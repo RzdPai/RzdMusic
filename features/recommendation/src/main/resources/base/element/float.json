@@ -1,0 +1,12 @@
+{
+  "float": [
+    {
+      "name": "home_icon_width",
+      "value": "45vp"
+    },
+    {
+      "name": "list_btn_padding",
+      "value": "10vp"
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "color": [
+    {
+      "name": "watch_page_background",
+      "value": "#000000"
+    },
+    {
+      "name": "watch_text_on_dark_primary",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "watch_text_secondary",
+      "value": "#999999"
+    },
+    {
+      "name": "watch_playlist_card_maroon",
+      "value": "#2E1F26"
+    },
+    {
+      "name": "watch_playlist_card_blue",
+      "value": "#1B262C"
+    },
+    {
+      "name": "watch_song_row_capsule",
+      "value": "#262626"
+    },
+    {
+      "name": "floating_mini_bar_background",
+      "value": "#30F1F3F5"
+    },
+    {
+      "name": "hero_overlay_text_secondary",
+      "value": "#99FFFFFF"
+    }
+  ]
+}

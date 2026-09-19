@@ -1,0 +1,13 @@
+{
+  "module": {
+    "name": "setting",
+    "type": "har",
+    "description": "$string:setting_title",
+    "deviceTypes": [
+      "phone",
+      "tablet",
+      "2in1"
+    ],
+    "routerMap": "$profile:router_map"
+  }
+}

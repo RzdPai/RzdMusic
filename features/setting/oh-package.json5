@@ -1,0 +1,14 @@
+{
+  "license": "Apache-2.0",
+  "devDependencies": {},
+  "author": "",
+  "name": "setting",
+  "description": "Settings, mine and online search pages",
+  "main": "./Index.ets",
+  "version": "1.0.0",
+  "dependencies": {
+    "musicbasic": "file:../../common/musicbasic",
+    "player": "file:../player",
+    "playlist": "file:../playlist"
+  }
+}

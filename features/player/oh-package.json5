@@ -1,0 +1,17 @@
+{
+  "name": "player",
+  "version": "1.0.0",
+  "description": "Please describe the basic information.",
+  "main": "Index.ets",
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "musicbasic": "file:../../common/musicbasic",
+    "@ohos/axios": "^2.2.6",
+    "@ohos/crypto-js": "^2.0.5",
+    "@jackiehou/lyric-view": "^1.0.9",
+    "@dabing/taglib_harmony": "^1.0.1"
+  },
+  "devDependencies": {},
+  "dynamicDependencies": {}
+}

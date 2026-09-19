@@ -1,0 +1,251 @@
+{
+  "string": [
+    {
+      "name": "page_show",
+      "value": "页面展示"
+    },
+    {
+      "name": "home_tab_featured",
+      "value": "精选"
+    },
+    {
+      "name": "home_tab_artist",
+      "value": "歌手"
+    },
+    {
+      "name": "home_tab_ai_music",
+      "value": "AI 音乐"
+    },
+    {
+      "name": "home_tab_charts",
+      "value": "榜单"
+    },
+    {
+      "name": "home_tab_categories",
+      "value": "分类"
+    },
+    {
+      "name": "home_page_title",
+      "value": "推荐"
+    },
+    {
+      "name": "home_page_title_pc",
+      "value": "首页"
+    },
+    {
+      "name": "home_search_placeholder",
+      "value": "搜索"
+    },
+    {
+      "name": "home_search_placeholder_pc",
+      "value": "歌曲、歌手、听书等更多内容"
+    },
+    {
+      "name": "home_for_you_title",
+      "value": "Hi Raven，为你推荐"
+    },
+    {
+      "name": "home_private_songs_title",
+      "value": "值得一键收藏的好歌"
+    },
+    {
+      "name": "home_category_singers",
+      "value": "热门歌手"
+    },
+    {
+      "name": "home_category_featured",
+      "value": "精选推荐"
+    },
+    {
+      "name": "home_category_charts",
+      "value": "全部榜单"
+    },
+    {
+      "name": "home_category_loading",
+      "value": "加载中..."
+    },
+    {
+      "name": "home_category_regions",
+      "value": "地区分类" },
+    {
+      "name": "home_category_empty",
+      "value": "暂无数据，请稍后重试"
+    },
+    {
+      "name": "playlist_detail_title",
+      "value": "动感电音的速度与激情"
+    },
+    {
+      "name": "playlist_detail_desc",
+      "value": "节奏超燃，带你星空台步走一圈。电音的世界，动感的节拍，跃动的音符，让我们沉迷节奏海洋。"
+    },
+    {
+      "name": "playlist_play_count",
+      "value": "3456万"
+    },
+    {
+      "name": "playlist_play_all",
+      "value": "播放全部"
+    },
+    {
+      "name": "playlist_collect",
+      "value": "收藏"
+    },
+    {
+      "name": "playlist_download",
+      "value": "下载"
+    },
+    {
+      "name": "playlist_tag_spatial",
+      "value": "空间音频"
+    },
+    {
+      "name": "private_song_title",
+      "value": "Huawei Music"
+    },
+    {
+      "name": "private_song_singer1",
+      "value": "赵某某"
+    },
+    {
+      "name": "private_song_singer2",
+      "value": "钱某某"
+    },
+    {
+      "name": "private_song_singer3",
+      "value": "孙某某"
+    },
+    {
+      "name": "private_song_singer4",
+      "value": "李某某"
+    },
+    {
+      "name": "private_song_singer5",
+      "value": "周某某"
+    },
+    {
+      "name": "private_song_singer6",
+      "value": "吴某某"
+    },
+    {
+      "name": "private_song_singer7",
+      "value": "郑某某"
+    },
+    {
+      "name": "private_song_singer8",
+      "value": "王某某"
+    },
+    {
+      "name": "private_song_singer9",
+      "value": "冯某某"
+    },
+    {
+      "name": "private_song_singer10",
+      "value": "陈某某"
+    },
+    {
+      "name": "private_song_singer11",
+      "value": "褚某某"
+    },
+    {
+      "name": "private_song_singer12",
+      "value": "卫某某"
+    },
+    {
+      "name": "hero_banner_subline_brand",
+      "value": "HUAWEI music"
+    },
+    {
+      "name": "hero_1_badge",
+      "value": "Music FM"
+    },
+    {
+      "name": "hero_1_title",
+      "value": "现在就听"
+    },
+    {
+      "name": "hero_2_badge",
+      "value": "March 18"
+    },
+    {
+      "name": "hero_2_title",
+      "value": "每日30首"
+    },
+    {
+      "name": "hero_3_badge",
+      "value": "NEW"
+    },
+    {
+      "name": "hero_3_title",
+      "value": "新歌推荐"
+    },
+    {
+      "name": "hero_4_badge",
+      "value": "MODE"
+    },
+    {
+      "name": "hero_4_title",
+      "value": "心动模式"
+    },
+    {
+      "name": "hero_5_badge",
+      "value": "PICK"
+    },
+    {
+      "name": "hero_5_title",
+      "value": "精选推荐"
+    },
+    {
+      "name": "rec_1_title",
+      "value": "午间温柔 | 听天籁之声路过人间"
+    },
+    {
+      "name": "rec_1_play",
+      "value": "8188万"
+    },
+    {
+      "name": "rec_2_title",
+      "value": "天生不落俗，人间唱诗班"
+    },
+    {
+      "name": "rec_2_play",
+      "value": "5767万"
+    },
+    {
+      "name": "rec_3_title",
+      "value": "电波发送 | 叮！城市郊游指南"
+    },
+    {
+      "name": "rec_3_play",
+      "value": "257W"
+    },
+    {
+      "name": "rec_4_title",
+      "value": "霓虹城市的合成器之声"
+    },
+    {
+      "name": "rec_4_play",
+      "value": "129W"
+    },
+    {
+      "name": "rec_5_title",
+      "value": "我在BGM中跳进了初夏的梦里"
+    },
+    {
+      "name": "rec_5_play",
+      "value": "88W"
+    },
+    {
+      "name": "rec_6_title",
+      "value": "豪情万丈的摇滚情歌精选"
+    },
+    {
+      "name": "rec_6_play",
+      "value": "63W"
+    },
+    {
+      "name": "empty_text",
+      "value": "暂无内容"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "routerMap": [
+    {
+      "name": "songPage",
+      "pageSourceFile": "src/main/ets/view/SongPage.ets",
+      "buildFunction": "SongPageBuilder"
+    },
+    {
+      "name": "MusicRecognitionPage",
+      "pageSourceFile": "src/main/ets/view/MusicRecognitionPage.ets",
+      "buildFunction": "MusicRecognitionPageBuilder"
+    }
+  ]
+}

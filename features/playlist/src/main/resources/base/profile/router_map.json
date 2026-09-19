@@ -1,0 +1,30 @@
+{
+  "routerMap": [
+    {
+      "name": "playList",
+      "pageSourceFile": "src/main/ets/view/PlaylistHubPage.ets",
+      "buildFunction": "PlayListBuilder"
+    },
+    {
+      "name": "songList",
+      "pageSourceFile": "src/main/ets/view/SongQueueListPage.ets",
+      "buildFunction": "SongListBuilder"
+    },
+    {
+      "name": "PlaylistDetailPage",
+      "pageSourceFile": "src/main/ets/view/PlaylistDetailPage.ets",
+      "buildFunction": "PlaylistDetailPageBuilder",
+      "data": {
+        "description": "Playlist detail (entry from mini bar Current list)"
+      }
+    },
+    {
+      "name": "SplitColumnPlaylistPage",
+      "pageSourceFile": "src/main/ets/view/SplitColumnPlaylistPage.ets",
+      "buildFunction": "SplitColumnPlaylistPageBuilder",
+      "data": {
+        "description": "Split-column playlist detail (wide layout / TV)"
+      }
+    }
+  ]
+}

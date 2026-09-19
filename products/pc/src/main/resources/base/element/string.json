@@ -1,0 +1,39 @@
+﻿{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "module description"
+    },
+    {
+      "name": "PcAbility_desc",
+      "value": "description"
+    },
+    {
+      "name": "PcAbility_label", "value": "派音"
+    },
+    {
+      "name": "tab_home",
+      "value": "推荐"
+    },
+    {
+      "name": "tab_music_hall",
+      "value": "歌单"
+    },
+    {
+      "name": "tab_cafe_listen",
+      "value": "我的"
+    },
+    {
+      "name": "tab_mine",
+      "value": "设置"
+    },
+    {
+      "name": "placeholder_tab_not_implemented",
+      "value": "该功能暂未开放"
+    },
+    {
+      "name": "sidebar_brand_music",
+      "value": "音乐"
+    }
+  ]
+}

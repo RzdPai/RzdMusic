@@ -1,0 +1,64 @@
+{
+  "string": [
+    {
+      "name": "recommend_shared_desc",
+      "value": "shared_desc"
+    },
+    {
+      "name": "brand_huawei_music",
+      "value": "Huawei Music"
+    },
+    {
+      "name": "capsule_nav_home",
+      "value": "首页"
+    },
+    {
+      "name": "capsule_nav_concert_hall",
+      "value": "音乐厅"
+    },
+    {
+      "name": "capsule_nav_kids",
+      "value": "儿童专区"
+    },
+    {
+      "name": "capsule_nav_spatial_audio",
+      "value": "空间音频"
+    },
+    {
+      "name": "capsule_nav_home_time",
+      "value": "居家时光"
+    },
+    {
+      "name": "home_plaza_title",
+      "value": "歌单广场"
+    },
+    {
+      "name": "home_ranking_title",
+      "value": "排行榜"
+    },
+    {
+      "name": "home_ranking_view_all",
+      "value": "全部榜单"
+    },
+    {
+      "name": "home_plaza_default",
+      "value": "默认"
+    },
+    {
+      "name": "home_plaza_choose_category",
+      "value": "选择分类"
+    },
+    {
+      "name": "home_plaza_load_more",
+      "value": "加载更多"
+    },
+    {
+      "name": "home_plaza_no_more",
+      "value": "没有更多歌单了"
+    },
+    {
+      "name": "home_guest_retry",
+      "value": "点击重试"
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "string": [
+    {
+      "name": "musiclist_shared_desc",
+      "value": "shared_desc"
+    },
+    {
+      "name": "watch_playlist_section_title",
+      "value": "Outdoor running"
+    },
+    {
+      "name": "watch_playlist_card_title_party",
+      "value": "Party Time"
+    },
+    {
+      "name": "watch_playlist_card_title_xmas",
+      "value": "Christmas"
+    },
+    {
+      "name": "watch_playlist_play_count_one",
+      "value": "892k plays"
+    },
+    {
+      "name": "watch_playlist_play_count_two",
+      "value": "826k plays"
+    },
+    {
+      "name": "watch_song_list_default_playlist",
+      "value": "Party Time"
+    },
+    {
+      "name": "playlist_home_title",
+      "value": "Mine"
+    },
+    {
+      "name": "playlist_home_clear_history",
+      "value": "Clear"
+    },
+    {
+      "name": "playlist_home_history",
+      "value": "History"
+    },
+    {
+      "name": "playlist_home_favorites",
+      "value": "Favorites"
+    },
+    {
+      "name": "playlist_home_history_empty",
+      "value": "No play history yet"
+    },
+    {
+      "name": "playlist_home_favorites_empty",
+      "value": "No favorite songs yet"
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "module": {
+    "name": "musichomepcsample",
+    "type": "entry",
+    "description": "$string:module_desc",
+    "mainElement": "MusichomePcAbility",
+    "deviceTypes": [
+      "2in1"
+    ],
+    "deliveryWithInstall": true,
+    "installationFree": false,
+    "pages": "$profile:main_pages",
+    "requestPermissions": [
+      {
+        "name": "ohos.permission.INTERNET"
+      }
+    ],
+    "abilities": [
+      {
+        "name": "MusichomePcAbility",
+        "srcEntry": "./ets/pcability/PcAbility.ets",
+        "description": "$string:PcAbility_desc",
+        "icon": "$media:ic_music_icon",
+        "label": "$string:PcAbility_label",
+        "startWindowIcon": "$media:startIcon",
+        "startWindowBackground": "$color:start_window_background",
+        "exported": true,
+        "minWindowWidth": 1080,
+        "minWindowHeight": 500,
+        "skills": [
+          {
+            "entities": [
+              "entity.system.home"
+            ],
+            "actions": [
+              "ohos.want.action.home"
+            ]
+          }
+        ]
+      }
+    ],
+    "extensionAbilities": [
+      {
+        "name": "MusichomePcBackupAbility",
+        "srcEntry": "./ets/pcbackupability/PcBackupAbility.ets",
+        "type": "backup",
+        "exported": false,
+        "metadata": [
+          {
+            "name": "ohos.extension.backup",
+            "resource": "$profile:backup_config"
+          }
+        ],
+      }
+    ]
+  }
+}

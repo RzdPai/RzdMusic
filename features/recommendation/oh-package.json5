@@ -1,0 +1,13 @@
+{
+  "name": "recommendation",
+  "version": "1.0.0",
+  "description": "Home recommendation (banner, categories, For You, etc.)",
+  "main": "Index.ets",
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "musicbasic": "file:../../common/musicbasic",
+    "player": "file:../player",
+    "playlist": "file:../playlist"
+  }
+}

@@ -1,0 +1,84 @@
+RzdMusic 第三方组件与来源声明
+=============================
+
+本源码包为「基于华为 MusicHome 多设备音乐模板」的二次开发版本，在模板基础上
+集成第三方音源 SDK 与多平台账号能力，扩展为可在鸿蒙设备上播放实际音乐的播放器。
+分发或再使用本工程时，请遵守以下各组件的许可条款。
+
+
+一、工程基础模板
+----------------
+组件：MusicHome 多设备音乐示例（多设备音乐界面）
+版权：Copyright (c) 2024-2026 Huawei Device Co., Ltd.
+许可：Apache License 2.0
+
+说明：本工程 common/、features/、products/ 下共 156 个 .ets/.ts 文件保留了原始
+      Apache-2.0 版权头，根目录 LICENSE 亦为同一许可。请勿删除或改写版权声明，
+      亦不得将本工程整体宣称为原创作品。
+
+
+二、音源与账号 SDK
+------------------
+组件：lx-music 音源协议实现（搜索聚合、歌单解析、各平台接口签名）
+来源：https://github.com/lyswhut/lx-music-desktop
+许可：Apache License 2.0
+
+说明：代码中的加密常量（KG_SALT、KG_MID、KG_APPID、EAPI_KEY、EAPI_SECRET、
+      LINUXAPI_KEY、ANDROID_KEY、PRESET_KEY/IV/PUBLIC_KEY 等）来自上述开源
+      工程，属公开的反爬协议参数，不是私人凭据。
+
+组件：酷狗 / 酷我 / 咪咕 / 网易云 / QQ 音乐 客户端接口
+说明：本工程仅实现客户端侧协议调用，不包含任何平台官方授权。使用相关接口产生
+      的版权与合规责任由使用者自行承担。
+
+
+三、歌词引擎（重要：存在许可证冲突，公开分发前必须处理）
+--------------------------------------------------------
+组件：AMLL（Apple Music Like Lyrics）逐字歌词渲染与歌词解析
+来源：https://github.com/amll-dev/applemusic-like-lyrics
+许可：AGPL-3.0-only
+
+冲突说明：features/player/src/main/ets/amll/ 下的实现移植自上述 AGPL-3.0 工程
+          （源码注释中已标注对应原仓库文件，如 packages/core/src/lyric-player/
+          base/consts.ts），但当前文件头声明为 Huawei Apache-2.0。
+          AGPL-3.0 与 Apache-2.0 不兼容，公开分发前必须从以下方案中择一处理：
+
+          方案 A（推荐）移除 features/player/src/main/ets/amll/ 相关实现，
+                        改用自有歌词渲染方案；
+          方案 B        将本工程整体以 AGPL-3.0 开源，并保留 AMLL 原作者署名；
+          方案 C        仅作内部使用，不对外公开分发。
+
+
+四、音频指纹（重要：逆向实现，存在法律风险）
+--------------------------------------------
+组件：afp.js / afp.wasm.js
+路径：features/player/src/main/resources/rawfile/afp/
+说明：该 WASM 用于对接网易云 AFP 音频指纹接口，系对私有算法的逆向实现，并非
+      官方发布物；其中还包含源自 PythonMonkey 的运行时脚手架（MPL-2.0）。
+风险：公开分发可能涉及版权与逆向工程法律风险，请自行评估后再决定是否随包发布。
+
+
+五、其他依赖
+------------
+@ohos/axios        Apache License 2.0
+@ohos/crypto-js    Apache License 2.0
+@ohos/hypium       Apache License 2.0
+@ohos/hamock       Apache License 2.0
+
+
+六、本源码包的脱敏说明
+----------------------
+为便于分发，本包已做如下处理，构建前请自行补齐：
+
+1. build-profile.json5 中的签名材料已替换为占位符：
+   <YOUR_KEYSTORE_DIR> / <YOUR_STORE_PASSWORD> / <YOUR_KEY_ALIAS> /
+   <YOUR_KEY_PASSWORD> / <YOUR_PROFILE_DIR> / <YOUR_CERT_DIR>
+   请填入你自己的 p12 / p7b / cer 文件与口令。
+
+2. 已移除 local.properties（其中含本机 SDK 的绝对路径），请在本地重新创建并指向
+   你自己的 HarmonyOS SDK 目录。
+
+3. CHANGELOG.md 中的本机用户目录与内网调试地址已打码。
+
+4. 日志中的完整 URL 与接口响应体已由 %{public}s 改为 %{private}s，避免鉴权参数
+   进入 hilog 输出。

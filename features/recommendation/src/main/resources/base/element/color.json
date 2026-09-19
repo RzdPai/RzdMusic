@@ -1,0 +1,92 @@
+{
+  "color": [
+    {
+      "name": "chip_unselected_background",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "chip_selected_background",
+      "value": "#313133"
+    },
+    {
+      "name": "chip_unselected_text",
+      "value": "#E6000000"
+    },
+    {
+      "name": "chip_selected_text",
+      "value": "#E6FFFFFF"
+    },
+    {
+      "name": "top_bar_search_background",
+      "value": "#1AFFFFFF"
+    },
+    {
+      "name": "home_icon_button_background",
+      "value": "#1AFFFFFF"
+    },
+    {
+      "name": "home_icon_button_border",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "private_song_like_color",
+      "value": "#FF1949"
+    },
+    {
+      "name": "home_btn_background",
+      "value": "#2A2A29"
+    },
+    {
+      "name": "banner_text_primary",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "banner_text_secondary",
+      "value": "#99FFFFFF"
+    },
+    {
+      "name": "banner_text_tertiary",
+      "value": "#E6FFFFFF"
+    },
+    {
+      "name": "banner_overlay_background",
+      "value": "#26000000"
+    },
+    {
+      "name": "card_play_count_icon",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "card_title_text",
+      "value": "#E6000000"
+    },
+    {
+      "name": "capsule_nav_text_active",
+      "value": "#E6FFFFFF"
+    },
+    {
+      "name": "capsule_nav_text_inactive",
+      "value": "#99FFFFFF"
+    },
+    {
+      "name": "capsule_nav_bg_active",
+      "value": "#1AFFFFFF"
+    },
+    {
+      "name": "capsule_container_bg",
+      "value": "#26FFFFFF"
+    },
+    {
+      "name": "capsule_container_border",
+      "value": "#26FFFFFF"
+    },
+    {
+      "name": "capsule_brand_text",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "capsule_brand_icon",
+      "value": "#99FFFFFF"
+    }
+  ]
+}

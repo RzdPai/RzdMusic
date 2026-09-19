@@ -1,0 +1,20 @@
+{
+  "module": {
+    "name": "player",
+    "type": "har",
+    "description": "$string:playback_shared_desc",
+    "deviceTypes": [
+      "phone",
+      "tablet",
+      "2in1",
+      "tv",
+      "wearable"
+    ],
+    "requestPermissions": [
+      {
+        "name": "ohos.permission.KEEP_BACKGROUND_RUNNING"
+      }
+    ],
+    "routerMap": "$profile:router_map"
+  }
+}

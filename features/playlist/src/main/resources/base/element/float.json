@@ -1,0 +1,40 @@
+{
+  "float": [
+    {
+      "name": "watch_playlist_section_title",
+      "value": "20fp"
+    },
+    {
+      "name": "watch_playlist_card_radius",
+      "value": "24vp"
+    },
+    {
+      "name": "watch_song_header_title",
+      "value": "22fp"
+    },
+    {
+      "name": "watch_song_header_sub",
+      "value": "14fp"
+    },
+    {
+      "name": "watch_song_row_cover",
+      "value": "48vp"
+    },
+    {
+      "name": "watch_song_row_padding_v",
+      "value": "10vp"
+    },
+    {
+      "name": "watch_song_title_size",
+      "value": "16fp"
+    },
+    {
+      "name": "watch_song_singer_size",
+      "value": "14fp"
+    },
+    {
+      "name": "watch_arc_list_padding_h",
+      "value": "4vp"
+    }
+  ]
+}

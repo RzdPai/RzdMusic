@@ -1,0 +1,52 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "module description"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "description"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "派音"
+    },
+    {
+      "name": "reason_background",
+      "value": "Allow applications to use the ability to run in the background while playing music scenes."
+    },
+    {
+      "name": "reason_microphone",
+      "value": "听歌识曲需要麦克风权限采集环境声音"
+    },
+    {
+      "name": "tab_home",
+      "value": "推荐"
+    },
+    {
+      "name": "tab_music_hall",
+      "value": "歌单"
+    },
+    {
+      "name": "tab_cafe_listen",
+      "value": "我的"
+    },
+    {
+      "name": "tab_mine",
+      "value": "设置"
+    },
+    {
+      "name": "placeholder_tab_not_implemented",
+      "value": "This feature is not available yet"
+    },
+    {
+      "name": "music_card_name",
+      "value": "正在播放"
+    },
+    {
+      "name": "music_card_desc",
+      "value": "显示当前播放歌曲"
+    }
+  ]
+}

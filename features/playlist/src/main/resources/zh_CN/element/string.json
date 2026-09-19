@@ -1,0 +1,56 @@
+{
+  "string": [
+    {
+      "name": "musiclist_shared_desc",
+      "value": "shared_desc"
+    },
+    {
+      "name": "watch_playlist_section_title",
+      "value": "户外跑必备"
+    },
+    {
+      "name": "watch_playlist_card_title_party",
+      "value": "派对时间"
+    },
+    {
+      "name": "watch_playlist_card_title_xmas",
+      "value": "圣诞庆典"
+    },
+    {
+      "name": "watch_playlist_play_count_one",
+      "value": "89.2万"
+    },
+    {
+      "name": "watch_playlist_play_count_two",
+      "value": "82.6万"
+    },
+    {
+      "name": "watch_song_list_default_playlist",
+      "value": "派对时间"
+    },
+    {
+      "name": "watch_song_count_suffix",
+      "value": "首"
+    },
+    {
+      "name": "playlist_home_title",
+      "value": "我的"
+    },
+    {
+      "name": "playlist_home_history",
+      "value": "历史"
+    },
+    {
+      "name": "playlist_home_favorites",
+      "value": "收藏"
+    },
+    {
+      "name": "playlist_home_history_empty",
+      "value": "暂无播放历史"
+    },
+    {
+      "name": "playlist_home_favorites_empty",
+      "value": "暂无收藏歌曲"
+    }
+  ]
+}

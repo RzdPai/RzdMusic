@@ -1,0 +1,36 @@
+{
+  "color": [
+    {
+      "name": "start_window_background",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "placeholder_background",
+      "value": "#F7F7F7"
+    },
+    {
+      "name": "placeholder_text",
+      "value": "#999999"
+    },
+    {
+      "name": "pc_sidebar_background",
+      "value": "#F5F5F5"
+    },
+    {
+      "name": "pc_main_home_background",
+      "value": "#F1F3F5"
+    },
+    {
+      "name": "pc_main_alt_background",
+      "value": "#F7F7F7"
+    },
+    {
+      "name": "pc_shell_background",
+      "value": "#E6FFFFFF"
+    },
+    {
+      "name": "pc_nav_item_selected_bg",
+      "value": "#1AFF1949"
+    }
+  ]
+}
