@@ -35,7 +35,15 @@ import {
   buildTitleMaterial
 } from 'musicbasic';
 import { AccountChangedState, PlayerConstants } from 'player';
-import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
+import {
+  BlurStrategy,
+  HdsNavDestination,
+  HdsNavDestinationTitleMode,
+  HdsNavigationTitleBarOptions,
+  ScrollEffectType,
+  TitleSize,
+  hdsEffect
+} from '@kit.UIDesignKit';
 import { RecommendViewModel } from '../viewmodel/RecommendViewModel';
 import { CategoryContentSection } from './CategoryContentSection';
 import { HomeFloatingMiniBar } from './HomeFloatingMiniBar';
@@ -66,6 +74,12 @@ export struct RecommendPage {
   @Consumer('pageIndexInfos') pageIndexInfos: NavPathStack = new NavPathStack();
   /** Scroller bound to the HDS title bar so the scroll effect (gradient blur) can fire. */
   private pageScroller: Scroller = new Scroller();
+  /** 首页常驻流光背景的着色器动画控制器（HDS UV_BACKGROUND_FLOW_LIGHT）。 */
+  private flowLightController: hdsEffect.ShaderEffectController = new hdsEffect.ShaderEffectController();
+  /** 流光完整循环一圈的时长（ms），与 KCM 首页流光默认值一致。 */
+  private flowLightDurationMs: number = 10000;
+  /** 流光层不透明度：压在首页底色之上、内容之下，避免喧宾夺主。 */
+  private flowLightOpacity: number = 0.5;
 
   aboutToAppear() {
     // 首页歌单广场/排行榜开关：从持久化设置同步到共享状态（默认关闭）
@@ -174,53 +188,85 @@ export struct RecommendPage {
     return SdkApiUtil.isSdkApiAtLeast(SdkConstants.HDS_TABS_BAR_FLOATING_MIN_SDK_API) ? 0 : 56;
   }
 
+  /**
+   * 首页常驻流光背景层：透明全屏 Stack 挂 HDS 着色器，动画无限循环播放。
+   * 作为内容容器 Stack 的首个子节点，绘制在首页底色之上、页面内容之下。
+   */
+  @Builder
+  private FlowLightBackground() {
+    Stack()
+      .width(StyleConstants.FULL_WIDTH)
+      .height(StyleConstants.FULL_HEIGHT)
+      .hitTestBehavior(HitTestMode.Transparent)
+      .opacity(this.flowLightOpacity)
+      .visualEffect(new hdsEffect.HdsEffectBuilder()
+        .shaderEffect({
+          effectType: hdsEffect.EffectType.UV_BACKGROUND_FLOW_LIGHT,
+          animation: {
+            duration: this.flowLightDurationMs,
+            iterations: -1,
+            autoPlay: true
+          },
+          controller: this.flowLightController
+        })
+        .buildEffect())
+  }
+
   build() {
     HdsNavDestination() {
-      Column() {
-        if (this.recommendViewModel.homeLoaded) {
-          Scroll(this.pageScroller) {
-            Column() {
-              HeroBannerSection({ recommendViewModel: this.recommendViewModel })
-              CategoryChipsSection({ recommendViewModel: this.recommendViewModel })
-              CategoryContentSection({ recommendViewModel: this.recommendViewModel })
-              if (this.homePlazaState.enabled) {
-                HomePlazaSection({ recommendViewModel: this.recommendViewModel })
-              }
-            }
-            .padding({
-              top: this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ?
-                0 : this.windowInfo.statusBarTopVp + TitleBarConstants.ROW_HEIGHT_VP
-            })
-          }
-          .layoutWeight(1)
-          .padding({
-            bottom: this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ? 0 : 16
-          })
-          .backgroundColor($r('app.color.background_secondary'))
-          .scrollBar(BarState.Off)
-          .edgeEffect(EdgeEffect.Spring)
-          .clip(false)
-          .align(Alignment.Top)
-        } else {
-          Column() {
-            LoadingProgress()
-              .width(48)
-              .height(48)
-              .color($r('app.color.mini_bar_primary'))
-          }
-          .width(StyleConstants.FULL_WIDTH)
-          .layoutWeight(1)
-          .justifyContent(FlexAlign.Center)
-          .alignItems(HorizontalAlign.Center)
-        }
+      Stack({ alignContent: Alignment.TopStart }) {
+        // 常驻流光背景：先绘制，位于 HdsNavDestination 底色之上、首页内容之下。
+        this.FlowLightBackground()
 
-        if (!this.shellProvidesFloatingMiniBar) {
-          HomeFloatingMiniBar()
+        Column() {
+          if (this.recommendViewModel.homeLoaded) {
+            Scroll(this.pageScroller) {
+              Column() {
+                HeroBannerSection({ recommendViewModel: this.recommendViewModel })
+                CategoryChipsSection({ recommendViewModel: this.recommendViewModel })
+                CategoryContentSection({ recommendViewModel: this.recommendViewModel })
+                if (this.homePlazaState.enabled) {
+                  HomePlazaSection({ recommendViewModel: this.recommendViewModel })
+                }
+              }
+              .padding({
+                top: this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ?
+                  0 : this.windowInfo.statusBarTopVp + TitleBarConstants.ROW_HEIGHT_VP
+              })
+            }
+            .layoutWeight(1)
+            .padding({
+              bottom: this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ? 0 : 16
+            })
+            .scrollBar(BarState.Off)
+            .edgeEffect(EdgeEffect.Spring)
+            .clip(false)
+            .align(Alignment.Top)
+          } else {
+            Column() {
+              LoadingProgress()
+                .width(48)
+                .height(48)
+                .color($r('app.color.mini_bar_primary'))
+            }
+            .width(StyleConstants.FULL_WIDTH)
+            .layoutWeight(1)
+            .justifyContent(FlexAlign.Center)
+            .alignItems(HorizontalAlign.Center)
+          }
+
+          if (!this.shellProvidesFloatingMiniBar) {
+            HomeFloatingMiniBar()
+          }
         }
+        .width(StyleConstants.FULL_WIDTH)
+        .height(StyleConstants.FULL_HEIGHT)
+        .padding({ bottom: this.homeFloatingMiniBarTabOverlapReserveBottomVp() })
       }
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
-      .padding({ bottom: this.homeFloatingMiniBarTabOverlapReserveBottomVp() })
+      // 首页底色保留在内容 Stack 上：流光层绘制在它之上、页面内容之下。
+      .backgroundColor($r('app.color.background_secondary'))
     }
     .hideTitleBar(false)
     .hideBackButton(true)
