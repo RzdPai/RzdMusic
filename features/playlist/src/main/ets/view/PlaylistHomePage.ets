@@ -159,6 +159,7 @@ export struct PlaylistHomePage {
       case 'tx': return '#31C27C';
       case 'wy': return '#C62F2F';
       case 'mg': return '#FF4081';
+      case 'local': return '#6B6B6B';
     }
     return '#6B6B6B';
   }
@@ -170,6 +171,7 @@ export struct PlaylistHomePage {
       case 'tx': return 'QQ';
       case 'wy': return '网易云';
       case 'mg': return '咪咕';
+      case 'local': return '本地';
     }
     return source;
   }

@@ -27,6 +27,7 @@ import { common, wantAgent } from '@kit.AbilityKit';
 import { avSession } from '@kit.AVSessionKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { resourceManager } from '@kit.LocalizationKit';
+import { fileIo as fs } from '@kit.CoreFileKit';
 import { AppStorageKeys, getAppRuntime, Logger, MusicAppState, MusicCardBridge, MusicStoreService, PlayedSongRecord, SongItem, StringResourceUtil, appendPlayLog } from 'musicbasic';
 import SongItemBuilder from '../util/SongItemBuilder';
 import { AudioPlayerState, MusicPlayMode } from './MusicData';
@@ -43,6 +44,25 @@ import { buildPlainLrc, truncateLrc } from '../util/LrcUtils';
 import { LyricLiveViewController } from '../util/LyricLiveViewController';
 
 const TAG = 'MediaService';
+
+/** Source id used by imported device audio (see features/localmusic). */
+const LOCAL_SOURCE: string = 'local';
+
+/**
+ * Supplies lyric text for an imported local song.
+ *
+ * `localmusic` owns local lyrics (a sibling `.lrc`, or a song matched against an
+ * online platform) and depends on this module, so the dependency is inverted here:
+ * `localmusic` registers its resolver during init and playback calls it back.
+ */
+export type LocalLyricResolver = (song: SongItem) => Promise<string>;
+
+let localLyricResolver: LocalLyricResolver | null = null;
+
+/** Registers (or clears, with null) the local lyric resolver. */
+export function setLocalLyricResolver(resolver: LocalLyricResolver | null): void {
+  localLyricResolver = resolver;
+}
 
 /** Persisted play queue snapshot: online records, local db ids, and current index. */
 interface QueueSnapshot {
@@ -663,6 +683,43 @@ export class MediaService {
     }
   }
 
+  /** Whether the sandbox audio file behind a local song is still on disk. */
+  private localFileExists(path: string): boolean {
+    if (path.length === 0) {
+      return false;
+    }
+    try {
+      return fs.accessSync(path);
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * Fills the lyric for an imported local song.
+   *
+   * No network access happens here: lyrics come from the sibling `.lrc` captured at
+   * import time, or from a platform song the user matched manually. Both are owned by
+   * `localmusic`, which hands them over through the registered resolver.
+   * @param songItem Queue item with source === 'local'.
+   */
+  private async enrichLocalTrack(songItem: SongItem): Promise<void> {
+    if (songItem.lyricText.length > 0 || localLyricResolver === null) {
+      return;
+    }
+    try {
+      const lyric: string = await localLyricResolver(songItem);
+      if (lyric.length > 0) {
+        songItem.lyricText = lyric;
+        this.getAppState().lyricVersion++;
+        this.liveViewController.reloadLyric(songItem.lyricText);
+        void this.setAVMetadata();
+      }
+    } catch (error) {
+      // lyric is optional
+    }
+  }
+
   /**
    * Lazily resolves the play url (and lyric) for an online song via the LX source engine.
    * Includes quality downgrade and cross-source fallback (lx-music style recovery).
@@ -1257,7 +1314,17 @@ export class MediaService {
       Logger.error(TAG, `resolve song failed at queue index ${musicIndex}`);
       return;
     }
-    if (queueSong.url.length === 0 && queueSong.source.length > 0) {
+    if (queueSong.source === LOCAL_SOURCE) {
+      // Imported device audio takes a direct path: it must play without the source
+      // engine loaded, otherwise a user with no source script cannot play their own files.
+      if (!this.localFileExists(queueSong.url)) {
+        this.appendPlayLog('[播放] 本地文件已不在：' + queueSong.url);
+        this.toast('文件已经不在了，请重新导入');
+        this.getAppState().isResolving = false;
+        return;
+      }
+      await this.enrichLocalTrack(queueSong);
+    } else if (queueSong.url.length === 0 && queueSong.source.length > 0) {
       const resolved = await this.resolveOnlineUrl(queueSong);
       this.appendPlayLog('[播放] resolveOnlineUrl=' + resolved);
       if (!resolved) {

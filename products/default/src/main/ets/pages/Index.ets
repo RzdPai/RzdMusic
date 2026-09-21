@@ -36,6 +36,9 @@ import { dispatchShellPlaybackIntent, LXSourceHost, PlaybackPageCoverContent } f
 import { RecommendPage } from 'recommendation';
 import { HomeMiniBarPlayer, PlaylistsPage } from 'playlist';
 import { MinePage, SettingPage } from 'setting';
+import { localMusic } from 'localmusic';
+import { syncManager } from 'sync';
+import { common } from '@kit.AbilityKit';
 import { HdsBarStyle, HdsTabs } from '@hms.hds.hdsBaseComponent';
 import { deviceInfo } from '@kit.BasicServicesKit';
 
@@ -82,6 +85,14 @@ struct Index {
     this.homeSourceState.source = MusicStoreService.getInstance().getHomeSource();
     this.miniLyricState.enabled = MusicStoreService.getInstance().getShowMiniLyric();
     AppStorage.setOrCreate('lxPlayQuality', MusicStoreService.getInstance().getPlayQuality());
+    // 本地音乐库与同步客户端在启动时初始化：本地音乐要建沙箱目录并载入索引，
+    // 同步客户端要读回服务器地址与开关（开关为关时不连服务端）。
+    const hostContext: common.UIAbilityContext | undefined =
+      this.getUIContext().getHostContext() as common.UIAbilityContext | undefined;
+    if (hostContext !== undefined) {
+      localMusic.init(hostContext);
+      syncManager.init(hostContext);
+    }
   }
 
   /** Dispatches playback shell intent when {@link PlaybackIntentState.requestVersion} changes. */

@@ -1,0 +1,12 @@
+{
+  "routerMap": [
+    {
+      "name": "SyncSettingsPage",
+      "pageSourceFile": "src/main/ets/view/SyncSettingsView.ets",
+      "buildFunction": "SyncSettingsPageBuilder",
+      "data": {
+        "description": "LX sync settings (server address, auth code, status)"
+      }
+    }
+  ]
+}

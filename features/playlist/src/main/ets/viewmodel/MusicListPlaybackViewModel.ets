@@ -15,8 +15,9 @@
 
 
 import { AppStorageV2, UIContext } from '@kit.ArkUI';
-import { AppStorageKeys, BoardSongParam, MusicStoreService, PlayedSongRecord } from 'musicbasic';
-import { LXSearchSong, lxGetPicFallback, lxTxToplist, OnlinePlayUtil, PlaylistSearchApi } from 'player';
+import { AppStorageKeys, BoardSongParam, MusicStoreService, PlayedSongRecord, SongItem } from 'musicbasic';
+import { LXSearchSong, lxGetPicFallback, lxTxToplist, MediaService, OnlinePlayUtil, PlaylistSearchApi } from 'player';
+import { localMusic, LOCAL_SOURCE } from 'localmusic';
 import { MusicAppState, PlaybackIntentState } from '../model/PlaylistModels';
 import { PlaylistSongUiDataSource } from '../model/PlaylistSongUiDataSource';
 import { PlaylistSongUi } from '../model/PlaylistUiModels';
@@ -61,17 +62,18 @@ export class MusicListPlaybackViewModel {
     this.applyStoreRecords(MusicStoreService.getInstance().getFavorites());
   }
 
-  /** Loads a user playlist by id into the playlist rows. */
+  /** Loads a user playlist by id into the playlist rows (local songs merged in front). */
   public loadPlaylistSongs(playlistId: string): void {
     const p = MusicStoreService.getInstance().getPlaylistById(playlistId);
+    const records: PlayedSongRecord[] = p !== undefined ? p.songs : [];
     if (p !== undefined) {
       this.appendListLog('[歌单] 加载 id=' + playlistId + ' 名称=' + p.name + ' 歌曲数=' + p.songs.length +
         ' 首曲=' + (p.songs.length > 0 ? p.songs[0].name + ' src=' + p.songs[0].source + ' id=' + p.songs[0].songId : '空'));
-      this.applyStoreRecords(p.songs);
     } else {
       this.appendListLog('[歌单] 未找到 id=' + playlistId);
-      this.applyStoreRecords([]);
     }
+    // 本地歌由 localmusic 侧表提供并排在最前（store 里可能已被同步覆盖掉本地行）
+    this.applyRows(PlaylistDataUtil.mergeLocalFirst(playlistId, records));
   }
 
   /** Appends a marker line to the shared run log (visible in settings). */
@@ -123,6 +125,11 @@ export class MusicListPlaybackViewModel {
       ui.coverUrl = record.img;
       uis.push(ui);
     }
+    this.applyRows(uis);
+  }
+
+  /** Publishes already-built rows to the list state and lazy data source. */
+  private applyRows(uis: PlaylistSongUi[]): void {
     this.playlistSongUis = uis;
     this.songListDataSource.reloadData(uis);
     this.songListVersion++;
@@ -248,8 +255,8 @@ export class MusicListPlaybackViewModel {
 
   /**
    * Requests playback for the row at the given index, or opens the player if it is already the current song.
-   * Online rows play through the LX engine; local rows use the global intent.
-   * @param index Zero-based playlist index.
+   * Local rows play from the sandbox (queue of the playlist's local songs); online rows play through the LX engine.
+   * @param index Zero-based playlist index (index into {@link playlistSongUis}).
    * @param uiContext Used for toast prompts when playing online.
    */
   public requestPlayByListIndex(index: number, uiContext: UIContext | undefined): void {
@@ -257,10 +264,22 @@ export class MusicListPlaybackViewModel {
       return;
     }
     const item = this.playlistSongUis[index];
+    if (item.source === LOCAL_SOURCE) {
+      this.playLocalRow(index);
+      return;
+    }
     if (item.source.length > 0) {
       const songs: LXSearchSong[] = [];
+      let startIndex: number = 0;
       for (let i: number = 0; i < this.playlistSongUis.length; i++) {
         const row = this.playlistSongUis[i];
+        // 本地歌不交给在线引擎（会把 source:'local' 当成未知音源去解析）
+        if (row.source === LOCAL_SOURCE) {
+          continue;
+        }
+        if (i === index) {
+          startIndex = songs.length;
+        }
         const song: LXSearchSong = {
           songId: row.songId,
           name: typeof row.title === 'string' ? row.title : '',
@@ -274,7 +293,10 @@ export class MusicListPlaybackViewModel {
         };
         songs.push(song);
       }
-      void OnlinePlayUtil.playList(this.appState, songs, index, uiContext);
+      if (songs.length === 0) {
+        return;
+      }
+      void OnlinePlayUtil.playList(this.appState, songs, startIndex, uiContext);
       return;
     }
     if (this.isCurrentSong(item)) {
@@ -284,6 +306,35 @@ export class MusicListPlaybackViewModel {
       return;
     }
     PlaylistDataUtil.applyPlaybackIntentForPlaylistIndex(index, this.playlistSongUis, this.playbackIntent);
+  }
+
+  /**
+   * Plays a local row: the queue is the playlist's local songs in list order, the tapped one starts.
+   * 播放侧按 `source === 'local'` 直路用沙箱绝对路径起播（见 LocalMusicView.playAt 的接线说明）。
+   */
+  private playLocalRow(index: number): void {
+    const keys: string[] = [];
+    let startLocal: number = 0;
+    for (let i: number = 0; i < this.playlistSongUis.length; i++) {
+      const row = this.playlistSongUis[i];
+      if (row.source !== LOCAL_SOURCE) {
+        continue;
+      }
+      if (i === index) {
+        startLocal = keys.length;
+      }
+      keys.push(row.songId);
+    }
+    const queue: SongItem[] = localMusic.songsByKeys(keys);
+    if (queue.length === 0 || startLocal >= queue.length) {
+      return;
+    }
+    this.appState.replaceQueue(queue, startLocal);
+    this.appState.currentQuality = 'local';
+    this.appState.isResolving = false;
+    void MediaService.getInstance().loadAsset(startLocal);
+    this.appState.isShowPlay = true;
+    this.playbackIntent.pendingPlaySongId = -1;
   }
 
   /**

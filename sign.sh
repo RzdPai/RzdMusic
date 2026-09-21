@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+# 出签名包的前提：build-profile.json5 里必须有指向 .sign/ 的 signingConfigs，
+# 且该配置要绑定当前构建机。仓库里已不再提交签名路径，构建前请先确认已配好。
 PRODUCT=${1:-default}
 MODE=${2:-release}
 

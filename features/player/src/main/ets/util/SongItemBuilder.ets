@@ -19,8 +19,12 @@
 
 import { common } from '@kit.AbilityKit';
 import { resourceManager } from '@kit.LocalizationKit';
+import { fileIo as fs } from '@kit.CoreFileKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { getAppRuntime, Logger, SongItem } from 'musicbasic';
+
+/** Source id used by imported device audio (see features/localmusic). */
+const LOCAL_SOURCE: string = 'local';
 
 /** Opens raw-file descriptors for SongItem.src and exposes them for AVPlayer.fdSrc. */
 export default class SongItemBuilder {
@@ -34,13 +38,22 @@ export default class SongItemBuilder {
   private httpUrl: string = '';
   /** Song metadata being prepared; null after release. */
   private songItem: SongItem | null = null;
+  /** FD of the opened sandbox audio file; -1 when the current build has none. */
+  private localFd: number = -1;
 
   /** Resolves raw FD for songItem.src and stores it for getRealUrl(). */
   public async build(songItem: SongItem): Promise<SongItem> {
+    await this.closeLocalFd();
     this.songItem = songItem;
     this.httpUrl = songItem.url.startsWith('http') ? songItem.url : '';
     if (this.httpUrl.length > 0) {
       this.realUrl = undefined;
+      return this.songItem;
+    }
+    // Imported device audio lives in the app sandbox, so resourceManager cannot
+    // reach it — the descriptor has to be opened directly.
+    if (songItem.source === LOCAL_SOURCE) {
+      this.realUrl = this.openSandboxFile(songItem.url);
       return this.songItem;
     }
     if (!this.abilityContext) {
@@ -59,6 +72,38 @@ export default class SongItemBuilder {
     return this.songItem;
   }
 
+  /** Opens a sandbox audio file read-only and returns the descriptor AVPlayer needs. */
+  private openSandboxFile(path: string): resourceManager.RawFileDescriptor | undefined {
+    if (path.length === 0) {
+      Logger.error('local music path is empty');
+      return undefined;
+    }
+    try {
+      const stat: fs.Stat = fs.statSync(path);
+      const file: fs.File = fs.openSync(path, fs.OpenMode.READ_ONLY);
+      this.localFd = file.fd;
+      const descriptor: resourceManager.RawFileDescriptor = { fd: file.fd, offset: 0, length: stat.size };
+      Logger.info('MediaAssetBuilder local fd ok:' + path);
+      return descriptor;
+    } catch (error) {
+      Logger.error('open local music failed: ' + path);
+      return undefined;
+    }
+  }
+
+  /** Closes the sandbox FD opened by the previous build, if any. */
+  private async closeLocalFd(): Promise<void> {
+    if (this.localFd < 0) {
+      return;
+    }
+    try {
+      fs.closeSync(this.localFd);
+    } catch (error) {
+      Logger.error('Failed to close local music fd');
+    }
+    this.localFd = -1;
+  }
+
   /** Descriptor for AVPlayer.fdSrc after a successful build. */
   public getRealUrl(): resourceManager.RawFileDescriptor | undefined {
     Logger.info(`url ${this.realUrl}`);
@@ -72,7 +117,9 @@ export default class SongItemBuilder {
 
   /** Closes the raw FD for the current songItem and clears internal state. */
   public async release(): Promise<void> {
-    if (this.abilityContext && this.songItem !== null && this.httpUrl.length === 0) {
+    await this.closeLocalFd();
+    if (this.abilityContext && this.songItem !== null && this.httpUrl.length === 0
+      && this.songItem.source !== LOCAL_SOURCE) {
       try {
         await this.abilityContext.resourceManager.closeRawFd(this.songItem.src);
       } catch (error) {

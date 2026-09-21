@@ -87,6 +87,10 @@ export class RouterUrlConstants {
   /** Guest ranking boards overview page (multi-source). */
   public static readonly RANKING_BOARDS: string = 'RankingBoardsPage';
   /** Guest ranking board detail page (board track list). */
+  /** LX sync settings page (server / auth code / status), registered by the sync HAR. */
+  public static readonly SYNC_SETTINGS: string = 'SyncSettingsPage';
+  /** Local music library page (imported device audio), registered by the localmusic HAR. */
+  public static readonly LOCAL_MUSIC: string = 'LocalMusicPage';
 }
 
 /**

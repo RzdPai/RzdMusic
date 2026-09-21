@@ -32,6 +32,9 @@ import { dispatchShellPlaybackIntent, LXSourceHost, PlaybackPageCoverContent } f
 import { RecommendPage } from 'recommendation';
 import { PlaylistsPage } from 'playlist';
 import { MinePage, SettingPage } from 'setting';
+import { localMusic } from 'localmusic';
+import { syncManager } from 'sync';
+import { common } from '@kit.AbilityKit';
 
 /**
  * PC root page: sidebar navigation, recommend tab in HdsNavigation, placeholders for other tabs,
@@ -62,6 +65,13 @@ struct Index {
     this.appState.playQueueIds = MusicDbApi.getInstance().getSongList().map((dto) => dto.id);
     this.themeState.color = MusicStoreService.getInstance().getThemeColor();
     AppStorage.setOrCreate('lxPlayQuality', MusicStoreService.getInstance().getPlayQuality());
+    // 本地音乐库与同步客户端在启动时初始化（与手机端入口一致）。
+    const hostContext: common.UIAbilityContext | undefined =
+      this.getUIContext().getHostContext() as common.UIAbilityContext | undefined;
+    if (hostContext !== undefined) {
+      localMusic.init(hostContext);
+      syncManager.init(hostContext);
+    }
   }
 
   /** Handles playback intent changes and animates opening the in-app player. */

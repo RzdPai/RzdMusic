@@ -23,9 +23,12 @@ import { pasteboard } from '@kit.BasicServicesKit';
 import { AmbientState, AppStorageKeys, RouterUrlConstants, BreakpointType, HomeSourceState, CoverRadiusState, LyricBlurState, LyricCenterState, LyricFontSizeState, LyricFpsState, MusicStoreService, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { LXUserApiInfo, lxSourceManager, MediaService } from 'player';
+import { localMusic } from 'localmusic';
+import { SyncSettingsPanel } from 'sync';
 import { AccountManageSheet } from '../account/AccountManageSheet';
 import { PlatformMusicPage } from '../account/PlatformMusicPage';
 import { DownloadManagerSection } from './DownloadManagerSection';
+import { LocalMusicSection } from './LocalMusicSection';
 
 import { CustomColorSheetContent } from './CustomColorSheetContent';
 import { CapsuleSegmentedSelector } from './CapsuleSegmentedSelector';
@@ -77,6 +80,8 @@ export struct SettingsDetailPage {
   @Local downloadQualityTag: boolean = false;
   @Local homeSource: string = 'qq';
   @Local useAccountRec: boolean = false;
+  /** 「本地音乐自动匹配歌词」开关（localmusic 的库状态，默认开） */
+  @Local autoMatchLyric: boolean = true;
   private readonly qualityRowLabels: string[][] = [
     ['128K', '320K', 'FLAC', '24Bit'],
     ['Hi-Res', '全景声', '全景声+', '母带']
@@ -102,8 +107,20 @@ export struct SettingsDetailPage {
   private pageScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
+    this.ensureLocalMusicInit();
     this.refresh();
     this.startEnginePolling();
+  }
+
+  /** 本地音乐库要用时才初始化（拿 UIContext 的 host context） */
+  private ensureLocalMusicInit(): void {
+    if (localMusic.isReady()) {
+      return;
+    }
+    const context: common.Context | undefined = this.getUIContext().getHostContext();
+    if (context !== undefined) {
+      localMusic.init(context as common.UIAbilityContext);
+    }
   }
 
   private detailTitle(): string {
@@ -116,6 +133,8 @@ export struct SettingsDetailPage {
       case 5: return '音源管理';
       case 6: return '下载设置';
       case 10: return '下载管理';
+      case 11: return '本地音乐';
+      case 12: return '同步设置';
       case 7: return '主题外观';
       case 8: return '其它设置';
       case 9: return '关于';
@@ -229,6 +248,7 @@ export struct SettingsDetailPage {
     this.lastError = AppStorage.get<string>('lxLastError') ?? '';
     this.playLog = AppStorage.get<string>('lxPlayLog') ?? '';
     this.colorMode = MusicStoreService.getInstance().getColorMode();
+    this.autoMatchLyric = localMusic.getAutoMatchLyric();
   }
 
   private copyPlayLog(): void {
@@ -827,6 +847,14 @@ export struct SettingsDetailPage {
               }
             })
 
+          this.SubTitle('本地音乐自动匹配歌词')
+          this.CapsuleSelector(this.onOffOptions, this.autoMatchLyric ? 0 : 1,
+            (index: number) => {
+              const isOn: boolean = index === 0;
+              this.autoMatchLyric = isOn;
+              localMusic.setAutoMatchLyric(isOn);
+            })
+
           this.SubTitle($r('app.string.setting_sub_lyric_font_size'))
           Slider({
             value: this.lyricFontSize,
@@ -935,6 +963,27 @@ export struct SettingsDetailPage {
     .width('100%')
     .height('100%')
     .padding({ top: getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP })
+  }
+
+  /** 标题栏顶部的避让高度：内嵌（宽屏右栏）时为 0，二级页时让出标题栏。 */
+  private contentTopOffset(): number {
+    return this.embedded ? 0 : getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP;
+  }
+
+  /** 本地音乐页：导入设备音频 + 列表 + 删除。 */
+  @Builder
+  private LocalMusicSheet() {
+    LocalMusicSection({
+      topOffset: this.contentTopOffset()
+    })
+  }
+
+  /** 同步设置页：洛雪同步的开关 / 服务器地址 / 认证码 / 进度 / 不喜欢规则。 */
+  @Builder
+  private SyncSettingsSheet() {
+    SyncSettingsPanel({
+      topOffset: this.contentTopOffset()
+    })
   }
 
   /** 主题设置弹窗：主题色 / 日夜模式 / 光感，拆为两张卡片。 */
@@ -1350,6 +1399,10 @@ export struct SettingsDetailPage {
           this.AboutSheet()
         } else if (this.sheetIndex === 10) {
           this.DownloadManagerSheet()
+        } else if (this.sheetIndex === 11) {
+          this.LocalMusicSheet()
+        } else if (this.sheetIndex === 12) {
+          this.SyncSettingsSheet()
         }
       }
       .width('100%')

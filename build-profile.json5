@@ -1,17 +1,21 @@
 {
   "app": {
+    // 签名材料是机器相关的（.sign/ 不入库），不要提交绝对路径。
+    // 本地：File > Project Structure > Signing Configs > 自动生成签名，会自动写回这里。
+    // 原先 Linux 构建机上使用的是 /root/Project/RzdMusic/.sign/ 下的
+    // RzdMusic.p12 / RzdMusicRelease.p7b / app_cert_chain.cer（keyAlias: rzdmusic）。
     "signingConfigs": [
       {
         "name": "default",
         "type": "HarmonyOS",
         "material": {
-          "storeFile": "/root/Project/RzdMusic/.sign/RzdMusic.p12",
-          "storePassword": "00000024df23d71e292edfa6afb17a48aeaf4c371da959fd41bec1448ebef491b33d2cdde8fcfc8379e732c47e66b806dbef2368",
-          "keyAlias": "rzdmusic",
-          "keyPassword": "00000024df23d71e292edfa6afb17a48aeaf4c371da959fd41bec1448ebef491b33d2cdde8fcfc8379e732c47e66b806dbef2368",
+          "certpath": "C:\\Users\\Lenovo\\.ohos\\config\\default_RzdMusic_2XecF7g9R_LOrh32bDfIECPILIGm64fGBSytQ10r1bw=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001BE1E62DEB3D114ABD819BBAFD25BD28DC43BD98D5A38DDFB2201230E3B47641B58698B65EAD53F4",
+          "profile": "C:\\Users\\Lenovo\\.ohos\\config\\default_RzdMusic_2XecF7g9R_LOrh32bDfIECPILIGm64fGBSytQ10r1bw=.p7b",
           "signAlg": "SHA256withECDSA",
-          "profile": "/root/Project/RzdMusic/.sign/RzdMusicRelease.p7b",
-          "certpath": "/root/Project/RzdMusic/.sign/app_cert_chain.cer"
+          "storeFile": "C:\\Users\\Lenovo\\.ohos\\config\\default_RzdMusic_2XecF7g9R_LOrh32bDfIECPILIGm64fGBSytQ10r1bw=.p12",
+          "storePassword": "0000001B53E0F25C492B63AE4BA182B9432E74F9B02C47A45BA4BD037F212DBD170912C9114F3C798A0A03"
         }
       }
     ],
@@ -123,6 +127,32 @@
     {
       "name": "setting",
       "srcPath": "./features/setting",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default",
+            "pc"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "localmusic",
+      "srcPath": "./features/localmusic",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default",
+            "pc"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "sync",
+      "srcPath": "./features/sync",
       "targets": [
         {
           "name": "default",

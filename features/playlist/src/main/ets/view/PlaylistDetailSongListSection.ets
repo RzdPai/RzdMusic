@@ -15,9 +15,13 @@
 
 
 import { uiObserver } from '@kit.ArkUI';
-import { BreakpointType, MusicStoreService, PlayedSongRecord, StyleConstants } from 'musicbasic';
+import { common } from '@kit.AbilityKit';
+import { BreakpointType, MusicStoreService, SongItem, StyleConstants } from 'musicbasic';
+import { localMusic } from 'localmusic';
 import { PlaylistSongUi } from '../model/PlaylistUiModels';
 import { MusicListPlaybackViewModel } from '../viewmodel/MusicListPlaybackViewModel';
+import { PlaylistDataUtil } from '../util/PlaylistDataUtil';
+import { notifyPlaylistChanged } from '../util/PlaylistRefreshBus';
 import { SongMoreMenu } from './SongMoreMenu';
 
 /** Bottom reserve (vp) inside the list so the last row clears the floating mini bar. */
@@ -55,12 +59,30 @@ export struct PlaylistDetailSongListSection {
   @Local sortMode: number = SORT_DEFAULT;
   /** True when custom reordering mode is active (up/down arrows on rows). */
   @Local customSortMode: boolean = false;
+  /** 「添加本地音乐」多选弹层是否可见。 */
+  @Local showLocalSheet: boolean = false;
+  /** 弹层里的本地音乐列表快照。 */
+  @Local localItems: SongItem[] = [];
+  /** 弹层里已勾选的本地歌 key。 */
+  @Local selectedLocal: Record<string, boolean> = {};
   /** List vertical scroller instance bound to the List. */
   private scroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
+    this.ensureLocalMusicReady();
     this.syncOriginal();
     this.applyFilterAndSort();
+  }
+
+  /** 兜底：宿主还没调过 localMusic.init 时这里自己初始化（读侧表需要库已加载）。 */
+  private ensureLocalMusicReady(): void {
+    if (localMusic.isReady()) {
+      return;
+    }
+    const context = this.getUIContext().getHostContext();
+    if (context !== undefined) {
+      localMusic.init(context as common.UIAbilityContext);
+    }
   }
 
   @Monitor('customSortCommand')
@@ -113,27 +135,71 @@ export struct PlaylistDetailSongListSection {
     this.originalSongs = [...this.listVm.playlistSongUis];
   }
 
-  /** Re-reads the playlist from the store (after a song deletion) and re-applies filter/sort. */
+  /** Re-reads the playlist (store + local side table) after a song was deleted, then re-applies. */
   private reloadFromStore(): void {
     if (this.playlistId.length === 0) {
       return;
     }
-    const p = MusicStoreService.getInstance().getPlaylistById(this.playlistId);
-    const records: PlayedSongRecord[] = p !== undefined ? p.songs : [];
-    const uis: PlaylistSongUi[] = [];
-    for (let i = 0; i < records.length; i++) {
-      const record = records[i];
-      const ui = new PlaylistSongUi();
-      ui.id = i + 1;
-      ui.title = record.name;
-      ui.singer = record.singer;
-      ui.source = record.source;
-      ui.songId = record.songId;
-      ui.coverUrl = record.img;
-      uis.push(ui);
-    }
-    this.originalSongs = uis;
+    this.ensureLocalMusicReady();
+    // 走 view model：本地歌侧表与 store 行的合并逻辑集中在 mergeLocalFirst 里
+    this.listVm.loadPlaylistSongs(this.playlistId);
+    this.syncOriginal();
     this.applyFilterAndSort();
+  }
+
+  // ------------------------------------------------------------ 添加本地音乐到歌单
+
+  /** 打开「添加本地音乐」多选弹层（读取全部本地歌）。 */
+  private openLocalPicker(): void {
+    this.ensureLocalMusicReady();
+    this.localItems = localMusic.getSongItems();
+    this.selectedLocal = {};
+    this.showLocalSheet = true;
+  }
+
+  /** 弹层里某条本地歌是否已勾选。 */
+  private isLocalSelected(key: string): boolean {
+    return this.selectedLocal[key] === true;
+  }
+
+  /** 勾选 / 取消勾选一条本地歌。 */
+  private toggleLocal(key: string, on: boolean): void {
+    const next: Record<string, boolean> = {};
+    const keys: string[] = Object.keys(this.selectedLocal);
+    for (let i: number = 0; i < keys.length; i++) {
+      next[keys[i]] = this.selectedLocal[keys[i]];
+    }
+    next[key] = on;
+    this.selectedLocal = next;
+  }
+
+  /** 已勾选的本地歌 key 列表。 */
+  private selectedLocalKeys(): string[] {
+    const out: string[] = [];
+    const keys: string[] = Object.keys(this.selectedLocal);
+    for (let i: number = 0; i < keys.length; i++) {
+      if (this.selectedLocal[keys[i]] === true) {
+        out.push(keys[i]);
+      }
+    }
+    return out;
+  }
+
+  /** 把勾选的本地歌批量加入当前歌单（侧表 + store），并刷新列表。 */
+  private addSelectedLocalToPlaylist(): void {
+    const keys: string[] = this.selectedLocalKeys();
+    if (keys.length === 0 || this.playlistId.length === 0) {
+      return;
+    }
+    const added: number = localMusic.addKeysToPlaylist(this.playlistId, keys);
+    notifyPlaylistChanged();
+    this.showLocalSheet = false;
+    this.selectedLocal = {};
+    this.listVm.loadPlaylistSongs(this.playlistId);
+    this.syncOriginal();
+    this.applyFilterAndSort();
+    const message: string = added > 0 ? '已加入 ' + added + ' 首本地音乐' : '歌单中已有这些本地音乐';
+    this.getUIContext().getPromptAction().showToast({ message: message, duration: 2000 });
   }
 
   /** Applies the current search keyword and sort mode onto the original songs. */
@@ -194,12 +260,27 @@ export struct PlaylistDetailSongListSection {
     this.applyFilterAndSort();
   }
 
-  /** Stable per-song key (source_songId) so deletions update the list correctly. */
+  /** 稳定 per-song key (source_songId) so deletions update the list correctly. */
   private songKeyOf(item: PlaylistSongUi): string {
     if (item.source.length > 0 && item.songId.length > 0) {
       return 'pl-' + item.source + '_' + item.songId;
     }
     return 'pl-local-' + item.id;
+  }
+
+  /**
+   * 行在 view model 原始（未排序 / 未过滤）列表里的下标，供播放使用。
+   * @param item 展示中的一行。
+   * @returns 原始下标；找不到时按 id 兜底。
+   */
+  private originalIndexOf(item: PlaylistSongUi): number {
+    const rows: PlaylistSongUi[] = this.listVm.playlistSongUis;
+    for (let i: number = 0; i < rows.length; i++) {
+      if (rows[i].source === item.source && rows[i].songId === item.songId) {
+        return i;
+      }
+    }
+    return item.id > 0 ? item.id - 1 : 0;
   }
 
   /** Sort menu items for the list-check icon. */
@@ -232,10 +313,9 @@ export struct PlaylistDetailSongListSection {
   /**
    * Builds a single playlist row: metadata, tags, overflow affordance, and tap-to-play.
    * @param item Song UI model for the row.
-   * @param index Zero-based index in the playlist for playback requests.
    */
   @Builder
-  private PlaylistSongRow(item: PlaylistSongUi, index: number) {
+  private PlaylistSongRow(item: PlaylistSongUi) {
     Row({ space: 8 }) {
       if (item.coverUrl.length > 0) {
         Image(item.coverUrl)
@@ -252,19 +332,35 @@ export struct PlaylistDetailSongListSection {
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
         Row({ space: 6 }) {
-          Text('VIP')
-            .fontSize($r('sys.float.Caption_S'))
-            .lineHeight(13)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.playlist_detail_tag_text'))
-            .padding({
-              left: 4,
-              right: 4,
-              top: 1,
-              bottom: 1
-            })
-            .backgroundColor($r('app.color.playlist_detail_tag_background'))
-            .borderRadius($r('sys.float.corner_radius_level2'))
+          if (PlaylistDataUtil.isLocalSource(item.source)) {
+            Text('本地')
+              .fontSize($r('sys.float.Caption_S'))
+              .lineHeight(13)
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.playlist_detail_tag_text'))
+              .padding({
+                left: 4,
+                right: 4,
+                top: 1,
+                bottom: 1
+              })
+              .backgroundColor($r('app.color.playlist_detail_tag_background'))
+              .borderRadius($r('sys.float.corner_radius_level2'))
+          } else {
+            Text('VIP')
+              .fontSize($r('sys.float.Caption_S'))
+              .lineHeight(13)
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.playlist_detail_tag_text'))
+              .padding({
+                left: 4,
+                right: 4,
+                top: 1,
+                bottom: 1
+              })
+              .backgroundColor($r('app.color.playlist_detail_tag_background'))
+              .borderRadius($r('sys.float.corner_radius_level2'))
+          }
           Text($r('app.string.playlist_tag_spatial'))
             .fontSize($r('sys.float.Caption_S'))
             .fontColor($r('app.color.playlist_detail_tag_text'))
@@ -321,8 +417,98 @@ export struct PlaylistDetailSongListSection {
       if (this.customSortMode) {
         return;
       }
-      this.listVm.requestPlayByListIndex(index, this.getUIContext());
+      // displaySongs 可能被排序 / 搜索过滤过，播放索引要回到 view model 的原始顺序
+      this.listVm.requestPlayByListIndex(this.originalIndexOf(item), this.getUIContext());
     })
+  }
+
+  /** 「添加本地音乐」多选弹层内容：勾选本地歌后批量写入歌单侧表。 */
+  @Builder
+  private LocalMusicPickerSheet() {
+    Column({ space: 12 }) {
+      Text('选择要加入歌单的本地音乐')
+        .fontSize($r('sys.float.Subtitle_L'))
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('sys.color.font_primary'))
+        .width(StyleConstants.FULL_WIDTH)
+        .textAlign(TextAlign.Center)
+
+      if (this.localItems.length === 0) {
+        Text('还没有导入本地音乐，请先到「我的 - 本地音乐」导入')
+          .fontSize($r('sys.float.Body_S'))
+          .fontColor($r('sys.color.font_tertiary'))
+          .width(StyleConstants.FULL_WIDTH)
+          .textAlign(TextAlign.Center)
+          .padding({ top: 24, bottom: 24 })
+      } else {
+        List({ space: 2 }) {
+          ForEach(this.localItems, (item: SongItem) => {
+            ListItem() {
+              Row({ space: 12 }) {
+                Toggle({ type: ToggleType.Checkbox, isOn: this.isLocalSelected(item.songId) })
+                  .width(22)
+                  .height(22)
+                  .selectedColor(MusicStoreService.getInstance().getThemeColor())
+                  .onChange((isOn: boolean) => {
+                    this.toggleLocal(item.songId, isOn);
+                  })
+                Column({ space: 4 }) {
+                  Text(typeof item.title === 'string' ? item.title : '')
+                    .fontSize($r('sys.float.Body_M'))
+                    .fontColor($r('sys.color.font_primary'))
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  Text(typeof item.singer === 'string' ? item.singer : '')
+                    .fontSize($r('sys.float.Caption_M'))
+                    .fontColor($r('sys.color.font_tertiary'))
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                }
+                .alignItems(HorizontalAlign.Start)
+                .layoutWeight(1)
+              }
+              .width(StyleConstants.FULL_WIDTH)
+              .height(52)
+              .onClick(() => {
+                this.toggleLocal(item.songId, !this.isLocalSelected(item.songId));
+              })
+            }
+          }, (item: SongItem) => item.songId)
+        }
+        .width(StyleConstants.FULL_WIDTH)
+        .height(260)
+        .scrollBar(BarState.Off)
+      }
+
+      Row({ space: 12 }) {
+        Button('取消')
+          .layoutWeight(1)
+          .height(44)
+          .fontSize($r('sys.float.Body_L'))
+          .borderRadius($r('sys.float.corner_radius_level6'))
+          .backgroundColor($r('sys.color.background_secondary'))
+          .fontColor($r('sys.color.font_tertiary'))
+          .onClick(() => {
+            this.showLocalSheet = false;
+            this.selectedLocal = {};
+          })
+        Button(this.selectedLocalKeys().length > 0 ? '加入歌单(' + this.selectedLocalKeys().length + ')' : '加入歌单')
+          .layoutWeight(1)
+          .height(44)
+          .fontSize($r('sys.float.Body_L'))
+          .borderRadius($r('sys.float.corner_radius_level6'))
+          .backgroundColor(MusicStoreService.getInstance().getThemeColor())
+          .fontColor($r('sys.color.font_on_primary'))
+          .enabled(this.selectedLocalKeys().length > 0)
+          .onClick(() => {
+            this.addSelectedLocalToPlaylist();
+          })
+      }
+      .width(StyleConstants.FULL_WIDTH)
+    }
+    .width(StyleConstants.FULL_WIDTH)
+    .padding({ left: 20, right: 20, top: 12, bottom: 24 })
+    .backgroundColor($r('sys.color.background_secondary'))
   }
 
   /**
@@ -373,6 +559,16 @@ export struct PlaylistDetailSongListSection {
               this.saveCustomSort();
             })
         } else {
+          if (this.playlistId.length > 0) {
+            Text('添加本地音乐')
+              .fontSize($r('sys.float.Body_S'))
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.primary40'))
+              .padding({ left: 8, right: 12 })
+              .onClick(() => {
+                this.openLocalPicker();
+              })
+          }
           SymbolGlyph($r('sys.symbol.list_checkmask'))
             .fontSize(20)
             .fontWeight(FontWeight.Regular)
@@ -403,7 +599,7 @@ export struct PlaylistDetailSongListSection {
         Repeat<PlaylistSongUi>(this.displaySongs)
           .each((obj: RepeatItem<PlaylistSongUi>) => {
             ListItem() {
-              this.PlaylistSongRow(obj.item, this.displaySongs.indexOf(obj.item))
+              this.PlaylistSongRow(obj.item)
             }
           })
           .key((item: PlaylistSongUi) => this.songKeyOf(item))
@@ -428,5 +624,15 @@ export struct PlaylistDetailSongListSection {
     }
     .width(StyleConstants.FULL_WIDTH)
     .height(this.effectiveListHeightVp())
+    .bindSheet($$this.showLocalSheet, this.LocalMusicPickerSheet(), {
+      height: 420,
+      dragBar: true,
+      showClose: false,
+      backgroundColor: $r('sys.color.background_secondary'),
+      onWillDismiss: (action: DismissSheetAction) => {
+        action.dismiss();
+        this.showLocalSheet = false;
+      }
+    })
   }
 }

@@ -15,7 +15,9 @@
 
 import { AppStorageV2 } from '@kit.ArkUI';
 import { AmbientState, AppStorageKeys, MusicAppState, MusicStoreService, PlayedSongRecord, PlaylistDto, SongItem, ThemeState } from 'musicbasic';
-import { DownloadUtil, LXQualityOption, LXSearchSong, MediaService, OnlinePlayUtil, lxGetQualityOptions } from 'player';
+import { DownloadUtil, LXQualityOption, LXSearchSong, OnlinePlayUtil, lxGetQualityOptions } from 'player';
+import { localMusic } from 'localmusic';
+import { PlaylistDataUtil } from '../util/PlaylistDataUtil';
 import { notifyPlaylistChanged } from '../util/PlaylistRefreshBus';
 
 /**
@@ -65,6 +67,16 @@ export struct SongMoreMenu {
     this.getUIContext().getPromptAction().showToast({ message: message, duration: 2000 });
   }
 
+  /** 这一行是不是本地歌（source === 'local'，复用 localmusic 的 isLocalSong 口径）。 */
+  private isLocalRow(): boolean {
+    return PlaylistDataUtil.isLocalSource(this.song.source);
+  }
+
+  /** 本地歌的库 key（本地行的 songId 就是 key）。 */
+  private localKey(): string {
+    return this.song.songId;
+  }
+
   /** Frosted glass strength of the popup, following the ambient light level. */
   private menuBlur(): BlurStyle {
     switch (this.ambientState.level) {
@@ -84,8 +96,12 @@ export struct SongMoreMenu {
     void OnlinePlayUtil.playSearchSong(this.appState, this.song, this.getUIContext());
   }
 
-  /** 打开下载音质弹层：先实时拉取音质+大小（mg3 同款流程）。 */
+  /** 打开下载音质弹层：先实时拉取音质+大小（mg3 同款流程）。本地歌没有音质协商。 */
   private async openQualitySheet(): Promise<void> {
+    if (this.isLocalRow()) {
+      this.toast('已经在本机了');
+      return;
+    }
     this.sheetType = 1;
     this.qualityLoading = true;
     this.qualityOptions = [];
@@ -189,40 +205,54 @@ export struct SongMoreMenu {
     }
   }
 
-  /** Popup menu items for the song actions. */
+  /** Popup menu items for the song actions（本地歌不显示「下载」，收藏动作走侧表）。 */
   private menuItems(): MenuElement[] {
+    const local: boolean = this.isLocalRow();
     const items: MenuElement[] = [
       {
         value: '播放',
         action: (): void => {
           this.playSong();
         }
-      },
-      {
+      }
+    ];
+    // 本地歌已经在本机了，没有「下载」这个概念
+    if (!local) {
+      items.push({
         value: '下载',
         action: (): void => {
           this.openQualitySheet();
         }
-      },
-      {
-        value: '添加到歌单',
+      });
+    }
+    items.push({
+      value: '添加到歌单',
+      action: (): void => {
+        this.openPlaylistPicker();
+      }
+    });
+    if (local) {
+      const favorite: boolean = localMusic.isFavorite(this.localKey());
+      items.push({
+        value: favorite ? '取消收藏' : '添加到收藏',
         action: (): void => {
-          this.openPlaylistPicker();
+          this.toggleFavorite();
         }
-      },
-      {
+      });
+    } else {
+      items.push({
         value: '添加到收藏',
         action: (): void => {
           this.addFavorite();
         }
-      },
-      {
-        value: '添加到播放列表',
-        action: (): void => {
-          this.addToPlayQueue();
-        }
+      });
+    }
+    items.push({
+      value: '添加到播放列表',
+      action: (): void => {
+        this.addToPlayQueue();
       }
-    ];
+    });
     if (this.playlistId.length > 0) {
       items.push({
         value: '从歌单中删除',
@@ -232,6 +262,18 @@ export struct SongMoreMenu {
       });
     }
     return items;
+  }
+
+  /** 本地歌：收藏 / 取消收藏（侧表 + store 由 localmusic 一起维护）。 */
+  private toggleFavorite(): void {
+    const key: string = this.localKey();
+    if (localMusic.isFavorite(key)) {
+      localMusic.removeKeysFromFavorites([key]);
+      this.toast('已取消收藏');
+    } else {
+      localMusic.addKeysToFavorites([key]);
+      this.toast('已添加到收藏');
+    }
   }
 
   /** Adds the song to favorites. */
@@ -252,12 +294,16 @@ export struct SongMoreMenu {
     this.toast('已添加到收藏');
   }
 
-  /** Removes the song from the playlist it belongs to. */
+  /** Removes the song from the playlist it belongs to（本地歌同时清侧表）。 */
   private deleteFromPlaylist(): void {
     if (this.playlistId.length === 0) {
       return;
     }
-    this.store.removeSongFromPlaylist(this.playlistId, this.song.source, this.song.songId);
+    if (this.isLocalRow()) {
+      localMusic.removeKeysFromPlaylist(this.playlistId, [this.localKey()]);
+    } else {
+      this.store.removeSongFromPlaylist(this.playlistId, this.song.source, this.song.songId);
+    }
     notifyPlaylistChanged();
     this.toast('已从歌单中删除');
     if (this.onSongDeleted !== null) {
@@ -267,23 +313,37 @@ export struct SongMoreMenu {
 
   /** Appends the song to the current play queue without starting playback. */
   private addToPlayQueue(): void {
-    if (this.song.source.length === 0) {
-      this.toast('无法添加本地歌曲');
+    if (this.isLocalRow()) {
+      const entry = localMusic.entryOf(this.localKey());
+      if (entry === undefined) {
+        this.toast('本地文件已不在，请重新导入');
+        return;
+      }
+      this.appendToQueue(localMusic.toSongItem(entry));
       return;
     }
-    const item = new SongItem();
-    item.id = Date.now();
-    item.title = this.song.name;
-    item.singer = this.song.singer;
-    item.source = this.song.source;
-    item.songId = this.song.songId;
-    item.albumId = this.song.albumId;
-    item.albumName = this.song.albumName;
-    item.cover = this.song.img;
-    item.url = '';
-    item.lyricText = '';
-    const queue = this.appState.playQueue;
-    for (let i = 0; i < queue.length; i++) {
+    if (this.song.source.length === 0) {
+      this.toast('无法添加该歌曲');
+      return;
+    }
+    const online = new SongItem();
+    online.id = Date.now();
+    online.title = this.song.name;
+    online.singer = this.song.singer;
+    online.source = this.song.source;
+    online.songId = this.song.songId;
+    online.albumId = this.song.albumId;
+    online.albumName = this.song.albumName;
+    online.cover = this.song.img;
+    online.url = '';
+    online.lyricText = '';
+    this.appendToQueue(online);
+  }
+
+  /** 入队去重（source + songId 相同视为已在队列中）。 */
+  private appendToQueue(item: SongItem): void {
+    const queue: SongItem[] = this.appState.playQueue;
+    for (let i: number = 0; i < queue.length; i++) {
       if (queue[i].source === item.source && queue[i].songId === item.songId) {
         this.toast('已在播放列表中');
         return;
@@ -301,8 +361,17 @@ export struct SongMoreMenu {
     this.showSheet = true;
   }
 
-  /** Adds the song to a playlist. */
+  /** Adds the song to a playlist（本地歌写 localmusic 侧表，在线歌写 store）。 */
   private addToPlaylist(p: PlaylistDto): void {
+    if (this.isLocalRow()) {
+      const added: number = localMusic.addKeysToPlaylist(p.id, [this.localKey()]);
+      if (added > 0) {
+        notifyPlaylistChanged();
+      }
+      this.toast(added > 0 ? '已添加到「' + p.name + '」' : '歌单中已有该歌曲');
+      this.showSheet = false;
+      return;
+    }
     const record = new PlayedSongRecord();
     record.songId = this.song.songId;
     record.name = this.song.name;

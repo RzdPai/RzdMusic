@@ -66,7 +66,7 @@ export struct SettingPage {
   @Local settingStack: NavPathStack = new NavPathStack();
   @Local selectedIndex: number = -1;
   @Local windowInfo: WindowInfo = getWindowInfoState();
-  /** 当前弹窗类型：0=在线导入，1=自定义颜色，2=平台账号，3=平台音乐，4=播放，5=音源，6=下载，7=主题，8=其它，9=关于，10=下载管理。 */
+  /** 当前弹窗类型：0=在线导入，1=自定义颜色，2=平台账号，3=平台音乐，4=播放，5=音源，6=下载，7=主题，8=其它，9=关于，10=下载管理，11=本地音乐，12=同步设置。 */
   @Local activeSettingSheet: number = -1;
   /** 搜索关键词（顶部搜索栏过滤设置项）。 */
   @Local searchKeyword: string = '';
@@ -1312,7 +1312,9 @@ export struct SettingPage {
                   (this.activeSettingSheet === 6 ? 360 :
                     (this.activeSettingSheet === 7 ? 520 :
                       (this.activeSettingSheet === 8 ? 400 :
-                    (this.activeSettingSheet === 10 ? 560 : 480))))))))),
+                        (this.activeSettingSheet === 10 ? 560 :
+                          (this.activeSettingSheet === 11 ? 640 :
+                            (this.activeSettingSheet === 12 ? 640 : 480))))))))))),
       dragBar: true,
       showClose: false,
       backgroundColor: $r('app.color.background_secondary'),
@@ -1444,7 +1446,7 @@ export struct SettingPage {
     return [source];
   }
 
-  /** 设置数据：播放设置（声音和震动图标）+ 下载设置。 */
+  /** 设置数据：播放设置（声音和震动图标）+ 下载设置 + 本地音乐。 */
   private playbackDownloadEntries(): SettingsEntry[] {
     const playback = new SettingsEntry();
     playback.icon = $r('app.media.ic_voice');
@@ -1464,7 +1466,16 @@ export struct SettingPage {
     download.onClick = (): void => {
       this.openSettingSheet(6);
     };
-    return [playback, download];
+    const localMusic = new SettingsEntry();
+    localMusic.icon = $r('app.media.ic_store');
+    localMusic.title = '本地音乐';
+    localMusic.subtitle = '导入设备音频，离线播放';
+    localMusic.id = 11;
+    localMusic.searchText = '本地音乐 本地 导入 音频 音乐库 离线';
+    localMusic.onClick = (): void => {
+      this.openSettingSheet(11);
+    };
+    return [playback, download, localMusic];
   }
 
   /** 设置数据：主题设置（桌面和个性化图标）。 */
@@ -1481,7 +1492,7 @@ export struct SettingPage {
     return [theme];
   }
 
-  /** 设置数据：其它设置（辅助功能图标）+ 关于（系统图标）。 */
+  /** 设置数据：其它设置（辅助功能图标）+ 同步设置 + 关于（系统图标）。 */
   private otherAboutEntries(): SettingsEntry[] {
     const other = new SettingsEntry();
     other.icon = $r('app.media.ic_accessibility');
@@ -1492,6 +1503,15 @@ export struct SettingPage {
     other.onClick = (): void => {
       this.openSettingSheet(8);
     };
+    const sync = new SettingsEntry();
+    sync.icon = $r('app.media.ic_super_device');
+    sync.title = '同步设置';
+    sync.subtitle = '洛雪同步：服务器地址 / 认证码';
+    sync.id = 12;
+    sync.searchText = '同步设置 同步 洛雪 服务器 认证码 设备名 不喜欢';
+    sync.onClick = (): void => {
+      this.openSettingSheet(12);
+    };
     const about = new SettingsEntry();
     about.icon = $r('app.media.ic_system');
     about.title = $r('app.string.mine_about_title');
@@ -1501,7 +1521,7 @@ export struct SettingPage {
     about.onClick = (): void => {
       this.openSettingSheet(9);
     };
-    return [other, about];
+    return [other, sync, about];
   }
 
   /** 登录音乐 大卡片（按顶部搜索词过滤行）。 */
