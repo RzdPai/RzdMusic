@@ -14,169 +14,139 @@
  */
 
 
-import { PathShape, uiObserver } from '@kit.ArkUI';
-import { BreakpointType, isWidthBreakpointLgOrXl, StyleConstants } from 'musicbasic';
+import { uiObserver } from '@kit.ArkUI';
+import { BreakpointType, isWidthBreakpointLgOrXl } from 'musicbasic';
 
 /**
- * Playlist detail hero: cover, title, description, collect/download actions, and header size reporting.
+ * 歌单详情大图 Hero：与歌手/专辑详情页同款——
+ * 顶部整幅封面大图 + 底部向页面底色没入的渐变 + 居中大标题 + 圆形毛玻璃播放按钮。
+ * 取色（avgColor）与前景色由宿主页面算好通过参数传入，本组件只负责排版。
  */
 @ComponentV2
 export struct PlaylistDetailHeroSection {
-  /** Breakpoint-driven typography and spacing. */
+  /** 断点环境，用于封面高度与标题字号的自适应。 */
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
-  /** Header width in pixels for small-screen curved clip geometry. */
-  @Param headerWidthPx: number = 0;
-  /** Header height in pixels for small-screen curved clip geometry. */
-  @Param headerHeightPx: number = 0;
-  /** Vertical curve depth in pixels used in the path clip on compact layouts. */
-  @Param depth: number = 18;
-  /** Callback invoked when the hero container area changes (width/height in px). */
-  @Param onHeaderAreaChange: (widthPx: number, heightPx: number) => void = (): void => {};
+  /** 封面图片地址；为空时显示占位图标。 */
+  @Param coverUrl: string = '';
+  /** 歌单 / 榜单标题。 */
+  @Param title: string = '';
+  /** 副标题（如「128 首 · 收藏」），为空则不显示。 */
+  @Param subtitle: string = '';
+  /** 播放按钮点击回调（播放全部）。 */
+  @Param onPlayAll: () => void = (): void => {};
+  /** 页面取色背景，渐变没入用。 */
+  @Param backdropColor: string = '#1f1f22';
+  /** 主文字/图标颜色（由宿主按背景明暗给出）。 */
+  @Param fgColor: ResourceColor = '#FFFFFF';
+  /** 次要文字颜色。 */
+  @Param fgSecondaryColor: ResourceColor = '#B3FFFFFF';
+  /** 圆形播放按钮底色。 */
+  @Param buttonTint: ResourceColor = '#33FFFFFF';
+  /** 圆形播放按钮毛玻璃强度。 */
+  @Param buttonBlur: BlurStyle = BlurStyle.Regular;
+
+  /** 加载失败后回退到占位图标，避免一片空白。 */
+  @Local imageFailed: boolean = false;
 
   /**
-   * Renders large-column stacked hero or compact row hero with optional path clip.
+   * 封面高度（vp）。
+   *
+   * 与歌手页**完全一致（320）**：歌手页（ArtistDetailPage）看起来没有任何问题，
+   * 所以这里不再按断点做 260/320/340 的差异化 —— 差异化正是"样式还有问题"的来源之一。
    */
+  private heroHeightVp(): number {
+    return 320;
+  }
+
+  /** 标题字号（fp）：与歌手页一致（28）。 */
+  private titleFontSize(): number {
+    return 28;
+  }
+
   build() {
-    if (isWidthBreakpointLgOrXl(this.breakpointEnv.widthBreakpoint)) {
-      Column() {
-        Flex({ direction: FlexDirection.Column, justifyContent: FlexAlign.Center, alignItems: ItemAlign.Center }) {
-          Stack({ alignContent: Alignment.BottomStart }) {
-            Image($r('app.media.ic_list_cover'))
-              .width('100%')
-              .aspectRatio(1)
-              .borderRadius($r('sys.float.corner_radius_level4'))
-              .objectFit(ImageFit.Cover)
-            Text($r('app.string.playlist_play_count'))
-              .fontSize(new BreakpointType(12, 12, 12, 12, 10).getWidthValueWithHeightSM(
-                this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint))
-              .fontColor($r('sys.color.font_on_primary'))
-              .lineHeight(new BreakpointType(16, 16, 16, 16, 13).getWidthValueWithHeightSM(
-                this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint))
-              .fontWeight(FontWeight.Regular)
-              .margin({
-                left: new BreakpointType(6, 6, 8, 8).getValue(this.breakpointEnv.widthBreakpoint),
-                bottom: new BreakpointType(6, 6, 8, 8).getValue(this.breakpointEnv.widthBreakpoint)
-              })
-          }
-          .margin({
-            top: 48,
-            left: 24,
-            right: 24,
-            bottom: 24
+    Stack({ alignContent: Alignment.Bottom }) {
+      if (this.coverUrl.length > 0 && !this.imageFailed) {
+        Image(this.coverUrl)
+          .width('100%')
+          .height(this.heroHeightVp())
+          .objectFit(ImageFit.Cover)
+          .onError(() => {
+            this.imageFailed = true;
           })
-
-          Column({ space: 8 }) {
-            Text($r('app.string.playlist_detail_title'))
-              .fontSize(new BreakpointType(20, 30, 30, 30, 18).getWidthValueWithHeightSM(
-                this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint))
-              .lineHeight(new BreakpointType(27, 40, 40, 40, 24).getWidthValueWithHeightSM(
-                this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint))
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('sys.color.font_on_primary'))
-            Text($r('app.string.playlist_detail_desc'))
-              .fontSize($r('sys.float.Caption_M'))
-              .fontWeight(FontWeight.Regular)
-              .fontColor($r('app.color.hero_overlay_text_secondary'))
-              .maxLines(2)
-          }
-          .layoutWeight(1)
-          .alignItems(HorizontalAlign.Center)
+      } else {
+        Column() {
+          SymbolGlyph($r('sys.symbol.music_note_list'))
+            .fontSize(56)
+            .fontWeight(FontWeight.Regular)
+            .fontColor([this.fgSecondaryColor])
         }
-        .layoutWeight(1)
-        .align(Alignment.Center)
+        .width('100%')
+        .height(this.heroHeightVp())
+        .justifyContent(FlexAlign.Center)
+        .backgroundColor('#1f2328')
       }
-      .margin({
-        top: 16,
-        left: 32,
-        right: 32,
-        bottom: 76
-      })
-      .padding({
-        left: 24,
-        right: 24,
-        bottom: 24
-      })
-      .onAreaChange((oldRect: Area, newRect: Area) => {
-        this.onHeaderAreaChange(
-          this.getUIContext().vp2px(newRect.width as number),
-          this.getUIContext().vp2px(newRect.height as number)
-        );
-      })
-      .borderRadius($r('sys.float.corner_radius_level10'))
-      .backgroundColor('#0F4587')
-      .justifyContent(FlexAlign.SpaceBetween)
-      .alignItems(HorizontalAlign.Center)
-    } else {
-      Column() {
-        Flex({ direction: FlexDirection.Row }) {
-          Stack({ alignContent: Alignment.BottomStart }) {
-            Image($r('app.media.ic_list_cover'))
-              .width(new BreakpointType(112, 156, 288, 288, 72).getWidthValueWithHeightSM(
-                this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint))
-              .height(new BreakpointType(112, 156, 288, 288, 72).getWidthValueWithHeightSM(
-                this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint))
-              .borderRadius($r('sys.float.corner_radius_level4'))
-              .objectFit(ImageFit.Fill)
-            Text($r('app.string.playlist_play_count'))
-              .fontSize(new BreakpointType(12, 12, 12, 12, 10).getWidthValueWithHeightSM(
-                this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint))
-              .fontColor($r('sys.color.font_on_primary'))
-              .lineHeight(new BreakpointType(16, 16, 16, 16, 13).getWidthValueWithHeightSM(
-                this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint))
-              .fontWeight(FontWeight.Regular)
-              .margin({
-                left: new BreakpointType(6, 6, 8, 8).getValue(this.breakpointEnv.widthBreakpoint),
-                bottom: new BreakpointType(6, 6, 8, 8).getValue(this.breakpointEnv.widthBreakpoint)
-              })
-          }
-          .width(new BreakpointType(112, 156, 288, 288, 72).getWidthValueWithHeightSM(
-            this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint))
-          .height(new BreakpointType(112, 156, 288, 288, 72).getWidthValueWithHeightSM(
-            this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint))
 
-          Column({ space: 8 }) {
-            Text($r('app.string.playlist_detail_title'))
-              .fontSize(new BreakpointType(20, 30, 30, 30, 18).getWidthValueWithHeightSM(
-                this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint))
-              .lineHeight(new BreakpointType(27, 40, 40, 40, 24).getWidthValueWithHeightSM(
-                this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint))
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('sys.color.font_on_primary'))
-            Text($r('app.string.playlist_detail_desc'))
-              .fontSize($r('sys.float.Caption_M'))
+      // 渐变：封面下缘没入页面取色背景。高度 150 与歌手页一致（原来是 190/210）。
+      Column()
+        .width('100%')
+        .height(150)
+        .linearGradient({
+          colors: [[Color.Transparent, 0], [this.backdropColor, 1]],
+          angle: 180,
+          direction: GradientDirection.Bottom
+        })
+
+      Column() {
+        // Hero 大标题现在是页面的**唯一**标题（HDS 标题栏已不放文字，见
+        // PlaylistDetailPage.getPlaylistDetailTitleBar），所以允许折两行。
+        Text(this.title.length > 0 ? this.title : '歌单')
+          .fontSize(this.titleFontSize())
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.fgColor)
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+          .textAlign(TextAlign.Center)
+          .padding({ left: 20, right: 20 })
+
+        if (this.subtitle.length > 0) {
+          Text(this.subtitle)
+            .fontSize($r('sys.float.Caption_L'))
+            .fontColor(this.fgSecondaryColor)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .width('100%')
+            .textAlign(TextAlign.Center)
+            .padding({ left: 20, right: 20, top: 6 })
+        }
+
+        Row() {
+          Row() {
+            SymbolGlyph($r('sys.symbol.play_fill'))
+              .fontSize(26)
               .fontWeight(FontWeight.Regular)
-              .fontColor($r('app.color.hero_overlay_text_secondary'))
-              .maxLines(2)
+              .height(26)
+              .fontColor([this.fgColor])
           }
-          .layoutWeight(1)
-          .alignItems(HorizontalAlign.Start)
-          .margin({
-            left: new BreakpointType(12, 24, 24, 24, 11).getWidthValueWithHeightSM(
-              this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint)
+          .width(60)
+          .height(60)
+          .borderRadius(30)
+          .backgroundColor(this.buttonTint)
+          .backgroundBlurStyle(this.buttonBlur)
+          .alignItems(VerticalAlign.Center)
+          .justifyContent(FlexAlign.Center)
+          .onClick(() => {
+            this.onPlayAll();
           })
         }
-        .width(StyleConstants.FULL_WIDTH)
+        .width('100%')
+        .justifyContent(FlexAlign.Center)
+        .padding({ top: 12 })
       }
-      .padding({
-        top: 56,
-        left: new BreakpointType(16, 113, 24, 24).getValue(this.breakpointEnv.widthBreakpoint),
-        right: new BreakpointType(16, 113, 24, 24).getValue(this.breakpointEnv.widthBreakpoint),
-        bottom: 24
-      })
-      .onAreaChange((oldRect: Area, newRect: Area) => {
-        this.onHeaderAreaChange(
-          this.getUIContext().vp2px(newRect.width as number),
-          this.getUIContext().vp2px(newRect.height as number)
-        );
-      })
-      .clipShape(new PathShape({
-        commands: `M 0 0 L ${this.headerWidthPx} 0 L ${this.headerWidthPx} ${this.headerHeightPx - this.depth} ` +
-          `Q ${this.headerWidthPx / 2} ${this.headerHeightPx} 0 ${this.headerHeightPx - this.depth} Z`
-      }))
-      .backgroundColor('#0F4587')
-      .width(StyleConstants.FULL_WIDTH)
-      .justifyContent(FlexAlign.SpaceBetween)
-      .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP])
+      .width('100%')
+      .padding({ left: 16, right: 16, bottom: 16 })
     }
+    .width('100%')
+    .height(this.heroHeightVp())
   }
 }

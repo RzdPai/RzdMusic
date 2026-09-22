@@ -15,11 +15,23 @@
 
 
 import { AppStorageV2, uiObserver } from '@kit.ArkUI';
-import { AppStorageKeys, BreakpointConstants, CoverRadiusState, MusicStoreService, PlayedSongRecord, StyleConstants, ThemeState } from 'musicbasic';
+import {
+  AppStorageKeys,
+  BreakpointConstants,
+  CoverRadiusState,
+  MusicStoreService,
+  PLAYER_BIG_COVER_ID,
+  PlayedSongRecord,
+  StyleConstants,
+  ThemeState
+} from 'musicbasic';
 import { MusicAppState } from '../model/PlayerModels';
 import { PlayerConstants } from '../constant/PlayerConstants';
 import { ControlAreaComponent } from './ControlAreaComponent';
 import { amllParseLyricCached } from '../amll/parse/AmllAutoDetect';
+
+/** 播放页大封面的组件 id（常量定义已提到 common 层，见 PlayerExpandState.ets）。 */
+export { PLAYER_BIG_COVER_ID } from 'musicbasic';
 
 /** Album art, title/artist block, and control area for full-screen playback layouts. */
 @ComponentV2
@@ -204,6 +216,7 @@ export struct MusicPlayInfoBlock {
   CoverInfo() {
     Stack({ alignContent: Alignment.Center }) {
       Image(this.currentCoverSource())
+        .id(PLAYER_BIG_COVER_ID)
         .constraintSize({ maxWidth: '100%', maxHeight: '100%' })
         .aspectRatio(1)
         .objectFit(ImageFit.Cover)
@@ -305,6 +318,7 @@ export struct MusicPlayInfoBlock {
         Column() {
           Column() {
             Image(this.currentCoverSource())
+              .id(PLAYER_BIG_COVER_ID)
               .width(StyleConstants.FULL_WIDTH)
               .aspectRatio(1)
               .objectFit(ImageFit.Cover)

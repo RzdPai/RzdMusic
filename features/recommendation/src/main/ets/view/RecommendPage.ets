@@ -17,12 +17,14 @@ import { AppStorageV2, uiObserver } from '@kit.ArkUI';
 import {
   AmbientState,
   AppStorageKeys,
+  BarScrollHelper,
   BreakpointType,
   getWindowInfoState,
   HomePlazaState,
   HomeRankingState,
   HomeSourceState,
   ImmersiveType,
+  MusicAppState,
   MusicStoreService,
   RouterUrlConstants,
   SdkApiUtil,
@@ -46,6 +48,11 @@ import { HomePlazaSection } from './HomePlazaSection';
 @ComponentV2
 export struct RecommendPage {
   @Param shellProvidesFloatingMiniBar: boolean = false;
+  /**
+   * 壳层双层底栏「上下两排」时额外占用的底部高度（vp）。
+   * 迷你条与页签分两排后，滚动到底的最后一行会被第二条遮住，必须由壳层告知。
+   */
+  @Param floatingBarExtraBottomReserveVp: number = 0;
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
   @Local windowInfo: WindowInfo = getWindowInfoState();
   @Local recommendViewModel: RecommendViewModel = new RecommendViewModel();
@@ -63,6 +70,9 @@ export struct RecommendPage {
     AppStorageV2.connect(HomeRankingState, AppStorageKeys.HOME_RANKING_STATE, () => new HomeRankingState())!;
   @Local accountChangedState: AccountChangedState =
     AppStorageV2.connect(AccountChangedState, PlayerConstants.ACCOUNT_CHANGED_STATE, () => new AccountChangedState())!;
+  /** 全局播控状态：滚动联动底栏时需要写 hdsBarLayoutMode / miniBarExpanded。 */
+  @Local appState: MusicAppState =
+    AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
   @Consumer('pageIndexInfos') pageIndexInfos: NavPathStack = new NavPathStack();
   /** Scroller bound to the HDS title bar so the scroll effect (gradient blur) can fire. */
   private pageScroller: Scroller = new Scroller();
@@ -169,9 +179,26 @@ export struct RecommendPage {
     if (this.shellProvidesFloatingMiniBar) {
       // 悬浮 Tab 条（barOverlap，高 56 + 底部间距 16）叠在内容上方，
       // 不预留高度时滚动到底的最后一行会被遮挡（推荐/歌手/榜单共用本页 Scroll）。
-      return 56 + 16;
+      // 双层底栏「上下两排」时还要再加上迷你条那一排的高度。
+      return 56 + 16 + this.floatingBarExtraBottomReserveVp;
     }
     return SdkApiUtil.isSdkApiAtLeast(SdkConstants.HDS_TABS_BAR_FLOATING_MIN_SDK_API) ? 0 : 56;
+  }
+
+  /**
+   * 滚动帧开始回调：驱动双层底栏的收起/展开。
+   *
+   * 方向（按产品需求）：列表**上滑** → Tab 收起；列表**下滑** → Tab 展开。
+   * `onScrollFrameBegin` 的 offset 就是本帧增量，直接交给 helper；返回值不消费滚动。
+   * @param offset 本帧滚动增量（vp）。
+   * @returns 不消费滚动：offsetRemain 原样返回。
+   */
+  private onHomeScrollFrameBegin(offset: number): OnScrollFrameBeginHandlerResult {
+    if (this.shellProvidesFloatingMiniBar && BarScrollHelper.isEnabled()) {
+      BarScrollHelper.notifyScrollDelta(this.getUIContext(), this.appState, offset,
+        this.breakpointEnv.widthBreakpoint);
+    }
+    return { offsetRemain: offset };
   }
 
   build() {
@@ -201,6 +228,9 @@ export struct RecommendPage {
           .edgeEffect(EdgeEffect.Spring)
           .clip(false)
           .align(Alignment.Top)
+          .onScrollFrameBegin((offset: number): OnScrollFrameBeginHandlerResult => {
+            return this.onHomeScrollFrameBegin(offset);
+          })
         } else {
           Column() {
             LoadingProgress()

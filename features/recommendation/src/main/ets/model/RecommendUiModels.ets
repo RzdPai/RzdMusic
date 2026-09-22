@@ -17,21 +17,29 @@
 /**
  * UI row model for a song in the private-songs recommendation list.
  */
+/**
+ * UI model for a home "private song" row (online or local).
+ *
+ * 「用登录状态获取推荐」关掉时，首页歌曲来自各平台榜单接口，**接口不带封面**，
+ * 封面是异步补进来的 —— 所以这个类必须是 `@ObservedV2` + `@Trace`，
+ * 否则补完封面改 `coverUrl` 时界面不会重绘（表现就是整排空图标、怎么刷新都没图）。
+ */
+@ObservedV2
 export class RecommendPrivateSongUi {
   /** Stable song id used for playback requests. */
   public id: number = 0;
   /** Song title text or resource. */
-  public title: string | Resource = '';
+  @Trace public title: string | Resource = '';
   /** Artist or singer line. */
-  public singer: string | Resource = '';
+  @Trace public singer: string | Resource = '';
   /** Cover artwork resource (mapped from API label in util). */
   public cover: Resource = $r('app.string.page_show');
   /** Music source id ('kw'|'kg'|'tx'|'wy'|'mg') for online songs; empty for local. */
-  public source: string = '';
+  @Trace public source: string = '';
   /** Song id within the music source for online songs. */
-  public songId: string = '';
+  @Trace public songId: string = '';
   /** Online cover image url; empty when unavailable. */
-  public coverUrl: string = '';
+  @Trace public coverUrl: string = '';
 }
 
 
@@ -57,6 +65,21 @@ export class RecommendHeroCardUi {
   public songId: string = '';
   /** Music source id ('kw'|'kg'|'tx'|'wy'|'mg') for daily-recommendation banners. */
   public source: string = '';
+  /**
+   * 功能入口卡的点击去向。
+   *
+   * 首页顶部那几张是 MusicHome 同款**功能入口**（现在就听 / 每日30首 / 新歌推荐 /
+   * 心动模式 / 精选推荐），不是歌曲也不是榜单，所以既没有 songId 也没有 boardId，
+   * 用这个字段决定点下去做什么。空串表示走原来的歌曲/榜单分发逻辑。
+   */
+  public feature: string = '';
+  /**
+   * 「每日30首」卡的背景拼图：该列表前 4 首的封面地址（2×2 拼贴）。
+   * 其它卡为空数组。
+   */
+  public dailyCovers: string[] = [];
+  /** 「每日30首」卡背景拼图取不到封面时的占位歌名（同样 4 个）。 */
+  public dailyTitles: string[] = [];
   /** Gradient start color (hex string). */
   public gradientStart: string = '#1E3A5F';
   /** Gradient end color (hex string). */

@@ -25,3 +25,4 @@ export { SplitColumnPlaylistPage, SplitColumnPlaylistPageBuilder } from './src/m
 export { PlaylistHub, PlayListBuilder } from './src/main/ets/view/PlaylistHubPage';
 export { SongListBuilder } from './src/main/ets/view/SongQueueListPage';
 export { getWatchNavContext, WatchNavContext } from './src/main/ets/model/WatchNavContext';
+export { MINI_BAR_COVER_ID } from './src/main/ets/view/HomeMiniBarAlbumCover';

@@ -5,13 +5,13 @@
         "name": "default",
         "type": "HarmonyOS",
         "material": {
-          "storeFile": "/root/Project/RzdMusic/.sign/RzdMusic.p12",
+          "storeFile": "C:/Users/Administrator/Desktop/RzdProject/RzdMusic/.sign/RzdMusic.p12",
           "storePassword": "00000024df23d71e292edfa6afb17a48aeaf4c371da959fd41bec1448ebef491b33d2cdde8fcfc8379e732c47e66b806dbef2368",
           "keyAlias": "rzdmusic",
           "keyPassword": "00000024df23d71e292edfa6afb17a48aeaf4c371da959fd41bec1448ebef491b33d2cdde8fcfc8379e732c47e66b806dbef2368",
           "signAlg": "SHA256withECDSA",
-          "profile": "/root/Project/RzdMusic/.sign/RzdMusicRelease.p7b",
-          "certpath": "/root/Project/RzdMusic/.sign/app_cert_chain.cer"
+          "profile": "C:/Users/Administrator/Desktop/RzdProject/RzdMusic/.sign/RzdMusicRelease.p7b",
+          "certpath": "C:/Users/Administrator/Desktop/RzdProject/RzdMusic/.sign/app_cert_chain.cer"
         }
       }
     ],
@@ -20,7 +20,7 @@
         "name": "default",
         "signingConfig": "default",
         "compatibleSdkVersion": "6.1.0(23)",
-        "targetSdkVersion": "6.1.0(23)",
+        "targetSdkVersion": "6.1.1(24)",
         "runtimeOS": "HarmonyOS",
         "buildOption": {
           "strictMode": {
@@ -33,7 +33,7 @@
         "name": "pc",
         "signingConfig": "default",
         "compatibleSdkVersion": "6.1.0(23)",
-        "targetSdkVersion": "6.1.0(23)",
+        "targetSdkVersion": "6.1.1(24)",
         "runtimeOS": "HarmonyOS",
         "buildOption": {
           "strictMode": {
@@ -123,6 +123,32 @@
     {
       "name": "setting",
       "srcPath": "./features/setting",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default",
+            "pc"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "localmusic",
+      "srcPath": "./features/localmusic",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default",
+            "pc"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "sync",
+      "srcPath": "./features/sync",
       "targets": [
         {
           "name": "default",

@@ -13,8 +13,22 @@
  * limitations under the License.
  */
 
-import { ImmersiveType, getWindowInfoState, WindowInfo } from 'musicbasic';
+import { AppStorageV2 } from '@kit.ArkUI';
+import {
+  AppStorageKeys,
+  BarLayoutModes,
+  ImmersiveType,
+  MINI_BAR_COVER_ID,
+  MusicAppState,
+  SdkApiUtil,
+  SdkConstants,
+  getWindowInfoState,
+  WindowInfo
+} from 'musicbasic';
 import { PlayerConstants, PlayerViewModel } from 'player';
+
+/** 迷你条封面的组件 id（常量定义已提到 common 层，见 PlayerExpandState.ets）。 */
+export { MINI_BAR_COVER_ID } from 'musicbasic';
 
 /**
  * Mini player album art with optional ring progress and play icon overlay.
@@ -28,8 +42,19 @@ export struct HomeMiniBarAlbumCover {
    * Embedded (`false`): cover image always 44vp.
    */
   @Param followAppMiniBarExpanded: boolean = true;
+  /**
+   * 锁定封面为「双层底栏 · 上下两排 · 折叠态」的尺寸（30vp）。
+   *
+   * 二级页面的悬浮胶囊要和**首页底栏双层时上面那条**长得一模一样，那一条在
+   * 上下两排时封面就是 30vp；但这个尺寸正常是靠 `isTwoRowBarLayout()` 读 HDS 栏排布
+   * 算出来的，而二级页面根本没有底栏，读到的值不可靠 —— 所以由调用方直接锁定。
+   */
+  @Param lockTwoRowCoverSize: boolean = false;
   /** Window info for immersive vs standard mini bar layout. */
   @Local windowInfo: WindowInfo = getWindowInfoState();
+  /** 全局播控状态：双层底栏「上下两排」时封面收缩到 30vp。 */
+  @Local appState: MusicAppState =
+    AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
 
   /**
    * @returns Progress denominator for the ring; at least 1 to avoid division issues.
@@ -56,11 +81,29 @@ export struct HomeMiniBarAlbumCover {
   }
 
   /**
+   * 双层底栏是否处于「上下两排」：此时迷你条只占半排，封面需要收缩到 30vp，
+   * 否则会把页签那一排挤出去（musicfreeOH 的同款处理）。
+   * @returns True when the HDS bar is in two-row (VERTICAL) layout.
+   */
+  private isTwoRowBarLayout(): boolean {
+    if (!this.followAppMiniBarExpanded) {
+      return false;
+    }
+    if (!SdkApiUtil.isDistributionOsApiAtLeast(SdkConstants.DISTRIBUTION_OS_6_1_1_CODE)) {
+      return false;
+    }
+    return this.appState.hdsBarLayoutMode === BarLayoutModes.VERTICAL;
+  }
+
+  /**
    * @returns Album cover width/height in vp for current immersive and expand state.
    */
   private coverSideLengthVp(): number {
     if (this.isImmersiveFreeWindowCover()) {
       return 32;
+    }
+    if (this.lockTwoRowCoverSize || this.isTwoRowBarLayout()) {
+      return 30;
     }
     return this.isCompactMiniBarCover() ? 44 : 56;
   }
@@ -72,6 +115,9 @@ export struct HomeMiniBarAlbumCover {
     if (this.isImmersiveFreeWindowCover()) {
       return 8;
     }
+    if (this.lockTwoRowCoverSize || this.isTwoRowBarLayout()) {
+      return 30;
+    }
     return this.isCompactMiniBarCover() ? 44 : 56;
   }
 
@@ -82,9 +128,12 @@ export struct HomeMiniBarAlbumCover {
     Stack({ alignContent: Alignment.Center }) {
       Image(this.playerViewModel.songCoverUrl().length > 0 ?
         this.playerViewModel.songCoverUrl() : this.playerViewModel.songCover())
+        .id(MINI_BAR_COVER_ID)
         .width(this.coverSideLengthVp())
         .height(this.coverSideLengthVp())
         .borderRadius(this.coverBorderRadiusVp())
+        // 上下两排 <-> 单排切换时封面尺寸平滑过渡（30 <-> 44），不要瞬跳
+        .animation({ duration: 500, curve: Curve.Smooth })
       if (!this.isImmersiveFreeWindowCover()) {
         Progress({
           value: this.playerViewModel.appState.progress,

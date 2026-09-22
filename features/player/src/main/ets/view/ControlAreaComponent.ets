@@ -258,7 +258,13 @@ export struct ControlAreaComponent {
       })
   }
 
-  /** Custom cast picker icon, sized to match the other bottom-row glyphs. */
+  /**
+   * 自定义投播图标。
+   *
+   * 尺寸/字重/颜色**必须**与 {@link bottomOtherGlyph} 完全一致，否则这一排里
+   * 投播会明显比另外三个大一圈（用户反馈的就是这个）。
+   * 这里和旁边三个一样只给 fontSize，不额外加 padding、也不包容器。
+   */
   @Builder
   private castPickerIcon() {
     SymbolGlyph($r('sys.symbol.shareplay'))
@@ -405,6 +411,9 @@ export struct ControlAreaComponent {
 
       if (this.showBottomOtherRow) {
         Row({ space: 0 }) {
+          // 投播：AVCastPicker 会自己画一个容器，不给尺寸时它比旁边 22vp 的 SymbolGlyph
+          // 大一圈。这里把宽高钉成 24（图标 22 + 各 1vp 余量），并让 customPicker
+          // 只负责画图标本体，这样四个按钮的视觉大小才一致。
           AVCastPicker({
             normalColor: '#99FFFFFF',
             activeColor: '#99FFFFFF',
@@ -412,8 +421,8 @@ export struct ControlAreaComponent {
               this.castPickerIcon()
             }
           })
-            .width(40)
-            .height(40)
+            .width(24)
+            .height(24)
           this.bottomOtherGlyph($r('sys.symbol.bell'), '通知')
           this.bottomOtherGlyph($r('sys.symbol.arrow_down_circle'), '下载', (): void => {
             this.openDownloadQuality();

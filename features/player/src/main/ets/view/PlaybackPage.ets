@@ -19,16 +19,20 @@ import { effectKit } from '@kit.ArkGraphics2D';
 import { common } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { http } from '@kit.NetworkKit';
+import { hdsEffect } from '@kit.UIDesignKit';
 import {
   AppStorageKeys,
   BreakpointConstants,
   CoverRadiusState,
+  CoverTintState,
   getWindowInfoState,
   ImmersiveType,
   isWidthBreakpointLgOrXl,
   Logger,
   MusicStoreService,
+  PlaybackFlowLightState,
   PlaybackShellConstants,
+  PlayerExpandState,
   ShowMiniLyricState,
   StyleConstants,
   WindowInfo,
@@ -58,6 +62,11 @@ interface PixelMapReleaseProbe {
   release?: () => void;
 }
 
+/** 一圈流光时长（ms）：慢一点才像"呼吸"而不是闪。 */
+const FLOW_LIGHT_DURATION_MS: number = 12000;
+/** 流光层整体不透明度：太高会盖住封面与歌词。 */
+const FLOW_LIGHT_OPACITY: number = 0.55;
+
 /**
  * Full-screen playback page: layered background, breakpoint-specific layout, dismiss gestures,
  * and dynamic tint from album art.
@@ -76,6 +85,17 @@ export struct PlaybackPage {
   @Local windowInfo: WindowInfo = getWindowInfoState();
   @Local coverRadiusState: CoverRadiusState =
     AppStorageV2.connect(CoverRadiusState, AppStorageKeys.COVER_RADIUS_STATE, () => new CoverRadiusState())!;
+  /** 播放页流光背景开关（设置项，AppStorageV2 共享，改设置立刻生效）。 */
+  @Local flowLightState: PlaybackFlowLightState =
+    AppStorageV2.connect(PlaybackFlowLightState, AppStorageKeys.PLAYBACK_FLOW_LIGHT_STATE,
+      () => new PlaybackFlowLightState())!;
+  /** 流光背景的两个颜色（由封面动态取色写入）。 */
+  @Local coverTint: CoverTintState =
+    AppStorageV2.connect(CoverTintState, AppStorageKeys.COVER_TINT_STATE, () => new CoverTintState())!;
+  /** 流光着色器控制器：换歌后按新取到的封面颜色重设 uniform。 */
+  private flowLightController: hdsEffect.ShaderEffectController = new hdsEffect.ShaderEffectController();
+  /** 已应用到着色器的取色版本号，避免同一份颜色重复下发布。 */
+  private appliedTintVersion: number = -1;
   /** Background cover image (Resource or blurred PixelMap). */
   @Local imageLabel: image.PixelMap | Resource = $r('app.media.ic_avatar1');
   /** Cross-script source-switch banner state; AppStorageV2-backed for reactive UI. */
@@ -102,6 +122,92 @@ export struct PlaybackPage {
   private context: common.UIAbilityContext | undefined = undefined;
   /** Logger tag for this page. */
   private static readonly logTag: string = 'PlaybackPage';
+  /** 收起态内容层占窗口高度的百分比：贴底一条，大致等于迷你条那一条。 */
+  private static readonly COLLAPSED_HEIGHT_PERCENT: number = 9;
+  /** 展开动画的起点进度（= 完全收起）。 */
+  private static readonly EXPAND_START_PROGRESS: number = 100;
+  /** 展开/收起动画时长（ms），与参考工程 `OPEN_PLAYER_UI_ANIMATION_MS` 一致。 */
+  private static readonly EXPAND_DURATION_MS: number = 380;
+  /** 展开看门狗（ms）：超时还没回到完整态就强制回到完整态。 */
+  private static readonly COLLAPSE_WATCHDOG_MS: number = 900;
+  /** 展开看门狗定时器句柄。 */
+  private collapseWatchdogTimer: number = -1;
+  /** 正在播收起动画（防止连点返回播两遍）。 */
+  private isClosing: boolean = false;
+  /** 下拉收起：拖拽多少距离算"拉到底"（相对窗口高度）。 */
+  private static readonly DISMISS_DRAG_SPAN_RATIO: number = 0.42;
+  /** 下拉松手时的提交阈值：进度超过它就收起，否则弹回完整态。 */
+  private static readonly DISMISS_COMMIT_PROGRESS: number = 38;
+
+  /** @returns 窗口高度（vp）；拿不到时给一个兜底值，保证拖拽比例不会除零。 */
+  private deviceHeightVp(): number {
+    const px: number = this.windowInfo.windowSize.height;
+    if (px <= 0) {
+      return 780;
+    }
+    return this.getUIContext().px2vp(px);
+  }
+
+  /** @returns 下拉到底所需的距离（vp）。 */
+  private dismissSpanVp(): number {
+    return this.deviceHeightVp() * PlaybackPage.DISMISS_DRAG_SPAN_RATIO;
+  }
+
+  /**
+   * 由拖拽距离换算收起进度。
+   * @param offsetY 手势的竖直位移（vp，向下为正）。
+   * @returns 进度 0..100。
+   */
+  private dismissProgressFromDrag(offsetY: number): number {
+    const y: number = offsetY > 0 ? offsetY : 0;
+    const span: number = this.dismissSpanVp();
+    if (span <= 0) {
+      return 0;
+    }
+    return Math.max(0, Math.min(100, (y / span) * 100));
+  }
+
+  /**
+   * 下拉收起手势：拖动期间**跟手**改进度（不走 animateTo，所以是即时的），
+   * 松手时超过阈值就收起、否则补间弹回完整态。
+   *
+   * 这套交互和参考工程 MusicHome 的 `PanGesture` 一致（它的 `dismissPanOffsetY`
+   * → `dismissSheetHeightPercent` + `coverLinearScale` 是同一件事）。
+   * @param offsetY 当前竖直位移（vp）。
+   * @param ended 是否是松手。
+   */
+  private onDismissDrag(offsetY: number, ended: boolean): void {
+    if (this.isClosing) {
+      return;
+    }
+    if (!ended) {
+      this.collapseProgress = this.dismissProgressFromDrag(offsetY);
+      return;
+    }
+    if (this.dismissProgressFromDrag(offsetY) >= PlaybackPage.DISMISS_COMMIT_PROGRESS) {
+      this.closeFullScreenPlayback();
+      return;
+    }
+    this.getUIContext().animateTo({ duration: 220, curve: Curve.EaseInOut }, (): void => {
+      this.collapseProgress = 0;
+    });
+  }
+
+  /**
+   * 壳层拦到系统返回（要求关闭模态）→ 播收起动画，不要直接消失。
+   *
+   * ⚠️ **不要在 `@Monitor` 回调里直接 `animateTo`**：这个回调不在手势/点击那类
+   *    "动画作用域"里，`animateTo` 有可能不插值，`collapseProgress` 会一步到位 ——
+   *    用户看到的就是"返回收起只能看到动画的最后，看不到中间过程"
+   *    （点收起按钮/下拉走的是点击与手势回调，所以那条路正常）。
+   *    挪到下一个任务里再播，就回到和点击一样的上下文。
+   */
+  @Monitor('expandState.collapseVersion')
+  onCollapseRequested(): void {
+    setTimeout((): void => {
+      this.closeFullScreenPlayback();
+    }, 0);
+  }
   /** Fallback page background tint when art or color pick fails. */
   private static readonly defaultImageBgColor: string = 'rgba(32, 32, 32, 1)';
 
@@ -133,6 +239,88 @@ export struct PlaybackPage {
     this.onBannerChange();
   }
 
+  /**
+   * 取色完成后把新颜色灌进流光着色器。
+   *
+   * 用 `setEffectParams`（而不是重建 `visualEffect`）：换歌只更新 uniform，
+   * 不会重启着色器、也不会让流光"跳"回起点。
+   */
+  @Monitor('coverTint.version')
+  onCoverTintVersionChange(): void {
+    this.applyFlowLightColors();
+  }
+
+  /**
+   * 流光背景开关被打开时，重新为当前这首曲目取一次色。
+   *
+   * 关着的时候取色是跳过的（省一次解码），所以刚打开开关时手上没有颜色；
+   * 这里补一次，用户不用切歌就能看到效果。
+   */
+  @Monitor('flowLightState.enabled')
+  onFlowLightEnabledChange(): void {
+    if (!this.flowLightState.enabled || this.context === undefined || !this.isAlive) {
+      return;
+    }
+    this.getImageColor();
+  }
+
+  /** 把 {@link coverTint} 里的颜色推给着色器（同版本号只推一次）。 */
+  private applyFlowLightColors(): void {
+    if (this.coverTint.version === this.appliedTintVersion) {
+      return;
+    }
+    this.appliedTintVersion = this.coverTint.version;
+    try {
+      this.flowLightController.setEffectParams({
+        colorSource: [this.coverTint.sourceColor],
+        colorTarget: [this.coverTint.targetColor]
+      });
+      Logger.info(PlaybackPage.logTag,
+        `flow light colors applied v=${this.coverTint.version} src=${this.coverTint.sourceColor}`);
+    } catch (error) {
+      const err = error as BusinessError;
+      Logger.warn(PlaybackPage.logTag,
+        `setEffectParams failed, code=${err?.code}, message=${err?.message}`);
+    }
+  }
+
+  /**
+   * 播放页流光背景层（HDS `UV_BACKGROUND_FLOW_LIGHT` 着色器）。
+   *
+   * 参考上游 PR #1 在首页的用法，但颜色不是写死的：`colorSource` /
+   * `colorTarget` 来自当前封面动态取色（见 {@link publishFlowLightColors}），
+   * 每次换歌都会重新算一次。
+   *
+   * 作为 `Stack` 的**首个子节点**绘制：在页面底色之上、封面/歌词之下。
+   * `HitTestMode.Transparent` 是必须的 —— 整层是全屏的，默认命中的话会把
+   * 播放页所有按钮的点击全吃掉。
+   */
+  @Builder
+  private FlowLightBackground() {
+    Stack()
+      .width(StyleConstants.FULL_WIDTH)
+      .height(StyleConstants.FULL_HEIGHT)
+      .hitTestBehavior(HitTestMode.Transparent)
+      .opacity(FLOW_LIGHT_OPACITY)
+      .visualEffect(new hdsEffect.HdsEffectBuilder()
+        .shaderEffect({
+          effectType: hdsEffect.EffectType.UV_BACKGROUND_FLOW_LIGHT,
+          animation: {
+            duration: FLOW_LIGHT_DURATION_MS,
+            iterations: -1,
+            autoPlay: true
+          },
+          // 初值用兜底色；真正的颜色由 applyFlowLightColors 在取色完成后下发，
+          // 这样即使取色很慢也能立刻看到流光在动（而不是黑屏等半天）。
+          params: {
+            colorSource: [this.coverTint.sourceColor],
+            colorTarget: [this.coverTint.targetColor]
+          },
+          controller: this.flowLightController
+        })
+        .buildEffect())
+  }
+
   /** 醒目提示横幅：音源脚本跨脚本切换时显示，3 秒后自动隐藏。 */
   @Builder
   private SwitchBanner() {
@@ -157,6 +345,21 @@ export struct PlaybackPage {
     }
   }
 
+  /** 收起进度 0..100：**0 = 完整播放页（静止态）**，100 = 收起成贴底的一条。 */
+  @Local collapseProgress: number = 0;
+  /**
+   * 收起请求通道（与壳层共用）。
+   *
+   * 壳层拦到**系统返回**（模态被要求关闭）时，只在这里 `requestCollapse()` 一下，
+   * 真正的收起动画由本页播 —— 不拦那一下，系统返回就是"啪"地消失、没有动画。
+   * 只用到 `collapseVersion` 一个计数，几何字段现在是空的（path 那版动画已移除）。
+   */
+  @Local expandState: PlayerExpandState =
+    AppStorageV2.connect(PlayerExpandState, AppStorageKeys.PLAYER_EXPAND_STATE,
+      () => new PlayerExpandState())!;
+  /** 下拉收起手势（竖直方向）。 */
+  private panOption: PanGestureOptions = new PanGestureOptions({ direction: PanDirection.Vertical });
+
   /** Seeds cover Resource from the current queue item. */
   aboutToAppear(): void {
     this.coverRadiusState.radius = MusicStoreService.getInstance().getCoverCornerRadius();
@@ -168,6 +371,23 @@ export struct PlaybackPage {
     if (this.switchBanner.ts > 0) {
       this.onBannerChange();
     }
+    // ★ 展开动画：先在 `aboutToAppear` 把进度放到"收起"，**保证第一帧画出来就是贴底的一条**。
+    //   如果放到 `onAppear` 再置，会先渲染出一帧完整播放页再收回去，看着就是闪一下。
+    this.collapseProgress = PlaybackPage.EXPAND_START_PROGRESS;
+    // ⚠️ 看门狗：万一下面 `onAppear` 里的补间因为任何原因没跑起来，
+    //   进度就会永远停在"收起"，用户看到的是打不开播放器。
+    //   最迟 COLLAPSE_WATCHDOG_MS 之后强制回到完整态 —— 宁可没有动画。
+    if (this.collapseWatchdogTimer !== -1) {
+      clearTimeout(this.collapseWatchdogTimer);
+    }
+    this.collapseWatchdogTimer = setTimeout((): void => {
+      this.collapseWatchdogTimer = -1;
+      if (this.collapseProgress > 0) {
+        Logger.error(PlaybackPage.logTag,
+          `expand watchdog fired progress=${this.collapseProgress}, force full screen`);
+        this.collapseProgress = 0;
+      }
+    }, PlaybackPage.COLLAPSE_WATCHDOG_MS);
   }
 
   aboutToDisappear(): void {
@@ -176,6 +396,64 @@ export struct PlaybackPage {
       clearTimeout(this.bannerClearTimer);
       this.bannerClearTimer = -1;
     }
+    if (this.collapseWatchdogTimer !== -1) {
+      clearTimeout(this.collapseWatchdogTimer);
+      this.collapseWatchdogTimer = -1;
+    }
+    // 下一次进来 `aboutToAppear` 会重新置成收起，这里复位只是为了不留脏状态
+    this.collapseProgress = 0;
+  }
+
+  /**
+   * 「一镜到底」展开动画：把进度从"收起"补间到 0。
+   *
+   * 手法完全照参考工程 MusicHome：**只用 `height` / `translate` / `scale` 三个基本属性**，
+   * 不碰任何形状裁剪 —— 那边播放页下滑收起时的"封面变小"就是这么做的（
+   * `dismissSheetHeightPercent` + `coverLinearScale`），我们只是把同一套进度反向跑一遍。
+   *
+   * 为什么这样就够了：内容层 `justifyContent(FlexAlign.End)` 贴着底边，
+   * 高度从"贴底一条"长到 100% = 从底部向上铺满；封面用 `layoutWeight(1)`，
+   * 高度变小它自己就变小，于是"封面慢慢变大"也一起来了。
+   */
+  private playExpandIntro(): void {
+    try {
+      this.getUIContext().animateTo({
+        duration: PlaybackPage.EXPAND_DURATION_MS,
+        curve: Curve.EaseInOut
+      }, (): void => {
+        this.collapseProgress = 0;
+      });
+    } catch (err) {
+      // 补间起不来就立刻回到完整态；看门狗此时还没到点，别让页面停在"收起"那一条上
+      const e = err as BusinessError;
+      Logger.error(PlaybackPage.logTag, `expand animateTo failed code=${e.code} msg=${e.message}`);
+      this.collapseProgress = 0;
+    }
+  }
+
+  /**
+   * @returns 内容层高度百分比字符串。
+   *
+   * 进度 0 → `'100%'`（与没有动画时逐像素一致，这是最重要的性质）；
+   * 进度 100 → `COLLAPSED_HEIGHT_PERCENT`（贴底一条，大致就是迷你条那一条的高度）。
+   */
+  private sheetHeightPercent(): string {
+    const p: number = Math.max(0, Math.min(100, this.collapseProgress));
+    if (p <= 0) {
+      return '100%';
+    }
+    const h: number = 100 - (100 - PlaybackPage.COLLAPSED_HEIGHT_PERCENT) * (p / 100);
+    return h.toFixed(2) + '%';
+  }
+
+  /**
+   * @returns 收起过程中是否要藏起标题/控件。
+   *
+   * 必须藏：内容被压扁到只剩一条时，固定高度的控制区会把封面挤成 0 高
+   * （参考工程也是这么处理的 —— 它的 `isDismissPhase2HideMeta()` 一进二段就藏 meta）。
+   */
+  private isCollapsing(): boolean {
+    return this.collapseProgress > 45;
   }
 
   /** Applies the keep-screen-on switch while the playback page is visible. */
@@ -258,10 +536,34 @@ export struct PlaybackPage {
     }
   }
 
-  /** Closes the full-screen player: restores window chrome, then the sheet dismisses natively. */
+  /**
+   * 关闭全屏播放页：先播收起动画（进度 0 → 收起），播完再恢复窗口 chrome 并卸载。
+   *
+   * ⚠️ 卸载放在**定时器**里而不是 `animateTo` 的完成回调：那个回调在部分场景不保证触发，
+   * 靠它卸载就会变成"返回键按了没反应"。定时器按时长兜底，最坏情况只是收起动画被跳过，
+   * 关闭一定会发生。
+   */
   private closeFullScreenPlayback(): void {
-    this.restorePlaybackWindowChrome();
-    this.state.isShowPlay = false;
+    if (this.isClosing) {
+      return;
+    }
+    this.isClosing = true;
+    // 关闭期间进度会停在"收起"几百毫秒，别让展开看门狗把它抢回完整态
+    if (this.collapseWatchdogTimer !== -1) {
+      clearTimeout(this.collapseWatchdogTimer);
+      this.collapseWatchdogTimer = -1;
+    }
+    this.getUIContext().animateTo({
+      duration: PlaybackPage.EXPAND_DURATION_MS,
+      curve: Curve.EaseInOut
+    }, (): void => {
+      this.collapseProgress = PlaybackPage.EXPAND_START_PROGRESS;
+    });
+    setTimeout((): void => {
+      this.isClosing = false;
+      this.restorePlaybackWindowChrome();
+      this.state.isShowPlay = false;
+    }, PlaybackPage.EXPAND_DURATION_MS + 20);
   }
 
   /** True for small-width + medium-height window (phone landscape-ish). */
@@ -353,7 +655,7 @@ export struct PlaybackPage {
                   MusicPlayInfoBlock({
                     state: this.state,
                     metaBlockTranslateYvp: 0,
-                    isDismissing: false,
+                    isDismissing: this.isCollapsing(),
                     coverLinearScale: 1
                   })
                 }
@@ -400,7 +702,7 @@ export struct PlaybackPage {
                     state: this.state,
                     useAlbumCoverBackground: this.isSmHeightMdLayout(),
                     metaBlockTranslateYvp: 0,
-                    isDismissing: false,
+                    isDismissing: this.isCollapsing(),
                     coverLinearScale: 1,
                     showControlArea: false
                   })
@@ -412,6 +714,8 @@ export struct PlaybackPage {
                       left: 4,
                       right: 4
                     })
+                    // 收起过程中内容被压扁，小歌词会和控制区互相盖住
+                    .visibility(this.isCollapsing() ? Visibility.None : Visibility.Visible)
                 }
                 .width(StyleConstants.FULL_WIDTH)
                 .margin({
@@ -463,6 +767,8 @@ export struct PlaybackPage {
                   right: $r('app.float.common_padding'),
                   bottom: 10
                 })
+                // 它是固定高度的：收起时留着会把封面挤成 0 高，必须整块藏掉
+                .visibility(this.isCollapsing() ? Visibility.None : Visibility.Visible)
             }
             .width(StyleConstants.FULL_WIDTH)
             .height(StyleConstants.FULL_HEIGHT)
@@ -479,15 +785,13 @@ export struct PlaybackPage {
               right: $r('app.float.common_padding')
             })
             .zIndex(2)
+            .visibility(this.isCollapsing() ? Visibility.None : Visibility.Visible)
         }
         .width(StyleConstants.FULL_WIDTH)
         .height(StyleConstants.FULL_HEIGHT)
         .padding({
-          bottom: WindowUtil.getInstance().getStartupNavigationBarBottomVp(),
-          top: WindowUtil.getInstance().getStartupStatusBarTopVp()
-        }).padding({
-          bottom: WindowUtil.getInstance().getStartupNavigationBarBottomVp(),
-          top: WindowUtil.getInstance().getStartupStatusBarTopVp()
+          bottom: this.windowInfo.navigationBarBottomVp,
+          top: this.windowInfo.statusBarTopVp
         })
       }
     }
@@ -505,7 +809,7 @@ export struct PlaybackPage {
           MusicPlayInfoBlock({
             state: this.state,
             metaBlockTranslateYvp: 0,
-            isDismissing: false,
+            isDismissing: this.isCollapsing(),
             coverLinearScale: 1,
             panelLayout: true
           })
@@ -531,8 +835,8 @@ export struct PlaybackPage {
       .padding({
         left: 56,
         right: 56,
-        top: WindowUtil.getInstance().getStartupStatusBarTopVp(),
-        bottom: WindowUtil.getInstance().getStartupNavigationBarBottomVp()
+        top: this.windowInfo.statusBarTopVp,
+        bottom: this.windowInfo.navigationBarBottomVp
       })
 
       if (!this.panelLayout) {
@@ -547,6 +851,7 @@ export struct PlaybackPage {
             right: 56
           })
           .zIndex(2)
+          .visibility(this.isCollapsing() ? Visibility.None : Visibility.Visible)
       }
     }
     .width(StyleConstants.FULL_WIDTH)
@@ -571,7 +876,15 @@ export struct PlaybackPage {
   private applyPlaybackWindowChromeImmediately(): void {
     const wu = WindowUtil.getInstance();
     wu.applyPlaybackNavigationBarColor(true);
-    wu.applyPlaybackWindowChrome(true, false);
+    // ⚠️ 第二个参数 fullScreen 必须是 **true**（照参考工程 MusicHome 的
+    //    `applyPlaybackWindowChrome(true)`）。
+    //
+    //    传 false 时窗口不进布局全屏，屏幕最底部那条系统导航栏/手势条区域**不归应用绘制**，
+    //    播放页背景铺不到那里 —— 表现就是「底部一直有一条空白」，而且和内容 padding 无关：
+    //    前面几轮无论怎么调 padding / expandSafeArea 都只是把空白变小或变大，消不掉。
+    //    切到布局全屏后这块区域归应用，背景才能真正铺到屏幕底边。
+    //    退场时 `applyPlaybackWindowChrome(false)` 会把布局全屏切回去，不影响其它页面。
+    wu.applyPlaybackWindowChrome(true, true);
     if (this.isPcFreeWindowDecor()) {
       wu.applyPcPlaybackDecorButtonStyle(true);
     }
@@ -589,6 +902,61 @@ export struct PlaybackPage {
   /** Entry point: kicks off async album-color extraction without blocking UI. */
   getImageColor(): void {
     void this.getImageColorAsync();
+  }
+
+  /**
+   * 由封面算出流光背景的两个颜色并写进 {@link coverTint}。
+   *
+   * 只在开关打开时才做：取色要走一次解码（在线封面还要先下载），关掉就别白花这份开销。
+   * 失败不报错也不改颜色 —— 保留上一首的颜色或兜底色，流光照样能看。
+   *
+   * @param pixelMap 已解码的封面位图，由调用方负责释放。
+   */
+  private async extractFlowLightColors(pixelMap: image.PixelMap): Promise<void> {
+    if (!this.flowLightState.enabled || !this.isAlive) {
+      return;
+    }
+    await new Promise<void>((resolve: () => void) => {
+      effectKit.createColorPicker(pixelMap,
+        (error: Error | undefined, colorPicker: effectKit.ColorPicker | undefined) => {
+          try {
+            if (!this.isAlive || error || colorPicker === undefined) {
+              return;
+            }
+            // 用占比最大的颜色作为基调，再在 vividFlowColors 里把饱和度/亮度拉起来：
+            // 封面主色经常是一大片接近黑的背景，直接拿它做流光基本看不见
+            // （首页 PR 那版写死一个紫色，所以没这个问题）。
+            const color = colorPicker.getLargestProportionColor();
+            this.publishFlowLightColors(color.red, color.green, color.blue);
+          } finally {
+            resolve();
+          }
+        });
+    });
+  }
+
+  /**
+   * 把封面主色换算成流光用的两个颜色并发布。
+   *
+   * 写 `coverTint` 会触发 {@link onCoverTintVersionChange}，由它把颜色下发给着色器。
+   *
+   * **不判断开关**：换算本身只是几次算术，关着也先算好存起来 —— 这样用户
+   * 在设置里一打开开关，第一帧的流光颜色就已经是当前封面色，不会先闪一下兜底色。
+   * 真正要花钱的是解码封面，那部分由 {@link extractFlowLightColors} 把关。
+   *
+   * @param red 封面主色红通道 0–255。
+   * @param green 封面主色绿通道 0–255。
+   * @param blue 封面主色蓝通道 0–255。
+   */
+  private publishFlowLightColors(red: number, green: number, blue: number): void {
+    if (!this.isAlive) {
+      return;
+    }
+    const vivid: string[] = ColorConversion.vividFlowColors(red, green, blue);
+    this.coverTint.sourceColor = vivid[0];
+    this.coverTint.targetColor = vivid[1];
+    this.coverTint.version = this.coverTint.version + 1;
+    Logger.info(PlaybackPage.logTag, `flow light tint updated src=${vivid[0]} dst=${vivid[1]}`);
   }
 
   /** Loads cover bytes, derives theme background color, and builds blurred background PixelMap. */
@@ -618,6 +986,8 @@ export struct PlaybackPage {
           const coverPm: image.PixelMap | undefined =
             await PlaybackPage.loadOnlineCoverPixelMap(song.cover);
           if (coverPm !== undefined && this.isAlive && jobSeq === this.imageColorJobSeq) {
+            // 流光取色：趁位图已经解码好顺手算一次，不用为它再下载一遍封面
+            await this.extractFlowLightColors(coverPm);
             const headFilter = effectKit.createEffect(coverPm);
             if (headFilter !== null) {
               headFilter.blur(PlayerConstants.IMAGE_BLUR);
@@ -710,6 +1080,8 @@ export struct PlaybackPage {
             const g = clampRgbByte(colorArr[1]);
             const b = clampRgbByte(colorArr[2]);
             this.state.imageColor = `rgba(${r}, ${g}, ${b}, 0.4)`;
+            // 同一次取色的结果顺带算流光色，省掉再建一个 ColorPicker 的开销
+            this.publishFlowLightColors(color.red, color.green, color.blue);
           } finally {
             resolve();
           }
@@ -774,22 +1146,52 @@ export struct PlaybackPage {
         .height('100%')
         .backgroundColor('#1c1c1e')
 
+      // 流光背景（设置项开关）：必须在内容层之前绘制，否则会盖住封面和歌词
+      if (this.flowLightState.enabled) {
+        this.FlowLightBackground()
+      }
+
       Column() {
         Column() {
           this.buildControlStack()
         }
-        .height('100%')
+        // ★ 展开/收起：内容层贴着底边（父层 justifyContent(End)），
+        //   高度从"贴底一条"长到 100% —— 这就是"向上下延伸铺满"。
+        //   进度 0 时是 '100%'，与没有动画时逐像素一致。
+        .height(this.sheetHeightPercent())
       }
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
       .backgroundColor(this.state.imageColor)
       .justifyContent(FlexAlign.End)
+      // 内容被压扁时裁掉溢出：静止态内容正好 100%，这条裁剪不产生任何视觉差异
+      .clip(true)
+      // ★ 下拉收起播放器（MusicHome 同款交互）：竖直拖拽跟手收起，松手按阈值决定去留。
+      //   放在最外层容器上；歌词那种可滚动子节点会先接到竖直手势，
+      //   所以在歌词上滚不会误触发收起（ArkUI 的手势冒泡顺序：子节点优先）。
+      .gesture(
+        PanGesture(this.panOption)
+          .onActionUpdate((event: GestureEvent): void => {
+            this.onDismissDrag(event.offsetY, false);
+          })
+          .onActionEnd((event: GestureEvent): void => {
+            this.onDismissDrag(event.offsetY, true);
+          })
+      )
+      // ⚠️ 整页**不做**任何位移/缩放，也**不要**在这里套形状裁剪（clipShape/path）。
+      //    曾经为了「一镜到底」在整页上套过 path 裁剪，两次都把播放页搞坏了
+      //    （一次打不开、一次卡死），原因见文件末尾的注释块。
+      //    现在这套展开只依赖 height/scale/translate 三个基本属性。
       .onAppear(() => {
         this.context = this.getUIContext().getHostContext() as common.UIAbilityContext;
         this.isAlive = true;
         this.getImageColor();
         this.applyPlaybackWindowChromeImmediately();
+        // 页面首次出现时同步一次开关状态（设置页可能刚改过）
+        this.applyFlowLightColors();
         this.playbackSwiperIndex = 0;
+        // ★ 第一帧已经按"收起"渲染过了（见 aboutToAppear），这里再补间回完整态
+        this.playExpandIntro();
       })
       .onDisAppear(() => {
         this.isAlive = false;
@@ -797,6 +1199,11 @@ export struct PlaybackPage {
         this.imageColorJobSeq++;
         this.releaseBackgroundCoverIfPixelMap();
         this.imageLabel = $r('app.media.ic_avatar1');
+        // 页面退场停掉着色器动画：整屏流光是持续的 GPU 开销，后台不该白耗电
+        try {
+          this.flowLightController.stop();
+        } catch (_err) {
+        }
         const wu = WindowUtil.getInstance();
         wu.applyPlaybackWindowChrome(false);
         wu.applyPcPlaybackDecorButtonStyle(false);
@@ -807,9 +1214,37 @@ export struct PlaybackPage {
         Stack() { this.SwitchBanner() }.zIndex(10)
       }
     }
-
+    .width(StyleConstants.FULL_WIDTH)
+    .height(StyleConstants.FULL_HEIGHT)
+    // ⚠️ 这里**不要**写 expandSafeArea / ignoreLayoutSafeArea。
+    //
+    // 参考工程（MusicHome）的播放页完全正常，它的做法是：
+    //   1. 壳层 `bindContentCover($$isShowPlay, PlaybackPageCoverContent(), ModalTransition.NONE)`；
+    //   2. `PlaybackPageCoverContent` 只是 width/height 100% 的 Column，**不碰安全区**；
+    //   3. 底部留白由内容自己加 `padding({ bottom: navigationBarBottomVp })`（见 buildControlStack）。
+    // 我们之前在这里叠了 expandSafeArea，反而和系统给的容器打架 —— 越加留白越大。
   }
 }
+
+/*
+ * ⚠️ 播放页「一镜到底」展开动画**已整体移除**（2026-09-22）。
+ *
+ * 试过两版，在这台设备上都不行：
+ *   1. `clipShape(new PathShape({ commands }))` —— 播放页整个不显示（表现为打不开）；
+ *   2. `clip(new Path({ commands }))` —— 点击播放器直接卡死。
+ * 两版都依赖同一个手法：用一条 path 把整页裁成迷你条那么大的小窗口、再逐帧长大。
+ * 同一个手法换两个 API 得到两种不同的坏结果，说明这条路在当前 SDK/设备上走不通。
+ *
+ * 已经保留的东西（都在 common/musicbasic，将来重做不用再搭一遍）：
+ *   - `PlayerExpandState`（两端封面的窗口矩形 + 相位 + 裁剪矩形计算）；
+ *   - `MINI_BAR_COVER_ID` / `PLAYER_BIG_COVER_ID` 两个组件 id；
+ *   - 迷你条封面与播放页大封面各自 `onAreaChange` 上报窗口矩形的能力。
+ *
+ * ⚠️ 重做时**不要再用 path 裁剪**。要那个"小窗口"就用纯布局属性：
+ *    外层容器 `width/height` 从迷你条矩形补间到整屏、`position` 从迷你条位置归零、
+ *    `clip(true)` 布尔裁剪守住边界；内层再放一个**固定窗口尺寸**的画布包住 PlaybackPage，
+ *    这样页面本身不会因为容器变小而重排。这些都是 API 7 的基本属性，没有形状类语义。
+ */
 
 /** Builder used by product shells to mount PlaybackPage inside a modal content cover. */
 @Builder
@@ -819,6 +1254,9 @@ export function PlaybackPageCoverContent() {
   }
   .width(StyleConstants.FULL_WIDTH)
   .height(StyleConstants.FULL_HEIGHT)
+  // 与参考工程（MusicHome）一致：**不碰安全区**。整屏铺满交给模态容器，
+  // 底部留白由 PlaybackPage 内部按 navigationBarBottomVp 自己加 padding。
+  // 在这里写 expandSafeArea / ignoreLayoutSafeArea 会与系统容器冲突，留白反而变大。
 }
 
 /** Panel-style cover content (wide split layout) for product shells that opt into the panel layout. */

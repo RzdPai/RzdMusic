@@ -39,6 +39,11 @@ export struct HomeMiniBarPlayer {
    * Cover image sizing is adjusted in HomeMiniBarAlbumCover.
    */
   @Param followAppMiniBarExpanded: boolean = true;
+  /**
+   * 锁定封面为 44vp（单排折叠态）。二级页面悬浮胶囊在外层固定了 56vp 高度，
+   * 封面必须跟着固定，否则 HDS 栏排布变化会把封面缩到 30vp。
+   */
+  @Param lockTwoRowCoverSize: boolean = false;
   private panOption: PanGestureOptions = new PanGestureOptions({ direction: PanDirection.Vertical });
 
   private effectiveMiniBarExpanded(): boolean {
@@ -52,7 +57,8 @@ export struct HomeMiniBarPlayer {
     Row({ space: 8 }) {
       HomeMiniBarAlbumCover({
         playerViewModel: this.playerViewModel,
-        followAppMiniBarExpanded: this.followAppMiniBarExpanded
+        followAppMiniBarExpanded: this.followAppMiniBarExpanded,
+        lockTwoRowCoverSize: this.lockTwoRowCoverSize
       })
       HomeMiniBarPlayerAside({
         playerViewModel: this.playerViewModel,

@@ -103,6 +103,7 @@ struct SongRowItem {
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%')
+          .textAlign(TextAlign.Start)
         Text(this.song.singer)
           .fontSize($r('sys.float.Caption_M'))
           .fontColor($r('sys.color.font_tertiary'))
@@ -732,6 +733,8 @@ struct OnlineSearchPage {
     param.playlistId = p.id;
     param.onlineSource = p.source;
     param.listTitle = p.name;
+    // 歌单自己的封面随路由带下去：详情页 Hero 用它，而不是第一首歌的封面
+    param.listCover = p.coverUrl;
     this.pageStack.pushPathByName(RouterUrlConstants.PLAYLIST_DETAIL, param);
   }
 
@@ -939,6 +942,7 @@ struct OnlineSearchPage {
             .fontColor($r('sys.color.font_primary'))
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .textAlign(TextAlign.Start)
             .layoutWeight(1)
         }
         .width('100%')
@@ -1456,30 +1460,28 @@ struct OnlineSearchPage {
                   }
                   .width('100%')
 
-                  // 热搜：原生 Grid 4 列，等宽对齐
-                  Grid() {
+                  // 热搜：Flex 自动换行 + 文字宽度自适应。
+                  // 原来用 4 栏等宽 Grid 且文字居中，短词两侧留一大片空白、
+                  // 长词被截断，整块看起来就是"每个词条长度都一样"。
+                  Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
                     ForEach(this.hotWords, (keyword: string) => {
-                      GridItem() {
-                        Text(keyword)
-                          .fontSize($r('sys.float.Body_M'))
-                          .fontColor($r('sys.color.font_primary'))
-                          .maxLines(1)
-                          .textOverflow({ overflow: TextOverflow.Ellipsis })
-                          .width('100%')
-                          .height(40)
-                          .borderRadius(20)
-                          .backgroundColor($r('app.color.background_secondary'))
-                          .textAlign(TextAlign.Center)
-                          .onClick(() => {
-                            this.query = keyword;
-                            void this.doSearch();
-                          })
-                      }
+                      Text(keyword)
+                        .fontSize($r('sys.float.Body_M'))
+                        .fontColor($r('sys.color.font_primary'))
+                        // ⚠️ 不设 maxLines(1)、也不设固定宽度：词条宽度完全由文字决定，
+                        //    长词整条显示，短词就是短胶囊。原来固定宽度 + 省略号就是
+                        //    「看着每个词条长度都像固定，长的词条显示不完整」的根因。
+                        .textAlign(TextAlign.Start)
+                        .padding({ left: 14, right: 14, top: 8, bottom: 8 })
+                        .borderRadius(18)
+                        .backgroundColor($r('app.color.background_secondary'))
+                        .margin({ right: 8, bottom: 8 })
+                        .onClick(() => {
+                          this.query = keyword;
+                          void this.doSearch();
+                        })
                     }, (keyword: string) => 'hot-' + keyword)
                   }
-                  .columnsTemplate('1fr 1fr 1fr 1fr')
-                  .columnsGap(8)
-                  .rowsGap(8)
                   .width('100%')
                   .padding({ left: 0, right: 0 })
                 }
@@ -1509,30 +1511,26 @@ struct OnlineSearchPage {
                   }
                   .width('100%')
 
-                  // 搜索历史：原生 Grid 4 列，等宽对齐
-                  Grid() {
+                  // 搜索历史：与热搜同款「自动换行 + 宽度自适应」。
+                  // 原来也是 4 栏等宽 Grid + 文字居中，长词被截断、短词两边一片空白，
+                  // 看起来就是「每个词条长度都固定」。
+                  Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
                     ForEach(this.searchHistory, (keyword: string) => {
-                      GridItem() {
-                        Text(keyword)
-                          .fontSize($r('sys.float.Body_M'))
-                          .fontColor($r('sys.color.font_primary'))
-                          .maxLines(1)
-                          .textOverflow({ overflow: TextOverflow.Ellipsis })
-                          .width('100%')
-                          .height(40)
-                          .borderRadius(20)
-                          .backgroundColor($r('app.color.background_secondary'))
-                          .textAlign(TextAlign.Center)
-                          .onClick(() => {
-                            this.query = keyword;
-                            void this.doSearch();
-                          })
-                      }
+                      Text(keyword)
+                        .fontSize($r('sys.float.Body_M'))
+                        .fontColor($r('sys.color.font_primary'))
+                        // 不设 maxLines / 不设固定宽度：词条宽度完全由文字决定
+                        .textAlign(TextAlign.Start)
+                        .padding({ left: 14, right: 14, top: 8, bottom: 8 })
+                        .borderRadius(18)
+                        .backgroundColor($r('app.color.background_secondary'))
+                        .margin({ right: 8, bottom: 8 })
+                        .onClick(() => {
+                          this.query = keyword;
+                          void this.doSearch();
+                        })
                     }, (keyword: string) => keyword)
                   }
-                  .columnsTemplate('1fr 1fr 1fr 1fr')
-                  .columnsGap(8)
-                  .rowsGap(8)
                   .width('100%')
                 }
                 .width('100%')
@@ -1600,7 +1598,10 @@ struct OnlineSearchPage {
           .height('100%')
           .scrollBar(BarState.Off)
           .edgeEffect(EdgeEffect.Spring)
-          .lanes(this.resultLaneCount(), 12)
+          // ⚠️ 不要给结果列表开多栏（原来按断点 1/2/3/4 栏）：
+          //    歌曲行本身是「封面 + 标题/歌手 + 来源/时长」的整行卡片，铺成多栏会把
+          //    文字挤窄、行与行长度还参差不齐，看起来就是"文字被拉伸对齐了"。
+          //    搜索结果统一单栏、左对齐。
           .contentStartOffset(this.contentPaddingTop)
           .padding({
             left: 12,
@@ -1666,7 +1667,9 @@ struct OnlineSearchPage {
       .padding({ top: 0 })
     }
     .hideTitleBar(false)
-    .hideBackButton(true)
+    // 返回按钮必须显示：原先 hideBackButton(true) 却给了 backIcon 配置 —— HDS 以
+    // hideBackButton 为准，返回键被整颗藏掉，用户反馈的「搜索页没有返回按钮」就是这个。
+    .hideBackButton(false)
     .titleBar(this.getSearchTitleBar())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .dynamicHideTitleBar({

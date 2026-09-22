@@ -23,6 +23,14 @@ export class PlaylistDto {
   public id: string = '';
   /** Display name of the playlist. */
   public name: string = '';
+  /**
+   * 歌单封面地址。
+   *
+   * 本地歌单多来自「收藏/导入别人的歌单」，导入时能取到源歌单封面；
+   * 纯手工新建的没有封面，保持为空并由 UI 显示内置占位图。
+   * **不要**用第一首歌的封面顶替，否则歌单页看起来会像专辑页。
+   */
+  public cover: string = '';
   /** Creation timestamp (ms). */
   public createTime: number = 0;
   /** Songs in the playlist (insertion order). */

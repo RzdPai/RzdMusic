@@ -16,6 +16,9 @@
 import { AppStorageV2 } from '@kit.ArkUI';
 import { AmbientState, AppStorageKeys, MusicAppState, MusicStoreService, PlayedSongRecord, PlaylistDto, SongItem, ThemeState } from 'musicbasic';
 import { DownloadUtil, LXQualityOption, LXSearchSong, MediaService, OnlinePlayUtil, lxGetQualityOptions } from 'player';
+// 「切换平台」复用 localmusic 的歌曲匹配引擎（内部走 player 的 lxSearch）
+import { LyricCandidate, MATCH_PLATFORMS, MatchSongInfo, parseIntervalMs, platformLabel, scoreCandidate,
+  searchCandidates } from 'localmusic';
 import { notifyPlaylistChanged } from '../util/PlaylistRefreshBus';
 
 /**
@@ -37,6 +40,15 @@ export struct SongMoreMenu {
   @Param playlistId: string = '';
   /** Callback invoked after a song is deleted from the playlist. */
   @Param onSongDeleted: (() => void) | null = null;
+  /**
+   * 「切换平台」成功后的回调。
+   *
+   * 换源改了库里的数据（收藏 / 历史），但**列表页自己不一定能感知到** ——
+   * 靠 `@Monitor('store.xxxVersion')` 有时不实时（Repeat/ForEach 复用节点、
+   * 页面还在不在前台都会影响）。所以照「重命名歌单」那套做法：
+   * 由调用方在这里**显式刷新自己的列表**。
+   */
+  @Param onSongSwitched: (() => void) | null = null;
 
   /** Global music app state for playback requests. */
   @Local appState: MusicAppState =
@@ -45,8 +57,12 @@ export struct SongMoreMenu {
   @Local store: MusicStoreService = MusicStoreService.getInstance();
   /** When true the bottom sheet is shown. */
   @Local showSheet: boolean = false;
-  /** Active sheet content: 1 = download quality, 2 = add-to-playlist picker. */
+  /** Active sheet content: 1 = download quality, 2 = add-to-playlist picker, 3 = switch platform. */
   @Local sheetType: number = 0;
+  /** 「切换平台」：正在搜索目标平台（弹层里显示 loading）。 */
+  @Local switching: boolean = false;
+  /** 「切换平台」：当前正在搜的目标平台。 */
+  @Local switchTarget: string = '';
   /** Download quality sheet: loading flag + resolved quality/size options. */
   @Local qualityLoading: boolean = false;
   @Local qualityOptions: LXQualityOption[] = [];
@@ -176,6 +192,9 @@ export struct SongMoreMenu {
     if (this.sheetType === 2) {
       return { title: '添加到歌单' };
     }
+    if (this.sheetType === 3) {
+      return { title: '切换平台' };
+    }
     return { title: '选择下载音质' };
   }
 
@@ -186,7 +205,176 @@ export struct SongMoreMenu {
       this.QualitySheet()
     } else if (this.sheetType === 2) {
       this.PlaylistPickerSheet()
+    } else if (this.sheetType === 3) {
+      this.SwitchPlatformSheet()
     }
+  }
+
+  /**
+   * 「切换平台」弹层：列出除当前平台外的平台，点一个就换过去。
+   *
+   * 这一项是用户点名要的（"这首歌当前是酷狗，手动改为 QQ"）。
+   * 匹配**复用引擎**：`localmusic` 的 `LyricMatch.searchCandidates` 就是
+   * "拿歌名+歌手去某个平台搜一批候选"，它内部走 player 的 `lxSearch`；
+   * 打分也用同一套 `scoreCandidate`，所以不需要另写检索逻辑。
+   */
+  @Builder
+  private SwitchPlatformSheet() {
+    Column() {
+      if (this.switching) {
+        Row({ space: 8 }) {
+          LoadingProgress()
+            .width(20)
+            .height(20)
+          Text(`正在 ${platformLabel(this.switchTarget)} 上搜索…`)
+            .fontSize(13)
+            .fontColor($r('app.color.font_tertiary'))
+        }
+        .width('100%')
+        .height(72)
+        .justifyContent(FlexAlign.Center)
+      } else {
+        List({ space: 2 }) {
+          ForEach(this.switchPlatforms(), (platform: string) => {
+            ListItem() {
+              Row({ space: 12 }) {
+                Text(platformLabel(platform))
+                  .fontSize($r('sys.float.Body_L'))
+                  .fontColor($r('app.color.font_primary'))
+                Blank()
+              }
+              .width('100%')
+              .padding({ top: 14, bottom: 14 })
+              .onClick(() => {
+                void this.switchToPlatform(platform);
+              })
+            }
+          }, (platform: string) => 'switch-plat-' + platform)
+        }
+        .width('100%')
+        .scrollBar(BarState.Off)
+      }
+    }
+    .width('100%')
+    .padding({ left: 20, right: 20, top: 4, bottom: 8 })
+  }
+
+  /** @returns 可切换的平台列表（排除当前平台）。 */
+  private switchPlatforms(): string[] {
+    const out: string[] = [];
+    for (let i: number = 0; i < MATCH_PLATFORMS.length; i++) {
+      const p: string = MATCH_PLATFORMS[i];
+      if (p !== this.song.source) {
+        out.push(p);
+      }
+    }
+    return out;
+  }
+
+  /**
+   * 把当前这首歌切到另一个平台：搜一批候选 → 打分挑最优 → **就地换源**。
+   *
+   * ⚠️ 按用户要求：**不自动开始播放**。切换只是把"这首歌在哪个平台"改掉，
+   *    然后让列表自己刷新（收藏 / 历史 / 歌单都跟着更新），播放由用户自己点。
+   *
+   * 两处必须处理的细节：
+   *  1. **封面**：新平台的搜索结果不一定带图（`img` 可能是空串），
+   *     那就**沿用原来那张封面**，否则切完就没图了（用户反馈过这个问题）；
+   *  2. **只改本来就存在的那份数据**：收藏里没有、历史里没有，就不往里塞 ——
+   *     不能因为"切个平台"凭空多出一条收藏/历史。
+   *
+   * 刷新机制不需要额外接线：`addFavorite/removeFavorite` 会 +1 `favoriteVersion`、
+   * `addHistory/removeHistoryByIds` 会 +1 `historyVersion`，`MinePage` 上有
+   * `@Monitor('store.historyVersion', 'store.favoriteVersion')` 会自己重读列表；
+   * 歌单侧则走 `notifyPlaylistChanged()` 那套刷新总线。
+   * @param platform 目标平台（kw / kg / tx / mg / wy）。
+   */
+  private async switchToPlatform(platform: string): Promise<void> {
+    this.switchTarget = platform;
+    this.switching = true;
+    const keyword: string = (this.song.name + ' ' + this.song.singer).trim();
+    const wantedMs: number = parseIntervalMs(this.song.interval);
+    let best: MatchSongInfo | null = null;
+    let bestScore: number = 0;
+    // 是否"够格"用引擎自己的判定（nameExact/nameClose + 歌手或时长对上），
+    // 也就是 localmusic 里那套「宁缺勿错」的门槛 —— 不要自己另立标准
+    let bestOk: boolean = false;
+    try {
+      const candidates: MatchSongInfo[] = await searchCandidates(keyword, platform);
+      for (let i: number = 0; i < candidates.length; i++) {
+        const cand: LyricCandidate = scoreCandidate(candidates[i], this.song.name, this.song.singer, wantedMs);
+        if (cand.score > bestScore) {
+          bestScore = cand.score;
+          best = candidates[i];
+          bestOk = cand.autoOk;
+        }
+      }
+    } catch (_e) {
+      best = null;
+      bestOk = false;
+    }
+    this.switching = false;
+    this.showSheet = false;
+    if (best === null || !bestOk) {
+      this.toast(`在 ${platformLabel(platform)} 没找到这首歌`);
+      return;
+    }
+    const matched: MatchSongInfo = best;
+    const oldSource: string = this.song.source;
+    const oldSongId: string = this.song.songId;
+    // 新平台没给封面就沿用旧的：宁可留着原来那张，也不要切成没图
+    const cover: string = matched.img.length > 0 ? matched.img : this.song.img;
+
+    // 1) 收藏：本来收藏过才换源
+    if (oldSource.length > 0 && this.store.isFavorite(oldSource, oldSongId)) {
+      this.store.removeFavorite(oldSource, oldSongId);
+      this.store.addFavorite(this.buildSwitchedRecord(matched, cover));
+    }
+    // 2) 历史：本来在历史里才换源（先按旧 key 删，再按新 key 写回）
+    if (oldSource.length > 0 && this.historyHas(oldSource, oldSongId)) {
+      this.store.removeHistoryByIds([oldSource + '_' + oldSongId]);
+      this.store.addHistory(this.buildSwitchedRecord(matched, cover));
+    }
+    // 3) 歌单等其它列表走刷新总线
+    notifyPlaylistChanged();
+    // 4) 调用方（历史 / 收藏 / 歌单页）显式刷新自己的列表
+    if (this.onSongSwitched !== null) {
+      this.onSongSwitched();
+    }
+    this.toast(`已切换到 ${platformLabel(matched.source)}`);
+  }
+
+  /** @returns 播放历史里是否已经有这首歌（换源只改已经存在的那条）。 */
+  private historyHas(source: string, songId: string): boolean {
+    const key: string = source + '_' + songId;
+    const list: PlayedSongRecord[] = this.store.getHistory();
+    for (let i: number = 0; i < list.length; i++) {
+      if (list[i].source + '_' + list[i].songId === key) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * 用匹配结果拼一条记录（收藏 / 历史共用）。
+   * @param matched 引擎匹配到的平台歌曲。
+   * @param cover 封面地址（新平台没给图时由调用方传入旧封面）。
+   * @returns 记录。
+   */
+  private buildSwitchedRecord(matched: MatchSongInfo, cover: string): PlayedSongRecord {
+    const record = new PlayedSongRecord();
+    record.songId = matched.songId;
+    record.name = matched.name;
+    record.singer = matched.singer;
+    record.albumName = matched.albumName;
+    record.albumId = matched.albumId;
+    record.source = matched.source;
+    record.interval = matched.interval;
+    record.img = cover;
+    record.quality = '';
+    record.time = Date.now();
+    return record;
   }
 
   /** Popup menu items for the song actions. */
@@ -220,6 +408,15 @@ export struct SongMoreMenu {
         value: '添加到播放列表',
         action: (): void => {
           this.addToPlayQueue();
+        }
+      },
+      {
+        // 用户点名的功能：手动把这首歌换到另一个平台（例：酷狗 → QQ）
+        value: '切换平台',
+        action: (): void => {
+          this.sheetType = 3;
+          this.switching = false;
+          this.showSheet = true;
         }
       }
     ];

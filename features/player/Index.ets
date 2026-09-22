@@ -19,7 +19,8 @@ export { PlayerConstants } from './src/main/ets/constant/PlayerConstants';
 export { AccountChangedState } from './src/main/ets/account/AccountChangedState';
 export { SwitchBannerState, SWITCH_BANNER_STORAGE_KEY } from './src/main/ets/model/SwitchBannerState';
 export { PlaybackPage, PlaybackPageCoverContent, PlaybackPagePanelCoverContent } from './src/main/ets/view/PlaybackPage';
-export { MediaService } from './src/main/ets/model/MediaService';
+export { MediaService, setLocalLyricResolver } from './src/main/ets/model/MediaService';
+export type { LocalLyricResolver } from './src/main/ets/model/MediaService';
 export { MusicAppState } from './src/main/ets/model/PlayerModels';
 export { PlayerViewModel } from './src/main/ets/viewmodel/PlayerViewModel';
 export { MusicPlayMode, AudioPlayerState } from './src/main/ets/model/MusicData';
@@ -32,7 +33,8 @@ export { OnlinePlayUtil } from './src/main/ets/util/OnlinePlayUtil';
 export { LXSourceHost } from './src/main/ets/source/LXSourceHost';
 export { LXSourceEngine, lxEngineIsReady } from './src/main/ets/source/LXSourceEngine';
 export { lxSourceManager } from './src/main/ets/source/LXSourceManager';
-export { getLXMusicUrl, getLXLyric, getLXPic, logError } from './src/main/ets/source/LXPlayHelper';
+export { getLXMusicUrl, getLXLyric, getLXPic, logError, fetchBoardSongs } from './src/main/ets/source/LXPlayHelper';
+export type { BoardSongEntry } from './src/main/ets/source/LXPlayHelper';
 export { lxGetQualityOptions, LXQualityOption } from './src/main/ets/source/LXQualityApi';
 export { lxSearch, lxLeaderboard, getLeaderboardEntries, lxGetPicFallback, lxGetLyricFallback,
   lxTxToplist, lxTxToplistInfo, lxTxSingerList, lxKgSingerList, lxTxToplistList, lxTxHotSearch,
@@ -63,3 +65,4 @@ export { SingerInfo, AlbumInfo, SongInfo, ArtistInfo, SearchPageResult, SongPage
 export type { ArtistDetailParams, AlbumDetailParams } from './src/main/ets/geuz/index';
 export { searchSingers, searchAlbums, sourceToCode, codeToSource, getArtistDetail, getArtistSongs,
   getArtistAlbums, getAlbumDetail } from './src/main/ets/geuz/index';
+export { PLAYER_BIG_COVER_ID } from './src/main/ets/view/MusicPlayInfoBlock';

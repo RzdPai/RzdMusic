@@ -22,6 +22,7 @@ import { AppRuntimeStorage, getAppRuntime as getAppRuntimeFromModel } from './sr
 // Constants (single Constants.ets file; class names unchanged)
 export {
   AppStorageKeys,
+  BarLayoutModes,
   BreakpointConstants,
   GridConstants,
   PlaybackIntentLogEvent,
@@ -68,6 +69,8 @@ export { AmbientState } from './src/main/ets/model/AmbientState';
 export { ThemeState } from './src/main/ets/model/ThemeState';
 export { HomeSourceState } from './src/main/ets/model/HomeSourceState';
 export { ShowMiniLyricState } from './src/main/ets/model/ShowMiniLyricState';
+export { PlaybackFlowLightState } from './src/main/ets/model/PlaybackFlowLightState';
+export { CoverTintState } from './src/main/ets/model/CoverTintState';
 export { ShowSubLyricState } from './src/main/ets/model/ShowSubLyricState';
 export { LyricFpsState } from './src/main/ets/model/LyricFpsState';
 export { LyricCenterState } from './src/main/ets/model/LyricCenterState';
@@ -100,8 +103,16 @@ export {
 export { getStatusBarTopVpFromWindowUtil } from './src/main/ets/util/StatusBarInsetUtil';
 export { buildTitleMaterial } from './src/main/ets/util/TitleMaterial';
 export { SdkApiUtil } from './src/main/ets/util/SdkApiUtil';
+export { BarScrollHelper, BarScrollDeltaTracker } from './src/main/ets/util/BarScrollHelper';
+export { ColorConversion } from './src/main/ets/util/ColorConversion';
 export { MusicStoreService } from './src/main/ets/util/MusicStoreService';
 export { appendPlayLog, appendError } from './src/main/ets/util/LxLogger';
 
 export { MusicEmptyComponent } from './src/main/ets/components/MusicEmptyComponent';
 export { MusicTextIcon } from './src/main/ets/components/MusicTextIcon';
+export {
+  PlayerExpandState,
+  MINI_BAR_COVER_ID,
+  PLAYER_BIG_COVER_ID,
+  areaLengthToVp
+} from './src/main/ets/model/PlayerExpandState';

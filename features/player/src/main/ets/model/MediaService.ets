@@ -27,6 +27,7 @@ import { common, wantAgent } from '@kit.AbilityKit';
 import { avSession } from '@kit.AVSessionKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { resourceManager } from '@kit.LocalizationKit';
+import { fileIo as fs } from '@kit.CoreFileKit';
 import { AppStorageKeys, getAppRuntime, Logger, MusicAppState, MusicCardBridge, MusicStoreService, PlayedSongRecord, SongItem, StringResourceUtil, appendPlayLog } from 'musicbasic';
 import SongItemBuilder from '../util/SongItemBuilder';
 import { AudioPlayerState, MusicPlayMode } from './MusicData';
@@ -43,6 +44,28 @@ import { buildPlainLrc, truncateLrc } from '../util/LrcUtils';
 import { LyricLiveViewController } from '../util/LyricLiveViewController';
 
 const TAG = 'MediaService';
+
+/** 导入设备音频（`features/localmusic`）使用的音源 id。 */
+const LOCAL_SOURCE: string = 'local';
+
+/**
+ * 为「本地歌」（`source === 'local'`）提供歌词文本。
+ *
+ * ⚠️ 依赖方向是**反向注册**的：歌词归 `localmusic` 管（同名 `.lrc`，或用户手动匹配到的
+ *    平台歌曲），而 `localmusic` 依赖本模块 —— 所以不能在这里 import 它。
+ *    `localmusic` 在 init 时把解析器注册进来，播放时由本模块回调。
+ */
+export type LocalLyricResolver = (song: SongItem) => Promise<string>;
+
+let localLyricResolver: LocalLyricResolver | null = null;
+
+/**
+ * 注册（传 null 则清除）本地歌词解析器。
+ * @param resolver 解析器；null 表示清除。
+ */
+export function setLocalLyricResolver(resolver: LocalLyricResolver | null): void {
+  localLyricResolver = resolver;
+}
 
 /** Persisted play queue snapshot: online records, local db ids, and current index. */
 interface QueueSnapshot {
@@ -87,8 +110,27 @@ export class MediaService {
   private musicIndex: number = 0;
   /** True when displayed progress should track AVPlayer time updates (false during seek). */
   private isCurrent: boolean = true;
-  /** When false, prepared state will not auto-start play (e.g. load-only). */
-  private isNeedPlay: boolean = true;
+  /**
+   * 「本次装载完成后是否自动起播」。
+   *
+   * 语义是**装载意图**，不是播放器状态：`loadAsset()` 每次都重新声明它，
+   * `prepared` 回调读取后立刻消费（置 false），所以它永远不会越过一次 prepare 生效。
+   *
+   * ⚠️ 历史坑：这个字段原来是 `isNeedPlay` + `this.isNeedPlay = loadOnly !== true`，
+   * 并且错误恢复链路里还有一处无条件 `= true`。启动恢复（`loadOnly = true` → false）
+   * 与错误恢复（无条件 true）会互相覆盖，结果**启动时偶尔自动开始播放**
+   * （典型时序：恢复时音质不可用 → 自动切档 → 重试把意图改回 true → prepare 完成就起播）。
+   */
+  private playWhenPrepared: boolean = false;
+  /**
+   * 装载代次：`loadAsset()` 每次自增。
+   *
+   * `prepared` 回调只认「本代次」的意图 —— 上一代遗留的 prepare 回调不能消费掉
+   * 新一代的起播意图，新一代的意图也不会被上一代的回调吃掉（用户点了播放却没响的根因）。
+   */
+  private loadGen: number = 0;
+  /** 已被消费（或已被新代次取代）的装载代次：≤ 该值的意图均已失效。 */
+  private playIntentConsumedGen: number = 0;
   /** Queue index to load once AVPlayer is ready; -1 means none. */
   private pendingLoadIndex: number = -1;
   /** Whether the pending load should skip starting playback. */
@@ -222,7 +264,6 @@ export class MediaService {
       (typeof current.title === 'string' ? current.title : ''));
     // 清空 url：让 resolveOnlineUrl 走 fallback 而不是直接走缓存
     current.url = '';
-    this.isNeedPlay = true;
     const resolved: boolean = await this.resolveOnlineUrl(current);
     appendPlayLog('[播放] 跨源重试解析结果=' + resolved + ' 新url=' +
       (current.url.length > 0 ? '已获得' : '空'));
@@ -236,7 +277,13 @@ export class MediaService {
     }
     // resolveOnlineUrl 已填好新 url/source/songId，加载播放
     this.errorRecoveryPending = false;
-    this.loadAsset(this.musicIndex);
+    // ★ 重试的起播意图必须**沿用出错时的播放状态**，不能无条件起播：
+    //   ① 启动恢复（loadOnly=true）时如果恰好撞上音质/音源不可用，重试会把意图改成 true，
+    //      prepare 一完成就自动放起来 —— 用户反馈的「启动应用自动开始播放」正是这条路径；
+    //   ② 暂停中报错重试也不该自己响起来。
+    //   这里先按当前播放状态写意图，再调 loadAsset 覆盖它。
+    void this.loadAsset(this.musicIndex);
+    this.overridePlayIntent(this.getAppState().isPlay);
   }
   /** AVPlayer timeUpdate: refreshes countdown label and progress in MusicAppState when active. */
   private updateTimeCall: (updateTime: number) => void = (updateTime: number) => {
@@ -344,13 +391,13 @@ export class MediaService {
         const appState = this.getAppState();
         appState.totalTime = MediaTools.msToCountdownTime(this.getDuration());
         appState.progressMax = this.getDuration();
-        this.appendPlayLog('[播放] prepared isNeedPlay=' + this.isNeedPlay);
-        if (this.avPlayer && this.isNeedPlay) {
+        const playedGen: number = this.consumePlayIntent();
+        this.appendPlayLog('[播放] prepared 本次起播=' + (playedGen >= 0));
+        if (playedGen >= 0) {
           this.ensureBackgroundAudioTask();
-          this.avPlayer.play();
+          this.startPlayback('prepared', playedGen);
         }
         this.setAVMetadata();
-        this.isNeedPlay = true;
         Logger.info(TAG, 'AVPlayer prepared succeeded.');
         break;
       case 'playing':
@@ -584,11 +631,47 @@ export class MediaService {
     return this.getAppState().resolveSongAtQueueIndex(index);
   }
 
-  /** Shows a toast via the current UIContext when available. */
+  /** 通过当前 UIContext 弹一条 toast（没有 UIContext 时静默跳过）。 */
   private toast(message: string): void {
     const uiContext = getAppRuntime().uiContext;
     if (uiContext !== undefined) {
       uiContext.getPromptAction().showToast({ message: message, duration: 2000 });
+    }
+  }
+
+  /** @returns 本地歌背后的沙箱音频文件是否还在磁盘上。 */
+  private localFileExists(path: string): boolean {
+    if (path.length === 0) {
+      return false;
+    }
+    try {
+      return fs.accessSync(path);
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  /**
+   * 补齐本地歌的歌词：只走**反向注册**的解析器，不联网。
+   *
+   * 歌词归 `localmusic` 管（同名 `.lrc`，或用户手动匹配到的平台歌曲），
+   * 而 `localmusic` 依赖本模块，所以由它注册进来、这里回调（见 setLocalLyricResolver）。
+   * @param songItem 队列项（`source === 'local'`）。
+   */
+  private async enrichLocalTrack(songItem: SongItem): Promise<void> {
+    if (songItem.lyricText.length > 0 || localLyricResolver === null) {
+      return;
+    }
+    try {
+      const lyric: string = await localLyricResolver(songItem);
+      if (lyric.length > 0) {
+        songItem.lyricText = lyric;
+        this.getAppState().lyricVersion++;
+        this.liveViewController.reloadLyric(songItem.lyricText);
+        void this.setAVMetadata();
+      }
+    } catch (_error) {
+      // 歌词是可选能力，取不到就静默跳过
     }
   }
 
@@ -1231,6 +1314,80 @@ export class MediaService {
   }
 
   /**
+   * 声明一次装载请求的起播意图，并让此前所有未消费的意图作废。
+   *
+   * @param autoPlay 本次装载完成后是否自动起播。默认 true（用户点歌、切歌、续播）。
+   *                 启动恢复 / 只预热地址时传 false。
+   * @returns 本次请求的代次，调用方无需保存（`consumePlayIntent` 会校验）。
+   */
+  private beginLoadRequest(autoPlay: boolean): number {
+    this.loadGen = this.loadGen + 1;
+    this.playWhenPrepared = autoPlay;
+    this.playIntentConsumedGen = this.loadGen - 1;
+    this.appendPlayLog('[播放] 装载请求 gen=' + this.loadGen + ' 起播意图=' + autoPlay);
+    return this.loadGen;
+  }
+
+  /**
+   * 消费当前装载代次的起播意图。
+   *
+   * 无论结果如何都会把该代次标记为“已消费”，因此同一个意图绝不会触发第二次 play()；
+   * 若期间又来了新的装载请求（`loadGen` 已前进），本次意图直接作废 —— 这正是
+   * **启动恢复不会因为紧接着的一次音质降级重试而变成自动播放** 的关键。
+   *
+   * @returns 应当起播时返回这次意图所属的代次；不应起播时返回 -1。
+   */
+  private consumePlayIntent(): number {
+    if (this.playIntentConsumedGen >= this.loadGen) {
+      return -1;
+    }
+    this.playIntentConsumedGen = this.loadGen;
+    const shouldPlay: boolean = this.playWhenPrepared;
+    this.playWhenPrepared = false;
+    return shouldPlay ? this.loadGen : -1;
+  }
+
+  /**
+   * 唯一一处「由本服务主动起播」的入口。
+   *
+   * **所有**自动起播都必须走这里（prepared 回调、单曲循环重播），不能再直接调
+   * `avPlayer.play()`：这样才能保证「启动恢复 + 音质降级重试」那条路径即使中间
+   * 又插进来一次装载请求，也不会偷偷把音乐放起来。
+   *
+   * 起播前会复核「意图代次是否仍是当前代次」：`consumePlayIntent()` 之后到这里之间
+   * 还可能有一次 await，期间若来了新的装载请求（`loadGen` 前进），本次起播直接放弃。
+   *
+   * @param reason 调用来源，只用于播放日志定位问题。
+   * @param playedGen 该意图所属的装载代次（由 {@link consumePlayIntent} 给出）。
+   */
+  private startPlayback(reason: string, playedGen: number): void {
+    if (!this.avPlayer) {
+      return;
+    }
+    if (playedGen < this.loadGen) {
+      this.appendPlayLog('[播放] 放弃起播(' + reason + ') 意图已被后续装载取代 ' +
+        playedGen + ' < ' + this.loadGen);
+      return;
+    }
+    this.appendPlayLog('[播放] 起播(' + reason + ') gen=' + playedGen);
+    this.avPlayer.play();
+  }
+
+  /**
+   * 对齐「本次装载完成后是否起播」的意图。
+   *
+   * 只应在**刚调用完 `loadAsset` / `loadAssetWithoutAutoPlay` 之后同步调用**：
+   * `loadAsset` 的函数体会同步跑到第一个 await 之前，所以此处的写入一定属于同一次装载。
+   * 用在「不应该由 loadAsset 默认值决定」的场景（删掉正在播的那首歌、错误恢复重试）。
+   *
+   * @param autoPlay 期望的起播意图。
+   */
+  private overridePlayIntent(autoPlay: boolean): void {
+    this.playWhenPrepared = autoPlay;
+    this.appendPlayLog('[播放] 起播意图校正 → ' + autoPlay + ' (gen=' + this.loadGen + ')');
+  }
+
+  /**
    * Load media asset for the given queue index (prepare or switch track).
    *
    * @param musicIndex Index in the play queue.
@@ -1239,6 +1396,10 @@ export class MediaService {
   public async loadAsset(musicIndex: number, loadOnly?: boolean): Promise<void> {
     // 主动加载新歌即取消尚未执行的一次错误恢复，避免旧定时器干扰新播放
     this.errorRecoveryPending = false;
+    // ★ 起播意图必须在**函数最前面**声明：下面 resolveOnlineUrl 是异步的，期间可能
+    //   有别的 loadAsset 插进来。放在异步之后声明会让「谁最后跑完谁说了算」，
+    //   启动恢复就会偶发地自动播放。
+    this.beginLoadRequest(loadOnly !== true);
     this.applyAudioSession(MusicStoreService.getInstance().getAudioMix());
     const len = this.getQueueLength();
     if (len === 0) {
@@ -1257,7 +1418,18 @@ export class MediaService {
       Logger.error(TAG, `resolve song failed at queue index ${musicIndex}`);
       return;
     }
-    if (queueSong.url.length === 0 && queueSong.source.length > 0) {
+    if (queueSong.source === LOCAL_SOURCE) {
+      // 本地歌（导入的设备音频）走**直路**：不联网、不看音源脚本脸色。
+      // 没有用户音源脚本的人也必须能放自己导入的文件，所以这里完全不碰 LX 引擎。
+      if (!this.localFileExists(queueSong.url)) {
+        this.appendPlayLog('[播放] 本地文件已不在：' + queueSong.url);
+        // 副本丢了要明确告诉用户，不能静默失败（用户以为是播放器坏了）
+        this.toast('文件已经不在了，请重新导入');
+        this.getAppState().isResolving = false;
+        return;
+      }
+      await this.enrichLocalTrack(queueSong);
+    } else if (queueSong.url.length === 0 && queueSong.source.length > 0) {
       const resolved = await this.resolveOnlineUrl(queueSong);
       this.appendPlayLog('[播放] resolveOnlineUrl=' + resolved);
       if (!resolved) {
@@ -1283,17 +1455,11 @@ export class MediaService {
       let httpUrl = this.songItemBuilder.getHttpUrl();
       if (this.avPlayer) {
         if (httpUrl.length > 0) {
-          if (loadOnly) {
-            this.isNeedPlay = false;
-          }
           this.avPlayer.url = httpUrl;
           Logger.info(TAG, 'loadAsset avPlayer.url:' + this.avPlayer.url);
         } else {
           let url = this.songItemBuilder.getRealUrl();
           if (url) {
-            if (loadOnly) {
-              this.isNeedPlay = false;
-            }
             let avFileDescriptor: media.AVFileDescriptor = { fd: url.fd, offset: url.offset, length: url.length };
             this.avPlayer.fdSrc = avFileDescriptor;
             Logger.info(TAG, 'loadAsset avPlayer.fdSrc:' + this.avPlayer.fdSrc);
@@ -1304,7 +1470,6 @@ export class MediaService {
       // 非首次切歌：无条件 reset（不依赖 isPrepared）。快速连续切歌时，上一首可能尚未
       // prepared（isPrepared=false），此时 stop() 会因 guard 空转导致新歌不加载。
       // reset 后 avPlayer 回到 idle，idle 状态回调会重新 build 当前歌曲并触发 prepare。
-      this.isNeedPlay = loadOnly !== true;
       if (this.state === AudioPlayerState.IDLE) {
         // 关键：错误恢复/上轮 reset 后播放器已在 idle。对 idle 播放器再调 reset()
         // 没有状态变化、不会触发 idle 回调，新 url 永远装不进去（日志表现为
@@ -1481,6 +1646,12 @@ export class MediaService {
    */
   public pause() {
     Logger.info(TAG, 'AVPlayer pause() isPrepared:' + this.isPrepared + ', state:' + this.state);
+    // 用户的暂停是最终意图：丢掉任何还没被 prepared 消费掉的「自动起播」意图，
+    // 否则暂停期间完成的那次 resolveOnlineUrl/重试仍会把音乐放起来。
+    if (this.playWhenPrepared) {
+      this.playWhenPrepared = false;
+      this.appendPlayLog('[播放] 暂停 → 丢弃未消费的起播意图 gen=' + this.loadGen);
+    }
     if (this.isPrepared && this.state === AudioPlayerState.PLAY && this.avPlayer) {
       this.avPlayer.pause().then(() => {
         this.state = AudioPlayerState.PAUSE;
@@ -1701,8 +1872,10 @@ export class MediaService {
     } else if (index === appState.selectIndex) {
       const next: number = Math.min(appState.selectIndex, appState.getQueueLength() - 1);
       appState.selectIndex = next;
-      this.isNeedPlay = appState.isPlay;
       void this.loadAsset(next);
+      // 删掉的正是当前播放的歌：只在**原本就在播**时自动续播下一首；
+      // 暂停状态下删歌不应该把音乐放起来（loadAsset 默认起播意图为 true，这里对齐回来）。
+      this.overridePlayIntent(appState.isPlay);
     }
     this.persistQueueSnapshot();
   }

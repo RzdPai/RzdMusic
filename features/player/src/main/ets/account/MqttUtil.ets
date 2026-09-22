@@ -96,11 +96,12 @@ function readUtf8String(bytes: Uint8Array, offset: number): ReadStringResult {
 
 function readProperties(bytes: Uint8Array, offset: number): ReadPropertyResult {
   const lengthResult: ReadResult = readVbi(bytes, offset);
-  const end: number = offset + lengthResult.size + lengthResult.value;
+  const end: number = Math.min(offset + lengthResult.size + lengthResult.value, bytes.length);
   let cursor: number = offset + lengthResult.size;
   const userProperties: Map<string, string> = new Map();
   let serverReference: string = '';
   while (cursor < end) {
+    const before: number = cursor;
     const id: number = bytes[cursor];
     cursor++;
     if (id === 0x26) {
@@ -117,10 +118,10 @@ function readProperties(bytes: Uint8Array, offset: number): ReadPropertyResult {
       cursor += 1;
     } else if (id === 0x03 || id === 0x04 || id === 0x22) {
       cursor += 2;
-    } else if (id === 0x05 || id === 0x06 || id === 0x07 || id === 0x08 || id === 0x09 ||
+    } else if (cursor + 4 <= end && (id === 0x05 || id === 0x06 || id === 0x07 || id === 0x08 || id === 0x09 ||
       id === 0x0a || id === 0x0b || id === 0x0c || id === 0x0d || id === 0x0e ||
       id === 0x0f || id === 0x10 || id === 0x11 || id === 0x1f || id === 0x20 ||
-      id === 0x23 || id === 0x28) {
+      id === 0x23 || id === 0x28)) {
       cursor += 4;
     } else if (id === 0x12 || id === 0x13 || id === 0x1c || id === 0x21) {
       const skipResult: ReadResult = readVbi(bytes, cursor);
@@ -130,11 +131,21 @@ function readProperties(bytes: Uint8Array, offset: number): ReadPropertyResult {
       cursor += keyResult.size;
       const valueResult: ReadStringResult = readUtf8String(bytes, cursor);
       cursor += valueResult.size;
-    } else if (id === 0x16 || id === 0x17 || id === 0x18 || id === 0x1a || id === 0x1b ||
-      id === 0x24 || id === 0x25) {
+    } else if (cursor + 2 <= end && (id === 0x16 || id === 0x17 || id === 0x18 || id === 0x1a || id === 0x1b ||
+      id === 0x24 || id === 0x25)) {
       const length: number = (bytes[cursor] << 8) | bytes[cursor + 1];
       cursor += 2 + length;
     } else {
+      // 未覆盖的 property id：不要静默 break（那会截断后续 userProperties /
+      // serverReference 解析），至少留一条线索，并按声明长度跳过。
+      hilog.warn(0x0000, LOG_TAG,
+        'mqtt 未识别的 property id=0x%{public}s，跳过 %{public}d 字节',
+        id.toString(16), Math.max(0, end - before));
+      break;
+    }
+    if (cursor <= before) {
+      // 防御：避免解析不前进导致死循环
+      hilog.warn(0x0000, LOG_TAG, 'mqtt property 解析未前进，提前结束 id=0x%{public}s', id.toString(16));
       break;
     }
   }
@@ -204,6 +215,20 @@ export class MqttConnectError extends Error {
   code: number = 0;
 }
 
+/**
+ * 连接过程中的共享可变状态。
+ *
+ * 必须用对象而不是布尔值：`settled` 曾经以「按值传参」的方式传进
+ * `drainPackets` / `handleConnack`，函数内部把形参置 true 并不会改到外层闭包，
+ * 于是 `ws.on('error')` 里 `if (settled)` 永远为假 —— CONNACK 成功、订阅也成功
+ * 之后，任何一次网络抖动都会走到 `destroy() + reject()`，把一条健康的连接直接
+ * 掐断，再触发上层重连退避，最终报「QQ 音乐扫码连接不稳定」。这就是 QQ 登录
+ * 失败的决定性原因（其它平台走 HTTP 轮询，没有这条链路）。
+ */
+interface MqttConnState {
+  settled: boolean;
+}
+
 export class MqttClient {
   private ws: webSocket.WebSocket | undefined = undefined;
   private buffer: Uint8Array = new Uint8Array(0);
@@ -213,24 +238,29 @@ export class MqttClient {
   onPublish: ((message: MqttPublishMessage) => void) | undefined = undefined;
   onError: ((err: Error) => void) | undefined = undefined;
   onClose: (() => void) | undefined = undefined;
+  /** SUBACK 回调：reason >= 0x80 表示订阅被拒绝，扫码事件永远不会到达。 */
+  onSuback: ((reasonCode: number) => void) | undefined = undefined;
+  /** CONNACK 拒绝回调（reason !== 0）。 */
+  onConnectError: ((reasonCode: number) => void) | undefined = undefined;
 
   connect(options: MqttClientOptions): Promise<void> {
     const ws: webSocket.WebSocket = webSocket.createWebSocket();
     this.ws = ws;
     this.closed = false;
     return new Promise<void>((resolve, reject) => {
-      let settled: boolean = false;
+      // 共享对象：所有回调读写的是同一份状态（修复按值传参的闭包 bug）
+      const connState: MqttConnState = { settled: false };
       const timer: number = setTimeout(() => {
-        if (settled) return;
-        settled = true;
+        if (connState.settled) return;
+        connState.settled = true;
         this.destroy();
         reject(new Error('连接扫码服务超时'));
       }, options.connectTimeout);
 
       ws.on('open', () => {
         ws.send(buildConnectPacket(options).buffer).catch((err: BusinessError) => {
-          if (settled) return;
-          settled = true;
+          if (connState.settled) return;
+          connState.settled = true;
           clearTimeout(timer);
           this.destroy();
           reject(new Error(`发送连接请求失败：${err.message ?? ''}`));
@@ -248,16 +278,17 @@ export class MqttClient {
         }
         if (bytes.length === 0) return;
         this.buffer = concatBytes(this.buffer, bytes);
-        this.drainPackets(settled, resolve, reject, timer);
+        this.drainPackets(connState, resolve, reject, timer);
       });
 
       ws.on('error', (err: BusinessError) => {
         hilog.error(0x0000, LOG_TAG, 'mqtt ws error: %{public}s code %{public}d', err.message ?? '', err.code ?? 0);
-        if (settled) {
+        if (connState.settled) {
+          // 连接已建立：只上报，交给上层重连，绝不在这里 destroy + reject
           if (this.onError) this.onError(new Error(err.message ?? '扫码连接异常'));
           return;
         }
-        settled = true;
+        connState.settled = true;
         clearTimeout(timer);
         this.destroy();
         const connectError: MqttConnectError = new MqttConnectError(`连接扫码服务失败：${err.message ?? ''}`);
@@ -281,8 +312,8 @@ export class MqttClient {
         pingInterval: 0,
       };
       ws.connect('wss://mu.y.qq.com/ws/handshake', requestOptions).catch((err: BusinessError) => {
-        if (settled) return;
-        settled = true;
+        if (connState.settled) return;
+        connState.settled = true;
         clearTimeout(timer);
         this.destroy();
         reject(new Error(`连接扫码服务失败：${err.message ?? ''}`));
@@ -291,7 +322,7 @@ export class MqttClient {
   }
 
   private drainPackets(
-    settled: boolean,
+    connState: MqttConnState,
     resolve: () => void,
     reject: (err: Error) => void,
     timer: number,
@@ -306,15 +337,36 @@ export class MqttClient {
       const first: number = packet[0];
       const type: number = first >> 4;
       if (type === 0x02) {
-        this.handleConnack(packet, settled, resolve, timer);
+        this.handleConnack(packet, connState, resolve, reject, timer);
       } else if (type === 0x03) {
         const message: MqttPublishMessage | undefined = this.parsePublish(packet);
         if (message && this.onPublish) this.onPublish(message);
+      } else if (type === 0x09) {
+        // SUBACK：旧实现整体丢弃，导致订阅失败时 UI 一直停在"等待扫码"
+        this.handleSuback(packet);
+      } else if (type === 0x0d) {
+        hilog.debug(0x0000, LOG_TAG, 'mqtt pingresp');
       }
     }
   }
 
-  private handleConnack(packet: Uint8Array, settled: boolean, resolve: () => void, timer: number): void {
+  /** SUBACK: [0x90][len][packetId:2][reasonCode...] */
+  private handleSuback(packet: Uint8Array): void {
+    const reasonCode: number = packet.length > 4 ? packet[4] : -1;
+    hilog.info(0x0000, LOG_TAG, 'mqtt suback reason %{public}d', reasonCode);
+    if (this.onSuback) this.onSuback(reasonCode);
+    if (reasonCode >= 0x80) {
+      hilog.error(0x0000, LOG_TAG, '扫码订阅被拒绝 reason=%{public}d', reasonCode);
+    }
+  }
+
+  private handleConnack(
+    packet: Uint8Array,
+    connState: MqttConnState,
+    resolve: () => void,
+    reject: (err: Error) => void,
+    timer: number,
+  ): void {
     const reasonCode: number = packet.length >= 3 ? packet[2] : -1;
     let info: MqttConnackInfo = { serverReference: '' };
     if (packet.length >= 4) {
@@ -322,13 +374,20 @@ export class MqttClient {
       info = { serverReference: properties.serverReference };
     }
     hilog.info(0x0000, LOG_TAG, 'mqtt connack reason %{public}d ref %{public}s', reasonCode, info.serverReference);
-    if (this.onConnack) this.onConnack(info);
-    if (!settled) {
-      settled = true;
+    if (!connState.settled) {
+      connState.settled = true;
       clearTimeout(timer);
+      if (reasonCode !== 0) {
+        // 旧实现无论什么 reason 都当成功，认证被拒也会继续 subscribe 并显示"等待扫码"
+        if (this.onConnectError) this.onConnectError(reasonCode);
+        this.destroy();
+        reject(new Error(`扫码服务拒绝连接（reason ${reasonCode}）`));
+        return;
+      }
       resolve();
       this.startPing();
     }
+    if (this.onConnack) this.onConnack(info);
   }
 
   private parsePublish(packet: Uint8Array): MqttPublishMessage | undefined {

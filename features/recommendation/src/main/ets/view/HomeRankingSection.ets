@@ -119,7 +119,13 @@ export struct HomeRankingSection {
       Column({ space: 8 }) {
         ForEach(this.hotBoards(), (item: RecommendBoardUi, index?: number) => {
           this.BoardRow(item, index ?? 0)
-        }, (item: RecommendBoardUi) => `rank-${item.source}_${item.id}`)
+        },
+        // ★ key 里必须带上 cover。
+        // 榜单列表是**两次**赋值：先给不带封面的列表，异步拿到封面后再整体替换。
+        // ForEach 只在 key 变化时才重建子节点；key 只用 source_id 时两次完全相同
+        // → 第二次带封面的赋值不会重绘 → 封面看起来"加载不出来"；
+        // 切平台时 id 变了才刷新，这就是"来回切平台才能加载出来"的原因。
+        (item: RecommendBoardUi) => `rank-${item.source}_${item.id}_${item.cover}`)
       }
       .width(StyleConstants.FULL_WIDTH)
       .margin({ top: 10 })

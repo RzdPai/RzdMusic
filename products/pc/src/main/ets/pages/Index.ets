@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,6 +14,7 @@
  */
 
 import { AppStorageV2 } from '@kit.ArkUI';
+import { BusinessError } from '@kit.BasicServicesKit';
 import { HdsNavigation } from '@kit.UIDesignKit';
 import {
   AppStorageKeys,
@@ -21,6 +22,7 @@ import {
   MusicAppState,
   MusicDbApi,
   MusicStoreService,
+  Logger,
   PlaybackIntentState,
   PlaybackShellConstants,
   StyleConstants,
@@ -32,6 +34,9 @@ import { dispatchShellPlaybackIntent, LXSourceHost, PlaybackPageCoverContent } f
 import { RecommendPage } from 'recommendation';
 import { PlaylistsPage } from 'playlist';
 import { MinePage, SettingPage } from 'setting';
+import { localMusic } from 'localmusic';
+import { syncManager } from 'sync';
+import { common } from '@kit.AbilityKit';
 
 /**
  * PC root page: sidebar navigation, recommend tab in HdsNavigation, placeholders for other tabs,
@@ -62,6 +67,25 @@ struct Index {
     this.appState.playQueueIds = MusicDbApi.getInstance().getSongList().map((dto) => dto.id);
     this.themeState.color = MusicStoreService.getInstance().getThemeColor();
     AppStorage.setOrCreate('lxPlayQuality', MusicStoreService.getInstance().getPlayQuality());
+    // 本地音乐库与同步客户端启动初始化（与手机壳层一致）：
+    // 同时把这两个 HAR 拉进 pc 的构建图（hvigor 对 HAR 是按引用编译的）。
+    // ⚠️ 各自包 try/catch：它们不是播放的前置条件，但一旦抛出去会中断 aboutToAppear。
+    const hostContext: common.UIAbilityContext | undefined =
+      this.getUIContext().getHostContext() as common.UIAbilityContext | undefined;
+    if (hostContext !== undefined) {
+      try {
+        localMusic.init(hostContext);
+      } catch (err) {
+        const e = err as BusinessError;
+        Logger.error('RzdShell', `localMusic init failed code=${e.code} msg=${e.message}`);
+      }
+      try {
+        syncManager.init(hostContext);
+      } catch (err) {
+        const e = err as BusinessError;
+        Logger.error('RzdShell', `syncManager init failed code=${e.code} msg=${e.message}`);
+      }
+    }
   }
 
   /** Handles playback intent changes and animates opening the in-app player. */

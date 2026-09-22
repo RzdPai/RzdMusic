@@ -1,4 +1,4 @@
-﻿{
+{
   "string": [
     {
       "name": "setting_title",
@@ -182,7 +182,7 @@
     },
     {
       "name": "mine_version",
-      "value": "1.7.0"
+      "value": "1.8.0"
     },
     {
       "name": "mine_about_bundle",
@@ -287,6 +287,10 @@
     {
       "name": "setting_sub_mini_lyric",
       "value": "播放页显示小歌词"
+    },
+    {
+      "name": "setting_sub_playback_flow_light",
+      "value": "播放页流光背景"
     },
     {
       "name": "setting_sub_audio_mix",

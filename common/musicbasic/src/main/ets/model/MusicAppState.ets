@@ -51,6 +51,20 @@ export class  MusicAppState {
   @Trace public imageColor: string = 'rgba(0, 0, 2, 1.00)';
   /** HdsTabs mini bar expanded (true) vs compact (false). */
   @Trace public miniBarExpanded: boolean = false;
+  /**
+   * 双层底栏排布模式：0 = HORIZONTAL（单排）/ 1 = VERTICAL（迷你条与页签上下两排）。
+   *
+   * 默认 **1 = 上下两排**，与 musicfreeOH 的 `AppState.hdsBarLayoutMode = 1` 一致：
+   * 迷你条是一条窄胶囊、页签单独一排。这就是 MusicFree 的默认观感。
+   *
+   * 收起/展开由 HDS 内部状态机负责（我们只在 `onBarStyleChange` 里读结果），
+   * 不要用滚动去驱动它。
+   *
+   * 这里存 number 而不是 HdsBarLayoutMode，是为了让 common 层不依赖 HDS UI 类型；
+   * 壳层负责与 `HdsBarLayoutMode` 互转。仅在 API ≥ 6.1.1(24) 生效，低版本传 undefined。
+   * @see BarLayoutModes
+   */
+  @Trace public hdsBarLayoutMode: number = 1;
   /** Bumped whenever the current track's lyric text is refreshed (async fill). */
   @Trace public lyricVersion: number = 0;
   /** 当前实际播放音质（含自动降级后的结果；空表示尚未解析）。 */

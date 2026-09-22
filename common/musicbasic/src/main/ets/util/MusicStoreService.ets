@@ -33,6 +33,7 @@ const KEY_AMBIENT_LEVEL: string = 'ambient_level';
 const KEY_THEME_COLOR: string = 'theme_color';
 const KEY_HOME_SOURCE: string = 'home_source';
 const KEY_SHOW_MINI_LYRIC: string = 'show_mini_lyric';
+const KEY_PLAYBACK_FLOW_LIGHT: string = 'playback_flow_light';
 const KEY_SHOW_SUB_LYRIC: string = 'show_sub_lyric';
 const KEY_PLAY_QUALITY: string = 'play_quality';
 const KEY_AUDIO_MIX: string = 'audio_mix';
@@ -551,6 +552,25 @@ export class MusicStoreService {
     }
 
     return store.getSync(KEY_SHOW_MINI_LYRIC, false) as boolean;
+  }
+
+  /** 是否启用播放页流光背景（封面动态取色）。 */
+  public getPlaybackFlowLight(): boolean {
+    const store = this.getStore();
+    if (store === undefined) {
+      return false;
+    }
+    return store.getSync(KEY_PLAYBACK_FLOW_LIGHT, false) as boolean;
+  }
+
+  /** Persists the playback-page flow-light background switch. */
+  public setPlaybackFlowLight(enabled: boolean): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_PLAYBACK_FLOW_LIGHT, enabled);
+    store.flush();
   }
 
   /** Whether the lyrics/playback page keeps the screen on. */

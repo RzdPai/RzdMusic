@@ -18,10 +18,11 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { common } from '@kit.AbilityKit';
 import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
-import { BreakpointType, ThemeState } from 'musicbasic';
-import { AmbientState, AppStorageKeys, MusicStoreService, PlayedSongRecord, PlaylistDto, RouterUrlConstants, TitleBarConstants, ToplistRouteParam, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
+import { AppStorageKeys, BarScrollHelper, BreakpointType, MusicAppState, ThemeState } from 'musicbasic';
+import { AmbientState, MusicStoreService, PlayedSongRecord, PlaylistDto, RouterUrlConstants, TitleBarConstants, ToplistRouteParam, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { lxSearch, SharePlaylistService, SharePlaylistSource } from 'player';
+import { localMusic, LocalMusicImportState, localMusicImportState } from 'localmusic';
 import { gunzipBytes } from '../util/GunzipUtil';
 import { registerPlaylistRefresh, unregisterPlaylistRefresh } from '../util/PlaylistRefreshBus';
 
@@ -129,6 +130,28 @@ export struct PlaylistsPage {
   private addMenuNode: ComponentContent<Object> | null = null;
   /** Scroller bound to the HDS title bar so the scroll effect (gradient blur) can fire. */
   private pageScroller: Scroller = new Scroller();
+  /** 全局播控状态：滚动联动双层底栏需要写 miniBarExpanded / hdsBarLayoutMode。 */
+  @Local appState: MusicAppState =
+    AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
+  /** 「本地音乐」入口要显示曲库首数：订阅它的导入状态，导入/删除后自动刷新。 */
+  @Local localMusicState: LocalMusicImportState = localMusicImportState();
+  /** 「本地音乐」路由名（与 features/localmusic 的 router_map.json 一致）。 */
+  private static readonly LOCAL_MUSIC_ROUTE: string = 'LocalMusicPage';
+
+  /**
+   * 滚动联动双层底栏（上滑收起 / 下滑展开）。
+   *
+   * 用户要求「全都自动收起展开」—— 底栏是所有 Tab 共用的一个控件，
+   * 只要有一个页面不接回调，就会出现"有的页面收、有的不收"。
+   * @param offset 本帧滚动增量（vp）。
+   */
+  private onPageScrollFrame(offset: number): void {
+    if (!BarScrollHelper.isEnabled()) {
+      return;
+    }
+    BarScrollHelper.notifyScrollDelta(this.getUIContext(), this.appState, offset,
+      this.breakpointEnv.widthBreakpoint as number);
+  }
 
 
   aboutToAppear(): void {
@@ -634,6 +657,68 @@ export struct PlaylistsPage {
     .padding({ top: 8, bottom: 12 })
   }
 
+  /**
+   * 「本地音乐」入口行（放在歌单页面里，按需求：本地音乐归歌单页面）。
+   *
+   * 本地音乐是一个独立 HAR（`features/localmusic`），它自带路由页 `LocalMusicPage`
+   * （见该模块的 `router_map.json`），所以这里只需要一个入口把路由推出去，
+   * **不**在本文件里写导入/列表逻辑。
+   *
+   * 副标题显示曲库首数：读 `localMusicImportState().version` 让它跟着
+   * "导入 / 删除 / 歌词匹配"一起刷新（那个字段就是为这种订阅准备的）。
+   */
+  @Builder
+  private LocalMusicEntry() {
+    Row({ space: 12 }) {
+      Row() {
+        SymbolGlyph($r('sys.symbol.music_note_list'))
+          .fontSize(18)
+          .fontColor([this.themeState.color])
+      }
+      .width(44)
+      .height(44)
+      .borderRadius($r('sys.float.corner_radius_level3'))
+      .backgroundColor($r('sys.color.background_tertiary'))
+      .justifyContent(FlexAlign.Center)
+
+      Column({ space: 2 }) {
+        Text('本地音乐')
+          .fontSize($r('sys.float.Body_L'))
+          .fontColor($r('sys.color.font_primary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(this.localMusicSubtitle())
+          .fontSize($r('sys.float.Caption_M'))
+          .fontColor($r('sys.color.font_tertiary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(18)
+        .fontColor([$r('sys.color.font_tertiary')])
+    }
+    .width('100%')
+    .padding({ top: 8, bottom: 8 })
+    .onClick(() => {
+      // 路由名与 localmusic 模块 router_map.json 里的 name 一致
+      this.pageIndexInfos.pushPathByName(PlaylistsPage.LOCAL_MUSIC_ROUTE, null);
+    })
+  }
+
+  /** @returns 「本地音乐」入口的副标题：有歌显示首数，没有就提示导入。 */
+  private localMusicSubtitle(): string {
+    // 读一下 version：导入/删除/匹配后自动重算
+    const version: number = this.localMusicState.version;
+    const count: number = localMusic.count();
+    if (count > 0) {
+      return `${count} 首` + (version >= 0 ? '' : '');
+    }
+    return '导入设备音频（选文件 / 选文件夹）';
+  }
+
   /** One playlist row: cover (first song's album art / placeholder), name, song count, chevron. */
   @Builder
   private PlaylistRow(p: PlaylistDto) {
@@ -721,6 +806,8 @@ export struct PlaylistsPage {
       param.sectionType = 'playlist';
       param.playlistId = p.id;
       param.listTitle = p.name;
+      // 本地歌单自身封面（新建的为空，详情页显示占位图；不用第一首歌的封面顶替）
+      param.listCover = p.cover;
       this.pageIndexInfos.pushPathByName(RouterUrlConstants.PLAYLIST_DETAIL, param);
     })
   }
@@ -962,6 +1049,10 @@ export struct PlaylistsPage {
             ListItem() {
               this.PlaylistsHeader()
             }
+            // 「本地音乐」入口：放在歌单列表最上面（需求：本地音乐放歌单页面）
+            ListItem() {
+              this.LocalMusicEntry()
+            }
             Repeat<PlaylistDto>(this.playlists)
               .each((obj: RepeatItem<PlaylistDto>) => {
                 ListItem() {
@@ -994,6 +1085,11 @@ export struct PlaylistsPage {
           .scrollBar(BarState.Off)
           .edgeEffect(EdgeEffect.Spring)
           .clip(false)
+          // 滚动联动双层底栏：上滑收起、下滑展开（与首页/我的/设置一致）
+          .onScrollFrameBegin((offset: number): OnScrollFrameBeginHandlerResult => {
+            this.onPageScrollFrame(offset);
+            return { offsetRemain: offset };
+          })
           .contentStartOffset(getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP)
           .divider({
             strokeWidth: 0.5,

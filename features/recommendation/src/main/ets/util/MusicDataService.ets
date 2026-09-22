@@ -145,21 +145,128 @@ async function fillTxCovers(map: Record<string, string>): Promise<void> {
   }
 }
 
+/** 酷我榜单列表接口（PC 端页面用的那个，不需要签名）。 */
+const KW_BANG_LIST_URL: string = 'http://wapi.kuwo.cn/api/pc/bang/list';
+
+/** 酷我榜单歌曲接口（老 PC 接口，不需要签名）。 */
+const KW_BANG_SONG_URL: string = 'http://kbangserver.kuwo.cn/ksong.s';
+
+/** 榜单歌曲每页条数。 */
+const KW_BANG_PAGE_SIZE: number = 80;
+
+/** 一个榜单在列表里展示所需的字段。 */
+export class KwBangEntry {
+  /** 榜单 id，同时也是歌曲接口的 `id` 参数。 */
+  id: string = '';
+  /** 榜单名称。 */
+  name: string = '';
+  /** 榜单封面。 */
+  cover: string = '';
+}
+
+/**
+ * 递归收集酷我榜单列表里的叶子榜单。
+ *
+ * 接口返回的是两级（有时三级）分组树：顶层是「排行榜」壳，第二层是「官方榜 / 特色榜」，
+ * 第三层才是真正的榜单（带 `sourceid`）。只有带非空 `sourceid` 的才是可用榜单。
+ *
+ * @param nodes 当前层的节点数组。
+ * @param out 收集结果（按接口顺序去重）。
+ */
+function collectKwBangs(nodes: JsonObject[], out: KwBangEntry[]): void {
+  for (let i: number = 0; i < nodes.length; i++) {
+    const node: JsonObject = nodes[i];
+    const id: string = text(node['sourceid']);
+    if (id.length > 0) {
+      const entry = new KwBangEntry();
+      entry.id = id;
+      entry.name = text(node['disname'] ?? node['name']);
+      // pic5 是 PC 大图，pic2 次之，pic 是小图
+      let cover: string = text(node['pic5']);
+      if (cover.length === 0) {
+        cover = text(node['pic2']);
+      }
+      if (cover.length === 0) {
+        cover = text(node['pic']);
+      }
+      entry.cover = cover;
+      if (entry.name.length > 0 && !out.some((item: KwBangEntry) => item.id === entry.id)) {
+        out.push(entry);
+      }
+    }
+    const children: JsonObject[] = asArray(node['child']);
+    if (children.length > 0) {
+      collectKwBangs(children, out);
+    }
+  }
+}
+
+/**
+ * 拉取酷我榜单列表（**带封面的实时列表**）。
+ *
+ * 为什么不再用写死的 id/名字表：那张表是照着酷我老版 PC 页面抄的，酷我换版之后
+ * 榜单 id 大面积变化 —— 表现就是「排行榜点进去全是空的 / 打不开」。
+ * 现在直接读官方的榜单列表接口，id、名字、封面都从接口来。
+ *
+ * @returns 榜单列表；失败时返回空数组，由调用方回退到写死的表。
+ */
+async function fetchKwBangs(): Promise<KwBangEntry[]> {
+  const root: JsonObject = await requestJson(KW_BANG_LIST_URL, http.RequestMethod.GET,
+    undefined, KW_BOARD_HEADERS);
+  const out: KwBangEntry[] = [];
+  collectKwBangs(asArray(root['child']), out);
+  if (out.length === 0) {
+    // 有的机房返回的是 data 包一层
+    collectKwBangs(asArray(asObject(root['data'])['child']), out);
+  }
+  return out;
+}
+
+/** 榜单列表的会话级缓存：首页在榜单模块里会切平台反复请求，没必要每次都打网络。 */
+let kwBangsCache: KwBangEntry[] | undefined = undefined;
+
+/** 拉取并缓存酷我榜单列表。 */
+async function kwBangs(): Promise<KwBangEntry[]> {
+  if (kwBangsCache !== undefined) {
+    return kwBangsCache;
+  }
+  const list: KwBangEntry[] = await fetchKwBangs();
+  if (list.length > 0) {
+    kwBangsCache = list;
+  }
+  return list;
+}
+
+/**
+ * 酷我榜单歌曲。
+ *
+ * 原来走的是 `wbd.kuwo.cn/api/bd/bang/bang_info`（需要 AES + md5 签名那套），
+ * 现在那个 AppId 已经被封，返回 `{"code":10004,"msg":"AppId错误"}` ——
+ * 这就是「酷我排行榜完全不可用」的直接原因。
+ * 改用老 PC 端的 `kbangserver.kuwo.cn/ksong.s`：无需签名，参数与元力音源插件一致。
+ *
+ * @param boardId 榜单 id（来自 {@link fetchKwBangs} 的 `sourceid`）。
+ * @returns 与其它平台一致的原始响应结构（`data.musiclist`）。
+ */
+async function requestKwBangSongs(boardId: string): Promise<JsonObject> {
+  const url: string = `${KW_BANG_SONG_URL}?from=pc&fmt=json&pn=0&rn=${KW_BANG_PAGE_SIZE}` +
+    `&type=bang&data=content&id=${encodeURIComponent(boardId)}` +
+    `&show_copyright_off=0&pcmp4=1&isbang=1&userid=0&httpStatus=1`;
+  const root: JsonObject = await requestJson(url, http.RequestMethod.GET, undefined, KW_BOARD_HEADERS);
+  const songs: JsonObject[] = asArray(root['musiclist']);
+  const data: JsonObject = {};
+  data['musiclist'] = songs;
+  const wrapped: JsonObject = {};
+  wrapped['data'] = data;
+  return wrapped;
+}
+
 /** Kuwo bang list: data.bangList[] carry bangId + pic (needs a kw referer/csrf pair). */
 async function fillKwCovers(map: Record<string, string>): Promise<void> {
-  const stamp: string = String(Date.now());
-  const query: string = 'http://wapi.kuwo.cn/api/www/bang/bang/bangList?httpsStatus=1&pn=1&rn=200&reqId=' + stamp;
-  const root: JsonObject = await requestJson(query, http.RequestMethod.GET, undefined, KW_BOARD_HEADERS);
-  const data: JsonObject = asObject(root['data']);
-  const items: JsonObject[] = asArray(data['bangList']);
-  for (let i: number = 0; i < items.length; i++) {
-    const id: string = text(items[i]['bangId']);
-    let cover: string = text(items[i]['pic']);
-    if (cover.length === 0) {
-      cover = text(items[i]['img']);
-    }
-    if (id.length > 0 && cover.length > 0) {
-      map[id] = cover;
+  const list: KwBangEntry[] = await kwBangs();
+  for (let i: number = 0; i < list.length; i++) {
+    if (list[i].id.length > 0 && list[i].cover.length > 0) {
+      map[list[i].id] = list[i].cover;
     }
   }
 }
@@ -425,27 +532,7 @@ async function requestFormJson(url: string, body: string): Promise<JsonObject> {
   }
 }
 
-async function requestKuwoRaw(url: string): Promise<string> {
-  const request = http.createHttp();
-  try {
-    const response = await request.request(url, {
-      method: http.RequestMethod.GET,
-      header: { 'User-Agent': 'Mozilla/5.0' },
-      connectTimeout: 8000,
-      readTimeout: 15000
-    });
-    return response.result as string;
-  } finally {
-    request.destroy();
-  }
-}
 
-function md5(value: string): string {
-  const digest = cryptoFramework.createMd('MD5');
-  const source: cryptoFramework.DataBlob = { data: new Uint8Array(buffer.from(value, 'utf-8').buffer) };
-  digest.updateSync(source);
-  return buffer.from(digest.digestSync().data).toString('hex');
-}
 
 async function neteaseLinuxParams(value: NeteaseLinuxParams): Promise<string> {
   const textValue = JSON.stringify(value);
@@ -458,43 +545,7 @@ async function neteaseLinuxParams(value: NeteaseLinuxParams): Promise<string> {
   return `eparams=${buffer.from(encrypted.data).toString('hex').toUpperCase()}`;
 }
 
-async function kuwoSignedParams(payload: string): Promise<string> {
-  const key: cryptoFramework.DataBlob = { data: new Uint8Array([112, 87, 39, 61, 199, 250, 41, 191, 57, 68, 45, 114, 221, 94, 140, 228]) };
-  const keyGenerator = cryptoFramework.createSymKeyGenerator('AES128');
-  const symKey = await keyGenerator.convertKey(key);
-  const cipher = cryptoFramework.createCipher('AES128|ECB|PKCS5');
-  cipher.initSync(cryptoFramework.CryptoMode.ENCRYPT_MODE, symKey, null);
-  const plain: cryptoFramework.DataBlob = { data: new Uint8Array(buffer.from(payload, 'utf-8').buffer) };
-  const encrypted = cipher.doFinalSync(plain);
-  const encoded = new util.Base64Helper().encodeToStringSync(encrypted.data);
-  const timestamp = Date.now();
-  const sign = md5(`y67sprxhhpws${encoded}${timestamp}`).toUpperCase();
-  return `data=${encodeURIComponent(encoded)}&time=${timestamp}&appId=y67sprxhhpws&sign=${sign}`;
-}
 
-async function requestKuwoRank(boardId: string): Promise<JsonObject> {
-  const payload = JSON.stringify({
-    uid: '', devId: '', sFrom: 'kuwo_sdk', user_type: 'AP',
-    carSource: 'kwplayercar_ar_6.0.1.0_apk_keluze.apk', id: boardId, pn: 0, rn: 100
-  });
-  const params = await kuwoSignedParams(payload);
-  const responseText = await requestKuwoRaw(`https://wbd.kuwo.cn/api/bd/bang/bang_info?${params}`);
-  let encoded = responseText;
-  try {
-    const root = asObject(JSON.parse(responseText) as Object);
-    encoded = text(root['data']);
-  } catch (_err) {
-    encoded = responseText;
-  }
-  const decoder = new util.Base64Helper();
-  const cipherText: cryptoFramework.DataBlob = { data: decoder.decodeSync(decodeURIComponent(encoded)) };
-  const key: cryptoFramework.DataBlob = { data: new Uint8Array([112, 87, 39, 61, 199, 250, 41, 191, 57, 68, 45, 114, 221, 94, 140, 228]) };
-  const symKey = await cryptoFramework.createSymKeyGenerator('AES128').convertKey(key);
-  const cipher = cryptoFramework.createCipher('AES128|ECB|PKCS5');
-  cipher.initSync(cryptoFramework.CryptoMode.DECRYPT_MODE, symKey, null);
-  const plain = cipher.doFinalSync(cipherText);
-  return asObject(JSON.parse(buffer.from(plain.data).toString('utf-8')) as Object);
-}
 
 async function requestNeteaseRank(boardId: string): Promise<JsonObject> {
   const requestParams: JsonObject = {};
@@ -519,7 +570,11 @@ function kwSongId(item: JsonObject): string {
   if (musicrid.startsWith('MUSIC_')) {
     return musicrid.substring('MUSIC_'.length);
   }
-  return musicrid;
+  if (musicrid.length > 0) {
+    return musicrid;
+  }
+  // kbangserver.kuwo.cn/ksong.s 的榜单歌曲用 `id` 这个字段（既不是 rid 也不是 musicrid）
+  return text(item['id']);
 }
 
 function formatPlaylist(source: string, item: JsonObject): PlaylistData {
@@ -590,15 +645,46 @@ function formatTrack(source: string, item: JsonObject): TrackData {
     return { songId: text(item['copyrightId'] ?? item['songId']), name: text(item['songName'] ?? item['songname']), artist: singerText(item['artists'] ?? item['singerList'] ?? item['singerName'] ?? item['singer']), album: albumText(item['album'] ?? item['albumName']), image: text(item['img3'] ?? item['img2'] ?? item['albumPic']), duration: durationText(item['length'] ?? item['duration']), source };
   }
   if (source === 'tx') {
-    const albumMid = text(item['albumMid'] ?? item['albummid']);
-    const cover = albumMid.length > 0 ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albumMid}.jpg` : '';
-    return { songId: text(item['mid'] ?? item['songmid']), name: text(item['songName'] ?? item['title']), artist: singerText(item['singer'] ?? item['singerName'] ?? item['artists']), album: albumText(item['album'] ?? item['albumName']), image: cover, duration: durationText(item['interval']), source };
+    // ⚠️ QQ 榜单的 albummid 在 `songlist[].data.albummid` 里，不在外层。
+    //    只读外层会永远拿不到 albumMid → 拼不出封面 → 未登录时首页 QQ 整排没封面。
+    //    这里兼容两种层级（榜单 / 搜索返回的结构不同）。
+    const inner = asObject(item['data']);
+    const albumMid = text(item['albumMid'] ?? item['albummid'] ?? inner['albummid'] ?? inner['albumMid']);
+    const cover = albumMid.length > 0
+      ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albumMid}.jpg` : '';
+    const singerValue = item['singer'] ?? item['singerName'] ?? item['artists'] ?? inner['singer'];
+    return { songId: text(item['mid'] ?? item['songmid'] ?? inner['songmid'] ?? inner['mid']), name: text(item['songName'] ?? item['title'] ?? inner['songname'] ?? inner['songname']), artist: singerText(singerValue), album: albumText(item['album'] ?? item['albumName'] ?? inner['albumname']), image: cover, duration: durationText(item['interval'] ?? inner['interval']), source };
   }
   if (source === 'kw') {
     return { songId: kwSongId(item), name: text(item['name'] ?? item['songname']), artist: singerText(item['artist'] ?? item['singer'] ?? item['artists']), album: albumText(item['album'] ?? item['albumName']), image: text(item['pic']), duration: durationText(item['duration']), source };
   }
   const artists = asArray(item['ar']).map((artist: JsonObject) => text(artist['name'])).join('、');
   return { songId: text(item['id']), name: text(item['name']), artist: artists, album: text(asObject(item['al'])['name']), image: text(asObject(item['al'])['picUrl']), duration: durationText(item['dt'], true), source };
+}
+
+/**
+ * 首页「精选推荐」默认使用的榜单。
+ *
+ * 需求：**未登录时不要用整张榜单列表拼歌，而是固定用一个内容最稳的榜单**。
+ *   - QQ  → 新歌榜（topid 27）
+ *   - 酷狗 → 飙升榜（rankid 6666）
+ *   - 网易 → 飙升榜（playlist 19723756）
+ * 榜单 id 都实测过可用。
+ *
+ * @param source 平台代号（tx / kg / wy）。
+ * @returns 榜单 id；未知平台返回空串（调用方回落到第一个榜单）。
+ */
+export function pickDedicatedBoardId(source: string): string {
+  if (source === 'tx') {
+    return '27';
+  }
+  if (source === 'kg') {
+    return '6666';
+  }
+  if (source === 'wy') {
+    return '19723756';
+  }
+  return '';
 }
 
 export class MusicDataService {
@@ -823,6 +909,43 @@ export class MusicDataService {
   }
 
   /**
+   * 带封面的榜单列表（**推荐走这个**）。
+   *
+   * 酷我走实时接口：老版写死的 id 表在酷我换版后大面积失效，列表本身就是坏的。
+   * 接口失败时回退到写死的表（至少列表还在，只是可能点进去没歌）。
+   *
+   * @param source 平台代号（kw / kg / tx / wy / mg）。
+   * @returns 榜单列表（含封面）。
+   */
+  static async boardsWithCovers(source: string): Promise<BoardData[]> {
+    if (source === 'kw') {
+      try {
+        const live: KwBangEntry[] = await kwBangs();
+        if (live.length > 0) {
+          return live.map((item: KwBangEntry): BoardData =>
+            ({ id: item.id, name: item.name, source, cover: item.cover }));
+        }
+      } catch (_err) {
+        // 落到下面的写死表
+      }
+    }
+    const list: BoardData[] = MusicDataService.boards(source);
+    let covers: Record<string, string> = {};
+    try {
+      covers = await MusicDataService.boardCovers(source);
+    } catch (_err) {
+      covers = {};
+    }
+    const out: BoardData[] = [];
+    for (let i: number = 0; i < list.length; i++) {
+      const item: BoardData = list[i];
+      const cover: string = covers[item.id] === undefined ? '' : covers[item.id];
+      out.push({ id: item.id, name: item.name, source: item.source, cover });
+    }
+    return out;
+  }
+
+  /**
    * Fetches board cover images for a source (netease toplist list / kugou rank
    * list). Results are cached per source for the session; failures return an
    * empty map so callers fall back to placeholders.
@@ -863,14 +986,12 @@ export class MusicDataService {
   }
 
   /**
-   * Builds the route param for opening a ranking board with the shared
-   * playlist detail page: prefetches the board tracks up front.
+   * 把榜单歌曲转成路由参数里的条目。
+   * @param source 平台代号。
+   * @param boardId 榜单 id。
+   * @returns 歌曲条目数组；失败返回空数组。
    */
-  static async buildBoardRouteParam(source: string, boardId: string, boardName: string): Promise<ToplistRouteParam> {
-    const param = new ToplistRouteParam();
-    param.listTitle = boardName;
-    param.boardSource = source;
-    param.boardId = boardId;
+  static async boardSongParams(source: string, boardId: string): Promise<BoardSongParam[]> {
     const songs: BoardSongParam[] = [];
     try {
       const tracks: TrackData[] = await MusicDataService.tracks(source, boardId);
@@ -885,28 +1006,40 @@ export class MusicDataService {
         songs.push(song);
       }
     } catch (_err) {
-      // keep empty list; detail page shows an empty board
+      // 失败就返回空数组，由详情页显示空态
     }
-    param.boardSongs = songs;
-    return param;
+    return songs;
   }
 
-  /** Boards of a source with cover urls filled from {@link boardCovers}. */
-  static async boardsWithCovers(source: string): Promise<BoardData[]> {
-    const list: BoardData[] = MusicDataService.boards(source);
-    let covers: Record<string, string> = {};
+  /**
+   * 组装打开榜单详情页的路由参数。
+   *
+   * **只取封面，不预取歌曲**：歌曲交给详情页自己异步拉（`player.fetchBoardSongs`），
+   * 这样点击后页面立刻出现、列表里显示加载骨架；预取会让"点一下 → 页面出现"之间卡住。
+   * 封面很快（榜单列表本身带封面、且有会话缓存），且 Hero 大图必须首帧就有，
+   * 所以这里保留同步等待。
+   *
+   * @param source 平台代号。
+   * @param boardId 榜单 id。
+   * @param boardName 榜单名（做标题）。
+   * @returns 已填好封面与标识的路由参数。
+   */
+  static async buildBoardRouteParam(source: string, boardId: string, boardName: string): Promise<ToplistRouteParam> {
+    const param = new ToplistRouteParam();
+    param.listTitle = boardName;
+    param.boardSource = source;
+    param.boardId = boardId;
+    // 榜单自己的封面（不是榜单里第一首歌的封面）。取不到就留空，由详情页显示占位图。
     try {
-      covers = await MusicDataService.boardCovers(source);
+      const covers: Record<string, string> = await MusicDataService.boardCovers(source);
+      const boardCover: string = covers[boardId];
+      if (boardCover !== undefined && boardCover.length > 0) {
+        param.listCover = boardCover;
+      }
     } catch (_err) {
-      covers = {};
+      // 封面获取失败不影响打开榜单
     }
-    const out: BoardData[] = [];
-    for (let i: number = 0; i < list.length; i++) {
-      const item: BoardData = list[i];
-      const cover: string = covers[item.id] === undefined ? '' : covers[item.id];
-      out.push({ id: item.id, name: item.name, source: item.source, cover });
-    }
-    return out;
+    return param;
   }
 
   static async tracks(source: string, boardId: string): Promise<TrackData[]> {
@@ -920,7 +1053,8 @@ export class MusicDataService {
     } else if (source === 'tx') {
       root = await requestJson('https://u.y.qq.com/cgi-bin/musicu.fcg', http.RequestMethod.POST, `{"toplist":{"module":"musicToplist.ToplistInfoServer","method":"GetDetail","param":{"topid":${Number(boardId)},"num":100}},"comm":{"uin":0,"format":"json","ct":20,"cv":1859}}`);
     } else {
-      root = await requestKuwoRank(boardId);
+      // 酷我：老签名接口（wbd.kuwo.cn，AppId 已被封）换成 kbangserver.kuwo.cn/ksong.s
+      root = await requestKwBangSongs(boardId);
     }
     let data = asObject(root['data'] ?? root['result'] ?? root['toplist'] ?? root);
     if (source === 'mg') {

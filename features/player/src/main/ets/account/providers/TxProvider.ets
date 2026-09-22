@@ -173,6 +173,22 @@ function getMusicKey(cookies: Map<string, string>): string {
     cookies.get('psrf_musickey') ?? cookies.get('p_skey') ?? cookies.get('skey') ?? '';
 }
 
+/**
+ * 读取 refresh 材料。
+ * QQ 的 musickey 是有寿命的（服务端下发 keyExpiresIn），没有 refresh_key /
+ * refresh_token 就无法静默续期，过期后接口一律 1000/104401，表现成
+ * 「登录过但用不了」。这里把服务端可能用的几种字段名都兜住。
+ */
+function getRefreshKey(cookies: Map<string, string>): string {
+  return cookies.get('refresh_key') ?? cookies.get('refreshKey') ??
+    cookies.get('psrf_qqrefresh_key') ?? cookies.get('psrf_qqrefresh_token') ?? '';
+}
+
+function getRefreshToken(cookies: Map<string, string>): string {
+  return cookies.get('refresh_token') ?? cookies.get('refreshToken') ??
+    cookies.get('psrf_qqrefresh_token') ?? '';
+}
+
 function getGtk(session: LoginSession): number {
   const seed: string = session.cookies.get('p_skey') ?? session.cookies.get('skey') ?? session.tokens.get('musicKey') ?? '';
   return hash33(seed, 5381);
@@ -191,6 +207,28 @@ function buildLoginResult(uin: string, musicKey: string, cookies: Map<string, st
   });
   session.tokens.set('uin', uin);
   session.tokens.set('musicKey', musicKey);
+  // 补齐可续期/可诊断字段（历史实现只存 uin + musicKey，登录态一过期就彻底废掉）
+  const refreshKey: string = getRefreshKey(cookies);
+  const refreshToken: string = getRefreshToken(cookies);
+  if (refreshKey.length > 0) {
+    session.tokens.set('refreshKey', refreshKey);
+  }
+  if (refreshToken.length > 0) {
+    session.tokens.set('refreshToken', refreshToken);
+  }
+  session.tokens.set('musicKeyCreateTime', String(Math.floor(Date.now() / 1000)));
+  session.tokens.set('loginType', musicKey.startsWith('W_X') ? '1' : '2');
+  const encryptUin: string = cookies.get('encrypt_uin') ?? '';
+  if (encryptUin.length > 0) {
+    session.tokens.set('encryptUin', encryptUin);
+  }
+  // 只列 key 名，便于排障时确认服务端下发了哪些字段（不落敏感值）
+  const cookieKeys: string[] = [];
+  cookies.forEach((_value: string, key: string) => {
+    cookieKeys.push(key);
+  });
+  hilog.info(0x0000, LOG_TAG, 'QQ 登录凭证 keys=[%{public}s] hasRefreshKey=%{public}d',
+    cookieKeys.join(','), refreshKey.length > 0 ? 1 : 0);
   return { account: account, session: session };
 }
 
@@ -317,6 +355,11 @@ function scheduleQrReconnect(qrcodeID: string, pending: PendingQrLogin, serverRe
   if (pending.reconnectAttempts >= MAX_QR_RECONNECT_ATTEMPTS) {
     pending.status = QrLoginStatus.Failed;
     pending.message = 'QQ 音乐扫码连接不稳定，请刷新二维码重试';
+    // 置终态时必须把已排的定时器清掉，否则它会用已删除的 pending 再重连一轮（僵尸重连）
+    if (pending.reconnectTimer >= 0) {
+      clearTimeout(pending.reconnectTimer);
+      pending.reconnectTimer = -1;
+    }
     endSuspendDelay(pending);
     return;
   }
@@ -425,6 +468,28 @@ async function connectQrMqtt(qrcodeID: string, pending: PendingQrLogin, serverRe
       ['pubsub', 'unicast'],
     ]));
   };
+  // SUBACK 非成功：订阅被拒时扫码事件永远不会到达，必须立刻给出可诊断的失败，
+  // 而不是让 UI 一直停在"等待扫码"（旧实现把 SUBACK 整体丢弃）。
+  client.onSuback = (reasonCode: number) => {
+    if (reasonCode < 0x80) {
+      return;
+    }
+    hilog.error(0x0000, LOG_TAG, 'QQ 扫码订阅被拒 reason=%{public}d', reasonCode);
+    pending.status = QrLoginStatus.Failed;
+    pending.message = `QQ 音乐扫码订阅失败（reason ${reasonCode}）`;
+    if (pending.reconnectTimer >= 0) {
+      clearTimeout(pending.reconnectTimer);
+      pending.reconnectTimer = -1;
+    }
+    endSuspendDelay(pending);
+    if (myGeneration === pending.generation) {
+      client.close();
+    }
+  };
+  // CONNACK 拒绝码：把服务端拒绝原因直接暴露出来
+  client.onConnectError = (reasonCode: number) => {
+    hilog.error(0x0000, LOG_TAG, 'QQ 扫码连接被拒 reason=%{public}d', reasonCode);
+  };
   const onConnectionLost: () => void = () => {
     if (myGeneration !== pending.generation) return;
     scheduleQrReconnect(qrcodeID, pending, currentReference);
@@ -489,14 +554,25 @@ export class TxProvider implements MusicProvider {
       throw new Error('Cookie 中缺少 QQ 账号或音乐凭证');
     }
     const result: AccountLoginResult = buildLoginResult(uin, musicKey, cookies, '');
+    // cookie 登录必须真校验一次：旧实现把 getUserPlaylists 的异常整个吞掉，
+    // 于是随便粘贴一段乱码也会「登录成功」并以「QQ用户 <uin>」落库，之后平台音乐页
+    // 什么都拉不到，用户看到的是「登录了但不能用」。网易云/酷狗都会 throw，这里对齐。
     try {
       const playlists: PlaylistInfo[] = await this.getUserPlaylists(result.session);
       if (playlists.length > 0) {
         const nick: string = result.session.tokens.get('nickname') ?? '';
-        if (nick.length > 0) result.account.nickname = nick;
+        if (nick.length > 0) {
+          result.account.nickname = nick;
+        }
       }
     } catch (err) {
-      // 歌单昵称获取失败不阻断登录
+      const error: Error = err as Error;
+      const message: string = error.message ?? '';
+      hilog.error(0x0000, LOG_TAG, 'QQ cookie 登录校验失败: %{public}s', message);
+      // musicu 返回了业务错误码 => 凭证无效；网络层异常则放行（登录态可能仍然可用）
+      if (message.indexOf('code ') >= 0 || message.indexOf('登录失效') >= 0) {
+        throw new Error(`QQ 音乐登录失败：${message || '登录凭证无效'}`);
+      }
     }
     return result;
   }
@@ -508,9 +584,14 @@ export class TxProvider implements MusicProvider {
       'cv': LOGIN_CLIENT_VERSION,
     };
     const data: Record<string, Object> = await requestLogin('CreateQRCode', param);
-    const qrcodeID: string = String(data['qrcodeID'] ?? '');
-    const qrUrl: string = String(data['qrcode'] ?? '');
-    if (qrcodeID.length === 0 || !qrUrl.startsWith('data:image/png;base64,')) {
+    // 上游偶尔返回 JPEG（微信通道）或用首字母大写的字段名；旧实现写死
+    // 'data:image/png;base64,' 前缀 + 精确字段名，遇到这两种情况直接抛错，
+    // 表现就是"二维码都出不来"。
+    const qrcodeID: string = String(data['qrcodeID'] ?? data['QrcodeID'] ?? '');
+    const qrUrl: string = String(data['qrcode'] ?? data['Qrcode'] ?? '');
+    if (qrcodeID.length === 0 || !/^data:image\//.test(qrUrl)) {
+      hilog.error(0x0000, LOG_TAG, 'CreateQRCode 响应异常 keys=[%{public}s] qrPrefix=%{public}s',
+        Object.keys(data).join(','), qrUrl.substring(0, 32));
       throw new Error('获取 QQ 音乐二维码失败');
     }
     const requestId: string = `${Date.now()}_${Math.floor(Math.random() * 100000)}`;
@@ -618,6 +699,10 @@ export class TxProvider implements MusicProvider {
     const pending: PendingQrLogin | undefined = pendingQrLogins.get(requestId);
     if (pending) {
       pending.cancelled = true;
+      // 先置终态再 close：close 会同步触发 onClose → onConnectionLost → scheduleQrReconnect，
+      // 而 scheduleQrReconnect 只对 Waiting/Scanned 排重连。旧实现 close 时状态还是 Waiting，
+      // 于是排出一个定时器，而 map 里的项已被删除，这段重连再也没人能取消（僵尸重连）。
+      pending.status = QrLoginStatus.Expired;
       endSuspendDelay(pending);
       if (pending.reconnectTimer >= 0) {
         clearTimeout(pending.reconnectTimer);

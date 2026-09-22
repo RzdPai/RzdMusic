@@ -1,6 +1,6 @@
-﻿import { LXSourceRequestData, LXMusicUrlResult, LXLyricResult, LXPicResult, LXSource, toLXSource } from './Interface';
+import { LXSourceRequestData, LXMusicUrlResult, LXLyricResult, LXPicResult, LXSource, toLXSource } from './Interface';
 import { lxEngineSendRequest, lxEngineRegisterPromise, lxEngineIsReady } from './LXSourceEngine';
-import { lxSearch } from './LXMusicSDK';
+import { lxSearch, lxLeaderboard } from './LXMusicSDK';
 import { appendError } from 'musicbasic';
 
 interface MusicInfoBrief {
@@ -197,4 +197,55 @@ export async function getLXPic(source: string, songId: string, name?: string, si
     }, reject);
     sendReq(requestKey, reqData);
   });
+}
+
+/** 榜单里的一首歌（供歌单详情页异步填充列表）。 */
+export interface BoardSongEntry {
+  /** 歌名。 */
+  title: string;
+  /** 歌手。 */
+  singer: string;
+  /** 平台代号（kw / kg / tx / wy / mg）。 */
+  source: string;
+  /** 平台内歌曲 id。 */
+  songId: string;
+  /** 封面；拿不到时留空，由调用方异步补。 */
+  coverUrl: string;
+}
+
+/**
+ * 拉取榜单歌曲。
+ *
+ * 放在 player 层是有意的：榜单页在 playlist 层，而 playlist **不能**依赖
+ * recommendation（那是上层），所以取数只能靠底层的 player。但用「路由参数里传函数」
+ * 这条路走不通 —— 导航参数经过框架传递后，对象里挂的回调函数会丢，页面拿到的
+ * `loader` 是个默认空实现，表现就是"榜单打开后一首歌都没有"。
+ * 现在由页面直接调这个函数，不依赖任何回调传递。
+ *
+ * @param source 平台代号。
+ * @param boardId 榜单 id。
+ * @returns 榜单歌曲；失败返回空数组。
+ */
+export async function fetchBoardSongs(source: string, boardId: string): Promise<BoardSongEntry[]> {
+  if (source.length === 0 || boardId.length === 0) {
+    return [];
+  }
+  try {
+    const result = await lxLeaderboard(source + '_' + boardId, 1, 100);
+    const out: BoardSongEntry[] = [];
+    for (let i: number = 0; i < result.list.length; i++) {
+      const s = result.list[i];
+      if (s.songId.length === 0) {
+        continue;
+      }
+      out.push({
+        title: s.name, singer: s.singer, source: s.source, songId: s.songId, coverUrl: s.img
+      });
+    }
+    logError('[榜单] ' + source + '/' + boardId + ' 取到 ' + out.length + ' 首');
+    return out;
+  } catch (err) {
+    logError('[榜单] ' + source + '/' + boardId + ' 取歌失败: ' + JSON.stringify(err).substring(0, 120));
+    return [];
+  }
 }

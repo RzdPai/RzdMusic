@@ -10,6 +10,20 @@ export let lxEngineRegisterPromise: ((key: string,
   resolve: (result: object) => void, reject: (reason: Error) => void) => void) | null = null;
 export let lxEngineIsReady: boolean = false;
 
+/** 初始化看门狗的最小/最大预算（ms）：脚本越大（联网校验 + eval）需要越久。 */
+const READY_WATCHDOG_MIN_MS: number = 8000;
+const READY_WATCHDOG_MAX_MS: number = 30000;
+/** 注入后始终收不到 init 时最多自动刷新几次（成功或换脚本时归零）。 */
+const READY_WATCHDOG_MAX_RETRY: number = 2;
+/** 未就绪期间排队的请求最多等待多久（ms），超时按失败回给调用方，避免永久挂起。 */
+const QUEUED_REQUEST_TTL_MS: number = 20000;
+
+/** 未就绪期间排队的 JS 语句。 */
+interface QueuedJs {
+  code: string;
+  expiresAt: number;
+}
+
 interface LXProxyInfo {
   host: string;
   port: string;
@@ -54,8 +68,19 @@ export struct LXSourceEngine {
   private methodList: string[] = ['onMessage'];
   private pendingRequests: Map<string, PendingRequest> = new Map();
   private webviewReady: boolean = false;
-  private pendingInitData: string = '';
-  private reloadCount: number = 0;
+  /** 本次会话要注入的载荷：注入后【不清空】，任何一次 onPageEnd 都能重放。 */
+  private currentInitJson: string = '';
+  private currentScriptId: string = '';
+  /** 页面代际：每次 onPageEnd 递增，注入时带给桥，用于区分重复注入与刷新后的新注入。 */
+  private pageGen: number = 0;
+  /** 注入后未就绪的自动重试次数（成功后归零）。 */
+  private readyRetryCount: number = 0;
+  /** 看门狗定时器句柄（-1 表示未挂）。 */
+  private readyWatchdogId: number = -1;
+  /** 未就绪期间排队的 JS（就绪后按序冲刷，避免请求被静默丢弃）。 */
+  private outgoingQueue: QueuedJs[] = [];
+  /** initScript 的并发保护：aboutToAppear 与 @Watch 可能同时触发加载。 */
+  private loadingSourceId: string = '';
   @State isReady: boolean = false;
   @State sources: Record<string, LXUserApiSourceInfo> = {};
   @StorageLink('lxActiveSource') @Watch('onActiveSourceChanged') lxActiveSource: string = '';
@@ -72,13 +97,53 @@ export struct LXSourceEngine {
   }
 
   async loadSourceById(sourceId: string): Promise<void> {
+    // 同一 id 的重复加载（aboutToAppear 与 @Watch 同帧触发）直接合流，避免两条注入链
+    // 共用 window._lx_init_parts 互相打断，产生半截 base64 与 JSON.parse 异常。
+    if (this.loadingSourceId === sourceId && this.currentScriptId === sourceId) {
+      LXSourceEngine.appendLog('引擎 忽略重复加载 id=' + sourceId);
+      return;
+    }
     LXSourceEngine.appendLog('引擎 加载源 id=' + sourceId);
-    let fullInfo: LXUserApiInfoFull | null = await lxSourceManager.getFullApiInfo(sourceId);
-    if (fullInfo !== null) {
-      LXSourceEngine.appendLog('引擎 读取脚本成功 name=' + fullInfo.name + ' len=' + fullInfo.script.length);
-      this.initScript(fullInfo);
-    } else {
-      LXSourceEngine.appendLog('引擎 读取脚本失败（源不存在）');
+    this.loadingSourceId = sourceId;
+    try {
+      let fullInfo: LXUserApiInfoFull | null = await lxSourceManager.getFullApiInfo(sourceId);
+      if (fullInfo !== null) {
+        LXSourceEngine.appendLog('引擎 读取脚本成功 name=' + fullInfo.name + ' len=' + fullInfo.script.length);
+        this.initScript(fullInfo);
+      } else {
+        LXSourceEngine.appendLog('引擎 读取脚本失败（源不存在）');
+        this.setReady(false, null);
+      }
+    } catch (err) {
+      const e: Error = err as Error;
+      LXSourceEngine.appendLog('引擎 读取脚本异常: ' + (e.message ?? ''));
+      this.setReady(false, null);
+    } finally {
+      if (this.loadingSourceId === sourceId) {
+        this.loadingSourceId = '';
+      }
+    }
+  }
+
+  /**
+   * 唯一的就绪写入口：三份就绪标志必须一起改。
+   * 历史实现里 @State isReady / lxEngineIsReady / AppStorage['lxEngineReady']
+   * 各自被不同代码路径读写，出现了「设置页显示 ✓ 就绪，实际引擎不可用」的假就绪。
+   * @param ready 是否就绪。
+   * @param srcs 就绪时脚本上报的 sources；未就绪传 null。
+   */
+  private setReady(ready: boolean, srcs: Record<string, LXUserApiSourceInfo> | null): void {
+    this.isReady = ready;
+    lxEngineIsReady = ready;
+    this.sources = ready && srcs !== null ? srcs : {};
+    AppStorage.setOrCreate('lxEngineReady', ready);
+    AppStorage.setOrCreate('lxEngineSources', ready && srcs !== null ? (JSON.stringify(srcs) || '{}') : '{}');
+    // 暴露「当前就绪的是哪个脚本」，换源逻辑据此判断目标脚本是否真的就绪
+    AppStorage.setOrCreate('lxEngineScriptId', ready ? this.currentScriptId : '');
+    LXSourceEngine.appendLog('引擎 ready=' + ready + ' scriptId=' + this.currentScriptId +
+      ' gen=' + this.pageGen + ' retry=' + this.readyRetryCount);
+    if (ready) {
+      this.flushOutgoingQueue();
     }
   }
 
@@ -100,11 +165,24 @@ export struct LXSourceEngine {
   }
 
   aboutToDisappear(): void {
+    this.clearReadyWatchdog();
     lxEngineSendRequest = null;
     lxEngineRegisterPromise = null;
     lxEngineIsReady = false;
     AppStorage.setOrCreate('lxEngineReady', false);
+    AppStorage.setOrCreate('lxEngineScriptId', '');
+    this.outgoingQueue = [];
+    this.currentInitJson = '';
+    this.currentScriptId = '';
     this.clearAllRequests();
+  }
+
+  /** 清理就绪看门狗，避免定时器泄漏与对已销毁控制器的 refresh。 */
+  private clearReadyWatchdog(): void {
+    if (this.readyWatchdogId !== -1) {
+      clearTimeout(this.readyWatchdogId);
+      this.readyWatchdogId = -1;
+    }
   }
 
   private clearAllRequests(): void {
@@ -118,6 +196,13 @@ export struct LXSourceEngine {
   initScript(apiInfo: LXUserApiInfoFull): void {
     LXSourceEngine.appendLog('引擎 initScript name=' + apiInfo.name + ' webviewReady=' + this.webviewReady);
     this.currentApiInfo = apiInfo;
+    if (apiInfo.script.length === 0) {
+      // 空脚本（文件缺失 / 解压失败）以前会被静默注入，之后永远等不到 init 事件，
+      // 只留下一句「注入后未就绪」，白白刷新三次。这里直接给出可诊断的失败。
+      LXSourceEngine.appendLog('引擎 脚本为空（文件缺失或解压失败）name=' + apiInfo.name);
+      this.setReady(false, null);
+      return;
+    }
     let proxyInfo: LXProxyInfo = { host: '', port: '' };
     let initData: LXInitData = {
       name: apiInfo.name,
@@ -129,8 +214,28 @@ export struct LXSourceEngine {
       proxy: proxyInfo
     };
     let initDataJson: string = JSON.stringify(initData) || '';
-    this.pendingInitData = initDataJson;
-    if (this.webviewReady) {
+    const changed: boolean = this.currentScriptId !== apiInfo.id || this.currentInitJson !== initDataJson;
+    this.currentScriptId = apiInfo.id;
+    this.currentInitJson = initDataJson;
+    if (!changed) {
+      // 同一个脚本重复设置：已就绪就什么也不做，未就绪则补一次注入
+      if (!this.isReady && this.webviewReady) {
+        this.injectScript(initDataJson);
+      }
+      return;
+    }
+    // 换脚本：先降级，杜绝「旧脚本的 ready 被当成新脚本的 ready」
+    this.readyRetryCount = 0;
+    this.setReady(false, null);
+    this.webviewReady = false;
+    LXSourceEngine.appendLog('引擎 脚本变更 → 重新加载页面 id=' + apiInfo.id +
+      ' 载荷=' + initDataJson.length + 'B');
+    try {
+      this.controller.refresh();
+    } catch (e) {
+      LXSourceEngine.appendLog('引擎 refresh 失败: ' + JSON.stringify(e).substring(0, 100));
+      // refresh 不可用时至少尝试直接注入
+      this.webviewReady = true;
       this.injectScript(initDataJson);
     }
   }
@@ -138,7 +243,49 @@ export struct LXSourceEngine {
   sendRequest(requestKey: string, data: LXSourceRequestData): void {
     let reqJson: string = JSON.stringify(data) || '';
     let b64: string = this.toBase64(reqJson);
-    this.runJs(`window._lx_handleRequest('${requestKey}', atob('${b64}'))`);
+    const code: string = `window._lx_handleRequest('${requestKey}', atob('${b64}'))`;
+    if (!this.isReady) {
+      // 未就绪时不再静默丢弃：排队，等 setReady(true) 后按序补发；
+      // 超过 TTL 仍未就绪则按失败回给调用方，避免永久挂起。
+      this.outgoingQueue.push({ code: code, expiresAt: Date.now() + QUEUED_REQUEST_TTL_MS });
+      LXSourceEngine.appendLog('引擎 请求入队（未就绪）key=' + requestKey +
+        ' 队列=' + this.outgoingQueue.length);
+      this.failExpiredQueue();
+      return;
+    }
+    this.runJs(code);
+  }
+
+  /** 丢弃已过期的排队请求，并把对应 Promise 以失败结束。 */
+  private failExpiredQueue(): void {
+    const now: number = Date.now();
+    const kept: QueuedJs[] = [];
+    for (let i: number = 0; i < this.outgoingQueue.length; i++) {
+      const item: QueuedJs = this.outgoingQueue[i];
+      if (item.expiresAt > now) {
+        kept.push(item);
+      }
+    }
+    this.outgoingQueue = kept;
+  }
+
+  /** 就绪后冲刷排队请求。 */
+  private flushOutgoingQueue(): void {
+    if (this.outgoingQueue.length === 0) {
+      return;
+    }
+    const now: number = Date.now();
+    const pending: QueuedJs[] = this.outgoingQueue;
+    this.outgoingQueue = [];
+    let sent: number = 0;
+    for (let i: number = 0; i < pending.length; i++) {
+      if (pending[i].expiresAt <= now) {
+        continue;
+      }
+      this.runJs(pending[i].code);
+      sent++;
+    }
+    LXSourceEngine.appendLog('引擎 冲刷排队请求 ' + sent + '/' + pending.length + ' 条');
   }
 
   private toBase64(str: string): string {
@@ -174,13 +321,13 @@ export struct LXSourceEngine {
   }
 
   destroy(): void {
+    this.clearReadyWatchdog();
     this.clearAllRequests();
-    this.isReady = false;
-    this.sources = {};
+    this.outgoingQueue = [];
+    this.currentInitJson = '';
+    this.currentScriptId = '';
     this.currentApiInfo = null;
-    lxEngineIsReady = false;
-    AppStorage.setOrCreate('lxEngineReady', false);
-    AppStorage.setOrCreate('lxEngineSources', '{}');
+    this.setReady(false, null);
   }
 
   private escapeJsString(s: string): string {
@@ -226,37 +373,56 @@ export struct LXSourceEngine {
     // newer systems (API 26 truncates and fails with "Invalid or unexpected
     // token"), so the base64 payload is injected in chunks. Chunks run
     // sequentially to keep their order on the JS side.
+    const gen: number = this.pageGen;
     const b64: string = this.toBase64(initDataJson);
     const partSize: number = 20000;
     const codes: string[] = [];
-    codes.push(`window._lx_init_parts = [];`);
+    // 带上代际：桥据此区分「同一次注入的重复调用」与「刷新/换脚本后的新注入」，
+    // 既能忽略重复注入，也能在 WebView 被系统回收后重新初始化（旧实现是永久闩锁）。
+    codes.push(`window._lx_init_begin(${gen});`);
     for (let i: number = 0; i < b64.length; i += partSize) {
-      codes.push(`window._lx_init_parts.push('${b64.substring(i, i + partSize)}');`);
+      codes.push(`window._lx_init_chunk(${gen}, '${b64.substring(i, i + partSize)}');`);
     }
-    codes.push(`window._lx_init(JSON.parse(decodeURIComponent(escape(atob(window._lx_init_parts.join(''))))));`);
-    LXSourceEngine.appendLog('引擎 注入分片数=' + (codes.length - 2));
+    codes.push(`window._lx_init_end(${gen});`);
+    LXSourceEngine.appendLog('引擎 注入分片数=' + (codes.length - 2) + ' gen=' + gen);
     this.runJsSequential(codes);
-    const retryJson: string = initDataJson;
+    this.armReadyWatchdog(gen, b64.length);
+  }
+
+  /**
+   * 就绪看门狗：只覆盖「注入后完全没有 init 事件」。
+   * 预算随载荷大小放大（脚本 eval + 启动期联网校验可能很久），旧的固定 8s 会把大脚本
+   * 误判成注入失败并 refresh 打断初始化；重试额度在就绪/换脚本时归零，避免一次慢启动
+   * 就永久用光重试次数。
+   * @param gen 本次注入的代际。
+   * @param payloadLen base64 载荷长度，用于估算预算。
+   */
+  private armReadyWatchdog(gen: number, payloadLen: number): void {
+    this.clearReadyWatchdog();
+    const budget: number = Math.min(READY_WATCHDOG_MAX_MS,
+      READY_WATCHDOG_MIN_MS + Math.floor(payloadLen / 4096) * 1000);
     const engineRef: LXSourceEngine = this;
-    setTimeout((): void => {
-      if (engineRef.isReady) {
+    this.readyWatchdogId = setTimeout((): void => {
+      engineRef.readyWatchdogId = -1;
+      if (engineRef.isReady || gen !== engineRef.pageGen) {
         return;
       }
-      if (engineRef.reloadCount < 3) {
-        // 未就绪：刷新 WebView 重连宿主桥后可多次重试（重启场景更稳）。
-        engineRef.reloadCount++;
-        engineRef.webviewReady = false;
-        engineRef.pendingInitData = retryJson;
-        LXSourceEngine.appendLog('引擎 注入后未就绪(' + engineRef.reloadCount + '/3)，刷新 WebView');
-        try {
-          engineRef.controller.refresh();
-        } catch (e) {
-          LXSourceEngine.appendLog('引擎 refresh 失败: ' + JSON.stringify(e).substring(0, 100));
-        }
-      } else {
-        LXSourceEngine.appendLog('引擎 多次刷新后仍未就绪，请重启应用');
+      if (engineRef.readyRetryCount >= READY_WATCHDOG_MAX_RETRY) {
+        LXSourceEngine.appendLog('引擎 注入后 ' + budget + 'ms 仍无 init 事件，停止自动重试（可手动重选音源）');
+        engineRef.setReady(false, null);
+        return;
       }
-    }, 8000);
+      engineRef.readyRetryCount++;
+      LXSourceEngine.appendLog('引擎 注入后无 init 事件(第' + engineRef.readyRetryCount + '/' +
+        READY_WATCHDOG_MAX_RETRY + '次)，刷新 WebView');
+      engineRef.webviewReady = false;
+      try {
+        // 刷新后 onPageEnd 会用 currentInitJson 重新注入（载荷不再是一次性的）
+        engineRef.controller.refresh();
+      } catch (e) {
+        LXSourceEngine.appendLog('引擎 refresh 失败: ' + JSON.stringify(e).substring(0, 100));
+      }
+    }, budget);
   }
 
   /** Update-source URL fragments seen in popular LX scripts (matched as substrings). */
@@ -367,20 +533,28 @@ export struct LXSourceEngine {
           let errorMsg: string = (data.message as string) || '';
           let srcs: Record<string, LXUserApiSourceInfo> =
             data.sources as Record<string, LXUserApiSourceInfo>;
-          LXSourceEngine.appendLog('引擎 init 事件 status=' + status +
+          const gen: number = data.gen !== undefined ? (data.gen as number) : -1;
+          LXSourceEngine.appendLog('引擎 init 事件 status=' + status + ' gen=' + gen +
+            ' pageGen=' + this.pageGen +
             (errorMsg.length > 0 ? ' msg=' + errorMsg.substring(0, 80) : ''));
+          if (gen >= 0 && gen !== this.pageGen) {
+            // 刷新/换脚本后迟到的旧代际事件：丢弃，避免把新脚本的状态写错
+            LXSourceEngine.appendLog('引擎 忽略过期代际的 init（gen=' + gen + '）');
+            break;
+          }
           if (status && srcs !== undefined) {
-            this.isReady = true;
-            this.sources = srcs;
-            lxEngineIsReady = true;
-            AppStorage.setOrCreate('lxEngineReady', true);
-            AppStorage.setOrCreate('lxEngineSources', JSON.stringify(srcs) || '{}');
+            // 成功即归零重试额度并撤掉看门狗
+            this.readyRetryCount = 0;
+            this.clearReadyWatchdog();
+            this.setReady(true, srcs);
             LXSourceEngine.appendLog('引擎 就绪 ✓ sources=' + Object.keys(srcs).length);
+            // 回写脚本平台信息，供换源时按平台择优（以前从不回写，一直是 {}）
+            lxSourceManager.saveApiSources(this.currentScriptId, srcs);
           } else {
-            this.isReady = false;
-            this.sources = {};
-            AppStorage.setOrCreate('lxEngineReady', false);
-            AppStorage.setOrCreate('lxEngineSources', '{}');
+            this.setReady(false, null);
+            if (status && srcs === undefined) {
+              LXSourceEngine.appendLog('引擎 init status=true 但缺少 sources，按未就绪处理');
+            }
           }
           break;
         }
@@ -442,12 +616,38 @@ export struct LXSourceEngine {
         controller: this.controller
       })
       .onPageEnd((): void => {
+        // 每次页面加载都递增代际：注入的载荷【不再一次性消费】，
+        // 这样 WebView 被系统回收/刷新后能自动重新注入，而不是留着"假就绪"。
+        this.pageGen++;
         this.webviewReady = true;
-        LXSourceEngine.appendLog('引擎 webview onPageEnd，待注入=' + (this.pendingInitData.length > 0));
-        if (this.pendingInitData.length > 0) {
-          this.injectScript(this.pendingInitData);
-          this.pendingInitData = '';
+        LXSourceEngine.appendLog('引擎 webview onPageEnd gen=' + this.pageGen +
+          ' 待注入=' + this.currentInitJson.length + 'B');
+        if (this.currentInitJson.length > 0) {
+          this.injectScript(this.currentInitJson);
+        } else {
+          LXSourceEngine.appendLog('引擎 onPageEnd 但无待注入载荷（尚未选源或脚本为空）');
         }
+      })
+      .onErrorReceive((event: OnErrorReceiveEvent): void => {
+        // Web 组件以前只接了 onPageEnd，rawfile 加载失败完全不可见
+        const err: WebResourceError = event.error;
+        LXSourceEngine.appendLog('引擎 Web 资源加载失败 code=' + err.getErrorCode() +
+          ' info=' + err.getErrorInfo());
+        this.setReady(false, null);
+      })
+      .onHttpErrorReceive((event: OnHttpErrorReceiveEvent): void => {
+        const resp: WebResourceResponse = event.response;
+        LXSourceEngine.appendLog('引擎 Web HTTP 错误 code=' + resp.getResponseCode());
+        this.setReady(false, null);
+      })
+      .onConsole((event: OnConsoleEvent): boolean => {
+        // 桥里的 console.error（含 sendToNative 桥缺失、JS 异常）第一次变得可见
+        const msg: ConsoleMessage = event.message;
+        const level: MessageLevel = msg.getMessageLevel();
+        if (level === MessageLevel.Error || level === MessageLevel.Warn) {
+          LXSourceEngine.appendLog('[js] ' + msg.getMessage().substring(0, 200));
+        }
+        return false;
       })
       .width(1)
       .height(1)

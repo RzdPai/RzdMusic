@@ -11,6 +11,8 @@
     "playlist": "file:../../features/playlist",
     "player": "file:../../features/player",
     "recommendation": "file:../../features/recommendation",
-    "setting": "file:../../features/setting"
+    "setting": "file:../../features/setting",
+    "localmusic": "file:../../features/localmusic",
+    "sync": "file:../../features/sync"
   }
 }

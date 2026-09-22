@@ -72,6 +72,8 @@ export class GridConstants {
 export class RouterUrlConstants {
   /** Playlist detail page. */
   public static readonly PLAYLIST_DETAIL: string = 'PlaylistDetailPage';
+  /** 首页「每日30首」入口打开的推荐列表页。 */
+  public static readonly DAILY_THIRTY: string = 'DailyThirtyPage';
   public static readonly MUSIC_RECOGNITION: string = 'MusicRecognitionPage';
   /** Split-column playlist (wide) page. */
   public static readonly SPLIT_COLUMN_PLAYLIST: string = 'SplitColumnPlaylistPage';
@@ -142,6 +144,27 @@ export class SdkConstants {
    * that needs the same floor; do not duplicate the magic number 23.
    */
   public static readonly HDS_TABS_BAR_FLOATING_MIN_SDK_API: number = 23;
+  /**
+   * API 24 = HarmonyOS 6.1.1(24)。自此版本起 `HdsTabs` 的 miniBar 支持
+   * `barLayoutMode`（迷你条与页签上下两排 / 单排），低版本必须传 undefined。
+   */
+  public static readonly HDS_TABS_BAR_TWO_ROW_MIN_SDK_API: number = 24;
+  /**
+   * `deviceInfo.distributionOSApiVersion` 上 6.1.1(24) 的取值
+   * （该字段格式为主版本*10000 + 次版本*100 + 补丁，与 `sdkApiVersion` 不同）。
+   */
+  public static readonly DISTRIBUTION_OS_6_1_1_CODE: number = 60101;
+}
+
+/**
+ * 双层底栏排布模式（数值与 HDS 的 `HdsBarLayoutMode` 一致）。
+ * 放在 common 层而不是直接引用 HDS 枚举，是为了避免 common 依赖 HDS UI 类型。
+ */
+export class BarLayoutModes {
+  /** 单排：迷你条被拉成整条通栏（"宽"样式 = 展开播放态）。 */
+  public static readonly HORIZONTAL: number = 0;
+  /** 上下两排：迷你条是一条"窄"胶囊、页签单独一排（**默认**）。 */
+  public static readonly VERTICAL: number = 1;
 }
 
 /**
@@ -176,6 +199,12 @@ public static readonly THEME_STATE: string = 'musichome_ThemeState';
 public static readonly HOME_SOURCE_STATE: string = 'musichome_HomeSourceState';
 /** {@link ShowMiniLyricState} (playback page mini lyric lines). */
 public static readonly SHOW_MINI_LYRIC_STATE: string = 'musichome_ShowMiniLyricState';
+/** {@link PlaybackFlowLightState} (playback page flow-light background toggle). */
+public static readonly PLAYBACK_FLOW_LIGHT_STATE: string = 'musichome_PlaybackFlowLightState';
+/** {@link CoverTintState} (flow-light colors extracted from the current cover). */
+public static readonly COVER_TINT_STATE: string = 'musichome_CoverTintState';
+  /** {@link PlayerExpandState} (playback page one-shot expand animation). */
+  public static readonly PLAYER_EXPAND_STATE: string = 'musichome_PlayerExpandState';
 /** {@link ShowSubLyricState} (lyrics page translation/romanization sub-lines). */
 public static readonly SHOW_SUB_LYRIC_STATE: string = 'musichome_ShowSubLyricState';
 /** {@link LyricFpsState} (lyrics page render frame rate). */

@@ -1,7 +1,7 @@
 import { fileIo as fs } from '@kit.CoreFileKit';
 import { zlib } from '@kit.BasicServicesKit';
 import { util } from '@kit.ArkTS';
-import { LXUserApiInfo, LXUserApiInfoFull } from './Interface';
+import { LXUserApiInfo, LXUserApiInfoFull, LXUserApiSourceInfo } from './Interface';
 
 const LX_API_LIST_FILE: string = 'lx_api_list.json';
 const LX_API_SCRIPT_PREFIX: string = 'lx_api_script_';
@@ -30,8 +30,37 @@ class LXSourceManager {
     if (this.apiList !== null) {
       return this.apiList;
     }
+    // filesDir 未初始化时读出来必然是空，而这里会把空结果永久缓存下来
+    // （setFilesDir 全仓库只有 LXSourceHost 一处调用，早于它读取的消费者会看到
+    // 「暂无导入的音源」并且再也恢复不了）。所以这种情况下不缓存。
+    if (this.filesDir.length === 0) {
+      console.error('LXSourceManager: filesDir 未初始化，跳过读取且不缓存');
+      return [];
+    }
     this.apiList = this.loadApiListFromFile();
     return this.apiList;
+  }
+
+  /**
+   * 把 init 事件上报的 sources 回写到音源列表，供换源时按平台择优。
+   * 历史实现从不回写，导致 lxEngineSources 一直是 {}，换源候选排序退化成
+   * 「按导入顺序硬试」，更早触发「已尝试全部可用音源」。
+   * @param apiId 音源 id。
+   * @param sources 脚本上报的 sources（平台 -> 支持的动作/音质）。
+   */
+  saveApiSources(apiId: string, sources: Record<string, LXUserApiSourceInfo>): void {
+    if (apiId.length === 0 || this.filesDir.length === 0) {
+      return;
+    }
+    const list: LXUserApiInfo[] = this.getApiList();
+    for (let i: number = 0; i < list.length; i++) {
+      if (list[i].id === apiId) {
+        list[i].sources = sources;
+        this.apiList = list;
+        this.saveApiListToFile();
+        return;
+      }
+    }
   }
 
   private loadApiListFromFile(): LXUserApiInfo[] {

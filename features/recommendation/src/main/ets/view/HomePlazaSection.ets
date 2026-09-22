@@ -179,6 +179,8 @@ export struct HomePlazaSection {
       param.onlineSource = item.source;
       param.playlistId = item.id;
       param.listTitle = item.name;
+      // 在线歌单封面随路由带下去：详情页 Hero 用它，而不是第一首歌的封面
+      param.listCover = item.image;
       this.pageIndexInfos.pushPathByName(RouterUrlConstants.PLAYLIST_DETAIL, param);
     })
   }

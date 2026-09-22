@@ -8,6 +8,7 @@
   "version": "1.0.0",
   "dependencies": {
     "musicbasic": "file:../../common/musicbasic",
-    "player": "file:../player"
+    "player": "file:../player",
+    "localmusic": "file:../localmusic"
   }
 }

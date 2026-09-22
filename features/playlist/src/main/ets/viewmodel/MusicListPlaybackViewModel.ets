@@ -23,6 +23,27 @@ import { PlaylistSongUi } from '../model/PlaylistUiModels';
 import { PlaylistDataUtil } from '../util/PlaylistDataUtil';
 
 /**
+ * 在线封面补全的最大行数。
+ *
+ * 酷我榜单一次返回 100 首、且接口不带封面，所以上限要够大才能把列表铺满；
+ * 但**必须配合下面的并发上限** —— 之前无条件串行发 100 个引擎请求，
+ * 把引擎打满导致所有平台都取不到数据、列表一直转圈。
+ */
+const COVER_FILL_LIMIT: number = 120;
+
+/** 在线封面补全的并发上限：不能把所有请求一次压给音源引擎。 */
+const COVER_FILL_CONCURRENCY: number = 3;
+
+/** 「每日30首」列表在 AppStorage 里的中转结构（由首页写入）。 */
+interface DailyThirtyRow {
+  title: string;
+  singer: string;
+  source: string;
+  songId: string;
+  coverUrl: string;
+}
+
+/**
  * Observable view model: playlist rows, lazy list data source, and play requests via global intent.
  */
 @ObservedV2
@@ -109,6 +130,43 @@ export class MusicListPlaybackViewModel {
     this.songListVersion++;
   }
 
+  /**
+   * 载入「每日30首」列表（首页推荐曲目）。
+   *
+   * 数据由首页（recommendation 层）在跳转前写进 `AppStorage` 的
+   * `dailyThirtySongs`；playlist 不能反向依赖 recommendation，所以用共享状态中转。
+   */
+  public loadDailyThirtySongs(): void {
+    const raw: string = AppStorage.get<string>('dailyThirtySongs') ?? '';
+    const uis: PlaylistSongUi[] = [];
+    if (raw.length > 0) {
+      try {
+        const rows: DailyThirtyRow[] = JSON.parse(raw) as DailyThirtyRow[];
+        for (let i: number = 0; i < rows.length; i++) {
+          const row = rows[i];
+          const ui = new PlaylistSongUi();
+          ui.id = i + 1;
+          ui.title = row.title;
+          ui.singer = row.singer;
+          ui.source = row.source;
+          ui.songId = row.songId;
+          ui.coverUrl = row.coverUrl;
+          uis.push(ui);
+        }
+      } catch (_err) {
+        // 解析失败就落空态
+      }
+    }
+    this.loadingOnline = true;
+    this.playlistSongUis = uis;
+    this.songListDataSource.reloadData(uis);
+    this.songListVersion++;
+    this.loadingOnline = false;
+    if (uis.length > 0) {
+      void this.fillOnlineCovers();
+    }
+  }
+
   /** Maps store records to playlist UI rows and rebuilds the list source. */
   private applyStoreRecords(records: PlayedSongRecord[]): void {
     const uis: PlaylistSongUi[] = [];
@@ -121,6 +179,10 @@ export class MusicListPlaybackViewModel {
       ui.source = record.source;
       ui.songId = record.songId;
       ui.coverUrl = record.img;
+      // 专辑 / 时长随行携带：批量「添加到歌单」「下载」需要它们，丢了就只能写空值
+      ui.albumName = record.albumName;
+      ui.albumId = record.albumId;
+      ui.interval = record.interval;
       uis.push(ui);
     }
     this.playlistSongUis = uis;
@@ -201,11 +263,31 @@ export class MusicListPlaybackViewModel {
   }
 
   /**
-   * Loads a prefetched multi-source ranking board into the playlist rows.
-   * @param songs Board songs handed over through the route param.
+   * 铺入一批榜单歌曲（**不结束后面的加载态**）。
+   *
+   * 榜单页打开时会走两步：先用路由参数里预取的结果铺一次（可能为空），
+   * 再由 `PlaylistDetailPage.loadBoardSongsAsync` 异步补齐。两步之间要保持
+   * `loadingOnline = true`，列表才不会先闪一下空态再出现内容。
+   *
+   * @param songs 榜单歌曲。
    */
   public loadBoardSongs(songs: BoardSongParam[]): void {
     this.loadingOnline = true;
+    this.applyBoardSongs(songs);
+  }
+
+  /**
+   * 结束榜单加载态。
+   *
+   * @param songs 最终结果；为空则列表落到空态（「未找到歌曲」）。
+   */
+  public finishBoardLoading(songs: BoardSongParam[]): void {
+    this.applyBoardSongs(songs);
+    this.loadingOnline = false;
+  }
+
+  /** 把榜单歌曲转成行模型并刷新数据源。 */
+  private applyBoardSongs(songs: BoardSongParam[]): void {
     const uis: PlaylistSongUi[] = [];
     for (let i: number = 0; i < songs.length; i++) {
       const s = songs[i];
@@ -221,29 +303,58 @@ export class MusicListPlaybackViewModel {
     this.playlistSongUis = uis;
     this.songListDataSource.reloadData(uis);
     this.songListVersion++;
-    this.loadingOnline = false;
     void this.fillOnlineCovers();
   }
 
-  /** 在线歌单封面补全：异步取各源封面并更新行数据。 */
+  /**
+   * 在线歌单/榜单封面补全。
+   *
+   * ⚠️ **必须限流 + 限制数量**。原来是对整个列表无条件 for-await 串行取封面：
+   * 酷我榜单一次返回 100 首、且接口不带封面，于是这里会连着发 100 次音源引擎请求
+   * （每次失败还会退化成搜索），表现就是「列表里有 100 首但一直转圈」，
+   * 而且引擎被这 100 个请求占满后，别的平台（酷狗/QQ/网易）也跟着取不到数据。
+   *
+   * 现在：只补**前 {@link COVER_FILL_LIMIT} 行**（够首屏用），并且并发不超过
+   * {@link COVER_FILL_CONCURRENCY}，剩下的行在用户滚动到附近时由行自己按需取。
+   */
   private async fillOnlineCovers(): Promise<void> {
-    for (let i = 0; i < this.playlistSongUis.length; i++) {
+    const total: number = Math.min(this.playlistSongUis.length, COVER_FILL_LIMIT);
+    const queue: number[] = [];
+    for (let i: number = 0; i < total; i++) {
       const ui = this.playlistSongUis[i];
       if (ui.source.length === 0 || ui.songId.length === 0 || ui.coverUrl.length > 0) {
         continue;
       }
-      try {
-        const pic: string = await lxGetPicFallback(ui.source, ui.songId, '',
-          typeof ui.title === 'string' ? ui.title : '', typeof ui.singer === 'string' ? ui.singer : '');
-        if (pic.length > 0 && this.playlistSongUis[i] !== undefined) {
-          this.playlistSongUis[i].coverUrl = pic;
-          this.songListDataSource.reloadData(this.playlistSongUis);
-          this.songListVersion++;
-        }
-      } catch (_err) {
-        // keep placeholder
-      }
+      queue.push(i);
     }
+    let cursor: number = 0;
+    const worker = async (): Promise<void> => {
+      while (cursor < queue.length) {
+        const index: number = queue[cursor];
+        cursor = cursor + 1;
+        if (index >= this.playlistSongUis.length) {
+          continue;
+        }
+        const ui = this.playlistSongUis[index];
+        try {
+          const pic: string = await lxGetPicFallback(ui.source, ui.songId, '',
+            typeof ui.title === 'string' ? ui.title : '', typeof ui.singer === 'string' ? ui.singer : '');
+          if (pic.length > 0 && this.playlistSongUis[index] !== undefined) {
+            this.playlistSongUis[index].coverUrl = pic;
+            this.songListDataSource.reloadData(this.playlistSongUis);
+            this.songListVersion++;
+          }
+        } catch (_err) {
+          // keep placeholder
+        }
+      }
+    };
+    const slots: number = Math.min(COVER_FILL_CONCURRENCY, Math.max(1, queue.length));
+    const tasks: Promise<void>[] = [];
+    for (let i: number = 0; i < slots; i++) {
+      tasks.push(worker());
+    }
+    await Promise.all(tasks);
   }
 
   /**

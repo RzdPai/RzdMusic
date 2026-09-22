@@ -20,7 +20,7 @@ import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { http } from '@kit.NetworkKit';
 import { pasteboard } from '@kit.BasicServicesKit';
-import { AmbientState, AppStorageKeys, RouterUrlConstants, BreakpointType, HomeSourceState, LyricBlurState, LyricFontSizeState, MusicStoreService, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, WindowInfo, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, getWindowInfoState } from 'musicbasic';
+import { AmbientState, AppStorageKeys, BarScrollHelper, RouterUrlConstants, BreakpointType, HomeSourceState, LyricBlurState, LyricFontSizeState, MusicAppState, MusicStoreService, PlaybackFlowLightState, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, WindowInfo, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, getWindowInfoState } from 'musicbasic';
 import { BlurStrategy, HdsNavigation, HdsNavigationTitleMode, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { LXUserApiInfo, lxSourceManager, MediaService } from 'player';
 import { AccountManageSheet } from '../account/AccountManageSheet';
@@ -90,6 +90,9 @@ export struct SettingPage {
   ];
   /** Scroller bound to the HDS title bar so the scroll effect (gradient blur) can fire. */
   private pageScroller: Scroller = new Scroller();
+  /** 全局播控状态：滚动联动双层底栏需要写 miniBarExpanded / hdsBarLayoutMode。 */
+  @Local appState: MusicAppState =
+    AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
 
   /** Applies a theme color (hex) and persists it. */
   private applyThemeColor(color: string): void {
@@ -122,6 +125,8 @@ export struct SettingPage {
   @Local playlistAddPosition: string = 'bottom';
   /** Whether the playback page shows mini lyric lines below the cover. */
   @Local showMiniLyric: boolean = false;
+  /** 播放页是否启用流光背景（颜色随封面动态取色）。 */
+  @Local playbackFlowLight: boolean = false;
   /** Whether playback shares audio focus with other apps. */
   @Local audioMix: boolean = false;
   @Local crossScriptFallback: boolean = true;
@@ -180,6 +185,7 @@ export struct SettingPage {
     this.playQuality = AppStorage.get<string>('lxPlayQuality') ?? '128k';
     this.ambientLevel = MusicStoreService.getInstance().getAmbientLevel();
     this.showMiniLyric = MusicStoreService.getInstance().getShowMiniLyric();
+    this.playbackFlowLight = MusicStoreService.getInstance().getPlaybackFlowLight();
     this.crossScriptFallback = MusicStoreService.getInstance().getCrossScriptFallback();
     this.audioMix = MusicStoreService.getInstance().getAudioMix();
     this.lyricBlurEnabled = MusicStoreService.getInstance().getLyricBlurEnabled();
@@ -771,6 +777,19 @@ export struct SettingPage {
               }
             })
 
+          this.SubTitle($r('app.string.setting_sub_playback_flow_light'))
+          this.CapsuleSelector(this.onOffOptions, this.playbackFlowLight ? 0 : 1,
+            (index: number) => {
+              const isOn: boolean = index === 0;
+              this.playbackFlowLight = isOn;
+              MusicStoreService.getInstance().setPlaybackFlowLight(isOn);
+              const state = AppStorageV2.connect(PlaybackFlowLightState,
+                AppStorageKeys.PLAYBACK_FLOW_LIGHT_STATE, () => new PlaybackFlowLightState());
+              if (state !== undefined) {
+                state.enabled = isOn;
+              }
+            })
+
           this.SubTitle($r('app.string.setting_sub_lyric_blur'))
           this.CapsuleSelector(this.onOffOptions, this.lyricBlurEnabled ? 0 : 1,
             (index: number) => {
@@ -1269,6 +1288,14 @@ export struct SettingPage {
     .scrollBar(BarState.Off)
     .edgeEffect(EdgeEffect.Spring)
     .align(Alignment.Top)
+    // 滚动联动双层底栏：上滑收起、下滑展开（与首页/歌单/我的一致）
+    .onScrollFrameBegin((offset: number): OnScrollFrameBeginHandlerResult => {
+      if (BarScrollHelper.isEnabled()) {
+        BarScrollHelper.notifyScrollDelta(this.getUIContext(), this.appState, offset,
+          this.breakpointEnv.widthBreakpoint as number);
+      }
+      return { offsetRemain: offset };
+    })
   }
 
   build() {

@@ -20,9 +20,10 @@ import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { http } from '@kit.NetworkKit';
 import { pasteboard } from '@kit.BasicServicesKit';
-import { AmbientState, AppStorageKeys, RouterUrlConstants, BreakpointType, HomeSourceState, CoverRadiusState, LyricBlurState, LyricCenterState, LyricFontSizeState, LyricFpsState, MusicStoreService, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
+import { AmbientState, AppStorageKeys, RouterUrlConstants, BreakpointType, HomeSourceState, CoverRadiusState, LyricBlurState, LyricCenterState, LyricFontSizeState, LyricFpsState, MusicStoreService, PlaybackFlowLightState, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { LXUserApiInfo, lxSourceManager, MediaService } from 'player';
+import { SyncSettingsPanel } from 'sync';
 import { AccountManageSheet } from '../account/AccountManageSheet';
 import { PlatformMusicPage } from '../account/PlatformMusicPage';
 import { DownloadManagerSection } from './DownloadManagerSection';
@@ -62,6 +63,8 @@ export struct SettingsDetailPage {
   @Local downloadNameFormat: string = 'title';
   @Local playlistAddPosition: string = 'bottom';
   @Local showMiniLyric: boolean = false;
+  /** 播放页是否启用流光背景（颜色随封面动态取色）。 */
+  @Local playbackFlowLight: boolean = false;
   @Local audioMix: boolean = false;
   @Local lyricBlurEnabled: boolean = true;
   @Local lyricFontSize: number = 28;
@@ -119,6 +122,8 @@ export struct SettingsDetailPage {
       case 7: return '主题外观';
       case 8: return '其它设置';
       case 9: return '关于';
+      // 11 = 同步设置（洛雪同步；入口在「其它设置」里）
+      case 11: return '同步设置';
       default: return '设置';
     }
   }
@@ -211,6 +216,7 @@ export struct SettingsDetailPage {
     AppStorage.setOrCreate('lxExtendedEnabled', this.extendedEnabled);
     this.ambientLevel = MusicStoreService.getInstance().getAmbientLevel();
     this.showMiniLyric = MusicStoreService.getInstance().getShowMiniLyric();
+    this.playbackFlowLight = MusicStoreService.getInstance().getPlaybackFlowLight();
     this.audioMix = MusicStoreService.getInstance().getAudioMix();
     this.lyricBlurEnabled = MusicStoreService.getInstance().getLyricBlurEnabled();
     this.saveToDownloadDir = MusicStoreService.getInstance().getDownloadSaveMode() === 'download';
@@ -248,6 +254,13 @@ export struct SettingsDetailPage {
     const param = new SettingsDetailRouteParam();
     param.index = index;
     this.pathStack.pushPathByName(RouterUrlConstants.SETTINGS_DETAIL, param);
+  }
+
+  /**
+   * @returns 子面板顶部要避让的高度：内嵌（宽屏右栏）时为 0，二级页时让出状态栏 + 标题栏。
+   */
+  private contentTopOffset(): number {
+    return this.embedded ? 0 : getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP;
   }
 
   private activeSourceLabel(): string {
@@ -788,6 +801,21 @@ export struct SettingsDetailPage {
               }
             })
 
+          // 播放页流光背景：颜色不是写死的，由 PlaybackPage 从封面动态取色
+          // （见 features/player 的 PlaybackPage.FlowLightBackground）
+          this.SubTitle($r('app.string.setting_sub_playback_flow_light'))
+          this.CapsuleSelector(this.onOffOptions, this.playbackFlowLight ? 0 : 1,
+            (index: number) => {
+              const isOn: boolean = index === 0;
+              this.playbackFlowLight = isOn;
+              MusicStoreService.getInstance().setPlaybackFlowLight(isOn);
+              const state = AppStorageV2.connect(PlaybackFlowLightState,
+                AppStorageKeys.PLAYBACK_FLOW_LIGHT_STATE, () => new PlaybackFlowLightState());
+              if (state !== undefined) {
+                state.enabled = isOn;
+              }
+            })
+
           this.SubTitle($r('app.string.setting_sub_lyric_blur'))
           this.CapsuleSelector(this.onOffOptions, this.lyricBlurEnabled ? 0 : 1,
             (index: number) => {
@@ -985,10 +1013,9 @@ export struct SettingsDetailPage {
     .scrollBar(BarState.Off)
   }
 
-  /** 其它设置弹窗：添加位置 / 首页来源+登录推荐，拆为两张卡片。 */
+  /** 其它设置弹窗：添加位置 / 首页来源+登录推荐 / 同步设置入口，拆为三张卡片。 */
   @Builder
-  private OtherSheet() {
-    Scroll(this.pageScroller) {
+  private OtherSheet() {    Scroll(this.pageScroller) {
       Column({ space: 12 }) {
         Column() {
           this.SubTitle($r('app.string.setting_sub_add_position'))
@@ -1035,6 +1062,36 @@ export struct SettingsDetailPage {
         .padding({ left: 16, right: 16, top: 4, bottom: 8 })
         .borderRadius($r('sys.float.corner_radius_level12'))
         .backgroundColor($r('app.color.card_background'))
+
+        // 同步设置（洛雪同步协议客户端）入口：按需求放在「其它设置」里。
+        // 具体界面由 features/sync 提供（SyncSettingsPanel），这里只负责跳子页。
+        Column() {
+          Row() {
+            Column({ space: 2 }) {
+              Text('同步设置')
+                .fontSize($r('sys.float.Body_L'))
+                .fontColor($r('sys.color.font_primary'))
+              Text('与洛雪音乐服务端同步歌单 / 收藏')
+                .fontSize($r('sys.float.Caption_M'))
+                .fontColor($r('sys.color.font_tertiary'))
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+
+            SymbolGlyph($r('sys.symbol.chevron_right'))
+              .fontSize(18)
+              .fontColor([$r('sys.color.font_tertiary')])
+          }
+          .width('100%')
+          .padding({ top: 10, bottom: 10 })
+          .onClick(() => {
+            this.pushSubSheet(11);
+          })
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 4, bottom: 4 })
+        .borderRadius($r('sys.float.corner_radius_level12'))
+        .backgroundColor($r('app.color.card_background'))
       }
       .width('100%')
       .padding({ left: 20, right: 20, top: 12, bottom: 12 })
@@ -1046,10 +1103,21 @@ export struct SettingsDetailPage {
     .scrollBar(BarState.Off)
   }
 
+  /**
+   * 同步设置页：洛雪同步协议客户端（服务器地址 / 认证码 / 设备名 / 连接状态 / 不喜欢规则）。
+   *
+   * 界面由 `features/sync` 的 `SyncSettingsPanel` 提供 —— setting 只做"入口 + 容器"，
+   * 同步协议、加密、离线队列都在 sync 模块里，符合三层架构（features 之间通过依赖声明协作）。
+   */
+  @Builder
+  private SyncSettingsSheet() {
+    SyncSettingsPanel({
+      topOffset: this.contentTopOffset()
+    })
+  }
   /** 关于弹窗：应用信息 / 捐赠 / QQ 群 / 日志。 */
   @Builder
-  private AboutSheet() {
-    Scroll(this.pageScroller) {
+  private AboutSheet() {    Scroll(this.pageScroller) {
       Column({ space: 12 }) {
         Column() {
           this.CardTitle($r('app.string.mine_about_title'))
@@ -1350,6 +1418,9 @@ export struct SettingsDetailPage {
           this.AboutSheet()
         } else if (this.sheetIndex === 10) {
           this.DownloadManagerSheet()
+        } else if (this.sheetIndex === 11) {
+          // 同步设置（洛雪同步协议）：入口在「其它设置」里
+          this.SyncSettingsSheet()
         }
       }
       .width('100%')
