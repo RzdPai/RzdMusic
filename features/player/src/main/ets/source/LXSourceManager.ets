@@ -1,13 +1,33 @@
+import { common } from '@kit.AbilityKit';
 import { fileIo as fs } from '@kit.CoreFileKit';
 import { zlib } from '@kit.BasicServicesKit';
 import { util } from '@kit.ArkTS';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { LXUserApiInfo, LXUserApiInfoFull, LXUserApiSourceInfo } from './Interface';
+
+const DOMAIN: number = 0x0000;
+const TAG: string = 'RzdLxSource';
 
 const LX_API_LIST_FILE: string = 'lx_api_list.json';
 const LX_API_SCRIPT_PREFIX: string = 'lx_api_script_';
 
 interface LXApiListStore {
   apis: LXUserApiInfo[];
+}
+
+/**
+ * 导入结果。
+ *
+ * 为什么要带 ok/message：`importApi` 以前是 void —— 「用派音打开 .js」导完只说
+ * 「已导入」，哪怕因为存储目录没初始化**一个字都没落盘**也照样报成功。现在失败能
+ * 如实提示，而不是骗用户。
+ */
+export interface LXApiImportResult {
+  ok: boolean;
+  /** 成功时是音源名，失败时是原因。 */
+  message: string;
+  /** 成功时的音源；失败为 null。 */
+  info: LXUserApiInfo | null;
 }
 
 class LXSourceManager {
@@ -18,6 +38,29 @@ class LXSourceManager {
     this.filesDir = dir;
   }
 
+  /**
+   * 用 Ability 上下文初始化存储目录。**必须在任何 import/读取之前调用**。
+   *
+   * 为什么要显式初始化：`filesDir` 原来只由 `LXSourceHost.aboutToAppear()` 赋值，
+   * 而「用派音打开 .js」是在 `onCreate` 里导入的 —— 那时 UI 还没起来、filesDir 还是
+   * 空串，脚本和列表就被写到 `"/lx_api_list.json"` 这种无效路径上（静默失败）。
+   * 结果就是用户看到的：**音源管理里只剩刚导入的那个，重启后连它也没了**
+   * （重启后从真正的 `filesDir/lx_api_list.json` 读到了老列表）。
+   *
+   * @param context UIAbility 上下文（`this.context`）。
+   */
+  init(context: common.Context): void {
+    if (context !== undefined && context.filesDir.length > 0) {
+      this.setFilesDir(context.filesDir);
+      hilog.info(DOMAIN, TAG, 'filesDir ready: %{public}s', context.filesDir);
+    }
+  }
+
+  /** 存储目录是否就绪（未就绪时读写一律不做，也不缓存空列表）。 */
+  ready(): boolean {
+    return this.filesDir.length > 0;
+  }
+
   private getListFilePath(): string {
     return this.filesDir + '/' + LX_API_LIST_FILE;
   }
@@ -26,19 +69,25 @@ class LXSourceManager {
     return this.filesDir + '/' + LX_API_SCRIPT_PREFIX + apiId + '.js';
   }
 
+  /**
+   * 音源列表。
+   *
+   * 返回的是**副本**：以前直接返回内部数组，调用方 push/splice 会绕过
+   * `saveApiListToFile()`，改动只在内存里、重启就丢。
+   */
   getApiList(): LXUserApiInfo[] {
     if (this.apiList !== null) {
-      return this.apiList;
+      return this.apiList.slice();
     }
     // filesDir 未初始化时读出来必然是空，而这里会把空结果永久缓存下来
     // （setFilesDir 全仓库只有 LXSourceHost 一处调用，早于它读取的消费者会看到
     // 「暂无导入的音源」并且再也恢复不了）。所以这种情况下不缓存。
     if (this.filesDir.length === 0) {
-      console.error('LXSourceManager: filesDir 未初始化，跳过读取且不缓存');
+      hilog.warn(DOMAIN, TAG, 'filesDir 未初始化，跳过读取且不缓存');
       return [];
     }
     this.apiList = this.loadApiListFromFile();
-    return this.apiList;
+    return this.apiList.slice();
   }
 
   /**
@@ -97,8 +146,10 @@ class LXSourceManager {
       let file: fs.File = fs.openSync(path, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
       fs.writeSync(file.fd, data.buffer as ArrayBuffer);
       fs.closeSync(file);
-    } catch (_err) {
-      console.error('LXSourceManager saveApiListToFile error');
+      hilog.info(DOMAIN, TAG, 'api list saved: %{public}s count=%{public}d', path, list.length);
+    } catch (err) {
+      const e: Error = err as Error;
+      hilog.error(DOMAIN, TAG, 'saveApiListToFile FAILED path=%{public}s : %{public}s', path, e.message ?? '');
     }
   }
 
@@ -203,13 +254,34 @@ class LXSourceManager {
       let file: fs.File = fs.openSync(scriptPath, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
       fs.writeSync(file.fd, data.buffer as ArrayBuffer);
       fs.closeSync(file);
-    } catch (_err) {
-      console.error('LXSourceManager saveScript error');
+      hilog.info(DOMAIN, TAG, 'script saved: %{public}s bytes=%{public}d', scriptPath, data.length);
+    } catch (err) {
+      const e: Error = err as Error;
+      // 这里以前是 console.error：落盘失败只进控制台，用户和日志都看不到
+      hilog.error(DOMAIN, TAG, 'saveScript FAILED path=%{public}s : %{public}s', scriptPath, e.message ?? '');
     }
   }
 
-  importApi(scriptRaw: string): LXUserApiInfo {
-    let parsed: ApiScriptInfo = this.parseScriptInfo(scriptRaw);
+  /**
+   * 导入音源脚本。
+   *
+   * 成功后注意：脚本与列表都写进 `filesDir`，**重启依然在**；失败会如实返回原因，
+   * 不会再出现「提示已导入、实际没落盘、重启就没了」。
+   * @param scriptRaw 脚本原文。
+   * @returns 导入结果（ok / message / info）。
+   */
+  importApi(scriptRaw: string): LXApiImportResult {
+    if (!this.ready()) {
+      hilog.error(DOMAIN, TAG, 'importApi aborted: filesDir 未初始化（脚本没落盘）');
+      return { ok: false, message: '存储目录未就绪，导入失败', info: null };
+    }
+    let parsed: ApiScriptInfo;
+    try {
+      parsed = this.parseScriptInfo(scriptRaw);
+    } catch (err) {
+      const e: Error = err as Error;
+      return { ok: false, message: e.message ?? '脚本格式不正确', info: null };
+    }
     let apiId: string = 'user_api_' + Math.random().toString().substring(2, 5) + '_' + Date.now().toString();
     let apiInfo: LXUserApiInfo = {
       id: apiId,
@@ -221,12 +293,24 @@ class LXSourceManager {
       version: parsed.version,
       sources: {}
     };
+    // 先落脚本再改列表：任何一步失败都不要往列表里塞半成品
     this.saveScript(apiId, scriptRaw);
+    if (!fs.accessSync(this.getScriptFilePath(apiId))) {
+      hilog.error(DOMAIN, TAG, 'importApi aborted: 脚本落盘校验失败 id=%{public}s', apiId);
+      return { ok: false, message: '脚本写入失败，请重试', info: null };
+    }
+    // 关键：先把已存在的列表读进内存，再 push —— 否则会把老音源整表覆盖掉
     let list: LXUserApiInfo[] = this.getApiList();
+    if (this.apiList === null) {
+      hilog.error(DOMAIN, TAG, 'importApi aborted: 列表未加载（拒绝覆盖已有音源）');
+      return { ok: false, message: '存储目录未就绪，导入失败', info: null };
+    }
     list.push(apiInfo);
     this.apiList = list;
     this.saveApiListToFile();
-    return apiInfo;
+    hilog.info(DOMAIN, TAG, 'imported id=%{public}s name=%{public}s total=%{public}d',
+      apiInfo.id, apiInfo.name, list.length);
+    return { ok: true, message: apiInfo.name, info: apiInfo };
   }
 
   private parseScriptInfo(script: string): ApiScriptInfo {

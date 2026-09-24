@@ -15,8 +15,14 @@
 
 import { AbilityConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
-import { getAppRuntime, Logger, WindowUtil } from 'musicbasic';
-import { MediaService } from 'player';
+import { fileIo as fs } from '@kit.CoreFileKit';
+import { util } from '@kit.ArkTS';
+import { appendPlayLog, getAppRuntime, Logger, WindowUtil } from 'musicbasic';
+import { lxSourceManager, MediaService } from 'player';
+import type { LXApiImportResult } from 'player';
+
+/** AppStorage key：上一次「用派音打开脚本」的结果文案（供窗口就绪后 toast）。 */
+const SOURCE_IMPORT_MSG_KEY: string = 'lxSourceImportMsg';
 
 /**
  * PC UIAbility: loads Index, wires WindowUtil for free-window chrome, and initializes MediaService.
@@ -27,8 +33,78 @@ export default class PcAbility extends UIAbility {
    * @param want Launch want.
    * @param launchParam Launch parameters.
    */
-  onCreate(): void {
+  onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     Logger.info('PcAbility: Ability onCreate');
+    // ⚠️ 顺序不能动：先把上下文存进 AppRuntime（否则后面 flushSourceImportToast
+    //    拿不到 uiContext，提示会静默丢掉），再把音源存储目录交给 LXSourceManager
+    //    （否则导入写到无效路径、重启就没了），最后才做「用派音打开 .js」的导入。
+    getAppRuntime().context = this.context;
+    lxSourceManager.init(this.context);
+    this.handleViewDataWant(want);
+  }
+
+  /**
+   * 「用派音打开脚本文件」的处理（与手机壳层一致）。
+   *
+   * 文件管理器以 `ohos.want.action.viewData` + `file://...` 拉起本应用
+   * （声明见 module.json5 的 skills：type = general.java-script，linkFeature = FileOpen），
+   * 行为等同设置页里的「导入音源」：读文件 → `lxSourceManager.importApi`。
+   * @param want 启动参数。
+   */
+  private handleViewDataWant(want: Want): void {
+    if (want.action !== 'ohos.want.action.viewData') {
+      return;
+    }
+    const uri: string = want.uri ?? '';
+    if (uri.length === 0) {
+      return;
+    }
+    try {
+      const file: fs.File = fs.openSync(uri, fs.OpenMode.READ_ONLY);
+      let script: string = '';
+      try {
+        const stat: fs.Stat = fs.statSync(uri);
+        const buf: ArrayBuffer = new ArrayBuffer(stat.size);
+        fs.readSync(file.fd, buf, { offset: 0, length: stat.size });
+        script = util.TextDecoder.create('utf-8').decodeToString(new Uint8Array(buf));
+      } finally {
+        fs.closeSync(file);
+      }
+      const result: LXApiImportResult = lxSourceManager.importApi(script);
+      if (!result.ok) {
+        appendPlayLog('[音源] 导入失败 ' + uri + ' : ' + result.message);
+        AppStorage.setOrCreate(SOURCE_IMPORT_MSG_KEY, '导入失败：' + result.message);
+        Logger.error(`PcAbility: source script rejected ${result.message}`);
+        this.flushSourceImportToast();
+        return;
+      }
+      appendPlayLog('[音源] 已导入脚本 ' + result.message + ' <- ' + uri);
+      AppStorage.setOrCreate(SOURCE_IMPORT_MSG_KEY, '音源「' + result.message + '」已导入');
+    } catch (err) {
+      const e: Error = err as Error;
+      appendPlayLog('[音源] 导入失败 ' + uri + ' : ' + (e.message ?? ''));
+      AppStorage.setOrCreate(SOURCE_IMPORT_MSG_KEY, '导入失败：不是有效的音源脚本');
+      Logger.error(`PcAbility: import source script failed ${e.message ?? ''}`);
+    }
+    this.flushSourceImportToast();
+  }
+
+  /** 窗口还没就绪时先把提示留着，等 onWindowStageCreate / onForeground 再提示。 */
+  private flushSourceImportToast(): void {
+    const message: string = AppStorage.get<string>(SOURCE_IMPORT_MSG_KEY) ?? '';
+    if (message.length === 0) {
+      return;
+    }
+    const ui = getAppRuntime().uiContext;
+    if (ui === undefined) {
+      return;
+    }
+    AppStorage.setOrCreate(SOURCE_IMPORT_MSG_KEY, '');
+    try {
+      ui.getPromptAction().showToast({ message: message, duration: 2500 });
+    } catch (error) {
+      Logger.warn(`source import toast failed: ${JSON.stringify(error)}`);
+    }
   }
 
   /** Logs ability destroy. */
@@ -65,6 +141,8 @@ export default class PcAbility extends UIAbility {
       } catch (error) {
         Logger.error(`WindowUtil init ${JSON.stringify(error)}`);
       }
+      // 冷启动如果是「用派音打开脚本」，导入已经做完了，这里把结果提示出来
+      this.flushSourceImportToast();
     });
   }
 
@@ -88,6 +166,13 @@ export default class PcAbility extends UIAbility {
   /** Logs foreground. */
   onForeground(): void {
     Logger.info('PcAbility: Ability onForeground');
+    this.flushSourceImportToast();
+  }
+
+  /** 应用已运行时从文件管理器「用派音打开 .js」走这条路。 */
+  onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
+    Logger.info('PcAbility: Ability onNewWant');
+    this.handleViewDataWant(want);
   }
 
   /** Logs background. */

@@ -20,6 +20,16 @@ import { DownloadUtil, LXQualityOption, LXSearchSong, MediaService, OnlinePlayUt
 import { LyricCandidate, MATCH_PLATFORMS, MatchSongInfo, parseIntervalMs, platformLabel, scoreCandidate,
   searchCandidates } from 'localmusic';
 import { notifyPlaylistChanged } from '../util/PlaylistRefreshBus';
+import { CommentPanel } from 'comment';
+import type { CommentSongRef } from 'comment';
+
+/**
+ * 半模态「重新打开」的冷却时间（ms）。
+ *
+ * 关闭动画（约 300ms）没走完就把 isShow 置回 true，框架会当成同一次关闭处理 ——
+ * 表现是「弹层刚弹出来立刻又收回去」。与播放页菜单弹层同一套处理。
+ */
+const SHEET_REOPEN_GUARD_MS: number = 360;
 
 /**
  * Shared "more" button + popup menu for song rows: play, download,
@@ -59,6 +69,8 @@ export struct SongMoreMenu {
   @Local showSheet: boolean = false;
   /** Active sheet content: 1 = download quality, 2 = add-to-playlist picker, 3 = switch platform. */
   @Local sheetType: number = 0;
+  /** 上一次弹层关闭动画结束的时间戳（见 openSheet 的冷却逻辑）。 */
+  private sheetClosedAtMs: number = 0;
   /** 「切换平台」：正在搜索目标平台（弹层里显示 loading）。 */
   @Local switching: boolean = false;
   /** 「切换平台」：当前正在搜的目标平台。 */
@@ -102,10 +114,9 @@ export struct SongMoreMenu {
 
   /** 打开下载音质弹层：先实时拉取音质+大小（mg3 同款流程）。 */
   private async openQualitySheet(): Promise<void> {
-    this.sheetType = 1;
     this.qualityLoading = true;
     this.qualityOptions = [];
-    this.showSheet = true;
+    this.openSheet(1);
     try {
       const opts: LXQualityOption[] = await lxGetQualityOptions(this.song);
       opts.sort((a: LXQualityOption, b: LXQualityOption): number => a.size - b.size);
@@ -118,6 +129,27 @@ export struct SongMoreMenu {
       this.showSheet = false;
       this.toast('该歌曲暂无可用音质');
     }
+  }
+
+  /**
+   * 打开弹层并切到指定内容（1 音质 / 2 添加到歌单 / 3 切换平台 / 4 评论）。
+   *
+   * 带一次「关闭动画冷却」：刚关完马上再点，等几十毫秒再开，
+   * 否则会「刚弹出来立刻又收回去」（与播放页菜单弹层同一个 Bug）。
+   */
+  private openSheet(type: number): void {
+    this.sheetType = type;
+    if (this.showSheet) {
+      return;   // 已经开着：只切内容
+    }
+    const since: number = Date.now() - this.sheetClosedAtMs;
+    if (since >= SHEET_REOPEN_GUARD_MS) {
+      this.showSheet = true;
+      return;
+    }
+    setTimeout((): void => {
+      this.showSheet = true;
+    }, SHEET_REOPEN_GUARD_MS - since);
   }
 
   /** Downloads the song at the chosen quality. */
@@ -186,7 +218,7 @@ export struct SongMoreMenu {
 
   /**
    * bindSheet 原生标题（X 关闭按钮由系统保证跟标题水平对齐，与播放详情页同款）。
-   * sheetType: 1 = 下载音质 → "选择下载音质"; 2 = 添加到歌单 → "添加到歌单"。
+   * sheetType: 1 = 下载音质 → "选择下载音质"; 2 = 添加到歌单 → "添加到歌单"; 4 = 评论。
    */
   private sheetTitle(): SheetTitleOptions {
     if (this.sheetType === 2) {
@@ -194,6 +226,9 @@ export struct SongMoreMenu {
     }
     if (this.sheetType === 3) {
       return { title: '切换平台' };
+    }
+    if (this.sheetType === 4) {
+      return { title: '评论' };
     }
     return { title: '选择下载音质' };
   }
@@ -207,7 +242,32 @@ export struct SongMoreMenu {
       this.PlaylistPickerSheet()
     } else if (this.sheetType === 3) {
       this.SwitchPlatformSheet()
+    } else if (this.sheetType === 4) {
+      // 评论：面板根节点是 height('100%')，所以外面这层容器也必须是**确定高度**
+      // （弹层内容区的高度就是弹层高度；这里不能用 layoutWeight —— 弹层内容根节点
+      //  是按内容包高度的，不是弹性容器，layoutWeight 会拿到 0）。
+      // 标题与关闭用 bindSheet 原生的（sheetTitle 的 case 4），面板不再自绘标题栏。
+      Column() {
+        CommentPanel({
+          song: this.commentSongRef(),
+          songKey: this.song.source + '_' + this.song.songId,
+          showHeader: false
+        })
+      }
+      .width('100%')
+      .height('100%')
     }
+  }
+
+  /** 评论面板要的歌曲身份（在线歌直接用；本地歌由面板里的解析器查匹配记录）。 */
+  private commentSongRef(): CommentSongRef {
+    const ref: CommentSongRef = {
+      source: this.song.source,
+      songId: this.song.songId,
+      name: this.song.name,
+      singer: this.song.singer
+    };
+    return ref;
   }
 
   /**
@@ -414,9 +474,15 @@ export struct SongMoreMenu {
         // 用户点名的功能：手动把这首歌换到另一个平台（例：酷狗 → QQ）
         value: '切换平台',
         action: (): void => {
-          this.sheetType = 3;
           this.switching = false;
-          this.showSheet = true;
+          this.openSheet(3);
+        }
+      },
+      {
+        // 查看评论（内置平台评论，见 features/comment）
+        value: '查看评论',
+        action: (): void => {
+          this.openSheet(4);
         }
       }
     ];
@@ -494,8 +560,7 @@ export struct SongMoreMenu {
   private openPlaylistPicker(): void {
     this.playlists = this.store.getPlaylists();
     this.newPlaylistName = '';
-    this.sheetType = 2;
-    this.showSheet = true;
+    this.openSheet(2);
   }
 
   /** Adds the song to a playlist. */
@@ -618,7 +683,8 @@ export struct SongMoreMenu {
       backgroundBlurStyle: this.menuBlur()
     })
     .bindSheet($$this.showSheet, this.ActiveSheet(), {
-      height: SheetSize.FIT_CONTENT,
+      // 评论要整屏高度才够看；其余弹层按内容自适应
+      height: this.sheetType === 4 ? SheetSize.LARGE : SheetSize.FIT_CONTENT,
       showClose: true,
       dragBar: false,
       // 用 bindSheet 原生 title 区域显示标题，X 关闭按钮由系统保证跟标题水平对齐（与播放详情页一致）
@@ -627,6 +693,10 @@ export struct SongMoreMenu {
       onWillDismiss: (action: DismissSheetAction) => {
         action.dismiss();
         this.showSheet = false;
+      },
+      onDisappear: (): void => {
+        // 记下关闭动画结束的时刻（重新打开的冷却用）
+        this.sheetClosedAtMs = Date.now();
       }
     })
   }

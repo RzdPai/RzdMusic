@@ -47,7 +47,12 @@ import { MinePage, SettingPage } from 'setting';
 //    即使已登记进 build-profile.json5，这两个模块也**不会被编译**（构建照样绿）。
 //    所以这里的 import 同时承担"启动初始化"和"把它拉进构建图"两个作用。
 import { localMusic } from 'localmusic';
+import type { MatchSongInfo } from 'localmusic';
 import { syncManager } from 'sync';
+// 歌曲评论（内置平台评论）：启动时把「本地音乐 -> 平台身份」的解析注册进 comment，
+// 这样评论面板既能看在线歌的评论，也能看本地歌（匹配过的那些）的评论。
+import { setCommentTargetResolver } from 'comment';
+import type { CommentSongRef } from 'comment';
 import { HdsBarLayoutMode, HdsBarStyle, HdsTabs } from '@hms.hds.hdsBaseComponent';
 import { BusinessError, deviceInfo } from '@kit.BasicServicesKit';
 import { common } from '@kit.AbilityKit';
@@ -158,7 +163,36 @@ struct Index {
         Logger.error('RzdShell', `syncManager init failed code=${e.code} msg=${e.message}`);
       }
     }
+    // 评论面板要能处理本地音乐：把「本地歌 -> 平台身份」的解析交给 comment
+    // （comment / player 都不能反向依赖 localmusic，所以这个映射只能由壳层拼）。
+    setCommentTargetResolver((song: CommentSongRef): Promise<CommentSongRef | null> => {
+      return Promise.resolve(this.resolveCommentTarget(song));
+    });
     this.syncViewportWidthVp();
+  }
+
+  /**
+   * 本地音乐 -> 平台身份（评论面板内部会调用）。
+   *
+   * 本地歌只存了本地 key，要取评论得先知道它匹配到平台上的哪一首：
+   * 用 `localMusic.matchOf` 读匹配记录（自动匹配成功或用户在「匹配歌词」里手选的那条）。
+   * 没有记录就返回 null，评论面板会提示「这首歌还没匹配到平台上的版本」。
+   *
+   * @param song 评论面板给的歌曲身份（本地歌的 songId 就是本地 key）。
+   * @returns 平台身份，或 null。
+   */
+  private resolveCommentTarget(song: CommentSongRef): CommentSongRef | null {
+    const matched: MatchSongInfo | null = localMusic.matchOf(song.songId);
+    if (matched === null) {
+      return null;
+    }
+    const ref: CommentSongRef = {
+      source: matched.source,
+      songId: matched.songId,
+      name: matched.name.length > 0 ? matched.name : song.name,
+      singer: matched.singer.length > 0 ? matched.singer : song.singer
+    };
+    return ref;
   }
 
   /**
@@ -215,6 +249,43 @@ struct Index {
     return this.ambientState.level;
   }
 
+  /**
+   * 单个页签被点击/选中时的弹跳触发计数（每个页签一个）。
+   *
+   * `symbolEffect(effect, trigger)` 是「trigger 变化就播一次」，所以每个页签必须
+   * **各用各的计数** —— 共用一个的话四个图标会一起弹（设计规范要的是「选中态」那一颗弹）。
+   */
+  @Local tabBounceTriggers: number[] = [0, 0, 0, 0];
+  /**
+   * 「回到顶部」指令（每个页签一个，递增触发）。
+   *
+   * 设计规范：点击**当前**页签要把界面回滚到顶部/指定位置。`onTabBarClick` 在
+   * 点已选中页签时也会触发，所以不需要在页签里自己加 onClick（那会打断页签切换）。
+   */
+  @Local tabScrollTopCommands: number[] = [0, 0, 0, 0];
+
+  /** 页签选中态弹跳（BounceSymbolEffect + EffectDirection.DOWN，见底部页签设计规范）。 */
+  private playTabBounce(index: number): void {
+    const next: number[] = [...this.tabBounceTriggers];
+    next[index] = (next[index] ?? 0) + 1;
+    this.tabBounceTriggers = next;
+  }
+
+  /** 让第 index 个页签的页面回到顶部（该页自己监听这个计数）。 */
+  private requestTabScrollTop(index: number): void {
+    const next: number[] = [...this.tabScrollTopCommands];
+    next[index] = (next[index] ?? 0) + 1;
+    this.tabScrollTopCommands = next;
+  }
+
+  /** 点页签：切到别的页签由 onChange 处理；点当前页签则回滚到顶部。 */
+  private onTabBarClicked(index: number): void {
+    if (index === this.tabState.tabIndex) {
+      this.playTabBounce(index);
+      this.requestTabScrollTop(index);
+    }
+  }
+
   /** Single bottom-tab label: icon + title, styled by selection. */
   @Builder
   private TabBarItem(index: number, title: Resource, symbol: Resource) {
@@ -224,6 +295,9 @@ struct Index {
         .fontWeight(FontWeight.Regular)
         .height(22)
         .fontColor([this.tabState.tabIndex === index ? this.themeState.color : $r('sys.color.icon_primary')])
+        // 选中态弹跳：`trigger` 变化即播一次（只有这个页签的计数在变，所以只有它弹）
+        .symbolEffect(new BounceSymbolEffect(EffectScope.WHOLE, EffectDirection.DOWN),
+          this.tabBounceTriggers[index])
       Text(title)
         .fontSize(11)
         .fontColor(this.tabState.tabIndex === index ? this.themeState.color : $r('sys.color.icon_primary'))
@@ -425,7 +499,8 @@ struct Index {
       Column() {
         RecommendPage({
           shellProvidesFloatingMiniBar: deviceInfo.distributionOSApiVersion >= 60100,
-          floatingBarExtraBottomReserveVp: this.twoRowExtraBottomVp()
+          floatingBarExtraBottomReserveVp: this.twoRowExtraBottomVp(),
+          scrollTopCommand: this.tabScrollTopCommands[0]
         })
           .layoutWeight(1)
       }
@@ -437,7 +512,7 @@ struct Index {
 
     TabContent() {
       Column() {
-        PlaylistsPage()
+        PlaylistsPage({ scrollTopCommand: this.tabScrollTopCommands[1] })
       }
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
@@ -447,7 +522,7 @@ struct Index {
 
     TabContent() {
       Column() {
-        MinePage()
+        MinePage({ scrollTopCommand: this.tabScrollTopCommands[2] })
       }
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
@@ -457,7 +532,7 @@ struct Index {
 
     TabContent() {
       Column() {
-        SettingPage()
+        SettingPage({ scrollTopCommand: this.tabScrollTopCommands[3] })
       }
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
@@ -514,7 +589,15 @@ struct Index {
             }
           })
           .onChange((index: number) => {
-            this.tabState.tabIndex = index;
+            if (index !== this.tabState.tabIndex) {
+              this.tabState.tabIndex = index;
+              // 切到新页签：选中态弹一下（点击与滑动切换都会走这里）
+              this.playTabBounce(index);
+            }
+          })
+          // 点页签：点的是**当前**页签时回到顶部（切页签交给 onChange）
+          .onTabBarClick((index: number): void => {
+            this.onTabBarClicked(index);
           })
           .height(StyleConstants.FULL_HEIGHT)
           .width(StyleConstants.FULL_WIDTH)
@@ -531,7 +614,13 @@ struct Index {
           .scrollable(true)
           .padding({ bottom: WindowUtil.getInstance().getStartupNavigationBarBottomVp() })
           .onChange((index: number) => {
-            this.tabState.tabIndex = index;
+            if (index !== this.tabState.tabIndex) {
+              this.tabState.tabIndex = index;
+              this.playTabBounce(index);
+            }
+          })
+          .onTabBarClick((index: number): void => {
+            this.onTabBarClicked(index);
           })
           .height(StyleConstants.FULL_HEIGHT)
           .width(StyleConstants.FULL_WIDTH)

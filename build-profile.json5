@@ -19,7 +19,12 @@
       {
         "name": "default",
         "signingConfig": "default",
-        "compatibleSdkVersion": "6.1.0(23)",
+        // compatibleSdkVersion 原来写 6.1.0(23)，但工程里用了 SDK 标注「起始 6.1.1(24)」的接口
+        // （例如 products/default/pages/Index.ets 的 HdsBarLayoutMode），编译期会报
+        // 「API is supported since SDK version 6.1.1(24). However, the current compatible SDK
+        // version is 6.1.0(23)」—— 上架前把最低兼容版本抬到 24，等于声明「只支持 HarmonyOS
+        // 6.1.1 及以上」，运行时不可能再落到没有该接口的系统上。
+        "compatibleSdkVersion": "6.1.1(24)",
         "targetSdkVersion": "6.1.1(24)",
         "runtimeOS": "HarmonyOS",
         "buildOption": {
@@ -149,6 +154,19 @@
     {
       "name": "sync",
       "srcPath": "./features/sync",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default",
+            "pc"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "comment",
+      "srcPath": "./features/comment",
       "targets": [
         {
           "name": "default",

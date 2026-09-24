@@ -16,12 +16,12 @@
 
 import { AppStorageV2, UIContext } from '@kit.ArkUI';
 import { http } from '@kit.NetworkKit';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { image } from '@kit.ImageKit';
 import { effectKit } from '@kit.ArkGraphics2D';
 import { AppStorageKeys, HomeSourceState, Logger, MusicAppState, MusicStoreService, PlaybackIntentState, getAppRuntime } from 'musicbasic';
 import { AccountService, ColorConversion, LXSearchSong, OnlinePlayUtil } from 'player';
-import { RecommendSongUiDataSource } from '../model/RecommendSongUiDataSource';
-import {
+import { RecommendSongUiDataSource } from '../model/RecommendSongUiDataSource';import {
   RecommendBoardUi,
   RecommendCardUi,
   RecommendCategoryTabUi,
@@ -33,6 +33,10 @@ import {
 } from '../model/RecommendUiModels';
 import { RecommendDataUtil } from '../util/RecommendDataUtil';
 import { BoardData, CategoryGroup, MusicDataService, PlaylistData, PlaylistPage } from '../util/MusicDataService';
+
+/** 歌单广场排障统一 TAG：`hdc shell hilog | findstr RzdPlazaNet` 一把抓完。 */
+const PLAZA_DOMAIN: number = 0x0000;
+const PLAZA_TAG: string = 'RzdPlazaNet';
 
 /**
  * View model for the recommendation home: hero banners, playlists, private songs, and category chips.
@@ -278,7 +282,9 @@ export class RecommendViewModel {
     this.plazaErrorText = '';
     try {
       const sorts = MusicDataService.sortOptions(this.plazaSourceCode());
-      const sortId: string = this.plazaSortIndex < sorts.length ? sorts[this.plazaSortIndex].id : sorts[0].id;
+      const sortId: string = sorts.length > 0
+        ? (this.plazaSortIndex < sorts.length ? sorts[this.plazaSortIndex].id : sorts[0].id)
+        : '';
       const result: PlaylistPage = await MusicDataService.playlists(this.plazaSourceCode(), sortId,
         this.plazaCategoryId.length > 0 ? this.plazaCategoryId : undefined, page);
       const mapped: RecommendPlazaPlaylistUi[] = result.list.map((item: PlaylistData): RecommendPlazaPlaylistUi => {
@@ -299,14 +305,21 @@ export class RecommendViewModel {
       }
       this.plazaPage = result.page;
       this.plazaHasNext = result.hasNext;
-    } catch (_err) {
+      if (page === 1) {
+        hilog.info(PLAZA_DOMAIN, PLAZA_TAG,
+          'plaza loaded: source=%{public}s items=%{public}d total=%{public}d hasNext=%{public}s',
+          this.plazaSourceCode(), mapped.length, result.total, String(result.hasNext));
+      }
+    } catch (err) {
+      const e: Error = err as Error;
       if (page === 1) {
         this.plazaPlaylists = [];
         this.plazaHasNext = false;
         this.plazaErrorText = `加载${MusicDataService.sourceName(this.plazaSourceCode())}歌单失败，请检查网络`;
+        hilog.error(PLAZA_DOMAIN, PLAZA_TAG, 'plaza load FAILED: source=%{public}s msg=%{public}s',
+          this.plazaSourceCode(), e.message ?? '');
       }
-    }
-    this.plazaLoading = false;
+    }    this.plazaLoading = false;
     this.plazaLoadingMore = false;
   }
 

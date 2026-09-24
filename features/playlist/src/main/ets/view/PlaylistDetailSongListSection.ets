@@ -41,6 +41,19 @@ const SORT_SINGER: number = 2;
 const SKELETON_ROW_KEYS: string[] = ['sk-0', 'sk-1', 'sk-2', 'sk-3', 'sk-4', 'sk-5'];
 
 /**
+ * 「先出壳、再出行」的行数阈值。
+ *
+ * 这个列表**不是懒加载的**：页面级 Scroll 是唯一的滚动容器，内层 List 不能给有界高度
+ * （给了它就会自己滚，页面 Scroll 收不到 offset，标题栏不再随滚动收起），List 拿不到
+ * 可视区就没法只建可见行。于是几百首歌时要一次性建几百个行节点 —— 用户看到的就是
+ * 「点了歌单，界面卡一下才出来」。
+ *
+ * 超过这个行数时先渲染一帧骨架（Hero、「播放全部」立刻可见），下一帧再把行铺出来，
+ * 页面打开观感是即时的。行数不多时直接铺行，避免多余的一次骨架闪烁。
+ */
+const HEAVY_LIST_THRESHOLD: number = 120;
+
+/**
  * Playlist song list with play-all header, MusicFree-style multi-select batch
  * operations, search filter, lazy list, and nested scroll behavior.
  * Sorting now lives in the host page's overflow menu (see {@link externalSortMode}).
@@ -98,10 +111,35 @@ export struct PlaylistDetailSongListSection {
     AppStorageV2.connect(ThemeState, AppStorageKeys.THEME_STATE, () => new ThemeState())!;
   /** List vertical scroller instance bound to the List. */
   private scroller: Scroller = new Scroller();
+  /**
+   * 大歌单的「首帧先出壳」闸门（见 {@link HEAVY_LIST_THRESHOLD}）。
+   * 为 false 时先渲染骨架，「播放全部」和 Hero 立刻可见，行等下一帧再铺。
+   */
+  @Local listReady: boolean = true;
 
   aboutToAppear(): void {
     this.syncOriginal();
     this.applyFilterAndSort();
+    this.scheduleHeavyListRender();
+  }
+
+  /**
+   * 行数超过阈值时，把「铺行」推迟一帧。
+   *
+   * 必须在**数据和渲染之间**调用（`aboutToAppear` / `@Monitor` 里），
+   * 否则首帧就会把几百行一次性建出来，页面还是卡着不出来。
+   */
+  private scheduleHeavyListRender(): void {
+    if (this.displaySongs.length < HEAVY_LIST_THRESHOLD) {
+      this.listReady = true;
+      return;
+    }
+    this.listReady = false;
+    hilog.info(BATCH_LOG_DOMAIN, BATCH_LOG_TAG,
+      'heavy list rows=%{public}d, render skeleton first', this.displaySongs.length);
+    setTimeout((): void => {
+      this.listReady = true;
+    }, 0);
   }
 
   @Monitor('customSortCommand')
@@ -137,6 +175,7 @@ export struct PlaylistDetailSongListSection {
   onSongListChanged(): void {
     this.syncOriginal();
     this.applyFilterAndSort();
+    this.scheduleHeavyListRender();
   }
 
   @Monitor('searchKeyword')
@@ -542,7 +581,7 @@ export struct PlaylistDetailSongListSection {
       // 加载态排在最前面：在线榜单/歌单的歌曲是异步拉的，之前这里直接把空态画出来，
       // 结果是「先闪一下居中的占位图标，再突然整列出现」。现在先给骨架 + 转圈，
       // 数据到了再换成真正的列表，视觉上不会跳。
-      if (this.loading) {
+      if (this.loading || !this.listReady) {
         this.PlayAllHeader()
 
         Column({ space: 12 }) {
@@ -613,7 +652,11 @@ export struct PlaylistDetailSongListSection {
           Repeat<PlaylistSongUi>(this.displaySongs)
             .each((obj: RepeatItem<PlaylistSongUi>) => {
               ListItem() {
-                this.PlaylistSongRow(obj.item, this.displaySongs.indexOf(obj.item))
+                // ★ 用 `obj.index`，**不要**再写 `this.displaySongs.indexOf(obj.item)`：
+                //   后者是 O(n) 的线性查找，而 `displaySongs` 是 @Local 观测数组，
+                //   每次元素读取都要走一遍代理陷阱 —— 几百行时整体是 O(n²) 的代理访问，
+                //   这是「打开几百首歌的歌单要等一会」的主要来源。
+                this.PlaylistSongRow(obj.item, obj.index)
               }
             })
             .key((item: PlaylistSongUi) => this.songKeyOf(item))

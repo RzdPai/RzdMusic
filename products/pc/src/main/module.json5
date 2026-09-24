@@ -35,6 +35,19 @@
             "actions": [
               "ohos.want.action.home"
             ]
+          },
+          {
+            // 「用派音打开 .js」= 导入音源脚本（与手机壳层同一份声明，见官方「拉起文件处理类应用」）
+            "actions": [
+              "ohos.want.action.viewData"
+            ],
+            "uris": [
+              {
+                "scheme": "file",
+                "type": "general.java-script",
+                "linkFeature": "FileOpen"
+              }
+            ]
           }
         ]
       }

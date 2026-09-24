@@ -23,6 +23,7 @@ import { pasteboard } from '@kit.BasicServicesKit';
 import { AmbientState, AppStorageKeys, RouterUrlConstants, BreakpointType, HomeSourceState, CoverRadiusState, LyricBlurState, LyricCenterState, LyricFontSizeState, LyricFpsState, MusicStoreService, PlaybackFlowLightState, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { LXUserApiInfo, lxSourceManager, MediaService } from 'player';
+import type { LXApiImportResult } from 'player';
 import { SyncSettingsPanel } from 'sync';
 import { AccountManageSheet } from '../account/AccountManageSheet';
 import { PlatformMusicPage } from '../account/PlatformMusicPage';
@@ -63,6 +64,10 @@ export struct SettingsDetailPage {
   @Local downloadNameFormat: string = 'title';
   @Local playlistAddPosition: string = 'bottom';
   @Local showMiniLyric: boolean = false;
+  /** 桌面歌词（系统 AVSession 悬浮窗歌词）开关，默认关（见 MusicStoreService.getDesktopLyric）。 */
+  @Local desktopLyric: boolean = false;
+  /** 系统是否支持桌面歌词：undefined = 还没探测过。 */
+  @Local desktopLyricSupport: boolean | undefined = undefined;
   /** 播放页是否启用流光背景（颜色随封面动态取色）。 */
   @Local playbackFlowLight: boolean = false;
   @Local audioMix: boolean = false;
@@ -216,6 +221,11 @@ export struct SettingsDetailPage {
     AppStorage.setOrCreate('lxExtendedEnabled', this.extendedEnabled);
     this.ambientLevel = MusicStoreService.getInstance().getAmbientLevel();
     this.showMiniLyric = MusicStoreService.getInstance().getShowMiniLyric();
+    this.desktopLyric = MusicStoreService.getInstance().getDesktopLyric();
+    // 会话是「第一次推歌」时才建的，所以这里主动探一次支持性（否则设置页只能说「未知」）
+    void MediaService.getInstance().probeDesktopLyricSupport().then((supported: boolean): void => {
+      this.desktopLyricSupport = supported;
+    });
     this.playbackFlowLight = MusicStoreService.getInstance().getPlaybackFlowLight();
     this.audioMix = MusicStoreService.getInstance().getAudioMix();
     this.lyricBlurEnabled = MusicStoreService.getInstance().getLyricBlurEnabled();
@@ -403,9 +413,14 @@ export struct SettingsDetailPage {
       const decoder: util.TextDecoder = util.TextDecoder.create('utf-8');
       const script: string = decoder.decodeToString(new Uint8Array(buf));
       try {
-        lxSourceManager.importApi(script);
+        // 同 SettingPage：结果对象里带真实原因，落盘失败不能报成功
+        const imported: LXApiImportResult = lxSourceManager.importApi(script);
+        if (!imported.ok) {
+          this.toast('导入失败：' + imported.message);
+          return;
+        }
         this.refresh();
-        this.toast('源导入成功');
+        this.toast('已导入「' + imported.message + '」');
       } catch (_parseErr) {
         this.toast('导入失败: 无效的脚本文件');
       }
@@ -444,11 +459,15 @@ export struct SettingsDetailPage {
         return;
       }
       try {
-        lxSourceManager.importApi(script);
+        const imported: LXApiImportResult = lxSourceManager.importApi(script);
+        if (!imported.ok) {
+          this.toast('导入失败：' + imported.message);
+          return;
+        }
         this.refresh();
         this.pathStack.pop();
         this.onlineUrl = '';
-        this.toast('源导入成功');
+        this.toast('已导入「' + imported.message + '」');
       } catch (_parseErr) {
         this.toast('导入失败: 无效的脚本文件');
       }
@@ -1013,6 +1032,22 @@ export struct SettingsDetailPage {
     .scrollBar(BarState.Off)
   }
 
+  /**
+   * 桌面歌词开关下面那行说明。
+   *
+   * 把「设备支不支持」和「什么时候显示」讲清楚：设备不支持时开关是没用的，
+   * 不说明白用户只会以为功能坏了（lxmusic 同样写了这层提示）。
+   */
+  private desktopLyricHint(): string {
+    if (this.desktopLyricSupport === false) {
+      return '当前设备/系统不支持桌面歌词，这个开关不会有实际效果（播控中心里的歌词不受影响）。';
+    }
+    if (!this.desktopLyric) {
+      return '关闭后不显示系统悬浮歌词；歌词仍会提供给播控中心 / 锁屏。';
+    }
+    return '播放中且有歌词时，系统会在桌面显示悬浮歌词；暂停不收起，停播、换到没有歌词的歌或关掉开关时收起。';
+  }
+
   /** 其它设置弹窗：添加位置 / 首页来源+登录推荐 / 同步设置入口，拆为三张卡片。 */
   @Builder
   private OtherSheet() {    Scroll(this.pageScroller) {
@@ -1057,6 +1092,29 @@ export struct SettingsDetailPage {
                 state.enabled = isOn;
               }
             })
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 4, bottom: 8 })
+        .borderRadius($r('sys.float.corner_radius_level12'))
+        .backgroundColor($r('app.color.card_background'))
+
+        // 桌面歌词（系统 AVSession 提供的悬浮窗歌词）：窗口由系统绘制，
+        // 应用只把标准 LRC 写进 AVMetadata.lyric 并控制显隐（见 features/player 的 MediaService）。
+        Column() {
+          this.SubTitle('桌面歌词')
+          this.CapsuleSelector(this.onOffOptions, this.desktopLyric ? 0 : 1,
+            (index: number) => {
+              const isOn: boolean = index === 0;
+              this.desktopLyric = isOn;
+              MusicStoreService.getInstance().setDesktopLyric(isOn);
+              // 立刻生效：开 → 需要时先 enable 再显示；关 → 收起悬浮窗
+              MediaService.getInstance().refreshDesktopLyric();
+            })
+          Text(this.desktopLyricHint())
+            .fontSize($r('sys.float.Caption_M'))
+            .fontColor($r('sys.color.font_tertiary'))
+            .width('100%')
+            .padding({ top: 6 })
         }
         .width('100%')
         .padding({ left: 16, right: 16, top: 4, bottom: 8 })

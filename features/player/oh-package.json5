@@ -7,6 +7,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "musicbasic": "file:../../common/musicbasic",
+    "comment": "file:../comment",
     "@ohos/axios": "^2.2.6",
     "@ohos/crypto-js": "^2.0.5",
     "@jackiehou/lyric-view": "^1.0.9",

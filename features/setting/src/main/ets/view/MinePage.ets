@@ -29,6 +29,8 @@ import { CapsuleSegmentedSelector } from './CapsuleSegmentedSelector';
 
 @ComponentV2
 export struct MinePage {
+  /** 「回到顶部」指令：壳层点了当前页签时递增（底部页签设计规范）。 */
+  @Param scrollTopCommand: number = 0;
   /** Window breakpoint for the HDS home-style responsive title. */
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
   @Local store: MusicStoreService = MusicStoreService.getInstance();
@@ -65,6 +67,12 @@ export struct MinePage {
 
   aboutToAppear(): void {
     this.refreshRecords();
+  }
+
+  /** 壳层点了当前页签：滚回顶部（底部页签设计规范）。 */
+  @Monitor('scrollTopCommand')
+  onScrollTopCommand(): void {
+    this.pageScroller.scrollEdge(Edge.Top);
   }
 
   /** 历史/收藏版本变化时刷新当前分段列表。 */

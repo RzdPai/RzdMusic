@@ -34,6 +34,7 @@ import {
   BoardSongParam,
   ImmersiveType,
   MusicStoreService,
+  PlaylistDto,
   SdkApiUtil,
   StyleConstants,
   TitleBarConstants,
@@ -48,6 +49,8 @@ import { PlaylistBatchSelectionStore } from '../model/PlaylistBatchSelectionStor
 import { PlaylistBatchActionBar } from './PlaylistBatchActionBar';
 import { PlaylistDetailHeroSection } from './PlaylistDetailHeroSection';
 import { PlaylistDetailSongListSection } from './PlaylistDetailSongListSection';
+import { pickPlaylistCover } from '../util/PlaylistCoverUtil';
+import type { CoverPickResult } from '../util/PlaylistCoverUtil';
 
 /** One LXMusic export song entry. */
 const PLAYLIST_LOG_DOMAIN: number = 0x0000;
@@ -133,6 +136,19 @@ function playlistMoreMenuComponent() {
           playlistMoreAction('dedupe');
         }
       })
+    // 歌单封面（仅本地歌单有效：在线歌单/榜单的封面来自平台，不允许覆盖）
+    MenuItem({ content: '设置歌单封面' })
+      .onClick(() => {
+        if (playlistMoreAction !== null) {
+          playlistMoreAction('cover');
+        }
+      })
+    MenuItem({ content: '移除自定义封面' })
+      .onClick(() => {
+        if (playlistMoreAction !== null) {
+          playlistMoreAction('clearCover');
+        }
+      })
   }
   .width(200)
 }
@@ -216,6 +232,8 @@ export struct PlaylistDetailPage {
   @Local lightBackdrop: boolean = false;
   /** 封面加载失败时回退到占位图标。 */
   @Local heroImageFailed: boolean = false;
+  /** 换封面后的重建信号（见 {@link heroCover}）。 */
+  @Local coverVersion: number = 0;
   /** 已取色的封面地址，避免同一张图重复取色。 */
   private colorizedCoverUrl: string = '';
   /** 标题栏「四个点」菜单图标 componentId（openMenu 锚点）。 */
@@ -268,6 +286,22 @@ export struct PlaylistDetailPage {
    * @returns 封面地址，可能为空。
    */
   private heroCoverUrl(): string {
+    // ★ 本地歌单：**以库里的封面为准**。用户可以在「四个点」菜单 / 我的歌单里把封面换成自己的图，
+    //   而路由参数里的 `listCover` 是进入页面那一刻的快照 —— 只认它的话，换完封面
+    //   大图不会变（要退出重进才生效）。
+    if (this.sectionType === 'playlist' && this.playlistId.length > 0) {
+      const own: string = this.resolvedPlaylistCover();
+      if (own.length > 0) {
+        return own;
+      }
+      // 歌单自己没有封面（手工新建，或早期导入没把源封面存下来）→ 退回第一首歌的专辑图，
+      // 与「我的歌单」列表里看到的封面保持一致（用户反馈：列表有封面、点进来却是空占位）。
+      const p: PlaylistDto | undefined = this.resolvedPlaylist();
+      if (p !== undefined && p.songs.length > 0 && p.songs[0].img.length > 0) {
+        return p.songs[0].img;
+      }
+      return '';
+    }
     if (this.listCover.length > 0) {
       return this.listCover;
     }
@@ -277,21 +311,42 @@ export struct PlaylistDetailPage {
     return '';
   }
 
-  /** 本地歌单自身封面（带缓存，避免 build 期间反复读存储）。 */
-  private cachedCoverPlaylistId: string = '';
-  private cachedCoverValue: string = '';
+  /**
+   * 本地歌单 DTO 缓存（同一个 playlistId 只查一次存储）。
+   *
+   * ⚠️ **必须缓存**：`MusicStoreService.getPlaylists()` 每次调用都会把 preferences 里
+   * **整份歌单 JSON** 重新 `JSON.parse` 并重建所有歌单的所有歌曲记录（见该方法里的注释），
+   * 而 `heroTitle()` / `resolvedPlaylistCover()` 是**每帧都会读**的（Hero 大标题 + 封面 +
+   * 标题栏选项里也读了一次）。歌单多、歌单里歌曲多的时候，每帧几次全量解析就是
+   * 「点开歌单要等一会」的直接来源之一。
+   *
+   * 缓存键是 playlistId：歌单名/封面在本页存活期间不会变（重命名发生在「我的歌单」页）。
+   */
+  private cachedPlaylistKey: string = '';
+  private cachedPlaylistValue: PlaylistDto | undefined = undefined;
+  /** 缓存对应的 `playlistVersion`：封面/名字被改过之后要重新读。 */
+  private cachedPlaylistVersion: number = -1;
 
-  private resolvedPlaylistCover(): string {
+  /** 当前本地歌单 DTO（非 'playlist' 场景或找不到时返回 undefined）。 */
+  private resolvedPlaylist(): PlaylistDto | undefined {
     if (this.sectionType !== 'playlist' || this.playlistId.length === 0) {
-      return '';
+      return undefined;
     }
-    if (this.cachedCoverPlaylistId === this.playlistId) {
-      return this.cachedCoverValue;
+    const version: number = MusicStoreService.getInstance().playlistVersion;
+    if (this.cachedPlaylistKey === this.playlistId && this.cachedPlaylistVersion === version) {
+      return this.cachedPlaylistValue;
     }
-    const p = MusicStoreService.getInstance().getPlaylistById(this.playlistId);
-    this.cachedCoverPlaylistId = this.playlistId;
-    this.cachedCoverValue = p !== undefined ? p.cover : '';
-    return this.cachedCoverValue;
+    const p: PlaylistDto | undefined = MusicStoreService.getInstance().getPlaylistById(this.playlistId);
+    this.cachedPlaylistKey = this.playlistId;
+    this.cachedPlaylistVersion = version;
+    this.cachedPlaylistValue = p;
+    return p;
+  }
+
+  /** 本地歌单自身封面（无封面时返回空串，由 Hero 显示内置占位图）。 */
+  private resolvedPlaylistCover(): string {
+    const p: PlaylistDto | undefined = this.resolvedPlaylist();
+    return p !== undefined ? p.cover : '';
   }
 
   /**
@@ -302,13 +357,56 @@ export struct PlaylistDetailPage {
     if (this.listTitle.length > 0) {
       return this.listTitle;
     }
-    if (this.sectionType === 'playlist' && this.playlistId.length > 0) {
-      const p = MusicStoreService.getInstance().getPlaylistById(this.playlistId);
-      if (p !== undefined && p.name.length > 0) {
-        return p.name;
-      }
+    // 走缓存（见 resolvedPlaylist 的注释）：这里在 build 期间被 Hero 和标题栏各读一次
+    const p: PlaylistDto | undefined = this.resolvedPlaylist();
+    if (p !== undefined && p.name.length > 0) {
+      return p.name;
     }
     return '歌单';
+  }
+
+  /**
+   * Hero 封面（带一个**显式的重建信号** `coverVersion`）。
+   *
+   * 用户在「设置歌单封面」里换完图之后我们把它 +1：@Local 的读取会被记成构建依赖，
+   * 于是 Hero 这一帧就用新封面重建 —— 不必去赌 store 那条 `playlistVersion` 链路
+   * （那是 @Trace 字段，理论上也能刷新，但换封面这件事必须**立刻**看到效果）。
+   */
+  private heroCover(): string {
+    return this.coverVersion >= 0 ? this.heroCoverUrl() : '';
+  }
+
+  /**
+   * 让用户从相册选一张图作为歌单封面。
+   *
+   * 图片会被拷进沙箱（见 `pickPlaylistCover`），再把沙箱 URI 写进歌单的 `cover`；
+   * 写库会 +playlistVersion，页面里的 DTO 缓存据此失效，Hero 大图下一帧就用新封面。
+   */
+  private async pickCoverAsync(): Promise<void> {
+    if (this.sectionType !== 'playlist' || this.playlistId.length === 0) {
+      this.toast('只有自己的歌单才能换封面');
+      return;
+    }
+    const result: CoverPickResult = await pickPlaylistCover(this.playlistId);
+    if (!result.ok) {
+      this.toast(result.message);
+      return;
+    }
+    MusicStoreService.getInstance().setPlaylistCover(this.playlistId, result.uri);
+    // 显式重建：大图这一帧就换成新封面
+    this.coverVersion++;
+    this.toast(result.message);
+    hilog.info(PLAYLIST_LOG_DOMAIN, PLAYLIST_LOG_TAG, 'playlist cover updated id=%{public}s',
+      this.playlistId);
+  }
+
+  /** 清掉自定义封面（回到内置占位图；在线导入的歌单本来就有源封面，清掉只影响自定义的那张）。 */
+  private clearCover(): void {
+    if (this.sectionType !== 'playlist' || this.playlistId.length === 0) {
+      return;
+    }
+    MusicStoreService.getInstance().setPlaylistCover(this.playlistId, '');
+    this.toast('已移除自定义封面');
   }
 
   /** 副标题：曲目数 + 内容类型（收藏 / 历史 / 播放列表 / 歌单）。 */
@@ -469,7 +567,7 @@ export struct PlaylistDetailPage {
   private PlaylistScrollContentRoot() {
     Column() {
       PlaylistDetailHeroSection({
-        coverUrl: this.heroCoverUrl(),
+        coverUrl: this.heroCover(),
         title: this.heroTitle(),
         subtitle: this.heroSubtitle(),
         backdropColor: this.backdropColor,
@@ -550,6 +648,10 @@ export struct PlaylistDetailPage {
         .padding({ top: this.isPlaylistDetailMainline() &&
           this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ? 56 : 0 })
         .backgroundColor(this.backdropColor)
+        // ★ 内容不足一屏时必须**顶对齐**：Scroll 在子组件高度小于视口时会把它垂直居中，
+        //   于是「歌曲很少（1 首甚至 0 首）」的歌单/榜单打开后大图封面会跑到屏幕中间。
+        //   `.align()` 只在内容不足一屏时生效，内容超出一屏（正常情况）行为不变。
+        .align(Alignment.Top)
         .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
       }
       .width(StyleConstants.FULL_WIDTH)
@@ -575,6 +677,10 @@ export struct PlaylistDetailPage {
         // 顶部**不给 padding**：Hero 要贴着屏幕顶端开始，收起的 MINI 标题栏覆盖在它上面
         // （歌手/专辑页同样如此）。加 padding 就会在 Hero 上方顶出一条空白。
         .backgroundColor(this.backdropColor)
+        // ★ 内容不足一屏时必须**顶对齐**（与上面 PC 分支同款）：
+        //   Scroll 的子组件高度小于视口时会被垂直居中 —— 歌单只剩 1 首甚至 0 首歌曲时，
+        //   表现就是「打开歌单，大图封面跑到了屏幕中间」。`.align()` 只在不足一屏时生效。
+        .align(Alignment.Top)
 
         // 固定屏幕底部的批量操作条（与列表同级，不随滚动移动）
         if (this.batchMode) {
@@ -998,7 +1104,16 @@ export struct PlaylistDetailPage {
     } else if (action === 'dedupe') {
       this.batchExitCommand++;
       this.dedupeCommand++;
+    } else if (action === 'cover') {
+      void this.pickCoverAsync();
+    } else if (action === 'clearCover') {
+      this.clearCover();
     }
+  }
+
+  /** 轻提示（歌单封面相关的反馈用）。 */
+  private toast(message: string): void {
+    this.getUIContext().getPromptAction().showToast({ message: message, duration: 2000 });
   }
 
   /**
@@ -1104,6 +1219,9 @@ export struct PlaylistDetailPage {
       playlistMoreAction = null;
       this.batchMode = false;
       this.colorizedCoverUrl = '';
+      // 歌单 DTO 缓存跟着页面生命周期走：下次进来重新查（期间可能被重命名/换封面）
+      this.cachedPlaylistKey = '';
+      this.cachedPlaylistValue = undefined;
       if (this.moreMenuNode !== null) {
         this.moreMenuNode.dispose();
         this.moreMenuNode = null;

@@ -794,6 +794,13 @@ struct OnlineSearchPage {
       const store = this.store;
       const created = store.createPlaylist(p.name.length > 0 ? p.name : '导入的歌单');
       const targetId: string = created.id;
+      // ★ 导入时把**源歌单封面**一起存下来：在线歌单自带封面，存了之后列表与详情页大图
+      //   都能显示（以前没存，详情页就只能显示占位图 —— 用户反馈的「导入的歌单没封面」）。
+      //   源歌单没给封面时退一步用第一首歌的专辑图（导入这一刻的快照）。
+      const cover: string = p.coverUrl.length > 0 ? p.coverUrl : (songs[0].picUrl ?? '');
+      if (cover.length > 0) {
+        store.setPlaylistCover(targetId, cover);
+      }
       let added = 0;
       for (let i = 0; i < songs.length; i++) {
         const record = this.searchPlaylistSongToRecord(songs[i]);

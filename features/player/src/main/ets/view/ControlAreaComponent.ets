@@ -25,6 +25,17 @@ import { buildSongShareText, showSystemShare } from '../util/ShareUtil';
 import { sourceToCode } from '../geuz/index';
 import { QueuePlaylistSheet } from './QueuePlaylistSheet';
 import { EXTENDED_QUALITIES } from '../util/SourceFallbackUtil';
+import { CommentPanel } from 'comment';
+import type { CommentSongRef } from 'comment';
+
+/**
+ * 半模态「重新打开」的冷却时间（ms）。
+ *
+ * 弹层关闭是带动画的（约 300ms），动画没走完就把 isShow 置回 true，
+ * 框架会把它当成同一次关闭处理 —— 表现是「刚弹出来立刻又收回去」。
+ * 取略大于动画时长，用户几乎感知不到（只有「刚关完马上再点」才会等这几十毫秒）。
+ */
+const SHEET_REOPEN_GUARD_MS: number = 360;
 
 /** Full-screen transport: progress, main controls, and auxiliary icon row inside a single bottom panel. */
 @ComponentV2
@@ -49,6 +60,15 @@ export struct ControlAreaComponent {
   @Local menuQualityMode: string = 'switch';
   /** 添加到歌单选择器显示状态。 */
   @Local showMenuPlaylist: boolean = false;
+  /**
+   * 歌曲菜单里的「查看评论」子页。
+   *
+   * 一个组件只能挂一个 bindSheet（菜单弹层已经占用了），所以评论和「切换音质」
+   * 「添加到歌单」一样是**同一个弹层里的一个子页**，靠这个标志切换。
+   */
+  @Local showMenuComment: boolean = false;
+  /** 上一次弹层关闭动画结束的时间戳（见 {@link openSheetFor} 的冷却逻辑）。 */
+  private sheetClosedAtMs: number = 0;
   /** 选择器中的歌单列表。 */
   @Local playlistOptions: PlaylistDto[] = [];
   /** 新建歌单名称输入。 */
@@ -59,26 +79,74 @@ export struct ControlAreaComponent {
   @Local themeState: ThemeState =
     AppStorageV2.connect(ThemeState, AppStorageKeys.THEME_STATE, () => new ThemeState())!;
 
+  /**
+   * 打开菜单弹层里的某个子页前，先把**其它**子页标志清掉。
+   *
+   * ⚠️ 这是踩过的 bug：只置位、不清位时，`MenuSheet()` 里排在最前面的
+   *    `showMenuComment` 还是 true —— 于是「打开过一次评论之后，再点下载按钮
+   *    弹出来的还是评论」。所有子页入口都必须先过这里。
+   */
+  private resetMenuSubPages(): void {
+    this.showMenuComment = false;
+    this.showMenuPlaylist = false;
+    this.showMenuQuality = false;
+    this.menuQualityMode = 'switch';
+  }
+
+  /**
+   * 打开菜单弹层并切到指定子页（'menu' / 'quality' / 'qualityDownload' / 'playlist' / 'comment'）。
+   *
+   * ⚠️ 不能在关闭动画还没走完时把 isShow 置回 true：框架内部还在收，
+   *    表现就是「弹层刚弹出来立刻又收回去」。用户实际踩到过：
+   *    评论 → 关闭 → 下载 → 关闭 → 评论，第三次会闪一下就没。
+   *    所以这里用 `onDisappear` 记下的时间戳做一次冷却（关着的时候点，几乎无感；
+   *    刚关完就点，就多等那几十毫秒把关闭动画让过去）。
+   */
+  private openSheetFor(page: string): void {
+    this.resetMenuSubPages();
+    if (page === 'quality') {
+      this.showMenuQuality = true;
+    } else if (page === 'qualityDownload') {
+      this.menuQualityMode = 'download';
+      this.showMenuQuality = true;
+    } else if (page === 'playlist') {
+      this.playlistOptions = this.store.getPlaylists();
+      this.newPlaylistName = '';
+      this.showMenuPlaylist = true;
+    } else if (page === 'comment') {
+      this.showMenuComment = true;
+    }
+    if (this.showMenuSheet) {
+      return;   // 已经开着：只切子页
+    }
+    const since: number = Date.now() - this.sheetClosedAtMs;
+    if (since >= SHEET_REOPEN_GUARD_MS) {
+      this.showMenuSheet = true;
+      return;
+    }
+    setTimeout((): void => {
+      this.showMenuSheet = true;
+    }, SHEET_REOPEN_GUARD_MS - since);
+  }
+
   /** Opens the song menu main list. */
   private openMenuSheet(): void {
-    this.menuQualityMode = 'switch';
-    this.showMenuQuality = false;
-    this.showMenuSheet = true;
+    this.openSheetFor('menu');
   }
 
   /** Opens the quality sub-list in download mode. */
   private openDownloadQuality(): void {
-    this.menuQualityMode = 'download';
-    this.showMenuQuality = true;
-    this.showMenuSheet = true;
+    this.openSheetFor('qualityDownload');
   }
 
-  /** Closes the whole menu sheet and resets the sub-list. */
+  /** 打开评论子页（播放页底部那颗「评论」按钮用它）。 */
+  private openCommentSheet(): void {
+    this.openSheetFor('comment');
+  }
+
   /** 打开添加到歌单选择器。 */
   private openPlaylistPicker(): void {
-    this.playlistOptions = this.store.getPlaylists();
-    this.newPlaylistName = '';
-    this.showMenuPlaylist = true;
+    this.openSheetFor('playlist');
   }
 
   /** 当前歌曲加入指定歌单。 */
@@ -116,11 +184,58 @@ export struct ControlAreaComponent {
     this.showMenuPlaylist = false;
     this.showMenuSheet = false;
     this.showMenuQuality = false;
+    this.showMenuComment = false;
+  }
+
+  /**
+   * 当前歌的平台身份（评论面板用）。
+   *
+   * 在线歌直接把 source + songId 交给评论面板；本地音乐（source = 'local'）交给
+   * 面板内部的解析器去查匹配记录（解析器由产品壳层注册，见 `features/comment`）。
+   */
+  private currentSongRef(): CommentSongRef {
+    const song = this.currentSong();
+    const ref: CommentSongRef = {
+      source: song !== undefined && typeof song.source === 'string' ? song.source : '',
+      songId: song !== undefined ? song.songId : '',
+      name: song !== undefined && typeof song.title === 'string' ? song.title : '',
+      singer: song !== undefined && typeof song.singer === 'string' ? song.singer : ''
+    };
+    return ref;
+  }
+
+  /** 评论面板的换歌标识：值变了面板会重新拉评论。 */
+  private currentSongKey(): string {
+    const ref: CommentSongRef = this.currentSongRef();
+    return ref.source + '_' + ref.songId;
   }
 
   /** Current song for menu info rows (singer / album). */
   private currentSong(): SongItem | undefined {
     return this.playerViewModel.appState.getCurrentSongItem();
+  }
+
+  /**
+   * 音质徽标文案。
+   *
+   * ⚠️ 本地歌必须**按歌曲本身**判断，不能只看 `appState.currentQuality`：
+   *    那个字段是播放时写的，重启后恢复上次播放的本地歌、或从歌单/队列播本地歌时
+   *    以前可能还是空的，于是徽标掉到 '128k' 兜底 —— 用户看到的就是
+   *    「本地歌的音质重启后变成 128K」。
+   */
+  private currentQualityLabel(): string {
+    const song = this.currentSong();
+    if (song !== undefined && (song.source === 'local' || song.quality === 'local')) {
+      return 'local';
+    }
+    const live: string = this.playerViewModel.appState.currentQuality;
+    if (live.length > 0) {
+      return live;
+    }
+    if (song !== undefined && song.quality.length > 0) {
+      return song.quality;
+    }
+    return '128k';
   }
 
   /** File size text of the current song for the given quality; empty when unknown. */
@@ -323,9 +438,8 @@ export struct ControlAreaComponent {
             .fontFamily(PlayerConstants.FONT_FAMILY_BLACK)
             .lineHeight('14vp')
           Blank()
-          // 当前音质徽标：显示实际播放音质（含自动降级），位于两个时长中央
-          Text(this.playerViewModel.appState.currentQuality.length > 0 ?
-            this.playerViewModel.appState.currentQuality : '128k')
+          // 当前音质徽标：本地歌显示「本地」，在线歌显示实际播放音质（含自动降级）
+          Text(this.currentQualityLabel())
             .fontSize(11)
             .fontColor($r('app.color.play_text_color'))
             .lineHeight(16)
@@ -423,9 +537,14 @@ export struct ControlAreaComponent {
           })
             .width(24)
             .height(24)
-          this.bottomOtherGlyph($r('sys.symbol.bell'), '通知')
+          // 这一排现在是「投播 / 下载 / 评论 / 更多」四个真入口。
+          // 原来第二颗铃铛（通知）是没接功能的占位，用户要求把它换掉：铃铛去掉，
+          // 下载左移一位，空出来的位置放「评论」——比藏在「更多」里少点两下。
           this.bottomOtherGlyph($r('sys.symbol.arrow_down_circle'), '下载', (): void => {
             this.openDownloadQuality();
+          })
+          this.bottomOtherGlyph($r('sys.symbol.text_bubble_left_2'), '评论', (): void => {
+            this.openCommentSheet();
           })
           this.bottomOtherGlyph($r('sys.symbol.dot_grid_1x2_circle'), '更多', (): void => {
             this.openMenuSheet();
@@ -451,7 +570,24 @@ export struct ControlAreaComponent {
   @Builder
   private MenuSheet() {
     Column({ space: 4 }) {
-      if (this.showMenuPlaylist) {
+      if (this.showMenuComment) {
+        // 评论子页：面板根节点是 height('100%')，所以外面这层容器也必须是**确定高度**
+        // （弹层内容区的高度就是弹层高度，用 height('100%') 才对；用 layoutWeight
+        //  在这里会拿到 0 —— 弹层内容根节点是按内容包高度的，不是弹性容器）。
+        Column() {
+          CommentPanel({
+            song: this.currentSongRef(),
+            songKey: this.currentSongKey(),
+            showHeader: true,
+            onClose: (): void => {
+              // 评论已经是底部工具行的一级入口，返回箭头直接收起弹层
+              this.closeMenuSheet();
+            }
+          })
+        }
+        .width('100%')
+        .height('100%')
+      } else if (this.showMenuPlaylist) {
         this.PlaylistPickerRows()
       } else if (this.showMenuQuality) {
         Text(this.menuQualityMode === 'download' ? '选择下载音质' : '切换音质')
@@ -528,30 +664,37 @@ export struct ControlAreaComponent {
         })
         this.MenuRow($r('app.string.player_menu_quality'), $r('sys.symbol.gearshape_fill'),
           (): void => {
-            this.menuQualityMode = 'switch';
-            this.showMenuQuality = true;
+            this.openSheetFor('quality');
           })
         this.MenuRow($r('app.string.player_menu_share'), $r('sys.symbol.share'),
           (): void => {
             this.closeMenuSheet();
             this.shareCurrentSong();
           })
+        // 「查看评论」已经从菜单里**移除**：播放页底部工具行新增了「评论」按钮，
+        // 一级入口比藏在这里少点两下（用户明确要求）。
       }
 
-      Button('取消')
-        .width('100%')
-        .height(44)
-        .fontSize(15)
-        .borderRadius(10)
-        .backgroundColor($r('app.color.background_secondary'))
-        .fontColor($r('app.color.font_tertiary'))
-        .margin({ top: 8 })
-        .onClick(() => {
-          this.closeMenuSheet();
-        })
+      // 评论子页自带标题栏与关闭，不再叠一个「取消」，否则底部被吃掉一大块
+      if (!this.showMenuComment) {
+        Button('取消')
+          .width('100%')
+          .height(44)
+          .fontSize(15)
+          .borderRadius(10)
+          .backgroundColor($r('app.color.background_secondary'))
+          .fontColor($r('app.color.font_tertiary'))
+          .margin({ top: 8 })
+          .onClick(() => {
+            this.closeMenuSheet();
+          })
+      }
     }
     .width('100%')
-    .padding({ left: 16, right: 16, bottom: 24 })
+    // 评论子页要**铺满弹层**：左右/下方留内边距的话，大图层四周会露出一圈弹层底色
+    // （用户反馈的「屏幕左右以及下方的黑边」就是这层内边距）。菜单本身仍然留白。
+    .padding(this.showMenuComment ?
+      { left: 0, right: 0, bottom: 0 } : { left: 16, right: 16, bottom: 24 })
     .backgroundColor($r('app.color.background_secondary'))
   }
 
@@ -652,10 +795,16 @@ export struct ControlAreaComponent {
       this.playMode = PlayerDataUtil.getPlayMode();
     })
     .bindSheet($$this.showMenuSheet, this.MenuSheet(), {
-      height: 360,
+      // 评论子页要整屏高度才够看（列表 + 两个页签）；菜单本身保持固定 360
+      height: this.showMenuComment ? SheetSize.LARGE : 360,
       dragBar: true,
       showClose: false,
-      backgroundColor: $r('app.color.background_secondary')
+      backgroundColor: $r('app.color.background_secondary'),
+      onDisappear: (): void => {
+        // 记下关闭动画结束的时刻（重新打开的冷却用），顺手把子页状态清干净
+        this.sheetClosedAtMs = Date.now();
+        this.resetMenuSubPages();
+      }
     })
   }
 }

@@ -33,6 +33,11 @@ const KEY_AMBIENT_LEVEL: string = 'ambient_level';
 const KEY_THEME_COLOR: string = 'theme_color';
 const KEY_HOME_SOURCE: string = 'home_source';
 const KEY_SHOW_MINI_LYRIC: string = 'show_mini_lyric';
+const KEY_DESKTOP_LYRIC: string = 'desktop_lyric';
+/** 华为账号登录资料（JSON，形状由 features/player 的 HuaweiAccountService 定义，这里只当字符串存）。 */
+const KEY_HUAWEI_ACCOUNT: string = 'huawei_account';
+/** 华为云盘访问令牌（JSON：accessToken / refreshToken / expiresAt）。 */
+const KEY_HUAWEI_DRIVE_TOKEN: string = 'huawei_drive_token';
 const KEY_PLAYBACK_FLOW_LIGHT: string = 'playback_flow_light';
 const KEY_SHOW_SUB_LYRIC: string = 'show_sub_lyric';
 const KEY_PLAY_QUALITY: string = 'play_quality';
@@ -98,6 +103,15 @@ export class MusicStoreService {
   @Trace public searchHistoryVersion: number = 0;
   /** Bumped on every playlist mutation; observable for UI refresh. */
   @Trace public playlistVersion: number = 0;
+  /**
+   * `getPlaylists()` 的解析结果缓存（键 = {@link playlistVersion}）。
+   *
+   * 见 `getPlaylists()` 里的说明：它每次都要把整份歌单 JSON 重新 parse 并重建记录，
+   * 而 UI 侧（歌单列表、歌单详情页的封面/标题、批量操作条、播放器选歌单）
+   * 会在每一帧里调用它好几次。
+   */
+  private playlistsCache: PlaylistDto[] | undefined = undefined;
+  private playlistsCacheVersion: number = -1;
 
   /** Process-wide singleton. */
   public static getInstance(): MusicStoreService {
@@ -657,6 +671,98 @@ export class MusicStoreService {
     }
     store.putSync(KEY_SHOW_MINI_LYRIC, enabled);
     store.flush();
+  }
+
+  /**
+   * @returns 桌面歌词（系统悬浮窗歌词）开关，默认**关**。
+   *
+   * 默认关：`enableDesktopLyric` 在部分机型上会顺带要悬浮窗授权，
+   * 用户没主动开就不该被弹窗打扰（要显示歌词的地方，播控中心 / 锁屏本来就有）。
+   */
+  public getDesktopLyric(): boolean {
+    const store = this.getStore();
+    if (store === undefined) {
+      return false;
+    }
+    return store.getSync(KEY_DESKTOP_LYRIC, false) as boolean;
+  }
+
+  /** 持久化桌面歌词开关。 */
+  public setDesktopLyric(enabled: boolean): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_DESKTOP_LYRIC, enabled);
+    store.flush();
+  }
+
+  /** @returns 华为账号登录资料的 JSON（没登录过返回空串）。 */
+  public getHuaweiAccount(): string {
+    const store = this.getStore();
+    if (store === undefined) {
+      return '';
+    }
+    return store.getSync(KEY_HUAWEI_ACCOUNT, '') as string;
+  }
+
+  /** 保存 / 清除华为账号登录资料（传空串 = 退出登录）。 */
+  public setHuaweiAccount(json: string): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_HUAWEI_ACCOUNT, json);
+    store.flush();
+  }
+
+  /** @returns 华为云盘访问令牌的 JSON（没连接过返回空串）。 */
+  public getHuaweiDriveToken(): string {
+    const store = this.getStore();
+    if (store === undefined) {
+      return '';
+    }
+    return store.getSync(KEY_HUAWEI_DRIVE_TOKEN, '') as string;
+  }
+
+  /** 保存华为云盘令牌（传空串 = 断开）。 */
+  public setHuaweiDriveToken(json: string): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_HUAWEI_DRIVE_TOKEN, json);
+    store.flush();
+  }
+
+  /** @returns 歌单的原始 JSON（云备份/恢复用，与 preferences 里存的是同一份格式）。 */
+  public playlistsJson(): string {
+    return JSON.stringify(this.getPlaylists());
+  }
+
+  /**
+   * 用一份原始 JSON 覆盖歌单（云恢复用）。
+   *
+   * 解析失败就原样不动现有数据、返回 false —— 恢复是「要么完整生效、要么不生效」，
+   * 不做半截写入。
+   */
+  public replacePlaylistsJson(json: string): boolean {
+    const store = this.getStore();
+    if (store === undefined || json.length === 0) {
+      return false;
+    }
+    try {
+      const list: Object[] = JSON.parse(json) as Object[];
+      if (!Array.isArray(list)) {
+        return false;
+      }
+      store.putSync(KEY_PLAYLISTS, json);
+      store.flush();
+      this.playlistVersion++;
+      return true;
+    } catch (_err) {
+      return false;
+    }
   }
 
   /** @returns Playback page cover corner radius in vp; default 8. */
@@ -1402,11 +1508,27 @@ export class MusicStoreService {
     record.url = obj.url as string ?? '';
     record.lyric = obj.lyric as string ?? '';
     record.time = obj.time as number ?? 0;
+    // ⚠️ 这两个字段一度漏掉（写的时候存了、读的时候没取）：
+    //   quality 丢了 → 重启后「当前音质」回落到默认 128k；
+    //   playScript 丢了 → 卡片/日志里「哪个音源脚本放的」变空。
+    // 凡是往 PlayedSongRecord 里加字段，这里**必须**跟着加一行。
+    record.quality = obj.quality as string ?? '';
+    record.playScript = obj.playScript as string ?? '';
     return record;
   }
 
   /** @returns All user playlists (newest first). */
   public getPlaylists(): PlaylistDto[] {
+    // ★ 缓存：preferences 里存的是**整份歌单 JSON**，这里每次都要 JSON.parse 一遍并
+    //   逐条重建所有歌单的所有歌曲记录 —— 复杂度是「全部歌单 × 全部歌曲」，跟你要查的
+    //   那个歌单无关。而歌单详情页的 Hero 标题/封面、歌单列表页、批量操作条都会在
+    //   build 期间调用它，一帧里能调好几次：歌单一多、歌曲一多，页面就会卡住。
+    //   所有写路径都是 `persistPlaylists()` + `playlistVersion++`（共 8 处，已逐一核对），
+    //   所以用版本号做键就能保证不会读到脏数据。
+    if (this.playlistsCache !== undefined && this.playlistsCacheVersion === this.playlistVersion) {
+      // 返回副本：调用方习惯 `list.unshift(p)` 之后再 persist，不能让它改到缓存本身
+      return this.playlistsCache.slice();
+    }
     const store = this.getStore();
     if (store === undefined) {
       return [];
@@ -1420,6 +1542,12 @@ export class MusicStoreService {
         const p = new PlaylistDto();
         p.id = o.id as string ?? '';
         p.name = o.name as string ?? '';
+        // ★★ 这一行是「自定义歌单封面不生效」的真正原因：
+        //    `persistPlaylists()` 一直把 cover 写进 preferences，但这里**从来没读回来** ——
+        //    于是任何一次重新解析（版本号一变就会重解析）之后 `p.cover` 都变成空串，
+        //    界面（列表 + 详情页大图）自然永远看不到自定义封面，重启也一样。
+        //    凡是往 PlaylistDto 里加字段，这里必须跟着加一行。
+        p.cover = o.cover as string ?? '';
         p.createTime = o.createTime as number ?? 0;
         const songs: Object[] = o.songs as Object[] ?? [];
         p.songs = [];
@@ -1428,8 +1556,12 @@ export class MusicStoreService {
         }
         list.push(p);
       }
-      return list;
+      this.playlistsCache = list;
+      this.playlistsCacheVersion = this.playlistVersion;
+      return list.slice();
     } catch (_err) {
+      this.playlistsCache = [];
+      this.playlistsCacheVersion = this.playlistVersion;
       return [];
     }
   }
@@ -1501,6 +1633,26 @@ export class MusicStoreService {
     for (let i: number = 0; i < list.length; i++) {
       if (list[i].id === id) {
         list[i].name = name;
+        this.persistPlaylists(list);
+        this.playlistVersion++;
+        return;
+      }
+    }
+  }
+
+  /**
+   * 设置歌单封面。
+   *
+   * @param id 歌单 id。
+   * @param cover 封面地址：自定义封面是**沙箱文件 URI**（`file://...`，由
+   *              `features/playlist` 的 `pickPlaylistCover` 落盘后给出）；
+   *              传空串表示清掉自定义封面（在线导入的歌单清掉后就回到内置占位图）。
+   */
+  public setPlaylistCover(id: string, cover: string): void {
+    const list: PlaylistDto[] = this.getPlaylists();
+    for (let i: number = 0; i < list.length; i++) {
+      if (list[i].id === id) {
+        list[i].cover = cover;
         this.persistPlaylists(list);
         this.playlistVersion++;
         return;

@@ -1,10 +1,12 @@
 import { common } from '@kit.AbilityKit';
 import { AppStorageV2 } from '@kit.ArkUI';
 import { AccountService } from 'player';
+import { HuaweiAccountService } from 'player';
 import { PlatformAccount, sourceName } from 'player';
 import { QrCodeLoginResult, QrCodeLoginState, QrLoginStatus } from 'player';
 import { AppStorageKeys, MusicStoreService, ThemeState } from 'musicbasic';
 import { CapsuleSegmentedSelector } from '../view/CapsuleSegmentedSelector';
+import { HuaweiAccountCard } from './HuaweiAccountCard';
 
 @ComponentV2
 export struct AccountManageSheet {
@@ -30,6 +32,8 @@ export struct AccountManageSheet {
     const context: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     if (context !== undefined) {
       AccountService.init(context);
+      // 华为账号：记录上下文并恢复上次的登录态（静默恢复，不会弹授权页）
+      HuaweiAccountService.getInstance().init(context);
     }
     this.initAsync();
   }
@@ -270,6 +274,9 @@ export struct AccountManageSheet {
     Column() {
       Scroll() {
       Column({ space: 10 }) {
+        // 华为账号（系统账号）在最上面，并用分隔线和下面的音乐平台账号分开
+        HuaweiAccountCard()
+
         if (this.accounts.length > 0) {
           ForEach(this.accounts, (account: PlatformAccount) => {
             this.accountItem(account)

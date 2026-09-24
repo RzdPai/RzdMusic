@@ -1,8 +1,26 @@
 import { http } from '@kit.NetworkKit';
+import { hilog } from '@kit.PerformanceAnalysisKit';
+import { BusinessError } from '@kit.BasicServicesKit';
 import { lxTxToplistInfo, TxToplistInfo } from 'player';
 import { BoardSongParam, ToplistRouteParam } from 'musicbasic';
 import { cryptoFramework } from '@kit.CryptoArchitectureKit';
 import { buffer, util } from '@kit.ArkTS';
+
+const LOG_DOMAIN: number = 0x0000;
+const LOG_TAG: string = 'RzdPlazaNet';
+
+/**
+ * 请求失败日志（只写 hilog，不写应用内日志面板）。
+ *
+ * 保留原因：酷狗广场/榜单走的是明文 HTTP，这类「请求成功但解析崩」或
+ * 「域名解析不了」的问题靠错误码一眼可辨；错误码含义见 errorcode-net-http。
+ * 排查用：`hdc shell hilog | findstr RzdPlazaNet`。
+ */
+function logHttpFailure(stage: string, url: string, err: Object): void {
+  const e: BusinessError = err as BusinessError;
+  hilog.warn(LOG_DOMAIN, LOG_TAG, '%{public}s failed: code=%{public}d msg=%{public}s url=%{public}s',
+    stage, e.code ?? 0, e.message ?? '', url);
+}
 
 export interface PlaylistData {
   id: string;
@@ -341,15 +359,33 @@ function boardNameList(source: string): string[] {
   return ['新歌榜', '热歌榜', '原创榜', '音乐风向榜', '彩铃分贝榜', '会员臻爱榜', '港台榜', '内地榜', '欧美榜', '国风金曲榜'];
 }
 
-function asObject(value: Object): JsonObject {
+/**
+ * 把任意值当作 JsonObject 用（取不到就返回**空对象**，绝不返回 undefined）。
+ *
+ * ⚠️ 为什么必须兜住 undefined/null：这个函数几乎总是被连着下标用，
+ * 例如 `asObject(root['data'])['params']`。如果这里原样返回 undefined，
+ * 下一层 `undefined['params']` 会抛
+ * 「Cannot load property of null or undefined」——**请求成功了却在解析时崩**，
+ * 表现成「这个源加载不出来」。酷狗广场就是踩了这个坑（列表响应没有 `data` 节点）。
+ * 返回 `{}` 之后，所有 `asObject(...)[...]` 都退化成「读到 undefined」，只会走到各个
+ * `?? 兜底`，不会再抛异常。
+ */
+function asObject(value: Object | undefined): JsonObject {
+  if (value === undefined || value === null) {
+    return {};
+  }
   return value as JsonObject;
 }
 
 function asArray(value: Object | undefined): JsonObject[] {
-  if (value === undefined) {
+  if (value === undefined || value === null) {
     return [];
   }
-  return (value as Object[]).map((item: Object) => asObject(item));
+  const array = value as Object[];
+  if (!Array.isArray(array)) {
+    return [];
+  }
+  return array.map((item: Object) => asObject(item));
 }
 
 function text(value: Object | undefined): string {
@@ -478,6 +514,11 @@ async function requestJsonValue(url: string, method: http.RequestMethod = http.R
       readTimeout: 12000
     });
     return JSON.parse(response.result as string) as Object;
+  } catch (err) {
+    // 记一条带错误码的日志再抛：否则调用方只看到「加载失败」，
+    // 分不清明文被拦(2300997) / DNS(2300006) / 连不上(2300007) / 证书(2300060)。
+    logHttpFailure('requestJsonValue', url, err);
+    throw err as Error;
   } finally {
     request.destroy();
   }
@@ -514,6 +555,140 @@ async function requestKuwoJson(url: string): Promise<JsonObject> {
     }
   }
   throw lastError;
+}
+
+/**
+ * 酷狗 `yueku/v9/special/getSpecial` 专用请求（歌单广场的分类 + 列表都走它）。
+ *
+ * 为什么要单独包一层：
+ *   1. 这两个接口是 **HTTP 明文**，偶发失败要重试（和酷我一样的 3 次）；
+ *   2. `status !== 1` 时接口其实没给数据（例如分类参数不对），必须**抛错**，
+ *      否则调用方会把它当成「成功但列表为空」——界面上就是「一直在加载/什么都没有」，
+ *      连错误提示都不给（歌单广场酷狗加载不出来就是这个症状）；
+ *   3. 顺手带上 `Referer: https://www.kugou.com/`，省得被 CDN 当成爬虫。
+ *
+ * 实测响应结构（2026-09 抓包）：
+ *   列表   `?is_ajax=1&cdn=cdn&t=5&c=&p=1`  → `{ status, special_db: [...] }`（**没有 data 包壳**）
+ *   分类   `?is_smarty=1&cdn=cdn`           → `{ status, data: { hotTag, tagids, params } }`
+ */
+async function requestKgJson(url: string): Promise<JsonObject> {
+  let lastError: Error = new Error('Kugou request failed');
+  for (let retry = 0; retry < 3; retry++) {
+    try {
+      const root = await requestJson(url, http.RequestMethod.GET, undefined,
+        { 'Referer': 'https://www.kugou.com/' });
+      if (num(root['status']) === 1) {
+        return root;
+      }
+      lastError = new Error(`Kugou status=${text(root['status'])}`);
+    } catch (error) {
+      lastError = error as Error;
+    }
+  }
+  hilog.warn(LOG_DOMAIN, LOG_TAG, 'kg legacy endpoint gave up: %{public}s url=%{public}s',
+    lastError.message ?? '', url);
+  throw lastError;
+}
+
+/**
+ * 酷狗歌单广场（**HTTPS 备用通道**）：`https://m.kugou.com/plist/index&json=true&page=N`
+ *
+ * 定位：**只作为降级通道**。主通道是带分类/排序的 `kgPlazaLegacy`
+ * （`yueku/v9/special/getSpecial`），这条只在它失败时兜底。
+ *
+ * 为什么留着它：主通道是明文 HTTP，而那个域名 `www2.kugou.kugou.com` 连 HTTPS 都用不了
+ * （实测 TLS 握手「未能为 SSL/TLS 安全通道建立信任关系」）——一旦遇到「明文被拦」的
+ * 网络环境就没有退路，这条 HTTPS 接口是那时唯一还能出数据的路。
+ *
+ * 接口特征（实测）：`plist.list[0]` = `{ total:600, has_next:1, info:[30 条] }`，
+ * 字段齐全（specialid / specialname / songcount / playcount / play_count_text /
+ * publishtime / username / imgurl），`page` 参数分页有效；封面 `imgurl` 里的 `{size}`
+ * 占位要替换，域名 `imgessl.kugou.com` 是 HTTPS。
+ * 缺陷：不认识排序参数（实测 t/sort/order 都返回同一批 id），也没有分类 —— 降级时功能缩水。
+ *
+ * @returns 成功返回列表页；拿不到真数据时 reject。
+ */
+async function kgPlazaViaHttps(pageNumber: number, limit: number): Promise<PlaylistPage> {
+  const url: string = `https://m.kugou.com/plist/index&json=true&page=${pageNumber}`;
+  const root: JsonObject = await requestJson(url, http.RequestMethod.GET, undefined,
+    { 'Referer': 'https://m.kugou.com/' });
+  const listNode = asObject(root['plist'])['list'];
+  const wrapper: JsonObject = Array.isArray(listNode) ? asObject(asArray(listNode)[0]) : asObject(listNode);
+  const info: JsonObject[] = asArray(wrapper['info']);
+  if (info.length === 0) {
+    throw new Error('Kugou https plaza returned no items');
+  }
+  const total: number = num(wrapper['total']);
+  const hasNextFlag: number = num(wrapper['has_next']);
+  const pageSize: number = num(root['pagesize']) || limit;
+  const list: PlaylistData[] = info.map((item: JsonObject): PlaylistData => ({
+    id: text(item['specialid']),
+    name: text(item['specialname']),
+    author: text(item['username'] ?? item['nickname']),
+    // imgurl 形如 https://imgessl.kugou.com/soft/collection/{size}/...jpg
+    image: text(item['imgurl']).replace('{size}', '240'),
+    count: text(item['songcount'] ?? item['song_count']),
+    time: dateText(item['publishtime'] ?? item['publish_time']),
+    // play_count_text 是「1689.9万」这种现成文案，直接用
+    listenCount: text(item['play_count_text'] ?? item['playcount'] ?? item['play_count']),
+    category: text(item['tagname']),
+    source: 'kg'
+  })).filter((item: PlaylistData) => item.name.length > 0);
+  if (list.length === 0) {
+    throw new Error('Kugou https plaza items all unnamed');
+  }
+  const hasNext: boolean = total > 0
+    ? pageNumber * pageSize < total
+    : hasNextFlag === 1 || list.length >= pageSize;
+  // 降级路径留一条 hilog（应用内日志面板不再输出）
+  hilog.info(LOG_DOMAIN, LOG_TAG, 'kg https channel ok: items=%{public}d total=%{public}d',
+    list.length, total);
+  return { list, page: pageNumber, limit: pageSize, total, hasNext };
+}
+
+/**
+ * 酷狗歌单广场（**老线路，明文 HTTP**）：`yueku/v9/special/getSpecial`
+ *
+ * 保留原因：它认识 `t=` 排序参数（推荐/最热/最新/热藏/飙升），而 HTTPS 那条不认识。
+ * 两条并行发、谁先有真数据用谁，见 `playlists()` 里的 `Promise.any`。
+ *
+ * 注意响应层级（实测）：列表 `{status, special_db:[…]}` 的 `special_db` 在**根节点**，
+ * 没有 `data` 包壳；分类 `{status, data:{hotTag,tagids}}` 才有 `data`。
+ * 这里两种都认，避免再犯「取 data.special_db 永远为空」的老错。
+ *
+ * @returns 成功返回列表页；`status !== 1` 或解析为空时 reject（由 Promise.any 判负）。
+ */
+async function kgPlazaLegacy(pageNumber: number, selectedSort: string,
+  categoryId?: string): Promise<PlaylistPage> {
+  const url: string =
+    `http://www2.kugou.kugou.com/yueku/v9/special/getSpecial?is_ajax=1&cdn=cdn&t=${selectedSort}&c=${categoryId ?? ''}&p=${pageNumber}`;
+  const root: JsonObject = await requestKgJson(url);
+  // ⚠️ 这里曾经这么写（错）：
+  //     asObject(root['params'] ?? asObject(root['data'])['params'])
+  //   列表响应里**没有 `data` 节点**，`asObject(undefined)` 返回 undefined，
+  //   接着读 `undefined['params']` 就抛
+  //   「Cannot load property of null or undefined」—— 请求明明成功、却在解析时崩，
+  //   然后被降级到 HTTPS 通道（表现为「老接口没有分类/排序」）。
+  //   正确做法：先安全取出 `data`（可能是空对象），再逐层兜底。
+  const dataNode: JsonObject = asObject(root['data']);
+  const rootList: JsonObject[] = asArray(root['special_db']);
+  const nestedList: JsonObject[] = asArray(dataNode['special_db']);
+  const raw: JsonObject[] = rootList.length > 0 ? rootList : nestedList;
+  const params: JsonObject = asObject(root['params'] ?? dataNode['params']);
+  const limit: number = num(params['pagesize']) || 20;
+  if (raw.length === 0) {
+    throw new Error('Kugou plaza returned no items');
+  }
+  const list: PlaylistData[] = raw
+    .map((item: JsonObject): PlaylistData => formatPlaylist('kg', item))
+    .filter((item: PlaylistData) => item.name.length > 0);
+  if (list.length === 0) {
+    throw new Error('Kugou plaza items all unnamed');
+  }
+  const total: number = num(params['total']);
+  const responsePage: number = num(params['p']) || pageNumber;
+  const hasNext: boolean = total > 0 ? responsePage * limit < total : list.length >= limit;
+  return { list, page: responsePage, limit, total, hasNext };
 }
 
 async function requestFormJson(url: string, body: string): Promise<JsonObject> {
@@ -582,7 +757,9 @@ function formatPlaylist(source: string, item: JsonObject): PlaylistData {
     return { id: text(item['id']), name: text(item['name']), author: text(item['uname']), image: text(item['img']), count: text(item['total']), time: dateText(item['publish_time']), listenCount: countText(item['listencnt']), category: text(item['tag']), source };
   }
   if (source === 'kg') {
-    return { id: text(item['specialid']), name: text(item['specialname']), author: text(item['nickname']), image: text(item['img'] ?? item['imgurl']), count: text(item['song_count'] ?? item['songcount']), time: dateText(item['publish_time'] ?? item['publishtime']), listenCount: text(item['total_play_count'] ?? item['play_count'] ?? item['playcount']), category: text(item['tagname']), source };
+    // 广场接口给的 play_count 常常是 0，而 total_play_count/collect_count 有值，
+    // 依次兜底，免得卡片上「播放量」永远是 0
+    return { id: text(item['specialid']), name: text(item['specialname']), author: text(item['nickname']), image: text(item['img'] ?? item['imgurl']), count: text(item['song_count'] ?? item['songcount']), time: dateText(item['publish_time'] ?? item['publishtime']), listenCount: text(item['total_play_count'] ?? item['play_count'] ?? item['collect_count']), category: text(item['tagname']), source };
   }
   if (source === 'tx' && item['basic'] !== undefined) {
     const basic = asObject(item['basic']);
@@ -695,11 +872,15 @@ export class MusicDataService {
   }
 
   static sortOptions(source: string): SortOption[] {
-    if (source === 'kw') {
-      return [{ id: 'new', name: '最新' }, { id: 'hot', name: '最热' }];
-    }
+    // 酷狗老接口（`yueku/v9/special/getSpecial`）**认 `t=` 排序参数**，所以这里保留
+    // 完整排序胶囊。注意：只有当广场走的是老接口时才有效 —— 万一降级到 HTTPS 通道
+    // （`m.kugou.com/plist/index`），排序参数会被忽略，但分类和排序的 UI 仍然正确存在，
+    // 只是点了不换数据；日志里会出现「本次由 HTTPS 通道兜底」提示降级。
     if (source === 'kg') {
       return [{ id: '5', name: '推荐' }, { id: '6', name: '最热' }, { id: '7', name: '最新' }, { id: '3', name: '热藏' }, { id: '8', name: '飙升' }];
+    }
+    if (source === 'kw') {
+      return [{ id: 'new', name: '最新' }, { id: 'hot', name: '最热' }];
     }
     if (source === 'tx') {
       return [{ id: '5', name: '最热' }, { id: '2', name: '最新' }];
@@ -731,7 +912,7 @@ export class MusicDataService {
         return groups;
       }
       if (source === 'kg') {
-        const root = await requestJson('http://www2.kugou.kugou.com/yueku/v9/special/getSpecial?is_smarty=1&cdn=cdn');
+        const root = await requestKgJson('http://www2.kugou.kugou.com/yueku/v9/special/getSpecial?is_smarty=1&cdn=cdn');
         const data = asObject(root['data']);
         const groups: CategoryGroup[] = [];
         const hotData = asObject(asObject(data['hotTag'])['data']);
@@ -810,8 +991,38 @@ export class MusicDataService {
 
   static async playlists(source: string, sortId?: string, categoryId?: string, page: number = 1): Promise<PlaylistPage> {
     let url = '';
-    const selectedSort = sortId ?? MusicDataService.sortOptions(source)[0].id;
+    const selectedSort = sortId ?? (MusicDataService.sortOptions(source).length > 0
+      ? MusicDataService.sortOptions(source)[0].id
+      : '');
     const pageNumber = Math.max(1, page);
+    // 酷狗有两条通道，顺序按「功能完整度」定：
+    //   主通道（明文）`www2.kugou.kugou.com/yueku/v9/special/getSpecial` —— 带**分类 + 排序**
+    //   备用通道（HTTPS）`m.kugou.com/plist/index` —— 只认 page，无分类无排序
+    // 备用通道存在的意义：主通道那个域名连 HTTPS 都用不了（TLS 握不上），
+    // 一旦遇到「明文被封」的网络环境，它是唯一还能出数据的路。
+    if (source === 'kg') {
+      let legacyPage: PlaylistPage | null = null;
+      try {
+        legacyPage = await kgPlazaLegacy(pageNumber, selectedSort, categoryId);
+      } catch (err) {
+        const e: Error = err as Error;
+        hilog.warn(LOG_DOMAIN, LOG_TAG,
+          'kg legacy plaza failed: %{public}s → fallback to https', e.message ?? '');
+      }
+      if (legacyPage !== null) {
+        return legacyPage;
+      }
+      try {
+        const httpsPage: PlaylistPage = await kgPlazaViaHttps(pageNumber, 30);
+        hilog.warn(LOG_DOMAIN, LOG_TAG,
+          'kg plaza served by HTTPS fallback (no category/sort): items=%{public}d', httpsPage.list.length);
+        return httpsPage;
+      } catch (err) {
+        const e: Error = err as Error;
+        hilog.warn(LOG_DOMAIN, LOG_TAG, 'kg https plaza also failed: %{public}s', e.message ?? '');
+        // 继续走下面的老代码（会再抛一次，由上层给出错误文案）
+      }
+    }
     if (source === 'kw') {
       if (categoryId !== undefined && categoryId.length > 0) {
         const parts = categoryId.split('-');
@@ -845,6 +1056,23 @@ export class MusicDataService {
       ? await requestMiguJsonValue(url)
       : await requestJsonValue(url);
     const root = asObject(rawValue);
+    // ⚠️ 酷狗广场列表的 `special_db` 在**根节点**上，没有 `data` 包壳：
+    //    `{"status":1,"special_db":[...]}`。
+    //    `data` 只存在于 `is_smarty=1`（分类）那个响应里。以前这里无条件取
+    //    `data.special_db`，酷狗列表永远是空数组 —— 界面上「酷狗歌单广场加载不出来」
+    //    （既不报错也没有内容）就是这么来的。现在两种层级都认。
+    const rootKgList: JsonObject[] | undefined = source === 'kg' ? asArray(root['special_db']) : undefined;
+    if (source === 'kg' && rootKgList !== undefined && rootKgList.length > 0) {
+      const params = asObject(root['params']);
+      const limit: number = num(params['pagesize']) || 20;
+      const total: number = num(params['total']);
+      const list = rootKgList
+        .map((item: JsonObject): PlaylistData => formatPlaylist(source, item))
+        .filter((item: PlaylistData) => item.name.length > 0);
+      const responsePage: number = num(params['p']) || pageNumber;
+      const hasNext: boolean = total > 0 ? responsePage * limit < total : list.length >= limit;
+      return { list, page: responsePage, limit, total, hasNext };
+    }
     let data = asObject(root['data'] ?? root['playlist'] ?? root['result'] ?? root);
     if (source === 'tx') {
       data = asObject(asObject(root['playlist'])['data']);

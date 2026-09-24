@@ -53,6 +53,12 @@ export struct RecommendPage {
    * 迷你条与页签分两排后，滚动到底的最后一行会被第二条遮住，必须由壳层告知。
    */
   @Param floatingBarExtraBottomReserveVp: number = 0;
+  /**
+   * 「回到顶部」指令（壳层在**点击当前页签**时递增）。
+   *
+   * 底部页签设计规范要求：点击已选中的页签要把界面回滚至顶部。
+   */
+  @Param scrollTopCommand: number = 0;
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
   @Local windowInfo: WindowInfo = getWindowInfoState();
   @Local recommendViewModel: RecommendViewModel = new RecommendViewModel();
@@ -82,6 +88,12 @@ export struct RecommendPage {
     this.homePlazaState.enabled = MusicStoreService.getInstance().getShowHomePlaza();
     this.homeRankingState.enabled = MusicStoreService.getInstance().getShowHomeRanking();
     this.recommendViewModel.load();
+  }
+
+  /** 壳层点了当前页签：滚回顶部（值变化才触发，所以不会误滚）。 */
+  @Monitor('scrollTopCommand')
+  onScrollTopCommand(): void {
+    this.pageScroller.scrollEdge(Edge.Top);
   }
 
   /** Routes to the online multi-source search page. */

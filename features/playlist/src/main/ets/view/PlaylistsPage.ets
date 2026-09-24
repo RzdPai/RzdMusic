@@ -19,12 +19,14 @@ import { common } from '@kit.AbilityKit';
 import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { AppStorageKeys, BarScrollHelper, BreakpointType, MusicAppState, ThemeState } from 'musicbasic';
-import { AmbientState, MusicStoreService, PlayedSongRecord, PlaylistDto, RouterUrlConstants, TitleBarConstants, ToplistRouteParam, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
+import { AmbientState, MusicStoreService, PlayedSongRecord, PlaylistDto, RouterUrlConstants, TitleBarConstants, ToplistRouteParam, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, LocalCoverImage } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { lxSearch, SharePlaylistService, SharePlaylistSource } from 'player';
 import { localMusic, LocalMusicImportState, localMusicImportState } from 'localmusic';
 import { gunzipBytes } from '../util/GunzipUtil';
 import { registerPlaylistRefresh, unregisterPlaylistRefresh } from '../util/PlaylistRefreshBus';
+import { pickPlaylistCover } from '../util/PlaylistCoverUtil';
+import type { CoverPickResult } from '../util/PlaylistCoverUtil';
 
 /**
  * LXMusic playlist export JSON shape (one song entry).
@@ -95,6 +97,8 @@ function playlistsAddMenuComponent() {
 
 @ComponentV2
 export struct PlaylistsPage {
+  /** 「回到顶部」指令：壳层点了当前页签时递增（底部页签设计规范）。 */
+  @Param scrollTopCommand: number = 0;
   /** Window breakpoint for the HDS home-style responsive title. */
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
   /** Nav stack for opening history / favorites list pages. */
@@ -206,6 +210,12 @@ export struct PlaylistsPage {
     }
   }
 
+  /** 壳层点了当前页签：滚回顶部（底部页签设计规范）。 */
+  @Monitor('scrollTopCommand')
+  onScrollTopCommand(): void {
+    this.pageScroller.scrollEdge(Edge.Top);
+  }
+
   @Monitor('store.playlistVersion')
   refresh(): void {
     const list: PlaylistDto[] = this.store.getPlaylists();
@@ -221,8 +231,11 @@ export struct PlaylistsPage {
     let changed: boolean = list.length !== this.playlists.length;
     if (!changed) {
       for (let i: number = 0; i < list.length; i++) {
+        // ⚠️ cover 必须参与比较：只换了封面的那次刷新，别的字段一模一样，
+        //    少了这一条就会「store 已更新、界面不动」（用户反馈的「设置封面未生效」）。
         if (list[i].id !== this.playlists[i].id || list[i].name !== this.playlists[i].name ||
-          list[i].songs.length !== this.playlists[i].songs.length) {
+          list[i].songs.length !== this.playlists[i].songs.length ||
+          list[i].cover !== this.playlists[i].cover) {
           changed = true;
           break;
         }
@@ -708,8 +721,32 @@ export struct PlaylistsPage {
     })
   }
 
-  /** @returns 「本地音乐」入口的副标题：有歌显示首数，没有就提示导入。 */
-  private localMusicSubtitle(): string {
+  /**
+   * 给某个歌单设置自定义封面（相册选图 → 拷进沙箱 → 写进歌单）。
+   *
+   * 写库会 +playlistVersion，`@Monitor('store.playlistVersion')` 里的 refresh() 会重读列表，
+   * 封面立刻就能看到；详情页大图也用同一个字段。
+   */
+  private async pickCoverFor(p: PlaylistDto): Promise<void> {
+    const result: CoverPickResult = await pickPlaylistCover(p.id);
+    if (!result.ok) {
+      this.getUIContext().getPromptAction().showToast({ message: result.message, duration: 2000 });
+      return;
+    }
+    MusicStoreService.getInstance().setPlaylistCover(p.id, result.uri);
+    this.appendImportLog('[封面] 歌单 ' + p.name + ' -> ' + result.uri);
+    this.getUIContext().getPromptAction().showToast({ message: result.message, duration: 2000 });
+    // 显式重建列表：只换封面时行 key 之外的东西没变，靠 @Monitor 里的 changed 判断有时
+    // 不够稳（Repeat 复用节点），这里照「重命名」那套手法把列表短暂摘掉再挂回。
+    if (this.listVisible) {
+      this.listVisible = false;
+      setTimeout((): void => {
+        this.listVisible = true;
+      }, 50);
+    }
+  }
+
+  /** @returns 「本地音乐」入口的副标题：有歌显示首数，没有就提示导入。 */  private localMusicSubtitle(): string {
     // 读一下 version：导入/删除/匹配后自动重算
     const version: number = this.localMusicState.version;
     const count: number = localMusic.count();
@@ -719,12 +756,15 @@ export struct PlaylistsPage {
     return '导入设备音频（选文件 / 选文件夹）';
   }
 
-  /** One playlist row: cover (first song's album art / placeholder), name, song count, chevron. */
+  /** One playlist row: cover (custom/source cover first, else first song's album art), name, count, chevron. */
   @Builder
   private PlaylistRow(p: PlaylistDto) {
     Row({ space: 12 }) {
-      // 歌单封面：取第一首歌的专辑封面；空歌单或无封面时用灰底音符占位
-      if (p.songs.length > 0 && p.songs[0].img.length > 0) {
+      // 歌单封面优先级：歌单自己的封面（自定义 / 在线导入时带过来的）> 第一首歌的专辑图 > 灰底音符占位
+      // 自定义封面是沙箱文件 → 交给 LocalCoverImage 自己解码成 PixelMap 显示
+      if (p.cover.length > 0) {
+        LocalCoverImage({ src: p.cover, imageWidth: 44, imageHeight: 44, radius: 8 })
+      } else if (p.songs.length > 0 && p.songs[0].img.length > 0) {
         Image(p.songs[0].img)
           .width(44)
           .height(44)
@@ -772,6 +812,20 @@ export struct PlaylistsPage {
               action: (): void => {
                 this.selectedPlaylist = p;
                 this.exportPlaylist();
+              }
+            },
+            {
+              // 自定义封面：相册选图 → 拷进沙箱 → 写进歌单（详情页大图与这里都会用它）
+              value: '设置歌单封面',
+              action: (): void => {
+                void this.pickCoverFor(p);
+              }
+            },
+            {
+              value: '移除自定义封面',
+              action: (): void => {
+                MusicStoreService.getInstance().setPlaylistCover(p.id, '');
+                this.getUIContext().getPromptAction().showToast({ message: '已移除自定义封面', duration: 2000 });
               }
             },
             {
@@ -1059,9 +1113,12 @@ export struct PlaylistsPage {
                   this.PlaylistRow(obj.item)
                 }
               })
-              // key 必须含 songs.length 与首曲封面：添加/删除歌曲或首曲封面变化时强制重建行，数量/封面才会刷新
+              // key 必须含 songs.length、首曲封面**与歌单自己的封面**：添加/删除歌曲、
+              // 首曲封面变化、或换了自定义封面时都要强制重建行，数量/封面才会刷新。
+              // （漏掉 p.cover 就是「设置封面之后列表不生效」的原因：Repeat 复用旧节点，
+              //   属性停在旧值，重启前一直看着旧封面。）
               .key((item: PlaylistDto) => item.id + '_' + item.name + '_' + item.songs.length + '_' +
-              (item.songs.length > 0 ? item.songs[0].img : ''))
+              item.cover + '_' + (item.songs.length > 0 ? item.songs[0].img : ''))
               .onMove((from: number, to: number): void => {
                 this.movePlaylist(from, to);
               })

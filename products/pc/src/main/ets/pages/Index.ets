@@ -35,7 +35,10 @@ import { RecommendPage } from 'recommendation';
 import { PlaylistsPage } from 'playlist';
 import { MinePage, SettingPage } from 'setting';
 import { localMusic } from 'localmusic';
+import type { MatchSongInfo } from 'localmusic';
 import { syncManager } from 'sync';
+import { setCommentTargetResolver } from 'comment';
+import type { CommentSongRef } from 'comment';
 import { common } from '@kit.AbilityKit';
 
 /**
@@ -86,6 +89,29 @@ struct Index {
         Logger.error('RzdShell', `syncManager init failed code=${e.code} msg=${e.message}`);
       }
     }
+    // 评论面板要能处理本地音乐：把「本地歌 -> 平台身份」的解析交给 comment（与手机壳层一致）
+    setCommentTargetResolver((song: CommentSongRef): Promise<CommentSongRef | null> => {
+      return Promise.resolve(this.resolveCommentTarget(song));
+    });
+  }
+
+  /**
+   * 本地音乐 -> 平台身份（评论面板内部会调用）。
+   * @param song 评论面板给的歌曲身份（本地歌的 songId 就是本地 key）。
+   * @returns 平台身份，或 null（没有匹配记录）。
+   */
+  private resolveCommentTarget(song: CommentSongRef): CommentSongRef | null {
+    const matched: MatchSongInfo | null = localMusic.matchOf(song.songId);
+    if (matched === null) {
+      return null;
+    }
+    const ref: CommentSongRef = {
+      source: matched.source,
+      songId: matched.songId,
+      name: matched.name.length > 0 ? matched.name : song.name,
+      singer: matched.singer.length > 0 ? matched.singer : song.singer
+    };
+    return ref;
   }
 
   /** Handles playback intent changes and animates opening the in-app player. */

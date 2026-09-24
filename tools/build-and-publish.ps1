@@ -1,13 +1,20 @@
 ﻿<#
 .SYNOPSIS
-  构建 RzdMusic（default + pc）→ 上传签名 HAP 到 WebDAV → 发推送通知（含下载直链）。
+  构建 RzdMusic（默认只构建 default）→ 上传签名 HAP 到 WebDAV → 发推送通知（含下载直链）。
 
 .DESCRIPTION
   一条命令走完：编译 → 找产物 → WebDAV PUT → 推送。
   推送正文里的下载直链做了「双重编码」，否则会 400（见下方说明）。
 
+  默认**只构建 default（手机/平板）**；pc 版按需显式传 -Products pc 才会构建
+  （2026-09-24 起：以后不用构建/上传 pc 版）。
+
 .PARAMETER Products
-  要构建的 product 列表，默认 default + pc。
+  要构建的 product 列表，默认只有 default。
+
+.PARAMETER Release
+  正式上架包：改用 assembleApp + buildMode=release，产物是 App Pack（*.app，给 AGC 提审用），
+  远端名 RzdMusic-<product>.app。不加这个开关就是日常自测用的 debug HAP。
 
 .PARAMETER SkipBuild
   跳过编译，只上传已有产物。
@@ -25,11 +32,13 @@
 
 .EXAMPLE
   pwsh -File tools/build-and-publish.ps1
+  pwsh -File tools/build-and-publish.ps1 -Release
   pwsh -File tools/build-and-publish.ps1 -Products default -SkipNotify
 #>
 [CmdletBinding()]
 param(
-  [string[]]$Products = @('default', 'pc'),
+  [string[]]$Products = @('default'),
+  [switch]$Release,
   [switch]$SkipBuild,
   [switch]$SkipNotify,
   [switch]$DryRun,
@@ -111,8 +120,17 @@ function Initialize-BuildEnv {
 }
 
 function Invoke-Build([string]$Product) {
-  Write-Step "构建 product=$Product"
-  $log = Join-Path $env:TEMP "rzdmusic-build-$Product.log"
+  # -Release：正式上架包 = assembleApp + buildMode=release（产出 App Pack，给 AGC 提审）
+  # 不加：日常自测包 = assembleHap + buildMode=debug（可直接 hdc install 的签名 HAP）
+  #
+  # ⚠️ mode 必须跟着任务换：`assembleApp` 是**工程级**任务，用 `--mode module` 会报
+  #    「00306054 Specification Limit Violation: Task ['assembleApp'] was not found in
+  #     the project」；module 级任务（assembleHap）反过来要用 `--mode module`。
+  $task = if ($Release) { 'assembleApp' } else { 'assembleHap' }
+  $mode = if ($Release) { 'release' } else { 'debug' }
+  $scope = if ($Release) { 'project' } else { 'module' }
+  Write-Step "构建 product=$Product（$task / $mode）"
+  $log = Join-Path $env:TEMP "rzdmusic-build-$Product-$mode.log"
   # ⚠️ hvigor 会把 WARN 写到 stderr（例如「Current product is 'default'... no executable
   # target in module: 'musichomepcsample'」）。PowerShell 5.1 只要在原生命令的 stderr 上
   # 看到任何一行，就抛 NativeCommandError；而脚本顶部是 $ErrorActionPreference = 'Stop'，
@@ -120,7 +138,7 @@ function Invoke-Build([string]$Product) {
   $prevEap = $ErrorActionPreference
   $ErrorActionPreference = 'Continue'
   try {
-    & $Hvigorw assembleHap --mode module -p "product=$Product" -p buildMode=debug --no-daemon *> $log
+    & $Hvigorw $task --mode $scope -p "product=$Product" -p "buildMode=$mode" --no-daemon *> $log
     $code = $LASTEXITCODE
   } finally {
     $ErrorActionPreference = $prevEap
@@ -143,6 +161,28 @@ function Get-SignedHaps([string]$Product) {
   if (-not (Test-Path $dir)) { return @() }
   return @(Get-ChildItem -Path $dir -Recurse -File -Filter '*-signed.hap' |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1)
+}
+
+# App Pack（*.app，上架用）：assembleApp 的产物在**工程根目录**的
+# `build/outputs/<product>/`（不是 products/<product>/build/... —— 这点和 HAP 不一样，
+# 找错了会「构建成功却报没找到产物」）。顺手把 module 目录也扫一遍当兜底。
+function Get-AppPacks([string]$Product) {
+  $roots = @(
+    (Join-Path $RepoRoot "build\outputs\$Product"),
+    (Join-Path $RepoRoot "products\$Product\build")
+  )
+  foreach ($dir in $roots) {
+    if (-not (Test-Path $dir)) { continue }
+    # 优先签名包（AGC 提审要签名的那个），没有就退回未签名的
+    $hit = @(Get-ChildItem -Path $dir -Recurse -File -Filter '*-signed.app' |
+      Sort-Object LastWriteTime -Descending)
+    if ($hit.Count -eq 0) {
+      $hit = @(Get-ChildItem -Path $dir -Recurse -File -Filter '*.app' |
+        Sort-Object LastWriteTime -Descending)
+    }
+    if ($hit.Count -gt 0) { return @($hit[0]) }
+  }
+  return @()
 }
 
 # ---------------------------------------------------------------------------
@@ -200,25 +240,38 @@ function Send-DavFile([string]$LocalPath, [string]$RemoteName) {
   }
 
   $sw = [Diagnostics.Stopwatch]::StartNew()
-  try {
-    Invoke-WebRequest -Uri ($DavBase + [uri]::EscapeDataString($RemoteName)) -Method Put `
-      -InFile $LocalPath -Headers (Get-DavCredentialHeader) -TimeoutSec 1800 -UseBasicParsing | Out-Null
-    $sw.Stop()
-    Write-Ok ("上传 {0}  {1:N0} bytes  {2:N1}s" -f $RemoteName, $size, $sw.Elapsed.TotalSeconds)
-    return $true
-  } catch {
-    $sw.Stop()
-    $status = ''
-    if ($_.Exception.Response) { $status = " HTTP $([int]$_.Exception.Response.StatusCode)" }
-    Write-Err2 "上传失败 $RemoteName$status : $($_.Exception.Message)"
-    return $false
+  # ⚠️ PUT 必须重试：上面的 DELETE 已经把旧包删掉了，此时 PUT 失败 = **远端一个包都没有**
+  #    （2026-09-23 的 pc 包就踩过：上传过程连接被重置，远端直接 404，
+  #     而脚本当时还报了「全部完成」并推了「构建完成」——那是假消息，已一并修掉）。
+  $attempts = 3
+  for ($attempt = 1; $attempt -le $attempts; $attempt++) {
+    try {
+      Invoke-WebRequest -Uri ($DavBase + [uri]::EscapeDataString($RemoteName)) -Method Put `
+        -InFile $LocalPath -Headers (Get-DavCredentialHeader) -TimeoutSec 1800 -UseBasicParsing | Out-Null
+      $sw.Stop()
+      Write-Ok ("上传 {0}  {1:N0} bytes  {2:N1}s" -f $RemoteName, $size, $sw.Elapsed.TotalSeconds)
+      return $true
+    } catch {
+      $status = ''
+      if ($_.Exception.Response) { $status = " HTTP $([int]$_.Exception.Response.StatusCode)" }
+      if ($attempt -lt $attempts) {
+        Write-Warn2 "上传失败（第 $attempt/$attempts 次）$RemoteName$status，稍后重试…"
+        Start-Sleep -Seconds (2 * $attempt)
+      } else {
+        $sw.Stop()
+        Write-Err2 "上传失败 $RemoteName$status : $($_.Exception.Message)"
+        return $false
+      }
+    }
   }
+  return $false
 }
 
 # ---------------------------------------------------------------------------
 # 主流程
 # ---------------------------------------------------------------------------
 $published = @()   # @{ name=; size= }
+$failed = @()      # 上传失败的远端名（重试过仍失败）
 
 if (-not $SkipBuild) { Initialize-BuildEnv }
 
@@ -227,22 +280,26 @@ foreach ($product in $Products) {
 
   # 注意：必须 @() 包一层。PowerShell 会把「空结果」解包成 $null、「单元素」解包成
   # 裸对象，两种情况都没有 .Count（Set-StrictMode 下会直接抛错）。
-  $haps = @(Get-SignedHaps $product)
-  if ($haps.Count -eq 0) {
-    Write-Warn2 "product=$product 没找到 *-signed.hap，跳过"
+  $arts = @(if ($Release) { Get-AppPacks $product } else { Get-SignedHaps $product })
+  if ($arts.Count -eq 0) {
+    $what = if ($Release) { '*.app' } else { '*-signed.hap' }
+    Write-Warn2 "product=$product 没找到 $what，跳过"
     continue
   }
 
-  $hap = $haps[0]
+  $art = $arts[0]
   # 远端固定名，便于覆盖更新；中文/空格会按 URL 段编码
   # RemoteSuffix 用于旁支构建（例如上游 PR 预览），避免覆盖正在使用的正式包
-  $remote = "RzdMusic-$product$RemoteSuffix-signed.hap"
+  $suffix = if ($Release) { '.app' } else { '-signed.hap' }
+  $remote = "RzdMusic-$product$RemoteSuffix$suffix"
   Write-Step "上传 product=$product"
-  Write-Host "  本地: $($hap.FullName)"
+  Write-Host "  本地: $($art.FullName)"
   Write-Host "  远端: $DavBase$remote"
 
-  if (Send-DavFile $hap.FullName $remote) {
-    $published += [pscustomobject]@{ name = $remote; size = $hap.Length }
+  if (Send-DavFile $art.FullName $remote) {
+    $published += [pscustomobject]@{ name = $remote; size = $art.Length }
+  } else {
+    $failed += $remote
   }
 }
 
@@ -254,6 +311,17 @@ if ($published.Count -eq 0) {
 
 Write-Step '上传结果'
 $published | ForEach-Object { Write-Host ("  {0}  ({1:N1} MB)" -f $_.name, ($_.size / 1MB)) }
+
+# 有产物没传上去就不能报「全部完成」：远端此刻可能是**空的**（旧包已被 DELETE），
+# 推送也必须说实话，否则用户会以为能装最新包。
+if ($failed.Count -gt 0) {
+  Write-Err2 ("以下产物上传失败: {0}" -f ($failed -join '、'))
+  if (-not $SkipNotify) {
+    $okNames = ($published | ForEach-Object { $_.name }) -join '、'
+    Send-Push 'RzdMusic 部分产物上传失败' "失败：$($failed -join '、')`n已成功：$okNames" | Out-Null
+  }
+  exit 1
+}
 
 if (-not $SkipNotify) {
   Write-Step '发送推送'

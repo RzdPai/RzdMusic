@@ -15,7 +15,7 @@
 
 
 import { uiObserver } from '@kit.ArkUI';
-import { BreakpointType, isWidthBreakpointLgOrXl } from 'musicbasic';
+import { BreakpointType, isWidthBreakpointLgOrXl, LocalCoverImage } from 'musicbasic';
 
 /**
  * 歌单详情大图 Hero：与歌手/专辑详情页同款——
@@ -49,6 +49,19 @@ export struct PlaylistDetailHeroSection {
   @Local imageFailed: boolean = false;
 
   /**
+   * 封面地址变了就重新允许加载。
+   *
+   * ⚠️ 不重置这个标志会有**粘性 Bug**：封面曾经加载失败一次（例如歌单原本没有封面、
+   *    退回用的第一首歌封面被防盗链挡住），之后用户在菜单里换了自定义封面，
+   *    `coverUrl` 变了但 `imageFailed` 还是 true → 大图一直停在占位图，
+   *    表现为「设置了封面但不生效」。
+   */
+  @Monitor('coverUrl')
+  onCoverUrlChanged(): void {
+    this.imageFailed = false;
+  }
+
+  /**
    * 封面高度（vp）。
    *
    * 与歌手页**完全一致（320）**：歌手页（ArtistDetailPage）看起来没有任何问题，
@@ -66,13 +79,17 @@ export struct PlaylistDetailHeroSection {
   build() {
     Stack({ alignContent: Alignment.Bottom }) {
       if (this.coverUrl.length > 0 && !this.imageFailed) {
-        Image(this.coverUrl)
-          .width('100%')
-          .height(this.heroHeightVp())
-          .objectFit(ImageFit.Cover)
-          .onError(() => {
+        // 自定义封面是沙箱文件：交给 LocalCoverImage 解码成 PixelMap 显示（不依赖 file:// URI 解析）
+        LocalCoverImage({
+          src: this.coverUrl,
+          imageWidth: '100%',
+          imageHeight: this.heroHeightVp(),
+          radius: 0,
+          fit: ImageFit.Cover,
+          onFailed: (): void => {
             this.imageFailed = true;
-          })
+          }
+        })
       } else {
         Column() {
           SymbolGlyph($r('sys.symbol.music_note_list'))

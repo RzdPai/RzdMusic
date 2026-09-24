@@ -111,4 +111,9 @@ export class PlayerConstants {
    * AppStorageV2 key for {@link AccountChangedState} (home reloads when a platform account mutates).
    */
   public static readonly ACCOUNT_CHANGED_STATE: string = 'player_AccountChangedState';
+
+  /**
+   * AppStorageV2 key for {@link HuaweiAccountState}（华为账号系统登录的登录态）。
+   */
+  public static readonly HUAWEI_ACCOUNT_STATE: string = 'player_HuaweiAccountState';
 }

@@ -218,7 +218,6 @@ export struct HomePlazaSection {
   }
 
   @Builder
-  @Builder
   private PlaylistGrid() {
     Row({ space: 12 }) {
       ForEach(this.plazaColumnIndexes(), (column: number) => {
@@ -316,8 +315,7 @@ export struct HomePlazaSection {
 
   @Builder
   private PlazaBody() {
-    if (this.recommendViewModel.plazaLoading) {
-      Column({ space: 12 }) {
+    if (this.recommendViewModel.plazaLoading) {      Column({ space: 12 }) {
         LoadingProgress()
           .width(32)
           .height(32)

@@ -20,9 +20,12 @@ import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { http } from '@kit.NetworkKit';
 import { pasteboard } from '@kit.BasicServicesKit';
-import { AmbientState, AppStorageKeys, BarScrollHelper, RouterUrlConstants, BreakpointType, HomeSourceState, LyricBlurState, LyricFontSizeState, MusicAppState, MusicStoreService, PlaybackFlowLightState, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, WindowInfo, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, getWindowInfoState } from 'musicbasic';
+import { AmbientState, AppStorageKeys, BarScrollHelper, RouterUrlConstants, BreakpointType, HomeSourceState, LocalCoverImage, LyricBlurState, LyricFontSizeState, MusicAppState, MusicStoreService, PlaybackFlowLightState, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, WindowInfo, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, getWindowInfoState } from 'musicbasic';
 import { BlurStrategy, HdsNavigation, HdsNavigationTitleMode, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { LXUserApiInfo, lxSourceManager, MediaService } from 'player';
+import type { LXApiImportResult } from 'player';
+import { HuaweiAccountService, HuaweiAccountState } from 'player';
+import { PlayerConstants } from 'player';
 import { AccountManageSheet } from '../account/AccountManageSheet';
 import { PlatformMusicPage } from '../account/PlatformMusicPage';
 
@@ -52,6 +55,8 @@ class SettingsEntry {
  */
 @ComponentV2
 export struct SettingPage {
+  /** 「回到顶部」指令：壳层点了当前页签时递增（底部页签设计规范）。 */
+  @Param scrollTopCommand: number = 0;
   /** Window breakpoint for the HDS home-style responsive title. */
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
   @Local lxApiList: LXUserApiInfo[] = [];
@@ -82,6 +87,10 @@ export struct SettingPage {
   @Local ambientLevel: number = 0;
   @Local themeState: ThemeState =
     AppStorageV2.connect(ThemeState, AppStorageKeys.THEME_STATE, () => new ThemeState())!;
+  /** 华为账号登录态：「登录音乐」那张卡登录后要显示头像与昵称。 */
+  @Local huaweiState: HuaweiAccountState =
+    AppStorageV2.connect(HuaweiAccountState, PlayerConstants.HUAWEI_ACCOUNT_STATE,
+      () => new HuaweiAccountState())!;
   @Local customColor: string = '';
   @Local colorMode: number = 2;
   private readonly presetColors: string[] = [
@@ -146,6 +155,8 @@ export struct SettingPage {
   aboutToAppear(): void {
     this.refresh();
     this.syncWideSettingLayout();
+    // 恢复华为账号登录态：登录过之后「登录音乐」那张卡要显示头像与昵称
+    HuaweiAccountService.getInstance().restore();
   }
 
   private isWideSettingLayout(): boolean {
@@ -166,6 +177,12 @@ export struct SettingPage {
       this.settingStack.disableAnimation(true);
       this.openSettingSheet(DEFAULT_SETTING_INDEX);
     }
+  }
+
+  /** 壳层点了当前页签：滚回顶部（底部页签设计规范）。 */
+  @Monitor('scrollTopCommand')
+  onScrollTopCommand(): void {
+    this.pageScroller.scrollEdge(Edge.Top);
   }
 
   @Monitor('windowInfo.widthBp')
@@ -376,9 +393,15 @@ export struct SettingPage {
       const decoder: util.TextDecoder = util.TextDecoder.create('utf-8');
       const script: string = decoder.decodeToString(new Uint8Array(buf));
       try {
-        lxSourceManager.importApi(script);
+        // importApi 现在返回结果对象（不再抛异常）：落盘失败必须如实提示，
+        // 否则会出现「提示导入成功、其实没落盘、重启就没了」
+        const imported: LXApiImportResult = lxSourceManager.importApi(script);
+        if (!imported.ok) {
+          this.toast('导入失败：' + imported.message);
+          return;
+        }
         this.refresh();
-        this.toast('源导入成功');
+        this.toast('已导入「' + imported.message + '」');
       } catch (_parseErr) {
         this.toast('导入失败: 无效的脚本文件');
       }
@@ -417,11 +440,15 @@ export struct SettingPage {
         return;
       }
       try {
-        lxSourceManager.importApi(script);
+        const imported: LXApiImportResult = lxSourceManager.importApi(script);
+        if (!imported.ok) {
+          this.toast('导入失败：' + imported.message);
+          return;
+        }
         this.refresh();
         this.closeSettingSheet();
         this.onlineUrl = '';
-        this.toast('源导入成功');
+        this.toast('已导入「' + imported.message + '」');
       } catch (_parseErr) {
         this.toast('导入失败: 无效的脚本文件');
       }
@@ -1538,24 +1565,55 @@ export struct SettingPage {
       Column({ space: 8 }) {
       if (this.rowVisible('登录音乐', '网易云 / QQ / 酷狗账号，扫码或 Cookie 登录')) {
         Row({ space: 12 }) {
-          Column() {
-            SymbolGlyph($r('sys.symbol.person_crop_circle_fill_1'))
-              .fontSize(64)
-              .fontWeight(FontWeight.Regular)
+          // 登录过华为账号：图标与文字都换成华为账号的头像 / 昵称（用户要求）
+          if (this.huaweiState.signedIn) {
+            if (this.huaweiState.avatarUri.length > 0) {
+              // 头像可能已经是沙箱本地图（Account Kit 那条路会先落盘）：走 LocalCoverImage
+              LocalCoverImage({
+                src: this.huaweiState.avatarUri,
+                imageWidth: 64,
+                imageHeight: 64,
+                radius: 32,
+                fit: ImageFit.Cover
+              })
+            } else {
+              Column() {
+                SymbolGlyph($r('sys.symbol.person_crop_circle_fill_1'))
+                  .fontSize(64)
+                  .fontWeight(FontWeight.Regular)
+                  .height(64)
+                  .fontColor([$r('sys.color.font_tertiary')])
+              }
+              .width(64)
               .height(64)
-              .fontColor([$r('sys.color.font_tertiary')])
+              .justifyContent(FlexAlign.Center)
+              .alignItems(HorizontalAlign.Center)
+            }
+          } else {
+            Column() {
+              SymbolGlyph($r('sys.symbol.person_crop_circle_fill_1'))
+                .fontSize(64)
+                .fontWeight(FontWeight.Regular)
+                .height(64)
+                .fontColor([$r('sys.color.font_tertiary')])
+            }
+            .width(64)
+            .height(64)
+            .justifyContent(FlexAlign.Center)
+            .alignItems(HorizontalAlign.Center)
           }
-          .width(64)
-          .height(64)
-          .justifyContent(FlexAlign.Center)
-          .alignItems(HorizontalAlign.Center)
 
           Column({ space: 2 }) {
-            Text('登录音乐')
+            Text(this.huaweiState.signedIn ?
+              (this.huaweiState.nickName.length > 0 ? this.huaweiState.nickName : '华为账号') : '登录音乐')
               .fontSize(20)
               .fontWeight(this.selectedIndex === 2 ? FontWeight.Bold : FontWeight.Medium)
               .fontColor(this.selectedIndex === 2 ? '#0A59F7' : $r('sys.color.font_primary'))
-            Text('网易云 / QQ / 酷狗账号，扫码或 Cookie 登录')
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+            Text(this.huaweiState.signedIn ?
+              '已登录华为账号 · 网易云 / QQ / 酷狗账号在这里管理' :
+              '网易云 / QQ / 酷狗账号，扫码或 Cookie 登录')
               .fontSize(12)
               .fontColor($r('sys.color.font_tertiary'))
               .maxLines(1)

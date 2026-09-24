@@ -86,6 +86,16 @@ export class MediaService {
   public avPlayer?: media.AVPlayer;
   /** Active AV session for lock screen / headset / system media controls. */
   private session?: avSession.AVSession;
+  /** 桌面歌词：系统是否支持（`isDesktopLyricSupported` 的结果）。 */
+  private desktopLyricSupported: boolean = false;
+  /** 支持性是否已探测过（没探测过时设置页要显示「未知」而不是「不支持」）。 */
+  private desktopLyricSupportKnown: boolean = false;
+  /** 本会话是否已 enableDesktopLyric（否则调 setDesktopLyricVisible 会报 6600110）。 */
+  private desktopLyricEnabled: boolean = false;
+  /** 悬浮窗当前是否可见（去重，避免重复调用系统接口）。 */
+  private desktopLyricVisible: boolean = false;
+  /** 最近一次推给系统的播放态（判断「停播/出错」要收起悬浮窗用）。 */
+  private lastPlaybackState: avSession.PlaybackState = avSession.PlaybackState.PLAYBACK_STATE_IDLE;
   private audioManager: audio.AudioManager | undefined = undefined;
   private routingCallback: ((action: audio.DeviceChangeAction) => void) | undefined = undefined;
   /** Audio session manager for cross-app concurrency policy (play alongside other apps). */
@@ -1195,15 +1205,121 @@ export class MediaService {
   private async enableSystemLyric(session: avSession.AVSession): Promise<void> {
     try {
       const supported: boolean = await avSession.isDesktopLyricSupported();
+      this.desktopLyricSupported = supported;
+      this.desktopLyricSupportKnown = true;
       if (!supported) {
         Logger.info(TAG, 'system lyric not supported on this device');
         return;
       }
+      // ⚠️ 开关关着时**不调用** enableDesktopLyric：部分机型这一步会顺带要悬浮窗授权，
+      //    用户既然关了这个功能就不该被打扰（lxmusic 同款取舍，用户开开关时再补 enable）。
+      if (!MusicStoreService.getInstance().getDesktopLyric()) {
+        Logger.info(TAG, 'desktop lyric off by user, skip enableDesktopLyric');
+        return;
+      }
       await session.enableDesktopLyric(true);
+      this.desktopLyricEnabled = true;
       Logger.info(TAG, 'system lyric enabled');
     } catch (error) {
+      // 6600110 / 6600111：没开启或系统不支持，忽略即可
       Logger.warn(TAG, `enable system lyric failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      this.syncDesktopLyric();
     }
+  }
+
+  /**
+   * 同步系统桌面歌词悬浮窗的显隐。
+   *
+   * 有带时间轴的歌词、用户开关是开的、且不是「停播 / 空闲 / 出错」时显示；其余收起。
+   * **暂停时刻意不收起**：一会儿就续播了，窗口跟着一显一隐更烦。
+   *
+   * 数据是单向推的：歌词通过 `AVMetadata.lyric`（标准 LRC）交给系统，进度由系统
+   * 拿 `AVPlaybackState.position` 自己外推，应用不需要逐句推。
+   */
+  private syncDesktopLyric(): void {
+    const session = this.session;
+    if (session === undefined || !this.desktopLyricSupported || !this.desktopLyricEnabled) {
+      return;
+    }
+    const song: SongItem | undefined = this.getSongItemAtQueueIndex(this.musicIndex);
+    const hasLyric: boolean = song !== undefined && this.hasTimedLyric(song);
+    const dead: boolean = this.lastPlaybackState === avSession.PlaybackState.PLAYBACK_STATE_STOP ||
+      this.lastPlaybackState === avSession.PlaybackState.PLAYBACK_STATE_IDLE ||
+      this.lastPlaybackState === avSession.PlaybackState.PLAYBACK_STATE_ERROR;
+    const want: boolean = MusicStoreService.getInstance().getDesktopLyric() && hasLyric && !dead;
+    if (want === this.desktopLyricVisible) {
+      return;
+    }
+    this.desktopLyricVisible = want;
+    session.setDesktopLyricVisible(want).then(() => {
+      Logger.info(TAG, `desktop lyric visible -> ${want}`);
+    }).catch((error: BusinessError) => {
+      Logger.warn(TAG, `setDesktopLyricVisible failed: ${error.message}`);
+    });
+  }
+
+  /**
+   * 这首歌有没有能交给系统的歌词。
+   *
+   * 系统靠 `[mm:ss.xx]` 时间标签自己滚动，**纯文本歌词解析不了**（会显示异常），
+   * 所以这里按「有没有时间标签」判断；歌词还没解析完时退化成对原文的正则判断。
+   */
+  private hasTimedLyric(song: SongItem): boolean {
+    const cached: AmllLyricLine[] | undefined = amllGetCachedLyric(song.lyricText);
+    if (cached === undefined) {
+      return /\[\d{1,2}:\d{1,2}/.test(song.lyricText);
+    }
+    return buildPlainLrc(cached).length > 0;
+  }
+
+  /**
+   * 用户改了「桌面歌词」开关后调用（设置页）。
+   *
+   * 开：还没 enable 过就先补 enable，再按播放状态定显隐；
+   * 关：直接重算（want 会是 false，悬浮窗收起）。
+   */
+  public refreshDesktopLyric(): void {
+    const session = this.session;
+    if (session === undefined) {
+      return;
+    }
+    if (!MusicStoreService.getInstance().getDesktopLyric() || this.desktopLyricEnabled) {
+      this.syncDesktopLyric();
+      return;
+    }
+    session.enableDesktopLyric(true).then(() => {
+      this.desktopLyricEnabled = true;
+      this.syncDesktopLyric();
+    }).catch((error: BusinessError) => {
+      Logger.warn(TAG, `enableDesktopLyric failed: ${error.message}`);
+    });
+  }
+
+  /**
+   * 探测系统是否支持桌面歌词（设置页提示用）。
+   *
+   * 会话是「第一次推歌」时才建的，所以没播过歌时支持性是未知的 —— 直接当不支持
+   * 会误导用户，这里主动问一次。
+   */
+  public async probeDesktopLyricSupport(): Promise<boolean> {
+    if (this.desktopLyricSupportKnown) {
+      return this.desktopLyricSupported;
+    }
+    try {
+      const supported: boolean = await avSession.isDesktopLyricSupported();
+      this.desktopLyricSupported = supported;
+      this.desktopLyricSupportKnown = true;
+      return supported;
+    } catch (error) {
+      Logger.warn(TAG, `probe desktop lyric failed: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
+  }
+
+  /** @returns 支持性；未探测过返回 undefined（设置页据此显示「未知」）。 */
+  public desktopLyricSupport(): boolean | undefined {
+    return this.desktopLyricSupportKnown ? this.desktopLyricSupported : undefined;
   }
 
   private async setAVMetadata(): Promise<void> {
@@ -1268,6 +1384,8 @@ export class MediaService {
             Logger.error(TAG, `SetAVMetadata failed: ${err instanceof Error ? err.message : String(err)}`);
           }
         }
+        // 换歌 / 歌词就绪后重算桌面歌词悬浮窗（没词就收起）
+        this.syncDesktopLyric();
       } finally {
         if (mediaImage !== undefined) {
           try {
@@ -1282,8 +1400,17 @@ export class MediaService {
     }
   }
 
-  /** Downloads cover bytes and decodes them into a PixelMap for AVSession metadata. */
+  /**
+   * 取封面并解码成 PixelMap（播控中心 / 锁屏卡片用）。
+   *
+   * ★ 必须区分「网络封面」和「本地文件封面」：本地音乐的封面是**沙箱文件 URI**
+   *   （`file://...`，见 features/localmusic 的 getCoverUri），拿 http 去取必然失败 ——
+   *   这正是「本地音乐在控制中心看不到封面」的原因（在线歌走 http 所以正常）。
+   */
   private async loadCoverPixelMap(coverUrl: string): Promise<PixelMap | undefined> {
+    if (this.isLocalCover(coverUrl)) {
+      return await this.decodeLocalCoverPixelMap(coverUrl);
+    }
     const httpRequest = http.createHttp();
     try {
       const resp: http.HttpResponse = await httpRequest.request(coverUrl, {
@@ -1305,6 +1432,40 @@ export class MediaService {
       return undefined;
     } finally {
       httpRequest.destroy();
+    }
+  }
+
+  /** 封面是不是「本地文件」（应用沙箱的 file:// URI 或绝对路径）。 */
+  private isLocalCover(cover: string): boolean {
+    return cover.startsWith('file://') || cover.startsWith('/');
+  }
+
+  /**
+   * 本地封面（沙箱文件）→ PixelMap。
+   *
+   * 用 fd 解码（`image.createImageSource(fd)`）而不是把整个文件读进内存：
+   * 封面可能有几百 KB～几 MB，读字节再解码会白占一份内存。
+   */
+  private async decodeLocalCoverPixelMap(cover: string): Promise<PixelMap | undefined> {
+    let file: fs.File | undefined = undefined;
+    try {
+      file = fs.openSync(cover, fs.OpenMode.READ_ONLY);
+      const imageSource = image.createImageSource(file.fd);
+      try {
+        return await imageSource.createPixelMap();
+      } finally {
+        imageSource.release();
+      }
+    } catch (error) {
+      Logger.warn(TAG, `local cover decode failed: ${error instanceof Error ? error.message : String(error)}`);
+      return undefined;
+    } finally {
+      if (file !== undefined) {
+        try {
+          fs.closeSync(file);
+        } catch (_err) {
+        }
+      }
     }
   }
 
@@ -1428,6 +1589,14 @@ export class MediaService {
         this.getAppState().isResolving = false;
         return;
       }
+      // ★ 音质徽标：本地没有音质协商，统一按 'local' 显示「本地」。
+      //   必须**写在这条播放直路上**，而不是只写在「本地音乐」页那个入口：
+      //   重启后恢复上次播放的本地歌、或从歌单/队列播本地歌都走这里，
+      //   以前这些路径不写 → `appState.currentQuality` 为空 → 徽标掉到 '128k' 兜底，
+      //   用户看到的就是「本地歌的音质重启后变成 128K」。
+      //   注意：这只影响展示用的徽标，不参与本地歌的歌词/封面匹配（那条路在
+      //   enrichLocalTrack / localLyricResolver 里，互不影响）。
+      this.getAppState().currentQuality = LOCAL_SOURCE;
       await this.enrichLocalTrack(queueSong);
     } else if (queueSong.url.length === 0 && queueSong.source.length > 0) {
       const resolved = await this.resolveOnlineUrl(queueSong);
@@ -1882,6 +2051,9 @@ export class MediaService {
 
   /** Pushes playback state (play/pause and position) to AVSession. */
   private async setPlayState(playbackState: avSession.AVPlaybackState) {
+    if (playbackState.state !== undefined) {
+      this.lastPlaybackState = playbackState.state;
+    }
     if (this.session) {
       this.session.setAVPlaybackState(playbackState, (err: BusinessError) => {
         if (err) {
@@ -1891,6 +2063,8 @@ export class MediaService {
         }
       });
     }
+    // 播放态变化要重算桌面歌词悬浮窗：暂停保持显示，停播/空闲/出错收起
+    this.syncDesktopLyric();
   }
 }
 

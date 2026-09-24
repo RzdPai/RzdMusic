@@ -29,13 +29,32 @@ import {
   getWindowInfoState,
   WindowInfo
 } from 'musicbasic';
-import { DownloadUtil, LXQualityOption, LXSearchSong, lxGetQualityOptions } from 'player';
+import { DownloadUtil, LXQualityOption, LXSearchSong, lxGetQualityOptionsForSongs, sourceDisplayName } from 'player';
+import type { LXBatchQualityResult } from 'player';
 import { PlaylistBatchSelectionStore } from '../model/PlaylistBatchSelectionStore';
 import { PlaylistSongUi } from '../model/PlaylistUiModels';
 import { notifyPlaylistChanged } from '../util/PlaylistRefreshBus';
 
 const BATCH_LOG_DOMAIN: number = 0x0000;
 const BATCH_LOG_TAG: string = 'RzdPlaylistBatchBar';
+
+/** 本地歌曲的 source 标记（与 localmusic 的 LOCAL_SOURCE 一致）。 */
+const LOCAL_SOURCE: string = 'local';
+
+/**
+ * 批量操作条上的弹层类型。
+ *
+ * ⚠️ 为什么用「一个枚举 + 单个 bindSheet」而不是两个布尔 + 两次 bindSheet：
+ * 一个组件上**只能注册一个 bindSheet**，写第二个会把第一个覆盖掉。之前这里两个弹层
+ * 各占一次 bindSheet，结果 `showPlaylistPicker = true` 根本没有生效的绑定 ——
+ * 用户看到的就是「点『添加到歌单』屏幕闪一下、弹层不出来；再点别的按钮它又冒出来」
+ * （第二次绑定被求值时的抖动把它带出来了）。合并成一个绑定就从根上不存在这个冲突。
+ */
+enum BatchSheetMode {
+  NONE = 0,
+  ADD_TO_PLAYLIST = 1,
+  DOWNLOAD_QUALITY = 2
+}
 
 /**
  * 批量操作条（MusicFree 同款）。
@@ -72,14 +91,21 @@ export struct PlaylistBatchActionBar {
     AppStorageV2.connect(ThemeState, AppStorageKeys.THEME_STATE, () => new ThemeState())!;
   /** 窗口信息：底部安全区（导航条/小白条）用于模糊层与内边距避让。 */
   @Local windowInfo: WindowInfo = getWindowInfoState();
-  /** 「添加到歌单」弹层。 */
-  @Local showPlaylistPicker: boolean = false;
+  /** 批量弹层当前展示哪一层（0 = 不展示）。一个组件只能有一个 bindSheet，见 BatchSheetMode 注释。 */
+  @Local sheetMode: BatchSheetMode = BatchSheetMode.NONE;
+  /** 弹层开关（bindSheet 要 `$$` 双向绑定布尔；真正决定展示哪一层的是 sheetMode）。 */
+  @Local showBatchSheet: boolean = false;
   @Local playlists: PlaylistDto[] = [];
   @Local newPlaylistName: string = '';
   /** 「下载」音质弹层。 */
-  @Local showQualityPicker: boolean = false;
   @Local qualityLoading: boolean = false;
   @Local qualityOptions: LXQualityOption[] = [];
+
+  /** 切换弹层：模式和开关一起改，避免只改一个导致状态对不上。 */
+  private setSheetMode(mode: BatchSheetMode): void {
+    this.sheetMode = mode;
+    this.showBatchSheet = mode !== BatchSheetMode.NONE;
+  }
 
   private toast(message: string): void {
     this.getUIContext().getPromptAction().showToast({ message: message, duration: 2000 });
@@ -221,13 +247,17 @@ export struct PlaylistBatchActionBar {
 
   /** 打开批量「添加到歌单」弹层。 */
   private openPlaylistPicker(): void {
-    if (this.selectedSongs().length === 0) {
+    const count: number = this.selectedSongs().length;
+    if (count === 0) {
       this.toast('请先勾选歌曲');
       return;
     }
     this.playlists = MusicStoreService.getInstance().getPlaylists();
     this.newPlaylistName = '';
-    this.showPlaylistPicker = true;
+    this.setSheetMode(BatchSheetMode.ADD_TO_PLAYLIST);
+    hilog.info(BATCH_LOG_DOMAIN, BATCH_LOG_TAG,
+      'open add-to-playlist sheet: selected=%{public}d playlists=%{public}d',
+      count, this.playlists.length);
   }
 
   /** 把已选歌曲添加到某个歌单。 */
@@ -243,7 +273,7 @@ export struct PlaylistBatchActionBar {
     notifyPlaylistChanged();
     hilog.info(BATCH_LOG_DOMAIN, BATCH_LOG_TAG, 'batch add to playlist name=%{public}s added=%{public}d',
       p.name, added);
-    this.showPlaylistPicker = false;
+    this.setSheetMode(BatchSheetMode.NONE);
     this.toast(added > 0 ? '已添加 ' + added + ' 首到「' + p.name + '」' : '「' + p.name + '」中已有这些歌曲');
     this.onExit();
   }
@@ -266,31 +296,72 @@ export struct PlaylistBatchActionBar {
       this.toast('请先勾选歌曲');
       return;
     }
+    // 本地歌曲（source='local'）没有「在线音质」可查：它们**已经是下载好的文件**，
+    // 直接过滤掉，别拿它们去查音质 —— 否则选了几首本地歌就是死路一条的
+    // 「暂无可用音质」（本地歌的 selectionKey 是 local_<key>，source 非空、骗过了旧的过滤条件）
+    const online: PlaylistSongUi[] = [];
+    for (let i: number = 0; i < rows.length; i++) {
+      if (rows[i].source !== LOCAL_SOURCE) {
+        online.push(rows[i]);
+      }
+    }
+    if (online.length === 0) {
+      this.toast('选中的都是本地歌曲，本身就在设备上，无需下载');
+      return;
+    }
     this.qualityLoading = true;
     this.qualityOptions = [];
-    this.showQualityPicker = true;
+    this.setSheetMode(BatchSheetMode.DOWNLOAD_QUALITY);
+    const songs: LXSearchSong[] = [];
+    for (let i: number = 0; i < online.length; i++) {
+      songs.push(this.toSearchSong(online[i]));
+    }
+    // 多首取并集：以前只看第一首，那首查不到就整批报「暂无可用音质」
+    let missing: number[] = [];
     try {
-      const opts: LXQualityOption[] = await lxGetQualityOptions(this.toSearchSong(rows[0]));
-      opts.sort((a: LXQualityOption, b: LXQualityOption): number => a.size - b.size);
-      this.qualityOptions = opts;
-    } catch (_err) {
+      const result: LXBatchQualityResult = await lxGetQualityOptionsForSongs(songs);
+      this.qualityOptions = result.options;
+      missing = result.missing;
+    } catch (err) {
+      const e: Error = err as Error;
+      hilog.warn(BATCH_LOG_DOMAIN, BATCH_LOG_TAG, 'batch quality threw: %{public}s', e.message ?? '');
       this.qualityOptions = [];
     }
     this.qualityLoading = false;
     if (this.qualityOptions.length === 0) {
-      this.showQualityPicker = false;
-      this.toast('该歌曲暂无可用音质');
+      const first: PlaylistSongUi = online[0];
+      hilog.warn(BATCH_LOG_DOMAIN, BATCH_LOG_TAG,
+        'no quality options: source=%{public}s songId=%{public}s name=%{public}s online=%{public}d selected=%{public}d',
+        first.source, first.songId, typeof first.title === 'string' ? first.title : '',
+        online.length, rows.length);
+      this.setSheetMode(BatchSheetMode.NONE);
+      // 提示里带上平台名，用户能立刻判断是不是「这个源的音质查不到」
+      const sourceName: string = sourceDisplayName(first.source);
+      this.toast('「' + (typeof first.title === 'string' ? first.title : '该歌曲') +
+        '」（' + sourceName + '）暂无可用音质');
+      return;
+    }
+    if (missing.length > 0) {
+      hilog.info(BATCH_LOG_DOMAIN, BATCH_LOG_TAG, 'batch quality partial: missing=%{public}d/%{public}d',
+        missing.length, songs.length);
     }
   }
 
-  /** 按选定音质批量下载已选歌曲。 */
+  /** 按选定音质批量下载已选歌曲（本地歌曲跳过：它们已经在设备上了）。 */
   private batchDownload(quality: string): void {
     const rows: PlaylistSongUi[] = this.selectedSongs();
-    this.showQualityPicker = false;
+    this.setSheetMode(BatchSheetMode.NONE);
     let started: number = 0;
+    let skippedLocal: number = 0;
+    let skippedNoId: number = 0;
     for (let i: number = 0; i < rows.length; i++) {
       const row: PlaylistSongUi = rows[i];
+      if (row.source === LOCAL_SOURCE) {
+        skippedLocal++;
+        continue;
+      }
       if (row.source.length === 0 || row.songId.length === 0) {
+        skippedNoId++;
         continue;
       }
       void DownloadUtil.downloadSong(row.source, row.songId,
@@ -299,9 +370,14 @@ export struct PlaylistBatchActionBar {
         quality, this.getUIContext(), row.coverUrl, row.albumName);
       started++;
     }
-    hilog.info(BATCH_LOG_DOMAIN, BATCH_LOG_TAG, 'batch download quality=%{public}s started=%{public}d',
-      quality, started);
-    this.toast('已开始下载 ' + started + ' 首');
+    hilog.info(BATCH_LOG_DOMAIN, BATCH_LOG_TAG,
+      'batch download quality=%{public}s started=%{public}d localSkipped=%{public}d noIdSkipped=%{public}d',
+      quality, started, skippedLocal, skippedNoId);
+    let message: string = '已开始下载 ' + started + ' 首';
+    if (skippedLocal > 0) {
+      message += '（跳过本地 ' + skippedLocal + ' 首）';
+    }
+    this.toast(message);
     this.onExit();
   }
 
@@ -521,30 +597,37 @@ export struct PlaylistBatchActionBar {
       // 现在按钮直接悬浮在列表之上，最后一行靠列表的 contentEndOffset 预留不被盖住。
     }
     .width(StyleConstants.FULL_WIDTH)
-    .bindSheet($$this.showPlaylistPicker, this.PlaylistPickerSheet(), {
-      height: SheetSize.FIT_CONTENT,
+    // 只允许**一个** bindSheet（一个组件上写两个，后者会把前者顶掉）。
+    // 弹层内容按 sheetMode 切换；`$$` 双向绑定这个布尔投影，用户下滑/点 X 关闭时
+    // 会把 sheetMode 归零，状态不会残留在「以为还开着」。
+    .bindSheet($$this.showBatchSheet, this.ActiveBatchSheet(), {
+      // 两个弹层高度不同，这里给函数式：跟着当前层返回
+      height: this.sheetHeight(),
       showClose: true,
       dragBar: false,
-      title: { title: '添加到歌单' },
+      // 标题写死一个能同时覆盖两层的中性文案：bindSheet 的 title 只在绑定创建时求值，
+      // 跟着 sheetMode 变会出现「标题和内容对不上」的中间态。
+      title: { title: '添加到歌单 / 下载音质' },
       backgroundColor: $r('sys.color.background_secondary'),
       onWillDismiss: (action: DismissSheetAction) => {
         action.dismiss();
-        this.showPlaylistPicker = false;
-      }
-    })
-    .bindSheet($$this.showQualityPicker, this.QualitySheet(), {
-      height: SheetSize.FIT_CONTENT,
-      showClose: true,
-      dragBar: false,
-      title: { title: '选择下载音质' },
-      backgroundColor: $r('sys.color.background_secondary'),
-      onWillDismiss: (action: DismissSheetAction) => {
-        this.dismissQuality();
+        this.setSheetMode(BatchSheetMode.NONE);
       }
     })
   }
 
-  private dismissQuality(): void {
-    this.showQualityPicker = false;
+  /** 当前弹层高度：新建歌单输入框那一层要高一些。 */
+  private sheetHeight(): SheetSize {
+    return this.sheetMode === BatchSheetMode.ADD_TO_PLAYLIST ? SheetSize.MEDIUM : SheetSize.FIT_CONTENT;
+  }
+
+  /** 按 sheetMode 选弹层内容（同一时刻只有一层）。 */
+  @Builder
+  private ActiveBatchSheet() {
+    if (this.sheetMode === BatchSheetMode.DOWNLOAD_QUALITY) {
+      this.QualitySheet();
+    } else {
+      this.PlaylistPickerSheet();
+    }
   }
 }

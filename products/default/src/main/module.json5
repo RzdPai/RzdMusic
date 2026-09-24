@@ -63,6 +63,24 @@
             "actions": [
               "action.system.home"
             ]
+          },
+          {
+            // 「用派音打开 .js」= 导入音源脚本（文件管理器 / 其他应用的「打开方式」）。
+            //
+            // 按官方「拉起文件处理类应用」的写法：actions 声明数据处理能力、
+            // uris.scheme 为 file、type 用**统一数据类型（UTD）**、linkFeature 固定 FileOpen。
+            // `general.java-script` 就是 JavaScript 源文件那一类（见 @ohos.data.uniformTypeDescriptor）。
+            // ⚠️ linkFeature 大小写敏感，且大小写写错就不会出现在「打开方式」里。
+            "actions": [
+              "ohos.want.action.viewData"
+            ],
+            "uris": [
+              {
+                "scheme": "file",
+                "type": "general.java-script",
+                "linkFeature": "FileOpen"
+              }
+            ]
           }
         ]
       }

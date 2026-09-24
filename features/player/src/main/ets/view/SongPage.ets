@@ -70,6 +70,12 @@ struct SongPage {
   /** Resolved quality id, suffixed with （缓存） when served from a local cached file. */
   private qualityLabel(): string {
     const song: SongItem | undefined = this.currentSong();
+    // ★ 本地歌（source/quality 为 'local'）没有音质协商，按**歌曲本身**显示「本地」：
+    //   全局音质字段是播放时写的，重启后恢复本地歌时它可能还是空的，
+    //   照旧逻辑会掉到「未知」，而播放页徽标会掉到 128k —— 两处都要按歌曲判断。
+    if (song !== undefined && (song.source === 'local' || song.quality === 'local')) {
+      return 'local';
+    }
     let q: string = song?.quality ?? '';
     if (q.length === 0) {
       q = this.state.currentQuality;
