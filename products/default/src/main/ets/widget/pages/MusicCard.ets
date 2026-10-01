@@ -1,15 +1,13 @@
-let storageUpdateCall = new LocalStorage();
-
-@Entry(storageUpdateCall)
-@Component
+@Entry
+@ComponentV2
 struct MusicCard {
-  @LocalStorageProp('title') title: string = '暂无播放';
-  @LocalStorageProp('singer') singer: string = '';
-  @LocalStorageProp('imgName') imgName: string = '';
-  @LocalStorageProp('playing') playing: boolean = false;
-  @LocalStorageProp('lyric') lyric: string = '';
-  @LocalStorageProp('dimension') dimension: number = 3;
-  @LocalStorageProp('formId') formId: string = '';
+  @Local title: string = '暂无播放';
+  @Local singer: string = '';
+  @Local imgName: string = '';
+  @Local playing: boolean = false;
+  @Local lyric: string = '';
+  @Local dimension: number = 3;
+  @Local formId: string = '';
 
   /** Square (2*2) cards stack the artwork above the title and controls. */
   private isSquareCard(): boolean {
@@ -180,5 +178,12 @@ struct MusicCard {
     }
     .width('100%')
     .height('100%')
+    .onClick(() => {
+      postCardAction(this, {
+        action: 'router',
+        abilityName: 'MusichomeAbility',
+        params: { fromMusicCard: true }
+      });
+    })
   }
 }

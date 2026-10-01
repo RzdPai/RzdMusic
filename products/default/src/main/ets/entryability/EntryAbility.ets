@@ -15,12 +15,18 @@
 
 import { AbilityConstant, Callee, common, Configuration, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
+import { fileIo as fs } from '@kit.CoreFileKit';
+import { util } from '@kit.ArkTS';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { formBindingData, formProvider } from '@kit.FormKit';
 import { rpc } from '@kit.IPCKit';
 import { CardImageHelper } from '../musiccard/CardImageHelper';
 import { appendPlayLog, getAppRuntime, Logger, MusicCardBridge, MusicCardSnapshot, MusicStoreService, WindowUtil } from 'musicbasic';
-import { MediaService } from 'player';
+import { lxSourceManager, MediaService } from 'player';
+import type { LXApiImportResult } from 'player';
+
+/** AppStorage key：上一次「用派音打开脚本」的结果文案（供窗口就绪后 toast）。 */
+const SOURCE_IMPORT_MSG_KEY: string = 'lxSourceImportMsg';
 
 /** Main UIAbility for the default phone product: wires app runtime, window util, and media singleton. */
 export default class EntryAbility extends UIAbility {
@@ -32,8 +38,82 @@ export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     getAppRuntime().context = this.context;
     Logger.info('EntryAbility: Ability onCreate');
+    // ⚠️ 必须在这里（任何 importApi 之前）把音源存储目录告诉 LXSourceManager：
+    //    它原来只由 LXSourceHost.aboutToAppear 赋值，而「用派音打开 .js」是 onCreate
+    //    里导入的 —— 那时 filesDir 还是空串，脚本与列表被写到无效路径（静默失败），
+    //    表现就是「音源管理里只剩刚导入的那个、重启后连它也没了」。
+    lxSourceManager.init(this.context);
     this.applyStoredColorMode();
     EntryAbility.registerCardActionChannel(this.callee, this.context);
+    // 冷启动也可能是「用派音打开 .js」（文件管理器点开），先把脚本吃进来
+    this.handleViewDataWant(want);
+  }
+
+  /**
+   * 「用派音打开脚本文件」的处理。
+   *
+   * 文件管理器 / 其他应用以 `ohos.want.action.viewData` + `file://...` 拉起本应用
+   * （声明见 module.json5 的 skills：type = general.java-script，linkFeature = FileOpen）。
+   * 行为与设置页里的「导入音源」完全一致 —— 读文件 → `lxSourceManager.importApi`。
+   *
+   * @param want 启动参数；不是 viewData 或没有 uri 时直接返回。
+   */
+  private handleViewDataWant(want: Want): void {
+    if (want.action !== 'ohos.want.action.viewData') {
+      return;
+    }
+    const uri: string = want.uri ?? '';
+    if (uri.length === 0) {
+      return;
+    }
+    try {
+      const file: fs.File = fs.openSync(uri, fs.OpenMode.READ_ONLY);
+      let script: string = '';
+      try {
+        const stat: fs.Stat = fs.statSync(uri);
+        const buf: ArrayBuffer = new ArrayBuffer(stat.size);
+        fs.readSync(file.fd, buf, { offset: 0, length: stat.size });
+        script = util.TextDecoder.create('utf-8').decodeToString(new Uint8Array(buf));
+      } finally {
+        fs.closeSync(file);
+      }
+      // 导入结果要如实反映：落盘失败时不能再报「已导入」
+      const result: LXApiImportResult = lxSourceManager.importApi(script);
+      if (!result.ok) {
+        appendPlayLog('[音源] 导入失败 ' + uri + ' : ' + result.message);
+        AppStorage.setOrCreate(SOURCE_IMPORT_MSG_KEY, '导入失败：' + result.message);
+        Logger.error(`EntryAbility: source script rejected ${result.message}`);
+        this.flushSourceImportToast();
+        return;
+      }
+      appendPlayLog('[音源] 已导入脚本 ' + result.message + ' <- ' + uri);
+      AppStorage.setOrCreate(SOURCE_IMPORT_MSG_KEY, '音源「' + result.message + '」已导入');
+      Logger.info(`EntryAbility: source script imported from ${uri}`);
+    } catch (err) {
+      const e: Error = err as Error;
+      appendPlayLog('[音源] 导入失败 ' + uri + ' : ' + (e.message ?? ''));
+      AppStorage.setOrCreate(SOURCE_IMPORT_MSG_KEY, '导入失败：不是有效的音源脚本');
+      Logger.error(`EntryAbility: import source script failed ${e.message ?? ''}`);
+    }
+    this.flushSourceImportToast();
+  }
+
+  /** 把「脚本导入结果」提示出来（窗口还没就绪时先留着，等 onWindowStageCreate 或回前台再提示）。 */
+  private flushSourceImportToast(): void {
+    const message: string = AppStorage.get<string>(SOURCE_IMPORT_MSG_KEY) ?? '';
+    if (message.length === 0) {
+      return;
+    }
+    const ui = getAppRuntime().uiContext;
+    if (ui === undefined) {
+      return;   // 窗口未就绪：留着，onForeground / loadContent 回调里再提示
+    }
+    AppStorage.setOrCreate(SOURCE_IMPORT_MSG_KEY, '');
+    try {
+      ui.getPromptAction().showToast({ message: message, duration: 2500 });
+    } catch (error) {
+      Logger.warn(`source import toast failed: ${JSON.stringify(error)}`);
+    }
   }
 
   /** Applies the user-saved color mode on startup (0=light, 1=dark, 2=follow system). */
@@ -69,6 +149,8 @@ export default class EntryAbility extends UIAbility {
       } catch (error) {
         Logger.error(`getMainWindowSync error ${JSON.stringify(error)}`);
       }
+      // 冷启动如果是「用派音打开脚本」，导入已经做完了，这里把结果提示出来
+      this.flushSourceImportToast();
       if (err.code) {
         Logger.error(`Failed to load the content. Cause: ${JSON.stringify(err) ?? ''}`);
         return;
@@ -127,6 +209,8 @@ export default class EntryAbility extends UIAbility {
     }
     MusicCardBridge.notify();
     this.consumeCardAction();
+    // 热启动的脚本导入结果在这里提示（onNewWant 时窗口已经就绪，通常当场就提示过了）
+    this.flushSourceImportToast();
   }
   /**
    * Registers the interactive-card channel. Card buttons post
@@ -170,7 +254,7 @@ export default class EntryAbility extends UIAbility {
     }, 0);
   }
 
-  /** Form ids of live cards; re-reads the shared file only when unknown, at most once a minute. */
+  /** Form ids of live cards; re-reads the shared file only when unknown, at most once every 2s. */
   private static resolveCardFormIds(): string[] {
     const store: MusicStoreService = MusicStoreService.getInstance();
     const cached: string[] = store.getCardFormIds();
@@ -178,7 +262,9 @@ export default class EntryAbility extends UIAbility {
       return cached;
     }
     const now: number = Date.now();
-    if (now - EntryAbility.lastFormIdRefresh < 60000) {
+    // ⚠️ 这里原来是 60 秒节流：卡片是在 FormExtensionAbility 进程里添加的，formId 经共享存储回传，
+    //    节流太长会导致「刚拖到桌面的卡片一分钟内不刷新」。改成 2 秒（仍然避免每次推都读盘）。
+    if (now - EntryAbility.lastFormIdRefresh < 2000) {
       return cached;
     }
     EntryAbility.lastFormIdRefresh = now;
@@ -286,5 +372,7 @@ export default class EntryAbility extends UIAbility {
   /** Warm-start delivery (no card payload here: card actions arrive on the callee channel). */
   onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     appendPlayLog('[卡片] onNewWant');
+    // 应用已在运行时，从文件管理器「用派音打开 .js」走这条路（导入音源脚本）
+    this.handleViewDataWant(want);
   }
 }
