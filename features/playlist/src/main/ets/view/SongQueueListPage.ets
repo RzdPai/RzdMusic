@@ -15,7 +15,7 @@
 
 import { AppStorageV2, ComponentContent, LengthMetrics } from '@kit.ArkUI';
 import { ArcList, ArcListItem } from '@kit.ArkUI';
-import { AppStorageKeys, StyleConstants, WatchNavRouteConstants } from 'musicbasic';
+import { guardPlayerBack, AppStorageKeys, StyleConstants, WatchNavRouteConstants } from 'musicbasic';
 import { MediaService, MusicAppState } from 'player';
 import { getWatchNavContext, WatchNavContext } from '../model/WatchNavContext';
 
@@ -140,6 +140,7 @@ struct SongQueueList {
         bottom: 8
       })
     }
+    .onBackPressed((): boolean => guardPlayerBack('SongQueueListPage'))
     .hideTitleBar(true)
   }
 }

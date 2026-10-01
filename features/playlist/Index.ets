@@ -15,6 +15,9 @@
 
 export { MiniBarPlayer } from './src/main/ets/view/MiniBarPlayer';
 export { HomeMiniBarPlayer } from './src/main/ets/view/HomeMiniBarPlayer';
+// 形变克隆层（挂在壳层）要复用迷你条右侧那一块的**副本**（歌名/歌手 + 播放按钮）——
+// 反编译里 `MainPage` 的元信息克隆/操作区克隆就是这么画的，所以 Aside 也要导出。
+export { HomeMiniBarPlayerAside } from './src/main/ets/view/HomeMiniBarPlayerAside';
 export { PlaylistFloatingMiniBar } from './src/main/ets/view/PlaylistFloatingMiniBar';
 export { SongMoreMenu } from './src/main/ets/view/SongMoreMenu';
 export { PlaylistDetailPage, PlaylistDetailPageBuilder } from './src/main/ets/view/PlaylistDetailPage';
@@ -25,3 +28,5 @@ export { SplitColumnPlaylistPage, SplitColumnPlaylistPageBuilder } from './src/m
 export { PlaylistHub, PlayListBuilder } from './src/main/ets/view/PlaylistHubPage';
 export { SongListBuilder } from './src/main/ets/view/SongQueueListPage';
 export { getWatchNavContext, WatchNavContext } from './src/main/ets/model/WatchNavContext';
+export { MINI_BAR_COVER_ID } from './src/main/ets/view/HomeMiniBarAlbumCover';
+export { PlaylistTransitionOverlay } from './src/main/ets/view/PlaylistTransitionOverlay';

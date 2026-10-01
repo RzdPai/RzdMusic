@@ -17,29 +17,44 @@ import { AppStorageV2, ComponentContent, LengthMetrics, uiObserver } from '@kit.
 import { BusinessError } from '@kit.BasicServicesKit';
 import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
+import { guardPlayerBack } from 'musicbasic';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { BlurStrategy, hdsMaterial, HdsNavDestination, HdsNavigationTitleBarOptions, ScrollEffectType, SystemMaterialParams } from '@kit.UIDesignKit';
+import { http } from '@kit.NetworkKit';
+import { image } from '@kit.ImageKit';
+import { effectKit } from '@kit.ArkGraphics2D';
+import { BlurStrategy, hdsMaterial, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, SystemMaterialParams } from '@kit.UIDesignKit';
 import {
   AmbientState,
+  getPlaylistTransitionState,
+  PlaylistTransitionState,
   AppStorageKeys,
   BreakpointConstants,
   BreakpointType,
+  buildTitleMaterial,
   getAppRuntime,
   getWindowInfoState,
   GridConstants,
   BoardSongParam,
   ImmersiveType,
   MusicStoreService,
+  PlaylistDto,
   SdkApiUtil,
   StyleConstants,
   TitleBarConstants,
   ToplistRouteParam,
-  WindowInfo
+  WindowInfo,
+  WindowUtil
 } from 'musicbasic';
+import { ColorConversion, fetchBoardSongs } from 'player';
+import { BoardSongEntry } from 'player';
 import { MusicListPlaybackViewModel } from '../viewmodel/MusicListPlaybackViewModel';
+import { PlaylistBatchSelectionStore } from '../model/PlaylistBatchSelectionStore';
+import { PlaylistBatchActionBar } from './PlaylistBatchActionBar';
 import { PlaylistDetailHeroSection } from './PlaylistDetailHeroSection';
-import { PlaylistFloatingMiniBar } from './PlaylistFloatingMiniBar';
+import { PlaylistImmersiveBackdrop } from './PlaylistImmersiveBackdrop';
 import { PlaylistDetailSongListSection } from './PlaylistDetailSongListSection';
+import { pickPlaylistCover } from '../util/PlaylistCoverUtil';
+import type { CoverPickResult } from '../util/PlaylistCoverUtil';
 
 /** One LXMusic export song entry. */
 const PLAYLIST_LOG_DOMAIN: number = 0x0000;
@@ -77,6 +92,11 @@ interface LxPlaylistJson {
  * Full-screen playlist detail page with hero header, song list, and floating mini player.
  */
 
+/** 排序项：0 默认 / 1 按歌名 / 2 按歌手（已从列表行内按钮移入「四个点」菜单）。 */
+const PLAYLIST_SORT_DEFAULT: number = 0;
+const PLAYLIST_SORT_TITLE: number = 1;
+const PLAYLIST_SORT_SINGER: number = 2;
+
 /** 标题栏「四个点」下拉菜单回调容器：全局 @Builder 通过模块级回调中转。 */
 let playlistMoreAction: ((action: string) => void) | null = null;
 
@@ -90,6 +110,24 @@ function playlistMoreMenuComponent() {
           playlistMoreAction('search');
         }
       })
+    MenuItem({ content: '默认排序' })
+      .onClick(() => {
+        if (playlistMoreAction !== null) {
+          playlistMoreAction('sortDefault');
+        }
+      })
+    MenuItem({ content: '按歌名排序' })
+      .onClick(() => {
+        if (playlistMoreAction !== null) {
+          playlistMoreAction('sortTitle');
+        }
+      })
+    MenuItem({ content: '按歌手排序' })
+      .onClick(() => {
+        if (playlistMoreAction !== null) {
+          playlistMoreAction('sortSinger');
+        }
+      })
     MenuItem({ content: '自定义排序顺序' })
       .onClick(() => {
         if (playlistMoreAction !== null) {
@@ -100,6 +138,19 @@ function playlistMoreMenuComponent() {
       .onClick(() => {
         if (playlistMoreAction !== null) {
           playlistMoreAction('dedupe');
+        }
+      })
+    // 歌单封面（仅本地歌单有效：在线歌单/榜单的封面来自平台，不允许覆盖）
+    MenuItem({ content: '设置歌单封面' })
+      .onClick(() => {
+        if (playlistMoreAction !== null) {
+          playlistMoreAction('cover');
+        }
+      })
+    MenuItem({ content: '移除自定义封面' })
+      .onClick(() => {
+        if (playlistMoreAction !== null) {
+          playlistMoreAction('clearCover');
         }
       })
   }
@@ -116,6 +167,8 @@ export struct PlaylistDetailPage {
   @Param topid: string = '';
   /** Display title for the online toplist (used in the title bar). */
   @Param listTitle: string = '';
+  /** 榜单/歌单自身封面（由跳转方传入；为空时 Hero 显示内置占位图）。 */
+  @Param listCover: string = '';
   /** 'history' or 'favorites' to load local store lists instead of an online toplist. */
   @Param sectionType: string = '';
   /** Playlist id when sectionType is 'playlist'. */
@@ -128,23 +181,39 @@ export struct PlaylistDetailPage {
   @Param boardId: string = '';
   /** Prefetched board songs handed over through the route param. */
   @Param boardSongs: BoardSongParam[] = [];
+  /**
+   * 榜单歌曲的异步加载器。
+   *
+   * 默认实现**直接调 player 的 `fetchBoardSongs`**：榜单页在 playlist 层，
+   * 而 playlist 不能依赖 recommendation（那是上层），所以取数只能靠底层的 player。
+   *
+   * ⚠️ 曾经试过"把取数函数随路由参数传进来"（`ToplistRouteParam.boardSongLoader`）：
+   * **走不通** —— 导航参数经框架传递后，挂在对象上的回调函数会丢失，页面拿到的一直是
+   * 默认空实现，表现就是"榜单打开后一首歌都没有"。取数必须自带，不能靠回调传递。
+   */
+  @Param boardSongLoader: () => Promise<BoardSongEntry[]> = (): Promise<BoardSongEntry[]> => {
+    return fetchBoardSongs(this.boardSource, this.boardId);
+  };
   /** Window chrome and immersive layout information shared app-wide. */
   @Local windowInfo: WindowInfo = getWindowInfoState();
   /** Ambient material level (0 = follow system) for title bar button styling. */
   @Local ambientState: AmbientState =
     AppStorageV2.connect(AmbientState, AppStorageKeys.AMBIENT_STATE, () => new AmbientState())!;
-  /** Hero header area width in pixels, updated from child layout. */
-  @Local private headerWidthPx: number = 0;
-  /** Hero header area height in pixels, updated from child layout. */
-  @Local private headerHeightPx: number = 0;
-  /** Curve depth in pixels for the small-screen hero clip shape. */
-  @Local private depth: number = 18;
   /** Vertical scroller for the main playlist content. */
   private pageScrollScroller: Scroller = new Scroller();
-  /** Dynamic top padding applied while scrolling under the title bar. */
-  @Local paddingTop: number = 0;
-  /** Available list area height (vp) measured from the host container. */
-  @Local songListHeightVp: number = 700;
+  @Local detailScrollVp: number = 0;
+  private lastScrollBand: number = -1;
+
+  private updateImmersiveScroll(): void {
+    this.detailScrollVp = Math.max(0, this.pageScrollScroller.currentOffset().yOffset);
+    const band: number = Math.floor(this.detailScrollVp / 56);
+    if (band !== this.lastScrollBand) {
+      this.lastScrollBand = band;
+      hilog.info(0, 'RzdPlaylistImmersive',
+        'scrollVp=%{public}f thresholdVp=264 avoidTopVp=%{public}f inFlow=%{public}d',
+        this.detailScrollVp, this.windowInfo.statusBarTopVp, this.isPcImmersiveBottomBarInFlow() ? 1 : 0);
+    }
+  }
   /** Whether the in-playlist search sheet is visible. */
   @Local showSearchSheet: boolean = false;
   /** Live search keyword filtering the playlist songs. */
@@ -155,6 +224,99 @@ export struct PlaylistDetailPage {
   @Local customSortCommand: number = 0;
   /** 歌曲去重指令（递增触发，转发给歌曲列表执行去重）。 */
   @Local dedupeCommand: number = 0;
+  /** 强制退出多选模式指令（递增触发）。 */
+  @Local batchExitCommand: number = 0;
+  /** 多选（批量操作）模式：为真时隐藏浮动迷你条，并在屏幕底部显示批量操作条。 */
+  @Local batchMode: boolean = false;
+  /**
+   * 多选共享状态（页面级唯一实例）。
+   *
+   * 歌曲列表（勾选）与批量操作条（全选/取已选）必须读同一份，否则"已选 N 首"
+   * 和实际勾选会对不上。
+   */
+  @Local batchSelection: PlaylistBatchSelectionStore = new PlaylistBatchSelectionStore();
+  /** 大图 Hero 取色背景（与歌手/专辑详情页同款：封面主色）。 */
+  @Local avgColor: string = '#1f1f22';
+  /** 取色后用于渐变没入的底色（跟随封面明暗，亮封面出浅底）。 */
+  @Local backdropColor: string = '#1f1f22';
+  /**
+   * 当前底色是否为浅色。
+   *
+   * **必须和 `backdropColor` 同一次计算得出**：它决定标题栏文字/图标、Hero 标题、
+   * 状态栏文字用深色还是白色。以前是从颜色字符串反推（另一套阈值），
+   * 两套阈值不一致就会出现「深底配深字」。
+   */
+  @Local lightBackdrop: boolean = false;
+  @Local transitionState: PlaylistTransitionState = getPlaylistTransitionState();
+  @Local transitionToken: number = 0;
+  @Local returnOpacity: number = 1;
+  private backCommitted: boolean = false;
+  private heroBuildLogged: boolean = false;
+
+  aboutToAppear(): void {
+    hilog.info(0, 'RzdPlaylistCrashGuard',
+      'page appear-before-build section=%{public}s rows=%{public}d inFlow=%{public}d',
+      this.sectionType, this.listVm.playlistSongUis.length, this.isPcImmersiveBottomBarInFlow() ? 1 : 0);
+  }
+
+  /** The framework owns the POP. Repeated back requests are coalesced, never replayed on another page. */
+  private interceptPlaylistBack(): boolean {
+    if (this.showSearchSheet) {
+      this.showSearchSheet = false;
+      return true;
+    }
+    if (this.batchMode) {
+      this.batchExitCommand++;
+      this.exitBatchMode();
+      return true;
+    }
+    if (this.backCommitted) {
+      hilog.info(0, 'RzdPlaylistTransition', 'back coalesced session=%{public}d', this.transitionToken);
+      return true;
+    }
+    this.backCommitted = true;
+    hilog.info(0, 'RzdPlaylistTransition', 'back accepted session=%{public}d framework POP; no queued stack mutation',
+      this.transitionToken);
+    return false;
+  }
+
+  private playlistReturnTransition(operation: NavigationOperation,
+    isEnter: boolean): Array<NavDestinationTransition> | undefined {
+    if (operation !== NavigationOperation.POP || isEnter || !this.transitionState.owns(this.transitionToken)) {
+      return undefined;
+    }
+    this.backCommitted = true;
+    const token: number = this.transitionToken;
+    const generation: number = this.transitionState.prepareReturn(this.getUIContext(), this.heroCoverUrl(), token);
+    // Even without a mounted source, finish the already-requested framework POP with a visible fade.
+    // Never push the removed page back, pop an extra page, or use an entry-time source snapshot.
+    this.returnOpacity = 1;
+    return [{
+      duration: generation > 0 ? 360 : 180,
+      curve: Curve.EaseInOut,
+      event: (): void => {
+        if (this.transitionState.owns(token)) {
+          this.transitionState.driveReturn(token, generation);
+          this.returnOpacity = 0;
+        }
+      },
+      onTransitionEnd: (): void => {
+        // A retained destination after framework cancellation must accept a fresh back request.
+        // No deferred pop is replayed here; a successful POP simply destroys this destination.
+        this.backCommitted = false;
+        this.returnOpacity = 1;
+        this.transitionState.finishReturn(token, generation);
+        hilog.info(0, 'RzdPlaylistTransition', 'POP end session=%{public}d gen=%{public}d clone=%{public}d',
+          token, generation, generation > 0 ? 1 : 0);
+      }
+    }];
+  }
+  /** 封面加载失败时回退到占位图标。 */
+  @Local heroImageFailed: boolean = false;
+  /** 换封面后的重建信号（见 {@link heroCover}）。 */
+  @Local coverVersion: number = 0;
+  /** 已取色的封面地址，避免同一张图重复取色。 */
+  private colorizedCoverUrl: string = '';
   /** 标题栏「四个点」菜单图标 componentId（openMenu 锚点）。 */
   private readonly moreMenuTargetId: string = 'playlist_more_menu_icon';
   /** 缓存菜单内容节点，避免每次点击重复创建。 */
@@ -189,150 +351,421 @@ export struct PlaylistDetailPage {
     return this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE;
   }
 
+  // ---------------------------------------------------------------------------
+  // 大图 Hero：与歌手/专辑详情页同款（封面取色 + 居中大标题 + 圆形播放按钮）
+  // ---------------------------------------------------------------------------
+
   /**
-   * Scroll handler: drives {@link paddingTop} from {@link pageScrollScroller} so content clears the title bar.
-   * Mainline + immersive skips dynamic padding (fixed inset handled elsewhere).
+   * 歌单 / 榜单封面。
+   *
+   * 只用「这个歌单/榜单自己的封面」：
+   *   1. 路由参数 `listCover`（榜单封面、在线歌单封面、横幅大图）；
+   *   2. 本地歌单的 `PlaylistDto.cover`（导入/收藏时带过来的源歌单封面）。
+   *
+   * 明确**不**退回「第一首歌的封面」——那会让歌单/榜单页看起来像专辑页。
+   * 取不到就返回空串，由 Hero 显示内置占位图。
+   * @returns 封面地址，可能为空。
    */
-  private onPlaylistScrollDidScroll(): void {
-    if (this.isPlaylistDetailMainline() && this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE) {
+  private heroCoverUrl(): string {
+    // ★ 本地歌单：**以库里的封面为准**。用户可以在「四个点」菜单 / 我的歌单里把封面换成自己的图，
+    //   而路由参数里的 `listCover` 是进入页面那一刻的快照 —— 只认它的话，换完封面
+    //   大图不会变（要退出重进才生效）。
+    if (this.sectionType === 'playlist' && this.playlistId.length > 0) {
+      const own: string = this.resolvedPlaylistCover();
+      if (own.length > 0) {
+        return own;
+      }
+      // 歌单自己没有封面（手工新建，或早期导入没把源封面存下来）→ 退回第一首歌的专辑图，
+      // 与「我的歌单」列表里看到的封面保持一致（用户反馈：列表有封面、点进来却是空占位）。
+      const p: PlaylistDto | undefined = this.resolvedPlaylist();
+      if (p !== undefined && p.songs.length > 0 && p.songs[0].img.length > 0) {
+        return p.songs[0].img;
+      }
+      return '';
+    }
+    if (this.listCover.length > 0) {
+      return this.listCover;
+    }
+    if (this.resolvedPlaylistCover().length > 0) {
+      return this.resolvedPlaylistCover();
+    }
+    return '';
+  }
+
+  /**
+   * 本地歌单 DTO 缓存（同一个 playlistId 只查一次存储）。
+   *
+   * ⚠️ **必须缓存**：`MusicStoreService.getPlaylists()` 每次调用都会把 preferences 里
+   * **整份歌单 JSON** 重新 `JSON.parse` 并重建所有歌单的所有歌曲记录（见该方法里的注释），
+   * 而 `heroTitle()` / `resolvedPlaylistCover()` 是**每帧都会读**的（Hero 大标题 + 封面 +
+   * 标题栏选项里也读了一次）。歌单多、歌单里歌曲多的时候，每帧几次全量解析就是
+   * 「点开歌单要等一会」的直接来源之一。
+   *
+   * 缓存键是 playlistId：歌单名/封面在本页存活期间不会变（重命名发生在「我的歌单」页）。
+   */
+  private cachedPlaylistKey: string = '';
+  private cachedPlaylistValue: PlaylistDto | undefined = undefined;
+  /** 缓存对应的 `playlistVersion`：封面/名字被改过之后要重新读。 */
+  private cachedPlaylistVersion: number = -1;
+
+  /** 当前本地歌单 DTO（非 'playlist' 场景或找不到时返回 undefined）。 */
+  private resolvedPlaylist(): PlaylistDto | undefined {
+    if (this.sectionType !== 'playlist' || this.playlistId.length === 0) {
+      return undefined;
+    }
+    const version: number = MusicStoreService.getInstance().playlistVersion;
+    if (this.cachedPlaylistKey === this.playlistId && this.cachedPlaylistVersion === version) {
+      return this.cachedPlaylistValue;
+    }
+    const p: PlaylistDto | undefined = MusicStoreService.getInstance().getPlaylistById(this.playlistId);
+    this.cachedPlaylistKey = this.playlistId;
+    this.cachedPlaylistVersion = version;
+    this.cachedPlaylistValue = p;
+    return p;
+  }
+
+  /** 本地歌单自身封面（无封面时返回空串，由 Hero 显示内置占位图）。 */
+  private resolvedPlaylistCover(): string {
+    const p: PlaylistDto | undefined = this.resolvedPlaylist();
+    return p !== undefined ? p.cover : '';
+  }
+
+  /**
+   * Hero / 标题栏标题：优先用路由传入的 `listTitle`；
+   * 从「我的歌单」进入时路由可能不带标题，此时回落到本地歌单名。
+   */
+  private heroTitle(): string {
+    if (this.listTitle.length > 0) {
+      return this.listTitle;
+    }
+    // 走缓存（见 resolvedPlaylist 的注释）：这里在 build 期间被 Hero 和标题栏各读一次
+    const p: PlaylistDto | undefined = this.resolvedPlaylist();
+    if (p !== undefined && p.name.length > 0) {
+      return p.name;
+    }
+    return '歌单';
+  }
+
+  /**
+   * Hero 封面（带一个**显式的重建信号** `coverVersion`）。
+   *
+   * 用户在「设置歌单封面」里换完图之后我们把它 +1：@Local 的读取会被记成构建依赖，
+   * 于是 Hero 这一帧就用新封面重建 —— 不必去赌 store 那条 `playlistVersion` 链路
+   * （那是 @Trace 字段，理论上也能刷新，但换封面这件事必须**立刻**看到效果）。
+   */
+  private heroCover(): string {
+    if (!this.heroBuildLogged) {
+      this.heroBuildLogged = true;
+      hilog.info(0, 'RzdPlaylistCrashGuard',
+        'parent-hero build-enter section=%{public}s rows=%{public}d binding=arrow-parent',
+        this.sectionType, this.listVm.playlistSongUis.length);
+    }
+    return this.coverVersion >= 0 ? this.heroCoverUrl() : '';
+  }
+
+  /**
+   * 让用户从相册选一张图作为歌单封面。
+   *
+   * 图片会被拷进沙箱（见 `pickPlaylistCover`），再把沙箱 URI 写进歌单的 `cover`；
+   * 写库会 +playlistVersion，页面里的 DTO 缓存据此失效，Hero 大图下一帧就用新封面。
+   */
+  private async pickCoverAsync(): Promise<void> {
+    if (this.sectionType !== 'playlist' || this.playlistId.length === 0) {
+      this.toast('只有自己的歌单才能换封面');
       return;
     }
-    const offset: number = this.pageScrollScroller.currentOffset().yOffset;
-    if (offset > 0 && offset < 56) {
-      this.paddingTop = offset;
-    } else if (offset >= 56) {
-      this.paddingTop = 56;
-    } else {
-      this.paddingTop = 0;
+    const result: CoverPickResult = await pickPlaylistCover(this.playlistId);
+    if (!result.ok) {
+      this.toast(result.message);
+      return;
+    }
+    MusicStoreService.getInstance().setPlaylistCover(this.playlistId, result.uri);
+    // 显式重建：大图这一帧就换成新封面
+    this.coverVersion++;
+    this.toast(result.message);
+    hilog.info(PLAYLIST_LOG_DOMAIN, PLAYLIST_LOG_TAG, 'playlist cover updated id=%{public}s',
+      this.playlistId);
+  }
+
+  /** 清掉自定义封面（回到内置占位图；在线导入的歌单本来就有源封面，清掉只影响自定义的那张）。 */
+  private clearCover(): void {
+    if (this.sectionType !== 'playlist' || this.playlistId.length === 0) {
+      return;
+    }
+    MusicStoreService.getInstance().setPlaylistCover(this.playlistId, '');
+    this.toast('已移除自定义封面');
+  }
+
+  /** 副标题：曲目数 + 内容类型（收藏 / 历史 / 播放列表 / 歌单）。 */
+  private heroSubtitle(): string {
+    const count: number = this.listVm.playlistSongUis.length;
+    let kind: string = '歌单';
+    if (this.sectionType === 'favorites') {
+      kind = '收藏';
+    } else if (this.sectionType === 'history') {
+      kind = '历史';
+    } else if (this.sectionType === 'queue') {
+      kind = '播放列表';
+    } else if (this.topid.length > 0 || this.boardId.length > 0) {
+      kind = '榜单';
+    } else if (this.sectionType === 'onlinePlaylist') {
+      kind = '在线歌单';
+    }
+    return count > 0 ? count + ' 首 · ' + kind : kind;
+  }
+
+  /**
+   * 下载封面并取主色作为页面背景（与 AlbumDetailPage.loadBackdropColor 同款流程），
+   * 使 Hero 下缘的渐变与页面底色无缝衔接。
+   */
+  private async loadBackdropColor(): Promise<void> {
+    const cover: string = this.heroCoverUrl();
+    if (cover.length === 0 || !/^https?:/.test(cover) || cover === this.colorizedCoverUrl) {
+      return;
+    }
+    this.colorizedCoverUrl = cover;
+    const req: http.HttpRequest = http.createHttp();
+    try {
+      const resp: http.HttpResponse = await req.request(cover, {
+        method: http.RequestMethod.GET,
+        expectDataType: http.HttpDataType.ARRAY_BUFFER,
+        readTimeout: 15000
+      });
+      if (resp.responseCode !== 200 || resp.result === undefined) {
+        return;
+      }
+      const src: image.ImageSource = image.createImageSource(resp.result as ArrayBuffer);
+      try {
+        const pixelMap: image.PixelMap = await src.createPixelMap();
+        try {
+          await new Promise<void>((resolve: () => void) => {
+            effectKit.createColorPicker(pixelMap,
+              (error: Error | undefined, colorPicker: effectKit.ColorPicker | undefined) => {
+                try {
+                  if (error === undefined && colorPicker !== undefined) {
+                    if (cover !== this.heroCoverUrl()) {
+                      return;
+                    }
+                    const color = colorPicker.getLargestProportionColor();
+                    // 与歌手页（ArtistDetailPage）**完全同款**：直接用 dealColor 的暗淡色当页面底色。
+                    // 之前这里换成过 coverBackdrop（亮封面出浅底），结果就是用户看到的
+                    // 「日间模式背景动态取色成深色、文字也深」这类矛盾 —— 歌手页看起来没问题，
+                    // 所以这里照抄它的取色流程，不再自己发明。
+                    const arr: number[] = ColorConversion.dealColor(color.red, color.green, color.blue);
+                    const r: number = Math.max(0, Math.min(255, arr[0]));
+                    const g: number = Math.max(0, Math.min(255, arr[1]));
+                    const b: number = Math.max(0, Math.min(255, arr[2]));
+                    this.avgColor = `rgb(${r}, ${g}, ${b})`;
+                    this.backdropColor = this.avgColor;
+                    // dealColor 的亮度上限是 0.3（深色），所以前景恒定用浅色（与歌手页一致）
+                    const luminance: number = 0.2126 * this.linearChannel(r) +
+                      0.7152 * this.linearChannel(g) + 0.0722 * this.linearChannel(b);
+                    // Choose the higher WCAG contrast of black/white against the actual painted RGB.
+                    this.lightBackdrop = (luminance + 0.05) / 0.05 >= 1.05 / (luminance + 0.05);
+                    hilog.info(PLAYLIST_LOG_DOMAIN, PLAYLIST_LOG_TAG,
+                      'hero backdrop color %{public}s light=%{public}d', this.avgColor, this.lightBackdrop);
+                  }
+                } finally {
+                  resolve();
+                }
+              });
+          });
+        } finally {
+          try {
+            pixelMap.release();
+          } catch (_err) {
+            // ignore
+          }
+        }
+      } finally {
+        src.release();
+      }
+    } catch (err) {
+      const e: Error = err as Error;
+      hilog.warn(PLAYLIST_LOG_DOMAIN, PLAYLIST_LOG_TAG, 'hero color pick failed: %{public}s', e.message ?? '');
+    } finally {
+      req.destroy();
     }
   }
 
   /**
-   * Builds the scrollable grid of hero and song list sections.
+   * 取色背景是否偏浅（决定前景文字/图标用深色还是白色）。
+   *
+   * 由 {@link loadBackdropColor} 在取色时一次性算好（{@link lightBackdrop}），
+   * 不再从颜色字符串反推 —— **判定和实际铺的底色必须出自同一次计算**，
+   * 否则两套阈值不一致就会出现「底色深、文字也深」这种自相矛盾的组合。
+   * @returns True 表示背景偏浅，前景应该用深色。
+   */
+  private linearChannel(channel: number): number {
+    const value: number = channel / 255;
+    return value <= 0.04045 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
+  }
+
+  private isLightBackdrop(): boolean {
+    return this.lightBackdrop;
+  }
+
+  /** Hero 主文字/图标颜色。 */
+  private heroFgPrimary(): ResourceColor {
+    return this.isLightBackdrop() ? '#E6000000' : '#FFFFFF';
+  }
+
+  /** Hero 次要文字颜色。 */
+  private heroFgSecondary(): ResourceColor {
+    return this.isLightBackdrop() ? '#99000000' : '#B3FFFFFF';
+  }
+
+  /** 圆形播放按钮底色。 */
+  private heroButtonTint(): ResourceColor {
+    return this.isLightBackdrop() ? '#1A000000' : '#33FFFFFF';
+  }
+
+  /** 圆形播放按钮毛玻璃强度，跟随环境光等级。 */
+  private heroButtonBlur(): BlurStyle {
+    return this.buildAmbientBlur();
+  }
+
+  /** 环境光等级 -> 毛玻璃强度（Hero 与浮动迷你条保持一致）。 */
+  private buildAmbientBlur(): BlurStyle {
+    switch (this.ambientState.level) {
+      case 1:
+        return BlurStyle.Thin;
+      case 2:
+        return BlurStyle.Regular;
+      case 3:
+        return BlurStyle.Thick;
+      default:
+        return BlurStyle.Regular;
+    }
+  }
+
+  /** Hero 播放按钮：播放全部（走与列表行一致的播放路径）。 */
+  private playAllFromHero(): void {
+    if (this.listVm.playlistSongUis.length === 0) {
+      return;
+    }
+    hilog.info(PLAYLIST_LOG_DOMAIN, PLAYLIST_LOG_TAG, 'hero play-all rows=%{public}d',
+      this.listVm.playlistSongUis.length);
+    this.listVm.requestPlayByListIndex(0, this.getUIContext());
+  }
+
+  /**
+   * 页面唯一的滚动内容：**大图 Hero + 歌曲列表**（两个分支共用同一份结构）。
+   *
+   * Hero 作为有界 List 的首项随歌曲滚动；页面不再包外层 Scroll。
+   * 同一 pageScroller 绑定 HDS 标题效果，组头负责真实吸顶。
    */
   @Builder
-  private PlaylistScrollContentRoot() {
-    Column() {
-      GridRow({
-        columns: {
-          sm: BreakpointConstants.COLUMN_LG,
-          md: BreakpointConstants.COLUMN_LG,
-          lg: BreakpointConstants.COLUMN_LG,
-          xl: BreakpointConstants.COLUMN_LG
+  private PlaylistHero() {
+      PlaylistDetailHeroSection({
+        coverUrl: this.heroCover(),
+        transitionToken: this.transitionToken,
+        title: this.heroTitle(),
+        subtitle: this.heroSubtitle(),
+        backdropColor: this.backdropColor,
+        fgColor: this.heroFgPrimary(),
+        fgSecondaryColor: this.heroFgSecondary(),
+        buttonTint: this.heroButtonTint(),
+        buttonBlur: this.heroButtonBlur(),
+        onPlayAll: (): void => {
+          this.playAllFromHero();
         }
-      }) {
-        GridCol({
-          span: {
-            sm: GridConstants.SPAN_TWELVE,
-            md: GridConstants.SPAN_TWELVE,
-            lg: GridConstants.SPAN_FOUR,
-            xl: GridConstants.SPAN_FOUR
-          }
-        }) {
-          PlaylistDetailHeroSection({
-            headerWidthPx: this.headerWidthPx,
-            headerHeightPx: this.headerHeightPx,
-            depth: this.depth,
-            onHeaderAreaChange: (widthPx: number, heightPx: number) => {
-              this.headerWidthPx = widthPx;
-              this.headerHeightPx = heightPx;
-            }
-          })
-        }
+      })
+  }
 
-        GridCol({
-          span: {
-            sm: GridConstants.SPAN_TWELVE,
-            md: GridConstants.SPAN_TWELVE,
-            lg: GridConstants.SPAN_EIGHT,
-            xl: GridConstants.SPAN_EIGHT
-          }
-        }) {
+  @Builder
+  private PlaylistScrollContentRoot() {
           PlaylistDetailSongListSection({
+            // A direct local @Builder reference uses the child's this at the call site.
+            // Keep Hero data/methods owned by PlaylistDetailPage (both layout branches).
+            heroBuilder: (): void => {
+              this.PlaylistHero()
+            },
+            pageScroller: this.pageScrollScroller,
+            onContentDidScroll: (): void => { this.updateImmersiveScroll(); },
+            bottomPaddingVp: this.batchBarLiftVp(),
+            revealOffsetVp: this.transitionState.matches(this.heroCoverUrl(), this.transitionToken) ?
+              24 * (1 - this.transitionState.progress) : 0,
             listVm: this.listVm,
-            listHeightVp: this.songListHeightVp,
             playlistId: this.sectionType === 'playlist' ? this.playlistId : '',
             searchKeyword: this.searchKeyword,
             externalSortMode: this.externalSortMode,
             customSortCommand: this.customSortCommand,
-            dedupeCommand: this.dedupeCommand
+            dedupeCommand: this.dedupeCommand,
+            batchExitCommand: this.batchExitCommand,
+            allowBatchDelete: this.sectionType === 'playlist' && this.playlistId.length > 0,
+            // 「播放全部」吸顶行要用页面底色当不透明背景
+            backdropColor: this.backdropColor,
+            fgColor: this.heroFgPrimary(),
+            fgSecondaryColor: this.heroFgSecondary(),
+            // 在线榜单/歌单的歌曲是异步拉的，加载中显示骨架而不是空态
+            loading: this.listVm.loadingOnline,
+            // 与页面底部的批量操作条共用同一份选择状态
+            batch: this.batchSelection,
+            onBatchModeChange: (active: boolean): void => {
+              this.batchMode = active;
+            }
           })
-        }
-      }
-      .width(StyleConstants.FULL_WIDTH)
-      .alignItems(ItemAlign.Start)
-    }
-    .width(StyleConstants.FULL_WIDTH)
+          .width(StyleConstants.FULL_WIDTH)
+          .layoutWeight(1)
+          // MINI title overlays 56vp; offset the viewport, not its scrollable content.
+          .margin({ top: 56 })
   }
 
   /**
-   * Builds the nav destination body: either column+mini bar in flow or stacked mini bar overlay.
+   * Builds the nav destination body.
+   *
+   * 迷你播放条**不在这里渲染**：由产品壳层在根 Stack 上常驻一条悬浮迷你条，
+   * 二级页面统一复用（见 `products/default` 的 `floatingMiniBar`）。
+   * 这里再来一条会叠成两条，也会和壳层那条互相抢点击。
+   *
+   * 批量操作条作为有界 List 的同级节点固定在屏幕底部，不随歌曲滚动。
    */
   @Builder
   private PlaylistNavDestinationSlot() {
     if (this.isPcImmersiveBottomBarInFlow()) {
       Column() {
-        Scroll(this.pageScrollScroller) {
-          this.PlaylistScrollContentRoot()
-        }
-        .layoutWeight(1)
-        .scrollBar(BarState.Off)
-        .padding({
-          top: this.isPlaylistDetailMainline() ?
-            (this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ? 56 : this.paddingTop) :
-            this.paddingTop
-        })
-        .onDidScroll((): void => {
-          this.onPlaylistScrollDidScroll();
-        })
-        .backgroundColor($r('app.color.playlist_detail_background'))
-        .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
-
-        PlaylistFloatingMiniBar()
-          .width(StyleConstants.FULL_WIDTH)
-          .padding({
-            left: 0,
-            right: 0
+        this.PlaylistScrollContentRoot()
+        if (this.batchMode) {
+          PlaylistBatchActionBar({
+            batch: this.batchSelection,
+            displaySongs: this.listVm.playlistSongUis,
+            playlistId: this.sectionType === 'playlist' ? this.playlistId : '',
+            allowBatchDelete: this.sectionType === 'playlist' && this.playlistId.length > 0,
+            onExit: (): void => { this.exitBatchMode(); },
+            onDeleted: (): void => { this.listVm.loadPlaylistSongs(this.playlistId); }
           })
+          .margin({ bottom: this.batchBarLiftVp() })
+        }
       }
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
-      .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+      .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
     } else {
-      Stack({ alignContent: Alignment.Bottom }) {
-        Scroll(this.pageScrollScroller) {
-          this.PlaylistScrollContentRoot()
-        }
-        .height('100%')
-        .scrollBar(BarState.Off)
-        .padding({
-          top: this.isPlaylistDetailMainline() ? 56 : this.paddingTop
-        })
-        .onDidScroll((): void => {
-          this.onPlaylistScrollDidScroll();
-        })
-        .backgroundColor($r('app.color.playlist_detail_background'))
-        .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+      // Column → 唯一有界 List（Hero + 吸顶组头 + 歌曲）→ 固定批量操作条。
+      Column() {
+        this.PlaylistScrollContentRoot()
 
-        PlaylistFloatingMiniBar()
-          .zIndex(10)
-          .margin({
-            left: new BreakpointType(16, 24, 32, 32, 9).getWidthValueWithHeightSM(
-              this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint),
-            right: new BreakpointType(16, 24, 32, 32, 9).getWidthValueWithHeightSM(
-              this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint)
+        // 固定屏幕底部的批量操作条（与列表同级，不随滚动移动）
+        if (this.batchMode) {
+          PlaylistBatchActionBar({
+            batch: this.batchSelection,
+            displaySongs: this.listVm.playlistSongUis,
+            playlistId: this.sectionType === 'playlist' ? this.playlistId : '',
+            allowBatchDelete: this.sectionType === 'playlist' && this.playlistId.length > 0,
+            onExit: (): void => {
+              this.exitBatchMode();
+            },
+            onDeleted: (): void => {
+              this.listVm.loadPlaylistSongs(this.playlistId);
+            }
           })
+          // 抬高一层：底下还有壳层的悬浮迷你播放条，不留白会把操作条压在里面
+          .margin({ bottom: this.batchBarLiftVp() })
+        }
       }
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
-      .onAreaChange((_oldArea: Area, newArea: Area) => {
-        const h: number = Number.parseFloat(newArea.height.toString());
-        if (h > 0) {
-          // Reserve space for the floating mini bar so the list viewport ends above it.
-          this.songListHeightVp = Math.max(200, h - 80);
-        }
-      })
-      .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
     }
   }
 
@@ -344,18 +777,9 @@ export struct PlaylistDetailPage {
     return $r('app.color.floating_mini_bar_background');
   }
 
-  /** System material for the title bar, following the ambient light level like the home tab bar. */
+  /** 标题栏系统材质：**直接用歌手页同一个函数** `buildTitleMaterial`。 */
   private ambientTitleMaterial(): SystemMaterialParams {
-    switch (this.ambientState.level) {
-      case 1:
-        return { materialType: hdsMaterial.MaterialType.IMMERSIVE, materialLevel: hdsMaterial.MaterialLevel.SMOOTH };
-      case 2:
-        return { materialType: hdsMaterial.MaterialType.IMMERSIVE, materialLevel: hdsMaterial.MaterialLevel.GENTLE };
-      case 3:
-        return { materialType: hdsMaterial.MaterialType.IMMERSIVE, materialLevel: hdsMaterial.MaterialLevel.EXQUISITE };
-      default:
-        return { materialType: hdsMaterial.MaterialType.ADAPTIVE, materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE };
-    }
+    return buildTitleMaterial(this.ambientState.level);
   }
 
   /** Exports the current playlist to a user-chosen file in LXMusic JSON format. */
@@ -443,115 +867,97 @@ export struct PlaylistDetailPage {
     return JSON.stringify(payload);
   }
 
+  /** 标题栏主标题/图标颜色。 */
+  private titleBarFg(): ResourceColor {
+    return this.heroFgPrimary();
+  }
+
+  /**
+   * 标题栏底色。
+   *
+   * **恒为透明**，不跟 `backdropColor` 走：标题栏下面就是 Hero 大图，
+   * 铺一层不透明的页面底色会把大图顶上截掉一条、还多出一条颜色带
+   * （用户反馈的「标题颜色不对」里的"颜色不对"主要就是这条带子）。
+   * 透明之后标题栏只负责文字/图标，底色由 Hero 自己决定。
+   *
+   * 注意：这里**不能**返回 `Color.Transparent` 以外的动态值 —— HDS 只在
+   * 初始化时读一次 `titleBar` 选项（滚动切换到 scrollEffectStyle 才会重读），
+   * 动态底色会在首屏和滚动后表现出两种颜色，正是「滑动一下就恢复」的现象。
+   * @returns 透明色。
+   */
+  private titleBarBackground(): ResourceColor {
+    return Color.Transparent;
+  }
+
   /**
    * Builds HDS title bar options for back, menu, padding, and scroll/blur styles for this route.
    * @returns Configured navigation title bar for the current breakpoint and immersive mode.
    */
   private getPlaylistDetailTitleBar(): HdsNavigationTitleBarOptions {
+    const bar: HdsNavigationTitleBarOptions = this.buildPlaylistDetailTitleBar();
+    if (bar.style !== undefined && SdkApiUtil.isSdkApiAtLeast(23)) {
+      // Do not let the HDS material insert a plate over the initial transparent photo.
+      bar.style.systemMaterialEffect = { materialType: hdsMaterial.MaterialType.NONE };
+    }
+    return bar;
+  }
+
+  private buildPlaylistDetailTitleBar(): HdsNavigationTitleBarOptions {
     const startVp: number = new BreakpointType(16, 24, 24, 24, 18).getWidthValueWithHeightSM(
       this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint);
     const endVp: number = this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ?
       Math.max(0, this.windowInfo.titleButtonWidthVp) + 8 : startVp;
-    if (this.isPlaylistDetailMainline()) {
-      if (this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE) {
-        return {
-          padding: {
-            start: LengthMetrics.vp(startVp),
-            end: LengthMetrics.vp(endVp)
-          },
-          style: {
-            originalStyle: {
-              backgroundStyle: {
-                backgroundColor: $r('app.color.playlist_detail_background')
-              }
-            },
-            scrollEffectStyle: {
-              backgroundStyle: {
-                backgroundColor: $r('app.color.playlist_detail_background')
-              }
-            },
-            systemMaterialEffect: this.ambientTitleMaterial()
-          },
-          content: {
-            title: {
-              mainTitle: this.listTitle
-            },
-            backIcon: {
-              label: 'back',
-              icon: $r('sys.symbol.chevron_left'),
-              isEnabled: true
-            },
-            menu: {
-              value: [
-                {
-                  content: {
-                    label: 'share',
-                    icon: $r('sys.symbol.share'),
-                    isEnabled: true,
-                    action: (): void => {
-                      setTimeout((): void => {
-                        this.exportPlaylist();
-                      }, 400);
-                    }
-                  }
-                },
-                {
-                  content: {
-                    label: 'more',
-                    icon: $r('sys.symbol.dot_grid_2x2'),
-                    isEnabled: true,
-                    componentId: this.moreMenuTargetId,
-                    action: (): void => {
-                      this.openMoreMenu();
-                    }
-                  }
-                }
-              ]
-            }
-          }
-        };
-      }
+    if (this.isPlaylistDetailMainline() && this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE) {
       return {
         padding: {
           start: LengthMetrics.vp(startVp),
           end: LengthMetrics.vp(endVp)
         },
         style: {
+          blurStrategy: BlurStrategy.DISABLE,
+          scrollEffectOpts: {
+            enableScrollEffect: true,
+            scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR,
+            blurEffectiveStartOffset: LengthMetrics.vp(0),
+            blurEffectiveEndOffset: LengthMetrics.vp(264)
+          },
           originalStyle: {
             backgroundStyle: {
-              backgroundColor: $r('app.color.playlist_detail_background')
+              backgroundColor: Color.Transparent
             },
             contentStyle: {
+              titleStyle: {
+                mainTitleColor: this.titleBarFg()
+              },
               backIconStyle: {
-                iconColor: $r('sys.color.font_primary'),
-                backgroundColor: this.ambientTitleButtonBackground()
+                iconColor: this.titleBarFg()
               },
               menuStyle: {
-                iconColor: $r('sys.color.font_primary'),
-                backgroundColor: this.ambientTitleButtonBackground()
+                iconColor: this.titleBarFg()
               }
             }
           },
           scrollEffectStyle: {
             backgroundStyle: {
-              backgroundColor: $r('app.color.playlist_detail_background')
+              backgroundColor: this.backdropColor
             },
             contentStyle: {
+              titleStyle: {
+                mainTitleColor: this.titleBarFg()
+              },
               backIconStyle: {
-                iconColor: $r('sys.color.font_primary'),
-                backgroundColor: this.ambientTitleButtonBackground()
+                iconColor: this.titleBarFg()
               },
               menuStyle: {
-                iconColor: $r('sys.color.font_primary'),
-                backgroundColor: this.ambientTitleButtonBackground()
+                iconColor: this.titleBarFg()
               }
             }
-          },
-          systemMaterialEffect: this.ambientTitleMaterial()
+          }
         },
         content: {
+          // PC 沉浸式窗口没有系统标题栏，内容顶到最上面，所以保留标题文字
           title: {
-            mainTitle: this.listTitle
+            mainTitle: this.heroTitle()
           },
           backIcon: {
             label: 'back',
@@ -588,112 +994,174 @@ export struct PlaylistDetailPage {
         }
       };
     }
-    return {
-      padding: {
-        start: LengthMetrics.vp(startVp),
-        end: LengthMetrics.vp(endVp)
-      },
-      style: {
-        blurStrategy: BlurStrategy.ENABLE,
-        scrollEffectOpts: {
-          enableScrollEffect: this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ? false : true,
-          enableRefreshOffsetChange: false,
-          scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR,
-          blurEffectiveStartOffset: LengthMetrics.vp(0),
-          blurEffectiveEndOffset: LengthMetrics.vp(20)
+      // Phone/tablet: match the current artist pattern, not its old blur/material plate.
+      // Safe foreground stays 56vp below MINI; only decoration extends into the status bar.
+      // The initial title plate is transparent and becomes opaque cover color at 264vp.
+      return {
+        padding: {
+          start: LengthMetrics.vp(startVp),
+          end: LengthMetrics.vp(endVp)
         },
-        originalStyle: {
-          backgroundStyle: {
-            backgroundColor: Color.Transparent
+        style: {
+          blurStrategy: BlurStrategy.DISABLE,
+          scrollEffectOpts: {
+            enableScrollEffect: true,
+            scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR,
+            blurEffectiveStartOffset: LengthMetrics.vp(0),
+            blurEffectiveEndOffset: LengthMetrics.vp(264)
           },
-          contentStyle: {
-            backIconStyle: {
-              iconColor: $r('app.color.on_primary90'),
+          originalStyle: {
+            backgroundStyle: {
+              backgroundColor: '#00000000'
             },
-            menuStyle: {
-              iconColor: $r('app.color.on_primary90'),
+            contentStyle: {
+              backIconStyle: {
+                iconColor: '#FFFFFF',
+                backgroundColor: '#1AFFFFFF'
+              },
+              menuStyle: {
+                iconColor: '#FFFFFF',
+                backgroundColor: '#1AFFFFFF'
+              }
+            }
+          },
+          scrollEffectStyle: {
+            backgroundStyle: {
+              backgroundColor: this.backdropColor
+            },
+            contentStyle: {
+              backIconStyle: {
+                iconColor: this.titleBarFg(),
+                backgroundColor: this.ambientTitleButtonBackground()
+              },
+              menuStyle: {
+                iconColor: this.titleBarFg(),
+                backgroundColor: this.ambientTitleButtonBackground()
+              }
             }
           }
         },
-        scrollEffectStyle: {
-          backgroundStyle: {
-            blurRadius: 40
+        content: {
+          // 标题栏不放文字（照 ArtistDetailPage）：歌单名由 Hero 大图上的大标题承担
+          backIcon: {
+            label: 'back',
+            icon: $r('sys.symbol.chevron_left'),
+            isEnabled: true
           },
-          contentStyle: {
-            backIconStyle: {
-              iconColor: $r('sys.color.font_primary'),
-            },
-            menuStyle: {
-              iconColor: $r('sys.color.font_primary'),
-            }
+          menu: {
+            value: [
+              {
+                content: {
+                  label: 'share',
+                  icon: $r('sys.symbol.share'),
+                  isEnabled: true,
+                  action: (): void => {
+                    setTimeout((): void => {
+                      this.exportPlaylist();
+                    }, 400);
+                  }
+                }
+              },
+              {
+                content: {
+                  label: 'more',
+                  icon: $r('sys.symbol.dot_grid_2x2'),
+                  isEnabled: true,
+                  componentId: this.moreMenuTargetId,
+                  action: (): void => {
+                    this.openMoreMenu();
+                  }
+                }
+              }
+            ]
           }
-        },
-        systemMaterialEffect: this.ambientTitleMaterial()
-      },
-      content: {
-        title: {
-          mainTitle: this.listTitle
-        },
-        backIcon: {
-          label: 'back',
-          icon: $r('sys.symbol.chevron_left'),
-          isEnabled: true
-        },
-        menu: {
-          value: [
-            {
-              content: {
-                label: 'share',
-                icon: $r('sys.symbol.share'),
-                isEnabled: true,
-                action: (): void => {
-                  setTimeout((): void => {
-                    this.exportPlaylist();
-                  }, 400);
-                }
-              }
-            },
-            {
-              content: {
-                label: 'more',
-                icon: $r('sys.symbol.dot_grid_2x2'),
-                isEnabled: true,
-                componentId: this.moreMenuTargetId,
-                action: (): void => {
-                  this.openMoreMenu();
-                }
-              }
-            }
-          ]
         }
+      };
+    }
+
+  /**
+   * 异步拉取榜单歌曲并填充列表。
+   *
+   * 页面打开时**不等**它：`loadBoardSongs(boardSongs)` 已经把骨架屏点亮
+   * （`loadingOnline = true`），这里拉到结果再替换，拉到空就落回空态。
+   *
+   * ⚠️ 无论走哪条分支都必须**结束加载态**：`finishBoardLoading` 是唯一把
+   * `loadingOnline` 置回 false 的地方，漏掉就会出现「一直加载中」。
+   * 这里用 try/catch/finally 兜死，任何异常都不会把骨架屏留在屏幕上。
+   */
+  private async loadBoardSongsAsync(): Promise<void> {
+    let songs: BoardSongParam[] = [];
+    try {
+      const entries: BoardSongEntry[] = await this.boardSongLoader();
+      songs = entries.map((e: BoardSongEntry): BoardSongParam => {
+        return {
+          title: e.title, singer: e.singer, source: e.source, songId: e.songId, coverUrl: e.coverUrl
+        };
+      });
+      if (songs.length === 0) {
+        hilog.warn(PLAYLIST_LOG_DOMAIN, PLAYLIST_LOG_TAG,
+          'board songs empty source=%{public}s id=%{public}s', this.boardSource, this.boardId);
       }
-    };
+    } catch (err) {
+      const e: Error = err as Error;
+      hilog.warn(PLAYLIST_LOG_DOMAIN, PLAYLIST_LOG_TAG,
+        'board songs failed: %{public}s', e.message ?? '');
+      songs = [];
+    } finally {
+      this.listVm.finishBoardLoading(songs);
+    }
   }
 
   /**
-   * Runs when the page appears: converts curve depth to px and refreshes playlist data.
+   * Runs when the page appears: refreshes playlist data, then samples the cover color
+   * so the hero gradient blends into the page background (same as the album/artist pages).
    */
   private onPlaylistDetailPageAppear(): void {
-    this.depth = this.getUIContext().vp2px(18);
     playlistMoreAction = (action: string): void => {
       this.handleMoreAction(action);
     };
+    this.batchMode = false;
+    setTimeout((): void => {
+      this.transitionState.start(this.getUIContext(), this.heroCoverUrl(), this.transitionToken);
+    }, 0);
+    hilog.info(PLAYLIST_LOG_DOMAIN, PLAYLIST_LOG_TAG,
+      'page appear sectionType=%{public}s playlistId=%{public}s title=%{public}s',
+      this.sectionType, this.playlistId, this.listTitle);
     if (this.boardSource.length > 0 && this.boardId.length > 0) {
+      // 打开榜单：先把预取到的（可能为空）铺上，再异步拉真正的歌曲。
+      // 骨架屏由 `listVm.loadingOnline` 驱动（loadBoardSongs 设 true，拉到后设 false）。
       this.listVm.loadBoardSongs(this.boardSongs);
+      void this.loadBackdropColor();
+      void this.loadBoardSongsAsync();
     } else if (this.topid.length > 0) {
-      this.listVm.loadOnlineToplist(this.topid);
+      this.listVm.loadOnlineToplist(this.topid).then((): void => {
+        void this.loadBackdropColor();
+      });
     } else if (this.sectionType === 'history') {
       this.listVm.loadHistorySongs();
+      void this.loadBackdropColor();
     } else if (this.sectionType === 'favorites') {
       this.listVm.loadFavoriteSongs();
+      void this.loadBackdropColor();
     } else if (this.sectionType === 'queue') {
       this.listVm.loadQueueSongs();
+      void this.loadBackdropColor();
     } else if (this.sectionType === 'playlist') {
       this.listVm.loadPlaylistSongs(this.playlistId);
+      void this.loadBackdropColor();
+    } else if (this.sectionType === 'daily30') {
+      // 「每日30首」：歌单来自首页那份推荐列表。
+      // 首页（recommendation 层）把歌单写进共享状态，这里读 —— playlist 不能反向依赖
+      // recommendation，所以走 common 的共享状态而不是直接引用。
+      this.listVm.loadDailyThirtySongs();
+      void this.loadBackdropColor();
     } else if (this.sectionType === 'onlinePlaylist' && this.onlineSource.length > 0) {
-      this.listVm.loadOnlinePlaylistSongs(this.onlineSource, this.playlistId);
+      this.listVm.loadOnlinePlaylistSongs(this.onlineSource, this.playlistId).then((): void => {
+        void this.loadBackdropColor();
+      });
     } else {
       this.listVm.syncPlaylistFromApi();
+      void this.loadBackdropColor();
     }
   }
 
@@ -701,11 +1169,63 @@ export struct PlaylistDetailPage {
   private handleMoreAction(action: string): void {
     if (action === 'search') {
       this.showSearchSheet = true;
+    } else if (action === 'sortDefault') {
+      this.applySortMode(PLAYLIST_SORT_DEFAULT);
+    } else if (action === 'sortTitle') {
+      this.applySortMode(PLAYLIST_SORT_TITLE);
+    } else if (action === 'sortSinger') {
+      this.applySortMode(PLAYLIST_SORT_SINGER);
     } else if (action === 'customSort') {
+      this.batchExitCommand++;
       this.customSortCommand++;
     } else if (action === 'dedupe') {
+      this.batchExitCommand++;
       this.dedupeCommand++;
+    } else if (action === 'cover') {
+      void this.pickCoverAsync();
+    } else if (action === 'clearCover') {
+      this.clearCover();
     }
+  }
+
+  /** 轻提示（歌单封面相关的反馈用）。 */
+  private toast(message: string): void {
+    this.getUIContext().getPromptAction().showToast({ message: message, duration: 2000 });
+  }
+
+  /**
+   * 排序模式下发（排序按钮已从列表行内移入「四个点」菜单）。
+   * `@Monitor('externalSortMode')` 只在值变化时触发，因此选中同一项时先归位到 -1 再置值。
+   * @param mode 0 默认 / 1 按歌名 / 2 按歌手。
+   */
+  private applySortMode(mode: number): void {
+    hilog.info(PLAYLIST_LOG_DOMAIN, PLAYLIST_LOG_TAG, 'sort mode -> %{public}d', mode);
+    this.batchExitCommand++;
+    if (this.externalSortMode === mode) {
+      this.externalSortMode = -1;
+    }
+    this.externalSortMode = mode;
+  }
+
+  /** 多选模式退出：宿主侧只维护"是否处于多选"用于隐藏迷你条。 */
+  private exitBatchMode(): void {
+    this.batchMode = false;
+  }
+
+  /**
+   * 批量操作条需要被抬高多少（vp）。
+   *
+   * 壳层的悬浮迷你播放条是根 `Stack` 最上层的一条浮层，位置贴近屏幕底部；
+   * 批量操作条也在页面底部，两者会叠在一起把操作条挡住。
+   * 这里按「迷你条高度 + 它距底的间距」把操作条整体上移，让它在播放器上方。
+   * @returns 抬高量（vp）。
+   */
+  private batchBarLiftVp(): number {
+    const miniBarHeight: number = 64;
+    const systemInset: number = this.windowInfo.navigationBarBottomVp > 0 ?
+      this.windowInfo.navigationBarBottomVp :
+      WindowUtil.getInstance().getStartupNavigationBarBottomVp();
+    return miniBarHeight + Math.max(12, systemInset + 8) + 8;
   }
 
   /** In-playlist search sheet: live filter over the current song list. */
@@ -750,20 +1270,75 @@ export struct PlaylistDetailPage {
    */
   build() {
     HdsNavDestination() {
-      this.PlaylistNavDestinationSlot()
+      Stack({ alignContent: Alignment.TopStart }) {
+        // 页面上**唯一**的照片层（Hero 不再画图，见 PlaylistDetailHeroSection）：
+        // 同时也是封面飞行的落点锚点，所以要把转场 token 传下去。
+        PlaylistImmersiveBackdrop({
+          photo: this.heroCover(),
+          color: this.backdropColor,
+          topAvoidVp: this.windowInfo.statusBarTopVp,
+          scrollVp: this.detailScrollVp,
+          transitionToken: this.transitionToken
+        })
+        this.PlaylistNavDestinationSlot()
+      }
+      .width(LayoutPolicy.matchParent)
+      .height(LayoutPolicy.matchParent)
+      .opacity(this.transitionState.matches(this.heroCoverUrl(), this.transitionToken) ?
+        Math.min(1, this.transitionState.progress * 2) : 1)
     }
     .hideTitleBar(false)
+    .opacity(this.returnOpacity * (this.transitionState.owns(this.transitionToken) ?
+      this.transitionState.returnPageOpacity : 1))
+    .onReady((context: NavDestinationContext): void => {
+      this.transitionToken = this.transitionState.claim(this.heroCoverUrl());
+      this.transitionState.bindDestination(this.transitionToken, context.navDestinationId ?? '',
+        (): string => this.heroCoverUrl());
+      this.backCommitted = false;
+      this.returnOpacity = 1;
+      hilog.info(0, 'RzdPlaylistTransition', 'detail claim session=%{public}d', this.transitionToken);
+    })
+    .onShown((): void => {
+      this.backCommitted = false;
+      this.returnOpacity = 1;
+    })
+    .onBackPressed((): boolean => {
+      if (guardPlayerBack('PlaylistDetailPage')) {
+        return true;
+      }
+      return this.interceptPlaylistBack();
+    })
+    .customTransition((operation: NavigationOperation, isEnter: boolean): Array<NavDestinationTransition> | undefined => {
+      return this.playlistReturnTransition(operation, isEnter);
+    })
     .titleBar(this.getPlaylistDetailTitleBar())
+    // ★ 与 AlbumDetailPage 同款：MINI 模式标题栏是"浮"在内容之上的窄条，
+    //   内容可以铺到它下面（Hero 大图直接顶到屏幕最上沿）。
+    //   不设这一项时标题栏按默认的大标题模式占位，顶上就会空出一块、
+    //   观感上像是有什么东西把图片挡住了 —— 这就是榜单页顶部空白的另一处原因。
+    .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.pageScrollScroller])
-    .backgroundColor($r('app.color.playlist_detail_background'))
+    .backgroundColor(this.backdropColor)
+    // 与 AlbumDetailPage 完全一致的两件套：expandSafeArea 让内容铺满到屏幕顶端
+    // （Hero 大图压在状态栏下），ignoreLayoutSafeArea 让 NavDestination 的**布局**也
+    // 忽略系统安全区 —— 少一个，顶上就会空出一条状态栏高度的带子。
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
     .systemBarStyle(
-      { statusBarContentColor: this.isWidthBreakpointSmOrMd() ? '#FFFFFF' : '#000000' },
-      { statusBarContentColor: '#000000' })
+      { statusBarContentColor: this.isLightBackdrop() ? '#000000' : '#FFFFFF' },
+      { statusBarContentColor: this.isLightBackdrop() ? '#000000' : '#FFFFFF' })
     .onAppear((): void => {
       this.onPlaylistDetailPageAppear();
     })
     .onDisAppear((): void => {
+      this.transitionState.release(this.transitionToken);
+      this.transitionToken = 0;
       playlistMoreAction = null;
+      this.batchMode = false;
+      this.colorizedCoverUrl = '';
+      // 歌单 DTO 缓存跟着页面生命周期走：下次进来重新查（期间可能被重命名/换封面）
+      this.cachedPlaylistKey = '';
+      this.cachedPlaylistValue = undefined;
       if (this.moreMenuNode !== null) {
         this.moreMenuNode.dispose();
         this.moreMenuNode = null;
@@ -788,6 +1363,7 @@ export function PlaylistDetailPageBuilder(name: string, param: Object) {
   PlaylistDetailPage({
     topid: (param as ToplistRouteParam | undefined)?.topid ?? '',
     listTitle: (param as ToplistRouteParam | undefined)?.listTitle ?? '',
+    listCover: (param as ToplistRouteParam | undefined)?.listCover ?? '',
     sectionType: (param as ToplistRouteParam | undefined)?.sectionType ?? '',
     playlistId: (param as ToplistRouteParam | undefined)?.playlistId ?? '',
     onlineSource: (param as ToplistRouteParam | undefined)?.onlineSource ?? '',

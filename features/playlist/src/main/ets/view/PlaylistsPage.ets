@@ -18,12 +18,16 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { common } from '@kit.AbilityKit';
 import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
-import { BreakpointType, ThemeState } from 'musicbasic';
-import { AmbientState, AppStorageKeys, MusicStoreService, PlayedSongRecord, PlaylistDto, RouterUrlConstants, TitleBarConstants, ToplistRouteParam, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
+import { guardPlayerBack } from 'musicbasic';
+import { AppStorageKeys, BarScrollHelper, BreakpointType, getPlaylistTransitionState, MusicAppState, ThemeState } from 'musicbasic';
+import { AmbientState, MusicStoreService, PlayedSongRecord, PlaylistDto, RouterUrlConstants, TitleBarConstants, ToplistRouteParam, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, LocalCoverImage } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { lxSearch, SharePlaylistService, SharePlaylistSource } from 'player';
+import { localMusic, LocalMusicImportState, localMusicImportState } from 'localmusic';
 import { gunzipBytes } from '../util/GunzipUtil';
 import { registerPlaylistRefresh, unregisterPlaylistRefresh } from '../util/PlaylistRefreshBus';
+import { pickPlaylistCover } from '../util/PlaylistCoverUtil';
+import type { CoverPickResult } from '../util/PlaylistCoverUtil';
 
 /**
  * LXMusic playlist export JSON shape (one song entry).
@@ -94,6 +98,8 @@ function playlistsAddMenuComponent() {
 
 @ComponentV2
 export struct PlaylistsPage {
+  /** 「回到顶部」指令：壳层点了当前页签时递增（底部页签设计规范）。 */
+  @Param scrollTopCommand: number = 0;
   /** Window breakpoint for the HDS home-style responsive title. */
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
   /** Nav stack for opening history / favorites list pages. */
@@ -129,6 +135,28 @@ export struct PlaylistsPage {
   private addMenuNode: ComponentContent<Object> | null = null;
   /** Scroller bound to the HDS title bar so the scroll effect (gradient blur) can fire. */
   private pageScroller: Scroller = new Scroller();
+  /** 全局播控状态：滚动联动双层底栏需要写 miniBarExpanded / hdsBarLayoutMode。 */
+  @Local appState: MusicAppState =
+    AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
+  /** 「本地音乐」入口要显示曲库首数：订阅它的导入状态，导入/删除后自动刷新。 */
+  @Local localMusicState: LocalMusicImportState = localMusicImportState();
+  /** 「本地音乐」路由名（与 features/localmusic 的 router_map.json 一致）。 */
+  private static readonly LOCAL_MUSIC_ROUTE: string = 'LocalMusicPage';
+
+  /**
+   * 滚动联动双层底栏（上滑收起 / 下滑展开）。
+   *
+   * 用户要求「全都自动收起展开」—— 底栏是所有 Tab 共用的一个控件，
+   * 只要有一个页面不接回调，就会出现"有的页面收、有的不收"。
+   * @param offset 本帧滚动增量（vp）。
+   */
+  private onPageScrollFrame(offset: number): void {
+    if (!BarScrollHelper.isEnabled()) {
+      return;
+    }
+    BarScrollHelper.notifyScrollDelta(this.getUIContext(), this.appState, offset,
+      this.breakpointEnv.widthBreakpoint as number);
+  }
 
 
   aboutToAppear(): void {
@@ -183,6 +211,12 @@ export struct PlaylistsPage {
     }
   }
 
+  /** 壳层点了当前页签：滚回顶部（底部页签设计规范）。 */
+  @Monitor('scrollTopCommand')
+  onScrollTopCommand(): void {
+    this.pageScroller.scrollEdge(Edge.Top);
+  }
+
   @Monitor('store.playlistVersion')
   refresh(): void {
     const list: PlaylistDto[] = this.store.getPlaylists();
@@ -198,8 +232,11 @@ export struct PlaylistsPage {
     let changed: boolean = list.length !== this.playlists.length;
     if (!changed) {
       for (let i: number = 0; i < list.length; i++) {
+        // ⚠️ cover 必须参与比较：只换了封面的那次刷新，别的字段一模一样，
+        //    少了这一条就会「store 已更新、界面不动」（用户反馈的「设置封面未生效」）。
         if (list[i].id !== this.playlists[i].id || list[i].name !== this.playlists[i].name ||
-          list[i].songs.length !== this.playlists[i].songs.length) {
+          list[i].songs.length !== this.playlists[i].songs.length ||
+          list[i].cover !== this.playlists[i].cover) {
           changed = true;
           break;
         }
@@ -634,29 +671,123 @@ export struct PlaylistsPage {
     .padding({ top: 8, bottom: 12 })
   }
 
-  /** One playlist row: cover (first song's album art / placeholder), name, song count, chevron. */
+  /**
+   * 「本地音乐」入口行（放在歌单页面里，按需求：本地音乐归歌单页面）。
+   *
+   * 本地音乐是一个独立 HAR（`features/localmusic`），它自带路由页 `LocalMusicPage`
+   * （见该模块的 `router_map.json`），所以这里只需要一个入口把路由推出去，
+   * **不**在本文件里写导入/列表逻辑。
+   *
+   * 副标题显示曲库首数：读 `localMusicImportState().version` 让它跟着
+   * "导入 / 删除 / 歌词匹配"一起刷新（那个字段就是为这种订阅准备的）。
+   */
+  @Builder
+  private LocalMusicEntry() {
+    Row({ space: 12 }) {
+      Row() {
+        SymbolGlyph($r('sys.symbol.music_note_list'))
+          .fontSize(18)
+          .fontColor([this.themeState.color])
+      }
+      .width(44)
+      .height(44)
+      .borderRadius($r('sys.float.corner_radius_level3'))
+      .backgroundColor($r('sys.color.background_tertiary'))
+      .justifyContent(FlexAlign.Center)
+
+      Column({ space: 2 }) {
+        Text('本地音乐')
+          .fontSize($r('sys.float.Body_L'))
+          .fontColor($r('sys.color.font_primary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(this.localMusicSubtitle())
+          .fontSize($r('sys.float.Caption_M'))
+          .fontColor($r('sys.color.font_tertiary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(18)
+        .fontColor([$r('sys.color.font_tertiary')])
+    }
+    .width('100%')
+    .padding({ top: 8, bottom: 8 })
+    .onClick(() => {
+      // 路由名与 localmusic 模块 router_map.json 里的 name 一致
+      this.pageIndexInfos.pushPathByName(PlaylistsPage.LOCAL_MUSIC_ROUTE, null);
+    })
+  }
+
+  /**
+   * 给某个歌单设置自定义封面（相册选图 → 拷进沙箱 → 写进歌单）。
+   *
+   * 写库会 +playlistVersion，`@Monitor('store.playlistVersion')` 里的 refresh() 会重读列表，
+   * 封面立刻就能看到；详情页大图也用同一个字段。
+   */
+  private async pickCoverFor(p: PlaylistDto): Promise<void> {
+    const result: CoverPickResult = await pickPlaylistCover(p.id);
+    if (!result.ok) {
+      this.getUIContext().getPromptAction().showToast({ message: result.message, duration: 2000 });
+      return;
+    }
+    MusicStoreService.getInstance().setPlaylistCover(p.id, result.uri);
+    this.appendImportLog('[封面] 歌单 ' + p.name + ' -> ' + result.uri);
+    this.getUIContext().getPromptAction().showToast({ message: result.message, duration: 2000 });
+    // 显式重建列表：只换封面时行 key 之外的东西没变，靠 @Monitor 里的 changed 判断有时
+    // 不够稳（Repeat 复用节点），这里照「重命名」那套手法把列表短暂摘掉再挂回。
+    if (this.listVisible) {
+      this.listVisible = false;
+      setTimeout((): void => {
+        this.listVisible = true;
+      }, 50);
+    }
+  }
+
+  /** @returns 「本地音乐」入口的副标题：有歌显示首数，没有就提示导入。 */  private localMusicSubtitle(): string {
+    // 读一下 version：导入/删除/匹配后自动重算
+    const version: number = this.localMusicState.version;
+    const count: number = localMusic.count();
+    if (count > 0) {
+      return `${count} 首` + (version >= 0 ? '' : '');
+    }
+    return '导入设备音频（选文件 / 选文件夹）';
+  }
+
+  /** One playlist row: cover (custom/source cover first, else first song's album art), name, count, chevron. */
   @Builder
   private PlaylistRow(p: PlaylistDto) {
     Row({ space: 12 }) {
-      // 歌单封面：取第一首歌的专辑封面；空歌单或无封面时用灰底音符占位
-      if (p.songs.length > 0 && p.songs[0].img.length > 0) {
-        Image(p.songs[0].img)
+      // 歌单封面优先级：歌单自己的封面（自定义 / 在线导入时带过来的）> 第一首歌的专辑图 > 灰底音符占位
+      // 自定义封面是沙箱文件 → 交给 LocalCoverImage 自己解码成 PixelMap 显示
+      Stack() {
+        if (p.cover.length > 0) {
+          LocalCoverImage({ src: p.cover, imageWidth: 44, imageHeight: 44, radius: 8 })
+        } else if (p.songs.length > 0 && p.songs[0].img.length > 0) {
+          Image(p.songs[0].img)
+            .width(44)
+            .height(44)
+            .borderRadius($r('sys.float.corner_radius_level3'))
+            .objectFit(ImageFit.Cover)
+        } else {
+          Row() {
+            SymbolGlyph($r('sys.symbol.music_note_list'))
+              .fontSize(16)
+              .fontColor([$r('sys.color.font_tertiary')])
+          }
           .width(44)
           .height(44)
           .borderRadius($r('sys.float.corner_radius_level3'))
-          .objectFit(ImageFit.Cover)
-      } else {
-        Row() {
-          SymbolGlyph($r('sys.symbol.music_note_list'))
-            .fontSize(16)
-            .fontColor([$r('sys.color.font_tertiary')])
+          .backgroundColor($r('sys.color.background_tertiary'))
+          .justifyContent(FlexAlign.Center)
         }
-        .width(44)
-        .height(44)
-        .borderRadius($r('sys.float.corner_radius_level3'))
-        .backgroundColor($r('sys.color.background_tertiary'))
-        .justifyContent(FlexAlign.Center)
       }
+      .id(`playlist-local-cover-${p.id}`)
+      .width(44)
+      .height(44)
       Column({ space: 4 }) {
         Text(p.name)
           .fontSize($r('sys.float.Body_M'))
@@ -687,6 +818,20 @@ export struct PlaylistsPage {
               action: (): void => {
                 this.selectedPlaylist = p;
                 this.exportPlaylist();
+              }
+            },
+            {
+              // 自定义封面：相册选图 → 拷进沙箱 → 写进歌单（详情页大图与这里都会用它）
+              value: '设置歌单封面',
+              action: (): void => {
+                void this.pickCoverFor(p);
+              }
+            },
+            {
+              value: '移除自定义封面',
+              action: (): void => {
+                MusicStoreService.getInstance().setPlaylistCover(p.id, '');
+                this.getUIContext().getPromptAction().showToast({ message: '已移除自定义封面', duration: 2000 });
               }
             },
             {
@@ -721,7 +866,12 @@ export struct PlaylistsPage {
       param.sectionType = 'playlist';
       param.playlistId = p.id;
       param.listTitle = p.name;
-      this.pageIndexInfos.pushPathByName(RouterUrlConstants.PLAYLIST_DETAIL, param);
+      // 本地歌单自身封面（新建的为空，详情页显示占位图；不用第一首歌的封面顶替）
+      param.listCover = p.cover.length > 0 ? p.cover :
+        (p.songs.length > 0 ? p.songs[0].img : '');
+      const animated: boolean = !getPlaylistTransitionState().prepare(this.getUIContext(),
+        `playlist-local-cover-${p.id}`, param.listCover);
+      this.pageIndexInfos.pushPathByName(RouterUrlConstants.PLAYLIST_DETAIL, param, animated);
     })
   }
 
@@ -962,15 +1112,22 @@ export struct PlaylistsPage {
             ListItem() {
               this.PlaylistsHeader()
             }
+            // 「本地音乐」入口：放在歌单列表最上面（需求：本地音乐放歌单页面）
+            ListItem() {
+              this.LocalMusicEntry()
+            }
             Repeat<PlaylistDto>(this.playlists)
               .each((obj: RepeatItem<PlaylistDto>) => {
                 ListItem() {
                   this.PlaylistRow(obj.item)
                 }
               })
-              // key 必须含 songs.length 与首曲封面：添加/删除歌曲或首曲封面变化时强制重建行，数量/封面才会刷新
+              // key 必须含 songs.length、首曲封面**与歌单自己的封面**：添加/删除歌曲、
+              // 首曲封面变化、或换了自定义封面时都要强制重建行，数量/封面才会刷新。
+              // （漏掉 p.cover 就是「设置封面之后列表不生效」的原因：Repeat 复用旧节点，
+              //   属性停在旧值，重启前一直看着旧封面。）
               .key((item: PlaylistDto) => item.id + '_' + item.name + '_' + item.songs.length + '_' +
-              (item.songs.length > 0 ? item.songs[0].img : ''))
+              item.cover + '_' + (item.songs.length > 0 ? item.songs[0].img : ''))
               .onMove((from: number, to: number): void => {
                 this.movePlaylist(from, to);
               })
@@ -994,6 +1151,11 @@ export struct PlaylistsPage {
           .scrollBar(BarState.Off)
           .edgeEffect(EdgeEffect.Spring)
           .clip(false)
+          // 滚动联动双层底栏：上滑收起、下滑展开（与首页/我的/设置一致）
+          .onScrollFrameBegin((offset: number): OnScrollFrameBeginHandlerResult => {
+            this.onPageScrollFrame(offset);
+            return { offsetRemain: offset };
+          })
           .contentStartOffset(getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP)
           .divider({
             strokeWidth: 0.5,
@@ -1016,6 +1178,7 @@ export struct PlaylistsPage {
       .width('100%')
       .height('100%')
     }
+    .onBackPressed((): boolean => guardPlayerBack('PlaylistsPage'))
     .hideTitleBar(false)
     .hideBackButton(true)
     .titleBar(this.getTitleBar())

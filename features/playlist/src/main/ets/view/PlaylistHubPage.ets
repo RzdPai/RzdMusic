@@ -15,7 +15,7 @@
 
 import { ComponentContent, LengthMetrics } from '@kit.ArkUI';
 import { ArcList, ArcListItem } from '@kit.ArkUI';
-import { StyleConstants, WatchNavRouteConstants } from 'musicbasic';
+import { guardPlayerBack, StyleConstants, WatchNavRouteConstants } from 'musicbasic';
 import { getWatchNavContext, WatchNavContext } from '../model/WatchNavContext';
 
 @Builder
@@ -165,6 +165,7 @@ export struct PlaylistHub {
         bottom: 8
       })
     }
+    .onBackPressed((): boolean => guardPlayerBack('PlaylistHubPage'))
     .hideTitleBar(true)
   }
 }

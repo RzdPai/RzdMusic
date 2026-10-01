@@ -14,7 +14,7 @@
  */
 
 import { AppStorageV2, uiObserver } from '@kit.ArkUI';
-import { AmbientState, BreakpointType, ThemeState } from 'musicbasic';
+import { guardPlayerBack, AmbientState, BreakpointType, ThemeState } from 'musicbasic';
 import { AppStorageKeys, MusicAppState, MusicStoreService, PlayedSongRecord, TabSwitchState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { OnlinePlayUtil } from 'player';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType } from '@kit.UIDesignKit';
@@ -42,6 +42,11 @@ export struct PlaylistHomePage {
   @Local selectedMap: Record<string, boolean> = {};
   /** Scroller bound to the HDS title bar so the scroll effect (gradient blur) can fire. */
   private pageScroller: Scroller = new Scroller();
+  /**
+   * 列表重建版本号：只用于「切换平台」后强制重建所有行（key 里带上它）。
+   * 见 {@link forceReload}。
+   */
+  @Local listVersion: number = 0;
 
   aboutToAppear(): void {
     this.refresh();
@@ -52,6 +57,19 @@ export struct PlaylistHomePage {
   refresh(): void {
     this.historyList = this.store.getHistory();
     this.favoriteList = this.store.getFavorites();
+  }
+
+  /**
+   * 「切换平台」后强制刷新（照搬「重命名歌单」那套显式刷新做法）。
+   *
+   * 换源改了库里的 source/songId，理论上 `@Monitor` 会来刷新，但
+   * `ForEach` 的 key 是 `source_songId` 且列表可能正在复用节点 —— 实测会出现
+   * 「库改了、列表还是旧的」。这里重读数据后再抬一次 `listVersion`，
+   * key 全变 → 强制整表重建，平台标签与封面立刻跟着变。
+   */
+  private forceReload(): void {
+    this.refresh();
+    this.listVersion++;
   }
 
   @Monitor('tabState.playlistSection')
@@ -244,7 +262,11 @@ export struct PlaylistHomePage {
             albumName: record.albumName, albumId: record.albumId, source: record.source,
             interval: record.interval, img: record.img, types: []
           },
-          iconSize: 18
+          iconSize: 18,
+          // 换源后立刻重建列表，保证平台标签/封面实时更新
+          onSongSwitched: (): void => {
+            this.forceReload();
+          }
         })
       }
     }
@@ -408,7 +430,7 @@ export struct PlaylistHomePage {
                 ListItem() {
                   this.SongRow(record, true)
                 }
-              }, (record: PlayedSongRecord) => record.source + '_' + record.songId)
+              }, (record: PlayedSongRecord) => this.listVersion + '_' + record.source + '_' + record.songId)
               ListItem() {
                 Column()
                   .height(64)
@@ -444,7 +466,7 @@ export struct PlaylistHomePage {
                 ListItem() {
                   this.SongRow(record, false)
                 }
-              }, (record: PlayedSongRecord) => record.source + '_' + record.songId)
+              }, (record: PlayedSongRecord) => this.listVersion + '_' + record.source + '_' + record.songId)
               ListItem() {
                 Column()
                   .height(64)
@@ -472,6 +494,7 @@ export struct PlaylistHomePage {
         right: new BreakpointType(16, 24, 32, 32).getValue(this.breakpointEnv.widthBreakpoint)
       })
     }
+    .onBackPressed((): boolean => guardPlayerBack('PlaylistHomePage'))
     .hideTitleBar(false)
     .hideBackButton(true)
     .titleBar(this.getTitleBar())
