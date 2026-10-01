@@ -23,6 +23,8 @@ export class PlaybackIntentState {
   @Trace public requestVersion: number = 0;
   /** Song id to play, matching {@link MusicAppState.playQueueIds}; -1 when unset. */
   @Trace public pendingPlaySongId: number = -1;
+  /** Index in MusicAppState's existing queue (online/local records); -1 when unset. */
+  @Trace public pendingQueueIndex: number = -1;
   /** When true, the shell should present full-screen player UI. */
   @Trace public openPlayerUi: boolean = false;
 }
