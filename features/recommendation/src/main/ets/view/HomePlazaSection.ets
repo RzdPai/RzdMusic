@@ -1,6 +1,7 @@
 import { uiObserver } from '@kit.ArkUI';
 import {
   BreakpointType,
+  getPlaylistTransitionState,
   RouterUrlConstants,
   StyleConstants
 } from 'musicbasic';
@@ -131,6 +132,7 @@ export struct HomePlazaSection {
           .borderRadius(8)
           .objectFit(ImageFit.Cover)
           .alt($r('app.media.ic_avatar1'))
+          .id(`playlist-plaza-cover-${item.source}-${item.id}`)
         if (item.listenCount.length > 0) {
           Row({ space: 4 }) {
             SymbolGlyph($r('sys.symbol.play_round_triangle_fill'))
@@ -179,7 +181,11 @@ export struct HomePlazaSection {
       param.onlineSource = item.source;
       param.playlistId = item.id;
       param.listTitle = item.name;
-      this.pageIndexInfos.pushPathByName(RouterUrlConstants.PLAYLIST_DETAIL, param);
+      // 在线歌单封面随路由带下去：详情页 Hero 用它，而不是第一首歌的封面
+      param.listCover = item.image;
+      const animated: boolean = !getPlaylistTransitionState().prepare(this.getUIContext(),
+        `playlist-plaza-cover-${item.source}-${item.id}`, item.image);
+      this.pageIndexInfos.pushPathByName(RouterUrlConstants.PLAYLIST_DETAIL, param, animated);
     })
   }
 
@@ -216,7 +222,6 @@ export struct HomePlazaSection {
   }
 
   @Builder
-  @Builder
   private PlaylistGrid() {
     Row({ space: 12 }) {
       ForEach(this.plazaColumnIndexes(), (column: number) => {
@@ -230,6 +235,7 @@ export struct HomePlazaSection {
       }, (column: number) => `plaza-col-${column}-${this.plazaColumnCount()}`)
     }
     .width(StyleConstants.FULL_WIDTH)
+    .alignItems(VerticalAlign.Top)
   }
 
   @Builder
@@ -314,8 +320,7 @@ export struct HomePlazaSection {
 
   @Builder
   private PlazaBody() {
-    if (this.recommendViewModel.plazaLoading) {
-      Column({ space: 12 }) {
+    if (this.recommendViewModel.plazaLoading) {      Column({ space: 12 }) {
         LoadingProgress()
           .width(32)
           .height(32)

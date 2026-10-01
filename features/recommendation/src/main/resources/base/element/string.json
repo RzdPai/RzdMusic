@@ -5,6 +5,46 @@
       "value": "shared_desc"
     },
     {
+      "name": "home_hero_1_badge",
+      "value": "Music FM"
+    },
+    {
+      "name": "home_hero_1_title",
+      "value": "现在就听"
+    },
+    {
+      "name": "home_hero_2_badge",
+      "value": "每日推荐"
+    },
+    {
+      "name": "home_hero_2_title",
+      "value": "每日30首"
+    },
+    {
+      "name": "home_hero_3_badge",
+      "value": "NEW"
+    },
+    {
+      "name": "home_hero_3_title",
+      "value": "新歌推荐"
+    },
+    {
+      "name": "home_hero_4_badge",
+      "value": "MODE"
+    },
+    {
+      "name": "home_hero_4_title",
+      "value": "心动模式"
+    },
+    {
+      "name": "home_hero_5_badge",
+      "value": "PICK"
+    },
+    {
+      "name": "home_hero_5_title",
+      "value": "精选推荐"
+    },
+    {
       "name": "brand_huawei_music",
       "value": "Huawei Music"
     },

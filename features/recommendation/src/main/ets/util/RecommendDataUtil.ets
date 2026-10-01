@@ -23,8 +23,8 @@ import {
   TabApiDto,
   getAppRuntime
 } from 'musicbasic';
-import { AccountService, getLeaderboardEntries, lxKgSingerList, lxLeaderboard, lxTxToplist, lxTxToplistInfo, lxTxToplistList, LXSearchSong, PlatformAccount, PlatformTrackInfo } from 'player';
-import { BoardData, MusicDataService, TrackData } from './MusicDataService';
+import { AccountService, getLeaderboardEntries, lxGetPicFallback, lxKgSingerList, lxLeaderboard, lxTxToplist, lxTxToplistInfo, lxTxToplistList, LXSearchSong, PlatformAccount, PlatformTrackInfo } from 'player';
+import { BoardData, MusicDataService, pickDedicatedBoardId, TrackData } from './MusicDataService';
 import {
   RecommendCardUi,
   RecommendCategoryTabUi,
@@ -33,6 +33,18 @@ import {
   RecommendPrivateSongUi,
   RecommendSingerUi
 } from '../model/RecommendUiModels';
+
+/** 首页顶部功能入口卡的定义（角标 / 标题 / 配图 / 点击去向）。 */
+interface RecommendHeroSpec {
+  /** 左下角小角标。 */
+  badge: string;
+  /** 卡片主标题。 */
+  title: string;
+  /** 卡片配图（打包内资源）。 */
+  image: Resource;
+  /** 点击去向标识：listenNow / daily30 / newSongs / heartMode / picked。 */
+  route: string;
+}
 
 /**
  * Maps {@link MusicDbApi} DTOs to recommendation UI models and applies playback intents.
@@ -136,36 +148,131 @@ export class RecommendDataUtil {
     const merged: RecommendPrivateSongUi[] = [];
     const seen: string[] = [];
     let boards: BoardData[] = [];
-    try {
-      boards = MusicDataService.boards(svcSource);
-    } catch (_err) {
-      boards = [];
-    }
-    for (let i: number = 0; i < boards.length && merged.length < targetCount; i++) {
-      let tracks: TrackData[] = [];
+
+    // 优先用「指定榜单」：未登录时首页精选推荐固定拉
+    // QQ 新歌榜 / 酷狗飙升榜 / 网易飙升榜（见 MusicDataService.pickDedicatedBoardId）。
+    // 这样出来的歌内容稳定、封面也齐，不需要靠多榜单轮询去凑。
+    const dedicatedId: string = pickDedicatedBoardId(svcSource);
+    if (dedicatedId.length > 0) {
       try {
-        tracks = await MusicDataService.tracks(svcSource, boards[i].id);
-      } catch (_err) {
-        tracks = [];
-      }
-      for (let j: number = 0; j < tracks.length && merged.length < targetCount; j++) {
-        const track = tracks[j];
-        const key: string = track.source + '_' + track.songId;
-        if (track.songId.length === 0 || seen.indexOf(key) >= 0) {
-          continue;
+        const tracks: TrackData[] = await MusicDataService.tracks(svcSource, dedicatedId);
+        for (let i: number = 0; i < tracks.length && merged.length < targetCount; i++) {
+          const track = tracks[i];
+          const key: string = track.source + '_' + track.songId;
+          if (track.songId.length === 0 || seen.indexOf(key) >= 0) {
+            continue;
+          }
+          seen.push(key);
+          const ui = new RecommendPrivateSongUi();
+          ui.id = merged.length;
+          ui.title = track.name;
+          ui.singer = track.artist;
+          ui.source = track.source;
+          ui.songId = track.songId;
+          ui.coverUrl = track.image;
+          merged.push(ui);
         }
-        seen.push(key);
-        const ui = new RecommendPrivateSongUi();
-        ui.id = merged.length;
-        ui.title = track.name;
-        ui.singer = track.artist;
-        ui.source = track.source;
-        ui.songId = track.songId;
-        ui.coverUrl = track.image;
-        merged.push(ui);
+      } catch (_err) {
+        // 失败则落到下面的多榜单兜底
       }
     }
+
+    if (merged.length === 0) {
+      try {
+        boards = await MusicDataService.boardsWithCovers(svcSource);
+      } catch (_err) {
+        boards = [];
+      }
+      if (boards.length === 0) {
+        try {
+          boards = MusicDataService.boards(svcSource);
+        } catch (_err) {
+          boards = [];
+        }
+      }
+      // 取前几个榜单的歌曲：**并行**发请求，避免任何一个榜单卡住拖住整块首页。
+      const probeCount: number = Math.min(boards.length, 4);
+      const tasks: Promise<TrackData[]>[] = [];
+      for (let i: number = 0; i < probeCount; i++) {
+        const boardId: string = boards[i].id;
+        tasks.push(MusicDataService.tracks(svcSource, boardId).catch((): TrackData[] => []));
+      }
+      const settled: TrackData[][] = await Promise.all(tasks);
+      for (let i: number = 0; i < settled.length && merged.length < targetCount; i++) {
+        const tracks: TrackData[] = settled[i];
+        for (let j: number = 0; j < tracks.length && merged.length < targetCount; j++) {
+          const track = tracks[j];
+          const key: string = track.source + '_' + track.songId;
+          if (track.songId.length === 0 || seen.indexOf(key) >= 0) {
+            continue;
+          }
+          seen.push(key);
+          const ui = new RecommendPrivateSongUi();
+          ui.id = merged.length;
+          ui.title = track.name;
+          ui.singer = track.artist;
+          ui.source = track.source;
+          ui.songId = track.songId;
+          ui.coverUrl = track.image;
+          merged.push(ui);
+        }
+      }
+    }
+    // ⚠️ 补封面：`MusicDataService.tracks` 走的国内接口大多**不返回封面**
+    //    （酷我 kbangserver 的 musiclist 里就没有图），所以首页歌曲行会整排空图标。
+    //    榜单页有封面是因为 PlaylistDetailSongListSection 自己会补，首页这边原来没有。
+    await RecommendDataUtil.fillSongCovers(merged);
     return merged;
+  }
+
+  /**
+   * 给缺封面的歌曲行补图并**返回新数组**（供 UI 重新绑定）。
+   *
+   * @param rows 歌曲行（原数组被原地修改，返回的也是同一个数组引用）。
+   * @returns 补过封面的行数组。
+   */
+  public static async fillCovers(rows: RecommendPrivateSongUi[]): Promise<RecommendPrivateSongUi[]> {
+    await RecommendDataUtil.fillSongCovers(rows);
+    return rows;
+  }
+
+  /**
+   * 给缺封面的歌曲行补图（并发受限，避免把音源引擎打满）。
+   *
+   * @param rows 待补的歌曲行（原地修改）。
+   */
+  private static async fillSongCovers(rows: RecommendPrivateSongUi[]): Promise<void> {
+    const pending: RecommendPrivateSongUi[] = [];
+    for (let i: number = 0; i < rows.length; i++) {
+      if (rows[i].coverUrl.length === 0 && rows[i].songId.length > 0 && rows[i].source.length > 0) {
+        pending.push(rows[i]);
+      }
+    }
+    if (pending.length === 0) {
+      return;
+    }
+    let cursor: number = 0;
+    const worker = async (): Promise<void> => {
+      while (cursor < pending.length) {
+        const row: RecommendPrivateSongUi = pending[cursor];
+        cursor = cursor + 1;
+        try {
+          const pic: string = await lxGetPicFallback(row.source, row.songId, '',
+            typeof row.title === 'string' ? row.title : '', typeof row.singer === 'string' ? row.singer : '');
+          if (pic.length > 0) {
+            row.coverUrl = pic;
+          }
+        } catch (_err) {
+          // 补不到就留空，行上会显示占位图标
+        }
+      }
+    };
+    const slots: number = Math.min(3, pending.length);
+    const tasks: Promise<void>[] = [];
+    for (let i: number = 0; i < slots; i++) {
+      tasks.push(worker());
+    }
+    await Promise.all(tasks);
   }
 
   /**
@@ -357,20 +464,112 @@ export class RecommendDataUtil {
   }
 
   /**
-   * Maps the first daily track rows into hero banner cards (max 3), used when
-   * the “use login recommendations” switch replaces the toplist banners.
+   * 首页顶部大卡片：**照 MusicHome 的 5 张功能入口卡**。
    *
-   * @param songRows Daily track rows from the account provider.
-   * @returns Hero banner cards backed by the daily track covers.
+   * MusicHome 首页顶部那一排不是歌曲卡片，而是固定的功能入口（见其
+   * `MusicMemoryStore.buildRecommendFeed()` 的 `appendHeroRow`）：
+   *
+   * | 角标 | 标题 | 图 |
+   * | --- | --- | --- |
+   * | Music FM | 现在就听 | **代码绘制**（取色底 + 梯形侧翼 + 该歌封面） |
+   * | 每日推荐 | 每日30首 | **代码绘制**（前 4 首封面拼 2×2 + 当天日期） |
+   * | NEW | 新歌推荐 | 该歌封面 |
+   * | MODE | 心动模式 | 该歌封面 |
+   * | PICK | 精选推荐 | 该歌封面 |
+   *
+   * ⚠️ **前两张是代码绘制的，不走这里给图**（用户明确要求不要改这两张）；
+   *    只有后三张改成用歌曲封面。原来五张各自对应一张打包内配图
+   *    `ic_recommend1..5.png`，那 5 张图已删除（源工程两份共约 1.3MB），
+   *    删图时记得同步 `common/musicbasic` 里 `MusicMemoryStore` 的引用。
+   *
+   * 它们没有 `songId` / `boardId`，所以点击行为由 `HeroBannerSection` 分发。
+   *
+   * 副标题（卡片下方那行）：MusicHome 用的是品牌行，这里按需求**每张卡各自随机抽一首**
+   * 列表里的歌名（不是五张都显示同一首）；`songNames` 为空时回落到品牌行。
+   *
+   * 另外「每日30首」这张卡是**实时**的：
+   *   - 大号日期用当天真实的月/日（原来写死成 9月30日）；
+   *   - 背景由该列表前 4 首的封面拼成 2×2（见 `HeroBannerSection.DailyCollage`），
+   *     所以把前 4 首的封面地址一并带出去。
+   *
+   * @param songNames 可用于副标题的歌名池（一般就是首页歌曲列表，已洗牌）。
+   * @param songCovers 与 `songNames` **同下标**的封面池（卡片封面直接用它们）。
+   * @param dailyCovers 每日30首背景用的 4 张封面（可为空）。
+   * @param dailyTitles 每日30首背景用的 4 首歌名（可为空，取不到封面时占位用）。
+   * @param listenNowTitle 「现在就听」卡固定显示的歌名（空则用池里第一首）。
+   * @param listenNowCover 「现在就听」卡固定使用的封面（空则用列表首张可用封面）。
+   * @returns 5 张功能入口卡片。
    */
-  public static mapAccountTracksToHeroCards(songRows: RecommendPrivateSongUi[]): RecommendHeroCardUi[] {
+  public static getFeatureHeroCards(songNames: string[], songCovers: string[] = [], dailyCovers: string[] = [],
+    dailyTitles: string[] = [], listenNowTitle: string = '',
+    listenNowCover: string = ''): RecommendHeroCardUi[] {
+    // 只需 badge / title / route —— 图不再走打包资源
+    const specs: RecommendHeroSpec[] = [
+      { badge: 'Music FM', title: '现在就听', image: $r('app.media.ic_avatar1'), route: 'listenNow' },
+      { badge: '每日推荐', title: '每日30首', image: $r('app.media.ic_avatar1'), route: 'daily30' },
+      { badge: 'NEW', title: '新歌推荐', image: $r('app.media.ic_avatar1'), route: 'newSongs' },
+      { badge: 'MODE', title: '心动模式', image: $r('app.media.ic_avatar1'), route: 'heartMode' },
+      { badge: 'PICK', title: '精选推荐', image: $r('app.media.ic_avatar1'), route: 'picked' }
+    ];
     const banners: RecommendHeroCardUi[] = [];
-    const count: number = Math.min(songRows.length, 3);
-    for (let i = 0; i < count; i++) {
+    for (let i: number = 0; i < specs.length; i++) {
+      const spec: RecommendHeroSpec = specs[i];
+      const banner = new RecommendHeroCardUi();
+      banner.badge = spec.badge;
+      banner.title = spec.title;
+      // ★ 按**下标**取歌名，不再每张独立随机。
+      //   独立随机会出现"五张卡都抽到同一首"（随机本来就允许重复），
+      //   调用方已经把歌名池洗好牌，这里顺序取即可保证 5 张互不相同；
+      //   池子不足时才用取模循环。
+      const slot: number = songNames.length > 0 ? i % songNames.length : -1;
+      const pick: string = slot >= 0 ? songNames[slot] : 'HUAWEI music';
+      banner.subLine = pick;
+      // ★ **后三张**（新歌推荐 / 心动模式 / 精选推荐）用歌曲封面：它们本来就是"某首歌"
+      //   的入口，封面直接用**下方那首歌自己的封面**（与歌名同下标洗过牌）。
+      // ★ **前两张在手机版卡面上不动**（用户明确要求）：
+      //   - 现在就听 —— 由 `HeroBannerSection.NowPlayingCard` 自己绘制
+      //     （取色底 + 两侧梯形侧翼 + 中间封面），封面另由 `listenNowCover` 定稿；
+      //   - 每日30首 —— 由 `DailyCollage` 用前 4 首封面拼四宫格 + 大号日期。
+      //   这两条渲染路径都**不读** `coverUrl`，所以这里照样填上不影响手机观感；
+      //   而平板/手表的简化卡面（`PanelHeroBannerSection` / `WearableHome`）是直接
+      //   取 `coverUrl ?? coverImage` 的 —— 填上它们才不会回落成占位图。
+      banner.coverUrl = slot >= 0 && slot < songCovers.length ? songCovers[slot] : '';
+      banner.coverImage = spec.image;
+      banner.source = '';
+      banner.songId = '';
+      banner.boardId = '';
+      banner.topid = '';
+      banner.feature = spec.route;
+      banner.dailyCovers = spec.route === 'daily30' ? dailyCovers : [];
+      banner.dailyTitles = spec.route === 'daily30' ? dailyTitles : [];
+      if (spec.route === 'listenNow') {
+        // 「现在就听」卡展示的就是它要播的那一首（与下方歌名一致）
+        if (listenNowCover.length > 0) {
+          banner.coverUrl = listenNowCover;
+        }
+        if (listenNowTitle.length > 0) {
+          banner.subLine = listenNowTitle;
+        }
+      }
+      banners.push(banner);
+    }
+    return banners;
+  }
+
+  /**
+   * 由歌曲行生成首页顶部大卡片（旧入口，保留给"用登录账号推荐"的路径）。
+   *
+   * @param songRows 歌曲行。
+   * @returns Hero 卡片 UI 模型。
+   */
+  public static mapSongsToHeroCards(songRows: RecommendPrivateSongUi[], count: number = 3): RecommendHeroCardUi[] {
+    const banners: RecommendHeroCardUi[] = [];
+    const limit: number = Math.min(songRows.length, count);
+    for (let i: number = 0; i < limit; i++) {
       const song = songRows[i];
       const banner = new RecommendHeroCardUi();
       banner.badge = '每日推荐';
-      banner.title = song.title;
+      banner.title = typeof song.title === 'string' ? song.title : '';
       banner.subLine = typeof song.singer === 'string' ? song.singer : '';
       banner.coverUrl = song.coverUrl;
       banner.songId = song.songId;
@@ -378,6 +577,17 @@ export class RecommendDataUtil {
       banners.push(banner);
     }
     return banners;
+  }
+
+  /**
+   * Maps the first daily track rows into hero banner cards (max 3), used when
+   * the “use login recommendations” switch replaces the toplist banners.
+   *
+   * @param songRows Daily track rows from the account provider.
+   * @returns Hero banner cards backed by the daily track covers.
+   */
+  public static mapAccountTracksToHeroCards(songRows: RecommendPrivateSongUi[]): RecommendHeroCardUi[] {
+    return RecommendDataUtil.mapSongsToHeroCards(songRows, 3);
   }
 
   /** Maps a search song into a private-song UI row (dedupe via seen ids). */
