@@ -1,0 +1,13 @@
+{
+  "module": {
+    "name": "localmusic",
+    "type": "har",
+    "description": "$string:localmusic_title",
+    "deviceTypes": [
+      "phone",
+      "tablet",
+      "2in1"
+    ],
+    "routerMap": "$profile:router_map"
+  }
+}

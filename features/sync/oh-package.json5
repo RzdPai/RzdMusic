@@ -1,0 +1,15 @@
+{
+  "license": "Apache-2.0",
+  "devDependencies": {},
+  "author": "",
+  "name": "sync",
+  "description": "LX Music sync protocol client (server sync)",
+  "main": "./Index.ets",
+  "version": "1.0.0",
+  "dependencies": {
+    "musicbasic": "file:../../common/musicbasic",
+    "player": "file:../player",
+    "localmusic": "file:../localmusic",
+    "@ohos/crypto-js": "^2.0.5"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "routerMap": [
+    {
+      "name": "LocalMusicPage",
+      "pageSourceFile": "src/main/ets/view/LocalMusicView.ets",
+      "buildFunction": "LocalMusicPageBuilder",
+      "data": {
+        "description": "Local music library (imported device audio)"
+      }
+    }
+  ]
+}

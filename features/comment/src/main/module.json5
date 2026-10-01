@@ -1,0 +1,12 @@
+{
+  "module": {
+    "name": "comment",
+    "type": "har",
+    "description": "$string:comment_title",
+    "deviceTypes": [
+      "phone",
+      "tablet",
+      "2in1"
+    ]
+  }
+}

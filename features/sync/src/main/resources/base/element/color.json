@@ -1,0 +1,8 @@
+{
+  "color": [
+    { "name": "sync_page_background", "value": "#F1F3F5" },
+    { "name": "sync_card_background", "value": "#FFFFFF" },
+    { "name": "sync_card_outline", "value": "#14000000" },
+    { "name": "sync_input_background", "value": "#F1F3F5" }
+  ]
+}
