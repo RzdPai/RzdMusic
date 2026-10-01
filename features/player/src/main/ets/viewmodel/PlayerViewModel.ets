@@ -14,7 +14,7 @@
  */
 
 import { AppStorageV2, UIContext } from '@kit.ArkUI';
-import { AppStorageKeys, PlaybackShellConstants, RouterUrlConstants, ToplistRouteParam } from 'musicbasic';
+import { AppStorageKeys, RouterUrlConstants, ToplistRouteParam } from 'musicbasic';
 import { MusicAppState, PlayerTrackUi } from '../model/PlayerModels';
 import { PlayerDataUtil } from '../util/PlayerDataUtil';
 
@@ -59,14 +59,17 @@ export class PlayerViewModel {
     this.appState.isShowPlay = true;
   }
 
-  /** Opens full-screen playback inside uiContext.animateTo for shared-element friendly timing. */
-  public openFullScreenWithSharedElementTransition(uiContext: UIContext): void {
-    uiContext.animateTo({
-      duration: PlaybackShellConstants.OPEN_PLAYER_UI_ANIMATION_MS,
-      curve: Curve.EaseInOut
-    }, () => {
-      this.appState.isShowPlay = true;
-    });
+  /**
+   * 打开全屏播放页。
+   *
+   * ⚠️ **不要再把 `isShowPlay = true` 包在 `uiContext.animateTo` 里**（旧动画时代的写法）：
+   *    那会给"挂载播放页浮层 + 形变几何初始化"整段套一层隐式动画，
+   *    于是形变的起点被那层动画吃掉 —— 用户实测"直接点开播放器还是旧动画/从中间开始"
+   *    就是这个。展开动画由播放页自己按反编译的 `doEnter` 播（350ms EaseInOut，
+   *    起点状态在 `aboutToAppear` 就压好了），壳层只负责挂载。
+   */
+  public openFullScreenWithSharedElementTransition(_uiContext: UIContext): void {
+    this.appState.isShowPlay = true;
   }
 
   /** Skips to previous track according to MediaService play mode. */

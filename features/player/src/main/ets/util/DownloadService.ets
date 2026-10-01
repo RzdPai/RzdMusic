@@ -33,6 +33,8 @@ export class DownloadTask {
   albumName: string = '';
   imgUrl: string = '';
   quality: string = '';
+  /** Immutable enqueue-time tier; resolved quality may downgrade without changing retry policy. */
+  requestedQuality: string = '';
   fileName: string = '';
   status: string = DownloadStatus.WAITING;
   progress: number = 0;
@@ -52,6 +54,7 @@ export class DownloadTask {
     t.albumName = this.albumName;
     t.imgUrl = this.imgUrl;
     t.quality = this.quality;
+    t.requestedQuality = this.requestedQuality;
     t.fileName = this.fileName;
     t.status = this.status;
     t.progress = this.progress;
@@ -206,6 +209,12 @@ export class DownloadService {
   enqueue(source: string, songId: string, name: string, singer: string, quality: string,
     uiContext: UIContext | undefined, imgUrl: string = '', albumName: string = '',
     silent: boolean = false): boolean {
+    // Default callers must resolve the network before enqueue (DownloadUtil does this).
+    // Never defer preference lookup until execution, or overwrite an explicit batch selection.
+    if (quality.length === 0) {
+      console.warn('[RzdQualityPolicy] download rejected: missing enqueue-time tier snapshot');
+      return false;
+    }
     if (!lxEngineIsReady) {
       this.toast(uiContext, '音源未就绪，请先在设置中导入并选中源');
       return false;
@@ -237,7 +246,14 @@ export class DownloadService {
     task.albumName = albumName;
     task.imgUrl = imgUrl;
     task.quality = quality;
+    task.requestedQuality = quality;
+    console.info('[RzdQualityPolicy] download snapshot id=' + id + ' requested=' + quality);
     task.fileName = this.buildFileName(name, singer, quality);
+    // Failed tasks are replaced, never duplicated under the same stable id.
+    const oldIndex: number = this.findIndex(id);
+    if (oldIndex >= 0) {
+      this.tasks.splice(oldIndex, 1);
+    }
     this.tasks.push(task);
     this.retryCounts.delete(id);
     appendPlayLog('[下载] 入队 ' + task.fileName);
@@ -247,6 +263,19 @@ export class DownloadService {
     this.notify(true);
     this.pump();
     return true;
+  }
+
+  /** Returns accepted task ids only; completion is reported by snapshots/listeners, never by enqueue. */
+  enqueueBatch(rows: DownloadTask[], uiContext: UIContext | undefined): string[] {
+    const accepted: string[] = [];
+    for (const row of rows) {
+      if (this.enqueue(row.source, row.songId, row.name, row.singer, row.quality,
+        uiContext, row.imgUrl, row.albumName, true)) {
+        accepted.push(row.source + '_' + row.songId + '_' + row.quality);
+      }
+    }
+    appendPlayLog('[下载批量] requested=' + rows.length + ' accepted=' + accepted.length);
+    return accepted;
   }
 
   /** 重试失败任务（从头开始）。 */
@@ -406,6 +435,7 @@ export class DownloadService {
         t.albumName = row.albumName ?? '';
         t.imgUrl = row.imgUrl ?? '';
         t.quality = row.quality ?? '';
+        t.requestedQuality = row.requestedQuality ?? t.quality;
         t.fileName = row.fileName ?? '';
         t.status = row.status ?? DownloadStatus.PAUSED;
         t.message = row.message ?? '';
@@ -549,7 +579,9 @@ export class DownloadService {
     }
     try {
       // 1) 解析下载地址：按所选音质起、逐档向下兜底
-      const chain: string[] = getQualityChain(task.quality, task.source);
+      const chain: string[] = getQualityChain(task.requestedQuality, task.source);
+      console.info('[RzdQualityPolicy] download resolve id=' + task.id +
+        ' snapshot=' + task.requestedQuality + ' chain=' + chain.join(','));
       let url: string = '';
       for (let i: number = 0; i < chain.length; i++) {
         try {
@@ -615,6 +647,7 @@ export class DownloadService {
       appendPlayLog('[下载] 完成 ' + task.fileName);
       this.notify(true);
       this.toastLatest('下载完成: ' + task.name);
+      this.pump();
     } catch (err) {
       if (this.findIndex(task.id) < 0) {
         return;
@@ -933,7 +966,13 @@ export class DownloadService {
       if (this.downloadDirUri.length === 0) {
         throw new Error('未授权下载目录');
       }
-      const destPath: string = new fileUri.FileUri(this.downloadDirUri + '/' + task.fileName).path;
+      let destPath: string = new fileUri.FileUri(this.downloadDirUri + '/' + encodeURIComponent(task.fileName)).path;
+      // Never truncate an existing user download with the same title.
+      if (fs.accessSync(destPath)) {
+        const uniqueName: string = task.fileName.replace(/(\.[^.]+)$/, '_' + Date.now() +
+          '_' + Math.floor(Math.random() * 1000000) + '$1');
+        destPath = new fileUri.FileUri(this.downloadDirUri + '/' + encodeURIComponent(uniqueName)).path;
+      }
       await this.copyTo(tmpPath, destPath);
       finalPath = destPath;
     } else {

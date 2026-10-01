@@ -17,7 +17,7 @@
  * AMLL 歌词视图组件（ArkUI 版）。
  *
  * 忠实复刻 applemusic-like-lyrics 的核心组件：
- * - Canvas 渲染逐词扫描高亮、强调动画、距离模糊、间奏点
+ * - 单 Canvas 渲染逐词扫描高亮、强调动画、间奏点；可见行有界离散模糊
  * - 物理弹簧滚动 + 触摸拖动 + 惯性 + 5 秒自动对齐回归
  * - 点击歌词行跳转
  */
@@ -79,8 +79,10 @@ export struct AmllLyricView {
   @Param glowColor: string = '#FFFFFF';
   /** 歌词列宽度比例 */
   @Param lineWidthAspect: number = 0.8;
-  /** 是否启用距离模糊 */
-  @Param enableBlur: boolean = true;
+  /** Whether the stored preference enables viewport blur. */
+  @Param enableBlur: boolean = false;
+  /** Parent has synchronously read the persisted preference. */
+  @Param blurPreferenceReady: boolean = false;
   /** 是否启用非当前行缩放 */
   @Param enableScale: boolean = true;
   /** 是否隐藏已播放的行 */
@@ -100,6 +102,7 @@ export struct AmllLyricView {
 
   private settings: RenderingContextSettings = new RenderingContextSettings(true);
   private ctx: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.settings);
+  @Local viewportBlurActive: boolean = true;
   private engine: AmllLyricPlayerEngine = new AmllLyricPlayerEngine();
   private renderer: AmllCanvasLyricRenderer | undefined = undefined;
   private frameTicker: FrameTicker = new FrameTicker();
@@ -302,6 +305,7 @@ export struct AmllLyricView {
         lyricCenter: this.lyricCenterState.enabled
       };
       this.renderer = new AmllCanvasLyricRenderer(this.ctx, this.engine, style);
+      // Single transparent surface: no additive blend or idle edge canvases.
       this.renderer.onResize(this.viewWidth, this.viewHeight);
       this.rendererInited = true;
     }
@@ -507,8 +511,15 @@ export struct AmllLyricView {
   }
 
   private drawFrame(time: number): void {
+    const active = this.blurPreferenceReady && this.enableBlur && !this.engine.isTouchScrolled;
+    if (this.viewportBlurActive !== active) {
+      this.engine.setConfig({ enableBlur: active });
+      this.viewportBlurActive = active;
+      Logger.info('LyricViewportBlur', `active=${active} enabled=${this.enableBlur} touchScrolled=${this.engine.isTouchScrolled} layers=1 blurMode=visible-line radiusCap=6 quantization=2`);
+    }
     this.ensureRenderer();
     if (this.renderer !== undefined) {
+      this.renderer.blurEnabled = active;
       this.renderer.draw(time);
     }
   }
@@ -688,53 +699,68 @@ export struct AmllLyricView {
     this.onSeekTime(startTime);
   }
 
+  @Monitor('enableBlur', 'blurPreferenceReady')
+  onBlurChanged(): void {
+    // drawFrame owns the effective gate, including touch scrolling; do not overwrite it here.
+    if (!this.isWindowHidden) {
+      this.drawFrame(this.localTime);
+      this.scheduleFrame();
+    }
+  }
+
   build() {
-    Canvas(this.ctx)
-      .width('100%')
-      .height('100%')
-      .blendMode(BlendMode.PLUS, BlendApplyType.OFFSCREEN)
-      .onAreaChange((_oldArea: Area, newArea: Area) => {
-        const w = Number.parseFloat(newArea.width.toString());
-        const h = Number.parseFloat(newArea.height.toString());
-        if (Math.abs(w - this.viewWidth) > 0.5 || Math.abs(h - this.viewHeight) > 0.5) {
-          this.viewWidth = w;
-          this.viewHeight = h;
-          this.engine.onResize(w, h);
-          if (this.renderer !== undefined) {
-            this.renderer.onResize(w, h);
+    Stack({ alignContent: Alignment.TopStart }) {
+      Canvas(this.ctx)
+        .width('100%')
+        .height('100%')
+        .onAreaChange((_oldArea: Area, newArea: Area) => {
+          const w = Number.parseFloat(newArea.width.toString());
+          const h = Number.parseFloat(newArea.height.toString());
+          if (Math.abs(w - this.viewWidth) > 0.5 || Math.abs(h - this.viewHeight) > 0.5) {
+            this.viewWidth = w;
+            this.viewHeight = h;
+            Logger.info('LyricViewportBlur', `resize=${w}x${h} layers=1 blend=source-over blurMode=visible-line`);
+            this.engine.onResize(w, h);
+            if (this.renderer !== undefined) {
+              this.renderer.onResize(w, h);
+            }
+            this.drawFrame(this.localTime);
           }
-          this.drawFrame(this.localTime);
-        }
-      })
-      .onTouch((event: TouchEvent) => {
-        this.handleCanvasTouch(event);
-      })
-      .gesture(
-        PanGesture(new PanGestureOptions({ direction: PanDirection.Vertical }))
-          .onActionStart((event: GestureEvent) => {
-            this.handlePanStart(event);
-          })
-          .onActionUpdate((event: GestureEvent) => {
-            this.handlePanUpdate(event);
-          })
-          .onActionEnd((event: GestureEvent) => {
-            this.handlePanEnd(event);
-          })
-          .onActionCancel((event: GestureEvent) => {
-            this.handlePanEnd(event);
-          })
-      )
-      .gesture(
-        TapGesture()
-          .onAction((event: GestureEvent) => {
-            this.handleTap(event);
-          })
-      )
-      .gesture(
-        LongPressGesture({ repeat: false, duration: 500 })
-          .onAction((event: GestureEvent) => {
-            this.handleLongPress(event);
-          })
-      )
+        })
+        .onTouch((event: TouchEvent) => {
+          this.handleCanvasTouch(event);
+        })
+        .gesture(
+          PanGesture(new PanGestureOptions({ direction: PanDirection.Vertical }))
+            .onActionStart((event: GestureEvent) => {
+              this.handlePanStart(event);
+            })
+            .onActionUpdate((event: GestureEvent) => {
+              this.handlePanUpdate(event);
+            })
+            .onActionEnd((event: GestureEvent) => {
+              this.handlePanEnd(event);
+            })
+            .onActionCancel((event: GestureEvent) => {
+              this.handlePanEnd(event);
+            })
+        )
+        .gesture(
+          TapGesture()
+            .onAction((event: GestureEvent) => {
+              this.handleTap(event);
+            })
+        )
+        .gesture(
+          LongPressGesture({ repeat: false, duration: 500 })
+            .onAction((event: GestureEvent) => {
+              this.handleLongPress(event);
+            })
+        )
+
+    }
+    .width('100%')
+    .height('100%')
+    .clip(true)
   }
 }

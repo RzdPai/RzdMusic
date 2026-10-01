@@ -27,6 +27,19 @@ const KG_HEADERS: Record<string, string> = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
 };
 
+/**
+ * 酷狗歌单详情专用请求头 + 分页参数。
+ *
+ * 接口 `mobilecdn.kugou.com/api/v3/special/song` 是移动端明文接口（实测可用），
+ * 每页上限 100 条；`KG_DETAIL_MAX_PAGES * KG_DETAIL_PAGE_SIZE` 是单次加载的歌曲上限。
+ */
+const KG_DETAIL_HEADERS: Record<string, string> = {
+  'User-Agent': 'Mozilla/5.0 (Linux; Android 12)',
+  'Referer': 'https://m.kugou.com/'
+};
+const KG_DETAIL_PAGE_SIZE: number = 100;
+const KG_DETAIL_MAX_PAGES: number = 10;
+
 export class PlaylistSearchApi {
   static supportsPlaylists(source: string): boolean {
     return source === 'all' || source === 'wy' || source === 'tx' || source === 'kw' ||
@@ -344,96 +357,88 @@ export class PlaylistSearchApi {
     return list;
   }
 
+  /**
+   * 酷狗歌单详情（歌单广场点进来的那条路）。
+   *
+   * ⚠️ 这条以前是坏的，两段**都失效**（2026-09 实测）：
+   *   1. 主通道 `https://www2.kugou.kugou.com/yueku/v9/special/single/<id>-5-9999.html`
+   *      —— 该域名**没有可用 HTTPS**（TLS 握手「未能为 SSL/TLS 安全通道建立信任关系」），
+   *      `getText` 直接返回空串，必然进兜底；
+   *   2. 兜底 `https://m.kugou.com/plist/list/<id>?json=true` —— 现在返回的是 **HTML 页面**
+   *      （`<!DOCTYPE HTML>`），`JSON.parse` 必然抛错 → 歌单里**一首歌都没有**。
+   *
+   * 现在走 `mobilecdn.kugou.com/api/v3/special/song`（明文 HTTP，实测可用：
+   * 每页 100 条、`data.total` 给总数、一次请求带齐 hash / filename / duration），
+   * 与榜单列表用的 `.../api/v3/rank/song` 是同一族移动端接口。
+   *
+   * @param id 酷狗歌单 id（`specialid`，即歌单广场卡片上的 `item.id`）。
+   * @returns 歌单歌曲；接口不可用时返回空数组。
+   */
   private static async kgPlaylistDetail(id: string): Promise<SearchPlaylistSong[]> {
-    const url: string = `https://www2.kugou.kugou.com/yueku/v9/special/single/${id}-5-9999.html`;
-    const text: string = await PlaylistSearchHttp.getText(url, KG_HEADERS);
-    const list: SearchPlaylistSong[] = [];
-    if (text === '') {
-      return list;
+    if (id.length === 0) {
+      return [];
     }
-    const marker: string = 'global.data = [';
-    const start: number = text.indexOf(marker);
-    if (start < 0) {
-      return PlaylistSearchApi.kgPlaylistDetailFallback(id);
-    }
-    const jsonStart: number = start + 'global.data = '.length;
-    const jsonEnd: number = text.lastIndexOf('];');
-    if (jsonEnd <= jsonStart) {
-      return PlaylistSearchApi.kgPlaylistDetailFallback(id);
-    }
-    let parsed: Object[];
-    try {
-      parsed = JSON.parse(text.substring(jsonStart, jsonEnd + 1)) as Object[];
-    } catch (e) {
-      return PlaylistSearchApi.kgPlaylistDetailFallback(id);
-    }
+    const all: SearchPlaylistSong[] = [];
     const seen: string[] = [];
-    for (let i = 0; i < parsed.length; i++) {
-      const item: Record<string, Object> = parsed[i] as Record<string, Object>;
-      if (item === null) {
-        continue;
+    for (let page: number = 1; page <= KG_DETAIL_MAX_PAGES; page++) {
+      const url: string = `http://mobilecdn.kugou.com/api/v3/special/song?version=9108&plat=0` +
+        `&pagesize=${KG_DETAIL_PAGE_SIZE}&area_code=1&page=${page}&specialid=${id}&with_res_tag=0`;
+      const text: string = await PlaylistSearchHttp.getText(url, KG_DETAIL_HEADERS);
+      if (text === '') {
+        break;
       }
-      const hash: string = strOf(item, 'hash');
-      if (hash === '') {
-        continue;
+      let root: Record<string, Object>;
+      try {
+        root = JSON.parse(text) as Record<string, Object>;
+      } catch (_err) {
+        break;
       }
-      if (seen.indexOf(hash) >= 0) {
-        continue;
+      const data: Record<string, Object> = root['data'] as Record<string, Object>;
+      if (data === undefined || data === null) {
+        break;
       }
-      seen.push(hash);
-      list.push(SearchPlaylistSong.of(hash, strOf(item, 'songname'), strOf(item, 'singername'),
-        strOf(item, 'album_name'), fmtDuration(numOf(item, 'duration')), 'kg'));
-    }
-    if (list.length === 0) {
-      return PlaylistSearchApi.kgPlaylistDetailFallback(id);
-    }
-    return list;
-  }
-
-  /** 酷狗歌单详情兜底：HTML 解析失败时用移动端 JSON 接口。 */
-  private static async kgPlaylistDetailFallback(id: string): Promise<SearchPlaylistSong[]> {
-    const url: string = `https://m.kugou.com/plist/list/${id}?json=true`;
-    const text: string = await PlaylistSearchHttp.getText(url, KG_HEADERS);
-    const list: SearchPlaylistSong[] = [];
-    if (text === '') {
-      return list;
-    }
-    let root: Record<string, Object>;
-    try {
-      root = JSON.parse(text) as Record<string, Object>;
-    } catch (e) {
-      return list;
-    }
-    const outer: Record<string, Object> = root['list'] as Record<string, Object>;
-    if (outer === undefined || outer === null) {
-      return list;
-    }
-    const listObj: Record<string, Object> = outer['list'] as Record<string, Object>;
-    if (listObj === undefined || listObj === null) {
-      return list;
-    }
-    const items: Object[] = listObj['info'] as Object[] ?? [];
-    for (let i = 0; i < items.length; i++) {
-      const item: Record<string, Object> = items[i] as Record<string, Object>;
-      if (item === null) {
-        continue;
+      const items: Object[] = data['info'] as Object[] ?? [];
+      for (let i: number = 0; i < items.length; i++) {
+        const item: Record<string, Object> = items[i] as Record<string, Object>;
+        if (item === null) {
+          continue;
+        }
+        const hash: string = strOf(item, 'hash');
+        if (hash === '' || seen.indexOf(hash) >= 0) {
+          continue;
+        }
+        const filename: string = strOf(item, 'filename');
+        let name: string = strOf(item, 'songname');
+        let singer: string = strOf(item, 'singername');
+        if (name.length === 0 && filename.length > 0) {
+          // filename 形如「大头针 Official - 伴郎 (Best Man)」
+          const sep: number = filename.indexOf(' - ');
+          if (sep >= 0) {
+            if (singer.length === 0) {
+              singer = filename.substring(0, sep);
+            }
+            name = filename.substring(sep + 3);
+          } else {
+            name = filename;
+          }
+        }
+        if (name.length === 0) {
+          continue;
+        }
+        seen.push(hash);
+        all.push(SearchPlaylistSong.of(hash, name, singer, strOf(item, 'album_name'),
+          fmtDuration(numOf(item, 'duration')), 'kg'));
       }
-      const hash: string = strOf(item, 'hash');
-      if (hash === '') {
-        continue;
+      if (items.length < KG_DETAIL_PAGE_SIZE) {
+        break;
       }
-      const filename: string = strOf(item, 'filename');
-      const sep: number = filename.indexOf(' - ');
-      let name: string = filename;
-      let singer: string = '';
-      if (sep >= 0) {
-        singer = filename.substring(0, sep);
-        name = filename.substring(sep + 3);
-      }
-      list.push(SearchPlaylistSong.of(hash, name, singer, '',
-        fmtDuration(numOf(item, 'duration')), 'kg'));
     }
-    return list;
+    // 超大歌单（几千首）全拉会明显卡，截到上限
+    const cap: number = KG_DETAIL_MAX_PAGES * KG_DETAIL_PAGE_SIZE;
+    if (all.length > cap) {
+      all.length = cap;
+    }
+    return all;
   }
 
   private static async mgSearchPlaylists(keyword: string, page: number): Promise<SearchPlaylistInfo[]> {

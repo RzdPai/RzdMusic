@@ -4,6 +4,7 @@ import { webview } from '@kit.ArkWeb';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
+import { guardPlayerBack } from 'musicbasic';
 import { AppStorageKeys, AmbientState, MusicAppState, MusicStoreService, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { RecognitionResult, RecognitionStatus, EngineReport, EngineResultGroup } from '../recognize/RecognitionTypes';
 import { MicCancelledError, MicPermissionError, MicRecorder } from '../recognize/MicRecorder';
@@ -592,6 +593,7 @@ export struct MusicRecognitionPage {
       .width('100%')
       .height('100%')
     }
+    .onBackPressed((): boolean => guardPlayerBack('MusicRecognitionPage'))
     .hideTitleBar(false)
     .titleBar(this.getTitleBar())
     .titleMode(HdsNavDestinationTitleMode.MINI)

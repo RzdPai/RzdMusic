@@ -17,7 +17,7 @@ import { AppStorageV2 } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { MediaService } from '../model/MediaService';
 import { sourceDisplayName } from '../util/SourceFallbackUtil';
-import { AppStorageKeys, Logger, MusicAppState, SongItem, StyleConstants } from 'musicbasic';
+import { guardPlayerBack, AppStorageKeys, Logger, MusicAppState, SongItem, StyleConstants } from 'musicbasic';
 
 @Builder
 export function SongPageBuilder() {
@@ -70,6 +70,12 @@ struct SongPage {
   /** Resolved quality id, suffixed with （缓存） when served from a local cached file. */
   private qualityLabel(): string {
     const song: SongItem | undefined = this.currentSong();
+    // ★ 本地歌（source/quality 为 'local'）没有音质协商，按**歌曲本身**显示「本地」：
+    //   全局音质字段是播放时写的，重启后恢复本地歌时它可能还是空的，
+    //   照旧逻辑会掉到「未知」，而播放页徽标会掉到 128k —— 两处都要按歌曲判断。
+    if (song !== undefined && (song.source === 'local' || song.quality === 'local')) {
+      return 'local';
+    }
     let q: string = song?.quality ?? '';
     if (q.length === 0) {
       q = this.state.currentQuality;
@@ -243,6 +249,7 @@ struct SongPage {
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
     }
+    .onBackPressed((): boolean => guardPlayerBack('SongPage'))
     .hideTitleBar(true)
     .focusable(true)
     .focusOnTouch(true)

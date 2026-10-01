@@ -14,7 +14,7 @@
  */
 
 import { AppStorageV2 } from '@kit.ArkUI';
-import { AppStorageKeys, SongItem, StyleConstants, ThemeState } from 'musicbasic';
+import { AppStorageKeys, PlaybackIntentState, SongItem, StyleConstants, ThemeState } from 'musicbasic';
 import { MusicAppState } from '../model/PlayerModels';
 import { MediaService } from '../model/MediaService';
 
@@ -74,6 +74,18 @@ export struct QueuePlaylistSheet {
   /** Lazy queue rows data source. */
   @Local queueSource: QueueSongDataSource = new QueueSongDataSource(this.appState);
 
+  private queueScroller: Scroller = new Scroller();
+
+  private locateCurrentSong(): void {
+    const index: number = this.appState.selectIndex;
+    const count: number = this.appState.getQueueLength();
+    if (index < 0 || index >= count) {
+      return;
+    }
+    this.queueScroller.scrollToIndex(index, true, ScrollAlign.CENTER);
+    console.info('[RzdQueueLocate] locate index=' + index + ' count=' + count);
+  }
+
   /** Refreshes the lazy queue source when the queue or the current index changes. */
   @Monitor('appState.playQueue', 'appState.playQueueIds', 'appState.selectIndex')
   onQueueChanged(): void {
@@ -89,13 +101,17 @@ export struct QueuePlaylistSheet {
     return index === this.appState.selectIndex;
   }
 
-  /** Starts playback at the given queue index and mirrors it in MusicAppState. */
+  /** Request playback through the existing shell dispatcher without opening a new player page. */
   private playQueueIndex(index: number): void {
     if (index < 0 || index >= this.appState.getQueueLength()) {
       return;
     }
-    this.appState.selectIndex = index;
-    void MediaService.getInstance().loadAsset(index);
+    const intent: PlaybackIntentState = AppStorageV2.connect(PlaybackIntentState,
+      AppStorageKeys.PLAYBACK_INTENT_STATE, () => new PlaybackIntentState())!;
+    intent.pendingPlaySongId = -1;
+    intent.pendingQueueIndex = index;
+    intent.openPlayerUi = false;
+    intent.requestVersion++;
   }
 
   /** Removes the song at the given queue index from the play queue. */
@@ -157,7 +173,7 @@ export struct QueuePlaylistSheet {
   @Builder
   SheetContent() {
     Column() {
-      List() {
+      List({ scroller: this.queueScroller }) {
         LazyForEach(this.queueSource, (song: SongItem, index: number) => {
           ListItem() {
             this.QueueSongRow(song, index);
@@ -168,7 +184,7 @@ export struct QueuePlaylistSheet {
       .width(StyleConstants.FULL_WIDTH)
       .layoutWeight(1)
       .scrollBar(BarState.Off)
-      .contentEndOffset(16)
+      .contentEndOffset(0)
       .padding({ left: 16, right: 16 })
       .nestedScroll({
         scrollForward: NestedScrollMode.SELF_FIRST,
@@ -176,7 +192,10 @@ export struct QueuePlaylistSheet {
       })
     }
     .width(StyleConstants.FULL_WIDTH)
-    .padding({ bottom: 24 })
+    .height('100%')
+    .onAreaChange((_oldArea: Area, area: Area): void => {
+      console.info('[RzdQueueLocate] viewport height=' + area.height + ' outerBottomPadding=0');
+    })
   }
 
   /** Sheet header: label with the queue count spaced on its right in a lighter tone. */
@@ -191,7 +210,23 @@ export struct QueuePlaylistSheet {
         .fontSize(15)
         .fontColor($r('app.color.font_tertiary'))
         .opacity(0.7)
+      Blank()
+      Button({ type: ButtonType.Normal }) {
+        Image($r('app.media.ic_queue_locate'))
+          .width(22)
+          .height(22)
+          .fillColor(this.themeState.color)
+      }
+        .backgroundColor(Color.Transparent)
+        .width(40)
+        .height(40)
+        .borderRadius(20)
+        .enabled(this.appState.selectIndex >= 0 && this.appState.selectIndex < this.appState.getQueueLength())
+        .accessibilityText('定位到当前播放歌曲')
+        .onClick((): void => { this.locateCurrentSong(); })
     }
+    .width('100%')
+    .padding({ right: 40 })
   }
 
   build() {

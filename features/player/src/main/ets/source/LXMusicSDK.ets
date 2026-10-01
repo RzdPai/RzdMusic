@@ -176,11 +176,73 @@ export async function lxLeaderboard(boardId: string, page: number,
       case 'kw': return await kwLeaderboard(id, page, limit);
       case 'kg': return await kgLeaderboard(id, page, limit);
       case 'mg': return await mgLeaderboard(id, page, limit);
+      case 'tx': return await lxTxToplist(id, limit);
+      case 'wy': return await wyLeaderboard(id, limit);
     }
   } catch (_err) {
     // fall through
   }
   return { list: [], total: 0, limit: limit, source: src };
+}
+
+/**
+ * 网易云榜单歌曲。
+ *
+ * 之前 `lxLeaderboard` 里**没有 wy 分支**（直接落到空结果），所以网易榜单
+ * 一首歌都取不到。这里补上：网易的榜单就是一个特殊歌单，直接读歌单详情。
+ *
+ * @param id 榜单 id（网易榜单就是 playlist id）。
+ * @param limit 期望条数。
+ * @returns 与其它平台一致的搜索结果。
+ */
+async function wyLeaderboard(id: string, limit: number): Promise<LXSearchResult> {
+  const url: string = 'https://music.163.com/api/v6/playlist/detail?id=' + id +
+    '&n=' + limit + '&s=0';
+  const text: string = await httpGet(url, { 'Referer': 'https://music.163.com/' });
+  if (text.length === 0) {
+    return { list: [], total: 0, limit: limit, source: 'wy' };
+  }
+  let resp: Record<string, Object> = {};
+  try {
+    resp = JSON.parse(text) as Record<string, Object>;
+  } catch (_err) {
+    return { list: [], total: 0, limit: limit, source: 'wy' };
+  }
+  const playlist: Record<string, Object> = (resp.playlist as Record<string, Object>) || {};
+  const tracks: Object[] = (playlist.tracks as Object[]) || [];
+  const list: LXSearchSong[] = [];
+  const seen: Record<string, boolean> = {};
+  for (let i: number = 0; i < tracks.length && list.length < limit; i++) {
+    const item: Record<string, Object> = tracks[i] as Record<string, Object>;
+    const songId: string = String(item.id || '');
+    if (songId.length === 0 || seen[songId]) {
+      continue;
+    }
+    seen[songId] = true;
+    const artists: Object[] = (item.ar as Object[]) || [];
+    const names: string[] = [];
+    for (let a: number = 0; a < artists.length; a++) {
+      names.push(((artists[a] as Record<string, Object>).name as string) || '');
+    }
+    const album: Record<string, Object> = (item.al as Record<string, Object>) || {};
+    const durationMs: number = parseInt(String(item.dt || '0'));
+    const durationSec: number = Math.floor(durationMs / 1000);
+    list.push({
+      songId: songId,
+      name: (item.name as string) || '',
+      singer: names.join('、'),
+      albumName: (album.name as string) || '',
+      albumId: String(album.id || ''),
+      source: 'wy',
+      interval: durationSec > 0 ?
+        String(Math.floor(durationSec / 60)).padStart(2, '0') + ':' +
+        String(durationSec % 60).padStart(2, '0') : '',
+      img: (album.picUrl as string) || '',
+      types: [{ type: '128k', size: '-1' }]
+    });
+  }
+  const total: number = parseInt(String(playlist.trackCount || list.length));
+  return { list: list, total: total > 0 ? total : list.length, limit: limit, source: 'wy' };
 }
 
 const REQ_TIMEOUT: number = 10000;
@@ -844,6 +906,56 @@ export async function lxGetPicFallback(source: string, songId: string, albumId?:
                 cover = 'https://' + cover.substring(7);
               }
               result = cover;
+            }
+          } catch (_err) {
+            // fall through
+          }
+        }
+        break;
+      }
+      case 'tx': {
+        // QQ 音乐封面。
+        //
+        // 为什么必须在这里补：QQ 榜单接口（fcg_v8_toplist_cp）把 `albummid` 放在
+        // `songlist[].data` 里，而 `MusicDataService.formatTrack('tx')` 读的是外层字段
+        // → 永远拿不到 → 未登录时首页 QQ 歌曲整排没封面（酷狗/网易各自有别的来源）。
+        // 这里走歌词接口：它对 `songmid` 就返回 `albummid`，拿它拼 y.gtimg.cn 封面。
+        const headers: Record<string, string> = {
+          'Referer': 'https://y.qq.com/portal/player.html',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        };
+        const lyricUrl: string = 'https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg' +
+          '?songmid=' + songId + '&format=json&nobase64=1&g_tk=5381&loginUin=0&hostUin=0' +
+          '&inCharset=utf8&outCharset=utf-8&notice=0&platform=yqq.json&needNewCode=0';
+        const lyricText: string = await httpGet(lyricUrl, headers);
+        if (lyricText.length > 0) {
+          try {
+            const lyricResp: Record<string, Object> = JSON.parse(lyricText) as Record<string, Object>;
+            const albumMid: string = lyricResp.albummid as string || '';
+            if (albumMid.length > 0) {
+              result = 'https://y.gtimg.cn/music/photo_new/T002R300x300M000' + albumMid + '.jpg';
+            }
+          } catch (_err) {
+            // fall through
+          }
+        }
+        break;
+      }
+      case 'wy': {
+        // 网易云封面：歌曲详情接口直接给 `al.picUrl`
+        const wyUrl: string = 'https://music.163.com/api/song/detail/?ids=[' + songId + ']';
+        const wyText: string = await httpGet(wyUrl, { 'Referer': 'https://music.163.com/' });
+        if (wyText.length > 0) {
+          try {
+            const wyResp: Record<string, Object> = JSON.parse(wyText) as Record<string, Object>;
+            const songs: Object[] = wyResp.songs as Object[] || [];
+            if (songs.length > 0) {
+              const first: Record<string, Object> = songs[0] as Record<string, Object>;
+              const al: Record<string, Object> = first.al as Record<string, Object> || {};
+              const pic: string = al.picUrl as string || '';
+              if (pic.length > 0) {
+                result = pic;
+              }
             }
           } catch (_err) {
             // fall through
@@ -2112,16 +2224,74 @@ export async function lxTxToplistList(): Promise<TxToplistEntry[]> {
 }
 
 async function kwLeaderboard(id: string, page: number, limit: number): Promise<LXSearchResult> {
-  return { list: [], total: 0, limit: limit, source: 'kw' };
+  // 酷我榜单：走老 PC 端接口 `kbangserver.kuwo.cn/ksong.s`（无需签名）。
+  // 原来的空实现让酷我榜单永远是空的；签名接口 wbd.kuwo.cn 的 AppId 又已被封。
+  const url: string = 'http://kbangserver.kuwo.cn/ksong.s?from=pc&fmt=json&pn=0&rn=' + limit +
+    '&type=bang&data=content&id=' + encodeURIComponent(id) +
+    '&show_copyright_off=0&pcmp4=1&isbang=1&userid=0&httpStatus=1';
+  const text: string = await httpGet(url);
+  if (text.length === 0) {
+    return { list: [], total: 0, limit: limit, source: 'kw' };
+  }
+  let resp: Record<string, Object> = {};
+  try {
+    resp = JSON.parse(text) as Record<string, Object>;
+  } catch (_err) {
+    return { list: [], total: 0, limit: limit, source: 'kw' };
+  }
+  const items: Object[] = (resp.musiclist as Object[]) || [];
+  const total: number = parseInt((resp.num as string) || String(items.length));
+  const list: LXSearchSong[] = [];
+  const seen: Record<string, boolean> = {};
+  for (let i: number = 0; i < items.length; i++) {
+    const item: Record<string, Object> = items[i] as Record<string, Object>;
+    // ⚠️ 这个接口的歌曲 id 字段是 `id`（不是 `rid` / 不是 `musicrid`），
+    //    取错会让每一首都因 songId 为空而被过滤掉 —— 表现就是"榜单里一首歌都没有"。
+    const songId: string = (item.id as string) || '';
+    if (songId.length === 0 || seen[songId]) {
+      continue;
+    }
+    seen[songId] = true;
+    const durationSec: number = parseInt((item.song_duration as string) || (item.duration as string) || '0');
+    const minutes: number = Math.floor(durationSec / 60);
+    const seconds: number = durationSec % 60;
+    const interval: string = durationSec > 0 ?
+      String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0') : '';
+    const song: LXSearchSong = {
+      songId: songId,
+      name: (item.name as string) || '',
+      singer: (item.artist as string) || '',
+      albumName: (item.album as string) || '',
+      albumId: (item.albumid as string) || '',
+      source: 'kw',
+      interval: interval,
+      img: '',
+      types: [{ type: '128k', size: '-1' }]
+    };
+    list.push(song);
+  }
+  return { list: list, total: total > 0 ? total : list.length, limit: limit, source: 'kw' };
 }
 
 async function kgLeaderboard(id: string, page: number, limit: number): Promise<LXSearchResult> {
+  // ⚠️ 必须用 **http**：酷狗这个 CDN 的 HTTPS 证书与 `mobilecdnbj.kugou.com`
+  //    对不上（curl 实测 `schannel: SNI or certificate check failed:
+  //    SEC_E_WRONG_PRINCIPAL`），HTTPS 请求在设备上直接建连失败 ——
+  //    这就是「酷狗榜单加载不出来」的原因。http 实测 200 且返回 100 条。
   let url: string =
-    'https://mobilecdnbj.kugou.com/api/v3/rank/song?version=9108&ranktype=1&plat=0' +
+    'http://mobilecdnbj.kugou.com/api/v3/rank/song?version=9108&ranktype=1&plat=0' +
     '&pagesize=' + limit + '&area_code=1&page=' + page + '&rankid=' + id +
     '&with_res_tag=0&show_portrait_mv=1';
   let text: string = await httpGet(url);
-  let resp: Record<string, Object> = JSON.parse(text) as Record<string, Object>;
+  if (text.length === 0) {
+    return { list: [], total: 0, limit: limit, source: 'kg' };
+  }
+  let resp: Record<string, Object> = {};
+  try {
+    resp = JSON.parse(text) as Record<string, Object>;
+  } catch (_err) {
+    return { list: [], total: 0, limit: limit, source: 'kg' };
+  }
   if (resp.errcode as number !== 0) {
     return { list: [], total: 0, limit: limit, source: 'kg' };
   }

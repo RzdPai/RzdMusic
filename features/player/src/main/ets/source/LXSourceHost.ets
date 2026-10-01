@@ -16,7 +16,8 @@ export struct LXSourceHost {
   aboutToAppear(): void {
     let context = this.getUIContext().getHostContext();
     if (context !== undefined) {
-      lxSourceManager.setFilesDir(context.filesDir);
+      // 幂等：正常路径上 Ability.onCreate 已经初始化过，这里只是兜底
+      lxSourceManager.init(context);
     }
     const saved: string = MusicStoreService.getInstance().getActiveSource();
     if (saved.length > 0) {

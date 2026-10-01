@@ -19,7 +19,20 @@ export { PlayerConstants } from './src/main/ets/constant/PlayerConstants';
 export { AccountChangedState } from './src/main/ets/account/AccountChangedState';
 export { SwitchBannerState, SWITCH_BANNER_STORAGE_KEY } from './src/main/ets/model/SwitchBannerState';
 export { PlaybackPage, PlaybackPageCoverContent, PlaybackPagePanelCoverContent } from './src/main/ets/view/PlaybackPage';
-export { MediaService } from './src/main/ets/model/MediaService';
+export { MediaService, setLocalLyricResolver } from './src/main/ets/model/MediaService';
+export type { LocalLyricResolver } from './src/main/ets/model/MediaService';
+// 华为账号（系统 Account Kit + 网页授权双路径）登录：登录态 + 资料 + 回退判据
+export {
+  HuaweiAccountService, HuaweiAccountState, HuaweiAuthError, HuaweiLoginMode, HuaweiLoginOutcome
+} from './src/main/ets/account/HuaweiAccountService';
+export type { HuaweiAccountProfile } from './src/main/ets/account/HuaweiAccountService';
+export {
+  HuaweiAccountCode, huaweiNeedsWebFallback, huaweiFallbackReason, huaweiIsCapabilityUnavailable
+} from './src/main/ets/account/HuaweiAccountCode';
+// 华为云空间直存（设置 + 歌单备份/恢复，走云盘 OpenAPI，不经 WebDAV 网关）
+export { HuaweiCloudSync } from './src/main/ets/account/HuaweiCloudSync';
+export { HuaweiNativeCloudBackup } from './src/main/ets/account/HuaweiNativeCloudBackup';
+export type { HuaweiDriveUser } from './src/main/ets/account/HuaweiCloudSync';
 export { MusicAppState } from './src/main/ets/model/PlayerModels';
 export { PlayerViewModel } from './src/main/ets/viewmodel/PlayerViewModel';
 export { MusicPlayMode, AudioPlayerState } from './src/main/ets/model/MusicData';
@@ -32,8 +45,13 @@ export { OnlinePlayUtil } from './src/main/ets/util/OnlinePlayUtil';
 export { LXSourceHost } from './src/main/ets/source/LXSourceHost';
 export { LXSourceEngine, lxEngineIsReady } from './src/main/ets/source/LXSourceEngine';
 export { lxSourceManager } from './src/main/ets/source/LXSourceManager';
-export { getLXMusicUrl, getLXLyric, getLXPic, logError } from './src/main/ets/source/LXPlayHelper';
-export { lxGetQualityOptions, LXQualityOption } from './src/main/ets/source/LXQualityApi';
+export type { LXApiImportResult } from './src/main/ets/source/LXSourceManager';
+export { getLXMusicUrl, getLXLyric, getLXPic, logError, fetchBoardSongs } from './src/main/ets/source/LXPlayHelper';
+export type { BoardSongEntry } from './src/main/ets/source/LXPlayHelper';
+export { lxGetQualityOptions, lxGetQualityOptionsForSongs, LXQualityOption } from './src/main/ets/source/LXQualityApi';
+export type { LXBatchQualityResult } from './src/main/ets/source/LXQualityApi';
+// 平台中文名（kw→酷我、wy→网易云…），批量下载的失败提示里要带上它
+export { sourceDisplayName } from './src/main/ets/util/SourceFallbackUtil';
 export { lxSearch, lxLeaderboard, getLeaderboardEntries, lxGetPicFallback, lxGetLyricFallback,
   lxTxToplist, lxTxToplistInfo, lxTxSingerList, lxKgSingerList, lxTxToplistList, lxTxHotSearch,
   lxGetWyLyricAll, lxGetTTMLLyric, lxGetLyricFull } from './src/main/ets/source/LXMusicSDK';
@@ -63,3 +81,4 @@ export { SingerInfo, AlbumInfo, SongInfo, ArtistInfo, SearchPageResult, SongPage
 export type { ArtistDetailParams, AlbumDetailParams } from './src/main/ets/geuz/index';
 export { searchSingers, searchAlbums, sourceToCode, codeToSource, getArtistDetail, getArtistSongs,
   getArtistAlbums, getAlbumDetail } from './src/main/ets/geuz/index';
+export { PLAYER_BIG_COVER_ID } from './src/main/ets/view/MusicPlayInfoBlock';

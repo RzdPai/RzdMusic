@@ -1,4 +1,4 @@
-import { MusicStoreService, appendPlayLog } from 'musicbasic';
+import { MusicStoreService, PlaybackPreferenceService, appendPlayLog } from 'musicbasic';
 import { getLXMusicUrl } from '../source/LXPlayHelper';
 import { LXUserApiInfo, LXUserApiSourceInfo } from '../source/Interface';
 import { lxSourceManager } from '../source/LXSourceManager';
@@ -96,11 +96,6 @@ function declaredQualitys(source: string): string[] | null {
 }
 
 export function getQualityChain(preferred: string, source: string): string[] {
-  const store: MusicStoreService = MusicStoreService.getInstance();
-  const extendedEnabled: boolean = (AppStorage.get<boolean>('lxExtendedEnabled') ?? false) ||
-    store.getPlayExtendedEnabled();
-  const liveQuality: string = AppStorage.get<string>('lxExtendedQuality') ?? '';
-  const extendedQuality: string = liveQuality.length > 0 ? liveQuality : store.getPlayExtendedQuality();
   const ladder: string[] = [];
   const start: number = STANDARD_LADDER.indexOf(preferred);
   for (let i: number = start >= 0 ? start : 0; i < STANDARD_LADDER.length; i++) {
@@ -120,9 +115,16 @@ export function getQualityChain(preferred: string, source: string): string[] {
     }
   }
   const out: string[] = [];
-  if (extendedEnabled && extendedQuality.length > 0) {
-    out.push(extendedQuality);
+  if (EXTENDED_QUALITIES.indexOf(preferred) >= 0) {
+    // Explicit selected tier wins even for downloads; source declaration must not hide this attempt.
+    out.push(preferred);
   }
+  // Every explicitly requested tier is attempted first, even if a script declaration omits it.
+  if (out.indexOf(preferred) < 0 && QUALITY_CHAIN.indexOf(preferred) >= 0) {
+    out.unshift(preferred);
+  }
+  console.info('[RzdQualityPolicy] chain source=' + source + ' preferred=' + preferred +
+    ' policy=network-or-explicit');
   for (let i: number = 0; i < standard.length; i++) {
     if (out.indexOf(standard[i]) < 0) {
       out.push(standard[i]);
@@ -254,7 +256,7 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
   onNotice: ((msg: string) => void) | null,
   options?: FallbackOptions): Promise<UrlResolveOutcome> {
   const opts: FallbackOptions = options ?? new FallbackOptions();
-  const preferred: string = AppStorage.get<string>('lxPlayQuality') ?? '128k';
+  const preferred: string = await PlaybackPreferenceService.resolveDefaultQuality();
   const currentId: string = activeSourceId();
   const chain: string[] = getQualityChain(preferred, source);
   appendPlayLog('[播放] 音质链(' + sourceDisplayName(source) + '): ' + chain.join(' > '));

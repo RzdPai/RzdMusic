@@ -20,7 +20,7 @@
  * - 逐词渐变扫描高亮（对应 CSS mask-image 渐变遮罩的 calc 后备方案）
  * - 强调效果（逐字符缩放/位移/辉光，对应 Web Animation API 的关键帧）
  * - 漂浮动画（对应 composite: add 的 float 动画）
- * - 距离模糊（对应 filter: blur）
+ * - 单透明画布，可见行距离模糊（上限 6px、2px 离散档，拖动清晰）
  * - 背景人声行滑动（对应 bgWrapper 的 slideY/scale）
  * - 间奏点呼吸动画
  */
@@ -532,6 +532,8 @@ export class AmllCanvasLyricRenderer {
 
   // ==================== 绘制 ====================
 
+  public blurEnabled: boolean = false;
+
   draw(renderTime: number): void {
     this.advanceSmoothTime(renderTime);
     // 间奏点透明度按真实时间推进（拖动时 draw 高频调用，渐隐实时生效）
@@ -544,25 +546,36 @@ export class AmllCanvasLyricRenderer {
     // 先确认容器有真实尺寸再测量：0 宽度下测量会生成病态行高（每字符一行），
     // 且首帧测量顺序建立后行高迟迟无法被真实值替换
     this.ensureMeasured();
-    this.ctx.reset();
-    this.ctx.save();
-    this.ctx.globalCompositeOperation = 'source-over';
-    this.ctx.filter = 'none';
-    this.ctx.shadowBlur = 0;
+    this.drawViewportSlice(this.ctx, 0, h, 0);
+  }
 
-    // 点击定位圆角框（画在歌词文本之下，随行滚动）
+  /** Render only groups intersecting this bounded surface; keep original viewport coordinates. */
+  private drawViewportSlice(context: CanvasRenderingContext2D, startY: number, endY: number,
+    originY: number): void {
+    this.ctx = context;
+    context.reset();
+    context.save();
+    context.translate(0, -originY);
+    context.beginPath();
+    context.rect(0, startY, this.containerWidth, endY - startY);
+    context.clip();
+    context.globalCompositeOperation = 'source-over';
+    context.filter = 'none';
+    context.shadowBlur = 0;
     this.drawFocusFrame();
-
     const groups = this.engine.groups;
+    const padding = this.style.fontSize * 2;
     for (let i = 0; i < groups.length; i++) {
-      this.drawGroup(groups[i], this.smoothTime);
+      const group = groups[i];
+      const top = group.posY.getCurrentPosition();
+      const height = this.engine.getLineHeight(i);
+      if (top + height + padding >= startY && top - padding <= endY) {
+        this.drawGroup(group, this.smoothTime);
+      }
     }
-    this.ctx.restore();
-
     this.drawInterludeDots();
-
-    // 上下边缘渐隐遮罩：避免歌词被视口直接裁切的割裂感
-    this.drawEdgeFade(w, h);
+    this.drawEdgeFade(this.containerWidth, this.containerHeight);
+    context.restore();
   }
 
   /** 点击定位行的圆角框：包住整个主行+副行块，弹性弹出/淡出 */
@@ -663,14 +676,10 @@ export class AmllCanvasLyricRenderer {
 
     ctx.save();
     ctx.globalAlpha = amllClamp01(group.opacity);
-    // 拖动/滚动交互期间（含松手后自动对齐回归前）不模糊任何行：
-    // 视口边缘进出与 overscan 区域的行在 calcLayout 中仍会拿到模糊目标，绘制层直接跳过
-    const blurVal = this.engine.isTouchScrolled ? 0 : Math.min(16, group.blur);
-    if (blurVal > 0.01) {
-      ctx.filter = `blur(${blurVal.toFixed(2)}px)`;
-    } else {
-      ctx.filter = 'none';
-    }
+    // Quantized, bounded blur only for visible groups. Touch scrolling renders sharp text.
+    const blurRadius: number = !this.blurEnabled || this.engine.isTouchScrolled ? 0 :
+      Math.min(6, Math.round(Math.max(0, group.blur) / 2) * 2);
+    ctx.filter = blurRadius >= 2 ? `blur(${blurRadius}px)` : 'none';
     ctx.shadowBlur = 0;
 
     // 主行缩放（transform-origin: left；对唱行 transform-origin: right）
@@ -732,14 +741,10 @@ export class AmllCanvasLyricRenderer {
     const bgOriginX: number = group.isBgFirst ? 0 : this.padX;
     ctx.save();
     ctx.globalAlpha *= 0.4 * alpha;
-    // 出现/消失过渡：随显示进度模糊淡出——出现时从强模糊渐变到清晰，收起时反向
-    // （数值取大：过渡初期透明度低，弱模糊肉眼不可见）
-    const transitionBlur = (1 - alpha) * 20;
-    if (transitionBlur > 0.1) {
-      ctx.filter = `blur(${transitionBlur.toFixed(2)}px)`;
-    } else {
-      ctx.filter = 'none';
-    }
+    // Preserve the original backing-vocal blur reveal, with only cost bounds changed.
+    const transitionBlur: number = !this.blurEnabled || this.engine.isTouchScrolled ? 0 :
+      Math.min(6, Math.round((1 - alpha) * 20 / 2) * 2);
+    ctx.filter = transitionBlur >= 2 ? `blur(${transitionBlur}px)` : 'none';
     ctx.beginPath();
     ctx.rect(this.padX, spaceTop, this.contentWidth, spaceH);
     ctx.clip();

@@ -88,7 +88,9 @@ export struct LyricsComponent {
   /** 是否存在翻译/罗马音副行（无副行时隐藏翻译按钮） */
   @Local hasSubLyric: boolean = false;
   /** 歌词页模糊效果开关（设置页可调，关闭时上下行用透明度过渡） */
-  @Local lyricBlurEnabled: boolean = true;
+  @Local lyricBlurEnabled: boolean = false;
+  /** No extra blur surfaces before the persisted preference has been read. */
+  @Local lyricBlurPreferenceReady: boolean = false;
   /** 设置页共享的模糊开关状态 */
   @Local lyricBlurState: LyricBlurState =
     AppStorageV2.connect(LyricBlurState, AppStorageKeys.LYRIC_BLUR_STATE, () => new LyricBlurState())!;
@@ -124,14 +126,30 @@ export struct LyricsComponent {
 
   aboutToAppear(): void {
     this.showSubLyricState.enabled = MusicStoreService.getInstance().getShowSubLyric();
-    this.lyricBlurEnabled = MusicStoreService.getInstance().getLyricBlurEnabled();
+    this.syncLyricBlurPreference('appear');
     this.lyricFontSizeState.size = MusicStoreService.getInstance().getLyricFontSize();
     this.loadLyrics();
   }
 
+  private syncLyricBlurPreference(reason: string): void {
+    this.lyricBlurPreferenceReady = false;
+    if (getAppRuntime().context === undefined) {
+      this.lyricBlurEnabled = false;
+      Logger.warn('LyricViewportBlur', `preference reason=${reason} synced=false effective=false`);
+      return;
+    }
+    const storedEnabled: boolean = MusicStoreService.getInstance().getLyricBlurEnabled();
+    this.lyricBlurEnabled = storedEnabled;
+    this.lyricBlurState.enabled = storedEnabled;
+    this.lyricBlurPreferenceReady = true;
+    Logger.info('LyricViewportBlur',
+      `preference reason=${reason} storeEnabled=${storedEnabled} sharedEnabled=${this.lyricBlurState.enabled} synced=true effective=${this.lyricBlurEnabled}`);
+  }
+
   @Monitor('lyricBlurState.enabled')
   onLyricBlurChanged(): void {
-    this.lyricBlurEnabled = this.lyricBlurState.enabled;
+    // Settings writes the store before publishing shared state. Never persist a UI fallback.
+    this.syncLyricBlurPreference('shared-change');
   }
 
   @Monitor('lyricFontSizeState.size')
@@ -469,6 +487,7 @@ export struct LyricsComponent {
             glowColor: '#FFFFFF',
             lineWidthAspect: 0.95,
             enableBlur: this.lyricBlurEnabled,
+            blurPreferenceReady: this.lyricBlurPreferenceReady,
             enableScale: true,
             hidePassedLines: false,
             showSubLyric: this.showSubLyricState.enabled,

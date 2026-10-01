@@ -33,19 +33,27 @@ export function dispatchShellPlaybackIntent(
 ): void {
   const songId: number = intentState.pendingPlaySongId;
   const openUi: boolean = intentState.openPlayerUi;
+  const queueIndex: number = intentState.pendingQueueIndex;
   Logger.debug(
     PlaybackIntentLogEvent.SHELL_DISPATCH,
     'songId=' + songId,
     'openUi=' + openUi
   );
-  if (songId < 0 && !openUi) {
+  if (songId < 0 && queueIndex < 0 && !openUi) {
     return;
   }
   if (openUi) {
     Logger.info(PlaybackIntentLogEvent.OPEN_PLAYER_UI, 'request');
     onRequestOpenPlayerUi();
   }
-  if (songId >= 0) {
+  if (queueIndex >= 0) {
+    if (queueIndex < appState.getQueueLength()) {
+      Logger.info(PlaybackIntentLogEvent.LOAD_QUEUE, 'queueIndex=' + queueIndex);
+      void MediaService.getInstance().loadAsset(queueIndex);
+    } else {
+      Logger.warn(PlaybackIntentLogEvent.SONG_NOT_IN_DB, 'invalid queueIndex=' + queueIndex);
+    }
+  } else if (songId >= 0) {
     const ids: number[] = [...appState.playQueueIds];
     let playIndex: number = ids.findIndex((id: number) => id === songId);
     if (playIndex < 0) {
@@ -64,5 +72,6 @@ export function dispatchShellPlaybackIntent(
     void MediaService.getInstance().loadAsset(playIndex);
   }
   intentState.pendingPlaySongId = -1;
+  intentState.pendingQueueIndex = -1;
   intentState.openPlayerUi = false;
 }
