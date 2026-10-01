@@ -14,9 +14,13 @@
  */
 
 import { AppStorageV2, uiObserver } from '@kit.ArkUI';
-import { AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, FavoriteEntry, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
+import { hilog } from '@kit.PerformanceAnalysisKit';
+import { guardPlayerBack } from 'musicbasic';
+import { PlaybackIntentState, SongItem } from 'musicbasic';
+import { AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BarScrollHelper, BreakpointType, FavoriteEntry, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { OnlinePlayUtil, sourceToCode } from 'player';
+import { SongMoreMenu } from 'playlist';
 import { PlatformMusicPage } from '../account/PlatformMusicPage';
 import { DownloadManagerSection } from './DownloadManagerSection';
 import { CapsuleSegmentedSelector } from './CapsuleSegmentedSelector';
@@ -28,6 +32,8 @@ import { CapsuleSegmentedSelector } from './CapsuleSegmentedSelector';
 
 @ComponentV2
 export struct MinePage {
+  /** 「回到顶部」指令：壳层点了当前页签时递增（底部页签设计规范）。 */
+  @Param scrollTopCommand: number = 0;
   /** Window breakpoint for the HDS home-style responsive title. */
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
   @Local store: MusicStoreService = MusicStoreService.getInstance();
@@ -53,11 +59,23 @@ export struct MinePage {
   @Local selectedMap: Record<string, boolean> = {};
   /** 平台音乐刷新信号（标题栏刷新按钮触发）。 */
   @Local platformRefreshSignal: number = 0;
+  /**
+   * 历史/收藏列表的重建版本号。
+   *
+   * 只用于「切换平台」后强制重建所有行（key 里带上它），见 {@link forceReloadRecords}。
+   */
+  @Local recordsVersion: number = 0;
   /** Scroller bound to the HDS title bar so the scroll effect (gradient blur) can fire. */
   private pageScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
     this.refreshRecords();
+  }
+
+  /** 壳层点了当前页签：滚回顶部（底部页签设计规范）。 */
+  @Monitor('scrollTopCommand')
+  onScrollTopCommand(): void {
+    this.pageScroller.scrollEdge(Edge.Top);
   }
 
   /** 历史/收藏版本变化时刷新当前分段列表。 */
@@ -74,9 +92,51 @@ export struct MinePage {
     }
   }
 
+  /**
+   * 「切换平台」后强制刷新列表（照搬「重命名歌单」那套显式刷新做法）。
+   *
+   * 光靠上面的 `@Monitor` 不够实时：`Repeat` 是按 key 复用节点的，
+   * 而这里的 key 就是 `source_songId` —— 换源后 key 变了理论上会重建，
+   * 但实测会出现"库已经改了、列表还是旧的"（页面复用/时机问题）。
+   * 所以这里先重读一遍数据，再把 `recordsVersion` 抬一位：key 里带上版本号，
+   * 所有行 key 全变 → 强制全部重建，立即显示新平台。
+   */
+  private forceReloadRecords(): void {
+    this.refreshRecords();
+    this.recordsVersion++;
+  }
+
   /** 播放一条历史/收藏记录（复用在线播放编排）。 */
   private playRecord(record: PlayedSongRecord): void {
     void OnlinePlayUtil.playRecord(this.appState, record, this.getUIContext());
+  }
+
+  /** Favorite play-all uses the existing app queue and shell intent dispatcher. */
+  private playAllFavorites(): void {
+    const queue: SongItem[] = [];
+    const seed: number = Date.now();
+    for (let i: number = 0; i < this.records.length; i++) {
+      const record: PlayedSongRecord = this.records[i];
+      if (record.songId.length === 0 || record.source.length === 0) {
+        continue;
+      }
+      const item: SongItem = MusicStoreService.toSongItem(record);
+      item.id = seed + i;
+      queue.push(item);
+    }
+    if (queue.length === 0) {
+      this.getUIContext().getPromptAction().showToast({ message: '暂无可播放收藏歌曲' });
+      return;
+    }
+    this.appState.replaceQueue(queue, 0);
+    const intent: PlaybackIntentState = AppStorageV2.connect(PlaybackIntentState,
+      AppStorageKeys.PLAYBACK_INTENT_STATE, (): PlaybackIntentState => new PlaybackIntentState())!;
+    intent.pendingPlaySongId = -1;
+    intent.pendingQueueIndex = 0;
+    intent.openPlayerUi = true;
+    intent.requestVersion++;
+    hilog.info(0, 'RzdMinePlayback', 'favorite play-all rows=%{public}d queue=%{public}d',
+      this.records.length, queue.length);
   }
 
   /** 多选 key。 */
@@ -256,9 +316,22 @@ export struct MinePage {
             .backgroundColor(this.platformColor(record.source))
         }
         .alignItems(HorizontalAlign.Center)
-        SymbolGlyph($r('sys.symbol.chevron_right'))
-          .fontSize(16)
-          .fontColor([$r('sys.color.font_tertiary')])
+        // ★ 右侧原来是 `chevron_right`（一个不能点的装饰箭头），
+        //   改成**和其它界面一致的歌曲菜单**（`SongMoreMenu`：播放/下载/加歌单/加收藏/加队列）。
+        //   历史与收藏两个分段共用这一行，所以两边同时生效。
+        //   行本身仍然可点（点整行 = 播放），菜单按钮自己消费点击、不会连带触发播放。
+        SongMoreMenu({
+          song: {
+            songId: record.songId, name: record.name, singer: record.singer,
+            albumName: record.albumName, albumId: record.albumId, source: record.source,
+            interval: record.interval, img: record.img, types: []
+          },
+          iconSize: 18,
+          // 换源后立刻重建列表，保证平台标签/封面实时更新
+          onSongSwitched: (): void => {
+            this.forceReloadRecords();
+          }
+        })
       }
     }
     .width('100%')
@@ -437,6 +510,18 @@ export struct MinePage {
         }
       });
     }
+    if (this.recordSection === 1 && this.records.length > 0 && !this.selectionMode) {
+      menus.push({
+        content: {
+          label: '播放全部',
+          icon: $r('sys.symbol.play_fill'),
+          isEnabled: true,
+          action: (): void => {
+            this.playAllFavorites();
+          }
+        }
+      });
+    }
     if ((this.recordSection === 0 || this.recordSection === 1) && this.records.length > 0 && !this.selectionMode) {
       menus.push({
         content: {
@@ -575,7 +660,8 @@ export struct MinePage {
                   this.RecordRow(obj.item)
                 }
               })
-              .key((item: PlayedSongRecord) => (this.recordSection === 0 ? 'h_' : 'f_') + item.source + '_' + item.songId)
+              .key((item: PlayedSongRecord) => (this.recordSection === 0 ? 'h_' : 'f_') + this.recordsVersion + '_' +
+              item.source + '_' + item.songId)
             if (this.records.length === 0) {
               ListItem() {
                 Text(this.recordSection === 0 ? '暂无播放历史' : '暂无收藏歌曲')
@@ -598,6 +684,14 @@ export struct MinePage {
           .scrollBar(BarState.Off)
           .edgeEffect(EdgeEffect.Spring)
           .clip(true)
+          // 滚动联动双层底栏：上滑收起、下滑展开（与首页/歌单/设置一致）
+          .onScrollFrameBegin((offset: number): OnScrollFrameBeginHandlerResult => {
+            if (BarScrollHelper.isEnabled()) {
+              BarScrollHelper.notifyScrollDelta(this.getUIContext(), this.appState, offset,
+                this.breakpointEnv.widthBreakpoint as number);
+            }
+            return { offsetRemain: offset };
+          })
           .divider({
             strokeWidth: 0.5,
             color: $r('sys.color.comp_divider'),
@@ -617,6 +711,7 @@ export struct MinePage {
       .width('100%')
       .height('100%')
     }
+    .onBackPressed((): boolean => guardPlayerBack('MinePage'))
     .hideTitleBar(false)
     .hideBackButton(true)
     .titleBar(this.getTitleBar())

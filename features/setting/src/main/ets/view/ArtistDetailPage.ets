@@ -18,6 +18,7 @@ import { http } from '@kit.NetworkKit';
 import { image } from '@kit.ImageKit';
 import { effectKit } from '@kit.ArkGraphics2D';
 import { BusinessError } from '@kit.BasicServicesKit';
+import { guardPlayerBack } from 'musicbasic';
 import { AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType } from '@kit.UIDesignKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
@@ -29,6 +30,10 @@ import {
 import { FavoriteEntry } from 'musicbasic';
 import { SongMoreMenu } from 'playlist';
 import { CapsuleSegmentedSelector } from './CapsuleSegmentedSelector';
+import { DetailImmersiveBackdrop } from './DetailImmersiveBackdrop';
+import { WindowInfo, getWindowInfoState } from 'musicbasic';
+import { hdsMaterial } from '@kit.UIDesignKit';
+import { ArtistDetailDataSource } from './ArtistDetailDataSource';
 
 const DANGER_COLOR: string = '#E64545';
 const SONG_PAGE_LIMIT: number = 50;
@@ -88,9 +93,46 @@ export struct ArtistDetailPage {
   @Local isFavoriteArtist: boolean = false;
   @Local artistDesc: string = '';
   @Local showAboutPopup: boolean = false;
+  @Local windowInfo: WindowInfo = getWindowInfoState();
+  @Local detailScrollVp: number = 0;
+  private lastScrollBand: number = -1;
   private scroller: Scroller = new Scroller();
 
+  private updateImmersiveScroll(): void {
+    this.detailScrollVp = Math.max(0, this.scroller.currentOffset().yOffset);
+    const band: number = Math.floor(this.detailScrollVp / 56);
+    if (band !== this.lastScrollBand) {
+      this.lastScrollBand = band;
+      hilog.info(0, 'RzdDetailImmersive', 'artist scrollVp=%{public}f thresholdVp=264 avoidTopVp=%{public}f',
+        this.detailScrollVp, this.windowInfo.statusBarTopVp);
+    }
+  }
+  private songData: ArtistDetailDataSource<SongInfo> = new ArtistDetailDataSource<SongInfo>();
+  private albumData: ArtistDetailDataSource<AlbumInfo> = new ArtistDetailDataSource<AlbumInfo>();
+  private songGeneration: number = 0;
+  private albumGeneration: number = 0;
+  private pageAlive: boolean = false;
+  @Local albumsLoading: boolean = false;
+
+  @Monitor('songs')
+  onSongsChanged(): void {
+    this.songData.reload(this.songs);
+  }
+
+  @Monitor('albums')
+  onAlbumsChanged(): void {
+    this.albumData.reload(this.albums);
+  }
+
+  aboutToDisappear(): void {
+    this.pageAlive = false;
+    this.songGeneration++;
+    this.albumGeneration++;
+    hilog.info(0, 'RzdArtistSticky', 'cancel page requests gen=%{public}d', this.songGeneration);
+  }
+
   aboutToAppear(): void {
+    this.pageAlive = true;
     const favSource: string = codeToSource(this.source);
     const favId: string = this.effectiveArtistId.length > 0 ? this.effectiveArtistId : this.effectiveArtistMid;
     this.isFavoriteArtist = favId.length > 0 && this.store.isFavoriteArtist(favSource, favId);
@@ -225,9 +267,18 @@ export struct ArtistDetailPage {
   }
 
   private async loadSongs(page: number, reset: boolean): Promise<void> {
-    if (this.loading || this.loadingMore) {
+    if (!this.pageAlive || (!reset && (this.loading || this.loadingMore))) {
       return;
     }
+    const generation: number = reset ? ++this.songGeneration : this.songGeneration;
+    const identity: string = this.effectiveArtistId + ':' + this.effectiveArtistMid;
+    const sort: number = this.songSort;
+    if (reset) {
+      this.loadingMore = false;
+      this.errorMsg = '';
+    }
+    hilog.info(0, 'RzdArtistSticky', 'songs start gen=%{public}d sort=%{public}d page=%{public}d',
+      generation, sort, page);
     if (reset) {
       this.loading = true;
     } else {
@@ -238,6 +289,11 @@ export struct ArtistDetailPage {
       const order: string = this.songSort === 0 ? 'hot' : 'time';
       const result: SongPageResult = await getArtistSongs(this.source, this.effectiveArtistId, this.effectiveArtistMid,
         order, SONG_PAGE_LIMIT, offset, this.artistNameText);
+      if (!this.pageAlive || generation !== this.songGeneration || sort !== this.songSort ||
+        identity !== this.effectiveArtistId + ':' + this.effectiveArtistMid) {
+        hilog.info(0, 'RzdArtistSticky', 'songs stale/cancel gen=%{public}d', generation);
+        return;
+      }
       if (result.list.length === 0) {
         this.songsHasMore = false;
         return;
@@ -248,24 +304,38 @@ export struct ArtistDetailPage {
       if (this.artistNameText.length === 0 && this.songs.length > 0) {
         this.artistNameText = this.songs[0].singer.length > 0 ? this.songs[0].singer : this.artistNameText;
       }
-      if (result.hasMore && this.songs.length < SONG_PAGE_LIMIT * 2 && page < 3) {
-        void this.loadSongs(page + 1, false);
-      }
+      hilog.info(0, 'RzdArtistSticky', 'songs ready gen=%{public}d loaded=%{public}d more=%{public}d',
+        generation, this.songs.length, this.songsHasMore ? 1 : 0);
     } catch (err) {
-      const e: Error = err as Error;
-      this.errorMsg = e.message ?? '加载失败';
-      this.songsHasMore = false;
+      if (this.pageAlive && generation === this.songGeneration) {
+        const e: Error = err as Error;
+        this.errorMsg = e.message ?? '加载失败';
+        this.songsHasMore = false;
+      }
     } finally {
-      this.loading = false;
-      this.loadingMore = false;
+      if (this.pageAlive && generation === this.songGeneration) {
+        this.loading = false;
+        this.loadingMore = false;
+      }
     }
   }
 
   private async loadAlbums(page: number): Promise<void> {
+    if (!this.pageAlive || this.albumsLoading) {
+      return;
+    }
+    this.albumsLoading = true;
+    const generation: number = ++this.albumGeneration;
+    const identity: string = this.effectiveArtistId + ':' + this.effectiveArtistMid;
     try {
       const offset: number = (page - 1) * ALBUM_PAGE_LIMIT;
       const result: ArtistAlbumPageResult = await getArtistAlbums(this.source, this.effectiveArtistId, this.effectiveArtistMid,
         ALBUM_PAGE_LIMIT, offset);
+      if (!this.pageAlive || generation !== this.albumGeneration ||
+        identity !== this.effectiveArtistId + ':' + this.effectiveArtistMid) {
+        hilog.info(0, 'RzdArtistSticky', 'albums stale/cancel gen=%{public}d', generation);
+        return;
+      }
       if (result.list.length === 0) {
         this.albumsHasMore = false;
         return;
@@ -278,11 +348,14 @@ export struct ArtistDetailPage {
       this.albums = page === 1 ? result.list : this.albums.concat(result.list);
       this.albumsHasMore = result.hasMore;
       this.albumPage = page + 1;
-      if (result.hasMore && this.albums.length < ALBUM_PAGE_LIMIT * 2 && page < 3) {
-        void this.loadAlbums(page + 1);
-      }
     } catch (_err) {
-      this.albumsHasMore = false;
+      if (this.pageAlive && generation === this.albumGeneration) {
+        this.albumsHasMore = false;
+      }
+    } finally {
+      if (this.pageAlive && generation === this.albumGeneration) {
+        this.albumsLoading = false;
+      }
     }
   }
 
@@ -427,14 +500,25 @@ export struct ArtistDetailPage {
   }
 
   private playAll(): void {
-    if (this.songs.length === 0) {
+    if (!this.pageAlive || this.activeTab !== 0 || this.loading || this.songs.length === 0) {
       return;
     }
     const list: LXSearchSong[] = [];
     for (let i: number = 0; i < this.songs.length; i++) {
       list.push(this.toPlayable(this.songs[i]));
     }
-    void OnlinePlayUtil.playList(this.appState, list, 0, this.getUIContext());
+    const generation: number = this.songGeneration;
+    const sort: number = this.songSort;
+    hilog.info(0, 'RzdArtistSticky', 'playall dispatch gen=%{public}d sort=%{public}d readyLoaded=%{public}d more=%{public}d',
+      generation, sort, list.length, this.songsHasMore ? 1 : 0);
+    void OnlinePlayUtil.playList(this.appState, list, 0, this.getUIContext()).then((accepted: boolean): void => {
+      if (!this.pageAlive || generation !== this.songGeneration || sort !== this.songSort) {
+        hilog.info(0, 'RzdArtistSticky', 'playall completion canceled gen=%{public}d', generation);
+        return;
+      }
+      hilog.info(0, 'RzdArtistSticky', 'playall accepted=%{public}d gen=%{public}d count=%{public}d',
+        accepted ? 1 : 0, generation, list.length);
+    });
   }
 
   /** 收藏：把歌手歌曲加入以歌手名命名的歌单（不存在则创建）。 */
@@ -636,11 +720,15 @@ export struct ArtistDetailPage {
           end: LengthMetrics.vp(16)
         },
         style: {
-          blurStrategy: BlurStrategy.ENABLE,
+          blurStrategy: BlurStrategy.DISABLE,
           scrollEffectOpts: {
-            scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR
+            enableScrollEffect: true,
+            scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR,
+            blurEffectiveStartOffset: LengthMetrics.vp(0),
+            blurEffectiveEndOffset: LengthMetrics.vp(264)
           },
           originalStyle: {
+            backgroundStyle: { backgroundColor: Color.Transparent },
             contentStyle: {
               backIconStyle: {
                 iconColor: this.fgPrimary(),
@@ -653,6 +741,7 @@ export struct ArtistDetailPage {
             }
           },
           scrollEffectStyle: {
+            backgroundStyle: { backgroundColor: this.avgColor },
             contentStyle: {
               backIconStyle: {
                 iconColor: this.fgPrimary(),
@@ -703,40 +792,15 @@ export struct ArtistDetailPage {
     }
     const style = bar.style;
     if (style !== undefined) {
-      style.systemMaterialEffect = buildTitleMaterial(this.ambientState.level);
+      // Fully transparent initial plate: do not let material supply an opaque backdrop.
+      style.systemMaterialEffect = { materialType: hdsMaterial.MaterialType.NONE };
     }
     return bar;
   }
 
-  build() {
-    HdsNavDestination() {
-      Column() {
+  @Builder
+  private ArtistHero() {
         Stack({ alignContent: Alignment.Bottom }) {
-          if (this.artistPicUrlText.length > 0 && !this.imageFailed) {
-            Image(this.artistPicUrlText)
-              .width('100%')
-              .height(320)
-              .objectFit(ImageFit.Cover)
-              .onError(() => {
-                this.imageFailed = true;
-              })
-          } else {
-            Column()
-              .width('100%')
-              .height(320)
-              .justifyContent(FlexAlign.Center)
-              .backgroundColor('#1f2328')
-          }
-
-          Column()
-            .width('100%')
-            .height(150)
-            .position({ y: 170 })
-            .linearGradient({
-              colors: [[Color.Transparent, 0], [this.avgColor, 1]],
-              angle: 180,
-              direction: GradientDirection.Bottom
-            })
 
           Column() {
             Text(this.artistNameText.length > 0 ? this.artistNameText : '歌手')
@@ -779,6 +843,7 @@ export struct ArtistDetailPage {
                 }
               })
 
+              if (this.activeTab === 0) {
               Row() {
                 SymbolGlyph($r('sys.symbol.play_fill'))
                   .fontSize(26)
@@ -793,9 +858,12 @@ export struct ArtistDetailPage {
               .backgroundBlurStyle(this.buttonBlur())
               .alignItems(VerticalAlign.Center)
               .justifyContent(FlexAlign.Center)
+              .enabled(!this.loading && this.songs.length > 0)
+              .opacity(this.loading || this.songs.length === 0 ? 0.5 : 1)
               .onClick(() => {
                 this.playAll();
               })
+              }
 
               Row() {
                 SymbolGlyph(this.isFavoriteArtist ? $r('sys.symbol.heart_fill') : $r('sys.symbol.heart'))
@@ -824,6 +892,28 @@ export struct ArtistDetailPage {
         .width('100%')
         .height(320)
 
+  }
+
+  @Builder
+  private ArtistStickyHeader() {
+    Column() {
+      if (this.activeTab === 0) {
+        Row({ space: 8 }) {
+          SymbolGlyph($r('sys.symbol.play_round_triangle_fill'))
+            .fontSize(28)
+            .fontColor([this.fgPrimary()])
+          Text('播放全部 · 已加载 ' + this.songs.length + ' 首')
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.fgPrimary())
+        }
+        .width('100%')
+        .height(52)
+        .padding({ left: 16, right: 16 })
+        .opacity(this.loading || this.songs.length === 0 ? 0.5 : 1)
+        .enabled(!this.loading && this.songs.length > 0)
+        .onClick((): void => { this.playAll(); })
+      }
         Row({ space: 8 }) {
           Column() {
             CapsuleSegmentedSelector({
@@ -842,9 +932,26 @@ export struct ArtistDetailPage {
         .justifyContent(FlexAlign.Center)
         .padding({ left: 16, right: 16, top: 6, bottom: 4 })
 
-        Scroll(this.scroller) {
-          Column({ space: 0 }) {
-            if (this.loading && this.songs.length === 0) {
+    }
+    .width('100%')
+    .backgroundColor(this.avgColor)
+  }
+
+  build() {
+    HdsNavDestination() {
+      Stack({ alignContent: Alignment.TopStart }) {
+        DetailImmersiveBackdrop({
+          photo: this.artistPicUrlText,
+          color: this.avgColor,
+          topAvoidVp: this.windowInfo.statusBarTopVp,
+          scrollVp: this.detailScrollVp,
+          page: 'artist'
+        })
+      List({ scroller: this.scroller }) {
+        ListItem() { this.ArtistHero() }
+        ListItemGroup({ header: this.ArtistStickyHeader() }) {
+            if (this.activeTab === 0 && this.loading && this.songs.length === 0) {
+              ListItem() {
               Column() {
                 LoadingProgress()
                   .width(32)
@@ -854,7 +961,9 @@ export struct ArtistDetailPage {
               .width('100%')
               .padding({ top: 60, bottom: 60 })
               .justifyContent(FlexAlign.Center)
-            } else if (this.errorMsg.length > 0 && this.songs.length === 0) {
+              }
+            } else if (this.activeTab === 0 && this.errorMsg.length > 0 && this.songs.length === 0) {
+              ListItem() {
               Column({ space: 8 }) {
                 Text(this.errorMsg)
                   .fontSize(13)
@@ -864,18 +973,14 @@ export struct ArtistDetailPage {
               }
               .width('100%')
               .padding({ top: 60, bottom: 60 })
+              }
             } else {
               if (this.activeTab === 0) {
-                ForEach(this.songs, (item: SongInfo, index: number) => {
-                  this.SongRowView(item, index)
-                  if (index < this.songs.length - 1) {
-                    Divider()
-                      .strokeWidth(0.5)
-                      .color(this.fgDivider())
-                      .margin({ left: 68, right: 16 })
-                  }
-                }, (item: SongInfo) => item.id + '_' + item.name)
+                LazyForEach(this.songData, (item: SongInfo, index: number) => {
+                  ListItem() { this.SongRowView(item, index) }
+                }, (item: SongInfo) => this.source + ':' + item.id)
                 if (this.songsHasMore) {
+                  ListItem() {
                   Row() {
                     Text(this.loadingMore ? '加载中…' : '上拉加载更多')
                       .fontSize(12)
@@ -887,18 +992,14 @@ export struct ArtistDetailPage {
                   }
                   .width('100%')
                   .justifyContent(FlexAlign.Center)
+                  }
                 }
               } else {
-                ForEach(this.albums, (item: AlbumInfo, index: number) => {
-                  this.AlbumRowView(item)
-                  if (index < this.albums.length - 1) {
-                    Divider()
-                      .strokeWidth(0.5)
-                      .color(this.fgDivider())
-                      .margin({ left: 84, right: 16 })
-                  }
-                }, (item: AlbumInfo) => item.id + '_' + item.name)
+                LazyForEach(this.albumData, (item: AlbumInfo) => {
+                  ListItem() { this.AlbumRowView(item) }
+                }, (item: AlbumInfo) => this.source + ':' + item.id + ':' + item.mid)
                 if (this.albumsHasMore) {
+                  ListItem() {
                   Row() {
                     Text('上拉加载更多')
                       .fontSize(12)
@@ -910,30 +1011,33 @@ export struct ArtistDetailPage {
                   }
                   .width('100%')
                   .justifyContent(FlexAlign.Center)
+                  }
                 }
               }
             }
-          }
-          .width('100%')
         }
-        .width('100%')
-        .layoutWeight(1)
-        .scrollBar(BarState.Off)
-        .edgeEffect(EdgeEffect.Spring)
-        .align(Alignment.Top)
-        .onReachEnd(() => {
-          this.loadMore();
-        })
       }
       .width('100%')
-      .height('100%')
+      .height('calc(100% - 56vp)')
+      .margin({ top: 56 })
+      .contentEndOffset(96)
+      .sticky(StickyStyle.Header)
+      .cachedCount(4)
+      .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.Spring)
+      .onReachEnd((): void => { this.loadMore(); })
+      .onDidScroll((): void => { this.updateImmersiveScroll(); })
+      }
+      .width(LayoutPolicy.matchParent)
+      .height(LayoutPolicy.matchParent)
     }
+    .onBackPressed((): boolean => guardPlayerBack('ArtistDetailPage'))
     .hideTitleBar(false)
     .titleBar(this.getArtistTitleBar())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.scroller])
-    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
-    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
     .systemBarStyle(
       { statusBarContentColor: this.isLightBackdrop() ? '#000000' : '#FFFFFF' },
       { statusBarContentColor: this.isLightBackdrop() ? '#000000' : '#FFFFFF' })

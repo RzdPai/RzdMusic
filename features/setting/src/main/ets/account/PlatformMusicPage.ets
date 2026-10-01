@@ -405,6 +405,12 @@ export struct PlatformMusicPage {
     void OnlinePlayUtil.playList(appState, songs, startIndex, this.getUIContext());
   }
 
+  /**
+   * 华为账号卡片在本页面**不渲染**：它属于「登录平台音乐」那个面板
+   * （`AccountManageSheet`，见 `HuaweiAccountCard`）。本页面是「用平台账号听歌」的
+   * 歌单浏览页，混进来会让两件事看起来是一回事。
+   */
+
   build() {
     Column() {
       if (this.groups.length === 0) {

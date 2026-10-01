@@ -14,6 +14,7 @@
  */
 
 import { AppStorageV2, LengthMetrics, uiObserver } from '@kit.ArkUI';
+import { guardPlayerBack } from 'musicbasic';
 import { AlbumRouteParam, AmbientState, AppStorageKeys, BreakpointType, FavoriteEntry, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, ThemeState, buildTitleMaterial } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType } from '@kit.UIDesignKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
@@ -22,6 +23,10 @@ import { image } from '@kit.ImageKit';
 import { effectKit } from '@kit.ArkGraphics2D';
 import { AlbumDetailResult, AlbumInfo, ColorConversion, LXSearchSong, OnlinePlayUtil, SongInfo, getAlbumDetail, codeToSource, showSystemShare, buildSongShareText } from 'player';
 import { SongMoreMenu } from 'playlist';
+import { DetailImmersiveBackdrop } from './DetailImmersiveBackdrop';
+import { ArtistDetailDataSource } from './ArtistDetailDataSource';
+import { WindowInfo, getWindowInfoState } from 'musicbasic';
+import { hdsMaterial } from '@kit.UIDesignKit';
 
 const ALBUM_PAGE_LIMIT: number = 100;
 
@@ -67,7 +72,26 @@ export struct AlbumDetailPage {
   @Local errorMsg: string = '';
   @Local avgColor: string = '#1f1f22';
   @Local imageFailed: boolean = false;
+  @Local windowInfo: WindowInfo = getWindowInfoState();
+  @Local detailScrollVp: number = 0;
+  private lastScrollBand: number = -1;
+  private songData: ArtistDetailDataSource<SongInfo> = new ArtistDetailDataSource<SongInfo>();
   private scroller: Scroller = new Scroller();
+
+  @Monitor('songs')
+  onSongsChanged(): void {
+    this.songData.reload(this.songs);
+  }
+
+  private updateImmersiveScroll(): void {
+    this.detailScrollVp = Math.max(0, this.scroller.currentOffset().yOffset);
+    const band: number = Math.floor(this.detailScrollVp / 56);
+    if (band !== this.lastScrollBand) {
+      this.lastScrollBand = band;
+      hilog.info(0, 'RzdDetailImmersive', 'album scrollVp=%{public}f thresholdVp=264 avoidTopVp=%{public}f',
+        this.detailScrollVp, this.windowInfo.statusBarTopVp);
+    }
+  }
 
   aboutToAppear(): void {
     const favSource: string = codeToSource(this.source);
@@ -395,11 +419,15 @@ export struct AlbumDetailPage {
           end: LengthMetrics.vp(16)
         },
         style: {
-          blurStrategy: BlurStrategy.ENABLE,
+          blurStrategy: BlurStrategy.DISABLE,
           scrollEffectOpts: {
-            scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR
+            enableScrollEffect: true,
+            scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR,
+            blurEffectiveStartOffset: LengthMetrics.vp(0),
+            blurEffectiveEndOffset: LengthMetrics.vp(264)
           },
           originalStyle: {
+            backgroundStyle: { backgroundColor: Color.Transparent },
             contentStyle: {
               backIconStyle: {
                 iconColor: this.fgPrimary(),
@@ -412,6 +440,7 @@ export struct AlbumDetailPage {
             }
           },
           scrollEffectStyle: {
+            backgroundStyle: { backgroundColor: this.avgColor },
             contentStyle: {
               backIconStyle: {
                 iconColor: this.fgPrimary(),
@@ -463,40 +492,24 @@ export struct AlbumDetailPage {
     }
     const style = bar.style;
     if (style !== undefined) {
-      style.systemMaterialEffect = buildTitleMaterial(this.ambientState.level);
+      style.systemMaterialEffect = { materialType: hdsMaterial.MaterialType.NONE };
     }
     return bar;
   }
 
   build() {
     HdsNavDestination() {
-      Column() {
+      Stack({ alignContent: Alignment.TopStart }) {
+        DetailImmersiveBackdrop({
+          photo: this.infoPicUrl,
+          color: this.avgColor,
+          topAvoidVp: this.windowInfo.statusBarTopVp,
+          scrollVp: this.detailScrollVp,
+          page: 'album'
+        })
+        List({ scroller: this.scroller }) {
+          ListItem() {
         Stack({ alignContent: Alignment.Bottom }) {
-          if (this.infoPicUrl.length > 0 && !this.imageFailed) {
-            Image(this.infoPicUrl)
-              .width('100%')
-              .height(320)
-              .objectFit(ImageFit.Cover)
-              .onError(() => {
-                this.imageFailed = true;
-              })
-          } else {
-            Column()
-              .width('100%')
-              .height(320)
-              .justifyContent(FlexAlign.Center)
-              .backgroundColor('#1f2328')
-          }
-
-          Column()
-            .width('100%')
-            .height(150)
-            .position({ y: 170 })
-            .linearGradient({
-              colors: [[Color.Transparent, 0], [this.avgColor, 1]],
-              angle: 180,
-              direction: GradientDirection.Bottom
-            })
 
           Column() {
             Text(this.infoName.length > 0 ? this.infoName : '专辑')
@@ -537,10 +550,9 @@ export struct AlbumDetailPage {
         }
         .width('100%')
         .height(320)
-
-        Scroll(this.scroller) {
-          Column({ space: 0 }) {
+          }
             if (this.loading) {
+              ListItem() {
               Column() {
                 LoadingProgress()
                   .width(32)
@@ -550,7 +562,9 @@ export struct AlbumDetailPage {
               .width('100%')
               .padding({ top: 60, bottom: 60 })
               .justifyContent(FlexAlign.Center)
+              }
             } else if (this.errorMsg.length > 0 && this.songs.length === 0) {
+              ListItem() {
               Column({ space: 8 }) {
                 Text(this.errorMsg)
                   .fontSize(13)
@@ -561,38 +575,32 @@ export struct AlbumDetailPage {
               .width('100%')
               .padding({ top: 60, bottom: 60 })
               .justifyContent(FlexAlign.Center)
+              }
             } else {
-              ForEach(this.songs, (item: SongInfo, index: number) => {
-                this.SongRowView(item, index)
-                if (index < this.songs.length - 1) {
-                  Divider()
-                    .strokeWidth(0.5)
-                    .color(this.fgDivider())
-                    .margin({ left: 68, right: 16 })
-                }
-              }, (item: SongInfo) => item.id + '_' + item.name + '_' + item.singer)
+              LazyForEach(this.songData, (item: SongInfo, index: number) => {
+                ListItem() { this.SongRowView(item, index) }
+              }, (item: SongInfo) => this.source + ':' + item.id + ':' + item.name + ':' + item.singer)
             }
-            Column()
-              .height(48)
-              .width('100%')
-          }
-          .width('100%')
         }
         .width('100%')
-        .layoutWeight(1)
+        .height('calc(100% - 56vp)')
+        .margin({ top: 56 })
+        .contentEndOffset(96)
+        .cachedCount(4)
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring)
-        .align(Alignment.Top)
+        .onDidScroll((): void => { this.updateImmersiveScroll(); })
       }
-      .width('100%')
-      .height('100%')
+      .width(LayoutPolicy.matchParent)
+      .height(LayoutPolicy.matchParent)
     }
+    .onBackPressed((): boolean => guardPlayerBack('AlbumDetailPage'))
     .hideTitleBar(false)
     .titleBar(this.getAlbumTitleBar())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.scroller])
-    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
-    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
     .systemBarStyle(
       { statusBarContentColor: this.isLightBackdrop() ? '#000000' : '#FFFFFF' },
       { statusBarContentColor: this.isLightBackdrop() ? '#000000' : '#FFFFFF' })

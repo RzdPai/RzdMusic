@@ -13,16 +13,20 @@
  * limitations under the License.
  */
 
-import { AppStorageV2, uiObserver } from '@kit.ArkUI';
+import { guardPlayerBack } from 'musicbasic';
+import { AppStorageV2, CapsuleSegmentButtonV2, ColorMetrics, LengthMetrics, SegmentButtonV2Items, uiObserver } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { common, ConfigurationConstant, Want } from '@kit.AbilityKit';
 import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { http } from '@kit.NetworkKit';
 import { pasteboard } from '@kit.BasicServicesKit';
-import { AmbientState, AppStorageKeys, RouterUrlConstants, BreakpointType, HomeSourceState, LyricBlurState, LyricFontSizeState, MusicStoreService, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, WindowInfo, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, getWindowInfoState } from 'musicbasic';
+import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, BarScrollHelper, RouterUrlConstants, BreakpointType, HomeSourceState, LocalCoverImage, LyricBlurState, LyricFontSizeState, MusicAppState, MusicStoreService, PlaybackFlowLightState, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, WindowInfo, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, getWindowInfoState } from 'musicbasic';
 import { BlurStrategy, HdsNavigation, HdsNavigationTitleMode, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { LXUserApiInfo, lxSourceManager, MediaService } from 'player';
+import type { LXApiImportResult } from 'player';
+import { HuaweiAccountService, HuaweiAccountState } from 'player';
+import { PlayerConstants } from 'player';
 import { AccountManageSheet } from '../account/AccountManageSheet';
 import { PlatformMusicPage } from '../account/PlatformMusicPage';
 
@@ -31,6 +35,7 @@ import { SettingsDetailPage, SettingsDetailRouteParam } from './SettingsDetailPa
 import { CapsuleSegmentedSelector } from './CapsuleSegmentedSelector';
 import { OptionChoiceSheet } from './OptionChoiceSheet';
 import { DownloadManagerSection } from './DownloadManagerSection';
+import { importSourceFiles } from '../util/SourceFileImport';
 const LX_ONLINE_IMPORT_MAX_BYTES: number = 9 * 1024 * 1024;
 const LX_ONLINE_IMPORT_TIMEOUT: number = 15000;
 const DEFAULT_SETTING_INDEX: number = 4;
@@ -52,6 +57,8 @@ class SettingsEntry {
  */
 @ComponentV2
 export struct SettingPage {
+  /** 「回到顶部」指令：壳层点了当前页签时递增（底部页签设计规范）。 */
+  @Param scrollTopCommand: number = 0;
   /** Window breakpoint for the HDS home-style responsive title. */
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
   @Local lxApiList: LXUserApiInfo[] = [];
@@ -76,12 +83,31 @@ export struct SettingPage {
   private pendingSheetIndex: number = -1;
   @Local onlineUrl: string = '';
   @Local importing: boolean = false;
-  @Local playQuality: string = '';
-  private readonly qualityOptions: string[] =
-    ['128k', '320k', 'flac', 'flac24bit', 'hires', 'atmos', 'atmos_plus', 'master'];
+  @Local store: MusicStoreService = MusicStoreService.getInstance();
+  /** 仅保存静态选项；选中态由分网 store 唯一真源派生。 */
+  private readonly networkQualityModeItems: SegmentButtonV2Items = new SegmentButtonV2Items([
+    { text: '关' },
+    { text: '开' }
+  ]);
+  private readonly downloadQualityModeItems: SegmentButtonV2Items = new SegmentButtonV2Items([
+    { text: '关' },
+    { text: '开' }
+  ]);
+  private readonly qualityRowLabels: string[][] = [
+    ['128K', '320K', 'FLAC', '24Bit'],
+    ['Hi-Res', '全景声', '全景声+', '母带']
+  ];
+  private readonly qualityRowValues: string[][] = [
+    ['128k', '320k', 'flac', 'flac24bit'],
+    ['hires', 'atmos', 'atmos_plus', 'master']
+  ];
   @Local ambientLevel: number = 0;
   @Local themeState: ThemeState =
     AppStorageV2.connect(ThemeState, AppStorageKeys.THEME_STATE, () => new ThemeState())!;
+  /** 华为账号登录态：「登录音乐」那张卡登录后要显示头像与昵称。 */
+  @Local huaweiState: HuaweiAccountState =
+    AppStorageV2.connect(HuaweiAccountState, PlayerConstants.HUAWEI_ACCOUNT_STATE,
+      () => new HuaweiAccountState())!;
   @Local customColor: string = '';
   @Local colorMode: number = 2;
   private readonly presetColors: string[] = [
@@ -90,6 +116,9 @@ export struct SettingPage {
   ];
   /** Scroller bound to the HDS title bar so the scroll effect (gradient blur) can fire. */
   private pageScroller: Scroller = new Scroller();
+  /** 全局播控状态：滚动联动双层底栏需要写 miniBarExpanded / hdsBarLayoutMode。 */
+  @Local appState: MusicAppState =
+    AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
 
   /** Applies a theme color (hex) and persists it. */
   private applyThemeColor(color: string): void {
@@ -122,6 +151,8 @@ export struct SettingPage {
   @Local playlistAddPosition: string = 'bottom';
   /** Whether the playback page shows mini lyric lines below the cover. */
   @Local showMiniLyric: boolean = false;
+  /** 播放页是否启用流光背景（颜色随封面动态取色）。 */
+  @Local playbackFlowLight: boolean = false;
   /** Whether playback shares audio focus with other apps. */
   @Local audioMix: boolean = false;
   @Local crossScriptFallback: boolean = true;
@@ -141,6 +172,8 @@ export struct SettingPage {
   aboutToAppear(): void {
     this.refresh();
     this.syncWideSettingLayout();
+    // 恢复华为账号登录态：登录过之后「登录音乐」那张卡要显示头像与昵称
+    HuaweiAccountService.getInstance().restore();
   }
 
   private isWideSettingLayout(): boolean {
@@ -163,6 +196,12 @@ export struct SettingPage {
     }
   }
 
+  /** 壳层点了当前页签：滚回顶部（底部页签设计规范）。 */
+  @Monitor('scrollTopCommand')
+  onScrollTopCommand(): void {
+    this.pageScroller.scrollEdge(Edge.Top);
+  }
+
   @Monitor('windowInfo.widthBp')
   onWindowWidthBpChanged(): void {
     this.syncWideSettingLayout();
@@ -177,9 +216,9 @@ export struct SettingPage {
       this.engineReady = AppStorage.get<boolean>('lxEngineReady') === true;
     }
     this.engineSources = AppStorage.get<string>('lxEngineSources') ?? '{}';
-    this.playQuality = AppStorage.get<string>('lxPlayQuality') ?? '128k';
     this.ambientLevel = MusicStoreService.getInstance().getAmbientLevel();
     this.showMiniLyric = MusicStoreService.getInstance().getShowMiniLyric();
+    this.playbackFlowLight = MusicStoreService.getInstance().getPlaybackFlowLight();
     this.crossScriptFallback = MusicStoreService.getInstance().getCrossScriptFallback();
     this.audioMix = MusicStoreService.getInstance().getAudioMix();
     this.lyricBlurEnabled = MusicStoreService.getInstance().getLyricBlurEnabled();
@@ -347,41 +386,20 @@ export struct SettingPage {
     this.refresh();
   }
 
-  /** Imports a source script from a local file via the system document picker. */
+  /** Imports source scripts from multiple local files, retaining per-file failures. */
   private async importLXSource(): Promise<void> {
     const context = this.getUIContext().getHostContext();
     if (context === undefined) {
       return;
     }
-    const docPicker: picker.DocumentViewPicker = new picker.DocumentViewPicker(context);
-    const docOptions: picker.DocumentSelectOptions = new picker.DocumentSelectOptions();
-    docOptions.maxSelectNumber = 1;
     try {
-      const result: string[] = await docPicker.select(docOptions);
-      if (result.length === 0) {
-        return;
+      const message: string = await importSourceFiles(context);
+      this.refresh();
+      if (message.length > 0) {
+        this.toast(message);
       }
-      const fileUri: string = result[0];
-      const file: fs.File = fs.openSync(fileUri, fs.OpenMode.READ_ONLY);
-      const stat: fs.Stat = fs.statSync(fileUri);
-      const buf: ArrayBuffer = new ArrayBuffer(stat.size);
-      fs.readSync(file.fd, buf, { offset: 0, length: stat.size });
-      fs.closeSync(file);
-      const decoder: util.TextDecoder = util.TextDecoder.create('utf-8');
-      const script: string = decoder.decodeToString(new Uint8Array(buf));
-      try {
-        lxSourceManager.importApi(script);
-        this.refresh();
-        this.toast('源导入成功');
-      } catch (_parseErr) {
-        this.toast('导入失败: 无效的脚本文件');
-      }
-    } catch (e) {
-      const err: BusinessError = e as BusinessError;
-      if (err.code !== undefined && err.code === 1) {
-        return;
-      }
-      this.toast('导入失败');
+    } catch (_error) {
+      this.toast('选择音源文件失败或已取消');
     }
   }
 
@@ -411,11 +429,15 @@ export struct SettingPage {
         return;
       }
       try {
-        lxSourceManager.importApi(script);
+        const imported: LXApiImportResult = lxSourceManager.importApi(script);
+        if (!imported.ok) {
+          this.toast('导入失败：' + imported.message);
+          return;
+        }
         this.refresh();
         this.closeSettingSheet();
         this.onlineUrl = '';
-        this.toast('源导入成功');
+        this.toast('已导入「' + imported.message + '」');
       } catch (_parseErr) {
         this.toast('导入失败: 无效的脚本文件');
       }
@@ -425,12 +447,6 @@ export struct SettingPage {
       httpRequest.destroy();
       this.importing = false;
     }
-  }
-
-  private selectQuality(q: string): void {
-    this.playQuality = q;
-    AppStorage.setOrCreate('lxPlayQuality', q);
-    MusicStoreService.getInstance().setPlayQuality(q);
   }
 
   private selectColorMode(mode: number): void {
@@ -494,7 +510,7 @@ export struct SettingPage {
       }
       .width('100%')
     }
-    .padding({ left: 20, right: 20, top: 24, bottom: 24 })
+    .padding({ left: 20, right: 20, top: 24, bottom: 160 })
   }
 
   /** 平台账号管理弹窗：账号管理。 */
@@ -723,17 +739,92 @@ export struct SettingPage {
     .height('100%')
   }
 
+  /** 显式读取版本号，让共享 store 的异步恢复和其它入口修改驱动刷新。 */
+  private networkBaseQuality(wifi: boolean): string {
+    const version: number = this.store.networkQualityVersion;
+    return this.store.getNetworkBaseQuality(wifi);
+  }
+
+  private networkExtendedQuality(wifi: boolean): string {
+    const version: number = this.store.networkQualityVersion;
+    return this.store.getNetworkExtendedQuality(wifi);
+  }
+
+  private networkExtendedEnabled(wifi: boolean): boolean {
+    const version: number = this.store.networkQualityVersion;
+    return this.store.getNetworkExtendedEnabled(wifi);
+  }
+
+  private networkEffectiveQualityLabel(wifi: boolean): string {
+    const version: number = this.store.networkQualityVersion;
+    const quality: string = this.store.getNetworkPlayQuality(wifi);
+    for (let row: number = 0; row < this.qualityRowValues.length; row++) {
+      const index: number = this.qualityRowValues[row].indexOf(quality);
+      if (index >= 0) {
+        return this.qualityRowLabels[row][index];
+      }
+    }
+    return quality;
+  }
+
+  private logNetworkQuality(wifi: boolean, action: string): void {
+    console.info(`[RzdQualitySettings] network=${wifi ? 'wifi-ethernet' : 'cellular'} action=${action} ` +
+      `enabled=${this.store.getNetworkExtendedEnabled(wifi)} base=${this.store.getNetworkBaseQuality(wifi)} ` +
+      `extended=${this.store.getNetworkExtendedQuality(wifi)} effective=${this.store.getNetworkPlayQuality(wifi)}`);
+  }
+
+  @Builder
+  private NetworkQualitySettings(wifi: boolean, title: string) {
+    this.SubTitle(title)
+    this.SubTitle('基础音质')
+    this.CapsuleSelector(this.qualityRowLabels[0],
+      this.qualityRowValues[0].indexOf(this.networkBaseQuality(wifi)), (index: number) => {
+        this.store.setNetworkBaseQuality(wifi, this.qualityRowValues[0][index]);
+        this.logNetworkQuality(wifi, 'base');
+      })
+    this.SubTitle('拓展音质')
+    Column() {
+      CapsuleSegmentButtonV2({
+        items: this.networkQualityModeItems,
+        selectedIndex: this.networkExtendedEnabled(wifi) ? 1 : 0,
+        $selectedIndex: (index: number): void => {
+          this.store.setNetworkExtendedEnabled(wifi, index === 1);
+          this.logNetworkQuality(wifi, 'segment-mode');
+        },
+        buttonBackgroundColor: ColorMetrics.resourceColor($r('app.color.capsule_background')),
+        buttonMinHeight: LengthMetrics.vp(40),
+        buttonBorderRadius: LengthMetrics.vp(20),
+        itemMinHeight: LengthMetrics.vp(40),
+        itemBorderRadius: LengthMetrics.vp(20),
+        itemFontColor: ColorMetrics.resourceColor($r('sys.color.font_primary')),
+        itemSelectedFontColor: ColorMetrics.resourceColor($r('sys.color.font_on_primary')),
+        itemSelectedBackgroundColor: ColorMetrics.resourceColor(this.themeState.color)
+      })
+    }
+    .width('100%')
+    .padding({ top: 4, bottom: 4 })
+    if (this.networkExtendedEnabled(wifi)) {
+      this.CapsuleSelector(this.qualityRowLabels[1],
+        this.qualityRowValues[1].indexOf(this.networkExtendedQuality(wifi)), (index: number) => {
+          this.store.setNetworkExtendedQuality(wifi, this.qualityRowValues[1][index]);
+          this.logNetworkQuality(wifi, 'extended');
+        })
+    }
+    Text('当前生效音质：' + this.networkEffectiveQualityLabel(wifi))
+      .fontSize($r('sys.float.Caption_M'))
+      .fontColor(this.themeState.color)
+      .width('100%')
+      .padding({ top: 8, bottom: 8 })
+  }
+
   /** 播放设置弹窗：音质+混音 / 其余，拆为两张卡片。 */
   @Builder
   private PlaybackSheet() {
     Scroll() {
       Column({ space: 12 }) {
         Column() {
-          this.SubTitle($r('app.string.setting_sub_quality'))
-          this.CapsuleSelector(this.qualityOptions, this.qualityOptions.indexOf(this.playQuality),
-            (index: number) => {
-              this.selectQuality(this.qualityOptions[index]);
-            })
+          this.NetworkQualitySettings(true, 'Wi-Fi / 以太网默认播放/下载音质')
+          this.NetworkQualitySettings(false, '蜂窝默认播放/下载音质')
 
           this.SubTitle($r('app.string.setting_sub_audio_mix'))
           this.CapsuleSelector(this.onOffOptions, this.audioMix ? 0 : 1,
@@ -766,6 +857,19 @@ export struct SettingPage {
               MusicStoreService.getInstance().setShowMiniLyric(isOn);
               const state = AppStorageV2.connect(ShowMiniLyricState, AppStorageKeys.SHOW_MINI_LYRIC_STATE,
                 () => new ShowMiniLyricState());
+              if (state !== undefined) {
+                state.enabled = isOn;
+              }
+            })
+
+          this.SubTitle($r('app.string.setting_sub_playback_flow_light'))
+          this.CapsuleSelector(this.onOffOptions, this.playbackFlowLight ? 0 : 1,
+            (index: number) => {
+              const isOn: boolean = index === 0;
+              this.playbackFlowLight = isOn;
+              MusicStoreService.getInstance().setPlaybackFlowLight(isOn);
+              const state = AppStorageV2.connect(PlaybackFlowLightState,
+                AppStorageKeys.PLAYBACK_FLOW_LIGHT_STATE, () => new PlaybackFlowLightState());
               if (state !== undefined) {
                 state.enabled = isOn;
               }
@@ -822,19 +926,46 @@ export struct SettingPage {
         .backgroundColor($r('app.color.card_background'))
       }
       .width('100%')
-      .padding({ left: 20, right: 20, top: 12, bottom: 12 })
+      .padding({ left: 20, right: 20, top: 12, bottom: 160 })
     }
     .width('100%')
     .height('100%')
     .scrollBar(BarState.Off)
   }
 
-  /** 下载设置弹窗：命名格式 / 质量标签 / 保存位置。 */
+  private downloadQualityMode(): string {
+    const version: number = this.store.downloadQualityVersion;
+    return this.store.getDownloadQualityMode();
+  }
+
+  @Builder
+  private DownloadQualitySettings() {
+    this.SubTitle('下载时选择音质')
+    CapsuleSegmentButtonV2({
+      items: this.downloadQualityModeItems,
+      selectedIndex: this.downloadQualityMode() === 'manual' ? 1 : 0,
+      $selectedIndex: (index: number): void => {
+        this.store.setDownloadQualityMode(index === 1 ? 'manual' : 'follow');
+        console.info('[RzdDownloadQuality] settings mode=' + this.store.getDownloadQualityMode());
+      },
+      buttonBackgroundColor: ColorMetrics.resourceColor($r('app.color.capsule_background')),
+      buttonMinHeight: LengthMetrics.vp(40),
+      buttonBorderRadius: LengthMetrics.vp(20),
+      itemMinHeight: LengthMetrics.vp(40),
+      itemBorderRadius: LengthMetrics.vp(20),
+      itemFontColor: ColorMetrics.resourceColor($r('sys.color.font_primary')),
+      itemSelectedFontColor: ColorMetrics.resourceColor($r('sys.color.font_on_primary')),
+      itemSelectedBackgroundColor: ColorMetrics.resourceColor(this.themeState.color)
+    })
+  }
+
+  /** 下载设置弹窗：音质 / 命名格式 / 质量标签 / 保存位置。 */
   @Builder
   private DownloadSheet() {
     Scroll() {
       Column({ space: 12 }) {
         Column() {
+          this.DownloadQualitySettings()
           this.SubTitle($r('app.string.setting_sub_name_format'))
           this.CapsuleSelector(this.nameFormatOptions,
             this.nameFormatValues.indexOf(this.downloadNameFormat),
@@ -864,7 +995,7 @@ export struct SettingPage {
         .backgroundColor($r('app.color.card_background'))
       }
       .width('100%')
-      .padding({ left: 20, right: 20, top: 12, bottom: 12 })
+      .padding({ left: 20, right: 20, top: 12, bottom: 160 })
     }
     .width('100%')
     .height('100%')
@@ -910,7 +1041,7 @@ export struct SettingPage {
         .backgroundColor($r('app.color.card_background'))
       }
       .width('100%')
-      .padding({ left: 20, right: 20, top: 12, bottom: 12 })
+      .padding({ left: 20, right: 20, top: 12, bottom: 160 })
     }
     .width('100%')
     .height('100%')
@@ -922,6 +1053,7 @@ export struct SettingPage {
   private OtherSheet() {
     Scroll() {
       Column({ space: 12 }) {
+        CoverCacheSettingsCard()
         Column() {
           this.SubTitle($r('app.string.setting_sub_add_position'))
           this.CapsuleSelector(this.addPositionOptions,
@@ -969,7 +1101,7 @@ export struct SettingPage {
         .backgroundColor($r('app.color.card_background'))
       }
       .width('100%')
-      .padding({ left: 20, right: 20, top: 12, bottom: 12 })
+      .padding({ left: 20, right: 20, top: 12, bottom: 160 })
     }
     .width('100%')
     .height('100%')
@@ -1110,7 +1242,7 @@ export struct SettingPage {
       }
       .width('100%')
       .alignItems(HorizontalAlign.Start)
-      .padding({ left: 20, right: 20, top: 24, bottom: 24 })
+      .padding({ left: 20, right: 20, top: 24, bottom: 160 })
     }
     .width('100%')
     .height('100%')
@@ -1218,7 +1350,7 @@ export struct SettingPage {
     }
     .width('100%')
     .height('100%')
-    .padding({ left: 20, right: 20, top: 24, bottom: 24 })
+    .padding({ left: 20, right: 20, top: 24, bottom: 160 })
   }
 
   private applyCustomColor(): void {
@@ -1269,6 +1401,14 @@ export struct SettingPage {
     .scrollBar(BarState.Off)
     .edgeEffect(EdgeEffect.Spring)
     .align(Alignment.Top)
+    // 滚动联动双层底栏：上滑收起、下滑展开（与首页/歌单/我的一致）
+    .onScrollFrameBegin((offset: number): OnScrollFrameBeginHandlerResult => {
+      if (BarScrollHelper.isEnabled()) {
+        BarScrollHelper.notifyScrollDelta(this.getUIContext(), this.appState, offset,
+          this.breakpointEnv.widthBreakpoint as number);
+      }
+      return { offsetRemain: offset };
+    })
   }
 
   build() {
@@ -1294,6 +1434,7 @@ export struct SettingPage {
         this.SettingsNavBarContent()
       }
     }
+    .onBackPressed((): boolean => guardPlayerBack('SettingPage'))
     .hideTitleBar(false)
     .hideBackButton(true)
     .titleBar(this.getTitleBar())
@@ -1511,24 +1652,55 @@ export struct SettingPage {
       Column({ space: 8 }) {
       if (this.rowVisible('登录音乐', '网易云 / QQ / 酷狗账号，扫码或 Cookie 登录')) {
         Row({ space: 12 }) {
-          Column() {
-            SymbolGlyph($r('sys.symbol.person_crop_circle_fill_1'))
-              .fontSize(64)
-              .fontWeight(FontWeight.Regular)
+          // 登录过华为账号：图标与文字都换成华为账号的头像 / 昵称（用户要求）
+          if (this.huaweiState.signedIn) {
+            if (this.huaweiState.avatarUri.length > 0) {
+              // 头像可能已经是沙箱本地图（Account Kit 那条路会先落盘）：走 LocalCoverImage
+              LocalCoverImage({
+                src: this.huaweiState.avatarUri,
+                imageWidth: 64,
+                imageHeight: 64,
+                radius: 32,
+                fit: ImageFit.Cover
+              })
+            } else {
+              Column() {
+                SymbolGlyph($r('sys.symbol.person_crop_circle_fill_1'))
+                  .fontSize(64)
+                  .fontWeight(FontWeight.Regular)
+                  .height(64)
+                  .fontColor([$r('sys.color.font_tertiary')])
+              }
+              .width(64)
               .height(64)
-              .fontColor([$r('sys.color.font_tertiary')])
+              .justifyContent(FlexAlign.Center)
+              .alignItems(HorizontalAlign.Center)
+            }
+          } else {
+            Column() {
+              SymbolGlyph($r('sys.symbol.person_crop_circle_fill_1'))
+                .fontSize(64)
+                .fontWeight(FontWeight.Regular)
+                .height(64)
+                .fontColor([$r('sys.color.font_tertiary')])
+            }
+            .width(64)
+            .height(64)
+            .justifyContent(FlexAlign.Center)
+            .alignItems(HorizontalAlign.Center)
           }
-          .width(64)
-          .height(64)
-          .justifyContent(FlexAlign.Center)
-          .alignItems(HorizontalAlign.Center)
 
           Column({ space: 2 }) {
-            Text('登录音乐')
+            Text(this.huaweiState.signedIn ?
+              (this.huaweiState.nickName.length > 0 ? this.huaweiState.nickName : '华为账号') : '登录音乐')
               .fontSize(20)
               .fontWeight(this.selectedIndex === 2 ? FontWeight.Bold : FontWeight.Medium)
               .fontColor(this.selectedIndex === 2 ? '#0A59F7' : $r('sys.color.font_primary'))
-            Text('网易云 / QQ / 酷狗账号，扫码或 Cookie 登录')
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+            Text(this.huaweiState.signedIn ?
+              '已登录华为账号 · 网易云 / QQ / 酷狗账号在这里管理' :
+              '网易云 / QQ / 酷狗账号，扫码或 Cookie 登录')
               .fontSize(12)
               .fontColor($r('sys.color.font_tertiary'))
               .maxLines(1)
