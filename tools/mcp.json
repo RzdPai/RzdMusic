@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "harmonyos_developer_knowledge": {
+      "type": "http",
+      "url": "https://connect-api.cloud.huawei.com/api/developerknowledge/mcp"
+    }
+  }
+}
