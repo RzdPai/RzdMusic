@@ -66,6 +66,8 @@ export struct SettingsDetailPage {
   @Local showMiniLyric: boolean = false;
   /** 桌面歌词（系统 AVSession 悬浮窗歌词）开关，默认关（见 MusicStoreService.getDesktopLyric）。 */
   @Local desktopLyric: boolean = false;
+  /** 车载蓝牙歌词：推送当前句到蓝牙车机/音箱。 */
+  @Local bluetoothLyric: boolean = false;
   /** 系统是否支持桌面歌词：undefined = 还没探测过。 */
   @Local desktopLyricSupport: boolean | undefined = undefined;
   /** 播放页是否启用流光背景（颜色随封面动态取色）。 */
@@ -225,6 +227,7 @@ export struct SettingsDetailPage {
     this.ambientLevel = MusicStoreService.getInstance().getAmbientLevel();
     this.showMiniLyric = MusicStoreService.getInstance().getShowMiniLyric();
     this.desktopLyric = MusicStoreService.getInstance().getDesktopLyric();
+    this.bluetoothLyric = MusicStoreService.getInstance().getBluetoothLyric();
     // 会话是「第一次推歌」时才建的，所以这里主动探一次支持性（否则设置页只能说「未知」）
     void MediaService.getInstance().probeDesktopLyricSupport().then((supported: boolean): void => {
       this.desktopLyricSupport = supported;
@@ -1148,6 +1151,27 @@ export struct SettingsDetailPage {
               MediaService.getInstance().refreshDesktopLyric();
             })
           Text(this.desktopLyricHint())
+            .fontSize($r('sys.float.Caption_M'))
+            .fontColor($r('sys.color.font_tertiary'))
+            .width('100%')
+            .padding({ top: 6 })
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 4, bottom: 8 })
+        .borderRadius($r('sys.float.corner_radius_level12'))
+        .backgroundColor($r('app.color.card_background'))
+
+        // 车载蓝牙歌词（移植自 lxmusic-harmony）：AVMetadata.singleLyricText 推当前句
+        Column() {
+          this.SubTitle('车载蓝牙歌词')
+          this.CapsuleSelector(this.onOffOptions, this.bluetoothLyric ? 0 : 1,
+            (index: number) => {
+              const isOn: boolean = index === 0;
+              this.bluetoothLyric = isOn;
+              MusicStoreService.getInstance().setBluetoothLyric(isOn);
+              MediaService.getInstance().refreshBluetoothLyric();
+            })
+          Text('向蓝牙车机/音箱推送当前歌词句（API 17+）。部分设备开启后可能略有卡顿，默认关闭。')
             .fontSize($r('sys.float.Caption_M'))
             .fontColor($r('sys.color.font_tertiary'))
             .width('100%')

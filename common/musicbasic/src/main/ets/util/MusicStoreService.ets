@@ -34,6 +34,8 @@ const KEY_THEME_COLOR: string = 'theme_color';
 const KEY_HOME_SOURCE: string = 'home_source';
 const KEY_SHOW_MINI_LYRIC: string = 'show_mini_lyric';
 const KEY_DESKTOP_LYRIC: string = 'desktop_lyric';
+/** 车载蓝牙歌词：通过 AVMetadata.singleLyricText 向蓝牙设备推送当前句（默认关）。 */
+const KEY_BLUETOOTH_LYRIC: string = 'bluetooth_lyric';
 /** 华为账号登录资料（JSON，形状由 features/player 的 HuaweiAccountService 定义，这里只当字符串存）。 */
 const KEY_HUAWEI_ACCOUNT: string = 'huawei_account';
 /** 华为云盘访问令牌（JSON：accessToken / refreshToken / expiresAt）。 */
@@ -748,6 +750,29 @@ export class MusicStoreService {
       return;
     }
     store.putSync(KEY_DESKTOP_LYRIC, enabled);
+    store.flush();
+  }
+
+  /**
+   * @returns 车载蓝牙歌词开关，默认**关**。
+   * 开启后通过 AVMetadata.singleLyricText 向车机/蓝牙音箱推送当前歌词句；
+   * 部分设备可能因此略增卡顿，故与洛雪一致默认关闭。
+   */
+  public getBluetoothLyric(): boolean {
+    const store = this.getStore();
+    if (store === undefined) {
+      return false;
+    }
+    return store.getSync(KEY_BLUETOOTH_LYRIC, false) as boolean;
+  }
+
+  /** 持久化车载蓝牙歌词开关。 */
+  public setBluetoothLyric(enabled: boolean): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_BLUETOOTH_LYRIC, enabled);
     store.flush();
   }
 
@@ -1919,6 +1944,33 @@ export class MusicStoreService {
         this.playlistVersion++;
         return;
       }
+    }
+  }
+
+  /**
+   * 把某首在线歌的封面写回所有包含它的本地歌单（导入后无封面、播放后补全）。
+   * 仅在原 img 为空或与新地址不同时写入，避免无意义刷盘。
+   */
+  public updateSongCoverInPlaylists(source: string, songId: string, img: string): void {
+    if (source.length === 0 || songId.length === 0 || img.length === 0) {
+      return;
+    }
+    const list: PlaylistDto[] = this.getPlaylists();
+    let changed: boolean = false;
+    for (let i: number = 0; i < list.length; i++) {
+      const songs: PlayedSongRecord[] = list[i].songs;
+      for (let j: number = 0; j < songs.length; j++) {
+        if (songs[j].source === source && songs[j].songId === songId) {
+          if (songs[j].img !== img) {
+            songs[j].img = img;
+            changed = true;
+          }
+        }
+      }
+    }
+    if (changed) {
+      this.persistPlaylists(list);
+      this.playlistVersion++;
     }
   }
 

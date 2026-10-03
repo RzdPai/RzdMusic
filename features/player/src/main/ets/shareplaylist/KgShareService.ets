@@ -133,6 +133,8 @@ interface KgGatewayItem {
 
 interface KgGatewayAlbum {
   album_name?: string;
+  sizable_cover?: string;
+  cover?: string;
 }
 
 interface KgGatewayAudio {
@@ -278,7 +280,8 @@ export class KgShareService {
         name: TextUtils.decodeName(t.songname ?? ''),
         artist: TextUtils.decodeName(t.singername ?? ''),
         album: TextUtils.decodeName(t.album_name ?? ''),
-        duration: Math.floor((t.duration ?? 0) / 1000)
+        duration: Math.floor((t.duration ?? 0) / 1000),
+        img: ''
       });
     }
     return songs;
@@ -718,12 +721,17 @@ export class KgShareService {
     const songs: SharePlaylistSong[] = [];
     for (let i = 0; i < details.length; i++) {
       const item: KgGatewayItem = details[i];
+      let pic: string = item.album_info?.sizable_cover ?? item.album_info?.cover ?? '';
+      if (pic.length > 0) {
+        pic = pic.replace('{size}', '240');
+      }
       songs.push({
         id: item.hash ?? item.audio_info?.audio_id ?? '',
         name: item.songname ?? '',
         artist: item.author_name ?? '',
         album: item.album_info?.album_name ?? '',
-        duration: Math.floor(Number(item.audio_info?.timelength ?? '0') / 1000)
+        duration: Math.floor(Number(item.audio_info?.timelength ?? '0') / 1000),
+        img: pic
       });
     }
     return songs;

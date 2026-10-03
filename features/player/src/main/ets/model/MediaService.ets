@@ -36,7 +36,7 @@ import { MediaTools } from '../util/MediaTools';
 import { lxGetLyricFull, lxGetPicFallback, lxGetTTMLLyric,
   LyricFullResult } from '../source/LXMusicSDK';
 import { lxEngineIsReady } from '../source/LXSourceEngine';
-import { FallbackOptions, QUALITY_TIER_COOLDOWN_MS, QUALITY_TIER_FAIL_THRESHOLD, UrlResolveOutcome, qualityTierKey, resolveMusicUrlWithFallback } from '../util/SourceFallbackUtil';
+import { FallbackOptions, QUALITY_TIER_COOLDOWN_MS, QUALITY_TIER_FAIL_THRESHOLD, UrlResolveOutcome, qualityTierKey, resolveMusicUrlWithFallback, sourceDisplayName } from '../util/SourceFallbackUtil';
 import { SwitchBannerState } from '../model/SwitchBannerState';
 import { amllGetCachedLyric, amllParseLyricCached } from '../amll/parse/AmllAutoDetect';
 import { AmllLyricLine } from '../amll/model/AmllTypes';
@@ -94,6 +94,8 @@ export class MediaService {
   private desktopLyricEnabled: boolean = false;
   /** 悬浮窗当前是否可见（去重，避免重复调用系统接口）。 */
   private desktopLyricVisible: boolean = false;
+  /** 当前推给蓝牙设备的歌词句（singleLyricText），变了才重推。 */
+  private btLyricText: string = '';
   /** 最近一次推给系统的播放态（判断「停播/出错」要收起悬浮窗用）。 */
   private lastPlaybackState: avSession.PlaybackState = avSession.PlaybackState.PLAYBACK_STATE_IDLE;
   private audioManager: audio.AudioManager | undefined = undefined;
@@ -303,6 +305,8 @@ export class MediaService {
       appState.currentTime = MediaTools.msToCountdownTime(updateTime);
       appState.progress = updateTime;
       this.syncCardLyric(updateTime);
+      // 车载蓝牙歌词：按进度换句（在节流元数据之前，查找很便宜）
+      this.refreshBluetoothLyricAt(updateTime);
     }
   };
 
@@ -747,6 +751,9 @@ export class MediaService {
         const pic: string = await lxGetPicFallback(songItem.source, songItem.songId, songItem.albumId, name, singer);
         if (pic.length > 0) {
           songItem.cover = pic;
+          // 写回歌单持久化，列表下次能显示
+          MusicStoreService.getInstance().updateSongCoverInPlaylists(
+            songItem.source, songItem.songId, pic);
           // Refresh AVSession metadata so the control-center card shows the real cover.
           this.setAVMetadata();
         }
@@ -776,13 +783,16 @@ export class MediaService {
     const opts: FallbackOptions = new FallbackOptions();
     opts.excludeUrl = this.failedUrl;
     opts.excludeQuality = this.failedQuality;
-    opts.allowScriptSwitch = true;
+    // 与「播放失败自动跨音源脚本」同一开关：同时控制跨平台搜索
+    const allowFb: boolean = MusicStoreService.getInstance().getCrossScriptFallback();
+    opts.allowScriptSwitch = allowFb;
+    opts.allowPlatformSwitch = allowFb;
     const outcome: UrlResolveOutcome = await resolveMusicUrlWithFallback(songItem.source,
       songItem.songId, name, singer, '', (msg: string): void => {
         this.toast(msg);
       }, opts);
     if (outcome.url.length === 0) {
-      this.toast('获取播放地址失败，已尝试全部可用音源');
+      this.toast('获取播放地址失败，已尝试全部平台与音源');
       return false;
     }
     // 记录本次真实来源：音乐平台 / 音源脚本 / 实际音质，供播放详情页展示与验证换源是否生效
@@ -812,6 +822,10 @@ export class MediaService {
     if (outcome.switchedScriptName.length > 0) {
       const banner: SwitchBannerState = SwitchBannerState.connect();
       banner.text = '已切换音源：' + outcome.switchedScriptName;
+      banner.ts = Date.now();
+    } else if (outcome.switched) {
+      const banner: SwitchBannerState = SwitchBannerState.connect();
+      banner.text = '已切换到' + sourceDisplayName(outcome.source) + '播放';
       banner.ts = Date.now();
     }
     await this.enrichOnlineTrack(songItem);
@@ -1324,6 +1338,90 @@ export class MediaService {
     return this.desktopLyricSupportKnown ? this.desktopLyricSupported : undefined;
   }
 
+
+  /**
+   * 用户切换「车载蓝牙歌词」开关后调用（设置页）。
+   * 立刻按当前进度重推 / 清空 singleLyricText。
+   */
+  public refreshBluetoothLyric(): void {
+    const pos: number = this.getCurrentTime();
+    this.refreshBluetoothLyricAt(pos, true);
+  }
+
+  /**
+   * 按播放进度更新蓝牙当前句；句变了才 setAVMetadata（轻量，不重拉封面）。
+   * @param positionMs 当前进度
+   * @param force 开关变化时强制推一次（含清空）
+   */
+  private refreshBluetoothLyricAt(positionMs: number, force: boolean = false): void {
+    const next: string = this.resolveBluetoothLyricLine(positionMs);
+    if (!force && next === this.btLyricText) {
+      return;
+    }
+    this.btLyricText = next;
+    if (!this.session || !this.abilityContext) {
+      return;
+    }
+    const song = this.getSongItemAtQueueIndex(this.musicIndex);
+    if (song === undefined) {
+      return;
+    }
+    const ctx = this.abilityContext;
+    const metadata: avSession.AVMetadata = {
+      assetId: `${this.musicIndex}`,
+      title: StringResourceUtil.resolve(ctx, song.title),
+      artist: StringResourceUtil.resolve(ctx, song.singer),
+      duration: this.getDuration()
+    };
+    const cachedLyric: AmllLyricLine[] | undefined = amllGetCachedLyric(song.lyricText);
+    if (cachedLyric !== undefined) {
+      const lrcText: string = truncateLrc(buildPlainLrc(cachedLyric));
+      if (lrcText.length > 0) {
+        metadata.lyric = lrcText;
+      }
+    } else if (song.lyricText.length > 0 && /\[\d{1,2}:\d{1,2}/.test(song.lyricText)) {
+      const normalized: string = song.lyricText.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').join('\r\n');
+      metadata.lyric = truncateLrc(normalized);
+    }
+    if (next.length > 0) {
+      metadata.singleLyricText = next;
+    }
+    this.session.setAVMetadata(metadata).then(() => {
+      Logger.info(TAG, 'bluetooth singleLyricText updated len=' + next.length);
+    }).catch((err: BusinessError) => {
+      Logger.warn(TAG, `push bluetooth lyric failed: ${err.message}`);
+    });
+  }
+
+  /**
+   * 计算当前应推给蓝牙设备的歌词原文句。
+   * 开关关 / 无时间轴歌词 / 尚未唱到第一句 → 空串（不下发字段）。
+   */
+  private resolveBluetoothLyricLine(positionMs: number): string {
+    if (!MusicStoreService.getInstance().getBluetoothLyric()) {
+      return '';
+    }
+    const song: SongItem | undefined = this.getSongItemAtQueueIndex(this.musicIndex);
+    if (song === undefined || song.lyricText.length === 0) {
+      return '';
+    }
+    const lines: AmllLyricLine[] | undefined = amllGetCachedLyric(song.lyricText);
+    if (lines === undefined || lines.length === 0) {
+      return '';
+    }
+    let current: string = '';
+    for (let i: number = 0; i < lines.length; i++) {
+      if (lines[i].startTime > positionMs) {
+        break;
+      }
+      const text: string = MediaService.lineText(lines[i]);
+      if (text.length > 0) {
+        current = text;
+      }
+    }
+    return current;
+  }
+
   private async setAVMetadata(): Promise<void> {
     const id = this.musicIndex;
     try {
@@ -1358,8 +1456,7 @@ export class MediaService {
           }
         }
         const song = metaSong;
-        // 播控中心歌词：统一转标准 LRC（系统要求标准歌词格式，总量 ≤128KB）。
-        // 歌词未缓存时（大歌词首次解析耗时长）延迟到解析完成后重推，避免阻塞 UI 线程。
+        // 播控中心歌词：统一转标准 LRC；车载蓝牙用 singleLyricText 推当前句（移植自 lxmusic-harmony）。
         const cachedLyric: AmllLyricLine[] | undefined = amllGetCachedLyric(song.lyricText);
         const metadata: avSession.AVMetadata = {
           assetId: `${id}`,
@@ -1373,7 +1470,22 @@ export class MediaService {
             metadata.lyric = lrcText;
           }
         } else if (song.lyricText.length > 0) {
+          const raw: string = song.lyricText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+          if (/\[\d{1,2}:\d{1,2}/.test(raw)) {
+            const normalized: string = raw.split('\n').join('\r\n');
+            const lrcText: string = truncateLrc(normalized);
+            if (lrcText.length > 0) {
+              metadata.lyric = lrcText;
+            }
+          }
           this.scheduleLyricMetadataRefresh();
+        }
+        // 蓝牙歌词：当前句纯文本（API 17+ singleLyricText）
+        const posMs: number = this.getCurrentTime();
+        const btLine: string = this.resolveBluetoothLyricLine(posMs);
+        this.btLyricText = btLine;
+        if (btLine.length > 0) {
+          metadata.singleLyricText = btLine;
         }
         if (mediaImage !== undefined) {
           metadata.mediaImage = mediaImage;
@@ -1563,6 +1675,8 @@ export class MediaService {
     //   有别的 loadAsset 插进来。放在异步之后声明会让「谁最后跑完谁说了算」，
     //   启动恢复就会偶发地自动播放。
     this.beginLoadRequest(loadOnly !== true);
+    // 换歌：清掉上一首蓝牙歌词句，避免车机残留
+    this.btLyricText = '';
     this.applyAudioSession(MusicStoreService.getInstance().getAudioMix());
     const len = this.getQueueLength();
     if (len === 0) {

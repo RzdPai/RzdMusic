@@ -523,7 +523,8 @@ export struct PlaylistsPage {
         record.albumId = '';
         record.source = info.source;
         record.interval = this.fmtDuration(s.duration);
-        record.img = info.coverUrl;
+        // 用歌曲自己的封面；没有则留空（播放时再补），绝不能用歌单封面冒充
+        record.img = (s.img !== undefined && s.img.length > 0) ? s.img : '';
         record.time = Date.now();
         songs.push(record);
       }
