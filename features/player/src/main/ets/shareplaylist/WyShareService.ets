@@ -4,6 +4,8 @@ import { appendError } from 'musicbasic';
 
 interface RawAlbum {
   name?: string;
+  picUrl?: string;
+  id?: number;
 }
 
 interface WyRawResponse {
@@ -216,12 +218,14 @@ export class WyShareService {
     const songs: SharePlaylistSong[] = [];
     for (let i = 0; i < tracks.length; i++) {
       const t: WyRawTrack = tracks[i];
+      const pic: string = t.al?.picUrl ?? '';
       songs.push({
         id: String(t.id ?? ''),
         name: t.name ?? '',
         artist: t.ar?.map((a: WyRawArtist): string => a.name ?? '').join(' / ') ?? '',
         album: t.al?.name ?? '',
-        duration: Math.floor((t.dt ?? 0) / 1000)
+        duration: Math.floor((t.dt ?? 0) / 1000),
+        img: pic
       });
     }
     return songs;

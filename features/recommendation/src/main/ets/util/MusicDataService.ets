@@ -120,34 +120,113 @@ class TxRequestPayload {
   topList: TxRequestTopList = new TxRequestTopList();
 }
 
-/** Kugou rank list: covers live under data.info[] and contain a {size} placeholder. */
+/**
+ * 酷狗榜单封面。
+ *
+ * 1) 主通道：rank/list 的 imgurl（含 {size} 占位）
+ * 2) 部分写死 rankid（如蜂鸟流行音乐榜 59703、网络红歌榜 23784）已不在 list 里，
+ *    对这些缺口再拉 rank/song 首页，用首曲 album_sizable_cover 兜底。
+ */
 async function fillKgCovers(map: Record<string, string>): Promise<void> {
-  const root: JsonObject = await requestJson(
-    'http://mobilecdnbj.kugou.com/api/v3/rank/list?version=9108&plat=0&area_code=1&page=1&pagesize=200');
-  const data: JsonObject = asObject(root['data']);
-  let items: JsonObject[] = asArray(data['info']);
-  if (items.length === 0) {
-    items = asArray(root['data']);
+  try {
+    const root: JsonObject = await requestJson(
+      'http://mobilecdnbj.kugou.com/api/v3/rank/list?version=9108&plat=0&area_code=1&page=1&pagesize=200');
+    const data: JsonObject = asObject(root['data']);
+    let items: JsonObject[] = asArray(data['info']);
+    if (items.length === 0) {
+      items = asArray(root['data']);
+    }
+    for (let i: number = 0; i < items.length; i++) {
+      const id: string = text(items[i]['rankid']);
+      let cover: string = text(items[i]['imgurl']);
+      if (cover.length === 0) {
+        cover = text(items[i]['album_img_9']);
+      }
+      if (cover.length === 0) {
+        cover = text(items[i]['bannerurl']);
+      }
+      if (cover.length === 0) {
+        cover = text(items[i]['img_cover']);
+      }
+      cover = cover.replace('{size}', '480');
+      if (id.length > 0 && cover.length > 0) {
+        map[id] = cover;
+      }
+    }
+  } catch (_err) {
+    // list 失败时仍尝试下面的按 id 兜底
   }
-  for (let i: number = 0; i < items.length; i++) {
-    const id: string = text(items[i]['rankid']);
-    const cover: string = text(items[i]['imgurl']).replace('{size}', '480');
-    if (id.length > 0 && cover.length > 0) {
-      map[id] = cover;
+  // 写死表里仍缺封面的 rankid：用榜内首曲专辑图顶上
+  const need: string[] = boardIdList('kg');
+  const missing: string[] = [];
+  for (let i: number = 0; i < need.length; i++) {
+    if (map[need[i]] === undefined || map[need[i]].length === 0) {
+      missing.push(need[i]);
     }
   }
+  if (missing.length === 0) {
+    return;
+  }
+  const tasks: Promise<void>[] = [];
+  for (let i: number = 0; i < missing.length; i++) {
+    const rankId: string = missing[i];
+    tasks.push((async (): Promise<void> => {
+      try {
+        const songRoot: JsonObject = await requestJson(
+          `http://mobilecdnbj.kugou.com/api/v3/rank/song?version=9108&ranktype=1&plat=0&pagesize=1&area_code=1&page=1&rankid=${rankId}`);
+        const songs: JsonObject[] = asArray(asObject(songRoot['data'])['info']);
+        if (songs.length === 0) {
+          return;
+        }
+        let cover: string = text(songs[0]['album_sizable_cover']);
+        if (cover.length === 0) {
+          cover = text(songs[0]['sizable_cover']);
+        }
+        if (cover.length === 0) {
+          cover = text(songs[0]['album_img']);
+        }
+        cover = cover.replace('{size}', '480');
+        if (cover.length > 0) {
+          map[rankId] = cover;
+        }
+      } catch (_e) {
+        // 单个榜失败不影响其它
+      }
+    })());
+  }
+  await Promise.all(tasks);
 }
 
 /**
- * QQ music toplist covers: the list API no longer returns usable pictures, so each
- * known toplist id is queried through the per-toplist info API (same source the
- * home chart tab uses, which still serves covers).
+ * QQ 榜单封面（移植自 Yyyangshenghao/simple-music）。
+ *
+ * 一次 `music.musicToplist.Toplist / GetAll` 拿全部分组 + frontPicUrl，
+ * 比逐个 GetDetail / lxTxToplistInfo 更快更稳。
+ * 仍缺的 id 再回退到 lxTxToplistInfo。
  */
 async function fillTxCovers(map: Record<string, string>): Promise<void> {
-  const ids: string[] = boardIdList('tx');
+  try {
+    const live: TxRankEntry[] = await fetchTxRanks();
+    for (let i: number = 0; i < live.length; i++) {
+      if (live[i].id.length > 0 && live[i].cover.length > 0) {
+        map[live[i].id] = live[i].cover;
+      }
+    }
+  } catch (_err) {
+  }
+  const need: string[] = boardIdList('tx');
+  const missing: string[] = [];
+  for (let i: number = 0; i < need.length; i++) {
+    if (map[need[i]] === undefined || map[need[i]].length === 0) {
+      missing.push(need[i]);
+    }
+  }
+  if (missing.length === 0) {
+    return;
+  }
   const tasks: Promise<TxToplistInfo | undefined>[] = [];
-  for (let i: number = 0; i < ids.length; i++) {
-    tasks.push(lxTxToplistInfo(ids[i]));
+  for (let i: number = 0; i < missing.length; i++) {
+    tasks.push(lxTxToplistInfo(missing[i]));
   }
   const settled: PromiseSettledResult<TxToplistInfo | undefined>[] = await Promise.allSettled(tasks);
   for (let i: number = 0; i < settled.length; i++) {
@@ -159,8 +238,193 @@ async function fillTxCovers(map: Record<string, string>): Promise<void> {
     if (info === undefined || info.pic.length === 0) {
       continue;
     }
-    map[ids[i]] = info.pic;
+    map[missing[i]] = info.pic;
   }
+}
+
+/** QQ 实时榜单项（对齐 simple-music mapQQToplistEntry）。 */
+class TxRankEntry {
+  id: string = '';
+  name: string = '';
+  cover: string = '';
+}
+
+/**
+ * 解析 GetAll 响应里的分组榜单。
+ * 兼容 `music.musicToplist.Toplist` 与 `musicToplist.ToplistInfoServer` 两种 module。
+ */
+function collectTxRankEntries(node: JsonObject, out: TxRankEntry[], seen: Record<string, boolean>): void {
+  const topId: string = text(node['topId'] ?? node['topid'] ?? node['id']);
+  let name: string = text(node['title']);
+  if (name.length === 0) {
+    name = text(node['name']);
+  }
+  let cover: string = text(node['frontPicUrl']);
+  if (cover.length === 0) {
+    cover = text(node['frontpic']);
+  }
+  if (cover.length === 0) {
+    cover = text(node['headPicUrl']);
+  }
+  if (cover.length === 0) {
+    cover = text(node['picUrl']);
+  }
+  if (cover.length === 0) {
+    cover = text(node['toplistPic']);
+  }
+  if (cover.length === 0) {
+    cover = text(node['cover']);
+  }
+  // 只收「看起来像榜单」的节点：有 topId 数字 + 名称
+  if (topId.length > 0 && name.length > 0 && /^\d+$/.test(topId) && !seen[topId]) {
+    seen[topId] = true;
+    const entry: TxRankEntry = new TxRankEntry();
+    entry.id = topId;
+    entry.name = name;
+    entry.cover = cover;
+    out.push(entry);
+  }
+  // 递归 group / toplist / list
+  const keys: string[] = ['group', 'groups', 'toplist', 'list', 'data'];
+  for (let k: number = 0; k < keys.length; k++) {
+    const kids: JsonObject[] = asArray(node[keys[k]]);
+    for (let i: number = 0; i < kids.length; i++) {
+      collectTxRankEntries(kids[i], out, seen);
+    }
+  }
+  // 有时 data 是对象
+  const dataObj: JsonObject = asObject(node['data']);
+  if (Object.keys(dataObj).length > 0) {
+    collectTxRankEntries(dataObj, out, seen);
+  }
+}
+
+/**
+ * QQ 实时榜单列表（simple-music: music.musicToplist.Toplist / GetAll）。
+ */
+async function fetchTxRanks(): Promise<TxRankEntry[]> {
+  const out: TxRankEntry[] = [];
+  const seen: Record<string, boolean> = {};
+  // 优先 simple-music 使用的 module
+  const bodies: string[] = [
+    '{"comm":{"uin":0,"format":"json","ct":20,"cv":1859},' +
+      '"toplists":{"module":"music.musicToplist.Toplist","method":"GetAll","param":{}}}',
+    '{"comm":{"uin":0,"format":"json","ct":20,"cv":1859},' +
+      '"req_0":{"module":"musicToplist.ToplistInfoServer","method":"GetAll","param":{}}}'
+  ];
+  for (let b: number = 0; b < bodies.length; b++) {
+    try {
+      const root: JsonObject = await requestJson(
+        'https://u.y.qq.com/cgi-bin/musicu.fcg',
+        http.RequestMethod.POST, bodies[b], TX_BOARD_HEADERS);
+      const block: JsonObject = asObject(root['toplists'] ?? root['req_0'] ?? root['topList']);
+      const data: JsonObject = asObject(block['data'] ?? block);
+      collectTxRankEntries(data, out, seen);
+      if (out.length > 0) {
+        break;
+      }
+    } catch (_e) {
+    }
+  }
+  return out;
+}
+
+
+
+/**
+ * 酷狗实时榜单（mobilecdnbj rank/list，全量 pagesize=200）。
+ */
+class KgRankEntry {
+  id: string = '';
+  name: string = '';
+  cover: string = '';
+}
+
+async function fetchKgRanks(): Promise<KgRankEntry[]> {
+  const out: KgRankEntry[] = [];
+  const seen: Record<string, boolean> = {};
+  try {
+    const root: JsonObject = await requestJson(
+      'http://mobilecdnbj.kugou.com/api/v3/rank/list?version=9108&plat=0&area_code=1&page=1&pagesize=200');
+    const data: JsonObject = asObject(root['data']);
+    let items: JsonObject[] = asArray(data['info']);
+    if (items.length === 0) {
+      items = asArray(root['data']);
+    }
+    for (let i: number = 0; i < items.length; i++) {
+      const id: string = text(items[i]['rankid']);
+      let name: string = text(items[i]['rankname']);
+      if (name.length === 0) {
+        name = text(items[i]['rank_name']);
+      }
+      let cover: string = text(items[i]['imgurl']);
+      if (cover.length === 0) {
+        cover = text(items[i]['album_img_9']);
+      }
+      if (cover.length === 0) {
+        cover = text(items[i]['bannerurl']);
+      }
+      if (cover.length === 0) {
+        cover = text(items[i]['img_cover']);
+      }
+      cover = cover.replace('{size}', '480');
+      if (id.length === 0 || name.length === 0 || seen[id]) {
+        continue;
+      }
+      seen[id] = true;
+      const entry: KgRankEntry = new KgRankEntry();
+      entry.id = id;
+      entry.name = name;
+      entry.cover = cover;
+      out.push(entry);
+    }
+  } catch (_err) {
+  }
+  return out;
+}
+
+/**
+ * 网易云实时榜单（NeteaseCloudMusicApiEnhanced: /api/toplist）。
+ * 返回全部官方榜（通常 60+），含 coverImgUrl。
+ */
+class WyRankEntry {
+  id: string = '';
+  name: string = '';
+  cover: string = '';
+}
+
+async function fetchWyRanks(): Promise<WyRankEntry[]> {
+  const out: WyRankEntry[] = [];
+  const seen: Record<string, boolean> = {};
+  try {
+    const root: JsonObject = await requestJson(
+      'https://music.163.com/api/toplist',
+      http.RequestMethod.GET, undefined, {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': 'https://music.163.com/'
+      });
+    const items: JsonObject[] = asArray(root['list']);
+    for (let i: number = 0; i < items.length; i++) {
+      const id: string = text(items[i]['id']);
+      const name: string = text(items[i]['name']);
+      let cover: string = text(items[i]['coverImgUrl']);
+      if (cover.length === 0) {
+        cover = text(items[i]['coverImgUrl'] ?? items[i]['picUrl']);
+      }
+      if (id.length === 0 || name.length === 0 || seen[id]) {
+        continue;
+      }
+      seen[id] = true;
+      const entry: WyRankEntry = new WyRankEntry();
+      entry.id = id;
+      entry.name = name;
+      entry.cover = cover;
+      out.push(entry);
+    }
+  } catch (_err) {
+  }
+  // 补充：toplist/detail 有时字段更全（weapi 不便直调时，api/toplist 已足够）
+  return out;
 }
 
 /** 酷我榜单列表接口（PC 端页面用的那个，不需要签名）。 */
@@ -289,25 +553,238 @@ async function fillKwCovers(map: Record<string, string>): Promise<void> {
   }
 }
 
-/** Migu chart list: data[] carry chartId + picUrl (best effort; endpoint may change). */
+/**
+ * 咪咕榜单封面（移植自 Domdkw/miguMusic-api-enhanced）。
+ *
+ * 主通道：`pc/bmw/rank/rank-index/v1.0`（实时榜单 + imageUrl）
+ * 兜底：写死 columnId 再走 `querycontentbyId` 取 columnPicUrl
+ */
 async function fillMgCovers(map: Record<string, string>): Promise<void> {
-  const root: JsonObject = await requestJson('https://music.migu.cn/v3/api/music/chart/list?pageSize=100',
-    http.RequestMethod.GET, undefined, MIGU_HEADERS);
-  let items: JsonObject[] = asArray(root['data']);
-  if (items.length === 0) {
-    items = asArray(asObject(root['data'])['list']);
+  try {
+    const root: JsonObject = await requestJson(
+      'https://app.c.nf.migu.cn/pc/bmw/rank/rank-index/v1.0',
+      http.RequestMethod.GET, undefined, MIGU_HEADERS);
+    collectMiguRankCovers(asObject(root['data']), map);
+  } catch (_err) {
+    // index 失败时仍走下面的按 id 兜底
   }
-  for (let i: number = 0; i < items.length; i++) {
-    const id: string = text(items[i]['chartId']);
-    let cover: string = text(items[i]['picUrl']);
-    if (cover.length === 0) {
-      cover = text(items[i]['pic']);
+  const need: string[] = boardIdList('mg');
+  const missing: string[] = [];
+  for (let i: number = 0; i < need.length; i++) {
+    if (map[need[i]] === undefined || map[need[i]].length === 0) {
+      missing.push(need[i]);
     }
-    if (id.length > 0 && cover.length > 0) {
-      map[id] = cover;
-    }
+  }
+  if (missing.length === 0) {
+    return;
+  }
+  const tasks: Promise<void>[] = [];
+  for (let i: number = 0; i < missing.length; i++) {
+    const columnId: string = missing[i];
+    tasks.push((async (): Promise<void> => {
+      try {
+        // rank-info：优先榜内第一首歌封面（img / songData.img1）
+        const infoRoot: JsonObject = await requestJson(
+          `https://app.c.nf.migu.cn/bmw/rank/rank-info/v1.0?pageNo=1&rankId=${columnId}`,
+          http.RequestMethod.GET, undefined, MIGU_HEADERS);
+        const infoData: JsonObject = asObject(infoRoot['data']);
+        let cover: string = '';
+        const contents: JsonObject[] = asArray(infoData['contents']);
+        if (contents.length > 0) {
+          cover = text(contents[0]['img']);
+          if (cover.length === 0) {
+            const songData: JsonObject = asObject(contents[0]['songData']);
+            cover = text(songData['img1']);
+            if (cover.length === 0) {
+              cover = text(songData['img2']);
+            }
+          }
+        }
+        if (cover.length === 0) {
+          cover = text(infoData['titlePic']);
+        }
+        if (cover.length === 0) {
+          cover = text(infoData['shareImg']);
+        }
+        if (cover.length === 0) {
+          const colRoot: JsonObject = await requestJson(
+            `https://app.c.nf.migu.cn/MIGUM2.0/v1.0/content/querycontentbyId.do?columnId=${columnId}&needAll=0`,
+            http.RequestMethod.GET, undefined, MIGU_HEADERS);
+          const col: JsonObject = asObject(colRoot['columnInfo']);
+          cover = text(col['columnPicUrl']);
+          if (cover.length === 0) {
+            cover = text(col['columnSmallpicUrl']);
+          }
+          if (cover.length === 0) {
+            cover = text(col['recommendPicUrl']);
+          }
+        }
+        if (cover.length > 0) {
+          map[columnId] = cover;
+        }
+      } catch (_e) {
+      }
+    })());
+  }
+  await Promise.all(tasks);
+}
+
+/** 从 rank-index 响应里递归收集 rankId → imageUrl。 */
+function collectMiguRankCovers(node: JsonObject, map: Record<string, string>): void {
+  const rankId: string = text(node['rankId'] ?? node['columnId']);
+  let cover: string = text(node['imageUrl']);
+  if (cover.length === 0) {
+    cover = text(node['imgUrl']);
+  }
+  if (cover.length === 0) {
+    cover = text(node['picUrl']);
+  }
+  if (cover.length === 0) {
+    cover = text(node['titlePic']);
+  }
+  if (rankId.length > 0 && cover.length > 0) {
+    map[rankId] = cover;
+  }
+  const kids: JsonObject[] = asArray(node['contents'] ?? node['itemList']);
+  for (let i: number = 0; i < kids.length; i++) {
+    collectMiguRankCovers(kids[i], map);
   }
 }
+
+/**
+ * 咪咕实时榜单列表（含封面），结构对齐酷我的 {@link KwBangEntry}。
+ * 接口：Domdkw/miguMusic-api-enhanced → rank_index。
+ */
+class MgRankEntry {
+  id: string = '';
+  name: string = '';
+  cover: string = '';
+}
+
+function collectMiguRankEntries(node: JsonObject, out: MgRankEntry[], seen: Record<string, boolean>): void {
+  const rankId: string = text(node['rankId'] ?? node['columnId']);
+  let name: string = text(node['rankName']);
+  if (name.length === 0) {
+    name = text(node['title']);
+  }
+  if (name.length === 0) {
+    name = text(node['name']);
+  }
+  let cover: string = text(node['imageUrl']);
+  if (cover.length === 0) {
+    cover = text(node['imgUrl']);
+  }
+  if (cover.length === 0) {
+    cover = text(node['picUrl']);
+  }
+  if (cover.length === 0) {
+    cover = text(node['titlePic']);
+  }
+  if (rankId.length > 0 && name.length > 0 && !seen[rankId]) {
+    seen[rankId] = true;
+    const entry: MgRankEntry = new MgRankEntry();
+    entry.id = rankId;
+    entry.name = name;
+    entry.cover = cover;
+    out.push(entry);
+  }
+  const kids: JsonObject[] = asArray(node['contents'] ?? node['itemList']);
+  for (let i: number = 0; i < kids.length; i++) {
+    collectMiguRankEntries(kids[i], out, seen);
+  }
+}
+
+/**
+ * 咪咕可探测到的额外榜单 id（rank-index 未收录，但 rank-info 仍可用）。
+ * 来源：历史写死表 + 实测 rank-info 有 title/歌曲。
+ */
+const MG_EXTRA_RANK_IDS: string[] = [
+  '75959118', // 音乐风向榜
+  '76557036', // 彩铃分贝榜
+  '23189800', // 港台榜
+  '23189399'  // 内地榜
+];
+
+/**
+ * 咪咕全量榜单（Domdkw/miguMusic-api-enhanced）。
+ * 1) rank-index ≈ 9 个（带 imageUrl）
+ * 2) rank-info 补全仍有效的历史榜
+ * 实测合计约 13 个有效榜（接口当前可返回的全部）。
+ */
+async function fetchMgRanks(): Promise<MgRankEntry[]> {
+  const out: MgRankEntry[] = [];
+  const seen: Record<string, boolean> = {};
+  try {
+    const root: JsonObject = await requestJson(
+      'https://app.c.nf.migu.cn/pc/bmw/rank/rank-index/v1.0',
+      http.RequestMethod.GET, undefined, MIGU_HEADERS);
+    collectMiguRankEntries(asObject(root['data']), out, seen);
+  } catch (_err) {
+  }
+  const need: string[] = [];
+  for (let i: number = 0; i < MG_EXTRA_RANK_IDS.length; i++) {
+    if (!seen[MG_EXTRA_RANK_IDS[i]]) {
+      need.push(MG_EXTRA_RANK_IDS[i]);
+    }
+  }
+  const hardcoded: string[] = boardIdList('mg');
+  for (let i: number = 0; i < hardcoded.length; i++) {
+    if (!seen[hardcoded[i]] && need.indexOf(hardcoded[i]) < 0) {
+      need.push(hardcoded[i]);
+    }
+  }
+  if (need.length === 0) {
+    return out;
+  }
+  const tasks: Promise<void>[] = [];
+  for (let i: number = 0; i < need.length; i++) {
+    const rankId: string = need[i];
+    tasks.push((async (): Promise<void> => {
+      try {
+        const infoRoot: JsonObject = await requestJson(
+          `https://app.c.nf.migu.cn/bmw/rank/rank-info/v1.0?pageNo=1&rankId=${rankId}`,
+          http.RequestMethod.GET, undefined, MIGU_HEADERS);
+        const data: JsonObject = asObject(infoRoot['data']);
+        const name: string = text(data['title']);
+        const contents: JsonObject[] = asArray(data['contents']);
+        // ★ 风向/彩铃/港台/内地等：titlePic 常是装饰图，直接用榜内第一首歌曲封面
+        let cover: string = '';
+        if (contents.length > 0) {
+          cover = text(contents[0]['img']);
+          if (cover.length === 0) {
+            const songData: JsonObject = asObject(contents[0]['songData']);
+            cover = text(songData['img1']);
+            if (cover.length === 0) {
+              cover = text(songData['img2']);
+            }
+          }
+        }
+        if (cover.length === 0) {
+          cover = text(data['titlePic']);
+        }
+        if (cover.length === 0) {
+          cover = text(data['shareImg']);
+        }
+        if (name.length === 0 && contents.length === 0) {
+          return;
+        }
+        if (seen[rankId]) {
+          return;
+        }
+        seen[rankId] = true;
+        const entry: MgRankEntry = new MgRankEntry();
+        entry.id = rankId;
+        entry.name = name.length > 0 ? name : rankId;
+        entry.cover = cover;
+        out.push(entry);
+      } catch (_e) {
+      }
+    })());
+  }
+  await Promise.all(tasks);
+  return out;
+}
+
 
 const SOURCES: string[] = ['kw', 'kg', 'tx', 'wy', 'mg'];
 
@@ -340,7 +817,7 @@ function boardIdList(source: string): string[] {
   if (source === 'wy') {
     return ['19723756', '3779629', '2884035', '3778678', '991319590', '71384707', '1978921795', '5453912201', '71385702', '745956260', '10520166', '180106', '60198', '3812895', '21845217', '60131', '2809513713', '2809577409', '27135204', '3001835560', '3001795926', '3001890046', '3112516681', '5059644681', '5059633707', '5059642708', '5338990334', '5059661515', '6688069460', '6723173524', '6732051320', '6732014811', '6886768100', '6939992364', '7095271308', '7356827205', '7603212484', '7775163417', '7785123708', '7785066739', '7785091694'];
   }
-  return ['27553319', '27186466', '27553408', '75959118', '76557036', '76557745', '23189800', '23189399', '19190036', '83176390'];
+  return ['83048887', '83049014', '83048867', '83049056', '76557745', '83176390', '27553319', '27186466', '27553408', '75959118', '76557036', '23189800', '23189399'];
 }
 
 function boardNameList(source: string): string[] {
@@ -356,7 +833,7 @@ function boardNameList(source: string): string[] {
   if (source === 'wy') {
     return ['飙升榜', '新歌榜', '原创榜', '热歌榜', '说唱榜', '古典榜', '电音榜', '黑胶VIP爱听榜', 'ACG榜', '韩语榜', '国电榜', 'UK排行榜周榜', '美国Billboard榜', 'Beatport全球电子舞曲榜', 'KTV唛榜', '日本Oricon榜', '欧美热歌榜', '欧美新歌榜', '法国 NRJ Vos Hits 周榜', 'ACG动画榜', 'ACG游戏榜', 'ACG VOCALOID榜', '中国新乡村音乐排行榜', '日语榜', '摇滚榜', '国风榜', '潜力爆款榜', '民谣榜', '听歌识曲榜', '网络热歌榜', '俄语榜', '越南语榜', '中文DJ榜', '俄罗斯top hit流行音乐榜', '泰语榜', 'BEAT排行榜', 'LOOK直播歌曲榜', '赏音榜', '黑胶VIP新歌榜', '黑胶VIP热歌榜', '黑胶VIP爱搜榜'];
   }
-  return ['新歌榜', '热歌榜', '原创榜', '音乐风向榜', '彩铃分贝榜', '会员臻爱榜', '港台榜', '内地榜', '欧美榜', '国风金曲榜'];
+  return ['全网热歌榜', '抖音热歌榜', '免费热歌榜', '收藏人气榜', '会员臻爱榜', '国风热歌榜', '尖叫新歌榜', '尖叫热歌榜', '尖叫原创榜', '音乐风向榜', '彩铃分贝榜', '港台榜', '内地榜'];
 }
 
 /**
@@ -1147,6 +1624,7 @@ export class MusicDataService {
    * @returns 榜单列表（含封面）。
    */
   static async boardsWithCovers(source: string): Promise<BoardData[]> {
+    // 全平台优先走实时接口，不截断数量；失败再回退写死表
     if (source === 'kw') {
       try {
         const live: KwBangEntry[] = await kwBangs();
@@ -1155,7 +1633,46 @@ export class MusicDataService {
             ({ id: item.id, name: item.name, source, cover: item.cover }));
         }
       } catch (_err) {
-        // 落到下面的写死表
+      }
+    }
+    if (source === 'kg') {
+      try {
+        const live: KgRankEntry[] = await fetchKgRanks();
+        if (live.length > 0) {
+          return live.map((item: KgRankEntry): BoardData =>
+            ({ id: item.id, name: item.name, source, cover: item.cover }));
+        }
+      } catch (_err) {
+      }
+    }
+    if (source === 'wy') {
+      try {
+        const live: WyRankEntry[] = await fetchWyRanks();
+        if (live.length > 0) {
+          return live.map((item: WyRankEntry): BoardData =>
+            ({ id: item.id, name: item.name, source, cover: item.cover }));
+        }
+      } catch (_err) {
+      }
+    }
+    if (source === 'mg') {
+      try {
+        const live: MgRankEntry[] = await fetchMgRanks();
+        if (live.length > 0) {
+          return live.map((item: MgRankEntry): BoardData =>
+            ({ id: item.id, name: item.name, source, cover: item.cover }));
+        }
+      } catch (_err) {
+      }
+    }
+    if (source === 'tx') {
+      try {
+        const live: TxRankEntry[] = await fetchTxRanks();
+        if (live.length > 0) {
+          return live.map((item: TxRankEntry): BoardData =>
+            ({ id: item.id, name: item.name, source, cover: item.cover }));
+        }
+      } catch (_err) {
       }
     }
     const list: BoardData[] = MusicDataService.boards(source);
@@ -1278,16 +1795,57 @@ export class MusicDataService {
     } else if (source === 'wy') {
       root = await requestNeteaseRank(boardId);
     } else if (source === 'mg') {
-      root = await requestJson(`https://app.c.nf.migu.cn/MIGUM2.0/v1.0/content/querycontentbyId.do?columnId=${boardId}&needAll=0`);
+      // 优先 rank-info（miguMusic-api-enhanced），失败再 querycontentbyId
+      try {
+        root = await requestJson(
+          `https://app.c.nf.migu.cn/bmw/rank/rank-info/v1.0?pageNo=1&rankId=${boardId}`,
+          http.RequestMethod.GET, undefined, MIGU_HEADERS);
+        if (text(root['code']) !== '000000' && asArray(asObject(root['data'])['contents']).length === 0) {
+          root = await requestJson(
+            `https://app.c.nf.migu.cn/MIGUM2.0/v1.0/content/querycontentbyId.do?columnId=${boardId}&needAll=0`,
+            http.RequestMethod.GET, undefined, MIGU_HEADERS);
+        }
+      } catch (_e) {
+        root = await requestJson(
+          `https://app.c.nf.migu.cn/MIGUM2.0/v1.0/content/querycontentbyId.do?columnId=${boardId}&needAll=0`,
+          http.RequestMethod.GET, undefined, MIGU_HEADERS);
+      }
     } else if (source === 'tx') {
-      root = await requestJson('https://u.y.qq.com/cgi-bin/musicu.fcg', http.RequestMethod.POST, `{"toplist":{"module":"musicToplist.ToplistInfoServer","method":"GetDetail","param":{"topid":${Number(boardId)},"num":100}},"comm":{"uin":0,"format":"json","ct":20,"cv":1859}}`);
+      // simple-music: music.musicToplist.Toplist/GetDetail；失败再 ToplistInfoServer
+      try {
+        root = await requestJson(
+          'https://u.y.qq.com/cgi-bin/musicu.fcg', http.RequestMethod.POST,
+          `{"toplist":{"module":"music.musicToplist.Toplist","method":"GetDetail",` +
+          `"param":{"topId":${Number(boardId)},"offset":0,"num":100,"withTags":true}},` +
+          `"comm":{"uin":0,"format":"json","ct":20,"cv":1859}}`,
+          TX_BOARD_HEADERS);
+        const block: JsonObject = asObject(root['toplist']);
+        const songList: JsonObject[] = asArray(asObject(block['data'])['songInfoList']);
+        if (songList.length === 0) {
+          root = await requestJson(
+            'https://u.y.qq.com/cgi-bin/musicu.fcg', http.RequestMethod.POST,
+            `{"toplist":{"module":"musicToplist.ToplistInfoServer","method":"GetDetail",` +
+            `"param":{"topid":${Number(boardId)},"num":100}},` +
+            `"comm":{"uin":0,"format":"json","ct":20,"cv":1859}}`,
+            TX_BOARD_HEADERS);
+        }
+      } catch (_e) {
+        root = await requestJson(
+          'https://u.y.qq.com/cgi-bin/musicu.fcg', http.RequestMethod.POST,
+          `{"toplist":{"module":"musicToplist.ToplistInfoServer","method":"GetDetail",` +
+          `"param":{"topid":${Number(boardId)},"num":100}},` +
+          `"comm":{"uin":0,"format":"json","ct":20,"cv":1859}}`,
+          TX_BOARD_HEADERS);
+      }
     } else {
       // 酷我：老签名接口（wbd.kuwo.cn，AppId 已被封）换成 kbangserver.kuwo.cn/ksong.s
       root = await requestKwBangSongs(boardId);
     }
     let data = asObject(root['data'] ?? root['result'] ?? root['toplist'] ?? root);
     if (source === 'mg') {
-      data = asObject(root['columnInfo']);
+      // rank-info: data.contents；旧接口: columnInfo.contents
+      const col: JsonObject = asObject(root['columnInfo']);
+      data = Object.keys(col).length > 0 ? col : asObject(root['data']);
     }
     let raw: JsonObject[] = [];
     if (source === 'kg') {
@@ -1295,9 +1853,30 @@ export class MusicDataService {
     } else if (source === 'wy') {
       raw = asArray(asObject(data['playlist'] ?? root['playlist'])['tracks']);
     } else if (source === 'mg') {
-      raw = asArray(data['contents']).map((item: JsonObject) => asObject(item['objectInfo']));
+      const contentItems: JsonObject[] = asArray(data['contents']);
+      const mapped: JsonObject[] = [];
+      for (let i: number = 0; i < contentItems.length; i++) {
+        const item: JsonObject = contentItems[i];
+        const obj: JsonObject = asObject(item['objectInfo']);
+        if (Object.keys(obj).length > 0) {
+          mapped.push(obj);
+        } else {
+          // rank-info 条目本身常带 songId / txt / img
+          mapped.push(item);
+        }
+      }
+      raw = mapped;
     } else if (source === 'tx') {
-      raw = asArray(asObject(data['data'])['songInfoList']);
+      // Toplist GetDetail: data.songInfoList；InfoServer: data.data.songInfoList
+      let txSongs: JsonObject[] = asArray(data['songInfoList']);
+      if (txSongs.length === 0) {
+        txSongs = asArray(asObject(data['data'])['songInfoList']);
+      }
+      if (txSongs.length === 0) {
+        const toplistBlock: JsonObject = asObject(root['toplist']);
+        txSongs = asArray(asObject(toplistBlock['data'])['songInfoList']);
+      }
+      raw = txSongs;
     } else {
       raw = asArray(asObject(data['data'] ?? data)['musiclist'] ?? data['musiclist']);
     }

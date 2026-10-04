@@ -4,6 +4,8 @@ import { TextUtils } from './TextUtils';
 
 interface RawAlbum {
   name?: string;
+  mid?: string;
+  pmid?: string;
 }
 
 interface TxRawResponse {
@@ -99,12 +101,16 @@ export class TxShareService {
     const songs: SharePlaylistSong[] = [];
     for (let i = 0; i < tracks.length; i++) {
       const t: TxRawTrack = tracks[i];
+      const albumMid: string = t.album?.mid ?? t.album?.pmid ?? '';
+      const cover: string = albumMid.length > 0 ?
+        ('https://y.gtimg.cn/music/photo_new/T002R300x300M000' + albumMid + '.jpg') : '';
       songs.push({
         id: t.songmid ?? '',
         name: t.name ?? '',
         artist: t.singer?.map((s: TxRawSinger): string => s.name ?? '').join(' / ') ?? '',
         album: t.album?.name ?? '',
-        duration: t.interval ?? 0
+        duration: t.interval ?? 0,
+        img: cover
       });
     }
     info.songs = songs;

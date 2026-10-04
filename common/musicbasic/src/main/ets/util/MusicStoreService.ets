@@ -34,6 +34,8 @@ const KEY_THEME_COLOR: string = 'theme_color';
 const KEY_HOME_SOURCE: string = 'home_source';
 const KEY_SHOW_MINI_LYRIC: string = 'show_mini_lyric';
 const KEY_DESKTOP_LYRIC: string = 'desktop_lyric';
+/** 车载蓝牙歌词：通过 AVMetadata.singleLyricText 向蓝牙设备推送当前句（默认关）。 */
+const KEY_BLUETOOTH_LYRIC: string = 'bluetooth_lyric';
 /** 华为账号登录资料（JSON，形状由 features/player 的 HuaweiAccountService 定义，这里只当字符串存）。 */
 const KEY_HUAWEI_ACCOUNT: string = 'huawei_account';
 /** 华为云盘访问令牌（JSON：accessToken / refreshToken / expiresAt）。 */
@@ -50,6 +52,8 @@ const KEY_LYRIC_FPS: string = 'lyric_fps';
 const KEY_LYRIC_CENTER: string = 'lyric_center';
 const KEY_LYRIC_BLUR: string = 'lyric_blur';
 const KEY_CROSS_SCRIPT_FALLBACK: string = 'cross_script_fallback';
+/** 音源脚本参与依次调用的顺序（JSON 字符串数组，空=全部按导入顺序）。 */
+const KEY_SOURCE_SCRIPT_ORDER: string = 'source_script_order';
 const KEY_QUALITY_TIER_HEALTH: string = 'quality_tier_health';
 const KEY_SHOW_HOME_PLAZA: string = 'show_home_plaza';
 const KEY_SHOW_HOME_RANKING: string = 'show_home_ranking';
@@ -398,6 +402,53 @@ export class MusicStoreService {
    * source script to find the song. Enabled by default to keep the historical
    * cross-script recovery behaviour.
    */
+
+  /**
+   * 参与「播放失败依次换音源」的脚本 id 顺序（用户可多选并手动排序）。
+   * 空数组表示未配置：回退为全部已导入脚本的当前列表顺序。
+   */
+  public getSourceScriptOrder(): string[] {
+    const store = this.getStore();
+    if (store === undefined) {
+      return [];
+    }
+    const raw: string = store.getSync(KEY_SOURCE_SCRIPT_ORDER, '') as string;
+    if (raw.length === 0) {
+      return [];
+    }
+    try {
+      const arr: Object = JSON.parse(raw) as Object;
+      if (!Array.isArray(arr)) {
+        return [];
+      }
+      const out: string[] = [];
+      for (let i: number = 0; i < (arr as Object[]).length; i++) {
+        const id: string = String((arr as Object[])[i] ?? '');
+        if (id.length > 0 && out.indexOf(id) < 0) {
+          out.push(id);
+        }
+      }
+      return out;
+    } catch (_e) {
+      return [];
+    }
+  }
+
+  public setSourceScriptOrder(ids: string[]): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    const cleaned: string[] = [];
+    for (let i: number = 0; i < ids.length; i++) {
+      if (ids[i].length > 0 && cleaned.indexOf(ids[i]) < 0) {
+        cleaned.push(ids[i]);
+      }
+    }
+    store.putSync(KEY_SOURCE_SCRIPT_ORDER, JSON.stringify(cleaned));
+    store.flush();
+  }
+
   public getCrossScriptFallback(): boolean {
     const store = this.getStore();
     if (store === undefined) {
@@ -748,6 +799,29 @@ export class MusicStoreService {
       return;
     }
     store.putSync(KEY_DESKTOP_LYRIC, enabled);
+    store.flush();
+  }
+
+  /**
+   * @returns 车载蓝牙歌词开关，默认**关**。
+   * 开启后通过 AVMetadata.singleLyricText 向车机/蓝牙音箱推送当前歌词句；
+   * 部分设备可能因此略增卡顿，故与洛雪一致默认关闭。
+   */
+  public getBluetoothLyric(): boolean {
+    const store = this.getStore();
+    if (store === undefined) {
+      return false;
+    }
+    return store.getSync(KEY_BLUETOOTH_LYRIC, false) as boolean;
+  }
+
+  /** 持久化车载蓝牙歌词开关。 */
+  public setBluetoothLyric(enabled: boolean): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_BLUETOOTH_LYRIC, enabled);
     store.flush();
   }
 
@@ -1919,6 +1993,33 @@ export class MusicStoreService {
         this.playlistVersion++;
         return;
       }
+    }
+  }
+
+  /**
+   * 把某首在线歌的封面写回所有包含它的本地歌单（导入后无封面、播放后补全）。
+   * 仅在原 img 为空或与新地址不同时写入，避免无意义刷盘。
+   */
+  public updateSongCoverInPlaylists(source: string, songId: string, img: string): void {
+    if (source.length === 0 || songId.length === 0 || img.length === 0) {
+      return;
+    }
+    const list: PlaylistDto[] = this.getPlaylists();
+    let changed: boolean = false;
+    for (let i: number = 0; i < list.length; i++) {
+      const songs: PlayedSongRecord[] = list[i].songs;
+      for (let j: number = 0; j < songs.length; j++) {
+        if (songs[j].source === source && songs[j].songId === songId) {
+          if (songs[j].img !== img) {
+            songs[j].img = img;
+            changed = true;
+          }
+        }
+      }
+    }
+    if (changed) {
+      this.persistPlaylists(list);
+      this.playlistVersion++;
     }
   }
 
