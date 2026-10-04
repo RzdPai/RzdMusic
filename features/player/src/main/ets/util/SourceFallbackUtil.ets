@@ -187,36 +187,68 @@ function scriptSupportsPlatform(info: LXUserApiInfo, source: string): boolean {
 
 function pickScriptCandidates(source: string, currentId: string): LXUserApiInfo[] {
   const now: number = Date.now();
-  const support: LXUserApiInfo[] = [];
-  const others: LXUserApiInfo[] = [];
   let list: LXUserApiInfo[] = [];
   try {
     list = lxSourceManager.getApiList();
   } catch (_err) {
     return [];
   }
+  const byId: Map<string, LXUserApiInfo> = new Map();
   for (let i: number = 0; i < list.length; i++) {
-    const info: LXUserApiInfo = list[i];
-    if (info.id === undefined || info.id.length === 0 || info.id === currentId) {
+    if (list[i].id !== undefined && list[i].id.length > 0) {
+      byId.set(list[i].id, list[i]);
+    }
+  }
+  // 用户配置的多选顺序；空则用全部导入顺序
+  let orderIds: string[] = [];
+  try {
+    orderIds = MusicStoreService.getInstance().getSourceScriptOrder();
+  } catch (_e) {
+    orderIds = [];
+  }
+  if (orderIds.length === 0) {
+    for (let i: number = 0; i < list.length; i++) {
+      if (list[i].id !== undefined && list[i].id.length > 0) {
+        orderIds.push(list[i].id);
+      }
+    }
+  }
+  // 从当前音源之后按顺序轮转，保证「第一个失败再试下一个」
+  const rotated: string[] = [];
+  let start: number = orderIds.indexOf(currentId);
+  if (start < 0) {
+    start = -1;
+  }
+  for (let i: number = start + 1; i < orderIds.length; i++) {
+    rotated.push(orderIds[i]);
+  }
+  for (let i: number = 0; i < start; i++) {
+    rotated.push(orderIds[i]);
+  }
+  const ordered: LXUserApiInfo[] = [];
+  for (let i: number = 0; i < rotated.length; i++) {
+    const id: string = rotated[i];
+    if (id === currentId) {
       continue;
     }
-    const until: number | undefined = scriptCooldown.get(info.id);
+    const info: LXUserApiInfo | undefined = byId.get(id);
+    if (info === undefined) {
+      continue;
+    }
+    const until: number | undefined = scriptCooldown.get(id);
     if (until !== undefined && until > now) {
       appendPlayLog('[换音源] 跳过冷却中的音源 ' + info.name);
       continue;
     }
-    if (scriptSupportsPlatform(info, source)) {
-      support.push(info);
-    } else {
-      others.push(info);
+    ordered.push(info);
+  }
+  // 日志标明调用顺序
+  if (ordered.length > 0) {
+    const names: string[] = [];
+    for (let i: number = 0; i < ordered.length; i++) {
+      names.push(ordered[i].name);
     }
-  }
-  const ordered: LXUserApiInfo[] = [];
-  for (let i: number = 0; i < support.length; i++) {
-    ordered.push(support[i]);
-  }
-  for (let i: number = 0; i < others.length; i++) {
-    ordered.push(others[i]);
+    appendPlayLog('[换音源] 依次候选: ' + names.join(' → '));
   }
   return ordered;
 }

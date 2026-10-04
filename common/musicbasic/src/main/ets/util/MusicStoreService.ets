@@ -52,6 +52,8 @@ const KEY_LYRIC_FPS: string = 'lyric_fps';
 const KEY_LYRIC_CENTER: string = 'lyric_center';
 const KEY_LYRIC_BLUR: string = 'lyric_blur';
 const KEY_CROSS_SCRIPT_FALLBACK: string = 'cross_script_fallback';
+/** 音源脚本参与依次调用的顺序（JSON 字符串数组，空=全部按导入顺序）。 */
+const KEY_SOURCE_SCRIPT_ORDER: string = 'source_script_order';
 const KEY_QUALITY_TIER_HEALTH: string = 'quality_tier_health';
 const KEY_SHOW_HOME_PLAZA: string = 'show_home_plaza';
 const KEY_SHOW_HOME_RANKING: string = 'show_home_ranking';
@@ -400,6 +402,53 @@ export class MusicStoreService {
    * source script to find the song. Enabled by default to keep the historical
    * cross-script recovery behaviour.
    */
+
+  /**
+   * 参与「播放失败依次换音源」的脚本 id 顺序（用户可多选并手动排序）。
+   * 空数组表示未配置：回退为全部已导入脚本的当前列表顺序。
+   */
+  public getSourceScriptOrder(): string[] {
+    const store = this.getStore();
+    if (store === undefined) {
+      return [];
+    }
+    const raw: string = store.getSync(KEY_SOURCE_SCRIPT_ORDER, '') as string;
+    if (raw.length === 0) {
+      return [];
+    }
+    try {
+      const arr: Object = JSON.parse(raw) as Object;
+      if (!Array.isArray(arr)) {
+        return [];
+      }
+      const out: string[] = [];
+      for (let i: number = 0; i < (arr as Object[]).length; i++) {
+        const id: string = String((arr as Object[])[i] ?? '');
+        if (id.length > 0 && out.indexOf(id) < 0) {
+          out.push(id);
+        }
+      }
+      return out;
+    } catch (_e) {
+      return [];
+    }
+  }
+
+  public setSourceScriptOrder(ids: string[]): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    const cleaned: string[] = [];
+    for (let i: number = 0; i < ids.length; i++) {
+      if (ids[i].length > 0 && cleaned.indexOf(ids[i]) < 0) {
+        cleaned.push(ids[i]);
+      }
+    }
+    store.putSync(KEY_SOURCE_SCRIPT_ORDER, JSON.stringify(cleaned));
+    store.flush();
+  }
+
   public getCrossScriptFallback(): boolean {
     const store = this.getStore();
     if (store === undefined) {

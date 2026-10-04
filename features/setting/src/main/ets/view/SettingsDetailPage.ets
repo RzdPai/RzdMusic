@@ -49,6 +49,7 @@ export struct SettingsDetailPage {
   @Local themeState: ThemeState =
     AppStorageV2.connect(ThemeState, AppStorageKeys.THEME_STATE, () => new ThemeState())!;
   @Local lxApiList: LXUserApiInfo[] = [];
+  @Local sourceOrderIds: string[] = [];
   @Local activeSource: string = '';
   @Local engineReady: boolean = false;
   @Local engineSources: string = '{}';
@@ -217,6 +218,14 @@ export struct SettingsDetailPage {
 
   private refresh(): void {
     this.lxApiList = lxSourceManager.getApiList();
+    this.sourceOrderIds = MusicStoreService.getInstance().getSourceScriptOrder();
+    if (this.sourceOrderIds.length === 0) {
+      const ids: string[] = [];
+      for (let i: number = 0; i < this.lxApiList.length; i++) {
+        if (this.lxApiList[i].id.length > 0) { ids.push(this.lxApiList[i].id); }
+      }
+      this.sourceOrderIds = ids;
+    }
     this.activeSource = AppStorage.get<string>('lxActiveSource') ?? '';
     if (this.activeSource.length === 0) {
       this.engineReady = false;
@@ -391,6 +400,9 @@ export struct SettingsDetailPage {
       AppStorage.setOrCreate('lxActiveSource', '');
       MusicStoreService.getInstance().setActiveSource('');
       this.activeSource = '';
+    }
+    if (this.sourceOrderIds.indexOf(apiId) >= 0) {
+      this.toggleSourceInOrder(apiId);
     }
     lxSourceManager.removeApi(apiId);
     this.refresh();
@@ -1376,6 +1388,91 @@ export struct SettingsDetailPage {
     .scrollBar(BarState.Off)
   }
 
+
+  private isSourceInOrder(apiId: string): boolean {
+    return this.sourceOrderIds.indexOf(apiId) >= 0;
+  }
+
+  private persistSourceOrder(): void {
+    MusicStoreService.getInstance().setSourceScriptOrder(this.sourceOrderIds);
+  }
+
+  private toggleSourceInOrder(apiId: string): void {
+    const idx: number = this.sourceOrderIds.indexOf(apiId);
+    if (idx >= 0) {
+      const next: string[] = [];
+      for (let i: number = 0; i < this.sourceOrderIds.length; i++) {
+        if (i !== idx) {
+          next.push(this.sourceOrderIds[i]);
+        }
+      }
+      this.sourceOrderIds = next;
+    } else {
+      const next: string[] = [];
+      for (let i: number = 0; i < this.sourceOrderIds.length; i++) {
+        next.push(this.sourceOrderIds[i]);
+      }
+      next.push(apiId);
+      this.sourceOrderIds = next;
+    }
+    this.persistSourceOrder();
+  }
+
+  private moveSourceOrderUp(apiId: string): void {
+    const idx: number = this.sourceOrderIds.indexOf(apiId);
+    if (idx <= 0) {
+      return;
+    }
+    const next: string[] = [];
+    for (let i: number = 0; i < this.sourceOrderIds.length; i++) {
+      next.push(this.sourceOrderIds[i]);
+    }
+    const tmp: string = next[idx - 1];
+    next[idx - 1] = next[idx];
+    next[idx] = tmp;
+    this.sourceOrderIds = next;
+    this.persistSourceOrder();
+  }
+
+  private moveSourceOrderDown(apiId: string): void {
+    const idx: number = this.sourceOrderIds.indexOf(apiId);
+    if (idx < 0 || idx >= this.sourceOrderIds.length - 1) {
+      return;
+    }
+    const next: string[] = [];
+    for (let i: number = 0; i < this.sourceOrderIds.length; i++) {
+      next.push(this.sourceOrderIds[i]);
+    }
+    const tmp: string = next[idx + 1];
+    next[idx + 1] = next[idx];
+    next[idx] = tmp;
+    this.sourceOrderIds = next;
+    this.persistSourceOrder();
+  }
+
+  private orderedApiListForUi(): LXUserApiInfo[] {
+    const byId: Map<string, LXUserApiInfo> = new Map();
+    for (let i: number = 0; i < this.lxApiList.length; i++) {
+      byId.set(this.lxApiList[i].id, this.lxApiList[i]);
+    }
+    const out: LXUserApiInfo[] = [];
+    const seen: Record<string, boolean> = {};
+    for (let i: number = 0; i < this.sourceOrderIds.length; i++) {
+      const id: string = this.sourceOrderIds[i];
+      const api: LXUserApiInfo | undefined = byId.get(id);
+      if (api !== undefined) {
+        out.push(api);
+        seen[id] = true;
+      }
+    }
+    for (let i: number = 0; i < this.lxApiList.length; i++) {
+      if (!seen[this.lxApiList[i].id]) {
+        out.push(this.lxApiList[i]);
+      }
+    }
+    return out;
+  }
+
   /** 音源管理弹窗：导入按钮 + 源列表。 */
   @Builder
   private SourceManagerSheet() {
@@ -1389,9 +1486,26 @@ export struct SettingsDetailPage {
 
       Scroll(this.pageScroller) {
         Column({ space: 8 }) {
-          ForEach(this.lxApiList, (api: LXUserApiInfo) => {
-            Row({ space: 8 }) {
-              Radio({ value: api.id, group: 'lxSource', indicatorType: RadioIndicatorType.TICK })
+          Text('勾选参与依次调用，上下键调整优先级；圆点为当前默认音源')
+            .fontSize($r('sys.float.Caption_M'))
+            .fontColor($r('sys.color.font_tertiary'))
+            .width('100%')
+
+          ForEach(this.orderedApiListForUi(), (api: LXUserApiInfo) => {
+            Row({ space: 6 }) {
+              Checkbox()
+                .select(this.isSourceInOrder(api.id))
+                .selectedColor(this.themeState.color)
+                .width(20)
+                .height(20)
+                .onChange((checked: boolean) => {
+                  const on: boolean = this.isSourceInOrder(api.id);
+                  if (checked !== on) {
+                    this.toggleSourceInOrder(api.id);
+                  }
+                })
+
+              Radio({ value: api.id, group: 'lxSourceDetail', indicatorType: RadioIndicatorType.TICK })
                 .width(20)
                 .height(20)
                 .checked(this.activeSource === api.id)
@@ -1402,18 +1516,26 @@ export struct SettingsDetailPage {
                 .onClick(() => {
                   this.selectLXSource(api.id);
                 })
+
               Column({ space: 2 }) {
                 Text(api.name)
                   .fontSize($r('sys.float.Body_L'))
                   .fontColor($r('sys.color.font_primary'))
                   .maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
-                if (api.author.length > 0 || api.version.length > 0) {
-                  Text((api.author.length > 0 ? api.author : '') +
-                    (api.version.length > 0 ? ' v' + api.version : ''))
-                    .fontSize($r('sys.float.Caption_S'))
-                    .fontColor($r('sys.color.font_tertiary'))
-                    .maxLines(1)
+                Row({ space: 4 }) {
+                  if (this.isSourceInOrder(api.id)) {
+                    Text('顺序 ' + (this.sourceOrderIds.indexOf(api.id) + 1))
+                      .fontSize($r('sys.float.Caption_S'))
+                      .fontColor(this.themeState.color)
+                  }
+                  if (api.author.length > 0 || api.version.length > 0) {
+                    Text((api.author.length > 0 ? api.author : '') +
+                      (api.version.length > 0 ? ' v' + api.version : ''))
+                      .fontSize($r('sys.float.Caption_S'))
+                      .fontColor($r('sys.color.font_tertiary'))
+                      .maxLines(1)
+                  }
                 }
               }
               .alignItems(HorizontalAlign.Start)
@@ -1428,6 +1550,21 @@ export struct SettingsDetailPage {
                   .fontColor(this.themeState.color)
               }
 
+              if (this.isSourceInOrder(api.id)) {
+                SymbolGlyph($r('sys.symbol.chevron_up'))
+                  .fontSize(18)
+                  .fontColor([$r('sys.color.font_tertiary')])
+                  .onClick(() => {
+                    this.moveSourceOrderUp(api.id);
+                  })
+                SymbolGlyph($r('sys.symbol.chevron_down'))
+                  .fontSize(18)
+                  .fontColor([$r('sys.color.font_tertiary')])
+                  .onClick(() => {
+                    this.moveSourceOrderDown(api.id);
+                  })
+              }
+
               SymbolGlyph($r('sys.symbol.trash'))
                 .fontSize(20)
                 .fontColor([$r('sys.color.font_tertiary')])
@@ -1439,7 +1576,7 @@ export struct SettingsDetailPage {
             .padding(10)
             .borderRadius($r('sys.float.corner_radius_level6'))
             .backgroundColor($r('app.color.card_background'))
-          }, (api: LXUserApiInfo) => api.id)
+          }, (api: LXUserApiInfo) => api.id + '|' + (this.isSourceInOrder(api.id) ? '1' : '0') + '|' + this.sourceOrderIds.indexOf(api.id))
 
           Row({ space: 10 }) {
             Button($r('app.string.setting_lx_import_file'))
