@@ -32,6 +32,8 @@ import {
   localMusic,
   localMusicImportState
 } from '../core/LocalMusic';
+import { LyricMatchSheet } from './LyricMatchSheet';
+import type { MatchSongInfo } from '../core/LyricMatch';
 
 const DOMAIN: number = 0x0001;
 const TAG: string = 'LocalMusicPage';
@@ -58,6 +60,15 @@ export struct LocalMusicPage {
   @Local selectionMode: boolean = false;
   /** 多选勾选表（key = 本地 key） */
   @Local selectedMap: Record<string, boolean> = {};
+  /** 一键匹配进行中 */
+  @Local matchingAll: boolean = false;
+  @Local matchProgress: string = '';
+  /** 单曲手动匹配面板 */
+  @Local showMatchSheet: boolean = false;
+  @Local matchSheetKey: string = '';
+  @Local matchSheetName: string = '';
+  @Local matchSheetSinger: string = '';
+  @Local matchSheetDurationMs: number = 0;
   /** 路由栈（与 MinePage 同一个 @Provider 名，用于返回） */
   @Consumer('pageIndexInfos') pageStack: NavPathStack = new NavPathStack();
 
@@ -139,6 +150,38 @@ export struct LocalMusicPage {
     }
     const result: ImportResult = await localMusic.importFolder(context);
     this.afterImport(result);
+  }
+
+
+  /**
+   * 一键匹配封面 / 歌词 / 评论源（平台顺序 QQ→网易→酷狗→酷我→咪咕）。
+   * 匹配结果写入 matchJson，播放页评论可据此拉平台评论。
+   */
+  private async runMatchAll(): Promise<void> {
+    if (this.matchingAll || this.items.length === 0) {
+      return;
+    }
+    this.matchingAll = true;
+    this.matchProgress = '准备匹配…';
+    try {
+      const result = await localMusic.matchAllOnline((done: number, total: number, name: string): void => {
+        this.matchProgress = `${done}/${total} ${name}`;
+      });
+      const msg: string = `匹配完成：成功 ${result.ok} 首，失败 ${result.fail} 首，共 ${result.total} 首`;
+      this.matchProgress = msg;
+      this.toast(msg);
+      try {
+        this.getUIContext().getPromptAction().showToast({ message: msg, duration: 3500 });
+      } catch (_e) {
+      }
+      this.refresh();
+    } catch (e) {
+      this.toast('匹配失败，请检查网络与音源');
+      hilog.warn(DOMAIN, TAG, 'matchAll failed: %{public}s', JSON.stringify(e));
+    } finally {
+      this.matchingAll = false;
+      this.matchProgress = '';
+    }
   }
 
   private afterImport(result: ImportResult): void {
@@ -242,15 +285,42 @@ export struct LocalMusicPage {
    * 补上之后本方法不用改：队列已经换成本地歌条目、url 已是沙箱绝对路径。
    */
   private playAt(index: number): void {
-    const queue: SongItem[] = this.items;
-    if (index < 0 || index >= queue.length) {
+    if (index < 0 || index >= this.items.length) {
       return;
+    }
+    const target: SongItem = this.items[index];
+    if (target.url.length === 0) {
+      this.toast('本地文件路径无效，请重新导入');
+      return;
+    }
+    // 复制队列快照，避免列表刷新后引用失效
+    const queue: SongItem[] = [];
+    for (let i: number = 0; i < this.items.length; i++) {
+      queue.push(this.items[i]);
     }
     this.appState.replaceQueue(queue, index);
     this.appState.currentQuality = 'local';
     this.appState.isResolving = false;
-    void MediaService.getInstance().loadAsset(index);
     this.appState.isShowPlay = true;
+    void MediaService.getInstance().loadAsset(index);
+  }
+
+  private openMatchFor(item: SongItem): void {
+    this.matchSheetKey = item.songId;
+    this.matchSheetName = typeof item.title === 'string' ? item.title : '';
+    this.matchSheetSinger = typeof item.singer === 'string' ? item.singer : '';
+    this.matchSheetDurationMs = 0;
+    try {
+      this.matchSheetDurationMs = localMusic.durationMsOf(item.songId);
+    } catch (_e) {
+    }
+    this.showMatchSheet = true;
+  }
+
+  private onMatchPicked(_info: MatchSongInfo, _source: string): void {
+    this.showMatchSheet = false;
+    this.toast('已匹配，封面/歌词/评论将按所选平台使用');
+    this.refresh();
   }
 
   // ------------------------------------------------------------ 界面
@@ -272,7 +342,14 @@ export struct LocalMusicPage {
           .fontWeight(FontWeight.Medium)
           .fontColor($r('sys.color.font_primary'))
         Blank()
-        if (this.items.length > 0 && !this.selectionMode) {
+        if (this.items.length > 0 && !this.selectionMode && !this.matchingAll) {
+          Text('一键匹配')
+            .fontSize($r('sys.float.Body_S'))
+            .fontColor(this.themeState.color)
+            .padding({ left: 8, right: 8, top: 6, bottom: 6 })
+            .onClick(() => {
+              void this.runMatchAll();
+            })
           Text('选择')
             .fontSize($r('sys.float.Body_S'))
             .fontColor($r('sys.color.font_secondary'))
@@ -328,6 +405,40 @@ export struct LocalMusicPage {
         .onClick(() => {
           localMusic.cancelImport();
         })
+    }
+    .width('100%')
+    .padding({ left: 12, right: 12, top: 9, bottom: 9 })
+    .margin({ left: 16, right: 16 })
+    .borderRadius($r('sys.float.corner_radius_level4'))
+    .backgroundColor($r('sys.color.background_secondary'))
+  }
+
+  @Builder
+  private MatchSheetBuilder() {
+    LyricMatchSheet({
+      songKey: this.matchSheetKey,
+      songName: this.matchSheetName,
+      singer: this.matchSheetSinger,
+      durationMs: this.matchSheetDurationMs,
+      onPick: (info: MatchSongInfo, source: string): void => {
+        this.onMatchPicked(info, source);
+      }
+    })
+  }
+
+  @Builder
+  private MatchProgressBar() {
+    Row({ space: 10 }) {
+      Text(this.matchProgress.length > 0 ?
+        `正在匹配 ${this.matchProgress}` : '正在匹配封面/歌词…')
+        .fontSize($r('sys.float.Caption_M'))
+        .fontColor($r('sys.color.font_secondary'))
+        .layoutWeight(1)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+      Text('QQ→网易→酷狗→酷我→咪咕')
+        .fontSize($r('sys.float.Caption_S'))
+        .fontColor($r('sys.color.font_tertiary'))
     }
     .width('100%')
     .padding({ left: 12, right: 12, top: 9, bottom: 9 })
@@ -443,9 +554,26 @@ export struct LocalMusicPage {
       .layoutWeight(1)
 
       if (!this.selectionMode) {
+        SymbolGlyph($r('sys.symbol.magnifyingglass'))
+          .fontSize(18)
+          .fontColor([$r('sys.color.icon_tertiary')])
+          .padding({ left: 4, right: 8 })
+          .onClick(() => {
+            this.openMatchFor(item);
+          })
         SymbolGlyph($r('sys.symbol.play_fill'))
           .fontSize(20)
           .fontColor([$r('sys.color.icon_tertiary')])
+          .onClick(() => {
+            let idx: number = -1;
+            for (let i: number = 0; i < this.items.length; i++) {
+              if (this.items[i].songId === item.songId) {
+                idx = i;
+                break;
+              }
+            }
+            this.playAt(idx);
+          })
       }
     }
     .width('100%')
@@ -455,7 +583,14 @@ export struct LocalMusicPage {
         this.toggleSelect(item, !this.isSelected(item));
         return;
       }
-      this.playAt(this.items.indexOf(item));
+      let idx: number = -1;
+      for (let i: number = 0; i < this.items.length; i++) {
+        if (this.items[i].songId === item.songId) {
+          idx = i;
+          break;
+        }
+      }
+      this.playAt(idx);
     })
   }
 
@@ -491,6 +626,9 @@ export struct LocalMusicPage {
         if (this.importState.importing || this.importState.progress.length > 0) {
           this.ProgressBar()
         }
+        if (this.matchingAll) {
+          this.MatchProgressBar()
+        }
 
         if (this.selectionMode) {
           this.SelectionBar()
@@ -515,9 +653,23 @@ export struct LocalMusicPage {
       .width('100%')
       .height('100%')
     }
-    .onBackPressed((): boolean => guardPlayerBack('LocalMusicView'))
+    .onBackPressed((): boolean => {
+      if (this.showMatchSheet) {
+        this.showMatchSheet = false;
+        return true;
+      }
+      return guardPlayerBack('LocalMusicView');
+    })
     .hideTitleBar(true)
     .backgroundColor($r('sys.color.background_primary'))
+    .bindSheet(this.showMatchSheet, this.MatchSheetBuilder, {
+      height: SheetSize.MEDIUM,
+      dragBar: true,
+      showClose: true,
+      onDisappear: (): void => {
+        this.showMatchSheet = false;
+      }
+    })
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
   }
 }

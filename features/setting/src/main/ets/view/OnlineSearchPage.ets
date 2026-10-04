@@ -19,7 +19,7 @@ import { guardPlayerBack } from 'musicbasic';
 import { AlbumRouteParam, ArtistRouteParam, BreakpointType, ThemeState, TitleBarConstants, WindowUtil, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions, HdsNavigationTitleBarOptions, HideMode, ScrollEffectType, TextStyleMode, TitleSize } from '@kit.UIDesignKit';
 import { AppStorageKeys, AmbientState, MusicAppState, MusicStoreService, PlayedSongRecord, QualityInfo, RouterUrlConstants, SongItem, ToplistRouteParam, buildTitleMaterial } from 'musicbasic';
-import { AlbumInfo, LXQualityOption, LXSearchSong, LXSearchResult, SingerInfo, lxGetPicFallback, lxGetQualityOptions, lxSearch, lxTxHotSearch, searchAlbums, searchSingers, sourceToCode, DownloadTask, DownloadUtil, OnlinePlayUtil, PlaylistSearchApi } from 'player';
+import { AlbumInfo, LXQualityOption, LXSearchSong, LXSearchResult, SingerInfo, lxGetPicFallback, lxGetQualityOptions, lxSearch, lxTxHotSearch, lxSearchSuggest, searchAlbums, searchSingers, sourceToCode, DownloadTask, DownloadUtil, OnlinePlayUtil, PlaylistSearchApi } from 'player';
 import type { SearchPlaylistInfo, SearchPlaylistSong } from 'player';
 import { SongMoreMenu } from 'playlist';
 
@@ -175,6 +175,11 @@ struct OnlineSearchPage {
   @Param routeParam: Object = '';
   @Consumer('pageIndexInfos') pageStack: NavPathStack = new NavPathStack();
   @Local query: string = '';
+  /** 输入中的联想候选（洛雪式：输入后下方弹出推荐） */
+  @Local suggestWords: string[] = [];
+  @Local showSuggest: boolean = false;
+  private suggestTimerId: number = -1;
+  private suggestSeq: number = 0;
   @Local searching: boolean = false;
   @Local songs: LXSearchSong[] = [];
   @Local errorMsg: string = '';
@@ -516,6 +521,68 @@ struct OnlineSearchPage {
     this.hotWords = words.slice(0, 10);
   }
 
+  /** 输入防抖后拉联想词（对齐 lx-music 搜索框下方候选） */
+  private scheduleSuggest(value: string): void {
+    const key: string = value.trim();
+    if (this.suggestTimerId >= 0) {
+      try {
+        clearTimeout(this.suggestTimerId);
+      } catch (_e) {
+      }
+      this.suggestTimerId = -1;
+    }
+    if (key.length === 0) {
+      this.suggestWords = [];
+      this.showSuggest = false;
+      return;
+    }
+    // 已有搜索结果时仍可显示联想，方便改关键词
+    const seq: number = ++this.suggestSeq;
+    this.suggestTimerId = setTimeout((): void => {
+      void this.loadSuggest(key, seq);
+    }, 280) as number;
+  }
+
+  private currentSuggestSource(): string {
+    if (this.selectedSourceIndex <= 0) {
+      return 'all';
+    }
+    const idx: number = this.selectedSourceIndex - 1;
+    if (idx < 0 || idx >= this.sources.length) {
+      return 'all';
+    }
+    return this.sources[idx].id;
+  }
+
+  private async loadSuggest(key: string, seq: number): Promise<void> {
+    try {
+      const words: string[] = await lxSearchSuggest(key, this.currentSuggestSource());
+      if (seq !== this.suggestSeq) {
+        return;
+      }
+      // 新数组引用，确保 ForEach 刷新
+      this.suggestWords = words.slice();
+      this.showSuggest = this.suggestWords.length > 0 && this.query.trim().length > 0;
+      console.info('[搜索联想UI] n=' + this.suggestWords.length + ' src=' + this.currentSuggestSource());
+    } catch (_e) {
+      if (seq === this.suggestSeq) {
+        this.suggestWords = [];
+        this.showSuggest = false;
+      }
+    }
+  }
+
+  private hideSuggest(): void {
+    this.showSuggest = false;
+  }
+
+  private pickSuggest(word: string): void {
+    this.query = word;
+    this.showSuggest = false;
+    this.suggestWords = [];
+    void this.doSearch();
+  }
+
   /** Reloads search history when the store changes. */
   @Monitor('store.searchHistoryVersion')
   onSearchHistoryChanged(): void {
@@ -574,6 +641,8 @@ struct OnlineSearchPage {
   }
 
   private async doSearch(): Promise<void> {
+    this.showSuggest = false;
+    this.suggestWords = [];
     if (this.query.trim().length === 0) {
       return;
     }
@@ -1118,19 +1187,22 @@ struct OnlineSearchPage {
     Column() {
       this.SearchInputBar()
 
-      Row({ space: 8 }) {
-        ForEach(this.modeSelectOptions, (opt: SelectOption, index: number) => {
-          this.ModeTabChip(opt.value as string, this.modeTabIcon(index), this.searchMode === index,
-            (): void => {
-              this.changeSearchMode(index);
-            })
-        }, (opt: SelectOption) => 'mode-' + opt.value + '-' + this.searchMode)
+      // 有联想时隐藏模式栏，让内容区顶到搜索框下方，悬浮层可紧贴
+      if (!(this.showSuggest && this.suggestWords.length > 0 && !this.searching)) {
+        Row({ space: 8 }) {
+          ForEach(this.modeSelectOptions, (opt: SelectOption, index: number) => {
+            this.ModeTabChip(opt.value as string, this.modeTabIcon(index), this.searchMode === index,
+              (): void => {
+                this.changeSearchMode(index);
+              })
+          }, (opt: SelectOption) => 'mode-' + opt.value + '-' + this.searchMode)
+        }
+        .width('100%')
+        .height(40)
+        .padding({ left: 16, right: 16 })
+        .margin({ top: 8 })
+        .justifyContent(FlexAlign.Start)
       }
-      .width('100%')
-      .height(40)
-      .padding({ left: 16, right: 16 })
-      .margin({ top: 8 })
-      .justifyContent(FlexAlign.Start)
     }
     .width('100%')
     .padding({ bottom: 8 })
@@ -1177,9 +1249,16 @@ struct OnlineSearchPage {
           .searchButton($r('app.string.search_button'))
           .onChange((value: string) => {
             this.query = value;
+            this.scheduleSuggest(value);
           })
           .onSubmit(() => {
+            this.hideSuggest();
             void this.doSearch();
+          })
+          .onEditChange((isEditing: boolean) => {
+            if (!isEditing) {
+              this.hideSuggest();
+            }
           })
       }
       .width('100%')
@@ -1475,10 +1554,9 @@ struct OnlineSearchPage {
 
         Stack({ alignContent: Alignment.Center }) {
           List({ scroller: this.listScroller }) {
-            if (this.query.trim().length === 0 && !this.searching) {
+            if (!this.searching && this.resultEmpty()) {
               ListItem() {
-              if (!this.searching && this.hotWords.length > 0 &&
-                this.resultEmpty()) {
+              if (this.hotWords.length > 0) {
                 Column({ space: 12 }) {
                   Row() {
                     Text($r('app.string.search_hot_title'))
@@ -1521,8 +1599,7 @@ struct OnlineSearchPage {
               }
 
               ListItem() {
-              if (!this.searching && this.searchHistory.length > 0 &&
-                this.resultEmpty()) {
+              if (this.searchHistory.length > 0) {
                 Column({ space: 12 }) {
                   Row() {
                     Text($r('app.string.search_history_title'))
@@ -1637,6 +1714,13 @@ struct OnlineSearchPage {
             right: 12,
             bottom: 0
           })
+          .onScrollFrameBegin((offset: number): OnScrollFrameBeginHandlerResult => {
+            // 列表滑动时自动收起联想（签名与 MinePage 一致）
+            if (this.showSuggest && Math.abs(offset) > 1) {
+              this.hideSuggest();
+            }
+            return { offsetRemain: offset };
+          })
 
           if (this.searching) {
             Column({ space: 8 }) {
@@ -1647,6 +1731,52 @@ struct OnlineSearchPage {
                 .fontSize($r('sys.float.Caption_L'))
                 .fontColor($r('sys.color.font_tertiary'))
             }
+          }
+
+          // 半透明悬浮候选：顶边与搜索框底对齐（contentPaddingTop = 标题+搜索区高度）
+          if (this.showSuggest && this.suggestWords.length > 0 && !this.searching) {
+            // 父层 Transparent：点击/滑动可穿透到下方 List，从而触发滚动自动收起
+            Column() {
+              Scroll() {
+                Column({ space: 0 }) {
+                  ForEach(this.suggestWords, (word: string, idx: number) => {
+                    Text(word)
+                      .fontSize(15)
+                      .fontColor($r('sys.color.font_primary'))
+                      .maxLines(1)
+                      .textOverflow({ overflow: TextOverflow.Ellipsis })
+                      .width('100%')
+                      .textAlign(TextAlign.Start)
+                      .padding({ left: 108, right: 16, top: 11, bottom: 11 })
+                      .onClick(() => {
+                        this.pickSuggest(word);
+                      })
+                  }, (word: string, idx: number) => 'sgf-' + idx + '-' + word)
+                }
+                .width('100%')
+              }
+              .width('100%')
+              .constraintSize({ maxHeight: 480 })
+              .scrollBar(BarState.Off)
+              // 与迷你播放条/搜索框同款磨砂：#30 透明度灰底 + 材质模糊
+              .backgroundColor(this.isDarkTheme() ? '#33202224' : '#30F1F3F5')
+              .backgroundBlurStyle(this.searchControlBlur())
+              .borderRadius(20)
+              .shadow({ radius: 12, color: '#22000000', offsetX: 0, offsetY: 3 })
+              .clip(true)
+              .hitTestBehavior(HitTestMode.Default)
+            }
+            .width('100%')
+            .height('100%')
+            .padding({
+              left: 16,
+              right: 16,
+              top: this.titleBarTopHeight + this.searchBarHeight
+            })
+            .alignItems(HorizontalAlign.Start)
+            .justifyContent(FlexAlign.Start)
+            .hitTestBehavior(HitTestMode.Transparent)
+            .zIndex(30)
           }
         }
         .width('100%')

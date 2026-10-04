@@ -51,16 +51,16 @@ export type { BoardSongEntry } from './src/main/ets/source/LXPlayHelper';
 export { lxGetQualityOptions, lxGetQualityOptionsForSongs, LXQualityOption } from './src/main/ets/source/LXQualityApi';
 export type { LXBatchQualityResult } from './src/main/ets/source/LXQualityApi';
 // 平台中文名（kw→酷我、wy→网易云…），批量下载的失败提示里要带上它
-export { sourceDisplayName } from './src/main/ets/util/SourceFallbackUtil';
+export { sourceDisplayName, qualityDisplayName } from './src/main/ets/util/SourceFallbackUtil';
 export { lxSearch, lxLeaderboard, getLeaderboardEntries, lxGetPicFallback, lxGetLyricFallback,
-  lxTxToplist, lxTxToplistInfo, lxTxSingerList, lxKgSingerList, lxTxToplistList, lxTxHotSearch,
+  lxTxToplist, lxTxToplistInfo, lxTxSingerList, lxKgSingerList, lxWySingerList, lxKwSingerList, lxMgSingerList, lxTxToplistList, lxTxHotSearch, lxSearchSuggest,
   lxGetWyLyricAll, lxGetTTMLLyric, lxGetLyricFull } from './src/main/ets/source/LXMusicSDK';
 export { buildSongShareText, showSystemShare } from './src/main/ets/util/ShareUtil';
 export { LyricLiveViewController } from './src/main/ets/util/LyricLiveViewController';
 export type { LiveViewLyricPayload } from './src/main/ets/util/LyricLiveViewController';
 export { DownloadUtil } from './src/main/ets/util/DownloadUtil';
 export { DownloadService, DownloadStatus, DownloadTask } from './src/main/ets/util/DownloadService';
-export type { TxToplistInfo } from './src/main/ets/source/LXMusicSDK';
+export type { TxToplistInfo, TxSinger } from './src/main/ets/source/LXMusicSDK';
 export type { LXSearchSong, LXSearchResult, LXQualityType, LXLeaderboardEntry, WyLyricResult, LyricFullResult } from './src/main/ets/source/LXMusicSDK';
 export type { LXUserApiInfo, LXUserApiInfoFull, LXUserApiSourceInfo, LXSource, LXQuality } from './src/main/ets/source/Interface';
 export { AmllLyricFormat } from './src/main/ets/amll/model/AmllTypes';

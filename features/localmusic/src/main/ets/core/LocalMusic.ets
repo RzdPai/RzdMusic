@@ -46,6 +46,7 @@ import { fileIo as fs, fileUri, picker } from '@kit.CoreFileKit';
 import { media } from '@kit.MediaKit';
 import { image } from '@kit.ImageKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { http } from '@kit.NetworkKit';
 import { MusicStoreService, PlayedSongRecord, SongItem, appendError, appendPlayLog } from 'musicbasic';
 import { autoMatchLyric, AutoMatchResult, infoFromJson, infoToJson, MatchSongInfo } from './LyricMatch';
 import { lxGetLyricFull, LyricFullResult, setLocalLyricResolver } from 'player';
@@ -114,6 +115,21 @@ export class LocalMusicImportState {
 export function localMusicImportState(): LocalMusicImportState {
   return AppStorageV2.connect(LocalMusicImportState, LOCAL_MUSIC_IMPORT_STATE_KEY,
     () => new LocalMusicImportState())!;
+}
+
+/** 一键匹配批量结果 */
+export interface MatchAllResult {
+  ok: number;
+  fail: number;
+  total: number;
+}
+
+interface Id3ParseResult {
+  title: string;
+  artist: string;
+  album: string;
+  lyrics: string;
+  coverJpeg: ArrayBuffer | null;
 }
 
 /** 一条本地歌曲（落盘索引里的一行） */
@@ -458,7 +474,22 @@ export class LocalMusic {
   /** 这条本地歌有没有一起导入的 `.lrc` */
   hasLocalLyric(key: string): boolean {
     const song: LocalSongEntry | undefined = this.byKey.get(key);
-    return song !== undefined && song.lrc.length > 0;
+    if (song === undefined) {
+      return false;
+    }
+    if (song.lrc.length > 0) {
+      try {
+        if (fs.accessSync(`${this.dir}/${song.lrc}`)) {
+          return true;
+        }
+      } catch (_e) {
+      }
+    }
+    try {
+      return fs.accessSync(`${this.dir}/${key}.lrc`);
+    } catch (_e2) {
+      return false;
+    }
   }
 
   /**
@@ -625,6 +656,11 @@ export class LocalMusic {
     try {
       const options: picker.DocumentSelectOptions = new picker.DocumentSelectOptions();
       options.selectMode = picker.DocumentSelectMode.FOLDER;
+      // 尽量多授权，便于枚举目录内文件
+      try {
+        options.maxSelectNumber = 1;
+      } catch (_e) {
+      }
       const documentPicker: picker.DocumentViewPicker = new picker.DocumentViewPicker(context);
       results = await documentPicker.select(options);
     } catch (e) {
@@ -634,9 +670,21 @@ export class LocalMusic {
     if (results.length === 0) {
       return emptyResult('没有选择文件夹');
     }
-    const uris: string[] = listFolderFiles(results[0]);
+    const folderUri: string = results[0];
+    hilog.info(DOMAIN, TAG, 'picked folder uri=%{public}s', folderUri.substring(0, 160));
+    let uris: string[] = listFolderFiles(folderUri);
+    // 仍为空：再尝试把 URI 编码形式解码后枚举
     if (uris.length === 0) {
-      return emptyResult('这个目录里没有找到文件，请改用「选择音乐文件」');
+      try {
+        const decoded: string = decodeURIComponent(folderUri);
+        if (decoded !== folderUri) {
+          uris = listFolderFiles(decoded);
+        }
+      } catch (_e) {
+      }
+    }
+    if (uris.length === 0) {
+      return emptyResult('无法读取该文件夹内容（系统未授予枚举权限）。请改用「选择音乐文件」多选导入，或把音乐放到应用可访问目录后重试');
     }
     return await this.importUris(uris);
   }
@@ -738,7 +786,16 @@ export class LocalMusic {
       // 同目录下的同名 .lrc 一并拷进来：这是**精确匹配**的歌词，播放时优先用它。
       // 「选文件夹」这条路一定拿得到；「选文件」那条路只授权了选中的文件，
       // 兄弟文件多半读不到 —— 读不到就算了，之后还有在线匹配兜底。
-      const lrc: string = this.copySiblingLrc(uri, key);
+      let lrc: string = this.copySiblingLrc(uri, key);
+      // ID3 内嵌歌词可能已在 readMetadata 里写成 key.lrc
+      if (lrc.length === 0) {
+        try {
+          if (fs.accessSync(`${this.dir}/${key}.lrc`)) {
+            lrc = `${key}.lrc`;
+          }
+        } catch (_e) {
+        }
+      }
       const entry: LocalSongEntry = {
         key: key,
         file: file,
@@ -809,7 +866,6 @@ export class LocalMusic {
       out.durationMs = asNumber(meta.duration);
       out.coverFile = await this.saveCover(extractor, key);
     } catch (e) {
-      // 不支持的编码 / 没有标签都会走到这里，属于常态，不报错只记日志
       hilog.info(DOMAIN, TAG, 'read metadata failed: %{public}s', JSON.stringify(e));
     } finally {
       if (extractor !== null) {
@@ -821,7 +877,160 @@ export class LocalMusic {
       }
       closeQuietly(file);
     }
+        // ID3 补全（mp3 等 AVMetadata 常漏封面/歌词）
+    try {
+      const id3: Id3ParseResult = parseId3FromFile(path, size);
+      if (out.name.length === 0 && id3.title.length > 0) {
+        out.name = id3.title;
+      }
+      if (out.singer.length === 0 && id3.artist.length > 0) {
+        out.singer = id3.artist;
+      }
+      if (out.album.length === 0 && id3.album.length > 0) {
+        out.album = id3.album;
+      }
+      if (out.coverFile.length === 0 && id3.coverJpeg !== null && id3.coverJpeg.byteLength > 64) {
+        const saved: string = this.writeCoverBytes(key, id3.coverJpeg);
+        if (saved.length > 0) {
+          out.coverFile = saved;
+        }
+      }
+      if (id3.lyrics.length > 20) {
+        this.writeSidecarLrc(key, id3.lyrics);
+      }
+    } catch (e) {
+      hilog.info(DOMAIN, TAG, 'id3 parse skip: %{public}s', JSON.stringify(e));
+    }
     return out;
+  }
+
+
+  /** 把内存中的 JPEG 字节写入 covers/<key>.jpg */
+  private writeCoverBytes(key: string, data: ArrayBuffer): string {
+    try {
+      const file: string = `${key}.jpg`;
+      const handle: fs.File = fs.openSync(`${this.coverDir}/${file}`,
+        fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
+      try {
+        fs.writeSync(handle.fd, data);
+      } finally {
+        fs.closeSync(handle);
+      }
+      return file;
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'writeCoverBytes failed: %{public}s', JSON.stringify(e));
+      return '';
+    }
+  }
+
+  /** 内嵌/匹配到的歌词写入同名 .lrc */
+  private writeSidecarLrc(key: string, text: string): string {
+    if (text.length < 4) {
+      return '';
+    }
+    const song: LocalSongEntry | undefined = this.byKey.get(key);
+    try {
+      const file: string = `${key}.lrc`;
+      const handle: fs.File = fs.openSync(`${this.dir}/${file}`,
+        fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
+      try {
+        const enc: util.TextEncoder = new util.TextEncoder();
+        const encoded: Uint8Array = new util.TextEncoder().encodeInto(text);
+        fs.writeSync(handle.fd, encoded.buffer);
+      } finally {
+        fs.closeSync(handle);
+      }
+      if (song !== undefined) {
+        song.lrc = file;
+      }
+      return file;
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'writeSidecarLrc failed: %{public}s', JSON.stringify(e));
+      return '';
+    }
+  }
+
+  /**
+   * 一键匹配：按 QQ→网易→酷狗→酷我→咪咕 搜索，写入匹配信息、封面、歌词。
+   * 匹配成功后评论面板可通过 matchJson 拉取对应平台评论。
+   */
+
+  /** 根据匹配结果补封面与平台歌词（手动/一键匹配后调用） */
+  async applyMatchMedia(key: string, info: MatchSongInfo): Promise<void> {
+    const song: LocalSongEntry | undefined = this.byKey.get(key);
+    if (song === undefined) {
+      return;
+    }
+    if (song.cover.length === 0 && info.img.length > 8) {
+      const buf: ArrayBuffer | null = await downloadBytes(info.img);
+      if (buf !== null) {
+        const saved: string = this.writeCoverBytes(key, buf);
+        if (saved.length > 0) {
+          song.cover = saved;
+        }
+      }
+    }
+    if (song.lrc.length === 0) {
+      try {
+        const full: LyricFullResult = await lxGetLyricFull(info.source, info.songId, info.name, info.singer);
+        if (full.main.length > 20) {
+          this.writeSidecarLrc(key, full.main);
+        }
+      } catch (_e) {
+      }
+    }
+    this.persist();
+    this.bumpVersion();
+  }
+
+  async matchAllOnline(onProgress: ((done: number, total: number, name: string) => void) | null): Promise<MatchAllResult> {
+    const result: MatchAllResult = { ok: 0, fail: 0, total: 0 };
+    const songs: LocalSongEntry[] = this.songs.slice();
+    result.total = songs.length;
+    for (let i: number = 0; i < songs.length; i++) {
+      const song: LocalSongEntry = songs[i];
+      const name: string = song.name.length > 0 ? song.name : titleFromFileName(song.file);
+      if (onProgress !== null) {
+        onProgress(i + 1, songs.length, name);
+      }
+      try {
+        const ar: AutoMatchResult = await autoMatchLyric(name, song.singer, song.durationMs);
+        if (ar.match === null) {
+          result.fail++;
+          continue;
+        }
+        this.saveMatch(song.key, ar.match.info.source, infoToJson(ar.match.info));
+        // 无封面则下载匹配封面
+        if (song.cover.length === 0 && ar.match.info.img.length > 8) {
+          const buf: ArrayBuffer | null = await downloadBytes(ar.match.info.img);
+          if (buf !== null) {
+            const saved: string = this.writeCoverBytes(song.key, buf);
+            if (saved.length > 0) {
+              song.cover = saved;
+              this.persist();
+            }
+          }
+        }
+        // 无本地歌词则拉平台歌词
+        if (song.lrc.length === 0) {
+          try {
+            const full: LyricFullResult = await lxGetLyricFull(
+              ar.match.info.source, ar.match.info.songId, ar.match.info.name, ar.match.info.singer);
+            if (full.main.length > 20) {
+              this.writeSidecarLrc(song.key, full.main);
+              this.persist();
+            }
+          } catch (_e) {
+          }
+        }
+        result.ok++;
+      } catch (e) {
+        result.fail++;
+        hilog.warn(DOMAIN, TAG, 'matchAll one failed: %{public}s', JSON.stringify(e));
+      }
+    }
+    this.bumpVersion();
+    return result;
   }
 
   /** 内嵌封面 -> JPEG 落盘到 covers/；没有封面返回空串 */
@@ -1292,17 +1501,75 @@ function emptyResult(message: string): ImportResult {
 }
 
 /** 目录 URI -> 目录里的文件 URI（不含子目录） */
+/**
+ * 枚举文件夹内文件（含一层子目录）。
+ * DocumentViewPicker 返回的目录 URI 在真机上常不能直接 listFileSync(uri)，
+ * 需依次尝试：原 URI → FileUri.path → 路径再 list。
+ */
 function listFolderFiles(dirUri: string): string[] {
   const out: string[] = [];
-  try {
-    const names: string[] = fs.listFileSync(dirUri);
-    for (const name of names) {
-      out.push(`${dirUri}/${name}`);
+  const seen: Record<string, boolean> = {};
+  const push = (u: string): void => {
+    if (u.length === 0 || seen[u]) {
+      return;
     }
-  } catch (e) {
-    hilog.warn(DOMAIN, TAG, 'list folder failed: %{public}s', JSON.stringify(e));
-    return [];
+    seen[u] = true;
+    out.push(u);
+  };
+  const tryList = (root: string, depth: number): void => {
+    if (root.length === 0 || depth > 3) {
+      return;
+    }
+    let names: string[] = [];
+    try {
+      names = fs.listFileSync(root);
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'listFileSync failed root=%{public}s err=%{public}s',
+        root.substring(0, 120), JSON.stringify(e));
+      return;
+    }
+    for (let i: number = 0; i < names.length; i++) {
+      const name: string = names[i];
+      if (name === '.' || name === '..') {
+        continue;
+      }
+      const child: string = root.endsWith('/') ? root + name : root + '/' + name;
+      let isDir: boolean = false;
+      try {
+        const st = fs.statSync(child);
+        isDir = st.isDirectory();
+      } catch (_e) {
+        isDir = false;
+      }
+      if (isDir) {
+        tryList(child, depth + 1);
+      } else {
+        push(child);
+      }
+    }
+  };
+  // 1) 直接用 Picker 返回的 URI
+  tryList(dirUri, 0);
+  // 2) FileUri 转成真实路径再扫
+  if (out.length === 0) {
+    try {
+      const fu: fileUri.FileUri = new fileUri.FileUri(dirUri);
+      const path: string = fu.path;
+      if (path.length > 0 && path !== dirUri) {
+        hilog.info(DOMAIN, TAG, 'list folder via path=%{public}s', path.substring(0, 120));
+        tryList(path, 0);
+      }
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'FileUri path failed: %{public}s', JSON.stringify(e));
+    }
   }
+  // 3) 去掉 file:// 前缀再试
+  if (out.length === 0 && dirUri.startsWith('file://')) {
+    const stripped: string = dirUri.substring('file://'.length);
+    tryList(stripped, 0);
+  }
+  hilog.info(DOMAIN, TAG, 'listFolderFiles count=%{public}d uri=%{public}s',
+    out.length, dirUri.substring(0, 120));
   return out;
 }
 
@@ -1491,4 +1758,195 @@ function unlinkQuietly(path: string): void {
   } catch (e) {
     // 文件不在了就当删好了
   }
+}
+
+
+async function downloadBytes(url: string): Promise<ArrayBuffer | null> {
+  if (url.length < 8) {
+    return null;
+  }
+  if (!(url.indexOf('http://') === 0 || url.indexOf('https://') === 0)) {
+    return null;
+  }
+  const req = http.createHttp();
+  try {
+    const resp: http.HttpResponse = await req.request(url, {
+      method: http.RequestMethod.GET,
+      connectTimeout: 10000,
+      readTimeout: 15000,
+      expectDataType: http.HttpDataType.ARRAY_BUFFER
+    });
+    if (resp.responseCode !== 200) {
+      return null;
+    }
+    if (resp.result instanceof ArrayBuffer) {
+      return resp.result as ArrayBuffer;
+    }
+    return null;
+  } catch (_e) {
+    return null;
+  } finally {
+    try {
+      req.destroy();
+    } catch (_e2) {
+    }
+  }
+}
+
+function synchsafeToSize(b0: number, b1: number, b2: number, b3: number): number {
+  return ((b0 & 0x7f) << 21) | ((b1 & 0x7f) << 14) | ((b2 & 0x7f) << 7) | (b3 & 0x7f);
+}
+
+function readU32(buf: Uint8Array, off: number): number {
+  return ((buf[off] & 0xff) << 24) | ((buf[off + 1] & 0xff) << 16) |
+    ((buf[off + 2] & 0xff) << 8) | (buf[off + 3] & 0xff);
+}
+
+function decodeId3Text(data: Uint8Array): string {
+  if (data.length === 0) {
+    return '';
+  }
+  const enc: number = data[0];
+  const body: Uint8Array = data.subarray(1);
+  try {
+    if (enc === 0) {
+      let s: string = '';
+      for (let i: number = 0; i < body.length; i++) {
+        if (body[i] === 0) {
+          break;
+        }
+        s += String.fromCharCode(body[i]);
+      }
+      return s.trim();
+    }
+    if (enc === 3) {
+      return decodeText(body, 'utf-8').replace(/\u0000/g, '').trim();
+    }
+    if (enc === 1 || enc === 2) {
+      const decoder: util.TextDecoder = util.TextDecoder.create('utf-16le');
+      return decoder.decodeToString(body).replace(/\u0000/g, '').trim();
+    }
+  } catch (_e) {
+  }
+  return decodeText(body, 'utf-8').replace(/\u0000/g, '').trim();
+}
+
+function readBytesRange(path: string, offset: number, length: number): Uint8Array | null {
+  let file: fs.File | null = null;
+  try {
+    file = fs.openSync(path, fs.OpenMode.READ_ONLY);
+    const buf: ArrayBuffer = new ArrayBuffer(length);
+    const read: number = fs.readSync(file.fd, buf, { offset: offset });
+    return new Uint8Array(buf, 0, read);
+  } catch (_e) {
+    return null;
+  } finally {
+    closeQuietly(file);
+  }
+}
+
+function parseId3FromFile(path: string, size: number): Id3ParseResult {
+  const out: Id3ParseResult = { title: '', artist: '', album: '', lyrics: '', coverJpeg: null };
+  if (size < 20) {
+    return out;
+  }
+  const maxRead: number = Math.min(size, 512 * 1024);
+  const bytes: Uint8Array | null = readBytesRange(path, 0, maxRead);
+  if (bytes === null || bytes.length < 10) {
+    return out;
+  }
+  if (!(bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33)) {
+    return out;
+  }
+  const ver: number = bytes[3];
+  const tagSize: number = synchsafeToSize(bytes[6], bytes[7], bytes[8], bytes[9]);
+  let offset: number = 10;
+  if ((bytes[5] & 0x40) !== 0 && offset + 4 <= bytes.length) {
+    const extSize: number = ver >= 4 ?
+      synchsafeToSize(bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]) :
+      readU32(bytes, offset);
+    offset += 4 + extSize;
+  }
+  const end: number = Math.min(bytes.length, 10 + tagSize);
+  while (offset + 10 <= end) {
+    const id: string = String.fromCharCode(bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]);
+    if (id.length < 4 || id.charCodeAt(0) === 0) {
+      break;
+    }
+    let frameSize: number = 0;
+    if (ver >= 4) {
+      frameSize = synchsafeToSize(bytes[offset + 4], bytes[offset + 5], bytes[offset + 6], bytes[offset + 7]);
+    } else {
+      frameSize = readU32(bytes, offset + 4);
+    }
+    if (frameSize <= 0 || offset + 10 + frameSize > bytes.length) {
+      break;
+    }
+    const data: Uint8Array = bytes.subarray(offset + 10, offset + 10 + frameSize);
+    if (id === 'TIT2' || id === 'TT2') {
+      out.title = decodeId3Text(data);
+    } else if (id === 'TPE1' || id === 'TP1') {
+      out.artist = decodeId3Text(data);
+    } else if (id === 'TALB' || id === 'TAL') {
+      out.album = decodeId3Text(data);
+    } else if (id === 'USLT' || id === 'ULT') {
+      if (data.length > 5) {
+        const enc: number = data[0];
+        let pos: number = 4;
+        if (enc === 0 || enc === 3) {
+          while (pos < data.length && data[pos] !== 0) {
+            pos++;
+          }
+          pos++;
+        } else {
+          while (pos + 1 < data.length && !(data[pos] === 0 && data[pos + 1] === 0)) {
+            pos += 2;
+          }
+          pos += 2;
+        }
+        if (pos < data.length) {
+          const lyricBytes: Uint8Array = new Uint8Array(1 + (data.length - pos));
+          lyricBytes[0] = enc;
+          for (let i: number = 0; i < data.length - pos; i++) {
+            lyricBytes[1 + i] = data[pos + i];
+          }
+          out.lyrics = decodeId3Text(lyricBytes);
+        }
+      }
+    } else if ((id === 'APIC' || id === 'PIC') && out.coverJpeg === null) {
+      if (data.length > 10) {
+        const enc: number = data[0];
+        let pos: number = 1;
+        while (pos < data.length && data[pos] !== 0) {
+          pos++;
+        }
+        pos++;
+        if (pos < data.length) {
+          pos++;
+        }
+        if (enc === 0 || enc === 3) {
+          while (pos < data.length && data[pos] !== 0) {
+            pos++;
+          }
+          pos++;
+        } else {
+          while (pos + 1 < data.length && !(data[pos] === 0 && data[pos + 1] === 0)) {
+            pos += 2;
+          }
+          pos += 2;
+        }
+        if (pos < data.length) {
+          const img: Uint8Array = data.subarray(pos);
+          const ab: ArrayBuffer = new ArrayBuffer(img.byteLength);
+          const view: Uint8Array = new Uint8Array(ab);
+          for (let i: number = 0; i < img.byteLength; i++) {
+            view[i] = img[i];
+          }
+          out.coverJpeg = ab;
+        }
+      }
+    }
+    offset += 10 + frameSize;
+  }
+  return out;
 }

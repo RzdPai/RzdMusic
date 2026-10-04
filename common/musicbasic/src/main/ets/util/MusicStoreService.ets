@@ -34,12 +34,17 @@ const KEY_THEME_COLOR: string = 'theme_color';
 const KEY_HOME_SOURCE: string = 'home_source';
 const KEY_SHOW_MINI_LYRIC: string = 'show_mini_lyric';
 const KEY_DESKTOP_LYRIC: string = 'desktop_lyric';
+/** 车载蓝牙歌词：通过 AVMetadata.singleLyricText 向蓝牙设备推送当前句（默认关）。 */
+const KEY_BLUETOOTH_LYRIC: string = 'bluetooth_lyric';
 /** 华为账号登录资料（JSON，形状由 features/player 的 HuaweiAccountService 定义，这里只当字符串存）。 */
 const KEY_HUAWEI_ACCOUNT: string = 'huawei_account';
 /** 华为云盘访问令牌（JSON：accessToken / refreshToken / expiresAt）。 */
 const KEY_HUAWEI_DRIVE_TOKEN: string = 'huawei_drive_token';
 const KEY_PLAYBACK_FLOW_LIGHT: string = 'playback_flow_light';
 const KEY_SHOW_SUB_LYRIC: string = 'show_sub_lyric';
+const KEY_SHOW_LYRIC_TRANSLATION: string = 'show_lyric_translation';
+const KEY_SHOW_LYRIC_ROMA: string = 'show_lyric_roma';
+const KEY_LYRIC_S2T: string = 'lyric_s2t';
 const KEY_PLAY_QUALITY: string = 'play_quality';
 const KEY_AUDIO_MIX: string = 'audio_mix';
 const KEY_DOWNLOAD_SAVE_MODE: string = 'download_save_mode';
@@ -50,6 +55,8 @@ const KEY_LYRIC_FPS: string = 'lyric_fps';
 const KEY_LYRIC_CENTER: string = 'lyric_center';
 const KEY_LYRIC_BLUR: string = 'lyric_blur';
 const KEY_CROSS_SCRIPT_FALLBACK: string = 'cross_script_fallback';
+/** 音源脚本参与依次调用的顺序（JSON 字符串数组，空=全部按导入顺序）。 */
+const KEY_SOURCE_SCRIPT_ORDER: string = 'source_script_order';
 const KEY_QUALITY_TIER_HEALTH: string = 'quality_tier_health';
 const KEY_SHOW_HOME_PLAZA: string = 'show_home_plaza';
 const KEY_SHOW_HOME_RANKING: string = 'show_home_ranking';
@@ -398,6 +405,53 @@ export class MusicStoreService {
    * source script to find the song. Enabled by default to keep the historical
    * cross-script recovery behaviour.
    */
+
+  /**
+   * 参与「播放失败依次换音源」的脚本 id 顺序（用户可多选并手动排序）。
+   * 空数组表示未配置：回退为全部已导入脚本的当前列表顺序。
+   */
+  public getSourceScriptOrder(): string[] {
+    const store = this.getStore();
+    if (store === undefined) {
+      return [];
+    }
+    const raw: string = store.getSync(KEY_SOURCE_SCRIPT_ORDER, '') as string;
+    if (raw.length === 0) {
+      return [];
+    }
+    try {
+      const arr: Object = JSON.parse(raw) as Object;
+      if (!Array.isArray(arr)) {
+        return [];
+      }
+      const out: string[] = [];
+      for (let i: number = 0; i < (arr as Object[]).length; i++) {
+        const id: string = String((arr as Object[])[i] ?? '');
+        if (id.length > 0 && out.indexOf(id) < 0) {
+          out.push(id);
+        }
+      }
+      return out;
+    } catch (_e) {
+      return [];
+    }
+  }
+
+  public setSourceScriptOrder(ids: string[]): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    const cleaned: string[] = [];
+    for (let i: number = 0; i < ids.length; i++) {
+      if (ids[i].length > 0 && cleaned.indexOf(ids[i]) < 0) {
+        cleaned.push(ids[i]);
+      }
+    }
+    store.putSync(KEY_SOURCE_SCRIPT_ORDER, JSON.stringify(cleaned));
+    store.flush();
+  }
+
   public getCrossScriptFallback(): boolean {
     const store = this.getStore();
     if (store === undefined) {
@@ -751,6 +805,29 @@ export class MusicStoreService {
     store.flush();
   }
 
+  /**
+   * @returns 车载蓝牙歌词开关，默认**关**。
+   * 开启后通过 AVMetadata.singleLyricText 向车机/蓝牙音箱推送当前歌词句；
+   * 部分设备可能因此略增卡顿，故与洛雪一致默认关闭。
+   */
+  public getBluetoothLyric(): boolean {
+    const store = this.getStore();
+    if (store === undefined) {
+      return false;
+    }
+    return store.getSync(KEY_BLUETOOTH_LYRIC, false) as boolean;
+  }
+
+  /** 持久化车载蓝牙歌词开关。 */
+  public setBluetoothLyric(enabled: boolean): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_BLUETOOTH_LYRIC, enabled);
+    store.flush();
+  }
+
   /** @returns 华为账号登录资料的 JSON（没登录过返回空串）。 */
   public getHuaweiAccount(): string {
     const store = this.getStore();
@@ -913,6 +990,76 @@ export class MusicStoreService {
       return;
     }
     store.putSync(KEY_SHOW_SUB_LYRIC, show);
+    store.flush();
+  }
+
+  /**
+   * 显示歌词翻译（对齐 lx player.isShowLyricTranslation）。
+   * 默认跟随历史 showSubLyric；若单独存过则用单独值。
+   */
+  public getShowLyricTranslation(): boolean {
+    const store = this.getStore();
+    if (store === undefined) {
+      return true;
+    }
+    // 未单独配置时跟随历史 showSubLyric
+    return store.getSync(KEY_SHOW_LYRIC_TRANSLATION,
+      store.getSync(KEY_SHOW_SUB_LYRIC, true)) as boolean;
+  }
+
+  public setShowLyricTranslation(show: boolean): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_SHOW_LYRIC_TRANSLATION, show);
+    // 兼容：任一子开关开启则 showSubLyric 为 true
+    const roma: boolean = this.getShowLyricRoma();
+    store.putSync(KEY_SHOW_SUB_LYRIC, show || roma);
+    store.flush();
+  }
+
+  /**
+   * 显示歌词罗马音（对齐 lx player.isShowLyricRoma）。
+   * 目前主要网易源有罗马音。
+   */
+  public getShowLyricRoma(): boolean {
+    const store = this.getStore();
+    if (store === undefined) {
+      return true;
+    }
+    return store.getSync(KEY_SHOW_LYRIC_ROMA,
+      store.getSync(KEY_SHOW_SUB_LYRIC, true)) as boolean;
+  }
+
+  public setShowLyricRoma(show: boolean): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_SHOW_LYRIC_ROMA, show);
+    const trans: boolean = this.getShowLyricTranslation();
+    store.putSync(KEY_SHOW_SUB_LYRIC, show || trans);
+    store.flush();
+  }
+
+  /**
+   * 将播放的中文歌词转为繁体（对齐 lx player.isS2t）。默认关闭。
+   */
+  public getLyricS2t(): boolean {
+    const store = this.getStore();
+    if (store === undefined) {
+      return false;
+    }
+    return store.getSync(KEY_LYRIC_S2T, false) as boolean;
+  }
+
+  public setLyricS2t(enabled: boolean): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_LYRIC_S2T, enabled);
     store.flush();
   }
 
@@ -1919,6 +2066,33 @@ export class MusicStoreService {
         this.playlistVersion++;
         return;
       }
+    }
+  }
+
+  /**
+   * 把某首在线歌的封面写回所有包含它的本地歌单（导入后无封面、播放后补全）。
+   * 仅在原 img 为空或与新地址不同时写入，避免无意义刷盘。
+   */
+  public updateSongCoverInPlaylists(source: string, songId: string, img: string): void {
+    if (source.length === 0 || songId.length === 0 || img.length === 0) {
+      return;
+    }
+    const list: PlaylistDto[] = this.getPlaylists();
+    let changed: boolean = false;
+    for (let i: number = 0; i < list.length; i++) {
+      const songs: PlayedSongRecord[] = list[i].songs;
+      for (let j: number = 0; j < songs.length; j++) {
+        if (songs[j].source === source && songs[j].songId === songId) {
+          if (songs[j].img !== img) {
+            songs[j].img = img;
+            changed = true;
+          }
+        }
+      }
+    }
+    if (changed) {
+      this.persistPlaylists(list);
+      this.playlistVersion++;
     }
   }
 

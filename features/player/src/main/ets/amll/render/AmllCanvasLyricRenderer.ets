@@ -1092,7 +1092,7 @@ export class AmllCanvasLyricRenderer {
       const rowWords = rows[r];
       const y = subTop + r * textH + textH * 0.85;
       const rowW = rowWidths !== undefined ? rowWidths[r] : this.rowWidth(rowWords);
-      const rowX = isDuet ? startX + maxW - rowW : startX;
+      const rowX = isDuet ? startX + maxW - rowW : this.centeredStartX(rowW);
       let x = rowX;
       for (let i = 0; i < rowWords.length; i++) {
         const m = rowWords[i];
@@ -1208,7 +1208,7 @@ export class AmllCanvasLyricRenderer {
     for (let r = 0; r < rows.length; r++) {
       const rowWords = rows[r];
       const y = subTop + r * textH + textH * 0.85;
-      const rowX = isDuet ? startX + maxW - this.rowWidth(rowWords) : startX;
+      const rowX = isDuet ? startX + maxW - this.rowWidth(rowWords) : this.centeredStartX(this.rowWidth(rowWords));
       let x = rowX;
       for (let i = 0; i < rowWords.length; i++) {
         const m = rowWords[i];
