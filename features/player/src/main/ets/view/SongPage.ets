@@ -16,7 +16,7 @@
 import { AppStorageV2 } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { MediaService } from '../model/MediaService';
-import { sourceDisplayName } from '../util/SourceFallbackUtil';
+import { sourceDisplayName, qualityDisplayName } from '../util/SourceFallbackUtil';
 import { guardPlayerBack, AppStorageKeys, Logger, MusicAppState, SongItem, StyleConstants } from 'musicbasic';
 
 @Builder
@@ -70,11 +70,8 @@ struct SongPage {
   /** Resolved quality id, suffixed with （缓存） when served from a local cached file. */
   private qualityLabel(): string {
     const song: SongItem | undefined = this.currentSong();
-    // ★ 本地歌（source/quality 为 'local'）没有音质协商，按**歌曲本身**显示「本地」：
-    //   全局音质字段是播放时写的，重启后恢复本地歌时它可能还是空的，
-    //   照旧逻辑会掉到「未知」，而播放页徽标会掉到 128k —— 两处都要按歌曲判断。
     if (song !== undefined && (song.source === 'local' || song.quality === 'local')) {
-      return 'local';
+      return '本地';
     }
     let q: string = song?.quality ?? '';
     if (q.length === 0) {
@@ -83,7 +80,8 @@ struct SongPage {
     if (q.length === 0) {
       return '未知';
     }
-    return song?.playCached === true ? q + '（缓存）' : q;
+    const name: string = qualityDisplayName(q);
+    return song?.playCached === true ? name + '（缓存）' : name;
   }
 
   private handleCrownVolume(event: CrownEvent): void {

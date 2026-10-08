@@ -418,6 +418,9 @@ export struct ArtistDetailPage {
 
   /** 歌手歌曲 → 可播放的 LXSearchSong。 */
   private toPlayable(song: SongInfo): LXSearchSong {
+    // 优先用歌曲自身封面，没有再退回歌手头像
+    const cover: string = (song.picUrl !== undefined && song.picUrl.length > 0) ?
+      song.picUrl : this.artistPicUrlText;
     return {
       songId: song.id,
       name: song.name,
@@ -426,7 +429,7 @@ export struct ArtistDetailPage {
       albumId: '',
       source: codeToSource(this.source),
       interval: formatInterval(song.interval),
-      img: this.artistPicUrlText,
+      img: cover,
       types: []
     };
   }
@@ -496,7 +499,20 @@ export struct ArtistDetailPage {
   }
 
   private playSong(song: SongInfo): void {
-    void OnlinePlayUtil.playSearchSong(this.appState, this.toPlayable(song), this.getUIContext());
+    // 整表入队，从当前曲开始，才能自动下一首
+    if (this.songs.length === 0) {
+      void OnlinePlayUtil.playSearchSong(this.appState, this.toPlayable(song), this.getUIContext());
+      return;
+    }
+    const list: LXSearchSong[] = [];
+    let start: number = 0;
+    for (let i: number = 0; i < this.songs.length; i++) {
+      list.push(this.toPlayable(this.songs[i]));
+      if (this.songs[i].id === song.id) {
+        start = i;
+      }
+    }
+    void OnlinePlayUtil.playList(this.appState, list, start, this.getUIContext());
   }
 
   private playAll(): void {

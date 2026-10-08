@@ -49,6 +49,47 @@ export class UrlResolveOutcome {
 
 const scriptCooldown: Map<string, number> = new Map();
 
+/** 播放页/列表音质徽标展示名 */
+export function qualityDisplayName(q: string): string {
+  if (q === 'local') {
+    return '本地';
+  }
+  if (q === '128k') {
+    return '128K';
+  }
+  if (q === '192k') {
+    return '192K';
+  }
+  if (q === '320k') {
+    return '320K';
+  }
+  if (q === 'flac') {
+    return 'FLAC';
+  }
+  if (q === 'flac24bit') {
+    return 'FLAC 24-bit';
+  }
+  if (q === 'hires') {
+    return 'HiRes';
+  }
+  if (q === 'atmos') {
+    return 'Atmos';
+  }
+  if (q === 'atmos_plus') {
+    return 'Atmos Plus';
+  }
+  if (q === 'master') {
+    return 'Master';
+  }
+  if (q === 'ape') {
+    return 'APE';
+  }
+  if (q === 'wav') {
+    return 'WAV';
+  }
+  return q;
+}
+
 export function sourceDisplayName(source: string): string {
   const name: string = SOURCE_NAMES[source];
   return name === undefined ? source : name;
@@ -273,7 +314,7 @@ async function tryQualities(source: string, songId: string, name: string, singer
         outcome.scriptName = activeSourceName();
         if (noticeDowngrade && q !== preferred && onNotice !== null) {
           appendPlayLog('[播放] 音质降级 ' + preferred + ' -> ' + q);
-          onNotice('当前音质不可用，已切换 ' + q);
+          onNotice('当前音质不可用，已切换 ' + qualityDisplayName(q));
         }
         return outcome;
       }

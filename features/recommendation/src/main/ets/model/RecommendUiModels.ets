@@ -131,12 +131,14 @@ export class RecommendCategoryTabUi {
  * UI model for a singer row in the home singer chart list.
  */
 export class RecommendSingerUi {
-  /** QQ singer id for future routing. */
+  /** Platform singer id for routing. */
   public singerId: string = '';
   /** Display name. */
   public name: string = '';
   /** Singer photo url. */
   public picUrl: string = '';
+  /** 副标题：如「QQ歌手榜」「酷狗歌手榜」 */
+  public sourceLabel: string = '';
 }
 
 

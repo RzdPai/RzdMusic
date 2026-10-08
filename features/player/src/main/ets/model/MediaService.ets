@@ -134,6 +134,8 @@ export class MediaService {
    * （典型时序：恢复时音质不可用 → 自动切档 → 重试把意图改回 true → prepare 完成就起播）。
    */
   private playWhenPrepared: boolean = false;
+  /** 最近一次 loadAsset 是否用户要起播（失败降级重试时沿用，避免 isPlay=false 导致不自动播） */
+  private lastLoadWantedPlay: boolean = false;
   /**
    * 装载代次：`loadAsset()` 每次自增。
    *
@@ -289,13 +291,14 @@ export class MediaService {
     }
     // resolveOnlineUrl 已填好新 url/source/songId，加载播放
     this.errorRecoveryPending = false;
-    // ★ 重试的起播意图必须**沿用出错时的播放状态**，不能无条件起播：
-    //   ① 启动恢复（loadOnly=true）时如果恰好撞上音质/音源不可用，重试会把意图改成 true，
-    //      prepare 一完成就自动放起来 —— 用户反馈的「启动应用自动开始播放」正是这条路径；
-    //   ② 暂停中报错重试也不该自己响起来。
-    //   这里先按当前播放状态写意图，再调 loadAsset 覆盖它。
-    void this.loadAsset(this.musicIndex);
-    this.overridePlayIntent(this.getAppState().isPlay);
+    // ★ 沿用「出错前那次装载」的起播意图：
+    //   - 用户点播/切歌（autoPlay=true）后音质无源或地址失败 → 降级/换源后必须自动播放
+    //   - 启动恢复（loadOnly）→ 仍不自动播放
+    // 以前用 isPlay 判断：报错时 isPlay 已被置 false，导致降级后永远不自动播。
+    const wanted: boolean = this.lastLoadWantedPlay;
+    void this.loadAsset(this.musicIndex, !wanted);
+    this.overridePlayIntent(wanted);
+    this.appendPlayLog('[播放] 降级/换源重试 起播意图=' + wanted);
   }
   /** AVPlayer timeUpdate: refreshes countdown label and progress in MusicAppState when active. */
   private updateTimeCall: (updateTime: number) => void = (updateTime: number) => {
@@ -1598,6 +1601,7 @@ export class MediaService {
   private beginLoadRequest(autoPlay: boolean): number {
     this.loadGen = this.loadGen + 1;
     this.playWhenPrepared = autoPlay;
+    this.lastLoadWantedPlay = autoPlay;
     this.playIntentConsumedGen = this.loadGen - 1;
     this.appendPlayLog('[播放] 装载请求 gen=' + this.loadGen + ' 起播意图=' + autoPlay);
     return this.loadGen;

@@ -42,6 +42,9 @@ const KEY_HUAWEI_ACCOUNT: string = 'huawei_account';
 const KEY_HUAWEI_DRIVE_TOKEN: string = 'huawei_drive_token';
 const KEY_PLAYBACK_FLOW_LIGHT: string = 'playback_flow_light';
 const KEY_SHOW_SUB_LYRIC: string = 'show_sub_lyric';
+const KEY_SHOW_LYRIC_TRANSLATION: string = 'show_lyric_translation';
+const KEY_SHOW_LYRIC_ROMA: string = 'show_lyric_roma';
+const KEY_LYRIC_S2T: string = 'lyric_s2t';
 const KEY_PLAY_QUALITY: string = 'play_quality';
 const KEY_AUDIO_MIX: string = 'audio_mix';
 const KEY_DOWNLOAD_SAVE_MODE: string = 'download_save_mode';
@@ -987,6 +990,76 @@ export class MusicStoreService {
       return;
     }
     store.putSync(KEY_SHOW_SUB_LYRIC, show);
+    store.flush();
+  }
+
+  /**
+   * 显示歌词翻译（对齐 lx player.isShowLyricTranslation）。
+   * 默认跟随历史 showSubLyric；若单独存过则用单独值。
+   */
+  public getShowLyricTranslation(): boolean {
+    const store = this.getStore();
+    if (store === undefined) {
+      return true;
+    }
+    // 未单独配置时跟随历史 showSubLyric
+    return store.getSync(KEY_SHOW_LYRIC_TRANSLATION,
+      store.getSync(KEY_SHOW_SUB_LYRIC, true)) as boolean;
+  }
+
+  public setShowLyricTranslation(show: boolean): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_SHOW_LYRIC_TRANSLATION, show);
+    // 兼容：任一子开关开启则 showSubLyric 为 true
+    const roma: boolean = this.getShowLyricRoma();
+    store.putSync(KEY_SHOW_SUB_LYRIC, show || roma);
+    store.flush();
+  }
+
+  /**
+   * 显示歌词罗马音（对齐 lx player.isShowLyricRoma）。
+   * 目前主要网易源有罗马音。
+   */
+  public getShowLyricRoma(): boolean {
+    const store = this.getStore();
+    if (store === undefined) {
+      return true;
+    }
+    return store.getSync(KEY_SHOW_LYRIC_ROMA,
+      store.getSync(KEY_SHOW_SUB_LYRIC, true)) as boolean;
+  }
+
+  public setShowLyricRoma(show: boolean): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_SHOW_LYRIC_ROMA, show);
+    const trans: boolean = this.getShowLyricTranslation();
+    store.putSync(KEY_SHOW_SUB_LYRIC, show || trans);
+    store.flush();
+  }
+
+  /**
+   * 将播放的中文歌词转为繁体（对齐 lx player.isS2t）。默认关闭。
+   */
+  public getLyricS2t(): boolean {
+    const store = this.getStore();
+    if (store === undefined) {
+      return false;
+    }
+    return store.getSync(KEY_LYRIC_S2T, false) as boolean;
+  }
+
+  public setLyricS2t(enabled: boolean): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_LYRIC_S2T, enabled);
     store.flush();
   }
 

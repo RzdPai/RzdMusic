@@ -121,7 +121,7 @@ export struct CategoryContentSection {
           .fontColor($r('app.color.font_primary'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
-        Text('酷狗歌手榜')
+        Text(item.sourceLabel.length > 0 ? item.sourceLabel : '热门歌手')
           .fontSize(11)
           .fontColor($r('app.color.font_tertiary'))
       }

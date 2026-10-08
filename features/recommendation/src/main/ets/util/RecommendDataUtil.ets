@@ -23,7 +23,7 @@ import {
   TabApiDto,
   getAppRuntime
 } from 'musicbasic';
-import { AccountService, getLeaderboardEntries, lxGetPicFallback, lxKgSingerList, lxLeaderboard, lxTxToplist, lxTxToplistInfo, lxTxToplistList, LXSearchSong, PlatformAccount, PlatformTrackInfo } from 'player';
+import { AccountService, getLeaderboardEntries, lxGetPicFallback, lxKgSingerList, lxTxSingerList, lxWySingerList, lxKwSingerList, lxMgSingerList, lxLeaderboard, lxTxToplist, lxTxToplistInfo, lxTxToplistList, LXSearchSong, PlatformAccount, PlatformTrackInfo, TxSinger } from 'player';
 import { BoardData, MusicDataService, pickDedicatedBoardId, TrackData } from './MusicDataService';
 import {
   RecommendCardUi,
@@ -671,8 +671,41 @@ export class RecommendDataUtil {
    * @param count How many singers to fetch.
    * @returns Singer UI rows.
    */
-  public static async loadSingerListAsync(count: number = 30): Promise<RecommendSingerUi[]> {
-    const singers = await lxKgSingerList(count);
+  public static async loadSingerListAsync(count: number = 30,
+    homeSource: string = ''): Promise<RecommendSingerUi[]> {
+    const svc: string = RecommendDataUtil.mapHomeSource(homeSource.length > 0 ? homeSource : 'kg');
+    const label: string = MusicDataService.sourceName(svc) + '歌手榜';
+    let singers: TxSinger[] = [];
+    try {
+      if (svc === 'tx') {
+        singers = await lxTxSingerList(count);
+      } else if (svc === 'wy') {
+        singers = await lxWySingerList(count);
+      } else if (svc === 'kw') {
+        singers = await lxKwSingerList(count);
+      } else if (svc === 'mg') {
+        singers = await lxMgSingerList(count);
+      } else {
+        singers = await lxKgSingerList(count);
+      }
+    } catch (_e) {
+      singers = [];
+    }
+    // 主平台失败时逐个回退，避免空白
+    if (singers.length === 0) {
+      try {
+        if (svc !== 'kg') {
+          singers = await lxKgSingerList(count);
+        }
+      } catch (_e2) {
+      }
+    }
+    if (singers.length === 0 && svc !== 'tx') {
+      try {
+        singers = await lxTxSingerList(count);
+      } catch (_e3) {
+      }
+    }
     if (singers.length > 0) {
       const uiList: RecommendSingerUi[] = [];
       for (let i: number = 0; i < singers.length; i++) {
@@ -680,6 +713,7 @@ export class RecommendDataUtil {
         ui.singerId = singers[i].singerId;
         ui.name = singers[i].name;
         ui.picUrl = singers[i].pic;
+        ui.sourceLabel = label;
         uiList.push(ui);
       }
       return uiList;
@@ -692,6 +726,7 @@ export class RecommendDataUtil {
       ui.singerId = '';
       ui.name = demo[i];
       ui.picUrl = '';
+      ui.sourceLabel = label;
       uiList.push(ui);
     }
     return uiList;

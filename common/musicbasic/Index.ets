@@ -139,3 +139,4 @@ export {
   MINI_BAR_ASIDE_FLOATING_ID,
   MORPH_HOST_ID
 } from './src/main/ets/model/PlayerExpandState';
+export { traditionalize } from './src/main/ets/util/SimplifiedToTraditional';

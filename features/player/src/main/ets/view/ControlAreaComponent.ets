@@ -1,3 +1,4 @@
+import { qualityDisplayName } from '../util/SourceFallbackUtil';
 /*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -306,19 +307,36 @@ export struct ControlAreaComponent {
   private currentQualityLabel(): string {
     const song = this.currentSong();
     if (song !== undefined && (song.source === 'local' || song.quality === 'local')) {
-      return 'local';
+      return '本地';
     }
-    const live: string = this.playerViewModel.appState.currentQuality;
-    if (live.length > 0) {
-      return live;
+    let q: string = this.playerViewModel.appState.currentQuality;
+    if (q.length === 0 && song !== undefined && song.quality.length > 0) {
+      q = song.quality;
     }
-    if (song !== undefined && song.quality.length > 0) {
-      return song.quality;
+    if (q.length === 0) {
+      q = '128k';
     }
-    return '128k';
+    return qualityDisplayName(q);
   }
 
   /** File size text of the current song for the given quality; empty when unknown. */
+  private currentPlatformLabel(): string {
+    const song = this.currentSong();
+    if (song === undefined) {
+      return '';
+    }
+    const src: string = typeof song.source === 'string' ? song.source : '';
+    if (src.length === 0 || src === 'local') {
+      return src === 'local' ? '本地' : '';
+    }
+    const map: Record<string, string> = {
+      'tx': 'QQ', 'wy': '网易', 'kg': '酷狗', 'kw': '酷我', 'mg': '咪咕'
+    };
+    const name: string | undefined = map[src];
+    return name !== undefined ? name : src;
+  }
+
+
   private currentQualitySize(quality: string): string {
     if (this.menuQualityMode === 'download') {
       const option: LXQualityOption | undefined = this.downloadQualityOptions.find(
@@ -469,7 +487,7 @@ export struct ControlAreaComponent {
       intent.requestVersion++;
       console.info('[RzdQualityPolicy] explicit re-resolve requested tier=' + q);
     }
-    this.getUIContext().getPromptAction().showToast({ message: '已选择当前网络音质 ' + q, duration: 2000 });
+    this.getUIContext().getPromptAction().showToast({ message: '已选择当前网络音质 ' + qualityDisplayName(q), duration: 2000 });
   }
 
   /** sys.symbol.repeat | repeat_1 | shuffle per MusicPlayMode. */
@@ -565,13 +583,24 @@ export struct ControlAreaComponent {
             .lineHeight('14vp')
           Blank()
           // 当前音质徽标：本地歌显示「本地」，在线歌显示实际播放音质（含自动降级）
-          Text(this.currentQualityLabel())
-            .fontSize(11)
-            .fontColor($r('app.color.play_text_color'))
-            .lineHeight(16)
-            .padding({ left: 8, right: 8, top: 2, bottom: 2 })
-            .borderRadius(10)
-            .backgroundColor('rgba(255, 255, 255, 0.12)')
+          Row({ space: 4 }) {
+            if (this.currentPlatformLabel().length > 0) {
+              Text(this.currentPlatformLabel())
+                .fontSize(11)
+                .fontColor($r('app.color.play_text_color'))
+                .lineHeight(16)
+                .padding({ left: 8, right: 8, top: 2, bottom: 2 })
+                .borderRadius(10)
+                .backgroundColor('rgba(255, 255, 255, 0.12)')
+            }
+            Text(this.currentQualityLabel())
+              .fontSize(11)
+              .fontColor($r('app.color.play_text_color'))
+              .lineHeight(16)
+              .padding({ left: 8, right: 8, top: 2, bottom: 2 })
+              .borderRadius(10)
+              .backgroundColor('rgba(255, 255, 255, 0.12)')
+          }
           Blank()
           Text(this.playerViewModel.appState.totalTime)
             .fontColor($r('app.color.play_text_color'))
@@ -724,7 +753,7 @@ export struct ControlAreaComponent {
 
         ForEach(this.menuQualityChoices(), (q: string) => {
           Row() {
-            Text(q)
+            Text(qualityDisplayName(q))
               .fontSize(16)
               .fontColor($r('app.color.font_primary'))
             Blank()

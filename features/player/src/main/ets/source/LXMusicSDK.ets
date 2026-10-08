@@ -365,6 +365,35 @@ async function httpGet(url: string, headers: Record<string, string> = {}): Promi
   }
 }
 
+/** 系统 http：部分联想域名 axios 易空响应，优先走 NetworkKit */
+async function httpGetNative(url: string, headers: Record<string, string> = {}): Promise<string> {
+  const httpRequest = http.createHttp();
+  try {
+    const resp = await httpRequest.request(url, {
+      method: http.RequestMethod.GET,
+      header: headers,
+      connectTimeout: REQ_TIMEOUT,
+      readTimeout: REQ_TIMEOUT,
+      expectDataType: http.HttpDataType.STRING
+    });
+    const result: Object = resp.result as Object;
+    if (typeof result === 'string') {
+      return result as string;
+    }
+    if (result !== undefined && result !== null) {
+      return JSON.stringify(result);
+    }
+  } catch (_e) {
+  } finally {
+    try {
+      httpRequest.destroy();
+    } catch (_d) {
+    }
+  }
+  // 回退 axios
+  return await httpGet(url, headers);
+}
+
 async function httpPost(url: string, body: string,
   headers: Record<string, string> = {}): Promise<string> {
   try {
@@ -2233,6 +2262,48 @@ export interface TxSinger {
  * @returns Singer chart rows, or empty array on failure.
  */
 export async function lxKgSingerList(count: number): Promise<TxSinger[]> {
+  // 1) mobilecdn 热门歌手（sort=1）
+  try {
+    const url: string = 'http://mobilecdnbj.kugou.com/api/v5/singer/list?version=9108&showtype=1&plat=0' +
+      '&sextype=0&sort=1&pagesize=' + count + '&type=0&page=1&musician=0';
+    const headers: Record<string, string> = {
+      'User-Agent': 'Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36',
+      'Referer': 'https://m.kugou.com/'
+    };
+    const text: string = await httpGet(url, headers);
+    appendLxLog('[kg歌手] v5 resp len=' + text.length);
+    if (text.length > 0) {
+      const resp: Record<string, Object> = JSON.parse(text) as Record<string, Object>;
+      const data: Record<string, Object> = resp.data as Record<string, Object> || {};
+      const info: Object[] = data.info as Object[] || data.list as Object[] || [];
+      const singers: TxSinger[] = [];
+      for (let i: number = 0; i < info.length && singers.length < count; i++) {
+        const row: Record<string, Object> = info[i] as Record<string, Object>;
+        const name: string = String(row.singername ?? row.author_name ?? '');
+        if (name.length === 0) {
+          continue;
+        }
+        let pic: string = String(row.imgurl ?? row.sizable_avatar ?? row.avatar ?? '');
+        pic = pic.replace('{size}', '300');
+        if (pic.startsWith('http://')) {
+          pic = 'https://' + pic.substring(7);
+        }
+        singers.push({
+          singerId: String(row.singerid ?? row.author_id ?? ''),
+          singerMid: '',
+          name: name,
+          pic: pic
+        });
+      }
+      if (singers.length > 0) {
+        appendLxLog('[kg歌手] v5 解析=' + singers.length);
+        return singers;
+      }
+    }
+  } catch (err) {
+    appendLxLog('[kg歌手] v5 异常: ' + JSON.stringify(err).substring(0, 100));
+  }
+  // 2) 旧 m.kugou 分类页兜底
   try {
     const url: string = 'https://m.kugou.com/singer/list/88?json=true';
     const headers: Record<string, string> = {
@@ -2240,7 +2311,6 @@ export async function lxKgSingerList(count: number): Promise<TxSinger[]> {
       'Referer': 'https://m.kugou.com/'
     };
     const text: string = await httpGet(url, headers);
-    appendLxLog('[kg歌手] resp len=' + text.length);
     if (text.length === 0) {
       return [];
     }
@@ -2255,19 +2325,20 @@ export async function lxKgSingerList(count: number): Promise<TxSinger[]> {
       for (let j: number = 0; j < singerRows.length && singers.length < count; j++) {
         const row: Record<string, Object> = singerRows[j] as Record<string, Object>;
         const name: string = row.singername as string || '';
-        const singerId: string = row.singerid as string || '';
         if (name.length === 0) {
           continue;
         }
         let pic: string = row.imgurl as string || '';
         pic = pic.replace('{size}', '300');
-        if (pic.startsWith('https://')) {
-          pic = 'https://' + pic.substring(7);
-        }
-        singers.push({ singerId: singerId, singerMid: '', name: name, pic: pic });
+        singers.push({
+          singerId: String(row.singerid ?? ''),
+          singerMid: '',
+          name: name,
+          pic: pic
+        });
       }
     }
-    appendLxLog('[kg歌手] 解析歌手=' + singers.length);
+    appendLxLog('[kg歌手] m站 解析=' + singers.length);
     return singers;
   } catch (err) {
     appendLxLog('[kg歌手] 异常: ' + JSON.stringify(err).substring(0, 120));
@@ -2304,6 +2375,182 @@ export async function lxTxSingerList(count: number): Promise<TxSinger[]> {
       }
     } catch (err) {
       appendLxLog('[tx歌手] url#' + u + ' 异常: ' + JSON.stringify(err).substring(0, 120));
+    }
+  }
+  return [];
+}
+
+
+/** 网易云热门歌手：/api/artist/top（参考 NeteaseCloudMusicApi top_artists） */
+export async function lxWySingerList(count: number): Promise<TxSinger[]> {
+  try {
+    const url: string = 'https://music.163.com/api/artist/top?offset=0&total=true&limit=' + count;
+    const headers: Record<string, string> = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Referer': 'https://music.163.com/'
+    };
+    const text: string = await httpGet(url, headers);
+    appendLxLog('[wy歌手] resp len=' + text.length);
+    if (text.length === 0) {
+      return [];
+    }
+    const resp: Record<string, Object> = JSON.parse(text) as Record<string, Object>;
+    const list: Object[] = resp.artists as Object[] || [];
+    const singers: TxSinger[] = [];
+    for (let i: number = 0; i < list.length && singers.length < count; i++) {
+      const row: Record<string, Object> = list[i] as Record<string, Object>;
+      const name: string = String(row.name ?? '');
+      if (name.length === 0) {
+        continue;
+      }
+      let pic: string = String(row.picUrl ?? row.img1v1Url ?? '');
+      if (pic.startsWith('http://')) {
+        pic = 'https://' + pic.substring(7);
+      }
+      singers.push({
+        singerId: String(row.id ?? ''),
+        singerMid: '',
+        name: name,
+        pic: pic
+      });
+    }
+    appendLxLog('[wy歌手] 解析=' + singers.length);
+    return singers;
+  } catch (err) {
+    appendLxLog('[wy歌手] 异常: ' + JSON.stringify(err).substring(0, 120));
+    return [];
+  }
+}
+
+/** 酷我推荐歌手（华语 category=11，参考 kuwoMusicApi /rec_singer） */
+export async function lxKwSingerList(count: number): Promise<TxSinger[]> {
+  const urls: string[] = [
+    'https://www.kuwo.cn/api/www/artist/artistInfo?category=0&prefix=&pn=1&rn=' + count + '&httpsStatus=1',
+    'https://wapi.kuwo.cn/api/www/artist/artistInfo?category=0&prefix=&pn=1&rn=' + count + '&httpsStatus=1'
+  ];
+  for (let u: number = 0; u < urls.length; u++) {
+    try {
+      const headers: Record<string, string> = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': 'https://www.kuwo.cn/',
+        'csrf': '0',
+        'Cookie': 'kw_token=0'
+      };
+      const text: string = await httpGet(urls[u], headers);
+      appendLxLog('[kw歌手] url#' + u + ' len=' + text.length);
+      if (text.length === 0) {
+        continue;
+      }
+      const resp: Record<string, Object> = JSON.parse(text) as Record<string, Object>;
+      const data: Record<string, Object> = resp.data as Record<string, Object> || {};
+      const list: Object[] = data.artistList as Object[] || data.list as Object[] || [];
+      const singers: TxSinger[] = [];
+      for (let i: number = 0; i < list.length && singers.length < count; i++) {
+        const row: Record<string, Object> = list[i] as Record<string, Object>;
+        const name: string = String(row.name ?? row.artist ?? '');
+        if (name.length === 0) {
+          continue;
+        }
+        let pic: string = String(row.pic ?? row.pic300 ?? row.img ?? '');
+        if (pic.startsWith('http://')) {
+          pic = 'https://' + pic.substring(7);
+        }
+        singers.push({
+          singerId: String(row.id ?? row.artistid ?? ''),
+          singerMid: '',
+          name: name,
+          pic: pic
+        });
+      }
+      if (singers.length > 0) {
+        appendLxLog('[kw歌手] 解析=' + singers.length);
+        return singers;
+      }
+    } catch (err) {
+      appendLxLog('[kw歌手] url#' + u + ' 异常: ' + JSON.stringify(err).substring(0, 100));
+    }
+  }
+  return [];
+}
+
+/** 咪咕热门歌手：搜索页热门歌手 / 栏目歌手（参考 miguMusic-api） */
+export async function lxMgSingerList(count: number): Promise<TxSinger[]> {
+  const urls: string[] = [
+    'https://m.music.migu.cn/migu/remoting/cms_list_tag?pageSize=' + count +
+      '&nid=23831003&pageNo=0&type=2006',
+    'https://app.c.nf.migu.cn/MIGUM3.0/v1.0/template/h5-singer-list/release?columnId=15250145' +
+      '&needAll=0&pageNumber=1&pageSize=' + count
+  ];
+  for (let u: number = 0; u < urls.length; u++) {
+    try {
+      const headers: Record<string, string> = {
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36',
+        'Referer': 'https://m.music.migu.cn/',
+        'channel': '0146921'
+      };
+      const text: string = await httpGet(urls[u], headers);
+      appendLxLog('[mg歌手] url#' + u + ' len=' + text.length);
+      if (text.length === 0) {
+        continue;
+      }
+      const resp: Record<string, Object> = JSON.parse(text) as Record<string, Object>;
+      const singers: TxSinger[] = [];
+      // cms_list_tag 结构
+      const body: Record<string, Object> = resp.body as Record<string, Object> || resp;
+      const content: Object[] = body.content as Object[] || body.data as Object[] ||
+        (body.contents as Object[]) || [];
+      for (let i: number = 0; i < content.length && singers.length < count; i++) {
+        const row: Record<string, Object> = content[i] as Record<string, Object>;
+        const name: string = String(row.title ?? row.singerName ?? row.name ?? row.txt ?? '');
+        if (name.length === 0 || name.indexOf('http') === 0) {
+          continue;
+        }
+        let pic: string = String(row.imgSrc ?? row.imgUrl ?? row.smallPic ?? row.picUrl ?? '');
+        if (pic.startsWith('//')) {
+          pic = 'https:' + pic;
+        }
+        if (pic.startsWith('http://')) {
+          pic = 'https://' + pic.substring(7);
+        }
+        singers.push({
+          singerId: String(row.singerId ?? row.id ?? row.contId ?? ''),
+          singerMid: '',
+          name: name,
+          pic: pic
+        });
+      }
+      // template h5-singer-list
+      if (singers.length === 0) {
+        const data: Record<string, Object> = resp.data as Record<string, Object> || {};
+        const contentItemList: Object[] = data.contentItemList as Object[] || [];
+        for (let i: number = 0; i < contentItemList.length && singers.length < count; i++) {
+          const block: Record<string, Object> = contentItemList[i] as Record<string, Object>;
+          const items: Object[] = block.itemList as Object[] || [];
+          for (let j: number = 0; j < items.length && singers.length < count; j++) {
+            const row: Record<string, Object> = items[j] as Record<string, Object>;
+            const name: string = String(row.title ?? row.singer ?? '');
+            if (name.length === 0) {
+              continue;
+            }
+            let pic: string = String(row.imgUrl ?? row.imgSrc ?? '');
+            if (pic.startsWith('//')) {
+              pic = 'https:' + pic;
+            }
+            singers.push({
+              singerId: String(row.singerId ?? row.id ?? ''),
+              singerMid: '',
+              name: name,
+              pic: pic
+            });
+          }
+        }
+      }
+      if (singers.length > 0) {
+        appendLxLog('[mg歌手] 解析=' + singers.length);
+        return singers;
+      }
+    } catch (err) {
+      appendLxLog('[mg歌手] url#' + u + ' 异常: ' + JSON.stringify(err).substring(0, 100));
     }
   }
   return [];
@@ -2408,6 +2655,325 @@ export async function lxTxHotSearch(): Promise<string[]> {
     appendLxLog('[tx热搜] 异常: ' + JSON.stringify(err).substring(0, 120));
     return [];
   }
+}
+
+
+/**
+ * 搜索联想候选 —— 对齐 lyswhut/lx-music-desktop tipSearch
+ * 酷我 tips.kuwo.cn / QQ smartbox / 酷狗 searchtip。
+ */
+/**
+ * 各平台搜索联想（对齐 lx-music-desktop tipSearch + 可用公开接口）
+ */
+async function tipSearchKuwo(key: string): Promise<string[]> {
+  const words: string[] = [];
+  // 1) tips.kuwo.cn（洛雪桌面端，部分网络 SSL 不稳定）
+  try {
+    const url: string = 'https://tips.kuwo.cn/t.s?corp=kuwo&newver=3&p2p=1&notrace=0&c=mbox' +
+      '&w=' + encodeURIComponent(key) + '&encoding=utf8&rformat=json';
+    const headers: Record<string, string> = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Referer': 'http://www.kuwo.cn/'
+    };
+    const text: string = await httpGetNative(url, headers);
+    if (text.length > 0) {
+      const resp: Record<string, Object> = JSON.parse(text) as Record<string, Object>;
+      let items: Object[] = resp.WORDITEMS as Object[] || [];
+      if (items.length === 0) {
+        items = resp.wordItems as Object[] || [];
+      }
+      for (let i: number = 0; i < items.length; i++) {
+        const row: Record<string, Object> = items[i] as Record<string, Object>;
+        const w: string = String(row.RELWORD ?? row.relword ?? '').trim();
+        if (w.length > 0) {
+          words.push(w);
+        }
+      }
+    }
+  } catch (_e) {
+  }
+  // 2) 回退：搜索接口歌名当联想
+  if (words.length < 5) {
+    try {
+      const url2: string = 'https://search.kuwo.cn/r.s?all=' + encodeURIComponent(key) +
+        '&ft=music&newsearch=1&itemset=web_2013&client=kt&pn=0&rn=20&rformat=json&encoding=utf8';
+      const text2: string = await httpGetNative(url2, {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      });
+      if (text2.length > 0) {
+        const fixed: string = text2.replace(/'/g, '"');
+        const resp2: Record<string, Object> = JSON.parse(fixed) as Record<string, Object>;
+        const list: Object[] = resp2.abslist as Object[] || [];
+        for (let i: number = 0; i < list.length; i++) {
+          const row: Record<string, Object> = list[i] as Record<string, Object>;
+          const name: string = String(row.SONGNAME ?? row.NAME ?? '').trim();
+          const singer: string = String(row.ARTIST ?? '').trim();
+          if (name.length === 0) {
+            continue;
+          }
+          if (singer.length > 0) {
+            words.push(key + ' ' + name);
+          } else {
+            words.push(name);
+          }
+        }
+      }
+    } catch (_e2) {
+    }
+  }
+  appendLxLog('[联想kw] n=' + words.length);
+  return words;
+}
+
+async function tipSearchTx(key: string): Promise<string[]> {
+  const words: string[] = [];
+  try {
+    const url: string = 'https://c.y.qq.com/splcloud/fcgi-bin/smartbox_new.fcg?is_xml=0&format=json' +
+      '&key=' + encodeURIComponent(key) +
+      '&loginUin=0&hostUin=0&inCharset=utf8&outCharset=utf-8&notice=0&platform=yqq&needNewCode=0';
+    const headers: Record<string, string> = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Referer': 'https://y.qq.com/portal/player.html'
+    };
+    const text: string = await httpGetNative(url, headers);
+    if (text.length === 0) {
+      return words;
+    }
+    const cleaned: string = stripJsonp(text);
+    if (cleaned.length === 0) {
+      return words;
+    }
+    const resp: Record<string, Object> = JSON.parse(cleaned) as Record<string, Object>;
+    const data: Record<string, Object> = resp.data as Record<string, Object> || {};
+    // 歌手 + 歌曲 + 专辑
+    const groups: string[] = ['singer', 'song', 'album'];
+    for (let g: number = 0; g < groups.length; g++) {
+      const node: Record<string, Object> = data[groups[g]] as Record<string, Object> || {};
+      let items: Object[] = node.itemlist as Object[] || [];
+      if (items.length === 0) {
+        items = node.item as Object[] || [];
+      }
+      for (let i: number = 0; i < items.length; i++) {
+        const row: Record<string, Object> = items[i] as Record<string, Object>;
+        const name: string = String(row.name ?? '').trim();
+        const singer: string = String(row.singer ?? '').trim();
+        if (groups[g] === 'singer' && name.length > 0) {
+          words.push(name);
+        } else if (name.length > 0 && singer.length > 0) {
+          words.push(name + ' - ' + singer);
+        } else if (name.length > 0) {
+          words.push(name);
+        }
+      }
+    }
+  } catch (_e) {
+  }
+  return words;
+}
+
+/** 网易关键词联想（api-enhanced search_suggest keyword，免 weapi） */
+async function tipSearchWy(key: string): Promise<string[]> {
+  const words: string[] = [];
+  try {
+    const url: string = 'https://music.163.com/api/search/suggest/keyword?s=' + encodeURIComponent(key);
+    const headers: Record<string, string> = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Referer': 'https://music.163.com/'
+    };
+    const text: string = await httpGetNative(url, headers);
+    if (text.length === 0) {
+      return words;
+    }
+    const resp: Record<string, Object> = JSON.parse(text) as Record<string, Object>;
+    const result: Record<string, Object> = resp.result as Record<string, Object> || {};
+    const allMatch: Object[] = result.allMatch as Object[] || [];
+    for (let i: number = 0; i < allMatch.length; i++) {
+      const w: string = String((allMatch[i] as Record<string, Object>).keyword ?? '').trim();
+      if (w.length > 0) {
+        words.push(w);
+      }
+    }
+    // 不足时补 web suggest 歌名
+    if (words.length < 6) {
+      const url2: string = 'https://music.163.com/api/search/suggest/web?s=' + encodeURIComponent(key) +
+        '&limit=20';
+      const text2: string = await httpGetNative(url2, headers);
+      if (text2.length > 0) {
+        const resp2: Record<string, Object> = JSON.parse(text2) as Record<string, Object>;
+        const result2: Record<string, Object> = resp2.result as Record<string, Object> || {};
+        const songs: Object[] = result2.songs as Object[] || [];
+        for (let i: number = 0; i < songs.length; i++) {
+          const row: Record<string, Object> = songs[i] as Record<string, Object>;
+          const name: string = String(row.name ?? '').trim();
+          const artists: Object[] = row.artists as Object[] || [];
+          let singer: string = '';
+          if (artists.length > 0) {
+            singer = String((artists[0] as Record<string, Object>).name ?? '').trim();
+          }
+          if (name.length > 0 && singer.length > 0) {
+            words.push(name + ' - ' + singer);
+          } else if (name.length > 0) {
+            words.push(name);
+          }
+        }
+      }
+    }
+  } catch (_e) {
+  }
+  return words;
+}
+
+async function tipSearchKg(key: string): Promise<string[]> {
+  const words: string[] = [];
+  try {
+    const url: string = 'https://searchtip.kugou.com/getSearchTip?MusicTipCount=20&keyword=' +
+      encodeURIComponent(key);
+    const headers: Record<string, string> = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Referer': 'https://www.kugou.com/'
+    };
+    const text: string = await httpGetNative(url, headers);
+    if (text.length === 0) {
+      return words;
+    }
+    const resp: Record<string, Object> = JSON.parse(text) as Record<string, Object>;
+    let records: Object[] = [];
+    const dataField: Object = resp.data as Object;
+    if (Array.isArray(dataField)) {
+      const arr: Object[] = dataField as Object[];
+      if (arr.length > 0) {
+        records = (arr[0] as Record<string, Object>).RecordDatas as Object[] || [];
+      }
+    } else if (dataField !== undefined && dataField !== null) {
+      records = (dataField as Record<string, Object>).RecordDatas as Object[] || [];
+    }
+    for (let i: number = 0; i < records.length; i++) {
+      const tip: string = String((records[i] as Record<string, Object>).HintInfo ?? '').trim();
+      if (tip.length > 0) {
+        words.push(tip);
+      }
+    }
+    appendLxLog('[联想kg] n=' + words.length);
+  } catch (_e) {
+  }
+  return words;
+}
+
+/** 咪咕联想（lx-music-desktop mg/tipSearch） */
+async function tipSearchMg(key: string): Promise<string[]> {
+  const words: string[] = [];
+  try {
+    const url: string = 'https://m.music.migu.cn/migu/remoting/autocomplete_tag.do?keyword=' +
+      encodeURIComponent(key);
+    const headers: Record<string, string> = {
+      'User-Agent': 'Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36',
+      'Referer': 'https://m.music.migu.cn/'
+    };
+    const text: string = await httpGetNative(url, headers);
+    if (text.length === 0) {
+      return words;
+    }
+    // 可能是 JSON 或 JSONP
+    let cleaned: string = text.trim();
+    if (cleaned.indexOf('(') === 0 || cleaned.indexOf('callback') >= 0) {
+      cleaned = stripJsonp(cleaned);
+    }
+    if (cleaned.length === 0) {
+      return words;
+    }
+    const resp: Object = JSON.parse(cleaned) as Object;
+    // 兼容多种结构
+    if (Array.isArray(resp)) {
+      for (let i: number = 0; i < (resp as Object[]).length; i++) {
+        const row = (resp as Object[])[i];
+        if (typeof row === 'string') {
+          words.push(row);
+        } else {
+          const r: Record<string, Object> = row as Record<string, Object>;
+          words.push(String(r.name ?? r.keyword ?? r.word ?? ''));
+        }
+      }
+    } else {
+      const body: Record<string, Object> = resp as Record<string, Object>;
+      const list: Object[] = body.songs as Object[] || body.data as Object[] ||
+        body.keyWords as Object[] || [];
+      for (let i: number = 0; i < list.length; i++) {
+        const row = list[i];
+        if (typeof row === 'string') {
+          words.push(row);
+        } else {
+          const r: Record<string, Object> = row as Record<string, Object>;
+          const name: string = String(r.name ?? r.songName ?? '').trim();
+          const singer: string = String(r.singerName ?? r.singer ?? '').trim();
+          if (name.length > 0 && singer.length > 0) {
+            words.push(name + ' - ' + singer);
+          } else if (name.length > 0) {
+            words.push(name);
+          }
+        }
+      }
+    }
+  } catch (_e) {
+  }
+  return words;
+}
+
+/**
+ * @param source 音源 id：all / tx / wy / kg / kw / mg
+ *   all 时按 QQ→网易→酷狗→酷我→咪咕 合并；单源只调对应接口
+ */
+export async function lxSearchSuggest(keyword: string, source: string = 'all'): Promise<string[]> {
+  const key: string = keyword.trim();
+  if (key.length === 0) {
+    return [];
+  }
+  const out: string[] = [];
+  const seen: string[] = [];
+  const pushWord = (w: string): void => {
+    const t: string = w.trim();
+    if (t.length === 0) {
+      return;
+    }
+    const low: string = t.toLowerCase();
+    for (let i: number = 0; i < seen.length; i++) {
+      if (seen[i] === low) {
+        return;
+      }
+    }
+    seen.push(low);
+    out.push(t);
+  };
+
+  const order: string[] = source === 'all' || source.length === 0
+    ? ['tx', 'wy', 'kg', 'kw', 'mg']
+    : [source];
+
+  for (let o: number = 0; o < order.length; o++) {
+    const sid: string = order[o];
+    let part: string[] = [];
+    if (sid === 'tx') {
+      part = await tipSearchTx(key);
+    } else if (sid === 'wy') {
+      part = await tipSearchWy(key);
+    } else if (sid === 'kg') {
+      part = await tipSearchKg(key);
+    } else if (sid === 'kw') {
+      part = await tipSearchKuwo(key);
+    } else if (sid === 'mg') {
+      part = await tipSearchMg(key);
+    }
+    appendLxLog('[联想] source=' + sid + ' got=' + part.length);
+    for (let i: number = 0; i < part.length; i++) {
+      pushWord(part[i]);
+    }
+    // 单源只跑一次
+    if (source !== 'all' && source.length > 0) {
+      break;
+    }
+  }
+
+  appendLxLog('[搜索联想] key=' + key + ' source=' + source + ' n=' + out.length);
+  return out.slice(0, 20);
 }
 
 /** One QQ music toplist entry from the full toplist overview API. */
