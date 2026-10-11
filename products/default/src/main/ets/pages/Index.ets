@@ -815,47 +815,51 @@ struct Index {
   /**
    * HDS 浮动底栏里的迷你播放条。
    *
+   * ⚠️ **二级页面在栈上时不渲染**（`navDepth > 0`）：二级页面有自己的官方浮动栏
+   * （见 {@link floatingMiniBar}），两边渲染的是同一个 `HomeMiniBarPlayer`，
+   * 它硬编码 `.id(MINI_BAR_ID)` —— 同时存在就会有两份同 id 的节点，
+   * 而播放页形变的起点是 `getRectangleById(MINI_BAR_ID)` 量的，量到哪一份不确定。
+   * 2026-10-01 那次回退就是这个坑（记忆 §17.3 / §17.4-3：「两处只能留一处」）。
+   *
    * **不要给它固定高度**（原来写死 `.height(56)`）：musicfreeOH 的 `PlayBar` 根节点
    * 只有一个 `.width('100%')`，高度是 HDS 量出来的、并由迷你条自己 `onAreaChange` 读回。
    * 写死高度会让 HDS 在「上下两排」时拿不到正确的内容高度，排布就退化。
    */
   @Builder
   private miniBar() {
-    HomeMiniBarPlayer({ showPreviousTrack: false })
+    if (this.navDepth <= 0) {
+      HomeMiniBarPlayer({ showPreviousTrack: false })
+    }
   }
 
   /**
-   * 二级页面的悬浮迷你播放条（胶囊）。
+   * 二级页面的悬浮迷你播放条：**官方 HDS 浮动栏 + 沉浸光感材质**（用户 2026-10-11 拍板的结构改造）。
    *
-   * ══════════════════════ 为什么这里**没有**官方光感（重要，别再来回翻烧饼）══════════════════════
+   * ══════════════════════ 为什么必须是"一个单页签的 HdsTabs"══════════════════════
    *
-   * 用户要的是"官方的、真正的光感"。查过官方两份文档后，这条路在本结构下**走不通**，原因有三条，
-   * 每条都有出处：
+   * 官方《沉浸光感功耗优化》原文：「其他组件仅在 Navigation/NavDestination 标题栏或横向 Tabs 中
+   * barPosition 为 BarPosition.End 的底部 TabBar 中生效。**在其他区域中设置沉浸光感效果不生效。**」
+   * 也就是说：光感材质只有**标题栏**与**底部 TabBar**两个合法宿主。旧写法（壳层 Stack 里一个普通
+   * Column 挂 `backgroundEffect`）**永远拿不到官方材质**，只能算自绘近似 —— 用户明确否掉了它。
    *
-   * ① 生效范围（官方《沉浸光感功耗优化》）：
-   *    「其他组件仅在 Navigation/NavDestination 标题栏或横向 Tabs 中 barPosition 为
-   *      BarPosition.End 的底部 TabBar 中生效。在其他区域中设置沉浸光感效果不生效。」
-   *    本函数画的是**壳层 Stack 里一个普通 Column**，既不是标题栏也不是 TabBar
-   *    ⇒ 给它挂 `systemMaterialEffect` 是**不生效**的（不是"效果弱"，是根本不渲染）。
+   * 现在的做法（= 参考工程 `lxmusic-harmony` 的 `views/PanePage.ets` 同一套）：**只有一个页签的
+   * HdsTabs**，页签栏的内容（CustomBuilder）就是播放器本体，再加上官方三条件
+   *   `barPosition(End)` + `barOverlap(true)` + `vertical(false)`
+   * ⇒ 这条栏就落在"底部 TabBar"这个合法宿主里，`systemMaterialEffect` 真生效。
+   * 材质档位复用标题栏那一份（{@link ambientTitleMaterial}），不要再内联一套三目。
    *
-   * ② 层级（官方 FAQ《材质效果的显示层级问题》）：
-   *    「沉浸光感的视觉层级位于组件的 backgroundColor、backgroundBlurStyle 等属性之下」
-   *    ⇒ 就算有材质，`backgroundColor` 不透明也会把它盖住（本胶囊必须有不透明/半透明底
-   *    才能保证歌名可读，二者天然冲突）。
+   * 宿主放在**壳层 Stack 的底部**（与旧胶囊同一个位置、同一套算术），所以二级页
+   * （`NavDestination`）盖不住它 —— 这正是它能替掉旧胶囊的原因。
    *
-   * ③ 结构（本工程）：二级页面是同一个 `HdsNavigation` 栈里的 `NavDestination`，
-   *    HDS 浮动底栏（首页那条真材质）在 `HdsNavigation` 的 **content 之内**，被
-   *    `NavDestination` 整片盖住 —— 这也正是本函数存在的原因（见 `shouldShowFloatingMiniBar`）。
-   *    唯一合规的位置是"**把二级页自己**放进一个 `barPosition(End)` 的 `HdsTabs`"，
-   *    而工程有 24+ 个二级页（feature 层 7 个 HAR），不属于本次允许改动的文件面。
+   * ══════════════════════ ★ 一条硬约束：全屏**只能存在一条**迷你条 ══════════════════════
    *
-   * ⇒ 结论：**本函数保持"普通胶囊 + backgroundEffect 近似"，并且明确标注它不是官方材质。**
-   *    要真上官方材质，唯一合规做法是：在承载二级页的那层里放一个
-   *    `HdsTabs({ barPosition: BarPosition.End })` + `.barOverlap(true)` + `.vertical(false)`
-   *    （三条件必须同时满足，缺一 `systemMaterialEffect` 不生效 —— 见官方《组件适配沉浸光感》），
-   *    把 `HomeMiniBarPlayer` 作为它的 `barFloatingStyle.miniBar.miniBarBuilder`，
-   *    材质用 `this.ambientTitleMaterial()`；此时**不要**再给该 bar 设
-   *    `barBackgroundColor` / `barBackgroundBlurStyle`（官方原文："避免遮挡材质效果"）。
+   * 2026-10-01 09:39 试过同一套宿主，回退了，原因就是**同 id 撞车**：
+   * 首页底栏的 `miniBar` 与这条二级栏渲染的是同一个 `HomeMiniBarPlayer`，它硬编码
+   * `.id(MINI_BAR_ID)`（连带 `MINI_BAR_COVER_ID` / `MINI_BAR_ASIDE_ID`）。二级页在栈上时
+   * 首页底栏并没有卸载 ⇒ 屏幕上出现**两份同 id** 的节点，而播放页形变的起点是
+   * `getRectangleById(MINI_BAR_ID)` 量的 —— 量到哪一份不确定，起点就抖。
+   * ⇒ 所以 {@link miniBar}（首页那条）在 `navDepth > 0` 时**不渲染**，两处只留一处。
+   *    改这里之前先看那条注释。
    *
    * ══════════════════ 尺寸 / 触摸 / 形变语义（这些**不能**动）══════════════════
    *
@@ -869,6 +873,8 @@ struct Index {
    *     外层 padding 居中，在部分形态下算错 —— 要么贴到屏幕右边，要么撑成整条大长方形
    *     （用户反馈的「大长方形，很丑」就是宽度算成了整屏）。
    *   - 圆角：胶囊用高度的一半，视觉上才是"一条胶囊"而不是"一块板子"。
+   *   栏宽同时写进 `barFloatingStyle.barWidth`：让 HDS 自己按这个宽度画胶囊，
+   *   我们再 `clip(false)`（裁了会把 HDS 的背板/折射一起裁掉）。
    *
    * 触摸：整屏 Stack 必须 `HitTestMode.Transparent` —— 默认的 Default 会把二级页面的
    * 点击全吃掉（踩过）；Transparent 表示自己不吃事件但子节点照常响应。
@@ -876,36 +882,56 @@ struct Index {
   @Builder
   private floatingMiniBar() {
     Stack({ alignContent: Alignment.Bottom }) {
-      Column() {
-        HomeMiniBarPlayer({
-          showPreviousTrack: false,
-          followAppMiniBarExpanded: false
-        })
-          .width(StyleConstants.FULL_WIDTH)
+      // 唯一可见的"页签"就是播放器本体（CustomBuilder 路线，与参考工程 PanePage 一致）：
+      // 不配置第二条 miniBar，TabContent 故意留空 —— 这一层只为拿到官方底栏宿主。
+      HdsTabs({ barPosition: BarPosition.End }) {
+        TabContent() {
+        }
+        .tabBar(this.floatingMiniBarContent())
       }
+      .barMode(BarMode.Fixed)
+      .barHeight(FLOATING_MINI_BAR_HEIGHT_VP)
+      // ★ 官方三条件：barPosition(End) + barOverlap(true) + vertical(false)。
+      //   缺一 `systemMaterialEffect` 就不生效（官方《设置页签栏的悬浮样式》约束条件）。
+      .barOverlap(true)
+      .barPosition(BarPosition.End)
+      .vertical(false)
+      .scrollable(false)
+      .animationDuration(0)
+      // barOverlap 自带一层隐式厚模糊，会把材质背板盖掉：一律关掉，材质交给 HDS 画。
+      .barBackgroundColor(Color.Transparent)
+      .barBackgroundBlurStyle(BlurStyle.NONE)
+      .barFloatingStyle({
+        // 三档同值：栏宽由我们显式给（见 floatingMiniBarWidthVp 的说明），
+        // 不交给 HDS 按内容算 —— 不然又会出现"要么贴边、要么撑成大长方形"。
+        barWidth: {
+          smallWidth: this.floatingMiniBarWidthVp(),
+          mediumWidth: this.floatingMiniBarWidthVp(),
+          largeWidth: this.floatingMiniBarWidthVp()
+        },
+        barSideMargin: 0,
+        // 离底距离由外层 margin 给（与旧胶囊同一套算术），栏自己不再叠一份。
+        barBottomMargin: 0,
+        // 底部渐隐遮罩：二级页面不需要（它会盖住内容），显式关掉。
+        gradientMask: { maskColor: Color.Transparent, maskHeight: 0 },
+        adaptToHandedness: false,
+        // ★ 官方沉浸光感：档位与标题栏/首页底栏共用同一份（ambientTitleMaterial）。
+        systemMaterialEffect: this.ambientTitleMaterial()
+      })
       .width(this.floatingMiniBarWidthVp())
       .height(FLOATING_MINI_BAR_HEIGHT_VP)
       .borderRadius(FLOATING_MINI_BAR_HEIGHT_VP / 2)
-      .borderWidth(1)
-      .borderColor($r('app.color.comp_divider'))
-      .clip(true)
-      // ⚠️ 这不是官方材质，是**近似**（原因见本 builder 顶部那三条，别删这段说明）。
-      //    官方 `systemMaterialEffect` 只认 Navigation/NavDestination 标题栏与
-      //    barPosition(End) 的横向 Tabs 底栏；普通容器上它不生效。
-      //    底色本身是半透明的（color.json 的 floating_mini_bar_sheet_background），
-      //    透明度过高会盖掉模糊 —— 改这个资源时要一起看效果。
-      .backgroundEffect({
-        radius: this.floatingMiniBarEffectRadiusVp(),
-        saturation: 1.15,
-        brightness: 1.02,
-        color: $r('app.color.floating_mini_bar_sheet_background')
-      })
+      // 不要裁：HDS 的材质背板/折射范围比内容盒大，裁了会缺一圈。
+      .clip(false)
       .onAppear((): void => {
-        // 日志里显式写明 mode=fallback：真机抓这条就知道现在走的是近似，不是官方材质。
         Logger.info('RzdSecondaryMiniMaterial',
-          `mode=fallback-backgroundEffect host=shell-capsule radius=${this.floatingMiniBarEffectRadiusVp()} ` +
+          `mode=hds-systemMaterialEffect officialRegion=yes host=single-tab-hdstabs ` +
             `height=${FLOATING_MINI_BAR_HEIGHT_VP} width=${this.floatingMiniBarWidthVp()} ` +
-            `ambient=${this.ambientLevelIndex()} officialRegion=no`);
+            `ambient=${this.ambientLevelIndex()} singleVisibleBar=true implicitBlur=none`);
+      })
+      .onAreaChange((_oldArea: Area, area: Area): void => {
+        Logger.info('RzdSecondaryMiniMaterial',
+          `host width=${area.width} height=${area.height} ambient=${this.ambientLevelIndex()}`);
       })
       .margin({ bottom: this.floatingMiniBarBottomMarginVp() })
     }
@@ -914,25 +940,25 @@ struct Index {
     .alignContent(Alignment.Bottom)
     .hitTestBehavior(HitTestMode.Transparent)
     .zIndex(20)
-    // Hidden preserves anchors/layout and hides the restored capsule with its controls immediately.
+    // Hidden preserves anchors/layout and hides the floating bar with its controls immediately.
     .visibility(this.expandState.sourceBarHidden ? Visibility.Hidden : Visibility.Visible)
   }
 
   /**
-   * 悬浮迷你条的光感模糊半径（vp）：跟随系统的环境光感档位。
-   * 档位来自 `ambientLevelIndex()`（与首页底栏的 `systemMaterialEffect.materialLevel` 同一套）。
+   * 官方浮动栏里**唯一可见的内容**（页签栏 CustomBuilder）。
+   *
+   * 尺寸与 {@link floatingMiniBar} 的宿主盒严格一致：宿主是 56vp 高，这里再写死一次，
+   * 免得 HDS 的排布变化（两排/单排）把封面从 44 缩成 30。
+   * 上拉/点击打开播放页的手势在 `HomeMiniBarPlayer` 内部，这里不要重复挂。
    */
-  private floatingMiniBarEffectRadiusVp(): number {
-    switch (this.ambientLevelIndex()) {
-      case 1:
-        return 14;
-      case 2:
-        return 22;
-      case 3:
-        return 30;
-      default:
-        return 22;
-    }
+  @Builder
+  private floatingMiniBarContent() {
+    HomeMiniBarPlayer({
+      showPreviousTrack: false,
+      followAppMiniBarExpanded: false
+    })
+      .width(this.floatingMiniBarWidthVp())
+      .height(FLOATING_MINI_BAR_HEIGHT_VP)
   }
 
   /** 悬浮迷你条的左右间距（vp）：只在小屏给一点边距，宽屏居中留白。 */
