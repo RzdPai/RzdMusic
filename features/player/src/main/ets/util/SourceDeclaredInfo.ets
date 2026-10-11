@@ -1,4 +1,4 @@
-/*
+﻿/*
  * 音源脚本「声明了什么」的只读摘要。
  *
  * 数据来源（唯一真源，不另造一份）：
@@ -25,7 +25,7 @@ const LX_SOURCE_NAMES: Record<string, string> = {
   'tx': 'QQ',
   'wy': '网易云',
   'mg': '咪咕',
-  'local': '本地'
+  'local': ''
 };
 
 /** 内置可选音质档 → 短标签（与设置页音质档命名保持一致）。 */
@@ -51,13 +51,14 @@ const LX_QUALITY_ORDER: string[] = [
 
 /** 动作 id → 短标签。未列出的动作原样回 id（宁可露英文也不静默丢掉）。 */
 const LX_ACTION_LABELS: Record<string, string> = {
-  'musicUrl': '取链接',
+  'musicUrl': '',
   'lyric': '歌词',
   'pic': '封面',
   'musicSearch': '搜索'
 };
 
-const LX_ACTION_ORDER: string[] = ['musicUrl', 'lyric', 'pic', 'musicSearch'];
+// ★ 用户 2026-10-11：「音质说明的『取链接』删掉」⇒ 动作说明里不再列 musicUrl。
+const LX_ACTION_ORDER: string[] = ['lyric', 'pic', 'musicSearch'];
 
 /**
  * 一条音源脚本「声明了哪些平台 / 什么音质 / 能做什么」的摘要。

@@ -186,6 +186,6 @@ export struct DownloadManagerSection {
     }
     .width('100%')
     .height('100%')
-    .padding({ left: 20, right: 20, top: 8 + this.contentTopOffset, bottom: 8 })
+      .padding({ left: 8, right: 8, top: 8 + this.contentTopOffset, bottom: 8 })
   }
 }

@@ -1,4 +1,4 @@
-/*
+﻿/*
  * 「音源管理」条目上的小标签（平台 / 音质 / 动作）。
  *
  * 为什么单独一个文件：**两处**音源管理界面（`SettingsDetailPage` 的二级页、
@@ -56,7 +56,7 @@ export struct LxSourceDeclaredTags {
       const item: LXSourcePlatformInfo = this.items[i];
       const bits: string[] = [];
       if (item.bestQuality.length > 0) {
-        bits.push('最高' + item.bestQuality);
+        bits.push(item.bestQuality);
       }
       if (item.actions.length > 0) {
         bits.push(item.actions.join('/'));

@@ -1,4 +1,4 @@
-/*
+﻿/*
  * 「本地音乐」页面（导入设备音频 / 列表 / 删除）
  *
  * 对应 listen 的文件：entry/src/main/ets/views/LocalMusicView.ets
@@ -535,6 +535,8 @@ export struct LocalMusicPage {
       //   `Header()` 是滚动内容之外的兄弟节点 ⇒ 它自己的避让只能由容器来给，给**只给状态栏高度**
       //   （**不能**加 56 —— 本页没有 HDS 标题栏，加了就是白白空掉一条标题栏）。
       //   页根的 `expandSafeArea(TOP)` + `backgroundColor` 继续负责把页面底色铺到状态栏那一条。
+      // ★ 用户 2026-10-11：「本地音乐界面改成历史页同款 HDS 标题」⇒ 标题栏交给 HDS，
+      //   自绘 Header 退到它下面（所以这里让位 = 状态栏 + HDS 标题栏 56）。
       .padding({ top: getStatusBarTopVpFromWindowUtil() })
     }
     .onBackPressed((): boolean => guardPlayerBack('LocalMusicView'))
