@@ -852,14 +852,17 @@ export struct RecordListPage {
     .titleBar(this.getTitleBar())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.pageScroller])
-    // ★ 状态栏两件套（全工程二级页统一口径，见「我的」→「最近播放」这一页的现场）：
-    //   ① `expandSafeArea` 的 TOP —— 只扩**绘制**区（官方《安全区域》原文：「expandSafeArea 属性
-    //      支持组件在不改变布局情况下扩展其绘制区域至安全区外」）⇒ 本页 `backgroundColor` 才能铺到
-    //      状态栏那一条，不再透出上一页（用户截图里透出的就是首页迷你播放条）；
-    //   ② `ignoreLayoutSafeArea` **只留 BOTTOM** —— 它会**改布局**，根节点带 TOP 会把 HDS 标题栏
-    //      的返回 / 菜单按钮一起顶进状态栏（用户报的"标题跑到状态栏下面"）。
+    // ★★ 状态栏三件套（2026-10-11 定稿，用户第三次纠正后）：
+    //   ① `expandSafeArea(TOP,BOTTOM)`：把**页面底色**铺到状态栏/导航条那两条（只扩绘制区）；
+    //   ② `ignoreLayoutSafeArea(...[TOP, BOTTOM])` —— **TOP 必须给**：
+    //      HDS 的标题栏自己会按"状态栏高度"往下让位，所以**页面盒子必须从屏幕 y=0 起排**，
+    //      否则就是"盒子已经让开状态栏(38) + 标题栏再让一次(38)" ⇒ 整条标题掉到
+    //      状态栏下面约一个状态栏高度（用户原话：「整个标题移到了状态栏下面」），
+    //      连带内容也多顶下去 38vp（「上方留的空距有点大了」）。
+    //      盒子从 0 起排后：标题栏 = 38..94 ✔，内容偏移 94（= 状态栏 + 标题栏）落在 94 ✔。
+    //   ③ 滚动容器 `clipContent(ContentClipMode.SAFE_AREA)`：让行能**画进**状态栏那一条（"延伸进状态栏"）。
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
-    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     .backgroundColor($r('app.color.background_secondary'))
   }
 }

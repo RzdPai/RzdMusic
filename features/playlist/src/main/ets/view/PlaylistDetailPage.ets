@@ -32,6 +32,7 @@ import {
   BreakpointType,
   buildTitleMaterial,
   getAppRuntime,
+  getStatusBarTopVpFromWindowUtil,
   getWindowInfoState,
   GridConstants,
   BoardSongParam,
@@ -708,8 +709,11 @@ export struct PlaylistDetailPage {
           })
           .width(StyleConstants.FULL_WIDTH)
           .layoutWeight(1)
-          // MINI title overlays 56vp; offset the viewport, not its scrollable content.
-          .margin({ top: 56 })
+          // MINI 标题栏是**浮在内容之上的窄条**（`titleMode(MINI)`），视口要给它让位 ——
+          // ★ 2026-10-11：值从写死的 56 改成「状态栏 + 56」= 94。盒子从屏幕 y=0 起排
+          //   （页根 `ignoreLayoutSafeArea` 带 TOP）后，HDS 标题栏落在 38..94，
+          //   所以视口上边界必须落在 94，首屏才正好是"标题栏下沿"。
+          .margin({ top: this.titleTopInset() })
   }
 
   /**
@@ -1228,6 +1232,22 @@ export struct PlaylistDetailPage {
     return miniBarHeight + Math.max(12, systemInset + 8) + 8;
   }
 
+  /**
+   * 歌曲列表视口要避让的顶部高度 = **状态栏 + HDS 标题栏**（≈38 + 56 = 94）。
+   *
+   * ★ 2026-10-11 定稿（用户第三次纠正）：页根 `HdsNavDestination` 的 `ignoreLayoutSafeArea`
+   *   **必须带 TOP** —— HDS 标题栏自己会按"状态栏高度"往下让位，所以页面盒子要从屏幕 y=0 起排
+   *   （只写 BOTTOM = "盒子让一次 + 标题栏再让一次" ⇒ 整条标题掉到状态栏下面约一个状态栏高度，
+   *   用户原话「整个标题移到了状态栏下面」，内容也多顶 38vp「上方留的空距有点大了」）。
+   *   盒子从 0 起排后：标题栏 = 38..94，所以这里**必须**给「状态栏 + 56」= 94
+   *   （改前那个写死的 `56` 是"盒子从状态栏下沿起排"时代的旧口径，会让首屏顶到标题栏底下）。
+   *   本页是整页大图形态，状态栏那一条仍然归**照片**（`PlaylistImmersiveBackdrop` 自己那层带
+   *   `ignoreLayoutSafeArea(TOP)`，不受这里影响），所以**不需要** `clipContent`。
+   */
+  private titleTopInset(): number {
+    return getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP;
+  }
+
   /** In-playlist search sheet: live filter over the current song list. */
   @Builder
   private SearchSheet() {
@@ -1319,16 +1339,21 @@ export struct PlaylistDetailPage {
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.pageScrollScroller])
     .backgroundColor(this.backdropColor)
-    // ★ 状态栏两件套（官方《安全区域》口径，与 AlbumDetailPage / ArtistDetailPage 逐条一致）：
-    //   ① `expandSafeArea` 的 TOP —— 只扩**绘制**区（官方原文：「expandSafeArea 属性支持组件
+    // ★★ 状态栏三件套（2026-10-11 定稿，用户第三次纠正后）：
+    //   ① `expandSafeArea(TOP,BOTTOM)` —— 只扩**绘制**区（官方原文：「expandSafeArea 属性支持组件
     //      在不改变布局情况下扩展其绘制区域至安全区外」）⇒ 本页 `backgroundColor(backdropColor)`
     //      能铺到状态栏那一条，首帧 / 无图时不再透出上一页；
-    //   ② `ignoreLayoutSafeArea` **只留 BOTTOM** —— 它会**改布局**，根节点带 TOP 会把 HDS 标题栏
-    //      的返回 / 菜单按钮一起顶进状态栏（用户报的"标题跑到状态栏下面"）。
-    //   照片层要压到状态栏底下由它自己那层负责：`PlaylistImmersiveBackdrop` 内部单独写了
-    //   `ignoreLayoutSafeArea([SYSTEM], [TOP])`（见该文件 :103），只作用于它自己。
+    //   ② `ignoreLayoutSafeArea(...[TOP, BOTTOM])` —— **TOP 必须给**：HDS 标题栏自己会按
+    //      "状态栏高度"往下让位，所以页面盒子必须从屏幕 y=0 起排；只写 BOTTOM 会变成"盒子让一次 +
+    //      标题栏再让一次" ⇒ 整条标题掉到状态栏下面约一个状态栏高度（用户原话「整个标题移到了
+    //      状态栏下面」），首屏内容也多顶 38vp（「上方留的空距有点大了」）。
+    //      盒子从 0 起排后：标题栏 = 38..94，歌曲列表视口的 `titleTopInset()`（= 94）正好落在 94 ✔。
+    //      ⚠️ 旧注释里"根节点带 TOP 会把标题栏的返回 / 菜单按钮顶进状态栏 / 只能留 BOTTOM"那句
+    //      **是错的**（那是把"盒子让位"和"标题栏让位"算成了同一次），已作废。
+    //   照片层要压到状态栏底下仍由它自己那层负责：`PlaylistImmersiveBackdrop` 内部单独写了
+    //   `ignoreLayoutSafeArea([SYSTEM], [TOP])`（见该文件 :103），只作用于它自己 —— 这一句不动。
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
-    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     .systemBarStyle(
       { statusBarContentColor: this.isLightBackdrop() ? '#000000' : '#FFFFFF' },
       { statusBarContentColor: this.isLightBackdrop() ? '#000000' : '#FFFFFF' })

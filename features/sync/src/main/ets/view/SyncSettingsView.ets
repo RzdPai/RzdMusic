@@ -598,7 +598,7 @@ export struct SyncSettingsPanel {
             .textAlign(TextAlign.Start)
         }
         .width('100%')
-        .padding({ left: 20, right: 20, top: this.topOffset + 12, bottom: 160 })
+        .padding({ left: 20, right: 20, top: this.topOffset + 12 })
       }
       .width('100%')
       .height('100%')
@@ -614,6 +614,12 @@ export struct SyncSettingsPanel {
       //   本面板里那三处 `.clip(true)` 都在**卡片自己**那一层（infoCard / hostHistoryCard / dislikeCard），
       //   不是 `Scroll` 的祖先，与这里无关。
       .clipContent(ContentClipMode.SAFE_AREA)
+      // ★ 底部"给悬浮播放条让位"的留白留在**滚动内容里**（`contentEndOffset` = 内容末端到显示区
+      //   边界的距离，官方 `ScrollableCommonMethod` @since 22，List/Scroll 通用）—— 它随内容一起滚走。
+      //   原来写的是**内容根 Column 的 `padding({ bottom: 160 })`**：作用域也在滚动内容里、效果相同，
+      //   这里换成与 `RecordListPage` / `SettingsDetailPage` / 其它页**完全同一口径**。
+      //   反面做法（禁）：写在外层容器的 `padding({ bottom })` 上 —— 那是固定在屏幕底部的死带。
+      .contentEndOffset(160)
 
       // 服务端要求选择同步方式：盖一层自绘底部面板（不用 bindSheet，内嵌时也能工作）
       if (this.state.pendingMode !== null) {
@@ -651,12 +657,17 @@ function describeDislikeRule(rule: string): string {
 /**
  * 路由页入口（features/sync/router_map.json 登记的 SyncSettingsPage）
  *
- * ★ 2026-10-11 第二十轮（用户：「我想让它延伸进状态栏」）：**「状态栏 + 56」整段都交给
+ * ★ 2026-10-11（用户：「我想让它延伸进状态栏」）：**「状态栏 + 56」= 94 整段都交给
  *   面板的 `topOffset`**（它落在面板 `Scroll` 的**内容** padding 上 ⇒ 列表能一路从标题栏
  *   底下穿进状态栏），页根里**不再套让位用的容器**。
  *   ⚠️ 数值**不许写死在面板内部**：面板同时被 setting 的「设置 → 同步设置」内嵌复用
  *   （`SettingsDetailPage.SyncSettingsSheet` 传 `topOffset = contentTopOffset()`，
  *   内嵌那一支 = 0，二级页那一支 = 状态栏 + 56）—— 写进面板就会多出一份。
+ *   ★★ 页根 `HdsNavDestination` 的 `ignoreLayoutSafeArea` **必须带 TOP**（2026-10-11 定稿，
+ *   用户第三次纠正后）：HDS 标题栏自己会按"状态栏高度"往下让位 ⇒ **页面盒子必须从屏幕 y=0 起排**；
+ *   只写 BOTTOM 就是"盒子让一次 + 标题栏再让一次"，整条标题掉到状态栏下面约一个状态栏高度
+ *   （用户原话「整个标题移到了状态栏下面」）、内容也多顶 38vp（「上方留的空距有点大了」）。
+ *   盒子从 0 起排后：标题栏 = 38..94 ✔，`topOffset`（状态栏 + 56 = 94）正好落在 94 ✔。
  */
 @Builder
 export function SyncSettingsPageBuilder(name: string, param: Object) {
@@ -671,4 +682,7 @@ export function SyncSettingsPageBuilder(name: string, param: Object) {
   .hideTitleBar(false)
   .backgroundColor($r('app.color.sync_page_background'))
   .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+  // ★★ 状态栏三件套之②：TOP 必须给（理由见上面 builder 头上的注释）。
+  //   ⚠️ 旧口径"根节点带 TOP 会把标题顶进状态栏 / 只能留 BOTTOM"**是错的**，已作废。
+  .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
 }

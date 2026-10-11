@@ -255,6 +255,14 @@ export struct LocalMusicPage {
 
   // ------------------------------------------------------------ 界面
 
+  /**
+   * 底部预留：壳层那条官方浮动播放条(56) + 间距(16) + 呼吸空间(16)。
+   * 与 `RecordListPage.bottomReservedVp()` 同一口径。
+   */
+  private bottomReservedVp(): number {
+    return 56 + 16 + 16;
+  }
+
   @Builder
   private Header() {
     Column({ space: 8 }) {
@@ -510,22 +518,37 @@ export struct LocalMusicPage {
           .layoutWeight(1)
           .width('100%')
           .divider({ strokeWidth: 0.6, color: $r('sys.color.background_tertiary') })
+          // ★ 底部"给悬浮播放条让位"的留白留在**列表里**（`contentEndOffset` = 内容末端到显示区
+          //   边界的距离，官方 `ScrollableCommonMethod` @since 22，List/Scroll 通用）—— 它随内容
+          //   一起滚走。**不要**写到容器的 `padding({ bottom })` 上：那是固定在屏幕底部的死带。
+          .contentEndOffset(this.bottomReservedVp())
         }
       }
       .width('100%')
       .height('100%')
-      .clip(true)
-      // ★ 状态栏那一条只留页面背景（2026-10-11 第十九轮，用户「内容是啥的都在状态栏下面」）：
-      //   内容容器整体让开状态栏高度，本页那行自绘标题（返回 + 「本地音乐」+ 导入）
-      //   才不会被顶到时间/信号图标后面；`List` 有 `clip(true)`（List 默认值），
-      //   行再往上滚最多滚到「状态栏下沿」为止。页根的 `expandSafeArea(TOP)` +
-      //   `backgroundColor` 继续负责把页面底色铺到状态栏那一条。
+      // ★★ "延伸进状态栏"的前提：**链上任何祖先都不许 `clip(true)`**
+      //   （官方《开发应用沉浸式效果》：「子节点可以单独设置该属性……**需要确保父组件未设置 clip
+      //   等裁剪属性**」）。这里原来写 `.clip(true)`（第十九轮"要挡住内容"的错误口径下加的）**已删除** ——
+      //   本页的 `List` 将来要能画进状态栏，全靠祖先这一层不裁。
+      // ★ 状态栏那一条：本页 `hideTitleBar(true)` + **自绘固定 `Header()`**（它不入滚动内容），
+      //   所以只有"整容器让开状态栏"这一档能选 —— 同 §30 的手表向页口径。
+      //   `Header()` 是滚动内容之外的兄弟节点 ⇒ 它自己的避让只能由容器来给，给**只给状态栏高度**
+      //   （**不能**加 56 —— 本页没有 HDS 标题栏，加了就是白白空掉一条标题栏）。
+      //   页根的 `expandSafeArea(TOP)` + `backgroundColor` 继续负责把页面底色铺到状态栏那一条。
       .padding({ top: getStatusBarTopVpFromWindowUtil() })
     }
     .onBackPressed((): boolean => guardPlayerBack('LocalMusicView'))
     .hideTitleBar(true)
     .backgroundColor($r('sys.color.background_primary'))
+    // ★★ 状态栏三件套（2026-10-11 定稿，用户第三次纠正后）：
+    //   ① `expandSafeArea(TOP,BOTTOM)` 把页面底色铺到状态栏/导航条那两条（只扩绘制区）；
+    //   ② `ignoreLayoutSafeArea(...[TOP, BOTTOM])` —— **TOP 必须给**：这一页虽然没有 HDS 标题栏，
+    //      但自绘 `Header()` 的避让是**容器 padding** 给的，只有盒子从屏幕 y=0 起排，
+    //      `padding({ top: 状态栏 })` 才等于"Header 正好落在状态栏下沿"；
+    //      只写 BOTTOM 时盒子自己已让开状态栏，再叠一层 padding ⇒ **Header 被推到状态栏 + 状态栏**，
+    //      顶部白多一条 38vp（这就是用户说的「上方留的空距有点大了」）。
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
   }
 }
 

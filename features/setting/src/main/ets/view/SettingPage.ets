@@ -1414,17 +1414,17 @@ export struct SettingPage {
       }
       .width('100%')
       .padding({
-        // ★ 2026-10-11 第二十轮（用户：「我想让它延伸进状态栏」）：这段留白在**滚动内容里**
+        // ★ 2026-10-11（用户：「我想让它延伸进状态栏」）：这段留白在**滚动内容里**
         //   （`Scroll` 的内容根 `Column` 的 padding），所以必须含状态栏那一段。
-        //   依据：页根 `NavDestination` 的内容区从屏幕 **y=0** 起排（壳层 `HdsNavigation` 自带
-        //   `ignoreLayoutSafeArea([...],[TOP,BOTTOM])`；`expandSafeArea` 只扩绘制区、不改布局）
-        //   ⇒ "静止时搜索框正好落在标题栏下沿" = 偏移 状态栏 + 56。
-        //   上滑时内容从标题栏底下**再穿进状态栏**（`Scroll` 的 clip 默认 true，只在 y=0 处裁）
+        //   依据：页根带 `ignoreLayoutSafeArea([SYSTEM], [TOP, BOTTOM])` ⇒ 页面盒子从屏幕
+        //   **y=0** 起排（HDS 标题栏自己让位到 38..94）
+        //   ⇒ "静止时搜索框正好落在标题栏下沿" = 偏移 状态栏 + 56 = 94。
+        //   上滑时内容从标题栏底下**再穿进状态栏** —— 靠下面 `Scroll` 自己那句
+        //   `clipContent(ContentClipMode.SAFE_AREA)`（`Scroll` 默认 `BOUNDARY`，按组件区域裁）。
         //   —— 这一页里**没有**"内容容器"，整个滚动视口就是页根的一级子节点。
         top: getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP,
         left: new BreakpointType(12, 16, 24, 24).getValue(this.breakpointEnv.widthBreakpoint),
-        right: new BreakpointType(12, 16, 24, 24).getValue(this.breakpointEnv.widthBreakpoint),
-        bottom: 72
+        right: new BreakpointType(12, 16, 24, 24).getValue(this.breakpointEnv.widthBreakpoint)
       })
     }
     .width('100%')
@@ -1439,6 +1439,12 @@ export struct SettingPage {
     //   ⚠️ 链上任何祖先都**不能**再写 `clip(true)`（官方："需要确保父组件未设置 clip 等裁剪属性"）——
     //   本页「页根 → 滚动容器」这条链上**没有**内容容器，`Scroll` 就是 HdsNavDestination 的一级子节点。
     .clipContent(ContentClipMode.SAFE_AREA)
+    // ★ 底部"给悬浮播放条让位"的留白留在**滚动内容里**（`contentEndOffset` = 内容末端到显示区
+    //   边界的距离，官方 `ScrollableCommonMethod` @since 22，List/Scroll 通用）—— 它随内容一起滚走。
+    //   原来写的是**内容根 `Column` 的 `padding({ bottom: 72 })`**：作用域也在滚动内容里、效果相同，
+    //   这里换成与 `RecordListPage` / `SettingsDetailPage` / 其它页**完全同一口径**。
+    //   反面做法（禁）：写在外层容器的 `padding({ bottom })` 上 —— 那是固定在屏幕底部的死带。
+    .contentEndOffset(72)
     // 滚动联动双层底栏：上滑收起、下滑展开（与首页/歌单/我的一致）
     .onScrollFrameBegin((offset: number): OnScrollFrameBeginHandlerResult => {
       if (BarScrollHelper.isEnabled()) {
@@ -1482,12 +1488,19 @@ export struct SettingPage {
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.pageScroller])
     .backgroundColor($r('app.color.background_secondary'))
-    // ★ 状态栏两件套：① `expandSafeArea` 的 TOP 只扩**绘制**区（官方《安全区域》：「expandSafeArea
-    //   属性支持组件在不改变布局情况下扩展其绘制区域至安全区外」）⇒ 本页底色铺到状态栏那一条；
-    //   ② `ignoreLayoutSafeArea` **只留 BOTTOM** —— 它会**改布局**，根节点带 TOP 会把 HDS 标题栏
-    //   的返回 / 菜单按钮顶进状态栏（用户报的"标题跑到状态栏下面"）。
+    // ★★ 状态栏三件套（2026-10-11 定稿，用户第三次纠正后）：
+    //   ① `expandSafeArea(TOP,BOTTOM)`：把**页面底色**铺到状态栏/导航条那两条（只扩绘制区）；
+    //   ② `ignoreLayoutSafeArea(...[TOP, BOTTOM])` —— **TOP 必须给**：HDS 标题栏自己会按"状态栏高度"
+    //      往下让位，所以**页面盒子必须从屏幕 y=0 起排**；只写 BOTTOM 变成"盒子让一次 + 标题栏再让一次"
+    //      ⇒ 整条标题掉到状态栏下面约一个状态栏高度（用户原话「整个标题移到了状态栏下面」），
+    //      内容也跟着多顶 38vp（「上方留的空距有点大了」）。
+    //      盒子从 0 起排后：标题栏 = 38..94 ✔，`SettingsNavBarContent` 里那个
+    //      `padding top`（状态栏 + 56 = 94）正好落在 94 ✔。
+    //      ⚠️ 旧注释里"根节点带 TOP 会把标题顶进状态栏 / 只能留 BOTTOM"那句**是错的**，已作废。
+    //   ③ 滚动容器 `clipContent(ContentClipMode.SAFE_AREA)` + 祖先链零 `clip(true)`：
+    //      内容能**画进**状态栏那一条。
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
-    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     .bindSheet(this.showSettingSheet, this.SettingSheetBuilder(), {
       height: this.activeSettingSheet === 0 ? 280 :
         (this.activeSettingSheet === 1 ? 340 :

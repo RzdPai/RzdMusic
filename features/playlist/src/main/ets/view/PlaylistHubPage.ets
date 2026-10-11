@@ -160,12 +160,18 @@ export struct PlaylistHub {
       .align(Alignment.Center)
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
-      .clip(true)
+      // ⚠️ 这里原来写 `.clip(true)`（第十九轮"要挡住内容"的错误口径下加的）**已删除** ——
+      //   官方《开发应用沉浸式效果》：「子节点可以单独设置该属性……**需要确保父组件未设置 clip
+      //   等裁剪属性**」⇒ 祖先一层 `clip(true)` 就会让子级的 `expandSafeArea` / 滚动容器的
+      //   `clipContent(ContentClipMode.SAFE_AREA)` 全部白设。
       .backgroundColor($r('app.color.watch_page_background'))
       .padding({
-        // ★ 状态栏那一条只留页面背景（2026-10-11 第十九轮跨页统一口径，用户「内容是啥的都在
-        //   状态栏下面」）：内容容器整体让开状态栏高度，行再往上滚最多滚到「状态栏下沿」为止。
-        //   页根（`NavDestination` + `expandSafeArea`）仍负责把页面底色铺到状态栏那一条。
+        // ★ 状态栏那一条只留页面背景。本页 `hideTitleBar(true)`（手表向、`ArcList` + 自绘
+        //   header）⇒ **没有 HDS 标题栏**，容器**只让开状态栏高度**，**不要**加 56 ——
+        //   加了就是白白空掉一条标题栏（用户说的「上方留的空距有点大了」）。
+        //   页根（`NavDestination` + `expandSafeArea` + `ignoreLayoutSafeArea(TOP,BOTTOM)`）
+        //   负责把盒子从屏幕 y=0 起排、底色铺到状态栏那一条，这里这一段 padding 才正好等于
+        //   "内容落在状态栏下沿"。
         //   ⚠️ 手表形态（ArcList 那一套）若 `statusBarTopVp` 不为 0，本页顶部会多出这一段，
         //   真机看一眼（见交付说明）。
         top: getStatusBarTopVpFromWindowUtil(),
@@ -174,5 +180,11 @@ export struct PlaylistHub {
     }
     .onBackPressed((): boolean => guardPlayerBack('PlaylistHubPage'))
     .hideTitleBar(true)
+    // ★★ 状态栏三件套（2026-10-11 定稿）：`ignoreLayoutSafeArea` **必须带 TOP** ——
+    //   页面盒子必须从屏幕 y=0 起排，上面那层 `padding({ top: 状态栏 })` 才等于"内容落在状态栏下沿"；
+    //   只写 BOTTOM 时盒子自己已让开状态栏，再叠一层 padding ⇒ 顶部白多一条 38vp。
+    //   （`hideTitleBar(true)` 的页没有"内容穿进状态栏"的要求，所以不需要 `clipContent`。）
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
   }
 }

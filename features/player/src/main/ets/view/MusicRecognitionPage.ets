@@ -567,8 +567,7 @@ export struct MusicRecognitionPage {
             //   ⇒ 行到状态栏那条就被裁掉，所以"偏移放哪都没用"。
             top: getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP,
             left: 16,
-            right: 16,
-            bottom: 24
+            right: 16
           })
         }
         .width('100%')
@@ -581,6 +580,11 @@ export struct MusicRecognitionPage {
         //   `clipContent(ContentClipMode.SAFE_AREA)`，**将内容层裁剪区域扩展至避让区**。
         //   ⚠️ 链上任何祖先都**不能**再写 `clip(true)`（官方："需要确保父组件未设置 clip 等裁剪属性"）。
         .clipContent(ContentClipMode.SAFE_AREA)
+        // ★ 底部"给悬浮播放条让位"的留白留在**滚动内容里**（原来是内容根 Column 的
+        //   `padding({ bottom: 24 })`，也随内容滚 —— 但按 2026-10-11 统一口径换成
+        //   `contentEndOffset`，与 `RecordListPage` / `SettingsDetailPage` / 其它页同一写法）。
+        //   反面做法（禁）：写在外层容器的 `padding({ bottom })` 上 = 屏幕底部一条死带。
+        .contentEndOffset(24)
 
         // 网易云 AFP 指纹 WASM 的隐藏宿主（与 LXSourceEngine 同款配置）：
         // 使用 1x1 + opacity(0) 而非负坐标定位，保证 WebView 在
@@ -624,10 +628,14 @@ export struct MusicRecognitionPage {
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.pageScroller])
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
-    // ★ `ignoreLayoutSafeArea` 只留 BOTTOM：它会**改布局**，根节点带 TOP 会把 HDS 标题栏的
-    //   返回 / 菜单按钮一起顶进状态栏（用户报的"标题跑到状态栏下面"）。要扩到状态栏那一条的背景，
-    //   由上一行的 `expandSafeArea` 负责（官方《安全区域》：它"在不改变布局情况下扩展其绘制区域"）。
-    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+    // ★★ 状态栏三件套（2026-10-11 定稿，用户第三次纠正后）：这里的 `ignoreLayoutSafeArea` **必须带 TOP** ——
+    //   HDS 标题栏自己会按"状态栏高度"往下让位，所以页面盒子必须从屏幕 y=0 起排；
+    //   只写 BOTTOM（盒子从状态栏下沿起排）会变成"盒子让一次 + 标题栏再让一次" ⇒
+    //   整条标题掉到状态栏下面约一个状态栏高度（用户原话「整个标题移到了状态栏下面」），
+    //   内容也跟着多顶 38vp（「上方留的空距有点大了」）。
+    //   盒子从 0 起排后：标题栏 = 38..94 ✔，滚动内容根 Column 的 `padding top`（状态栏 + 56 = 94）正好落在 94 ✔。
+    //   ⚠️ 旧注释里"根节点带 TOP 会把标题/搜索按钮顶进状态栏 / 只能留 BOTTOM"那句**是错的**，已作废。
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     .systemBarStyle(
       { statusBarContentColor: this.isDarkTheme() ? '#FFFFFF' : '#000000' },
       { statusBarContentColor: this.isDarkTheme() ? '#FFFFFF' : '#000000' })

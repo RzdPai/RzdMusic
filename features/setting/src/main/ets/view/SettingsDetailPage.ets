@@ -1531,13 +1531,20 @@ export struct SettingsDetailPage {
       .clipContent(ContentClipMode.SAFE_AREA)
       .scrollBar(BarState.Off)
       .align(Alignment.Top)
+      // ★ 底部那段"给悬浮播放条让位"的留白**必须留在列表里**（`contentEndOffset` = 内容末端到显示区
+      //   边界的距离，官方 @since 22，List/Scroll 通用）—— 它随内容一起滚走。
+      //   用户 2026-10-11 报「音源管理页面底部还是空白，我感觉是你又把底部留白写死在屏幕底部而不是列表底部」
+      //   —— 原来这段写在外层容器的 `padding({ bottom })` 上：那是**固定在屏幕底部的一条死带**，
+      //   列表永远用不到它，滚到底就露一块空白。现在改成内容末端的偏移，滚到底刚好停在播放条上方。
+      .contentEndOffset(SETTINGS_PANEL_BOTTOM_VP)
     }
     .width('100%')
     .height('100%')
     .align(Alignment.Top)
     // 顶部的 56vp 已经挪进 Scroll 内容里（见上面那个 `Blank()`），这里**不再补**顶部留白 ——
     // 否则就是"标题栏 56 + 外层 56"两份，顶上白白多一段（用户报的"上方一大块空白"）。
-    .padding({ left: 20, right: 20, top: 0, bottom: SETTINGS_PANEL_BOTTOM_VP })
+    // 底部留白同理：已改成 Scroll 的 `contentEndOffset`，外层**不再占位**。
+    .padding({ left: 20, right: 20 })
   }
 
   private applyCustomColor(): void {
@@ -1569,10 +1576,13 @@ export struct SettingsDetailPage {
       })
       .bindToScrollable([this.pageScroller])
       .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
-      // ★ `ignoreLayoutSafeArea` 只留 BOTTOM：它会**改布局**，根节点带 TOP 会把 HDS 标题栏的
-      //   返回 / 菜单按钮一起顶进状态栏（用户报的"标题跑到状态栏下面"）。要铺到状态栏那一条的是
-      //   上一行的 `expandSafeArea`（官方《安全区域》：它"在不改变布局情况下扩展其绘制区域"）。
-      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+      // ★ 状态栏三件套（2026-10-11 定稿，用户第三次纠正后）：这里的 `ignoreLayoutSafeArea` **必须带 TOP** ——
+      //   HDS 标题栏自己会按"状态栏高度"往下让位，所以页面盒子必须从屏幕 y=0 起排；
+      //   只写 BOTTOM（盒子从状态栏下沿起排）会变成"盒子让一次 + 标题栏再让一次" ⇒
+      //   整条标题掉到状态栏下面约一个状态栏高度（用户原话「整个标题移到了状态栏下面」），
+      //   内容也跟着多顶 38vp（「上方留的空距有点大了」）。
+      //   （另一处口径：滚动容器用 `clipContent(ContentClipMode.SAFE_AREA)` 让内容能画进状态栏。）
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
       .systemBarStyle(
         { statusBarContentColor: this.isDarkTheme() ? '#FFFFFF' : '#000000' },
         { statusBarContentColor: this.isDarkTheme() ? '#FFFFFF' : '#000000' })

@@ -1031,11 +1031,6 @@ export struct PlaylistsPage {
                   .padding({ top: 16, bottom: 16 })
               }
             }
-            ListItem() {
-              Column()
-                .height(48)
-                .width('100%')
-            }
           }
           .width('100%')
           .height('100%')
@@ -1056,15 +1051,21 @@ export struct PlaylistsPage {
             this.onPageScrollFrame(offset);
             return { offsetRemain: offset };
           })
-          // ★ 2026-10-11 第二十轮（用户：「我的意思是现在不会延伸到状态栏，而我想让它延伸进状态栏」）：
-          //   "状态栏 + HDS 标题栏"这一整段留白**放进滚动内容里**，而不是加在容器上。
-          //   依据：页根 `NavDestination` 的内容区从屏幕 **y=0** 起排（壳层 `products/default/.../Index.ets`
-          //   的 `HdsNavigation` 自带 `ignoreLayoutSafeArea([...],[TOP,BOTTOM])`；`expandSafeArea` 只扩绘制区、
-          //   不改布局），所以"静止时第一行正好落在标题栏下沿"= 偏移量必须是 状态栏 + 56。
+          // ★ 2026-10-11 定稿（用户：「我的意思是现在不会延伸到状态栏，而我想让它延伸进状态栏」）：
+          //   "状态栏 + HDS 标题栏"（≈38 + 56 = 94）这一整段留白**放进滚动内容里**，而不是加在容器上。
+          //   依据：页根写了 `ignoreLayoutSafeArea([SYSTEM], [TOP, BOTTOM])` ⇒ 页面盒子从屏幕 **y=0** 起排
+          //   （HDS 标题栏自己会让位到 38..94，盒子**不能**再让一次），所以"静止时第一行正好落在
+          //   标题栏下沿"= 偏移量必须是 状态栏 + 56 = 94。
           //   效果：往上滚时整行从标题栏底下**再穿进状态栏**（`clipContent(SAFE_AREA)` 把内容裁剪区
           //   扩到避让区，行一路画到屏幕最顶端），
           //   而容器 padding 那套会让滚动视口从状态栏下沿起排、状态栏那一条永远是死背景。
           .contentStartOffset(getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP)
+          // ★ 底部那段"给悬浮播放条让位"的留白**必须留在列表里**（`contentEndOffset` = 内容末端到
+          //   显示区边界的距离，官方 `ScrollableCommonMethod` @since 22，List/Scroll 通用）—— 它随
+          //   内容一起滚走。原来写的是**列表末尾一个 48vp 的 `ListItem`＋`Column`**：作用于内容也对，
+          //   但用 `contentEndOffset` 与 `RecordListPage` / `SettingsDetailPage` 口径一致，一行搞定。
+          //   反面做法（禁）：写在外层容器的 `padding({ bottom })` 上 —— 那是固定在屏幕底部的死带。
+          .contentEndOffset(48)
           .divider({
             strokeWidth: 0.5,
             color: $r('sys.color.comp_divider'),
@@ -1103,12 +1104,19 @@ export struct PlaylistsPage {
     .titleBar(this.getTitleBar())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.pageScroller])
-    // ★ 状态栏两件套：① `expandSafeArea` 的 TOP 只扩**绘制**区（官方《安全区域》：「expandSafeArea
-    //   属性支持组件在不改变布局情况下扩展其绘制区域至安全区外」）⇒ 本页底色铺到状态栏那一条；
-    //   ② `ignoreLayoutSafeArea` **只留 BOTTOM** —— 它会**改布局**，根节点带 TOP 会把 HDS 标题栏
-    //   的返回 / 菜单按钮顶进状态栏（用户报的"标题跑到状态栏下面"）。
+    // ★★ 状态栏三件套（2026-10-11 定稿，用户第三次纠正后）：
+    //   ① `expandSafeArea(TOP,BOTTOM)`：把**页面底色**铺到状态栏/导航条那两条（只扩绘制区）；
+    //   ② `ignoreLayoutSafeArea(...[TOP, BOTTOM])` —— **TOP 必须给**：
+    //      HDS 的标题栏自己会按"状态栏高度"往下让位，所以**页面盒子必须从屏幕 y=0 起排**，
+    //      否则就是"盒子已经让开状态栏(38) + 标题栏再让一次(38)" ⇒ 整条标题掉到状态栏下面
+    //      约一个状态栏高度（用户原话：「整个标题移到了状态栏下面」），连带内容也多顶下去
+    //      38vp（「上方留的空距有点大了」）。
+    //      盒子从 0 起排后：标题栏 = 38..94 ✔，内容偏移 94（= 状态栏 + 标题栏）正好落在 94 ✔。
+    //      ⚠️ 旧注释里"根节点带 TOP 会把标题顶进状态栏 / 只能留 BOTTOM"那句**是错的**，已作废。
+    //   ③ 滚动容器 `clipContent(ContentClipMode.SAFE_AREA)` + 祖先链零 `clip(true)`：
+    //      让行能**画进**状态栏那一条（"延伸进状态栏"）。
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
-    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     .backgroundColor($r('sys.color.background_secondary'))
     .bindSheet($$this.showSheet, this.MainSheet(), {
       height: SheetSize.FIT_CONTENT,

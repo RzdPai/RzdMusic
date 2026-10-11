@@ -15,7 +15,7 @@
 
 import { AppStorageV2, LengthMetrics, uiObserver } from '@kit.ArkUI';
 import { guardPlayerBack } from 'musicbasic';
-import { AlbumRouteParam, AmbientState, AppStorageKeys, BreakpointType, FavoriteEntry, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, ThemeState, TitleBarConstants, buildTitleMaterial } from 'musicbasic';
+import { AlbumRouteParam, AmbientState, AppStorageKeys, BreakpointType, FavoriteEntry, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType } from '@kit.UIDesignKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { http } from '@kit.NetworkKit';
@@ -139,6 +139,23 @@ export struct AlbumDetailPage {
       return 0;
     }
     return Math.max(0, this.getUIContext().px2vp(hPx) - this.windowInfo.statusBarTopVp);
+  }
+
+  /**
+   * 歌曲列表视口要避让的顶部高度 = **状态栏 + HDS 标题栏**（≈38 + 56 = 94）。
+   *
+   * ★ 2026-10-11 定稿（用户第三次纠正）：页根 `HdsNavDestination` 的 `ignoreLayoutSafeArea`
+   *   **必须带 TOP** —— HDS 标题栏自己会按"状态栏高度"往下让位，所以页面盒子要从屏幕 y=0 起排
+   *   （只写 BOTTOM = "盒子让一次 + 标题栏再让一次" ⇒ 整条标题掉到状态栏下面约一个状态栏高度，
+   *   用户原话「整个标题移到了状态栏下面」，内容也多顶 38vp「上方留的空距有点大了」）。
+   *   盒子从 0 起排后：标题栏 = 38..94，所以这里**必须**给「状态栏 + 56」= 94
+   *   （改前那个 `TitleBarConstants.ROW_HEIGHT_VP`（56）是"盒子从状态栏下沿起排"时代的旧口径，
+   *   会让首屏顶到标题栏底下）。与 `ArtistDetailPage.titleTopInset` 逐字同款。
+   *   本页是整页大图形态，状态栏那一条仍然归**照片**（`DetailImmersiveBackdrop` 自己那层带
+   *   `ignoreLayoutSafeArea(TOP)`，不受这里影响），所以**不需要** `clipContent`。
+   */
+  private titleTopInset(): number {
+    return getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP;
   }
 
   aboutToAppear(): void {
@@ -856,9 +873,12 @@ export struct AlbumDetailPage {
             }
         }
         .width('100%')
-        // 与 `TitleBarConstants.ROW_HEIGHT_VP`（56vp）同值：别写魔数。
-        .height('calc(100% - ' + TitleBarConstants.ROW_HEIGHT_VP + 'vp)')
-        .margin({ top: TitleBarConstants.ROW_HEIGHT_VP })
+        // MINI 标题栏是**浮在内容之上的窄条**（`titleMode(MINI)`）⇒ 视口要给它让位。
+        // ★ 2026-10-11：值从 56 改成 `titleTopInset()` = 「状态栏 + 56」= 94（盒子从屏幕 y=0 起排、
+        //   HDS 标题栏落在 38..94 之后，视口上边界必须落在 94 才等于是"标题栏下沿"）；
+        //   高度跟着减同一个量，视口底边不会因此跑出屏幕。
+        .height('calc(100% - ' + this.titleTopInset() + 'vp)')
+        .margin({ top: this.titleTopInset() })
         .contentEndOffset(96)
         .cachedCount(4)
         .scrollBar(BarState.Off)
@@ -873,17 +893,23 @@ export struct AlbumDetailPage {
     .titleBar(this.getAlbumTitleBar())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.scroller])
-    // ★ 只扩**绘制**区到顶部（官方《安全区域》：「expandSafeArea 属性支持组件在不改变布局情况下扩展
-    //   其绘制区域至安全区外」「expandSafeArea 属性仅作用于当前组件，不会向父组件或子组件传递」）。
-    //   为什么必须是 expandSafeArea 而不是把 TOP 塞进下面的 ignoreLayoutSafeArea：
-    //   官方同页给出的用法就是这一条 ——「页面中有标题栏等文字不希望和避让区重叠时，建议对组件设置
-    //   expandSafeArea 属性实现沉浸式效果」。ignoreLayoutSafeArea 会**改布局**（标题栏、返回键会一起
-    //   顶进状态栏里，用户确认过的那版观感就毁了），所以只让它管 BOTTOM。
-    //   这一条换来的效果：NavDestination 自己的 `backgroundColor(avgColor)` 也铺到状态栏那一条 ⇒
-    //   首帧 / 没图 / 图加载失败时，那一条就是页面自己的底色，和判据（statusBarOriginalColor 的 ① 档）
-    //   一致，不会出现"壳层背景色的一条接缝"。与 ArtistDetailPage 同款。
+    // ★★ 状态栏三件套（2026-10-11 定稿，用户第三次纠正后）：
+    //   ① `expandSafeArea(TOP,BOTTOM)` —— 只扩**绘制**区（官方《安全区域》：「expandSafeArea 属性
+    //      支持组件在不改变布局情况下扩展其绘制区域至安全区外」「仅作用于当前组件，不会向父组件或
+    //      子组件传递」）⇒ NavDestination 自己的 `backgroundColor(avgColor)` 也铺到状态栏那一条 ⇒
+    //      首帧 / 没图 / 图加载失败时，那一条就是页面自己的底色，和判据（statusBarOriginalColor 的
+    //      ① 档）一致，不会出现"壳层背景色的一条接缝"。与 ArtistDetailPage 同款。
+    //   ② `ignoreLayoutSafeArea(...[TOP, BOTTOM])` —— **TOP 必须给**：HDS 标题栏自己会按
+    //      "状态栏高度"往下让位，所以页面盒子必须从屏幕 y=0 起排；只写 BOTTOM 就是"盒子让一次 +
+    //      标题栏再让一次" ⇒ 整条标题掉到状态栏下面约一个状态栏高度（用户原话「整个标题移到了
+    //      状态栏下面」），首屏内容也多顶 38vp（「上方留的空距有点大了」）。
+    //      盒子从 0 起排后：标题栏 = 38..94，列表视口的 `titleTopInset()`（= 94）正好落在 94 ✔。
+    //      ⚠️ 旧注释里"ignoreLayoutSafeArea 会改布局、标题栏/返回键会一起顶进状态栏，所以只让它管
+    //      BOTTOM"那句**是错的**（把"盒子让位"与"标题栏让位"算成了同一次），已作废。
+    //   照片层要压到状态栏底下仍由它自己那层负责：`DetailImmersiveBackdrop` 内部单独写了
+    //   `ignoreLayoutSafeArea([SYSTEM], [TOP])`（见该文件 :82），只作用于它自己 —— 这一句不动。
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
-    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     // ★ 状态栏样式的**唯一真源**（不再叠加 window 级 setWindowSystemBarProperties，官方：
     //   「不建议混合使用 systemBarStyle 属性和 window 设置状态栏样式的相关接口」；
     //   「初次设置 Navigation/NavDestination 的 systemBarStyle 属性时，会备份当前状态栏样式用于后续的

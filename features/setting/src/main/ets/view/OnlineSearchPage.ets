@@ -232,9 +232,11 @@ struct OnlineSearchPage {
   /**
    * "状态栏 + HDS 标题栏"（vp）。
    *
-   * ★ 2026-10-11 第二十轮（用户：「我想让它延伸进状态栏」）：这段留白由**滚动内容**的
-   *   `contentStartOffset` 提供（见 `refreshContentPaddingTop()`），页根内容区从屏幕 y=0 起排
-   *   ⇒ 值必须是「状态栏 + 56」（`expandSafeArea` 只扩绘制区、不改布局，不会把内容推到状态栏下沿）。
+   * ★ 2026-10-11（用户：「我想让它延伸进状态栏」）：这段留白由**滚动内容**的
+   *   `contentStartOffset` 提供（见 `refreshContentPaddingTop()`），页根带
+   *   `ignoreLayoutSafeArea([SYSTEM], [TOP, BOTTOM])` ⇒ 页面盒子从屏幕 y=0 起排
+   *   （HDS 标题栏自己让位到 38..94）⇒ 值必须是「状态栏 + 56」= 94（**不能**只写 56，
+   *   那一档是"盒子从状态栏下沿起排"时代的旧口径）。
    */
   @Local titleBarTopHeight: number = 94;
   /** Search mode: 0 = songs, 1 = playlists, 2 = singers, 3 = albums. */
@@ -378,11 +380,12 @@ struct OnlineSearchPage {
   /**
    * Recomputes the content top inset from the title row height + search row height.
    *
-   * ★ 2026-10-11 第二十轮（用户：「我想让它延伸进状态栏」）：这段留白住在**滚动内容里**
-   *   （`List.contentStartOffset`），页根 `NavDestination` 的内容区从屏幕 **y=0** 起排
-   *   （壳层 `HdsNavigation` 自带 `ignoreLayoutSafeArea([...],[TOP,BOTTOM])`；`expandSafeArea`
-   *   只扩绘制区、不改布局）⇒ 要"静止时第一行落在标题栏下沿"，就必须写「状态栏 + 56」。
-   *   上滑时行从标题栏底下**再穿进状态栏**（List 的 clip 默认 true，只在 y=0 处裁）。
+   * ★ 2026-10-11（用户：「我想让它延伸进状态栏」）：这段留白住在**滚动内容里**
+   *   （`List.contentStartOffset`），页根 `NavDestination` 带
+   *   `ignoreLayoutSafeArea([SYSTEM], [TOP, BOTTOM])` ⇒ 页面盒子从屏幕 **y=0** 起排
+   *   （HDS 标题栏自己让位到 38..94）⇒ 要"静止时第一行落在标题栏下沿"，就必须写「状态栏 + 56」= 94。
+   *   上滑时行从标题栏底下**再穿进状态栏** —— 靠 `List.clipContent(ContentClipMode.SAFE_AREA)`
+   *   （List 默认是 `ContentClipMode.CONTENT_ONLY`，按内容区裁，行到状态栏那条就被切一刀）。
    */
   private refreshContentPaddingTop(): void {
     this.titleBarTopHeight = getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP;
@@ -1661,6 +1664,11 @@ struct OnlineSearchPage {
           //   ⇒ 行一滚到状态栏那条就被裁掉，所以"偏移放哪都没用"。
           //   ⚠️ 链上任何祖先都**不能**再写 `clip(true)`（官方："需要确保父组件未设置 clip 等裁剪属性"）。
           .clipContent(ContentClipMode.SAFE_AREA)
+          // ★ 底部留白**必须放在滚动视口里**（`contentEndOffset` = 内容末端到显示区边界的距离，随内容滚走）：
+          //   这一页原来**一点底部留白都没有** ⇒ 滚到底最后一行会被壳层那条悬浮播放条压住。
+          //   值与其他二级页同口径：56(播放条) + 16 + 16 = 88。
+          //   ⚠️ 别写在外层容器的 `padding({bottom})` 上 —— 那是固定在屏幕底部的死带（用户点过的老毛病）。
+          .contentEndOffset(88)
 
           if (this.searching) {
             Column({ space: 8 }) {
@@ -1722,11 +1730,12 @@ struct OnlineSearchPage {
       //   等裁剪属性**」⇒ 祖先有一层 `clip(true)`，里面 List 的
       //   `clipContent(ContentClipMode.SAFE_AREA)` 就白设了，行到状态栏那条仍被裁掉。
       //   （`List` 自己默认的裁剪语义保持不变，别再动。）
-      // ★ 状态栏那一条归页面（2026-10-11 第二十轮，用户：「我想让它延伸进状态栏」）：
+      // ★ 状态栏那一条归页面（2026-10-11，用户：「我想让它延伸进状态栏」）：
       //   这里是**内容容器**，顶部 padding 回到 0（== 不让位）—— 容器从屏幕 y=0 起排、
       //   `List` 拿整屏视口；"状态栏 + 标题栏 + 搜索行"那段留白改由
       //   `List.contentStartOffset(this.contentPaddingTop)` 给在**滚动内容里**（见
-      //   `refreshContentPaddingTop()`），静止时位置不变、上滑则整行从标题栏底下穿进状态栏。
+      //   `refreshContentPaddingTop()`：`titleBarTopHeight` = 状态栏 + 56 = 94），
+      //   静止时位置不变、上滑则整行从标题栏底下穿进状态栏。
       //   页根的 `expandSafeArea(TOP)` + `backgroundColor` 继续把页面底色铺到状态栏那一条。
       .padding({ top: 0 })
     }
@@ -1751,10 +1760,15 @@ struct OnlineSearchPage {
       { statusBarContentColor: this.isDarkTheme() ? '#FFFFFF' : '#000000' },
       { statusBarContentColor: this.isDarkTheme() ? '#FFFFFF' : '#000000' })
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
-    // ★ `ignoreLayoutSafeArea` 只留 BOTTOM：它会**改布局**，根节点带 TOP 会把 HDS 标题栏的
-    //   返回 / 搜索按钮一起顶进状态栏（用户报的"标题跑到状态栏下面"）。要铺到状态栏那一条的是
-    //   上一行的 `expandSafeArea`（官方《安全区域》：它"在不改变布局情况下扩展其绘制区域"）。
-    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+    // ★★ 状态栏三件套（2026-10-11 定稿，用户第三次纠正后）：这里的 `ignoreLayoutSafeArea` **必须带 TOP** ——
+    //   HDS 标题栏自己会按"状态栏高度"往下让位，所以页面盒子必须从屏幕 y=0 起排；
+    //   只写 BOTTOM（盒子从状态栏下沿起排）会变成"盒子让一次 + 标题栏再让一次" ⇒
+    //   整条标题掉到状态栏下面约一个状态栏高度（用户原话「整个标题移到了状态栏下面」），
+    //   内容也跟着多顶 38vp（「上方留的空距有点大了」）。
+    //   盒子从 0 起排后：标题栏 = 38..94 ✔，`List.contentStartOffset(titleBarTopHeight + searchHeaderHeight)`
+    //   里的 `titleBarTopHeight`（= 状态栏 + 56 = 94）正好落在 94 ✔。
+    //   ⚠️ 旧注释里"根节点带 TOP 会把标题/搜索按钮顶进状态栏 / 只能留 BOTTOM"那句**是错的**，已作废。
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     .bindSheet(this.showQualitySheet, this.BatchQualitySheet(), {
       detents: [SheetSize.FIT_CONTENT],
       dragBar: true,

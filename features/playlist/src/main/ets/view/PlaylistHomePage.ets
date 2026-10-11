@@ -431,11 +431,6 @@ export struct PlaylistHomePage {
                   this.SongRow(record, true)
                 }
               }, (record: PlayedSongRecord) => this.listVersion + '_' + record.source + '_' + record.songId)
-              ListItem() {
-                Column()
-                  .height(64)
-                  .width('100%')
-              }
             }
             .width('100%')
             .layoutWeight(1)
@@ -452,10 +447,16 @@ export struct PlaylistHomePage {
               startMargin: 16,
               endMargin: 16
             })
-            // ★ 2026-10-11 第二十轮（用户：「我想让它延伸进状态栏」）："状态栏 + HDS 标题栏"
-            //   这一整段留白**放进滚动内容里**（页根内容区从屏幕 y=0 起排 ⇒ 偏移 = 状态栏 + 56）。
+            // ★ 定稿（用户：「我想让它延伸进状态栏」）："状态栏 + HDS 标题栏"（≈38 + 56 = 94）
+            //   这一整段留白**放进滚动内容里**（页根带 `ignoreLayoutSafeArea(TOP,BOTTOM)` ⇒ 盒子从
+            //   屏幕 y=0 起排，标题栏自己让位到 38..94）⇒ 偏移 = 状态栏 + 56 = 94。
             //   静止时第一行正好落在标题栏下沿，上滑则整行从标题栏底下再穿进状态栏。
             .contentStartOffset(getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP)
+            // ★ 底部"给悬浮播放条让位"的留白留在**列表里**（`contentEndOffset`，@since 22，
+            //   List/Scroll 通用）：随内容一起滚走。原来写的是**列表末尾一个 64vp 的 ListItem**，
+            //   效果一样，这里换成与 `RecordListPage` / `SettingsDetailPage` 同一口径。
+            //   反面做法（禁）：写在外层容器的 `padding({ bottom })` 上 = 屏幕底部一条死带。
+            .contentEndOffset(64)
           }
         } else {
           if (this.favoriteList.length === 0) {
@@ -475,11 +476,6 @@ export struct PlaylistHomePage {
                   this.SongRow(record, false)
                 }
               }, (record: PlayedSongRecord) => this.listVersion + '_' + record.source + '_' + record.songId)
-              ListItem() {
-                Column()
-                  .height(64)
-                  .width('100%')
-              }
             }
             .width('100%')
             .layoutWeight(1)
@@ -492,8 +488,10 @@ export struct PlaylistHomePage {
               startMargin: 16,
               endMargin: 16
             })
-            // ★ 同一支的偏移算式，理由见上面那处 contentStartOffset。
+            // ★ 同一支的偏移算式（= 状态栏 + 56 = 94），理由见上面那处 contentStartOffset。
             .contentStartOffset(getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP)
+            // ★ 同一支的底部留白，理由见上面那处 contentEndOffset（必须留在列表里，随内容滚走）。
+            .contentEndOffset(64)
           }
         }
       }
@@ -518,13 +516,18 @@ export struct PlaylistHomePage {
     .titleBar(this.getTitleBar())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.pageScroller])
-    // ★ 状态栏两件套（2026-10-11 第二十轮复核）：① `expandSafeArea` 的 TOP = 只扩绘制区
-    //   （官方：「不改变布局情况下扩展其绘制区域至安全区外」），本页 `backgroundColor` 才能铺到状态栏那一条，
-    //   不再透出上一页；② `ignoreLayoutSafeArea` **只留 BOTTOM** = 它改布局，根节点带 TOP 会把 HDS 标题栏顶进状态栏。
-    //   ⚠️ 正因为①不改布局、②不带 TOP，页根内容区从屏幕 **y=0** 起排 ⇒ 上面两处 `contentStartOffset`
-    //   必须写「状态栏 + 56」（不是只写 56），顶部那段留白**不要**改回容器 padding。
+    // ★★ 状态栏三件套（2026-10-11 定稿，用户第三次纠正后）：
+    //   ① `expandSafeArea(TOP,BOTTOM)`：把**页面底色**铺到状态栏/导航条那两条（只扩绘制区）；
+    //   ② `ignoreLayoutSafeArea(...[TOP, BOTTOM])` —— **TOP 必须给**：HDS 的标题栏自己会按"状态栏高度"
+    //      往下让位，所以**页面盒子必须从屏幕 y=0 起排**；只写 BOTTOM 变成"盒子让一次 + 标题栏再让一次"
+    //      ⇒ 整条标题掉到状态栏下面约一个状态栏高度（用户原话「整个标题移到了状态栏下面」），
+    //      内容也跟着多顶 38vp（「上方留的空距有点大了」）。
+    //      盒子从 0 起排后：标题栏 = 38..94 ✔，上面两处 `contentStartOffset` 的 94 正好落在 94 ✔
+    //      （这就是它们**必须**写「状态栏 + 56」而不是只写 56 的原因；顶部那段留白**不要**改回容器 padding）。
+    //      ⚠️ 旧注释里"根节点带 TOP 会把 HDS 标题栏顶进状态栏 / 只能留 BOTTOM"那句**是错的**，已作废。
+    //   ③ 滚动容器 `clipContent(ContentClipMode.SAFE_AREA)` + 祖先链零 `clip(true)`：行能**画进**状态栏。
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
-    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     .backgroundColor($r('sys.color.background_secondary'))
   }
 }
