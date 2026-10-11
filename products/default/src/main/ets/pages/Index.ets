@@ -898,9 +898,12 @@ struct Index {
       .vertical(false)
       .scrollable(false)
       .animationDuration(0)
-      // barOverlap 自带一层隐式厚模糊，会把材质背板盖掉：一律关掉，材质交给 HDS 画。
-      .barBackgroundColor(Color.Transparent)
-      .barBackgroundBlurStyle(BlurStyle.NONE)
+      // ★ 不要碰 `barBackgroundColor` / `barBackgroundBlurStyle`！
+      //   官方《组件适配沉浸光感》原文：「设置悬浮材质后，**不建议**再通过 `barBackgroundColor`、
+      //   `barBackgroundBlurStyle` 为 TabBar 设置背景色或背景模糊，**避免遮挡材质效果**。」
+      //   我们上一版照 2026-10-01 那次实验写了 `Color.Transparent` + `BlurStyle.NONE`，
+      //   真机反馈是「底下播放条是**透明**的，只看得见封面和按钮」—— 也就是把 HDS 自己那条
+      //   悬浮胶囊背板一起关掉了。⇒ 一律不设，背板/材质全交给 HDS。
       .barFloatingStyle({
         // 三档同值：栏宽由我们显式给（见 floatingMiniBarWidthVp 的说明），
         // 不交给 HDS 按内容算 —— 不然又会出现"要么贴边、要么撑成大长方形"。

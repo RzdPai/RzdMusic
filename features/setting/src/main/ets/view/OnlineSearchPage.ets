@@ -16,7 +16,7 @@
 import { AppStorageV2, Chip, ChipSize, LengthMetrics, uiObserver } from '@kit.ArkUI';
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import { guardPlayerBack } from 'musicbasic';
-import { AlbumRouteParam, ArtistRouteParam, BreakpointType, ThemeState, TitleBarConstants, WindowUtil, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
+import { AlbumRouteParam, ArtistRouteParam, BreakpointType, ThemeState, TitleBarConstants, WindowUtil } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions, HdsNavigationTitleBarOptions, HideMode, ScrollEffectType, TextStyleMode, TitleSize } from '@kit.UIDesignKit';
 import { AppStorageKeys, AmbientState, MusicAppState, MusicStoreService, PlayedSongRecord, QualityInfo, RouterUrlConstants, SongItem, ToplistRouteParam, buildTitleMaterial } from 'musicbasic';
 import { AlbumInfo, LXQualityOption, LXSearchSong, LXSearchResult, SingerInfo, lxGetPicFallback, lxGetQualityOptions, lxSearch, lxTxHotSearch, searchAlbums, searchSingers, sourceToCode, DownloadTask, DownloadUtil, OnlinePlayUtil, PlaylistSearchApi } from 'player';
@@ -221,11 +221,16 @@ struct OnlineSearchPage {
   /** Scroller of the result list, bound to the HDS title bar for the search-row hide. */
   private listScroller: Scroller = new Scroller();
   /** Top inset cleared as the search row hides on scroll; stays at the title bar height. */
-  @Local contentPaddingTop: number = 148;
+  @Local contentPaddingTop: number = 56;
   @Local searchBarHeight: number = 40;
   @Local searchHeaderHeight: number = 96;
-  /** titleBar 区总高（状态栏 + 标题行，不含搜索框）。搜索框在主体顶部时用它避开系统区域。 */
-  @Local titleBarTopHeight: number = 108;
+  /**
+   * HDS 标题栏高度（56vp）。
+   *
+   * ★ 这里**不再加状态栏避让**：根节点 `ignoreLayoutSafeArea` 的 TOP 已去掉（只剩 BOTTOM），
+   *   框架会先把内容推到状态栏下沿，页面自己再补状态栏那一段就会**多出一份空白**。
+   */
+  @Local titleBarTopHeight: number = 56;
   /** Search mode: 0 = songs, 1 = playlists, 2 = singers, 3 = albums. */
   @Local searchMode: number = 0;
   /** Playlist search results. */
@@ -364,11 +369,12 @@ struct OnlineSearchPage {
     this.batchQualityLoading = false;
   }
 
-  /** Recomputes the content top inset from the actual status bar height + title row + search row. */
+  /** Recomputes the content top inset from the title row height + search row height. */
   private refreshContentPaddingTop(): void {
-    // titleBar 区总高（状态栏 + 标题行）：搜索框现在位于主体顶部，只需避开这一段
-    this.titleBarTopHeight =
-      getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP;
+    // ★ 安全区由框架给（根节点 `ignoreLayoutSafeArea` 只剩 BOTTOM）⇒ 这里只补 HDS 标题栏那一段 56vp。
+    //   原来写的是 `getStatusBarTopVpFromWindowUtil() + 56`，那是配合根节点 ignoreLayoutSafeArea(TOP)
+    //   （内容从屏幕 y=0 起排）的算法；TOP 去掉后再留状态栏那一段 = **顶部多一份空白**。
+    this.titleBarTopHeight = TitleBarConstants.ROW_HEIGHT_VP;
     // 主体内容顶部：标题行 + bottomBuilder（搜索框+模式切换）实测高度
     this.contentPaddingTop = this.titleBarTopHeight + this.searchHeaderHeight;
   }
@@ -1716,7 +1722,10 @@ struct OnlineSearchPage {
       { statusBarContentColor: this.isDarkTheme() ? '#FFFFFF' : '#000000' },
       { statusBarContentColor: this.isDarkTheme() ? '#FFFFFF' : '#000000' })
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
-    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    // ★ `ignoreLayoutSafeArea` 只留 BOTTOM：它会**改布局**，根节点带 TOP 会把 HDS 标题栏的
+    //   返回 / 搜索按钮一起顶进状态栏（用户报的"标题跑到状态栏下面"）。要铺到状态栏那一条的是
+    //   上一行的 `expandSafeArea`（官方《安全区域》：它"在不改变布局情况下扩展其绘制区域"）。
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
     .bindSheet(this.showQualitySheet, this.BatchQualitySheet(), {
       detents: [SheetSize.FIT_CONTENT],
       dragBar: true,

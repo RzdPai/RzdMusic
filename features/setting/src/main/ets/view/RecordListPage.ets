@@ -52,7 +52,7 @@ import { guardPlayerBack, PlaybackIntentState, SongItem } from 'musicbasic';
 import {
   AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, FavoriteEntry,
   MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, ThemeState, TitleBarConstants,
-  buildTitleMaterial, getStatusBarTopVpFromWindowUtil
+  buildTitleMaterial
 } from 'musicbasic';
 import {
   BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions,
@@ -436,9 +436,16 @@ export struct RecordListPage {
     return new BreakpointType(16, 24, 32, 32).getValue(this.breakpointEnv.widthBreakpoint);
   }
 
-  /** 内容视口顶部要避让的高度（状态栏 + HDS 标题栏）。 */
+  /**
+   * 内容视口顶部要避让的高度 = **只有 HDS 标题栏那一段 56vp**。
+   *
+   * ★ 为什么不再加 `getStatusBarTopVpFromWindowUtil()`：根节点 `ignoreLayoutSafeArea` 的 TOP 已去掉
+   *   （官方语义：它会**改布局**；根节点带 TOP 会把 HDS 标题栏顶进状态栏），框架会先把内容推到
+   *   状态栏下沿，页面自己再补一段状态栏高度就是**顶部多出一份空白**。
+   *   铺到状态栏那一条由根节点的 `expandSafeArea([SYSTEM],[TOP,BOTTOM])` 负责（只扩绘制区、不改布局）。
+   */
   private titleTopInset(): number {
-    return getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP;
+    return TitleBarConstants.ROW_HEIGHT_VP;
   }
 
   /** 底部预留：壳层那条官方浮动播放条(56) + 间距(16) + 呼吸空间(16)。 */
@@ -830,7 +837,14 @@ export struct RecordListPage {
     .titleBar(this.getTitleBar())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.pageScroller])
-    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    // ★ 状态栏两件套（全工程二级页统一口径，见「我的」→「最近播放」这一页的现场）：
+    //   ① `expandSafeArea` 的 TOP —— 只扩**绘制**区（官方《安全区域》原文：「expandSafeArea 属性
+    //      支持组件在不改变布局情况下扩展其绘制区域至安全区外」）⇒ 本页 `backgroundColor` 才能铺到
+    //      状态栏那一条，不再透出上一页（用户截图里透出的就是首页迷你播放条）；
+    //   ② `ignoreLayoutSafeArea` **只留 BOTTOM** —— 它会**改布局**，根节点带 TOP 会把 HDS 标题栏
+    //      的返回 / 菜单按钮一起顶进状态栏（用户报的"标题跑到状态栏下面"）。
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
     .backgroundColor($r('app.color.background_secondary'))
   }
 }

@@ -21,7 +21,7 @@ import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { http } from '@kit.NetworkKit';
 import { pasteboard } from '@kit.BasicServicesKit';
-import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, BarScrollHelper, RouterUrlConstants, BreakpointType, HomeSourceState, LocalCoverImage, LyricBlurState, LyricFontSizeState, MusicAppState, MusicStoreService, notifyHomeSourceRefresh, PlaybackFlowLightState, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, WindowInfo, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, getWindowInfoState } from 'musicbasic';
+import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, BarScrollHelper, RouterUrlConstants, BreakpointType, HomeSourceState, LocalCoverImage, LyricBlurState, LyricFontSizeState, MusicAppState, MusicStoreService, notifyHomeSourceRefresh, PlaybackFlowLightState, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, WindowInfo, buildTitleMaterial, getWindowInfoState } from 'musicbasic';
 import { BlurStrategy, HdsNavigation, HdsNavigationTitleMode, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatformsOf, lxSourceManager, MediaService } from 'player';
 import type { LXApiImportResult } from 'player';
@@ -1412,7 +1412,11 @@ export struct SettingPage {
       }
       .width('100%')
       .padding({
-        top: getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP,
+        // ★ 安全区由框架给（根节点 `ignoreLayoutSafeArea` 只剩 BOTTOM，状态栏避让交给框架），
+        //   这里只补 HDS 标题栏 56vp。原来写的是"状态栏 + 56"——那是配合根节点 ignoreLayoutSafeArea(TOP)
+        //   （内容从屏幕 y=0 起排）的算法；TOP 去掉后框架会先把内容推到状态栏下沿，
+        //   再留状态栏那一段就是**顶部多出一份空白**。
+        top: TitleBarConstants.ROW_HEIGHT_VP,
         left: new BreakpointType(12, 16, 24, 24).getValue(this.breakpointEnv.widthBreakpoint),
         right: new BreakpointType(12, 16, 24, 24).getValue(this.breakpointEnv.widthBreakpoint),
         bottom: 72
@@ -1466,8 +1470,12 @@ export struct SettingPage {
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.pageScroller])
     .backgroundColor($r('app.color.background_secondary'))
-    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
-    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    // ★ 状态栏两件套：① `expandSafeArea` 的 TOP 只扩**绘制**区（官方《安全区域》：「expandSafeArea
+    //   属性支持组件在不改变布局情况下扩展其绘制区域至安全区外」）⇒ 本页底色铺到状态栏那一条；
+    //   ② `ignoreLayoutSafeArea` **只留 BOTTOM** —— 它会**改布局**，根节点带 TOP 会把 HDS 标题栏
+    //   的返回 / 菜单按钮顶进状态栏（用户报的"标题跑到状态栏下面"）。
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
     .bindSheet(this.showSettingSheet, this.SettingSheetBuilder(), {
       height: this.activeSettingSheet === 0 ? 280 :
         (this.activeSettingSheet === 1 ? 340 :

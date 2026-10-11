@@ -1319,10 +1319,15 @@ export struct PlaylistDetailPage {
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.pageScrollScroller])
     .backgroundColor(this.backdropColor)
-    // 与 AlbumDetailPage 完全一致的两件套：expandSafeArea 让内容铺满到屏幕顶端
-    // （Hero 大图压在状态栏下），ignoreLayoutSafeArea 让 NavDestination 的**布局**也
-    // 忽略系统安全区 —— 少一个，顶上就会空出一条状态栏高度的带子。
-    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
+    // ★ 状态栏两件套（官方《安全区域》口径，与 AlbumDetailPage / ArtistDetailPage 逐条一致）：
+    //   ① `expandSafeArea` 的 TOP —— 只扩**绘制**区（官方原文：「expandSafeArea 属性支持组件
+    //      在不改变布局情况下扩展其绘制区域至安全区外」）⇒ 本页 `backgroundColor(backdropColor)`
+    //      能铺到状态栏那一条，首帧 / 无图时不再透出上一页；
+    //   ② `ignoreLayoutSafeArea` **只留 BOTTOM** —— 它会**改布局**，根节点带 TOP 会把 HDS 标题栏
+    //      的返回 / 菜单按钮一起顶进状态栏（用户报的"标题跑到状态栏下面"）。
+    //   照片层要压到状态栏底下由它自己那层负责：`PlaylistImmersiveBackdrop` 内部单独写了
+    //   `ignoreLayoutSafeArea([SYSTEM], [TOP])`（见该文件 :103），只作用于它自己。
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
     .systemBarStyle(
       { statusBarContentColor: this.isLightBackdrop() ? '#000000' : '#FFFFFF' },

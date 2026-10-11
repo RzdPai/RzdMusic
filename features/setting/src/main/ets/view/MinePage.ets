@@ -72,7 +72,11 @@
  *   - 记录（播放历史 / 收藏）不再在页内分段，各是一个子页面：`RouterUrlConstants.RECORD_LIST`
  *     一页两模式（见 `RecordListPage.ets`），行版式与动作**整套搬过去**，本页不再保留那份代码；
  *   - 下载管理 → `RouterUrlConstants.SETTINGS_DETAIL` + `index = 10`（设置详情页的下载管理那一档）；
- *   - 本地音乐 → `localmusic` 自己的路由页 `LocalMusicPage`；云端音乐 → `RouterUrlConstants.CLOUD_MUSIC`。
+ *   - 本地音乐 → `localmusic` 自己的路由页 `LocalMusicPage`；
+ *   - 平台音乐 → `RouterUrlConstants.SETTINGS_DETAIL` + `index = 3`（设置详情页里渲染的就是
+ *     `PlatformMusicPage` 本体）。**原第 5 格的「云端音乐」已按用户要求撤掉**
+ *     （那套 WebDAV 曲库是参考工程的逻辑，用户说"不要用他那套"）；页面代码仍在
+ *     `features/sync/.../CloudMusicPage.ets`、路由也还登记着，只是**本页不再有入口**。
  *
  * ⚠️ 歌单行用 `LazyForEach` + 稳定 key（数据源 `MinePlaylistSource`，挂在歌单卡的 Column 里）。
  *    **不要**换回 `Repeat`；也**不要**把无上限的列表搬回本页 —— 记录列表那种"听一年几千条"的
@@ -83,15 +87,19 @@ import { AppStorageV2, uiObserver } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { guardPlayerBack } from 'musicbasic';
 import {
-  AmbientState, AppStorageKeys, BarScrollHelper, BreakpointType, LocalCoverImage, MusicAppState,
-  MusicStoreService, PlaylistDto, RouterUrlConstants, ThemeState, TitleBarConstants, ToplistRouteParam,
-  buildTitleMaterial, getStatusBarTopVpFromWindowUtil
+  AmbientState, AppRuntimeStorage, AppStorageKeys, BarScrollHelper, BreakpointType, LocalCoverImage,
+  MusicAppState, MusicStoreService, PlaylistDto, RouterUrlConstants, ThemeState, TitleBarConstants,
+  ToplistRouteParam, buildTitleMaterial, getAppRuntime, getStatusBarTopVpFromWindowUtil
 } from 'musicbasic';
 import {
   BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions,
   ScrollEffectType, TitleSize
 } from '@kit.UIDesignKit';
 import { LocalMusicImportState, localMusic, localMusicImportState } from 'localmusic';
+// 平台账号数（那一格的条数）/ 下载完成数（那一格的条数）
+import { AccountService, DownloadService, DownloadStatus, DownloadTask } from 'player';
+// 「网络导入」表单：与「全部歌单」页**同一个组件**（用户要求这一格直接进网络导入，不要再提示/跳整页）
+import { NetworkImportSheet } from 'playlist';
 import { LoginMusicCard } from './LoginMusicCard';
 import { MineTopFade } from './MineWidgets';
 import { RECORD_MODE_FAVORITES, RECORD_MODE_HISTORY, RecordListRouteParam } from './RecordListPage';
@@ -151,7 +159,7 @@ const TAG: string = 'RzdMineRoute';
 class MineQuickEntry {
   symbol: Resource = $r('sys.symbol.folder');
   label: string = '';
-  /** 'local' | 'history' | 'favorites' | 'downloads' | 'cloud'。 */
+  /** 'local' | 'history' | 'favorites' | 'downloads' | 'platform'（原 'cloud' 已撤）。 */
   action: string = 'local';
 }
 
@@ -159,7 +167,7 @@ class MineQuickEntry {
 class MineLinkRow {
   symbol: Resource = $r('sys.symbol.gearshape_fill');
   label: string = '';
-  /** 'settings' = 大设置页本体，'about' = 关于（设置详情页），'platform' = 平台音乐。 */
+  /** 'settings' = 大设置页本体，'about' = 关于（设置详情页）。 */
   action: string = 'settings';
 }
 
@@ -251,6 +259,12 @@ export struct MinePage {
   @Local historyCount: number = 0;
   @Local favoriteCount: number = 0;
   @Local localCount: number = 0;
+  /** 「下载管理」那一格的条数 = **已下载完成**的任务数（一首一个任务）。 */
+  @Local downloadedCount: number = 0;
+  /** 「平台音乐」那一格的条数 = 已登录的平台账号数（单位「个」，见 `countOf`）。 */
+  @Local platformAccountCount: number = 0;
+  /** 「歌单导入」面板（`NetworkImportSheet`，与全部歌单页同一个组件）。 */
+  @Local importSheetOpen: boolean = false;
   /** 歌单卡的数据（`store.playlistVersion` 变一次就读一次）。 */
   @Local playlists: PlaylistDto[] = [];
   /** 歌单行的懒加载数据源（`@Local` 保证 `LazyForEach` 拿到同一个实例）。 */
@@ -261,11 +275,63 @@ export struct MinePage {
   @Local editName: string = '';
   /** Scroller bound to the HDS title bar so the scroll effect (gradient blur) can fire. */
   private pageScroller: Scroller = new Scroller();
+  /** 下载队列监听句柄（`aboutToDisappear` 里要摘掉）。 */
+  private downloadListener: (() => void) | undefined = undefined;
 
   aboutToAppear(): void {
     hilog.info(DOMAIN, TAG, 'mine page appear');
     this.refreshCounts();
     this.refreshPlaylists();
+    // 下载 / 账号两个条数：进页各读一次，之后靠监听跟着变（见下）
+    this.refreshDownloadCount();
+    this.refreshPlatformCount();
+    this.downloadListener = (): void => {
+      this.refreshDownloadCount();
+    };
+    DownloadService.getInstance().addListener(this.downloadListener);
+  }
+
+  aboutToDisappear(): void {
+    // 监听一定要摘（本页在页签里会反复进出）
+    if (this.downloadListener !== undefined) {
+      DownloadService.getInstance().removeListener(this.downloadListener);
+      this.downloadListener = undefined;
+    }
+  }
+
+  /** 下载队列变化（完成一首 / 清空已完成）时更新那一格的条数。 */
+  private refreshDownloadCount(): void {
+    const tasks: DownloadTask[] = DownloadService.getInstance().getTasksSnapshot();
+    let done: number = 0;
+    for (let i = 0; i < tasks.length; i++) {
+      if (tasks[i].status === DownloadStatus.COMPLETED) {
+        done++;
+      }
+    }
+    this.downloadedCount = done;
+  }
+
+  /**
+   * 「平台音乐」那一格：已登录的平台账号数。
+   *
+   * 为什么是账号数而不是曲目数：平台曲库的歌曲数要**联网拉歌单**才知道，
+   * 为了一个角标在进页时发请求不划算 ⇒ 报"几个账号"（单位「个」）；没登录就是 0 个。
+   *
+   * ⚠️ `AccountService.listAccounts()` 里的 `getStore()` 在**没 init 过**时会直接抛
+   *    「AccountService 未初始化」——本页进页顺序不保证推荐页已经 init 过，所以这里
+   *    照 `RecommendViewModel.refreshGuestMode()` 的写法：先 `init(runtime.context)`，
+   *    并整段 try/catch 兜住（读不到就当 0，绝不让它把本页的 `aboutToAppear` 带崩）。
+   */
+  private refreshPlatformCount(): void {
+    try {
+      const runtime: AppRuntimeStorage = getAppRuntime();
+      AccountService.init(runtime.context);
+      this.platformAccountCount = AccountService.listAccounts().length;
+    } catch (err) {
+      const message: string = err instanceof Error ? err.message : String(err);
+      hilog.warn(DOMAIN, TAG, 'platform account count unavailable: %{public}s', message);
+      this.platformAccountCount = 0;
+    }
   }
 
   /** 壳层点了当前页签：滚回顶部（底部页签设计规范）。 */
@@ -302,11 +368,16 @@ export struct MinePage {
   }
 
   /**
-   * 快捷入口那一格的条数；**不知道就返回 -1**（那一格不画条数）。
+   * 快捷入口那一格的条数（**五格都要有数**，用户 2026-10-11 明确要求统一）。
    *
-   * 下载管理 / 云端音乐两格的条数没有可靠的同步来源：`DownloadService` 给的是**任务**列表
-   * （排队 / 下载中 / 失败 / 完成，不等于"几首"），云端曲库在 `features/sync` 那边、本页拿不到计数。
-   * 「不假装知道」比编一个数更好 —— 所以这两格不显示条数。
+   *   · 本地音乐 / 最近播放 / 收藏 = 各自的曲目数（`MusicStoreService`）；
+   *   · 下载管理 = **已下载完成的任务数**（`DownloadService` 的 `COMPLETED`；
+   *     一个任务对应一首，排队/下载中/暂停/失败的不算 —— 这是"下载好了几首"的口径）；
+   *   · 平台音乐 = **已登录的平台账号数**（`AccountService.listAccounts()`）。
+   *     这一格**不报"几首"**：平台曲库的歌曲数要联网拉歌单才知道，本页不做那次请求，
+   *     所以按"账号数"显示单位「个」，不编一个可能过期的曲目数。
+   * @param action 快捷入口的 action
+   * @returns 条数（≥0 才画）
    */
   private countOf(action: string): number {
     if (action === 'history') {
@@ -318,7 +389,18 @@ export struct MinePage {
     if (action === 'local') {
       return this.localCount;
     }
+    if (action === 'downloads') {
+      return this.downloadedCount;
+    }
+    if (action === 'platform') {
+      return this.platformAccountCount;
+    }
     return -1;
+  }
+
+  /** 条数的显示单位：「平台音乐」报的是账号数，其余都是曲目数。 */
+  private countUnitOf(action: string): string {
+    return action === 'platform' ? '个' : '首';
   }
 
   /** 快捷入口清单（照搬参考那 5 格：本地音乐 / 最近播放 / 收藏 / 下载管理 / 云端音乐）。 */
@@ -339,20 +421,25 @@ export struct MinePage {
     download.symbol = $r('sys.symbol.download');
     download.label = '下载管理';
     download.action = 'downloads';
-    const cloud = new MineQuickEntry();
-    cloud.symbol = $r('sys.symbol.cloud');
-    cloud.label = '云端音乐';
-    cloud.action = 'cloud';
-    return [local, history, favorite, download, cloud];
+    // ★ 第 5 格用**我们自己的「平台音乐」**（原「云端音乐」= 参考那套 WebDAV 曲库）：
+    //   用户 2026-10-11 明确「那个云端音乐还是不要用他那套逻辑了，正好用我们多出来的这个平台音乐」。
+    //   平台音乐页仍在 `features/setting/.../account/PlatformMusicPage.ets`，
+    //   入口走大设置页那一档（`SETTINGS_DETAIL` + index 3，渲染的就是它本体，没有第二份实现）。
+    const platform = new MineQuickEntry();
+    platform.symbol = $r('sys.symbol.auditorium');
+    platform.label = '平台音乐';
+    platform.action = 'platform';
+    return [local, history, favorite, download, platform];
   }
 
-  /** 快捷入口的无障碍播报文本（没有条数的那两格不提条数）。 */
+  /** 快捷入口的无障碍播报文本（带单位的条数一起播报）。 */
   private quickA11y(entry: MineQuickEntry): string {
     const count: number = this.countOf(entry.action);
-    return count >= 0 ? entry.label + '，共 ' + count + ' 首' : entry.label;
+    return count >= 0 ?
+      entry.label + '，共 ' + count + this.countUnitOf(entry.action) : entry.label;
   }
 
-  /** 入口卡：设置（大设置页本体）+ 帮助和反馈（设置详情页的「关于」）+ 平台音乐。 */
+  /** 入口卡：设置（大设置页本体）+ 帮助和反馈（设置详情页的「关于」）。 */
   private linkRows(): MineLinkRow[] {
     const settings = new MineLinkRow();
     settings.symbol = $r('sys.symbol.gearshape_fill');
@@ -362,11 +449,7 @@ export struct MinePage {
     help.symbol = $r('sys.symbol.questionmark_circle');
     help.label = '帮助和反馈';
     help.action = 'about';
-    const platform = new MineLinkRow();
-    platform.symbol = $r('sys.symbol.auditorium');
-    platform.label = '平台音乐';
-    platform.action = 'platform';
-    return [settings, help, platform];
+    return [settings, help];
   }
 
   // ─────────────────────────────── 路由（全部走壳层共享栈） ───────────────────────────────
@@ -404,8 +487,12 @@ export struct MinePage {
       this.pushSettingsDetail(DOWNLOAD_SHEET_INDEX);
       return;
     }
-    // 云端音乐（WebDAV 云端曲库，页面在 features/sync 那边）
-    this.pushOnShellStack(RouterUrlConstants.CLOUD_MUSIC, new Object());
+    if (action === 'platform') {
+      // ★ 第 5 格 = 我们自己的「平台音乐」（原「云端音乐」那套 WebDAV 曲库已按用户要求不用了）。
+      //   平台音乐页本体在 `features/setting/.../account/PlatformMusicPage.ets`，
+      //   由大设置页的那一档渲染出来（`SETTINGS_DETAIL` + index 3），**没有第二份实现**。
+      this.pushSettingsDetail(PLATFORM_MUSIC_SHEET_INDEX);
+    }
   }
 
   /** 入口卡点了某一行。 */
@@ -413,11 +500,6 @@ export struct MinePage {
     if (action === 'about') {
       // 「帮助和反馈」直接落到大设置页的「关于」那一档（少一次点击）
       this.pushSettingsDetail(ABOUT_SHEET_INDEX);
-      return;
-    }
-    if (action === 'platform') {
-      // 「平台音乐」= 大设置页里的那一档（渲染的就是 PlatformMusicPage 本身）
-      this.pushSettingsDetail(PLATFORM_MUSIC_SHEET_INDEX);
       return;
     }
     // 「设置」= 我们原本那个大设置页**本体**（不是副本、不是二级入口列表）
@@ -456,17 +538,15 @@ export struct MinePage {
   }
 
   /**
-   * 「歌单导入」：进整页。
+   * 「歌单导入」：**直接开从网络导入的表单**（选来源 + 粘贴分享链接）。
    *
-   * 导入要选来源平台 + 粘贴分享链接（外加进度层），那套表单在 `PlaylistsPage` 里，
-   * 本卡不重复实现一遍 —— 直接进整页，用户点右上角那个「+」就是了。
+   * 用户 2026-10-11 明确：「我的页的歌单导入别提示了，直接用从网络导入」——
+   * 所以这里不再跳「全部歌单」整页、也不再弹那句"去点右上角 +"的提示，
+   * 而是把**同一个** `NetworkImportSheet` 组件（「全部歌单」页用的就是它）就地弹出来。
+   * 导入落库仍走 `MusicStoreService.importPlaylist()`，没有第二份实现。
    */
   private openImportPlaylist(): void {
-    this.pushOnShellStack(RouterUrlConstants.MINE_PLAYLIST, new Object());
-    this.getUIContext().getPromptAction().showToast({
-      message: '在「歌单」页点右上角的「+」导入',
-      duration: 2200
-    });
+    this.importSheetOpen = true;
   }
 
   /** 进「全部歌单」整页（= 原来那个「歌单」页签的整页能力）。 */
@@ -579,13 +659,11 @@ export struct MinePage {
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-          // 没有可靠条数来源的那两格不画这一行（见 countOf 的说明）
-          if (this.countOf(entry.action) >= 0) {
-            Text(String(this.countOf(entry.action)) + ' 首')
-              .fontSize(11)
-              .fontColor($r('sys.color.font_tertiary'))
-              .maxLines(1)
-          }
+          // 五格**都**画条数（用户要求统一）；单位按格算：「平台音乐」是账号数、其余是曲目数
+          Text(String(this.countOf(entry.action)) + ' ' + this.countUnitOf(entry.action))
+            .fontSize(11)
+            .fontColor($r('sys.color.font_tertiary'))
+            .maxLines(1)
         }
         .layoutWeight(1)
         .justifyContent(FlexAlign.Center)
@@ -922,6 +1000,28 @@ export struct MinePage {
     return bar;
   }
 
+  /**
+   * 「歌单导入」面板：**直接复用** `features/playlist` 的 `NetworkImportSheet`。
+   *
+   * 版式、来源下拉、链接校验、`SharePlaylistService.fetchPlaylist()` 与
+   * `MusicStoreService.importPlaylist()` 全在那个组件里 —— 本页一行都不重复实现，
+   * 与「全部歌单」页点「+ → 网络导入」是**同一个入口**。
+   */
+  @Builder
+  private ImportPlaylistSheet() {
+    NetworkImportSheet({
+      onClose: (): void => {
+        this.importSheetOpen = false;
+      },
+      onImported: (name: string, count: number): void => {
+        this.importSheetOpen = false;
+        // 歌单卡的数据靠 `store.playlistVersion` 自己刷新（`@Monitor('store.playlistVersion')`）
+        this.getUIContext().getPromptAction().showToast(
+          { message: '已导入歌单「' + name + '」(' + count + ' 首)', duration: 2500 });
+      }
+    })
+  }
+
   /** 「新建 / 重命名歌单」小面板的内容（照搬参考 `editSheet()` 的形状）。 */
   @Builder
   private EditPlaylistSheet() {
@@ -1057,6 +1157,19 @@ export struct MinePage {
         showClose: false,
         title: { title: this.editingId.length === 0 ? '新建歌单' : '重命名歌单' },
         backgroundColor: $r('app.color.background_secondary')
+      })
+      // 「歌单导入」= 就地弹**从网络导入**那张表单（与「全部歌单」页同一个组件，见 openImportPlaylist）
+      .bindSheet($$this.importSheetOpen, this.ImportPlaylistSheet(), {
+        preferType: SheetType.BOTTOM,
+        detents: [SheetSize.MEDIUM],
+        detentSelection: SheetSize.MEDIUM,
+        dragBar: true,
+        showClose: false,
+        title: { title: '网络导入歌单' },
+        backgroundColor: $r('sys.color.background_secondary'),
+        onDisappear: (): void => {
+          this.importSheetOpen = false;
+        }
       })
     }
     .onBackPressed((): boolean => guardPlayerBack('MinePage'))

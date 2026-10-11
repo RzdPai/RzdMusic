@@ -21,7 +21,7 @@ import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { http } from '@kit.NetworkKit';
 import { pasteboard } from '@kit.BasicServicesKit';
-import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, BreakpointType, HomeSourceState, CoverRadiusState, LyricBlurState, LyricCenterState, LyricFontSizeState, LyricFpsState, MusicStoreService, notifyHomeSourceRefresh, PlaybackFlowLightState, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
+import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, BreakpointType, HomeSourceState, CoverRadiusState, LyricBlurState, LyricCenterState, LyricFontSizeState, LyricFpsState, MusicStoreService, notifyHomeSourceRefresh, PlaybackFlowLightState, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatformsOf, lxSourceManager, MediaService } from 'player';
 import type { LXApiImportResult } from 'player';
@@ -271,10 +271,15 @@ export struct SettingsDetailPage {
   }
 
   /**
-   * @returns 子面板顶部要避让的高度：内嵌（宽屏右栏）时为 0，二级页时让出状态栏 + 标题栏。
+   * ★ 这里**不再加状态栏避让**：根节点 `ignoreLayoutSafeArea` 的 TOP 已去掉（只剩 BOTTOM），
+   *   框架会先把内容推到状态栏下沿，页面自己再补状态栏那一段就是**顶部多出一份空白**；
+   *   铺到状态栏那一条由根节点的 `expandSafeArea([SYSTEM],[TOP,BOTTOM])` 负责（只扩绘制区、不改布局）。
+   *   所以各子面板的顶部留白 = **只有 HDS 标题栏 56vp**（见下面各 `padding({ top: … })`）。
+   *
+   * @returns 子面板顶部要避让的高度：内嵌（宽屏右栏）时为 0，二级页时为 HDS 标题栏高度。
    */
   private contentTopOffset(): number {
-    return this.embedded ? 0 : getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP;
+    return this.embedded ? 0 : TitleBarConstants.ROW_HEIGHT_VP;
   }
 
   private activeSourceLabel(): string {
@@ -524,7 +529,7 @@ export struct SettingsDetailPage {
       .width('100%')
     }
     .width('100%')
-    .padding({ left: 20, right: 20, top: getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP + 8, bottom: 160 })
+    .padding({ left: 20, right: 20, top: TitleBarConstants.ROW_HEIGHT_VP + 8, bottom: 160 })
   }
 
   /** 平台账号管理弹窗：账号管理。整页导航时内容需避开标题栏（AccountManageSheet 自身仅按弹窗场景留 12vp）。 */
@@ -538,7 +543,7 @@ export struct SettingsDetailPage {
     }
     .width('100%')
     .height('100%')
-    .padding({ top: getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP + 8 })
+    .padding({ top: TitleBarConstants.ROW_HEIGHT_VP + 8 })
   }
 
   /** 平台音乐弹窗。 */
@@ -938,7 +943,7 @@ export struct SettingsDetailPage {
     }
     .width('100%')
     .height('100%')
-    .padding({ top: getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP })
+    .padding({ top: TitleBarConstants.ROW_HEIGHT_VP })
     .align(Alignment.Top)
     .scrollBar(BarState.Off)
   }
@@ -1017,7 +1022,7 @@ export struct SettingsDetailPage {
     }
     .width('100%')
     .height('100%')
-    .padding({ top: getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP })
+    .padding({ top: TitleBarConstants.ROW_HEIGHT_VP })
     .align(Alignment.Top)
     .scrollBar(BarState.Off)
   }
@@ -1030,7 +1035,7 @@ export struct SettingsDetailPage {
     }
     .width('100%')
     .height('100%')
-    .padding({ top: getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP })
+    .padding({ top: TitleBarConstants.ROW_HEIGHT_VP })
   }
 
   /** 主题设置弹窗：主题色 / 日夜模式 / 光感，拆为两张卡片。 */
@@ -1076,7 +1081,7 @@ export struct SettingsDetailPage {
     }
     .width('100%')
     .height('100%')
-    .padding({ top: getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP })
+    .padding({ top: TitleBarConstants.ROW_HEIGHT_VP })
     .align(Alignment.Top)
     .scrollBar(BarState.Off)
   }
@@ -1208,7 +1213,7 @@ export struct SettingsDetailPage {
     }
     .width('100%')
     .height('100%')
-    .padding({ top: getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP })
+    .padding({ top: TitleBarConstants.ROW_HEIGHT_VP })
     .align(Alignment.Top)
     .scrollBar(BarState.Off)
   }
@@ -1362,7 +1367,7 @@ export struct SettingsDetailPage {
     }
     .width('100%')
     .height('100%')
-    .padding({ top: getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP })
+    .padding({ top: TitleBarConstants.ROW_HEIGHT_VP })
     .align(Alignment.Top)
     .scrollBar(BarState.Off)
   }
@@ -1471,7 +1476,7 @@ export struct SettingsDetailPage {
     .width('100%')
     .height('100%')
     .align(Alignment.Top)
-    .padding({ left: 20, right: 20, top: getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP + 8, bottom: 160 })
+    .padding({ left: 20, right: 20, top: TitleBarConstants.ROW_HEIGHT_VP + 8, bottom: 160 })
   }
 
   private applyCustomColor(): void {
@@ -1503,7 +1508,10 @@ export struct SettingsDetailPage {
       })
       .bindToScrollable([this.pageScroller])
       .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
-      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+      // ★ `ignoreLayoutSafeArea` 只留 BOTTOM：它会**改布局**，根节点带 TOP 会把 HDS 标题栏的
+      //   返回 / 菜单按钮一起顶进状态栏（用户报的"标题跑到状态栏下面"）。要铺到状态栏那一条的是
+      //   上一行的 `expandSafeArea`（官方《安全区域》：它"在不改变布局情况下扩展其绘制区域"）。
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .systemBarStyle(
         { statusBarContentColor: this.isDarkTheme() ? '#FFFFFF' : '#000000' },
         { statusBarContentColor: this.isDarkTheme() ? '#FFFFFF' : '#000000' })

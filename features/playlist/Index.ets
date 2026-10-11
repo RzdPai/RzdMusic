@@ -24,6 +24,8 @@ export { PlaylistDetailPage, PlaylistDetailPageBuilder } from './src/main/ets/vi
 export { ToplistRouteParam } from 'musicbasic';
 export { PlaylistHomePage } from './src/main/ets/view/PlaylistHomePage';
 export { PlaylistsPage } from './src/main/ets/view/PlaylistsPage';
+// 「网络导入歌单」表单：**共用组件**（「全部歌单」页与「我的」页歌单卡都直接弹它，不许第二份）
+export { NetworkImportSheet } from './src/main/ets/view/NetworkImportSheet';
 export { SplitColumnPlaylistPage, SplitColumnPlaylistPageBuilder } from './src/main/ets/view/SplitColumnPlaylistPage';
 export { PlaylistHub, PlayListBuilder } from './src/main/ets/view/PlaylistHubPage';
 export { SongListBuilder } from './src/main/ets/view/SongQueueListPage';

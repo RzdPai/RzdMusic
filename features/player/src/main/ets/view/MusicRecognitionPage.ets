@@ -5,7 +5,7 @@ import { pasteboard } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { guardPlayerBack } from 'musicbasic';
-import { AppStorageKeys, AmbientState, MusicAppState, MusicStoreService, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
+import { AppStorageKeys, AmbientState, MusicAppState, MusicStoreService, ThemeState, TitleBarConstants, buildTitleMaterial } from 'musicbasic';
 import { RecognitionResult, RecognitionStatus, EngineReport, EngineResultGroup } from '../recognize/RecognitionTypes';
 import { MicCancelledError, MicPermissionError, MicRecorder } from '../recognize/MicRecorder';
 import { RecognitionNetworkError } from '../recognize/errors';
@@ -555,7 +555,10 @@ export struct MusicRecognitionPage {
           }
           .width('100%')
           .padding({
-            top: getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP,
+            // 安全区由框架给（根节点 `ignoreLayoutSafeArea` 只剩 BOTTOM），这里只补 HDS 标题栏 56vp。
+            // 原来写的是"状态栏 + 56"——那是配合根节点 ignoreLayoutSafeArea(TOP)（内容从屏幕 y=0 起排）
+            // 的算法，TOP 去掉后框架先推到状态栏下沿，再留状态栏那一段就是**多一份空白**。
+            top: TitleBarConstants.ROW_HEIGHT_VP,
             left: 16,
             right: 16,
             bottom: 24
@@ -599,7 +602,10 @@ export struct MusicRecognitionPage {
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.pageScroller])
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
-    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    // ★ `ignoreLayoutSafeArea` 只留 BOTTOM：它会**改布局**，根节点带 TOP 会把 HDS 标题栏的
+    //   返回 / 菜单按钮一起顶进状态栏（用户报的"标题跑到状态栏下面"）。要扩到状态栏那一条的背景，
+    //   由上一行的 `expandSafeArea` 负责（官方《安全区域》：它"在不改变布局情况下扩展其绘制区域"）。
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
     .systemBarStyle(
       { statusBarContentColor: this.isDarkTheme() ? '#FFFFFF' : '#000000' },
       { statusBarContentColor: this.isDarkTheme() ? '#FFFFFF' : '#000000' })

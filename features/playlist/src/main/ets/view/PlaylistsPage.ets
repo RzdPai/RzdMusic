@@ -20,14 +20,17 @@ import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { guardPlayerBack } from 'musicbasic';
 import { AppStorageKeys, BarScrollHelper, BreakpointType, getPlaylistTransitionState, MusicAppState, ThemeState } from 'musicbasic';
-import { AmbientState, MusicStoreService, PlayedSongRecord, PlaylistDto, RouterUrlConstants, TitleBarConstants, ToplistRouteParam, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, LocalCoverImage } from 'musicbasic';
+import { AmbientState, MusicStoreService, PlayedSongRecord, PlaylistDto, RouterUrlConstants, TitleBarConstants, ToplistRouteParam, buildTitleMaterial, LocalCoverImage } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
-import { lxSearch, SharePlaylistService, SharePlaylistSource } from 'player';
+import { lxSearch } from 'player';
 import { localMusic, LocalMusicImportState, localMusicImportState } from 'localmusic';
 import { gunzipBytes } from '../util/GunzipUtil';
 import { registerPlaylistRefresh, unregisterPlaylistRefresh } from '../util/PlaylistRefreshBus';
 import { pickPlaylistCover } from '../util/PlaylistCoverUtil';
 import type { CoverPickResult } from '../util/PlaylistCoverUtil';
+// ★「网络导入」表单是**共用组件**（「我的」页歌单卡的「歌单导入」也直接用它），
+//   **不要在页面里再写一份**（用户 2026-10-11 要求两处都走同一个入口）。
+import { NetworkImportSheet } from './NetworkImportSheet';
 
 /**
  * LXMusic playlist export JSON shape (one song entry).
@@ -123,12 +126,8 @@ export struct PlaylistsPage {
   @Local importing: boolean = false;
   /** Import progress text shown in the loading sheet. */
   @Local importProgress: string = '';
-  /** 网络导入选中的来源（网易云/QQ/酷我/酷狗/咪咕）。 */
-  @Local onlineSource: string = 'wy';
-  /** 网络导入粘贴的分享链接/ID。 */
-  @Local onlineLink: string = '';
-  /** 网络导入进行中。 */
-  @Local onlineImporting: boolean = false;
+  // ⚠️ 网络导入那份表单的状态（来源 / 链接 / 进行中）**已经搬进共用组件** `NetworkImportSheet`，
+  //    本页不再持有 —— 见文件上方那条 import 注释。
   /** 标题栏加号菜单图标 componentId（openMenu 锚点）。 */
   private readonly addMenuTargetId: string = 'playlists_add_menu_icon';
   /** 缓存菜单内容节点，避免每次点击重复创建。 */
@@ -204,7 +203,7 @@ export struct PlaylistsPage {
       }, 400);
     } else if (action === 'online') {
       setTimeout((): void => {
-        this.onlineLink = '';
+        // 链接清空由 `NetworkImportSheet` 自己管（取消时按 `clearLinkOnClose`、导入成功后也清）
         this.activeSheet = 2;
         this.showSheet = true;
       }, 400);
@@ -486,10 +485,6 @@ export struct PlaylistsPage {
     }
   }
 
-  private readonly onlineSourceOptions: string[] = ['网易云', 'QQ', '酷我', '酷狗', '咪咕'];
-  private readonly onlineSourceValues: SharePlaylistSource[] =
-    [SharePlaylistSource.Wy, SharePlaylistSource.Tx, SharePlaylistSource.Kw, SharePlaylistSource.Kg, SharePlaylistSource.Mg];
-
   /** 把秒数格式化为 "mm:ss"。 */
   private fmtDuration(seconds: number): string {
     const s: number = Math.max(0, Math.floor(seconds));
@@ -498,49 +493,10 @@ export struct PlaylistsPage {
     return `${mm.toString().padStart(2, '0')}:${ss.toString().padStart(2, '0')}`;
   }
 
-  /** 从分享链接/ID 拉取歌单并导入。 */
-  private async importOnlinePlaylist(): Promise<void> {
-    const link: string = this.onlineLink.trim();
-    if (link.length === 0) {
-      this.getUIContext().getPromptAction().showToast({ message: '请粘贴歌单分享链接或ID', duration: 2000 });
-      return;
-    }
-    this.onlineImporting = true;
-    try {
-      const info = await SharePlaylistService.fetchPlaylist(link, this.onlineSource as SharePlaylistSource);
-      if (info.songs.length === 0) {
-        this.getUIContext().getPromptAction().showToast({ message: '歌单为空或解析失败', duration: 2000 });
-        return;
-      }
-      const songs: PlayedSongRecord[] = [];
-      for (let i = 0; i < info.songs.length; i++) {
-        const s = info.songs[i];
-        const record = new PlayedSongRecord();
-        record.songId = s.id;
-        record.name = s.name;
-        record.singer = s.artist;
-        record.albumName = s.album;
-        record.albumId = '';
-        record.source = info.source;
-        record.interval = this.fmtDuration(s.duration);
-        record.img = info.coverUrl;
-        record.time = Date.now();
-        songs.push(record);
-      }
-      const name: string = info.name.length > 0 ? info.name : '导入的歌单';
-      this.store.importPlaylist(name, songs);
-      this.showSheet = false;
-      this.onlineLink = '';
-      this.getUIContext().getPromptAction().showToast(
-        { message: '已导入歌单「' + name + '」(' + songs.length + ' 首)', duration: 2500 });
-    } catch (e) {
-      const err = e as Error;
-      this.getUIContext().getPromptAction().showToast(
-        { message: err.message ?? '导入失败，请检查链接', duration: 2500 });
-    } finally {
-      this.onlineImporting = false;
-    }
-  }
+  // ⚠️「从分享链接拉取歌单并导入」的实现**已整体搬进** `NetworkImportSheet`（共用组件）。
+  //    这里**不要**再写一份：`importOnlinePlaylist()` / `onlineSource` / `onlineLink` /
+  //    `onlineImporting` / `onlineSourceOptions` / `onlineSourceValues` 都在那个组件里，
+  //    本页只负责弹它、并处理 onClose / onImported。
 
   /** Imports an LXMusic playlist JSON file chosen by the user. */
   private importPlaylistFile(): void {
@@ -875,69 +831,19 @@ export struct PlaylistsPage {
     })
   }
 
-  /** 网络导入表单弹窗：选来源 + 粘贴链接。 */
+  /** 网络导入表单弹窗：**共用组件** `NetworkImportSheet`（版式与逻辑都在那边，别在这里重写）。 */
   @Builder
   private OnlineImportSheet() {
-    Column({ space: 16 }) {
-      Row({ space: 8 }) {
-        Text('来源')
-          .fontSize($r('sys.float.Body_M'))
-          .fontColor($r('sys.color.font_secondary'))
-        Select(this.onlineSourceOptions.map((v: string): SelectOption => { return { value: v }; }))
-          .selected(this.onlineSourceValues.indexOf(this.onlineSource as SharePlaylistSource))
-          .value(this.onlineSourceOptions[this.onlineSourceValues.indexOf(this.onlineSource as SharePlaylistSource)])
-          .layoutWeight(1)
-          .height(44)
-          .fontColor($r('sys.color.font_primary'))
-          .borderRadius($r('sys.float.corner_radius_level6'))
-          .backgroundColor($r('sys.color.background_secondary'))
-          .onSelect((index: number) => {
-            this.onlineSource = this.onlineSourceValues[index];
-          })
+    NetworkImportSheet({
+      onClose: (): void => {
+        this.showSheet = false;
+      },
+      onImported: (name: string, count: number): void => {
+        this.showSheet = false;
+        this.getUIContext().getPromptAction().showToast(
+          { message: '已导入歌单「' + name + '」(' + count + ' 首)', duration: 2500 });
       }
-      .width('100%')
-
-      TextArea({ text: this.onlineLink, placeholder: '粘贴歌单分享链接或ID' })
-        .width('100%')
-        .height(96)
-        .borderRadius($r('sys.float.corner_radius_level6'))
-        .padding({ left: 12, right: 12, top: 10, bottom: 10 })
-        .fontSize($r('sys.float.Body_M'))
-        .fontColor($r('sys.color.font_primary'))
-        .backgroundColor($r('sys.color.background_secondary'))
-        .onChange((value: string) => {
-          this.onlineLink = value;
-        })
-
-      Row({ space: 12 }) {
-        Button('取消')
-          .layoutWeight(1)
-          .height(44)
-          .fontSize($r('sys.float.Body_L'))
-          .borderRadius($r('sys.float.corner_radius_level6'))
-          .backgroundColor($r('sys.color.background_secondary'))
-          .fontColor($r('sys.color.font_tertiary'))
-          .onClick(() => {
-            this.showSheet = false;
-            this.onlineLink = '';
-          })
-        Button(this.onlineImporting ? '导入中…' : '导入')
-          .layoutWeight(1)
-          .height(44)
-          .fontSize($r('sys.float.Body_L'))
-          .borderRadius($r('sys.float.corner_radius_level6'))
-          .backgroundColor(this.themeState.color)
-          .fontColor($r('sys.color.font_on_primary'))
-          .enabled(!this.onlineImporting)
-          .onClick(() => {
-            void this.importOnlinePlaylist();
-          })
-      }
-      .width('100%')
-    }
-    .width('100%')
-    .padding({ left: 20, right: 20, bottom: 24 })
-    .backgroundColor($r('sys.color.background_secondary'))
+    })
   }
 
   /**
@@ -1156,7 +1062,11 @@ export struct PlaylistsPage {
             this.onPageScrollFrame(offset);
             return { offsetRemain: offset };
           })
-          .contentStartOffset(getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP)
+          // 安全区由框架给（根节点只给 `expandSafeArea` 扩绘制区、`ignoreLayoutSafeArea` 只留 BOTTOM），
+          // 这里只补 HDS 标题栏 56vp。原来写的是"状态栏 + 56"，那是配合根节点 ignoreLayoutSafeArea(TOP)
+          // （内容从屏幕 y=0 起排）的算法 —— TOP 去掉后框架会先把内容推到状态栏下沿，
+          // 再留着状态栏那一段就会**多出一份空白**。
+          .contentStartOffset(TitleBarConstants.ROW_HEIGHT_VP)
           .divider({
             strokeWidth: 0.5,
             color: $r('sys.color.comp_divider'),
@@ -1184,7 +1094,12 @@ export struct PlaylistsPage {
     .titleBar(this.getTitleBar())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.pageScroller])
-    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    // ★ 状态栏两件套：① `expandSafeArea` 的 TOP 只扩**绘制**区（官方《安全区域》：「expandSafeArea
+    //   属性支持组件在不改变布局情况下扩展其绘制区域至安全区外」）⇒ 本页底色铺到状态栏那一条；
+    //   ② `ignoreLayoutSafeArea` **只留 BOTTOM** —— 它会**改布局**，根节点带 TOP 会把 HDS 标题栏
+    //   的返回 / 菜单按钮顶进状态栏（用户报的"标题跑到状态栏下面"）。
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
     .backgroundColor($r('sys.color.background_secondary'))
     .bindSheet($$this.showSheet, this.MainSheet(), {
       height: SheetSize.FIT_CONTENT,

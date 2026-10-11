@@ -15,7 +15,7 @@
 
 import { AppStorageV2, uiObserver } from '@kit.ArkUI';
 import { guardPlayerBack, AmbientState, BreakpointType, ThemeState } from 'musicbasic';
-import { AppStorageKeys, MusicAppState, MusicStoreService, PlayedSongRecord, TabSwitchState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
+import { AppStorageKeys, MusicAppState, MusicStoreService, PlayedSongRecord, TabSwitchState, TitleBarConstants, buildTitleMaterial } from 'musicbasic';
 import { OnlinePlayUtil } from 'player';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType } from '@kit.UIDesignKit';
 import { SongMoreMenu } from './SongMoreMenu';
@@ -447,7 +447,7 @@ export struct PlaylistHomePage {
               startMargin: 16,
               endMargin: 16
             })
-            .contentStartOffset(getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP)
+            .contentStartOffset(TitleBarConstants.ROW_HEIGHT_VP)
           }
         } else {
           if (this.favoriteList.length === 0) {
@@ -483,7 +483,7 @@ export struct PlaylistHomePage {
               startMargin: 16,
               endMargin: 16
             })
-            .contentStartOffset(getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP)
+            .contentStartOffset(TitleBarConstants.ROW_HEIGHT_VP)
           }
         }
       }
@@ -500,7 +500,12 @@ export struct PlaylistHomePage {
     .titleBar(this.getTitleBar())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.pageScroller])
-    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    // ★ 状态栏两件套（只改这两行，顺手把上面两处 contentStartOffset 里的状态栏那一段去掉）：
+    //   ① `expandSafeArea` 的 TOP = 只扩绘制区（官方：「不改变布局情况下扩展其绘制区域至安全区外」），
+    //      本页 `backgroundColor` 才能铺到状态栏那一条，不再透出上一页；
+    //   ② `ignoreLayoutSafeArea` **只留 BOTTOM** = 它改布局，根节点带 TOP 会把 HDS 标题栏顶进状态栏。
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
     .backgroundColor($r('sys.color.background_secondary'))
   }
 }

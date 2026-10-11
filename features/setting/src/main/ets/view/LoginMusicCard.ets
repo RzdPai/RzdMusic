@@ -187,8 +187,12 @@ export struct LoginMusicCard {
     }
     .width('100%')
     .padding({ top: 4, bottom: 4 })
-    .borderRadius($r('sys.float.corner_radius_level16'))
-    .backgroundColor($r('app.color.comp_background_list_card'))
+    // ★ 与「我的」页其它卡片（快捷入口卡 / 歌单卡 / 入口卡）**同一档**：
+    //   圆角用 `MinePage.R_CARD`（16）、底色用 `app.color.card_background`。
+    //   原来这里跟着原大设置页用 `sys.float.corner_radius_level16` +
+    //   `app.color.comp_background_list_card`，在本页里看起来"颜色和圆角都跟下面不一样"（用户反馈）。
+    .borderRadius(ACCOUNT_CARD_RADIUS)
+    .backgroundColor($r('app.color.card_background'))
     .bindSheet($$this.sheetOpen, this.AccountSheetContent(), {
       height: ACCOUNT_SHEET_HEIGHT,
       dragBar: true,
