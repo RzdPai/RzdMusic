@@ -695,7 +695,7 @@ export struct PlatformMusicPage {
         .layoutWeight(1)
         // ★ 用户 2026-10-11：「平台音乐页面上方有一块空白」——宿主面板已经让过一次顶（大设置页/二级页的首个 Blank），
       //   这里再让一次就叠成一块死空白 ⇒ 内层不再加顶部 padding，让位只由宿主的滚动内容负责。
-      .padding({ top: 0 })
+      .padding({ top: this.contentTopOffset })
         // ★★ 官方《开发应用沉浸式效果》→「滚动类场景」②：滚动容器要设
         //   `clipContent(ContentClipMode.SAFE_AREA)` 才能"把内容层裁剪区域扩展至避让区"
         //   —— 否则内容只会被按内容框裁掉，**永远画不进状态栏**（用户报「平台音乐页内容没延伸进状态栏」）。

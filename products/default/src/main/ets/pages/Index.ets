@@ -1003,11 +1003,10 @@ struct Index {
       //   而这里原来写 `width('100%')`（= 宿主盒全宽）⇒ 内容比胶囊宽 2×side，
       //   封面贴着胶囊左缘、右侧按钮顶到胶囊右缘 ⇒ 看着就是"元素错位"。
       //   现在把内容宽度也定成胶囊宽度（同一函数、同一口径），HDS 居中后两者**完全重合**。
-      .width(this.floatingMiniBarWidthVp())
+      .width(StyleConstants.FULL_WIDTH)
       // ★ 用户 2026-10-11 第二次报「二级播放条元素还是错位」：内容与胶囊同宽后，HomeMiniBarPlayer`r
       //   自己那套左右 padding（口径来自首页那条**更窄**的底栏）会让封面/按钮贴到胶囊圆角上，
       //   所以这里再补一层与胶囊一致的左右内边距（12/16，同 floatingMiniBarSideMarginVp）。
-      .padding({ left: this.floatingMiniBarSideMarginVp(), right: this.floatingMiniBarSideMarginVp() })
       .height(FLOATING_MINI_BAR_HEIGHT_VP)
   }
 
