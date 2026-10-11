@@ -437,15 +437,18 @@ export struct RecordListPage {
   }
 
   /**
-   * 内容视口顶部要避让的高度 = **只有 HDS 标题栏那一段 56vp**。
+   * 内容顶部要避让的高度 = **状态栏 + HDS 标题栏**（38 + 56）。
    *
-   * ★ 为什么不再加 `getStatusBarTopVpFromWindowUtil()`：根节点 `ignoreLayoutSafeArea` 的 TOP 已去掉
-   *   （官方语义：它会**改布局**；根节点带 TOP 会把 HDS 标题栏顶进状态栏），框架会先把内容推到
-   *   状态栏下沿，页面自己再补一段状态栏高度就是**顶部多出一份空白**。
-   *   铺到状态栏那一条由根节点的 `expandSafeArea([SYSTEM],[TOP,BOTTOM])` 负责（只扩绘制区、不改布局）。
+   * ★ 2026-10-11 口径（问过用户，两次）：**页面要"延伸进状态栏"** ——
+   *   内容（列表）滚上去时一直能画到屏幕最顶端（状态栏那一条也归页面），
+   *   所以**不能**把状态栏高度加到"容器"的 padding 上（那样列表视口从状态栏下沿开始，
+   *   状态栏那一条就永远是一段死背景，用户明确说不要）。
+   *   正确做法是把这个偏移**放进滚动内容里**（下面那个 `Blank()`），
+   *   于是：静止时第一行正好在标题栏下沿，往上滚则整行从标题栏底下、再穿到状态栏里。
+   *   根节点的 `expandSafeArea([SYSTEM],[TOP,BOTTOM])` 继续负责把页面底色也铺满整屏。
    */
   private titleTopInset(): number {
-    return TitleBarConstants.ROW_HEIGHT_VP;
+    return getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP;
   }
 
   /** 底部预留：壳层那条官方浮动播放条(56) + 间距(16) + 呼吸空间(16)。 */
@@ -830,12 +833,9 @@ export struct RecordListPage {
       }
       .width('100%')
       .height('100%')
-      // ★ 状态栏那一条只留页面背景（用户 2026-10-11：「内容是啥的都在状态栏下面」）：
-      //   内容容器整体让开状态栏高度，里面的 `List` 自己有 `clip(true)` ⇒ 行往上滚最多滚到
-      //   状态栏下沿为止，不会再画到时间/信号图标后面；标题栏那 56vp 仍是透明的，
-      //   列表照样从它底下穿过（沉浸式不受影响）。页根那条 `expandSafeArea(TOP)` +
-      //   `backgroundColor` 继续负责把页面底色铺到状态栏那一条。
-      .padding({ top: getStatusBarTopVpFromWindowUtil() })
+      // ★ 这里**不加** `padding({ top: 状态栏 })`：那会让列表视口从状态栏下沿起排，
+      //   状态栏那一条变死背景 —— 用户要的是"**延伸进状态栏**"（见 `titleTopInset()` 说明）。
+      //   让开状态栏 + 标题栏的偏移在**滚动内容里**（下面那个 `Blank()`）。
     }
     .onBackPressed((): boolean => guardPlayerBack('RecordListPage'))
     .hideTitleBar(false)

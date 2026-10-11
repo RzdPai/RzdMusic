@@ -220,17 +220,23 @@ struct OnlineSearchPage {
   private loadingCovers: Set<string> = new Set();
   /** Scroller of the result list, bound to the HDS title bar for the search-row hide. */
   private listScroller: Scroller = new Scroller();
-  /** Top inset cleared as the search row hides on scroll; stays at the title bar height. */
-  @Local contentPaddingTop: number = 56;
+  /**
+   * 结果列表的顶部偏移（= "状态栏 + 标题栏 + 搜索行"）。
+   *
+   * ★ 这里只是**占位初值**，`aboutToAppear()` 里的 `refreshContentPaddingTop()` 会立刻按
+   *   标题栏与搜索行的实测高度重算（2026-10-11 第二十轮：从 56 提到 94，口径 = 状态栏 + 56）。
+   */
+  @Local contentPaddingTop: number = 94;
   @Local searchBarHeight: number = 40;
   @Local searchHeaderHeight: number = 96;
   /**
-   * HDS 标题栏高度（56vp）。
+   * "状态栏 + HDS 标题栏"（vp）。
    *
-   * ★ 这里**不再加状态栏避让**：根节点 `ignoreLayoutSafeArea` 的 TOP 已去掉（只剩 BOTTOM），
-   *   框架会先把内容推到状态栏下沿，页面自己再补状态栏那一段就会**多出一份空白**。
+   * ★ 2026-10-11 第二十轮（用户：「我想让它延伸进状态栏」）：这段留白由**滚动内容**的
+   *   `contentStartOffset` 提供（见 `refreshContentPaddingTop()`），页根内容区从屏幕 y=0 起排
+   *   ⇒ 值必须是「状态栏 + 56」（`expandSafeArea` 只扩绘制区、不改布局，不会把内容推到状态栏下沿）。
    */
-  @Local titleBarTopHeight: number = 56;
+  @Local titleBarTopHeight: number = 94;
   /** Search mode: 0 = songs, 1 = playlists, 2 = singers, 3 = albums. */
   @Local searchMode: number = 0;
   /** Playlist search results. */
@@ -369,12 +375,17 @@ struct OnlineSearchPage {
     this.batchQualityLoading = false;
   }
 
-  /** Recomputes the content top inset from the title row height + search row height. */
+  /**
+   * Recomputes the content top inset from the title row height + search row height.
+   *
+   * ★ 2026-10-11 第二十轮（用户：「我想让它延伸进状态栏」）：这段留白住在**滚动内容里**
+   *   （`List.contentStartOffset`），页根 `NavDestination` 的内容区从屏幕 **y=0** 起排
+   *   （壳层 `HdsNavigation` 自带 `ignoreLayoutSafeArea([...],[TOP,BOTTOM])`；`expandSafeArea`
+   *   只扩绘制区、不改布局）⇒ 要"静止时第一行落在标题栏下沿"，就必须写「状态栏 + 56」。
+   *   上滑时行从标题栏底下**再穿进状态栏**（List 的 clip 默认 true，只在 y=0 处裁）。
+   */
   private refreshContentPaddingTop(): void {
-    // ★ 安全区由框架给（根节点 `ignoreLayoutSafeArea` 只剩 BOTTOM）⇒ 这里只补 HDS 标题栏那一段 56vp。
-    //   原来写的是 `getStatusBarTopVpFromWindowUtil() + 56`，那是配合根节点 ignoreLayoutSafeArea(TOP)
-    //   （内容从屏幕 y=0 起排）的算法；TOP 去掉后再留状态栏那一段 = **顶部多一份空白**。
-    this.titleBarTopHeight = TitleBarConstants.ROW_HEIGHT_VP;
+    this.titleBarTopHeight = getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP;
     // 主体内容顶部：标题行 + bottomBuilder（搜索框+模式切换）实测高度
     this.contentPaddingTop = this.titleBarTopHeight + this.searchHeaderHeight;
   }
@@ -1700,13 +1711,13 @@ struct OnlineSearchPage {
       .width('100%')
       .height('100%')
       .clip(true)
-      // ★ 状态栏那一条只留页面背景（2026-10-11 第十九轮，用户「内容是啥的都在状态栏下面」）：
-      //   内容容器整体让开状态栏高度（原来是 `padding({ top: 0 })`，等于没让）。
-      //   里面的 `List` 有 `clip(true)`（List 默认值）⇒ 行再往上滚最多滚到「状态栏下沿」为止，
-      //   不会再画到时间/信号图标后面；标题栏那 56vp 仍是透明的、列表照样从它底下穿过
-      //   （沉浸式不受影响 —— 那个 56 由 `contentPaddingTop` 给在列表内容里，没动）。
+      // ★ 状态栏那一条归页面（2026-10-11 第二十轮，用户：「我想让它延伸进状态栏」）：
+      //   这里是**内容容器**，顶部 padding 回到 0（== 不让位）—— 容器从屏幕 y=0 起排、
+      //   `List` 拿整屏视口；"状态栏 + 标题栏 + 搜索行"那段留白改由
+      //   `List.contentStartOffset(this.contentPaddingTop)` 给在**滚动内容里**（见
+      //   `refreshContentPaddingTop()`），静止时位置不变、上滑则整行从标题栏底下穿进状态栏。
       //   页根的 `expandSafeArea(TOP)` + `backgroundColor` 继续把页面底色铺到状态栏那一条。
-      .padding({ top: getStatusBarTopVpFromWindowUtil() })
+      .padding({ top: 0 })
     }
     .onBackPressed((): boolean => guardPlayerBack('OnlineSearchPage'))
     .hideTitleBar(false)

@@ -37,8 +37,11 @@ export struct SyncSettingsPanel {
   /**
    * 内容顶部要额外避让的高度（vp）
    *
-   * 作为路由页时由 SettingsDetailPage 传标题栏高度（内容区铺到标题栏下面）；
-   * 内嵌在设置页宽屏右栏时传 0。
+   * ★ 2026-10-11 第二十轮（用户：「我想让它延伸进状态栏」）：这一段落在面板 `Scroll` 的
+   *   **内容** padding 上 ⇒ 它是"滚动内容的第一段留白"，可以含状态栏那一段。
+   *   两个调用点各自传自己的口径：路由页（`SyncSettingsPageBuilder`）传「状态栏 + 56」，
+   *   设置页内嵌/二级页那一支由 `SettingsDetailPage.contentTopOffset()` 给（内嵌 = 0）。
+   *   **面板内部不写死任何状态栏数值。**
    */
   @Param topOffset: number = 0;
   @Local themeState: ThemeState =
@@ -638,30 +641,20 @@ function describeDislikeRule(rule: string): string {
 /**
  * 路由页入口（features/sync/router_map.json 登记的 SyncSettingsPage）
  *
- * 内容区铺到标题栏下面（与 setting 模块的二级页一致），所以这里补一段顶部避让。
- * 顶部避让分两段：**状态栏那一段由本层容器负责**（让状态栏只留页面背景），
- * **HDS 标题栏那 56vp 仍由面板的 `topOffset` 负责**（列表照样从标题栏材质底下穿过）。
+ * ★ 2026-10-11 第二十轮（用户：「我想让它延伸进状态栏」）：**「状态栏 + 56」整段都交给
+ *   面板的 `topOffset`**（它落在面板 `Scroll` 的**内容** padding 上 ⇒ 列表能一路从标题栏
+ *   底下穿进状态栏），页根里**不再套让位用的容器**。
+ *   ⚠️ 数值**不许写死在面板内部**：面板同时被 setting 的「设置 → 同步设置」内嵌复用
+ *   （`SettingsDetailPage.SyncSettingsSheet` 传 `topOffset = contentTopOffset()`，
+ *   内嵌那一支 = 0，二级页那一支 = 状态栏 + 56）—— 写进面板就会多出一份。
  */
 @Builder
 export function SyncSettingsPageBuilder(name: string, param: Object) {
   HdsNavDestination() {
-    Column() {
-      SyncSettingsPanel({
-        // 只给 HDS 标题栏那一行；状态栏那一段由外层容器的 padding 给（见下）。
-        topOffset: TitleBarConstants.ROW_HEIGHT_VP
-      })
-    }
-    .width('100%')
-    .height('100%')
-    .clip(true)
-    // ★ 状态栏那一条只留页面背景（2026-10-11 第十九轮，用户「内容是啥的都在状态栏下面」）：
-    //   内容容器整体让开状态栏高度；面板里的 `Scroll` 会把自己的内容裁在自身边界内
-    //   （`Scroll` 的 clip 默认 true）⇒ 内容再往上滚最多滚到「状态栏下沿」为止，
-    //   不会画到时间/信号图标后面。标题栏那 56vp 仍是透明的、内容照样从它底下穿过。
-    //   ⚠️ 这一段**不能写进 `SyncSettingsPanel` 里**：setting 的「设置 → 同步设置」是**内嵌**复用
-    //   同一个面板（`SettingsDetailPage.SyncSettingsSheet` 传 `topOffset = contentTopOffset()`），
-    //   内嵌那一支外层已经让过状态栏，写进面板会多出一份。
-    .padding({ top: getStatusBarTopVpFromWindowUtil() })
+    SyncSettingsPanel({
+      // = 状态栏 + HDS 标题栏；面板里再加它自己的 12vp ⇒ 总高仍是 38 + 56 + 12。
+      topOffset: getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP
+    })
   }
   .titleBar({ content: { title: { mainTitle: '同步设置' } } })
   .onBackPressed((): boolean => guardPlayerBack('SyncSettingsPage'))

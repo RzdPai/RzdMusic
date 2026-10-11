@@ -450,7 +450,10 @@ export struct PlaylistHomePage {
               startMargin: 16,
               endMargin: 16
             })
-            .contentStartOffset(TitleBarConstants.ROW_HEIGHT_VP)
+            // ★ 2026-10-11 第二十轮（用户：「我想让它延伸进状态栏」）："状态栏 + HDS 标题栏"
+            //   这一整段留白**放进滚动内容里**（页根内容区从屏幕 y=0 起排 ⇒ 偏移 = 状态栏 + 56）。
+            //   静止时第一行正好落在标题栏下沿，上滑则整行从标题栏底下再穿进状态栏。
+            .contentStartOffset(getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP)
           }
         } else {
           if (this.favoriteList.length === 0) {
@@ -487,7 +490,8 @@ export struct PlaylistHomePage {
               startMargin: 16,
               endMargin: 16
             })
-            .contentStartOffset(TitleBarConstants.ROW_HEIGHT_VP)
+            // ★ 同一支的偏移算式，理由见上面那处 contentStartOffset。
+            .contentStartOffset(getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP)
           }
         }
       }
@@ -495,12 +499,9 @@ export struct PlaylistHomePage {
       .height('100%')
       .clip(true)
       .padding({
-        // ★ 状态栏那一条只留页面背景（2026-10-11 第十九轮，用户「内容是啥的都在状态栏下面」）：
-        //   内容容器整体让开状态栏高度；里面的 `List` 有 `clip(true)`，
-        //   行再往上滚最多滚到「状态栏下沿」为止，不会再画到时间/信号图标后面。
-        //   标题栏那 56vp 仍是透明的、列表照样从它底下穿过（沉浸式不受影响）；
-        //   页根的 `expandSafeArea(TOP)` + `backgroundColor` 继续负责把页面底色铺到状态栏那一条。
-        top: getStatusBarTopVpFromWindowUtil(),
+        // ★ 状态栏那一条归页面（2026-10-11 第二十轮，用户：「我想让它延伸进状态栏」）：
+        //   这里是**内容容器**，顶部 padding 已删 —— 容器从屏幕 y=0 起排、List 拿整屏视口，
+        //   "状态栏 + 标题栏"那段留白改由上面两处 `contentStartOffset(状态栏 + 56)` 提供。
         left: new BreakpointType(16, 24, 32, 32).getValue(this.breakpointEnv.widthBreakpoint),
         right: new BreakpointType(16, 24, 32, 32).getValue(this.breakpointEnv.widthBreakpoint)
       })
@@ -511,10 +512,11 @@ export struct PlaylistHomePage {
     .titleBar(this.getTitleBar())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.pageScroller])
-    // ★ 状态栏两件套（只改这两行，顺手把上面两处 contentStartOffset 里的状态栏那一段去掉）：
-    //   ① `expandSafeArea` 的 TOP = 只扩绘制区（官方：「不改变布局情况下扩展其绘制区域至安全区外」），
-    //      本页 `backgroundColor` 才能铺到状态栏那一条，不再透出上一页；
-    //   ② `ignoreLayoutSafeArea` **只留 BOTTOM** = 它改布局，根节点带 TOP 会把 HDS 标题栏顶进状态栏。
+    // ★ 状态栏两件套（2026-10-11 第二十轮复核）：① `expandSafeArea` 的 TOP = 只扩绘制区
+    //   （官方：「不改变布局情况下扩展其绘制区域至安全区外」），本页 `backgroundColor` 才能铺到状态栏那一条，
+    //   不再透出上一页；② `ignoreLayoutSafeArea` **只留 BOTTOM** = 它改布局，根节点带 TOP 会把 HDS 标题栏顶进状态栏。
+    //   ⚠️ 正因为①不改布局、②不带 TOP，页根内容区从屏幕 **y=0** 起排 ⇒ 上面两处 `contentStartOffset`
+    //   必须写「状态栏 + 56」（不是只写 56），顶部那段留白**不要**改回容器 padding。
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
     .backgroundColor($r('sys.color.background_secondary'))

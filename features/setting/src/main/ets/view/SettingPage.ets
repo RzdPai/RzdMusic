@@ -21,7 +21,7 @@ import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { http } from '@kit.NetworkKit';
 import { pasteboard } from '@kit.BasicServicesKit';
-import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, BarScrollHelper, RouterUrlConstants, BreakpointType, HomeSourceState, LocalCoverImage, LyricBlurState, LyricFontSizeState, MusicAppState, MusicStoreService, notifyHomeSourceRefresh, PlaybackFlowLightState, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, WindowInfo, buildTitleMaterial, getWindowInfoState } from 'musicbasic';
+import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, BarScrollHelper, RouterUrlConstants, BreakpointType, HomeSourceState, LocalCoverImage, LyricBlurState, LyricFontSizeState, MusicAppState, MusicStoreService, notifyHomeSourceRefresh, PlaybackFlowLightState, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, WindowInfo, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, getWindowInfoState } from 'musicbasic';
 import { BlurStrategy, HdsNavigation, HdsNavigationTitleMode, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatformsOf, lxSourceManager, MediaService } from 'player';
 import type { LXApiImportResult } from 'player';
@@ -1414,11 +1414,14 @@ export struct SettingPage {
       }
       .width('100%')
       .padding({
-        // ★ 安全区由框架给（根节点 `ignoreLayoutSafeArea` 只剩 BOTTOM，状态栏避让交给框架），
-        //   这里只补 HDS 标题栏 56vp。原来写的是"状态栏 + 56"——那是配合根节点 ignoreLayoutSafeArea(TOP)
-        //   （内容从屏幕 y=0 起排）的算法；TOP 去掉后框架会先把内容推到状态栏下沿，
-        //   再留状态栏那一段就是**顶部多出一份空白**。
-        top: TitleBarConstants.ROW_HEIGHT_VP,
+        // ★ 2026-10-11 第二十轮（用户：「我想让它延伸进状态栏」）：这段留白在**滚动内容里**
+        //   （`Scroll` 的内容根 `Column` 的 padding），所以必须含状态栏那一段。
+        //   依据：页根 `NavDestination` 的内容区从屏幕 **y=0** 起排（壳层 `HdsNavigation` 自带
+        //   `ignoreLayoutSafeArea([...],[TOP,BOTTOM])`；`expandSafeArea` 只扩绘制区、不改布局）
+        //   ⇒ "静止时搜索框正好落在标题栏下沿" = 偏移 状态栏 + 56。
+        //   上滑时内容从标题栏底下**再穿进状态栏**（`Scroll` 的 clip 默认 true，只在 y=0 处裁）
+        //   —— 这一页里**没有**"内容容器"，整个滚动视口就是页根的一级子节点。
+        top: getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP,
         left: new BreakpointType(12, 16, 24, 24).getValue(this.breakpointEnv.widthBreakpoint),
         right: new BreakpointType(12, 16, 24, 24).getValue(this.breakpointEnv.widthBreakpoint),
         bottom: 72

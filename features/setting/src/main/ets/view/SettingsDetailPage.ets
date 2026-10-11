@@ -281,15 +281,32 @@ export struct SettingsDetailPage {
   }
 
   /**
-   * ★ 这里**不再加状态栏避让**：根节点 `ignoreLayoutSafeArea` 的 TOP 已去掉（只剩 BOTTOM），
-   *   框架会先把内容推到状态栏下沿，页面自己再补状态栏那一段就是**顶部多出一份空白**；
-   *   铺到状态栏那一条由根节点的 `expandSafeArea([SYSTEM],[TOP,BOTTOM])` 负责（只扩绘制区、不改布局）。
-   *   所以各子面板的顶部留白 = **只有 HDS 标题栏 56vp**（见下面各 `padding({ top: … })`）。
+   * 子面板顶部要避让的高度。
    *
-   * @returns 子面板顶部要避让的高度：内嵌（宽屏右栏）时为 0，二级页时为 HDS 标题栏高度。
+   * ★ 2026-10-11 口径（用户明确两次）：二级页要**延伸进状态栏** ——
+   *   内容（列表）往上滚要能一直画到屏幕最顶端，状态栏那一条也归页面。
+   *   所以**不能**把状态栏高度加到"内容容器"的 padding 上（那样视口从状态栏下沿起排，
+   *   状态栏那一条就成了一段死背景），而应该把"状态栏 + 标题栏"加在**子面板自己**的顶部留白上：
+   *   静止时第一项正好落在标题栏下沿，往上滚则整项从标题栏底下穿到状态栏里。
+   *
+   * @returns 内嵌（宽屏右栏）时只补 HDS 标题栏；二级页时补"状态栏 + HDS 标题栏"。
+   */
+  private panelTopInset(): number {
+    return this.embedded ? TitleBarConstants.ROW_HEIGHT_VP :
+      getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP;
+  }
+
+  /**
+   * 交给**自带滚动容器的子页面**（`PlatformMusicPage` 那种）的顶部偏移。
+   *
+   * 内嵌（宽屏右栏）时为 0：右栏里没有 HDS 标题栏，也不归它避让状态栏（外层大设置页负责）。
+   * 二级页时 = "状态栏 + HDS 标题栏"（理由同 {@link panelTopInset}）。
+   *
+   * @returns 顶部偏移（vp）。
    */
   private contentTopOffset(): number {
-    return this.embedded ? 0 : TitleBarConstants.ROW_HEIGHT_VP;
+    return this.embedded ? 0 :
+      getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP;
   }
 
   private activeSourceLabel(): string {
@@ -539,7 +556,7 @@ export struct SettingsDetailPage {
       .width('100%')
     }
     .width('100%')
-    .padding({ left: 20, right: 20, top: TitleBarConstants.ROW_HEIGHT_VP + 8, bottom: SETTINGS_PANEL_BOTTOM_VP })
+    .padding({ left: 20, right: 20, top: this.panelTopInset() + 8, bottom: SETTINGS_PANEL_BOTTOM_VP })
   }
 
   /** 平台账号管理弹窗：账号管理。整页导航时内容需避开标题栏（AccountManageSheet 自身仅按弹窗场景留 12vp）。 */
@@ -553,7 +570,7 @@ export struct SettingsDetailPage {
     }
     .width('100%')
     .height('100%')
-    .padding({ top: TitleBarConstants.ROW_HEIGHT_VP + 8 })
+    .padding({ top: this.panelTopInset() + 8 })
   }
 
   /** 平台音乐弹窗。 */
@@ -823,6 +840,7 @@ export struct SettingsDetailPage {
   private PlaybackSheet() {
     Scroll(this.pageScroller) {
       Column({ space: 12 }) {
+        Blank().height(this.panelTopInset())
         Column() {
           this.NetworkQualitySettings(true, 'Wi-Fi / 以太网默认播放/下载音质')
           this.NetworkQualitySettings(false, '蜂窝默认播放/下载音质')
@@ -964,7 +982,7 @@ export struct SettingsDetailPage {
     }
     .width('100%')
     .height('100%')
-    .padding({ top: TitleBarConstants.ROW_HEIGHT_VP })
+    .padding({ top: 0 })
     .align(Alignment.Top)
     .scrollBar(BarState.Off)
   }
@@ -1000,6 +1018,7 @@ export struct SettingsDetailPage {
   private DownloadSheet() {
     Scroll(this.pageScroller) {
       Column({ space: 12 }) {
+        Blank().height(this.panelTopInset())
         Column() {
           this.DownloadQualitySettings()
           this.SubTitle($r('app.string.setting_sub_name_format'))
@@ -1043,7 +1062,7 @@ export struct SettingsDetailPage {
     }
     .width('100%')
     .height('100%')
-    .padding({ top: TitleBarConstants.ROW_HEIGHT_VP })
+    .padding({ top: 0 })
     .align(Alignment.Top)
     .scrollBar(BarState.Off)
   }
@@ -1058,7 +1077,7 @@ export struct SettingsDetailPage {
     }
     .width('100%')
     .height('100%')
-    .padding({ top: TitleBarConstants.ROW_HEIGHT_VP })
+    .padding({ top: this.panelTopInset() })
   }
 
   /** 主题设置弹窗：主题色 / 日夜模式 / 光感，拆为两张卡片。 */
@@ -1066,6 +1085,7 @@ export struct SettingsDetailPage {
   private ThemeSheet() {
     Scroll(this.pageScroller) {
       Column({ space: 12 }) {
+        Blank().height(this.panelTopInset())
         Column() {
           this.SubTitle($r('app.string.setting_sub_theme_color'))
           this.ColorDotRow()
@@ -1104,7 +1124,7 @@ export struct SettingsDetailPage {
     }
     .width('100%')
     .height('100%')
-    .padding({ top: TitleBarConstants.ROW_HEIGHT_VP })
+    .padding({ top: 0 })
     .align(Alignment.Top)
     .scrollBar(BarState.Off)
   }
@@ -1129,6 +1149,7 @@ export struct SettingsDetailPage {
   @Builder
   private OtherSheet() {    Scroll(this.pageScroller) {
       Column({ space: 12 }) {
+        Blank().height(this.panelTopInset())
         CoverCacheSettingsCard()
         Column() {
           this.SubTitle($r('app.string.setting_sub_add_position'))
@@ -1236,7 +1257,7 @@ export struct SettingsDetailPage {
     }
     .width('100%')
     .height('100%')
-    .padding({ top: TitleBarConstants.ROW_HEIGHT_VP })
+    .padding({ top: 0 })
     .align(Alignment.Top)
     .scrollBar(BarState.Off)
   }
@@ -1257,6 +1278,7 @@ export struct SettingsDetailPage {
   @Builder
   private AboutSheet() {    Scroll(this.pageScroller) {
       Column({ space: 12 }) {
+        Blank().height(this.panelTopInset())
         Column() {
           this.CardTitle($r('app.string.mine_about_title'))
 
@@ -1390,7 +1412,7 @@ export struct SettingsDetailPage {
     }
     .width('100%')
     .height('100%')
-    .padding({ top: TitleBarConstants.ROW_HEIGHT_VP })
+    .padding({ top: 0 })
     .align(Alignment.Top)
     .scrollBar(BarState.Off)
   }
@@ -1414,7 +1436,7 @@ export struct SettingsDetailPage {
            *   一往上滑就从标题栏（渐变模糊材质）底下穿过去，顶上那 56vp 不再是一段"死空白"。
            *   用户 2026-10-11：「音源管理页面上方下方都一大块空白，能不能去掉」。
            */
-          Blank().height(TitleBarConstants.ROW_HEIGHT_VP)
+          Blank().height(getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP)
           ForEach(this.lxApiList, (api: LXUserApiInfo) => {
             Row({ space: 8 }) {
               Radio({ value: api.id, group: 'lxSource', indicatorType: RadioIndicatorType.TICK })
@@ -1583,12 +1605,11 @@ export struct SettingsDetailPage {
       }
       .width('100%')
       .height('100%')
-      // ★ 状态栏那一条只留页面背景（用户 2026-10-11：「内容是啥的都在状态栏下面」）：
-      //   内容容器让开状态栏高度 ⇒ 子面板里的列表再往上滚也只能滚到状态栏下沿，
-      //   不会再画到时间/信号图标后面；标题栏那 56vp 仍然透明，内容照样从它底下穿过。
-      //   ⚠️ 宽屏内嵌（`embedded`，右栏那一支）**不加**：那时本页在设置页的右栏里，
-      //      状态栏那一条由外层大设置页负责。
-      .padding({ left: 4, right: 4, top: this.embedded ? 0 : getStatusBarTopVpFromWindowUtil() })
+      // ★ 内容容器**不加**顶部 padding：用户要"延伸进状态栏"（见 `panelTopInset()` 的说明），
+      //   让开状态栏 + 标题栏的那一段加在各子面板自己的顶部留白上，
+      //   这样列表往上滚时能一直画到屏幕最顶端（状态栏那一条也归页面）。
+      //   ⚠️ 宽屏内嵌（`embedded`，右栏那一支）不参与状态栏避让（外层大设置页负责）。
+      .padding({ left: 4, right: 4 })
       .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
   }
 

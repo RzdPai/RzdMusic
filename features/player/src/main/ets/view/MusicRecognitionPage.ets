@@ -555,10 +555,13 @@ export struct MusicRecognitionPage {
           }
           .width('100%')
           .padding({
-            // 安全区由框架给（根节点 `ignoreLayoutSafeArea` 只剩 BOTTOM），这里只补 HDS 标题栏 56vp。
-            // 原来写的是"状态栏 + 56"——那是配合根节点 ignoreLayoutSafeArea(TOP)（内容从屏幕 y=0 起排）
-            // 的算法，TOP 去掉后框架先推到状态栏下沿，再留状态栏那一段就是**多一份空白**。
-            top: TitleBarConstants.ROW_HEIGHT_VP,
+            // ★ 2026-10-11 第二十轮（用户：「我想让它延伸进状态栏」）：这段留白在**滚动内容里**
+            //   （Scroll 的内容根 Column 的 padding），所以必须含状态栏那一段。
+            //   依据：页根 `NavDestination` 内容区从屏幕 **y=0** 起排（壳层 `HdsNavigation` 自带
+            //   `ignoreLayoutSafeArea([...],[TOP,BOTTOM])`；`expandSafeArea` 只扩绘制区、不改布局）
+            //   ⇒ "静止时首屏内容落在标题栏下沿" = 偏移 状态栏 + 56。
+            //   上滑时内容从标题栏底下**再穿进状态栏**（Scroll 的 clip 默认 true，只在 y=0 处裁）。
+            top: getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP,
             left: 16,
             right: 16,
             bottom: 24
@@ -596,13 +599,11 @@ export struct MusicRecognitionPage {
       .width('100%')
       .height('100%')
       .clip(true)
-      // ★ 状态栏那一条只留页面背景（2026-10-11 第十九轮，用户「内容是啥的都在状态栏下面」）：
-      //   内容容器整体让开状态栏高度；里面的 `Scroll` 会把自己的内容裁在自身边界内
-      //   （`Scroll` 的 clip 默认 true），于是内容再往上滚最多滚到「状态栏下沿」为止，
-      //   不会画到时间/信号图标后面。标题栏那 56vp 仍是透明的、内容照样从它底下穿过
-      //   （沉浸式不受影响，见 Scroll 内层 Column 的 `padding top = 56`）；
+      // ★ 状态栏那一条归页面（2026-10-11 第二十轮，用户：「我想让它延伸进状态栏」）：
+      //   这里是**内容容器**，**不加任何顶部 padding** —— 容器从屏幕 y=0 起排，里面的 `Scroll`
+      //   拿到整屏视口；"状态栏 + 标题栏"那段留白改由 Scroll 内容根 Column 的
+      //   `padding top = 状态栏 + 56` 提供。
       //   页根的 `expandSafeArea(TOP)` + `backgroundColor` 继续把页面底色铺到状态栏那一条。
-      .padding({ top: getStatusBarTopVpFromWindowUtil() })
     }
     .onBackPressed((): boolean => guardPlayerBack('MusicRecognitionPage'))
     .hideTitleBar(false)
