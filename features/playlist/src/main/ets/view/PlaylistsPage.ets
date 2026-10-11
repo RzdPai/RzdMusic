@@ -117,8 +117,7 @@ export struct PlaylistsPage {
   @Local showSheet: boolean = false;
   /** 当前弹窗类型：0=新建/重命名歌单，1=导入方式选择，2=网络导入表单。 */
   @Local activeSheet: number = 0;
-  /** True when playlist reordering mode is active (drag rows to reorder). */
-  @Local playlistSortMode: boolean = false;
+  // ★「排序模式」这个中间态已删（用户 2026-10-11：去掉排序按钮，长按直接拖、拖完就落库）
   @Local newPlaylistName: string = '';
   @Local selectedPlaylist: PlaylistDto | undefined = undefined;
   @Local selectedPlaylistId: string = '';
@@ -561,15 +560,9 @@ export struct PlaylistsPage {
     }
   }
 
-  /** Enters playlist reordering mode (drag to reorder). */
-  private enterPlaylistSortMode(): void {
-    this.playlistSortMode = true;
-  }
-
-  /** Exits playlist reordering mode and persists the new order. */
-  private exitPlaylistSortMode(): void {
-    this.playlistSortMode = false;
-  }
+  // ★ 2026-10-11：「排序模式」这套中间态（`playlistSortMode` / `enterPlaylistSortMode()` /
+  //   `exitPlaylistSortMode()`）已按用户要求**删除** —— 标题栏那颗「排序」按钮没了，
+  //   长按歌单行直接就能拖（见 `movePlaylist` 与行的 `.onLongPress` 注释），拖完立刻落库。
 
   /** Persists the current playlist order after a drag reorder. */
   private persistPlaylistOrder(): void {
@@ -580,17 +573,24 @@ export struct PlaylistsPage {
     this.store.reorderPlaylists(ids);
   }
 
-  /** 拖动排序回调：仅排序模式下应用新顺序。 */
+  /**
+   * 拖动排序回调：**直接应用并落库**。
+   *
+   * ★ 2026-10-11 用户报「长按也能拖动，但松手之后位置还是原来的」—— 旧实现只在
+   *   `playlistSortMode` 为真时才应用新顺序，而且**要等用户点标题栏那颗「排序」→「完成」**
+   *   才 `reorderPlaylists()` 落库；中间任何一次 `store.playlistVersion` 变化（增删歌、
+   *   改封面…）都会把列表刷回旧顺序 ⇒ 看着就是"拖完又弹回去"。
+   *   现在：拖一下就应用 + **立刻落库**（`MusicStoreService.reorderPlaylists`），
+   *   也不需要"排序模式"这个中间态了（长按就是拖动，见行的 `.onLongPress` 注释）。
+   */
   private movePlaylist(from: number, to: number): void {
-    if (!this.playlistSortMode) {
-      return;
-    }
     if (from === to || from < 0 || to < 0 || from >= this.playlists.length || to >= this.playlists.length) {
       return;
     }
     const moved: PlaylistDto[] = this.playlists.splice(from, 1);
     this.playlists.splice(to, 0, moved[0]);
     this.playlists = [...this.playlists];
+    this.persistPlaylistOrder();
   }
 
   /** Frosted glass strength of the playlist row popup, following the ambient light level. */
@@ -607,21 +607,16 @@ export struct PlaylistsPage {
     }
   }
 
-  /** 我的歌单 section header：排序 + 新增（仅收藏栏显示）。 */
+  /**
+   * 我的歌单 section header。
+   *
+   * ★ 2026-10-11：用户要求**去掉那颗「排序」按钮**，改成"直接长按就拖"（见 `movePlaylist`），
+   *   所以这里不再有「完成」按钮，header 只留一条留白（原来那颗按钮就是为了退出排序模式）。
+   */
   @Builder
   private PlaylistsHeader() {
     Row() {
       Blank()
-      if (this.playlistSortMode) {
-        Text('完成')
-          .fontSize($r('sys.float.Body_S'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.themeState.color)
-          .onClick(() => {
-            this.persistPlaylistOrder();
-            this.exitPlaylistSortMode();
-          })
-      }
     }
     .width('100%')
     .padding({ top: 8, bottom: 12 })
@@ -758,66 +753,64 @@ export struct PlaylistsPage {
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
 
-      if (this.playlistSortMode) {
-        SymbolGlyph($r('sys.symbol.line_3_horizontal'))
-          .fontSize(20)
-          .fontColor([$r('sys.color.icon_tertiary')])
-          .margin({ right: 4 })
-      } else {
-        SymbolGlyph($r('sys.symbol.dot_grid_1x2_circle'))
-          .fontSize(18)
-          .fontColor([$r('sys.color.font_tertiary')])
-          .margin({ right: 4 })
-          .bindMenu([
-            {
-              value: $r('app.string.mine_playlist_export'),
-              action: (): void => {
-                this.selectedPlaylist = p;
-                this.exportPlaylist();
-              }
-            },
-            {
-              // 自定义封面：相册选图 → 拷进沙箱 → 写进歌单（详情页大图与这里都会用它）
-              value: '设置歌单封面',
-              action: (): void => {
-                void this.pickCoverFor(p);
-              }
-            },
-            {
-              value: '移除自定义封面',
-              action: (): void => {
-                MusicStoreService.getInstance().setPlaylistCover(p.id, '');
-                this.getUIContext().getPromptAction().showToast({ message: '已移除自定义封面', duration: 2000 });
-              }
-            },
-            {
-              value: $r('app.string.mine_playlist_rename'),
-              action: (): void => {
-                this.selectedPlaylist = p;
-                this.renamePlaylist();
-              }
-            },
-            {
-              value: $r('app.string.mine_playlist_delete'),
-              action: (): void => {
-                this.selectedPlaylist = p;
-                this.deletePlaylist();
-              }
+      // ⋯ 菜单：**永远都在**（导出 / 设置封面 / 移除封面 / 重命名 / 删除）。
+      // ⚠️ 2026-10-11 之前这里有个 `if (playlistSortMode)` 分支，进排序模式后这颗按钮会被
+      //    换成拖动手柄 ⇒ 用户看到的就是「歌单右侧的菜单按钮没了，无法删除」。现在排序模式
+      //    已删（长按行直接拖，见 movePlaylist），这一颗按钮不再被换掉。
+      SymbolGlyph($r('sys.symbol.dot_grid_1x2_circle'))
+        .fontSize(18)
+        .fontColor([$r('sys.color.font_tertiary')])
+        .margin({ right: 4 })
+        .bindMenu([
+          {
+            value: $r('app.string.mine_playlist_export'),
+            action: (): void => {
+              this.selectedPlaylist = p;
+              this.exportPlaylist();
             }
-          ], {
-            backgroundBlurStyle: this.playlistMenuBlur()
-          })
-        SymbolGlyph($r('sys.symbol.chevron_right'))
-          .fontSize(18)
-          .fontColor([$r('sys.color.font_tertiary')])
-      }
+          },
+          {
+            // 自定义封面：相册选图 → 拷进沙箱 → 写进歌单（详情页大图与这里都会用它）
+            value: '设置歌单封面',
+            action: (): void => {
+              void this.pickCoverFor(p);
+            }
+          },
+          {
+            value: '移除自定义封面',
+            action: (): void => {
+              MusicStoreService.getInstance().setPlaylistCover(p.id, '');
+              this.getUIContext().getPromptAction().showToast({ message: '已移除自定义封面', duration: 2000 });
+            }
+          },
+          {
+            value: $r('app.string.mine_playlist_rename'),
+            action: (): void => {
+              this.selectedPlaylist = p;
+              this.renamePlaylist();
+            }
+          },
+          {
+            value: $r('app.string.mine_playlist_delete'),
+            action: (): void => {
+              this.selectedPlaylist = p;
+              this.deletePlaylist();
+            }
+          }
+        ], {
+          backgroundBlurStyle: this.playlistMenuBlur()
+        })
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(18)
+        .fontColor([$r('sys.color.font_tertiary')])
     }
     .width('100%')
     .padding({ top: 12, bottom: 12 })
+    // ★ 长按 = 直接进入拖动排序（用户 2026-10-11 要求：去掉「排序」按钮，长按就拖）。
+    //   ArkUI 的 `List` + `Repeat.onMove` 本来就是"长按拖动"，这里不需要额外的模式开关；
+    //   拖动落到 `movePlaylist()`，它**立刻落库**（`MusicStoreService.reorderPlaylists`），
+    //   所以松手后顺序不会再被刷回去（用户报的"松手之后位置还是原来的"）。
     .onClick(() => {
-      if (this.playlistSortMode) {
-        return;
-      }
       const param = new ToplistRouteParam();
       param.sectionType = 'playlist';
       param.playlistId = p.id;
@@ -983,16 +976,8 @@ export struct PlaylistsPage {
         },
         menu: {
           value: [
-            {
-              content: {
-                label: 'sort',
-                icon: $r('sys.symbol.list_checkmask'),
-                isEnabled: true,
-                action: (): void => {
-                  this.enterPlaylistSortMode();
-                }
-              }
-            },
+            // ★ 用户 2026-10-11：「你顺手把排序按钮去掉，直接长按触发排序」——
+            //   所以这里**只有「+」**（新建 / 导入）；拖动排序改成长按歌单行（见 PlaylistRow）。
             {
               content: {
                 label: 'add',

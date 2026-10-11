@@ -38,6 +38,16 @@ import { LengthMetrics } from '@kit.ArkUI';
 const LX_ONLINE_IMPORT_MAX_BYTES: number = 9 * 1024 * 1024;
 const LX_ONLINE_IMPORT_TIMEOUT: number = 15000;
 
+/**
+ * 各子面板**底部**要留的高度（vp）—— 让最后一行不被二级页底部那条官方浮动播放条压住。
+ *
+ * 为什么从 160 收到 88（用户 2026-10-11：「音源管理页面上方下方都一大块空白，能不能去掉」）：
+ *   160 是"旧壳层自绘胶囊 + 两排底栏"时代按最大占用拍的，滚到底会露出一大段空白。
+ *   现在二级页底部只有一条 56vp 的官方浮动栏（`floatingMiniBar()`），离底间距 ≈ 手势条 + 8，
+ *   所以 56 + 24(手势条) + 8(余量) = 88 就够；再多就是纯空白。
+ */
+const SETTINGS_PANEL_BOTTOM_VP: number = 88;
+
 export class SettingsDetailRouteParam {
   index: number = 4;
 }
@@ -529,7 +539,7 @@ export struct SettingsDetailPage {
       .width('100%')
     }
     .width('100%')
-    .padding({ left: 20, right: 20, top: TitleBarConstants.ROW_HEIGHT_VP + 8, bottom: 160 })
+    .padding({ left: 20, right: 20, top: TitleBarConstants.ROW_HEIGHT_VP + 8, bottom: SETTINGS_PANEL_BOTTOM_VP })
   }
 
   /** 平台账号管理弹窗：账号管理。整页导航时内容需避开标题栏（AccountManageSheet 自身仅按弹窗场景留 12vp）。 */
@@ -939,7 +949,7 @@ export struct SettingsDetailPage {
         .backgroundColor($r('app.color.card_background'))
       }
       .width('100%')
-      .padding({ left: 20, right: 20, top: 12, bottom: 160 })
+      .padding({ left: 20, right: 20, top: 12, bottom: SETTINGS_PANEL_BOTTOM_VP })
     }
     .width('100%')
     .height('100%')
@@ -1018,7 +1028,7 @@ export struct SettingsDetailPage {
         .backgroundColor($r('app.color.card_background'))
       }
       .width('100%')
-      .padding({ left: 20, right: 20, top: 12, bottom: 160 })
+      .padding({ left: 20, right: 20, top: 12, bottom: SETTINGS_PANEL_BOTTOM_VP })
     }
     .width('100%')
     .height('100%')
@@ -1077,7 +1087,7 @@ export struct SettingsDetailPage {
         .backgroundColor($r('app.color.card_background'))
       }
       .width('100%')
-      .padding({ left: 20, right: 20, top: 12, bottom: 160 })
+      .padding({ left: 20, right: 20, top: 12, bottom: SETTINGS_PANEL_BOTTOM_VP })
     }
     .width('100%')
     .height('100%')
@@ -1209,7 +1219,7 @@ export struct SettingsDetailPage {
         .backgroundColor($r('app.color.card_background'))
       }
       .width('100%')
-      .padding({ left: 20, right: 20, top: 12, bottom: 160 })
+      .padding({ left: 20, right: 20, top: 12, bottom: SETTINGS_PANEL_BOTTOM_VP })
     }
     .width('100%')
     .height('100%')
@@ -1363,7 +1373,7 @@ export struct SettingsDetailPage {
       }
       .width('100%')
       .alignItems(HorizontalAlign.Start)
-      .padding({ left: 20, right: 20, top: 24, bottom: 160 })
+      .padding({ left: 20, right: 20, top: 24, bottom: SETTINGS_PANEL_BOTTOM_VP })
     }
     .width('100%')
     .height('100%')
@@ -1385,6 +1395,13 @@ export struct SettingsDetailPage {
 
       Scroll(this.pageScroller) {
         Column({ space: 8 }) {
+          /**
+           * ★ 顶部这段留白放在**滚动内容里面**（不是外层 padding），目的是让卡片能**滑到 HDS
+           *   标题栏底下**（沉浸式）：静止时与原来一样、第一张卡正好在标题栏下沿，
+           *   一往上滑就从标题栏（渐变模糊材质）底下穿过去，顶上那 56vp 不再是一段"死空白"。
+           *   用户 2026-10-11：「音源管理页面上方下方都一大块空白，能不能去掉」。
+           */
+          Blank().height(TitleBarConstants.ROW_HEIGHT_VP)
           ForEach(this.lxApiList, (api: LXUserApiInfo) => {
             Row({ space: 8 }) {
               Radio({ value: api.id, group: 'lxSource', indicatorType: RadioIndicatorType.TICK })
@@ -1476,7 +1493,9 @@ export struct SettingsDetailPage {
     .width('100%')
     .height('100%')
     .align(Alignment.Top)
-    .padding({ left: 20, right: 20, top: TitleBarConstants.ROW_HEIGHT_VP + 8, bottom: 160 })
+    // 顶部的 56vp 已经挪进 Scroll 内容里（见上面那个 `Blank()`），这里**不再补**顶部留白 ——
+    // 否则就是"标题栏 56 + 外层 56"两份，顶上白白多一段（用户报的"上方一大块空白"）。
+    .padding({ left: 20, right: 20, top: 0, bottom: SETTINGS_PANEL_BOTTOM_VP })
   }
 
   private applyCustomColor(): void {

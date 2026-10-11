@@ -71,9 +71,6 @@ import { common } from '@kit.AbilityKit';
  */
 const FLOATING_MINI_BAR_HEIGHT_VP: number = 56;
 
-  /** 二级页面悬浮迷你条在宽屏下的最大宽度（vp）：胶囊不该铺满整个平板/桌面窗口。 */
-  const FLOATING_MINI_BAR_MAX_WIDTH_VP: number = 560;
-
 /**
  * 播放页浮层在壳层 Stack 里的层级。
  *
@@ -866,15 +863,14 @@ struct Index {
    * 形态用**首页两排 Tab 时上面那条**的写法：同一个
    * `HomeMiniBarPlayer({ showPreviousTrack: false, followAppMiniBarExpanded: false })`。
    *
-   * 三个尺寸都必须**显式**给，不能靠百分比撑：
+   * 两个尺寸**显式**给：
    *   - 高度：56vp（封面 44 + 上下各 6vp）。它是播放页形变的起点，几何只随
    *     `FLOATING_MINI_BAR_HEIGHT_VP` 这一个常量变化。
-   *   - 宽度：**显式 vp**（见 {@link floatingMiniBarWidthVp}）。之前靠 `width('100%')` +
-   *     外层 padding 居中，在部分形态下算错 —— 要么贴到屏幕右边，要么撑成整条大长方形
-   *     （用户反馈的「大长方形，很丑」就是宽度算成了整屏）。
-   *   - 圆角：胶囊用高度的一半，视觉上才是"一条胶囊"而不是"一块板子"。
-   *   栏宽同时写进 `barFloatingStyle.barWidth`：让 HDS 自己按这个宽度画胶囊，
-   *   我们再 `clip(false)`（裁了会把 HDS 的背板/折射一起裁掉）。
+   *   - 宽度：**交给 HDS**（宿主铺满宽度，栏体/胶囊的宽度与居中由官方浮动栏自己算）。
+   *     以前我们写死过宽度（`width(窗口宽 − 边距)` + `barFloatingStyle.barWidth`），
+   *     真机反馈是"要么贴到屏幕右边、要么撑成整条大长方形，很丑"—— 那是和 HDS 的让位动画打架
+   *     （2026-10-01 那次实验的教训），现在不再自己算。
+   *   `clip(false)` 要留着：裁了会把 HDS 的背板/折射一起裁掉。
    *
    * 触摸：整屏 Stack 必须 `HitTestMode.Transparent` —— 默认的 Default 会把二级页面的
    * 点击全吃掉（踩过）；Transparent 表示自己不吃事件但子节点照常响应。
@@ -882,10 +878,25 @@ struct Index {
   @Builder
   private floatingMiniBar() {
     Stack({ alignContent: Alignment.Bottom }) {
-      // 唯一可见的"页签"就是播放器本体（CustomBuilder 路线，与参考工程 PanePage 一致）：
-      // 不配置第二条 miniBar，TabContent 故意留空 —— 这一层只为拿到官方底栏宿主。
+      /**
+       * ★★ 关键：`TabContent()` **不能是空的**。
+       *
+       * 2026-10-01 那次实验就是"空 TabContent + 播放器当 tabBar"，真机上**没有胶囊背板**
+       * （作者当时只能补一块自绘背板兜底）。2026-10-11 复现了同一个现象：用户报
+       * 「底下播放条是透明的，只看得见封面和按钮」。现在往 TabContent 里放一个**真实的
+       * 满尺寸容器**，让 HDS 认为这条栏有内容，从而按悬浮样式画出自己的胶囊背板 + 材质。
+       *
+       * 另外 `barFloatingStyle` 的键**与首页那条官方底栏保持一致**（只给
+       * `barBottomMargin` / `adaptToHandedness` / `systemMaterialEffect`）：
+       * 上一版多传的 `barWidth` / `barSideMargin: 0` / `gradientMask: {maskHeight: 0}` 是
+       * 2026-10-01 实验那套（**当时正是配着那块自绘背板用的**），现在一律不传，避免任何
+       * "自己接管栏体"的暗示，背板/材质全交给 HDS。
+       */
       HdsTabs({ barPosition: BarPosition.End }) {
         TabContent() {
+          Column()
+            .width('100%')
+            .height('100%')
         }
         .tabBar(this.floatingMiniBarContent())
       }
@@ -901,36 +912,22 @@ struct Index {
       // ★ 不要碰 `barBackgroundColor` / `barBackgroundBlurStyle`！
       //   官方《组件适配沉浸光感》原文：「设置悬浮材质后，**不建议**再通过 `barBackgroundColor`、
       //   `barBackgroundBlurStyle` 为 TabBar 设置背景色或背景模糊，**避免遮挡材质效果**。」
-      //   我们上一版照 2026-10-01 那次实验写了 `Color.Transparent` + `BlurStyle.NONE`，
-      //   真机反馈是「底下播放条是**透明**的，只看得见封面和按钮」—— 也就是把 HDS 自己那条
-      //   悬浮胶囊背板一起关掉了。⇒ 一律不设，背板/材质全交给 HDS。
       .barFloatingStyle({
-        // 三档同值：栏宽由我们显式给（见 floatingMiniBarWidthVp 的说明），
-        // 不交给 HDS 按内容算 —— 不然又会出现"要么贴边、要么撑成大长方形"。
-        barWidth: {
-          smallWidth: this.floatingMiniBarWidthVp(),
-          mediumWidth: this.floatingMiniBarWidthVp(),
-          largeWidth: this.floatingMiniBarWidthVp()
-        },
-        barSideMargin: 0,
-        // 离底距离由外层 margin 给（与旧胶囊同一套算术），栏自己不再叠一份。
-        barBottomMargin: 0,
-        // 底部渐隐遮罩：二级页面不需要（它会盖住内容），显式关掉。
-        gradientMask: { maskColor: Color.Transparent, maskHeight: 0 },
+        // 离底间距交给 HDS 的浮动栏自己算（与首页那条同口径）
+        barBottomMargin: this.floatingMiniBarBottomMarginVp(),
         adaptToHandedness: false,
         // ★ 官方沉浸光感：档位与标题栏/首页底栏共用同一份（ambientTitleMaterial）。
         systemMaterialEffect: this.ambientTitleMaterial()
       })
-      .width(this.floatingMiniBarWidthVp())
+      .width(StyleConstants.FULL_WIDTH)
       .height(FLOATING_MINI_BAR_HEIGHT_VP)
-      .borderRadius(FLOATING_MINI_BAR_HEIGHT_VP / 2)
       // 不要裁：HDS 的材质背板/折射范围比内容盒大，裁了会缺一圈。
       .clip(false)
       .onAppear((): void => {
         Logger.info('RzdSecondaryMiniMaterial',
           `mode=hds-systemMaterialEffect officialRegion=yes host=single-tab-hdstabs ` +
-            `height=${FLOATING_MINI_BAR_HEIGHT_VP} width=${this.floatingMiniBarWidthVp()} ` +
-            `ambient=${this.ambientLevelIndex()} singleVisibleBar=true implicitBlur=none`);
+            `tabContent=nonEmpty height=${FLOATING_MINI_BAR_HEIGHT_VP} ` +
+            `ambient=${this.ambientLevelIndex()} singleVisibleBar=true`);
       })
       .onAreaChange((_oldArea: Area, area: Area): void => {
         Logger.info('RzdSecondaryMiniMaterial',
@@ -960,33 +957,17 @@ struct Index {
       showPreviousTrack: false,
       followAppMiniBarExpanded: false
     })
-      .width(this.floatingMiniBarWidthVp())
+      // 宽度交给 HDS 的浮动栏（它自己算胶囊宽度）：这里写 100% 就是"填满栏体"，
+      // 再写死一个宽度会和 HDS 的让位/居中打架（2026-10-01 那次实验的教训）。
+      .width(StyleConstants.FULL_WIDTH)
       .height(FLOATING_MINI_BAR_HEIGHT_VP)
   }
 
-  /** 悬浮迷你条的左右间距（vp）：只在小屏给一点边距，宽屏居中留白。 */
-  private floatingMiniBarSideMarginVp(): number {
-    return new BreakpointType(12, 16, 96, 160, 9).getWidthValueWithHeightSM(
-      this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint);
-  }
-
-  /**
-   * 悬浮迷你条宽度（vp）。
-   *
-   * 手机：窗口宽 − 两侧边距（12 / 16）。宽屏：固定胶囊宽度、居中，不再拉满 ——
-   * 二级页面上的播放器是"浮起来的一条"，撑满整屏就变成用户说的"大长方形"。
-   * @returns 宽度（vp）。
-   */
-  private floatingMiniBarWidthVp(): number {
-    const side: number = this.floatingMiniBarSideMarginVp();
-    if (this.viewportWidthVp <= 0) {
-      return 336;
-    }
-    const full: number = this.viewportWidthVp - side * 2;
-    const isWide: boolean = this.breakpointEnv.widthBreakpoint !== WidthBreakpoint.WIDTH_SM &&
-      this.breakpointEnv.widthBreakpoint !== WidthBreakpoint.WIDTH_MD;
-    return isWide ? Math.min(FLOATING_MINI_BAR_MAX_WIDTH_VP, full) : Math.max(220, full);
-  }
+  // ⚠️ 这里原来有 `floatingMiniBarSideMarginVp()` / `floatingMiniBarWidthVp()` 两个"自己算胶囊宽度"
+  //    的辅助函数（连同 `FLOATING_MINI_BAR_MAX_WIDTH_VP`）。2026-10-11 起**栏宽交给 HDS**：
+  //    官方浮动栏自己会算悬浮胶囊的宽度/居中/左右让位，我们再去 `barWidth`/`width()` 写一遍
+  //    只会和它的让位动画打架（用户当时看到的"要么贴边、要么撑成大长方形"就是这么来的）。
+  //    ⇒ 两个函数已删；宿主铺满宽度（`StyleConstants.FULL_WIDTH`），栏体宽度由 HDS 决定。
 
   /**
    * 悬浮迷你条是否可见。
