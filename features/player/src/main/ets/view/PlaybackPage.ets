@@ -727,6 +727,11 @@ export struct PlaybackPage {
       this.expandState.morphDrive = MorphDrive.NONE;
     }
     this.coverRadiusState.radius = MusicStoreService.getInstance().getCoverCornerRadius();
+    // ★ 流光背景开关：**必须在这里从持久化存储灌进 V2 状态**。
+    //   设置页只在「用户切换开关」时写 `PlaybackFlowLightState`，冷启动时没人灌值 ⇒
+    //   状态默认 false，即使设置里是"开"也永远不画流光（用户反馈的"流光背景不生效"就是这个）。
+    //   与 `AmllLyricView`（自己从 store 灌 fps/居中/副歌词）保持同一套做法。
+    this.flowLightState.enabled = MusicStoreService.getInstance().getPlaybackFlowLight();
     const song = this.state.getCurrentSongItem();
     this.releaseBackgroundCoverIfPixelMap();
     this.imageLabel = song !== undefined ? song.label : $r('app.media.ic_avatar1');

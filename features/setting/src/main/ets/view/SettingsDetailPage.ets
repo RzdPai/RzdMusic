@@ -21,9 +21,9 @@ import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { http } from '@kit.NetworkKit';
 import { pasteboard } from '@kit.BasicServicesKit';
-import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, BreakpointType, HomeSourceState, CoverRadiusState, LyricBlurState, LyricCenterState, LyricFontSizeState, LyricFpsState, MusicStoreService, PlaybackFlowLightState, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
+import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, BreakpointType, HomeSourceState, CoverRadiusState, LyricBlurState, LyricCenterState, LyricFontSizeState, LyricFpsState, MusicStoreService, notifyHomeSourceRefresh, PlaybackFlowLightState, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
-import { LXUserApiInfo, lxSourceManager, MediaService } from 'player';
+import { LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatformsOf, lxSourceManager, MediaService } from 'player';
 import type { LXApiImportResult } from 'player';
 import { SyncSettingsPanel } from 'sync';
 import { AccountManageSheet } from '../account/AccountManageSheet';
@@ -33,6 +33,7 @@ import { importSourceFiles } from '../util/SourceFileImport';
 
 import { CustomColorSheetContent } from './CustomColorSheetContent';
 import { CapsuleSegmentedSelector } from './CapsuleSegmentedSelector';
+import { LxSourceDeclaredBlock } from './LxSourceTags';
 import { LengthMetrics } from '@kit.ArkUI';
 const LX_ONLINE_IMPORT_MAX_BYTES: number = 9 * 1024 * 1024;
 const LX_ONLINE_IMPORT_TIMEOUT: number = 15000;
@@ -286,6 +287,18 @@ export struct SettingsDetailPage {
       }
     }
     return this.activeSource;
+  }
+
+  /**
+   * 一条音源脚本声明了哪些平台 / 什么音质 / 能做什么。
+   *
+   * 数据链：脚本 init 上报 `sources` → `LXSourceManager.saveApiSources()` 落进
+   * `lx_api_list.json` 的 `apis[].sources` → 这里按音源 id 取出来收敛成标签。
+   * 引擎就绪后 `refresh()` 会重读列表，所以「选中一次该音源」之后标签就出现了。
+   * 没声明过就是空数组 ⇒ 界面给中性提示，**不猜**。
+   */
+  private lxPlatformsOf(api: LXUserApiInfo): LXSourcePlatformInfo[] {
+    return lxDeclaredPlatformsOf(api);
   }
 
   private nameFormatLabel(): string {
@@ -1115,6 +1128,8 @@ export struct SettingsDetailPage {
               if (state !== undefined) {
                 state.source = this.homeSource;
               }
+              // 首页这时在另一个 Tab 里：显式通知一次，别只靠 @Monitor（见 HomeSourceBus 注释）
+              notifyHomeSourceRefresh();
             })
 
           this.SubTitle($r('app.string.setting_sub_use_account_rec'))
@@ -1391,6 +1406,13 @@ export struct SettingsDetailPage {
                     .fontColor($r('sys.color.font_tertiary'))
                     .maxLines(1)
                 }
+                // ★「支持的平台」标签：来源是脚本 init 上报并已持久化的 sources，
+                //   没检测到就给中性提示（详见 LxSourceTags.ets 的文件头）。
+                LxSourceDeclaredBlock({
+                  items: this.lxPlatformsOf(api),
+                  accentColor: this.themeState.color,
+                  active: this.activeSource === api.id
+                })
               }
               .alignItems(HorizontalAlign.Start)
               .layoutWeight(1)

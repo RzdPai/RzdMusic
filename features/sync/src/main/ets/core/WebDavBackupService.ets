@@ -1,6 +1,7 @@
 import { http } from '@kit.NetworkKit';
 import { util } from '@kit.ArkTS';
 import { DataBackupService, MusicStoreService } from 'musicbasic';
+import { attachSourcesToSnapshot, mergeSourcesFromSnapshot } from './SourceSync';
 
 export class WebDavConfig {
   url: string = '';
@@ -80,7 +81,12 @@ export class WebDavBackupService {
   static async backup(config: WebDavConfig): Promise<string> {
     const name: string = 'rzdmusic-backup-' + Date.now() + '-' +
       Math.floor(Math.random() * 1000000000).toString(36) + '.json';
-    const text: string = DataBackupService.getInstance().exportSnapshotText();
+    const snapshotText: string = DataBackupService.getInstance().exportSnapshotText();
+    // 这里把「自定义音源脚本」并进同一份备份的 customSources 段：
+    // 洛雪同步协议里没有音源模块（详见 SourceSync.ets 文件头的核对结果），这是本工程
+    // 现成的、自带账号隔离的跨设备通道。并进去之后**不会**改变 DataBackupService 认得的字段，
+    // 旧版本客户端读到未知键会忽略，旧备份没有该键时按「没有音源」处理。
+    const text: string = await attachSourcesToSnapshot(snapshotText);
     const response = await WebDavBackupService.request(config, name, http.RequestMethod.PUT, text);
     if (response.responseCode !== 200 && response.responseCode !== 201 && response.responseCode !== 204) {
       throw new Error('备份失败 HTTP ' + response.responseCode + '，请确认目录已存在');
@@ -97,6 +103,10 @@ export class WebDavBackupService {
   }
 
   static async restore(text: string): Promise<string> {
-    return await DataBackupService.getInstance().restoreSnapshotText(text);
+    const message: string = await DataBackupService.getInstance().restoreSnapshotText(text);
+    // 设置/歌单是「覆盖」，音源是「保守合并」（本机已有同 id 的不覆盖、本机独有的不删）。
+    // 音源这段失败不影响上面的恢复结论，所以摘要单独拼。
+    const summary: string = await mergeSourcesFromSnapshot(text);
+    return summary.length > 0 ? `${message}；${summary}` : message;
   }
 }

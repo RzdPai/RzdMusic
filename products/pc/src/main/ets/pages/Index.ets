@@ -20,6 +20,7 @@ import {
   AppStorageKeys,
   getWindowInfoState,
   getPlaylistTransitionState,
+  HomeSourceState,
   MusicAppState,
   MusicDbApi,
   MusicStoreService,
@@ -70,6 +71,15 @@ struct Index {
   /** Window layout info (e.g. status bar inset for main column padding). */
   @Local windowInfo: WindowInfo = getWindowInfoState();
   /**
+   * 首页来源平台（设置里选的 `qq`/`kg`/`wy`）。
+   *
+   * ⚠️ PC 壳层原来**没有**这一段：手机壳 `products/default` 会在 aboutToAppear 里把持久化的
+   * 平台值灌进 HomeSourceState，PC 没有 ⇒ 冷启动后 `HomeSourceState.source` 一直是类默认值
+   * `'qq'`，而设置页却是从 preferences 读的（显示"酷狗"）—— 于是"设置里选了平台，首页却不是那个平台"。
+   */
+  @Local homeSourceState: HomeSourceState =
+    AppStorageV2.connect(HomeSourceState, AppStorageKeys.HOME_SOURCE_STATE, () => new HomeSourceState())!;
+  /**
    * 整页形变状态（播放页的展开/收起几何）。
    *
    * PC 壳层本来就是把播放页当浮层挂在 Stack 里（没有模态），所以形变那套几何需要的
@@ -83,6 +93,8 @@ struct Index {
   aboutToAppear() {
     this.appState.playQueueIds = MusicDbApi.getInstance().getSongList().map((dto) => dto.id);
     this.themeState.color = MusicStoreService.getInstance().getThemeColor();
+    // 与手机壳一致：把持久化的「首页来源平台」灌进共享状态（漏了这一段 = 冷启动后首页平台永远是 qq）
+    this.homeSourceState.source = MusicStoreService.getInstance().getHomeSource();
     AppStorage.setOrCreate('lxPlayQuality', MusicStoreService.getInstance().getPlayQuality());
     // 本地音乐库与同步客户端启动初始化（与手机壳层一致）：
     // 同时把这两个 HAR 拉进 pc 的构建图（hvigor 对 HAR 是按引用编译的）。

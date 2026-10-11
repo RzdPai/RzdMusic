@@ -391,6 +391,15 @@ export struct HomePlazaSection {
   build() {
     Column() {
       this.SectionHeader()
+      // 「歌单广场没跟着首页来源平台走」的原因（该平台广场接口取不到数据时才有这行）
+      if (this.recommendViewModel.plazaFollowNote().length > 0) {
+        Text(this.recommendViewModel.plazaFollowNote())
+          .fontSize(12)
+          .lineHeight(17)
+          .fontColor($r('app.color.font_tertiary'))
+          .width(StyleConstants.FULL_WIDTH)
+          .padding({ bottom: 6 })
+      }
       this.SourceBar()
       this.FilterBar()
       this.PlazaBody()

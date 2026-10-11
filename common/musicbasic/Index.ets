@@ -81,6 +81,8 @@ export { FavoriteEntry } from './src/main/ets/model/FavoriteEntry';
 export { PlaylistTransitionState, PlaylistTransitionRect, getPlaylistTransitionState,
   PLAYLIST_HERO_COVER_ID, PLAYLIST_TRANSITION_HOST_ID } from './src/main/ets/model/PlaylistTransitionState';
 export { DataBackupService } from './src/main/ets/util/DataBackupService';
+export { registerHomeSourceRefresh, unregisterHomeSourceRefresh,
+  notifyHomeSourceRefresh } from './src/main/ets/util/HomeSourceBus';
 export { PlaybackPreferenceService } from './src/main/ets/util/PlaybackPreferenceService';
 export { MusicCardBridge } from './src/main/ets/model/MusicCardBridge';
 export type { MusicCardSnapshot } from './src/main/ets/model/MusicCardBridge';

@@ -21,9 +21,9 @@ import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { http } from '@kit.NetworkKit';
 import { pasteboard } from '@kit.BasicServicesKit';
-import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, BarScrollHelper, RouterUrlConstants, BreakpointType, HomeSourceState, LocalCoverImage, LyricBlurState, LyricFontSizeState, MusicAppState, MusicStoreService, PlaybackFlowLightState, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, WindowInfo, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, getWindowInfoState } from 'musicbasic';
+import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, BarScrollHelper, RouterUrlConstants, BreakpointType, HomeSourceState, LocalCoverImage, LyricBlurState, LyricFontSizeState, MusicAppState, MusicStoreService, notifyHomeSourceRefresh, PlaybackFlowLightState, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, WindowInfo, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, getWindowInfoState } from 'musicbasic';
 import { BlurStrategy, HdsNavigation, HdsNavigationTitleMode, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
-import { LXUserApiInfo, lxSourceManager, MediaService } from 'player';
+import { LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatformsOf, lxSourceManager, MediaService } from 'player';
 import type { LXApiImportResult } from 'player';
 import { HuaweiAccountService, HuaweiAccountState } from 'player';
 import { PlayerConstants } from 'player';
@@ -35,6 +35,7 @@ import { SettingsDetailPage, SettingsDetailRouteParam } from './SettingsDetailPa
 import { CapsuleSegmentedSelector } from './CapsuleSegmentedSelector';
 import { OptionChoiceSheet } from './OptionChoiceSheet';
 import { DownloadManagerSection } from './DownloadManagerSection';
+import { LxSourceDeclaredBlock } from './LxSourceTags';
 import { importSourceFiles } from '../util/SourceFileImport';
 const LX_ONLINE_IMPORT_MAX_BYTES: number = 9 * 1024 * 1024;
 const LX_ONLINE_IMPORT_TIMEOUT: number = 15000;
@@ -299,6 +300,17 @@ export struct SettingPage {
   private nameFormatLabel(): string {
     const idx = this.nameFormatValues.indexOf(this.downloadNameFormat);
     return idx >= 0 ? this.nameFormatOptions[idx] : this.downloadNameFormat;
+  }
+
+  /**
+   * 一条音源脚本声明了哪些平台 / 什么音质 / 能做什么。
+   *
+   * 与 `SettingsDetailPage.lxPlatformsOf` 同源同一份实现（`player` 的
+   * `lxDeclaredPlatformsOf`）：脚本 init 上报 `sources` → `saveApiSources()` 落盘 →
+   * 这里读出来收敛成标签。没声明过就是空数组 ⇒ 界面给中性提示，**不猜**。
+   */
+  private lxPlatformsOf(api: LXUserApiInfo): LXSourcePlatformInfo[] {
+    return lxDeclaredPlatformsOf(api);
   }
 
   private colorModeLabel(): string {
@@ -1080,6 +1092,8 @@ export struct SettingPage {
               if (state !== undefined) {
                 state.source = this.homeSource;
               }
+              // 首页这时在另一个 Tab 里：显式通知一次，别只靠 @Monitor（见 HomeSourceBus 注释）
+              notifyHomeSourceRefresh();
             })
 
           this.SubTitle($r('app.string.setting_sub_use_account_rec'))
@@ -1295,6 +1309,12 @@ export struct SettingPage {
                     .fontColor($r('sys.color.font_tertiary'))
                     .maxLines(1)
                 }
+                // ★「支持的平台」标签：与 SettingsDetailPage 的音源管理同一份渲染实现
+                LxSourceDeclaredBlock({
+                  items: this.lxPlatformsOf(api),
+                  accentColor: this.themeState.color,
+                  active: this.activeSource === api.id
+                })
               }
               .alignItems(HorizontalAlign.Start)
               .layoutWeight(1)

@@ -865,11 +865,52 @@ export function pickDedicatedBoardId(source: string): string {
   return '';
 }
 
+/**
+ * {@link pickDedicatedBoardId} 对应榜单的**名字**（首页要把它显示出来）。
+ *
+ * 名字写死而不是去请求接口：首页首帧就要有「来自 酷狗音乐 · 飙升榜」这行字，
+ * 等接口回来再填会让首屏先空一行再跳一次。榜单名对这些平台是稳定的。
+ *
+ * @param source 平台代号（tx / kg / wy）。
+ * @returns 榜单名；未知平台返回空串。
+ */
+export function pickDedicatedBoardName(source: string): string {
+  if (source === 'tx') {
+    return '新歌榜';
+  }
+  if (source === 'kg') {
+    return '飙升榜';
+  }
+  if (source === 'wy') {
+    return '飙升榜';
+  }
+  return '';
+}
+
 export class MusicDataService {
   static readonly sourceList: string[] = SOURCES;
 
   static sourceName(source: string): string {
     return sourceDisplayName(source);
+  }
+
+  /**
+   * 歌单广场（`playlists()`）这个平台到底能不能出数据。
+   *
+   * ⚠️ 2026-10 实测（本机 curl，未登录）：
+   *   - 酷我 `getRcmPlayList`、酷狗 `yueku/v9/special`、网易 `api/playlist/list`：**都能出歌单**；
+   *   - **QQ 不行**：`u.y.qq.com/cgi-bin/musicu.fcg` 的 `playlist.PlayListPlazaServer` 回
+   *     `{"code":0,"playlist":{"code":500003,"subcode":860100005}}` —— HTTP 200、**一条歌单都没有**，
+   *     而且不抛异常，所以广场只会**静默空着**（连"加载失败"都不显示）。
+   *
+   * 用途：「首页来源平台」变化时，只有能出数据的平台才把歌单广场跟着切过去 ——
+   * 否则会把原本能用的酷我广场换成一块空白（那是"变坏了"，不是"没变"）。
+   *
+   * @param source 平台代号（kw / kg / tx / wy / mg）。
+   * @returns true = 广场可跟随该平台。
+   */
+  static plazaSupported(source: string): boolean {
+    return source !== 'tx';
   }
 
   static sortOptions(source: string): SortOption[] {
@@ -1280,7 +1321,17 @@ export class MusicDataService {
     } else if (source === 'mg') {
       root = await requestJson(`https://app.c.nf.migu.cn/MIGUM2.0/v1.0/content/querycontentbyId.do?columnId=${boardId}&needAll=0`);
     } else if (source === 'tx') {
-      root = await requestJson('https://u.y.qq.com/cgi-bin/musicu.fcg', http.RequestMethod.POST, `{"toplist":{"module":"musicToplist.ToplistInfoServer","method":"GetDetail","param":{"topid":${Number(boardId)},"num":100}},"comm":{"uin":0,"format":"json","ct":20,"cv":1859}}`);
+      // ⚠️ 2026-10 实测（本机 curl 复核）：老的
+      //    `u.y.qq.com/cgi-bin/musicu.fcg` + `musicToplist.ToplistInfoServer/GetDetail`
+      //    对**未登录**请求已经不再返回数据 —— 无论 topid / comm 怎么拼，body 只有
+      //    `{"code":500001,"ts":...}`，没有 `songInfoList`。于是首页 QQ 歌曲永远解析出 0 首，
+      //    只能靠 `loadPrivateSongListAsync` 那条兜底（内地榜）撑场面，切换其它榜单/平台自然"没变化"。
+      //    这里改用 `lxTxToplist`（features/player）**同一支经典榜单接口**，实测 code=0 且带
+      //    songlist[].data（songmid / songname / albummid / interval / singer）—— formatTrack
+      //    本来就兼容这一层（`inner = item.data`），所以只换 URL 与下面的取数层级即可。
+      root = await requestJson(
+        `https://c.y.qq.com/v8/fcg-bin/fcg_v8_toplist_cp.fcg?topid=${boardId}&page=detail&type=top&tpl=3&song_begin=0&song_num=100`,
+        http.RequestMethod.GET, undefined, TX_BOARD_HEADERS);
     } else {
       // 酷我：老签名接口（wbd.kuwo.cn，AppId 已被封）换成 kbangserver.kuwo.cn/ksong.s
       root = await requestKwBangSongs(boardId);
@@ -1297,7 +1348,9 @@ export class MusicDataService {
     } else if (source === 'mg') {
       raw = asArray(data['contents']).map((item: JsonObject) => asObject(item['objectInfo']));
     } else if (source === 'tx') {
-      raw = asArray(asObject(data['data'])['songInfoList']);
+      // 经典榜单接口（fcg_v8_toplist_cp）把每首歌放在 `songlist[].data` 里，
+      // 与老的 musicu.fcg（`data.data.songInfoList`）**不是同一层**。
+      raw = asArray(root['songlist']);
     } else {
       raw = asArray(asObject(data['data'] ?? data)['musiclist'] ?? data['musiclist']);
     }

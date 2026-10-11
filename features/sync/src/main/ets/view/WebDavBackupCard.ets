@@ -60,7 +60,7 @@ export struct WebDavBackupCard {
       this.pendingText = await WebDavBackupService.fetch(this.config(), this.fileName);
       const result = await this.getUIContext().getPromptAction().showDialog({
         title: '确认覆盖本机数据',
-        message: '恢复将使用备份中的设置和歌单覆盖本机对应数据，不合并。请先备份当前数据；恢复期间请勿编辑歌单或切换同步。',
+        message: '恢复将使用备份中的设置和歌单覆盖本机对应数据，不合并（自定义音源除外：按 id 保守合并，不覆盖本机已有的同 id 音源，也不删除本机独有的音源）。请先备份当前数据；恢复期间请勿编辑歌单或切换同步。',
         buttons: [{ text: '取消', color: '#808080' }, { text: '覆盖恢复', color: '#E53935' }]
       });
       if (result.index === 1) {
@@ -86,7 +86,9 @@ export struct WebDavBackupCard {
         textItem: { primaryText: { text: 'WebDAV 配置' } },
         cardBackgroundColor: $r('app.color.sync_card_background')
       })
-      Text('独立备份设置和歌单（不含音频）；每次生成独立文件，不覆盖远端。目录须已存在。')
+      Text('独立备份设置、歌单与自定义音源脚本（不含音频）；每次生成独立文件，不覆盖远端。目录须已存在。')
+        .fontSize(12).fontColor($r('sys.color.font_secondary')).width('100%')
+      Text('恢复时：设置与歌单按备份覆盖；自定义音源按 id 保守合并 —— 本机已有同 id 的音源不会被覆盖，本机独有的音源不会被删除。')
         .fontSize(12).fontColor($r('sys.color.font_secondary')).width('100%')
       TextInput({ text: this.url, placeholder: 'https://服务器/dav/备份目录/' })
         .fontColor($r('sys.color.font_primary'))

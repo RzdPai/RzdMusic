@@ -19,7 +19,7 @@ import { image } from '@kit.ImageKit';
 import { effectKit } from '@kit.ArkGraphics2D';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { guardPlayerBack } from 'musicbasic';
-import { AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
+import { AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, ThemeState, TitleBarConstants, WindowUtil, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType } from '@kit.UIDesignKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import {
@@ -133,6 +133,9 @@ export struct ArtistDetailPage {
 
   aboutToAppear(): void {
     this.pageAlive = true;
+    // 进页第一件事就把状态栏前景色按本页背景下发，别等 NavDestination 的 systemBarStyle
+    // （它要等本页成为栈顶、再晚一帧才由框架应用），见 preapplyStatusBarColor 的说明。
+    this.preapplyStatusBarColor();
     const favSource: string = codeToSource(this.source);
     const favId: string = this.effectiveArtistId.length > 0 ? this.effectiveArtistId : this.effectiveArtistMid;
     this.isFavoriteArtist = favId.length > 0 && this.store.isFavoriteArtist(favSource, favId);
@@ -478,6 +481,45 @@ export struct ArtistDetailPage {
   /** 主文字颜色：浅色背景用深字，深色背景用白字。 */
   private fgPrimary(): string {
     return this.isLightBackdrop() ? '#E6000000' : '#FFFFFF';
+  }
+
+  /** 状态栏前景（图标/时间）颜色：与页面背景判据同源，避免两处各写一套。 */
+  private statusBarContentColor(): string {
+    return this.isLightBackdrop() ? '#000000' : '#FFFFFF';
+  }
+
+  /**
+   * 把当前该有的状态栏前景色立刻下发到窗口（窗口级 setWindowSystemBarProperties）。
+   *
+   * 为什么必须在 aboutToAppear 里主动下发一次，而不是只靠 `.systemBarStyle`：
+   *   `.systemBarStyle` 挂在 NavDestination 上，要等它成为栈顶、并且下一帧才由框架应用；
+   *   而 push 进来的这一瞬间，窗口上挂的还是上一页的颜色（首页彩色 Hero 是白图标、
+   *   搜索页预下发的是黑图标）⇒ 状态栏与歌手页背景不符，看起来"割裂"。
+   *   搜索页当初就是这么修的（OnlineSearchPage.ets 的 preapplyStatusBarColor，见该文件 451-456 行），
+   *   这里用同一手法；区别只在于歌手页的颜色还要等异步取色。
+   *
+   * 颜色什么时候确定、什么时候下发（三段，缺一不可）：
+   *   ① 确定点 A = aboutToAppear：这一刻页面背景是确定的 —— HdsNavDestination.backgroundColor 与
+   *      DetailImmersiveBackdrop 的渐变底色都用 avgColor，而它的初值是 '#1f1f22'（深色），
+   *      封面照此时还没解码出来。所以由 isLightBackdrop() 推出"白"就是此刻唯一正确的值。
+   *      ★ 这里不写死 '#FFFFFF'，走的是与页面文字/图标完全相同的判据（statusBarContentColor），
+   *      背景一改判据跟着改，不会和页面自身配色分叉。
+   *   ② 确定点 B = loadBackdropColor() 的取色回调里 avgColor 被赋值那一刻 —— 真正的背景色到这时才定。
+   *      由 @Monitor('avgColor') 立即再下发一次，不等下一帧的声明式重排。
+   *   ③ 取色失败 / 没有封面图 ⇒ 停在 ① 的值；此时页面从头到尾都是深色渐变底，前后一致，不会闪。
+   */
+  private preapplyStatusBarColor(): void {
+    const color: string = this.statusBarContentColor();
+    WindowUtil.getInstance().setWindowSystemBarProperties({ statusBarContentColor: color });
+    hilog.info(0, 'RzdDetailImmersive',
+      'artist statusBar preapply avgColor=%{public}s light=%{public}d color=%{public}s',
+      this.avgColor, this.isLightBackdrop() ? 1 : 0, color);
+  }
+
+  /** 取色回来（avgColor 变化）就是背景色真正确定的时刻：立刻重下发一次状态栏颜色。 */
+  @Monitor('avgColor')
+  onAvgColorChanged(): void {
+    this.preapplyStatusBarColor();
   }
 
   /** 次要文字颜色。 */
@@ -1039,8 +1081,8 @@ export struct ArtistDetailPage {
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
     .systemBarStyle(
-      { statusBarContentColor: this.isLightBackdrop() ? '#000000' : '#FFFFFF' },
-      { statusBarContentColor: this.isLightBackdrop() ? '#000000' : '#FFFFFF' })
+      { statusBarContentColor: this.statusBarContentColor() },
+      { statusBarContentColor: this.statusBarContentColor() })
     .backgroundColor(this.avgColor)
   }
 }

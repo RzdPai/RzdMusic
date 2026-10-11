@@ -25,14 +25,17 @@ import {
   HomeRankingState,
   HomeSourceState,
   ImmersiveType,
+  Logger,
   MusicAppState,
   MusicStoreService,
+  registerHomeSourceRefresh,
   RouterUrlConstants,
   SdkApiUtil,
   SdkConstants,
   SongConstants,
   StyleConstants,
   TitleBarConstants,
+  unregisterHomeSourceRefresh,
   UseAccountRecState,
   WindowInfo,
   buildTitleMaterial
@@ -83,18 +86,62 @@ export struct RecommendPage {
   @Consumer('pageIndexInfos') pageIndexInfos: NavPathStack = new NavPathStack();
   /** Scroller bound to the HDS title bar so the scroll effect (gradient blur) can fire. */
   private pageScroller: Scroller = new Scroller();
+  /**
+   * 上一次**已经按它加载过**的首页来源平台值。
+   *
+   * 用途：`@Monitor` 与刷新总线（见 common/musicbasic 的 HomeSourceBus）可能对同一次
+   * 设置改动都触发一次，另外从设置页切回首页时还要再兜底复查一次 —— 靠这个字段去重，
+   * 保证同一个平台值只真正重载一次。
+   */
+  private loadedHomeSource: string = '';
 
   aboutToAppear() {
     // 首页歌单广场/排行榜开关：从持久化设置同步到共享状态（默认关闭）
     this.homePlazaState.enabled = MusicStoreService.getInstance().getShowHomePlaza();
     this.homeRankingState.enabled = MusicStoreService.getInstance().getShowHomeRanking();
+    this.loadedHomeSource = this.homeSourceState.source;
     this.recommendViewModel.load();
+    // 设置页写完平台值后会显式通知一次（常驻 Tab 页只靠 @Monitor 不可靠，见 HomeSourceBus 注释）
+    registerHomeSourceRefresh((): void => {
+      this.applyHomeSourceIfChanged();
+    });
+  }
+
+  aboutToDisappear() {
+    unregisterHomeSourceRefresh();
   }
 
   /** 壳层点了当前页签：滚回顶部（值变化才触发，所以不会误滚）。 */
   @Monitor('scrollTopCommand')
   onScrollTopCommand(): void {
     this.pageScroller.scrollEdge(Edge.Top);
+  }
+
+  /**
+   * 页签重新可见时兜底复查一次。
+   *
+   * 用户是在**「设置」Tab 里**改的平台，改完切回首页 —— 这条路径上 @Monitor / 总线
+   * 任意一条没生效，用户看到的就是"改了设置，首页没变"。这里用一个很便宜的判据
+   * （当前平台值 vs 已加载的平台值）再兜一层，代价只是一次字符串比较。
+   *
+   * @param isVisible 当前是否可见（不可见时直接返回，不做任何事）。
+   */
+  private onHomeVisibleChanged(isVisible: boolean): void {
+    if (!isVisible) {
+      return;
+    }
+    this.applyHomeSourceIfChanged();
+  }
+
+  /** 平台值确实变了才重载首页（多条触发路径共用这一道闸）。 */
+  private applyHomeSourceIfChanged(): void {
+    const source: string = this.homeSourceState.source;
+    if (source === this.loadedHomeSource) {
+      return;
+    }
+    this.loadedHomeSource = source;
+    Logger.info('RzdHomeSource', `page reload source=${source}`);
+    this.recommendViewModel.load();
   }
 
   /** Routes to the online multi-source search page. */
@@ -172,7 +219,7 @@ export struct RecommendPage {
 
   @Monitor('homeSourceState.source')
   onHomeSourceChanged(): void {
-    this.recommendViewModel.load();
+    this.applyHomeSourceIfChanged();
   }
 
   @Monitor('useAccountRecState.enabled')
@@ -250,6 +297,13 @@ export struct RecommendPage {
               .width(48)
               .height(48)
               .color($r('app.color.mini_bar_primary'))
+            // 切平台时立刻告诉用户"在换哪个平台"，而不是一个没有信息量的转圈
+            if (this.recommendViewModel.homeLoadingLabel.length > 0) {
+              Text(this.recommendViewModel.homeLoadingLabel)
+                .fontSize(13)
+                .fontColor($r('app.color.font_tertiary'))
+                .margin({ top: 12 })
+            }
           }
           .width(StyleConstants.FULL_WIDTH)
           .layoutWeight(1)
@@ -264,6 +318,12 @@ export struct RecommendPage {
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
       .padding({ bottom: this.homeFloatingMiniBarTabOverlapReserveBottomVp() })
+      // 从「设置」Tab 切回首页时兜底复查平台值（见 onHomeVisibleChanged 注释）。
+      // 挂在页面内容根节点（内置组件）上而不是 HdsNavDestination 上：
+      // 自定义组件上的事件属性在框架里不一定落到根节点，这里必须是**一定生效**的那一层。
+      .onVisibleAreaChange([0.0], (isVisible: boolean, _ratio: number): void => {
+        this.onHomeVisibleChanged(isVisible);
+      })
     }
     .onBackPressed((): boolean => guardPlayerBack('RecommendPage'))
     .hideTitleBar(false)

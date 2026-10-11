@@ -65,11 +65,11 @@ import { common } from '@kit.AbilityKit';
 /**
  * 二级页面悬浮迷你条的固定高度（vp）。
  *
- * 56 = 封面 44（折叠态，`HomeMiniBarAlbumCover.coverSideLengthVp()`）+ 上下各 6vp 内边距。
- * 二级页面这条永远是折叠形态（`followAppMiniBarExpanded: false` + `lockTwoRowCoverSize: true`），
- * 与首页底栏当前是单排还是双排无关 —— 它同时是播放页形变的起点，几何必须稳定。
+ * **与首页底栏里那条一致（56）**：封面 44（`HomeMiniBarAlbumCover.coverSideLengthVp()` 常规态）
+ * + 上下各 6vp 内边距。用户要求二级页面也用「主页那个高一点的」，不再用 30vp 封面的矮胶囊。
+ * 它是播放页形变的起点，几何只随这一处常量变化（别再按首页单排/双排去动它）。
  */
-const FLOATING_MINI_BAR_HEIGHT_VP: number = 42;
+const FLOATING_MINI_BAR_HEIGHT_VP: number = 56;
 
   /** 二级页面悬浮迷你条在宽屏下的最大宽度（vp）：胶囊不该铺满整个平板/桌面窗口。 */
   const FLOATING_MINI_BAR_MAX_WIDTH_VP: number = 560;
@@ -812,21 +812,29 @@ struct Index {
       Column() {
         HomeMiniBarPlayer({
           showPreviousTrack: false,
-          followAppMiniBarExpanded: false,
-          lockTwoRowCoverSize: true
+          followAppMiniBarExpanded: false
         })
           .width(StyleConstants.FULL_WIDTH)
       }
       .width(this.floatingMiniBarWidthVp())
       .height(FLOATING_MINI_BAR_HEIGHT_VP)
-      .backgroundColor($r('app.color.floating_mini_bar_sheet_background'))
       .borderRadius(FLOATING_MINI_BAR_HEIGHT_VP / 2)
       .borderWidth(1)
       .borderColor($r('app.color.comp_divider'))
       .clip(true)
-      .backgroundBlurStyle(this.miniBarBlurStyle())
+      // 光感材质：模糊 + 提饱和 + 半透明底色（HDS 的 `systemMaterialEffect` 只挂在
+      // HDS 自己的组件上，普通容器拿不到，这里用等价的 `backgroundEffect` 做同一种观感）。
+      // 底色本身就是半透明的（见 color.json 的 floating_mini_bar_sheet_background），
+      // 透明度过高会盖掉模糊 —— 改这个资源时要一起看效果。
+      .backgroundEffect({
+        radius: this.floatingMiniBarEffectRadiusVp(),
+        saturation: 1.15,
+        brightness: 1.02,
+        color: $r('app.color.floating_mini_bar_sheet_background')
+      })
       .onAppear((): void => {
-        Logger.info('RzdSecondaryMiniMaterial', 'rollback ordinary capsule before HDS experiment');
+        Logger.info('RzdSecondaryMiniMaterial',
+          `capsule material radius=${this.floatingMiniBarEffectRadiusVp()} height=${FLOATING_MINI_BAR_HEIGHT_VP}`);
       })
       .margin({ bottom: this.floatingMiniBarBottomMarginVp() })
     }
@@ -839,17 +847,20 @@ struct Index {
     .visibility(this.expandState.sourceBarHidden ? Visibility.Hidden : Visibility.Visible)
   }
 
-  /** Restored ordinary capsule blur, not HDS immersive material. */
-  private miniBarBlurStyle(): BlurStyle {
+  /**
+   * 悬浮迷你条的光感模糊半径（vp）：跟随系统的环境光感档位。
+   * 档位来自 `ambientLevelIndex()`（与首页底栏的 `systemMaterialEffect.materialLevel` 同一套）。
+   */
+  private floatingMiniBarEffectRadiusVp(): number {
     switch (this.ambientLevelIndex()) {
       case 1:
-        return BlurStyle.Thin;
+        return 14;
       case 2:
-        return BlurStyle.Regular;
+        return 22;
       case 3:
-        return BlurStyle.Thick;
+        return 30;
       default:
-        return BlurStyle.Regular;
+        return 22;
     }
   }
 

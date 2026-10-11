@@ -24,7 +24,7 @@ import {
   getAppRuntime
 } from 'musicbasic';
 import { AccountService, getLeaderboardEntries, lxGetPicFallback, lxKgSingerList, lxLeaderboard, lxTxToplist, lxTxToplistInfo, lxTxToplistList, LXSearchSong, PlatformAccount, PlatformTrackInfo } from 'player';
-import { BoardData, MusicDataService, pickDedicatedBoardId, TrackData } from './MusicDataService';
+import { BoardData, MusicDataService, pickDedicatedBoardId, pickDedicatedBoardName, TrackData } from './MusicDataService';
 import {
   RecommendCardUi,
   RecommendCategoryTabUi,
@@ -44,6 +44,21 @@ interface RecommendHeroSpec {
   image: Resource;
   /** 点击去向标识：listenNow / daily30 / newSongs / heartMode / picked。 */
   route: string;
+}
+
+/**
+ * 首页歌曲列表的加载结果。
+ *
+ * 为什么要把「榜单名 / 是否降级」一起带出来：首页必须在区块里**写清数据来源**，
+ * 否则用户切了「首页来源平台」却看不出首页到底变没变（用户反馈："首页似乎都没变"）。
+ */
+export class HomeSongLoadResult {
+  /** 歌曲行（可能为空）。 */
+  public songs: RecommendPrivateSongUi[] = [];
+  /** 实际命中的**指定榜单**名（如「新歌榜」）；空串表示没走到指定榜单。 */
+  public boardName: string = '';
+  /** true = 指定榜单取不到、用该平台其它榜单兜底（内容是真的，只是不是首选榜单）。 */
+  public degraded: boolean = false;
 }
 
 /**
@@ -144,10 +159,28 @@ export class RecommendDataUtil {
    * @returns Song rows for the home private-songs section.
    */
   public static async loadSourceSongsAsync(source: string, targetCount: number = 12): Promise<RecommendPrivateSongUi[]> {
+    const result: HomeSongLoadResult = await RecommendDataUtil.loadHomeSongsAsync(source, targetCount);
+    return result.songs;
+  }
+
+  /**
+   * 首页歌曲 + **这次到底用了哪个榜单 / 有没有降级**。
+   *
+   * 首页要在「精选推荐」标题下把数据来源写出来（`来自 酷狗音乐 · 飙升榜`），
+   * 否则用户切了平台却看不出首页到底变没变（用户反馈的原话就是"首页似乎都没变"）。
+   * 拿不到内容时也要说清楚原因，**不伪造数据**。
+   *
+   * @param source Home source id ('qq'|'kg'|'wy')。
+   * @param targetCount 需要的行数。
+   * @returns 歌曲行 + 榜单名 + 是否降级。
+   */
+  public static async loadHomeSongsAsync(source: string, targetCount: number = 12): Promise<HomeSongLoadResult> {
     const svcSource: string = RecommendDataUtil.mapHomeSource(source);
     const merged: RecommendPrivateSongUi[] = [];
     const seen: string[] = [];
     let boards: BoardData[] = [];
+    const dedicatedName: string = pickDedicatedBoardName(svcSource);
+    let usedDedicatedBoard: boolean = false;
 
     // 优先用「指定榜单」：未登录时首页精选推荐固定拉
     // QQ 新歌榜 / 酷狗飙升榜 / 网易飙升榜（见 MusicDataService.pickDedicatedBoardId）。
@@ -172,6 +205,7 @@ export class RecommendDataUtil {
           ui.coverUrl = track.image;
           merged.push(ui);
         }
+        usedDedicatedBoard = merged.length > 0;
       } catch (_err) {
         // 失败则落到下面的多榜单兜底
       }
@@ -222,7 +256,11 @@ export class RecommendDataUtil {
     //    （酷我 kbangserver 的 musiclist 里就没有图），所以首页歌曲行会整排空图标。
     //    榜单页有封面是因为 PlaylistDetailSongListSection 自己会补，首页这边原来没有。
     await RecommendDataUtil.fillSongCovers(merged);
-    return merged;
+    const result = new HomeSongLoadResult();
+    result.songs = merged;
+    result.boardName = usedDedicatedBoard ? dedicatedName : '';
+    result.degraded = !usedDedicatedBoard && merged.length > 0;
+    return result;
   }
 
   /**

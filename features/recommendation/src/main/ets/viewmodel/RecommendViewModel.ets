@@ -32,7 +32,7 @@ import { RecommendSongUiDataSource } from '../model/RecommendSongUiDataSource';i
   RecommendSingerUi
 } from '../model/RecommendUiModels';
 import { RecommendDataUtil } from '../util/RecommendDataUtil';
-import { BoardData, CategoryGroup, MusicDataService, PlaylistData, PlaylistPage } from '../util/MusicDataService';
+import { BoardData, CategoryGroup, MusicDataService, pickDedicatedBoardName, PlaylistData, PlaylistPage } from '../util/MusicDataService';
 
 /** 歌单广场排障统一 TAG：`hdc shell hilog | findstr RzdPlazaNet` 一把抓完。 */
 const PLAZA_DOMAIN: number = 0x0000;
@@ -137,6 +137,18 @@ export class RecommendViewModel {
   @Trace public categoryLoading: boolean = false;
   /** True once the initial home data (banners, cards, private songs) has finished loading. */
   @Trace public homeLoaded: boolean = false;
+  /**
+   * 「首页来源平台」的可读名字（`酷狗音乐` / `QQ音乐` …）。
+   *
+   * 首页要把它显示在「精选推荐」下面 —— 用户切了平台要能**一眼看出首页换没换**。
+   */
+  @Trace public homeSourceLabel: string = '';
+  /** 首页歌曲实际用的榜单名（`飙升榜` 等）；空串表示没有指定榜单。 */
+  @Trace public homeBoardLabel: string = '';
+  /** 首页数据来源的一句话说明（降级 / 空态原因）；空串 = 一切正常，不显示。 */
+  @Trace public homeHint: string = '';
+  /** 首页加载中的文案（切换平台时立刻显示，让用户看到"确实在换"）。 */
+  @Trace public homeLoadingLabel: string = '';
   /** True when no music-platform account is signed in; guest sections (plaza, rankings) show. */
   @Trace public isGuestMode: boolean = false;
   /** Index of the selected playlist-plaza source in {@link MusicDataService.sourceList}. */
@@ -157,6 +169,11 @@ export class RecommendViewModel {
   @Trace public plazaLoadingMore: boolean = false;
   /** Non-empty plaza error message from the last first-page load. */
   @Trace public plazaErrorText: string = '';
+  /**
+   * 歌单广场没跟着「首页来源平台」走（该平台的广场接口取不到数据，见
+   * {@link MusicDataService.plazaSupported}）。UI 用当下的平台名拼说明文案。
+   */
+  @Trace public plazaNotFollowing: boolean = false;
   /** True when the plaza source reports more pages. */
   @Trace public plazaHasNext: boolean = false;
   /** Index of the selected ranking source in {@link MusicDataService.sourceList}. */
@@ -166,17 +183,132 @@ export class RecommendViewModel {
   private plazaPage: number = 1;
   private guestSectionsRequested: boolean = false;
   private accountServiceReady: boolean = false;
+  /**
+   * 首页加载世代号。
+   *
+   * 切平台是**连点**操作（QQ → 酷狗 → 网易），每次都会起一条异步链。
+   * 没有世代号时，先发的那条（比如 QQ）后回来就会把网易的结果覆盖掉 ——
+   * 表现成"切到网易了，首页却是 QQ 的歌"。每条链只在自己仍是最新世代时才写状态。
+   */
+  private loadGen: number = 0;
+  /** 上一次已经对齐过「首页来源平台」的平台值（避免每次 load 都重置用户的平台选择）。 */
+  private alignedHomeSource: string = '';
 
   /**
    * Loads all recommendation UI data: QQ music toplists for banners, cards and
    * private songs; falls back to demo data when the network fails.
    */
   public load(): void {
+    this.loadGen = this.loadGen + 1;
+    const gen: number = this.loadGen;
+    const homeSource: string = this.homeSourceState.source;
+    this.syncHomeSourceLabels(homeSource);
+    // 首页里**自带平台选择器**的两块（歌单广场 / 排行榜）也跟「首页来源平台」走。
+    // 它们原来固定停在 MusicDataService.sourceList[0]（酷我），切平台时整块内容
+    // 一动不动 —— 这就是"首页似乎都没变"里最大的一块（歌单广场默认就是显示的）。
+    if (this.alignHomePlatformSections(homeSource)) {
+      this.guestSectionsRequested = false;
+    }
     this.homeLoaded = false;
     this.categoryTabItems = RecommendDataUtil.getCategoryTabs();
     this.chartList = [];
+    Logger.info('RzdHomeSource', `load source=${homeSource} label=${this.homeSourceLabel} gen=${gen}`);
     this.refreshGuestMode();
-    void this.loadHomeData();
+    void this.loadHomeData(gen);
+  }
+
+  /**
+   * 「精选推荐」标题下面那行来源说明（`酷狗音乐 · 飙升榜`）。
+   *
+   * 用户切了「首页来源平台」必须能一眼看到首页换没换 —— 这行字就是那个"看得见的反馈"。
+   *
+   * @returns 来源说明；平台名还没同步时返回空串（此时不显示这行）。
+   */
+  public homeSourceCaption(): string {
+    if (this.homeSourceLabel.length === 0) {
+      return '';
+    }
+    return this.homeBoardLabel.length > 0
+      ? `${this.homeSourceLabel} · ${this.homeBoardLabel}`
+      : this.homeSourceLabel;
+  }
+
+  /**
+   * 把首页数据来源的文案同步到 UI（平台名 / 榜单名 / 加载中提示）。
+   *
+   * 必须在**发请求之前**同步做掉：这样切平台时用户立刻看到
+   * 「正在加载 酷狗音乐 · 飙升榜…」，而不是一整页无提示的骨架。
+   *
+   * @param homeSource 设置里选中的首页平台值（'qq'|'kg'|'wy'）。
+   */
+  private syncHomeSourceLabels(homeSource: string): void {
+    const svcSource: string = RecommendDataUtil.mapHomeSource(homeSource);
+    this.homeSourceLabel = `${MusicDataService.sourceName(svcSource)}音乐`;
+    this.homeBoardLabel = pickDedicatedBoardName(svcSource);
+    this.homeHint = '';
+    this.homeLoadingLabel = this.homeBoardLabel.length > 0
+      ? `正在加载 ${this.homeSourceLabel} · ${this.homeBoardLabel}…`
+      : `正在加载 ${this.homeSourceLabel}…`;
+  }
+
+  /**
+   * 让首页里带自己平台选择器的区块（歌单广场 / 排行榜）跟随「首页来源平台」。
+   *
+   * 只在**平台值真的变了**时动手（`alignedHomeSource` 去重），否则用户手点的
+   * 广场/榜单平台选择会被其它原因触发的 load() 反复重置。
+   *
+   * @param homeSource 设置里选中的首页平台值。
+   * @returns true = 本次确实换了平台（调用方需要连带重载广场/榜单数据）。
+   */
+  private alignHomePlatformSections(homeSource: string): boolean {
+    if (homeSource === this.alignedHomeSource) {
+      return false;
+    }
+    this.alignedHomeSource = homeSource;
+    const svcSource: string = RecommendDataUtil.mapHomeSource(homeSource);
+    const index: number = MusicDataService.sourceList.indexOf(svcSource);
+    if (index < 0) {
+      return false;
+    }
+    this.rankingSourceIndex = index;
+    // 排行榜：kw/kg/tx/wy 的榜单接口都能用（酷我走实时接口），跟着首页平台切没有风险。
+    if (MusicDataService.plazaSupported(svcSource)) {
+      if (this.plazaSourceIndex !== index) {
+        // 分类 / 排序 / 分页都是**属于某个平台**的，换平台必须一起清掉
+        this.plazaSourceIndex = index;
+        this.plazaSortIndex = 0;
+        this.plazaCategoryName = '';
+        this.plazaCategoryId = '';
+        this.plazaPage = 1;
+      }
+      this.plazaNotFollowing = false;
+    } else {
+      // 该平台的广场接口本身就取不到数据（见 MusicDataService.plazaSupported 的实测记录）：
+      // **不切**（切过去只会得到一块空白），但也不装没这回事 —— 在广场标题下写清楚。
+      // 这里只置一个标志位，文案由 UI 用**当下**的平台名拼（用户可能又手点了广场的平台胶囊）。
+      this.plazaNotFollowing = true;
+    }
+    Logger.info('RzdHomeSource',
+      `align plaza/ranking -> ${MusicDataService.sourceName(svcSource)}(${svcSource}) index=${index}`);
+    return true;
+  }
+
+  /** 歌单广场当前所在平台的可读名（`酷我音乐`），给"没跟着切"的说明文案用。 */
+  public plazaSourceLabel(): string {
+    return `${MusicDataService.sourceName(this.plazaSourceCode())}音乐`;
+  }
+
+  /**
+   * 「歌单广场没跟着首页平台走」的说明文案。
+   *
+   * 空串 = 不需要显示（广场本来就跟着首页平台）。
+   * @returns 给广场标题下面那行小字用的说明。
+   */
+  public plazaFollowNote(): string {
+    if (!this.plazaNotFollowing) {
+      return '';
+    }
+    return `${this.homeSourceLabel}的歌单广场接口暂时不可用，这里仍显示${this.plazaSourceLabel()}歌单。`;
   }
 
   /** Refreshes the guest flag from the account store; kicks off guest sections when guest. */
@@ -309,6 +441,15 @@ export class RecommendViewModel {
         hilog.info(PLAZA_DOMAIN, PLAZA_TAG,
           'plaza loaded: source=%{public}s items=%{public}d total=%{public}d hasNext=%{public}s',
           this.plazaSourceCode(), mapped.length, result.total, String(result.hasNext));
+        if (mapped.length === 0) {
+          // ⚠️ HTTP 200 但一条都没有（QQ 的广场就是这个形态，见 MusicDataService.plazaSupported）：
+          //    以前这里既不报错也没内容，广场就是**一块空白**，用户只能看到"没反应"。
+          //    现在给一句诚实的说明 + 复用重试入口。
+          this.plazaErrorText =
+            `${MusicDataService.sourceName(this.plazaSourceCode())}歌单广场暂时没有返回内容（该平台的广场接口可能已失效）`;
+          hilog.warn(PLAZA_DOMAIN, PLAZA_TAG, 'plaza empty: source=%{public}s page=1',
+            this.plazaSourceCode());
+        }
       }
     } catch (err) {
       const e: Error = err as Error;
@@ -368,8 +509,14 @@ export class RecommendViewModel {
     });
   }
 
-  /** Loads QQ music driven home sections; falls back to demo content on failure. */
-  private async loadHomeData(): Promise<void> {
+  /**
+   * Loads the home sections for the selected platform; falls back to the platform's
+   * other boards on failure, and reports honestly when nothing could be fetched.
+   *
+   * @param gen 本次加载的世代号（{@link load} 递增）。中途用户又换了平台时，
+   *   旧世代的结果**一律丢弃**，避免把上一次平台的响应写进当前平台。
+   */
+  private async loadHomeData(gen: number): Promise<void> {
     let useAccountRec: boolean = false;
     try {
       useAccountRec = MusicStoreService.getInstance().getUseAccountRec();
@@ -380,15 +527,53 @@ export class RecommendViewModel {
     let cards: RecommendCardUi[] = [];
     let songs: RecommendPrivateSongUi[] = [];
     const homeSource: string = this.homeSourceState.source;
+    /** 设置里这个平台**应该**用的榜单（`酷狗 → 飙升榜`）；只用于降级文案。 */
+    const preferredBoard: string = this.homeBoardLabel;
+    let degraded: boolean = false;
+    let usedBoardName: string = '';
     if (useAccountRec) {
       songs = await RecommendDataUtil.loadTxAccountDailyTracksAsync();
     }
     if (songs.length === 0) {
       // 未登录 / 账号推荐拿不到内容：走平台榜单歌曲，卡片样式与登录态**完全一致**
-      songs = await RecommendDataUtil.loadSourceSongsAsync(homeSource, 12);
+      const result = await RecommendDataUtil.loadHomeSongsAsync(homeSource, 12);
+      songs = result.songs;
+      degraded = result.degraded;
+      usedBoardName = result.boardName;
     }
     if (homeSource === 'qq' && songs.length === 0) {
+      // QQ 专用最后兜底：经典榜单接口里的**内地榜**（topid 6）。
+      // ⚠️ 这条兜底以前是存在的、但首页上面那行"来源"没有，用户根本看不出用的是兜底榜单，
+      //    所以这里把真实榜单名一起带出来（`内地榜`），不再谎称是新歌榜。
       songs = await RecommendDataUtil.loadPrivateSongListAsync(12, 'qq');
+      if (songs.length > 0) {
+        degraded = true;
+        usedBoardName = '内地榜';
+      }
+    }
+    if (gen !== this.loadGen) {
+      // 用户在这条链跑的过程中又换了平台：这次结果作废（见 loadGen 注释）
+      Logger.info('RzdHomeSource', `drop stale result source=${homeSource} gen=${gen} current=${this.loadGen}`);
+      return;
+    }
+    Logger.info('RzdHomeSource',
+      `loaded source=${homeSource} songs=${songs.length} board=${usedBoardName} degraded=${degraded} gen=${gen}`);
+    if (usedBoardName.length > 0) {
+      this.homeBoardLabel = usedBoardName;
+    }
+    // ★ 诚实的降级说明：拿不到内容就写清楚，不伪造数据、也不假装"没变化"。
+    if (songs.length === 0) {
+      this.homeHint = this.isGuestMode
+        ? `未登录时只读取各平台的公开榜单，${this.homeSourceLabel}这次没有取到内容；可在「设置 → 首页来源平台」换一个平台。`
+        : `${this.homeSourceLabel}暂时没有取到内容，请检查网络后重试。`;
+    } else if (degraded) {
+      // ⚠️ ArkTS 对"三元表达式直接接在模板串里"比较敏感，先算成局部变量再拼，别写在 ${} 里
+      const preferredText: string = preferredBoard.length > 0 ? `「${preferredBoard}」` : '指定榜单';
+      const actualText: string = this.homeBoardLabel !== preferredBoard && this.homeBoardLabel.length > 0
+        ? `「${this.homeBoardLabel}」` : '';
+      this.homeHint = `${this.homeSourceLabel}${preferredText}取不到，已改用该平台其它榜单${actualText}。`;
+    } else {
+      this.homeHint = '';
     }
     // 顶部大卡片 == MusicHome 的 5 张**功能入口卡**（现在就听 / 每日30首 / 新歌推荐 /
     // 心动模式 / 精选推荐），不是歌曲卡片。登录与否都是这一套。
@@ -414,7 +599,7 @@ export class RecommendViewModel {
     await this.refreshNowPlayingTintAsync();
     // 最后补封面并放行：补完会重算功能卡（四宫格＋歌名），
     // 然后 `dailySongsReady` 置位，整块轮播一次性出现。
-    await this.refillHomeCovers();
+    await this.refillHomeCovers(gen);
   }
 
   /**
@@ -427,10 +612,15 @@ export class RecommendViewModel {
    *    之前是首轮结束就放行、后面几轮在后台继续补 —— 用户看到的就是
    *    「卡片先按旧数据画出来，过一会儿封面/歌名又变一次」。
    *    现在整块轮播（含四宫格、歌名、取色背景）在数据完全定稿后一次性出现。
+   *
+   * @param gen 世代号：中途换了平台就不要再往 UI 写（旧平台的封面不能覆盖新平台）。
    */
-  private async refillHomeCovers(): Promise<void> {
+  private async refillHomeCovers(gen: number): Promise<void> {
     const maxRounds: number = 3;
     for (let round: number = 0; round < maxRounds; round++) {
+      if (gen !== this.loadGen) {
+        return;
+      }
       const rows: RecommendPrivateSongUi[] = this.privateSongDisplayList;
       let missing: number = 0;
       for (let i: number = 0; i < rows.length; i++) {
@@ -442,6 +632,9 @@ export class RecommendViewModel {
         break;
       }
       const filled: RecommendPrivateSongUi[] = await RecommendDataUtil.fillCovers(rows);
+      if (gen !== this.loadGen) {
+        return;
+      }
       if (filled.length > 0) {
         this.privateSongDisplayList = filled;
         this.privateSongDataSource = new RecommendSongUiDataSource(filled);

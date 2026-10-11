@@ -15,7 +15,7 @@
 
 import { AppStorageV2, LengthMetrics, uiObserver } from '@kit.ArkUI';
 import { guardPlayerBack } from 'musicbasic';
-import { AlbumRouteParam, AmbientState, AppStorageKeys, BreakpointType, FavoriteEntry, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, ThemeState, buildTitleMaterial } from 'musicbasic';
+import { AlbumRouteParam, AmbientState, AppStorageKeys, BreakpointType, FavoriteEntry, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, ThemeState, WindowUtil, buildTitleMaterial } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType } from '@kit.UIDesignKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { http } from '@kit.NetworkKit';
@@ -94,6 +94,9 @@ export struct AlbumDetailPage {
   }
 
   aboutToAppear(): void {
+    // 进页第一件事就把状态栏前景色按本页背景下发（与 ArtistDetailPage 同款修法，
+    // 详见那里 preapplyStatusBarColor 的注释）。
+    this.preapplyStatusBarColor();
     const favSource: string = codeToSource(this.source);
     const favId: string = this.albumId.length > 0 ? this.albumId : this.albumMid;
     this.isFavoriteAlbum = favId.length > 0 &&
@@ -273,6 +276,29 @@ export struct AlbumDetailPage {
   /** 主文字颜色：浅色背景用深字，深色背景用白字。 */
   private fgPrimary(): string {
     return this.isLightBackdrop() ? '#E6000000' : '#FFFFFF';
+  }
+
+  /** 状态栏前景（图标/时间）颜色：与页面背景判据同源。 */
+  private statusBarContentColor(): string {
+    return this.isLightBackdrop() ? '#000000' : '#FFFFFF';
+  }
+
+  /**
+   * 把当前该有的状态栏前景色立刻下发到窗口（窗口级 setWindowSystemBarProperties）。
+   * 理由与三段"颜色何时确定/何时下发"的说明见 ArtistDetailPage.preapplyStatusBarColor。
+   */
+  private preapplyStatusBarColor(): void {
+    const color: string = this.statusBarContentColor();
+    WindowUtil.getInstance().setWindowSystemBarProperties({ statusBarContentColor: color });
+    hilog.info(0, 'RzdDetailImmersive',
+      'album statusBar preapply avgColor=%{public}s light=%{public}d color=%{public}s',
+      this.avgColor, this.isLightBackdrop() ? 1 : 0, color);
+  }
+
+  /** 取色回来（avgColor 变化）就是背景色真正确定的时刻：立刻重下发一次状态栏颜色。 */
+  @Monitor('avgColor')
+  onAvgColorChanged(): void {
+    this.preapplyStatusBarColor();
   }
 
   /** 次要文字颜色。 */
@@ -602,8 +628,8 @@ export struct AlbumDetailPage {
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
     .systemBarStyle(
-      { statusBarContentColor: this.isLightBackdrop() ? '#000000' : '#FFFFFF' },
-      { statusBarContentColor: this.isLightBackdrop() ? '#000000' : '#FFFFFF' })
+      { statusBarContentColor: this.statusBarContentColor() },
+      { statusBarContentColor: this.statusBarContentColor() })
     .backgroundColor(this.avgColor)
   }
 }

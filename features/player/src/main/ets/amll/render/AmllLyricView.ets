@@ -143,6 +143,31 @@ export struct AmllLyricView {
   @Local lyricCenterState: LyricCenterState =
     AppStorageV2.connect(LyricCenterState, AppStorageKeys.LYRIC_CENTER_STATE, () => new LyricCenterState())!;
 
+  /**
+   * 帧率诊断（`hdc shell hilog | grep RzdLyricPerf`）。
+   *
+   * 设置页的「歌词帧率」只在这里的帧循环生效，用户很难肉眼判断有没有吃上；
+   * 每 3 秒打一条「上限 vs 实测」，真机上就能直接看出设置是否生效
+   * （例如上限 60 时 actual 应≈60，而不是 120）。
+   */
+  private perfFrames: number = 0;
+  private perfWindowStartMs: number = 0;
+
+  private countPerfFrame(now: number): void {
+    if (this.perfWindowStartMs === 0) {
+      this.perfWindowStartMs = now;
+      this.perfFrames = 0;
+    }
+    this.perfFrames++;
+    const span: number = now - this.perfWindowStartMs;
+    if (span >= 3000) {
+      Logger.info('RzdLyricPerf', `lyric fps limit=${this.fpsLimit} actual=${Math.round(this.perfFrames * 1000 / span)}` +
+        ` frames=${this.perfFrames}/${span}ms`);
+      this.perfFrames = 0;
+      this.perfWindowStartMs = now;
+    }
+  }
+
   @Monitor('lyricFpsState.fps')
   onLyricFpsChanged(): void {
     this.fpsLimit = this.lyricFpsState.fps;
@@ -448,6 +473,8 @@ export struct AmllLyricView {
     }
     let dt = elapsed;
     this.lastFrameTime = now;
+    // 真正渲染的一帧才计数（被上限跳过的帧不算），用于核对设置是否生效
+    this.countPerfFrame(now);
     if (dt <= 0 || dt > 100) {
       dt = FRAME_INTERVAL_MS;
     }

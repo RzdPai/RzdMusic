@@ -30,6 +30,34 @@ export interface LXApiImportResult {
   info: LXUserApiInfo | null;
 }
 
+/**
+ * 跨设备搬运一个音源所需的全部内容（同步下载侧使用）。
+ *
+ * id 必须是**远端那一份**，不能重新生成：脚本文件名就是 `lx_api_script_<id>.js`，
+ * 两台设备用同一个 id 才谈得上"同一份音源"，也才谈得上冲突比对新旧。
+ */
+export interface LXApiSeed {
+  id: string;
+  /** 脚本原文（同步载荷里一律用解压后的明文）。 */
+  script: string;
+  name?: string;
+  description?: string;
+  author?: string;
+  homepage?: string;
+  version?: string;
+  allowShowUpdateAlert?: boolean;
+}
+
+/** 按给定 id 落盘的结果；outcome 三态比 ok 布尔量更好排障 */
+export interface LXApiUpsertResult {
+  /** 'added' = 新落盘；'exists' = 本机已有同 id（未改动）；'failed' = 失败 */
+  outcome: string;
+  message: string;
+}
+
+/** 音源 id 的合法字符集：它会被拼进脚本文件名，必须挡住路径穿越一类的注入 */
+const API_ID_PATTERN: RegExp = /^[A-Za-z0-9_-]{1,64}$/;
+
 class LXSourceManager {
   private apiList: LXUserApiInfo[] | null = null;
   private filesDir: string = '';
@@ -403,6 +431,118 @@ class LXSourceManager {
       sources: apiInfo.sources
     };
     return fullInfo;
+  }
+
+  // ------------------------------------------------------------ 跨设备搬运（同步载荷）
+
+  /**
+   * 音源 id 是否可用作文件名。
+   *
+   * ★ 这是同步下载侧的**必做校验**：id 来自远端 JSON，会拼成 `lx_api_script_<id>.js`，
+   * 不校验就等于把沙箱文件路径交给远端数据（`../` 之类）。本机自动生成的 id
+   * （`user_api_<3位>_<时间戳>`）天然满足这个字符集。
+   */
+  isValidApiId(apiId: string): boolean {
+    return typeof apiId === 'string' && API_ID_PATTERN.test(apiId);
+  }
+
+  /** 本机是否已有这个 id 的音源 */
+  hasApi(apiId: string): boolean {
+    if (apiId.length === 0) {
+      return false;
+    }
+    const list: LXUserApiInfo[] = this.getApiList();
+    for (let i: number = 0; i < list.length; i++) {
+      if (list[i].id === apiId) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * 列出全部音源（含脚本原文），供同步上行打包。
+   *
+   * 读不到脚本的条目照旧返回（script 为空串）：调用方据此决定是跳过还是照发元数据，
+   * 这里不替它做决定。
+   */
+  async listFullApis(): Promise<LXUserApiInfoFull[]> {
+    const out: LXUserApiInfoFull[] = [];
+    const list: LXUserApiInfo[] = this.getApiList();
+    for (let i: number = 0; i < list.length; i++) {
+      const item: LXUserApiInfo = list[i];
+      const script: string = await this.getScript(item.id);
+      const fullInfo: LXUserApiInfoFull = {
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        script: script,
+        allowShowUpdateAlert: item.allowShowUpdateAlert,
+        author: item.author,
+        homepage: item.homepage,
+        version: item.version,
+        sources: item.sources
+      };
+      out.push(fullInfo);
+    }
+    return out;
+  }
+
+  /**
+   * 按「给定 id」落盘一个音源（同步下载用）。
+   *
+   * 与 importApi 的区别只有一个：**id 由调用方给**（远端那一份），不重新生成 ——
+   * 生成新 id 会让同一份音源在两台设备上变成两个音源，永远无法比对/去重。
+   *
+   * 保守约定（与本文件 importApi 相同的那条：先落脚本、再改列表，任一步失败都不留半成品）：
+   *   - 本机已有同 id ⇒ 返回 'exists'，**一个字节都不改**（冲突判定交给调用方，
+   *     它手上才有两边的脚本文本可以比）；
+   *   - id 非法 / 脚本为空 / 目录未就绪 ⇒ 'failed'，不落盘。
+   */
+  importApiWithId(seed: LXApiSeed): LXApiUpsertResult {
+    if (!this.ready()) {
+      hilog.error(DOMAIN, TAG, 'importApiWithId aborted: filesDir 未初始化');
+      return { outcome: 'failed', message: '存储目录未就绪' };
+    }
+    if (!this.isValidApiId(seed.id)) {
+      hilog.error(DOMAIN, TAG, 'importApiWithId aborted: 非法 id=%{public}s', seed.id);
+      return { outcome: 'failed', message: '音源 id 非法' };
+    }
+    if (seed.script.length === 0) {
+      return { outcome: 'failed', message: '脚本为空' };
+    }
+    // 先读列表（getApiList 顺带把列表读进内存），后面 push 才不会把已有音源整表覆盖掉
+    const list: LXUserApiInfo[] = this.getApiList();
+    if (this.apiList === null) {
+      hilog.error(DOMAIN, TAG, 'importApiWithId aborted: 列表未加载（拒绝覆盖已有音源）');
+      return { outcome: 'failed', message: '存储目录未就绪' };
+    }
+    for (let i: number = 0; i < list.length; i++) {
+      if (list[i].id === seed.id) {
+        return { outcome: 'exists', message: list[i].name };
+      }
+    }
+    this.saveScript(seed.id, seed.script);
+    if (!fs.accessSync(this.getScriptFilePath(seed.id))) {
+      hilog.error(DOMAIN, TAG, 'importApiWithId aborted: 脚本落盘校验失败 id=%{public}s', seed.id);
+      return { outcome: 'failed', message: '脚本写入失败' };
+    }
+    const info: LXUserApiInfo = {
+      id: seed.id,
+      name: seed.name !== undefined && seed.name.length > 0 ? seed.name : seed.id,
+      description: seed.description !== undefined ? seed.description : '',
+      allowShowUpdateAlert: seed.allowShowUpdateAlert !== undefined ? seed.allowShowUpdateAlert : true,
+      author: seed.author !== undefined ? seed.author : '',
+      homepage: seed.homepage !== undefined ? seed.homepage : '',
+      version: seed.version !== undefined ? seed.version : '',
+      sources: {}
+    };
+    list.push(info);
+    this.apiList = list;
+    this.saveApiListToFile();
+    hilog.info(DOMAIN, TAG, 'imported(from sync) id=%{public}s name=%{public}s total=%{public}d',
+      info.id, info.name, list.length);
+    return { outcome: 'added', message: info.name };
   }
 }
 

@@ -36,6 +36,14 @@
       "data": {
         "description": "Settings detail sub page"
       }
+    },
+    {
+      "name": "MineSettingsPage",
+      "pageSourceFile": "src/main/ets/view/MineSettingsPage.ets",
+      "buildFunction": "MineSettingsPageBuilder",
+      "data": {
+        "description": "Settings entries page pushed from the Mine tab"
+      }
     }
   ]
 }

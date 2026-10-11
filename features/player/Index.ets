@@ -52,6 +52,10 @@ export { lxGetQualityOptions, lxGetQualityOptionsForSongs, LXQualityOption } fro
 export type { LXBatchQualityResult } from './src/main/ets/source/LXQualityApi';
 // 平台中文名（kw→酷我、wy→网易云…），批量下载的失败提示里要带上它
 export { sourceDisplayName } from './src/main/ets/util/SourceFallbackUtil';
+// 音源脚本「声明了哪些平台 / 什么音质 / 能做什么」的只读摘要（「音源管理」用）
+export { lxDeclaredPlatforms, lxDeclaredPlatformsOf, lxSourceLabel, lxQualityLabel, lxActionLabel }
+  from './src/main/ets/util/SourceDeclaredInfo';
+export type { LXSourcePlatformInfo } from './src/main/ets/util/SourceDeclaredInfo';
 export { lxSearch, lxLeaderboard, getLeaderboardEntries, lxGetPicFallback, lxGetLyricFallback,
   lxTxToplist, lxTxToplistInfo, lxTxSingerList, lxKgSingerList, lxTxToplistList, lxTxHotSearch,
   lxGetWyLyricAll, lxGetTTMLLyric, lxGetLyricFull } from './src/main/ets/source/LXMusicSDK';

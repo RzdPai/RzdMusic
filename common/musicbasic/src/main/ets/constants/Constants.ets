@@ -82,6 +82,13 @@ export class RouterUrlConstants {
   /** Artist detail page (singer profile with full song list). */
   public static readonly ARTIST_DETAIL: string = 'ArtistDetailPage';
   public static readonly SETTINGS_DETAIL: string = 'SettingsDetailPage';
+  /**
+   * 「我的」→「设置」的二级页（搜索框 + 设置项分组列表）。
+   *
+   * 二级页本体只列入口，点进去仍是 {@link SETTINGS_DETAIL}（同一个 `sheetIndex` 语义），
+   * 所以它和原来的「设置」页签指向同一批详情页，不存在两份设置项实现。
+   */
+  public static readonly MINE_SETTINGS: string = 'MineSettingsPage';
   /** Album detail page (album cover + track list). */
   public static readonly ALBUM_DETAIL: string = 'AlbumDetailPage';
   /** Settings category sub-page (second level of the settings menu). */

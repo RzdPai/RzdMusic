@@ -394,6 +394,14 @@ export struct SyncSettingsPanel {
         .fontColor($r('sys.color.font_secondary'))
         .width('100%')
         .textAlign(TextAlign.Start)
+      Text('注意：自定义音源（导入的音源脚本）不随洛雪同步走 —— 洛雪同步协议里只有「列表」与'
+        + '「不喜欢的歌曲」两个模块，没有音源模块，客户端无法单方面增加。'
+        + '要把音源带到别的设备，请用下面的「WebDAV 备份 / 恢复」：备份会带上音源脚本，'
+        + '恢复时按 id 保守合并（本机已有的同 id 音源不会被覆盖，本机独有的音源不会被删除）。')
+        .fontSize($r('sys.float.Caption_M'))
+        .fontColor($r('sys.color.font_secondary'))
+        .width('100%')
+        .textAlign(TextAlign.Start)
     }
     .width('100%')
     .padding({ left: 14, right: 14, top: 12, bottom: 12 })
