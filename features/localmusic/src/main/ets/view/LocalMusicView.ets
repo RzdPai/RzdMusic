@@ -23,6 +23,7 @@
 import { AppStorageV2 } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
 import { guardPlayerBack } from 'musicbasic';
 import { AppStorageKeys, MusicAppState, SongItem, ThemeState, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { MediaService } from 'player';
@@ -492,7 +493,7 @@ export struct LocalMusicPage {
   }
 
   build() {
-    NavDestination() {
+    HdsNavDestination() {
       Column() {
         this.Header()
 
@@ -537,10 +538,13 @@ export struct LocalMusicPage {
       //   页根的 `expandSafeArea(TOP)` + `backgroundColor` 继续负责把页面底色铺到状态栏那一条。
       // ★ 用户 2026-10-11：「本地音乐界面改成历史页同款 HDS 标题」⇒ 标题栏交给 HDS，
       //   自绘 Header 退到它下面（所以这里让位 = 状态栏 + HDS 标题栏 56）。
-      .padding({ top: getStatusBarTopVpFromWindowUtil() })
+      // ★ 用户 2026-10-11：「本地音乐界面改成历史页同款 HDS 标题」⇒ 让位 = 状态栏 + HDS 标题栏 56
+      .padding({ top: getStatusBarTopVpFromWindowUtil() + 56 })
     }
     .onBackPressed((): boolean => guardPlayerBack('LocalMusicView'))
-    .hideTitleBar(true)
+    .hideTitleBar(false)
+    .titleBar({ content: { title: { mainTitle: '本地音乐' } } })
+    .titleMode(HdsNavDestinationTitleMode.MINI)
     .backgroundColor($r('sys.color.background_primary'))
     // ★★ 状态栏三件套（2026-10-11 定稿，用户第三次纠正后）：
     //   ① `expandSafeArea(TOP,BOTTOM)` 把页面底色铺到状态栏/导航条那两条（只扩绘制区）；

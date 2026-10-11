@@ -62,7 +62,10 @@ export struct LxSourceDeclaredTags {
         bits.push(item.actions.join('/'));
       }
       if (bits.length > 0) {
-        parts.push(item.label + ' ' + bits.join(' · '));
+        // ★ 用户 2026-10-11：「音源管理里面的 · 也去掉」——its 里可能有空段（标签置空的动作/音质），
+    //   直接 join 会留下孤零零的分隔符 ⇒ 先过滤空段再拼。
+    const kept: string[] = bits.filter((b: string) => b.length > 0);
+    parts.push(kept.length > 0 ? item.label + ' ' + kept.join(' · ') : item.label);
       }
     }
     return parts.join('；');

@@ -85,6 +85,7 @@
 
 import { AppStorageV2, uiObserver } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { common } from '@kit.AbilityKit';
 import { guardPlayerBack } from 'musicbasic';
 import {
   AmbientState, AppRuntimeStorage, AppStorageKeys, BarScrollHelper, BreakpointType, FavoriteEntry,
@@ -358,6 +359,17 @@ export struct MinePage {
   /** 本地音乐导入 / 删除 / 歌词匹配后更新条数。 */
   @Monitor('localMusicState.version')
   refreshLocalCount(): void {
+    // ★★ 用户 2026-10-11：「我的页本地音乐不论多少首都显示 0 首」——根因：`LocalMusic` 是单例，
+    //   `count()` 读的是内存里的 songs，填内存的只有 `LocalMusicView.aboutToAppear` 那句 `localMusic.init(context)`。
+    //   我的页从没 init 过 ⇒ 恒 0（本地音乐页自己 init 过所以显示 1 首）。照它补上（幂等 + try 兜住）。
+    try {
+      if (!localMusic.isReady()) {
+        localMusic.init(this.getUIContext().getHostContext() as common.UIAbilityContext);
+      }
+    } catch (err) {
+      const message: string = err instanceof Error ? err.message : String(err);
+      hilog.warn(DOMAIN, TAG, 'localMusic init failed: %{public}s', message);
+    }
     this.localCount = localMusic.count();
   }
 
@@ -1394,3 +1406,4 @@ export struct MinePage {
     .backgroundColor($r('app.color.background_secondary'))
   }
 }
+
