@@ -1,4 +1,4 @@
-/*
+﻿/*
  * 「我的 → 云端音乐」二级页（照搬参考工程 lxmusic-harmony 的 views/WebDavView.ets 版式）
  *
  * ## 它是什么
@@ -463,7 +463,9 @@ export struct CloudMusicPage {
       this.pathStack?.pop();
     };
     this.cachedTitleBar = {
-      avoidLayoutSafeArea: true,
+      // ★ 2026-10-11 真机定论（设置页截图量出来的）：HDS 标题栏容器本来就在状态栏下沿，
+      //   voidLayoutSafeArea: true 会让它**再退一个状态栏**（标题 76..132）⇒ 恒为 false（标题 38..94）。
+      avoidLayoutSafeArea: false,
       style: {
         blurStrategy: BlurStrategy.ENABLE,
         scrollEffectOpts: {

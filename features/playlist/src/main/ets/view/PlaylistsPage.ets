@@ -939,7 +939,9 @@ export struct PlaylistsPage {
   /** HDS title bar with system material and gradient blur. */
   private getTitleBar(): HdsNavigationTitleBarOptions {
     return {
-      avoidLayoutSafeArea: true,
+      // ★ 2026-10-11 真机定论（设置页截图量出来的）：HDS 标题栏容器本来就在状态栏下沿，
+      //   voidLayoutSafeArea: true 会让它**再退一个状态栏**（标题 76..132）⇒ 恒为 false（标题 38..94）。
+      avoidLayoutSafeArea: false,
       style: {
         blurStrategy: BlurStrategy.ENABLE,
         scrollEffectOpts: {
