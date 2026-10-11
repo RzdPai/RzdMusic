@@ -108,7 +108,10 @@ export {
   WINDOW_INFO_STORAGE_KEY,
   getWindowInfoState
 } from './src/main/ets/util/WindowUtil';
-export { getStatusBarTopVpFromWindowUtil } from './src/main/ets/util/StatusBarInsetUtil';
+export {
+  getStatusBarTopVpFromWindowUtil,
+  getNavigationBarBottomVpFromWindowUtil
+} from './src/main/ets/util/StatusBarInsetUtil';
 export { buildTitleMaterial } from './src/main/ets/util/TitleMaterial';
 export { SdkApiUtil } from './src/main/ets/util/SdkApiUtil';
 export { BarScrollHelper, BarScrollDeltaTracker } from './src/main/ets/util/BarScrollHelper';

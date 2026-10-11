@@ -21,6 +21,7 @@ import {
   BarLayoutModes,
   BreakpointType,
   getWindowInfoState,
+  getNavigationBarBottomVpFromWindowUtil,
   getPlaylistTransitionState,
   HomeSourceState,
   ImmersiveType,
@@ -73,6 +74,15 @@ const FLOATING_MINI_BAR_HEIGHT_VP: number = 56;
 
 /** 二级页面悬浮迷你条在宽屏下的最大宽度（vp）：胶囊不该铺满整个平板/桌面窗口。 */
 const FLOATING_MINI_BAR_MAX_WIDTH_VP: number = 560;
+
+/**
+ * 上拉打开播放页的**起手热区**高度（vp，贴屏幕底那一条）。
+ *
+ * 迷你条 56 + 底部避让（导航条/小白条约 14~24）+ 8 的边距，再往上一小段余量 ≈ 112。
+ * 只有落在这条带里的上滑才由壳层接管（详见 `pullOpenStartsNearBottom()`）——
+ * 页面中段的上滑交还给列表，避免「我的页从播放器上面一部分上滑也打开播放器」。
+ */
+const PULL_OPEN_HANDLE_BAND_VP: number = 112;
 
 /**
  * 播放页浮层在壳层 Stack 里的层级。
@@ -414,13 +424,28 @@ struct Index {
   //   → 高度/缩放/位置/圆角/透明度全部跟着手指走
   //   → 壳层 onActionEnd 过阈值则补间到 0（完全展开），否则补间到 100 并卸载
 
-  /** 上拉打开：起手是否落在屏幕下半部分（只有从底部起手才接管）。 */
+  /**
+   * 上拉打开：起手点是否落在「迷你条那一条带」里（迷你条 = 那个把手）。
+   *
+   * ⚠️ 旧规则是「从屏幕下半部分（≥60% 屏高）起手就接管」，用户实测（2026-10-11）：
+   *   「我的页我从播放器上面一部分的位置上滑也会打开播放器（只有我的页会出现）」。
+   *   原因：旧规则把**整个下半屏**都划成拉伸手势的热区。别的页面在那一带正好是长列表 /
+   *   滚动视图，竖直拖动被列表先吃掉，壳层这条 `.gesture(PanGesture)`（冒泡阶段，优先级
+   *   低于子组件）根本收不到；而「我的」页内容不满一屏（或已经滚到底）时列表不消费拖动，
+   *   于是手势冒泡上来、播放器被顺手拉开 —— 所以只有它「漏」。
+   *   收紧成：起手点必须落在**底部那一条带**（迷你条 56 + 底部避让 + 上沿余量）内。
+   *   页面中段、列表区域的上滑一律交还给滚动视图（这也和"迷你条是把手"的交互直觉一致）。
+   * @param fingers 起手手指列表（窗口坐标 globalY，vp）。
+   * @returns 是否由壳层接管这次拖动。
+   */
   private pullOpenStartsNearBottom(fingers: FingerInfo[]): boolean {
     if (fingers === undefined || fingers.length === 0) {
       return false;
     }
     const h: number = this.viewportHeightVp > 0 ? this.viewportHeightVp : 800;
-    return fingers[0].globalY >= h * 0.6;
+    const y: number = fingers[0].globalY;
+    const bandTop: number = Math.max(h - PULL_OPEN_HANDLE_BAND_VP, h * 0.6);
+    return y >= bandTop;
   }
 
   /** 上拉开始：进入 ENTERING 阶段（可跟手）并挂载播放页。 */
@@ -1039,9 +1064,10 @@ struct Index {
    * @returns 底部间距（vp）。
    */
   private floatingMiniBarBottomMarginVp(): number {
-    const systemInset: number = this.windowInfo.navigationBarBottomVp > 0 ?
-      this.windowInfo.navigationBarBottomVp :
-      WindowUtil.getInstance().getStartupNavigationBarBottomVp();
+    // ★ 走 `getNavigationBarBottomVpFromWindowUtil()`：它「缓存 → 现向窗口量 → 最后一次好值 →
+    //   启动快照」逐级兜底。老代码只读缓存 + 启动快照，两者都为 0 时（避让区一次都没上报成功）
+    //   边距会退化成 12，胶囊贴着屏幕底、压在系统手势条上 —— 用户看到的「底部播放器错位」。
+    const systemInset: number = getNavigationBarBottomVpFromWindowUtil();
     return Math.max(12, systemInset + 8);
   }
 
