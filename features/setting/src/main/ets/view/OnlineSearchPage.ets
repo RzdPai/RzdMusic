@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,9 +18,10 @@ import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import { guardPlayerBack } from 'musicbasic';
 import { AlbumRouteParam, ArtistRouteParam, BreakpointType, ThemeState, TitleBarConstants, WindowUtil, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions, HdsNavigationTitleBarOptions, HideMode, ScrollEffectType, TextStyleMode, TitleSize } from '@kit.UIDesignKit';
-import { AppStorageKeys, AmbientState, MusicAppState, MusicStoreService, PlayedSongRecord, QualityInfo, RouterUrlConstants, SongItem, ToplistRouteParam, buildTitleMaterial } from 'musicbasic';
+import { AppStorageKeys, AmbientState, FavoriteEntry, MusicAppState, MusicStoreService, PlayedSongRecord, QualityInfo, RouterUrlConstants, SongItem, ToplistRouteParam, buildTitleMaterial } from 'musicbasic';
 import { AlbumInfo, LXQualityOption, LXSearchSong, LXSearchResult, SingerInfo, lxGetPicFallback, lxGetQualityOptions, lxSearch, lxTxHotSearch, searchAlbums, searchSingers, sourceToCode, DownloadTask, DownloadUtil, OnlinePlayUtil, PlaylistSearchApi } from 'player';
 import type { SearchPlaylistInfo, SearchPlaylistSong } from 'player';
+import { sourceName } from 'player';
 import { SongMoreMenu } from 'playlist';
 
 /** Observable per-source checkbox state. */
@@ -826,6 +827,33 @@ struct OnlineSearchPage {
   }
 
   /** Fetches playlist songs and saves them into a brand-new playlist named after it. */
+  /**
+   * 收藏 / 取消收藏这张**在线歌单**（写 `favorite_playlists`，我的页「收藏歌单」那一段读它）。
+   *
+   * 只存"身份 + 展示信息"（id / source / 名字 / 作者 / 曲目数 / 封面），**不拉歌曲列表**——
+   * 收藏是"留着以后听"的动作，不是导入；要落到本地歌单请用菜单里的「导入为我的歌单」。
+   * 已经收藏过的再点 = 取消收藏（同一颗星在平台音乐页也能取消，两处同一份数据）。
+   */
+  private collectPlaylist(p: SearchPlaylistInfo): void {
+    const store = this.store;
+    if (store.isFavoritePlaylist(p.source, p.id)) {
+      store.removeFavoritePlaylist(p.source, p.id);
+      this.getUIContext().getPromptAction().showToast({ message: '已取消收藏', duration: 1800 });
+      return;
+    }
+    const entry = new FavoriteEntry();
+    entry.id = p.id;
+    entry.source = p.source;
+    entry.name = p.name.length > 0 ? p.name : '在线歌单';
+    entry.sub = p.creator.length > 0 ? p.creator : sourceName(p.source);
+    entry.count = p.trackCount;
+    entry.img = p.coverUrl;
+    entry.time = Date.now();
+    store.addFavoritePlaylist(entry);
+    this.getUIContext().getPromptAction().showToast(
+      { message: '已收藏，可在「我的 → 收藏歌单」找到', duration: 2200 });
+  }
+
   private async addPlaylistToMine(p: SearchPlaylistInfo): Promise<void> {
     try {
       const songs: SearchPlaylistSong[] = await PlaylistSearchApi.getPlaylistDetail(p.source, p.id);
@@ -1010,7 +1038,18 @@ struct OnlineSearchPage {
         .margin({ right: 4 })
         .bindMenu([
           {
-            value: '添加到我的歌单',
+            // ★ 用户 2026-10-11：「歌单菜单添加到我的歌单行为从创建一个歌单改为收藏该歌单」。
+            //   原来这一项 = `addPlaylistToMine()`（拉全量歌曲、`createPlaylist()` 落一张本地歌单）。
+            //   现在改成**收藏该在线歌单**（写 `MusicStoreService` 的 `favorite_playlists`），
+            //   与「我的 → 歌单卡 → 收藏歌单」那一段同一份数据；导入能力保留为下面单独一项，
+            //   免得多出来的歌单没人知道从哪来（能力一个都没丢）。
+            value: '收藏该歌单',
+            action: (): void => {
+              this.collectPlaylist(p);
+            }
+          },
+          {
+            value: '导入为我的歌单',
             action: (): void => {
               void this.addPlaylistToMine(p);
             }
@@ -1759,7 +1798,11 @@ struct OnlineSearchPage {
     .systemBarStyle(
       { statusBarContentColor: this.isDarkTheme() ? '#FFFFFF' : '#000000' },
       { statusBarContentColor: this.isDarkTheme() ? '#FFFFFF' : '#000000' })
-    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+    // ★★ 用户 2026-10-11：「顶栏标题错位的问题还在，你应该参考一下其他显示正常的页面是怎么写的」。
+    //   逐页对比后：显示正常的 MinePage / RecommendPage **都没有** expandSafeArea，
+    //   而所有标题偏低的页面都有 ⇒ 照正常页面去掉它（官方语义：expandSafeArea 只延伸**绘制区**，
+    //   「子组件相对屏幕位置不变」，但它会让 HDS 标题栏的定位多让一次）。
+    //   页面底色由页盒自身 ackgroundColor 铺满（盒顶 = 0，实测见 RzdPageTopInset），不需要它补状态栏那一条。
     // ★★ 状态栏三件套（2026-10-11 定稿，用户第三次纠正后）：这里的 `ignoreLayoutSafeArea` **必须带 TOP** ——
     //   HDS 标题栏自己会按"状态栏高度"往下让位，所以页面盒子必须从屏幕 y=0 起排；
     //   只写 BOTTOM（盒子从状态栏下沿起排）会变成"盒子让一次 + 标题栏再让一次" ⇒

@@ -677,15 +677,12 @@ export struct MinePage {
       ForEach(this.quickEntries(), (entry: MineQuickEntry) => {
         Column({ space: 6 }) {
           Stack({ alignContent: Alignment.Center }) {
-            // 图标底：强调色 12% 的圆角方块 + 强调色图形（形状随这排入口，参考是 44 / 圆角 15）
-            Column()
-              .width(QUICK_ICON_BOX)
-              .height(QUICK_ICON_BOX)
-              .borderRadius(QUICK_ICON_RADIUS)
-              .backgroundColor(this.themeState.color)
-              .opacity(ACCENT_TINT_OPACITY)
+            // ★ 用户 2026-10-11：「那五个图标后面的小背景去掉（不是大卡片，是小卡片）」。
+            //   原来这里垫了一块 44×44、圆角 15、强调色 12% 的方块（`QUICK_ICON_BOX/RADIUS` +
+            //   `ACCENT_TINT_OPACITY`）—— 现在只留图标本身；外框尺寸保留 44×44 ，
+            //   五格的图标中心与文字基线不会因为删背景而挪位。
             SymbolGlyph(entry.symbol)
-              .fontSize(23)
+              .fontSize(26)
               .fontColor([this.themeState.color])
           }
           .width(QUICK_ICON_BOX)

@@ -872,7 +872,9 @@ export struct RecordListPage {
     //      连带内容也多顶下去 38vp（「上方留的空距有点大了」）。
     //      盒子从 0 起排后：标题栏 = 38..94 ✔，内容偏移 94（= 状态栏 + 标题栏）落在 94 ✔。
     //   ③ 滚动容器 `clipContent(ContentClipMode.SAFE_AREA)`：让行能**画进**状态栏那一条（"延伸进状态栏"）。
-    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+    // ★★ 用户 2026-10-11：「顶栏标题错位的问题还在，你应该参考一下其他显示正常的页面是怎么写的」。
+    //   逐页对比后：显示正常的 MinePage / RecommendPage **都没有** expandSafeArea，
+    //   而所有标题偏低的页面都有 ⇒ 照正常页面去掉它。页面底色由页盒自身 backgroundColor 铺满。
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     // ★ 实测页盒顶边（窗口坐标 vp）：内容让位与标题栏 `avoidLayoutSafeArea` 都由它推出来，
     //   不再假设盒顶 = 0。只在变化超过 0.5vp 时写状态，避免与布局互相追。
