@@ -7,6 +7,14 @@
       "data": {
         "description": "LX sync settings (server address, auth code, status)"
       }
+    },
+    {
+      "name": "CloudMusicPage",
+      "pageSourceFile": "src/main/ets/view/CloudMusicPage.ets",
+      "buildFunction": "CloudMusicPageBuilder",
+      "data": {
+        "description": "Cloud music library on our own WebDAV server (browse + play)"
+      }
     }
   ]
 }

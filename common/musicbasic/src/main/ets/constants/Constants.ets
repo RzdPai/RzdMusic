@@ -90,7 +90,18 @@ export class RouterUrlConstants {
    */
   public static readonly MINE_SETTINGS: string = 'MineSettingsPage';
   /**
-   * 「我的」→「全部歌单」的二级页（= 原来那个「歌单」页签的整页）。
+   * 「我的」→「设置」的二级页 = **我们原本那个大设置页**（`SettingPage`）。
+   *
+   * ★ 用户 2026-10-11 明确：设置页用回我们原本的 `SettingPage`
+   * （原来它是底栏第 4 个页签；页签收成两个之后改成从「我的」页进，**内容不重写**）；
+   * 其中顶部的「登录音乐」大卡片**搬到「我的」页顶部**（见 `LoginMusicCard.ets`），
+   * 所以这一页里不再有那张卡。
+   *
+   * `MINE_SETTINGS`（旧名，指向已被删掉的 `MineSettingsPage`）保留常量只为兼容，
+   * 新的跳转一律用这个名字。
+   */
+  public static readonly SETTING_PAGE: string = 'SettingPage';
+  /** 「我的」→「全部歌单」的二级页（= 原来那个「歌单」页签的整页）。
    *
    * ★ 底栏从四个页签收成两个（推荐 / 我的）之后，「歌单」页签被删掉，
    * 它的**整页能力**（新建 / 排序 / 导入 / 改封面 / 删除）只能从「我的」页进，
@@ -102,6 +113,27 @@ export class RouterUrlConstants {
   public static readonly MINE_PLAYLIST: string = 'MinePlaylistPage';
   /** Album detail page (album cover + track list). */
   public static readonly ALBUM_DETAIL: string = 'AlbumDetailPage';
+  /**
+   * 「我的」→「最近播放 / 收藏」的二级页（同一张列表，靠参数分模式）。
+   *
+   * ★ 用户 2026-10-11 要求「我的」页**完全照搬**参考工程 lxmusic-harmony 的 MineView：
+   * 那一页的「最近播放 / 收藏」不是页内的分段胶囊，而是**各自一个子页面**
+   * （参考：`views/HistoryView.ets` 与内置收藏歌单详情）。
+   * 我们的历史 / 收藏数据本来就在 `MusicStoreService` 里，所以用**一页两模式**，
+   * 不新开两份列表实现。
+   *
+   * 路由表条目在 `features/setting/src/main/resources/base/profile/router_map.json`。
+   */
+  public static readonly RECORD_LIST: string = 'RecordListPage';
+  /**
+   * 「我的」→「云端音乐」的二级页（WebDAV 云端曲库）。
+   *
+   * ★ 照搬参考工程：它的「云端音乐」入口走的是 `core/webdav/*` + `views/WebDavView.ets`
+   * （WebDAV 上的曲库），不是 LX-Server。我们 `features/sync` 里已经有 WebDAV 客户端与凭据，
+   * 所以这一页落在 `features/sync`，路由表条目在
+   * `features/sync/src/main/resources/base/profile/router_map.json`。
+   */
+  public static readonly CLOUD_MUSIC: string = 'CloudMusicPage';
   /** Settings category sub-page (second level of the settings menu). */
   public static readonly SETTING_CATEGORY: string = 'SettingCategoryPage';
   /** Guest ranking boards overview page (multi-source). */

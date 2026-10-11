@@ -19,8 +19,8 @@
  * 底栏从四个页签收成两个（推荐 / 我的）之后，「歌单」那个页签被删掉了，但它的
  * **整页能力**（新建 / 重命名 / 删除 / 拖动排序 / 导出 / 网络导入 / 自定义封面 /
  * 进歌单详情 / 本地音乐入口）一样都不能少 —— 那些能力全在 `features/playlist` 的
- * `PlaylistsPage` 里，所以这里只是把它挂到本 HAR 的路由表上，由「我的」页的
- * **自带路由栈**（`MinePage.localStack`）推进来。
+ * `PlaylistsPage` 里，所以这里只是把它挂到本 HAR 的路由表上，由「我的」页
+ * `pushPathByName(RouterUrlConstants.MINE_PLAYLIST, ...)` 推**壳层共享栈**出来。
  *
  * ★ 为什么不直接把路由名加到 `features/playlist` 的 router_map：
  *   本轮的改动范围被限定在 `features/setting/**` 与两个 product 的壳层，
@@ -30,9 +30,13 @@
  * ⚠️ 两个导出都要留着：
  *   · `MinePlaylistPageBuilder` 是**系统路由表**要的（`router_map.json` 的 buildFunction，
  *     `@Builder` 函数体里必须含 `NavDestination` —— 这里是 `HdsNavDestination`，
- *     它是 `PlaylistsPage.build()` 的根节点），与同目录的 `MineSettingsPageBuilder` 同构；
+ *     它是 `PlaylistsPage.build()` 的根节点）；
  *   · `MinePlaylistPage` 结构体让 `MinePage` 能**直接引用本文件**（HAR 是按引用编译的：
  *     只被 router_map 引用的文件不会被拉进编译图，所以多一个 struct 出口更稳）。
+ *
+ * ⚠️ 本页**不自带 Navigation**：由「我的」页推**壳层共享栈**（`pageIndexInfos`）出来，
+ *    整屏盖住壳层底栏，底部只剩壳层那条官方浮动播放条；系统返回也走壳层栈。
+ *    （原来「我的」页自带内层 Navigation 的那版已被否掉，理由见 `MinePage` 文件头。）
  */
 
 import { PlaylistsPage } from 'playlist';

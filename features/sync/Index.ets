@@ -11,3 +11,7 @@ export type { SyncActionSink, LibrarySummary, LxPlaylistSummary } from './src/ma
 // 界面层（设置页内嵌面板 + 同步方式选择面板 + 路由页入口）
 export { SyncSettingsPanel, SyncSettingsPageBuilder } from './src/main/ets/view/SyncSettingsView';
 export { SyncModeSheet } from './src/main/ets/view/SyncModeSheet';
+// 「我的 → 云端音乐」二级页（WebDAV 上的曲库）；路由表条目在
+// `src/main/resources/base/profile/router_map.json` 的 `CloudMusicPage`。
+// 只导出 Builder：页面组件本身由路由表渲染，别的模块不需要 new 它。
+export { CloudMusicPageBuilder } from './src/main/ets/view/CloudMusicPage';

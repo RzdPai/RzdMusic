@@ -1401,7 +1401,9 @@ export struct SettingPage {
           .onChange((value: string) => {
             this.searchKeyword = value;
           })
-        this.LoginAccountCard()
+        // ★ 用户 2026-10-11：原来这里那张「登录音乐」大卡片**搬到「我的」页顶部**了
+        //   （抽成 `LoginMusicCard.ets`，我的页调它）。设置页里**不再有**这张卡，
+        //   所以这里只删掉那一行调用 —— `LoginAccountCard()` 这个 Builder 与其余设置项一律不动。
         this.SourceEntry()
         this.PlaybackDownloadEntry()
         this.ThemeEntry()
@@ -1456,7 +1458,10 @@ export struct SettingPage {
     }
     .onBackPressed((): boolean => guardPlayerBack('SettingPage'))
     .hideTitleBar(false)
-    .hideBackButton(true)
+    // ★ 这一页现在**只作为二级页**存在（原来的「设置」页签已被「我的」页取代，
+    //   入口 = 「我的」→ 入口卡「设置」，见 `MinePage.linkRows()` / `onLinkTap()`），
+    //   所以必须显示返回箭头 —— 以前它是页签页、没有"上一页"可回，才写的 true。
+    .hideBackButton(false)
     .titleBar(this.getTitleBar())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.pageScroller])
@@ -1751,5 +1756,22 @@ export struct SettingPage {
     .backgroundColor($r('app.color.comp_background_list_card'))
       }
   }
+}
+
+/**
+ * 路由表里注册的 Builder（`features/setting` 的 `router_map.json`）。
+ *
+ * ★ 用户 2026-10-11：设置页用回**我们原本这个大的设置页本体**（原来它是底栏第 4 个页签；
+ *   页签收成「推荐 / 我的」两个之后，改成从「我的」页入口卡的那一行进来）——
+ *   **不是副本、也没有重写**，`router_map.json` 里指的就是本文件。
+ *
+ * 这一页**没有必填 `@Param`**（`scrollTopCommand` 有默认值 0），所以这里直接
+ * `SettingPage()`、不传参数；它自己是 `HdsNavDestination` 根节点，被壳层那条共享
+ * `HdsNavigation` 推出来就是正常的二级页（页内的 `@Consumer('pageIndexInfos')` 拿到的
+ * 就是壳层共享栈，推设置详情页照旧）。
+ */
+@Builder
+export function SettingPageBuilder(name: string, param: Object) {
+  SettingPage()
 }
 

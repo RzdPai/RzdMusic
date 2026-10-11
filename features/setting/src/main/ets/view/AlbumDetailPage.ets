@@ -15,7 +15,7 @@
 
 import { AppStorageV2, LengthMetrics, uiObserver } from '@kit.ArkUI';
 import { guardPlayerBack } from 'musicbasic';
-import { AlbumRouteParam, AmbientState, AppStorageKeys, BreakpointType, FavoriteEntry, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, ThemeState, TitleBarConstants, WindowUtil, buildTitleMaterial } from 'musicbasic';
+import { AlbumRouteParam, AmbientState, AppStorageKeys, BreakpointType, FavoriteEntry, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, ThemeState, TitleBarConstants, buildTitleMaterial } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType } from '@kit.UIDesignKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { http } from '@kit.NetworkKit';
@@ -29,6 +29,15 @@ import { WindowInfo, getWindowInfoState } from 'musicbasic';
 
 const ALBUM_PAGE_LIMIT: number = 100;
 
+/**
+ * ★ 双胞胎常量：`DetailImmersiveBackdrop` 的 `heroHeightVp` / `rowHeightVp` 默认值
+ * （本页没有覆写这两个 `@Param`，所以照片画框 = 320 + 56 + 状态栏避让）。
+ * 只有算「状态栏那一条在照片里对应哪一块」时才用得到；改那两处默认值时必须同步这里。
+ * 与 `ArtistDetailPage` 的同名常量**必须逐字一致**（两页是双胞胎实现）。
+ */
+const BACKDROP_HERO_VP: number = 320;
+const BACKDROP_ROW_VP: number = 56;
+
 /** 秒数 → mm:ss 时长文本。 */
 function formatAlbumInterval(seconds: number): string {
   let s: number = Math.max(0, Math.floor(seconds));
@@ -36,6 +45,20 @@ function formatAlbumInterval(seconds: number): string {
   s = s % 60;
   const ss: string = s < 10 ? '0' + s : String(s);
   return m + ':' + ss;
+}
+
+/**
+ * 取色器给的通道值（0–255）→ `rgb(r, g, b)`。
+ *
+ * ⚠️ **不经过 `ColorConversion.dealColor`**：那个函数是给"深底白字"页面底色设计的，
+ * 亮度上限锁死在 0.3（约 RGB 76）⇒ 结果永远是深色，拿它判"背景亮不亮"必然判成"暗"。
+ * 判状态栏前景色必须用**照片本身的原始亮度**（状态栏那一条压的就是原始照片）。
+ */
+function toRgbString(red: number, green: number, blue: number): string {
+  const r: number = Math.max(0, Math.min(255, Math.round(red)));
+  const g: number = Math.max(0, Math.min(255, Math.round(green)));
+  const b: number = Math.max(0, Math.min(255, Math.round(blue)));
+  return `rgb(${r}, ${g}, ${b})`;
 }
 
 /**
@@ -70,6 +93,17 @@ export struct AlbumDetailPage {
   @Local coverFailed: boolean = false;
   @Local errorMsg: string = '';
   @Local avgColor: string = '#1f1f22';
+  /**
+   * ★ 状态栏判据用的**原始色**（不压暗），只在取色回调里写：
+   *  * `photoTopColor`：封面照里**真正压在状态栏那一条下面**的那块区域的平均色 —— 滚动前的判据；
+   *  * `photoRawAvgColor`：整张封面照的原始平均色 —— 区域取色失败时的兜底判据。
+   * 空串 = 还没有照片像素（首帧 / 没图 / 失败），此时判据退回 `avgColor`。
+   * 与 `ArtistDetailPage` 的同名状态**语义必须逐字一致**（两页是双胞胎实现）。
+   */
+  @Local photoTopColor: string = '';
+  @Local photoRawAvgColor: string = '';
+  /** 上一次打过的状态栏判据日志（内容相同就不再刷）。 */
+  private lastStatusBarLog: string = '';
   @Local imageFailed: boolean = false;
   @Local windowInfo: WindowInfo = getWindowInfoState();
   @Local detailScrollVp: number = 0;
@@ -108,9 +142,12 @@ export struct AlbumDetailPage {
   }
 
   aboutToAppear(): void {
-    // 进页第一件事就把状态栏前景色按本页背景下发（与 ArtistDetailPage 同款修法，
-    // 详见那里 preapplyStatusBarColor 的注释）。
-    this.preapplyStatusBarColor();
+    // ★ 状态栏前景色**不再**在这里用 window 接口预下发（原来的 preapplyStatusBarColor 已删）：
+    //   官方《HdsNavigation》systemBarStyle 说明：「不建议混合使用 systemBarStyle 属性和 window 设置
+    //   状态栏样式的相关接口，例如：setWindowSystemBarProperties。」且「当页面设置不同样式时，在页面
+    //   转场开始时生效」⇒ 声明式的 `.systemBarStyle` 就是唯一真源，转场开始那一刻框架就该换色。
+    //   这里只打一条进页判据（触发点 = entry），真机 grep RzdAlbumStatusBar 就能对上。
+    this.logStatusBarDecision('entry');
     const favSource: string = codeToSource(this.source);
     const favId: string = this.albumId.length > 0 ? this.albumId : this.albumMid;
     this.isFavoriteAlbum = favId.length > 0 &&
@@ -203,7 +240,11 @@ export struct AlbumDetailPage {
     void OnlinePlayUtil.playList(this.appState, list, 0, this.getUIContext());
   }
 
-  /** 下载专辑封面并取主色作为页面背景渐变底色。 */
+  /**
+   * 下载专辑封面，取两个颜色：
+   *  * `avgColor`：全图主色经 `ColorConversion.dealColor` 压暗 —— 页面渐变底、文字、标题栏底色都用它（行为不变）；
+   *  * `photoRawAvgColor` + `photoTopColor`：**原始**（不压暗）平均色，只给状态栏判据用（见 {@link statusBarOriginalColor}）。
+   */
   private async loadBackdropColor(): Promise<void> {
     if (this.infoPicUrl.length === 0) {
       return;
@@ -234,12 +275,16 @@ export struct AlbumDetailPage {
                     const b: number = Math.max(0, Math.min(255, arr[2]));
                     this.avgColor = `rgb(${r}, ${g}, ${b})`;
                     this.cachedTitleBar = undefined;
+                    // ★ 同一个 picker 顺手取「原始平均色」当兜底判据（不压暗，见 toRgbString 的说明）。
+                    const raw: effectKit.Color = colorPicker.getAverageColor();
+                    this.photoRawAvgColor = toRgbString(raw.red, raw.green, raw.blue);
                   }
                 } finally {
                   resolve();
                 }
               });
           });
+          this.logStatusBarDecision('avg-sample');
         } finally {
           try {
             pixelMap.release();
@@ -247,6 +292,7 @@ export struct AlbumDetailPage {
             // ignore
           }
         }
+        await this.loadStatusBarStripColor(src);
       } finally {
         src.release();
       }
@@ -257,9 +303,98 @@ export struct AlbumDetailPage {
     }
   }
 
-  /** 取色背景是否偏浅（决定前景文字/图标用深色还是白色）。 */
-  private isLightBackdrop(): boolean {
-    const c: string = this.avgColor;
+  /**
+   * 只解出「状态栏那一条压在封面照上的区域」并取它的平均色 → `photoTopColor`。
+   *
+   * 与 `ArtistDetailPage.loadStatusBarStripColor` **逐字同款**（两页是双胞胎实现）。
+   * 为什么必须按区域取：状态栏是半透明图标压在照片最上面一条上，判"图标该黑还是该白"只能看
+   * **那一条**的亮度；全图主色表达的是"占比最大的颜色"，跟顶部那一条可以完全不搭。
+   * 取不到（解码不支持区域 / 尺寸还没量到）就返回，判据退回 `photoRawAvgColor` → `avgColor`。
+   * @param src 已经创建好的图片源（本方法内只做一次小区域解码）。
+   */
+  private async loadStatusBarStripColor(src: image.ImageSource): Promise<void> {
+    try {
+      const info: image.ImageInfo = await src.getImageInfo();
+      const region: image.Region | undefined = this.statusBarStripRegion(info.size.width, info.size.height);
+      if (region === undefined) {
+        return;
+      }
+      const stripSize: image.Size = {
+        width: Math.max(1, Math.round(region.size.width / 4)),
+        height: Math.max(1, Math.round(region.size.height / 4))
+      };
+      const opts: image.DecodingOptions = {
+        desiredRegion: region,
+        desiredSize: stripSize,
+        cropAndScaleStrategy: image.CropAndScaleStrategy.CROP_FIRST
+      };
+      hilog.info(0x0000, 'RzdAlbumStatusBar',
+        'strip region x=%{public}d y=%{public}d w=%{public}d h=%{public}d imgW=%{public}d imgH=%{public}d avoidVp=%{public}f',
+        region.x, region.y, region.size.width, region.size.height, info.size.width, info.size.height,
+        this.windowInfo.statusBarTopVp);
+      const strip: image.PixelMap = await src.createPixelMap(opts);
+      try {
+        await new Promise<void>((resolve: () => void) => {
+          effectKit.createColorPicker(strip,
+            (error: Error | undefined, colorPicker: effectKit.ColorPicker | undefined) => {
+              try {
+                if (error === undefined && colorPicker !== undefined) {
+                  const raw: effectKit.Color = colorPicker.getAverageColor();
+                  this.photoTopColor = toRgbString(raw.red, raw.green, raw.blue);
+                }
+              } finally {
+                resolve();
+              }
+            });
+        });
+      } finally {
+        try {
+          strip.release();
+        } catch (_err) {
+          // ignore
+        }
+      }
+      this.logStatusBarDecision('strip-sample');
+    } catch (_err) {
+      // 区域解码失败：判据退回整图原始平均色（loadBackdropColor 里已经取到）
+      hilog.warn(0x0000, 'RzdAlbumStatusBar', 'strip sample failed, fallback to whole-image average');
+    }
+  }
+
+  /**
+   * 状态栏那一条在**源图**里对应哪一块（`ImageFit.Cover` + 竖向居中裁剪的逆运算）。
+   * @param imgW 源图宽（px）。
+   * @param imgH 源图高（px）。
+   * @returns 区域；窗口尺寸/避让高度还没量到（=0）时返回 undefined。
+   */
+  private statusBarStripRegion(imgW: number, imgH: number): image.Region | undefined {
+    const bandVp: number = this.windowInfo.statusBarTopVp;
+    const boxWvp: number = this.getUIContext().px2vp(this.windowInfo.windowSize.width);
+    const boxHvp: number = BACKDROP_HERO_VP + BACKDROP_ROW_VP + bandVp;
+    if (bandVp <= 0 || boxWvp <= 0 || boxHvp <= 0 || imgW <= 0 || imgH <= 0) {
+      return undefined;
+    }
+    // vp/px：Cover 取长边比例，画框一定被铺满，多出来的方向居中裁掉
+    const scaleVpPerPx: number = Math.max(boxWvp / imgW, boxHvp / imgH);
+    if (!Number.isFinite(scaleVpPerPx) || scaleVpPerPx <= 0) {
+      return undefined;
+    }
+    const cropTopVp: number = Math.max(0, (imgH * scaleVpPerPx - boxHvp) / 2);
+    const y0: number = Math.max(0, Math.min(imgH - 1, Math.floor(cropTopVp / scaleVpPerPx)));
+    const y1: number = Math.max(y0 + 1, Math.min(imgH, Math.ceil((cropTopVp + bandVp) / scaleVpPerPx)));
+    const region: image.Region = {
+      x: 0,
+      y: y0,
+      size: { width: imgW, height: y1 - y0 }
+    };
+    return region;
+  }
+
+  /**
+   * 颜色亮不亮 —— **全页唯一判据**（`#RRGGBB` 与 `rgb(r, g, b)` 都认；认不出来按"暗"处理）。
+   * 页面文字/图标、标题栏图标、状态栏前景色全部走它，谁都不许另写一套。
+   */
+  private isLightColor(c: string): boolean {
     let r: number = -1;
     let g: number = -1;
     let b: number = -1;
@@ -282,6 +417,81 @@ export struct AlbumDetailPage {
     return (0.299 * r + 0.587 * g + 0.114 * b) > 150;
   }
 
+  /**
+   * 取色背景是否偏浅 —— 判的是**页面正文的背景**。
+   *
+   * ⚠️ `avgColor` 是 `ColorConversion.dealColor` 压暗过的（亮度上限 0.3），所以这里几乎恒为 false
+   * ⇒ 页面文字/图标恒用白色。**这是对的**：正文压在的就是这块压暗底色本身（见 `HdsNavDestination
+   * .backgroundColor(this.avgColor)` + 照片层的渐变遮罩底部色）。
+   * ★ 但**不能拿它当状态栏的判据** —— 状态栏那一条压的是**原始封面照**，不是这块压暗底色。
+   */
+  private isLightBackdrop(): boolean {
+    return this.isLightColor(this.avgColor);
+  }
+
+  /**
+   * 滚动前压在状态栏那一条下面的颜色 = 封面照顶部那一条的原始平均色。
+   * 没有照片像素时（首帧 / 没图 / 取色失败）退回 `photoRawAvgColor` → `avgColor`：
+   * 那两个时刻状态栏那一条确实是页面自己的底色（照片层顶部是 `Color.Transparent`，压不出东西来）。
+   */
+  private statusBarOriginalBackground(): string {
+    if (this.photoTopColor.length > 0) {
+      return this.photoTopColor;
+    }
+    if (this.photoRawAvgColor.length > 0) {
+      return this.photoRawAvgColor;
+    }
+    return this.avgColor;
+  }
+
+  /**
+   * `.systemBarStyle` 的**第一个**参数（官方：`originalStyle` = 「系统状态栏**初始**样式」）。
+   *
+   * 三种状态分别该是什么色（对应官方 HdsNavDestination.systemBarStyle 的语义）：
+   *   ① 首帧 / 没图 / 取色失败：状态栏那一条 = 页面自己的底色 `avgColor`（压暗深色）⇒ 白图标；
+   *   ② 照片就位（未滚动，滚动 < 264vp）：那一条压的是**封面照顶部**⇒ 由照片顶部原始亮度算，浅色照片给黑图标；
+   *   ③ 滚动过 264vp（动态档）：见 {@link statusBarScrollEffectColor}。
+   * 官方：「未设置 systemBarStyle 属性时，颜色默认值同主标题栏字体颜色」—— 我们显式给，判据一律由背景算出。
+   */
+  private statusBarOriginalColor(): string {
+    return this.isLightColor(this.statusBarOriginalBackground()) ? '#000000' : '#FFFFFF';
+  }
+
+  /**
+   * `.systemBarStyle` 的**第二个**参数（官方：`scrollEffectStyle` = 「动态样式生效后，系统状态栏对应的
+   * **最终**动态样式」）。
+   *
+   * ⚠️ 官方说的是"**最终**"：动态档的终点是封面照完全上移出状态栏（照片画框 376vp+避让，滚动超过它就没照片了），
+   * 那时那一条压的是「页面压暗底色」本身（也正是滚动档标题栏 `scrollEffectStyle.backgroundStyle.backgroundColor`
+   * 用的 `avgColor`）⇒ 判据取 `avgColor`。
+   * 动态档切换点是 264vp，此时照片还剩一小截 ⇒ 理论上有一小段（264vp ~ 照片画框高）照片与判据不完全同步；
+   * **这一点是有意取的保守值**：若改成用照片色，越过照片画框后就会变成"黑图标压深底"（更差）。
+   * 与第一个参数**必须分开算**：把同一个值塞给两个参数，等于承认两种状态里必有一种是错的。
+   */
+  private statusBarScrollEffectColor(): string {
+    return this.isLightColor(this.avgColor) ? '#000000' : '#FFFFFF';
+  }
+
+  /**
+   * 状态栏判据日志：打出**下发值 + 判据来源 + 触发点**（真机 `grep RzdAlbumStatusBar`）。
+   * 内容没变就不打，避免 build 每帧刷屏。
+   * @param trigger 触发点：entry（进页）/ avg-sample（主色回来）/ strip-sample（顶部条回来）/ pic-url（封面地址变化）
+   */
+  private logStatusBarDecision(trigger: string): void {
+    const original: string = this.statusBarOriginalColor();
+    const scrolled: string = this.statusBarScrollEffectColor();
+    const strip: string = this.photoTopColor.length > 0 ? this.photoTopColor : '(none)';
+    const rawAvg: string = this.photoRawAvgColor.length > 0 ? this.photoRawAvgColor : '(none)';
+    const line: string = trigger + '|' + original + '|' + scrolled + '|' + strip + '|' + rawAvg + '|' + this.avgColor;
+    if (line === this.lastStatusBarLog) {
+      return;
+    }
+    this.lastStatusBarLog = line;
+    hilog.info(0x0000, 'RzdAlbumStatusBar',
+      'trigger=%{public}s original=%{public}s scrollEffect=%{public}s strip=%{public}s rawAvg=%{public}s avgColor=%{public}s',
+      trigger, original, scrolled, strip, rawAvg, this.avgColor);
+  }
+
   /** 标题栏返回/菜单按钮的半透明底色。 */
   private fgTitleIconBg(): string {
     return this.isLightBackdrop() ? '#1A000000' : '#1AFFFFFF';
@@ -292,39 +502,28 @@ export struct AlbumDetailPage {
     return this.isLightBackdrop() ? '#E6000000' : '#FFFFFF';
   }
 
-  /** 状态栏前景（图标/时间）颜色：与页面背景判据同源。 */
-  private statusBarContentColor(): string {
-    return this.isLightBackdrop() ? '#000000' : '#FFFFFF';
-  }
-
-  /**
-   * 把当前该有的状态栏前景色立刻下发到窗口（窗口级 setWindowSystemBarProperties）。
-   * 理由与三段"颜色何时确定/何时下发"的说明见 ArtistDetailPage.preapplyStatusBarColor。
-   */
-  private preapplyStatusBarColor(): void {
-    const color: string = this.statusBarContentColor();
-    WindowUtil.getInstance().setWindowSystemBarProperties({ statusBarContentColor: color });
-    hilog.info(0, 'RzdDetailImmersive',
-      'album statusBar preapply avgColor=%{public}s light=%{public}d color=%{public}s',
-      this.avgColor, this.isLightBackdrop() ? 1 : 0, color);
-  }
-
-  /** 取色回来（avgColor 变化）就是背景色真正确定的时刻：立刻重下发一次状态栏颜色。 */
+  /** 取色回来（avgColor 变化）⇒ 标题栏图标色与滚动档底色都是它推出来的，缓存必须作废。 */
   @Monitor('avgColor')
   onAvgColorChanged(): void {
-    this.preapplyStatusBarColor();
+    this.cachedTitleBar = undefined;
   }
 
   /**
-   * 封面地址到手（详情接口返回 / 路由带进来晚了一拍）时也要重下发一次。
+   * 封面地址到手（详情接口返回 / 路由带进来晚了一拍）时更新判据。
    *
-   * 理由：`avgColor` 只有在**取到色**之后才变，而取色的输入是封面地址；封面地址本身
-   * 可能就是异步才有的（`loadDetail()` 回包）。这一档不补，首帧那一次下发就停在
-   * `#1f1f22` 推出的白字判据上，一旦封面是浅色图，状态栏会与顶部照片不符。
+   * 理由：`photoTopColor` 只在**取到色**之后才有值，而取色的输入是封面地址；地址本身可能是异步才有的。
+   * ⚠️ 这里**只**更新判据状态（`@Local`）让 `.systemBarStyle` 重新求值，不再走
+   * `WindowUtil.setWindowSystemBarProperties`（官方明确不建议两套混用，见 aboutToAppear 的注释）。
    */
   @Monitor('infoPicUrl')
   onPicUrlChanged(): void {
-    this.preapplyStatusBarColor();
+    this.logStatusBarDecision('pic-url');
+  }
+
+  /** 顶部条取色回来：`.systemBarStyle` 的第一个参数会在这次状态变更后重新求值。 */
+  @Monitor('photoTopColor')
+  onPhotoTopColorChanged(): void {
+    this.logStatusBarDecision('strip-applied');
   }
 
   /** 次要文字颜色。 */
@@ -674,11 +873,26 @@ export struct AlbumDetailPage {
     .titleBar(this.getAlbumTitleBar())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.scroller])
-    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
+    // ★ 只扩**绘制**区到顶部（官方《安全区域》：「expandSafeArea 属性支持组件在不改变布局情况下扩展
+    //   其绘制区域至安全区外」「expandSafeArea 属性仅作用于当前组件，不会向父组件或子组件传递」）。
+    //   为什么必须是 expandSafeArea 而不是把 TOP 塞进下面的 ignoreLayoutSafeArea：
+    //   官方同页给出的用法就是这一条 ——「页面中有标题栏等文字不希望和避让区重叠时，建议对组件设置
+    //   expandSafeArea 属性实现沉浸式效果」。ignoreLayoutSafeArea 会**改布局**（标题栏、返回键会一起
+    //   顶进状态栏里，用户确认过的那版观感就毁了），所以只让它管 BOTTOM。
+    //   这一条换来的效果：NavDestination 自己的 `backgroundColor(avgColor)` 也铺到状态栏那一条 ⇒
+    //   首帧 / 没图 / 图加载失败时，那一条就是页面自己的底色，和判据（statusBarOriginalColor 的 ① 档）
+    //   一致，不会出现"壳层背景色的一条接缝"。与 ArtistDetailPage 同款。
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+    // ★ 状态栏样式的**唯一真源**（不再叠加 window 级 setWindowSystemBarProperties，官方：
+    //   「不建议混合使用 systemBarStyle 属性和 window 设置状态栏样式的相关接口」；
+    //   「初次设置 Navigation/NavDestination 的 systemBarStyle 属性时，会备份当前状态栏样式用于后续的
+    //    恢复场景」—— 由框架负责备份/恢复，手动下发反而会把这个模型打乱）。
+    //   两个参数按官方语义分开算：第一个 = 进页/未滚动的那一刻（封面照顶部那一条），
+    //   第二个 = 滚动动态档生效后的最终态（压暗底色本身）。
     .systemBarStyle(
-      { statusBarContentColor: this.statusBarContentColor() },
-      { statusBarContentColor: this.statusBarContentColor() })
+      { statusBarContentColor: this.statusBarOriginalColor() },
+      { statusBarContentColor: this.statusBarScrollEffectColor() })
     .backgroundColor(this.avgColor)
   }
 }
