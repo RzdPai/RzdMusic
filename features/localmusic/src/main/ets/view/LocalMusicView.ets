@@ -698,7 +698,6 @@ export struct LocalMusicPage {
       }
       return guardPlayerBack('LocalMusicView');
     })
-    .hideTitleBar(true)
     .backgroundColor($r('sys.color.background_primary'))
     .bindSheet(this.showMatchSheet, this.MatchSheetBuilder, {
       height: SheetSize.MEDIUM,

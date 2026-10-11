@@ -435,7 +435,10 @@ export struct SettingsDetailPage {
   }
 
   private selectLXSource(apiId: string): void {
-    const next: string = this.activeSource === apiId ? '' : apiId;
+    // ★ 用户 2026-10-11「音源勾选是不是有点问题」：圆点是「当前默认音源」而不是开关 ——
+    //   原来点当前默认那一行会把它清成空字符串（`? ' : apiId`）⇒ 一圈圆点全是空心，看着像没选中。
+    //   现在点击恒为「设为默认」，不再有「点一下取消默认」这种状态。
+    const next: string = apiId;
     AppStorage.setOrCreate('lxActiveSource', next);
     MusicStoreService.getInstance().setActiveSource(next);
     this.activeSource = next;

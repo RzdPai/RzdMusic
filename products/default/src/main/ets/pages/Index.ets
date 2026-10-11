@@ -1006,9 +1006,6 @@ struct Index {
       .width(StyleConstants.FULL_WIDTH)
       // ★★ 用户 2026-10-11：「二级页面播放器依旧错位…它是跑到右下角了」——
       //   结论：**不要改内容的宽高**（一改就与 HDS 的胶囊定位打架，元素整体右下偏），
-      //   只保持全宽、加一层**左右对称**内边距，让封面/按钮从胶囊边缘退进来
-      //   （与胶囊两侧留白同口径：floatingMiniBarSideMarginVp = 12/16）。
-      .padding({ left: this.floatingMiniBarSideMarginVp(), right: this.floatingMiniBarSideMarginVp() })
       .height(FLOATING_MINI_BAR_HEIGHT_VP)
   }
 

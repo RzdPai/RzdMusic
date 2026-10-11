@@ -502,6 +502,8 @@ export struct PlatformMusicPage {
       } else {
         Scroll(this.pageScroller) {
           Column() {
+            // ★ 顶部让位放在**滚动内容里**：静止时正好在标题栏下沿，上滑跟着滚走（不再是死空白）
+            Blank().height(this.contentTopOffset)
             Scroll() {
               Row({ space: 8 }) {
                 ForEach(this.groups, (group: AccountGroup) => {
@@ -695,7 +697,8 @@ export struct PlatformMusicPage {
         .layoutWeight(1)
         // ★ 用户 2026-10-11：「平台音乐页面上方有一块空白」——宿主面板已经让过一次顶（大设置页/二级页的首个 Blank），
       //   这里再让一次就叠成一块死空白 ⇒ 内层不再加顶部 padding，让位只由宿主的滚动内容负责。
-      .padding({ top: this.contentTopOffset })
+      // ★ 用户 2026-10-11 第二次报「平台音乐顶部一块空白」：这句 padding 加在**外 Scroll** 上
+      //   = 一条固定不动的带子 ✗。已搬进滚动内容（见 Scroll(this.pageScroller) 里那个 Blank）。
         // ★★ 官方《开发应用沉浸式效果》→「滚动类场景」②：滚动容器要设
         //   `clipContent(ContentClipMode.SAFE_AREA)` 才能"把内容层裁剪区域扩展至避让区"
         //   —— 否则内容只会被按内容框裁掉，**永远画不进状态栏**（用户报「平台音乐页内容没延伸进状态栏」）。
