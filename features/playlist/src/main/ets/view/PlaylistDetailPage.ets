@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -900,8 +900,13 @@ export struct PlaylistDetailPage {
   private getPlaylistDetailTitleBar(): HdsNavigationTitleBarOptions {
     const bar: HdsNavigationTitleBarOptions = this.buildPlaylistDetailTitleBar();
     if (bar.style !== undefined && SdkApiUtil.isSdkApiAtLeast(23)) {
-      // Do not let the HDS material insert a plate over the initial transparent photo.
-      bar.style.systemMaterialEffect = { materialType: hdsMaterial.MaterialType.NONE };
+      // ★★ 用户 2026-10-11：「歌单页（首页点每日30首打开的那个页面）顶部那几个按钮的沉浸光感」
+      //   +「像歌手页就是正常的」⇒ 根因就是下面这一句：原来把材质**显式压成 NONE**
+      //   （当时的顾虑是"材质会在首屏透明 Hero 大图上压一块板"），于是这一页的返回键/菜单按钮
+      //   永远是最低档效果，跟软件里设的「精致」无关。
+      //   现在改成与歌手页**同一个函数**（`ambientTitleMaterial()` → `buildTitleMaterial(level)`），
+      //   档位跟随软件内设置；Hero 那一条的透明底色仍由 `titleBarBackground()` 保证。
+      bar.style.systemMaterialEffect = this.ambientTitleMaterial();
     }
     return bar;
   }
