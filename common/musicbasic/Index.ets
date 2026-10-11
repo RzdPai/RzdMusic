@@ -112,6 +112,7 @@ export {
   getStatusBarTopVpFromWindowUtil,
   getNavigationBarBottomVpFromWindowUtil
 } from './src/main/ets/util/StatusBarInsetUtil';
+export { PageTopInsetHelper } from './src/main/ets/util/PageTopInsetHelper';
 export { buildTitleMaterial } from './src/main/ets/util/TitleMaterial';
 export { SdkApiUtil } from './src/main/ets/util/SdkApiUtil';
 export { BarScrollHelper, BarScrollDeltaTracker } from './src/main/ets/util/BarScrollHelper';

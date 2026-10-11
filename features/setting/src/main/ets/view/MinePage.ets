@@ -87,17 +87,17 @@ import { AppStorageV2, uiObserver } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { guardPlayerBack } from 'musicbasic';
 import {
-  AmbientState, AppRuntimeStorage, AppStorageKeys, BarScrollHelper, BreakpointType, LocalCoverImage,
-  MusicAppState, MusicStoreService, PlaylistDto, RouterUrlConstants, ThemeState, TitleBarConstants,
-  ToplistRouteParam, buildTitleMaterial, getAppRuntime, getStatusBarTopVpFromWindowUtil
+  AmbientState, AppRuntimeStorage, AppStorageKeys, BarScrollHelper, BreakpointType, FavoriteEntry,
+  LocalCoverImage, MusicAppState, MusicStoreService, PlaylistDto, RouterUrlConstants, ThemeState,
+  TitleBarConstants, ToplistRouteParam, buildTitleMaterial, getAppRuntime, getStatusBarTopVpFromWindowUtil
 } from 'musicbasic';
 import {
   BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions,
   ScrollEffectType, TitleSize
 } from '@kit.UIDesignKit';
 import { LocalMusicImportState, localMusic, localMusicImportState } from 'localmusic';
-// 平台账号数（那一格的条数）/ 下载完成数（那一格的条数）
-import { AccountService, DownloadService, DownloadStatus, DownloadTask } from 'player';
+// 平台账号数（那一格的条数）/ 下载完成数（那一格的条数）/ 收藏歌单行上的平台名（sourceName）
+import { AccountService, DownloadService, DownloadStatus, DownloadTask, sourceName } from 'player';
 // 「网络导入」表单：与「全部歌单」页**同一个组件**（用户要求这一格直接进网络导入，不要再提示/跳整页）
 import { NetworkImportSheet } from 'playlist';
 import { LoginMusicCard } from './LoginMusicCard';
@@ -267,6 +267,12 @@ export struct MinePage {
   @Local importSheetOpen: boolean = false;
   /** 歌单卡的数据（`store.playlistVersion` 变一次就读一次）。 */
   @Local playlists: PlaylistDto[] = [];
+  /**
+   * 歌单卡当前显示哪一段：`0` = 自建歌单，`1` = 收藏歌单（照搬参考 `playlistTab`）。
+   */
+  @Local playlistTab: number = 0;
+  /** 收藏的在线歌单（`store.favoritePlaylistVersion` 变一次就读一次）。 */
+  @Local collectedPlaylists: FavoriteEntry[] = [];
   /** 歌单行的懒加载数据源（`@Local` 保证 `LazyForEach` 拿到同一个实例）。 */
   @Local playlistSource: MinePlaylistSource = new MinePlaylistSource();
   /** 新建 / 重命名共用的小面板：`editingId` 为空表示新建。 */
@@ -281,7 +287,7 @@ export struct MinePage {
   aboutToAppear(): void {
     hilog.info(DOMAIN, TAG, 'mine page appear');
     this.refreshCounts();
-    this.refreshPlaylists();
+    this.loadPlaylistData();
     // 下载 / 账号两个条数：进页各读一次，之后靠监听跟着变（见下）
     this.refreshDownloadCount();
     this.refreshPlatformCount();
@@ -367,6 +373,20 @@ export struct MinePage {
     this.playlistSource.applyItems(this.playlists.slice(0, PLAYLIST_PREVIEW_MAX));
   }
 
+  /** 收藏的在线歌单（平台音乐页那颗收藏按钮写入，`favoritePlaylistVersion` 是 `@Trace`）。 */
+  @Monitor('store.favoritePlaylistVersion')
+  refreshCollectedPlaylists(): void {
+    this.collectedPlaylists = this.store.getFavoritePlaylists();
+    hilog.info(DOMAIN, TAG, 'collected playlists refreshed: count=%{public}d tab=%{public}d',
+      this.collectedPlaylists.length, this.playlistTab);
+  }
+
+  /** 歌单卡首次进页时把两段数据都读齐（`@Monitor` 只在**变化**时触发）。 */
+  private loadPlaylistData(): void {
+    this.refreshPlaylists();
+    this.refreshCollectedPlaylists();
+  }
+
   /**
    * 快捷入口那一格的条数（**五格都要有数**，用户 2026-10-11 明确要求统一）。
    *
@@ -403,22 +423,29 @@ export struct MinePage {
     return action === 'platform' ? '个' : '首';
   }
 
-  /** 快捷入口清单（照搬参考那 5 格：本地音乐 / 最近播放 / 收藏 / 下载管理 / 云端音乐）。 */
+  /**
+   * 快捷入口清单（照搬参考那 5 格：本地音乐 / 最近播放 / 收藏 / 下载管理 / 平台音乐）。
+   *
+   * 图标（用户 2026-10-11 逐个点名，全部核对过 `sdk\default\openharmony\ets\build-tools\
+   * ets-loader\sysResource.js` 里 `sys.symbol` 的符号表，5 个名字都存在）：
+   *   本地音乐 `music_square_stack_fill` / 最近播放 `doc_text_badge_clock_fill` /
+   *   收藏 `star_square_stack_fill` / 下载管理 `download_fill` / 设置 `gearshape`。
+   */
   private quickEntries(): MineQuickEntry[] {
     const local = new MineQuickEntry();
-    local.symbol = $r('sys.symbol.folder');
+    local.symbol = $r('sys.symbol.music_square_stack_fill');
     local.label = '本地音乐';
     local.action = 'local';
     const history = new MineQuickEntry();
-    history.symbol = $r('sys.symbol.clock');
+    history.symbol = $r('sys.symbol.doc_text_badge_clock_fill');
     history.label = '最近播放';
     history.action = 'history';
     const favorite = new MineQuickEntry();
-    favorite.symbol = $r('sys.symbol.heart_fill');
+    favorite.symbol = $r('sys.symbol.star_square_stack_fill');
     favorite.label = '收藏';
     favorite.action = 'favorites';
     const download = new MineQuickEntry();
-    download.symbol = $r('sys.symbol.download');
+    download.symbol = $r('sys.symbol.download_fill');
     download.label = '下载管理';
     download.action = 'downloads';
     // ★ 第 5 格用**我们自己的「平台音乐」**（原「云端音乐」= 参考那套 WebDAV 曲库）：
@@ -442,7 +469,7 @@ export struct MinePage {
   /** 入口卡：设置（大设置页本体）+ 帮助和反馈（设置详情页的「关于」）。 */
   private linkRows(): MineLinkRow[] {
     const settings = new MineLinkRow();
-    settings.symbol = $r('sys.symbol.gearshape_fill');
+    settings.symbol = $r('sys.symbol.gearshape');
     settings.label = '设置';
     settings.action = 'settings';
     const help = new MineLinkRow();
@@ -466,6 +493,17 @@ export struct MinePage {
     // ⚠️ 字段名是 `index`（组件内的 @Param 才叫 sheetIndex）
     param.index = index;
     this.pushOnShellStack(RouterUrlConstants.SETTINGS_DETAIL, param);
+  }
+
+  /**
+   * 打开「平台音乐」（设置详情页第 3 档，渲染的就是 `PlatformMusicPage` 本体）。
+   *
+   * 收藏歌单那一行的点击落点：我们没有在线歌单详情页，在线歌单只能在平台音乐页里
+   * 播放或导入（见 `CollectedRow` 的说明）。
+   */
+  private openPlatformMusic(): void {
+    hilog.info(DOMAIN, TAG, 'open platform music from collected playlist row');
+    this.pushSettingsDetail(PLATFORM_MUSIC_SHEET_INDEX);
   }
 
   /** 快捷入口点了某一格。 */
@@ -687,93 +725,133 @@ export struct MinePage {
   }
 
   /**
-   * ③ 歌单卡（照搬参考 `playlistCard()`：卡头 + 浅底动作区 + 歌单行 + 长按菜单）。
+   * ③ 歌单卡（照搬参考 `playlistCard()`：卡头两段 + 浅底动作区 + 歌单行 + 长按菜单）。
    *
-   * ★ 参考的卡头是「自建歌单 | 收藏歌单」两个标题（含各自计数、`|` 分隔、当前那段加粗）。
-   *   **我们只保留「自建歌单」一段**，原因（不编数据源）：
-   *   参考的「收藏歌单」= 它自己 `core/sync/CollectedPlaylists` 里存下来的
-   *   "收藏的**别人的在线歌单**"（只记平台 + 歌单 id）。本工程**没有这个本地存储**：
-   *   全仓 grep `CollectedPlaylists` / `KEY_COLLECTED` / `collectedPlaylists` 零命中；
-   *   `MusicStoreService` 只有自建歌单 + 收藏的**歌**（loveList）+ 收藏的歌手 / 专辑；
-   *   `features/sync` 的 `LocalLibrary` 也只有 `playlistSummaries()`（自建）与
-   *   `favoritePlaylistSummary()`（收藏的歌）。唯一形态相近的
-   *   `TxProvider.getCollectedPlaylists()` 是"用登录态从 QQ 拉用户自己收藏的歌单"，
-   *   属于**平台音乐页**的能力，不是本地的"收藏别人的歌单"。
-   *   ⇒ 照搬成两段就得**先造一个数据源**（那是新功能，不是照搬），所以这里只留一段，
-   *     并在文档里如实写明，**不编造数据**。
+   * ★ 卡头是「自建歌单 | 收藏歌单」两段（各自的计数、`|` 分隔、**当前那段加粗**），
+   *   照搬参考的 `playlistTab` 切换。
    *
-   * ★ 卡头右端是我们原有的「全部」入口（参考没有），因为本卡只内联前 4 张：
+   * ★ 两段的数据来源（2026-10-11 第四轮补齐）：
+   *   · 自建歌单 = `store.getPlaylists()`（本地自建 + 网络导入落下来的）；
+   *   · 收藏歌单 = `store.getFavoritePlaylists()` —— **收藏的在线歌单**（平台歌单），
+   *     存 `FavoriteEntry`（id / source / name / sub / img / count），
+   *     由平台音乐页每行右侧那颗「收藏」按钮写入（`addFavoritePlaylist`）。
+   *     上一轮这里只有一段，是因为当时**确实没有这个本地存储**（全仓 grep 零命中）；
+   *     现在在 `MusicStoreService` 里按"收藏歌手 / 收藏专辑"同一套写法补上了
+   *     （键 `favorite_playlists` + `@Trace favoritePlaylistVersion`），所以两段都有真数据，
+   *     仍然**不编造**任何一条。
+   *
+   * ★ 卡头右端是我们原有的「全部」入口（参考没有），只对**自建歌单**那一段显示：
    *   整页能力（新建 / 排序 / 导入 / 导出 / 改封面 / 删除）都在 `MinePlaylistPage` 里。
    */
   @Builder
   private PlaylistCard() {
     Column() {
-      // 卡头：标题 + 计数 + 右侧「全部」（照搬参考卡头的版式与高度 54）
+      // 卡头：两段标题 + 计数 + 右侧「全部」（照搬参考卡头的版式与高度 54）
       Row({ space: 6 }) {
         Text('自建歌单')
           .fontSize(F_SECTION)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('sys.color.font_primary'))
+          .fontWeight(this.playlistTab === 0 ? FontWeight.Bold : FontWeight.Medium)
+          .fontColor(this.playlistTab === 0 ? $r('sys.color.font_primary') : $r('sys.color.font_tertiary'))
+          .onClick(() => {
+            this.playlistTab = 0;
+          })
         Text(String(this.playlists.length))
           .fontSize(F_SUB)
           .fontColor($r('sys.color.font_tertiary'))
-        Blank()
-        Text('全部')
+        Text('|')
           .fontSize(F_SUB)
-          // 可点文字用**用户自定义强调色**
-          .fontColor(this.themeState.color)
-        SymbolGlyph($r('sys.symbol.chevron_right'))
-          .fontSize(14)
-          .fontColor([$r('sys.color.icon_tertiary')])
+          .fontColor($r('app.color.comp_divider'))
+        Text('收藏歌单')
+          .fontSize(F_SECTION)
+          .fontWeight(this.playlistTab === 1 ? FontWeight.Bold : FontWeight.Medium)
+          .fontColor(this.playlistTab === 1 ? $r('sys.color.font_primary') : $r('sys.color.font_tertiary'))
+          .onClick(() => {
+            this.playlistTab = 1;
+          })
+        Text(String(this.collectedPlaylists.length))
+          .fontSize(F_SUB)
+          .fontColor($r('sys.color.font_tertiary'))
+        Blank()
+        if (this.playlistTab === 0) {
+          Text('全部')
+            .fontSize(F_SUB)
+            // 可点文字用**用户自定义强调色**
+            .fontColor(this.themeState.color)
+          SymbolGlyph($r('sys.symbol.chevron_right'))
+            .fontSize(14)
+            .fontColor([$r('sys.color.icon_tertiary')])
+        }
       }
       .width('100%')
       .height(CARD_HEADER_HEIGHT)
       .padding({ left: 14, right: 14 })
       .onClick(() => {
-        this.openAllPlaylists();
+        // ⚠️ 整行点击只在「自建歌单」那一段生效：段标题自己带 onClick（先消费掉），
+        //    点到空白处才算「全部歌单」——切到收藏段时这里不做任何事。
+        if (this.playlistTab === 0) {
+          this.openAllPlaylists();
+        }
       })
-      .accessibilityText('全部歌单')
+      .accessibilityText(this.playlistTab === 0 ? '全部歌单' : '收藏歌单')
       .accessibilityLevel('yes')
 
-      // 动作区（照搬参考：64 高、圆角 16、浅灰底，两格平分）
-      Column() {
-        Row() {
-          this.PlaylistAction(0)
-          this.PlaylistAction(1)
+      // 动作区（照搬参考：64 高、圆角 16、浅灰底，两格平分）——只属于「自建歌单」那一段
+      if (this.playlistTab === 0) {
+        Column() {
+          Row() {
+            this.PlaylistAction(0)
+            this.PlaylistAction(1)
+          }
+          .width('100%')
+          .height(CARD_ACTION_HEIGHT)
+          .borderRadius(CARD_ACTION_RADIUS)
+          .backgroundColor($r('app.color.capsule_background'))
+          .clip(true)
         }
         .width('100%')
-        .height(CARD_ACTION_HEIGHT)
-        .borderRadius(CARD_ACTION_RADIUS)
-        .backgroundColor($r('app.color.capsule_background'))
-        .clip(true)
+        .padding({ left: 14, right: 14, bottom: 10 })
       }
-      .width('100%')
-      .padding({ left: 14, right: 14, bottom: 10 })
 
-      if (this.playlists.length === 0) {
-        Text('还没有歌单，点上面的「新建歌单」建一个，或者用「歌单导入」粘贴一张分享链接')
-          .fontSize(F_SUB)
-          .fontColor($r('sys.color.font_tertiary'))
-          .width('100%')
-          .padding({ left: 14, right: 14, top: 4, bottom: 18 })
-          .textAlign(TextAlign.Start)
-      } else {
-        // ★ 歌单行：LazyForEach + 稳定 key（数据源见 MinePlaylistSource）
-        LazyForEach(this.playlistSource, (item: PlaylistDto, index: number) => {
-          this.PlaylistRow(item, index > 0)
-        }, (item: PlaylistDto, index: number) => this.playlistSource.keyOf(index))
-
-        if (this.playlists.length > PLAYLIST_PREVIEW_MAX) {
-          Text(`查看全部 ${this.playlists.length} 张歌单`)
+      if (this.playlistTab === 0) {
+        if (this.playlists.length === 0) {
+          Text('还没有歌单，点上面的「新建歌单」建一个，或者用「歌单导入」粘贴一张分享链接')
             .fontSize(F_SUB)
-            .fontColor(this.themeState.color)
+            .fontColor($r('sys.color.font_tertiary'))
             .width('100%')
-            .height(44)
-            .padding({ left: 14, right: 14 })
+            .padding({ left: 14, right: 14, top: 4, bottom: 18 })
             .textAlign(TextAlign.Start)
-            .onClick(() => {
-              this.openAllPlaylists();
-            })
+        } else {
+          // ★ 歌单行：LazyForEach + 稳定 key（数据源见 MinePlaylistSource）
+          LazyForEach(this.playlistSource, (item: PlaylistDto, index: number) => {
+            this.PlaylistRow(item, index > 0)
+          }, (item: PlaylistDto, index: number) => this.playlistSource.keyOf(index))
+
+          if (this.playlists.length > PLAYLIST_PREVIEW_MAX) {
+            Text(`查看全部 ${this.playlists.length} 张歌单`)
+              .fontSize(F_SUB)
+              .fontColor(this.themeState.color)
+              .width('100%')
+              .height(44)
+              .padding({ left: 14, right: 14 })
+              .textAlign(TextAlign.Start)
+              .onClick(() => {
+                this.openAllPlaylists();
+              })
+          }
+        }
+      } else {
+        if (this.collectedPlaylists.length === 0) {
+          Text('还没有收藏歌单。到「平台音乐」里点歌单右侧的星标，收藏的在线歌单会出现在这里')
+            .fontSize(F_SUB)
+            .fontColor($r('sys.color.font_tertiary'))
+            .width('100%')
+            .padding({ left: 14, right: 14, top: 4, bottom: 18 })
+            .textAlign(TextAlign.Start)
+        } else {
+          ForEach(this.collectedPlaylists.slice(0, PLAYLIST_PREVIEW_MAX),
+            (entry: FavoriteEntry, index: number) => {
+              this.CollectedRow(entry, index > 0)
+            }, (entry: FavoriteEntry) => 'mine_collected_' + entry.source + '_' + entry.id)
         }
       }
     }
@@ -781,6 +859,115 @@ export struct MinePage {
     .borderRadius(R_CARD)
     .backgroundColor($r('app.color.card_background'))
     .clip(true)
+  }
+
+  /**
+   * 收藏歌单的一行（封面 + 名字 + 平台·曲目数 + 右箭头，行高与自建歌单一致）。
+   *
+   * 打开位置：**平台音乐**（设置详情页那一档）。我们没有"在线歌单详情页"——
+   * 在线歌单在本工程里只有两条出路：① 在平台音乐页里直接播放；② 走 `NetworkImportSheet`
+   * 导入成本地歌单。所以这一行不假装能打开详情，统一跳到平台音乐；
+   * 长按给「取消收藏」。
+   */
+  @Builder
+  private CollectedRow(entry: FavoriteEntry, showDivider: boolean) {
+    Column() {
+      if (showDivider) {
+        Divider()
+          .strokeWidth(0.6)
+          .color($r('app.color.comp_divider'))
+          .margin({ left: 72 })
+      }
+
+      Row({ space: 12 }) {
+        Stack() {
+          if (entry.img.length > 0) {
+            Image(entry.img)
+              .width(ROW_COVER)
+              .height(ROW_COVER)
+              .borderRadius(R_COVER)
+              .objectFit(ImageFit.Cover)
+              .alt($r('sys.symbol.music_note_list'))
+          } else {
+            Row() {
+              SymbolGlyph($r('sys.symbol.star_square_stack_fill'))
+                .fontSize(22)
+                .fontColor([$r('sys.color.font_tertiary')])
+            }
+            .width(ROW_COVER)
+            .height(ROW_COVER)
+            .borderRadius(R_COVER)
+            .backgroundColor($r('sys.color.background_tertiary'))
+            .justifyContent(FlexAlign.Center)
+          }
+        }
+        .width(ROW_COVER)
+        .height(ROW_COVER)
+
+        Column({ space: 4 }) {
+          Text(entry.name)
+            .fontSize(F_ITEM)
+            .fontColor($r('sys.color.font_primary'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .width('100%')
+            .textAlign(TextAlign.Start)
+          Text(this.collectedMeta(entry))
+            .fontSize(F_SUB)
+            .fontColor($r('sys.color.font_tertiary'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .width('100%')
+            .textAlign(TextAlign.Start)
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        SymbolGlyph($r('sys.symbol.chevron_right'))
+          .fontSize(18)
+          .height(18)
+          .fontColor([$r('sys.color.icon_tertiary')])
+      }
+      .width('100%')
+      .height(LIST_ROW_HEIGHT)
+      .padding({ left: 14, right: 14 })
+      .onClick(() => {
+        this.openPlatformMusic();
+      })
+      .bindContextMenu(this.CollectedRowMenu(entry), ResponseType.LongPress)
+    }
+    .width('100%')
+  }
+
+  /** 收藏行的副标题：平台名 + 曲目数（都没有就退回来源 id）。 */
+  private collectedMeta(entry: FavoriteEntry): string {
+    const parts: string[] = [];
+    if (entry.sub.length > 0) {
+      parts.push(entry.sub);
+    } else if (entry.source.length > 0) {
+      parts.push(sourceName(entry.source));
+    }
+    if (entry.count > 0) {
+      parts.push(String(entry.count) + ' 首');
+    }
+    return parts.length > 0 ? parts.join(' · ') : '在线歌单';
+  }
+
+  /** 收藏行的长按菜单：取消收藏 / 打开平台音乐。 */
+  @Builder
+  private CollectedRowMenu(entry: FavoriteEntry) {
+    Menu() {
+      MenuItem({ content: '取消收藏' })
+        .onClick(() => {
+          this.store.removeFavoritePlaylist(entry.source, entry.id);
+          hilog.info(DOMAIN, TAG, 'uncollect playlist source=%{public}s id=%{public}s',
+            entry.source, entry.id);
+        })
+      MenuItem({ content: '打开平台音乐' })
+        .onClick(() => {
+          this.openPlatformMusic();
+        })
+    }
   }
 
   /** 歌单卡动作区的一格（照搬参考 `cardAction()`：图标 23 + 名字）。 */
@@ -831,28 +1018,45 @@ export struct MinePage {
       }
 
       Row({ space: 12 }) {
-        if (item.cover.length > 0) {
-          // 自定义封面是沙箱文件 URI，走 LocalCoverImage 用 fd 解码（真机 Image 直喂不显示）
-          LocalCoverImage({
-            src: item.cover,
-            imageWidth: ROW_COVER,
-            imageHeight: ROW_COVER,
-            radius: R_COVER,
-            fit: ImageFit.Cover
-          })
-        } else {
-          // 歌单没有封面时用占位图形，**不用第一首歌的封面顶替**（见 PlaylistDto 的说明）
-          Row() {
-            SymbolGlyph($r('sys.symbol.music_note_list'))
-              .fontSize(22)
-              .fontColor([$r('sys.color.font_tertiary')])
+        // ★ 封面三级优先级（与「全部歌单」页 `PlaylistsPage.PlaylistRow` 逐字同构）：
+        //   ① 歌单自己的封面（自定义 / 在线导入时带过来的沙箱 URI）→ `LocalCoverImage` 用 fd 解码；
+        //   ② 第一首歌的专辑图（在线导入进来的歌单都有 `img`，这一级才是"我的页也有封面"的关键）；
+        //   ③ 灰底音符占位。
+        //   ⚠️ 这里曾经**只有 ① 和 ③**（注释还写着"不用第一首歌的封面顶替"），
+        //      结果就是用户看到的「我的页歌单不显示封面，点进歌单页就正常」——
+        //      两级列表用的不是同一套优先级。现在两级共用同一套。
+        Stack() {
+          if (item.cover.length > 0) {
+            // 自定义封面是沙箱文件 URI，走 LocalCoverImage 用 fd 解码（真机 Image 直喂不显示）
+            LocalCoverImage({
+              src: item.cover,
+              imageWidth: ROW_COVER,
+              imageHeight: ROW_COVER,
+              radius: R_COVER,
+              fit: ImageFit.Cover
+            })
+          } else if (item.songs.length > 0 && item.songs[0].img.length > 0) {
+            Image(item.songs[0].img)
+              .width(ROW_COVER)
+              .height(ROW_COVER)
+              .borderRadius(R_COVER)
+              .objectFit(ImageFit.Cover)
+              .alt($r('sys.symbol.music_note_list'))
+          } else {
+            Row() {
+              SymbolGlyph($r('sys.symbol.music_note_list'))
+                .fontSize(22)
+                .fontColor([$r('sys.color.font_tertiary')])
+            }
+            .width(ROW_COVER)
+            .height(ROW_COVER)
+            .borderRadius(R_COVER)
+            .backgroundColor($r('sys.color.background_tertiary'))
+            .justifyContent(FlexAlign.Center)
           }
-          .width(ROW_COVER)
-          .height(ROW_COVER)
-          .borderRadius(R_COVER)
-          .backgroundColor($r('sys.color.background_tertiary'))
-          .justifyContent(FlexAlign.Center)
         }
+        .width(ROW_COVER)
+        .height(ROW_COVER)
 
         Column({ space: 4 }) {
           Text(item.name)
@@ -1129,7 +1333,14 @@ export struct MinePage {
         .width('100%')
         .height('100%')
         .scrollBar(BarState.Off)
-        .edgeEffect(EdgeEffect.Spring)
+        // ★ 底部（以及顶部）回弹：`List` 的 `edgeEffect` 默认是 `Spring`，但
+        //   `EdgeEffectOptions.alwaysEnabled` 对 **List/Grid/WaterFlow 默认 false**、
+        //   对 Scroll 才是 true（官方《滚动组件通用接口 · edgeEffect》原文：
+        //   「组件内容大小小于组件自身时是否开启滑动效果……默认值：List、Grid、WaterFlow
+        //   组件默认 { alwaysEnabled: false }，Scroll 组件默认 { alwaysEnabled: true }」）。
+        //   我的页内容短于一屏时（或用大屏/折叠展开）拖到底就没有回弹，用户点名的就是这个
+        //   ⇒ 显式打开 alwaysEnabled。
+        .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
         .clip(true)
         // 滚动联动双层底栏：上滑收起、下滑展开（与首页/歌单/设置一致）
         .onScrollFrameBegin((offset: number): OnScrollFrameBeginHandlerResult => {

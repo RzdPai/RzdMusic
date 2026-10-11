@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,7 +51,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { guardPlayerBack, PlaybackIntentState, SongItem } from 'musicbasic';
 import {
   AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, FavoriteEntry,
-  MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, ThemeState, TitleBarConstants,
+  MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord, RouterUrlConstants, ThemeState, TitleBarConstants,
   buildTitleMaterial, getStatusBarTopVpFromWindowUtil
 } from 'musicbasic';
 import {
@@ -186,6 +186,13 @@ export struct RecordListPage {
    * 见 {@link forceReloadRecords}。
    */
   @Local recordsVersion: number = 0;
+  /**
+   * 页根（`HdsNavDestination`）在**窗口坐标**里的顶边 y（vp），由 `onAreaChange` 实测。
+   *
+   * 默认 0 = "页盒贴屏幕顶"（此前写死的假设）。量到非 0 后，内容让位（`titleTopInset()`）
+   * 与标题栏的 `avoidLayoutSafeArea` 一起按它换算 ⇒ 标题与内容都不会整体下移一个状态栏。
+   */
+  @Local boxTopVp: number = 0;
   /**
    * 壳层的共享路由栈（「我的」页推本页用的就是它）。
    *
@@ -448,7 +455,9 @@ export struct RecordListPage {
    *   根节点的 `expandSafeArea([SYSTEM],[TOP,BOTTOM])` 继续负责把页面底色也铺满整屏。
    */
   private titleTopInset(): number {
-    return getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP;
+    // ⚠️ 不再假设页盒从窗口 y=0 起排：由 `boxTopVp`（页根 `onAreaChange` 实测）换算，
+    //    盒顶 0 → 94、盒顶 38 → 56，两种情形内容都落在窗口的 94 那条线上（`PageTopInsetHelper`）。
+    return PageTopInsetHelper.contentOffsetVp(this.boxTopVp);
   }
 
   /** 底部预留：壳层那条官方浮动播放条(56) + 间距(16) + 呼吸空间(16)。 */
@@ -690,7 +699,9 @@ export struct RecordListPage {
       });
     }
     const bar: HdsNavigationTitleBarOptions = {
-      avoidLayoutSafeArea: true,
+      // ★ 盒顶实测贴屏幕顶（0）时才让 HDS 标题栏自己退回状态栏下方；盒顶已在状态栏下沿时
+      //   不能再退（否则标题掉到 38+38，用户报的「历史/收藏页标题下移」）。
+      avoidLayoutSafeArea: PageTopInsetHelper.avoidLayoutSafeArea(this.boxTopVp),
       style: {
         blurStrategy: BlurStrategy.ENABLE,
         scrollEffectOpts: {
@@ -863,6 +874,17 @@ export struct RecordListPage {
     //   ③ 滚动容器 `clipContent(ContentClipMode.SAFE_AREA)`：让行能**画进**状态栏那一条（"延伸进状态栏"）。
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    // ★ 实测页盒顶边（窗口坐标 vp）：内容让位与标题栏 `avoidLayoutSafeArea` 都由它推出来，
+    //   不再假设盒顶 = 0。只在变化超过 0.5vp 时写状态，避免与布局互相追。
+    .onAreaChange((_oldArea: Area, newArea: Area): void => {
+      const top: number = newArea.globalPosition.y as number;
+      if (Math.abs(top - this.boxTopVp) > 0.5) {
+        this.boxTopVp = top;
+        hilog.info(DOMAIN, TAG, 'RzdPageTopInset boxTopVp=%{public}f page=record offset=%{public}f avoid=%{public}s',
+          top, PageTopInsetHelper.contentOffsetVp(top),
+          String(PageTopInsetHelper.avoidLayoutSafeArea(top)));
+      }
+    })
     .backgroundColor($r('app.color.background_secondary'))
   }
 }

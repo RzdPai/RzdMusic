@@ -28,6 +28,7 @@ const KEY_HISTORY: string = 'history_list';
 const KEY_FAVORITES: string = 'favorite_list';
 const KEY_FAVORITE_ARTISTS: string = 'favorite_artists';
 const KEY_FAVORITE_ALBUMS: string = 'favorite_albums';
+const KEY_FAVORITE_PLAYLISTS: string = 'favorite_playlists';
 const KEY_SEARCH_HISTORY: string = 'search_history';
 const KEY_AMBIENT_LEVEL: string = 'ambient_level';
 const KEY_THEME_COLOR: string = 'theme_color';
@@ -105,6 +106,15 @@ export class MusicStoreService {
   @Trace public favoriteVersion: number = 0;
   @Trace public favoriteArtistVersion: number = 0;
   @Trace public favoriteAlbumVersion: number = 0;
+  /**
+   * 收藏的**在线歌单**（平台歌单，不是本地自建）版本号。
+   *
+   * 为什么需要它：参考工程 lxmusic-harmony 的「我的」页歌单卡是
+   * 「自建歌单 | 收藏歌单」两段，我们此前缺第二段的数据源（见 MinePage 的说明）。
+   * 现在补齐：`getFavoritePlaylists()` 存 `FavoriteEntry`（id/source/name/sub/img/count），
+   * 由平台音乐页的收藏按钮写入；界面 `@Monitor('store.favoritePlaylistVersion')` 自动刷新。
+   */
+  @Trace public favoritePlaylistVersion: number = 0;
   /** Bumped on every search history mutation; observable for UI refresh. */
   @Trace public searchHistoryVersion: number = 0;
   /** Bumped on every playlist mutation; observable for UI refresh. */
@@ -1575,6 +1585,58 @@ export class MusicStoreService {
   /** @returns Whether the album is in favorites. */
   public isFavoriteAlbum(source: string, id: string): boolean {
     const list: FavoriteEntry[] = this.getFavoriteAlbums();
+    for (let i: number = 0; i < list.length; i++) {
+      if (list[i].id === id && list[i].source === source) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** @returns 收藏的在线歌单（按收藏时间，最新在前）。 */
+  public getFavoritePlaylists(): FavoriteEntry[] {
+    const store = this.getStore();
+    if (store === undefined) {
+      return [];
+    }
+    const text: string = store.getSync(KEY_FAVORITE_PLAYLISTS, '[]') as string;
+    try {
+      return JSON.parse(text) as FavoriteEntry[];
+    } catch (_err) {
+      return [];
+    }
+  }
+
+  /** 收藏（或刷新）一张在线歌单；同 `source` + `id` 只留一条。 */
+  public addFavoritePlaylist(entry: FavoriteEntry): void {
+    const list: FavoriteEntry[] = this.getFavoritePlaylists();
+    const kept: FavoriteEntry[] = [];
+    for (let i: number = 0; i < list.length; i++) {
+      if (list[i].id !== entry.id || list[i].source !== entry.source) {
+        kept.push(list[i]);
+      }
+    }
+    kept.unshift(entry);
+    this.saveFavoriteEntries(KEY_FAVORITE_PLAYLISTS, kept);
+    this.favoritePlaylistVersion++;
+  }
+
+  /** 取消收藏一张在线歌单。 */
+  public removeFavoritePlaylist(source: string, id: string): void {
+    const list: FavoriteEntry[] = this.getFavoritePlaylists();
+    const kept: FavoriteEntry[] = [];
+    for (let i: number = 0; i < list.length; i++) {
+      if (list[i].id !== id || list[i].source !== source) {
+        kept.push(list[i]);
+      }
+    }
+    this.saveFavoriteEntries(KEY_FAVORITE_PLAYLISTS, kept);
+    this.favoritePlaylistVersion++;
+  }
+
+  /** @returns 该在线歌单是否已收藏。 */
+  public isFavoritePlaylist(source: string, id: string): boolean {
+    const list: FavoriteEntry[] = this.getFavoritePlaylists();
     for (let i: number = 0; i < list.length; i++) {
       if (list[i].id === id && list[i].source === source) {
         return true;

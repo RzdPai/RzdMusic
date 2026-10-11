@@ -1,12 +1,15 @@
 import { common } from '@kit.AbilityKit';
 import { AppStorageV2 } from '@kit.ArkUI';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { HdsNavDestination, HdsNavDestinationTitleMode, TitleSize } from '@kit.UIDesignKit';
-import { AppStorageKeys, MusicAppState, ThemeState } from 'musicbasic';
+import { AppStorageKeys, FavoriteEntry, MusicAppState, MusicStoreService, ThemeState } from 'musicbasic';
 import { LXSearchSong, OnlinePlayUtil } from 'player';
 import { AccountService } from 'player';
 import { PlatformAccount, PlaylistInfo, PlaylistTrackInfo, PlatformTrackInfo, PlaylistMutationTrack, sourceName } from 'player';
 
 const DANGER_COLOR: string = '#E64545';
+/** 日志标签：grep `RzdPlatformCollect` 看收藏/取消收藏在线歌单的链路。 */
+const COLLECT_TAG: string = 'RzdPlatformCollect';
 
 const songCache: Map<string, PlatformTrackInfo[]> = new Map();
 
@@ -34,6 +37,8 @@ export struct PlatformMusicPage {
   @Local selectedTitle: string = '';
   @Local selectedSource: string = '';
   @Local selectedDestination: PlaylistDestination | null = null;
+  /** 当前选中的在线歌单是否已收藏（「我的」页歌单卡第二段的数据就是它写进去的）。 */
+  @Local selectedFavorited: boolean = false;
   @Local songs: PlatformTrackInfo[] = [];
   @Local isLoading: boolean = false;
   @Local error: string = '';
@@ -151,6 +156,73 @@ export struct PlatformMusicPage {
     this.currentPlaylists = group === undefined ? [] : group.playlists;
   }
 
+  /**
+   * 同步「当前选中的在线歌单是否已收藏」。
+   *
+   * 每次切换选中项（歌单 / 每日推荐 / 账号默认）都要跑一次：每日推荐与账号默认不是
+   * 歌单（`selectedDestination === null`），那颗星要消失，不能残留上一张歌单的状态。
+   */
+  private syncSelectedFavorited(): void {
+    const dest: PlaylistDestination | null = this.selectedDestination;
+    this.selectedFavorited = dest !== null && dest.playlistId.length > 0 &&
+      MusicStoreService.getInstance().isFavoritePlaylist(this.selectedSource, dest.playlistId);
+  }
+
+  /** 当前选中歌单在 `currentPlaylists` 里的原始条目（拿 total / dirId 用）。 */
+  private selectedPlaylistInfo(): PlaylistInfo | undefined {
+    const dest: PlaylistDestination | null = this.selectedDestination;
+    if (dest === null || dest.playlistId.length === 0) {
+      return undefined;
+    }
+    for (let i: number = 0; i < this.currentPlaylists.length; i++) {
+      if (this.currentPlaylists[i].id === dest.playlistId) {
+        return this.currentPlaylists[i];
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * 收藏 / 取消收藏当前这张**在线歌单**。
+   *
+   * 写入 `MusicStoreService` 的 `favorite_playlists`（`FavoriteEntry`）：
+   *   · `id` / `source` = 平台歌单 id / 平台标识；`name` = 歌单名；
+   *   · `sub` = 平台名（`sourceName`）；`count` = 曲目数（优先用已拉到的 `songs`，
+   *     没拉到就用歌单自带的 `total` 文本，**都不编**）；
+   *   · `img` = 第一首曲目的封面（`songs[0].picUrl`，拿不到就留空 ⇒ 界面用占位图）。
+   * 「我的」页歌单卡的「收藏歌单」那一段就是读它（`@Monitor favoritePlaylistVersion`）。
+   */
+  private toggleCollectSelected(): void {
+    const dest: PlaylistDestination | null = this.selectedDestination;
+    if (dest === null || dest.playlistId.length === 0) {
+      return;
+    }
+    const store: MusicStoreService = MusicStoreService.getInstance();
+    if (store.isFavoritePlaylist(this.selectedSource, dest.playlistId)) {
+      store.removeFavoritePlaylist(this.selectedSource, dest.playlistId);
+      this.selectedFavorited = false;
+      hilog.info(0x0000, COLLECT_TAG, 'uncollect source=%{public}s id=%{public}s',
+        this.selectedSource, dest.playlistId);
+      return;
+    }
+    const entry: FavoriteEntry = new FavoriteEntry();
+    entry.id = dest.playlistId;
+    entry.source = this.selectedSource;
+    entry.name = this.selectedTitle;
+    entry.sub = sourceName(this.selectedSource);
+    const info: PlaylistInfo | undefined = this.selectedPlaylistInfo();
+    const totalText: string = info !== undefined ? info.total : '';
+    const parsed: number = totalText.length > 0 ? Number.parseInt(totalText, 10) : Number.NaN;
+    entry.count = this.songs.length > 0 ? this.songs.length : (Number.isNaN(parsed) ? 0 : parsed);
+    entry.img = this.songs.length > 0 ? this.songs[0].picUrl : '';
+    entry.time = Date.now();
+    store.addFavoritePlaylist(entry);
+    this.selectedFavorited = true;
+    hilog.info(0x0000, COLLECT_TAG,
+      'collect name=%{public}s source=%{public}s id=%{public}s count=%{public}d',
+      entry.name, entry.source, entry.id, entry.count);
+  }
+
   private async selectDaily(account: PlatformAccount): Promise<void> {
     const key: string = `${account.id}:daily`;
     this.selectedKey = key;
@@ -158,6 +230,8 @@ export struct PlatformMusicPage {
     this.selectedTitle = this.dailyTitle(account.source);
     this.selectedSource = account.source;
     this.selectedDestination = null;
+    // 每日推荐不是「歌单」，收藏星要消失（否则会残留上一张歌单的收藏态）
+    this.syncSelectedFavorited();
     this.error = '';
     const cached: PlatformTrackInfo[] | undefined = songCache.get(key);
     if (cached !== undefined) {
@@ -196,6 +270,7 @@ export struct PlatformMusicPage {
     destination.dirId = playlist.dirId;
     destination.isEditable = playlist.isEditable;
     this.selectedDestination = destination;
+    this.syncSelectedFavorited();
     this.error = '';
     const cached: PlatformTrackInfo[] | undefined = songCache.get(key);
     if (cached !== undefined) {
@@ -550,6 +625,25 @@ export struct PlatformMusicPage {
                   .margin({ top: 2 })
               }
               .alignItems(HorizontalAlign.Start)
+              .layoutWeight(1)
+
+              // ★ 收藏这张在线歌单（「我的」页歌单卡第二段「收藏歌单」的数据来源）。
+              //   只在选中的是**歌单**时出现；每日推荐 / 账号默认没有歌单身份，不给这颗星。
+              if (this.selectedDestination !== null && this.selectedDestination.playlistId.length > 0) {
+                Row() {
+                  SymbolGlyph(this.selectedFavorited ? $r('sys.symbol.star_fill') : $r('sys.symbol.star'))
+                    .fontSize(22)
+                    .fontColor([this.selectedFavorited ? this.themeState.color : $r('sys.color.icon_tertiary')])
+                }
+                .width(40)
+                .height(40)
+                .justifyContent(FlexAlign.Center)
+                .onClick(() => {
+                  this.toggleCollectSelected();
+                })
+                .accessibilityText(this.selectedFavorited ? '取消收藏歌单' : '收藏歌单')
+                .accessibilityLevel('yes')
+              }
             }
             .width('100%')
             .padding({ left: 20, right: 20, top: 6, bottom: 8 })

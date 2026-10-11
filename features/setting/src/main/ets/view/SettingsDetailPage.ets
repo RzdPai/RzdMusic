@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,8 @@ import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { http } from '@kit.NetworkKit';
 import { pasteboard } from '@kit.BasicServicesKit';
-import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, BreakpointType, HomeSourceState, CoverRadiusState, LyricBlurState, LyricCenterState, LyricFontSizeState, LyricFpsState, MusicStoreService, notifyHomeSourceRefresh, PlaybackFlowLightState, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
+import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, BreakpointType, HomeSourceState, CoverRadiusState, LyricBlurState, LyricCenterState, LyricFontSizeState, LyricFpsState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, PlaybackFlowLightState, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatformsOf, lxSourceManager, MediaService } from 'player';
 import type { LXApiImportResult } from 'player';
@@ -292,8 +293,10 @@ export struct SettingsDetailPage {
    * @returns 内嵌（宽屏右栏）时只补 HDS 标题栏；二级页时补"状态栏 + HDS 标题栏"。
    */
   private panelTopInset(): number {
+    // ⚠️ 二级页不再假设页盒从窗口 y=0 起排：由 `boxTopVp`（页根 `onAreaChange` 实测）换算，
+    //    盒顶 0 → 94、盒顶 38 → 56，两种情形内容都落在窗口的 94 那条线上（`PageTopInsetHelper`）。
     return this.embedded ? TitleBarConstants.ROW_HEIGHT_VP :
-      getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP;
+      PageTopInsetHelper.contentOffsetVp(this.boxTopVp);
   }
 
   /**
@@ -306,7 +309,7 @@ export struct SettingsDetailPage {
    */
   private contentTopOffset(): number {
     return this.embedded ? 0 :
-      getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP;
+      PageTopInsetHelper.contentOffsetVp(this.boxTopVp);
   }
 
   private activeSourceLabel(): string {
@@ -600,6 +603,19 @@ export struct SettingsDetailPage {
   /** Cached title bar options so scrolling rebuilds do not recreate material params. */
   private cachedTitleBarOptions: HdsNavigationTitleBarOptions | undefined = undefined;
 
+  /**
+   * 页根（`HdsNavDestination`）在**窗口坐标**里的顶边 y（vp），由 `onAreaChange` 实测。
+   * 默认 0 = "页盒贴屏幕顶"。量到非 0 后，子面板让位（`panelTopInset` / `contentTopOffset`）
+   * 与标题栏 `avoidLayoutSafeArea` 一起按它换算。见 `PageTopInsetHelper`。
+   */
+  @Local boxTopVp: number = 0;
+
+  /** 盒顶量出来（或变化）后丢弃标题栏缓存，让 `avoidLayoutSafeArea` 跟着改。 */
+  @Monitor('boxTopVp')
+  onBoxTopChanged(): void {
+    this.cachedTitleBarOptions = undefined;
+  }
+
   /** 光感等级变化时丢弃标题栏缓存，使设置页自身标题栏的沉浸材质实时跟随设置变化。 */
   @Monitor('ambientLevel')
   onAmbientLevelChanged(): void {
@@ -612,7 +628,8 @@ export struct SettingsDetailPage {
       return this.cachedTitleBarOptions;
     }
     this.cachedTitleBarOptions = {
-      avoidLayoutSafeArea: true,
+      // ★ 盒顶实测贴屏幕顶（0）时才让 HDS 标题栏自己退回状态栏下方（否则标题会掉 38+38）。
+      avoidLayoutSafeArea: PageTopInsetHelper.avoidLayoutSafeArea(this.boxTopVp),
       style: {
         blurStrategy: BlurStrategy.ENABLE,
         scrollEffectOpts: {
@@ -1442,7 +1459,7 @@ export struct SettingsDetailPage {
            *   一往上滑就从标题栏（渐变模糊材质）底下穿过去，顶上那 56vp 不再是一段"死空白"。
            *   用户 2026-10-11：「音源管理页面上方下方都一大块空白，能不能去掉」。
            */
-          Blank().height(getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP)
+          Blank().height(PageTopInsetHelper.contentOffsetVp(this.boxTopVp))
           ForEach(this.lxApiList, (api: LXUserApiInfo) => {
             Row({ space: 8 }) {
               Radio({ value: api.id, group: 'lxSource', indicatorType: RadioIndicatorType.TICK })
@@ -1583,6 +1600,18 @@ export struct SettingsDetailPage {
       //   内容也跟着多顶 38vp（「上方留的空距有点大了」）。
       //   （另一处口径：滚动容器用 `clipContent(ContentClipMode.SAFE_AREA)` 让内容能画进状态栏。）
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+      // ★ 实测页盒顶边（窗口坐标 vp）：子面板让位与标题栏 `avoidLayoutSafeArea` 都由它推出来。
+      //   只在变化超过 0.5vp 时写状态，避免与布局互相追。
+      .onAreaChange((_oldArea: Area, newArea: Area): void => {
+        const top: number = newArea.globalPosition.y as number;
+        if (Math.abs(top - this.boxTopVp) > 0.5) {
+          this.boxTopVp = top;
+          hilog.info(0x0000, 'RzdSettingsDetail',
+            'RzdPageTopInset boxTopVp=%{public}f page=settingsDetail offset=%{public}f avoid=%{public}s',
+            top, PageTopInsetHelper.contentOffsetVp(top),
+            String(PageTopInsetHelper.avoidLayoutSafeArea(top)));
+        }
+      })
       .systemBarStyle(
         { statusBarContentColor: this.isDarkTheme() ? '#FFFFFF' : '#000000' },
         { statusBarContentColor: this.isDarkTheme() ? '#FFFFFF' : '#000000' })

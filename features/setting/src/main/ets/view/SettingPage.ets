@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,8 +21,9 @@ import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { http } from '@kit.NetworkKit';
 import { pasteboard } from '@kit.BasicServicesKit';
-import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, BarScrollHelper, RouterUrlConstants, BreakpointType, HomeSourceState, LocalCoverImage, LyricBlurState, LyricFontSizeState, MusicAppState, MusicStoreService, notifyHomeSourceRefresh, PlaybackFlowLightState, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, WindowInfo, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, getWindowInfoState } from 'musicbasic';
+import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, BarScrollHelper, RouterUrlConstants, BreakpointType, HomeSourceState, LocalCoverImage, LyricBlurState, LyricFontSizeState, MusicAppState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, PlaybackFlowLightState, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, WindowInfo, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, getWindowInfoState } from 'musicbasic';
 import { BlurStrategy, HdsNavigation, HdsNavigationTitleMode, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatformsOf, lxSourceManager, MediaService } from 'player';
 import type { LXApiImportResult } from 'player';
 import { HuaweiAccountService, HuaweiAccountState } from 'player';
@@ -40,6 +41,10 @@ import { importSourceFiles } from '../util/SourceFileImport';
 const LX_ONLINE_IMPORT_MAX_BYTES: number = 9 * 1024 * 1024;
 const LX_ONLINE_IMPORT_TIMEOUT: number = 15000;
 const DEFAULT_SETTING_INDEX: number = 4;
+
+/** 日志域 / 标签：`grep RzdPageTopInset` 看页盒顶边实测与由此算出的让位。 */
+const DOMAIN: number = 0x0000;
+const TAG: string = 'RzdSettingPage';
 
 /** 设置页大卡片内的一行设置入口。 */
 class SettingsEntry {
@@ -556,6 +561,21 @@ export struct SettingPage {
   /** Cached title bar options so scrolling rebuilds do not recreate material params. */
   private cachedTitleBarOptions: HdsNavigationTitleBarOptions | undefined = undefined;
 
+  /**
+   * 页根（`HdsNavDestination`）在**窗口坐标**里的顶边 y（vp），由 `onAreaChange` 实测。
+   *
+   * 默认 0 = "页盒贴屏幕顶"（= 参考工程 lxmusic-harmony 的假设，也是我们此前写死的那套），
+   * 量到非 0（框架把页盒压在安全区内）后：内容让位与 HDS 标题栏的 `avoidLayoutSafeArea`
+   * 一起换算过来，标题与内容都不会再整体下移一个状态栏。见 `PageTopInsetHelper` 的说明。
+   */
+  @Local boxTopVp: number = 0;
+
+  /** 盒顶量出来（或变化）后丢弃标题栏缓存，让 `avoidLayoutSafeArea` 跟着改。 */
+  @Monitor('boxTopVp')
+  onBoxTopChanged(): void {
+    this.cachedTitleBarOptions = undefined;
+  }
+
   /** 光感等级变化时丢弃标题栏缓存，使设置页自身标题栏的沉浸材质实时跟随设置变化。 */
   @Monitor('ambientLevel')
   onAmbientLevelChanged(): void {
@@ -568,7 +588,9 @@ export struct SettingPage {
       return this.cachedTitleBarOptions;
     }
     this.cachedTitleBarOptions = {
-      avoidLayoutSafeArea: true,
+      // ★ 页盒实测贴屏幕顶（盒顶 = 0）时，才让 HDS 标题栏自己退回状态栏下方；
+      //   盒顶本身已在状态栏下沿（38）时不能再退，否则标题栏会掉到 38 + 38（用户报的「标题下移」）。
+      avoidLayoutSafeArea: PageTopInsetHelper.avoidLayoutSafeArea(this.boxTopVp),
       style: {
         blurStrategy: BlurStrategy.ENABLE,
         scrollEffectOpts: {
@@ -1416,13 +1438,13 @@ export struct SettingPage {
       .padding({
         // ★ 2026-10-11（用户：「我想让它延伸进状态栏」）：这段留白在**滚动内容里**
         //   （`Scroll` 的内容根 `Column` 的 padding），所以必须含状态栏那一段。
-        //   依据：页根带 `ignoreLayoutSafeArea([SYSTEM], [TOP, BOTTOM])` ⇒ 页面盒子从屏幕
-        //   **y=0** 起排（HDS 标题栏自己让位到 38..94）
-        //   ⇒ "静止时搜索框正好落在标题栏下沿" = 偏移 状态栏 + 56 = 94。
+        //   ⚠️ 但"该让多少"不能假设页盒从 y=0 起排 —— 框架有可能把页盒限制在安全区内
+        //   （实测：用户装机后标题/内容整体下移一个状态栏，说明盒顶不是 0）。
+        //   现在由 `boxTopVp`（页根 `onAreaChange` 实测）算：盒顶 0 → 94；盒顶 38 → 56，
+        //   两种情形内容都落在窗口的 94 那条线上（详见 `PageTopInsetHelper`）。
         //   上滑时内容从标题栏底下**再穿进状态栏** —— 靠下面 `Scroll` 自己那句
         //   `clipContent(ContentClipMode.SAFE_AREA)`（`Scroll` 默认 `BOUNDARY`，按组件区域裁）。
-        //   —— 这一页里**没有**"内容容器"，整个滚动视口就是页根的一级子节点。
-        top: getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP,
+        top: PageTopInsetHelper.contentOffsetVp(this.boxTopVp),
         left: new BreakpointType(12, 16, 24, 24).getValue(this.breakpointEnv.widthBreakpoint),
         right: new BreakpointType(12, 16, 24, 24).getValue(this.breakpointEnv.widthBreakpoint)
       })
@@ -1501,6 +1523,19 @@ export struct SettingPage {
     //      内容能**画进**状态栏那一条。
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    // ★ 实测页盒顶边（窗口坐标 vp）。这是本页两个顶部量的**唯一输入**：
+    //   内容让位 `PageTopInsetHelper.contentOffsetVp(boxTopVp)` 与标题栏的
+    //   `avoidLayoutSafeArea`。用户装机反复报「标题下移 / 上方留白大」就是因为它此前被写死成 0。
+    //   只在变化超过 0.5vp 时才写状态，避免和布局互相追着改。
+    .onAreaChange((_oldArea: Area, newArea: Area): void => {
+      const top: number = newArea.globalPosition.y as number;
+      if (Math.abs(top - this.boxTopVp) > 0.5) {
+        this.boxTopVp = top;
+        hilog.info(DOMAIN, TAG, 'RzdPageTopInset boxTopVp=%{public}f page=setting offset=%{public}f avoid=%{public}s',
+          top, PageTopInsetHelper.contentOffsetVp(top),
+          String(PageTopInsetHelper.avoidLayoutSafeArea(top)));
+      }
+    })
     .bindSheet(this.showSettingSheet, this.SettingSheetBuilder(), {
       height: this.activeSettingSheet === 0 ? 280 :
         (this.activeSettingSheet === 1 ? 340 :
