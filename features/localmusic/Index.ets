@@ -21,7 +21,7 @@ export {
   titleFromFileName,
   singerFromFileName
 } from './src/main/ets/core/LocalMusic';
-export type { LocalSongEntry, ImportResult } from './src/main/ets/core/LocalMusic';
+export type { LocalSongEntry, ImportResult, MatchAllResult } from './src/main/ets/core/LocalMusic';
 
 export {
   MATCH_PLATFORMS,

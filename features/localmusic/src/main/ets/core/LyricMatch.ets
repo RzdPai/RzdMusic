@@ -49,8 +49,8 @@ export interface MatchSongInfo {
   img: string;
 }
 
-/** 参与匹配的平台，按「搜索接口稳定程度」排序；某个平台搜不动会跳到下一个 */
-export const MATCH_PLATFORMS: string[] = ['kw', 'kg', 'tx', 'mg', 'wy'];
+/** 参与匹配的平台：优先 QQ → 网易云 → 酷狗 → 酷我 → 咪咕 */
+export const MATCH_PLATFORMS: string[] = ['tx', 'wy', 'kg', 'kw', 'mg'];
 
 /** 平台名（显示用） */
 const PLATFORM_LABELS: Record<string, string> = {

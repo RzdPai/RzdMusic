@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -198,6 +198,26 @@ export class RecommendViewModel {
    * Loads all recommendation UI data: QQ music toplists for banners, cards and
    * private songs; falls back to demo data when the network fails.
    */
+
+  /** 精选/歌手/分类与设置「首页来源平台」对齐 */
+  private syncHomeSourceIndices(): void {
+    const home: string = this.homeSourceState.source;
+    const mapped: string = RecommendDataUtil.mapHomeSource(home);
+    const list: string[] = MusicDataService.sourceList;
+    let idx: number = 0;
+    for (let i: number = 0; i < list.length; i++) {
+      if (list[i] === mapped || list[i] === home) {
+        idx = i;
+        break;
+      }
+    }
+    this.plazaSourceIndex = idx;
+    this.rankingSourceIndex = idx;
+    // 首页平台变更后清空歌手缓存，下次进入歌手 tab 按新平台重拉
+    this.singerList = [];
+    this.chartList = [];
+  }
+
   public load(): void {
     this.loadGen = this.loadGen + 1;
     const gen: number = this.loadGen;
@@ -215,8 +235,9 @@ export class RecommendViewModel {
     this.homeLoaded = false;
     this.categoryTabItems = RecommendDataUtil.getCategoryTabs();
     this.chartList = [];
-    Logger.info('RzdHomeSource', `load source=${homeSource} label=${this.homeSourceLabel} gen=${gen}`);
-    void this.loadHomeData(gen);
+    this.syncHomeSourceIndices();
+    this.refreshGuestMode();
+    void this.loadHomeData(this.loadGen);
   }
 
   /**
@@ -889,11 +910,12 @@ export class RecommendViewModel {
 
   /** Loads the QQ singer chart into {@link singerList} (once). */
   private async loadSingers(): Promise<void> {
-    if (this.singerList.length > 0 || this.categoryLoading) {
+    if (this.categoryLoading) {
       return;
     }
     this.categoryLoading = true;
-    const singers = await RecommendDataUtil.loadSingerListAsync(30);
+    const home: string = this.homeSourceState.source;
+    const singers = await RecommendDataUtil.loadSingerListAsync(30, home);
     this.singerList = singers;
     this.categoryLoading = false;
   }

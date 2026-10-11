@@ -15,17 +15,13 @@ export struct HomeRankingSection {
   /** True when hosted inside the category content (parent already applies the gutter). */
   @Param embedded: boolean = false;
   @Consumer('pageIndexInfos') pageIndexInfos: NavPathStack = new NavPathStack();
-  private hotBoardCount: number = 12;
-
   private homeScrollGutterH(): number {
     return new BreakpointType(16, 24, 32, 32).getValue(this.breakpointEnv.widthBreakpoint);
   }
 
+  /** 展示全部榜单（不再截断为 12 个）。 */
   private hotBoards(): RecommendBoardUi[] {
-    if (this.recommendViewModel.rankingBoards.length <= this.hotBoardCount) {
-      return this.recommendViewModel.rankingBoards;
-    }
-    return this.recommendViewModel.rankingBoards.slice(0, this.hotBoardCount);
+    return this.recommendViewModel.rankingBoards;
   }
 
   @Builder

@@ -325,7 +325,7 @@ export struct AmllLyricView {
         lineWidthAspect: this.lineWidthAspect,
         paddingXEm: 0.6,
         bgLineScale: 0.7,
-        subLineScale: 0.5,
+        subLineScale: 1.0,
         showSubLyric: this.showSubLyricState.enabled,
         lyricCenter: this.lyricCenterState.enabled
       };
@@ -445,7 +445,7 @@ export struct AmllLyricView {
         lineWidthAspect: this.lineWidthAspect,
         paddingXEm: 0.6,
         bgLineScale: 0.7,
-        subLineScale: 0.5,
+        subLineScale: 1.0,
         showSubLyric: this.showSubLyricState.enabled
       });
       // 不调用 onResize：避免触发全量重测（首帧清空测量缓存导致整屏闪烁）

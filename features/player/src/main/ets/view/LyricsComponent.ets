@@ -26,7 +26,8 @@ import {
   LyricFontSizeState,
   MusicStoreService,
   ShowSubLyricState,
-  StyleConstants
+  StyleConstants,
+  traditionalize
 } from 'musicbasic';
 import { MusicAppState } from '../model/PlayerModels';
 import { AmllLyricLine, AmllLyricFormat, AmllLyricWord } from '../amll/model/AmllTypes';
@@ -87,6 +88,8 @@ export struct LyricsComponent {
     AppStorageV2.connect(ShowSubLyricState, AppStorageKeys.SHOW_SUB_LYRIC_STATE, () => new ShowSubLyricState())!;
   /** 是否存在翻译/罗马音副行（无副行时隐藏翻译按钮） */
   @Local hasSubLyric: boolean = false;
+  /** 歌词繁体显示（简/繁按钮） */
+  @Local lyricS2tEnabled: boolean = false;
   /** 歌词页模糊效果开关（设置页可调，关闭时上下行用透明度过渡） */
   @Local lyricBlurEnabled: boolean = false;
   /** No extra blur surfaces before the persisted preference has been read. */
@@ -125,7 +128,11 @@ export struct LyricsComponent {
   }
 
   aboutToAppear(): void {
-    this.showSubLyricState.enabled = MusicStoreService.getInstance().getShowSubLyric();
+    const store = MusicStoreService.getInstance();
+    const showTrans: boolean = store.getShowLyricTranslation();
+    const showRoma: boolean = store.getShowLyricRoma();
+    this.showSubLyricState.enabled = showTrans || showRoma;
+    this.lyricS2tEnabled = store.getLyricS2t();
     this.syncLyricBlurPreference('appear');
     this.lyricFontSizeState.size = MusicStoreService.getInstance().getLyricFontSize();
     this.loadLyrics();
@@ -254,10 +261,22 @@ export struct LyricsComponent {
     if (!song) {
       return;
     }
-    this.translationLines = this.parseTranslationLines(song.lyricTranslation);
-    if (song.lyricText && song.lyricText.length > 0) {
-      this.rawLyricText = song.lyricText;
-      const text: string = song.lyricText;
+    // 简繁转换：对齐 lx player.isS2t
+    const s2t: boolean = MusicStoreService.getInstance().getLyricS2t();
+    let mainLyric: string = song.lyricText ?? '';
+    let transLyric: string = song.lyricTranslation ?? '';
+    if (s2t) {
+      if (mainLyric.length > 0) {
+        mainLyric = traditionalize(mainLyric);
+      }
+      if (transLyric.length > 0) {
+        transLyric = traditionalize(transLyric);
+      }
+    }
+    this.translationLines = this.parseTranslationLines(transLyric);
+    if (mainLyric.length > 0) {
+      this.rawLyricText = mainLyric;
+      const text: string = mainLyric;
       const hit: AmllLyricLine[] | undefined = amllGetCachedLyric(text);
       if (hit !== undefined) {
         // 缓存命中（播放器打开时已预热）：直接应用
@@ -318,16 +337,17 @@ export struct LyricsComponent {
   }
 
   /** 是否有任意副行（翻译/罗马音）：没有则隐藏翻译开关按钮 */
+  /**
+   * 是否显示「译」按钮：取决于当前歌曲是否有翻译/罗马音数据，
+   * 与副歌词是否正在显示无关，避免关闭后按钮消失无法再打开。
+   */
   private updateHasSubLyric(): void {
-    let found = false;
-    for (let i = 0; i < this.lrcLines.length; i++) {
-      const line = this.lrcLines[i];
-      if (line.translatedLyric.length > 0 || line.romanLyric.length > 0) {
-        found = true;
-        break;
-      }
+    const song = this.state.getCurrentSongItem();
+    if (song === undefined) {
+      this.hasSubLyric = false;
+      return;
     }
-    this.hasSubLyric = found;
+    this.hasSubLyric = song.lyricTranslation.length > 0 || song.lyricRoman.length > 0;
   }
 
   /** 通用歌词文本解析：支持 LRC/QRC/ESLRC/YRC/TTML 等任意格式，返回按时间升序的行 */
@@ -371,7 +391,11 @@ export struct LyricsComponent {
    * 逐主行找"未消费"且时间最近（<= 窗口）的子行，每个子行至多匹配一个主行；
    * 窗口内无对应子行的主行留空（不补）。空文本子行只消费不附加（防止标题行抢走真歌词行）。
    */
-  private attachSubLyric(target: string): void {
+  /**
+   * @param target 子歌词原文
+   * @param asTranslation true=写入 translatedLyric；false=写入 romanLyric
+   */
+  private attachSubLyric(target: string, asTranslation: boolean): void {
     if (target.length === 0 || this.lrcLines.length === 0) {
       return;
     }
@@ -383,7 +407,6 @@ export struct LyricsComponent {
     const used: boolean[] = new Array<boolean>(subLines.length).fill(false);
     for (let i: number = 0; i < this.lrcLines.length; i++) {
       const mainTime: number = this.lrcLines[i].startTime;
-      // 标题行（制作人/作词/作曲等）不参与匹配，防止抢走第一句真歌词的翻译/罗马音
       if (isTitleLine(this.lineTextOf(this.lrcLines[i]))) {
         continue;
       }
@@ -403,10 +426,9 @@ export struct LyricsComponent {
         used[bestIdx] = true;
         const matched: TranslationLine = subLines[bestIdx];
         if (matched.text.length === 0) {
-          // 空占位行：消费掉，不附加任何内容
           continue;
         }
-        if (target === this.state.getCurrentSongItem()?.lyricTranslation) {
+        if (asTranslation) {
           this.lrcLines[i].translatedLyric = matched.text;
         } else {
           this.lrcLines[i].romanLyric = matched.text;
@@ -417,20 +439,38 @@ export struct LyricsComponent {
 
   /** Attaches the nearest translation (by line start time) to each lyric line. */
   private attachTranslations(): void {
+    if (!MusicStoreService.getInstance().getShowLyricTranslation()) {
+      // 关闭翻译时清空已有行上的译文
+      for (let i: number = 0; i < this.lrcLines.length; i++) {
+        this.lrcLines[i].translatedLyric = '';
+      }
+      return;
+    }
     const song = this.state.getCurrentSongItem();
     if (song === undefined || song.lyricTranslation.length === 0 || this.lrcLines.length === 0) {
       return;
     }
-    this.attachSubLyric(song.lyricTranslation);
+    let trans: string = song.lyricTranslation;
+    if (MusicStoreService.getInstance().getLyricS2t()) {
+      trans = traditionalize(trans);
+    }
+    this.attachSubLyric(trans, true);
   }
 
   /** Attaches the romanization (romaji) lyric to each line by time match. */
   private attachRoman(): void {
+    if (!MusicStoreService.getInstance().getShowLyricRoma()) {
+      for (let i: number = 0; i < this.lrcLines.length; i++) {
+        this.lrcLines[i].romanLyric = '';
+        this.lrcLines[i].romanWords = [];
+      }
+      return;
+    }
     const song = this.state.getCurrentSongItem();
     if (song === undefined || song.lyricRoman.length === 0 || this.lrcLines.length === 0) {
       return;
     }
-    this.attachSubLyric(song.lyricRoman);
+    this.attachSubLyric(song.lyricRoman, false);
     this.attachRomanWords(song.lyricRoman);
   }
 
@@ -510,35 +550,75 @@ export struct LyricsComponent {
           Text('')
             .width('80%')
         }
-        // 悬浮操作按钮（不占布局空间）：竖屏的翻译/点赞按钮叠在歌词右下角，
-        // 释放原按钮行占用的高度，歌词 Canvas 下边界可延伸到控件行
+        // 悬浮操作按钮：左「简/繁」单字切换与右「译」同框样式、中轴对称
         if (!this.panelBottomBar) {
-          Row({ space: 16 }) {
-            if (this.isTablet) {
-              Image($r('app.media.ic_public_likes'))
-                .width($r('app.float.likes_image_lg'))
-                .height($r('app.float.likes_image_lg'))
-                .objectFit(ImageFit.Contain)
-                .margin({
-                  right: $r('app.float.likes_margin')
-                })
-            }
-            if (this.hasSubLyric) {
-              SymbolGlyph($r('sys.symbol.translate_square'))
-                .fontSize(20)
-                .fontWeight(FontWeight.Regular)
-                .height(20)
-                .fontColor([$r('app.color.play_text_color')])
-                .opacity(this.showSubLyricState.enabled ? 1 : 0.35)
-                .onClick((): void => {
-                  const next: boolean = !this.showSubLyricState.enabled;
-                  this.showSubLyricState.enabled = next;
-                  MusicStoreService.getInstance().setShowSubLyric(next);
-                })
+          Row() {
+            // 左侧：只显示当前态一字，点击在 简↔繁 间切换
+            Text(this.lyricS2tEnabled ? '繁' : '简')
+              .fontSize(13)
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.play_text_color'))
+              .width(28)
+              .height(28)
+              .textAlign(TextAlign.Center)
+              .border({
+                width: 1.5,
+                color: $r('app.color.play_text_color'),
+                radius: 6
+              })
+              .opacity(0.9)
+              .onClick((): void => {
+                const next: boolean = !this.lyricS2tEnabled;
+                this.lyricS2tEnabled = next;
+                MusicStoreService.getInstance().setLyricS2t(next);
+                this.loadLyrics();
+              })
+
+            Blank()
+
+            // 右侧：译 + 平板点赞（与左侧同尺寸描边框）
+            Row({ space: 16 }) {
+              if (this.isTablet) {
+                Image($r('app.media.ic_public_likes'))
+                  .width($r('app.float.likes_image_lg'))
+                  .height($r('app.float.likes_image_lg'))
+                  .objectFit(ImageFit.Contain)
+              }
+              if (this.hasSubLyric) {
+                Text('译')
+                  .fontSize(13)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor($r('app.color.play_text_color'))
+                  .width(28)
+                  .height(28)
+                  .textAlign(TextAlign.Center)
+                  .border({
+                    width: 1.5,
+                    color: $r('app.color.play_text_color'),
+                    radius: 6
+                  })
+                  .opacity(this.showSubLyricState.enabled ? 0.9 : 0.35)
+                  .onClick((): void => {
+                    const next: boolean = !this.showSubLyricState.enabled;
+                    this.showSubLyricState.enabled = next;
+                    const store = MusicStoreService.getInstance();
+                    store.setShowLyricTranslation(next);
+                    store.setShowLyricRoma(next);
+                    this.attachTranslations();
+                    this.attachRoman();
+                    this.updateHasSubLyric();
+                  })
+              }
             }
           }
-          .justifyContent(FlexAlign.End)
-          .margin({
+          .width(StyleConstants.FULL_WIDTH)
+          .padding({
+            left: new BreakpointType(
+              $r('app.float.lyric_margin_right_sm'),
+              $r('app.float.lyric_margin_right_md'),
+              $r('app.float.lyric_margin_right_lg'),
+              $r('app.float.lyric_margin_right_lg')
+            ).getValue(this.breakpointEnv.widthBreakpoint),
             right: new BreakpointType(
               $r('app.float.lyric_margin_right_sm'),
               $r('app.float.lyric_margin_right_md'),

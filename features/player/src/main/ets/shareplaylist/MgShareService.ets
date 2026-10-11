@@ -16,6 +16,13 @@ interface MgRawSong {
   duration?: number;
   album?: string;
   singerList?: MgRawSinger[];
+  imgItems?: MgSongImgItem[];
+  albumImgs?: MgSongImgItem[];
+  imgUrl?: string;
+}
+
+interface MgSongImgItem {
+  img?: string;
 }
 
 interface MgRawSinger {
@@ -131,12 +138,23 @@ export class MgShareService {
     const songs: SharePlaylistSong[] = [];
     for (let i = 0; i < trackList.length; i++) {
       const t: MgRawSong = trackList[i];
+      let pic: string = t.imgUrl ?? '';
+      if (pic.length === 0 && t.imgItems !== undefined && t.imgItems.length > 0) {
+        pic = t.imgItems[0].img ?? '';
+      }
+      if (pic.length === 0 && t.albumImgs !== undefined && t.albumImgs.length > 0) {
+        pic = t.albumImgs[0].img ?? '';
+      }
+      if (pic.length > 0 && !pic.startsWith('http')) {
+        pic = 'https://d.musicapp.migu.cn' + pic;
+      }
       songs.push({
         id: t.songId ?? '',
         name: t.songName ?? '',
         artist: t.singerList?.map((s: MgRawSinger): string => s.name ?? '').join(' / ') ?? '',
         album: t.album ?? '',
-        duration: t.duration ?? 0
+        duration: t.duration ?? 0,
+        img: pic
       });
     }
     return songs;

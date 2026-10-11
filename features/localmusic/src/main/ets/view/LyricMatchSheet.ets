@@ -72,7 +72,7 @@ export struct LyricMatchSheet {
 
   aboutToAppear(): void {
     this.keyword = this.singer.length > 0 ? `${this.songName} ${this.singer}` : this.songName;
-    void this.search();
+    void this.search(); // initial
   }
 
   /** 逐个平台搜，边搜边把结果并进列表（搜不到的、接口不通的都跳过） */
@@ -137,15 +137,13 @@ export struct LyricMatchSheet {
 
   build() {
     Column() {
-      Text(`匹配歌词：${this.songName}`)
+      Text('手动匹配封面 / 歌词 / 评论')
         .fontSize($r('sys.float.Subtitle_M'))
         .fontColor($r('sys.color.font_primary'))
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
         .width('100%')
         .textAlign(TextAlign.Start)
 
-      Text('本地歌没有平台身份，这里按歌名与歌手去平台上搜；选中的那条会记住，下次直接用它取词。')
+      Text('可修改歌名后再搜索；点选结果后用于封面、歌词与评论。平台顺序：QQ→网易→酷狗→酷我→咪咕')
         .fontSize($r('sys.float.Caption_M'))
         .fontColor($r('sys.color.font_tertiary'))
         .width('100%')
@@ -261,4 +259,6 @@ export function applyPickedMatch(key: string, info: MatchSongInfo, source: strin
   }
   const platform: string = source.length > 0 ? source : info.source;
   localMusic.saveMatch(key, platform, infoToJson(info));
+  // 异步补封面与歌词
+  void localMusic.applyMatchMedia(key, info);
 }

@@ -188,6 +188,10 @@ export class MusicListPlaybackViewModel {
     this.playlistSongUis = uis;
     this.songListDataSource.reloadData(uis);
     this.songListVersion++;
+    // 导入歌单常无单曲封面：异步补全（与榜单列表同一套限流逻辑）
+    if (uis.length > 0) {
+      void this.fillOnlineCovers();
+    }
   }
 
   /**
@@ -200,7 +204,7 @@ export class MusicListPlaybackViewModel {
     const uis: PlaylistSongUi[] = [];
     let errInfo: string = '';
     try {
-      const res = await lxTxToplist(topid, 30);
+      const res = await lxTxToplist(topid, 500);
       for (let i: number = 0; i < res.list.length; i++) {
         const song = res.list[i];
         const ui = new PlaylistSongUi();
@@ -341,6 +345,9 @@ export class MusicListPlaybackViewModel {
             typeof ui.title === 'string' ? ui.title : '', typeof ui.singer === 'string' ? ui.singer : '');
           if (pic.length > 0 && this.playlistSongUis[index] !== undefined) {
             this.playlistSongUis[index].coverUrl = pic;
+            // 写回本地歌单，下次打开不用再请求
+            const row = this.playlistSongUis[index];
+            MusicStoreService.getInstance().updateSongCoverInPlaylists(row.source, row.songId, pic);
             this.songListDataSource.reloadData(this.playlistSongUis);
             this.songListVersion++;
           }

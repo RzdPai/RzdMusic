@@ -231,7 +231,7 @@ export async function fetchBoardSongs(source: string, boardId: string): Promise<
     return [];
   }
   try {
-    const result = await lxLeaderboard(source + '_' + boardId, 1, 100);
+    const result = await lxLeaderboard(source + '_' + boardId, 1, 500);
     const out: BoardSongEntry[] = [];
     for (let i: number = 0; i < result.list.length; i++) {
       const s = result.list[i];

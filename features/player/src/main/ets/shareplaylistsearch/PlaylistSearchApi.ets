@@ -139,22 +139,52 @@ export class PlaylistSearchApi {
     return list;
   }
 
+  /**
+   * 网易云歌单详情。
+   * detail 的 tracks 常被截断；用 track/all 分页 + trackIds 批量 song/detail 补全。
+   */
   private static async wyPlaylistDetail(id: string): Promise<SearchPlaylistSong[]> {
-    const url: string = `https://music.163.com/api/v6/playlist/detail?id=${id}&n=100000&s=8`;
-    const text: string = await PlaylistSearchHttp.getText(url, {
+    const headers: Record<string, string> = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       'Referer': 'https://music.163.com/'
-    });
+    };
+    const url: string = `https://music.163.com/api/v6/playlist/detail?id=${id}&n=100000&s=8`;
+    const textBody: string = await PlaylistSearchHttp.getText(url, headers, 30000);
     const list: SearchPlaylistSong[] = [];
-    if (text === '') {
+    if (textBody === '') {
       return list;
     }
-    const root: Record<string, Object> = JSON.parse(text) as Record<string, Object>;
+    let root: Record<string, Object>;
+    try {
+      root = JSON.parse(textBody) as Record<string, Object>;
+    } catch (_e) {
+      return list;
+    }
     const playlist: Record<string, Object> = root['playlist'] as Record<string, Object>;
     if (playlist === undefined || playlist === null) {
       return list;
     }
-    const tracks: Object[] = playlist['tracks'] as Object[] ?? [];
+    let tracks: Object[] = playlist['tracks'] as Object[] ?? [];
+    const trackIdsRaw: Object[] = playlist['trackIds'] as Object[] ?? [];
+    const expected: number = trackIdsRaw.length > tracks.length ? trackIdsRaw.length : tracks.length;
+
+    if (tracks.length < expected) {
+      const paged: Object[] = await PlaylistSearchApi.wyFetchTracksAll(id, headers, expected);
+      if (paged.length > tracks.length) {
+        tracks = paged;
+      }
+    }
+    if (tracks.length < expected && trackIdsRaw.length > tracks.length) {
+      try {
+        const byIds: Object[] = await PlaylistSearchApi.wyFetchSongsByIds(trackIdsRaw, headers);
+        if (byIds.length > tracks.length) {
+          tracks = byIds;
+        }
+      } catch (_e) {
+      }
+    }
+
+    const seen: Record<string, boolean> = {};
     for (let i = 0; i < tracks.length; i++) {
       const item: Record<string, Object> = tracks[i] as Record<string, Object>;
       if (item === null) {
@@ -164,7 +194,12 @@ export class PlaylistSearchApi {
       if (idN === 0) {
         continue;
       }
-      const artists: Object[] = item['ar'] as Object[] ?? [];
+      const sid: string = String(idN);
+      if (seen[sid]) {
+        continue;
+      }
+      seen[sid] = true;
+      const artists: Object[] = (item['ar'] as Object[] ?? item['artists'] as Object[]) ?? [];
       const names: string[] = [];
       for (let j = 0; j < artists.length; j++) {
         const ar: Record<string, Object> = artists[j] as Record<string, Object>;
@@ -175,14 +210,83 @@ export class PlaylistSearchApi {
           }
         }
       }
-      const album: Record<string, Object> = item['al'] as Record<string, Object>;
+      const album: Record<string, Object> =
+        (item['al'] as Record<string, Object>) ?? (item['album'] as Record<string, Object>);
       const albumName: string = album === undefined || album === null ? '' : strOf(album, 'name');
       const picUrl: string = album === undefined || album === null ? '' :
         toHttps(strOf(album, 'picUrl'));
-      list.push(SearchPlaylistSong.of(String(idN), strOf(item, 'name'), names.join(' / '),
-        albumName, fmtDuration(numOf(item, 'dt') / 1000), 'wy', picUrl));
+      const durationMs: number = numOf(item, 'dt') || numOf(item, 'duration');
+      list.push(SearchPlaylistSong.of(sid, strOf(item, 'name'), names.join(' / '),
+        albumName, fmtDuration(durationMs / 1000), 'wy', picUrl));
     }
     return list;
+  }
+
+  private static async wyFetchTracksAll(id: string, headers: Record<string, string>,
+    need: number): Promise<Object[]> {
+    const out: Object[] = [];
+    const pageSize: number = 1000;
+    let offset: number = 0;
+    while (offset < need && offset < 20000) {
+      const pageUrl: string =
+        `https://music.163.com/api/playlist/track/all?id=${id}&limit=${pageSize}&offset=${offset}`;
+      let page: Object[] = [];
+      try {
+        const body: string = await PlaylistSearchHttp.getText(pageUrl, headers, 30000);
+        if (body === '') {
+          break;
+        }
+        const raw: Record<string, Object> = JSON.parse(body) as Record<string, Object>;
+        page = (raw['songs'] as Object[]) ?? [];
+      } catch (_e) {
+        break;
+      }
+      for (let i = 0; i < page.length; i++) {
+        out.push(page[i]);
+      }
+      if (page.length < pageSize) {
+        break;
+      }
+      offset += pageSize;
+    }
+    return out;
+  }
+
+  private static async wyFetchSongsByIds(trackIds: Object[],
+    headers: Record<string, string>): Promise<Object[]> {
+    const result: Object[] = [];
+    for (let i = 0; i < trackIds.length; i += 100) {
+      const ids: number[] = [];
+      const end: number = i + 100 < trackIds.length ? i + 100 : trackIds.length;
+      for (let j = i; j < end; j++) {
+        const tid: Record<string, Object> = trackIds[j] as Record<string, Object>;
+        if (tid === null) {
+          continue;
+        }
+        const sid: number = numOf(tid, 'id');
+        if (sid > 0) {
+          ids.push(sid);
+        }
+      }
+      if (ids.length === 0) {
+        continue;
+      }
+      const detailUrl: string =
+        `https://music.163.com/api/song/detail?ids=${encodeURIComponent(JSON.stringify(ids))}`;
+      try {
+        const body: string = await PlaylistSearchHttp.getText(detailUrl, headers, 20000);
+        if (body === '') {
+          continue;
+        }
+        const raw: Record<string, Object> = JSON.parse(body) as Record<string, Object>;
+        const songs: Object[] = (raw['songs'] as Object[]) ?? [];
+        for (let k = 0; k < songs.length; k++) {
+          result.push(songs[k]);
+        }
+      } catch (_e) {
+      }
+    }
+    return result;
   }
 
   private static async txSearchPlaylists(keyword: string, page: number): Promise<SearchPlaylistInfo[]> {
@@ -217,31 +321,102 @@ export class PlaylistSearchApi {
     return list;
   }
 
+  /**
+   * QQ 歌单详情。getcdinfo 在部分网络/热门歌单会空返回，失败则走 musicu CgiGetDiss。
+   */
   private static async txPlaylistDetail(id: string): Promise<SearchPlaylistSong[]> {
-    const url: string =
-      `https://c.y.qq.com/qzone/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg?type=1&json=1&utf8=1&onlysong=0&new_format=1` +
-      `&disstid=${id}&loginUin=0&hostUin=0&format=json&inCharset=utf8&outCharset=utf-8&notice=0&platform=yqq.json&needNewCode=0`;
-    const text: string = await PlaylistSearchHttp.getText(url, TX_HEADERS);
+    let songs: Object[] = await PlaylistSearchApi.txSongsViaGetCdInfo(id);
+    if (songs.length === 0) {
+      songs = await PlaylistSearchApi.txSongsViaCgiGetDiss(id);
+    }
+    return PlaylistSearchApi.txMapSongs(songs);
+  }
+
+  private static txDetailHeaders(id: string): Record<string, string> {
+    return {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Origin': 'https://y.qq.com',
+      'Referer': `https://y.qq.com/n/yqq/playsquare/${id}.html`
+    };
+  }
+
+  private static async txSongsViaGetCdInfo(id: string): Promise<Object[]> {
+    const hosts: string[] = ['c.y.qq.com', 'i.y.qq.com'];
+    const empty: Object[] = [];
+    for (let h = 0; h < hosts.length; h++) {
+      const url: string =
+        `https://${hosts[h]}/qzone/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg?type=1&json=1&utf8=1&onlysong=0&new_format=1` +
+        `&disstid=${id}&loginUin=0&hostUin=0&format=json&inCharset=utf8&outCharset=utf-8&notice=0&platform=yqq.json&needNewCode=0`;
+      try {
+        const body: string = await PlaylistSearchHttp.getText(url, PlaylistSearchApi.txDetailHeaders(id), 30000);
+        if (body === '') {
+          continue;
+        }
+        const root: Record<string, Object> = JSON.parse(body) as Record<string, Object>;
+        const cdlist: Object[] = root['cdlist'] as Object[] ?? [];
+        if (cdlist.length === 0) {
+          continue;
+        }
+        const cd: Record<string, Object> = cdlist[0] as Record<string, Object>;
+        if (cd === null) {
+          continue;
+        }
+        const songs: Object[] = cd['songlist'] as Object[] ?? [];
+        if (songs.length > 0) {
+          return songs;
+        }
+      } catch (_e) {
+      }
+    }
+    return empty;
+  }
+
+  private static async txSongsViaCgiGetDiss(id: string): Promise<Object[]> {
+    const empty: Object[] = [];
+    const numericId: number = Number(id);
+    const disstidParam: string = Number.isFinite(numericId) && numericId > 0 ?
+      String(Math.trunc(numericId)) : `"${id}"`;
+    const body: string =
+      `{"req_0":{"module":"srf_diss_info.DissInfoServer","method":"CgiGetDiss",` +
+      `"param":{"disstid":${disstidParam},"userinfo":1,"tag":1}},` +
+      `"comm":{"g_tk":5381,"uin":0,"format":"json","ct":20,"cv":0}}`;
+    try {
+      const textBody: string = await PlaylistSearchHttp.postText(
+        'https://u.y.qq.com/cgi-bin/musicu.fcg', body, {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Referer': 'https://y.qq.com/',
+          'Origin': 'https://y.qq.com',
+          'Content-Type': 'application/json'
+        }, 30000);
+      if (textBody === '') {
+        return empty;
+      }
+      const root: Record<string, Object> = JSON.parse(textBody) as Record<string, Object>;
+      const req0: Record<string, Object> = root['req_0'] as Record<string, Object>;
+      if (req0 === undefined || req0 === null) {
+        return empty;
+      }
+      const data: Record<string, Object> = req0['data'] as Record<string, Object>;
+      if (data === undefined || data === null) {
+        return empty;
+      }
+      return data['songlist'] as Object[] ?? empty;
+    } catch (_e) {
+      return empty;
+    }
+  }
+
+  private static txMapSongs(songs: Object[]): SearchPlaylistSong[] {
     const list: SearchPlaylistSong[] = [];
-    if (text === '') {
-      return list;
-    }
-    const root: Record<string, Object> = JSON.parse(text) as Record<string, Object>;
-    const cdlist: Object[] = root['cdlist'] as Object[] ?? [];
-    if (cdlist.length === 0) {
-      return list;
-    }
-    const cd: Record<string, Object> = cdlist[0] as Record<string, Object>;
-    if (cd === null) {
-      return list;
-    }
-    const songs: Object[] = cd['songlist'] as Object[] ?? [];
     for (let i = 0; i < songs.length; i++) {
       const item: Record<string, Object> = songs[i] as Record<string, Object>;
       if (item === null) {
         continue;
       }
-      const mid: string = strOf(item, 'mid');
+      let mid: string = strOf(item, 'mid');
+      if (mid === '') {
+        mid = strOf(item, 'songmid');
+      }
       if (mid === '') {
         continue;
       }
@@ -257,11 +432,31 @@ export class PlaylistSearchApi {
         }
       }
       const album: Record<string, Object> = item['album'] as Record<string, Object>;
-      const albumName: string = album === undefined || album === null ? '' : strOf(album, 'name');
-      const albumMid: string = album === undefined || album === null ? '' : strOf(album, 'mid');
+      let albumName: string = '';
+      let albumMid: string = '';
+      if (album !== undefined && album !== null) {
+        albumName = strOf(album, 'name');
+        albumMid = strOf(album, 'mid');
+        if (albumMid === '') {
+          albumMid = strOf(album, 'pmid');
+        }
+      }
+      if (albumName === '') {
+        albumName = strOf(item, 'albumname');
+      }
+      if (albumMid === '') {
+        albumMid = strOf(item, 'albummid');
+      }
       const picUrl: string = albumMid === '' ? '' :
         `https://y.gtimg.cn/music/photo_new/T002R500x500M000${albumMid}.jpg`;
-      list.push(SearchPlaylistSong.of(mid, strOf(item, 'name'), singerNames.join(' / '),
+      let name: string = strOf(item, 'name');
+      if (name === '') {
+        name = strOf(item, 'songname');
+      }
+      if (name === '') {
+        name = strOf(item, 'title');
+      }
+      list.push(SearchPlaylistSong.of(mid, name, singerNames.join(' / '),
         albumName, fmtDuration(numOf(item, 'interval')), 'tx', picUrl));
     }
     return list;
@@ -297,28 +492,64 @@ export class PlaylistSearchApi {
     return list;
   }
 
+  /**
+   * 酷我歌单详情。原实现 rn=100 只取一页；按 total 分页拉全量（每页 500，上限约 5000）。
+   */
   private static async kwPlaylistDetail(id: string): Promise<SearchPlaylistSong[]> {
-    const url: string =
-      `http://nplserver.kuwo.cn/pl.svc?op=getlistinfo&pid=${id}&pn=0&rn=100&encode=utf8` +
-      `&keyset=pl2012&identity=kuwo&pcmp4=1&vipver=MUSIC_9.0.5.0_W1&newver=1`;
-    const text: string = await PlaylistSearchHttp.getText(url, KW_HEADERS);
     const list: SearchPlaylistSong[] = [];
-    if (text === '') {
-      return list;
-    }
-    const root: Record<string, Object> = JSON.parse(text) as Record<string, Object>;
-    const items: Object[] = root['musiclist'] as Object[] ?? [];
-    for (let i = 0; i < items.length; i++) {
-      const item: Record<string, Object> = items[i] as Record<string, Object>;
-      if (item === null) {
-        continue;
+    const pageSize: number = 500;
+    let page: number = 0;
+    let total: number = -1;
+    const seen: Record<string, boolean> = {};
+    while (page * pageSize < 5000) {
+      const url: string =
+        `http://nplserver.kuwo.cn/pl.svc?op=getlistinfo&pid=${id}&pn=${page}&rn=${pageSize}&encode=utf8` +
+        `&keyset=pl2012&identity=kuwo&pcmp4=1&vipver=MUSIC_9.0.5.0_W1&newver=1`;
+      let body: string = '';
+      try {
+        body = await PlaylistSearchHttp.getText(url, KW_HEADERS, 20000);
+      } catch (_e) {
+        break;
       }
-      const rid: string = strOf(item, 'id');
-      if (rid === '') {
-        continue;
+      if (body === '') {
+        break;
       }
-      list.push(SearchPlaylistSong.of(rid, strOf(item, 'name'), strOf(item, 'artist'),
-        strOf(item, 'album'), fmtDuration(numOf(item, 'duration')), 'kw'));
+      let root: Record<string, Object>;
+      try {
+        root = JSON.parse(body) as Record<string, Object>;
+      } catch (_e) {
+        break;
+      }
+      if (total < 0) {
+        total = numOf(root, 'total');
+        if (total <= 0) {
+          total = numOf(root, 'songnum');
+        }
+      }
+      const items: Object[] = root['musiclist'] as Object[] ?? [];
+      if (items.length === 0) {
+        break;
+      }
+      for (let i = 0; i < items.length; i++) {
+        const item: Record<string, Object> = items[i] as Record<string, Object>;
+        if (item === null) {
+          continue;
+        }
+        const rid: string = strOf(item, 'id');
+        if (rid === '' || seen[rid]) {
+          continue;
+        }
+        seen[rid] = true;
+        list.push(SearchPlaylistSong.of(rid, strOf(item, 'name'), strOf(item, 'artist'),
+          strOf(item, 'album'), fmtDuration(numOf(item, 'duration')), 'kw'));
+      }
+      if (items.length < pageSize) {
+        break;
+      }
+      if (total > 0 && list.length >= total) {
+        break;
+      }
+      page = page + 1;
     }
     return list;
   }
@@ -472,41 +703,89 @@ export class PlaylistSearchApi {
     return list;
   }
 
+  /**
+   * 咪咕歌单详情。
+   * 上游硬限制：无论 pageSize 传 50/100/200，每页最多返回 50 首。
+   * 必须按 pageNo 翻页，直到凑齐 totalCount 或本页不足 50。
+   */
   private static async mgPlaylistDetail(id: string): Promise<SearchPlaylistSong[]> {
-    const url: string = `https://app.c.nf.migu.cn/MIGUM3.0/resource/playlist/song/v2.0?pageNo=1&pageSize=200&playlistId=${id}`;
-    const text: string = await PlaylistSearchHttp.getText(url, MG_HEADERS);
     const list: SearchPlaylistSong[] = [];
-    if (text === '') {
-      return list;
-    }
-    const root: Record<string, Object> = JSON.parse(text) as Record<string, Object>;
-    const data: Record<string, Object> = root['data'] as Record<string, Object>;
-    if (data === undefined || data === null) {
-      return list;
-    }
-    const items: Object[] = data['songList'] as Object[] ?? [];
-    for (let i = 0; i < items.length; i++) {
-      const item: Record<string, Object> = items[i] as Record<string, Object>;
-      if (item === null) {
-        continue;
+    // ★ 必须用 50：接口单页上限就是 50；若写 100，首页只回 50 会被误判为「最后一页」提前结束
+    const pageSize: number = 50;
+    let pageNo: number = 1;
+    let totalCount: number = 0;
+    const maxPages: number = 100; // 上限约 5000 首
+    while (pageNo <= maxPages) {
+      const url: string =
+        `https://app.c.nf.migu.cn/MIGUM3.0/resource/playlist/song/v2.0` +
+        `?pageNo=${pageNo}&pageSize=${pageSize}&playlistId=${id}`;
+      const text: string = await PlaylistSearchHttp.getText(url, MG_HEADERS);
+      if (text === '') {
+        break;
       }
-      const id: string = strOf(item, 'songId');
-      if (id === '') {
-        continue;
+      let root: Record<string, Object>;
+      try {
+        root = JSON.parse(text) as Record<string, Object>;
+      } catch (_e) {
+        break;
       }
-      const singersArr: Object[] = item['singerList'] as Object[] ?? [];
-      const singerNames: string[] = [];
-      for (let j = 0; j < singersArr.length; j++) {
-        const sg: Record<string, Object> = singersArr[j] as Record<string, Object>;
-        if (sg !== null) {
-          const sn: string = strOf(sg, 'name');
-          if (sn.length > 0) {
-            singerNames.push(sn);
-          }
+      const data: Record<string, Object> = root['data'] as Record<string, Object>;
+      if (data === undefined || data === null) {
+        break;
+      }
+      if (pageNo === 1) {
+        totalCount = numOf(data, 'totalCount');
+        if (totalCount === 0) {
+          totalCount = numOf(data, 'total');
         }
       }
-      list.push(SearchPlaylistSong.of(id, strOf(item, 'songName'), singerNames.join(' / '),
-        strOf(item, 'album'), fmtDuration(numOf(item, 'duration')), 'mg'));
+      const items: Object[] = data['songList'] as Object[] ?? [];
+      if (items.length === 0) {
+        break;
+      }
+      for (let i = 0; i < items.length; i++) {
+        const item: Record<string, Object> = items[i] as Record<string, Object>;
+        if (item === null) {
+          continue;
+        }
+        const songId: string = strOf(item, 'songId');
+        if (songId === '') {
+          continue;
+        }
+        const singersArr: Object[] = item['singerList'] as Object[] ?? [];
+        const singerNames: string[] = [];
+        for (let j = 0; j < singersArr.length; j++) {
+          const sg: Record<string, Object> = singersArr[j] as Record<string, Object>;
+          if (sg !== null) {
+            const sn: string = strOf(sg, 'name');
+            if (sn.length > 0) {
+              singerNames.push(sn);
+            }
+          }
+        }
+        // 带上歌曲封面（img），便于详情页展示
+        let picUrl: string = toHttps(strOf(item, 'img'));
+        if (picUrl.length === 0) {
+          const imgItems: Object[] = item['imgItems'] as Object[] ?? [];
+          if (imgItems.length > 0) {
+            const img0: Record<string, Object> = imgItems[0] as Record<string, Object>;
+            if (img0 !== null) {
+              picUrl = toHttps(strOf(img0, 'img'));
+            }
+          }
+        }
+        list.push(SearchPlaylistSong.of(songId, strOf(item, 'songName'), singerNames.join(' / '),
+          strOf(item, 'album'), fmtDuration(numOf(item, 'duration')), 'mg', picUrl));
+      }
+      // 已凑够 totalCount
+      if (totalCount > 0 && list.length >= totalCount) {
+        break;
+      }
+      // 本页不足 50 → 没有下一页
+      if (items.length < pageSize) {
+        break;
+      }
+      pageNo += 1;
     }
     return list;
   }

@@ -496,6 +496,7 @@ export struct PlaylistsPage {
   //    这里**不要**再写一份：`importOnlinePlaylist()` / `onlineSource` / `onlineLink` /
   //    `onlineImporting` / `onlineSourceOptions` / `onlineSourceValues` 都在那个组件里，
   //    本页只负责弹它、并处理 onClose / onImported。
+  /** 从分享链接/ID 拉取歌单并导入。 */
 
   /** Imports an LXMusic playlist JSON file chosen by the user. */
   private importPlaylistFile(): void {
