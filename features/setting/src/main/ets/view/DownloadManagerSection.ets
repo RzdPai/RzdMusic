@@ -1,4 +1,4 @@
-import { AppStorageV2 } from '@kit.ArkUI';
+﻿import { AppStorageV2 } from '@kit.ArkUI';
 import { AppStorageKeys, ThemeState } from 'musicbasic';
 import { DownloadService, DownloadStatus, DownloadTask } from 'player';
 
@@ -171,6 +171,8 @@ export struct DownloadManagerSection {
               }
               .width('100%')
               .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+      // ★ 用户 2026-10-11：「下载管理页加上回弹」（同我的页：List 的 lwaysEnabled 默认 false）
+      
               .borderRadius($r('sys.float.corner_radius_level12'))
               .backgroundColor($r('app.color.card_background'))
               .alignItems(VerticalAlign.Center)

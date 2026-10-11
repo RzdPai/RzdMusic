@@ -998,9 +998,12 @@ struct Index {
       showPreviousTrack: false,
       followAppMiniBarExpanded: false
     })
-      // 宽度交给 HDS 的浮动栏（它自己算胶囊宽度）：这里写 100% 就是"填满栏体"，
-      // 再写死一个宽度会和 HDS 的让位/居中打架（2026-10-01 那次实验的教训）。
-      .width(StyleConstants.FULL_WIDTH)
+      // ★★ 用户 2026-10-11 定论：「错位的是播放条上的**元素**而不是播放条本身」。
+      //   胶囊宽度由 `barFloatingStyle.barWidth` 给出（= 窗口宽 − 两侧留白 side），HDS 把它**居中**画；
+      //   而这里原来写 `width('100%')`（= 宿主盒全宽）⇒ 内容比胶囊宽 2×side，
+      //   封面贴着胶囊左缘、右侧按钮顶到胶囊右缘 ⇒ 看着就是"元素错位"。
+      //   现在把内容宽度也定成胶囊宽度（同一函数、同一口径），HDS 居中后两者**完全重合**。
+      .width(this.floatingMiniBarWidthVp())
       .height(FLOATING_MINI_BAR_HEIGHT_VP)
   }
 

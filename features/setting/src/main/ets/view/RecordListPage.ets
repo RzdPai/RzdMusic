@@ -440,7 +440,9 @@ export struct RecordListPage {
 
   /** 左右安全边距（按断点，与其它页面同一档）。 */
   private contentPaddingSide(): number {
-    return new BreakpointType(16, 24, 32, 32).getValue(this.breakpointEnv.widthBreakpoint);
+    // ★ 用户 2026-10-11：「历史页、收藏页列表离屏幕两端距离太大了」⇒ 收紧一档
+    //   （原 16/24/32/32 → 8/12/16/16）。行内的 14vp 是行自身内边距，卡片/行会贴着这条间距。
+    return new BreakpointType(8, 12, 16, 16).getValue(this.breakpointEnv.widthBreakpoint);
   }
 
   /**
