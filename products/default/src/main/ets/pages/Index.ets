@@ -71,6 +71,9 @@ import { common } from '@kit.AbilityKit';
  */
 const FLOATING_MINI_BAR_HEIGHT_VP: number = 56;
 
+/** 二级页面悬浮迷你条在宽屏下的最大宽度（vp）：胶囊不该铺满整个平板/桌面窗口。 */
+const FLOATING_MINI_BAR_MAX_WIDTH_VP: number = 560;
+
 /**
  * 播放页浮层在壳层 Stack 里的层级。
  *
@@ -913,6 +916,15 @@ struct Index {
       //   官方《组件适配沉浸光感》原文：「设置悬浮材质后，**不建议**再通过 `barBackgroundColor`、
       //   `barBackgroundBlurStyle` 为 TabBar 设置背景色或背景模糊，**避免遮挡材质效果**。」
       .barFloatingStyle({
+        // ★ 栏宽**必须显式给**（官方 `HdsTabsFloatingStyle.barWidth` 三档）：
+        //   不给就按 HDS 自己的默认宽度画 ⇒ 真机上那条悬浮胶囊只有"一小坨"，
+        //   而里面的播放器是按 100% 排的 ⇒ 内容整个溢出胶囊外（用户截图："播放器一坨"）。
+        //   我们按窗口宽 − 两侧留白给三档同值（宽屏再夹一个最大宽），与旧胶囊口径一致。
+        barWidth: {
+          smallWidth: this.floatingMiniBarWidthVp(),
+          mediumWidth: this.floatingMiniBarWidthVp(),
+          largeWidth: this.floatingMiniBarWidthVp()
+        },
         // 离底间距交给 HDS 的浮动栏自己算（与首页那条同口径）
         barBottomMargin: this.floatingMiniBarBottomMarginVp(),
         adaptToHandedness: false,
@@ -965,11 +977,33 @@ struct Index {
       .height(FLOATING_MINI_BAR_HEIGHT_VP)
   }
 
-  // ⚠️ 这里原来有 `floatingMiniBarSideMarginVp()` / `floatingMiniBarWidthVp()` 两个"自己算胶囊宽度"
-  //    的辅助函数（连同 `FLOATING_MINI_BAR_MAX_WIDTH_VP`）。2026-10-11 起**栏宽交给 HDS**：
-  //    官方浮动栏自己会算悬浮胶囊的宽度/居中/左右让位，我们再去 `barWidth`/`width()` 写一遍
-  //    只会和它的让位动画打架（用户当时看到的"要么贴边、要么撑成大长方形"就是这么来的）。
-  //    ⇒ 两个函数已删；宿主铺满宽度（`StyleConstants.FULL_WIDTH`），栏体宽度由 HDS 决定。
+  // ⚠️ 这里原来把"自己算栏宽"的两个辅助函数删掉过（2026-10-11 上午），理由是"栏宽交给 HDS"；
+  //    真机证明**不行**：HDS 默认宽度只有一小坨，播放器内容整个溢出胶囊外（用户截图"一坨"）
+  //    ⇒ 现在按官方 `barWidth` 三档显式给回来（见 `floatingMiniBar()`）。
+
+  /** 悬浮迷你条的左右间距（vp）：只在小屏给一点边距，宽屏居中留白。 */
+  private floatingMiniBarSideMarginVp(): number {
+    return new BreakpointType(12, 16, 96, 160, 9).getWidthValueWithHeightSM(
+      this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint);
+  }
+
+  /**
+   * 悬浮迷你条宽度（vp）：写进 `barFloatingStyle.barWidth` 的三档。
+   *
+   * 手机：窗口宽 − 两侧边距（12 / 16）；宽屏：夹在 {@link FLOATING_MINI_BAR_MAX_WIDTH_VP} 内居中。
+   * 量不到窗口宽时给 336 兜底（旧胶囊同口径）。
+   * @returns 宽度（vp）。
+   */
+  private floatingMiniBarWidthVp(): number {
+    const side: number = this.floatingMiniBarSideMarginVp();
+    if (this.viewportWidthVp <= 0) {
+      return 336;
+    }
+    const full: number = this.viewportWidthVp - side * 2;
+    const isWide: boolean = this.breakpointEnv.widthBreakpoint !== WidthBreakpoint.WIDTH_SM &&
+      this.breakpointEnv.widthBreakpoint !== WidthBreakpoint.WIDTH_MD;
+    return isWide ? Math.min(FLOATING_MINI_BAR_MAX_WIDTH_VP, full) : Math.max(220, full);
+  }
 
   /**
    * 悬浮迷你条是否可见。

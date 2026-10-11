@@ -600,6 +600,11 @@ export struct PlatformMusicPage {
         .width('100%')
         .layoutWeight(1)
         .padding({ top: this.contentTopOffset })
+        // ★★ 官方《开发应用沉浸式效果》→「滚动类场景」②：滚动容器要设
+        //   `clipContent(ContentClipMode.SAFE_AREA)` 才能"把内容层裁剪区域扩展至避让区"
+        //   —— 否则内容只会被按内容框裁掉，**永远画不进状态栏**（用户报「平台音乐页内容没延伸进状态栏」）。
+        //   ⚠️ 链上祖先不许有 `clip(true)`。
+        .clipContent(ContentClipMode.SAFE_AREA)
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring)
       }
