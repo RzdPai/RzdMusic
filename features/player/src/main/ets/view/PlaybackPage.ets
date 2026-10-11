@@ -550,30 +550,82 @@ export struct PlaybackPage {
    * `HitTestMode.Transparent` 是必须的 —— 整层是全屏的，默认命中的话会把
    * 播放页所有按钮的点击全吃掉。
    */
+  /**
+   * 本机是否具备 HDS 视效能力位。
+   *
+   * ⚠️ 流光是 HDS `hdsEffect` 的 shader 视效：**设备没有这个能力位时它会静默不画**
+   *    （不报错、不抛异常），表现就是用户说的"开了开关但什么都没发生"。
+   *    所以这里显式判断 + 记日志，并在不支持时退回一层静态渐变（至少看得见颜色变化）。
+   */
+  /** 流光的 HDS 能力位：缺失时 shader 视效会静默不画（见 {@link hdsEffectCapable}）。 */
+  private static readonly HDS_CORE_SYSCAP: string = 'SystemCapability.UIDesign.HDSComponent.Core';
+
+  private hdsEffectCapable(): boolean {
+    try {
+      return canIUse(PlaybackPage.HDS_CORE_SYSCAP);
+    } catch (_err) {
+      return false;
+    }
+  }
+
   @Builder
   private FlowLightBackground() {
-    Stack()
-      .width(StyleConstants.FULL_WIDTH)
-      .height(StyleConstants.FULL_HEIGHT)
-      .hitTestBehavior(HitTestMode.Transparent)
-      .opacity(FLOW_LIGHT_OPACITY * this.backgroundRevealOpacity())
-      .visualEffect(new hdsEffect.HdsEffectBuilder()
-        .shaderEffect({
-          effectType: hdsEffect.EffectType.UV_BACKGROUND_FLOW_LIGHT,
-          animation: {
-            duration: FLOW_LIGHT_DURATION_MS,
-            iterations: -1,
-            autoPlay: true
-          },
-          // 初值用兜底色；真正的颜色由 applyFlowLightColors 在取色完成后下发，
-          // 这样即使取色很慢也能立刻看到流光在动（而不是黑屏等半天）。
-          params: {
-            colorSource: [this.coverTint.sourceColor],
-            colorTarget: [this.coverTint.targetColor]
-          },
-          controller: this.flowLightController
+    if (this.hdsEffectCapable()) {
+      Stack()
+        .width(StyleConstants.FULL_WIDTH)
+        .height(StyleConstants.FULL_HEIGHT)
+        .hitTestBehavior(HitTestMode.Transparent)
+        .opacity(FLOW_LIGHT_OPACITY * this.backgroundRevealOpacity())
+        // 官方示例里挂 shader 视效的容器都带底色（`backgroundColor('#383838')`）；
+        // 这里给一层**很淡的暗底**，既给视效一个可渲染的底，又不遮住封面。
+        .backgroundColor('#33000000')
+        .visualEffect(new hdsEffect.HdsEffectBuilder()
+          .shaderEffect({
+            effectType: hdsEffect.EffectType.UV_BACKGROUND_FLOW_LIGHT,
+            animation: {
+              duration: FLOW_LIGHT_DURATION_MS,
+              iterations: -1,
+              autoPlay: true
+            },
+            // 初值用兜底色；真正的颜色由 applyFlowLightColors 在取色完成后下发，
+            // 这样即使取色很慢也能立刻看到流光在动（而不是黑屏等半天）。
+            params: {
+              colorSource: [this.coverTint.sourceColor],
+              colorTarget: [this.coverTint.targetColor]
+            },
+            controller: this.flowLightController
+          })
+          .buildEffect())
+        .onAppear((): void => {
+          Logger.info('RzdFlowLight',
+            `layer mounted capable=1 enabled=${this.flowLightState.enabled} ` +
+            `opacity=${FLOW_LIGHT_OPACITY * this.backgroundRevealOpacity()} ` +
+            `src=${this.coverTint.sourceColor} dst=${this.coverTint.targetColor} v=${this.coverTint.version}`);
+          // autoPlay 已开，再显式 play 一次让状态确定（换歌重建该层时不会停在暂停态）
+          try {
+            this.flowLightController.play();
+          } catch (error) {
+            const err = error as BusinessError;
+            Logger.warn('RzdFlowLight', `play failed code=${err?.code} message=${err?.message}`);
+          }
         })
-        .buildEffect())
+    } else {
+      // 能力位缺失：退回静态渐变（颜色仍跟封面走），保证"开关打开看得见东西"
+      Column()
+        .width(StyleConstants.FULL_WIDTH)
+        .height(StyleConstants.FULL_HEIGHT)
+        .hitTestBehavior(HitTestMode.Transparent)
+        .opacity(FLOW_LIGHT_OPACITY * this.backgroundRevealOpacity())
+        .linearGradient({
+          direction: GradientDirection.Bottom,
+          colors: [[this.coverTint.sourceColor, 0], [this.coverTint.targetColor, 1]]
+        })
+        .onAppear((): void => {
+          Logger.warn('RzdFlowLight',
+            `layer mounted capable=0（无 HDS 视效能力位，改用静态渐变）enabled=${this.flowLightState.enabled} ` +
+            `src=${this.coverTint.sourceColor} dst=${this.coverTint.targetColor}`);
+        })
+    }
   }
 
   /** 醒目提示横幅：音源脚本跨脚本切换时显示，3 秒后自动隐藏。 */

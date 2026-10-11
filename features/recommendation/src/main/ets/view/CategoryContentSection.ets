@@ -412,25 +412,8 @@ export struct CategoryContentSection {
   private FeaturedList() {
     Column() {
       this.CategoryTitle($r('app.string.home_category_featured'))
-      // ★ 「数据来源」这行是给用户的**可见反馈**：切「设置 → 首页来源平台」后它会立刻变
-      //   （`酷狗音乐 · 飙升榜`）。以前首页只有歌单内容会变、且失败时静默空着，
-      //   用户就会得到"无论选哪个平台首页都没变"的观感。
-      if (this.recommendViewModel.homeSourceCaption().length > 0) {
-        Text(this.recommendViewModel.homeSourceCaption())
-          .fontSize(12)
-          .fontColor($r('app.color.font_tertiary'))
-          .width(StyleConstants.FULL_WIDTH)
-          .padding({ bottom: this.recommendViewModel.homeHint.length > 0 ? 2 : 8 })
-      }
-      // 降级 / 空态说明：拿不到内容就说清楚原因，**不伪造数据**。
-      if (this.recommendViewModel.homeHint.length > 0) {
-        Text(this.recommendViewModel.homeHint)
-          .fontSize(12)
-          .lineHeight(17)
-          .fontColor($r('app.color.font_tertiary'))
-          .width(StyleConstants.FULL_WIDTH)
-          .padding({ bottom: 8 })
-      }
+      // ⚠️ 2026-10 用户明确要求：**这行"数据来源（QQ音乐·新歌榜）"与下面的降级说明全部删掉**
+      //    —— 他要的是简洁，不要任何解释性文字。数据来源不再用文字表达。
       if (this.recommendViewModel.privateSongDisplayList.length === 0) {
         Text($r('app.string.home_category_empty'))
           .fontSize(13)
@@ -491,14 +474,7 @@ export struct CategoryContentSection {
   private SingerList() {
     Column() {
       this.CategoryTitle($r('app.string.home_category_singers'))
-      // 歌手榜**不受「首页来源平台」控制**（只有酷狗有可用的公开歌手榜接口，
-      // 见 RecommendDataUtil.loadSingerListAsync → lxKgSingerList），这里明写出来，
-      // 免得用户以为"换了平台首页却没变"是坏了。
-      Text('歌手榜数据来自酷狗音乐（其它平台暂无公开歌手榜接口）')
-        .fontSize(12)
-        .fontColor($r('app.color.font_tertiary'))
-        .width(StyleConstants.FULL_WIDTH)
-        .padding({ bottom: 8 })
+      // ⚠️ 用户要求删掉「歌手榜数据来自酷狗音乐（…）」那行说明 —— 简洁优先，不解释数据来源。
       if (this.recommendViewModel.singerList.length === 0) {
         Text(this.recommendViewModel.categoryLoading ?
           $r('app.string.home_category_loading') : $r('app.string.home_category_empty'))

@@ -89,6 +89,17 @@ export class RouterUrlConstants {
    * 所以它和原来的「设置」页签指向同一批详情页，不存在两份设置项实现。
    */
   public static readonly MINE_SETTINGS: string = 'MineSettingsPage';
+  /**
+   * 「我的」→「全部歌单」的二级页（= 原来那个「歌单」页签的整页）。
+   *
+   * ★ 底栏从四个页签收成两个（推荐 / 我的）之后，「歌单」页签被删掉，
+   * 它的**整页能力**（新建 / 排序 / 导入 / 改封面 / 删除）只能从「我的」页进，
+   * 所以这里给它一个路由名；路由表条目在
+   * `features/setting/src/main/resources/base/profile/router_map.json`，
+   * Builder 在 `features/setting/src/main/ets/view/MinePlaylistPage.ets`（薄壳，渲染
+   * `features/playlist` 的 `PlaylistsPage`，**没有第二份实现**）。
+   */
+  public static readonly MINE_PLAYLIST: string = 'MinePlaylistPage';
   /** Album detail page (album cover + track list). */
   public static readonly ALBUM_DETAIL: string = 'AlbumDetailPage';
   /** Settings category sub-page (second level of the settings menu). */

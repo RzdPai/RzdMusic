@@ -1,0 +1,12 @@
+{
+    "color": [
+        {
+            "name": "mine_top_fade",
+            "value": "#FF000000"
+        },
+        {
+            "name": "mine_top_fade_end",
+            "value": "#00000000"
+        }
+    ]
+}

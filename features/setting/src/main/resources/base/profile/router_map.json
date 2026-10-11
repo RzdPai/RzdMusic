@@ -44,6 +44,14 @@
       "data": {
         "description": "Settings entries page pushed from the Mine tab"
       }
+    },
+    {
+      "name": "MinePlaylistPage",
+      "pageSourceFile": "src/main/ets/view/MinePlaylistPage.ets",
+      "buildFunction": "MinePlaylistPageBuilder",
+      "data": {
+        "description": "All-playlists page pushed from the Mine tab (the deleted playlist tab keeps its full capability here)"
+      }
     }
   ]
 }

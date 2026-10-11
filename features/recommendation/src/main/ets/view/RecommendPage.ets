@@ -297,13 +297,7 @@ export struct RecommendPage {
               .width(48)
               .height(48)
               .color($r('app.color.mini_bar_primary'))
-            // 切平台时立刻告诉用户"在换哪个平台"，而不是一个没有信息量的转圈
-            if (this.recommendViewModel.homeLoadingLabel.length > 0) {
-              Text(this.recommendViewModel.homeLoadingLabel)
-                .fontSize(13)
-                .fontColor($r('app.color.font_tertiary'))
-                .margin({ top: 12 })
-            }
+            // ⚠️ 用户要求简洁：加载态只留转圈，**不再写"正在加载 QQ音乐·新歌榜…"这种说明文字**。
           }
           .width(StyleConstants.FULL_WIDTH)
           .layoutWeight(1)

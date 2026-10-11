@@ -38,8 +38,8 @@ import {
 } from 'musicbasic';
 import { dispatchShellPlaybackIntent, LXSourceHost, PlaybackPageCoverContent } from 'player';
 import { RecommendPage } from 'recommendation';
-import { PlaylistsPage, PlaylistTransitionOverlay } from 'playlist';
-import { MinePage, SettingPage } from 'setting';
+import { PlaylistTransitionOverlay } from 'playlist';
+import { MinePage } from 'setting';
 import { localMusic } from 'localmusic';
 import type { MatchSongInfo } from 'localmusic';
 import { syncManager } from 'sync';
@@ -92,6 +92,13 @@ struct Index {
   /** Initializes play queue from the local database. */
   aboutToAppear() {
     this.appState.playQueueIds = MusicDbApi.getInstance().getSongList().map((dto) => dto.id);
+    // ★ 侧栏从 4 项收成 2 项（推荐 / 我的）之后，`TabSwitchState.tabIndex` 可能是上一版留下的
+    //   越界下标（旧「歌单」= 1、「我的」= 2、「设置」= 3）—— 越界时下面两个分支都不成立，
+    //   主区会整片空白。共享状态里没有"页签数"这个概念，所以在这里夹一次。
+    if (this.tabState.tabIndex < 0 || this.tabState.tabIndex > 1) {
+      Logger.warn('RzdShell', `pc tab index out of range (${this.tabState.tabIndex}), reset to 0`);
+      this.tabState.tabIndex = 0;
+    }
     this.themeState.color = MusicStoreService.getInstance().getThemeColor();
     // 与手机壳一致：把持久化的「首页来源平台」灌进共享状态（漏了这一段 = 冷启动后首页平台永远是 qq）
     this.homeSourceState.source = MusicStoreService.getInstance().getHomeSource();
@@ -225,9 +232,7 @@ struct Index {
           .alignItems(VerticalAlign.Center)
 
           this.SideNavItem(0, $r('app.string.tab_home'), $r('sys.symbol.house_fill'));
-          this.SideNavItem(1, $r('app.string.tab_music_hall'), $r('sys.symbol.auditorium'));
-          this.SideNavItem(2, $r('app.string.tab_cafe_listen'), $r('sys.symbol.person_crop_circle_fill_1'));
-          this.SideNavItem(3, $r('app.string.tab_mine'), $r('sys.symbol.gearshape_fill'));
+          this.SideNavItem(1, $r('app.string.tab_cafe_listen'), $r('sys.symbol.person_crop_circle_fill_1'));
         }
         .width(StyleConstants.FULL_WIDTH)
         .height(StyleConstants.FULL_HEIGHT)
@@ -240,83 +245,59 @@ struct Index {
         .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.START])
 
         Column() {
-          if (this.tabState.tabIndex === 0) {
-            Column() {
-              HdsNavigation(this.pageIndexInfos) {
+          /**
+           * ★ 两个页签（推荐 / 我的）**共用同一个 `HdsNavigation`**，与 `products/default`
+           *   的手机壳结构一致（那边是 `HdsNavigation(pageIndexInfos) { HdsTabs { … } }`）。
+           *
+           * 为什么必须合成一个（2026-10-11 修）：
+           *   官方文档《Navigation 开发指导》原文 —— "每个 Navigation 都有自己的路由栈，
+           *   **不可共享**"。所以不能把同一个 `NavPathStack` 分别塞给两个 `HdsNavigation`。
+           *   而 `MinePage` 里的「收藏 → 歌手 / 专辑详情」「歌单 → 歌单详情」是往
+           *   `@Consumer('pageIndexInfos')`（= 壳层这个共享栈）上 push 的：以前「我的」那一支
+           *   给的是 inline `new NavPathStack()`，推上去的页面没登记路由表；而共享栈又只绑在
+           *   「推荐」那一支上，切到「我的」时那一支**已卸载** —— 表现就是"点了没反应"。
+           *   现在只有一个 Navigation、一个栈，页签切换发生在它**内部**，栈与渲染者始终同一个。
+           *
+           * `MinePage` 自带的 `MinePage.localStack` 不受影响：它管自己的设置页 / 全部歌单页，
+           * 属于"内层 Navigation 用系统路由表"，与本层这一支互不干扰。
+           */
+          HdsNavigation(this.pageIndexInfos) {
+            if (this.tabState.tabIndex === 0) {
+              Column() {
                 RecommendPage()
               }
               .width(StyleConstants.FULL_WIDTH)
-              .layoutWeight(1)
-              .mode(NavigationMode.Stack)
-              .customNavContentTransition((from: NavContentInfo, _to: NavContentInfo,
-                operation: NavigationOperation): NavigationAnimatedTransition | undefined => {
-                return getPlaylistTransitionState().navigationReturn(this.getUIContext(), from, operation);
-              })
-              .hideTitleBar(true)
-              .hideToolBar(true)
+              .height(StyleConstants.FULL_HEIGHT)
               .backgroundColor($r('sys.color.slider_outset_and_none_track_color'))
-            }
-            .width(StyleConstants.FULL_WIDTH)
-            .height(StyleConstants.FULL_HEIGHT)
-            .transition(TransitionEffect.OPACITY.animation({ duration: 250, curve: Curve.EaseInOut }))
-          } else if (this.tabState.tabIndex === 1) {
-            Column() {
-              HdsNavigation(new NavPathStack()) {
-                PlaylistsPage()
-              }
-              .width(StyleConstants.FULL_WIDTH)
-              .layoutWeight(1)
-              .mode(NavigationMode.Stack)
-              .customNavContentTransition((from: NavContentInfo, _to: NavContentInfo,
-                operation: NavigationOperation): NavigationAnimatedTransition | undefined => {
-                return getPlaylistTransitionState().navigationReturn(this.getUIContext(), from, operation);
-              })
-              .hideTitleBar(true)
-              .hideToolBar(true)
-              .backgroundColor($r('app.color.pc_main_alt_background'))
-            }
-            .width(StyleConstants.FULL_WIDTH)
-            .height(StyleConstants.FULL_HEIGHT)
-            .transition(TransitionEffect.OPACITY.animation({ duration: 250, curve: Curve.EaseInOut }))
-          } else if (this.tabState.tabIndex === 2) {
-            Column() {
-              HdsNavigation(new NavPathStack()) {
+              .transition(TransitionEffect.OPACITY.animation({ duration: 250, curve: Curve.EaseInOut }))
+            } else {
+              /**
+               * 「我的」（侧栏第 2 项 = 最后一项）。
+               *
+               * ★ 侧栏从 4 项收成 2 项（推荐 / 我的），与手机壳同一套口径：
+               *   「歌单」「设置」两项的内容都在「我的」页里（歌单卡 / 入口卡），
+               *   所以这里不再各占一格 —— 被删掉的那两项的能力入口见
+               *   `products/default` 的同名注释（`MinePage` 的二级页）。
+               */
+              Column() {
                 MinePage()
               }
               .width(StyleConstants.FULL_WIDTH)
-              .layoutWeight(1)
-              .mode(NavigationMode.Stack)
-              .customNavContentTransition((from: NavContentInfo, _to: NavContentInfo,
-                operation: NavigationOperation): NavigationAnimatedTransition | undefined => {
-                return getPlaylistTransitionState().navigationReturn(this.getUIContext(), from, operation);
-              })
-              .hideTitleBar(true)
-              .hideToolBar(true)
+              .height(StyleConstants.FULL_HEIGHT)
               .backgroundColor($r('app.color.pc_main_alt_background'))
+              .transition(TransitionEffect.OPACITY.animation({ duration: 250, curve: Curve.EaseInOut }))
             }
-            .width(StyleConstants.FULL_WIDTH)
-            .height(StyleConstants.FULL_HEIGHT)
-            .transition(TransitionEffect.OPACITY.animation({ duration: 250, curve: Curve.EaseInOut }))
-          } else {
-            Column() {
-              HdsNavigation(new NavPathStack()) {
-                SettingPage()
-              }
-              .width(StyleConstants.FULL_WIDTH)
-              .layoutWeight(1)
-              .mode(NavigationMode.Stack)
-              .customNavContentTransition((from: NavContentInfo, _to: NavContentInfo,
-                operation: NavigationOperation): NavigationAnimatedTransition | undefined => {
-                return getPlaylistTransitionState().navigationReturn(this.getUIContext(), from, operation);
-              })
-              .hideTitleBar(true)
-              .hideToolBar(true)
-              .backgroundColor($r('app.color.pc_main_alt_background'))
-            }
-            .width(StyleConstants.FULL_WIDTH)
-            .height(StyleConstants.FULL_HEIGHT)
-            .transition(TransitionEffect.OPACITY.animation({ duration: 250, curve: Curve.EaseInOut }))
           }
+          .width(StyleConstants.FULL_WIDTH)
+          .layoutWeight(1)
+          .mode(NavigationMode.Stack)
+          .customNavContentTransition((from: NavContentInfo, _to: NavContentInfo,
+            operation: NavigationOperation): NavigationAnimatedTransition | undefined => {
+            return getPlaylistTransitionState().navigationReturn(this.getUIContext(), from, operation);
+          })
+          .hideTitleBar(true)
+          .hideToolBar(true)
+          .backgroundColor(this.mainContentBackgroundColor())
         }
         .width(StyleConstants.FULL_WIDTH)
         .height(StyleConstants.FULL_HEIGHT)

@@ -15,7 +15,7 @@
 
 import { AppStorageV2, LengthMetrics, uiObserver } from '@kit.ArkUI';
 import { guardPlayerBack } from 'musicbasic';
-import { AlbumRouteParam, AmbientState, AppStorageKeys, BreakpointType, FavoriteEntry, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, ThemeState, WindowUtil, buildTitleMaterial } from 'musicbasic';
+import { AlbumRouteParam, AmbientState, AppStorageKeys, BreakpointType, FavoriteEntry, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, ThemeState, TitleBarConstants, WindowUtil, buildTitleMaterial } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType } from '@kit.UIDesignKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { http } from '@kit.NetworkKit';
@@ -26,7 +26,6 @@ import { SongMoreMenu } from 'playlist';
 import { DetailImmersiveBackdrop } from './DetailImmersiveBackdrop';
 import { ArtistDetailDataSource } from './ArtistDetailDataSource';
 import { WindowInfo, getWindowInfoState } from 'musicbasic';
-import { hdsMaterial } from '@kit.UIDesignKit';
 
 const ALBUM_PAGE_LIMIT: number = 100;
 
@@ -91,6 +90,21 @@ export struct AlbumDetailPage {
       hilog.info(0, 'RzdDetailImmersive', 'album scrollVp=%{public}f thresholdVp=264 avoidTopVp=%{public}f',
         this.detailScrollVp, this.windowInfo.statusBarTopVp);
     }
+  }
+
+  /**
+   * 页内可用高度（vp）= 窗口高 − 状态栏避让。
+   *
+   * 与 `ArtistDetailPage.pageContentHeightVp` 同款：照片层挂在内容驱动的 Stack 里，
+   * 百分比 / `LayoutPolicy.matchParent` 会量成 0 ⇒ 照片整张不画（"顶部是纯色不是照片"）。
+   * @returns 高度（vp）；窗口尺寸未就绪时返回 0。
+   */
+  private pageContentHeightVp(): number {
+    const hPx: number = this.windowInfo.windowSize.height;
+    if (hPx <= 0) {
+      return 0;
+    }
+    return Math.max(0, this.getUIContext().px2vp(hPx) - this.windowInfo.statusBarTopVp);
   }
 
   aboutToAppear(): void {
@@ -301,6 +315,18 @@ export struct AlbumDetailPage {
     this.preapplyStatusBarColor();
   }
 
+  /**
+   * 封面地址到手（详情接口返回 / 路由带进来晚了一拍）时也要重下发一次。
+   *
+   * 理由：`avgColor` 只有在**取到色**之后才变，而取色的输入是封面地址；封面地址本身
+   * 可能就是异步才有的（`loadDetail()` 回包）。这一档不补，首帧那一次下发就停在
+   * `#1f1f22` 推出的白字判据上，一旦封面是浅色图，状态栏会与顶部照片不符。
+   */
+  @Monitor('infoPicUrl')
+  onPicUrlChanged(): void {
+    this.preapplyStatusBarColor();
+  }
+
   /** 次要文字颜色。 */
   private fgSecondary(): string {
     return this.isLightBackdrop() ? '#99000000' : '#B3FFFFFF';
@@ -432,11 +458,23 @@ export struct AlbumDetailPage {
     })
   }
 
-  /** HDS 标题栏：返回按钮 + 专辑名，沉浸渐变模糊。 */
+  /**
+   * HDS 标题栏：返回按钮 + 收藏/分享，无标题文字。
+   *
+   * ★ 沉浸光感与歌手页**完全同款**（同一份写法，别两边各写一套）：
+   *   官方《沉浸光感功耗优化》—— 「其他组件仅在 Navigation/NavDestination 标题栏或横向
+   *   Tabs 中 barPosition 为 BarPosition.End 的底部 TabBar 中生效。在其他区域中设置沉浸光感
+   *   效果不生效。」⇒ 标题栏是允许区域；`TitleBarStyleOptions.systemMaterialEffect`
+   *   （`@since 6.1.0(23)`）就是官方的真实材质入口。
+   *   官方 FAQ《材质效果的显示层级问题》——「沉浸光感的视觉层级位于组件的 backgroundColor、
+   *   backgroundBlurStyle 等属性之下」，所以：① 不滚动时背景必须 `Color.Transparent`；
+   *   ② 标题栏上不再叠 `backgroundBlurStyle` / `backgroundEffect`。
+   *   本页 `originalStyle.backgroundStyle.backgroundColor` 本来就是透明，保持即可。
+   */
   private cachedTitleBar: HdsNavigationTitleBarOptions | undefined = undefined;
 
   private getAlbumTitleBar(): HdsNavigationTitleBarOptions {
-    hilog.info(0x0000, 'RzdAlbumDetail', 'getAlbumTitleBar called');
+    hilog.info(0x0000, 'RzdAlbumDetail', 'getAlbumTitleBar called level=%{public}d', this.ambientState.level);
     let bar = this.cachedTitleBar;
     if (bar === undefined) {
       bar = {
@@ -445,7 +483,8 @@ export struct AlbumDetailPage {
           end: LengthMetrics.vp(16)
         },
         style: {
-          blurStrategy: BlurStrategy.DISABLE,
+          // ENABLE：滚动渐变那一档也要走模糊档（原来被改成 DISABLE，等于把材质链断掉）。
+          blurStrategy: BlurStrategy.ENABLE,
           scrollEffectOpts: {
             enableScrollEffect: true,
             scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR,
@@ -453,6 +492,7 @@ export struct AlbumDetailPage {
             blurEffectiveEndOffset: LengthMetrics.vp(264)
           },
           originalStyle: {
+            // ① 不滚动时**必须透明**，否则不透明底把材质整个盖住（"一块纯色"）。
             backgroundStyle: { backgroundColor: Color.Transparent },
             contentStyle: {
               backIconStyle: {
@@ -518,7 +558,13 @@ export struct AlbumDetailPage {
     }
     const style = bar.style;
     if (style !== undefined) {
-      style.systemMaterialEffect = { materialType: hdsMaterial.MaterialType.NONE };
+      // ★ 官方沉浸光感材质（与歌手页同一份写法）。
+      //   ⚠️ 不要再写回 `{ materialType: hdsMaterial.MaterialType.NONE }` —— 那等于关掉光感。
+      const material = buildTitleMaterial(this.ambientState.level);
+      style.systemMaterialEffect = material;
+      hilog.info(0x0000, 'RzdAlbumDetail',
+        'titleBar material type=%{public}d level=%{public}d avgColor=%{public}s',
+        material.materialType ?? -1, material.materialLevel ?? -1, this.avgColor);
     }
     return bar;
   }
@@ -530,6 +576,8 @@ export struct AlbumDetailPage {
           photo: this.infoPicUrl,
           color: this.avgColor,
           topAvoidVp: this.windowInfo.statusBarTopVp,
+          // ★ 页内可用高度（vp）：照片层必须拿到**显式数值**才画得出来。
+          pageHeightVp: this.pageContentHeightVp(),
           scrollVp: this.detailScrollVp,
           page: 'album'
         })
@@ -609,8 +657,9 @@ export struct AlbumDetailPage {
             }
         }
         .width('100%')
-        .height('calc(100% - 56vp)')
-        .margin({ top: 56 })
+        // 与 `TitleBarConstants.ROW_HEIGHT_VP`（56vp）同值：别写魔数。
+        .height('calc(100% - ' + TitleBarConstants.ROW_HEIGHT_VP + 'vp)')
+        .margin({ top: TitleBarConstants.ROW_HEIGHT_VP })
         .contentEndOffset(96)
         .cachedCount(4)
         .scrollBar(BarState.Off)

@@ -14,7 +14,7 @@
  */
 
 import { AppStorageV2, curves, uiObserver } from '@kit.ArkUI';
-import { HdsNavigation, HdsTabsController, HdsTabsBarChangeMode, hdsMaterial } from '@kit.UIDesignKit';
+import { HdsNavigation, HdsTabsController, HdsTabsBarChangeMode, SystemMaterialParams, hdsMaterial } from '@kit.UIDesignKit';
 import {
   AmbientState,
   AppStorageKeys,
@@ -45,8 +45,8 @@ import {
 } from 'musicbasic';
 import { dispatchShellPlaybackIntent, LXSourceHost, PlaybackPageCoverContent, PlayerViewModel } from 'player';
 import { RecommendPage } from 'recommendation';
-import { HomeMiniBarPlayer, HomeMiniBarPlayerAside, PlaylistsPage, PlaylistTransitionOverlay } from 'playlist';
-import { MinePage, SettingPage } from 'setting';
+import { HomeMiniBarPlayer, HomeMiniBarPlayerAside, PlaylistTransitionOverlay } from 'playlist';
+import { MinePage } from 'setting';
 // 新模块：本地音乐（导入设备音频到沙箱）与洛雪同步客户端。
 // ⚠️ hvigor 对 HAR 是**按引用编译**的：没有任何代码 import 它们时，
 //    即使已登记进 build-profile.json5，这两个模块也**不会被编译**（构建照样绿）。
@@ -227,6 +227,13 @@ struct Index {
   /** Initializes play queue ids from local DB for the session. */
   aboutToAppear() {
     this.appState.playQueueIds = MusicDbApi.getInstance().getSongList().map((dto) => dto.id);
+    // ★ 页签从 4 个收成 2 个（推荐 / 我的）之后，`TabSwitchState.tabIndex` 可能是上一版留下的
+    //   越界下标（比如旧的「我的」= 2、「设置」= 3）—— HdsTabs 拿到越界下标会落在空白页上。
+    //   共享状态里没有"页签数"这个概念，所以在这里夹一次：越界即回首页。
+    if (this.tabState.tabIndex < 0 || this.tabState.tabIndex > 1) {
+      Logger.warn(RzdShellLogTag, `tab index out of range (${this.tabState.tabIndex}), reset to 0`);
+      this.tabState.tabIndex = 0;
+    }
     this.ambientState.level = MusicStoreService.getInstance().getAmbientLevel();
     this.themeState.color = MusicStoreService.getInstance().getThemeColor();
     this.homeSourceState.source = MusicStoreService.getInstance().getHomeSource();
@@ -630,6 +637,32 @@ struct Index {
     })
   }
 
+  /**
+   * 光感标题栏材质（HDS 官方 `systemMaterialEffect`），跟随环境光档位。
+   *
+   *
+   * ⚠️ 这个函数**只能**喂给 HDS 的 `titleBar.style.systemMaterialEffect` 或
+   *    `HdsTabs` 的 `barFloatingStyle.systemMaterialEffect`。官方《沉浸光感功耗优化》原文：
+   *      「其他组件仅在 Navigation/NavDestination 标题栏或横向 Tabs 中 barPosition 为
+   *        BarPosition.End 的底部 TabBar 中生效。在其他区域中设置沉浸光感效果不生效。」
+   *    ⇒ 直接把它挂到普通容器（比如下面那条 `floatingMiniBar` 的 Column）上**是不生效的**，
+   *    不要那样写。留着它，是为了在"把二级播放条搬进 HdsTabs 的 miniBar"那条路
+   *    （见 {@link floatingMiniBar} 的说明）里能直接复用同一套档位。
+   * @returns HDS 材质参数（`@since 6.1.0(23)`，default/pc 的 compatible 均 ≥ 23）。
+   */
+  private ambientTitleMaterial(): SystemMaterialParams {
+    switch (this.ambientLevelIndex()) {
+      case 1:
+        return { materialType: hdsMaterial.MaterialType.IMMERSIVE, materialLevel: hdsMaterial.MaterialLevel.SMOOTH };
+      case 2:
+        return { materialType: hdsMaterial.MaterialType.IMMERSIVE, materialLevel: hdsMaterial.MaterialLevel.GENTLE };
+      case 3:
+        return { materialType: hdsMaterial.MaterialType.IMMERSIVE, materialLevel: hdsMaterial.MaterialLevel.EXQUISITE };
+      default:
+        return { materialType: hdsMaterial.MaterialType.ADAPTIVE, materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE };
+    }
+  }
+
   /** Bottom inset (vp) for the floating tab bar; smaller on short-height SM layout. */
   private homeTabBarBottomMarginVp(): number {
     const compactLayout: boolean = this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_SM &&
@@ -660,16 +693,20 @@ struct Index {
    * 单个页签被点击/选中时的弹跳触发计数（每个页签一个）。
    *
    * `symbolEffect(effect, trigger)` 是「trigger 变化就播一次」，所以每个页签必须
-   * **各用各的计数** —— 共用一个的话四个图标会一起弹（设计规范要的是「选中态」那一颗弹）。
+   * **各用各的计数** —— 共用一个的话两个图标会一起弹（设计规范要的是「选中态」那一颗弹）。
+   *
+   * ⚠️ 长度必须等于页签数（现在是 2）：`TabBarItem` 按下标取。
    */
-  @Local tabBounceTriggers: number[] = [0, 0, 0, 0];
+  @Local tabBounceTriggers: number[] = [0, 0];
   /**
    * 「回到顶部」指令（每个页签一个，递增触发）。
    *
    * 设计规范：点击**当前**页签要把界面回滚到顶部/指定位置。`onTabBarClick` 在
    * 点已选中页签时也会触发，所以不需要在页签里自己加 onClick（那会打断页签切换）。
+   *
+   * ⚠️ 长度必须等于页签数（现在是 2）：`HomeTabsPages()` 按下标取。
    */
-  @Local tabScrollTopCommands: number[] = [0, 0, 0, 0];
+  @Local tabScrollTopCommands: number[] = [0, 0];
 
   /** 页签选中态弹跳（BounceSymbolEffect + EffectDirection.DOWN，见底部页签设计规范）。 */
   private playTabBounce(index: number): void {
@@ -790,17 +827,47 @@ struct Index {
   /**
    * 二级页面的悬浮迷你播放条（胶囊）。
    *
+   * ══════════════════════ 为什么这里**没有**官方光感（重要，别再来回翻烧饼）══════════════════════
+   *
+   * 用户要的是"官方的、真正的光感"。查过官方两份文档后，这条路在本结构下**走不通**，原因有三条，
+   * 每条都有出处：
+   *
+   * ① 生效范围（官方《沉浸光感功耗优化》）：
+   *    「其他组件仅在 Navigation/NavDestination 标题栏或横向 Tabs 中 barPosition 为
+   *      BarPosition.End 的底部 TabBar 中生效。在其他区域中设置沉浸光感效果不生效。」
+   *    本函数画的是**壳层 Stack 里一个普通 Column**，既不是标题栏也不是 TabBar
+   *    ⇒ 给它挂 `systemMaterialEffect` 是**不生效**的（不是"效果弱"，是根本不渲染）。
+   *
+   * ② 层级（官方 FAQ《材质效果的显示层级问题》）：
+   *    「沉浸光感的视觉层级位于组件的 backgroundColor、backgroundBlurStyle 等属性之下」
+   *    ⇒ 就算有材质，`backgroundColor` 不透明也会把它盖住（本胶囊必须有不透明/半透明底
+   *    才能保证歌名可读，二者天然冲突）。
+   *
+   * ③ 结构（本工程）：二级页面是同一个 `HdsNavigation` 栈里的 `NavDestination`，
+   *    HDS 浮动底栏（首页那条真材质）在 `HdsNavigation` 的 **content 之内**，被
+   *    `NavDestination` 整片盖住 —— 这也正是本函数存在的原因（见 `shouldShowFloatingMiniBar`）。
+   *    唯一合规的位置是"**把二级页自己**放进一个 `barPosition(End)` 的 `HdsTabs`"，
+   *    而工程有 24+ 个二级页（feature 层 7 个 HAR），不属于本次允许改动的文件面。
+   *
+   * ⇒ 结论：**本函数保持"普通胶囊 + backgroundEffect 近似"，并且明确标注它不是官方材质。**
+   *    要真上官方材质，唯一合规做法是：在承载二级页的那层里放一个
+   *    `HdsTabs({ barPosition: BarPosition.End })` + `.barOverlap(true)` + `.vertical(false)`
+   *    （三条件必须同时满足，缺一 `systemMaterialEffect` 不生效 —— 见官方《组件适配沉浸光感》），
+   *    把 `HomeMiniBarPlayer` 作为它的 `barFloatingStyle.miniBar.miniBarBuilder`，
+   *    材质用 `this.ambientTitleMaterial()`；此时**不要**再给该 bar 设
+   *    `barBackgroundColor` / `barBackgroundBlurStyle`（官方原文："避免遮挡材质效果"）。
+   *
+   * ══════════════════ 尺寸 / 触摸 / 形变语义（这些**不能**动）══════════════════
+   *
    * 形态用**首页两排 Tab 时上面那条**的写法：同一个
-   * `HomeMiniBarPlayer({ showPreviousTrack: false, followAppMiniBarExpanded: false })`，
-   * 回退普通 Column 胶囊与原 sheet 背景/模糊，不再使用二级 HDS Tabs 试验宿主。
+   * `HomeMiniBarPlayer({ showPreviousTrack: false, followAppMiniBarExpanded: false })`。
    *
    * 三个尺寸都必须**显式**给，不能靠百分比撑：
-   *   - 高度：二级固定封面 30vp + 上下各 6vp，宿主与浮动栏均固定 42vp。
-   *     保留原封面、内边距与折叠形态，不改变形变起点。
+   *   - 高度：56vp（封面 44 + 上下各 6vp）。它是播放页形变的起点，几何只随
+   *     `FLOATING_MINI_BAR_HEIGHT_VP` 这一个常量变化。
    *   - 宽度：**显式 vp**（见 {@link floatingMiniBarWidthVp}）。之前靠 `width('100%')` +
    *     外层 padding 居中，在部分形态下算错 —— 要么贴到屏幕右边，要么撑成整条大长方形
-   *     （用户反馈的「大长方形，很丑」就是宽度算成了整屏）。写死宽度后居中由
-   *     `Column` 的 `alignItems(HorizontalAlign.Center)` 保证，和窗口宽度无关。
+   *     （用户反馈的「大长方形，很丑」就是宽度算成了整屏）。
    *   - 圆角：胶囊用高度的一半，视觉上才是"一条胶囊"而不是"一块板子"。
    *
    * 触摸：整屏 Stack 必须 `HitTestMode.Transparent` —— 默认的 Default 会把二级页面的
@@ -822,10 +889,11 @@ struct Index {
       .borderWidth(1)
       .borderColor($r('app.color.comp_divider'))
       .clip(true)
-      // 光感材质：模糊 + 提饱和 + 半透明底色（HDS 的 `systemMaterialEffect` 只挂在
-      // HDS 自己的组件上，普通容器拿不到，这里用等价的 `backgroundEffect` 做同一种观感）。
-      // 底色本身就是半透明的（见 color.json 的 floating_mini_bar_sheet_background），
-      // 透明度过高会盖掉模糊 —— 改这个资源时要一起看效果。
+      // ⚠️ 这不是官方材质，是**近似**（原因见本 builder 顶部那三条，别删这段说明）。
+      //    官方 `systemMaterialEffect` 只认 Navigation/NavDestination 标题栏与
+      //    barPosition(End) 的横向 Tabs 底栏；普通容器上它不生效。
+      //    底色本身是半透明的（color.json 的 floating_mini_bar_sheet_background），
+      //    透明度过高会盖掉模糊 —— 改这个资源时要一起看效果。
       .backgroundEffect({
         radius: this.floatingMiniBarEffectRadiusVp(),
         saturation: 1.15,
@@ -833,8 +901,11 @@ struct Index {
         color: $r('app.color.floating_mini_bar_sheet_background')
       })
       .onAppear((): void => {
+        // 日志里显式写明 mode=fallback：真机抓这条就知道现在走的是近似，不是官方材质。
         Logger.info('RzdSecondaryMiniMaterial',
-          `capsule material radius=${this.floatingMiniBarEffectRadiusVp()} height=${FLOATING_MINI_BAR_HEIGHT_VP}`);
+          `mode=fallback-backgroundEffect host=shell-capsule radius=${this.floatingMiniBarEffectRadiusVp()} ` +
+            `height=${FLOATING_MINI_BAR_HEIGHT_VP} width=${this.floatingMiniBarWidthVp()} ` +
+            `ambient=${this.ambientLevelIndex()} officialRegion=no`);
       })
       .margin({ bottom: this.floatingMiniBarBottomMarginVp() })
     }
@@ -928,7 +999,23 @@ struct Index {
     return Math.max(12, systemInset + 8);
   }
 
-  /** Tab pages: recommend, playlist (history/favorites), mine, settings. */
+  /**
+   * 底部页签：**只剩两个** —— 推荐 / 我的。
+   *
+   * 为什么是这两个（用户 2026-10-11 明确要求"底栏只剩两个 Tab"，另一个由我们自己判断）：
+   *   - 「推荐」是内容主面（首页推荐流），也是全场所有"去首页"动作的落点，删掉它应用就没了入口；
+   *   - 「我的」是参考工程 lxmusic-harmony 的做法：它自己也**从四个页签（推荐/歌单/我的/设置）
+   *     收成了三个（推荐/听书/我的）**，理由逐字同构 —— 歌单与设置的**内容都搬进了「我的」页**
+   *     （快捷入口 + 歌单卡 + 设置卡），再留着那两个页签就是"同一件事两个入口"。
+   *     我们没有「听书」，所以正好是**两个**。
+   *
+   * 被删掉的两个页签，能力都有新入口（一条都没丢）：
+   *   - 「设置」→「我的」页那张**入口卡**的「设置」行 → `MineSettingsPage` 二级页
+   *     （搜索框 + 六组设置项，点进去仍是同一个 `SettingsDetailPage`）；
+   *   - 「歌单」→「我的」页那张**歌单卡**：卡内直接列歌单（点进详情 / 长按重命名·删除）、
+   *     动作区「新建歌单」（就地弹层）、「歌单导入」与卡头「全部」→ `MinePlaylistPage`
+   *     二级页（薄壳，渲染的仍是 `PlaylistsPage` 整页：排序 / 导出 / 改封面 / 网络导入都在）。
+   */
   @Builder
   private HomeTabsPages() {
     TabContent() {
@@ -948,33 +1035,13 @@ struct Index {
 
     TabContent() {
       Column() {
-        PlaylistsPage({ scrollTopCommand: this.tabScrollTopCommands[1] })
+        MinePage({ scrollTopCommand: this.tabScrollTopCommands[1] })
       }
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
       .expandSafeArea([SafeAreaType.SYSTEM, SafeAreaType.CUTOUT], [SafeAreaEdge.TOP])
     }
-    .tabBar(this.TabBarItem(1, $r('app.string.tab_music_hall'), $r('sys.symbol.auditorium')))
-
-    TabContent() {
-      Column() {
-        MinePage({ scrollTopCommand: this.tabScrollTopCommands[2] })
-      }
-      .width(StyleConstants.FULL_WIDTH)
-      .height(StyleConstants.FULL_HEIGHT)
-      .expandSafeArea([SafeAreaType.SYSTEM, SafeAreaType.CUTOUT], [SafeAreaEdge.TOP])
-    }
-    .tabBar(this.TabBarItem(2, $r('app.string.tab_cafe_listen'), $r('sys.symbol.person_crop_circle_fill_1')))
-
-    TabContent() {
-      Column() {
-        SettingPage({ scrollTopCommand: this.tabScrollTopCommands[3] })
-      }
-      .width(StyleConstants.FULL_WIDTH)
-      .height(StyleConstants.FULL_HEIGHT)
-      .expandSafeArea([SafeAreaType.SYSTEM, SafeAreaType.CUTOUT], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
-    }
-    .tabBar(this.TabBarItem(3, $r('app.string.tab_mine'), $r('sys.symbol.gearshape_fill')))
+    .tabBar(this.TabBarItem(1, $r('app.string.tab_cafe_listen'), $r('sys.symbol.person_crop_circle_fill_1')))
   }
 
   /** Root UI: {@link HdsNavigation} with tabs and optional playback cover. */
@@ -999,13 +1066,10 @@ struct Index {
             // （smallWidth = 窗口宽 − 96 / 284 / 328）会让整条底栏明显窄于屏幕，
             // 「上下两排」时两侧就留出很大空隙（用户反馈的就是这个）。
             barBottomMargin: this.homeTabBarBottomMarginVp(),
-            systemMaterialEffect: this.ambientLevelIndex() === 1 ?
-              { materialType: hdsMaterial.MaterialType.IMMERSIVE, materialLevel: hdsMaterial.MaterialLevel.SMOOTH } :
-              this.ambientLevelIndex() === 2 ?
-                { materialType: hdsMaterial.MaterialType.IMMERSIVE, materialLevel: hdsMaterial.MaterialLevel.GENTLE } :
-                this.ambientLevelIndex() === 3 ?
-                  { materialType: hdsMaterial.MaterialType.IMMERSIVE, materialLevel: hdsMaterial.MaterialLevel.EXQUISITE } :
-                  { materialType: hdsMaterial.MaterialType.ADAPTIVE, materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE },
+            // ★ 这条是**官方真实光感**：HdsTabs 的浮动底栏（barOverlap + !vertical +
+            //   barPosition(End) 三条件同时满足）+ `systemMaterialEffect`。
+            //   档位与标题栏共用 ambientTitleMaterial()，不要再在本处内联一套三目。
+            systemMaterialEffect: this.ambientTitleMaterial(),
             // 智感握姿：跟随握持手调整浮动条左右偏置
             adaptToHandedness: true,
             miniBar: {

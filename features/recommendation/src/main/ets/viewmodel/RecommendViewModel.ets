@@ -220,26 +220,10 @@ export class RecommendViewModel {
   }
 
   /**
-   * 「精选推荐」标题下面那行来源说明（`酷狗音乐 · 飙升榜`）。
+   * 把首页数据来源的**内部标签**同步好（平台名 / 榜单名）。
    *
-   * 用户切了「首页来源平台」必须能一眼看到首页换没换 —— 这行字就是那个"看得见的反馈"。
-   *
-   * @returns 来源说明；平台名还没同步时返回空串（此时不显示这行）。
-   */
-  public homeSourceCaption(): string {
-    if (this.homeSourceLabel.length === 0) {
-      return '';
-    }
-    return this.homeBoardLabel.length > 0
-      ? `${this.homeSourceLabel} · ${this.homeBoardLabel}`
-      : this.homeSourceLabel;
-  }
-
-  /**
-   * 把首页数据来源的文案同步到 UI（平台名 / 榜单名 / 加载中提示）。
-   *
-   * 必须在**发请求之前**同步做掉：这样切平台时用户立刻看到
-   * 「正在加载 酷狗音乐 · 飙升榜…」，而不是一整页无提示的骨架。
+   * ⚠️ 2026-10 用户要求「简洁」后，这些标签**只用于内部日志与降级判断**，
+   *    界面上一律不显示（原来的"正在加载 …"、"QQ音乐 · 新歌榜"来源行都已删除）。
    *
    * @param homeSource 设置里选中的首页平台值（'qq'|'kg'|'wy'）。
    */
@@ -253,9 +237,8 @@ export class RecommendViewModel {
       this.homeBoardLabel = '内地榜';
     }
     this.homeHint = '';
-    this.homeLoadingLabel = this.homeBoardLabel.length > 0
-      ? `正在加载 ${this.homeSourceLabel} · ${this.homeBoardLabel}…`
-      : `正在加载 ${this.homeSourceLabel}…`;
+    // ⚠️ 加载态文案也一并停用（用户要求简洁）：只留转圈，不写"正在加载 XX音乐·某榜…"。
+    this.homeLoadingLabel = '';
   }
 
   /**
@@ -305,18 +288,8 @@ export class RecommendViewModel {
     return `${MusicDataService.sourceName(this.plazaSourceCode())}音乐`;
   }
 
-  /**
-   * 「歌单广场没跟着首页平台走」的说明文案。
-   *
-   * 空串 = 不需要显示（广场本来就跟着首页平台）。
-   * @returns 给广场标题下面那行小字用的说明。
-   */
-  public plazaFollowNote(): string {
-    if (!this.plazaNotFollowing) {
-      return '';
-    }
-    return `${this.homeSourceLabel}的歌单广场接口暂时不可用，这里仍显示${this.plazaSourceLabel()}歌单。`;
-  }
+  // ⚠️ 原 `plazaFollowNote()`（"XX音乐的歌单广场接口暂时不可用，这里仍显示…歌单"）
+  //    已按用户「简洁」要求删除：行为不变（不支持的平台仍不切广场），界面不再解释。
 
   /** Refreshes the guest flag from the account store; kicks off guest sections when guest. */
   public refreshGuestMode(): void {
@@ -595,20 +568,10 @@ export class RecommendViewModel {
     if (usedBoardName.length > 0) {
       this.homeBoardLabel = usedBoardName;
     }
-    // ★ 诚实的降级说明：拿不到内容就写清楚，不伪造数据、也不假装"没变化"。
-    if (songs.length === 0) {
-      this.homeHint = this.isGuestMode
-        ? `未登录时只读取各平台的公开榜单，${this.homeSourceLabel}这次没有取到内容；可在「设置 → 首页来源平台」换一个平台。`
-        : `${this.homeSourceLabel}暂时没有取到内容，请检查网络后重试。`;
-    } else if (degraded) {
-      // ⚠️ ArkTS 对"三元表达式直接接在模板串里"比较敏感，先算成局部变量再拼，别写在 ${} 里
-      const preferredText: string = preferredBoard.length > 0 ? `「${preferredBoard}」` : '指定榜单';
-      const actualText: string = this.homeBoardLabel !== preferredBoard && this.homeBoardLabel.length > 0
-        ? `「${this.homeBoardLabel}」` : '';
-      this.homeHint = `${this.homeSourceLabel}${preferredText}取不到，已改用该平台其它榜单${actualText}。`;
-    } else {
-      this.homeHint = '';
-    }
+    // ⚠️ 2026-10 用户要求「简洁」：**不再产出任何解释性文案**（"正在加载 …榜单…"、
+    //    "…取不到，已改用该平台其它榜单…"、"歌单广场接口暂时不可用…" 全部删除）。
+    //    失败与降级只进日志（`RzdHomeSource`），界面不再用文字解释。
+    this.homeHint = '';
     // 顶部大卡片 == MusicHome 的 5 张**功能入口卡**（现在就听 / 每日30首 / 新歌推荐 /
     // 心动模式 / 精选推荐），不是歌曲卡片。登录与否都是这一套。
     // ⚠️ 顺序很重要：必须**先把列表赋值**再生成卡片 —— 卡片要拿列表前 4 首的封面

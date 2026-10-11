@@ -391,15 +391,8 @@ export struct HomePlazaSection {
   build() {
     Column() {
       this.SectionHeader()
-      // 「歌单广场没跟着首页来源平台走」的原因（该平台广场接口取不到数据时才有这行）
-      if (this.recommendViewModel.plazaFollowNote().length > 0) {
-        Text(this.recommendViewModel.plazaFollowNote())
-          .fontSize(12)
-          .lineHeight(17)
-          .fontColor($r('app.color.font_tertiary'))
-          .width(StyleConstants.FULL_WIDTH)
-          .padding({ bottom: 6 })
-      }
+      // ⚠️ 用户要求简洁：删掉「XX音乐的歌单广场接口暂时不可用，这里仍显示…」那行说明。
+      //    行为不变（平台不支持时仍不切、保留原来能用的广场），只是不再用文字解释。
       this.SourceBar()
       this.FilterBar()
       this.PlazaBody()

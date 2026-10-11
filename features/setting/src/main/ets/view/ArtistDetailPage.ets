@@ -32,7 +32,6 @@ import { SongMoreMenu } from 'playlist';
 import { CapsuleSegmentedSelector } from './CapsuleSegmentedSelector';
 import { DetailImmersiveBackdrop } from './DetailImmersiveBackdrop';
 import { WindowInfo, getWindowInfoState } from 'musicbasic';
-import { hdsMaterial } from '@kit.UIDesignKit';
 import { ArtistDetailDataSource } from './ArtistDetailDataSource';
 
 const DANGER_COLOR: string = '#E64545';
@@ -106,6 +105,22 @@ export struct ArtistDetailPage {
       hilog.info(0, 'RzdDetailImmersive', 'artist scrollVp=%{public}f thresholdVp=264 avoidTopVp=%{public}f',
         this.detailScrollVp, this.windowInfo.statusBarTopVp);
     }
+  }
+
+  /**
+   * 页内可用高度（vp）= 窗口高 − 状态栏避让。
+   *
+   * 为什么照片层要这个数值而不是自己写 `'100%'` / `LayoutPolicy.matchParent`：
+   * 它挂在内容驱动的 Stack 里，百分比 / matchParent 会在首帧量成 0 高 ⇒ 照片整张不画
+   * （用户报的"歌手页顶部是纯色不是照片"）。这里由页面把确定值传下去。
+   * @returns 高度（vp）；窗口尺寸还没量到时返回 0，调用方按"不画照片"处理。
+   */
+  private pageContentHeightVp(): number {
+    const hPx: number = this.windowInfo.windowSize.height;
+    if (hPx <= 0) {
+      return 0;
+    }
+    return Math.max(0, this.getUIContext().px2vp(hPx) - this.windowInfo.statusBarTopVp);
   }
   private songData: ArtistDetailDataSource<SongInfo> = new ArtistDetailDataSource<SongInfo>();
   private albumData: ArtistDetailDataSource<AlbumInfo> = new ArtistDetailDataSource<AlbumInfo>();
@@ -522,6 +537,20 @@ export struct ArtistDetailPage {
     this.preapplyStatusBarColor();
   }
 
+  /**
+   * 歌手照片地址到手（`resolveSingerBySearch()` 搜到 / 路由带进来晚了一拍）时重下发一次。
+   *
+   * 理由：`avgColor` 只在**取到色**之后才变，而取色的输入是照片地址；照片地址本身可能
+   * 是异步才有的。这一档不补，首帧那次下发就停在 `#1f1f22` 推出的白字判据上，
+   * 遇上浅色照片时状态栏会与顶部背景不符。
+   */
+  @Monitor('artistPicUrlText')
+  onArtistPicUrlChanged(): void {
+    this.preapplyStatusBarColor();
+    // 标题栏缓存里存的是构建那一刻的 avgColor 快照，照片换了要让它重建。
+    this.cachedTitleBar = undefined;
+  }
+
   /** 次要文字颜色。 */
   private fgSecondary(): string {
     return this.isLightBackdrop() ? '#99000000' : '#B3FFFFFF';
@@ -749,11 +778,30 @@ export struct ArtistDetailPage {
     this.pageIndexInfos.pushPathByName(RouterUrlConstants.ALBUM_DETAIL, param);
   }
 
-  /** HDS 标题栏：返回 + 分享/更多三枚按钮（无标题文字），沉浸渐变模糊。 */
+  /**
+   * HDS 标题栏：返回 + 分享/更多三枚按钮（无标题文字）。
+   *
+   * ★ 沉浸光感（官方真实材质，不是自绘近似）：
+   *   `style.systemMaterialEffect = buildTitleMaterial(ambientState.level)`
+   *   走的是 HDS 的 `TitleBarStyleOptions.systemMaterialEffect`（`@since 6.1.0(23)`，
+   *   本工程 default/pc 的 compatible 都 ≥ 23，可用）。
+   *   为什么必须是它：官方《沉浸光感功耗优化》明确 ——
+   *   「其他组件仅在 Navigation/NavDestination 标题栏或横向 Tabs 中 barPosition 为
+   *     BarPosition.End 的底部 TabBar 中生效。在其他区域中设置沉浸光感效果不生效。」
+   *   标题栏正是允许区域，所以只有挂在这里才是**系统的**光感。
+   *
+   * ★ 想看到材质，两件事必须同时成立（官方 FAQ《材质效果的显示层级问题》：
+   *   「沉浸光感的视觉层级位于组件的 backgroundColor、backgroundBlurStyle 等属性之下」）：
+   *   ① 不滚动时 `originalStyle.backgroundStyle.backgroundColor` 必须是 `Color.Transparent`
+   *      —— 否则那块不透明底把材质整个盖住，看起来就是"一块纯色"；
+   *   ② 标题栏上不要再叠 `backgroundBlurStyle` / `backgroundEffect`
+   *      —— 材质自带模糊，叠加既是重复处理也会互相干扰。
+   *   两者本页都满足：只有 `scrollEffectStyle`（滚过 264vp 之后那一档）才落 `avgColor`。
+   */
   private cachedTitleBar: HdsNavigationTitleBarOptions | undefined = undefined;
 
   private getArtistTitleBar(): HdsNavigationTitleBarOptions {
-    hilog.info(0x0000, 'RzdArtistDetail', 'getArtistTitleBar called');
+    hilog.info(0x0000, 'RzdArtistDetail', 'getArtistTitleBar called level=%{public}d', this.ambientState.level);
     let bar = this.cachedTitleBar;
     if (bar === undefined) {
       bar = {
@@ -762,7 +810,8 @@ export struct ArtistDetailPage {
           end: LengthMetrics.vp(16)
         },
         style: {
-          blurStrategy: BlurStrategy.DISABLE,
+          // ENABLE：让 HDS 在滚动渐变那一档也走模糊档（原来被改成 DISABLE，等于把材质链断掉）。
+          blurStrategy: BlurStrategy.ENABLE,
           scrollEffectOpts: {
             enableScrollEffect: true,
             scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR,
@@ -770,6 +819,7 @@ export struct ArtistDetailPage {
             blurEffectiveEndOffset: LengthMetrics.vp(264)
           },
           originalStyle: {
+            // ① 不滚动时**必须透明**，否则盖住材质（见上面注释）。
             backgroundStyle: { backgroundColor: Color.Transparent },
             contentStyle: {
               backIconStyle: {
@@ -834,8 +884,14 @@ export struct ArtistDetailPage {
     }
     const style = bar.style;
     if (style !== undefined) {
-      // Fully transparent initial plate: do not let material supply an opaque backdrop.
-      style.systemMaterialEffect = { materialType: hdsMaterial.MaterialType.NONE };
+      // ★ 官方沉浸光感材质（IMMERSIVE + 档位跟随环境光等级）。
+      //   ⚠️ 千万不要再写回 `{ materialType: hdsMaterial.MaterialType.NONE }` ——
+      //   那正是用户报的"原本歌手页上面有光感，现在没了"。
+      const material = buildTitleMaterial(this.ambientState.level);
+      style.systemMaterialEffect = material;
+      hilog.info(0x0000, 'RzdArtistDetail',
+        'titleBar material type=%{public}d level=%{public}d avgColor=%{public}s',
+        material.materialType ?? -1, material.materialLevel ?? -1, this.avgColor);
     }
     return bar;
   }
@@ -986,6 +1042,8 @@ export struct ArtistDetailPage {
           photo: this.artistPicUrlText,
           color: this.avgColor,
           topAvoidVp: this.windowInfo.statusBarTopVp,
+          // ★ 页内可用高度（vp）：照片层必须拿到**显式数值**才画得出来（见该组件类注释）。
+          pageHeightVp: this.pageContentHeightVp(),
           scrollVp: this.detailScrollVp,
           page: 'artist'
         })
@@ -1060,8 +1118,9 @@ export struct ArtistDetailPage {
         }
       }
       .width('100%')
-      .height('calc(100% - 56vp)')
-      .margin({ top: 56 })
+      // 56vp 与 `TitleBarConstants.ROW_HEIGHT_VP` 同值：这里写常量，别再出现魔数。
+      .height('calc(100% - ' + TitleBarConstants.ROW_HEIGHT_VP + 'vp)')
+      .margin({ top: TitleBarConstants.ROW_HEIGHT_VP })
       .contentEndOffset(96)
       .sticky(StickyStyle.Header)
       .cachedCount(4)
