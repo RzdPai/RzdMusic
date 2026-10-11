@@ -21,7 +21,7 @@ import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { http } from '@kit.NetworkKit';
 import { pasteboard } from '@kit.BasicServicesKit';
-import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, BreakpointType, HomeSourceState, CoverRadiusState, LyricBlurState, LyricCenterState, LyricFontSizeState, LyricFpsState, MusicStoreService, notifyHomeSourceRefresh, PlaybackFlowLightState, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial } from 'musicbasic';
+import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, BreakpointType, HomeSourceState, CoverRadiusState, LyricBlurState, LyricCenterState, LyricFontSizeState, LyricFpsState, MusicStoreService, notifyHomeSourceRefresh, PlaybackFlowLightState, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatformsOf, lxSourceManager, MediaService } from 'player';
 import type { LXApiImportResult } from 'player';
@@ -560,9 +560,20 @@ export struct SettingsDetailPage {
   @Builder
   private PlatformMusicSheetBuilder() {
     Column() {
+      /**
+       * ★ 必须把它自己的 `Scroll` 用的 scroller 交出去（用户 2026-10-11：「平台音乐页面没模糊效果」）。
+       *
+       * 原因：本页标题栏的渐变模糊是"标题栏 ← 滚动容器"的绑定驱动的
+       * （根节点 `.bindToScrollable([this.pageScroller])`）。原来这里只传了 `onClose`，
+       * 于是 `PlatformMusicPage` 用它**自己默认 new 出来的** `Scroller` 去包 `Scroll`
+       * ⇒ 它滚它的、标题栏收不到滚动量 ⇒ **永远不模糊**（材质在，但没有"滑过才渐变模糊"的那一段）。
+       * 传同一个 scroller 之后，滚动量才会喂给标题栏。
+       */
       PlatformMusicPage({
+        pageScroller: this.pageScroller,
+        contentTopOffset: this.contentTopOffset(),
         onClose: (): void => {
-              }
+        }
       })
     }
     .width('100%')
@@ -1041,7 +1052,9 @@ export struct SettingsDetailPage {
   @Builder
   private DownloadManagerSheet() {
     Column() {
-      DownloadManagerSection()
+      // ★ 同「平台音乐」那条：把本页的 scroller 传下去，否则它自己 new 一个 ⇒
+      //   它滚它的、标题栏收不到滚动量 ⇒ 滑过标题栏时**不会渐变模糊**。
+      DownloadManagerSection({ pageScroller: this.pageScroller })
     }
     .width('100%')
     .height('100%')
@@ -1570,7 +1583,12 @@ export struct SettingsDetailPage {
       }
       .width('100%')
       .height('100%')
-      .padding({ left: 4, right: 4 })
+      // ★ 状态栏那一条只留页面背景（用户 2026-10-11：「内容是啥的都在状态栏下面」）：
+      //   内容容器让开状态栏高度 ⇒ 子面板里的列表再往上滚也只能滚到状态栏下沿，
+      //   不会再画到时间/信号图标后面；标题栏那 56vp 仍然透明，内容照样从它底下穿过。
+      //   ⚠️ 宽屏内嵌（`embedded`，右栏那一支）**不加**：那时本页在设置页的右栏里，
+      //      状态栏那一条由外层大设置页负责。
+      .padding({ left: 4, right: 4, top: this.embedded ? 0 : getStatusBarTopVpFromWindowUtil() })
       .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
   }
 

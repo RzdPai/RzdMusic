@@ -52,7 +52,7 @@ import { guardPlayerBack, PlaybackIntentState, SongItem } from 'musicbasic';
 import {
   AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, FavoriteEntry,
   MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, ThemeState, TitleBarConstants,
-  buildTitleMaterial
+  buildTitleMaterial, getStatusBarTopVpFromWindowUtil
 } from 'musicbasic';
 import {
   BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions,
@@ -830,6 +830,12 @@ export struct RecordListPage {
       }
       .width('100%')
       .height('100%')
+      // ★ 状态栏那一条只留页面背景（用户 2026-10-11：「内容是啥的都在状态栏下面」）：
+      //   内容容器整体让开状态栏高度，里面的 `List` 自己有 `clip(true)` ⇒ 行往上滚最多滚到
+      //   状态栏下沿为止，不会再画到时间/信号图标后面；标题栏那 56vp 仍是透明的，
+      //   列表照样从它底下穿过（沉浸式不受影响）。页根那条 `expandSafeArea(TOP)` +
+      //   `backgroundColor` 继续负责把页面底色铺到状态栏那一条。
+      .padding({ top: getStatusBarTopVpFromWindowUtil() })
     }
     .onBackPressed((): boolean => guardPlayerBack('RecordListPage'))
     .hideTitleBar(false)

@@ -933,7 +933,9 @@ struct Index {
         Logger.info('RzdSecondaryMiniMaterial',
           `host width=${area.width} height=${area.height} ambient=${this.ambientLevelIndex()}`);
       })
-      .margin({ bottom: this.floatingMiniBarBottomMarginVp() })
+      // ⚠️ **不要**在这里再写一个 `.margin({ bottom: ... })`：离底距离已经由
+      //    `barFloatingStyle.barBottomMargin` 给了（与首页那条官方底栏同一口径）。
+      //    两个一起写 = 离底距离翻倍，真机上看着就是"播放条浮得太高"（用户 2026-10-11 让看的那条）。
     }
     .width(StyleConstants.FULL_WIDTH)
     .height(StyleConstants.FULL_HEIGHT)

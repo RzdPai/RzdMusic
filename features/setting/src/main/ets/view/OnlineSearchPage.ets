@@ -16,7 +16,7 @@
 import { AppStorageV2, Chip, ChipSize, LengthMetrics, uiObserver } from '@kit.ArkUI';
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import { guardPlayerBack } from 'musicbasic';
-import { AlbumRouteParam, ArtistRouteParam, BreakpointType, ThemeState, TitleBarConstants, WindowUtil } from 'musicbasic';
+import { AlbumRouteParam, ArtistRouteParam, BreakpointType, ThemeState, TitleBarConstants, WindowUtil, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions, HdsNavigationTitleBarOptions, HideMode, ScrollEffectType, TextStyleMode, TitleSize } from '@kit.UIDesignKit';
 import { AppStorageKeys, AmbientState, MusicAppState, MusicStoreService, PlayedSongRecord, QualityInfo, RouterUrlConstants, SongItem, ToplistRouteParam, buildTitleMaterial } from 'musicbasic';
 import { AlbumInfo, LXQualityOption, LXSearchSong, LXSearchResult, SingerInfo, lxGetPicFallback, lxGetQualityOptions, lxSearch, lxTxHotSearch, searchAlbums, searchSingers, sourceToCode, DownloadTask, DownloadUtil, OnlinePlayUtil, PlaylistSearchApi } from 'player';
@@ -1699,7 +1699,14 @@ struct OnlineSearchPage {
       }
       .width('100%')
       .height('100%')
-      .padding({ top: 0 })
+      .clip(true)
+      // ★ 状态栏那一条只留页面背景（2026-10-11 第十九轮，用户「内容是啥的都在状态栏下面」）：
+      //   内容容器整体让开状态栏高度（原来是 `padding({ top: 0 })`，等于没让）。
+      //   里面的 `List` 有 `clip(true)`（List 默认值）⇒ 行再往上滚最多滚到「状态栏下沿」为止，
+      //   不会再画到时间/信号图标后面；标题栏那 56vp 仍是透明的、列表照样从它底下穿过
+      //   （沉浸式不受影响 —— 那个 56 由 `contentPaddingTop` 给在列表内容里，没动）。
+      //   页根的 `expandSafeArea(TOP)` + `backgroundColor` 继续把页面底色铺到状态栏那一条。
+      .padding({ top: getStatusBarTopVpFromWindowUtil() })
     }
     .onBackPressed((): boolean => guardPlayerBack('OnlineSearchPage'))
     .hideTitleBar(false)

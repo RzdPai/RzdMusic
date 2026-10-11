@@ -24,7 +24,7 @@ import { AppStorageV2 } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { guardPlayerBack } from 'musicbasic';
-import { AppStorageKeys, MusicAppState, SongItem, ThemeState } from 'musicbasic';
+import { AppStorageKeys, MusicAppState, SongItem, ThemeState, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { MediaService } from 'player';
 import {
   ImportResult,
@@ -514,6 +514,13 @@ export struct LocalMusicPage {
       }
       .width('100%')
       .height('100%')
+      .clip(true)
+      // ★ 状态栏那一条只留页面背景（2026-10-11 第十九轮，用户「内容是啥的都在状态栏下面」）：
+      //   内容容器整体让开状态栏高度，本页那行自绘标题（返回 + 「本地音乐」+ 导入）
+      //   才不会被顶到时间/信号图标后面；`List` 有 `clip(true)`（List 默认值），
+      //   行再往上滚最多滚到「状态栏下沿」为止。页根的 `expandSafeArea(TOP)` +
+      //   `backgroundColor` 继续负责把页面底色铺到状态栏那一条。
+      .padding({ top: getStatusBarTopVpFromWindowUtil() })
     }
     .onBackPressed((): boolean => guardPlayerBack('LocalMusicView'))
     .hideTitleBar(true)

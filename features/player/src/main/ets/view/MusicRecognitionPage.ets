@@ -5,7 +5,7 @@ import { pasteboard } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { guardPlayerBack } from 'musicbasic';
-import { AppStorageKeys, AmbientState, MusicAppState, MusicStoreService, ThemeState, TitleBarConstants, buildTitleMaterial } from 'musicbasic';
+import { AppStorageKeys, AmbientState, MusicAppState, MusicStoreService, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { RecognitionResult, RecognitionStatus, EngineReport, EngineResultGroup } from '../recognize/RecognitionTypes';
 import { MicCancelledError, MicPermissionError, MicRecorder } from '../recognize/MicRecorder';
 import { RecognitionNetworkError } from '../recognize/errors';
@@ -595,6 +595,14 @@ export struct MusicRecognitionPage {
       }
       .width('100%')
       .height('100%')
+      .clip(true)
+      // ★ 状态栏那一条只留页面背景（2026-10-11 第十九轮，用户「内容是啥的都在状态栏下面」）：
+      //   内容容器整体让开状态栏高度；里面的 `Scroll` 会把自己的内容裁在自身边界内
+      //   （`Scroll` 的 clip 默认 true），于是内容再往上滚最多滚到「状态栏下沿」为止，
+      //   不会画到时间/信号图标后面。标题栏那 56vp 仍是透明的、内容照样从它底下穿过
+      //   （沉浸式不受影响，见 Scroll 内层 Column 的 `padding top = 56`）；
+      //   页根的 `expandSafeArea(TOP)` + `backgroundColor` 继续把页面底色铺到状态栏那一条。
+      .padding({ top: getStatusBarTopVpFromWindowUtil() })
     }
     .onBackPressed((): boolean => guardPlayerBack('MusicRecognitionPage'))
     .hideTitleBar(false)

@@ -15,7 +15,7 @@
 
 import { AppStorageV2, uiObserver } from '@kit.ArkUI';
 import { guardPlayerBack, AmbientState, BreakpointType, ThemeState } from 'musicbasic';
-import { AppStorageKeys, MusicAppState, MusicStoreService, PlayedSongRecord, TabSwitchState, TitleBarConstants, buildTitleMaterial } from 'musicbasic';
+import { AppStorageKeys, MusicAppState, MusicStoreService, PlayedSongRecord, TabSwitchState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { OnlinePlayUtil } from 'player';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType } from '@kit.UIDesignKit';
 import { SongMoreMenu } from './SongMoreMenu';
@@ -440,7 +440,10 @@ export struct PlaylistHomePage {
             .width('100%')
             .layoutWeight(1)
             .scrollBar(BarState.Off)
-            .clip(false)
+            // ★ 必须是 `clip(true)`（List 的默认值）：`clip(false)` 时滚出视口的行**不受任何裁剪**，
+            //   会一路画到屏幕 y=0（状态栏那一条）——外面容器的 padding 挡不住这种"漏画"。
+            //   与「全部歌单」同一处修法（见 `PlaylistsPage`）。
+            .clip(true)
             .divider({
               strokeWidth: 0.5,
               color: $r('sys.color.comp_divider'),
@@ -476,7 +479,8 @@ export struct PlaylistHomePage {
             .width('100%')
             .layoutWeight(1)
             .scrollBar(BarState.Off)
-            .clip(false)
+            // ★ 同上一支：`clip(false)` → `clip(true)`，理由见上面的注释。
+            .clip(true)
             .divider({
               strokeWidth: 0.5,
               color: $r('sys.color.comp_divider'),
@@ -489,7 +493,14 @@ export struct PlaylistHomePage {
       }
       .width('100%')
       .height('100%')
+      .clip(true)
       .padding({
+        // ★ 状态栏那一条只留页面背景（2026-10-11 第十九轮，用户「内容是啥的都在状态栏下面」）：
+        //   内容容器整体让开状态栏高度；里面的 `List` 有 `clip(true)`，
+        //   行再往上滚最多滚到「状态栏下沿」为止，不会再画到时间/信号图标后面。
+        //   标题栏那 56vp 仍是透明的、列表照样从它底下穿过（沉浸式不受影响）；
+        //   页根的 `expandSafeArea(TOP)` + `backgroundColor` 继续负责把页面底色铺到状态栏那一条。
+        top: getStatusBarTopVpFromWindowUtil(),
         left: new BreakpointType(16, 24, 32, 32).getValue(this.breakpointEnv.widthBreakpoint),
         right: new BreakpointType(16, 24, 32, 32).getValue(this.breakpointEnv.widthBreakpoint)
       })

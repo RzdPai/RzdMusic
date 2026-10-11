@@ -15,7 +15,7 @@
 
 import { AppStorageV2, ComponentContent, LengthMetrics } from '@kit.ArkUI';
 import { ArcList, ArcListItem } from '@kit.ArkUI';
-import { guardPlayerBack, AppStorageKeys, StyleConstants, WatchNavRouteConstants } from 'musicbasic';
+import { guardPlayerBack, AppStorageKeys, StyleConstants, WatchNavRouteConstants, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { MediaService, MusicAppState } from 'player';
 import { getWatchNavContext, WatchNavContext } from '../model/WatchNavContext';
 
@@ -133,8 +133,15 @@ struct SongQueueList {
       .align(Alignment.Center)
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
+      .clip(true)
       .backgroundColor($r('app.color.watch_page_background'))
       .padding({
+        // ★ 状态栏那一条只留页面背景（2026-10-11 第十九轮跨页统一口径，用户「内容是啥的都在
+        //   状态栏下面」）：内容容器整体让开状态栏高度，行再往上滚最多滚到「状态栏下沿」为止。
+        //   页根（`NavDestination` + `expandSafeArea`）仍负责把页面底色铺到状态栏那一条。
+        //   ⚠️ 手表形态（ArcList 那一套）若 `statusBarTopVp` 不为 0，本页顶部会多出这一段，
+        //   真机看一眼（见交付说明）。
+        top: getStatusBarTopVpFromWindowUtil(),
         left: $r('app.float.watch_arc_list_padding_h'),
         right: $r('app.float.watch_arc_list_padding_h'),
         bottom: 8

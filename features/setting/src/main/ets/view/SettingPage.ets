@@ -745,7 +745,9 @@ export struct SettingPage {
   @Builder
   private DownloadManagerSheet() {
     Column() {
-      DownloadManagerSection()
+      // ★ 把本页的 scroller 传下去：否则子组件自己 new 一个 ⇒ 标题栏收不到滚动量 ⇒ 不模糊
+      //   （与「平台音乐」「我的 → 下载管理」同一条，见记忆 §29）。
+      DownloadManagerSection({ pageScroller: this.pageScroller })
     }
     .width('100%')
     .height('100%')

@@ -20,7 +20,7 @@ import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { guardPlayerBack } from 'musicbasic';
 import { AppStorageKeys, BarScrollHelper, BreakpointType, getPlaylistTransitionState, MusicAppState, ThemeState } from 'musicbasic';
-import { AmbientState, MusicStoreService, PlayedSongRecord, PlaylistDto, RouterUrlConstants, TitleBarConstants, ToplistRouteParam, buildTitleMaterial, LocalCoverImage } from 'musicbasic';
+import { AmbientState, MusicStoreService, PlayedSongRecord, PlaylistDto, RouterUrlConstants, TitleBarConstants, ToplistRouteParam, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, LocalCoverImage } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { lxSearch } from 'player';
 import { localMusic, LocalMusicImportState, localMusicImportState } from 'localmusic';
@@ -1041,7 +1041,11 @@ export struct PlaylistsPage {
           .height('100%')
           .scrollBar(BarState.Off)
           .edgeEffect(EdgeEffect.Spring)
-          .clip(false)
+          // ★ 必须是 `clip(true)`（List 的默认值，官方《通用属性·背景》：「List、Scroll… 组件的 clip
+          //   属性默认值为 true」；滚动容器的内容裁剪模式 List 默认 `ContentClipMode.CONTENT_ONLY`，
+          //   「裁剪只针对滚动容器的内容」）。原来写 `clip(false)` ⇒ 滚出视口的行**不受任何裁剪**，
+          //   会一路画到屏幕 y=0（状态栏那一条）—— 只靠外面那层容器的 padding 挡不住这种"漏画"。
+          .clip(true)
           // 滚动联动双层底栏：上滑收起、下滑展开（与首页/我的/设置一致）
           .onScrollFrameBegin((offset: number): OnScrollFrameBeginHandlerResult => {
             this.onPageScrollFrame(offset);
@@ -1072,6 +1076,13 @@ export struct PlaylistsPage {
       }
       .width('100%')
       .height('100%')
+      .clip(true)
+      // ★ 状态栏那一条只留页面背景（2026-10-11 第十九轮，用户「内容是啥的都在状态栏下面」）：
+      //   内容容器整体让开状态栏高度；里面的 `List` 有 `clip(true)`，
+      //   行再往上滚最多滚到「状态栏下沿」为止，不会再画到时间/信号图标后面。
+      //   标题栏那 56vp 仍是透明的、列表照样从它底下穿过（沉浸式不受影响）；
+      //   页根的 `expandSafeArea(TOP)` + `backgroundColor` 继续负责把页面底色铺到状态栏那一条。
+      .padding({ top: getStatusBarTopVpFromWindowUtil() })
     }
     .onBackPressed((): boolean => guardPlayerBack('PlaylistsPage'))
     .hideTitleBar(false)
