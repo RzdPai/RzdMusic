@@ -19,6 +19,7 @@ import { util } from '@kit.ArkTS';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { DataBackupService, getAppRuntime } from 'musicbasic';
+import { attachSourcesToSnapshot, mergeSourcesIntoRestoreResult } from '../source/SourceBackupPayload';
 
 const TAG: string = 'RzdHuaweiCloud';
 const MAX_BYTES: number = 16 * 1024 * 1024;
@@ -80,8 +81,11 @@ export class HuaweiNativeCloudBackup {
       // 不覆盖last-good：新备份使用唯一文件名，完整fsync后同cloud目录rename发布。
       const path: string = this.path() + '.' + Date.now() + '.' + util.generateRandomUUID() + '.json';
       const staging: string = path + '.partial';
-      const bytes: Uint8Array = new util.TextEncoder().encodeInto(
+      // 自定义音源脚本并进同一份快照的 customSources 段（与 WebDAV/旧网页云盘同一条载荷）。
+      // ★ 这一步在**写文件之前**：附加失败时它原样返回入参，绝不改下面的任何判据。
+      const snapshotText: string = await attachSourcesToSnapshot(
         DataBackupService.getInstance().exportSnapshotText());
+      const bytes: Uint8Array = new util.TextEncoder().encodeInto(snapshotText);
       if (bytes.length === 0 || bytes.length > MAX_BYTES) {
         throw new Error('备份大小超出限制');
       }
@@ -193,8 +197,12 @@ export class HuaweiNativeCloudBackup {
         fileIo.closeSync(file);
       }
       hilog.info(0, TAG, 'restore read confirmed-cloud backup bytes=%{public}d', offset);
-      return await DataBackupService.getInstance().restoreSnapshotText(
-        util.TextDecoder.create('utf-8').decodeToString(new Uint8Array(buffer)));
+      const snapshotText: string = util.TextDecoder.create('utf-8').decodeToString(new Uint8Array(buffer));
+      // 设置/歌单按备份覆盖（原来那一步，结论一字不改），自定义音源在其后**保守合并**。
+      // mergeSourcesIntoRestoreResult 自带 try/catch：音源段坏掉时只留一行日志，
+      // 返回的仍是上面那条恢复结论 —— 绝不让音源影响备份恢复的成败判定。
+      const message: string = await DataBackupService.getInstance().restoreSnapshotText(snapshotText);
+      return await mergeSourcesIntoRestoreResult(snapshotText, message);
     } catch (err) {
       return this.failure('恢复', err as BusinessError);
     } finally {

@@ -25,6 +25,7 @@ import { util } from '@kit.ArkTS';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { DataBackupService, Logger, MusicStoreService } from 'musicbasic';
+import { attachSourcesToSnapshot, mergeSourcesIntoRestoreResult } from '../source/SourceBackupPayload';
 
 const DOMAIN: number = 0x0000;
 const TAG: string = 'RzdHuaweiCloud';
@@ -708,7 +709,12 @@ export class HuaweiCloudSync {
   public async uploadSnapshot(): Promise<string> {
     try {
       await this.ensureAccessToken();
-      const snapshotText: string = DataBackupService.getInstance().exportSnapshotText();
+      // 自定义音源脚本并进同一份快照的 customSources 段（与 WebDAV / 系统云空间同一条载荷，
+      // 三条通道互相可读）。★ 必须在算 expectedBytes 之前：回读核对比的是**实际写上去的字节数**，
+      // 用附加前的长度去比会永远对不上、把「已上云」误判成「未确认」。
+      // attachSourcesToSnapshot 失败时原样返回入参，因此不影响下面任何成功判据。
+      const snapshotText: string = await attachSourcesToSnapshot(
+        DataBackupService.getInstance().exportSnapshotText());
       const expectedBytes: number = utf8Length(snapshotText);
       const folderId: string = await this.ensureBackupFolder();
       const existing: DriveFile | undefined = await this.findBackupFile(folderId);
@@ -747,7 +753,10 @@ export class HuaweiCloudSync {
         return '云盘里的备份是空的';
       }
       hilog.info(DOMAIN, TAG, 'restore from legacy drive size=%{public}d', file.size);
-      return await DataBackupService.getInstance().restoreSnapshotText(text);
+      // 设置/歌单按备份覆盖（结论一字不改），自定义音源在其后**保守合并**；
+      // 音源段坏掉只留日志，不影响上面那条恢复结论（外壳自带 try/catch）。
+      const message: string = await DataBackupService.getInstance().restoreSnapshotText(text);
+      return await mergeSourcesIntoRestoreResult(text, message);
     } catch (err) {
       const e: Error = err as Error;
       hilog.warn(DOMAIN, TAG, 'download snapshot failed: %{public}s', e.message ?? '');

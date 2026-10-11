@@ -1,5 +1,5 @@
 /**
- * RzdMusic 自定义音源（音源脚本）的跨设备搬运层
+ * RzdMusic 自定义音源（音源脚本）的跨设备搬运层 —— **唯一实现**。
  *
  * ★★ 为什么不是"洛雪同步"——先看这段，再看代码（用户报的"洛雪同步没把音源同步上去"）
  *
@@ -24,11 +24,24 @@
  * 让音源搭上这条连接。至于把音源塞进 `list` 载荷里"走私"：服务端的快照 key 是列表 JSON 的 md5，
  * 一塞就与官方客户端对不上，两边会反复弹合并框 —— 那等于毁掉互操作性，不能做。
  *
- * ⇒ 音源只能在**我们自己的载荷**里搬。本模块里已经有一个自有的跨设备通道：
- *   `WebDavBackupService`（`rzdmusic-backup-*.json`，同一个 WebDAV 账号，按钮就在设置页
- *   「数据同步」面板里）。音源就搭它走：备份时并进同一份 JSON 的 `customSources` 段，
- *   恢复时按 id 保守合并。字段名全是**我们自己定的**，不冒充洛雪协议字段；
- *   旧版本客户端读到未知键会忽略，旧备份没有该键时按"没有音源"处理 ⇒ 双向兼容。
+ * ⇒ 音源只能在**我们自己的载荷**里搬。本工程现有**三条**自有备份通道，全部经过这里：
+ *   1. `WebDavBackupService`（`rzdmusic-backup-*.json`，同一个 WebDAV 账号）；
+ *   2. `HuaweiNativeCloudBackup`（系统华为云空间 / CoreFileKit `cloudSync.FileSync`）；
+ *   3. `HuaweiCloudSync`（旧网页云盘 / Drive OpenAPI）。
+ * 三条通道的产物都是 `DataBackupService.exportSnapshotText()` 的同一份 JSON，
+ * 差别只在"写去哪里"，所以本文件只在**快照文本进出**这一层做挂载：
+ * 上行 `attachSourcesToSnapshot()`、下行 `mergeSourcesFromSnapshot()`。
+ * 字段名全是**我们自己定的**，不冒充洛雪协议字段；
+ * 旧版本客户端读到未知键会忽略，旧备份没有该键时按"没有音源"处理 ⇒ 双向兼容。
+ *
+ * ★★ 为什么这个文件在 `features/player` 而不在 `features/sync`：
+ *   - `features/sync` 依赖 `features/player`（`sync/oh-package.json5` 里有 `"player": "file:../player"`），
+ *     反向依赖会成环 ⇒ **player 绝不能 import sync**；
+ *   - 而本文件的宿主（`HuaweiNativeCloudBackup` / `HuaweiCloudSync`）和音源的**唯一真源**
+ *     （`LXSourceManager`，在 player 内）**都在 player 这一侧**；
+ *   - 所以实现放 player、由 player 的 `Index.ets` 导出，`features/sync` 反向引用它。
+ *     **全仓只有这一份实现**（原先 sync 里的 `SourceSync.ets` 已删除，不留薄转发层，
+ *     免得日后有人改了其中一份、另一份静默发散）。
  *
  * 冲突策略（保守，一条都不许"静默丢"，每条跳过的都要有日志）：
  *   同 id + 脚本内容相同   → 跳过（本来就一样）
@@ -36,12 +49,16 @@
  *   本机没有该 id          → 落盘（id 原样保留，两台设备才认得出是同一份音源）
  *   本机有、远端没有       → **一律不删**（远端只是没带，不代表用户想删）
  *   远端 activeId 且本机当前没有选中、且合并后本地确有该 id → 才把本机选中切过去
+ *
+ * ⚠️ 载荷格式**已推给用户用过**（键名 / kind / v 都不能动）：
+ *     `customSources` / `kind = 'rzdmusic-custom-sources'` / `v = 1`。
+ *     三条通道写出来的音源段互相可直接读（同一个 `SOURCE_SYNC_KEY`、同一套校验）。
  */
 
+import { deviceInfo } from '@kit.BasicServicesKit';
 import { Logger, MusicStoreService } from 'musicbasic';
-import { lxSourceManager } from 'player';
-import type { LXUserApiInfoFull } from 'player';
-import { defaultDeviceName } from './SyncStore';
+import { lxSourceManager } from './LXSourceManager';
+import type { LXUserApiInfoFull } from './Interface';
 
 const TAG: string = 'RzdSyncSources';
 
@@ -67,9 +84,10 @@ export const MAX_TOTAL_CHARS: number = 2 * 1024 * 1024;
 /**
  * 备份 JSON 整体长度闸门。
  *
- * `DataBackupService.restoreSnapshotText` 里硬性写着"备份为空或超过 16MB 限制"，恢复侧
- * `WebDavBackupService.request()` 的 `maxLimit` 也是 16MB。并进来的音源段一旦把整份备份
- * 顶破这两道闸门，**备份/恢复这个既有功能就废了** —— 所以并之前先量整体长度，超了就整段不并
+ * `DataBackupService.restoreSnapshotText` 里硬性写着"备份为空或超过 16MB 限制"；
+ * `WebDavBackupService.request()` 的 `maxLimit` 与 `HuaweiNativeCloudBackup.MAX_BYTES`
+ * 也都是 16MB。并进来的音源段一旦把整份备份顶破这些闸门，**备份/恢复这个既有功能就废了**
+ * —— 所以并之前先量整体长度，超了就整段不并
  * （宁可这一次不带音源，也不能把备份搞坏），并记日志。
  */
 const MAX_BACKUP_CHARS: number = 15 * 1024 * 1024;
@@ -124,9 +142,36 @@ function emptyReport(): SourceMergeReport {
   return { added: 0, same: 0, conflict: 0, invalid: 0, failed: 0, total: 0, activeApplied: false };
 }
 
+/**
+ * 载荷里的设备名（只用于日志/排障，不参与任何判据）。
+ *
+ * 取值口径与 `features/sync` 的 `SyncStore.defaultDeviceName()` **逐字相同**
+ * （市场名 → 产品型号 → 品牌 + HarmonyOS → 'HarmonyOS'），这样已经上传过的备份
+ * 与新备份的 `device` 字段口径一致，不会因为搬到 player 而变样。
+ */
+function sourcePayloadDevice(): string {
+  try {
+    const market: string = deviceInfo.marketName;
+    if (market !== undefined && market.length > 0) {
+      return market;
+    }
+    const model: string = deviceInfo.productModel;
+    if (model !== undefined && model.length > 0) {
+      return model;
+    }
+    const brand: string = deviceInfo.brand;
+    if (brand !== undefined && brand.length > 0) {
+      return `${brand} HarmonyOS`;
+    }
+  } catch (_err) {
+    // 某些设备上 deviceInfo 取不到，走兜底
+  }
+  return 'HarmonyOS';
+}
+
 function currentDeviceName(): string {
   try {
-    return defaultDeviceName();
+    return sourcePayloadDevice();
   } catch (_err) {
     return '';
   }
@@ -245,7 +290,7 @@ function isSourcePayload(raw: Object | undefined): boolean {
  * 合并远端音源段（下行侧，恢复备份时调用）。
  *
  * ★ 全程只调用 lxSourceManager 的两个方法（listFullApis / importApiWithId），
- *   不在同步模块里另持一份音源状态 —— 音源的唯一真源仍然是 LXSourceManager。
+ *   不在别处另持一份音源状态 —— 音源的唯一真源仍然是 LXSourceManager。
  *
  * @param raw 备份 JSON 里的 `customSources` 段；缺省/不认识 = 没有音源，直接返回空报告
  */
@@ -390,12 +435,13 @@ export function describeSourceMerge(report: SourceMergeReport): string {
   return parts.join(' · ');
 }
 
-// ------------------------------------------------------------------ 备份/恢复的挂载点
+// ------------------------------------------------------------------ 备份/恢复的挂载点（三条通道共用）
 
 /**
- * 把音源段并进备份 JSON（上行）。
+ * 把音源段并进备份 JSON（上行）。WebDAV / 系统云空间 / 旧网页云盘三条通道都走这里。
  *
  * ★ 任何一步不顺利都**原样返回入参**：音源同步再重要，也不能把"备份"这件事本身弄坏。
+ *   （调用方拿到原样文本后照旧走它自己的"确认上云"判据，本函数不改任何成败结论。）
  */
 export async function attachSourcesToSnapshot(snapshotText: string): Promise<string> {
   let payload: SourcePayload | null = null;
@@ -428,7 +474,7 @@ export async function attachSourcesToSnapshot(snapshotText: string): Promise<str
 }
 
 /**
- * 从备份 JSON 里取音源段并保守合并（下行）。
+ * 从备份 JSON 里取音源段并保守合并（下行）。WebDAV / 系统云空间 / 旧网页云盘三条通道都走这里。
  *
  * @returns 给界面看的一句话摘要；备份里没有音源段（旧备份 / 上传方本机没有音源）时返回空串
  */
@@ -450,8 +496,27 @@ export async function mergeSourcesFromSnapshot(snapshotText: string): Promise<st
     return describeSourceMerge(report);
   } catch (e) {
     // 音源合并失败**不能**让设置/歌单的恢复结果变成"失败"
-    Logger.error(TAG, `音源同步 合并异常（不影响设置/歌单恢复）：${(e as Error).message}`);
+    Logger.error(TAG, `音源合并异常（不影响设置/歌单/备份结论）：${(e as Error).message}`);
     return '';
   }
 }
 
+/**
+ * 恢复侧的"安全外壳"：把 `mergeSourcesFromSnapshot` 包成**绝不抛异常、绝不改结论**的一步。
+ *
+ * 三条通道的恢复路径统一用它：无论音源段是坏的、版本不认识、还是落盘失败，
+ * 都只留下一行日志，原样返回宿主（设置/歌单）的恢复结论字符串。
+ *
+ * @param message 宿主恢复流程给出的结论（「恢复成功」/「没有可恢复的备份」/「恢复失败…」）
+ * @returns 结论 + 音源摘要（没有音源段时就是原结论，逐字符不变）
+ */
+export async function mergeSourcesIntoRestoreResult(snapshotText: string, message: string): Promise<string> {
+  let summary: string = '';
+  try {
+    summary = await mergeSourcesFromSnapshot(snapshotText);
+  } catch (e) {
+    Logger.error(TAG, `音源合并外壳异常（已忽略，不影响备份恢复结论）：${(e as Error).message}`);
+    summary = '';
+  }
+  return summary.length > 0 ? `${message}；${summary}` : message;
+}

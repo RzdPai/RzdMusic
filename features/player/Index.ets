@@ -46,6 +46,15 @@ export { LXSourceHost } from './src/main/ets/source/LXSourceHost';
 export { LXSourceEngine, lxEngineIsReady } from './src/main/ets/source/LXSourceEngine';
 export { lxSourceManager } from './src/main/ets/source/LXSourceManager';
 export type { LXApiImportResult } from './src/main/ets/source/LXSourceManager';
+// 自定义音源的跨设备搬运载荷（**全仓唯一实现**）：WebDAV / 系统华为云空间 / 旧网页云盘
+// 三条备份通道都以它为挂载点。放在 player 是因为 sync → player 是单向依赖，
+// player 反向 import sync 会成环（详见该文件头部说明）。
+export {
+  SOURCE_SYNC_KEY, MAX_SOURCES, MAX_SCRIPT_CHARS,
+  collectSourcePayload, applySourcePayload, describeSourceMerge,
+  attachSourcesToSnapshot, mergeSourcesFromSnapshot, mergeSourcesIntoRestoreResult
+} from './src/main/ets/source/SourceBackupPayload';
+export type { SourcePayload, SourcePayloadEntry, SourceMergeReport } from './src/main/ets/source/SourceBackupPayload';
 export { getLXMusicUrl, getLXLyric, getLXPic, logError, fetchBoardSongs } from './src/main/ets/source/LXPlayHelper';
 export type { BoardSongEntry } from './src/main/ets/source/LXPlayHelper';
 export { lxGetQualityOptions, lxGetQualityOptionsForSongs, LXQualityOption } from './src/main/ets/source/LXQualityApi';

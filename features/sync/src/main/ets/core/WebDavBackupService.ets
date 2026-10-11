@@ -1,7 +1,9 @@
 import { http } from '@kit.NetworkKit';
 import { util } from '@kit.ArkTS';
 import { DataBackupService, MusicStoreService } from 'musicbasic';
-import { attachSourcesToSnapshot, mergeSourcesFromSnapshot } from './SourceSync';
+// 音源载荷的唯一实现住在 features/player（同步模块不能反向被 player 依赖 ⇒ 实现放 player，
+// 这里只引用）。详见 features/player/src/main/ets/source/SourceBackupPayload.ets 头部。
+import { attachSourcesToSnapshot, mergeSourcesIntoRestoreResult } from 'player';
 
 export class WebDavConfig {
   url: string = '';
@@ -83,9 +85,10 @@ export class WebDavBackupService {
       Math.floor(Math.random() * 1000000000).toString(36) + '.json';
     const snapshotText: string = DataBackupService.getInstance().exportSnapshotText();
     // 这里把「自定义音源脚本」并进同一份备份的 customSources 段：
-    // 洛雪同步协议里没有音源模块（详见 SourceSync.ets 文件头的核对结果），这是本工程
+    // 洛雪同步协议里没有音源模块（详见 SourceBackupPayload.ets 文件头的核对结果），这是本工程
     // 现成的、自带账号隔离的跨设备通道。并进去之后**不会**改变 DataBackupService 认得的字段，
     // 旧版本客户端读到未知键会忽略，旧备份没有该键时按「没有音源」处理。
+    // ★ 同一条载荷也被系统华为云空间 / 旧网页云盘那两条通道使用（同一份实现、同一个键）。
     const text: string = await attachSourcesToSnapshot(snapshotText);
     const response = await WebDavBackupService.request(config, name, http.RequestMethod.PUT, text);
     if (response.responseCode !== 200 && response.responseCode !== 201 && response.responseCode !== 204) {
@@ -105,8 +108,8 @@ export class WebDavBackupService {
   static async restore(text: string): Promise<string> {
     const message: string = await DataBackupService.getInstance().restoreSnapshotText(text);
     // 设置/歌单是「覆盖」，音源是「保守合并」（本机已有同 id 的不覆盖、本机独有的不删）。
-    // 音源这段失败不影响上面的恢复结论，所以摘要单独拼。
-    const summary: string = await mergeSourcesFromSnapshot(text);
-    return summary.length > 0 ? `${message}；${summary}` : message;
+    // 音源这段失败不影响上面的恢复结论 —— mergeSourcesIntoRestoreResult 自带兜底，
+    // 绝不抛异常、也不改 message 的内容。
+    return await mergeSourcesIntoRestoreResult(text, message);
   }
 }

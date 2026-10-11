@@ -202,6 +202,9 @@ export class RecommendViewModel {
     this.loadGen = this.loadGen + 1;
     const gen: number = this.loadGen;
     const homeSource: string = this.homeSourceState.source;
+    // ⚠️ 顺序：先刷新游客标志，再同步文案 —— `syncHomeSourceLabels()` 里"未登录+QQ 用内地榜"
+    //    那条判断依赖 `isGuestMode`，反过来的话首帧会先写"新歌榜"再跳成"内地榜"。
+    this.refreshGuestMode();
     this.syncHomeSourceLabels(homeSource);
     // 首页里**自带平台选择器**的两块（歌单广场 / 排行榜）也跟「首页来源平台」走。
     // 它们原来固定停在 MusicDataService.sourceList[0]（酷我），切平台时整块内容
@@ -213,7 +216,6 @@ export class RecommendViewModel {
     this.categoryTabItems = RecommendDataUtil.getCategoryTabs();
     this.chartList = [];
     Logger.info('RzdHomeSource', `load source=${homeSource} label=${this.homeSourceLabel} gen=${gen}`);
-    this.refreshGuestMode();
     void this.loadHomeData(gen);
   }
 
@@ -245,6 +247,11 @@ export class RecommendViewModel {
     const svcSource: string = RecommendDataUtil.mapHomeSource(homeSource);
     this.homeSourceLabel = `${MusicDataService.sourceName(svcSource)}音乐`;
     this.homeBoardLabel = pickDedicatedBoardName(svcSource);
+    // 未登录（游客模式）+ QQ：首页歌曲走**内地榜**（用户指定），首屏文案就得是内地榜 ——
+    // 不能先写"新歌榜"、加载完再跳成"内地榜"。
+    if (this.isGuestMode && svcSource === 'tx') {
+      this.homeBoardLabel = '内地榜';
+    }
     this.homeHint = '';
     this.homeLoadingLabel = this.homeBoardLabel.length > 0
       ? `正在加载 ${this.homeSourceLabel} · ${this.homeBoardLabel}…`
@@ -534,18 +541,45 @@ export class RecommendViewModel {
     if (useAccountRec) {
       songs = await RecommendDataUtil.loadTxAccountDailyTracksAsync();
     }
+    // ★ **未登录 + QQ：直接用内地榜**（用户 2026-10 明确要求）。
+    //   缘由：当年 QQ 的「指定榜单」接口（musicu.fcg GetDetail）对未登录请求已失效，
+    //   首页实际一直是落在内地榜兜底上；后来把那支接口修好（经典 `fcg_v8_toplist_cp`）之后
+    //   首页变成了"新歌榜"，用户要求未登录时回到内地榜。
+    //   ⚠️ 这里是**正向选择**而不是降级 ⇒ 不置 `degraded`（界面不说"取不到、已改用别的榜"）。
+    if (songs.length === 0 && !useAccountRec && homeSource === 'qq') {
+      try {
+        songs = await RecommendDataUtil.loadPrivateSongListAsync(12, 'qq');
+      } catch (_err) {
+        songs = [];
+      }
+      if (songs.length > 0) {
+        usedBoardName = '内地榜';
+      }
+      Logger.info('RzdHomeSource',
+        `guest qq uses 内地榜 songs=${songs.length} gen=${gen}`);
+    }
     if (songs.length === 0) {
-      // 未登录 / 账号推荐拿不到内容：走平台榜单歌曲，卡片样式与登录态**完全一致**
-      const result = await RecommendDataUtil.loadHomeSongsAsync(homeSource, 12);
-      songs = result.songs;
-      degraded = result.degraded;
-      usedBoardName = result.boardName;
+      // 未登录 / 账号推荐拿不到内容：走平台榜单歌曲，卡片样式与登录态**完全一致**。
+      // ⚠️ 用 try/catch 包住：这条链里任何异常都不许把下面的兜底跳过去（兜底必须可达）。
+      try {
+        const result = await RecommendDataUtil.loadHomeSongsAsync(homeSource, 12);
+        songs = result.songs;
+        degraded = result.degraded;
+        usedBoardName = result.boardName;
+      } catch (_err) {
+        Logger.warn('RzdHomeSource', `loadHomeSongsAsync threw source=${homeSource} gen=${gen}`);
+        songs = [];
+      }
     }
     if (homeSource === 'qq' && songs.length === 0) {
       // QQ 专用最后兜底：经典榜单接口里的**内地榜**（topid 6）。
-      // ⚠️ 这条兜底以前是存在的、但首页上面那行"来源"没有，用户根本看不出用的是兜底榜单，
-      //    所以这里把真实榜单名一起带出来（`内地榜`），不再谎称是新歌榜。
-      songs = await RecommendDataUtil.loadPrivateSongListAsync(12, 'qq');
+      // 与上面"游客态首选内地榜"同源（`lxTxToplist('6')`），这里是双重保险：
+      // 前面两条链都失败时首页仍要有内容，而不是一片空白。
+      try {
+        songs = await RecommendDataUtil.loadPrivateSongListAsync(12, 'qq');
+      } catch (_err) {
+        songs = [];
+      }
       if (songs.length > 0) {
         degraded = true;
         usedBoardName = '内地榜';
