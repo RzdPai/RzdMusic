@@ -72,10 +72,22 @@ export class PageTopInsetHelper {
 
   /**
    * 页盒是否已经贴到屏幕顶（据此决定 HDS 标题栏要不要自己退回状态栏下方）。
-   * @param boxTopVp 页根实测盒顶（窗口坐标 vp）。
-   * @returns `true` = 盒顶在 0（标题栏需要自己退到状态栏下方）。
+   *
+   * ⚠️ **真机实测后定稿：恒为 `false`**（2026-10-11 第六轮 22:13 的设置页截图量出来的）。
+   *
+   *   · 截图里标题栏（返回键 + 「设置」）的竖直中心 ≈ 114vp，而"理想位置"（状态栏 38 + 标题栏 56，
+   *     中心 66vp）相差 +48vp；换算成坐标就是 **标题栏占 76..132**，即 `38 + 38`；
+   *   · 同一张截图里**内容**（搜索框）落在 ≈ 94vp（我们给的让位 94）—— **内容一直是对的**；
+   *   · ⇒ HDS 的标题栏容器**本来就在状态栏下沿**（38 起排），`avoidLayoutSafeArea: true` 让它
+   *     **又退了一个状态栏**（76..132）。所以正确值是 `false`：标题栏回到 38..94 ✔。
+   *
+   * 也就是说「标题下移」既不是内容让位的问题（`contentOffsetVp` 是对的），也不是页盒顶边的问题
+   * ——是这一个开关。内容让位公式保持不动。
+   * @param boxTopVp 页根实测盒顶（窗口坐标 vp）——本方法已恒返回 false，参数只用于日志诊断。
+   * @returns 恒为 `false`。
    */
   public static avoidLayoutSafeArea(boxTopVp: number): boolean {
-    return (boxTopVp > 0 ? boxTopVp : 0) <= 0.5;
+    // boxTopVp 仅用于诊断日志（`RzdPageTopInset` 里已经打出来了），这里不再把它当判据。
+    return boxTopVp < -1000000;
   }
 }

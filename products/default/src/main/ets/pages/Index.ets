@@ -941,13 +941,18 @@ struct Index {
       //   官方《组件适配沉浸光感》原文：「设置悬浮材质后，**不建议**再通过 `barBackgroundColor`、
       //   `barBackgroundBlurStyle` 为 TabBar 设置背景色或背景模糊，**避免遮挡材质效果**。」
       .barFloatingStyle({
-        // ★★ 用户 2026-10-11：「二级页面播放条错位…你应该参考一下其他显示正常的页面是怎么写的」。
-        //   显示正常的是**首页那条官方底栏**（壳层 `HdsTabs` 的 `barFloatingStyle`），它
-        //   **不传 `barWidth`**；而这里原来传了三档 `barWidth`（我们算的"窗口宽 − 两侧留白"）。
-        //   官方 `barWidth` 只改**胶囊**的宽度，**不参与** tabBar 内容的排布 ⇒ 胶囊被我们压窄、
-        //   内容仍按 HDS 默认几何铺开 ⇒ 胶囊与内容错位（用户看到的"播放条错位"）。
-        //   ⇒ 与首页那条**逐字对齐**：只给 barBottomMargin / adaptToHandedness / systemMaterialEffect。
-        //   离底间距交给 HDS 的浮动栏自己算（与首页那条同口径）
+        // ★★ 栏宽**必须显式给**（官方 `HdsTabsFloatingStyle.barWidth` 三档）。
+        //   ⚠️ 2026-10-11 第六轮我按"参考首页那条"把它去掉了，装到机器上**更糟**
+        //   （用户：「播放条原本是错位，现在还没上个版本正常」）⇒ 恢复三档 `barWidth`：
+        //   不给就按 HDS 自己的默认宽度画 ⇒ 真机上那条悬浮胶囊只有"一小坨"，
+        //   而里面的播放器是按 100% 排的 ⇒ 内容整个溢出胶囊外。
+        //   按窗口宽 − 两侧留白给三档同值（宽屏再夹一个最大宽）。
+        barWidth: {
+          smallWidth: this.floatingMiniBarWidthVp(),
+          mediumWidth: this.floatingMiniBarWidthVp(),
+          largeWidth: this.floatingMiniBarWidthVp()
+        },
+        // 离底间距交给 HDS 的浮动栏自己算（与首页那条同口径）
         barBottomMargin: this.floatingMiniBarBottomMarginVp(),
         adaptToHandedness: false,
         // ★ 官方沉浸光感：档位与标题栏/首页底栏共用同一份（ambientTitleMaterial）。

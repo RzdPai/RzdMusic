@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -838,7 +838,9 @@ export struct MinePage {
         }
       } else {
         if (this.collectedPlaylists.length === 0) {
-          Text('还没有收藏歌单。到「平台音乐」里点歌单右侧的星标，收藏的在线歌单会出现在这里')
+          Text('')
+            .width('100%')
+            .height(12)
             .fontSize(F_SUB)
             .fontColor($r('sys.color.font_tertiary'))
             .width('100%')

@@ -851,7 +851,7 @@ struct OnlineSearchPage {
     entry.time = Date.now();
     store.addFavoritePlaylist(entry);
     this.getUIContext().getPromptAction().showToast(
-      { message: '已收藏，可在「我的 → 收藏歌单」找到', duration: 2200 });
+      { message: '已收藏', duration: 1500 });
   }
 
   private async addPlaylistToMine(p: SearchPlaylistInfo): Promise<void> {
