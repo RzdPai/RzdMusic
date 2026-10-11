@@ -560,7 +560,11 @@ export struct MusicRecognitionPage {
             //   依据：页根 `NavDestination` 内容区从屏幕 **y=0** 起排（壳层 `HdsNavigation` 自带
             //   `ignoreLayoutSafeArea([...],[TOP,BOTTOM])`；`expandSafeArea` 只扩绘制区、不改布局）
             //   ⇒ "静止时首屏内容落在标题栏下沿" = 偏移 状态栏 + 56。
-            //   上滑时内容从标题栏底下**再穿进状态栏**（Scroll 的 clip 默认 true，只在 y=0 处裁）。
+            //   上滑时内容从标题栏底下**再穿进状态栏** —— 靠的是下面 Scroll 自己那句
+            //   `clipContent(ContentClipMode.SAFE_AREA)`（官方《开发应用沉浸式效果》→「滚动类场景」：
+            //   「设置滚动容器的内容裁剪属性 `clipContent(ContentClipMode.SAFE_AREA)`，
+            //    **将内容层裁剪区域扩展至避让区**」）。原来 Scroll 用的是默认 `BOUNDARY`（按组件区域裁）
+            //   ⇒ 行到状态栏那条就被裁掉，所以"偏移放哪都没用"。
             top: getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP,
             left: 16,
             right: 16,
@@ -572,6 +576,11 @@ export struct MusicRecognitionPage {
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring)
         .align(Alignment.Top)
+        // ★★ 让内容能画进状态栏（"延伸进状态栏"）的**官方正解**：
+        //   官方《开发应用沉浸式效果》→「滚动类场景」② —— 设置滚动容器的内容裁剪属性
+        //   `clipContent(ContentClipMode.SAFE_AREA)`，**将内容层裁剪区域扩展至避让区**。
+        //   ⚠️ 链上任何祖先都**不能**再写 `clip(true)`（官方："需要确保父组件未设置 clip 等裁剪属性"）。
+        .clipContent(ContentClipMode.SAFE_AREA)
 
         // 网易云 AFP 指纹 WASM 的隐藏宿主（与 LXSourceEngine 同款配置）：
         // 使用 1x1 + opacity(0) 而非负坐标定位，保证 WebView 在
@@ -598,7 +607,11 @@ export struct MusicRecognitionPage {
       }
       .width('100%')
       .height('100%')
-      .clip(true)
+      // ⚠️ 这里原来写 `.clip(true)`（上一轮"要挡住内容"的错误口径下加的）**已删除** ——
+      //   官方《开发应用沉浸式效果》：「子节点可以单独设置该属性……**需要确保父组件未设置 clip
+      //   等裁剪属性**」⇒ 祖先有一层 `clip(true)`，里面 Scroll 的
+      //   `clipContent(ContentClipMode.SAFE_AREA)` 就白设了，行到状态栏那条仍被裁掉。
+      //   （`Scroll` 自己默认的裁剪语义保持不变，别再动。）
       // ★ 状态栏那一条归页面（2026-10-11 第二十轮，用户：「我想让它延伸进状态栏」）：
       //   这里是**内容容器**，**不加任何顶部 padding** —— 容器从屏幕 y=0 起排，里面的 `Scroll`
       //   拿到整屏视口；"状态栏 + 标题栏"那段留白改由 Scroll 内容根 Column 的

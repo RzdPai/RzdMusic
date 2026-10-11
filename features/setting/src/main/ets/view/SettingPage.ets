@@ -1432,6 +1432,13 @@ export struct SettingPage {
     .scrollBar(BarState.Off)
     .edgeEffect(EdgeEffect.Spring)
     .align(Alignment.Top)
+    // ★★ 让内容能画进状态栏（"延伸进状态栏"）的**官方正解**：
+    //   官方《开发应用沉浸式效果》→「滚动类场景」② —— 设置滚动容器的内容裁剪属性
+    //   `clipContent(ContentClipMode.SAFE_AREA)`，**将内容层裁剪区域扩展至避让区**。
+    //   `Scroll` 的默认值是 `ContentClipMode.BOUNDARY`（按组件区域裁）⇒ 内容到状态栏那条会被裁掉。
+    //   ⚠️ 链上任何祖先都**不能**再写 `clip(true)`（官方："需要确保父组件未设置 clip 等裁剪属性"）——
+    //   本页「页根 → 滚动容器」这条链上**没有**内容容器，`Scroll` 就是 HdsNavDestination 的一级子节点。
+    .clipContent(ContentClipMode.SAFE_AREA)
     // 滚动联动双层底栏：上滑收起、下滑展开（与首页/歌单/我的一致）
     .onScrollFrameBegin((offset: number): OnScrollFrameBeginHandlerResult => {
       if (BarScrollHelper.isEnabled()) {

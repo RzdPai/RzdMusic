@@ -1041,11 +1041,16 @@ export struct PlaylistsPage {
           .height('100%')
           .scrollBar(BarState.Off)
           .edgeEffect(EdgeEffect.Spring)
-          // ★ 必须是 `clip(true)`（List 的默认值，官方《通用属性·背景》：「List、Scroll… 组件的 clip
-          //   属性默认值为 true」；滚动容器的内容裁剪模式 List 默认 `ContentClipMode.CONTENT_ONLY`，
-          //   「裁剪只针对滚动容器的内容」）。原来写 `clip(false)` ⇒ 滚出视口的行**不受任何裁剪**，
-          //   会一路画到屏幕 y=0（状态栏那一条）—— 只靠外面那层容器的 padding 挡不住这种"漏画"。
-          .clip(true)
+          // ★★ 让内容能画进状态栏（"延伸进状态栏"）的**官方正解**。
+          //   官方《开发应用沉浸式效果》→「滚动类场景」原文：
+          //     「滚动容器设置 expandSafeArea 属性生效，但当父组件是滚动容器时，子组件设置 expandSafeArea
+          //      不生效。对于滚动容器的子组件……② 设置父组件滚动容器和子组件相同的背景色，
+          //      设置滚动容器的内容裁剪属性 `clipContent(ContentClipMode.SAFE_AREA)`，
+          //      **将内容层裁剪区域扩展至避让区**。」
+          //   原来这里写的是 `.clip(true)`（List 默认 `ContentClipMode.CONTENT_ONLY`，按内容区裁）
+          //   ⇒ 行一滚到状态栏那条就被裁掉，所以"偏移放哪都没用"。
+          //   ⚠️ 链上任何祖先都**不能**再写 `clip(true)`（官方："需要确保父组件未设置 clip 等裁剪属性"）。
+          .clipContent(ContentClipMode.SAFE_AREA)
           // 滚动联动双层底栏：上滑收起、下滑展开（与首页/我的/设置一致）
           .onScrollFrameBegin((offset: number): OnScrollFrameBeginHandlerResult => {
             this.onPageScrollFrame(offset);
@@ -1056,7 +1061,8 @@ export struct PlaylistsPage {
           //   依据：页根 `NavDestination` 的内容区从屏幕 **y=0** 起排（壳层 `products/default/.../Index.ets`
           //   的 `HdsNavigation` 自带 `ignoreLayoutSafeArea([...],[TOP,BOTTOM])`；`expandSafeArea` 只扩绘制区、
           //   不改布局），所以"静止时第一行正好落在标题栏下沿"= 偏移量必须是 状态栏 + 56。
-          //   效果：往上滚时整行从标题栏底下**再穿进状态栏**（`clip(true)` 只在 y=0 处裁），
+          //   效果：往上滚时整行从标题栏底下**再穿进状态栏**（`clipContent(SAFE_AREA)` 把内容裁剪区
+          //   扩到避让区，行一路画到屏幕最顶端），
           //   而容器 padding 那套会让滚动视口从状态栏下沿起排、状态栏那一条永远是死背景。
           .contentStartOffset(getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP)
           .divider({
@@ -1079,7 +1085,11 @@ export struct PlaylistsPage {
       }
       .width('100%')
       .height('100%')
-      .clip(true)
+      // ⚠️ 这里原来写 `.clip(true)`（上一轮"要挡住内容"的错误口径下加的）**已删除** ——
+      //   官方《开发应用沉浸式效果》：「子节点可以单独设置该属性……**需要确保父组件未设置 clip
+      //   等裁剪属性**」⇒ 祖先只要有一层 `clip(true)`，滚动容器自己的
+      //   `clipContent(ContentClipMode.SAFE_AREA)` 就白设了，行到状态栏那条仍被裁掉。
+      //   （`List` 自己默认的裁剪语义保持不变，别再动它。）
       // ★ 状态栏那一条归页面（2026-10-11 第二十轮，用户：「我想让它延伸进状态栏」）：
       //   这里是**内容容器**，**不加任何顶部 padding** —— 容器从屏幕 y=0 起排，
       //   里面的 `List` 才有完整的整屏视口；"状态栏 + 标题栏"那段留白改由 List 自己的

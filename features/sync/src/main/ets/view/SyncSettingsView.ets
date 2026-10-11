@@ -604,6 +604,16 @@ export struct SyncSettingsPanel {
       .height('100%')
       .scrollBar(BarState.Off)
       .align(Alignment.Top)
+      // ★★ 让内容能画进状态栏（"延伸进状态栏"）的**官方正解**（官方《开发应用沉浸式效果》→「滚动类场景」）：
+      //   「设置父组件滚动容器和子组件相同的背景色，设置滚动容器的内容裁剪属性
+      //    `clipContent(ContentClipMode.SAFE_AREA)`，**将内容层裁剪区域扩展至避让区**。」
+      //   `Scroll` 默认 `ContentClipMode.BOUNDARY`（按组件区域裁）⇒ 卡片滚到状态栏那条会被裁掉。
+      //   面板的顶部留白本来就在**滚动内容里**（上面那个 Column 的 `padding top = topOffset + 12`）
+      //   ⇒ 换成本句之后卡片才能一路画到屏幕最顶端。
+      //   ⚠️ 链上任何祖先都**不能**再写 `clip(true)`（官方："需要确保父组件未设置 clip 等裁剪属性"）；
+      //   本面板里那三处 `.clip(true)` 都在**卡片自己**那一层（infoCard / hostHistoryCard / dislikeCard），
+      //   不是 `Scroll` 的祖先，与这里无关。
+      .clipContent(ContentClipMode.SAFE_AREA)
 
       // 服务端要求选择同步方式：盖一层自绘底部面板（不用 bindSheet，内嵌时也能工作）
       if (this.state.pendingMode !== null) {

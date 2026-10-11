@@ -822,7 +822,16 @@ export struct RecordListPage {
         .height('100%')
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring)
-        .clip(true)
+        // ★★ 让内容能画进状态栏（"延伸进状态栏"）的**官方正解**。
+        //   官方《开发应用沉浸式效果》→「滚动类场景」原文：
+        //     「滚动容器设置 expandSafeArea 属性生效，但当父组件是滚动容器时，子组件设置 expandSafeArea
+        //      不生效。对于滚动容器的子组件……② 设置父组件滚动容器和子组件相同的背景色，
+        //      设置滚动容器的内容裁剪属性 `clipContent(ContentClipMode.SAFE_AREA)`，
+        //      **将内容层裁剪区域扩展至避让区**。」
+        //   原来这里写的是 `.clip(true)`（= 裁到 padding 内侧的内容矩形）⇒ 行一滚到状态栏就被裁掉，
+        //   所以"偏移放哪都没用"。换成 SAFE_AREA 后裁剪区含避让区，行才能一路画到屏幕最顶端。
+        //   ⚠️ 链上任何祖先都**不能**再写 `clip(true)`（官方："需要确保父组件未设置 clip 等裁剪属性"）。
+        .clipContent(ContentClipMode.SAFE_AREA)
         .padding({
           left: this.contentPaddingSide(),
           right: this.contentPaddingSide()

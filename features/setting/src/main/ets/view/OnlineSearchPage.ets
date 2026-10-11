@@ -1654,6 +1654,13 @@ struct OnlineSearchPage {
             right: 12,
             bottom: 0
           })
+          // ★★ 让内容能画进状态栏（"延伸进状态栏"）的**官方正解**：
+          //   官方《开发应用沉浸式效果》→「滚动类场景」② —— 设置滚动容器的内容裁剪属性
+          //   `clipContent(ContentClipMode.SAFE_AREA)`，**将内容层裁剪区域扩展至避让区**。
+          //   原来 List 用的是默认 `ContentClipMode.CONTENT_ONLY`（按内容区裁）
+          //   ⇒ 行一滚到状态栏那条就被裁掉，所以"偏移放哪都没用"。
+          //   ⚠️ 链上任何祖先都**不能**再写 `clip(true)`（官方："需要确保父组件未设置 clip 等裁剪属性"）。
+          .clipContent(ContentClipMode.SAFE_AREA)
 
           if (this.searching) {
             Column({ space: 8 }) {
@@ -1710,7 +1717,11 @@ struct OnlineSearchPage {
       }
       .width('100%')
       .height('100%')
-      .clip(true)
+      // ⚠️ 这里原来写 `.clip(true)`（上一轮"要挡住内容"的错误口径下加的）**已删除** ——
+      //   官方《开发应用沉浸式效果》：「子节点可以单独设置该属性……**需要确保父组件未设置 clip
+      //   等裁剪属性**」⇒ 祖先有一层 `clip(true)`，里面 List 的
+      //   `clipContent(ContentClipMode.SAFE_AREA)` 就白设了，行到状态栏那条仍被裁掉。
+      //   （`List` 自己默认的裁剪语义保持不变，别再动。）
       // ★ 状态栏那一条归页面（2026-10-11 第二十轮，用户：「我想让它延伸进状态栏」）：
       //   这里是**内容容器**，顶部 padding 回到 0（== 不让位）—— 容器从屏幕 y=0 起排、
       //   `List` 拿整屏视口；"状态栏 + 标题栏 + 搜索行"那段留白改由

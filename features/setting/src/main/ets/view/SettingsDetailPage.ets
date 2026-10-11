@@ -734,6 +734,7 @@ export struct SettingsDetailPage {
       .padding({ left: 2, right: 2 })
     }
     .scrollable(ScrollDirection.Horizontal)
+    .clipContent(ContentClipMode.SAFE_AREA)
     .scrollBar(BarState.Off)
     .width('100%')
     .margin({ top: 8 })
@@ -984,6 +985,7 @@ export struct SettingsDetailPage {
     .height('100%')
     .padding({ top: 0 })
     .align(Alignment.Top)
+    .clipContent(ContentClipMode.SAFE_AREA)
     .scrollBar(BarState.Off)
   }
 
@@ -1064,6 +1066,7 @@ export struct SettingsDetailPage {
     .height('100%')
     .padding({ top: 0 })
     .align(Alignment.Top)
+    .clipContent(ContentClipMode.SAFE_AREA)
     .scrollBar(BarState.Off)
   }
 
@@ -1126,6 +1129,7 @@ export struct SettingsDetailPage {
     .height('100%')
     .padding({ top: 0 })
     .align(Alignment.Top)
+    .clipContent(ContentClipMode.SAFE_AREA)
     .scrollBar(BarState.Off)
   }
 
@@ -1259,6 +1263,7 @@ export struct SettingsDetailPage {
     .height('100%')
     .padding({ top: 0 })
     .align(Alignment.Top)
+    .clipContent(ContentClipMode.SAFE_AREA)
     .scrollBar(BarState.Off)
   }
 
@@ -1414,6 +1419,7 @@ export struct SettingsDetailPage {
     .height('100%')
     .padding({ top: 0 })
     .align(Alignment.Top)
+    .clipContent(ContentClipMode.SAFE_AREA)
     .scrollBar(BarState.Off)
   }
 
@@ -1522,6 +1528,7 @@ export struct SettingsDetailPage {
         .width('100%')
       }
       .layoutWeight(1)
+      .clipContent(ContentClipMode.SAFE_AREA)
       .scrollBar(BarState.Off)
       .align(Alignment.Top)
     }

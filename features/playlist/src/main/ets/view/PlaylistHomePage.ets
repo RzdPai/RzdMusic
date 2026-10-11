@@ -440,10 +440,12 @@ export struct PlaylistHomePage {
             .width('100%')
             .layoutWeight(1)
             .scrollBar(BarState.Off)
-            // ★ 必须是 `clip(true)`（List 的默认值）：`clip(false)` 时滚出视口的行**不受任何裁剪**，
-            //   会一路画到屏幕 y=0（状态栏那一条）——外面容器的 padding 挡不住这种"漏画"。
-            //   与「全部歌单」同一处修法（见 `PlaylistsPage`）。
-            .clip(true)
+            // ★★ 让内容能画进状态栏的**官方正解**（官方《开发应用沉浸式效果》→「滚动类场景」）：
+            //   「设置父组件滚动容器和子组件相同的背景色，设置滚动容器的内容裁剪属性
+            //    `clipContent(ContentClipMode.SAFE_AREA)`，**将内容层裁剪区域扩展至避让区**。」
+            //   原来写 `.clip(true)`（List 默认 `CONTENT_ONLY`，按内容区裁）⇒ 行滚到状态栏就被裁掉。
+            //   ⚠️ 链上任何祖先都**不能**再写 `clip(true)`（官方："需要确保父组件未设置 clip 等裁剪属性"）。
+            .clipContent(ContentClipMode.SAFE_AREA)
             .divider({
               strokeWidth: 0.5,
               color: $r('sys.color.comp_divider'),
@@ -482,8 +484,8 @@ export struct PlaylistHomePage {
             .width('100%')
             .layoutWeight(1)
             .scrollBar(BarState.Off)
-            // ★ 同上一支：`clip(false)` → `clip(true)`，理由见上面的注释。
-            .clip(true)
+            // ★ 同上一支：`clip(true)` → `clipContent(ContentClipMode.SAFE_AREA)`，理由见上面的注释。
+            .clipContent(ContentClipMode.SAFE_AREA)
             .divider({
               strokeWidth: 0.5,
               color: $r('sys.color.comp_divider'),
@@ -497,7 +499,11 @@ export struct PlaylistHomePage {
       }
       .width('100%')
       .height('100%')
-      .clip(true)
+      // ⚠️ 这里原来写 `.clip(true)`（上一轮"要挡住内容"的错误口径下加的）**已删除** ——
+      //   官方《开发应用沉浸式效果》：「子节点可以单独设置该属性……**需要确保父组件未设置 clip
+      //   等裁剪属性**」⇒ 祖先有一层 `clip(true)`，上面两支 List 的
+      //   `clipContent(ContentClipMode.SAFE_AREA)` 就白设了。
+      //   （两支 `List` 自己默认的裁剪语义保持不变，别再动。）
       .padding({
         // ★ 状态栏那一条归页面（2026-10-11 第二十轮，用户：「我想让它延伸进状态栏」）：
         //   这里是**内容容器**，顶部 padding 已删 —— 容器从屏幕 y=0 起排、List 拿整屏视口，
