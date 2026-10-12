@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -150,7 +150,11 @@ export struct HomeMiniBarPlayer {
     //      的另一半原因（见 `MiniPlayer胶囊布局与宽度约束.md` 第六节第 2、3 条）。
     .padding({
       left: this.sidePadVp(),
-      right: this.actionsTrailVp(),
+      // ★ 用户 2026-10-12：「右边三个按钮往左移动一点」——二级页面这条胶囊里，内容宽 = 胶囊宽，
+      //   而 `actionsTrailVp()` 是照**首页那条**（内容比胶囊宽）定的 ⇒ 按钮簇贴着胶囊右缘。
+      //   折叠态（= 二级页面，`followAppMiniBarExpanded === false`）再收一份 `sidePadVp()`，
+      //   与左侧封面到胶囊左缘的距离同一个口径，不放新的魔法数；首页那条完全不变。
+      right: this.actionsTrailVp() + (this.followAppMiniBarExpanded ? 0 : this.sidePadVp()),
       top: 6,
       bottom: 6,
     })

@@ -957,7 +957,10 @@ struct Index {
           largeWidth: this.floatingMiniBarWidthVp()
         },
         // 离底间距交给 HDS 的浮动栏自己算（与首页那条同口径）
-        barBottomMargin: this.floatingMiniBarBottomMarginVp(),
+        // ★ 用户 2026-10-12：「播放条整个往下移动一些，就用首页的 Tab 栏的位置」——
+        //   原来用 loatingMiniBarBottomMarginVp()（= max(12, 避让 + 8)），比首页底栏高约 8vp；
+        //   现在直接用首页那条的 homeTabBarBottomMarginVp()，两条栏**同一个离底口径**。
+        barBottomMargin: this.homeTabBarBottomMarginVp(),
         adaptToHandedness: false,
         // ★ 官方沉浸光感：档位与标题栏/首页底栏共用同一份（ambientTitleMaterial）。
         systemMaterialEffect: this.ambientTitleMaterial()
