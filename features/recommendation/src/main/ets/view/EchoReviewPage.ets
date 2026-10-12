@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -702,6 +702,7 @@ export struct EchoReviewPage {
   private TopArtistSection() {
     Column({ space: 10 }) {
       this.SectionTitle('最常听的歌手')
+      Column({ space: 10 }) {
       if (this.stats.topArtists.length === 0) {
         this.EmptyHint()
       } else {
@@ -773,13 +774,16 @@ export struct EchoReviewPage {
           .borderRadius(14)
         }
       }
+      // ★ 用户 2026-10-13：「文字放卡片外」——官方区块标题是**卡片外的纯文字**，卡片只包数据
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+      .padding(14)
+      .backgroundColor('#14FFFFFF')
+      .borderRadius(16)
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
-    // ★ 用户 2026-10-12：「你少了很多卡片背景」——官方每个区块都坐在一张圆角卡上
-    .padding(14)
-    .backgroundColor('#14FFFFFF')
-    .borderRadius(16)
   }
 
   /** 最常听的专辑。 */
@@ -787,6 +791,7 @@ export struct EchoReviewPage {
   private TopAlbumsSection() {
     Column({ space: 10 }) {
       this.SectionTitle('最常听的专辑')
+      Column({ space: 10 }) {
       if (this.stats.topAlbums.length === 0) {
         this.EmptyHint()
       } else {
@@ -820,13 +825,16 @@ export struct EchoReviewPage {
         .width('100%')
         .alignItems(VerticalAlign.Top)
       }
+      // ★ 用户 2026-10-13：「文字放卡片外」——官方区块标题是**卡片外的纯文字**，卡片只包数据
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+      .padding(14)
+      .backgroundColor('#14FFFFFF')
+      .borderRadius(16)
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
-    // ★ 用户 2026-10-12：「你少了很多卡片背景」——官方每个区块都坐在一张圆角卡上
-    .padding(14)
-    .backgroundColor('#14FFFFFF')
-    .borderRadius(16)
   }
 
   /** 你是怎样的听众：24 小时柱状图。 */
@@ -834,6 +842,7 @@ export struct EchoReviewPage {
   private AudienceSection() {
     Column({ space: 10 }) {
       this.SectionTitle('你是怎样的听众')
+      Column({ space: 10 }) {
       Text('听歌时段')
         .fontSize(13)
         .fontColor('#99FFFFFF')
@@ -913,13 +922,16 @@ export struct EchoReviewPage {
         .fontColor('#CCFFFFFF')
         .width('100%')
         .textAlign(TextAlign.Start)
+      // ★ 用户 2026-10-13：「文字放卡片外」——官方区块标题是**卡片外的纯文字**，卡片只包数据
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+      .padding(14)
+      .backgroundColor('#14FFFFFF')
+      .borderRadius(16)
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
-    // ★ 用户 2026-10-12：「你少了很多卡片背景」——官方每个区块都坐在一张圆角卡上
-    .padding(14)
-    .backgroundColor('#14FFFFFF')
-    .borderRadius(16)
   }
 
   /** 完播率（口径写在页面上，见文件头）。 */
@@ -927,6 +939,7 @@ export struct EchoReviewPage {
   private CompletionSection() {
     Column({ space: 8 }) {
       this.SectionTitle('完播率')
+      Column({ space: 10 }) {
       Row({ space: 14 }) {
         Stack({ alignContent: Alignment.Center }) {
           Progress({ value: this.stats.completeRate, total: 100, type: ProgressType.Ring })
@@ -963,13 +976,16 @@ export struct EchoReviewPage {
         .alignItems(HorizontalAlign.Start)
       }
       .width('100%')
+      // ★ 用户 2026-10-13：「文字放卡片外」——官方区块标题是**卡片外的纯文字**，卡片只包数据
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+      .padding(14)
+      .backgroundColor('#14FFFFFF')
+      .borderRadius(16)
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
-    // ★ 用户 2026-10-12：「你少了很多卡片背景」——官方每个区块都坐在一张圆角卡上
-    .padding(14)
-    .backgroundColor('#14FFFFFF')
-    .borderRadius(16)
   }
 
   /** 新发现。 */
@@ -977,6 +993,7 @@ export struct EchoReviewPage {
   private NewDiscoverySection() {
     Column({ space: 8 }) {
       this.SectionTitle('新发现')
+      Column({ space: 10 }) {
       Row({ space: 6 }) {
         Text(String(this.stats.newSongCount))
           .fontSize(24)
@@ -1005,13 +1022,16 @@ export struct EchoReviewPage {
         .fontColor('#CCFFFFFF')
         .width('100%')
         .textAlign(TextAlign.Start)
+      // ★ 用户 2026-10-13：「文字放卡片外」——官方区块标题是**卡片外的纯文字**，卡片只包数据
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+      .padding(14)
+      .backgroundColor('#14FFFFFF')
+      .borderRadius(16)
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
-    // ★ 用户 2026-10-12：「你少了很多卡片背景」——官方每个区块都坐在一张圆角卡上
-    .padding(14)
-    .backgroundColor('#14FFFFFF')
-    .borderRadius(16)
   }
 
   @Builder
