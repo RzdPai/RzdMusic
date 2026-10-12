@@ -669,9 +669,11 @@ export struct EchoReviewPage {
     const bottomRise: number = shrink * (1 - SIDE_TOP_WEIGHT);
     return matrix4.identity().setPolyToPoly({
       src: [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: 0, y: h }, { x: w, y: h }],
+      // ★ 用户 2026-10-13：「上边缘对了，**下边缘还是反的**」⇒ 内侧下角改成**往下沉**（原来往上抬），
+      //   上下两条边同向斜，视觉上才和官方一致。
       dst: isRight
-        ? [{ x: 0, y: topDrop }, { x: w, y: 0 }, { x: 0, y: h - bottomRise }, { x: w, y: h }]
-        : [{ x: 0, y: 0 }, { x: w, y: topDrop }, { x: 0, y: h }, { x: w, y: h - bottomRise }],
+        ? [{ x: 0, y: topDrop }, { x: w, y: 0 }, { x: 0, y: h + bottomRise }, { x: w, y: h }]
+        : [{ x: 0, y: 0 }, { x: w, y: topDrop }, { x: 0, y: h }, { x: w, y: h + bottomRise }],
       srcIndex: 0,
       dstIndex: 0,
       pointCount: 4
@@ -752,7 +754,7 @@ export struct EchoReviewPage {
     .layoutWeight(rank === '1st' ? 2 : 1)
     .alignItems(HorizontalAlign.Center)
     // ★ 用户 2026-10-12：「左右两张往中间靠靠，官方的是被盖住了一部分」⇒ 负 margin 与中卡叠压
-    .margin({ left: rank === '2nd' ? -44 : 0, right: rank === '3rd' ? -44 : 0 })
+    .margin({ left: rank === '2nd' ? -62 : 0, right: rank === '3rd' ? -62 : 0 })
   }
 
   /** 最常听的歌手：大图卡 + 后面几名；这一段可见时背景淡入。 */
