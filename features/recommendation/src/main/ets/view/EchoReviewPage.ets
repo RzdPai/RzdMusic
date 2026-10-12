@@ -660,9 +660,9 @@ export struct EchoReviewPage {
             //   第 1 名不转（ngle: 0）。若倾斜方向反了，把 angle/z 的正负一起翻即可。
             .rotate({
               y: 1,
-              z: rank === '2nd' ? -0.05 : 0.05,
-              perspective: 70,
-              angle: rank === '1st' ? 0 : (rank === '2nd' ? -38 : 38)
+              z: rank === '2nd' ? -0.14 : 0.14,
+              perspective: 55,
+              angle: rank === '1st' ? 0 : (rank === '2nd' ? -46 : 46)
             })
             .zIndex(rank === '1st' ? 2 : 1)
         } else {
@@ -678,7 +678,8 @@ export struct EchoReviewPage {
 
       Text(rank)
         .fontSize(12)
-        .fontColor('#99FFFFFF')
+          // ★ 用户 2026-10-13：「1st/2nd/3rd 颜色不一样」⇒ 三档亮度（1st 最亮）
+          .fontColor(rank === '1st' ? '#FFFFFF' : (rank === '2nd' ? '#B3FFFFFF' : '#73FFFFFF'))
       Text(item.name)
         .fontSize(rank === '1st' ? 14 : 12)
         .fontWeight(rank === '1st' ? FontWeight.Bold : FontWeight.Normal)
@@ -693,7 +694,7 @@ export struct EchoReviewPage {
     .layoutWeight(rank === '1st' ? 2 : 1)
     .alignItems(HorizontalAlign.Center)
     // ★ 用户 2026-10-12：「左右两张往中间靠靠，官方的是被盖住了一部分」⇒ 负 margin 与中卡叠压
-    .margin({ left: rank === '2nd' ? -26 : 0, right: rank === '3rd' ? -26 : 0 })
+    .margin({ left: rank === '2nd' ? -44 : 0, right: rank === '3rd' ? -44 : 0 })
   }
 
   /** 最常听的歌手：大图卡 + 后面几名；这一段可见时背景淡入。 */
@@ -884,7 +885,7 @@ export struct EchoReviewPage {
         }, (count: number, index: number) => 'day_' + index)
       }
       // ★ 用户 2026-10-12：官方是**三行**小方块（31 天 ÷ 11 ≈ 3 行），不是一行大格子
-      .columnsTemplate('1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr')
+      .columnsTemplate('1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr')
       // ★ 用户 2026-10-12：「听歌日历也太大了」⇒ 收紧成官方那种紧凑热力图
       .rowsGap(2)
       .columnsGap(2)
