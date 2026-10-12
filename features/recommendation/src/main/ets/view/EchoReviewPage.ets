@@ -29,7 +29,8 @@
  * 且不依赖 PixelMap 解码链路，稳）；`backdropOpacity` 由 `onVisibleAreaChange` 驱动。
  */
 
-import { MusicStoreService, PageTopInsetHelper, PlayedSongRecord } from 'musicbasic';
+import { AppStorageKeys, BarScrollHelper, MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord } from 'musicbasic';
+import { AppStorageV2, uiObserver } from '@kit.ArkUI';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 
 /** 一段统计结果（整体重建后一次性赋给 @Local，避免深层可变状态）。 */
@@ -141,6 +142,11 @@ export struct EchoReviewPage {
   @Local yearLabel: string = '';
   @Local monthLabel: string = '';
   private scroller: Scroller = new Scroller();
+  /** 共享播放状态（底栏联动要读它）。 */
+  @Local appState: MusicAppState =
+    AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
+  /** 窗口断点（底栏联动的 notifyScrollDelta 需要）。 */
+  @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
 
   aboutToAppear(): void {
     this.reload();
@@ -381,8 +387,10 @@ export struct EchoReviewPage {
   /** HDS 标题栏：标题就是「月份 · 回响」（官方把这句话放在标题栏里）。 */
   private getTitleBar(): HdsNavigationTitleBarOptions {
     return {
-      // 避让口径与其他页一致（真机定论：HDS 标题栏容器本来就在状态栏下沿）
-      avoidLayoutSafeArea: false,
+      // ★★ 用户 2026-10-13：「标题还是没正常，参考推荐页（首页）或我的页」⇒ 与那两页**逐字一致**：
+      //   页根 ignoreLayoutSafeArea(TOP,BOTTOM) 让盒子从 y=0 起排 + avoidLayoutSafeArea: true
+      //   让 HDS 标题栏自己退到状态栏下方 ⇒ 标题落在 38..94（这就是那两页的口径）。
+      avoidLayoutSafeArea: true,
       style: {
         blurStrategy: BlurStrategy.ENABLE,
         scrollEffectOpts: {
@@ -423,13 +431,21 @@ export struct EchoReviewPage {
           Column().width('100%').height(120)
         }
         .width('100%')
-      // 页根从状态栏下起排 ⇒ 内容只需让开 HDS 标题栏那一行（用公共常量，不写魔法数）
-      .padding({ left: 16, right: 16, top: PageTopInsetHelper.TITLE_BAR_HEIGHT_VP + 8 })
+      // 盒子从 y=0 起排（页根 ignore TOP）⇒ 内容让位 = 状态栏 + 标题栏 = 94（公共 helper 同一口径）
+      .padding({ left: 16, right: 16, top: PageTopInsetHelper.targetContentTopVp() + 8 })
       }
       .width('100%')
       .height('100%')
       .scrollBar(BarState.Off)
       .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
+      // ★ 用户 2026-10-13：「回想页上滑底栏不会收起，首页和我的页是正常的」⇒ 补上同一套底栏联动
+      .onScrollFrameBegin((offset: number): OnScrollFrameBeginHandlerResult => {
+        if (BarScrollHelper.isEnabled()) {
+          BarScrollHelper.notifyScrollDelta(this.getUIContext(), this.appState, offset,
+            this.breakpointEnv.widthBreakpoint as number);
+        }
+        return { offsetRemain: offset };
+      })
       .clipContent(ContentClipMode.SAFE_AREA)
     }
     .width('100%')
@@ -454,7 +470,7 @@ export struct EchoReviewPage {
     //   把布局区扩到 y=0，而 avoidLayoutSafeArea=false 的语义是「宿主已避让，标题栏不再避让」⇒ 标题锚在 0..56。
     //   页签页没人替我们避让（入栈页是 Navigation 保证页根从状态栏下开始），所以这里**只留 BOTTOM**：
     //   页根回到状态栏之下，标题自然落在 statusBar..statusBar+56。
-    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     .hideBackButton(true)
     .backgroundColor('#000000')
   }
