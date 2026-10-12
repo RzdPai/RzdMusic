@@ -884,8 +884,8 @@ export struct EchoReviewPage {
           }
         }, (count: number, index: number) => 'day_' + index)
       }
-      // ★ 用户 2026-10-12：官方是**三行**小方块（31 天 ÷ 11 ≈ 3 行），不是一行大格子
-      .columnsTemplate('1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr')
+      // ★ 用户 2026-10-13：官方是**两行**小方块（31 天 ÷ 16 ≈ 2 行）
+      .columnsTemplate('1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr')
       // ★ 用户 2026-10-12：「听歌日历也太大了」⇒ 收紧成官方那种紧凑热力图
       .rowsGap(2)
       .columnsGap(2)
