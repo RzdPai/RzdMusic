@@ -30,6 +30,7 @@
  */
 
 import { MusicStoreService, PlayedSongRecord } from 'musicbasic';
+import { CoverWing } from './CoverWing';
 
 /** 一段统计结果（整体重建后一次性赋给 @Local，避免深层可变状态）。 */
 export class EchoStats {
@@ -49,6 +50,8 @@ export class EchoStats {
   completeCount: number = 0;
   halfCount: number = 0;
   perDayMinutes: number = 0;
+  /** 上个月的总分钟数（用来显示「是上个月的 X 倍」，官方那句）。 */
+  prevMinutes: number = 0;
 }
 
 class EchoTopSong {
@@ -155,15 +158,26 @@ export struct EchoReviewPage {
     const store: MusicStoreService = MusicStoreService.getInstance();
     const all: PlayedSongRecord[] = store.getHistory();
     const range: MonthRange = monthRangeOf(this.monthOffset);
+    const prev: MonthRange = monthRangeOf(this.monthOffset - 1);
     this.yearLabel = String(range.year) + ' 年';
     this.monthLabel = range.label;
-    const stats: EchoStats = EchoReviewPage.buildStats(all, range);
+    const stats: EchoStats = EchoReviewPage.buildStats(all, range, prev);
     this.stats = stats;
     this.backdropImg = stats.topArtists.length > 0 ? stats.topArtists[0].img : '';
   }
 
+  /** 上个月对比文案（官方那句「是上个月的 X 倍」）。 */
+  private ratioText(): string {
+    const prev: number = this.stats.prevMinutes;
+    if (prev <= 0) {
+      return this.stats.totalMinutes > 0 ? '上个月还没有听歌记录' : '';
+    }
+    const ratio: number = this.stats.totalMinutes / prev;
+    return '是上个月的 ' + ratio.toFixed(1) + ' 倍';
+  }
+
   /** 纯函数：把记录聚合成一段统计。 */
-  private static buildStats(all: PlayedSongRecord[], range: MonthRange): EchoStats {
+  private static buildStats(all: PlayedSongRecord[], range: MonthRange, prev: MonthRange): EchoStats {
     const out: EchoStats = new EchoStats();
     out.hourBuckets = [];
     for (let i: number = 0; i < HOURS_IN_DAY; i++) {
@@ -175,17 +189,21 @@ export struct EchoReviewPage {
     }
     const inMonth: PlayedSongRecord[] = [];
     const firstSeen: Map<string, number> = new Map();
+    let prevSeconds: number = 0;
     for (let i: number = 0; i < all.length; i++) {
       const r: PlayedSongRecord = all[i];
       const key: string = r.source + '|' + r.songId;
-      const prev: number | undefined = firstSeen.get(key);
-      if (prev === undefined || r.time < prev) {
+      const prevSeen: number | undefined = firstSeen.get(key);
+      if (prevSeen === undefined || r.time < prevSeen) {
         firstSeen.set(key, r.time);
       }
       if (r.time >= range.start && r.time < range.end) {
         inMonth.push(r);
+      } else if (r.time >= prev.start && r.time < prev.end) {
+        prevSeconds += intervalSeconds(r.interval);
       }
     }
+    out.prevMinutes = Math.round(prevSeconds / 60);
     out.playCount = inMonth.length;
     let seconds: number = 0;
     const songCount: Map<string, number> = new Map();
@@ -390,29 +408,10 @@ export struct EchoReviewPage {
     .backgroundColor('#000000')
   }
 
-  /** 标题：`2026 年` / `10 月 · 回响`（点左右箭头切月）。 */
+  /** 标题：`10 月 · 回响` + 分钟数 + 与上月的倍数（官方版式）。 */
   @Builder
   private Header() {
     Column({ space: 6 }) {
-      Row({ space: 8 }) {
-        Text(this.yearLabel)
-          .fontSize(13)
-          .fontColor('#99FFFFFF')
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(14)
-          .fontColor(['#99FFFFFF'])
-          .onClick(() => {
-            this.shiftMonth(-1);
-          })
-        SymbolGlyph($r('sys.symbol.chevron_right'))
-          .fontSize(14)
-          .fontColor(['#99FFFFFF'])
-          .onClick(() => {
-            this.shiftMonth(1);
-          })
-      }
-      .width('100%')
-
       Text(this.monthLabel + ' · 回响')
         .fontSize(28)
         .fontWeight(FontWeight.Bold)
@@ -421,14 +420,66 @@ export struct EchoReviewPage {
         .textAlign(TextAlign.Start)
 
       Text(this.stats.totalMinutes + ' 分钟')
-        .fontSize(20)
-        .fontWeight(FontWeight.Medium)
+        .fontSize(24)
+        .fontWeight(FontWeight.Bold)
         .fontColor('#FFFFFF')
         .width('100%')
         .textAlign(TextAlign.Start)
+
+      if (this.ratioText().length > 0) {
+        Text(this.ratioText())
+          .fontSize(13)
+          .fontColor('#B3FFFFFF')
+          .width('100%')
+          .textAlign(TextAlign.Start)
+      }
+
+      // 年 / 月两枚胶囊（官方是带下拉箭头的胶囊按钮；这里左右箭头切月，形态一致）
+      Row({ space: 8 }) {
+        Row({ space: 4 }) {
+          Text(this.yearLabel)
+            .fontSize(13)
+            .fontColor('#E6FFFFFF')
+          SymbolGlyph($r('sys.symbol.chevron_down'))
+            .fontSize(11)
+            .fontColor(['#99FFFFFF'])
+        }
+        .height(30)
+        .padding({ left: 12, right: 12 })
+        .borderRadius(15)
+        .backgroundColor('#1FFFFFFF')
+
+        Row({ space: 8 }) {
+          SymbolGlyph($r('sys.symbol.chevron_left'))
+            .fontSize(12)
+            .fontColor(['#E6FFFFFF'])
+            .onClick(() => {
+              this.shiftMonth(-1);
+            })
+          Text(this.monthLabel)
+            .fontSize(13)
+            .fontColor('#E6FFFFFF')
+          SymbolGlyph($r('sys.symbol.chevron_right'))
+            .fontSize(12)
+            .fontColor(['#E6FFFFFF'])
+            .onClick(() => {
+              this.shiftMonth(1);
+            })
+        }
+        .height(30)
+        .padding({ left: 12, right: 12 })
+        .borderRadius(15)
+        .backgroundColor('#1FFFFFFF')
+      }
+      .width('100%')
+      .margin({ top: 6 })
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
+    // ★ 用户 2026-10-12：「你少了很多卡片背景」——官方每个区块都坐在一张圆角卡上
+    .padding(14)
+    .backgroundColor('#14FFFFFF')
+    .borderRadius(16)
   }
 
   /** 三格统计：次播放 / 首歌 / 位歌手。 */
@@ -481,7 +532,10 @@ export struct EchoReviewPage {
       if (this.stats.topSongs.length === 0) {
         this.EmptyHint()
       } else {
-        Row({ space: 10 }) {
+        // ★ 用户 2026-10-12：「常听的歌参考首页现在就听的**侧翼**，你这就光旋转了图片」
+        //   ⇒ 照搬首页 `NowPlayingCard` 的构造：封面两侧各一片 `CoverWing`（等腰梯形），
+        //     用**负 margin** 让封面压住侧翼内缘，层次靠 `zIndex`（不靠声明顺序）。
+        Row() {
           if (this.stats.topSongs.length > 1) {
             this.SongCover(this.stats.topSongs[1], '2nd')
           }
@@ -496,30 +550,73 @@ export struct EchoReviewPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
+    // ★ 用户 2026-10-12：「你少了很多卡片背景」——官方每个区块都坐在一张圆角卡上
+    .padding(14)
+    .backgroundColor('#14FFFFFF')
+    .borderRadius(16)
   }
 
+  /**
+   * 一个名次：**封面 + 侧翼**（照搬首页 `NowPlayingCard` 的构造）。
+   *
+   * 第 1 名：左右各一片侧翼（大）；第 2/3 名：只在**靠外那一侧**给一片窄侧翼
+   * （内缘被相邻的封面压住，正好也是官方的观感）。侧翼用负 margin 与封面叠压，
+   * 层次由 `zIndex` 指定（首页那条注释踩过坑：右翼靠声明顺序会被画到封面之上）。
+   * @param item 名次数据
+   * @param rank `1st` / `2nd` / `3rd`
+   */
   @Builder
   private SongCover(item: EchoTopSong, rank: string) {
     Column({ space: 6 }) {
-      if (item.img.length > 0) {
-        Image(item.img)
-          .width(rank === '1st' ? 128 : 84)
-          .height(rank === '1st' ? 128 : 84)
-          .borderRadius(10)
-          .objectFit(ImageFit.Cover)
-          // ★ 用户 2026-10-12：两侧那两张「斜着」的封面（参照首页「现在就听」那张卡的叠图观感，
-          //   这里用系统属性 `rotate` 收角；第 1 名保持正放）
-          .rotate({ angle: rank === '2nd' ? '8deg' : (rank === '3rd' ? '-8deg' : '0deg') })
-      } else {
-        Column()
-          .width(rank === '1st' ? 128 : 84)
-          .height(rank === '1st' ? 128 : 84)
-          .borderRadius(10)
-          .backgroundColor('#22FFFFFF')
-          // ★ 用户 2026-10-12：两侧那两张「斜着」的封面（参照首页「现在就听」那张卡的叠图观感，
-          //   这里用系统属性 `rotate` 收角；第 1 名保持正放）
-          .rotate({ angle: rank === '2nd' ? '8deg' : (rank === '3rd' ? '-8deg' : '0deg') })
+      Row() {
+        if (rank === '1st' || rank === '3rd') {
+          CoverWing({
+            isStart: true,
+            wingWidth: rank === '1st' ? 30 : 18,
+            wingHeight: rank === '1st' ? 112 : 74,
+            insetTop: rank === '1st' ? 16 : 12,
+            insetBottom: rank === '1st' ? 16 : 12,
+            outerRadius: rank === '1st' ? 16 : 10,
+            innerRadius: 0,
+            fill: '#2EFFFFFF'
+          })
+            .zIndex(0)
+            .margin({ right: rank === '1st' ? -12 : -8 })
+        }
+
+        if (item.img.length > 0) {
+          Image(item.img)
+            .width(rank === '1st' ? 128 : 84)
+            .height(rank === '1st' ? 128 : 84)
+            .borderRadius(rank === '1st' ? 13 : 9)
+            .objectFit(ImageFit.Cover)
+            .shadow({ radius: rank === '1st' ? 24 : 12, color: 'rgba(0, 0, 0, 0.45)', offsetX: 0, offsetY: 8 })
+            .zIndex(1)
+        } else {
+          Column()
+            .width(rank === '1st' ? 128 : 84)
+            .height(rank === '1st' ? 128 : 84)
+            .borderRadius(rank === '1st' ? 13 : 9)
+            .backgroundColor('#22FFFFFF')
+            .zIndex(1)
+        }
+
+        if (rank === '1st' || rank === '2nd') {
+          CoverWing({
+            isStart: false,
+            wingWidth: rank === '1st' ? 30 : 18,
+            wingHeight: rank === '1st' ? 112 : 74,
+            insetTop: rank === '1st' ? 16 : 12,
+            insetBottom: rank === '1st' ? 16 : 12,
+            outerRadius: rank === '1st' ? 16 : 10,
+            innerRadius: 0,
+            fill: '#2EFFFFFF'
+          })
+            .zIndex(0)
+            .margin({ left: rank === '1st' ? -12 : -8 })
+        }
       }
+
       Text(rank)
         .fontSize(12)
         .fontColor('#99FFFFFF')
@@ -626,6 +723,10 @@ export struct EchoReviewPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
+    // ★ 用户 2026-10-12：「你少了很多卡片背景」——官方每个区块都坐在一张圆角卡上
+    .padding(14)
+    .backgroundColor('#14FFFFFF')
+    .borderRadius(16)
   }
 
   /** 最常听的专辑。 */
@@ -669,6 +770,10 @@ export struct EchoReviewPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
+    // ★ 用户 2026-10-12：「你少了很多卡片背景」——官方每个区块都坐在一张圆角卡上
+    .padding(14)
+    .backgroundColor('#14FFFFFF')
+    .borderRadius(16)
   }
 
   /** 你是怎样的听众：24 小时柱状图。 */
@@ -726,10 +831,11 @@ export struct EchoReviewPage {
         }, (count: number, index: number) => 'day_' + index)
       }
       .columnsTemplate('1fr 1fr 1fr 1fr 1fr 1fr 1fr')
-      .rowsGap(4)
-      .columnsGap(4)
+      // ★ 用户 2026-10-12：「听歌日历也太大了」⇒ 收紧成官方那种紧凑热力图
+      .rowsGap(3)
+      .columnsGap(3)
       .width('100%')
-      .height(150)
+      .height(96)
 
       Text('31 天里有 ' + this.stats.listenDays + ' 天在听歌 · 平均每个听歌日 ' +
         this.stats.perDayMinutes + ' 分钟')
@@ -740,6 +846,10 @@ export struct EchoReviewPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
+    // ★ 用户 2026-10-12：「你少了很多卡片背景」——官方每个区块都坐在一张圆角卡上
+    .padding(14)
+    .backgroundColor('#14FFFFFF')
+    .borderRadius(16)
   }
 
   /** 完播率（口径写在页面上，见文件头）。 */
@@ -786,6 +896,10 @@ export struct EchoReviewPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
+    // ★ 用户 2026-10-12：「你少了很多卡片背景」——官方每个区块都坐在一张圆角卡上
+    .padding(14)
+    .backgroundColor('#14FFFFFF')
+    .borderRadius(16)
   }
 
   /** 新发现。 */
@@ -824,6 +938,10 @@ export struct EchoReviewPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
+    // ★ 用户 2026-10-12：「你少了很多卡片背景」——官方每个区块都坐在一张圆角卡上
+    .padding(14)
+    .backgroundColor('#14FFFFFF')
+    .borderRadius(16)
   }
 
   @Builder
