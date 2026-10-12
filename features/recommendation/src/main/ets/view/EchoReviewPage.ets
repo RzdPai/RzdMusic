@@ -678,6 +678,22 @@ export struct EchoReviewPage {
     });
   }
 
+  /**
+   * 名次的四点投影：**1st 不形变**（方卡）、2nd（在左）用左卡、3rd（在右）用右卡。
+   *
+   * ⚠️ 用户 2026-10-13 反馈过两个错：① 中间那张也被形变了（因为属性是共用的，1st 也吃了变换）；
+   * ② 左右镜像用反了（2nd 在左却给了右卡）。所以这里按 rank 明确分派。
+   * @param rank `1st` / `2nd` / `3rd`
+   * @returns 变换矩阵（1st 为恒等，视觉上是正常方形）
+   */
+  private sideQuadFor(rank: string): matrix4.Matrix4Transit {
+    if (rank === '1st') {
+      return matrix4.identity();
+    }
+    // '2nd' 渲染在左边（外侧在左）、'3rd' 渲染在右边（外侧在右）
+    return this.sideQuad(rank === '3rd');
+  }
+
   @Builder
   private SongCover(item: EchoTopSong, rank: string) {
     Column({ space: 6 }) {
@@ -694,7 +710,7 @@ export struct EchoReviewPage {
             //   上边斜率大于下边、内侧压缩到 80%；仿射（skew/rotate）数学上做不到"上下斜率不同"，
             //   裁剪只是少画一块（轮廓仍是矩形），所以都不对。官方要求先把变换锚点挪到左上角。
             .scale({ centerX: 0, centerY: 0, x: 1 })
-            .transform(this.sideQuad(rank === '2nd'))
+            .transform(this.sideQuadFor(rank))
             .shadow({ radius: rank === '1st' ? 24 : 12, color: 'rgba(0, 0, 0, 0.45)', offsetX: 0, offsetY: 8 })
             // ★★ GLM5.3（zai/glm-5.3）给的官方观感做法：**真 3D 透视形变**（不是裁梯形）——
             //   y:1 绕 Y 轴倾斜产生近大远小，z 让上边缘微斜、下边缘大致保持平，perspective 越小透视越强。
@@ -884,12 +900,13 @@ export struct EchoReviewPage {
   private AudienceSection() {
     Column({ space: 10 }) {
       this.SectionTitle('你是怎样的听众')
-      Column({ space: 10 }) {
+      // ★ 用户 2026-10-13：「听歌时段 / 听歌日历 怎么还在卡片内部」⇒ 这两个小标题也放到**卡外**
       Text('听歌时段')
         .fontSize(13)
         .fontColor('#99FFFFFF')
         .width('100%')
         .textAlign(TextAlign.Start)
+      Column({ space: 10 }) {
       Row({ space: 2 }) {
         ForEach(this.stats.hourBuckets, (count: number, hour: number) => {
           Column() {
@@ -923,13 +940,14 @@ export struct EchoReviewPage {
       .backgroundColor('#14FFFFFF')
       .borderRadius(16)
 
-      // ★ 用户 2026-10-13：「官方那里听歌时段和听歌日历是**两张卡片**」⇒ 拆成两张（这是第二张）
-      Column({ space: 10 }) {
+      // ★ 用户 2026-10-13：「官方那里听歌时段和听歌日历是**两张卡片**」⇒ 第二张卡；
+      //   小标题「听歌日历」同样放在**卡外**
       Text('听歌日历')
         .fontSize(13)
         .fontColor('#99FFFFFF')
         .width('100%')
         .textAlign(TextAlign.Start)
+      Column({ space: 10 }) {
         .margin({ top: 8 })
       Grid() {
         ForEach(this.stats.dayBuckets, (count: number, index: number) => {
