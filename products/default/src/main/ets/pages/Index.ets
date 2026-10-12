@@ -960,13 +960,18 @@ struct Index {
         // ★ 用户 2026-10-12：「播放条整个往下移动一些，就用首页的 Tab 栏的位置」——
         //   原来用 loatingMiniBarBottomMarginVp()（= max(12, 避让 + 8)），比首页底栏高约 8vp；
         //   现在直接用首页那条的 homeTabBarBottomMarginVp()，两条栏**同一个离底口径**。
-        barBottomMargin: this.homeTabBarBottomMarginVp(),
+        // ★ GLM5.3 诊断 + 真机实测 2026-10-12：arBottomMargin 是相对**宿主盒底**算的，而这条宿主只有 56vp
+        //   高（首页那条宿主是全屏）⇒ 同一个 margin 值下胶囊被顶高约一个安全区（实测 69vp vs 首页 37vp）。
+        //   所以这里 margin 归零，改由宿主整体 offset 下移一份现有 helper 的值（不放魔法数、一行可回退）。
+        barBottomMargin: 0,
         adaptToHandedness: false,
         // ★ 官方沉浸光感：档位与标题栏/首页底栏共用同一份（ambientTitleMaterial）。
         systemMaterialEffect: this.ambientTitleMaterial()
       })
       .width(StyleConstants.FULL_WIDTH)
       .height(FLOATING_MINI_BAR_HEIGHT_VP)
+      // 与首页底栏同一屏幕位置：整块宿主向下让出底部避让那一份（barBottomMargin 已归零）
+      .offset({ y: this.homeTabBarBottomMarginVp() })
       // 不要裁：HDS 的材质背板/折射范围比内容盒大，裁了会缺一圈。
       .clip(false)
       .onAppear((): void => {

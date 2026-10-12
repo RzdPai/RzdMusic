@@ -292,6 +292,11 @@ export struct MinePage {
     // 下载 / 账号两个条数：进页各读一次，之后靠监听跟着变（见下）
     this.refreshDownloadCount();
     this.refreshPlatformCount();
+    // ★★ GLM5.3（provider=zai）诊断 2026-10-12：「重启后本地音乐恒 0 首」的根因 ——
+    //   本方法原来**只**靠 `@Monitor('localMusicState.version')` 刷新，而 `version` 只在导入/删除时 +1，
+    //   冷启动不会变 ⇒ `refreshLocalCount()` 从来没被执行过（count() 也从来没被读过）⇒ 恒 0。
+    //   导入一首就 +1 触发 Monitor，所以"导入后正常、重启后归零"。这里补上首次读取。
+    this.refreshLocalCount();
     this.downloadListener = (): void => {
       this.refreshDownloadCount();
     };
@@ -373,10 +378,6 @@ export struct MinePage {
     }
     this.localCount = localMusic.count();
     if (this.localCount === 0) {
-      // 冷启动兜底：目录/索引还没就绪时 400ms 后再读一次（幂等，读不到就当 0）
-      setTimeout((): void => {
-        this.localCount = localMusic.count();
-      }, 400);
     }
   }
 
