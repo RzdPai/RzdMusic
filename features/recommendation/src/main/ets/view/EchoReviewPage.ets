@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -679,7 +679,8 @@ export struct EchoReviewPage {
       Text(rank)
         .fontSize(12)
           // ★ 用户 2026-10-13：「1st/2nd/3rd 颜色不一样」⇒ 三档亮度（1st 最亮）
-          .fontColor(rank === '1st' ? '#FFFFFF' : (rank === '2nd' ? '#B3FFFFFF' : '#73FFFFFF'))
+          // ★★ 用户 2026-10-13：「官方那个 1st 是黄色，另外两个也一样」⇒ **奖牌色**（金/银/铜），不是灰阶
+          .fontColor(rank === '1st' ? '#FFD54A' : (rank === '2nd' ? '#D6DEE8' : '#E0A16A'))
       Text(item.name)
         .fontSize(rank === '1st' ? 14 : 12)
         .fontWeight(rank === '1st' ? FontWeight.Bold : FontWeight.Normal)
