@@ -963,7 +963,12 @@ struct Index {
         // ★ GLM5.3 诊断 + 真机实测 2026-10-12：arBottomMargin 是相对**宿主盒底**算的，而这条宿主只有 56vp
         //   高（首页那条宿主是全屏）⇒ 同一个 margin 值下胶囊被顶高约一个安全区（实测 69vp vs 首页 37vp）。
         //   所以这里 margin 归零，改由宿主整体 offset 下移一份现有 helper 的值（不放魔法数、一行可回退）。
-        barBottomMargin: 0,
+        // ★★ 真机两点标定（2026-10-12）：
+        //   · margin = homeTabBarBottomMarginVp()（这台≈38）、无 offset ⇒ 胶囊离屏底 ≈ 69vp（太高）；
+        //   · margin = 0 + 宿主 offset(38) ⇒ 胶囊**紧贴屏幕底**（0vp，太低）；
+        //   ⇒ 实测近似线性：gap ≈ 1.8 × margin。要"导航条上面一点点"（≈18~22vp）⇒ 取 1/3 份。
+        //   一行调法（别动宿主那句 offset）：更贴底改 / 4，更高改 / 2。
+        barBottomMargin: this.homeTabBarBottomMarginVp() / 3,
         adaptToHandedness: false,
         // ★ 官方沉浸光感：档位与标题栏/首页底栏共用同一份（ambientTitleMaterial）。
         systemMaterialEffect: this.ambientTitleMaterial()
