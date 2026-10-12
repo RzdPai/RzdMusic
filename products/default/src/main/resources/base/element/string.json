@@ -1,5 +1,9 @@
-{
+﻿{
   "string": [
+    {
+      "name": "tab_echo",
+      "value": "回响"
+    },
     {
       "name": "module_desc",
       "value": "module description"

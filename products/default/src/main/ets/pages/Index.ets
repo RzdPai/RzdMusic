@@ -46,6 +46,7 @@ import {
 } from 'musicbasic';
 import { dispatchShellPlaybackIntent, LXSourceHost, PlaybackPageCoverContent, PlayerViewModel } from 'player';
 import { RecommendPage } from 'recommendation';
+import { EchoReviewPage } from 'recommendation';
 import { HomeMiniBarPlayer, HomeMiniBarPlayerAside, PlaylistTransitionOverlay } from 'playlist';
 import { MinePage } from 'setting';
 // 新模块：本地音乐（导入设备音频到沙箱）与洛雪同步客户端。
@@ -244,7 +245,7 @@ struct Index {
     // ★ 页签从 4 个收成 2 个（推荐 / 我的）之后，`TabSwitchState.tabIndex` 可能是上一版留下的
     //   越界下标（比如旧的「我的」= 2、「设置」= 3）—— HdsTabs 拿到越界下标会落在空白页上。
     //   共享状态里没有"页签数"这个概念，所以在这里夹一次：越界即回首页。
-    if (this.tabState.tabIndex < 0 || this.tabState.tabIndex > 1) {
+    if (this.tabState.tabIndex < 0 || this.tabState.tabIndex > 2) {
       Logger.warn(RzdShellLogTag, `tab index out of range (${this.tabState.tabIndex}), reset to 0`);
       this.tabState.tabIndex = 0;
     }
@@ -735,7 +736,7 @@ struct Index {
    *
    * ⚠️ 长度必须等于页签数（现在是 2）：`HomeTabsPages()` 按下标取。
    */
-  @Local tabScrollTopCommands: number[] = [0, 0];
+  @Local tabScrollTopCommands: number[] = [0, 0, 0];
 
   /** 页签选中态弹跳（BounceSymbolEffect + EffectDirection.DOWN，见底部页签设计规范）。 */
   private playTabBounce(index: number): void {
@@ -968,7 +969,7 @@ struct Index {
         //   · margin = 0 + 宿主 offset(38) ⇒ 胶囊**紧贴屏幕底**（0vp，太低）；
         //   ⇒ 实测近似线性：gap ≈ 1.8 × margin。要"导航条上面一点点"（≈18~22vp）⇒ 取 1/3 份。
         //   一行调法（别动宿主那句 offset）：更贴底改 / 4，更高改 / 2。
-        barBottomMargin: this.homeTabBarBottomMarginVp() / 3,
+        barBottomMargin: this.homeTabBarBottomMarginVp() / 2,
         adaptToHandedness: false,
         // ★ 官方沉浸光感：档位与标题栏/首页底栏共用同一份（ambientTitleMaterial）。
         systemMaterialEffect: this.ambientTitleMaterial()
@@ -1139,15 +1140,26 @@ struct Index {
     }
     .tabBar(this.TabBarItem(0, $r('app.string.tab_home'), $r('sys.symbol.house_fill')))
 
+    // ★ 用户 2026-10-12：底栏中间加一页「回响」（月度听歌报告）
     TabContent() {
       Column() {
-        MinePage({ scrollTopCommand: this.tabScrollTopCommands[1] })
+        EchoReviewPage({ scrollTopCommand: this.tabScrollTopCommands[1] })
       }
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
       .expandSafeArea([SafeAreaType.SYSTEM, SafeAreaType.CUTOUT], [SafeAreaEdge.TOP])
     }
-    .tabBar(this.TabBarItem(1, $r('app.string.tab_cafe_listen'), $r('sys.symbol.person_crop_circle_fill_1')))
+    .tabBar(this.TabBarItem(1, $r('app.string.tab_echo'), $r('sys.symbol.waveform')))
+
+    TabContent() {
+      Column() {
+        MinePage({ scrollTopCommand: this.tabScrollTopCommands[2] })
+      }
+      .width(StyleConstants.FULL_WIDTH)
+      .height(StyleConstants.FULL_HEIGHT)
+      .expandSafeArea([SafeAreaType.SYSTEM, SafeAreaType.CUTOUT], [SafeAreaEdge.TOP])
+    }
+    .tabBar(this.TabBarItem(2, $r('app.string.tab_cafe_listen'), $r('sys.symbol.person_crop_circle_fill_1')))
   }
 
   /** Root UI: {@link HdsNavigation} with tabs and optional playback cover. */
