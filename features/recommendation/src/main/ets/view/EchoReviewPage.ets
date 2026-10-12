@@ -29,7 +29,7 @@
  * 且不依赖 PixelMap 解码链路，稳）；`backdropOpacity` 由 `onVisibleAreaChange` 驱动。
  */
 
-import { MusicStoreService, PlayedSongRecord } from 'musicbasic';
+import { MusicStoreService, PageTopInsetHelper, PlayedSongRecord } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 
 /** 一段统计结果（整体重建后一次性赋给 @Local，避免深层可变状态）。 */
@@ -168,7 +168,6 @@ export struct EchoReviewPage {
     this.monthLabel = range.label;
     const stats: EchoStats = EchoReviewPage.buildStats(all, range, prev);
     this.stats = stats;
-    this.backdropImg = stats.topArtists.length > 0 ? stats.topArtists[0].img : '';
   }
 
   /** 上个月对比文案（官方那句「是上个月的 X 倍」）。 */
@@ -404,15 +403,6 @@ export struct EchoReviewPage {
   private EchoBody() {
     Stack({ alignContent: Alignment.Top }) {
       // ① 动态背景：第一名歌手那张图的高斯模糊（= 它的取色观感），滑到歌手段时淡入
-      if (this.backdropImg.length > 0) {
-        Image(this.backdropImg)
-          .width('100%')
-          .height('42%')
-          .objectFit(ImageFit.Cover)
-          .blur(90)
-          .opacity(this.backdropOpacity * 0.55)
-          .align(Alignment.Top)
-      }
       Column()
         .width('100%')
         .height('100%')
@@ -433,7 +423,8 @@ export struct EchoReviewPage {
           Column().width('100%').height(120)
         }
         .width('100%')
-        .padding({ left: 16, right: 16, top: 8 })
+      // 页根从状态栏下起排 ⇒ 内容只需让开 HDS 标题栏那一行（用公共常量，不写魔法数）
+      .padding({ left: 16, right: 16, top: PageTopInsetHelper.TITLE_BAR_HEIGHT_VP + 8 })
       }
       .width('100%')
       .height('100%')
@@ -459,7 +450,11 @@ export struct EchoReviewPage {
     // ★★ 照 `RecommendPage` 的根属性链补齐（用户 2026-10-12：「标题栏跑顶部了」）：
     //   页签页的 HdsNavDestination 必须给 ignoreLayoutSafeArea(TOP,BOTTOM)，
     //   否则盒子被压在安全区内、HDS 标题栏再自己让一次 ⇒ 标题跑到状态栏里。
-    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    // ★★ GLM5.3（zai/glm-5.3）诊断 2026-10-12：「标题跑屏幕顶」的根因 —— 页根写了 ignoreLayoutSafeArea(TOP)
+    //   把布局区扩到 y=0，而 avoidLayoutSafeArea=false 的语义是「宿主已避让，标题栏不再避让」⇒ 标题锚在 0..56。
+    //   页签页没人替我们避让（入栈页是 Navigation 保证页根从状态栏下开始），所以这里**只留 BOTTOM**：
+    //   页根回到状态栏之下，标题自然落在 statusBar..statusBar+56。
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
     .hideBackButton(true)
     .backgroundColor('#000000')
   }
@@ -638,23 +633,25 @@ export struct EchoReviewPage {
 
         if (item.img.length > 0) {
           Image(item.img)
-            .width(rank === '1st' ? 128 : 84)
-            .height(rank === '1st' ? 128 : 84)
+            .width(rank === '1st' ? 150 : 110)
+            .height(rank === '1st' ? 150 : 110)
             .borderRadius(rank === '1st' ? 13 : 9)
             .objectFit(ImageFit.Cover)
             .shadow({ radius: rank === '1st' ? 24 : 12, color: 'rgba(0, 0, 0, 0.45)', offsetX: 0, offsetY: 8 })
-            .zIndex(1)
-            // ★ 用户 2026-10-12：侧翼封面裁成梯形（外缘收进 inset、内缘满高 ⇒ 上边缘斜、有立体感）；
-            //   第 1 名给等价的整矩形路径，保证两支都走同一条 clipShape（不空传 commands）。
-            .clipShape(new Path({
-              width: rank === '1st' ? 128 : 84,
-              height: rank === '1st' ? 128 : 84,
-              commands: this.coverPathFor(rank)
-            }))
+            // ★★ GLM5.3（zai/glm-5.3）给的官方观感做法：**真 3D 透视形变**（不是裁梯形）——
+            //   y:1 绕 Y 轴倾斜产生近大远小，z 让上边缘微斜、下边缘大致保持平，perspective 越小透视越强。
+            //   第 1 名不转（ngle: 0）。若倾斜方向反了，把 angle/z 的正负一起翻即可。
+            .rotate({
+              y: 1,
+              z: rank === '2nd' ? -0.05 : 0.05,
+              perspective: 80,
+              angle: rank === '1st' ? 0 : (rank === '2nd' ? -28 : 28)
+            })
+            .zIndex(rank === '1st' ? 2 : 1)
         } else {
           Column()
-            .width(rank === '1st' ? 128 : 84)
-            .height(rank === '1st' ? 128 : 84)
+            .width(rank === '1st' ? 150 : 110)
+            .height(rank === '1st' ? 150 : 110)
             .borderRadius(rank === '1st' ? 13 : 9)
             .backgroundColor('#22FFFFFF')
             .zIndex(1)
@@ -678,6 +675,8 @@ export struct EchoReviewPage {
     }
     .layoutWeight(rank === '1st' ? 2 : 1)
     .alignItems(HorizontalAlign.Center)
+    // ★ 用户 2026-10-12：「左右两张往中间靠靠，官方的是被盖住了一部分」⇒ 负 margin 与中卡叠压
+    .margin({ left: rank === '2nd' ? -26 : 0, right: rank === '3rd' ? -26 : 0 })
   }
 
   /** 最常听的歌手：大图卡 + 后面几名；这一段可见时背景淡入。 */
@@ -718,15 +717,6 @@ export struct EchoReviewPage {
         .width('100%')
         .borderRadius(14)
         .clip(true)
-        .onVisibleAreaChange([0.0, 0.5], (isVisible: boolean, ratio: number): void => {
-          // 滑到这一段（露出一半以上）→ 背景淡入歌手图的取色；否则回到纯黑
-          const target: number = ratio > 0.5 ? 1 : 0;
-          if (target !== this.backdropOpacity) {
-            this.getUIContext().animateTo({ duration: 420, curve: Curve.EaseInOut }, () => {
-              this.backdropOpacity = target;
-            });
-          }
-        })
 
         if (this.stats.topArtists.length > 1) {
           Column() {
