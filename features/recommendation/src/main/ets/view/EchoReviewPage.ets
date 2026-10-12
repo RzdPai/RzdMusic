@@ -553,14 +553,15 @@ export struct EchoReviewPage {
 
   @Builder
   private StatCell(value: string, label: string) {
+    // ★ 用户 2026-10-13：「三个文字颜色都不一样」⇒ 数字恒纯白、单位恒灰（与官方一致，不再混主题色）
     Column({ space: 4 }) {
       Text(value)
-        .fontSize(22)
+        .fontSize(24)
         .fontWeight(FontWeight.Bold)
         .fontColor('#FFFFFF')
       Text(label)
         .fontSize(12)
-        .fontColor('#99FFFFFF')
+        .fontColor('#8CFFFFFF')
     }
     .layoutWeight(1)
     .alignItems(HorizontalAlign.Start)
@@ -660,8 +661,8 @@ export struct EchoReviewPage {
             .rotate({
               y: 1,
               z: rank === '2nd' ? -0.05 : 0.05,
-              perspective: 80,
-              angle: rank === '1st' ? 0 : (rank === '2nd' ? -28 : 28)
+              perspective: 70,
+              angle: rank === '1st' ? 0 : (rank === '2nd' ? -38 : 38)
             })
             .zIndex(rank === '1st' ? 2 : 1)
         } else {
@@ -875,8 +876,8 @@ export struct EchoReviewPage {
           GridItem() {
             Column()
               .width('100%')
-              .width(14)
-              .height(14)
+              .width('100%')
+              .aspectRatio(1)
               .borderRadius(3)
               .backgroundColor(this.dayColor(count))
           }
@@ -885,8 +886,8 @@ export struct EchoReviewPage {
       // ★ 用户 2026-10-12：官方是**三行**小方块（31 天 ÷ 11 ≈ 3 行），不是一行大格子
       .columnsTemplate('1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr')
       // ★ 用户 2026-10-12：「听歌日历也太大了」⇒ 收紧成官方那种紧凑热力图
-      .rowsGap(4)
-      .columnsGap(3)
+      .rowsGap(2)
+      .columnsGap(2)
       .width('100%')
       .height(60)
 
