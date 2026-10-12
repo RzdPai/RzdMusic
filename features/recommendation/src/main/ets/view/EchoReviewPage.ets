@@ -30,6 +30,7 @@
  */
 
 import { MusicStoreService, PlayedSongRecord } from 'musicbasic';
+import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { CoverWing } from './CoverWing';
 
 /** 一段统计结果（整体重建后一次性赋给 @Local，避免深层可变状态）。 */
@@ -363,7 +364,29 @@ export struct EchoReviewPage {
     this.reload();
   }
 
-  build() {
+  /** HDS 标题栏：标题就是「月份 · 回响」（官方把这句话放在标题栏里）。 */
+  private getTitleBar(): HdsNavigationTitleBarOptions {
+    return {
+      // 避让口径与其他页一致（真机定论：HDS 标题栏容器本来就在状态栏下沿）
+      avoidLayoutSafeArea: false,
+      style: {
+        blurStrategy: BlurStrategy.ENABLE,
+        scrollEffectOpts: {
+          scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR
+        }
+      },
+      content: {
+        title: {
+          mainTitle: this.monthLabel + ' · 回响',
+          mainTitleSize: TitleSize.TITLE_ML
+        }
+      }
+    };
+  }
+
+  /** 页面主体（原 build 的内容；2026-10-12 标题交给 HDS 标题栏后原样搬进来）。 */
+  @Builder
+  private EchoBody() {
     Stack({ alignContent: Alignment.Top }) {
       // ① 动态背景：第一名歌手那张图的高斯模糊（= 它的取色观感），滑到歌手段时淡入
       if (this.backdropImg.length > 0) {
@@ -408,16 +431,23 @@ export struct EchoReviewPage {
     .backgroundColor('#000000')
   }
 
+  build() {
+    // ★ 用户 2026-10-12：「10 月 · 回响 是 HDS 标题栏里面的」⇒ 与首页/历史页同款：
+    //   页根用 HdsNavDestination + titleBar，标题交给 HDS（滚动联动渐变模糊也一起有了）。
+    HdsNavDestination() {
+      this.EchoBody()
+    }
+    .hideTitleBar(false)
+    .titleBar(this.getTitleBar())
+    .titleMode(HdsNavDestinationTitleMode.MINI)
+    .bindToScrollable([this.scroller])
+    .backgroundColor('#000000')
+  }
+
   /** 标题：`10 月 · 回响` + 分钟数 + 与上月的倍数（官方版式）。 */
   @Builder
   private Header() {
     Column({ space: 6 }) {
-      Text(this.monthLabel + ' · 回响')
-        .fontSize(28)
-        .fontWeight(FontWeight.Bold)
-        .fontColor('#FFFFFF')
-        .width('100%')
-        .textAlign(TextAlign.Start)
 
       Text(this.stats.totalMinutes + ' 分钟')
         .fontSize(24)
@@ -476,10 +506,6 @@ export struct EchoReviewPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
-    // ★ 用户 2026-10-12：「你少了很多卡片背景」——官方每个区块都坐在一张圆角卡上
-    .padding(14)
-    .backgroundColor('#14FFFFFF')
-    .borderRadius(16)
   }
 
   /** 三格统计：次播放 / 首歌 / 位歌手。 */
@@ -550,10 +576,6 @@ export struct EchoReviewPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
-    // ★ 用户 2026-10-12：「你少了很多卡片背景」——官方每个区块都坐在一张圆角卡上
-    .padding(14)
-    .backgroundColor('#14FFFFFF')
-    .borderRadius(16)
   }
 
   /**
@@ -824,18 +846,19 @@ export struct EchoReviewPage {
           GridItem() {
             Column()
               .width('100%')
-              .aspectRatio(1)
+              .height(12)
               .borderRadius(3)
               .backgroundColor(this.dayColor(count))
           }
         }, (count: number, index: number) => 'day_' + index)
       }
-      .columnsTemplate('1fr 1fr 1fr 1fr 1fr 1fr 1fr')
+      // ★ 用户 2026-10-12：官方是**三行**小方块（31 天 ÷ 11 ≈ 3 行），不是一行大格子
+      .columnsTemplate('1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr')
       // ★ 用户 2026-10-12：「听歌日历也太大了」⇒ 收紧成官方那种紧凑热力图
-      .rowsGap(3)
+      .rowsGap(4)
       .columnsGap(3)
       .width('100%')
-      .height(96)
+      .height(60)
 
       Text('31 天里有 ' + this.stats.listenDays + ' 天在听歌 · 平均每个听歌日 ' +
         this.stats.perDayMinutes + ' 分钟')
