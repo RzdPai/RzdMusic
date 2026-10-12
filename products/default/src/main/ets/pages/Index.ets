@@ -214,7 +214,6 @@ struct Index {
    * 与真实迷你条各自持有一个 VM 实例是安全的（VM 只是 `MusicAppState`/`MediaService` 的门面，
    * 状态本身仍然只有一份）。
    */
-  @Local miniBarViewModel: PlayerViewModel = new PlayerViewModel();
 
   /**
    * 窗口宽度（vp），用于给悬浮迷你条算一个**稳定的显式宽度**。
@@ -228,6 +227,10 @@ struct Index {
   @Local viewportHeightVp: number = 0;
   /** 上拉打开手势（竖直方向）。 */
   private pullOpenOption: PanGestureOptions = new PanGestureOptions({ direction: PanDirection.Vertical });
+
+  /**
+   * 一张截图就能拿到 x/y/w/h，下一轮按数字改完即删。
+   */
   private tabsController: HdsTabsController = new HdsTabsController();
   /**
    * 进出二级页面期间抑制 HDS 的样式回调（进二级页面不再改布局状态，只用于出页面时的幂等对齐）。
