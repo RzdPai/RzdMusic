@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -948,7 +948,6 @@ export struct EchoReviewPage {
         .width('100%')
         .textAlign(TextAlign.Start)
       Column({ space: 10 }) {
-        .margin({ top: 8 })
       Grid() {
         ForEach(this.stats.dayBuckets, (count: number, index: number) => {
           GridItem() {
