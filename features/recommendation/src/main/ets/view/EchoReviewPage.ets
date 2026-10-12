@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@
  */
 
 import { AppStorageKeys, BarScrollHelper, MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord } from 'musicbasic';
-import { AppStorageV2, uiObserver } from '@kit.ArkUI';
+import { AppStorageV2, matrix4, uiObserver } from '@kit.ArkUI';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 
 /** 一段统计结果（整体重建后一次性赋给 @Local，避免深层可变状态）。 */
@@ -86,6 +86,12 @@ const DAYS_MAX: number = 31;
 const TOP_SONGS: number = 3;
 const TOP_ARTISTS: number = 4;
 const TOP_ALBUMS: number = 3;
+/** 侧翼卡边长（vp）——四点投影矩阵按这个尺寸算（内部再 vp2px）。 */
+const SIDE_CARD_VP: number = 110;
+/** 侧翼**内侧**竖边被压到的比例（官方实测 ≈0.80）。 */
+const SIDE_INNER_SCALE: number = 0.8;
+/** 高度损失里分给**上边**的比例（官方实测 ≈0.70 ⇒ 上边斜得多、下边斜得少）。 */
+const SIDE_TOP_WEIGHT: number = 0.7;
 
 /** 把 `mm:ss` 解析成秒；解析不出来算 0（不猜）。 */
 function intervalSeconds(interval: string): number {
@@ -643,6 +649,35 @@ export struct EchoReviewPage {
     return this.sideCoverCommands(84, 84, rank === '3rd');
   }
 
+  /**
+   * 侧翼封面的**四点投影**矩阵（`matrix4.setPolyToPoly`，`pointCount: 4` ⇒ 透视而非仿射）。
+   *
+   * 依据（另一模型对官方截图逐边实测）：
+   *   · 外侧竖边满高、内侧竖边压到 `SIDE_INNER_SCALE`（≈80%），左右两卡互为镜像；
+   *   · 高度损失里 `SIDE_TOP_WEIGHT`（≈70%）分给上边、其余给下边 ⇒ **上边斜得多、下边斜得少**；
+   *   · 同一条竖边的两点 x 相同 ⇒ 竖边保持竖直。
+   * ⚠️ 坐标单位是 **px**（`Point.x/y`），必须 `vp2px`；`dstIndex` 官方默认值描述易误读，显式传 0。
+   * @param isRight true = 右侧（2nd，镜像），false = 左侧（3rd）
+   * @returns 变换矩阵
+   */
+  private sideQuad(isRight: boolean): matrix4.Matrix4Transit {
+    const ui = this.getUIContext();
+    const w: number = ui.vp2px(SIDE_CARD_VP);
+    const h: number = ui.vp2px(SIDE_CARD_VP);
+    const shrink: number = (1 - SIDE_INNER_SCALE) * h;
+    const topDrop: number = shrink * SIDE_TOP_WEIGHT;
+    const bottomRise: number = shrink * (1 - SIDE_TOP_WEIGHT);
+    return matrix4.identity().setPolyToPoly({
+      src: [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: 0, y: h }, { x: w, y: h }],
+      dst: isRight
+        ? [{ x: 0, y: topDrop }, { x: w, y: 0 }, { x: 0, y: h - bottomRise }, { x: w, y: h }]
+        : [{ x: 0, y: 0 }, { x: w, y: topDrop }, { x: 0, y: h }, { x: w, y: h - bottomRise }],
+      srcIndex: 0,
+      dstIndex: 0,
+      pointCount: 4
+    });
+  }
+
   @Builder
   private SongCover(item: EchoTopSong, rank: string) {
     Column({ space: 6 }) {
@@ -654,6 +689,12 @@ export struct EchoReviewPage {
             .height(rank === '1st' ? 150 : 110)
             .borderRadius(rank === '1st' ? 13 : 9)
             .objectFit(ImageFit.Cover)
+            // ★★ 四点投影映射（另一模型逐边实测给的方案，2026-10-13）：
+            //   官方那是 `matrix4.setPolyToPoly(pointCount: 4)` 的**透视**变换 —— 竖边保持竖直、
+            //   上边斜率大于下边、内侧压缩到 80%；仿射（skew/rotate）数学上做不到"上下斜率不同"，
+            //   裁剪只是少画一块（轮廓仍是矩形），所以都不对。官方要求先把变换锚点挪到左上角。
+            .scale({ centerX: 0, centerY: 0, x: 1 })
+            .transform(this.sideQuad(rank === '2nd'))
             .shadow({ radius: rank === '1st' ? 24 : 12, color: 'rgba(0, 0, 0, 0.45)', offsetX: 0, offsetY: 8 })
             // ★★ GLM5.3（zai/glm-5.3）给的官方观感做法：**真 3D 透视形变**（不是裁梯形）——
             //   y:1 绕 Y 轴倾斜产生近大远小，z 让上边缘微斜、下边缘大致保持平，perspective 越小透视越强。
@@ -875,7 +916,15 @@ export struct EchoReviewPage {
         Text('23 点').fontSize(11).fontColor('#88FFFFFF')
       }
       .width('100%')
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+      .padding(14)
+      .backgroundColor('#14FFFFFF')
+      .borderRadius(16)
 
+      // ★ 用户 2026-10-13：「官方那里听歌时段和听歌日历是**两张卡片**」⇒ 拆成两张（这是第二张）
+      Column({ space: 10 }) {
       Text('听歌日历')
         .fontSize(13)
         .fontColor('#99FFFFFF')
