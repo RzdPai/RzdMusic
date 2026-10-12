@@ -226,6 +226,7 @@ struct Index {
   /** 视口高度（vp）：上拉打开的"起手是否在底部"判定与位移映射都要用它。 */
   @Local viewportHeightVp: number = 0;
   /** 上拉打开手势（竖直方向）。 */
+  @Local miniBarViewModel: PlayerViewModel = new PlayerViewModel();
   private pullOpenOption: PanGestureOptions = new PanGestureOptions({ direction: PanDirection.Vertical });
 
   /**
