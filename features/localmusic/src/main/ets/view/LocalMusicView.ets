@@ -23,7 +23,7 @@
 import { AppStorageV2 } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
+import { HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions } from '@kit.UIDesignKit';
 import { guardPlayerBack } from 'musicbasic';
 import { AppStorageKeys, MusicAppState, SongItem, ThemeState, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { MediaService } from 'player';
@@ -334,54 +334,64 @@ export struct LocalMusicPage {
     return 56 + 16 + 16;
   }
 
+  /**
+   * HDS 标题栏右侧菜单（用户 2026-10-12：「那个匹配、选择、导入像歌单页一样放进菜单」）。
+   *
+   * 自绘 Header 里那三个按钮/那颗红胶囊全部撤掉，能力一个不少地搬到这里；
+   * 选中模式 / 一键匹配进行中时不显示（避免和底部的批量操作条打架）。
+   * @returns 标题栏菜单项（按当前状态动态生成）。
+   */
+  private titleMenus(): HdsNavigationMenuItemOptions[] {
+    const out: HdsNavigationMenuItemOptions[] = [];
+    if (this.items.length > 0 && !this.selectionMode && !this.matchingAll) {
+      out.push({
+        content: {
+          label: '一键匹配',
+          icon: $r('sys.symbol.wand_and_stars'),
+          isEnabled: true,
+          action: (): void => {
+            void this.runMatchAll();
+          }
+        }
+      });
+      out.push({
+        content: {
+          label: '选择',
+          icon: $r('sys.symbol.checkmark_circle'),
+          isEnabled: true,
+          action: (): void => {
+            this.enterSelectionMode();
+          }
+        }
+      });
+    }
+    if (!this.selectionMode && !this.matchingAll) {
+      out.push({
+        content: {
+          label: '导入音乐',
+          icon: $r('sys.symbol.plus'),
+          isEnabled: true,
+          action: (): void => {
+            void this.pickFiles();
+          }
+        }
+      });
+      out.push({
+        content: {
+          label: '导入文件夹',
+          icon: $r('sys.symbol.folder'),
+          isEnabled: true,
+          action: (): void => {
+            void this.pickFolder();
+          }
+        }
+      });
+    }
+    return out;
+  }
   @Builder
   private Header() {
     Column({ space: 8 }) {
-      Row({ space: 10 }) {
-        if (this.pageStack.size() > 0) {
-          SymbolGlyph($r('sys.symbol.chevron_left'))
-            .fontSize(20)
-            .fontColor([$r('sys.color.icon_primary')])
-            .onClick(() => {
-              this.pageStack.pop();
-            })
-        }
-        Text('本地音乐')
-          .fontSize($r('sys.float.Title_M'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('sys.color.font_primary'))
-        Blank()
-        if (this.items.length > 0 && !this.selectionMode && !this.matchingAll) {
-          Text('一键匹配')
-            .fontSize($r('sys.float.Body_S'))
-            .fontColor(this.themeState.color)
-            .padding({ left: 8, right: 8, top: 6, bottom: 6 })
-            .onClick(() => {
-              void this.runMatchAll();
-            })
-          Text('选择')
-            .fontSize($r('sys.float.Body_S'))
-            .fontColor($r('sys.color.font_secondary'))
-            .padding({ left: 8, right: 8, top: 6, bottom: 6 })
-            .onClick(() => {
-              this.enterSelectionMode();
-            })
-        }
-        Row({ space: 4 }) {
-          SymbolGlyph($r('sys.symbol.plus'))
-            .fontSize(16)
-            .fontColor([$r('sys.color.font_on_primary')])
-          Text('导入')
-            .fontSize($r('sys.float.Body_S'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('sys.color.font_on_primary'))
-        }
-        .padding({ left: 14, right: 16, top: 7, bottom: 7 })
-        .borderRadius($r('sys.float.corner_radius_level12'))
-        .backgroundColor(this.themeState.color)
-        .bindMenu(this.importMenu())
-      }
-      .width('100%')
 
       Row({ space: 8 }) {
         Text(this.items.length > 0 ?
@@ -681,7 +691,13 @@ export struct LocalMusicPage {
     }
     .onBackPressed((): boolean => guardPlayerBack('LocalMusicView'))
     .hideTitleBar(false)
-    .titleBar({ content: { title: { mainTitle: '本地音乐' } } })
+    // ★ 用户 2026-10-12：「现在本地音乐页面有两个标题。你把下面那个去掉，然后那个匹配、选择、导入像歌单页一样放进菜单。」
+    .titleBar({
+      content: {
+        title: { mainTitle: '本地音乐' },
+        menu: { value: this.titleMenus() }
+      }
+    })
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .backgroundColor($r('sys.color.background_primary'))
     // ★★ 状态栏三件套（2026-10-11 定稿，用户第三次纠正后）：

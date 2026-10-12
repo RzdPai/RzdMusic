@@ -359,18 +359,25 @@ export struct MinePage {
   /** 本地音乐导入 / 删除 / 歌词匹配后更新条数。 */
   @Monitor('localMusicState.version')
   refreshLocalCount(): void {
-    // ★★ 用户 2026-10-11：「我的页本地音乐不论多少首都显示 0 首」——根因：`LocalMusic` 是单例，
-    //   `count()` 读的是内存里的 songs，填内存的只有 `LocalMusicView.aboutToAppear` 那句 `localMusic.init(context)`。
-    //   我的页从没 init 过 ⇒ 恒 0（本地音乐页自己 init 过所以显示 1 首）。照它补上（幂等 + try 兜住）。
+    // ★★ 用户 2026-10-12：「导入一首歌之后显示正常，重启应用之后又显示 0 首」——
+    //   冷启动时我的页 aboutToAppear 跑得很早，`getUIContext().getHostContext()` 可能还拿不到，
+    //   init 被 try 吞掉 ⇒ count() 恒 0 且此后再也没有刷新时机。
+    //   改成与 AccountService 同源的 `getAppRuntime().context`，并补一次延迟重读兜底。
     try {
       if (!localMusic.isReady()) {
-        localMusic.init(this.getUIContext().getHostContext() as common.UIAbilityContext);
+        localMusic.init(getAppRuntime().context as common.UIAbilityContext);
       }
     } catch (err) {
       const message: string = err instanceof Error ? err.message : String(err);
       hilog.warn(DOMAIN, TAG, 'localMusic init failed: %{public}s', message);
     }
     this.localCount = localMusic.count();
+    if (this.localCount === 0) {
+      // 冷启动兜底：目录/索引还没就绪时 400ms 后再读一次（幂等，读不到就当 0）
+      setTimeout((): void => {
+        this.localCount = localMusic.count();
+      }, 400);
+    }
   }
 
   /** 歌单卡的数据（`playlistVersion` 是 `@Trace`，增删改都会走到这里）。 */
@@ -1406,4 +1413,3 @@ export struct MinePage {
     .backgroundColor($r('app.color.background_secondary'))
   }
 }
-
