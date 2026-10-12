@@ -31,7 +31,6 @@
 
 import { MusicStoreService, PlayedSongRecord } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
-import { CoverWing } from './CoverWing';
 
 /** 一段统计结果（整体重建后一次性赋给 @Local，避免深层可变状态）。 */
 export class EchoStats {
@@ -53,6 +52,11 @@ export class EchoStats {
   perDayMinutes: number = 0;
   /** 上个月的总分钟数（用来显示「是上个月的 X 倍」，官方那句）。 */
   prevMinutes: number = 0;
+  /** 最长连续听歌天数（官方日历下面那三行的第一行）。 */
+  longestStreak: number = 0;
+  /** 当月听得最多的那一天（1-31）与次数（官方第三行「10 月 11 日听得最多 —— 2 次」）。 */
+  bestDay: number = 0;
+  bestDayCount: number = 0;
 }
 
 class EchoTopSong {
@@ -253,6 +257,17 @@ export struct EchoReviewPage {
     out.songCount = songCount.size;
     out.singerCount = artistCount.size;
     out.listenDays = days.size;
+    let streak: number = 0;
+    for (let i: number = 0; i < DAYS_MAX; i++) {
+      if (out.dayBuckets[i] > 0) {
+        streak++;
+        if (streak > out.longestStreak) {
+          out.longestStreak = streak;
+        }
+      } else {
+        streak = 0;
+      }
+    }
     out.perDayMinutes = out.listenDays > 0 ? Math.round(out.totalMinutes / out.listenDays) : 0;
     out.newSongCount = brandNew;
     out.newSongTotal = songCount.size;
@@ -441,6 +456,11 @@ export struct EchoReviewPage {
     .titleBar(this.getTitleBar())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.scroller])
+    // ★★ 照 `RecommendPage` 的根属性链补齐（用户 2026-10-12：「标题栏跑顶部了」）：
+    //   页签页的 HdsNavDestination 必须给 ignoreLayoutSafeArea(TOP,BOTTOM)，
+    //   否则盒子被压在安全区内、HDS 标题栏再自己让一次 ⇒ 标题跑到状态栏里。
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    .hideBackButton(true)
     .backgroundColor('#000000')
   }
 
@@ -594,9 +614,10 @@ export struct EchoReviewPage {
     const h: number = ui.vp2px(hVp);
     const inset: number = ui.vp2px(wVp * 0.16);
     if (isStart) {
-      return `M0 ${inset} L${w} 0 L${w} ${h} L0 ${h - inset} Z`;
+      // ★ 用户 2026-10-12：「只有上边缘是倾斜的，下边缘是平的」⇒ 底边两点都在 y=h
+      return `M0 ${inset} L${w} 0 L${w} ${h} L0 ${h} Z`;
     }
-    return `M0 0 L${w} ${inset} L${w} ${h - inset} L0 ${h} Z`;
+    return `M0 0 L${w} ${inset} L${w} ${h} L0 ${h} Z`;
   }
 
   /** 封面裁切路径：第 1 名 = 整矩形（等价于不裁），2/3 名 = 梯形（上边缘斜）。单位 px。 */
@@ -614,20 +635,6 @@ export struct EchoReviewPage {
   private SongCover(item: EchoTopSong, rank: string) {
     Column({ space: 6 }) {
       Row() {
-        if (rank === '1st' || rank === '3rd') {
-          CoverWing({
-            isStart: true,
-            wingWidth: rank === '1st' ? 30 : 18,
-            wingHeight: rank === '1st' ? 112 : 74,
-            insetTop: rank === '1st' ? 16 : 12,
-            insetBottom: rank === '1st' ? 16 : 12,
-            outerRadius: rank === '1st' ? 16 : 10,
-            innerRadius: 0,
-            fill: '#2EFFFFFF'
-          })
-            .zIndex(0)
-            .margin({ right: rank === '1st' ? -12 : -8 })
-        }
 
         if (item.img.length > 0) {
           Image(item.img)
@@ -653,20 +660,6 @@ export struct EchoReviewPage {
             .zIndex(1)
         }
 
-        if (rank === '1st' || rank === '2nd') {
-          CoverWing({
-            isStart: false,
-            wingWidth: rank === '1st' ? 30 : 18,
-            wingHeight: rank === '1st' ? 112 : 74,
-            insetTop: rank === '1st' ? 16 : 12,
-            insetBottom: rank === '1st' ? 16 : 12,
-            outerRadius: rank === '1st' ? 16 : 10,
-            innerRadius: 0,
-            fill: '#2EFFFFFF'
-          })
-            .zIndex(0)
-            .margin({ left: rank === '1st' ? -12 : -8 })
-        }
       }
 
       Text(rank)
@@ -876,7 +869,8 @@ export struct EchoReviewPage {
           GridItem() {
             Column()
               .width('100%')
-              .height(12)
+              .width(14)
+              .height(14)
               .borderRadius(3)
               .backgroundColor(this.dayColor(count))
           }
@@ -890,8 +884,23 @@ export struct EchoReviewPage {
       .width('100%')
       .height(60)
 
-      Text('31 天里有 ' + this.stats.listenDays + ' 天在听歌 · 平均每个听歌日 ' +
-        this.stats.perDayMinutes + ' 分钟')
+      // ★ 官方是**三行**字（用户 2026-10-12：「下面是三行字」）
+      Text('31 天里有 ' + this.stats.listenDays + ' 天在听歌')
+        .fontSize(12)
+        .fontColor('#CCFFFFFF')
+        .width('100%')
+        .textAlign(TextAlign.Start)
+      Text('最长连续 ' + this.stats.longestStreak + ' 天没断过')
+        .fontSize(12)
+        .fontColor('#99FFFFFF')
+        .width('100%')
+        .textAlign(TextAlign.Start)
+      Text(this.stats.bestDayCount > 0 ?
+        (this.monthLabel.replace(' 月', '') + ' 月 ' + this.stats.bestDay + ' 日听得最多 —— ' + this.stats.bestDayCount + ' 次') : '还没有哪一天听得特别多')
+        .fontSize(12)
+        .fontColor('#99FFFFFF')
+        .width('100%')
+        .textAlign(TextAlign.Start)
         .fontSize(12)
         .fontColor('#CCFFFFFF')
         .width('100%')
