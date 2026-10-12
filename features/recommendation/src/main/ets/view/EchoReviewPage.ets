@@ -587,6 +587,29 @@ export struct EchoReviewPage {
    * @param item 名次数据
    * @param rank `1st` / `2nd` / `3rd`
    */
+  /** 侧翼封面梯形路径（用户 2026-10-12：「上边缘斜、有立体感」）；**单位 px**（官方 Path 规定）。 */
+  private sideCoverCommands(wVp: number, hVp: number, isStart: boolean): string {
+    const ui = this.getUIContext();
+    const w: number = ui.vp2px(wVp);
+    const h: number = ui.vp2px(hVp);
+    const inset: number = ui.vp2px(wVp * 0.16);
+    if (isStart) {
+      return `M0 ${inset} L${w} 0 L${w} ${h} L0 ${h - inset} Z`;
+    }
+    return `M0 0 L${w} ${inset} L${w} ${h - inset} L0 ${h} Z`;
+  }
+
+  /** 封面裁切路径：第 1 名 = 整矩形（等价于不裁），2/3 名 = 梯形（上边缘斜）。单位 px。 */
+  private coverPathFor(rank: string): string {
+    if (rank === '1st') {
+      const ui = this.getUIContext();
+      const w: number = ui.vp2px(128);
+      const h: number = ui.vp2px(128);
+      return `M0 0 L${w} 0 L${w} ${h} L0 ${h} Z`;
+    }
+    return this.sideCoverCommands(84, 84, rank === '3rd');
+  }
+
   @Builder
   private SongCover(item: EchoTopSong, rank: string) {
     Column({ space: 6 }) {
@@ -614,6 +637,13 @@ export struct EchoReviewPage {
             .objectFit(ImageFit.Cover)
             .shadow({ radius: rank === '1st' ? 24 : 12, color: 'rgba(0, 0, 0, 0.45)', offsetX: 0, offsetY: 8 })
             .zIndex(1)
+            // ★ 用户 2026-10-12：侧翼封面裁成梯形（外缘收进 inset、内缘满高 ⇒ 上边缘斜、有立体感）；
+            //   第 1 名给等价的整矩形路径，保证两支都走同一条 clipShape（不空传 commands）。
+            .clipShape(new Path({
+              width: rank === '1st' ? 128 : 84,
+              height: rank === '1st' ? 128 : 84,
+              commands: this.coverPathFor(rank)
+            }))
         } else {
           Column()
             .width(rank === '1st' ? 128 : 84)
