@@ -668,12 +668,15 @@ export struct EchoReviewPage {
     const topDrop: number = shrink * SIDE_TOP_WEIGHT;
     const bottomRise: number = shrink * (1 - SIDE_TOP_WEIGHT);
     return matrix4.identity().setPolyToPoly({
-      src: [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: 0, y: h }, { x: w, y: h }],
-      // ★ 用户 2026-10-13：「上边缘对了，**下边缘还是反的**」⇒ 内侧下角改成**往下沉**（原来往上抬），
-      //   上下两条边同向斜，视觉上才和官方一致。
+      // ★★ GLM5.3（zai/glm-5.3）诊断 2026-10-13：点序**必须顺时针 TL,TR,BR,BL**。
+      //   我原来写的是 `TL,TR,BL,BR`（自交的"蝴蝶结"序）⇒ 单应会把**一条对边镜像**，
+      //   所以表现成「上边对了、下边反了」；把下角改成 h+bottomRise 又变平行四边形，都是这个根因。
+      src: [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: w, y: h }, { x: 0, y: h }],
+      // 右侧（3rd）：内边在左 ⇒ 左上角下沉 topDrop、左下角上收 bottomRise
+      // 左侧（2nd）：镜像 ⇒ 右上角下沉、右下角上收
       dst: isRight
-        ? [{ x: 0, y: topDrop }, { x: w, y: 0 }, { x: 0, y: h - bottomRise }, { x: w, y: h }]
-        : [{ x: 0, y: 0 }, { x: w, y: topDrop }, { x: 0, y: h }, { x: w, y: h - bottomRise }],
+        ? [{ x: 0, y: topDrop }, { x: w, y: 0 }, { x: w, y: h }, { x: 0, y: h - bottomRise }]
+        : [{ x: 0, y: 0 }, { x: w, y: topDrop }, { x: w, y: h - bottomRise }, { x: 0, y: h }],
       srcIndex: 0,
       dstIndex: 0,
       pointCount: 4
