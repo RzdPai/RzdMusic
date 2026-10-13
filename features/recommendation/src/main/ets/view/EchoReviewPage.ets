@@ -30,7 +30,7 @@
  * 且不依赖 PixelMap 解码链路，稳）；`backdropOpacity` 由 `onVisibleAreaChange` 驱动。
  */
 
-import { AppStorageKeys, BarScrollHelper, MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord } from 'musicbasic';
+import { AlbumRouteParam, AppStorageKeys, ArtistRouteParam, BarScrollHelper, MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord, RouterUrlConstants } from 'musicbasic';
 import { AppStorageV2, matrix4, uiObserver } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
@@ -72,6 +72,8 @@ class EchoTopSong {
   img: string = '';
   count: number = 0;
   share: number = 0;
+  /** 音乐源 id（'kw'|'kg'|'tx'|'wy'|'mg'），点击跳转要用。 */
+  source: string = '';
 }
 
 class EchoTopArtist {
@@ -79,12 +81,31 @@ class EchoTopArtist {
   img: string = '';
   count: number = 0;
   share: number = 0;
+  /** 音乐源 id，点开歌手页要用（转成 geuz 源码）。 */
+  source: string = '';
 }
 
 class EchoTopAlbum {
   name: string = '';
   img: string = '';
   count: number = 0;
+  /** 音乐源 id + 平台专辑 id + 歌手名（点开专辑页要用）。 */
+  source: string = '';
+  albumId: string = '';
+  singer: string = '';
+}
+
+/**
+ * 年 / 月下拉里的一项。
+ *
+ * `offset` 是相对**当前月**的偏移（0 = 本月，-1 = 上月…），正好就是 `monthOffset` 的口径，
+ * 所以选中某一项 = `this.monthOffset = item.offset`（见 `jumpToMonth`）。
+ */
+class MonthOption {
+  year: number = 0;
+  month: number = 0;
+  offset: number = 0;
+  label: string = '';
 }
 
 const HOURS_IN_DAY: number = 24;
@@ -110,8 +131,16 @@ const MAIN_CARD_VP: number = 150;
 const SIDE_SQUEEZE: number = 0.848;
 /** 上边斜率（按**收缩后**的可见宽算）：参考实测 0.168。 */
 const SIDE_TOP_SLOPE: number = 0.168;
-/** 下边斜率：实测 −0.087（即下边往内**抬** 0.087×可见宽）。 */
+/** 下边斜率的实测值：−0.087（即下边往内**抬** 0.087×可见宽）。 */
 const SIDE_BOTTOM_SLOPE: number = 0.087;
+
+/**
+ * 标题里会出现的六个区块名（下标与 `sectionRatios` 一一对齐）。
+ *
+ * 官方标题随滚动变：「10 月 · 你听了什么」→「10 月 · 你是怎样的听众」→「10 月 · 有趣的发现」。
+ * 我们这版的区块名固定成下面这六个（`noteSection` 取"可见比例最大"的那一段）。
+ */
+const SECTION_NAMES: string[] = ['你听了什么', '最常听的歌手', '最常听的专辑', '你是怎样的听众', '完播率', '新发现'];
 
 /** 把 `mm:ss` 解析成秒；解析不出来算 0（不猜）。 */
 function intervalSeconds(interval: string): number {
@@ -168,6 +197,23 @@ export struct EchoReviewPage {
   @Local yearLabel: string = '';
   @Local monthLabel: string = '';
   private scroller: Scroller = new Scroller();
+  /**
+   * ★★ 2026-10-14：**这个 @Local 必须有** —— 下面那句 `@Monitor('store.historyVersion')` 原来监听的是
+   * `reload()` 里的**局部变量** `store`（不是组件状态），编译期就有告警
+   * `The '@Monitor' decorator needs to monitor the state variables that exist`，
+   * 于是这条 monitor **从来没生效过** —— 用户报的"我听新歌，最常听的歌不会更新"就是这个。
+   * `MusicStoreService` 本身是 `@ObservedV2` + `@Trace historyVersion`（每次写历史 +1），
+   * 把它挂成组件状态就通了（同 `PlaylistHomePage` / `PlaylistsPage` 的写法）。
+   */
+  @Local store: MusicStoreService = MusicStoreService.getInstance();
+  /** 壳层的页面栈：点封面/歌手/专辑要跳二级页（壳层用 `@Provider('pageIndexInfos')` 提供）。 */
+  @Consumer('pageIndexInfos') pageIndexInfos: NavPathStack = new NavPathStack();
+  /** 年 / 月下拉的可选项（历史里出现过的月份，降序）。 */
+  @Local monthOptions: MonthOption[] = [];
+  /** 标题里"当前区块"的名字（随滚动变，见 `noteSection`）。 */
+  @Local sectionTitle: string = '';
+  /** 六个区块的可见比例（非状态，只在 `onVisibleAreaChange` 回调里读写）。 */
+  private sectionRatios: number[] = [0, 0, 0, 0, 0, 0];
   /** 共享播放状态（底栏联动要读它）。 */
   @Local appState: MusicAppState =
     AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
@@ -181,6 +227,7 @@ export struct EchoReviewPage {
   /** 历史变化（播放器、歌曲菜单…都会 +1 `historyVersion`）后重算。 */
   @Monitor('store.historyVersion')
   onHistoryChanged(): void {
+    hilog.info(ECHO_DOMAIN, ECHO_TAG, 'history changed (v=%{public}d) -> reload', this.store.historyVersion);
     this.reload();
   }
 
@@ -192,12 +239,14 @@ export struct EchoReviewPage {
 
   /** 重算整页统计（含背景图选择）。 */
   private reload(): void {
-    const store: MusicStoreService = MusicStoreService.getInstance();
+    const store: MusicStoreService = this.store;
     const all: PlayedSongRecord[] = store.getHistory();
     const range: MonthRange = monthRangeOf(this.monthOffset);
     const prev: MonthRange = monthRangeOf(this.monthOffset - 1);
     this.yearLabel = String(range.year) + ' 年';
     this.monthLabel = range.label;
+    // 年/月下拉的可选项（历史里出现过的月份）
+    this.monthOptions = EchoReviewPage.buildMonthOptions(all, range, this.monthOffset);
     const stats: EchoStats = EchoReviewPage.buildStats(all, range, prev);
     this.stats = stats;
   }
@@ -256,6 +305,13 @@ export struct EchoReviewPage {
     const artistImg: Map<string, string> = new Map();
     const albumCount: Map<string, number> = new Map();
     const albumImg: Map<string, string> = new Map();
+    // ★ 2026-10-14：点封面要能跳二级页 ⇒ 顺手把**跳转需要的那几个字段**也聚出来
+    //   （歌手/歌曲要 source，专辑还要 albumId + 歌手名）。
+    const songSource: Map<string, string> = new Map();
+    const artistSource: Map<string, string> = new Map();
+    const albumSource: Map<string, string> = new Map();
+    const albumIdOf: Map<string, string> = new Map();
+    const albumSinger: Map<string, string> = new Map();
     const days: Set<number> = new Set();
     let newest: number = 0;
     let brandNew: number = 0;
@@ -267,14 +323,29 @@ export struct EchoReviewPage {
       if (r.img.length > 0 && songImg.get(songKey) === undefined) {
         songImg.set(songKey, r.img);
       }
+      if (r.source.length > 0 && songSource.get(songKey) === undefined) {
+        songSource.set(songKey, r.source);
+      }
       artistCount.set(r.singer, (artistCount.get(r.singer) ?? 0) + 1);
       if (r.img.length > 0 && artistImg.get(r.singer) === undefined) {
         artistImg.set(r.singer, r.img);
+      }
+      if (r.source.length > 0 && artistSource.get(r.singer) === undefined) {
+        artistSource.set(r.singer, r.source);
       }
       if (r.albumName.length > 0) {
         albumCount.set(r.albumName, (albumCount.get(r.albumName) ?? 0) + 1);
         if (r.img.length > 0 && albumImg.get(r.albumName) === undefined) {
           albumImg.set(r.albumName, r.img);
+        }
+        if (r.source.length > 0 && albumSource.get(r.albumName) === undefined) {
+          albumSource.set(r.albumName, r.source);
+        }
+        if (r.albumId.length > 0 && albumIdOf.get(r.albumName) === undefined) {
+          albumIdOf.set(r.albumName, r.albumId);
+        }
+        if (r.singer.length > 0 && albumSinger.get(r.albumName) === undefined) {
+          albumSinger.set(r.albumName, r.singer);
         }
       }
       const d: Date = new Date(r.time);
@@ -330,14 +401,14 @@ export struct EchoReviewPage {
     out.halfCount = Math.max(0, songCount.size - repeated);
     out.completeRate = songCount.size > 0 ? Math.round(repeated * 100 / songCount.size) : 0;
     // Top 榜（简单选择排序，榜单只要前几个，规模很小）
-    out.topSongs = EchoReviewPage.pickSongs(songCount, songImg, out.playCount);
-    out.topArtists = EchoReviewPage.pickArtists(artistCount, artistImg, out.playCount);
-    out.topAlbums = EchoReviewPage.pickAlbums(albumCount, albumImg);
+    out.topSongs = EchoReviewPage.pickSongs(songCount, songImg, songSource, out.playCount);
+    out.topArtists = EchoReviewPage.pickArtists(artistCount, artistImg, artistSource, out.playCount);
+    out.topAlbums = EchoReviewPage.pickAlbums(albumCount, albumImg, albumSource, albumIdOf, albumSinger);
     return out;
   }
 
   private static pickSongs(counts: Map<string, number>, imgs: Map<string, string>,
-    total: number): EchoTopSong[] {
+    sources: Map<string, string>, total: number): EchoTopSong[] {
     const out: EchoTopSong[] = [];
     const used: Set<string> = new Set();
     for (let n: number = 0; n < TOP_SONGS; n++) {
@@ -358,6 +429,7 @@ export struct EchoReviewPage {
       item.name = parts[0];
       item.singer = parts.length > 1 ? parts[1] : '';
       item.img = imgs.get(bestKey) ?? '';
+      item.source = sources.get(bestKey) ?? '';
       item.count = best;
       item.share = total > 0 ? Math.round(best * 100 / total) : 0;
       out.push(item);
@@ -366,7 +438,7 @@ export struct EchoReviewPage {
   }
 
   private static pickArtists(counts: Map<string, number>, imgs: Map<string, string>,
-    total: number): EchoTopArtist[] {
+    sources: Map<string, string>, total: number): EchoTopArtist[] {
     const out: EchoTopArtist[] = [];
     const used: Set<string> = new Set();
     for (let n: number = 0; n < TOP_ARTISTS; n++) {
@@ -385,6 +457,7 @@ export struct EchoReviewPage {
       const item: EchoTopArtist = new EchoTopArtist();
       item.name = bestKey;
       item.img = imgs.get(bestKey) ?? '';
+      item.source = sources.get(bestKey) ?? '';
       item.count = best;
       item.share = total > 0 ? Math.round(best * 100 / total) : 0;
       out.push(item);
@@ -392,7 +465,8 @@ export struct EchoReviewPage {
     return out;
   }
 
-  private static pickAlbums(counts: Map<string, number>, imgs: Map<string, string>): EchoTopAlbum[] {
+  private static pickAlbums(counts: Map<string, number>, imgs: Map<string, string>,
+    sources: Map<string, string>, ids: Map<string, string>, singers: Map<string, string>): EchoTopAlbum[] {
     const out: EchoTopAlbum[] = [];
     const used: Set<string> = new Set();
     for (let n: number = 0; n < TOP_ALBUMS; n++) {
@@ -411,23 +485,257 @@ export struct EchoReviewPage {
       const item: EchoTopAlbum = new EchoTopAlbum();
       item.name = bestKey;
       item.img = imgs.get(bestKey) ?? '';
+      item.source = sources.get(bestKey) ?? '';
+      item.albumId = ids.get(bestKey) ?? '';
+      item.singer = singers.get(bestKey) ?? '';
       item.count = best;
       out.push(item);
     }
     return out;
   }
 
-  /** 点标题切换月份（本月 → 上月 → … 最多回溯 11 个月）。 */
+  /**
+   * 历史里出现过的「年-月」清单（降序，含当前选中的那个月），给年/月下拉用。
+   *
+   * `MonthOption.offset` 与 `monthOffset` 同口径（0 = 本月），所以选中即 `monthOffset = offset`。
+   * 未来月份不列（offset > 0 直接跳过）。
+   * @param all 全部播放记录
+   * @param selected 当前选中的月份区间（用它换算每个候选月份的 offset）
+   * @param selectedOffset 当前选中的 monthOffset
+   */
+  private static buildMonthOptions(all: PlayedSongRecord[], selected: MonthRange,
+    selectedOffset: number): MonthOption[] {
+    const seen: Set<string> = new Set();
+    const list: MonthOption[] = [];
+    const add = (y: number, m: number): void => {
+      const key: string = y + '-' + m;
+      if (seen.has(key)) {
+        return;
+      }
+      const offset: number = selectedOffset + (y - selected.year) * 12 + (m - selected.month);
+      if (offset > 0) {
+        return;
+      }
+      seen.add(key);
+      const o: MonthOption = new MonthOption();
+      o.year = y;
+      o.month = m;
+      o.offset = offset;
+      o.label = m + ' 月';
+      list.push(o);
+    };
+    for (let i: number = 0; i < all.length; i++) {
+      const d: Date = new Date(all[i].time);
+      add(d.getFullYear(), d.getMonth() + 1);
+    }
+    // 选中的那个月一定在列表里（哪怕它没有任何记录，否则下拉里选不回当前视图）
+    add(selected.year, selected.month);
+    list.sort((a: MonthOption, b: MonthOption): number => b.offset - a.offset);
+    return list;
+  }
+
+  /** 点箭头切月份（本月 → 上月 → … 最多回溯 11 个月）。 */
   private shiftMonth(delta: number): void {
-    const next: number = this.monthOffset + delta;
-    if (next > 0 || next < -11) {
+    this.jumpToMonth(this.monthOffset + delta);
+  }
+
+  /** 切到某个 `monthOffset`（越界不动）。 */
+  private jumpToMonth(next: number): void {
+    if (next > 0 || next < -11 || next === this.monthOffset) {
       return;
     }
     this.monthOffset = next;
     this.reload();
   }
 
-  /** HDS 标题栏：标题就是「月份 · 回响」（官方把这句话放在标题栏里）。 */
+  /** 年胶囊的菜单项：历史里出现过的年份（点哪个年就跳到那年里"最接近当前月"的那一项）。 */
+  private yearMenuItems(): MenuElement[] {
+    const years: number[] = [];
+    for (let i: number = 0; i < this.monthOptions.length; i++) {
+      const y: number = this.monthOptions[i].year;
+      if (years.indexOf(y) < 0) {
+        years.push(y);
+      }
+    }
+    const items: MenuElement[] = [];
+    for (let i: number = 0; i < years.length; i++) {
+      const y: number = years[i];
+      items.push({
+        value: y + ' 年',
+        action: (): void => {
+          this.jumpToYear(y);
+        }
+      });
+    }
+    return items;
+  }
+
+  /** 跳到某一年：优先"同月"，那年没有就取该年最近的一个月。 */
+  private jumpToYear(year: number): void {
+    let pick: MonthOption | undefined = undefined;
+    for (let i: number = 0; i < this.monthOptions.length; i++) {
+      const o: MonthOption = this.monthOptions[i];
+      if (o.year !== year) {
+        continue;
+      }
+      if (pick === undefined) {
+        pick = o;
+      }
+      if (o.month === this.selectedMonthNumber()) {
+        pick = o;
+        break;
+      }
+    }
+    if (pick !== undefined) {
+      this.jumpToMonth(pick.offset);
+    }
+  }
+
+  /** 当前 `monthOffset` 对应的"月份数字"（1-12）。 */
+  private selectedMonthNumber(): number {
+    const d: Date = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() + this.monthOffset);
+    return d.getMonth() + 1;
+  }
+
+  /** 月胶囊的菜单项：当前这一年里有记录的月份（降序）。 */
+  private monthMenuItems(): MenuElement[] {
+    const year: number = new Date().getFullYear();
+    const items: MenuElement[] = [];
+    const months: MonthOption[] = [];
+    const selMonth: number = this.selectedMonthNumber();
+    for (let i: number = 0; i < this.monthOptions.length; i++) {
+      const o: MonthOption = this.monthOptions[i];
+      // 选中的月份可能落在上一年（跨年），这里按"当前视图所在的年"过滤
+      const viewYear: number = this.viewYear();
+      if (o.year === viewYear) {
+        months.push(o);
+      }
+    }
+    for (let i: number = 0; i < months.length; i++) {
+      const o: MonthOption = months[i];
+      items.push({
+        value: o.label,
+        action: (): void => {
+          this.jumpToMonth(o.offset);
+        }
+      });
+    }
+    if (items.length === 0) {
+      items.push({ value: this.monthLabel, action: (): void => { /* 只有当前月时点它没意义 */ } });
+    }
+    hilog.info(ECHO_DOMAIN, ECHO_TAG,
+      'month menu built year=%{public}d items=%{public}d (fallbackYear=%{public}d selMonth=%{public}d)',
+      this.viewYear(), items.length, year, selMonth);
+    return items;
+  }
+
+  /** 当前视图所在的年份（`monthOffset` 推算，跨年也对）。 */
+  private viewYear(): number {
+    const d: Date = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() + this.monthOffset);
+    return d.getFullYear();
+  }
+
+  /** 音乐源 id（'kw'|'kg'|'tx'|'wy'|'mg'）→ geuz 源码（0=kg,1=tx,2=wy,3=mg,4=kw）。 */
+  private static sourceCode(source: string): number {
+    if (source === 'kg') {
+      return 0;
+    }
+    if (source === 'tx') {
+      return 1;
+    }
+    if (source === 'wy') {
+      return 2;
+    }
+    if (source === 'mg') {
+      return 3;
+    }
+    if (source === 'kw') {
+      return 4;
+    }
+    return 2;
+  }
+
+  /** ★ 2026-10-14 用户：「官方那个很多地方都是能点击的」⇒ 三张卡都能点开。 */
+  private openSong(item: EchoTopSong): void {
+    // 历史里只有平台 id、没有本库 id，直接播不了；用「歌名 + 歌手」打开在线搜索最稳（官方也是能点开搜）
+    const query: string = item.singer.length > 0 ? (item.name + ' ' + item.singer) : item.name;
+    hilog.info(ECHO_DOMAIN, ECHO_TAG, 'open song search=%{public}s', query);
+    this.pageIndexInfos.pushPathByName(RouterUrlConstants.ONLINE_SEARCH, query);
+  }
+
+  /** 最常听的歌手 → 歌手页（只带名字 + 源，官方也是按名字进）。 */
+  private openArtist(item: EchoTopArtist): void {
+    if (item.name.length === 0) {
+      return;
+    }
+    const param: ArtistRouteParam = new ArtistRouteParam();
+    param.source = EchoReviewPage.sourceCode(item.source);
+    param.name = item.name;
+    param.picUrl = item.img;
+    hilog.info(ECHO_DOMAIN, ECHO_TAG, 'open artist name=%{public}s source=%{public}d', item.name, param.source);
+    this.pageIndexInfos.pushPathByName(RouterUrlConstants.ARTIST_DETAIL, param);
+  }
+
+  /** 最常听的专辑 → 专辑页（有平台专辑 id 才走专辑页，否则退回在线搜索）。 */
+  private openAlbum(item: EchoTopAlbum): void {
+    if (item.name.length === 0) {
+      return;
+    }
+    if (item.albumId.length === 0) {
+      hilog.info(ECHO_DOMAIN, ECHO_TAG, 'album id missing, fallback to search name=%{public}s', item.name);
+      this.pageIndexInfos.pushPathByName(RouterUrlConstants.ONLINE_SEARCH, item.name);
+      return;
+    }
+    const param: AlbumRouteParam = new AlbumRouteParam();
+    param.source = EchoReviewPage.sourceCode(item.source);
+    param.id = item.albumId;
+    param.name = item.name;
+    param.picUrl = item.img;
+    param.artistName = item.singer;
+    hilog.info(ECHO_DOMAIN, ECHO_TAG, 'open album name=%{public}s id=%{public}s', item.name, param.id);
+    this.pageIndexInfos.pushPathByName(RouterUrlConstants.ALBUM_DETAIL, param);
+  }
+
+  /**
+   * 记录某个区块的可见比例，标题取"可见比例最大"的那一段（官方标题会随滚动变：
+   * 「10 月 · 你听了什么」→「10 月 · 你是怎样的听众」…）。
+   * @param index 区块下标（与 `SECTION_NAMES` 对齐）
+   * @param ratio 可见比例 0..1（`onVisibleAreaChange` 给的）
+   */
+  private noteSection(index: number, ratio: number): void {
+    if (index < 0 || index >= this.sectionRatios.length) {
+      return;
+    }
+    if (Math.abs(this.sectionRatios[index] - ratio) < 0.01) {
+      return;
+    }
+    this.sectionRatios[index] = ratio;
+    let best: number = 0;
+    let bestRatio: number = -1;
+    for (let i: number = 0; i < this.sectionRatios.length; i++) {
+      if (this.sectionRatios[i] > bestRatio) {
+        bestRatio = this.sectionRatios[i];
+        best = i;
+      }
+    }
+    const name: string = SECTION_NAMES[best];
+    if (bestRatio > 0.15 && name !== this.sectionTitle) {
+      this.sectionTitle = name;
+      hilog.info(ECHO_DOMAIN, ECHO_TAG,
+        'title section -> %{public}s (ratio=%{public}f index=%{public}d)', name, bestRatio, best);
+    }
+  }
+
+  /** 标题栏用的"当前区块名"（没量到之前是空的 ⇒ 显示「10 月 · 回响」）。 */
+  private titleSection(): string {
+    return this.sectionTitle.length > 0 ? this.sectionTitle : '回响';
+  }
+
+  /** HDS 标题栏：标题 =「月份 · 当前区块」（官方把这句话放在标题栏里，且随滚动变）。 */
   private getTitleBar(): HdsNavigationTitleBarOptions {
     return {
       // ★★ 用户 2026-10-13：「标题还是没正常，参考推荐页（首页）或我的页」⇒ 与那两页**逐字一致**：
@@ -442,7 +750,7 @@ export struct EchoReviewPage {
       },
       content: {
         title: {
-          mainTitle: this.monthLabel + ' · 回响',
+          mainTitle: this.monthLabel + ' · ' + this.titleSection(),
           mainTitleSize: TitleSize.TITLE_ML
         }
       }
@@ -465,6 +773,8 @@ export struct EchoReviewPage {
         Column({ space: 18 }) {
           this.Header()
           this.OverviewCard()
+          // ★ 用户 2026-10-14：年 / 月选择器要在**三格统计下面**（官方版式）
+          this.MonthPicker()
           this.TopSongsSection()
           this.TopArtistSection()
           this.TopAlbumsSection()
@@ -537,49 +847,60 @@ export struct EchoReviewPage {
           .width('100%')
           .textAlign(TextAlign.Start)
       }
-
-      // 年 / 月两枚胶囊（官方是带下拉箭头的胶囊按钮；这里左右箭头切月，形态一致）
-      Row({ space: 8 }) {
-        Row({ space: 4 }) {
-          Text(this.yearLabel)
-            .fontSize(13)
-            .fontColor('#E6FFFFFF')
-          SymbolGlyph($r('sys.symbol.chevron_down'))
-            .fontSize(11)
-            .fontColor(['#99FFFFFF'])
-        }
-        .height(30)
-        .padding({ left: 12, right: 12 })
-        .borderRadius(15)
-        .backgroundColor('#1FFFFFFF')
-
-        Row({ space: 8 }) {
-          SymbolGlyph($r('sys.symbol.chevron_left'))
-            .fontSize(12)
-            .fontColor(['#E6FFFFFF'])
-            .onClick(() => {
-              this.shiftMonth(-1);
-            })
-          Text(this.monthLabel)
-            .fontSize(13)
-            .fontColor('#E6FFFFFF')
-          SymbolGlyph($r('sys.symbol.chevron_right'))
-            .fontSize(12)
-            .fontColor(['#E6FFFFFF'])
-            .onClick(() => {
-              this.shiftMonth(1);
-            })
-        }
-        .height(30)
-        .padding({ left: 12, right: 12 })
-        .borderRadius(15)
-        .backgroundColor('#1FFFFFFF')
-      }
-      .width('100%')
-      .margin({ top: 6 })
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
+  }
+
+  /**
+   * 年 / 月两枚胶囊（官方位置：**在三格统计下面**，用户 2026-10-14 明确「官方那个是调整年月在
+   * xx次播放、xx首歌、xx位歌手下面，你这放上面了」⇒ 从 `Header` 里搬到这里）。
+   *
+   * 两枚都能点开：
+   *   · 年 → 历史里出现过的年份（`yearMenuItems`），点哪个年跳到那年最接近的月份；
+   *   · 月 → 这一年里有记录的月份（`monthMenuItems`），另外保留左右箭头逐月翻。
+   */
+  @Builder
+  private MonthPicker() {
+    Row({ space: 8 }) {
+      Row({ space: 4 }) {
+        Text(this.yearLabel)
+          .fontSize(13)
+          .fontColor('#E6FFFFFF')
+        SymbolGlyph($r('sys.symbol.chevron_down'))
+          .fontSize(11)
+          .fontColor(['#99FFFFFF'])
+      }
+      .height(30)
+      .padding({ left: 12, right: 12 })
+      .borderRadius(15)
+      .backgroundColor('#1FFFFFFF')
+      .bindMenu(this.yearMenuItems())
+
+      Row({ space: 8 }) {
+        SymbolGlyph($r('sys.symbol.chevron_left'))
+          .fontSize(12)
+          .fontColor(['#E6FFFFFF'])
+          .onClick(() => {
+            this.shiftMonth(-1);
+          })
+        Text(this.monthLabel)
+          .fontSize(13)
+          .fontColor('#E6FFFFFF')
+        SymbolGlyph($r('sys.symbol.chevron_right'))
+          .fontSize(12)
+          .fontColor(['#E6FFFFFF'])
+          .onClick(() => {
+            this.shiftMonth(1);
+          })
+      }
+      .height(30)
+      .padding({ left: 12, right: 12 })
+      .borderRadius(15)
+      .backgroundColor('#1FFFFFFF')
+      .bindMenu(this.monthMenuItems())
+    }
+    .width('100%')
   }
 
   /** 三格统计：次播放 / 首歌 / 位歌手。 */
@@ -664,6 +985,10 @@ export struct EchoReviewPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
+    // 区块 0：标题随滚动变（见 noteSection）
+    .onVisibleAreaChange([0.0, 1.0], (isVisible: boolean, ratio: number) => {
+      this.noteSection(0, ratio);
+    })
   }
 
   /**
@@ -727,12 +1052,16 @@ export struct EchoReviewPage {
    *     从"组件中心"挪到"组件左上角"，否则四点坐标会被当成相对中心的坐标。
    *   · 四个数全是常量 ⇒ 这里**不需要任何测量**（上一版用 `onAreaChange` 量列高喂进来，量到的口径不可控，
    *     真机上出现过"上边斜率对、下边几乎不动"的怪现象）。
+   *   · ⚠️⚠️ **必须用 `freshIdentity()` 起头，不能用 `matrix4.identity()`**：真机实测三张卡里
+   *     只有先构造的那张对、后面的会"退化"（右卡退化成纯平移、中间的 1st 被轻微压扁）。
+   *     原因是 `Matrix4Transit` 的方法都**就地改原矩阵**，而 `matrix4.identity()` 疑似返回同一个共享对象 ⇒
+   *     同一帧里三次构造互相污染。`matrix4.init([...16 个数...])` 是真正新建对象，见 `freshIdentity()`。
    * @param rank `1st` / `2nd` / `3rd`（`1st` 不形变，返回恒等矩阵）
    * @returns 变换矩阵
    */
   private sideQuadFor(rank: string): matrix4.Matrix4Transit {
     if (rank === '1st') {
-      return matrix4.identity();
+      return this.freshIdentity();
     }
     const ui = this.getUIContext();
     const side: number = ui.vp2px(SIDE_CARD_VP);
@@ -743,7 +1072,7 @@ export struct EchoReviewPage {
       'sideQuad rank=%{public}s side=%{public}f innerX=%{public}f topDrop=%{public}f bottomRise=%{public}f',
       rank, side, innerX, topDrop, bottomRise);
     // 点序 TL,TR,BL,BR（与官方示例一致）；3rd 渲染在左（外边在左）、2nd 渲染在右（外边在右）
-    return matrix4.identity().setPolyToPoly({
+    const m: matrix4.Matrix4Transit = this.freshIdentity().setPolyToPoly({
       src: [{ x: 0, y: 0 }, { x: side, y: 0 }, { x: 0, y: side }, { x: side, y: side }],
       dst: rank === '2nd'
         ? [{ x: side - innerX, y: topDrop }, { x: side, y: 0 },
@@ -754,6 +1083,27 @@ export struct EchoReviewPage {
       dstIndex: 0,
       pointCount: 4
     });
+    // 自检：把四个 src 角喂回矩阵，应当落到 dst 上（真机上 `hdc shell hilog | findstr TrapFix` 核对）
+    const probe: number[][] = [[0, 0], [side, 0], [0, side], [side, side]];
+    for (let i: number = 0; i < probe.length; i++) {
+      const q: number[] = m.transformPoint([probe[i][0], probe[i][1]]);
+      hilog.info(ECHO_DOMAIN, ECHO_TAG,
+        'TrapFix %{public}s src(%{public}f,%{public}f)->(%{public}f,%{public}f)',
+        rank, probe[i][0], probe[i][1], q[0], q[1]);
+    }
+    return m;
+  }
+
+  /**
+   * 全新的单位矩阵。
+   *
+   * ⚠️ **不要用 `matrix4.identity()`**：`Matrix4Transit` 的方法（setPolyToPoly/translate/scale/combine…）
+   * 都是**就地修改**调用它的那个矩阵对象；真机上同一帧里连续构造三张卡时，后两张会污染到前一张的状态
+   * （症状：左卡正确、右卡退化成平移、中间的 1st 被压扁 ⇒ 用户看到的"左右留白不一样"）。
+   * `matrix4.init()` 传 16 个数字才会**新建**一个矩阵对象（单位矩阵的 16 个数与排布口径无关，安全）。
+   */
+  private freshIdentity(): matrix4.Matrix4Transit {
+    return matrix4.init([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
   }
   @Builder
   private SongCover(item: EchoTopSong, rank: string) {
@@ -804,6 +1154,10 @@ export struct EchoReviewPage {
     //     所以文字自动拿到**同一个透视**（跟着一起斜、一起横向收窄），且与封面底边无缝衔接。
     .scale({ centerX: 0, centerY: 0, x: 1 })
     .transform(this.sideQuadFor(rank))
+    // ★ 2026-10-14 用户：「最常听的歌也能点开」⇒ 点这张卡打开这首歌（本库没有平台 id，走在线搜索）
+    .onClick(() => {
+      this.openSong(item);
+    })
     // 中间那张要在最上层，才能压住左右两侧的内边（zIndex 必须给容器，不只给封面）
     .zIndex(rank === '1st' ? 2 : 1)
   }
@@ -847,6 +1201,10 @@ export struct EchoReviewPage {
         .width('100%')
         .borderRadius(14)
         .clip(true)
+        // ★ 2026-10-14：第一名歌手的大图卡可点开（歌手页）
+        .onClick(() => {
+          this.openArtist(this.stats.topArtists[0]);
+        })
 
         if (this.stats.topArtists.length > 1) {
           Column() {
@@ -877,6 +1235,10 @@ export struct EchoReviewPage {
               }
               .width('100%')
               .height(60)
+              // ★ 2026-10-14：2/3/4 名那几行也可点开（歌手页）
+              .onClick(() => {
+                this.openArtist(item);
+              })
             }, (item: EchoTopArtist) => 'artist_' + item.name)
           }
           .width('100%')
@@ -895,6 +1257,10 @@ export struct EchoReviewPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
+    // 区块 1：标题随滚动变
+    .onVisibleAreaChange([0.0, 1.0], (isVisible: boolean, ratio: number) => {
+      this.noteSection(1, ratio);
+    })
   }
 
   /** 最常听的专辑。 */
@@ -931,6 +1297,10 @@ export struct EchoReviewPage {
             }
             .layoutWeight(1)
             .alignItems(HorizontalAlign.Start)
+            // ★ 2026-10-14：专辑卡可点开（专辑页，没 id 时退回在线搜索）
+            .onClick(() => {
+              this.openAlbum(item);
+            })
           }, (item: EchoTopAlbum) => 'album_' + item.name)
         }
         .width('100%')
@@ -946,6 +1316,10 @@ export struct EchoReviewPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
+    // 区块 2：标题随滚动变
+    .onVisibleAreaChange([0.0, 1.0], (isVisible: boolean, ratio: number) => {
+      this.noteSection(2, ratio);
+    })
   }
 
   /** 你是怎样的听众：24 小时柱状图。 */
@@ -1048,6 +1422,10 @@ export struct EchoReviewPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
+    // 区块 3：标题随滚动变
+    .onVisibleAreaChange([0.0, 1.0], (isVisible: boolean, ratio: number) => {
+      this.noteSection(3, ratio);
+    })
   }
 
   /** 完播率（口径只写在文件头，不在页面上占一行 —— 用户 2026-10-14 让删的）。 */
@@ -1110,6 +1488,10 @@ export struct EchoReviewPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
+    // 区块 4：标题随滚动变
+    .onVisibleAreaChange([0.0, 1.0], (isVisible: boolean, ratio: number) => {
+      this.noteSection(4, ratio);
+    })
   }
 
   /** 新发现。 */
@@ -1158,6 +1540,10 @@ export struct EchoReviewPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
+    // 区块 5：标题随滚动变
+    .onVisibleAreaChange([0.0, 1.0], (isVisible: boolean, ratio: number) => {
+      this.noteSection(5, ratio);
+    })
   }
 
   @Builder

@@ -506,13 +506,42 @@ export struct PlaybackPage {
   }
 
   /**
-   * 流光背景开关被打开时，重新为当前这首曲目取一次色。
+   * ★★ 2026-10-14 修「流光背景开关经常不跟随设置」：
+   *
+   * 共享状态 `PlaybackFlowLightState` 是**新创建**的（默认 false），谁都没把 `MusicStoreService`
+   * 里持久化的那个值灌进去 —— 只有设置页切开关时才会写共享状态。于是：**开着流光 → 重启 App →
+   * 播放页读到的还是默认 false**（设置页没进去过就一直错着），用户看到的就是"开关不跟随设置"。
+   *
+   * 这里照 `LyricsComponent.syncLyricBlurPreference()` 的同一套口径：进页面时从 store 读一次、
+   * 写回共享状态；反向（共享状态变了）也顺手落库，保证两边永远一致。
+   * 用户日志关键字：`RzdFlowLight pref`。
+   */
+  private syncFlowLightPreference(reason: string): void {
+    const stored: boolean = MusicStoreService.getInstance().getPlaybackFlowLight();
+    const shared: boolean = this.flowLightState.enabled;
+    if (stored !== shared) {
+      this.flowLightState.enabled = stored;
+    }
+    Logger.info('RzdFlowLight',
+      `pref reason=${reason} store=${stored} sharedBefore=${shared} effective=${stored}`);
+    if (stored && this.context !== undefined && this.isAlive) {
+      this.getImageColor();
+    }
+  }
+
+  /**
+   * 流光背景开关变化时：① 共享状态 → 落库（别处只改共享状态时不会丢设置）② 打开时补一次取色。
    *
    * 关着的时候取色是跳过的（省一次解码），所以刚打开开关时手上没有颜色；
    * 这里补一次，用户不用切歌就能看到效果。
    */
   @Monitor('flowLightState.enabled')
   onFlowLightEnabledChange(): void {
+    const stored: boolean = MusicStoreService.getInstance().getPlaybackFlowLight();
+    if (stored !== this.flowLightState.enabled) {
+      MusicStoreService.getInstance().setPlaybackFlowLight(this.flowLightState.enabled);
+      Logger.info('RzdFlowLight', `pref persist enabled=${this.flowLightState.enabled}`);
+    }
     if (!this.flowLightState.enabled || this.context === undefined || !this.isAlive) {
       return;
     }
@@ -559,6 +588,27 @@ export struct PlaybackPage {
    */
   /** 流光的 HDS 能力位：缺失时 shader 视效会静默不画（见 {@link hdsEffectCapable}）。 */
   private static readonly HDS_CORE_SYSCAP: string = 'SystemCapability.UIDesign.HDSComponent.Core';
+
+  /**
+   * 未开流光时的封面底图模糊半径（px，effectKit 口径）。
+   *
+   * ★ 用户 2026-10-14：「不流光时模糊半径改大」—— 流光关掉后背景只剩这张封面，
+   * 糊得重一点才像"背景"而不是"第二张封面"（原来固定用 `PlayerConstants.IMAGE_BLUR` = 15，那是给流光打底的强度）。
+   */
+  private static readonly IMAGE_BLUR_NO_FLOW: number = 34;
+  /** 背景层（非 PixelMap 源）的实时模糊半径：没流光时同样加大一档。 */
+  private static readonly LAYER_BLUR_WITH_FLOW: number = 80;
+  private static readonly LAYER_BLUR_NO_FLOW: number = 140;
+
+  /** 当前该用的封面底图模糊半径：开流光用 15（给流光打底），没流光用更大的一档。 */
+  private imageBlurRadius(): number {
+    return this.flowLightState.enabled ? PlayerConstants.IMAGE_BLUR : PlaybackPage.IMAGE_BLUR_NO_FLOW;
+  }
+
+  /** 当前该用的背景层实时模糊半径。 */
+  private layerBlurRadius(): number {
+    return this.flowLightState.enabled ? PlaybackPage.LAYER_BLUR_WITH_FLOW : PlaybackPage.LAYER_BLUR_NO_FLOW;
+  }
 
   private hdsEffectCapable(): boolean {
     try {
@@ -1715,7 +1765,7 @@ export struct PlaybackPage {
             await this.extractFlowLightColors(coverPm);
             const headFilter = effectKit.createEffect(coverPm);
             if (headFilter !== null) {
-              headFilter.blur(PlayerConstants.IMAGE_BLUR);
+              headFilter.blur(this.imageBlurRadius());
               const blurred = await headFilter.getEffectPixelMap();
               if (this.isAlive && jobSeq === this.imageColorJobSeq) {
                 this.imageLabel = blurred;
@@ -1821,7 +1871,7 @@ export struct PlaybackPage {
     try {
       const headFilter = effectKit.createEffect(pixelMap);
       if (headFilter !== null) {
-        headFilter.blur(PlayerConstants.IMAGE_BLUR);
+        headFilter.blur(this.imageBlurRadius());
         const blurred = await headFilter.getEffectPixelMap();
         if (this.isAlive && jobSeq === this.imageColorJobSeq) {
           this.imageLabel = blurred;
@@ -1933,7 +1983,7 @@ export struct PlaybackPage {
             .width('100%')
             .height('100%')
             .objectFit(ImageFit.Cover)
-            .blur(this.isPixelMapCover(this.backgroundImageSource()) ? 0 : 80)
+            .blur(this.isPixelMapCover(this.backgroundImageSource()) ? 0 : this.layerBlurRadius())
             .opacity(0.55 * this.backgroundRevealOpacity())
             .hitTestBehavior(HitTestMode.None)
 

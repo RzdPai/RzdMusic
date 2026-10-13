@@ -145,12 +145,24 @@ export struct LyricsComponent {
       Logger.warn('LyricViewportBlur', `preference reason=${reason} synced=false effective=false`);
       return;
     }
-    const storedEnabled: boolean = MusicStoreService.getInstance().getLyricBlurEnabled();
-    this.lyricBlurEnabled = storedEnabled;
-    this.lyricBlurState.enabled = storedEnabled;
+    const store = MusicStoreService.getInstance();
+    if (reason === 'shared-change') {
+      // ★★ 2026-10-14 修「模糊开关经常不跟随设置」：外部（设置页/云同步/别处）改的是**共享状态**，
+      //   这里原来一律拿 store 的值**反向覆盖**共享状态 —— 只要 store 落后一步（异步落盘、云同步只写了 store…）
+      //   就会把用户刚选的开关**改回去**，表现就是"点了没反应/过一会儿又变回来"。
+      //   共享状态是无歧义的用户选择，这一支直接以它为准并落库（不再回读 store）。
+      this.lyricBlurEnabled = this.lyricBlurState.enabled;
+      if (store.getLyricBlurEnabled() !== this.lyricBlurState.enabled) {
+        store.setLyricBlurEnabled(this.lyricBlurState.enabled);
+      }
+    } else {
+      const storedEnabled: boolean = store.getLyricBlurEnabled();
+      this.lyricBlurEnabled = storedEnabled;
+      this.lyricBlurState.enabled = storedEnabled;
+    }
     this.lyricBlurPreferenceReady = true;
     Logger.info('LyricViewportBlur',
-      `preference reason=${reason} storeEnabled=${storedEnabled} sharedEnabled=${this.lyricBlurState.enabled} synced=true effective=${this.lyricBlurEnabled}`);
+      `preference reason=${reason} shared=${this.lyricBlurState.enabled} effective=${this.lyricBlurEnabled} synced=true`);
   }
 
   @Monitor('lyricBlurState.enabled')
