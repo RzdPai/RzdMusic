@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -674,7 +674,7 @@ export struct EchoReviewPage {
     .rotate({
       y: 1,
       angle: rank === '1st' ? 0 : (rank === '2nd' ? 24 : -24),
-      perspective: 580,
+      perspective: 90,
       centerX: rank === '1st' ? '50%' : (rank === '2nd' ? 0 : '100%')
     })
     // ★★ 2026-10-13：负 margin 要加在**中间那张**上（左右各 -46），由它去盖住两侧。
