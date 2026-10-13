@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -753,8 +753,9 @@ export struct EchoReviewPage {
     }
     .layoutWeight(rank === '1st' ? 2 : 1)
     .alignItems(HorizontalAlign.Center)
-    // ★ 用户 2026-10-12：「左右两张往中间靠靠，官方的是被盖住了一部分」⇒ 负 margin 与中卡叠压
-    .margin({ right: rank === '2nd' ? -62 : 0, left: rank === '3rd' ? -62 : 0 })
+    // ★★ 2026-10-13：负 margin 要加在**中间那张**上（左右各 -62），由它去盖住两侧。
+    //   加在两侧会把它们顶出屏幕（左卡被屏幕左缘裁掉、右卡超出）⇒ 看着就像被裁一半的平行四边形。
+    .margin({ left: rank === '1st' ? -62 : 0, right: rank === '1st' ? -62 : 0 })
     // 中间那张要在最上层，才能压住左右两侧的内边（zIndex 必须给容器，不只给 Image）
     .zIndex(rank === '1st' ? 2 : 1)
   }
