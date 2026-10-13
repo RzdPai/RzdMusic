@@ -91,12 +91,26 @@ const DAYS_MAX: number = 31;
 const TOP_SONGS: number = 3;
 const TOP_ARTISTS: number = 4;
 const TOP_ALBUMS: number = 3;
-/** 侧卡宽度（vp）：四点投影矩阵按它算（内部再 vp2px，官方 Path/Point 都是 px 口径）。 */
-const SIDE_CARD_VP: number = 110;
-/** 侧卡**内侧**竖边被压到的比例（实测官方 ≈0.80）。 */
-const SIDE_INNER_SCALE: number = 0.8;
-/** 高度损失里分给**上边**的比例（实测官方 ≈0.7 ⇒ 上边斜得多、下边斜得少）。 */
-const SIDE_TOP_WEIGHT: number = 0.7;
+/**
+ * 【2026-10-13 第四轮：按参考软件截图**逐像素量**出来的四个数】
+ *
+ * 量法：`_recover\tools\card-profile.ps1`（按饱和度找封面色块）+ `crop-grid.ps1`（裁图叠 20px 网格）
+ * 量参考软件 `com.yonminma.wanting` 的回响页封面（截图 1224×2776，密度 ≈3.4px/vp）：
+ *   · 中间 1st 封面 531px 宽；两侧封面**外边**高 488px ⇒ 侧/中 = 488/531 ≈ 0.92；
+ *   · 侧卡可见宽 414px（由它下方三行文字的居中点反推：文字中心在离外边 207px ≈ 可见宽的一半）；
+ *   · 侧卡上边斜率 dy/dx = 0.168、下边 −0.087（按**可见宽**算）；
+ *   · 外高 488 → 内高 355（=488×(1−0.168−0.087)，与 `侧翼.txt` 的 0.80 对得上）。
+ */
+/** 侧卡封面边长（vp）：中间 150 × 0.92 ≈ 138（**变换盒就是它**，不含下面三行文字）。 */
+const SIDE_CARD_VP: number = 138;
+/** 中间那张（1st）的封面边长（vp）—— 与参考软件的 1st 封面一致（150vp = 510px）。 */
+const MAIN_CARD_VP: number = 150;
+/** 横向透视收缩：可见宽 / 封面边长 = 414/488 ≈ 0.848（绕竖轴转的余弦缩短）。 */
+const SIDE_SQUEEZE: number = 0.848;
+/** 上边斜率（按**收缩后**的可见宽算）：参考实测 0.168。 */
+const SIDE_TOP_SLOPE: number = 0.168;
+/** 下边斜率：实测 −0.087（即下边往内**抬** 0.087×可见宽）。 */
+const SIDE_BOTTOM_SLOPE: number = 0.087;
 
 /** 把 `mm:ss` 解析成秒；解析不出来算 0（不猜）。 */
 function intervalSeconds(interval: string): number {
@@ -153,13 +167,6 @@ export struct EchoReviewPage {
   @Local yearLabel: string = '';
   @Local monthLabel: string = '';
   private scroller: Scroller = new Scroller();
-  /**
-   * 侧卡整列（封面 + 三行文字）的**实测高度**（vp）。
-   *
-   * 四点投影的 src 必须按组件自己的盒子给（px 口径），而这一列的高度由内容撑出来、编译期不知道，
-   * 所以用 onAreaChange 量一次写回（容差 0.5vp，不会与渲染互相追）。
-   */
-  @Local sideCardHeightVp: number = 0;
   /** 共享播放状态（底栏联动要读它）。 */
   @Local appState: MusicAppState =
     AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
@@ -628,59 +635,82 @@ export struct EchoReviewPage {
   }
 
   /**
+   * 封面边长（vp）：`1st` 用 `MAIN_CARD_VP`(150)，两侧用 `SIDE_CARD_VP`(138)。
+   * 也**就是**四点投影的变换盒尺寸（盒 = 封面，见 `sideQuadFor()`）。
+   * @param rank `1st` / `2nd` / `3rd`
+   * @returns 边长 vp
+   */
+  private coverVpOf(rank: string): number {
+    return rank === '1st' ? MAIN_CARD_VP : SIDE_CARD_VP;
+  }
+
+  /**
+   * 封面圆角（vp）。按边长等比缩放（150 ⇒ 13vp 是原本的观感，138 ⇒ 12vp）。
+   * @param rank `1st` / `2nd` / `3rd`
+   * @returns 圆角 vp
+   */
+  private coverRadiusOf(rank: string): number {
+    return rank === '1st' ? 13 : 12;
+  }
+
+  /**
    * 一个名次：封面 + 名次/歌名/次数三段文字。
    *
-   * 第 1 名：方卡、不形变（恒等矩阵），`zIndex(2)` 压住两侧；第 2/3 名：用**四点投影矩阵**
-   * （`sideQuadFor()`）压成梯形 —— 外边竖直满高、内边竖直但只有 0.80 高，并由中间那张盖住内侧一部分
-   * （负 margin 加在中间那张上，加两侧会把它们顶出屏）。
+   * 三张卡在 `Row` 里**不靠负 margin 叠**：两侧各占一个**定宽列**（`SIDE_CARD_VP`），
+   * 中间那张 `layoutWeight(1)` 吃掉剩下的全部宽度 —— 它为了居中会**溢出**自己那条窄列，
+   * 于是自然压住两侧的内边（`zIndex(2)`）。这样在窄屏上两侧不会被顶出屏幕。
    * @param item 名次数据
    * @param rank `1st` / `2nd` / `3rd`
    */
 
   /**
-   * 侧卡的**四点投影矩阵**（`matrix4.setPolyToPoly(pointCount: 4)` ⇒ 透视变换，不是仿射）。
+   * 侧卡封面的**四点投影矩阵**（`matrix4.setPolyToPoly(pointCount: 4)` ⇒ 透视变换，不是仿射）。
    *
    * 为什么不用 `rotate({ y: 1, perspective })`：那一套的**实际透视强度**在本机和文档/任何模型推算都对不上
-   * （真机记录：18/200 方形、24/90 过强、16/121 与 24/580 又回到方形），参数路线已被证伪。
-   * 四点映射直接把参考软件实测的**梯形四角**钉死，几何 100% 可控。
+   * （真机记录：18/200 方形、24/90 过强、16/121 与 24/580 又回到方形），参数路线已被证伪；
+   * 四点映射直接把参考软件量出来的**梯形四角**钉死，几何 100% 可控。
    *
-   * 形状（**纯梯形 / keystone**，取自参考软件实测 `侧翼.txt`）：
-   *   · 外边（左卡的左边 / 右卡的右边）**满高且严格竖直**；
-   *   · 内边**也是竖直的**，只是压短到 `SIDE_INNER_SCALE`(0.80)：实测 442px → 355px；
-   *   · 高度损失按 `SIDE_TOP_WEIGHT`(0.7) 分给上边、0.3 给下边 ⇒ 上边斜率 0.22、下边 −0.09。
-   *   · ⚠️ **不做横向内缩**：内边的 x 仍是整宽 w（横向内缩会顺带把封面横向压扁，实测里没有这一项）。
-   *   · 校验：斜面 = 0.7×0.2×h / w；本页 h≈161vp、w=110vp ⇒ 上边 0.205、下边 0.088，与实测 0.22 / 0.09 吻合。
+   * ⚠️ 变换盒 = **封面本身**（`SIDE_CARD_VP` 见方），**不含**下面那三行文字。这是从参考软件反推的关键：
+   * 只有"盒高 = 封面边长"时，上边斜率 0.168、下边斜率 −0.087、内/外高比 0.783 三个数才同时成立
+   * （把三行文字也算进盒里，同样的上边斜率会把内边压得远远不够，实测参考的内边就是 ~0.78）。
+   * 文字只跟着做**横向收缩**（见 `SongCover()`），纵向不动 ⇒ 和参考一样是水平的三行。
    *
-   * ⚠️ 口径（查 `js-apis-matrix4` 确认）：
+   * 形状（以 3rd 卡为例，外边在左）：
+   *   · 外边 TL(0,0) / BL(0,side) **原地不动**（满高、严格竖直）；
+   *   · 内边挪到 x = `side × SIDE_SQUEEZE`（0.848，横向缩短 = 绕竖轴旋转的透视收缩）；
+   *   · 上边 TR 下沉 `可见宽 × 0.168`、下边 BR 上抬 `可见宽 × 0.087`（两个斜率都是参考实测值）。
+   *
+   * ⚠️ 口径（查本地 `@ohos.matrix4.d.ts` + 官方文档确认）：
    *   · `Point.x/y` 单位是 **px**，必须 `vp2px` 换算；
    *   · `pointCount: 4` 才是透视矩阵（0/1/2/3 分别是恒等/平移/仿射/含剪切仿射）；
    *   · `dstIndex` 默认值是 `src.length/2`（这里会是 2！），所以**必须显式传 0**；
    *   · 点序照抄官方示例 `TL,TR,BL,BR`（src/dst 用同一顺序即可，映射只认"第 i 个对第 i 个"）。
    *   · 配套的 `.scale({ centerX: 0, centerY: 0, x: 1 })` 见 `SongCover()`：官方明确要求它把变换中心点
-   *     从"组件中心"挪到"组件左上角"，否则四点坐标是按中心算的（这里传进来的就是左上角起算的坐标）。
+   *     从"组件中心"挪到"组件左上角"，否则四点坐标会被当成相对中心的坐标。
+   *   · 因为盒高就是常量边长，这里**不需要任何测量**（上一版用 `onAreaChange` 量列高，量到的口径不可控）。
    * @param rank `1st` / `2nd` / `3rd`（`1st` 不形变，返回恒等矩阵）
-   * @param boxHVp 变换盒**实测高度**（vp）；量不到（0）时返回恒等矩阵 ⇒ 首帧不形变、不闪
    * @returns 变换矩阵
    */
-  private sideQuadFor(rank: string, boxHVp: number): matrix4.Matrix4Transit {
-    if (rank === '1st' || boxHVp <= 0) {
+  private sideQuadFor(rank: string): matrix4.Matrix4Transit {
+    if (rank === '1st') {
       return matrix4.identity();
     }
     const ui = this.getUIContext();
-    const w: number = ui.vp2px(SIDE_CARD_VP);
-    const h: number = ui.vp2px(boxHVp);
-    const loss: number = h * (1 - SIDE_INNER_SCALE);
-    const topDrop: number = loss * SIDE_TOP_WEIGHT;
-    const bottomRise: number = loss * (1 - SIDE_TOP_WEIGHT);
+    const side: number = ui.vp2px(SIDE_CARD_VP);
+    const innerX: number = side * SIDE_SQUEEZE;
+    const topDrop: number = innerX * SIDE_TOP_SLOPE;
+    const bottomRise: number = innerX * SIDE_BOTTOM_SLOPE;
     hilog.info(ECHO_DOMAIN, ECHO_TAG,
-      'sideQuad rank=%{public}s w=%{public}fpx h=%{public}fpx topDrop=%{public}fpx bottomRise=%{public}fpx',
-      rank, w, h, topDrop, bottomRise);
+      'sideQuad rank=%{public}s side=%{public}f innerX=%{public}f topDrop=%{public}f bottomRise=%{public}f',
+      rank, side, innerX, topDrop, bottomRise);
     // 点序 TL,TR,BL,BR（与官方示例一致）；3rd 渲染在左（外边在左）、2nd 渲染在右（外边在右）
     return matrix4.identity().setPolyToPoly({
-      src: [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: 0, y: h }, { x: w, y: h }],
+      src: [{ x: 0, y: 0 }, { x: side, y: 0 }, { x: 0, y: side }, { x: side, y: side }],
       dst: rank === '2nd'
-        ? [{ x: 0, y: topDrop }, { x: w, y: 0 }, { x: 0, y: h - bottomRise }, { x: w, y: h }]
-        : [{ x: 0, y: 0 }, { x: w, y: topDrop }, { x: 0, y: h }, { x: w, y: h - bottomRise }],
+        ? [{ x: side - innerX, y: topDrop }, { x: side, y: 0 },
+           { x: side - innerX, y: side - bottomRise }, { x: side, y: side }]
+        : [{ x: 0, y: 0 }, { x: innerX, y: topDrop },
+           { x: 0, y: side }, { x: innerX, y: side - bottomRise }],
       srcIndex: 0,
       dstIndex: 0,
       pointCount: 4
@@ -688,34 +718,41 @@ export struct EchoReviewPage {
   }
   @Builder
   private SongCover(item: EchoTopSong, rank: string) {
-    // 外层：只负责在 Row 里**占位 / 居中 / 压层**（layoutWeight、负 margin、zIndex），**不参与变换**。
-    Column() {
-      // ★ 变换层：宽度钉死成封面宽度（`SIDE_CARD_VP`）。原因：布局列宽是 Row 的 1/4 ≈ 82vp，**比封面窄**，
-      //   封面是溢出显示的；矩阵若按 82vp 算，封面外侧那 14vp 就落进投影的"外推区"，形状会歪。
-      //   钉成 110vp 后变换盒四角与封面四角**严格对齐**，`sideQuadFor()` 里的 w 就是这里的宽度。
-      // ★★ 2026-10-13（另一软件作者给的官方做法）：「把**文字和图片放到一个 Column 里，然后对 Column 做变换**，
-      //   文字就自动跟着变形了」⇒ 变换加在**整个列**上（封面 + 名次/歌名/次数三段文字一起斜）。
-      Column({ space: 6 }) {
-        Row() {
-
-          if (item.img.length > 0) {
-            Image(item.img)
-              .width(rank === '1st' ? 150 : 110)
-              .height(rank === '1st' ? 150 : 110)
-              .borderRadius(rank === '1st' ? 13 : 9)
-              .objectFit(ImageFit.Cover)
-              .zIndex(rank === '1st' ? 2 : 1)
-          } else {
-            Column()
-              .width(rank === '1st' ? 150 : 110)
-              .height(rank === '1st' ? 150 : 110)
-              .borderRadius(rank === '1st' ? 13 : 9)
-              .backgroundColor('#22FFFFFF')
-              .zIndex(1)
-          }
-
+    // 布局盒：宽度 = 封面边长。**两侧不设 layoutWeight、中间设 layoutWeight(1)**：
+    //   Row 的分配 = 两侧各占 138vp、中间把剩下的全吃掉 ⇒ 中间那条列很窄，它里面的封面（150vp）
+    //   居中**溢出**出来，自然压住两侧的内边。这样窄屏上两侧也不会被顶出屏，不需要负 margin。
+    Column({ space: 6 }) {
+      // ① 封面（**变换盒就是它**）：四点投影 = 梯形 + 横向收缩。宽度/高度钉死成边长，矩阵四角与封面四角严格对齐。
+      Column() {
+        if (item.img.length > 0) {
+          Image(item.img)
+            .width('100%')
+            .height('100%')
+            .borderRadius(this.coverRadiusOf(rank))
+            .objectFit(ImageFit.Cover)
+        } else {
+          Column()
+            .width('100%')
+            .height('100%')
+            .borderRadius(this.coverRadiusOf(rank))
+            .backgroundColor('#22FFFFFF')
         }
+      }
+      .width(this.coverVpOf(rank))
+      .height(this.coverVpOf(rank))
+      // ★★★ 2026-10-13 第四轮：**rotate 整条路线全退**（参数路线已被真机证伪），
+      //   改用**四点投影映射** `matrix4.setPolyToPoly`（见 `sideQuadFor()`）。
+      //   · 官方 `setPolyToPoly` 示例明确要求配一句 `.scale({ centerX: 0, centerY: 0, x: 1 })`（**挂在组件上**）：
+      //     把变换中心点从"组件中心"挪到"组件左上角"（x:1 是恒等缩放、不改大小）。不挪的话四点坐标
+      //     会被当成相对中心的坐标 ⇒ 整个梯形偏出去。`1st` 那张是恒等矩阵，配它也无副作用。
+      //   · 用 `.transform()`（官方 `setPolyToPoly` 示例的写法，API 12 起可用）。
+      .scale({ centerX: 0, centerY: 0, x: 1 })
+      .transform(this.sideQuadFor(rank))
+      .zIndex(rank === '1st' ? 2 : 1)
 
+      // ② 名次 / 歌名 / 次数：只跟着做**横向收缩**（锚在**外边**：左卡左缘、右卡右缘），纵向不动
+      //   ⇒ 和参考软件一样，文字保持水平、不倾斜，且水平位置正好落在收窄后的封面下方。
+      Column({ space: 2 }) {
         Text(rank)
           .fontSize(12)
             // ★ 用户 2026-10-13：「1st/2nd/3rd 颜色不一样」⇒ 三档亮度（1st 最亮）
@@ -732,37 +769,19 @@ export struct EchoReviewPage {
           .fontColor('#88FFFFFF')
           .maxLines(1)
       }
-      .width(rank === '1st' ? 150 : SIDE_CARD_VP)
+      .width(this.coverVpOf(rank))
       .alignItems(HorizontalAlign.Center)
-      // ★★★ 2026-10-13 第三轮返工：**rotate 整条路线全退**（`rotate + perspective` 在本机怎么调都对不上，
-      //   参数路线已被证伪），改用**四点投影映射** `matrix4.setPolyToPoly`，几何由 `sideQuadFor()` 直接钉死。
-      //   · 官方示例（`js-apis-matrix4#setPolyToPoly`）明确要求配一句
-      //     `.scale({ centerX: 0, centerY: 0, x: 1 })`：把变换中心点从**组件中心**挪到**组件左上角**
-      //     （`x: 1` 是恒等缩放，不改大小）。不挪的话四点坐标会被当成"相对中心"的坐标 ⇒ 整体偏出去。
-      //   · 用 `.transform()` 而不是 `.transform3D()`：官方 `setPolyToPoly` 示例就是这么配的（API 12 起可用）。
-      .scale({ centerX: 0, centerY: 0, x: 1 })
-      .transform(this.sideQuadFor(rank, this.sideCardHeightVp))
-      // 矩阵要**实测高度**（`Point` 是 px 口径）：首帧量不到就先返回恒等矩阵（不形变、不闪），量到后自动重算。
-      .onAreaChange((_oldArea: Area, newArea: Area) => {
-        if (rank === '1st') {
-          return;
-        }
-        const boxW: number = newArea.width as number;
-        const boxH: number = newArea.height as number;
-        if (Math.abs(boxH - this.sideCardHeightVp) > 0.5) {
-          this.sideCardHeightVp = boxH;
-          hilog.info(ECHO_DOMAIN, ECHO_TAG,
-            'side card box %{public}f x %{public}f vp (rank=%{public}s, expect w=%{public}d)',
-            boxW, boxH, rank, SIDE_CARD_VP);
-        }
+      .scale({
+        x: rank === '1st' ? 1 : SIDE_SQUEEZE,
+        centerX: rank === '2nd' ? SIDE_CARD_VP : 0,
+        centerY: 0
       })
     }
-    .layoutWeight(rank === '1st' ? 2 : 1)
+    .width(this.coverVpOf(rank))
     .alignItems(HorizontalAlign.Center)
-    // ★★ 2026-10-13：负 margin 要加在**中间那张**上（左右各 -46），由它去盖住两侧。
-    //   加在两侧会把它们顶出屏幕（左卡被屏幕左缘裁掉、右卡超出）⇒ 看着就像被裁一半的平行四边形。
-    .margin({ left: rank === '1st' ? -46 : 0, right: rank === '1st' ? -46 : 0 })
-    // 中间那张要在最上层，才能压住左右两侧的内边（zIndex 必须给容器，不只给 Image）
+    // 两侧固定宽度（不参与权重分配）；中间那张吃掉 Row 剩下的全部宽度
+    .layoutWeight(rank === '1st' ? 1 : 0)
+    // 中间那张要在最上层，才能压住左右两侧的内边（zIndex 必须给容器，不只给封面）
     .zIndex(rank === '1st' ? 2 : 1)
   }
 
