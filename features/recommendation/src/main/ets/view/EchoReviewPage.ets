@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -711,25 +711,12 @@ export struct EchoReviewPage {
             .height(rank === '1st' ? 150 : 110)
             .borderRadius(rank === '1st' ? 13 : 9)
             .objectFit(ImageFit.Cover)
-            // ★★ 四点投影映射（另一模型逐边实测给的方案，2026-10-13）：
-            //   官方那是 `matrix4.setPolyToPoly(pointCount: 4)` 的**透视**变换 —— 竖边保持竖直、
-            //   上边斜率大于下边、内侧压缩到 80%；仿射（skew/rotate）数学上做不到"上下斜率不同"，
-            //   裁剪只是少画一块（轮廓仍是矩形），所以都不对。官方要求先把变换锚点挪到左上角。
-            .scale({ centerX: 0, centerY: 0, x: 1 })
-            // ★★ 2026-10-13 真机定论：`.transform()` 只做**仿射**（平行线永远平行 ⇒ 上下边永远同斜率），
-            //   做不出透视。换 `transform3D`（API 20，官方 d.ts：「The interface can display the effect
-            //   of three-dimensional matrix transformation」）—— 你那份分析文件也提到了这条路：
-            //   「若透视渲染有偏差就换 transform3D」。
-            .transform3D(this.sideQuadFor(rank))
-            .shadow({ radius: rank === '1st' ? 24 : 12, color: 'rgba(0, 0, 0, 0.45)', offsetX: 0, offsetY: 8 })
-            // ★★ GLM5.3（zai/glm-5.3）给的官方观感做法：**真 3D 透视形变**（不是裁梯形）——
-            //   y:1 绕 Y 轴倾斜产生近大远小，z 让上边缘微斜、下边缘大致保持平，perspective 越小透视越强。
-            //   第 1 名不转（ngle: 0）。若倾斜方向反了，把 angle/z 的正负一起翻即可。
+            // ★★ 2026-10-13 根因：原来同时挂着 .transform3D() 和 .rotate()，两个变换叠加打架。
+            //   现在只留一个简单的 Y 轴 3D 旋转：y:1 绕竖直轴倾斜（近大远小），perspective 越小透视越强。
             .rotate({
               y: 1,
-              z: rank === '2nd' ? -0.14 : 0.14,
-              perspective: 55,
-              angle: rank === '1st' ? 0 : (rank === '2nd' ? -46 : 46)
+              perspective: 200,
+              angle: rank === '1st' ? 0 : (rank === '2nd' ? 18 : -18)
             })
             .zIndex(rank === '1st' ? 2 : 1)
         } else {
