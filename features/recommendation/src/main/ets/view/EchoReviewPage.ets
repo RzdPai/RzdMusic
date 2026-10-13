@@ -90,8 +90,8 @@ const TOP_ALBUMS: number = 3;
 const SIDE_CARD_VP: number = 110;
 /** 侧翼**内侧**竖边被压到的比例（官方实测 ≈0.80）。 */
 const SIDE_INNER_SCALE: number = 0.8;
-/** 高度损失里分给**上边**的比例（官方实测 ≈0.70 ⇒ 上边斜得多、下边斜得少）。 */
-const SIDE_TOP_WEIGHT: number = 0.85;
+/** 高度损失里分给**上边**的比例（另一模型对官方截图逐边实测 ≈0.70 ⇒ 上边斜得多、下边斜得少）。 */
+const SIDE_TOP_WEIGHT: number = 0.7;
 
 /** 把 `mm:ss` 解析成秒；解析不出来算 0（不猜）。 */
 function intervalSeconds(interval: string): number {
@@ -755,7 +755,7 @@ export struct EchoReviewPage {
     .alignItems(HorizontalAlign.Center)
     // ★★ 2026-10-13：负 margin 要加在**中间那张**上（左右各 -62），由它去盖住两侧。
     //   加在两侧会把它们顶出屏幕（左卡被屏幕左缘裁掉、右卡超出）⇒ 看着就像被裁一半的平行四边形。
-    .margin({ left: rank === '1st' ? -62 : 0, right: rank === '1st' ? -62 : 0 })
+    .margin({ left: rank === '1st' ? -46 : 0, right: rank === '1st' ? -46 : 0 })
     // 中间那张要在最上层，才能压住左右两侧的内边（zIndex 必须给容器，不只给 Image）
     .zIndex(rank === '1st' ? 2 : 1)
   }
