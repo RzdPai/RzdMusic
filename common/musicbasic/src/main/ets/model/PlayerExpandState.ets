@@ -54,6 +54,31 @@ export enum MorphDrive {
 /** clip 窗口在静止态向外扩张的余量（vp）：保证任何窗口尺寸都不会裁到内容。 */
 const CLIP_IDLE_MARGIN_VP: number = 120;
 
+/**
+ * 形变过程中圆角衰减的指数（<1 ⇒ 中段更"胖"）。
+ *
+ * ★ 用户 2026-10-14：「播放器展开收起过程中圆角加大一些」。起点/终点都不动
+ *   （起点 = 迷你条胶囊半高，终点 = 0 = 满屏直角），只把中间的衰减放缓 ⇒ 观感上圆角更大。
+ */
+const MORPH_RADIUS_DECAY_POW: number = 0.62;
+
+/**
+ * 打开过程中"内容层"的显形曲线：0.45 之前全透明，之后三次缓出到 1。
+ *
+ * ★ 用户 2026-10-14：「展开时 UI 直接淡入淡出太生硬，官方的那些 UI 是从下面跳上来、非线性曲线」
+ *   ⇒ 不再"落位才置 1"。`PlaybackPage.contentRiseVp()` 用同一条曲线驱动位移，于是边升边显。
+ */
+function morphContentIn(t: number): number {
+  const k: number = (t - 0.45) / 0.55;
+  if (k <= 0) {
+    return 0;
+  }
+  if (k >= 1) {
+    return 1;
+  }
+  return 1 - Math.pow(1 - k, 3);
+}
+
 /** 迷你条那条胶囊的组件 id（展开动画的起点矩形由它量出来）。 */
 export const MINI_BAR_ID: string = 'rzd_mini_bar';
 
@@ -1692,7 +1717,7 @@ export class PlayerExpandState {
     const clipHeight: number = this.initClipHeight + (this.morphBoxH - this.initClipHeight) * t;
     // 圆角：`radius = (initClipHeight*initScale/2 + delta*t) / scaleValue`，
     // 起点可视圆角 = 胶囊高度的一半（= 迷你条胶囊的圆角），终点 0。
-    const visualRadius: number = this.initRadiusVisual * (1 - t);
+    const visualRadius: number = this.initRadiusVisual * Math.pow(1 - t, MORPH_RADIUS_DECAY_POW);
     this.morphScale = scale;
     this.morphClipHeight = Math.max(1, clipHeight);
     this.morphTx = this.initTranslateX * (1 - t);
@@ -1703,8 +1728,13 @@ export class PlayerExpandState {
     // 播放页内容是落位时才出现的 —— 这就是"四个边同时到边"之后才见到页面的观感。
     // OPEN -> LEAVING must not erase all chrome/lyrics at the first p<1 sample.
     // Cover has its own bridge gate; other content fades continuously with the bottom window.
-    this.morphContentOpacity = this.morphStage === MorphStage.LEAVING ? this.pullBottomIn() :
-      (t >= 1 ? 1 : 0);
+    //
+    // ★★ 2026-10-14 用户：「现在播放器展开时 UI 直接淡入淡出太生硬，官方的那些 UI 是从下面跳上来、
+    //    并且是非线性曲线」⇒ 打开这条路**不再"落位才置 1"**，改成 0.45 起三次缓出到 1
+    //    （`morphContentIn()`）；配合 `PlaybackPage.contentRiseVp()` 的同一条曲线，
+    //    UI 会"边从下方升起边显形"。收起仍走连续的 `pullBottomIn()`。
+    this.morphContentOpacity = this.morphStage === MorphStage.LEAVING ?
+      this.pullBottomIn() : morphContentIn(t);
   }
 
   /**
@@ -1804,7 +1834,13 @@ export class PlayerExpandState {
     //     反编译侧也会退回 `onAreaChange` 的值，而"第一次打开"时页面刚挂载、
     //     FrameNode 可能还拿不到 —— 只认前者的话这一次就必然退化。
     const endKnown: boolean = (this.bigNodeKnown && this.bigNodeW > 0) || this.bigSize > 0;
-    return this.morphUsable && endKnown && this.endCoverSize > 0;
+    // ★★ 2026-10-14（GLM5.3 诊断 + 代码核对，真机症状：点击打开"封面固定在中间、没有飞入"）：
+    //   `measureNode()` 只挡 `w/h <= 0`，而**点击打开的重试窗口里内容层可能还是"贴底一条"**
+    //   （`sheetHeightPercent()` 按 `collapseProgress` 返回收起高度，`layoutWeight(1)+aspectRatio(1)`
+    //   的小封面量出来 w/h 都 > 0）⇒ 终点锚点会被写成那个小矩形，形变"成功"但落点错。
+    //   这里加一条**合理性下限**：展开页封面不可能小于盒子宽的 1/4（压扁帧直接判"未就绪"，继续重试）。
+    const endSane: boolean = this.endCoverSize >= this.morphBoxW * 0.25;
+    return this.morphUsable && endKnown && endSane;
   }
 
   /** @returns 播放页封面（形变终点）这个锚点是否量到过 —— 只给日志用，排查"没有封面飞入"。 */

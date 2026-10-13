@@ -31,6 +31,7 @@
  */
 
 import { AlbumRouteParam, AppStorageKeys, ArtistRouteParam, BarScrollHelper, MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord, RouterUrlConstants } from 'musicbasic';
+import { OnlinePlayUtil } from 'player';
 import { AppStorageV2, matrix4, uiObserver } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
@@ -74,6 +75,14 @@ class EchoTopSong {
   share: number = 0;
   /** 音乐源 id（'kw'|'kg'|'tx'|'wy'|'mg'），点击跳转要用。 */
   source: string = '';
+  /**
+   * 这首歌在本月的一条**完整播放记录**。
+   *
+   * ★ 用户 2026-10-14：「能不能实现一下歌曲点击直接播放」⇒ 直接把它交给
+   * `OnlinePlayUtil.playRecord(appState, record, uiContext)`（它内部会：组队列 → 秒开播放页 →
+   * 缺地址时后台解析，还能复用记录里缓存的 `url`），比"搜同名"稳得多。
+   */
+  record: PlayedSongRecord = new PlayedSongRecord();
 }
 
 class EchoTopArtist {
@@ -135,12 +144,17 @@ const SIDE_TOP_SLOPE: number = 0.168;
 const SIDE_BOTTOM_SLOPE: number = 0.087;
 
 /**
- * 标题里会出现的六个区块名（下标与 `sectionRatios` 一一对齐）。
+ * 标题里会出现的区块名（下标与 `sectionRatios` / `sectionWindowY0` 一一对齐）。
  *
- * 官方标题随滚动变：「10 月 · 你听了什么」→「10 月 · 你是怎样的听众」→「10 月 · 有趣的发现」。
- * 我们这版的区块名固定成下面这六个（`noteSection` 取"可见比例最大"的那一段）。
+ * 下标 0 = **页头**（官方在最顶上标题是「10 月 · 回响」，不是"你听了什么"——用户 2026-10-14 报的）；
+ * 1..6 = 六个区块；最后一个是「有趣的发现」（用户原话：「最下面也是有趣的发现而不是完播率。
+ * 原本的内容不要改，因为官方也是这样的，没有'有趣的发现'这个区块，但滑到那里标题就是会变成有趣的发现」）。
  */
-const SECTION_NAMES: string[] = ['你听了什么', '最常听的歌手', '最常听的专辑', '你是怎样的听众', '完播率', '新发现'];
+const SECTION_NAMES: string[] =
+  ['回响', '你听了什么', '最常听的歌手', '最常听的专辑', '你是怎样的听众', '完播率', '有趣的发现'];
+
+/** 标题栏下沿的大致高度（vp）：区块顶边越过这条线才算"当前区块"。 */
+const TITLE_BAR_VP: number = 100;
 
 /** 把 `mm:ss` 解析成秒；解析不出来算 0（不猜）。 */
 function intervalSeconds(interval: string): number {
@@ -212,8 +226,22 @@ export struct EchoReviewPage {
   @Local monthOptions: MonthOption[] = [];
   /** 标题里"当前区块"的名字（随滚动变，见 `noteSection`）。 */
   @Local sectionTitle: string = '';
-  /** 六个区块的可见比例（非状态，只在 `onVisibleAreaChange` 回调里读写）。 */
-  private sectionRatios: number[] = [0, 0, 0, 0, 0, 0];
+  /** 本组件是否还活着（延时的量测回调要判）。 */
+  private isAliveEcho: boolean = true;
+  /** 延时量测的等待时长（ms）：等首帧布局完成。 */
+  private static readonly MEASURE_DELAY_MS: number = 350;
+  /** 七个区块（含页头）的可见比例（非状态，只在 `onVisibleAreaChange` 回调里读写）。 */
+  private sectionRatios: number[] = [0, 0, 0, 0, 0, 0, 0];
+  /**
+   * 七个区块的**窗口 y（px）** + 量测时的滚动偏移（vp）。
+   *
+   * 「当前区块 = 顶边越过标题栏的最后一个区块」——只有位置信息才能同时满足用户报的两条：
+   * 最顶上要是「回响」（页头还没被顶出去）、最底下要是「有趣的发现」（完播率虽然整块可见，
+   * 但最后一个越线的仍是最后那个区块）。光看"可见比例最大"做不到这一点（页头/末块会平局）。
+   * 量测在 `measureSectionTops()`，滚动时用 `updateTitleByOffset()` 纯算术推。
+   */
+  private sectionWindowY0: number[] = [];
+  private measuredOffsetVp: number = 0;
   /** 共享播放状态（底栏联动要读它）。 */
   @Local appState: MusicAppState =
     AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
@@ -222,6 +250,19 @@ export struct EchoReviewPage {
 
   aboutToAppear(): void {
     this.reload();
+    // 布局稳定后再量一次各区块的窗口位置（标题随滚动变要用；量不到就退回比例法）
+    this.scheduleMeasureSections('appear');
+  }
+
+  /** 延时量区块位置（首帧还没布局完，量了会全 0；换月后内容高度也会变，得重量一次）。 */
+  private scheduleMeasureSections(reason: string): void {
+    setTimeout((): void => {
+      if (!this.isAliveEcho) {
+        return;
+      }
+      hilog.info(ECHO_DOMAIN, ECHO_TAG, 'measure sections (%{public}s)', reason);
+      this.measureSectionTops();
+    }, EchoReviewPage.MEASURE_DELAY_MS);
   }
 
   /** 历史变化（播放器、歌曲菜单…都会 +1 `historyVersion`）后重算。 */
@@ -249,6 +290,12 @@ export struct EchoReviewPage {
     this.monthOptions = EchoReviewPage.buildMonthOptions(all, range, this.monthOffset);
     const stats: EchoStats = EchoReviewPage.buildStats(all, range, prev);
     this.stats = stats;
+    // 换月后内容高度会变 ⇒ 重新量一次区块位置（标题随滚动变要用）
+    this.scheduleMeasureSections('reload');
+  }
+
+  aboutToDisappear(): void {
+    this.isAliveEcho = false;
   }
 
   /** 上个月对比文案（官方那句「是上个月的 X 倍」）。 */
@@ -308,6 +355,8 @@ export struct EchoReviewPage {
     // ★ 2026-10-14：点封面要能跳二级页 ⇒ 顺手把**跳转需要的那几个字段**也聚出来
     //   （歌手/歌曲要 source，专辑还要 albumId + 歌手名）。
     const songSource: Map<string, string> = new Map();
+    // ★ 2026-10-14：每首歌留一条完整记录（点歌直接播要用）
+    const songRecord: Map<string, PlayedSongRecord> = new Map();
     const artistSource: Map<string, string> = new Map();
     const albumSource: Map<string, string> = new Map();
     const albumIdOf: Map<string, string> = new Map();
@@ -325,6 +374,9 @@ export struct EchoReviewPage {
       }
       if (r.source.length > 0 && songSource.get(songKey) === undefined) {
         songSource.set(songKey, r.source);
+      }
+      if (songRecord.get(songKey) === undefined) {
+        songRecord.set(songKey, r);
       }
       artistCount.set(r.singer, (artistCount.get(r.singer) ?? 0) + 1);
       if (r.img.length > 0 && artistImg.get(r.singer) === undefined) {
@@ -401,14 +453,14 @@ export struct EchoReviewPage {
     out.halfCount = Math.max(0, songCount.size - repeated);
     out.completeRate = songCount.size > 0 ? Math.round(repeated * 100 / songCount.size) : 0;
     // Top 榜（简单选择排序，榜单只要前几个，规模很小）
-    out.topSongs = EchoReviewPage.pickSongs(songCount, songImg, songSource, out.playCount);
+    out.topSongs = EchoReviewPage.pickSongs(songCount, songImg, songSource, songRecord, out.playCount);
     out.topArtists = EchoReviewPage.pickArtists(artistCount, artistImg, artistSource, out.playCount);
     out.topAlbums = EchoReviewPage.pickAlbums(albumCount, albumImg, albumSource, albumIdOf, albumSinger);
     return out;
   }
 
   private static pickSongs(counts: Map<string, number>, imgs: Map<string, string>,
-    sources: Map<string, string>, total: number): EchoTopSong[] {
+    sources: Map<string, string>, records: Map<string, PlayedSongRecord>, total: number): EchoTopSong[] {
     const out: EchoTopSong[] = [];
     const used: Set<string> = new Set();
     for (let n: number = 0; n < TOP_SONGS; n++) {
@@ -430,6 +482,10 @@ export struct EchoReviewPage {
       item.singer = parts.length > 1 ? parts[1] : '';
       item.img = imgs.get(bestKey) ?? '';
       item.source = sources.get(bestKey) ?? '';
+      const rec: PlayedSongRecord | undefined = records.get(bestKey);
+      if (rec !== undefined) {
+        item.record = rec;
+      }
       item.count = best;
       item.share = total > 0 ? Math.round(best * 100 / total) : 0;
       out.push(item);
@@ -659,11 +715,24 @@ export struct EchoReviewPage {
     return 2;
   }
 
-  /** ★ 2026-10-14 用户：「官方那个很多地方都是能点击的」⇒ 三张卡都能点开。 */
+  /**
+   * ★ 2026-10-14 用户：「官方那个很多地方都是能点击的」⇒ 三张卡都能点开；
+   *   用户第二轮又明确「能不能实现一下歌曲点击直接播放」⇒ 这里**直接播**。
+   *
+   * 用 `OnlinePlayUtil.playRecord(appState, record, uiContext)`（player 模块导出）：
+   * 它会把这条记录组进队列、**秒开播放页**，记录里已有 `url` 时直接复用（`playCached`），
+   * 没有就后台解析（还能跨源降级）—— 比"拿歌名去在线搜索"稳得多。
+   * 兜底：万一这条记录不完整（没 songId），退回在线搜索。
+   */
   private openSong(item: EchoTopSong): void {
-    // 历史里只有平台 id、没有本库 id，直接播不了；用「歌名 + 歌手」打开在线搜索最稳（官方也是能点开搜）
+    if (item.record.songId.length > 0) {
+      hilog.info(ECHO_DOMAIN, ECHO_TAG, 'play song name=%{public}s source=%{public}s id=%{public}s',
+        item.name, item.record.source, item.record.songId);
+      void OnlinePlayUtil.playRecord(this.appState, item.record, this.getUIContext());
+      return;
+    }
     const query: string = item.singer.length > 0 ? (item.name + ' ' + item.singer) : item.name;
-    hilog.info(ECHO_DOMAIN, ECHO_TAG, 'open song search=%{public}s', query);
+    hilog.info(ECHO_DOMAIN, ECHO_TAG, 'song record incomplete, fallback to search=%{public}s', query);
     this.pageIndexInfos.pushPathByName(RouterUrlConstants.ONLINE_SEARCH, query);
   }
 
@@ -701,9 +770,8 @@ export struct EchoReviewPage {
   }
 
   /**
-   * 记录某个区块的可见比例，标题取"可见比例最大"的那一段（官方标题会随滚动变：
-   * 「10 月 · 你听了什么」→「10 月 · 你是怎样的听众」…）。
-   * @param index 区块下标（与 `SECTION_NAMES` 对齐）
+   * 记录某个区块的可见比例（**兜底路径**：位置量不到时用）。
+   * @param index 区块下标（与 `SECTION_NAMES` 对齐；0 = 页头）
    * @param ratio 可见比例 0..1（`onVisibleAreaChange` 给的）
    */
   private noteSection(index: number, ratio: number): void {
@@ -714,6 +782,10 @@ export struct EchoReviewPage {
       return;
     }
     this.sectionRatios[index] = ratio;
+    if (this.sectionWindowY0.length === SECTION_NAMES.length) {
+      // 位置法可用时以它为准，比例只在量不到位置时兜底（见 updateTitleByOffset）
+      return;
+    }
     let best: number = 0;
     let bestRatio: number = -1;
     for (let i: number = 0; i < this.sectionRatios.length; i++) {
@@ -722,12 +794,66 @@ export struct EchoReviewPage {
         best = i;
       }
     }
-    const name: string = SECTION_NAMES[best];
-    if (bestRatio > 0.15 && name !== this.sectionTitle) {
-      this.sectionTitle = name;
-      hilog.info(ECHO_DOMAIN, ECHO_TAG,
-        'title section -> %{public}s (ratio=%{public}f index=%{public}d)', name, bestRatio, best);
+    if (bestRatio > 0.15) {
+      this.setSectionTitle(SECTION_NAMES[best], 'ratio', bestRatio);
     }
+  }
+
+  /** 写标题用的区块名（值没变就不写，避免每帧重渲染）。 */
+  private setSectionTitle(name: string, why: string, value: number): void {
+    if (name === this.sectionTitle) {
+      return;
+    }
+    this.sectionTitle = name;
+    hilog.info(ECHO_DOMAIN, ECHO_TAG,
+      'title section -> %{public}s [%{public}s %{public}f]', name, why, value);
+  }
+
+  /**
+   * 量七个区块在窗口里的 y（px）与当前滚动偏移。
+   *
+   * 进页面 / 换月 / 展开后各调一次（布局稳定后延时调，见调用点）。量不到就**保持空数组**，
+   * 标题退回 `noteSection` 的比例法（不会卡死、也不会瞎跳）。
+   */
+  private measureSectionTops(): void {
+    const ui = this.getUIContext();
+    const utils = ui.getComponentUtils();
+    const tops: number[] = [];
+    try {
+      for (let i: number = 0; i < SECTION_NAMES.length; i++) {
+        const info = utils.getRectangleById('echoSec' + i);
+        tops.push(info.windowOffset.y);
+      }
+    } catch (err) {
+      hilog.warn(ECHO_DOMAIN, ECHO_TAG, 'measureSectionTops failed: %{public}s', JSON.stringify(err));
+      return;
+    }
+    this.sectionWindowY0 = tops;
+    this.measuredOffsetVp = this.scroller.currentOffset().yOffset;
+    hilog.info(ECHO_DOMAIN, ECHO_TAG, 'section tops measured: %{public}s',
+      tops.map((v: number): string => Math.round(v).toString()).join(','));
+    this.updateTitleByOffset();
+  }
+
+  /**
+   * 按滚动偏移更新标题：**顶边已越过标题栏的最后一个区块**。
+   *
+   * 位置由「量测时的窗口 y − 之后的滚动位移」推出来，全程只有算术，不查组件树（滚动里每帧调也便宜）。
+   */
+  private updateTitleByOffset(): void {
+    if (this.sectionWindowY0.length !== SECTION_NAMES.length) {
+      return;
+    }
+    const ui = this.getUIContext();
+    const deltaPx: number = (this.scroller.currentOffset().yOffset - this.measuredOffsetVp) * ui.vp2px(1);
+    const linePx: number = ui.vp2px(TITLE_BAR_VP);
+    let pick: number = 0;
+    for (let i: number = 0; i < this.sectionWindowY0.length; i++) {
+      if (this.sectionWindowY0[i] - deltaPx <= linePx) {
+        pick = i;
+      }
+    }
+    this.setSectionTitle(SECTION_NAMES[pick], 'offset', this.scroller.currentOffset().yOffset);
   }
 
   /** 标题栏用的"当前区块名"（没量到之前是空的 ⇒ 显示「10 月 · 回响」）。 */
@@ -791,6 +917,11 @@ export struct EchoReviewPage {
       .height('100%')
       .scrollBar(BarState.Off)
       .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
+      // ★ 用户 2026-10-14：标题随滚动变 ⇒ 每帧按"顶边越过标题栏的最后一个区块"更新标题
+      //   （纯算术，不查组件树；位置由 measureSectionTops 量一次）
+      .onDidScroll((xOffset: number, yOffset: number, state: ScrollState) => {
+        this.updateTitleByOffset();
+      })
       // ★ 用户 2026-10-13：「回想页上滑底栏不会收起，首页和我的页是正常的」⇒ 补上同一套底栏联动
       .onScrollFrameBegin((offset: number): OnScrollFrameBeginHandlerResult => {
         if (BarScrollHelper.isEnabled()) {
@@ -850,6 +981,11 @@ export struct EchoReviewPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
+    // 页头 = 标题里的「回响」（下标 0）：量它的位置 + 兜底用的可见比例
+    .id('echoSec0')
+    .onVisibleAreaChange([0.0, 1.0], (isVisible: boolean, ratio: number) => {
+      this.noteSection(0, ratio);
+    })
   }
 
   /**
@@ -985,9 +1121,10 @@ export struct EchoReviewPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
-    // 区块 0：标题随滚动变（见 noteSection）
+    // 区块 1：标题随滚动变（id 供 measureSectionTops 量位置）
+    .id('echoSec1')
     .onVisibleAreaChange([0.0, 1.0], (isVisible: boolean, ratio: number) => {
-      this.noteSection(0, ratio);
+      this.noteSection(1, ratio);
     })
   }
 
@@ -1071,14 +1208,15 @@ export struct EchoReviewPage {
     hilog.info(ECHO_DOMAIN, ECHO_TAG,
       'sideQuad rank=%{public}s side=%{public}f innerX=%{public}f topDrop=%{public}f bottomRise=%{public}f',
       rank, side, innerX, topDrop, bottomRise);
-    // 点序 TL,TR,BL,BR（与官方示例一致）；3rd 渲染在左（外边在左）、2nd 渲染在右（外边在右）
+    // ★★★ 2026-10-14 第七轮：**两张侧卡共用这一个"左边"矩阵**（真机上左边那张是唯一被量证正确的）。
+    //   右边那张不再走分支，而是由外层 `.scale({ x: -1, y: 1 })` **整层镜像**得到（见 `SongCover()`）——
+    //   这样左右是**构造级对称**，不再受"transform 锚点到底是组件中心还是左上角"的影响
+    //   （上一版给 '2nd' 单独写了镜像 dst，真机上它横向退化成"纯平移 +35px"，右卡因此比左卡多出 10vp）。
+    //   点序 TL,TR,BL,BR（与官方示例一致）。
     const m: matrix4.Matrix4Transit = this.freshIdentity().setPolyToPoly({
       src: [{ x: 0, y: 0 }, { x: side, y: 0 }, { x: 0, y: side }, { x: side, y: side }],
-      dst: rank === '2nd'
-        ? [{ x: side - innerX, y: topDrop }, { x: side, y: 0 },
-           { x: side - innerX, y: side - bottomRise }, { x: side, y: side }]
-        : [{ x: 0, y: 0 }, { x: innerX, y: topDrop },
-           { x: 0, y: side }, { x: innerX, y: side - bottomRise }],
+      dst: [{ x: 0, y: 0 }, { x: innerX, y: topDrop },
+            { x: 0, y: side }, { x: innerX, y: side - bottomRise }],
       srcIndex: 0,
       dstIndex: 0,
       pointCount: 4
@@ -1105,61 +1243,76 @@ export struct EchoReviewPage {
   private freshIdentity(): matrix4.Matrix4Transit {
     return matrix4.init([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
   }
+  /** 右卡整层镜像用的 x 缩放因子：右卡 -1，其余 1（`.scale({x:-1})` 是唯一语义明确的镜像手段）。 */
+  private mirrorX(rank: string): number {
+    return rank === '2nd' ? -1 : 1;
+  }
+
   @Builder
   private SongCover(item: EchoTopSong, rank: string) {
-    // 一张卡 = 一个 Column（封面 + 名次/歌名/次数），**整列一起做四点投影**（用户 2026-10-14：
-    //   「文字没有倾斜」⇒ 文字必须跟着卡片一起斜，所以变换不能再只加在封面上）。
-    //   宽度钉死成封面边长（1st = 150vp、两侧 = 138vp）；在 Stack 里由外层 Row 顶到左右两端/居中。
-    Column({ space: 6 }) {
-      if (item.img.length > 0) {
-        Image(item.img)
-          .width(this.coverVpOf(rank))
-          .height(this.coverVpOf(rank))
-          .borderRadius(this.coverRadiusOf(rank))
-          .objectFit(ImageFit.Cover)
-      } else {
-        Column()
-          .width(this.coverVpOf(rank))
-          .height(this.coverVpOf(rank))
-          .borderRadius(this.coverRadiusOf(rank))
-          .backgroundColor('#22FFFFFF')
-      }
+    // 外层「镜像层」：**只有右卡**真的镜像（`.scale({x:-1})`，锚点就是它自己的中心，语义确定）。
+    //   为什么这么做：真机上给 '2nd' 单独写一份镜像 dst 时，它横向会退化成"纯平移 +35px"（左卡却正常），
+    //   左右就差了 10vp。现在两张侧卡**共用左卡那一个矩阵**，右卡再把整层镜像一次 ⇒ **构造级对称**。
+    Column() {
+      // 卡片本体：封面 + 名次/歌名/次数，整列一起做四点投影（文字因此跟着斜）。
+      Column({ space: 6 }) {
+        if (item.img.length > 0) {
+          Image(item.img)
+            .width(this.coverVpOf(rank))
+            .height(this.coverVpOf(rank))
+            .borderRadius(this.coverRadiusOf(rank))
+            .objectFit(ImageFit.Cover)
+            // 图自己再反镜像一次 ⇒ 右卡的封面画面方向依然正常（不出现镜像的字）
+            .scale({ x: this.mirrorX(rank), y: 1 })
+        } else {
+          Column()
+            .width(this.coverVpOf(rank))
+            .height(this.coverVpOf(rank))
+            .borderRadius(this.coverRadiusOf(rank))
+            .backgroundColor('#22FFFFFF')
+        }
 
-      Text(rank)
-        .fontSize(12)
-          // ★ 用户 2026-10-13：「1st/2nd/3rd 颜色不一样」⇒ 三档亮度（1st 最亮）
-          // ★★ 用户 2026-10-13：「官方那个 1st 是黄色，另外两个也一样」⇒ **奖牌色**（金/银/铜），不是灰阶
-          .fontColor(rank === '1st' ? '#FFD54A' : (rank === '2nd' ? '#D6DEE8' : '#E0A16A'))
-      Text(item.name)
-        .fontSize(rank === '1st' ? 14 : 12)
-        .fontWeight(rank === '1st' ? FontWeight.Bold : FontWeight.Normal)
-        .fontColor('#FFFFFF')
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-      Text(item.count + ' 次 · 占 ' + item.share + '%')
-        .fontSize(11)
-        .fontColor('#88FFFFFF')
-        .maxLines(1)
+        Text(rank)
+          .fontSize(12)
+            // ★ 用户 2026-10-13：「1st/2nd/3rd 颜色不一样」⇒ 三档亮度（1st 最亮）
+            // ★★ 用户 2026-10-13：「官方那个 1st 是黄色，另外两个也一样」⇒ **奖牌色**（金/银/铜），不是灰阶
+            .fontColor(rank === '1st' ? '#FFD54A' : (rank === '2nd' ? '#D6DEE8' : '#E0A16A'))
+          .scale({ x: this.mirrorX(rank), y: 1 })
+        Text(item.name)
+          .fontSize(rank === '1st' ? 14 : 12)
+          .fontWeight(rank === '1st' ? FontWeight.Bold : FontWeight.Normal)
+          .fontColor('#FFFFFF')
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .scale({ x: this.mirrorX(rank), y: 1 })
+        Text(item.count + ' 次 · 占 ' + item.share + '%')
+          .fontSize(11)
+          .fontColor('#88FFFFFF')
+          .maxLines(1)
+          .scale({ x: this.mirrorX(rank), y: 1 })
+      }
+      .width(this.coverVpOf(rank))
+      .alignItems(HorizontalAlign.Center)
+      // ★★★ 2026-10-13 第四轮：**rotate 整条路线全退**（参数路线已被真机证伪），
+      //   改用**四点投影映射** `matrix4.setPolyToPoly`（见 `sideQuadFor()`）。
+      //   · 官方 `setPolyToPoly` 示例明确要求配一句 `.scale({ centerX: 0, centerY: 0, x: 1 })`（**挂在组件上**）：
+      //     把变换中心点从"组件中心"挪到"组件左上角"（x:1 是恒等缩放、不改大小）。
+      //   · 用 `.transform()`（官方 `setPolyToPoly` 示例的写法，API 12 起可用）。
+      //   · 矩阵的 src/dst 只按**封面边长** `side` 给（y 也只用 [0, side]）——这套映射在 y 方向是**线性**的
+      //     （y' = y·s(ξ) + ξ·topDrop），超出 src 范围的 y 会被同一线性关系外推，
+      //     所以下面三行文字自动拿到**同一个透视**（跟着一起斜、一起横向收窄），且与封面底边无缝衔接。
+      .scale({ centerX: 0, centerY: 0, x: 1 })
+      .transform(this.sideQuadFor(rank))
+      // 中间那张要在最上层，才能压住左右两侧的内边（zIndex 必须给容器，不只给封面）
+      .zIndex(rank === '1st' ? 2 : 1)
     }
     .width(this.coverVpOf(rank))
-    .alignItems(HorizontalAlign.Center)
-    // ★★★ 2026-10-13 第四轮：**rotate 整条路线全退**（参数路线已被真机证伪），
-    //   改用**四点投影映射** `matrix4.setPolyToPoly`（见 `sideQuadFor()`）。
-    //   · 官方 `setPolyToPoly` 示例明确要求配一句 `.scale({ centerX: 0, centerY: 0, x: 1 })`（**挂在组件上**）：
-    //     把变换中心点从"组件中心"挪到"组件左上角"（x:1 是恒等缩放、不改大小）。不挪的话四点坐标
-    //     会被当成相对中心的坐标 ⇒ 整个梯形偏出去。`1st` 那张是恒等矩阵，配它也无副作用。
-    //   · 用 `.transform()`（官方 `setPolyToPoly` 示例的写法，API 12 起可用）。
-    //   · 矩阵的 src/dst 只按**封面边长** `side` 给（y 也只用 [0, side]）——这不影响下面的文字：
-    //     这套映射在 y 方向是**线性**的（y' = y·s(ξ) + ξ·topDrop），超出 src 范围的 y 会被同一线性关系外推，
-    //     所以文字自动拿到**同一个透视**（跟着一起斜、一起横向收窄），且与封面底边无缝衔接。
-    .scale({ centerX: 0, centerY: 0, x: 1 })
-    .transform(this.sideQuadFor(rank))
-    // ★ 2026-10-14 用户：「最常听的歌也能点开」⇒ 点这张卡打开这首歌（本库没有平台 id，走在线搜索）
+    // ★ ★ 镜像层：右卡整层水平镜像（左卡/中卡是 x:1 的空操作）
+    .scale({ x: this.mirrorX(rank), y: 1 })
+    // ★ 2026-10-14 用户：「最常听的歌也能点开」⇒ 点这张卡打开/播放这首歌
     .onClick(() => {
       this.openSong(item);
     })
-    // 中间那张要在最上层，才能压住左右两侧的内边（zIndex 必须给容器，不只给封面）
-    .zIndex(rank === '1st' ? 2 : 1)
   }
 
   /** 最常听的歌手：大图卡 + 后面几名；这一段可见时背景淡入。 */
@@ -1257,9 +1410,10 @@ export struct EchoReviewPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
-    // 区块 1：标题随滚动变
+    // 区块 2：标题随滚动变（id 供 measureSectionTops 量位置）
+    .id('echoSec2')
     .onVisibleAreaChange([0.0, 1.0], (isVisible: boolean, ratio: number) => {
-      this.noteSection(1, ratio);
+      this.noteSection(2, ratio);
     })
   }
 
@@ -1316,9 +1470,10 @@ export struct EchoReviewPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
-    // 区块 2：标题随滚动变
+    // 区块 3：标题随滚动变（id 供 measureSectionTops 量位置）
+    .id('echoSec3')
     .onVisibleAreaChange([0.0, 1.0], (isVisible: boolean, ratio: number) => {
-      this.noteSection(2, ratio);
+      this.noteSection(3, ratio);
     })
   }
 
@@ -1422,9 +1577,10 @@ export struct EchoReviewPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
-    // 区块 3：标题随滚动变
+    // 区块 4：标题随滚动变（id 供 measureSectionTops 量位置）
+    .id('echoSec4')
     .onVisibleAreaChange([0.0, 1.0], (isVisible: boolean, ratio: number) => {
-      this.noteSection(3, ratio);
+      this.noteSection(4, ratio);
     })
   }
 
@@ -1488,9 +1644,10 @@ export struct EchoReviewPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
-    // 区块 4：标题随滚动变
+    // 区块 5：标题随滚动变（id 供 measureSectionTops 量位置）
+    .id('echoSec5')
     .onVisibleAreaChange([0.0, 1.0], (isVisible: boolean, ratio: number) => {
-      this.noteSection(4, ratio);
+      this.noteSection(5, ratio);
     })
   }
 
@@ -1540,9 +1697,10 @@ export struct EchoReviewPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
-    // 区块 5：标题随滚动变
+    // 区块 6：标题随滚动变（id 供 measureSectionTops 量位置）
+    .id('echoSec6')
     .onVisibleAreaChange([0.0, 1.0], (isVisible: boolean, ratio: number) => {
-      this.noteSection(5, ratio);
+      this.noteSection(6, ratio);
     })
   }
 

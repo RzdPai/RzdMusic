@@ -177,7 +177,14 @@ export struct PlaybackPage {
    *   目标节点变成可量测。反编译结论：无界的播放页**也不常驻**（同样是 push 出来的），
    *   它之所以"第一次就有封面飞入"，靠的就是这个重试窗口 + `setFinalStatus()` 兜底。
    */
-  private morphRetryLeft: number = 12;
+  /**
+   * 点击展开时的补量重试次数。
+   *
+   * ★ 2026-10-14：12 → 20。点击打开时播放页刚挂载、封面节点常常要好几帧才布局出来，
+   *   重试用尽就会走"无动画直接落位"的兜底（用户看到的「封面固定在中间、没有飞入」就是这个）。
+   *   代价是最坏情况多等 ~250ms（12×32=384ms → 20×32=640ms），但比没有动画好。
+   */
+  private morphRetryLeft: number = 20;
   /**
    * 「可以开始画了」的门：形变真正开始（几何量到并压到起点）之前，整页保持**全透明**。
    *
@@ -186,6 +193,15 @@ export struct PlaybackPage {
    * 关掉绘制不影响布局（`opacity` 不参与布局），所以量测照常进行。
    */
   @Local introPaintReady: boolean = false;
+  /**
+   * ★ 2026-10-14：点击展开的**重试窗口**标志。
+   *
+   * 这期间内容层必须保持 **100% 全尺寸布局**（只靠透明度门挡绘制），否则
+   * `sheetHeightPercent()` 会把内容层压成"贴底一条"，大封面被压扁后仍能被量到
+   * ⇒ 形变终点（续飞封面落点）写成那个小矩形 ⇒ 用户看到"封面固定在中间、没有飞入"。
+   * 见 `sheetHeightPercent()` 与 `tryStartMorphIntro()` 的说明。
+   */
+  @Local expandIntroPending: boolean = false;
   /**
    * 形变早期"底面颜色"淡入的终点进度（0…1）。
    *
@@ -590,24 +606,46 @@ export struct PlaybackPage {
   private static readonly HDS_CORE_SYSCAP: string = 'SystemCapability.UIDesign.HDSComponent.Core';
 
   /**
-   * 未开流光时的封面底图模糊半径（px，effectKit 口径）。
+   * 封面底图的模糊半径（px，effectKit 口径）。
    *
-   * ★ 用户 2026-10-14：「不流光时模糊半径改大」—— 流光关掉后背景只剩这张封面，
-   * 糊得重一点才像"背景"而不是"第二张封面"（原来固定用 `PlayerConstants.IMAGE_BLUR` = 15，那是给流光打底的强度）。
+   * ★ 用户 2026-10-14 追问：「流光背景不是单独一套背景吗，跟模糊有啥关系」—— 对，是两套：
+   *   ①**模糊封面层**（这一层，`Image(backgroundImageSource())`）永远在底下画；
+   *   ②**流光背景层**（`FlowLightBackground()`）只在开关打开时叠在①之上。
+   *   所以模糊**不该跟着流光开关变**（上一版按开关取 15/34 是我理解偏了）。
+   *   这版统一用 **34**（原来固定 15，太清、看着像"第二张封面"而不是背景）。
+   *   ⚠️ 底图是**换歌时用 effectKit 一次性预渲染**的，所以改这个值要等换一首歌才生效（不做重渲染）。
    */
-  private static readonly IMAGE_BLUR_NO_FLOW: number = 34;
-  /** 背景层（非 PixelMap 源）的实时模糊半径：没流光时同样加大一档。 */
-  private static readonly LAYER_BLUR_WITH_FLOW: number = 80;
-  private static readonly LAYER_BLUR_NO_FLOW: number = 140;
+  private static readonly COVER_BLUR: number = 34;
+  /**
+   * 背景层的**实时**模糊半径（只在封面不是预渲染 PixelMap 时才走这条，例如兜底头像）。
+   * 同样与流光开关无关。
+   */
+  private static readonly LAYER_BLUR: number = 140;
+  /**
+   * 展开/收起过程中内容层从下方升起的距离（vp）。
+   *
+   * ★ 用户 2026-10-14：「官方那些 UI 是从下面跳上来、非线性曲线」⇒ 起点在下方这个距离，
+   *   随 `morphContentOpacity`（三次缓出）一起升到位。静止态位移为 0。
+   */
+  private static readonly CONTENT_RISE_VP: number = 90;
 
-  /** 当前该用的封面底图模糊半径：开流光用 15（给流光打底），没流光用更大的一档。 */
+  /** 内容层当前的升起位移（vp）：由内容不透明度那条曲线反推 ⇒ 位移与淡入同步。 */
+  private contentRiseVp(): number {
+    const o: number = this.expandState.morphContentOpacity;
+    if (o >= 1) {
+      return 0;
+    }
+    return (1 - Math.max(0, o)) * PlaybackPage.CONTENT_RISE_VP;
+  }
+
+  /** 当前该用的封面底图模糊半径（常量，与流光开关无关）。 */
   private imageBlurRadius(): number {
-    return this.flowLightState.enabled ? PlayerConstants.IMAGE_BLUR : PlaybackPage.IMAGE_BLUR_NO_FLOW;
+    return PlaybackPage.COVER_BLUR;
   }
 
   /** 当前该用的背景层实时模糊半径。 */
   private layerBlurRadius(): number {
-    return this.flowLightState.enabled ? PlaybackPage.LAYER_BLUR_WITH_FLOW : PlaybackPage.LAYER_BLUR_NO_FLOW;
+    return PlaybackPage.LAYER_BLUR;
   }
 
   private hdsEffectCapable(): boolean {
@@ -845,9 +883,11 @@ export struct PlaybackPage {
     // ★ 展开动画：先在 `aboutToAppear` 把进度放到"收起"，**保证第一帧画出来就是贴底的一条**。
     //   如果放到 `onAppear` 再置，会先渲染出一帧完整播放页再收回去，看着就是闪一下。
     this.collapseProgress = PlaybackPage.EXPAND_START_PROGRESS;
+    // ★ 重试窗口：全尺寸布局 + 不绘制（见 expandIntroPending 的说明）
+    this.expandIntroPending = true;
     this.dismissMorphActive = false;
-    // 每次打开都重置重试额度（照抄 `schedulePublishRetry` 的 12×32ms）
-    this.morphRetryLeft = 12;
+    // 每次打开都重置重试额度（照抄 `schedulePublishRetry` 的 20×32ms，2026-10-14 由 12 提到 20）
+    this.morphRetryLeft = 20;
     // ★ 容器形变那条路（对标无界 ExpandAnimation）：不是上拉拉进来的（点击 / 起播意图打开）
     //   就**就地**起一次形变 —— 几何压到起点（p = 0 = 迷你条封面那一小块），
     //   于是第一帧画出来就是"迷你条那里的一小块"，补间在 `onAppear` 里跑。
@@ -947,6 +987,7 @@ export struct PlaybackPage {
     this.expandState.morphSettleOpen();
     // 无动画落位也必须开门，否则整页会一直停在"不画"的状态（打不开播放页）
     this.introPaintReady = true;
+    this.expandIntroPending = false;
     this.collapseProgress = 0;
     this.expandIntroRunning = false;
   }
@@ -960,6 +1001,8 @@ export struct PlaybackPage {
       // 手指正在驱动：谁也别抢；绘制门也一并放行（这条路不进下面的开门分支）
       // 首次上拉的目标尚未布局时仍保持透明全尺寸，补量成功再放行。
       this.introPaintReady = this.expandState.morphUsable;
+      // 手指路自己保证全尺寸布局，重试窗口的标记要清掉
+      this.expandIntroPending = false;
       this.expandIntroRunning = false;
       this.collapseProgress = 0;
       return true;
@@ -989,6 +1032,7 @@ export struct PlaybackPage {
     }
     // 几何就绪：开门，允许绘制（此时已经是"迷你条那一小块"的起点态）
     this.introPaintReady = true;
+    this.expandIntroPending = false;
     this.expandIntroRunning = false;
     this.collapseProgress = 0;
     this.playMorphOpenIntro();
@@ -1093,7 +1137,14 @@ export struct PlaybackPage {
     // ⚠️ 容器形变（无界那套）期间**必须恒为 100%**：那套只靠"外层容器缩放 + 裁剪"完成展开，
     //    若这里同时按 collapseProgress 压缩内容层高度，就有两套动画在改同一片布局，
     //    表现为内容被压扁、封面错位。
-    if (this.expandState.morphContainerActive()) {
+    //
+    // ★★ 2026-10-14（GLM5.3 诊断 + 代码核对，修「点击打开封面固定在中间、没有飞入」）：
+    //    点击路径在**重试窗口**（`expandIntroPending`）里也必须保持 100% 全尺寸布局 ——
+    //    那时形变还没开始（`morphContainerActive()` 为 false），于是这里会按 `collapseProgress`
+    //    压缩成"贴底一条"，大封面被压成一个小正方形却仍然 w/h > 0 ⇒ 被 `measureNode` 当作
+    //    合法终点收下 ⇒ 续飞终点写坏、落点在屏幕中间。而这期间页面本来就**不画**
+    //    （`introPaintReady === false` ⇒ opacity 0），全尺寸布局不会闪帧。
+    if (this.expandState.morphContainerActive() || this.expandIntroPending) {
       return '100%';
     }
     const p: number = Math.max(0, Math.min(100, this.collapseProgress));
@@ -2006,6 +2057,11 @@ export struct PlaybackPage {
           .height(StyleConstants.FULL_HEIGHT)
           .justifyContent(FlexAlign.End)
           .clip(true)
+          // ★ 用户 2026-10-14：「展开时 UI 直接淡入淡出太生硬，官方的 UI 是从下面跳上来、非线性曲线」
+          //   ⇒ 内容层整体从下方 `CONTENT_RISE_VP` 处升起（位移和透明度共用 `morphContentOpacity`
+          //   这一条三次缓出曲线，所以"边升边显"）。**静止态 morphContentOpacity = 1 ⇒ 位移恒为 0**，
+          //   与没有这套动画时逐像素一致（不会影响落位后的版面）。
+          .translate({ y: this.contentRiseVp() })
           // ⚠️ 这里**不再**给整层加透明度/底色：透明度已按反编译拆成三层窗口
           //   （背景 `pullBgIn` / 顶栏 `pullChromeOpacity` / 底栏 `pullBottomIn`），
           //   底色由形变容器里那个取色层负责，否则静止态会少一层颜色。
@@ -2046,6 +2102,7 @@ export struct PlaybackPage {
             this.state.isShowPlay = false;
             // 下一次打开重新走"先量再缩"的顺序：把绘制门也关回去
             this.introPaintReady = false;
+            this.expandIntroPending = false;
             // ★ 页面卸载时**无条件**复位"跟手会话"的两个标记。
             //   `pullDragging` / `morphDrive` 决定点击打开时要不要做形变初始化；
             //   只要有一轮手势没走到收尾（被系统抢走、中途卸载、硬关闭…）它就会残留，
