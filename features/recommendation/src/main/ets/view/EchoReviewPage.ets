@@ -22,7 +22,8 @@
  * 由此聚合出：总时长 / 次数 / 歌曲数 / 歌手数、最常听的歌 / 歌手 / 专辑、听歌时段、听歌日历、
  * 本月新发现、完播率（口径见下）。**没有的数据不编**：
  *   · 「完整听完几次」在播放链路里没有落库（`PlayedSongRecord` 只有 `interval` 时长和 `time` 时间），
- *     所以完播率按**曲目占比**给出（本月听过的歌里，播过 ≥2 次的比例），并在页面上写明口径。
+ *     所以完播率按**曲目占比**给出（本月听过的歌里，播过 ≥2 次的比例）。
+ *     该口径**只留在这里**，页面上不再写（用户 2026-10-14：那行说明没必要）。
  *
  * 动态背景（用户描述）：滑到「最常听的歌手」那一段的过程中，背景从纯黑**渐变为该歌手图片的取色**，
  * 离开该段再渐变回黑。这里的"取色"用的是**同一张图的高斯模糊 + 低透明度**（等效取色的观感，
@@ -224,6 +225,9 @@ export struct EchoReviewPage {
     }
     const inMonth: PlayedSongRecord[] = [];
     const firstSeen: Map<string, number> = new Map();
+    // ★ 2026-10-14：「新发现」要按**歌**（name+singer）算"是不是这个月才第一次听"，
+    //   所以这里按**同一口径**再记一份每首歌的首次出现时间（`firstSeen` 是按 source|songId 记的，对不上）。
+    const songFirstSeen: Map<string, number> = new Map();
     let prevSeconds: number = 0;
     for (let i: number = 0; i < all.length; i++) {
       const r: PlayedSongRecord = all[i];
@@ -231,6 +235,11 @@ export struct EchoReviewPage {
       const prevSeen: number | undefined = firstSeen.get(key);
       if (prevSeen === undefined || r.time < prevSeen) {
         firstSeen.set(key, r.time);
+      }
+      const songKeyAll: string = r.name + '\u0001' + r.singer;
+      const prevSongSeen: number | undefined = songFirstSeen.get(songKeyAll);
+      if (prevSongSeen === undefined || r.time < prevSongSeen) {
+        songFirstSeen.set(songKeyAll, r.time);
       }
       if (r.time >= range.start && r.time < range.end) {
         inMonth.push(r);
@@ -275,10 +284,6 @@ export struct EchoReviewPage {
         out.dayBuckets[dayIndex] = out.dayBuckets[dayIndex] + 1;
       }
       days.add(d.getDate());
-      const key: string = r.source + '|' + r.songId;
-      if ((firstSeen.get(key) ?? 0) >= range.start) {
-        brandNew++;
-      }
       if (r.time > newest) {
         newest = r.time;
       }
@@ -289,6 +294,12 @@ export struct EchoReviewPage {
     out.listenDays = days.size;
     let streak: number = 0;
     for (let i: number = 0; i < DAYS_MAX; i++) {
+      // ★ 2026-10-14：顺手把「听得最多的那一天」算出来（原来 bestDay/bestDayCount 只声明没赋值 ⇒
+      //   日历那行永远显示"还没有哪一天听得特别多"，用户报的 bug）
+      if (out.dayBuckets[i] > out.bestDayCount) {
+        out.bestDayCount = out.dayBuckets[i];
+        out.bestDay = i + 1;
+      }
       if (out.dayBuckets[i] > 0) {
         streak++;
         if (streak > out.longestStreak) {
@@ -299,6 +310,13 @@ export struct EchoReviewPage {
       }
     }
     out.perDayMinutes = out.listenDays > 0 ? Math.round(out.totalMinutes / out.listenDays) : 0;
+    // ★ 2026-10-14：「新发现」原来在**播放记录**上累加 brandNew ⇒ 31 条记录 / 28 首歌，分子比还分母大（用户报的怪值）。
+    //   改成按**歌**算：本月听过的歌里，首次出现时间落在本月的才算"新发现"。
+    songCount.forEach((count: number, songKey: string): void => {
+      if ((songFirstSeen.get(songKey) ?? 0) >= range.start) {
+        brandNew++;
+      }
+    });
     out.newSongCount = brandNew;
     out.newSongTotal = songCount.size;
     // 完播率（口径：本月听过的歌里播过 ≥2 次的占比 —— 播放链路没有"是否听完"的落库，见文件头）
@@ -617,17 +635,31 @@ export struct EchoReviewPage {
       } else {
         // ★★★ 用户 2026-10-13：**左右顺序跟官方是反的** —— 官方是「3rd 在左、1st 居中、2nd 在右」
         //   （不是常见的 2nd 左 / 3rd 右 领奖台顺序），所以这里 topSongs[2] 放左、topSongs[1] 放右。
-        Row() {
+        // ★★★ 2026-10-14 第五轮：**改用 Stack + 满宽 Row 显式贴边**，不再用 Row 的 layoutWeight 余量算术。
+        //   真机实测（本版之前）：两侧 `.width(138)` + 中间 `layoutWeight(1)` 时，中间那条列实际拿到 ≈61.7vp
+        //   而不是算出来的 52vp ⇒ 三张卡整体右移 ≈9.7vp，于是**左边留白 16vp、右边只剩 6.5vp**
+        //   （用户报的"左右不对称"）。现在左右各用一个满宽 Row 把卡顶到 Row 的两端，
+        //   两端都等于页面内边距 16vp；中间那张由 Stack 居中。三张的压叠关系不变（中间的 zIndex 最高）。
+        Stack({ alignContent: Alignment.Bottom }) {
           if (this.stats.topSongs.length > 2) {
-            this.SongCover(this.stats.topSongs[2], '3rd')
+            Row() {
+              this.SongCover(this.stats.topSongs[2], '3rd')
+            }
+            .width('100%')
+            .justifyContent(FlexAlign.Start)
           }
-          this.SongCover(this.stats.topSongs[0], '1st')
+
           if (this.stats.topSongs.length > 1) {
-            this.SongCover(this.stats.topSongs[1], '2nd')
+            Row() {
+              this.SongCover(this.stats.topSongs[1], '2nd')
+            }
+            .width('100%')
+            .justifyContent(FlexAlign.End)
           }
+
+          this.SongCover(this.stats.topSongs[0], '1st')
         }
         .width('100%')
-        .alignItems(VerticalAlign.Bottom)
       }
     }
     .width('100%')
@@ -670,10 +702,16 @@ export struct EchoReviewPage {
    * （真机记录：18/200 方形、24/90 过强、16/121 与 24/580 又回到方形），参数路线已被证伪；
    * 四点映射直接把参考软件量出来的**梯形四角**钉死，几何 100% 可控。
    *
-   * ⚠️ 变换盒 = **封面本身**（`SIDE_CARD_VP` 见方），**不含**下面那三行文字。这是从参考软件反推的关键：
-   * 只有"盒高 = 封面边长"时，上边斜率 0.168、下边斜率 −0.087、内/外高比 0.783 三个数才同时成立
-   * （把三行文字也算进盒里，同样的上边斜率会把内边压得远远不够，实测参考的内边就是 ~0.78）。
-   * 文字只跟着做**横向收缩**（见 `SongCover()`），纵向不动 ⇒ 和参考一样是水平的三行。
+   * ⚠️ src/dst 只按**封面边长** `side` 给（y 也只用到 [0, side]），但矩阵是加在**整列**上的（见 `SongCover()`）。
+   * 为什么这样是对的：这套映射在 y 方向是**线性**的 ——
+   *   x' = x·(innerX/side)，y' = y·s(ξ) + ξ·topDrop，其中 ξ = x/side、s(ξ) = 1 − ξ·(topDrop+bottomRise)/side。
+   * 所以超出 [0, side] 的 y 会被同一线性关系外推：封面底边（y = side）处的斜率继续往下延伸，
+   * 下面三行文字自动拿到**同一个透视**（一起斜、一起横向收窄），并且和封面底边**无缝衔接**（不会有台阶）。
+   * 取 [0, side] 作为 src 只是为了把参考软件的实测数直接钉在**封面**上：
+   *   · 封面**上边**斜率 = topDrop/可见宽 = 0.168 ✓（参考实测）；
+   *   · 封面**下边**斜率 = −bottomRise/可见宽 = −0.087 ✓；
+   *   · 封面内/外高比 = 1 − 0.168 − 0.087 = 0.783 ✓（与 `侧翼.txt` 的 0.80 对得上）。
+   * 反过来若按"整列高度"去设参数，封面就会被压过头（这一版之前就是这么错的）。
    *
    * 形状（以 3rd 卡为例，外边在左）：
    *   · 外边 TL(0,0) / BL(0,side) **原地不动**（满高、严格竖直）；
@@ -687,7 +725,8 @@ export struct EchoReviewPage {
    *   · 点序照抄官方示例 `TL,TR,BL,BR`（src/dst 用同一顺序即可，映射只认"第 i 个对第 i 个"）。
    *   · 配套的 `.scale({ centerX: 0, centerY: 0, x: 1 })` 见 `SongCover()`：官方明确要求它把变换中心点
    *     从"组件中心"挪到"组件左上角"，否则四点坐标会被当成相对中心的坐标。
-   *   · 因为盒高就是常量边长，这里**不需要任何测量**（上一版用 `onAreaChange` 量列高，量到的口径不可控）。
+   *   · 四个数全是常量 ⇒ 这里**不需要任何测量**（上一版用 `onAreaChange` 量列高喂进来，量到的口径不可控，
+   *     真机上出现过"上边斜率对、下边几乎不动"的怪现象）。
    * @param rank `1st` / `2nd` / `3rd`（`1st` 不形变，返回恒等矩阵）
    * @returns 变换矩阵
    */
@@ -718,69 +757,53 @@ export struct EchoReviewPage {
   }
   @Builder
   private SongCover(item: EchoTopSong, rank: string) {
-    // 布局盒：宽度 = 封面边长。**两侧不设 layoutWeight、中间设 layoutWeight(1)**：
-    //   Row 的分配 = 两侧各占 138vp、中间把剩下的全吃掉 ⇒ 中间那条列很窄，它里面的封面（150vp）
-    //   居中**溢出**出来，自然压住两侧的内边。这样窄屏上两侧也不会被顶出屏，不需要负 margin。
+    // 一张卡 = 一个 Column（封面 + 名次/歌名/次数），**整列一起做四点投影**（用户 2026-10-14：
+    //   「文字没有倾斜」⇒ 文字必须跟着卡片一起斜，所以变换不能再只加在封面上）。
+    //   宽度钉死成封面边长（1st = 150vp、两侧 = 138vp）；在 Stack 里由外层 Row 顶到左右两端/居中。
     Column({ space: 6 }) {
-      // ① 封面（**变换盒就是它**）：四点投影 = 梯形 + 横向收缩。宽度/高度钉死成边长，矩阵四角与封面四角严格对齐。
-      Column() {
-        if (item.img.length > 0) {
-          Image(item.img)
-            .width('100%')
-            .height('100%')
-            .borderRadius(this.coverRadiusOf(rank))
-            .objectFit(ImageFit.Cover)
-        } else {
-          Column()
-            .width('100%')
-            .height('100%')
-            .borderRadius(this.coverRadiusOf(rank))
-            .backgroundColor('#22FFFFFF')
-        }
+      if (item.img.length > 0) {
+        Image(item.img)
+          .width(this.coverVpOf(rank))
+          .height(this.coverVpOf(rank))
+          .borderRadius(this.coverRadiusOf(rank))
+          .objectFit(ImageFit.Cover)
+      } else {
+        Column()
+          .width(this.coverVpOf(rank))
+          .height(this.coverVpOf(rank))
+          .borderRadius(this.coverRadiusOf(rank))
+          .backgroundColor('#22FFFFFF')
       }
-      .width(this.coverVpOf(rank))
-      .height(this.coverVpOf(rank))
-      // ★★★ 2026-10-13 第四轮：**rotate 整条路线全退**（参数路线已被真机证伪），
-      //   改用**四点投影映射** `matrix4.setPolyToPoly`（见 `sideQuadFor()`）。
-      //   · 官方 `setPolyToPoly` 示例明确要求配一句 `.scale({ centerX: 0, centerY: 0, x: 1 })`（**挂在组件上**）：
-      //     把变换中心点从"组件中心"挪到"组件左上角"（x:1 是恒等缩放、不改大小）。不挪的话四点坐标
-      //     会被当成相对中心的坐标 ⇒ 整个梯形偏出去。`1st` 那张是恒等矩阵，配它也无副作用。
-      //   · 用 `.transform()`（官方 `setPolyToPoly` 示例的写法，API 12 起可用）。
-      .scale({ centerX: 0, centerY: 0, x: 1 })
-      .transform(this.sideQuadFor(rank))
-      .zIndex(rank === '1st' ? 2 : 1)
 
-      // ② 名次 / 歌名 / 次数：只跟着做**横向收缩**（锚在**外边**：左卡左缘、右卡右缘），纵向不动
-      //   ⇒ 和参考软件一样，文字保持水平、不倾斜，且水平位置正好落在收窄后的封面下方。
-      Column({ space: 2 }) {
-        Text(rank)
-          .fontSize(12)
-            // ★ 用户 2026-10-13：「1st/2nd/3rd 颜色不一样」⇒ 三档亮度（1st 最亮）
-            // ★★ 用户 2026-10-13：「官方那个 1st 是黄色，另外两个也一样」⇒ **奖牌色**（金/银/铜），不是灰阶
-            .fontColor(rank === '1st' ? '#FFD54A' : (rank === '2nd' ? '#D6DEE8' : '#E0A16A'))
-        Text(item.name)
-          .fontSize(rank === '1st' ? 14 : 12)
-          .fontWeight(rank === '1st' ? FontWeight.Bold : FontWeight.Normal)
-          .fontColor('#FFFFFF')
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-        Text(item.count + ' 次 · 占 ' + item.share + '%')
-          .fontSize(11)
-          .fontColor('#88FFFFFF')
-          .maxLines(1)
-      }
-      .width(this.coverVpOf(rank))
-      .alignItems(HorizontalAlign.Center)
-      .scale({
-        x: rank === '1st' ? 1 : SIDE_SQUEEZE,
-        centerX: rank === '2nd' ? SIDE_CARD_VP : 0,
-        centerY: 0
-      })
+      Text(rank)
+        .fontSize(12)
+          // ★ 用户 2026-10-13：「1st/2nd/3rd 颜色不一样」⇒ 三档亮度（1st 最亮）
+          // ★★ 用户 2026-10-13：「官方那个 1st 是黄色，另外两个也一样」⇒ **奖牌色**（金/银/铜），不是灰阶
+          .fontColor(rank === '1st' ? '#FFD54A' : (rank === '2nd' ? '#D6DEE8' : '#E0A16A'))
+      Text(item.name)
+        .fontSize(rank === '1st' ? 14 : 12)
+        .fontWeight(rank === '1st' ? FontWeight.Bold : FontWeight.Normal)
+        .fontColor('#FFFFFF')
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+      Text(item.count + ' 次 · 占 ' + item.share + '%')
+        .fontSize(11)
+        .fontColor('#88FFFFFF')
+        .maxLines(1)
     }
     .width(this.coverVpOf(rank))
     .alignItems(HorizontalAlign.Center)
-    // 两侧固定宽度（不参与权重分配）；中间那张吃掉 Row 剩下的全部宽度
-    .layoutWeight(rank === '1st' ? 1 : 0)
+    // ★★★ 2026-10-13 第四轮：**rotate 整条路线全退**（参数路线已被真机证伪），
+    //   改用**四点投影映射** `matrix4.setPolyToPoly`（见 `sideQuadFor()`）。
+    //   · 官方 `setPolyToPoly` 示例明确要求配一句 `.scale({ centerX: 0, centerY: 0, x: 1 })`（**挂在组件上**）：
+    //     把变换中心点从"组件中心"挪到"组件左上角"（x:1 是恒等缩放、不改大小）。不挪的话四点坐标
+    //     会被当成相对中心的坐标 ⇒ 整个梯形偏出去。`1st` 那张是恒等矩阵，配它也无副作用。
+    //   · 用 `.transform()`（官方 `setPolyToPoly` 示例的写法，API 12 起可用）。
+    //   · 矩阵的 src/dst 只按**封面边长** `side` 给（y 也只用 [0, side]）——这不影响下面的文字：
+    //     这套映射在 y 方向是**线性**的（y' = y·s(ξ) + ξ·topDrop），超出 src 范围的 y 会被同一线性关系外推，
+    //     所以文字自动拿到**同一个透视**（跟着一起斜、一起横向收窄），且与封面底边无缝衔接。
+    .scale({ centerX: 0, centerY: 0, x: 1 })
+    .transform(this.sideQuadFor(rank))
     // 中间那张要在最上层，才能压住左右两侧的内边（zIndex 必须给容器，不只给封面）
     .zIndex(rank === '1st' ? 2 : 1)
   }
@@ -1012,10 +1035,6 @@ export struct EchoReviewPage {
       Text(this.stats.bestDayCount > 0 ?
         (this.monthLabel.replace(' 月', '') + ' 月 ' + this.stats.bestDay + ' 日听得最多 —— ' + this.stats.bestDayCount + ' 次') : '还没有哪一天听得特别多')
         .fontSize(12)
-        .fontColor('#99FFFFFF')
-        .width('100%')
-        .textAlign(TextAlign.Start)
-        .fontSize(12)
         .fontColor('#CCFFFFFF')
         .width('100%')
         .textAlign(TextAlign.Start)
@@ -1031,7 +1050,7 @@ export struct EchoReviewPage {
     .alignItems(HorizontalAlign.Start)
   }
 
-  /** 完播率（口径写在页面上，见文件头）。 */
+  /** 完播率（口径只写在文件头，不在页面上占一行 —— 用户 2026-10-14 让删的）。 */
   @Builder
   private CompletionSection() {
     Column({ space: 8 }) {
@@ -1058,14 +1077,16 @@ export struct EchoReviewPage {
             .fontColor('#FFFFFF')
             .width('100%')
             .textAlign(TextAlign.Start)
-          Text('重复播放 ' + this.stats.completeCount + ' 首 · 只听一次 ' + this.stats.halfCount + ' 首')
+          // ★★ 用户 2026-10-14：「（口径：本月听过的歌里播过 ≥2 次的占比）这段文字留着干嘛」⇒ 口径说明整行删掉，
+          //   改成官方那种**两行明细** + 卡片底部一行「平均每个听歌日 X 分钟」（官方版式）。
+          Text('重复播放 ' + this.stats.completeCount + ' 首')
             .fontSize(12)
             .fontColor('#99FFFFFF')
             .width('100%')
             .textAlign(TextAlign.Start)
-          Text('（口径：本月听过的歌里播过 ≥2 次的占比）')
-            .fontSize(11)
-            .fontColor('#77FFFFFF')
+          Text('只听一次 ' + this.stats.halfCount + ' 首')
+            .fontSize(12)
+            .fontColor('#99FFFFFF')
             .width('100%')
             .textAlign(TextAlign.Start)
         }
@@ -1073,6 +1094,12 @@ export struct EchoReviewPage {
         .alignItems(HorizontalAlign.Start)
       }
       .width('100%')
+
+      Text('平均每个听歌日 ' + this.stats.perDayMinutes + ' 分钟')
+        .fontSize(12)
+        .fontColor('#99FFFFFF')
+        .width('100%')
+        .textAlign(TextAlign.Start)
       // ★ 用户 2026-10-13：「文字放卡片外」——官方区块标题是**卡片外的纯文字**，卡片只包数据
       }
       .width('100%')
@@ -1114,7 +1141,9 @@ export struct EchoReviewPage {
         .backgroundColor('#33FFFFFF')
 
       Text(this.stats.newSongTotal > 0 ?
-        '其中 ' + this.stats.newSongCount + ' 首是这个月才第一次听的' : '这个月还没有听得上的歌')
+        ('其中 ' + this.stats.newSongCount + ' 首是这个月才第一次听的 · 占 ' +
+        Math.round(this.stats.newSongCount * 100 / this.stats.newSongTotal) + '%')
+        : '这个月还没有听得上的歌')
         .fontSize(12)
         .fontColor('#CCFFFFFF')
         .width('100%')
