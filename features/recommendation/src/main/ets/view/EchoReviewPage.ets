@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -630,13 +630,6 @@ export struct EchoReviewPage {
             .height(rank === '1st' ? 150 : 110)
             .borderRadius(rank === '1st' ? 13 : 9)
             .objectFit(ImageFit.Cover)
-            // ★★ 2026-10-13 根因：原来同时挂着 .transform3D() 和 .rotate()，两个变换叠加打架。
-            //   现在只留一个简单的 Y 轴 3D 旋转：y:1 绕竖直轴倾斜（近大远小），perspective 越小透视越强。
-            .rotate({
-              y: 1,
-              perspective: 200,
-              angle: rank === '1st' ? 0 : (rank === '2nd' ? 18 : -18)
-            })
             .zIndex(rank === '1st' ? 2 : 1)
         } else {
           Column()
@@ -667,7 +660,15 @@ export struct EchoReviewPage {
     }
     .layoutWeight(rank === '1st' ? 2 : 1)
     .alignItems(HorizontalAlign.Center)
-    // ★★ 2026-10-13：负 margin 要加在**中间那张**上（左右各 -62），由它去盖住两侧。
+    // ★★ 2026-10-13（另一软件作者给的官方做法）：「把**文字和图片放到一个 Column 里，然后对 Column 做旋转**，
+    //   文字就自动跟着旋转了」⇒ 旋转加在**整个 Column** 上（图片 + 名次/歌名/次数三段文字一起斜），
+    //   而不是只加在 Image 上。`y:1` = 绕竖直轴（竖边保持竖直），`perspective` 越小透视越强。
+    .rotate({
+      y: 1,
+      perspective: 90,
+      angle: rank === '1st' ? 0 : (rank === '2nd' ? 26 : -26)
+    })
+    // ★★ 2026-10-13：负 margin 要加在**中间那张**上（左右各 -46），由它去盖住两侧。
     //   加在两侧会把它们顶出屏幕（左卡被屏幕左缘裁掉、右卡超出）⇒ 看着就像被裁一半的平行四边形。
     .margin({ left: rank === '1st' ? -46 : 0, right: rank === '1st' ? -46 : 0 })
     // 中间那张要在最上层，才能压住左右两侧的内边（zIndex 必须给容器，不只给 Image）
