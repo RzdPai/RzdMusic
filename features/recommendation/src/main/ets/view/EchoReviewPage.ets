@@ -590,16 +590,15 @@ export struct EchoReviewPage {
       if (this.stats.topSongs.length === 0) {
         this.EmptyHint()
       } else {
-        // ★ 用户 2026-10-12：「常听的歌参考首页现在就听的**侧翼**，你这就光旋转了图片」
-        //   ⇒ 照搬首页 `NowPlayingCard` 的构造：封面两侧各一片 `CoverWing`（等腰梯形），
-        //     用**负 margin** 让封面压住侧翼内缘，层次靠 `zIndex`（不靠声明顺序）。
+        // ★★★ 用户 2026-10-13：**左右顺序跟官方是反的** —— 官方是「3rd 在左、1st 居中、2nd 在右」
+        //   （不是常见的 2nd 左 / 3rd 右 领奖台顺序），所以这里 topSongs[2] 放左、topSongs[1] 放右。
         Row() {
-          if (this.stats.topSongs.length > 1) {
-            this.SongCover(this.stats.topSongs[1], '2nd')
-          }
-          this.SongCover(this.stats.topSongs[0], '1st')
           if (this.stats.topSongs.length > 2) {
             this.SongCover(this.stats.topSongs[2], '3rd')
+          }
+          this.SongCover(this.stats.topSongs[0], '1st')
+          if (this.stats.topSongs.length > 1) {
+            this.SongCover(this.stats.topSongs[1], '2nd')
           }
         }
         .width('100%')
@@ -665,13 +664,14 @@ export struct EchoReviewPage {
     // 参数依据（查过 SDK `RotateOptions`：`x/y/z` = **旋转轴向量**、`centerX/centerY` = **变换锚点**）：
     //   · `y: 1` ⇒ 绕**竖直轴**旋转（竖边保持竖直）；
     //   · `centerX` 锚在**外侧边**（左卡锚 0、右卡锚 '100%'）⇒ 外侧竖边原地不动、保持满高；
-    //   · `centerY` 必须留**纵向居中（默认）** —— 曾按 GLM5.3 建议压到 '120%'，结果压缩沿"从灭点发散"
-    //     的方向发生，内侧边不只变短还被整体拉斜 ⇒ 看着成了平行四边形（用户 2026-10-13 实测反馈）。
-    //   · `perspective` ≈ 观察距离（越小透视越强）：110vp 卡片取 90（200 弱到看不出、55 会过头）。
+    //   · `centerY` 留**纵向居中（默认）** —— 曾按 GLM5.3 建议压到 '120%'，压缩方向被拉斜 ⇒ 成了平行四边形。
+    //   · **角度/视距按你那份实测反推**：官方外侧边 442px : 内侧边 355px = **0.80** 压缩比。
+    //     绕外侧边旋转 θ、视距 p 时内侧边缩放 = p / (p + 卡片宽·sinθ)；卡片宽 110vp ⇒ 要 0.80 需 p = 440·sinθ。
+    //     取 **θ = 16°** ⇒ p ≈ 121（原来的 24°/90 算出 0.67，压过头了，所以看着比官方"陡"）。
     .rotate({
       y: 1,
-      angle: rank === '1st' ? 0 : (rank === '2nd' ? 24 : -24),
-      perspective: 90,
+      angle: rank === '1st' ? 0 : (rank === '2nd' ? 16 : -16),
+      perspective: 121,
       centerX: rank === '1st' ? '50%' : (rank === '2nd' ? 0 : '100%')
     })
     // ★★ 2026-10-13：负 margin 要加在**中间那张**上（左右各 -46），由它去盖住两侧。
