@@ -30,7 +30,7 @@
  */
 
 import { AppStorageKeys, BarScrollHelper, MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord } from 'musicbasic';
-import { AppStorageV2, matrix4, uiObserver } from '@kit.ArkUI';
+import { AppStorageV2, uiObserver } from '@kit.ArkUI';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 
 /** 一段统计结果（整体重建后一次性赋给 @Local，避免深层可变状态）。 */
@@ -86,12 +86,6 @@ const DAYS_MAX: number = 31;
 const TOP_SONGS: number = 3;
 const TOP_ARTISTS: number = 4;
 const TOP_ALBUMS: number = 3;
-/** 侧翼卡边长（vp）——四点投影矩阵按这个尺寸算（内部再 vp2px）。 */
-const SIDE_CARD_VP: number = 110;
-/** 侧翼**内侧**竖边被压到的比例（官方实测 ≈0.80）。 */
-const SIDE_INNER_SCALE: number = 0.8;
-/** 高度损失里分给**上边**的比例（另一模型对官方截图逐边实测 ≈0.70 ⇒ 上边斜得多、下边斜得少）。 */
-const SIDE_TOP_WEIGHT: number = 0.7;
 
 /** 把 `mm:ss` 解析成秒；解析不出来算 0（不猜）。 */
 function intervalSeconds(interval: string): number {
@@ -617,88 +611,13 @@ export struct EchoReviewPage {
   }
 
   /**
-   * 一个名次：**封面 + 侧翼**（照搬首页 `NowPlayingCard` 的构造）。
+   * 一个名次：封面 + 名次/歌名/次数三段文字。
    *
-   * 第 1 名：左右各一片侧翼（大）；第 2/3 名：只在**靠外那一侧**给一片窄侧翼
-   * （内缘被相邻的封面压住，正好也是官方的观感）。侧翼用负 margin 与封面叠压，
-   * 层次由 `zIndex` 指定（首页那条注释踩过坑：右翼靠声明顺序会被画到封面之上）。
+   * 第 1 名：方卡、不形变，`zIndex(2)` 压住两侧；第 2/3 名：Y 轴 3D 倾斜（`rotate({y:1})`）
+   * 成透视梯形，并由中间那张盖住一部分（负 margin 加在中间那张上，加两侧会把它们顶出屏）。
    * @param item 名次数据
    * @param rank `1st` / `2nd` / `3rd`
    */
-  /** 侧翼封面梯形路径（用户 2026-10-12：「上边缘斜、有立体感」）；**单位 px**（官方 Path 规定）。 */
-  private sideCoverCommands(wVp: number, hVp: number, isStart: boolean): string {
-    const ui = this.getUIContext();
-    const w: number = ui.vp2px(wVp);
-    const h: number = ui.vp2px(hVp);
-    const inset: number = ui.vp2px(wVp * 0.16);
-    if (isStart) {
-      // ★ 用户 2026-10-12：「只有上边缘是倾斜的，下边缘是平的」⇒ 底边两点都在 y=h
-      return `M0 ${inset} L${w} 0 L${w} ${h} L0 ${h} Z`;
-    }
-    return `M0 0 L${w} ${inset} L${w} ${h} L0 ${h} Z`;
-  }
-
-  /** 封面裁切路径：第 1 名 = 整矩形（等价于不裁），2/3 名 = 梯形（上边缘斜）。单位 px。 */
-  private coverPathFor(rank: string): string {
-    if (rank === '1st') {
-      const ui = this.getUIContext();
-      const w: number = ui.vp2px(128);
-      const h: number = ui.vp2px(128);
-      return `M0 0 L${w} 0 L${w} ${h} L0 ${h} Z`;
-    }
-    return this.sideCoverCommands(84, 84, rank === '3rd');
-  }
-
-  /**
-   * 侧翼封面的**四点投影**矩阵（`matrix4.setPolyToPoly`，`pointCount: 4` ⇒ 透视而非仿射）。
-   *
-   * 依据（另一模型对官方截图逐边实测）：
-   *   · 外侧竖边满高、内侧竖边压到 `SIDE_INNER_SCALE`（≈80%），左右两卡互为镜像；
-   *   · 高度损失里 `SIDE_TOP_WEIGHT`（≈70%）分给上边、其余给下边 ⇒ **上边斜得多、下边斜得少**；
-   *   · 同一条竖边的两点 x 相同 ⇒ 竖边保持竖直。
-   * ⚠️ 坐标单位是 **px**（`Point.x/y`），必须 `vp2px`；`dstIndex` 官方默认值描述易误读，显式传 0。
-   * @param isRight true = 右侧（2nd，镜像），false = 左侧（3rd）
-   * @returns 变换矩阵
-   */
-  private sideQuad(isRight: boolean): matrix4.Matrix4Transit {
-    const ui = this.getUIContext();
-    const w: number = ui.vp2px(SIDE_CARD_VP);
-    const h: number = ui.vp2px(SIDE_CARD_VP);
-    const shrink: number = (1 - SIDE_INNER_SCALE) * h;
-    const topDrop: number = shrink * SIDE_TOP_WEIGHT;
-    const bottomRise: number = shrink * (1 - SIDE_TOP_WEIGHT);
-    return matrix4.identity().setPolyToPoly({
-      // ★★ GLM5.3（zai/glm-5.3）诊断 2026-10-13：点序**必须顺时针 TL,TR,BR,BL**。
-      //   我原来写的是 `TL,TR,BL,BR`（自交的"蝴蝶结"序）⇒ 单应会把**一条对边镜像**，
-      //   所以表现成「上边对了、下边反了」；把下角改成 h+bottomRise 又变平行四边形，都是这个根因。
-      src: [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: w, y: h }, { x: 0, y: h }],
-      // 右侧（3rd）：内边在左 ⇒ 左上角下沉 topDrop、左下角上收 bottomRise
-      // 左侧（2nd）：镜像 ⇒ 右上角下沉、右下角也下沉
-      // ★ 用户 2026-10-13：「下边缘往下沉了，没往上收，反过来了」⇒ 翻 bottomRise 方向
-      dst: isRight
-        ? [{ x: 0, y: topDrop }, { x: w, y: 0 }, { x: w, y: h }, { x: 0, y: h + bottomRise }]
-        : [{ x: 0, y: 0 }, { x: w, y: topDrop }, { x: w, y: h + bottomRise }, { x: 0, y: h }],
-      srcIndex: 0,
-      dstIndex: 0,
-      pointCount: 4
-    });
-  }
-
-  /**
-   * 名次的四点投影：**1st 不形变**（方卡）、2nd（在左）用左卡、3rd（在右）用右卡。
-   *
-   * ⚠️ 用户 2026-10-13 反馈过两个错：① 中间那张也被形变了（因为属性是共用的，1st 也吃了变换）；
-   * ② 左右镜像用反了（2nd 在左却给了右卡）。所以这里按 rank 明确分派。
-   * @param rank `1st` / `2nd` / `3rd`
-   * @returns 变换矩阵（1st 为恒等，视觉上是正常方形）
-   */
-  private sideQuadFor(rank: string): matrix4.Matrix4Transit {
-    if (rank === '1st') {
-      return matrix4.identity();
-    }
-    // '2nd' 渲染在左边（外侧在左）、'3rd' 渲染在右边（外侧在右）
-    return this.sideQuad(rank === '3rd');
-  }
 
   @Builder
   private SongCover(item: EchoTopSong, rank: string) {
