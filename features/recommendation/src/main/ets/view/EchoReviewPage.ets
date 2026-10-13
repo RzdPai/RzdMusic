@@ -228,6 +228,14 @@ export struct EchoReviewPage {
   @Local sectionTitle: string = '';
   /** 本组件是否还活着（延时的量测回调要判）。 */
   private isAliveEcho: boolean = true;
+  /**
+   * 是否已经滑到**页面最底部**（末尾那段 120vp 占位露头 ⇒ true）。
+   *
+   * ★ 用户 2026-10-14：「我滑到最下面没变成有趣的发现」⇒ 位置法在最底部**不可靠**
+   *   （最后那个区块的顶边未必越过标题栏线，尤其内容不够长时），所以底部改用**哨兵**：
+   *   末尾占位块一露头就把标题钉成最后一个区块名。顶部同理用页头的可见比例钉「回响」。
+   */
+  @Local atBottom: boolean = false;
   /** 延时量测的等待时长（ms）：等首帧布局完成。 */
   private static readonly MEASURE_DELAY_MS: number = 350;
   /** 七个区块（含页头）的可见比例（非状态，只在 `onVisibleAreaChange` 回调里读写）。 */
@@ -782,8 +790,17 @@ export struct EchoReviewPage {
       return;
     }
     this.sectionRatios[index] = ratio;
-    if (this.sectionWindowY0.length === SECTION_NAMES.length) {
-      // 位置法可用时以它为准，比例只在量不到位置时兜底（见 updateTitleByOffset）
+    // ★ 顶部：页头基本完整可见 ⇒ 标题就是「回响」（用户 2026-10-14：最上面不该是"你听了什么"）
+    if (index === 0) {
+      if (ratio > 0.5) {
+        this.setSectionTitle(SECTION_NAMES[0], 'header', ratio);
+      } else if (!this.atBottom) {
+        this.updateTitleByOffset();
+      }
+      return;
+    }
+    if (this.sectionWindowY0.length === SECTION_NAMES.length || this.atBottom) {
+      // 位置法可用（或已经到底）时以它们为准，比例只在量不到位置时兜底（见 updateTitleByOffset）
       return;
     }
     let best: number = 0;
@@ -841,6 +858,11 @@ export struct EchoReviewPage {
    * 位置由「量测时的窗口 y − 之后的滚动位移」推出来，全程只有算术，不查组件树（滚动里每帧调也便宜）。
    */
   private updateTitleByOffset(): void {
+    // ★ 到底了就是最后一个区块（哨兵优先），位置法在底部不可靠
+    if (this.atBottom) {
+      this.setSectionTitle(SECTION_NAMES[SECTION_NAMES.length - 1], 'bottom', 1);
+      return;
+    }
     if (this.sectionWindowY0.length !== SECTION_NAMES.length) {
       return;
     }
@@ -907,7 +929,21 @@ export struct EchoReviewPage {
           this.AudienceSection()
           this.CompletionSection()
           this.NewDiscoverySection()
-          Column().width('100%').height(120)
+          // ★ 末尾占位块兼作"到底了"的哨兵（用户 2026-10-14：滑到最下面标题要是「有趣的发现」）
+          Column()
+            .width('100%')
+            .height(120)
+            .onVisibleAreaChange([0.0, 0.01], (isVisible: boolean, ratio: number) => {
+              if (this.atBottom !== isVisible) {
+                this.atBottom = isVisible;
+                hilog.info(ECHO_DOMAIN, ECHO_TAG, 'bottom sentinel visible=%{public}s', String(isVisible));
+                if (isVisible) {
+                  this.setSectionTitle(SECTION_NAMES[SECTION_NAMES.length - 1], 'bottom', ratio);
+                } else {
+                  this.updateTitleByOffset();
+                }
+              }
+            })
         }
         .width('100%')
       // 盒子从 y=0 起排（页根 ignore TOP）⇒ 内容让位 = 状态栏 + 标题栏 = 94（公共 helper 同一口径）

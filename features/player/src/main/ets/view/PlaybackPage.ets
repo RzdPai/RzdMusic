@@ -624,18 +624,20 @@ export struct PlaybackPage {
   /**
    * 展开/收起过程中内容层从下方升起的距离（vp）。
    *
-   * ★ 用户 2026-10-14：「官方那些 UI 是从下面跳上来、非线性曲线」⇒ 起点在下方这个距离，
-   *   随 `morphContentOpacity`（三次缓出）一起升到位。静止态位移为 0。
+   * ★ 用户 2026-10-14：「官方**没有淡入淡出**，而且是**全部飞上来**」⇒ 位移独立于透明度曲线，
+   *   跟 `morphP` 走**三次缓出**（走得快、收得慢 = "飞上来"），起点在下方这个距离。
+   *   静止态 `morphP = 1 ⇒ 位移恒为 0`，与没有这套动画时逐像素一致。
    */
-  private static readonly CONTENT_RISE_VP: number = 90;
+  private static readonly CONTENT_RISE_VP: number = 180;
 
-  /** 内容层当前的升起位移（vp）：由内容不透明度那条曲线反推 ⇒ 位移与淡入同步。 */
+  /** 内容层当前的升起位移（vp）：跟 morphP 走三次缓出。 */
   private contentRiseVp(): number {
-    const o: number = this.expandState.morphContentOpacity;
-    if (o >= 1) {
+    const p: number = this.expandState.morphP;
+    if (p >= 1 || !this.expandState.morphUsable) {
       return 0;
     }
-    return (1 - Math.max(0, o)) * PlaybackPage.CONTENT_RISE_VP;
+    const eased: number = 1 - Math.pow(1 - Math.max(0, p), 3);
+    return (1 - eased) * PlaybackPage.CONTENT_RISE_VP;
   }
 
   /** 当前该用的封面底图模糊半径（常量，与流光开关无关）。 */
@@ -951,6 +953,13 @@ export struct PlaybackPage {
    * 高度变小它自己就变小，于是"封面慢慢变大"也一起来了。
    */
   private playExpandIntro(): void {
+    // ★★ 2026-10-14（修「点击打开封面最后位置错位」）：**先把内容层高度复位成全尺寸再量/再重试**。
+    //   重试窗口里 `sheetHeightPercent()` 会按 `collapseProgress`（收起态）把内容层压成"贴底一条"，
+    //   大封面被压扁后**仍然 w/h > 0**（`measureNode` 只挡 <= 0）⇒ 形变终点（续飞封面落点）
+    //   被写成那个小矩形 ⇒ 落地位置错。此期间页面不画（绘制门关着），所以全尺寸布局不会闪帧。
+    if (this.collapseProgress !== 0) {
+      this.collapseProgress = 0;
+    }
     // ★ **统一入口 + 无界式兜底**：所有打开方式（点击、起播意图、上拉松手）都从这里进。
     //   · 手指正在驱动 → 让给手势；
     //   · 两端锚点（迷你条封面 + 播放页封面）都量到了 → 走形变（`tryStartMorphIntro`）；
@@ -969,7 +978,8 @@ export struct PlaybackPage {
       this.morphRetryLeft--;
       Logger.warn(PlaybackPage.logTag,
         `expand intro: anchors not ready, retry (left=${this.morphRetryLeft}) ` +
-        `usable=${this.expandState.morphUsable} bigKnown=${this.expandState.bigCoverAnchored()}`);
+        `usable=${this.expandState.morphUsable} ${this.expandState.debugEndAnchor()} ` +
+        `sheetH=${this.sheetHeightPercent()} pending=${this.expandIntroPending}`);
       setTimeout((): void => {
         if (this.isAlive && !this.isClosing) {
           this.playExpandIntro();
@@ -1031,6 +1041,9 @@ export struct PlaybackPage {
       return false;
     }
     // 几何就绪：开门，允许绘制（此时已经是"迷你条那一小块"的起点态）
+    Logger.info(PlaybackPage.logTag,
+      `expand intro: anchors ready -> morph (${this.expandState.debugEndAnchor()}) ` +
+      `sheetH=${this.sheetHeightPercent()} pending=${this.expandIntroPending}`);
     this.introPaintReady = true;
     this.expandIntroPending = false;
     this.expandIntroRunning = false;

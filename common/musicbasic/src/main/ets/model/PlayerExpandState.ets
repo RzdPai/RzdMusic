@@ -63,20 +63,23 @@ const CLIP_IDLE_MARGIN_VP: number = 120;
 const MORPH_RADIUS_DECAY_POW: number = 0.62;
 
 /**
- * 打开过程中"内容层"的显形曲线：0.45 之前全透明，之后三次缓出到 1。
+ * 打开过程中"内容层"的显形曲线。
  *
- * ★ 用户 2026-10-14：「展开时 UI 直接淡入淡出太生硬，官方的那些 UI 是从下面跳上来、非线性曲线」
- *   ⇒ 不再"落位才置 1"。`PlaybackPage.contentRiseVp()` 用同一条曲线驱动位移，于是边升边显。
+ * ★ 用户 2026-10-14 二次反馈：「官方打开播放器**没有淡入淡出**，而且是**全部飞上来**，
+ *   先是进度条、然后是下面的组件，不是现在这样中间淡入一半飞上去」
+ *   ⇒ 不再做"从 0 慢慢淡入"，改成 **0.15 之前就冲到 1**（快到看不出淡入），
+ *   剩下的行程全部交给 `PlaybackPage.contentRiseVp()` 的**从下升起**（位移与它同源）。
+ *   ⚠️ 保留一小段透明期是为了避免"播放页自己那张封面"与"续飞封面"同时出现（双封面）。
  */
 function morphContentIn(t: number): number {
-  const k: number = (t - 0.45) / 0.55;
+  const k: number = t / 0.15;
   if (k <= 0) {
     return 0;
   }
   if (k >= 1) {
     return 1;
   }
-  return 1 - Math.pow(1 - k, 3);
+  return k;
 }
 
 /** 迷你条那条胶囊的组件 id（展开动画的起点矩形由它量出来）。 */
@@ -1846,6 +1849,19 @@ export class PlayerExpandState {
   /** @returns 播放页封面（形变终点）这个锚点是否量到过 —— 只给日志用，排查"没有封面飞入"。 */
   public bigCoverAnchored(): boolean {
     return this.bigNodeKnown;
+  }
+
+  /**
+   * 诊断用：把"形变终点锚点"当前值拼成一行日志。
+   *
+   * 用户 2026-10-14 报「点击打开播放器封面最后位置错位（上滑打开正常）」⇒ 上机 `findstr RzdMorph`
+   * 或 `findstr "expand intro"` 看这行：`endCover` 应该是展开态封面的边长（几百 vp 量级），
+   * 若它是一个几十 vp 的小方块，就说明量到的是"被压扁的内容层"里的封面。
+   */
+  public debugEndAnchor(): string {
+    return `bigNodeKnown=${this.bigNodeKnown} bigNodeW=${Math.round(this.bigNodeW)} ` +
+      `bigSize=${Math.round(this.bigSize)} endCover=${Math.round(this.endCoverSize)} ` +
+      `boxW=${Math.round(this.morphBoxW)}`;
   }
 
   /** @returns 世代号是否还是捕获时那一个（延时回调用它丢弃过期动作）。 */

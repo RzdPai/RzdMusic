@@ -14,7 +14,7 @@
  */
 
 import { AppStorageV2, curves, uiObserver } from '@kit.ArkUI';
-import { HdsNavigation, HdsTabsController, HdsTabsBarChangeMode, SystemMaterialParams, hdsMaterial } from '@kit.UIDesignKit';
+import { HdsNavigation, HdsTabsController, HdsAnimationMode, HdsTabsBarChangeMode, SystemMaterialParams, hdsMaterial } from '@kit.UIDesignKit';
 import {
   AmbientState,
   AppStorageKeys,
@@ -228,11 +228,6 @@ struct Index {
   @Local viewportHeightVp: number = 0;
   /** 上拉打开手势（竖直方向）。 */
   @Local miniBarViewModel: PlayerViewModel = new PlayerViewModel();
-  /**
-   * 迷你播放条的"弹一下"脉冲（1 = 常态）。
-   * 用户 2026-10-14：播放器收起后播放条要弹一下 ⇒ `bounceMiniBar()` 先置 1.06 再 spring 回 1。
-   */
-  @Local miniBarPulse: number = 1;
   private pullOpenOption: PanGestureOptions = new PanGestureOptions({ direction: PanDirection.Vertical });
 
   /**
@@ -379,24 +374,25 @@ struct Index {
   }
 
   /**
-   * 播放器收起后，迷你播放条"弹一下"。
+   * 播放器收起后，让 HDS 底栏/迷你条播一次**系统自带的显示动效**（用户 2026-10-14 要的"背板弹一下"）。
    *
-   * 两段动画：先 140ms 放到 1.06，再用 spring 回位（有回弹过冲，就是"弹"的观感）。
-   * 只作用于迷你条的**内容**（`miniBar` / `floatingMiniBarContent`），落位态 `miniBarPulse = 1` 无副作用。
+   * ★ 之前那版我用 `HomeMiniBarPlayer.scale()` 自己放大 6% 是错的（用户：「把现在的弹一下删掉，
+   *   我要的就是 HDS 背板弹一下，而且这是系统接口」）。
+   *   正确接口（官方 `HdsTabs (底部页签)` 文档 + 本地 SDK
+   *   `@hms.hds.hdsBaseComponent.d.ets` 核对过）：
+   *   · `HdsTabsController.applyShowAnimation(mode: HdsAnimationMode)` —— HdsTabs 的控制器调用
+   *     **页签栏和迷你栏的显示动效**；
+   *   · `HdsAnimationMode { SCROLL_ANIMATION = 0, CLICK_ANIMATION = 1 }` —— 收起是"点击触发"那一类。
+   *   胶囊背板由 HDS 自己画/自己动，壳层一行 `scale` 是做不到这个效果的。
    */
   private bounceMiniBar(): void {
-    if (!this.shouldShowFloatingMiniBar() && this.navDepth > 0) {
-      return;
+    try {
+      this.tabsController.applyShowAnimation(HdsAnimationMode.CLICK_ANIMATION);
+      Logger.info('RzdMiniBarBounce', 'collapse -> HDS applyShowAnimation(CLICK_ANIMATION)');
+    } catch (err) {
+      // 老版本 SDK（< 6.1.0(23)）没这个接口：静默跳过，不影响收起流程
+      Logger.warn('RzdMiniBarBounce', `applyShowAnimation failed: ${JSON.stringify(err)}`);
     }
-    this.getUIContext().animateTo({ duration: 140, curve: Curve.EaseOut }, (): void => {
-      this.miniBarPulse = 1.06;
-    });
-    setTimeout((): void => {
-      this.getUIContext().animateTo({ duration: 420, curve: curves.springMotion(0.36, 0.92) }, (): void => {
-        this.miniBarPulse = 1;
-      });
-    }, 150);
-    Logger.info('RzdMiniBarBounce', 'collapse -> bounce');
   }
 
   /** 播放页路由在栈里的下标（不在栈里返回 -1）。 */
@@ -888,10 +884,7 @@ struct Index {
   @Builder
   private miniBar() {
     if (this.navDepth <= 0) {
-      // ★ 用户 2026-10-14：「官方的播放器收起后那个播放条会弹一下」⇒ 收起时给播放条一次 scale 脉冲。
-      //   动的是**内容**（`HomeMiniBarPlayer`）：胶囊背板是 HDS 画的，壳层改不了它的大小/位置。
       HomeMiniBarPlayer({ showPreviousTrack: false })
-        .scale({ x: this.miniBarPulse, y: this.miniBarPulse })
     }
   }
 
@@ -1049,8 +1042,6 @@ struct Index {
       showPreviousTrack: false,
       followAppMiniBarExpanded: false
     })
-      // ★ 收起播放页后的"弹一下"（同 `miniBar()`）
-      .scale({ x: this.miniBarPulse, y: this.miniBarPulse })
       // ★★ 用户 2026-10-11 定论：「错位的是播放条上的**元素**而不是播放条本身」。
       //   胶囊宽度由 `barFloatingStyle.barWidth` 给出（= 窗口宽 − 两侧留白 side），HDS 把它**居中**画；
       //   而这里原来写 `width('100%')`（= 宿主盒全宽）⇒ 内容比胶囊宽 2×side，
