@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,8 +30,13 @@
  */
 
 import { AppStorageKeys, BarScrollHelper, MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord } from 'musicbasic';
-import { AppStorageV2, uiObserver } from '@kit.ArkUI';
+import { AppStorageV2, matrix4, uiObserver } from '@kit.ArkUI';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
+
+/** 回响页日志域/标签：`hdc shell hilog | findstr RzdEcho` 可捞侧卡量测与矩阵构造。 */
+const ECHO_DOMAIN: number = 0x0001;
+const ECHO_TAG: string = 'RzdEcho';
 
 /** 一段统计结果（整体重建后一次性赋给 @Local，避免深层可变状态）。 */
 export class EchoStats {
@@ -86,6 +91,12 @@ const DAYS_MAX: number = 31;
 const TOP_SONGS: number = 3;
 const TOP_ARTISTS: number = 4;
 const TOP_ALBUMS: number = 3;
+/** 侧卡宽度（vp）：四点投影矩阵按它算（内部再 vp2px，官方 Path/Point 都是 px 口径）。 */
+const SIDE_CARD_VP: number = 110;
+/** 侧卡**内侧**竖边被压到的比例（实测官方 ≈0.80）。 */
+const SIDE_INNER_SCALE: number = 0.8;
+/** 高度损失里分给**上边**的比例（实测官方 ≈0.7 ⇒ 上边斜得多、下边斜得少）。 */
+const SIDE_TOP_WEIGHT: number = 0.7;
 
 /** 把 `mm:ss` 解析成秒；解析不出来算 0（不猜）。 */
 function intervalSeconds(interval: string): number {
@@ -142,6 +153,13 @@ export struct EchoReviewPage {
   @Local yearLabel: string = '';
   @Local monthLabel: string = '';
   private scroller: Scroller = new Scroller();
+  /**
+   * 侧卡整列（封面 + 三行文字）的**实测高度**（vp）。
+   *
+   * 四点投影的 src 必须按组件自己的盒子给（px 口径），而这一列的高度由内容撑出来、编译期不知道，
+   * 所以用 onAreaChange 量一次写回（容差 0.5vp，不会与渲染互相追）。
+   */
+  @Local sideCardHeightVp: number = 0;
   /** 共享播放状态（底栏联动要读它）。 */
   @Local appState: MusicAppState =
     AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
@@ -612,71 +630,135 @@ export struct EchoReviewPage {
   /**
    * 一个名次：封面 + 名次/歌名/次数三段文字。
    *
-   * 第 1 名：方卡、不形变，`zIndex(2)` 压住两侧；第 2/3 名：Y 轴 3D 倾斜（`rotate({y:1})`）
-   * 成透视梯形，并由中间那张盖住一部分（负 margin 加在中间那张上，加两侧会把它们顶出屏）。
+   * 第 1 名：方卡、不形变（恒等矩阵），`zIndex(2)` 压住两侧；第 2/3 名：用**四点投影矩阵**
+   * （`sideQuadFor()`）压成梯形 —— 外边竖直满高、内边竖直但只有 0.80 高，并由中间那张盖住内侧一部分
+   * （负 margin 加在中间那张上，加两侧会把它们顶出屏）。
    * @param item 名次数据
    * @param rank `1st` / `2nd` / `3rd`
    */
 
+  /**
+   * 侧卡的**四点投影矩阵**（`matrix4.setPolyToPoly(pointCount: 4)` ⇒ 透视变换，不是仿射）。
+   *
+   * 为什么不用 `rotate({ y: 1, perspective })`：那一套的**实际透视强度**在本机和文档/任何模型推算都对不上
+   * （真机记录：18/200 方形、24/90 过强、16/121 与 24/580 又回到方形），参数路线已被证伪。
+   * 四点映射直接把参考软件实测的**梯形四角**钉死，几何 100% 可控。
+   *
+   * 形状（**纯梯形 / keystone**，取自参考软件实测 `侧翼.txt`）：
+   *   · 外边（左卡的左边 / 右卡的右边）**满高且严格竖直**；
+   *   · 内边**也是竖直的**，只是压短到 `SIDE_INNER_SCALE`(0.80)：实测 442px → 355px；
+   *   · 高度损失按 `SIDE_TOP_WEIGHT`(0.7) 分给上边、0.3 给下边 ⇒ 上边斜率 0.22、下边 −0.09。
+   *   · ⚠️ **不做横向内缩**：内边的 x 仍是整宽 w（横向内缩会顺带把封面横向压扁，实测里没有这一项）。
+   *   · 校验：斜面 = 0.7×0.2×h / w；本页 h≈161vp、w=110vp ⇒ 上边 0.205、下边 0.088，与实测 0.22 / 0.09 吻合。
+   *
+   * ⚠️ 口径（查 `js-apis-matrix4` 确认）：
+   *   · `Point.x/y` 单位是 **px**，必须 `vp2px` 换算；
+   *   · `pointCount: 4` 才是透视矩阵（0/1/2/3 分别是恒等/平移/仿射/含剪切仿射）；
+   *   · `dstIndex` 默认值是 `src.length/2`（这里会是 2！），所以**必须显式传 0**；
+   *   · 点序照抄官方示例 `TL,TR,BL,BR`（src/dst 用同一顺序即可，映射只认"第 i 个对第 i 个"）。
+   *   · 配套的 `.scale({ centerX: 0, centerY: 0, x: 1 })` 见 `SongCover()`：官方明确要求它把变换中心点
+   *     从"组件中心"挪到"组件左上角"，否则四点坐标是按中心算的（这里传进来的就是左上角起算的坐标）。
+   * @param rank `1st` / `2nd` / `3rd`（`1st` 不形变，返回恒等矩阵）
+   * @param boxHVp 变换盒**实测高度**（vp）；量不到（0）时返回恒等矩阵 ⇒ 首帧不形变、不闪
+   * @returns 变换矩阵
+   */
+  private sideQuadFor(rank: string, boxHVp: number): matrix4.Matrix4Transit {
+    if (rank === '1st' || boxHVp <= 0) {
+      return matrix4.identity();
+    }
+    const ui = this.getUIContext();
+    const w: number = ui.vp2px(SIDE_CARD_VP);
+    const h: number = ui.vp2px(boxHVp);
+    const loss: number = h * (1 - SIDE_INNER_SCALE);
+    const topDrop: number = loss * SIDE_TOP_WEIGHT;
+    const bottomRise: number = loss * (1 - SIDE_TOP_WEIGHT);
+    hilog.info(ECHO_DOMAIN, ECHO_TAG,
+      'sideQuad rank=%{public}s w=%{public}fpx h=%{public}fpx topDrop=%{public}fpx bottomRise=%{public}fpx',
+      rank, w, h, topDrop, bottomRise);
+    // 点序 TL,TR,BL,BR（与官方示例一致）；3rd 渲染在左（外边在左）、2nd 渲染在右（外边在右）
+    return matrix4.identity().setPolyToPoly({
+      src: [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: 0, y: h }, { x: w, y: h }],
+      dst: rank === '2nd'
+        ? [{ x: 0, y: topDrop }, { x: w, y: 0 }, { x: 0, y: h - bottomRise }, { x: w, y: h }]
+        : [{ x: 0, y: 0 }, { x: w, y: topDrop }, { x: 0, y: h }, { x: w, y: h - bottomRise }],
+      srcIndex: 0,
+      dstIndex: 0,
+      pointCount: 4
+    });
+  }
   @Builder
   private SongCover(item: EchoTopSong, rank: string) {
-    Column({ space: 6 }) {
-      Row() {
+    // 外层：只负责在 Row 里**占位 / 居中 / 压层**（layoutWeight、负 margin、zIndex），**不参与变换**。
+    Column() {
+      // ★ 变换层：宽度钉死成封面宽度（`SIDE_CARD_VP`）。原因：布局列宽是 Row 的 1/4 ≈ 82vp，**比封面窄**，
+      //   封面是溢出显示的；矩阵若按 82vp 算，封面外侧那 14vp 就落进投影的"外推区"，形状会歪。
+      //   钉成 110vp 后变换盒四角与封面四角**严格对齐**，`sideQuadFor()` 里的 w 就是这里的宽度。
+      // ★★ 2026-10-13（另一软件作者给的官方做法）：「把**文字和图片放到一个 Column 里，然后对 Column 做变换**，
+      //   文字就自动跟着变形了」⇒ 变换加在**整个列**上（封面 + 名次/歌名/次数三段文字一起斜）。
+      Column({ space: 6 }) {
+        Row() {
 
-        if (item.img.length > 0) {
-          Image(item.img)
-            .width(rank === '1st' ? 150 : 110)
-            .height(rank === '1st' ? 150 : 110)
-            .borderRadius(rank === '1st' ? 13 : 9)
-            .objectFit(ImageFit.Cover)
-            .zIndex(rank === '1st' ? 2 : 1)
-        } else {
-          Column()
-            .width(rank === '1st' ? 150 : 110)
-            .height(rank === '1st' ? 150 : 110)
-            .borderRadius(rank === '1st' ? 13 : 9)
-            .backgroundColor('#22FFFFFF')
-            .zIndex(1)
+          if (item.img.length > 0) {
+            Image(item.img)
+              .width(rank === '1st' ? 150 : 110)
+              .height(rank === '1st' ? 150 : 110)
+              .borderRadius(rank === '1st' ? 13 : 9)
+              .objectFit(ImageFit.Cover)
+              .zIndex(rank === '1st' ? 2 : 1)
+          } else {
+            Column()
+              .width(rank === '1st' ? 150 : 110)
+              .height(rank === '1st' ? 150 : 110)
+              .borderRadius(rank === '1st' ? 13 : 9)
+              .backgroundColor('#22FFFFFF')
+              .zIndex(1)
+          }
+
         }
 
+        Text(rank)
+          .fontSize(12)
+            // ★ 用户 2026-10-13：「1st/2nd/3rd 颜色不一样」⇒ 三档亮度（1st 最亮）
+            // ★★ 用户 2026-10-13：「官方那个 1st 是黄色，另外两个也一样」⇒ **奖牌色**（金/银/铜），不是灰阶
+            .fontColor(rank === '1st' ? '#FFD54A' : (rank === '2nd' ? '#D6DEE8' : '#E0A16A'))
+        Text(item.name)
+          .fontSize(rank === '1st' ? 14 : 12)
+          .fontWeight(rank === '1st' ? FontWeight.Bold : FontWeight.Normal)
+          .fontColor('#FFFFFF')
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(item.count + ' 次 · 占 ' + item.share + '%')
+          .fontSize(11)
+          .fontColor('#88FFFFFF')
+          .maxLines(1)
       }
-
-      Text(rank)
-        .fontSize(12)
-          // ★ 用户 2026-10-13：「1st/2nd/3rd 颜色不一样」⇒ 三档亮度（1st 最亮）
-          // ★★ 用户 2026-10-13：「官方那个 1st 是黄色，另外两个也一样」⇒ **奖牌色**（金/银/铜），不是灰阶
-          .fontColor(rank === '1st' ? '#FFD54A' : (rank === '2nd' ? '#D6DEE8' : '#E0A16A'))
-      Text(item.name)
-        .fontSize(rank === '1st' ? 14 : 12)
-        .fontWeight(rank === '1st' ? FontWeight.Bold : FontWeight.Normal)
-        .fontColor('#FFFFFF')
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-      Text(item.count + ' 次 · 占 ' + item.share + '%')
-        .fontSize(11)
-        .fontColor('#88FFFFFF')
-        .maxLines(1)
+      .width(rank === '1st' ? 150 : SIDE_CARD_VP)
+      .alignItems(HorizontalAlign.Center)
+      // ★★★ 2026-10-13 第三轮返工：**rotate 整条路线全退**（`rotate + perspective` 在本机怎么调都对不上，
+      //   参数路线已被证伪），改用**四点投影映射** `matrix4.setPolyToPoly`，几何由 `sideQuadFor()` 直接钉死。
+      //   · 官方示例（`js-apis-matrix4#setPolyToPoly`）明确要求配一句
+      //     `.scale({ centerX: 0, centerY: 0, x: 1 })`：把变换中心点从**组件中心**挪到**组件左上角**
+      //     （`x: 1` 是恒等缩放，不改大小）。不挪的话四点坐标会被当成"相对中心"的坐标 ⇒ 整体偏出去。
+      //   · 用 `.transform()` 而不是 `.transform3D()`：官方 `setPolyToPoly` 示例就是这么配的（API 12 起可用）。
+      .scale({ centerX: 0, centerY: 0, x: 1 })
+      .transform(this.sideQuadFor(rank, this.sideCardHeightVp))
+      // 矩阵要**实测高度**（`Point` 是 px 口径）：首帧量不到就先返回恒等矩阵（不形变、不闪），量到后自动重算。
+      .onAreaChange((_oldArea: Area, newArea: Area) => {
+        if (rank === '1st') {
+          return;
+        }
+        const boxW: number = newArea.width as number;
+        const boxH: number = newArea.height as number;
+        if (Math.abs(boxH - this.sideCardHeightVp) > 0.5) {
+          this.sideCardHeightVp = boxH;
+          hilog.info(ECHO_DOMAIN, ECHO_TAG,
+            'side card box %{public}f x %{public}f vp (rank=%{public}s, expect w=%{public}d)',
+            boxW, boxH, rank, SIDE_CARD_VP);
+        }
+      })
     }
     .layoutWeight(rank === '1st' ? 2 : 1)
     .alignItems(HorizontalAlign.Center)
-    // ★★ 2026-10-13（另一软件作者给的官方做法）：「把**文字和图片放到一个 Column 里，然后对 Column 做旋转**，
-    //   文字就自动跟着旋转了」⇒ 旋转加在**整个 Column** 上（图片 + 名次/歌名/次数三段文字一起斜）。
-    // 参数依据（查过 SDK `RotateOptions`：`x/y/z` = **旋转轴向量**、`centerX/centerY` = **变换锚点**）：
-    //   · `y: 1` ⇒ 绕**竖直轴**旋转（竖边保持竖直）；
-    //   · `centerX` 锚在**外侧边**（左卡锚 0、右卡锚 '100%'）⇒ 外侧竖边原地不动、保持满高；
-    //   · `centerY` 留**纵向居中（默认）** —— 曾按 GLM5.3 建议压到 '120%'，压缩方向被拉斜 ⇒ 成了平行四边形。
-    //   · **角度/视距：查官方文档后按 px 口径重算（GLM5.3，2026-10-13）**：
-    //     `perspective` = **相机在 z 轴的坐标（单位 px）**，投影 `s = p/(p − z)`（z 朝相机为正）。
-    //     卡片 110vp = 357.5px，绕外边转 θ ⇒ 内边 z = −357.5·sinθ。
-    //     · 24°/90 ⇒ 90/235 ≈ **0.38**（透视过强，所以之前看着像平行四边形）；
-    //     · 16°/121 ⇒ ≈0.80，但 0.80 在 110vp 卡上只差 22vp ⇒ **视觉上近似方形**（"又变成方形了"）；
-    //     · **24°/580 ⇒ ≈0.80 且倾斜清晰可见**（p = 4×357.5×sin24° ≈ 582）。真机若仍偏弱再降到 450。
-    .rotate({
-      y: 1,
-      angle: rank === '1st' ? 0 : (rank === '2nd' ? 24 : -24),
-      perspective: 90,
-      centerX: rank === '1st' ? '50%' : (rank === '2nd' ? 0 : '100%')
-    })
     // ★★ 2026-10-13：负 margin 要加在**中间那张**上（左右各 -46），由它去盖住两侧。
     //   加在两侧会把它们顶出屏幕（左卡被屏幕左缘裁掉、右卡超出）⇒ 看着就像被裁一半的平行四边形。
     .margin({ left: rank === '1st' ? -46 : 0, right: rank === '1st' ? -46 : 0 })
