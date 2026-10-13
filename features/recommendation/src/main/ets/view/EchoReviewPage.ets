@@ -673,10 +673,11 @@ export struct EchoReviewPage {
       //   所以表现成「上边对了、下边反了」；把下角改成 h+bottomRise 又变平行四边形，都是这个根因。
       src: [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: w, y: h }, { x: 0, y: h }],
       // 右侧（3rd）：内边在左 ⇒ 左上角下沉 topDrop、左下角上收 bottomRise
-      // 左侧（2nd）：镜像 ⇒ 右上角下沉、右下角上收
+      // 左侧（2nd）：镜像 ⇒ 右上角下沉、右下角也下沉
+      // ★ 用户 2026-10-13：「下边缘往下沉了，没往上收，反过来了」⇒ 翻 bottomRise 方向
       dst: isRight
-        ? [{ x: 0, y: topDrop }, { x: w, y: 0 }, { x: w, y: h }, { x: 0, y: h - bottomRise }]
-        : [{ x: 0, y: 0 }, { x: w, y: topDrop }, { x: w, y: h - bottomRise }, { x: 0, y: h }],
+        ? [{ x: 0, y: topDrop }, { x: w, y: 0 }, { x: w, y: h }, { x: 0, y: h + bottomRise }]
+        : [{ x: 0, y: 0 }, { x: w, y: topDrop }, { x: w, y: h + bottomRise }, { x: 0, y: h }],
       srcIndex: 0,
       dstIndex: 0,
       pointCount: 4
