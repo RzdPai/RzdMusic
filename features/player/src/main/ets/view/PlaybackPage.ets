@@ -624,20 +624,24 @@ export struct PlaybackPage {
   /**
    * 展开/收起过程中内容层从下方升起的距离（vp）。
    *
-   * ★ 用户 2026-10-14：「官方**没有淡入淡出**，而且是**全部飞上来**」⇒ 位移独立于透明度曲线，
-   *   跟 `morphP` 走**三次缓出**（走得快、收得慢 = "飞上来"），起点在下方这个距离。
-   *   静止态 `morphP = 1 ⇒ 位移恒为 0`，与没有这套动画时逐像素一致。
+   * ★ 用户 2026-10-14 二次反馈：「现在还是淡入淡出，没有飞入」——第一版我按 90vp 位移给的是
+   *   **内容层自己的坐标**，而这一层在形变期间被外层容器**缩放**着（`morphScale` 起点 ≈0.25），
+   *   于是 90vp 在屏幕上只有 ~22vp、还大半落在裁剪窗口之外 ⇒ 看不见"飞入"。
+   *   现在位移按 `1 / morphScale` 放大 ⇒ **屏幕上的位移恒为这个值**（起点时内容远在裁剪窗口下方，
+   *   随着 p→1 升到位，"从下面飞上来"就出来了）。静止态 `morphP = 1 ⇒ 位移 0`，落位版面不受影响。
    */
   private static readonly CONTENT_RISE_VP: number = 180;
 
-  /** 内容层当前的升起位移（vp）：跟 morphP 走三次缓出。 */
+  /** 内容层当前的升起位移（vp，**内容层自身坐标**）：跟 morphP 走三次缓出，再按缩放反算。 */
   private contentRiseVp(): number {
     const p: number = this.expandState.morphP;
     if (p >= 1 || !this.expandState.morphUsable) {
       return 0;
     }
     const eased: number = 1 - Math.pow(1 - Math.max(0, p), 3);
-    return (1 - eased) * PlaybackPage.CONTENT_RISE_VP;
+    const screenVp: number = (1 - eased) * PlaybackPage.CONTENT_RISE_VP;
+    const scale: number = Math.max(0.05, this.expandState.morphScale);
+    return screenVp / scale;
   }
 
   /** 当前该用的封面底图模糊半径（常量，与流光开关无关）。 */

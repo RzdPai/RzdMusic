@@ -63,13 +63,10 @@ const CLIP_IDLE_MARGIN_VP: number = 120;
 const MORPH_RADIUS_DECAY_POW: number = 0.62;
 
 /**
- * 打开过程中"内容层"的显形曲线。
+ * 打开过程中"内容层"的显形曲线（**现在不用了**，保留给将来可能的"轻微淡入"）。
  *
- * ★ 用户 2026-10-14 二次反馈：「官方打开播放器**没有淡入淡出**，而且是**全部飞上来**，
- *   先是进度条、然后是下面的组件，不是现在这样中间淡入一半飞上去」
- *   ⇒ 不再做"从 0 慢慢淡入"，改成 **0.15 之前就冲到 1**（快到看不出淡入），
- *   剩下的行程全部交给 `PlaybackPage.contentRiseVp()` 的**从下升起**（位移与它同源）。
- *   ⚠️ 保留一小段透明期是为了避免"播放页自己那张封面"与"续飞封面"同时出现（双封面）。
+ * ★ 用户 2026-10-14 两次反馈「官方**没有淡入淡出**」⇒ 展开时内容层恒为 1（见 `applyMorphProgress`），
+ *   出场完全交给 `PlaybackPage.contentRiseVp()` 的"从下升起"。此函数已不在调用链上。
  */
 function morphContentIn(t: number): number {
   const k: number = t / 0.15;
@@ -1726,18 +1723,14 @@ export class PlayerExpandState {
     this.morphTx = this.initTranslateX * (1 - t);
     this.morphTy = this.initTranslateY * (1 - t);
     this.morphRadius = scale > 0 ? visualRadius / scale : 0;
-    // 内容层：反编译侧**全程 0、落位那一刻才置 1**（构造 / `doEnter` 延迟闭包 / `λ2_2`
-    // → `λ1_2`，`setFinalStatus` 也是 1）。所以展开过程中屏上只有底色 + 续飞封面，
-    // 播放页内容是落位时才出现的 —— 这就是"四个边同时到边"之后才见到页面的观感。
-    // OPEN -> LEAVING must not erase all chrome/lyrics at the first p<1 sample.
-    // Cover has its own bridge gate; other content fades continuously with the bottom window.
-    //
-    // ★★ 2026-10-14 用户：「现在播放器展开时 UI 直接淡入淡出太生硬，官方的那些 UI 是从下面跳上来、
-    //    并且是非线性曲线」⇒ 打开这条路**不再"落位才置 1"**，改成 0.45 起三次缓出到 1
-    //    （`morphContentIn()`）；配合 `PlaybackPage.contentRiseVp()` 的同一条曲线，
-    //    UI 会"边从下方升起边显形"。收起仍走连续的 `pullBottomIn()`。
+    // 内容层：反编译侧**全程 0、落位那一刻才置 1**；但用户 2026-10-14 两次明确
+    // 「官方没有淡入淡出，而且是全部飞上来」⇒ **展开时不要任何淡入**：内容层始终 1，
+    // 出场完全交给 `PlaybackPage.contentRiseVp()` 的"从下升起"。
+    // 不会出现"两个封面"：播放页自己那张封面有**独立的门**
+    // （`MusicPlayInfoBlock` 里 `.opacity(morphContainerActive() ? 0 : 1)`），形变期间它本来就不画。
+    // 收起（LEAVING）仍走连续的 `pullBottomIn()`，保持原有的收拢观感。
     this.morphContentOpacity = this.morphStage === MorphStage.LEAVING ?
-      this.pullBottomIn() : morphContentIn(t);
+      this.pullBottomIn() : 1;
   }
 
   /**

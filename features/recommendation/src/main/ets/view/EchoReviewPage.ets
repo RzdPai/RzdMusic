@@ -144,7 +144,7 @@ const SIDE_TOP_SLOPE: number = 0.168;
 const SIDE_BOTTOM_SLOPE: number = 0.087;
 
 /**
- * 标题里会出现的区块名（下标与 `sectionRatios` / `sectionWindowY0` 一一对齐）。
+ * 标题里会出现的区块名（下标与 `sectionRatios` 一一对齐）。
  *
  * 下标 0 = **页头**（官方在最顶上标题是「10 月 · 回响」，不是"你听了什么"——用户 2026-10-14 报的）；
  * 1..6 = 六个区块；最后一个是「有趣的发现」（用户原话：「最下面也是有趣的发现而不是完播率。
@@ -236,20 +236,8 @@ export struct EchoReviewPage {
    *   末尾占位块一露头就把标题钉成最后一个区块名。顶部同理用页头的可见比例钉「回响」。
    */
   @Local atBottom: boolean = false;
-  /** 延时量测的等待时长（ms）：等首帧布局完成。 */
-  private static readonly MEASURE_DELAY_MS: number = 350;
   /** 七个区块（含页头）的可见比例（非状态，只在 `onVisibleAreaChange` 回调里读写）。 */
   private sectionRatios: number[] = [0, 0, 0, 0, 0, 0, 0];
-  /**
-   * 七个区块的**窗口 y（px）** + 量测时的滚动偏移（vp）。
-   *
-   * 「当前区块 = 顶边越过标题栏的最后一个区块」——只有位置信息才能同时满足用户报的两条：
-   * 最顶上要是「回响」（页头还没被顶出去）、最底下要是「有趣的发现」（完播率虽然整块可见，
-   * 但最后一个越线的仍是最后那个区块）。光看"可见比例最大"做不到这一点（页头/末块会平局）。
-   * 量测在 `measureSectionTops()`，滚动时用 `updateTitleByOffset()` 纯算术推。
-   */
-  private sectionWindowY0: number[] = [];
-  private measuredOffsetVp: number = 0;
   /** 共享播放状态（底栏联动要读它）。 */
   @Local appState: MusicAppState =
     AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
@@ -258,20 +246,8 @@ export struct EchoReviewPage {
 
   aboutToAppear(): void {
     this.reload();
-    // 布局稳定后再量一次各区块的窗口位置（标题随滚动变要用；量不到就退回比例法）
-    this.scheduleMeasureSections('appear');
   }
 
-  /** 延时量区块位置（首帧还没布局完，量了会全 0；换月后内容高度也会变，得重量一次）。 */
-  private scheduleMeasureSections(reason: string): void {
-    setTimeout((): void => {
-      if (!this.isAliveEcho) {
-        return;
-      }
-      hilog.info(ECHO_DOMAIN, ECHO_TAG, 'measure sections (%{public}s)', reason);
-      this.measureSectionTops();
-    }, EchoReviewPage.MEASURE_DELAY_MS);
-  }
 
   /** 历史变化（播放器、歌曲菜单…都会 +1 `historyVersion`）后重算。 */
   @Monitor('store.historyVersion')
@@ -298,8 +274,6 @@ export struct EchoReviewPage {
     this.monthOptions = EchoReviewPage.buildMonthOptions(all, range, this.monthOffset);
     const stats: EchoStats = EchoReviewPage.buildStats(all, range, prev);
     this.stats = stats;
-    // 换月后内容高度会变 ⇒ 重新量一次区块位置（标题随滚动变要用）
-    this.scheduleMeasureSections('reload');
   }
 
   aboutToDisappear(): void {
@@ -778,7 +752,16 @@ export struct EchoReviewPage {
   }
 
   /**
-   * 记录某个区块的可见比例（**兜底路径**：位置量不到时用）。
+   * 记录某个区块的可见比例，并按「**可见比例 > 0 的最小下标**」更新标题。
+   *
+   * ★★ 2026-10-14 第三版（用户反馈「标题只有你听了什么，没有最常听的 xxx」）：
+   *   位置法（`getRectangleById` + 滚动偏移）在真机上不可靠，且用户**没法跑 hdc 看日志**，
+   *   所以改成**只用可见比例**的规则 —— 不需要量位置、不需要 id、不需要滚动偏移：
+   *     · 视野里最靠上的那个区块 = **可见比例 > 阈值的最小下标**；
+   *     · 页头（下标 0）在最上面，所以刚进页面标题就是「回响」；
+   *     · 往下滚，页头比例归 0 ⇒ 依次轮到"你听了什么 / 最常听的歌手 / …"；
+   *     · 到底了由**末尾哨兵**接管（`atBottom`）⇒「有趣的发现」。
+   *   阈值取 0.02（不是 0）：避免浮点毛刺把"刚露头"的区块判进来。
    * @param index 区块下标（与 `SECTION_NAMES` 对齐；0 = 页头）
    * @param ratio 可见比例 0..1（`onVisibleAreaChange` 给的）
    */
@@ -786,35 +769,29 @@ export struct EchoReviewPage {
     if (index < 0 || index >= this.sectionRatios.length) {
       return;
     }
-    if (Math.abs(this.sectionRatios[index] - ratio) < 0.01) {
+    if (Math.abs(this.sectionRatios[index] - ratio) < 0.005) {
       return;
     }
     this.sectionRatios[index] = ratio;
-    // ★ 顶部：页头基本完整可见 ⇒ 标题就是「回响」（用户 2026-10-14：最上面不该是"你听了什么"）
-    if (index === 0) {
-      if (ratio > 0.5) {
-        this.setSectionTitle(SECTION_NAMES[0], 'header', ratio);
-      } else if (!this.atBottom) {
-        this.updateTitleByOffset();
-      }
+    this.refreshTitleFromRatios();
+  }
+
+  /** 标题 = 可见比例 > 阈值的最小下标那个区块（到底了则钉在最后一个）。 */
+  private refreshTitleFromRatios(): void {
+    if (this.atBottom) {
+      this.setSectionTitle(SECTION_NAMES[SECTION_NAMES.length - 1], 'bottom', 1);
       return;
     }
-    if (this.sectionWindowY0.length === SECTION_NAMES.length || this.atBottom) {
-      // 位置法可用（或已经到底）时以它们为准，比例只在量不到位置时兜底（见 updateTitleByOffset）
-      return;
-    }
-    let best: number = 0;
-    let bestRatio: number = -1;
     for (let i: number = 0; i < this.sectionRatios.length; i++) {
-      if (this.sectionRatios[i] > bestRatio) {
-        bestRatio = this.sectionRatios[i];
-        best = i;
+      if (this.sectionRatios[i] > EchoReviewPage.SECTION_VISIBLE_MIN) {
+        this.setSectionTitle(SECTION_NAMES[i], 'ratio', this.sectionRatios[i]);
+        return;
       }
-    }
-    if (bestRatio > 0.15) {
-      this.setSectionTitle(SECTION_NAMES[best], 'ratio', bestRatio);
     }
   }
+
+  /** "这个区块算在视野里"的最小可见比例。 */
+  private static readonly SECTION_VISIBLE_MIN: number = 0.02;
 
   /** 写标题用的区块名（值没变就不写，避免每帧重渲染）。 */
   private setSectionTitle(name: string, why: string, value: number): void {
@@ -826,57 +803,7 @@ export struct EchoReviewPage {
       'title section -> %{public}s [%{public}s %{public}f]', name, why, value);
   }
 
-  /**
-   * 量七个区块在窗口里的 y（px）与当前滚动偏移。
-   *
-   * 进页面 / 换月 / 展开后各调一次（布局稳定后延时调，见调用点）。量不到就**保持空数组**，
-   * 标题退回 `noteSection` 的比例法（不会卡死、也不会瞎跳）。
-   */
-  private measureSectionTops(): void {
-    const ui = this.getUIContext();
-    const utils = ui.getComponentUtils();
-    const tops: number[] = [];
-    try {
-      for (let i: number = 0; i < SECTION_NAMES.length; i++) {
-        const info = utils.getRectangleById('echoSec' + i);
-        tops.push(info.windowOffset.y);
-      }
-    } catch (err) {
-      hilog.warn(ECHO_DOMAIN, ECHO_TAG, 'measureSectionTops failed: %{public}s', JSON.stringify(err));
-      return;
-    }
-    this.sectionWindowY0 = tops;
-    this.measuredOffsetVp = this.scroller.currentOffset().yOffset;
-    hilog.info(ECHO_DOMAIN, ECHO_TAG, 'section tops measured: %{public}s',
-      tops.map((v: number): string => Math.round(v).toString()).join(','));
-    this.updateTitleByOffset();
-  }
 
-  /**
-   * 按滚动偏移更新标题：**顶边已越过标题栏的最后一个区块**。
-   *
-   * 位置由「量测时的窗口 y − 之后的滚动位移」推出来，全程只有算术，不查组件树（滚动里每帧调也便宜）。
-   */
-  private updateTitleByOffset(): void {
-    // ★ 到底了就是最后一个区块（哨兵优先），位置法在底部不可靠
-    if (this.atBottom) {
-      this.setSectionTitle(SECTION_NAMES[SECTION_NAMES.length - 1], 'bottom', 1);
-      return;
-    }
-    if (this.sectionWindowY0.length !== SECTION_NAMES.length) {
-      return;
-    }
-    const ui = this.getUIContext();
-    const deltaPx: number = (this.scroller.currentOffset().yOffset - this.measuredOffsetVp) * ui.vp2px(1);
-    const linePx: number = ui.vp2px(TITLE_BAR_VP);
-    let pick: number = 0;
-    for (let i: number = 0; i < this.sectionWindowY0.length; i++) {
-      if (this.sectionWindowY0[i] - deltaPx <= linePx) {
-        pick = i;
-      }
-    }
-    this.setSectionTitle(SECTION_NAMES[pick], 'offset', this.scroller.currentOffset().yOffset);
-  }
 
   /** 标题栏用的"当前区块名"（没量到之前是空的 ⇒ 显示「10 月 · 回响」）。 */
   private titleSection(): string {
@@ -940,7 +867,7 @@ export struct EchoReviewPage {
                 if (isVisible) {
                   this.setSectionTitle(SECTION_NAMES[SECTION_NAMES.length - 1], 'bottom', ratio);
                 } else {
-                  this.updateTitleByOffset();
+                  this.refreshTitleFromRatios();
                 }
               }
             })
@@ -953,11 +880,6 @@ export struct EchoReviewPage {
       .height('100%')
       .scrollBar(BarState.Off)
       .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
-      // ★ 用户 2026-10-14：标题随滚动变 ⇒ 每帧按"顶边越过标题栏的最后一个区块"更新标题
-      //   （纯算术，不查组件树；位置由 measureSectionTops 量一次）
-      .onDidScroll((xOffset: number, yOffset: number, state: ScrollState) => {
-        this.updateTitleByOffset();
-      })
       // ★ 用户 2026-10-13：「回想页上滑底栏不会收起，首页和我的页是正常的」⇒ 补上同一套底栏联动
       .onScrollFrameBegin((offset: number): OnScrollFrameBeginHandlerResult => {
         if (BarScrollHelper.isEnabled()) {
@@ -995,7 +917,7 @@ export struct EchoReviewPage {
     .backgroundColor('#000000')
   }
 
-  /** 标题：`10 月 · 回响` + 分钟数 + 与上月的倍数（官方版式）。 */
+  /** 页头：`xx 分钟` + 与上月的倍数（官方版式）。 */
   @Builder
   private Header() {
     Column({ space: 6 }) {
@@ -1017,7 +939,7 @@ export struct EchoReviewPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
-    // 页头 = 标题里的「回响」（下标 0）：量它的位置 + 兜底用的可见比例
+    // 页头 = 标题里的「回响」（下标 0）：可见比例 > 阈值即"当前区块"
     .id('echoSec0')
     .onVisibleAreaChange([0.0, 1.0], (isVisible: boolean, ratio: number) => {
       this.noteSection(0, ratio);
@@ -1157,7 +1079,7 @@ export struct EchoReviewPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
-    // 区块 1：标题随滚动变（id 供 measureSectionTops 量位置）
+    // 区块 1：标题随滚动变（id 留着给以后排查用；标题判定已改用"可见比例"法）
     .id('echoSec1')
     .onVisibleAreaChange([0.0, 1.0], (isVisible: boolean, ratio: number) => {
       this.noteSection(1, ratio);
@@ -1446,7 +1368,7 @@ export struct EchoReviewPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
-    // 区块 2：标题随滚动变（id 供 measureSectionTops 量位置）
+    // 区块 2：标题随滚动变（id 留着给以后排查用；标题判定已改用"可见比例"法）
     .id('echoSec2')
     .onVisibleAreaChange([0.0, 1.0], (isVisible: boolean, ratio: number) => {
       this.noteSection(2, ratio);
@@ -1506,7 +1428,7 @@ export struct EchoReviewPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
-    // 区块 3：标题随滚动变（id 供 measureSectionTops 量位置）
+    // 区块 3：标题随滚动变（id 留着给以后排查用；标题判定已改用"可见比例"法）
     .id('echoSec3')
     .onVisibleAreaChange([0.0, 1.0], (isVisible: boolean, ratio: number) => {
       this.noteSection(3, ratio);
@@ -1613,7 +1535,7 @@ export struct EchoReviewPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
-    // 区块 4：标题随滚动变（id 供 measureSectionTops 量位置）
+    // 区块 4：标题随滚动变（id 留着给以后排查用；标题判定已改用"可见比例"法）
     .id('echoSec4')
     .onVisibleAreaChange([0.0, 1.0], (isVisible: boolean, ratio: number) => {
       this.noteSection(4, ratio);
@@ -1680,7 +1602,7 @@ export struct EchoReviewPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
-    // 区块 5：标题随滚动变（id 供 measureSectionTops 量位置）
+    // 区块 5：标题随滚动变（id 留着给以后排查用；标题判定已改用"可见比例"法）
     .id('echoSec5')
     .onVisibleAreaChange([0.0, 1.0], (isVisible: boolean, ratio: number) => {
       this.noteSection(5, ratio);
@@ -1733,7 +1655,7 @@ export struct EchoReviewPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
-    // 区块 6：标题随滚动变（id 供 measureSectionTops 量位置）
+    // 区块 6：标题随滚动变（id 留着给以后排查用；标题判定已改用"可见比例"法）
     .id('echoSec6')
     .onVisibleAreaChange([0.0, 1.0], (isVisible: boolean, ratio: number) => {
       this.noteSection(6, ratio);

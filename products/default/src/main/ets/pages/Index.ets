@@ -355,13 +355,15 @@ struct Index {
   //       isShowPlay: true  → false  ⇒ 弹出播放页路由
   //   既有调用点一行都不用改，新增入口也自动覆盖。
 
-  /** 播放页挂载/卸载的唯一收口（所有 `isShowPlay` 写入最终都会走到这里）。 */
+  /**
+   * 播放页挂载/卸载的唯一收口（所有 `isShowPlay` 写入最终都会走到这里）。 */
   @Monitor('appState.isShowPlay')
   onShowPlayChanged(): void {
-    // ★ 用户 2026-10-14：「官方的播放器收起后那个播放条会弹一下」⇒ 收起（true→false）时弹一下
-    if (!this.appState.isShowPlay) {
-      this.bounceMiniBar();
-    }
+    // ★ 用户 2026-10-14：「官方的播放器收起后那个播放条会弹一下」⇒ 走 HDS 自己的"隐藏/显示动效"：
+    //   打开播放页时先让底栏/迷你栏走一次**隐藏动效**（`applyHideAnimation`），
+    //   收起时再走**显示动效**（`applyShowAnimation`）—— 之前只调"显示"没有效果，
+    //   就是因为栏本来就是显示状态（官方的语义是"隐藏↔显示"这一对，不是单独的弹跳）。
+    this.animateHdsBars(this.appState.isShowPlay, 'showPlayChanged');
     if (!PLAYER_ROUTE_MODE) {
       Logger.info('RzdPlayerRoute', `overlay visible=${this.appState.isShowPlay} retainedPaths=${JSON.stringify(this.pageIndexInfos.getAllPathName())}`);
       return;
@@ -374,26 +376,29 @@ struct Index {
   }
 
   /**
-   * 播放器收起后，让 HDS 底栏/迷你条播一次**系统自带的显示动效**（用户 2026-10-14 要的"背板弹一下"）。
+   * 让 HDS 底栏 / 迷你栏播一次显示或隐藏动效（系统接口，胶囊背板由 HDS 自己动）。
    *
-   * ★ 之前那版我用 `HomeMiniBarPlayer.scale()` 自己放大 6% 是错的（用户：「把现在的弹一下删掉，
-   *   我要的就是 HDS 背板弹一下，而且这是系统接口」）。
-   *   正确接口（官方 `HdsTabs (底部页签)` 文档 + 本地 SDK
-   *   `@hms.hds.hdsBaseComponent.d.ets` 核对过）：
-   *   · `HdsTabsController.applyShowAnimation(mode: HdsAnimationMode)` —— HdsTabs 的控制器调用
-   *     **页签栏和迷你栏的显示动效**；
-   *   · `HdsAnimationMode { SCROLL_ANIMATION = 0, CLICK_ANIMATION = 1 }` —— 收起是"点击触发"那一类。
-   *   胶囊背板由 HDS 自己画/自己动，壳层一行 `scale` 是做不到这个效果的。
+   * 依据（官方《HdsTabs (底部页签)》 + 本地 SDK `@hms.hds.hdsBaseComponent.d.ets`）：
+   *   · `HdsTabsController.applyHideAnimation(mode: HdsAnimationMode)`：页签栏和迷你栏的**隐藏动效**；
+   *   · `HdsTabsController.applyShowAnimation(mode: HdsAnimationMode)`：**显示动效**；
+   *   · `HdsAnimationMode { SCROLL_ANIMATION = 0, CLICK_ANIMATION = 1 }` —— 播放页开关属于"点击"场景。
+   * @param hiding true = 播放页打开了（把栏收起来）；false = 播放页收起了（把栏放出来）
+   * @param why 日志用
    */
-  private bounceMiniBar(): void {
+  private animateHdsBars(hiding: boolean, why: string): void {
     try {
-      this.tabsController.applyShowAnimation(HdsAnimationMode.CLICK_ANIMATION);
-      Logger.info('RzdMiniBarBounce', 'collapse -> HDS applyShowAnimation(CLICK_ANIMATION)');
+      if (hiding) {
+        this.tabsController.applyHideAnimation(HdsAnimationMode.CLICK_ANIMATION);
+      } else {
+        this.tabsController.applyShowAnimation(HdsAnimationMode.CLICK_ANIMATION);
+      }
+      Logger.info('RzdMiniBarBounce', `hds bar animation hiding=${hiding} why=${why}`);
     } catch (err) {
-      // 老版本 SDK（< 6.1.0(23)）没这个接口：静默跳过，不影响收起流程
-      Logger.warn('RzdMiniBarBounce', `applyShowAnimation failed: ${JSON.stringify(err)}`);
+      // 老版本 SDK（< 6.1.0(23)）没有这两个接口：静默跳过，不影响播放页开关流程
+      Logger.warn('RzdMiniBarBounce', `hds bar animation failed hiding=${hiding}: ${JSON.stringify(err)}`);
     }
   }
+
 
   /** 播放页路由在栈里的下标（不在栈里返回 -1）。 */
   private playerRouteIndex(): number {
