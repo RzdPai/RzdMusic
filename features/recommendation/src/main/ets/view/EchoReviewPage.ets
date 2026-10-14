@@ -28,6 +28,26 @@
  * 动态背景（用户描述）：滑到「最常听的歌手」那一段的过程中，背景从纯黑**渐变为该歌手图片的取色**，
  * 离开该段再渐变回黑。这里的"取色"用的是**同一张图的高斯模糊 + 低透明度**（等效取色的观感，
  * 且不依赖 PixelMap 解码链路，稳）；`backdropOpacity` 由 `onVisibleAreaChange` 驱动。
+ *
+ * ═══════════════════════ 日夜间配色（2026-10-15 本轮）═══════════════════════
+ * 本页原来是**只有夜间一套硬编码色**（黑底 + 白/半透明白字），日间不可读。
+ * 现在全部改成**跟随系统深浅色**的 token（`app.color.echo_*`，base + dark 各一份，
+ * 定义在 `features/recommendation/src/main/resources/{base,dark}/element/color.json`）。
+ *
+ * **验收口径：夜间与改前逐字一致** —— `dark` 里每一个 `echo_*` 的取值就是改动前那一处
+ * 硬编码 hex 的**原值**（例如 `echo_text_secondary` dark = `#CCFFFFFF`、`echo_card_background`
+ * dark = `#14FFFFFF`、`echo_accent` dark = `#FF3B6B`），页面底色直接复用已有的成对 token
+ * `app.color.page_background`（base `#F1F3F5` / dark `#000000` = 改动前的纯黑）。
+ * 日间则是**同一套角色的反向取值**：白 α 叠层 ↔ 黑 α 叠层、白字 ↔ 近黑字，
+ * 正文（≥12fp）对比度按浅底 `#F1F3F5` 复核过 ≥ 4.5:1。
+ *
+ * 两个**成对但是同值**的例外（base = dark，故意不跟主题翻）：
+ *   · `echo_photo_scrim`（歌手大图上那层 `#CC000000` 蒙层）：它压在**照片**上而不是页面底上；
+ *   · `echo_on_photo_primary` / `echo_on_photo_secondary`：压在上面那层蒙层上的白字。
+ *     ⇒ 若这三者跟主题翻成浅色，日间就是"深字压深蒙层"，直接不可读。
+ * ⚠️ 本页**只动颜色**：`matrix4` 四点投影/镜像卡几何、`monthOffset`/`buildStats` 数据逻辑、
+ *   `SongCover(index, rank)` 的 `@Builder` 传参、标题随滚动判定、`onVisibleAreaChange` 钩子
+ *   一律未动（`dayColor()` 的返回类型 `string` → `ResourceColor` 是颜色切换的必要改动，算法未改）。
  */
 
 import { AlbumRouteParam, AppStorageKeys, ArtistRouteParam, BarScrollHelper, MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord, RouterUrlConstants } from 'musicbasic';
@@ -841,7 +861,7 @@ export struct EchoReviewPage {
       Column()
         .width('100%')
         .height('100%')
-        .backgroundColor('#000000')
+        .backgroundColor($r('app.color.page_background'))
         .opacity(0.86)
 
       // ② 内容
@@ -880,7 +900,7 @@ export struct EchoReviewPage {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('#000000')
+    .backgroundColor($r('app.color.page_background'))
   }
 
   build() {
@@ -902,7 +922,7 @@ export struct EchoReviewPage {
     //   页根回到状态栏之下，标题自然落在 statusBar..statusBar+56。
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     .hideBackButton(true)
-    .backgroundColor('#000000')
+    .backgroundColor($r('app.color.page_background'))
   }
 
   /** 页头：`xx 分钟` + 与上月的倍数（官方版式）。 */
@@ -913,14 +933,14 @@ export struct EchoReviewPage {
       Text(this.stats.totalMinutes + ' 分钟')
         .fontSize(24)
         .fontWeight(FontWeight.Bold)
-        .fontColor('#FFFFFF')
+        .fontColor($r('app.color.echo_text_primary'))
         .width('100%')
         .textAlign(TextAlign.Start)
 
       if (this.ratioText().length > 0) {
         Text(this.ratioText())
           .fontSize(13)
-          .fontColor('#B3FFFFFF')
+          .fontColor($r('app.color.echo_text_ratio'))
           .width('100%')
           .textAlign(TextAlign.Start)
       }
@@ -948,30 +968,30 @@ export struct EchoReviewPage {
       Row({ space: 4 }) {
         Text(this.yearLabel)
           .fontSize(13)
-          .fontColor('#E6FFFFFF')
+          .fontColor($r('app.color.echo_text_chip'))
         SymbolGlyph($r('sys.symbol.chevron_down'))
           .fontSize(11)
-          .fontColor(['#99FFFFFF'])
+          .fontColor([$r('app.color.echo_text_tertiary')])
       }
       .height(30)
       .padding({ left: 12, right: 12 })
       .borderRadius(15)
-      .backgroundColor('#1FFFFFFF')
+      .backgroundColor($r('app.color.echo_chip_background'))
       .bindMenu(this.yearMenuItems())
 
       Row({ space: 8 }) {
         SymbolGlyph($r('sys.symbol.chevron_left'))
           .fontSize(12)
-          .fontColor(['#E6FFFFFF'])
+          .fontColor([$r('app.color.echo_text_chip')])
           .onClick(() => {
             this.shiftMonth(-1);
           })
         Text(this.monthLabel)
           .fontSize(13)
-          .fontColor('#E6FFFFFF')
+          .fontColor($r('app.color.echo_text_chip'))
         SymbolGlyph($r('sys.symbol.chevron_right'))
           .fontSize(12)
-          .fontColor(['#E6FFFFFF'])
+          .fontColor([$r('app.color.echo_text_chip')])
           .onClick(() => {
             this.shiftMonth(1);
           })
@@ -979,7 +999,7 @@ export struct EchoReviewPage {
       .height(30)
       .padding({ left: 12, right: 12 })
       .borderRadius(15)
-      .backgroundColor('#1FFFFFFF')
+      .backgroundColor($r('app.color.echo_chip_background'))
       .bindMenu(this.monthMenuItems())
     }
     .width('100%')
@@ -1013,10 +1033,10 @@ export struct EchoReviewPage {
       Text(this.statValueOf(kind))
         .fontSize(24)
         .fontWeight(FontWeight.Bold)
-        .fontColor('#FFFFFF')
+        .fontColor($r('app.color.echo_text_primary'))
       Text(this.statLabelOf(kind))
         .fontSize(12)
-        .fontColor('#8CFFFFFF')
+        .fontColor($r('app.color.echo_text_unit'))
     }
     .layoutWeight(1)
     .alignItems(HorizontalAlign.Start)
@@ -1049,7 +1069,7 @@ export struct EchoReviewPage {
     Text(text)
       .fontSize(18)
       .fontWeight(FontWeight.Bold)
-      .fontColor('#FFFFFF')
+      .fontColor($r('app.color.echo_text_primary'))
       .width('100%')
       .textAlign(TextAlign.Start)
   }
@@ -1061,7 +1081,7 @@ export struct EchoReviewPage {
       this.SectionTitle('你听了什么')
       Text('最常听的歌')
         .fontSize(13)
-        .fontColor('#99FFFFFF')
+        .fontColor($r('app.color.echo_text_tertiary'))
         .width('100%')
         .textAlign(TextAlign.Start)
       if (this.stats.topSongs.length === 0) {
@@ -1262,25 +1282,28 @@ export struct EchoReviewPage {
             .width(this.coverVpOf(rank))
             .height(this.coverVpOf(rank))
             .borderRadius(this.coverRadiusOf(rank))
-            .backgroundColor('#22FFFFFF')
+            .backgroundColor($r('app.color.echo_placeholder_background'))
         }
 
         Text(rank)
           .fontSize(12)
             // ★ 用户 2026-10-13：「1st/2nd/3rd 颜色不一样」⇒ 三档亮度（1st 最亮）
             // ★★ 用户 2026-10-13：「官方那个 1st 是黄色，另外两个也一样」⇒ **奖牌色**（金/银/铜），不是灰阶
-            .fontColor(rank === '1st' ? '#FFD54A' : (rank === '2nd' ? '#D6DEE8' : '#E0A16A'))
+            // ★ 奖牌色（金/银/铜）在日间要单独给深色版：原来的 #FFD54A 之类
+            //   压在浅底上对比度只有 ~1.3:1（等于看不见），base 值按 ≥4.5:1 重取。
+            .fontColor(rank === '1st' ? $r('app.color.echo_rank_gold') :
+              (rank === '2nd' ? $r('app.color.echo_rank_silver') : $r('app.color.echo_rank_bronze')))
           .scale({ x: this.mirrorX(rank), y: 1 })
         Text(this.stats.topSongs[index].name)
           .fontSize(rank === '1st' ? 14 : 12)
           .fontWeight(rank === '1st' ? FontWeight.Bold : FontWeight.Normal)
-          .fontColor('#FFFFFF')
+          .fontColor($r('app.color.echo_text_primary'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .scale({ x: this.mirrorX(rank), y: 1 })
         Text(this.stats.topSongs[index].count + ' 次 · 占 ' + this.stats.topSongs[index].share + '%')
           .fontSize(11)
-          .fontColor('#88FFFFFF')
+          .fontColor($r('app.color.echo_text_faint'))
           .maxLines(1)
           .scale({ x: this.mirrorX(rank), y: 1 })
       }
@@ -1325,25 +1348,30 @@ export struct EchoReviewPage {
               .height(220)
               .objectFit(ImageFit.Cover)
           } else {
-            Column().width('100%').height(220).backgroundColor('#22FFFFFF')
+            Column().width('100%').height(220).backgroundColor($r('app.color.echo_placeholder_background'))
           }
           Column({ space: 4 }) {
             Text(this.stats.topArtists[0].name)
               .fontSize(26)
               .fontWeight(FontWeight.Bold)
-              .fontColor('#FFFFFF')
+              // ⚠️ 这一行文字压在**照片上的暗色蒙层**（`echo_photo_scrim`）上，不是压在页面底上
+              //   ⇒ 两个主题都用白字（`echo_on_photo_primary` 的 base/dark 都是 #FFFFFF）。
+              //   若这里跟着主题翻成深色，日间就是"深字压深蒙层"，直接不可读。
+              .fontColor($r('app.color.echo_on_photo_primary'))
               .width('100%')
               .textAlign(TextAlign.Start)
             Text(this.stats.topArtists[0].count + ' 次播放 · 占了你 ' +
               this.stats.topArtists[0].share + '% 的播放')
               .fontSize(12)
-              .fontColor('#CCFFFFFF')
+              .fontColor($r('app.color.echo_on_photo_secondary'))
               .width('100%')
               .textAlign(TextAlign.Start)
           }
           .width('100%')
           .padding({ left: 14, right: 14, top: 12, bottom: 14 })
-          .backgroundColor('#CC000000')
+          // ⚠️ 这一层是**照片上的蒙层**，不是页面底：它必须两个主题都保持暗色
+          //   （照片内容不可控，白字要有可预期的底）。base/dark 同值，见 token 表。
+          .backgroundColor($r('app.color.echo_photo_scrim'))
         }
         .width('100%')
         .borderRadius(14)
@@ -1359,7 +1387,7 @@ export struct EchoReviewPage {
               Row({ space: 12 }) {
                 Text(String(index + 2))
                   .fontSize(15)
-                  .fontColor('#FFFFFF')
+                  .fontColor($r('app.color.echo_text_primary'))
                   .width(22)
                 if (item.img.length > 0) {
                   Image(item.img)
@@ -1368,17 +1396,17 @@ export struct EchoReviewPage {
                     .borderRadius(6)
                     .objectFit(ImageFit.Cover)
                 } else {
-                  Column().width(40).height(40).borderRadius(6).backgroundColor('#22FFFFFF')
+                  Column().width(40).height(40).borderRadius(6).backgroundColor($r('app.color.echo_placeholder_background'))
                 }
                 Text(item.name)
                   .fontSize(15)
-                  .fontColor('#FFFFFF')
+                  .fontColor($r('app.color.echo_text_primary'))
                   .layoutWeight(1)
                   .maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
                 Text(item.count + ' 次')
                   .fontSize(12)
-                  .fontColor('#99FFFFFF')
+                  .fontColor($r('app.color.echo_text_tertiary'))
               }
               .width('100%')
               .height(60)
@@ -1390,7 +1418,7 @@ export struct EchoReviewPage {
           }
           .width('100%')
           .padding({ left: 14, right: 14 })
-          .backgroundColor('#14FFFFFF')
+          .backgroundColor($r('app.color.echo_card_background'))
           .borderRadius(14)
         }
       }
@@ -1399,7 +1427,7 @@ export struct EchoReviewPage {
       .width('100%')
       .alignItems(HorizontalAlign.Start)
       .padding(14)
-      .backgroundColor('#14FFFFFF')
+      .backgroundColor($r('app.color.echo_card_background'))
       .borderRadius(16)
     }
     .width('100%')
@@ -1430,17 +1458,17 @@ export struct EchoReviewPage {
                   .borderRadius(10)
                   .objectFit(ImageFit.Cover)
               } else {
-                Column().width('100%').aspectRatio(1).borderRadius(10).backgroundColor('#22FFFFFF')
+                Column().width('100%').aspectRatio(1).borderRadius(10).backgroundColor($r('app.color.echo_placeholder_background'))
               }
               Text(item.name)
                 .fontSize(12)
-                .fontColor('#FFFFFF')
+                .fontColor($r('app.color.echo_text_primary'))
                 .maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
                 .width('100%')
               Text(item.count + ' 次')
                 .fontSize(11)
-                .fontColor('#88FFFFFF')
+                .fontColor($r('app.color.echo_text_faint'))
                 .width('100%')
             }
             .layoutWeight(1)
@@ -1459,7 +1487,7 @@ export struct EchoReviewPage {
       .width('100%')
       .alignItems(HorizontalAlign.Start)
       .padding(14)
-      .backgroundColor('#14FFFFFF')
+      .backgroundColor($r('app.color.echo_card_background'))
       .borderRadius(16)
     }
     .width('100%')
@@ -1479,7 +1507,7 @@ export struct EchoReviewPage {
       // ★ 用户 2026-10-13：「听歌时段 / 听歌日历 怎么还在卡片内部」⇒ 这两个小标题也放到**卡外**
       Text('听歌时段')
         .fontSize(13)
-        .fontColor('#99FFFFFF')
+        .fontColor($r('app.color.echo_text_tertiary'))
         .width('100%')
         .textAlign(TextAlign.Start)
       Column({ space: 10 }) {
@@ -1490,7 +1518,8 @@ export struct EchoReviewPage {
               .width('100%')
               .height(this.barHeightVp(count))
               .borderRadius(3)
-              .backgroundColor(hour === this.peakHour() ? '#FF3B6B' : '#66FFFFFF')
+              .backgroundColor(hour === this.peakHour() ? $r('app.color.echo_accent') :
+                $r('app.color.echo_bar_rest'))
           }
           .layoutWeight(1)
           .height(90)
@@ -1502,25 +1531,25 @@ export struct EchoReviewPage {
       .alignItems(VerticalAlign.Bottom)
 
       Row() {
-        Text('0 点').fontSize(11).fontColor('#88FFFFFF')
+        Text('0 点').fontSize(11).fontColor($r('app.color.echo_text_faint'))
         Blank()
-        Text('12 点').fontSize(11).fontColor('#88FFFFFF')
+        Text('12 点').fontSize(11).fontColor($r('app.color.echo_text_faint'))
         Blank()
-        Text('23 点').fontSize(11).fontColor('#88FFFFFF')
+        Text('23 点').fontSize(11).fontColor($r('app.color.echo_text_faint'))
       }
       .width('100%')
       }
       .width('100%')
       .alignItems(HorizontalAlign.Start)
       .padding(14)
-      .backgroundColor('#14FFFFFF')
+      .backgroundColor($r('app.color.echo_card_background'))
       .borderRadius(16)
 
       // ★ 用户 2026-10-13：「官方那里听歌时段和听歌日历是**两张卡片**」⇒ 第二张卡；
       //   小标题「听歌日历」同样放在**卡外**
       Text('听歌日历')
         .fontSize(13)
-        .fontColor('#99FFFFFF')
+        .fontColor($r('app.color.echo_text_tertiary'))
         .width('100%')
         .textAlign(TextAlign.Start)
       Column({ space: 10 }) {
@@ -1547,18 +1576,18 @@ export struct EchoReviewPage {
       // ★ 官方是**三行**字（用户 2026-10-12：「下面是三行字」）
       Text('31 天里有 ' + this.stats.listenDays + ' 天在听歌')
         .fontSize(12)
-        .fontColor('#CCFFFFFF')
+        .fontColor($r('app.color.echo_text_secondary'))
         .width('100%')
         .textAlign(TextAlign.Start)
       Text('最长连续 ' + this.stats.longestStreak + ' 天没断过')
         .fontSize(12)
-        .fontColor('#99FFFFFF')
+        .fontColor($r('app.color.echo_text_tertiary'))
         .width('100%')
         .textAlign(TextAlign.Start)
       Text(this.stats.bestDayCount > 0 ?
         (this.monthLabel.replace(' 月', '') + ' 月 ' + this.stats.bestDay + ' 日听得最多 —— ' + this.stats.bestDayCount + ' 次') : '还没有哪一天听得特别多')
         .fontSize(12)
-        .fontColor('#CCFFFFFF')
+        .fontColor($r('app.color.echo_text_secondary'))
         .width('100%')
         .textAlign(TextAlign.Start)
       // ★ 用户 2026-10-13：「文字放卡片外」——官方区块标题是**卡片外的纯文字**，卡片只包数据
@@ -1566,7 +1595,7 @@ export struct EchoReviewPage {
       .width('100%')
       .alignItems(HorizontalAlign.Start)
       .padding(14)
-      .backgroundColor('#14FFFFFF')
+      .backgroundColor($r('app.color.echo_card_background'))
       .borderRadius(16)
     }
     .width('100%')
@@ -1589,12 +1618,12 @@ export struct EchoReviewPage {
           Progress({ value: this.stats.completeRate, total: 100, type: ProgressType.Ring })
             .width(78)
             .height(78)
-            .color('#FF3B6B')
+            .color($r('app.color.echo_accent'))
             .style({ strokeWidth: 8 })
           Text(this.stats.completeRate + '%')
             .fontSize(18)
             .fontWeight(FontWeight.Bold)
-            .fontColor('#FFFFFF')
+            .fontColor($r('app.color.echo_text_primary'))
         }
         .width(78)
         .height(78)
@@ -1602,19 +1631,19 @@ export struct EchoReviewPage {
         Column({ space: 4 }) {
           Text('的歌被听到了最后')
             .fontSize(14)
-            .fontColor('#FFFFFF')
+            .fontColor($r('app.color.echo_text_primary'))
             .width('100%')
             .textAlign(TextAlign.Start)
           // ★★ 用户 2026-10-14：「（口径：本月听过的歌里播过 ≥2 次的占比）这段文字留着干嘛」⇒ 口径说明整行删掉，
           //   改成官方那种**两行明细** + 卡片底部一行「平均每个听歌日 X 分钟」（官方版式）。
           Text('重复播放 ' + this.stats.completeCount + ' 首')
             .fontSize(12)
-            .fontColor('#99FFFFFF')
+            .fontColor($r('app.color.echo_text_tertiary'))
             .width('100%')
             .textAlign(TextAlign.Start)
           Text('只听一次 ' + this.stats.halfCount + ' 首')
             .fontSize(12)
-            .fontColor('#99FFFFFF')
+            .fontColor($r('app.color.echo_text_tertiary'))
             .width('100%')
             .textAlign(TextAlign.Start)
         }
@@ -1625,7 +1654,7 @@ export struct EchoReviewPage {
 
       Text('平均每个听歌日 ' + this.stats.perDayMinutes + ' 分钟')
         .fontSize(12)
-        .fontColor('#99FFFFFF')
+        .fontColor($r('app.color.echo_text_tertiary'))
         .width('100%')
         .textAlign(TextAlign.Start)
       // ★ 用户 2026-10-13：「文字放卡片外」——官方区块标题是**卡片外的纯文字**，卡片只包数据
@@ -1633,7 +1662,7 @@ export struct EchoReviewPage {
       .width('100%')
       .alignItems(HorizontalAlign.Start)
       .padding(14)
-      .backgroundColor('#14FFFFFF')
+      .backgroundColor($r('app.color.echo_card_background'))
       .borderRadius(16)
     }
     .width('100%')
@@ -1655,10 +1684,10 @@ export struct EchoReviewPage {
         Text(String(this.stats.newSongCount))
           .fontSize(24)
           .fontWeight(FontWeight.Bold)
-          .fontColor('#FF3B6B')
+          .fontColor($r('app.color.echo_accent'))
         Text('/ ' + this.stats.newSongTotal + ' 首')
           .fontSize(14)
-          .fontColor('#99FFFFFF')
+          .fontColor($r('app.color.echo_text_tertiary'))
           .margin({ bottom: 3 })
       }
       .width('100%')
@@ -1670,15 +1699,15 @@ export struct EchoReviewPage {
       })
         .width('100%')
         .height(6)
-        .color('#FF3B6B')
-        .backgroundColor('#33FFFFFF')
+        .color($r('app.color.echo_accent'))
+        .backgroundColor($r('app.color.echo_track_background'))
 
       Text(this.stats.newSongTotal > 0 ?
         ('其中 ' + this.stats.newSongCount + ' 首是这个月才第一次听的 · 占 ' +
         Math.round(this.stats.newSongCount * 100 / this.stats.newSongTotal) + '%')
         : '这个月还没有听得上的歌')
         .fontSize(12)
-        .fontColor('#CCFFFFFF')
+        .fontColor($r('app.color.echo_text_secondary'))
         .width('100%')
         .textAlign(TextAlign.Start)
       // ★ 用户 2026-10-13：「文字放卡片外」——官方区块标题是**卡片外的纯文字**，卡片只包数据
@@ -1686,7 +1715,7 @@ export struct EchoReviewPage {
       .width('100%')
       .alignItems(HorizontalAlign.Start)
       .padding(14)
-      .backgroundColor('#14FFFFFF')
+      .backgroundColor($r('app.color.echo_card_background'))
       .borderRadius(16)
     }
     .width('100%')
@@ -1702,7 +1731,7 @@ export struct EchoReviewPage {
   private EmptyHint() {
     Text('这个月还没有听歌记录，去播放几首吧')
       .fontSize(13)
-      .fontColor('#99FFFFFF')
+      .fontColor($r('app.color.echo_text_tertiary'))
       .width('100%')
       .textAlign(TextAlign.Start)
   }
@@ -1734,17 +1763,24 @@ export struct EchoReviewPage {
     return best;
   }
 
-  /** 日历格颜色：0 次最深，次数越多越亮。 */
-  private dayColor(count: number): string {
+  /**
+   * 日历格颜色：0 次最深，次数越多越亮（热力图）。
+   *
+   * ⚠️ 返回值从 `string` 改成 `ResourceColor`：这几个色必须**跟主题**（夜间原来是
+   *   白/粉几档透明色，日间压在浅底上等于看不见），所以不能再返回写死的 hex 字符串。
+   * @param count 当天播放次数。
+   * @returns 该格底色（成对 token：夜间值与改动前逐字相同）。
+   */
+  private dayColor(count: number): ResourceColor {
     if (count <= 0) {
-      return '#14FFFFFF';
+      return $r('app.color.echo_card_background');
     }
     if (count === 1) {
-      return '#4DFF3B6B';
+      return $r('app.color.echo_heat_low');
     }
     if (count === 2) {
-      return '#99FF3B6B';
+      return $r('app.color.echo_heat_mid');
     }
-    return '#FFFF3B6B';
+    return $r('app.color.echo_heat_high');
   }
 }

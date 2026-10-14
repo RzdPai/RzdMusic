@@ -51,12 +51,14 @@ import { HeroBannerSection } from './HeroBannerSection';
 import { HomePlazaSection } from './HomePlazaSection';
 
 /**
- * 首页滚动位置「记录 + 恢复」补位的最大帧数。
+ * 首页滚动位置「记录 + 恢复」补位的最大帧数（每帧 16ms ⇒ 约 **480ms** 的补位窗口）。
  *
- * 内容没量完高时 `scrollTo` 会被夹在可滚范围内 —— 补不到目标就下一帧再补，
- * 补到 / 超帧数 / 用户自己滚过就收手。
+ * 为什么不是"补一次就完"：`Scroll` 刚重建时**内容还在异步长高**（首页顶部 5 张大卡要等
+ * `dailySongsReady`、封面要等网络补三轮），而 `scrollTo` 的目标会被当前可滚范围夹住 ——
+ * 夹住时逐帧再补一次，等内容够高了自然就到位。
+ * ⚠️ 窗口不能太短：160ms（第 2 版的 10 帧）在真机上常常还没等到内容量完就放弃了。
  */
-const HOME_SCROLL_RESTORE_MAX_FRAMES: number = 10;
+const HOME_SCROLL_RESTORE_MAX_FRAMES: number = 30;
 /** 判定"补到位"的容差（vp）：小于它就认为已经在目标位置了。 */
 const HOME_SCROLL_RESTORE_EPS_VP: number = 1;
 
@@ -108,45 +110,59 @@ export struct RecommendPage {
   /**
    * 首页垂直滚动的**当前位置**（vp）。
    *
-   * 「位置停留」的记录面：由 {@link onHomeScrollDidScroll} 每帧记录
-   * （`Scroller.currentOffset().yOffset`），容器被重建时按它补回去。
+   * 「位置停留」的记录面：由 {@link onHomeScrollDidScroll} 在**用户真的拖动/惯性滚动**时
+   * 写入（`Scroller.currentOffset().yOffset`，绝对位置 —— 回调入参是本帧增量，不能直接记）。
    *
-   * ⚠️ 为什么需要它：首页**唯一**的垂直滚动容器挂在
-   * `if (this.recommendViewModel.homeLoaded)` 这个条件分支上，而
-   * `RecommendViewModel.load()` 第 235 行会把 `homeLoaded` 置回 **false**
-   * （切平台、从设置页切回首页的可见性兜底复查都会走）⇒ **分支反转 = 容器销毁重建
-   * = 偏移归 0**。`Scroll` 实例自己不会重置偏移，是这个重建把它吃掉的。
-   * 全仓**没有任何** `scrollTo({y:0})` 之类的"主动重置"，唯一的归零入口是壳层
-   * 点当前页签时的 `@Monitor('scrollTopCommand')`（那条**必须先清零本字段**）。
+   * ⚠️ 全仓**没有任何** `scrollTo({y:0})` 之类的"主动重置"；记录被清掉的时机只有两处，
+   *   都在 {@link resetHomeScrollRecord} 的调用点上：
+   *   ① 壳层点**当前**页签要求回顶部（`@Monitor('scrollTopCommand')`）；
+   *   ② 首页来源平台变了（内容整体换掉，同一段偏移指向另一批数据，停留没有意义）。
    */
   private homeScrollOffsetVp: number = 0;
-  /** 本次挂载是否还需要把偏移补回去（`onAttach` 置位，补到位/放弃后清掉）。 */
+  /**
+   * 补位链是否在跑（`true` 期间每 16ms 复核一次「实测 vs 目标」）。
+   *
+   * ★★★ **这里是第 2 版失败的真正根因，别再改回去**：
+   *    第 2 版（§58）另有一个 `homeUserScrolled` 闩 —— 用户一拖动就置 `true`，
+   *    而它**只由 `resetHomeScrollRecord()` 清**（只有"点当前页签回顶部"和"换平台"两条路会调）。
+   *    可是**唯一能让 `homeScrollOffsetVp` 变成非 0 的动作，就是用户拖动**（记录只在
+   *    `ScrollState.Scroll/Fling` 时写）⇒ 「记录非 0」与「用户滚过」是同一件事的两个说法
+   *    ⇒ `startHomeScrollRestore()` 每次都在第二道闸就 `return`（日志里是满屏
+   *    `restore skipped reason=… cause=user-scrolled`）⇒ **补位链一次都没真正跑过**。
+   *    这就是"加了逻辑还是不能停"的答案，也是本版把那个闩**整个删掉**的原因。
+   *
+   * 现在的口径：`onDidScroll` 只在**本次补位窗口内**收到 `Scroll`/`Fling` 时取消
+   * **本次**补位（用户的停位就是他的意愿）；窗口之外用户怎么滚都不影响下一次补位。
+   */
   private homeScrollRestorePending: boolean = false;
-  /** 本次挂载已经重试补位的帧数（上限 {@link HOME_SCROLL_RESTORE_MAX_FRAMES}）。 */
+  /** 本次补位链已经跑过的帧数（上限 {@link HOME_SCROLL_RESTORE_MAX_FRAMES}）。 */
   private homeScrollRestoreTries: number = 0;
   /**
-   * 本帧 `scrollTo` 之前量到的偏移；-1 = 还没补过。用于区分"没补动"与"用户滚了"。
+   * 本次补位链的**目标偏移快照**（vp）。
    *
-   * ⚠️ 它**只用来识别"补位前用户就滚了"**（补位过程中偏移反而离开目标 ⇒ 用户接管），
-   *    不能拿它当"补位已完成"的判据（见 {@link restoreHomeScrollOnFrame} 顶部那段注释：
-   *    失败的那一版正是错在这里 —— 第一帧读到的 0 被写进这里，第二帧就被当成"已到位"收工）。
+   * 为什么快照而不是每帧读 `homeScrollOffsetVp`：补位期间用户可能又滚了一下（那会被判成
+   * "接管"并取消），目标跟着记录漂移会让"到位没有"的判据自相矛盾。
    */
-  private homeScrollRestoredToVp: number = -1;
+  private homeScrollRestoreTargetVp: number = 0;
   /**
-   * 本次挂载**用户有没有自己滚过**（用户一滚就置 true ⇒ 位置停留整体放弃）。
+   * 上一帧量到的偏移；-1 = 本链还没补过。**只用于日志**（打印每帧的
+   * `measured=` 序列，无设备时靠它判断两件事：`initialOffset` 有没有生效、
+   * 目标是不是被可滚范围夹住）。
    *
-   * 为什么需要它：把 `onDidScroll` 当"记录触发源"是上一版的错；但"用户滚过没有"这件事
-   * 只有 `onDidScroll` 知道，而它在**不滚动时一次都不来** ⇒
-   * **不能反着用它当"恢复触发源"**，只能用它做**否决位**。
+   * ⚠️ 它**不再参与任何判定**。第 2 版拿它当"用户滚过没有"的判据是个错：
+   *    `scrollTo` 自己造成的偏移变化（尤其被可滚范围夹住时逐帧变一点）会被误判成
+   *    用户滚动 ⇒ 链条第二帧就自己掐断。现在"用户接管"只看 `onDidScroll` 的
+   *    `scrollState`（`Scroll`=手指拖动、`Fling`=惯性；无动画 `scrollTo` 官方口径是 `Idle`）。
    */
-  private homeUserScrolled: boolean = false;
+  private homeScrollRestoreLastMeasuredVp: number = -1;
   /**
    * 本帧的"记录值"是不是**位置停留自己补出来的**。
    *
-   * 后台补位（`onAttach` 的帧循环 / `scrollTo` 无动画）会以 `ScrollState.Idle` 回调
-   * `onDidScroll`（本机 SDK `list.d.ts:77-78`：`Idle` = 「滚动状态回到空闲时，
-   * 以及控制器**无动画**方法控制滚动时」触发）—— 也就是说 `Idle` **不能**直接当成
-   * "用户没滚"。这里自己置位、回调里消费，把"我补的"和"用户滚的"分开。
+   * 后台补位（`scrollTo` 无动画）会以 `ScrollState.Idle` 回调 `onDidScroll`（本机 SDK
+   * `list.d.ts` 的 `ScrollState.Idle` 原文：「Triggered when the scroll state returns to
+   * idle, and when the controller's **non-animated** methods are used to control the
+   * scroll」）—— 也就是说 `Idle` **不能**直接当成"用户没滚"。这里自己置位、回调里消费，
+   * 把"我补的"和"用户滚的"分开。
    */
   private homeScrollProgrammaticMove: boolean = false;
 
@@ -217,15 +233,15 @@ export struct RecommendPage {
   /**
    * 位置记录清零（点当前页签回顶部 / 换首页平台时用；恢复相关状态一并收干净）。
    *
-   * ⚠️ 连带清掉 {@link homeUserScrolled} 与补位标志：调用之后这次"位置停留"应当
-   * **彻底作废**，不能留下一个"pending 但目标为 0"的半截状态。
+   * ⚠️ 调完之后这次"位置停留"应当**彻底作废**：不能留下一个"pending 但目标为 0"的半截状态
+   * （否则补位链会拿着一帧前的旧目标继续 `scrollTo`）。
    */
   private resetHomeScrollRecord(): void {
     this.homeScrollOffsetVp = 0;
     this.homeScrollRestorePending = false;
     this.homeScrollRestoreTries = 0;
-    this.homeScrollRestoredToVp = -1;
-    this.homeUserScrolled = false;
+    this.homeScrollRestoreTargetVp = 0;
+    this.homeScrollRestoreLastMeasuredVp = -1;
     this.homeScrollProgrammaticMove = false;
   }
 
@@ -238,23 +254,33 @@ export struct RecommendPage {
    *      "列表滑动时触发"；`scrollEdge` / 不带动画的 `scrollTo`/`scrollToIndex` 都不触发）
    *      ⇒ 容器刚重建时偏移 0、用户手指没动 ⇒ **回调一次都不来 ⇒ 位置永远补不回去**。
    *   ② 第二版：`initialOffset(记录值)` 作首选 + `onAttach` 帧循环兜底 —— 真机**仍无效**。
-   *      根因（官方 `initialOffset` 原文）：「设置初始滚动偏移量。**只在首次布局时生效**，
-   *      后续动态修改该属性值不生效」。而首页的"重建"是一条**异步链**：
-   *      `load()` 把 `homeLoaded=false` → 容器重建 → **首次布局时列表数据还没回来**
-   *      （`dailySongsReady` 仍为 false，`HeroBannerSection` 画的是 5 张占位卡）⇒
-   *      内容高度远小于最终高度 ⇒ `initialOffset` 的目标值**当场被可滚范围夹住**；
-   *      等数据回来内容变高，这个属性**已经用掉了它唯一的那次机会**，不会重放。
-   *      ⇒ 也就是说：**"重建是不是一次新的首次布局"这个问题问错了方向** ——
-   *      就算它是（`homeLoaded` 是 `if/else` 的条件、两支的根节点不同 ⇒ 分支反转
-   *      必然销毁重建容器），那一次"首次布局"也发生在**内容还矮**的时候。
+   *      ★★★ **真根因（本轮查出来的，别再猜是"首次布局没触发"）**：
+   *      第二版在 {@link startHomeScrollRestore} 里加了一道闸
+   *      **「本次挂载用户已经自己滚过 ⇒ 直接跳过」**，而那个标志
+   *      （`homeUserScrolled`）**只有 `resetHomeScrollRecord()` 会清**，
+   *      却被**唯一能让记录值变成非 0 的动作**（用户在 `onDidScroll` 里拖动/惯性滚动）置上
+   *      ⇒ 「记录非 0」⇔「用户滚过」是同一件事 ⇒ **补位链一次都没跑起来过**
+   *      （真机日志里是满屏 `restore skipped … cause=user-scrolled`，一行 `tick` 都没有）。
+   *      也就是说：这一版失败跟 `initialOffset` 的语义、跟内容长高**都无关** ——
+   *      它在"要不要补"这一步就被自己否决了。**本版已把这个闩整个删掉。**
+   *      ⚠️ 另外它那句判据"补过一次后偏移又变了 ⇒ 用户滚的"也是错的：`scrollTo` 自己的
+   *      效果（尤其被可滚范围夹住时逐帧只挪一点）会被误读成用户接管 ⇒ 链条第二帧自杀。
+   *      现在"用户接管"只认 `onDidScroll` 的 `scrollState`（`Scroll`/`Fling`）。
+   *   ③ 第二版还有一个**次要**的机制缺陷（本版仍在兜它）：首页的"重建"是一条**异步链**——
+   *      `load()` 把 `homeLoaded=false` → 容器重建 → 首次布局时顶部大卡还是占位卡
+   *      （`dailySongsReady` 为 false）、封面还在补 ⇒ 内容高度小于最终高度
+   *      ⇒ `initialOffset` 的目标值当场被可滚范围夹住，而它**只有这一次机会**。
+   *      （实测口径：容器挂载后第一行 `tick t=0 measured=… target=…`，`measured` 明显偏小即为此。）
    *
-   * ⇒ **本版（第 3 版）不再把任何一步押在"首次布局"上**：
-   *   恢复链由三个**可观测事件**驱动，每个事件都自己复核"实测偏移 vs 目标"，
+   * ⇒ **本版（第 3 版）不再把任何一步押在"首次布局"上，也不再有任何"用户滚过就永久放弃"的闩**：
+   *   恢复链由四个**可观测事件**驱动，每个事件都自己复核"实测偏移 vs 目标"，
    *   且都能在内容变高之后**再来一次**：
    *     · `onAttach`（容器刚重建）→ {@link startHomeScrollRestore}；
    *     · 内容量完（顶部留白容器 `onAreaChange`）→ {@link notifyHomeContentLaidOut}；
-   *     · 首页页签重新可见（`onVisibleAreaChange`）→ {@link onHomeVisibleChanged}。
-   *   三者都只是"发起"，真正的补位与重试仍在 {@link restoreHomeScrollOnFrame} 里，
+   *     · 首页页签重新可见（`onVisibleAreaChange`）→ {@link onHomeVisibleChanged}；
+   *     · 首页数据/封面就绪（`@Monitor('recommendViewModel.homeLoaded')` /
+   *       `@Monitor('recommendViewModel.dailySongsReady')`）→ 见两个 `@Monitor` 方法。
+   *   四者都只是"发起"，真正的补位与重试仍在 {@link restoreHomeScrollOnFrame} 里，
    *   `initialOffset` 保留为**顺手的第一笔**（不再是唯一指望）。
    */
   private onHomeScrollAttach(): void {
@@ -263,29 +289,40 @@ export struct RecommendPage {
     this.chipRowTopInContentVp = 0;
     this.chipStickyActive = false;
     this.homeContentLaidOutNotified = false;
+    // 容器重建 = 上一轮的补位链已经失去意义（它对着的是那个已经被销毁的 `Scroll`）
+    this.homeScrollRestorePending = false;
+    this.homeScrollRestoreTries = 0;
+    this.homeScrollRestoreLastMeasuredVp = -1;
+    // ★ 诊断三连（无设备时唯一的证据）：容器是不是**真的重建过**、这一刻记录值/实测值各是多少。
+    //   `measured` 与 `target` 相等 ⇒ `initialOffset` 生效了；`measured` 明显小于 `target`
+    //   ⇒ 目标被"内容还没长高"的可滚范围夹住了（补位链接下来会逐帧把它顶上去）。
+    Logger.info('RzdHomeScroll',
+      `container attach target=${this.homeScrollOffsetVp} measured=${this.readHomeScrollOffset()}`
+        + ` homeLoaded=${this.recommendViewModel.homeLoaded}`
+        + ` dailySongsReady=${this.recommendViewModel.dailySongsReady}`);
     this.startHomeScrollRestore('attach');
   }
 
   /**
    * 发起（或沿用）一次"把偏移补回记录值"的补位链。
    *
-   * 「什么时候**不**该恢复」——三条，全部在这里拦掉，写清楚免得后面有人又加回一条错的：
+   * 「什么时候**不**该恢复」——全部闸门就这两条，写清楚免得后面有人又加回一条错的：
    *   ① 没有记录值（`homeScrollOffsetVp <= 0`）：本来就在顶，没什么可恢复；
-   *   ② 本次访问用户**已经自己滚过**（`homeUserScrolled`）：用户停在哪就是他的意愿，
-   *      再拉回去 = 抢滚动（顶栏/底栏"点当前页签回顶部"那条会走
-   *      {@link resetHomeScrollRecord}，把这个标志一起清掉，所以不会互相打架）；
-   *   ③ 已经有补位链在跑：沿用，不叠加（重复发起会让帧计数互相覆盖）。
+   *   ② 已经有补位链在跑：沿用，不叠加（重复发起会让帧计数互相覆盖）。
    *
-   * @param reason 触发原因，只用于日志（attach / content-laid-out / tab-visible）。
+   * ★★ **这里曾经还有第三条"本次访问用户已经自己滚过 ⇒ 跳过"，它已被删除**：
+   *   那个闩（`homeUserScrolled`）只由 `resetHomeScrollRecord()` 清，而它恰恰被
+   *   **唯一能让记录值非 0 的动作**（用户拖动）置上 ⇒ 条件恒真 ⇒ 补位链永远跑不起来
+   *   （真机上表现为"加了逻辑还是不能停"）。详见 {@link homeScrollRestorePending} 的注释。
+   *   现在的替代口径：补位链跑起来之后，`onDidScroll` 在**本次窗口内**收到
+   *   `Scroll`/`Fling` 就取消**本次**（见 {@link onHomeScrollDidScroll}）——
+   *   用户的停位仍然是他的意愿，但不会连累下一次补位。
+   *
+   * @param reason 触发原因，只用于日志
+   *   （attach / content-laid-out / tab-visible / home-loaded / covers-ready）。
    */
   private startHomeScrollRestore(reason: string): void {
     if (this.homeScrollOffsetVp <= 0) {
-      return;
-    }
-    if (this.homeUserScrolled) {
-      Logger.info('RzdHomeScroll',
-        `restore skipped reason=${reason} cause=user-scrolled offset=${this.readHomeScrollOffset()}`
-          + ` target=${this.homeScrollOffsetVp}`);
       return;
     }
     if (this.homeScrollRestorePending) {
@@ -293,9 +330,11 @@ export struct RecommendPage {
     }
     this.homeScrollRestorePending = true;
     this.homeScrollRestoreTries = 0;
-    this.homeScrollRestoredToVp = -1;
+    this.homeScrollRestoreTargetVp = this.homeScrollOffsetVp;
+    this.homeScrollRestoreLastMeasuredVp = -1;
     Logger.info('RzdHomeScroll',
-      `attach target=${this.homeScrollOffsetVp} reason=${reason} from=${this.readHomeScrollOffset()}`);
+      `restore start target=${this.homeScrollRestoreTargetVp} reason=${reason}`
+        + ` measured=${this.readHomeScrollOffset()}`);
     this.restoreHomeScrollNextFrame();
   }
 
@@ -331,60 +370,62 @@ export struct RecommendPage {
   /**
    * 帧循环里的一次补位尝试。
    *
-   * ★★ **这里就是第 2 版失败的第二个原因，别再改回去**：
-   *    第 2 版的"到位"判据是 `Math.abs(offset - target) < EPS`，而**目标为 0 时
-   *    第一帧读到的 0 会被判成"已经在目标位置"**，于是打一行 `restored` 就收工
-   *    —— 位置永远没被补过。（另一半原因见 {@link onHomeScrollAttach}：内容是异步长高的。）
-   *    本版判据改成**目标恒为记录值**（绝不把 0 当目标）：
-   *      · 实测 ≈ 记录值 ⇒ 真的到位，收工；
-   *      · 补过一次之后偏移**又变了** 且 现在**不等于**记录值 ⇒ 用户接管，放手；
-   *      · 超帧数 ⇒ 放弃（内容比记录时矮 / 该位置已不可达）。
-   *    顺序不能颠倒（先读实测、再判定、最后才动）。
+   * 每帧的顺序固定为：**先读实测 → 先落一行日志 → 再判定 → 最后才动**。
+   *   · 实测 ≈ 目标 ⇒ 真的到位，收工（`restored`）；
+   *   · 超帧数 ⇒ 放弃（内容比记录时矮 / 该位置已不可达）（`gave up`）；
+   *   · 其余 ⇒ 记下本帧实测，`scrollTo` 到目标，排下一帧。
+   *
+   * ★★ **"用户接管"不再在这里判**（第 2 版的错就在这）：`scrollTo` 自己造成的偏移变化
+   *    （尤其被可滚范围夹住时逐帧只挪一点点）会被旧判据误读成"用户滚了" ⇒ 链条自杀。
+   *    现在只有 `onDidScroll` 的 `Scroll`/`Fling` 才算用户接管，且它会直接
+   *    `homeScrollRestorePending = false`（见 {@link onHomeScrollDidScroll}）。
+   *
+   * ★ 每帧都打一行 `tick t=… measured=… target=…`：这就是"`initialOffset` 到底有没有生效"
+   *    的**证据行**——第 0 帧（`t=0`）的 `measured` 已经 ≈ `target` ⇒ 生效；
+   *    `measured` 明显偏小且逐帧只长一点点 ⇒ 目标被可滚范围夹住（内容还在长）。
    */
   private restoreHomeScrollOnFrame(): void {
     if (!this.homeScrollRestorePending) {
       return;
     }
-    const target: number = this.homeScrollOffsetVp;
-    if (target <= 0) {
-      // 记录被清零了（点当前页签回顶部）：别再把用户拉回旧位置
+    const target: number = this.homeScrollRestoreTargetVp;
+    if (target <= 0 || this.homeScrollOffsetVp <= 0) {
+      // 记录被清零了（点当前页签回顶部 / 换平台）：别再把用户拉回旧位置
       this.homeScrollRestorePending = false;
-      Logger.info('RzdHomeScroll', 'restore cancelled target cleared');
+      this.homeScrollRestoreTries = 0;
+      this.homeScrollRestoreLastMeasuredVp = -1;
+      Logger.info('RzdHomeScroll', `restore cancelled target cleared target=${this.homeScrollOffsetVp}`);
       return;
     }
-    const offset: number = this.readHomeScrollOffset();
+    const measured: number = this.readHomeScrollOffset();
     // ★ 补位帧里顺手把吸顶也复算一次：重建这一路不触发 `onDidScroll`，
     //   而恢复后的偏移恰恰决定"分类 Tab 是不是已经滚过去了"。
-    this.updateChipSticky(offset);
-    if (Math.abs(offset - target) < HOME_SCROLL_RESTORE_EPS_VP) {
+    this.updateChipSticky(measured);
+    Logger.info('RzdHomeScroll',
+      `tick t=${this.homeScrollRestoreTries} measured=${measured} target=${target}`
+        + ` prev=${this.homeScrollRestoreLastMeasuredVp}`);
+    if (Math.abs(measured - target) < HOME_SCROLL_RESTORE_EPS_VP) {
       this.homeScrollRestorePending = false;
-      this.homeScrollRestoredToVp = -1;
-      Logger.info('RzdHomeScroll', `restored offset=${offset} target=${target} tries=${this.homeScrollRestoreTries}`);
-      return;
-    }
-    if (this.homeScrollRestoredToVp >= 0 &&
-      Math.abs(offset - this.homeScrollRestoredToVp) >= HOME_SCROLL_RESTORE_EPS_VP) {
-      // 补过一次之后偏移**又变了** ⇒ 那是用户自己滚的：放手，别抢滚动
-      this.homeScrollRestorePending = false;
-      this.homeScrollRestoredToVp = -1;
-      Logger.info('RzdHomeScroll', `restore cancelled by user scroll offset=${offset} target=${target}`);
+      this.homeScrollRestoreLastMeasuredVp = -1;
+      Logger.info('RzdHomeScroll',
+        `restored measured=${measured} target=${target} ticks=${this.homeScrollRestoreTries}`);
       return;
     }
     if (this.homeScrollRestoreTries >= HOME_SCROLL_RESTORE_MAX_FRAMES) {
       // 补了这么多帧还不到位（内容比原来矮、或偏移已被夹到可滚范围）：放手
       this.homeScrollRestorePending = false;
-      this.homeScrollRestoredToVp = -1;
-      Logger.info('RzdHomeScroll', `restore gave up offset=${offset} target=${target} tries=${this.homeScrollRestoreTries}`);
+      this.homeScrollRestoreLastMeasuredVp = -1;
+      Logger.info('RzdHomeScroll',
+        `restore gave up measured=${measured} target=${target} ticks=${this.homeScrollRestoreTries}`);
       return;
     }
     this.homeScrollRestoreTries = this.homeScrollRestoreTries + 1;
-    this.homeScrollRestoredToVp = offset;
+    this.homeScrollRestoreLastMeasuredVp = measured;
     // ★ 标一句"这一次滚动是我自己发的"：**无动画 `scrollTo` 会以 `ScrollState.Idle`
-    //   回调 `onDidScroll`**（本机 SDK `list.d.ts:77-78`：`Idle` =「滚动状态回到空闲时，
+    //   回调 `onDidScroll`**（本机 SDK `list.d.ts`：`Idle` =「滚动状态回到空闲时，
     //   以及控制器**无动画**方法控制滚动时」触发）⇒ 不标就会被当成"用户滚过"而把补位链自己掐掉。
     this.homeScrollProgrammaticMove = true;
     this.pageScroller.scrollTo({ xOffset: 0, yOffset: target, animation: false });
-    Logger.info('RzdHomeScroll', `restore target=${target} from=${offset} try=${this.homeScrollRestoreTries}`);
     this.restoreHomeScrollNextFrame();
   }
 
@@ -399,7 +440,7 @@ export struct RecommendPage {
   }
 
   /**
-   * 首页滚动容器每帧的**偏移记录** + 「分类 Tab 吸顶」判定。
+   * 首页滚动容器每帧的**偏移记录** + 「分类 Tab 吸顶」判定 + 「用户接管」判定。
    *
    * ⚠️ 为什么不用 `onScroll`：官方已把它标为 `@deprecated since 12`，
    *   `@useinstead ScrollableCommonMethod#onDidScroll`。
@@ -409,9 +450,12 @@ export struct RecommendPage {
    *   `ScrollOnScrollCallback = (xOffset, yOffset, scrollState)` ⇒ d.ts 里就是"本帧偏移量"），
    *   所以要**绝对位置**必须回调 `currentOffset()` —— 这一点别改回去。
    *
-   * ★★ **它不是"位置停留"的触发源，只是"用户滚过没有"的唯一证据来源**：
-   *   不滚动就一次都不回调（第一版把补位写在它里面 ⇒ 永远补不回去）；
-   *   反过来它极可靠地告诉我们"用户动过手" ⇒ 用来**否决**补位。
+   * ★★ **它不是"位置停留"的触发源，只是两件事的证据来源**：
+   *   ① 用户滚到哪了（记录面）：`Scroll`=手指拖动、`Fling`=惯性，只有这两种是用户意愿；
+   *   ② 用户有没有在**补位窗口内**接管：是 ⇒ 立刻取消**本次**补位（别跟用户抢滚动），
+   *      但**不再**留下"滚过就永久放弃"的闩（那个闩是第 2 版把整个功能变成死代码的根因，
+   *      见 {@link homeScrollRestorePending}）。
+   *   它**不能**当"恢复触发源"——不滚动就一次都不回调（第一版把补位写在它里面 ⇒ 永远补不回去）。
    *
    * @param _frameDelta 本帧滚动增量（不参与计算，留着按官方签名接）。
    * @param scrollState 本帧滚动状态；`Scroll`=用户拖动、`Fling`=惯性、
@@ -421,17 +465,20 @@ export struct RecommendPage {
   private onHomeScrollDidScroll(_frameDelta: number, scrollState: ScrollState): void {
     const offset: number = this.readHomeScrollOffset();
     if (scrollState === ScrollState.Scroll || scrollState === ScrollState.Fling) {
-      // ① 用户真的在滚：记下位置，并且**从此不再补位**（用户的停位就是他的意愿）
-      this.homeUserScrolled = true;
+      // ① 用户真的在滚：记下位置（用户的停位就是他的意愿）。
+      //    ★ 这里**只记录**，不再设任何"滚过就永久放弃"的闩 —— 那是第 2 版把整个
+      //      位置停留变成死代码的原因（见 homeScrollRestorePending 的注释）。
       if (Math.abs(offset - this.homeScrollOffsetVp) >= HOME_SCROLL_RESTORE_EPS_VP) {
         this.homeScrollOffsetVp = offset;
         Logger.info('RzdHomeScroll', `record offset=${offset}`);
       }
-      // 链条已经在跑时被用户打断：立刻收手，别等到下一帧的判据
+      // 补位链正在跑时被用户打断：立刻收手，别等到下一帧的判据
       if (this.homeScrollRestorePending) {
         this.homeScrollRestorePending = false;
-        this.homeScrollRestoredToVp = -1;
-        Logger.info('RzdHomeScroll', `restore cancelled by user scroll offset=${offset}`);
+        this.homeScrollRestoreTries = 0;
+        this.homeScrollRestoreLastMeasuredVp = -1;
+        Logger.info('RzdHomeScroll',
+          `restore cancelled by user scroll measured=${offset} target=${this.homeScrollRestoreTargetVp}`);
       }
     } else if (scrollState === ScrollState.Idle) {
       // ② `Idle` 有两种来源，必须分开（见方法头注释）：
@@ -439,8 +486,8 @@ export struct RecommendPage {
       //    回弹动画结束…）⇒ 只跟随记录，**不算用户滚动、也不启动恢复**。
       if (this.homeScrollProgrammaticMove) {
         this.homeScrollProgrammaticMove = false;
-      } else if (Math.abs(offset - this.homeScrollOffsetVp) >= HOME_SCROLL_RESTORE_EPS_VP &&
-        !this.homeScrollRestorePending && this.homeScrollOffsetVp > 0) {
+      } else if (!this.homeScrollRestorePending && this.homeScrollOffsetVp > 0 &&
+        Math.abs(offset - this.homeScrollOffsetVp) >= HOME_SCROLL_RESTORE_EPS_VP) {
         this.homeScrollOffsetVp = offset;
         Logger.info('RzdHomeScroll', `record offset=${offset} cause=idle`);
       }
@@ -539,14 +586,60 @@ export struct RecommendPage {
       return;
     }
     this.applyHomeSourceIfChanged();
-    // ★ 位置停留的第 3 个触发点：**首页页签重新可见**（切到「回响」/「我的」再切回来，
+    // ★ 位置停留的触发点之一：**首页页签重新可见**（切到「回响」/「我的」再切回来，
     //   以及从二级页返回）。
-    //   为什么用这里：壳层是 `HdsTabs`，切页签**不一定**销毁重建本页（`TabContent`
-    //   可能一直挂在树上）⇒ 容器没重建、`onAttach` 不会再来一次；而"可见了没有"
+    //   为什么用这里：壳层是 `HdsTabs`，而 `HdsTabsOptions extends TabsOptions`、
+    //   子节点就是 `TabContent` ⇒ 官方 `ts-container-tabs` 的口径适用：
+    //   「**已经显示的 Tabs 子组件 TabContent 后续隐藏时不会被销毁**」⇒ 切页签时
+    //   本页与里面的 `Scroll` **都不重建**、`onAttach` 不会再来一次；而"可见了没有"
     //   恰恰是这一条回调唯一能保证的事（`onVisibleAreaChange` 挂在页面内容根节点上，
     //   随页签切换必然翻转）。
-    //   `startHomeScrollRestore` 自带三道闸（无记录 / 用户滚过 / 已在补位）⇒ 不会重复补。
+    //   ⇒ 这就是"进该 Tab / 从二级页返回"时的**主动复核点**：位置没丢时它是一次空操作
+    //   （第 0 帧实测 ≈ 目标 ⇒ `restored`），真丢了时才真的 `scrollTo` 补回去。
+    //   `startHomeScrollRestore` 只有两道闸（无记录 / 已在补位）⇒ 不会重复补。
     this.startHomeScrollRestore('tab-visible');
+  }
+
+  /**
+   * 首页数据加载状态变化（`RecommendViewModel.load()` 把 `homeLoaded` 置 false、
+   * 数据回来后置 true）。
+   *
+   * 为什么要接这一条：`homeLoaded` 是**首页唯一滚动容器所在条件分支**的判据
+   * （`build()` 里 `if (this.recommendViewModel.homeLoaded)`）⇒ 它一翻 false，
+   * `Scroll` 就被销毁、偏移归 0；翻回 true 时是一次全新的"首次布局"。
+   *   ① 翻 false：在跑的补位链失去意义（它手里那个 `Scroller` 马上要被销毁）⇒ 收掉；
+   *   ② 翻 true：容器重建完成 ⇒ 立刻发起一次补位（真正的重试仍在帧循环里，
+   *      因为这一刻首页封面/歌曲列表可能还在异步补，内容还没长到最终高度）。
+   */
+  @Monitor('recommendViewModel.homeLoaded')
+  onHomeLoadedChanged(): void {
+    if (!this.recommendViewModel.homeLoaded) {
+      this.homeScrollRestorePending = false;
+      this.homeScrollRestoreTries = 0;
+      this.homeScrollRestoreLastMeasuredVp = -1;
+      Logger.info('RzdHomeScroll',
+        `chain dropped cause=home-loaded-false target=${this.homeScrollOffsetVp}`);
+      return;
+    }
+    this.startHomeScrollRestore('home-loaded');
+  }
+
+  /**
+   * 顶部大卡「整块出现」的时刻（`dailySongsReady`：封面全部就绪才画真卡片）。
+   *
+   * 这是**内容高度最终确定**的信号 —— 内容一长高，可滚范围变大，之前被夹住的
+   * `scrollTo` 目标才真正可达 ⇒ 在这里再复核一次（这就是"在数据重载完成回调里恢复"）。
+   *
+   * ⚠️ 已知局限（写清楚免得当成 bug）：`dailySongsReady` 只在 `load()` 的第 1 轮之后
+   *   置 true，`load()` 本身**不会**把它重置为 false ⇒ 第 2 次以后的换平台/换账号
+   *   这条 `@Monitor` 不会再触发。那几条路靠 `onAttach` + `home-loaded` + 480ms 帧循环兜住。
+   */
+  @Monitor('recommendViewModel.dailySongsReady')
+  onHomeDailySongsReadyChanged(): void {
+    if (!this.recommendViewModel.dailySongsReady) {
+      return;
+    }
+    this.startHomeScrollRestore('covers-ready');
   }
 
   /** 平台值确实变了才重载首页（多条触发路径共用这一道闸）。 */
@@ -749,12 +842,19 @@ export struct RecommendPage {
               // ★ 位置停留的**第一笔**（⚠️ 不再是唯一指望，见 onHomeScrollAttach 那段根因）：
               //   `initialOffset` 只在**首次布局**生效（官方原文：「设置初始滚动偏移量。
               //   **只在首次布局时生效**，后续动态修改该属性值不生效」）。
-              //   容器被 `homeLoaded` 反转销毁重建时确实又是一次"首次布局"，**但**
-              //   那一刻列表数据还没回来（`dailySongsReady` 仍为 false，画的是占位卡）
-              //   ⇒ 内容很矮 ⇒ 目标偏移**当场被可滚范围夹住**，而且**只有这一次机会**。
-              //   所以现在：它负责"顺手就对"的那一半，剩下那一半由
-              //   `onAttach` / 内容量完 / 页签重新可见 三条路各自补（见 restoreHomeScrollOnFrame）。
+              //   ⇒ 它在本工程里**确实触发**，但只有两类时机：
+              //     ① App 首次进首页：`homeLoaded` 首次翻 true、`Scroll` 节点第一次创建，
+              //        此刻 `homeScrollOffsetVp` 还是 0 ⇒ **属性生效但等于没做**；
+              //     ② 之后每次 `homeLoaded` 反转（`load()` 造成）重建 `Scroll`：
+              //        这时它带着记录值生效 —— 但**只有这一次机会**，而首页内容
+              //        （顶部 5 张大卡要等 `dailySongsReady`、封面要等网络补）是**异步长高**的，
+              //        内容还矮时目标当场被可滚范围夹住 ⇒ 之后再改这个属性也不会重放。
+              //   ⇒ 所以它只负责"顺手就对"的那一半；另一半由
+              //     `onAttach` / 内容量完 / 页签重新可见 / 数据与封面就绪 四条路各自补
+              //     （见 {@link restoreHomeScrollOnFrame} 的帧循环）。
               //   ⚠️ 它是渲染期读的普通字段（不是 `@Local`）⇒ 偏移变化**不会**触发重渲染。
+              //   🔎 验证它到底有没有生效：`grep RzdHomeScroll` 看容器挂载后的第一行
+              //     `tick t=0 measured=… target=…` —— `measured ≈ target` 就是生效了。
               .initialOffset({ xOffset: 0, yOffset: this.homeScrollOffsetVp })
               .onAttach((): void => {
                 this.onHomeScrollAttach();

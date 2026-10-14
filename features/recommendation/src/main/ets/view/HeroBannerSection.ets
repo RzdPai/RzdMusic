@@ -15,6 +15,7 @@
 
 import { uiObserver } from '@kit.ArkUI';
 import {
+  areaLengthToVp,
   BreakpointType,
   getPlaylistTransitionState,
   ColorConversion,
@@ -54,6 +55,14 @@ export struct HeroBannerSection {
   @Local windowInfo: WindowInfo = getWindowInfoState();
   /** Nav stack for routing to toplist detail. */
   @Consumer('pageIndexInfos') pageIndexInfos: NavPathStack = new NavPathStack();
+  /**
+   * 大卡横向滚动容器（`Scroll`）的视口宽度实测值（vp）。
+   *
+   * 只为算横向吸附的**分页点**而存在（末页要用"可滑动距离"兜住，见 {@link heroSnapPoints}）。
+   * ⚠️ 量的是**滚动容器自己**（它的宽度是写死的 `100%`、不随内容变），
+   *    不是内容里那条 `Row` —— 拿内容当测量源会形成"量到 W₂ → 分页点变 → 又量到 W₂"的正反馈。
+   */
+  @Local heroScrollWidthVp: number = 0;
 
   /** Routes to the shared playlist detail page with the prefetched board. */
   private async openBoard(source: string, boardId: string, title: string | Resource): Promise<void> {
@@ -285,6 +294,59 @@ owPlayingCoverUrl），**不是**实时读在播歌曲 ——
 
   private homeScrollGutterH(): number {
     return new BreakpointType(16, 24, 32, 32).getValue(this.breakpointEnv.widthBreakpoint);
+  }
+
+  /** 大卡之间的列间距（vp）—— 与 build() 里两条 `Row({ space })` 用的**同一个**断点表。 */
+  private heroCardGap(): number {
+    return new BreakpointType(8, 12, 16, 16).getValue(this.breakpointEnv.widthBreakpoint);
+  }
+
+  /** 记录横向滚动容器的视口宽度（vp），供 {@link heroSnapPoints} 算"可滑动距离"。 */
+  private onHeroScrollAreaChange(area: Area): void {
+    const width: number = areaLengthToVp(area.width);
+    if (width > 0 && Math.abs(width - this.heroScrollWidthVp) > 0.5) {
+      this.heroScrollWidthVp = width;
+    }
+  }
+
+  /**
+   * @returns 大卡横向滚动的**分页点**（vp，单调递增）——「与 `featuredSnapPoints()` 同口径」
+   *   （对方在 `CategoryContentSection.ets`，即"精选推荐"那一行，用户要的正是它的行为）。
+   *
+   * 官方语义（ts-container-scroll / `snapPagination`）：
+   *   - 传**单个** `Dimension` = "每页大小"，系统按它分页；
+   *   - 传 **`Array<Dimension>`** = 逐个"**分页点**"（最终停靠的滚动偏移），
+   *     每个值必须落在 `[0, 可滑动距离]` 内、且**必须单调递增**。
+   *
+   * ⚠️ 之所以要把**每一张卡**对齐的偏移都列出来：只传一个步距时全部能停的位置只有
+   *    「开头 / 一张卡 / 末尾」三个 ⇒ 甩一下停在哪算哪、卡片半截可见（用户反馈的"没有停留"）。
+   *   ⇒ 步长 = **卡片宽度 + 列间距**（`k × 步长` = 第 k 张卡左边缘对齐时所需偏移）；
+   *   ⇒ 末页 = **可滑动距离**：最后一张卡对齐所需偏移会超出可滑动距离（内容右侧本来就不够），
+   *      用可滑动距离兜住，**保证最后一张卡也能停住、不会弹回去**。
+   *   ⚠️ 落点用 `Math.floor(kMax)`：框架按"向下取整"归到分页点，
+   *      算出比真范围大 1px 的点会让"甩到底"停在倒数第二条缝上。
+   */
+  private heroSnapPoints(): number[] {
+    const count: number = this.recommendViewModel.heroCards.length;
+    if (count <= 0) {
+      return [0];
+    }
+    const gutter: number = this.homeScrollGutterH();
+    const pitch: number = this.cardWidth() + this.heroCardGap();
+    // 内容总宽 = 左右 gutter + n 张卡 + (n-1) 个列间距
+    const contentWidth: number = gutter * 2 + count * this.cardWidth() + (count - 1) * this.heroCardGap();
+    const maxOffset: number = Math.max(0, contentWidth - this.heroScrollWidthVp);
+
+    const points: number[] = [];
+    const kMax: number = maxOffset > 0 && pitch > 0 ? Math.floor(maxOffset / pitch) : -1;
+    for (let k: number = 0; k <= kMax; k++) {
+      points.push(k * pitch);
+    }
+    const last: number = points.length > 0 ? points[points.length - 1] : -1;
+    if (Math.abs(maxOffset - last) > 0.5) {
+      points.push(maxOffset);
+    }
+    return points;
   }
 
   /**
@@ -675,7 +737,7 @@ owPlayingCoverUrl），**不是**实时读在播歌曲 ——
       .align(this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ? Alignment.Start : Alignment.Center)
     } else {
       Scroll() {
-        Row({ space: new BreakpointType(8, 12, 16, 16).getValue(this.breakpointEnv.widthBreakpoint) }) {
+        Row({ space: this.heroCardGap() }) {
           ForEach(this.recommendViewModel.heroCards, (item: RecommendHeroCardUi, index?: number) => {
             Column() {
               this.HeroBannerCard(item);
@@ -693,6 +755,19 @@ owPlayingCoverUrl），**不是**实时读在播歌曲 ——
       .scrollable(ScrollDirection.Horizontal)
       .width(StyleConstants.FULL_WIDTH)
       .align(this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ? Alignment.Start : Alignment.Center)
+      // ★ 横向**吸附**：每张卡停住（与「精选推荐」那一行同一个口径，见 {@link heroSnapPoints}）。
+      //   用户原话「首页那几张大卡片还是没有停留」＝甩一下停在哪算哪、卡片半截可见；
+      //   之前这里**既没有 Scroller 也没有 scrollSnap**，所以「跟精选推荐一样」这件事从来没成立过。
+      //   ⚠️ `scrollSnap` 是 **`Scroll`** 的属性（`component/scroll.d.ts:1875`）；
+      //      `List` 的吸附接口才叫 `scrollSnapAlign(ScrollSnapAlign)`（`list.d.ts:1925`），别写混。
+      .onAreaChange((_old: Area, area: Area): void => {
+        this.onHeroScrollAreaChange(area);
+      })
+      .scrollSnap({
+        snapAlign: ScrollSnapAlign.START,
+        snapPagination: this.heroSnapPoints(),
+        enableSnapToStart: true
+      })
     }
   }
 }
