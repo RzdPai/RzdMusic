@@ -363,9 +363,14 @@ export class PlayerExpandState {
   //    现在的顺序是：p≤0.55 封面飞完并交棒给真封面（`realCoverVisible()`），p≥0.60 按钮组才开始升
   //    ⇒ **结构上不可能互相遮挡**，不依赖任何"量得准不准"。
 
-  /** 续飞封面窗口终点：p ∈ [0, 0.55] 完成"迷你条封面 → 播放页封面"，之后真封面接手。 */
-  public static readonly WIN_BRIDGE_END: number = 0.55;
-  /** 进度条那一组的时间窗（从下升起）。 */
+  /**
+   * 进度条那一组的时间窗（从下升起）。
+   *
+   * ⚠️ 续飞封面**没有**时间窗、必须一直飞到 p=1（见 `morphBridging()` 的注释）——
+   *    所以"封面会不会盖住控制区"只能靠**这两组的窗口起始点晚于封面离开视野**来保证：
+   *    实测封面飞到 p≈0.42 之后已在屏幕上半部，而进度条从 0.42、按钮从 0.60 才升 ⇒ 不相遇。
+   *    真正盖住进度条的是**歌名/歌手克隆层**（见 `metaCloneOpacityAt`），已在 0.38 前淡出。
+   */
   public static readonly WIN_PROGRESS_START: number = 0.42;
   public static readonly WIN_PROGRESS_END: number = 0.70;
   /** 底部按钮那一组的时间窗（从下升起，晚于进度条）。 */
@@ -420,14 +425,44 @@ export class PlayerExpandState {
   /**
    * @returns 播放页**真封面**是否该画。
    *
-   * 形变期间由续飞封面代表它；一旦续飞封面飞完（`p ≥ WIN_BRIDGE_END`）就地交棒给真封面
-   * —— 两者在交棒那一刻矩形重合，所以看不到"跳一下"，也**永远不会同时出现两个封面**。
+   * 形变期间由续飞封面代表它；形变容器一撤（相位回到 OPEN/NONE）就地交棒 ——
+   * 交棒那一刻容器是恒等变换、续飞封面正好落在真实封面上，所以看不到跳变。
+   *
+   * ⚠️ 不要再引入"p ≥ 某阈值就提前交棒"：续飞封面的矩形是**窗口坐标**，
+   *    容器还没撤时把两者对调一定错位（真机实测过，见 `morphBridging()` 注释）。
    */
   public realCoverVisible(): boolean {
+    return !this.morphContainerActive();
+  }
+
+  /**
+   * @returns 歌名/歌手这一行在**播放页里**的不透明度（形变期间的交接窗口）。
+   *
+   * ★★ 2026-10-15 真机实测：用户观察到「**进度条疑似是被歌曲名/歌手名挡住的**」。
+   *   机制：壳层的元信息克隆层（`MorphMetaBridge`）从迷你条一路飞到大标题位，
+   *   **全程都画在播放页之上**；而进度条那一组从 p=0.42 就开始升 ⇒ 半路被它压过去。
+   *   修法：把这一行做成"**早交接**"——克隆层在 0.24→0.38 淡出，播放页自己这一行在
+   *   0.18→0.34 淡入（重叠 0.24~0.34 做交叉，不漏空档）⇒
+   *   **p ≥ 0.38 时克隆层已经不在屏幕上**，进度条 0.42 才开始升 ⇒ 结构上不可能再被挡。
+   *   收敛后再交给 `pullChromeOpacity()`/静止态（形变一结束恒 1）。
+   *   ⚠️ 它是 `p` 的纯函数 ⇒ 展开/收起共用同一张表、天然互逆。
+   * @param p 进度 0…1
+   */
+  public static metaRowOpacityAt(p: number): number {
+    return PlayerExpandState.ramp01(p, 0.18, 0.34);
+  }
+
+  /** @returns 壳层元信息克隆层的不透明度系数（与 {@link metaRowOpacityAt} 交叉，0.38 之后为 0）。 */
+  public static metaCloneOpacityAt(p: number): number {
+    return 1 - PlayerExpandState.ramp01(p, 0.24, 0.38);
+  }
+
+  /** @returns 播放页歌名/歌手这一行当前该用的不透明度。 */
+  public metaRowOpacity(): number {
     if (!this.morphClipping()) {
-      return true;
+      return 1;
     }
-    return this.morphP >= PlayerExpandState.WIN_BRIDGE_END;
+    return PlayerExpandState.metaRowOpacityAt(this.morphP);
   }
 
   /** 背景最低不透明度兜底（反编译 `PlayerPage.PULL_BG_FLOOR`）。 */
@@ -892,7 +927,15 @@ export class PlayerExpandState {
     if (this.morphStage === MorphStage.OPEN) {
       return 1;
     }
-    return this.metaBridgeOwnsPaint() ? 0 : this.pullChromeOpacity();
+    // ★★ 2026-10-15 真机实测修正：不再用"谁拥有绘制权"（`metaBridgeOwnsPaint`）当门 ——
+    //   那个门取决于驱动源/相位，三条路不等价，而且它让这一行**一直到最后才出现**，
+    //   于是克隆层（壳层、画在播放页之上）会一直挡着从 p=0.42 开始升起的进度条。
+    //   现在改成 `p` 的纯函数：0.18→0.34 淡入，与克隆层的 0.24→0.38 淡出交叉 ⇒
+    //   不漏空档、不留重叠，且**开/关两个方向同一张表**。
+    if (this.morphClipping()) {
+      return PlayerExpandState.metaRowOpacityAt(this.morphP);
+    }
+    return this.pullChromeOpacity();
   }
 
   public logMorphOwnership(event: string): void {
@@ -1536,14 +1579,15 @@ export class PlayerExpandState {
     if (this.morphStage === MorphStage.LANDING) {
       return false;
     }
-    // ★★ 2026-10-15：这一棒只活在**自己的时间窗** [0, WIN_BRIDGE_END] 里，之后交棒给真封面
-    //    （`realCoverVisible()` 与这里**严格互补** ⇒ 既不会两个封面同时出现，也不会有一段没有封面）。
-    //    顺带解决"控制区被盖住"：按钮组的时间窗从 0.60 起，那时这一棒早已消失。
-    if (this.morphP >= PlayerExpandState.WIN_BRIDGE_END) {
-      return false;
-    }
     // 起点（迷你条封面）与终点（播放页封面）都量到了才画，否则宁可没有这一棒
     // ⚠️ 终点**必须有值**：终点是"静止态真实矩形"，终点为 0 时会飞向屏幕左上角
+    //
+    // ★★ 2026-10-15 **回退我自己的"时间窗"改动**：这一棒必须**一直飞到 p=1**。
+    //   原因（真机实测）：它的矩形是**窗口坐标**，而被画在**被 scale+translate 变换过的容器里**，
+    //   只有 p=1（容器是恒等变换）时窗口坐标才等于它要落的位置；
+    //   若在 p=0.55 就把它裁掉/交棒，那一帧它还在半路、真封面在自己的布局位上 ⇒ **会跳**。
+    //   我一度试过"逆变换回页内坐标"来提前落位，真机结果是"封面跑到左上角"
+    //   （说明 `.scale()` 的枢轴不是我以为的容器中心）⇒ 该方案作废，别再试。
     return this.snapStartW > 0 && this.endCoverSize > 0;
   }
 
@@ -1613,10 +1657,12 @@ export class PlayerExpandState {
    *   于是终点正好是实测的 (bigX, bigY, bigSize) —— **动画完成那一刻才归位**。
    */
   public morphCoverBridge(): LyricMorphRect {
-    // ★ 时间窗重映射：这一棒只在 [0, WIN_BRIDGE_END] 内飞，**到 0.55 就已经落位**
-    //   （t=1 = 真实封面矩形）—— 于是"交棒给真封面"（`realCoverVisible()`）那一刻
-    //   两边矩形完全重合，既看不到跳变，也不会两个封面同时在场。
-    const t: number = PlayerExpandState.ramp01(this.morphP, 0, PlayerExpandState.WIN_BRIDGE_END);
+    // ★★ 2026-10-15 **回退"页内坐标逆变换"**：真机实测那样做会把封面画到左上角
+    //   （说明 `.scale()` 的枢轴不是容器中心，我的换算前提不成立）。
+    //   现在回到"**窗口坐标直线插值**"——淡入淡出版里就是这样，用户实测"封面是正常的"：
+    //   两端在 p=0 / p=1 都对（p=1 时窗口坐标 = 页内坐标），中间段是近似但观感正常。
+    //   ⚠️ 所以它**必须一直飞到 p=1**（见 `morphBridging()` 里的说明），不要提前交棒。
+    const t: number = this.morphP < 0 ? 0 : (this.morphP > 1 ? 1 : this.morphP);
     // ⚠️ **直线插值**（对标反编译 `MiniMorph`：中心/边长各一条 `lerpN`）：
     //    `coverCenterXAt/YAt(t)`、`coverVisualEdgeAt(t)`、`coverVisualRadiusAt(t)`。
     //    ⚠️ 之前我拿"容器变换后的当前帧矩形"当终点，于是起点那一段终点会**往下跑**
@@ -1637,32 +1683,12 @@ export class PlayerExpandState {
     // `scale({centerX:'50%',centerY:'50%'})` 完全同口径。
     const endX: number = this.endCoverX + (this.endCoverSize - endSize) / 2;
     const endY: number = this.endCoverY + (this.endCoverH - endH) / 2;
-    // ★★ 2026-10-15（回退后重做）：上面插出来的矩形是**窗口（屏幕）坐标**，
-    //   而消费方 `MorphCoverBridge` 画在**被 `scale`+`translate` 变换过、且带 `.clip(true)` 的
-    //   形变容器**里 —— 容器的布局盒就是裁剪窗口（`morphClipHeight` 高），p 小时它只有几十~几百 vp。
-    //   直接把窗口坐标当页内坐标用 ⇒ 封面矩形**整个落在裁剪窗口之外** ⇒
-    //   前半段一个像素都画不出来，等窗口长过它才从**底缘**冒头（用户实测的
-    //   "封面从一个非常下的位置飞上来、前半段看不到"）。
-    //   正解：在窗口坐标里插值（两端点与量测同口径），再按容器变换**逆变换**回页内：
-    //       screen = pivot + (page − pivot) · scale + translate
-    //    ⇒  page   = pivot + (screen − translate − pivot) / scale
-    //   枢轴 = 容器当前布局盒的中心（宽 = 宿主宽，高 = `morphClipHeight`；`.scale()` 默认以中心为枢轴）。
-    //   尺寸/圆角同样 `/ scale`（与同文件 `morphRadius = visualRadius / scale` 是同一套口径）。
-    //   ⚠️ 两端在屏上**逐像素不变**：t=1 时该容器是恒等变换；t=0 端恰是原值的逆像 ⇒ 零回归。
-    const comp: number = this.morphScale > 0.02 ? this.morphScale : 0.02;
-    const pivotX: number = this.morphBoxWidth() / 2;
-    const pivotY: number = this.morphClipHeight / 2;
-    const screenX: number = this.snapStartX + (endX - this.snapStartX) * t;
-    const screenY: number = this.snapStartY + (endY - this.snapStartY) * t;
-    const screenSize: number = this.snapStartW + (endSize - this.snapStartW) * t;
-    const screenH: number = this.snapStartW + (endH - this.snapStartW) * t;
-    const screenRadius: number = startRadius + (endRadius - startRadius) * t;
     return {
-      x: pivotX + (screenX - this.morphTx - pivotX) / comp,
-      y: pivotY + (screenY - this.morphTy - pivotY) / comp,
-      size: screenSize / comp,
-      height: screenH / comp,
-      radius: screenRadius / comp
+      x: this.snapStartX + (endX - this.snapStartX) * t,
+      y: this.snapStartY + (endY - this.snapStartY) * t,
+      size: this.snapStartW + (endSize - this.snapStartW) * t,
+      height: this.snapStartW + (endH - this.snapStartW) * t,
+      radius: startRadius + (endRadius - startRadius) * t
     };
   }
 

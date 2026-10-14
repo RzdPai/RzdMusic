@@ -330,9 +330,9 @@ export struct MusicPlayInfoBlock {
         //    （见 `PlaybackPage.MorphCoverBridge`）。两边都画就是"出现两个封面"，
         //    而且这张是按布局走的、和飞行中的那张不同步，看着就是两个错位的封面。
         //    形变结束（相位回到 OPEN/NONE）后恒为 1，静止态逐像素不变。
-        // ★★ 2026-10-15（回退后重做）：形变期间由**续飞封面**代表它；一旦续飞封面飞完
-        //   （p ≥ WIN_BRIDGE_END）就地交棒给真封面 —— 两个门严格互补，既不会两个封面
-        //   同时出现，也不会有一段没封面（see PlayerExpandState.realCoverVisible）。
+        // ★★ 2026-10-15：形变期间由**续飞封面**代表它（续飞封面一直飞到 p=1，真机实测这样最稳）；
+        //   形变容器一撤（`realCoverVisible()` = `!morphContainerActive()`）就地交棒 ——
+        //   那一刻容器是恒等变换、续飞封面正好落在真实封面上，不会跳，也不会同时出现两个封面。
         .opacity(this.expandState.realCoverVisible() ? 1 : 0)
         // 把大封面的窗口矩形报给共享状态：封面「续飞到歌词页」要靠它当起点。
         // 用 onAreaChange 而不是 getRectangleById —— 后者的单位没有文档保证（实测是 px），
@@ -457,9 +457,9 @@ export struct MusicPlayInfoBlock {
               .borderRadius(this.coverRadiusState.radius)
               .clip(true)
               // 形变期间不画（那一刻由"桥接封面"在飞，见 CoverInfo 里的同一条注释）
-              // ★★ 2026-10-15（回退后重做）：形变期间由**续飞封面**代表它；一旦续飞封面飞完
-        //   （p ≥ WIN_BRIDGE_END）就地交棒给真封面 —— 两个门严格互补，既不会两个封面
-        //   同时出现，也不会有一段没封面（see PlayerExpandState.realCoverVisible）。
+              // ★★ 2026-10-15：形变期间由**续飞封面**代表它（续飞封面一直飞到 p=1，真机实测这样最稳）；
+        //   形变容器一撤（`realCoverVisible()` = `!morphContainerActive()`）就地交棒 ——
+        //   那一刻容器是恒等变换、续飞封面正好落在真实封面上，不会跳，也不会同时出现两个封面。
         .opacity(this.expandState.realCoverVisible() ? 1 : 0)
               // 同上：面板布局下的大封面也要上报矩形
               .onAreaChange((_oldValue: Area, newValue: Area) => {
