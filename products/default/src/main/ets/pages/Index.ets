@@ -14,7 +14,7 @@
  */
 
 import { AppStorageV2, curves, uiObserver } from '@kit.ArkUI';
-import { HdsNavigation, HdsTabsController, HdsAnimationMode, HdsTabsBarChangeMode, SystemMaterialParams, hdsMaterial } from '@kit.UIDesignKit';
+import { HdsNavigation, HdsTabsController, HdsTabsBarChangeMode, SystemMaterialParams, hdsMaterial } from '@kit.UIDesignKit';
 import {
   AmbientState,
   AppStorageKeys,
@@ -359,11 +359,12 @@ struct Index {
    * 播放页挂载/卸载的唯一收口（所有 `isShowPlay` 写入最终都会走到这里）。 */
   @Monitor('appState.isShowPlay')
   onShowPlayChanged(): void {
-    // ★ 用户 2026-10-14：「官方的播放器收起后那个播放条会弹一下」⇒ 走 HDS 自己的"隐藏/显示动效"：
-    //   打开播放页时先让底栏/迷你栏走一次**隐藏动效**（`applyHideAnimation`），
-    //   收起时再走**显示动效**（`applyShowAnimation`）—— 之前只调"显示"没有效果，
-    //   就是因为栏本来就是显示状态（官方的语义是"隐藏↔显示"这一对，不是单独的弹跳）。
-    this.animateHdsBars(this.appState.isShowPlay, 'showPlayChanged');
+    // ★ 用户 2026-10-14：「官方的播放器收起后那个播放条会弹一下」⇒ 收起时让**迷你条**弹一下。
+    //   ⚠️ 上一版用的 `applyShowAnimation` 是"页签栏**和**迷你栏"一起的显示动效，
+    //   真机上连底部 Tab 栏一起弹（用户报的「连带着 Tab 栏都会一起弹」）⇒ 换成**只管迷你栏**的接口。
+    if (!this.appState.isShowPlay) {
+      this.bounceMiniBarOnly();
+    }
     if (!PLAYER_ROUTE_MODE) {
       Logger.info('RzdPlayerRoute', `overlay visible=${this.appState.isShowPlay} retainedPaths=${JSON.stringify(this.pageIndexInfos.getAllPathName())}`);
       return;
@@ -376,28 +377,38 @@ struct Index {
   }
 
   /**
-   * 让 HDS 底栏 / 迷你栏播一次显示或隐藏动效（系统接口，胶囊背板由 HDS 自己动）。
+   * 只让**迷你栏**弹一下（底部 Tab 栏不动）。
    *
    * 依据（官方《HdsTabs (底部页签)》 + 本地 SDK `@hms.hds.hdsBaseComponent.d.ets`）：
-   *   · `HdsTabsController.applyHideAnimation(mode: HdsAnimationMode)`：页签栏和迷你栏的**隐藏动效**；
-   *   · `HdsTabsController.applyShowAnimation(mode: HdsAnimationMode)`：**显示动效**；
-   *   · `HdsAnimationMode { SCROLL_ANIMATION = 0, CLICK_ANIMATION = 1 }` —— 播放页开关属于"点击"场景。
-   * @param hiding true = 播放页打开了（把栏收起来）；false = 播放页收起了（把栏放出来）
-   * @param why 日志用
+   *   · `HdsTabsController.applyMiniBarStyle(style: HdsBarStyle)`：更新**迷你栏**样式并**伴随动效**；
+   *   · `HdsBarStyle { COLLAPSE = 0, EXPAND = 1 }`；
+   *   · 对照：`applyShowAnimation/applyHideAnimation` 是"页签栏和迷你栏"一起的 ⇒ 会连 Tab 栏一起弹 ✗。
+   * 迷你栏是**受控属性**（`miniBarStyle: appState.miniBarExpanded ? EXPAND : COLLAPSE`），
+   * 所以按"当前状态取反、再弹回原状态"做，不会改掉用户自己的展开/折叠偏好。
    */
-  private animateHdsBars(hiding: boolean, why: string): void {
+  private bounceMiniBarOnly(): void {
+    const wasExpanded: boolean = this.appState.miniBarExpanded;
+    const popTo: HdsBarStyle = wasExpanded ? HdsBarStyle.COLLAPSE : HdsBarStyle.EXPAND;
+    const backTo: HdsBarStyle = wasExpanded ? HdsBarStyle.EXPAND : HdsBarStyle.COLLAPSE;
     try {
-      if (hiding) {
-        this.tabsController.applyHideAnimation(HdsAnimationMode.CLICK_ANIMATION);
-      } else {
-        this.tabsController.applyShowAnimation(HdsAnimationMode.CLICK_ANIMATION);
-      }
-      Logger.info('RzdMiniBarBounce', `hds bar animation hiding=${hiding} why=${why}`);
+      this.tabsController.applyMiniBarStyle(popTo);
+      Logger.info('RzdMiniBarBounce', `mini bar pop wasExpanded=${wasExpanded}`);
     } catch (err) {
-      // 老版本 SDK（< 6.1.0(23)）没有这两个接口：静默跳过，不影响播放页开关流程
-      Logger.warn('RzdMiniBarBounce', `hds bar animation failed hiding=${hiding}: ${JSON.stringify(err)}`);
+      Logger.warn('RzdMiniBarBounce', `applyMiniBarStyle failed: ${JSON.stringify(err)}`);
+      return;
     }
+    setTimeout((): void => {
+      try {
+        this.tabsController.applyMiniBarStyle(backTo);
+        Logger.info('RzdMiniBarBounce', 'mini bar back');
+      } catch (err) {
+        Logger.warn('RzdMiniBarBounce', `applyMiniBarStyle(back) failed: ${JSON.stringify(err)}`);
+      }
+    }, Index.BOUNCE_BACK_MS);
   }
+
+  /** 迷你栏"弹一下"的回位延时（ms）。 */
+  private static readonly BOUNCE_BACK_MS: number = 260;
 
 
   /** 播放页路由在栈里的下标（不在栈里返回 -1）。 */

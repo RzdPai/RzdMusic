@@ -144,14 +144,15 @@ const SIDE_TOP_SLOPE: number = 0.168;
 const SIDE_BOTTOM_SLOPE: number = 0.087;
 
 /**
- * 标题里会出现的区块名（下标与 `sectionRatios` 一一对齐）。
+ * 标题里会用到的两个名字。
  *
- * 下标 0 = **页头**（官方在最顶上标题是「10 月 · 回响」，不是"你听了什么"——用户 2026-10-14 报的）；
- * 1..6 = 六个区块；最后一个是「有趣的发现」（用户原话：「最下面也是有趣的发现而不是完播率。
- * 原本的内容不要改，因为官方也是这样的，没有'有趣的发现'这个区块，但滑到那里标题就是会变成有趣的发现」）。
+ * ★★ 2026-10-14 用户澄清（**他原来的需求被我在上一版理解偏了**）：
+ *   「标题应该只有你听了什么，没有最常听的 xxx，要不然快速滑动标题会看起来像闪了好几下」
+ *   ⇒ 标题**只在两档之间切**：刚进来（页头还在视野里）=「回响」；滚进内容后 =「你听了什么」，
+ *   **不再跟着后面那些区块变**（最常听的歌手/专辑/你是怎样的听众/完播率/有趣的发现都不上标题）。
+ *   所以这里只留两项，判定也只看**页头**一个区块的可见比例。
  */
-const SECTION_NAMES: string[] =
-  ['回响', '你听了什么', '最常听的歌手', '最常听的专辑', '你是怎样的听众', '完播率', '有趣的发现'];
+const SECTION_NAMES: string[] = ['回响', '你听了什么'];
 
 /** 标题栏下沿的大致高度（vp）：区块顶边越过这条线才算"当前区块"。 */
 const TITLE_BAR_VP: number = 100;
@@ -224,19 +225,17 @@ export struct EchoReviewPage {
   @Consumer('pageIndexInfos') pageIndexInfos: NavPathStack = new NavPathStack();
   /** 年 / 月下拉的可选项（历史里出现过的月份，降序）。 */
   @Local monthOptions: MonthOption[] = [];
-  /** 标题里"当前区块"的名字（随滚动变，见 `noteSection`）。 */
+  /** 标题里"当前状态"的名字（只有「回响」/「你听了什么」两档，见 `noteSection`）。 */
   @Local sectionTitle: string = '';
-  /** 本组件是否还活着（延时的量测回调要判）。 */
+  /** 本组件是否还活着（延时的回调要判）。 */
   private isAliveEcho: boolean = true;
   /**
-   * 是否已经滑到**页面最底部**（末尾那段 120vp 占位露头 ⇒ true）。
+   * 各区块的可见比例缓存（非状态）。
    *
-   * ★ 用户 2026-10-14：「我滑到最下面没变成有趣的发现」⇒ 位置法在最底部**不可靠**
-   *   （最后那个区块的顶边未必越过标题栏线，尤其内容不够长时），所以底部改用**哨兵**：
-   *   末尾占位块一露头就把标题钉成最后一个区块名。顶部同理用页头的可见比例钉「回响」。
+   * ⚠️ **当前只有 [0]（页头）被真正使用** —— 用户 2026-10-14 明确"标题不要跟着后面那些区块变，
+   * 快速滑动会像闪了好几下"，所以判定只读页头那份；其余下标留着是因为六个区块的
+   * `onVisibleAreaChange` 仍会把下标传进来（`noteSection` 对非 0 直接 return）。
    */
-  @Local atBottom: boolean = false;
-  /** 七个区块（含页头）的可见比例（非状态，只在 `onVisibleAreaChange` 回调里读写）。 */
   private sectionRatios: number[] = [0, 0, 0, 0, 0, 0, 0];
   /** 共享播放状态（底栏联动要读它）。 */
   @Local appState: MusicAppState =
@@ -698,24 +697,22 @@ export struct EchoReviewPage {
   }
 
   /**
-   * ★ 2026-10-14 用户：「官方那个很多地方都是能点击的」⇒ 三张卡都能点开；
-   *   用户第二轮又明确「能不能实现一下歌曲点击直接播放」⇒ 这里**直接播**。
-   *
-   * 用 `OnlinePlayUtil.playRecord(appState, record, uiContext)`（player 模块导出）：
-   * 它会把这条记录组进队列、**秒开播放页**，记录里已有 `url` 时直接复用（`playCached`），
-   * 没有就后台解析（还能跨源降级）—— 比"拿歌名去在线搜索"稳得多。
-   * 兜底：万一这条记录不完整（没 songId），退回在线搜索。
+   * ★ 2026-10-14 用户：「官方那个很多地方都是能点击的」；随后明确
+   *   「回响页没找到不要搜索，其它地方不都有搜索当前歌曲播放的代码吗，这样搞太割裂了」
+   *   ⇒ **不退回在线搜索**，一律走 App 现有的那条"播放这首歌"的路：
+   *   `OnlinePlayUtil.playRecord(appState, record, uiContext)`（player 模块导出，别处播历史/收藏就是它）。
+   *   它自己会组队列、秒开播放页、记录里有 `url` 就直接复用、没有就后台解析（含跨源降级）。
+   *   记录不完整（没 songId）时**什么都不做**（宁可不开，也不跳去搜索页）。
    */
   private openSong(item: EchoTopSong): void {
-    if (item.record.songId.length > 0) {
-      hilog.info(ECHO_DOMAIN, ECHO_TAG, 'play song name=%{public}s source=%{public}s id=%{public}s',
-        item.name, item.record.source, item.record.songId);
-      void OnlinePlayUtil.playRecord(this.appState, item.record, this.getUIContext());
+    if (item.record.songId.length === 0) {
+      hilog.warn(ECHO_DOMAIN, ECHO_TAG, 'song record incomplete, skip (no search fallback) name=%{public}s',
+        item.name);
       return;
     }
-    const query: string = item.singer.length > 0 ? (item.name + ' ' + item.singer) : item.name;
-    hilog.info(ECHO_DOMAIN, ECHO_TAG, 'song record incomplete, fallback to search=%{public}s', query);
-    this.pageIndexInfos.pushPathByName(RouterUrlConstants.ONLINE_SEARCH, query);
+    hilog.info(ECHO_DOMAIN, ECHO_TAG, 'play song name=%{public}s source=%{public}s id=%{public}s',
+      item.name, item.record.source, item.record.songId);
+    void OnlinePlayUtil.playRecord(this.appState, item.record, this.getUIContext());
   }
 
   /** 最常听的歌手 → 歌手页（只带名字 + 源，官方也是按名字进）。 */
@@ -752,46 +749,28 @@ export struct EchoReviewPage {
   }
 
   /**
-   * 记录某个区块的可见比例，并按「**可见比例 > 0 的最小下标**」更新标题。
+   * 标题判定：**只看页头**。
    *
-   * ★★ 2026-10-14 第三版（用户反馈「标题只有你听了什么，没有最常听的 xxx」）：
-   *   位置法（`getRectangleById` + 滚动偏移）在真机上不可靠，且用户**没法跑 hdc 看日志**，
-   *   所以改成**只用可见比例**的规则 —— 不需要量位置、不需要 id、不需要滚动偏移：
-   *     · 视野里最靠上的那个区块 = **可见比例 > 阈值的最小下标**；
-   *     · 页头（下标 0）在最上面，所以刚进页面标题就是「回响」；
-   *     · 往下滚，页头比例归 0 ⇒ 依次轮到"你听了什么 / 最常听的歌手 / …"；
-   *     · 到底了由**末尾哨兵**接管（`atBottom`）⇒「有趣的发现」。
-   *   阈值取 0.02（不是 0）：避免浮点毛刺把"刚露头"的区块判进来。
-   * @param index 区块下标（与 `SECTION_NAMES` 对齐；0 = 页头）
+   * 页头（`xx 分钟` 那一块）还在视野里 ⇒「回响」；滚出视野 ⇒「你听了什么」。
+   * 用户 2026-10-14：「标题应该只有你听了什么，没有最常听的 xxx，要不然快速滑动标题会看起来像闪了好几下」
+   * ⇒ 不做多档位。阈值取 0.05：页头完全离开视野那一刻才切，避免边界抖动闪一下。
+   * @param index 区块下标（只认 0 = 页头，其余直接忽略）
    * @param ratio 可见比例 0..1（`onVisibleAreaChange` 给的）
    */
   private noteSection(index: number, ratio: number): void {
-    if (index < 0 || index >= this.sectionRatios.length) {
+    if (index !== 0) {
       return;
     }
-    if (Math.abs(this.sectionRatios[index] - ratio) < 0.005) {
+    if (Math.abs(this.sectionRatios[0] - ratio) < 0.005) {
       return;
     }
-    this.sectionRatios[index] = ratio;
-    this.refreshTitleFromRatios();
+    this.sectionRatios[0] = ratio;
+    const name: string = ratio > EchoReviewPage.HEADER_VISIBLE_MIN ? SECTION_NAMES[0] : SECTION_NAMES[1];
+    this.setSectionTitle(name, 'header', ratio);
   }
 
-  /** 标题 = 可见比例 > 阈值的最小下标那个区块（到底了则钉在最后一个）。 */
-  private refreshTitleFromRatios(): void {
-    if (this.atBottom) {
-      this.setSectionTitle(SECTION_NAMES[SECTION_NAMES.length - 1], 'bottom', 1);
-      return;
-    }
-    for (let i: number = 0; i < this.sectionRatios.length; i++) {
-      if (this.sectionRatios[i] > EchoReviewPage.SECTION_VISIBLE_MIN) {
-        this.setSectionTitle(SECTION_NAMES[i], 'ratio', this.sectionRatios[i]);
-        return;
-      }
-    }
-  }
-
-  /** "这个区块算在视野里"的最小可见比例。 */
-  private static readonly SECTION_VISIBLE_MIN: number = 0.02;
+  /** "页头还算在视野里"的最小可见比例。 */
+  private static readonly HEADER_VISIBLE_MIN: number = 0.05;
 
   /** 写标题用的区块名（值没变就不写，避免每帧重渲染）。 */
   private setSectionTitle(name: string, why: string, value: number): void {
@@ -856,21 +835,8 @@ export struct EchoReviewPage {
           this.AudienceSection()
           this.CompletionSection()
           this.NewDiscoverySection()
-          // ★ 末尾占位块兼作"到底了"的哨兵（用户 2026-10-14：滑到最下面标题要是「有趣的发现」）
-          Column()
-            .width('100%')
-            .height(120)
-            .onVisibleAreaChange([0.0, 0.01], (isVisible: boolean, ratio: number) => {
-              if (this.atBottom !== isVisible) {
-                this.atBottom = isVisible;
-                hilog.info(ECHO_DOMAIN, ECHO_TAG, 'bottom sentinel visible=%{public}s', String(isVisible));
-                if (isVisible) {
-                  this.setSectionTitle(SECTION_NAMES[SECTION_NAMES.length - 1], 'bottom', ratio);
-                } else {
-                  this.refreshTitleFromRatios();
-                }
-              }
-            })
+          // 末尾占位（纯留白，让最后一屏能滚上来；标题已不再依赖"到底哨兵"）
+          Column().width('100%').height(120)
         }
         .width('100%')
       // 盒子从 y=0 起排（页根 ignore TOP）⇒ 内容让位 = 状态栏 + 标题栏 = 94（公共 helper 同一口径）

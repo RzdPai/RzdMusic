@@ -54,31 +54,6 @@ export enum MorphDrive {
 /** clip 窗口在静止态向外扩张的余量（vp）：保证任何窗口尺寸都不会裁到内容。 */
 const CLIP_IDLE_MARGIN_VP: number = 120;
 
-/**
- * 形变过程中圆角衰减的指数（<1 ⇒ 中段更"胖"）。
- *
- * ★ 用户 2026-10-14：「播放器展开收起过程中圆角加大一些」。起点/终点都不动
- *   （起点 = 迷你条胶囊半高，终点 = 0 = 满屏直角），只把中间的衰减放缓 ⇒ 观感上圆角更大。
- */
-const MORPH_RADIUS_DECAY_POW: number = 0.62;
-
-/**
- * 打开过程中"内容层"的显形曲线（**现在不用了**，保留给将来可能的"轻微淡入"）。
- *
- * ★ 用户 2026-10-14 两次反馈「官方**没有淡入淡出**」⇒ 展开时内容层恒为 1（见 `applyMorphProgress`），
- *   出场完全交给 `PlaybackPage.contentRiseVp()` 的"从下升起"。此函数已不在调用链上。
- */
-function morphContentIn(t: number): number {
-  const k: number = t / 0.15;
-  if (k <= 0) {
-    return 0;
-  }
-  if (k >= 1) {
-    return 1;
-  }
-  return k;
-}
-
 /** 迷你条那条胶囊的组件 id（展开动画的起点矩形由它量出来）。 */
 export const MINI_BAR_ID: string = 'rzd_mini_bar';
 
@@ -1717,7 +1692,7 @@ export class PlayerExpandState {
     const clipHeight: number = this.initClipHeight + (this.morphBoxH - this.initClipHeight) * t;
     // 圆角：`radius = (initClipHeight*initScale/2 + delta*t) / scaleValue`，
     // 起点可视圆角 = 胶囊高度的一半（= 迷你条胶囊的圆角），终点 0。
-    const visualRadius: number = this.initRadiusVisual * Math.pow(1 - t, MORPH_RADIUS_DECAY_POW);
+    const visualRadius: number = this.initRadiusVisual * (1 - t);
     this.morphScale = scale;
     this.morphClipHeight = Math.max(1, clipHeight);
     this.morphTx = this.initTranslateX * (1 - t);
@@ -1830,13 +1805,7 @@ export class PlayerExpandState {
     //     反编译侧也会退回 `onAreaChange` 的值，而"第一次打开"时页面刚挂载、
     //     FrameNode 可能还拿不到 —— 只认前者的话这一次就必然退化。
     const endKnown: boolean = (this.bigNodeKnown && this.bigNodeW > 0) || this.bigSize > 0;
-    // ★★ 2026-10-14（GLM5.3 诊断 + 代码核对，真机症状：点击打开"封面固定在中间、没有飞入"）：
-    //   `measureNode()` 只挡 `w/h <= 0`，而**点击打开的重试窗口里内容层可能还是"贴底一条"**
-    //   （`sheetHeightPercent()` 按 `collapseProgress` 返回收起高度，`layoutWeight(1)+aspectRatio(1)`
-    //   的小封面量出来 w/h 都 > 0）⇒ 终点锚点会被写成那个小矩形，形变"成功"但落点错。
-    //   这里加一条**合理性下限**：展开页封面不可能小于盒子宽的 1/4（压扁帧直接判"未就绪"，继续重试）。
-    const endSane: boolean = this.endCoverSize >= this.morphBoxW * 0.25;
-    return this.morphUsable && endKnown && endSane;
+    return this.morphUsable && endKnown && this.endCoverSize > 0;
   }
 
   /** @returns 播放页封面（形变终点）这个锚点是否量到过 —— 只给日志用，排查"没有封面飞入"。 */

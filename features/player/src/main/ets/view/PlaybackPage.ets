@@ -184,7 +184,7 @@ export struct PlaybackPage {
    *   重试用尽就会走"无动画直接落位"的兜底（用户看到的「封面固定在中间、没有飞入」就是这个）。
    *   代价是最坏情况多等 ~250ms（12×32=384ms → 20×32=640ms），但比没有动画好。
    */
-  private morphRetryLeft: number = 20;
+  private morphRetryLeft: number = 12;
   /**
    * 「可以开始画了」的门：形变真正开始（几何量到并压到起点）之前，整页保持**全透明**。
    *
@@ -193,15 +193,6 @@ export struct PlaybackPage {
    * 关掉绘制不影响布局（`opacity` 不参与布局），所以量测照常进行。
    */
   @Local introPaintReady: boolean = false;
-  /**
-   * ★ 2026-10-14：点击展开的**重试窗口**标志。
-   *
-   * 这期间内容层必须保持 **100% 全尺寸布局**（只靠透明度门挡绘制），否则
-   * `sheetHeightPercent()` 会把内容层压成"贴底一条"，大封面被压扁后仍能被量到
-   * ⇒ 形变终点（续飞封面落点）写成那个小矩形 ⇒ 用户看到"封面固定在中间、没有飞入"。
-   * 见 `sheetHeightPercent()` 与 `tryStartMorphIntro()` 的说明。
-   */
-  @Local expandIntroPending: boolean = false;
   /**
    * 形变早期"底面颜色"淡入的终点进度（0…1）。
    *
@@ -622,17 +613,17 @@ export struct PlaybackPage {
    */
   private static readonly LAYER_BLUR: number = 140;
   /**
-   * 展开/收起过程中内容层从下方升起的距离（vp）。
+   * 展开/收起过程中**控制区**（进度条 + 底部那一堆按钮）从下方升起的距离（vp）。
    *
-   * ★ 用户 2026-10-14 二次反馈：「现在还是淡入淡出，没有飞入」——第一版我按 90vp 位移给的是
-   *   **内容层自己的坐标**，而这一层在形变期间被外层容器**缩放**着（`morphScale` 起点 ≈0.25），
-   *   于是 90vp 在屏幕上只有 ~22vp、还大半落在裁剪窗口之外 ⇒ 看不见"飞入"。
-   *   现在位移按 `1 / morphScale` 放大 ⇒ **屏幕上的位移恒为这个值**（起点时内容远在裁剪窗口下方，
-   *   随着 p→1 升到位，"从下面飞上来"就出来了）。静止态 `morphP = 1 ⇒ 位移 0`，落位版面不受影响。
+   * ★ 用户 2026-10-14 澄清：「我指飞入的是**播放页的进度条和下面那一堆按钮**」
+   *   ⇒ 位移只加在控制区那一层（见 `buildControlStack()` 里 ControlAreaComponent 的容器）。
+   *   位移按 `1 / morphScale` 反算：形变期间那层被外层容器缩放（起点 ≈0.25），
+   *   不反算的话屏上只有 ~1/4 的距离、看不出"飞上来"。
+   *   静止态 `morphP = 1 ⇒ 位移恒为 0`，落位版面不受影响。
    */
   private static readonly CONTENT_RISE_VP: number = 180;
 
-  /** 内容层当前的升起位移（vp，**内容层自身坐标**）：跟 morphP 走三次缓出，再按缩放反算。 */
+  /** 控制区当前的升起位移（vp，**组件自身坐标**）：跟 morphP 走三次缓出，再按缩放反算。 */
   private contentRiseVp(): number {
     const p: number = this.expandState.morphP;
     if (p >= 1 || !this.expandState.morphUsable) {
@@ -889,11 +880,9 @@ export struct PlaybackPage {
     // ★ 展开动画：先在 `aboutToAppear` 把进度放到"收起"，**保证第一帧画出来就是贴底的一条**。
     //   如果放到 `onAppear` 再置，会先渲染出一帧完整播放页再收回去，看着就是闪一下。
     this.collapseProgress = PlaybackPage.EXPAND_START_PROGRESS;
-    // ★ 重试窗口：全尺寸布局 + 不绘制（见 expandIntroPending 的说明）
-    this.expandIntroPending = true;
     this.dismissMorphActive = false;
     // 每次打开都重置重试额度（照抄 `schedulePublishRetry` 的 20×32ms，2026-10-14 由 12 提到 20）
-    this.morphRetryLeft = 20;
+    this.morphRetryLeft = 12;
     // ★ 容器形变那条路（对标无界 ExpandAnimation）：不是上拉拉进来的（点击 / 起播意图打开）
     //   就**就地**起一次形变 —— 几何压到起点（p = 0 = 迷你条封面那一小块），
     //   于是第一帧画出来就是"迷你条那里的一小块"，补间在 `onAppear` 里跑。
@@ -957,13 +946,6 @@ export struct PlaybackPage {
    * 高度变小它自己就变小，于是"封面慢慢变大"也一起来了。
    */
   private playExpandIntro(): void {
-    // ★★ 2026-10-14（修「点击打开封面最后位置错位」）：**先把内容层高度复位成全尺寸再量/再重试**。
-    //   重试窗口里 `sheetHeightPercent()` 会按 `collapseProgress`（收起态）把内容层压成"贴底一条"，
-    //   大封面被压扁后**仍然 w/h > 0**（`measureNode` 只挡 <= 0）⇒ 形变终点（续飞封面落点）
-    //   被写成那个小矩形 ⇒ 落地位置错。此期间页面不画（绘制门关着），所以全尺寸布局不会闪帧。
-    if (this.collapseProgress !== 0) {
-      this.collapseProgress = 0;
-    }
     // ★ **统一入口 + 无界式兜底**：所有打开方式（点击、起播意图、上拉松手）都从这里进。
     //   · 手指正在驱动 → 让给手势；
     //   · 两端锚点（迷你条封面 + 播放页封面）都量到了 → 走形变（`tryStartMorphIntro`）；
@@ -982,8 +964,7 @@ export struct PlaybackPage {
       this.morphRetryLeft--;
       Logger.warn(PlaybackPage.logTag,
         `expand intro: anchors not ready, retry (left=${this.morphRetryLeft}) ` +
-        `usable=${this.expandState.morphUsable} ${this.expandState.debugEndAnchor()} ` +
-        `sheetH=${this.sheetHeightPercent()} pending=${this.expandIntroPending}`);
+        `usable=${this.expandState.morphUsable} bigKnown=${this.expandState.bigCoverAnchored()}`);
       setTimeout((): void => {
         if (this.isAlive && !this.isClosing) {
           this.playExpandIntro();
@@ -1001,7 +982,6 @@ export struct PlaybackPage {
     this.expandState.morphSettleOpen();
     // 无动画落位也必须开门，否则整页会一直停在"不画"的状态（打不开播放页）
     this.introPaintReady = true;
-    this.expandIntroPending = false;
     this.collapseProgress = 0;
     this.expandIntroRunning = false;
   }
@@ -1016,8 +996,7 @@ export struct PlaybackPage {
       // 首次上拉的目标尚未布局时仍保持透明全尺寸，补量成功再放行。
       this.introPaintReady = this.expandState.morphUsable;
       // 手指路自己保证全尺寸布局，重试窗口的标记要清掉
-      this.expandIntroPending = false;
-      this.expandIntroRunning = false;
+        this.expandIntroRunning = false;
       this.collapseProgress = 0;
       return true;
     }
@@ -1045,11 +1024,7 @@ export struct PlaybackPage {
       return false;
     }
     // 几何就绪：开门，允许绘制（此时已经是"迷你条那一小块"的起点态）
-    Logger.info(PlaybackPage.logTag,
-      `expand intro: anchors ready -> morph (${this.expandState.debugEndAnchor()}) ` +
-      `sheetH=${this.sheetHeightPercent()} pending=${this.expandIntroPending}`);
     this.introPaintReady = true;
-    this.expandIntroPending = false;
     this.expandIntroRunning = false;
     this.collapseProgress = 0;
     this.playMorphOpenIntro();
@@ -1154,14 +1129,7 @@ export struct PlaybackPage {
     // ⚠️ 容器形变（无界那套）期间**必须恒为 100%**：那套只靠"外层容器缩放 + 裁剪"完成展开，
     //    若这里同时按 collapseProgress 压缩内容层高度，就有两套动画在改同一片布局，
     //    表现为内容被压扁、封面错位。
-    //
-    // ★★ 2026-10-14（GLM5.3 诊断 + 代码核对，修「点击打开封面固定在中间、没有飞入」）：
-    //    点击路径在**重试窗口**（`expandIntroPending`）里也必须保持 100% 全尺寸布局 ——
-    //    那时形变还没开始（`morphContainerActive()` 为 false），于是这里会按 `collapseProgress`
-    //    压缩成"贴底一条"，大封面被压成一个小正方形却仍然 w/h > 0 ⇒ 被 `measureNode` 当作
-    //    合法终点收下 ⇒ 续飞终点写坏、落点在屏幕中间。而这期间页面本来就**不画**
-    //    （`introPaintReady === false` ⇒ opacity 0），全尺寸布局不会闪帧。
-    if (this.expandState.morphContainerActive() || this.expandIntroPending) {
+    if (this.expandState.morphContainerActive()) {
       return '100%';
     }
     const p: number = Math.max(0, Math.min(100, this.collapseProgress));
@@ -1602,6 +1570,12 @@ export struct PlaybackPage {
               .clip(true)
               .margin({ bottom: this.expandState.chromeOffsetY() })
               .opacity(this.expandState.pullBottomIn())
+              // ★★ 2026-10-14 用户澄清：「我指飞入的是**播放页的进度条和下面那一堆按钮**」
+              //   ⇒ 位移只加在**控制区这一层**（进度条 + 底部按钮都在 `ControlAreaComponent` 里），
+              //   影响面最小：封面/歌词/顶栏都不动。`contentRiseVp()` 已经把位移按 `1/morphScale`
+              //   反算过（形变期间外层在缩放），所以屏上看到的是恒定的"从下升起"。
+              //   静止态 `morphP = 1 ⇒ 位移 0`，落位版面逐像素不变。
+              .translate({ y: this.contentRiseVp() })
               .onTouch((_event: TouchEvent): void => {
                 this.touchChrome();
               })
@@ -2074,11 +2048,6 @@ export struct PlaybackPage {
           .height(StyleConstants.FULL_HEIGHT)
           .justifyContent(FlexAlign.End)
           .clip(true)
-          // ★ 用户 2026-10-14：「展开时 UI 直接淡入淡出太生硬，官方的 UI 是从下面跳上来、非线性曲线」
-          //   ⇒ 内容层整体从下方 `CONTENT_RISE_VP` 处升起（位移和透明度共用 `morphContentOpacity`
-          //   这一条三次缓出曲线，所以"边升边显"）。**静止态 morphContentOpacity = 1 ⇒ 位移恒为 0**，
-          //   与没有这套动画时逐像素一致（不会影响落位后的版面）。
-          .translate({ y: this.contentRiseVp() })
           // ⚠️ 这里**不再**给整层加透明度/底色：透明度已按反编译拆成三层窗口
           //   （背景 `pullBgIn` / 顶栏 `pullChromeOpacity` / 底栏 `pullBottomIn`），
           //   底色由形变容器里那个取色层负责，否则静止态会少一层颜色。
@@ -2119,8 +2088,7 @@ export struct PlaybackPage {
             this.state.isShowPlay = false;
             // 下一次打开重新走"先量再缩"的顺序：把绘制门也关回去
             this.introPaintReady = false;
-            this.expandIntroPending = false;
-            // ★ 页面卸载时**无条件**复位"跟手会话"的两个标记。
+                    // ★ 页面卸载时**无条件**复位"跟手会话"的两个标记。
             //   `pullDragging` / `morphDrive` 决定点击打开时要不要做形变初始化；
             //   只要有一轮手势没走到收尾（被系统抢走、中途卸载、硬关闭…）它就会残留，
             //   残留成 (true, FINGER) 时点击打开会**永远跳过形变**，
