@@ -196,6 +196,25 @@ export class WindowUtil {
   }
 
   /**
+   * Reads the soft-keyboard avoid height straight from the window, bypassing the cached avoid area.
+   * @returns Keyboard height in vp; 0 when the keyboard is not shown or the window is not ready.
+   */
+  private readStraightKeyboardBottomVp(): number {
+    const win = this.mainWindow;
+    if (win === undefined) {
+      return 0;
+    }
+    try {
+      const area: window.AvoidArea = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_KEYBOARD);
+      return area.visible && area.bottomRect.height > 0 ? this.px2vpSafe(area.bottomRect.height) : 0;
+    } catch (error) {
+      let err = error as BusinessError;
+      Logger.error(`read keyboard avoid area failed. Code: ${err.code}, message: ${err.message}`);
+      return 0;
+    }
+  }
+
+  /**
    * Status bar top inset (vp) for layout, resolved so that it is never a stale 0.
    *
    * 取值顺序：缓存值 → 直接向窗口量（同一帧就能拿到）→ 最后一次量到的好值 → 启动快照。
@@ -229,6 +248,28 @@ export class WindowUtil {
     }
     return this.lastGoodNavigationBarBottomVp > 0 ?
       this.lastGoodNavigationBarBottomVp : this.startupNavigationBarBottomVp;
+  }
+
+  /**
+   * Soft-keyboard avoid height (vp) for layout; **0 means "no keyboard"**.
+   *
+   * ⚠️ 与 {@link resolveStatusBarTopVp} / {@link resolveNavigationBarBottomVp} 的关键区别：
+   *    这里**不做** `lastGood*` 兜底 —— 对状态栏/导航栏来说 0 是"没量到"（会让页顶让位少一截），
+   *    对键盘来说 **0 就是合法值**（= 没弹出）。真正要防的是反向的**陈旧非 0**（键盘收起时报文漏收
+   *    ⇒ 悬浮条永远抬着），所以：缓存里没有（`updateWindowInfo` 之前）或缓存说"键盘正在显示"时，
+   *   都再向窗口现量一次；只有缓存明确说"不可见"时才直接返回 0（**不弹键盘是常态，
+   *   不为它多做一次窗口查询**）。
+   * 本方法是**只读**的（不在 build 期间写状态），可以安全地在 `build()` 里调用；它读的是
+   * `@Trace avoidKeyboard`，所以键盘弹出/收起会自动驱动重新布局（无需页面自己再挂监听）。
+   * @returns Keyboard height in vp; 0 when no soft keyboard is shown.
+   */
+  public resolveKeyboardBottomVp(): number {
+    const cached: window.AvoidArea | undefined = this.mainWindowInfo.avoidKeyboard;
+    if (cached === undefined) {
+      return this.readStraightKeyboardBottomVp();
+    }
+    const cachedShowing: boolean = cached.visible && cached.bottomRect.height > 0;
+    return cachedShowing ? this.readStraightKeyboardBottomVp() : 0;
   }
 
   /**
@@ -290,6 +331,11 @@ export class WindowUtil {
         this.mainWindowInfo.avoidSystemGesture = avoidOptions.area;
       } else if (avoidOptions.type === window.AvoidAreaType.TYPE_KEYBOARD) {
         this.mainWindowInfo.avoidKeyboard = avoidOptions.area;
+        // 键盘避让诊断（`hdc shell hilog | grep RzdKeyboardAvoid`）：这里只报原始量，
+        // 换算成 vp、以及谁拿它去让位，由消费方（壳层悬浮播放条）自己打点。
+        Logger.info('RzdKeyboardAvoid',
+          `window avoidAreaChange keyboard visible=${avoidOptions.area.visible} ` +
+            `bottomPx=${avoidOptions.area.bottomRect.height}`);
       } else if (avoidOptions.type === window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR) {
         this.mainWindowInfo.avoidNavigationIndicator = avoidOptions.area;
       }

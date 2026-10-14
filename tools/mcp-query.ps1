@@ -17,6 +17,7 @@ param(
   [string]$Ids = '',
   [string]$ArgsJson = '',
   [int]$Top = 5,
+  [string]$ProtocolVersion = '2025-11-25',
   [switch]$Brief,
   [switch]$NoArgs,
   [switch]$ListTools,
@@ -36,7 +37,20 @@ function Invoke-Mcp {
   foreach ($k in $hdr.Keys) { $h[$k] = $hdr[$k] }
   if ($Extra) { foreach ($k in $Extra.Keys) { $h[$k] = $Extra[$k] } }
   $resp = Invoke-WebRequest -Uri $base -Method Post -Body $Body -Headers $h -TimeoutSec 180 -UseBasicParsing
-  $text = $resp.Content
+  # PowerShell 5.1 decodes the body using the charset in Content-Type; this server does not
+  # send one, so PS falls back to ISO-8859-1 and Chinese text comes out as mojibake.
+  # Always re-decode the raw bytes as UTF-8.
+  $text = $null
+  try {
+    $ms = New-Object System.IO.MemoryStream
+    $resp.RawContentStream.Position = 0
+    $resp.RawContentStream.CopyTo($ms)
+    $text = [System.Text.Encoding]::UTF8.GetString($ms.ToArray())
+    $ms.Dispose()
+  } catch {
+    $text = $resp.Content
+  }
+  if (-not $text) { $text = $resp.Content }
   if ($text -is [byte[]]) { $text = [System.Text.Encoding]::UTF8.GetString($text) }
   $sid = $null
   foreach ($k in $resp.Headers.Keys) { if ($k -ieq 'Mcp-Session-Id') { $sid = $resp.Headers[$k] } }
@@ -55,7 +69,23 @@ function Get-SsePayload {
   return $out
 }
 
-$init = Invoke-Mcp -Body '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"rzdmusic-doc","version":"1.0.0"}}}'
+# Protocol version: the server began requiring 2025-11-25 around 2026-10.
+# The old 2024-11-05 now returns:
+#   {"error":{"code":-32602,"message":"Unsupported protocol version",
+#             "data":{"supported":["2025-11-25"]}}}
+# Override with -ProtocolVersion; falls back to the legacy value if the first try fails.
+$ProtoVer = $ProtocolVersion
+$initBody = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"' + $ProtoVer + '","capabilities":{},"clientInfo":{"name":"rzdmusic-doc","version":"1.0.0"}}}'
+$init = Invoke-Mcp -Body $initBody
+if (-not $init.Sid) {
+  $legacyBody = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"rzdmusic-doc","version":"1.0.0"}}}'
+  $init2 = Invoke-Mcp -Body $legacyBody
+  if ($init2.Sid) { $init = $init2 } else {
+    Write-Host '[MCP] handshake failed for both protocol versions. Raw response:'
+    Write-Host $init.Text
+    exit 1
+  }
+}
 if (-not $init.Sid) { Write-Host '[MCP] no Mcp-Session-Id header:'; Write-Host $init.Text; exit 1 }
 $sid = @{ 'Mcp-Session-Id' = $init.Sid }
 $null = Invoke-Mcp -Body '{"jsonrpc":"2.0","method":"notifications/initialized"}' -Extra $sid

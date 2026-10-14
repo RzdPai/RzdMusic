@@ -26,7 +26,8 @@
  *    `linearGradient` 的端点不能对资源色算 alpha，直接拿 `Color.Transparent` 当终点会在
  *    浅色底上"穿过黑色"（中途发暗）。起点色必须与**真实页面底色**一致 —— 本族的页面底色
  *    统一是 `app.color.background_secondary`（base `#F1F3F5` = `mine_top_fade` 的不透明值，
- *    dark `#000000` = `mine_top_fade` 的不透明值），所以"蒙版起点 = 页面底色"是**构造上成立**的。
+ *    dark `#FF1C1C1E` = `mine_top_fade` 的不透明值 —— 2026-10-15 夜间页面底从纯黑改成深灰时
+ *    两个 token 是同一次一起改的，**别只改一边**），所以"蒙版起点 = 页面底色"是**构造上成立**的。
  */
 
 /**

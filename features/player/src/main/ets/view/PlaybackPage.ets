@@ -98,7 +98,14 @@ export struct PlaybackPage {
   private flowLightController: hdsEffect.ShaderEffectController = new hdsEffect.ShaderEffectController();
   /** 已应用到着色器的取色版本号，避免同一份颜色重复下发布。 */
   private appliedTintVersion: number = -1;
-  /** Background cover image (Resource or blurred PixelMap). */
+  /**
+   * Background cover source (Resource).
+   *
+   * ⚠️ 2026-10-15：背景改实时模糊后，本字段**恒为 `Resource`**（= `song.label`，原始封面），
+   *   不再被赋成 `effectKit` 预渲染出来的模糊 PixelMap（那条路已停用，见
+   *   {@link getImageColorAsync}）。类型保留 `PixelMap | Resource` 是为了兼容
+   *   {@link isPixelMapCover} / {@link originalCoverSource} 那条兜底分支。
+   */
   @Local imageLabel: image.PixelMap | Resource = $r('app.media.ic_avatar1');
   /** Cross-script source-switch banner state; AppStorageV2-backed for reactive UI. */
   @Local switchBanner: SwitchBannerState = SwitchBannerState.connect();
@@ -592,23 +599,43 @@ export struct PlaybackPage {
   private static readonly HDS_CORE_SYSCAP: string = 'SystemCapability.UIDesign.HDSComponent.Core';
 
   /**
-   * 封面底图模糊半径（px，effectKit 口径）。
+   * 旧的「预渲染」封面底图模糊半径（px，`effectKit.createEffect().blur()` 口径）。
    *
-   * ★★ 2026-10-14：**与流光开关彻底解耦**（用户要求"模糊半径别跟着流光变"）。
-   *   原来开流光用 15 / 关流光用 34，切一下开关背景糊度就跳一次；现在恒为 34。
+   * ⚠️ 2026-10-15：**已不再用于背景**。
+   *   播放页背景改成**实时模糊**（原始封面 + 组件级 `.blur()`，见
+   *   {@link LIVE_BACKDROP_BLUR_VP}）⇒ `effectKit` 那条"先把封面糊成 PixelMap 再当底图"
+   *   的**预渲染路已整体停用**，本常量只剩「等价换算的基准值」这一个用途
+   *   （由 {@link imageBlurRadius} 读取）。保留不删，方便以后回看观感尺度。
    */
   private static readonly COVER_BLUR: number = 34;
-  /** 背景层（非 PixelMap 源）的实时模糊半径：恒 140（同上，不再跟流光开关联动）。 */
-  private static readonly LAYER_BLUR: number = 140;
+  /**
+   * 背景层**实时模糊**半径（vp）。
+   *
+   * ★ 取值依据（为什么是 11 而不是 34）：`blur()` 的入参单位是 **px**（官方《图像效果》：
+   *   「模糊半径……单位：px」），而 vp→px 会乘设备像素密度。本机手机形态密度 ≈ 3
+   *   ⇒ `34 px ÷ 3 ≈ 11.3 vp`；取整 **11 vp ⇒ ≈33 px**，与旧的预渲染 `blur(34px)` 同尺度
+   *   （两者都是"以屏幕像素为单位的模糊半径"，观感等价）。
+   *   用 vp 而不是写死 px 是**有意为之**：密度更大的设备上旧写法的物理模糊反而更"糊"，
+   *   换成 vp 后糊度相对屏宽恒定。
+   * ⚠️ 旧的 `LAYER_BLUR = 140`（只对非 PixelMap 源生效的那条实时模糊）已随本次改动删除：
+   *   PixelMap 源现在同样走实时模糊，不再有"一条真模糊、一条 0"的分叉。
+   */
+  private static readonly LIVE_BACKDROP_BLUR_VP: number = 11;
 
-  /** 当前该用的封面底图模糊半径（常量，与流光开关无关）。 */
+  /** 旧的预渲染模糊半径（px）。**已不再用于背景**，只作为"等价换算基准"保留。 */
   private imageBlurRadius(): number {
     return PlaybackPage.COVER_BLUR;
   }
 
-  /** 当前该用的背景层实时模糊半径。 */
-  private layerBlurRadius(): number {
-    return PlaybackPage.LAYER_BLUR;
+  /**
+   * 背景层的实时模糊半径（vp）。
+   *
+   * ⚠️ 这里**故意返回常量**而不是 `px2vp(COVER_BLUR)`：`aboutToAppear()` 阶段
+   *   `getUIContext()` 未必可用，而 `px2vp` 需要 UIContext；常量 11 vp 在任何密度下
+   *   都落在"和旧观感同一档"的范围内（见 {@link LIVE_BACKDROP_BLUR_VP} 的换算依据）。
+   */
+  private backdropBlurRadiusVp(): number {
+    return PlaybackPage.LIVE_BACKDROP_BLUR_VP;
   }
 
   private hdsEffectCapable(): boolean {
@@ -1164,7 +1191,39 @@ export struct PlaybackPage {
     return $r('app.media.ic_avatar1');
   }
 
-  /** Blurred backdrop source: online cover url when available, else the local pixel-map / resource. */
+  /**
+   * **背景层**的底图：**未做任何预渲染模糊**的原始封面。
+   *
+   * 与 {@link backgroundImageSource}（旧的预渲染底图）的区别只有一个：**不做 effectKit 预模糊**。
+   * 因为背景层已经改成实时模糊，底图必须给原图 —— 给预渲染过的图再实时模糊是
+   * "糊两遍"，而且会丢掉实时模糊该有的层次。
+   *
+   * 取源顺序与 {@link backgroundImageSource} 逐条对齐，只是把"预渲染结果"换成"原图"：
+   * 1. `imageLabel` 非 PixelMap（`Resource`，本地/内置封面）⇒ 直接用；
+   * 2. 在线歌曲有 `song.cover` ⇒ 用 URL（让 `Image` 组件自己加载原始封面）；
+   * 3. 兜底 ⇒ `imageLabel`（在线歌无封面时它就是 `ic_avatar1`，与 {@link getImageColorAsync} 同口径）。
+   *
+   * ⚠️ 第 2 条必须在第 3 条之前判：在线歌的 `imageLabel` 可能是"预渲染模糊过的 PixelMap"，
+   *    而它在本次改动后**已经不再被赋成模糊图**（见 {@link getImageColorAsync}），
+   *    所以这里的判据同时兼容改动前后两种赋值。
+   */
+  private originalCoverSource(): string | image.PixelMap | Resource {
+    const song = this.state.getCurrentSongItem();
+    if (!this.isPixelMapCover(this.imageLabel) &&
+      song !== undefined && song.cover.length > 0) {
+      return song.cover;
+    }
+    return this.imageLabel;
+  }
+
+  /**
+   * Blurred backdrop source: online cover url when available, else the local pixel-map / resource.
+   *
+   * ⚠️ 2026-10-15：**已不再被播放页背景层使用**（背景层改吃 {@link originalCoverSource}）。
+   *   唯一调用点是 {@link phoneSwiperBackdropImage}，而那个 builder 本身就是死代码
+   *   （全文件只有定义、没有调用）⇒ 本方法目前**也是死代码**。
+   *   按任务要求"保留函数但标注已不再用于背景"，**保留不删**。
+   */
   private backgroundImageSource(): string | image.PixelMap | Resource {
     const song = this.state.getCurrentSongItem();
     if (this.isPixelMapCover(this.imageLabel)) {
@@ -1176,7 +1235,14 @@ export struct PlaybackPage {
     return this.imageLabel;
   }
 
-  /** True when value looks like a decoded PixelMap ({@link Resource} has no release). */
+  /**
+   * True when value looks like a decoded PixelMap ({@link Resource} has no release).
+   *
+   * ⚠️ 2026-10-15：背景改实时模糊后 `imageLabel` **恒为 `Resource`**（不再被赋成任何
+   *   PixelMap）⇒ 本方法在两个调用点都恒返回 false，实际已成**兜底守卫**。
+   *   保留不删：`originalCoverSource()` 的类型分支仍靠它表达"底图可能是位图"的意图，
+   *   以后若有人重新把解码结果放进 `imageLabel`，这条分支会自动重新生效。
+   */
   private isPixelMapCover(value: string | image.PixelMap | Resource): boolean {
     if (typeof value !== 'object' || value === null) {
       return false;
@@ -1185,7 +1251,15 @@ export struct PlaybackPage {
     return typeof probe.release === 'function';
   }
 
-  /** Releases native PixelMap backing if {@link imageLabel} is a decoded bitmap (not a Resource). */
+  /**
+   * Releases native PixelMap backing if {@link imageLabel} is a decoded bitmap (not a Resource).
+   *
+   * ⚠️ 2026-10-15：**已不再会命中任何东西**（`imageLabel` 恒为 `Resource`，见
+   *   {@link isPixelMapCover}）。两个调用点（`aboutToAppear` / `onDisAppear`）保留原样，
+   *   因为这是一条**安全网**：万一以后又有人把位图塞进 `imageLabel`，它仍然会负责释放。
+   *   ⚠️ 反面教训（本次改动顺带解决的）：以前背景层渲染的**正是**这里会被释放的那张
+   *   PixelMap —— "先释放、再由 `@Local` 触发换源"中间隔着调度，属于潜在 use-after-free。
+   */
   private releaseBackgroundCoverIfPixelMap(): void {
     if (!this.isPixelMapCover(this.imageLabel)) {
       return;
@@ -1332,7 +1406,19 @@ export struct PlaybackPage {
     return true;
   }
 
-  /** Blurred cover tile + imageColor (phone Swiper); same for album page and lyrics page. */
+  /**
+   * Blurred cover tile + imageColor (phone Swiper); same for album page and lyrics page.
+   *
+   * ⚠️ 2026-10-15 本次改动**没有动这一支**（用户只点名"背景那一层"）：它仍然吃
+   *   {@link backgroundImageSource}（预渲染底图）。实际状态已经核过一遍：
+   *   `grep -n "phoneSwiperBackdropImage" PlaybackPage.ets` **只有定义处这一个命中**
+   *   ⇒ 这个 builder **本来就是死代码**（没有任何调用点），所以它在本次改动前后
+   *   对画面都没有影响。
+   *   ⚠️ 因此"预渲染那条路"现在的消费者是**零个**；`effectKit.blur` 那条分支我保留在
+   *   {@link getImageColorAsync} 的注释里说明来龙去脉，但**代码已经删掉**（见那里的 ★★）。
+   *   若以后要复活这一支，改法与背景层同构（`originalCoverSource()` +
+   *   `.blur(backdropBlurRadiusVp())`），但要单独确认观感（它是 0.5 不透明度）。
+   */
   @Builder
   phoneSwiperBackdropImage() {
     Image(this.backgroundImageSource())
@@ -1775,7 +1861,15 @@ export struct PlaybackPage {
     Logger.info(PlaybackPage.logTag, `flow light tint updated src=${vivid[0]} dst=${vivid[1]}`);
   }
 
-  /** Loads cover bytes, derives theme background color, and builds blurred background PixelMap. */
+  /**
+   * Loads cover bytes, derives theme background color, and (before 2026-10-15) built the
+   * blurred background PixelMap.
+   *
+   * ★★ 2026-10-15：**不再产出任何背景底图**。背景层改成「原始封面 + 组件级实时模糊」
+   *   （{@link originalCoverSource} + {@link backdropBlurRadiusVp}）⇒ 这里只剩两件事：
+   *   ① 把 `imageLabel` 复位成**原始封面**（`Resource`）；② 算出 `state.imageColor`
+   *   （播放页背景那层取样色）+ 流光色。中间解码出来的 PixelMap **只用于取色，用完即弃**。
+   */
   private async getImageColorAsync(): Promise<void> {
     const jobSeq: number = ++this.imageColorJobSeq;
     const ctx = this.context;
@@ -1796,7 +1890,13 @@ export struct PlaybackPage {
       if (this.isAlive) {
         this.state.imageColor = 'rgba(20, 20, 22, 0.5)';
       }
-      // 在线歌曲：预渲染模糊背景（一次性 blur），避免 buildControlStack 中每帧 blur(300) 实时模糊
+      // 在线歌曲：只**解码**封面给流光取色用。
+      //
+      // ★★ 2026-10-15：这里原来还会 `effectKit.createEffect(coverPm).blur(imageBlurRadius())`
+      //   预渲染一张模糊 PixelMap 当底图 —— **该预渲染已整体停用**（背景改实时模糊，
+      //   底图给的是 {@link originalCoverSource()} 的原始封面）。
+      //   ⇒ `imageLabel` 不再被赋成模糊图；解码这一步保留，因为
+      //   {@link extractFlowLightColors} 需要一个现成的 PixelMap（免得为取色再下载一遍封面）。
       if (song.cover.length > 0 && this.isAlive) {
         try {
           const coverPm: image.PixelMap | undefined =
@@ -1804,22 +1904,12 @@ export struct PlaybackPage {
           if (coverPm !== undefined && this.isAlive && jobSeq === this.imageColorJobSeq) {
             // 流光取色：趁位图已经解码好顺手算一次，不用为它再下载一遍封面
             await this.extractFlowLightColors(coverPm);
-            const headFilter = effectKit.createEffect(coverPm);
-            if (headFilter !== null) {
-              headFilter.blur(this.imageBlurRadius());
-              const blurred = await headFilter.getEffectPixelMap();
-              if (this.isAlive && jobSeq === this.imageColorJobSeq) {
-                this.imageLabel = blurred;
-              } else {
-                this.releasePixelMapQuiet(blurred);
-              }
-            }
           }
           if (coverPm !== undefined) {
             this.releasePixelMapQuiet(coverPm);
           }
         } catch (_err) {
-          // 预渲染失败则回退默认图，不影响播放
+          // 取色失败不影响播放：背景走实时模糊，不再需要这张预渲染图
         }
       }
       return;
@@ -1909,24 +1999,15 @@ export struct PlaybackPage {
       return;
     }
 
-    try {
-      const headFilter = effectKit.createEffect(pixelMap);
-      if (headFilter !== null) {
-        headFilter.blur(this.imageBlurRadius());
-        const blurred = await headFilter.getEffectPixelMap();
-        if (this.isAlive && jobSeq === this.imageColorJobSeq) {
-          this.imageLabel = blurred;
-        } else {
-          this.releasePixelMapQuiet(blurred);
-        }
-      }
-    } catch (error) {
-      const err = error as BusinessError;
-      Logger.error(PlaybackPage.logTag,
-        `blur effect failed, code=${err?.code}, message=${err?.message}`);
-    } finally {
-      this.releasePixelMapQuiet(pixelMap);
-    }
+    // ★★ 2026-10-15：这里原来是「`effectKit.blur(imageBlurRadius())` 预渲染一张模糊 PixelMap
+    //   赋给 `imageLabel` 当背景底图」。背景改成实时模糊后**这条路已整体停用** ——
+    //   `imageLabel` 保持为 `song.label`（**原始封面 Resource**），
+    //   由 {@link originalCoverSource} 交给背景层 + 组件级 `.blur()` 去实时模糊。
+    //   解码出来的 PixelMap 只服务于上面那次取色，用完即弃。
+    //   ⚠️ 顺带解掉一个隐患：以前被释放的正是"正在当底图渲染的那张 PixelMap"
+    //      （下次换歌/页面卸载时 `releaseBackgroundCoverIfPixelMap()` 会释放它），
+    //      现在 `imageLabel` 恒为 Resource ⇒ **背景层不再持有任何会被释放的位图**。
+    this.releasePixelMapQuiet(pixelMap);
   }
 
   /** Downloads an online cover url and decodes it into a PixelMap (best-effort). */
@@ -2020,11 +2101,20 @@ export struct PlaybackPage {
             .opacity(this.backgroundRevealOpacity())
 
           // 背景与控件分离：全程同一张封面底图，任意宽高铺满，不在落位帧才换彩色。
-          Image(this.backgroundImageSource())
+          //
+          // ★★ 2026-10-15：**实时模糊**（用户要求"播放页背景改为实时模糊"）。
+          //   底图 = {@link originalCoverSource()}（**原始封面，不做 effectKit 预渲染模糊**）；
+          //   糊度 = 组件级 `.blur()`（`CommonMethod.blur`，官方《图像效果》实时模糊接口）。
+          //   ⚠️ 旧写法是"`effectKit` 先把封面糊成 PixelMap 当底图 + 这里按源类型二选一
+          //      （PixelMap 源 `blur(0)` / 其它源 `blur(140)`）"—— 那条分叉已整体删除：
+          //      **两个源现在都走同一条实时模糊**，不再有"预渲染过的就不糊"这种行为。
+          //   ⚠️ 半径与依据见 {@link backdropBlurRadiusVp} / {@link LIVE_BACKDROP_BLUR_VP}。
+          //   ⚠️ 绘制顺序 / 圆角 / 透明度（`0.55 * backgroundRevealOpacity()`）**一字未改**。
+          Image(this.originalCoverSource())
             .width('100%')
             .height('100%')
             .objectFit(ImageFit.Cover)
-            .blur(this.isPixelMapCover(this.backgroundImageSource()) ? 0 : this.layerBlurRadius())
+            .blur(this.backdropBlurRadiusVp())
             .opacity(0.55 * this.backgroundRevealOpacity())
             .hitTestBehavior(HitTestMode.None)
 

@@ -80,6 +80,19 @@ export struct PlaylistBatchActionBar {
   @Param playlistId: string = '';
   /** 是否允许批量删除（本地歌单为 true）。 */
   @Param allowBatchDelete: boolean = false;
+  /**
+   * 这条操作条**压着的那块页面底色**（只作说明与后续扩展用，当前不参与取色）。
+   *
+   * ★★ 用户 2026-10-12：「多选时下方文字会跟随背景自动变化颜色 ⇒ 日间模式下背景取了黑色，
+   *   而文字依然是黑色」。歌单详情 / 每日30首这一页的底色是**封面动态取色**（`backdropColor`），
+   *   操作条自己是透明的一层 ⇒ 上面那两行文字（「已选 N 首歌曲」「取消」）直接压在取色底上。
+   *
+   * ⚠️ 这里**故意不接受"文字色"参数**、也**不在这里按底色现算黑白**：同一个量两处各算一遍，
+   *   必然在临界底色上和宿主打架（一边白字一边黑字）。真源只有一个 —— 宿主的
+   *   `PlaylistDetailPage.lightBackdrop`（恒 false ⇒ 正文恒白字，与歌手页同款），
+   *   见 `surfaceInk()`。
+   */
+  @Param backdropColor: string = '';
   /** 退出多选回调（宿主据此隐藏迷你条等）。 */
   @Param onExit: () => void = (): void => {};
   /** 批量删除完成回调（宿主重新加载列表）。 */
@@ -110,6 +123,16 @@ export struct PlaylistBatchActionBar {
 
   private toast(message: string): void {
     this.getUIContext().getPromptAction().showToast({ message: message, duration: 2000 });
+  }
+
+  // ─────────────────── 取色底上的前景色（与宿主那块底成对） ───────────────────
+  // 与 `PlaylistDetailSongListSection.surfaceInk()` **同一结论、同一个真源**：
+  // 宿主 `PlaylistDetailPage` 的正文底色是 `ColorConversion.dealColor` 压暗过的深底
+  // ⇒「`lightBackdrop` 恒 false ⇒ 正文恒白字」（与歌手页 `ArtistDetailPage` 逐字同款，已上机验证）。
+  // 本组件是透明的一层，文字直接压在同一块底上 ⇒ 取同一个结论，两边不会打架。
+  /** 取色底上的主文字色（「已选 N 首歌曲」/「取消」）。 */
+  private surfaceInk(): ResourceColor {
+    return '#FFFFFF';
   }
 
   /** 是否已全选当前可见行。 */
@@ -464,8 +487,13 @@ export struct PlaylistBatchActionBar {
       .fontWeight(FontWeight.Medium)
       .borderRadius(10)
       .padding({ left: 2, right: 2 })
-      .backgroundColor($r('sys.color.comp_background_tertiary'))
-      .fontColor($r('sys.color.font_primary'))
+      // ★★ 用户 2026-10-12：「多选时下方文字会跟随背景自动变化颜色 ⇒ 日间模式下黑底黑字看不清」。
+      //   **底与字必须成对、只走主题 token**（日间 / 夜间各有一套取值，构造上不会撞色）：
+      //     底 = `app.color.capsule_background`（base #F1F3F5 / dark #2C2D2F）
+      //     字 = `app.color.font_primary`     （base #E5000000 / dark #E5FFFFFF）
+      //   ⚠️ 别把底或字换成"页面取色 / 主题强调色 / 写死 hex"—— 那正是"文字跟着背景变"的来源。
+      .backgroundColor($r('app.color.capsule_background'))
+      .fontColor($r('app.color.font_primary'))
       .onClick(() => {
         action();
       })
@@ -588,11 +616,11 @@ export struct PlaylistBatchActionBar {
         Row() {
           Text('已选 ' + this.batch.keys.length + ' 首歌曲')
             .fontSize(13)
-            .fontColor($r('sys.color.font_secondary'))
+            .fontColor(this.surfaceInk())
           Blank()
           Text('取消')
             .fontSize(16)
-            .fontColor($r('sys.color.font_secondary'))
+            .fontColor(this.surfaceInk())
             .onClick(() => {
               this.onExit();
             })

@@ -53,6 +53,10 @@
       "value": "热门歌手"
     },
     {
+      "name": "home_new_songs",
+      "value": "新歌推荐"
+    },
+    {
       "name": "home_category_featured",
       "value": "精选推荐"
     },

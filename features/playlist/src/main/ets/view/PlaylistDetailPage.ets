@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -558,11 +558,19 @@ export struct PlaylistDetailPage {
                     const b: number = Math.max(0, Math.min(255, arr[2]));
                     this.avgColor = `rgb(${r}, ${g}, ${b})`;
                     this.backdropColor = this.avgColor;
-                    // dealColor 的亮度上限是 0.3（深色），所以前景恒定用浅色（与歌手页一致）
-                    const luminance: number = 0.2126 * this.linearChannel(r) +
-                      0.7152 * this.linearChannel(g) + 0.0722 * this.linearChannel(b);
-                    // Choose the higher WCAG contrast of black/white against the actual painted RGB.
-                    this.lightBackdrop = (luminance + 0.05) / 0.05 >= 1.05 / (luminance + 0.05);
+                    // ★★ 2026-10-12（用户：「歌单页多选时下方文字会跟随背景自动变化颜色，日间模式下
+                    //   背景取了黑色，而文字依然是黑色」）—— **原来这里是用 WCAG 对比度现算的**：
+                    //     luminance+0.05)/0.05 >= 1.05/(luminance+0.05)，等价于 luminance >= 0.179。
+                    //   而 `dealColor` 的输出并非恒暗：色相不同时最大通道仍在 0.3 附近，
+                    //   加权相对亮度会落在 0.18 上下 ⇒ 判据**会在临界点翻成 true**，页面文字翻成黑色，
+                    //   可它压着的那块底（`backdropColor` / 吸顶多选行）只是"中等偏暗" ⇒ **黑底黑字**。
+                    //   ⇒ 改成与**歌手页（ArtistDetailPage）逐字同款的口径**：
+                    //     「`avgColor` 是 `dealColor` 压暗过的（近灰度封面直接取原灰，否则亮度上限 0.3）
+                    //      ⇒ 页面正文压的恒是深底 ⇒ 恒用白字」。
+                    //   ⚠️ 判据必须和它压着的那块底**同源**：本页正文的底就是 `backdropColor`，
+                    //      不是原始照片（照片只在上方照片层，另有 `statusBar*` 那套单独判）。
+                    //      歌手页这条口径已经上机验证过（用户：「像歌手页就是正常的」），照抄它。
+                    this.lightBackdrop = false;
                     hilog.info(PLAYLIST_LOG_DOMAIN, PLAYLIST_LOG_TAG,
                       'hero backdrop color %{public}s light=%{public}d', this.avgColor, this.lightBackdrop);
                   }
@@ -592,16 +600,15 @@ export struct PlaylistDetailPage {
   /**
    * 取色背景是否偏浅（决定前景文字/图标用深色还是白色）。
    *
-   * 由 {@link loadBackdropColor} 在取色时一次性算好（{@link lightBackdrop}），
+   * 由 {@link loadBackdropColor} 在取色时定死（{@link lightBackdrop}），
    * 不再从颜色字符串反推 —— **判定和实际铺的底色必须出自同一次计算**，
    * 否则两套阈值不一致就会出现「底色深、文字也深」这种自相矛盾的组合。
-   * @returns True 表示背景偏浅，前景应该用深色。
+   *
+   * ⚠️ 2026-10-12：`linearChannel()`（WCAG 相对亮度那一步）**已删除** —— 它服务的那个
+   * 「按对比度挑黑/白」判据在 `dealColor` 的取值域里就会翻成 true ⇒ 页面黑底黑字
+   * （详见 {@link loadBackdropColor} 里的注释）。现在与歌手页同口径：正文恒白字。
+   * @returns True 表示背景偏浅，前景应该用深色。本页恒为 false。
    */
-  private linearChannel(channel: number): number {
-    const value: number = channel / 255;
-    return value <= 0.04045 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
-  }
-
   private isLightBackdrop(): boolean {
     return this.lightBackdrop;
   }
@@ -736,6 +743,9 @@ export struct PlaylistDetailPage {
             displaySongs: this.listVm.playlistSongUis,
             playlistId: this.sectionType === 'playlist' ? this.playlistId : '',
             allowBatchDelete: this.sectionType === 'playlist' && this.playlistId.length > 0,
+            // ★ 操作条是透明的一层，文字直接压在**页面取色底**上 ⇒ 把「它压着哪块底」告诉它，
+            //   底与字的真源只有本页这一处（`lightBackdrop` = false ⇒ 正文恒白字，见 surfaceInk 注释）。
+            backdropColor: this.backdropColor,
             onExit: (): void => { this.exitBatchMode(); },
             onDeleted: (): void => { this.listVm.loadPlaylistSongs(this.playlistId); }
           })
@@ -757,6 +767,8 @@ export struct PlaylistDetailPage {
             displaySongs: this.listVm.playlistSongUis,
             playlistId: this.sectionType === 'playlist' ? this.playlistId : '',
             allowBatchDelete: this.sectionType === 'playlist' && this.playlistId.length > 0,
+            // ★ 见上一条分支同款注释：把「它压着哪块底」传下去，文字色只认本页这一处真源。
+            backdropColor: this.backdropColor,
             onExit: (): void => {
               this.exitBatchMode();
             },

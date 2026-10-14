@@ -5,7 +5,7 @@ import { pasteboard } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { guardPlayerBack } from 'musicbasic';
-import { AppStorageKeys, AmbientState, MusicAppState, MusicStoreService, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
+import { AppStorageKeys, AmbientState, MusicAppState, MusicStoreService, SongTitleMarquee, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { RecognitionResult, RecognitionStatus, EngineReport, EngineResultGroup } from '../recognize/RecognitionTypes';
 import { MicCancelledError, MicPermissionError, MicRecorder } from '../recognize/MicRecorder';
 import { RecognitionNetworkError } from '../recognize/errors';
@@ -353,12 +353,14 @@ export struct MusicRecognitionPage {
         .justifyContent(FlexAlign.Center)
       }
       Column({ space: 2 }) {
-        Text(item.title)
-          .fontSize($r('sys.float.Body_M'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('sys.color.font_primary'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        // ★ 歌名过长时跑马灯（用户要求「各个页面歌曲名过长时改为用跑马灯显示」）。
+        //   字号/字色/字重逐字保留，唯一变化是溢出行为：`Ellipsis` → `MARQUEE`。
+        SongTitleMarquee({
+          text: item.title,
+          titleFontSize: $r('sys.float.Body_M'),
+          titleFontColor: $r('sys.color.font_primary'),
+          titleFontWeight: FontWeight.Medium
+        })
         Text((item.artist.length > 0 ? item.artist : '未知歌手') +
           (item.album.length > 0 ? ' · ' + item.album : ''))
           .fontSize($r('sys.float.Caption_M'))

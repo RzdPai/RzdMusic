@@ -22,6 +22,7 @@ import {
   BreakpointType,
   MusicStoreService,
   PlayedSongRecord,
+  SongTitleMarquee,
   StyleConstants,
   ThemeState
 } from 'musicbasic';
@@ -77,6 +78,11 @@ export struct PlaylistDetailSongListSection {
    * 传入的必须是同一个色值，吸顶行才能和页面融成一体。
    */
   @Param backdropColor: string = '#1f1f22';
+  // ★★ 用户 2026-10-12 的对比度 bug 修法（见 `surfaceInk()` 头上那段）：底色与文字色**必须同源**。
+  //   本组件铺的那块底就是 `backdropColor`（吸顶组头 = 整页底色），而它由宿主
+  //   `PlaylistDetailPage` 用 `ColorConversion.dealColor` 压暗后给出 ⇒「恒深底 ⇒ 正文恒白字」
+  //   这一条结论**只在宿主那一处算**（与歌手页同款），本组件直接取用它。
+  //   下面两个 `@Param` 现在保留作 API 兼容与默认值来源（`surfaceInk()` 目前返回常量白）。
   @Param fgColor: ResourceColor = '#FFFFFF';
   @Param fgSecondaryColor: ResourceColor = '#B3FFFFFF';
   /**
@@ -325,6 +331,34 @@ export struct PlaylistDetailSongListSection {
     this.getUIContext().getPromptAction().showToast({ message: message, duration: 2000 });
   }
 
+  // ───────────────────── 取色底上的前景色（对比度恒定） ─────────────────────
+  //
+  // ★★ 用户 2026-10-12：「歌单页（如首页每日三十首）多选时**下方文字会跟随背景自动变化颜色**，
+  //   日间模式下背景取了黑色，而文字依然是黑色」。
+  //
+  // 现场：整块内容（含多选时切换出来的「已选 N 首 / 全选 / 完成」那一行、以及歌曲行文字）
+  //   压在**封面动态取色**的 `backdropColor` 上（见 `StickyPlayAllHeader`：
+  //   `.backgroundColor(this.backdropColor)`），而文字色来自宿主算的 `@Param fgColor`
+  //   （`PlaylistDetailPage.heroFgPrimary()` → `isLightBackdrop()`）—— 底与字是**两条独立通道**：
+  //   底色一变（换歌单 / 换封面 / 异步取色回来），文字色只要没跟着同一帧一起翻，就会落到
+  //   「深底 + 深字」= 用户看到的「文字跟着背景变、却越变越看不见」。
+  //
+  // 修法（两步，缺一不可）：
+  //   ① 宿主侧：`PlaylistDetailPage` 的 `lightBackdrop` **定死为 false**（与歌手页 `ArtistDetailPage`
+  //      逐字同款口径：`dealColor` 压暗过的底 ⇒ 正文恒白字）。原来那句"按 WCAG 对比度挑黑白"的判据
+  //      在 `dealColor` 的取值域里会翻成 true，正是黑底黑字的来源（详见宿主里的注释）。
+  //   ② 本组件侧：取色底上的前景色**只认这一条结论**（恒白字），不再自己按底色现算一次
+  //      —— 同一个量两处各算一遍，必然在临界底色上打架（一边白字一边黑字）。
+  /** 取色底上的主文字色（与 `StickyPlayAllHeader` 铺的 `backdropColor` 成对）。 */
+  private surfaceInk(): ResourceColor {
+    return '#FFFFFF';
+  }
+
+  /** 取色底上的次要文字色（与 {@link surfaceInk} 同一结论，只降透明度）。 */
+  private surfaceInkSecondary(): ResourceColor {
+    return '#B3FFFFFF';
+  }
+
   /** 是否已全选当前可见行（批量操作条与列表头共用同一份选择状态）。 */
   private isAllSelected(): boolean {
     return this.displaySongs.length > 0 && this.batch.keys.length >= this.displaySongs.length;
@@ -388,7 +422,7 @@ export struct PlaylistDetailSongListSection {
     SymbolGlyph(this.batch.has(row.selectionKey()) ?
       $r('sys.symbol.checkmark_circle_fill') : $r('sys.symbol.circle'))
       .fontSize(24)
-      .fontColor([this.batch.has(row.selectionKey()) ? this.themeState.color : this.fgSecondaryColor])
+      .fontColor([this.batch.has(row.selectionKey()) ? this.themeState.color : this.surfaceInkSecondary()])
       .transition(TransitionEffect.OPACITY)
   }
 
@@ -409,12 +443,16 @@ export struct PlaylistDetailSongListSection {
         LocalCoverImage({ src: item.coverUrl, cacheHttp: true, imageWidth: 44, imageHeight: 44, radius: 8 })
       }
       Column({ space: 4 }) {
-        Text(item.title)
-          .fontSize($r('sys.float.Body_M'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.fgColor)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        // ★ 歌名过长时跑马灯（用户要求「各个页面歌曲名过长时改为用跑马灯显示」）。
+        //   本源同时服务「每日30首」与「歌单详情」⇒ 这一处替换把两块一起覆盖。
+        //   字号/字色/字重逐字保留（字色是随底取色的 `surfaceInk()`），
+        //   唯一变化是溢出行为：`Ellipsis` → `MARQUEE`。
+        SongTitleMarquee({
+          text: item.title,
+          titleFontSize: $r('sys.float.Body_M'),
+          titleFontColor: this.surfaceInk(),
+          titleFontWeight: FontWeight.Medium
+        })
         Row({ space: 6 }) {
           // VIP / 空间音频标识已按需求**移除**：这两枚标签目前是写死的（不看歌曲真实
           // 版权字段），只会让每一行都挂两个没有信息量的角标，视觉上很吵。
@@ -422,7 +460,7 @@ export struct PlaylistDetailSongListSection {
             .fontSize($r('sys.float.Caption_M'))
             .lineHeight(16)
             .fontWeight(FontWeight.Regular)
-            .fontColor(this.fgSecondaryColor)
+            .fontColor(this.surfaceInkSecondary())
             .maxLines(1)
             .layoutWeight(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -436,7 +474,7 @@ export struct PlaylistDetailSongListSection {
           .fontSize(20)
           .fontWeight(FontWeight.Regular)
           .height(20)
-          .fontColor([this.fgSecondaryColor])
+          .fontColor([this.surfaceInkSecondary()])
           .margin({ right: 4 })
       } else if (!this.batch.batchMode) {
         SongMoreMenu({
@@ -447,7 +485,7 @@ export struct PlaylistDetailSongListSection {
             interval: item.interval, img: item.coverUrl, types: []
           },
           iconSize: 18,
-          iconColor: this.fgSecondaryColor,
+          iconColor: this.surfaceInkSecondary(),
           playlistId: this.playlistId,
           onSongDeleted: (): void => {
             this.reloadFromStore();
@@ -495,24 +533,24 @@ export struct PlaylistDetailSongListSection {
           .fontSize($r('sys.float.Subtitle_L'))
           .fontWeight(FontWeight.Medium)
           .lineHeight(24)
-          .fontColor(this.fgColor)
+          .fontColor(this.surfaceInk())
       } else {
         Row({ space: 8 }) {
           SymbolGlyph($r('sys.symbol.play_round_triangle_fill'))
             .fontSize(32)
             .fontWeight(FontWeight.Regular)
             .height(32)
-            .fontColor([this.fgColor])
+            .fontColor([this.surfaceInk()])
           Text($r('app.string.playlist_play_all'))
             .fontSize($r('sys.float.Subtitle_L'))
             .fontWeight(FontWeight.Medium)
             .lineHeight(24)
-            .fontColor(this.fgColor)
+            .fontColor(this.surfaceInk())
           Text(`${this.displaySongs.length}`)
             .fontSize($r('sys.float.Subtitle_L'))
             .fontWeight(FontWeight.Medium)
             .lineHeight(24)
-            .fontColor(this.fgColor)
+            .fontColor(this.surfaceInk())
         }
         .onClick(() => {
           if (this.displaySongs.length > 0) {
@@ -527,14 +565,14 @@ export struct PlaylistDetailSongListSection {
         Text(this.isAllSelected() ? '取消全选' : '全选')
           .fontSize($r('sys.float.Body_S'))
           .fontWeight(FontWeight.Medium)
-          .fontColor(this.fgSecondaryColor)
+          .fontColor(this.surfaceInkSecondary())
           .onClick(() => {
             this.toggleSelectAll();
           })
         Text('完成')
           .fontSize($r('sys.float.Body_S'))
           .fontWeight(FontWeight.Medium)
-          .fontColor(this.fgSecondaryColor)
+          .fontColor(this.surfaceInkSecondary())
           .margin({ left: 20 })
           .onClick(() => {
             this.exitBatchMode();
@@ -543,7 +581,7 @@ export struct PlaylistDetailSongListSection {
         Text('完成')
           .fontSize($r('sys.float.Body_S'))
           .fontWeight(FontWeight.Medium)
-          .fontColor(this.fgSecondaryColor)
+          .fontColor(this.surfaceInkSecondary())
           .onClick(() => {
             this.saveCustomSort();
           })
@@ -553,7 +591,7 @@ export struct PlaylistDetailSongListSection {
           .fontSize(20)
           .fontWeight(FontWeight.Regular)
           .height(20)
-          .fontColor([this.fgSecondaryColor])
+          .fontColor([this.surfaceInkSecondary()])
           .onClick(() => {
             this.enterBatchMode();
           })
@@ -602,7 +640,7 @@ export struct PlaylistDetailSongListSection {
             .color($r('app.color.primary40'))
           Text('正在加载歌曲…')
             .fontSize($r('sys.float.Body_S'))
-            .fontColor(this.fgSecondaryColor)
+            .fontColor(this.surfaceInkSecondary())
         }
         .width(StyleConstants.FULL_WIDTH)
         .padding({ top: 48, bottom: 48 })
@@ -644,7 +682,7 @@ export struct PlaylistDetailSongListSection {
         Column() {
           Text('未找到歌曲')
             .fontSize($r('sys.float.Body_S'))
-            .fontColor(this.fgSecondaryColor)
+            .fontColor(this.surfaceInkSecondary())
         }
         .width(StyleConstants.FULL_WIDTH)
         .height(120)

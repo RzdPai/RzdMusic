@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -534,6 +534,6 @@ export struct PlaylistHomePage {
     //   「子组件相对屏幕位置不变」，但它会让 HDS 标题栏的定位多让一次）。
     //   页面底色由页盒自身 ackgroundColor 铺满（盒顶 = 0，实测见 RzdPageTopInset），不需要它补状态栏那一条。
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
-    .backgroundColor($r('sys.color.background_secondary'))
+    .backgroundColor($r('app.color.page_background'))
   }
 }

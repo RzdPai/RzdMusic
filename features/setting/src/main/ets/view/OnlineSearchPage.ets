@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import { guardPlayerBack } from 'musicbasic';
 import { AlbumRouteParam, ArtistRouteParam, BreakpointType, ThemeState, TitleBarConstants, WindowUtil, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions, HdsNavigationTitleBarOptions, HideMode, ScrollEffectType, TextStyleMode, TitleSize } from '@kit.UIDesignKit';
-import { AppStorageKeys, AmbientState, FavoriteEntry, MusicAppState, MusicStoreService, PlayedSongRecord, QualityInfo, RouterUrlConstants, SongItem, ToplistRouteParam, buildTitleMaterial } from 'musicbasic';
+import { AppStorageKeys, AmbientState, FavoriteEntry, MusicAppState, MusicStoreService, PlayedSongRecord, QualityInfo, RouterUrlConstants, SongItem, SongTitleMarquee, ToplistRouteParam, buildTitleMaterial } from 'musicbasic';
 import { AlbumInfo, LXQualityOption, LXSearchSong, LXSearchResult, SingerInfo, lxGetPicFallback, lxGetQualityOptions, lxSearch, lxTxHotSearch, lxSearchSuggest, searchAlbums, searchSingers, sourceToCode, DownloadTask, DownloadUtil, OnlinePlayUtil, PlaylistSearchApi } from 'player';
 import type { SearchPlaylistInfo, SearchPlaylistSong } from 'player';
 import { sourceName } from 'player';
@@ -99,18 +99,25 @@ struct SongRowItem {
           this.onLoadCover(this.song);
         })
       Column({ space: 2 }) {
-        Text(this.song.name)
-          .fontSize($r('sys.float.Body_L'))
-          .fontColor($r('sys.color.font_primary'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .width('100%')
-          .textAlign(TextAlign.Start)
+        // ★ 歌名过长时跑马灯（用户要求「各个页面歌曲名过长时改为用跑马灯显示」）。
+        //   换掉了原来的 `Text(song.name).maxLines(1).textOverflow(Ellipsis)`，
+        //   字号/字色/字重/宽度约束**逐字保留**（`textAlign(TextAlign.Start)` 本来就是默认值，
+        //   且 `TextOverflow.MARQUEE` 生效时官方注明 textAlign 不生效）；`SongTitleMarquee` 自带 `layoutWeight(1)`，
+        //   等价于这里原来那句 `.width('100%')`（父 Column 已 `layoutWeight(1)`）。
+        SongTitleMarquee({
+          text: this.song.name,
+          titleFontSize: $r('sys.float.Body_L'),
+          titleFontColor: $r('sys.color.font_primary'),
+          titleFontWeight: FontWeight.Normal
+        })
+        // ⚠️ 这一行原来误写成 `TextOverflow.MARQUEE`（歌手名跑马灯 = 用户没要的东西，
+        //   且没有 `marqueeOptions` ⇒ 走的是 SDK 默认参数）。本次**恢复成 Ellipsis**，
+        //   把跑马灯让给真正该滚的歌名那一行。
         Text(this.song.singer)
           .fontSize($r('sys.float.Caption_M'))
           .fontColor($r('sys.color.font_tertiary'))
           .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.MARQUEE })
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%')
       }
       .alignItems(HorizontalAlign.Start)

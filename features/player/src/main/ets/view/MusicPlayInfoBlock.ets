@@ -192,6 +192,12 @@ export struct MusicPlayInfoBlock {
   @Builder
   MusicInfoTextsCompactCover() {
     Column() {
+      // ★ 歌名过长时跑马灯（用户要求「各个页面歌曲名过长时改为用跑马灯显示」）。
+      //   ⚠️ 这里**故意不用共用组件 `SongTitleMarquee`，而是就地加属性**：
+      //     这两个 Text 挂着 `PLAYER_META_TITLE_ID` + `onAreaChange → publishMeta()`，
+      //     是**形变续飞封面的端点量测源**；换组件会改结构/改量测，等于动形变 ——
+      //     而本次改动明令"形变相关一行都不要碰"。就地加属性则结构、id、量测、`controller`
+      //     一个都不变，只有"溢出行为"和"行数语义"变了。
       Text(this.state.getCurrentSongItem()?.title ?? '', { controller: this.titleController })
         .id(PLAYER_META_TITLE_ID)
         .onAreaChange((): void => { this.publishMeta(false, true); })
@@ -200,8 +206,21 @@ export struct MusicPlayInfoBlock {
         .opacity(0.86)
         .fontWeight(FontWeight.Bold)
         .fontFamily(PlayerConstants.FONT_FAMILY_BOLD)
-        .maxLines(2)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        // ⚠️ `MARQUEE` 生效时 `maxLines` 不生效（官方《Text》：跑马灯只在单行语义下滚）
+        //   ⇒ 原来的 `maxLines(2)` 已去掉：歌名从"最多两行省略"变成"一行跑马灯"。
+        //   这是"歌名过长用跑马灯"的必然代价（不换行才能整条读完）。形变量测不受影响：
+        //   `onAreaChange` 量的是这个 Text 自己的矩形，行数变了它照样上报。
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.MARQUEE })
+        .marqueeOptions({
+          start: true,
+          fromStart: true,
+          step: 4,
+          loop: -1,
+          delay: 1000,
+          fadeout: false,
+          marqueeStartPolicy: MarqueeStartPolicy.DEFAULT
+        })
         .width(StyleConstants.FULL_WIDTH)
       Text(this.state.getCurrentSongItem()?.singer ?? '', { controller: this.singerController })
         .id(PLAYER_META_SINGER_ID)
@@ -363,6 +382,7 @@ export struct MusicPlayInfoBlock {
   MusicInfoTexts() {
     Column() {
       Flex({ justifyContent: FlexAlign.SpaceBetween, alignItems: ItemAlign.Center }) {
+        // ★ 歌名过长时跑马灯（同上：就地加属性，不换组件、不动形变量测源）。
         Text(this.state.getCurrentSongItem()?.title ?? '', { controller: this.titleController })
           .id(PLAYER_META_TITLE_ID)
           .onAreaChange((): void => { this.publishMeta(false); })
@@ -372,8 +392,18 @@ export struct MusicPlayInfoBlock {
           .opacity(0.86)
           .fontWeight(FontWeight.Bold)
           .fontFamily(PlayerConstants.FONT_FAMILY_BOLD)
-          .maxLines(2)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          // `MARQUEE` 生效时 `maxLines` 不生效 ⇒ 原来的 `maxLines(2)` 去掉（见上一处的说明）。
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.MARQUEE })
+          .marqueeOptions({
+            start: true,
+            fromStart: true,
+            step: 4,
+            loop: -1,
+            delay: 1000,
+            fadeout: false,
+            marqueeStartPolicy: MarqueeStartPolicy.DEFAULT
+          })
           // ★ 歌名/歌手这一行仍然走"原来的飞入"（所有权交接门，用户明确不改）——
           //   只是**门从整行挪到了这两个 Text 上**，好把收藏按钮摘出去（见下）。
           .opacity(this.expandState.targetMetaOpacity())

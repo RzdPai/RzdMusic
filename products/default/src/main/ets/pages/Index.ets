@@ -22,6 +22,7 @@ import {
   BreakpointType,
   getWindowInfoState,
   getNavigationBarBottomVpFromWindowUtil,
+  getKeyboardBottomVpFromWindowUtil,
   getPlaylistTransitionState,
   HomeSourceState,
   ImmersiveType,
@@ -75,6 +76,25 @@ const FLOATING_MINI_BAR_HEIGHT_VP: number = 56;
 
 /** 二级页面悬浮迷你条在宽屏下的最大宽度（vp）：胶囊不该铺满整个平板/桌面窗口。 */
 const FLOATING_MINI_BAR_MAX_WIDTH_VP: number = 560;
+
+/**
+ * 键盘弹出时，二级页面悬浮迷你条**再往上抬多少**（vp）的两个常量。
+ *
+ * 背景（官方《自定义键盘》）：系统默认的键盘避让**只保证输入框不被遮挡**，
+ * 输入框下面的组件（本条悬浮播放条就是）会被键盘压住 ⇒ 必须自己按键盘高度避让。
+ *
+ * 算式（`floatingMiniBarKeyboardLiftVp()`）：
+ *   lift = 键盘高度 + {@link FLOATING_MINI_BAR_KEYBOARD_GAP_VP} − 常态下胶囊离屏底的既有间隙
+ * 其中"既有间隙"按 2026-10-12 的真机两点标定 `gap ≈ 1.8 × barBottomMargin` 反推
+ * （见 {@link floatingMiniBar} 里那两条实测记录）—— 减掉它是为了**不要把已经有的那份间隙
+ * 重复算一遍**，否则键盘态会比常态明显浮高一截（§29.1 用户就报过"播放条浮得太高"）。
+ *
+ * ⚠️ 真机调法（只动这两个常量，别改算式）：
+ *   · 键盘态偏高 ⇒ 调**大** FACTOR（多减一点）；偏低 / 仍被压住 ⇒ 调**小** FACTOR（减 0 = 整条上移一个键盘高）。
+ *   · 想整体再多留一点缝 ⇒ 调大 GAP。
+ */
+const FLOATING_MINI_BAR_KEYBOARD_GAP_VP: number = 8;
+const FLOATING_MINI_BAR_CAPSULE_GAP_FACTOR: number = 1.8;
 
 /**
  * 上拉打开播放页的**起手热区**高度（vp，贴屏幕底那一条）。
@@ -342,6 +362,21 @@ struct Index {
       // 直接挂起播放页即可：展开动画由播放页自己播（见 playExpandIntro / morphScaleValue）。
       this.appState.isShowPlay = true;
     });
+  }
+
+  /**
+   * 键盘避让诊断：软键盘弹出 / 收起时打一行（`hdc shell hilog | grep RzdKeyboardAvoid`）。
+   *
+   * ⚠️ **不要在壳层再挂一份窗口监听**：`TYPE_KEYBOARD` 的避让区由
+   * `common/musicbasic` 的 `WindowUtil.updateWindowInfo()` 统一监听（全进程唯一一处），
+   * 这里只是**读**它写进 `WindowInfo.avoidKeyboard`（`@Trace`）的结果 ——
+   * 读 `@Trace` 属性既能驱动本条悬浮条的重新布局，也正好是这个诊断断点。
+   */
+  @Monitor('windowInfo.avoidKeyboard')
+  onKeyboardAvoidAreaChanged(): void {
+    Logger.info('RzdKeyboardAvoid',
+      `shell secondary bar keyboardVp=${this.keyboardBottomVp()} ` +
+        `lift=${this.floatingMiniBarKeyboardLiftVp()} baseOffset=${this.homeTabBarBottomMarginVp()}`);
   }
 
   // ─────────────── 播放页入口：`isShowPlay` → NavDestination 推入 / 弹出 ───────────────
@@ -986,7 +1021,11 @@ struct Index {
       .width(StyleConstants.FULL_WIDTH)
       .height(FLOATING_MINI_BAR_HEIGHT_VP)
       // 与首页底栏同一屏幕位置：整块宿主向下让出底部避让那一份（barBottomMargin 已归零）
-      .offset({ y: this.homeTabBarBottomMarginVp() })
+      // ★ 键盘避让（用户 2026-10-12「二级页面播放条加上键盘避让」）：键盘弹出时在这份偏移上
+      //   再减掉 `floatingMiniBarKeyboardLiftVp()`（= 键盘高度 + 8 − 常态既有间隙）⇒ 整条宿主
+      //   连同 HDS 胶囊一起上抬到键盘上沿之上；键盘收起后 lift 恒为 0 ⇒ 这一行**逐字等于**
+      //   改动前的 `homeTabBarBottomMarginVp()`（回归红线，见那个函数的注释）。
+      .offset({ y: this.floatingMiniBarHostOffsetYVp() })
       // 不要裁：HDS 的材质背板/折射范围比内容盒大，裁了会缺一圈。
       .clip(false)
       .onAppear((): void => {
@@ -997,7 +1036,9 @@ struct Index {
       })
       .onAreaChange((_oldArea: Area, area: Area): void => {
         Logger.info('RzdSecondaryMiniMaterial',
-          `host width=${area.width} height=${area.height} ambient=${this.ambientLevelIndex()}`);
+          `host width=${area.width} height=${area.height} ambient=${this.ambientLevelIndex()} ` +
+            `keyboardVp=${this.keyboardBottomVp()} lift=${this.floatingMiniBarKeyboardLiftVp()} ` +
+            `offsetY=${this.floatingMiniBarHostOffsetYVp()}`);
       })
       // ⚠️ **不要**在这里再写一个 `.margin({ bottom: ... })`：离底距离已经由
       //    `barFloatingStyle.barBottomMargin` 给了（与首页那条官方底栏同一口径）。
@@ -1109,6 +1150,48 @@ struct Index {
     //   边距会退化成 12，胶囊贴着屏幕底、压在系统手势条上 —— 用户看到的「底部播放器错位」。
     const systemInset: number = getNavigationBarBottomVpFromWindowUtil();
     return Math.max(12, systemInset + 8);
+  }
+
+  /**
+   * 软键盘高度（vp）：没有键盘时 0。
+   *
+   * 唯一监听点在 `common/musicbasic` 的 `WindowUtil`（`on('avoidAreaChange')` 的
+   * `TYPE_KEYBOARD` 分支写 `WindowInfo.avoidKeyboard`）；本函数只是只读门面，
+   * 读的是 `@Trace` 字段 ⇒ 键盘弹出/收起会自动驱动壳层重新布局。
+   */
+  private keyboardBottomVp(): number {
+    return getKeyboardBottomVpFromWindowUtil();
+  }
+
+  /**
+   * 键盘弹出时，二级页面悬浮迷你条**再往上抬**的距离（vp）；无键盘时**恒为 0**。
+   *
+   * 只作用于二级页面那条悬浮条（{@link floatingMiniBar}）：首页那条迷你条在 HDS 浮动底栏里、
+   * 由官方栏体负责让位，**不要**把本值喂给它。
+   *
+   * 算式与两个常量怎么调，见 {@link FLOATING_MINI_BAR_KEYBOARD_GAP_VP} 头上那段。
+   * @returns 上抬距离（vp）；无键盘时为 0（此时调用方算式逐字等于改动前的值）。
+   */
+  private floatingMiniBarKeyboardLiftVp(): number {
+    const keyboardVp: number = this.keyboardBottomVp();
+    if (keyboardVp <= 0) {
+      return 0;
+    }
+    const existingGapVp: number =
+      FLOATING_MINI_BAR_CAPSULE_GAP_FACTOR * (this.homeTabBarBottomMarginVp() / 2);
+    const lift: number = keyboardVp + FLOATING_MINI_BAR_KEYBOARD_GAP_VP - existingGapVp;
+    return lift > 0 ? lift : 0;
+  }
+
+  /**
+   * 二级页面悬浮迷你条**宿主**的纵向偏移（vp）。
+   *
+   * ⚠️ 无键盘时必须**逐字等于** `homeTabBarBottomMarginVp()` —— 这是回归红线：
+   *    键盘避让只允许在"真的弹了键盘"时改变这条栏的位置。
+   * @returns 宿主 offset.y（vp）。
+   */
+  private floatingMiniBarHostOffsetYVp(): number {
+    return this.homeTabBarBottomMarginVp() - this.floatingMiniBarKeyboardLiftVp();
   }
 
   /**

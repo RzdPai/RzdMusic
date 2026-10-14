@@ -143,13 +143,6 @@ export struct LyricMatchSheet {
         .width('100%')
         .textAlign(TextAlign.Start)
 
-      Text('可修改歌名后再搜索；点选结果后用于封面、歌词与评论。平台顺序：QQ→网易→酷狗→酷我→咪咕')
-        .fontSize($r('sys.float.Caption_M'))
-        .fontColor($r('sys.color.font_tertiary'))
-        .width('100%')
-        .padding({ top: 4, bottom: 8 })
-        .textAlign(TextAlign.Start)
-
       Row({ space: 8 }) {
         TextInput({ text: this.keyword, placeholder: '歌名 歌手' })
           .placeholderColor($r('sys.color.font_tertiary'))

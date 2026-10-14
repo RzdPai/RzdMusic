@@ -1,4 +1,4 @@
-﻿import { common } from '@kit.AbilityKit';
+import { common } from '@kit.AbilityKit';
 import { AppStorageV2 } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { HdsNavDestination, HdsNavDestinationTitleMode, TitleSize } from '@kit.UIDesignKit';
@@ -709,7 +709,10 @@ export struct PlatformMusicPage {
     }
       .width('100%')
       .height('100%')
-      .backgroundColor($r('sys.color.background_secondary'))
+      // ★ 2026-10-12：页面级底色统一走 `app.color.page_background`
+      //   （base #F1F3F5 / dark #FF1C1C1E）—— 夜间模式的"各个页面背景"由这个 token 一处决定，
+      //   不再直接用 `sys.color.background_secondary`（系统色不在应用资源表里，改不动、也无法统一）。
+      .backgroundColor($r('app.color.page_background'))
   }
 }
 

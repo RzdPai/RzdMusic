@@ -43,3 +43,19 @@ export function getNavigationBarBottomVpFromWindowUtil(util?: WindowUtil): numbe
   const windowUtil = util ?? WindowUtil.getInstance();
   return windowUtil.resolveNavigationBarBottomVp();
 }
+
+/**
+ * Reads the soft-keyboard height in vp — **0 when no keyboard is shown**.
+ *
+ * 用途：给"浮在页面底部、但不归 ArcUI 键盘避让管"的自绘悬浮条（如二级页面的迷你播放条）
+ * 算避让距离。官方《自定义键盘》一节写明：「系统默认的自定义键盘避让功能**只能保证输入框不被遮挡**，
+ * 输入框下方的组件可能会被（自定义）键盘挡住…需要开发者自己实现避让」—— 所以要自己监听
+ * `TYPE_KEYBOARD` 避让区。监听本身在 {@link WindowUtil} 里（全进程**只有这一处**，
+ * 见 `updateWindowInfo()` 的 `avoidAreaChange`），本函数只是把它换算成 vp 的只读门面。
+ * @param util Optional util instance; uses singleton when omitted.
+ * @returns Keyboard height in vp; 0 when no soft keyboard is shown.
+ */
+export function getKeyboardBottomVpFromWindowUtil(util?: WindowUtil): number {
+  const windowUtil = util ?? WindowUtil.getInstance();
+  return windowUtil.resolveKeyboardBottomVp();
+}

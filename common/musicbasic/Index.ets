@@ -110,7 +110,8 @@ export {
 } from './src/main/ets/util/WindowUtil';
 export {
   getStatusBarTopVpFromWindowUtil,
-  getNavigationBarBottomVpFromWindowUtil
+  getNavigationBarBottomVpFromWindowUtil,
+  getKeyboardBottomVpFromWindowUtil
 } from './src/main/ets/util/StatusBarInsetUtil';
 export { PageTopInsetHelper } from './src/main/ets/util/PageTopInsetHelper';
 export { buildTitleMaterial } from './src/main/ets/util/TitleMaterial';
@@ -123,6 +124,8 @@ export { appendPlayLog, appendError } from './src/main/ets/util/LxLogger';
 
 export { MusicEmptyComponent } from './src/main/ets/components/MusicEmptyComponent';
 export { MusicTextIcon } from './src/main/ets/components/MusicTextIcon';
+// 歌名跑马灯：各页面歌曲列表行 / 播放页歌名的统一出口（TextOverflow.MARQUEE + marqueeOptions）
+export { SongTitleMarquee } from './src/main/ets/components/SongTitleMarquee';
 // 封面图：本地沙箱文件自己解码成 PixelMap 再显示（绕开 file:// URI 的解析差异）
 export { LocalCoverImage } from './src/main/ets/components/LocalCoverImage';
 export {

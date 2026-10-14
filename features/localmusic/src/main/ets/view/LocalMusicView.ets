@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 「本地音乐」页面（导入设备音频 / 列表 / 删除）
  *
  * 对应 listen 的文件：entry/src/main/ets/views/LocalMusicView.ets
@@ -25,7 +25,7 @@ import { common } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions } from '@kit.UIDesignKit';
 import { guardPlayerBack } from 'musicbasic';
-import { AppStorageKeys, MusicAppState, SongItem, ThemeState, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
+import { AppStorageKeys, MusicAppState, SongItem, SongTitleMarquee, ThemeState, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { MediaService } from 'player';
 import {
   ImportResult,
@@ -539,13 +539,15 @@ export struct LocalMusicPage {
       }
 
       Column({ space: 3 }) {
-        Text(typeof item.title === 'string' ? item.title : '')
-          .fontSize($r('sys.float.Body_L'))
-          .fontColor($r('sys.color.font_primary'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .width('100%')
-          .textAlign(TextAlign.Start)
+        // ★ 歌名过长时跑马灯（用户要求「各个页面歌曲名过长时改为用跑马灯显示」）。
+        //   字号/字色逐字保留；`textAlign(TextAlign.Start)` 本来就是默认值，
+        //   且 `TextOverflow.MARQUEE` 生效时官方注明 textAlign 不生效 ⇒ 一并去掉。
+        SongTitleMarquee({
+          text: typeof item.title === 'string' ? item.title : '',
+          titleFontSize: $r('sys.float.Body_L'),
+          titleFontColor: $r('sys.color.font_primary'),
+          titleFontWeight: FontWeight.Normal
+        })
         Row({ space: 8 }) {
           Text(typeof item.singer === 'string' ? item.singer : '')
             .fontSize($r('sys.float.Caption_M'))
@@ -714,7 +716,7 @@ export struct LocalMusicPage {
       }
       return guardPlayerBack('LocalMusicView');
     })
-    .backgroundColor($r('sys.color.background_primary'))
+    .backgroundColor($r('app.color.page_background'))
     .bindSheet(this.showMatchSheet, this.MatchSheetBuilder, {
       height: SheetSize.MEDIUM,
       dragBar: true,
