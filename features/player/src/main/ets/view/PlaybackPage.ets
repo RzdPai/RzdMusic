@@ -2036,6 +2036,22 @@ export struct PlaybackPage {
           // 封面续飞浮层：夹在背景与内容之间，切页那 0.36 秒里顶替两张静态封面
           // No cover overlay: the lyric page has no matching image destination.
 
+          // ★★ 2026-10-15 用户实测两条，这一处是共同的根：
+          //   「**小歌词是从我封面背后出现**，不是从下方飞上来」+「进度条会被挡住（像是封面挡的）」
+          //   ⇒ 续飞封面原来画在**整页内容之上**（根 Stack 的最后一个孩子），于是
+          //     · 从下升起的**小歌词**先被它挡着 ⇒ 看起来是"从封面背后冒出来"；
+          //     · 同样从下升起的**控制区**（进度条+按钮）也会被它压住。
+          //   现在把它挪到**内容层之前**：形变期间播放页自己那张真封面是隐藏的
+          //   （`realCoverVisible()` 为假 ⇒ 封面槽位是空的、透明的），所以续飞封面照样透得出来、
+          //   位置与大小一模一样（它本来就是按"迷你条封面 → 播放页封面"插值画的）；
+          //   而**所有升上来的内容都在它之上** ⇒ 两组飞入都能被看见，也不再互相遮挡 ——
+          //   这是结构上的保证，与"量得准不准"无关。
+          //   ⚠️ 不要再挪回去（§47 那次"看不见"是我同一轮加的 `barOpacity` 把迷你条真身也藏了造成的，
+          //      那个门已经删除；本节这版没有它）。
+          if (this.expandState.morphBridging()) {
+            this.MorphCoverBridge()
+          }
+
           // ★ 内容层：尺寸恒为 100%（= 裁剪窗口 = 可视矩形 / 缩放），所以永远填满可视矩形
           Column() {        Column() {
               this.buildControlStack()
@@ -2130,12 +2146,9 @@ export struct PlaybackPage {
         Stack() { this.SwitchBanner() }.zIndex(10)
       }
 
-      // ★ 桥接封面（一镜到底里"封面"那一棒，对标无界 CoverMorph）：
-      //   在**宿主坐标**里从迷你条封面飞到播放页封面，**p = 1 时恰好落位**，
-      //   之后由播放页自己那张封面接手（形变期间它不画）。
-      if (this.expandState.morphBridging()) {
-        this.MorphCoverBridge()
-      }
+      // ⚠️ 续飞封面（`MorphCoverBridge`）**不在这里**：2026-10-15 起它画在**内容层之前**
+      //    （见上面根 Stack 里那段注释）—— 画在这一层（内容之上）会把从下升起的
+      //    小歌词/收藏按钮/进度条/底部按钮全都压住，用户实测"小歌词从封面背后出现、进度条被挡"。
     }
     .width(StyleConstants.FULL_WIDTH)
     .height(StyleConstants.FULL_HEIGHT)

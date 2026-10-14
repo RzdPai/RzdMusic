@@ -374,6 +374,9 @@ export struct MusicPlayInfoBlock {
           .fontFamily(PlayerConstants.FONT_FAMILY_BOLD)
           .maxLines(2)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
+          // ★ 歌名/歌手这一行仍然走"原来的飞入"（所有权交接门，用户明确不改）——
+          //   只是**门从整行挪到了这两个 Text 上**，好把收藏按钮摘出去（见下）。
+          .opacity(this.expandState.targetMetaOpacity())
         Row({ space: 4 }) {
           SymbolGlyph(this.isCurrentFavorite ? $r('sys.symbol.heart_fill') : $r('sys.symbol.heart'))
             .fontSize(20)
@@ -384,10 +387,14 @@ export struct MusicPlayInfoBlock {
               this.toggleFavorite();
             })
         }
-        // ★★ 2026-10-15 用户定调：「**先飞入的是小歌词和收藏按钮**」
-        //   ⇒ 收藏按钮与小歌词共用**第一组**时间窗（`earlyRiseVp()`，早于控制区那一组），
-        //   从下升起 180vp 到位；形变结束/静止态位移恒 0（版面逐像素不变）。
-        //   ⚠️ 只挂在这个按钮上，**不动**歌名/歌手那一行本身的飞入（用户明确"还用原来的"）。
+        // ★★ 2026-10-15 用户定调（两次强调）：「**先飞入的是小歌词和收藏按钮**」
+        //   「收藏**不是自己入场**啊，是**和小歌词一起**」
+        //   ⇒ 收藏按钮与小歌词**同一组、同一时间窗**（都读 `earlyRiseVp()`），一起从下升起；
+        //   ⚠️ 必须把它从**整行透明门**里摘出来（原来那一行的 `.opacity(targetMetaOpacity())` 挂在
+        //      外层 Column 上：形变期间恒 0、到形变结束才显示 ⇒ 我给它加位移也看不见，
+        //      用户实测"收藏按钮动画结束后突然冒出来"）。
+        //      所以现在：行门只压在歌名/歌手的 Text 上，这个按钮**自己一直可见**、只做位移入场。
+        //   ⚠️ 也不要给它单独一套窗口 —— 它和小歌词是**一组**。
         .translate({ y: this.expandState.earlyRiseVp() })
       }
       .width(StyleConstants.FULL_WIDTH)
@@ -404,12 +411,15 @@ export struct MusicPlayInfoBlock {
         .fontWeight(FontWeight.Regular)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
+        // 同上：行门挪到具体 Text 上
+        .opacity(this.expandState.targetMetaOpacity())
     }
     .margin({ top: $r('app.float.music_info_margin_top') })
-    // ★ 歌名/歌手属于**顶栏那一档**（反编译 `pullChromeOpacity = clamp((effT-0.18)/0.44)`，
-    //   0.18 → 0.62），要在展开**过程中**就淡入 —— 不是随内容落位才出现。
-    //   封面仍然归 `contentOpacity`（`CoverInfo` 里那条）。
-    .opacity(this.expandState.targetMetaOpacity())
+    // ⚠️ 2026-10-15：**这里不再挂整行的透明门**（原来 `.opacity(targetMetaOpacity())` 在这一层）——
+    //   它会把行内的**收藏按钮**一起压成 0，导致"收藏按钮动画结束后突然冒出来"。
+    //   现在这个门分别挂在歌名 Text 与歌手 Text 上（见上），收藏按钮自己只做位移入场，
+    //   与小歌词**同一组**一起从下升起。
+    //   歌名/歌手的时序语义（克隆层接管期间为 0、交回播放页才显示）**完全没变**。
   }
 
   /** Responsive grid placing cover, texts, and ControlAreaComponent. */
