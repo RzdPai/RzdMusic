@@ -1,5 +1,5 @@
-﻿import { AppStorageV2 } from '@kit.ArkUI';
-import { AppStorageKeys, ThemeState } from 'musicbasic';
+import { AppStorageV2 } from '@kit.ArkUI';
+import { AppStorageKeys, SongTitleMarquee, ThemeState } from 'musicbasic';
 import { DownloadService, DownloadStatus, DownloadTask } from 'player';
 
 /**
@@ -101,11 +101,16 @@ export struct DownloadManagerSection {
             ListItem() {
               Row({ space: 12 }) {
                 Column({ space: 4 }) {
-                  Text(t.name)
-                    .fontSize(15)
-                    .maxLines(1)
-                    .textOverflow({ overflow: TextOverflow.Ellipsis })
-                    .fontColor($r('sys.color.font_primary'))
+                  // ★ 2026-10-15：任务名（= 歌曲名）过长改跑马灯。这一行原来**没写** fontSize（走 Text
+                  //   默认字号），换成自定义组件后字号不再由调用点决定 ⇒ 按同一行副标题/卡片的既有尺度
+                  //   显式给 15（与 `ArtistDetailPage`/`AlbumDetailPage` 歌曲行同档），真机看一眼观感。
+                  //   父容器是 `Column` ⇒ 用默认 `fillByWidth`（`width('100%')`）。
+                  SongTitleMarquee({
+                    text: t.name,
+                    titleFontSize: 15,
+                    titleFontColor: $r('sys.color.font_primary'),
+                    titleFontWeight: FontWeight.Normal
+                  })
                   Text(t.singer + ' · ' + t.quality)
                     .fontSize(12)
                     .maxLines(1)

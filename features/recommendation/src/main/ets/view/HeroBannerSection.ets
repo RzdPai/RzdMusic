@@ -25,6 +25,7 @@ import {
   WindowInfo
 } from 'musicbasic';
 import { CoverWing } from './CoverWing';
+import { HeroSongListCard } from './HeroSongListCard';
 import { ToplistRouteParam } from 'playlist';
 import { RecommendHeroCardUi, RecommendPrivateSongUi } from '../model/RecommendUiModels';
 import { MusicDataService } from '../util/MusicDataService';
@@ -165,6 +166,24 @@ export struct HeroBannerSection {
     }
     // 其余三张：播各自显示的那首歌
     this.playNamedSong(typeof item.subLine === 'string' ? item.subLine : '');
+  }
+
+  /**
+   * 这张卡的**卡面**是不是「歌曲列表」形态。
+   *
+   * 用户 2026-10-15 澄清：「是**首页大卡片**的新歌推荐和精选推荐」——
+   * 指的是顶部那排 5 张大卡里 `feature === 'newSongs'` / `'picked'` 这两张
+   * （清单见 `RecommendDataUtil.getFeatureHeroCards`）。它们原先卡面**只有一首歌**
+   * （该歌封面 + 该歌歌名），现在改成**歌曲列表**（行样式同「每日30首」）。
+   *
+   * ⚠️ **只换卡面内容**：卡片的框（`Stack` + `cardWidth()/cardHeight()` + `clip(true)` +
+   *   `borderRadius(20)`）、标题（`item.title`）、数据来源（`privateSongDisplayList`）
+   *   与点击行为（行内 `requestPlayOnlineSong`）都保持原样。
+   * @param item 卡片数据。
+   * @returns true = 卡面渲染歌曲列表。
+   */
+  private isSongListFeature(item: RecommendHeroCardUi): boolean {
+    return item.feature === 'newSongs' || item.feature === 'picked';
   }
 
   /** 当月英文名（「每日30首」卡上的月份文案，按当天日期实时取）。 */
@@ -449,9 +468,35 @@ owPlayingCoverUrl），**不是**实时读在播歌曲 ——
       } else if (item.feature === 'listenNow') {
         // 「现在就听」：封面 + 封面取色背景
         this.NowPlayingCard(item)
+      } else if (this.isSongListFeature(item)) {
+        // 「新歌推荐」/「精选推荐」：卡面 = **歌曲列表**（行样式同「每日30首」）。
+        //
+        // ⚠️ 为什么是"封面打底 + 列表铺满"而不是"只留列表"：
+        //    这两张卡在改动前是「整张卡的封面 + 底部标题条」——封面/标题条都在 Stack 里。
+        //    用户要的是"内容改成歌曲列表"，**不是**"卡片改样式" ⇒ 卡片的高度/圆角/裁切
+        //    以及原来那层封面底都留着（截图里卡片那一眼看出来的形状一个像素不变），
+        //    列表这一层是**不透明**的、铺满整张卡，`HeroSongListCard` 自己把标题条
+        //    （角标图标 + `新歌推荐` / `精选推荐` + 播放图标）画在最上面。
+        Image(item.coverUrl.length > 0 ? item.coverUrl : $r('app.media.ic_avatar1'))
+          .width(StyleConstants.FULL_WIDTH)
+          .height(StyleConstants.FULL_HEIGHT)
+          .objectFit(ImageFit.Cover)
+          .alt($r('app.media.ic_avatar1'))
+
+        HeroSongListCard({
+          title: typeof item.title === 'string' ? item.title : '',
+          dataSource: this.recommendViewModel.privateSongDataSource,
+          songCount: this.recommendViewModel.privateSongDisplayList.length,
+          keyPrefix: item.feature,
+          // 卡片自己那条标题条（见下）已经负责标题 ⇒ 卡面不再自绘一条，
+          // 也把整张卡的高度让给列表（否则标题条会盖住列表最上面一行）。
+          showHeader: false,
+          recommendViewModel: this.recommendViewModel
+        })
       } else {
-        // 新歌推荐 / 心动模式 / 精选推荐：直接用**下方那首歌自己的封面**
+        // 心动模式等**其余**功能卡：直接用**下方那首歌自己的封面**
         // （取不到就用通用占位图；不再有打包内配图，那 5 张 ic_recommend* 已删除）
+        // ⚠️ 「新歌推荐」/「精选推荐」已在上面的分支换成歌曲列表，不再走这里。
         Image(item.coverUrl.length > 0 ? item.coverUrl : $r('app.media.ic_avatar1'))
           .width(StyleConstants.FULL_WIDTH)
           .height(StyleConstants.FULL_HEIGHT)
@@ -459,6 +504,12 @@ owPlayingCoverUrl），**不是**实时读在播歌曲 ——
           .alt($r('app.media.ic_avatar1'))
       }
 
+      // ★ 卡片标题条（角标图标 + `item.badge` + `item.title` + `item.subLine` + 播放图标）：
+      //   **改动前就在这一层**，本轮一个字都没动 —— 它铺在卡面之上（`SpaceBetween`），
+      //   「新歌推荐」/「精选推荐」换成歌曲列表之后，**这两张卡的标题仍由它承担**
+      //   （所以 `HeroSongListCard` 那一支传了 `showHeader: false`，免得出现两条标题）。
+      //   它自己的 `.onClick` 在**外层那个 `Stack`** 上（见本 @Builder 末尾）：
+      //   列表行自己消费点击 ⇒ 点行播那一首，点标题条播卡上那首（= 改动前的行为）。
       Column() {
         Row({ space: 4 }) {
           Image($r('app.media.ic_music_symbol'))

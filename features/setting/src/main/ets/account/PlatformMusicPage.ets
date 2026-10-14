@@ -2,7 +2,7 @@ import { common } from '@kit.AbilityKit';
 import { AppStorageV2 } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { HdsNavDestination, HdsNavDestinationTitleMode, TitleSize } from '@kit.UIDesignKit';
-import { AppStorageKeys, FavoriteEntry, MusicAppState, MusicStoreService, ThemeState } from 'musicbasic';
+import { AppStorageKeys, FavoriteEntry, MusicAppState, MusicStoreService, SongTitleMarquee, ThemeState } from 'musicbasic';
 import { LXSearchSong, OnlinePlayUtil } from 'player';
 import { AccountService } from 'player';
 import { PlatformAccount, PlaylistInfo, PlaylistTrackInfo, PlatformTrackInfo, PlaylistMutationTrack, sourceName } from 'player';
@@ -407,12 +407,14 @@ export struct PlatformMusicPage {
           .backgroundColor($r('sys.color.background_tertiary'))
       }
       Column() {
-        Text(song.name)
-          .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('sys.color.font_primary'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        // ★ 2026-10-15：歌名过长改跑马灯（用户要求「各个页面歌曲名过长时改为用跑马灯显示」）。
+        //   字号/字重/字色逐字保留；父容器是 `Column` ⇒ 用组件默认的 `fillByWidth`（`width('100%')`）。
+        SongTitleMarquee({
+          text: song.name,
+          titleFontSize: 13,
+          titleFontColor: $r('sys.color.font_primary'),
+          titleFontWeight: FontWeight.Medium
+        })
         Text(song.singer.length > 0 ? `${song.singer}${song.album.length > 0 ? ` · ${song.album}` : ''}` : song.album)
           .fontSize(11)
           .fontColor($r('sys.color.font_tertiary'))

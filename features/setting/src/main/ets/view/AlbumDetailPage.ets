@@ -15,7 +15,7 @@
 
 import { AppStorageV2, LengthMetrics, uiObserver } from '@kit.ArkUI';
 import { guardPlayerBack } from 'musicbasic';
-import { AlbumRouteParam, AmbientState, AppStorageKeys, BreakpointType, FavoriteEntry, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
+import { AlbumRouteParam, AmbientState, AppStorageKeys, BreakpointType, FavoriteEntry, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, SongTitleMarquee, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType } from '@kit.UIDesignKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { http } from '@kit.NetworkKit';
@@ -639,11 +639,15 @@ export struct AlbumDetailPage {
         .backgroundColor('#22FFFFFF')
       }
       Column({ space: 2 }) {
-        Text(item.name)
-          .fontSize(15)
-          .fontColor(this.fgPrimary())
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        // ★ 2026-10-15：**歌曲行**的歌名过长改跑马灯（用户要求「各个页面歌曲名过长时改为用跑马灯显示」）。
+        //   字号/字色逐字保留（字色是随底取色的 `fgPrimary()`）；父容器是 `Column` ⇒ 默认 `fillByWidth`。
+        //   ⚠️ 只改这一行歌曲名 —— 下面的歌手·专辑行、`build()` 里 320vp 大图上的专辑名**一律不动**。
+        SongTitleMarquee({
+          text: item.name,
+          titleFontSize: 15,
+          titleFontColor: this.fgPrimary(),
+          titleFontWeight: FontWeight.Normal
+        })
         Text(item.singer + (item.albumName.length > 0 ? ' · ' + item.albumName : ''))
           .fontSize(12)
           .fontColor(this.fgSecondary())

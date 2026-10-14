@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 「我的 → 云端音乐」二级页（照搬参考工程 lxmusic-harmony 的 views/WebDavView.ets 版式）
  *
  * ## 它是什么
@@ -46,6 +46,7 @@ import {
   MusicAppState,
   PlaybackIntentState,
   SongItem,
+  SongTitleMarquee,
   ThemeState,
   TitleBarConstants,
   buildTitleMaterial,
@@ -652,13 +653,16 @@ export struct CloudMusicPage {
       .backgroundColor($r('app.color.capsule_background'))
 
       Column({ space: 4 }) {
-        Text(row.song.name.length > 0 ? row.song.name : row.song.file)
-          .fontSize($r('sys.float.Body_M'))
-          .fontColor($r('sys.color.font_primary'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .width('100%')
-          .textAlign(TextAlign.Start)
+        // ★ 2026-10-15：歌名过长改跑马灯（用户要求「各个页面歌曲名过长时改为用跑马灯显示」）。
+        //   字号/字色逐字保留；父容器是 `Column` ⇒ 用组件默认的 `fillByWidth`。
+        //   ⚠️ 原来那句 `.textAlign(TextAlign.Start)` **去掉了** —— 官方《Text》注明
+        //   `TextOverflow.MARQUEE` 生效（文本可滚动）时 `textAlign` 不生效，留着只是误导。
+        SongTitleMarquee({
+          text: row.song.name.length > 0 ? row.song.name : row.song.file,
+          titleFontSize: $r('sys.float.Body_M'),
+          titleFontColor: $r('sys.color.font_primary'),
+          titleFontWeight: FontWeight.Normal
+        })
         Text(this.subtitleOf(row.song))
           .fontSize($r('sys.float.Caption_M'))
           .fontColor($r('sys.color.font_tertiary'))

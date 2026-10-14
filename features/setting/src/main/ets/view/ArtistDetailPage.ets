@@ -19,7 +19,7 @@ import { image } from '@kit.ImageKit';
 import { effectKit } from '@kit.ArkGraphics2D';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { guardPlayerBack } from 'musicbasic';
-import { AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
+import { AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, SongTitleMarquee, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType } from '@kit.UIDesignKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import {
@@ -905,11 +905,16 @@ export struct ArtistDetailPage {
         .backgroundColor('#22FFFFFF')
       }
       Column({ space: 2 }) {
-        Text(item.name)
-          .fontSize(15)
-          .fontColor(this.fgPrimary())
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        // ★ 2026-10-15：**歌曲行**的歌名过长改跑马灯（用户要求「各个页面歌曲名过长时改为用跑马灯显示」）。
+        //   字号/字色逐字保留（字色是随底取色的 `fgPrimary()`）；父容器是 `Column` ⇒ 默认 `fillByWidth`。
+        //   ⚠️ 只改这一行歌曲名 —— 下面的歌手·专辑行、`AlbumRowView` 里的专辑名、`ArtistHero()` 里的
+        //      歌手名**一律不动**（它们不是歌名）。
+        SongTitleMarquee({
+          text: item.name,
+          titleFontSize: 15,
+          titleFontColor: this.fgPrimary(),
+          titleFontWeight: FontWeight.Normal
+        })
         Text(item.singer + (item.albumName.length > 0 ? ' · ' + item.albumName : ''))
           .fontSize(12)
           .fontColor(this.fgSecondary())

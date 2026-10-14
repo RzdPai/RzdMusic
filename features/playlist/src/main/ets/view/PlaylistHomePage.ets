@@ -15,7 +15,7 @@
 
 import { AppStorageV2, uiObserver } from '@kit.ArkUI';
 import { guardPlayerBack, AmbientState, BreakpointType, ThemeState } from 'musicbasic';
-import { AppStorageKeys, MusicAppState, MusicStoreService, PlayedSongRecord, TabSwitchState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
+import { AppStorageKeys, MusicAppState, MusicStoreService, PlayedSongRecord, SongTitleMarquee, TabSwitchState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { OnlinePlayUtil } from 'player';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType } from '@kit.UIDesignKit';
 import { SongMoreMenu } from './SongMoreMenu';
@@ -226,12 +226,15 @@ export struct PlaylistHomePage {
         .borderRadius($r('sys.float.corner_radius_level3'))
         .objectFit(ImageFit.Cover)
       Column({ space: 4 }) {
-        Text(record.name)
-          .fontSize($r('sys.float.Body_L'))
-          .fontWeight(FontWeight.Regular)
-          .fontColor($r('sys.color.font_primary'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        // ★ 2026-10-15：这里是「历史 / 收藏」记录行的歌名（与 `RecordListPage` 同一批数据），
+        //   上一轮铺跑马灯时漏了这一处 ⇒ 补上（用户报的第 2 条说的就是这类页面）。
+        //   字号/字重/字色逐字保留；父容器是 `Column` ⇒ 用组件默认的 `width('100%')` 约束宽度。
+        SongTitleMarquee({
+          text: record.name,
+          titleFontSize: $r('sys.float.Body_L'),
+          titleFontWeight: FontWeight.Regular,
+          titleFontColor: $r('sys.color.font_primary')
+        })
         Row({ space: 6 }) {
           Text(record.singer)
             .fontSize($r('sys.float.Caption_M'))
