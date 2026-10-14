@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -858,7 +858,16 @@ struct Index {
   @Builder
   private miniBar() {
     if (this.navDepth <= 0) {
+      // ★★ 2026-10-15（回退后重做）**不变量**：一次形变会话期间，迷你条**真身不参与绘制**，
+      //   由壳层克隆层（`MorphMiniBarClone` / `MorphMetaBridge`）与播放页内的续飞封面代表它。
+      //   `sourceBarHidden` 由会话拥有者唯一写（`morphBeginEntering` / `morphBeginLeaving` 置 true，
+      //   `morphLand` / `morphReset` 置 false）⇒ 三条打开路都成立。
+      //   不这么做的话：播放页形变期间是**半透明**画出来的，真身会从底下透出来 ——
+      //   一边是克隆层画的副本、一边是真身，用户看到的正是"迷你条压在播放页上"（重叠）。
+      //   ⚠️ 必须用 `Visibility.Hidden`（保留布局）：形变起点要 `getRectangleById` 量这条栏，
+      //   用 `None` 会量不到 ⇒ 动画直接退化。
       HomeMiniBarPlayer({ showPreviousTrack: false })
+        .visibility(this.expandState.sourceBarHidden ? Visibility.Hidden : Visibility.Visible)
     }
   }
 

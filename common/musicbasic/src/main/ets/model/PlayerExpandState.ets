@@ -349,6 +349,87 @@ export class PlayerExpandState {
   // 三者都作用在 `effT` 上，而 `effT = 会话中 ? pullT : 1` —— 所以**不在形变会话时全部为 1**
   // （静止态逐像素不变，这是硬要求）。
 
+  // ═══════════════ 元素时间窗表（★ 唯一一份；p 的纯函数 ⇒ 展开/收起天然互逆）═══════════════
+  //
+  // ★★ 2026-10-15（回退后重做）用户定调：「不要淡入淡出」+「效果最好」。
+  //     ⇒ 页面内容**不再靠透明度出场**，改成**分窗错峰的"从下升起"**：
+  //        封面先续飞落定 → 进度条那一组升上来 → 底部按钮那一组升上来（一组一段，互不重叠）。
+  //     ⇒ 时间窗只写在这里一份，**所有取值都是 `p` 的纯函数**（不含方向判断、不含驱动源判断）：
+  //        展开 = p 从 0 走到 1；收起 = p 从 1 走回 0 ⇒ **同一张表天然互逆**，
+  //        既满足"下拉收起一直是对的"，又不需要为收起再写一套。
+  //
+  // ⚠️ 为什么必须"互不重叠"：封面那一棒画在整页内容**之上**（§47 的教训：挪到内容层之下会被页面挡），
+  //    如果它和"升上来的控制区"在时间上重叠，就会在屏幕上互相盖住（用户实测的"进度条被挡住"）。
+  //    现在的顺序是：p≤0.55 封面飞完并交棒给真封面（`realCoverVisible()`），p≥0.60 按钮组才开始升
+  //    ⇒ **结构上不可能互相遮挡**，不依赖任何"量得准不准"。
+
+  /** 续飞封面窗口终点：p ∈ [0, 0.55] 完成"迷你条封面 → 播放页封面"，之后真封面接手。 */
+  public static readonly WIN_BRIDGE_END: number = 0.55;
+  /** 进度条那一组的时间窗（从下升起）。 */
+  public static readonly WIN_PROGRESS_START: number = 0.42;
+  public static readonly WIN_PROGRESS_END: number = 0.70;
+  /** 底部按钮那一组的时间窗（从下升起，晚于进度条）。 */
+  public static readonly WIN_BUTTONS_START: number = 0.60;
+  public static readonly WIN_BUTTONS_END: number = 0.92;
+  /** "从下升起"的幅度（屏幕 vp，形变期间按 `1/scale` 反算成页内位移）。 */
+  public static readonly RISE_VP: number = 180;
+
+  /** @returns 窗口 [start, end] 内的线性进度 0…1（窗口外夹紧）。 */
+  public static ramp01(p: number, start: number, end: number): number {
+    if (end <= start) {
+      return p >= end ? 1 : 0;
+    }
+    const v: number = (p - start) / (end - start);
+    return v < 0 ? 0 : (v > 1 ? 1 : v);
+  }
+
+  /**
+   * @returns 底部按钮那一组（= 整片控制区）的纵向位移（**页内** vp）。
+   *
+   * `p` 在其时间窗内从 1 → 0（= 从下面 180vp 处升到位）；静止态恒 0、非形变期恒 0。
+   * ⚠️ 除以 `morphScale`：这层会被外层形变容器缩放，反算后屏上位移才恒定。
+   */
+  public contentRiseVp(): number {
+    if (!this.morphClipping()) {
+      return 0;
+    }
+    const w: number = PlayerExpandState.ramp01(this.morphP,
+      PlayerExpandState.WIN_BUTTONS_START, PlayerExpandState.WIN_BUTTONS_END);
+    const scale: number = Math.max(0.05, this.morphScale);
+    return (1 - w) * PlayerExpandState.RISE_VP / scale;
+  }
+
+  /**
+   * @returns 进度条那一组的**额外**纵向位移（页内 vp）。
+   *
+   * 净位移 = `contentRiseVp() + progressRiseExtraVp() = (1 - 进度条窗口进度) * RISE_VP / scale`
+   * ⇒ 进度条走**自己那段时间窗**（比按钮早），两组各自升上来，中途不重叠。
+   */
+  public progressRiseExtraVp(): number {
+    if (!this.morphClipping()) {
+      return 0;
+    }
+    const wp: number = PlayerExpandState.ramp01(this.morphP,
+      PlayerExpandState.WIN_PROGRESS_START, PlayerExpandState.WIN_PROGRESS_END);
+    const wb: number = PlayerExpandState.ramp01(this.morphP,
+      PlayerExpandState.WIN_BUTTONS_START, PlayerExpandState.WIN_BUTTONS_END);
+    const scale: number = Math.max(0.05, this.morphScale);
+    return (wb - wp) * PlayerExpandState.RISE_VP / scale;
+  }
+
+  /**
+   * @returns 播放页**真封面**是否该画。
+   *
+   * 形变期间由续飞封面代表它；一旦续飞封面飞完（`p ≥ WIN_BRIDGE_END`）就地交棒给真封面
+   * —— 两者在交棒那一刻矩形重合，所以看不到"跳一下"，也**永远不会同时出现两个封面**。
+   */
+  public realCoverVisible(): boolean {
+    if (!this.morphClipping()) {
+      return true;
+    }
+    return this.morphP >= PlayerExpandState.WIN_BRIDGE_END;
+  }
+
   /** 背景最低不透明度兜底（反编译 `PlayerPage.PULL_BG_FLOOR`）。 */
   private static readonly PULL_BG_FLOOR: number = 0.04;
 
@@ -1455,6 +1536,12 @@ export class PlayerExpandState {
     if (this.morphStage === MorphStage.LANDING) {
       return false;
     }
+    // ★★ 2026-10-15：这一棒只活在**自己的时间窗** [0, WIN_BRIDGE_END] 里，之后交棒给真封面
+    //    （`realCoverVisible()` 与这里**严格互补** ⇒ 既不会两个封面同时出现，也不会有一段没有封面）。
+    //    顺带解决"控制区被盖住"：按钮组的时间窗从 0.60 起，那时这一棒早已消失。
+    if (this.morphP >= PlayerExpandState.WIN_BRIDGE_END) {
+      return false;
+    }
     // 起点（迷你条封面）与终点（播放页封面）都量到了才画，否则宁可没有这一棒
     // ⚠️ 终点**必须有值**：终点是"静止态真实矩形"，终点为 0 时会飞向屏幕左上角
     return this.snapStartW > 0 && this.endCoverSize > 0;
@@ -1526,7 +1613,10 @@ export class PlayerExpandState {
    *   于是终点正好是实测的 (bigX, bigY, bigSize) —— **动画完成那一刻才归位**。
    */
   public morphCoverBridge(): LyricMorphRect {
-    const t: number = this.morphP < 0 ? 0 : (this.morphP > 1 ? 1 : this.morphP);
+    // ★ 时间窗重映射：这一棒只在 [0, WIN_BRIDGE_END] 内飞，**到 0.55 就已经落位**
+    //   （t=1 = 真实封面矩形）—— 于是"交棒给真封面"（`realCoverVisible()`）那一刻
+    //   两边矩形完全重合，既看不到跳变，也不会两个封面同时在场。
+    const t: number = PlayerExpandState.ramp01(this.morphP, 0, PlayerExpandState.WIN_BRIDGE_END);
     // ⚠️ **直线插值**（对标反编译 `MiniMorph`：中心/边长各一条 `lerpN`）：
     //    `coverCenterXAt/YAt(t)`、`coverVisualEdgeAt(t)`、`coverVisualRadiusAt(t)`。
     //    ⚠️ 之前我拿"容器变换后的当前帧矩形"当终点，于是起点那一段终点会**往下跑**
@@ -1547,12 +1637,32 @@ export class PlayerExpandState {
     // `scale({centerX:'50%',centerY:'50%'})` 完全同口径。
     const endX: number = this.endCoverX + (this.endCoverSize - endSize) / 2;
     const endY: number = this.endCoverY + (this.endCoverH - endH) / 2;
+    // ★★ 2026-10-15（回退后重做）：上面插出来的矩形是**窗口（屏幕）坐标**，
+    //   而消费方 `MorphCoverBridge` 画在**被 `scale`+`translate` 变换过、且带 `.clip(true)` 的
+    //   形变容器**里 —— 容器的布局盒就是裁剪窗口（`morphClipHeight` 高），p 小时它只有几十~几百 vp。
+    //   直接把窗口坐标当页内坐标用 ⇒ 封面矩形**整个落在裁剪窗口之外** ⇒
+    //   前半段一个像素都画不出来，等窗口长过它才从**底缘**冒头（用户实测的
+    //   "封面从一个非常下的位置飞上来、前半段看不到"）。
+    //   正解：在窗口坐标里插值（两端点与量测同口径），再按容器变换**逆变换**回页内：
+    //       screen = pivot + (page − pivot) · scale + translate
+    //    ⇒  page   = pivot + (screen − translate − pivot) / scale
+    //   枢轴 = 容器当前布局盒的中心（宽 = 宿主宽，高 = `morphClipHeight`；`.scale()` 默认以中心为枢轴）。
+    //   尺寸/圆角同样 `/ scale`（与同文件 `morphRadius = visualRadius / scale` 是同一套口径）。
+    //   ⚠️ 两端在屏上**逐像素不变**：t=1 时该容器是恒等变换；t=0 端恰是原值的逆像 ⇒ 零回归。
+    const comp: number = this.morphScale > 0.02 ? this.morphScale : 0.02;
+    const pivotX: number = this.morphBoxWidth() / 2;
+    const pivotY: number = this.morphClipHeight / 2;
+    const screenX: number = this.snapStartX + (endX - this.snapStartX) * t;
+    const screenY: number = this.snapStartY + (endY - this.snapStartY) * t;
+    const screenSize: number = this.snapStartW + (endSize - this.snapStartW) * t;
+    const screenH: number = this.snapStartW + (endH - this.snapStartW) * t;
+    const screenRadius: number = startRadius + (endRadius - startRadius) * t;
     return {
-      x: this.snapStartX + (endX - this.snapStartX) * t,
-      y: this.snapStartY + (endY - this.snapStartY) * t,
-      size: this.snapStartW + (endSize - this.snapStartW) * t,
-      height: this.snapStartW + (endH - this.snapStartW) * t,
-      radius: startRadius + (endRadius - startRadius) * t
+      x: pivotX + (screenX - this.morphTx - pivotX) / comp,
+      y: pivotY + (screenY - this.morphTy - pivotY) / comp,
+      size: screenSize / comp,
+      height: screenH / comp,
+      radius: screenRadius / comp
     };
   }
 
@@ -1698,13 +1808,15 @@ export class PlayerExpandState {
     this.morphTx = this.initTranslateX * (1 - t);
     this.morphTy = this.initTranslateY * (1 - t);
     this.morphRadius = scale > 0 ? visualRadius / scale : 0;
-    // 内容层：反编译侧**全程 0、落位那一刻才置 1**（构造 / `doEnter` 延迟闭包 / `λ2_2`
-    // → `λ1_2`，`setFinalStatus` 也是 1）。所以展开过程中屏上只有底色 + 续飞封面，
-    // 播放页内容是落位时才出现的 —— 这就是"四个边同时到边"之后才见到页面的观感。
-    // OPEN -> LEAVING must not erase all chrome/lyrics at the first p<1 sample.
-    // Cover has its own bridge gate; other content fades continuously with the bottom window.
-    this.morphContentOpacity = this.morphStage === MorphStage.LEAVING ? this.pullBottomIn() :
-      (t >= 1 ? 1 : 0);
+    // 内容层（封面页里的歌词/小歌词那几处）：
+    // ★★ 2026-10-15（回退后重做）改成 **p 的纯函数**。
+    //   原来这里是 `LEAVING ? pullBottomIn() : (t >= 1 ? 1 : 0)` —— 带**方向判断**：
+    //   展开时全程 0（阶跃到落位才 1）、收起时按 [0.45,1] 线性淡。
+    //   同一条 `p` 两端像素完全不同 ⇒ "展开 ≠ 收起倒放"的硬证据，也是收起时
+    //   "元素先没、页面再收"的一半来源。现在按用户定调「不要淡入淡出」：
+    //   恒为 1，出场完全交给位移（`contentRiseVp` / `progressRiseExtraVp`）与裁剪窗口。
+    //   封面不在这里管：它有 `realCoverVisible()` 与 `morphBridging()` 那一对严格互补的门。
+    this.morphContentOpacity = 1;
   }
 
   /**

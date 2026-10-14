@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-import { AppStorageV2, curves, uiObserver, window } from '@kit.ArkUI';
+import { AppStorageV2, curves, uiObserver, UIUtils, window } from '@kit.ArkUI';
 import { image } from '@kit.ImageKit';
 import { effectKit } from '@kit.ArkGraphics2D';
 import { common } from '@kit.AbilityKit';
@@ -451,17 +451,19 @@ export struct PlaybackPage {
   /**
    * 壳层拦到系统返回（要求关闭播放页）→ 播收起动画，不要直接消失。
    *
-   * ⚠️ **不要在 `@Monitor` 回调里直接 `animateTo`**：这个回调不在手势/点击那类
-   *    "动画作用域"里，`animateTo` 有可能不插值，`collapseProgress` 会一步到位 ——
-   *    用户看到的就是"返回收起只能看到动画的最后，看不到中间过程"
-   *    （点收起按钮/下拉走的是点击与手势回调，所以那条路正常）。
-   *    挪到下一个任务里再播，就回到和点击一样的上下文。
+   * ★★ 2026-10-15（回退后重做）：**删掉原来那句 `setTimeout(0)`**。
+   *   当年的注释写的是"不要在 `@Monitor` 回调里直接 `animateTo`，有可能不插值" ——
+   *   这个现象是真实存在的，但根因不是"动画作用域"，而是官方的
+   *   **「在 `@Monitor` 中触发 `animateTo` 时不显示动画」**：
+   *   V2 状态变量修改是异步标脏（Promise 微任务），而 `animateTo` 立刻刷新脏节点决定首帧；
+   *   在 `@Monitor` 回调里补间还没开始，被监听的状态就已经在标脏队列里 ⇒ 首帧/插值不对。
+   *   官方（`arkts-new-applysync-flushupdates-flushuiupdates`「使用场景 · 动效场景」）给的写法
+   *   就是在 `animateTo` 的闭包里用 `UIUtils.applySync` 同步刷新目标值 ——
+   *   `closeFullScreenPlayback()` 里已经按这个写法改了，所以这里可以直接调用。
    */
   @Monitor('expandState.collapseVersion')
   onCollapseRequested(): void {
-    setTimeout((): void => {
-      this.closeFullScreenPlayback();
-    }, 0);
+    this.closeFullScreenPlayback();
   }
   /** Fallback page background tint when art or color pick fails. */
   private static readonly defaultImageBgColor: string = 'rgba(32, 32, 32, 1)';
@@ -976,7 +978,22 @@ export struct PlaybackPage {
     //   上一版的 bug 正在这里：作废动作被放在 `morphBeginEntering()` 内部，
     //   正好把刚量到的终点抹掉 → 重试期又补不回来（`morphLive()` 挡着）
     //   → 重试用尽无动画落位 ⇒ **点击路径从来没进过 `playMorphOpenIntro()`**。
-    if (!this.expandState.prepareMorphEntry(this.getUIContext(), true)) {
+    if (!this.expandState.morphUsable) {
+      return false;
+    }
+    // ★★ 2026-10-15（回退后重做）**为什么外面要包一层 `UIUtils.applySync`**：
+    //   `prepareMorphEntry` 的最后一步是"把几何压到起点"（`applyMorphProgress(0)`），
+    //   紧接着**同一个任务里**就起补间。而 V2 的状态变量修改**不会立即标脏**（抛 Promise 微任务），
+    //   `animateTo` 却会**立刻刷新已标脏节点来决定动效首帧** ⇒ 压起点那一下**没生效**，首帧用旧值。
+    //   官方（`arkts-new-applysync-flushupdates-flushuiupdates`）明确规定这种
+    //   "动效前有额外修改"的场景要用 `UIUtils.applySync` 同步刷新后再起动画 —— 这正是
+    //   "点击打开和手指拖动打开是两个动画"的结构性根因（50ms 延迟/重试/绘制门都是它的补丁）。
+    //   ⚠️ 它只解决**标脏**、不解决**布局**：等封面节点量得到仍然要靠上面的重试窗口。
+    let prepared: boolean = false;
+    UIUtils.applySync((): void => {
+      prepared = this.expandState.prepareMorphEntry(this.getUIContext(), true);
+    });
+    if (!prepared) {
       // 保留本轮就绪状态，等待下一次原尺寸布局，不在重试间压缩/复位布局。
       return false;
     }
@@ -1040,46 +1057,48 @@ export struct PlaybackPage {
   private playMorphOpenIntro(): void {
     this.expandIntroRunning = true;
     this.expandState.morphDrive = MorphDrive.ANIM;
-    // ⚠️ 补间**延后 50ms** 再起（反编译 `doEnter` 就是 `delay: 50`）：页面这一帧才刚挂载、
-    //    还没画过，同帧起补间的话等第一帧真的画出来时动画已经走了几十毫秒 ——
-    //    用户看到的就是"直接点开是从中间开始的"。
+    // ★★ 2026-10-15（回退后重做）：**删掉原来"延后 50ms 再起补间"那一步**。
+    //   它当年是为了绕开一个真实存在的坑：**V2 的状态变量是"异步标脏"（Promise 微任务），
+    //   而 `animateTo` 会立刻刷新已标脏节点来决定动效首帧** —— 于是"先把几何压到起点、
+    //   同一个任务里再起补间"时，压起点那一下**没生效**，首帧直接用旧值。
+    //   官方（`arkts-new-applysync-flushupdates-flushuiupdates`）给的解法是
+    //   `UIUtils.applySync(() => { … })`：同步刷新闭包内的状态变化，再起原来的动画。
+    //   本方法配合 `tryStartMorphIntro` 里那层 `applySync` 使用 ——
+    //   这也是"点击打开和手指拖动打开是两个动画"的结构性根因，50ms/重试/绘制门都是它的补丁。
     // ⚠️ 世代号：收尾回调必须比对 `morphGen`（反编译里 `animGen++` + onFinish 校验），
     //    否则快速连点/收起会串状态。
     const gen: number = this.expandState.morphGen;
-    setTimeout((): void => {
-      if (!this.expandState.morphGenAlive(gen) || this.isClosing) {
-        return;
-      }
-      try {
-        // 主段：反编译 `doEnter` 段1 = 350ms / Curve.EaseInOut
-        this.getUIContext().animateTo({
-          duration: PlaybackPage.MORPH_OPEN_DURATION_MS,
-          curve: Curve.EaseInOut
-        }, (): void => {
+    try {
+      this.getUIContext().animateTo({
+        duration: PlaybackPage.MORPH_OPEN_DURATION_MS,
+        curve: Curve.EaseInOut
+      }, (): void => {
+        // 动效的目标值也走 applySync：与官方"动效场景"示例一致，保证尾帧同步落地。
+        UIUtils.applySync((): void => {
           this.expandState.applyMorphProgress(1);
         });
-      } catch (err) {
-        // 补间起不来也要落到完整态，绝不能把播放页留在"迷你条那一小块"
-        const e = err as BusinessError;
-        Logger.error(PlaybackPage.logTag, `morph open animateTo failed code=${e.code} msg=${e.message}`);
-        this.expandIntroRunning = false;
-        this.expandState.morphSettleOpen();
+      });
+    } catch (err) {
+      // 补间起不来也要落到完整态，绝不能把播放页留在"迷你条那一小块"
+      const e = err as BusinessError;
+      Logger.error(PlaybackPage.logTag, `morph open animateTo failed code=${e.code} msg=${e.message}`);
+      this.expandIntroRunning = false;
+      this.expandState.morphSettleOpen();
+      return;
+    }
+    setTimeout((): void => {
+      if (!this.expandState.morphGenAlive(gen) || this.isClosing || !this.isAlive) {
+        this.expandState.logMorphOwnership('open-finish-expired');
         return;
       }
-      setTimeout((): void => {
-        if (!this.expandState.morphGenAlive(gen) || this.isClosing || !this.isAlive) {
-          this.expandState.logMorphOwnership('open-finish-expired');
-          return;
-        }
-        this.expandIntroRunning = false;
-        this.expandState.morphSettleOpen();
-        // ★ 落位后**重量一次**几何：这一刻页面已经是原尺寸（scale=1、位移=0），
-        //   量到的是干净的终点矩形；同时把 aside 的宽度刷新一遍（HDS 底栏排布可能变过）。
-        //   ⚠️ 这一量只影响**下一轮**展开（不动本轮终点），所以它是"下一轮更准"的保险，
-        //      不是本轮落位对不对的依据。
-        this.expandState.measureGeometry(this.getUIContext(), true);
-      }, PlaybackPage.MORPH_OPEN_DURATION_MS + 30);
-    }, PlaybackPage.MORPH_INTRO_DELAY_MS);
+      this.expandIntroRunning = false;
+      this.expandState.morphSettleOpen();
+      // ★ 落位后**重量一次**几何：这一刻页面已经是原尺寸（scale=1、位移=0），
+      //   量到的是干净的终点矩形；同时把 aside 的宽度刷新一遍（HDS 底栏排布可能变过）。
+      //   ⚠️ 这一量只影响**下一轮**展开（不动本轮终点），所以它是"下一轮更准"的保险，
+      //      不是本轮落位对不对的依据。
+      this.expandState.measureGeometry(this.getUIContext(), true);
+    }, PlaybackPage.MORPH_OPEN_DURATION_MS + 30);
   }
 
   /**
@@ -1240,15 +1259,26 @@ export struct PlaybackPage {
     //      OPEN（不是 ENTERING/LEAVING），用后者判定会掉回"压扁内容层高度"的老动画 ——
     //      用户实测到的「用系统返回关闭还是旧动画」就是这里。
     if (this.expandState.morphUsable) {
-      this.expandState.morphBeginLeaving();
+      // ★ 先把"进入收起相位 + 冻结几何"同步刷出去：这一段是补间**之前**的额外修改，
+      //   按官方规则必须用 `applySync` 同步标脏，否则补间首帧会用旧值。
+      UIUtils.applySync((): void => {
+        this.expandState.morphBeginLeaving();
+      });
       const morphCloseMs: number = PlaybackPage.MORPH_CLOSE_DURATION_MS;
-      // 主段：反编译 `doBack` 段1 = 350ms / Curve.EaseInOut（与展开**对称**）
+      // ★★ 2026-10-15（回退后重做）：收起补间改用**与下拉 settle 同族的"快出慢收"**贝塞尔
+      //   （`Index.settlePullOpen` 用的就是这条）。原因：元素窗与几何共用同一条 `p`，
+      //   而 `Curve.EaseInOut` 慢启动 ⇒ 前 1/3 时间容器几乎没缩、`p` 却已经穿过
+      //   "按钮组 [0.60,0.92] / 进度条组 [0.42,0.70]"⇒ 观感就是"元素先沉下去没了、页面才收"。
+      //   手指那条路之所以正常：`p` 是一比一压的，松手提交时这些窗口早已穿过。
       const gen: number = this.expandState.morphGen;
       this.getUIContext().animateTo({
         duration: morphCloseMs,
-        curve: Curve.EaseInOut
+        curve: curves.cubicBezierCurve(0.23, 1.0, 0.32, 1.0)
       }, (): void => {
-        this.expandState.applyMorphProgress(0);
+        // 目标值同步落地（官方"动效场景"写法）。
+        UIUtils.applySync((): void => {
+          this.expandState.applyMorphProgress(0);
+        });
       });
       setTimeout((): void => {
         if (!this.expandState.morphGenAlive(gen)) {
@@ -1489,7 +1519,10 @@ export struct PlaybackPage {
                     showBottomOtherRow: true,
                     chromeOffsetY: this.expandState.chromeOffsetY(),
                     chromeOpacity: this.expandState.chromeOpacity(),
-                    chromeGap: this.expandState.chromeGapVp()
+                    chromeGap: this.expandState.chromeGapVp(),
+                    // ★★ 2026-10-15（回退后重做）：进度条那一组走**自己那段时间窗**，
+                    //   比下面那一堆按钮早一步升上来（用户要的"一组一组从下上来"）。
+                    progressRiseVp: this.expandState.progressRiseExtraVp()
                   })
                     .width(StyleConstants.FULL_WIDTH)
                 }
@@ -1532,7 +1565,12 @@ export struct PlaybackPage {
                 this.lyricChromeHeight * this.lyricChromeProgress : undefined)
               .clip(true)
               .margin({ bottom: this.expandState.chromeOffsetY() })
-              .opacity(this.expandState.pullBottomIn())
+              // ★★ 2026-10-15（回退后重做）用户定调：「**不要淡入淡出**」——
+              //   控制区不再靠透明度出场（原来这里是 `.opacity(pullBottomIn())`），
+              //   改成**从下升起的位移**：整片控制区在自己的时间窗内从下方 180vp 升到位，
+              //   进度条那一组再早一步（见 `progressRiseExtraVp`）。
+              //   静止态位移恒 0（`morphClipping()` 为假时直接返回 0）⇒ 版面逐像素不变。
+              .translate({ y: this.expandState.contentRiseVp() })
               .onTouch((_event: TouchEvent): void => {
                 this.touchChrome();
               })
