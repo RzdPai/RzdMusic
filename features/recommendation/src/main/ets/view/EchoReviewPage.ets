@@ -989,28 +989,59 @@ export struct EchoReviewPage {
   @Builder
   private OverviewCard() {
     Row() {
-      this.StatCell(String(this.stats.playCount), '次播放')
-      this.StatCell(String(this.stats.songCount), '首歌')
-      this.StatCell(String(this.stats.singerCount), '位歌手')
+      this.StatCell('play')
+      this.StatCell('song')
+      this.StatCell('singer')
     }
     .width('100%')
     .padding({ top: 8, bottom: 8 })
   }
 
+  /**
+   * 单格统计。
+   *
+   * ⚠️ 与 `SongCover` 同一个坑：**参数只许是常量**。原来写的是
+   * `StatCell(String(this.stats.playCount), '次播放')` —— 状态派生值进了实参 ⇒
+   * 这格数字同样永久停在首帧（用户没报，但源码上必中招）。现在只传 `kind`，
+   * 数字在**体内**读 `this.stats`（builder 体内联进调用方渲染树，读取会被追踪）。
+   * @param kind `play` / `song` / `singer`
+   */
   @Builder
-  private StatCell(value: string, label: string) {
+  private StatCell(kind: string) {
     // ★ 用户 2026-10-13：「三个文字颜色都不一样」⇒ 数字恒纯白、单位恒灰（与官方一致，不再混主题色）
     Column({ space: 4 }) {
-      Text(value)
+      Text(this.statValueOf(kind))
         .fontSize(24)
         .fontWeight(FontWeight.Bold)
         .fontColor('#FFFFFF')
-      Text(label)
+      Text(this.statLabelOf(kind))
         .fontSize(12)
         .fontColor('#8CFFFFFF')
     }
     .layoutWeight(1)
     .alignItems(HorizontalAlign.Start)
+  }
+
+  /** @returns 单格统计的数字文案（体内读 `@Local stats`，保证切月份后刷新）。 */
+  private statValueOf(kind: string): string {
+    if (kind === 'play') {
+      return String(this.stats.playCount);
+    }
+    if (kind === 'song') {
+      return String(this.stats.songCount);
+    }
+    return String(this.stats.singerCount);
+  }
+
+  /** @returns 单格统计的单位文案。 */
+  private statLabelOf(kind: string): string {
+    if (kind === 'play') {
+      return '次播放';
+    }
+    if (kind === 'song') {
+      return '首歌';
+    }
+    return '位歌手';
   }
 
   @Builder
@@ -1046,7 +1077,7 @@ export struct EchoReviewPage {
         Stack({ alignContent: Alignment.Bottom }) {
           if (this.stats.topSongs.length > 2) {
             Row() {
-              this.SongCover(this.stats.topSongs[2], '3rd')
+              this.SongCover(2, '3rd')
             }
             .width('100%')
             .justifyContent(FlexAlign.Start)
@@ -1054,13 +1085,13 @@ export struct EchoReviewPage {
 
           if (this.stats.topSongs.length > 1) {
             Row() {
-              this.SongCover(this.stats.topSongs[1], '2nd')
+              this.SongCover(1, '2nd')
             }
             .width('100%')
             .justifyContent(FlexAlign.End)
           }
 
-          this.SongCover(this.stats.topSongs[0], '1st')
+          this.SongCover(0, '1st')
         }
         .width('100%')
       }
@@ -1194,16 +1225,32 @@ export struct EchoReviewPage {
     return rank === '2nd' ? -1 : 1;
   }
 
+  /**
+   * 单张歌曲卡。
+   *
+   * ★★ 2026-10-15 修用户「切月份后最常听的歌不刷新」：
+   *   **参数里绝不能出现状态派生值**。ArkUI 官方规则（`arkts-builder`「常见问题」+
+   *   `arkts-localbuilder`「参数传递规则」）：`@Builder` 的参数**默认按值传递** ——
+   *   `this.SongCover(this.stats.topSongs[i], rank)` 这种写法把 `stats` 的派生值当实参传进来，
+   *   那棵子树**不会建立对 `@Local stats` 的依赖**，`this.stats = stats` 整体替换也推不动它
+   *   ⇒ 歌名/封面/次数永久停在**首次渲染那一帧**（用户看到的"切月份不刷新"），
+   *   连 `onClick` 闭包捕获的都是旧 `item`（点旧卡播旧歌）。
+   *   全页只有这一段（还有三格统计 `StatCell`）是"多参 builder + 状态实参"，所以只有它们不刷新。
+   *   现在只传**常量**（`index` / `rank`），取值全部改成 builder **体内**读 `this.stats.topSongs[index]`
+   *   —— builder 体是内联进调用方渲染树的，这里的 `this.stats` 读取会被正常追踪。
+   * @param index 榜单下标（常量：0/1/2）
+   * @param rank `1st` / `2nd` / `3rd`
+   */
   @Builder
-  private SongCover(item: EchoTopSong, rank: string) {
+  private SongCover(index: number, rank: string) {
     // 外层「镜像层」：**只有右卡**真的镜像（`.scale({x:-1})`，锚点就是它自己的中心，语义确定）。
     //   为什么这么做：真机上给 '2nd' 单独写一份镜像 dst 时，它横向会退化成"纯平移 +35px"（左卡却正常），
     //   左右就差了 10vp。现在两张侧卡**共用左卡那一个矩阵**，右卡再把整层镜像一次 ⇒ **构造级对称**。
     Column() {
       // 卡片本体：封面 + 名次/歌名/次数，整列一起做四点投影（文字因此跟着斜）。
       Column({ space: 6 }) {
-        if (item.img.length > 0) {
-          Image(item.img)
+        if (this.stats.topSongs[index].img.length > 0) {
+          Image(this.stats.topSongs[index].img)
             .width(this.coverVpOf(rank))
             .height(this.coverVpOf(rank))
             .borderRadius(this.coverRadiusOf(rank))
@@ -1224,14 +1271,14 @@ export struct EchoReviewPage {
             // ★★ 用户 2026-10-13：「官方那个 1st 是黄色，另外两个也一样」⇒ **奖牌色**（金/银/铜），不是灰阶
             .fontColor(rank === '1st' ? '#FFD54A' : (rank === '2nd' ? '#D6DEE8' : '#E0A16A'))
           .scale({ x: this.mirrorX(rank), y: 1 })
-        Text(item.name)
+        Text(this.stats.topSongs[index].name)
           .fontSize(rank === '1st' ? 14 : 12)
           .fontWeight(rank === '1st' ? FontWeight.Bold : FontWeight.Normal)
           .fontColor('#FFFFFF')
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .scale({ x: this.mirrorX(rank), y: 1 })
-        Text(item.count + ' 次 · 占 ' + item.share + '%')
+        Text(this.stats.topSongs[index].count + ' 次 · 占 ' + this.stats.topSongs[index].share + '%')
           .fontSize(11)
           .fontColor('#88FFFFFF')
           .maxLines(1)
@@ -1256,8 +1303,9 @@ export struct EchoReviewPage {
     // ★ ★ 镜像层：右卡整层水平镜像（左卡/中卡是 x:1 的空操作）
     .scale({ x: this.mirrorX(rank), y: 1 })
     // ★ 2026-10-14 用户：「最常听的歌也能点开」⇒ 点这张卡打开/播放这首歌
+    // ⚠️ 这里必须**点击那一刻**才从 `this.stats` 取，不能用参数捕获的旧值（否则播的是旧月份那首）。
     .onClick(() => {
-      this.openSong(item);
+      this.openSong(this.stats.topSongs[index]);
     })
   }
 

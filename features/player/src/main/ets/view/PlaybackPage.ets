@@ -1341,11 +1341,19 @@ export struct PlaybackPage {
     if (this.expandState.morphUsable) {
       this.expandState.morphBeginLeaving();
       const morphCloseMs: number = PlaybackPage.MORPH_CLOSE_DURATION_MS;
-      // 主段：反编译 `doBack` 段1 = 350ms / Curve.EaseInOut（与展开**对称**）
+      // ★★ 2026-10-15 修「用系统返回 / 返回按钮关闭时，很多元素先消失、然后才收起」：
+      //   收起原来用 `Curve.EaseInOut`（与展开对称）。但**元素门和几何是同一条 p 的函数**，
+      //   EaseInOut 慢启动 ⇒ 前 1/3 时间里容器几乎没缩（scale 只从 1 掉到 ~0.8），
+      //   而 p 已经跌破 0.72 / 0.45 两个窗口 ⇒ 进度条与底部按钮先"沉"出裁剪窗口、
+      //   顶栏/歌名跟着淡掉，最后才看到整页收起来 —— 用户描述的顺序就是这么来的。
+      //   下拉收起之所以"正常"：那条路是手指一比一压 p，到松手提交时（`DISMISS_COMMIT_PROGRESS = 38`
+      //   ⇒ p ≈ 0.62）这些窗口**已经在拖动过程里穿过了**，剩下的补间只是纯收缩。
+      //   ⇒ 返回路改用**与下拉 settle 同族的"快出慢收"贝塞尔**（`settlePullOpen` 用的就是这条）：
+      //     视觉上"整页立刻开始缩"，元素是**跟着缩**出去的，而不是先没、再收。
       const gen: number = this.expandState.morphGen;
       this.getUIContext().animateTo({
         duration: morphCloseMs,
-        curve: Curve.EaseInOut
+        curve: curves.cubicBezierCurve(0.23, 1.0, 0.32, 1.0)
       }, (): void => {
         this.expandState.applyMorphProgress(0);
       });

@@ -373,6 +373,17 @@ export class PlayerExpandState {
     if (!this.morphLive()) {
       return 1;
     }
+    // ★★ 2026-10-15 修「系统返回 / 返回按钮关闭播放页时，很多元素先消失、然后才收起」：
+    //   收起（LEAVING）期间**不再淡出**顶栏与歌名/歌手。原来这里对 LEAVING 也套用
+    //   "0.18 → 0.62" 那条淡入公式 —— 反向走就是"p 一掉到 0.62 以下就开始淡出"，
+    //   350ms 的补间里它落在**前半段**（EaseInOut 起步慢），于是观感是
+    //   "返回按钮/标题先没了"，之后才轮到页面收缩。
+    //   跟手下拉之所以看不出：那条路是手指一比一驱动的，淡出被"跟手"掩护掉了。
+    //   现在收起阶段恒为 1，整页只在容器自己的 `morphPageOpacity()`（p<0.12）淡出，
+    //   展开/收起就是同一套参数的**正反两遍**。
+    if (this.morphStage === MorphStage.LEAVING) {
+      return 1;
+    }
     const p: number = this.morphP < 0 ? 0 : (this.morphP > 1 ? 1 : this.morphP);
     const v: number = (p - 0.18) / (0.62 - 0.18);
     return v < 0 ? 0 : (v > 1 ? 1 : v);
@@ -1547,12 +1558,34 @@ export class PlayerExpandState {
     // `scale({centerX:'50%',centerY:'50%'})` 完全同口径。
     const endX: number = this.endCoverX + (this.endCoverSize - endSize) / 2;
     const endY: number = this.endCoverY + (this.endCoverH - endH) / 2;
+    // ★★ 2026-10-15 修「续飞封面动画前半段看不见、后半段才从下面浮上来」的**真正机制**：
+    //   上面算出的 (x, y, size) 全是**窗口（屏幕）坐标**，而消费方 `MorphCoverBridge` 把它画在
+    //   **被 `scale(morphScale)` + `translate(morphTx/Ty)` 变换过、并且带 `.clip(true)` 的形变容器里**
+    //   —— 那个容器的高度就是 `morphClipHeight`（裁剪窗口），p 小的时候它只有 `initClipHeight`
+    //   （≈ 胶囊那一格，360~620vp 量级），而窗口坐标 y ≈ 700 直接当页内坐标用 ⇒ **封面矩形整个落在
+    //   裁剪窗口之外**：前半段一个像素都画不出来；等 `morphClipHeight` 长过它才从窗口**底缘**冒头
+    //   （所以看起来是"从一个非常下的位置飞上来"），随后随 p→1 滑到正确落位。
+    //   ⇒ 必须在**屏幕坐标**里插值（两端点与量测同口径），再按容器变换**逆变换**回页内：
+    //        screen = pivot + (page − pivot) · scale + (tx, ty)
+    //     ⇒  page   = pivot + (screen − (tx, ty) − pivot) / scale
+    //   枢轴 = 容器当前布局盒的中心（宽 = 宿主宽，高 = `morphClipHeight`；`.scale()` 默认以中心为枢轴）。
+    //   ⚠️ **两端点在屏上的位置逐像素不变**：p=1 时 scale=1 / tx=ty=0，本式是恒等变换；
+    //      p=0 端又正好是"原来那个值"的逆像 ⇒ 落位与历史行为零回归，变的只有中间帧的路径
+    //      与"是否落在裁剪窗口内"。尺寸/圆角同样按 `scale` 换算（见下）。
+    const comp: number = this.morphScale > 0.02 ? this.morphScale : 0.02;
+    const pivotX: number = this.morphBoxWidth() / 2;
+    const pivotY: number = this.morphClipHeight / 2;
+    const screenX: number = this.snapStartX + (endX - this.snapStartX) * t;
+    const screenY: number = this.snapStartY + (endY - this.snapStartY) * t;
+    const screenSize: number = this.snapStartW + (endSize - this.snapStartW) * t;
+    const screenH: number = this.snapStartW + (endH - this.snapStartW) * t;
+    const screenRadius: number = startRadius + (endRadius - startRadius) * t;
     return {
-      x: this.snapStartX + (endX - this.snapStartX) * t,
-      y: this.snapStartY + (endY - this.snapStartY) * t,
-      size: this.snapStartW + (endSize - this.snapStartW) * t,
-      height: this.snapStartW + (endH - this.snapStartW) * t,
-      radius: startRadius + (endRadius - startRadius) * t
+      x: pivotX + (screenX - this.morphTx - pivotX) / comp,
+      y: pivotY + (screenY - this.morphTy - pivotY) / comp,
+      size: screenSize / comp,
+      height: screenH / comp,
+      radius: screenRadius / comp
     };
   }
 

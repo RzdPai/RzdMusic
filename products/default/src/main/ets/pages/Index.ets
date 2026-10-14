@@ -869,6 +869,17 @@ struct Index {
     if (!this.appState.isShowPlay) {
       return false;
     }
+    // ★★ 2026-10-15（同一轮内修）：**几何还没就绪时必须留着迷你条**。
+    //   点击打开那条路会先挂载播放页、再 12×32ms（≤400ms）补量两端锚点，
+    //   这段"假动画"窗口里 `morphUsable` 还是 false、播放页也还没开始画
+    //   （`PlaybackPage.morphOpacityValue()` 的门关着）—— 此刻把底栏透明掉，
+    //   屏幕上就是"迷你条没了、播放页也没出来"的空档，随后才从下面冒出来
+    //   （用户实测："点击打开动画有问题" + "封面从一个很下面的位置飞上来、前半段看不见"）。
+    //   `morphUsable` 为真 + 页面真的在画（`morphPageOpacity() > 0.02`）才让出这一条栏；
+    //   形变彻底不可用（直接落位）时底栏保持不透明也无妨 —— 它在播放页浮层**之下**，看不见。
+    if (!this.expandState.morphUsable) {
+      return false;
+    }
     return this.expandState.morphPageOpacity() > 0.02;
   }
 
