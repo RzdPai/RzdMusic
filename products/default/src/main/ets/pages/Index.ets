@@ -359,12 +359,6 @@ struct Index {
    * 播放页挂载/卸载的唯一收口（所有 `isShowPlay` 写入最终都会走到这里）。 */
   @Monitor('appState.isShowPlay')
   onShowPlayChanged(): void {
-    // ★ 用户 2026-10-14：「官方的播放器收起后那个播放条会弹一下」⇒ 收起时让**迷你条**弹一下。
-    //   ⚠️ 上一版用的 `applyShowAnimation` 是"页签栏**和**迷你栏"一起的显示动效，
-    //   真机上连底部 Tab 栏一起弹（用户报的「连带着 Tab 栏都会一起弹」）⇒ 换成**只管迷你栏**的接口。
-    if (!this.appState.isShowPlay) {
-      this.bounceMiniBarOnly();
-    }
     if (!PLAYER_ROUTE_MODE) {
       Logger.info('RzdPlayerRoute', `overlay visible=${this.appState.isShowPlay} retainedPaths=${JSON.stringify(this.pageIndexInfos.getAllPathName())}`);
       return;
@@ -375,40 +369,6 @@ struct Index {
       this.popPlayerRoute();
     }
   }
-
-  /**
-   * 只让**迷你栏**弹一下（底部 Tab 栏不动）。
-   *
-   * 依据（官方《HdsTabs (底部页签)》 + 本地 SDK `@hms.hds.hdsBaseComponent.d.ets`）：
-   *   · `HdsTabsController.applyMiniBarStyle(style: HdsBarStyle)`：更新**迷你栏**样式并**伴随动效**；
-   *   · `HdsBarStyle { COLLAPSE = 0, EXPAND = 1 }`；
-   *   · 对照：`applyShowAnimation/applyHideAnimation` 是"页签栏和迷你栏"一起的 ⇒ 会连 Tab 栏一起弹 ✗。
-   * 迷你栏是**受控属性**（`miniBarStyle: appState.miniBarExpanded ? EXPAND : COLLAPSE`），
-   * 所以按"当前状态取反、再弹回原状态"做，不会改掉用户自己的展开/折叠偏好。
-   */
-  private bounceMiniBarOnly(): void {
-    const wasExpanded: boolean = this.appState.miniBarExpanded;
-    const popTo: HdsBarStyle = wasExpanded ? HdsBarStyle.COLLAPSE : HdsBarStyle.EXPAND;
-    const backTo: HdsBarStyle = wasExpanded ? HdsBarStyle.EXPAND : HdsBarStyle.COLLAPSE;
-    try {
-      this.tabsController.applyMiniBarStyle(popTo);
-      Logger.info('RzdMiniBarBounce', `mini bar pop wasExpanded=${wasExpanded}`);
-    } catch (err) {
-      Logger.warn('RzdMiniBarBounce', `applyMiniBarStyle failed: ${JSON.stringify(err)}`);
-      return;
-    }
-    setTimeout((): void => {
-      try {
-        this.tabsController.applyMiniBarStyle(backTo);
-        Logger.info('RzdMiniBarBounce', 'mini bar back');
-      } catch (err) {
-        Logger.warn('RzdMiniBarBounce', `applyMiniBarStyle(back) failed: ${JSON.stringify(err)}`);
-      }
-    }, Index.BOUNCE_BACK_MS);
-  }
-
-  /** 迷你栏"弹一下"的回位延时（ms）。 */
-  private static readonly BOUNCE_BACK_MS: number = 260;
 
 
   /** 播放页路由在栈里的下标（不在栈里返回 -1）。 */

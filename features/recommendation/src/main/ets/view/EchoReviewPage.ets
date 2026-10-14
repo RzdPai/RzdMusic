@@ -144,15 +144,21 @@ const SIDE_TOP_SLOPE: number = 0.168;
 const SIDE_BOTTOM_SLOPE: number = 0.087;
 
 /**
- * 标题里会用到的两个名字。
+ * 标题档位表（下标与各区块的 `onVisibleAreaChange` 一一对齐）。
  *
- * ★★ 2026-10-14 用户澄清（**他原来的需求被我在上一版理解偏了**）：
- *   「标题应该只有你听了什么，没有最常听的 xxx，要不然快速滑动标题会看起来像闪了好几下」
- *   ⇒ 标题**只在两档之间切**：刚进来（页头还在视野里）=「回响」；滚进内容后 =「你听了什么」，
- *   **不再跟着后面那些区块变**（最常听的歌手/专辑/你是怎样的听众/完播率/有趣的发现都不上标题）。
- *   所以这里只留两项，判定也只看**页头**一个区块的可见比例。
+ * ★★ 2026-10-14 用户最终定稿（他明确纠正过我两次）：
+ *   「我都专门说了是不要常听的 xxx，意思是保留 **[回响, 你听了什么, 你是怎样的听众, 有趣的发现]**」
+ *   ⇒ 只留这四个名字，**最常听的歌手/专辑、完播率都不上标题**（否则快速滑动会像闪了好几下）：
+ *     · 0 页头            → 回响
+ *     · 1 你听了什么       → 你听了什么
+ *     · 2 最常听的歌手     → 你听了什么（沿用上一档，不进标题表）
+ *     · 3 最常听的专辑     → 你听了什么（同上）
+ *     · 4 你是怎样的听众   → 你是怎样的听众
+ *     · 5 完播率          → 你是怎样的听众（不进标题表，沿用上一档）
+ *     · 6 新发现          → 有趣的发现（官方叫法；**页面上的区块名仍然是"新发现"**）
  */
-const SECTION_NAMES: string[] = ['回响', '你听了什么'];
+const SECTION_NAMES: string[] =
+  ['回响', '你听了什么', '你听了什么', '你听了什么', '你是怎样的听众', '你是怎样的听众', '有趣的发现'];
 
 /** 标题栏下沿的大致高度（vp）：区块顶边越过这条线才算"当前区块"。 */
 const TITLE_BAR_VP: number = 100;
@@ -749,28 +755,33 @@ export struct EchoReviewPage {
   }
 
   /**
-   * 标题判定：**只看页头**。
+   * 标题判定：**可见比例 > 阈值的最小下标**那个区块。
    *
-   * 页头（`xx 分钟` 那一块）还在视野里 ⇒「回响」；滚出视野 ⇒「你听了什么」。
-   * 用户 2026-10-14：「标题应该只有你听了什么，没有最常听的 xxx，要不然快速滑动标题会看起来像闪了好几下」
-   * ⇒ 不做多档位。阈值取 0.05：页头完全离开视野那一刻才切，避免边界抖动闪一下。
-   * @param index 区块下标（只认 0 = 页头，其余直接忽略）
+   * 为什么这样够用又能避免"闪好几下"：页头在最上面（刚进页面 =「回响」），往下滚页头比例归 0
+   * ⇒ 顺着区块往下切；而 `SECTION_NAMES` 里**相邻若干区块共用同一个名字**
+   * （最常听的歌手/专辑还是"你听了什么"；完播率还是"你是怎样的听众"；最后一个是"有趣的发现"），
+   * 所以标题一共只会变三次，不会抖。
+   * @param index 区块下标（与 `SECTION_NAMES` 对齐；0 = 页头）
    * @param ratio 可见比例 0..1（`onVisibleAreaChange` 给的）
    */
   private noteSection(index: number, ratio: number): void {
-    if (index !== 0) {
+    if (index < 0 || index >= this.sectionRatios.length) {
       return;
     }
-    if (Math.abs(this.sectionRatios[0] - ratio) < 0.005) {
+    if (Math.abs(this.sectionRatios[index] - ratio) < 0.005) {
       return;
     }
-    this.sectionRatios[0] = ratio;
-    const name: string = ratio > EchoReviewPage.HEADER_VISIBLE_MIN ? SECTION_NAMES[0] : SECTION_NAMES[1];
-    this.setSectionTitle(name, 'header', ratio);
+    this.sectionRatios[index] = ratio;
+    for (let i: number = 0; i < this.sectionRatios.length; i++) {
+      if (this.sectionRatios[i] > EchoReviewPage.SECTION_VISIBLE_MIN) {
+        this.setSectionTitle(SECTION_NAMES[i], 'ratio', this.sectionRatios[i]);
+        return;
+      }
+    }
   }
 
-  /** "页头还算在视野里"的最小可见比例。 */
-  private static readonly HEADER_VISIBLE_MIN: number = 0.05;
+  /** "算在视野里"的最小可见比例（不是 0：避免浮点毛刺把刚露头的区块判进来）。 */
+  private static readonly SECTION_VISIBLE_MIN: number = 0.02;
 
   /** 写标题用的区块名（值没变就不写，避免每帧重渲染）。 */
   private setSectionTitle(name: string, why: string, value: number): void {

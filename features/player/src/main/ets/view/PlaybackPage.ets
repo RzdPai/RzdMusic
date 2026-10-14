@@ -635,6 +635,23 @@ export struct PlaybackPage {
     return screenVp / scale;
   }
 
+  /**
+   * 控制区的不透明度。
+   *
+   * ★ 用户 2026-10-14（看完官方截图后）：「最开始就只有封面，然后其它元素慢慢从下方上来…
+   *   飞入是一个**非线性曲线**，并且**没有淡入淡出**」
+   *   ⇒ 展开期间恒为 1（出场完全靠 `contentRiseVp()` 的位移，不再叠一层淡入）；
+   *   收起（LEAVING）仍用原来的 `pullBottomIn()` 连续收拢，保持老观感。
+   *   注：歌曲名/歌手那一行**有它自己的飞入逻辑**（`MusicPlayInfoBlock` 的 `metaBlockTranslateYvp`
+   *   + `targetMetaOpacity`），用户明确说"还用我们自己的逻辑"⇒ 这里不碰它。
+   */
+  private controlOpacity(): number {
+    if (this.expandState.morphStage === MorphStage.LEAVING) {
+      return this.expandState.pullBottomIn();
+    }
+    return 1;
+  }
+
   /** 当前该用的封面底图模糊半径（常量，与流光开关无关）。 */
   private imageBlurRadius(): number {
     return PlaybackPage.COVER_BLUR;
@@ -1569,7 +1586,8 @@ export struct PlaybackPage {
                 this.lyricChromeHeight * this.lyricChromeProgress : undefined)
               .clip(true)
               .margin({ bottom: this.expandState.chromeOffsetY() })
-              .opacity(this.expandState.pullBottomIn())
+              // 展开时不做淡入（用户 2026-10-14：飞入没有淡入淡出，只有从下往上的位移）
+              .opacity(this.controlOpacity())
               // ★★ 2026-10-14 用户澄清：「我指飞入的是**播放页的进度条和下面那一堆按钮**」
               //   ⇒ 位移只加在**控制区这一层**（进度条 + 底部按钮都在 `ControlAreaComponent` 里），
               //   影响面最小：封面/歌词/顶栏都不动。`contentRiseVp()` 已经把位移按 `1/morphScale`
