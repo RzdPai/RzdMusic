@@ -613,29 +613,66 @@ export struct PlaybackPage {
    */
   private static readonly LAYER_BLUR: number = 140;
   /**
-   * 展开/收起过程中**控制区**（进度条 + 底部那一堆按钮）从下方升起的距离（vp）。
+   * 展开/收起时**控制区**两组元素各自"从下方升起"的窗口与幅度。
    *
-   * ★ 用户 2026-10-14 澄清：「我指飞入的是**播放页的进度条和下面那一堆按钮**」
-   *   ⇒ 位移只加在控制区那一层（见 `buildControlStack()` 里 ControlAreaComponent 的容器）。
-   *   位移按 `1 / morphScale` 反算：形变期间那层被外层容器缩放（起点 ≈0.25），
-   *   不反算的话屏上只有 ~1/4 的距离、看不出"飞上来"。
-   *   静止态 `morphP = 1 ⇒ 位移恒为 0`，落位版面不受影响。
+   * ★★ 2026-10-14 用户看官方截图后的定论：
+   *   「他是一个一个从下面上来的」——官方顺序是 **封面 → 歌名/歌手 → 进度条 → 底部按钮**，
+   *   每一组**各自一段时间**从下面升上来（不是一起动、也不是只有速度差）。
+   *   所以这里给两组**互不重叠的时间窗**（都是 `morphP` 的区间）：
+   *   · 进度条那一组：`PROGRESS_*`（先）；
+   *   · 底部按钮那一组：`BUTTONS_*`（后，一直到 p = 1 正好停住）。
+   *   歌名/歌手那一行**用我们自己的逻辑**（`MusicPlayInfoBlock`），按用户要求不碰。
    */
+  private static readonly PROGRESS_WINDOW_START: number = 0.45;
+  private static readonly PROGRESS_WINDOW_END: number = 0.72;
+  private static readonly BUTTONS_WINDOW_START: number = 0.72;
+  private static readonly BUTTONS_WINDOW_END: number = 1;
+  /** 每一组从下方多远处升起（vp，**屏上**）。 */
   private static readonly CONTENT_RISE_VP: number = 180;
 
-  /** 控制区当前的升起位移（vp，**组件自身坐标**）：**线性**跟 `morphP`，再按缩放反算。 */
+  /** 窗口进度：p 在 [start, end] 内线性 0→1，窗口外取 0 / 1。 */
+  private static windowProgress(p: number, start: number, end: number): number {
+    if (end <= start) {
+      return p >= end ? 1 : 0;
+    }
+    return Math.max(0, Math.min(1, (p - start) / (end - start)));
+  }
+
+  /**
+   * 控制区**整片**（= 底部按钮那一组）的升起位移（vp，组件自身坐标）。
+   *
+   * 线性跟 `morphP` 的窗口进度（**不自己叠缓动**：补间那一层已经是非线性曲线，
+   * 再叠一层会"前半段冲完、后半段干等"，用户之前报过）。按 `1/morphScale` 反算 ⇒ 屏上位移恒定。
+   */
   private contentRiseVp(): number {
     const p: number = this.expandState.morphP;
-    if (p >= 1 || !this.expandState.morphUsable) {
+    if (!this.expandState.morphUsable) {
       return 0;
     }
-    // ★★ 2026-10-14 用户：「飞入不应该正好在动画结束的时候停止吗」——
-    //   位移**不再自己叠缓出**：形变自身的补间曲线已经是一条非线性曲线
-    //   （点击路 `playMorphOpenIntro` 用 `Curve.EaseInOut`，跟手路由手指驱动），
-    //   再叠一层三次缓出会让它在**前半段就走完 88%**、后半段干等（用户看到的就是"提前停住"）。
-    //   线性跟 `morphP` ⇒ 到动画结束正好归零、全程都在动，且仍然是非线性观感（曲线的非线性来自补间本身）。
+    const w: number = PlaybackPage.windowProgress(p,
+      PlaybackPage.BUTTONS_WINDOW_START, PlaybackPage.BUTTONS_WINDOW_END);
     const scale: number = Math.max(0.05, this.expandState.morphScale);
-    return (1 - Math.max(0, p)) * PlaybackPage.CONTENT_RISE_VP / scale;
+    return (1 - w) * PlaybackPage.CONTENT_RISE_VP / scale;
+  }
+
+  /**
+   * **进度条那一组**的**额外**位移（叠加在整片控制区的位移之上）。
+   *
+   * 净位移 = 整片位移 + 这一份 = `(1 - 进度条自己的窗口进度) * 幅度` ⇒
+   * 进度条走的是**自己那段时间窗**（比按钮早），p = 1 时两份都归零。
+   * 公式：`(按钮窗口进度 - 进度条窗口进度) * 幅度`（后段为负 —— 进度条已落位、按钮还在升）。
+   */
+  private progressRiseVp(): number {
+    const p: number = this.expandState.morphP;
+    if (!this.expandState.morphUsable) {
+      return 0;
+    }
+    const wp: number = PlaybackPage.windowProgress(p,
+      PlaybackPage.PROGRESS_WINDOW_START, PlaybackPage.PROGRESS_WINDOW_END);
+    const wb: number = PlaybackPage.windowProgress(p,
+      PlaybackPage.BUTTONS_WINDOW_START, PlaybackPage.BUTTONS_WINDOW_END);
+    const scale: number = Math.max(0.05, this.expandState.morphScale);
+    return (wb - wp) * PlaybackPage.CONTENT_RISE_VP / scale;
   }
 
   /**
@@ -654,28 +691,6 @@ export struct PlaybackPage {
     }
     return 1;
   }
-
-  /**
-   * **进度条那一组**的额外迟到位移（vp）。
-   *
-   * ★ 用户 2026-10-14：「那组件明显是**分开飞入**的（速度不一样）」⇒ 控制区内部做错峰：
-   *   整片控制区按 `contentRiseVp()` 一起升起，其中**进度条这一组**再多压一段，
-   *   到 `morphP` 的后段才追平 ⇒ 按钮先落位、进度条后跟上（观感就是分开飞进来的）。
-   *   同样按 `1/morphScale` 反算（形变期间外层在缩放）。静止态恒为 0。
-   */
-  private progressRiseVp(): number {
-    const p: number = this.expandState.morphP;
-    if (p >= 1 || !this.expandState.morphUsable) {
-      return 0;
-    }
-    // 0.45 之前保持整段滞后，之后线性追平到 0（p = 1 正好归零 ⇒ 与动画同时结束）
-    const lag: number = Math.max(0, 1 - Math.max(0, (p - 0.45) / 0.55));
-    const scale: number = Math.max(0.05, this.expandState.morphScale);
-    return lag * PlaybackPage.PROGRESS_LAG_VP / scale;
-  }
-
-  /** 进度条那一组的最大滞后位移（vp）。 */
-  private static readonly PROGRESS_LAG_VP: number = 48;
 
   /** 当前该用的封面底图模糊半径（常量，与流光开关无关）。 */
   private imageBlurRadius(): number {

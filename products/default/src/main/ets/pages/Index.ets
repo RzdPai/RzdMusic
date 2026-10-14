@@ -860,7 +860,16 @@ struct Index {
   @Builder
   private miniBar() {
     if (this.navDepth <= 0) {
+      // ★★ 2026-10-14 用户：「中间过程还重叠了」——
+      //   展开/收起期间播放页自己是**半透明画出来**的（底色 + 取色层按 `backgroundRevealOpacity` 淡入），
+      //   底下这条迷你播放条会**透出来**（截图里就是"迷你条压在播放页上"）。
+      //   形变期间应该由**续飞封面**（`MorphCoverBridge`）代表这条迷你条，真身必须先藏起来。
+      //   `PlayerExpandState.sourceBarHidden` 就是"桥接层接管了这条栏"的标志（另外两处已在用），
+      //   这里补上**首页这条**（之前只判了二级页那条悬浮栏）。
+      //   ⚠️ 必须用 `Visibility.Hidden`（不是 None）：Hidden 保留布局 ⇒ 形变起点要
+      //   `getRectangleById` 量这条栏，用 None 会量不到 ⇒ 动画直接退化。
       HomeMiniBarPlayer({ showPreviousTrack: false })
+        .visibility(this.expandState.sourceBarHidden ? Visibility.Hidden : Visibility.Visible)
     }
   }
 
