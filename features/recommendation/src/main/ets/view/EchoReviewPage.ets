@@ -772,6 +772,15 @@ export struct EchoReviewPage {
       return;
     }
     this.sectionRatios[index] = ratio;
+    // ★★ 2026-10-14 用户：「滑到最下面不会出现有趣的发现」——
+    //   只按"最小下标"取的话，滚到底时最上面还露着的仍是"完播率"（下标 5），
+    //   标题就停在"你是怎样的听众"上 ✗。所以**最后一档单独判**：
+    //   最后那个区块（新发现）有半屏以上可见 ⇒ 直接用"有趣的发现"。
+    const lastIdx: number = this.sectionRatios.length - 1;
+    if (this.sectionRatios[lastIdx] > EchoReviewPage.LAST_SECTION_MIN) {
+      this.setSectionTitle(SECTION_NAMES[lastIdx], 'last', this.sectionRatios[lastIdx]);
+      return;
+    }
     for (let i: number = 0; i < this.sectionRatios.length; i++) {
       if (this.sectionRatios[i] > EchoReviewPage.SECTION_VISIBLE_MIN) {
         this.setSectionTitle(SECTION_NAMES[i], 'ratio', this.sectionRatios[i]);
@@ -782,6 +791,8 @@ export struct EchoReviewPage {
 
   /** "算在视野里"的最小可见比例（不是 0：避免浮点毛刺把刚露头的区块判进来）。 */
   private static readonly SECTION_VISIBLE_MIN: number = 0.02;
+  /** 最后一个区块要有多可见才把标题切成"有趣的发现"（半屏）。 */
+  private static readonly LAST_SECTION_MIN: number = 0.5;
 
   /** 写标题用的区块名（值没变就不写，避免每帧重渲染）。 */
   private setSectionTitle(name: string, why: string, value: number): void {

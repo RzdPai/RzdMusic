@@ -66,6 +66,13 @@ export struct ControlAreaComponent {
   @Param chromeOpacity: number = 1;
   /** 控制区按钮间距（vp）：由宿主按窗口档位给（手机 18 / 折叠 24 / 平板 30）；0 = 用组件默认值。 */
   @Param chromeGap: number = 0;
+  /**
+   * 播放页**展开/收起**时，进度条这一组额外"迟到"的竖直位移（vp，正数 = 比下面的按钮晚一步落位）。
+   *
+   * 用户 2026-10-14：「那组件明显是**分开飞入**的（速度不一样）」⇒ 同一片控制区里做出错峰：
+   * 按钮那排先到位，进度条这一组再跟上。默认 0 ⇒ 面板/平板分栏等其它使用点完全不受影响。
+   */
+  @Param progressRiseVp: number = 0;
   /** Controls the song menu bottom sheet (quality / singer / album / share). */
   @Local showMenuSheet: boolean = false;
   /** When true, shows the current play queue as a bottom sheet. */
@@ -618,6 +625,10 @@ export struct ControlAreaComponent {
           $r('app.float.slider_margin_bottom_lg') : this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_SM &&
             this.breakpointEnv.heightBreakpoint === HeightBreakpoint.HEIGHT_MD ? 8 : $r('app.float.slider_margin_bottom')
       })
+      // ★★ 2026-10-14 用户：「那组件明显是**分开飞入**的（速度不一样）」
+      //   ⇒ 播放页展开时给**进度条这一组**额外一份"迟到"的位移（正数 = 比下面的按钮晚一步落位）。
+      //   默认 0 ⇒ 其它布局（分栏面板等）完全不受影响。
+      .translate({ y: this.progressRiseVp })
 
       Row() {
         SymbolGlyph(this.playModeSymbol())

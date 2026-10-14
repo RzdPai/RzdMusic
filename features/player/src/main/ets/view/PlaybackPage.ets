@@ -623,16 +623,19 @@ export struct PlaybackPage {
    */
   private static readonly CONTENT_RISE_VP: number = 180;
 
-  /** 控制区当前的升起位移（vp，**组件自身坐标**）：跟 morphP 走三次缓出，再按缩放反算。 */
+  /** 控制区当前的升起位移（vp，**组件自身坐标**）：**线性**跟 `morphP`，再按缩放反算。 */
   private contentRiseVp(): number {
     const p: number = this.expandState.morphP;
     if (p >= 1 || !this.expandState.morphUsable) {
       return 0;
     }
-    const eased: number = 1 - Math.pow(1 - Math.max(0, p), 3);
-    const screenVp: number = (1 - eased) * PlaybackPage.CONTENT_RISE_VP;
+    // ★★ 2026-10-14 用户：「飞入不应该正好在动画结束的时候停止吗」——
+    //   位移**不再自己叠缓出**：形变自身的补间曲线已经是一条非线性曲线
+    //   （点击路 `playMorphOpenIntro` 用 `Curve.EaseInOut`，跟手路由手指驱动），
+    //   再叠一层三次缓出会让它在**前半段就走完 88%**、后半段干等（用户看到的就是"提前停住"）。
+    //   线性跟 `morphP` ⇒ 到动画结束正好归零、全程都在动，且仍然是非线性观感（曲线的非线性来自补间本身）。
     const scale: number = Math.max(0.05, this.expandState.morphScale);
-    return screenVp / scale;
+    return (1 - Math.max(0, p)) * PlaybackPage.CONTENT_RISE_VP / scale;
   }
 
   /**
@@ -651,6 +654,28 @@ export struct PlaybackPage {
     }
     return 1;
   }
+
+  /**
+   * **进度条那一组**的额外迟到位移（vp）。
+   *
+   * ★ 用户 2026-10-14：「那组件明显是**分开飞入**的（速度不一样）」⇒ 控制区内部做错峰：
+   *   整片控制区按 `contentRiseVp()` 一起升起，其中**进度条这一组**再多压一段，
+   *   到 `morphP` 的后段才追平 ⇒ 按钮先落位、进度条后跟上（观感就是分开飞进来的）。
+   *   同样按 `1/morphScale` 反算（形变期间外层在缩放）。静止态恒为 0。
+   */
+  private progressRiseVp(): number {
+    const p: number = this.expandState.morphP;
+    if (p >= 1 || !this.expandState.morphUsable) {
+      return 0;
+    }
+    // 0.45 之前保持整段滞后，之后线性追平到 0（p = 1 正好归零 ⇒ 与动画同时结束）
+    const lag: number = Math.max(0, 1 - Math.max(0, (p - 0.45) / 0.55));
+    const scale: number = Math.max(0.05, this.expandState.morphScale);
+    return lag * PlaybackPage.PROGRESS_LAG_VP / scale;
+  }
+
+  /** 进度条那一组的最大滞后位移（vp）。 */
+  private static readonly PROGRESS_LAG_VP: number = 48;
 
   /** 当前该用的封面底图模糊半径（常量，与流光开关无关）。 */
   private imageBlurRadius(): number {
@@ -1543,7 +1568,9 @@ export struct PlaybackPage {
                     showBottomOtherRow: true,
                     chromeOffsetY: this.expandState.chromeOffsetY(),
                     chromeOpacity: this.expandState.chromeOpacity(),
-                    chromeGap: this.expandState.chromeGapVp()
+                    chromeGap: this.expandState.chromeGapVp(),
+                    // ★ 展开时让进度条那组比按钮晚一步（错峰飞入，见 progressRiseVp 说明）
+                    progressRiseVp: this.progressRiseVp()
                   })
                     .width(StyleConstants.FULL_WIDTH)
                 }
