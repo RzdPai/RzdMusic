@@ -177,13 +177,6 @@ export struct PlaybackPage {
    *   目标节点变成可量测。反编译结论：无界的播放页**也不常驻**（同样是 push 出来的），
    *   它之所以"第一次就有封面飞入"，靠的就是这个重试窗口 + `setFinalStatus()` 兜底。
    */
-  /**
-   * 点击展开时的补量重试次数。
-   *
-   * ★ 2026-10-14：12 → 20。点击打开时播放页刚挂载、封面节点常常要好几帧才布局出来，
-   *   重试用尽就会走"无动画直接落位"的兜底（用户看到的「封面固定在中间、没有飞入」就是这个）。
-   *   代价是最坏情况多等 ~250ms（12×32=384ms → 20×32=640ms），但比没有动画好。
-   */
   private morphRetryLeft: number = 12;
   /**
    * 「可以开始画了」的门：形变真正开始（几何量到并压到起点）之前，整页保持**全透明**。
@@ -597,105 +590,14 @@ export struct PlaybackPage {
   private static readonly HDS_CORE_SYSCAP: string = 'SystemCapability.UIDesign.HDSComponent.Core';
 
   /**
-   * 封面底图的模糊半径（px，effectKit 口径）。
+   * 封面底图模糊半径（px，effectKit 口径）。
    *
-   * ★ 用户 2026-10-14 追问：「流光背景不是单独一套背景吗，跟模糊有啥关系」—— 对，是两套：
-   *   ①**模糊封面层**（这一层，`Image(backgroundImageSource())`）永远在底下画；
-   *   ②**流光背景层**（`FlowLightBackground()`）只在开关打开时叠在①之上。
-   *   所以模糊**不该跟着流光开关变**（上一版按开关取 15/34 是我理解偏了）。
-   *   这版统一用 **34**（原来固定 15，太清、看着像"第二张封面"而不是背景）。
-   *   ⚠️ 底图是**换歌时用 effectKit 一次性预渲染**的，所以改这个值要等换一首歌才生效（不做重渲染）。
+   * ★★ 2026-10-14：**与流光开关彻底解耦**（用户要求"模糊半径别跟着流光变"）。
+   *   原来开流光用 15 / 关流光用 34，切一下开关背景糊度就跳一次；现在恒为 34。
    */
   private static readonly COVER_BLUR: number = 34;
-  /**
-   * 背景层的**实时**模糊半径（只在封面不是预渲染 PixelMap 时才走这条，例如兜底头像）。
-   * 同样与流光开关无关。
-   */
+  /** 背景层（非 PixelMap 源）的实时模糊半径：恒 140（同上，不再跟流光开关联动）。 */
   private static readonly LAYER_BLUR: number = 140;
-  /**
-   * 展开/收起时**控制区**两组元素各自"从下方升起"的窗口与幅度。
-   *
-   * ★★ 2026-10-14 用户看官方截图后的定论：
-   *   「他是一个一个从下面上来的」——官方顺序是 **封面 → 歌名/歌手 → 进度条 → 底部按钮**，
-   *   每一组**各自一段时间**从下面升上来（不是一起动、也不是只有速度差）。
-   *   所以这里给两组**互不重叠的时间窗**（都是 `morphP` 的区间）：
-   *   · 进度条那一组：`PROGRESS_*`（先）；
-   *   · 底部按钮那一组：`BUTTONS_*`（后，一直到 p = 1 正好停住）。
-   *   歌名/歌手那一行**用我们自己的逻辑**（`MusicPlayInfoBlock`），按用户要求不碰。
-   */
-  private static readonly PROGRESS_WINDOW_START: number = 0.45;
-  private static readonly PROGRESS_WINDOW_END: number = 0.72;
-  private static readonly BUTTONS_WINDOW_START: number = 0.72;
-  private static readonly BUTTONS_WINDOW_END: number = 1;
-  /** 每一组从下方多远处升起（vp，**屏上**）。 */
-  private static readonly CONTENT_RISE_VP: number = 180;
-
-  /** 窗口进度：p 在 [start, end] 内线性 0→1，窗口外取 0 / 1。 */
-  private static windowProgress(p: number, start: number, end: number): number {
-    if (end <= start) {
-      return p >= end ? 1 : 0;
-    }
-    return Math.max(0, Math.min(1, (p - start) / (end - start)));
-  }
-
-  /**
-   * 控制区**整片**（= 底部按钮那一组）的升起位移（vp，组件自身坐标）。
-   *
-   * 线性跟 `morphP` 的窗口进度（**不自己叠缓动**：补间那一层已经是非线性曲线，
-   * 再叠一层会"前半段冲完、后半段干等"，用户之前报过）。按 `1/morphScale` 反算 ⇒ 屏上位移恒定。
-   */
-  private contentRiseVp(): number {
-    const p: number = this.expandState.morphP;
-    if (!this.expandState.morphUsable) {
-      return 0;
-    }
-    const w: number = PlaybackPage.windowProgress(p,
-      PlaybackPage.BUTTONS_WINDOW_START, PlaybackPage.BUTTONS_WINDOW_END);
-    const scale: number = Math.max(0.05, this.expandState.morphScale);
-    return (1 - w) * PlaybackPage.CONTENT_RISE_VP / scale;
-  }
-
-  /**
-   * **进度条那一组**的**额外**位移（叠加在整片控制区的位移之上）。
-   *
-   * 净位移 = 整片位移 + 这一份 = `(1 - 进度条自己的窗口进度) * 幅度` ⇒
-   * 进度条走的是**自己那段时间窗**（比按钮早），p = 1 时两份都归零。
-   * 公式：`(按钮窗口进度 - 进度条窗口进度) * 幅度`（后段为负 —— 进度条已落位、按钮还在升）。
-   */
-  private progressRiseVp(): number {
-    const p: number = this.expandState.morphP;
-    if (!this.expandState.morphUsable) {
-      return 0;
-    }
-    const wp: number = PlaybackPage.windowProgress(p,
-      PlaybackPage.PROGRESS_WINDOW_START, PlaybackPage.PROGRESS_WINDOW_END);
-    const wb: number = PlaybackPage.windowProgress(p,
-      PlaybackPage.BUTTONS_WINDOW_START, PlaybackPage.BUTTONS_WINDOW_END);
-    const scale: number = Math.max(0.05, this.expandState.morphScale);
-    return (wb - wp) * PlaybackPage.CONTENT_RISE_VP / scale;
-  }
-
-  /**
-   * 控制区的不透明度。
-   *
-   * ★ 用户 2026-10-14（看完官方截图后）：「最开始就只有封面，然后其它元素慢慢从下方上来…
-   *   飞入是一个**非线性曲线**，并且**没有淡入淡出**」
-   *   ⇒ 展开期间恒为 1（出场完全靠 `contentRiseVp()` 的位移，不再叠一层淡入）。
-   *
-   * ★★ 2026-10-15 修「用系统返回/播放页返回按钮关闭时，很多元素先消失、然后才收起」：
-   *   收起（LEAVING）原来用 `pullBottomIn() = clamp((p-0.45)/0.55)` —— 也就是进度一到
-   *   55% 就把控制区淡成 0，而那时页面才缩掉一小半 ⇒ 观感就是"元素先没了，页面再收"。
-   *   现在**收起也不再淡出**：整页缩回迷你条那一小块时，控制区随窗口一起被裁掉，
-   *   观感正好是展开那一套的**逆放**（下拉收起一直是好的，就是因为它是手指一比一驱动的，
-   *   淡出被"跟手"掩护掉了；返回按钮是 350ms 补间，淡出就露出来了）。
-   *   最后的交接由容器自己的 `morphPageOpacity()`（p<0.12 淡到 0）负责，不在这里重复淡。
-   *
-   * 注：歌曲名/歌手那一行**有它自己的飞入逻辑**（`MusicPlayInfoBlock` 的 `metaBlockTranslateYvp`
-   * + `targetMetaOpacity`），用户明确说"还用我们自己的逻辑"⇒ 这里不碰它。
-   */
-  private controlOpacity(): number {
-    return 1;
-  }
 
   /** 当前该用的封面底图模糊半径（常量，与流光开关无关）。 */
   private imageBlurRadius(): number {
@@ -943,7 +845,7 @@ export struct PlaybackPage {
     //   如果放到 `onAppear` 再置，会先渲染出一帧完整播放页再收回去，看着就是闪一下。
     this.collapseProgress = PlaybackPage.EXPAND_START_PROGRESS;
     this.dismissMorphActive = false;
-    // 每次打开都重置重试额度（照抄 `schedulePublishRetry` 的 20×32ms，2026-10-14 由 12 提到 20）
+    // 每次打开都重置重试额度（照抄 `schedulePublishRetry` 的 12×32ms）
     this.morphRetryLeft = 12;
     // ★ 容器形变那条路（对标无界 ExpandAnimation）：不是上拉拉进来的（点击 / 起播意图打开）
     //   就**就地**起一次形变 —— 几何压到起点（p = 0 = 迷你条封面那一小块），
@@ -1057,8 +959,7 @@ export struct PlaybackPage {
       // 手指正在驱动：谁也别抢；绘制门也一并放行（这条路不进下面的开门分支）
       // 首次上拉的目标尚未布局时仍保持透明全尺寸，补量成功再放行。
       this.introPaintReady = this.expandState.morphUsable;
-      // 手指路自己保证全尺寸布局，重试窗口的标记要清掉
-        this.expandIntroRunning = false;
+      this.expandIntroRunning = false;
       this.collapseProgress = 0;
       return true;
     }
@@ -1341,19 +1242,11 @@ export struct PlaybackPage {
     if (this.expandState.morphUsable) {
       this.expandState.morphBeginLeaving();
       const morphCloseMs: number = PlaybackPage.MORPH_CLOSE_DURATION_MS;
-      // ★★ 2026-10-15 修「用系统返回 / 返回按钮关闭时，很多元素先消失、然后才收起」：
-      //   收起原来用 `Curve.EaseInOut`（与展开对称）。但**元素门和几何是同一条 p 的函数**，
-      //   EaseInOut 慢启动 ⇒ 前 1/3 时间里容器几乎没缩（scale 只从 1 掉到 ~0.8），
-      //   而 p 已经跌破 0.72 / 0.45 两个窗口 ⇒ 进度条与底部按钮先"沉"出裁剪窗口、
-      //   顶栏/歌名跟着淡掉，最后才看到整页收起来 —— 用户描述的顺序就是这么来的。
-      //   下拉收起之所以"正常"：那条路是手指一比一压 p，到松手提交时（`DISMISS_COMMIT_PROGRESS = 38`
-      //   ⇒ p ≈ 0.62）这些窗口**已经在拖动过程里穿过了**，剩下的补间只是纯收缩。
-      //   ⇒ 返回路改用**与下拉 settle 同族的"快出慢收"贝塞尔**（`settlePullOpen` 用的就是这条）：
-      //     视觉上"整页立刻开始缩"，元素是**跟着缩**出去的，而不是先没、再收。
+      // 主段：反编译 `doBack` 段1 = 350ms / Curve.EaseInOut（与展开**对称**）
       const gen: number = this.expandState.morphGen;
       this.getUIContext().animateTo({
         duration: morphCloseMs,
-        curve: curves.cubicBezierCurve(0.23, 1.0, 0.32, 1.0)
+        curve: Curve.EaseInOut
       }, (): void => {
         this.expandState.applyMorphProgress(0);
       });
@@ -1596,9 +1489,7 @@ export struct PlaybackPage {
                     showBottomOtherRow: true,
                     chromeOffsetY: this.expandState.chromeOffsetY(),
                     chromeOpacity: this.expandState.chromeOpacity(),
-                    chromeGap: this.expandState.chromeGapVp(),
-                    // ★ 展开时让进度条那组比按钮晚一步（错峰飞入，见 progressRiseVp 说明）
-                    progressRiseVp: this.progressRiseVp()
+                    chromeGap: this.expandState.chromeGapVp()
                   })
                     .width(StyleConstants.FULL_WIDTH)
                 }
@@ -1641,14 +1532,7 @@ export struct PlaybackPage {
                 this.lyricChromeHeight * this.lyricChromeProgress : undefined)
               .clip(true)
               .margin({ bottom: this.expandState.chromeOffsetY() })
-              // 展开时不做淡入（用户 2026-10-14：飞入没有淡入淡出，只有从下往上的位移）
-              .opacity(this.controlOpacity())
-              // ★★ 2026-10-14 用户澄清：「我指飞入的是**播放页的进度条和下面那一堆按钮**」
-              //   ⇒ 位移只加在**控制区这一层**（进度条 + 底部按钮都在 `ControlAreaComponent` 里），
-              //   影响面最小：封面/歌词/顶栏都不动。`contentRiseVp()` 已经把位移按 `1/morphScale`
-              //   反算过（形变期间外层在缩放），所以屏上看到的是恒定的"从下升起"。
-              //   静止态 `morphP = 1 ⇒ 位移 0`，落位版面逐像素不变。
-              .translate({ y: this.contentRiseVp() })
+              .opacity(this.expandState.pullBottomIn())
               .onTouch((_event: TouchEvent): void => {
                 this.touchChrome();
               })
@@ -2107,19 +1991,7 @@ export struct PlaybackPage {
             this.FlowLightBackground()
           }
 
-          // ★★ 2026-10-15 修「进度条飞上来以后被慢慢挡住，动画结束才又出现」：
-          //   这一棒（续飞封面）原来画在**内容层之上**（根 Stack 的最后一个孩子），
-          //   于是只要它的落位矩形一旦偏低/偏大，就会把**正在从下面升上来的进度条和底部按钮**盖住；
-          //   `morphBridging()` 在 p=1 那一刻变 false ⇒ 副本被卸载 ⇒ 进度条"又出现" ——
-          //   用户描述的「被慢慢挡住 → 看不到 → 结束后又出现」就是这条。
-          //   现在把它挪到**背景与内容之间**：形变期间播放页自己那张真封面是隐藏的
-          //   （`MusicPlayInfoBlock` 的门 `morphContainerActive() ? 0 : 1`），封面那个槽位是空的，
-          //   所以副本照样透得出来；但它**永远不可能盖住控制区** —— 这是结构上的保证，
-          //   与"终点量得准不准"无关。
-          if (this.expandState.morphBridging()) {
-            this.MorphCoverBridge()
-          }
-
+          // 封面续飞浮层：夹在背景与内容之间，切页那 0.36 秒里顶替两张静态封面
           // No cover overlay: the lyric page has no matching image destination.
 
           // ★ 内容层：尺寸恒为 100%（= 裁剪窗口 = 可视矩形 / 缩放），所以永远填满可视矩形
@@ -2173,7 +2045,7 @@ export struct PlaybackPage {
             this.state.isShowPlay = false;
             // 下一次打开重新走"先量再缩"的顺序：把绘制门也关回去
             this.introPaintReady = false;
-                    // ★ 页面卸载时**无条件**复位"跟手会话"的两个标记。
+            // ★ 页面卸载时**无条件**复位"跟手会话"的两个标记。
             //   `pullDragging` / `morphDrive` 决定点击打开时要不要做形变初始化；
             //   只要有一轮手势没走到收尾（被系统抢走、中途卸载、硬关闭…）它就会残留，
             //   残留成 (true, FINGER) 时点击打开会**永远跳过形变**，
@@ -2216,8 +2088,12 @@ export struct PlaybackPage {
         Stack() { this.SwitchBanner() }.zIndex(10)
       }
 
-      // ⚠️ 续飞封面（`MorphCoverBridge`）**不在这一层**：2026-10-15 起它画在内容层**之下**
-      //    （见上面根 Stack 里那段注释）—— 画在这里会盖住升起来的进度条/底部按钮。
+      // ★ 桥接封面（一镜到底里"封面"那一棒，对标无界 CoverMorph）：
+      //   在**宿主坐标**里从迷你条封面飞到播放页封面，**p = 1 时恰好落位**，
+      //   之后由播放页自己那张封面接手（形变期间它不画）。
+      if (this.expandState.morphBridging()) {
+        this.MorphCoverBridge()
+      }
     }
     .width(StyleConstants.FULL_WIDTH)
     .height(StyleConstants.FULL_HEIGHT)

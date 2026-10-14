@@ -373,17 +373,6 @@ export class PlayerExpandState {
     if (!this.morphLive()) {
       return 1;
     }
-    // ★★ 2026-10-15 修「系统返回 / 返回按钮关闭播放页时，很多元素先消失、然后才收起」：
-    //   收起（LEAVING）期间**不再淡出**顶栏与歌名/歌手。原来这里对 LEAVING 也套用
-    //   "0.18 → 0.62" 那条淡入公式 —— 反向走就是"p 一掉到 0.62 以下就开始淡出"，
-    //   350ms 的补间里它落在**前半段**（EaseInOut 起步慢），于是观感是
-    //   "返回按钮/标题先没了"，之后才轮到页面收缩。
-    //   跟手下拉之所以看不出：那条路是手指一比一驱动的，淡出被"跟手"掩护掉了。
-    //   现在收起阶段恒为 1，整页只在容器自己的 `morphPageOpacity()`（p<0.12）淡出，
-    //   展开/收起就是同一套参数的**正反两遍**。
-    if (this.morphStage === MorphStage.LEAVING) {
-      return 1;
-    }
     const p: number = this.morphP < 0 ? 0 : (this.morphP > 1 ? 1 : this.morphP);
     const v: number = (p - 0.18) / (0.62 - 0.18);
     return v < 0 ? 0 : (v > 1 ? 1 : v);
@@ -1558,34 +1547,12 @@ export class PlayerExpandState {
     // `scale({centerX:'50%',centerY:'50%'})` 完全同口径。
     const endX: number = this.endCoverX + (this.endCoverSize - endSize) / 2;
     const endY: number = this.endCoverY + (this.endCoverH - endH) / 2;
-    // ★★ 2026-10-15 修「续飞封面动画前半段看不见、后半段才从下面浮上来」的**真正机制**：
-    //   上面算出的 (x, y, size) 全是**窗口（屏幕）坐标**，而消费方 `MorphCoverBridge` 把它画在
-    //   **被 `scale(morphScale)` + `translate(morphTx/Ty)` 变换过、并且带 `.clip(true)` 的形变容器里**
-    //   —— 那个容器的高度就是 `morphClipHeight`（裁剪窗口），p 小的时候它只有 `initClipHeight`
-    //   （≈ 胶囊那一格，360~620vp 量级），而窗口坐标 y ≈ 700 直接当页内坐标用 ⇒ **封面矩形整个落在
-    //   裁剪窗口之外**：前半段一个像素都画不出来；等 `morphClipHeight` 长过它才从窗口**底缘**冒头
-    //   （所以看起来是"从一个非常下的位置飞上来"），随后随 p→1 滑到正确落位。
-    //   ⇒ 必须在**屏幕坐标**里插值（两端点与量测同口径），再按容器变换**逆变换**回页内：
-    //        screen = pivot + (page − pivot) · scale + (tx, ty)
-    //     ⇒  page   = pivot + (screen − (tx, ty) − pivot) / scale
-    //   枢轴 = 容器当前布局盒的中心（宽 = 宿主宽，高 = `morphClipHeight`；`.scale()` 默认以中心为枢轴）。
-    //   ⚠️ **两端点在屏上的位置逐像素不变**：p=1 时 scale=1 / tx=ty=0，本式是恒等变换；
-    //      p=0 端又正好是"原来那个值"的逆像 ⇒ 落位与历史行为零回归，变的只有中间帧的路径
-    //      与"是否落在裁剪窗口内"。尺寸/圆角同样按 `scale` 换算（见下）。
-    const comp: number = this.morphScale > 0.02 ? this.morphScale : 0.02;
-    const pivotX: number = this.morphBoxWidth() / 2;
-    const pivotY: number = this.morphClipHeight / 2;
-    const screenX: number = this.snapStartX + (endX - this.snapStartX) * t;
-    const screenY: number = this.snapStartY + (endY - this.snapStartY) * t;
-    const screenSize: number = this.snapStartW + (endSize - this.snapStartW) * t;
-    const screenH: number = this.snapStartW + (endH - this.snapStartW) * t;
-    const screenRadius: number = startRadius + (endRadius - startRadius) * t;
     return {
-      x: pivotX + (screenX - this.morphTx - pivotX) / comp,
-      y: pivotY + (screenY - this.morphTy - pivotY) / comp,
-      size: screenSize / comp,
-      height: screenH / comp,
-      radius: screenRadius / comp
+      x: this.snapStartX + (endX - this.snapStartX) * t,
+      y: this.snapStartY + (endY - this.snapStartY) * t,
+      size: this.snapStartW + (endSize - this.snapStartW) * t,
+      height: this.snapStartW + (endH - this.snapStartW) * t,
+      radius: startRadius + (endRadius - startRadius) * t
     };
   }
 
@@ -1731,17 +1698,13 @@ export class PlayerExpandState {
     this.morphTx = this.initTranslateX * (1 - t);
     this.morphTy = this.initTranslateY * (1 - t);
     this.morphRadius = scale > 0 ? visualRadius / scale : 0;
-    // 内容层：反编译侧**全程 0、落位那一刻才置 1**；但用户 2026-10-14 两次明确
-    // 「官方没有淡入淡出，而且是全部飞上来」⇒ **展开时不要任何淡入**：内容层始终 1，
-    // 出场完全交给 `PlaybackPage.contentRiseVp()` 的"从下升起"。
-    // 不会出现"两个封面"：播放页自己那张封面有**独立的门**
-    // （`MusicPlayInfoBlock` 里 `.opacity(morphContainerActive() ? 0 : 1)`），形变期间它本来就不画。
-    // ⚠️ 2026-10-15：**收起（LEAVING）也不淡了** —— 原来这里 `pullBottomIn()`（p<0.45 就归零），
-    //    于是"返回/系统返回"关播放页时是**先淡掉一片元素、再收缩**（用户实测：
-    //    「很多元素先消失，然后收起」）。跟手下拉看不出这个问题只是因为淡出被手指掩护了。
-    //    现在展开/收起是同一套参数的正反两遍：只缩不淡，最后的交接交给
-    //    容器自己的 `morphPageOpacity()`（p<0.12 淡到 0）与迷你条那两档淡入。
-    this.morphContentOpacity = 1;
+    // 内容层：反编译侧**全程 0、落位那一刻才置 1**（构造 / `doEnter` 延迟闭包 / `λ2_2`
+    // → `λ1_2`，`setFinalStatus` 也是 1）。所以展开过程中屏上只有底色 + 续飞封面，
+    // 播放页内容是落位时才出现的 —— 这就是"四个边同时到边"之后才见到页面的观感。
+    // OPEN -> LEAVING must not erase all chrome/lyrics at the first p<1 sample.
+    // Cover has its own bridge gate; other content fades continuously with the bottom window.
+    this.morphContentOpacity = this.morphStage === MorphStage.LEAVING ? this.pullBottomIn() :
+      (t >= 1 ? 1 : 0);
   }
 
   /**
@@ -1847,19 +1810,6 @@ export class PlayerExpandState {
   /** @returns 播放页封面（形变终点）这个锚点是否量到过 —— 只给日志用，排查"没有封面飞入"。 */
   public bigCoverAnchored(): boolean {
     return this.bigNodeKnown;
-  }
-
-  /**
-   * 诊断用：把"形变终点锚点"当前值拼成一行日志。
-   *
-   * 用户 2026-10-14 报「点击打开播放器封面最后位置错位（上滑打开正常）」⇒ 上机 `findstr RzdMorph`
-   * 或 `findstr "expand intro"` 看这行：`endCover` 应该是展开态封面的边长（几百 vp 量级），
-   * 若它是一个几十 vp 的小方块，就说明量到的是"被压扁的内容层"里的封面。
-   */
-  public debugEndAnchor(): string {
-    return `bigNodeKnown=${this.bigNodeKnown} bigNodeW=${Math.round(this.bigNodeW)} ` +
-      `bigSize=${Math.round(this.bigSize)} endCover=${Math.round(this.endCoverSize)} ` +
-      `boxW=${Math.round(this.morphBoxW)}`;
   }
 
   /** @returns 世代号是否还是捕获时那一个（延时回调用它丢弃过期动作）。 */
