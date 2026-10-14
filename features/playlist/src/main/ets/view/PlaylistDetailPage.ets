@@ -1114,6 +1114,13 @@ export struct PlaylistDetailPage {
     let songs: BoardSongParam[] = [];
     try {
       const entries: BoardSongEntry[] = await this.boardSongLoader();
+      // ★ 因果链的收口日志（`grep RzdHomeBoard`）：`board=<boardSource>_<boardId>` 必须与
+      //   卡面四宫格取封面时打的 `feature board loaded … board=<同一个值>` 逐字相等。
+      //   这里打的是 `fetchBoardSongs` 内部真正交给 `lxLeaderboard` 的**完整 id**
+      //   （它自己拼 `source + '_' + boardId`），所以它是"同一个 id"最硬的证据。
+      hilog.info(PLAYLIST_LOG_DOMAIN, 'RzdHomeBoard',
+        'board songs loaded board=%{public}s count=%{public}d', this.boardSource + '_' + this.boardId,
+        entries.length);
       songs = entries.map((e: BoardSongEntry): BoardSongParam => {
         return {
           title: e.title, singer: e.singer, source: e.source, songId: e.songId, coverUrl: e.coverUrl

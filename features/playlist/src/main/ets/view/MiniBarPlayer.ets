@@ -134,8 +134,12 @@ export struct MiniBarPlayer {
           if (!this.expandState.pullDragging) {
             return;
           }
+          // ★ 提交判据**只有一份**：`PlayerExpandState.pullOpenShouldCommit()`
+          //   （清单 §一 1.2「进度 OR 速度」）—— 原来这里只判 `>= 0.45`，
+          //   "位移不大但甩得很快"打不开。判据收敛后，两条迷你条 + 壳层三处一致。
           this.expandState.requestPullOpenSettle(
-            this.expandState.pullOpenFraction(event.offsetY) >= 0.45);
+            this.expandState.pullOpenShouldCommit(this.expandState.morphP,
+              event.offsetY, event.velocityY));
         })
         .onActionCancel((): void => {
           if (!this.expandState.pullDragging) {

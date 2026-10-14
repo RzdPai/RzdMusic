@@ -403,6 +403,23 @@ export class PlayerExpandState {
   /** 浮层拷贝的补间时长（ms，对标无界 `ENTER_MS = 560`）。 */
   public static readonly MORPH_OVERLAY_DURATION_MS: number = 560;
 
+  // ⚠️ **收起方向：无界是 `REVERSE_MS = 460` + `REVERSE_EASING = "cubic-bezier(0.85, 0, 0.5, 0.88)"`
+  //    （`_recover\logic-src\ExpandAnimation驱动与补间定稿.md` §三「两套时长表的真实关系」：
+  //     `ENTER_MS` / `REVERSE_MS` **同属 `MainPage` 那一层**，即与 560 同源；
+  //     `_recover\logic-src\pullT写入算式与形变枚举.md` §五 常量全集亦列了这两个值）
+  //    —— 本轮**有意不落地，只标注**，理由是**量化过的、且是本架构的硬约束**：
+  //      · 浮层这一棒**只活到 `morphLand()`**（`morphBridging()` 在 LANDING 为假）；
+  //        收起时播放页那层是 `PlaybackPage.MORPH_CLOSE_DURATION_MS = 350` + 20 ⇒
+  //        浮层实际只有 ~370ms 可画；
+  //      · 用现有的 560 + `(0.23,1,0.32,1)`：t=0.661 处曲线已到 **≈99%** ⇒ 撤掉时几乎无跳变；
+  //      · 换成 460 + `(0.85,0,0.5,0.88)`：同一时刻只到 **≈87%** ⇒ 撤掉瞬间会有
+  //        **约 12% 行程的"啪"一下**（封面朝迷你条方向弹一小段）—— 这正是 §48/§51 反复
+  //        出问题的那类尾跳。
+  //    ⇒ 想真正对齐这两条值，得先让**浮层的存活期跟它自己的时长对齐**（那会破坏 §60.5 ⑤
+  //      "同一时刻至多一张封面"的严格互补：浮层多活一帧就与真封面同时在场）。
+  //      这一条**留待真机**：先看 `morph overlay tween done` 与收起落位的时间差，再定。
+  //      依据行：`docs\无界形变手感-落实到RzdMusic清单.md` §一 1.6 的"收起方向 460"那一行。
+
   // ⚠️ 这里**没有** `morphOverlayCurve()` 这类返回 `ICurve`/`UIShape` 的包装函数 —— 故意的：
   //   本机 SDK 里 `ICurve`（`component/common.d.ts:4154`）**唯独它没写 `declare`**
   //   （同文件其它接口都是 `declare interface`）⇒ 它不是全局可见的；`@kit.ArkUI` 也**没有**
@@ -537,7 +554,21 @@ export class PlayerExpandState {
    *   · 本实现：`base * (size / miniSize)` 再封顶 `base * 1.6` —— **按尺寸比例放大 + 上限**。
    *   两者在中间态的曲率不同，但本实现**不依赖 `onAreaChange` 的时序**（见下面那两条注释），
    *   改成两端点 lerp 会把时序敏感重新引进来 ⇒ 保留。
-   * @returns 补偿后的圆角（vp）。
+   *
+   * ★★ 复核（2026-10-15，判据行 `git grep -n coverVisualRadius -- "*.ets"`）：
+   *    **本函数全仓零调用点**（只有这一处定义 + 两处注释），所以 D3 记的这条差异
+   *    **并不在活的渲染路径上**。活的圆角是这两条：
+   *    · **形变容器**：`applyMorphProgress()` 里 `morphRadius = visualRadius / scale`，
+   *      而 `visualRadius = initRadiusVisual * (1 - t)`（`initRadiusVisual = 胶囊高 / 2`）
+   *      —— 这**已经就是无界的形状**：两端点线性插值 + **除以 scale**
+   *      （清单 §一 1.4 的 `coverRadiusAt = coverVisualRadiusAt / coverScaleAt`）；
+   *      差的只是终点值（我们 0、无界 34，且口径不同：我们算**整页容器**，无界算**封面本身**）；
+   *    · **封面本身**：展开页封面的圆角来自**用户设置** `CoverRadiusState`
+   *      （`MusicPlayInfoBlock` → `AppStorageV2.connect(CoverRadiusState …)`）
+   *      ⇒ 无界那个"绝对值 34"**绝不能照抄**，照抄会覆盖用户在设置里的选择。
+   *    ⇒ 结论与清单 §四 D3 一致（保留现算法、只标差异），但差异的落点是**死代码**：
+   *      本函数只为"记录无界口径"而留，**不要**为了对齐它去改圆角。
+   * @returns 补偿后的圆角（vp）。⚠️ 无调用点（见上）。
    */
   public coverVisualRadius(): number {
     const base: number = this.coverRadius();
@@ -842,6 +873,28 @@ export class PlayerExpandState {
   //    `morphSettleOpen()` / `morphDrive` / `morphGen` / `morphGenAlive()` / `morphSessionDriving()`。
   //    ⇒ 两套并存会让后来的人改错地方，故一并删除；上面三个**仍在用**的字段
   //    （`transitionProgress` / `pullDragging` / `pullStartedAtMs`）保留。
+  //
+  // ⚠️ **D5 续查（2026-10-15，同一口径：`git grep -n "<名字>" -- "*.ets"`，
+  //    命中全部落在本文件自己的定义/注释里 = 零调用点）**：下面这些 public 成员
+  //    **仍是零调用点，但本轮「保留 + 登记」而不是删除**，两条理由：
+  //      ① 清单 §三 把其中的**公式**（`pullBottomIn`）列为「已经对了、别动」——
+  //         它是与无界对账的参考公式，删掉就没有对照物了（§47.2 当初也是这么定的）；
+  //      ② 其余是"整页缩放 / 压扁内容层"那一版（现行第 5 版之前）的旧 API。
+  //         统一登记在这里，**后来的人别再照它写** —— D5 要防的就是"改错地方"。
+  //      · 圆角 / 封面旧口径：`coverVisualRadius()`、`coverX()`、`coverY()`、
+  //        `coverSize()`、`coverRadius()`、`coverOpacity()`
+  //      · 封面两档透明度的旧口径：`miniCoverOpacity()`、`innerCoverOpacity()`
+  //      · 旧整页透明度 / 裁剪路径：`pageOpacity()`、`clipCommands()`
+  //      · 旧相位门：`hasGeometry()`、`armExpand()`、`beginAnimating()`、`finishAnimating()`
+  //      · 旧"控制区自动收起"：`chromeShouldAutoHide()`、`collapseChrome()`、
+  //        `revealChrome()`、以及**本类**的 `touchChrome()`
+  //        （⚠️ `PlaybackPage` 里另有一个**同名的私有方法**，那个是**活的** ——
+  //         它挂在 `onTouch` 上重置自动收起计时器，别混）
+  //      · 旧淡入淡出：实例方法 `metaOpacity()`（⚠️ 与此同名的
+  //        `miniBarMetaOpacity()` 是**活的**，别混）、`pullBottomIn()`
+  //    ⚠️ **两个"有调用点但等于常量"的别误判**：`chromeOpacity()` / `chromeOffsetY()`
+  //      确实被 `PlaybackPage` 的控制区读到，但**写入方**（上面那组 `chrome*`）零调用点
+  //      ⇒ 它们恒为 1 / 0，读到不产生任何效果（§47.4 / §48.6 记的就是这件事）。
 
   // ═════════════════════════ 五点六、裁剪容器形变（对标无界 ExpandAnimation.applyPullProgress）═════════════════════════
   //
@@ -1641,13 +1694,81 @@ export class PlayerExpandState {
     return ratio < 0 ? 0 : (ratio > 1 ? 1 : ratio);
   }
 
-  /** @returns 跟手位移的归一化行程（vp）：胶囊 top，量不到就退回窗口高度的 0.55。 */
+  /**
+   * @returns 跟手位移的归一化行程（vp）：**优先实测**胶囊 top（= 无界的 `coverRect.top`），
+   *   量不到才退回窗口高度的 0.55。
+   *
+   * ⚠️ **兜底比例 0.55 ≠ 无界的 `PULL_RANGE_RATIO = 0.32`，有意保留、只标注**
+   *   （依据 `docs\无界形变手感-落实到RzdMusic清单.md` §八 第 6 条：比例值"改了要实测手感再定"，
+   *   不许按无界的值直接覆盖）：
+   *   · 主路径**恒为实测 `barY`**（`morphInitParams()` 成功时 `barY > 0`），
+   *     兜底分支只在"几何全没量到"时走 —— 那种情况下手势本来就退化（起手即 `!ok` 落位），
+   *     0.55 与 0.32 都不参与真实手感；
+   *   · 判据行：真机上若看到 `morph init FAIL: bar …` 或 `morph init box=… bar=(0,0,…)`，
+   *     说明走的是兜底 —— 那时再谈要不要把它对齐到 0.32。
+   */
   public pullSpanVp(): number {
     if (this.barY > 0 && this.barH > 0) {
       return this.barY;
     }
     const h: number = this.windowHeightVp > 0 ? this.windowHeightVp : 800;
     return Math.max(1, h * 0.55);
+  }
+
+  /** 上拉打开的**进度**提交阈值（0…1）：超过它就展开到底。 */
+  private static readonly PULL_OPEN_COMMIT_FRACTION: number = 0.45;
+  /**
+   * 上拉打开的**速度**提交阈值（vp/s）。
+   *
+   * 出处与 `PlaybackPage.DISMISS_COMMIT_VELOCITY` 是**同一个数**：
+   *   `docs\无界形变手感-落实到RzdMusic清单.md` §一 1.2「提交判定 —— 进度 OR 速度」
+   *   ⇒ `commit = (morphT >= COMMIT_T 0.32) || (velocity <= COMMIT_VELOCITY 900)`
+   *   ⇒ 无界的 `COMMIT_VELOCITY = 900`。
+   * 而且那一条本来就是**打开方向**的判据：`morphT` 正是无界
+   *   `MainPage.pullUpdate` 算出来的**上拉打开**进度（`clamp(-vp2px(dy)/pullRangePx)`）。
+   *   收起方向那条（`PlaybackPage.onDismissDrag`，D1）是 RzdMusic 的反向手势，
+   *   已经按同一数额落地；这里把**打开**方向也补齐 ⇒ 两条手势的提交判据同源同额。
+   *
+   * ⚠️ **不照抄符号**（清单 §八 第 3 条）：SDK 的 `GestureEvent.velocityY` 没承诺方向。
+   *   这里与 D1 同款绕开：**方向由位移判（上拉 ⇒ `offsetY < 0`）、大小取 `Math.abs(velocityY)`**
+   *   ⇒ 无论系统给的是 +900 还是 −900，判定结果都一样。
+   */
+  private static readonly PULL_OPEN_COMMIT_VELOCITY: number = 900;
+
+  /**
+   * 上拉松手：**是否提交**（= 展开到底而不是回弹卸载）。
+   *
+   * ★ 这是**唯一**的提交判据（清单 §一 1.2 的「进度 OR 速度」+ §四 D1）。
+   *   两条理由，缺一条都不该把它做成函数：
+   *   1. **补速度项**：原来 `>= 0.45` 只看进度 —— "位移不大、但甩得很快"不提交，
+   *      手感上就是"**轻甩打不开**"（D1 在收起方向修掉的是同一个毛病）；
+   *   2. **判据只有一份**：原来这条 `>= 0.45` 在**三个文件里各写一遍**
+   *      （`Index.onPullOpenEnd` / `HomeMiniBarPlayer` / `MiniBarPlayer`），
+   *      而本工程的既有教训是「**同一个量在两处各算一遍，就会在临界值上打架**」
+   *      （歌单页黑白字那次）⇒ 收敛到这里，三处只传参、不再各自判。
+   *
+   * ⚠️ 判据全部是**入参的纯函数**：不读上一帧、不做累加（清单 §一 1.1 的同一条要求）。
+   * @param progress 当前上拉进度 0…1（传 `morphP` —— **屏上真正在用的那个值**，
+   *   而不是拿 `offsetY` 重算一遍：起手中途补量过锚点时 `pullSpanVp()` 会变，
+   *   重算出的值与画面不一致）
+   * @param offsetY 松手时的竖直位移（vp，**上拉为负**）
+   * @param velocityY 松手时的竖直速度（`GestureEvent.velocityY`，vp/s）
+   * @returns true = 展开到底；false = 回弹并卸载
+   */
+  public pullOpenShouldCommit(progress: number, offsetY: number, velocityY: number): boolean {
+    const reached: boolean = progress >= PlayerExpandState.PULL_OPEN_COMMIT_FRACTION;
+    const opening: boolean = offsetY < 0;
+    const speed: number = Math.abs(velocityY);
+    const fastFlick: boolean = opening && speed >= PlayerExpandState.PULL_OPEN_COMMIT_VELOCITY;
+    const commit: boolean = reached || fastFlick;
+    // 上机排查：`hdc shell hilog -x | Select-String 'RzdMorph pull commit'`
+    Logger.info(PlayerExpandState.logTag,
+      `RzdMorph pull commit progress=${progress.toFixed(3)}/${
+        PlayerExpandState.PULL_OPEN_COMMIT_FRACTION} offsetY=${offsetY.toFixed(1)} ` +
+      `velocityY=${velocityY.toFixed(1)} absVelocity=${speed.toFixed(1)} ` +
+      `dir=${opening ? 'open' : 'close'} fastFlick=${fastFlick} ` +
+      `velocityThreshold=${PlayerExpandState.PULL_OPEN_COMMIT_VELOCITY} commit=${commit}`);
+    return commit;
   }
 
   /** 松手请求版本号（壳层 `@Monitor` 它来播收尾补间）。 */
@@ -1964,6 +2085,10 @@ export class PlayerExpandState {
    * 起点 = 当前浮层进度（可能是手指停在中间、也可能是上一次补间的中间态），
    * 终点 = `progress`；时长 560ms、曲线 `cubic-bezier(0.23, 1.0, 0.32, 1.0)`（快出慢收）。
    * 世代号保证"新补间/复位"之后旧回调直接丢弃。
+   *
+   * ⚠️ **两个方向共用这一套时长/曲线是刻意的**（无界收起方向另有一说 `460` +
+   *   `"cubic-bezier(0.85, 0, 0.5, 0.88)"`）—— 为什么不照搬、以及那个"12% 尾跳"的算式，
+   *   见上面 `MORPH_OVERLAY_DURATION_MS` 后面那段说明。**别只改这里的 `duration`。**
    * @param progress true = 展开到 1；false = 收回 0
    * @param ui 起补间用的 UIContext
    */

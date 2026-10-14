@@ -169,16 +169,28 @@ export struct HeroBannerSection {
   }
 
   /**
-   * 「每日30首 / 新歌推荐 / 精选推荐」三张**歌单卡**的点击：进歌单详情页。
+   * 「每日30首」的点击：走**首页推荐列表**那条通道进歌单详情页。
    *
-   * ⚠️ 详情页现在**只有 `sectionType === 'daily30'` 这一个**"首页推荐歌单"通道
-   *   （数据经 `AppStorage['dailyThirtySongs']` 中转，见
-   *   `features/playlist/.../MusicListPlaybackViewModel.loadDailyThirtySongs`），
-   *   **没有** `newSongs` / `picked` 分区 ⇒ 三张卡先共用同一条通道、只换歌单标题
-   *   （用户原话里的"只改文字"）。要真正按分区取数据，得在数据层加通道（见本轮报告）。
+   * ⚠️ 本通道**只服务 `daily30` 一张卡**，数据经 `AppStorage['dailyThirtySongs']` 中转
+   *   （读侧：`features/playlist/.../MusicListPlaybackViewModel.loadDailyThirtySongs`），
+   *   内容是**首页列表的快照** `privateSongDisplayList`。
+   *
+   * ⚠️⚠️ **榜单卡（新歌推荐 / 精选推荐）绝对不能走这里** —— 这条通道里没有任何榜单数据，
+   *   而榜单卡的四宫格封面来自**各自平台的榜单**（`loadFeatureBoardSongsAsync`，
+   *   见 `RecommendViewModel.loadFeatureBoardCovers`）⇒ 两者不同源，
+   *   走这里点进去就是**0 首歌**（用户 2026-10-15 报的 bug 正是这个：0ee1320 那一版
+   *   把三张拼图卡一起塞进了本方法）。榜单卡的去向是 {@link openFeatureBoard}。
    * @param item 卡片数据（`title` 即歌单标题）。
    */
   private openHeroSongList(item: RecommendHeroCardUi): void {
+    // ★ 防御性护栏：榜单卡一律不得走这条「首页推荐列表」通道（见本方法注释的 ⚠️⚠️）。
+    //   这里 return 而不是"兜底走榜单"：本方法是同步的，跳转要等榜单路由参数里的封面，
+    //   所以真正的分发在 `onFeatureTap` 那一处（它在进本方法之前就把榜单卡分走了）。
+    if (isFeatureBoardCard(item.feature)) {
+      Logger.warn('RzdHomeBoard',
+        `refuse daily30 channel for board card feature=${item.feature} (use openFeatureBoard)`);
+      return;
+    }
     const list = this.recommendViewModel.privateSongDisplayList;
     const rows: DailyThirtyRow[] = [];
     for (let i: number = 0; i < list.length; i++) {
@@ -232,8 +244,13 @@ export struct HeroBannerSection {
       return;
     }
     const param: ToplistRouteParam = await MusicDataService.buildBoardRouteParam(svcSource, boardId, boardName);
+    // ★ 因果链自查口径（`grep RzdHomeBoard`）：这一行打出的 `board` 就是卡面四宫格取封面用的**同一个 id**
+    //   （`loadFeatureBoardSongsAsync` 打的 `feature board loaded … board=<同一个值>`），
+    //   也是详情页 `fetchBoardSongs(source, boardId)` 拼回 `lxLeaderboard` 的**同一个 id**
+    //   ⇒ 日志里三个 `board=` 一串起来相等，就证明「卡面看到的」与「点进去的第一页」同源。
     Logger.info('RzdHomeBoard',
-      `feature board tap feature=${item.feature} source=${svcSource} board=${boardId} name=${boardName}`);
+      `feature board tap feature=${item.feature} source=${svcSource} board=${boardId} name=${boardName}` +
+      ` detail=fetchBoardSongs(${svcSource},${boardId})`);
     const coverId: string = HeroBannerSection.collageCoverId(item.feature);
     const animated: boolean = !getPlaylistTransitionState().prepare(this.getUIContext(), coverId, param.listCover);
     this.pageIndexInfos.pushPathByName(RouterUrlConstants.PLAYLIST_DETAIL, param, animated);

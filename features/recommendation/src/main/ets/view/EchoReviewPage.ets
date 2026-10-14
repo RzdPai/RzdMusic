@@ -842,6 +842,33 @@ export struct EchoReviewPage {
         blurStrategy: BlurStrategy.ENABLE,
         scrollEffectOpts: {
           scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR
+        },
+        // ★★ 2026-10-15 本轮（日间化收尾）：**必须显式给 `mainTitleColor`** —— 照
+        //   `RecommendPage.getTitleBar()` 逐字同款（两份都给：`originalStyle` + `scrollEffectStyle`）。
+        //
+        //   原因（官方 `ui-design-hdsnavigation` 原文，别凭观感猜）：
+        //   `ScrollEffectType.IMMERSIVE_GRADIENT_BLUR`（6.1.0(23) 起）的语义是
+        //   「标题文字和图标样式**从白色到黑色**线性过渡」⇒ 未显式指定颜色时，
+        //   **未滚动（originalStyle）那一段的标题默认是白的**。本页原来是纯黑底，
+        //   白标题正好；本轮改成跟随深浅色后，日间页底是 `page_background`(=#F1F3F5) ——
+        //   白字压浅底**等于看不见**。给 `sys.color.font_primary` 之后标题跟着系统深浅色走。
+        //   ★ 顺带一个必须知道的**耦合**：官方 `systemBarStyle` 说明写着「未设置 systemBarStyle
+        //     属性时，颜色（状态栏）默认值**同主标题栏字体颜色**」⇒ 显式给主标题色，状态栏图标
+        //     色也跟着这个决定；日间浅底配深字，状态栏图标自然是深色，不需要另调 window 接口
+        //     （官方另有「不建议混合使用 systemBarStyle 与 setWindowSystemBarProperties」）。
+        originalStyle: {
+          contentStyle: {
+            titleStyle: {
+              mainTitleColor: $r('sys.color.font_primary')
+            }
+          }
+        },
+        scrollEffectStyle: {
+          contentStyle: {
+            titleStyle: {
+              mainTitleColor: $r('sys.color.font_primary')
+            }
+          }
         }
       },
       content: {

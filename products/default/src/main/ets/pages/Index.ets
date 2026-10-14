@@ -49,6 +49,8 @@ import {
 import { dispatchShellPlaybackIntent, LXSourceHost, PlaybackPageCoverContent, PlayerViewModel } from 'player';
 import { RecommendPage } from 'recommendation';
 import { EchoReviewPage } from 'recommendation';
+// 「现在就听」：底栏第 2 个页签（推荐 / **现在就听** / 回响 / 我的）。
+import { NowPlayingFeedPage } from 'recommendation';
 import { HomeMiniBarPlayer, HomeMiniBarPlayerAside, PlaylistTransitionOverlay } from 'playlist';
 import { MinePage } from 'setting';
 // 新模块：本地音乐（导入设备音频到沙箱）与洛雪同步客户端。
@@ -277,7 +279,12 @@ struct Index {
     // ★ 页签从 4 个收成 2 个（推荐 / 我的）之后，`TabSwitchState.tabIndex` 可能是上一版留下的
     //   越界下标（比如旧的「我的」= 2、「设置」= 3）—— HdsTabs 拿到越界下标会落在空白页上。
     //   共享状态里没有"页签数"这个概念，所以在这里夹一次：越界即回首页。
-    if (this.tabState.tabIndex < 0 || this.tabState.tabIndex > 2) {
+    // ★ 2026-10-15：「现在就听」插到「推荐」与「回响」之间 ⇒ 页签数变 4，上界 2 → 3。
+    //   ⚠️ 这一层没有单一真源：插/删页签必须**同时**改四组按下标取的地方 ——
+    //     ① 这里（越界夹取上界）；② `tabScrollTopCommands` 长度；
+    //     ③ `tabBounceTriggers` 长度；④ `TabBarItem(i,…)` 与各页 `scrollTopCommand` 的下标。
+    //   漏一组就是"错位 / 不弹 / 不复位"。
+    if (this.tabState.tabIndex < 0 || this.tabState.tabIndex > 3) {
       Logger.warn(RzdShellLogTag, `tab index out of range (${this.tabState.tabIndex}), reset to 0`);
       this.tabState.tabIndex = 0;
     }
@@ -571,12 +578,22 @@ struct Index {
     this.expandState.syncMorphOverlayFromPage();
   }
 
-  /** 松手：过阈值补间到 1（展开），否则回到 0 并卸载。 */
-  private onPullOpenEnd(_offsetY: number): void {
+  /**
+   * 松手：**提交判据交给 `PlayerExpandState.pullOpenShouldCommit()`**（清单 §一 1.2
+   * 「进度 OR 速度」）—— 过阈值（或快速上甩）补间到 1（展开），否则回到 0 并卸载。
+   *
+   * ⚠️ 这里**不要再写 `morphP >= 0.45`**：那条判据原来在三个文件里各写了一遍
+   *    （本文件 + 两个迷你条），收敛到 `PlayerExpandState` 一处之后，
+   *    改阈值只改那一个常量，不会出现"两条手势临界值不一样"。
+   * @param offsetY 松手时的竖直位移（vp，上拉为负）—— 只用来判**方向**
+   * @param velocityY 松手时的竖直速度（`GestureEvent.velocityY`）—— 只用来判**快甩**
+   */
+  private onPullOpenEnd(offsetY: number, velocityY: number): void {
     if (!this.expandState.pullDragging) {
       return;
     }
-    this.settlePullOpen(this.expandState.morphP >= 0.45);
+    this.settlePullOpen(
+      this.expandState.pullOpenShouldCommit(this.expandState.morphP, offsetY, velocityY));
   }
 
   /**
@@ -882,18 +899,18 @@ struct Index {
    * `symbolEffect(effect, trigger)` 是「trigger 变化就播一次」，所以每个页签必须
    * **各用各的计数** —— 共用一个的话两个图标会一起弹（设计规范要的是「选中态」那一颗弹）。
    *
-   * ⚠️ 长度必须等于页签数（现在是 2）：`TabBarItem` 按下标取。
+   * ⚠️ 长度必须等于页签数（现在是 **4**：推荐 / 现在就听 / 回响 / 我的）：`TabBarItem` 按下标取。
    */
-  @Local tabBounceTriggers: number[] = [0, 0];
+  @Local tabBounceTriggers: number[] = [0, 0, 0, 0];
   /**
    * 「回到顶部」指令（每个页签一个，递增触发）。
    *
    * 设计规范：点击**当前**页签要把界面回滚到顶部/指定位置。`onTabBarClick` 在
    * 点已选中页签时也会触发，所以不需要在页签里自己加 onClick（那会打断页签切换）。
    *
-   * ⚠️ 长度必须等于页签数（现在是 2）：`HomeTabsPages()` 按下标取。
+   * ⚠️ 长度必须等于页签数（现在是 **4**）：`HomeTabsPages()` 按下标取。
    */
-  @Local tabScrollTopCommands: number[] = [0, 0, 0];
+  @Local tabScrollTopCommands: number[] = [0, 0, 0, 0];
 
   /** 页签选中态弹跳（BounceSymbolEffect + EffectDirection.DOWN，见底部页签设计规范）。 */
   private playTabBounce(index: number): void {
@@ -1354,26 +1371,48 @@ struct Index {
     }
     .tabBar(this.TabBarItem(0, $r('app.string.tab_home'), $r('sys.symbol.house_fill')))
 
+    // ★ 用户 2026-10-15：「Tab 的推荐和回响中间加个**现在就听**，上下滑动切换歌曲。」
+    //   一屏一首歌、竖向 Swiper 换歌；未登录走当前平台榜单、登录走该平台每日推荐
+    //   （两条通道都在 `NowPlayingFeedPage` 里，见该文件头）。
+    //   图标 `sys.symbol.music_note_circle_fill` 与另外三枚同为 fill 系（已在本机
+    //   `sysResource.js` 的 symbol 表里核实存在）。
+    TabContent() {
+      Column() {
+        NowPlayingFeedPage({
+          // 底部让位与上面「推荐」页同一判据（HDS 浮动胶囊底栏 6.1.1(24)/60100 起才存在）：
+          // 56 = 胶囊高，+16 = `barBottomMargin` 的常规值。它加在**滑动卡片自己**身上，
+          // 这样每一屏都能正好躲开底栏（见 `NowPlayingFeedPage.FEED_DEFAULT_BOTTOM_RESERVE_VP`）。
+          bottomReserveVp: deviceInfo.distributionOSApiVersion >= 60100 ? 56 + 16 : 56,
+          scrollTopCommand: this.tabScrollTopCommands[1]
+        })
+          .layoutWeight(1)
+      }
+      .width(StyleConstants.FULL_WIDTH)
+      .height(StyleConstants.FULL_HEIGHT)
+      .expandSafeArea([SafeAreaType.SYSTEM, SafeAreaType.CUTOUT], [SafeAreaEdge.TOP])
+    }
+    .tabBar(this.TabBarItem(1, $r('app.string.tab_now_playing'), $r('sys.symbol.music_note_circle_fill')))
+
     // ★ 用户 2026-10-12：底栏中间加一页「回响」（月度听歌报告）
     TabContent() {
       Column() {
-        EchoReviewPage({ scrollTopCommand: this.tabScrollTopCommands[1] })
+        EchoReviewPage({ scrollTopCommand: this.tabScrollTopCommands[2] })
       }
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
       .expandSafeArea([SafeAreaType.SYSTEM, SafeAreaType.CUTOUT], [SafeAreaEdge.TOP])
     }
-    .tabBar(this.TabBarItem(1, $r('app.string.tab_echo'), $r('sys.symbol.waveform')))
+    .tabBar(this.TabBarItem(2, $r('app.string.tab_echo'), $r('sys.symbol.waveform')))
 
     TabContent() {
       Column() {
-        MinePage({ scrollTopCommand: this.tabScrollTopCommands[2] })
+        MinePage({ scrollTopCommand: this.tabScrollTopCommands[3] })
       }
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
       .expandSafeArea([SafeAreaType.SYSTEM, SafeAreaType.CUTOUT], [SafeAreaEdge.TOP])
     }
-    .tabBar(this.TabBarItem(2, $r('app.string.tab_cafe_listen'), $r('sys.symbol.person_crop_circle_fill_1')))
+    .tabBar(this.TabBarItem(3, $r('app.string.tab_cafe_listen'), $r('sys.symbol.person_crop_circle_fill_1')))
   }
 
   /** Root UI: {@link HdsNavigation} with tabs and optional playback cover. */
@@ -1572,7 +1611,9 @@ struct Index {
           this.onPullOpenUpdate(event.offsetY);
         })
         .onActionEnd((event: GestureEvent): void => {
-          this.onPullOpenEnd(event.offsetY);
+          // ★ 速度项也要传进去（清单 §一 1.2「进度 OR 速度」；判据在
+          //   `PlayerExpandState.pullOpenShouldCommit()` 里，方向由位移判、大小取 abs）
+          this.onPullOpenEnd(event.offsetY, event.velocityY);
         })
         .onActionCancel((): void => {
           this.onPullOpenCancel();
