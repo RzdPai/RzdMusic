@@ -117,12 +117,18 @@ export struct MiniBarPlayer {
             return;
           }
           this.schedulePullAnchorRemeasure();
+          // ★ 壳层浮层那份续飞封面（`Index.MorphCoverClone`）也压回起点：
+          //   它有自己的进度 `morphOverlayP`（静止态初值是 1），不压回 0 的话
+          //   浮层的第一帧会按"落位的大封面"画一次。
+          this.expandState.morphOverlayReset();
         })
         .onActionUpdate((event: GestureEvent): void => {
           if (!this.expandState.pullDragging) {
             return;
           }
           this.expandState.applyMorphProgress(this.expandState.pullOpenFraction(event.offsetY));
+          // 跟手期壳层浮层必须与播放页同值（否则松手补间时会先跳一下浮层那个进度）
+          this.expandState.syncMorphOverlayFromPage();
         })
         .onActionEnd((event: GestureEvent): void => {
           if (!this.expandState.pullDragging) {

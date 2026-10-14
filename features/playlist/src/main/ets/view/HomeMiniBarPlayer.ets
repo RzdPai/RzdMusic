@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -196,12 +196,18 @@ export struct HomeMiniBarPlayer {
           //   免得手指一路往上拖、屏上却只有底色窗口在长大、一张封面都看不到。
           //   补量成功后就按当前进度重落一次几何，收尾时不会跳。
           this.schedulePullAnchorRemeasure(0);
+          // ★ 壳层浮层那份续飞封面（`Index.MorphCoverClone`）也压回起点：
+          //   它有自己的进度 `morphOverlayP`（静止态初值是 1），不压回 0 的话
+          //   浮层的第一帧会按"落位的大封面"画一次。
+          this.expandState.morphOverlayReset();
         })
         .onActionUpdate((event: GestureEvent): void => {
           if (!this.expandState.pullDragging) {
             return;
           }
           this.expandState.applyMorphProgress(this.expandState.pullOpenFraction(event.offsetY));
+          // 跟手期两层必须同值（否则松手补间时会先跳一下浮层那个进度）
+          this.expandState.syncMorphOverlayFromPage();
         })
         .onActionEnd((event: GestureEvent): void => {
           if (!this.expandState.pullDragging) {

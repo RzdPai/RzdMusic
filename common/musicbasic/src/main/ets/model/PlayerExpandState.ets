@@ -14,7 +14,8 @@
  */
 
 import { Logger } from '../util/Logger';
-import { UIContext } from '@kit.ArkUI';
+import { curves, UIContext } from '@kit.ArkUI';
+import { deviceInfo } from '@kit.BasicServicesKit';
 import { MorphMetaEndpoint, MorphMetaFrame } from './MorphMetaGeometry';
 
 /**
@@ -381,6 +382,27 @@ export class PlayerExpandState {
   public static readonly WIN_B_END: number = 0.90;
   /** "从下升起"的幅度（屏幕 vp，形变期间按 `1/scale` 反算成页内位移）。 */
   public static readonly RISE_VP: number = 180;
+
+  // ═══════════════ 壳层浮层这一层的**独立时长/曲线**（对标无界 `animateMorphT`）═══════════════
+  //
+  // 无界是**两层**：播放页内快照 350ms `Curve.EaseInOut`（`doEnter`）+ 浮层拷贝的 `morphT`
+  //  560ms `cubic-bezier(0.23, 1.0, 0.32, 1.0)`（`animateMorphT`）。
+  // RzdMusic 现在也分成两层：**播放页那层的 350ms 一个字都不动**（`PlaybackPage.MORPH_OPEN_DURATION_MS`），
+  // 壳层浮层这一层单独走下面这套 560ms + 快出慢收的贝塞尔。
+  //
+  // ⚠️ 只有**浮层拷贝**吃这一套；`morphP`（= 播放页几何）继续由原调用方按 350ms 补间。
+
+  /** 浮层拷贝的补间时长（ms，对标无界 `ENTER_MS = 560`）。 */
+  public static readonly MORPH_OVERLAY_DURATION_MS: number = 560;
+
+  // ⚠️ 这里**没有** `morphOverlayCurve()` 这类返回 `ICurve`/`UIShape` 的包装函数 —— 故意的：
+  //   本机 SDK 里 `ICurve`（`component/common.d.ts:4154`）**唯独它没写 `declare`**
+  //   （同文件其它接口都是 `declare interface`）⇒ 它不是全局可见的；`@kit.ArkUI` 也**没有**
+  //   导出 `UIShape`（编译实测：`Module '"@kit.ArkUI"' has no exported member 'UIShape'`）。
+  //   ⇒ 曲线**就在唯一那个 `animateTo` 的调用点上内联写**，与工程里既有的两处同款
+  //   （`products/default .../Index.ets:611`、`PlaybackPage.ets:1350`）：
+  //       curve: curves.cubicBezierCurve(0.23, 1.0, 0.32, 1.0)
+  //   改这条曲线只改那**一处**（`morphOverlayTweenTo` 里），不要另起包装。
 
   /** @returns 窗口 [start, end] 内的线性进度 0…1（窗口外夹紧）。 */
   public static ramp01(p: number, start: number, end: number): number {
@@ -951,6 +973,26 @@ export class PlayerExpandState {
   @Trace public morphRadius: number = 0;
   /** 内容层不透明度（可视矩形接近整屏才浮现）。 */
   @Trace public morphContentOpacity: number = 1;
+
+  /**
+   * **壳层浮层拷贝**的独立进度 0…1（只有浮层那一份封面克隆吃它）。
+   *
+   * 为什么要与 `morphP` 分开：对标无界的**两层结构** —— 播放页内快照 350ms、
+   * 浮层拷贝 560ms 且曲线不同（快出慢收）。两者同起、各自到点。
+   * **播放页的几何仍然只由 `morphP` 驱动**，本字段不参与任何页内摆放。
+   *
+   * 写入点（只有这三个，别再加）：
+   *   ① 手指跟手：`syncMorphOverlayFromPage()`（与 `morphP` 一比一同步，不跑补间）；
+   *   ② 补间：`morphOverlayTweenTo()`（唯一一处 animateTo，560ms + 快出慢收）；
+   *   ③ 复位：`morphOverlayReset()`（`morphReset` / 会话开始）。
+   */
+  @Trace public morphOverlayP: number = 1;
+  /** 浮层拷贝补间的世代号（新补间/复位后旧回调直接丢弃）。 */
+  private morphOverlayGen: number = 0;
+  /** 浮层拷贝此刻是否有补间在跑（防止同一段动画被重复起一遍）。 */
+  private morphOverlayAnimating: boolean = false;
+  /** `hostsMorphOverlay()` 的缓存：-1 = 还没判过，0 = 否，1 = 是（见该函数的说明）。 */
+  private morphOverlayHostCached: number = -1;
 
   /**
    * 形变几何是否可用（`morphInitParams()` 的结论）。
@@ -1629,12 +1671,26 @@ export class PlayerExpandState {
    *   于是终点正好是实测的 (bigX, bigY, bigSize) —— **动画完成那一刻才归位**。
    */
   public morphCoverBridge(): LyricMorphRect {
+    return this.morphCoverRectAt(this.morphP);
+  }
+
+  /**
+   * @returns **任意进度**下的续飞封面矩形（vp，**窗口坐标**）。
+   *
+   * ⚠️ 两份口径分开、不要混在一个函数里：
+   *   · `morphCoverBridge()`          —— 播放页那份，进度 = `morphP`（350ms 那层）；
+   *   · `morphOverlayCoverBridge()`   —— **壳层浮层**那份，进度 = `morphOverlayP`（560ms 那层）。
+   * 两者共用下面这段纯几何（起点/终点/直线插值），只差一个 `t`。
+   *
+   * @param progress 0 = 迷你条封面，1 = 播放页封面（静止态实测矩形）
+   */
+  private morphCoverRectAt(progress: number): LyricMorphRect {
     // ★★ 2026-10-15 **回退"页内坐标逆变换"**：真机实测那样做会把封面画到左上角
     //   （说明 `.scale()` 的枢轴不是容器中心，我的换算前提不成立）。
     //   现在回到"**窗口坐标直线插值**"——淡入淡出版里就是这样，用户实测"封面是正常的"：
     //   两端在 p=0 / p=1 都对（p=1 时窗口坐标 = 页内坐标），中间段是近似但观感正常。
     //   ⚠️ 所以它**必须一直飞到 p=1**（见 `morphBridging()` 里的说明），不要提前交棒。
-    const t: number = this.morphP < 0 ? 0 : (this.morphP > 1 ? 1 : this.morphP);
+    const t: number = progress < 0 ? 0 : (progress > 1 ? 1 : progress);
     // ⚠️ **直线插值**（对标反编译 `MiniMorph`：中心/边长各一条 `lerpN`）：
     //    `coverCenterXAt/YAt(t)`、`coverVisualEdgeAt(t)`、`coverVisualRadiusAt(t)`。
     //    ⚠️ 之前我拿"容器变换后的当前帧矩形"当终点，于是起点那一段终点会**往下跑**
@@ -1662,6 +1718,204 @@ export class PlayerExpandState {
       height: this.snapStartW + (endH - this.snapStartW) * t,
       radius: startRadius + (endRadius - startRadius) * t
     };
+  }
+
+  // ═══════════ 壳层浮层拷贝（对标无界 `MainPage.MorphOverlayHost` 里的 `morphCover`）═══════════
+  //
+  // 结构（**两层**，两个进度各自到点）：
+  //   · 下 层 = 播放页自己：`morphP` 驱动的整页 scale/translate/clip，**350ms `Curve.EaseInOut`**
+  //     （调用点没动：`PlaybackPage.MORPH_OPEN_DURATION_MS`）；
+  //   · 上 层 = **壳层浮层**（`products/default .../Index.ets` 的 `MorphCoverClone()`）：
+  //     `morphOverlayP` 驱动，**560ms + `curves.cubicBezierCurve(0.23, 1.0, 0.32, 1.0)`**。
+  //
+  // 为什么浮层那份要单独一个进度：它**不在播放页的形变容器里**（不受 scale/translate/clip 影响，
+  // 直接按窗口坐标摆在壳层的满屏 Stack 上），所以它可以是完全不同的一条时间线；
+  // 对齐无界之后观感就是"封面横穿屏幕飞过去"而不是"整页从迷你条位置长大"。
+
+  /** @returns 浮层拷贝的进度（夹紧到 0…1）。 */
+  public morphOverlayProgress(): number {
+    const p: number = this.morphOverlayP;
+    return p < 0 ? 0 : (p > 1 ? 1 : p);
+  }
+
+  /**
+   * @returns 壳层浮层那份续飞封面的矩形（vp，**窗口坐标**）。
+   *
+   * 进度 = `morphOverlayP`（560ms 那层），与 `morphCoverBridge()`（播放页那份，进度 = `morphP`）
+   * **共用同一段纯几何**（`morphCoverRectAt`），只是插值参数不同。
+   * ⚠️ 壳层直接拿它当 `.position()` / `.width()` 用，**不做任何"页内 ↔ 窗口"换算**。
+   */
+  public morphOverlayCoverBridge(): LyricMorphRect {
+    return this.morphCoverRectAt(this.morphOverlayProgress());
+  }
+
+  /**
+   * @returns 壳层浮层要不要画这份封面拷贝。
+   *
+   * 两个条件：
+   *   1. `morphBridging()` —— 与播放页那一棒**完全同一把门**（相位/两端矩形的既有判据一个字没改）；
+   *   2. `hostsMorphOverlay()` —— 宿主壳层这次是不是真的接管了这一棒（PC 壳层还没接 ⇒ 不画，
+   *      否则会出现"播放页也不画、浮层也不画"的**无封面**空档）。
+   *
+   * ⚠️ 为什么不再另加"进度 ≥ 某阈值就停笔"：浮层这一棒早于播放页落位
+   *   （560ms + 20ms 收尾 vs 播放页 350ms + 30ms），末尾那几十毫秒里两端进度都已经是 1、
+   *   矩形逐像素相同，停笔时**没有可跳的差**；而多一个阈值就会重新引入"半路消失"那类 bug。
+   */
+  public morphOverlayBridging(): boolean {
+    if (!this.hostsMorphOverlay()) {
+      return false;
+    }
+    return this.morphBridging();
+  }
+
+  /** @returns 浮层拷贝的不透明度（与播放页那份同口径：画的时候恒 1）。 */
+  public morphOverlayBridgeOpacity(): number {
+    return this.morphOverlayBridging() ? 1 : 0;
+  }
+
+  /**
+   * @returns 当前 shell 是否自己重绘了续飞封面（= 播放页应**停用**自己的 `MorphCoverBridge`）。
+   *
+   * 判据用**设备类型**（`2in1` = PC/平板笔电形态）：本轮的浮层只落在 `products/default`
+   * 壳层，PC 壳层（`products/pc/.../Index.ets`）没有 `MorphMiniBarClone`，也没接这份浮层 ⇒
+   * 在 PC 上**继续由播放页自己画**（行为与改动前逐字一致），避免"两边都不画"。
+   *
+   * ⚠️ 这段是**临时脚手架**：等浮层也落到 PC 壳层后，把这里改成常量 `true`
+   *   （或直接删掉这个函数与它的调用点）。
+   */
+  public hostsMorphOverlay(): boolean {
+    // ⚠️ 结果要**缓存**：这个函数在渲染门里被逐帧调用（`MorphCoverClone` 那个 `if`），
+    //    而 `deviceInfo.deviceType` 是系统属性读取，不该每帧问一次。
+    //    设备类型一次运行内不会变，缓存是安全的。
+    if (this.morphOverlayHostCached < 0) {
+      try {
+        this.morphOverlayHostCached = deviceInfo.deviceType !== '2in1' ? 1 : 0;
+      } catch (err) {
+        // 取不到设备类型时按"播放页自己画"处理：宁可多一层也不要一张都没有
+        Logger.warn(PlayerExpandState.logTag, `hostsMorphOverlay: deviceType unavailable ${err}`);
+        this.morphOverlayHostCached = 0;
+      }
+    }
+    return this.morphOverlayHostCached === 1;
+  }
+
+  /**
+   * 会话开始/复位：把浮层进度压回起点并中断它自己的补间。
+   *
+   * ⚠️ 起手那**一帧**很关键：`morphOverlayP` 的初值是 1（静止态语义），若不压回 0，
+   * 浮层的第一帧就会画成大封面（观感是"闪一下大图"）。
+   */
+  public morphOverlayReset(): void {
+    this.morphOverlayGen = this.morphOverlayGen + 1;
+    this.morphOverlayAnimating = false;
+    this.morphOverlayP = 0;
+    Logger.info(PlayerExpandState.logTag,
+      `morph overlay reset gen=${this.morphOverlayGen} overlayP=0`);
+  }
+
+  /**
+   * 跟手期间把浮层进度与播放页进度**一比一同步**（不跑任何补间）。
+   *
+   * 手指那条路上两层必须是同一个值，否则松手时会"补"一下（一小段瞬移）。
+   * 补间路（`morphOverlayTweenTo`）不走这里：那条路上两层刻意不同步（这才是两层的意义）。
+   */
+  public syncMorphOverlayFromPage(): void {
+    if (this.morphOverlayAnimating) {
+      return;
+    }
+    this.morphOverlayP = this.morphP;
+  }
+
+  /**
+   * 播放页侧开始**展开**补间了 ⇒ 壳层浮层也起自己的 560ms 那一版。
+   *
+   * ⚠️ 为什么由**壳层**调（`@Monitor('expandState.morphDrive')`）、而不是让播放页调：
+   *   浮层与它那份进度整个属于壳层（`products/default .../Index.ets`），
+   *   `@Monitor` 是 V2 的**异步监听**，回调发生在播放页那次状态写入的**同一轮**
+   *   ⇒ 两层算"同起"，而播放页那 350ms 的代码**一行都不用动**。
+   *   排查关键字：`grep RzdMorphOverlay`（`page-intro` / `page-collapse` / `shell-settle` 三行）。
+   * @param ui 壳层的 UIContext（补间必须在它上面起）
+   */
+  public focusMorphOverlayForPageIntro(ui: UIContext): void {
+    if (!this.hostsMorphOverlay()) {
+      return;
+    }
+    if (this.morphDrive !== MorphDrive.ANIM || !this.morphContainerActive()) {
+      return;
+    }
+    Logger.info(PlayerExpandState.logTag,
+      `morph overlay page-intro from=${this.morphOverlayP.toFixed(3)} gen=${this.morphGen}`);
+    this.morphOverlayTweenTo(true, ui);
+  }
+
+  /**
+   * 播放页侧开始**收起**了 ⇒ 浮层也跟着回起点（走它自己的 560ms）。
+   * @param ui 壳层的 UIContext
+   */
+  public focusMorphOverlayForPageCollapse(ui: UIContext): void {
+    if (!this.hostsMorphOverlay()) {
+      return;
+    }
+    Logger.info(PlayerExpandState.logTag,
+      `morph overlay page-collapse from=${this.morphOverlayP.toFixed(3)} gen=${this.morphGen}`);
+    this.morphOverlayTweenTo(false, ui);
+  }
+
+  /**
+   * 浮层拷贝的补间（**唯一一处** `animateTo`）。
+   *
+   * 起点 = 当前浮层进度（可能是手指停在中间、也可能是上一次补间的中间态），
+   * 终点 = `progress`；时长 560ms、曲线 `cubic-bezier(0.23, 1.0, 0.32, 1.0)`（快出慢收）。
+   * 世代号保证"新补间/复位"之后旧回调直接丢弃。
+   * @param progress true = 展开到 1；false = 收回 0
+   * @param ui 起补间用的 UIContext
+   */
+  public morphOverlayTweenTo(progress: boolean, ui: UIContext): void {
+    this.morphOverlayGen = this.morphOverlayGen + 1;
+    const gen: number = this.morphOverlayGen;
+    const from: number = this.morphOverlayProgress();
+    const to: number = progress ? 1 : 0;
+    if (Math.abs(to - from) < 0.0001) {
+      // 已经在终点：不起补间（避免每次进播放页都白跑一段 560ms 的空动画）
+      this.morphOverlayAnimating = false;
+      this.morphOverlayP = to;
+      return;
+    }
+    if (ui === undefined) {
+      // 拿不到 UIContext：直接落位。**绝不能整段跳过** —— 否则浮层会停在中途不落位。
+      Logger.warn(PlayerExpandState.logTag,
+        `morph overlay tween no UIContext, jump from=${from.toFixed(3)} to=${to}`);
+      this.morphOverlayAnimating = false;
+      this.morphOverlayP = to;
+      return;
+    }
+    // 起补间之前先把"起点"同步标脏（与 `PlaybackPage.playMorphOpenIntro` 同一条官方口径：
+    // V2 状态是**异步标脏**、而 `animateTo` 会立刻刷新已标脏节点来决定首帧）。
+    // 这里不需要 `UIUtils.applySync`：浮层的起点就是字段当前值，animateTo 的闭包只写终点。
+    this.morphOverlayAnimating = true;
+    Logger.info(PlayerExpandState.logTag,
+      `morph overlay tween start from=${from.toFixed(3)} to=${to} ` +
+        `ms=${PlayerExpandState.MORPH_OVERLAY_DURATION_MS} gen=${gen}`);
+    ui.animateTo({
+      duration: PlayerExpandState.MORPH_OVERLAY_DURATION_MS,
+      // ★ 浮层这一层**单独**的时长/曲线（对标无界 `animateMorphT` 的 ENTER_MS + EASE_OUT_STR）。
+      //   ⚠️ 曲线内联写在这里，别抽成返回 `ICurve`/`UIShape` 的包装函数（那两个类型在本机 SDK
+      //      里都不是全局可见的，见文件顶部 `MORPH_OVERLAY_DURATION_MS` 旁边那段说明）。
+      curve: curves.cubicBezierCurve(0.23, 1.0, 0.32, 1.0)
+    }, (): void => {
+      // ⚠️ 目标值**直接写字段**，不要走 `syncMorphOverlayFromPage()`：那个会被
+      //    `morphOverlayAnimating` 挡掉（此时它为 true），写不进去就等于没动画。
+      this.morphOverlayP = to;
+    });
+    setTimeout((): void => {
+      if (gen !== this.morphOverlayGen) {
+        // 已被新补间/复位取代：什么都别动
+        return;
+      }
+      this.morphOverlayAnimating = false;
+      this.morphOverlayP = to;
+      Logger.info(PlayerExpandState.logTag, `morph overlay tween done overlayP=${to} gen=${gen}`);
+    }, PlayerExpandState.MORPH_OVERLAY_DURATION_MS + 20);
   }
 
   /**
@@ -1777,6 +2031,18 @@ export class PlayerExpandState {
   public applyMorphProgress(p: number): void {
     const t: number = p < 0 ? 0 : (p > 1 ? 1 : p);
     this.morphP = t;
+    // ★ 浮层那一层在**非形变期**跟着播放页一起复位（避免"残留进度画一帧大封面"）。
+    //   ⚠️ 判据是 `!morphContainerActive()` —— **不能在形变期无条件复位**：
+    //      · 起手那一刻（`morphBeginEntering` / `pullOpenBegin`）已经进了 ENTERING，
+    //        所以这里不复位；浮层的起点由壳层那两处显式压回 0
+    //        （`onPullOpenStart` 跟手起手 / `settlePullOpen` 起补间）；
+    //      · 而"落位后又被调用一次"（`morphSettleOpen` 里的 `applyMorphProgress(1)`）
+    //        发生在相位已经是 OPEN（容器不活跃）时 —— 那时复位也无害：浮层这份本来就不画了
+    //        （`morphOverlayBridging()` 已经 false），下一轮起手会重新压 0。
+    //      这条复位的真正价值是兜住"异常路径直接落位/卸载"那种没人显式复位的情况。
+    if (!this.morphContainerActive()) {
+      this.morphOverlayReset();
+    }
     if (!this.morphUsable) {
       // 几何没量到：不裁剪、不缩放、不透明 —— 直接当"没有这套动画"
       this.morphScale = 1;
@@ -1969,6 +2235,10 @@ export class PlayerExpandState {
     this.morphStage = MorphStage.NONE;
     this.morphDrive = MorphDrive.NONE;
     this.morphP = 1;
+    // ★ 浮层那一层（`morphOverlayP`，560ms 那条时间线）**也必须在这里清**：
+    //   会话结束/卸载之后它的补间还可能挂在那 560ms 的尾巴上，不清的话
+    //   下一轮起手第一帧会按"残留进度"画一次浮层封面（观感是闪一下大图）。
+    this.morphOverlayReset();
     // 几何也一起作废：下次展开必须重新量一遍（宿主尺寸/迷你条位置都可能变了）
     this.morphUsable = false;
     // 会话结束：下一轮展开要从"作废终点 → 在原尺寸时量 → 压起点"重新走一遍

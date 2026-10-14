@@ -25,7 +25,6 @@ import {
   WindowInfo
 } from 'musicbasic';
 import { CoverWing } from './CoverWing';
-import { HeroSongListCard } from './HeroSongListCard';
 import { ToplistRouteParam } from 'playlist';
 import { RecommendHeroCardUi, RecommendPrivateSongUi } from '../model/RecommendUiModels';
 import { MusicDataService } from '../util/MusicDataService';
@@ -126,35 +125,80 @@ export struct HeroBannerSection {
     void this.recommendViewModel.requestPlayOnlineSong(target, this.getUIContext());
   }
 
+  /**
+   * 这张卡的卡面是不是「四张封面拼一块」的**歌单卡**形态。
+   *
+   * 用户 2026-10-15 纠正原话：「**新歌推荐不是说了改成歌曲列表，就是和每日三十首一样
+   * 点开是个歌单**，并且**封面也是四张封面拼一块**，**只要把上面文字改了**。」
+   * ⇒ `newSongs` / `picked` 与 `daily30` 走**同一个卡面**（`DailyCollage`，逐字同款），
+   *   差别只有卡上/卡底的文字（`item.badge` / `item.title` / `item.subLine`，都来自数据层，
+   *   本文件不判类型、不写死文案）。
+   *
+   * ⚠️ 上一版把这两张做成"卡内嵌一个歌曲列表"（`HeroSongListCard`）—— 那是**做错了**：
+   *    用户要的是"卡 = 歌单入口"，不是"卡里放一个列表"。本轮已撤掉该用法；
+   *    `HeroSongListCard.ets` 文件保留但**当前无人引用**。
+   * @param item 卡片数据。
+   * @returns true = 卡面渲染四宫格拼图（歌单卡）。
+   */
+  private isCollageFeature(item: RecommendHeroCardUi): boolean {
+    return item.feature === 'daily30' || item.feature === 'newSongs' || item.feature === 'picked';
+  }
+
+  /**
+   * 四宫格第一格的组件 id：既是**共享元素转场**的量测锚点（`PlaylistTransitionState.prepare`），
+   * 也**必须按卡片区分** —— 同屏最多有 3 张拼图卡（每日30首 / 新歌推荐 / 精选推荐），
+   * id 重名会让 `getFrameNodeById` 量到错的那张卡。
+   *
+   * `daily30` 算出来仍是 `playlist-daily30-cover`（与改动前逐字相同，转场链路不变）。
+   * @param feature 卡片去向标识（`daily30` / `newSongs` / `picked`）。
+   * @returns 组件 id。
+   */
+  private static collageCoverId(feature: string): string {
+    return `playlist-${feature}-cover`;
+  }
+
+  /**
+   * 「每日30首 / 新歌推荐 / 精选推荐」三张**歌单卡**的点击：进歌单详情页。
+   *
+   * ⚠️ 详情页现在**只有 `sectionType === 'daily30'` 这一个**"首页推荐歌单"通道
+   *   （数据经 `AppStorage['dailyThirtySongs']` 中转，见
+   *   `features/playlist/.../MusicListPlaybackViewModel.loadDailyThirtySongs`），
+   *   **没有** `newSongs` / `picked` 分区 ⇒ 三张卡先共用同一条通道、只换歌单标题
+   *   （用户原话里的"只改文字"）。要真正按分区取数据，得在数据层加通道（见本轮报告）。
+   * @param item 卡片数据（`title` 即歌单标题）。
+   */
+  private openHeroSongList(item: RecommendHeroCardUi): void {
+    const list = this.recommendViewModel.privateSongDisplayList;
+    const rows: DailyThirtyRow[] = [];
+    for (let i: number = 0; i < list.length; i++) {
+      const t = list[i].title;
+      const s = list[i].singer;
+      rows.push({
+        title: typeof t === 'string' ? t : '',
+        singer: typeof s === 'string' ? s : '',
+        source: list[i].source,
+        songId: list[i].songId,
+        coverUrl: list[i].coverUrl
+      });
+    }
+    AppStorage.setOrCreate('dailyThirtySongs', JSON.stringify(rows));
+    const param = new ToplistRouteParam();
+    param.sectionType = 'daily30';
+    param.listTitle = typeof item.title === 'string' && item.title.length > 0 ? item.title : '每日30首';
+    if (list.length > 0) {
+      param.listCover = list[0].coverUrl;
+    }
+    const coverId: string = HeroBannerSection.collageCoverId(item.feature);
+    const animated: boolean = !getPlaylistTransitionState().prepare(this.getUIContext(),
+      coverId, param.listCover);
+    this.pageIndexInfos.pushPathByName(RouterUrlConstants.PLAYLIST_DETAIL, param, animated);
+  }
+
   /** 功能入口卡点击：现在就听 / 每日30首 / 新歌推荐 / 心动模式 / 精选推荐。 */
   private onFeatureTap(item: RecommendHeroCardUi): void {
-    if (item.feature === 'daily30') {
-      // 「每日30首」**直接用现有的榜单页面**（PlaylistDetailPage），不再新写一个页面。
-      // 走 sectionType='daily30'，歌单通过 AppStorage 中转给详情页
-      // （playlist 不能反向依赖 recommendation）。
-      const list = this.recommendViewModel.privateSongDisplayList;
-      const rows: DailyThirtyRow[] = [];
-      for (let i: number = 0; i < list.length; i++) {
-        const t = list[i].title;
-        const s = list[i].singer;
-        rows.push({
-          title: typeof t === 'string' ? t : '',
-          singer: typeof s === 'string' ? s : '',
-          source: list[i].source,
-          songId: list[i].songId,
-          coverUrl: list[i].coverUrl
-        });
-      }
-      AppStorage.setOrCreate('dailyThirtySongs', JSON.stringify(rows));
-      const param = new ToplistRouteParam();
-      param.sectionType = 'daily30';
-      param.listTitle = '每日30首';
-      if (list.length > 0) {
-        param.listCover = list[0].coverUrl;
-      }
-      const animated: boolean = !getPlaylistTransitionState().prepare(this.getUIContext(),
-        'playlist-daily30-cover', param.listCover);
-      this.pageIndexInfos.pushPathByName(RouterUrlConstants.PLAYLIST_DETAIL, param, animated);
+    if (this.isCollageFeature(item)) {
+      // ★ 三张**歌单卡**走同一条路：进歌单详情（用户：「和每日三十首一样点开是个歌单」）。
+      this.openHeroSongList(item);
       return;
     }
     if (item.feature === 'listenNow') {
@@ -164,26 +208,8 @@ export struct HeroBannerSection {
       this.playNamedSong(typeof item.subLine === 'string' ? item.subLine : '');
       return;
     }
-    // 其余三张：播各自显示的那首歌
+    // 其余卡（心动模式）：播各自显示的那首歌
     this.playNamedSong(typeof item.subLine === 'string' ? item.subLine : '');
-  }
-
-  /**
-   * 这张卡的**卡面**是不是「歌曲列表」形态。
-   *
-   * 用户 2026-10-15 澄清：「是**首页大卡片**的新歌推荐和精选推荐」——
-   * 指的是顶部那排 5 张大卡里 `feature === 'newSongs'` / `'picked'` 这两张
-   * （清单见 `RecommendDataUtil.getFeatureHeroCards`）。它们原先卡面**只有一首歌**
-   * （该歌封面 + 该歌歌名），现在改成**歌曲列表**（行样式同「每日30首」）。
-   *
-   * ⚠️ **只换卡面内容**：卡片的框（`Stack` + `cardWidth()/cardHeight()` + `clip(true)` +
-   *   `borderRadius(20)`）、标题（`item.title`）、数据来源（`privateSongDisplayList`）
-   *   与点击行为（行内 `requestPlayOnlineSong`）都保持原样。
-   * @param item 卡片数据。
-   * @returns true = 卡面渲染歌曲列表。
-   */
-  private isSongListFeature(item: RecommendHeroCardUi): boolean {
-    return item.feature === 'newSongs' || item.feature === 'picked';
   }
 
   /** 当月英文名（「每日30首」卡上的月份文案，按当天日期实时取）。 */
@@ -376,11 +402,14 @@ owPlayingCoverUrl），**不是**实时读在播歌曲 ——
   }
 
   /**
-   * 「每日30首」卡的实时背景：**列表前 4 首的封面拼 2×2**。
+   * 「歌单卡」（每日30首 / 新歌推荐 / 精选推荐）的实时背景：**列表前 4 首的封面拼 2×2**。
    *
    * 参考工程的 `ic_recommend2.png` 就是一张"四宫格封面 + 大号日期"的静态图
    * （11 月 / 30），所以这里照它的构图做实时的：四个格子放真实封面，
    * 拿不到封面的格子用主题浅色块占位。
+   *
+   * ⚠️ 三张卡**共用这一份实现**（用户：「和每日三十首一样…只要把上面文字改了」）；
+   *    `idPrefix` 按卡片区分，避免同屏三张拼图卡的组件 id 重名。
    * @param item 卡片数据（`dailyCovers` 为 4 个封面地址）。
    */
   @Builder
@@ -405,7 +434,7 @@ owPlayingCoverUrl），**不是**实时读在播歌曲 ——
     .justifyContent(FlexAlign.Center)
   }
 
-  /** 2×2 里的一个格子。 */
+  /** 2×2 里的一个格子（id 按卡片区分：`playlist-<feature>-cover` / `…-tile-N`）。 */
   @Builder
   private DailyCell(item: RecommendHeroCardUi, index: number) {
     Stack() {
@@ -424,7 +453,8 @@ owPlayingCoverUrl），**不是**实时读在播歌曲 ——
     }
     .layoutWeight(1)
     .height(StyleConstants.FULL_HEIGHT)
-    .id(index === 0 ? 'playlist-daily30-cover' : `playlist-daily30-tile-${index}`)
+    .id(index === 0 ? HeroBannerSection.collageCoverId(item.feature)
+      : `playlist-${item.feature}-tile-${index}`)
   }
 
   /**
@@ -435,10 +465,13 @@ owPlayingCoverUrl），**不是**实时读在播歌曲 ——
   @Builder
   private HeroBannerCard(item: RecommendHeroCardUi) {
     Stack() {
-      if (item.feature === 'daily30') {
-        // 「每日30首」：四宫格封面 + 大号日期（实时）。
-        // 四宫格直接用首页列表**缓存下来的封面**（`dailyCovers` 就是列表前 4 首的
-        // coverUrl，不再额外请求），整块轮播在封面就绪后一次性出现（见 build）。
+      if (this.isCollageFeature(item)) {
+        // ★ 三张**歌单卡**（每日30首 / 新歌推荐 / 精选推荐）**共用这一个卡面**：
+        //   四张封面拼 2×2 + 底部渐变 + 居中大号文字。
+        //   差别**只有文字** —— 卡上/卡底的 `item.badge` / `item.title` / `item.subLine`
+        //   来自数据层（`NEW 新歌推荐` / `PICK 精选推荐`），这里一个文案都不写死。
+        //   四宫格封面用首页列表**缓存下来的前 4 张封面**（`dailyCovers`，不再额外请求），
+        //   整块轮播在封面就绪后一次性出现（见 build）。
         this.DailyCollage(item)
 
         Column()
@@ -468,35 +501,9 @@ owPlayingCoverUrl），**不是**实时读在播歌曲 ——
       } else if (item.feature === 'listenNow') {
         // 「现在就听」：封面 + 封面取色背景
         this.NowPlayingCard(item)
-      } else if (this.isSongListFeature(item)) {
-        // 「新歌推荐」/「精选推荐」：卡面 = **歌曲列表**（行样式同「每日30首」）。
-        //
-        // ⚠️ 为什么是"封面打底 + 列表铺满"而不是"只留列表"：
-        //    这两张卡在改动前是「整张卡的封面 + 底部标题条」——封面/标题条都在 Stack 里。
-        //    用户要的是"内容改成歌曲列表"，**不是**"卡片改样式" ⇒ 卡片的高度/圆角/裁切
-        //    以及原来那层封面底都留着（截图里卡片那一眼看出来的形状一个像素不变），
-        //    列表这一层是**不透明**的、铺满整张卡，`HeroSongListCard` 自己把标题条
-        //    （角标图标 + `新歌推荐` / `精选推荐` + 播放图标）画在最上面。
-        Image(item.coverUrl.length > 0 ? item.coverUrl : $r('app.media.ic_avatar1'))
-          .width(StyleConstants.FULL_WIDTH)
-          .height(StyleConstants.FULL_HEIGHT)
-          .objectFit(ImageFit.Cover)
-          .alt($r('app.media.ic_avatar1'))
-
-        HeroSongListCard({
-          title: typeof item.title === 'string' ? item.title : '',
-          dataSource: this.recommendViewModel.privateSongDataSource,
-          songCount: this.recommendViewModel.privateSongDisplayList.length,
-          keyPrefix: item.feature,
-          // 卡片自己那条标题条（见下）已经负责标题 ⇒ 卡面不再自绘一条，
-          // 也把整张卡的高度让给列表（否则标题条会盖住列表最上面一行）。
-          showHeader: false,
-          recommendViewModel: this.recommendViewModel
-        })
       } else {
         // 心动模式等**其余**功能卡：直接用**下方那首歌自己的封面**
         // （取不到就用通用占位图；不再有打包内配图，那 5 张 ic_recommend* 已删除）
-        // ⚠️ 「新歌推荐」/「精选推荐」已在上面的分支换成歌曲列表，不再走这里。
         Image(item.coverUrl.length > 0 ? item.coverUrl : $r('app.media.ic_avatar1'))
           .width(StyleConstants.FULL_WIDTH)
           .height(StyleConstants.FULL_HEIGHT)
@@ -506,10 +513,11 @@ owPlayingCoverUrl），**不是**实时读在播歌曲 ——
 
       // ★ 卡片标题条（角标图标 + `item.badge` + `item.title` + `item.subLine` + 播放图标）：
       //   **改动前就在这一层**，本轮一个字都没动 —— 它铺在卡面之上（`SpaceBetween`），
-      //   「新歌推荐」/「精选推荐」换成歌曲列表之后，**这两张卡的标题仍由它承担**
-      //   （所以 `HeroSongListCard` 那一支传了 `showHeader: false`，免得出现两条标题）。
+      //   「新歌推荐」/「精选推荐」的卡面已与「每日30首」同款（四宫格），
+      //   **这三张卡的"文字"仍全部由它承担**（角标 `NEW`/`PICK`/`每日推荐` + 标题 + 副标题），
+      //   也就是用户要的"只要把上面文字改了"—— 文案来自数据层，这里不判类型。
       //   它自己的 `.onClick` 在**外层那个 `Stack`** 上（见本 @Builder 末尾）：
-      //   列表行自己消费点击 ⇒ 点行播那一首，点标题条播卡上那首（= 改动前的行为）。
+      //   标题条不单独消费点击 ⇒ 点整张卡都是"进歌单"（与「每日30首」逐字同一条行为）。
       Column() {
         Row({ space: 4 }) {
           Image($r('app.media.ic_music_symbol'))

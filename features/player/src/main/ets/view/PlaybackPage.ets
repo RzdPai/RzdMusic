@@ -2067,7 +2067,8 @@ export struct PlaybackPage {
     //   内容层高度 = 裁剪高度 = 可视高度 / 缩放，所以可视矩形里**永远填满整页**，
     //   没有留白、也不会被裁；内容层等可视矩形宽高比接近页面时才浮现，
     //   避免中段看到一张被压扁的页面（那正是"从中间开始、看不出展开过程"的来源）。
-    //   封面由 `MorphCoverBridge` 单独续飞，**p = 1 才落位**。
+    //   封面由续飞封面单独续飞，**p = 1 才落位**（2026-10-15 起那一棒画在**壳层浮层**
+    //   `Index.MorphCoverClone()` 里；PC 壳层仍在本页的 `MorphCoverBridge`）。
     Stack({ alignContent: Alignment.TopStart }) {
       Column() {
         Stack() {
@@ -2138,7 +2139,21 @@ export struct PlaybackPage {
           //   这是结构上的保证，与"量得准不准"无关。
           //   ⚠️ 不要再挪回去（§47 那次"看不见"是我同一轮加的 `barOpacity` 把迷你条真身也藏了造成的，
           //      那个门已经删除；本节这版没有它）。
-          if (this.expandState.morphBridging()) {
+          // ★★ 2026-10-15（壳层浮层那一轮）：**播放页不再画这张续飞封面** ——
+          //   `hostsMorphOverlay()` 为真（手机/平板形态）时，那一棒已经**搬到壳层浮层**
+          //   （`products/default/src/main/ets/pages/Index.ets` 的 `MorphCoverClone()`），
+          //   并且由**它自己的进度** `morphOverlayP` 驱动（560ms，
+          //   `curves.cubicBezierCurve(0.23, 1.0, 0.32, 1.0)`）。
+          //   留在播放页里画的那一版有一个结构性毛病：它在这个**被 scale+translate 变换过、
+          //   还带 `.clip()` 与动态 `.height(morphClipHeight())` 的容器**里，矩形却是窗口坐标
+          //   ⇒ 只有 p=1（恒等变换）才严格正确，中途只能"近似"，历史上反复出"前半段看不见 /
+          //   被别的东西挡住"。浮层那份不在这个容器里，没有这个问题。
+          //   ⚠️ 判断条件不是"p 到没到"，而是**宿主有没有接管**（见 `hostsMorphOverlay()`）：
+          //     PC 壳层（`products/pc`）还没接这份浮层，那边**继续由播放页自己画**
+          //     —— 否则会出现"两边都不画"的**无封面**空档。
+          //   ⚠️ 播放页自己那张**真封面**在形变期间仍然不画（`realCoverVisible()` 那把门没动），
+          //     否则会出现两个封面；两者严格互补。
+          if (this.expandState.morphBridging() && !this.expandState.hostsMorphOverlay()) {
             this.MorphCoverBridge()
           }
 
@@ -2258,6 +2273,11 @@ export struct PlaybackPage {
 
   /**
    * 形变期间"续飞封面"浮层：一张脱离布局、按宿主坐标摆放的封面。
+   *
+   * ⚠️ **2026-10-15：这一棒已经搬到壳层浮层**（`Index.ets` 的 `MorphCoverClone()`），
+   *    本页只在 `hostsMorphOverlay()` 为假的宿主（PC 壳层）上还调它 ——
+   *    调用点上的注释写清了为什么。函数体保留：PC 那条路仍然需要它，
+   *    而且删掉它就得同时删掉 PC 的封面当棒（那是另一件事）。
    *
    * 静止态**不产生任何节点**（`morphBridging()` 为 false），所以它不可能影响静态布局。
    * `HitTestMode.None` 是必须的：整层铺满屏幕，默认命中的话会把播放页所有点击吃掉。

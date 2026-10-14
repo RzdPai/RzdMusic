@@ -31,6 +31,7 @@ import {
   MusicStoreService,
   Logger,
   MORPH_HOST_ID,
+  MorphStage,
   PlaybackIntentState,
   PlayerExpandState,
   MorphDrive,
@@ -258,6 +259,17 @@ struct Index {
    * 进出二级页面期间抑制 HDS 的样式回调（进二级页面不再改布局状态，只用于出页面时的幂等对齐）。
    */
   private restoringHomeBar: boolean = false;
+
+  /**
+   * 壳层此刻是否**自己**持有浮层那一棒的补间（`MorphCoverClone` 的 `morphOverlayP`）。
+   *
+   * 用途只有一个：给 `@Monitor('expandState.morphDrive')` 让路 ——
+   * `settlePullOpen` 起完壳层的浮层补间之后会把 `morphDrive` 置成 `ANIM`，
+   * 那一瞬监控回调也会被触发；不回让的话它会再起一条方向相反的浮层补间
+   * （"松手没过阈值、封面已经往回补了，又被拽到落位"）。
+   * 注意它**不是**渲染门（渲染门在 `PlayerExpandState.morphOverlayBridging()` 里）。
+   */
+  private shellOwnsOverlayTween: boolean = false;
 
   /** Initializes play queue ids from local DB for the session. */
   aboutToAppear() {
@@ -521,6 +533,9 @@ struct Index {
     // ★ 起手那一刻播放页刚挂载，"续飞封面"的终点（它的大封面）还量不到 —— 补量。
     //   与迷你条自己那条手势里的补量同一套窗口（12 × 32ms，对标反编译 `onPullReady`）。
     this.schedulePullAnchorRemeasure(0);
+    // ★ 壳层浮层那一棒（`MorphCoverClone`）也压回起点。它的进度 `morphOverlayP`
+    //   静止态初值是 1（"已经在落位"的语义），不压回 0 的话浮层第一帧会画成大封面。
+    this.expandState.morphOverlayReset();
   }
 
   /**
@@ -549,6 +564,11 @@ struct Index {
       return;
     }
     this.expandState.applyMorphProgress(this.expandState.pullOpenFraction(offsetY));
+    // ★ 手指跟手那条路上，浮层拷贝的进度与播放页进度**一比一同步**（不跑补间）：
+    //   两层在跟手期必须是同一个值，否则松手补间时会先"跳"到浮层自己那个进度上。
+    //   两条手势（壳层这条 + 迷你条那条）都写 `morphP`，所以浮层必须**跟着 morphP 走**
+    //   而不是等某个入口去设 —— 这样不管哪条手势接到的都能对上。
+    this.expandState.syncMorphOverlayFromPage();
   }
 
   /** 松手：过阈值补间到 1（展开），否则回到 0 并卸载。 */
@@ -569,6 +589,49 @@ struct Index {
       return;
     }
     this.settlePullOpen(this.expandState.pullSettleCommit);
+  }
+
+  // ─────────────── 壳层浮层那一棒（续飞封面）的**独立时间线**（560ms）───────────────
+  //
+  // 结构（对标无界 1.2.4 的 `MainPage.MorphOverlayHost`）：
+  //   · 下 层 = 播放页自己：`morphP`，**350ms `Curve.EaseInOut`**（一处没动）；
+  //   · 上 层 = **壳层浮层**（`MorphCoverClone()`）：`morphOverlayP`，**560ms + 快出慢收**。
+  //
+  // 为什么用 `@Monitor` 去追「播放页那一层开始播了」：
+  //   点击打开那条路的补间在播放页里（`PlaybackPage.playMorphOpenIntro`），
+  //   而**播放页的 350ms 是明令不许动的**；`@Monitor` 是 V2 的**异步监听**，
+  //   回调落在播放页那次状态写入的同一轮里 ⇒ 两层"同起"，播放页一行都不用改。
+  //   两条路各自命中一个字段：
+  //     · 点击打开 → `morphDrive` 变成 `ANIM`（`playMorphOpenIntro` 第一行）；
+  //     · 首页/二级页返回、下拉提交 → `morphStage` 变成 `LEAVING`（`morphBeginLeaving`）。
+  //   ⚠️ 手指跟手那条路**不走这里**（它在 `onPullOpenUpdate` 里一比一同步），
+  //      所以这里不必判 `pullDragging`。
+
+  /** 播放页开始**展开**补间 ⇒ 浮层这一层也起自己那 560ms。 */
+  @Monitor('expandState.morphDrive')
+  onMorphDriveChanged(): void {
+    if (!this.appState.isShowPlay) {
+      return;
+    }
+    // ⚠️ 壳层自己刚起过浮层补间（`settlePullOpen`）时**让给它**：
+    //    否则松手"没过阈值"那条路会被这里反向覆盖 —— 壳层在把浮层补到 0（回弹），
+    //    而这里又补到 1，两层方向相反、观感是"封面不肯回去"。
+    if (this.shellOwnsOverlayTween) {
+      return;
+    }
+    this.expandState.focusMorphOverlayForPageIntro(this.getUIContext());
+  }
+
+  /** 播放页开始**收起** ⇒ 浮层这一层也按自己那 560ms 收回起点。 */
+  @Monitor('expandState.morphStage')
+  onMorphStageChanged(): void {
+    if (!this.appState.isShowPlay) {
+      return;
+    }
+    if (this.expandState.morphStage !== MorphStage.LEAVING) {
+      return;
+    }
+    this.expandState.focusMorphOverlayForPageCollapse(this.getUIContext());
   }
 
   /**
@@ -604,6 +667,18 @@ struct Index {
     const duration: number = commit ? PULL_OPEN_SETTLE_MS : PULL_OPEN_ABORT_MS;
     this.expandState.pullDragging = false;
     this.expandState.morphDrive = MorphDrive.ANIM;
+    // ★★ 浮层拷贝这一层走**它自己**的时长/曲线（560ms + 快出慢收，对标无界 `animateMorphT`），
+    //   与下面这条 300/180ms 的**播放页**补间**同起**（同一帧、同一个任务里两个 `animateTo`）。
+    //   ⚠️ 播放页那条一个字都不动（`PULL_OPEN_SETTLE_MS` 仍是 300 / `PULL_OPEN_ABORT_MS` 仍是 180）。
+    //   起点取浮层**当前**进度（跟手停在哪儿就从哪儿接着走）。
+    this.expandState.morphOverlayTweenTo(commit, this.getUIContext());
+    // 标记"浮层这一棒的补间由壳层发起"：`@Monitor('expandState.morphDrive')` 在下面那行
+    // 把 drive 置成 ANIM 之后**也会**被触发，没有这个标记的话它会再起一条**方向可能相反**的
+    // 浮层补间（回弹那条路正是如此）。标记在补间结束/被新补间取代时清掉。
+    this.shellOwnsOverlayTween = true;
+    setTimeout((): void => {
+      this.shellOwnsOverlayTween = false;
+    }, PlayerExpandState.MORPH_OVERLAY_DURATION_MS + 20);
     const gen: number = this.expandState.morphGen;
     this.getUIContext().animateTo({
       // 无界 Tokens 的标准时长：180ms 微交互 / 300ms 主转场
@@ -651,7 +726,8 @@ struct Index {
    *     + `opacity(metaOpacityAt(t))`（`clamp(1 - t/0.35)`）
    *   · `λ1f` 操作区克隆：`translate({y: coverRiseAt(t)})` + `opacity(actionsOpacityAt(t))`
    *     （`clamp(1 - t/0.20)`，比元信息更早消失 —— "右侧三个按钮慢慢隐藏"就是这条）
-   *   · 面那一棒（封面克隆）在播放页里（`MorphCoverBridge`），两侧矩形同源。
+   *   · 面那一棒（封面克隆）**也在这个壳层里**了 —— 见 {@link MorphCoverClone}
+   *     （2026-10-15 从 `PlaybackPage.MorphCoverBridge` 搬来；两侧矩形同源）。
    *
    * 位移量是**相对量**（`coverRightShiftAt = coverRight(t) - coverRight(0)`），
    * 所以它只会"被封面推着往右走、跟着封面往上抬"，不会跳到别的位置。
@@ -700,6 +776,52 @@ struct Index {
         Logger.info('RzdPlayerViewport', `clone origin=${point.x},${point.y} sizePx=${size.width}x${size.height}`);
       }
     })
+  }
+
+  /**
+   * ★★ 形变**浮层**：续飞封面的**壳层克隆**（对标无界 `MainPage.MorphOverlayHost.morphCover`）。
+   *
+   * 这一棒原来画在播放页内部（`PlaybackPage.MorphCoverBridge`）。搬到这里的原因是**坐标系**：
+   * 播放页那一版被画在**被 scale+translate 变换过、还带 `.clip()` 与动态 `.height(morphClipHeight())`
+   * 的容器**里，而它拿到的矩形是**窗口坐标** ⇒ 只有 p=1（恒等变换）时严格正确。
+   * 历史上它反复出问题（"封面前半段看不见""坐标口径推错""被别的元素挡住"）都出在这个前提上。
+   * 浮层这一份**不在那个容器里**：它直接躺在壳层这个满屏 Stack 上，`morphOverlayCoverBridge()`
+   * 给的窗口坐标就是它的绘制坐标，**不做任何"页内 ↔ 窗口"换算**。
+   *
+   * 两层各自的时长/曲线（这是"两层"的关键）：
+   *   · 播放页那一层：`morphP`，350ms `Curve.EaseInOut`（**没动**）；
+   *   · 这一层：`morphOverlayP`，560ms `cubic-bezier(0.23, 1.0, 0.32, 1.0)`（快出慢收）。
+   *
+   * ⚠️ 显隐门用 `morphOverlayBridging()`（= `morphBridging()` ∧ 宿主确实接管了这一棒），
+   *    **不是**新造一把门；三个副本（封面 / 歌名歌手 / 操作区）能不能同时成立，
+   *    以及"迷你条本体被占位顶掉、播放页真封面不画"这三条不变量见任务报告。
+   * ⚠️ 整层不吃事件（下面就是播放页，点击/手势必须照常落到播放页上）。
+   */
+  @Builder
+  private MorphCoverClone() {
+    Stack() {
+      Image(this.miniBarViewModel.songCoverUrl().length > 0 ?
+        this.miniBarViewModel.songCoverUrl() : this.miniBarViewModel.songCover())
+        // ⚠️ 矩形直接来自共享状态（vp，**窗口坐标**）：宽、高**分开取** ——
+        //    播放页封面外有 `layoutWeight(1)` + `constraintSize`，量到的矩形不保证是正方形，
+        //    按正方形画会在落位交棒那一刻跳一下（用户实测过的"结束时封面大小跳一下"）。
+        .width(this.expandState.morphOverlayCoverBridge().size)
+        .height(this.expandState.morphOverlayCoverBridge().height)
+        .objectFit(ImageFit.Cover)
+        .borderRadius(this.expandState.morphOverlayCoverBridge().radius)
+        .clip(true)
+        .position({
+          x: this.expandState.morphOverlayCoverBridge().x,
+          y: this.expandState.morphOverlayCoverBridge().y
+        })
+    }
+    .width(LayoutPolicy.matchParent)
+    .height(LayoutPolicy.matchParent)
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    .opacity(this.expandState.morphOverlayBridgeOpacity())
+    // 整层不吃事件：下面就是播放页，玩家的点击必须照常落到播放页上
+    .hitTestBehavior(HitTestMode.None)
+    .zIndex(PLAYER_CLONE_Z_INDEX)
   }
 
   /**
@@ -1415,6 +1537,14 @@ struct Index {
       MorphMetaBridge()
         .zIndex(PLAYER_CLONE_Z_INDEX)
         .hitTestBehavior(HitTestMode.None)
+
+      // ★★ 第三份拷贝 = **续飞封面**（2026-10-15 从播放页搬来的那一棒）。
+      //    它有自己的时间线（`morphOverlayP`，560ms + 快出慢收），与另两份同层（zIndex 110）。
+      //    顶点/终点量测与另外两份同源（`reportMini` / `reportBig`），所以三者是一起走的。
+      //    渲染门写在 builder 里（`morphOverlayBridging()`）。
+      if (this.expandState.morphOverlayBridging()) {
+        this.MorphCoverClone()
+      }
 
       // 全局悬浮迷你播放条：只在二级页面渲染（首页那份在 HDS 浮动底栏里）。
       // 条件渲染而不是常驻 + visibility —— 常驻的整屏透明节点会吃掉底栏手势。

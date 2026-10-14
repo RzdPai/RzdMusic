@@ -127,11 +127,33 @@ export struct RecommendPage {
   /** 本帧 `scrollTo` 之前量到的偏移；-1 = 还没补过。用于区分"没补动"与"用户滚了"。 */
   private homeScrollRestoredToVp: number = -1;
 
-  /** 四个分类 Tab：「吸顶副本」当前是否显示（由 {@link onHomeScrollDidScroll} 按偏移判定）。 */
+  /**
+   * 四个分类 Tab：「吸顶副本」当前是否显示（由 {@link onHomeScrollDidScroll} 按偏移判定）。
+   *
+   * ★ 全套做法**照 RzdVideo 首页**（`RzdVideo/entry/src/main/ets/pages/HomePage.ets`
+   *   的 `syncStickyChips()` + `chipsRow(sticky)` + 最外层 `Stack` 里那份副本），
+   *   口径逐条对齐（它是在真机上迭代了几十个 build 才定的）：
+   *   ① 滚动容器**仍是 `Scroll`**，不换 `List` / `sticky`（§56 换成 List 那次整体回退过）；
+   *   ② 流内那一行与吸顶那一行是**同一份实现**（同一个 `CategoryChipsSection`），
+   *      吸顶生效时流内那份走 `Visibility.Hidden`（**保留占位** ⇒ 布局不跳、切换不闪）；
+   *   ③ 副本挂在滚动内容**外面**、与 `Scroll` 同层（`Stack` 的子节点）⇒ 不参与滚动、
+   *      不抢手势；位置 = 「`Stack` 顶对齐 + `padding({ top: 吸顶线 })`」（**不是** `.position()`）；
+   *   ④ 判据用**顶边法**（RzdVideo 的公式）：`offset >= 行顶边 − 吸顶线` ⇒ 副本出现；
+   *      这一刻副本与流内那一行的像素位置**完全重合** ⇒ 吸顶瞬间零跳变。
+   */
   @Local chipStickyActive: boolean = false;
-  /** 分类 Tab 行**在滚动内容里的顶边**（vp）；0 = 还没量到（此时不判吸顶）。 */
+  /**
+   * 分类 Tab 行**在滚动内容里的顶边**（vp）；0 = 还没量到（此时不判吸顶）。
+   *
+   * 由包在那一行外面的「只负责量它」的容器 `onAreaChange` 给出（取 `area.position.y`）：
+   * 官方口径里 `position` = 目标元素左上角相对**父元素**的位置 ⇒ **不随滚动变化**，
+   * 所以不需要（也不该）只在"偏移 ≈ 0"时才采纳。
+   * ⚠️ 唯一前提：它的父元素（滚动内容根 `Column`）**没有 padding** —— 顶部那段留白
+   *    已从 `padding.top` 改成内容里第一个「固定高度容器」（见 build()），
+   *    这样 `position.y` 只有一种解释 = 该行在内容里的位置，不用再猜 padding 算不算在内。
+   */
   private chipRowTopInContentVp: number = 0;
-  /** 分类 Tab 行**自身高度**（vp），量到之前用 0（吸顶副本高度取不到时按 0 放置，下一帧就补上）。 */
+  /** 分类 Tab 行**自身高度**（vp）；只用于诊断日志（副本高度由那一行自己决定，不读它）。 */
   @Local chipRowHeightVp: number = 0;
 
   aboutToAppear() {
@@ -195,7 +217,8 @@ export struct RecommendPage {
     this.homeScrollRestorePending = this.homeScrollOffsetVp > 0;
     this.homeScrollRestoreTries = 0;
     this.homeScrollRestoredToVp = -1;
-    // 分类 Tab 顶边随容器重建一起作废：静止态那次 onAreaChange 会把它重新标成 0。
+    // 分类 Tab 顶边随容器重建一起作废：重建后的首帧布局会再走一次 `onAreaChange`
+    // （旧 area 为空 ⇒ 必然回调），那时量到的是**内容坐标**，与当前偏移无关。
     this.chipRowTopInContentVp = 0;
     this.chipStickyActive = false;
     Logger.info('RzdHomeScroll',
@@ -234,6 +257,9 @@ export struct RecommendPage {
     }
     const offset: number = this.readHomeScrollOffset();
     const target: number = this.homeScrollOffsetVp;
+    // ★ 补位帧里顺手把吸顶也复算一次：重建这一路不触发 `onDidScroll`，
+    //   而 `initialOffset` 恢复后的偏移恰恰决定"分类 Tab 是不是已经滚过去了"。
+    this.updateChipSticky(offset);
     if (Math.abs(offset - target) < HOME_SCROLL_RESTORE_EPS_VP) {
       this.homeScrollRestorePending = false;
       this.homeScrollRestoredToVp = -1;
@@ -304,36 +330,49 @@ export struct RecommendPage {
     Logger.info('RzdHomeScroll', `${stage} offset=${this.readHomeScrollOffset()} target=${this.homeScrollOffsetVp}`);
   }
 
-  /** 分类 Tab 行在滚动内容里的顶边（静止态量到的那次就是它的内容坐标）。 */
+  /**
+   * 分类 Tab 行在滚动内容里的顶边（父元素无 padding ⇒ 量到的就是**内容坐标**）。
+   *
+   * ⚠️ 与上一版（§58）的差别：**去掉了"只在偏移 ≈ 0 时才采纳"的闸**。
+   *   那条闸的出发点是"滚动中量到的可能是视口坐标"，但 `Area.position` 官方口径是
+   *   **相对父元素**、不随滚动变化；而带上那条闸反而制造了一个真 bug ——
+   *   容器因 `homeLoaded` 反转而重建时，`initialOffset` 已经把偏移恢复成非 0，
+   *   首帧 `onAreaChange` 就被闸挡掉，之后滚动不会再改变"相对父元素的位置"⇒
+   *   `onAreaChange` **不会再回调** ⇒ 顶边永远停在 0 ⇒ **吸顶永远不生效**。
+   */
   private onChipRowAreaChange(area: Area): void {
     const height: number = areaLengthToVp(area.height);
     if (height > 0 && Math.abs(height - this.chipRowHeightVp) > 0.5) {
       this.chipRowHeightVp = height;
     }
-    // 静止态（偏移 0）量到的顶边 = 该行在**滚动内容**里的位置；
-    // 滚动中它也会变（那是视口坐标，不是内容坐标）⇒ 只在偏移 ~0 时采纳。
-    if (this.readHomeScrollOffset() < HOME_SCROLL_RESTORE_EPS_VP) {
-      this.chipRowTopInContentVp = areaLengthToVp(area.position.y);
+    const top: number = areaLengthToVp(area.position.y);
+    if (top > 0 && Math.abs(top - this.chipRowTopInContentVp) > 0.5) {
+      this.chipRowTopInContentVp = top;
     }
+    // ★ 量到顶边后**立刻按当前偏移复算一次**吸顶：容器重建（`homeLoaded` 反转）时
+    //   `initialOffset` 会把偏移直接恢复成非 0，而那条路**不会**触发 `onDidScroll`
+    //   ⇒ 不复算的话"四个 Tab 已经滚过去"这一屏上副本不会出现，要等用户手动滚一下才回来。
+    this.updateChipSticky(this.readHomeScrollOffset());
     Logger.info('RzdHomeScroll',
       `chip area h=${height} top=${this.chipRowTopInContentVp} sticky=${this.chipStickyActive}`);
   }
 
   /**
-   * 分类 Tab 吸顶判定：这一行的**下边沿**越过吸顶线就显示"吸顶副本"。
+   * 分类 Tab 吸顶判定：这一行的**顶边**到达吸顶线就显示"吸顶副本"。
    *
-   * 为什么用下边沿（`top + height`）而不是顶边：用顶边时行"半截还露着"就提前钉住了，
-   * 视觉上会跳一下；用下边沿 = 原位置那一行**完整滑出视口顶**的瞬间才接管 ——
-   * 这正是 `List` 的 `sticky` 语义（一行完整离开才吸附）。
+   * ★ 判据抄 RzdVideo 首页（`syncStickyChips()`）：`y >= 行顶边 − 吸顶线`，即**顶边法**。
+   *   为什么不是"下边沿法"（行完整滑出视口顶才接管）：顶边法下，副本出现的那一瞬间
+   *   流内那一行的顶边**正好也在吸顶线**上 ⇒ 两份像素级重合、切换零跳变；
+   *   而下边沿法要等整整一行滚进标题栏底下才接管，中间那一段会"看不见任何一行"。
    * @param offset 当前垂直偏移（vp）。
    */
   private updateChipSticky(offset: number): void {
     if (this.chipRowTopInContentVp <= 0) {
-      // 还没量到那一行的位置（首帧）⇒ 不判吸顶，免得闪一下
+      // 还没量到那一行的位置（首帧 / 分类行还没出现）⇒ 不判吸顶，免得闪一下
       return;
     }
     const stickLine: number = this.contentTopInsetVp();
-    const active: boolean = offset > this.chipRowTopInContentVp - stickLine + this.chipRowHeightVp;
+    const active: boolean = offset >= this.chipRowTopInContentVp - stickLine;
     if (active !== this.chipStickyActive) {
       this.chipStickyActive = active;
       Logger.info('RzdHomeScroll',
@@ -506,85 +545,105 @@ export struct RecommendPage {
     HdsNavDestination() {
       Column() {
         if (this.recommendViewModel.homeLoaded) {
-          // ★ 滚动容器**仍然是 `Scroll`**（本轮一个字都没改成 `List`）——
-          //   外层只多套一层 `Stack`，用来在**同一层**叠"四个分类 Tab 的吸顶副本"。
+          // ★ 结构**照 RzdVideo 首页**（`HomePage.ets` 的 `build()`，真机迭代过几十个 build）：
+          //     Stack(顶对齐) { Column { Scroll(layoutWeight(1)) … } ; 吸顶副本(同层) }
+          //   · 滚动容器**仍然是 `Scroll`**（不换 `List` / `sticky` —— §56 换成 List 那版
+          //     在真机上四 Tab 整行消失、内容错位，已整体回退）；
+          //   · 中间那层 `Column` 是 RzdVideo 的关键一笔：`layoutWeight(1)` 只在
+          //     Row / Column / Flex 里生效，`Scroll` **直接**挂在 `Stack` 下等于没有高度
+          //     （表现就是整块空）。撑满由「`Stack` 的 `layoutWeight(1)` + 这层 `100%`」完成。
           Stack({ alignContent: Alignment.TopStart }) {
-            Scroll(this.pageScroller) {
+            Column() {
+              Scroll(this.pageScroller) {
+                Column() {
+                  // ★ 顶部留白（状态栏 + HDS 标题栏 ≈ 94vp）：从"内容根的 `padding.top`"
+                  //   改成**内容里第一个固定高度的空容器**。视觉完全等价（都是把下面的内容下移 94），
+                  //   但滚动内容根的 padding 因此恒为 0 —— 分类 Tab 那一行 `onAreaChange`
+                  //   量到的 `area.position.y` 只有一种解释 = 它在**内容**里的位置，
+                  //   不用再猜"父元素的 padding 算不算在内"。
+                  Column()
+                    .width(StyleConstants.FULL_WIDTH)
+                    .height(this.contentTopInsetVp())
+
+                  HeroBannerSection({ recommendViewModel: this.recommendViewModel })
+
+                  // ★ 四个分类 Tab 那一行：外面包一层**只负责量它**的容器（顶边 / 高度）。
+                  //   吸顶生效时**流内这一份走 `Visibility.Hidden`**（保留占位、不参与绘制）——
+                  //   与 RzdVideo 逐字同一条口径：屏上任何时刻只有一行分类可见，且布局不跳。
+                  //   ⚠️ 别改成 `Visibility.None`：那会把后面所有内容整体上移，吸顶瞬间闪一下。
+                  Column() {
+                    CategoryChipsSection({ recommendViewModel: this.recommendViewModel })
+                  }
+                  .width(StyleConstants.FULL_WIDTH)
+                  .visibility(this.chipStickyActive ? Visibility.Hidden : Visibility.Visible)
+                  .onAreaChange((_old: Area, area: Area): void => {
+                    this.onChipRowAreaChange(area);
+                  })
+
+                  CategoryContentSection({ recommendViewModel: this.recommendViewModel })
+                  if (this.homePlazaState.enabled) {
+                    HomePlazaSection({ recommendViewModel: this.recommendViewModel })
+                  }
+                }
+              }
+              .width(StyleConstants.FULL_WIDTH)
+              // ⚠️ 这里能（也必须）用 `layoutWeight(1)`：它现在挂在**外层那个 `Column`** 里，
+              //   不是挂在 `Stack` 里（`Stack` 的子节点按自身尺寸排，写 layoutWeight 等于没高度）。
+              .layoutWeight(1)
+              .padding({
+                bottom: this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ? 0 : 16
+              })
+              .backgroundColor($r('app.color.background_secondary'))
+              .scrollBar(BarState.Off)
+              .edgeEffect(EdgeEffect.Spring)
+              .clip(false)
+              .align(Alignment.Top)
+              // ★ 位置停留的**首选恢复路径**：`initialOffset` 只在**首次布局**生效
+              //   （官方：「设置初始滚动偏移量。只在首次布局时生效」）——
+              //   容器被 `homeLoaded` 反转销毁重建时正好又是一次"首次布局"，
+              //   于是重建那一帧就带着记录值排布，**没有"先画在顶部再跳一下"的闪**，
+              //   也不受"内容还没量完高、scrollTo 被夹住"的影响。
+              //   ⚠️ 它是渲染期读的普通字段（不是 `@Local`）⇒ 偏移变化**不会**触发重渲染。
+              .initialOffset({ xOffset: 0, yOffset: this.homeScrollOffsetVp })
+              .onAttach((): void => {
+                this.onHomeScrollAttach();
+              })
+              .onDidScroll((_frameDelta: number, scrollState: ScrollState): void => {
+                this.onHomeScrollDidScroll(_frameDelta, scrollState);
+              })
+              .onScrollFrameBegin((offset: number): OnScrollFrameBeginHandlerResult => {
+                return this.onHomeScrollFrameBegin(offset);
+              })
+              .onScrollStop((): void => {
+                this.logHomeScrollOffset('scroll-stop');
+              })
+            }
+            .width(StyleConstants.FULL_WIDTH)
+            .height(StyleConstants.FULL_HEIGHT)
+
+            // ★ 四个分类 Tab 的**吸顶副本**：与 `Scroll` **同层**（`Stack` 的子节点）⇒
+            //   不参与滚动、不抢手势（与 RzdVideo 的 `chipsRow(true)` 那一层同构）。
+            //   · 位置：靠 `Stack` 的顶对齐 + `.padding({ top: 吸顶线 })` 给出
+            //     （RzdVideo 的做法；**不用** `.position()`），吸顶线 = 滚动内容里那段
+            //     顶部留白 `contentTopInsetVp()`（非沉浸式 = 状态栏 + 标题栏 ≈ 94）
+            //     —— 与上面那个空容器**同一个数** ⇒ 副本落在 HDS 标题栏下沿，**不盖标题栏**。
+            //   · 不透明：外层的 padding 段透明，真正铺底的是里面那层 `Column`
+            //     （高度 = 分类行自己的高度），底 = `app.color.background_secondary`
+            //     （与整页底色同一个 token）⇒ 滚过去的卡片/列表不会从行后透出来。
+            //   · `hitTestBehavior(Transparent)`：只有这一行自己吃点击，其余一律放行给下面的内容
+            //     （与 RzdVideo 同一口径）。
+            if (this.chipStickyActive) {
               Column() {
-                HeroBannerSection({ recommendViewModel: this.recommendViewModel })
-                // 四个分类 Tab 那一行：外面包一层只负责**量它**（顶边 / 高度）的容器，
-                // 不参与任何布局决策 —— 原来的位置、留白、点击行为逐字未动。
                 Column() {
                   CategoryChipsSection({ recommendViewModel: this.recommendViewModel })
                 }
                 .width(StyleConstants.FULL_WIDTH)
-                .onAreaChange((_old: Area, area: Area): void => {
-                  this.onChipRowAreaChange(area);
-                })
-
-                CategoryContentSection({ recommendViewModel: this.recommendViewModel })
-                if (this.homePlazaState.enabled) {
-                  HomePlazaSection({ recommendViewModel: this.recommendViewModel })
-                }
-              }
-              .padding({
-                top: this.contentTopInsetVp()
-              })
-            }
-            // ⚠️ 这里**必须**是 `width/height 100%`，**不能**沿用 `layoutWeight(1)`：
-            //   `layoutWeight` 只在 Row / Column / Flex 里生效，`Stack` 的子节点
-            //   是按自身尺寸排的 ⇒ 在 Stack 里写 `layoutWeight(1)` 等于没有高度
-            //   （表现就是整块空、或者只剩一小条）。撑满改由外层 Stack 的
-            //   `layoutWeight(1)` + 这里的 `100%` 一起完成。
-            .width(StyleConstants.FULL_WIDTH)
-            .height(StyleConstants.FULL_HEIGHT)
-            .padding({
-              bottom: this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ? 0 : 16
-            })
-            .backgroundColor($r('app.color.background_secondary'))
-            .scrollBar(BarState.Off)
-            .edgeEffect(EdgeEffect.Spring)
-            .clip(false)
-            .align(Alignment.Top)
-            // ★ 位置停留的**首选恢复路径**：`initialOffset` 只在**首次布局**生效
-            //   （官方：「设置初始滚动偏移量。只在首次布局时生效」）——
-            //   容器被 `homeLoaded` 反转销毁重建时正好又是一次"首次布局"，
-            //   于是重建那一帧就带着记录值排布，**没有"先画在顶部再跳一下"的闪**，
-            //   也不受"内容还没量完高、scrollTo 被夹住"的影响。
-            //   ⚠️ 它是渲染期读的普通字段（不是 `@Local`）⇒ 偏移变化**不会**触发重渲染。
-            .initialOffset({ xOffset: 0, yOffset: this.homeScrollOffsetVp })
-            .onAttach((): void => {
-              this.onHomeScrollAttach();
-            })
-            .onDidScroll((_frameDelta: number, scrollState: ScrollState): void => {
-              this.onHomeScrollDidScroll(_frameDelta, scrollState);
-            })
-            .onScrollFrameBegin((offset: number): OnScrollFrameBeginHandlerResult => {
-              return this.onHomeScrollFrameBegin(offset);
-            })
-            .onScrollStop((): void => {
-              this.logHomeScrollOffset('scroll-stop');
-            })
-
-            // ★ 四个分类 Tab 的**吸顶副本**：只在"原位置那一行完整滑出视口顶"时出现
-            //   （判据见 `updateChipSticky`），位置 = 吸顶线（非沉浸式 = 状态栏 + 标题栏 = 94）。
-            //   ⚠️ 为什么吸顶线是 94：滚动内容顶部那段留白就是 `statusBarTopVp + ROW_HEIGHT_VP`
-            //      （内容根的 `padding.top`），副本与它**同一个数** ⇒ 副本落在 HDS 标题栏下沿、
-            //      **不盖标题栏**（两处必须同进同出）。
-            //   ⚠️ 副本必须**不透明**：它下面是滚过去的卡片/列表，透明底会从底下透出来。
-            //      这一行自己不带底色（它是 `Scroll` 横滑的胶囊行），所以这里补一层
-            //      `Column` 铺 `app.color.background_secondary`（与整页底色同一个 token）。
-            //   ⚠️ 原生 `List` 的 `sticky` 语义是"整行钉住"；这里整行钉在 94 处，
-            //      行**上方**那一段（94 - 行高）在真机上会看到内容从标题栏底下穿过 ——
-            //      那是 HDS 标题栏本来就要有的沉浸观感，故**不**把副本底拉到状态栏。
-            if (this.chipStickyActive) {
-              Column() {
-                CategoryChipsSection({ recommendViewModel: this.recommendViewModel })
+                .backgroundColor($r('app.color.background_secondary'))
               }
               .width(StyleConstants.FULL_WIDTH)
-              .backgroundColor($r('app.color.background_secondary'))
-              .position({ y: this.contentTopInsetVp() })
-              .zIndex(1)
+              .padding({ top: this.contentTopInsetVp() })
+              .hitTestBehavior(HitTestMode.Transparent)
+              .zIndex(5)
             }
           }
           .width(StyleConstants.FULL_WIDTH)

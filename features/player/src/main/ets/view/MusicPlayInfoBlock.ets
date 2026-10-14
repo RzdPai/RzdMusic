@@ -346,7 +346,9 @@ export struct MusicPlayInfoBlock {
         .syncLoad(true)
         .borderRadius(this.coverRadiusState.radius)
         // ⚠️ 形变期间**不画这张封面**：那一刻是"桥接封面"在从迷你条封面飞过来
-        //    （见 `PlaybackPage.MorphCoverBridge`）。两边都画就是"出现两个封面"，
+        //    （2026-10-15 起它在**壳层浮层**里：`products/default .../Index.ets` 的
+        //     `MorphCoverClone()`；PC 壳层仍走 `PlaybackPage.MorphCoverBridge`）。
+        //    两边都画就是"出现两个封面"，
         //    而且这张是按布局走的、和飞行中的那张不同步，看着就是两个错位的封面。
         //    形变结束（相位回到 OPEN/NONE）后恒为 1，静止态逐像素不变。
         // ★★ 2026-10-15：形变期间由**续飞封面**代表它（续飞封面一直飞到 p=1，真机实测这样最稳）；

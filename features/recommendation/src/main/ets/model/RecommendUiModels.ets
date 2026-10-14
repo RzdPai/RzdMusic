@@ -74,11 +74,14 @@ export class RecommendHeroCardUi {
    */
   public feature: string = '';
   /**
-   * 「每日30首」卡的背景拼图：该列表前 4 首的封面地址（2×2 拼贴）。
-   * 其它卡为空数组。
+   * 「拼图卡」的背景拼图：该列表前 4 首的封面地址（2×2 拼贴）。
+   *
+   * ⚠️ 现在**三张卡**都用它：`daily30`（每日30首）/ `newSongs`（新歌推荐）/ `picked`（精选推荐）
+   * —— 用户 2026-10-15 要求后两张"和每日30首一样（四张封面拼一块 + 点开是歌单），只改文字"。
+   * 其余两张卡为空数组。
    */
   public dailyCovers: string[] = [];
-  /** 「每日30首」卡背景拼图取不到封面时的占位歌名（同样 4 个）。 */
+  /** 「拼图卡」背景取不到封面时的占位歌名（同样 4 个）。 */
   public dailyTitles: string[] = [];
   /** Gradient start color (hex string). */
   public gradientStart: string = '#1E3A5F';

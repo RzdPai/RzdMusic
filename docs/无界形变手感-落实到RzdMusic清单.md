@@ -117,6 +117,101 @@ coverRadiusAt(t)       = coverVisualRadiusAt(t) / coverScaleAt(t)              /
 
 ---
 
+## 二·补、★★ 两条**架构级**差异（比第四节的数值差异重要得多）
+
+> 用户指出：「RzdMusic 的 UI 飞入逻辑也和无界明显不一样，还有无界的播放页歌词上面也有歌曲封面和名称」。
+> 这两条我实测确认成立，**它们不是调参能解决的，是要先做架构决策**。
+
+---
+
+### A1（架构级）飞入的实现方式根本不同
+
+| | **无界** | **RzdMusic（现状）** |
+| --- | --- | --- |
+| 跨页浮层 | **有** —— `MainPage.MorphOverlayHost`，全屏、由 AppStorage 的 `lx_pull_active` 门控 | **没有** |
+| 飞的是什么 | **重绘的一份拷贝**（`morphCover` / `morphMiniMeta` / `morphActions`），挂在浮层里、在 MainPage 坐标系 | **播放页自己的根 Stack 做缩放/位移**（`MORPH_HOST_ID` 注释：「手机侧就是播放页自己的根 Stack」） |
+| 迷你条本体 | 被 `emptyMiniSlot()`（空 `Column`）顶掉 | 用 `miniBarOpacity()` 淡出「交棒给播放页」 |
+| 下半层 | `ExpandAnimation` 驱动播放页快照（`scaleValue`/`translate`/`clipHeight`），**350ms EaseInOut** | 播放页整体缩放展开 |
+| 交接开关 | `AppStorage[lx_pull_active]`（6 个写入点，只有 `setMiniOut` 能写 true） | 无此概念，靠进度驱动 |
+| 视觉结果 | **封面横穿屏幕飞过去**（560ms，肉眼看到的是浮层拷贝） | **整页从迷你条位置长大**（迷你条同时淡出） |
+
+**为什么会不同（不是谁写错了）**：迷你条在 `MainPage`、播放页是 Navigation 栈里的**另一个页面**，
+两者坐标系不同。无界用**浮层统一坐标系**从而能画出一条真实的飞行轨迹；
+RzdMusic 选择**不做跨页浮层**，改成「播放页自己长大」。
+
+**⇒ 这是产品决定，不是 bug。** 执行前必须先定：
+
+- **要 A（对齐无界）**：在**首页**加一个全屏浮层宿主（等价 `MorphOverlayHost`），
+  门控用 AppStorage（V2 里对应 `AppStorageV2` + `@Observed`/`@Trace` 或一个单例 store），
+  浮层里**重绘**迷你条的封面/meta/actions 三份拷贝；播放页只负责下层就位。
+  **工作量大、要动首页结构。**
+- **要 B（保持现状）**：接受「整页长大」的观感，只做第四节的数值对齐。
+  **然后在文档里写清「有意偏离」**，免得以后有人当成 bug 去修。
+
+**⛔ 别做半套**：只加浮层但不把迷你条本体换成占位，会出现**两份封面同时在屏幕上**。
+
+---
+
+### A2（功能缺失）歌词页顶部没有封面 + 歌曲名称
+
+**无界的做法**（已实测）：
+
+```
+playerPane = Stack {
+  Swiper {
+    Column   ← page 0：封面页
+    Column   ← page 1：**空 Column**，只有 padding({top: lyricPadTop()}) + 手势
+  }
+  Stack { this.floatingCover() ; if(…) ] }     ← ★ 浮层：跨页浮动的封面
+  if(…) { this.floatingMeta() }                 ← ★ 浮层：跨页浮动的歌名/歌手
+  if(…) { scrubber + transport }
+}
+```
+
+**关键三点：**
+1. **Swiper 的「歌词页」是个空壳** —— 只有 `padding({top: lyricPadTop()})`，**零子组件**（我数过字节码，88 行里没有任何 `observeComponentCreation2`）
+2. 封面与歌名是**挂在 Swiper 之外的浮层**（`floatingCover` / `floatingMeta`），
+   切到歌词页时**缩小并移到顶部** —— 同一个元素在动，不是两页各画一份
+3. 歌词靠 `lyricPadTop()` **按浮层高度让位**：
+
+```ts
+lyricPadTop() {
+  if (!this.lyricFloat) { return 0; }                       // 不开浮层 → 不预留
+  const boxH = this.overlayBoxH();
+  return boxH <= 0 ? LYRIC_PAD_TOP_FALLBACK : /* 按 overlay 高度算 */;
+}
+```
+
+`LyricsView` 在 `PlayerPage` 里出现 **2 次**（宽屏右栏 + 歌词页）。
+
+**RzdMusic 的现状**（已实测）：
+
+| 位置 | 内容 |
+| --- | --- |
+| `features\player\src\main\ets\view\PlaybackPage.ets` **L1544-1553** | 歌词页 = `Column { LyricsComponent({ … hideLyricsMetaHeader: this.isSmHeightMdLayout(), … }) }` |
+| 同文件 **L331-353** | `animateLyricMorph()` —— **`lyricMorphVisible = false` 无条件写死**，等于关掉了整套歌词页封面形变 |
+| 同文件 **L1507-1508** | `.opacity(this.lyricMorphVisible ? 0 : 1)` —— 那层门控因为上面恒 false，**是空转的** |
+| 全仓 | **搜不到** `lyricFloat` / `overlayBoxH` / `lyricPadTop` / `LYRIC_PAD_TOP` 的任何等价物 |
+
+`animateLyricMorph` 里的原注释写得很直白：
+> `// Lyrics has no cover destination. Do not fabricate a floating thumbnail above its header.`
+> `// The real cover remains in Swiper and uses its native slide; all lyric animations stay intact.`
+
+**⇒ 这是「主动关掉」，不是「没做」。** 执行前必须先定：
+
+- **要恢复**：`PlayerExpandState` 里**已经有半成品** —— `lyricMorph()` / `lyricCoverSizeOf()` / `lyricCoverXOf()` / `lyricCoverYOf()` / `lyricGeometryReady()`（L537-612）都在，
+  常量 `LYRIC_COVER_SCALE_RATIO = 0.52` / `LYRIC_COVER_TOP_RATIO = 0.06`。
+  要做的是：① 让歌词页按浮层高度留出顶部空间（新增 `lyricPadTop()` 等价物）
+  ② 切页时把封面/meta 浮层移到「顶部小尺寸」而不是直接 `false`
+  ③ 解开 `lyricMorphVisible` 的硬编码
+- **不恢复**：把 `animateLyricMorph` 和那批 `lyricMorph*` 半成品**删掉或明确标注废弃** ——
+  留着 `lyricMorphVisible ? 0 : 1` 这种恒空转的门控，会让后人以为这条链是活的
+
+⚠️ **注意 `lyricMorph` 与歌词渲染本身不是一回事** —— 用户明确说过**歌词渲染机制不在范围内**。
+这里要动的是**封面/歌名浮层的跨页定位**，不碰歌词怎么画。**别顺手去改歌词。**
+
+---
+
 ## 三、✅ 已经对了、别动
 
 | 项 | RzdMusic | 无界 | 判定 |
@@ -265,10 +360,16 @@ hdc shell hilog -x | Select-String -Pattern 'RzdMorph|PlaybackPage|morphGen'
 
 ## 八、执行前请先确认
 
-1. **D1 的 `velocityY` 符号** —— 先打日志实测，别猜
-2. **RzdMusic 是几层** —— 决定 D4 是否适用
-3. **遗留 API（D5）是否真死了** —— 全仓扫过，但可能有动态调用
-4. **`DISMISS_DRAG_SPAN_RATIO` 该不该从 0.42 改 0.32** ——
+> **⛔ 先看第二节·补的 A1 / A2 —— 那两条是架构决策，不做决定就别往下改。**
+> 第四节的 D1-D5 是数值/接线层面的修补，A1/A2 是「要不要改架构、要不要恢复功能」。
+
+1. **A1：要不要做跨页浮层**（对齐无界的「飞行」）还是保持现在的「整页长大」？
+   —— 这条不确定，D4（时长）也无从谈起
+2. **A2：要不要恢复歌词页顶部的封面+名称浮层**？（`PlayerExpandState` 里已有半成品）
+3. **D1 的 `velocityY` 符号** —— 先打日志实测，别猜
+4. **RzdMusic 是几层** —— 决定 D4 是否适用
+5. **遗留 API（D5）是否真死了** —— 全仓扫过，但可能有动态调用
+6. **`DISMISS_DRAG_SPAN_RATIO` 该不该从 0.42 改 0.32** ——
    无界是 0.32，但 RzdMusic 的参考工程 MusicHome 可能是另一个值；**改了要实测手感再定**
 
 **未确认的不许猜。** 这份清单里凡是标「待确认」的，都要靠实测或读码定案，不能按无界的值直接覆盖。

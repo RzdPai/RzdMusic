@@ -532,8 +532,8 @@ export class RecommendDataUtil {
    *
    * @param songNames 可用于副标题的歌名池（一般就是首页歌曲列表，已洗牌）。
    * @param songCovers 与 `songNames` **同下标**的封面池（卡片封面直接用它们）。
-   * @param dailyCovers 每日30首背景用的 4 张封面（可为空）。
-   * @param dailyTitles 每日30首背景用的 4 首歌名（可为空，取不到封面时占位用）。
+   * @param dailyCovers **拼图卡**（每日30首 / 新歌推荐 / 精选推荐）背景用的 4 张封面（可为空）。
+   * @param dailyTitles 同上 4 张封面取不到时的占位歌名（可为空）。
    * @param listenNowTitle 「现在就听」卡固定显示的歌名（空则用池里第一首）。
    * @param listenNowCover 「现在就听」卡固定使用的封面（空则用列表首张可用封面）。
    * @returns 5 张功能入口卡片。
@@ -578,8 +578,13 @@ export class RecommendDataUtil {
       banner.boardId = '';
       banner.topid = '';
       banner.feature = spec.route;
-      banner.dailyCovers = spec.route === 'daily30' ? dailyCovers : [];
-      banner.dailyTitles = spec.route === 'daily30' ? dailyTitles : [];
+      // ★ 2026-10-15（用户纠正）：「新歌推荐」「精选推荐」两张卡**和「每日30首」同款** ——
+      //   四张封面拼一块 + 点开进歌单，**只改文字** ⇒ 它们也要拿到那 4 张封面。
+      //   （原来只有 `daily30` 拿得到，另两张的卡面因此只有一首歌的封面。）
+      const isCollageRoute: boolean =
+        spec.route === 'daily30' || spec.route === 'newSongs' || spec.route === 'picked';
+      banner.dailyCovers = isCollageRoute ? dailyCovers : [];
+      banner.dailyTitles = isCollageRoute ? dailyTitles : [];
       if (spec.route === 'listenNow') {
         // 「现在就听」卡展示的就是它要播的那一首（与下方歌名一致）
         if (listenNowCover.length > 0) {
