@@ -66,14 +66,9 @@ export struct ControlAreaComponent {
   @Param chromeOpacity: number = 1;
   /** 控制区按钮间距（vp）：由宿主按窗口档位给（手机 18 / 折叠 24 / 平板 30）；0 = 用组件默认值。 */
   @Param chromeGap: number = 0;
-  /**
-   * 展开动画里**进度条那一组**的额外纵向位移（vp，宿主给定，已含 `1/morphScale` 反算）。
-   *
-   * ★★ 2026-10-15：播放页展开时"一组一组从下上来"——进度条组比下面那一堆按钮早一步。
-   * 宿主传的是**额外量**（净位移 = 控制区整片位移 + 这一份）；默认 0 ⇒
-   * 面板布局 / 平板分栏等其它使用点行为完全不变。
-   */
-  @Param progressRiseVp: number = 0;
+  // ⚠️ 2026-10-15 已**删除** `progressRiseVp` 参数：用户定调「进度条和下面的那堆按钮**一起**飞入」，
+  //    它们是一组，整片控制区的位移由宿主挂在**外层**（`PlaybackPage` 的 `.translate({y: contentRiseVp()})`），
+  //    组件内部不再做任何错峰。以后要再拆组，先问清楚顺序。
   /** Controls the song menu bottom sheet (quality / singer / album / share). */
   @Local showMenuSheet: boolean = false;
   /** When true, shows the current play queue as a bottom sheet. */
@@ -626,10 +621,8 @@ export struct ControlAreaComponent {
           $r('app.float.slider_margin_bottom_lg') : this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_SM &&
             this.breakpointEnv.heightBreakpoint === HeightBreakpoint.HEIGHT_MD ? 8 : $r('app.float.slider_margin_bottom')
       })
-      // ★★ 2026-10-15：进度条那一组在展开时**比按钮早一步**从下面升上来
-      //   （用户要的"一组一组从下上来"；净位移 = 宿主给的控制区位移 + 这一份）。
-      //   默认 0 ⇒ 其它使用点（面板/平板）完全不受影响。
-      .translate({ y: this.progressRiseVp })
+      // ★★ 2026-10-15：进度条与下面那堆按钮是**一组**（用户定调"一起飞入"），
+      //   整片控制区的位移由宿主（`PlaybackPage`）挂在外层，这里**不再**做内部错峰。
 
       Row() {
         SymbolGlyph(this.playModeSymbol())

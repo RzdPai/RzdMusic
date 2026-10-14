@@ -1428,6 +1428,10 @@ export struct PlaybackPage {
                     })
                     // 小歌词属于"内容"：反编译里 `contentOpacity` 落位才置 1
                     .opacity(this.expandState.morphContentOpacity)
+                    // ★★ 2026-10-15 用户定调：「**先飞入的是小歌词和收藏按钮**」
+                    //   ⇒ 小歌词走**第一组**的时间窗（`earlyRiseVp()`，早于控制区那一组），
+                    //   从下升起 180vp；静止态位移恒 0，版面逐像素不变。
+                    .translate({ y: this.expandState.earlyRiseVp() })
                     // 收起过程中内容被压扁，小歌词会和控制区互相盖住
                     .visibility(this.isCollapsing() ? Visibility.None : Visibility.Visible)
                 }
@@ -1515,14 +1519,14 @@ export struct PlaybackPage {
               // 控制区：静止 3 秒自动收起，点/碰任意处唤出（对标无界音乐 BarCollapse）
               Column() {
                 Column() {
+                  // ★★ 2026-10-15 用户定调：「**进度条和下面的那堆按钮一起飞入**」——
+                  //   它们是一组：整片控制区在**同一个时间窗**里从下升上来（见 `contentRiseVp()`），
+                  //   所以这里**不再**给进度条单独错峰（上一版就是那么做错的）。
                   ControlAreaComponent({
                     showBottomOtherRow: true,
                     chromeOffsetY: this.expandState.chromeOffsetY(),
                     chromeOpacity: this.expandState.chromeOpacity(),
-                    chromeGap: this.expandState.chromeGapVp(),
-                    // ★★ 2026-10-15（回退后重做）：进度条那一组走**自己那段时间窗**，
-                    //   比下面那一堆按钮早一步升上来（用户要的"一组一组从下上来"）。
-                    progressRiseVp: this.expandState.progressRiseExtraVp()
+                    chromeGap: this.expandState.chromeGapVp()
                   })
                     .width(StyleConstants.FULL_WIDTH)
                 }
@@ -1568,7 +1572,7 @@ export struct PlaybackPage {
               // ★★ 2026-10-15（回退后重做）用户定调：「**不要淡入淡出**」——
               //   控制区不再靠透明度出场（原来这里是 `.opacity(pullBottomIn())`），
               //   改成**从下升起的位移**：整片控制区在自己的时间窗内从下方 180vp 升到位，
-              //   进度条那一组再早一步（见 `progressRiseExtraVp`）。
+              //   两组的先后见 PlaybackPage 顶部的 `WIN_A_*` / `WIN_B_*` 说明。
               //   静止态位移恒 0（`morphClipping()` 为假时直接返回 0）⇒ 版面逐像素不变。
               .translate({ y: this.expandState.contentRiseVp() })
               .onTouch((_event: TouchEvent): void => {

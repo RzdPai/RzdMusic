@@ -85,13 +85,11 @@ export struct MorphMetaBridge {
     .clip(false)
     .position({ x: this.expandState.morphMetaFrame(singer).x,
       y: this.expandState.morphMetaFrame(singer).y })
-    // ★★ 2026-10-15 真机实测：用户观察到「进度条疑似是被歌曲名/歌手名挡住的」。
-    //   这一层是**壳层克隆层**，画在播放页**之上**（zIndex 110），从迷你条一路飞到大标题位，
-    //   原来全程都亮着 ⇒ 进度条那一组（p=0.42 起从下升起）半路就被它压过去。
-    //   现在乘一个**时间窗系数**：0.24→0.38 淡出、之后恒 0（播放页自己那一行 0.18→0.34 淡入，
-    //   两段交叉 ⇒ 不漏空档）⇒ p ≥ 0.38 时这一层已经不在屏幕上。
-    .opacity(this.expandState.morphMetaFrame(singer).opacity *
-      PlayerExpandState.metaCloneOpacityAt(this.expandState.morphP))
+    // ★★ 2026-10-15 **恢复原样**：用户明确「歌曲名和歌手还用原来的飞入动画不用改」。
+    //   我上一版在这里乘了一个"0.24→0.38 淡出"的时间窗系数（想让它别挡进度条），
+    //   结果是这一层提前消失、而播放页自己那一行还压在缩小布局里 ⇒ 观感"飞到中间就没了"。
+    //   现在不加任何系数：这一层的透明度**只由 `morphMetaFrame().opacity` 决定**（两端插值）。
+    .opacity(this.expandState.morphMetaFrame(singer).opacity)
     .hitTestBehavior(HitTestMode.None)
   }
 

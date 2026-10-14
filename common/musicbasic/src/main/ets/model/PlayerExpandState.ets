@@ -351,31 +351,34 @@ export class PlayerExpandState {
 
   // ═══════════════ 元素时间窗表（★ 唯一一份；p 的纯函数 ⇒ 展开/收起天然互逆）═══════════════
   //
-  // ★★ 2026-10-15（回退后重做）用户定调：「不要淡入淡出」+「效果最好」。
-  //     ⇒ 页面内容**不再靠透明度出场**，改成**分窗错峰的"从下升起"**：
-  //        封面先续飞落定 → 进度条那一组升上来 → 底部按钮那一组升上来（一组一段，互不重叠）。
-  //     ⇒ 时间窗只写在这里一份，**所有取值都是 `p` 的纯函数**（不含方向判断、不含驱动源判断）：
-  //        展开 = p 从 0 走到 1；收起 = p 从 1 走回 0 ⇒ **同一张表天然互逆**，
-  //        既满足"下拉收起一直是对的"，又不需要为收起再写一套。
+  // ★★ 2026-10-15 用户定调：「不要淡入淡出」+「效果最好」，并**亲口给定了分组与顺序**：
+  //     「**进度条和下面的那堆按钮一起飞入，先飞入的是小歌词和收藏按钮**（把进度条换成这两个）」
+  //      ⇒ 只有**两组**要"从下升起"，且顺序是：
+  //        ① 小歌词 + 收藏按钮（先）
+  //        ② 进度条 + 下面那一堆按钮 = **整片控制区**（后，作为一组，内部不再分先后）
+  //      ⇒ 时间窗只写在这里一份，**所有取值都是 `p` 的纯函数**（不含方向判断、不含驱动源判断）：
+  //         展开 = p 从 0 走到 1；收起 = p 从 1 走回 0 ⇒ **同一张表天然互逆**，
+  //         既满足"下拉收起一直是对的"，又不需要为收起再写一套。
   //
-  // ⚠️ 为什么必须"互不重叠"：封面那一棒画在整页内容**之上**（§47 的教训：挪到内容层之下会被页面挡），
-  //    如果它和"升上来的控制区"在时间上重叠，就会在屏幕上互相盖住（用户实测的"进度条被挡住"）。
-  //    现在的顺序是：p≤0.55 封面飞完并交棒给真封面（`realCoverVisible()`），p≥0.60 按钮组才开始升
-  //    ⇒ **结构上不可能互相遮挡**，不依赖任何"量得准不准"。
+  // ⚠️ 为什么两组都要**靠后**：续飞封面画在整页内容**之上**（§47 的教训：挪到内容层之下会被页面挡），
+  //    而且它**必须一直飞到 p=1**（它的矩形是窗口坐标，只有 p=1 的恒等变换下才落得准）。
+  //    所以"不被封面盖住"只能靠**错峰**：等封面飞到上半屏之后，底下这两组再依次升上来。
 
   /**
-   * 进度条那一组的时间窗（从下升起）。
+   * 第一组（小歌词 + 收藏按钮）的时间窗。
    *
-   * ⚠️ 续飞封面**没有**时间窗、必须一直飞到 p=1（见 `morphBridging()` 的注释）——
-   *    所以"封面会不会盖住控制区"只能靠**这两组的窗口起始点晚于封面离开视野**来保证：
-   *    实测封面飞到 p≈0.42 之后已在屏幕上半部，而进度条从 0.42、按钮从 0.60 才升 ⇒ 不相遇。
-   *    真正盖住进度条的是**歌名/歌手克隆层**（见 `metaCloneOpacityAt`），已在 0.38 前淡出。
+   * ⚠️ 顺序依据（用户 2026-10-15 原话）：「**先飞入的是小歌词和收藏按钮**」。
    */
-  public static readonly WIN_PROGRESS_START: number = 0.42;
-  public static readonly WIN_PROGRESS_END: number = 0.70;
-  /** 底部按钮那一组的时间窗（从下升起，晚于进度条）。 */
-  public static readonly WIN_BUTTONS_START: number = 0.60;
-  public static readonly WIN_BUTTONS_END: number = 0.92;
+  public static readonly WIN_A_START: number = 0.30;
+  public static readonly WIN_A_END: number = 0.52;
+  /**
+   * 第二组（进度条 + 底部按钮 = 整片控制区）的时间窗。
+   *
+   * ⚠️ 顺序依据（同一句）：「**进度条和下面的那堆按钮一起飞入**」——它们**是一组**，
+   *    所以这里只有一个窗口，不要再给进度条单独错峰（上一版就是那么做错的）。
+   */
+  public static readonly WIN_B_START: number = 0.60;
+  public static readonly WIN_B_END: number = 0.90;
   /** "从下升起"的幅度（屏幕 vp，形变期间按 `1/scale` 反算成页内位移）。 */
   public static readonly RISE_VP: number = 180;
 
@@ -389,37 +392,34 @@ export class PlayerExpandState {
   }
 
   /**
-   * @returns 底部按钮那一组（= 整片控制区）的纵向位移（**页内** vp）。
+   * @returns 第一组「小歌词 + 收藏按钮」的纵向位移（**页内** vp）。
    *
-   * `p` 在其时间窗内从 1 → 0（= 从下面 180vp 处升到位）；静止态恒 0、非形变期恒 0。
-   * ⚠️ 除以 `morphScale`：这层会被外层形变容器缩放，反算后屏上位移才恒定。
+   * 窗内从 180vp 升到位（屏幕量），静止态/非形变期恒 0。
+   * ⚠️ 除以 `morphScale`：这一层会被外层形变容器缩放，反算后屏上位移才恒定。
+   */
+  public earlyRiseVp(): number {
+    if (!this.morphClipping()) {
+      return 0;
+    }
+    const w: number = PlayerExpandState.ramp01(this.morphP,
+      PlayerExpandState.WIN_A_START, PlayerExpandState.WIN_A_END);
+    const scale: number = Math.max(0.05, this.morphScale);
+    return (1 - w) * PlayerExpandState.RISE_VP / scale;
+  }
+
+  /**
+   * @returns 第二组「整片控制区（进度条 + 底部按钮）」的纵向位移（**页内** vp）。
+   *
+   * 与第一组同一套公式、只是窗口更晚 ⇒ 展开时"小歌词+收藏"先上来、"控制区"后上来。
    */
   public contentRiseVp(): number {
     if (!this.morphClipping()) {
       return 0;
     }
     const w: number = PlayerExpandState.ramp01(this.morphP,
-      PlayerExpandState.WIN_BUTTONS_START, PlayerExpandState.WIN_BUTTONS_END);
+      PlayerExpandState.WIN_B_START, PlayerExpandState.WIN_B_END);
     const scale: number = Math.max(0.05, this.morphScale);
     return (1 - w) * PlayerExpandState.RISE_VP / scale;
-  }
-
-  /**
-   * @returns 进度条那一组的**额外**纵向位移（页内 vp）。
-   *
-   * 净位移 = `contentRiseVp() + progressRiseExtraVp() = (1 - 进度条窗口进度) * RISE_VP / scale`
-   * ⇒ 进度条走**自己那段时间窗**（比按钮早），两组各自升上来，中途不重叠。
-   */
-  public progressRiseExtraVp(): number {
-    if (!this.morphClipping()) {
-      return 0;
-    }
-    const wp: number = PlayerExpandState.ramp01(this.morphP,
-      PlayerExpandState.WIN_PROGRESS_START, PlayerExpandState.WIN_PROGRESS_END);
-    const wb: number = PlayerExpandState.ramp01(this.morphP,
-      PlayerExpandState.WIN_BUTTONS_START, PlayerExpandState.WIN_BUTTONS_END);
-    const scale: number = Math.max(0.05, this.morphScale);
-    return (wb - wp) * PlayerExpandState.RISE_VP / scale;
   }
 
   /**
@@ -435,35 +435,11 @@ export class PlayerExpandState {
     return !this.morphContainerActive();
   }
 
-  /**
-   * @returns 歌名/歌手这一行在**播放页里**的不透明度（形变期间的交接窗口）。
-   *
-   * ★★ 2026-10-15 真机实测：用户观察到「**进度条疑似是被歌曲名/歌手名挡住的**」。
-   *   机制：壳层的元信息克隆层（`MorphMetaBridge`）从迷你条一路飞到大标题位，
-   *   **全程都画在播放页之上**；而进度条那一组从 p=0.42 就开始升 ⇒ 半路被它压过去。
-   *   修法：把这一行做成"**早交接**"——克隆层在 0.24→0.38 淡出，播放页自己这一行在
-   *   0.18→0.34 淡入（重叠 0.24~0.34 做交叉，不漏空档）⇒
-   *   **p ≥ 0.38 时克隆层已经不在屏幕上**，进度条 0.42 才开始升 ⇒ 结构上不可能再被挡。
-   *   收敛后再交给 `pullChromeOpacity()`/静止态（形变一结束恒 1）。
-   *   ⚠️ 它是 `p` 的纯函数 ⇒ 展开/收起共用同一张表、天然互逆。
-   * @param p 进度 0…1
-   */
-  public static metaRowOpacityAt(p: number): number {
-    return PlayerExpandState.ramp01(p, 0.18, 0.34);
-  }
-
-  /** @returns 壳层元信息克隆层的不透明度系数（与 {@link metaRowOpacityAt} 交叉，0.38 之后为 0）。 */
-  public static metaCloneOpacityAt(p: number): number {
-    return 1 - PlayerExpandState.ramp01(p, 0.24, 0.38);
-  }
-
-  /** @returns 播放页歌名/歌手这一行当前该用的不透明度。 */
-  public metaRowOpacity(): number {
-    if (!this.morphClipping()) {
-      return 1;
-    }
-    return PlayerExpandState.metaRowOpacityAt(this.morphP);
-  }
+  // ⚠️ 2026-10-15 教训（别再犯）：**不要**把歌名/歌手这一行改成"p 的独立窗口"
+  //    （我试过 `ramp01(p, 0.18, 0.34)` 让它在播放页里早出现、并让壳层克隆层在 0.38 前淡完）。
+  //    那样做的结果是：克隆层淡出时，播放页自己那一行还压在**缩小布局**里看不见 ⇒
+  //    用户实测「歌曲名和歌手到中间就消失了」。这一段**保持原来的"所有权交接"语义**，
+  //    见 `targetMetaOpacity()`：克隆层接管期间该行为 0，交回给播放页时才显示。
 
   /** 背景最低不透明度兜底（反编译 `PlayerPage.PULL_BG_FLOOR`）。 */
   private static readonly PULL_BG_FLOOR: number = 0.04;
@@ -927,15 +903,11 @@ export class PlayerExpandState {
     if (this.morphStage === MorphStage.OPEN) {
       return 1;
     }
-    // ★★ 2026-10-15 真机实测修正：不再用"谁拥有绘制权"（`metaBridgeOwnsPaint`）当门 ——
-    //   那个门取决于驱动源/相位，三条路不等价，而且它让这一行**一直到最后才出现**，
-    //   于是克隆层（壳层、画在播放页之上）会一直挡着从 p=0.42 开始升起的进度条。
-    //   现在改成 `p` 的纯函数：0.18→0.34 淡入，与克隆层的 0.24→0.38 淡出交叉 ⇒
-    //   不漏空档、不留重叠，且**开/关两个方向同一张表**。
-    if (this.morphClipping()) {
-      return PlayerExpandState.metaRowOpacityAt(this.morphP);
-    }
-    return this.pullChromeOpacity();
+    // ★★ 2026-10-15 **恢复原样**：用户明确「歌曲名和歌手咋还中间消失了，**还用原来的飞入动画不用改**」——
+    //   我上一版把这一行改成"0.18→0.34 淡入的纯函数"，它与克隆层的淡出交叉时，
+    //   播放页自己那一行还被压在缩小布局里（屏幕上看不见）⇒ 观感就是"飞入到一半突然没了"。
+    //   原来的写法是"克隆层接管期间这一行为 0，交回给播放页时才显示" —— 保持不动。
+    return this.metaBridgeOwnsPaint() ? 0 : this.pullChromeOpacity();
   }
 
   public logMorphOwnership(event: string): void {
@@ -1840,7 +1812,7 @@ export class PlayerExpandState {
     //   展开时全程 0（阶跃到落位才 1）、收起时按 [0.45,1] 线性淡。
     //   同一条 `p` 两端像素完全不同 ⇒ "展开 ≠ 收起倒放"的硬证据，也是收起时
     //   "元素先没、页面再收"的一半来源。现在按用户定调「不要淡入淡出」：
-    //   恒为 1，出场完全交给位移（`contentRiseVp` / `progressRiseExtraVp`）与裁剪窗口。
+    //   恒为 1，出场完全交给位移（`earlyRiseVp` / `contentRiseVp`）与裁剪窗口。
     //   封面不在这里管：它有 `realCoverVisible()` 与 `morphBridging()` 那一对严格互补的门。
     this.morphContentOpacity = 1;
   }

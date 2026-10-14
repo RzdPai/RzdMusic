@@ -384,6 +384,11 @@ export struct MusicPlayInfoBlock {
               this.toggleFavorite();
             })
         }
+        // ★★ 2026-10-15 用户定调：「**先飞入的是小歌词和收藏按钮**」
+        //   ⇒ 收藏按钮与小歌词共用**第一组**时间窗（`earlyRiseVp()`，早于控制区那一组），
+        //   从下升起 180vp 到位；形变结束/静止态位移恒 0（版面逐像素不变）。
+        //   ⚠️ 只挂在这个按钮上，**不动**歌名/歌手那一行本身的飞入（用户明确"还用原来的"）。
+        .translate({ y: this.expandState.earlyRiseVp() })
       }
       .width(StyleConstants.FULL_WIDTH)
 
