@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,7 +51,8 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { guardPlayerBack, PlaybackIntentState, SongItem } from 'musicbasic';
 import {
   AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, FavoriteEntry,
-  MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord, RouterUrlConstants, ThemeState, TitleBarConstants,
+  MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord, RouterUrlConstants, SongTitleMarquee,
+  ThemeState, TitleBarConstants,
   buildTitleMaterial, getStatusBarTopVpFromWindowUtil
 } from 'musicbasic';
 import {
@@ -548,11 +549,15 @@ export struct RecordListPage {
           .justifyContent(FlexAlign.Center)
         }
         Column({ space: 4 }) {
-          Text(record.name)
-            .fontSize(F_ITEM)
-            .fontColor($r('sys.color.font_primary'))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          // ★ 2026-10-15（用户实测反馈）：历史页歌名原来还是 `Ellipsis` ⇒ 换成跑马灯
+          //   （用户要求「各个页面歌曲名过长时改为用跑马灯显示」，这一处漏了）。
+          //   字号/字色逐字保留；父容器是 `Column` ⇒ 用组件默认的 `width('100%')` 约束宽度。
+          SongTitleMarquee({
+            text: record.name,
+            titleFontSize: F_ITEM,
+            titleFontColor: $r('sys.color.font_primary'),
+            titleFontWeight: FontWeight.Normal
+          })
           Text(((record.singer ?? '').length > 0 ? record.singer : ''))
             .fontSize(F_SUB)
             .fontColor($r('sys.color.font_tertiary'))
