@@ -51,7 +51,14 @@ const HERO_FEATURE_PICKED: string = 'picked';
  *   （`LXMusicSDK.ets` 里 `{ id: 'tx_27', name: 'QQ音乐新歌榜' }` 那一份），
  *   它同时被 `lxLeaderboard()`（卡片四宫格取歌）与 `fetchBoardSongs()`
  *   （榜单详情页取歌）消费 ⇒ 卡片上看到的和点进去的是**同一份数据**，不需要新造接口。
- *   返回的是**带平台前缀的完整 id**（`tx_27`），正是 `fetchBoardSongs` 需要的形态。
+ *
+ * ⚠️⚠️ 本函数返回的是**带平台前缀的完整 id**（`tx_27`），它只满足**一个**口径：
+ *   `lxLeaderboard(fullId, …)` —— 那个函数自己 `split('_')` 拆出平台与榜单号。
+ *   **路由参数那一层千万不要用它**：`ToplistRouteParam.boardId` / `fetchBoardSongs(source, boardId)`
+ *   要的是**不带前缀的榜单号**（`27`），因为 `fetchBoardSongs` **自己会拼** `source + '_' + boardId`。
+ *   （2026-10-15 真机报的「新歌推荐 / 精选推荐点进去 0 首歌」正是这里传错口径：
+ *   `fetchBoardSongs('tx', 'tx_27')` → `lxLeaderboard('tx_tx_27')` → `split('_')` 得
+ *   `src='tx'` / `id='tx'` → `lxTxToplist('tx')` → 空。要路由参数请用 {@link pickFeatureBoardBareId}。）
  */
 // ⚠️ ArkTS 禁止**嵌套的无类型对象字面量**（`arkts-no-untyped-obj-literals`，实测报在这里）⇒
 //    用「`feature|source` 复合键」的**扁平表**，一层字面量、类型明确，编译才过。
@@ -87,6 +94,35 @@ const FEATURE_BOARD_IDS: Record<string, string> = {
 export function pickFeatureBoardId(feature: string, svcSource: string): string {
   const id: string | undefined = FEATURE_BOARD_IDS[feature + '|' + svcSource];
   return id === undefined ? '' : id;
+}
+
+/**
+ * 取「某张卡在某平台」要用的**榜单号 —— 去掉平台前缀的那个形态**（`tx_27` → `27`）。
+ *
+ * 本工程对榜单 id 有**两条口径**，参数形态不同，混用就是「点进去 0 首歌」：
+ *   - **完整 id**（`tx_27`）：`lxLeaderboard(fullId, …)` 用（它自己 `split('_')`）、
+ *     `getLeaderboardEntries()` 那张表是这个形态；取它用 {@link pickFeatureBoardId}。
+ *   - **平台 + 纯榜单号**（`tx` + `27`）：**路由参数**用 ——
+ *     `ToplistRouteParam{ boardSource, boardId }` → `PlaylistDetailPage`
+ *     → `fetchBoardSongs(boardSource, boardId)`（它自己拼 `source + '_' + boardId`）。
+ *     ★ 这与首页排行榜 `HomeRankingSection.openBoard`、「精选推荐」
+ *     `CategoryContentSection.openBoardChart` 完全同形：它们传的 `boardId` 都来自
+ *     `MusicDataService.boardsWithCovers()`，那个函数返回的 id **不带平台前缀**
+ *     （QQ 走 `fetchTxRanks()`，只收 `/^\d+$/` 的 `topId`；缺省表走 `boardIdList('tx')`，
+ *     里面就是 `'4' / '26' / '27' …`）。**以它们为准**。
+ *
+ * ⚠️ 前缀只在本函数里剥**一次**：调用点拿到的是已经裸的榜单号，不许再剥、也不许用
+ *   `pickFeatureBoardId()` 的结果当路由参数。
+ * @param feature 卡片标识（`newSongs` / `picked`）。
+ * @param svcSource 平台代号（tx / kg / kw / wy / mg）。
+ * @returns 不带平台前缀的榜单号；该平台无对应榜单时返回空串。
+ */
+export function pickFeatureBoardBareId(feature: string, svcSource: string): string {
+  const fullId: string = pickFeatureBoardId(feature, svcSource);
+  const sep: number = fullId.indexOf('_');
+  // 表里的 id 一律是 `<平台>_<榜单号>`（`tx_27` / `kg_6666` / `wy_1`）；
+  // 万一将来有人往里写了不带前缀的 id，这里原样返回，不要把它截成空串。
+  return sep < 0 ? fullId : fullId.substring(sep + 1);
 }
 
 /**

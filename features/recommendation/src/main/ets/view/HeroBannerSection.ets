@@ -30,7 +30,12 @@ import { CoverWing } from './CoverWing';
 import { ToplistRouteParam } from 'playlist';
 import { RecommendHeroCardUi, RecommendPrivateSongUi } from '../model/RecommendUiModels';
 import { MusicDataService } from '../util/MusicDataService';
-import { RecommendDataUtil, isFeatureBoardCard, pickFeatureBoardId } from '../util/RecommendDataUtil';
+import {
+  RecommendDataUtil,
+  isFeatureBoardCard,
+  pickFeatureBoardBareId,
+  pickFeatureBoardId
+} from '../util/RecommendDataUtil';
 import { RecommendViewModel } from '../viewmodel/RecommendViewModel';
 
 /** 「每日30首」歌单在 AppStorage 里的中转结构（详情页读取）。 */
@@ -226,10 +231,21 @@ export struct HeroBannerSection {
    *
    * ★ 通道**完全复用现成的那一条**，一个新接口都没有：
    *   `ToplistRouteParam{ boardSource, boardId }` → `PlaylistDetailPage`
-   *   → `player.fetchBoardSongs(source, boardId)` → `lxLeaderboard('<source>_<boardId>')`。
-   *   榜单 id 来自 `RecommendDataUtil.pickFeatureBoardId()`（即 player 的 `getLeaderboardEntries()`
-   *   那张表，`tx_27` = QQ 新歌榜 / `tx_26` = QQ 热歌榜 …）—— 与卡面四宫格取歌**同一个 id**，
+   *   → `player.fetchBoardSongs(boardSource, boardId)` → `lxLeaderboard('<boardSource>_<boardId>')`。
+   *   榜单来自 `RecommendDataUtil.pickFeatureBoardId()`（即 player 的 `getLeaderboardEntries()`
+   *   那张表，`tx_27` = QQ 新歌榜 / `tx_26` = QQ 热歌榜 …）—— 与卡面四宫格取歌**同一个榜**，
    *   所以「卡上看到的 4 张封面」和「点进去的第一页」是同一张榜。
+   *
+   * ⚠️⚠️ 但**两个 id 的形态不一样**，这是本方法最容易写错的一处（2026-10-15 真机「点进去 0 首歌」就是它）：
+   *   - 卡面四宫格：`lxLeaderboard(fullId)` —— `fullId` 是**带前缀的完整 id**（`tx_27`），
+   *     因为 `lxLeaderboard` 自己 `split('_')`；取它用 {@link pickFeatureBoardId}。
+   *   - 路由参数：`fetchBoardSongs` **自己会拼** `source + '_' + boardId`
+   *     ⇒ `boardId` 必须是**不带前缀的榜单号**（`27`），与首页排行榜
+   *     `HomeRankingSection.openBoard`、「精选推荐」`CategoryContentSection.openBoardChart`
+   *     完全同形（它们传的 `boardId` 来自 `boardsWithCovers()`，那个是裸的）；
+   *     取它用 {@link pickFeatureBoardBareId}。
+   *   传错成 `fetchBoardSongs('tx', 'tx_27')` ⇒ `lxLeaderboard('tx_tx_27')` ⇒ `split('_')` 得
+   *   `src='tx'`/`id='tx'` ⇒ `lxTxToplist('tx')` ⇒ **0 首**。
    *
    * ⚠️ 取不到榜单 id（该平台没有这张榜）时**什么都不做**并记日志，绝不退回 daily30
    *   —— 退回去会出现"卡上写新歌推荐、点开是每日30首"的错位。
@@ -237,20 +253,25 @@ export struct HeroBannerSection {
    */
   private async openFeatureBoard(item: RecommendHeroCardUi): Promise<void> {
     const svcSource: string = RecommendDataUtil.mapHomeSource(this.recommendViewModel.homeSourceCode());
-    const boardId: string = pickFeatureBoardId(item.feature, svcSource);
+    // 卡面四宫格那条通道要的形态（带前缀，`lxLeaderboard` 自己拆）—— 只用于日志比对。
+    const fullBoardId: string = pickFeatureBoardId(item.feature, svcSource);
+    // 路由参数那条通道要的形态（不带前缀，`fetchBoardSongs` 自己拼回 `svcSource + '_' + boardId`）。
+    const routeBoardId: string = pickFeatureBoardBareId(item.feature, svcSource);
     const boardName: string = RecommendDataUtil.pickFeatureBoardName(item.feature, svcSource);
-    if (boardId.length === 0) {
+    if (routeBoardId.length === 0) {
       Logger.info('RzdHomeBoard', `feature board tap: no board feature=${item.feature} source=${svcSource}`);
       return;
     }
-    const param: ToplistRouteParam = await MusicDataService.buildBoardRouteParam(svcSource, boardId, boardName);
-    // ★ 因果链自查口径（`grep RzdHomeBoard`）：这一行打出的 `board` 就是卡面四宫格取封面用的**同一个 id**
-    //   （`loadFeatureBoardSongsAsync` 打的 `feature board loaded … board=<同一个值>`），
-    //   也是详情页 `fetchBoardSongs(source, boardId)` 拼回 `lxLeaderboard` 的**同一个 id**
-    //   ⇒ 日志里三个 `board=` 一串起来相等，就证明「卡面看到的」与「点进去的第一页」同源。
+    const param: ToplistRouteParam = await MusicDataService.buildBoardRouteParam(svcSource, routeBoardId, boardName);
+    // ★ 因果链自查口径（`grep RzdHomeBoard`）：一行里把三段字符串**逐字**打全，一眼就能对上/对上不：
+    //   `board=tx_27`     —— 与卡面四宫格取封面时打的 `feature board loaded … board=tx_27` 同一个值；
+    //   `route=tx 27`     —— 真正进路由参数的形态（`boardSource` / `boardId`）；
+    //   `lxLeaderboard(tx_27)` —— `fetchBoardSongs` 内部拼出来的最终字符串，
+    //                        与详情页 `board songs loaded board=tx_27` 同一行。
     Logger.info('RzdHomeBoard',
-      `feature board tap feature=${item.feature} source=${svcSource} board=${boardId} name=${boardName}` +
-      ` detail=fetchBoardSongs(${svcSource},${boardId})`);
+      `feature board tap feature=${item.feature} source=${svcSource} board=${fullBoardId}` +
+      ` route=${svcSource} ${routeBoardId} name=${boardName}` +
+      ` detail=fetchBoardSongs(${svcSource},${routeBoardId}) lx=lxLeaderboard(${svcSource}_${routeBoardId})`);
     const coverId: string = HeroBannerSection.collageCoverId(item.feature);
     const animated: boolean = !getPlaylistTransitionState().prepare(this.getUIContext(), coverId, param.listCover);
     this.pageIndexInfos.pushPathByName(RouterUrlConstants.PLAYLIST_DETAIL, param, animated);
