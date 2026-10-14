@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 import {
   HeroCardApiDto,
+  Logger,
   MusicDbApi,
   PlaybackIntentState,
   RecommendCardApiDto,
@@ -23,7 +24,7 @@ import {
   TabApiDto,
   getAppRuntime
 } from 'musicbasic';
-import { AccountService, getLeaderboardEntries, lxGetPicFallback, lxKgSingerList, lxTxSingerList, lxWySingerList, lxKwSingerList, lxMgSingerList, lxLeaderboard, lxTxToplist, lxTxToplistInfo, lxTxToplistList, LXSearchSong, PlatformAccount, PlatformTrackInfo, TxSinger } from 'player';
+import { AccountService, getLeaderboardEntries, lxGetPicFallback, lxKgSingerList, lxTxSingerList, lxWySingerList, lxKwSingerList, lxMgSingerList, lxLeaderboard, lxTxToplist, lxTxToplistInfo, lxTxToplistList, LXLeaderboardEntry, LXSearchSong, PlatformAccount, PlatformTrackInfo, TxSinger } from 'player';
 import { BoardData, MusicDataService, pickDedicatedBoardId, pickDedicatedBoardName, TrackData } from './MusicDataService';
 import {
   RecommendCardUi,
@@ -33,6 +34,68 @@ import {
   RecommendPrivateSongUi,
   RecommendSingerUi
 } from '../model/RecommendUiModels';
+
+/** 「新歌推荐」卡的取值标识（= 所在平台**新歌榜**）。 */
+const HERO_FEATURE_NEW_SONGS: string = 'newSongs';
+/** 「精选推荐」卡的取值标识（= 所在平台**热歌榜**）。 */
+const HERO_FEATURE_PICKED: string = 'picked';
+
+/**
+ * 首页「新歌推荐 / 精选推荐」两张卡各自取哪张榜单。
+ *
+ * 需求（用户原话）：「新歌推荐和精选推荐改成对应榜单（比如当前设置首页推荐为 QQ，
+ * 就用 QQ 的新歌榜和热歌榜）」⇒ **二者都跟着「首页来源平台」走**：
+ *   - `newSongs` → 该平台的**新歌榜**；`picked` → 该平台的**热歌榜**。
+ *
+ * ★ 榜单 id 用的是工程里**现成的那张表** —— `player` 的 `getLeaderboardEntries()`
+ *   （`LXMusicSDK.ets` 里 `{ id: 'tx_27', name: 'QQ音乐新歌榜' }` 那一份），
+ *   它同时被 `lxLeaderboard()`（卡片四宫格取歌）与 `fetchBoardSongs()`
+ *   （榜单详情页取歌）消费 ⇒ 卡片上看到的和点进去的是**同一份数据**，不需要新造接口。
+ *   返回的是**带平台前缀的完整 id**（`tx_27`），正是 `fetchBoardSongs` 需要的形态。
+ */
+// ⚠️ ArkTS 禁止**嵌套的无类型对象字面量**（`arkts-no-untyped-obj-literals`，实测报在这里）⇒
+//    用「`feature|source` 复合键」的**扁平表**，一层字面量、类型明确，编译才过。
+// ⚠️ 每一个 id 都**必须在工程现成的榜单表里查得到**（`features/player/src/main/ets/source/LXMusicSDK.ets`
+//    的 `getLeaderboardEntries()`，实测行 159~167）。上一版有人写了 `kg_51341`（工程里根本没有）
+//    和把 `kg_6666`（酷狗**飙升榜**）当热歌榜 ⇒ 已改正：
+//      新歌榜：tx_27(QQ) / kw_17(酷我) / wy_1(网易云) / mg_1(咪咕)
+//      热歌榜：tx_26(QQ) / kw_16(酷我) / wy_0(网易云) / mg_2(咪咕)
+//    ⚠️ **酷狗在这张表里没有"新歌榜/热歌榜"**：只有 `kg_8888`(TOP500) 与 `kg_6666`(飙升榜)。
+//       这里按"性质最接近"降级（新歌→飙升榜、热歌→TOP500），**并在注释里标明这是降级**，
+//       而不是伪造一个不存在的榜单 id（伪造的 id 会让卡片取歌失败、点进去是空页）。
+const FEATURE_BOARD_IDS: Record<string, string> = {
+  'newSongs|tx': 'tx_27',
+  'newSongs|kg': 'kg_6666', // 降级：酷狗无新歌榜，用飙升榜（新歌性质最接近）
+  'newSongs|kw': 'kw_17',
+  'newSongs|wy': 'wy_1',
+  'newSongs|mg': 'mg_1',
+  'picked|tx': 'tx_26',
+  'picked|kg': 'kg_8888', // 降级：酷狗无热歌榜，用 TOP500（热门性质最接近）
+  'picked|kw': 'kw_16',
+  'picked|wy': 'wy_0',
+  'picked|mg': 'mg_2'
+};
+
+/**
+ * 取「某张卡在某平台」要用的榜单 id（带平台前缀）。
+ *
+ * ⚠️ 返回**空串**表示这个平台没有对应榜单 ⇒ 调用方必须自己能兜住（不伪造数据）。
+ * @param feature 卡片标识（`newSongs` / `picked`）。
+ * @param svcSource 平台代号（tx / kg / kw / wy / mg）。
+ * @returns 榜单 id；无对应榜单返回空串。
+ */
+export function pickFeatureBoardId(feature: string, svcSource: string): string {
+  const id: string | undefined = FEATURE_BOARD_IDS[feature + '|' + svcSource];
+  return id === undefined ? '' : id;
+}
+
+/**
+ * @param feature 卡片标识（`newSongs` / `picked`）。
+ * @returns true = 这张卡是「跟着首页平台走的榜单卡」。
+ */
+export function isFeatureBoardCard(feature: string): boolean {
+  return feature === HERO_FEATURE_NEW_SONGS || feature === HERO_FEATURE_PICKED;
+}
 
 /** 首页顶部功能入口卡的定义（角标 / 标题 / 配图 / 点击去向）。 */
 interface RecommendHeroSpec {
@@ -271,6 +334,68 @@ export class RecommendDataUtil {
    */
   public static async fillCovers(rows: RecommendPrivateSongUi[]): Promise<RecommendPrivateSongUi[]> {
     await RecommendDataUtil.fillSongCovers(rows);
+    return rows;
+  }
+
+  /**
+   * 「新歌推荐 / 精选推荐」两张卡所在平台的榜单**名**（卡上不显示，只用于日志与详情页标题）。
+   *
+   * 名字取自 `player` 那张现成的榜单表（`getLeaderboardEntries()`），**不自己拼字符串** ——
+   * 详情页标题与榜单列表里的名字必须逐字一致，否则用户会以为点错了榜。
+   * @param feature 卡片标识（`newSongs` / `picked`）。
+   * @param svcSource 平台代号（tx / kg / kw / wy / mg）。
+   * @returns 榜单名；找不到返回空串。
+   */
+  public static pickFeatureBoardName(feature: string, svcSource: string): string {
+    const id: string = pickFeatureBoardId(feature, svcSource);
+    if (id.length === 0) {
+      return '';
+    }
+    const entries: LXLeaderboardEntry[] = getLeaderboardEntries();
+    for (let i: number = 0; i < entries.length; i++) {
+      if (entries[i].id === id) {
+        return entries[i].name;
+      }
+    }
+    return '';
+  }
+
+  /**
+   * 「新歌推荐 / 精选推荐」两张卡各自取所属平台的榜单歌曲（只取前几首，给四宫格拼图用）。
+   *
+   * 数据通道**完全复用现有那条**：
+   *   - 卡片拼图 → `lxLeaderboard(source_boardId, 1, limit)`（= `fetchBoardSongs` 用的同一个函数）；
+   *   - 点进去的详情页 → `ToplistRouteParam.boardSource/boardId` → `PlaylistDetailPage`
+   *     → `player.fetchBoardSongs` ⇒ **卡片与详情页同源**，不需要新增接口、也不需要
+   *     `AppStorage['dailyThirtySongs']` 那条 `sectionType='daily30'` 中转。
+   *
+   * ⚠️ 取不到（网络失败 / 该平台没有这张榜）时**返回空数组**，由调用方决定回落 ——
+   *    这里绝不伪造歌单内容。
+   * @param feature 卡片标识（`newSongs` / `picked`）。
+   * @param svcSource 平台代号（tx / kg / kw / wy / mg）。
+   * @param limit 需要的条数（拼四宫格只需 4）。
+   * @returns 歌曲行；失败或平台无此榜返回空数组。
+   */
+  public static async loadFeatureBoardSongsAsync(feature: string, svcSource: string,
+    limit: number = 4): Promise<RecommendPrivateSongUi[]> {
+    const boardId: string = pickFeatureBoardId(feature, svcSource);
+    if (boardId.length === 0) {
+      Logger.info('RzdHomeBoard', `feature board missing feature=${feature} source=${svcSource}`);
+      return [];
+    }
+    const rows: RecommendPrivateSongUi[] = [];
+    try {
+      const res = await lxLeaderboard(boardId, 1, limit);
+      const seen: string[] = [];
+      for (let i: number = 0; i < res.list.length && rows.length < limit; i++) {
+        rows.push(RecommendDataUtil.mapSearchSongToPrivateUi(res.list[i], i, seen));
+      }
+    } catch (_err) {
+      Logger.warn('RzdHomeBoard', `feature board load failed feature=${feature} board=${boardId}`);
+      return [];
+    }
+    await RecommendDataUtil.fillSongCovers(rows);
+    Logger.info('RzdHomeBoard', `feature board loaded feature=${feature} board=${boardId} songs=${rows.length}`);
     return rows;
   }
 
@@ -536,11 +661,17 @@ export class RecommendDataUtil {
    * @param dailyTitles 同上 4 张封面取不到时的占位歌名（可为空）。
    * @param listenNowTitle 「现在就听」卡固定显示的歌名（空则用池里第一首）。
    * @param listenNowCover 「现在就听」卡固定使用的封面（空则用列表首张可用封面）。
+   * @param boardCovers **榜单拼图卡**（新歌推荐 / 精选推荐）各自的 4 张封面，键是卡片标识
+   *   （`newSongs` / `picked`）。★ 这两张卡自 2026-10-15 起**不再是"首页推荐列表"**，
+   *   而是**各自所属平台的榜单**（新歌榜 / 热歌榜）—— 封面必须来自**各自的榜单**，
+   *   不能再拿首页列表前 4 首去拼（那样卡面与点进去的内容对不上）。
+   *   取不到时**回落**成首页列表那 4 张（旧观感），不空着。
    * @returns 5 张功能入口卡片。
    */
   public static getFeatureHeroCards(songNames: string[], songCovers: string[] = [], dailyCovers: string[] = [],
     dailyTitles: string[] = [], listenNowTitle: string = '',
-    listenNowCover: string = ''): RecommendHeroCardUi[] {
+    listenNowCover: string = '',
+    boardCovers: Record<string, string[]> = {}): RecommendHeroCardUi[] {
     // 只需 badge / title / route —— 图不再走打包资源
     const specs: RecommendHeroSpec[] = [
       { badge: 'Music FM', title: '现在就听', image: $r('app.media.ic_avatar1'), route: 'listenNow' },
@@ -581,10 +712,19 @@ export class RecommendDataUtil {
       // ★ 2026-10-15（用户纠正）：「新歌推荐」「精选推荐」两张卡**和「每日30首」同款** ——
       //   四张封面拼一块 + 点开进歌单，**只改文字** ⇒ 它们也要拿到那 4 张封面。
       //   （原来只有 `daily30` 拿得到，另两张的卡面因此只有一首歌的封面。）
+      // ★ 2026-10-15（第二次纠正）：这两张卡改成**各自平台的榜单**（新歌榜 / 热歌榜）
+      //   ⇒ 拼图封面优先取**各自榜单**的那 4 张（`boardCovers[spec.route]`），
+      //     取不到（接口失败 / 该平台没有这张榜）才回落成首页列表那 4 张。
       const isCollageRoute: boolean =
         spec.route === 'daily30' || spec.route === 'newSongs' || spec.route === 'picked';
-      banner.dailyCovers = isCollageRoute ? dailyCovers : [];
-      banner.dailyTitles = isCollageRoute ? dailyTitles : [];
+      const featureCovers: string[] | undefined = boardCovers[spec.route];
+      if (isCollageRoute && featureCovers !== undefined && featureCovers.length > 0) {
+        banner.dailyCovers = featureCovers;
+        banner.dailyTitles = [];
+      } else {
+        banner.dailyCovers = isCollageRoute ? dailyCovers : [];
+        banner.dailyTitles = isCollageRoute ? dailyTitles : [];
+      }
       if (spec.route === 'listenNow') {
         // 「现在就听」卡展示的就是它要播的那一首（与下方歌名一致）
         if (listenNowCover.length > 0) {

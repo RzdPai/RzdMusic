@@ -168,6 +168,13 @@ export struct HomeSongListSection {
       top: 10,
       bottom: 10
     })
+    // ★ 2026-10-15：行下方细分隔线（与 `CategoryContentSection.FeaturedRow` 同一口径：
+    //   语义色 `app.color.comp_divider`）。本组件**当前无人引用**（首页已回到 `Scroll`，
+    //   见文件头），这里同步改是为了"万一哪天重新启用，行样式与现役那一份仍然一致"。
+    //   ⚠️ 这里用 `border` 而不是 `Divider()` 子节点：本行根节点是 `Row`（不是 `Column`），
+    //      加子节点会改变行内排布；`border` 只作用于自身底边，没有这个问题。
+    .borderWidth({ bottom: 0.6 })
+    .borderColor({ bottom: $r('app.color.comp_divider') })
     .onClick(() => {
       void this.recommendViewModel.requestPlayOnlineSong(item, this.getUIContext());
     })

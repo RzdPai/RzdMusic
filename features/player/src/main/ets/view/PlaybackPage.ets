@@ -40,6 +40,7 @@ import {
   WindowInfo,
   WindowUtil
 } from 'musicbasic';
+import type { LyricMorphRect } from 'musicbasic';
 import { MusicAppState } from '../model/PlayerModels';
 import { SwitchBannerState } from '../model/SwitchBannerState';
 import { MediaService } from '../model/MediaService';
@@ -201,7 +202,12 @@ export struct PlaybackPage {
    * 迷你条到这里正好消失 —— 观感就是"播放条的颜色化成了页面背景、并跟着长大"。
    */
   private static readonly MORPH_BG_FADE_TO: number = 0.20;
-  /** 封面「续飞到歌词页」的时长（ms）。比展开略短，因为它只是局部元素换位。 */
+  /**
+   * 封面 + 歌名「续飞到歌词页顶部」的时长（ms）。比展开略短，因为它只是局部元素换位。
+   *
+   * A2 起这条时长**真的被用上了**（`animateLyricMorph` 的 `animateTo`）；此前整套歌词页
+   * 封面形变被 `lyricMorphVisible = false` 无条件关着，这个常量是空的。
+   */
   private static readonly LYRIC_MORPH_DURATION_MS: number = 360;
   /** 控制区静止多久后自动收起（ms）。 */
   private static readonly CHROME_AUTO_HIDE_MS: number = 3000;
@@ -220,10 +226,30 @@ export struct PlaybackPage {
    * 后者不能去动形变相位，否则会把静止的 OPEN 态改成 LEAVING。
    */
   private dismissMorphActive: boolean = false;
-  /** 下拉收起：拖拽多少距离算"拉到底"（相对窗口高度）。 */
+  /**
+   * 下拉收起：拖拽多少距离算"拉到底"（相对窗口高度）。
+   *
+   * ⚠️ **无界是 0.32，这里保持 0.42，标注"待实测"** —— 依据
+   *   `docs\无界形变手感-落实到RzdMusic清单.md` §八 第 6 条
+   *   （"改了要实测手感再定"，不许按无界的值直接覆盖）。
+   *   它现在只是**兜底**：{@link dismissSpanVp} 优先用实测的收起行程，
+   *   只有量不到（`miniY <= 0`）时才退回这个比例。
+   */
   private static readonly DISMISS_DRAG_SPAN_RATIO: number = 0.42;
   /** 下拉松手时的提交阈值：进度超过它就收起，否则弹回完整态。 */
   private static readonly DISMISS_COMMIT_PROGRESS: number = 38;
+  /**
+   * 下拉松手时的**速度**提交阈值（vp/s）。
+   *
+   * 出处：`docs\无界形变手感-落实到RzdMusic清单.md` §一 1.2「提交判定 —— 进度 OR 速度」：
+   * `commit = (morphT >= COMMIT_T 即 0.32) || (velocity <= COMMIT_VELOCITY 即 900)`
+   * ⇒ 无界的 `COMMIT_VELOCITY = 900`。**这个数是从文档取的，不是估的。**
+   *
+   * ⚠️ 但**绝不照抄它的比较方向/正负号**：无界是"上拉打开"，这里是"下拉收起"，方向相反，
+   *   文档也明说"符号要先实测、别照抄"。见 {@link onDismissDrag}：
+   *   **方向由位移判、大小由 `Math.abs(velocityY)` 取** ⇒ 根上不需要假设符号。
+   */
+  private static readonly DISMISS_COMMIT_VELOCITY: number = 900;
 
   /** @returns 窗口高度（vp）；拿不到时给一个兜底值，保证拖拽比例不会除零。 */
   private deviceHeightVp(): number {
@@ -234,8 +260,29 @@ export struct PlaybackPage {
     return this.getUIContext().px2vp(px);
   }
 
-  /** @returns 下拉到底所需的距离（vp）。 */
+  /**
+   * @returns 下拉到底所需的距离（vp）—— 跟手归一化的**分母**。
+   *
+   * ★ D2：**优先用实测**，拿不到才退回窗口比例。对齐无界
+   *   `pullRangePx = coverRect.top > 0 ? coverRect.top : windowHeight * 0.32`
+   *   （`docs\无界形变手感-落实到RzdMusic清单.md` §一 1.1）。
+   *
+   * **为什么实测值取 `expandState.miniY`**：跟手进度是「手指位移的纯函数」
+   *   （`progress = offsetY / span`），分母的语义就是"手指走完整个收起动作要走多远"。
+   *   收起的目标是迷你条封面那一小块，而它的顶边就在窗口坐标 `miniY` —— 形变容器在 `p = 0`
+   *   时的可视矩形顶边正是 `miniCoverY`（= `miniY`，由 `morphInitParams()` 从同一份实测值算出），
+   *   满屏态顶边是 0 ⇒ 走完全程 = 顶边从 0 挪到 `miniY` ⇒ 行程 `miniY`。
+   *
+   * ⚠️ **改分母不会累积偏移**（§六 第 3 条的判据）：`dismissProgressFromDrag()` 仍然是
+   *   `clamp(offsetY / span * 100)` 这种"**当前**手指绝对位移"的纯函数，**不读上一帧**；
+   *   而且 `miniY` 在一次拖动期间是常量 —— 迷你条在形变期间是 `Visibility.Hidden`
+   *   （**保留布局**、面积不变），不会再触发 `onAreaChange` 上报 ⇒ 分母不会在拖动中途跳变。
+   */
   private dismissSpanVp(): number {
+    const measured: number = this.expandState.miniY;
+    if (measured > 0) {
+      return measured;
+    }
     return this.deviceHeightVp() * PlaybackPage.DISMISS_DRAG_SPAN_RATIO;
   }
 
@@ -255,18 +302,36 @@ export struct PlaybackPage {
 
   /**
    * 下拉收起手势：拖动期间**跟手**改进度（不走 animateTo，所以是即时的），
-   * 松手时超过阈值就收起、否则补间弹回完整态。
+   * 松手时 **进度过阈值 OR 速度足够快** 就收起，否则补间弹回完整态。
    *
    * 这套交互和参考工程 MusicHome 的 `PanGesture` 一致（它的 `dismissPanOffsetY`
    * → `dismissSheetHeightPercent` + `coverLinearScale` 是同一件事）。
-   * @param offsetY 当前竖直位移（vp）。
+   *
+   * ★ D1：速度项见下面 {@link PlaybackPage.DISMISS_COMMIT_VELOCITY}。
+   * @param offsetY 当前竖直位移（vp，向下为正）。
    * @param ended 是否是松手。
+   * @param velocityY 松手时的竖直速度（来自 `GestureEvent.velocityY`）。
+   *   ⚠️ **本函数不依赖它的符号**（见下），所以默认值 0 也不会造出"误提交"。
    */
-  private onDismissDrag(offsetY: number, ended: boolean): void {
+  private onDismissDrag(offsetY: number, ended: boolean, velocityY: number = 0): void {
     if (this.isClosing) {
       return;
     }
     const progress: number = this.dismissProgressFromDrag(offsetY);
+    // ★★ D1（最高优先级）：提交判定 = **进度 OR 速度**（无界 §一 1.2）。
+    //   只有进度时，"位移不到 38% 但甩得很快"收不起来 —— 用户手感上就是"快甩没反应"。
+    //
+    //   ⚠️ **不许猜 `velocityY` 的符号**（文档 §八 第 3 条 + §四 D1 的 ⚠️）：
+    //     无界那边是"向下为正"，而我们这里是**下拉收起**、方向与它相反，
+    //     照抄正负号必错；而 SDK 的 `GestureEvent.velocityY`（`gesture.d.ts`，@since 10）
+    //     也没有承诺符号方向。所以这里从根上绕开：
+    //       · **方向**只由**位移**判 —— `offsetY > 0` 即"这次拖动朝收起方向"；
+    //       · **大小**只取 `Math.abs(velocityY)`。
+    //     ⇒ 无论系统给的是 +900 还是 −900，判定结果都一样，**没有任何"符号实测"前置条件**。
+    //   阈值 900 取自文档（见 `DISMISS_COMMIT_VELOCITY` 的注释），不是编的。
+    const collapsingDirection: boolean = offsetY > 0;
+    const speed: number = Math.abs(velocityY);
+    const fastFlick: boolean = collapsingDirection && speed >= PlaybackPage.DISMISS_COMMIT_VELOCITY;
     // ★ 形变那套：下拉收起就是**反向跑同一套几何**（无界也是同一个 progress 正反两用）
     //   —— 整页缩回迷你条那一小块、裁剪窗口收回去、迷你条同时淡回来。
     if (this.expandState.morphUsable) {
@@ -284,7 +349,16 @@ export struct PlaybackPage {
         return;
       }
       this.dismissMorphActive = false;
-      if (progress >= PlaybackPage.DISMISS_COMMIT_PROGRESS) {
+      const shouldClose: boolean = progress >= PlaybackPage.DISMISS_COMMIT_PROGRESS || fastFlick;
+      // 上机排查用：`hdc shell hilog -x | Select-String 'RzdMorph dismiss commit'`
+      Logger.info(PlayerExpandState.LOG_TAG,
+        `RzdMorph dismiss commit progress=${progress.toFixed(2)}/${
+          PlaybackPage.DISMISS_COMMIT_PROGRESS} velocityY=${velocityY.toFixed(1)} ` +
+        `absVelocity=${speed.toFixed(1)} dir=${collapsingDirection ? 'collapse' : 'open'} ` +
+        `fastFlick=${fastFlick} velocityThreshold=${PlaybackPage.DISMISS_COMMIT_VELOCITY} ` +
+        `span=${this.dismissSpanVp().toFixed(1)} spanSrc=${
+          this.expandState.miniY > 0 ? 'measured' : 'ratio'} commit=${shouldClose}`);
+      if (shouldClose) {
         // 交给 closeFullScreenPlayback：它会接着把形变补间到 0 再卸载
         this.closeFullScreenPlayback();
         return;
@@ -306,7 +380,12 @@ export struct PlaybackPage {
     if (!ended) {
       return;
     }
-    if (progress >= PlaybackPage.DISMISS_COMMIT_PROGRESS) {
+    const shouldCloseFallback: boolean = progress >= PlaybackPage.DISMISS_COMMIT_PROGRESS || fastFlick;
+    Logger.info(PlayerExpandState.LOG_TAG,
+      `RzdMorph dismiss commit(noMorph) progress=${progress.toFixed(2)} velocityY=${velocityY.toFixed(1)} ` +
+      `absVelocity=${speed.toFixed(1)} dir=${collapsingDirection ? 'collapse' : 'open'} ` +
+      `fastFlick=${fastFlick} commit=${shouldCloseFallback}`);
+    if (shouldCloseFallback) {
       this.closeFullScreenPlayback();
       return;
     }
@@ -315,43 +394,135 @@ export struct PlaybackPage {
     });
   }
 
-  // ─────────────────────── 封面续飞到歌词页 ───────────────────────
+  // ─────────────────────── 封面 + 歌名续飞到歌词页顶部（A2）───────────────────────
 
   /**
-   * 播放页 ⇄ 歌词页切换时，让**同一张封面**飞过去（对标无界音乐 `CoverMorph`）。
+   * 切到歌词页时让**同一张封面 + 歌名**缩小并移到歌词页顶部（对标无界 `floatingCover` /
+   * `floatingMeta`），切回封面页时原路飞回。
    *
-   * 为什么另画一张而不是动页面里那张：歌词页是 Swiper 的一页，它的封面由布局决定，
-   * 而"飞过去"要求封面**脱离布局**在窗口坐标里走。所以只在切换的那段时间里画一张
-   * 浮层（`LyricCoverOverlay`），两端位置由 `PlayerExpandState.lyricMorph()` 算。
+   * ## 为什么是这样（而不是"两页各画一份"）
    *
-   * ⚠️ 静止态一定是"不画"（`lyricMorphVisible = false`）：这样即使这套算错了，
-   * 也只在切页那 0.36 秒里出问题，不会把播放页搞坏。
+   * 无界的 `playerPane` 是 `Stack { Swiper{ 封面页 ; 空歌词页 } ; floatingCover ; floatingMeta }`
+   * —— 封面与歌名**挂在 Swiper 之外**，切页时是**同一个元素**在动；歌词页那一页本身是个空壳，
+   * 只有 `padding({ top: lyricPadTop() })` 让位。本方法就是"让那个元素动"的驱动。
+   *
+   * ## 三个不变量
+   *
+   * 1. **同一时刻至多一张封面**：{@link lyricFloatActive} 同时管两件事 ——
+   *    浮层画不画、封面页那份真封面藏不藏，两者**严格互补**；
+   * 2. **静止态两页各自逐像素不变**：`t = 0` 那一端就是真封面的落点矩形
+   *    （`PlayerExpandState.lyricMorph(0)` 复用续飞封面 `p=1` 的同一段端点几何），
+   *    所以交棒那一帧没有可跳的差；
+   * 3. **浮层不可用就整套不启用**（`lyricFloat()` 为假：封面没量到 / 宽屏面板走另一套布局）
+   *    —— 什么都不画、`lyricPadTop()` 也是 0，与没有这套东西时一致。
+   *
+   * ⚠️ **歌词怎么画一个字没动**（`LyricsComponent` / `AmllLyricView` 不碰），
+   *   这里只动"封面/歌名浮层的跨页定位"与歌词页的顶部留白。
    * @param toLyric true = 去歌词页，false = 回封面页
    */
   private animateLyricMorph(toLyric: boolean): void {
-    // Lyrics has no cover destination. Do not fabricate a floating thumbnail above its header.
-    // The real cover remains in Swiper and uses its native slide; all lyric animations stay intact.
-    this.lyricMorphGen++;
-    this.lyricMorphVisible = false;
-    this.lyricMorphOpacity = 0;
+    const gen: number = ++this.lyricMorphGen;
     this.lyricMorphTarget = toLyric;
     this.lyricSwiperSettled = false;
-    this.lyricFlightSettled = true;
-    Logger.info('RzdLyricMorph', `native swiper only toLyric=${toLyric} overlayNodes=0`);
-
+    this.lyricFlightSettled = false;
+    if (!this.expandState.lyricFloat()) {
+      // 浮层不可用：退回"原生 Swiper 滑动"，不产生任何节点（老行为）。
+      this.lyricMorphVisible = false;
+      this.lyricMorphOpacity = 0;
+      this.lyricFlightSettled = true;
+      Logger.info('RzdLyricFloat', `disabled toLyric=${toLyric} gen=${gen} reason=floatUnusable`);
+      return;
+    }
+    this.lyricMorphVisible = true;
+    this.lyricMorphOpacity = 1;
+    const to: number = toLyric ? 1 : 0;
+    const from: number = this.lyricMorphT;
+    Logger.info('RzdLyricFloat',
+      `flight start toLyric=${toLyric} from=${from.toFixed(3)} to=${to} gen=${gen} ` +
+      `coverSize=${this.expandState.lyricCoverSizeOf().toFixed(1)} ` +
+      `coverY=${this.expandState.lyricCoverYOf().toFixed(1)} ` +
+      `metaY=${this.expandState.lyricMetaYOf().toFixed(1)} ` +
+      `padTop=${this.expandState.lyricPadTop().toFixed(1)}`);
+    // ⚠️ V2 的状态标脏是**异步**的（官方 `arkts-new-applysync-flushupdates-flushuiupdates`）：
+    //   同一任务里"先置 `lyricMorphVisible`、紧接着起 `animateTo`"，首帧可能还按旧值渲染
+    //   ⇒ 浮层会晚一帧才挂上。本文件既有两处同款补丁（`MORPH_INTRO_DELAY_MS` /
+    //   `morphRetryLeft × MORPH_RETRY_MS`），这里用 `setTimeout(0)` 把补间推到下一轮。
+    setTimeout((): void => {
+      if (!this.isAlive || gen !== this.lyricMorphGen) {
+        Logger.info('RzdLyricFloat', `flight abort gen=${gen} stale=${gen !== this.lyricMorphGen}`);
+        return;
+      }
+      this.getUIContext().animateTo({
+        duration: PlaybackPage.LYRIC_MORPH_DURATION_MS,
+        // ⚠️ 曲线**内联**在调用点：`ICurve` 是 `common.d.ts` 里唯一漏写 `declare` 的接口，
+        //   写成"返回 ICurve 的包装函数"过不了编译（见项目记忆 §60.2）。
+        curve: Curve.EaseInOut
+      }, (): void => {
+        this.lyricMorphT = to;
+      });
+      setTimeout((): void => {
+        if (!this.isAlive || gen !== this.lyricMorphGen) {
+          return;
+        }
+        this.lyricFlightSettled = true;
+        this.finishLyricMorph(gen);
+      }, PlaybackPage.LYRIC_MORPH_DURATION_MS + 20);
+    }, 0);
   }
 
+  /**
+   * 收尾：Swiper 自己的切换动画与浮层飞行**都结束**之后才卸掉"飞行中"这一档。
+   *
+   * ⚠️ 这里**不是**把封面一刀切掉：落位后浮层继续由 {@link lyricFloatActive} 的
+   * `playbackSwiperIndex` 分支撑着（歌词页静止态仍然要显示那张小封面 + 歌名）。
+   * 原来的写法是 `lyricMorphVisible = false` 无条件写死 ⇒ 整套歌词页封面形变是关着的。
+   */
   private finishLyricMorph(gen: number): void {
     if (gen !== this.lyricMorphGen || !this.lyricSwiperSettled || !this.lyricFlightSettled) {
       return;
     }
-    if (!this.lyricMorphTarget) {
-      this.lyricMorphVisible = false;
-      Logger.info('RzdLyricMorph', `handoff cover gen=${gen}`);
-      return;
-    }
     this.lyricMorphVisible = false;
-    Logger.info('RzdLyricMorph', `handoff lyrics gen=${gen} overlayNodes=0`);
+    this.lyricMorphOpacity = 1;
+    Logger.info('RzdLyricFloat',
+      `flight settled gen=${gen} toLyric=${this.lyricMorphTarget} ` +
+      `t=${this.lyricMorphT.toFixed(3)} index=${this.playbackSwiperIndex}`);
+  }
+
+  /**
+   * @returns 歌词页浮层这一刻是否要占位（= 要不要画浮层 + 要不要藏掉封面页那份真封面）。
+   *
+   * 两个来源：
+   *   · `lyricMorphVisible` —— **飞行中**（Swiper 正在滑，浮层替真封面飞）；
+   *   · `playbackSwiperIndex === 1` —— **已经在歌词页**（静止态，小封面 + 歌名留在顶部）。
+   * 两者都成立时是"落位帧"，矩形相同 ⇒ 不会跳。
+   */
+  private lyricFloatActive(): boolean {
+    if (!this.expandState.lyricFloat()) {
+      return false;
+    }
+    return this.lyricMorphVisible || this.playbackSwiperIndex === PlaybackPage.SWIPER_INDEX_LYRIC;
+  }
+
+  /** @returns 浮层里封面的一帧矩形（vp，窗口坐标）。 */
+  private lyricFloatRect(): LyricMorphRect {
+    return this.expandState.lyricMorph(this.lyricMorphT);
+  }
+
+  /** @returns 浮层里歌名块的宽度（vp）：窗口宽度两侧各留 16vp。 */
+  private lyricFloatMetaWidth(): number {
+    const w: number = this.expandState.windowWidthVp - 32;
+    return w > 120 ? w : 120;
+  }
+
+  /**
+   * @returns 浮层里歌名/歌手的不透明度。
+   *
+   * 直接用飞行进度：`t = 0` 时**完全透明**（那一刻封面正压在真封面位置上，
+   * 歌名块不该冒出来），到歌词页才满不透明。这样即使两端的歌名位置略有差异也看不出来。
+   */
+  private lyricFloatMetaOpacity(): number {
+    const t: number = this.lyricMorphT;
+    return t < 0 ? 0 : (t > 1 ? 1 : t);
   }
 
   // ─────────────────────── 控制区自动收起 ───────────────────────
@@ -731,24 +902,23 @@ export struct PlaybackPage {
   }
 
   /**
-   * 封面「续飞到歌词页」的浮层（对标无界音乐 CoverMorph）。
+   * 浮层定位口径（改前那版注释是**错的**，2026-10-15 按本机 SDK 更正）。
    *
-   * ## 定位推导（这段值得看，不然看不出那些减法在干嘛）
+   * ❌ 旧说法：「`position({x, y})` 是在**自然位置**上再加偏移，所以居中的 Stack 里要先减
+   *    `(窗口尺寸 − 自己尺寸) / 2`」。**不成立。**
    *
-   * 浮层挂在一个铺满窗口、`alignContent: Center` 的 Stack 里，所以子节点的**自然位置**
-   * 是"在窗口里居中"。`position({x, y})` 是在自然位置上再加偏移，不是绝对坐标，
-   * 于是要落到窗口坐标 (X, Y) 需要：
+   * ✔ 本机 SDK 原文（`sdk\default\openharmony\ets\component\common.d.ts:25284`，
+   *    `position(value: Position | Edges | LocalizedEdges)`）：
+   *    「**Sets the absolute position of the component relative to the position of the
+   *    parent component.**」—— 就是**相对父组件左上角的绝对定位**，与自然位置/`alignContent` 无关。
    *
-   * ```
-   *   margin = 自然位置修正 + 目标坐标
-   *          = -(窗口尺寸 - 自己尺寸) / 2 + (X, Y)
-   * ```
+   * ⇒ 结论（本文件所有浮层都按这条写）：
+   *    只要浮层所在容器**左上角就是窗口原点**，`PlayerExpandState` 交出的**窗口坐标**
+   *    就能直接当 `.position({x, y})` 用，**全链零换算**。
+   *    `MorphCoverBridge`（同一层）按窗口坐标落位已被真机验证；`LyricFloatLayer` 同层同口径。
    *
-   * 这里把浮层尺寸**取成窗口尺寸**，于是修正项 = (-0, -0)，代码里那些减法就都不需要了：
-   * `margin` 直接等于目标坐标。内部那张图再按目标矩形用 `position` + `margin` 放进去，
-   * 因为此时外层原点已经与窗口原点重合，内层的推导退化成一个纯减法。
-   *
-   * 只在切页那 ~0.36 秒里可见；静止态 `lyricMorphVisible = false`，**不产生任何节点**。
+   * 现状：A2 的歌词页浮层由下面的 {@link LyricFloatLayer} 承担；
+   * 这两个 `morphWindow*Vp()` 是更早那版（已删）`LyricCoverOverlay` 的遗留取值器，保留不动。
    */
   /** @returns 浮层参考用的窗口宽度（vp）。 */
   private morphWindowWidthVp(): number {
@@ -1392,6 +1562,21 @@ export struct PlaybackPage {
   }
 
   /**
+   * @returns 是否走「手机 Swiper」那一支布局（封面页 / 歌词页**横向切换**的那套）。
+   *
+   * 判据与 `buildControlStack()` 里那个 `if` 的取反**逐字一致**：
+   * `SM`（不论高）或 `MD + HEIGHT_SM`。A2 的歌词页浮层只在这一支里画
+   * （面板/宽屏布局没有"歌词页"这一说，画上去会在封面右侧多出一张小封面）。
+   */
+  private usesPhoneSwiperLayout(): boolean {
+    if (this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_SM) {
+      return true;
+    }
+    return this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_MD &&
+      this.breakpointEnv.heightBreakpoint === HeightBreakpoint.HEIGHT_SM;
+  }
+
+  /**
    * True for the narrow-phone Swiper layout (not fold inner dual-pane, not lg/xl grid).
    * Album and lyrics pages share the same blurred backdrop + imageColor so the tint matches.
    */
@@ -1504,8 +1689,12 @@ export struct PlaybackPage {
                   })
                   // 小歌词并入封面页：开启时底部预留固定空间，随封面页一起横向滑动
                   .padding({ bottom: this.miniLyricState.enabled ? 40 : 0 })
-                  // One visible cover owner during flight; steady cover page stays unchanged.
-                  .opacity(this.lyricMorphVisible ? 0 : 1)
+                  // ★★ A2：**同一时刻至多一张封面** —— `lyricFloatActive()` 为真时
+                  //   （飞行中 / 已在歌词页）封面页这份真封面让位给浮层那份，
+                  //   两者严格互补；交棒那一帧矩形相同（浮层 t=0 就是真封面的落点矩形）。
+                  //   改前这里是 `this.lyricMorphVisible ? 0 : 1`，而 `lyricMorphVisible`
+                  //   被写死成 false ⇒ 这层门**恒为 1、是空转的**（清单 §二·补 A2 第 3 条）。
+                  .opacity(this.lyricFloatActive() ? 0 : 1)
                   MiniLyricLinesComponent()
                     .width(StyleConstants.FULL_WIDTH)
                     .margin({
@@ -1566,7 +1755,13 @@ export struct PlaybackPage {
                 })
                 .padding({
                   left: $r('app.float.common_padding'),
-                  right: $r('app.float.common_padding')
+                  right: $r('app.float.common_padding'),
+                  // ★★ A2：**按浮层让位**（等价无界的 `lyricPadTop()`）——
+                  //   让歌词正文不钻到顶部那张封面 + 歌名浮层底下。
+                  //   `lyricPadTop()` 自己保证"浮层不可用时返回 0"（`!lyricFloat → 0`），
+                  //   所以这条 padding 在宽屏 / 封面还没量到时与改动前**逐像素一致**。
+                  //   ⚠️ 只动留白，**歌词内容一个字不改**。
+                  top: this.expandState.lyricPadTop()
                 })
                 // 歌词属于"内容"：`contentOpacity`（落位才置 1）
                 .opacity(this.expandState.morphContentOpacity)
@@ -1592,7 +1787,14 @@ export struct PlaybackPage {
                 this.animateLyricMorph(targetIndex === PlaybackPage.SWIPER_INDEX_LYRIC);
               })
               .onAnimationEnd((index: number, _event: SwiperAnimationEvent): void => {
-                Logger.info('RzdLyricMorph', `native swiper end index=${index} overlayNodes=0`);
+                // ★ A2：Swiper 自己的滑动结束 —— 与浮层飞行的收尾做**两问握手**
+                //   （`lyricSwiperSettled && lyricFlightSettled` 都到了才卸掉"飞行中"那一档）。
+                //   ⚠️ 改前这里只打日志、**从不置位 `lyricSwiperSettled`** ⇒
+                //   `finishLyricMorph` 永远进不去（整套歌词页封面形变是死的）。
+                this.lyricSwiperSettled = true;
+                this.finishLyricMorph(this.lyricMorphGen);
+                Logger.info('RzdLyricFloat',
+                  `swiper end index=${index} gen=${this.lyricMorphGen} t=${this.lyricMorphT.toFixed(3)}`);
               })
               .onChange((index: number): void => {
                 this.playbackSwiperIndex = index;
@@ -2230,6 +2432,18 @@ export struct PlaybackPage {
             Logger.info('RzdPlayerRoute', 'leave overlay: window layout unchanged');
             wu.applyPcPlaybackDecorButtonStyle(false);
           })
+
+          // ★★ A2：歌词页顶部的「封面 + 歌名」浮层。
+          //   放在 Stack C 的**最后一个孩子**：`position` 是"相对父组件左上角的绝对定位"，
+          //   而本层的左上角就是窗口原点（与 `MorphCoverBridge` 同级同口径）⇒
+          //   `PlayerExpandState.lyricMorph()` 交出的窗口坐标可以直接用；
+          //   同时它在这个被 `scale/translate/clip` 变换过的容器里 ⇒ 收起时跟着一起缩。
+          //   ⚠️ 只在**手机 Swiper 分支**画：宽屏 / 面板布局没有"歌词页"这一说，
+          //     多画一层会在封面右侧凭空多出一张小封面。
+          //   门在 `LyricFloatLayer()` 内部的 `lyricFloatActive()`：静止在封面页时**零节点**。
+          if (this.usesPhoneSwiperLayout()) {
+            this.LyricFloatLayer()
+          }
         }
         .width(StyleConstants.FULL_WIDTH)
         .height(StyleConstants.FULL_HEIGHT)
@@ -2263,10 +2477,14 @@ export struct PlaybackPage {
     .gesture(
       PanGesture(this.panOption)
         .onActionUpdate((event: GestureEvent): void => {
-          this.onDismissDrag(event.offsetY, false);
+          // 跟手期间也给 velocityY：拖动中它不影响判定（判定只在松手那一帧用），
+          // 传进去是为了日志里能同时看到"位移 + 速度"的完整曲线。
+          this.onDismissDrag(event.offsetY, false, event.velocityY);
         })
         .onActionEnd((event: GestureEvent): void => {
-          this.onDismissDrag(event.offsetY, true);
+          // ★ D1：松手这一帧的 `velocityY` 就是速度提交判定的输入（`GestureEvent.velocityY`，
+          //   `gesture.d.ts` @since 10，本机 SDK 已核对存在）。符号不由我们假设，见 `onDismissDrag`。
+          this.onDismissDrag(event.offsetY, true, event.velocityY);
         })
     )
   }
@@ -2304,6 +2522,83 @@ export struct PlaybackPage {
     .height(StyleConstants.FULL_HEIGHT)
     .opacity(this.expandState.morphBridgeOpacity())
     .hitTestBehavior(HitTestMode.None)
+  }
+
+  /**
+   * 歌词页顶部的「封面 + 歌名/歌手」浮层（对标无界 `PlayerPage.floatingCover` / `floatingMeta`）。
+   *
+   * ## 它是什么（A2：恢复「歌词页顶部有封面 + 歌曲名称」）
+   *
+   * 无界的 `playerPane` 是 `Stack { Swiper{ 封面页 ; **空**歌词页 } ; floatingCover ; floatingMeta }`
+   * —— 封面与歌名挂在 `Swiper` **之外**，切到歌词页时**同一个元素**缩小并移到顶部；
+   * 歌词页那一页本身只有 `padding({ top: lyricPadTop() })`。这里就是那一层。
+   *
+   * ## 三个约束（缺一条就会出老毛病）
+   *
+   * 1. **同一时刻至多一张封面**：本浮层挂载 ⟺ 封面页那份真封面被 `.opacity(0)` 藏起来
+   *    —— 同一把门 {@link lyricFloatActive}，两者严格互补；交棒那一帧矩形相同
+   *    （浮层 `t = 0` 用的就是真封面的落点几何，见 `PlayerExpandState.lyricMorph`）；
+   * 2. **静止态不产生节点**：不在歌词页、也不在飞行中时 `lyricFloatActive()` 为假，
+   *    `if` 分支直接不建节点 ⇒ 静止在封面页时版面与没有这套东西**逐像素一致**；
+   * 3. **不吃触摸**：`HitTestMode.None`（与 `MorphCoverBridge` 同款）——
+   *    整层铺满屏幕，默认命中的话会把歌词的滚动与点击全吃掉。
+   *
+   * ## 为什么挂在这个位置（`Stack`C 的最后一个孩子）而不是壳层
+   *
+   * · **坐标口径**：本层左上角就是窗口原点（与 `MorphCoverBridge` 同级、同口径 ——
+   *   它按窗口坐标 `.position()` 落位是**已被真机验证过**的），所以 `lyricMorph()` 交出的
+   *   窗口坐标可以直接当 `.position()` 用，**全链零换算**；
+   * · **必须跟着形变一起缩**：它在这个被 `scale + translate + clip` 变换过的容器里，
+   *   收起播放页时浮层跟着缩；挂到根 `Stack`（变换之外）就会"页面缩、封面不缩"。
+   *
+   * ⚠️ 歌词怎么画**一个字没动**（`LyricsComponent` / `AmllLyricView` 不碰）。
+   */
+  @Builder
+  private LyricFloatLayer() {
+    if (this.lyricFloatActive()) {
+      Stack({ alignContent: Alignment.TopStart }) {
+        Image(this.currentCoverSource())
+          .width(this.lyricFloatRect().size)
+          .height(this.lyricFloatRect().height)
+          .objectFit(ImageFit.Cover)
+          .borderRadius(this.lyricFloatRect().radius)
+          .clip(true)
+          .position({
+            x: this.lyricFloatRect().x,
+            y: this.lyricFloatRect().y
+          })
+
+        Column() {
+          Text(this.state.getCurrentSongItem()?.title ?? '')
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.play_text_color'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .textAlign(TextAlign.Center)
+            .width(StyleConstants.FULL_WIDTH)
+          Text(this.state.getCurrentSongItem()?.singer ?? '')
+            .fontSize(12)
+            .fontColor($r('app.color.play_text_color'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .textAlign(TextAlign.Center)
+            .width(StyleConstants.FULL_WIDTH)
+            .margin({ top: 4 })
+        }
+        .width(this.lyricFloatMetaWidth())
+        // 歌名块与封面**同一个进度**插值（`lyricMetaMorphY`）⇒ "同一个元素在动"
+        .position({
+          x: (this.expandState.windowWidthVp - this.lyricFloatMetaWidth()) / 2,
+          y: this.expandState.lyricMetaMorphY(this.lyricMorphT)
+        })
+        // t=0 时完全透明：那一刻封面正压在真封面位置上，歌名块不该冒出来
+        .opacity(this.lyricFloatMetaOpacity())
+      }
+      .width(StyleConstants.FULL_WIDTH)
+      .height(StyleConstants.FULL_HEIGHT)
+      .hitTestBehavior(HitTestMode.None)
+    }
   }
 }
 

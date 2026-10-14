@@ -2,7 +2,7 @@
   "color": [
     {
       "name": "start_window_background",
-      "value": "#FF1C1C1E"
+      "value": "#000000"
     },
     {
       "name": "placeholder_background",
@@ -14,7 +14,7 @@
     },
     {
       "name": "home_page_background",
-      "value": "#FF1C1C1E"
+      "value": "#000000"
     }
   ]
 }

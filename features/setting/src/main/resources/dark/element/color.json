@@ -2,7 +2,7 @@
     "color": [
         {
             "name": "mine_top_fade",
-            "value": "#FF1C1C1E"
+            "value": "#FF000000"
         },
         {
             "name": "mine_top_fade_end",

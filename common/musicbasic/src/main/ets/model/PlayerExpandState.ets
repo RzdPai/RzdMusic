@@ -185,8 +185,16 @@ export function areaLengthToVp(value: Length | undefined): number {
  */
 @ObservedV2
 export class PlayerExpandState {
+  /**
+   * 日志 tag 的**对外副本**。
+   *
+   * 为什么要有它：手势提交判定那条日志写在 `PlaybackPage.onDismissDrag` 里，
+   * 而那里需要的是**同一个** tag —— `hilog | grep RzdMorph` 一条命令要能同时拉到
+   * 「形变几何」与「提交判定」两条链。原来的 `logTag` 是 `private`，别的类读不到。
+   */
+  public static readonly LOG_TAG: string = 'RzdMorph';
   /** 日志 tag：排查展开形变时 `hilog | grep RzdMorph`。 */
-  private static readonly logTag: string = 'RzdMorph';
+  private static readonly logTag: string = PlayerExpandState.LOG_TAG;
 
   // ───────────────────────── 相位 ─────────────────────────
 
@@ -521,6 +529,14 @@ export class PlayerExpandState {
   /**
    * 视觉圆角：封面被等比缩放时，圆角也要跟着缩放，否则小尺寸下圆角显得过大、
    * 大尺寸下显得过小（这就是无界 `visualRadiusAt` / `coverVisualRadiusAt` 的作用）。
+   *
+   * ⚠️ **D3：与无界算法不同，此处刻意保留，只标注差异**（依据
+   *    `docs\无界形变手感-落实到RzdMusic清单.md` §四 D3「建议：保留现算法，只在文档里标注差异」）。
+   *   · 无界：`visualRadius = lerp(vp(miniCover.width) / 2, 目标圆角绝对值 34, t)`，
+   *     再 `radius = visualRadius / scale` —— **两端点线性插值**；
+   *   · 本实现：`base * (size / miniSize)` 再封顶 `base * 1.6` —— **按尺寸比例放大 + 上限**。
+   *   两者在中间态的曲率不同，但本实现**不依赖 `onAreaChange` 的时序**（见下面那两条注释），
+   *   改成两端点 lerp 会把时序敏感重新引进来 ⇒ 保留。
    * @returns 补偿后的圆角（vp）。
    */
   public coverVisualRadius(): number {
@@ -600,21 +616,129 @@ export class PlayerExpandState {
    */
   public lyricMorph(t: number): LyricMorphRect {
     const p: number = t < 0 ? 0 : (t > 1 ? 1 : t);
-    const fromSize: number = this.playerCoverWidth();
+    const fromRect: LyricMorphRect = this.bigEndpointRect();
+    const fromSize: number = fromRect.size;
     const toSize: number = this.lyricCoverSizeOf();
     const size: number = this.lerp(fromSize, toSize, p);
-    const fromRadius: number = this.bigRadius > 0
-      ? this.bigRadius
-      : fromSize * PlayerExpandState.COVER_RADIUS_RATIO;
+    const height: number = this.lerp(fromRect.height, toSize, p);
     return {
-      x: this.lerp(this.bigX, this.lyricCoverXOf(), p),
-      y: this.lerp(this.bigY, this.lyricCoverYOf(), p),
+      x: this.lerp(fromRect.x, this.lyricCoverXOf(), p),
+      y: this.lerp(fromRect.y, this.lyricCoverYOf(), p),
       size: size,
-      // 歌词页那一端是算出来的正方形；展开页那一端沿用 `bigSize`（`reportBig` 上报的就是宽）
-      height: size,
+      // 歌词页那一端是算出来的正方形；展开页那一端沿用实测的落点矩形（可能不是正方形）
+      height: height,
       // 圆角跟着尺寸缩小，避免小尺寸下圆角显得过大（对标 visualRadiusAt）
-      radius: this.lerp(fromRadius, toSize * PlayerExpandState.COVER_RADIUS_RATIO, p)
+      radius: this.lerp(fromRect.radius, toSize * PlayerExpandState.COVER_RADIUS_RATIO, p)
     };
+  }
+
+  /**
+   * @returns 「展开页那一端」的封面矩形（vp，窗口坐标）。
+   *
+   * ⚠️ **必须与「续飞封面 p = 1 的落点」逐像素相同**（`morphCoverRectAt(1)` 用的就是同一段算式）：
+   *    歌词页浮层在回来的那一趟终点会**卸载自己并把真封面放出来**，两端不一致就会在交棒那一帧
+   *    跳一下（5% 的视觉缩放差就够看见了 —— 真封面播放态被弹簧放大 1.05 / 暂停态 0.95）。
+   *    所以这里**不直接用** `bigX/bigY/bigSize`（那是布局矩形、不含视觉缩放），
+   *    而是复用同一段端点几何；几何还没就绪时才退回 `reportBig` 的上报值。
+   */
+  private bigEndpointRect(): LyricMorphRect {
+    if (this.endCoverSize > 0 && this.snapStartW > 0) {
+      return this.morphCoverRectAt(1);
+    }
+    const fallbackSize: number = this.playerCoverWidth();
+    return {
+      x: this.bigX,
+      y: this.bigY,
+      size: fallbackSize,
+      height: fallbackSize,
+      radius: this.bigRadius > 0
+        ? this.bigRadius
+        : fallbackSize * PlayerExpandState.COVER_RADIUS_RATIO
+    };
+  }
+
+  // ─────────────── 二·补（A2）：歌词页顶部的「封面 + 歌名」浮层 ───────────────
+  //
+  // 对标无界 `PlayerPage`：封面与歌名**挂在 Swiper 之外的浮层**上，切到歌词页时
+  // 「同一个元素」缩小并移到顶部；歌词正文靠 `lyricPadTop()` 按浮层高度让位。
+  // 这里只提供**几何**，怎么画由 `PlaybackPage.LyricFloatLayer()` 决定。
+
+  /** 歌词页浮层里「封面底边 → 歌名块顶边」的间距（vp）。⚠️ 本项目估定值，非逆向值。 */
+  private static readonly LYRIC_META_GAP_VP: number = 10;
+  /** 歌词页浮层里「歌名 + 歌手」两行所占高度（vp）。⚠️ 本项目估定值，非逆向值。 */
+  private static readonly LYRIC_META_BLOCK_H_VP: number = 44;
+  /** 歌词页浮层底边与歌词正文之间的呼吸间距（vp）。⚠️ 本项目估定值，非逆向值。 */
+  private static readonly LYRIC_PAD_GAP_VP: number = 10;
+  /** 浮层几何拿不到时的兜底顶部留白（vp，≈ 一屏的 1/5）。⚠️ 本项目估定值，非逆向值。 */
+  private static readonly LYRIC_PAD_TOP_FALLBACK: number = 150;
+
+  /**
+   * @returns 歌词页浮层（封面 + 歌名/歌手）是否启用。
+   *
+   * 与无界的 `lyricFloat` 同义：**不开浮层 ⇒ `lyricPadTop()` 必须返回 0**（不预留空间，
+   * 版面与没有这套东西时逐像素一致）。
+   *
+   * ⚠️ 除了"几何就绪"，还要求**封面尺寸已经上报**（`lyricCoverSizeOf() > 0`）：
+   *    播放页大封面还没量到时，歌词页封面算出来是 0 × 0 —— 那时若还按浮层让位，
+   *    就会凭空多出一段顶部留白。此时整套浮层**整体不启用**，退回"原生 Swiper 滑动"的老样子。
+   */
+  public lyricFloat(): boolean {
+    return this.lyricGeometryReady() && this.lyricCoverSizeOf() > 0;
+  }
+
+  /** @returns 歌词页歌名块的顶边（vp，窗口坐标）= 封面底边 + 间距。 */
+  public lyricMetaYOf(): number {
+    return this.lyricCoverYOf() + this.lyricCoverSizeOf() + PlayerExpandState.LYRIC_META_GAP_VP;
+  }
+
+  /** @returns **展开页那一端**歌名块的顶边（vp，窗口坐标）= 落点矩形底边 + 间距。 */
+  public lyricMetaFromYOf(): number {
+    const r: LyricMorphRect = this.bigEndpointRect();
+    return r.y + r.height + PlayerExpandState.LYRIC_META_GAP_VP;
+  }
+
+  /**
+   * @returns 歌名块顶边的一帧位置（vp，窗口坐标）。
+   *
+   * 与封面用**同一个进度**插值 ⇒ 封面与歌名是"同一个元素在动"（对标无界
+   * `floatingCover` + `floatingMeta` 同属一层浮层、一起缩小移到顶部），
+   * 而不是"切换的两页各画一份"。
+   * @param t 0 = 展开页位置，1 = 歌词页顶部
+   */
+  public lyricMetaMorphY(t: number): number {
+    const p: number = t < 0 ? 0 : (t > 1 ? 1 : t);
+    return this.lerp(this.lyricMetaFromYOf(), this.lyricMetaYOf(), p);
+  }
+
+  /** @returns 歌词页浮层（封面 + 歌名块）整体占用的竖直高度（vp，从窗口顶边量起）。 */
+  public lyricOverlayHeight(): number {
+    if (!this.lyricFloat()) {
+      return 0;
+    }
+    const size: number = this.lyricCoverSizeOf();
+    if (size <= 0) {
+      return 0;
+    }
+    return this.lyricMetaYOf() + PlayerExpandState.LYRIC_META_BLOCK_H_VP;
+  }
+
+  /**
+   * @returns 歌词页正文必须让位的**顶部内边距**（vp）—— 等价无界的 `lyricPadTop()`。
+   *
+   * 判据链与无界一致：`!lyricFloat → 0`；浮层高度算不出来 → 兜底常量；
+   * 正常 → 浮层高度 + 一点呼吸间距。
+   * ⚠️ 中间的 `boxH <= 0` 是**防御分支**（`lyricFloat()` 已经要求封面尺寸 > 0，
+   *    正常流程走不到），按无界那份 `lyricPadTop()` 的结构保留。
+   */
+  public lyricPadTop(): number {
+    if (!this.lyricFloat()) {
+      return 0;
+    }
+    const boxH: number = this.lyricOverlayHeight();
+    if (boxH <= 0) {
+      return PlayerExpandState.LYRIC_PAD_TOP_FALLBACK;
+    }
+    return boxH + PlayerExpandState.LYRIC_PAD_GAP_VP;
   }
 
   // ═════════════════════════ 三点五、整页形变放大（对标无界 ExpandAnimation 的"逐渐形变放大填满"）═════════════════════════
@@ -684,7 +808,12 @@ export class PlayerExpandState {
   //
   // 无界那套是**手势驱动**的：`onDown / onMove(205 条) / onUp` 把手指位移映射成一个进度，
   // 松手后按阈值 `doEnter`（完成展开）或 `doBack`（回弹），跟手阶段进度**可以停在中间**。
-  // 这里等价实现，壳层（products）负责手势，本类只存进度与阈值判定。
+  // 这里等价实现：壳层（products）负责手势，本类只存进度与相位。
+  //
+  // ⚠️ 活的入口是 **`pullOpenBegin()`**（起手：量几何 + 压到起点）与
+  //    `morphBeginLeaving()` / `applyMorphProgress()` / `morphSettleOpen()`。
+  //    下面这三个字段是它们的状态；同段里原来那套 `beginPullOpen/updatePull/endPullOpen/
+  //    pullProgressFrom/pullShouldCommit` 已按 D5 删除（零调用点）。
 
   /**
    * 上拉进度：**0 = 完全展开，100 = 还在迷你条那一小块**（与 `collapseProgress` 同向）。
@@ -704,47 +833,15 @@ export class PlayerExpandState {
    */
   @Trace public pullStartedAtMs: number = 0;
 
-  /** 松手判定阈值：拉过这个进度（0…100 里的数值）才算"要打开"。 */
-  private static readonly PULL_COMMIT_PROGRESS: number = 55;
-
-  /**
-   * 把手指位移映射成进度（0…100）。
-   *
-   * 线性映射而不是曲线：跟手阶段用户期望"我拉多少它走多少"，
-   * 加了缓动反而会觉得滑腻；收尾那段才交给 `animateTo` 的曲线。
-   * @param offsetYvp 手指竖直位移（向下为正，所以上拉是负值）
-   * @param spanVp 走完全程需要的位移（一般取窗口高度的一半左右）
-   * @returns 进度 0…100
-   */
-  public pullProgressFrom(offsetYvp: number, spanVp: number): number {
-    if (spanVp <= 0) {
-      return 100;
-    }
-    const traveled: number = -offsetYvp;   // 上拉为正
-    const ratio: number = traveled / spanVp;
-    const clamped: number = ratio < 0 ? 0 : (ratio > 1 ? 1 : ratio);
-    return 100 * (1 - clamped);
-  }
-
-  /** @returns 松手时是否应该"打开"（超过阈值）。 */
-  public pullShouldCommit(): boolean {
-    return this.transitionProgress <= PlayerExpandState.PULL_COMMIT_PROGRESS;
-  }
-
-  /** 手指按下：进入跟手态，并让播放页立刻挂载（此时进度还是 100 = 迷你条那一小块）。 */
-  public beginPullOpen(): void {
-    this.pullDragging = true;
-  }
-
-  /** 跟手更新（壳层每个 move 调一次）。 */
-  public updatePull(progress: number): void {
-    this.transitionProgress = progress < 0 ? 0 : (progress > 100 ? 100 : progress);
-  }
-
-  /** 松手：退出跟手态（收尾补间由壳层发起）。 */
-  public endPullOpen(): void {
-    this.pullDragging = false;
-  }
+  // ⚠️ **D5：这里原来还有一套「上拉打开」的遗留 API，已删**（2026-10-15 复核，见
+  //    `docs\无界形变手感-落实到RzdMusic清单.md` §二 待办第 0 项 / §四 D5）：
+  //      `PULL_COMMIT_PROGRESS (=55)` / `pullProgressFrom()` / `pullShouldCommit()` /
+  //      `beginPullOpen()` / `updatePull()` / `endPullOpen()`
+  //    全仓（`git grep -n … -- "*.ets" "*.ts"`，含 features / common / products）**零调用点**，
+  //    只在定义处出现。活的驱动链是 `morphUsable` / `morphBeginLeaving()` / `applyMorphProgress()` /
+  //    `morphSettleOpen()` / `morphDrive` / `morphGen` / `morphGenAlive()` / `morphSessionDriving()`。
+  //    ⇒ 两套并存会让后来的人改错地方，故一并删除；上面三个**仍在用**的字段
+  //    （`transitionProgress` / `pullDragging` / `pullStartedAtMs`）保留。
 
   // ═════════════════════════ 五点六、裁剪容器形变（对标无界 ExpandAnimation.applyPullProgress）═════════════════════════
   //

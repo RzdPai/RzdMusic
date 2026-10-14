@@ -20,6 +20,7 @@ import {
   ColorConversion,
   getWindowInfoState,
   ImmersiveType,
+  Logger,
   RouterUrlConstants,
   StyleConstants,
   WindowInfo
@@ -28,6 +29,7 @@ import { CoverWing } from './CoverWing';
 import { ToplistRouteParam } from 'playlist';
 import { RecommendHeroCardUi, RecommendPrivateSongUi } from '../model/RecommendUiModels';
 import { MusicDataService } from '../util/MusicDataService';
+import { RecommendDataUtil, isFeatureBoardCard, pickFeatureBoardId } from '../util/RecommendDataUtil';
 import { RecommendViewModel } from '../viewmodel/RecommendViewModel';
 
 /** 「每日30首」歌单在 AppStorage 里的中转结构（详情页读取）。 */
@@ -194,10 +196,49 @@ export struct HeroBannerSection {
     this.pageIndexInfos.pushPathByName(RouterUrlConstants.PLAYLIST_DETAIL, param, animated);
   }
 
+  /**
+   * 「新歌推荐 / 精选推荐」的点击：进**对应的榜单歌单页**。
+   *
+   * 用户原话：「新歌推荐和精选推荐改成对应榜单（比如当前设置首页推荐为 QQ，
+   * 就用 QQ 的新歌榜和热歌榜）」⇒ 这两张卡**不再是首页推荐列表**（那条 `sectionType='daily30'`
+   * 通道只留给「每日30首」），而是各自平台的新歌榜 / 热歌榜。
+   *
+   * ★ 通道**完全复用现成的那一条**，一个新接口都没有：
+   *   `ToplistRouteParam{ boardSource, boardId }` → `PlaylistDetailPage`
+   *   → `player.fetchBoardSongs(source, boardId)` → `lxLeaderboard('<source>_<boardId>')`。
+   *   榜单 id 来自 `RecommendDataUtil.pickFeatureBoardId()`（即 player 的 `getLeaderboardEntries()`
+   *   那张表，`tx_27` = QQ 新歌榜 / `tx_26` = QQ 热歌榜 …）—— 与卡面四宫格取歌**同一个 id**，
+   *   所以「卡上看到的 4 张封面」和「点进去的第一页」是同一张榜。
+   *
+   * ⚠️ 取不到榜单 id（该平台没有这张榜）时**什么都不做**并记日志，绝不退回 daily30
+   *   —— 退回去会出现"卡上写新歌推荐、点开是每日30首"的错位。
+   * @param item 卡片数据（`feature` 决定取新歌榜还是热歌榜）。
+   */
+  private async openFeatureBoard(item: RecommendHeroCardUi): Promise<void> {
+    const svcSource: string = RecommendDataUtil.mapHomeSource(this.recommendViewModel.homeSourceCode());
+    const boardId: string = pickFeatureBoardId(item.feature, svcSource);
+    const boardName: string = RecommendDataUtil.pickFeatureBoardName(item.feature, svcSource);
+    if (boardId.length === 0) {
+      Logger.info('RzdHomeBoard', `feature board tap: no board feature=${item.feature} source=${svcSource}`);
+      return;
+    }
+    const param: ToplistRouteParam = await MusicDataService.buildBoardRouteParam(svcSource, boardId, boardName);
+    Logger.info('RzdHomeBoard',
+      `feature board tap feature=${item.feature} source=${svcSource} board=${boardId} name=${boardName}`);
+    const coverId: string = HeroBannerSection.collageCoverId(item.feature);
+    const animated: boolean = !getPlaylistTransitionState().prepare(this.getUIContext(), coverId, param.listCover);
+    this.pageIndexInfos.pushPathByName(RouterUrlConstants.PLAYLIST_DETAIL, param, animated);
+  }
+
   /** 功能入口卡点击：现在就听 / 每日30首 / 新歌推荐 / 心动模式 / 精选推荐。 */
   private onFeatureTap(item: RecommendHeroCardUi): void {
-    if (this.isCollageFeature(item)) {
-      // ★ 三张**歌单卡**走同一条路：进歌单详情（用户：「和每日三十首一样点开是个歌单」）。
+    if (isFeatureBoardCard(item.feature)) {
+      // ★ 「新歌推荐 / 精选推荐」= 该平台的新歌榜 / 热歌榜（见 openFeatureBoard 注释）。
+      void this.openFeatureBoard(item);
+      return;
+    }
+    if (item.feature === 'daily30') {
+      // 只有「每日30首」走首页推荐列表那条通道（用户可以：「和每日三十首一样点开是个歌单」）。
       this.openHeroSongList(item);
       return;
     }
@@ -483,16 +524,36 @@ owPlayingCoverUrl），**不是**实时读在播歌曲 ——
             direction: GradientDirection.Bottom
           })
 
+        // ★ 卡面正中的大号文字。
+        //   用户 2026-10-15（本轮）：「**上面不显示时间，就显示类似于新歌推荐四个大字**」
+        //   ⇒ **只有「每日30首」**保留"月份 + 日期"（那是它的卡面语言），
+        //     新歌推荐 / 精选推荐只留**大号标题**一行。
+        //   ⚠️ 这不是"删掉文字"：三张卡上原本就没有别的大字，「新歌推荐 / 精选推荐」
+        //     这行字来自数据层（`item.title`，见 `RecommendDataUtil.getFeatureHeroCards`
+        //     的 specs），所以这里新增的 `Text(item.title)` **不会写死任何文案**。
+        //   ⚠️ 卡片底那条 overlay 标题条（角标 NEW/PICK + 标题 + 副标题 + 播放图标）
+        //     一个字未动，仍在下面那一层。
         Column({ space: 0 }) {
-          Text(this.monthName())
-            .fontSize(16)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#FFFFFF')
-          Text(`${this.dayOfMonth()}`)
-            .fontSize(56)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#FFFFFF')
-            .lineHeight(60)
+          if (item.feature === 'daily30') {
+            Text(this.monthName())
+              .fontSize(16)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#FFFFFF')
+            Text(`${this.dayOfMonth()}`)
+              .fontSize(56)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#FFFFFF')
+              .lineHeight(60)
+          } else {
+            // 「新歌推荐」/「精选推荐」：只显示那四个大字（字号与日期同档，居中）。
+            Text(item.title)
+              .fontSize(40)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#FFFFFF')
+              .lineHeight(52)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
         }
         .width(StyleConstants.FULL_WIDTH)
         .height(StyleConstants.FULL_HEIGHT)

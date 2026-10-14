@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -79,6 +79,19 @@ export class RecommendViewModel {
    * 补完（或确认拿不到）后置 true。
    */
   @Trace public dailySongsReady: boolean = false;
+
+  /**
+   * 「新歌推荐 / 精选推荐」两张榜单卡的四宫格封面（键 = 卡片标识 `newSongs` / `picked`）。
+   *
+   * 这两张卡现在各自指向**所属平台的新歌榜 / 热歌榜**（见
+   * {@link RecommendDataUtil.loadFeatureBoardSongsAsync}），所以卡面拼图必须来自
+   * **各自的榜单**，不能再用首页推荐列表前 4 首。
+   *
+   * ⚠️ **不是 `@Trace`**：它只被 {@link refreshFeatureHeroCards} 组装卡片时读一次，
+   *    读完就烘进 `heroCards`（那个才是 `@Trace`）。给它加 `@Trace` 反而会在写入时
+   *    触发一次多余的整块重绘，而那时卡片还没重算 ⇒ 白闪一帧。
+   */
+  private featureBoardCovers: Record<string, string[]> = {};
 
   constructor() {
     RecommendViewModel.latest = this;
@@ -356,6 +369,20 @@ export class RecommendViewModel {
     return MusicDataService.sourceList[this.plazaSourceIndex];
   }
 
+  /**
+   * 「首页来源平台」对应的服务层平台代号（`qq` → `tx`）。
+   *
+   * 首页里有两套平台概念，别混：
+   *   - **首页来源平台**（设置里选的，`homeSourceState.source`）= 整个首页的数据来源；
+   *   - 歌单广场 / 排行榜**各自**的平台选择器（`plazaSourceIndex` / `rankingSourceIndex`）。
+   * 「新歌推荐 / 精选推荐」两张榜单卡跟的是**前者**（用户原话：
+   *   「比如当前设置首页推荐为 QQ，就用 QQ 的新歌榜和热歌榜」）⇒ 用本方法取平台代号。
+   * @returns 平台代号（tx / kg / wy / …）。
+   */
+  public homeSourceCode(): string {
+    return RecommendDataUtil.mapHomeSource(this.homeSourceState.source);
+  }
+
   /** Source id of the currently selected ranking source. */
   public rankingSourceCode(): string {
     return MusicDataService.sourceList[this.rankingSourceIndex];
@@ -610,6 +637,14 @@ export class RecommendViewModel {
       // 一首歌都没有：不卡在骨架屏，直接放行（卡片显示占位）
       this.dailySongsReady = true;
     }
+    // ★ 先取「新歌推荐 / 精选推荐」两张**榜单卡**各自的四宫格封面（各自平台的 新歌榜 / 热歌榜），
+    //   再生成卡片 —— `refreshFeatureHeroCards()` 是**同步**的，封面必须先到位。
+    //   取不到（网络失败 / 该平台没有这张榜）时该卡回落成首页列表那 4 张（见
+    //   `getFeatureHeroCards` 的 `boardCovers`），不会变成空白拼图。
+    await this.loadFeatureBoardCovers(gen);
+    if (gen !== this.loadGen) {
+      return;
+    }
     this.refreshFeatureHeroCards();
     this.homeLoaded = true;
     // 「现在就听」卡背景取色：也放在**放行之前**完成，
@@ -740,9 +775,51 @@ export class RecommendViewModel {
     const listenNowCover: string = pickIndex >= 0 ? covers[pickIndex] : '';
     // ★ 五张卡现在**全部**用歌曲自己的封面（不再用打包内配图），见 getFeatureHeroCards。
     this.heroCards = RecommendDataUtil.getFeatureHeroCards(shuffled, shuffledCovers, dailyCovers, dailyTitles,
-      listenNowTitle, listenNowCover);
+      listenNowTitle, listenNowCover, this.featureBoardCovers);
     // 「现在就听」卡的封面与背景色一起定稿（背景由这张封面取色）
     this.nowPlayingCoverUrl = listenNowCover;
+  }
+
+  /**
+   * 组装「新歌推荐 / 精选推荐」两张**榜单卡**的四宫格封面（各自平台的 新歌榜 / 热歌榜）。
+   *
+   * 为什么单独一个方法、且**只调一次**：`refreshFeatureHeroCards()` 会在同一次首页装配里
+   * 被调用多次（赋值列表后一次 + 每轮补封面后一次），而榜单取歌是**网络请求** ——
+   * 放进 `refreshFeatureHeroCards()` 里就会重复请求同一张榜。这里取一次、存下来，
+   * 之后每次重算卡片都读缓存。
+   *
+   * ⚠️ 两张卡的榜单跟着**「首页来源平台」**走（用户原话：
+   *   「比如当前设置首页推荐为 QQ，就用 QQ 的新歌榜和热歌榜」）⇒ 用 `homeSourceState.source`
+   *   映射出的平台代号去取；**不跟随**首页自己那两个平台选择器（歌单广场 / 排行榜）。
+   *
+   * @param gen 世代号；中途用户换了平台就丢弃这次结果（旧平台的封面不能盖在新平台上）。
+   */
+  private async loadFeatureBoardCovers(gen: number): Promise<void> {
+    const svcSource: string = RecommendDataUtil.mapHomeSource(this.homeSourceState.source);
+    const features: string[] = ['newSongs', 'picked'];
+    const covers: Record<string, string[]> = {};
+    for (let i: number = 0; i < features.length; i++) {
+      const feature: string = features[i];
+      let rows: RecommendPrivateSongUi[] = [];
+      try {
+        rows = await RecommendDataUtil.loadFeatureBoardSongsAsync(feature, svcSource, 4);
+      } catch (_err) {
+        rows = [];
+      }
+      if (gen !== this.loadGen) {
+        // 换平台了：这次结果作废（与 loadHomeData 同一条口径）
+        return;
+      }
+      const urls: string[] = [];
+      for (let j: number = 0; j < rows.length; j++) {
+        urls.push(rows[j].coverUrl);
+      }
+      covers[feature] = urls;
+    }
+    this.featureBoardCovers = covers;
+    Logger.info('RzdHomeBoard',
+      `feature board covers ready source=${svcSource} newSongs=${covers['newSongs'] === undefined ? 0 : covers['newSongs'].length}` +
+      ` picked=${covers['picked'] === undefined ? 0 : covers['picked'].length} gen=${gen}`);
   }
 
   /** Fisher-Yates 洗牌，返回下标顺序（不改入参）。 */

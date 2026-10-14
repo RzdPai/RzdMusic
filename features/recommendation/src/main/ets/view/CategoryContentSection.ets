@@ -345,56 +345,104 @@ export struct CategoryContentSection {
   }
 
   /**
+   * 歌曲行内**分割线左侧的内缩**（vp）= 封面宽 48 + 行内间隙 12。
+   *
+   * 与工程现有做法同口径（`features/sync` 的 `Divider().margin({ left: 14 })`、
+   * `settings` 的 `GroupDivider()`）：分割线不与封面左边缘齐平，而是从**文字列**起画，
+   * 视觉上把"封面 + 文字"当成一个整体分组（参考截图里也是这样）。
+   */
+  private static readonly ROW_DIVIDER_INSET_VP: number = 60;
+  /** 分割线线宽（vp）；与 `sync` / `settings` 两处现有分割线同值。 */
+  private static readonly ROW_DIVIDER_WIDTH_VP: number = 0.6;
+
+  /**
+   * @returns 第 `column` 列的**最后一行**在列内的下标（0 基）。
+   *
+   * 用途：**最后一行不画分割线**（用户给的是"歌曲中间加分割线" ⇒ 行与行之间才需要）。
+   * 不能直接拿 `FEATURED_ROWS - 1` 当"最后一行"：最后一列可能只有 1~2 首。
+   * @param column 列下标。
+   * @returns 最后一行下标；该列为空时返回 -1。
+   */
+  private featuredLastRowIndex(column: number): number {
+    return this.featuredColumnItems(column).length - 1;
+  }
+
+  /**
    * 「精选推荐」的一行：封面 + 歌名/歌手 + 更多按钮，**横向**排布（与改动前的版式一致）。
    *
    * ⚠️ 只有宽度变了：原来是 `FULL_WIDTH`（一整行），现在固定成 {@link featuredCellWidth}，
    *    于是同一行里能并排放多列。
    * ⚠️ 歌名、歌手都是 `maxLines(1)`：多列网格里每格必须等高，
    *    歌名换行会让同一行的格子高低不齐。
+   *
+   * ★ 2026-10-15（本轮新增）：**行下方加一条细分割线**（用户：「首页精选推荐改成和第二张图
+   *   一样，歌曲中间加上分割线」；参考图 = 无界音乐首页的「猜你喜欢」列表）。
+   *   · 颜色用**语义色** `app.color.comp_divider`（本模块自己的 token，base/dark 成对存在；
+   *     全仓的分割线都走它 —— `MinePage` / `RecordListPage` / `HomeFloatingMiniBar` 等 ——
+   *     与同一份数据在 `sys.color.comp_divider` 上也是同一个值），**不写死 hex**；
+   *   · **最后一行不画**（列内最后一行之后的空白不属于"歌曲中间"）；
+   *   · 线宽 0.6 / 左内缩 60 都与工程现有分割线一致（见两个常量）。
    * @param item 歌曲。
+   * @param column 该行所在的列下标（用于判"是不是本列最后一行"）。
+   * @param row 该行在列内的下标（0 基）。
    */
   @Builder
-  private FeaturedRow(item: RecommendPrivateSongUi) {
-    Row({ space: 12 }) {
-      Image(item.coverUrl.length > 0 ? item.coverUrl : $r('app.media.ic_avatar1'))
-        .width(48)
-        .height(48)
-        .borderRadius(6)
-        .objectFit(ImageFit.Cover)
-        .alt($r('app.media.ic_avatar1'))
-      Column({ space: 4 }) {
-        Text(item.title)
-          .fontSize(15)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.font_primary'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-        Text(item.singer)
-          .fontSize(12)
-          .fontColor($r('app.color.font_tertiary'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-      }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
+  private FeaturedRow(item: RecommendPrivateSongUi, column: number, row: number) {
+    // ★ 为什么外面包一层 `Column` 而不是把线直接加在 `Row` 上：
+    //   线的**左内缩**（60vp）与行的左右内边距是两件事，挂在同一个节点上会互相干扰；
+    //   包一层之后"行"仍是原来的 `Row`（版式逐字未变），线是它的兄弟节点。
+    Column({ space: 0 }) {
+      Row({ space: 12 }) {
+        Image(item.coverUrl.length > 0 ? item.coverUrl : $r('app.media.ic_avatar1'))
+          .width(48)
+          .height(48)
+          .borderRadius(6)
+          .objectFit(ImageFit.Cover)
+          .alt($r('app.media.ic_avatar1'))
+        Column({ space: 4 }) {
+          Text(item.title)
+            .fontSize(15)
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.font_primary'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          Text(item.singer)
+            .fontSize(12)
+            .fontColor($r('app.color.font_tertiary'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
 
-      SongMoreMenu({
-        song: {
-          songId: item.songId, name: typeof item.title === 'string' ? item.title : '',
-          singer: typeof item.singer === 'string' ? item.singer : '',
-          albumName: '', albumId: '', source: item.source,
-          interval: '', img: item.coverUrl, types: []
-        },
-        iconSize: 18
+        SongMoreMenu({
+          song: {
+            songId: item.songId, name: typeof item.title === 'string' ? item.title : '',
+            singer: typeof item.singer === 'string' ? item.singer : '',
+            albumName: '', albumId: '', source: item.source,
+            interval: '', img: item.coverUrl, types: []
+          },
+          iconSize: 18
+        })
+      }
+      .width(StyleConstants.FULL_WIDTH)
+      .padding({ top: 10, bottom: 10 })
+      .onClick(() => {
+        if (item.source.length > 0) {
+          void this.recommendViewModel.requestPlayOnlineSong(item, this.getUIContext());
+        }
       })
+
+      // 分割线：**列内最后一行不加**（见方法头注释）。
+      if (row < this.featuredLastRowIndex(column)) {
+        Divider()
+          .strokeWidth(CategoryContentSection.ROW_DIVIDER_WIDTH_VP)
+          .color($r('app.color.comp_divider'))
+          .margin({ left: CategoryContentSection.ROW_DIVIDER_INSET_VP })
+      }
     }
     .width(this.featuredCellWidth())
-    .padding({ top: 10, bottom: 10 })
-    .onClick(() => {
-      if (item.source.length > 0) {
-        void this.recommendViewModel.requestPlayOnlineSong(item, this.getUIContext());
-      }
-    })
+    .alignItems(HorizontalAlign.Start)
   }
 
   /**
@@ -425,13 +473,15 @@ export struct CategoryContentSection {
           Row({ space: CategoryContentSection.FEATURED_COL_GAP }) {
             ForEach(this.featuredColumnIndexes(), (column: number) => {
               Column({ space: CategoryContentSection.FEATURED_ROW_GAP }) {
-                ForEach(this.featuredColumnItems(column), (item: RecommendPrivateSongUi) => {
-                  this.FeaturedRow(item);
+                ForEach(this.featuredColumnItems(column), (item: RecommendPrivateSongUi, row?: number) => {
+                  // ★ 行下标（`row`）是**列内**下标，交给行组件判"是不是本列最后一行"——
+                  //   最后一行不画分割线（见 `FeaturedRow` 注释）。
+                  this.FeaturedRow(item, column, row ?? 0);
                   // ★ key 必须带上 coverUrl：这几张卡的封面是**异步补进来**的，
                   //   ForEach 只在 key 变化时重建子节点；key 只用 source_songId 时补图完
                   //   也不会重绘，表现就是「首页歌曲永远没有封面」。
-                }, (item: RecommendPrivateSongUi) =>
-                'feat-' + column + '-' + item.source + '_' + item.songId + '_' + item.coverUrl)
+                }, (item: RecommendPrivateSongUi, row?: number) =>
+                'feat-' + column + '-' + (row ?? 0) + '-' + item.source + '_' + item.songId + '_' + item.coverUrl)
               }
               .alignItems(HorizontalAlign.Start)
             }, (column: number) =>
