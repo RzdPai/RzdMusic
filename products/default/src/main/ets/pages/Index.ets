@@ -845,6 +845,34 @@ struct Index {
   }
 
   /**
+   * 播放页此刻是否已经"压在壳层底栏之上"（用于把整条浮动底栏的 `barOpacity` 压到 0）。
+   *
+   * ★★ 2026-10-15 修用户两条反馈：
+   *   1.「点击迷你条打开播放器时会**重叠**」—— 播放页形变的头几帧是**半透明**画出来的
+   *      （底色/取色层按 `backgroundRevealOpacity` 从 0.25 淡到 1），底下那条迷你播放条
+   *      会**透出来**：一边是形变克隆层画的副本、一边是真身，两块叠在一起。
+   *   2.「进度条飞上来以后被慢慢挡住」—— 底栏（页签胶囊 + 迷你条 + 光感材质背板）
+   *      在播放页透明的那段时间同样会透出来压在控制区上。
+   *
+   * `sourceBarHidden` 只管得住"形变桥接层接管"那条路（`acquire/release` 里写的），
+   * 点击打开那条路并不一定走所有权切换，所以这里用**播放页自己的绘制状态**当门：
+   * `morphPageOpacity()` 恒 0 表示播放页没在画（形变开始前 / 已经交还给迷你条 / 已关闭），
+   * 一旦它在画（任意打开路径、任意相位）⇒ 整条底栏透明。
+   *
+   * ⚠️ 用 `barOpacity`（HDS 官方字段，@since 6.1.0(23)）而**不是** `Visibility.None`：
+   *    · 透明度**不影响布局/量测** —— 形变起点要靠 `getRectangleById(MINI_BAR_ID)` 量这条栏，
+   *      节点一旦不挂载或尺寸归零，整段动画就直接退化（这个坑踩过一次，见 `miniBar()` 注释）；
+   *    · 它同时盖掉胶囊背景与光感材质背板，`enableMiniBarBackground` 只管得住迷你条那一块。
+   * @returns true = 底栏必须整条透明
+   */
+  private playerCoversShellBar(): boolean {
+    if (!this.appState.isShowPlay) {
+      return false;
+    }
+    return this.expandState.morphPageOpacity() > 0.02;
+  }
+
+  /**
    * HDS 浮动底栏里的迷你播放条。
    *
    * ⚠️ **二级页面在栈上时不渲染**（`navDepth > 0`）：二级页面有自己的官方浮动栏
@@ -1199,6 +1227,12 @@ struct Index {
             //   barPosition(End) 三条件同时满足）+ `systemMaterialEffect`。
             //   档位与标题栏共用 ambientTitleMaterial()，不要再在本处内联一套三目。
             systemMaterialEffect: this.ambientTitleMaterial(),
+            // ★★ 2026-10-15：播放页在画（任意打开路径 / 任意形变相位）时整条底栏透明。
+            //   见 `playerCoversShellBar()` 的注释：不透明的话迷你条真身会从**半透明的播放页**
+            //   里透出来 ⇒ 用户看到的「点击打开时重叠」，以及"进度条被慢慢挡住"。
+            //   ⚠️ 必须用 `barOpacity`（HDS 官方字段，**不影响布局与量测**）：形变起点要量
+            //   `MINI_BAR_ID` 这条迷你条，换成 `Visibility.None` 就量不到了。
+            barOpacity: this.playerCoversShellBar() ? 0 : 1,
             // 智感握姿：跟随握持手调整浮动条左右偏置
             adaptToHandedness: true,
             miniBar: {

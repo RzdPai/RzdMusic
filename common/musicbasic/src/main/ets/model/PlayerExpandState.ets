@@ -1703,9 +1703,12 @@ export class PlayerExpandState {
     // 出场完全交给 `PlaybackPage.contentRiseVp()` 的"从下升起"。
     // 不会出现"两个封面"：播放页自己那张封面有**独立的门**
     // （`MusicPlayInfoBlock` 里 `.opacity(morphContainerActive() ? 0 : 1)`），形变期间它本来就不画。
-    // 收起（LEAVING）仍走连续的 `pullBottomIn()`，保持原有的收拢观感。
-    this.morphContentOpacity = this.morphStage === MorphStage.LEAVING ?
-      this.pullBottomIn() : 1;
+    // ⚠️ 2026-10-15：**收起（LEAVING）也不淡了** —— 原来这里 `pullBottomIn()`（p<0.45 就归零），
+    //    于是"返回/系统返回"关播放页时是**先淡掉一片元素、再收缩**（用户实测：
+    //    「很多元素先消失，然后收起」）。跟手下拉看不出这个问题只是因为淡出被手指掩护了。
+    //    现在展开/收起是同一套参数的正反两遍：只缩不淡，最后的交接交给
+    //    容器自己的 `morphPageOpacity()`（p<0.12 淡到 0）与迷你条那两档淡入。
+    this.morphContentOpacity = 1;
   }
 
   /**

@@ -680,15 +680,20 @@ export struct PlaybackPage {
    *
    * ★ 用户 2026-10-14（看完官方截图后）：「最开始就只有封面，然后其它元素慢慢从下方上来…
    *   飞入是一个**非线性曲线**，并且**没有淡入淡出**」
-   *   ⇒ 展开期间恒为 1（出场完全靠 `contentRiseVp()` 的位移，不再叠一层淡入）；
-   *   收起（LEAVING）仍用原来的 `pullBottomIn()` 连续收拢，保持老观感。
-   *   注：歌曲名/歌手那一行**有它自己的飞入逻辑**（`MusicPlayInfoBlock` 的 `metaBlockTranslateYvp`
-   *   + `targetMetaOpacity`），用户明确说"还用我们自己的逻辑"⇒ 这里不碰它。
+   *   ⇒ 展开期间恒为 1（出场完全靠 `contentRiseVp()` 的位移，不再叠一层淡入）。
+   *
+   * ★★ 2026-10-15 修「用系统返回/播放页返回按钮关闭时，很多元素先消失、然后才收起」：
+   *   收起（LEAVING）原来用 `pullBottomIn() = clamp((p-0.45)/0.55)` —— 也就是进度一到
+   *   55% 就把控制区淡成 0，而那时页面才缩掉一小半 ⇒ 观感就是"元素先没了，页面再收"。
+   *   现在**收起也不再淡出**：整页缩回迷你条那一小块时，控制区随窗口一起被裁掉，
+   *   观感正好是展开那一套的**逆放**（下拉收起一直是好的，就是因为它是手指一比一驱动的，
+   *   淡出被"跟手"掩护掉了；返回按钮是 350ms 补间，淡出就露出来了）。
+   *   最后的交接由容器自己的 `morphPageOpacity()`（p<0.12 淡到 0）负责，不在这里重复淡。
+   *
+   * 注：歌曲名/歌手那一行**有它自己的飞入逻辑**（`MusicPlayInfoBlock` 的 `metaBlockTranslateYvp`
+   * + `targetMetaOpacity`），用户明确说"还用我们自己的逻辑"⇒ 这里不碰它。
    */
   private controlOpacity(): number {
-    if (this.expandState.morphStage === MorphStage.LEAVING) {
-      return this.expandState.pullBottomIn();
-    }
     return 1;
   }
 
@@ -2094,7 +2099,19 @@ export struct PlaybackPage {
             this.FlowLightBackground()
           }
 
-          // 封面续飞浮层：夹在背景与内容之间，切页那 0.36 秒里顶替两张静态封面
+          // ★★ 2026-10-15 修「进度条飞上来以后被慢慢挡住，动画结束才又出现」：
+          //   这一棒（续飞封面）原来画在**内容层之上**（根 Stack 的最后一个孩子），
+          //   于是只要它的落位矩形一旦偏低/偏大，就会把**正在从下面升上来的进度条和底部按钮**盖住；
+          //   `morphBridging()` 在 p=1 那一刻变 false ⇒ 副本被卸载 ⇒ 进度条"又出现" ——
+          //   用户描述的「被慢慢挡住 → 看不到 → 结束后又出现」就是这条。
+          //   现在把它挪到**背景与内容之间**：形变期间播放页自己那张真封面是隐藏的
+          //   （`MusicPlayInfoBlock` 的门 `morphContainerActive() ? 0 : 1`），封面那个槽位是空的，
+          //   所以副本照样透得出来；但它**永远不可能盖住控制区** —— 这是结构上的保证，
+          //   与"终点量得准不准"无关。
+          if (this.expandState.morphBridging()) {
+            this.MorphCoverBridge()
+          }
+
           // No cover overlay: the lyric page has no matching image destination.
 
           // ★ 内容层：尺寸恒为 100%（= 裁剪窗口 = 可视矩形 / 缩放），所以永远填满可视矩形
@@ -2191,12 +2208,8 @@ export struct PlaybackPage {
         Stack() { this.SwitchBanner() }.zIndex(10)
       }
 
-      // ★ 桥接封面（一镜到底里"封面"那一棒，对标无界 CoverMorph）：
-      //   在**宿主坐标**里从迷你条封面飞到播放页封面，**p = 1 时恰好落位**，
-      //   之后由播放页自己那张封面接手（形变期间它不画）。
-      if (this.expandState.morphBridging()) {
-        this.MorphCoverBridge()
-      }
+      // ⚠️ 续飞封面（`MorphCoverBridge`）**不在这一层**：2026-10-15 起它画在内容层**之下**
+      //    （见上面根 Stack 里那段注释）—— 画在这里会盖住升起来的进度条/底部按钮。
     }
     .width(StyleConstants.FULL_WIDTH)
     .height(StyleConstants.FULL_HEIGHT)
