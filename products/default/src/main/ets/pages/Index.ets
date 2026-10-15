@@ -85,9 +85,13 @@ const FLOATING_MINI_BAR_MAX_WIDTH_VP: number = 560;
  *
  * ★ 用户 2026-10-15（参考图对比）：**这一页要把浮动底栏上方那条小播放条整条藏掉**
  *   —— 参考图里 Tab 栏之上只有一行进度（左当前时间 / 中细条 / 右总时长），没有迷你条。
- *   所以本页：① {@link miniBar} 不渲染那条迷你条；② 即便用户此前把迷你条展开过
- *   （`hdsBarLayoutMode === VERTICAL` 的两排态），本页也强制回到**单排**
- *   （{@link barLayoutModeForHds}）—— 否则会留下"空着的一排"。
+ *   所以本页做三件事（**排布模式一个字都不动**，见 `barLayoutModeForHds()` 的注释）：
+ *   ① {@link miniBar} 条件渲染 ⇒ 那条迷你条的内容为空，HDS 按内容量高 ⇒ **没有那一排**；
+ *   ② {@link miniBarStyleForHds} 恒回 `COLLAPSE` ⇒ 即便用户此前把迷你条展开过
+ *      （`miniBarExpanded === true`），本页也不会画出一条展开的**空**栏；
+ *   ③ `enableMiniBarBackground` 在本页为 false ⇒ 不会留下一枚空胶囊背板。
+ * ⚠️ **不要**改用 `barLayoutMode = HORIZONTAL`（试过，真机反馈"tab 栏短一截"）：
+ *   那个模式是"页签与迷你条**并排**"，迷你条空着时页签会被挤到左边、右端空出一格。
  * ⚠️ 顺序与 `HomeTabsPages()` 里 `TabContent` 的次序、`tabScrollTopCommands[i]` 的
  *   下标含义**必须一致**（`tab_now_playing` 那一项就是它）。
  */
@@ -1015,12 +1019,12 @@ struct Index {
     if (!this.supportsTwoRowLayout()) {
       return undefined;
     }
-    // ★「现在就听」页**强制单排**（用户 2026-10-15 参考图：Tab 栏之上不许有迷你条那一排）。
-    //   即便用户之前把迷你条展开过（`hdsBarLayoutMode === VERTICAL`），切到本页也要回到单排，
-    //   否则会留下"空着的一排"把 Tab 胶囊顶上去。见 {@link NOW_PLAYING_TAB_INDEX}。
-    if (this.tabState.tabIndex === NOW_PLAYING_TAB_INDEX) {
-      return HdsBarLayoutMode.HORIZONTAL;
-    }
+    // ★★ 2026-10-15 真机反馈**不要**在这一页把它压成 HORIZONTAL（我上一版就是那么写的，错了）：
+    //   `HORIZONTAL` 是"页签与迷你条**并排**在同一排"的排布 ⇒ 迷你条那一格空着时，
+    //   页签被挤到左边、右边留出一格 —— 用户原话「底部 tab 栏切换到这个页面的时候**会短一截**
+    //   （像是以前那个**左侧 Tab 栏，右侧圆形播放器**的版本）」说的就是它。
+    //   正解：**排布模式完全不动**（跟别的页签逐字一致），只把 {@link miniBar} 的内容让它量成 0 高
+    //   （HDS 是按内容量高度的，空 builder ⇒ 没有那一排，见 `miniBar()` 的注释）。
     return this.appState.hdsBarLayoutMode === BarLayoutModes.HORIZONTAL ?
       HdsBarLayoutMode.HORIZONTAL : HdsBarLayoutMode.VERTICAL;
   }
@@ -1073,21 +1077,35 @@ struct Index {
     // ★ 用户 2026-10-15：底栏「现在就听」那一页**不画**这条迷你条（参考图里 Tab 栏之上只有进度行）。
     //   见 {@link NOW_PLAYING_TAB_INDEX}。用条件渲染而不是 `Visibility.Hidden`：
     //   保留占位的话 HDS 会继续按"两排"排布，Tab 胶囊会被顶高、底下留下一块空档。
+    //   ⚠️ **排布模式不要跟着改**（`barLayoutModeForHds()` 里那段的坑）：
+    //     HORIZONTAL 是"页签与迷你条并排"，会让页签被挤到左边、右端空一格（用户看到的"短一截"）。
+    //     这里只让 HDS **量到 0 高**（它是按内容量高度的），排布模式与别的页签逐字一致。
     //   ⚠️ 代价：这一页上 `getRectangleById(MINI_BAR_ID)` 量不到迷你条 ⇒ 形变起点只能走兜底几何。
     //     可以接受：本页**不会打开播放页**（`NowPlayingFeedPage` 的 `playAt` 走
     //     `openPlayer=false` / `PlaybackIntentState.openPlayerUi=false`），
     //     而能开到播放页的入口（底栏迷你条点击、系统媒体控制）在本页也不存在/不形变。
-    if (this.navDepth <= 0 && this.tabState.tabIndex !== NOW_PLAYING_TAB_INDEX) {
-      // ★★ 2026-10-15（回退后重做）**不变量**：一次形变会话期间，迷你条**真身不参与绘制**，
-      //   由壳层克隆层（`MorphMiniBarClone` / `MorphMetaBridge`）与播放页内的续飞封面代表它。
-      //   `sourceBarHidden` 由会话拥有者唯一写（`morphBeginEntering` / `morphBeginLeaving` 置 true，
-      //   `morphLand` / `morphReset` 置 false）⇒ 三条打开路都成立。
-      //   不这么做的话：播放页形变期间是**半透明**画出来的，真身会从底下透出来 ——
-      //   一边是克隆层画的副本、一边是真身，用户看到的正是"迷你条压在播放页上"（重叠）。
-      //   ⚠️ 必须用 `Visibility.Hidden`（保留布局）：形变起点要 `getRectangleById` 量这条栏，
-      //   用 `None` 会量不到 ⇒ 动画直接退化。
-      HomeMiniBarPlayer({ showPreviousTrack: false })
-        .visibility(this.expandState.sourceBarHidden ? Visibility.Hidden : Visibility.Visible)
+    if (this.navDepth <= 0) {
+      if (this.tabState.tabIndex === NOW_PLAYING_TAB_INDEX) {
+        // ★★ 这一页**显式给 0 高**（而不是"整个 builder 不渲染"）：
+        //   官方《设置页签栏的悬浮样式》原文——迷你栏是自定义区域，**跟页签栏高度相等且水平对齐**；
+        //   本工程用 `barLayoutMode = VERTICAL` 把它改成上下两排，而 HDS 在那一档是**按内容量高**的
+        //   （见 `miniBar()` 上面那段"不要给它固定高度"的记录）⇒ 给一个 0 高容器，
+        //   "上面那一排"高度就是 0，页签胶囊的几何与别的页签**逐字一致**。
+        Column()
+          .width(StyleConstants.FULL_WIDTH)
+          .height(0)
+      } else {
+        // ★★ 2026-10-15（回退后重做）**不变量**：一次形变会话期间，迷你条**真身不参与绘制**，
+        //   由壳层克隆层（`MorphMiniBarClone` / `MorphMetaBridge`）与播放页内的续飞封面代表它。
+        //   `sourceBarHidden` 由会话拥有者唯一写（`morphBeginEntering` / `morphBeginLeaving` 置 true，
+        //   `morphLand` / `morphReset` 置 false）⇒ 三条打开路都成立。
+        //   不这么做的话：播放页形变期间是**半透明**画出来的，真身会从底下透出来 ——
+        //   一边是克隆层画的副本、一边是真身，用户看到的正是"迷你条压在播放页上"（重叠）。
+        //   ⚠️ 必须用 `Visibility.Hidden`（保留布局）：形变起点要 `getRectangleById` 量这条栏，
+        //   用 `None` 会量不到 ⇒ 动画直接退化。
+        HomeMiniBarPlayer({ showPreviousTrack: false })
+          .visibility(this.expandState.sourceBarHidden ? Visibility.Hidden : Visibility.Visible)
+      }
     }
   }
 

@@ -63,10 +63,10 @@
  *     挂在根节点上封面会被一起缩进（改动前就是这么错的，用户实测"封面离左右还有距离"）。
  *
  * ★ **整页分三层**（`build()` 里那个 `Stack`，自下而上）：
- *   ① **取色底** `pageTint` —— 当前这屏封面的主色经 `dealColor` 压暗（照歌手页那一套，见
+ *   ① **取色底** `pageTint` —— 当前这屏封面的主色经 `dealColor` 处理（照歌手页那一套，见
  *      {@link extractCardColor}）；取色完成前是 `FEED_BASE_NEUTRAL`（由已有 token 算出的中性深色）；
- *   ② 顶部一段渐隐压深（把顶栏那两个白图标衬托出来，**高度只到封面顶边为止**，
- *      见 {@link topScrimHeightVp}）；
+ *   ② **深底才有**的顶部一段渐隐压深（把顶栏那两个图标衬托出来，**高度正好到封面顶边为止**，
+ *      见 {@link topScrimHeightVp}）——⚠️ **浅底时它的 `opacity` 为 0**（见 {@link pageTintIsLight}）；
  *   ③ 内容（竖向 `Swiper`；封面在卡片里，**自带上、下两条 `pageTint` 渐变化进背景**，
  *      见 {@link FeedCover}）。
  *
@@ -86,9 +86,16 @@
  *    这正是官方/本工程对"压在照片/大图上的蒙层 + 它的文字必须成对且两主题同值"那条口径的做法
  *    （照片内容不可控，跟着主题翻就会出现"深字压深蒙层"不可读）。跨 HAR 引用 `app.color.*` 有先例：
  *    `features/recommendation/.../WearableHome.ets:42` 就在用 player 的 `app.color.font_color`。
- *    ⚠️ 两个**取色底 / 压深色**是把 token 的 RGB 过 `resourceManager.getColorSync` 读出来拼的
- *      （颜色只能是 string），拼法与理由写在 `feedTokenRgb` / `FEED_BASE_NEUTRAL` / `FEED_SCRIM_TOP`
- *      头上 —— 仍然"只有 token、没有新 hex"。
+ *    ⚠️ 两个**取色底 / 压深色**是把 token 的值写成**数字 ARGB 常量**再 `>>>` 拆通道拼出来的
+ *      （颜色只能是 string，而模块级常量求值时拿不到 `resourceManager`），来源与理由逐条锁在
+ *      `FEED_DARK_SURFACE_ARGB` / `FEED_BASE_NEUTRAL` / `FEED_SCRIM_TOP` 的注释里
+ *      —— 代码里**没有任何 hex 字符串字面量**。
+ *
+ * ★★ **墨色跟着底色走**（2026-10-15 用户二审第 1 条："背景是动态更新的，但是这堆按钮文字却是固定颜色"）：
+ *   底色是**按封面取的**，浅色封面会取出**浅色底**（`dealColor` 对"近中性色"是**原样返回**的，
+ *   见 §四.8），而原先所有文字/图标都是"压在深色图上"的**白色 token** ⇒ 浅底时整页糊掉。
+ *   现在收敛成"取色方法 + 深浅两档"：见 §四.8 与 `inkPrimary()/inkSecondary()/inkSoft()/inkPillBg()/
+ *   inkTrack()/inkTrackPlayed()` —— 判据是 `pageTintIsLight`。
  *
  * ## 四、几条"别再踩"的硬约束（写在这里免得下一轮又撞上）
  *
@@ -124,6 +131,22 @@
  *    （默认 `true` = 原行为）与 `PlaybackIntentState.openPlayerUi`。本页两处都传/写 `false`，
  *    **不要**改用"事后把 `appState.isShowPlay` 掰回去"（那是"请求过又撤销"，
  *    壳层的 `@Monitor('appState.isShowPlay')` 会读到瞬时 true，见 {@link playAt} §2）。
+ * 8. **墨色（文字/图标/进度条/胶囊）必须跟着取色底走**（用户 2026-10-15 第 1 条）。
+ *    · **判据只有一个**：`@Local pageTintIsLight` —— 由 `extractCardColor()` 算出 `tint` 的**同一处**
+ *      、拿**同一份** RGB 经 {@link ColorConversion.luminanceOf} 算感知亮度（即 `0.299R+0.587G+0.114B`）
+ *      再与 **140** 比（`> 140` 视为浅底）。**140 这个阈值照抄 `ColorConversion.contrastOverlay()`**
+ *      （`ColorConversion.ets:254` 的 `luminanceOf(hex) > 140`），**不自己造第二套判据**。
+ *    · **深底（`pageTintIsLight === false`）逐字保持改动前那一族 token**（`app.color.player_text_primary`
+ *      / `play_text_color` / `play_singer_color` / `slider_track` / `slider_select`）；
+ *      **浅底**改成同一枚 `1C1C1E` 的**数字 ARGB 常量**（`0xFF1C1C1E` / `0xCC1C1C1E` / `0x991C1C1E`
+ *      / `0x331C1C1E` / `0x141C1C1E`，理由逐条写在 `FEED_INK_LIGHT_*` 头上）。
+ *    · ⚠️ **一律用数字 ARGB 常量，不写 `'#RRGGBB'` 字符串字面量** —— 本文件代码内 hex 字面量保持 **0**。
+ *    · ⚠️ 小歌词两行的字色由本页**传参**下去（`MiniLyricLinesComponent` 新增两个可选 `@Param`），
+ *      **不改它的渲染逻辑**；播放页不传 ⇒ 行为逐字不变（见 {@link FeedLyric}）。
+ *    · ⚠️ **已知边界**（只写在这里，不靠猜）：`dealColor` 对**高饱和**颜色把 HSB 亮度**锁死在 ≤ 0.3**
+ *      ⇒ 那一路的底色亮度永远 < 140（实测上限约 0.3×255 ≈ 76，感知亮度也 ≤ 76）；
+ *      **只有"近中性（近白/近灰/近黑）的封面"**才会取出浅底（`dealColor` 对 `max−min < 1e-3` 原样返回）
+ *      —— 用户那张近白封面正是这一档。
  *
  * 诊断关键字：`grep RzdNowPlaying`（hilog 标签；load / page request / page result /
  * exhausted / dislike / favorite / **play toggle / play / play switch / play skip** / **tint** 各有独立字样，
@@ -270,20 +293,23 @@ const FEED_COVER_RADIUS_VP: number = 24;
  * 封面**上**边那条"化进页底色"的渐变带宽（占**封面高**的比例）。
  *
  * `[pageTint, 0] → [Color.Transparent, 1]` 只画在封面高 `本值` 那一段里：
- * 封面顶边那一行**就是**页底色（与背后的取色底无缝接上），往下 20% 之内回到原图。
+ * 封面顶边那一行**就是**页底色（与背后的取色底无缝接上），往下 30% 之内回到原图。
  * ⚠️ 它是**比例而不是 vp**（`linearGradient` 的色标口径，见 {@link FeedCover}）。
- * 20% 取自用户要求（"约封面高的 18~22% 内化开"）。
+ * ★ 30% = 用户 2026-10-15 第 2 条"这个过渡不太自然"之后**从 20% 加大**的：
+ *   20% 那一段太短，顶边那行页底色与封面原图之间像"贴了一条色带"；
+ *   拉长到 30% 之后才是"图片慢慢化进背景"。
  */
-const FEED_COVER_TOP_FADE: number = 0.20;
+const FEED_COVER_TOP_FADE: number = 0.30;
 
 /**
  * 封面**下**边那条渐变带宽（占**封面高**的比例，从封面下沿**往上**算）。
  *
  * `[Color.Transparent, 0] → [pageTint, 1]` 画在封面高 `本值` 那一段里（贴在封面下沿）：
- * 封面下沿那一行**就是**页底色，往上 28% 之内回到原图。
- * ⚠️ 同样是**比例**。28% 取自用户要求（"约封面下沿往上 25~30% 内化开"）。
+ * 封面下沿那一行**就是**页底色，往上 40% 之内回到原图。
+ * ⚠️ 同样是**比例**。★ 40% = 用户 2026-10-15 第 2 条之后**从 28% 加大**（理由同
+ *   {@link FEED_COVER_TOP_FADE}：下沿那条接缝原来也偏硬）。
  */
-const FEED_COVER_BOTTOM_FADE: number = 0.28;
+const FEED_COVER_BOTTOM_FADE: number = 0.40;
 
 /**
  * 封面以下**每一行**（歌词 / 歌名 / 歌手 / 音质 / 动作 / 进度）的左右内边距（vp）。
@@ -356,6 +382,30 @@ const FEED_PILL_BG: Resource = $r('app.color.slider_track');
 const FEED_FAVORITE: Resource = $r('app.color.playlist_play_all_icon');
 const FEED_TRACK: Resource = $r('app.color.slider_track');
 const FEED_TRACK_PLAYED: Resource = $r('app.color.slider_select');
+
+/**
+ * **浅底档的墨色**（`pageTintIsLight === true` 时用）—— 五枚**数字 ARGB 常量**。
+ *
+ * ★★ 为什么是**同一枚 `1C1C1E`**：它就是本文件已经锁死来源的那枚深色
+ *   （{@link FEED_DARK_SURFACE_ARGB} = `0xE61C1C1E`，即 `app.color.info_scrim_bottom` 的 RGB 部分）。
+ *   浅底要的是"深墨"，而工程里"写在浅底上的深色"用的就是这一枚（`PlaybackPage` 那颗播放键的图标色
+ *   也是它）⇒ 直接用同一枚值，**不新增第二个色相**，深浅两档的墨色是同一族。
+ * ★ 为什么写成**数字**而不是 `'#RRGGBB'` 字符串：本文件"代码内 hex 字符串字面量 = 0"这条口径要保持
+ *   （`0xE61C1C1E` 同款写法），而 `ResourceColor` 接受 `number`（`0xAARRGGBB`）。
+ * ★ 五档的 α 与深色档**一一对应**（各自注释里写明对的是哪一枚）：
+ *   · `0xFF` = 主墨（对 {@link FEED_TITLE_COLOR}，即 `player_text_primary`，不透明）；
+ *   · `0xCC` = 次墨（对 `FEED_SINGER_COLOR`，即 `play_text_color`，80%）；
+ *   · `0x99` = 弱墨（对 `FEED_SOFT_COLOR`，即 `play_singer_color`，60%）；
+ *   · `0x33` = 未播进度槽（对 `FEED_TRACK`，即 `slider_track`，20%）；
+ *   · `0x14` = 描边胶囊的底（对 `FEED_PILL_BG`，即同一枚 `slider_track`，约 8%）。
+ * ⚠️ 用法见 {@link NowPlayingFeedPage.inkPrimary} 等几个取色方法 —— **不要在组件里直接用这些常量**，
+ *   那样就绕过了"深浅两档二选一"这件事（浅底会漏掉某一处，正是本次要修的病根）。
+ */
+const FEED_INK_LIGHT_PRIMARY: number = 0xFF1C1C1E;
+const FEED_INK_LIGHT_SECONDARY: number = 0xCC1C1C1E;
+const FEED_INK_LIGHT_SOFT: number = 0x991C1C1E;
+const FEED_INK_LIGHT_TRACK: number = 0x331C1C1E;
+const FEED_INK_LIGHT_PILL_BG: number = 0x141C1C1E;
 /** 整页深色底 token（`app.color.info_scrim_bottom` = `#E61C1C1E`）。
  *
  * ⚠️ 改动前它还兼任"白圆播放键上的图标色"，那颗键本轮改成**播放页同款的 `Image`**，
@@ -414,12 +464,15 @@ const FEED_BASE_NEUTRAL: string = ((): string => {
 const FEED_SCRIM_ALPHA: number = 0.35;
 
 /**
- * 顶栏那一段压深用的颜色（`rgba(28, 28, 30, 0.35)`）。
+ * 顶部压深那一段的颜色（`rgba(28, 28, 30, 0.35)`）。
  *
  * 与 {@link FEED_TRANSPARENT}（同一枚颜色的 α=0 档）配成一对做 `linearGradient`：
  * **不改 hex、只改 α** —— 底仍然是 {@link FEED_DARK_SURFACE} 那枚 token 的 RGB。
  * 为什么不能沿用改动前那层"整屏 `[透明, 0] → [深色, 1]`"：它会把整页压成深色、
  * 把背景取色整块盖掉（取色就白做了）⇒ 现在只压最上面那一段（高度见 {@link topScrimHeightVp}）。
+ *
+ * ⚠️ **只有深底才会看到它**：浅底时这一层的 `opacity` 是 0（见 {@link NowPlayingFeedPage.pageTintIsLight}
+ * 与 `build()` 的层 2）—— 理由见 {@link topScrimHeightVp} 的注释。
  */
 const FEED_SCRIM_TOP: string = ((): string => {
   const r: number = (FEED_DARK_SURFACE_ARGB >>> 16) & 0xFF;
@@ -429,35 +482,121 @@ const FEED_SCRIM_TOP: string = ((): string => {
 })();
 
 /**
- * 顶部压深层的**最小**高度（vp）—— 真实高度由 {@link topScrimHeightVp} 按窗口算：
- * `max(本值, coverTopVp())`，也就是"一直压到封面顶边为止"。
+ * **"底色算不算亮"的感知亮度阈值** —— `> 本值` 视为浅底 ⇒ 墨色切深色档。
  *
- * ★ 为什么压到封面顶边就够：这一层的 α 是"从上往下 0.35 → 0"，而**封面顶边那一行本身就是页底色**
- *   （封面自带上渐变，见 {@link FEED_COVER_TOP_FADE}）⇒ 压深在封面顶边收到 0 的那一刻，
- *   画面正好换到"封面顶边的页底色"，**没有缝**；再往下压也看不见（被不透明的封面盖住）。
- * ★ 140 只是矮窗口（`coverTopVp()` 很小）时的兜底：保证状态栏 + 标题栏那一段一定被压到。
+ * ★ 出处：**照抄** `common/musicbasic/src/main/ets/util/ColorConversion.ets:254` 里
+ *   `contrastOverlay()` 的那一句 `ColorConversion.luminanceOf(hex) > 140 ? '000000' : 'FFFFFF'`
+ *   —— 同一个类里"在任意底色上挑一个一定看得见的叠加色"用的就是这个数。
+ *   **不自己造第二个判据**（同仓两条阈值打架是旧账）。
+ * ★ 亮度口径也在那边：{@link ColorConversion.luminanceOf} = `0.299R + 0.587G + 0.114B`。
  */
-const FEED_TOP_SCRIM_MIN_VP: number = 140;
+const FEED_INK_LIGHT_THRESHOLD: number = 140;
 
 /**
- * 由封面像素算出的页底色。
+ * 换歌时"底色 + 墨色"渐变的时长（ms）—— 用户 2026-10-15 第 2 条"这个过渡不太自然"。
  *
- * ★★ 复用工程**现成**的那一套，一行新算法都不写：`effectKit.createColorPicker` 取封面主色
- *    → `ColorConversion.dealColor` 压暗 → 当页面底色 —— 与歌手页 `ArtistDetailPage.loadBackdropColor()`、
- *    专辑页 `AlbumDetailPage`、歌单页 `PlaylistDetailPage` **逐字同款**。
- *   （另一套 `vividFlowColors` 是播放页"流光"用的**鲜艳色**，亮度给到中高区间，
- *    压白字会读不清，所以底色这一档不用它。）
+ * ★ 400ms / `Curve.EaseInOut`（曲线与工程里其它"背景类"补间同一档，如壳层那几处
+ *   `animateTo({ duration: …, curve: Curve.EaseInOut })`）。
+ * ★ 只包 {@link extractCardColor} 里"写 `pageTint` / `pageTintIsLight`"那一小段：
+ *   **异步 / 网络 / 解码 / 日志都不进闭包**（包进去会被补间吃掉时间，且日志会被延迟到下一帧）。
+ * ★ 为什么底色要渐变：改动前是**硬切** —— 快速上下滑时底色会在两屏之间"啪"地跳一下。
+ * ⚠️ 时长只有上机才能调手感；这里先给 400（与"一屏吸附 280ms"同量级但不抢戏）。
+ */
+const FEED_TINT_ANIM_MS: number = 400;
+
+/**
+ * ⑦ 进度条的**条厚**（vp）—— 用户 2026-10-15 第 4 条"进度条改粗一些"：**3 → 6**。
+ *
+ * ★ 为什么是 6：改动前 3vp 是按"参考图上的细线"量的，但真机上 3vp 在**取色底**上几乎看不见
+ *   （用户看到的原话就是"细"）⇒ 翻倍到 6vp。两端时间字号（12fp）**不动**，所以这一行加高 4vp。
+ * ★ 圆角跟着条厚走：`borderRadius = 本值 / 2`（3vp），不再写死原来的 2 —— 半圆端头，
+ *   条厚一改圆角自动跟上（写死就会出现"6vp 的条配 2vp 圆角"那种方头）。
+ * ★ **没有滑块**：这条是进度指示，不是可拖的 `Slider`（真要加滑块得另找播放页那套接口，
+ *   不在本次范围内）⇒ 不存在"滑块会不会超过 12vp"这一项。
+ */
+const FEED_PROGRESS_TRACK_VP: number = 6;
+
+/**
+ * ⑦ 进度行**整行**高度（vp）= 条厚 + 两端时间与条之间的余量。
+ *
+ * 改动前是 20（条厚 3 + 12fp 文字那一行 ≈ 17 的行高）。
+ * 条厚翻倍到 6 ⇒ 整行 20 → **24**（12fp 文字行高 ≈ 15~17vp 仍然是这一行的高度决定项，
+ * 24 让 6vp 的条上下各留 ≈ 4vp，不会被文字行挤扁）。
+ * ⚠️ 这一行是**卡片内列的最后一个兄弟**，它下面紧接的就是 `padding.bottom = cardChromeBottomVp()`
+ *   （底栏让位 + {@link FEED_BOTTOM_GAP_VP} 间距）⇒ 加高 4vp **只会把进度条整体往上抬 4vp**，
+ *   不会往底栏方向长（所以"被底栏压住"这件事不会因为这次改粗而发生）。
+ */
+const FEED_PROGRESS_ROW_VP: number = 24;
+
+/*
+ * ⚠️ **这里原来有一个 `FEED_TOP_SCRIM_MIN_VP = 140`，本轮删掉、不要再恢复**：
+ *   原先顶部压深的高度是 `max(140, coverTopVp())`，而真机上 `coverTopVp()` ≈ 110vp
+ *   （"标题栏下沿 + 一小截"，见 {@link NowPlayingFeedPage.coverTopVp} 的算式）⇒ **140 这一项总是赢**，
+ *   于是那层深色**多压了 30 多 vp 到封面上**（用户 2026-10-15 第 2 条"过渡不太自然"的成因之一）。
+ *   现在高度**正好 = `coverTopVp()`**（见 {@link NowPlayingFeedPage.topScrimHeightVp}）：α 在封面顶边收到 0，
+ *   而封面顶边那一行本身就是页底色（封面自带的上渐变，见 {@link FEED_COVER_TOP_FADE}）⇒ 两段无缝，
+ *   且不再压到封面。恢复那个常量 = 把这个观感问题原样引回来。
+ */
+
+/**
+ * 一次取色算出来的**两件事**（底色 + 它亮不亮）。
+ *
+ * ⚠️ 为什么要有这个类：判"底色是不是亮"必须拿**与底色同一份** RGB（`dealColor` **处理之后**的值），
+ *   所以它只能在 {@link feedTintResultOf} 里、与 `tint` **同一处**算出来 ——
+ *   分成两次调用 `dealColor` 就是"同一个量算两遍"（本工程有旧账）。
+ * ⚠️ ArkTS 禁止无类型对象字面量 ⇒ 返回值只能是具名类型，不能用 `{tint, luminance}`。
+ *
+ * ⚠️ **这里原来是一个只返回底色字符串的 `feedTintOf(r,g,b)`，本轮已删**（本轮唯一被删的函数）：
+ *   它被本类 + {@link feedTintResultOf} 整体取代 —— 因为"判亮"必须与底色**同源**，
+ *   留着旧函数就一定会有人写成"两处各调一次 `dealColor`"（同一个量算两遍是本工程旧账）。
+ *   取代口径与它逐字相同：取色算法、`Math.max/min` 夹取、返回"不透明 `rgb()`"都不变。
+ */
+class FeedTintResult {
+  /** 不透明 `rgb(r, g, b)`（照旧给 `pageTint` 用）。 */
+  public readonly tint: string;
+  /** 同一份 RGB 的感知亮度 0–255（`0.299R + 0.587G + 0.114B`）。 */
+  public readonly luminance: number;
+
+  public constructor(tint: string, luminance: number) {
+    this.tint = tint;
+    this.luminance = luminance;
+  }
+}
+
+/**
+ * 把 `dealColor` **处理过**的三通道拼成 `#RRGGBB` 再交给**现成**的
+ * {@link ColorConversion.luminanceOf} 算感知亮度（它内部就是 `0.299R + 0.587G + 0.114B`，
+ * 见 `ColorConversion.ets:262`）—— **不自己写亮度公式**。
+ *
+ * ⚠️ 拼 `#RRGGBB` 用的是**局部变量**（不是 hex 字面量）⇒ 本文件"代码内 hex 字面量 = 0"这条口径不受影响。
+ * @param r 已夹到 0–255 的红通道。
+ * @param g 已夹到 0–255 的绿通道。
+ * @param b 已夹到 0–255 的蓝通道。
+ * @returns 感知亮度 0–255。
+ */
+function feedTintLuminanceOf(r: number, g: number, b: number): number {
+  const toHex: (v: number) => string =
+    (v: number): string => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
+  return ColorConversion.luminanceOf('#' + toHex(r) + toHex(g) + toHex(b));
+}
+
+/**
+ * 取色的**唯一入口**：一次 `dealColor` 同时给出"底色"和"它亮不亮"。
+ *
+ * ★ 这就是"**墨色跟着底色走**"那条需求的判据来源（用户 2026-10-15 第 1 条）：
+ *   `pageTint` 与 `pageTintIsLight` 必须来自**同一份** RGB，否则会出现
+ *   "底色已经是浅色、墨色还按深底算"的那种半吊子状态。
  * @param red 主色红通道 0–255。
  * @param green 主色绿通道 0–255。
  * @param blue 主色蓝通道 0–255。
- * @returns 不透明 `rgb(r, g, b)`（不透明度交给调用方的 `.opacity()`，别在这里编 α）。
+ * @returns {@link FeedTintResult}（底色字符串 + 感知亮度）。
  */
-function feedTintOf(red: number, green: number, blue: number): string {
+function feedTintResultOf(red: number, green: number, blue: number): FeedTintResult {
   const tuned: number[] = ColorConversion.dealColor(red, green, blue);
   const r: number = Math.max(0, Math.min(255, tuned[0]));
   const g: number = Math.max(0, Math.min(255, tuned[1]));
   const b: number = Math.max(0, Math.min(255, tuned[2]));
-  return `rgb(${r}, ${g}, ${b})`;
+  return new FeedTintResult(`rgb(${r}, ${g}, ${b})`, feedTintLuminanceOf(r, g, b));
 }
 
 /**
@@ -647,6 +786,18 @@ export struct NowPlayingFeedPage {
    * 真源是封面（`row.coverUrl`），取色链路见 {@link extractCardColor}。
    */
   @Local pageTint: string = FEED_BASE_NEUTRAL;
+  /**
+   * **当前底色是不是"亮"的** —— 决定全套墨色走深色档还是浅色档（用户 2026-10-15 第 1 条）。
+   *
+   * ★ 写入点**只有一个**：{@link extractCardColor} 里取色回调那处，与 {@link pageTint}
+   *   **同一个 `animateTo` 闭包里**、由**同一份** `dealColor` 结果算出来（见 {@link feedTintResultOf}）。
+   *   判据 = `luminanceOf(hex) > 140`，出处见 {@link FEED_INK_LIGHT_THRESHOLD}。
+   * ★ **必须 `@Local`**：它驱动全套墨色重绘（`inkPrimary()` 等几个取色方法 + `getTitleBar()`）；
+   *   写成普通私有字段就是"底色换了、墨色不换"（而且不报错）。
+   * ★ 初始值 `false`（深色档）与兜底底色 {@link FEED_BASE_NEUTRAL} **一致**：
+   *   兜底底是 `FEED_DARK_SURFACE_ARGB` 的 RGB `1C1C1E`，感知亮度 ≈ 28 < 140 ⇒ 就是深底。
+   */
+  @Local pageTintIsLight: boolean = false;
   /** 已经取过色的封面地址（去重：同一张封面不要反复下载+解码）。 */
   private lastTintUrl: string = '';
   /** 取色代次：快速滑动 + 异步解码，靠它把过期的那一次结果丢掉（与播放页 `imageColorJobSeq` 同款）。 */
@@ -1715,8 +1866,9 @@ export struct NowPlayingFeedPage {
    *   ① 预算 `FEED_CHROME_VP` 里带着 ≈ 49vp 呼吸位、而本函数**没减进度行**（那 20vp 是内列的兄弟）
    *      ⇒ 真实落点比本函数大约再低 10~15vp；
    *   ② 歌词组件按需渲染，行高在不同设备上有差异。
-   *   本函数现在的唯一消费方是 {@link topScrimHeightVp}（顶部压深到封面顶边为止），
-   *   十几 vp 的误差在那儿完全看不出来。
+   *   本函数现在的消费方只有一个：{@link topScrimHeightVp}（顶部压深**正好压到封面顶边为止**）——
+   *   注意顶部让位是**另一个量**（{@link topStackOffsetVp} = 状态栏 + 标题栏），别把两者混起来。
+   *   十几 vp 的误差在压深那儿完全看不出来。
    * @returns 封面顶边 y（vp，从页盒顶部算；页盒从屏幕 y=0 起排）。
    */
   private coverTopVp(): number {
@@ -1773,18 +1925,27 @@ export struct NowPlayingFeedPage {
   }
 
   /**
-   * 顶部压深层的**高度**（vp）= `max({@link FEED_TOP_SCRIM_MIN_VP}, {@link coverTopVp})`。
+   * 顶部压深层的**高度**（vp）—— **就是** {@link coverTopVp}（**没有 `max(...)` 兜底**，见下）。
    *
-   * ★ 它就是"把顶栏那两个白图标衬托出来"的那一段：从屏幕顶一路压到**封面顶边**，
+   * ★ 它就是"把顶栏那两个图标衬托出来"的那一段：从屏幕顶一路压到**封面顶边**，
    *   α 同时从 0.35 线性收到 0 ⇒ 在封面顶边处正好归零，而封面顶边那一行本身就是页底色
    *   （见 {@link FEED_COVER_TOP_FADE}）⇒ 两段接得没有缝。
    * ★ 按窗口算、不写死：封面高度/比例一改，这一段自动跟着走（不再是一个固定的 180vp）。
    * ★ 它挂在**内容层下面**（见 `build()` 的层序）：封面以下的部分本来就被不透明的封面盖住，
-   *   所以"算得略长一点"没有任何副作用。
+   *   所以"算得略长一点"没有副作用（但**短**了就会在封面顶边之上留一条没压到的亮带）。
+   * ⚠️⚠️ **本轮去掉了原来的 `max(140, coverTopVp())`**（用户 2026-10-15 第 2 条"过渡不太自然"）：
+   *   真机上 `coverTopVp()` ≈ 110vp（标题栏下沿 + 一小截），**140 这一项总是赢**
+   *   ⇒ 那层深色会**多压 30 多 vp 到封面上**，在封面顶部横着切一条明显的深色带。
+   *   现在"高度 = 封面顶边"，α 恰好在封面顶边归零，与封面自带的上渐变无缝接上。
+   * ⚠️ 更要紧的一条：**浅底时这一层的 `opacity` = 0**（{@link pageTintIsLight} 为 true）——
+   *   浅底上它本来就是"一条多余的深色横带"（深色图标在浅底上不用它托），
+   *   而且此时墨色已经切成深色档（{@link inkPrimary}），根本不需要压深。
+   *   写成 `opacity` 而不是"条件渲染"是有意的：它挂在 `animateTo(400ms)` 上，换歌时
+   *   **跟着底色一起淡出/淡入**（见 `build()` 层 2 的注释）。
    * @returns 顶部压深层高度（vp）。
    */
   private topScrimHeightVp(): number {
-    return Math.max(FEED_TOP_SCRIM_MIN_VP, this.coverTopVp());
+    return this.coverTopVp();
   }
 
   /**
@@ -1796,6 +1957,78 @@ export struct NowPlayingFeedPage {
   private topStackOffsetVp(): number {
     return PageTopInsetHelper.targetContentTopVp();
   }
+
+  // ─────────────────── 墨色：跟着底色走（深浅两档，唯一的二选一在这里）───────────────────
+
+  /**
+   * **主墨** —— 歌名 / 顶栏两个图标与标题 / 小歌词主行 / 加载指示器。
+   *
+   * · 深底：{@link FEED_TITLE_COLOR}（`app.color.player_text_primary`，改动前那一族，**逐字保持**）；
+   * · 浅底：`0xFF1C1C1E`（{@link FEED_INK_LIGHT_PRIMARY}）。
+   * @returns 深/浅两档之一。
+   */
+  private inkPrimary(): ResourceColor {
+    return this.pageTintIsLight ? FEED_INK_LIGHT_PRIMARY : FEED_TITLE_COLOR;
+  }
+
+  /**
+   * **次墨** —— 歌手名 / 小歌词次行 / 动作行那三个图标 / 空态文案。
+   *
+   * · 深底：{@link FEED_SINGER_COLOR}（`app.color.play_text_color`）；
+   * · 浅底：`0xCC1C1C1E`（{@link FEED_INK_LIGHT_SECONDARY}，80%）。
+   * @returns 深/浅两档之一。
+   */
+  private inkSecondary(): ResourceColor {
+    return this.pageTintIsLight ? FEED_INK_LIGHT_SECONDARY : FEED_SINGER_COLOR;
+  }
+
+  /**
+   * **弱墨** —— 平台/音质胶囊的字与描边 / 进度两端的时间。
+   *
+   * · 深底：{@link FEED_SOFT_COLOR}（`app.color.play_singer_color`）；
+   * · 浅底：`0x991C1C1E`（{@link FEED_INK_LIGHT_SOFT}，60%）。
+   * @returns 深/浅两档之一。
+   */
+  private inkSoft(): ResourceColor {
+    return this.pageTintIsLight ? FEED_INK_LIGHT_SOFT : FEED_SOFT_COLOR;
+  }
+
+  /**
+   * **描边胶囊的底**（平台胶囊 / 音质胶囊）。
+   *
+   * · 深底：{@link FEED_PILL_BG}（`app.color.slider_track`）；
+   * · 浅底：`0x141C1C1E`（{@link FEED_INK_LIGHT_PILL_BG}，约 8%）。
+   * ⚠️ 这枚只是"淡一点的底"，胶囊**读不读得清靠描边与字**（{@link inkSoft}）——
+   *   浅底下 20% 的黑底会显脏，所以给了更淡的一档。
+   * @returns 深/浅两档之一。
+   */
+  private inkPillBg(): ResourceColor {
+    return this.pageTintIsLight ? FEED_INK_LIGHT_PILL_BG : FEED_PILL_BG;
+  }
+
+  /**
+   * **未播进度槽**（{@link FeedProgress} 里那条轨的底色）。
+   *
+   * · 深底：{@link FEED_TRACK}（`app.color.slider_track`）；
+   * · 浅底：`0x331C1C1E`（{@link FEED_INK_LIGHT_TRACK}，20%）。
+   * @returns 深/浅两档之一。
+   */
+  private inkTrack(): ResourceColor {
+    return this.pageTintIsLight ? FEED_INK_LIGHT_TRACK : FEED_TRACK;
+  }
+
+  /**
+   * **已播进度**（{@link FeedProgress} 里那截填充）。
+   *
+   * · 深底：{@link FEED_TRACK_PLAYED}（`app.color.slider_select`）；
+   * · 浅底：`0xCC1C1C1E`（{@link FEED_INK_LIGHT_SECONDARY}，80%）—— 浅底上要"看得见且够实"，
+   *   所以用次墨那一档，不另造一枚。
+   * @returns 深/浅两档之一。
+   */
+  private inkTrackPlayed(): ResourceColor {
+    return this.pageTintIsLight ? FEED_INK_LIGHT_SECONDARY : FEED_TRACK_PLAYED;
+  }
+
 
   /**
    * HDS 标题栏 —— **左三条横线 + 右分享、没有标题文字**。
@@ -1847,15 +2080,15 @@ export struct NowPlayingFeedPage {
           },
           contentStyle: {
             titleStyle: {
-              mainTitleColor: FEED_TITLE_COLOR
+              mainTitleColor: this.inkPrimary()
             },
             menuStyle: {
               backgroundColor: FEED_TRANSPARENT,
-              iconColor: FEED_TITLE_COLOR
+              iconColor: this.inkPrimary()
             },
             backIconStyle: {
               backgroundColor: FEED_TRANSPARENT,
-              iconColor: FEED_TITLE_COLOR
+              iconColor: this.inkPrimary()
             }
           }
         },
@@ -1865,15 +2098,15 @@ export struct NowPlayingFeedPage {
           },
           contentStyle: {
             titleStyle: {
-              mainTitleColor: FEED_TITLE_COLOR
+              mainTitleColor: this.inkPrimary()
             },
             menuStyle: {
               backgroundColor: FEED_TRANSPARENT,
-              iconColor: FEED_TITLE_COLOR
+              iconColor: this.inkPrimary()
             },
             backIconStyle: {
               backgroundColor: FEED_TRANSPARENT,
-              iconColor: FEED_TITLE_COLOR
+              iconColor: this.inkPrimary()
             }
           }
         },
@@ -1922,14 +2155,14 @@ export struct NowPlayingFeedPage {
         LoadingProgress()
           .width(48)
           .height(48)
-          .color(FEED_TITLE_COLOR)
+          .color(this.inkPrimary())
       } else {
         SymbolGlyph($r('sys.symbol.music_note_circle_fill'))
           .fontSize(40)
-          .fontColor([FEED_SINGER_COLOR])
+          .fontColor([this.inkSecondary()])
         Text(this.feedHint.length > 0 ? this.feedHint : '暂时没有可以听的歌')
           .fontSize(14)
-          .fontColor(FEED_SINGER_COLOR)
+          .fontColor(this.inkSecondary())
           .textAlign(TextAlign.Center)
           .maxLines(3)
       }
@@ -2006,8 +2239,13 @@ export struct NowPlayingFeedPage {
    * ★ 用户 ① 的那张官方图里，歌词两行在**歌名上方** —— 本页现在也放在歌名上方
    *   （`FeedCard` 里封面之后、歌名之前）。
    * ★ 它是"自取数"组件：`@Local state: MusicAppState` 自己连 AppStorageV2，
-   *   行号与两行文本都由 `state.progress` + 当前曲的 `lyricText` 现算出来 ⇒ **本页不给任何入参**，
+   *   行号与两行文本都由 `state.progress` + 当前曲的 `lyricText` 现算出来 ⇒ 本页**不给它文本入参**，
    *   也**不改它的渲染逻辑**（用户明确"歌词渲染不在范围"）。
+   * ★ **本轮只多传两个颜色**（用户第 1 条："这堆按钮文字却是固定颜色"）：
+   *   `mainLineColor = ` 主墨（{@link inkPrimary}）、`nextLineColor = ` 次墨（{@link inkSecondary}）——
+   *   组件里这两个 `@Param` 是**可选**的（`ResourceColor | undefined`，默认 `undefined`），
+   *   内部写 `this.mainLineColor ?? $r('app.color.player_text_primary')`；**播放页不传** ⇒ 行为逐字不变。
+   *   组件拿不到本页的 `pageTintIsLight`，所以"深浅两档"必须由本页选好再传下去。
    * ★ 对齐：**左对齐**、左右内边距 = {@link FEED_SIDE_PADDING_VP}（与下面的歌名/歌手/音质/
    *   动作/进度**同一列**）—— 参考图里这两行就是左对齐贴着歌名那一列的左沿，
    *   改动前那个"居中收窄（左右 12vp + 居中）"是错的。
@@ -2026,7 +2264,14 @@ export struct NowPlayingFeedPage {
       // `ignoreUserSetting: true` ⇒ **无视「设置 → 小歌词」那个开关**强制渲染这两行。
       // ⚠️ 只放宽"画不画"，组件内部的取词/解析/行号逻辑一字未动；
       //   播放页不传这个参数（默认 false）⇒ 它的行为与改动前逐字相同。
-      MiniLyricLinesComponent({ ignoreUserSetting: true })
+      // ★ **墨色跟着底色走**（用户第 1 条）：组件那两个字色原来是**写死的白 token**
+      //   ⇒ 浅底上两行歌词完全看不见。本页按墨色传进去（主行 = 主墨、次行 = 次墨），
+      //   浅底时组件就用深色；播放页**不传**这两个参数 ⇒ 走组件原来的 token，行为逐字不变。
+      MiniLyricLinesComponent({
+        ignoreUserSetting: true,
+        mainLineColor: this.inkPrimary(),
+        nextLineColor: this.inkSecondary()
+      })
     }
     .width(StyleConstants.FULL_WIDTH)
     .alignItems(HorizontalAlign.Start)
@@ -2050,19 +2295,19 @@ export struct NowPlayingFeedPage {
     Row({ space: 8 }) {
       Text(row.singer)
         .fontSize(14)
-        .fontColor(FEED_SINGER_COLOR)
+        .fontColor(this.inkSecondary())
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .constraintSize({ maxWidth: '70%' })
       Text(this.sourceTagOf(row))
         .fontSize(9)
         .fontWeight(FontWeight.Bold)
-        .fontColor(FEED_SOFT_COLOR)
+        .fontColor(this.inkSoft())
         .padding({ left: 5, right: 5, top: 1, bottom: 1 })
         .borderRadius(4)
         .borderWidth(1)
-        .borderColor(FEED_SOFT_COLOR)
-        .backgroundColor(FEED_PILL_BG)
+        .borderColor(this.inkSoft())
+        .backgroundColor(this.inkPillBg())
     }
     .width(StyleConstants.FULL_WIDTH)
     .alignItems(VerticalAlign.Center)
@@ -2099,12 +2344,12 @@ export struct NowPlayingFeedPage {
       ForEach(this.qualityPills(row), (label: string) => {
         Text(label)
           .fontSize(10)
-          .fontColor(FEED_SOFT_COLOR)
+          .fontColor(this.inkSoft())
           .padding({ left: 8, right: 8, top: 2, bottom: 2 })
           .borderRadius(9)
           .borderWidth(1)
-          .borderColor(FEED_SOFT_COLOR)
-          .backgroundColor(FEED_PILL_BG)
+          .borderColor(this.inkSoft())
+          .backgroundColor(this.inkPillBg())
       }, (label: string): string => 'qp-' + this.songKey(row) + '-' + label)
     }
     .width(StyleConstants.FULL_WIDTH)
@@ -2140,20 +2385,20 @@ export struct NowPlayingFeedPage {
         Row({ space: 4 }) {
           SymbolGlyph(this.isFavorited(row) ? $r('sys.symbol.heart_fill') : $r('sys.symbol.heart'))
             .fontSize(24)
-            .fontColor([this.isFavorited(row) ? FEED_FAVORITE : FEED_SINGER_COLOR])
+            .fontColor([this.isFavorited(row) ? FEED_FAVORITE : this.inkSecondary()])
             .onClick((): void => {
               this.toggleFavorite(row);
             })
           Text(String(this.favoriteCount()))
             .fontSize(12)
-            .fontColor(FEED_SINGER_COLOR)
+            .fontColor(this.inkSecondary())
             .maxLines(1)
         }
         .alignItems(VerticalAlign.Center)
 
         SymbolGlyph($r('sys.symbol.heart_slash'))
           .fontSize(24)
-          .fontColor([FEED_SINGER_COLOR])
+          .fontColor([this.inkSecondary()])
           .onClick((): void => {
             this.dislike(row, index);
           })
@@ -2162,7 +2407,7 @@ export struct NowPlayingFeedPage {
         SongMoreMenu({
           song: this.toLxSong(row),
           iconSize: 24,
-          iconColor: FEED_SINGER_COLOR
+          iconColor: this.inkSecondary()
         })
       }
       .alignItems(VerticalAlign.Center)
@@ -2211,16 +2456,20 @@ export struct NowPlayingFeedPage {
   }
 
   /**
-   * ⑦ 细进度条 + 两端时间（**一行**：左当前时间 / 中间细条 / 右总时长）。
+   * ⑦ 进度条 + 两端时间（**一行**：左当前时间 / 中间条 / 右总时长）。
    *
    * · 正在播的那一屏：左端 = `MusicAppState.currentTime`，右端 = `totalTime`，
    *   已播比例 = `progress / progressMax`（**同一个真源**给播放页用的那两个值）；
    * · 其它屏：左端 `00:00`，右端 = 这首歌源数据自带的 `interval`（取不到就 `--:--`），
    *   已播比例为 0 —— 不是"进度丢了"，而是"这首没在播"。
-   * ★ 字号 12fp（参考图两端时间 ≈ 12fp 量级）、条厚 3vp、圆角 2vp；
+   * ★ 字号 12fp（参考图两端时间 ≈ 12fp 量级，**本轮不动**）、条厚 {@link FEED_PROGRESS_TRACK_VP}（**3 → 6vp**，
+   *   用户 2026-10-15 第 4 条）、圆角 = 条厚 / 2（半圆端头，跟着条厚走）；
    *   左右内边距 = {@link FEED_SIDE_PADDING_VP}（与上面各行同一列，参考图量得 ≈ 19.3vp）。
+   * ★ **墨色跟着底色走**：两端时间 = 弱墨 {@link inkSoft}、已播 = {@link inkTrackPlayed}、
+   *   未播槽 = {@link inkTrack}（浅底时那一格是 20% 的深色，不再用白色系的 `slider_track`）。
    * ★ 它下面紧接的就是 {@link cardChromeBottomVp}（底栏让位 + {@link FEED_BOTTOM_GAP_VP} 间距）
-   *   ⇒ 视觉上正好贴在壳层那条胶囊底栏的上方。
+   *   ⇒ 视觉上正好贴在壳层那条胶囊底栏的上方；行高加到 {@link FEED_PROGRESS_ROW_VP} 之后
+   *   **只往上抬、不往下长**，所以不会被底栏压住。
    * @param row 这一屏的歌。
    */
   @Builder
@@ -2228,26 +2477,26 @@ export struct NowPlayingFeedPage {
     Row({ space: 8 }) {
       Text(this.isCurrentSong(row) ? this.appState.currentTime : '00:00')
         .fontSize(12)
-        .fontColor(FEED_SOFT_COLOR)
+        .fontColor(this.inkSoft())
 
       Row() {
         Column()
           .width(this.playedPercentOf(row))
-          .height(3)
-          .borderRadius(2)
-          .backgroundColor(FEED_TRACK_PLAYED)
+          .height(FEED_PROGRESS_TRACK_VP)
+          .borderRadius(FEED_PROGRESS_TRACK_VP / 2)
+          .backgroundColor(this.inkTrackPlayed())
       }
       .layoutWeight(1)
-      .height(3)
-      .borderRadius(2)
-      .backgroundColor(FEED_TRACK)
+      .height(FEED_PROGRESS_TRACK_VP)
+      .borderRadius(FEED_PROGRESS_TRACK_VP / 2)
+      .backgroundColor(this.inkTrack())
 
       Text(this.durationOf(row))
         .fontSize(12)
-        .fontColor(FEED_SOFT_COLOR)
+        .fontColor(this.inkSoft())
     }
     .width(StyleConstants.FULL_WIDTH)
-    .height(20)
+    .height(FEED_PROGRESS_ROW_VP)
     .alignItems(VerticalAlign.Center)
     .padding({ left: FEED_SIDE_PADDING_VP, right: FEED_SIDE_PADDING_VP })
   }
@@ -2305,7 +2554,7 @@ export struct NowPlayingFeedPage {
           Text(row.title)
             .fontSize(24)
             .fontWeight(FontWeight.Bold)
-            .fontColor(FEED_TITLE_COLOR)
+            .fontColor(this.inkPrimary())
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .width(StyleConstants.FULL_WIDTH)
@@ -2353,14 +2602,23 @@ export struct NowPlayingFeedPage {
           .height(StyleConstants.FULL_HEIGHT)
           .backgroundColor(this.pageTint)
           .hitTestBehavior(HitTestMode.None)
-        // ── 层 2：顶部压深（顶栏那两个白色图标压在浅色/花哨的封面上会读不清）──────
-        // · 只压最上面一段（α 从 0.35 渐隐到 0），**高度按窗口算 = 一直到封面顶边为止**
-        //   （{@link topScrimHeightVp} = max(FEED_TOP_SCRIM_MIN_VP, coverTopVp())）：
+        // ── 层 2：顶部压深（深底才有）────────────────────────────────────────
+        // · 只压最上面一段（α 从 0.35 渐隐到 0），**高度 = 封面顶边**（{@link topScrimHeightVp}）：
         //   压深收到 0 的那一刻正好是封面顶边，而封面顶边那一行本身就是页底色
         //   （封面自带的上渐变，见 {@link FeedCover}）⇒ 两段接得**没有缝**。
+        //   ⚠️ 本轮**删掉了原来的 `max(140, coverTopVp())` 兜底** —— 真机上 coverTopVp() ≈ 110vp，
+        //      140 恒赢 ⇒ 深色会多压 30 多 vp 到封面上（用户第 2 条"过渡不太自然"的成因之一）。
         // · ⚠️ 它**在内容层下面**：封面以下的部分被不透明的封面盖住，所以"算长一点"没有副作用。
         // · ⚠️ 改动前那一层是"整屏压到深色"，会把层 1 的取色整个盖掉 ⇒ 取色就白做了；别改回去。
         // · 色标是**比例**（0 → 1），不是 vp（见 {@link FeedCover} 的同一条警示）。
+        // ⚠️⚠️ **浅底时这一层淡出到 0（不画）**（用户第 2 条的另一半）：这一层的职责是"把**白色**
+        //   顶栏图标从浅色封面里托出来"，而浅底时墨色已经切成深色档（{@link inkPrimary}
+        //   给 `0xFF1C1C1E`）⇒ 一边把背景压深、一边画深色图标，只会得到"一条多余的深色横带"。
+        // ★ 这里写 `opacity(this.pageTintIsLight ? 0 : 1)` 而**不是** `if (...) {…}`：
+        //   它挂在 `animateTo(400ms)` 的补间上，换歌时**跟着底色一起淡出/淡入** ——
+        //   否则深底 → 浅底的那一瞬间这一层会"啪"地消失，而底色还要 400ms 才渐变完
+        //   （中间那几帧是"白图标压着还没变亮的底"，正好是最需要这一层托着的时刻）。
+        //   浅底时 opacity = 0 ⇒ 既不多一条深色横带，也没有那一层。
         Column()
           .width(StyleConstants.FULL_WIDTH)
           .height(this.topScrimHeightVp())
@@ -2371,6 +2629,7 @@ export struct NowPlayingFeedPage {
               [Color.Transparent, 1]
             ]
           })
+          .opacity(this.pageTintIsLight ? 0 : 1)
           .hitTestBehavior(HitTestMode.None)
 
         // ── 层 3：内容 ────────────────────────────────────────────────
@@ -2466,16 +2725,22 @@ export struct NowPlayingFeedPage {
   }
 
   /**
-   * 下载封面 → 解码 → 取主色 → 写成页底色。
+   * 下载封面 → 解码 → 取主色 → 写成页底色（**+ 它亮不亮**）。
    *
    * ★★ **一行新算法都没有**，整条链路与歌手页 `ArtistDetailPage.loadBackdropColor()`
    *    （`features/setting/.../ArtistDetailPage.ets:293`）逐条同款：
    *      ① `http.createHttp().request(url, { expectDataType: ARRAY_BUFFER })` 下封面字节；
    *      ② `image.createImageSource(buffer)` → `createPixelMap()`；
    *      ③ `effectKit.createColorPicker(pixelMap, cb)` → `getLargestProportionColor()`；
-   *      ④ `ColorConversion.dealColor(r,g,b)` 压暗 → {@link feedTintOf} → `.backgroundColor()`。
+   *      ④ `dealColor(r,g,b)` → 不透明 `rgb(...)` → `.backgroundColor()`（{@link feedTintResultOf}）。
    * 资源释放（`pixelMap.release` / `src.release` / `req.destroy`）也与那一份一致 ——
    * 本页**每次翻屏都会走一次**，漏一个 release 就是一路泄漏。
+   *
+   * ★★ **本轮在这一处多做了两件事**（用户第 1 / 第 2 条，**取色算法本身一行未动**）：
+   *   ① 同一个 {@link FeedTintResult} 里**顺带**给出"底色亮不亮"⇒ 写进 {@link pageTintIsLight}
+   *      （判据 140，出处见 {@link FEED_INK_LIGHT_THRESHOLD}）；
+   *   ② 两个状态位的写入包在一层 `animateTo(400ms, EaseInOut)` 里 ⇒ 换歌时**底色渐变**过去
+   *      （改动前是硬切）。
    *
    * ⚠️ 过期结果必须丢掉：快速连滑会同时有几条在飞，靠 {@link cardColorJobSeq} 代次判断
    *   （与播放页 `imageColorJobSeq` 同一套做法）；失败**不改颜色**，保留上一个色/兜底色。
@@ -2504,10 +2769,21 @@ export struct NowPlayingFeedPage {
                 try {
                   if (error === undefined && colorPicker !== undefined) {
                     const color: effectKit.Color = colorPicker.getLargestProportionColor();
-                    const tint: string = feedTintOf(color.red, color.green, color.blue);
+                    const result: FeedTintResult = feedTintResultOf(color.red, color.green, color.blue);
+                    const light: boolean = result.luminance > FEED_INK_LIGHT_THRESHOLD;
                     if (this.feedAlive && jobSeq === this.cardColorJobSeq) {
-                      this.pageTint = tint;
-                      Logger.info(RZD_TAG, `tint ${tint} url=${url}`);
+                      // ⚠️ 只把"写状态"这一小段包进 animateTo（400ms / EaseInOut）：
+                      //   换歌时底色从上一首的色**渐变**到这一首的色，而不是硬切（用户第 2 条）。
+                      //   异步 / 网络 / 解码 / 日志**都不在**这个闭包里 —— 包进去会被补间吃掉时间。
+                      //   墨色两个状态位必须**写在一起**：只动其中一个会出现"底色已经渐变到浅色、
+                      //   墨色还是白"的中间帧。
+                      this.getUIContext().animateTo({ duration: FEED_TINT_ANIM_MS, curve: Curve.EaseInOut }, () => {
+                        this.pageTint = result.tint;
+                        this.pageTintIsLight = light;
+                      });
+                      // 日志必须在 animateTo 之外（与上面同一条纪律）
+                      Logger.info(RZD_TAG,
+                        `tint ink light=${light} lum=${result.luminance} tint=${result.tint} url=${url}`);
                     }
                   }
                 } finally {

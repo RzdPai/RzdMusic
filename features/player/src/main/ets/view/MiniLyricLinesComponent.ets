@@ -32,6 +32,22 @@ export struct MiniLyricLinesComponent {
    * 默认 false ⇒ 播放页行为与改动前逐字相同（仍由「设置 → 小歌词」控制）。
    */
   @Param ignoreUserSetting: boolean = false;
+  /**
+   * **主行**（当前行）的字色 —— **可选**，不传就还是原来的 token。
+   *
+   * 为什么要有：底栏页签「现在就听」的背景是**按封面动态取色**的，浅色封面会取出浅色底，
+   * 而组件里原来写死的 `app.color.player_text_primary` 是**白色** ⇒ 浅底上这两行看不见。
+   * 组件自己拿不到那一页的"底色亮不亮"，所以由**调用方选好颜色传进来**。
+   *
+   * ⚠️ 默认值给 `undefined`（而不是 `$r(...)`）：`@Param` 的默认值表达式会在**声明处**求值，
+   *   这里用 `undefined` + 使用处的 `??` 兜底，求值时机最稳（也避免默认值求值早于 `$r` 可用）。
+   * ⚠️ **播放页不传** ⇒ `??` 落到原来的 `$r('app.color.player_text_primary')`，行为逐字不变。
+   */
+  @Param mainLineColor: ResourceColor | undefined = undefined;
+  /**
+   * **次行**（下一行）的字色 —— **可选**，不传就还是原来的 token（见 {@link mainLineColor}）。
+   */
+  @Param nextLineColor: ResourceColor | undefined = undefined;
   @Local state: MusicAppState =
     AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
   @Local miniLyricState: ShowMiniLyricState =
@@ -87,14 +103,15 @@ export struct MiniLyricLinesComponent {
       Column({ space: 3 }) {
         Text(this.miniLyricLines()[0])
           .fontSize(15)
-          .fontColor($r('app.color.player_text_primary'))
+          // 调用方给了颜色就用它（「现在就听」页按取色底传深浅两档），没给就是原来的白 token
+          .fontColor(this.mainLineColor ?? $r('app.color.player_text_primary'))
           .opacity(0.92)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width(StyleConstants.FULL_WIDTH)
         Text(this.miniLyricLines()[1])
           .fontSize(14)
-          .fontColor($r('app.color.play_text_color'))
+          .fontColor(this.nextLineColor ?? $r('app.color.play_text_color'))
           .opacity(0.6)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
