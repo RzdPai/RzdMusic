@@ -1447,7 +1447,19 @@ struct Index {
           // 56 = 胶囊高，+16 = `barBottomMargin` 的常规值。它加在**滑动卡片自己**身上，
           // 这样每一屏都能正好躲开底栏（见 `NowPlayingFeedPage.FEED_DEFAULT_BOTTOM_RESERVE_VP`）。
           bottomReserveVp: deviceInfo.distributionOSApiVersion >= 60100 ? 56 + 16 : 56,
-          scrollTopCommand: this.tabScrollTopCommands[1]
+          scrollTopCommand: this.tabScrollTopCommands[1],
+          // ★★ 2026-10-15 用户：「我启动应用过一会就会自动开始播放，**自动开始播放的逻辑应该是我打开
+          //    那个现在就听的页面的时候**」。根因是 `HdsTabs` 的 `TabContent` 子页面**启动时就挂载**
+          //    ⇒ 页面里的 `applyRows()` 一到数据就起播了（用户还在首页）。
+          //    ⇒ 下发**本页在底栏里的下标**（是个常量），页面自己连 `TabSwitchState` 判"现在在不在屏幕上"
+          //      （`@Monitor('tabState.tabIndex')`），只有在前台才起播。
+          //    ⚠️ **不要改成"壳层传 `isActive: this.tabState.tabIndex === …`"**：ArkUI V2 是"读才订阅"，
+          //      切页签时重绘的是读了 `tabIndex` 的那几个 `TabBarItem` 节点，本页这个 `@Param`
+          //      **不保证被重新求值** ⇒ `isActive` 会一直停在初值（静默失效）。
+          //    ⚠️ 参数名**不能叫 `tabIndex`**：`CustomComponent` 自己有一个同名方法
+          //      （通用属性 `tabIndex(index)`），自定义组件里同名会 **编译失败**（本机实测：
+          //      `Property 'tabIndex' … is not assignable to the same property in base type 'CustomComponent'`）。
+          barTabIndex: NOW_PLAYING_TAB_INDEX
         })
           .layoutWeight(1)
       }

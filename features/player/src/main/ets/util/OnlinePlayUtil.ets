@@ -292,4 +292,35 @@ export class OnlinePlayUtil {
     }
     return true;
   }
+
+  /**
+   * 往**现有**播放队列尾部追加若干在线歌曲（不重开队列、不动 `selectIndex`、不触发任何 UI）。
+   *
+   * ★「现在就听」（`NowPlayingFeedPage`）到底之后**再拉一批**时用它：
+   *   feed 变长了、队列也得跟着变长，否则 `MediaService.playNext()`（`MediaService.ets:1988`，
+   *   「Loads the next queue index in linear order (**wraps to 0 at end**)」）读到的是**实时**
+   *   `getQueueLength()` —— 队列不长，"播完最后一首"就 wrap 回第 0 首，用户听到的还是旧的那一批。
+   *   追加之后，下一个下标自然落在新拉进来的那几首上。
+   *
+   * ⚠️ 调用方必须自己保证"**只追加真正新增的歌**"（本方法**不去重**）：
+   *   队列与 feed 是两份东西，这里没有"已见过"的口径可查 —— 重复追加会让队列里出现重复曲目。
+   * ⚠️ `@Trace` 数组必须**整体赋值**才可靠地触发观察（`playQueue` 是 `@Trace`）：
+   *   这里用 `concat` 生成新数组再赋回去，**不要**用 `push`（`push` 改的是同一个引用）。
+   * ⚠️ **不动 `selectIndex`**：追加只影响"后面还有什么"，当前这首与该下标的位置都没变。
+   * @param appState 共享播控状态（`playQueue` 的真源）。
+   * @param songs 要追加的在线歌曲（顺序 = 它们在 feed 里的顺序）。
+   * @returns 真正追加了几首。
+   */
+  public static appendQueue(appState: MusicAppState, songs: LXSearchSong[]): number {
+    if (songs.length === 0) {
+      return 0;
+    }
+    const items: SongItem[] = [];
+    for (let i: number = 0; i < songs.length; i++) {
+      items.push(OnlinePlayUtil.buildSongItem(songs[i]));
+    }
+    // ⚠️ 整体赋值（见上面 @Trace 那条说明）
+    appState.playQueue = appState.playQueue.concat(items);
+    return items.length;
+  }
 }

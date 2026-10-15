@@ -38,13 +38,37 @@
  *   · **榜单（未登录）**：`lxLeaderboard(boardId, page, limit)` 里**只有 kg 真用了 `page`**，
  *     另外四个平台的实现把 page 丢掉 ⇒ kg 走"页码递增 + 固定页大小"，
  *     其余平台走"**窗口随页数变大 + 去重切前缀**"（不伪造任何一首歌）；
- *     {@link FEED_MAX_PAGES} / {@link FEED_EMPTY_STREAK} 两道收尾保护兜住"不许死循环打接口"。
- *   · **每日推荐（已登录）**：provider 侧**没有任何分页/游标**（一次给全）⇒
- *     按任务口径"**到末尾后回到开头循环**"，实现 = `Swiper.loop(true)`，不重复插入、key 不变。
- *   · **触发时机**：滑到**倒数第 {@link FEED_PREFETCH_REMAIN} 首**时在 `onChange` 里预取
- *     （见 {@link onFeedChanged}），另有 `feedFetching` 并发闸。
+ *     窗口到顶（{@link FEED_MAX_PAGES}）之后改走"再拉一批"，由 {@link FEED_EMPTY_STREAK}
+ *     / {@link FEED_MAX_REFETCH_ROUNDS} 兜住"不许死循环打接口"。
+ *   · **每日推荐（已登录）**：provider 侧**没有任何分页/游标**（一次给全）——
+ *     但**每次调用返回的歌曲不一样**（用户 2026-10-15 实测）⇒
+ *     到末尾之后**不再"回到开头循环旧的那一批"**，而是走 {@link fetchChannelRows}
+ *     **再问一次每日推荐、把新拿到的那一批接着往下放**；
+ *     只有连续 {@link FEED_EMPTY_STREAK} 次 0 新增（或轮次上界）才落 {@link markExhausted}
+ *     并打开 `Swiper.loop(true)` —— `syncLoop` 的开关条件本身没变。
+ *   · **★ 队列同步**：feed 变长时若"全局队列就是这一份"，同时用
+ *     {@link OnlinePlayUtil.appendQueue} 把新增行**追加到队列尾部** ——
+ *     否则 `MediaService.playNext()`（读到末尾会 **wrap 回 0**）播完最后一首还是绕回旧的那批。
+ *   · **触发时机**：① 滑到**倒数第 {@link FEED_PREFETCH_REMAIN} 首**时在 `onChange` 里预取
+ *     （见 {@link onFeedChanged}）；② **不滑也在听**时由 `@Monitor('appState.selectIndex')`
+ *     补触发（见 {@link onPlayingSongChanged}）——两者共用 `feedFetching` 并发闸。
  *   · **到底不出现空白**：`loop` 打开后永远滑得到下一屏；`loop` 没开时也只会停在最后一屏
  *     （`edgeEffect(EdgeEffect.Spring)` 回弹），**不会出现空屏**。
+ *
+ * ## 二·五、自动播放（**只在"本页在前台"时才起播**，别再退回"进页就播"）
+ *
+ * ★★ 用户 2026-10-15 原话：「我启动应用过一会就会自动开始播放，**自动开始播放的逻辑应该是
+ *   我打开那个『现在就听』的页面的时候**」。根因：`HdsTabs` 的 `TabContent` 子页面
+ *   **在 App 启动时就被挂载**（不是切到才挂载）⇒ 无条件 `playAt(0)` 会让音乐在首页自己响起来
+ *   （"过一会"正好是首批数据那次网络请求的耗时）。
+ * ★ 两条路都判 {@link isOnScreen}（`tabState.tabIndex === tabIndex`）：
+ *   · 数据**比切页签晚**回来 ⇒ {@link applyRows} 里那一次；不在前台就不起播，
+ *     并落一行 `autoplay deferred (not on screen)`；
+ *   · 数据**已经在了**、用户才切过来 ⇒ {@link onTabSwitched}（`@Monitor('tabState.tabIndex')`），
+ *     落一行 `activate autoplay`；若在播的就是本页的歌则 `activate skip`（**不重播**）。
+ * ★ **判据必须是页面自己订阅 `TabSwitchState`**，不能等壳层把 `isActive` 算好了传进来：
+ *   ArkUI V2 "读才订阅"，父组件那次传参不保证随页签切换重算（会静默停在初值）。
+ *   先例：`features/playlist/.../PlaylistHomePage.ets:32/75`。
  *
  * ## 三、界面（照用户给的参考图：华为音乐全屏播放页）
  *
@@ -148,9 +172,12 @@
  *      **只有"近中性（近白/近灰/近黑）的封面"**才会取出浅底（`dealColor` 对 `max−min < 1e-3` 原样返回）
  *      —— 用户那张近白封面正是这一档。
  *
- * 诊断关键字：`grep RzdNowPlaying`（hilog 标签；load / page request / page result /
- * exhausted / dislike / favorite / **play toggle / play / play switch / play skip** / **tint** 各有独立字样，
- * 判读表见任务报告）。壳层那半条用 `grep PlaybackIntent` / `RzdPlayerRoute`。
+ * 诊断关键字：`grep RzdNowPlaying`（hilog 标签；load / page request / page skipped /
+ * **refetch round= / refetch queue append= / refetch queue untouched / refetch failed** /
+ * exhausted / dislike / favorite / **play toggle / play / play switch / play skip** /
+ * **tab -> / activate autoplay / activate skip / autoplay deferred** / **tail watch** /
+ * **tint** 各有独立字样，判读表见任务报告）。
+ * 壳层那半条用 `grep PlaybackIntent` / `RzdPlayerRoute` / `RzdMiniBarHide`。
  */
 
 import { AppStorageV2, uiObserver } from '@kit.ArkUI';
@@ -173,6 +200,7 @@ import {
   PlaybackIntentState,
   SongItem,
   StyleConstants,
+  TabSwitchState,
   WindowInfo,
   getWindowInfoState
 } from 'musicbasic';
@@ -231,7 +259,19 @@ const FEED_MAX_PAGES: number = 8;
  */
 const FEED_EMPTY_STREAK: number = 2;
 
-/** 滑到"**剩余几首**"时预取下一页（见 {@link onFeedChanged}）。 */
+/**
+ * **收尾保护③**："再拉一批"的轮次硬上界（见 {@link loadMore}）。
+ *
+ * ★★ 它**只是防死循环的硬上界**（万一"取不动了"这件事在某个平台上表现成
+ *   "每次都返回同一批已见过的歌"以外的形态，不至于把接口打成死循环）；
+ *   **真正的终止判据是 {@link FEED_EMPTY_STREAK}**（连续 0 首新增）。
+ *   正常使用下永远碰不到这个上界 —— 用户滑 20 批 × 每批几十首 = 几百首之后才会到。
+ * ★ 20 的来历：每日推荐一批约 30 首 ⇒ 20 批 ≈ 600 首，远超"随手听歌"的量级；
+ *   同时把最坏情况下的网络请求数钉在有限个（每日推荐每批 2 个请求）。
+ */
+const FEED_MAX_REFETCH_ROUNDS: number = 20;
+
+/** 滑到"**剩余几首**"时预取下一页（见 {@link onFeedChanged}）；不在滑动时由 {@link onPlayingSongChanged} 补触发。 */
 const FEED_PREFETCH_REMAIN: number = 3;
 
 /**
@@ -761,8 +801,41 @@ export struct NowPlayingFeedPage {
       () => new AccountChangedState())!;
   /** 窗口信息（算封面边长、顶部让位用）。 */
   @Local windowInfo: WindowInfo = getWindowInfoState();
+  /**
+   * 底栏页签下标真源（与壳层是**同一个 `AppStorageV2` 单例**；切页签时壳层写它）。
+   *
+   * ★★ 本页必须**自己订阅**它，不能等壳层把 `tabIndex === …` 算好了传进来 ——
+   *   理由见 {@link tabIndex} 的注释（V2"读才订阅"⇒ 父组件那次传参不保证重算）。
+   * ★ 照抄的先例：`features/playlist/src/main/ets/view/PlaylistHomePage.ets:32`
+   *   （`@Local tabState` + `:75` 的 `@Monitor('tabState.playlistSection')`）。
+   */
+  @Local tabState: TabSwitchState =
+    AppStorageV2.connect(TabSwitchState, AppStorageKeys.TAB_SWITCH_STATE, () => new TabSwitchState())!;
   /** 窗口断点（只为让封面边长在旋转/折叠展开时重算）。 */
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
+
+  /**
+   * **本页**在底栏里的下标 —— 壳层下发的**常量**（`products/default/.../Index.ets` 传
+   * `NOW_PLAYING_TAB_INDEX` = 1）。
+   *
+   * ★ 它**不是**可变状态，只是让页面不必硬编码那个 1。判"现在屏幕上是不是本页"用的是
+   *   {@link tabState}.`tabIndex === 本值`（见 {@link isOnScreen}）。
+   * ★★ 为什么**不**由壳层下发 `isActive: this.tabState.tabIndex === …`：
+   *   ArkUI V2 是"**读才订阅**" —— 切页签时只写 `TabSwitchState.tabIndex`，
+   *   重绘的是读了它的那几个节点（`TabBarItem` 等），**父组件里那一次传参不保证被重新求值**
+   *   ⇒ 页面拿到的 `isActive` 会一直停在初值（切过来了还是不起播，**静默失效**）。
+   *   正确姿势 = **页面自己连共享状态**（照 `features/playlist/.../PlaylistHomePage.ets:32/75`
+   *   的 `@Local tabState` + `@Monitor('tabState.playlistSection')` 先例）。
+   * 默认 `1`（与壳层 `NOW_PLAYING_TAB_INDEX` 同值）：单独用本页做预览时不传也是对的。
+   *
+   * ⚠️⚠️ **名字不能叫 `tabIndex`**（本机实测编译报错）：
+   *   `Property 'tabIndex' in type 'NowPlayingFeedPage' is not assignable to the same property
+   *    in base type 'CustomComponent'. Type 'number' is not assignable to type '(index: number) => CommonAttribute'`
+   *   —— `CustomComponent` 自己有一个同名**方法** `tabIndex(index)`（通用属性），
+   *   自定义组件里再声明同名成员就是**覆盖基类成员**，直接编译不过。
+   *   所以叫 `barTabIndex`（"本页在底栏里的下标"），语义不变。
+   */
+  @Param barTabIndex: number = 1;
 
   /** 竖向 Swiper 的控制器（"点当前页签回顶部" = `changeIndex(0)`）。 */
   private feedController: SwiperController = new SwiperController();
@@ -834,10 +907,50 @@ export struct NowPlayingFeedPage {
   private feedFetching: boolean = false;
   /** 连续"0 首新歌 / 请求失败"的次数 —— 收尾保护②的计数（见 {@link loadMore}）。 */
   private feedEmptyStreak: number = 0;
-  /** 这条通道还能不能往后取：true 之后**一律不再打接口**（收尾保护的总闸）。 */
+  /**
+   * 已经"再拉一批"了几轮 —— 收尾保护③的计数（硬上界 {@link FEED_MAX_REFETCH_ROUNDS}）。
+   *
+   * ⚠️ 只在 {@link fetchChannelRows} 那条路上 +1（**真翻页不计数**）：
+   *   它的语义是"这条通道已经取不到**新页**了，我们靠再问一次接口拿新歌"。
+   */
+  private feedRefetchRounds: number = 0;
+  /**
+   * 每日推荐通道**当时选中的那个账号 id**（{@link loadDaily} 写入，{@link resetPaging} 清空）。
+   *
+   * ★ 为什么记字段、而不是每次再 `pickAccount(AccountService.listAccounts(), this.svcSource())`：
+   *   ① 每日推荐是**账号级**数据，再拉一批必须问**同一个账号**，否则会串号；
+   *   ② 再 pick 一次还多读一次 preferences（`AccountService.listAccounts()` 会反序列化账号表），
+   *      而且"期间用户在别处登录了另一个同平台账号"时会**悄悄换人**——
+   *      记下当时那个 id 是**唯一真源**，语义最直白。
+   * ⚠️ `resetPaging()` 必须清掉它，否则换平台后第一次 `loadMore` 会拿旧平台的账号去问。
+   */
+  private feedAccountId: string = '';
+  /** 这条通道还能不能往后取：true 之后**一律不再打接口**（收尾保护的总闸，见 {@link markExhausted}）。 */
   @Local feedExhausted: boolean = false;
-  /** 是否让 `Swiper` 循环：到底之后打开 ⇒ 永远滑不到空白（"回到开头循环"）。 */
+  /**
+   * 是否让 `Swiper` 循环：**取不动了之后**才打开 ⇒ 永远滑不到空白（"回到开头循环"）。
+   *
+   * ⚠️ "取不动了"= {@link feedExhausted}（连续 0 新增 / 轮次上界 / 出错），**不是**"到了末尾"
+   *   —— 到了末尾还会去"再拉一批"（见 {@link loadMore}），那期间**不开循环**。
+   */
   @Local feedLoop: boolean = false;
+  /**
+   * 这一轮走的是"**再拉一批**"那条路（true）还是"真翻页"那条路（false）——
+   * 帧内临时量，只给 {@link loadMore} / {@link syncQueueWithNewRows} 用。
+   *
+   * 为什么要有它：队列同步只该发生在"到底之后再拉一批"这条路上（那是 feed 与队列
+   * **同一批歌**的语义）；真翻页那条路上队列由 {@link playAt} 的组队列分支负责。
+   */
+  private isRefetchRound: boolean = false;
+  /**
+   * "这一轮开始时，**全局播放队列是不是就是屏幕上这一份 feed**"——
+   * {@link loadMore} 在**调 {@link appendRows} 之前**写它，{@link syncQueueWithNewRows} 读它。
+   *
+   * ⚠️ **必须**在 append 之前取：`queueMatchesFeed` 要比"队列长度 == feed 长度"，
+   *   append 之后 feed 先变长、队列还没追 ⇒ 判据会**永远返回 false**（队列就永远不同步了）。
+   * ⚠️ 它是"本轮"的临时快照，不是状态：每轮 `loadMore` 开头重算一次。
+   */
+  private queueWasFeed: boolean = false;
   /** 已经插入过的 `source|songId`（**去重真源**，也是"同一首歌不重复插入"的判据）。 */
   private feedSeen: string[] = [];
   /** 本页点过「不感兴趣」的 key（只在**本页**隐藏，不落盘、不动播放队列）。 */
@@ -881,7 +994,17 @@ export struct NowPlayingFeedPage {
     // 背景取色的兜底：进页面先按**当前这一屏**的封面取一次色
     // （`applyRows` 之后下标归 0，那次也会触发；这里覆盖"页面被复用、下标没变"的情况）。
     this.refreshCardColor();
+    // ⚠️ `load()` 之后**数据回来时**才可能起播（`applyRows` → {@link ensureAutoplay}），
+    //    而且**必须**先过 `isOnScreen` 那一关：本页的宿主 `TabContent` 在 App 启动时就被挂载
+    //    （见文件头 §二·五），"进 aboutToAppear"**不等于**"用户在看这一页"。
     this.load();
+    // ★ "数据**已经**在了、用户才切到本页"这一半在这里兜（页面被重挂载时 `tabIndex` 本来就已经
+    //   等于本页 ⇒ `@Monitor('tabState.tabIndex')` 之后**不会再变**，光靠它就没机会起播）：
+    //   `aboutToAppear` 在 `load()` 之后**同步**跑完，此时数据还是旧的/空的 ⇒ 这里通常什么也不做
+    //   （`ensureAutoplay` 自己会因 `totalCount() === 0` 早退）；
+    //   真正起作用的场景是"壳层重挂载本页、数据源刚好还在"。
+    //   ⚠️ **不是**"进页面无条件起播"：前台判据与去重都在 `ensureAutoplay` 里。
+    this.ensureAutoplay();
   }
 
   /** 页面销毁：异步取色回来时不要再写状态（与播放页 `isAlive` 同一口径）。 */
@@ -968,6 +1091,9 @@ export struct NowPlayingFeedPage {
     this.feedPage = 0;
     this.feedFetching = false;
     this.feedEmptyStreak = 0;
+    // ★ "再拉一批"的轮次与"当时那个账号"都归零：换通道之后的这一批必须重新数、重新问账号。
+    this.feedRefetchRounds = 0;
+    this.feedAccountId = '';
     this.feedExhausted = false;
     this.feedLoop = false;
     this.feedSeen = [];
@@ -1030,9 +1156,13 @@ export struct NowPlayingFeedPage {
    * `getTrackDetails()`（:292），由该账号的 provider 取（tx / wy / kg 三个 provider 有实现）。
    * ⚠️ 没有对应 provider 的平台（kw / mg）会走到 catch ⇒ **空态并写明原因，不伪造**。
    *
-   * ★★ 这条通道**没有下一页**（读 provider 实现得来，见 {@link loadMore} 的注释）⇒
-   *    `applyRows` 会直接把 `feedExhausted` 置 true 并打开 `Swiper.loop`，
-   *    "到末尾后回到开头循环"，不再试着往后取。
+   * ★★ 这条通道**没有"下一页"**（读 provider 实现得来，见 {@link loadMore} 的注释：
+   *    tx 内部固定翻 `Page = 1..3` 再 `Set` 去重，wy / kg 单次请求），
+   *    但**每次调用返回的歌曲不一样**（用户 2026-10-15 实测）⇒
+   *    到末尾之后**不再"回到开头循环旧的那一批"**，而是走 {@link fetchChannelRows}
+   *    **再问一次每日推荐、把新拿到的那一批接着往下放**；
+   *    只有连续 {@link FEED_EMPTY_STREAK} 次 0 首新增（或轮次上界 {@link FEED_MAX_REFETCH_ROUNDS}）
+   *    才落 {@link markExhausted} 并打开 `Swiper.loop`。
    * @param src 平台代号。
    * @param acc 该平台的账号。
    */
@@ -1049,6 +1179,9 @@ export struct NowPlayingFeedPage {
       for (let i: number = 0; i < tracks.length; i++) {
         rows.push(this.toRowFromTrack(tracks[i], i));
       }
+      // ★ 记下"这条通道问的是哪个账号" —— {@link fetchChannelRows} 再拉一批时要用同一个 id
+      //   （理由见 {@link feedAccountId} 的注释）。
+      this.feedAccountId = acc.id;
       Logger.info(RZD_TAG, `load daily platform=${src} ids=${ids.length} songs=${rows.length}`);
       this.applyRows(rows, FeedOrigin.DAILY);
     } catch (err) {
@@ -1106,12 +1239,6 @@ export struct NowPlayingFeedPage {
     this.qualityRequested = [];
     this.qualityVersion++;
     this.feedRevision++;
-    // ★ 每日推荐**结构上没有下一页**（见 loadDaily / loadMore）⇒ 一开始就按"到底"处理，
-    //   让循环直接生效。这样避免"用户滑到最后一首那一刻才切模式"（那一下会跳）。
-    if (origin === FeedOrigin.DAILY) {
-      this.feedExhausted = true;
-      Logger.info(RZD_TAG, `daily has no paging -> loop total=${fresh.length}`);
-    }
     this.syncLoop();
     // ⚠️ `Swiper.onChange` 在**切换到位**时才回调，而"首帧是否回调"没有保证 ⇒
     //    第 0 屏的音质**主动查一次**（见文件头 §四 的同一处坑）。
@@ -1122,13 +1249,25 @@ export struct NowPlayingFeedPage {
       if (fresh.length <= FEED_PREFETCH_REMAIN + 1) {
         void this.loadMore();
       }
-      // ★★ **进页面自动播放**（用户 2026-10-15 原话："打开这个页面自动播放当前歌曲，
-      //    滑到哪首歌就播放哪一首"）。首批数据刚到就起播第 0 屏。
+      // ★★ **进页自动播放**（用户 2026-10-15 原话："打开这个页面自动播放当前歌曲，
+      //    滑到哪首歌就播放哪一首"）—— 语义是"**本页在前台时**自动播放"。
+      //    ⚠️ **必须先判 {@link isOnScreen}**（在 {@link ensureAutoplay} 里）：
+      //      `HdsTabs` 的 `TabContent` 子页面**启动时就挂载**（不是切到才挂载）⇒
+      //      不判的话，App 一启动、这次网络请求一回来就自己出声了。
+      //      用户实测的原话：「我启动应用**过一会**就会自动开始播放」——"过一会"正好是
+      //      这一次请求的耗时（根因就在这一处；已排除 `MediaService.restoreLastQueue()`，
+      //      它走 `loadAsset(idx, true)` = `loadOnly`，注释明写"启动恢复 → 仍不自动播放"）。
       //    ⚠️ 只在**首屏装载**这一条路上起播：`appendRows`（翻页追加）不碰播放 ——
-      //      否则每预取一页都会把当前在播的那首重放一遍。
-      //    ⚠️ 用的是同一个 {@link playAt}：它自己会判"这首是不是已经在播"，
-      //      所以"从别的页签切回来、歌还没变"时**不会重播**（用户要求）。
-      this.playAt(0);
+      //      否则每预取一批都会把当前在播的那首重放一遍。
+      //    ⚠️ 后面的判定全部收进 {@link ensureAutoplay}（切页签那条路共用同一段），
+      //      `playAt` 自己会判"这首是不是已经在播"⇒"歌没变"时**不会重播**（用户要求）。
+      //    ⚠️ 不在前台时**什么都不做**：切到本页那一刻由 {@link onTabSwitched} 补起播。
+      if (this.isOnScreen()) {
+        this.ensureAutoplay();
+      } else {
+        Logger.info(RZD_TAG,
+          `autoplay deferred (not on screen) tab=${this.tabState.tabIndex} mine=${this.barTabIndex} total=${fresh.length}`);
+      }
     }
   }
 
@@ -1200,9 +1339,17 @@ export struct NowPlayingFeedPage {
   }
 
   /**
-   * 预取下一页（滑到倒数第 {@link FEED_PREFETCH_REMAIN} 首时由 {@link onFeedChanged} 触发）。
+   * 预取**下一批**（滑到倒数第 {@link FEED_PREFETCH_REMAIN} 首时由 {@link onFeedChanged} 触发；
+   * 不在滑动时由 {@link onPlayingSongChanged} 补触发）。
    *
-   * ## 两条通道"能不能翻页"，都是**读实现**得来的（不是猜 API 文档）
+   * ★★ **这一版的核心变化：到底之后不再"循环旧的那一批"，而是再去拉一批新的。**
+   *   用户 2026-10-15 原话：「我发现在还是那一个列表循环，就是**播完了应该自动刷新列表**
+   *   （你从每日30首，每次获取到的歌曲也都不一样）」。
+   *   改动前的形状：`applyRows` 对 DAILY **一开始就**置 `feedExhausted = true`
+   *   ⇒ `syncLoop()` 立刻开 `Swiper.loop(true)` ⇒ 同一批歌在屏幕上无限转。
+   *   现在：DAILY 也走"能往后取"这条路，取不动了（连续 0 新增）才落 `markExhausted` 开循环。
+   *
+   * ## 两条通道"能不能往后取"，都是**读实现**得来的（不是猜 API 文档）
    *
    * ### 1、未登录 = 榜单 · `lxLeaderboard(boardId, page, limit)`
    *     （`features/player/src/main/ets/source/LXMusicSDK.ets:169`）
@@ -1215,9 +1362,11 @@ export struct NowPlayingFeedPage {
    *       它自己按 `song_begin` 循环取到 `songNum` 为止 ⇒ 加大 `songNum` 才多给；
    *     · `wy` → `wyLeaderboard(id, limit)`：**签名里就没有 page**（`:198`）；
    *     · `mg` → `mgLeaderboard(id, page, limit)`：收下了 page 但**没用**（`:3153`）。
-   *   ⇒ **能翻就翻**：kg 走"页码递增 + 固定页大小"；那四个平台走
-   *     "**窗口随页数变大**（`limit = 单页 × 页数`，有上界）+ {@link filterFresh} 切前缀"。
-   *     两条路都**只把接口真实返回的歌插进来**（`raw` / `added` 都打日志），**不伪造数据**。
+   *   ⇒ **能翻就翻**：kg 走"页码递增 + 固定页大小"（`fetchBoardPage` 那一支）；
+   *     那四个平台"**窗口随页数变大**（`limit = 单页 × 页数`，有上界）"——
+   *     但窗口有上界 {@link FEED_BOARD_WINDOW_MAX}，到顶之后再翻也只是把同一批歌取回来，
+   *     所以 `feedPage >= FEED_MAX_PAGES` 之后改走 {@link fetchChannelRows} 的"再拉一批"支，
+   *     靠 {@link filterFresh} 切前缀 + 两道收尾保护兜住（**不伪造数据**）。
    *
    * ### 2、已登录 = 每日推荐 · `AccountService.getDailyTrackIds()`
    *     （`features/player/src/main/ets/account/AccountService.ets:286`）
@@ -1226,64 +1375,73 @@ export struct NowPlayingFeedPage {
    *       返回的是**一份定长的列表**，没有"下一页"的参数可传；
    *     · `WyProvider.ets:427`：`POST /weapi/v3/discovery/recommend/songs`（`{}` 空体）单次返回；
    *     · `KgProvider.ets:522`：`everyday_song_recommend` 单次返回。
-   *   ⇒ **不能翻**。按任务口径改成"**到末尾后回到开头循环**"，实现 = `Swiper.loop(true)`
-   *     （`applyRows` 里对 DAILY 直接置 `feedExhausted` 并 {@link syncLoop}）：
-   *     不重复插入同一首歌、`LazyForEach` 的 key 不变，滑到头也**不会出现空白**。
+   *   ⇒ **没有"下一页"** —— 但**每次调用返回的歌曲不一样**（用户 2026-10-15 实测）⇒
+   *     到底之后走 {@link fetchChannelRows} 的 DAILY 支：**再调一次每日推荐**，
+   *     新歌经 {@link filterFresh}（`feedSeen` 去重）接着往下插。
+   *   ⇒ 只有**连续 {@link FEED_EMPTY_STREAK} 次 0 首新增**（接口开始反复给同一批）
+   *     或轮次上界 {@link FEED_MAX_REFETCH_ROUNDS} 才落 {@link markExhausted}、开 `Swiper.loop`。
    *
-   * ## 收尾保护（两道，避免死循环打接口）
+   * ## 收尾保护（三道，避免死循环打接口）
    *   ① 连续 {@link FEED_EMPTY_STREAK} 次"0 首新歌 / 请求失败" ⇒ {@link markExhausted}，
-   *      此后**一律不再打接口**（`feedExhausted` 是总闸）；
-   *   ② 页码硬上界 {@link FEED_MAX_PAGES}。
-   *   两者都会落一行 `RzdNowPlaying exhausted reason=…`（上机判读见任务报告）。
+   *      此后**一律不再打接口**（`feedExhausted` 是总闸）—— **这是真正的终止判据**；
+   *   ② 页码硬上界 {@link FEED_MAX_PAGES}（到顶后换成"再拉一批"）；
+   *   ③ "再拉一批"的轮次硬上界 {@link FEED_MAX_REFETCH_ROUNDS}（只是防死循环的兜底，
+   *      正常使用碰不到）。
+   *   三者都会落一行 `RzdNowPlaying exhausted reason=…`（上机判读见任务报告）。
    */
   private async loadMore(): Promise<void> {
     if (this.feedFetching || this.feedExhausted) {
       return;
     }
-    if (this.feedOrigin !== FeedOrigin.BOARD) {
-      // 每日推荐 / 空态 / 还没加载完：没有下一页（依据见方法注释）。
-      this.markExhausted('no-board-channel');
+    if (this.feedOrigin === FeedOrigin.EMPTY || this.feedOrigin === FeedOrigin.NONE) {
+      // 空态 / 还没加载完：没有通道可取。⚠️ 这里**不** markExhausted，也不动循环。
       return;
     }
     this.feedFetching = true;
-    const page: number = this.feedPage + 1;
+    // ★★ 队列是否"就是屏幕上这一份"——**必须在 appendRows 之前取**：
+    //    append 之后 feed 先变长、队列还是旧的，`queueMatchesFeed`（比总长度）会直接返回 false
+    //    ⇒ 队列就再也同步不上了（`syncQueueWithNewRows` 会永远走"不动队列"那一支）。
+    this.queueWasFeed = this.queueMatchesFeed(this.appState.playQueue);
     try {
-      const src: string = this.svcSource();
-      const boardId: string = pickFeatureBoardId('newSongs', src);
-      if (boardId.length === 0) {
-        this.markExhausted('board-missing');
+      let rows: RecommendPrivateSongUi[] | undefined;
+      if (this.feedOrigin === FeedOrigin.BOARD && this.feedPage < FEED_MAX_PAGES) {
+        // 还能真翻页：照旧（页码 +1、窗口变大、去重切前缀）。
+        this.isRefetchRound = false;
+        rows = await this.fetchBoardPage(this.feedPage + 1);
+      } else if (this.feedRefetchRounds < FEED_MAX_REFETCH_ROUNDS) {
+        // ★★ **到底了 ⇒ 再拉一批**（不再是"回到开头循环旧的那一批"）。
+        this.isRefetchRound = true;
+        this.feedRefetchRounds++;
+        rows = await this.fetchChannelRows();
+      } else {
+        this.markExhausted('refetch-cap');
         return;
       }
-      const limit: number = this.boardFetchLimit(page);
+      const added: RecommendPrivateSongUi[] = rows === undefined ? [] : this.appendRows(rows);
       Logger.info(RZD_TAG,
-        `page request board=${boardId} platform=${src} page=${page} limit=${limit} prev=${this.feedSource.totalCount()}`);
-      const res: LXSearchResult = await lxLeaderboard(boardId, page, limit);
-      const rows: RecommendPrivateSongUi[] = [];
-      for (let i: number = 0; i < res.list.length; i++) {
-        rows.push(this.toRow(res.list[i], i));
-      }
-      this.feedPage = page;
-      const added: number = this.appendRows(rows);
-      Logger.info(RZD_TAG,
-        `page result board=${boardId} page=${page} raw=${res.list.length} added=${added} ` +
+        `refetch round=${this.feedRefetchRounds} max=${FEED_MAX_REFETCH_ROUNDS} origin=${this.feedOriginName()} ` +
+          `platform=${this.svcSource()} raw=${rows === undefined ? 0 : rows.length} added=${added.length} ` +
           `total=${this.feedSource.totalCount()} streak=${this.feedEmptyStreak}`);
-      if (added === 0) {
-        this.feedEmptyStreak++;
-      } else {
-        this.feedEmptyStreak = 0;
+      // ★★ 队列同步：feed 变长的同时，**全局播放队列也要跟着变长** —— 否则
+      //    `MediaService.playNext()` 读到的是旧的队列长度，播完最后一首会 **wrap 回第 0 首**
+      //    （用户听到的还是旧的那一批）。详见 {@link syncQueueWithNewRows}。
+      //    ⚠️ 只在"到底之后再拉一批"这条路上做：真翻页（`fetchBoardPage`）时队列在别的路径上
+      //      自有它的口径，这里不掺和。
+      if (added.length > 0 && this.isRefetchRound) {
+        this.syncQueueWithNewRows(added);
       }
+      this.feedEmptyStreak = added.length === 0 ? this.feedEmptyStreak + 1 : 0;
       if (this.feedEmptyStreak >= FEED_EMPTY_STREAK) {
-        this.markExhausted('empty-page');
-      } else if (page >= FEED_MAX_PAGES) {
-        this.markExhausted('max-page');
+        this.markExhausted('empty-round');
       }
     } catch (err) {
       const e = err as BusinessError;
       this.feedEmptyStreak++;
       Logger.error(RZD_TAG,
-        `page failed page=${page} streak=${this.feedEmptyStreak} code=${e.code} msg=${e.message}`);
+        `refetch failed origin=${this.feedOriginName()} platform=${this.svcSource()} page=${this.feedPage} ` +
+          `round=${this.feedRefetchRounds} streak=${this.feedEmptyStreak} code=${e.code} msg=${e.message}`);
       if (this.feedEmptyStreak >= FEED_EMPTY_STREAK) {
-        this.markExhausted('page-error');
+        this.markExhausted('fetch-error');
       }
     } finally {
       // ⚠️ `finally` 一定要有：失败路径上不放闸的话，这条通道就再也不会有下一次预取了。
@@ -1291,19 +1449,142 @@ export struct NowPlayingFeedPage {
     }
   }
 
+  /** `feedOrigin` 的短名（**只用于日志**，别拿它做逻辑判断）。 */
+  private feedOriginName(): string {
+    switch (this.feedOrigin) {
+      case FeedOrigin.BOARD:
+        return 'BOARD';
+      case FeedOrigin.DAILY:
+        return 'DAILY';
+      case FeedOrigin.EMPTY:
+        return 'EMPTY';
+      default:
+        return 'NONE';
+    }
+  }
+
+  /**
+   * 取榜单的**第 `page` 页**（**从改动前的 `loadMore()` 里原样搬出来的**，
+   * 逻辑一字未改：`boardId` / `limit` / `lxLeaderboard` / `toRow` 循环 / `feedPage` 赋值都留着）。
+   *
+   * ⚠️ 只搬位置，不改口径：`this.feedPage = page` 仍然只在**请求成功之后**写 ——
+   *   失败时不推进页码，下一轮还会拿同一个 page 重试（原行为）。
+   * @param page 要取的页码（1 起）。
+   * @returns 这一页的行（可为空数组）；`boardId` 缺失时返回 `undefined` 并由调用方计数。
+   */
+  private async fetchBoardPage(page: number): Promise<RecommendPrivateSongUi[] | undefined> {
+    const src: string = this.svcSource();
+    const boardId: string = pickFeatureBoardId('newSongs', src);
+    if (boardId.length === 0) {
+      Logger.warn(RZD_TAG, `page skipped board-missing platform=${src} page=${page}`);
+      return undefined;
+    }
+    const limit: number = this.boardFetchLimit(page);
+    Logger.info(RZD_TAG,
+      `page request board=${boardId} platform=${src} page=${page} limit=${limit} prev=${this.feedSource.totalCount()}`);
+    const res: LXSearchResult = await lxLeaderboard(boardId, page, limit);
+    const rows: RecommendPrivateSongUi[] = [];
+    for (let i: number = 0; i < res.list.length; i++) {
+      rows.push(this.toRow(res.list[i], i));
+    }
+    this.feedPage = page;
+    return rows;
+  }
+
+  /**
+   * ★★ **按当前通道"再取一批"** —— 这就是"到底之后不再循环旧的那一批"的落点。
+   *
+   * · {@link FeedOrigin.BOARD} ⇒ 接着往前推榜单窗口（`fetchBoardPage(feedPage + 1)`）——
+   *   行为与改动前的"翻页"一致（非 kg 平台窗口到顶后靠 `feedSeen` 切前缀拿新歌）；
+   * · {@link FeedOrigin.DAILY} ⇒ **再调一次每日推荐**（`getDailyTrackIds` + `getTrackDetails`，
+   *   与 {@link loadDaily} 逐字同口径）：provider 没有"下一页"参数，但**每次返回的歌曲不一样**
+   *   （用户实测）⇒ 新歌靠 {@link filterFresh} 去重后接着往下插；
+   * · 其它 origin ⇒ 返回 `undefined`（调用方当 0 新增计数，交由收尾保护收口）。
+   *
+   * ⚠️ 每日推荐问的是 {@link feedAccountId}（{@link loadDaily} 当时选中的那个账号），
+   *   **不是**再 `pickAccount` 一次 —— 理由写在 {@link feedAccountId} 的注释里。
+   * ⚠️ 异常**不在这里吞**：交给 {@link loadMore} 的 catch 统一记 streak + 打日志（一条口径）。
+   * @returns 这一批原始行；`undefined` = 这条通道没有"再拉一批"这一说。
+   */
+  private async fetchChannelRows(): Promise<RecommendPrivateSongUi[] | undefined> {
+    if (this.feedOrigin === FeedOrigin.BOARD) {
+      return await this.fetchBoardPage(this.feedPage + 1);
+    }
+    if (this.feedOrigin !== FeedOrigin.DAILY) {
+      return undefined;
+    }
+    const accountId: string = this.feedAccountId;
+    if (accountId.length === 0) {
+      Logger.warn(RZD_TAG, `refetch daily skipped (no account id) platform=${this.svcSource()}`);
+      return undefined;
+    }
+    const ids: string[] = await AccountService.getDailyTrackIds(accountId);
+    if (ids.length === 0) {
+      Logger.warn(RZD_TAG, `refetch daily empty ids account=${accountId}`);
+      return [];
+    }
+    const tracks: PlatformTrackInfo[] = await AccountService.getTrackDetails(accountId, ids);
+    const rows: RecommendPrivateSongUi[] = [];
+    for (let i: number = 0; i < tracks.length; i++) {
+      rows.push(this.toRowFromTrack(tracks[i], i));
+    }
+    return rows;
+  }
+
+  /**
+   * ★★ 把"这一轮真正插进 feed 的新行"**追加到现有播放队列尾部**（队列与 feed 同步变长）。
+   *
+   * ## 为什么非做不可
+   *   `MediaService.playNext()` 里读的是**实时** `getQueueLength()`
+   *   （`MediaService.ets:1988`：「Loads the next queue index in linear order (**wraps to 0 at end**)」）。
+   *   队列不跟着变长的话：feed 刷新了、屏幕上多出新歌了，但**播完最后一首仍然绕回第 0 首**
+   *   —— 用户听到的还是旧的那一批（这正是用户报的"还是那一个列表循环"的另一半）。
+   *   追加之后，`playNext()` 的下一个下标自然落在新拉进来的那几首上。
+   *
+   * ## 两条不变量
+   *   ① **只在"全局队列 == 屏幕上这一份 feed"时才追加**：判据 `queueWasFeed` 必须在
+   *      {@link appendRows} **之前**取（append 之后队列长度就与 feed 对不上了，
+   *      {@link queueMatchesFeed} 会永远返回 false）；
+   *   ② **只追加本轮新增的行**：直接吃 `appendRows()` 的返回值
+   *      （`filterFresh` 已经把这些行从"已见过的"里筛掉了 —— 见 {@link loadMore}）。
+   *
+   * ⚠️ 队列没匹配上（用户在别处换过队列，例如从歌单/搜索结果起播）⇒ **一律不动队列**，
+   *   只让 feed 变长：滑到新歌时 {@link playAt} 自己会重建队列（那是它第三条分支）。
+   * @param fresh 本轮真正插进 feed 的新行。
+   */
+  private syncQueueWithNewRows(fresh: RecommendPrivateSongUi[]): void {
+    if (!this.queueWasFeed) {
+      Logger.info(RZD_TAG, `refetch queue untouched (queue != feed) new=${fresh.length}`);
+      return;
+    }
+    const songs: LXSearchSong[] = [];
+    for (let i: number = 0; i < fresh.length; i++) {
+      songs.push(this.toLxSong(fresh[i]));
+    }
+    const appended: number = OnlinePlayUtil.appendQueue(this.appState, songs);
+    Logger.info(RZD_TAG, `refetch queue append=${appended} totalQueue=${this.appState.getQueueLength()}`);
+  }
+
   /**
    * 追加（**去重后**）并通知 `LazyForEach`。
+   *
+   * ★ 返回值改成**新增行数组**（本轮改动）：{@link loadMore} 需要把"这一轮真正插进去的行"
+   *   转成 `LXSearchSong` 送进播放队列（见 {@link syncQueueWithNewRows}）。
+   *   方案选的是"让本方法顺带返回新增行"，**不是**"在调用点用 `feedSeen` 的增量再算一次"：
+   *   后者要再对一遍下标/前缀（`filterFresh` 的 `feedSeen` 是**按批累积**的），
+   *   很容易算错；直接返回本方法自己已经拿到的那份 `fresh` 最准。
+   *   **去重逻辑一个字没动**（`filterFresh` 原样），只是把它的结果也交出去。
    * @param rows 原始行。
-   * @returns 真正插进去多少首（0 = 这一页全是已见过的 ⇒ 交给收尾保护计数）。
+   * @returns 真正插进去的那些行（空数组 = 这一批全是已见过的 ⇒ 交给收尾保护计数）。
    */
-  private appendRows(rows: RecommendPrivateSongUi[]): number {
+  private appendRows(rows: RecommendPrivateSongUi[]): RecommendPrivateSongUi[] {
     const fresh: RecommendPrivateSongUi[] = this.filterFresh(rows);
     if (fresh.length === 0) {
-      return 0;
+      return [];
     }
     this.feedSource.append(fresh);
     this.feedRevision++;
-    return fresh.length;
+    return fresh;
   }
 
   /**
@@ -1732,6 +2013,117 @@ export struct NowPlayingFeedPage {
       void this.loadMore();
     }
     this.playAt(index);
+  }
+
+  /**
+   * **播完最后一首的另一半**：用户只是听、不滑，队列走到末尾时也要能接着拉新的一批。
+   *
+   * ★ 为什么需要它：预取原来**只**在 {@link onFeedChanged}（滑动）里触发 ⇒
+   *   用户把手机放着听完当前这一批，就再也不会去拉新的（表现：放到最后一首之后
+   *   `MediaService.playNext()` wrap 回第 0 首，或者干脆停在那儿）。
+   * ★ 判据：拿**当前在播的那首**在 feed 里按 `source|songId`（{@link songKey} 口径）找下标，
+   *   找到且落进"倒数第 {@link FEED_PREFETCH_REMAIN} 首"以内 ⇒ 预取一批。
+   *   **找不到**（在播的歌不属于本页 feed，例如从歌单/搜索结果起播）⇒ **什么都不做**。
+   * ★ 连点保护由 {@link loadMore} 自己的闸负责（`feedFetching` / `feedExhausted`）：
+   *   这里无脑调是安全的，不会打接口风暴。
+   */
+  @Monitor('appState.selectIndex')
+  onPlayingSongChanged(): void {
+    const cur: SongItem | undefined = this.appState.getCurrentSongItem();
+    if (cur === undefined) {
+      return;
+    }
+    const total: number = this.feedSource.totalCount();
+    const index: number = this.feedIndexOf(cur.source, cur.songId);
+    if (index < 0) {
+      // 在播的不是本页的歌（别处换过队列）⇒ 本页不该插手
+      return;
+    }
+    if (total - 1 - index > FEED_PREFETCH_REMAIN) {
+      return;
+    }
+    Logger.info(RZD_TAG,
+      `tail watch index=${index} total=${total} ${cur.source}_${cur.songId} -> loadMore`);
+    void this.loadMore();
+  }
+
+  /**
+   * 在 feed 里按 `source|songId`（{@link songKey} 口径）找一行。
+   * @param source 平台代号。
+   * @param songId 歌曲 id。
+   * @returns 下标；**找不到返回 -1**（调用方据此判"不是本页的歌"）。
+   */
+  private feedIndexOf(source: string, songId: string): number {
+    const total: number = this.feedSource.totalCount();
+    for (let i: number = 0; i < total; i++) {
+      const row: RecommendPrivateSongUi = this.feedSource.getData(i);
+      if (row.source === source && row.songId === songId) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  /** 本页现在是不是真的在屏幕上（`HdsTabs` 的 `TabContent` 子页面启动时就挂载，只有这个能判）。 */
+  private isOnScreen(): boolean {
+    return this.tabState.tabIndex === this.barTabIndex;
+  }
+
+  /**
+   * 底栏页签切过来了（壳层写 `TabSwitchState.tabIndex`，本页自己订阅 —— 见 {@link tabIndex}）。
+   *
+   * ★ 用户 2026-10-15 原话：「我启动应用过一会就会自动开始播放，**自动开始播放的逻辑应该是
+   *   我打开那个『现在就听』的页面的时候**」⇒ "进页自动播放"的真实语义 = {@link ensureAutoplay}：
+   *   · `applyRows()` 里那次管的是"数据比用户切页签**晚**回来"；
+   *   · 本方法管的是"数据**已经**在了、用户才切过来"（那一条路上 `applyRows` 不会再跑）。
+   * ★ **去重**（用户此前明确要求"从别的页签切回来、歌没变就不要重播"）：
+   *   在播的那首**已经是本页 feed 里的歌** ⇒ 直接 return，**绝不起播**。
+   *   ⚠️ 这里**不另立判据** —— 起播那一步就是 {@link playAt}，它自带"已在播这首就 skip"的门。
+   */
+  @Monitor('tabState.tabIndex')
+  onTabSwitched(): void {
+    const onScreen: boolean = this.isOnScreen();
+    Logger.info(RZD_TAG,
+      `tab -> ${this.tabState.tabIndex} mine=${this.barTabIndex} onScreen=${onScreen}`);
+    if (!onScreen) {
+      return;
+    }
+    this.ensureAutoplay();
+  }
+
+  /**
+   * **"进页自动播放"的唯一判定入口**（三条路共用：首批数据回来 / 切到本页 / 页面挂载）。
+   *
+   * ★ 为什么要有它：如果只把判定写在 {@link onTabSwitched} 里，会漏掉一个真实场景 ——
+   *   **页面挂载时 `tabIndex` 本来就已经等于本页**（壳层重挂载 / 首帧就落在本页）：
+   *   那时 `@Monitor` 的初值回调里 `onScreen` 是 false（`tabState.tabIndex` 初值 0），
+   *   之后 `tabIndex` 不再变化 ⇒ **没有任何一次会去起播**。
+   *   所以"数据已经在了"这一半同时挂在 `aboutToAppear` 上（见那里）。
+   * ★ **去重**（用户此前明确要求"从别的页签切回来、歌没变就不要重播"）：
+   *   在播的那首**已经是本页 feed 里的歌** ⇒ 直接 return，**绝不起播**。
+   *   ⚠️ 起播那一步就是 {@link playAt}，它自带"已在播这首就 skip"的门（**不另立判据**）。
+   */
+  private ensureAutoplay(): void {
+    if (!this.isOnScreen()) {
+      return;
+    }
+    const total: number = this.feedSource.totalCount();
+    if (total === 0) {
+      // 还没数据：交给 applyRows 那条路（它自己会判 isOnScreen）
+      return;
+    }
+    const cur: SongItem | undefined = this.appState.getCurrentSongItem();
+    if (cur !== undefined) {
+      const index: number = this.feedIndexOf(cur.source, cur.songId);
+      if (index >= 0) {
+        // 在播的就是本页的歌 ⇒ **绝不起播**（从别的页签切回来、歌没变不重播）
+        Logger.info(RZD_TAG, `activate skip (already playing this feed) index=${index}`);
+        return;
+      }
+    }
+    Logger.info(RZD_TAG,
+      `activate autoplay index=${this.currentIndex} total=${total} tab=${this.tabState.tabIndex}`);
+    this.playAt(this.currentIndex);
   }
 
   /**
