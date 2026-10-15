@@ -24,7 +24,21 @@ import { MediaService } from '../model/MediaService';
 
 /**
  * Handles PlaybackIntentState for phone/TV/PC entry shells: queue sync, play, and optional full-screen open.
- * Caller supplies onRequestOpenPlayerUi (typically UIContext.animateTo + appState.isShowPlay = true).
+ *
+ * `onRequestOpenPlayerUi` 的写法是**裸置位**：
+ * ```ts
+ * () => { this.appState.isShowPlay = true; }
+ * ```
+ * ⚠️ **不要把 `isShowPlay = true` 包进 `UIContext.animateTo`**（本注释原来就写着那个错写法，
+ *    已按 `派音动画Bug清单.md` P1-9 改正）。那层隐式动画会给"挂载播放页浮层 +
+ *    形变几何初始化"整段套一层补间，**把形变起点吃掉** —— 表现为"打开播放器不是从迷你条长出来、
+ *    而是从中间某处开始长大"。展开动画由播放页自己播
+ *    （`PlaybackPage.playExpandIntro` → `playMorphOpenIntro`，配 `UIUtils.applySync`）。
+ *    参考实现：`products/default/src/main/ets/pages/Index.ets` 的
+ *    `onPlaybackIntentChanged` 里那个闭包。
+ *
+ * ⚠️ PC 壳层 `products/pc/src/main/ets/pages/Index.ets` 的 `onPlaybackIntentChanged`
+ *    **仍然**把 `isShowPlay = true` 包在 `animateTo` 里（P1-9 的第二处）—— 那一处待主线收。
  */
 export function dispatchShellPlaybackIntent(
   appState: MusicAppState,

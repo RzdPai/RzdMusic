@@ -81,6 +81,19 @@ const FLOATING_MINI_BAR_HEIGHT_VP: number = 56;
 const FLOATING_MINI_BAR_MAX_WIDTH_VP: number = 560;
 
 /**
+ * 底栏「现在就听」那一页的页签下标。
+ *
+ * ★ 用户 2026-10-15（参考图对比）：**这一页要把浮动底栏上方那条小播放条整条藏掉**
+ *   —— 参考图里 Tab 栏之上只有一行进度（左当前时间 / 中细条 / 右总时长），没有迷你条。
+ *   所以本页：① {@link miniBar} 不渲染那条迷你条；② 即便用户此前把迷你条展开过
+ *   （`hdsBarLayoutMode === VERTICAL` 的两排态），本页也强制回到**单排**
+ *   （{@link barLayoutModeForHds}）—— 否则会留下"空着的一排"。
+ * ⚠️ 顺序与 `HomeTabsPages()` 里 `TabContent` 的次序、`tabScrollTopCommands[i]` 的
+ *   下标含义**必须一致**（`tab_now_playing` 那一项就是它）。
+ */
+const NOW_PLAYING_TAB_INDEX: number = 1;
+
+/**
  * 键盘弹出时，二级页面悬浮迷你条**再往上抬多少**（vp）的两个常量。
  *
  * 背景（官方《自定义键盘》）：系统默认的键盘避让**只保证输入框不被遮挡**，
@@ -547,10 +560,15 @@ struct Index {
 
   /**
    * 跟手期间补量"续飞封面"的终点锚点（播放页大封面）。
+   *
+   * ⚠️ `attempt` **必须带默认值 `0`**，并且要挡住 `undefined`/`NaN`：
+   * `attempt >= PULL_ANCHOR_RETRY_MAX` 对 `undefined` 和 `NaN` **都是 false**，
+   * 于是无参调用（或某一层传了 `attempt + 1` 算出 NaN）会让这条 32ms 递归**永不停止**
+   * （`features/playlist` 的另两份副本原来就是这个形状，2026-10-15 已对齐；见无界同步 §72）。
    * @param attempt 已尝试次数
    */
-  private schedulePullAnchorRemeasure(attempt: number): void {
-    if (attempt >= PULL_ANCHOR_RETRY_MAX) {
+  private schedulePullAnchorRemeasure(attempt: number = 0): void {
+    if (!Number.isFinite(attempt) || attempt >= PULL_ANCHOR_RETRY_MAX) {
       return;
     }
     const gen: number = this.expandState.morphGen;
@@ -997,6 +1015,12 @@ struct Index {
     if (!this.supportsTwoRowLayout()) {
       return undefined;
     }
+    // ★「现在就听」页**强制单排**（用户 2026-10-15 参考图：Tab 栏之上不许有迷你条那一排）。
+    //   即便用户之前把迷你条展开过（`hdsBarLayoutMode === VERTICAL`），切到本页也要回到单排，
+    //   否则会留下"空着的一排"把 Tab 胶囊顶上去。见 {@link NOW_PLAYING_TAB_INDEX}。
+    if (this.tabState.tabIndex === NOW_PLAYING_TAB_INDEX) {
+      return HdsBarLayoutMode.HORIZONTAL;
+    }
     return this.appState.hdsBarLayoutMode === BarLayoutModes.HORIZONTAL ?
       HdsBarLayoutMode.HORIZONTAL : HdsBarLayoutMode.VERTICAL;
   }
@@ -1004,6 +1028,21 @@ struct Index {
   /** 设备发行版是否支持 `barLayoutMode`（6.1.1(24) 起）。 */
   private supportsTwoRowLayout(): boolean {
     return SdkApiUtil.isDistributionOsApiAtLeast(SdkConstants.DISTRIBUTION_OS_6_1_1_CODE);
+  }
+
+  /**
+   * 传给 HDS 的迷你条样式。
+   *
+   * ★「现在就听」页恒为 `COLLAPSE`：那一页既没有迷你条内容（{@link miniBar} 不渲染），
+   *   又被 {@link barLayoutModeForHds} 压成单排 —— 而"单排 + `EXPAND`"是已知的错误组合
+   *   （底栏会变成「长条 Tab + 圆形播放器」）。见 {@link NOW_PLAYING_TAB_INDEX}。
+   * @returns 迷你条样式。
+   */
+  private miniBarStyleForHds(): HdsBarStyle {
+    if (this.tabState.tabIndex === NOW_PLAYING_TAB_INDEX) {
+      return HdsBarStyle.COLLAPSE;
+    }
+    return this.appState.miniBarExpanded ? HdsBarStyle.EXPAND : HdsBarStyle.COLLAPSE;
   }
 
   /**
@@ -1031,7 +1070,14 @@ struct Index {
    */
   @Builder
   private miniBar() {
-    if (this.navDepth <= 0) {
+    // ★ 用户 2026-10-15：底栏「现在就听」那一页**不画**这条迷你条（参考图里 Tab 栏之上只有进度行）。
+    //   见 {@link NOW_PLAYING_TAB_INDEX}。用条件渲染而不是 `Visibility.Hidden`：
+    //   保留占位的话 HDS 会继续按"两排"排布，Tab 胶囊会被顶高、底下留下一块空档。
+    //   ⚠️ 代价：这一页上 `getRectangleById(MINI_BAR_ID)` 量不到迷你条 ⇒ 形变起点只能走兜底几何。
+    //     可以接受：本页**不会打开播放页**（`NowPlayingFeedPage` 的 `playAt` 走
+    //     `openPlayer=false` / `PlaybackIntentState.openPlayerUi=false`），
+    //     而能开到播放页的入口（底栏迷你条点击、系统媒体控制）在本页也不存在/不形变。
+    if (this.navDepth <= 0 && this.tabState.tabIndex !== NOW_PLAYING_TAB_INDEX) {
       // ★★ 2026-10-15（回退后重做）**不变量**：一次形变会话期间，迷你条**真身不参与绘制**，
       //   由壳层克隆层（`MorphMiniBarClone` / `MorphMetaBridge`）与播放页内的续飞封面代表它。
       //   `sourceBarHidden` 由会话拥有者唯一写（`morphBeginEntering` / `morphBeginLeaving` 置 true，
@@ -1447,14 +1493,20 @@ struct Index {
               miniBarBuilder: (): void => {
                 this.miniBar();
               },
-              // ★ 双层底栏的关键：barLayoutMode = VERTICAL 才把迷你条与页签排成上下两排。
+              // ★ 双层底栏的关键：`barLayoutMode = VERTICAL` 才把迷你条与页签排成上下两排。
               //   该字段是 @since 6.1.1(24)，所以工程 targetSdkVersion 必须 ≥ 24
               //   （本项目已由 6.1.0(23) 提到 6.1.1(24)，compatibleSdkVersion 保持 23，
               //     设备覆盖不变）。低配发行版上传 undefined。
+              //   ⚠️「现在就听」页由 `barLayoutModeForHds()` 强制 HORIZONTAL（见它和
+              //     `NOW_PLAYING_TAB_INDEX` 的注释）：那一页不许有迷你条那一排。
               barLayoutMode: this.barLayoutModeForHds(),
               // 受控属性：折叠态 = 窄胶囊，点击后由 onBarStyleChange 透出再回灌
-              enableMiniBarBackground: !this.expandState.sourceBarHidden,
-              miniBarStyle: this.appState.miniBarExpanded ? HdsBarStyle.EXPAND : HdsBarStyle.COLLAPSE,
+              // ⚠️ 单排（HORIZONTAL）配 `EXPAND` 是**已知的错误组合**（底栏会变成
+              //   「长条 Tab + 圆形播放器」，见 `onMiniBarStyleChangeFull` 的注释）⇒
+              //   在「现在就听」页一并把样式压回 `COLLAPSE`。
+              enableMiniBarBackground: !this.expandState.sourceBarHidden &&
+                this.tabState.tabIndex !== NOW_PLAYING_TAB_INDEX,
+              miniBarStyle: this.miniBarStyleForHds(),
               onBarStyleChange: (miniBarStyle: HdsBarStyle, _tabStyle: HdsBarStyle,
                 _miniWidth: number, _tabWidth: number, mode: HdsTabsBarChangeMode): void => {
                 this.onMiniBarStyleChangeFull(miniBarStyle, mode);
@@ -1466,6 +1518,13 @@ struct Index {
               this.tabState.tabIndex = index;
               // 切到新页签：选中态弹一下（点击与滑动切换都会走这里）
               this.playTabBounce(index);
+              // ★ 迷你条显隐诊断（`hdc shell hilog | grep RzdMiniBarHide`）：
+              //   切到「现在就听」应打出 `hidden=true barLayout=HORIZONTAL style=COLLAPSE`，
+              //   切回来应打出 `hidden=false`。只能看日志，无设备验证。
+              Logger.info(RzdShellLogTag,
+                `RzdMiniBarHide tab=${index} hidden=${index === NOW_PLAYING_TAB_INDEX} ` +
+                  `barLayout=${this.barLayoutModeForHds()} style=${this.miniBarStyleForHds()} ` +
+                  `navDepth=${this.navDepth}`);
             }
           })
           // 点页签：点的是**当前**页签时回到顶部（切页签交给 onChange）

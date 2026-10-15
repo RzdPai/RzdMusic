@@ -2351,6 +2351,47 @@ export struct PlaybackPage {
             this.FlowLightBackground()
           }
 
+          // ★★ 2026-10-15：**径向暗角**（`无界vs派音-差异分析.md` §3.4「对齐建议 · ④ 只加径向暗角」）。
+          //   这一条是那份文档给的**最小路线**：纯声明式、零新依赖、立刻可感
+          //   —— 与"网格流动背景"（`MeshCoverBg`：`NodeContainer` + 自定义 `RenderNode.drawPixelMapMesh`
+          //   + `displaySync` 逐帧顶点，见 `播放页背景-MeshGradient与MeshSource定稿.md` §4）**分开**：
+          //   那套本轮**不做**，这里只叠一层径向压暗。
+          //
+          //   逐项数值都取自文档（`[单源]`，出处写明以便复核）：
+          //   `无界vs派音-差异分析.md` §3.4 组件树末行与「④」那一段 —— 无界
+          //   `MeshCoverBg` 的 `Stack` **最上面**就是这一层 `Column().radialGradient(...)`，
+          //   而我们的 `Stack` 里"内容层"（`buildControlStack`）也是最后画的。
+          //   ⇒ 为了不吃到内容层，这里放在**封面底图层之后** —— 它在栈里的绘制位置
+          //      与无界"压在整个背景之上、内容之下"的语义等价（无界那一层之下是网格背景，
+          //      我们的内容层是**不透明**的独立层，不受它影响）。
+          //   · `center: ['50%', '50%']` —— 圆心在正中（文档同处）；
+          //   · `radius: '70%'` —— 文档同处；官方 `ts-universal-attributes-gradient-color`
+          //     （2026-10-15 取的原文）：「径向渐变的半径，number 类型时单位为 vp，
+          //     设置的值为 undefined 时系统按组件尺寸自动算」⇒ 这里给**百分比字符串**，
+          //     随容器（= 整屏）走，不是固定 vp；
+          //   · `colors: [['#26000000', 0], ['#26000000', 0.45], ['#66000000', 1]]`
+          //     —— 文档 §3.4 常量表：`SCRIM_CENTER = "#26000000"`（α≈15%）、
+          //     `SCRIM_EDGE = "#66000000"`（α=40%），中心色一直铺到半径的 45% 才开始压暗；
+          //     （实现里写成等值的十六进制字面量 `0x26/0x66`，与同文件其余渐变/底色写法一致。）
+          //   · 色标的第二个元素是**比例 [0,1.0]**，不是 vp —— 这三处 0 / 0.45 / 1 本来就是
+          //     比例写法（同 §71.1 那条单位坑；官方原文「取值范围为 [0, 1.0]」）。
+          //
+          //   ⚠️ 与无界的一处**已知差别**：无界那一层是**恒开**（只由 `scrim` 布尔门控），
+          //      我们这里在**形变/转场期间关掉**（复用 `backgroundRevealOpacity()` 同款的
+          //      `morphContainerActive()` 判据）—— 否则形变中那个被 scale+clip 的小窗口里
+          //      会多一层压暗，与"半透明 → 不透明"那条既有口径打架。
+          //      观感是否要改成恒开，**只能上机看**（见本轮报告的"只能上机确认"清单）。
+          Column()
+            .width(StyleConstants.FULL_WIDTH)
+            .height(StyleConstants.FULL_HEIGHT)
+            .radialGradient({
+              center: ['50%', '50%'],
+              radius: '70%',
+              colors: [[0x26000000, 0.0], [0x26000000, 0.45], [0x66000000, 1.0]]
+            })
+            .opacity(this.expandState.morphContainerActive() ? 0 : 1)
+            .hitTestBehavior(HitTestMode.None)
+
           // 封面续飞浮层：夹在背景与内容之间，切页那 0.36 秒里顶替两张静态封面
           // No cover overlay: the lyric page has no matching image destination.
 

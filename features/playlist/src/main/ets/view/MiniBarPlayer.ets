@@ -51,12 +51,34 @@ export struct MiniBarPlayer {
   /** 上拉打开播放页（跟手）：驱动共享形变进度，收尾补间交给壳层。 */
   private panOption: PanGestureOptions = new PanGestureOptions({ direction: PanDirection.Vertical });
 
+  /**
+   * 补量终点锚点的重试次数 / 间隔（ms）。
+   *
+   * 与 `HomeMiniBarPlayer` 的 `PULL_ANCHOR_RETRY_MAX / PULL_ANCHOR_RETRY_MS`、
+   * 以及 `PlaybackPage` 的 12 × 32ms 是**同一个窗口**（对标反编译 `schedulePublishRetry`）。
+   * ★ 2026-10-15：本文件原来是**写死的两个字面量**（`12` / `32`），
+   *   与 `HomeMiniBarPlayer` 的具名常量重复；改成具名常量只为让三处副本好对账
+   *   （`派音动画Bug清单.md` P1-10 的判据就是"三处签名/常量应完全一致"）。**值一个字没改。**
+   */
+  private static readonly PULL_ANCHOR_RETRY_MAX: number = 12;
+  private static readonly PULL_ANCHOR_RETRY_MS: number = 32;
+
   private effectiveMiniBarExpanded(): boolean {
     return this.followAppMiniBarExpanded && this.playerViewModel.appState.miniBarExpanded;
   }
 
+  /**
+   * 上拉起手后补量"续飞封面"的终点锚点（12 × 32ms 轮询，对标反编译侧的 `onPullReady` 补量）。
+   *
+   * ★★ 2026-10-15（`派音动画Bug清单.md` **P1-10**）：本方法是同一份逻辑的**三个副本之一**
+   *    （另两个：`HomeMiniBarPlayer.ets` 与壳层 `products/default/.../Index.ets:565`）。
+   *    原来只有这里带默认值 `= 0`；本轮把默认值与"非有限数直接返回"这条护栏补齐到
+   *    `HomeMiniBarPlayer`，并把下面那个写死的 `12` 换成与本文件同一个常量的写法。
+   *    ⚠️ 壳层那一份属禁区文件，**本轮没动**（见本轮报告"需要壳层配合的条目"）。
+   * @param attempt 已经尝试过的次数（默认 0；非有限数一律直接返回，避免 `NaN` 递归成死循环）
+   */
   private schedulePullAnchorRemeasure(attempt: number = 0): void {
-    if (attempt >= 12) {
+    if (!Number.isFinite(attempt) || attempt >= MiniBarPlayer.PULL_ANCHOR_RETRY_MAX) {
       return;
     }
     const gen: number = this.expandState.morphGen;
@@ -67,7 +89,7 @@ export struct MiniBarPlayer {
       if (!this.expandState.measureMiniDuringPull(this.getUIContext(), true)) {
         this.schedulePullAnchorRemeasure(attempt + 1);
       }
-    }, 32);
+    }, MiniBarPlayer.PULL_ANCHOR_RETRY_MS);
   }
 
   /**

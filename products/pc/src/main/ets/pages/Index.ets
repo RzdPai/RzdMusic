@@ -27,7 +27,6 @@ import {
   Logger,
   MORPH_HOST_ID,
   PlaybackIntentState,
-  PlaybackShellConstants,
   PlayerExpandState,
   MorphMetaBridge,
   StyleConstants,
@@ -147,16 +146,20 @@ struct Index {
     return ref;
   }
 
-  /** Handles playback intent changes and animates opening the in-app player. */
+  /**
+   * Handles playback intent changes and opens the in-app player.
+   *
+   * ★ 2026-10-15（无界逆向 P1-9，`[我核]✅`）：**不要把 `isShowPlay = true` 包进
+   *   `uiContext.animateTo`**。那会给"挂载播放页浮层 + 形变几何初始化"整段套一层隐式动画，
+   *   于是形变的起点被那层动画吃掉（用户症状："从搜索结果/播放记录打开时从中间某处长出来"）。
+   *   展开动画由播放页自己按反编译的 `doEnter` 播（350ms EaseInOut，起点在 `aboutToAppear` 压好），
+   *   壳层只负责**裸置位**。默认壳层（`products/default/.../Index.ets`）早已是裸置位，本处是
+   *   全仓最后一处旧写法；`PlayerViewModel.openFullScreenWithSharedElementTransition()` 的注释同口径。
+   */
   @Monitor('intentState.requestVersion')
   onPlaybackIntentChanged() {
     dispatchShellPlaybackIntent(this.appState, this.intentState, () => {
-      this.getUIContext().animateTo({
-        duration: PlaybackShellConstants.OPEN_PLAYER_UI_ANIMATION_MS,
-        curve: Curve.EaseInOut
-      }, () => {
-        this.appState.isShowPlay = true;
-      });
+      this.appState.isShowPlay = true;
     });
   }
 

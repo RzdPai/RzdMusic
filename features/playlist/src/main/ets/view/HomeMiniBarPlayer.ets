@@ -76,10 +76,22 @@ export struct HomeMiniBarPlayer {
    * 反编译侧靠 `onPullReady` 回调补量；这里用同样的窗口（12 × 32ms）轮询，
    * 一旦量到就按当前进度重落几何（`measureMiniDuringPull` 内部做），
    * 于是"手指已经拖到一半、封面才出现"也能立刻接上，不会一直缺这一棒。
-   * @param attempt 已经尝试过的次数
+   *
+   * ★★ 2026-10-15（`派音动画Bug清单.md` **P1-10**）：形参补上**默认值 `= 0`**，
+   *    并把守卫从 `attempt >= MAX` 加宽成 `!Number.isFinite(attempt) || attempt >= MAX`。
+   *    为什么：同一份逻辑本仓有**三个副本**（本文件 / `MiniBarPlayer.ets` / 壳层
+   *    `products/default/.../Index.ets` 的 `schedulePullAnchorRemeasure`），
+   *    原来**只有 `MiniBarPlayer` 带默认值**。一旦哪条路径写成无参调用：
+   *    `undefined >= 12` 在 JS 语义下是 **false** ⇒ **不早退、照跑**；
+   *    而递归那一句传的是 `attempt + 1` = **NaN**，`NaN >= 12` 同样是 false
+   *    ⇒ 每 32ms 一个定时器，**永远停不下来**。当前唯一的调用点传了 `0`，
+   *    所以线上没触发 —— 这是"下次改就会踩"的护栏，不是修现状。
+   *    ⚠️ 壳层那第三个副本属禁区文件（`products/default/src/main/ets/pages/Index.ets`
+   *    `:565`），**本轮没动**，需要壳层配合（见本轮报告"需要壳层配合的条目"）。
+   * @param attempt 已经尝试过的次数（默认 0；非有限数一律直接返回）
    */
-  private schedulePullAnchorRemeasure(attempt: number): void {
-    if (attempt >= HomeMiniBarPlayer.PULL_ANCHOR_RETRY_MAX) {
+  private schedulePullAnchorRemeasure(attempt: number = 0): void {
+    if (!Number.isFinite(attempt) || attempt >= HomeMiniBarPlayer.PULL_ANCHOR_RETRY_MAX) {
       return;
     }
     const gen: number = this.expandState.morphGen;

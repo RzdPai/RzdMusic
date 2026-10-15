@@ -14,7 +14,10 @@
  */
 
 import { UIContext } from '@kit.ArkUI';
-import { MusicAppState, MusicStoreService, PlayedSongRecord, PlaybackShellConstants, QualityInfo, SongItem, appendPlayLog } from 'musicbasic';
+// ⚠️ `PlaybackShellConstants.OPEN_PLAYER_UI_ANIMATION_MS` 已从本文件的 import 里去掉：
+//    它是上面 `openFullScreen` 那层 `animateTo` 的时长（P1-9），包装删掉后本文件不再用得到它。
+//    常量本体仍留在 `musicbasic`（PC 壳层 `products/pc/.../Index.ets` 还在用，那一条待主线收）。
+import { MusicAppState, MusicStoreService, PlayedSongRecord, QualityInfo, SongItem, appendPlayLog } from 'musicbasic';
 import { LXSearchSong, LXQualityType, lxGetLyricFull, lxSearch, WyLyricResult } from '../source/LXMusicSDK';
 import { lxEngineIsReady } from '../source/LXSourceEngine';
 import { LXSource } from '../source/Interface';
@@ -75,18 +78,32 @@ export class OnlinePlayUtil {
     }
   }
 
-  /** Opens the full-screen player inside an animateTo so shared elements morph smoothly. */
-  private static openFullScreen(appState: MusicAppState, uiContext: UIContext | undefined): void {
-    if (uiContext !== undefined) {
-      uiContext.animateTo({
-        duration: PlaybackShellConstants.OPEN_PLAYER_UI_ANIMATION_MS,
-        curve: Curve.EaseInOut
-      }, () => {
-        appState.isShowPlay = true;
-      });
-    } else {
-      appState.isShowPlay = true;
-    }
+  /**
+   * 挂起全屏播放页浮层（**裸置位，外面不许再套 `animateTo`**）。
+   *
+   * ★★ 2026-10-15：这一段原来是
+   * `uiContext.animateTo({ duration: OPEN_PLAYER_UI_ANIMATION_MS, curve: EaseInOut },
+   *  () => { appState.isShowPlay = true; })` —— **旧动画时代的写法，已删除**。
+   *
+   * 为什么必须裸置位（`派音动画Bug清单.md` **P1-9**，交叉核对记录 §6.2 标 `[我核] ✅ 成立`）：
+   * 1. `PlayerViewModel.openFullScreenWithSharedElementTransition()`（`viewmodel/PlayerViewModel.ets`）
+   *    的注释**明令禁止**这层包装：那会给"挂载播放页浮层 + 形变几何初始化"整段套一层隐式动画，
+   *    **形变的起点被这层动画吃掉** ⇒ 用户看到的正是"从搜索结果/播放记录打开播放器时，
+   *    播放页从中间某处开始长大 / 先僵一下再展开"，而不是从迷你条长出来。
+   * 2. 展开动画由**播放页自己**播（`PlaybackPage.playExpandIntro` → `playMorphOpenIntro`），
+   *    它依赖 `UIUtils.applySync` 把"压到起点"同步刷出去；外面再套一层 `animateTo`
+   *    等于把那层隐式动画又套回来，两条路（点击打开 / 手指拖动打开）会重新分叉。
+   * 3. 同仓的"正确写法"全是裸置位（壳层 `products/default/.../Index.ets` 的
+   *    `dispatchShellPlaybackIntent` 回调、`MiniBarPlayer` / `HomeMiniBarPlayer` /
+   *    `RecommendViewModel` / `LocalMusicView`）—— **只有这里和 PC 壳层是旧的**。
+   *
+   * 判据（应为 0 命中）：`grep -rn "animateTo" --include=*.ets | Select-String "isShowPlay"`。
+   * @param appState 共享播控状态（壳层 `@Monitor('appState.isShowPlay')` 会用这个字段挂载浮层）
+   * @param _uiContext 仅保留形参以不动现有调用点签名；本方法已不再需要 UIContext
+   *        （`toast` 那条路仍在用，见各 `play*` 方法）。
+   */
+  private static openFullScreen(appState: MusicAppState, _uiContext: UIContext | undefined): void {
+    appState.isShowPlay = true;
   }
 
   /**
@@ -95,7 +112,7 @@ export class OnlinePlayUtil {
    * MusicAppState.lyricVersion.
    * @param appState Shared playback state.
    * @param song Search / leaderboard song.
-   * @param uiContext Used for toast prompts and the open animation.
+   * @param uiContext Used for toast prompts only (the open animation is played by the player page itself).
    * @returns True when the song was queued and playback started.
    */
   public static async playSearchSong(appState: MusicAppState, song: LXSearchSong,
@@ -138,7 +155,7 @@ export class OnlinePlayUtil {
    * Plays a stored history / favorite record; reuses a cached url when available.
    * @param appState Shared playback state.
    * @param record Stored song record.
-   * @param uiContext Used for toast prompts and the open animation.
+   * @param uiContext Used for toast prompts only (the open animation is played by the player page itself).
    * @returns True when the song was queued and playback started.
    */
   public static async playRecord(appState: MusicAppState, record: PlayedSongRecord,
@@ -205,14 +222,17 @@ export class OnlinePlayUtil {
    * @param appState Shared playback state.
    * @param songs Search / leaderboard songs.
    * @param startIndex Index to start playback at.
-   * @param uiContext Used for toast prompts and the open animation.
+   * @param uiContext Used for toast prompts only (the open animation is played by the player page itself).
    * @param openPlayer 是否**同时打开全屏播放页**（默认 `true` = 原行为，现有 4 参调用点一行都不用改）。
    *   传 `false` 的只有底栏页签「现在就听」（`NowPlayingFeedPage`）：那一页自己就是"现在在听什么"的
    *   全屏呈现，用户明确要求「打开这个页面**不会打开播放器**」。
    *   ⚠️ 用这个参数、**不要**在调用点事后把 `appState.isShowPlay` 掰回去：
-   *   {@link openFullScreen} 是在 `uiContext.animateTo()` 的闭包里写 `isShowPlay` 的，
-   *   事后回滚等于"请求过又撤销"，而壳层的 `@Monitor('appState.isShowPlay')` 会在
-   *   `pushPlayerRoute()` 里读到那个瞬时的 true（`products/default/.../Index.ets:413`）。
+   *   {@link openFullScreen} 一置位，壳层的 `@Monitor('appState.isShowPlay')`（**同步**触发）
+   *   就会在 `pushPlayerRoute()` 里读到那个 true（`products/default/.../Index.ets`）
+   *   —— 事后回滚等于"请求过又撤销"，监听方**已经读到过中间值**了。
+   *   （本节 2026-10-15 订正：`openFullScreen` 原来是在 `uiContext.animateTo()` 的闭包里置位的，
+   *    那一层包装已按 `派音动画Bug清单.md` P1-9 删除，但"不能事后回滚"这条理由与包装无关，
+   *    照旧成立 —— 差别只在于"读到 true"与"读到 true 并吃掉一层隐式动画"。）
    * @returns True when the queue was built and playback started.
    */
   public static async playList(appState: MusicAppState, songs: LXSearchSong[], startIndex: number,
