@@ -1391,7 +1391,7 @@ struct Index {
       .height(StyleConstants.FULL_HEIGHT)
       .expandSafeArea([SafeAreaType.SYSTEM, SafeAreaType.CUTOUT], [SafeAreaEdge.TOP])
     }
-    .tabBar(this.TabBarItem(1, $r('app.string.tab_now_playing'), $r('sys.symbol.music_note_circle_fill')))
+    .tabBar(this.TabBarItem(1, $r('app.string.tab_now_playing'), $r('sys.symbol.music_round_triangle_fill')))
 
     // ★ 用户 2026-10-12：底栏中间加一页「回响」（月度听歌报告）
     TabContent() {

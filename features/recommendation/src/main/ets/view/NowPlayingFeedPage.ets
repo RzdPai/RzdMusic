@@ -23,8 +23,14 @@
  *   · 推荐来源两条通道**都是首页现成的**（见 {@link loadChart} / {@link loadDaily}）：
  *     未登录 → 当前平台的新歌榜（`pickFeatureBoardId('newSongs', svcSource)` → `lxLeaderboard`）；
  *     已登录 → 该平台账号的每日推荐（`AccountService.getDailyTrackIds/getTrackDetails`）。
- *   · 点歌走 `OnlinePlayUtil.playList(整份队列, 下标)`：组队列、起播、打开播放页都由它做，
- *     本页**不 push 路由、不另起播控状态**（全局播控唯一真源仍是 `MusicAppState`）。
+ *   · **播放入口只有两条，都是工程现成的**（用户 2026-10-15："打开这个页面自动播放当前歌曲，
+ *     滑到哪首歌就播放哪一首"，而且**这一页不会打开播放器**）：
+ *     ① 队列还不是屏幕上这一份 ⇒ `OnlinePlayUtil.playList(appState, 整份队列, 下标, uiContext, false)`
+ *        （第 5 参 `openPlayer=false` ⇒ `playList` **不请求**全屏播放页）；
+ *     ② 队列就是这一份、只需换当前曲 ⇒ 写 `PlaybackIntentState`（`openPlayerUi=false`），
+ *        由壳层 `dispatchShellPlaybackIntent()` 去 `MediaService.loadAsset()`。
+ *     两条都不 push 路由、不另起播控状态（全局播控唯一真源仍是 `MusicAppState`）。
+ *     详见 {@link playAt} 的 §2 —— **别改成"调完 `playList` 再回滚 `isShowPlay`"**（理由写在那里）。
  *
  * ## 二、无限刷（**页码/游标怎么走、依据是什么**，全部读实现得来，不猜）
  *
@@ -42,10 +48,24 @@
  *
  * ## 三、界面（照用户给的参考图：华为音乐全屏播放页）
  *
- * 自上而下：顶栏（左汉堡 / 右刷新，无标题文字）→ 大气泡封面 →
- * 歌词两行（当前行亮白较大 + 上一行更暗更小）→ 左对齐歌名 + 歌手/平台胶囊 →
- * 一行音质标签（描边胶囊）→ 动作行（红心+数字 / 不感兴趣 / 更多 ←→ 大号白色圆形播放键）→
- * 细进度条 + 两端时间。底部那条浮动胶囊底栏**是壳层的**，本页只让位（`bottomReserveVp`）。
+ * 自上而下：顶栏（**左三条横线 / 右分享**，都无底色、无标题文字）→
+ * **封面区（中间偏上、按窗口宽铺满、底部化进页底色）** →
+ * **小歌词两行（当前行 + 下一行，在歌名上方）** → 左对齐歌名 + 歌手/平台胶囊 →
+ * 一行音质标签（描边胶囊）→ 动作行（红心+数字 / 不感兴趣 / 更多 ←→ **播放页同款的主播放/暂停键**）→
+ * 细进度条 + 两端时间（**明显在底栏之上**）。
+ * 底部那条浮动胶囊底栏**是壳层的**，本页只让位（`bottomReserveVp + FEED_BOTTOM_GAP_VP`）。
+ *
+ * ★ **整页分五层**（`build()` 里那个 `Stack`，自下而上）：
+ *   ① **取色底** `pageTint` —— 当前这屏封面的主色经 `dealColor` 压暗（照歌手页那一套，见
+ *      {@link extractCardColor}）；取色完成前是 `FEED_BASE_NEUTRAL`（由已有 token 算出的中性深色）；
+ *   ② 模糊封面铺满（`blur 11vp` + `opacity 0.55`，与播放页同一配方）；
+ *   ③ 顶部一段渐隐压深（把顶栏那两个白图标衬托出来，**不铺满整屏**）；
+ *   ④ **图片 → 背景的过渡层**：整屏一条
+ *      `[Color.Transparent, 0] → [pageTint, coverGradientStop()]` —— 与歌手页
+ *      `DetailImmersiveBackdrop.ets:70-73` 同一条做法（照片 + `[Transparent,0]→[取色,1]` 的遮罩列），
+ *      第二个色标 = **封面下沿占整屏的比例**，第一个色标之前恒透明 ⇒ 封面那一整块颜色不变；
+ *      ⚠️ 那个色标是**比例不是 vp**（官方夹到 `[0,1]`），见 {@link coverGradientStop}；
+ *   ⑤ 内容（竖向 `Swiper`）。
  *
  * ★★ **配色一律走 token、不写死 hex**，而且这里用的是**播放页那一族"压在图上"的 token**
  *   （`app.color.player_text_primary` / `play_text_color` / `play_singer_color` /
@@ -54,6 +74,9 @@
  *    这正是官方/本工程对"压在照片/大图上的蒙层 + 它的文字必须成对且两主题同值"那条口径的做法
  *    （照片内容不可控，跟着主题翻就会出现"深字压深蒙层"不可读）。跨 HAR 引用 `app.color.*` 有先例：
  *    `features/recommendation/.../WearableHome.ets:42` 就在用 player 的 `app.color.font_color`。
+ *    ⚠️ 两个**取色底 / 压深色**是把 token 的 RGB 过 `resourceManager.getColorSync` 读出来拼的
+ *      （颜色只能是 string），拼法与理由写在 `feedTokenRgb` / `FEED_BASE_NEUTRAL` / `FEED_SCRIM_TOP`
+ *      头上 —— 仍然"只有 token、没有新 hex"。
  *
  * ## 四、几条"别再踩"的硬约束（写在这里免得下一轮又撞上）
  *
@@ -64,44 +87,56 @@
  * 3. **页根/HDS 标题栏/让位**：`HdsNavDestination` + `titleMode(MINI)` + 空标题 +
  *    `ignoreLayoutSafeArea([SYSTEM], [TOP, BOTTOM])`；HDS 的 `titleBar.style.avoidLayoutSafeArea`
  *    **恒为 `true`**（真机定论，见 `PageTopInsetHelper` 注释）。
- *    ⚠️ 本轮把顶栏改成"左 `backIcon` 汉堡 + 右 `menu` 刷新、`mainTitle: ''`"，
- *    且 `hideBackButton(false)`（HDS 文档原文：**true 才隐藏返回键**，默认 false；
- *    要用自定义返回图标就必须让它显示，官方 `HdsNavDestination` 示例里就是
- *    `.titleBar({...}).hideBackButton(false)` 的写法）。
+ *    ⚠️ 顶栏是"左 `backIcon` + 右 `menu`、`mainTitle: ''`"，且 `hideBackButton(false)`
+ *    （HDS 文档原文：**true 才隐藏返回键**，默认 false；要用自定义图标就必须让它显示，
+ *    官方 `HdsNavDestination` 示例里就是 `.titleBar({...}).hideBackButton(false)` 的写法）。
  * 4. **没有 `bindToScrollable`**：那个接口只收 `Array<Scroller>`
  *    （`component/nav_destination.d.ts:1213`），本页的控制器是 `SwiperController`，类型对不上 ⇒
  *    本页顶栏**没有**"滑过才渐变模糊"，只有 `systemMaterialEffect`。别硬塞。
  * 5. **`@Param` 的默认值不能引用私有成员**：所以主题色 token 写成模块级常量。
- * 6. **歌词两行只用了"当前行 + 上一行"**：工程里**没有任何可从别的 HAR 拿到的"下一行"** ——
- *    `MiniLyricLinesComponent`（`features/player/.../view/MiniLyricLinesComponent.ets`，正是
- *    "当前行 + 下一行"那个组件）**不在 `features/player/Index.ets` 的导出面里**，
- *    而 HAR 只能按导出面引用、不能深链到内部文件；
- *    `LyricLiveViewController` 虽然导出了，但它的 `curLineText/nextLineText` 是 **private**，
- *    且在 `!isActive`（实况窗没起来）时 `update()` 直接 return，拿不到值。
- *    ⇒ 本页只复用**已有的那一条真源** `MusicStoreService.getCardLyric()`
- *    （播放链路 `MediaService.syncCardLyric()` 在每个进度回调里写进去的**当前行**），
- *    "上一行"是自己观察到的历史值 —— **都是真实数据，不新写解析、不伪造歌词**。
- *    ⚠️ 要真做出"当前行 + 下一行"，正确的改法是**在 `features/player/Index.ets` 里加一行**
- *    `export { MiniLyricLinesComponent } from './src/main/ets/view/MiniLyricLinesComponent';`
- *    然后这里换成 `MiniLyricLinesComponent()`（本轮不许动 player，故未做）。
+ * 6. **歌词 = 播放页现成的 `MiniLyricLinesComponent`**（当前行 + **下一行**，在歌名上方）。
+ *    它**已经**由 `features/player/Index.ets` 导出（本轮加的那一行），本页直接
+ *    `MiniLyricLinesComponent({ ignoreUserSetting: true })`。
+ *    ⚠️ 它是"自取数"组件（自己连 `MusicAppState` + 按 `progress` 从当前曲的 `lyricText` 算行），
+ *      **取词/解析/行号逻辑一字未改**；本轮只给它加了一个**opt-in 显示开关**
+ *      `@Param ignoreUserSetting: boolean = false`（`MiniLyricLinesComponent.ets:27`），
+ *      渲染门变成 `if (this.miniLyricState.enabled || this.ignoreUserSetting)`：
+ *      **默认 false ⇒ 播放页逐字保持原行为**（仍由「设置 → 小歌词」控制），
+ *      只有本页传 `true`（这一页自己就是"现在在听什么"的全屏呈现，两行歌词是它的正文之一）。
+ *      ⚠️ 早先那版"本页去强开 `ShowMiniLyricState.enabled`"的做法是错的：那会**连带改掉播放页**的观感。
+ *    ⚠️ 本页自己那条"当前行 + 上一行"的观察链（`lyricCurrent` / `lyricPrevious` /
+ *      `@Monitor('appState.progress')`）**保留但已不用于显示**（也不删）：万一下一轮要回退组件、
+ *      或者要拿它做别的（如歌词按钮），数据还在；它读的是
+ *      `MusicStoreService.getCardLyric()`（播放链路 `MediaService.syncCardLyric()` 写进去的真源）。
+ * 7. **全屏播放页在这条路上只有一个开关**：`OnlinePlayUtil.playList` 的第 5 参 `openPlayer`
+ *    （默认 `true` = 原行为）与 `PlaybackIntentState.openPlayerUi`。本页两处都传/写 `false`，
+ *    **不要**改用"事后把 `appState.isShowPlay` 掰回去"（那是"请求过又撤销"，
+ *    壳层的 `@Monitor('appState.isShowPlay')` 会读到瞬时 true，见 {@link playAt} §2）。
  *
  * 诊断关键字：`grep RzdNowPlaying`（hilog 标签；load / page request / page result /
- * exhausted / dislike / favorite / play 各有独立字样，判读表见任务报告）。
+ * exhausted / dislike / favorite / **play / play switch / play skip** / **tint** 各有独立字样，
+ * 判读表见任务报告）。壳层那半条用 `grep PlaybackIntent` / `RzdPlayerRoute`。
  */
 
 import { AppStorageV2, uiObserver } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
 import { BusinessError, deviceInfo } from '@kit.BasicServicesKit';
+import { effectKit } from '@kit.ArkGraphics2D';
+import { image } from '@kit.ImageKit';
+import { http } from '@kit.NetworkKit';
 import {
   AmbientState,
   AppStorageKeys,
   buildTitleMaterial,
+  ColorConversion,
   HomeSourceState,
   Logger,
   MusicAppState,
   MusicStoreService,
   PageTopInsetHelper,
   PlayedSongRecord,
+  PlaybackIntentState,
+  SongItem,
   StyleConstants,
   WindowInfo,
   getWindowInfoState
@@ -117,13 +152,16 @@ import {
 import {
   AccountChangedState,
   AccountService,
+  buildSongShareText,
   lxGetQualityOptions,
   lxLeaderboard,
   LXQualityOption,
+  MiniLyricLinesComponent,
   OnlinePlayUtil,
   PlatformAccount,
   PlatformTrackInfo,
-  PlayerConstants
+  PlayerConstants,
+  showSystemShare
 } from 'player';
 import type { LXSearchSong, LXSearchResult } from 'player';
 import { SongMoreMenu } from 'playlist';
@@ -172,24 +210,63 @@ const FEED_PREFETCH_REMAIN: number = 3;
  */
 const FEED_DEFAULT_BOTTOM_RESERVE_VP: number = 56;
 
-/** 封面边长上限（vp）：窄屏取"宽度 − 48"，宽屏（平板/展开态）不要无限放大。 */
+/**
+ * 底栏让位之上**再让出的一段可见间距**（vp）—— 让"进度条整体明显在底栏之上"。
+ *
+ * 这一档就是 ① 要求的"进度条与底栏之间留出可见间距"，写法是**加号而不是新写一个魔法数**：
+ *   `卡片 padding.bottom = bottomReserveVp（底栏让位，唯一来源） + FEED_BOTTOM_GAP_VP（间距）`
+ * （见 {@link FeedCard} 的 `padding` 与 {@link cardChromeBottomVp}）。
+ * ⚠️ 两处**必须同时**用 {0} + FEED_BOTTOM_GAP_VP，**不能**在别处再叠一次 —— 叠两次就是
+ *   "封面变小 + 进度条上移两档"，与首页那类"同一个量算两遍"的旧账同族。
+ * 12 的来历：官方那版进度条下沿到底栏胶囊上沿大约半个底栏高度（56/2 = 28），
+ * 其中一半由底栏自己的 `barBottomMargin` 提供、另一半由这里补，取整 12vp。
+ */
+const FEED_BOTTOM_GAP_VP: number = 12;
+
+/**
+ * 封面区**高度**上限（vp）。
+ *
+ * 宽屏（平板 / 折叠展开）时封面按窗口宽铺满会很夸张（600vp 宽 ⇒ 600vp 高），
+ * 到顶之后剩下的宽度留给左右留白。与改动前的 `FEED_COVER_MAX_VP` 同值，改名只为语义准确
+ * （它现在限制的是**高度**，宽度由"铺满"决定）。
+ */
 const FEED_COVER_MAX_VP: number = 320;
 
-/** 封面圆角（vp）——参考图是"大气泡"圆角方形。 */
+/**
+ * 封面区高度相对**可用竖向空间**的比例。
+ *
+ * 可用空间 = 窗口高 − 顶部让位（状态栏 + HDS 标题栏，`PageTopInsetHelper`）
+ *   − 卡片底部让位（{@link cardChromeBottomVp}）。
+ * 封面高度 = `min(可用空间 × 本值, 窗口宽, FEED_COVER_MAX_VP)`。
+ * ⚠️ 封面**宽度 = 窗口宽**（"按窗口宽铺满"），所以宽屏会先被 `FEED_COVER_MAX_VP` 夹住。
+ * 1.15 是"竖屏手机上比正方形略高一点"的经验值：360×780 的手机上得到 353vp，
+ * 既明显大于改动前那个居中方形小卡，又不会把动作行顶出屏幕。
+ */
+const FEED_COVER_RATIO: number = 1.15;
+
+/** 封面区高度下限（vp）：极矮窗口（平板横屏 / 折叠展开）宁可让内容挤一点，也不要压成一条。 */
+const FEED_COVER_MIN_VP: number = 160;
+
+/**
+ * 封面圆角（vp）——**本轮已不使用，保留给"如果要给封面加圆角"的场景**。
+ *
+ * ⚠️ 为什么现在不圆角：官方那张图里的照片是**通栏铺满、不圆角**的
+ *   （圆角只出现在"居中方形小卡"那种形态上），本页封面改成"按窗口宽铺满"之后
+ *   再圆角就会在四角露出底色、把"图片化进背景"这件事做坏。
+ *   所以 `FeedCover` 里**没有** `.borderRadius()`；要加回来必须同时想清楚四角怎么处理。
+ */
 const FEED_COVER_RADIUS_VP: number = 24;
 
 /**
- * 封面之外的固定占位（vp）：歌词两行 + 歌名/歌手 + 音质标签 + 动作行 + 进度行 + 各处间距 + 呼吸留白。
+ * 歌名/歌手 + 音质标签 + 动作行 + 三处间距 + 呼吸留白的合计占位（vp），
+ * 从"可用竖向空间"里减掉之后才轮到封面（见 {@link coverHeightVp}）。
  *
- * 用它把封面边长反算出来（见 {@link coverSizeVp}）—— 写死尺寸在矮窗口
- * （平板横屏 / 折叠展开）会把动作行顶出屏幕，这是本页最容易出问题的一处。
- *
- * 320 ≈ 歌词 44 + 歌名/歌手 60 + 音质 26 + 动作 56 + 进度 20 + 5 处 `space` ≈ 70 + 呼吸留白 ≈ 44。
+ * ⚠️ **不含歌词**（歌词组件按需渲染，高度由它自己决定，见 {@link FeedLyric}）——
+ * 所以这个数比改动前的 `FEED_CHROME_VP`(320) 小得多。写死尺寸在矮窗口会把动作行顶出屏幕，
+ * 这是本页最容易出问题的一处。
+ * 200 ≈ 歌名 29 + 歌手行 20 + 音质 22 + 动作 56 + 5 处卡片 `space`（14×4 + 6）≈ 62 + 呼吸留白 ≈ 11。
  */
-const FEED_CHROME_VP: number = 320;
-
-/** 歌词区固定高度（vp）：**每一屏都占同样高**，否则滑动时封面会上下跳。 */
-const FEED_LYRIC_BLOCK_VP: number = 44;
+const FEED_CHROME_VP: number = 200;
 
 /**
  * 背景模糊半径（vp）。
@@ -204,6 +281,26 @@ const FEED_BACKDROP_ALPHA: number = 0.55;
 
 /** 音质标签在一张表值里的分隔符（`Map<string, string>` 存多枚标签，`Map` 不能直接存数组比较省事）。 */
 const FEED_QUALITY_SEP: string = '|';
+
+/**
+ * 动作行高度（vp）。
+ *
+ * 由播放页同款的那颗主键决定：`app.float.image_play_width` = **72vp**（`float.json:96`），
+ * 比改动前那颗 56vp 的白圆大一圈，所以这一行也得跟着长高 —— 否则它会撑破行高、
+ * 与上面的音质标签挤在一起。
+ */
+const FEED_ACTIONS_ROW_VP: number = 72;
+
+/** 主播放/暂停键边长 —— **同一个 token**（`app.float.image_play_width`，72vp），
+ * 不再手写 56/72 这种数字；播放页主控区那颗用的就是它。 */
+const FEED_PLAY_BUTTON_SIZE: Resource = $r('app.float.image_play_width');
+
+/**
+ * 主播放/暂停键的不透明度 —— 与播放页 `controlImageBuilder()` 的 `opacity(0.86)` 同值
+ * （`ControlAreaComponent.ets:986`）：那颗按钮"看着是纯白圆"，实际是 86% 白，
+ * 压在模糊封面上才不会死白。**照抄这个数**，别自己调。
+ */
+const FEED_PLAY_BUTTON_OPACITY: number = 0.86;
 
 /** 一屏最多画几枚音质胶囊（参考图是三枚，多了这行会溢出）。 */
 const FEED_QUALITY_PILL_MAX: number = 3;
@@ -222,10 +319,95 @@ const FEED_PILL_BG: Resource = $r('app.color.slider_track');
 const FEED_FAVORITE: Resource = $r('app.color.playlist_play_all_icon');
 const FEED_TRACK: Resource = $r('app.color.slider_track');
 const FEED_TRACK_PLAYED: Resource = $r('app.color.slider_select');
-/** 整页深色底（同时也是"白圆按钮上的图标色"）——`#E61C1C1E`，两主题同值。 */
+/** 整页深色底 token（`app.color.info_scrim_bottom` = `#E61C1C1E`）。
+ *
+ * ⚠️ 改动前它还兼任"白圆播放键上的图标色"，那颗键本轮改成**播放页同款的 `Image`**，
+ *   自带白色圆底 ⇒ 那个用途没了。现在它只在两处被用到：
+ *   ① 作为 {@link FEED_DARK_SURFACE_ARGB} 的**来源说明**（数字常量就是它的值）；
+ *   ② 顶栏那两个槽位的透明背板用的是同族 α=0 档（{@link FEED_TRANSPARENT}）。
+ *   ⚠️ 它**不再**直接喂给任何组件属性（整页底色改成取色 `pageTint`、兜底是 `FEED_BASE_NEUTRAL`）——
+ *   保留常量是为了"值只有一个来源"这件事在代码里可见，别当它是漏用的死代码删掉。
+ */
 const FEED_DARK_SURFACE: Resource = $r('app.color.info_scrim_bottom');
 /** 全透明档：同一枚 `1C1C1E` 的 α=0 值（`info_scrim_top`），用于"要透明背板"的地方。 */
 const FEED_TRANSPARENT: Resource = $r('app.color.info_scrim_top');
+
+/**
+ * 取色完成**之前**的中性兜底底色（不透明 `rgb()` 字符串）。
+ *
+ * 底就是 {@link FEED_DARK_SURFACE} 这枚**已有 token**（`app.color.info_scrim_bottom`，
+ * 本机 `features/player/src/main/resources/base/element/color.json` 里是 `#E61C1C1E`，
+ * 而且**没有 dark 覆盖文件** ⇒ 两个主题同值、α 也恒定）。
+ * 它的 RGB（`1C1C1E` = 28/28/30）本身就是"中性深色"，起点已经落在
+ * {@link ColorConversion.dealColor} 的取值域里 —— 所以**不用任何新 hex**，
+ * 把 token 的 ARGB 写成数字常量再拆通道即可。
+ *
+ * ⚠️ **不走 `resourceManager.getColorSync`**：那个接口在 Kit 导出的 `resourceManager`
+ *   命名空间上**没有**（`.d.ts` 里是 `resourceManager.ResourceManager` 这个**类**的实例方法，
+ *   名字空间是 `export default` 的模块对象）⇒ 直接调会报
+ *   `Property 'getColorSync' does not exist on typeof resourceManager`，本机已实测。
+ *   要用得先在运行时 `getUIContext().getHostContext().resourceManager` 拿实例，
+ *   而模块级常量求值时还拿不到它。这里改成"把 token 值写成常量 + 注释锁死来源"。
+ */
+const FEED_DARK_SURFACE_ARGB: number = 0xE61C1C1E;
+
+/**
+ * 读不到资源时的最后兜底色 —— 与播放页 `PlaybackPage.defaultImageBgColor`
+ * （`rgba(32, 32, 32, 1)`）**逐字同值**，两个页面的兜底观感一致。
+ */
+const FEED_NEUTRAL_HEX: number = 0x202020;
+
+/**
+ * 整页底色：取色完成前的中性兜底（见上方注释）。
+ * 取色完成后由 `@Local pageTint` 覆盖成封面主色。
+ */
+const FEED_BASE_NEUTRAL: string = ((): string => {
+  const tuned: number[] = ColorConversion.dealColor(
+    (FEED_DARK_SURFACE_ARGB >>> 16) & 0xFF, (FEED_DARK_SURFACE_ARGB >>> 8) & 0xFF, FEED_DARK_SURFACE_ARGB & 0xFF);
+  return `rgb(${tuned[0]}, ${tuned[1]}, ${tuned[2]})`;
+})();
+
+/** 顶部压深层的 α（0.55 —— 与背景模糊层 {@link FEED_BACKDROP_ALPHA} 同值，观感一致）。 */
+const FEED_SCRIM_ALPHA: number = 0.55;
+
+/**
+ * 顶栏那一段压深用的颜色（`rgba(28, 28, 30, 0.55)`）。
+ *
+ * 与 {@link FEED_TRANSPARENT}（同一枚颜色的 α=0 档）配成一对做 `linearGradient`：
+ * **不改 hex、只改 α** —— 底仍然是 {@link FEED_DARK_SURFACE} 那枚 token 的 RGB。
+ * 为什么不能沿用改动前那层"整屏 `[透明, 0] → [深色, 1]`"：它会把整页压成深色、
+ * 把背景取色整块盖掉（取色就白做了）⇒ 现在只压最上面 {@link FEED_TOP_SCRIM_VP} 那一段。
+ */
+const FEED_SCRIM_TOP: string = ((): string => {
+  const r: number = (FEED_DARK_SURFACE_ARGB >>> 16) & 0xFF;
+  const g: number = (FEED_DARK_SURFACE_ARGB >>> 8) & 0xFF;
+  const b: number = FEED_DARK_SURFACE_ARGB & 0xFF;
+  return `rgba(${r}, ${g}, ${b}, ${FEED_SCRIM_ALPHA})`;
+})();
+
+/** 顶部压深层的总高度（vp）：一段把顶栏两个图标衬托出来的渐变，不铺满整屏。 */
+const FEED_TOP_SCRIM_VP: number = 180;
+
+/**
+ * 由封面像素算出的页底色。
+ *
+ * ★★ 复用工程**现成**的那一套，一行新算法都不写：`effectKit.createColorPicker` 取封面主色
+ *    → `ColorConversion.dealColor` 压暗 → 当页面底色 —— 与歌手页 `ArtistDetailPage.loadBackdropColor()`、
+ *    专辑页 `AlbumDetailPage`、歌单页 `PlaylistDetailPage` **逐字同款**。
+ *   （另一套 `vividFlowColors` 是播放页"流光"用的**鲜艳色**，亮度给到中高区间，
+ *    压白字会读不清，所以底色这一档不用它。）
+ * @param red 主色红通道 0–255。
+ * @param green 主色绿通道 0–255。
+ * @param blue 主色蓝通道 0–255。
+ * @returns 不透明 `rgb(r, g, b)`（不透明度交给调用方的 `.opacity()`，别在这里编 α）。
+ */
+function feedTintOf(red: number, green: number, blue: number): string {
+  const tuned: number[] = ColorConversion.dealColor(red, green, blue);
+  const r: number = Math.max(0, Math.min(255, tuned[0]));
+  const g: number = Math.max(0, Math.min(255, tuned[1]));
+  const b: number = Math.max(0, Math.min(255, tuned[2]));
+  return `rgb(${r}, ${g}, ${b})`;
+}
 
 /**
  * 数据来源（决定卡片脚注写什么、以及"没有通道"时空态说什么）。
@@ -348,6 +530,21 @@ export struct NowPlayingFeedPage {
     AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
   /** 收藏门的真源；它的 `@Trace favoriteVersion` 让收藏状态变化能驱动本页重绘。 */
   @Local store: MusicStoreService = MusicStoreService.getInstance();
+  /**
+   * 播放意图（**工程硬规则"播放入口唯一"**）。
+   *
+   * ★ 本页"滑到哪播哪"里"队列已经在播、只需换当前曲"那一条走它：
+   *   壳层 `@Monitor('intentState.requestVersion')` → `dispatchShellPlaybackIntent()`
+   *   （`features/player/src/main/ets/util/PlaybackIntentShell.ets:29`），
+   *   `queueIndex >= 0` 时由**它**去调 `MediaService.getInstance().loadAsset(queueIndex)`，
+   *   而 `openPlayerUi === false` ⇒ 不会打开播放器（那一句写在 `if (openUi)` 里，`:45-48`）。
+   *   两个 product 的壳层都挂了这条 monitor（`products/{default,pc}/.../Index.ets`）。
+   * ★ 与 `MusicAppState` 同一个 `AppStorageV2` 通道（`AppStorageKeys.PLAYBACK_INTENT_STATE`），
+   *   不新造状态、也不自己 `push` 路由。
+   */
+  @Local playbackIntentState: PlaybackIntentState =
+    AppStorageV2.connect(PlaybackIntentState, AppStorageKeys.PLAYBACK_INTENT_STATE,
+      () => new PlaybackIntentState())!;
   /** 底栏/标题栏沉浸光感档位（标题栏材质要用它，与首页同一套档位）。 */
   @Local ambientState: AmbientState =
     AppStorageV2.connect(AmbientState, AppStorageKeys.AMBIENT_STATE, () => new AmbientState())!;
@@ -370,8 +567,30 @@ export struct NowPlayingFeedPage {
   private feedController: SwiperController = new SwiperController();
   /** 懒加载数据源（`LazyForEach` 直挂 `Swiper`）。 */
   @Local feedSource: FeedDataSource = new FeedDataSource([]);
-  /** 当前这一屏的下标（`onChange` 写入，用于点歌时定位）。 */
+  /**
+   * 当前这一屏的下标（`onChange` 写入）。
+   *
+   * ★ 它有三个消费方：点歌/不感兴趣的定位、**背景（模糊层 + 取色）**、
+   *   以及"滑到哪就播哪"（见 {@link playAt}）。
+   * ⚠️ `@Local` 是必需的：下面 `@Monitor('currentIndex')` 只能盯可观察的成员，
+   *   写成普通私有字段的话翻页时取色**永远不会重新触发**（而且不报错）。
+   */
   @Local currentIndex: number = 0;
+
+  // ───────────────────── 背景：封面取色（照歌手页那一套）─────────────────────
+
+  /**
+   * 当前**生效**的页底色（**不透明** `rgb()`；取色完成前 = {@link FEED_BASE_NEUTRAL}）。
+   *
+   * 真源是封面（`row.coverUrl`），取色链路见 {@link extractCardColor}。
+   */
+  @Local pageTint: string = FEED_BASE_NEUTRAL;
+  /** 已经取过色的封面地址（去重：同一张封面不要反复下载+解码）。 */
+  private lastTintUrl: string = '';
+  /** 取色代次：快速滑动 + 异步解码，靠它把过期的那一次结果丢掉（与播放页 `imageColorJobSeq` 同款）。 */
+  private cardColorJobSeq: number = 0;
+  /** 组件是否还挂着（异步回来时页面可能已经销毁）。 */
+  private feedAlive: boolean = true;
   /** 加载中（空态/加载态的二选一）。 */
   @Local feedLoading: boolean = true;
   /** 已经加载的是哪条通道。 */
@@ -445,7 +664,28 @@ export struct NowPlayingFeedPage {
     //   `readList(KEY_FAVORITES)`（反序列化整份收藏），而进度一 tick 每张卡都会重绘
     //   ⇒ 每帧 2~3 次 JSON 解析，白白卡滑动。
     this.favoriteTotal = this.store.getFavorites().length;
+    this.feedAlive = true;
+    // 背景取色的兜底：进页面先按**当前这一屏**的封面取一次色
+    // （`applyRows` 之后下标归 0，那次也会触发；这里覆盖"页面被复用、下标没变"的情况）。
+    this.refreshCardColor();
     this.load();
+  }
+
+  /** 页面销毁：异步取色回来时不要再写状态（与播放页 `isAlive` 同一口径）。 */
+  aboutToDisappear(): void {
+    this.feedAlive = false;
+  }
+
+  /**
+   * 翻屏 ⇒ 背景（模糊层 + 取色底）跟着换。
+   *
+   * ⚠️ 不能改成"在 `onFeedChanged` 里直接调"：`applyRows`（首批装载）与 `deleteRowAt`
+   *   （不感兴趣删行）也会改下标，而它们**不经过** `onChange` ⇒ 那些路径上背景不换。
+   *   盯 `@Local currentIndex` 这一个真源，四条路径全覆盖。
+   */
+  @Monitor('currentIndex')
+  onFeedIndexChanged(): void {
+    this.refreshCardColor();
   }
 
   /** 收藏变化（`@Trace favoriteVersion`）⇒ 只更新那个数字，不做别的。 */
@@ -669,6 +909,13 @@ export struct NowPlayingFeedPage {
       if (fresh.length <= FEED_PREFETCH_REMAIN + 1) {
         void this.loadMore();
       }
+      // ★★ **进页面自动播放**（用户 2026-10-15 原话："打开这个页面自动播放当前歌曲，
+      //    滑到哪首歌就播放哪一首"）。首批数据刚到就起播第 0 屏。
+      //    ⚠️ 只在**首屏装载**这一条路上起播：`appendRows`（翻页追加）不碰播放 ——
+      //      否则每预取一页都会把当前在播的那首重放一遍。
+      //    ⚠️ 用的是同一个 {@link playAt}：它自己会判"这首是不是已经在播"，
+      //      所以"从别的页签切回来、歌还没变"时**不会重播**（用户要求）。
+      this.playAt(0);
     }
   }
 
@@ -1072,12 +1319,37 @@ export struct NowPlayingFeedPage {
   }
 
   /**
-   * 播放第 `index` 首。
+   * 播放第 `index` 首 —— **进页面自动播放**与**滑到哪播哪**共用这一个入口。
    *
-   * ★ 唯一入口：`OnlinePlayUtil.playList(appState, 整份队列, index, uiContext)`
-   *   （`features/player/.../util/OnlinePlayUtil.ets:211`）—— 组队列 / `MediaService.loadAsset`
-   *   / 打开播放页都由它做；本页**不 push 路由、不另起播控状态**。
-   * @param index 队列下标。
+   * ## 1、三条分支（**先判"这首是不是已经在播"，避免重复起播**）
+   *   · 已经在播的就是**这一首** ⇒ 直接 return（重复对同一首起播会把进度打回 0）；
+   *   · 已经在播的是**同一个队列**里的**另一首** ⇒ 走 `PlaybackIntentState`
+   *     （见 §2；队列不动、不重拉歌词、播放器不开）；
+   *   · 其余（页面刚进来 / 队列被别处换过）⇒ 走**组队列**的官方入口
+   *     `OnlinePlayUtil.playList(appState, 整份队列, 下标, uiContext, **false**)`。
+   *
+   * ## 2、★★ 「这个页面不会打开播放器」是怎么做到的（**两个入口各一条正规出口，不做事后回滚**）
+   *   · **组队列那一条**：`playList` 第 5 个参数 `openPlayer` 传 `false`
+   *     （`OnlinePlayUtil.ets:225` 起，默认 `true` ⇒ 现有 4 参调用点一行都不用改）。
+   *     `playList` 内部就**不再调** `openFullScreen()` ⇒ `appState.isShowPlay` 从头到尾没被写过，
+   *     浮层自然不出现。
+   *     ⚠️ **不许**改用"调完再 `appState.isShowPlay = false`"的写法：`openFullScreen` 是在
+   *       `uiContext.animateTo()` 的**闭包**里写这个字段的，事后回滚 = "请求过又撤销"，
+   *       而壳层的 `@Monitor('appState.isShowPlay')`（`products/default/.../Index.ets:413`）
+   *       会在 `pushPlayerRoute()` 里读到那个**瞬时的 true**。
+   *   · **只换当前曲那一条**：走 `PlaybackIntentState`（工程硬规则"播放入口唯一"）——
+   *     壳层 `@Monitor('intentState.requestVersion')` → `dispatchShellPlaybackIntent()`
+   *     （`PlaybackIntentShell.ets:29`）：`queueIndex >= 0` 时它自己 `MediaService.loadAsset(queueIndex)`，
+   *     而 `openUi === false` ⇒ **不触发** `onRequestOpenPlayerUi()`（那一句写在 `if (openUi)` 里，
+   *     `:45-48`）。两个 product 的壳层都挂了这条 monitor。
+   *     ⇒ 队列不动、不重建、不并发重拉歌词、播放器不开。
+   *
+   * ## 3、去抖
+   *   ② 那条分支要求"**全局队列就是屏幕上这一份**"，而组队列只在第三条分支发生 ——
+   *   于是快速连滑时：第一下组队列起播，后面每一下都只发一个 intent（`loadAsset` 一次），
+   *   **不会连着重开队列**（每次重开队列都会把 20 首歌的歌词并发拉一遍，是本页最贵的一件事）。
+   *   `MediaService.loadAsset` 自己还有 `loadRequestSeq` 代次判断，过期的那次不生效。
+   * @param index 队列下标（= 屏幕上这一屏的下标）。
    */
   private playAt(index: number): void {
     const songs: LXSearchSong[] = this.buildQueue();
@@ -1085,8 +1357,50 @@ export struct NowPlayingFeedPage {
       return;
     }
     const target: number = index < 0 || index >= songs.length ? 0 : index;
-    Logger.info(RZD_TAG, `play index=${target} songs=${songs.length}`);
-    void OnlinePlayUtil.playList(this.appState, songs, target, this.getUIContext());
+    const row: RecommendPrivateSongUi = this.feedSource.getData(target);
+    const queue: SongItem[] = this.appState.playQueue;
+    if (this.isCurrentSong(row)) {
+      // 已经在播这一首（含"点封面/点播放键"重复点同一屏）：不动队列、不重置进度
+      Logger.info(RZD_TAG, `play skip (already current) index=${target} ${row.source}_${row.songId}`);
+      return;
+    }
+    if (queue.length === songs.length && this.queueMatchesFeed(queue)) {
+      // 队列就是屏幕上这一份 ⇒ 走播放意图（壳层会调 loadAsset，**不会**打开播放器）
+      const intent: PlaybackIntentState = this.playbackIntentState;
+      intent.pendingPlaySongId = -1;
+      intent.pendingQueueIndex = target;
+      // ★ 必须**显式**写 false：它是壳层"要不要打开播放器"的唯一判据（`if (openUi)`）
+      intent.openPlayerUi = false;
+      intent.requestVersion++;
+      Logger.info(RZD_TAG,
+        `play switch index=${target} ${row.source}_${row.songId} (intent v=${intent.requestVersion})`);
+      return;
+    }
+    // 组队列（官方入口）——整份队列 + 下标；★ 第 5 参 `false` = **不打开播放器**（见 §2）
+    Logger.info(RZD_TAG, `play index=${target} songs=${songs.length} (playList openPlayer=false)`);
+    void OnlinePlayUtil.playList(this.appState, songs, target, this.getUIContext(), false);
+  }
+
+  /**
+   * 全局队列与屏幕上这一份是不是同一批歌（同长度 + **逐首同 `source_songId`**）。
+   *
+   * 用它决定"只换当前曲"还是"重新组队列"（见 {@link playAt}）——
+   * 要比的是**身份**而不是下标，因为翻页追加/删行之后两份的下标含义可能不同。
+   * @param queue 全局播放队列。
+   * @returns true = 同一批歌、顺序也一致。
+   */
+  private queueMatchesFeed(queue: SongItem[]): boolean {
+    const total: number = this.feedSource.totalCount();
+    if (queue.length !== total) {
+      return false;
+    }
+    for (let i: number = 0; i < total; i++) {
+      const row: RecommendPrivateSongUi = this.feedSource.getData(i);
+      if (queue[i].source !== row.source || queue[i].songId !== row.songId) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /** 当前这一屏是否就是全局在播的那首（决定播放按钮画"播放"还是"暂停"）。 */
@@ -1170,12 +1484,14 @@ export struct NowPlayingFeedPage {
   // ─────────────────────────── 交互信号 ───────────────────────────
 
   /**
-   * 换歌到位：记下标 + 补音质标签 + **预取下一页**。
+   * 换歌到位：记下标 + 补音质标签 + **预取下一页** + **切歌播放**。
    *
    * ★ 触发时机就是这里（`Swiper.onChange`，`component/swiper.d.ts` 的 `Callback<number>` 档）：
    *   滑到**倒数第 {@link FEED_PREFETCH_REMAIN} 首**时请求下一页，让用户滑到底之前
    *   新歌已经进来了 —— 页面永远不会出现"滑不动了才知道没数据"。
    *   并发由 {@link loadMore} 里的 `feedFetching` 闸住（快速连滑只会有一个请求在飞）。
+   * ★ **滑到哪就播哪**（用户 2026-10-15 原话）：真正起播的动作在 {@link playAt}
+   *   （按"这首歌是不是已在播"去重，所以这里无脑调一次是安全的，不会重复起播）。
    */
   private onFeedChanged(index: number): void {
     this.currentIndex = index;
@@ -1186,29 +1502,44 @@ export struct NowPlayingFeedPage {
     if (total - 1 - index <= FEED_PREFETCH_REMAIN) {
       void this.loadMore();
     }
-    // ★ 页内**不播**：上下滑只是翻卡片，点播放按钮/点封面才真正起播 ——
-    //   参考图的语义也是"滑到一个位置，再决定听哪首"。
-    //   （若将来要"滑到哪就播哪"，只在这里调 `playAt(index)` 即可。）
+    this.playAt(index);
   }
 
   /**
-   * 顶栏左侧「汉堡」：展开**完整播放器**（壳层那层浮层）。
+   * 顶栏左侧「三条横线」：**不打开播放页**（用户 2026-10-15 明确「这个页面是不会打开播放器的」）。
    *
-   * ★ 走的就是壳层/首页现成的动作：`appState.isShowPlay = true`
-   *   （首页「现在就听」卡 `RecommendViewModel.openPlayer():67`、
-   *     迷你条 `MiniBarPlayer.ets:111` 都是这一句），不 push 路由、不新造入口。
-   * ⚠️ 参考图那一枚在华为音乐里是"收起"，本页是**底栏页签**、没有可收起的上层，
-   *   所以这里取"展开完整播放器"——**有真实动作，不是画个图标**。
-   * ⚠️ 没有在播的歌时不开（否则会打开一个空播放页），改成给一句提示。
+   * ⚠️ 这里**故意没有可执行的菜单**：本页能做的事（收藏 / 不感兴趣 / 更多 / 播放暂停）都已经
+   *   画在卡片自己的动作行上，再抄一份菜单就是"同一件事两个入口"；而"打开完整播放器"这条路
+   *   **被用户明确否掉**了（上一版那颗汉堡就是它，本轮整体移除）。
+   *   所以保留成"点一下给一句提示"：**不静默、也不跳转**。
+   *   真要给它加行为，正确做法是在这里 `bindMenu`（HDS 顶栏的图标槽位不吃自定义菜单）——
+   *   见任务报告里的"未完成/存疑"。
    */
-  private openFullPlayer(): void {
-    if (this.appState.getCurrentSongItem() === undefined) {
-      Logger.info(RZD_TAG, 'open player skipped: no current song');
-      this.toast('还没有在播的歌');
+  private onFeedMenu(): void {
+    Logger.info(RZD_TAG, `menu tapped index=${this.currentIndex} (no menu: page never opens the player)`);
+    this.toast('本页的操作都在卡片上：收藏 / 不感兴趣 / 更多');
+  }
+
+  /**
+   * 顶栏右侧「分享」：接的正是工程**现成**的那一条分享链路。
+   *
+   * 与播放页 `TopAreaComponent.ets:51`、专辑页 `AlbumDetailPage.ets:577` 逐字同款：
+   *   `showSystemShare(uiContext, buildSongShareText(title, singer, source, songId), '歌曲分享')`
+   *   —— 两个函数都从 `player` 的导出面来（`features/player/Index.ets:71`），不新写分享实现。
+   * ⚠️ 没有歌可分享（空态/下标越界）时只给一句提示，不弹一个空分享面板。
+   */
+  private onShareSong(): void {
+    const total: number = this.feedSource.totalCount();
+    if (total <= 0) {
+      this.toast('还没有可以分享的歌');
       return;
     }
-    Logger.info(RZD_TAG, `open full player from feed index=${this.currentIndex}`);
-    this.appState.isShowPlay = true;
+    const index: number = this.currentIndex >= 0 && this.currentIndex < total ? this.currentIndex : 0;
+    const row: RecommendPrivateSongUi = this.feedSource.getData(index);
+    const title: string = typeof row.title === 'string' ? row.title : '';
+    const singer: string = typeof row.singer === 'string' ? row.singer : '';
+    Logger.info(RZD_TAG, `share song=${row.source}_${row.songId} title=${title}`);
+    showSystemShare(this.getUIContext(), buildSongShareText(title, singer, row.source, row.songId), '歌曲分享');
   }
 
   /**
@@ -1278,41 +1609,143 @@ export struct NowPlayingFeedPage {
 
   // ─────────────────────────── 版式 ───────────────────────────
 
-  /**
-   * 封面边长（vp）。
-   *
-   * 算式：`min(窗口宽 − 48, 窗口高 − 顶部让位 − chrome, FEED_COVER_MAX_VP)`，
-   * 再保证不小于 140（极矮窗口下宁可让内容可滚，也不要把封面压成一条）。
-   * @returns 封面边长（vp）。
-   */
-  private coverSizeVp(): number {
-    const widthVp: number = this.windowInfo.windowSize.width > 0 ?
+  /** 窗口宽（vp）；窗口尺寸还没量到时用 360（与改动前同一个兜底值）。 */
+  private windowWidthVp(): number {
+    return this.windowInfo.windowSize.width > 0 ?
       this.getUIContext().px2vp(this.windowInfo.windowSize.width) : 360;
-    const heightVp: number = this.windowInfo.windowSize.height > 0 ?
+  }
+
+  /** 窗口高（vp）；窗口尺寸还没量到时用 780。 */
+  private windowHeightVp(): number {
+    return this.windowInfo.windowSize.height > 0 ?
       this.getUIContext().px2vp(this.windowInfo.windowSize.height) : 780;
-    const byWidth: number = widthVp - 48;
-    const byHeight: number = heightVp - PageTopInsetHelper.targetContentTopVp() - FEED_CHROME_VP -
-      this.bottomReserveVp;
-    const size: number = Math.min(Math.min(byWidth, byHeight), FEED_COVER_MAX_VP);
-    return Math.max(size, 140);
   }
 
   /**
-   * HDS 标题栏 —— 参考图那一行：**左汉堡 + 右刷新、没有标题文字**。
+   * 封面区顶边在页内的 y（vp）—— 那个居中的封面**实际**从哪儿开始画。
+   *
+   * ★ 算术（`FeedCard` 里封面区是居中排的）：
+   *   内容盒高 = 窗口高 − 顶部让位（{@link topStackOffsetVp}）− {@link cardChromeBottomVp}；
+   *   内容盒内部 = 上余量 + `[封面, 歌词, 元信息, 音质, 动作]` + 下余量，
+   *   其中 `[封面 + 其余] = 内容盒高 − 上下余量`，而居中 ⇒ **上余量 = 下余量**
+   *   ⇒ `封面顶边 y = 顶部让位 + (内容盒高 − (封面高 + FEED_CHROME_VP)) / 2`。
+   *   （`FEED_CHROME_VP` 就是"除封面以外那一堆"的合计，见它的常量注释。）
+   * ⚠️ **不含歌词**：歌词组件按需渲染，所以这个顶边是"歌词关掉时"的位置；
+   *   歌词打开时会整体上移约 `歌词高 / 2`（≈ 12vp）—— 渐变起点会跟着差这么一点点，
+   *   属于可接受的误差（真要精确得等 `MiniLyricLinesComponent` 上报高度，
+   *   而它不在本轮范围内；见文件头 §四.6）。
+   * @returns 封面顶边 y（vp，从页盒顶部算；页盒从屏幕 y=0 起排）。
+   */
+  private coverTopVp(): number {
+    const contentHeight: number = this.cardContentHeightVp();
+    const used: number = this.coverHeightVp() + FEED_CHROME_VP;
+    return this.topStackOffsetVp() + Math.max(0, contentHeight - used) / 2;
+  }
+
+  /**
+   * 卡片内容盒的高度（vp）= 窗口高 − 顶部让位（状态栏 + HDS 标题栏）− 底部让位 + 间距。
+   *
+   * 与 {@link coverHeightVp} 里那个 `available` 是同一条算式（减去 `FEED_CHROME_VP` 之前的量）。
+   */
+  private cardContentHeightVp(): number {
+    return this.windowHeightVp() - this.topStackOffsetVp() - this.cardChromeBottomVp();
+  }
+
+  /**
+   * 卡片底部**总共**要让出的高度（vp）—— ①②两处唯一的让位来源。
+   *
+   * `= bottomReserveVp（壳层下发的底栏让位，唯一来源） + FEED_BOTTOM_GAP_VP（进度条与底栏之间
+   *    的可见间距）`。
+   * ⚠️ `bottomReserveVp` **只在这里加一次**：{@link FeedCard} 的 `padding.bottom` 与
+   *    {@link coverHeightVp} 的可用高度都用本函数 —— 两处各写一遍就是"封面变小 + 进度条上移两档"。
+   * @returns 底部让位 + 间距（vp）。
+   */
+  private cardChromeBottomVp(): number {
+    return this.bottomReserveVp + FEED_BOTTOM_GAP_VP;
+  }
+
+  /**
+   * 封面区**高度**（vp）—— 宽度恒为**窗口宽**（`FeedCover` 里 `.width(FULL_WIDTH)`）。
+   *
+   * 算式：`clamp(min(可用竖向空间 × FEED_COVER_RATIO, 窗口宽, FEED_COVER_MAX_VP),
+   *              FEED_COVER_MIN_VP, 窗口宽)`。
+   *
+   * 可用竖向空间 = 窗口高 − 顶部让位（状态栏 + HDS 标题栏，`PageTopInsetHelper`）
+   *   − {@link cardChromeBottomVp}（底部让位 + 间距）− {@link FEED_CHROME_VP}（歌名/歌手/音质/动作/间距）。
+   * ★ **不含歌词**：歌词组件 `MiniLyricLinesComponent` 自己决定画不画、多高（见 {@link FeedLyric}），
+   *   所以它的高度只能靠 `FEED_CHROME_VP` 里留的那点呼吸位吸收 —— 这也是本页最需要上机核的一处。
+   * ★ 三个夹取的理由：① 矮窗口（平板横屏 / 折叠展开）别把动作行顶出屏幕；
+   *   ② 宽屏（平板）别让封面高度跟着宽度一起涨；③ 极矮窗口下宁可内容挤一点也不要压成一条。
+   * @returns 封面区高度（vp）。
+   */
+  private coverHeightVp(): number {
+    const widthVp: number = this.windowWidthVp();
+    const available: number = this.windowHeightVp() - PageTopInsetHelper.targetContentTopVp() -
+      this.cardChromeBottomVp() - FEED_CHROME_VP;
+    const byHeight: number = Math.max(0, available) * FEED_COVER_RATIO;
+    const size: number = Math.min(Math.min(byHeight, widthVp), FEED_COVER_MAX_VP);
+    const floor: number = Math.min(FEED_COVER_MIN_VP, widthVp);
+    return Math.max(size, floor);
+  }
+
+  /**
+   * 层 4 那条渐变的第二个色标 —— **封面下沿占整屏的比例**（`0~1`）。
+   *
+   * ★★ 官方口径（`ts-universal-attributes-gradient-color` → `LinearGradientOptions.colors`）：
+   *   「number 表示该颜色所处的位置，**取值范围为 [0, 1.0]**，设置的值小于 0 时按 0 处理，
+   *    **设置的值大于 1.0 时按 1.0 处理**」—— 所以这里**必须是比例**。
+   *   ⚠️ 曾经这里直接给的是 vp（≈350）：会被夹成 `1.0`，渐变就退化成"从屏幕顶一路渐变到底"，
+   *   而我们要的是"**第一个色标之前恒透明**（封面那一整块颜色不变），从封面下沿才开始化开"。
+   *   工程里的同款写法见 `DetailImmersiveBackdrop.ets:70-73`（歌手页）与
+   *   `PlaylistImmersiveBackdrop.ets:92`：都是 `[Color.Transparent, 0] → [取色, 1]` 的比例写法。
+   * ★ 分母是**整屏高**（层 4 就是 `.height(FULL_HEIGHT)`），不是"封面高"。
+   * @returns 封面下沿 / 整屏高，已夹进 `[0, 1]`。
+   */
+  private coverGradientStop(): number {
+    const heightVp: number = this.windowHeightVp();
+    if (heightVp <= 0) {
+      return 0;
+    }
+    const bottomVp: number = this.coverTopVp() + this.coverHeightVp();
+    return Math.min(1, Math.max(0, bottomVp / heightVp));
+  }
+
+  /**
+   * 页内内容整体下移多少（vp）= 状态栏 + HDS 标题栏（{@link PageTopInsetHelper}）。
+   *
+   * 页根是 `HdsNavDestination` + `ignoreLayoutSafeArea(TOP, BOTTOM)`（页盒从 y=0 起排，
+   * 见 `build()`），所以"顶部让位"必须在内容自己身上做。
+   */
+  private topStackOffsetVp(): number {
+    return PageTopInsetHelper.targetContentTopVp();
+  }
+
+  /**
+   * HDS 标题栏 —— **左三条横线 + 右分享、没有标题文字**。
    *
    * ★ 做法是"用 HDS 自己的两个槽位"，不是另起一条自绘 Row：
    *   · 左侧 = `content.backIcon`（返回图标区域），配 `hideBackButton(false)`
    *     —— HDS 文档原文（`ui-design-hdsnavdestination`）：「**true：隐藏返回键；false：显示返回键**，
    *       默认 false」，官方 `HdsNavDestination` 示例也是 `.titleBar({...}).hideBackButton(false)`；
    *       要用自定义图标就必须让它显示，否则那个槽位整个不渲染。
-   *     `HdsNavigationIconOptions.action` 会把默认的"返回上一页"替换成我们的动作（{@link openFullPlayer}）。
-   *   · 右侧 = `content.menu.value`（与 `RecommendPage.ets:707` 的写法逐字同款）。
+   *     `HdsNavigationIconOptions.action` 会把默认的"返回上一页"替换成我们的动作（{@link onFeedMenu}）。
+   *   · 右侧 = `content.menu.value`（与 `RecommendPage.ets:707` 的写法逐字同款），动作 = {@link onShareSong}。
    *   · `mainTitle` 给空串：参考图**没有标题文字**，但保留这一项可以让标题区域仍然占位、
    *     两个图标仍然分居两端（完全省略 `title` 的话布局由 HDS 内部决定，观感不可控）。
    *
+   * ★ **两个按钮都没有背景**：两个槽位的 `backgroundColor` 都给 `info_scrim_top`
+   *   （同一枚 `1C1C1E` 的 **α=0** 档）⇒ 只剩图标本体 + HDS 自己那圈点击热区，
+   *   没有改动前那枚"圆形底"（用户 ① 的截图对比里明确要去掉）。
+   * ★ 图标：
+   *   · 左 = `sys.symbol.line_3_horizontal`（本机 `sysResource.js:3783` 核实存在，
+   *     与 `line_2_horizontal`/`line_4_horizontal` 同族，就是"三条水平线"）；
+   *     原来那枚 `sys.symbol.hamburgers` 是"带框的汉堡"，与官方图不一致。
+   *   · 右 = `sys.symbol.share`（`sysResource.js:3617` 核实存在）——分享，
+   *     换掉了改动前的 `sys.symbol.arrow_clockwise`（刷新/换一换）。
+   *
    * ⚠️ 图标/标题**一律不给 `sys.color.*`**：本页整屏压在模糊封面上，
    *   而 `sys.color.*` 跟着系统深浅色翻（日间变近黑 ⇒ 黑图标压深蒙层看不见）。
-   *   用播放页那一族"压在图上、两主题同值"的 token，并用 `info_scrim_top`（α=0）把背板抹透明。
+   *   用播放页那一族"压在图上、两主题同值"的 token。
    * ⚠️ 没有 `bindToScrollable`：那个接口只收 `Array<Scroller>`（`component/nav_destination.d.ts:1213`），
    *   本页控制器是 `SwiperController`，类型对不上 ⇒ 顶栏**没有**"滑过才渐变模糊"，别硬塞。
    */
@@ -1379,22 +1812,22 @@ export struct NowPlayingFeedPage {
           mainTitleSize: TitleSize.TITLE_ML
         },
         backIcon: {
-          label: 'collapse',
-          icon: $r('sys.symbol.hamburgers'),
+          label: 'feed-menu',
+          icon: $r('sys.symbol.line_3_horizontal'),
           isEnabled: true,
           action: (): void => {
-            this.openFullPlayer();
+            this.onFeedMenu();
           }
         },
         menu: {
           value: [
             {
               content: {
-                label: 'refresh',
-                icon: $r('sys.symbol.arrow_clockwise'),
+                label: 'share',
+                icon: $r('sys.symbol.share'),
                 isEnabled: true,
                 action: (): void => {
-                  this.refreshFeed();
+                  this.onShareSong();
                 }
               }
             }
@@ -1432,72 +1865,63 @@ export struct NowPlayingFeedPage {
   }
 
   /**
-   * ② 大气泡封面（整块可点 = 从这首开始放，与首页卡片"点封面就播"的直觉一致）。
+   * ② 封面区：**中间偏上、按窗口宽铺满**，底部由 {@link build} 里那一层渐变化进页底色。
+   *
+   * ★ 只有两层：`Image`（宽 = 窗口宽、高 = {@link coverHeightVp}，都按窗口算、不写死）+ 点击热区。
+   *   "图片 → 背景"的那条 `linearGradient` **不在这里**：它必须**从封面下沿一路延伸到底**，
+   *   而本 `Stack` 的高度只有封面那么高 ⇒ 放进来就只能"在封面自己身上化开"，
+   *   把封面糊掉、下方还留一条硬缝。所以它挂在页根那个**整屏** `Stack` 上，
+   *   端点由 {@link coverTopVp} 给（详见 `build()` 层 3 的注释）——
+   *   做法与歌手页 `DetailImmersiveBackdrop.ets:67-73` 同源（照片 + `[Transparent,0]→[底色,1]`）。
    * @param row 这一屏的歌。
    * @param index 这一屏的下标。
    */
   @Builder
   private FeedCover(row: RecommendPrivateSongUi, index: number) {
-    Image(row.coverUrl.length > 0 ? row.coverUrl : $r('app.media.ic_avatar1'))
-      .width(this.coverSizeVp())
-      .height(this.coverSizeVp())
-      .borderRadius(FEED_COVER_RADIUS_VP)
-      .objectFit(ImageFit.Cover)
-      .alt($r('app.media.ic_avatar1'))
-      .draggable(false)
-      .onClick((): void => {
-        this.playAt(index);
-      })
+    Stack({ alignContent: Alignment.TopStart }) {
+      Image(row.coverUrl.length > 0 ? row.coverUrl : $r('app.media.ic_avatar1'))
+        .width(StyleConstants.FULL_WIDTH)
+        .height(this.coverHeightVp())
+        .objectFit(ImageFit.Cover)
+        .alt($r('app.media.ic_avatar1'))
+        .draggable(false)
+    }
+    .width(StyleConstants.FULL_WIDTH)
+    .height(this.coverHeightVp())
+    .onClick((): void => {
+      this.playAt(index);
+    })
   }
 
   /**
-   * ③ 歌词两行：**当前行（亮白、较大）+ 上一行（更暗、更小）**。
+   * ③ 歌词：**直接用播放页现成的「当前行 + 下一行」小歌词组件**
+   * （`features/player/.../view/MiniLyricLinesComponent.ets`）。
    *
-   * ⚠️ 每一屏都占**同样高度**（{@link FEED_LYRIC_BLOCK_VP}）：不是当前在播的那一屏时只占位、不写字 ——
-   *    否则各屏高度不同，上下滑的时候封面会一跳一跳。
-   * ⚠️ 参考图是"上行几乎透明 / 当前行亮 / 下行更暗"三层，本页只有两层：见文件头 §四.6
-   *    （"下一行"在本工程没有任何可公开导入的来源，不许为此新写一套解析）。
+   * ★ 用户 ① 的那张官方图里，歌词两行在**歌名上方** —— 本页现在也放在歌名上方
+   *   （`FeedCard` 里封面之后、歌名之前）。
+   * ★ 它是"自取数"组件：`@Local state: MusicAppState` 自己连 AppStorageV2，
+   *   行号与两行文本都由 `state.progress` + 当前曲的 `lyricText` 现算出来 ⇒ **本页不给任何入参**，
+   *   也**不改它的渲染逻辑**（用户明确"歌词渲染不在范围"）。
+   * ★ 对齐：本页要的是"居中"（官方图居中），组件自己写死了 `.alignItems(HorizontalAlign.Start)`
+   *   与每行 `width(FULL_WIDTH)` ⇒ 这里用一个 `Column` 把它**居中收窄**：
+   *   左右各留 12vp、整体加一点上边距，视觉上就与下面的歌名/歌手同一列。
+   *   这是**布局侧**的调整，没有碰组件的渲染逻辑（没改它的文件）。
+   *
+   * ⚠️ 组件带 `.margin({ top: 2, bottom: -10 })`，高度 ≈ 15 + 14 + 3(space) + 2 − 10 ≈ 24vp，
+   *   比改动前那块固定 44vp 的占位矮 ⇒ 少掉的那 20vp 被 {@link FEED_CHROME_VP} 里的呼吸位吸收。
    * @param row 这一屏的歌。
    */
   @Builder
   private FeedLyric(row: RecommendPrivateSongUi) {
-    Column({ space: 2 }) {
-      Text(this.lyricLineFor(row, true))
-        .fontSize(13)
-        .fontColor(FEED_SOFT_COLOR)
-        .opacity(0.45)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .width(StyleConstants.FULL_WIDTH)
-        .textAlign(TextAlign.Center)
-      Text(this.lyricLineFor(row, false))
-        .fontSize(17)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(FEED_TITLE_COLOR)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .width(StyleConstants.FULL_WIDTH)
-        .textAlign(TextAlign.Center)
+    Column() {
+      // `ignoreUserSetting: true` ⇒ **无视「设置 → 小歌词」那个开关**强制渲染这两行。
+      // ⚠️ 只放宽"画不画"，组件内部的取词/解析/行号逻辑一字未动；
+      //   播放页不传这个参数（默认 false）⇒ 它的行为与改动前逐字相同。
+      MiniLyricLinesComponent({ ignoreUserSetting: true })
     }
     .width(StyleConstants.FULL_WIDTH)
-    .height(FEED_LYRIC_BLOCK_VP)
-    .justifyContent(FlexAlign.Center)
-  }
-
-  /**
-   * 这一屏要显示的歌词行。
-   *
-   * ★ 只有**正在播的那一屏**才有歌词：歌词真源是全局播控的"当前行"，
-   *   把它画在别的歌的卡上就是错的内容。
-   * @param row 这一屏的歌。
-   * @param previous true = 上一行，false = 当前行。
-   * @returns 歌词文本；不适用时返回空串（占位仍在）。
-   */
-  private lyricLineFor(row: RecommendPrivateSongUi, previous: boolean): string {
-    if (!this.isCurrentSong(row)) {
-      return '';
-    }
-    return previous ? this.lyricPrevious : this.lyricCurrent;
+    .alignItems(HorizontalAlign.Center)
+    .padding({ left: 12, right: 12 })
   }
 
   /**
@@ -1627,25 +2051,34 @@ export struct NowPlayingFeedPage {
 
       Blank()
 
-      // 最右：大号白色圆形播放/暂停（比其它图标明显大）
-      Stack() {
-        Circle()
-          .width(56)
-          .height(56)
-          .fill(FEED_TITLE_COLOR)
-        SymbolGlyph(this.isCurrentSong(row) && this.appState.isPlay ?
-          $r('sys.symbol.pause_fill') : $r('sys.symbol.play_fill'))
-          .fontSize(28)
-          .fontColor([FEED_DARK_SURFACE])
-      }
-      .width(56)
-      .height(56)
-      .onClick((): void => {
-        this.onPlayButton(row, index);
-      })
+      // ── 最右：**播放页同款**的主播放/暂停键（用户 ⑥："照播放页那个主播放/暂停按钮做"）──
+      // ★ 逐条对齐 `ControlAreaComponent.ets:648-661`（播放页主控区那颗）：
+      //   · 图标 = `app.media.ic_public_play` / `app.media.ic_public_pause`
+      //     ⚠️ **名字与图形是反的**（本工程既有口径，别"修正"）：`ic_public_play` 画的是**两条竖线**（暂停）、
+      //       `ic_public_pause` 画的是**三角形**（播放）—— 所以正在播时给 `ic_public_play`。
+      //   · 尺寸 = `$r('app.float.image_play_width')`（`float.json:96`，**72vp**；
+      //     `_lg` 档 88vp 只在宽屏用，本页按 `FEED_PLAY_BUTTON_VP` 固定即可）。
+      //   · 按压态 = `@Extend(Image) controlImageBuilder()` 那三条：
+      //     `aspectRatio(1)` + `objectFit(Contain)` + **`opacity(0.86)`**（同 `ControlAreaComponent.ets:983-988`）。
+      //   · 它自己就带白圆底（SVG 里的白色圆形路径）⇒ **不再另画 `Circle`**，
+      //     所以改动前那个"纯白圆 + 另一个图标"的组合整体删掉了。
+      //   行为仍然是本页的 {@link onPlayButton}（当前这首只翻 `isPlay`，否则从这首起播）。
+      Image(this.isCurrentSong(row) && this.appState.isPlay ?
+        $r('app.media.ic_public_play') : $r('app.media.ic_public_pause'))
+        .width(FEED_PLAY_BUTTON_SIZE)
+        .height(FEED_PLAY_BUTTON_SIZE)
+        .aspectRatio(1)
+        .objectFit(ImageFit.Contain)
+        .opacity(FEED_PLAY_BUTTON_OPACITY)
+        .draggable(false)
+        .accessibilityText(this.isCurrentSong(row) && this.appState.isPlay ? '暂停' : '播放')
+        .accessibilityLevel('yes')
+        .onClick((): void => {
+          this.onPlayButton(row, index);
+        })
     }
     .width(StyleConstants.FULL_WIDTH)
-    .height(56)
+    .height(FEED_ACTIONS_ROW_VP)
     .alignItems(VerticalAlign.Center)
   }
 
@@ -1720,8 +2153,9 @@ export struct NowPlayingFeedPage {
   /**
    * 一屏卡片 = 参考图自上而下的那一整列。
    *
-   * ⚠️ 整块自己带 `padding.bottom = bottomReserveVp`（给壳层那套浮动胶囊底栏让位）——
-   *    **不能**把它加在外层容器上，否则滑动的每一屏都对不齐底栏。
+   * ⚠️ 整块自己带 `padding.bottom = bottomReserveVp + FEED_BOTTOM_GAP_VP`（{@link cardChromeBottomVp}）——
+   *    **不能**把它加在外层容器上，否则滑动的每一屏都对不齐底栏；
+   *    **也不能**在别处再叠一次（{@link coverHeightVp} 读的是同一个函数）。
    * ⚠️ 卡片自己**不画背景**：整页的底色/模糊封面由 {@link build} 那一层负责，
    *    卡片一上底色，模糊大图就被切成一块一块的了。
    * @param row 这一屏的歌。
@@ -1731,9 +2165,9 @@ export struct NowPlayingFeedPage {
   private FeedCard(row: RecommendPrivateSongUi, index: number) {
     Column({ space: 0 }) {
       Column({ space: 14 }) {
-        // ② 大气泡封面
+        // ② 封面区（中间偏上、按窗口宽铺满、底部化进页底色）
         this.FeedCover(row, index)
-        // ③ 歌词两行（居中，等高占位）
+        // ③ 小歌词（当前行 + 下一行，在**歌名上方**）
         this.FeedLyric(row)
         // ④ 歌名（左对齐、粗体）+ 歌手 / 平台胶囊
         Column({ space: 6 }) {
@@ -1751,7 +2185,7 @@ export struct NowPlayingFeedPage {
         .alignItems(HorizontalAlign.Start)
         // ⑤ 音质标签行
         this.FeedQualityRow(row)
-        // ⑥ 动作行
+        // ⑥ 动作行（最右是播放页同款的主播放/暂停键）
         this.FeedActions(row, index)
       }
       .width(StyleConstants.FULL_WIDTH)
@@ -1759,13 +2193,14 @@ export struct NowPlayingFeedPage {
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
 
-      // ⑦ 细进度条 + 两端时间
+      // ⑦ 细进度条 + 两端时间 —— 它下面那一档就是 `cardChromeBottomVp()`（底栏 + 间距），
+      //    所以进度条**整体明显在底栏之上**（用户 ① 的要求）。
       this.FeedProgress(row)
     }
     .width(StyleConstants.FULL_WIDTH)
     .height(StyleConstants.FULL_HEIGHT)
-    // ★ 给壳层浮动底栏让位：加在**卡片自己**身上（见文件头与常量注释）
-    .padding({ bottom: this.bottomReserveVp, left: 24, right: 24 })
+    // ★ 给壳层浮动底栏让位 + 留出可见间距：加在**卡片自己**身上（见文件头与常量注释）
+    .padding({ bottom: this.cardChromeBottomVp(), left: 24, right: 24 })
   }
 
   build() {
@@ -1773,13 +2208,20 @@ export struct NowPlayingFeedPage {
     // ignoreLayoutSafeArea(TOP, BOTTOM)（页盒从 y=0 起排 ⇒ 背景层可以一直铺到状态栏后面）。
     HdsNavDestination() {
       Stack({ alignContent: Alignment.TopStart }) {
-        // ── 层 1：模糊封面大图铺满整屏（跟随**当前这一屏**的歌）──────────────
-        // 配方与播放页一致（`PlaybackPage.ets:2316-2321`）：`objectFit(Cover)` + 组件级 `.blur()`
-        // + `opacity 0.55`，叠在深色底之上；模糊半径口径见 FEED_BACKDROP_BLUR_VP。
+        // ── 层 1：**取色背景**（用户 ②：背景按封面动态取色）────────────────────
+        // `pageTint` = 当前这一屏封面的主色经 `ColorConversion.dealColor` 压暗
+        // （见 {@link extractCardColor}，与歌手页 / 专辑页 / 播放页同一套口径）；
+        // 取色完成前是 {@link FEED_BASE_NEUTRAL}（由**已有 token** 算出来的中性深色兜底）。
         Column()
           .width(StyleConstants.FULL_WIDTH)
           .height(StyleConstants.FULL_HEIGHT)
-          .backgroundColor(FEED_DARK_SURFACE)
+          .backgroundColor(this.pageTint)
+          .hitTestBehavior(HitTestMode.None)
+        // ── 层 2：模糊封面铺满整屏（跟随**当前这一屏**的歌）────────────────────
+        // 配方与播放页一致（`PlaybackPage.ets:2316-2321`）：`objectFit(Cover)` + 组件级 `.blur()`
+        // + `opacity 0.55`，叠在取色底之上；模糊半径口径见 FEED_BACKDROP_BLUR_VP。
+        // ⚠️ 它**不是**"背景色"本身（那是层 1），只是压在取色底上的一层柔光，
+        //    所以取色一变、整页的色调就跟着变，而大图的观感与播放页保持一致。
         if (this.currentCoverUrl().length > 0) {
           Image(this.currentCoverUrl())
             .width(StyleConstants.FULL_WIDTH)
@@ -1790,20 +2232,43 @@ export struct NowPlayingFeedPage {
             .draggable(false)
             .hitTestBehavior(HitTestMode.None)
         }
-        // ── 层 2：柔和渐隐（封面上方与四周压得更实，白字才一直读得清）──────
+        // ── 层 3：顶部压深（顶栏那两个白色图标压在浅色封面上会读不清）──────────
+        // 只压最上面一段（α 从 0.55 渐隐到 0）：改动前那一层是"整屏压到深色"，
+        // 会把层 1 的取色整个盖掉 ⇒ 取色就白做了。
+        Column()
+          .width(StyleConstants.FULL_WIDTH)
+          .height(FEED_TOP_SCRIM_VP)
+          .linearGradient({
+            direction: GradientDirection.Bottom,
+            colors: [
+              [FEED_SCRIM_TOP, 0],
+              [Color.Transparent, 1]
+            ]
+          })
+          .hitTestBehavior(HitTestMode.None)
+
+        // ── 层 4：**图片 → 背景**的过渡（用户 ② 第三条）────────────────────────
+        // 整屏一层，`[Transparent, 0] → [pageTint, coverGradientStop()]`：
+        //   · 第一个色标之前（y < 封面下沿）恒为**完全透明** ⇒ 封面那一整块颜色不变；
+        //   · 从**封面下沿那一行**开始化开，到元信息/动作区已经是纯页底色 ⇒ 没有硬缝。
+        // 这就是歌手页 `DetailImmersiveBackdrop.ets:70-73` 那条做法（照片 + 一条
+        // `[Color.Transparent, 0] → [取色, 1]` 的遮罩列），只是"化开的位置"从"照片框下沿"
+        // 改成"封面下沿"。
+        // ⚠️ 色标的第二个元素是**比例（0~1）不是 vp**：官方明确"大于 1.0 时按 1.0 处理"，
+        //   给 vp 会被夹成 1.0 ⇒ 退化成"整屏渐变"，封面那一块也会被染色。见 {@link coverGradientStop}。
         Column()
           .width(StyleConstants.FULL_WIDTH)
           .height(StyleConstants.FULL_HEIGHT)
           .linearGradient({
             direction: GradientDirection.Bottom,
             colors: [
-              [FEED_TRANSPARENT, 0],
-              [FEED_DARK_SURFACE, 1]
+              [Color.Transparent, 0],
+              [this.pageTint, this.coverGradientStop()]
             ]
           })
           .hitTestBehavior(HitTestMode.None)
 
-        // ── 层 3：内容 ────────────────────────────────────────────────
+        // ── 层 5：内容 ────────────────────────────────────────────────
         Column() {
           if (this.feedRevision >= 0 && this.feedSource.totalCount() > 0) {
             // ★ 竖向 Swiper = "一屏一首、上下滑换歌"：
@@ -1858,7 +2323,7 @@ export struct NowPlayingFeedPage {
     .backgroundColor(FEED_PAGE_BG)
   }
 
-  /** 背景层要用的封面（= **当前这一屏**那张；空串表示没有可用封面，只留深色底）。 */
+  /** 背景层要用的封面（= **当前这一屏**那张；空串表示没有可用封面，只留兜底底色）。 */
   private currentCoverUrl(): string {
     const total: number = this.feedSource.totalCount();
     if (total <= 0) {
@@ -1866,6 +2331,92 @@ export struct NowPlayingFeedPage {
     }
     const index: number = this.currentIndex >= 0 && this.currentIndex < total ? this.currentIndex : 0;
     return this.feedSource.getData(index).coverUrl;
+  }
+
+  // ─────────────────────────── 背景：封面取色 ───────────────────────────
+
+  /**
+   * 当前这一屏的封面换了就取一次色（见 `@Monitor('currentIndex')` 与 `aboutToAppear`）。
+   *
+   * 去重判据是**封面地址**而不是下标：翻页追加 / 删行之后同一个下标可能是另一首歌，
+   * 而同一张封面无论在哪个下标都只需要取一次。
+   */
+  private refreshCardColor(): void {
+    const url: string = this.currentCoverUrl();
+    if (url.length === 0 || url === this.lastTintUrl) {
+      return;
+    }
+    this.lastTintUrl = url;
+    void this.extractCardColor(url);
+  }
+
+  /**
+   * 下载封面 → 解码 → 取主色 → 写成页底色。
+   *
+   * ★★ **一行新算法都没有**，整条链路与歌手页 `ArtistDetailPage.loadBackdropColor()`
+   *    （`features/setting/.../ArtistDetailPage.ets:293`）逐条同款：
+   *      ① `http.createHttp().request(url, { expectDataType: ARRAY_BUFFER })` 下封面字节；
+   *      ② `image.createImageSource(buffer)` → `createPixelMap()`；
+   *      ③ `effectKit.createColorPicker(pixelMap, cb)` → `getLargestProportionColor()`；
+   *      ④ `ColorConversion.dealColor(r,g,b)` 压暗 → {@link feedTintOf} → `.backgroundColor()`。
+   * 资源释放（`pixelMap.release` / `src.release` / `req.destroy`）也与那一份一致 ——
+   * 本页**每次翻屏都会走一次**，漏一个 release 就是一路泄漏。
+   *
+   * ⚠️ 过期结果必须丢掉：快速连滑会同时有几条在飞，靠 {@link cardColorJobSeq} 代次判断
+   *   （与播放页 `imageColorJobSeq` 同一套做法）；失败**不改颜色**，保留上一个色/兜底色。
+   * @param url 封面地址。
+   */
+  private async extractCardColor(url: string): Promise<void> {
+    const jobSeq: number = ++this.cardColorJobSeq;
+    const req: http.HttpRequest = http.createHttp();
+    try {
+      const resp: http.HttpResponse = await req.request(url, {
+        method: http.RequestMethod.GET,
+        expectDataType: http.HttpDataType.ARRAY_BUFFER,
+        readTimeout: 15000
+      });
+      if (resp.responseCode !== 200 || resp.result === undefined) {
+        Logger.warn(RZD_TAG, `tint skip http=${resp.responseCode} url=${url}`);
+        return;
+      }
+      const src: image.ImageSource = image.createImageSource(resp.result as ArrayBuffer);
+      try {
+        const pixelMap: image.PixelMap = await src.createPixelMap();
+        try {
+          await new Promise<void>((resolve: () => void) => {
+            effectKit.createColorPicker(pixelMap,
+              (error: Error | undefined, colorPicker: effectKit.ColorPicker | undefined) => {
+                try {
+                  if (error === undefined && colorPicker !== undefined) {
+                    const color: effectKit.Color = colorPicker.getLargestProportionColor();
+                    const tint: string = feedTintOf(color.red, color.green, color.blue);
+                    if (this.feedAlive && jobSeq === this.cardColorJobSeq) {
+                      this.pageTint = tint;
+                      Logger.info(RZD_TAG, `tint ${tint} url=${url}`);
+                    }
+                  }
+                } finally {
+                  resolve();
+                }
+              });
+          });
+        } finally {
+          try {
+            pixelMap.release();
+          } catch (_err) {
+            // 释放失败无所谓：这只是一张临时位图
+          }
+        }
+      } finally {
+        src.release();
+      }
+    } catch (err) {
+      const e = err as BusinessError;
+      // 取色失败不影响播放与背景的模糊层 —— 保留上一个色（或兜底色）
+      Logger.warn(RZD_TAG, `tint failed code=${e.code} msg=${e.message} url=${url}`);
+    } finally {
+      req.destroy();
+    }
   }
 
   /**

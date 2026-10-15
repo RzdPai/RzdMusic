@@ -95,3 +95,8 @@ export type { ArtistDetailParams, AlbumDetailParams } from './src/main/ets/geuz/
 export { searchSingers, searchAlbums, sourceToCode, codeToSource, getArtistDetail, getArtistSongs,
   getArtistAlbums, getAlbumDetail } from './src/main/ets/geuz/index';
 export { PLAYER_BIG_COVER_ID } from './src/main/ets/view/MusicPlayInfoBlock';
+// 播放页的「小歌词」两行（当前行 + 下一行），渲染在播放条插槽里。
+// ⚠️ 底栏页签「现在就听」要在**歌名上方**画同样的两行歌词，而 HAR 只能按导出面引用
+//   （不能深链到 `src/main/ets/view/` 内部文件）⇒ 这里补一行导出，**组件本身一行未改**
+//   （用户明确"歌词渲染不在范围"）。用法见 `recommendation/.../NowPlayingFeedPage` 的 `FeedLyric`。
+export { MiniLyricLinesComponent } from './src/main/ets/view/MiniLyricLinesComponent';

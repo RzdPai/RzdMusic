@@ -590,13 +590,38 @@ export class PlayerExpandState {
   // 说明歌词页的封面不是"另一页的元素"，而是**同一张封面继续飞过去的**。
   //
   // 我们这边**刻意不靠运行时测量**：歌词页封面的位置直接由窗口尺寸算出来
-  // （`coverW * LYRIC_COVER_SCALE_RATIO` 之类），这样：
+  // （`LYRIC_COVER_EDGE_VP` + 几个比例），这样：
   //   1. 不依赖 `onAreaChange` 的时序（那个在切页动画里很容易拿到中间态）；
   //   2. 任意时刻打断都自洽；
   //   3. 窄屏/宽屏都跟着窗口走，不用为每种断点各配一套。
 
-  /** 歌词页封面宽度相对展开页封面宽度的比例。 */
-  private static readonly LYRIC_COVER_SCALE_RATIO: number = 0.52;
+  /**
+   * 歌词页小封面的**绝对边长**（vp）。
+   *
+   * ★ 对标无界 `PlayerPage.CoverMorph` 的 `LYRIC_COVER_EDGE = 48.72`
+   *   （`func_main_0` 闭包槽 `0x05`，`wujie.pa:197901` 起；同一处还有 `0x04 = -40` 的
+   *   `tyPlayer`、`0x14 = 0.32` 的 `COMMIT_T`）。
+   *
+   * **无界这里是个硬不变量**：`lyricScale = 48.72 / edge` ⇒
+   * **`edge × lyricScale ≡ 48.72`** —— 歌词页那枚小封面与「本页大封面多宽」**无关**，
+   * 恒定 48.72vp。`edge` 的常态值是 328（= `coverEdgeMaxOf` 的产物，**不是默认的 348**），
+   * ⇒ `lyricScale ≈ 0.1485`；构造器那个兜底 `0.14` 正好 = `48.72 / 348`，即默认 `edge` 那一档
+   * （两条路自洽，可作交叉验证）。
+   *
+   * ⚠️ 本轮之前这里是一个**比例**（`LYRIC_COVER_SCALE_RATIO = 0.52`，随大封面一起变大）——
+   *   本轮两份新文档都点名"量纲不同、不可对号"、并**直接给了改法**：
+   *   · `_recover\logic-src\无界vs派音-差异分析.md` §〇「根因已确认（本轮新解，直接可抄）」
+   *     ——"歌词页封面：无界小、派音居中大"的根因；
+   *   · `_recover\logic-src\歌词页浮层封面与歌名定稿.md` §7.2 / §7.4「最短改动建议」第 1 条
+   *     ——"把 `lyricCoverSizeOf()` 从比例改成常量 `48.72`（1 行）"。
+   *   验收判据（同文档 §6）：`edge × lyricScale === 48.72`（浮点 ±0.01）。
+   *
+   * ⚠️ **单源**：`_recover\logic-src\交付物交叉核对记录.md` §9.9 把"歌词页浮层整族"
+   *   列为单源未复核 ⇒ 本轮**只落了这一个数**；同一份文档 §7.4 建议的另两条
+   *   （`lyricMetaYOf()` 锚点改成"封面顶边 − 26"、补 OFF/AUTO/始终开启 用户档位）**没落**，
+   *   理由见该文 §8 的 U1（坐标系歧义）与"属新增功能、非数值对齐"。
+   */
+  private static readonly LYRIC_COVER_EDGE_VP: number = 48.72;
   /** 歌词页封面顶部相对展开页封面顶部的下移比例（占展开页封面高度）。 */
   private static readonly LYRIC_COVER_TOP_RATIO: number = 0.06;
   /** 封面圆角占其短边的比例（展开页那一端）。 */
@@ -615,9 +640,18 @@ export class PlayerExpandState {
     return 0;
   }
 
-  /** @returns 歌词页封面边长（vp）。 */
+  /**
+   * @returns 歌词页封面边长（vp）—— 恒定的 {@link PlayerExpandState.LYRIC_COVER_EDGE_VP}。
+   *
+   * ⚠️ **"大封面还没量到就返回 0"这条门必须保留**：{@link lyricFloat} 用它当"几何就绪"的
+   *    第二问（`lyricCoverSizeOf() > 0`）—— 大封面未上报时若还返回常量，浮层会提前启用、
+   *    让歌词凭空多出一段顶部留白。
+   */
   public lyricCoverSizeOf(): number {
-    return this.playerCoverWidth() * PlayerExpandState.LYRIC_COVER_SCALE_RATIO;
+    if (this.playerCoverWidth() <= 0) {
+      return 0;
+    }
+    return PlayerExpandState.LYRIC_COVER_EDGE_VP;
   }
 
   /** @returns 歌词页封面左边界：水平居中。 */
@@ -1715,8 +1749,21 @@ export class PlayerExpandState {
     return Math.max(1, h * 0.55);
   }
 
+  /**
+   * @returns 跟手行程是否**走的是实测那一支**（`barY`/`barH` 都有值）。
+   *
+   * 只给日志用：`RzdMorph dismiss commit` / `RzdMorph pull commit` 两条判据日志里都要带
+   * "这个分母是量的还是兜底的"。**为什么非要它**：`派音动画Bug清单.md` §6.5 立过一条——
+   * 只打"比值 vs 阈值"会把「两个方向的分母不是同一个长度」这件事继续藏起来，
+   * 于是下一个人又会把收起的 `38%` 换算成 `1 − 0.38 = 0.62` 去和打开的 `0.45` 比。
+   * 两个分母（`pullSpanVp()` / `PlaybackPage.dismissSpanVp()`）必须与两个阈值**同行打印**。
+   */
+  public pullSpanIsMeasured(): boolean {
+    return this.barY > 0 && this.barH > 0;
+  }
+
   /** 上拉打开的**进度**提交阈值（0…1）：超过它就展开到底。 */
-  private static readonly PULL_OPEN_COMMIT_FRACTION: number = 0.45;
+  public static readonly PULL_OPEN_COMMIT_FRACTION: number = 0.45;
   /**
    * 上拉打开的**速度**提交阈值（vp/s）。
    *
@@ -1734,6 +1781,40 @@ export class PlayerExpandState {
    *   ⇒ 无论系统给的是 +900 还是 −900，判定结果都一样。
    */
   private static readonly PULL_OPEN_COMMIT_VELOCITY: number = 900;
+
+  // ══════════ 开 / 关两向的提交判据：**只在这里定义一份**（本轮收敛） ══════════
+  //
+  // 收敛的由来（`_recover\logic-src\派音动画Bug清单.md` P0-1 + §6.5）：
+  //   原来这两个数**分居两个文件**（打开在 `PlayerExpandState`、收在 `PlaybackPage`），
+  //   没有任何交叉校验 —— 而它们是**互逆的两条手势**，改一个不改另一个就会在临界位置打架
+  //   （手感上是"甩不上去，一松手又掉下来"）。
+  //   §6.5 的处置结论：**性质是"两处各写一遍 + 从未定案"**（不是"方向反了"，
+  //   那句"收起方向的门比打开方向高 39%"是把两把不同的尺子（`barY` / `miniY`）换算错了）。
+  //
+  // ⚠️⚠️ **这两个数与 `PULL_OPEN_COMMIT_FRACTION` 只能一起改**，而且**必须先上机实测**：
+  //   `PlaybackPage` 原注释（现行版本已随本收敛一起搬到这里）明确写着
+  //   "无界是 `COMMIT_T = 0.32`，这里保持 0.42 / 0.45，标注『待实测』…**不许按无界的值直接覆盖**"。
+  //   两个方向现在的**手指绝对位移**量级（`派音动画Bug清单.md` §6.5 的表）：
+  //     打开提交 ≈ `0.45 × barY`；收起提交 ≈ `0.38 × miniY`（`barY ≈ miniY`）
+  //   ⇒ 收起其实**比打开更容易**（约 −16%），不是"收起更难"。
+  //   二者都**不等于**无界的 0.32；要不要对齐只能靠真机手感，**读代码定不了**。
+
+  /**
+   * 下拉松手时的**进度**提交阈值（0…100，占 {@link PlayerExpandState.DISMISS_DRAG_SPAN_RATIO}
+   * 或实测 `miniY` 那把尺子的百分比）：超过它就收起，否则弹回完整态。
+   */
+  public static readonly DISMISS_COMMIT_PROGRESS: number = 38;
+
+  /**
+   * 下拉收起：拖拽多少距离算"拉到底"（相对窗口高度）。
+   *
+   * ⚠️ **无界是 0.32，这里保持 0.42，标注"待实测"** —— 依据
+   *   `docs\无界形变手感-落实到RzdMusic清单.md` §八 第 6 条
+   *   （"改了要实测手感再定"，不许按无界的值直接覆盖）。
+   *   它现在只是**兜底**：`PlaybackPage.dismissSpanVp()` 优先用实测的收起行程（`miniY`），
+   *   只有量不到（`miniY <= 0`）时才退回这个比例。
+   */
+  public static readonly DISMISS_DRAG_SPAN_RATIO: number = 0.42;
 
   /**
    * 上拉松手：**是否提交**（= 展开到底而不是回弹卸载）。
@@ -1762,12 +1843,20 @@ export class PlayerExpandState {
     const fastFlick: boolean = opening && speed >= PlayerExpandState.PULL_OPEN_COMMIT_VELOCITY;
     const commit: boolean = reached || fastFlick;
     // 上机排查：`hdc shell hilog -x | Select-String 'RzdMorph pull commit'`
+    // ⚠️ 这一行**与 `PlaybackPage.onDismissDrag` 那条同构**：都把**两个方向的阈值 + 两个分母**
+    //    打在同一行（见 `pullSpanIsMeasured()` 的注释）—— 只打"比值 vs 阈值"会继续藏住
+    //    "两个分母不是同一个长度"这件事，下次还会有人把收起的 38% 换算成 0.62 去和 0.45 比。
     Logger.info(PlayerExpandState.logTag,
       `RzdMorph pull commit progress=${progress.toFixed(3)}/${
         PlayerExpandState.PULL_OPEN_COMMIT_FRACTION} offsetY=${offsetY.toFixed(1)} ` +
       `velocityY=${velocityY.toFixed(1)} absVelocity=${speed.toFixed(1)} ` +
       `dir=${opening ? 'open' : 'close'} fastFlick=${fastFlick} ` +
-      `velocityThreshold=${PlayerExpandState.PULL_OPEN_COMMIT_VELOCITY} commit=${commit}`);
+      `velocityThreshold=${PlayerExpandState.PULL_OPEN_COMMIT_VELOCITY} ` +
+      `span=${this.pullSpanVp().toFixed(1)} spanSrc=${
+        this.pullSpanIsMeasured() ? 'measured' : 'ratio'} ` +
+      `dismissThreshold=${PlayerExpandState.DISMISS_COMMIT_PROGRESS} dismissSpan=${
+        this.miniY.toFixed(1)} dismissSpanSrc=${
+        this.miniY > 0 ? 'measured' : 'ratio'} commit=${commit}`);
     return commit;
   }
 

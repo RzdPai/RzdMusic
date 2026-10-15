@@ -25,6 +25,13 @@ import { amllParseLyricCached } from '../amll/parse/AmllAutoDetect';
  */
 @ComponentV2
 export struct MiniLyricLinesComponent {
+  /**
+   * true 时**无视用户的小歌词开关**强制渲染（底栏页签「现在就听」用；播放页不传 ⇒ 默认 false）。
+   *
+   * ⚠️ 只影响"画不画"，**取词/解析/行号逻辑一行不动**：
+   * 默认 false ⇒ 播放页行为与改动前逐字相同（仍由「设置 → 小歌词」控制）。
+   */
+  @Param ignoreUserSetting: boolean = false;
   @Local state: MusicAppState =
     AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
   @Local miniLyricState: ShowMiniLyricState =
@@ -75,7 +82,8 @@ export struct MiniLyricLinesComponent {
 
   build() {
     // 未开启时完全不占位；开启后常驻两行空间（切换页面/滑动不跳动）
-    if (this.miniLyricState.enabled) {
+    // ⚠️ `ignoreUserSetting` 只放宽这个门（见它的 @Param 注释），渲染逻辑一字未改。
+    if (this.miniLyricState.enabled || this.ignoreUserSetting) {
       Column({ space: 3 }) {
         Text(this.miniLyricLines()[0])
           .fontSize(15)

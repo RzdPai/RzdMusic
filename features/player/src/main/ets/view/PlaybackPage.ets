@@ -227,17 +227,28 @@ export struct PlaybackPage {
    */
   private dismissMorphActive: boolean = false;
   /**
-   * 下拉收起：拖拽多少距离算"拉到底"（相对窗口高度）。
+   * 下拉收起手势的**起手位移门限**（vp）。
    *
-   * ⚠️ **无界是 0.32，这里保持 0.42，标注"待实测"** —— 依据
-   *   `docs\无界形变手感-落实到RzdMusic清单.md` §八 第 6 条
-   *   （"改了要实测手感再定"，不许按无界的值直接覆盖）。
-   *   它现在只是**兜底**：{@link dismissSpanVp} 优先用实测的收起行程，
-   *   只有量不到（`miniY <= 0`）时才退回这个比例。
+   * ★ 对标无界 `PlayerPage` 顶部关闭手势的
+   *   `PanGesture({ direction: PanDirection.Down, distance: 8 })`
+   *   （`_recover\logic-src\开关播放器-手势路径定稿.md` §0 速查表 / §1.1 ⑤ / §1.3；
+   *   字节码 `wujie.pa:181153-181157`）—— **就是无界的那个 8，不是我们估的**。
+   *
+   * ⚠️ 为什么用**框架级**门限、而不在 {@link onDismissDrag} 里手写 `if (offsetY < N) return;`：
+   *   `PanGestureOptions.distance`（本机 `gesture.d.ts:2380` 确有该字段，**默认 5vp**）
+   *   是"手指走满多少才**识别**这个手势"—— 没走满时 `onActionStart/Update/End`
+   *   根本不会触发 ⇒ 静止态被 1~2vp 抖动推进 `LEAVING`（`派音动画Bug清单.md` P0-4）**在源头不成立**；
+   *   而手写判据会多一次不连续（跟手进度在门限那一帧从 0 直接跳到 `N/span`）。
+   *
+   * ⚠️ **打开方向不动**：两条迷你条的 `panOption` 保持默认 5vp ——
+   *   那正好等于无界上滑打开手势的 `{ direction: PanDirection.Vertical, distance: 5 }`
+   *   （同文档 §1.1 ①），所以那里既不加也不改。
    */
-  private static readonly DISMISS_DRAG_SPAN_RATIO: number = 0.42;
-  /** 下拉松手时的提交阈值：进度超过它就收起，否则弹回完整态。 */
-  private static readonly DISMISS_COMMIT_PROGRESS: number = 38;
+  private static readonly DISMISS_PAN_DISTANCE_VP: number = 8;
+  // ⚠️ 下拉收起的两个**判据常量**（提交阈值 38 / 兜底行程比例 0.42）**已收敛到**
+  //    `PlayerExpandState.DISMISS_COMMIT_PROGRESS` / `PlayerExpandState.DISMISS_DRAG_SPAN_RATIO`
+  //    —— 原先它们与打开方向的 `PULL_OPEN_COMMIT_FRACTION` 分居两个文件、无交叉校验
+  //    （`派音动画Bug清单.md` P0-1）。理由与"不许照抄无界 0.32"的说明都在那里的注释里。
   /**
    * 下拉松手时的**速度**提交阈值（vp/s）。
    *
@@ -283,7 +294,7 @@ export struct PlaybackPage {
     if (measured > 0) {
       return measured;
     }
-    return this.deviceHeightVp() * PlaybackPage.DISMISS_DRAG_SPAN_RATIO;
+    return this.deviceHeightVp() * PlayerExpandState.DISMISS_DRAG_SPAN_RATIO;
   }
 
   /**
@@ -349,15 +360,21 @@ export struct PlaybackPage {
         return;
       }
       this.dismissMorphActive = false;
-      const shouldClose: boolean = progress >= PlaybackPage.DISMISS_COMMIT_PROGRESS || fastFlick;
+      const shouldClose: boolean = progress >= PlayerExpandState.DISMISS_COMMIT_PROGRESS || fastFlick;
       // 上机排查用：`hdc shell hilog -x | Select-String 'RzdMorph dismiss commit'`
+      // ⚠️ 这一行**故意同时打两个方向的阈值与两个分母**（参见
+      //    `PlayerExpandState.pullSpanIsMeasured()` 的注释 / `派音动画Bug清单.md` §6.5）：
+      //    只打"比值 vs 阈值"会继续藏住"两把尺子不是同一个长度"这件事。
       Logger.info(PlayerExpandState.LOG_TAG,
         `RzdMorph dismiss commit progress=${progress.toFixed(2)}/${
-          PlaybackPage.DISMISS_COMMIT_PROGRESS} velocityY=${velocityY.toFixed(1)} ` +
+          PlayerExpandState.DISMISS_COMMIT_PROGRESS} velocityY=${velocityY.toFixed(1)} ` +
         `absVelocity=${speed.toFixed(1)} dir=${collapsingDirection ? 'collapse' : 'open'} ` +
         `fastFlick=${fastFlick} velocityThreshold=${PlaybackPage.DISMISS_COMMIT_VELOCITY} ` +
         `span=${this.dismissSpanVp().toFixed(1)} spanSrc=${
-          this.expandState.miniY > 0 ? 'measured' : 'ratio'} commit=${shouldClose}`);
+          this.expandState.miniY > 0 ? 'measured' : 'ratio'} ` +
+        `openThreshold=${PlayerExpandState.PULL_OPEN_COMMIT_FRACTION} openSpan=${
+          this.expandState.pullSpanVp().toFixed(1)} openSpanSrc=${
+          this.expandState.pullSpanIsMeasured() ? 'measured' : 'ratio'} commit=${shouldClose}`);
       if (shouldClose) {
         // 交给 closeFullScreenPlayback：它会接着把形变补间到 0 再卸载
         this.closeFullScreenPlayback();
@@ -380,7 +397,7 @@ export struct PlaybackPage {
     if (!ended) {
       return;
     }
-    const shouldCloseFallback: boolean = progress >= PlaybackPage.DISMISS_COMMIT_PROGRESS || fastFlick;
+    const shouldCloseFallback: boolean = progress >= PlayerExpandState.DISMISS_COMMIT_PROGRESS || fastFlick;
     Logger.info(PlayerExpandState.LOG_TAG,
       `RzdMorph dismiss commit(noMorph) progress=${progress.toFixed(2)} velocityY=${velocityY.toFixed(1)} ` +
       `absVelocity=${speed.toFixed(1)} dir=${collapsingDirection ? 'collapse' : 'open'} ` +
@@ -959,8 +976,16 @@ export struct PlaybackPage {
     this.collapseProgress = this.expandState.transitionProgress;
   }
 
-  /** 下拉收起手势（竖直方向）。 */
-  private panOption: PanGestureOptions = new PanGestureOptions({ direction: PanDirection.Vertical });
+  /**
+   * 下拉收起手势（竖直方向）。
+   *
+   * ⚠️ `distance` 是**无界对齐值**（见 {@link PlaybackPage.DISMISS_PAN_DISTANCE_VP} 的注释）：
+   *    不写它时框架默认 **5vp**，那一档会被 1~2vp 的抖动识别成"开始下拉"。
+   */
+  private panOption: PanGestureOptions = new PanGestureOptions({
+    direction: PanDirection.Vertical,
+    distance: PlaybackPage.DISMISS_PAN_DISTANCE_VP
+  });
 
   // ═══════════ 封面「续飞到歌词页」（对标 无界音乐 CoverMorph 双端点）═══════════
 

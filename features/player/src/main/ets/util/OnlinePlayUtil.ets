@@ -206,10 +206,17 @@ export class OnlinePlayUtil {
    * @param songs Search / leaderboard songs.
    * @param startIndex Index to start playback at.
    * @param uiContext Used for toast prompts and the open animation.
+   * @param openPlayer 是否**同时打开全屏播放页**（默认 `true` = 原行为，现有 4 参调用点一行都不用改）。
+   *   传 `false` 的只有底栏页签「现在就听」（`NowPlayingFeedPage`）：那一页自己就是"现在在听什么"的
+   *   全屏呈现，用户明确要求「打开这个页面**不会打开播放器**」。
+   *   ⚠️ 用这个参数、**不要**在调用点事后把 `appState.isShowPlay` 掰回去：
+   *   {@link openFullScreen} 是在 `uiContext.animateTo()` 的闭包里写 `isShowPlay` 的，
+   *   事后回滚等于"请求过又撤销"，而壳层的 `@Monitor('appState.isShowPlay')` 会在
+   *   `pushPlayerRoute()` 里读到那个瞬时的 true（`products/default/.../Index.ets:413`）。
    * @returns True when the queue was built and playback started.
    */
   public static async playList(appState: MusicAppState, songs: LXSearchSong[], startIndex: number,
-    uiContext: UIContext | undefined): Promise<boolean> {
+    uiContext: UIContext | undefined, openPlayer: boolean = true): Promise<boolean> {
     if (!lxEngineIsReady) {
       OnlinePlayUtil.toast(uiContext, '音源未就绪，请在设置中导入并选中源');
       return false;
@@ -232,9 +239,12 @@ export class OnlinePlayUtil {
     appState.currentQuality = '';
     appState.isResolving = true;
     MediaService.getInstance().loadAsset(playIndex);
-    OnlinePlayUtil.openFullScreen(appState, uiContext);
+    // ★ openPlayer = false 时**根本不请求**全屏播放页（见本方法的 @param 说明）。
+    if (openPlayer) {
+      OnlinePlayUtil.openFullScreen(appState, uiContext);
+    }
     OnlinePlayUtil.appendPlayLog('[播放] playList 秒开，后台解析 index=' + playIndex +
-      ' 歌数=' + songs.length);
+      ' 歌数=' + songs.length + ' openPlayer=' + openPlayer);
     // 仅预解析当前及邻近歌曲的歌词（切歌时其余歌曲会自动按需补全），
     // 避免长歌单数百首并发请求导致卡死。
     const preloadCount: number = 8;
