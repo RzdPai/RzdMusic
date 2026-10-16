@@ -1357,8 +1357,13 @@ export struct PlaybackPage {
       return;
     }
     const e = this.expandState;
-    const line1: string = `V 8f3a2c1 sess=${e.morphSessionStarted ? 1 : 0} ` +
-      `usable=${e.morphUsable ? 1 : 0} cont=${e.morphContainerActive() ? 1 : 0} ` +
+    // ★ 2026-10-16（版本标记 `8f3a2c1` → `b41d7e9`）：加上了无界那道 `pullGeomReady` 门
+    //   （`geom` 这一位）。**用户报"没动画"时先看 `geom`**：
+    //     `geom=0` ⇒ 终点几何始终没量到 ⇒ 容器恒等 ⇒ 正是"没有封面/背景动画"；
+    //     `geom=1` 而 `scale=1.000` ⇒ 量到了却没落位（看 `clip`/`cont`/`drv` 是哪一位不对）。
+    const line1: string = `V b41d7e9 sess=${e.morphSessionStarted ? 1 : 0} ` +
+      `usable=${e.morphUsable ? 1 : 0} geom=${e.morphGeomReadyNow() ? 1 : 0} ` +
+      `cont=${e.morphContainerActive() ? 1 : 0} ` +
       `clip=${e.morphClipping() ? 1 : 0} scale=${e.morphScale.toFixed(3)} p=${e.morphP.toFixed(3)}`;
     const line2: string = `real=${e.realCoverVisible() ? 1 : 0} ` +
       `clone=${e.morphOverlayBridging() ? 1 : 0} ` +
@@ -2356,6 +2361,19 @@ export struct PlaybackPage {
         return;
       }
       this.expandIntroRunning = false;
+      // ★★ 2026-10-16（**同一条"不要在没有几何时落位"的规则**，见 `Index.settlePullOpen`）：
+      //   这一句原来无条件落位。若本轮几何始终没量到（`morphGeomReady` 为假），
+      //   `morphSettleOpen()` 内部的 `applyMorphProgress(1)` 会被那道门挡掉、
+      //   而相位却翻成 OPEN ⇒ 容器停在恒等 + 相位 OPEN 的**半死状态**。
+      //   ⇒ 按无界「量不到就退回普通 push(无形变)」的口径：只把相位收干净，不落位。
+      if (!this.expandState.morphGeomReadyNow()) {
+        this.expandState.pushMorphTrace('openNoGeom');
+        this.expandState.morphReset();
+        this.expandState.morphStage = MorphStage.OPEN;
+        this.expandState.morphP = 1;
+        this.expandState.measureGeometry(this.getUIContext(), true);
+        return;
+      }
       this.expandState.morphSettleOpen();
       // ★ 落位后**重量一次**几何：这一刻页面已经是原尺寸（scale=1、位移=0），
       //   量到的是干净的终点矩形；同时把 aside 的宽度刷新一遍（HDS 底栏排布可能变过）。
@@ -2549,6 +2567,18 @@ export struct PlaybackPage {
     //      OPEN（不是 ENTERING/LEAVING），用后者判定会掉回"压扁内容层高度"的老动画 ——
     //      用户实测到的「用系统返回关闭还是旧动画」就是这里。
     if (this.expandState.morphUsable) {
+      // ★★★ 2026-10-16（**收起这一侧也要过"几何就绪"那道门**）：
+      //   本轮给 `applyMorphProgress` 加了一道无界的门（`morphGeomReady`，见那个字段的注释）：
+      //   几何没就绪时它**什么都不做**。打开这条路靠 `measureMiniDuringPull` 置位，
+      //   而"点击关闭 / 系统返回关闭"是从**已经落位的打开态**往回跑 —— 正常应当已置位；
+      //   但异常路径（打开时补量失败过一次、`morphReset` 之后又进来…）会让它是假，
+      //   那时下面那 460ms 的收起补间就是**整段空转** =
+      //   用户实测的「点击关闭 / 系统返回 没有封面/背景动画」。
+      //   ⇒ 这里用打开态已有的端点几何兜底放行（无界的收起本来就不重新量终点）。
+      if (!this.expandState.ensureMorphGeomForClose()) {
+        Logger.warn(PlaybackPage.logTag,
+          'close: geometry unresolved on both ends ⇒ close without morph animation');
+      }
       // ★★ 2026-10-15（照搬无界：**关闭时长与缓动**）——
       //   **这一处就是用户实测「关闭播放器几乎没动画」的真根因。**
       //   无界"关闭提交"（quit）分支（`_recover/logic-src/开关播放器-手势路径定稿.md`

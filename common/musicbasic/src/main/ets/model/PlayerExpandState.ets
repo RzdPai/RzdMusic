@@ -1831,6 +1831,45 @@ export class PlayerExpandState {
    *    —— 那就是"上拉打开播放器，屏幕上看不到东西"。
    */
   @Trace public morphUsable: boolean = false;
+  /**
+   * ★★★ 2026-10-16（**照搬无界 `PlayerPage.__pullGeomReady`**）：
+   * 本轮形变的**终点几何**是否已经量到（= 可以按公式给容器落非恒等的 `scale/translate/clip`）。
+   *
+   * ## 为什么必须有这一条（它是「点击打开 / 点击关闭 / 系统返回 没有动画」的最后一把锁）
+   *
+   * 无界侧（`wujie.pa` 原文，逐条对应）：
+   * ```
+   *   PlayerPage.__pullGeomReady                          // 168236（初值 false）
+   *   ExpandAnimation.applyPullProgress:                  // 50930-50946
+   *       if (!pullReady) { this.initParams(ui); pullReady = true; }   // ← 只有这一种进法
+   *       ...scale/translate/clip 的插值...
+   *   PlayerPage.publishMorphTargets:                     // 175872-176232
+   *       if (swiperProgress > 0.02) return;               // 只有**封面页**才上报
+   *       if (!isMorphTarget()) return;
+   *       ...量 playerCoverRect / playerMetaRect，越界或量不到 → schedulePublishRetry()...
+   *       ExpandSnapshot.playerCoverRect = cover; playerMetaRect = meta;
+   *       if (!pullMode) {                                 // 点击打开：pullMode === false
+   *         if (!pullGeomReady) { pullGeomReady = true;    // ← 置位
+   *                               expand.applyPullProgress(ui, pullT); } }
+   *   PlayerPage.onPullTChanged:                          // 174826-174850
+   *       if (!pullMode) return;
+   *       if (!pullGeomReady) return;                      // ← **几何没齐就不落属性**
+   *       expand.applyPullProgress(ui, effT());
+   * ```
+   * 三条都在说同一件事：**`applyPullProgress` 只在终点几何量到之后才允许改容器几何**。
+   *
+   * 我们这边的断点（本轮读出来的）：`applyMorphProgress()` 在 `!morphUsable` 时
+   * **把容器写回恒等**（`PlaybackPage:morphClipping()` 随之为假 ⇒ 高度 `'100%'`、
+   * 不裁剪），而点击/返回这条路上「播放页那一刻还没挂载」⇒ `pullOpenBegin` 里
+   * `prepareMorphEntry` 的终点锚点必然量不到 ⇒ `morphUsable === false`
+   * ⇒ 容器**整段停在恒等** ⇒ 用户看到的正是「没有封面/背景动画」。
+   * 跟手那条路之所以好，是因为上拉时播放页已经挂载、第一拍就量到了。
+   *
+   * ⇒ 修法 = 把「几何没齐」的语义从"写回恒等"改成**无界那样的"什么都不做"**：
+   *   容器保持当前值（初次 = 恒等，与"没有这套动画"逐像素一致），
+   *   等终点锚点补量成功那一帧再第一次落非恒等几何。
+   */
+  @Trace public morphGeomReady: boolean = false;
   /** 形变用的宿主尺寸（vp）：内容层的固定尺寸，也是"铺满"的目标。 */
   private morphBoxW: number = 0;
   private morphBoxH: number = 0;
@@ -2310,7 +2349,24 @@ export class PlayerExpandState {
     return true;
   }
 
-  /** @returns 终点锚点的来源（只给日志用：判断终点是量到的还是退回的 `onAreaChange` 值）。 */
+  /** @returns 终点锚点（播放页大封面）是否有一份可用值（FrameNode 量到，或 onAreaChange 兜底）。 */
+  private endAnchorKnown(): boolean {
+    return (this.bigNodeKnown && this.bigNodeW > 0) || this.bigSize > 0;
+  }
+
+  /**
+   * @returns 终点锚点是否已就绪（给调用方判"还要不要继续补量"用）。
+   *
+   * ⚠️ **不要**用 `morphUsable` 代替它：`morphUsable` 会因为"退回 `onAreaChange` 兜底值"
+   * （甚至"上一轮留下的值"）而为真，用它当"还要不要补量"的判据会让补量链**提前收工**
+   * —— 那正是点击打开时 `morphGeomReady` 永远是假的原因之一。
+   * 真正的"可以落位"判据是 {@link morphGeomReadyNow}。
+   */
+  public morphEndAnchorReady(): boolean {
+    return this.endAnchorKnown();
+  }
+
+  /** @returns 终点的来源（只给日志用：区分 FrameNode 量到 / onAreaChange 兜底 / 都没有）。 */
   private endAnchorSource(): string {
     if (this.bigNodeKnown && this.bigNodeW > 0) {
       return 'frameNode';
@@ -2383,6 +2439,14 @@ export class PlayerExpandState {
   public prepareMorphEntry(ui: UIContext, preferFloating: boolean): boolean {
     if (!this.morphSessionStarted) {
       this.invalidateEndAnchor();
+      // ★★★ 2026-10-16（**新会话必须把"锚点用量"也清零**）：
+      //   `bigSize` 是 `MusicPlayInfoBlock.reportBig()`（`onAreaChange`）上报的**跨会话残留字段**
+      //   —— `morphReset()` 不清它。于是"终点锚点是否量到"（`morphEndAnchorReady()`）在
+      //   新一轮的**第一拍**就会读到**上一轮**的值 ⇒ 补量链以为已经就绪 ⇒ 提前收工
+      //   ⇒ `morphGeomReady` 永远是假 ⇒ 容器恒等 ⇒ 点击打开没有动画。
+      //   无界侧没有这个问题（它的 `ExpandSnapshot.playerCoverRect` 每轮由播放页**重新上报**），
+      //   所以这里只需在会话边界把"这一次量到的"清零即可。
+      this.bigSize = 0;
       this.morphSessionStarted = true;
     }
     // 等待布局期间保持原尺寸。不能先压到 p=0 再跨帧补量：下一帧已经是缩小布局。
@@ -2440,7 +2504,21 @@ export class PlayerExpandState {
       `mini=(${this.miniX.toFixed(1)},${this.miniY.toFixed(1)},${this.miniSize.toFixed(1)}) ` +
       `win=${this.windowWidthVp.toFixed(0)}x${this.windowHeightVp.toFixed(0)} ` +
       `pad=${this.topInsetVp().toFixed(1)}/${this.navigationBarBottomVp.toFixed(1)} ` +
-      `usable=${this.morphUsable} bigKnown=${this.bigNodeKnown}`);
+      `usable=${this.morphUsable} bigKnown=${this.bigNodeKnown} ` +
+      `endKnown=${this.endAnchorKnown()} geomReady=${this.morphGeomReady}`);
+    // ★★★ 2026-10-16（**返回值语义订正：`false` 只代表"起点几何也没有"**）：
+    //   原来是 `ready || (barWinW > 0 && miniSize > 0)` —— 单看没问题，但它与调用方
+    //   `Index.beginOpenMorphOnClick` 的"`false` ⇒ 立刻 `morphReset()` + 无形变落位"
+    //   合起来就是那个坑：点击打开时**终点**（播放页大封面）必然还没挂载，
+    //   而调用方会把"终点没量到"当成"这套动画做不了"⇒ **补量链被整段跳过**
+    //   ⇒ `morphGeomReady` 永远为假 ⇒ 容器恒等 ⇒
+    //   用户实测「点击打开 / 点击关闭 / 系统返回 都没有动画」。
+    //   无界的形状（`MainPage.beginMorphEnter` 146495 起 + `openPlayerMorph` 149679）：
+    //   **量到起点就 `true` 并推路由**，终点由**播放页挂载后自己上报**
+    //   （`publishMorphTargets` → `pullGeomReady = true` → `onPullReady` 回调接着跑）。
+    //   ⇒ 所以这里保持"起点就绪即 true"；终点缺失由补量链负责（调用方**不再**因
+    //     `false` 而放弃会话，见那边 `isFreshSession` 那一段）。
+    //   `false` 现在只对应"连迷你条胶囊都没量到"这一种真正没救的情况。
     return ready || (this.barWinW > 0 && this.miniSize > 0);
   }
 
@@ -2468,6 +2546,19 @@ export class PlayerExpandState {
     this.freezeMorphMeta(ui);
     this.sourceBarHidden = true;
     this.morphInitParams();
+    // ★★★ 2026-10-16（**照搬无界 `publishMorphTargets` 最后那三行**，`wujie.pa` 176216-176233）：
+    //   终点几何刚刚量到 ⇒ 这就是"几何就绪"那一刻，**在这一拍**把容器几何第一次落到
+    //   `applyMorphProgress(pendingProgress)`。在此之前 `applyMorphProgress` 会主动什么都不做
+    //   （见那边的 `morphGeomReady` 门）⇒ 容器一直保持恒等，不会出现"提前按半份几何落位"。
+    if (!this.morphGeomReady) {
+      this.morphGeomReady = true;
+      this.pushMorphTrace('geomReady');
+      Logger.info(PlayerExpandState.logTag,
+        `morph geom ready: end=(${this.endCoverX.toFixed(1)},${this.endCoverY.toFixed(1)},` +
+        `${this.endCoverSize.toFixed(1)}x${this.endCoverH.toFixed(1)},src=${this.endAnchorSource()}) ` +
+        `start=(${this.miniCoverX.toFixed(1)},${this.miniCoverY.toFixed(1)},${this.miniCoverSize.toFixed(1)}) ` +
+        `initScale=${this.initScale.toFixed(4)} p=${pendingProgress.toFixed(3)}`);
+    }
     this.applyMorphProgress(pendingProgress);
     return true;
   }
@@ -3302,6 +3393,26 @@ export class PlayerExpandState {
     //     · `morphReset()`（会话结束 / 卸载）—— 里面已经调了 `morphOverlayReset()`；
     //     · 起手那一帧由壳层/迷你条显式压 0（`onPullOpenStart` / `settlePullOpen`）。
     //   渲染门（`morphOverlayBridging()`）自己保证静止态不画，所以不会残留一张封面。
+    // ★★★ 2026-10-16（**照搬无界 `onPullTChanged` / `applyPullProgress` 的那道门**）：
+    //   `wujie.pa` 174839-174850：
+    // ```ts
+    //   if (!pullGeomReady) { return; }        // ← 终点几何没量到 ⇒ 这一帧什么都不做
+    //   expand.applyPullProgress(ui, effT());
+    // ```
+    //   **不是**"写回恒等"，而是**保持容器当前值不动**。
+    //   为什么必须这样（本仓的真实断点）：点击打开 / 点击关闭 / 系统返回这三条路上，
+    //   播放页在 `pullOpenBegin` 那一刻还没挂载 ⇒ 终点锚点量不到 ⇒ `morphUsable === false`
+    //   ⇒ 原来这里把容器写回恒等 ⇒ **整段动画都没有**（用户实测）。
+    //   改成"什么都不做"之后，容器一直停在恒等（= 与"没有这套动画"逐像素一致），
+    //   直到 `measureMiniDuringPull()` 量到终点那一帧才第一次落非恒等几何 ⇒
+    //   补间那一帧起生效（`animateTo` 的闭包会把终点值写进去，ArkUI 自己补间）。
+    //   ⚠️ **顺序是硬约束**：这一条必须在下面 `!morphUsable` 那条**之前** ——
+    //      `morphUsable === false` 正是"几何没量到"的主场景，排在它后面等于没加门。
+    //   ⚠️ 恒等的兜底仍然由 `morphReset()` 承担（它显式把五个几何字段写回恒等）——
+    //      那也是"会话结束"的唯一边界，比"每帧写回"精确得多。
+    if (!this.morphGeomReady) {
+      return;
+    }
     if (!this.morphUsable) {
       // 几何没量到：不裁剪、不缩放、不透明 —— 直接当"没有这套动画"
       this.morphScale = 1;
@@ -3386,6 +3497,10 @@ export class PlayerExpandState {
    */
   public invalidateEndAnchor(): void {
     this.bigNodeKnown = false;
+    // ★ 2026-10-16（照搬无界）：终点作废 ⇒「几何就绪」也一并作废（`beginMorphEnter` 里
+    //   `morphSeq++` 与 `morphGeomReady = false` 是同两行，`wujie.pa` 146581-146589）。
+    //   否则上一轮量到的终点会被当成本轮的 ⇒ 容器按过期几何落位（"飞过去了却没落到封面上"）。
+    this.morphGeomReady = false;
   }
 
   /**
@@ -3500,6 +3615,10 @@ export class PlayerExpandState {
     this.morphOverlayReset();
     // 几何也一起作废：下次展开必须重新量一遍（宿主尺寸/迷你条位置都可能变了）
     this.morphUsable = false;
+    // ★ 2026-10-16（照搬无界）：连同"几何就绪"一起作废 —— 下一轮必须重新量到终点才容许
+    //   落非恒等几何（`applyMorphProgress` 的那道门）。⚠️ 不清的话，点击打开时
+    //   "旧实例卸载的 morphReset"之后，新一轮会在**没有终点**的情况下被放行 ⇒ 又回到旧 bug。
+    this.morphGeomReady = false;
     // 会话结束：下一轮展开要从"作废终点 → 在原尺寸时量 → 压起点"重新走一遍
     this.morphSessionStarted = false;
     this.morphScale = 1;
@@ -3536,6 +3655,51 @@ export class PlayerExpandState {
   public morphContainerActive(): boolean {
     return this.morphStage === MorphStage.ENTERING || this.morphStage === MorphStage.LEAVING ||
       this.morphStage === MorphStage.LANDING;
+  }
+
+  /**
+   * @returns 本轮形变的**终点几何**是否已量到（= 容器可以落非恒等 `scale/translate/clip`）。
+   *
+   * 对标无界 `PlayerPage.pullGeomReady`（`wujie.pa` 168236 / 176221 / 176232）：
+   * 那两个调用点（`onPullTChanged` 的门、`publishMorphTargets` 的置位）就是它的全部语义
+   * —— **"几何没齐就别动容器"**。
+   *
+   * ⚠️ 与 {@link morphUsable} 的分工：
+   *   · `morphUsable` —— `morphInitParams()` 算出来了（两个端点都有一份值）；
+   *   · `morphGeomReady` —— **本会话真的量到了终点锚点**，可以落位。
+   *   前者会因为"退回 onAreaChange 兜底值"而为真，后者不会 —— 落位门必须用后者。
+   * 排查关键字：`grep morph geom ready`（`hdc shell hilog -x | Select-String 'morph geom ready'`）。
+   */
+  public morphGeomReadyNow(): boolean {
+    return this.morphGeomReady;
+  }
+
+  /**
+   * 给**收起**那一侧用的兜底：把"几何就绪"这一位放行。
+   *
+   * 依据：无界的收起是从**已经落位的打开态**反向跑同一条公式
+   * （`MainPage.closeWithAnimation` → `animateMorphT(reverseMs, 0, REVERSE_EASING)`），
+   * 那时容器本来就是 identity、两端的端点几何早就有了；它**不会**在收起路上再去量一遍终点。
+   * 我们这边多一道 `morphGeomReady` 门（为了挡住"点击打开时用半份几何落位"），
+   * 所以收起前必须确认这一位是开的 —— 否则 `applyMorphProgress(0)` 会被挡掉 ⇒
+   * 收起补间**整段是空转**（用户实测「点击关闭 / 系统返回关闭没有动画」）。
+   *
+   * ⚠️ 只在"这一位因为异常路径没开、但端点几何其实拿得到"时才由调用方调它；
+   *    `morphInitParams()` 返回 false（连盒子/胶囊都没量到）时**不置位**，
+   *    让收起落到"无形变"的退化路径上（宁可没动画也不要飞错位置）。
+   * @returns 是否已就绪
+   */
+  public ensureMorphGeomForClose(): boolean {
+    if (this.morphGeomReady) {
+      return true;
+    }
+    if (!this.morphInitParams()) {
+      return false;
+    }
+    this.morphGeomReady = true;
+    this.pushMorphTrace('geomReadyClose');
+    Logger.info(PlayerExpandState.logTag, 'morph geom ready (close path fallback)');
+    return true;
   }
 
   /** @returns 形变是否"活着"（对标 `morphLiveOf`：ENTERING / LEAVING / LANDING）。 */

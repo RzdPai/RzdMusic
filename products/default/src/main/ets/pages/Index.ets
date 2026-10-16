@@ -568,14 +568,46 @@ struct Index {
       this.expandState.pullDragging = false;
       this.expandState.morphReset();
     }
+    // ★★★ 2026-10-16（**记住"这一轮是不是新会话"**，它决定 `false` 怎么处理）：
+    //   `pullOpenBegin()` 把 `morphSessionStarted` 置真的那一步就是"会话建立"。
+    //   在它之前读到 false ⇒ 这是**全新一轮**（用户真的要打开播放器）。
+    const isFreshSession: boolean = !this.expandState.morphSessionStarted;
     const ok: boolean = this.expandState.pullOpenBegin(this.getUIContext(), this.navDepth > 0);
     this.expandState.pushMorphTrace(ok ? 'beginOk' : 'beginNo');
+    if (!ok && isFreshSession) {
+      // ★★★ 2026-10-16（**"点击打开没有动画"的最后一块拼图**）：
+      //   这一段原来是"`false` ⇒ `pullDragging=false` + `morphReset()` + `morphSettleOpen()`
+      //   + `return false`"，也就是**整段放弃形变会话**。
+      //   ⚠️ 而 `pullOpenBegin` 返回 `false` 的**唯一**原因是"这一拍量不到东西"——
+      //   点击打开时这**必然**发生（播放页还没挂载、封面节点不存在），
+      //   于是这一次打开被永久判成"几何没量到 ⇒ 无形变落位"，
+      //   **连一次补量都没试过**（用户实测「点击打开播放器没有封面/背景动画」）。
+      //   无界的形状（`MainPage.openPlayerMorph` 149679）：`beginMorphEnter` 返回 false 时
+      //   **不放弃**，而是
+      // ```ts
+      //     this.enterAnimStarted = false;
+      //     ExpandSnapshot.onPullReady = () => { … };   // ← 注册回调，等播放页上报几何再接着跑
+      // ```
+      //   ⇒ 我们的等价物就是**让补量链接手**：保持 `ENTERING/FINGER` 与 `pullDragging`，
+      //     由 `settlePullOpen` 的 12×32ms 补量把终点量回来，量到那一拍
+      //     （`measureMiniDuringPull` 里）把 `morphGeomReady` 置真、容器第一次落位。
+      //   ⚠️ 只在 `isFreshSession` 时这样做：**已经在会话里**（重复触发 / 残留）仍然走原来的
+      //     保守分支，免得把用户正在看的那一轮会话清掉。
+      this.expandState.pushMorphTrace('awaitGeom');
+      Logger.warn(RzdShellLogTag,
+        `open morph: geometry not measurable yet ⇒ keep the session and retry ` +
+        `(stage=${this.expandState.morphStage} drive=${this.expandState.morphDrive} ` +
+        `bigKnown=${this.expandState.bigCoverAnchored()})`);
+      return true;
+    }
     if (!ok) {
       Logger.warn(RzdShellLogTag,
         'open morph: mini bar / host rect unavailable ⇒ plain landing (no morph)');
       this.expandState.pullDragging = false;
       this.expandState.morphReset();
-      this.expandState.morphSettleOpen();
+      this.expandState.pushMorphTrace('noMorph');
+      this.expandState.morphStage = MorphStage.OPEN;
+      this.expandState.morphP = 1;
       return false;
     }
     Logger.info(RzdShellLogTag, 'open morph: begin from click entry (align Wujie openPlayerMorph)');
@@ -846,7 +878,12 @@ struct Index {
    */
   private settlePullOpen(commit: boolean, attempt: number = 0): void {
     this.expandState.pushMorphTrace(`settle${attempt}${commit ? 'C' : 'A'}`);
-    if (!this.expandState.morphUsable) {
+    // ★★★ 2026-10-16（**补量链的门换了个量**）：原来是 `if (!morphUsable)`。
+    //   `morphUsable` 是 `morphInitParams()` 的"算出来了"（会因为退回 `onAreaChange`
+    //   兜底值、甚至上一轮留下的值而为真）⇒ 用它当"还要不要补量"的判据，补量链会
+    //   **提前收工**，而真正该判的是"**终点锚点这次到底量到没有**"。
+    //   ⇒ 换成 `morphEndAnchorReady()`；真正的"可以落位"门是 `morphGeomReadyNow()`。
+    if (!this.expandState.morphUsable || !this.expandState.morphEndAnchorReady()) {
       // 快速松手也要完成原尺寸锚点补量；不能先切 ANIM 导致补量停止。
       this.expandState.pullDragging = true;
       this.expandState.morphDrive = MorphDrive.FINGER;
@@ -890,10 +927,19 @@ struct Index {
         } else {
           Logger.warn(RzdShellLogTag, 'pull settle: end anchor unavailable, immediate landing');
           this.expandState.pullDragging = false;
+          // ★★★ 2026-10-16（**照搬无界把"几何永远没量到"当退化路径**）：
+          //   这段原来是"`morphReset()` + commit 时再 `morphSettleOpen()`"——
+          //   自相矛盾：`morphReset()` 把几何清成恒等（`morphUsable = false`），
+          //   紧接着的 `morphSettleOpen()` 内部 `applyMorphProgress(1)` 又因为
+          //   `morphGeomReady` 为假而**什么都不做** ⇒ 容器停在恒等、相位却是 OPEN。
+          //   无界的口径更干净（`wujie.pa` 的 `pickCapsuleRect` 那段：量不到就
+          //   「**本次退回普通 push(无形变)**」）：**量不到就彻底不要这套动画**，
+          //   让播放页以恒等几何、OPEN 相位正常显示，而不是留一个半死的形变会话。
+          this.expandState.pushMorphTrace('noGeom');
           this.expandState.morphReset();
-          if (commit) {
-            this.expandState.morphSettleOpen();
-          } else {
+          this.expandState.morphStage = MorphStage.OPEN;
+          this.expandState.morphP = 1;
+          if (!commit) {
             this.appState.isShowPlay = false;
           }
         }
@@ -943,16 +989,38 @@ struct Index {
         //   ⇒ 一旦它变，`morphSettleOpen()` 被跳过 ⇒ **相位停在 ENTERING、`morphUsable` 保持真**
         //     ⇒ `morphClipping()` 恒真 ⇒ 容器一直停在最后那一帧的 `scale/translate/clip`
         //     ⇒ 观感就是「**背景整屏、封面位置不对**」。
-        //   ⇒ 改法：只判 `isShowPlay`；再补一条 `morphUsable` —— 几何没就绪时不能落位
+        //   ⇒ 改法：只判 `isShowPlay`；再补一条 `geomReady` —— **几何没就绪时不能落位**
         //     （否则会把一帧"没量齐"的中间态固定下来）。
-        if (this.appState.isShowPlay && this.expandState.morphUsable) {
+        //   ★★ 2026-10-16（二次订正）：这一条判据原来是 `morphUsable`。但 `morphUsable`
+        //     会因为"退回 `onAreaChange` 兜底值"而为真（见 `morphIntroAnchorsReady` 的注释），
+        //     它**不足以**说明"终点锚点真的量到了"。`morphGeomReady()` 才是无界
+        //     `pullGeomReady` 的等价物（只在 `measureMiniDuringPull` 量到终点那一拍置位）
+        //     ⇒ 落位门必须用它，否则会把"半份几何"落定成 OPEN。
+        if (this.appState.isShowPlay && this.expandState.morphGeomReadyNow() &&
+          this.expandState.morphUsable) {
           this.expandState.pushMorphTrace('settled');
           this.expandState.morphSettleOpen();
         } else {
           this.expandState.pushMorphTrace('settleSkip');
           Logger.info(RzdShellLogTag,
             `pull settle: skip morphSettleOpen showPlay=${this.appState.isShowPlay} ` +
-            `usable=${this.expandState.morphUsable} stage=${this.expandState.morphStage}`);
+            `usable=${this.expandState.morphUsable} geomReady=${this.expandState.morphGeomReadyNow()} ` +
+            `stage=${this.expandState.morphStage}`);
+          // ★★★ 2026-10-16（与上面"end anchor unavailable"那条**同一条规则**）：
+          //   几何始终没量到 ⇒ 无界的口径是「本次退回普通 push(无形变)」——
+          //   必须把相位从 ENTERING 收回来。原来是**只打条日志、什么都不做**：
+          //   相位永远停在 ENTERING、`morphContainerActive()` 恒真 ⇒
+          //   播放页那条路可能挂着一个半死的形变会话（用户实测的"背景整屏 / 没有动画"）。
+          //   ⚠️ 只在"用户在播放页"（`isShowPlay`）时才收 —— 用户已经离开时由 `popPlayerRoute`
+          //     那条路自己收（`morphReset` 已在 `onDisAppear` 里跑过）。
+          if (this.appState.isShowPlay && !this.expandState.morphGeomReadyNow()) {
+            this.expandState.pushMorphTrace('degrade');
+            Logger.warn(RzdShellLogTag,
+              'pull settle: geometry never ready ⇒ degrade to a plain full-screen player');
+            this.expandState.morphReset();
+            this.expandState.morphStage = MorphStage.OPEN;
+            this.expandState.morphP = 1;
+          }
         }
       }, duration + 20);
       return;
