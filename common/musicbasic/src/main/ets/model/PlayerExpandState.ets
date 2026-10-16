@@ -3729,8 +3729,46 @@ export class PlayerExpandState {
    * `getFrameNodeById` → `getPositionToWindowWithTransform()`（vp）+ `getMeasuredSize()`（px→vp）。
    * 用 FrameNode 而不是 `getComponentUtils().getRectangleById`：前者是**渲染后**的位置
    * （含祖先 transform），后者之前在 HDS 浮动底栏上量出来是偏的。
+   *
+   * ★★★ 2026-10-17（**回原始字节码复核测量这一层** —— 三条结论，别再重复查）
+   *
+   * **(a) 上游**有**两个**测量助手，语义不同，别混**（`ComponentRect.ets`）：
+   * ```
+   *   getRectByFrameNode(id)  = getPositionToWindow**WithTransform** + getMeasuredSize   ← 含变换的位置
+   *   getRectById(id)         = getRectangleById(...) + **一个 scale 修正**
+   * ```
+   * 那个修正是这一份（`wujie.pa:50532` 起，逐条解出来）：
+   * ```ts
+   *   const halfW = info.size.width  * (1 - info.scale.x) / 2;   // ★ 绕中心缩放 ⇒ 左边界往里收半个差
+   *   const halfH = info.size.height * (1 - info.scale.y) / 2;
+   *   rect.left   = info.translate.x + info.screenOffset.x + halfW;
+   *   rect.top    = info.translate.y + info.screenOffset.y + halfH;
+   *   rect.right  = info.translate.x + info.screenOffset.x + info.size.width  - halfW;
+   *   rect.bottom = info.translate.y + info.screenOffset.y + info.size.height - halfH;
+   * ```
+   *   ⇒ **因为 `getMeasuredSize()` 给的是"布局尺寸"（不含 scale），而含变换的位置把 scale 算进去了**
+   *     ⇒ 不做这个修正，"位置"与"尺寸"就**不是同一个坐标系**。
+   *
+   * **(b) 本仓的对应关系**：本函数就是 (a) 里的 `getRectByFrameNode`
+   *   （`naturalLayout=false` ⇒ 含变换的位置 + 布局尺寸），
+   *   **并且**我们给可缩放的那个消费者（播放页大封面）走了 `naturalLayout=true`
+   *   （`measureEndAnchor` 用 `getPositionToWindow()` = 不含变换 ⇒ 与"布局尺寸"自洽 ✓），
+   *   另把缩放**单独存**（`bigNodeScaleX/Y`）在绘制时乘回去 —— 与上游"把 scale 除掉再乘回来"同源。
+   *   ⚠️ 所以**没有**照搬 (a) 那个 `halfW/halfH` 是**有意的**：我们的调用点要么不带 scale，
+   *     要么已经换成 `naturalLayout=true` 这条自洽路径。
+   *
+   * **(c) 唯一可能踩到的地方（记下来，别当不知道）**：**迷你条胶囊**（`measureGeometry` 里
+   *   `measureNode(ui, MINI_BAR_*)`，走的是含变换的默认路径）在
+   *   **落位挤压弹簧**（迷你条的 `.scale({y: morphSquashY})`，0.86→1 共 430ms）**正在跑**时被量到，
+   *   它的 `y` 会带上 `h×(1−0.86)/2 ≈ 3.9vp` 的偏移，而 `h` 仍是未缩放的布局高 ⇒ 差 ~4vp。
+   *   实测上**基本踩不到**：胶囊只在"打开起手 / 关闭起手"被量，而那两刻弹簧早已归位
+   *   （挤压只在关闭落位后 430ms 内偏离 1）。
+   *   ⇒ 若将来出现"某次打开时封面/背景起点整体偏几 vp"，**先查这里**（读数：徽标第二行
+   *     `snap=`/`end=`、第十三行的 `CLO:… bar=WxH`）。
    * @param ui UIContext
    * @param id 组件 id
+   * @param naturalLayout true = 用**不含变换**的 `getPositionToWindow()`（与"布局尺寸"自洽；
+   *        给**带 scale 的节点**用；上游对应 `getRectByFrameNode`）
    * @returns 窗口矩形；量不到返回 undefined
    */
   private measureNode(ui: UIContext, id: string, naturalLayout: boolean = false): NodeRect | undefined {
