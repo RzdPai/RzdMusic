@@ -1497,6 +1497,19 @@ export struct PlaybackPage {
   private diagScrollCount: number = 0;
   private diagScrollLast: string = '-';
   /**
+   * ★★★ 2026-10-16：内容层 `.onAppear()` **走了哪条分支** —— 定位"关闭后突然又放展开"。
+   *
+   * 取值：
+   * ```
+   *   '-'        = 这个回调还没进过
+   *   'morph'    = 走了形变分支（morphContainerActive || morphSessionStarted）✅ 正常
+   *   'intro'    = 走了兜底分支并起了 playExpandIntro()  ← ★ 若出现在关闭过程中，就是本 bug
+   *   'skipClose'= 走了兜底分支但被"正在关闭"那道门拦下 ✅（本轮新增的门）
+   * ```
+   * 判读：关闭后若看到 `intro` ⇒ 门没拦住（要再查判据）；看到 `skipClose` ⇒ 门生效了。
+   */
+  private diagAppearBranch: string = '-';
+  /**
    * 上一次 `onContentDidScroll` 的时间戳（ms）—— **用来让"落定"让位给"逐帧进度"**。
    *
    * ★★★ 2026-10-16（这是本轮必须处理的一处**真实冲突**）：
@@ -1685,6 +1698,12 @@ export struct PlaybackPage {
       `coll=${this.chromeCollapsed ? 1 : 0} p=${e.morphP.toFixed(2)} ` +
       `clipH=${e.morphClipHeight.toFixed(0)} bg=${this.backgroundRevealOpacity().toFixed(2)} ` +
       `drv=${e.morphDrive} sq=${e.morphSquashY.toFixed(3)}`;
+    // ★★★ 2026-10-16（**内容层 onAppear 走了哪条分支** —— 定位"关闭后又放一遍展开"）：
+    //   `ab` = morph（形变分支，正常）/ intro（起了 playExpandIntro ← 关闭时出现即 bug）
+    //        / skipClose（兜底分支但被"正在关闭"的门拦下，本轮新增）
+    //   `ap` = introPaintReady（整页绘制门）
+    const line11: string = `ab=${this.diagAppearBranch} ap=${this.introPaintReady ? 1 : 0} ` +
+      `stage=${e.morphStage} exit=${this.expandIntroRunning ? 1 : 0}`;
     // ★★★ 第五行：**动作轨迹**（最近 6 个动作，按发生顺序 `>` 连接）。
     //   为什么最有用：这条链上"顺序"本身就是自变量的最大值 ——
     //   同一个函数先调还是后调，结果完全不同（§93 的 `onAppear` 误判、§103 的
@@ -1696,7 +1715,7 @@ export struct PlaybackPage {
     //     `…>tween>settleSkip`                                 ⇒ 补间起了但落位被跳过（§104 那类）
     const line5: string = `trace=${e.morphTrace.length > 0 ? e.morphTrace : '(empty)'}`;
     const next: string =
-      `${line1}\n${line2}\n${line3}\n${line4}\n${line5}\n${line6}\n${line7}\n${line8}\n${line9}\n${line10}`;
+      `${line1}\n${line2}\n${line3}\n${line4}\n${line5}\n${line6}\n${line7}\n${line8}\n${line9}\n${line10}\n${line11}`;
     if (next !== this.diagText) {
       this.diagText = next;
     }
@@ -1711,10 +1730,9 @@ export struct PlaybackPage {
       .backgroundColor('rgba(0, 0, 0, 0.78)')
       .padding({ left: 8, right: 8, top: 4, bottom: 4 })
       .borderRadius(6)
-      // ★ 2026-10-16：徽标现在有 **10 行**（…第九行进度源自证 / 第十行**关闭路径读数**）
-      //   ⇒ `maxLines` 必须够，否则最后一行会被截掉（第十行是定位"关闭时背景高度特低 /
-      //     关闭后突然又展开"的关键判据）。
-      .maxLines(12)
+      // ★ 2026-10-16：徽标现在有 **11 行**（…第十行关闭路径读数 / 第十一行 onAppear 分支）
+      //   ⇒ `maxLines` 必须够，否则最后一行会被截掉。
+      .maxLines(13)
       .position({ x: 8, y: 120 })
       .zIndex(99)
       .hitTestBehavior(HitTestMode.None)
@@ -4715,6 +4733,7 @@ export struct PlaybackPage {
             //     它成立 ⇒ 这一页的第一帧就该"不画"（等壳层把几何压到起点），
             //     而不是自己开始播那套 `collapseProgress` 旧动画。
             if (this.expandState.morphContainerActive() || this.expandState.morphSessionStarted) {
+              this.diagAppearBranch = 'morph';
               this.introPaintReady = true;
               this.expandIntroRunning = false;
               // ★★ 2026-10-16（点击路径的**几何补量**）：
@@ -4764,7 +4783,31 @@ export struct PlaybackPage {
               }, 0);
             } else {
               // 兜底：形变没起来（几何没量齐的退化路径）仍旧走老那套，别让页面打不开。
-              this.playExpandIntro();
+              //
+              // ★★★ 2026-10-16（**修用户实测「下拉关闭后，动画结束了突然又放一遍展开」**）
+              //
+              // ## 这条分支为什么会在"关闭"时被走到
+              // 本 `.onAppear()` 是**节点级**回调 —— 它会在**分支重建**时也触发，
+              // 不只是"页面被打开"那一次。而关闭链路里 `morphReset()` 会把
+              // `morphSessionStarted` 清回 false（`morphStage` 变成 NONE）⇒
+              // 上面那个 `if` 的两个判据**同时变假** ⇒ 落到这里 ⇒ **重放一遍展开动画**。
+              //
+              // ## 判据：`isClosing` + `morphStage === LANDING`
+              //   · `isClosing` 由关闭链路置真（`closeFullScreenPlayback()`，`:2967`）；
+              //   · `morphStage === LANDING` —— `morphLand()` **只在关闭路径**被调
+              //     （`PlaybackPage:3092/3100` 与 `Index:1088`，全工程清点过），
+              //     它是"已经交还给迷你条"的相位。
+              //   ⇒ 两条任一成立就说明这一帧属于**关闭**，绝不该起"打开"的动画。
+              //   ⚠️ 这两条都不依赖"处理那一刻量到没量到"，也不依赖世代号。
+              if (this.isClosing || this.expandState.morphStage === MorphStage.LANDING) {
+                this.diagAppearBranch = 'skipClose';
+                Logger.info(PlaybackPage.logTag,
+                  `RzdMorphOnAppear skip intro: closing. isClosing=${this.isClosing} ` +
+                  `stage=${this.expandState.morphStage} p=${this.expandState.morphP.toFixed(3)}`);
+              } else {
+                this.diagAppearBranch = 'intro';
+                this.playExpandIntro();
+              }
             }
           })
           .onDisAppear(() => {
