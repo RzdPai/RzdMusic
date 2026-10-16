@@ -1069,6 +1069,11 @@ struct Index {
         `stage=${this.expandState.morphStage}`);
     }
     const duration: number = commit ? PULL_OPEN_SETTLE_MS : PULL_OPEN_ABORT_MS;
+    // ★★★ 2026-10-17（照搬无界 `MorphGuard.animateMorph` 的第一句）：把"配色安静窗口"
+    //   推到**这条补间结束**（`quietMs` 用补间自己的时长 —— 无界那侧也是按调用点传的，
+    //   本处没有任何新造常量）。⇒ 展开动画跑着的时候"上色"往后挪，不会在动画中途跳色
+    //   （取色是异步的，换歌那一拍它极可能正好落在展开动画中间）。
+    this.expandState.markMorphQuiet(duration);
     this.expandState.pushMorphTrace('tween');
     this.expandState.pullDragging = false;
     this.expandState.morphDrive = MorphDrive.ANIM;

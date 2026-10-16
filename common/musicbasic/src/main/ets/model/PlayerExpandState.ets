@@ -1077,6 +1077,77 @@ export class PlayerExpandState {
    *   ⇒ **不会双重扣减**，只让结果对"扩展到底有没有生效"免疫 ✓
    *   （这正是 §56.50 里留的兜底 (b)，本轮的接线就是它。）
    */
+  /**
+   * ★★★ 2026-10-17（**照搬无界 `MorphGuard`：形变期间不许改配色的"安静窗口"**）
+   *
+   * ## 无界那两条（`design/src/main/ets/logic/MorphGuard.ets`，`wujie.pa:92721-92815`）
+   * ```ts
+   *   // 模块级状态（初值都是 0）：
+   *   MorphGuard.morphQuietUntil = 0;
+   *   MorphGuard.colorSettleUntil = 0;
+   *
+   *   function animateMorph(ui, …, quietMs, onBlocked): boolean {
+   *     const now = Date.now();
+   *     MorphGuard.morphQuietUntil = now + quietMs;            // ★ 起补间时把"安静窗口"推到未来
+   *     if (!(now >= MorphGuard.colorSettleUntil)) {           // 配色还没安定
+   *       onBlocked(); return false;                           // ★ 这次形变**不起**
+   *     }
+   *     ui.animateTo({ curve }, …); return true;
+   *   }
+   *   colorApplyAllowed(now, until) = now >= until;
+   *   colorApplyWaitMs(now, until) = until - now;
+   * ```
+   * 而**配色应用侧**（`MainPage`，`wujie.pa:145945-145989`）：
+   * ```ts
+   *   const wait = colorApplyWaitMs(Date.now(), MorphGuard.morphQuietUntil);
+   *   if (wait > 0) {                                   // ★ 还在安静窗口里
+   *     if (!this.colorModeRetryQueued) {
+   *       this.colorModeRetryQueued = true;
+   *       setTimeout(λ, wait + 32);                     // ★ 0x20 = 32ms 余量，稍后重试一次
+   *     }
+   *     return;                                         // ★ 本次不上色
+   *   }
+   *   …正常上色…
+   *   // 重试 λ（wujie.pa:157930-157939）：colorModeRetryQueued = false; syncReportChrome();
+   * ```
+   * ⇒ 语义：**形变动画跑着的时候，配色一律往后挪**（改色会打断/污染正在跑的补间，
+   *   观感就是"动画中途背景色突然跳一下"），窗口一过自动补一次。
+   *
+   * ## 本仓的映射
+   * · 写侧：{@link markMorphQuiet}，在各处**起形变补间**的那一刻调，
+   *   `quietMs` **就用那条补间自己的时长**（无界那侧也是按调用点传的，
+   *   例如 `closeSearchMorph` 传 `SP_SEARCH_SETTLE_MS`）⇒ **没有任何新造常量**；
+   * · 读侧：{@link colorApplyAllowed} / {@link colorApplyWaitMs}，
+   *   由 `PlaybackPage` 的两处"上色点"（流光 shader 参数 / 网格背景源）查询。
+   *
+   * ⚠️ 与 `colorSettleUntil`（"配色还没安定就别起形变"那半条）**本轮没接** ——
+   *   本仓没有"配色安定时刻"这个概念（取色是异步的，没有 settled 回调），
+   *   要接得先定义"什么算安定"。记在 `RzdMusic记忆.md` §140 的待办里。
+   */
+  private morphQuietUntilMs: number = 0;
+
+  /**
+   * 把"配色安静窗口"推到 `durationMs` 之后 —— 照搬 `MorphGuard.animateMorph` 的第一句。
+   * @param durationMs **正在起的这条形变补间的时长**（不要另造常数）
+   */
+  public markMorphQuiet(durationMs: number): void {
+    if (durationMs <= 0) {
+      return;
+    }
+    this.morphQuietUntilMs = Date.now() + durationMs;
+  }
+
+  /** @returns 现在能不能上色（= 安静窗口已过）—— 照搬 `MorphGuard.colorApplyAllowed`。 */
+  public colorApplyAllowed(): boolean {
+    return Date.now() >= this.morphQuietUntilMs;
+  }
+
+  /** @returns 还要等多久才能上色（ms；0 = 现在就能）—— 照搬 `MorphGuard.colorApplyWaitMs`。 */
+  public colorApplyWaitMs(): number {
+    const wait: number = this.morphQuietUntilMs - Date.now();
+    return wait > 0 ? wait : 0;
+  }
+
   @Trace public pageBoxTopVp: number = 0;
 
   /**

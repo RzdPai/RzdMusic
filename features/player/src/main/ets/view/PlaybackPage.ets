@@ -2478,9 +2478,40 @@ export struct PlaybackPage {
     this.getImageColor();
   }
 
+  /**
+   * ★★★ 2026-10-17（**照搬无界 `MorphGuard` 的"配色安静窗口"** —— 见 `morphQuietUntilMs` 的推导）
+   *
+   * @returns 现在**不能**上色时还要等多少 ms（0 = 可以立即上色）。
+   *   ⚠️ 不能上色时本函数会**顺手排一次重试**（幂等：`colorRetryQueued` 只允许一条在飞），
+   *   重试间隔 = `wait + 32ms`（无界那个 `0x20` 余量），与无界 `MainPage` 的写法逐条对应。
+   */
+  private colorApplyWaitOrRetry(): number {
+    const wait: number = this.expandState.colorApplyWaitMs();
+    if (wait <= 0) {
+      return 0;
+    }
+    if (!this.colorRetryQueued) {
+      this.colorRetryQueued = true;
+      setTimeout((): void => {
+        this.colorRetryQueued = false;
+        // 与无界那个重试 λ 一致：先放开幂等标记，再把上色重跑一遍
+        // （无界调的是 `syncReportChrome()`；本仓对应的就是这两个上色点）。
+        this.applyFlowLightColors();
+        this.republishMeshSourceIfAny();
+      }, wait + 32);
+    }
+    Logger.info(PlaybackPage.logTag,
+      `RzdFlowLight color apply deferred ${wait.toFixed(0)}ms (morph quiet window)`);
+    return wait;
+  }
+
   /** 把 {@link coverTint} 里的颜色推给着色器（同版本号只推一次）。 */
   private applyFlowLightColors(): void {
     if (this.coverTint.version === this.appliedTintVersion) {
+      return;
+    }
+    // ★ 形变安静窗口内不上色（见 `colorApplyWaitOrRetry`）：等窗口过去它会自己重试一次。
+    if (this.colorApplyWaitOrRetry() > 0) {
       return;
     }
     this.appliedTintVersion = this.coverTint.version;
@@ -2719,6 +2750,16 @@ export struct PlaybackPage {
    * ⚠️ 与 `playMenuOpen` **必须一起**并进收起门（同一条守卫的两个分量，不许只判一个）。
    */
   @Local auxSheetOpen: boolean = false;
+  /**
+   * ★ 2026-10-17：`MorphGuard` 安静窗口的"重试只排一条"幂等标记
+   * （对标无界 `MainPage.colorModeRetryQueued`，`wujie.pa:145966/145979`；重试 λ 里复位）。
+   */
+  private colorRetryQueued: boolean = false;
+  /**
+   * ★ 2026-10-17：安静窗口期间**待补**的网格背景源（窗口过去后由
+   * {@link republishMeshSourceIfAny} 提交）。所有权在本页，替换时释放旧的。
+   */
+  private pendingMeshPm: image.PixelMap | undefined = undefined;
   /** 自动收起计时器。 */
   private chromeTimerId: number = -1;
   /** 最后一次控制区交互时间（ms）。 */
@@ -3638,6 +3679,11 @@ export struct PlaybackPage {
       const closeScale: number = closeFromT < PlaybackPage.REVERSE_MIN_RATIO ?
         PlaybackPage.REVERSE_MIN_RATIO : closeFromT;
       const morphCloseMs: number = Math.round(PlaybackPage.REVERSE_MS * closeScale);
+      // ★★★ 2026-10-17（照搬无界 `MorphGuard.animateMorph` 的第一句）：起补间之前把"配色安静窗口"
+      //   推到**这条补间结束**（`quietMs` 就是这条补间自己的时长 —— 无界那侧也是按调用点传的，
+      //   例如 `closeSearchMorph` 传 `SP_SEARCH_SETTLE_MS`，本处没有任何新造常量）。
+      //   ⇒ 关闭动画跑着的时候，换歌/取色完成的"上色"一律往后挪，不会在动画中途跳色。
+      this.expandState.markMorphQuiet(morphCloseMs);
       // ★★ 浮层那一棒（壳层 `MorphCoverClone` 的续飞封面）**必须由本处同步驱动** ——
       //   依据见 `PlayerExpandState.applyMorphProgress` 里"删掉自动复位"那段 + 用户实测的
       //   「下拉关闭时封面动画是展开那一套」「系统返回关闭没有封面动画」。
@@ -4987,11 +5033,44 @@ export struct PlaybackPage {
       return;
     }
     const old: image.PixelMap | undefined = this.meshSrc;
+    // ★★★ 2026-10-17（照搬无界 `MorphGuard` 的"配色安静窗口"）：形变补间跑着的时候**不换背景**
+    //   （换背景 = 整层网格重画，观感就是"动画中途背景色跳一下"）。窗口过去后自动补上最后一次。
+    if (this.colorApplyWaitOrRetry() > 0) {
+      const dropped: image.PixelMap | undefined = this.pendingMeshPm;
+      this.pendingMeshPm = pm;
+      if (dropped !== undefined && dropped !== pm) {
+        this.releasePixelMapQuiet(dropped);
+      }
+      return;
+    }
+    this.commitMeshSource(pm, old);
+  }
+
+  /**
+   * 把网格源真正挂上去（{@link publishMeshSource} 的"提交"那半）。
+   * @param pm 新的网格源（所有权转移给本页）
+   * @param old 被替换掉的旧源（非空则释放）
+   */
+  private commitMeshSource(pm: image.PixelMap, old: image.PixelMap | undefined): void {
     this.meshSrc = pm;
     this.meshSrcVersion = this.meshSrcVersion + 1;
     if (old !== undefined && old !== pm) {
       this.releasePixelMapQuiet(old);
     }
+  }
+
+  /**
+   * 安静窗口过去后补上最后一次网格源 —— 与无界那个重试 λ（`wujie.pa:157930-157939`）
+   * 调 `syncReportChrome()` 是同一件事：**窗口一过就把最新配色补上去**。
+   * 没有待补的源时是空操作。
+   */
+  private republishMeshSourceIfAny(): void {
+    const pending: image.PixelMap | undefined = this.pendingMeshPm;
+    if (pending === undefined) {
+      return;
+    }
+    this.pendingMeshPm = undefined;
+    this.commitMeshSource(pending, this.meshSrc);
   }
 
   /** Downloads an online cover url and decodes it into a PixelMap (best-effort). */
