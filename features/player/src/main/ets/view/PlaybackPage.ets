@@ -493,6 +493,82 @@ export struct PlaybackPage {
    */
   private static lastCloseAtMs: number = 0;
 
+  /**
+   * ★★★ 2026-10-16（**关闭过程的时序"黑匣子"** —— 打破"没有设备读数"的僵局）
+   *
+   * ## 为什么必须做成"跨实例静态锁存"
+   * 用户报的两条（「关闭时背景只剩一条」「关闭后又放一遍展开」）**都发生在关闭过程中**，
+   * 而**播放页一 pop，屏上那个徽标就跟着没了** ⇒ 事后读不到任何东西。
+   * ⇒ 把关键事件记进**模块级静态环形缓冲**，等**下一次打开播放页**再显示 ⇒ 就有了"上一次关闭"的完整时序。
+   *
+   * ## 记什么（只记"状态转移"与"关键出口"，**不记每帧**，否则环形缓冲会被刷掉）
+   * ```
+   *   CLO  = closeFullScreenPlayback 入口（写下 lastCloseAtMs）
+   *   LV   = morphBeginLeaving（收起相位）
+   *   SET  = 关闭收尾定时器到点（附 closeGen / alive / 走了哪一支）
+   *   LND  = morphLand（落回迷你条）
+   *   SQZ  = squashLandAnim（挤压起）
+   *   RST  = morphReset（几何回恒等）
+   *   POPT = 壳层把 isShowPlay 置 false（触发 popPlayerRoute）
+   *   DIS  = 内容层 onDisappear（附 wasAlive）
+   *   AP   = 内容层 onAppear（附走了哪条分支）
+   *   INTR = playExpandIntro 起（**若出现在关闭之后，就是"又放一遍展开"的直接证据**）
+   *   OPN  = 壳层 isShowPlay=true（触发 pushPlayerRoute）
+   * ```
+   * 每项带一个相对时间（ms，相对缓冲区里第一条）。
+   *
+   * ## 读法（徽标**第十三行**）
+   * 缓冲区**以一次关闭为单位**（`CLO` 一到就清空重来），所以读到的永远是"最近一次关闭"的全过程：
+   * 正常关闭后重新打开，应当看到形如：
+   * ```
+   *   t0 CLO → t+2 LV → t+480 SET:ok/gen=3 → t+481 LND → t+482 SQZ → t+483 RST → t+484 POPT → t+490 DIS:alive=0
+   * ```
+   * 异常形状与含义：
+   * - 出现 **`INTR`**（在 DIS 之后）⇒ 确认是"关闭余波重放展开"；
+   * - `SET:genBAD` / `SET:dead` ⇒ 收尾定时器走了早退支（**几何不会复位** ⇒ 背景只剩一条同源）；
+   * - **没有 `RST`** ⇒ `morphReset()` 没执行 ⇒ 几何停在中间态；
+   * - `RST` 在 `POPT` **之后** ⇒ 存在"pop 了但几何还是满屏"的中间帧（GLM 的假设）。
+   */
+  private static evLog: string = '';
+  private static evT0: number = 0;
+  private static evCount: number = 0;
+
+  /**
+   * 记一条时序事件（见 {@link PlaybackPage.evLog}）。
+   * @param tag 事件名（上面那张表里的短标签）
+   * @param detail 可选的补充（例如 `ok` / `genBAD` / `dead`）
+   *
+   * ⚠️ **public static**（不是 private）：壳层 `products/default/.../pages/Index.ets` 的
+   *    `@Monitor('appState.isShowPlay')` 里要记 `OPN` —— 「关闭后又放一遍展开」的
+   *    头号嫌疑就是**壳层把播放页又推了一次**，那一笔只有壳层能记。
+   *    （壳层 → 播放页是单向依赖：`player` 的桶文件已经导出 `PlaybackPage`，不构成循环。）
+   */
+  public static ev(tag: string, detail: string = ''): void {
+    const now: number = Date.now();
+    // ★ 缓冲区以**一次关闭**为单位：`CLO`（关闭链路入口）一到就把上一轮整段清掉、`t0` 重置到这一刻。
+    //   为什么这样切：徽标是**等下一次打开播放页**才显示的（关闭途中页面已经被 pop），
+    //   若不清，读到的是"好几轮混在一起"的日志，`t+` 也会一直往上涨到看不出相对时序。
+    //   切成"最近一次关闭"之后，读法就固定成 `t+0 CLO → …`。
+    if (tag === 'CLO') {
+      PlaybackPage.evLog = '';
+      PlaybackPage.evT0 = now;
+      PlaybackPage.evCount = 0;
+    } else if (PlaybackPage.evT0 === 0) {
+      PlaybackPage.evT0 = now;
+    }
+    PlaybackPage.evCount++;
+    const rel: number = now - PlaybackPage.evT0;
+    const item: string = detail.length > 0 ? `${tag}:${detail}` : tag;
+    PlaybackPage.evLog = `${PlaybackPage.evLog} t+${rel} ${item} |`;
+    // 环形：超过 900 字符就砍掉最早那段（保住"最近的关闭全过程"）
+    if (PlaybackPage.evLog.length > 900) {
+      const cut: number = PlaybackPage.evLog.indexOf('|');
+      if (cut >= 0) {
+        PlaybackPage.evLog = PlaybackPage.evLog.substring(cut + 1);
+      }
+    }
+  }
+
   /** 关闭余波窗口（ms）—— `lastCloseAtMs` 的宽度。⚠️ 工程判断值，不是逆向值（见上方说明）。 */
   private static readonly CLOSE_WINDOW_MS: number = 1500;
 
@@ -1025,6 +1101,7 @@ export struct PlaybackPage {
           //   字节码 L151812-151838）。
           //   ⚠️ 必须在 `morphBeginLeaving()` **之前**取：下一步会改相位。
           this.dismissBaseT = this.expandState.morphP;
+          PlaybackPage.ev('LV', `finger p=${this.dismissBaseT.toFixed(2)}`);
           this.expandState.morphBeginLeaving();
         }
         this.expandState.morphDrive = MorphDrive.FINGER;
@@ -1769,8 +1846,19 @@ export struct PlaybackPage {
     //     `clickOpen>skip`                                     ⇒ 被 `pullDragging`/相位挡了
     //     `…>tween>settleSkip`                                 ⇒ 补间起了但落位被跳过（§104 那类）
     const line5: string = `trace=${e.morphTrace.length > 0 ? e.morphTrace : '(empty)'}`;
+    // ★★★ 2026-10-16（**第十三行：关闭过程"黑匣子"** —— 读法见 {@link PlaybackPage.evLog}）
+    //   为什么需要它：用户报的两条（「关闭时背景只剩一条」「关闭后又放一遍展开」）
+    //   **都发生在关闭过程中，而那一刻徽标已随播放页一起消失** ⇒ 事后读不到任何东西。
+    //   ⇒ 事件记在**模块级静态环形缓冲**里，等下一次打开播放页再显示 ⇒ 就有了上一次关闭的完整时序。
+    //
+    //   ⚠️ 显示时把 `|` 换成换行：一行一个事件，一张截图就能读完
+    //     （不换行的话近千字符会挤成一坨，11fp 下几乎不可读）。
+    const evRaw: string = PlaybackPage.evLog;
+    const line13: string = evRaw.length > 0
+      ? `ev#${PlaybackPage.evCount}\n${evRaw.split('|').join('\n')}`
+      : `ev#${PlaybackPage.evCount} (no events yet)`;
     const next: string =
-      `${line1}\n${line2}\n${line3}\n${line4}\n${line5}\n${line6}\n${line7}\n${line8}\n${line9}\n${line10}\n${line11}\n${line12}`;
+      `${line1}\n${line2}\n${line3}\n${line4}\n${line5}\n${line6}\n${line7}\n${line8}\n${line9}\n${line10}\n${line11}\n${line12}\n${line13}`;
     if (next !== this.diagText) {
       this.diagText = next;
     }
@@ -1785,9 +1873,9 @@ export struct PlaybackPage {
       .backgroundColor('rgba(0, 0, 0, 0.78)')
       .padding({ left: 8, right: 8, top: 4, bottom: 4 })
       .borderRadius(6)
-      // ★ 2026-10-16：徽标现在有 **12 行**（…第十一行 onAppear 分支 / 第十二行控制区自证）
-      //   ⇒ `maxLines` 必须够，否则最后一行会被截掉。
-      .maxLines(14)
+      // ★ 2026-10-16：徽标现在有 **13 行**（…第十二行控制区自证 / 第十三行关闭过程事件日志，
+      //   事件日志本身就是多行——一行一个事件）⇒ `maxLines` 必须够，否则最后一行会被截掉。
+      .maxLines(32)
       .position({ x: 8, y: 120 })
       .zIndex(99)
       .hitTestBehavior(HitTestMode.None)
@@ -3030,6 +3118,8 @@ export struct PlaybackPage {
     //   "这一次出现的节点是不是刚才那次关闭的余波"。**只在这里写、那里读**，
     //   两处成对（上一轮只有读、没有写 ⇒ 门恒假）。
     PlaybackPage.lastCloseAtMs = Date.now();
+    // ★ 时序黑匣子：本次关闭开始（见 `evLog` 的注释）
+    PlaybackPage.ev('CLO', `gen=${this.closeGen + 1} p=${this.expandState.morphP.toFixed(2)}`);
     // ★★ P0-2：本轮关闭的**独立代次** + 取消上一轮可能还挂着的卸载定时器。
     //   `isClosing` 挡得住"收起动画进行中"的重入，但它在 `morphCloseMs + 20`（≈370ms）
     //   就被清回 `false`，而那一刻播放页**可能还没 unmount** ⇒ 第二次点击会再起一条
@@ -3091,6 +3181,7 @@ export struct PlaybackPage {
       // ★ 先把"进入收起相位 + 冻结几何"同步刷出去：这一段是补间**之前**的额外修改，
       //   按官方规则必须用 `applySync` 同步标脏，否则补间首帧会用旧值。
       UIUtils.applySync((): void => {
+        PlaybackPage.ev('LV', `anim from=${closeFromT.toFixed(2)}`);
         this.expandState.morphBeginLeaving();
       });
       const closeScale: number = closeFromT < PlaybackPage.REVERSE_MIN_RATIO ?
@@ -3129,10 +3220,12 @@ export struct PlaybackPage {
       this.closeSettleTimer = setTimeout((): void => {
         this.closeSettleTimer = -1;
         if (!this.isAlive) {
+          PlaybackPage.ev('SET', `dead p=${this.expandState.morphP.toFixed(2)}`);
           return;
         }
         // ★ P0-2：本轮关闭已被"下一次关闭请求"取代 ⇒ 收尾交给那一轮，这里什么都不做
         if (closeGen !== this.closeGen) {
+          PlaybackPage.ev('SET', `genWait`);
           return;
         }
         // 与上一条**都要**：`closeGen` 挡"重复关闭"，`morphGenAlive` 挡"关闭途中又被展开"
@@ -3169,13 +3262,16 @@ export struct PlaybackPage {
           //      `morphLand()` 在非形变态是安全的空操作语义（只翻相位 + 交还所有权）。
           this.expandState.morphLand();
           this.state.isShowPlay = false;
+          PlaybackPage.ev('SET', `genBAD→LND+POPT`);
           return;
         }
+        PlaybackPage.ev('SET', `ok gen=${closeGen}`);
         this.isClosing = false;
         this.restorePlaybackWindowChrome();
         // LANDING：此刻播放页已经缩成透明的一小块，把迷你条交还给它
         // （`miniBarOpacity()` 在非 ENTERING/LEAVING 时恒为 1），再卸载。
         this.expandState.morphLand();
+        PlaybackPage.ev('LND');
         // ★★ 2026-10-15（照搬无界 `squashLand`）：**落位那一帧起"播放条挤压 → 回弹"**。
         //   顺序和无界逐字一致：`setMorph(LANDING)`（=`morphLand()`，本帧播放页停笔、
         //   迷你条真身显出来）→ `animateSquash(SQUASH_Y 0.86, 110ms)` → 320ms 过冲回弹。
@@ -3185,17 +3281,23 @@ export struct PlaybackPage {
         //      把相位清成 NONE，但它**不碰** `morphSquashY`（挤压是独立的一条标量），
         //      所以先 reset 再 squash 也不会被吃掉 —— 这里按无界原序（land → squash）留在中间。
         this.expandState.squashLandAnim(this.getUIContext());
+        PlaybackPage.ev('SQZ');
         this.state.isShowPlay = false;
+        PlaybackPage.ev('POPT');
         this.expandState.morphReset();
+        PlaybackPage.ev('RST');
       }, morphCloseMs + 20);
       return;
     }
     // 没有可靠几何时直接关闭，绝不回退到压扁内容层的旧转场。
     Logger.warn(PlaybackPage.logTag, 'collapse without geometry: immediate landing');
+    PlaybackPage.ev('CLO', 'noGeom');
     this.isClosing = false;
     this.restorePlaybackWindowChrome();
     this.state.isShowPlay = false;
+    PlaybackPage.ev('POPT', 'noGeom');
     this.expandState.morphReset();
+    PlaybackPage.ev('RST', 'noGeom');
     // 兜底路径也要弹一下：否则"几何没量到"时这条唯一的收起反馈就整个没有
     this.expandState.squashLandAnim(this.getUIContext());
   }
@@ -4877,6 +4979,7 @@ export struct PlaybackPage {
               if (this.isClosing || this.expandState.morphStage === MorphStage.LANDING ||
                 (sinceCloseMs >= 0 && sinceCloseMs < PlaybackPage.CLOSE_WINDOW_MS)) {
                 this.diagAppearBranch = 'skipClose';
+                PlaybackPage.ev('AP', `skipClose since=${sinceCloseMs}`);
                 Logger.info(PlaybackPage.logTag,
                   `RzdMorphOnAppear skip intro: closing. isClosing=${this.isClosing} ` +
                   `stage=${this.expandState.morphStage} sinceClose=${sinceCloseMs}ms ` +
@@ -4887,6 +4990,7 @@ export struct PlaybackPage {
                 this.introPaintReady = true;
               } else {
                 this.diagAppearBranch = 'intro';
+                PlaybackPage.ev('INTR', `sinceClose=${sinceCloseMs}`);
                 this.playExpandIntro();
               }
             }
@@ -4899,6 +5003,7 @@ export struct PlaybackPage {
             //     **判据读到的是"被自己改过之后"的值**）。
             const wasAlive: boolean = this.isAlive;
             this.isAlive = false;
+            PlaybackPage.ev('DIS', `wasAlive=${wasAlive ? 1 : 0} show=${this.state.isShowPlay ? 1 : 0}`);
             // ★★★ 2026-10-16（**删掉这里那句同步的 `state.isShowPlay = false`**）：
             //   原来这里写着 `this.state.isShowPlay = false;`。它是一个**节点级**回调里的写入，
             //   而 `isShowPlay` 是**壳层路由的驱动源**（`Index.@Monitor('appState.isShowPlay')`

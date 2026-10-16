@@ -46,7 +46,7 @@ import {
   WindowInfo,
   WindowUtil
 } from 'musicbasic';
-import { dispatchShellPlaybackIntent, LXSourceHost, PlaybackPageCoverContent, PlayerViewModel } from 'player';
+import { dispatchShellPlaybackIntent, LXSourceHost, PlaybackPage, PlaybackPageCoverContent, PlayerViewModel } from 'player';
 import { RecommendPage } from 'recommendation';
 import { EchoReviewPage } from 'recommendation';
 // 「现在就听」：底栏第 2 个页签（推荐 / **现在就听** / 回响 / 我的）。
@@ -465,6 +465,14 @@ struct Index {
       return;
     }
     if (this.appState.isShowPlay) {
+      // ★★★ 2026-10-16（**关闭过程黑匣子 · 唯一能记 `OPN` 的地方就是这里**）：
+      //   用户报的「关闭后又突然放一遍展开」—— 头号嫌疑是**壳层把播放页又推了一次**
+      //   （`isShowPlay` 在关闭途中被谁写回 true ⇒ 本 `@Monitor` 收到 false→true
+      //   ⇒ `beginOpenMorphOnClick()` + `pushPlayerRoute()` ⇒ 新实例、新展开动画）。
+      //   这一笔**只有壳层能记**（播放页那一刻已经 pop 了），所以事件日志做成了 public static
+      //   （见 `PlaybackPage.evLog` 的说明）。读法见自证徽标第十三行：正常关闭后重新打开，
+      //   日志里**只应有一条 `OPN`**；若关闭段之后紧跟一条 `OPN` 而用户并没有点开 ⇒ 就是它。
+      PlaybackPage.ev('OPN', `stage=${this.expandState.morphStage} p=${this.expandState.morphP.toFixed(2)}`);
       // ★★ 2026-10-15（照搬无界）：**点击打开也必须走形变**。
       //   无界里「点击播放条」和「上滑手势」**共用同一个 `beginMorphEnter`**
       //   （全包只有 `openPlayerMorph` 与 `pullStart` 两个调用者，见
