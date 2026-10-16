@@ -1191,13 +1191,44 @@ export class PlayerExpandState {
   /** `fitPlayerOverlay` 里那个"硬编码 +8"（上界夹紧用）。 */
   private static readonly COVER_FIT_BOUND_INSET_VP: number = 8;
   /**
-   * `CoverMorph.metaTopFixLyric` 的默认值（vp）—— **元信息块的歌词页端锚点修正**。
+   * `CoverMorph.metaTopFixLyric` 的默认值（vp）—— **元信息块歌词页端锚点的修正量**。
    *
-   * 出处：`wujie.pa:85527`（`ldai 0x1c` + 紧随的 `neg`），归档笔记
-   * `_recover/logic-src/歌词页浮层封面与歌名定稿.md:1356 / :1417` 定稿取 **−26**。
-   * ⚠️ 是**上游笔记的定稿值**，不是自编值。
+   * ★★★ 2026-10-17（**回原始字节码重读，订正上一版**）：
+   *
+   * ```
+   *   85527  ldai 0x1c        ← 0x1c = **28**
+   *   85528  sta v0
+   *   85531  ldobjbyname 0x55, "metaTopFixLyric"      ; acc = a3.metaTopFixLyric
+   *   85534  ldnull / stricteq → jnez L19             ; 传 null ⇒ 用默认
+   *   85537  ldundefined / stricteq → jnez L19        ; 传 undefined ⇒ 用默认
+   *   85540  mov v0, v1                               ; 否则用调用方给的
+   *   85542  lda v0 / 85543 stobjbyname "metaTopFixLyric"
+   * ```
+   *   ⇒ **默认值 = `+28`，而且 `85527` 之后【没有 `neg`】。**
+   *
+   * ⚠️ **本仓上一版写的是 `−26`**，出处是归档笔记
+   *   `_recover/logic-src/歌词页浮层封面与歌名定稿.md:858`「默认 -26（`ldai 0x1a / neg`）」
+   *   与同文件 `:1356`「**-26** ← `85527 ldai 0x1c`」——
+   *   这两行**互相矛盾**（一处说 `0x1a`+`neg`，一处说 `0x1c`），**都不能用**。
+   *
+   * ★ 负号在本文件所依赖的那份反汇编里**一定写成 `ldai <绝对值> / neg`**（可复现的两处铁证）：
+   * ```
+   *   txLyric 默认 −151：85462 ldai 0x97 + 85463 neg        （0x97 = 151）
+   *   tyPlayer 默认 −40 ：（同族，CoverMorph 构造函数里 `v0 = (-(40))`）
+   * ```
+   *   ⇒ `85527 ldai 0x1c` 无 `neg` ⇒ **+28**，不是 −28 也不是 −26。
+   *
+   * ★ **语义（这一条比数值更容易搞错）**：`metaOffsetYAt(t)` 返回的是元信息块的**中心 Y**，
+   *   不是顶边 —— 见 `CoverMorph.metaOffsetYAt` 的两个端点：
+   * ```
+   *   metaOffsetYAt(t) = lerp(metaYPlayer, topYAtLyric() + metaTopFixLyric, t)
+   *   · metaYPlayer —— `fitPlayerOverlay` 给的 `coverBottom + gap + metaH/2` **（中心）**
+   *   · topYAtLyric() + 28 —— `coverTop + 28`；小封面可视边 ≈ 48.72 ⇒ 其中心 = coverTop + 24.36
+   *     ⇒ **`coverTop + 28` ≈ 小封面的竖直中心** ✓ 两端点**同为"中心"**，自洽。
+   * ```
+   *   ⇒ 本仓在用值（顶边）要与它对比，必须先 `− rowH/2` 换成顶边（见 `metaTopGeomY`）。
    */
-  public static readonly META_TOP_FIX_LYRIC_VP: number = -26;
+  public static readonly META_TOP_FIX_LYRIC_VP: number = 28;
   /**
    * `CoverMorph.tyPlayer` 的默认值（= 播放页端封面中心的基准偏移）。
    *
@@ -1259,20 +1290,44 @@ export class PlayerExpandState {
    *    ⇒ 本轮把它**量出来**（徽标 `metaD`），**不改**。
    *
    * @param t 形变进度（0 = 封面页端 / 1 = 歌词页端）
-   * @returns 元信息块顶边（vp，窗口坐标）
+   * @param rowH 元信息行自身高度（`PlaybackPage.LYRIC_META_ROW_H_VP`）——
+   *        用来把无界的**中心**换算成本仓对账用的**顶边**（见下面那段订正）
+   * @returns 元信息块**顶边**（vp，窗口坐标）—— 与本仓在用值**同口径**，可直接相减
+   *
+   * ★★★ 2026-10-17（**订正：无界那两端是"中心"，本函数原来是拿它当"顶边"用的**）
+   *
+   * `CoverMorph.metaOffsetYAt`（`design__src__main__ets__logic__CoverMorph.ets:205-211`）：
+   * ```
+   *   metaOffsetYAt(t) = lerp(metaYPlayer, topYAtLyric() + metaTopFixLyric, t)
+   * ```
+   * 而 `metaYPlayer` 出自 `fitPlayerOverlay`：`coverBottom + gap + metaH/2` **（中心）**；
+   * 另一端 `topYAtLyric() + 28` ≈ 小封面的竖直中心（见 `META_TOP_FIX_LYRIC_VP` 的推导）
+   * ⇒ **两端点都是"元信息块的中心 Y"**，所以：
+   * ```
+   *   fromTop = coverBottom + gap                    （= 中心 − rowH/2）
+   *   toTop   = lyricCoverTop + 28 − rowH/2          （= 中心 − rowH/2）
+   * ```
+   * 本函数返回**顶边**（在用的那条 `.position().y` 就是顶边）⇒ 直接可比。
+   *
+   * ⚠️ 上一版写的是 `toTop = lyric.y − 26` —— **数值错（−26 应为 +28）、口径也错（把中心当顶边）**，
+   *   于是徽标第六行的 `metaD` 一直在报一个**并不存在**的偏差。
+   *   订正后：`metaD = metaTop − metaExp` 在 **t=0 与 t=1 两端都应 ≈ 0**
+   *   （两端式子现在逐字同源）；**中段**若不为 0，那是"位置 lerp 的进度源不同"
+   *   （我们用 `lyricMorphT`，无界用 `swiperProgress`），那才是真正要看的东西。
    */
-  public metaTopGeomY(t: number): number {
+  public metaTopGeomY(t: number, rowH: number): number {
     const p: number = t < 0 ? 0 : (t > 1 ? 1 : t);
     const cover: LyricMorphRect = this.playerCoverGeomRect();
     if (cover.size <= 0) {
       return 0;
     }
     const gap: number = PlayerExpandState.COVER_FIT_META_GAP_VP;      // 50（无界默认）
-    // ① t = 0 那一端：封面底边 + gap（= fitPlayerOverlay 的 metaY 反推出来）
+    const halfRow: number = rowH > 0 ? rowH / 2 : 0;
+    // ① t = 0 那一端：封面底边 + gap（= `fitPlayerOverlay` 的 metaY − metaH/2）
     const fromTop: number = cover.y + cover.size + gap;
-    // ② t = 1 那一端：小封面顶边 + metaTopFixLyric（无界的 metaOffsetYAt(1)）
+    // ② t = 1 那一端：小封面顶边 + metaTopFixLyric(+28) − rowH/2
     const lyric: LyricMorphRect = this.lyricMorph(1);
-    const toTop: number = lyric.y + PlayerExpandState.META_TOP_FIX_LYRIC_VP;
+    const toTop: number = lyric.y + PlayerExpandState.META_TOP_FIX_LYRIC_VP - halfRow;
     return this.lerp(fromTop, toTop, p);
   }
 

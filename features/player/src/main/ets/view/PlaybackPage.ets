@@ -1789,19 +1789,21 @@ export struct PlaybackPage {
     //   `metaExp` = **无界算式值**（`lerp(封面底边+gap, 小封面顶边+metaTopFixLyric, t)`，
     //              见 `metaTopGeomY(t)`）；
     //   `metaD`   = 两者之差。
-    //   ## 判读（**已由本轮静态核算定死**，不再需要"猜 26 是不是错"）
+    //   ## ★★★ 2026-10-17 判读**订正**（原判读建立在两个错上：常数写成 −26、且把"中心"当"顶边"）
+    //   无界 `metaOffsetYAt` 的两端**都是"元信息块的中心 Y"**（见 `META_TOP_FIX_LYRIC_VP` 的推导），
+    //   而本仓在用的是**顶边** ⇒ 原来的 `metaExp` 口径与 `metaTop` 不同，`metaD` 一直在报一个
+    //   **并不存在**的偏差。订正后 `metaTopGeomY(t, rowH)` 已经把两端都换算成顶边 ⇒
     //   ```
-    //     t = 0 ⇒ metaTop 与 metaExp 的**两端式子完全相同** ⇒ metaD 应 = 0（容 1vp 取整）
-    //     t = 1 ⇒ 两者差 26 —— 这是**设计差**（我们的端点在"封面顶边"，
-    //             无界的端点在"封面顶边 − metaTopFixLyric(26)"）⇒ metaD 应 = +26
-    //     ⇒ 所以正确的读数是 **metaD ≈ 26 × t**（一条直线，不是常数）
+    //     t = 0 ⇒ metaD 应 ≈ 0（两端式子逐字同源：`封面底边 + gap`）
+    //     t = 1 ⇒ metaD 应 ≈ 0（两端式子逐字同源：`小封面顶边 + 28 − rowH/2`）
+    //     ⇒ 中段若不为 0，**那才是要查的东西**：位置 lerp 的**进度源不同**
+    //       （我们用 `lyricMorphT`，无界用 `swiperProgress`）
     //   ```
-    //   ⇒ 若 `metaD` 明显偏离 `26×t` ⇒ 说明两条链有别的偏差（那才是要查的）。
     const metaInUse: number = e.metaTopInUseYAt(this.lyricMorphT, PlaybackPage.LYRIC_META_ROW_H_VP);
-    const metaExp: number = e.metaTopGeomY(this.lyricMorphT);
+    const metaExp: number = e.metaTopGeomY(this.lyricMorphT, PlaybackPage.LYRIC_META_ROW_H_VP);
     const line6: string = `metaTop=${metaInUse.toFixed(1)} metaExp=${metaExp.toFixed(1)} ` +
       `metaD=${(metaInUse - metaExp).toFixed(1)} ` +
-      `(t=0 期望 metaD=0 ⇒ 未减 metaTopFixLyric；差=26×(1−t))`;
+      `(两端期望 metaD≈0；中段不为 0 = 进度源差异)`;
     // ★★★ 2026-10-16（**"歌词页封面没变小"的直接判据**，用户真机截图后加）：
     //   用户实测「这是歌词页，那个封面没变小」⇒ 读数 `t=0.00 edge=331`。
     //   封面尺寸 = `lyricMorph(lyricMorphT).size`，而 `lyricMorphT` 只有 0/1 两个稳定值：
@@ -5984,14 +5986,31 @@ export struct PlaybackPage {
         //   ⚠️ `MusicPlayInfoBlock`（宽屏 / 面板那两支）**一直用的就是它**（L239 / L411 / L447）
         //      ⇒ 同上一处一样，又是「同一形状 N 处、只改了一处」漏掉的那一处。
         .opacity(this.expandState.targetMetaOpacity())
-        // ★★★ 2026-10-16（用户实测：「**无界的收藏和歌曲菜单是跟着标题歌手一起飞上来的**」）
-        //   这一行原来**只有淡入、没有位移** ⇒ 右边的收藏/更多两个图标只能"淡出来"，
-        //   不会跟文字一起"飞上来"。
-        //   ⇒ 按无界 `pullChromeOpacity` 的窗口（**0.18 → 0.62**）给整行加同窗位移：
-        //     · 文字与两个图标**同处这一行** ⇒ 天然"一起飞上来"（不需要给图标单独加）；
-        //     · 窗口与那行的淡入区间**同一个** ⇒ 同起同落，不会"先淡后飞"。
-        //   ⚠️ 位移是**页内** vp（函数里已按 `1/morphScale` 反算）⇒ 屏上位移恒定 180vp。
-        .translate({ y: this.expandState.metaRiseVp() })
+        // ★★★★ 2026-10-17（**删掉这里那条自编的 180vp 位移** —— goal 第 1 条的正面要求）
+        //
+        // 上一版这里是 `.translate({ y: this.expandState.metaRiseVp() })`，
+        // `metaRiseVp() = (1 − ramp01(p, 0.18, 0.62)) × **RISE_VP(180)** / morphScale`
+        // —— 那个 **180 是本仓自定值、没有任何出处**（`RISE_VP` 的注释自己写着"屏幕量"）。
+        //
+        // 无界这一行的位移**只有一条**，就是上面那条 `.position()` 里的
+        // ```
+        //   metaOffsetYAt(t) = lerp(metaYPlayer, topYAtLyric() + metaTopFixLyric, t)
+        // ```
+        // （`CoverMorph.ets:205-211`）—— **lerp 本身就是那条"飞上来"**：
+        // t=0 在"大封面底边 + 50"，t=1 到"小封面竖直中心"（`topYAtLyric + 28`，
+        // 见 `META_TOP_FIX_LYRIC_VP`），**全行程由 t 驱动**，不需要再叠一条窗内位移。
+        //
+        // ⇒ 删掉它之后：
+        //   · 文字与两个图标**同处这一行** ⇒ 依然"一起飞上来"（位置 lerp 同源）；
+        //   · 淡入仍按 `targetMetaOpacity()`（内含 `pullChromeOpacity` 的 0.18–0.62 窗口，
+        //     那是用户已确认的 ③）；
+        //   · 与无界**只差"进度源"**：我们用 `lyricMorphT`，无界用 `swiperProgress` ——
+        //     这正是徽标第六行 `metaD`（订正后）要量的东西。
+        //
+        // ⚠️ `earlyRiseVp()` / `contentRiseVp()`（小歌词组 / 控制区组）**本次不动**：
+        //   goal 第 1 条只点了元信息行；那两组是"控制区从下升上来"，用户已确认的
+        //   ③ 说的就是它们那套时间窗（`pullChromeOpacity` 0.18–0.62 / `pullBottomIn` 0.45–1.00）。
+        //   它们同样叠了一条 180vp —— 要不要一起去掉，等这次观感反馈再定（见 §130）。
       }
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
