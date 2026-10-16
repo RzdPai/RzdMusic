@@ -1235,13 +1235,34 @@ export class PlayerExpandState {
    * ⇒ 那个式子的**本体**就是「浮层底边（相对盒顶） + 23」，与 `.padding({top})` 的口径一致
    *   （`padding` 本来就是**盒内相对量**）。
    *
-   * ## 本仓现在差什么
-   * 我们用 `lyricCoverYOf() + lyricCoverSizeOf() + LYRIC_PAD_GAP_VP(23)`，
-   * 即"浮层底边（**窗口**坐标） + 23" ⇒ 两者**只在 `lyricBoxTopVp ≈ 0` 时等价**。
-   * ⇒ 本字段就是判据：**量到 0 就说明我们的式子已经是对的**；
-   *   量到明显非 0 ⇒ 要改成 `(浮层底边 − lyricBoxTopVp) + 23`（一行）。
-   * ⚠️ 这一点与本仓 §56.50 那条"让位量是**相对盒顶**的"是**同一个形状**，
-   *   而 `topInsetVp()` 早就吃过这个亏（当时多让了一个状态栏）⇒ 先量再改。
+   * ## ★★★ 结论（2026-10-17 收尾，**这一条已闭合：不需要换算，式子不改**）
+   *
+   * 本仓 `lyricCoverYOf() + lyricCoverSizeOf() + 23` 已经就是"浮层底边（从**盒顶**量起） + 23"，
+   * 因为**那个盒的顶边在结构上恒等于窗口顶边**。证据链（全部可在源码里复核）：
+   * ```
+   *   ① `overlayBoxH()` = `swiperBoxH`（`wujie.pa:172866`）⇒ 那个"盒"就是 **Swiper 的盒**；
+   *   ② Swiper 挂在手机支的 `Column` 里，该 `Column` 只有
+   *      `.width(FULL_WIDTH) .height(FULL_HEIGHT)`、**没有任何 padding/margin**
+   *      （`PlaybackPage.ets:4185` 起、`4624-4626` 收尾）⇒ Swiper 的内容盒顶边 = 该 `Column` 的顶边；
+   *   ③ 该 `Column` 与 `LyricFloatLayer()`（`PlaybackPage.ets:5841`）**是同一个 `Stack` 的孩子**
+   *      （同一个 `Stack({alignContent: TopStart})`，其自身也只有 `.width/.height`，`5844-5845`）；
+   *   ④ 而 `LyricFloatLayer` 把 `lyricMorph()` 交出的**窗口坐标直接写进 `.position()`**
+   *      且落点正确（用户已确认 ①「封面几何现在正常了」）⇒ **那个 `Stack` 的内容盒左上角就是窗口原点**；
+   *   ⑤ 于是 ②③④ 串起来：**Swiper 盒顶 = 窗口顶 = 0** ⇒ `lyricBoxTopVp` 恒为 0
+   *      ⇒ 本仓的"窗口坐标"与无界的"相对盒顶"是**同一个数**。
+   * ```
+   * （数值上也自洽：无界那份 `boxH/2 + bottomYAtLyric()` 的语义是"把**以盒中心为原点**的
+   *   morph 局部 y 换算成从盒顶量起"，而 `lyricCoverYOf()` 本来就是窗口 y —— 见上面 ⑤。）
+   *
+   * ⚠️⚠️ **绝对不要**把这个字段拿去参与 `lyricPadTop()` 的计算（哪怕写成
+   *   `(lyricOverlayHeight() − lyricBoxTopVp) + 23` 看起来更"严谨"）：
+   *   本字段是 `onAreaChange` 的 `globalPosition.y`，而歌词页那一棵 `Column` **在形变容器里面**
+   *   （容器有 `.scale/.translate/.clip`）⇒ **形变过程中这个读数是被变换过的**（会周期性地明显非 0）
+   *   ⇒ 用它会让 `lyricPadTop()` 在动画中抖动。**它是"结构不变量"的哨兵，不是输入。**
+   *
+   * ⇒ 保留它的唯一用途：**哨兵**。若将来有人在 `Column`/`Stack` 上加了一层 padding，
+   *   这里会读到明显非 0（日志关键字 `RzdLyricBoxTop`、徽标第六行 `lBox=`）⇒ 那时才需要换算。
+   *   常态应当是 `0.0`。
    */
   @Trace public lyricBoxTopVp: number = 0;
 
@@ -1790,13 +1811,19 @@ export class PlayerExpandState {
    * ```
    * ★ 前两项**合起来就是"浮层底边（相对盒顶）"**（把归档实测值 `700/2 + (−175.28) + 23 = 197.72`
    *   代进去反解得 `boxH/2 + bottomYAtLyric = 174.72`，见 `lyricBoxTopVp` 的注释）
-   *   ⇒ 本仓写成"浮层底边 + `LYRIC_PAD_GAP_VP`"，**只差一个坐标系问题**：
+   *   ⇒ 本仓写成"浮层底边 + `LYRIC_PAD_GAP_VP`"，**已经是同一个口径**：
    *
-   * ⚠️ **仍未闭合的一步**：本仓 `lyricOverlayHeight()` 是**窗口**坐标，而无界那一项是
-   *   **相对盒顶** ⇒ 两者只在 `lyricBoxTopVp ≈ 0` 时等价。判据已量出来（徽标第六行 `lBox=`），
-   *   拿到读数后若明显非 0，改成 `(lyricOverlayHeight() − lyricBoxTopVp) + 23` 即可（一行）。
-   *   ⚠️ 为什么不猜：这与 §56.50「让位量是**相对盒顶**的」同一个形状，
-   *     `topInsetVp()` 当年就按"盒顶 = 0"写而**多让了一个状态栏**。
+   * ✅ **曾经挂在这里的那个"未闭合的一步"已闭合（2026-10-17 收尾）**：
+   *   原来写的是「本仓 `lyricOverlayHeight()` 是**窗口**坐标，而无界那一项是**相对盒顶**
+   *   ⇒ 两者只在 `lyricBoxTopVp ≈ 0` 时等价，等徽标第六行 `lBox=` 的读数再定」。
+   *   现在**不需要那个读数了** —— 结构上可证 `lBox ≡ 0`：
+   *   那个"盒"就是 Swiper 的盒，而 Swiper 所在的 `Column` 与 `LyricFloatLayer()`
+   *   是**同一个 `Stack` 的孩子**、两者都不带 padding，且该 `Stack` 的内容盒左上角
+   *   已被证明就是窗口原点（用户已确认封面落点正确）⇒ **盒顶 = 窗口顶**。
+   *   完整证据链（含 `PlaybackPage.ets` 行号）见 {@link lyricBoxTopVp} 的 JSDoc。
+   *   ⇒ `lyricBoxTopVp` 从此只当**结构不变量哨兵**（常态 `0.0`），**不许**参与本函数的计算
+   *     （它是 `globalPosition.y`，形变期间被容器变换过，用它会让 padding 抖动）。
+   *
    * ⚠️ 中间的 `boxH <= 0` 是**防御分支**，按无界那份结构保留
    *   （`lyricFloat()` 已要求封面尺寸 > 0，正常流程走不到）。
    */

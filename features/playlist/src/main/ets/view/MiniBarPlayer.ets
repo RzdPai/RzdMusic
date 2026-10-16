@@ -52,6 +52,18 @@ export struct MiniBarPlayer {
   private panOption: PanGestureOptions = new PanGestureOptions({ direction: PanDirection.Vertical });
 
   /**
+   * 诊断闸：本轮手势是否**已经记过一次**"跟手更新被判据拒掉"。
+   *
+   * ⚠️ **三条跟手链（壳层 `Index` + 本文件 + `HomeMiniBarPlayer`）必须都有这一个字段**
+   * —— 上拉的起手点通常在迷你条上（壳层那条还额外要求落在底部带内），
+   * 所以"用户在迷你条上drag"走的其实是**本文件**这条手势。少接一处，
+   * 徽标第十行的 `pd=` 就会恒为 `0/0/0`，把"判据拒了"误判成"事件没到"
+   * （这正是「同一形状 N 处、只改了一处」那个老毛病）。
+   * 语义与用法见 `PlayerExpandState.pullDropBegin`；`onActionStart` 里清零。
+   */
+  private pullDropCountedThisGesture: boolean = false;
+
+  /**
    * 补量终点锚点的重试次数 / 间隔（ms）。
    *
    * 与 `HomeMiniBarPlayer` 的 `PULL_ANCHOR_RETRY_MAX / PULL_ANCHOR_RETRY_MS`、
@@ -134,6 +146,10 @@ export struct MiniBarPlayer {
     .gesture(
       PanGesture(this.panOption)
         .onActionStart((): void => {
+          // ★ 诊断闸复位（与壳层 `Index.onPullOpenStart` 同一套，见 `pullDropCountedThisGesture`）：
+          //   **三条跟手链（壳层 + 两条迷你条）必须都接计数**，否则用户从迷你条起手的拖动
+          //   会让徽标第十行的 `pd=` 恒为 `0/0/0`，把"判据拒了"误判成"事件没到"。
+          this.pullDropCountedThisGesture = false;
           if (this.appState.isShowPlay) {
             return;
           }
@@ -142,6 +158,8 @@ export struct MiniBarPlayer {
             this.appState.isShowPlay = true;
           }
           if (!ok) {
+            // ★ 与壳层 `onPullOpenStart` 的 `!morphOk` 支同族 ⇒ 计同一个数（`pullDropBegin`）。
+            this.expandState.notePullDropBegin();
             this.expandState.pullDragging = false;
             this.expandState.morphReset();
             this.expandState.morphSettleOpen();
@@ -155,6 +173,11 @@ export struct MiniBarPlayer {
         })
         .onActionUpdate((event: GestureEvent): void => {
           if (!this.expandState.pullDragging) {
+            // ★ 诊断（一次手势只记一次，理由见 `Index.pullDropCountedThisGesture`）。
+            if (!this.pullDropCountedThisGesture) {
+              this.pullDropCountedThisGesture = true;
+              this.expandState.notePullDropUpdate();
+            }
             return;
           }
           this.expandState.applyMorphProgress(this.expandState.pullOpenFraction(event.offsetY));
@@ -163,6 +186,7 @@ export struct MiniBarPlayer {
         })
         .onActionEnd((event: GestureEvent): void => {
           if (!this.expandState.pullDragging) {
+            this.expandState.notePullDropEnd();
             return;
           }
           // ★ 提交判据**只有一份**：`PlayerExpandState.pullOpenShouldCommit()`
@@ -174,6 +198,7 @@ export struct MiniBarPlayer {
         })
         .onActionCancel((): void => {
           if (!this.expandState.pullDragging) {
+            this.expandState.notePullDropEnd();
             return;
           }
           this.expandState.requestPullOpenSettle(false);

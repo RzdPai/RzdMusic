@@ -1841,9 +1841,16 @@ export struct PlaybackPage {
     const metaOld: number = e.metaTopInUseYAt(this.lyricMorphT, PlaybackPage.LYRIC_META_ROW_H_VP);
     const line6: string = `metaTop=${metaTop.toFixed(1)} metaOld=${metaOld.toFixed(1)} ` +
       `metaD=${(metaOld - metaTop).toFixed(1)} (t=0 期望 −40 / t=1 期望 −3.6) ` +
-      // ★ 2026-10-17：`lBox` = 歌词页内容盒的**窗口顶边**（`reportLyricBoxTop` 喂）。
-      //   `lBox ≈ 0` ⇒ `lyricPadTop` 现在这条"窗口坐标 + 23"的式子**已经**等价于无界的盒内式子 ✓
-      //   `lBox` 明显非 0 ⇒ 要把 `lyricPadTop` 换成 `(浮层底边 − lBox) + 23`（§135，一行）
+      // ★ 2026-10-17（**这一条已经从"待读的判据"降级为"结构不变量哨兵"**）：
+      //   `lBox` = 歌词页内容盒的**窗口顶边**（`reportLyricBoxTop` 喂）。
+      //   结构上恒为 **0**（"盒"就是 Swiper 的盒，而 Swiper 所在的 `Column` 与
+      //   `LyricFloatLayer()` 是同一个不带 padding 的 `Stack` 的孩子，且该 `Stack`
+      //   的内容盒左上角 = 窗口原点 —— 完整证据链见 `PlayerExpandState.lyricBoxTopVp` 的 JSDoc）
+      //   ⇒ `lyricPadTop()` 那条"窗口坐标 + 23"的式子**已经**等价于无界的盒内式子 ✓
+      //     **不需要换算，也不必再读这个数了。**
+      //   ⚠️ 它现在只有一个用途：**若将来有人给那两层加了 padding，这里会读到明显非 0** ——
+      //     那时才需要把 `lyricPadTop` 换成 `(浮层底边 − lBox) + 23`（一行）。
+      //   ⚠️ 动画中它可能瞬时非 0（那是容器变换过的 `globalPosition.y`，正常）⇒ 看**静止态**的读数。
       `lBox=${e.lyricBoxTopVp.toFixed(1)}`;
     // ★★★ 2026-10-16（**"歌词页封面没变小"的直接判据**，用户真机截图后加）：
     //   用户实测「这是歌词页，那个封面没变小」⇒ 读数 `t=0.00 edge=331`。
@@ -4306,13 +4313,17 @@ export struct PlaybackPage {
                 }
                 .width(StyleConstants.FULL_WIDTH)
                 .height(StyleConstants.FULL_HEIGHT)
-                // ★★★ 2026-10-17（**为 `lyricPadTop()` 换无界式子补的那一块测量**）：
-                //   上报歌词页内容盒的**窗口顶边**（见 `PlayerExpandState.lyricBoxTopVp` 的推导：
+                // ★★★ 2026-10-17（**这一块测量已从"判据"降级为"哨兵"** —— 结论已闭合）：
+                //   上报歌词页内容盒的**窗口顶边**。当初加它是为了定"`lyricPadTop()` 要不要换算坐标"：
                 //   无界那个 `boxH/2 + bottomYAtLyric` 合起来就是"浮层底边**相对盒顶**"，
-                //   而本仓现在拿**窗口坐标**当盒内相对量用 ⇒ 只在盒顶 ≈ 0 时等价）。
-                //   读法：徽标第六行 `lBox=`。量到 0 ⇒ 现有式子已经对；
-                //   明显非 0 ⇒ 换成盒内相对量（改一行：减掉 `lyricBoxTopVp`）。
+                //   而本仓拿**窗口坐标**当盒内相对量用 ⇒ 只在盒顶 ≈ 0 时等价。
+                //   ✅ **收尾结论：盒顶结构上就是 0**（"盒"= Swiper 的盒；Swiper 所在的 `Column`
+                //     与 `LyricFloatLayer()` 是同一个不带 padding 的 `Stack` 的孩子，且该 `Stack`
+                //     的内容盒左上角 = 窗口原点 —— 完整证据链见 `PlayerExpandState.lyricBoxTopVp`）
+                //     ⇒ **不需要换算，也不必再读这个数**。保留上报只为"将来有人加 padding 时能发现"。
                 //   ⚠️ 必须用 `globalPosition`（窗口坐标），`position` 是相对父组件的。
+                //   ⚠️ 动画中它可能瞬时非 0（容器 `.scale/.translate` 变换过的读数，正常）；
+                //     只有**静止态**明显非 0 才说明结构变了。
                 .onAreaChange((_oldValue: Area, newValue: Area): void => {
                   this.expandState.reportLyricBoxTop(areaLengthToVp(newValue.globalPosition.y));
                 })
