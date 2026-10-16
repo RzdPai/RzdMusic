@@ -4703,8 +4703,11 @@ export class PlayerExpandState {
     return this.chromeOf().seekSize;
   }
 
-  /** 顶栏那一行的实际行高（vp）。★ 与 `topInsetVp()` 的 56 **不是同一个量**，见 `chromeTopBarH()`。 */
-  public static readonly TOP_BAR_ROW_H_VP: number = 56;
+  // ⚠️ 这里原来有一个 `TOP_BAR_ROW_H_VP = 56`（顶栏行高），**2026-10-17 已删除**：
+  //   它是自编值（从 `design/Index.BAR_H = 56` 借来的，而那个 56 是**底栏**高度），
+  //   真正的行高是 `chrome().topBarH`（FULL 44）⇒ 已由 `chromeTopBarH()` 直接取档位表。
+  //   ⚠️ 与它**同名不同物**的是 `PLAYER_TOP_FALLBACK_VP = 56`（= `topInsetVp()` 的让位线下限），
+  //      那个**还在用**、**不许**顺手删 —— 两者只是数值撞了，永远别当成一个量。
 
   /**
    * ★★★ 2026-10-16：封面基准矩形的**竖向校正量**（vp，负 = 往上）。
@@ -5007,34 +5010,62 @@ export class PlayerExpandState {
   }
 
   /**
-   * 顶栏那一行的高度（vp）—— 对标无界 `chrome().topBarH`。
+   * 顶栏那一行的高度（vp）—— **照搬无界 `chrome().topBarH`**。
    *
-   * ★★ 2026-10-15（照搬无界档位表）：`wujie.pa:93534/93554/93574`（FULL / MEDIUM / COMPACT）
-   *   ⇒ **FULL 44 / MEDIUM 40 / COMPACT 36**。
+   * ## 上游的唯一消费点（本轮回字节码确证）
    *
-   * ⚠️ **它现在是"归一化 + 逐字不变"的**，不是把顶栏压到 44：
-   *   我们的 `TopAreaComponent` 原来写死 `.height(56)`，而 56 = **让位线本身**
-   *   （`PLAYER_TOP_FALLBACK_VP = 56`，也就是无界的 `padTop()` 下限）。
-   *   无界的 `topBarH = 44` 是**内容行高**，它外面还有 `padTop()` 那一圈。
-   *   两者混在一处时，直接把 56 改成 44 会**同时**动到"内容让位线"和"顶栏自身高度"
-   *   —— 而让位线已经被整套形变几何（`topInsetVp()` / `lyricCoverYOf()` /
-   *   `morphInitParams()`）依赖 ⇒ 那是"一块独立大活"（见下面「未接线字段」）。
-   *   ⇒ 本轮只做**一件事**：把那个写死的 56 换成 `TOP_BAR_ROW_H_VP`，
-   *     并让本函数在**手机档（`chromeTier` = 2 / FULL）**下**恰好返回它** ⇒
-   *     手机上**逐像素不变**（回归红线），而档位从此有了唯一入口。
+   * 无界那个顶栏 Row 的修饰符链在 `PlayerPage.@e*#`（`wujie.pa:196015-196107`）里，逐条解出来是：
+   * ```ts
+   *   Row().width('100%').bindSheet(customSleepOpen, {...})
+   *        .height(this.chrome().topBarH)                     // ★ 196068-196079 —— 全 `.pa` 唯一消费点
+   *        .alignItems(VerticalAlign.Center)                  // 196080-196088
+   *        .padding({ left: this.pageSide(), right: this.pageSide() })   // 196089-196106
+   * ```
+   * 档位表（`wujie.pa:93534/93554/93574`）⇒ **FULL 44 / MEDIUM 40 / COMPACT 36**
+   * （手机 `chromeTier` = 2 = FULL ⇒ **44**）。
+   *
+   * ## 本仓原来为什么写成 56，以及那个理由**已被推翻**
+   *
+   * `TopAreaComponent` 原来写死 `.height(56)`，注释给的"不能改"理由是：
+   * > 56 = **内容让位线本身**（`PLAYER_TOP_FALLBACK_VP = 56`），直接换成 44 会**同时**
+   * > 动到让位线与顶栏高度，而让位线被整套形变几何依赖。
+   *
+   * ★★ 2026-10-17（收尾复核）：**这个耦合在本仓代码里并不存在** ——
+   *   · 让位线那一路走的是 **`PLAYER_TOP_FALLBACK_VP`**（`topInsetVp()` → `max(状态栏, 56)`），
+   *     它**从不读** `TOP_BAR_ROW_H_VP`；
+   *   · `TOP_BAR_ROW_H_VP` 的唯一消费者就是本函数，而本函数的唯一消费者是
+   *     `TopAreaComponent.height(...)`（全仓 grep 过）。
+   *   ⇒ 两者只是**数值恰好相同**的**两个独立量**；旧理由把"同值"误当成了"同一量"。
+   *   ⇒ 所以这里可以**直接照搬档位表**（与 `sideSize` / `favSize` / `titleSize` / `artistSize`
+   *     那几个字段的做法完全一致），并且顺带修掉一处**自编值**：
+   *     `56` 其实是从 `design/Index.BAR_H = 56` 借来的，而在无界那边
+   *     **`BAR_H` 是"底栏（HDS 标签栏）高度"**（`设计常量全量解算.md`：「BAR_H = 56 ← 底栏高度」，
+   *     消费者是 `SubPageBar` 的 `CAPSULE_BOTTOM` / `MINI_CAPSULE_H`），**不是播放页顶栏的行高**。
+   *
+   * ## ⚠️ 仍**未**接线的那一半（留给下一轮，别当成已经做完）
+   *
+   * 无界这个顶栏所在的那一层还有一个**锚点**：
+   * `Column().height(winHVp()).padding({ top: padTop(), bottom: padBottom() })`（`wujie.pa:191783-191800`），
+   * 即顶栏的**顶边 = `padTop()`**。本仓那一层用的是
+   * `.padding({ top: windowInfo.statusBarTopVp, bottom: windowInfo.navigationBarBottomVp })`
+   * （`PlaybackPage.ets:4690-4693`）—— 用的是**原始窗口内边距**，而几何侧用的是
+   * `topInsetVp()`（= `max(状态栏, 56) − 盒顶`）与 `padBottomVp()`（= `max(避让, bottomGap)`）。
+   * ⇒ 布局侧与几何侧**不是同一个量**（差到十几 vp），这是**下一轮的独立一项**：
+   *   要改就把那两个 padding 换成 `topInsetVp()` / `padBottomVp()`（与上游同构），
+   *   但它是**可见位移**、且会动到"顶栏那条关闭手势带"的位置 ⇒ 需要一次观感确认，别盲改。
    * @returns 顶栏行高（vp）
    */
   public chromeTopBarH(): number {
-    // ⚠️ 手机档直接返回 `TOP_BAR_ROW_H_VP`（= 改前的 56）。
-    //    MEDIUM / COMPACT 的值已备好（40 / 36），等"内容让位线"与"顶栏行高"解耦后再接。
-    return this.chromeTier === 0 ? 36 : (this.chromeTier === 1 ? 40 : PlayerExpandState.TOP_BAR_ROW_H_VP);
+    // 三档一律取档位表 —— 与上游 `chrome().topBarH` 逐字一致（FULL 44 / MEDIUM 40 / COMPACT 36）。
+    return this.chromeOf().topBarH;
   }
 
   // ─────────────── 无界 `PlayerChrome` 档位表：**尚未接线**的 5 个字段（D4 剩项）───────────────
   //
   // 出处：`wujie.pa:93534/93554/93574`（三档字面量对象），转写见
   //       `RzdMusic记忆.md` §56.26 / §56.29 与 `RzdMusic待确认清单.md` 的 D4。
-  // 已接线（6 项）：`topBarH`（本轮，手机档逐字不变） / `sideSize` / `favSize` /
+  // 已接线（6 项）：`topBarH`（★ 2026-10-17 起**直接取档位表** = 44/40/36；旧理由
+  //               "56 同时是让位线"已被推翻，见 `chromeTopBarH()` 的证据链） / `sideSize` / `favSize` /
   //               `titleSize`（= 封面页 20，配 `metaProgress` 0.75 → 歌词页 15） /
   //               `artistSize`（= 封面页 14 → 歌词页 12） / `metaGap`（= 10vp 那一档口径）。
   // ⚠️ **下面这 5 项不是"忘了"，是"接不了"** —— 每一项都要先动**结构**，不是改一个数：

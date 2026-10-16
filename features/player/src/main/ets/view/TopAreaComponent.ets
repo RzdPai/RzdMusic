@@ -42,14 +42,18 @@ export struct TopAreaComponent {
   /** Window metrics for immersive title padding. */
   @Local windowInfo: WindowInfo = getWindowInfoState();
   /**
-   * 无界 `PlayerChrome` 档位表（只读 `topBarH` 那一项）。
+   * 无界 `PlayerChrome` 档位表（顶栏行高那一项）。
    *
-   * ★★ 2026-10-15（照搬无界）：顶栏行高原来在这里**写死 56**，而 56 是**内容让位线**
-   *   （= 无界 `padTop()` 下限），不是无界的 `topBarH`（FULL 44）。两者混在一处时
-   *   直接换数会同时动到让位线 —— 而让位线被整套形变几何依赖（见
-   *   `PlayerExpandState.chromeTopBarH()` 的注释）。
-   *   ⇒ 这里只把"写死的 56"换成**唯一入口** `chromeTopBarH()`：手机档它恰好返回 56
-   *     （`TOP_BAR_ROW_H_VP`），**逐像素不变**；档位从此只有一处可改。
+   * ★★ 2026-10-15：顶栏行高原来在这里**写死 56**。当时只把"写死的 56"换成唯一入口
+   *   `chromeTopBarH()`（手机档恰好仍返回 56 ⇒ 逐像素不变），理由是"56 同时是内容让位线"。
+   *
+   * ★★★ 2026-10-17（**收尾复核：那个理由被推翻，行高已换成档位表的值**）：
+   *   · 让位线那一路走的是 `PLAYER_TOP_FALLBACK_VP`（`topInsetVp()`），**从不读**行高常量；
+   *   · 行高常量的唯一消费者就是 `chromeTopBarH()`，而本组件的 `.height()` 是它的唯一出口；
+   *   ⇒ 两者只是**数值撞了**（都是 56）的**两个独立量** ⇒ 可以直接照搬上游：
+   *     无界顶栏 Row 就是 `.height(this.chrome().topBarH)`（`wujie.pa:196068-196079`）
+   *     ⇒ 手机档（FULL）**44**。
+   *   ⇒ 视觉影响：本行内容（返回键 / 分享键）**居中** ⇒ 会整体上移 6vp；行本身也变矮 12vp。
    */
   @Local expandState: PlayerExpandState =
     AppStorageV2.connect(PlayerExpandState, AppStorageKeys.PLAYER_EXPAND_STATE,
@@ -86,8 +90,9 @@ export struct TopAreaComponent {
           this.shareCurrentSong();
         })
     }
-    // ★ 2026-10-15：由 `PlayerExpandState.chromeTopBarH()` 给（档位唯一入口）。
-    //   手机档 = `TOP_BAR_ROW_H_VP` = 56 ⇒ **与改前的写死值逐像素相同**。
+    // ★ 2026-10-17：由 `PlayerExpandState.chromeTopBarH()` 给，而它现在**直接取档位表**
+    //   （= 无界 `chrome().topBarH`：FULL 44 / MEDIUM 40 / COMPACT 36）。
+    //   ⇒ 手机档 = **44**（改前是自编的 56 —— 那是 `design/Index.BAR_H`「底栏高度」，借错了）。
     .height(this.expandState.chromeTopBarH())
     .width(StyleConstants.FULL_WIDTH)
     .justifyContent(FlexAlign.SpaceBetween)
