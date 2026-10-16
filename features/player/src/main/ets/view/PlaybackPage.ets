@@ -1098,14 +1098,16 @@ export struct PlaybackPage {
   // ─────────────────────── 封面 + 歌名续飞到歌词页顶部（A2）───────────────────────
 
   /**
-   * 切到歌词页时让**同一张封面 + 歌名**缩小并移到歌词页顶部（对标无界 `floatingCover` /
-   * `floatingMeta`），切回封面页时原路飞回。
+   * ══════════════ 封面 / 歌名浮层的**跨页定位**（对标无界 `floatingCover` / `floatingMeta`）══════════════
+   *
+   * 切到歌词页时让**同一张封面 + 歌名**缩小并移到歌词页顶部，切回封面页时原路飞回 ——
+   * **由 Swiper 的滚动进度逐帧驱动**（不是补间驱动）。
    *
    * ## 为什么是这样（而不是"两页各画一份"）
    *
    * 无界的 `playerPane` 是 `Stack { Swiper{ 封面页 ; 空歌词页 } ; floatingCover ; floatingMeta }`
    * —— 封面与歌名**挂在 Swiper 之外**，切页时是**同一个元素**在动；歌词页那一页本身是个空壳，
-   * 只有 `padding({ top: lyricPadTop() })` 让位。本方法就是"让那个元素动"的驱动。
+   * 只有 `padding({ top: lyricPadTop() })` 让位。
    *
    * ## 三个不变量
    *
@@ -1120,57 +1122,31 @@ export struct PlaybackPage {
    *
    * ⚠️ **歌词怎么画一个字没动**（`LyricsComponent` / `AmllLyricView` 不碰），
    *   这里只动"封面/歌名浮层的跨页定位"与歌词页的顶部留白。
-   * @param toLyric true = 去歌词页，false = 回封面页
+   *
+   * ## ★★★ 2026-10-16（**驱动方式已照搬无界：进度式，不是补间式**）
+   *
+   * 这里原来有一个 `animateLyricMorph(toLyric)`：用 `animateTo(360ms, EaseInOut)` 把
+   * `lyricMorphT` 从 0 补到 1（或反向），并由 `.onAnimationStart` 调用。
+   * **现在它已删除**，理由（每一条都指向无界的原文）：
+   *
+   * ```
+   *   ① 无界**没有这条补间**：它的封面位置直接是 `morph.scaleAt/txAt/tyAt(swiperProgress)`
+   *      —— `swiperProgress` 就是 Swiper 的滚动进度（见 §116.2 的逐条字节码）。
+   *   ② `.onAnimationStart` 那条路带守卫「index === targetIndex ⇒ 跳过」
+   *      ⇒ 只要切页不是"一次真滑动"（程序化切页 / 重挂载初始页不是 0 / 页与状态不一致），
+   *        整套飞行**永远不启动** ⇒ `lyricMorphT` 恒 0 ⇒ 封面恒为大封面。
+   *        **用户 2026-10-16 的截图正是这个形状**（大封面叠着歌词）。
+   *   ③ 删掉之后 `t` 由 `onSwiperContentDidScroll()` **逐帧**写（官方 SDK：
+   *      "invoked ... on a frame-by-frame basis"），**不依赖任何"发生过一次滑动"**。
+   * ```
+   *
+   * ⚠️ 与它一起不再被使用的还有：`lyricSwiperSettled` / `lyricFlightSettled`（那对"两问握手"）
+   *    与 `LYRIC_MORPH_DURATION_MS`。它们**保留为字段/常量**（徽标仍打印前两个），
+   *    但**没有渲染用途** —— 若确认不需要，可以整组删掉。
+   * ⚠️ `lyricMorphVisible` / `lyricMorphOpacity` 现在**只被徽标读**，不再门住任何绘制
+   *    （我把全部消费点清点过：除了赋值点，只有 `refreshDiagText` 在读）。
+   *    ⇒ 所以"标志没被复位"不会造成任何观感问题（这一点是**清点出来的**，不是推断）。
    */
-  private animateLyricMorph(toLyric: boolean): void {
-    const gen: number = ++this.lyricMorphGen;
-    this.lyricMorphTarget = toLyric;
-    this.lyricSwiperSettled = false;
-    this.lyricFlightSettled = false;
-    if (!this.expandState.lyricFloat()) {
-      // 浮层不可用：退回"原生 Swiper 滑动"，不产生任何节点（老行为）。
-      this.lyricMorphVisible = false;
-      this.lyricMorphOpacity = 0;
-      this.lyricFlightSettled = true;
-      Logger.info('RzdLyricFloat', `disabled toLyric=${toLyric} gen=${gen} reason=floatUnusable`);
-      return;
-    }
-    this.lyricMorphVisible = true;
-    this.lyricMorphOpacity = 1;
-    const to: number = toLyric ? 1 : 0;
-    const from: number = this.lyricMorphT;
-    Logger.info('RzdLyricFloat',
-      `flight start toLyric=${toLyric} from=${from.toFixed(3)} to=${to} gen=${gen} ` +
-      `coverSize=${this.expandState.lyricCoverSizeOf().toFixed(1)} ` +
-      `coverY=${this.expandState.lyricCoverYOf().toFixed(1)} ` +
-      `metaY=${this.expandState.lyricMetaYOf().toFixed(1)} ` +
-      `padTop=${this.expandState.lyricPadTop().toFixed(1)}`);
-    // ⚠️ V2 的状态标脏是**异步**的（官方 `arkts-new-applysync-flushupdates-flushuiupdates`）：
-    //   同一任务里"先置 `lyricMorphVisible`、紧接着起 `animateTo`"，首帧可能还按旧值渲染
-    //   ⇒ 浮层会晚一帧才挂上。本文件既有两处同款补丁（`MORPH_INTRO_DELAY_MS` /
-    //   `morphRetryLeft × MORPH_RETRY_MS`），这里用 `setTimeout(0)` 把补间推到下一轮。
-    setTimeout((): void => {
-      if (!this.isAlive || gen !== this.lyricMorphGen) {
-        Logger.info('RzdLyricFloat', `flight abort gen=${gen} stale=${gen !== this.lyricMorphGen}`);
-        return;
-      }
-      this.getUIContext().animateTo({
-        duration: PlaybackPage.LYRIC_MORPH_DURATION_MS,
-        // ⚠️ 曲线**内联**在调用点：`ICurve` 是 `common.d.ts` 里唯一漏写 `declare` 的接口，
-        //   写成"返回 ICurve 的包装函数"过不了编译（见项目记忆 §60.2）。
-        curve: Curve.EaseInOut
-      }, (): void => {
-        this.lyricMorphT = to;
-      });
-      setTimeout((): void => {
-        if (!this.isAlive || gen !== this.lyricMorphGen) {
-          return;
-        }
-        this.lyricFlightSettled = true;
-        this.finishLyricMorph(gen);
-      }, PlaybackPage.LYRIC_MORPH_DURATION_MS + 20);
-    }, 0);
-  }
 
   /**
    * `Swiper.onContentDidScroll` 的处理器 —— **无界的进度源**（逐条照抄）。
@@ -1308,6 +1284,24 @@ export struct PlaybackPage {
    * ⚠️ 这里**不是**把封面一刀切掉：浮层是**常驻**的，落位后仍由 `playbackSwiperIndex`
    * 分支决定它落在哪个端点（歌词页静止态仍然要显示那张小封面 + 歌名）。
    * 原来的写法是 `lyricMorphVisible = false` 无条件写死 ⇒ 整套歌词页封面形变是关着的。
+   *
+   * ## ★★ 2026-10-16（**已判定为死代码，保留不删**）
+   *
+   * 两个理由，都是清点出来的：
+   * 1. 本函数要求 `lyricSwiperSettled && lyricFlightSettled` **两问都到位**；
+   *    而置 `lyricFlightSettled = true` 的**唯一**地方原来在 `animateLyricMorph()` 的收尾
+   *    `setTimeout` 里 —— 那个方法本轮已随"改进度驱动"一起删除（见文件上方那段说明）
+   *    ⇒ `lyricFlightSettled` 永远是 `false`（除非 `syncLyricMorphToPage()` 落定时置真，
+   *      但那条路上 `lyricMorphVisible` 已经被它自己置成 `false`）
+   *    ⇒ 本函数**必然在第一个 `if` 处返回**。
+   * 2. 本函数只写 `lyricMorphVisible` / `lyricMorphOpacity` 两个字段，
+   *    而这两个字段**现在只被徽标读**（全部消费点已清点）⇒ 即使它跑到了也没有渲染影响。
+   *
+   * ⇒ 保留而不删的理由：它是"两问握手"那套设计的收尾端，**若将来恢复补间驱动**
+   *    （例如发现进度驱动在某个机型上不可用）需要它一起恢复；
+   *    删了就得从 git 历史里捞。**它不会有害**（必然早退、且只写徽标读的字段）。
+   * ⚠️ 若确认进度驱动稳定，可以把它 + `lyricSwiperSettled` / `lyricFlightSettled` /
+   *    `LYRIC_MORPH_DURATION_MS` **整组删掉**。
    */
   private finishLyricMorph(gen: number): void {
     if (gen !== this.lyricMorphGen || !this.lyricSwiperSettled || !this.lyricFlightSettled) {
