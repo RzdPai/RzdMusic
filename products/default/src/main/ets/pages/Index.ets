@@ -36,6 +36,8 @@ import {
   PlayerExpandState,
   MorphDrive,
   MorphMetaBridge,
+  // ★ 2026-10-17（照搬无界 `MainPage.__shrink`）：非手势关闭的快照收缩浮层状态
+  MorphShrinkState,
   RouterUrlConstants,
   SdkApiUtil,
   SdkConstants,
@@ -139,6 +141,13 @@ const PLAYER_OVERLAY_Z_INDEX: number = 100;
  * 反编译里克隆层挂在 `MainPage` 的最上层（三个 lambda），比播放页容器更高。
  */
 const PLAYER_CLONE_Z_INDEX: number = 110;
+/**
+ * ★ 2026-10-17：快照收缩浮层（`ShrinkOverlayHost`）的层次 —— **必须比上面所有浮层都高**。
+ *   它代表"正在消失的那一屏播放页"，压在克隆层（110）与迷你条之上才不会被盖住。
+ *   ⚠️ 无界那一侧它也没有专门的 z（`MainPage` 里它排在浮层宿主之后），
+ *     这里显式给一个值只是为了**不依赖声明顺序**。
+ */
+const SHRINK_OVERLAY_Z_INDEX: number = 130;
 
 /**
  * ★ 播放页入口**双轨开关**（施工图第 1 步）。
@@ -267,6 +276,17 @@ struct Index {
   @Local expandState: PlayerExpandState =
     AppStorageV2.connect(PlayerExpandState, AppStorageKeys.PLAYER_EXPAND_STATE,
       () => new PlayerExpandState())!;
+  /**
+   * ★★★ 2026-10-17（照搬无界 `MainPage` 的 `__shrink` + `shrinkPixmap`）：
+   * 「非手势关闭」（关闭按钮 / 系统返回）那一棒的**满窗快照浮层**。
+   *
+   * 无界那一侧这两样都挂在 `MainPage` 上（`wujie.pa:143995` / `144006`），
+   * 渲染点也在 `MainPage`（`162465-162707`）—— 所以本仓同样由**壳层**持握与渲染。
+   * 播放页负责"拍快照 + `start(...)`"（它才知道什么时候要关），壳层负责画。
+   */
+  @Local shrinkState: MorphShrinkState =
+    AppStorageV2.connect(MorphShrinkState, AppStorageKeys.MORPH_SHRINK_STATE,
+      () => new MorphShrinkState())!;
   /** Cached window metrics (safe areas, size) for layout padding. */
   @Local windowInfo: WindowInfo = getWindowInfoState();
   /**
@@ -1147,6 +1167,77 @@ struct Index {
       return;
     }
     this.settlePullOpen(false);
+  }
+
+  /**
+   * ★★★★ 2026-10-17（照搬无界 `MainPage` 的快照收缩浮层，`wujie.pa:162465-162707`）：
+   * 「非手势关闭」= 把播放页根节点的一张**满窗快照**缩到迷你条胶囊，同时淡出。
+   *
+   * ## 为什么必须是这样（用户第 ② 条「有背景但是高度特低」的正解）
+   * 我们原来（以及现在**下拉**那条路仍然）是**动活的播放页**：改裁剪窗口 + 缩放。
+   * 只要"裁剪窗口高度"与"缩放"有一点不同步，屏上就是"有背景、但只剩很矮的一条"。
+   * 无界的非手势关闭**根本不动活页面**：它在 `closeWithAnimation()` 里
+   * `componentSnapshot.get(PLAYER_ROOT_ID, λ)` 拍一张图，然后 `nav.pop(false)` 把页面卸掉，
+   * 再让**这张图**缩下去 ⇒ 图里的背景与封面**同比例一起缩** ⇒ 那种形状**不可能**出现。
+   *
+   * ## 逐条对照（全部直读，见 `MorphShrinkState` 文件头）
+   * ```
+   *   If (shrink.visible && shrinkPixmap !== undefined) {          // 162466-162492
+   *     Column()
+   *       .width('100%')                                            // 162726-162733
+   *       .clip(true)                                               // 162734-162741
+   *       .height(shrink.clipHeight)                                // 162742-162751
+   *       .borderRadius(shrink.radius)                              // 162752-162761
+   *       .scale({ x/y: shrink.scaleValue })                        // 162762-162777
+   *       .translate({ x: shrink.translateX, y: shrink.translateY })// 162778-162793
+   *       .opacity(shrink.opacity)                                  // 162794-162803
+   *       .hitTestBehavior(HitTestMode.None)                        // 162804-162812
+   *       { Image(shrinkPixmap)                                     // 162820-162828
+   *           .width(整窗宽).height(整窗高)                          // 162829-162862（图恒为整窗）
+   *           .objectFit(ImageFit.Cover)                            // 162863-162871
+   *           .syncLoad(true) }                                     // 162872-162879
+   *   }
+   * ```
+   * ⚠️ 那个 `Column` 的宽度是 `'100%'`（= 整窗宽）**且靠父 `Stack` 的左上角对齐**
+   *    —— `MorphShrinkState` 里那组 `endTx/endTy` 正是按"绕自身中心缩放"反解出来的，
+   *    两者是一对，**不要**给它加 `.position()` 或改对齐方式。
+   * ⚠️ 整层不吃事件（关播放器的瞬间，下面的首页要立刻可用）。
+   */
+  @Builder
+  private ShrinkOverlayHost() {
+    if (this.shrinkState.visible && this.shrinkState.pixmap !== undefined) {
+      // ⚠️ 外层 `Stack` 必须是 **`Alignment.TopStart` + 整窗盒**：
+      //   `MorphShrinkState` 那组 `endTx/endTy` 是按"`Column` 未缩放时占 `x∈[0,W], y∈[0,C]`"
+      //   反解出来的（见那个文件头的对账）—— 靠父容器的**左上角对齐**才成立。
+      //   盒尺寸用**实测窗口尺寸**显式给（与另外三个浮层同一处修正：不给就只等于安全区之内那块）。
+      Stack({ alignContent: Alignment.TopStart }) {
+        Column() {
+          Image(this.shrinkState.pixmap)
+            // 图恒为**整窗**（无界 `162829-162862` 就是 `px2vp(windowWidth_px/Height_px)`）
+            .width(this.expandState.windowWidthVp > 0 ?
+              this.expandState.windowWidthVp : StyleConstants.FULL_WIDTH)
+            .height(this.expandState.windowHeightVp > 0 ?
+              this.expandState.windowHeightVp : StyleConstants.FULL_HEIGHT)
+            .objectFit(ImageFit.Cover)
+            .syncLoad(true)
+        }
+        .width(StyleConstants.FULL_WIDTH)
+        .clip(true)
+        .height(this.shrinkState.clipHeight)
+        .borderRadius(this.shrinkState.radius)
+        .scale({ x: this.shrinkState.scaleValue, y: this.shrinkState.scaleValue })
+        .translate({ x: this.shrinkState.translateX, y: this.shrinkState.translateY })
+        .opacity(this.shrinkState.opacity)
+      }
+      .width(this.expandState.windowWidthVp > 0 ?
+        this.expandState.windowWidthVp : StyleConstants.FULL_WIDTH)
+      .height(this.expandState.windowHeightVp > 0 ?
+        this.expandState.windowHeightVp : StyleConstants.FULL_HEIGHT)
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+      .hitTestBehavior(HitTestMode.None)
+      .zIndex(SHRINK_OVERLAY_Z_INDEX)
+      .id('rzd_shrink_overlay_host')
+    }
   }
 
   /**
@@ -2117,6 +2208,11 @@ struct Index {
       if (this.expandState.morphOverlayBridging()) {
         this.MorphCoverClone()
       }
+
+      // ★★★ 2026-10-17（照搬无界 `MainPage` 的 `If (shrink.visible && shrinkPixmap)`）：
+      //   「非手势关闭」那一棒：一张满窗快照缩到迷你条胶囊 + 淡出。
+      //   放在**最上面**（zIndex 130）：它就是"正在消失的那一屏播放页"。
+      this.ShrinkOverlayHost()
 
       // 全局悬浮迷你播放条：只在二级页面渲染（首页那份在 HDS 浮动底栏里）。
       // 条件渲染而不是常驻 + visibility —— 常驻的整屏透明节点会吃掉底栏手势。

@@ -65,12 +65,49 @@ import { Logger } from '../util/Logger';
  *   endTx    = px2vp(capsule.left − (winW − capsule.width) / 2)
  *   endTy    = px2vp(capsule.top  − (capsule.height / endScale − capsule.height) / 2)
  * ```
+ * ★ **本处直接收 vp（不是 px），四个式子的结果逐位相同** —— 证明（设 `k = px/vp`，即 `px2vp(x)=x/k`）：
+ * ```
+ *   endScale' = (k·w_vp)/(k·W_vp) = w_vp/W_vp                        （比值，与 k 无关）
+ *   endClipH' = px2vp(k·h_vp/endScale) = (k·h_vp/endScale)/k = h_vp/endScale
+ *   endTx'    = px2vp(k·x_vp − (k·W_vp − k·w_vp)/2) = x_vp − (W_vp − w_vp)/2
+ *   endTy'    = y_vp − (h_vp/endScale − h_vp)/2
+ * ```
+ * ⇒ 单位统一成 vp 只是**省掉两次 px↔vp 往返**，不是"改算法"。
+ * ⚠️ 本仓的量测（`PlayerExpandState.barWin*`）本来就是 vp，`vp2px` 再 `px2vp` 纯属浪费。
+ *
  * 起始态（`52819-52852`）：
  * ```
- *   scale=1 / translate=(0,0) / clipHeight=px2vp(winH) / radius=34 / opacity=1 / visible=true
+ *   scale=1 / translate=(0,0) / clipHeight=px2vp(winH)=winH_vp / radius=34 / opacity=1 / visible=true
  * ```
  * ⇒ **起始态与"满屏播放页"逐像素对齐**（这一条是这套动画成立的前提：
  *   快照就是满屏那一张，不需要任何"起点对齐"补偿）。
+ *
+ * 宿主节点长什么样（`wujie.pa:162465-162707`，`MainPage` 里那个 `If`）：
+ * ```
+ *   If (shrink.visible && shrinkPixmap !== undefined) {
+ *     Column()
+ *       .width('100%')                       // = 整窗宽（父 Stack 左上角对齐）
+ *       .clip(true)                          // ← 裁剪窗口：宽恒为整窗、高随动画变
+ *       .height(shrink.clipHeight)
+ *       .borderRadius(shrink.radius)
+ *       .scale({ x: shrink.scaleValue, y: shrink.scaleValue })
+ *       .translate({ x: shrink.translateX, y: shrink.translateY })
+ *       .opacity(shrink.opacity)
+ *       .hitTestBehavior(HitTestMode.None)
+ *       { Image(shrinkPixmap)
+ *           .width(px2vp(windowWidth_px)).height(px2vp(windowHeight_px))   // ← 图恒为整窗
+ *           .objectFit(ImageFit.Cover).syncLoad(true) }
+ *   }
+ * ```
+ * ★ 终点几何的正确性可以对账（这也是为什么 `endTx/endTy` 长那个样子）：
+ *   `Column` 未缩放时占 `x∈[0,W], y∈[0,C]`（`C = endClipH = h/s`），
+ *   `scale` 默认**绕自身中心**：
+ * ```
+ *   缩放后宽 = W·s = w        ✓ 等于胶囊宽
+ *   缩放后高 = C·s = h        ✓ 等于胶囊高
+ *   左边界 = W/2 − W·s/2 = (W − w)/2  ⇒ 要落在 x_vp 需 translateX = x_vp − (W − w)/2  ✓ = endTx
+ *   上边界 = C/2 − C·s/2 = (h/s − h)/2 ⇒ 需 translateY = y_vp − (h/s − h)/2        ✓ = endTy
+ * ```
  *
  * ⚠️ **本文件目前还没接线**（没有调用者）—— 见 `RzdMusic记忆.md` §127 的施工图。
  *    写实现与接线**分两步**，是为了让"有回归风险的那一半"单独一轮做。
@@ -145,38 +182,41 @@ export class MorphShrinkState {
   /**
    * 无界 `start(ui, ov, srcBox, onDone)`（`wujie.pa:52716-53001`）。
    *
-   * @param ui UIContext（`px2vp` 与 `animateTo` 用）
+   * ⚠️ **单位**：无界传的是 **px**（`WindowInfo.*_px` + 胶囊的 px 渲染矩形），
+   *    这里传 **vp** —— 见文件头那段代数证明（四个式子的结果逐位相同）。
+   *
+   * @param ui UIContext（`animateTo` 用）
    * @param pixmap 已经拍好的**满窗快照**（调用方在 `componentSnapshot.get` 成功回调里传进来）
-   * @param srcBox 胶囊的**渲染矩形**（px、窗口坐标）—— 无界的 `srcBox`
-   * @param winWidthPx 窗口宽（px）
-   * @param winHeightPx 窗口高（px）
+   * @param srcBoxVp 胶囊的**窗口矩形**（vp）—— 无界的 `srcBox`
+   * @param winWVp 窗口宽（vp）
+   * @param winHVp 窗口高（vp）
    * @param onDone 无界那个 `a5` 回调：`onFinish` 收尾时调一次
    *
-   * ⚠️ `srcBox === undefined` 那一支（`52723-52747`）无界也会走到：它
+   * ⚠️ `srcBox` 量不到那一支（`52723-52747`）无界也会走到：它
    *   `hilog.warn('start skipped: no srcBox')` + `visible = false` + 调 `onDone()`。
    *   本处用"宽或高 ≤ 0"等价表达（ArkTS 的参数不会真的 `undefined`，但量不到时会是 0）。
    */
-  public start(ui: UIContext, pixmap: image.PixelMap, srcBox: MorphShrinkRect,
-    winWidthPx: number, winHeightPx: number, onDone: () => void): void {
-    if (srcBox === undefined || srcBox.width <= 0 || srcBox.height <= 0 ||
-      winWidthPx <= 0 || winHeightPx <= 0) {
+  public start(ui: UIContext, pixmap: image.PixelMap, srcBoxVp: MorphShrinkRect,
+    winWVp: number, winHVp: number, onDone: () => void): void {
+    if (srcBoxVp === undefined || srcBoxVp.width <= 0 || srcBoxVp.height <= 0 ||
+      winWVp <= 0 || winHVp <= 0) {
       Logger.warn(MorphShrinkState.logTag, 'shrink start skipped: no srcBox');
       this.visible = false;
       onDone();
       return;
     }
-    // ── 终点几何（`52748-52818` 逐条转写）
-    const endScale: number = srcBox.width / winWidthPx;
-    const endClipH: number = ui.px2vp(srcBox.height / endScale);
-    const endTx: number = ui.px2vp(srcBox.left - (winWidthPx - srcBox.width) / 2);
-    const endTy: number = ui.px2vp(srcBox.top -
-      (srcBox.height / endScale - srcBox.height) / 2);
+    // ── 终点几何（`52748-52818` 逐条转写，单位 vp）
+    const endScale: number = srcBoxVp.width / winWVp;
+    const endClipH: number = srcBoxVp.height / endScale;
+    const endTx: number = srcBoxVp.left - (winWVp - srcBoxVp.width) / 2;
+    const endTy: number = srcBoxVp.top -
+      (srcBoxVp.height / endScale - srcBoxVp.height) / 2;
     // ── 起始态（`52819-52852`）：与满屏播放页逐像素对齐
     this.pixmap = pixmap;
     this.scaleValue = 1;
     this.translateX = 0;
     this.translateY = 0;
-    this.clipHeight = ui.px2vp(winHeightPx);
+    this.clipHeight = winHVp;
     this.radius = MorphShrinkState.START_RADIUS;
     this.opacity = 1;
     this.visible = true;
@@ -185,7 +225,8 @@ export class MorphShrinkState {
     Logger.info(MorphShrinkState.logTag,
       `shrink START → scale=${endScale.toFixed(3)} clipH=${endClipH.toFixed(2)} ` +
       `tx=${endTx.toFixed(2)} ty=${endTy.toFixed(2)} ` +
-      `(capsule l=${srcBox.left} t=${srcBox.top} ${srcBox.width}x${srcBox.height})`);
+      `(capsule l=${srcBoxVp.left.toFixed(1)} t=${srcBoxVp.top.toFixed(1)} ` +
+      `${srcBoxVp.width.toFixed(1)}x${srcBoxVp.height.toFixed(1)}) win=${winWVp.toFixed(0)}x${winHVp.toFixed(0)}`);
     // ── 两条补间（`52959-52999`）
     //    ① 350ms EaseInOut：缩到胶囊；`onFinish` 收尾（`53056-53089`）
     //    ② delay 260 / 90ms Sharp：淡出（`53045-53051`）

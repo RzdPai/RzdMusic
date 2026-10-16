@@ -14,7 +14,7 @@
  */
 
 // ⚠️ `TextController` 是 ArkUI 的**全局环境类型**（不需要 import，`MusicPlayInfoBlock` 同款）
-import { AppStorageV2, curves, uiObserver, UIUtils, window } from '@kit.ArkUI';
+import { AppStorageV2, componentSnapshot, curves, uiObserver, UIUtils, window } from '@kit.ArkUI';
 import { image } from '@kit.ImageKit';
 import { effectKit } from '@kit.ArkGraphics2D';
 import { common } from '@kit.AbilityKit';
@@ -41,6 +41,9 @@ import {
   PLAYER_BIG_COVER_ID,
   // ★ 2026-10-17（照搬无界 `PLAYER_ROOT_ID`）：非手势关闭要拍快照的那个节点（= 形变容器）
   PLAYER_ROOT_ID,
+  // ★ 2026-10-17（照搬无界 ShrinkOverlay）：非手势关闭的快照收缩浮层
+  MorphShrinkState,
+  type MorphShrinkRect,
   PLAYER_META_TITLE_ID,
   PLAYER_META_SINGER_ID,
   MorphMetaEndpoint,
@@ -2311,7 +2314,12 @@ export struct PlaybackPage {
    */
   @Monitor('expandState.collapseVersion')
   onCollapseRequested(): void {
-    this.closeFullScreenPlayback();
+    // ★★★★ 2026-10-17（照搬无界 `MainPage.closeWithAnimation()` 的非手势分支）：
+    //   这条 Monitor 是**唯一**的"非手势关闭"入口（`guardPlayerBack()` / 壳层 `onBackPress()`
+    //   都走 `expandState.requestCollapse()` ⇒ `collapseVersion++`）。
+    //   下拉那条路**不经过这里**（它直接调 `closeFullScreenPlayback()`）。
+    //   ⇒ 所以这里正好对应无界的 `pullMode === false` 那一支：**拍快照缩图，不动活页面**。
+    this.closeWithAnimation();
   }
   /** Fallback page background tint when art or color pick fails. */
   private static readonly defaultImageBgColor: string = 'rgba(32, 32, 32, 1)';
@@ -3289,6 +3297,97 @@ export struct PlaybackPage {
     this.expandState.freezeMorphMeta(this.getUIContext());
     this.expandState.logMorphOwnership('close-freeze-natural-open');
     Logger.info(PlaybackPage.logTag, 'collapse geometry refreshed while OPEN');
+  }
+
+  /**
+   * ★★★★ 2026-10-17（照搬无界 `MainPage.closeWithAnimation()`，`wujie.pa:171054-171095`）：
+   * **非手势关闭**（关闭按钮 / 系统返回）—— 缩的**不是活页面**，而是**一张满窗快照**。
+   *
+   * ## 无界的原文形状
+   * ```
+   *   closeWithAnimation() {
+   *     if (pullMode && ExpandSnapshot.onReverseMorph(myMorphSnap)) return;   // ① 下拉那条路：自己处理
+   *     getUIContext().getComponentSnapshot().get(PLAYER_ROOT_ID, λ@1*#);     // ② 否则：拍快照
+   *   }
+   *   λ@1*#（wujie.pa:181020-181077）：
+   *     失败 ⇒ hilog.warn('root snapshot failed, fallback: …') + nav.pop()    （无参 = 不带转场）
+   *     成功 ⇒ ExpandSnapshot.onShrinkBack(pixmap, this.mySrcBox) + nav.pop(false)
+   *   onShrinkBack → ShrinkOverlay.start(…)     ← 本仓的 MorphShrinkState
+   * ```
+   *
+   * ## 为什么要照搬（用户第 ② 条「有背景但是高度特低」）
+   * 我们一直是"动活的播放页"（改裁剪窗口 + 缩放）⇒ 只要两者不同步，屏上就是
+   * "有背景、但只剩很矮的一条"。而**缩一张图**时背景与封面**同比例**，那种形状不可能出现。
+   *   ⚠️ 下拉那条路**保留**活页形变（无界的 `onReverseMorph` 就是它）——
+   *     用户已确认「②上拉打开/下拉关闭的封面+背景动画正常」，不动它。
+   *
+   * ## 本仓的映射
+   * ```
+   *   无界 pullMode            ←→ 本处"是不是从下拉那条路来的"：本方法**只被非手势入口调用**
+   *                                 （见 `onCollapseRequested`），所以进来就是 ② 支。
+   *   无界 PLAYER_ROOT_ID      ←→ 本页形变容器上的 `.id(PLAYER_ROOT_ID)`（照搬同一位置）
+   *   无界 mySrcBox            ←→ `expandState.barWinX/Y/W/H`（迷你条胶囊的窗口矩形，vp）
+   *   无界 nav.pop(false)      ←→ `state.isShowPlay = false`（壳层 `popPlayerRoute()` 用的是
+   *                                 `pageIndexInfos.pop(false)` ⇒ 本就**不带转场**）
+   *   无界失败支 nav.pop()     ←→ 同样置 `isShowPlay = false`（我们的 pop 恒无转场 ⇒ 等价）
+   * ```
+   *
+   * ⚠️ `mySrcBox`（胶囊矩形）**只在形变会话建立时量到**（`reportMini` → `barWin*`）。
+   *   量不到时 `MorphShrinkState.start` 会走无界那条 `start skipped: no srcBox` 支
+   *   （`visible=false` + `onDone()`）⇒ 退化成"无动画关闭"，**与无界的退化路径一致**。
+   *   排查关键字：`RzdShrinkOverlay` / `root snapshot failed`。
+   */
+  private closeWithAnimation(): void {
+    if (this.isClosing) {
+      return;
+    }
+    const winW: number = this.expandState.windowWidthVp;
+    const winH: number = this.expandState.windowHeightVp;
+    const srcBox: MorphShrinkRect = {
+      left: this.expandState.barWinX,
+      top: this.expandState.barWinY,
+      width: this.expandState.barWinW,
+      height: this.expandState.barWinH
+    };
+    // 关播放器这一下不要再自动收控制区（与 closeFullScreenPlayback 同一条）
+    this.stopChromeAutoHide();
+    this.isClosing = true;
+    PlaybackPage.lastCloseAtMs = Date.now();
+    PlaybackPage.ev('CLO', `snapshot p=${this.expandState.morphP.toFixed(2)} ` +
+      `bar=${srcBox.width.toFixed(0)}x${srcBox.height.toFixed(0)}`);
+    Logger.info(PlaybackPage.logTag,
+      `RzdShrinkOverlay closeWithAnimation: snapshot ${PLAYER_ROOT_ID} ` +
+      `win=${winW.toFixed(0)}x${winH.toFixed(0)} ` +
+      `bar=(${srcBox.left.toFixed(1)},${srcBox.top.toFixed(1)},` +
+      `${srcBox.width.toFixed(1)}x${srcBox.height.toFixed(1)})`);
+    // ⚠️ 快照必须在**形变开始之前**拍：此刻容器是恒等变换（满屏），拍到的才是"满屏那一张"。
+    componentSnapshot.get(PLAYER_ROOT_ID, (err: BusinessError, pixmap: image.PixelMap): void => {
+      if (err !== null && err !== undefined) {
+        Logger.warn(PlaybackPage.logTag,
+          'RzdShrinkOverlay root snapshot failed, fallback: ' + JSON.stringify(err));
+        PlaybackPage.ev('RST', 'snapFail→pop');
+        // 与无界一致：失败就**直接卸页面**（无转场）。⚠️ 必须放开 `isClosing`，
+        // 否则若这一次 pop 没成功，下拉关闭与关闭按钮会双双永久失效（§123 那类事故）。
+        this.isClosing = false;
+        this.state.isShowPlay = false;
+        return;
+      }
+      const shrink: MorphShrinkState = this.morphShrinkState();
+      shrink.start(this.getUIContext(), pixmap, srcBox, winW, winH, (): void => {
+        Logger.info(PlaybackPage.logTag, 'RzdShrinkOverlay onDone (overlay hidden)');
+        // 浮层收尾（≈350ms）之后再放开闸门：正常路径下那时页面早已被 pop，
+        // 这一句只是"万一没 pop 掉"的自愈（同失败支的理由）。
+        this.isClosing = false;
+      });
+      PlaybackPage.ev('SQZ', `shrink win=${winW.toFixed(0)}x${winH.toFixed(0)}`);
+      this.state.isShowPlay = false;
+    });
+  }
+
+  /** 取得共享的快照收缩状态（与壳层 `Index` 同一个 AppStorageV2 实例）。 */
+  private morphShrinkState(): MorphShrinkState {
+    return AppStorageV2.connect(MorphShrinkState, AppStorageKeys.MORPH_SHRINK_STATE,
+      () => new MorphShrinkState())!;
   }
 
   private closeFullScreenPlayback(): void {

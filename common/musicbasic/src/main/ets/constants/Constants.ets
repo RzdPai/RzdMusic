@@ -263,6 +263,12 @@ public static readonly PLAYBACK_FLOW_LIGHT_STATE: string = 'musichome_PlaybackFl
 public static readonly COVER_TINT_STATE: string = 'musichome_CoverTintState';
   /** {@link PlayerExpandState} (playback page one-shot expand animation). */
   public static readonly PLAYER_EXPAND_STATE: string = 'musichome_PlayerExpandState';
+  /**
+   * ★★★ 2026-10-17（照搬无界 `MainPage.__shrink` + `shrinkPixmap`）：
+   * 非手势关闭那一棒的**浮层状态**（{@link MorphShrinkState}）。
+   * 播放页写（拍快照 + `start`），壳层读（渲染满窗 Image 浮层）⇒ 必须是共享状态。
+   */
+  public static readonly MORPH_SHRINK_STATE: string = 'musichome_MorphShrinkState';
 /** {@link ShowSubLyricState} (lyrics page translation/romanization sub-lines). */
 public static readonly SHOW_SUB_LYRIC_STATE: string = 'musichome_ShowSubLyricState';
 /** {@link LyricFpsState} (lyrics page render frame rate). */
