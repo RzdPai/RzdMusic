@@ -510,6 +510,8 @@ export struct PlaybackPage {
    *   SQZ  = squashLandAnim（挤压起）
    *   RST  = morphReset（几何回恒等）
    *   POPT = 壳层把 isShowPlay 置 false（触发 popPlayerRoute）
+   *   REM  = 壳层真的把播放页路由删掉了（`popPlayerRoute` 里的 `pop/removeByIndexes`）
+   *          ★ **`RST` 与 `REM` 的 `t+` 差**就是"满屏中间态"有多长（用户第 ③ 条的判据）
    *   DIS  = 内容层 onDisappear（附 wasAlive）
    *   AP   = 内容层 onAppear（附走了哪条分支）
    *   INTR = playExpandIntro 起（**若出现在关闭之后，就是"又放一遍展开"的直接证据**）
@@ -525,9 +527,11 @@ export struct PlaybackPage {
    * ```
    * 异常形状与含义：
    * - 出现 **`INTR`**（在 DIS 之后）⇒ 确认是"关闭余波重放展开"；
+   * - 出现 **`OPN`**（在关闭段之后，而用户并没点开）⇒ 壳层把播放页又推了一次；
    * - `SET:genBAD` / `SET:dead` ⇒ 收尾定时器走了早退支（**几何不会复位** ⇒ 背景只剩一条同源）；
    * - **没有 `RST`** ⇒ `morphReset()` 没执行 ⇒ 几何停在中间态；
-   * - `RST` 在 `POPT` **之后** ⇒ 存在"pop 了但几何还是满屏"的中间帧（GLM 的假设）。
+   * - `RST` 在 `REM`（路由真被删掉）**之前超过一帧** ⇒ 存在"pop 了但几何已经满屏"的中间帧
+   *   （GLM 的假设，§123.3 —— 也就是用户第 ③ 条的候选机制）。
    */
   private static evLog: string = '';
   private static evT0: number = 0;
@@ -1542,7 +1546,14 @@ export struct PlaybackPage {
   // ```
   // ⚠️ **它只在连点 3 次之后才出现** ⇒ 正常情况下用户完全看不到，不影响观感。
   // ⚠️ 纯只读：不写任何与动画有关的状态（只写 `diagBadgeOn` / `diagText` 两个本页字段）。
-  @Local private diagBadgeOn: boolean = false;
+  //
+  // ★★★ 2026-10-17（**开关改成跨实例记忆** —— 直接为了"少让用户白跑一轮"）：
+  //   徽标第十三行读的是**静态**事件日志（上一次关闭的全过程），而读完它的姿势是
+  //   「关闭 → **重新打开播放页** → 打开徽标 → 截图」。可 `diagBadgeOn` 原来是**实例局部**的
+  //   ⇒ 每次重新打开都回到"关"，用户得**再连点 3 次**才看得到 —— 多一步就多一次读不到的风险。
+  //   ⇒ 加一个静态镜像：**开一次就一直是开的**（直到再连点 3 次关掉，或进程重启）。
+  private static diagBadgeOnStatic: boolean = false;
+  @Local private diagBadgeOn: boolean = PlaybackPage.diagBadgeOnStatic;
   @Local private diagText: string = '';
   private diagTapCount: number = 0;
   private diagTapLastMs: number = 0;
@@ -1657,6 +1668,9 @@ export struct PlaybackPage {
     if (this.diagTapCount >= 3) {
       this.diagTapCount = 0;
       this.diagBadgeOn = !this.diagBadgeOn;
+      // ★ 2026-10-17：跨实例记忆（见 `diagBadgeOnStatic` 那段）。**必须成对写**：
+      //   只读不写 = 开关永远回到 false（那正是"用户白跑一轮"的形状）。
+      PlaybackPage.diagBadgeOnStatic = this.diagBadgeOn;
     }
   }
 
@@ -3283,9 +3297,16 @@ export struct PlaybackPage {
         this.expandState.squashLandAnim(this.getUIContext());
         PlaybackPage.ev('SQZ');
         this.state.isShowPlay = false;
-        PlaybackPage.ev('POPT');
+        PlaybackPage.ev('POPT',
+          `stage=${this.expandState.morphStage} p=${this.expandState.morphP.toFixed(2)}`);
         this.expandState.morphReset();
-        PlaybackPage.ev('RST');
+        // ★ 记在**复位之后**：要读的正是"复位把几何变成了什么" ——
+        //   `morphP` 回到 1 且相位清成 NONE ⇒ `morphContainerActive()` 翻假 ⇒
+        //   容器不再裁剪/缩放 = **满屏**。若这一笔发生在路由被真正删掉（`REM`）之前，
+        //   中间那段就是用户看到的"突然展开一下才消失"。
+        PlaybackPage.ev('RST',
+          `p=${this.expandState.morphP.toFixed(2)} stage=${this.expandState.morphStage} ` +
+          `cont=${this.expandState.morphContainerActive() ? 1 : 0}`);
       }, morphCloseMs + 20);
       return;
     }

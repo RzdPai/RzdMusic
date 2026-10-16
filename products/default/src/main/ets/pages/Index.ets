@@ -691,10 +691,19 @@ struct Index {
   private popPlayerRoute(): void {
     const idx: number = this.playerRouteIndex();
     if (idx < 0) {
+      PlaybackPage.ev('REM', 'noIdx');
       return;
     }
     const names: string[] = this.pageIndexInfos.getAllPathName();
     Logger.info(RzdShellLogTag, `route: remove player at index=${idx} (top=${names.length - 1})`);
+    // ★★★ 2026-10-16（**关闭过程黑匣子 · 第三笔**）：记"路由真的被删掉了"这一刻。
+    //   为什么必须记：现在关闭链路的收尾是**同一个 tick 里连着做**的 ——
+    //   `isShowPlay=false`（→ 本函数，但 V2 `@Monitor` 是**异步**回调）→ `morphReset()`
+    //   （**同步**把 `morphP` 复位成 1、相位清成 NONE ⇒ 容器不再裁剪/缩放 = 满屏）。
+    //   ⇒ 两者之间只要隔了哪怕一帧，屏上就是"已经缩成小圆点了" → 突然**满屏播放页**
+    //     → 再被 pop 的转场带走。用户报的「动画结束了**突然来个展开播放器的动画**」正是这个形状。
+    //   判读：`RST` 与 `REM` 之间的 `t+` 差 > ~16ms ⇒ 至少有一帧满屏中间态 ⇒ 就是它。
+    PlaybackPage.ev('REM', `idx=${idx} top=${names.length - 1}`);
     if (idx === names.length - 1) {
       this.pageIndexInfos.pop(false);
     } else {
