@@ -1828,7 +1828,11 @@ export struct PlaybackPage {
     const metaTop: number = e.metaTopGeomY(this.lyricMorphT, PlaybackPage.LYRIC_META_ROW_H_VP);
     const metaOld: number = e.metaTopInUseYAt(this.lyricMorphT, PlaybackPage.LYRIC_META_ROW_H_VP);
     const line6: string = `metaTop=${metaTop.toFixed(1)} metaOld=${metaOld.toFixed(1)} ` +
-      `metaD=${(metaOld - metaTop).toFixed(1)} (t=0 期望 −40 / t=1 期望 −3.6)`;
+      `metaD=${(metaOld - metaTop).toFixed(1)} (t=0 期望 −40 / t=1 期望 −3.6) ` +
+      // ★ 2026-10-17：`lBox` = 歌词页内容盒的**窗口顶边**（`reportLyricBoxTop` 喂）。
+      //   `lBox ≈ 0` ⇒ `lyricPadTop` 现在这条"窗口坐标 + 23"的式子**已经**等价于无界的盒内式子 ✓
+      //   `lBox` 明显非 0 ⇒ 要把 `lyricPadTop` 换成 `(浮层底边 − lBox) + 23`（§135，一行）
+      `lBox=${e.lyricBoxTopVp.toFixed(1)}`;
     // ★★★ 2026-10-16（**"歌词页封面没变小"的直接判据**，用户真机截图后加）：
     //   用户实测「这是歌词页，那个封面没变小」⇒ 读数 `t=0.00 edge=331`。
     //   封面尺寸 = `lyricMorph(lyricMorphT).size`，而 `lyricMorphT` 只有 0/1 两个稳定值：
@@ -4130,6 +4134,16 @@ export struct PlaybackPage {
                 }
                 .width(StyleConstants.FULL_WIDTH)
                 .height(StyleConstants.FULL_HEIGHT)
+                // ★★★ 2026-10-17（**为 `lyricPadTop()` 换无界式子补的那一块测量**）：
+                //   上报歌词页内容盒的**窗口顶边**（见 `PlayerExpandState.lyricBoxTopVp` 的推导：
+                //   无界那个 `boxH/2 + bottomYAtLyric` 合起来就是"浮层底边**相对盒顶**"，
+                //   而本仓现在拿**窗口坐标**当盒内相对量用 ⇒ 只在盒顶 ≈ 0 时等价）。
+                //   读法：徽标第六行 `lBox=`。量到 0 ⇒ 现有式子已经对；
+                //   明显非 0 ⇒ 换成盒内相对量（改一行：减掉 `lyricBoxTopVp`）。
+                //   ⚠️ 必须用 `globalPosition`（窗口坐标），`position` 是相对父组件的。
+                .onAreaChange((_oldValue: Area, newValue: Area): void => {
+                  this.expandState.reportLyricBoxTop(areaLengthToVp(newValue.globalPosition.y));
+                })
                 // ★★★ 2026-10-17（照搬无界 `PlayerPage.onLyricSwipe(offsetY)` —— **逐条对齐**）
                 //
                 // 无界（`_recover/logic-src/PlayerPage.abc.txt:6938-6985`，挂在 `LyricsView` 上）：

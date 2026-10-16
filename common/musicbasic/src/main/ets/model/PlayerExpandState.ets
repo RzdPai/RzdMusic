@@ -1080,6 +1080,47 @@ export class PlayerExpandState {
   @Trace public pageBoxTopVp: number = 0;
 
   /**
+   * ★★★ 2026-10-17（**为"`lyricPadTop()` 换无界式子"补的最后一块测量**）：
+   * **歌词页那一棵 `Column`（Swiper 页 1 的内容盒）的窗口顶边**（vp，实测；0 = 还没量到）。
+   *
+   * ## 为什么要它
+   * 无界 `lyricPadTop() = overlayBoxH()/2 + morph.bottomYAtLyric() + 23`
+   * （`wujie.pa:172855-172890`，逐条已解）。把归档笔记那组实测值代进去
+   * （`700/2 + (−175.28) + 23 = 197.72`）反解：
+   * ```
+   *   bottomYAtLyric = −175.28  ⇒  它**不是**窗口坐标（否则浮层跑到屏幕外）
+   *   boxH/2 + bottomYAtLyric = 350 − 175.28 = 174.72
+   *   ⇒ 即"**浮层底边相对盒顶**" —— 也就是那一项度量的是**以盒中心为原点**的 y，
+   *     再靠 `boxH/2` 换算成"从盒顶量起"
+   * ```
+   * ⇒ 那个式子的**本体**就是「浮层底边（相对盒顶） + 23」，与 `.padding({top})` 的口径一致
+   *   （`padding` 本来就是**盒内相对量**）。
+   *
+   * ## 本仓现在差什么
+   * 我们用 `lyricCoverYOf() + lyricCoverSizeOf() + LYRIC_PAD_GAP_VP(23)`，
+   * 即"浮层底边（**窗口**坐标） + 23" ⇒ 两者**只在 `lyricBoxTopVp ≈ 0` 时等价**。
+   * ⇒ 本字段就是判据：**量到 0 就说明我们的式子已经是对的**；
+   *   量到明显非 0 ⇒ 要改成 `(浮层底边 − lyricBoxTopVp) + 23`（一行）。
+   * ⚠️ 这一点与本仓 §56.50 那条"让位量是**相对盒顶**的"是**同一个形状**，
+   *   而 `topInsetVp()` 早就吃过这个亏（当时多让了一个状态栏）⇒ 先量再改。
+   */
+  @Trace public lyricBoxTopVp: number = 0;
+
+  /**
+   * 歌词页内容盒顶边上报（由歌词页那棵 `Column` 的 `onAreaChange` 喂，`globalPosition.y`）。
+   * @param topVp 盒顶（vp，窗口坐标）
+   */
+  public reportLyricBoxTop(topVp: number): void {
+    const v: number = topVp > 0 ? topVp : 0;
+    if (Math.abs(v - this.lyricBoxTopVp) > 0.5) {
+      this.lyricBoxTopVp = v;
+      Logger.info(PlayerExpandState.LOG_TAG,
+        `RzdLyricBoxTop top=${v.toFixed(1)} ⇒ lyricPadTop=${this.lyricPadTop().toFixed(1)} ` +
+        `(overlayBottom=${(this.lyricCoverYOf() + this.lyricCoverSizeOf()).toFixed(1)})`);
+    }
+  }
+
+  /**
    * 播放页页盒顶边上报（由路由壳的 `onAreaChange` 喂，`area.position.y`）。
    * @param boxTopVp 页盒顶（vp，窗口坐标）
    */
@@ -1477,7 +1518,25 @@ export class PlayerExpandState {
   /** 歌词页浮层里「歌名 + 歌手」两行所占高度（vp）。⚠️ 本项目估定值，非逆向值。 */
   private static readonly LYRIC_META_BLOCK_H_VP: number = 44;
   /** 歌词页浮层底边与歌词正文之间的呼吸间距（vp）。⚠️ 本项目估定值，非逆向值。 */
-  private static readonly LYRIC_PAD_GAP_VP: number = 10;
+  /**
+   * 歌词页正文让位的**呼吸间距**（vp）—— 无界 `lyricPadTop()` 里那个字面量 **`+23`**。
+   *
+   * ★★★ 2026-10-17（照搬无界，`wujie.pa:172888`）：`ldai 0x17` = **23**。
+   *   ```ts
+   *     lyricPadTop() {
+   *       if (!this.lyricFloat) return 0;
+   *       const boxH = this.overlayBoxH();
+   *       if (boxH <= 0) return LYRIC_PAD_TOP_FALLBACK;      // 96
+   *       return boxH / 2 + this.morph.bottomYAtLyric() + 23;
+   *     }
+   *   ```
+   * ⚠️ 本仓原来写的是 **10**（自定值）。
+   * ⚠️ 见 `lyricBoxTopVp` 的注释：**这个常量与"盒内相对量"是同一件事的两半** ——
+   *   无界那个 `boxH/2 + bottomYAtLyric()` 合起来就是"**浮层底边相对盒顶**"（推导见那里），
+   *   本仓目前直接给"浮层底边（窗口坐标）+ 本常量"，两者**只在 `lyricBoxTopVp ≈ 0` 时等价**。
+   *   测量已接上（徽标第六行 `lBox=`）⇒ 拿到读数再决定要不要换成盒内相对量。
+   */
+  private static readonly LYRIC_PAD_GAP_VP: number = 23;
   /**
    * 歌词页浮层几何拿不到时的**兜底顶部留白**（vp）。
    *
