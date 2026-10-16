@@ -1510,6 +1510,22 @@ export struct PlaybackPage {
    */
   private diagAppearBranch: string = '-';
   /**
+   * ★★★ 2026-10-16：**背景层自己的实测矩形**（窗口坐标，vp）—— 定位"有背景但高度特低"。
+   *
+   * 为什么单独量它：背景层（`MeshCoverBg` 那个宿主 `Column`）是**形变容器的子节点**，
+   * 而且是 `.height('100%')` + `.position({x:0,y:0})` ⇒ 它的高度**完全由容器决定**。
+   * 用户报「有背景但是**高度特低**」时，三种可能必须分辨：
+   * ```
+   *   ① 容器的裁剪窗口本来就是那么小（`clipH` 读数）⇒ 正常，是动画中段
+   *   ② 背景层的盒子被压成了极小（本读数 `bgH`）  ⇒ 布局问题（百分比链断了）
+   *   ③ 背景层盒子正常但被**淡掉**了（`bg` 不透明度）⇒ 是 `backgroundRevealOpacity()` 的事
+   * ```
+   * 由 `MeshCoverBg` 所在宿主 `Column` 的 `.onAreaChange()` 写（只读，无副作用）。
+   * ⚠️ `onAreaChange` 给的是**布局几何**（不含祖先 transform）⇒ 配合徽标第一行的
+   *    `scale` 才能还原"屏上多高"（= `bgH × scale`）。
+   */
+  @Local private diagBgBox: string = '-';
+  /**
    * 上一次 `onContentDidScroll` 的时间戳（ms）—— **用来让"落定"让位给"逐帧进度"**。
    *
    * ★★★ 2026-10-16（这是本轮必须处理的一处**真实冲突**）：
@@ -1703,7 +1719,19 @@ export struct PlaybackPage {
     //        / skipClose（兜底分支但被"正在关闭"的门拦下，本轮新增）
     //   `ap` = introPaintReady（整页绘制门）
     const line11: string = `ab=${this.diagAppearBranch} ap=${this.introPaintReady ? 1 : 0} ` +
-      `stage=${e.morphStage} exit=${this.expandIntroRunning ? 1 : 0}`;
+      `stage=${e.morphStage} exit=${this.expandIntroRunning ? 1 : 0} bgBox=${this.diagBgBox}`;
+    // ★★★ 2026-10-16（**控制区自证** —— 定位用户第 1 条「有时下方几个按钮也会隐藏」）
+    //   必须能分辨这三种形状（修法完全不同）：
+    //     ① 自动收起（设计行为：无界 `IDLE_MS = 5000`，只在 `isPlay` 时生效）
+    //        ⇒ `cc=1` + `cpr=0` + `chH` 正常 ⇒ **不是 bug**
+    //     ② 被裁掉（容器裁剪窗口把控制区切掉）⇒ `clipH` 很小而 `chH` 正常 ⇒ 是容器几何的事
+    //     ③ 高度塌陷（`lyricChromeHeight` 量成 0 ⇒ `.height(0 * progress)` = 0）
+    //        ⇒ `chH=0` ⇒ 是**量测**的事（`lyricChromeMeasurePending` / `wasConstrained` 那条链）
+    //   `cpr` = lyricChromeProgress（1 = 全出、0 = 全收）；`chH` = lyricChromeHeight；
+    //   `ofs` = chromeOffsetY（收起时下移 46vp）
+    const line12: string = `cc=${this.chromeCollapsed ? 1 : 0} cpr=${this.lyricChromeProgress.toFixed(2)} ` +
+      `chH=${this.lyricChromeHeight.toFixed(0)} ofs=${e.chromeOffsetY().toFixed(0)} ` +
+      `pend=${this.lyricChromeMeasurePending ? 1 : 0} play=${this.state.isPlay ? 1 : 0}`;
     // ★★★ 第五行：**动作轨迹**（最近 6 个动作，按发生顺序 `>` 连接）。
     //   为什么最有用：这条链上"顺序"本身就是自变量的最大值 ——
     //   同一个函数先调还是后调，结果完全不同（§93 的 `onAppear` 误判、§103 的
@@ -1715,7 +1743,7 @@ export struct PlaybackPage {
     //     `…>tween>settleSkip`                                 ⇒ 补间起了但落位被跳过（§104 那类）
     const line5: string = `trace=${e.morphTrace.length > 0 ? e.morphTrace : '(empty)'}`;
     const next: string =
-      `${line1}\n${line2}\n${line3}\n${line4}\n${line5}\n${line6}\n${line7}\n${line8}\n${line9}\n${line10}\n${line11}`;
+      `${line1}\n${line2}\n${line3}\n${line4}\n${line5}\n${line6}\n${line7}\n${line8}\n${line9}\n${line10}\n${line11}\n${line12}`;
     if (next !== this.diagText) {
       this.diagText = next;
     }
@@ -1730,9 +1758,9 @@ export struct PlaybackPage {
       .backgroundColor('rgba(0, 0, 0, 0.78)')
       .padding({ left: 8, right: 8, top: 4, bottom: 4 })
       .borderRadius(6)
-      // ★ 2026-10-16：徽标现在有 **11 行**（…第十行关闭路径读数 / 第十一行 onAppear 分支）
+      // ★ 2026-10-16：徽标现在有 **12 行**（…第十一行 onAppear 分支 / 第十二行控制区自证）
       //   ⇒ `maxLines` 必须够，否则最后一行会被截掉。
-      .maxLines(13)
+      .maxLines(14)
       .position({ x: 8, y: 120 })
       .zIndex(99)
       .hitTestBehavior(HitTestMode.None)
@@ -4611,6 +4639,16 @@ export struct PlaybackPage {
           .height(StyleConstants.FULL_HEIGHT)
           .position({ x: 0, y: 0 })
           .hitTestBehavior(HitTestMode.None)
+          // ★★★ 2026-10-16（**背景层自证** —— 见 `diagBgBox` 的注释）：
+          //   量的是**本层（背景宿主）**的布局矩形。用户报"有背景但高度特低"时：
+          //     · `bgH` 很小而 `clipH` 也小 ⇒ 正常（动画中段，容器就只有那么大）
+          //     · `bgH` 很小而 `clipH` 不小 ⇒ **百分比链断了**（背景没铺满容器）
+          //     · `bgH` 正常 ⇒ 问题在**不透明度**（看 `bg`）或**绘制**（不是布局）
+          .onAreaChange((_oldArea: Area, area: Area): void => {
+            const w: number = areaLengthToVp(area.width);
+            const h: number = areaLengthToVp(area.height);
+            this.diagBgBox = `${w.toFixed(0)}x${h.toFixed(0)}`;
+          })
 
           // ★ 内容层：尺寸恒为 100%（= 裁剪窗口 = 可视矩形 / 缩放），所以永远填满可视矩形
           Column() {        Column() {
