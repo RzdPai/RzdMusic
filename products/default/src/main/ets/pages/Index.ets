@@ -568,6 +568,31 @@ struct Index {
       this.expandState.pullDragging = false;
       this.expandState.morphReset();
     }
+    // ★★★ 2026-10-16（**判据订正：给"上一会话"补一条硬条件**）：
+    //   原来只有上面那条 `pullDragging || morphContainerActive()` 守卫。上一轮把
+    //   `aboutToDisappear()` 里那句无条件 `morphReset()` 加了门（"会话活着就不清"）之后，
+    //   **会话泄漏**变成可能：`morphSessionStarted` 残留为 true，而 `pullDragging` /
+    //   `morphContainerActive()` 都已是假 ⇒ 上面那条守卫**看不见它** ⇒ 下一轮点击
+    //   读到 `isFreshSession = false` ⇒ 走"放弃会话"分支 ⇒ **又没动画**。
+    //
+    //   ⇒ 补一条**硬条件**：`playerRouteIndex() < 0`（播放页路由**不在**栈里）。
+    //     全工程 8 处 `isShowPlay = true` 都**不自己 push**，push 只由本文件的
+    //     `pushPlayerRoute()` 做 ⇒ **"路由不在栈里"就是"上一轮会话已经结束"的硬证据**
+    //     （无论是正常关闭还是被中间打断）。
+    //     ⚠️ 唯一要注意：上拉手势在**首页**起手时路由也还没 push。但那时
+    //       `pullDragging === true` ⇒ 上面那条守卫会先 return（不影响手势）；
+    //       而"点击打开"起手时 `isShowPlay` 刚变 true、`pullDragging` 必为假
+    //       ⇒ 落到这里清一次是安全的（清完 `pullOpenBegin` 立刻重建）。
+    const routeOnStack: boolean = this.playerRouteIndex() >= 0;
+    if (!routeOnStack && this.expandState.morphSessionStarted) {
+      this.expandState.pushMorphTrace('leakClr');
+      Logger.warn(RzdShellLogTag,
+        `open morph: clearing LEAKED session (route not on stack; stage=${this.expandState.morphStage} ` +
+        `drive=${this.expandState.morphDrive} usable=${this.expandState.morphUsable} ` +
+        `geom=${this.expandState.morphGeomReadyNow()})`);
+      this.expandState.pullDragging = false;
+      this.expandState.morphReset();
+    }
     // ★★★ 2026-10-16（**记住"这一轮是不是新会话"**，它决定 `false` 怎么处理）：
     //   `pullOpenBegin()` 把 `morphSessionStarted` 置真的那一步就是"会话建立"。
     //   在它之前读到 false ⇒ 这是**全新一轮**（用户真的要打开播放器）。
