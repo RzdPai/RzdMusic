@@ -818,6 +818,21 @@ export struct PlaybackPage {
    * ⚠️ 我们原来是 **3000**（本仓自定值，无出处）⇒ 这就是"空闲时间不一样"的来源。
    */
   private static readonly CHROME_AUTO_HIDE_MS: number = 5000;
+  /**
+   * 控制区"亮出 / 收起"那条补间的时长（ms）。
+   *
+   * ★★★ 2026-10-17（照搬无界 `PlayerPage.CHROME_ANIM_MS`）：**350**。
+   *   出处：`showChrome()` 与 `hideChrome()` 各自那次 `animateTo(...)` 的 `duration`
+   *   都是 `throw.undefinedifholewithname "CHROME_ANIM_MS"`
+   *   （`logic-src/PlayerPage.abc.txt` 的 11967-11976 与 4210-4219），
+   *   常量值 350 见 `_recover/logic-src/MiniMorph渲染方与顶底栏淡入公式.md:163`
+   *   （`CHROME_ANIM_MS | 350 | 顶栏显隐时长（= D_MAIN）`）。
+   *
+   * ⚠️ 我们原来是 **240 + `Curve.EaseIn`（收起）/ `Curve.EaseOut`（唤出）**，
+   *   是**本仓自定值**（无出处）⇒ 按"不许夹带自编值"改成无界那两个值：
+   *   **350ms + `Curve.EaseInOut`（显、隐同一条曲线）。**
+   */
+  private static readonly CHROME_ANIM_MS: number = 350;
   /** 手机端 Swiper 里「歌词页」的下标（0 = 封面页）。 */
   private static readonly SWIPER_INDEX_LYRIC: number = 1;
 
@@ -1949,16 +1964,48 @@ export struct PlaybackPage {
    */
   private barCollapse: BarCollapse = new BarCollapse();
 
-  /** 记录一次控制区交互：唤出并重置自动收起计时。 */
+  /**
+   * ★★★ 2026-10-17（照搬无界 `PlayerPage.showChrome()`）：**只"亮出控制区"，不重置空闲计时**。
+   *
+   * 出处（`_recover/logic-src/PlayerPage.abc.txt:11942-11982`）：
+   * ```
+   *   showChrome() {
+   *     if (chromeHidden) {
+   *       getUIContext().animateTo({ duration: CHROME_ANIM_MS, curve: Curve.EaseInOut },
+   *                                () => { chromeHidden = false; });   // λ@5*#
+   *     }
+   *   }
+   * ```
+   * ★ 关键：**它里面没有 `startIdle()`**（`hideChrome` 里也没有 `clearIdle()`）。
+   *   也就是说"唤出控制区"与"起空闲计时"是无界里**两件独立的事**，
+   *   要不要起计时由**调用点**决定（见 {@link PlaybackPage.onSwiperIndexChanged} 与
+   *   `onLyricInteract` / `onLyricSwipe`）。我们原来把两者捆成一个 `touchChrome()`，
+   *   于是在"切到封面页"那条路上会**顺手把空闲计时也起起来** —— 与无界相反（那里是 `clearIdle()`）。
+   */
+  private showChrome(): void {
+    if (!this.chromeCollapsed) {
+      return;
+    }
+    this.getUIContext().animateTo({
+      duration: PlaybackPage.CHROME_ANIM_MS,
+      curve: Curve.EaseInOut
+    }, (): void => {
+      this.chromeCollapsed = false;
+      this.lyricChromeProgress = 1;
+    });
+    Logger.info('RzdLyricChrome', `show naturalHeight=${this.lyricChromeHeight}`);
+  }
+
+  /**
+   * 记录一次控制区交互：**唤出 + 重置自动收起计时**。
+   *
+   * 无界里这两件事是分开的（`showChrome()` 与 `startIdle()`），只有
+   * "用户在歌词页上点了/下滑了"这类**真交互**才同时做两件 —— 所以这里保留这个组合入口，
+   * 由调用点自己选（切页那条路只调其中一个，见 `onSwiperIndexChanged`）。
+   */
   private touchChrome(): void {
     this.chromeTouchedAtMs = Date.now();
-    if (this.chromeCollapsed) {
-      this.getUIContext().animateTo({ duration: 240, curve: Curve.EaseOut }, (): void => {
-        this.chromeCollapsed = false;
-        this.lyricChromeProgress = 1;
-      });
-      Logger.info('RzdLyricChrome', `show naturalHeight=${this.lyricChromeHeight}`);
-    }
+    this.showChrome();
     this.scheduleChromeAutoHide();
   }
 
@@ -2103,7 +2150,10 @@ export struct PlaybackPage {
       if (this.isCollapsing()) {
         return;
       }
-      this.getUIContext().animateTo({ duration: 240, curve: Curve.EaseIn }, (): void => {
+      this.getUIContext().animateTo({
+        duration: PlaybackPage.CHROME_ANIM_MS,
+        curve: Curve.EaseInOut
+      }, (): void => {
         this.chromeCollapsed = true;
         this.lyricChromeProgress = 0;
         Logger.info('RzdLyricChrome', `hide auto naturalHeight=${this.lyricChromeHeight}`);
@@ -2114,28 +2164,39 @@ export struct PlaybackPage {
   /**
    * @returns 控制区是否可以"收起来"（自动空闲收起 + 拖动收起共用这一把门）。
    *
-   * ★★★ 2026-10-16（照搬无界 `startIdle`）：**把封面页也纳入**。
+   * ★★★ 2026-10-17（**订正上一轮的一个错结论 —— 它当时只看 `startIdle` 内部，漏了所有调用点**）。
    *
-   * 无界那一侧（`wujie.pa:179903-179942`）：
-   * ```
-   *   startIdle() { clearIdle(); if (!(entryAllowsAuto(lyricImmersive))) return; ... setTimeout(λ, IDLE_MS) }
-   *   λ: idleTimer = -1; hideChrome()
-   * ```
-   * 其中 `entryAllowsAuto(mode)`（`264331`）= `mode === LyricEntryMode.AUTO`；
-   * `lyricImmersive` 是**沉浸歌词**那个模式（我们这一侧没有这个概念）。
-   * ⇒ 无界的门**与"当前在哪一页"无关** ⇒ **封面页也会空闲收起**。
+   * ## 无界的事实：空闲收起**只在歌词页发生**
    *
-   * ⚠️ 我们原来是 `SM 宽度 && 停在歌词页`（本仓自定）⇒ 封面页永远不收。
-   *    现在改成"**手机 Swiper 布局**（`usesPhoneSwiperLayout()`）"——
-   *    · 歌词页：行为与改前**一致**（原来 `canHideLyricChrome()` 在那时才为真）；
-   *    · 封面页：**新增**空闲收起（与无界一致）。
-   *    ⚠️ 宽屏 / 面板那两支**不在本门内**（那两支没有"收起控制区"这套）。
-   *    ⚠️ **回退方式**：若真机上封面页收起观感不对，把本方法改回
-   *      `return this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_SM &&
-   *              this.playbackSwiperIndex === PlaybackPage.SWIPER_INDEX_LYRIC;` 即可（一行）。
+   * 上一轮我读到 `startIdle()`（`PlayerPage.abc.txt:12394-12435`）里那道门是
+   * `entryAllowsAuto(this.lyricImmersive)`，而 `lyricImmersive` 是**用户偏好**
+   * （`wujie.pa:169823-169825`：`this.lyricImmersive = pref.lyricImmersiveMode`）
+   * ⇒ 于是写了「**无界的门与"当前在哪一页"无关 ⇒ 封面页也会空闲收起**」，
+   * 并把本方法放宽到 `usesPhoneSwiperLayout()`。
+   * **那个推论是错的** —— 页面的限制不在 `startIdle` 里，而在**它的每一个调用点**上：
+   *
+   * | 调用点 | 字节码 | 条件 |
+   * | --- | --- | --- |
+   * | swiper `onChange` | `abc.txt:23189-23215` | **`index === 1`（歌词页）⇒ `startIdle()`**；否则 ⇒ `clearIdle() + showChrome()`（**不起计时**） |
+   * | 歌词区触摸抬起前 | `abc.txt:6914-6932`（`onLyricInteract`） | 仅在**歌词页**且 `!chromeHidden` 时 `startIdle()` |
+   * | 歌词区下滑 | `abc.txt:6938-6985`（`onLyricSwipe`，`offsetY ≥ SWIPE_TOGGLE_VP 24`） | 仅在**歌词页**：`showChrome() + startIdle()` |
+   * | 沉浸模式变更 | `abc.txt:7766-7800` | `entryAllowsAuto(mode) && !chromeHidden && swiperProgress > 0.5` |
+   *
+   * ⇒ **四个起点全在歌词页，而切到封面页那一支是显式的 `clearIdle()`**
+   *   ⇒ **无界在封面页不会空闲收起控制区**。
+   *   ★ 而且这正是用户早先报的那一条：「有时**播放页首页**下方几个按钮也会隐藏」——
+   *     封面页隐藏是**我们**带进来的行为，不是无界的。
+   *
+   * ## 现在的判据
+   * 手机 Swiper 布局（封面页/歌词页这套）**且**停在歌词页。
+   * ⚠️ 这与上一轮之前的写法一致（`WIDTH_SM && 歌词页`），差别只是宽度判据换成了
+   *   `usesPhoneSwiperLayout()`（与 `Swiper` 真实是否使用同一口径，更硬）。
+   * ⚠️ 本门是"自动收起 + 拖动收起"共用的 —— 两者按无界也**都只在歌词页**起作用
+   *   （`BarCollapse` 挂在歌词页那套控制区上）。
    */
   private canHideLyricChrome(): boolean {
-    return this.usesPhoneSwiperLayout();
+    return this.usesPhoneSwiperLayout() &&
+      this.playbackSwiperIndex === PlaybackPage.SWIPER_INDEX_LYRIC;
   }
 
   private hideLyricChrome(): void {
@@ -2143,11 +2204,43 @@ export struct PlaybackPage {
       return;
     }
     this.stopChromeAutoHide();
-    this.getUIContext().animateTo({ duration: 240, curve: Curve.EaseOut }, (): void => {
+    this.getUIContext().animateTo({
+      duration: PlaybackPage.CHROME_ANIM_MS,
+      curve: Curve.EaseInOut
+    }, (): void => {
       this.chromeCollapsed = true;
       this.lyricChromeProgress = 0;
     });
     Logger.info(PlaybackPage.logTag, 'lyric chrome hidden: upward gesture');
+  }
+
+  /**
+   * Swiper 换页时的控制区收尾 —— **照搬无界那个 `onChange` λ 的逐字结构**
+   * （`_recover/logic-src/PlayerPage.abc.txt:23189-23215`）：
+   *
+   * ```ts
+   *   const v = 1;                                   // = SWIPER_INDEX_LYRIC
+   *   if (index === v) { startIdle(); }              // 歌词页：起空闲计时（**不**唤出）
+   *   else { clearIdle(); showChrome(); }            // 封面页：停计时 + **唤出**控制区
+   *   this.atLyricScreen = (index === v);
+   * ```
+   *
+   * ⚠️ 我们原来是无条件 `touchChrome()`（= 唤出 **+** 起计时），再在非歌词页补一句
+   *   `stopChromeAutoHide()`。那样在**切到封面页**时是"先起计时再停掉"，
+   *   净效果虽然也对，但与无界"那里根本不唤出 vs 这里会唤出"的差别被抹掉了 ——
+   *   无界切到封面页是**显式唤出**（用户从歌词页滑回来时控制区一定是亮的），
+   *   这一条我们碰巧也对，但**动机不同**，且少了"歌词页那一支不唤出"。
+   *
+   * @param index 新的页下标（0 = 封面页，1 = 歌词页）
+   */
+  private onSwiperIndexChanged(index: number): void {
+    if (index === PlaybackPage.SWIPER_INDEX_LYRIC) {
+      // startIdle：`scheduleChromeAutoHide()` 内部自带"`canHideLyricChrome()` 不成立就不收"
+      this.scheduleChromeAutoHide();
+      return;
+    }
+    this.stopChromeAutoHide();
+    this.showChrome();
   }
 
   /**
@@ -3972,10 +4065,19 @@ export struct PlaybackPage {
                 this.diagChg = `${index}`;
                 this.diagChgCount = this.diagChgCount + 1;
                 this.playbackSwiperIndex = index;
-                this.touchChrome();
-                if (index !== PlaybackPage.SWIPER_INDEX_LYRIC) {
-                  this.stopChromeAutoHide();
-                }
+                // ★★★ 2026-10-17（**照搬无界那个 `onChange` λ 的逐字结构** —— 原来是无条件 `touchChrome()`）
+                //   无界（`_recover/logic-src/PlayerPage.abc.txt:23189-23215`）：
+                // ```
+                //   const v = 1;
+                //   if (index === v) { startIdle(); }            // 歌词页：只起空闲计时
+                //   else { clearIdle(); showChrome(); }          // 封面页：停计时 + 唤出控制区
+                //   this.atLyricScreen = (index === v);
+                // ```
+                //   ⇒ 两个关键差别（都被我们原来那句 `touchChrome()` 抹掉了）：
+                //     ① 切到**歌词页**不唤出控制区（`touchChrome()` 会唤出）；
+                //     ② 切到**封面页**要**显式唤出**并**停掉**空闲计时
+                //        （`touchChrome()` 是"先起计时再停掉"，净效果同，但少了那条语义）。
+                this.onSwiperIndexChanged(index);
               })
 
               // ★★★ 2026-10-16（照搬无界）：**控制区三段结构的两根占位条**。

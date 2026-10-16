@@ -558,39 +558,55 @@ struct Index {
     //   ⚠️ 原注释（本文件 4332-4336 行）已经点出这个形状会导致
     //     「**点击打开又退化成派音旧动画**」，但它只给 `dismissMorphActive` 做了自愈，
     //      **这条守卫本身没做**。⇒ 这就是"点了没动画"里最难复现的那一种。
-    // ★★★ 2026-10-17（**判据订正：`isShowPlay` 在这里恒为真 ⇒ 上面那条自愈其实是死代码**）：
-    //   原来读的是 `this.appState.isShowPlay`（原来的 `wasAlreadyShown`）。
-    //   但**本函数的唯一调用点**就在 `@Monitor('appState.isShowPlay')` 的 `if (isShowPlay)` 支里
-    //   ⇒ 走到这一行时 `isShowPlay` **必然已经是 true** ⇒ 那个判据**恒真**
-    //   ⇒ `staleClr` 那条自愈**永远走不到**：只要相位残留 `ENTERING/LEAVING/LANDING`，
-    //     这一次打开就被判成"重复触发" ⇒ `return false` ⇒ **打开没有形变动画**
-    //     （正是用户报过的那条，也是"关闭后立刻再打开没动画"的成因）。
+    // ★★★ 2026-10-17（**判据订正 · 第二次**：第一版把**上拉手势**打断了 —— 用户实测「上滑不能自由了」）
     //
-    //   ⇒ 换成**硬判据** `playerRouteIndex() >= 0`（"播放页路由还在栈里"）：
-    //     它与下面 `leakClr` 那条是**同一个口径**，而代码自己在那段注释里已经论证过
-    //     「全工程 8 处 `isShowPlay = true` 都**不自己 push**，push 只由 `pushPlayerRoute()` 做
-    //       ⇒ 路由不在栈里就是上一轮会话已经结束的**硬证据**」。
-    //   ⚠️ 为什么这条现在是**必需**的（不再只是可选清理）：
-    //     本轮把关闭收尾的 `morphReset()` 改成了"**等 pop 之后再复位**"
+    // ## 第一版错在哪（必须记下来）
+    //   第一版把判据从 `this.appState.isShowPlay`（恒真）换成 `playerRouteIndex() >= 0`，
+    //   用意是让 `staleClr` 自愈真的能跑到。但**上拉打开这条路也走本函数**：
+    //   ```ts
+    //   // 壳层 onPullOpenStart：
+    //   this.expandState.pullDragging = false;
+    //   const morphOk = this.expandState.pullOpenBegin(...);   // ← 里面把 pullDragging 置 true
+    //   if (!this.appState.isShowPlay) { this.appState.isShowPlay = true; }   // ← 触发本 Monitor
+    //   ```
+    //   ⇒ 走到这里时 `pullDragging === true`（手指正在驱动）而**路由还没 push**
+    //     ⇒ 新判据算出 `routeOnStack === false` ⇒ 落进 `staleClr` 支
+    //     ⇒ **`pullDragging = false` + `morphReset()`** ⇒ 跟手会话被自己掐死
+    //     ⇒ 「上滑不能自由了」。(旧代码判据恒真 ⇒ 走 `skip` ⇒ 歪打正着地护住了手势。)
+    //
+    // ## 订正后的结构（**两件事分开判**，这才是原注释真正想表达的意思）
+    //   · 原注释自己写着「上拉手势在首页起手时路由还没 push。但那时 `pullDragging === true`
+    //     ⇒ 上面那条守卫会先 return（不影响手势）」—— **"手指在驱动就放行"是原有意图**，
+    //     只是被恒真的标志实现坏了。
+    //   · 所以：**`pullDragging === true` ⇒ 一律放行（那是活会话，不是残留）**；
+    //     只有"相位残留**且**没有手指在驱动"才轮到判"是不是真已经在播放页里"。
+    //   ⚠️ 第二层判据仍用**硬读数** `playerRouteIndex() >= 0`（与下面 `leakClr` 同口径）——
+    //     因为 `isShowPlay` 在唯一调用点上必然已是 true，读它等于没判。
+    //   ⚠️ 这一层是必需的：本轮把关闭收尾的 `morphReset()` 改成"等 pop 之后再复位"
     //     （`PlaybackPage.scheduleMorphResetAfterPop`，见 `RzdMusic记忆.md` §125）
-    //     ⇒ 关闭后到复位前那一小段里相位**仍是 `LANDING`**。
-    //     若判据还是恒真的那个，用户在那一小段里点开就会**丢动画**。
-    const showAlreadyRequested: boolean = this.playerRouteIndex() >= 0;
-    if (this.expandState.pullDragging || this.expandState.morphContainerActive()) {
-      if (showAlreadyRequested) {
-        // 真的"已经在播放页里"（重复触发）⇒ 保持原行为：让给已有会话
+    //     ⇒ 关闭后到复位前那一小段相位仍是 `LANDING`；点开时必须能清掉它。
+    if (this.expandState.pullDragging) {
+      // 手指正在驱动（上拉/下拉跟手）：**活会话**，谁也别动它
+      this.expandState.pushMorphTrace('skip');
+      Logger.info(RzdShellLogTag,
+        `open morph: skip (finger driving; stage=${this.expandState.morphStage} ` +
+        `routeOnStack=${this.playerRouteIndex() >= 0 ? 1 : 0})`);
+      return false;
+    }
+    if (this.expandState.morphContainerActive()) {
+      // 相位残留但没有手指在驱动 ⇒ 判"用户是不是真的已经在播放页里"
+      if (this.playerRouteIndex() >= 0) {
+        // 真的已经在播放页里（重复触发）⇒ 保持原行为：让给已有会话
         this.expandState.pushMorphTrace('skip');
         Logger.info(RzdShellLogTag,
-          `open morph: skip (pullDragging=${this.expandState.pullDragging} ` +
-          `stage=${this.expandState.morphStage} routeOnStack=1)`);
+          `open morph: skip (already in player; stage=${this.expandState.morphStage})`);
         return false;
       }
       // 残留垃圾 + 用户确实要打开 ⇒ **先清干净再继续**
       this.expandState.pushMorphTrace('staleClr');
       Logger.warn(RzdShellLogTag,
-        `open morph: clearing STALE session (pullDragging=${this.expandState.pullDragging} ` +
-        `stage=${this.expandState.morphStage} drive=${this.expandState.morphDrive} routeOnStack=0)`);
-      this.expandState.pullDragging = false;
+        `open morph: clearing STALE session (stage=${this.expandState.morphStage} ` +
+        `drive=${this.expandState.morphDrive} routeOnStack=0)`);
       this.expandState.morphReset();
     }
     // ★★★ 2026-10-16（**判据订正：给"上一会话"补一条硬条件**）：

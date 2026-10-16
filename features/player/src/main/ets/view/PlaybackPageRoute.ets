@@ -166,22 +166,31 @@ struct PlaybackPageRouteShell {
     //   判据用 `morphContainerActive()`（stage ∈ ENTERING/LEAVING/LANDING）而不是
     //   `effT()>=1`：两者语义等价（形变中为真、落位后为假），而前者在本仓已有稳定实现。
     .backgroundColor(this.expandState.morphContainerActive() ? Color.Transparent : PlaybackPageRouteShell.REST_BG)
-    // ★★ 2026-10-16（修用户实测「**无界关闭播放器后播放条会弹，派音光文字弹一下背景不会**」）
+    // ★★★ 2026-10-17（**删掉这里那条 `.scale({y: morphSquashY})` —— 它是本仓自创的消费点**）
     //
-    // 无界的胶囊是**自绘**的：`MiniPlayer` 的 `Row` 自己带背景，`scale.y` 一乘**连背景一起压**。
-    // 我们这条首页迷你条挂在 **HDS 浮动底栏**的 `miniBar` 槽里：
-    //   · `HomeMiniBarPlayer` 的根 `Row` 是**透明**的（`.backgroundColor` 从来没设过）；
-    //   · 背景是 **HDS 自己画的背板**（在 `miniBar` 槽之下，不在我们的子树里）。
-    // ⇒ 给那个 `Row` 加 `.scale({y: morphSquashY})` **只能压到里面的内容**，背板纹丝不动
-    //   —— 这正是"**光文字弹一下**"的机制。
+    // 上一轮为了让"关闭落位那一记弹"连背景一起压，把 `morphSquashY` 挂到了**路由壳**这一层
+    // （播放页的绘制层）。**无界没有这个消费点**：
+    //   · `SQUASH_Y = 0.86` 真正消费在**迷你条胶囊**的 `scaleY` 弹簧上
+    //     （`MainPage`；见 `RzdMusic记忆.md` §56.33 / 待确认清单 E1，
+    //      声明 `wujie.pa:198175-198192`、唯一使用点 `176560-176579`）；
+    //   · `PlayerPage` 只把 `morphSquashing` 当**布尔绘制门**读
+    //     （`pullPaintable()`：`!pullGeomReady ? true : !morphSquashing`），**从不拿它做缩放**。
     //
-    // ⇒ 本处把同一个 `morphSquashY` 挂到**路由壳这一层**（播放页的绘制层）。
-    //   关闭落位那一刻播放页已经缩成"迷你条那么小的一块"，所以这一压**观感上就是
-    //   "整块连同背景一起弹一下"**，与无界的胶囊挤压对齐。
-    //   ⚠️ `morphSquashY` 静止态**恒为 1** ⇒ 对静止版面与展开动画**零影响**；
-    //     它只在 `squashLandAnim()`（关闭落位 110ms + 320ms 回弹）期间偏离 1。
-    //   ⚠️ 别在这里再加 `.animation(...)`：补间由 `squashLandAnim()` 的 `animateTo` 起。
-    .scale({ x: 1, y: this.expandState.morphSquashY })
+    // ## 为什么它有害（这就是用户第 ③ 条「关闭后突然来个展开动画」的候选机制）
+    //   关闭落位那一 tick 的顺序是
+    //   `morphLand()` → `squashLandAnim()`（起 110ms 压 + 320ms 回弹）→ `isShowPlay = false`（→ pop）
+    //   ⇒ 路由壳在被 pop 之前的那 1~2 帧里，正被 `.scale({x:1, y:0.86})` 压着，
+    //     而**整个播放页（含背景、含裁剪窗口）都在这个壳里** ⇒ 那 1~2 帧屏上是
+    //     "一幅被纵向压扁/回弹的播放页" ⇒ 观感正是"**突然又来一下展开/弹动**"。
+    //   ⚠️ 而它在**静止态恒为 1**，所以删掉它对静止版面与展开动画**零影响**
+    //     （这一条上一轮的注释里也写了）。
+    //   ⚠️ 迷你条那一份消费点**保留**（`HomeMiniBarPlayer` / `MiniBarPlayer` 的
+    //     `.scale({x:1, y: morphSquashY})`）—— 那才是无界对应的那个（用户确认过的 ⑥）。
+    //   ⚠️ `PlaybackPage.morphOpacityValue()` 里那处只读判断（`morphSquashY !== 1` 的诊断位）保留。
+    //
+    // 复核命令：`grep -rn 'morphSquashY' RzdMusic --include=*.ets`
+    //   期望：写入处只有 `PlayerExpandState.squashLandAnim()`；
+    //         消费处只有迷你条那两个（`HomeMiniBarPlayer` / `MiniBarPlayer`）+ 诊断位。
     // ⚠️ 2026-10-15：本层的 `.expandSafeArea(...)` 已**移走** —— 安全区的两个属性统一写在
     //   **页根（`HdsNavDestination`）**上（见那个 builder 里的注释）。
     //   理由：写两层会与外壳容器打架（`PlaybackPage.ets` L3247 那条"写错地方反而留白更大"
