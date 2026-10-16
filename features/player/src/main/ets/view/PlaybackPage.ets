@@ -840,6 +840,28 @@ export struct PlaybackPage {
   private static readonly CHROME_ANIM_MS: number = 350;
   /** 手机端 Swiper 里「歌词页」的下标（0 = 封面页）。 */
   private static readonly SWIPER_INDEX_LYRIC: number = 1;
+  /**
+   * 歌词区**上下滑切换控制区**的阈值（vp）—— 照抄无界 `SWIPE_TOGGLE_VP`。
+   *
+   * 出处：`PlayerPage.onLyricSwipe`（`_recover/logic-src/PlayerPage.abc.txt:6942` 的
+   * `throw.undefinedifholewithname "SWIPE_TOGGLE_VP"`，以及**高支**的字面量
+   * `6974 ldai 0x18` = **24**）；归档常量表 `MiniMorph渲染方与顶底栏淡入公式.md:171`
+   * 同样记着 `SWIPE_TOGGLE_VP | 24`。
+   * ⚠️ 本仓原来写的是 **12**（自定的一半）⇒ 太容易误触（本层是 `parallelGesture`）。
+   */
+  private static readonly SWIPE_TOGGLE_VP: number = 24;
+  /**
+   * 歌词区**上滑隐藏控制区**那一支是否放开 —— 对应无界的 `entryAllowsManual(lyricImmersive)` 门。
+   *
+   * 无界：`entryAllowsManual(mode) = mode === MANUAL || mode === BOTH`，而
+   * `LyricEntryMode` 默认档是 **AUTO**（`歌词页浮层封面与歌名定稿.md` §1：OFF0 / AUTO1 / MANUAL2 / BOTH3）
+   * ⇒ **默认档下"上滑隐藏"什么都不做**（那一支整段被门挡住）。
+   * 本仓没有这个用户设置（面板里没有"沉浸歌词模式"这一项）⇒ 取**默认**行为。
+   *
+   * ⚠️ **改回 true 就是"上滑隐藏控制区"重新生效**（一行）；已在
+   *   `RzdMusic待确认清单.md` 第 33 条里明确问你"要不要这个手势"。
+   */
+  private static readonly LYRIC_SWIPE_ALLOWS_MANUAL: boolean = false;
 
   /**
    * "滚动仍在进行"的判定窗（ms）—— 见 `lastScrollAtMs` 的注释。
@@ -4108,11 +4130,38 @@ export struct PlaybackPage {
                 }
                 .width(StyleConstants.FULL_WIDTH)
                 .height(StyleConstants.FULL_HEIGHT)
+                // ★★★ 2026-10-17（照搬无界 `PlayerPage.onLyricSwipe(offsetY)` —— **逐条对齐**）
+                //
+                // 无界（`_recover/logic-src/PlayerPage.abc.txt:6938-6985`，挂在 `LyricsView` 上）：
+                // ```ts
+                //   onLyricSwipe(offsetY) {
+                //     if (offsetY <= -SWIPE_TOGGLE_VP) {                 // ← 上滑
+                //       if (entryAllowsManual(this.lyricImmersive)) {   // ← ★ 这一支**有门**
+                //         hideChrome(); clearIdle();
+                //       }
+                //     } else if (offsetY >= 24) {                        // ← 下滑（字面量 0x18 = 24）
+                //       showChrome(); startIdle();                       // ← 这一支**无门**
+                //     }
+                //   }
+                // ```
+                // ★ 两处与原实现的差别（都已按字节码订正）：
+                //   ① 阈值：我们原来写的是 **12**（本仓自定的一半），无界**两侧都是 24**
+                //      （低支走 `SWIPE_TOGGLE_VP`、高支是字面量 `ldai 0x18`；
+                //        归档常量表 `MiniMorph渲染方与顶底栏淡入公式.md:171` 也是 `SWIPE_TOGGLE_VP | 24`）。
+                //      ⚠️ 12 太容易误触（本层是 `parallelGesture`，歌词一往上拖就够 12vp）。
+                //   ② 上滑那一支在无界里**带 `entryAllowsManual` 门**，而
+                //      `entryAllowsManual(mode) = mode === MANUAL || mode === BOTH`，
+                //      默认档是 **AUTO**（`LyricEntryMode` 4 档：OFF0/AUTO1/MANUAL2/BOTH3，
+                //      见 `歌词页浮层封面与歌名定稿.md` §1）⇒ **默认档下上滑什么都不做**。
+                //      本仓没有这个用户设置 ⇒ 只能取**默认**行为（见 `LYRIC_SWIPE_ALLOWS_MANUAL`）。
+                //   ⚠️ 下滑那一支在无界里**没有门** ⇒ 我们无条件保留（`showChrome` + 起计时）。
                 .parallelGesture(PanGesture({ direction: PanDirection.Vertical })
                   .onActionUpdate((event: GestureEvent): void => {
-                    if (event.offsetY < -12) {
-                      this.hideLyricChrome();
-                    } else if (event.offsetY > 12) {
+                    if (event.offsetY <= -PlaybackPage.SWIPE_TOGGLE_VP) {
+                      if (PlaybackPage.LYRIC_SWIPE_ALLOWS_MANUAL) {
+                        this.hideLyricChrome();
+                      }
+                    } else if (event.offsetY >= PlaybackPage.SWIPE_TOGGLE_VP) {
                       this.touchChrome();
                     }
                   }))
