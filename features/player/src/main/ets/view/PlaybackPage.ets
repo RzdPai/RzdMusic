@@ -499,6 +499,15 @@ export struct PlaybackPage {
   private static lastCloseAtMs: number = 0;
 
   /**
+   * ★ 2026-10-17：上一次关闭**走了退化路径**的原因（短标签；空 = 没走退化）。
+   *
+   * 由 `closeLiveMorphFallback()` 写、`closeFullScreenPlayback()` 的 `ev('CLO', …)` 读并**清空**
+   * ⇒ 徽标第十三行的 `CLO:… fb=<原因>` 就是"这次返回关闭走的是快照还是活页"的直接读数。
+   * ⚠️ 只在"退化那一次"有值，读完即清（否则会被当成常驻状态）。
+   */
+  private static closeFallbackReason: string = '';
+
+  /**
    * ★★★ 2026-10-16（**关闭过程的时序"黑匣子"** —— 打破"没有设备读数"的僵局）
    *
    * ## 为什么必须做成"跨实例静态锁存"
@@ -3438,6 +3447,15 @@ export struct PlaybackPage {
     this.stopChromeAutoHide();
     this.isClosing = true;
     PlaybackPage.lastCloseAtMs = Date.now();
+    // ★★★ 2026-10-17（**快照路径可用性预检** —— 见 `closeLiveMorphFallback` 的分歧说明）
+    //   两个前提：① 胶囊矩形（`srcBox`）量到了；② 窗口尺寸有值（`MorphShrinkState.start`
+    //   的两端公式都吃它）。任一不成立就直接走退化路径，**不去拍那张注定没用的快照**。
+    if (srcBox.width <= 0 || srcBox.height <= 0 || winW <= 0 || winH <= 0) {
+      this.closeLiveMorphFallback(
+        `noSrcBox meas=${measured ? 1 : 0} bar=${srcBox.width.toFixed(0)}x${srcBox.height.toFixed(0)} ` +
+        `win=${winW.toFixed(0)}x${winH.toFixed(0)}`);
+      return;
+    }
     PlaybackPage.ev('CLO', `snapshot p=${this.expandState.morphP.toFixed(2)} ` +
       `meas=${measured ? 1 : 0} bar=${srcBox.width.toFixed(0)}x${srcBox.height.toFixed(0)}`);
     Logger.info(PlaybackPage.logTag,
@@ -3457,18 +3475,26 @@ export struct PlaybackPage {
       //   ⚠️ `morphLand()` 把相位置 `LANDING`，但此刻 `morphP = 1`（刚 `refreshCollapseGeometry`
       //      刷过）⇒ 容器 `.height(morphClipHeight)` = 整窗、`scale = 1` = **恒等**
       //      ⇒ 零观感变化；何况那 1~2 帧上面还盖着不透明的快照浮层。
-      this.restorePlaybackWindowChrome();
-      this.expandState.morphLand();
+      //   ⚠️ **失败支不进这一对**（它要走退化路径，那时 `morphLand()` 会把相位提前翻掉，
+      //      而 `closeFullScreenPlayback()` 需要从"还在展开态"起手）⇒ 见下面 `if` 的位置。
       if (err !== null && err !== undefined) {
         Logger.warn(PlaybackPage.logTag,
           'RzdShrinkOverlay root snapshot failed, fallback: ' + JSON.stringify(err));
-        PlaybackPage.ev('RST', 'snapFail→pop');
-        // 与无界一致：失败就**直接卸页面**（无转场）。⚠️ 必须放开 `isClosing`，
-        // 否则若这一次 pop 没成功，下拉关闭与关闭按钮会双双永久失效（§123 那类事故）。
-        this.isClosing = false;
-        this.state.isShowPlay = false;
+        // ★★★ 2026-10-17（**本仓刻意的分歧点**）：无界的失败支是 `nav.pop()`（无转场），
+        //   我们这里退回**本仓既有的活页形变**（`closeFullScreenPlayback()`）。理由：
+        //   · 无界拍的是 `PLAYER_ROOT_ID`（一个普通 Stack）；我们拍的是 **`NavDestination(DIALOG)`
+        //     里的节点**，这条渲染路径是**我们特有的** ⇒ 一旦 `componentSnapshot` 在这条路上
+        //     系统性取不到图，**每一次返回关闭**都会退化成"页面直接消失" ——
+        //     那是比"背景只剩一条"严重得多的可见回归；
+        //   · 活页形变本身是**已被用户确认可用**的那一套（②「上拉打开/下拉关闭的封面+背景动画正常」），
+        //     退回去最坏也只是回到原来的观感瑕疵。
+        //   ⚠️ 失败原因照旧打 `Logger.warn`，并把原因带进事件日志（`CLO` 的 `fb=`），
+        //     **一次截图即可判读**（见 `closeFallbackReason`）。
+        this.closeLiveMorphFallback(`snapFail`);
         return;
       }
+      this.restorePlaybackWindowChrome();
+      this.expandState.morphLand();
       const shrink: MorphShrinkState = this.morphShrinkState();
       shrink.start(this.getUIContext(), pixmap, srcBox, winW, winH, (): void => {
         Logger.info(PlaybackPage.logTag, 'RzdShrinkOverlay onDone (overlay hidden)');
@@ -3487,6 +3513,38 @@ export struct PlaybackPage {
       () => new MorphShrinkState())!;
   }
 
+  /**
+   * ★★★ 2026-10-17：快照路径不可用时的**退化出口** —— 退回本仓既有的"活页形变"关闭。
+   *
+   * ## 这是与无界的**一处刻意分歧**（记在案，别再当作"没照搬"）
+   * 无界 `λ@1*#`（`wujie.pa:181020-181077`）在快照失败时是 `nav.pop()`（**无参 = 不带转场**），
+   * 也就是"页面直接消失"。我们**不**照搬那一条，理由两条：
+   * 1. 拍的对象不同：无界拍 `PLAYER_ROOT_ID`（一个普通 `Stack`），我们拍的是
+   *    **`NavDestination(DIALOG)` 里的节点** —— 这条渲染路径**是我们特有的**；
+   *    一旦 `componentSnapshot` 在这条路上系统性取不到图，**每一次返回关闭**都会退化成
+   *    "页面直接消失"，那是**比"背景只剩一条"严重得多**的可见回归；
+   * 2. 活页形变是**用户已确认可用**的那一套（确认清单 ②「上拉打开/下拉关闭的封面+背景动画正常」），
+   *    退回去最坏也只是回到原来那点观感瑕疵。
+   *
+   * ## 触发条件（两处调用点）
+   * · `closeWithAnimation()` 的**预检**：胶囊矩形 / 窗口尺寸任一不可用（`bar=0x0`），
+   *   此时连快照都不去拍（拍了也没用）；
+   * · 快照回调的**失败支**（`err` 非空）。
+   *
+   * ## 可读性
+   * 原因写进静态 `closeFallbackReason`，由 `closeFullScreenPlayback()` 的 `ev('CLO', …)`
+   * 一起打进事件日志（徽标第十三行的 `fb=`）⇒ **一次截图就能看出走没走退化**。
+   * @param reason 退化原因（短标签，会进事件日志）
+   */
+  private closeLiveMorphFallback(reason: string): void {
+    Logger.warn(PlaybackPage.logTag,
+      `RzdShrinkOverlay fallback → live morph (${reason})`);
+    PlaybackPage.closeFallbackReason = reason;
+    // `closeFullScreenPlayback()` 的第一道闸就是 `isClosing`，必须放开才进得去。
+    this.isClosing = false;
+    this.closeFullScreenPlayback();
+  }
+
   private closeFullScreenPlayback(): void {
     if (this.isClosing) {
       return;
@@ -3497,7 +3555,12 @@ export struct PlaybackPage {
     //   两处成对（上一轮只有读、没有写 ⇒ 门恒假）。
     PlaybackPage.lastCloseAtMs = Date.now();
     // ★ 时序黑匣子：本次关闭开始（见 `evLog` 的注释）
-    PlaybackPage.ev('CLO', `gen=${this.closeGen + 1} p=${this.expandState.morphP.toFixed(2)}`);
+    //   ★ 2026-10-17：`fb=` = 这一次是**从快照路径退化过来的**（见 `closeFallbackReason`），
+    //   读完即清 ⇒ `fb=` 空 = 走的快照路径；`fb=snapFail` / `fb=noSrcBox …` = 走了活页形变。
+    const fb: string = PlaybackPage.closeFallbackReason;
+    PlaybackPage.closeFallbackReason = '';
+    PlaybackPage.ev('CLO', `gen=${this.closeGen + 1} p=${this.expandState.morphP.toFixed(2)}` +
+      (fb.length > 0 ? ` fb=${fb}` : ''));
     // ★★ P0-2：本轮关闭的**独立代次** + 取消上一轮可能还挂着的卸载定时器。
     //   `isClosing` 挡得住"收起动画进行中"的重入，但它在 `morphCloseMs + 20`（≈370ms）
     //   就被清回 `false`，而那一刻播放页**可能还没 unmount** ⇒ 第二次点击会再起一条
