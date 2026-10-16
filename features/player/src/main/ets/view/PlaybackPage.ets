@@ -1579,29 +1579,53 @@ export struct PlaybackPage {
       `avoid=${e.navigationBarBottomVp.toFixed(1)} gap=${e.chromeBottomGapVp().toFixed(0)} ` +
       `gapScrub=${e.chromeGapScrubVp().toFixed(0)} tier=${e.chromeTier}`;
     // ★ 第四行：**本轮的两个动作计数**（判"代码有没有跑到"比判值更靠前，见字段注释）。
-    //   ★★ 2026-10-16（goal 第 2 条「页面圆角再核一遍」的**自证位**）：
-    //     加 `rad` / `radVis` / `edge` 三个量，用户**不用 hdc** 就能核无界那套算式：
-    //       rad    = 写进容器 `.borderRadius()` 的值 = visualRadiusAt(t) / scaleAt(t)（无界 85604-85613）
-    //       radVis = rad × morphScale = **屏上实际看到的圆角**（应恒等于 lerp(8, 12, t)）
-    //       edge   = lyricMorph(t).size（封面边长，用来核对"圆角 ≤ 边长/2"这条合理性）
-    //     判读：`t=0`（封面页）⇒ radVis 应 = **8**；`t=1`（歌词页）⇒ radVis 应 = **12**；
-    //           形变中 radVis 应**始终在 8~12 之间**（不随 scale 抖动）。
-    //     形状不对 ⇒ 看 `scale`（rad = radVis/scale，scale 错则 rad 跟着错）。
+    //   ★★★ 2026-10-16（goal 第 2 条「页面圆角再核一遍」的**自证位** —— **已订正过一次**）
+    //
+    //   ⚠️ 我第一版把 `rad`/`radVis` 量成了 `morphRadius` —— **那是"容器自己"的圆角**，
+    //      不是封面的圆角，两者是**两条独立的链**（别混）：
+    //   ```
+    //     容器圆角 morphRadius = initRadiusVisual × (1 − t) / scale
+    //        · 起点 = 迷你条胶囊圆角的一半，终点 = **0**（铺满屏 ⇒ 容器不该有圆角）
+    //        · 无界同款：applyPullProgress 的 radius 分支（51054-51086）
+    //        ⇒ 所以 t=0 时它按设计就是 0 —— 我第一版拿它当"封面圆角"，读数自然全是 0。
+    //
+    //     封面圆角 coverLocalRect().radius = lyricMorph(t).radius
+    //        · 无界 `radiusAt(t) = visualRadiusAt(t) / scaleAt(t)`
+    //          其中 `visualRadiusAt(t) = lerp(radiusPlayer, radiusLyricVisual, t)`
+    //          `radiusPlayer = 8`（wujie.pa:85761 ldai 0x8）
+    //          `radiusLyricVisual = 12`（同族常量）
+    //        · 本仓 `lyricMorph()` 里就是 `lerp(COVER_RADIUS_PLAYER_VP(8), COVER_RADIUS_LYRIC_VISUAL_VP(12), p)`
+    //        ⇒ 两端**逐字一致**：t=0 ⇒ 8；t=1 ⇒ 12
+    //   ```
+    //   ⇒ 这一行现在量的是**封面那条链**（`cRad` / `cRadV`，c = cover），
+    //     并保留容器那条（`rad`/`radVis`）以便对照 —— 两条都打出来，一眼能分辨。
+    //   判读：`t=0` ⇒ **cRad = cRadV = 8.00**；`t=1` ⇒ **12.00**；
+    //         形变中 `cRadV = cRad × morphScale` 应始终在 **8~12 之间**（不随 scale 抖动）。
+    //   复核入口：连点播放页左上角 3 次。
+    const coverRect: LyricMorphRect = this.coverLocalRect();
     const line4: string = `remeasure=${this.diagRemeasureTries} overlayKick=${this.diagOverlayKicks} ` +
-      `seek=${e.chromeSeekSize().toFixed(0)} rad=${e.morphRadius.toFixed(2)} ` +
-      `radVis=${(e.morphRadius * e.morphScale).toFixed(2)} ` +
-      `edge=${this.coverLocalRect().size.toFixed(0)} t=${this.lyricMorphT.toFixed(2)}`;
-    // ★★★ 2026-10-16（goal 第 1 条「元信息行照搬 `floatingMeta`」的**现场自证**）：
-    //   `metaTop` = 歌名块顶边的**在用值**（= `lyricMetaYOf()`，也就是 `.position()` 里真正用的）；
-    //   `metaExp` = **无界算式值**（= 小封面顶边 + `metaTopFixLyric`(−26)，见 `metaTopGeomY()`）；
-    //   `metaΔ`   = 两者之差 ⇒ **正确实现下应恒为 `+26`**（我们少减了那 26vp）。
-    //   ⇒ 用户只要念这三个数，就能判定"元信息行这条到底还差多少"，**不需要真机逐帧截图**。
-    //   ⚠️ 它们都是**窗口坐标**（`lyricMorph(1).y` 与 `lyricCoverYOf()` 同口径）⇒ 可直接相减。
-    const metaInUse: number = e.metaTopInUseY();
-    const metaExp: number = e.metaTopGeomY();
+      `seek=${e.chromeSeekSize().toFixed(0)} edge=${coverRect.size.toFixed(0)} t=${this.lyricMorphT.toFixed(2)} ` +
+      `cRad=${coverRect.radius.toFixed(2)} cRadV=${(coverRect.radius * e.morphScale).toFixed(2)} ` +
+      `rad=${e.morphRadius.toFixed(2)} radVis=${(e.morphRadius * e.morphScale).toFixed(2)}`;
+    // ★★★ 2026-10-16（goal 第 1 条「元信息行照搬 `floatingMeta`」的**现场自证** —— 第二版）
+    //   `metaTop` = 元信息块顶边的**在用值**（与上面那条 `.position()` 表达式**逐字同一份**，
+    //              含那个"竖直居中补偿"项 ⇒ 见 `metaTopInUseYAt()`）；
+    //   `metaExp` = **无界算式值**（`lerp(封面底边+gap, 小封面顶边+metaTopFixLyric, t)`，
+    //              见 `metaTopGeomY(t)`）；
+    //   `metaD`   = 两者之差。
+    //   ## 判读（**已由本轮静态核算定死**，不再需要"猜 26 是不是错"）
+    //   ```
+    //     t = 0 ⇒ metaTop 与 metaExp 的**两端式子完全相同** ⇒ metaD 应 = 0（容 1vp 取整）
+    //     t = 1 ⇒ 两者差 26 —— 这是**设计差**（我们的端点在"封面顶边"，
+    //             无界的端点在"封面顶边 − metaTopFixLyric(26)"）⇒ metaD 应 = +26
+    //     ⇒ 所以正确的读数是 **metaD ≈ 26 × t**（一条直线，不是常数）
+    //   ```
+    //   ⇒ 若 `metaD` 明显偏离 `26×t` ⇒ 说明两条链有别的偏差（那才是要查的）。
+    const metaInUse: number = e.metaTopInUseYAt(this.lyricMorphT, PlaybackPage.LYRIC_META_ROW_H_VP);
+    const metaExp: number = e.metaTopGeomY(this.lyricMorphT);
     const line6: string = `metaTop=${metaInUse.toFixed(1)} metaExp=${metaExp.toFixed(1)} ` +
       `metaD=${(metaInUse - metaExp).toFixed(1)} ` +
-      `(期望 metaD=+26 ⇒ 我们锚在"小封面顶边"但少减了 metaTopFixLyric)`;
+      `(t=0 期望 metaD=0 ⇒ 未减 metaTopFixLyric；差=26×(1−t))`;
     // ★★★ 2026-10-16（**"歌词页封面没变小"的直接判据**，用户真机截图后加）：
     //   用户实测「这是歌词页，那个封面没变小」⇒ 读数 `t=0.00 edge=331`。
     //   封面尺寸 = `lyricMorph(lyricMorphT).size`，而 `lyricMorphT` 只有 0/1 两个稳定值：

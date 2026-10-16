@@ -1202,50 +1202,86 @@ export class PlayerExpandState {
   private static readonly COVER_TY_PLAYER_VP: number = 40;
 
   /**
-   * @returns 元信息块**顶边**的无界算式值（vp，窗口坐标）—— 纯几何，不查任何节点。
+   * @returns 元信息块**顶边**的**无界算式值**（vp，窗口坐标）。
    *
-   * ★★★ 2026-10-16（goal 第 1 条「元信息行照搬 `floatingMeta`」的**可核对化**）
+   * ★★★ 2026-10-16（goal 第 1 条「元信息行照搬 `floatingMeta`」的**可核对化** —— 第二版）
    *
-   * ## 无界的两条式子（逐字）
+   * ## ⚠️ 第一版绕远了（自记）
+   * 我第一版写成 `lyricMorph(1).y + metaTopFixLyric` —— 那是"从**封面端点**反推"，
+   * 绕过了 `fitPlayerOverlay` 自己算出来的 `metaY`。**正确做法是从算式直接推**（如下）。
+   *
+   * ## 无界的算式链（逐字）
    * ```ts
-   *   metaY         = curMetaY(0) + edge/2 + gap(50) + metaH(60)/2     // playerCoverGeomRect 已算
-   *   metaOffsetYAt = lerp(metaYPlayer, topYAtLyric + metaTopFixLyric, t)   // wujie.pa:85582-85599
-   *   topYAtLyric   = tyLyric − edge·lyricScale/2                           // wujie.pa:85635-85651
+   *   // ① CoverMorph 的起点（wujie.pa:177459-177464）
+   *   metaYPlayer = fit.metaY          // 由 refitOverlay 写入
+   *   // ② 封面中心（playerCoverGeomRect 的 ⑤ 步已经算出来）
+   *   centerY = contentTop + metaY     其中 metaY = curMetaY(0) + edge/2 + gap + metaH/2
+   *   // ③ 歌词页那一端的元信息块顶边（wujie.pa:85582-85599）
+   *   metaOffsetYAt(1) = topYAtLyric + metaTopFixLyric
+   *   // ④ 元信息块**中心**随 t 走的那条线
+   *   //    t=0 时其中心 = centerY − edge/2 − META_GAP_BELOW_COVER
+   *   metaCenterY(t) = lerp(centerY(t) − edge(t)/2 − gap, topYAtLyric(t) + metaTopFixLyric(), t)
    * ```
-   * 其中 **`metaYPlayer = fit.metaY`**（`refitOverlay` 的写入，见定稿 §4.1）、
-   * **`metaTopFixLyric = −26`**（`wujie.pa:85527 ldai 0x1c; neg`；归档笔记把早先那个 −20 订正成了 −26）。
    *
-   * ## ★ 关键：无界的**终点锚在"小封面顶边"上**，不是"底边"（定稿 §1417 原文）
+   * ## ★ 关键恒等式（本轮静态核出来的，两端都成立）
    * ```
-   *   metaOffsetYAt(1) = topYAtLyric + (−26) = 小封面顶边 − 26
+   *   t = 0：metaTop(0) = centerY − edge/2 − gap + metaH/2 − metaH/2 = 封面底边 + gap(50)
+   *   t = 1：metaTop(1) = topYAtLyric + metaTopFixLyric
+   *                     = (topInset + 48.72) + (−26) = topInset + 22.72
+   *          我们的：     = lyricCoverYOf() = topInset + LYRIC_ROW_TOPBAR_H_VP(56)
+   *          两者差 26 是**设计差**，不是量测差 —— 见下面"那 26vp 到底是什么"。
    * ```
-   * ⇒ 本函数 = `playerCoverGeomRect().y − 26`（`lyricMorph(1).y` 就是小封面顶边）。
    *
-   * ## 与我们在用的那条式子对比（**这就是 goal 第 1 条剩下的那条差**）
-   * 在用：`lyricMetaYOf() = lyricCoverYOf() = topInset + LYRIC_ROW_TOPBAR_H_VP(56)` —— **锚在小封面顶边** ✓
-   * 但**没有减那 26**。
+   * ## 那 26vp 到底是什么（别再用"K 比卡片矮"去解释它）
+   * 这 26 是**两种锚法在同一个卡片高度下的必然差**：
    * ```
-   *   Δ = 在用 − 无界 = (topInset + 56) − (topInset + 56 − 26) = +26vp   ⇒ 歌名块整体偏低 26vp
+   *   我们的端点在"封面**顶边**"（并排布局：文字与封面竖直居中，行高 = 封面边长）
+   *   无界的端点在"封面顶边 − 26"（`metaTopFixLyric`）
+   *   ⇒ 只要封面边长 = 48.72，两者就**恒差 26**，与卡片真实高度无关。
    * ```
-   * （定稿 §1446 估算的是"≈75vp"，那是按"锚底边"那个错读算的；按当前代码的锚点算 **Δ = +26vp**。）
+   * ⚠️ 所以"该不该减掉这 26"**不能靠算式判**（算式给了两条同样自洽的路），
+   *    只能靠**观感**：它决定"歌词页那一行文字与左边小封面是**顶对齐**还是**居中**"。
+   *    ⇒ 这正是 goal 里那句「⚠️ 拆 `LyricFloatLayer` 时不要碰已验证好的那部分」的适用场合。
+   *    ⇒ 本轮把它**量出来**（徽标 `metaD`），**不改**。
    *
-   * ⚠️ **本轮不改它**：改它会同时推动 `lyricOverlayHeight()` → `lyricPadTop()` → 歌词正文让位，
-   *    而歌词页是用户验收过的（"歌词页正常了"）⇒ 属于"无设备不改"的那一类。
-   *    本函数只做**自证**：徽标第四行打出 `metaTop`（屏上量到的元信息块顶边）与
-   *    `metaExp`（无界算式值），两者之差就是待确认的 Δ。
-   * @returns 元信息块顶边（无界算式值，vp，窗口坐标）
+   * @param t 形变进度（0 = 封面页端 / 1 = 歌词页端）
+   * @returns 元信息块顶边（vp，窗口坐标）
    */
-  public metaTopGeomY(): number {
-    const cover: LyricMorphRect = this.lyricMorph(1);
+  public metaTopGeomY(t: number): number {
+    const p: number = t < 0 ? 0 : (t > 1 ? 1 : t);
+    const cover: LyricMorphRect = this.playerCoverGeomRect();
     if (cover.size <= 0) {
       return 0;
     }
-    return cover.y + PlayerExpandState.META_TOP_FIX_LYRIC_VP;
+    const gap: number = PlayerExpandState.COVER_FIT_META_GAP_VP;      // 50（无界默认）
+    // ① t = 0 那一端：封面底边 + gap（= fitPlayerOverlay 的 metaY 反推出来）
+    const fromTop: number = cover.y + cover.size + gap;
+    // ② t = 1 那一端：小封面顶边 + metaTopFixLyric（无界的 metaOffsetYAt(1)）
+    const lyric: LyricMorphRect = this.lyricMorph(1);
+    const toTop: number = lyric.y + PlayerExpandState.META_TOP_FIX_LYRIC_VP;
+    return this.lerp(fromTop, toTop, p);
   }
 
   /** @returns 元信息块顶边的**在用值**（= 我们在 `.position()` 里真正用的那个）—— 给徽标对账用。 */
   public metaTopInUseY(): number {
     return this.lyricMetaYOf();
+  }
+
+  /**
+   * @returns 元信息块顶边的**在用值（带 t）** —— 与 `PlaybackPage` 里那条 `.position()` 表达式
+   *          **逐字同一份**（含那里那个"竖直居中补偿"项），供徽标逐帧对账。
+   *
+   * 出处：`PlaybackPage.LyricFloatLayer()` 里 meta 那一行的
+   * ```ts
+   *   y: lyricMetaMorphY(t) + t × (lyricFloatRect().size − LYRIC_META_ROW_H_VP) / 2
+   * ```
+   * ⚠️ 两者**必须同步改**（这里是唯一允许复制那条表达式的地方，复制目的是对账）。
+   * @param t 形变进度
+   * @param rowH 元信息行自身高度（`PlaybackPage.LYRIC_META_ROW_H_VP`）
+   */
+  public metaTopInUseYAt(t: number, rowH: number): number {
+    const p: number = t < 0 ? 0 : (t > 1 ? 1 : t);
+    return this.lyricMetaMorphY(p) + p * (this.lyricMorph(p).size - rowH) / 2;
   }
 
   /**
