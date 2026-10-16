@@ -322,6 +322,17 @@ struct Index {
   private pullOpenOption: PanGestureOptions = new PanGestureOptions({ direction: PanDirection.Vertical });
 
   /**
+   * 诊断闸：本轮手势是否**已经记过一次**"跟手更新被判据拒掉"。
+   *
+   * 为什么需要它（而不是每次都记）：`onPullOpenUpdate` 由每个触摸移动事件调用，
+   * 而计数落在 `PlayerExpandState` 的 `@Trace` 字段上 ⇒ 每次都写会让徽标那个
+   * 13 行 `Text` 每帧重建，**诊断本身会把手感搅浑**。诊断只需要"这一轮有没有被拒"
+   * 这一个事实 ⇒ 一次手势只记一次（`onPullOpenStart` 里清零）。
+   * 读数：徽标第十行 `pd=<起手拒>/<更新拒>/<松手拒>`，见 `PlayerExpandState.pullDropBegin`。
+   */
+  private pullDropCountedThisGesture: boolean = false;
+
+  /**
    * 一张截图就能拿到 x/y/w/h，下一轮按数字改完即删。
    */
   private tabsController: HdsTabsController = new HdsTabsController();
@@ -801,6 +812,8 @@ struct Index {
 
   /** 上拉开始：进入 ENTERING 阶段（可跟手）并挂载播放页。 */
   private onPullOpenStart(fingers: FingerInfo[]): void {
+    // ★ 诊断：新一轮手势开始 ⇒ 清掉"本次手势已记过一次拒绝"的闸（见 `onPullOpenUpdate`）。
+    this.pullDropCountedThisGesture = false;
     // ⚠️ 播放页已经开着就别接管：播放页现在是壳层 Stack 里的普通浮层（不再是模态），
     //    壳层这条手势在它上面依然收得到 —— 不挡一下，用户在播放页里从下半屏往上拖
     //    会把形变进度复位到 0（播放页"啪"地缩回迷你条），
@@ -824,6 +837,9 @@ struct Index {
     if (!morphOk) {
       // 几何没量齐（迷你条没挂载 / 宿主没尺寸）：直接铺满，别硬做形变
       // —— 硬做的话播放页会被压成一条细缝（见 PlayerExpandState.morphUsable）。
+      // ★ 诊断计数（徽标第十行 `pd=` 的第一个数）：这个数涨 ⇒ 上拉**没有跟手动画**，
+      //   原因是"起手那一刻几何没量齐"，与 `pullDragging` 那条路无关（见 `pullDropBegin`）。
+      this.expandState.notePullDropBegin();
       this.expandState.pullDragging = false;
       this.expandState.morphReset();
       this.expandState.morphSettleOpen();
@@ -887,6 +903,15 @@ struct Index {
   /** 跟手更新：位移 → 进度 0…1（**线性**，跟手阶段不加缓动）。 */
   private onPullOpenUpdate(offsetY: number): void {
     if (!this.expandState.pullDragging) {
+      // ★ 诊断计数（徽标第十行 `pd=` 的中间那个数）—— 见 `PlayerExpandState.pullDropUpdate`：
+      //   "手指在动但进度不跟"时，这个数会涨，并说明是**判据**拒的（而不是事件没到）。
+      // ⚠️ **一次手势只记一次**：本函数由每个 `onActionUpdate` 调用（≈60~120 次/秒），
+      //   而计数写的是 `@Trace` 字段 ⇒ 每次都写会让徽标那个 `Text` 每帧重建，
+      //   恰好把"手感"搅浑（诊断本身变成干扰源）。诊断只需要"这一轮有没有被拒"这一个事实。
+      if (!this.pullDropCountedThisGesture) {
+        this.pullDropCountedThisGesture = true;
+        this.expandState.notePullDropUpdate();
+      }
       return;
     }
     this.expandState.applyMorphProgress(this.expandState.pullOpenFraction(offsetY));
@@ -909,6 +934,8 @@ struct Index {
    */
   private onPullOpenEnd(offsetY: number, velocityY: number): void {
     if (!this.expandState.pullDragging) {
+      // ★ 诊断计数（徽标第十行 `pd=` 的最后那个数）—— 见 `PlayerExpandState.pullDropEnd`。
+      this.expandState.notePullDropEnd();
       return;
     }
     this.settlePullOpen(
@@ -1169,6 +1196,8 @@ struct Index {
   /** 手势被系统抢走：回弹到起点并卸载（否则播放页会一直挂在迷你条那一小块上）。 */
   private onPullOpenCancel(): void {
     if (!this.expandState.pullDragging) {
+      // ★ 与 `onPullOpenEnd` 同族（都是"收尾被拒"）⇒ 计到同一个数上，见 `pullDropEnd`。
+      this.expandState.notePullDropEnd();
       return;
     }
     this.settlePullOpen(false);

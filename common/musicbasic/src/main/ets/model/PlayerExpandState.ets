@@ -1921,6 +1921,45 @@ export class PlayerExpandState {
    */
   @Trace public pullStartedAtMs: number = 0;
 
+  // ─────────── 跟手"被拒"计数（★ 纯诊断：不参与任何判断，只上徽标）───────────
+  //
+  // ## 为什么需要（goal 纪律「先画『入口 × 判断』对照表，再动手」的落点）
+  //
+  // 用户报的症状是「**上滑不能自由了**」= 手指在动、进度不跟。可能的机制只有两类：
+  //   (a) **更新被某个判据拒掉**（本仓跟手链上共 3 个"拒绝点"，见下）；
+  //   (b) 事件本身没到（手势识别 / 命中区 / 版式问题）—— 那与状态机无关。
+  // 两者修法完全不同，而**没有设备就分不出来**（用户不能用 hdc）。
+  // ⇒ 把 (a) 的三个拒绝点**计数**并显示在徽标上（零行为变化，只加三个自增）：
+  //     用户在徽标开着的情况下做一次上拉，看这三个数**有没有变**：
+  //       · 变了 ⇒ 就是 (a)，并直接指出是哪一个判据（下面三个字段的注释给了各自含义）；
+  //       · 一个都没变 ⇒ 判据全程放行 ⇒ 问题在 (b)，去查手势/命中区，**不要再改状态机**。
+  //
+  // ★ 三个字段**不清零**（累计值）：用户不必"先开徽标再复现"，随时打开就能看；
+  //   若某次起手就失败，累计值也会 +1 并一直留着（重启 App 才归零）。
+  //   徽标读数位置：**第十行**尾部 `pd=<起手拒>/<更新拒>/<松手拒>`。
+
+  /** 起手被判据拒掉的次数（`pullOpenBegin` 返回 false ⇒ 直接铺满、无跟手动画）。 */
+  @Trace public pullDropBegin: number = 0;
+  /** 跟手更新被 `pullDragging` 拒掉的次数（手指在动但进度不跟 —— 本条最直接）。 */
+  @Trace public pullDropUpdate: number = 0;
+  /** 松手（提交/回弹判定）被 `pullDragging` 拒掉的次数。 */
+  @Trace public pullDropEnd: number = 0;
+
+  /** 记一次"起手被拒"（诊断用；见 {@link pullDropBegin} 的说明）。 */
+  public notePullDropBegin(): void {
+    this.pullDropBegin = this.pullDropBegin + 1;
+  }
+
+  /** 记一次"跟手更新被拒"（诊断用；见 {@link pullDropUpdate} 的说明）。 */
+  public notePullDropUpdate(): void {
+    this.pullDropUpdate = this.pullDropUpdate + 1;
+  }
+
+  /** 记一次"松手被拒"（诊断用；见 {@link pullDropEnd} 的说明）。 */
+  public notePullDropEnd(): void {
+    this.pullDropEnd = this.pullDropEnd + 1;
+  }
+
   // ⚠️ **D5：这里原来还有一套「上拉打开」的遗留 API，已删**（2026-10-15 复核，见
   //    `docs\无界形变手感-落实到RzdMusic清单.md` §二 待办第 0 项 / §四 D5）：
   //      `PULL_COMMIT_PROGRESS (=55)` / `pullProgressFrom()` / `pullShouldCommit()` /

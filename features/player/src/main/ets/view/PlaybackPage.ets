@@ -1896,11 +1896,26 @@ export struct PlaybackPage {
     //   bg    = 背景层不透明度（② 看它有没有被淡掉）
     //   drv   = morphDrive（FINGER/ANIM/NONE）
     //   sq    = morphSquashY（落位挤压，≠1 时在弹）
+    //   pd    = **跟手"被拒"计数**（★ 2026-10-17 新增，直接为用户的「上滑不能自由」）
+    //           `<起手拒>/<更新拒>/<松手拒>`，**累计值、不清零**（重启 App 才归零）。
+    //           用法：让徽标开着 → 做一次上拉 → 看这三个数**有没有变**。
+    //           · 变了 ⇒ 「不跟手」是**判据**拒的，且一眼看出是哪一个：
+    //              第 1 个涨 = 起手那一刻几何没量齐（直接铺满、无跟手动画）
+    //                          ⇒ 查 `measureMiniDuringPull` / 迷你条是否已挂载；
+    //              第 2 个涨 = 手指在动但 `pullDragging` 是假（本类最可疑的一条，
+    //                          历史上这一类已经出过两次回归：§round-36 的 `staleClr`）
+    //                          ⇒ 查"谁把 `pullDragging` 清成了假"；
+    //              第 3 个涨 = 松手/取消被判据拒（收尾没走 ⇒ 页面卡在半路）。
+    //           · 一个都没变 ⇒ 判据全程放行 ⇒ 问题在**(b)事件/手势识别/版式**，
+    //             **不要再去动状态机**（修法完全不同）。
+    //           ⚠️ 第 2 个是**按手势计次**的（一次手势最多 +1），见
+    //              `Index.pullDropCountedThisGesture` 的说明。
     // ```
     const line10: string = `show=${this.state.isShowPlay ? 1 : 0} clos=${this.isClosing ? 1 : 0} ` +
       `coll=${this.chromeCollapsed ? 1 : 0} p=${e.morphP.toFixed(2)} ` +
       `clipH=${e.morphClipHeight.toFixed(0)} bg=${this.backgroundRevealOpacity().toFixed(2)} ` +
-      `drv=${e.morphDrive} sq=${e.morphSquashY.toFixed(3)}`;
+      `drv=${e.morphDrive} sq=${e.morphSquashY.toFixed(3)} ` +
+      `pd=${e.pullDropBegin}/${e.pullDropUpdate}/${e.pullDropEnd}`;
     // ★★★ 2026-10-16（**内容层 onAppear 走了哪条分支** —— 定位"关闭后又放一遍展开"）：
     //   `ab` = morph（形变分支，正常）/ intro（起了 playExpandIntro ← 关闭时出现即 bug）
     //        / skipClose（兜底分支但被"正在关闭"的门拦下，本轮新增）
