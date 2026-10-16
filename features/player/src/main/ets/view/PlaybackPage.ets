@@ -3300,19 +3300,48 @@ export struct PlaybackPage {
     return !this.expandState.morphContainerActive() && this.collapseProgress > 45;
   }
 
+  /**
+   * ★ 2026-10-17：上一次**真正下发成功**的常亮档位（`undefined` = 还没成功过 / 失败已回滚）。
+   *
+   * 照搬无界 `WindowInfo.setKeepScreenOn`（`design/animation/WindowInfo.ets`）的幂等判据：
+   * ```ts
+   *   setKeepScreenOn(on) {
+   *     if (this.screenOn === on) return;                 // ★ 值没变就不下发（幂等）
+   *     if (window === undefined) return;
+   *     this.screenOn = on;
+   *     window.setWindowKeepScreenOn(on).catch(λ2);       // ★ λ2：warn + `screenOn = false`（失败回滚）
+   *   }
+   * ```
+   * ⚠️ **回滚那半条是关键**：若不回滚，失败之后缓存值与真实值不一致 ⇒ 下一次同值请求会被幂等门挡掉
+   *   ⇒ **永远不再下发**（与本仓反复踩的"起手置真/收尾置假 不成对"同一个形状）。
+   */
+  private keepScreenOnApplied: boolean | undefined = undefined;
+
   /** Applies the keep-screen-on switch while the playback page is visible. */
   private applyKeepScreenOn(enabled: boolean): void {
     try {
+      // 先算**真正要下发的值**（用户偏好与页面相位都要满足），再拿它做幂等判据
+      // ⚠️ 顺序：必须在取 UIContext 之前（无界也是在判 window 之前先比 `screenOn`）。
+      const keep: boolean = enabled && MusicStoreService.getInstance().getKeepScreenOn();
+      if (this.keepScreenOnApplied === keep) {
+        return;
+      }
       const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext | undefined;
       if (ctx === undefined) {
         return;
       }
-      const keep: boolean = enabled && MusicStoreService.getInstance().getKeepScreenOn();
+      this.keepScreenOnApplied = keep;
       window.getLastWindow(ctx).then((win: window.Window): void => {
-        win.setWindowKeepScreenOn(keep);
+        // ★ 内层 promise 也要 catch：`setWindowKeepScreenOn` 本身返回 Promise，
+        //   不接住就是一个未处理的 rejection（原来这里正是这样），而且失败时**必须回滚**。
+        win.setWindowKeepScreenOn(keep).catch((_err: Object): void => {
+          this.keepScreenOnApplied = undefined;
+        });
       }).catch((_err: Object): void => {
+        this.keepScreenOnApplied = undefined;
       });
     } catch (_err) {
+      this.keepScreenOnApplied = undefined;
     }
   }
 
