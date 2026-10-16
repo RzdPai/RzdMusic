@@ -132,11 +132,17 @@ export {
   PlayerExpandState,
   MINI_BAR_COVER_ID,
   PLAYER_BIG_COVER_ID,
+  PLAYER_ROOT_ID,
   areaLengthToVp
 } from './src/main/ets/model/PlayerExpandState';
 export type { LyricMorphRect } from './src/main/ets/model/PlayerExpandState';
 // ★ 2026-10-16（照搬无界 `design/logic/BarCollapse`）：控制条「拖动收起/展开」手势状态机
 export { BarCollapse, BarAction, BarAxis } from './src/main/ets/model/BarCollapse';
+// ★★★ 2026-10-17（照搬无界 `design/animation/ShrinkOverlay`）：非手势关闭那一棒 ——
+//   缩的不是活页面，而是**一张满窗快照**（用户第 ② 条「有背景但是高度特低」的正解）。
+//   ⚠️ 目前**还没接线**（无调用者），见本文件与 `RzdMusic记忆.md` §127 的施工图。
+export { MorphShrinkState } from './src/main/ets/model/MorphShrinkState';
+export type { MorphShrinkRect } from './src/main/ets/model/MorphShrinkState';
 // 裁剪容器形变（对标无界 ExpandAnimation）：阶段机 + 容器几何
 export { MorphMetaBridge } from './src/main/ets/components/MorphMetaBridge';
 export { MorphMetaEndpoint, MINI_META_TITLE_ID, MINI_META_SINGER_ID,

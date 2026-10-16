@@ -39,6 +39,8 @@ import {
   PlayedSongRecord,
   // ★ 2026-10-15（覆盖层统一）：端点量测的常量与工具（原来只在 `MusicPlayInfoBlock` 里用）
   PLAYER_BIG_COVER_ID,
+  // ★ 2026-10-17（照搬无界 `PLAYER_ROOT_ID`）：非手势关闭要拍快照的那个节点（= 形变容器）
+  PLAYER_ROOT_ID,
   PLAYER_META_TITLE_ID,
   PLAYER_META_SINGER_ID,
   MorphMetaEndpoint,
@@ -5373,6 +5375,21 @@ export struct PlaybackPage {
         .height(StyleConstants.FULL_HEIGHT)
       }
       .width(StyleConstants.FULL_WIDTH)
+      // ★★★ 2026-10-17（照搬无界 `PLAYER_ROOT_ID`）：**非手势关闭要拍的那张快照就是本节点**。
+      //
+      // 无界那一侧，`.id(PLAYER_ROOT_ID)` 挂在**带 `.scale/.translate/.clip` 的那个 Stack 上**
+      // （`wujie.pa:191400-191478`：`.scale` 191400-191415 → `.translate` 191416-191431 →
+      //   `.clip(true)` 191462-191469 → **`.id(PLAYER_ROOT_ID)` 191470-191478**），
+      // 而 `MeshCoverBg` 与 `playerPane` 都在它**里面**（本页 :4952-4970 那段逐行对照）。
+      //
+      // ⇒ 所以这里也挂在**形变容器**这一层（不是它的父 `Stack`）：
+      //   静止态（`morphScale=1 / translate=(0,0) / 无裁剪`）它就是**满屏的播放页**，
+      //   快照拿到的正是"满屏那一张" —— 这正是 `ShrinkOverlay` 要求起点与满屏逐像素对齐的前提。
+      //   ⚠️ 因此 `componentSnapshot.get(PLAYER_ROOT_ID, …)` **必须在形变开始之前**调
+      //      （无界的 `closeWithAnimation()` 也是在 `pullMode` 之外、页面还满屏时才拍）。
+      //   ⚠️ 与 `MESH_BG_ID` / `MINI_LYRIC_BOX_ID` 等**并存**（`getFrameNodeById` 按 id 查，
+      //      一个节点只有一个 id；这几个是**不同节点**，互不影响）。
+      .id(PLAYER_ROOT_ID)
       // 裁剪窗口高度 = 可视高度 / 缩放 ⇒ 缩放后正好是那块可视矩形
       .height(this.morphClipHeight())
       // 边界裁剪（圆角由各图层自带；不用 clipShape：它会覆盖 borderRadius，

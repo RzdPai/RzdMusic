@@ -30,6 +30,20 @@ export const MINI_BAR_COVER_ID: string = 'rzd_mini_bar_cover';
 export const PLAYER_BIG_COVER_ID: string = 'rzd_player_big_cover';
 
 /**
+ * ★★★ 2026-10-17（照搬无界 `PLAYER_ROOT_ID`）：**形变容器**（带 `.scale/.translate/.clip` 那个节点）的 id。
+ *
+ * 用途只有一个：非手势关闭（关闭按钮 / 系统返回）时
+ * `componentSnapshot.get(PLAYER_ROOT_ID, …)` **拍的就是这个节点**，
+ * 拍到的图交给 `MorphShrinkState`（照搬 `ShrinkOverlay`）缩到迷你条胶囊。
+ * 出处：`wujie.pa:191470-191478` 的 `.id(PLAYER_ROOT_ID)`
+ *   （挂在 `.scale` 191400-191415 / `.translate` 191416-191431 / `.clip` 191462-191469 之后）。
+ *
+ * ⚠️ 与 `PLAYER_BIG_COVER_ID` / `MESH_BG_ID` 等**不是同一个节点**（id 按节点唯一，几个互不影响）。
+ * ⚠️ 快照**必须**在形变开始之前拍（静止态下这个节点就是满屏的播放页）。
+ */
+export const PLAYER_ROOT_ID: string = 'rzd_player_root';
+
+/**
  * 形变阶段（对标无界 `MorphState.MorphStage`）。
  *
  * ```
