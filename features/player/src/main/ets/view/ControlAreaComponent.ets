@@ -105,6 +105,41 @@ export struct ControlAreaComponent {
   /** 宿主侧改变菜单开关（子组件不再自己写状态）。 */
   @Event onMenuSheetChange: (open: boolean) => void = (_open: boolean): void => {};
   /**
+   * ★★★ 2026-10-17（照搬无界 `PlayerPage.hideChrome()` 的"**面板开着就不收**"守卫）：
+   * 本组件里那两个**不属于菜单 sheet** 的弹层（播放队列 / 其他版本）状态变化时，向上报一个布尔。
+   *
+   * ## 无界那一条守卫的原文（`_recover/logic-src/PlayerPage.abc.txt:4124-4225`）
+   * ```ts
+   *   hideChrome() {
+   *     if (chromeHidden) return;
+   *     if (queueOpen || settingsOpen || addplaylistOpen || lyricmatchOpen || qualityOpen ||
+   *         lyricsetOpen || sleepOpen || customSleepOpen || lyricoffsetOpen || versionOpen) return;
+   *     getUIContext().animateTo({ duration: CHROME_ANIM_MS, curve: Curve.EaseInOut },
+   *                              () => { chromeHidden = true; });
+   *   }
+   * ```
+   * ⇒ **任何面板开着就不收控制区**（10 个 flag 的短路或链）。
+   *
+   * ## 本仓怎么映射（**不是**逐 flag 对齐，而是"按可达性 + 不漏形状"）
+   * | 无界的 flag | 本仓 | 谁能看见 |
+   * | --- | --- | --- |
+   * | `settingsOpen` / `qualityOpen` / `lyricsetOpen` / `sleepOpen` / `addplaylistOpen` / `lyricmatchOpen` / `customSleepOpen` / `lyricoffsetOpen` | 都落在那**一个** `bindSheet` 菜单里（`menuSheetOpen()`；`showMenuQuality` / `showMenuPlaylist` / `showMenuComment` 是它的子面板） | 宿主已通过 `showMenuSheet` / `onMenuSheetChange` 看得见 ✓ |
+   * | `queueOpen`（播放队列弹层） | `showPlaylistSheet` | 宿主**看不见** ⇒ 本回调补上 |
+   * | `versionOpen`（其他版本） | `showOtherVersionsSheet` | 同上 |
+   * ⇒ 加了本回调之后，宿主能看见"**任何**面板是否开着"，语义与无界那条守卫一致。
+   *
+   * ⚠️ 一个组件只能挂一个 `bindSheet`，所以本组件里不会再有第三个弹层；
+   *   若将来新增，**必须**并进下面那个 `@Monitor` 的表达式（否则又是一处"漏改"）。
+   * @param open true = 有弹层开着 ⇒ 宿主**不许**收控制区
+   */
+  @Event onAuxSheetOpenChange: (open: boolean) => void = (_open: boolean): void => {};
+
+  /** 那两个弹层任一开关变化 ⇒ 上报（见 {@link onAuxSheetOpenChange}）。 */
+  @Monitor('showPlaylistSheet', 'showOtherVersionsSheet')
+  onAuxSheetsChanged(): void {
+    this.onAuxSheetOpenChange(this.showPlaylistSheet || this.showOtherVersionsSheet);
+  }
+  /**
    * 组件**自己那份**菜单开关 —— 仅当宿主**没有**接管时使用。
    *
    * ⚠️⚠️ 2026-10-15（补漏，必须读）：本组件的调用点一共 **5 处**，其中 **4 处并没有传

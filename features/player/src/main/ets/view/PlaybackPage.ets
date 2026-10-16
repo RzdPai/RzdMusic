@@ -2156,6 +2156,14 @@ export struct PlaybackPage {
       if (!this.isAlive || this.chromeCollapsed || !this.canHideLyricChrome() || !this.state.isPlay) {
         return;
       }
+      // ★★★ 2026-10-17（照搬无界 `hideChrome()` 的"面板开着就不收"，`abc.txt:4124-4225`）：
+      //   那一条是 10 个面板 flag 的短路或链；本仓的分量见 `auxSheetOpen` 的注释
+      //   （菜单一族 → `playMenuOpen`；队列/其他版本 → `auxSheetOpen`）。两个都要判。
+      if (this.playMenuOpen || this.auxSheetOpen) {
+        Logger.info('RzdLyricChrome',
+          `hide skipped (panel open: menu=${this.playMenuOpen ? 1 : 0} aux=${this.auxSheetOpen ? 1 : 0})`);
+        return;
+      }
       // 正在收起/展开播放器时不打扰
       if (this.isCollapsing()) {
         return;
@@ -2211,6 +2219,10 @@ export struct PlaybackPage {
 
   private hideLyricChrome(): void {
     if (!this.canHideLyricChrome() || this.chromeCollapsed) {
+      return;
+    }
+    // ★ 同一条守卫（见 `scheduleChromeAutoHide` 里的说明）：面板开着就不收。
+    if (this.playMenuOpen || this.auxSheetOpen) {
       return;
     }
     this.stopChromeAutoHide();
@@ -2662,6 +2674,16 @@ export struct PlaybackPage {
 
   /** 控制区是否已自动收起（收起后点任意处唤出）。 */
   @Local chromeCollapsed: boolean = false;
+  /**
+   * ★★★ 2026-10-17（照搬无界 `PlayerPage.hideChrome()` 的"面板开着就不收"守卫）：
+   * **播放队列 / 其他版本**这两个弹层是否开着（由 `ControlAreaComponent.onAuxSheetOpenChange` 上报）。
+   *
+   * 无界那一条守卫是 10 个 flag 的短路或链（`abc.txt:4124-4225`）；
+   * 本仓菜单 sheet 那一族（`settingsOpen`/`qualityOpen`/…）落在**一个** `bindSheet` 里，
+   * 已由 `playMenuOpen` 代表；剩下这两个由本字段代表 ⇒ 两者合起来 = "任何面板开着"。
+   * ⚠️ 与 `playMenuOpen` **必须一起**并进收起门（同一条守卫的两个分量，不许只判一个）。
+   */
+  @Local auxSheetOpen: boolean = false;
   /** 自动收起计时器。 */
   private chromeTimerId: number = -1;
   /** 最后一次控制区交互时间（ms）。 */
@@ -4295,6 +4317,12 @@ export struct PlaybackPage {
                     showMenuSheet: this.playMenuOpen,
                     onMenuSheetChange: (open: boolean): void => {
                       this.playMenuOpen = open;
+                    },
+                    // ★★★ 2026-10-17（照搬无界 `hideChrome()` 的"面板开着就不收"守卫）：
+                    //   菜单 sheet 已由上面那一对看得见；**其余两个弹层**（播放队列 / 其他版本）
+                    //   在本组件内部，宿主看不到 ⇒ 由这个回调报上来，并进收起门（见 `auxSheetOpen`）。
+                    onAuxSheetOpenChange: (open: boolean): void => {
+                      this.auxSheetOpen = open;
                     },
                     chromeOffsetY: this.expandState.chromeOffsetY(),
                     chromeOpacity: this.expandState.chromeOpacity()
