@@ -755,9 +755,31 @@ struct Index {
     if (!Number.isFinite(attempt) || attempt >= PULL_ANCHOR_RETRY_MAX) {
       return;
     }
-    const gen: number = this.expandState.morphGen;
     setTimeout((): void => {
-      if (!this.expandState.pullDragging || !this.expandState.morphGenAlive(gen)) {
+      // ★★★ 2026-10-16（**同一形状的第 4 处**：`morphGenAlive` 守卫 —— 前 3 处已在 §102/§104 修过）
+      //   这里原来是 `if (!pullDragging || !morphGenAlive(gen)) return;`，其中
+      //   `gen` 是**发起那一刻**捕获的 `morphGen`。
+      //
+      // ## 为什么它在点击这条路上是错的
+      //   `morphGen` 的语义是"这一轮形变会话的编号"，它被 `morphReset()` **推高**。
+      //   而点击打开时，`pushPath` 会让**旧页面实例卸载**，旧实例的 `onDisAppear` 会走
+      //   （那条路上目前只有"`morphUsable` 为真就跳过"这一层保护，见 `PlaybackPage.onDisAppear`）
+      //   —— 一旦它真的调到了 `morphReset()`，本函数的世代号立刻过期
+      //   ⇒ **每一拍都在第 2 行静默 return**（不写日志，查不出来）。
+      //   这与 §102 修掉的、以及 §104 修的**完全同一个形状**：
+      //     > 用"会话编号"去判"用户还想不想看播放页" —— 两者无关。
+      //
+      // ## 改法（判据换成更早、更直接的事实）
+      //   `pullDragging` 表示"这一轮跟手/收尾还没走完"（`settlePullOpen` 会一直保持它，
+      //   直到补间起跑那一刻才置 false）—— 这正是"还要不要继续补量"的真判据。
+      //   世代号在这里没有任何正确用途：补量只需要"几何还没齐 + 用户还在等"。
+      //   ⇒ 去掉 `gen`，只判 `pullDragging`；再补一条 `isShowPlay`（用户已离开就别量了）。
+      if (!this.expandState.pullDragging) {
+        return;
+      }
+      // 用户已经离开播放页（`popPath` 那条路）⇒ 再补量也没人看，收工。
+      // ⚠️ 判据用 `isShowPlay` 而**不是**世代号（世代号会被无关的事推高，见上面那段）。
+      if (!this.appState.isShowPlay) {
         return;
       }
       if (this.expandState.measureMiniDuringPull(this.getUIContext(), this.navDepth > 0)) {

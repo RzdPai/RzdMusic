@@ -46,6 +46,8 @@ import {
   PlaybackFlowLightState,
   PlaybackShellConstants,
   PlayerExpandState,
+  // ★ 2026-10-16：本页在 `.onDisAppear()` 里要判"播放页路由还在不在栈里"（见 `playerRouteStillPushed`）
+  RouterUrlConstants,
   ShowMiniLyricState,
   StyleConstants,
   WindowInfo,
@@ -101,6 +103,16 @@ const FLOW_LIGHT_OPACITY: number = 0.55;
  */
 @ComponentV2
 export struct PlaybackPage {
+  /**
+   * 壳层的路由栈（`Index.ets:237 @Provider('pageIndexInfos')` 提供）。
+   *
+   * ★ 2026-10-16 新增：**唯一用途**是让本页在 `.onDisAppear()` 里判
+   * 「播放页路由是不是还在栈里」—— 见 {@link playerRouteStillPushed}。
+   * 为什么不从参数传：`PlaybackPageCoverContent` / `PlaybackPageBuilder` 都是 `@Builder`，
+   * 多传一个 `NavPathStack` 要改三处签名；`@Provider/@Consumer` 是本工程已经在用的
+   * 官方成对机制（`Index.ets` 已经是 `@Provider`），接一次即可。
+   */
+  @Consumer('pageIndexInfos') pageIndexInfos: NavPathStack = new NavPathStack();
   /** Window width/height breakpoint for responsive layout branches. */
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
   /** Global music UI and queue state. */
@@ -1357,11 +1369,12 @@ export struct PlaybackPage {
       return;
     }
     const e = this.expandState;
-    // ★ 2026-10-16（版本标记 `8f3a2c1` → `b41d7e9`）：加上了无界那道 `pullGeomReady` 门
-    //   （`geom` 这一位）。**用户报"没动画"时先看 `geom`**：
-    //     `geom=0` ⇒ 终点几何始终没量到 ⇒ 容器恒等 ⇒ 正是"没有封面/背景动画"；
-    //     `geom=1` 而 `scale=1.000` ⇒ 量到了却没落位（看 `clip`/`cont`/`drv` 是哪一位不对）。
-    const line1: string = `V b41d7e9 sess=${e.morphSessionStarted ? 1 : 0} ` +
+    // ★ 2026-10-16（版本标记 `b41d7e9` → **`c52e0a7`**）：本轮修的是
+    //   `aboutToDisappear()` 里那句无条件 `morphReset()`（§110）——
+    //   **用户报"没动画"时先看第一行的 `sess` / `geom` 两位**：
+    //     `sess=0` ⇒ 会话被清掉了（`aboutToDisappear` 那条路没被拦住）；
+    //     `geom=0` ⇒ 终点几何始终没量到 ⇒ 容器恒等 ⇒ 正是"没有封面/背景动画"。
+    const line1: string = `V c52e0a7 sess=${e.morphSessionStarted ? 1 : 0} ` +
       `usable=${e.morphUsable ? 1 : 0} geom=${e.morphGeomReadyNow() ? 1 : 0} ` +
       `cont=${e.morphContainerActive() ? 1 : 0} ` +
       `clip=${e.morphClipping() ? 1 : 0} scale=${e.morphScale.toFixed(3)} p=${e.morphP.toFixed(3)}`;
@@ -2148,9 +2161,68 @@ export struct PlaybackPage {
     }, PlaybackPage.COLLAPSE_WATCHDOG_MS);
   }
 
+  /**
+   * @returns 播放页路由**是否还在壳层的 `NavPathStack` 里**。
+   *
+   * ★ 2026-10-16 新增（唯一调用点：`.onDisAppear()` 里那道 `isShowPlay` 兜底门）。
+   *
+   * ## 为什么需要它
+   * `isShowPlay` 是**壳层路由的驱动源**（`Index.@Monitor('appState.isShowPlay')`
+   * → `popPlayerRoute()`）。而 `.onDisAppear()` 是**节点级**回调，会在
+   * "点击打开时旧实例卸载 / 分支重建"这些场合**也**触发 —— 那时播放页路由明明在栈里。
+   * 所以要写 `isShowPlay = false` 之前，必须先确认"这一次真的是下台"。
+   *
+   * ⚠️ 口径与壳层的 {@link Index.playerRouteIndex} **逐字一致**（`getAllPathName()` +
+   *    `indexOf(PLAYER_PAGE)`），这样两边对"播放页在不在栈里"永远是同一个答案。
+   * ⚠️ 取不到栈（`@Consumer` 没接上）时**返回 true**（= 保守认为"还在栈里"）：
+   *    宁可漏掉一次 Hard-exit 兜底，也绝不冒着"把刚打开的播放页弹掉"的风险。
+   */
+  private playerRouteStillPushed(): boolean {
+    try {
+      const names: string[] = this.pageIndexInfos.getAllPathName();
+      if (names === undefined) {
+        return true;
+      }
+      return names.indexOf(RouterUrlConstants.PLAYER_PAGE) >= 0;
+    } catch (err) {
+      Logger.warn(PlaybackPage.logTag, `playerRouteStillPushed failed: ${err}`);
+      return true;
+    }
+  }
+
   aboutToDisappear(): void {
-    // Hard exits (such as opening another feature) also return the paint owner to the mini bar.
-    this.expandState.morphReset();
+    // ★★★ 2026-10-16（**"点击打开 / 点击关闭 / 系统返回 没有动画"的最终推手**）：
+    //   原句是**无条件、同步**的 `morphReset()`。而 `morphReset()` 会做四件事：
+    // ```
+    //     morphGen++                  ⇒ 所有 `morphGenAlive` 守卫立刻过期
+    //     morphUsable = false         ⇒ §102/§104 修好的那三处守卫又全废
+    //     morphSessionStarted = false ⇒ §108 加的"新会话"判据被抹掉
+    //     morphGeomReady = false      ⇒ 上一轮加的 `pullGeomReady` 门被关回去
+    // ```
+    //   ⚠️ 而**点击打开时，旧播放页实例的 `aboutToDisappear` 就在这一轮起手之后跑**
+    //   （本文件 `:4235` 自己写过"新实例 `onAppear` 与旧实例 `onDisappear` 几乎同帧"；
+    //     `aboutToDisappear` 比 `onDisappear` **更早**，而且**没有任何延迟**）
+    //   ⇒ 它把**刚刚建立好的新一轮会话**整个清掉：
+    //     · `beginOpenMorphOnClick` 的 `isFreshSession` 判据被抹 ⇒ 走"放弃会话"那条分支；
+    //     · `settlePullOpen` 的补量链把几何量回来之后，又会有人再清一次；
+    //     · 观感就是用户报的那三条 —— **点击打开 / 点击关闭 / 系统返回 都没有封面/背景动画**
+    //       （而上拉那条路不经过"旧实例卸载"，所以一直正常）。
+    //
+    // ## 判据为什么用 `morphSessionStarted`（而不是 `morphUsable`）
+    //   这正是 goal 纪律里那条「**判据优先选更早的事实**」：
+    //     · `morphUsable`      —— 要等**终点锚点量到**才为真。点击路径在起手与挂载那一刻
+    //                            它**必然为假** ⇒ 拿它当门 = 门永远开着（`.onDisAppear` 里
+    //                            那道门就是这么失效的，本轮一并订正）。
+    //     · `morphSessionStarted` —— 由 `prepareMorphEntry()` 第一步置位，
+    //                            **三条入口（点击/上拉/系统）都会经过它**，而且远早于几何量齐。
+    //   ⇒ "还没起过会话"才说明这次卸载是真·离开播放页，该把绘制权还给迷你条。
+    //   ⚠️ 与 `.onDisAppear` 里那道门**必须用同一个判据**（两处形状相同，别再各写一套）。
+    if (!this.expandState.morphSessionStarted) {
+      this.expandState.morphReset();
+    } else {
+      Logger.info(PlaybackPage.logTag,
+        'RzdMorphAboutToDisappear keep session (morphSessionStarted=true, a live session owns it)');
+    }
     ++this.lyricMorphGen;
     this.lyricMorphVisible = false;
     this.lyricChromeProgress = 1;
@@ -4182,13 +4254,28 @@ export struct PlaybackPage {
                   return;
                 }
                 this.diagRemeasureTries = this.diagRemeasureTries + 1;
-                if (this.expandState.morphUsable) {
+                // ★★★ 2026-10-16（**同一形状的第 3 处**：又是"算出来了"当成"量到了"）：
+                //   这句原来是 `if (morphUsable) { return; }` —— 而 `morphUsable` 是
+                //   `morphInitParams()` 的结论：**只要 barW/boxW 量到了它就为真**，
+                //   **根本不管终点锚点有没有**。于是点击打开这条路上：
+                // ```
+                //   pullOpenBegin → morphInitParams() 成功（迷你条有几何）⇒ morphUsable = true
+                //   挂载 → 这里读到 morphUsable === true ⇒ **直接 return**
+                //        ⇒ 本页这次"最早的补量时机"被白白丢掉
+                // ```
+                //   而终点锚点在**本页挂载之前**是绝对量不到的（节点还不存在）
+                //   ⇒ 就只剩壳层那条 12×32ms 兜底，两条并行的补量**一条都没跑**。
+                //   ⇒ 判据换成 {@link PlayerExpandState.morphGeomReadyNow}（= 无界 `pullGeomReady`，
+                //     只有真的量到终点那一拍才为真）。**本页挂载这一刻正是"终点节点刚存在"的最早时机**。
+                //   ⚠️ 与 `morphUsable` 的分工见那个字段的注释，别再混用。
+                if (this.expandState.morphGeomReadyNow()) {
                   return;
                 }
+                this.expandState.pushMorphTrace('appearRem');
                 UIUtils.applySync((): void => {
                   this.expandState.prepareMorphEntry(this.getUIContext(), true);
                 });
-                if (this.expandState.morphUsable) {
+                if (this.expandState.morphGeomReadyNow()) {
                   this.diagOverlayKicks = this.diagOverlayKicks + 1;
                   this.expandState.focusMorphOverlayForPageIntro(this.getUIContext());
                   Logger.info(PlaybackPage.logTag,
@@ -4204,7 +4291,50 @@ export struct PlaybackPage {
           })
           .onDisAppear(() => {
             this.isAlive = false;
-            this.state.isShowPlay = false;
+            // ★★★ 2026-10-16（**删掉这里那句同步的 `state.isShowPlay = false`**）：
+            //   原来这里写着 `this.state.isShowPlay = false;`。它是一个**节点级**回调里的写入，
+            //   而 `isShowPlay` 是**壳层路由的驱动源**（`Index.@Monitor('appState.isShowPlay')`
+            //   → `popPlayerRoute()`）。两者搭在一起的后果是这个形状：
+            // ```
+            //   点击打开：壳层把 isShowPlay 置 true ⇒ 推入播放页路由
+            //   同一帧/下一帧，**旧播放页实例**（或分支重建的那个节点）触发 onDisAppear
+            //   ⇒ 它把 isShowPlay 写回 false
+            //   ⇒ 壳层立刻 popPlayerRoute() ⇒ **刚打开的播放页被弹掉 / 动画被掐断**
+            // ```
+            //   ⚠️ 而且这是**幂等性反了的**一处：注释 `:2709` 自己写着
+            //     「`isShowPlay` 若已是 false，`@Monitor` 不会重复动作」——那是"关闭链路"的语义。
+            //     关闭链路上 `isShowPlay = false` 有**三处权威设置点**，都在
+            //     `closeFullScreenPlayback()` 里、都在正确的时刻：
+            //       · `:2712` 无锚点早退支
+            //       · `:2729` 正常收起补间收尾支
+            //       · `:2738` "没有可靠几何直接关闭"退化支
+            //   ⇒ 本处**不需要**再写一次；留着只会让"打开"被自己误判成"关闭"。
+            //   ⚠️ 若哪天真需要兜底（例如 Hard exit 走不到上面三处），
+            //      **必须**先判"播放页路由确实已经不在栈里"再写 —— 否则又是这个形状。
+            //      排查关键字：`route: push player` 与 `route: remove player at index=` 的时序。
+            //
+            // ★★★ 2026-10-16（**折中做法：留下安全网，但给它一个"只在下台时触发"的条件**）：
+            //   直接删掉它有风险 —— `Hard exit`（例如系统把模态整个收掉、或别的模块直接
+            //   `popPath`）时**没有任何人**会把迷你条交还回来。所以不删，改成"**只在确认
+            //   播放页已经不在路由栈里**时才写"，并且**推迟一拍**（让同帧内可能发生的
+            //   push 先落栈）：
+            //     · 点击打开：那一拍栈里**已有**播放页 ⇒ 不写 ⇒ 不会被误判成关闭 ✓
+            //     · 系统返回 / 关闭按钮：那三处权威点已经写过（`isShowPlay` 已是 false，
+            //       重复写是幂等的空操作）✓
+            //     · Hard exit 且没人写：那一拍栈里没有播放页 ⇒ 写 false ⇒ 壳层收尾 ✓
+            setTimeout((): void => {
+              if (this.playerRouteStillPushed()) {
+                Logger.info(PlaybackPage.logTag,
+                  'RzdMorphOnDisappear keep isShowPlay (player route still on the stack)');
+                return;
+              }
+              if (!this.state.isShowPlay) {
+                return;
+              }
+              Logger.warn(PlaybackPage.logTag,
+                'RzdMorphOnDisappear fallback: player route gone but isShowPlay still true ⇒ release it');
+              this.state.isShowPlay = false;
+            }, 0);
             // 下一次打开重新走"先量再缩"的顺序：把绘制门也关回去
             this.introPaintReady = false;
             // ★ 页面卸载时复位"跟手会话"的两个标记。
@@ -4222,15 +4352,19 @@ export struct PlaybackPage {
             //   ⇒ `morphUsable` 永远为假 ⇒ 容器停在恒等 ⇒ **背景整屏、没有动画**。
             //
             //   ⇒ 加一道门：**推迟一拍再清，并且"若那一拍已经有活着的会话就跳过"**。
-            //     判据用 `morphUsable`（几何已就绪）——
-            //     · 新一轮会话已经量齐 ⇒ 屏上是**下一次打开**的形变，绝不能清；
-            //     · 没有活着的会话（几何没就绪）⇒ 按原样清掉残留（保留下面的自愈目的）。
-            //     ⚠️ 推迟一拍不改变"残留清理"的语义：残留标记本来就不会在一帧内造成危害，
-            //       而 `pullDragging` / `morphDrive` 那两句**保持同步执行**（它们才是自愈的关键）。
+            //     ★★★ 2026-10-16（**判据订正：`morphUsable` → `morphSessionStarted`**）：
+            //       原来这里判 `morphUsable`（几何已就绪）——**在点击这条路上它必然为假**：
+            //       起手与挂载那一刻终点锚点还没量到，`morphUsable` 就是 false
+            //       ⇒ 这道门**永远开着** ⇒ 与被删掉的那句无条件 `morphReset()` 等价。
+            //       这正是 goal 纪律里那条「**判据优先选更早的事实**」的反例：
+            //         · `morphSessionStarted` 由 `prepareMorphEntry()` 第一步置位，
+            //           三条入口（点击 / 上拉 / 系统）都经过它，**远早于几何量齐**；
+            //         · 它才是"这一轮到底起没起会话"的判据。
+            //       ⚠️ 与 `aboutToDisappear()` 那道门**必须同一个判据**（同一形状，不许各写一套）。
             setTimeout((): void => {
-              if (this.expandState.morphUsable) {
+              if (this.expandState.morphSessionStarted) {
                 Logger.info(PlaybackPage.logTag,
-                  'RzdMorphOnDisappear keep session (usable=true, a live session owns it)');
+                  'RzdMorphOnDisappear keep session (morphSessionStarted=true, a live session owns it)');
                 return;
               }
               Logger.info(PlaybackPage.logTag, 'RzdMorphOnDisappear reset (no live session)');

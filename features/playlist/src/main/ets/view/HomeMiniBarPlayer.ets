@@ -165,10 +165,16 @@ export struct HomeMiniBarPlayer {
     if (!Number.isFinite(attempt) || attempt >= HomeMiniBarPlayer.PULL_ANCHOR_RETRY_MAX) {
       return;
     }
-    const gen: number = this.expandState.morphGen;
     setTimeout((): void => {
-      // 手势已经收尾 / 页面已卸载 / 换了一轮形变：不再补量
-      if (!this.expandState.pullDragging || !this.expandState.morphGenAlive(gen)) {
+      // ★★★ 2026-10-16（**同一形状第 4/5/6 处：去掉 `morphGenAlive` 守卫**）
+      //   原来是 `if (!pullDragging || !morphGenAlive(gen)) return;`。
+      //   `morphGen` 的语义是"这一轮形变会话的编号"，它被 `morphReset()` 推高 ——
+      //   而"旧页面实例卸载"这类与用户意图无关的事就会推高它
+      //   ⇒ 整个 12×32ms 补量窗口在第 1 拍静默死掉（不写日志，查不出来）。
+      //   这正是 §102/§104 在壳层修掉的同一个形状（那句结论在本仓写过三遍）：
+      //     > 用"会话编号"去判"用户还想不想看播放页" —— 两者无关。
+      //   ⇒ 只判 `pullDragging`（"这一轮还没走完"才是要不要继续补量的真判据）。
+      if (!this.expandState.pullDragging) {
         return;
       }
       if (this.expandState.measureMiniDuringPull(this.getUIContext(), false)) {

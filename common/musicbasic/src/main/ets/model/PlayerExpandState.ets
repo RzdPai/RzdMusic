@@ -2484,6 +2484,51 @@ export class PlayerExpandState {
       this.morphDrive = MorphDrive.FINGER;
       this.morphUsable = false;
       this.morphP = 0;
+      // ★★★ 2026-10-16（**照搬无界"进相位时就落起点几何"** —— 修"点击打开首帧闪一整屏"）：
+      //
+      // ## 无界是怎么做的
+      // ```
+      //   beginMorphEnter(src)                              wujie.pa 146495
+      //       setMorph(ENTERING, FINGER)                    // ① 进相位
+      //       pushPath({name, param:{pull:true}})           // ② 推路由
+      //   …播放页挂载、publishMorphTargets 量到终点…
+      //       pullGeomReady = true
+      //       expand.applyPullProgress(ui, pullT)           // ③ 第一次就落 **pullT = 0** 的几何
+      //                                                     //    （= 迷你条那一小块，不是恒等！）
+      // ```
+      //   ⇒ 无界的 `pullVisibleRect` **从第一帧起就永远是那个小矩形**，从不等于恒等。
+      //
+      // ## 我们原来的样子（这就是"点了会闪一下全屏"的来源）
+      //   `prepareMorphEntry` 在终点锚点缺失时**提前 return false**，于是
+      //   `morphBeginEntering()` → `applyMorphProgress(0)` **根本没跑到**
+      //   ⇒ 容器停在**恒等**（整屏）⇒ 播放页挂载那一刻就是"一整屏播放页"，
+      //     要等 32ms 后补量成功才"啪"地缩到迷你条再往前长 —— 观感是**闪一帧全屏再收回去**。
+      //
+      // ## 改法（判据取自更早的事实）
+      //   起点几何（迷你条胶囊 + 宿主尺寸）在**这一刻是量得到的**（`morphInitParams()` 已经成功过），
+      //   只有**终点**量不到 ⇒ 那就先按终点缺失把**起点几何**落下去：
+      //   `applyMorphProgress(0)` 只需要 `initScale/initTranslate*/initClipHeight`，
+      //   它们全部由 `morphInitParams()` 填好 —— **不需要终点**。
+      //   ⚠️ `morphUsable` 仍保持 false：更新它的是真正的补量（`measureMiniDuringPull`），
+      //      它是下游一堆门的判据，这里**不动它**（第一轮纪律：不要用一个布尔承担两种语义）。
+      //   ⚠️ 落几何要临时开门（`morphGeomReady`），落完**必须原样关回去** —— 否则
+      //      "最后一次量到的 initScale" 会被无界的门放行去画一串过期几何。
+      const startGeomOk: boolean = this.morphInitParams();
+      if (startGeomOk) {
+        // ⚠️ `applyMorphProgress` 现在有一道 `morphGeomReady` 门（见那个字段），
+        //    而这一刻"终点还没量到"⇒ 门上写着"不许落位"。
+        //    起点几何是**另一件事**：它只需要胶囊与宿主尺寸（都已经量到了）。
+        //    ⇒ 临时开门落一次，落完**原样关回去**（绝不能让"最后一次量到的 initScale"
+        //      被当成"本轮已就绪"而放行一串过期几何）。
+        const prevReady: boolean = this.morphGeomReady;
+        this.morphGeomReady = true;
+        this.applyMorphProgress(0);
+        this.morphGeomReady = prevReady;
+      }
+      Logger.info(PlayerExpandState.logTag,
+        `RzdMorphStart bake start geometry: initOk=${startGeomOk} geomReady=${this.morphGeomReady} ` +
+        `initScale=${this.initScale.toFixed(4)} clipH=${this.initClipHeight.toFixed(1)} ` +
+        `tx=${this.initTranslateX.toFixed(1)} ty=${this.initTranslateY.toFixed(1)}`);
     }
     // 已有起点就继续等待目标挂载，调用方不能把首次上拉直接落位。
     // ★★ 2026-10-15 诊断锚点（`hdc shell hilog -x | Select-String 'RzdMorphStart'`）——

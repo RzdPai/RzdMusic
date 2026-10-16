@@ -81,9 +81,13 @@ export struct MiniBarPlayer {
     if (!Number.isFinite(attempt) || attempt >= MiniBarPlayer.PULL_ANCHOR_RETRY_MAX) {
       return;
     }
-    const gen: number = this.expandState.morphGen;
     setTimeout((): void => {
-      if (!this.expandState.pullDragging || !this.expandState.morphGenAlive(gen)) {
+      // ★★★ 2026-10-16（与 `HomeMiniBarPlayer` / 壳层**逐字同一处修正**）：
+      //   去掉 `morphGenAlive(gen)` —— `morphGen` 会被"旧页面实例卸载"这类
+      //   与用户意图无关的事推高，导致补量窗口在第 1 拍静默死掉。
+      //   判据只留 `pullDragging`（"这一轮还没走完"）。详见
+      //   `products/default/.../Index.ets` 里 `schedulePullAnchorRemeasure` 的长注释。
+      if (!this.expandState.pullDragging) {
         return;
       }
       if (!this.expandState.measureMiniDuringPull(this.getUIContext(), true)) {
