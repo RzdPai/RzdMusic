@@ -528,6 +528,18 @@ export class PlayerExpandState {
   /**
    * 操作区（播放/下一首等按钮）的淡出系数
    * （对标 `MiniMorph.actionsOpacityAt = clamp(1 - t/0.20)`，比歌名更早消失）。
+   *
+   * ★ 2026-10-17（`MiniMorph` 逐条复核 —— 本文件是**最后一个**没审过的播放器上游模块）：
+   * ```
+   *   MiniMorph.actionsOpacityAt(t)      = clamp(1 − t / 0.2 , 0, 1)   ✓ 与本函数逐字一致
+   *   MiniMorph.metaOpacityAt(t)         = clamp(1 − t / 0.35, 0, 1)   ✓ 与上面那个逐字一致
+   *   MiniMorph.coverVisualRadiusAt(t)   = lerp(vp(miniCover.width)/2, targetCoverRadius, t)
+   *        ⇒ 这是**胶囊那一侧**的圆角插值（与 `CoverMorph.radiusAt` 不是一回事，别混）
+   *   MiniMorph.coverBoxEdge/Left/Top/Right/Scale/VisualEdge/CenterX/CenterY/Rise/RightShift
+   *        ⇒ 胶囊端点的逐项几何，本仓对应 `miniX` / `miniY` / `miniSize` / `barWin…` /
+   *          `cover…ShiftAt` / `coverRiseAt`（⚠️ 写注释时别把星号和斜杠连着写，会提前结束注释块）
+   * ```
+   * ⇒ **本仓这三条都与上游一致** ✓（记在这里，免得下一轮再从头核 `MiniMorph`）。
    */
   public static actionsOpacityAt(progress: number): number {
     const v: number = 1 - progress / 0.20;
@@ -3765,6 +3777,31 @@ export class PlayerExpandState {
    *   （挤压只在关闭落位后 430ms 内偏离 1）。
    *   ⇒ 若将来出现"某次打开时封面/背景起点整体偏几 vp"，**先查这里**（读数：徽标第二行
    *     `snap=`/`end=`、第十三行的 `CLO:… bar=WxH`）。
+   *
+   * **(d) 上游 `MainPage.visualRect(…, baseRect)`（"视觉矩形修正"）—— 结论：本仓**无法照搬**，
+   * 不写是**有意的**，别再当前置任务挂在那儿。** 原始字节码
+   * （`_recover/disasm/wujie.pa:143042`，94~95 条指令，逐条解完）逻辑是：
+   * ```ts
+   *   const vis = getRectById(…);                  // ← 需要**另一个**测量来源（含 scale 修正那条）
+   *   if (vis === undefined)                       { return baseRect; }   // 量不到 ⇒ 原样返回
+   *   if (baseRect.width <= 0)                     { return baseRect; }
+   *   const k = vis.width / baseRect.width;
+   *   if (k <= 0)                                  { return baseRect; }
+   *   if (Math.abs(k - 1) < 0.01)                  { return baseRect; }   // ★ 自带"分歧 <1% 就不修"护栏
+   *   const out = new RectInPx();                  // 注意：位置取 base、尺寸取 k 倍
+   *   out.left = baseRect.left;  out.top = baseRect.top;
+   *   out.width  = baseRect.width  * k;            // = vis.width
+   *   out.height = baseRect.height * k;
+   *   out.right = out.left + out.width;  out.bottom = out.top + out.height;
+   *   return out;
+   * ```
+   * ⇒ **要照搬就必须在"同一次测量里"同时拿到 `getRectById(...)`**，而
+   * `getRectangleById` 在 HDS 浮动底栏上量出来的值本身是偏的（见本函数开头）
+   * ⇒ 我们没有可信的同轮次第二来源；**硬凑一个只会是自创数值**（违反"照搬"红线）。
+   * ⇒ 我们真正的等价物是 (b) 那条：`naturalLayout` + 单独保存的 `bigNodeScaleX/Y`
+   * —— 用**自洽的口径**代替"两个来源互相校正"，比照搬更稳。
+   * ⇒ ★ 顺带确证：**上游自己认为"两个来源差 <1% 就不必修"**（那条 `1e-2` 护栏）
+   * ⇒ 我们测量链上 `<1%` 的出入**不是 bug**，不要为它改公式。
    * @param ui UIContext
    * @param id 组件 id
    * @param naturalLayout true = 用**不含变换**的 `getPositionToWindow()`（与"布局尺寸"自洽；
