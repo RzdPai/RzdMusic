@@ -5722,6 +5722,36 @@ export struct PlaybackPage {
       //   ⚠️ 与 `MESH_BG_ID` / `MINI_LYRIC_BOX_ID` 等**并存**（`getFrameNodeById` 按 id 查，
       //      一个节点只有一个 id；这几个是**不同节点**，互不影响）。
       .id(PLAYER_ROOT_ID)
+      // ★★★★ 2026-10-17（**接上上游那个"LANDING 时停笔"的绘制门** —— `playerPaintsOf`）
+      //
+      // ## 上游那一条是**有消费者**的（`wujie.pa:153390-153430`，`MainPage` 发布形变状态那里）
+      // ```ts
+      //   AppStorage.setOrCreate(K_MORPH_SQUASH, playerPaintsOf(stage) ? true : false);  // ★ 就是这个布尔
+      //   if (stage !== MorphStage.LANDING) { this.stopLandAnim(); this.morphSquashY = 1; }
+      // ```
+      // 而 `playerPaintsOf(stage) = stage !== MorphStage.LANDING`（`MorphState.ets`，`wujie.pa:93205`）
+      // ⇒ **进 LANDING 那一刻起，播放页整页不再绘制**。
+      // `PlayerPage` 侧读它就是 `pullPaintable = !pullGeomReady ? true : playerPaints(stage)`。
+      //
+      // ## 本仓原来**没接**（死门）
+      // `PlayerExpandState.playerPaints()` 早就写好了（`return stage !== LANDING;`），
+      // 注释里也写着它防的是什么：
+      // > 「LANDING = 已经交还给迷你条（对标 `playerPaintsOf = false`）：这一帧起播放页
+      // >   **不再画**，否则会在迷你条封面上留一个**同尺寸的深色小方块**，直到被卸载。」
+      // 但它**零消费者** ⇒ 那句话描述的现象一直在发生。而"同尺寸的小方块"在手机上正是
+      // **一条很矮的背景**（容器 `scale ≈ 0.082` × `clipHeight ≈ 683` ≈ 迷你条那块
+      // 330×56 的扁平矩形）—— 与用户第 ② 条「**有背景但是高度特低**」逐字吻合。
+      //
+      // ## 为什么 `.visibility(Hidden)` 而不是 `.opacity(0)` 或条件渲染
+      //   · `Hidden` = **不绘制、但保留布局** ⇒ 与"停笔"同义，且不动任何量测/锚点
+      //     （`getFrameNodeById` 的矩形、`onAreaChange` 上报都不受影响）；
+      //   · `.opacity(0)` 仍会走绘制管线（"停笔"没做到），而且本页的 `.opacity` 已经是
+      //     `morphOpacityValue()`（恒 1，见那里的注释）；
+      //   · 条件渲染会把节点从树上摘掉 ⇒ 量测源消失（`PLAYER_BIG_COVER_ID` 等），风险大。
+      // ⚠️ 快照在 `morphLand()` **之前**拍（见 `closeWithAnimation` 的顺序）⇒ 本门翻假时
+      //    图已经到手，不会拍到一张空图。
+      // ⚠️ 上一帧仍是 LEAVING（在画）⇒ 关闭动画本身不受影响。
+      .visibility(this.expandState.playerPaints() ? Visibility.Visible : Visibility.Hidden)
       // 裁剪窗口高度 = 可视高度 / 缩放 ⇒ 缩放后正好是那块可视矩形
       .height(this.morphClipHeight())
       // 边界裁剪（圆角由各图层自带；不用 clipShape：它会覆盖 borderRadius，
