@@ -3497,7 +3497,17 @@ export struct PlaybackPage {
       this.expandState.morphLand();
       const shrink: MorphShrinkState = this.morphShrinkState();
       shrink.start(this.getUIContext(), pixmap, srcBox, winW, winH, (): void => {
-        Logger.info(PlaybackPage.logTag, 'RzdShrinkOverlay onDone (overlay hidden)');
+        // ★★★ 2026-10-17（照搬 `MainPage` 那个 **onDone λ@12*#**，`wujie.pa:154940-154949`）：
+        // ```ts
+        //   () => { this.miniHidden = false; this.shrinkPixmap = undefined; }
+        // ```
+        //   · `miniHidden = false` —— 本仓对应的是"迷你条**真身**可见"，
+        //     那一步由本路径更早的 `morphLand()`（交还绘制权）负责，这里不重复；
+        //   · `shrinkPixmap = undefined` —— ★ **必须做**：那是一张**满窗** PixelMap
+        //     （1080×2400×4B ≈ 10MB 级），共享状态一直引用着它就不会被回收。
+        //     上一版**漏了这一句** ⇒ 每关一次播放器就多留一张（直到下一次关闭才被覆盖）。
+        Logger.info(PlaybackPage.logTag, 'RzdShrinkOverlay onDone (overlay hidden, pixmap dropped)');
+        shrink.clearPixmap();
         // 浮层收尾（≈350ms）之后再放开闸门：正常路径下那时页面早已被 pop，
         // 这一句只是"万一没 pop 掉"的自愈（同失败支的理由）。
         this.isClosing = false;

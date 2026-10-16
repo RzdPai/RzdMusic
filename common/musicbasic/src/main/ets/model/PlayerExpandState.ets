@@ -1513,7 +1513,16 @@ export class PlayerExpandState {
   // 「同一个元素」缩小并移到顶部；歌词正文靠 `lyricPadTop()` 按浮层高度让位。
   // 这里只提供**几何**，怎么画由 `PlaybackPage.LyricFloatLayer()` 决定。
 
-  /** 歌词页浮层里「封面底边 → 歌名块顶边」的间距（vp）。⚠️ 本项目估定值，非逆向值。 */
+  /**
+   * 歌词页浮层里「封面底边 → 歌名块顶边」的间距（vp）。⚠️ 本项目估定值，非逆向值。
+   *
+   * ★ 2026-10-17：**它现在只剩一个用途** —— 徽标第六行 `metaOld=` 那条**旧式子**
+   *   （`lyricMetaFromYOf()` → `lyricMetaMorphY()` → `metaTopInUseYAt()`）的对账。
+   *   歌名块的**真实渲染位置**在 §131 已改成 `metaTopGeomY(t, rowH)`，那里用的是
+   *   无界的 `COVER_FIT_META_GAP_VP(50)`（**不是这个 10** —— 见 §131.2：
+   *   这个 10 是把"被丢弃的档位 `metaGap`"当成了真值）。
+   *   ⚠️ 因此**不要**再拿它去参与任何渲染计算。
+   */
   private static readonly LYRIC_META_GAP_VP: number = 10;
   /** 歌词页浮层里「歌名 + 歌手」两行所占高度（vp）。⚠️ 本项目估定值，非逆向值。 */
   private static readonly LYRIC_META_BLOCK_H_VP: number = 44;
@@ -1599,7 +1608,24 @@ export class PlayerExpandState {
     return this.lerp(this.lyricMetaFromYOf(), this.lyricMetaYOf(), p);
   }
 
-  /** @returns 歌词页浮层（封面 + 歌名块）整体占用的竖直高度（vp，从窗口顶边量起）。 */
+  /**
+   * @returns 歌词页浮层（封面 + 歌名块）的**底边**（vp，从窗口顶边量起）。
+   *
+   * 歌名与封面在歌词页是**并排**的 ⇒ 浮层的底边就是**封面底边**
+   * （不能用 `lyricMetaYOf() + LYRIC_META_BLOCK_H_VP` —— 那是"歌名排在封面下方"时的算法，
+   *  并排之后会把留白算多一整块）。
+   *
+   * ★★★ 2026-10-17（**订正：这里原来多叠了一个 `+ LYRIC_META_GAP_VP(10)`**）：
+   *   它唯一的消费者是 {@link lyricPadTop}，而 `lyricPadTop` 自己又会加一个呼吸间距
+   *   （`LYRIC_PAD_GAP_VP`）⇒ **同一个"浮层底边之后的间距"被加了两次**（33 = 10 + 23）。
+   *   而反解出来的无界式子只有**一次**（见 `lyricPadTop` 的注释）：
+   * ```
+   *   lyricPadTop = boxH/2 + bottomYAtLyric() + 23
+   *                 └──────┬──────┘
+   *              这两项合起来 = "浮层底边（相对盒顶）"，**不含任何额外间距**
+   * ```
+   *   ⇒ 本函数只返回**浮层底边**，"呼吸间距"一律由 {@link lyricPadTop} 那一层加。
+   */
   public lyricOverlayHeight(): number {
     if (!this.lyricFloat()) {
       return 0;
@@ -1608,29 +1634,42 @@ export class PlayerExpandState {
     if (size <= 0) {
       return 0;
     }
-    // ★ 2026-10-15（照搬无界）：歌名与封面**并排**之后，浮层高度 = 封面底边 + 一点呼吸间距。
-    //   （原来是 `lyricMetaYOf() + LYRIC_META_BLOCK_H_VP` —— 那是"歌名排在封面下方"时的算法，
-    //     并排之后它会把留白算多一整块。）
-    return this.lyricCoverYOf() + size + PlayerExpandState.LYRIC_META_GAP_VP;
+    return this.lyricCoverYOf() + size;
   }
 
   /**
-   * @returns 歌词页正文必须让位的**顶部内边距**（vp）—— 等价无界的 `lyricPadTop()`。
+   * @returns 歌词页正文必须让位的**顶部内边距**（vp）—— 等价无界的 `lyricPadTop()`
+   *          （`wujie.pa:172855-172890`，逐条已解）。
    *
-   * 判据链与无界一致：`!lyricFloat → 0`；浮层高度算不出来 → 兜底常量；
-   * 正常 → 浮层高度 + 一点呼吸间距。
-   * ⚠️ 中间的 `boxH <= 0` 是**防御分支**（`lyricFloat()` 已经要求封面尺寸 > 0，
-   *    正常流程走不到），按无界那份 `lyricPadTop()` 的结构保留。
+   * ```ts
+   *   lyricPadTop() {
+   *     if (!this.lyricFloat) return 0;
+   *     const boxH = this.overlayBoxH();                    // = swiperBoxH > 0 ? swiperBoxH : estBoxH()
+   *     if (boxH <= 0) return LYRIC_PAD_TOP_FALLBACK;        // 96
+   *     return boxH / 2 + this.morph.bottomYAtLyric() + 23;  // 0x17 = 23
+   *   }
+   * ```
+   * ★ 前两项**合起来就是"浮层底边（相对盒顶）"**（把归档实测值 `700/2 + (−175.28) + 23 = 197.72`
+   *   代进去反解得 `boxH/2 + bottomYAtLyric = 174.72`，见 `lyricBoxTopVp` 的注释）
+   *   ⇒ 本仓写成"浮层底边 + `LYRIC_PAD_GAP_VP`"，**只差一个坐标系问题**：
+   *
+   * ⚠️ **仍未闭合的一步**：本仓 `lyricOverlayHeight()` 是**窗口**坐标，而无界那一项是
+   *   **相对盒顶** ⇒ 两者只在 `lyricBoxTopVp ≈ 0` 时等价。判据已量出来（徽标第六行 `lBox=`），
+   *   拿到读数后若明显非 0，改成 `(lyricOverlayHeight() − lyricBoxTopVp) + 23` 即可（一行）。
+   *   ⚠️ 为什么不猜：这与 §56.50「让位量是**相对盒顶**的」同一个形状，
+   *     `topInsetVp()` 当年就按"盒顶 = 0"写而**多让了一个状态栏**。
+   * ⚠️ 中间的 `boxH <= 0` 是**防御分支**，按无界那份结构保留
+   *   （`lyricFloat()` 已要求封面尺寸 > 0，正常流程走不到）。
    */
   public lyricPadTop(): number {
     if (!this.lyricFloat()) {
       return 0;
     }
-    const boxH: number = this.lyricOverlayHeight();
-    if (boxH <= 0) {
+    const overlayBottom: number = this.lyricOverlayHeight();
+    if (overlayBottom <= 0) {
       return PlayerExpandState.LYRIC_PAD_TOP_FALLBACK;
     }
-    return boxH + PlayerExpandState.LYRIC_PAD_GAP_VP;
+    return overlayBottom + PlayerExpandState.LYRIC_PAD_GAP_VP;
   }
 
   // ═════════════════════════ 三点五、整页形变放大（对标无界 ExpandAnimation 的"逐渐形变放大填满"）═════════════════════════

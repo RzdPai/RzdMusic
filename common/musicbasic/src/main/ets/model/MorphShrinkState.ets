@@ -259,4 +259,20 @@ export class MorphShrinkState {
 
   /** 日志 tag（无界那侧是 `"WantingMusic-Shrink"`，本仓统一 `Rzd` 前缀）。 */
   public static readonly logTag: string = 'RzdShrinkOverlay';
+
+  /**
+   * ★ 2026-10-17：丢掉那张满窗快照的引用源 —— 照搬 `MainPage` 的 `λ@12*#`
+   * （`wujie.pa:154940-154949`：`miniHidden = false; shrinkPixmap = undefined;`）。
+   *
+   * ⚠️ **必须在浮层收尾时调**（`start` 的 `onDone` 里），否则那张
+   *   **满窗 PixelMap**（1080×2400×4B ≈ 10MB 级）会被共享状态一直引用 ⇒ 不会被回收。
+   *   `start` 的 `onFinish` 只把 `visible` 置假（浮层节点因此卸载），
+   *   **引用本身要由调用方在 `onDone` 里丢** —— 无界就是这么分工的
+   *   （`ShrinkOverlay.onFinish` 只 `visible = false` + 回调；清 `shrinkPixmap` 在 `MainPage` 那侧）。
+   * ⚠️ 本仓**只丢引用、不 `release()`** —— 与无界逐字一致，也避开"节点还引用着就被释放"
+   *   那一帧的风险（节点卸载后由 GC 回收 native 内存）。
+   */
+  public clearPixmap(): void {
+    this.pixmap = undefined;
+  }
 }
