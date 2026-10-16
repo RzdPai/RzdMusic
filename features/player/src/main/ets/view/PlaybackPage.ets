@@ -1163,6 +1163,61 @@ export struct PlaybackPage {
   }
 
   /**
+   * 把'封面浮层飞行进度'**对齐到当前页** —— 不依赖"发生过一次滑动"。
+   *
+   * ★★★ 2026-10-16（**修用户实测「歌词页封面没变小叠在歌词上面」**）
+   *
+   * ## 用户的观察（决定性）
+   * 截图里**歌名/歌手/歌词正文是压在封面上的** —— 那是**封面页那一端的浮层位置**
+   * （歌名在封面下方 `META_GAP_BELOW_COVER(50)`、封面是整窗那一份 331）。
+   * 而歌词正文**已经显示出来了**（那需要 swiper 在第 2 页）。
+   * ⇒ 两件事同时成立只有一种解释：**页切了，浮层没跟**（徽标 `edge=331 t=0.00` 正是它）。
+   *
+   * ## 为什么原来的写法会漏
+   * `lyricMorphT` 的唯一驱动点是 `.onAnimationStart`，而它带一个守卫
+   * 「**已经在目标页了就跳过**（`index === targetIndex`）」。于是只要出现
+   * "当前页 = 歌词页、而 `lyricMorphT` 仍是 0"这种**不一致的初始态**，就再也没有任何东西会去修正它：
+   *   · 进播放器时若索引已是 1（上一轮 `onAppear` 复位过 0、或索引来自别处）⇒ 守卫直接跳过；
+   *   · 节点重建后 `onAppear` 把 `lyricMorphT` 归到"当前页对应的端点"——
+   *     而**当前页**这个值本身若与 swiper 实际停的页不一致，归出来的就是错的端点。
+   *
+   * ## 正确的关系（单一真源）
+   * ```
+   *   playbackSwiperIndex（当前页）  ──决定──▶  lyricMorphT 的**静止端点**
+   *                                        （0 = 封面页那一端，1 = 歌词页那一端）
+   *   滑动过程中的补间只是"从一个端点走到另一个端点"，
+   *   而**静止态**永远等于"当前页对应的端点"。
+   * ```
+   * ⇒ 本方法就是那条关系的实现：立即把 `t` 置到当前页对应的端点（不动画）。
+   *   · 与滑动中的补间**不冲突**：补间只在 `lyricMorphVisible === true`（飞行中）时才有意义，
+   *     而本方法只在"静止态下发现不一致"时被调用（见调用点）。
+   *   · 幂等：已经在正确端点时写同一个值，不触发任何重绘差异。
+   *
+   * ⚠️ 调用点：`aboutToAppear()`（页面挂载时对齐一次）与内容层 `.onAppear()`
+   *    （节点出现时对齐一次）。**不要**放进滑动回调里（那会打断补间）。
+   * @param reason 只用于日志（`boot` / `appear`）
+   */
+  private syncLyricMorphToPage(reason: string): void {
+    const want: number = this.playbackSwiperIndex === PlaybackPage.SWIPER_INDEX_LYRIC ? 1 : 0;
+    if (this.lyricMorphVisible && Math.abs(this.lyricMorphT - want) < 0.999) {
+      // 飞行中且还没到端点 ⇒ 别打断补间（这条只在极端时序下才可能命中）
+      return;
+    }
+    if (Math.abs(this.lyricMorphT - want) < 0.0001) {
+      return;
+    }
+    Logger.info('RzdLyricFloat',
+      `sync to page reason=${reason} index=${this.playbackSwiperIndex} want=${want} ` +
+      `from=${this.lyricMorphT.toFixed(3)}`);
+    this.lyricMorphT = want;
+    this.lyricMorphTarget = this.playbackSwiperIndex === PlaybackPage.SWIPER_INDEX_LYRIC;
+    this.lyricSwiperSettled = true;
+    this.lyricFlightSettled = true;
+    this.lyricMorphVisible = false;
+    this.lyricMorphOpacity = 1;
+  }
+
+  /**
    * 收尾：Swiper 自己的切换动画与浮层飞行**都结束**之后才卸掉"飞行中"这一档。
    *
    * ⚠️ 这里**不是**把封面一刀切掉：浮层是**常驻**的，落位后仍由 `playbackSwiperIndex`
@@ -1323,6 +1378,33 @@ export struct PlaybackPage {
   private diagOverlayKicks: number = 0;
 
   /**
+   * ★★★ 2026-10-16（**Swiper 回调实参记录** —— 修"歌词页封面没变小"的**决定性**读数）
+   *
+   * 为什么必须记它：上一批我在这条链上用**静态推理**在两种假设之间摇摆 ——
+   * ```
+   *   假设 A：`.onAnimationStart` **根本没触发**（切页没走滑动回调）
+   *   假设 B：触发了但**被守卫挡掉**（`index === targetIndex`）
+   * ```
+   * 两者的修法**完全不同**（A 要在挂载/切页时补一次对齐；B 要改守卫的判据），
+   * 而只有真机读数能分辨。⇒ 记下来，一次定位。
+   *
+   * 读法（徽标**第八行**）：
+   * ```
+   *   ast=<index>-<target>   例 `ast=0-1` = 从第 0 页滑向第 1 页（正常切到歌词页）
+   *                          `ast=-1--1` = **这个回调一次都没进来过**（假设 A 成立）
+   *   skp=<守卫挡掉的次数>   > 0 而 ast 有值 ⇒ 假设 B 成立（回调进了但被 `index===target` 挡）
+   *   aend=<index>/<次数>    `onAnimationEnd` 最后一次的实参与次数
+   *   chg=<index>/<次数>     `onChange` 最后一次的实参与次数（swiper 自己认为停在哪一页）
+   * ```
+   */
+  private diagAnimStart: string = '-1--1';
+  private diagAnimSkip: number = 0;
+  private diagAnimEnd: string = '-';
+  private diagAnimEndCount: number = 0;
+  private diagChg: string = '-';
+  private diagChgCount: number = 0;
+
+  /**
    * 顶部那块"隐形热区"的点击计数：**连点 3 次**开关自证徽标。
    *
    * 用 800ms 的窗口判定"连点"；间隔超过就重新计数。
@@ -1429,6 +1511,13 @@ export struct PlaybackPage {
       `sg=${this.lyricSwiperSettled ? 1 : 0} fs=${this.lyricFlightSettled ? 1 : 0} ` +
       `lcEdge=${e.lyricCoverSizeOf().toFixed(1)} lcY=${e.lyricCoverYOf().toFixed(1)} ` +
       `float=${e.lyricFloat() ? 1 : 0}`;
+    // ★★★ 2026-10-16（**Swiper 回调实参** —— 见字段 `diagAnimStart` 的注释）：
+    //   `ast=-1--1` = `onAnimationStart` **一次都没进来过**（⇒ 切页没走滑动回调）；
+    //   `ast=0-1` + `skp>0` = 进来了但被守卫挡掉（⇒ 要改守卫判据）；
+    //   `chg=1/…` 而 `sw=0` = swiper 认为在歌词页、状态却记着 0（⇒ 状态没同步）。
+    const line8: string = `ast=${this.diagAnimStart} skp=${this.diagAnimSkip} ` +
+      `aend=${this.diagAnimEnd}/${this.diagAnimEndCount} ` +
+      `chg=${this.diagChg}/${this.diagChgCount}`;
     // ★★★ 第五行：**动作轨迹**（最近 6 个动作，按发生顺序 `>` 连接）。
     //   为什么最有用：这条链上"顺序"本身就是自变量的最大值 ——
     //   同一个函数先调还是后调，结果完全不同（§93 的 `onAppear` 误判、§103 的
@@ -1439,7 +1528,8 @@ export struct PlaybackPage {
     //     `clickOpen>skip`                                     ⇒ 被 `pullDragging`/相位挡了
     //     `…>tween>settleSkip`                                 ⇒ 补间起了但落位被跳过（§104 那类）
     const line5: string = `trace=${e.morphTrace.length > 0 ? e.morphTrace : '(empty)'}`;
-    const next: string = `${line1}\n${line2}\n${line3}\n${line4}\n${line5}\n${line6}\n${line7}`;
+    const next: string =
+      `${line1}\n${line2}\n${line3}\n${line4}\n${line5}\n${line6}\n${line7}\n${line8}`;
     if (next !== this.diagText) {
       this.diagText = next;
     }
@@ -1454,9 +1544,10 @@ export struct PlaybackPage {
       .backgroundColor('rgba(0, 0, 0, 0.78)')
       .padding({ left: 8, right: 8, top: 4, bottom: 4 })
       .borderRadius(6)
-      // ★ 2026-10-16：徽标现在有 **7 行**（第六行 meta 对账 + 第七行 swiper/飞行状态）
-      //   ⇒ `maxLines` 必须跟着涨，否则第七行会被截掉（那是本轮最关键的判据）。
-      .maxLines(9)
+      // ★ 2026-10-16：徽标现在有 **8 行**（第六行 meta 对账 / 第七行 swiper+飞行状态 /
+      //   第八行 **Swiper 回调实参**）⇒ `maxLines` 必须够，否则最后一行会被截掉
+      //   （第八行是本轮"歌词页封面没变小"能不能一次定位的关键判据）。
+      .maxLines(10)
       .position({ x: 8, y: 120 })
       .zIndex(99)
       .hitTestBehavior(HitTestMode.None)
@@ -2116,6 +2207,13 @@ export struct PlaybackPage {
     Logger.info(PlaybackPage.logTag,
       `aboutToAppear: pullDragging=${this.expandState.pullDragging} ` +
       `usable=${this.expandState.morphUsable} stage=${this.expandState.morphStage}`);
+    // ★★★ 2026-10-16（**修用户实测「歌词页封面没变小、叠在歌词上面」**）：
+    //   页面**挂载那一刻**就把"封面浮层飞行进度"对齐到当前页 —— 这是本页第一次有机会做这件事，
+    //   而且它与"是否发生过一次滑动"无关（理由见 `syncLyricMorphToPage()` 的长注释）。
+    //   用户那张截图正是这个形状：**swiper 在歌词页、`lyricMorphT` 还是 0** ⇒ 大封面 + 歌词同时在场。
+    //   ⚠️ 放在 `aboutToAppear`（struct 级、挂载即有）而不只在内容层 `.onAppear`（节点级、
+    //      分支重建才跑）—— 两处都要，因为两者时机不同（前者早于首帧布局，后者晚于挂载）。
+    this.syncLyricMorphToPage('boot');
     // ★ **自愈**：见 `onDisAppear` 里那段说明 —— 这两个标记一旦残留，点击打开就永远
     //   跳过形变初始化，只播老动画。这里再兜一层：只有"确实在看手势"（drive=FINGER）
     //   才认为手指在驱动；而且即使如此，只要已经过了 2 秒还没收尾，就一定是残留
@@ -3168,8 +3266,10 @@ export struct PlaybackPage {
               //   `.index(this.playbackSwiperIndex)` —— 这是 ArkUI `Swiper` 的官方属性，
               //   而我们本来就把这个值当"当前页"用（`.onChange` 写它、`onAppear` 复位它）。
               //   ⚠️ **不引入任何新数值**：它是"把已有的状态接到视图上"，属修一致性而不是调参。
-              //   ⚠️ `onAppear` 里那句 `playbackSwiperIndex = 0` 仍保留（打开播放器应从封面页进）——
-              //      两者在"冷启动进播放器"时结果一致（都回第 0 页），不冲突。
+              //   ⚠️ 【2026-10-16 订正】这里原来写着"`onAppear` 里那句
+              //      `playbackSwiperIndex = 0` 仍保留" —— **那句已经删掉了**：
+              //      它是节点级回调里的写入，会抢掉用户当前页；
+              //      "打开播放器回封面页"是**打开意图**的职责（见内容层 `onAppear` 那段长注释）。
               //   复核关键字：徽标**第七行** `sw=` / `tgt=`（新加）——
               //     `sw=1 tgt=1` 才是歌词页的正常态；`sw=0` 而你在歌词页 ⇒ 就是本条。
               Swiper() {
@@ -3311,7 +3411,15 @@ export struct PlaybackPage {
               //    所以分级下移：封面 → MusicPlayInfoBlock 自己带；
               //    歌词 → 各自那两份 LyricsComponent；小歌词 → MiniLyricLinesComponent。
               .onAnimationStart((index: number, targetIndex: number, _event: SwiperAnimationEvent): void => {
+                // ★★★ 2026-10-16（**把 swiper 回调的实参记进徽标** —— 这一条是"歌词页封面没变小"
+                //   能不能一次定位的**唯一**决定因素）：
+                //   上一批我用静态推理在两种假设之间摇摆（"回调没触发" vs "触发但被守卫挡"），
+                //   而**两者的修法完全不同** ⇒ 必须拿到真机读数，不许再猜。
+                //   记法：`ast=<index>-<target>`（`ast=-1--1` = 这个回调**一次都没进来过**）。
+                //   排查关键字：徽标第八行开头 `ast=`。
+                this.diagAnimStart = `${index}-${targetIndex}`;
                 if (index === targetIndex && !this.lyricMorphVisible) {
+                  this.diagAnimSkip = this.diagAnimSkip + 1;
                   return;
                 }
                 this.animateLyricMorph(targetIndex === PlaybackPage.SWIPER_INDEX_LYRIC);
@@ -3323,10 +3431,14 @@ export struct PlaybackPage {
                 //   `finishLyricMorph` 永远进不去（整套歌词页封面形变是死的）。
                 this.lyricSwiperSettled = true;
                 this.finishLyricMorph(this.lyricMorphGen);
+                this.diagAnimEnd = `${index}`;
+                this.diagAnimEndCount = this.diagAnimEndCount + 1;
                 Logger.info('RzdLyricFloat',
                   `swiper end index=${index} gen=${this.lyricMorphGen} t=${this.lyricMorphT.toFixed(3)}`);
               })
               .onChange((index: number): void => {
+                this.diagChg = `${index}`;
+                this.diagChgCount = this.diagChgCount + 1;
                 this.playbackSwiperIndex = index;
                 this.touchChrome();
                 if (index !== PlaybackPage.SWIPER_INDEX_LYRIC) {
@@ -4334,9 +4446,12 @@ export struct PlaybackPage {
             //   this.lyricMorphT = this.playbackSwiperIndex === PlaybackPage.SWIPER_INDEX_LYRIC ? 1 : 0;
             // ```
             //   即"静止态 = 当前页对应的端点"，这也是 `lyricMorphT` 两个稳定值的定义。
-            this.lyricMorphT = this.playbackSwiperIndex === PlaybackPage.SWIPER_INDEX_LYRIC ? 1 : 0;
-            // 飞行动画一律回"可见"档：上面已把 `lyricMorphT` 放到**当前页对应的静止端点**，
-            // 所以这不是"半路停住"，而是"落定在正确的那一端"（见上一条注释）。
+            //   ★ 2026-10-16（第二版）：这里原来是一句内联三元。现在收敛进
+            //     `syncLyricMorphToPage()` —— 因为**同一个对齐动作在挂载时也要做一次**
+            //     （`aboutToAppear`），两处必须同一口径（见那个方法的注释）。
+            this.syncLyricMorphToPage('appear');
+            // ⚠️ 这一句**必须留在外面**：`syncLyricMorphToPage()` 在"已经对齐"时会**早退**，
+            //   而"节点重建后不许停在补间中间态"这条要求每次 `onAppear` 都要满足。
             this.lyricMorphVisible = false;
             // 控制区：进来先唤出，3 秒没动自动收起
             this.chromeCollapsed = false;
