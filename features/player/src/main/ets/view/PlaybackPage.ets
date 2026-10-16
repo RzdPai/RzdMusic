@@ -1656,6 +1656,35 @@ export struct PlaybackPage {
     //   封面 `edge` 应变成小封面（≈48.7）。
     //   `scr=0` ⇒ 这个回调一次都没触发（要换进度源）。
     const line9: string = `scr=${this.diagScrollCount} last=${this.diagScrollLast}`;
+    // ★★★ 2026-10-16（**关闭路径的现场读数** —— 用户 23:19/23:20 三条反馈的定位用）
+    //
+    // 用户反馈（原话概括）：
+    // ```
+    //   ① 有时"播放页首页下方几个按钮也会隐藏"
+    //   ② "返回关闭播放器我发现不是没背景，你看那一条，是**有背景但是高度特低**"
+    //   ③ "下拉关闭播放器封面是这个小圆形，然后动画结束了**突然来个展开播放器的动画**"
+    // ```
+    // 这三条都发生在**关闭过程中**，而上面 1~9 行大多是"静止态读数" ⇒ 必须补这一行。
+    //
+    // 各量的判读：
+    // ```
+    //   show  = 壳层 isShowPlay。③ 的头号嫌疑：若它在关闭途中变回 true，
+    //           壳层 `@Monitor('appState.isShowPlay')` 会 `pushPlayerRoute()`
+    //           ⇒ **重新推入一个新的播放页实例** ⇒ 就是"又放一遍展开"
+    //   clos  = isClosing（关闭链路已起）
+    //   coll  = 控制区已收起（① 的直接读数：1 = 那几个按钮是藏着的）
+    //   p     = morphP（关闭时向 0 走）
+    //   clipH = **写进容器 `.height()` 的裁剪窗口高**（② 的直接读数：
+    //           背景是容器的子节点 ⇒ 容器被裁成多高，背景就只画多高）
+    //           静止态应 = 0（此时 `.height()` 内部走 '100%'）；关闭中会连续变到 ≈ 迷你条高
+    //   bg    = 背景层不透明度（② 看它有没有被淡掉）
+    //   drv   = morphDrive（FINGER/ANIM/NONE）
+    //   sq    = morphSquashY（落位挤压，≠1 时在弹）
+    // ```
+    const line10: string = `show=${this.state.isShowPlay ? 1 : 0} clos=${this.isClosing ? 1 : 0} ` +
+      `coll=${this.chromeCollapsed ? 1 : 0} p=${e.morphP.toFixed(2)} ` +
+      `clipH=${e.morphClipHeight.toFixed(0)} bg=${this.backgroundRevealOpacity().toFixed(2)} ` +
+      `drv=${e.morphDrive} sq=${e.morphSquashY.toFixed(3)}`;
     // ★★★ 第五行：**动作轨迹**（最近 6 个动作，按发生顺序 `>` 连接）。
     //   为什么最有用：这条链上"顺序"本身就是自变量的最大值 ——
     //   同一个函数先调还是后调，结果完全不同（§93 的 `onAppear` 误判、§103 的
@@ -1667,7 +1696,7 @@ export struct PlaybackPage {
     //     `…>tween>settleSkip`                                 ⇒ 补间起了但落位被跳过（§104 那类）
     const line5: string = `trace=${e.morphTrace.length > 0 ? e.morphTrace : '(empty)'}`;
     const next: string =
-      `${line1}\n${line2}\n${line3}\n${line4}\n${line5}\n${line6}\n${line7}\n${line8}\n${line9}`;
+      `${line1}\n${line2}\n${line3}\n${line4}\n${line5}\n${line6}\n${line7}\n${line8}\n${line9}\n${line10}`;
     if (next !== this.diagText) {
       this.diagText = next;
     }
@@ -1682,9 +1711,10 @@ export struct PlaybackPage {
       .backgroundColor('rgba(0, 0, 0, 0.78)')
       .padding({ left: 8, right: 8, top: 4, bottom: 4 })
       .borderRadius(6)
-      // ★ 2026-10-16：徽标现在有 **9 行**（…第八行 Swiper 回调实参 / 第九行进度源自证）
-      //   ⇒ `maxLines` 必须够，否则最后一行会被截掉（那两行是本轮的关键判据）。
-      .maxLines(11)
+      // ★ 2026-10-16：徽标现在有 **10 行**（…第九行进度源自证 / 第十行**关闭路径读数**）
+      //   ⇒ `maxLines` 必须够，否则最后一行会被截掉（第十行是定位"关闭时背景高度特低 /
+      //     关闭后突然又展开"的关键判据）。
+      .maxLines(12)
       .position({ x: 8, y: 120 })
       .zIndex(99)
       .hitTestBehavior(HitTestMode.None)

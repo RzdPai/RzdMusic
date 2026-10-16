@@ -1624,6 +1624,11 @@ export class PlayerExpandState {
   //        `revealChrome()`、以及**本类**的 `touchChrome()`
   //        （⚠️ `PlaybackPage` 里另有一个**同名的私有方法**，那个是**活的** ——
   //         它挂在 `onTouch` 上重置自动收起计时器，别混）
+  //        ★★★ 2026-10-16：**这四个已按本条执行删除**（含 `lastChromeTouchMs` 与
+  //        `CHROME_AUTO_HIDE_MS(3000)`）。留下 `revealChrome()` / `touchChrome()` 的**简化版**
+  //        （只翻 `chromeCollapsed`，不再记时间戳），因为 `PlaybackPage` 会调它们。
+  //        ⚠️ 之所以必须删：那对 3000ms 与活的那条 `PlaybackPage.CHROME_AUTO_HIDE_MS(5000)` 是
+  //        **同一个功能的两套值** ⇒ 后来人按 3000 核对会得出"与无界不一致"的错误结论。
   //      · 旧淡入淡出：实例方法 `metaOpacity()`（⚠️ 与此同名的
   //        `miniBarMetaOpacity()` 是**活的**，别混）、`pullBottomIn()`
   //    ⚠️ **两个"有调用点但等于常量"的别误判**：`chromeOpacity()` / `chromeOffsetY()`
@@ -4605,33 +4610,32 @@ export class PlayerExpandState {
 
   /** 控制区是否被自动收起（对标 `BarCollapse.isCollapsed`）。 */
   @Trace public chromeCollapsed: boolean = false;
-  /** 最后一次用户操作控制区的时间戳（ms）。 */
-  private lastChromeTouchMs: number = 0;
-  /** 静止多久后自动收起（ms）。 */
-  private static readonly CHROME_AUTO_HIDE_MS: number = 3000;
 
-  /** 记录一次控制区交互（点击/滑动），重置自动收起计时。 */
+  /**
+   * 记录一次控制区交互（点击/滑动）—— 只翻转"是否收起"这一个状态。
+   *
+   * ★★★ 2026-10-16（**本轮删掉了这条链上另外两个成员**）
+   *
+   * 原来这里还有 `lastChromeTouchMs` + `CHROME_AUTO_HIDE_MS(3000)` + `chromeShouldAutoHide()` +
+   * `collapseChrome()` —— **四个成员全部零消费**（本文件 :1623 早就记过"旧控制区自动收起"是死的，
+   * 但一直没删）。它们不只是"没用"，而是**有害**：
+   * ```
+   *   它们让"自动收起"在本仓看起来有**两套值**：
+   *     PlayerExpandState.CHROME_AUTO_HIDE_MS = 3000   ← 零消费（本轮删除）
+   *     PlaybackPage.CHROME_AUTO_HIDE_MS      = 5000   ← 活的（= 无界 PlayerPage.IDLE_MS，见 §96）
+   *   ⇒ 后来人按 3000 去核对就会得出"与无界不一致"的错误结论。
+   * ```
+   * ⚠️ 另外 `chromeCollapsed` 这个名字在**两个类里各有一个**（本类 + `PlaybackPage` 自己的
+   *    `@Local chromeCollapsed`）—— 后者才是渲染用的那个；本类这个只被 `chromeOffsetY()` /
+   *   本方法 / `revealChrome()` 读写（`PlaybackPage` 会调后两个）。
+   *    ⇒ **不要**把它当成"播放页那份"，它们是两处状态。
+   */
   public touchChrome(): void {
-    this.lastChromeTouchMs = Date.now();
     this.chromeCollapsed = false;
   }
 
-  /** @returns 现在是否到了该自动收起控制区的时间。 */
-  public chromeShouldAutoHide(): boolean {
-    if (this.chromeCollapsed || this.lastChromeTouchMs <= 0) {
-      return false;
-    }
-    return Date.now() - this.lastChromeTouchMs >= PlayerExpandState.CHROME_AUTO_HIDE_MS;
-  }
-
-  /** 自动收起控制区。 */
-  public collapseChrome(): void {
-    this.chromeCollapsed = true;
-  }
-
-  /** 唤出控制区。 */
+  /** 唤出控制区（`PlaybackPage.touchChrome()` 的模型侧对应物）。 */
   public revealChrome(): void {
-    this.lastChromeTouchMs = Date.now();
     this.chromeCollapsed = false;
   }
 
