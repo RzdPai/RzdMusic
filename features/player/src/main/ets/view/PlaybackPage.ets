@@ -1764,13 +1764,16 @@ export struct PlaybackPage {
       return;
     }
     const e = this.expandState;
-    // ★ 2026-10-16（版本标记 `b41d7e9` → **`c52e0a7`** → **`d73f1b8`**）：本轮加的是
+    // ★ 2026-10-16（版本标记 `b41d7e9` → `c52e0a7` → `d73f1b8`）：那一轮加的是
     //   goal 第 2 条的圆角自证位（第四行 `rad`/`radVis`/`edge`/`t`）与
     //   "卸载放权判据"的定稿（`morphSessionOughtToLive`）。
     //   **用户报"没动画"时先看第一行的 `sess` / `geom` 两位**：
     //     `sess=0` ⇒ 会话被清掉了（`aboutToDisappear` 那条路没被拦住）；
     //     `geom=0` ⇒ 终点几何始终没量到 ⇒ 容器恒等 ⇒ 正是"没有封面/背景动画"。
-    const line1: string = `V d73f1b8 sess=${e.morphSessionStarted ? 1 : 0} ` +
+    // ★ 2026-10-17（版本标记 → **`af66eb1`**）：那一轮加的是**第十行尾部的 `pd=`**
+    //   （跟手三个拒绝点的累计计数）。⇒ **用户报"不跟手"时先看 `pd`**：
+    //     `pd=0/0/0` ⇒ 判据全程放行，问题在事件/手势/版式；任一非 0 ⇒ 是判据拒的。
+    const line1: string = `V af66eb1 sess=${e.morphSessionStarted ? 1 : 0} ` +
       `usable=${e.morphUsable ? 1 : 0} geom=${e.morphGeomReadyNow() ? 1 : 0} ` +
       `cont=${e.morphContainerActive() ? 1 : 0} ` +
       `clip=${e.morphClipping() ? 1 : 0} scale=${e.morphScale.toFixed(3)} p=${e.morphP.toFixed(3)}`;
@@ -1966,7 +1969,7 @@ export struct PlaybackPage {
   /** 自证徽标本体（黑底白字、不吃事件、压在最上面）。 */
   @Builder
   private DiagBadge() {
-    Text(this.diagText.length > 0 ? this.diagText : 'V 8f3a2c1 (no data)')
+    Text(this.diagText.length > 0 ? this.diagText : 'V af66eb1 (no data)')
       .fontSize(11)
       .fontColor(Color.White)
       .backgroundColor('rgba(0, 0, 0, 0.78)')
