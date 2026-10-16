@@ -1403,6 +1403,17 @@ export struct PlaybackPage {
       `seek=${e.chromeSeekSize().toFixed(0)} rad=${e.morphRadius.toFixed(2)} ` +
       `radVis=${(e.morphRadius * e.morphScale).toFixed(2)} ` +
       `edge=${this.coverLocalRect().size.toFixed(0)} t=${this.lyricMorphT.toFixed(2)}`;
+    // ★★★ 2026-10-16（goal 第 1 条「元信息行照搬 `floatingMeta`」的**现场自证**）：
+    //   `metaTop` = 歌名块顶边的**在用值**（= `lyricMetaYOf()`，也就是 `.position()` 里真正用的）；
+    //   `metaExp` = **无界算式值**（= 小封面顶边 + `metaTopFixLyric`(−26)，见 `metaTopGeomY()`）；
+    //   `metaΔ`   = 两者之差 ⇒ **正确实现下应恒为 `+26`**（我们少减了那 26vp）。
+    //   ⇒ 用户只要念这三个数，就能判定"元信息行这条到底还差多少"，**不需要真机逐帧截图**。
+    //   ⚠️ 它们都是**窗口坐标**（`lyricMorph(1).y` 与 `lyricCoverYOf()` 同口径）⇒ 可直接相减。
+    const metaInUse: number = e.metaTopInUseY();
+    const metaExp: number = e.metaTopGeomY();
+    const line6: string = `metaTop=${metaInUse.toFixed(1)} metaExp=${metaExp.toFixed(1)} ` +
+      `metaD=${(metaInUse - metaExp).toFixed(1)} ` +
+      `(期望 metaD=+26 ⇒ 我们锚在"小封面顶边"但少减了 metaTopFixLyric)`;
     // ★★★ 第五行：**动作轨迹**（最近 6 个动作，按发生顺序 `>` 连接）。
     //   为什么最有用：这条链上"顺序"本身就是自变量的最大值 ——
     //   同一个函数先调还是后调，结果完全不同（§93 的 `onAppear` 误判、§103 的
@@ -1413,7 +1424,7 @@ export struct PlaybackPage {
     //     `clickOpen>skip`                                     ⇒ 被 `pullDragging`/相位挡了
     //     `…>tween>settleSkip`                                 ⇒ 补间起了但落位被跳过（§104 那类）
     const line5: string = `trace=${e.morphTrace.length > 0 ? e.morphTrace : '(empty)'}`;
-    const next: string = `${line1}\n${line2}\n${line3}\n${line4}\n${line5}`;
+    const next: string = `${line1}\n${line2}\n${line3}\n${line4}\n${line5}\n${line6}`;
     if (next !== this.diagText) {
       this.diagText = next;
     }

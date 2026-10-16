@@ -1177,14 +1177,76 @@ export class PlayerExpandState {
   /** `fitPlayerOverlay` 里那个"硬编码 +8"（上界夹紧用）。 */
   private static readonly COVER_FIT_BOUND_INSET_VP: number = 8;
   /**
+   * `CoverMorph.metaTopFixLyric` 的默认值（vp）—— **元信息块的歌词页端锚点修正**。
+   *
+   * 出处：`wujie.pa:85527`（`ldai 0x1c` + 紧随的 `neg`），归档笔记
+   * `_recover/logic-src/歌词页浮层封面与歌名定稿.md:1356 / :1417` 定稿取 **−26**。
+   * ⚠️ 是**上游笔记的定稿值**，不是自编值。
+   */
+  public static readonly META_TOP_FIX_LYRIC_VP: number = -26;
+  /**
    * `CoverMorph.tyPlayer` 的默认值（= 播放页端封面中心的基准偏移）。
    *
    * ⚠️ 它相对**谁**我**始终没读准**：按 `topYAtPlayer() = tyPlayer − edge/2` 会算出
    *   `−40 − 164 = −204`（在屏幕外），与无界截图（封面在屏幕上部）矛盾。
    * ⇒ **本实现不用它**，改用"从内容顶边往下推"的等价式（见 `playerCoverGeomRect()` 的注释）。
    *   本常量保留只为记录逆向值、并给下一轮留线索。
+   *
+   * ★★ 2026-10-16（**订正符号：实为 `+40`，不是 `−40`**）：
+   *   归档笔记 `_recover/logic-src/歌词页浮层封面与歌名定稿.md:581` 原文写的是
+   *   @@COVER_TY_PLAYER,                    // = 40   ← ★ 第五个参数，不是 metaGap！@@
+   *   而 `topYAtPlayer() = tyPlayer − edge/2`（`wujie.pa:85656-85667`）⇒ `40 − 164 = −124`
+   *   仍然在屏外，说明 **`tyPlayer` 的基准不是窗口顶边**（这条推断与本函数头注释一致）。
+   *   ⇒ 值改成 **+40** 以免下一个人按 −40 复算；**本实现仍然不用它**（用等价式）。
    */
-  private static readonly COVER_TY_PLAYER_VP: number = -40;
+  private static readonly COVER_TY_PLAYER_VP: number = 40;
+
+  /**
+   * @returns 元信息块**顶边**的无界算式值（vp，窗口坐标）—— 纯几何，不查任何节点。
+   *
+   * ★★★ 2026-10-16（goal 第 1 条「元信息行照搬 `floatingMeta`」的**可核对化**）
+   *
+   * ## 无界的两条式子（逐字）
+   * ```ts
+   *   metaY         = curMetaY(0) + edge/2 + gap(50) + metaH(60)/2     // playerCoverGeomRect 已算
+   *   metaOffsetYAt = lerp(metaYPlayer, topYAtLyric + metaTopFixLyric, t)   // wujie.pa:85582-85599
+   *   topYAtLyric   = tyLyric − edge·lyricScale/2                           // wujie.pa:85635-85651
+   * ```
+   * 其中 **`metaYPlayer = fit.metaY`**（`refitOverlay` 的写入，见定稿 §4.1）、
+   * **`metaTopFixLyric = −26`**（`wujie.pa:85527 ldai 0x1c; neg`；归档笔记把早先那个 −20 订正成了 −26）。
+   *
+   * ## ★ 关键：无界的**终点锚在"小封面顶边"上**，不是"底边"（定稿 §1417 原文）
+   * ```
+   *   metaOffsetYAt(1) = topYAtLyric + (−26) = 小封面顶边 − 26
+   * ```
+   * ⇒ 本函数 = `playerCoverGeomRect().y − 26`（`lyricMorph(1).y` 就是小封面顶边）。
+   *
+   * ## 与我们在用的那条式子对比（**这就是 goal 第 1 条剩下的那条差**）
+   * 在用：`lyricMetaYOf() = lyricCoverYOf() = topInset + LYRIC_ROW_TOPBAR_H_VP(56)` —— **锚在小封面顶边** ✓
+   * 但**没有减那 26**。
+   * ```
+   *   Δ = 在用 − 无界 = (topInset + 56) − (topInset + 56 − 26) = +26vp   ⇒ 歌名块整体偏低 26vp
+   * ```
+   * （定稿 §1446 估算的是"≈75vp"，那是按"锚底边"那个错读算的；按当前代码的锚点算 **Δ = +26vp**。）
+   *
+   * ⚠️ **本轮不改它**：改它会同时推动 `lyricOverlayHeight()` → `lyricPadTop()` → 歌词正文让位，
+   *    而歌词页是用户验收过的（"歌词页正常了"）⇒ 属于"无设备不改"的那一类。
+   *    本函数只做**自证**：徽标第四行打出 `metaTop`（屏上量到的元信息块顶边）与
+   *    `metaExp`（无界算式值），两者之差就是待确认的 Δ。
+   * @returns 元信息块顶边（无界算式值，vp，窗口坐标）
+   */
+  public metaTopGeomY(): number {
+    const cover: LyricMorphRect = this.lyricMorph(1);
+    if (cover.size <= 0) {
+      return 0;
+    }
+    return cover.y + PlayerExpandState.META_TOP_FIX_LYRIC_VP;
+  }
+
+  /** @returns 元信息块顶边的**在用值**（= 我们在 `.position()` 里真正用的那个）—— 给徽标对账用。 */
+  public metaTopInUseY(): number {
+    return this.lyricMetaYOf();
+  }
 
   /**
    * @returns 播放页封面**锚定矩形**（vp，窗口坐标）。
@@ -1217,6 +1279,14 @@ export class PlayerExpandState {
    *   metaY = 0 + 164 + 50 + 30 = 244 ≤ bound(291) ⇒ 244
    *   封面中心 = 56 + 244 = **300**，顶边 = 300 − 164 = **136vp**
    * ```
+   * ★★ 2026-10-16（**订正一处算式**）：上面 `metaY` 那行原来写 `= 244`，但
+   *   `0 + 164 + 50 + 30 = **234**`（164+50+30=244 是把 `edge/2` 与 `metaH/2` 相加时算错了）。
+   *   ⚠️ **代码本身一直是对的**（代码就是 `edge/2 + gap + metaH/2`），错的只是这行注释。
+   *   ⚠️ 用 234 代入后：封面中心 = `56 + 234 = **290**`、顶边 = `290 − 164 = **126vp**`。
+   *   我**不据此改代码** —— 用户已在真机验收封面位置"现在正常了"，静止态位置以**实测为准**；
+   *   而 `+10` 这个差与 `bounds`/`estBoxH` 的口径有关，**需要实测才能定**（见
+   *   `estBoxHVp()` 那段"为什么只用诊断"的说明）。
+   *   复核入口：徽标**第六行**的 `metaTop` / `metaExp` / `metaD`（见 {@link metaTopGeomY}）。
    * ⇒ 相对"在窗口里居中"（中心 390、顶边 226）**上移 90vp** —— 这就是用户要的"高一些"。
    *
    * ## 为什么这次能定住（与 §72 那次失败的区别）
