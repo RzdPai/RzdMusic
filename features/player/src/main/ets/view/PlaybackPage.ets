@@ -220,45 +220,18 @@ export struct PlaybackPage {
   private titleController: TextController = new TextController();
   private singerController: TextController = new TextController();
 
-  /** 变换式覆盖层的**基准矩形**（纯几何、与量测无关）—— 见 `PlayerExpandState.playerCoverGeomRect`。 */
-  private coverLayerBase(): LyricMorphRect {
-    return this.expandState.playerCoverGeomRect();
-  }
-
-  /**
-   * @returns 覆盖层的缩放 = `lyricMorph(t).size / 基准尺寸`。
-   *
-   * `t = 0` 时它 = 实测尺寸 / 基准尺寸 ⇒ 渲染出来的封面**仍然正好是实测端点那个大小**
-   * （位移项会把基准位补回实测位）⇒ 与改前 `.width(lyricFloatRect().size)` 的结果逐像素相同。
-   */
-  private coverLayerScale(): number {
-    const base: number = this.coverLayerBase().size;
-    if (base <= 0) {
-      return 1;
-    }
-    return this.lyricFloatRect().size / base;
-  }
-
-  private coverLayerTx(): number {
-    return this.lyricFloatRect().x - this.coverLayerBase().x;
-  }
-
-  private coverLayerTy(): number {
-    return this.lyricFloatRect().y - this.coverLayerBase().y;
-  }
-
-  /**
-   * @returns 写进 `.borderRadius()` 的值。
-   * ⚠️ 圆角作用在**未缩放**的节点上 ⇒ 必须除以 `scale`，视觉半径才等于 `lyricMorph` 给的那个；
-   *    不除的话小封面那端圆角会被放大约 6.7 倍（看着像个小圆片）。
-   */
-  private coverLayerRadius(): number {
-    const s: number = this.coverLayerScale();
-    if (s <= 0.0001) {
-      return 0;
-    }
-    return this.lyricFloatRect().radius / s;
-  }
+  // ⚠️ 这里原来有一整簇「变换式覆盖层」的取值器 —— **2026-10-17 已删除**：
+  //      `coverLayerBase()` / `coverLayerScale()` / `coverLayerTx()` / `coverLayerTy()` /
+  //      `coverLayerRadius()`（= 基准矩形 / 缩放 / 位移 / **半径 ÷ scale**）。
+  //   删除理由（删前逐个 grep 全仓确认零消费者）：
+  //   · 它们是**已被撤回的那一版**（"基准 + `.scale()` + `.translate()`"）的产物：
+  //     现行走 **`coverLocalRect()`**，而它就是 `lyricFloatRect()` 的**直通**
+  //     （尺寸/位置/圆角一律直接写进 `.width/.position/.borderRadius`，**本节点没有自己的 `.scale()`**）；
+  //   · 唯一还在读它们的是下面那条 `RzdCoverRect` 诊断日志里的 `base=/tx=/ty=` 三段 ——
+  //     而那三段量的正是"只有已被撤回那一版才有的量" ⇒ 留着只会误导后来人（已一并删掉）；
+  //   · ★ 尤其 `coverLayerRadius()` 的注释写着「圆角作用在**未缩放**的节点上 ⇒ 必须除以 scale」，
+  //     与现行设计**正好相反**：现在这个节点**没有** `.scale()` ⇒ 照它去"除以 scale"
+  //     会把小封面那端的圆角放大到 ~6.7 倍（看着像个小圆片）。**这是必须删掉它的直接原因。**
 
   /**
    * 覆盖层上报「播放页封面端点」。
@@ -314,8 +287,8 @@ export struct PlaybackPage {
       `RzdCoverRect measured=(${gx.toFixed(1)},${gy.toFixed(1)},${gs.toFixed(1)}) ` +
       `geometry=(${geom.x.toFixed(1)},${geom.y.toFixed(1)},${geom.size.toFixed(1)}) ` +
       `dxy=(${(gx - geom.x).toFixed(1)},${(gy - geom.y).toFixed(1)}) ` +
-      `base=(${this.coverLayerBase().x.toFixed(1)},${this.coverLayerBase().y.toFixed(1)}) ` +
-      `tx=${this.coverLayerTx().toFixed(1)} ty=${this.coverLayerTy().toFixed(1)} ` +
+      // ⚠️ 2026-10-17：原来这里还有 `base=/tx=/ty=` 三段，随"变换式覆盖层"那一簇一起删除了
+      //   （它们量的只有已被撤回那一版才有的量，见本文件 :247 附近那段记账）。
       `win=${this.expandState.windowWidthVp.toFixed(0)}x${this.expandState.windowHeightVp.toFixed(0)} ` +
       `padTop=${this.expandState.topInsetVp().toFixed(1)} miniY=${this.expandState.miniY.toFixed(1)} ` +
       `miniSize=${this.expandState.miniSize.toFixed(1)} t=${this.lyricMorphT.toFixed(3)}`);
@@ -2467,28 +2440,13 @@ export struct PlaybackPage {
    * 里持久化的那个值灌进去 —— 只有设置页切开关时才会写共享状态。于是：**开着流光 → 重启 App →
    * 播放页读到的还是默认 false**（设置页没进去过就一直错着），用户看到的就是"开关不跟随设置"。
    *
-   * 这里照 `LyricsComponent.syncLyricBlurPreference()` 的同一套口径：进页面时从 store 读一次、
-   * 写回共享状态；反向（共享状态变了）也顺手落库，保证两边永远一致。
-   * 用户日志关键字：`RzdFlowLight pref`。
-   */
-  private syncFlowLightPreference(reason: string): void {
-    const stored: boolean = MusicStoreService.getInstance().getPlaybackFlowLight();
-    const shared: boolean = this.flowLightState.enabled;
-    if (stored !== shared) {
-      this.flowLightState.enabled = stored;
-    }
-    Logger.info('RzdFlowLight',
-      `pref reason=${reason} store=${stored} sharedBefore=${shared} effective=${stored}`);
-    if (stored && this.context !== undefined && this.isAlive) {
-      this.getImageColor();
-    }
-  }
-
-  /**
-   * 流光背景开关变化时：① 共享状态 → 落库（别处只改共享状态时不会丢设置）② 打开时补一次取色。
-   *
-   * 关着的时候取色是跳过的（省一次解码），所以刚打开开关时手上没有颜色；
-   * 这里补一次，用户不用切歌就能看到效果。
+   * ⚠️ 2026-10-17（**删除了一具同名尸体**）：这里原来还有一个
+   *   `syncFlowLightPreference(reason)` 方法，做的是"**store → 共享状态**"这一向；
+   *   但真正跑的是 `aboutToAppear` 里那句直接赋值
+   *   （`this.flowLightState.enabled = MusicStoreService…getPlaybackFlowLight()`），
+   *   而**反向**（共享状态 → 落库）由下面的 `onFlowLightEnabledChange()` 负责。
+   *   ⇒ 那个方法**零调用点**、只是"同一件事的两套写法"（它多一条日志 + 一次多余的取色），
+   *     留着就是"后来人改错地方"的入口 ⇒ 已删除；此处保留说明，免得又被重新加回来。
    */
   @Monitor('flowLightState.enabled')
   onFlowLightEnabledChange(): void {
@@ -4796,14 +4754,11 @@ export struct PlaybackPage {
     return this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE;
   }
 
-  /** Applies playback-specific window chrome and optional PC decor button style. */
-  private applyWindowSafeAreas(): void {
-    const wu = WindowUtil.getInstance();
-    wu.applyPlaybackWindowChrome(true, false);
-    if (this.isPcFreeWindowDecor()) {
-      wu.applyPcPlaybackDecorButtonStyle(true);
-    }
-  }
+  // ⚠️ 2026-10-17：这里原来还有一个 `applyWindowSafeAreas()` —— **已删除**。
+  //   它与下面那个**活着的** `applyPlaybackWindowChromeImmediately()`（唯一调用点 :5534）
+  //   是**同一件事的两套写法**，只差一句 `applyPlaybackNavigationBarColor(true)`
+  //   ⇒ 零调用点、留着就是"改错地方"的入口（本仓已经为这个形状吃过好几次亏）。
+  //   ⇒ 真要改播放页的窗口装饰，**只改下面那一个**。
 
   /** Applies playback window chrome: system-bar colors only, window layout stays non-full-screen. */
   private applyPlaybackWindowChromeImmediately(): void {
