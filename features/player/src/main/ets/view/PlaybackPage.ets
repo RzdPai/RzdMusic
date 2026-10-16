@@ -2667,10 +2667,17 @@ export struct PlaybackPage {
    * **在页面下台之前正是正确的显示状态** ⇒ 复位没有任何理由抢在 pop 前面。
    * 反过来，**不复位会污染下一轮**（几何挂在 AppStorageV2 上是共享的）⇒ 必须复位，只是要晚。
    *
-   * ## 判据为什么用"路由还在不在栈里"而不是固定延时
+   * ## 判据为什么用"节点+路由都下台了"而不是固定延时
    * 固定延时（例如 64ms）只是**赌** pop 比它快；赌输就悄悄退回原 bug。
-   * 而 `playerRouteStillPushed()`（口径与壳层 `playerRouteIndex()` 逐字一致）
-   * 才是"页面真的下台了"这件事的**直接读数** ⇒ 轮询它，超时才兜底。
+   * 两个**直接读数**都要满足才复位，因为单看一个都会"复位得太早"：
+   * · `!this.isAlive`（节点级）—— `onDisappear` 是节点真的消失时才触发；
+   * · `!playerRouteStillPushed()`（路由级）—— 口径与壳层 `playerRouteIndex()` 逐字一致。
+   * ⚠️ 只看路由会**太早**：`pop()` 只是改 `NavPathStack` 的**数据**，
+   *    节点的摘除要等下一次 layout ⇒ 路由已下台、节点还在屏上的那一帧是存在的。
+   * ⚠️ 只看节点也会**太早**：关闭途中的"分支重建"同样会触发 `onDisappear`（本文件 5000+ 行
+   *    的注释专门讲过这件事）—— 那时节点还会回来。
+   * ⇒ 两者**同时**成立才是"真的走了"；再加 `attempt >= RESET_POLL_MAX` 兜底，
+   *    保证"哪怕两个读数都坏掉，几何也一定会被复位"（宁可晚，不可不清）。
    *
    * ## 两道守卫（缺一不可）
    * · `closeGen !== this.closeGen`：这一轮关闭已被"下一次关闭请求"取代 ⇒ 别清；
@@ -2692,14 +2699,17 @@ export struct PlaybackPage {
         PlaybackPage.ev('RST', 'skip(newerSession)');
         return;
       }
-      if (this.playerRouteStillPushed() && attempt < PlaybackPage.RESET_POLL_MAX) {
+      const nodeGone: boolean = !this.isAlive;
+      const routeGone: boolean = !this.playerRouteStillPushed();
+      if (!(nodeGone && routeGone) && attempt < PlaybackPage.RESET_POLL_MAX) {
         this.scheduleMorphResetAfterPop(closeGen, resetGen, attempt + 1);
         return;
       }
       this.expandState.morphReset();
       PlaybackPage.ev('RST',
         `p=${this.expandState.morphP.toFixed(2)} stage=${this.expandState.morphStage} ` +
-        `cont=${this.expandState.morphContainerActive() ? 1 : 0} try=${attempt}`);
+        `cont=${this.expandState.morphContainerActive() ? 1 : 0} ` +
+        `try=${attempt} node=${nodeGone ? 1 : 0} route=${routeGone ? 1 : 0}`);
     }, PlaybackPage.RESET_POLL_MS);
   }
 
@@ -3378,9 +3388,12 @@ export struct PlaybackPage {
         //   迷你条真身显出来）→ `animateSquash(SQUASH_Y 0.86, 110ms)` → 320ms 过冲回弹。
         //   ⇒ 用户实测的「无界关闭时播放条会弹一下」就是这一对补间。
         //   ⚠️ 必须在 `morphLand()` 之后：早一帧就是"播放页还在画、条先弹"。
-        //   ⚠️ 与 `morphReset()` 的顺序**不能反**：`morphReset()` 会把 `morphP` 复位成 1、
-        //      把相位清成 NONE，但它**不碰** `morphSquashY`（挤压是独立的一条标量），
-        //      所以先 reset 再 squash 也不会被吃掉 —— 这里按无界原序（land → squash）留在中间。
+        //   ⚠️ **2026-10-17 订正**：这一句原来接着写"与 `morphReset()` 的顺序不能反"。
+        //      现在 `morphReset()` 已经**不在这里**了（改成"等 pop 之后"，
+        //      见下面那段说明与 `scheduleMorphResetAfterPop()`）——
+        //      所以它与 `squashLandAnim()` 之间不再有顺序问题。
+        //      ⚠️ 但 `morphReset()` **仍然不碰** `morphSquashY`（挤压是独立的一条标量），
+        //      所以那一棒在复位之后照样会把 0.86 弹回 1：**这是要的**（无界的落位回弹）。
         this.expandState.squashLandAnim(this.getUIContext());
         PlaybackPage.ev('SQZ');
         this.state.isShowPlay = false;
