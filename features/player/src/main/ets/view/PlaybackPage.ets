@@ -3343,6 +3343,18 @@ export struct PlaybackPage {
     }
     const winW: number = this.expandState.windowWidthVp;
     const winH: number = this.expandState.windowHeightVp;
+    // ★★★ 2026-10-17（**必须现量一次胶囊矩形** —— 这是"返回关闭会不会变成无动画"的开关）：
+    //   `barWinX/Y/W/H` 由 `measureGeometry()` 写，而它**只在两处**被调用：
+    //     · 各条 opening 路径的补量（`measureMiniDuringPull` 内部那条链）；
+    //     · **`refreshCollapseGeometry()`**（旧关闭路径在起手时现量一次）。
+    //   ⇒ 若本条路上 `barWin*` 仍为 0（例如打开走的是退化路径、从没量到过），
+    //     `MorphShrinkState.start()` 会走无界那条 `start skipped: no srcBox` 支
+    //     ⇒ **返回关闭变成"无动画直接消失"**（那是可见回归，不是"没修好"那么轻）。
+    //   ⚠️ 这里**直接调 `measureGeometry`**，不用旧的 `refreshCollapseGeometry()` ——
+    //      后者自带 `morphStage === OPEN` 门（退化打开时会是 LANDING/NONE ⇒ 什么都不量），
+    //      而快照路径**只需要胶囊矩形**（旧的 `morphInitParams`/`freezeMorphMeta` 是给
+    //      活页补间用的，本路径不需要）。
+    const measured: boolean = this.expandState.measureGeometry(this.getUIContext(), true, true);
     const srcBox: MorphShrinkRect = {
       left: this.expandState.barWinX,
       top: this.expandState.barWinY,
@@ -3354,14 +3366,26 @@ export struct PlaybackPage {
     this.isClosing = true;
     PlaybackPage.lastCloseAtMs = Date.now();
     PlaybackPage.ev('CLO', `snapshot p=${this.expandState.morphP.toFixed(2)} ` +
-      `bar=${srcBox.width.toFixed(0)}x${srcBox.height.toFixed(0)}`);
+      `meas=${measured ? 1 : 0} bar=${srcBox.width.toFixed(0)}x${srcBox.height.toFixed(0)}`);
     Logger.info(PlaybackPage.logTag,
       `RzdShrinkOverlay closeWithAnimation: snapshot ${PLAYER_ROOT_ID} ` +
       `win=${winW.toFixed(0)}x${winH.toFixed(0)} ` +
       `bar=(${srcBox.left.toFixed(1)},${srcBox.top.toFixed(1)},` +
       `${srcBox.width.toFixed(1)}x${srcBox.height.toFixed(1)})`);
     // ⚠️ 快照必须在**形变开始之前**拍：此刻容器是恒等变换（满屏），拍到的才是"满屏那一张"。
+    //   ⚠️⚠️ `restorePlaybackWindowChrome()` **不能**放在拍快照之前 —— 它会恢复窗口布局
+    //     （`applyPlaybackWindowChrome(false,…)`，本项目在播放页会把窗口铺到整窗），
+    //     布局一变，拍到的就不是"满窗那一张"。与旧路径一致：**收尾时才恢复**。
     componentSnapshot.get(PLAYER_ROOT_ID, (err: BusinessError, pixmap: image.PixelMap): void => {
+      // ── 提交关闭时的**本仓特有收尾**（无界没有"沉浸窗口"这套，所以它没有这两句）
+      //   ① 恢复系统栏/窗口 chrome —— 不恢复的话返回关闭之后顶栏会停在"播放页沉浸"那一套配色；
+      //   ② `morphLand()` 交还绘制权 ⇒ 迷你条**真身**立刻显出来
+      //      （不交还的话要等浮层淡出 ≈350ms 之后才看到迷你条"啪"地出现）。
+      //   ⚠️ `morphLand()` 把相位置 `LANDING`，但此刻 `morphP = 1`（刚 `refreshCollapseGeometry`
+      //      刷过）⇒ 容器 `.height(morphClipHeight)` = 整窗、`scale = 1` = **恒等**
+      //      ⇒ 零观感变化；何况那 1~2 帧上面还盖着不透明的快照浮层。
+      this.restorePlaybackWindowChrome();
+      this.expandState.morphLand();
       if (err !== null && err !== undefined) {
         Logger.warn(PlaybackPage.logTag,
           'RzdShrinkOverlay root snapshot failed, fallback: ' + JSON.stringify(err));
