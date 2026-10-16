@@ -576,6 +576,16 @@ export struct PlaybackPage {
   /** 关闭余波窗口（ms）—— `lastCloseAtMs` 的宽度。⚠️ 工程判断值，不是逆向值（见上方说明）。 */
   private static readonly CLOSE_WINDOW_MS: number = 1500;
 
+  /**
+   * `scheduleMorphResetAfterPop()` 的轮询间隔（ms）与最大次数。
+   *
+   * ⚠️ **工程判断值，不是逆向值**：无界没有这条"等 pop 再复位"的显式轮询
+   * （它的页面是模态，收起完成即卸载）。这里只是因为我们的路由 pop 是**异步**的。
+   * 32ms ≈ 两帧；8 次 ≈ 256ms 上限（超时兜底复位，宁可晚也不能不清）。
+   */
+  private static readonly RESET_POLL_MS: number = 32;
+  private static readonly RESET_POLL_MAX: number = 8;
+
   /** 上一次 `RzdBgLayer` 的签名（节流）。 */
   private lastBgLayerLog: string = '';
 
@@ -2641,7 +2651,60 @@ export struct PlaybackPage {
   }
 
   /**
-   * @returns 播放页路由**是否还在壳层的 `NavPathStack` 里**。
+   * 关闭落位之后：**等播放页真的从路由栈里下台，再复位形变几何**。
+   *
+   * ## 为什么不能在同一 tick 里复位（用户第 ③ 条的机制）
+   * 关闭收尾原来是 `isShowPlay = false`（→ 壳层 `@Monitor` **异步** pop）
+   * 紧跟着**同步** `morphReset()`。而 `morphReset()` 会
+   * `morphStage = NONE` + `morphP = 1` + `morphClipHeight = 0` + `morphScale = 1`
+   * ⇒ 容器**不裁剪、不缩放** = **满屏播放页**；
+   * 路由却要到下一帧才被摘掉（`@Monitor` 派发一层 + 布局摘除一层）
+   * ⇒ 中间那 1~2 帧就是"已经缩成小圆点 → 突然满屏 → 消失"，
+   * 用户描述成「动画结束了**突然来个展开播放器的动画**」。
+   *
+   * ## 为什么"晚一点复位"是安全的
+   * `morphLand()` 已经把绘制权交还给迷你条了，而"被裁在迷你条那么高"的那一份几何
+   * **在页面下台之前正是正确的显示状态** ⇒ 复位没有任何理由抢在 pop 前面。
+   * 反过来，**不复位会污染下一轮**（几何挂在 AppStorageV2 上是共享的）⇒ 必须复位，只是要晚。
+   *
+   * ## 判据为什么用"路由还在不在栈里"而不是固定延时
+   * 固定延时（例如 64ms）只是**赌** pop 比它快；赌输就悄悄退回原 bug。
+   * 而 `playerRouteStillPushed()`（口径与壳层 `playerRouteIndex()` 逐字一致）
+   * 才是"页面真的下台了"这件事的**直接读数** ⇒ 轮询它，超时才兜底。
+   *
+   * ## 两道守卫（缺一不可）
+   * · `closeGen !== this.closeGen`：这一轮关闭已被"下一次关闭请求"取代 ⇒ 别清；
+   * · `!morphGenAlive(resetGen)`：几何世代号已经变了 ⇒ 已经有别人（新一轮打开的自愈
+   *   `staleClr` / `leakClr`）清过并重建了会话 ⇒ **再清一次就会把刚起的会话掐死**
+   *   （那正是"点击打开没有动画"的成因）。
+   *
+   * @param closeGen 捕获自关闭起手的关闭世代号
+   * @param resetGen 捕获自关闭收尾那一刻的形变世代号
+   * @param attempt 已经轮询过几次（内部递归用）
+   */
+  private scheduleMorphResetAfterPop(closeGen: number, resetGen: number, attempt: number): void {
+    setTimeout((): void => {
+      if (closeGen !== this.closeGen) {
+        PlaybackPage.ev('RST', 'skip(newerClose)');
+        return;
+      }
+      if (!this.expandState.morphGenAlive(resetGen)) {
+        PlaybackPage.ev('RST', 'skip(newerSession)');
+        return;
+      }
+      if (this.playerRouteStillPushed() && attempt < PlaybackPage.RESET_POLL_MAX) {
+        this.scheduleMorphResetAfterPop(closeGen, resetGen, attempt + 1);
+        return;
+      }
+      this.expandState.morphReset();
+      PlaybackPage.ev('RST',
+        `p=${this.expandState.morphP.toFixed(2)} stage=${this.expandState.morphStage} ` +
+        `cont=${this.expandState.morphContainerActive() ? 1 : 0} try=${attempt}`);
+    }, PlaybackPage.RESET_POLL_MS);
+  }
+
+  /**
+   * 播放页路由**是否还在壳层的 `NavPathStack` 里**。
    *
    * ★ 2026-10-16 新增（唯一调用点：`.onDisAppear()` 里那道 `isShowPlay` 兜底门）。
    *
@@ -3234,7 +3297,31 @@ export struct PlaybackPage {
       this.closeSettleTimer = setTimeout((): void => {
         this.closeSettleTimer = -1;
         if (!this.isAlive) {
-          PlaybackPage.ev('SET', `dead p=${this.expandState.morphP.toFixed(2)}`);
+          // ★★★ 2026-10-17（**用户第 ② 条「有背景但是高度特低」的头号嫌疑就在这里**）。
+          //
+          // ## 原来这里是"直接 return"，什么收尾都不做
+          // ```ts
+          //   if (!this.isAlive) { ev('SET','dead'); return; }   // ← 旧写法
+          // ```
+          // 于是几何**永远停在补间跑到的那个位置**：相位还是 `LEAVING`
+          // ⇒ `morphContainerActive()` 真 ⇒ `morphClipping()` 真
+          // ⇒ 容器 `.height()` 吃的是 `morphClipHeight`（≈ 迷你条那一份，几十 vp）
+          // ⇒ **整页只画出很矮的一条**，而背景（`MeshCoverBg`）是容器的子节点
+          // ⇒ 屏上就是用户说的「有背景但是高度特低」。
+          //
+          // ## 为什么"页面死了"反而更需要收尾
+          // 这一支的含义是"收尾定时器醒来时页面已经卸载了"，而**几何是共享的**
+          // （`PlayerExpandState` 挂在 AppStorageV2 上）⇒ 页面没了、几何还歪着，
+          // 下一次打开就是从这一份歪几何起手。
+          //
+          // ⇒ 与下面那条"世代号早退支"**对齐成同一个形状**（那条本来就是对的）：
+          //   翻相位 + 卸载。⚠️ 仍然**不调 `morphReset()`** —— 这里没有可靠的
+          //   "页面已经下台"判据，而 `morphReset()` 会在页面还在屏上时把容器复位成满屏
+          //   （那就是用户第 ③ 条）。复位的正确时机见 `scheduleMorphResetAfterPop()`。
+          PlaybackPage.ev('SET', `dead→LND+POPT p=${this.expandState.morphP.toFixed(2)}`);
+          this.isClosing = false;
+          this.expandState.morphLand();
+          this.state.isShowPlay = false;
           return;
         }
         // ★ P0-2：本轮关闭已被"下一次关闭请求"取代 ⇒ 收尾交给那一轮，这里什么都不做
@@ -3299,14 +3386,31 @@ export struct PlaybackPage {
         this.state.isShowPlay = false;
         PlaybackPage.ev('POPT',
           `stage=${this.expandState.morphStage} p=${this.expandState.morphP.toFixed(2)}`);
-        this.expandState.morphReset();
-        // ★ 记在**复位之后**：要读的正是"复位把几何变成了什么" ——
-        //   `morphP` 回到 1 且相位清成 NONE ⇒ `morphContainerActive()` 翻假 ⇒
-        //   容器不再裁剪/缩放 = **满屏**。若这一笔发生在路由被真正删掉（`REM`）之前，
-        //   中间那段就是用户看到的"突然展开一下才消失"。
-        PlaybackPage.ev('RST',
-          `p=${this.expandState.morphP.toFixed(2)} stage=${this.expandState.morphStage} ` +
-          `cont=${this.expandState.morphContainerActive() ? 1 : 0}`);
+        // ★★★ 2026-10-17（**用户第 ③ 条「突然来个展开播放器的动画」的机制级修法**）。
+        //
+        // ## 原来这里是"同一 tick 里同步 morphReset()"，为什么那是错的
+        // ```ts
+        //   this.state.isShowPlay = false;   // → 壳层 @Monitor（V2 异步）→ popPlayerRoute()
+        //   this.expandState.morphReset();   // ← 同步，紧跟其后
+        // ```
+        // `morphReset()` 会把 `morphStage` 清成 `NONE`、`morphP` 复位成 1、
+        // `morphClipHeight` 清零、`morphScale` 复位成 1
+        // ⇒ `morphContainerActive()` 翻假 ⇒ 容器**不裁剪、不缩放、不位移** = **满屏播放页**。
+        // 而路由要到**下一帧**才被 `pop(false)` 摘掉（`@Monitor` 派发一层 + 布局摘除一层）
+        // ⇒ 中间那 1~2 帧屏上就是：
+        // ```
+        //   已经缩成小圆点（LANDING，被裁在迷你条那么高） → 突然满屏播放页 → 消失
+        // ```
+        // 观感正是用户说的「动画结束了**突然来个展开播放器的动画**」。
+        //
+        // ## 修法：**等页面真的下台再复位几何**
+        // 落位（`morphLand()`）已经把绘制权交还给迷你条了，那一份"被裁在迷你条那么高"的
+        // 几何**在页面下台之前是完全正确的显示状态**（用户看到的就是迷你条）——
+        // 所以复位**没有任何理由**抢在 pop 前面做。
+        // ⚠️ 但也不能不做：几何是共享的，不复位会污染下一轮（见 `morphGenAlive` 那道门）。
+        // ⇒ 交给 `scheduleMorphResetAfterPop()`：**轮询到"播放页路由已经不在栈里"才复位**，
+        //   并带"新一轮会话已接管就不许清"的双守卫。
+        this.scheduleMorphResetAfterPop(closeGen, this.expandState.morphGen, 0);
       }, morphCloseMs + 20);
       return;
     }
@@ -3317,8 +3421,8 @@ export struct PlaybackPage {
     this.restorePlaybackWindowChrome();
     this.state.isShowPlay = false;
     PlaybackPage.ev('POPT', 'noGeom');
-    this.expandState.morphReset();
-    PlaybackPage.ev('RST', 'noGeom');
+    // ★ 同"正常收尾支"：复位几何必须**等页面真的下台**（见 `scheduleMorphResetAfterPop`）。
+    this.scheduleMorphResetAfterPop(this.closeGen, this.expandState.morphGen, 0);
     // 兜底路径也要弹一下：否则"几何没量到"时这条唯一的收起反馈就整个没有
     this.expandState.squashLandAnim(this.getUIContext());
   }

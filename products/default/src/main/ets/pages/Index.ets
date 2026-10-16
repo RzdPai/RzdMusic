@@ -558,21 +558,38 @@ struct Index {
     //   ⚠️ 原注释（本文件 4332-4336 行）已经点出这个形状会导致
     //     「**点击打开又退化成派音旧动画**」，但它只给 `dismissMorphActive` 做了自愈，
     //      **这条守卫本身没做**。⇒ 这就是"点了没动画"里最难复现的那一种。
-    const wasAlreadyShown: boolean = this.appState.isShowPlay;
+    // ★★★ 2026-10-17（**判据订正：`isShowPlay` 在这里恒为真 ⇒ 上面那条自愈其实是死代码**）：
+    //   原来读的是 `this.appState.isShowPlay`（原来的 `wasAlreadyShown`）。
+    //   但**本函数的唯一调用点**就在 `@Monitor('appState.isShowPlay')` 的 `if (isShowPlay)` 支里
+    //   ⇒ 走到这一行时 `isShowPlay` **必然已经是 true** ⇒ 那个判据**恒真**
+    //   ⇒ `staleClr` 那条自愈**永远走不到**：只要相位残留 `ENTERING/LEAVING/LANDING`，
+    //     这一次打开就被判成"重复触发" ⇒ `return false` ⇒ **打开没有形变动画**
+    //     （正是用户报过的那条，也是"关闭后立刻再打开没动画"的成因）。
+    //
+    //   ⇒ 换成**硬判据** `playerRouteIndex() >= 0`（"播放页路由还在栈里"）：
+    //     它与下面 `leakClr` 那条是**同一个口径**，而代码自己在那段注释里已经论证过
+    //     「全工程 8 处 `isShowPlay = true` 都**不自己 push**，push 只由 `pushPlayerRoute()` 做
+    //       ⇒ 路由不在栈里就是上一轮会话已经结束的**硬证据**」。
+    //   ⚠️ 为什么这条现在是**必需**的（不再只是可选清理）：
+    //     本轮把关闭收尾的 `morphReset()` 改成了"**等 pop 之后再复位**"
+    //     （`PlaybackPage.scheduleMorphResetAfterPop`，见 `RzdMusic记忆.md` §125）
+    //     ⇒ 关闭后到复位前那一小段里相位**仍是 `LANDING`**。
+    //     若判据还是恒真的那个，用户在那一小段里点开就会**丢动画**。
+    const showAlreadyRequested: boolean = this.playerRouteIndex() >= 0;
     if (this.expandState.pullDragging || this.expandState.morphContainerActive()) {
-      if (wasAlreadyShown) {
+      if (showAlreadyRequested) {
         // 真的"已经在播放页里"（重复触发）⇒ 保持原行为：让给已有会话
         this.expandState.pushMorphTrace('skip');
         Logger.info(RzdShellLogTag,
           `open morph: skip (pullDragging=${this.expandState.pullDragging} ` +
-          `stage=${this.expandState.morphStage} showPlay=1)`);
+          `stage=${this.expandState.morphStage} routeOnStack=1)`);
         return false;
       }
       // 残留垃圾 + 用户确实要打开 ⇒ **先清干净再继续**
       this.expandState.pushMorphTrace('staleClr');
       Logger.warn(RzdShellLogTag,
         `open morph: clearing STALE session (pullDragging=${this.expandState.pullDragging} ` +
-        `stage=${this.expandState.morphStage} drive=${this.expandState.morphDrive} showPlay=0)`);
+        `stage=${this.expandState.morphStage} drive=${this.expandState.morphDrive} routeOnStack=0)`);
       this.expandState.pullDragging = false;
       this.expandState.morphReset();
     }
