@@ -470,6 +470,32 @@ export struct PlaybackPage {
   /** 网格背景层的组件 id（只给 {@link PlaybackPage.logBgLayer} 量测用）。 */
   private static readonly MESH_BG_ID: string = 'rzd_mesh_bg_layer';
 
+  /**
+   * ★★★ 2026-10-16（**GLM5.3 会诊发现：我上一轮那道门是"死门"**）
+   *
+   * ## 事故经过（如实记，别再犯）
+   * 我给内容层 `.onAppear()` 的兜底分支加过一道"跨实例时间窗"门，判据写的是
+   * `PlaybackPage.lastCloseAtMs > 0 && Date.now() - PlaybackPage.lastCloseAtMs < CLOSE_WINDOW_MS`。
+   * GLM 指出：**整份关闭代码里没有任何一行写 `lastCloseAtMs`，而 `CLOSE_WINDOW_MS` 也从未声明**
+   * ⇒ 那道门**恒假**，等于什么都没加。我查证了时间线：那份工作区编辑（23:54）
+   *   **晚于最后一次成功构建（23:49）** ⇒ **它从未被编译过**，用户装到的包里根本没有它。
+   * ⇒ 教训：**改了源码必须当场构建**；"我加了门"与"门在产物里"是两件事。
+   *
+   * ## 为什么需要"跨实例"的判据
+   * 本页所有 `@Local` / 私有字段都是**实例局部**的；而 `morphReset()` 会把
+   * `PlayerExpandState` 里那套（`morphSessionStarted` / `morphStage` / `morphGeomReady`）全清掉。
+   * ⇒ 关闭余波落在**新实例**身上时，实例局部的门全部失明。
+   *   只能用一个**跨实例共享**的时刻做判据 ⇒ 本静态字段。
+   *
+   * ⚠️ **两个字段必须成对使用**：`lastCloseAtMs` 由**关闭链路**写
+   *    （`closeFullScreenPlayback` 入口），`CLOSE_WINDOW_MS` 只在此处当窗口宽度。
+   *    别再出现"只读不写"（那正是上一轮的事故）。
+   */
+  private static lastCloseAtMs: number = 0;
+
+  /** 关闭余波窗口（ms）—— `lastCloseAtMs` 的宽度。⚠️ 工程判断值，不是逆向值（见上方说明）。 */
+  private static readonly CLOSE_WINDOW_MS: number = 1500;
+
   /** 上一次 `RzdBgLayer` 的签名（节流）。 */
   private lastBgLayerLog: string = '';
 
@@ -1719,7 +1745,8 @@ export struct PlaybackPage {
     //        / skipClose（兜底分支但被"正在关闭"的门拦下，本轮新增）
     //   `ap` = introPaintReady（整页绘制门）
     const line11: string = `ab=${this.diagAppearBranch} ap=${this.introPaintReady ? 1 : 0} ` +
-      `stage=${e.morphStage} exit=${this.expandIntroRunning ? 1 : 0} bgBox=${this.diagBgBox}`;
+      `stage=${e.morphStage} exit=${this.expandIntroRunning ? 1 : 0} bgBox=${this.diagBgBox} ` +
+      `lcl=${PlaybackPage.lastCloseAtMs > 0 ? (Date.now() - PlaybackPage.lastCloseAtMs).toFixed(0) : 'never'}`;
     // ★★★ 2026-10-16（**控制区自证** —— 定位用户第 1 条「有时下方几个按钮也会隐藏」）
     //   必须能分辨这三种形状（修法完全不同）：
     //     ① 自动收起（设计行为：无界 `IDLE_MS = 5000`，只在 `isPlay` 时生效）
@@ -2998,6 +3025,11 @@ export struct PlaybackPage {
     if (this.isClosing) {
       return;
     }
+    // ★★★ 2026-10-16（**给"关闭余波窗口"盖章 —— 这一行是上一轮漏掉的**）
+    //   见 `lastCloseAtMs` 的注释：内容层 `.onAppear()` 的兜底分支靠它判断
+    //   "这一次出现的节点是不是刚才那次关闭的余波"。**只在这里写、那里读**，
+    //   两处成对（上一轮只有读、没有写 ⇒ 门恒假）。
+    PlaybackPage.lastCloseAtMs = Date.now();
     // ★★ P0-2：本轮关闭的**独立代次** + 取消上一轮可能还挂着的卸载定时器。
     //   `isClosing` 挡得住"收起动画进行中"的重入，但它在 `morphCloseMs + 20`（≈370ms）
     //   就被清回 `false`，而那一刻播放页**可能还没 unmount** ⇒ 第二次点击会再起一条
@@ -4830,18 +4862,29 @@ export struct PlaybackPage {
               // `morphSessionStarted` 清回 false（`morphStage` 变成 NONE）⇒
               // 上面那个 `if` 的两个判据**同时变假** ⇒ 落到这里 ⇒ **重放一遍展开动画**。
               //
-              // ## 判据：`isClosing` + `morphStage === LANDING`
-              //   · `isClosing` 由关闭链路置真（`closeFullScreenPlayback()`，`:2967`）；
-              //   · `morphStage === LANDING` —— `morphLand()` **只在关闭路径**被调
-              //     （`PlaybackPage:3092/3100` 与 `Index:1088`，全工程清点过），
-              //     它是"已经交还给迷你条"的相位。
-              //   ⇒ 两条任一成立就说明这一帧属于**关闭**，绝不该起"打开"的动画。
-              //   ⚠️ 这两条都不依赖"处理那一刻量到没量到"，也不依赖世代号。
-              if (this.isClosing || this.expandState.morphStage === MorphStage.LANDING) {
+              // ## 判据（三道，**第三条是跨实例的**）
+              //   ① `isClosing` 由关闭链路置真（`closeFullScreenPlayback()` 首部）；
+              //   ② `morphStage === LANDING` —— `morphLand()` **只在关闭路径**被调
+              //      （全工程清点：`PlaybackPage` 两处 + `Index:1088`）⇒ 是"已交还迷你条"的相位；
+              //   ③ ★ `lastCloseAtMs` 时间窗 —— **跨实例**共享（见那个静态字段的注释）。
+              //      ⚠️ ①② 都是**实例局部**的：新实例的 `aboutToAppear` 会把 `isClosing`
+              //         **无条件清回 false**，`morphReset()` 又把 `morphStage` 归 NONE
+              //         ⇒ 关闭余波落在新实例上时**两条全瞎** ⇒ 必须靠 ③。
+              //      ⚠️ ③ 的写点**只有** `closeFullScreenPlayback()` 首部一处（两处成对，
+              //         上一轮就是漏了那个写点、门恒假 ⇒ 白改一轮）。
+              const sinceCloseMs: number =
+                PlaybackPage.lastCloseAtMs > 0 ? Date.now() - PlaybackPage.lastCloseAtMs : -1;
+              if (this.isClosing || this.expandState.morphStage === MorphStage.LANDING ||
+                (sinceCloseMs >= 0 && sinceCloseMs < PlaybackPage.CLOSE_WINDOW_MS)) {
                 this.diagAppearBranch = 'skipClose';
                 Logger.info(PlaybackPage.logTag,
                   `RzdMorphOnAppear skip intro: closing. isClosing=${this.isClosing} ` +
-                  `stage=${this.expandState.morphStage} p=${this.expandState.morphP.toFixed(3)}`);
+                  `stage=${this.expandState.morphStage} sinceClose=${sinceCloseMs}ms ` +
+                  `p=${this.expandState.morphP.toFixed(3)}`);
+                // ★ 除"不播动画"之外还必须**把几何落定**：
+                //   否则容器可能停在被中断的中间 scale（用户报的"背景只剩一条"同源）。
+                this.expandState.morphSettleOpen();
+                this.introPaintReady = true;
               } else {
                 this.diagAppearBranch = 'intro';
                 this.playExpandIntro();
