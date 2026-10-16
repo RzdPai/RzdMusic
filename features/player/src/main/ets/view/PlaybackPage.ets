@@ -2305,6 +2305,26 @@ export struct PlaybackPage {
   }
 
   /**
+   * 照搬无界 `PlayerPage.onLyricInteract()`（`_recover/logic-src/PlayerPage.abc.txt:6914-6932`）：
+   *
+   * ```ts
+   *   onLyricInteract() { if (!chromeHidden) { startIdle(); } }
+   * ```
+   * 挂载点在同文件 `190116-190130`：只有 **`TouchType.Down`** 调它。
+   *
+   * ⚠️ 两个"不要搞错"：
+   *   · 它**只起计时**（`startIdle`），**不唤出**控制区 ⇒ 这里用 `scheduleChromeAutoHide()`
+   *     而**不是** `touchChrome()`（后者 = `showChrome()` + 起计时，是另一条路上的组合）。
+   *   · 条件是 `!chromeHidden`（已经收起时**不起**计时）⇒ 这里对应 `!chromeCollapsed`。
+   */
+  private onLyricInteract(): void {
+    if (this.chromeCollapsed) {
+      return;
+    }
+    this.scheduleChromeAutoHide();
+  }
+
+  /**
    * 壳层拦到系统返回（要求关闭播放页）→ 播收起动画，不要直接消失。
    *
    * ★★ 2026-10-15（回退后重做）：**删掉原来那句 `setTimeout(0)`**。
@@ -4141,6 +4161,26 @@ export struct PlaybackPage {
               .onContentDidScroll((_selectedIndex: number, index: number,
                 position: number, _mainAxisLength: number): void => {
                 this.onSwiperContentDidScroll(index, position);
+              })
+              // ★★★ 2026-10-17（照搬无界 `onLyricInteract` —— 歌词区**触摸**就重置空闲计时）
+              //
+              // 无界那一侧（`_recover/logic-src/PlayerPage.abc.txt:6914-6932`）：
+              // ```ts
+              //   onLyricInteract() { if (!chromeHidden) { startIdle(); } }
+              // ```
+              // 挂载点在同文件 `190116-190130`：**`TouchType.Down`** 才调（不是 Move/Up）。
+              // ⚠️ 关键差别：它**只** `startIdle()`，**不** `showChrome()`
+              //   ⇒ 所以这里也**不能**用 `touchChrome()`（那个会顺手把控制区唤出来）。
+              // ⚠️ 挂载点选在 `Swiper` 而不是"歌词页那一棵子树"：本仓 `scheduleChromeAutoHide()`
+              //   内部还有 `canHideLyricChrome()`（**只在歌词页为真**）这道门
+              //   ⇒ 在封面页触摸即使起了计时器也**不会**收起任何东西
+              //   ⇒ 与无界"只在歌词页挂"**行为等价**（少挖一层子树的属性链）。
+              // ⚠️ `.onTouch` 只观察、**不消费**事件 ⇒ 不影响 Swiper 自己的滑动。
+              .onTouch((event: TouchEvent): void => {
+                if (event.type !== TouchType.Down) {
+                  return;
+                }
+                this.onLyricInteract();
               })
               // ★ 目标 ④ 的**分支归属诊断**（手机支）—— 见 `logBranchSurface()` 的注释。
               //   挂在 `Swiper`（它只存在于手机这一支）的 `.onAppear()` 上：

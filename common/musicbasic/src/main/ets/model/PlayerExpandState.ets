@@ -1478,8 +1478,22 @@ export class PlayerExpandState {
   private static readonly LYRIC_META_BLOCK_H_VP: number = 44;
   /** 歌词页浮层底边与歌词正文之间的呼吸间距（vp）。⚠️ 本项目估定值，非逆向值。 */
   private static readonly LYRIC_PAD_GAP_VP: number = 10;
-  /** 浮层几何拿不到时的兜底顶部留白（vp，≈ 一屏的 1/5）。⚠️ 本项目估定值，非逆向值。 */
-  private static readonly LYRIC_PAD_TOP_FALLBACK: number = 150;
+  /**
+   * 歌词页浮层几何拿不到时的**兜底顶部留白**（vp）。
+   *
+   * ★★★ 2026-10-17（照搬无界 `LYRIC_PAD_TOP_FALLBACK`）：**96**（本仓原来是 **150**，自定值）。
+   *
+   * 出处：`PlayerPage.lyricPadTop()` 的兜底支走的是文件级 lexenv 槽 **`0x06`**
+   * （`wujie.pa:172872-172874`：`ldlexvar 0x1, 0x6` + `throw.undefinedifholewithname
+   * "LYRIC_PAD_TOP_FALLBACK"`），而槽位表与取值在归档笔记里已经核过：
+   * `_recover/logic-src/歌词页浮层封面与歌名定稿.md:1299`
+   * 「`0x06` | `LYRIC_PAD_TOP_FALLBACK` | **96** | `lyricPadTop()` 兜底」。
+   * 同一份笔记的差异表 `:1448` 也早已标出「派音 150 vs 无界 96 —— 不一致但影响小」。
+   *
+   * ⚠️ 这条兜底一旦命中，观感就是"**歌词顶上多一块空白**"（笔记 `:1434` 的原话）
+   *   ⇒ 150 比 96 多 54vp 的空白，属于**该修的自定值**。
+   */
+  private static readonly LYRIC_PAD_TOP_FALLBACK: number = 96;
 
   /**
    * @returns 歌词页浮层（封面 + 歌名/歌手）是否启用。
