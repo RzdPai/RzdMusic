@@ -73,11 +73,28 @@ export struct LyricsComponent {
     AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
   @Param isShowControl: boolean = false;
   @Param isTablet: boolean = false;
-  @Param hideLyricsMetaHeader: boolean = false;
+  /**
+   * 是否隐藏"歌名 - 歌手"这行自带表头。
+   *
+   * ★★ 2026-10-15：**默认值从 `false` 翻成 `true`** —— 让"照搬无界"成为**默认行为**。
+   *   理由：① 无界**没有**这个内建表头（`歌词页浮层封面与歌名定稿.md` L1449 原文：
+   *   「无界没有 `LyricsComponent` 内建 header 这回事」）；② 播放页**三处**调用点
+   *   （手机 Swiper 歌词页 / 宽屏 `GridCol` / 面板）现在**全部**显式传 `true`，
+   *   而且那两条非手机分支各自都另有 `MusicPlayInfoBlock` 在显示歌名 ⇒ 留着就是重复。
+   *   ⇒ 把默认值翻过来：**将来谁新加调用点忘了传，也默认落在"与无界一致"那一侧**，
+   *     而不是默默多出一行重复的歌名（这正是 §56.19 记的"N 处只改一处"那类问题的防线）。
+   */
+  @Param hideLyricsMetaHeader: boolean = true;
   @Param panelBottomBar: boolean = false;
   @Param onSeekTime: (ms: number) => void = (): void => {};
   @Local lrcLines: AmllLyricLine[] = [];
   @Local rawLyricText: string = '';
+  /**
+   * `renderLines()` 的缓存（见该方法注释：`@Param` 按引用比对，不能每帧新建数组）。
+   * `metaCutCacheSrc` 存"这份缓存是按哪个源数组算的"，源换引用即失效。
+   */
+  private metaCutCacheSrc: AmllLyricLine[] | undefined = undefined;
+  private metaCutCache: AmllLyricLine[] = [];
 
   @Local currentLineText: string = '';
   @Local lyricViewHeight: number = 0;
@@ -176,6 +193,71 @@ export struct LyricsComponent {
     if (this.lyricFontSizeState.size !== MusicStoreService.getInstance().getLyricFontSize()) {
       MusicStoreService.getInstance().setLyricFontSize(this.lyricFontSizeState.size);
     }
+  }
+
+  /**
+   * ★★★ 2026-10-16（**修"播放界面错位"的真根因**）：
+   *   让 `hideLyricsMetaHeader` 这个 `@Param` **真正生效** ——
+   *   在此之前它**只有声明**（`grep hideLyricsMetaHeader` 全文件只命中声明那一行），
+   *   也就是说"藏掉歌词页自带表头"这件事**几轮前以为改了、其实从未生效**。
+   *
+   * ## 用户看到的现象与它怎么对上
+   *
+   * 用户截图里贴在一起的两行是 **`作词：唐恬` / `作曲：钱雷`** ——
+   * 它们**不是小歌词组件画的**，而是**歌词正文的头两行**（LRC 里排在最前面的标题行）。
+   * `AmllLyricView` 拿到**整份** `lrcLines`（含这两行），并把它当普通歌词**一起滚动**；
+   * 这两行的 `startTime` 是 0，于是静止在封面页/歌词页时它们正好停在屏上那一条高度带里，
+   * 与 `Swiper` **之外**那条歌名/歌手覆盖层（`LyricFloatLayer`）**重叠** ⇒ 就是"错位"。
+   *
+   * ## 为什么之前把修法放错了地方
+   *
+   * 我原以为那是"小歌词组件与歌名行抢位"，于是去改 `MiniLyricLinesComponent` 的让位量
+   * （`MINI_LYRIC_SINK_VP = 44`）。**但小歌词那一支默认是关的**
+   * （`MusicStoreService.getShowMiniLyric()` 的默认值是 `false`）⇒ 那条修法**根本不在渲染树里**。
+   * 真正的渲染者是这里。
+   *
+   * ## 实现上的两条安全线（避免误伤）
+   *
+   * 1. **只掐"开头连续"的标题行** —— 一旦遇到第一行**非**标题行就停手。
+   *    理由：有些歌词正文里会出现"作曲：我自己"这种句子，无条件过滤会把真歌词也删掉；
+   *    而真实 LRC 的元信息**恒在最前面**。
+   * 2. `hideLyricsMetaHeader === false` 时**原样返回**（零行为变化）——
+   *    宽屏/面板那两支与老调用点不受影响。
+   *
+   * @returns 送进渲染器的行数组（可能比 `lrcLines` 短若干行）
+   */
+  private renderLines(): AmllLyricLine[] {
+    if (!this.hideLyricsMetaHeader || this.lrcLines.length === 0) {
+      return this.lrcLines;
+    }
+    // ⚠️ 必须缓存：`@Param` 是按**引用**比对的，每次 build 新建数组会让
+    //    `AmllLyricView` 每帧都认为"歌词变了"（白重排 + 可能打断滚动动画）。
+    //    失效条件：源数组换了引用（`loadLyrics` 每次都是整体赋值）或开关翻转。
+    if (this.metaCutCacheSrc === this.lrcLines) {
+      return this.metaCutCache;
+    }
+    let cut: number = 0;
+    while (cut < this.lrcLines.length && isTitleLine(this.lineTextOf(this.lrcLines[cut]))) {
+      cut++;
+    }
+    if (cut === 0) {
+      this.metaCutCacheSrc = this.lrcLines;
+      this.metaCutCache = this.lrcLines;
+      return this.lrcLines;
+    }
+    // 全部都是标题行（极端：歌词只有元信息）⇒ 不裁，否则页面会变成"无歌词"空态
+    if (cut >= this.lrcLines.length) {
+      this.metaCutCacheSrc = this.lrcLines;
+      this.metaCutCache = this.lrcLines;
+      return this.lrcLines;
+    }
+    const kept: AmllLyricLine[] = [];
+    for (let i: number = cut; i < this.lrcLines.length; i++) {
+      kept.push(this.lrcLines[i]);
+    }
+    this.metaCutCacheSrc = this.lrcLines;
+    this.metaCutCache = kept;
+    return kept;
   }
 
   @Monitor('state.progress')
@@ -530,7 +612,11 @@ export struct LyricsComponent {
       Stack({ alignContent: Alignment.BottomEnd }) {
         if (this.lrcLines.length > 0) {
           AmllLyricView({
-            lyricLines: this.lrcLines,
+            // ★★★ 2026-10-16：**必须用 `renderLines()`**（掐掉开头的标题行），
+            //   否则 `作词：唐恬` / `作曲：钱雷` 会当普通歌词一起滚上去，
+            //   与歌名/歌手覆盖层重叠 —— 用户实测的「播放界面错位」就是它。
+            //   详见 `renderLines()` 的注释。
+            lyricLines: this.renderLines(),
             currentTime: this.state.progress,
             isPlay: this.state.isPlay,
             fontSize: this.activeFontSize(),

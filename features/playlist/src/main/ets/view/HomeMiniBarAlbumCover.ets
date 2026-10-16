@@ -109,10 +109,25 @@ export struct HomeMiniBarAlbumCover {
 
   /**
    * @returns Album cover width/height in vp for current immersive and expand state.
+   *
+   * ★★ 2026-10-15（修用户实测「**无界的播放条更粗一些**」）：
+   *   无界 `MiniPlayer` 的胶囊内容高度是 **56vp**（逆向定稿：
+   *   `MiniPlayer胶囊布局与宽度约束.md` §八 + `播放条三形态完整UI.md` §1.8.1 ——
+   *   `sidePad() = h/2 − coverEdge()/2`，折叠态 `h = BAR_CONTENT_H(40) × 1.4 = 56`，
+   *   `coverEdge() = 40 × MINI_COVER_RATIO(0.8) = 32` ⇒ `sidePad = 12`，即
+   *   **32 内容 + 12×2 内边距 = 56**）。
+   *
+   *   我们这条原来在沉浸式自由窗口（= 这台机器）下给的是 **32**（真正的内容高），
+   *   ⇒ 内容行只有 32vp，HDS 的 56vp 槽位里上下各空 12vp ⇒ **观感明显比无界细一圈**。
+   *   ⇒ 把"沉浸式自由窗口"这一档的封面从 32 提到 **40**（内容高），
+   *     再由 `HomeMiniBarPlayer` 的上下各 8vp 内边距补成 **56** ⇒ 与无界同厚。
+   *   ⚠️ 只改**这一档**（`isImmersiveFreeWindowCover`）：下面那两档（44 / 30）是
+   *      首页双层底栏与二级页锁定档，与"播放条更粗"这条反馈无关，**一个字不动**。
+   *   ⚠️ 圆角仍按"封面边长"给（同一档返回同一个数 ⇒ 圆形封面），见 {@link coverBorderRadiusVp}。
    */
   private coverSideLengthVp(): number {
     if (this.isImmersiveFreeWindowCover()) {
-      return 32;
+      return 40;
     }
     if (this.lockTwoRowCoverSize || this.isTwoRowBarLayout()) {
       return 30;
@@ -122,10 +137,15 @@ export struct HomeMiniBarAlbumCover {
 
   /**
    * @returns Corner radius in vp matching the square side length logic.
+   *
+   * ⚠️ 沉浸式自由窗口那一档原来返回的是 **8**（一个固定圆角）—— 那是早期"圆角封面还没定"
+   *    的遗留值，与另一档"圆角 = 边长"（圆形封面）**不是同一种封面形状**。
+   *    本轮把这一档也统一成**圆角 = 边长**（与迷你条在播放页形变里被当成"小圆片"的观感一致），
+   *    它是**同一个函数的三个分支必须同形**这条既有约定的最后一块（见 `MiniBarAlbumCover` 的同名方法）。
    */
   private coverBorderRadiusVp(): number {
     if (this.isImmersiveFreeWindowCover()) {
-      return 8;
+      return 40;
     }
     if (this.lockTwoRowCoverSize || this.isTwoRowBarLayout()) {
       return 30;

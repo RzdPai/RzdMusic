@@ -16,7 +16,7 @@ import { qualityDisplayName } from '../util/SourceFallbackUtil';
 
 import { AppStorageV2, uiObserver } from '@kit.ArkUI';
 import { AVCastPicker } from '@kit.AVSessionKit';
-import { AppStorageKeys, ArtistRouteParam, BreakpointType, isWidthBreakpointLgOrXl, MusicStoreService, PlaybackPreferenceService, PlaybackIntentState, PlayedSongRecord, PlaylistDto, RouterUrlConstants, SongItem, StyleConstants, ThemeState } from 'musicbasic';
+import { AppStorageKeys, ArtistRouteParam, BreakpointType, isWidthBreakpointLgOrXl, MusicStoreService, PlaybackPreferenceService, PlaybackIntentState, PlayedSongRecord, PlaylistDto, PlayerExpandState, RouterUrlConstants, SongItem, StyleConstants, ThemeState } from 'musicbasic';
 import { PlayerConstants } from '../constant/PlayerConstants';
 import { MusicPlayMode } from '../model/MusicData';
 import { PlayerDataUtil } from '../util/PlayerDataUtil';
@@ -53,6 +53,25 @@ export struct ControlAreaComponent {
   @Local playMode: MusicPlayMode = MusicPlayMode.ORDER;
   /** When false, hides the bottom “other actions�?placeholder row (e.g. album-gradient full-screen layout). */
   @Param showBottomOtherRow: boolean = true;
+  /**
+   * 时间行中间是否画「平台 / 音质」两枚徽标。
+   *
+   * ★★ 2026-10-15（照搬无界）：默认 **false** —— 无界 `scrubber` 的时间行只有
+   *   `[当前] Blank [总时长]`（`PlayerPage完整UI定稿.md` §8.2），音质在**菜单 sheet** 里选。
+   *   派音菜单里也有音质子列表 ⇒ 这里关掉不会丢功能。
+   *   ⚠️ 要恢复成派音原来的样子：改成 `true`。
+   */
+  private static readonly SHOW_SCRUBBER_BADGES: boolean = false;
+
+  /**
+   * 进度条（`Slider`）的轨道粗细（vp）—— **照抄无界 `scrubber` 的 `.trackThickness(12)`**。
+   *
+   * 出处：`PlayerPage完整UI定稿.md` §8.2（`scrubber` 绝对 L177708-177818，字节码
+   * `L197370` 的 `.width("100%")` 与 `L197382` 的 `.trackThickness(12)`）。
+   * ⚠️ 我们原来**根本没设 `trackThickness`** ⇒ 用系统默认值 ⇒ 比无界细
+   *   （用户实测：「**进度条改成无界一样的粗细**」）。
+   */
+  private static readonly SCRUBBER_TRACK_THICKNESS_VP: number = 12;
 
   // ─────────── 控制区动效（由播放页驱动，对标无界音乐 PlayerChrome + BarCollapse）───────────
 
@@ -65,12 +84,52 @@ export struct ControlAreaComponent {
   /** 控制区透明度：自动收起时淡出；默认 1。 */
   @Param chromeOpacity: number = 1;
   /** 控制区按钮间距（vp）：由宿主按窗口档位给（手机 18 / 折叠 24 / 平板 30）；0 = 用组件默认值。 */
-  @Param chromeGap: number = 0;
+  // ⚠️ 2026-10-15：`@Param chromeGap` **已删除** —— 它自始至终**只有声明、没有使用**
+  //   （grep 全组件只有声明那一处），是条**死管道**；而 `PlaybackPage` 一直在往里传
+  //   `expandState.chromeGapVp()`（那组 18/24/30 **不是无界的值**）⇒ 两边一起删。
+  //   控制区真正的间距要从无界档位表的 `gapSwiper` / `gapScrub` 来，
+  //   但那要先按三段结构重排（见 `RzdMusic待确认清单.md` D4）。
   // ⚠️ 2026-10-15 已**删除** `progressRiseVp` 参数：用户定调「进度条和下面的那堆按钮**一起**飞入」，
   //    它们是一组，整片控制区的位移由宿主挂在**外层**（`PlaybackPage` 的 `.translate({y: contentRiseVp()})`），
   //    组件内部不再做任何错峰。以后要再拆组，先问清楚顺序。
-  /** Controls the song menu bottom sheet (quality / singer / album / share). */
-  @Local showMenuSheet: boolean = false;
+  /**
+   * Controls the song menu bottom sheet (quality / singer / album / share).
+   *
+   * ★★ 2026-10-15（照搬无界）：从 `@Local` 提升成 **`@Param` + `@Event`**。
+   *   无界的菜单入口是 `metaRow` 右侧的第二个 `SymbolGlyph`（「更多」），
+   *   而 `metaRow` 画在 `PlaybackPage` 的那一覆盖层里 ⇒ **状态必须由宿主持有**，
+   *   本组件只负责画 sheet。宿主把 `showMenuSheet` 传进来、并在 `onMenuSheetChange` 里改它。
+   *   （无界 `PlayerPage完整UI定稿.md` §6.2：`SymbolGlyph 收藏` + `SymbolGlyph 更多`。）
+   */
+  @Param showMenuSheet: boolean | undefined = undefined;
+  /** 宿主侧改变菜单开关（子组件不再自己写状态）。 */
+  @Event onMenuSheetChange: (open: boolean) => void = (_open: boolean): void => {};
+  /**
+   * 组件**自己那份**菜单开关 —— 仅当宿主**没有**接管时使用。
+   *
+   * ⚠️⚠️ 2026-10-15（补漏，必须读）：本组件的调用点一共 **5 处**，其中 **4 处并没有传
+   *   `showMenuSheet` / `onMenuSheetChange`**（`MusicPlayInfoBlock` 3 处 + `LyricsComponent` 1 处）。
+   *   如果这里只留 `@Param` + 默认空回调，那 4 处的「歌曲菜单」会**永远打不开**
+   *   （内部那句 `= true` 已经改成回调，回调是空的）——
+   *   这就是"把 `@Local` 提升成 `@Param` 时配套没跟上"的典型形状。
+   *   所以：`@Param` 的默认值取 **`undefined`**（而不是 `false`）用来区分"宿主没传"，
+   *   没传就退回组件内部状态 ⇒ **5 个调用点行为全部正确**。
+   */
+  @Local menuSheetLocal: boolean = false;
+
+  /** @returns 菜单当前是否展开（宿主接管则读宿主的值，否则读组件自己的）。 */
+  private menuSheetOpen(): boolean {
+    return this.showMenuSheet !== undefined ? this.showMenuSheet : this.menuSheetLocal;
+  }
+
+  /** 请求改变菜单开关（投给宿主；宿主没接管就自己改）。 */
+  private requestMenuSheet(open: boolean): void {
+    if (this.showMenuSheet !== undefined) {
+      this.onMenuSheetChange(open);
+    } else {
+      this.menuSheetLocal = open;
+    }
+  }
   /** When true, shows the current play queue as a bottom sheet. */
   @Local showPlaylistSheet: boolean = false;
   @Local showOtherVersionsSheet: boolean = false;
@@ -107,6 +166,18 @@ export struct ControlAreaComponent {
   /** App accent color for menu highlights. */
   @Local themeState: ThemeState =
     AppStorageV2.connect(ThemeState, AppStorageKeys.THEME_STATE, () => new ThemeState())!;
+  /**
+   * 形变状态（用来取**控制区档位尺寸**）。
+   *
+   * ★ 2026-10-15：本文件原来**没有**它 —— 控制区的所有尺寸都是**写死的字面量**
+   *   （`isWidthBreakpointLgOrXl(bp) ? 26 : 24` 这类），而无界是**按档位表取值**
+   *   （`chrome().sideSize` / `favSize` / `playSize` …，见 `RzdMusic记忆.md` §56.26）。
+   *   这里按本文件**既有的套路**（`themeState` / `intent` 都是 `AppStorageV2.connect`）接进来，
+   *   就不再需要从宿主传 `@Param`（那要改 5 个调用点 —— "同一形状 N 处"的老毛病）。
+   */
+  private expandState: PlayerExpandState =
+    AppStorageV2.connect(PlayerExpandState, AppStorageKeys.PLAYER_EXPAND_STATE,
+      () => new PlayerExpandState())!;
 
   /**
    * 打开菜单弹层里的某个子页前，先把**其它**子页标志清掉。
@@ -146,16 +217,16 @@ export struct ControlAreaComponent {
     } else if (page === 'comment') {
       this.showMenuComment = true;
     }
-    if (this.showMenuSheet) {
+    if (this.menuSheetOpen()) {
       return;   // 已经开着：只切子页
     }
     const since: number = Date.now() - this.sheetClosedAtMs;
     if (since >= SHEET_REOPEN_GUARD_MS) {
-      this.showMenuSheet = true;
+      this.requestMenuSheet(true);
       return;
     }
     setTimeout((): void => {
-      this.showMenuSheet = true;
+      this.requestMenuSheet(true);
     }, SHEET_REOPEN_GUARD_MS - since);
   }
 
@@ -266,7 +337,7 @@ export struct ControlAreaComponent {
 
   private closeMenuSheet(): void {
     this.showMenuPlaylist = false;
-    this.showMenuSheet = false;
+    this.requestMenuSheet(false);
     this.showMenuQuality = false;
     this.showMenuComment = false;
   }
@@ -470,7 +541,7 @@ export struct ControlAreaComponent {
     const index: number = appState.selectIndex;
     const song: SongItem | undefined = appState.getCurrentSongItem();
     this.showMenuQuality = false;
-    this.showMenuSheet = false;
+    this.requestMenuSheet(false);
     const generation: number = ++this.networkLookupGeneration;
     const wifi: boolean = await PlaybackPreferenceService.resolveCurrentNetworkWifi();
     this.store.setNetworkPlayQuality(wifi, q);
@@ -551,6 +622,12 @@ export struct ControlAreaComponent {
           .blockColor($r('app.color.slider_block'))
           .selectedColor($r('app.color.slider_select'))
           .trackColor($r('app.color.slider_track'))
+          // ★★★ 2026-10-16（用户实测：「**进度条改成无界一样的粗细**」）
+          //   无界 `scrubber` 那一层的确切写法（`PlayerPage完整UI定稿.md` §8.2，
+          //   字节码 `L197370 / L197382`）：`.width("100%").trackThickness(12)`。
+          //   ⚠️ 我们原来**没有设 `trackThickness`**，走的是系统默认（视觉上更细）
+          //     ⇒ 这就是"粗细不一样"的来源。这里照抄无界的 **12**。
+          .trackThickness(ControlAreaComponent.SCRUBBER_TRACK_THICKNESS_VP)
           .blockSize({
             width: $r('app.float.slider_block'),
             height: $r('app.float.slider_block')
@@ -585,10 +662,25 @@ export struct ControlAreaComponent {
             .fontFamily(PlayerConstants.FONT_FAMILY_BLACK)
             .lineHeight('14vp')
           Blank()
-          // 当前音质徽标：本地歌显示「本地」，在线歌显示实际播放音质（含自动降级）
-          Row({ space: 4 }) {
-            if (this.currentPlatformLabel().length > 0) {
-              Text(this.currentPlatformLabel())
+          // ★★ 2026-10-15（照搬无界）：**时间行中间不再夹音质/平台徽标**。
+          //   无界的 `scrubber` 时间行只有 `Row{ Text(当前) , Blank , Text(总时长) }`
+          //   （`PlayerPage完整UI定稿.md` §8.2），音质是在**菜单 sheet** 里选的 ——
+          //   派音这里也在菜单里显示了（见本文件下方的音质子列表）。
+          //   ⚠️ 那三个取值方法（`currentPlatformLabel` / `currentQualityLabel` /
+          //      `currentQualitySize`）**都保留**（菜单还在用），只是不在这里画。
+          //      要恢复：把 `SHOW_SCRUBBER_BADGES` 改成 `true`。
+          if (ControlAreaComponent.SHOW_SCRUBBER_BADGES) {
+            Row({ space: 4 }) {
+              if (this.currentPlatformLabel().length > 0) {
+                Text(this.currentPlatformLabel())
+                  .fontSize(11)
+                  .fontColor($r('app.color.play_text_color'))
+                  .lineHeight(16)
+                  .padding({ left: 8, right: 8, top: 2, bottom: 2 })
+                  .borderRadius(10)
+                  .backgroundColor('rgba(255, 255, 255, 0.12)')
+              }
+              Text(this.currentQualityLabel())
                 .fontSize(11)
                 .fontColor($r('app.color.play_text_color'))
                 .lineHeight(16)
@@ -596,13 +688,6 @@ export struct ControlAreaComponent {
                 .borderRadius(10)
                 .backgroundColor('rgba(255, 255, 255, 0.12)')
             }
-            Text(this.currentQualityLabel())
-              .fontSize(11)
-              .fontColor($r('app.color.play_text_color'))
-              .lineHeight(16)
-              .padding({ left: 8, right: 8, top: 2, bottom: 2 })
-              .borderRadius(10)
-              .backgroundColor('rgba(255, 255, 255, 0.12)')
           }
           Blank()
           Text(this.playerViewModel.appState.totalTime)
@@ -626,7 +711,7 @@ export struct ControlAreaComponent {
 
       Row() {
         SymbolGlyph(this.playModeSymbol())
-          .fontSize(isWidthBreakpointLgOrXl(this.breakpointEnv.widthBreakpoint) ? 26 : 24)
+          .fontSize(this.expandState.chromeSideSize())
           .fontWeight(FontWeight.Regular)
           .fontColor([$r('app.color.play_text_color')])
           .accessibilityText('播放模式')
@@ -637,8 +722,16 @@ export struct ControlAreaComponent {
           })
         Image($r('app.media.ic_public_forward'))
           .controlImageBuilder()
-          .width(isWidthBreakpointLgOrXl(this.breakpointEnv.widthBreakpoint) ?
-            $r('app.float.control_width_lg') : $r('app.float.control_width'))
+          // ★★★ 2026-10-16（照搬无界 `chrome().seekSize`）：
+          //   这两处 `Image` 的属性（`aspectRatio(1)` + `opacity(0.86)` + `objectFit(Contain)`，
+          //   见本文件末尾的 `controlImageBuilder()`）**与无界那两处逐字相同**
+          //   （`wujie.pa:181429` / `181639`：`Image().width(chrome().seekSize).aspectRatio(1)…`）
+          //   ⇒ 对应关系确定：**方形图标按钮的宽度 = 本档的 `seekSize`**（32 / 30 / 28）。
+          //   ⚠️ 改前是 `app.float.control_width`(32) / `control_width_lg`(36) —— 写死两档、
+          //     不随档位变；FULL 档恰好等于 32 所以看不出问题，中/紧凑档会偏大。
+          //   ⚠️ **播放/暂停主按钮不换**：无界那边它用 `playSize`（72/62/52），
+          //     而本仓这里是 `image_play_width = 72vp`（FULL 档恰好对上）。
+          .width(this.expandState.chromeSeekSize())
           .accessibilityText('上一首')
           .accessibilityLevel('yes')
           .onClick(() => {
@@ -661,8 +754,8 @@ export struct ControlAreaComponent {
           })
         Image($r('app.media.ic_public_next'))
           .controlImageBuilder()
-          .width(isWidthBreakpointLgOrXl(this.breakpointEnv.widthBreakpoint) ?
-            $r('app.float.control_width_lg') : $r('app.float.control_width'))
+          // 同上一首：`chrome().seekSize`（无界 `wujie.pa:181639`）
+          .width(this.expandState.chromeSeekSize())
           .accessibilityText('下一首')
           .accessibilityLevel('yes')
           .onClick(() => {
@@ -670,7 +763,7 @@ export struct ControlAreaComponent {
             this.playerViewModel.appState.pageShowTime = 0;
           })
         SymbolGlyph($r('sys.symbol.music_note_list'))
-          .fontSize(isWidthBreakpointLgOrXl(this.breakpointEnv.widthBreakpoint) ? 26 : 24)
+          .fontSize(this.expandState.chromeSideSize())
           .fontWeight(FontWeight.Regular)
           .fontColor([$r('app.color.play_text_color')])
           .accessibilityText('播放列表')
@@ -965,7 +1058,7 @@ export struct ControlAreaComponent {
     .onAppear(() => {
       this.playMode = PlayerDataUtil.getPlayMode();
     })
-    .bindSheet($$this.showMenuSheet, this.MenuSheet(), {
+    .bindSheet(this.menuSheetOpen(), this.MenuSheet(), {
       // 评论子页要整屏高度才够看（列表 + 两个页签）；菜单本身保持固定 360
       height: this.showMenuComment ? SheetSize.LARGE : 416,
       dragBar: true,
@@ -975,6 +1068,9 @@ export struct ControlAreaComponent {
         // 记下关闭动画结束的时刻（重新打开的冷却用），顺手把子页状态清干净
         this.sheetClosedAtMs = Date.now();
         this.resetMenuSubPages();
+        // ★ 状态在宿主手里：下拉关闭 / 点遮罩关闭都要通知它，否则宿主以为还开着、
+        //   再点一次「更多」会**打不开**（`showMenuSheet` 已经是 true）。
+        this.requestMenuSheet(false);
       }
     })
   }

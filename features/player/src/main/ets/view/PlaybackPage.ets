@@ -13,6 +13,7 @@
  * limitations under the License.
  */
 
+// ⚠️ `TextController` 是 ArkUI 的**全局环境类型**（不需要 import，`MusicPlayInfoBlock` 同款）
 import { AppStorageV2, curves, uiObserver, UIUtils, window } from '@kit.ArkUI';
 import { image } from '@kit.ImageKit';
 import { effectKit } from '@kit.ArkGraphics2D';
@@ -23,6 +24,9 @@ import { hdsEffect } from '@kit.UIDesignKit';
 import {
   AppStorageKeys,
   BreakpointConstants,
+  // ★ 2026-10-16（照搬无界 `BarCollapse`）：控制条拖动收起/展开的手势状态机
+  BarAction,
+  BarCollapse,
   CoverRadiusState,
   CoverTintState,
   getWindowInfoState,
@@ -32,6 +36,13 @@ import {
   MorphDrive,
   MorphStage,
   MusicStoreService,
+  PlayedSongRecord,
+  // ★ 2026-10-15（覆盖层统一）：端点量测的常量与工具（原来只在 `MusicPlayInfoBlock` 里用）
+  PLAYER_BIG_COVER_ID,
+  PLAYER_META_TITLE_ID,
+  PLAYER_META_SINGER_ID,
+  MorphMetaEndpoint,
+  areaLengthToVp,
   PlaybackFlowLightState,
   PlaybackShellConstants,
   PlayerExpandState,
@@ -49,6 +60,12 @@ import { PlayerConstants } from '../constant/PlayerConstants';
 import { ControlAreaComponent } from './ControlAreaComponent';
 import { LyricsComponent } from './LyricsComponent';
 import { MiniLyricLinesComponent } from './MiniLyricLinesComponent';
+import { MeshCoverBg } from './MeshCoverBg';
+// ★ 网格背景的取图流水线（照搬无界 `design/logic/MeshSource.ets`）
+import { SRC_EDGE, enhanceColors, boxBlurRgba } from '../util/MeshSource';
+// ⚠️ 手机窄屏的**页 0 已经不用它了**（照搬无界：封面/歌名改成 `Swiper` 外的覆盖层），
+//    但**宽屏 / 面板布局那两条分支仍在用**（`MusicPlayInfoBlock` 在 1817 / 2101 两处）
+//    ⇒ import 不能删。那两条分支的统一是下一块（整屏封面页与覆盖层合并）。
 import { MusicPlayInfoBlock } from './MusicPlayInfoBlock';
 import { TopAreaComponent } from './TopAreaComponent';
 
@@ -58,6 +75,14 @@ function clampRgbByte(n: number): number {
     return 0;
   }
   return Math.max(0, Math.min(255, Math.floor(n)));
+}
+
+/** 一次封面下载解出的两张位图（见 `PlaybackPage.loadOnlineCoverPair`）。 */
+class CoverDecodePair {
+  /** 全尺寸，供 `effectKit` 取色。 */
+  full: image.PixelMap | undefined = undefined;
+  /** 64×64、RGBA_8888、可编辑 —— 网格背景的源。 */
+  mesh: image.PixelMap | undefined = undefined;
 }
 
 /** Minimal shape for probing {@link image.PixelMap.release}; {@link Resource} does not carry this. */
@@ -123,7 +148,258 @@ export struct PlaybackPage {
   /** When true, renders the wide split panel layout (no top bar, custom paddings). */
   @Param panelLayout: boolean = false;
   /** Swiper page index (lyrics vs main stack on some layouts). */
+  /** 当前 Swiper 页（0 = 封面页，1 = 歌词页）。 */
   @Local playbackSwiperIndex: number = 0;
+  /** 歌曲菜单（那一横行的「更多」）是否展开；sheet 由 `ControlAreaComponent` 画。 */
+  @Local playMenuOpen: boolean = false;
+  /** 当前曲是否已收藏（那一横行右侧的心形）。与 `MusicPlayInfoBlock` 同一套读写。 */
+  @Local isCurrentFavorite: boolean = false;
+  @Local favStore: MusicStoreService = MusicStoreService.getInstance();
+
+  /**
+   * 网格背景的源位图（64×64、已过 `enhanceColors` + `boxBlurRgba(9,3)`）。
+   *
+   * ★ 2026-10-15（照搬无界 `MeshCoverBg`）：本页持有它的生命周期 ——
+   *   换歌时 `publishMeshSource` 释放上一张；为空时背景层退回"实时模糊那张图"。
+   */
+  @Local meshSrc: image.PixelMap | undefined = undefined;
+  /** 换图令牌（`MeshCoverBg` 靠它触发重新上传，见那里的 `@Monitor`）。 */  @Local meshSrcVersion: number = 0;
+
+  /** 曲目或收藏版本变化时刷新心形。 */
+  @Monitor('state.selectIndex', 'favStore.favoriteVersion')
+  onFavoriteChanged(): void {
+    const song = this.state.getCurrentSongItem();
+    if (song === undefined || song.source.length === 0) {
+      this.isCurrentFavorite = false;
+      return;
+    }
+    this.isCurrentFavorite = this.favStore.isFavorite(song.source, song.songId);
+  }
+
+  /** 切换收藏（照抄 `MusicPlayInfoBlock.toggleFavorite()`，保证两处行为一致）。 */
+  private toggleFavorite(): void {
+    const song = this.state.getCurrentSongItem();
+    if (song === undefined || song.source.length === 0) {
+      return;
+    }
+    if (this.favStore.isFavorite(song.source, song.songId)) {
+      this.favStore.removeFavorite(song.source, song.songId);
+    } else {
+      const record = new PlayedSongRecord();
+      record.songId = song.songId;
+      record.name = typeof song.title === 'string' ? song.title : '';
+      record.singer = typeof song.singer === 'string' ? song.singer : '';
+      record.source = song.source;
+      record.img = song.cover;
+      record.url = song.url;
+      record.lyric = song.lyricText;
+      record.time = Date.now();
+      this.favStore.addFavorite(record);
+    }
+  }
+
+  // ───────── 覆盖层（变换式）的几何 + 端点上报（对标无界 `floatingCover.onAreaChange → publishMorphTargets`）─────────
+
+  private titleController: TextController = new TextController();
+  private singerController: TextController = new TextController();
+
+  /** 变换式覆盖层的**基准矩形**（纯几何、与量测无关）—— 见 `PlayerExpandState.playerCoverGeomRect`。 */
+  private coverLayerBase(): LyricMorphRect {
+    return this.expandState.playerCoverGeomRect();
+  }
+
+  /**
+   * @returns 覆盖层的缩放 = `lyricMorph(t).size / 基准尺寸`。
+   *
+   * `t = 0` 时它 = 实测尺寸 / 基准尺寸 ⇒ 渲染出来的封面**仍然正好是实测端点那个大小**
+   * （位移项会把基准位补回实测位）⇒ 与改前 `.width(lyricFloatRect().size)` 的结果逐像素相同。
+   */
+  private coverLayerScale(): number {
+    const base: number = this.coverLayerBase().size;
+    if (base <= 0) {
+      return 1;
+    }
+    return this.lyricFloatRect().size / base;
+  }
+
+  private coverLayerTx(): number {
+    return this.lyricFloatRect().x - this.coverLayerBase().x;
+  }
+
+  private coverLayerTy(): number {
+    return this.lyricFloatRect().y - this.coverLayerBase().y;
+  }
+
+  /**
+   * @returns 写进 `.borderRadius()` 的值。
+   * ⚠️ 圆角作用在**未缩放**的节点上 ⇒ 必须除以 `scale`，视觉半径才等于 `lyricMorph` 给的那个；
+   *    不除的话小封面那端圆角会被放大约 6.7 倍（看着像个小圆片）。
+   */
+  private coverLayerRadius(): number {
+    const s: number = this.coverLayerScale();
+    if (s <= 0.0001) {
+      return 0;
+    }
+    return this.lyricFloatRect().radius / s;
+  }
+
+  /**
+   * 覆盖层上报「播放页封面端点」。
+   *
+   * ★ 对标无界 `floatingCover.onAreaChange → publishMorphTargets()`：**覆盖层自己就是量测源**。
+   * ⚠️ **只在封面页静止（`t ≈ 0`）时上报**：形变途中这一层的位置是被形变驱动的，
+   *    把移动中的矩形写回端点会形成正反馈（端点越跑越偏）。
+   */
+  private reportPlayerCoverFromOverlay(area: Area): void {
+    if (this.lyricMorphT > 0.001) {
+      return;
+    }
+    // ★★★ 2026-10-16：**形变中一律不上报**（见 `coverAnchorMeasurable()` 的注释）。
+    //   点开/收起时覆盖层会跟着容器一起缩，那时量到的矩形是"迷你条封面那么大"，
+    //   写进 `endCover*` 会把续飞封面的终点写坏 ⇒ 那一棒不画或飞到错的小矩形。
+    if (!this.coverAnchorMeasurable()) {
+      return;
+    }
+    const gx: number = areaLengthToVp(area.globalPosition.x);
+    const gy: number = areaLengthToVp(area.globalPosition.y);
+    const gs: number = areaLengthToVp(area.width);
+    // ★★ 2026-10-15 诊断锚点（`hdc shell hilog -x | Select-String 'RzdCoverRect'`）——
+    //   一次把**三个矩形**打出来，用来判定"封面落点不对"到底属于哪一种（**两种修法完全不同**）：
+    //     · `measured` = `onAreaChange` 的 `globalPosition`。⚠️ 它是**布局几何**，
+    //       **不含本节点自己的 `.scale()` / `.translate()`**（本仓注释多处强调过这一点）；
+    //     · `geometry` = 纯几何端点（`playerCoverGeomRect()`，**不查任何节点**，对标无界
+    //       `CoverMorph` 全程不量测）；
+    //     · `base/tx/ty` = 覆盖层的参考系与位移 —— **渲染位 = base + translate**。
+    //   **判据**：
+    //     ① 若 `dxy` ≈ 上下安全区高度（几十 vp、且上下两个方向） ⇒ **内容盒偏移**问题
+    //        ⇒ 就是 `PlaybackPageRoute` 那条页根扩展（`expandSafeArea` + `ignoreLayoutSafeArea`）在管；
+    //     ② 若 `dxy` 是**别的常数 / 与 `tx,ty` 同值** ⇒ **量测口径**问题
+    //        ⇒ 说明该把**渲染位（base + translate）**而不是布局位报上去（否则"端点由封面算、
+    //          封面又按端点落位"会形成**死环**，误差会被稳定地锁住 —— 这正是本方法注释里
+    //          早就写过的"自己量自己"）。
+    //   ⚠️ 这条日志**只读不写**，不影响任何行为（`reportBig` 的入参一字未改）。
+    const geom: LyricMorphRect = this.expandState.playerCoverGeomRect();
+    // ★★★ 2026-10-16：**封面基准几何自证**（排查关键字 `RzdCoverGeom`）
+    //   一条就能判"封面位置对不对"，不必再靠截图量像素：
+    //     期望（手机 360×780 这档）：`edge=328`、`y≈136`（= 顶边）、`center=300`。
+    //     · `edge` 明显大于 328（例如 393/369）⇒ 宽预算又用成"整窗宽"了；
+    //     · `y` 接近 `(winH−edge)/2`（≈ 298）⇒ 又变回"在窗口里居中"（← 用户报的"低了好多"）。
+    Logger.info(PlayerExpandState.LOG_TAG,
+      `RzdCoverGeom edge=${geom.size.toFixed(1)} x=${geom.x.toFixed(1)} y=${geom.y.toFixed(1)} ` +
+      `centerY=${(geom.y + geom.size / 2).toFixed(1)} radius=${geom.radius.toFixed(1)} ` +
+      `win=${this.expandState.windowWidthVp.toFixed(0)}x${this.expandState.windowHeightVp.toFixed(0)} ` +
+      `padTop=${this.expandState.topInsetVp().toFixed(1)} padBottom=${this.expandState.navigationBarBottomVp.toFixed(1)} ` +
+      // ★ 判据：`centerY` 是本次**基准**的中心。期望（手机）= padTop + 244 ≈ 300。
+      //   若它接近 `win/2`（≈462）⇒ 又回到"窗口居中"（用户报的"低"）。
+      `expectCenter=${(this.expandState.topInsetVp() + 244).toFixed(1)} ` +
+      `(windowCentered-y=${((this.expandState.windowHeightVp - geom.size) / 2).toFixed(1)})`);
+    Logger.info(PlayerExpandState.LOG_TAG,
+      `RzdCoverRect measured=(${gx.toFixed(1)},${gy.toFixed(1)},${gs.toFixed(1)}) ` +
+      `geometry=(${geom.x.toFixed(1)},${geom.y.toFixed(1)},${geom.size.toFixed(1)}) ` +
+      `dxy=(${(gx - geom.x).toFixed(1)},${(gy - geom.y).toFixed(1)}) ` +
+      `base=(${this.coverLayerBase().x.toFixed(1)},${this.coverLayerBase().y.toFixed(1)}) ` +
+      `tx=${this.coverLayerTx().toFixed(1)} ty=${this.coverLayerTy().toFixed(1)} ` +
+      `win=${this.expandState.windowWidthVp.toFixed(0)}x${this.expandState.windowHeightVp.toFixed(0)} ` +
+      `padTop=${this.expandState.topInsetVp().toFixed(1)} miniY=${this.expandState.miniY.toFixed(1)} ` +
+      `miniSize=${this.expandState.miniSize.toFixed(1)} t=${this.lyricMorphT.toFixed(3)}`);
+    this.expandState.reportBig(
+      gx,
+      gy,
+      gs,
+      this.coverRadiusState.radius);
+  }
+
+  /**
+   * ★★★ 2026-10-16 新增：**"终点锚点只能在全尺寸那一帧上报"** —— 供
+   * {@link PlaybackPage.reportPlayerCoverFromOverlay} 用（那两处 `reportBig` 的前置判据）。
+   *
+   * ## 为什么必须要这道门（点击打开没有封面动画的真几何风险）
+   *
+   * 覆盖层的 `.id(PLAYER_BIG_COVER_ID)` + `onAreaChange` 既是"播放页封面"的**唯一量测源**，
+   * 又被挂在**形变容器内部**。于是：
+   * ```
+   *   容器已经被压到起点（scale ≈ 0.08）之后，任何一次 onAreaChange 报上来的
+   *   globalPosition/width 都是【迷你条封面那么小】的矩形
+   *   ⇒ 它会把 `endCoverSize/endCoverX/endCoverY` 写成迷你条的尺寸
+   *   ⇒ 续飞封面（浮层克隆）的**终点**被写坏：那一棒要么不画、要么飞到一个错误的小矩形
+   * ```
+   * 用户实测「**点击打开 / 点击关闭 / 系统返回都没有封面动画**」与这条完全吻合 ——
+   * 点击路径上覆盖层是**随页面一起挂载**的，它的第一次 `onAreaChange` 很可能就落在
+   * "容器已被压到起点"之后。
+   *
+   * ⇒ 判据：**容器是恒等变换（`morphScale ≥ 1`）且没有裁剪**时才允许上报。
+   *   形变中（`morphClipping()` 为真）一律不上报 —— 那时量到的都不是"静止态真实矩形"。
+   * ⚠️ 静止态的 `morphScale` 恒为 1 ⇒ 这道门在静止态**恒真**，不影响既有行为。
+   * ⚠️ 与既有的 `lyricMorphT > 0.001` 那道门是**两条独立条件**（那条管"歌词页飞行中"），
+   *   两条都必须保留。
+   */
+  private coverAnchorMeasurable(): boolean {
+    if (this.expandState.morphClipping()) {
+      return false;
+    }
+    return this.expandState.morphScale >= 0.999;
+  }
+
+  /**
+   * 上报歌名/歌手的**排版端点**（形变把文字由大变小/由小变大时按同一套字体参数插值）。
+   *
+   * ★ 这两个上报原来在 `MusicPlayInfoBlock` 里。它从窄屏页 0 移除后必须搬到这里 ——
+   *   否则端点量不到 ⇒ **封面缩成 0（看不见）+ 展开动画没有端点**（2026-10-15 那次崩溃的根因）。
+   * 字体参数与那一行**实际渲染的值**保持一致（`LYRIC_META_TITLE_FP` / `LYRIC_META_ARTIST_FP`）。
+   */
+  private publishMetaEndpoint(singer: boolean): void {
+    const song = this.state.getCurrentSongItem();
+    const endpoint: MorphMetaEndpoint = new MorphMetaEndpoint();
+    endpoint.id = singer ? PLAYER_META_SINGER_ID : PLAYER_META_TITLE_ID;
+    endpoint.controller = singer ? this.singerController : this.titleController;
+    const raw: string | Resource = singer ? (song?.singer ?? '') : (song?.title ?? '');
+    endpoint.content = typeof raw === 'string' ? raw
+      : this.getUIContext().getHostContext()!.resourceManager.getStringSync(raw.id);
+    // ★ 2026-10-15：上报**当前这一帧**的字号（两端插值的结果），而不是固定的歌词页值 ——
+    //   否则形变端点量到的是一个"只在歌词页才成立"的字号，封面页那一端会偏小。
+    endpoint.fontFp = singer ? this.metaArtistFp() : this.metaTitleFp();
+    endpoint.family = singer ? PlayerConstants.FONT_FAMILY_BLACK : PlayerConstants.FONT_FAMILY_BOLD;
+    endpoint.weight = singer ? 400 : 700;
+    endpoint.color = singer ? $r('app.color.play_singer_color') : $r('app.color.play_text_color');
+    endpoint.opacity = singer ? 1 : 0.86;
+    endpoint.maxLines = 1;
+    this.expandState.registerMorphMeta(false, singer, endpoint);
+  }
+
+  /**
+   * ★★★ 2026-10-16 新增：封面落位随 `lyricMorphT` 变化时打一次对账日志。
+   *
+   * ⚠️ `lyricMorphT` 是**逐帧**改的（补间里写），所以这里**必须**有节流 ——
+   *   节流与去重都在 {@link PlaybackPage.logCoverLocal} 里（100ms + 签名比对）。
+   * 排查关键字：`hdc shell hilog -x | Select-String 'RzdCoverLocal'`
+   */
+  @Monitor('lyricMorphT')
+  onLyricMorphTChanged(): void {
+    this.logCoverLocal();
+  }
+
+  /** 曲目变化时重报两个文字端点（原来在 `MusicPlayInfoBlock` 的 `@Monitor` 里）。 */
+  @Monitor('state.selectIndex')
+  onMetaEndpointChanged(): void {
+    this.publishMetaEndpoint(false);
+    this.publishMetaEndpoint(true);
+  }
+
+  /**
+   * @returns 歌词页那一横行的**左内边距**（vp）。
+   *
+   * 按 `lyricMorphT` 在两个端点之间插值：
+   * · `t = 0`（封面页）= 页面边距，歌名居中区正下方；
+   * · `t = 1`（歌词页）= **小封面右缘 + 12**，文字让开小封面。
+   * 无界靠 `floatingCover` 与 `metaRow` 两层的横向错位达到同一效果，这里用内边距表达、
+   * 少一层、也天然随进度连续（不会在交棒帧跳一下）。
+   */
+  private lyricMetaLeftInset(): number {
+    const side: number = PlaybackPage.LYRIC_META_SIDE_VP;
+    const t: number = this.lyricMorphT;
+    const coverRight: number = this.lyricFloatRect().x + this.lyricFloatRect().size;
+    return side + (coverRight + PlaybackPage.LYRIC_META_GAP_VP - side) * t;
+  }
   /** False after teardown to ignore async image callbacks. */
   private isAlive: boolean = true;
   /** Bumps on each {@link getImageColorAsync} run so stale async work skips UI updates and releases pixels. */
@@ -149,14 +425,207 @@ export struct PlaybackPage {
    * 容器形变收起（反向）的时长（ms）：比展开略快，收起来要干脆。
    */
   /**
-   * 容器形变收起（反向）的时长（ms）。
+   * 关闭（反向形变）的**基础时长**与**时长下限比例**（对标无界 `MainPage` 的两个常量）。
    *
-   * 反编译 `doBack` 段1 与展开**对称**，也是 350ms / `Curve.EaseInOut`
-   * （它另有两段 50ms 的 `Curve.Friction` 快闪，delay 150/200 —— 那两段动的是
-   * 迷你条那侧的内容透明度，我们这边由 `miniBarMetaOpacity/miniBarOpacity` 按进度算，
-   * 不需要额外的补间）。
+   * ★★ 2026-10-15（照搬无界，修「关闭播放器几乎没动画」）：
+   *   `reverseMs = round(REVERSE_MS × max(REVERSE_MIN_RATIO, morphT))`
+   *   （`_recover/logic-src/开关播放器-手势路径定稿.md` §0 速查 L29 / §八 常量表 L620-625）。
+   *   ⇒ 满展开时 **460ms**；只拉开一点点（`morphT < 0.4`）时按下限 **460×0.4 = 184ms**。
+   *
+   * ⚠️ 被替换掉的旧常量 `MORPH_CLOSE_DURATION_MS = 350` 有两处错（都不是"数值微调"）：
+   *   ① **时长偏短**：350 vs 无界满展开 460，少了 24% 的行程时间；
+   *   ② 更要命的是**缓动整条抄错**：旧代码用 `cubicBezier(0.23, 1.0, 0.32, 1.0)`
+   *      （= `EASE_OUT_STR`，那是**打开提交**用的曲线），它**前 15% 时间就走完约 70% 行程**
+   *      ⇒ 350ms 里约 50ms 就缩完、剩下 300ms 几乎静止 = 用户说的"**几乎没动画**"。
+   *   无界"关闭提交"用的是 **`REVERSE_EASING = cubic-bezier(0.85, 0, 0.5, 0.88)`**（慢启动）。
+   *   完整对照与"别搞混三处缓动"的说明写在 `closeFullScreenPlayback()` 里。
    */
-  private static readonly MORPH_CLOSE_DURATION_MS: number = 350;
+  private static readonly REVERSE_MS: number = 460;
+
+  /**
+   * `page 0` 小歌词相对页底的**下压量**（vp）。
+   *
+   * ★★ 2026-10-15（修用户实测「播放界面这里错位」）：见 `MiniLyricLinesComponent` 那处调用点的注释 ——
+   *   小歌词原来贴页底，正好落在 `Swiper` 之外那条**歌名/歌手覆盖层**的高度带里（≈660~690vp）。
+   *   取值 = `PlayerExpandState` 里歌名块的高度口径（`LYRIC_META_BLOCK_H_VP = 44`），
+   *   推开"两行文字"那么多即可；静止态它只是一个固定位移，**不参与任何补间**。
+   */
+  private static readonly MINI_LYRIC_SINK_VP: number = 44;
+
+  /** 小歌词容器的组件 id（只给 {@link PlaybackPage.logLayoutBoxes} 量测用，不参与任何逻辑）。 */
+  private static readonly MINI_LYRIC_BOX_ID: string = 'rzd_page0_mini_lyric_box';
+
+  /** 网格背景层的组件 id（只给 {@link PlaybackPage.logBgLayer} 量测用）。 */
+  private static readonly MESH_BG_ID: string = 'rzd_mesh_bg_layer';
+
+  /** 上一次 `RzdBgLayer` 的签名（节流）。 */
+  private lastBgLayerLog: string = '';
+
+  /**
+   * ★★★ 2026-10-16 新增诊断：**背景层到底是多大、多不透明**。
+   *
+   * ## 它判什么（用户反复报的两条都靠它定性）
+   *
+   * ```
+   *   hdc shell hilog -x | Select-String 'RzdBgLayer'
+   *   ⇒ RzdBgLayer box=(x,y,w,h) win=WxH clip=… p=… op=… squashing=… meshSrc=yes|no playing=…
+   * ```
+   *
+   * | 读到的 | 含义 |
+   * | --- | --- |
+   * | `box.w/h ≈ win` **且 `op ≈ 1`** | 背景整屏不透明 ⇒ 这才是「**背景全屏**」的形状 |
+   * | `box.w/h ≈ win` 但 `op` 很小（0.04~0.3） | 背景整屏但几乎透明 ⇒ **与无界同形**（无界那层也在满屏层里） |
+   * | `box.w/h` 明显小于 `win` | 背景被限制在小窗口里（另一种形状） |
+   * | `meshSrc=no` | 网格没源 ⇒ 屏上是**兜底取样色**（在线歌曲那层是 `rgba(20,20,22,0.5)`） |
+   *
+   * ⚠️ 只读：本方法不写任何状态。
+   */
+  private logBgLayer(): void {
+    let box: string = 'none';
+    try {
+      const node = this.getUIContext().getFrameNodeById(PlaybackPage.MESH_BG_ID);
+      if (node !== null) {
+        const p: Position = node.getPositionToWindowWithTransform();
+        const s: Size = node.getMeasuredSize();
+        box = `(${areaLengthToVp(p.x).toFixed(1)},${areaLengthToVp(p.y).toFixed(1)},` +
+          `${this.getUIContext().px2vp(s.width).toFixed(1)},${this.getUIContext().px2vp(s.height).toFixed(1)})`;
+      }
+    } catch (err) {
+      box = 'err';
+    }
+    const op: number = this.backgroundRevealOpacity();
+    const sig: string = `${box}|${op.toFixed(2)}|${this.expandState.morphP.toFixed(2)}`;
+    if (sig === this.lastBgLayerLog) {
+      return;
+    }
+    this.lastBgLayerLog = sig;
+    Logger.info(PlayerExpandState.LOG_TAG,
+      `RzdBgLayer box=${box} win=${this.expandState.windowWidthVp.toFixed(0)}x` +
+      `${this.expandState.windowHeightVp.toFixed(0)} clip=${this.expandState.morphClipHeight.toFixed(0)} ` +
+      `p=${this.expandState.morphP.toFixed(3)} op=${op.toFixed(3)} ` +
+      `squashing=${(this.expandState.morphSquashY !== 1)} stage=${this.expandState.morphStage} ` +
+      `meshSrc=${this.meshSrc !== undefined ? 'yes' : 'no'} playing=${this.state.isPlay} ` +
+      `active=${this.state.isShowPlay}`);
+  }
+
+  /**
+   * 控制区**三段结构**的两根占位条（组件 id，只给 {@link PlaybackPage.logLayoutBoxes} 量测用）。
+   *
+   * 出处：无界 overlay 的 builder 树（`wujie.pa:190464` / `190497`）——
+   * ```
+   *   Row().height(lerp(swiperGap(), 10, swiperProgress))   // 190464  ← "Swiper ↔ 进度条"
+   *   Row().height(chrome().gapScrub)                       // 190497  ← "进度条 ↔ 传输条"
+   * ```
+   * ⚠️ 它们**不是 padding**，是**零内容 Row**（`Column` 里的普通兄弟节点）——
+   *   所以"三段"是 `[Swiper | gapSwiper 行 | gapScrub 行 | 进度条+传输条]`。
+   * ⚠️ 无界那两份用的是 `.height(lerp(...))`，`lerp` 第三实参是 `swiperProgress`：
+   *   拖拽打开/关闭的过程中这两根条会跟着补间（`a=swiperGap, b=10`）。
+   *   我们这一侧没有 `swiperProgress` 这个量（我们的展开进度叫 `morphP`，语义不同），
+   *   所以**静止态取 `swiperGap()` 那一端**（= `lerp(t=0)`），形变期不动 —— 见方法注释。
+   */
+  private static readonly SWIPER_GAP_ROW_ID: string = 'rzd_gap_swiper_row';
+  private static readonly CHROME_SCRUB_GAP_ROW_ID: string = 'rzd_gap_scrub_row';
+
+  /**
+   * @returns 「Swiper ↔ 进度条」占位条的高度（vp）—— 无界 `swiperGap()`（`wujie.pa:180127`）。
+   *
+   * ## 为什么这里是**一个常数**、不是 `lerp`
+   *
+   * 无界写的是 `lerp(swiperGap(), 10, swiperProgress)`，即**拖拽打开/关闭过程中**这根条
+   * 从 `swiperGap()` 收到 10vp。`swiperProgress` 是**它自己的**下拉进度量（0→1 对应关闭动作），
+   * 我们这一侧对应的是 `expandState.morphP`（展开进度，**方向与相位都不同**：
+   * 我们是"从迷你条长到整屏"，它是"从整屏往下拖走"）。
+   * ⇒ 硬套 `lerp(..., morphP)` 会得到**反相**的曲线（展开时反而收窄），那是**新造一个行为**，
+   *   不是照搬。所以静止态老老实实取 `lerp` 的 `t=0` 那一端（`swiperGap()`），
+   *   并把"形变期补间"登记为待办（`RzdMusic待确认清单.md` D4-b）。
+   */
+  private swiperGapRowHVp(): number {
+    return this.expandState.swiperGapVp();
+  }
+
+  /**
+   * @returns 「进度条 ↔ 传输条」占位条的**额外**高度（vp）。
+   *
+   * ⚠️ 恒为 0，**不是漏做**：这一段的间距我们**已经有了**，位置在
+   *   `ControlAreaComponent.bottomPanel()` 里那个 `Column` 的 `.margin({ bottom: … })`
+   *   （按断点取 `app.float.slider_margin_bottom*`）。无界表里这一段叫 `gapScrub`
+   *   （FULL 28 / MEDIUM 20 / COMPACT 14）。
+   * ⇒ 这里保留一个 0 高的可量测节点，**只为**把"实测间距 vs `gapScrub`"打进日志
+   *   （`RzdSwiperBox`），等真机数据回来再决定是"把 margin 换成 `gapScrub`"还是"保留派音原值"。
+   *   现在**不并行加**（否则就是同一段间距两条口径 —— 本仓反复踩过的形状）。
+   */
+  private chromeScrubGapRowHVp(): number {
+    return 0;
+  }
+
+  /**
+   * ★ 2026-10-15 诊断锚点：把**四个会互相压的块**的窗口矩形一次打出来。
+   *
+   * 排查关键字：`hdc shell hilog -x | Select-String 'RzdBoxes'`
+   *
+   * 打的是**窗口坐标**（`getPositionToWindowWithTransform()`）与**实测尺寸**，
+   * 与用户截图的像素可以直接换算对账（本机 1224×2776 截图 ⇒ 3px/vp）：
+   * ```
+   *   RzdBoxes cover=(x,y,w,h) title=(…) singer=(…) lyric=(…)
+   * ```
+   * **判据（哪两个块真的相交、就改那一对）**：
+   *   · `lyric.top` 落在 `[singer.top, singer.bottom]` 区间内 ⇒ **小歌词压在歌名/歌手那一行上**
+   *     ⇒ 调 `MINI_LYRIC_SINK_VP`（本仓已按"两行文字"的量级给 44）；
+   *   · `lyric.bottom` 越过控制区顶边 ⇒ 小歌词被控制区压住 ⇒ 那是另一处（Swiper 权重分配）；
+   *   · `cover.bottom` 与 `title.top` 的间距 ≈ 0 ⇒ 歌名紧贴封面（`LYRIC_META_GAP_VP` 那一档）。
+   * ⚠️ 只读、不写：本方法不改变任何状态（不会形成"量测→改状态→再量测"的死环）。
+   */
+  private logLayoutBoxes(): void {
+    const g = (id: string): string => {
+      try {
+        const node = this.getUIContext().getFrameNodeById(id);
+        if (node === null) {
+          return 'none';
+        }
+        const p: Position = node.getPositionToWindowWithTransform();
+        const s: Size = node.getMeasuredSize();
+        return `(${areaLengthToVp(p.x).toFixed(1)},${areaLengthToVp(p.y).toFixed(1)},` +
+          `${this.getUIContext().px2vp(s.width).toFixed(1)},${this.getUIContext().px2vp(s.height).toFixed(1)})`;
+      } catch (err) {
+        return 'err';
+      }
+    };
+    Logger.info(PlayerExpandState.LOG_TAG,
+      `RzdBoxes cover=${g(PLAYER_BIG_COVER_ID)} title=${g(PLAYER_META_TITLE_ID)} ` +
+      `singer=${g(PLAYER_META_SINGER_ID)} lyric=${g(PlaybackPage.MINI_LYRIC_BOX_ID)} ` +
+      `win=${this.expandState.windowWidthVp.toFixed(0)}x${this.expandState.windowHeightVp.toFixed(0)} ` +
+      `pad=${this.expandState.topInsetVp().toFixed(1)}/${this.expandState.navigationBarBottomVp.toFixed(1)} ` +
+      `sink=${PlaybackPage.MINI_LYRIC_SINK_VP} t=${this.lyricMorphT.toFixed(3)}`);
+    // ★★★ 2026-10-16（照搬无界）：**控制区三段结构**的对账日志。
+    //   判据（真机上一次就够）：实测 Swiper 高度 vs `estBoxH()`（= `usableH − chromeTotal`），
+    //   以及两根占位条的实测高 vs 应有高。差得多 ⇒ 我们控制区的自然高和无界表对不上，
+    //   那时再决定"往表里对齐"还是"改我们自己的高度"（**不要两头一起改**）。
+    //   排查关键字：`hdc shell hilog -x | Select-String 'RzdSwiperBox'`
+    const gapWanted: number = this.expandState.swiperGapVp();
+    const gapGot: number = this.boxH(PlaybackPage.SWIPER_GAP_ROW_ID);
+    const scrubWanted: number = this.expandState.chromeGapScrubVp();
+    Logger.info(PlayerExpandState.LOG_TAG,
+      `RzdSwiperBox tier=${this.expandState.chromeTier} usableH=${this.expandState.usableHVp().toFixed(1)} ` +
+      `chromeTotal=${this.expandState.chromeTotalVp().toFixed(1)} ` +
+      `estBoxH=${this.expandState.estBoxHVp().toFixed(1)} ` +
+      `gapSwiper want=${gapWanted.toFixed(1)} got=${gapGot.toFixed(1)} ` +
+      `gapScrub want=${scrubWanted.toFixed(1)} got=${this.boxH(PlaybackPage.CHROME_SCRUB_GAP_ROW_ID).toFixed(1)}`);
+  }
+
+  /** @returns 某个组件 id 的**实测高度**（vp，量不到返回 -1）—— 只给诊断日志用。 */
+  private boxH(id: string): number {
+    try {
+      const node = this.getUIContext().getFrameNodeById(id);
+      if (node === null) {
+        return -1;
+      }
+      return this.getUIContext().px2vp(node.getMeasuredSize().height);
+    } catch (err) {
+      return -1;
+    }
+  }
+  /** 关闭时长比例的下限（`morphT` 小于它时按它算）—— 对标无界 `REVERSE_MIN_RATIO = 0.4`。 */
+  private static readonly REVERSE_MIN_RATIO: number = 0.4;
   /**
    * 点击/起播意图打开时，补间**延后两帧**再起（ms）。
    *
@@ -210,9 +679,99 @@ export struct PlaybackPage {
    */
   private static readonly LYRIC_MORPH_DURATION_MS: number = 360;
   /** 控制区静止多久后自动收起（ms）。 */
-  private static readonly CHROME_AUTO_HIDE_MS: number = 3000;
+  /**
+   * 控制区**空闲自动收起**的等待时长（ms）。
+   *
+   * ★★★ 2026-10-16（照搬无界 `PlayerPage.IDLE_MS`）：**5000**。
+   *   出处：`wujie.pa:197964` 的 `stlexvar 0x0, 0x8` 前一条 `ldai 0x1388`
+   *   （`0x1388` = **5000**），而 `startIdle()`（`wujie.pa:179936-179938`）
+   *   就是 `setTimeout(<λ>, IDLE_MS)`，那个 λ（`193408-193418`）做什么是明确的：
+   *   `idleTimer = -1; this.hideChrome();`。
+   * ⚠️ 我们原来是 **3000**（本仓自定值，无出处）⇒ 这就是"空闲时间不一样"的来源。
+   */
+  private static readonly CHROME_AUTO_HIDE_MS: number = 5000;
   /** 手机端 Swiper 里「歌词页」的下标（0 = 封面页）。 */
   private static readonly SWIPER_INDEX_LYRIC: number = 1;
+  /**
+   * 歌词页那一横行（对标无界 `metaRow`）的排版常量 —— 数值取自
+   * `PlayerPage完整UI定稿.md` §6.2：标题 `15` / 粗体 / 白 / `opacity 0.86`，歌手 `12` / 常规。
+   */
+  private static readonly LYRIC_META_TITLE_FP: number = 15;
+  private static readonly LYRIC_META_ARTIST_FP: number = 12;
+  /**
+   * **封面页那一端**的歌名/歌手字号（fp）—— 对标无界 `chrome().titleSize` / `chrome().artistSize`（FULL 档）。
+   *
+   * ★★ 2026-10-15（照搬无界；本轮从字节码提取，**同时纠正我上一轮的一处误读**）：
+   *   无界那**一个** `Text` 的字号是**插值**出来的（`wujie.pa:194905-194939`，`lerp` 三参调用）：
+   * ```
+   *   fontSize( lerp( chrome().titleSize * sizeK(),   // 封面页端 = 20 × sizeK
+   *                   15 * sizeK(),                   // 歌词页端 = 15 × sizeK
+   *                   metaProgress() ) )              // 进度（= swiperProgress）
+   * ```
+   *   歌手同理：`lerp( chrome().artistSize * sizeK()(=14), 12 * sizeK(), metaProgress() )`。
+   *   ⇒ **封面页 20 / 14，歌词页 15 / 12**；`sizeK()` 是"窗口宽度的函数"
+   *     （手机上 ≈1，平板/PC 才有差 —— 见 `RzdMusic待确认清单.md` E5）。
+   *
+   * ⚠️ 我们原来**两页都固定 15 / 12** ⇒ **封面页歌名偏小 33%（15 vs 20）**、歌手偏小（12 vs 14）。
+   * ⚠️ 上一轮（§56.27）我一度把它读成"字号要**乘** `metaProgress()`"，并据此判"不许改" ——
+   *   **那个读法是错的**（把 `lerp` 当成了乘法，于是以为封面页会变成 0 号字）。
+   *   真相是插值：字号**从不消失**，只是**由 20 收到 15**。本轮按真相改正。
+   */
+  private static readonly META_TITLE_FP_COVER: number = 20;
+  private static readonly META_ARTIST_FP_COVER: number = 14;
+
+  /**
+   * 当前这一帧的**歌名字号**（fp）—— 两端之间按**歌词页进度**插值。
+   *
+   * ★ 用 `lyricMorphT`（本页"封面页 ⇄ 歌词页"的进度）当无界 `metaProgress()` 的等价物：
+   *   静止在封面页 = 0 ⇒ `20fp`；静止在歌词页 = 1 ⇒ `15fp`；切页那 360ms 里连续过渡。
+   * @returns 歌名字号（fp）
+   */
+  private metaTitleFp(): number {
+    return PlaybackPage.lerpFp(PlaybackPage.META_TITLE_FP_COVER,
+      PlaybackPage.LYRIC_META_TITLE_FP, this.lyricMorphT);
+  }
+
+  /**
+   * 当前这一帧的**歌手字号**（fp）：`14`（封面页）→ `12`（歌词页）。理由同 {@link metaTitleFp}。
+   * @returns 歌手字号（fp）
+   */
+  private metaArtistFp(): number {
+    return PlaybackPage.lerpFp(PlaybackPage.META_ARTIST_FP_COVER,
+      PlaybackPage.LYRIC_META_ARTIST_FP, this.lyricMorphT);
+  }
+
+  /**
+   * 两端之间的线性插值（`t` 夹到 0..1）。给上面两个字号用。
+   * @param from `t = 0` 那一端的值
+   * @param to `t = 1` 那一端的值
+   * @param t 进度（任意实数，内部夹取）
+   * @returns 插值结果
+   */
+  private static lerpFp(from: number, to: number, t: number): number {
+    const p: number = t < 0 ? 0 : (t > 1 ? 1 : t);
+    return from + (to - from) * p;
+  }
+  /** 小封面右缘到歌名的间距（vp）。 */
+  private static readonly LYRIC_META_GAP_VP: number = 12;
+  /** 该行右侧留白（vp）—— 给收藏/更多两个图标让位。 */
+  private static readonly LYRIC_META_SIDE_VP: number = 16;
+  // ⚠️ 2026-10-15：`LYRIC_META_ICON_FP` **已删除** —— 收藏 / 更多那两个图标改用
+  //   `this.expandState.chromeFavSize()`（**按档位表取值** 24 / 22 / 20），
+  //   完整出处（`chrome().favSize`、`wujie.pa:195193 / 195316`、档位表 `93534`）写在那个方法上。
+  //   删它的原因：原来这里写死 `22`（注释自陈"取与派音一致的一档"，**不是无界的值**），
+  //   换成 getter 之后这个常量就**没有调用者了** —— 不留死代码（同族清理见 §56.15 / §56.20）。
+  /** 图标的点击热区边长（vp，官方 `HIT = 44`）。 */
+  private static readonly LYRIC_META_HIT_VP: number = 44;
+  /**
+   * 歌词页那一横行的**行高**（vp）—— 两行文字（标题 15 / 歌手 12 + 2 间距）+ 图标留白。
+   * ⚠️ 它只用于"竖直居中补偿"（见 `LyricFloatLayer` 里 `.position()` 的注释），
+   *    **不要**改成封面边长 —— 那会把封面页的歌名往下推半个大封面的高度。
+   */
+  private static readonly LYRIC_META_ROW_H_VP: number = 34;
+  /** 网格背景源的盒式模糊半径 / 轮数（无界 `MeshCoverBg` 的 `BLUR_RADIUS` / `BLUR_PASSES`）。 */
+  private static readonly MESH_BLUR_RADIUS: number = 9;
+  private static readonly MESH_BLUR_PASSES: number = 3;
   /** 展开看门狗（ms）：超时还没回到完整态就强制回到完整态。 */
   private static readonly COLLAPSE_WATCHDOG_MS: number = 900;
   /** 展开看门狗定时器句柄。 */
@@ -220,12 +779,45 @@ export struct PlaybackPage {
   /** 正在播收起动画（防止连点返回播两遍）。 */
   private isClosing: boolean = false;
   /**
+   * ★★ 2026-10-15（无界逆向 P0-3）：回弹收尾的**独立代次**。
+   *
+   * ⚠️ **不要用 `morphGen` 校验这一步**：`morphGen` 是"几何代次"，
+   *   `morphBeginEntering` / `morphBeginLeaving` / `morphReset` 都会 `++`
+   *   （`PlayerExpandState` L2330 / L2437 / L2456）⇒ 240ms 窗口里只要起了**任何**新会话，
+   *   这次收尾就被**静默跳过**；而它是**唯一**把 `morphDrive` 清回 `NONE` 的地方
+   *   （`morphSettleOpen()` L2421）⇒ `morphSessionDriving()`（L2487）恒真
+   *   ⇒ 壳层克隆层（三个按钮 / 歌名）常驻在屏上。
+   *   判据：`hdc shell hilog -x | Select-String 'RzdMorph'` —— 一轮"下拉→松手"里
+   *   看 `morph open (settled)` 有没有出现。
+   */
+  private dismissSettleGen: number = 0;
+  /**
+   * ★★ 2026-10-15（无界逆向 P0-2）：整页关闭的**独立代次** + 卸载定时器句柄。
+   *
+   * 原来只靠 `isClosing` 挡重入，而它在 `morphCloseMs + 20`（≈370ms）就被清回 `false`，
+   * 那一刻播放页**可能还没 unmount** ⇒ 第二次点击能再起一条 350ms 补间 + 第二个卸载定时器，
+   * 而 `morphGenAlive` 校验拦不住（两条链的 `morphGen` 相同）。
+   * 现在：句柄存下来可被取消 + 代次严格校验 ⇒ "第二次点击"要么被明确忽略、要么干净接管。
+   */
+  private closeGen: number = 0;
+  private closeSettleTimer: number = -1;
+  /**
    * 本次下拉跟手是否已经把形变相位切到 LEAVING（对标无界的 `drive = FINGER`）。
    *
    * 有了它，松手时才能分清"这次下拉真的跟手过"和"只是极短的一次拖拽"：
    * 后者不能去动形变相位，否则会把静止的 OPEN 态改成 LEAVING。
    */
   private dismissMorphActive: boolean = false;
+  /**
+   * 本次下拉收起**起手那一刻**的形变进度（`morphP`，0..1）—— 关闭提交用**相对量**判据的基准。
+   *
+   * ★★ 2026-10-15（照搬无界 `reverseQuitDelta`）：无界的关闭提交不是"缩到多少就关"，
+   *   而是"**比起点往回走了多少**"：`delta >= max(baseT/2, COMMIT_T)`。
+   *   起手时在 `morphBeginLeaving()` 之前记录本值；松手时算 `delta = baseT − 当前进度`。
+   *   ⚠️ 初值取 **1**（满展开）—— 与"从静止的播放页开始下拉"这一常态一致；
+   *      真正起手时会被立刻覆盖（见 `onDismissDrag` 里记录它的那一行）。
+   */
+  private dismissBaseT: number = 1;
   /**
    * 下拉收起手势的**起手位移门限**（vp）。
    *
@@ -261,6 +853,18 @@ export struct PlaybackPage {
    *   **方向由位移判、大小由 `Math.abs(velocityY)` 取** ⇒ 根上不需要假设符号。
    */
   private static readonly DISMISS_COMMIT_VELOCITY: number = 900;
+  /**
+   * ★★ 2026-10-15（无界逆向 P0-4）：下拉收起的**最小起手位移**（vp）。
+   *
+   * 没有它的时候，跟手分支只要 `offsetY > 0`（**1vp 都算**）就会 `morphBeginLeaving()`
+   * ⇒ 相位被推进 `LEAVING` 且 `morphGen++`，而屏上几乎什么都没动；
+   * 松手回落时又给相位做一次 220ms 补间 + 240ms 定时器
+   * ⇒ 观感是"轻轻蹭一下就闪一下"，同时把 P0-3 那条残留状态的门打开。
+   * 8vp ≈ 2.5mm，**远小于**误触尺度（≥10vp）与真实下拉起手（几十 vp）
+   * ⇒ **只挡抖动、不挡跟手**（下一个 `onActionUpdate` 一旦越过它照常起手）。
+   * ⚠️ 无界侧**没有**这个门限 —— 这是派音自己的加固，**故意不与它对齐**。
+   */
+  private static readonly DISMISS_MIN_START_VP: number = 8;
 
   /** @returns 窗口高度（vp）；拿不到时给一个兜底值，保证拖拽比例不会除零。 */
   private deviceHeightVp(): number {
@@ -326,6 +930,13 @@ export struct PlaybackPage {
    */
   private onDismissDrag(offsetY: number, ended: boolean, velocityY: number = 0): void {
     if (this.isClosing) {
+      // ★★ 2026-10-15：这一行以前是**静默** return，于是"下拉收起完全不跟手"这件事
+      //   在日志里一点痕迹都没有（手指动了、屏上没动、日志也没写），只能靠猜。
+      //   现在把它打出来：`hdc shell hilog -x | Select-String 'RzdMorph dismiss blocked'`
+      //   —— 出现它 = `isClosing` 卡住了（见 `closeFullScreenPlayback()` 的补漏注释）；
+      //   **完全不出现** = 手势根本没到这（那是手势路由问题，去查 `RzdMorph dismiss pan start`）。
+      Logger.warn(PlayerExpandState.LOG_TAG,
+        `RzdMorph dismiss blocked: isClosing=true offsetY=${offsetY.toFixed(1)} ended=${ended}`);
       return;
     }
     const progress: number = this.dismissProgressFromDrag(offsetY);
@@ -348,8 +959,24 @@ export struct PlaybackPage {
     if (this.expandState.morphUsable) {
       if (!ended) {
         if (!this.dismissMorphActive) {
+          // ★★ P0-4：**最小起手位移门限**（依据见 `DISMISS_MIN_START_VP` 的注释）。
+          //   低于它就当这次拖动不存在：不改相位、不 ++ 代次、不刷几何，直接返回。
+          //   下一个 `onActionUpdate` 只要越过门限就会正常起手 ⇒ 跟手不会变迟钝。
+          //   ⚠️ **`fastFlick` 必须能绕过门限**：一次"极快但位移很小"的下甩
+          //      （8ms 内只走了几 vp）原本靠速度项就能收起，被门限挡掉就成了"快甩没反应"
+          //      —— 那正是 D1 当初要修的毛病。所以这里是 `位移没过门限 **且** 不是快甩`。
+          if (offsetY < PlaybackPage.DISMISS_MIN_START_VP && !fastFlick) {
+            return;
+          }
           this.refreshCollapseGeometry();
           this.dismissMorphActive = true;
+          // ★★ 2026-10-15（照搬无界：关闭提交改成**相对量**判据）：起手这一刻先把当前进度记下来 ——
+          //   松手时的判据是"**比起点往回走了多少**"（`delta`），不是"缩到了多少"。
+          //   无界 `reverseQuitDelta()`：`quit = delta >= max(baseT/2, COMMIT_T)`
+          //   （`_recover/logic-src/开关播放器-手势路径定稿.md` §八 L351-353 / L386，
+          //   字节码 L151812-151838）。
+          //   ⚠️ 必须在 `morphBeginLeaving()` **之前**取：下一步会改相位。
+          this.dismissBaseT = this.expandState.morphP;
           this.expandState.morphBeginLeaving();
         }
         this.expandState.morphDrive = MorphDrive.FINGER;
@@ -360,14 +987,26 @@ export struct PlaybackPage {
         return;
       }
       this.dismissMorphActive = false;
-      const shouldClose: boolean = progress >= PlayerExpandState.DISMISS_COMMIT_PROGRESS || fastFlick;
+      // ★★ 2026-10-15（照搬无界）：关闭提交改成**相对量**判据 `delta >= max(baseT/2, COMMIT_T)`
+      //   （无界 `reverseQuitDelta()`；出处同上）。
+      //   · `delta` = 起点进度 − 当前进度 = "这一拖往回走了多少"；
+      //   · **满展开起手**（`baseT = 1`）⇒ 阈值 = `max(0.5, 0.32) = 0.5` ⇒ **要拉回去 50% 才关**
+      //     （改前是"缩到 38% 就关"≈ `delta ≥ 0.38` ⇒ **更容易误关**）；
+      //   · `baseT` 小于 0.64 时阈值退到 `COMMIT_T = 0.32`（无界那条 `max` 的另一半）。
+      //   ⚠️ 速度项**不能丢**：无界也是 `进度 ∥ 速度`（§一 1.2），"快甩"必须照样能关。
+      const currentT: number = 1 - progress / 100;
+      const dismissDelta: number = this.dismissBaseT - currentT;
+      const dismissThreshold: number = Math.max(this.dismissBaseT / 2,
+        PlayerExpandState.PULL_OPEN_COMMIT_FRACTION);
+      const shouldClose: boolean = dismissDelta >= dismissThreshold || fastFlick;
       // 上机排查用：`hdc shell hilog -x | Select-String 'RzdMorph dismiss commit'`
       // ⚠️ 这一行**故意同时打两个方向的阈值与两个分母**（参见
       //    `PlayerExpandState.pullSpanIsMeasured()` 的注释 / `派音动画Bug清单.md` §6.5）：
       //    只打"比值 vs 阈值"会继续藏住"两把尺子不是同一个长度"这件事。
       Logger.info(PlayerExpandState.LOG_TAG,
-        `RzdMorph dismiss commit progress=${progress.toFixed(2)}/${
-          PlayerExpandState.DISMISS_COMMIT_PROGRESS} velocityY=${velocityY.toFixed(1)} ` +
+        `RzdMorph dismiss commit progress=${progress.toFixed(2)} baseT=${this.dismissBaseT.toFixed(3)} ` +
+        `delta=${dismissDelta.toFixed(3)}/${dismissThreshold.toFixed(3)} ` +
+        `velocityY=${velocityY.toFixed(1)} ` +
         `absVelocity=${speed.toFixed(1)} dir=${collapsingDirection ? 'collapse' : 'open'} ` +
         `fastFlick=${fastFlick} velocityThreshold=${PlaybackPage.DISMISS_COMMIT_VELOCITY} ` +
         `span=${this.dismissSpanVp().toFixed(1)} spanSrc=${
@@ -382,14 +1021,37 @@ export struct PlaybackPage {
       }
       // 没过阈值：弹回完整态，并把相位收回 OPEN
       this.expandState.morphDrive = MorphDrive.ANIM;
-      const gen: number = this.expandState.morphGen;
+      // ★★ P0-3：相位归位改用**独立代次**（依据见字段 `dismissSettleGen` 的注释），
+      //   不再复用 `morphGen` —— 它会被任何新会话 ++，导致这次收尾被静默跳过，
+      //   而 `morphDrive` 就永远停在 `ANIM`。
+      const settleGen: number = this.dismissSettleGen + 1;
+      this.dismissSettleGen = settleGen;
       this.getUIContext().animateTo({ duration: 220, curve: Curve.EaseInOut }, (): void => {
         this.expandState.applyMorphProgress(1);
       });
       setTimeout((): void => {
-        if (this.isAlive && !this.isClosing && this.expandState.morphGenAlive(gen)) {
-          this.expandState.morphSettleOpen();
+        if (!this.isAlive || this.isClosing) {
+          return;
         }
+        if (settleGen !== this.dismissSettleGen) {
+          // 本轮回弹已被下一次回弹取代
+          return;
+        }
+        // ★ 相位已被别的会话接管就必须放手：新一轮拖动会把 `drive` 置 `FINGER`，
+        //   `morphBeginEntering` 会把 `stage` 置 `ENTERING`、`closeFullScreenPlayback`
+        //   会把 `isClosing` 置真 —— 三种接管都能被上面几条挡住。
+        //   只有"本轮仍是相位主人"时才归位。
+        if (this.expandState.morphStage !== MorphStage.LEAVING
+          || this.expandState.morphDrive !== MorphDrive.ANIM) {
+          Logger.info(PlayerExpandState.LOG_TAG,
+            `RzdMorph dismiss bounce: phase taken over stage=${this.expandState.morphStage} ` +
+            `drive=${this.expandState.morphDrive}, skip settle`);
+          return;
+        }
+        // ★ `morphSettleOpen()` 内部会把 `morphDrive` 归 `NONE`
+        //   （`PlayerExpandState` L2421，**全仓唯一**的清零点）——
+        //   这一步就是"壳层克隆层常驻"那条 bug 的解药，**不要绕过它**。
+        this.expandState.morphSettleOpen();
       }, 240);
       return;
     }
@@ -425,8 +1087,9 @@ export struct PlaybackPage {
    *
    * ## 三个不变量
    *
-   * 1. **同一时刻至多一张封面**：{@link lyricFloatActive} 同时管两件事 ——
-   *    浮层画不画、封面页那份真封面藏不藏，两者**严格互补**；
+   * 1. **全场只有一张封面**：封面页那份真封面已经并进浮层（`page 0` 只剩
+   *    `MiniLyricLinesComponent` 空壳），"两份封面同时可见"从结构上就不可能，
+   *    所以**没有"两者互补"这回事**（旧门 `lyricFloatActive()` 已删）；
    * 2. **静止态两页各自逐像素不变**：`t = 0` 那一端就是真封面的落点矩形
    *    （`PlayerExpandState.lyricMorph(0)` 复用续飞封面 `p=1` 的同一段端点几何），
    *    所以交棒那一帧没有可跳的差；
@@ -490,8 +1153,8 @@ export struct PlaybackPage {
   /**
    * 收尾：Swiper 自己的切换动画与浮层飞行**都结束**之后才卸掉"飞行中"这一档。
    *
-   * ⚠️ 这里**不是**把封面一刀切掉：落位后浮层继续由 {@link lyricFloatActive} 的
-   * `playbackSwiperIndex` 分支撑着（歌词页静止态仍然要显示那张小封面 + 歌名）。
+   * ⚠️ 这里**不是**把封面一刀切掉：浮层是**常驻**的，落位后仍由 `playbackSwiperIndex`
+   * 分支决定它落在哪个端点（歌词页静止态仍然要显示那张小封面 + 歌名）。
    * 原来的写法是 `lyricMorphVisible = false` 无条件写死 ⇒ 整套歌词页封面形变是关着的。
    */
   private finishLyricMorph(gen: number): void {
@@ -506,43 +1169,285 @@ export struct PlaybackPage {
   }
 
   /**
-   * @returns 歌词页浮层这一刻是否要占位（= 要不要画浮层 + 要不要藏掉封面页那份真封面）。
+   * @returns 浮层里封面的一帧矩形（vp，窗口坐标）。
    *
-   * 两个来源：
-   *   · `lyricMorphVisible` —— **飞行中**（Swiper 正在滑，浮层替真封面飞）；
-   *   · `playbackSwiperIndex === 1` —— **已经在歌词页**（静止态，小封面 + 歌名留在顶部）。
-   * 两者都成立时是"落位帧"，矩形相同 ⇒ 不会跳。
+   * ⚠️ 2026-10-15（第 2 块·覆盖层统一）**删掉了三个已死的私有方法**：
+   *   · `lyricFloatActive()` —— 它原来是浮层的门（只在"飞行中/歌词页"才画）；
+   *     覆盖层改成**常驻**之后没有任何调用点。
+   *   · `lyricFloatMetaOpacity()` —— 原来让歌名在 `t=0` 完全透明（那一刻封面页那份歌名
+   *     由 `MusicPlayInfoBlock` 画）；页 0 不再画封面/歌名之后它恒为 1。
+   *   · `lyricFloatMetaWidth()` —— 歌名块原来水平居中、用它算块宽；
+   *     现在是**一横行**（左内边距由 `lyricMetaLeftInset()` 给），不再需要它。
+   *   相关注释里凡还写着"门在 `lyricFloatActive()`"的地方都已就地改正。
    */
-  private lyricFloatActive(): boolean {
-    if (!this.expandState.lyricFloat()) {
-      return false;
-    }
-    return this.lyricMorphVisible || this.playbackSwiperIndex === PlaybackPage.SWIPER_INDEX_LYRIC;
-  }
-
-  /** @returns 浮层里封面的一帧矩形（vp，窗口坐标）。 */
   private lyricFloatRect(): LyricMorphRect {
     return this.expandState.lyricMorph(this.lyricMorphT);
   }
 
-  /** @returns 浮层里歌名块的宽度（vp）：窗口宽度两侧各留 16vp。 */
-  private lyricFloatMetaWidth(): number {
-    const w: number = this.expandState.windowWidthVp - 32;
-    return w > 120 ? w : 120;
+  /**
+   * @returns 封面那一层**实际要写进 `.position()` 的矩形**（vp）。
+   *
+   * ★★★ 2026-10-16（**撤回我上一版的逆变换**，用户实测「封面是飞到屏幕外」）：
+   *
+   * 上一版我在这里调 `coverLocalRectFor()` 做"屏幕坐标 → 容器本地坐标"的逆变换，
+   * 前提是 **`.scale()` 绕容器中心**。真机上结果是封面**飞出屏幕**。
+   *
+   * ⚠️ 这个前提在本仓**早就有过一次真机反证**（`morphCoverRectAt()` 的注释、
+   *   `LyricFloatLayer` 顶部"⚠️ 2026-10-15 刻意不改"那一段）：
+   *   > 「逆变换回页内坐标 —— 真机结果"**封面跑到左上角**"（说明 `.scale()` 的枢轴
+   *   >   **不是我以为的容器中心**）⇒ 该方案作废，**别再试**。」
+   *   ⇒ 我这次等于**原地重踩了一遍**，教训记进 `RzdMusic记忆.md` §86。
+   *
+   * ## 现在 = 纯几何、**不做任何坐标系换算**（就是用户确认过"现在正常了"的那一版）
+   *
+   * ```
+   *   尺寸 / 位置 / 圆角一律取 lyricMorph(t)（= 无界 CoverMorph 的输出）
+   *   直接写进 .position() / .width() / .borderRadius()
+   * ```
+   * 本层挂在形变容器**内部**，所以形变中它的**实际**屏幕位会被容器变换挪走
+   * （`y' ≈ t·y`，见 `LyricFloatLayer` 顶部那段推导）—— 这条"落位时正确、形变中偏"
+   * 的口径**用户在真机上验过、观感可接受**（封面跟着容器一起缩向迷你条）。
+   * ⚠️ 它成立的前提是 `t = 1`（落位）时容器是恒等变换 —— 而那正是静止态，恒成立。
+   */
+  private coverLocalRect(): LyricMorphRect {
+    return this.lyricFloatRect();
+  }
+
+  /** 上一次 `RzdCoverLocal` 的落位签名（节流用，只在真的变了才打）。 */
+  private lastCoverLocalLog: string = '';
+  /** `RzdCoverLocal` 的采样节流（ms，形变时每帧都会变，太密会刷屏）。 */
+  private static readonly COVER_LOCAL_LOG_MS: number = 100;
+  private lastCoverLocalAtMs: number = 0;
+
+  /**
+   * ★★★ 2026-10-16 新增诊断：**封面落位的正/反变换对账**。
+   *
+   * ## 它判什么
+   *
+   * ```
+   *   hdc shell hilog -x | Select-String 'RzdCoverLocal'
+   *   ⇒ RzdCoverLocal t=… s=… tx=… ty=… screen=(x,y,w,h,r) local=(x,y,w,h,r)
+   * ```
+   * · `s = 1 / tx = ty = 0`（静止态）⇒ 两个矩形必须**逐字相同**（反变换是恒等的）；
+   * · 形变中 ⇒ `local` 必须**远大于** `screen`（因为要被 `s` 压回去），
+   *   且 `local.x/y` 可能为负（封面在裁剪窗口之外的那一截，这是正常的）；
+   * · **判据**：把 `s / tx / ty` 与 `screen` 代进容器变换
+   *   `y_屏 = H/2 + (y_本 − H/2)s + d` 应还原出 `screen.y` —— 若还原不出来，
+   *   说明容器的枢轴/尺寸假设与实现不符（那时要改的是 `coverHostH()`，不是封面）。
+   */
+  private logCoverLocal(): void {
+    const now: number = Date.now();
+    if (now - this.lastCoverLocalAtMs < PlaybackPage.COVER_LOCAL_LOG_MS) {
+      return;
+    }
+    const screen: LyricMorphRect = this.lyricFloatRect();
+    const local: LyricMorphRect = this.coverLocalRect();
+    const sig: string = `${screen.x.toFixed(0)},${screen.y.toFixed(0)},${local.x.toFixed(0)},${local.y.toFixed(0)}`;
+    if (sig === this.lastCoverLocalLog) {
+      return;
+    }
+    this.lastCoverLocalAtMs = now;
+    this.lastCoverLocalLog = sig;
+    const s: number = this.expandState.morphScale;
+    Logger.info('RzdLyricFloat',
+      `RzdCoverLocal t=${this.lyricMorphT.toFixed(3)} s=${s.toFixed(4)} ` +
+      `tx=${this.expandState.morphTx.toFixed(1)} ty=${this.expandState.morphTy.toFixed(1)} ` +
+      `winH=${this.expandState.windowHeightVp.toFixed(0)} clipH=${this.expandState.morphClipHeight.toFixed(0)} ` +
+      `screen=(${screen.x.toFixed(1)},${screen.y.toFixed(1)},${screen.size.toFixed(1)},${screen.radius.toFixed(1)}) ` +
+      `local=(${local.x.toFixed(1)},${local.y.toFixed(1)},${local.size.toFixed(1)},${local.radius.toFixed(1)}) ` +
+      `realCover=${this.expandState.realCoverVisible()} clone=${this.expandState.morphOverlayBridging()} ` +
+      `squash=${this.expandState.morphSquashY.toFixed(3)}`);
+  }
+
+  // ⚠️ 2026-10-16：`SQUASH_MIN` / `squashWrapHVp()` / `squashWrapOffsetYVp()` **已删除**。
+  //
+  // 它们是我上一版为了让"背景也跟着弹"而加的一层补偿容器
+  // （`.height(winH × k)` + `.offset({y: −winH(1−k)/2})` + `.scale({y: k})`）。
+  // 本轮把无界的**层级**读通之后，那个补偿**整个不需要了**：
+  // 无界的 `MeshCoverBg` 就在**被 `scale/translate/clip` 的那个 Stack 里面**
+  // （`wujie.pa` 191388 那个 `PLAYER_ROOT_ID` 容器，见 `build()` 里那段容器树），
+  // ⇒ 它天然跟着容器一起缩、一起被裁、也天然在路由壳那条 `morphSquashY` 的作用域里。
+  // ⇒ 背景已按无界搬回容器内部，这一层补偿连同它的常量一起删掉。
+
+  // ─────────────────────── 控制区自动收起 ───────────────────────
+
+  // ═══════════════ ★★★ 现场自证徽标（**不依赖 hdc**）═══════════════
+  //
+  // ## 为什么加它
+  //
+  // 「点击打开 / 点击关闭 / 系统返回没有封面动画」这条问题，本轮已经改了 3 处
+  // （§92 背景不透明度 / §93 挂载判据 / §94 终点锚点量测门），但**用户不能用 hdc**，
+  // 我拿不到 `RzdCoverLocal` / `RzdMorphOwnership` 那些日志 ⇒ 只能靠"改了再让用户装"，
+  // 而这条链上有 5~6 个判断，**盲改的代价已经被证明极大**（§86~§94 共 8 轮）。
+  //
+  // ⇒ 加一个**页面上直接显示判据**的小徽标：用户点开播放器后把屏上那两行数字念出来，
+  //   我就能一次定位到具体哪一个判断为假。**装一次顶十次盲改。**
+  //
+  // ## 用法（用户侧）
+  // ```
+  //   · 连点播放页顶部 3 次（点"返回"往右一点那片空白，或点歌名/歌手那一行）
+  //   · 屏上出现一小块黑底白字，形如：
+  //       V 8f3a2c1 sess=1 usable=1 cont=1 clip=1 scale=0.082 p=0.000
+  //       real=0 clone=1 snap=330/56 end=328/328 op=0.040 stage=1 drv=2
+  //   · 把这两行念给我（或截图）即可；再点 3 次可关掉
+  // ```
+  // ⚠️ **它只在连点 3 次之后才出现** ⇒ 正常情况下用户完全看不到，不影响观感。
+  // ⚠️ 纯只读：不写任何与动画有关的状态（只写 `diagBadgeOn` / `diagText` 两个本页字段）。
+  @Local private diagBadgeOn: boolean = false;
+  @Local private diagText: string = '';
+  private diagTapCount: number = 0;
+  private diagTapLastMs: number = 0;
+  /**
+   * ★ 自证计数（只给徽标用，不影响任何逻辑）：
+   * · `diagRemeasureTries` —— `onAppear` 里那次几何补量被调用了几次；
+   * · `diagOverlayKicks`   —— 其中"补量成功后顺手起了浮层补间"几次。
+   * ```
+   *   两者都 0 ⇒ 那段代码根本没跑到（`onAppear` 走了别的分支）
+   *   1 / 1    ⇒ 补量与起棒都发生了 ⇒ 若封面仍不飞，问题在几何值（看 snap / end）
+   *   1 / 0    ⇒ 补量跑了但 `morphUsable` 仍为假 ⇒ 看 usable / end 两列
+   * ```
+   */
+  private diagRemeasureTries: number = 0;
+  private diagOverlayKicks: number = 0;
+
+  /**
+   * 顶部那块"隐形热区"的点击计数：**连点 3 次**开关自证徽标。
+   *
+   * 用 800ms 的窗口判定"连点"；间隔超过就重新计数。
+   */
+  private onDiagHotspotTap(): void {
+    const now: number = Date.now();
+    if (now - this.diagTapLastMs > 800) {
+      this.diagTapCount = 0;
+    }
+    this.diagTapLastMs = now;
+    this.diagTapCount = this.diagTapCount + 1;
+    if (this.diagTapCount >= 3) {
+      this.diagTapCount = 0;
+      this.diagBadgeOn = !this.diagBadgeOn;
+    }
   }
 
   /**
-   * @returns 浮层里歌名/歌手的不透明度。
+   * 把当前那一串判据拼成两行字符串（**只在徽标开着时调用**）。
    *
-   * 直接用飞行进度：`t = 0` 时**完全透明**（那一刻封面正压在真封面位置上，
-   * 歌名块不该冒出来），到歌词页才满不透明。这样即使两端的歌名位置略有差异也看不出来。
+   * 每一项都对应本轮改过或怀疑过的一个判断，命名与代码字段一一对应：
+   * ```
+   *   sess   = morphSessionStarted        （§93：壳层已起会话）
+   *   usable = morphUsable                （几何是否量齐）
+   *   cont   = morphContainerActive()     （容器是否在形变域）
+   *   clip   = morphClipping()            （裁剪是否生效）
+   *   scale  = morphScale                 （1 = 恒等；0.08 = 已压到起点）
+   *   p      = morphP                     （形变进度）
+   *   real   = realCoverVisible()         （播放页真封面是否画）
+   *   clone  = morphOverlayBridging()     （壳层续飞封面是否画）
+   *   snap   = snapStartW / miniSize      （起点：续飞封面宽度 / 迷你条封面）
+   *   end    = endCoverSize / endCoverH   （终点：播放页封面）
+   *   op     = backgroundRevealOpacity()  （背景不透明度）
+   *   stage / drv = morphStage / morphDrive
+   * ```
+   * ⚠️ 判读要点（写在这里，用户念数字时我自己对号）：
+   * · `clone=1` 且 `real=0` ⇒ 封面该由壳层浮层画；若屏上没有 ⇒ 看 `snap/end` 是否非零；
+   * · `clone=0` 且 `real=1` ⇒ 封面该由播放页画（那时它在容器里，会被缩放）；
+   * · `clone=0` 且 `real=0` ⇒ **两边都不画**（就是"完全没有封面"的那个形状）；
+   * · `op=0.04` 且 `p≈0` ⇒ 背景刚起步；`op=1` ⇒ 已满。
    */
-  private lyricFloatMetaOpacity(): number {
-    const t: number = this.lyricMorphT;
-    return t < 0 ? 0 : (t > 1 ? 1 : t);
+  private refreshDiagText(): void {
+    if (!this.diagBadgeOn) {
+      return;
+    }
+    const e = this.expandState;
+    const line1: string = `V 8f3a2c1 sess=${e.morphSessionStarted ? 1 : 0} ` +
+      `usable=${e.morphUsable ? 1 : 0} cont=${e.morphContainerActive() ? 1 : 0} ` +
+      `clip=${e.morphClipping() ? 1 : 0} scale=${e.morphScale.toFixed(3)} p=${e.morphP.toFixed(3)}`;
+    const line2: string = `real=${e.realCoverVisible() ? 1 : 0} ` +
+      `clone=${e.morphOverlayBridging() ? 1 : 0} ` +
+      `snap=${e.snapStartWVp().toFixed(0)}/${e.miniSize.toFixed(0)} ` +
+      `end=${e.endCoverSizeVp().toFixed(0)}/${e.endCoverHVp().toFixed(0)} ` +
+      `op=${this.backgroundRevealOpacity().toFixed(3)} stage=${e.morphStage} drv=${e.morphDrive}`;
+    // ★ 第三行：控制区预算（**不用 hdc 也能核无界那套数值**）——
+    //   `usableH` 应按无界 `winH − padTop − max(avoidBottom, bottomGap)` 算；
+    //   `padBot` 读到的值应与 `gap` 列（FULL 65）一致（除非实测避让区比它还大）。
+    const line3: string = `usableH=${e.usableHVp().toFixed(1)} padBot=${e.padBottomVp().toFixed(1)} ` +
+      `avoid=${e.navigationBarBottomVp.toFixed(1)} gap=${e.chromeBottomGapVp().toFixed(0)} ` +
+      `gapScrub=${e.chromeGapScrubVp().toFixed(0)} tier=${e.chromeTier}`;
+    // ★ 第四行：**本轮的两个动作计数**（判"代码有没有跑到"比判值更靠前，见字段注释）。
+    const line4: string = `remeasure=${this.diagRemeasureTries} overlayKick=${this.diagOverlayKicks} ` +
+      `seek=${e.chromeSeekSize().toFixed(0)}`;
+    // ★★★ 第五行：**动作轨迹**（最近 6 个动作，按发生顺序 `>` 连接）。
+    //   为什么最有用：这条链上"顺序"本身就是自变量的最大值 ——
+    //   同一个函数先调还是后调，结果完全不同（§93 的 `onAppear` 误判、§103 的
+    //   `onDisappear` 误杀都是顺序问题），而前四行只看得出"当前值"。
+    //   判读示例（点击打开应当看到的形状）：
+    //     `clickOpen>beginOk>settle0C>settle1C>measOk>tween`  ⇒ 一路走通
+    //     `clickOpen>beginOk>settle0C>settle1C>…`（无 measOk）⇒ 补量一直没成功
+    //     `clickOpen>skip`                                     ⇒ 被 `pullDragging`/相位挡了
+    //     `…>tween>settleSkip`                                 ⇒ 补间起了但落位被跳过（§104 那类）
+    const line5: string = `trace=${e.morphTrace.length > 0 ? e.morphTrace : '(empty)'}`;
+    const next: string = `${line1}\n${line2}\n${line3}\n${line4}\n${line5}`;
+    if (next !== this.diagText) {
+      this.diagText = next;
+    }
+  }
+
+  /** 自证徽标本体（黑底白字、不吃事件、压在最上面）。 */
+  @Builder
+  private DiagBadge() {
+    Text(this.diagText.length > 0 ? this.diagText : 'V 8f3a2c1 (no data)')
+      .fontSize(11)
+      .fontColor(Color.White)
+      .backgroundColor('rgba(0, 0, 0, 0.78)')
+      .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+      .borderRadius(6)
+      .maxLines(8)
+      .position({ x: 8, y: 120 })
+      .zIndex(99)
+      .hitTestBehavior(HitTestMode.None)
+  }
+
+  /**
+   * 顶部"隐形热区"：连点 3 次开关自证徽标。
+   *
+   * ⚠️ 放在**顶栏之下、内容之上**的一个窄条（高 48vp、不拦其它交互以外的东西）：
+   *   它只吃掉自己这一条带子上的点击，不影响播放/切歌/歌词滚动。
+   */
+  /**
+   * 顶部"隐形热区"：连点 3 次开关自证徽标。
+   *
+   * ⚠️ **2026-10-16 修一处我自己引入的交互回归**：第一版写的是
+   *   `Row().width('100%').height(48).position({x:0, y:96})` ——
+   *   而**声明式 `.onClick` 会消费命中区域**（`HitTestMode` 默认对自身范围 Block）
+   *   ⇒ 它把 96…144 那**一整条横向带子**的点击全吃掉了。
+   *   在歌词页上那一带是**歌词行**（点歌词跳转）⇒ 真实功能被挡。
+   *
+   * ⇒ 现在改成**左上角一小块**（120×40 @ y=88），只覆盖封面左上角那片不可能有交互的区域：
+   *   · 封面页：那一带是封面图像本身（无点击语义）；
+   *   · 歌词页：`lyricPadTop()` 保证歌词正文从浮层下方开始，不会落到这一小块里。
+   *   · 顶栏在 `y < 88`，也碰不到。
+   * ⚠️ 若哪天这块也需要调位置，**先确认不压在"有交互的带子"上**。
+   */
+  @Builder
+  private DiagHotspot() {
+    Row()
+      .width(120)
+      .height(40)
+      .backgroundColor(Color.Transparent)
+      .position({ x: 0, y: 88 })
+      .zIndex(98)
+      .onClick((): void => {
+        this.onDiagHotspotTap();
+        this.refreshDiagText();
+      })
   }
 
   // ─────────────────────── 控制区自动收起 ───────────────────────
+
+  /**
+   * ★★★ 2026-10-16（照搬无界 `BarCollapse`）：拖动控制条收起/展开的**手势状态机**。
+   * 逐条转写见 `common/musicbasic/.../model/BarCollapse.ets`（含字节码行号对照表）。
+   * 只有 `onChromeBarTouch()` 会用它。
+   */
+  private barCollapse: BarCollapse = new BarCollapse();
 
   /** 记录一次控制区交互：唤出并重置自动收起计时。 */
   private touchChrome(): void {
@@ -568,6 +1473,10 @@ export struct PlaybackPage {
    *    用户实测也确认过这一点："无界动画开始不是透明的"。
    */
   private morphOpacityValue(): number {
+    // ★ 自证徽标：动画期间逐帧刷新读数（徽标关着时它立刻 return，零开销）。
+    //   放在这里是因为本函数**每帧都被调用**，且写的是两个本页 `@Local` 字段，
+    //   与动画状态完全无关（纯只读）。用户在动画**结束之后**读到的就是收尾那一刻的值。
+    this.refreshDiagText();
     // ★ 绘制门（见 `introPaintReady`）：形变开始之前整页不画，避免那 1~2 帧闪出完整播放页。
     // ⚠️ 两条**必须放行**的情况（否则就是"播放界面打不开"）：
     //   1. 已经落位（相位 OPEN）—— 无论门是什么状态，静止态一律要画；
@@ -581,13 +1490,97 @@ export struct PlaybackPage {
       this.expandState.morphUsable) {
       return 1;
     }
+    // ★★ 2026-10-16（点击打开的第二半）：
+    //   这一段是"壳层已为这一轮起了形变会话（`morphSessionStarted`），但几何还没压到起点"
+    //   ⇒ 返回 0（整页不画），挡住"挂载那 1~2 帧闪出完整播放页"。
+    //   ⚠️ 副作用（已知、接受）：这几帧里**壳层的元信息克隆层（`MorphMetaBridge`）还在画**
+    //     （它在窗口坐标上、不吃本页的 opacity）⇒ 屏上会有一行歌名/歌手先亮着。
+    //     这是无界同构的形状（它的 `floatingMeta` 也在播放页之外），**不再另做补丁**。
     return 0;
   }
 
-  /** 背景全程共用同一张底图，从 25% 半透明连续到落位时不透明。 */
+  /**
+   * 形变期间"背景整层"的不透明度（静止态恒 1）。
+   *
+   * ★★★ 2026-10-16（**照抄无界 `pullBgOpacity`**，修用户实测「播放器展开还是背景全屏」）
+   *
+   * ## 无界的原式（字节码逐条读出来的）
+   *
+   * ```
+   *   PULL_BG_FLOOR = 0.04          wujie.pa:179978-179979  (fldai 4.0e-2)
+   *   PULL_BG_IN_END = 0.30         wujie.pa:179980-179981  (fldai 3.0e-1)
+   *
+   *   pullPaintable = pullGeomReady && !morphSquashing      wujie.pa:176560-176579
+   *   pullBgIn      = clamp(effT / PULL_BG_IN_END)          wujie.pa:176295-176326
+   *                   // effT = 形变中 ? morphT : 1  ⇒ 静止态恒 1
+   *   pullBgOpacity = !pullPaintable ? 0
+   *                                 : PULL_BG_FLOOR + pullBgIn × (1 − PULL_BG_FLOOR)
+   *                                                          wujie.pa:176331-176372
+   * ```
+   *
+   * ## ⚠️⚠️ 本轮**订正一处我读反了的极性**（别再照着旧注释改回去）
+   *
+   * 我前一版把 `pullBgOpacity` 读成"点击展开时 `pullPaintable()` 为假 ⇒ 背景不画"，
+   * 并据此让本函数在非跟手形变时 `return 0`。**读反了**：
+   *
+   * * `jnez L` 的语义是"**条件为假**时跳"（已由 `playerSwiperGapOf` 那把尺子钉死）；
+   * * `lda pullPaintable(); isfalse; jnez L2` ⇒ **`pullPaintable() === true` 时跳到 L2**，
+   *   而 L2 才是"算 `PULL_BG_FLOOR + pullBgIn × 0.96`"那一支；
+   * * 只有 `pullPaintable()` 为假才 `ldai 0x0; return`。
+   *
+   * 而 `pullPaintable = pullGeomReady && !morphSquashing`（`morphSquashing` 只在
+   * 关闭落位那一记挤压期间为真）⇒ **上拉/点击展开全程为真** ⇒ **背景全程都画**。
+   * ⇒ 用户实测「**无界动画过程有背景的（至少实机是这样）**」正是这条独立证据。
+   *
+   * ## 结论（本仓映射）
+   *
+   * | 场景 | 结果 |
+   * | --- | --- |
+   * | 静止态 | 1 |
+   * | 形变中 | `PULL_BG_FLOOR + pullBgIn × (1 − PULL_BG_FLOOR)` = `0.04 → 1`（`pullIn ≥ 0.30` 后恒 1） |
+   * | 落位挤压（`morphSquashing`） | 0（无界那一档也一样） |
+   *
+   * ⚠️ 旧注释里"**不要**照抄 `clamp(p/0.30)`"那条结论**已作废**：它担心的是"背景层在
+   * **被裁剪的小窗口里**、30% 就满不透明 ⇒ 窗口里一整块黑"。而背景层现在是**在裁剪容器内部**
+   * （§90 照搬无界的层级），那个形状不存在了。
+   *
+   * ⚠️ **2026-10-16 二次订正（用户实测「点击打开/点击关闭/系统返回还是没有」）**：
+   *   下面那句 `if (this.expandState.morphSquashY !== 1) return 0;` **是错的** ——
+   *   它本意是当"落位挤压"（无界 `morphSquashing`），但 `morphSquashY` 在**点击/返回**这条路上
+   *   也会不等于 1（关闭落位那一记 110ms+320ms 的挤压），于是整条路的背景被压成 0
+   *   ⇒ 用户看到的是"**只有上拉那条有背景**"。
+   *   ⇒ 现在改成：**只要有形变，背景就按 `pullBgIn` 上淡入**，不再对 Drive 或挤压做特殊判断。
+   *     背景已经被容器裁剪（§90），所以"形变早期整屏"这个顾虑本身也不存在了。
+   *
+   * ⚠️ 它同时管着：垫底层、取样色层、网格层、径向暗角 —— 改它等于改这四层。
+   * 排查关键字：`hdc shell hilog -x | Select-String 'RzdBgOpacity'`
+   * @returns 0..1（静止态 = 1）
+   */
   private backgroundRevealOpacity(): number {
-    return this.expandState.morphContainerActive() ?
-      0.25 + 0.75 * this.expandState.morphP : 1;
+    if (!this.expandState.morphContainerActive()) {
+      return 1;
+    }
+    return PlaybackPage.PULL_BG_FLOOR + this.pullBgIn() * (1 - PlaybackPage.PULL_BG_FLOOR);
+  }
+
+  /** 无界 `PULL_BG_FLOOR`（`wujie.pa:179978-179979`，`fldai 4.0e-2`）。 */
+  private static readonly PULL_BG_FLOOR: number = 0.04;
+
+  /** 无界 `PULL_BG_IN_END`（`wujie.pa:179980-179981`，`fldai 3.0e-1`）。 */
+  private static readonly PULL_BG_IN_END: number = 0.30;
+
+  /**
+   * @returns 无界 `pullBgIn() = clamp(effT / PULL_BG_IN_END)`（`wujie.pa:176295-176326`）。
+   *
+   * `effT = 形变中 ? morphT : 1` ⇒ 静止态恒 1（即 `pullBgIn = 1`）。
+   * ⚠️ 本仓的"形变进度"对应 `morphP`（展开 0→1 / 收起 1→0），与无界的 `morphT` 同口径。
+   */
+  private pullBgIn(): number {
+    if (!this.expandState.morphContainerActive()) {
+      return 1;
+    }
+    const raw: number = this.expandState.morphP / PlaybackPage.PULL_BG_IN_END;
+    return raw < 0 ? 0 : (raw > 1 ? 1 : raw);
   }
 
   /**
@@ -618,9 +1611,31 @@ export struct PlaybackPage {
     }, PlaybackPage.CHROME_AUTO_HIDE_MS);
   }
 
+  /**
+   * @returns 控制区是否可以"收起来"（自动空闲收起 + 拖动收起共用这一把门）。
+   *
+   * ★★★ 2026-10-16（照搬无界 `startIdle`）：**把封面页也纳入**。
+   *
+   * 无界那一侧（`wujie.pa:179903-179942`）：
+   * ```
+   *   startIdle() { clearIdle(); if (!(entryAllowsAuto(lyricImmersive))) return; ... setTimeout(λ, IDLE_MS) }
+   *   λ: idleTimer = -1; hideChrome()
+   * ```
+   * 其中 `entryAllowsAuto(mode)`（`264331`）= `mode === LyricEntryMode.AUTO`；
+   * `lyricImmersive` 是**沉浸歌词**那个模式（我们这一侧没有这个概念）。
+   * ⇒ 无界的门**与"当前在哪一页"无关** ⇒ **封面页也会空闲收起**。
+   *
+   * ⚠️ 我们原来是 `SM 宽度 && 停在歌词页`（本仓自定）⇒ 封面页永远不收。
+   *    现在改成"**手机 Swiper 布局**（`usesPhoneSwiperLayout()`）"——
+   *    · 歌词页：行为与改前**一致**（原来 `canHideLyricChrome()` 在那时才为真）；
+   *    · 封面页：**新增**空闲收起（与无界一致）。
+   *    ⚠️ 宽屏 / 面板那两支**不在本门内**（那两支没有"收起控制区"这套）。
+   *    ⚠️ **回退方式**：若真机上封面页收起观感不对，把本方法改回
+   *      `return this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_SM &&
+   *              this.playbackSwiperIndex === PlaybackPage.SWIPER_INDEX_LYRIC;` 即可（一行）。
+   */
   private canHideLyricChrome(): boolean {
-    return this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_SM &&
-      this.playbackSwiperIndex === PlaybackPage.SWIPER_INDEX_LYRIC;
+    return this.usesPhoneSwiperLayout();
   }
 
   private hideLyricChrome(): void {
@@ -633,6 +1648,49 @@ export struct PlaybackPage {
       this.lyricChromeProgress = 0;
     });
     Logger.info(PlaybackPage.logTag, 'lyric chrome hidden: upward gesture');
+  }
+
+  /**
+   * ★★★ 2026-10-16（照搬无界 `BarCollapse`）：**拖动控制条收起 / 展开**。
+   *
+   * 无界的手势状态机（`design/src/main/ets/logic/BarCollapse.ets`，字节码
+   * `wujie.pa:83706-84140`）已逐条转写到 `common/musicbasic/.../model/BarCollapse.ets`
+   * （含 `THRESHOLD = 1.5`、轴向锁定、`run` 累积、目标一致不动作、**250ms 节流**）。
+   * 本方法只做两件事：**把触摸事件喂进去** + **按它返回的动作驱动收起/展开**。
+   *
+   * 语义（照抄后的行为）：
+   * ```
+   *   · 纵向下拉累计 ≤ −1.5vp ⇒ COLLAPSE（控制区收起）
+   *   · 纵向上推累计 ≥ +1.5vp ⇒ EXPAND  （控制区展开）
+   *   · 横向锁定 ⇒ 整串手势忽略（不会和歌词横滑打架）
+   * ```
+   * ⚠️ 动画沿用本页既有的那一套（`chromeCollapsed` + `lyricChromeProgress`，240ms `EaseOut`），
+   *   与自动收起（3s 空闲）**共用同一条路径** ⇒ 两种入口观感一致。
+   * ⚠️ 收起门沿用 `canHideLyricChrome()` —— **与自动收起、拖动收起同一把门**
+   *   （照搬无界 `startIdle` 后它已放宽到"手机 Swiper 布局"，含封面页，见那个方法的注释）。
+   *   所以不会出现"自动能收、拖动不能收"这种不一致。
+   * @param event 控制区容器上的触摸事件
+   */
+  private onChromeBarTouch(event: TouchEvent): void {
+    if (!this.canHideLyricChrome()) {
+      return;
+    }
+    const touches: TouchObject[] = event.touches;
+    const first: TouchObject | undefined = touches.length > 0 ? touches[0] : undefined;
+    const action: BarAction = this.barCollapse.reportTouch(event.type,
+      first !== undefined ? first.windowX : 0,
+      first !== undefined ? first.windowY : 0,
+      touches.length, Date.now());
+    if (action === BarAction.COLLAPSE) {
+      Logger.info(PlaybackPage.logTag,
+        `RzdBarCollapse action=COLLAPSE collapsed=${this.barCollapse.isCollapsed()} axis=${this.barCollapse.lockedAxis()}`);
+      this.hideLyricChrome();
+    } else if (action === BarAction.EXPAND) {
+      Logger.info(PlaybackPage.logTag,
+        `RzdBarCollapse action=EXPAND collapsed=${this.barCollapse.isCollapsed()} axis=${this.barCollapse.lockedAxis()}`);
+      // 展开 = 本页既有的"唤出控制区"（`touchChrome()` 里那段 240ms 动画 + 重置空闲计时）
+      this.touchChrome();
+    }
   }
 
   /** 停掉自动收起计时（页面卸载、开始收起播放器时调用）。 */
@@ -786,45 +1844,9 @@ export struct PlaybackPage {
   /** 流光的 HDS 能力位：缺失时 shader 视效会静默不画（见 {@link hdsEffectCapable}）。 */
   private static readonly HDS_CORE_SYSCAP: string = 'SystemCapability.UIDesign.HDSComponent.Core';
 
-  /**
-   * 旧的「预渲染」封面底图模糊半径（px，`effectKit.createEffect().blur()` 口径）。
-   *
-   * ⚠️ 2026-10-15：**已不再用于背景**。
-   *   播放页背景改成**实时模糊**（原始封面 + 组件级 `.blur()`，见
-   *   {@link LIVE_BACKDROP_BLUR_VP}）⇒ `effectKit` 那条"先把封面糊成 PixelMap 再当底图"
-   *   的**预渲染路已整体停用**，本常量只剩「等价换算的基准值」这一个用途
-   *   （由 {@link imageBlurRadius} 读取）。保留不删，方便以后回看观感尺度。
-   */
-  private static readonly COVER_BLUR: number = 34;
-  /**
-   * 背景层**实时模糊**半径（vp）。
-   *
-   * ★ 取值依据（为什么是 11 而不是 34）：`blur()` 的入参单位是 **px**（官方《图像效果》：
-   *   「模糊半径……单位：px」），而 vp→px 会乘设备像素密度。本机手机形态密度 ≈ 3
-   *   ⇒ `34 px ÷ 3 ≈ 11.3 vp`；取整 **11 vp ⇒ ≈33 px**，与旧的预渲染 `blur(34px)` 同尺度
-   *   （两者都是"以屏幕像素为单位的模糊半径"，观感等价）。
-   *   用 vp 而不是写死 px 是**有意为之**：密度更大的设备上旧写法的物理模糊反而更"糊"，
-   *   换成 vp 后糊度相对屏宽恒定。
-   * ⚠️ 旧的 `LAYER_BLUR = 140`（只对非 PixelMap 源生效的那条实时模糊）已随本次改动删除：
-   *   PixelMap 源现在同样走实时模糊，不再有"一条真模糊、一条 0"的分叉。
-   */
-  private static readonly LIVE_BACKDROP_BLUR_VP: number = 11;
-
-  /** 旧的预渲染模糊半径（px）。**已不再用于背景**，只作为"等价换算基准"保留。 */
-  private imageBlurRadius(): number {
-    return PlaybackPage.COVER_BLUR;
-  }
-
-  /**
-   * 背景层的实时模糊半径（vp）。
-   *
-   * ⚠️ 这里**故意返回常量**而不是 `px2vp(COVER_BLUR)`：`aboutToAppear()` 阶段
-   *   `getUIContext()` 未必可用，而 `px2vp` 需要 UIContext；常量 11 vp 在任何密度下
-   *   都落在"和旧观感同一档"的范围内（见 {@link LIVE_BACKDROP_BLUR_VP} 的换算依据）。
-   */
-  private backdropBlurRadiusVp(): number {
-    return PlaybackPage.LIVE_BACKDROP_BLUR_VP;
-  }
+  // ★★ 2026-10-15（第三十九轮 / Round 20）：`COVER_BLUR` 与 `imageBlurRadius()` **已删除**
+  //   （播放页背景改成网格背景后，预渲染模糊那条线在编译图里已无任何调用者）。
+  //   删除依据与产物符号自检（modules.abc GONE）见 RzdMusic记忆.md §56.15。
 
   private hdsEffectCapable(): boolean {
     try {
@@ -1067,8 +2089,28 @@ export struct PlaybackPage {
     }
     // ★ 展开动画：先在 `aboutToAppear` 把进度放到"收起"，**保证第一帧画出来就是贴底的一条**。
     //   如果放到 `onAppear` 再置，会先渲染出一帧完整播放页再收回去，看着就是闪一下。
-    this.collapseProgress = PlaybackPage.EXPAND_START_PROGRESS;
+    //
+    // ★★ 2026-10-15（照搬无界）：**壳层已经起了形变时，这一档不许再压**。
+    //   无界的展开**只有一个动画主** —— 壳层的 `ExpandAnimation.doEnter`（350ms）驱动整页的
+    //   `scale/translate/clipWidth/clipHeight`；播放页自己**没有**第二套"贴底一条长上来"。
+    //   而 `collapseProgress` 这套（内容层 `height` 从贴底一条长到 100%）是**派音旧路**，
+    //   两条同时在跑就是用户实测的「点击打开播放器没有动画 / 背景不对」：
+    //   页面被旧路按"贴底一条"起手，而形变的起点几何已经被壳层按迷你条胶囊压好了。
+    //   判据用 `morphContainerActive()`（stage ∈ ENTERING/LEAVING/LANDING）：它在
+    //   `pullOpenBegin()` 里就置好了，而壳层是**先 begin 再 pushPath**（对标无界
+    //   `beginMorphEnter` 内部自己 push 的顺序）⇒ `aboutToAppear` 这一刻读到的就是真相。
+    const shellOwnsMorph: boolean = this.expandState.morphContainerActive();
+    if (shellOwnsMorph) {
+      this.collapseProgress = 0;
+    } else {
+      this.collapseProgress = PlaybackPage.EXPAND_START_PROGRESS;
+    }
     this.dismissMorphActive = false;
+    // ★★ 2026-10-15：`isClosing` 是 `onDismissDrag()` / `closeFullScreenPlayback()` 的**第一道闸**，
+    //   它一旦残留成 true，下拉收起与关闭按钮就双双失效（详见 `closeFullScreenPlayback()` 里
+    //   那条 `morphGenAlive` 早退分支的补漏注释）。挂载时**无条件**清一次：
+    //   新挂载的页面不可能"正在收起"，任何残留都只可能来自上一轮未走完的会话。
+    this.isClosing = false;
     // 每次打开都重置重试额度（照抄 `schedulePublishRetry` 的 12×32ms）
     this.morphRetryLeft = 12;
     // ★ 容器形变那条路（对标无界 ExpandAnimation）：不是上拉拉进来的（点击 / 起播意图打开）
@@ -1386,56 +2428,24 @@ export struct PlaybackPage {
     return $r('app.media.ic_avatar1');
   }
 
-  /**
-   * **背景层**的底图：**未做任何预渲染模糊**的原始封面。
-   *
-   * 与 {@link backgroundImageSource}（旧的预渲染底图）的区别只有一个：**不做 effectKit 预模糊**。
-   * 因为背景层已经改成实时模糊，底图必须给原图 —— 给预渲染过的图再实时模糊是
-   * "糊两遍"，而且会丢掉实时模糊该有的层次。
-   *
-   * 取源顺序与 {@link backgroundImageSource} 逐条对齐，只是把"预渲染结果"换成"原图"：
-   * 1. `imageLabel` 非 PixelMap（`Resource`，本地/内置封面）⇒ 直接用；
-   * 2. 在线歌曲有 `song.cover` ⇒ 用 URL（让 `Image` 组件自己加载原始封面）；
-   * 3. 兜底 ⇒ `imageLabel`（在线歌无封面时它就是 `ic_avatar1`，与 {@link getImageColorAsync} 同口径）。
-   *
-   * ⚠️ 第 2 条必须在第 3 条之前判：在线歌的 `imageLabel` 可能是"预渲染模糊过的 PixelMap"，
-   *    而它在本次改动后**已经不再被赋成模糊图**（见 {@link getImageColorAsync}），
-   *    所以这里的判据同时兼容改动前后两种赋值。
-   */
-  private originalCoverSource(): string | image.PixelMap | Resource {
-    const song = this.state.getCurrentSongItem();
-    if (!this.isPixelMapCover(this.imageLabel) &&
-      song !== undefined && song.cover.length > 0) {
-      return song.cover;
-    }
-    return this.imageLabel;
-  }
+  // ★★ 2026-10-15（第三十九轮 / Round 20）：原先挂在这里的整段 JSDoc 描述的是 `originalCoverSource()`
+  //   （第三十七轮已删除，见 RzdMusic记忆.md §56.13），并且通篇引用 `backgroundImageSource()`
+  //   （本轮已删除）⇒ 已是**孤儿注释**，整段清掉。
+  //   ⚠️ `isPixelMapCover()` **仍然在用**（真实调用点：`releaseBackgroundCoverIfPixelMap()`），
+  //   **不要跟着删**。
 
-  /**
-   * Blurred backdrop source: online cover url when available, else the local pixel-map / resource.
-   *
-   * ⚠️ 2026-10-15：**已不再被播放页背景层使用**（背景层改吃 {@link originalCoverSource}）。
-   *   唯一调用点是 {@link phoneSwiperBackdropImage}，而那个 builder 本身就是死代码
-   *   （全文件只有定义、没有调用）⇒ 本方法目前**也是死代码**。
-   *   按任务要求"保留函数但标注已不再用于背景"，**保留不删**。
-   */
-  private backgroundImageSource(): string | image.PixelMap | Resource {
-    const song = this.state.getCurrentSongItem();
-    if (this.isPixelMapCover(this.imageLabel)) {
-      return this.imageLabel;
-    }
-    if (song !== undefined && song.cover.length > 0) {
-      return song.cover;
-    }
-    return this.imageLabel;
-  }
+  // ★★ 2026-10-15（第三十九轮 / Round 20）：`backgroundImageSource()` **已删除** ——
+  //   它自己的 JSDoc 就写明"唯一调用点是 phoneSwiperBackdropImage，而那个 builder 本身是死代码"
+  //   ⇒ 随 `phoneSwiperBackdropImage` 一起下线，全仓零调用者。
+  //   删除依据与产物符号自检（modules.abc GONE）见 RzdMusic记忆.md §56.15。
 
   /**
    * True when value looks like a decoded PixelMap ({@link Resource} has no release).
    *
    * ⚠️ 2026-10-15：背景改实时模糊后 `imageLabel` **恒为 `Resource`**（不再被赋成任何
-   *   PixelMap）⇒ 本方法在两个调用点都恒返回 false，实际已成**兜底守卫**。
-   *   保留不删：`originalCoverSource()` 的类型分支仍靠它表达"底图可能是位图"的意图，
+   *   PixelMap）⇒ 本方法在调用点恒返回 false，实际已成**兜底守卫**。
+   *   保留不删：`releaseBackgroundCoverIfPixelMap()` 仍靠它判类型（背景那条路已在
+   *   第三十九轮随 `backgroundImageSource()` 一起下线，见 RzdMusic记忆.md §56.15），
    *   以后若有人重新把解码结果放进 `imageLabel`，这条分支会自动重新生效。
    */
   private isPixelMapCover(value: string | image.PixelMap | Resource): boolean {
@@ -1513,6 +2523,17 @@ export struct PlaybackPage {
     if (this.isClosing) {
       return;
     }
+    // ★★ P0-2：本轮关闭的**独立代次** + 取消上一轮可能还挂着的卸载定时器。
+    //   `isClosing` 挡得住"收起动画进行中"的重入，但它在 `morphCloseMs + 20`（≈370ms）
+    //   就被清回 `false`，而那一刻播放页**可能还没 unmount** ⇒ 第二次点击会再起一条
+    //   350ms 补间 + 第二个卸载定时器，而两条链的 `morphGen` 相同 ⇒ `morphGenAlive` 拦不住。
+    //   有了 `closeGen` + 句柄，第二次点击要么被明确忽略、要么干净接管。
+    const closeGen: number = this.closeGen + 1;
+    this.closeGen = closeGen;
+    if (this.closeSettleTimer !== -1) {
+      clearTimeout(this.closeSettleTimer);
+      this.closeSettleTimer = -1;
+    }
     this.refreshCollapseGeometry();
     this.isClosing = true;
     // 正在收起播放器时不要再自动收控制区（两个动画叠一起会很乱）
@@ -1528,30 +2549,107 @@ export struct PlaybackPage {
     //      OPEN（不是 ENTERING/LEAVING），用后者判定会掉回"压扁内容层高度"的老动画 ——
     //      用户实测到的「用系统返回关闭还是旧动画」就是这里。
     if (this.expandState.morphUsable) {
+      // ★★ 2026-10-15（照搬无界：**关闭时长与缓动**）——
+      //   **这一处就是用户实测「关闭播放器几乎没动画」的真根因。**
+      //   无界"关闭提交"（quit）分支（`_recover/logic-src/开关播放器-手势路径定稿.md`
+      //   §0 速查表 L27/L29，常量表 §八 L620-633）：
+      //     `reverseMs = round(REVERSE_MS(460) × max(REVERSE_MIN_RATIO(0.4), morphT))`
+      //     `animateMorphT(reverseMs, t = 0, REVERSE_EASING)`
+      //     `REVERSE_EASING = cubic-bezier(0.85, 0, 0.5, 0.88)`   ← ★ **慢启动**
+      //   ⚠️ 我们原来是 **350ms + `cubicBezier(0.23, 1.0, 0.32, 1.0)`**，而那条
+      //      （`EASE_OUT_STR`）是**打开提交**用的：**前 15% 时间就走完约 70% 行程**
+      //      ⇒ 350ms 里约 50ms 就缩完了、剩下 300ms 几乎什么都没发生 ——
+      //      用户感知就是"**关闭几乎没动画**"：不是没播，是**一眨眼就没了**。
+      //   ⇒ 两处都按无界改：时长 `460 × max(0.4, morphT)`、缓动 **`REVERSE_EASING`**。
+      //      下界 `460×0.4 = 184ms` 保证"只拉开一点点就松手"时也还有个像样的收势。
+      //   ⚠️ **别把两条缓动搞混**（定稿 §八 L385 原文：「`REVERSE_EASING` 只在
+      //      '提交关闭(quit)'这一支用；**取消回弹反而用 `EASE_OUT_STR`**」）：
+      //        · 打开提交 / 打开取消 → `EASE_OUT_STR`
+      //        · **关闭提交 → `REVERSE_EASING`**
+      //        · 关闭取消（回弹）→ `EASE_OUT_STR`
+      //   ⚠️ 进度必须在 `morphBeginLeaving()` **之前**取（下面那个 `applySync` 里会改相位）。
+      const closeFromT: number = this.expandState.morphP;
       // ★ 先把"进入收起相位 + 冻结几何"同步刷出去：这一段是补间**之前**的额外修改，
       //   按官方规则必须用 `applySync` 同步标脏，否则补间首帧会用旧值。
       UIUtils.applySync((): void => {
         this.expandState.morphBeginLeaving();
       });
-      const morphCloseMs: number = PlaybackPage.MORPH_CLOSE_DURATION_MS;
-      // ★★ 2026-10-15（回退后重做）：收起补间改用**与下拉 settle 同族的"快出慢收"**贝塞尔
-      //   （`Index.settlePullOpen` 用的就是这条）。原因：元素窗与几何共用同一条 `p`，
-      //   而 `Curve.EaseInOut` 慢启动 ⇒ 前 1/3 时间容器几乎没缩、`p` 却已经穿过
-      //   "按钮组 [0.60,0.92] / 进度条组 [0.42,0.70]"⇒ 观感就是"元素先沉下去没了、页面才收"。
-      //   手指那条路之所以正常：`p` 是一比一压的，松手提交时这些窗口早已穿过。
+      const closeScale: number = closeFromT < PlaybackPage.REVERSE_MIN_RATIO ?
+        PlaybackPage.REVERSE_MIN_RATIO : closeFromT;
+      const morphCloseMs: number = Math.round(PlaybackPage.REVERSE_MS * closeScale);
+      // ★★ 浮层那一棒（壳层 `MorphCoverClone` 的续飞封面）**必须由本处同步驱动** ——
+      //   依据见 `PlayerExpandState.applyMorphProgress` 里"删掉自动复位"那段 + 用户实测的
+      //   「下拉关闭时封面动画是展开那一套」「系统返回关闭没有封面动画」。
+      //   ⚠️ 原来只靠壳层 `@Monitor('expandState.morphStage')`：V2 的 `@Monitor` 是**异步**回调，
+      //      而本函数的收尾定时器（`morphCloseMs + 20`）里会连着走
+      //      `morphLand()` → `morphReset()`（后者**同步**把 `morphOverlayP` 清 0）——
+      //      只要 `@Monitor` 的回调排在复位之后，封面那一棒就**整段没播**。
+      //      这里在起补间之前**同步**喊一声，顺序就不再取决于微任务调度。
+      //   ⚠️ 浮层那条补间**已经在跑**时不要抢（`overlayTweenAnimating()`）：
+      //      上拉/回弹那条由壳层 `settlePullOpen` 发起，方向与本次一致，抢过来只会打断它。
+      //      （`focusMorphOverlayForPageCollapse` 内部还有一层"本轮只许起一次"的幂等护栏，
+      //        因为壳层的 `@Monitor` 也会调它 —— 见该函数的注释。）
+      this.expandState.focusMorphOverlayForPageCollapse(this.getUIContext());
+      Logger.info(PlaybackPage.logTag,
+        `RzdMorph close tween from morphT=${closeFromT.toFixed(3)} ⇒ ${morphCloseMs}ms ` +
+        `(=REVERSE_MS ${PlaybackPage.REVERSE_MS} × max(REVERSE_MIN_RATIO ${PlaybackPage.REVERSE_MIN_RATIO}, morphT)) ` +
+        `easing=REVERSE_EASING(0.85,0,0.5,0.88) overlayP=${this.expandState.morphOverlayProgress().toFixed(3)} ` +
+        `overlayAnimating=${this.expandState.overlayTweenAnimating()} ` +
+        `coverClone=${this.expandState.morphOverlayBridging()} ` +
+        `realCover=${this.expandState.realCoverVisible()}`);
       const gen: number = this.expandState.morphGen;
       this.getUIContext().animateTo({
         duration: morphCloseMs,
-        curve: curves.cubicBezierCurve(0.23, 1.0, 0.32, 1.0)
+        curve: curves.cubicBezierCurve(0.85, 0, 0.5, 0.88)
       }, (): void => {
         // 目标值同步落地（官方"动效场景"写法）。
         UIUtils.applySync((): void => {
           this.expandState.applyMorphProgress(0);
         });
       });
-      setTimeout((): void => {
+      this.closeSettleTimer = setTimeout((): void => {
+        this.closeSettleTimer = -1;
+        if (!this.isAlive) {
+          return;
+        }
+        // ★ P0-2：本轮关闭已被"下一次关闭请求"取代 ⇒ 收尾交给那一轮，这里什么都不做
+        if (closeGen !== this.closeGen) {
+          return;
+        }
+        // 与上一条**都要**：`closeGen` 挡"重复关闭"，`morphGenAlive` 挡"关闭途中又被展开"
         if (!this.expandState.morphGenAlive(gen)) {
-          // 这一轮收起已经被新的形变会话取代（世代号变了）：什么都别动
+          // 这一轮收起已经被新的形变会话取代（世代号变了）：本轮作废。
+          //
+          // ★★ 2026-10-15 补漏（用户实测「**没法下拉关闭播放器**」+「关闭播放器几乎没动画」）：
+          //   本轮的收起既然作废，就必须**把 `isClosing` 放掉**。它只在下面那条正常收尾里被清，
+          //   而这条早退路径**没有任何人会再清它** ⇒ 卡在 `true` 之后：
+          //     · `onDismissDrag()`（本文件第 567 行）第一行就 `if (this.isClosing) return;`
+          //     · `closeFullScreenPlayback()`（第 1779 行）同样第一行就 return
+          //   ⇒ **下拉收起与关闭按钮双双永久失效**，而且屏上没有任何动画
+          //     （观感正是"关闭播放器几乎没动画"—— 因为关闭**根本没启动**）。
+          //   只有下次重新进播放页（新实例）才会"自己好了"，所以这个 bug 很容易被当成偶发。
+          //   ⚠️ 上面 `closeGen !== this.closeGen` 那条**不能**这样清：那是"新一轮关闭已接管"，
+          //      标志归那一轮管（它走到这里时会自己清，链式自愈）。
+          Logger.warn(PlaybackPage.logTag,
+            `RzdMorph close aborted by new morph session gen=${gen} ` +
+            `liveGen=${this.expandState.morphGen} stage=${this.expandState.morphStage} ` +
+            `⇒ release isClosing + finish the close`);
+          this.isClosing = false;
+          // ★★★ 2026-10-16（**"点击关闭 / 系统返回"这一条的最后一块**）：
+          //   上面那条早退**只放开了 `isClosing`，没有推进"关闭"这件事本身**
+          //   ⇒ 播放页会**永远留在屏上**（用户点关闭之后屏上什么都没发生）。
+          //   为什么走到这里：收起过程中若 `morphGen` 被 `morphReset()` 清过一次
+          //   （典型来源：播放页自身的 `onDisappear` / 迷你条侧卸载 / 上一轮残留清理），
+          //   世代号就与本轮捕获的不同 —— 而**这并不代表"用户不想关了"**。
+          //   ⇒ 本轮既然是"要关"，就把关闭推到底：
+          //     ① 直接落位（`morphLand()`，与正常收尾同一步）；
+          //     ② 卸载播放页（`isShowPlay=false`）——
+          //        相位与几何的清理由**卸载链自己的** `onDisappear → morphReset()` 负责，
+          //        这里**不重复调**（重复调会再多推一次 `morphGen`，制造下一轮的同类问题）。
+          //   ⚠️ 幂等/安全：`isShowPlay` 若已是 false，`@Monitor` 不会重复动作；
+          //      `morphLand()` 在非形变态是安全的空操作语义（只翻相位 + 交还所有权）。
+          this.expandState.morphLand();
+          this.state.isShowPlay = false;
           return;
         }
         this.isClosing = false;
@@ -1559,6 +2657,15 @@ export struct PlaybackPage {
         // LANDING：此刻播放页已经缩成透明的一小块，把迷你条交还给它
         // （`miniBarOpacity()` 在非 ENTERING/LEAVING 时恒为 1），再卸载。
         this.expandState.morphLand();
+        // ★★ 2026-10-15（照搬无界 `squashLand`）：**落位那一帧起"播放条挤压 → 回弹"**。
+        //   顺序和无界逐字一致：`setMorph(LANDING)`（=`morphLand()`，本帧播放页停笔、
+        //   迷你条真身显出来）→ `animateSquash(SQUASH_Y 0.86, 110ms)` → 320ms 过冲回弹。
+        //   ⇒ 用户实测的「无界关闭时播放条会弹一下」就是这一对补间。
+        //   ⚠️ 必须在 `morphLand()` 之后：早一帧就是"播放页还在画、条先弹"。
+        //   ⚠️ 与 `morphReset()` 的顺序**不能反**：`morphReset()` 会把 `morphP` 复位成 1、
+        //      把相位清成 NONE，但它**不碰** `morphSquashY`（挤压是独立的一条标量），
+        //      所以先 reset 再 squash 也不会被吃掉 —— 这里按无界原序（land → squash）留在中间。
+        this.expandState.squashLandAnim(this.getUIContext());
         this.state.isShowPlay = false;
         this.expandState.morphReset();
       }, morphCloseMs + 20);
@@ -1570,6 +2677,130 @@ export struct PlaybackPage {
     this.restorePlaybackWindowChrome();
     this.state.isShowPlay = false;
     this.expandState.morphReset();
+    // 兜底路径也要弹一下：否则"几何没量到"时这条唯一的收起反馈就整个没有
+    this.expandState.squashLandAnim(this.getUIContext());
+  }
+
+  /** 上次 `logBranchSurface()` 打过的签名（用来把重复重绘压成一条；见该方法注释）。 */
+  private lastBranchLog: string = '';
+
+  /**
+   * ★★ 2026-10-15（目标 ④ 的**分支归属诊断 + 版面不变量自检**）：把"现在到底走的哪一条分支 +
+   * 那一支的实测几何 + **不变量是否成立**"打出来。
+   *
+   * ## 为什么需要它
+   *
+   * 本页的布局是**三条分支**（`buildControlStack()`）：
+   * ```
+   *   panel（面板）  ← usePanelLayout()
+   *   wide（宽屏/平板）← 非 SM 且非（MD + HEIGHT_SM）
+   *   phone（手机）  ← 其余
+   * ```
+   * 而**只有手机形态在本机可构造** ⇒ 宽屏/平板/横屏/PC 那两条**从来没被验过**。
+   * 等拿到那些形态时，第一件要知道的事是"**它到底走了哪一支**"——
+   * 因为三条分支的**封面渲染者不同**（phone = 覆盖层 `LyricFloatLayer`；wide/panel = `MusicPlayInfoBlock`），
+   * 一旦分支判据与预期不符，症状会表现为"封面位置很奇怪"，而根因其实是"走错了支"。
+   *
+   * ## 不变量自检（`inv=` 那一列）—— 把"看着不对"变成"日志直接说不成立"
+   *
+   * | 标记 | 断言 | 不成立说明什么 |
+   * | --- | --- | --- |
+   * | `coverNone` | 封面节点量得到 | 那一支没把 `PLAYER_BIG_COVER_ID` 挂上 ⇒ 宽度/端点链会退化 |
+   * | `coverSquare` | 封面宽高差 ≤ 1vp | 封面被压扁（`constraintSize` / `layoutWeight` 抢了空间）⇒ 续飞封面落位会跳 |
+   * | `metaGapOk` | 歌名顶边 ≥ 封面底边 − 1vp（不重叠） | **歌名压在大封面上** ⇒ 用户报的"错位"的一种 |
+   * | `metaOrder` | 歌手顶边 ≥ 歌名顶边（歌手在歌名**下面**） | 两行顺序反了 |
+   * | `metaInWin` | 歌名/歌手底边 ≤ 窗口高 | 歌名被挤出屏幕（历史上"偏低 164vp"那个 bug 的形状） |
+   * | `miniClear` | 小歌词顶边 ≥ 歌手底边（**小歌词不与歌名重叠**） | ★ 这正是用户报的「播放界面错位」（§57 用 `MINI_LYRIC_SINK_VP=44` 修的） |
+   * | `branchSane` | 同一屏**只有一支**（`usePanel` 与 `phoneSwiper` 不同时把同一块内容托付给两种结构） | 判据重叠区被踩到 ⇒ 先修判据再谈布局 |
+   *
+   * ## 它从哪儿被调（★ 这一段本身是个实测结论）
+   *
+   * ⚠️ **不能直接写在 `@Builder` 体里** —— 本轮实测编译报错：
+   *   `'this.logBranchSurface('wide')' does not meet UI component syntax`
+   *   （ArkTS 的 `@Builder` 体只接受 **UI 组件语法**）。
+   * ⇒ 现在挂在**三条分支各自的根容器**的 `.onAppear()` 上 —— 那一支**首次挂载**时触发一次，
+   *   手机↔宽屏↔面板互相切换时各来一次（形变期间不会触发）。
+   *   目前挂了三处：宽屏那支的 `Column`、手机那支的 `Swiper`、面板那支的根 `Stack`。
+   *   `branch` 参数由**各调用点自己声明**（它字面上就知道自己是谁）。
+   *
+   * ## 为什么可以直接写在 `@Builder` 里
+   *
+   * （此条已作废 —— 见上。`@Builder` 体只接受 UI 组件语法，所以挂在 `.onAppear()`。）
+   *
+   * 排查关键字：`hdc shell hilog -x | Select-String 'RzdBranch'`
+   * ⚠️ 只读：不写任何状态（`lastBranchLog` 只是日志节流用的字符串）。
+   * @param branch 当前分支名（'phone' / 'wide' / 'panel'）
+   */
+  private logBranchSurface(branch: string): void {
+    const rectOf = (id: string): LyricMorphRect | undefined => {
+      try {
+        const node = this.getUIContext().getFrameNodeById(id);
+        if (node === null) {
+          return undefined;
+        }
+        const p: Position = node.getPositionToWindowWithTransform();
+        const s: Size = node.getMeasuredSize();
+        return {
+          x: areaLengthToVp(p.x),
+          y: areaLengthToVp(p.y),
+          size: this.getUIContext().px2vp(s.width),
+          height: this.getUIContext().px2vp(s.height),
+          radius: 0
+        };
+      } catch (err) {
+        return undefined;
+      }
+    };
+    const fmt = (r: LyricMorphRect | undefined): string => r === undefined
+      ? 'none'
+      : `(${r.x.toFixed(0)},${r.y.toFixed(0)},${r.size.toFixed(0)},${r.height.toFixed(0)})`;
+    const cover: LyricMorphRect | undefined = rectOf(PLAYER_BIG_COVER_ID);
+    const title: LyricMorphRect | undefined = rectOf(PLAYER_META_TITLE_ID);
+    const singer: LyricMorphRect | undefined = rectOf(PLAYER_META_SINGER_ID);
+    const lyric: LyricMorphRect | undefined = rectOf(PlaybackPage.MINI_LYRIC_BOX_ID);
+    // ───────── 不变量自检（全部是"不成立才说话"的形式，避免日志里一堆 true） ─────────
+    const bad: string[] = [];
+    if (cover === undefined) {
+      bad.push('coverNone');
+    } else if (Math.abs(cover.size - cover.height) > 1) {
+      bad.push(`coverSquare(${cover.size.toFixed(0)}x${cover.height.toFixed(0)})`);
+    }
+    if (cover !== undefined && title !== undefined && title.y < cover.y + cover.height - 1) {
+      bad.push(`metaGapOk(title.y=${title.y.toFixed(0)}<cover.b=${(cover.y + cover.height).toFixed(0)})`);
+    }
+    if (title !== undefined && singer !== undefined && singer.y < title.y) {
+      bad.push('metaOrder(singer above title)');
+    }
+    const winH: number = this.expandState.windowHeightVp;
+    if (winH > 0 && singer !== undefined && singer.y + singer.height > winH) {
+      bad.push(`metaInWin(singer.b=${(singer.y + singer.height).toFixed(0)}>${winH.toFixed(0)})`);
+    }
+    // ★ 这条就是用户报的「播放界面错位」的机器判据（§57 用 MINI_LYRIC_SINK_VP 修的那条）。
+    if (lyric !== undefined && singer !== undefined && lyric.y < singer.y + singer.height - 1) {
+      bad.push(`miniClear(lyric.y=${lyric.y.toFixed(0)}<singer.b=${(singer.y + singer.height).toFixed(0)})`);
+    }
+    // 判据重叠区：MD + 横屏时 usePanelLayout() 与 usesPhoneSwiperLayout() 可能同时为真。
+    // 现在靠 `if` 顺序兜住（面板胜出）⇒ 只要"面板支里还认为自己是 phoneSwiper"，就是隐患。
+    const panel: boolean = this.usePanelLayout();
+    const phoneSwiper: boolean = this.usesPhoneSwiperLayout();
+    if (panel && phoneSwiper && branch !== 'phone') {
+      bad.push('branchSane(panel∩phoneSwiper both true)');
+    }
+    const sig: string = `${branch}|${this.expandState.windowWidthVp.toFixed(0)}x` +
+      `${this.expandState.windowHeightVp.toFixed(0)}|${fmt(cover)}|${fmt(title)}|${fmt(singer)}|${fmt(lyric)}`;
+    if (sig === this.lastBranchLog) {
+      return;
+    }
+    this.lastBranchLog = sig;
+    Logger.info(PlayerExpandState.LOG_TAG,
+      `RzdBranch branch=${branch} win=${this.expandState.windowWidthVp.toFixed(0)}x` +
+      `${this.expandState.windowHeightVp.toFixed(0)} bp=(${this.breakpointEnv.widthBreakpoint},` +
+      `${this.breakpointEnv.heightBreakpoint}) panelLayout=${this.panelLayout} ` +
+      `usePanel=${panel} phoneSwiper=${phoneSwiper} ` +
+      `cover=${fmt(cover)} title=${fmt(title)} singer=${fmt(singer)} lyric=${fmt(lyric)} ` +
+      `pad=${this.expandState.topInsetVp().toFixed(1)}/${this.expandState.navigationBarBottomVp.toFixed(1)} ` +
+      // ⚠️ 空数组要打成 `ok`，不能打空串 —— 否则"日志里那一段没了"和"没自检"分不清。
+      `inv=${bad.length === 0 ? 'ok' : bad.join(';')}`);
   }
 
   /** True for small-width + medium-height window (phone landscape-ish). */
@@ -1589,16 +2820,40 @@ export struct PlaybackPage {
   /**
    * @returns 是否走「手机 Swiper」那一支布局（封面页 / 歌词页**横向切换**的那套）。
    *
-   * 判据与 `buildControlStack()` 里那个 `if` 的取反**逐字一致**：
-   * `SM`（不论高）或 `MD + HEIGHT_SM`。A2 的歌词页浮层只在这一支里画
-   * （面板/宽屏布局没有"歌词页"这一说，画上去会在封面右侧多出一张小封面）。
+   * ★★ 2026-10-15（第九轮·**改正一处"注释与实现不符"**）：
+   *   原注释写的是「判据与 `buildControlStack()` 里那个 `if` 的取反**逐字一致**：
+   *   `SM`（不论高）或 **`MD + HEIGHT_SM`**」——
+   *   ⚠️ **实现里对 MD 并没有高度条件**（就是 `widthBp === WIDTH_MD` 本身）。两句不一致，
+   *   而且**不一致的那个方向是"实现更宽"**（MD + 任意高度都返回 true）。
+   *
+   *   现在的实际语义（照实现写，**未改行为**）：
+   * ```
+   *   widthBp === SM                      → true
+   *   widthBp === MD                      → true      ← ⚠️ 不含高度判断
+   *   其余（LG / XL）                      → false
+   * ```
+   *   ⇒ 它比 `buildControlStack()` 那条 `if` 的取反**多命中"MD + 非 HEIGHT_SM"**这一档。
+   *
+   * ## ★ 与 `usePanelLayout()` 的**重叠区**（已登记，别在这里偷偷改）
+   *
+   * ```
+   *   usePanelLayout() 在 (横屏 && widthBp !== SM) 时为真
+   *   ⇒ 重叠 = 【横屏】【widthBp === MD】
+   * ```
+   * 好处是 `buildControlStack()` 里 `if (usePanelLayout())` **在前** ⇒ 面板支胜出、
+   * 覆盖层被本函数挡掉 ⇒ **不会画两份封面**；
+   * 坏处是这属于"**靠 if 顺序兜住**"，不是"判据互斥"。
+   * ⚠️ **本函数还管着 `isPhoneLyricsStyleBackdropLayout()`（背景样式链）** ⇒
+   *   把它收窄成 `&& !usePanelLayout()` 是**可见行为变化**（横屏背景样式会变），
+   *   而横屏形态本机验不了 ⇒ **先决条件**：`RzdBranch` 在真机上量出重叠区的实际分支
+   *   （`branchSane` 断言）之后，再决定收不收窄。登记处：
+   *   `_recover/logic-src/目标④-宽屏面板统一-施工图与验收.md` §4「判据重叠」。
    */
   private usesPhoneSwiperLayout(): boolean {
     if (this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_SM) {
       return true;
     }
-    return this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_MD &&
-      this.breakpointEnv.heightBreakpoint === HeightBreakpoint.HEIGHT_SM;
+    return this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_MD;
   }
 
   /**
@@ -1616,27 +2871,10 @@ export struct PlaybackPage {
     return true;
   }
 
-  /**
-   * Blurred cover tile + imageColor (phone Swiper); same for album page and lyrics page.
-   *
-   * ⚠️ 2026-10-15 本次改动**没有动这一支**（用户只点名"背景那一层"）：它仍然吃
-   *   {@link backgroundImageSource}（预渲染底图）。实际状态已经核过一遍：
-   *   `grep -n "phoneSwiperBackdropImage" PlaybackPage.ets` **只有定义处这一个命中**
-   *   ⇒ 这个 builder **本来就是死代码**（没有任何调用点），所以它在本次改动前后
-   *   对画面都没有影响。
-   *   ⚠️ 因此"预渲染那条路"现在的消费者是**零个**；`effectKit.blur` 那条分支我保留在
-   *   {@link getImageColorAsync} 的注释里说明来龙去脉，但**代码已经删掉**（见那里的 ★★）。
-   *   若以后要复活这一支，改法与背景层同构（`originalCoverSource()` +
-   *   `.blur(backdropBlurRadiusVp())`），但要单独确认观感（它是 0.5 不透明度）。
-   */
-  @Builder
-  phoneSwiperBackdropImage() {
-    Image(this.backgroundImageSource())
-      .width('100%')
-      .height('100%')
-      .objectFit(ImageFit.Cover)
-      .opacity(0.5)
-  }
+  // ★★ 2026-10-15（第三十九轮 / Round 20）：`@Builder phoneSwiperBackdropImage()` **已删除** ——
+  //   它自己的 JSDoc 就写明"`grep -n "phoneSwiperBackdropImage"` 只有定义处这一个命中 ⇒ 本来就是死代码"，
+  //   删除后 `backgroundImageSource()` 也随之零调用者（两者一起下线）。
+  //   删除依据与产物符号自检（modules.abc GONE）见 RzdMusic记忆.md §56.15。
 
   /** Main Stack: background art, breakpoint-specific controls and lyrics grid. */
   @Builder
@@ -1679,6 +2917,17 @@ export struct PlaybackPage {
                   LyricsComponent({
                     isShowControl: this.isShowControlLg,
                     isTablet: this.isTabletFalse,
+                    // ★★ 2026-10-15（照搬无界 / 目标 ④「宽屏·面板两分支统一」）：
+                    //   无界**没有** `LyricsComponent` 内建"歌名 - 歌手"表头这回事
+                    //   （`_recover/logic-src/歌词页浮层封面与歌名定稿.md` L1449 原文：
+                    //   「无界没有 `LyricsComponent` 内建 header 这回事」）。
+                    //   ⚠️ 手机那一支（下面 L2002 那处）第 1 块已经传了 `true`，
+                    //      而**宽屏/面板这两处当时漏了** —— 又是
+                    //      §56.1.6 / §56.16 / §56.17 那个「同一形状有 N 处、只改了一处」的老毛病。
+                    //   冗余是实打实的：本分支上面就有 `MusicPlayInfoBlock`（L1908）在显示
+                    //   封面 + 歌名 + 歌手 ⇒ 歌词再自报一次就是"同一首歌名出现两次"。
+                    //   ⇒ 藏掉它**不丢任何信息**，且与无界的观感一致。
+                    hideLyricsMetaHeader: true,
                     onSeekTime: (ms: number): void => {
                       MediaService.getInstance().seek(ms);
                     }
@@ -1699,41 +2948,68 @@ export struct PlaybackPage {
               right: $r('app.float.common_padding'),
               top: 80
             })
+            // ★★ 目标 ④ 的**分支归属诊断**（见 `logBranchSurface()` 的注释）。
+            //   ⚠️ **必须挂在 `.onAppear()` 里，不能直接在 `@Builder` 体内调用** ——
+            //      ArkTS 的 `@Builder` 体只接受 **UI 组件语法**，直接写方法调用会编译报错
+            //      （本轮实测：`'this.logBranchSurface('wide')' does not meet UI component syntax`）。
+            //   ⚠️ 也**不能**挂在"那一支的根容器"上就以为够了：这里挂在 `Column` 上，
+            //      它只在**本支首次挂载**时触发 ⇒ 手机↔宽屏↔面板互相切换时各来一次，
+            //      形变期间不会刷屏（`logBranchSurface` 内部还有一层签名节流）。
+            .onAppear((): void => {
+              this.logBranchSurface('wide');
+            })
           } else {
             // 手机：Swiper 封面/歌词滑动 + 底部控制区
             Column() {
               Swiper() {
                 Stack({ alignContent: Alignment.Bottom }) {
-                  MusicPlayInfoBlock({
-                    state: this.state,
-                    useAlbumCoverBackground: this.isSmHeightMdLayout(),
-                    metaBlockTranslateYvp: 0,
-                    isDismissing: this.isCollapsing(),
-                    coverLinearScale: 1,
-                    showControlArea: false
+                  // ★★ 2026-10-15（照搬无界）：**页 0 是空壳**。
+                  //   无界的 `playerPane` 里 `Swiper` 两页都只有 `Column().width/height('100%')`，
+                  //   **封面与歌名根本不在页里**，而在 `Swiper` 之外的覆盖层
+                  //   （`floatingCover` / `floatingMeta`，见 `PlayerPage完整UI定稿.md` §3 / §5 / §6）。
+                  //   ⇒ 这里删掉 `MusicPlayInfoBlock`：它自带封面 + 歌名，
+                  //     留着就会和那个**唯一的覆盖层**画成两份封面。
+                  //   ⚠️ 它原来的两个职责（`.id(PLAYER_BIG_COVER_ID)` + `reportBig`、
+                  //      `.id(PLAYER_META_*_ID)` + `publishMeta`）**已经搬到覆盖层**（见
+                  //      `reportPlayerCoverFromOverlay` / `publishMetaEndpoint`）——
+                  //      这是这次能删的前提；上一轮就是漏了这一步，导致"封面消失 + 动画全废"。
+                  //   ⚠️ 宽屏/面板那两条分支仍在用它（`PlaybackPage` 内另有两处），
+                  //      所以 import 保留。
+                  Column() {
+                    MiniLyricLinesComponent()
+                      .width(StyleConstants.FULL_WIDTH)
+                      .margin({
+                        left: 4,
+                        right: 4,
+                        // ★★ 2026-10-15（修用户实测「播放界面这里错位」= 小歌词与歌名那一行重叠）：
+                        //   这一页的 `Stack` 是 `Alignment.Bottom`，而**歌名/歌手那一行不是本页的内容**
+                        //   —— 它是 `Swiper` 之外的覆盖层（`LyricFloatLayer`，`morphCoverRectAt` 派的位），
+                        //   所以"小歌词贴在页底"正好落在那一行的高度带里（用户复现点 ≈ 660~690vp）。
+                        //   ⇒ 把小歌词再往下推 `MINI_LYRIC_SINK_VP`：推开"歌名+歌手两行"的量级
+                        //     （= `LYRIC_META_BLOCK_H_VP` 那一档口径），而不是拍一个数。
+                        //   ⚠️ 负外边距是**唯一**能把它推出父容器内容区的手段（`offset`/`translate`
+                        //      只挪绘制、把可视区留在原位，等于没让位）；它只影响这一页的排版，
+                        //      不参与任何补间。
+                        bottom: -PlaybackPage.MINI_LYRIC_SINK_VP
+                      })
+                      // 小歌词属于"内容"：反编译里 `contentOpacity` 落位才置 1
+                      .opacity(this.expandState.morphContentOpacity)
+                      // ★★ 2026-10-15 用户定调：「**先飞入的是小歌词和收藏按钮**」
+                      //   ⇒ 小歌词走**第一组**的时间窗（`earlyRiseVp()`，早于控制区那一组），
+                      //   从下升起 180vp；静止态位移恒 0，版面逐像素不变。
+                      .translate({ y: this.expandState.earlyRiseVp() })
+                      // 收起过程中内容被压扁，小歌词会和控制区互相盖住
+                      .visibility(this.isCollapsing() ? Visibility.None : Visibility.Visible)
+                  }
+                  // ★ 2026-10-15 诊断锚点（`hdc shell hilog -x | Select-String 'RzdBoxes'`）：
+                  //   把**三个会互相压的块**的窗口矩形一次打出来 ——
+                  //     `lyric` 小歌词 / `title` 歌名 / `singer` 歌手 / `cover` 大封面。
+                  //   判据：`lyric.top` 与 `singer.bottom` 相交 ⇒ 就是用户报的"这里错位"；
+                  //         不相交而仍看着压在一起 ⇒ 那是**绘制**（scale/clip）而不是排版，另找。
+                  .id(PlaybackPage.MINI_LYRIC_BOX_ID)
+                  .onAreaChange((): void => {
+                    this.logLayoutBoxes();
                   })
-                  // 小歌词并入封面页：开启时底部预留固定空间，随封面页一起横向滑动
-                  .padding({ bottom: this.miniLyricState.enabled ? 40 : 0 })
-                  // ★★ A2：**同一时刻至多一张封面** —— `lyricFloatActive()` 为真时
-                  //   （飞行中 / 已在歌词页）封面页这份真封面让位给浮层那份，
-                  //   两者严格互补；交棒那一帧矩形相同（浮层 t=0 就是真封面的落点矩形）。
-                  //   改前这里是 `this.lyricMorphVisible ? 0 : 1`，而 `lyricMorphVisible`
-                  //   被写死成 false ⇒ 这层门**恒为 1、是空转的**（清单 §二·补 A2 第 3 条）。
-                  .opacity(this.lyricFloatActive() ? 0 : 1)
-                  MiniLyricLinesComponent()
-                    .width(StyleConstants.FULL_WIDTH)
-                    .margin({
-                      left: 4,
-                      right: 4
-                    })
-                    // 小歌词属于"内容"：反编译里 `contentOpacity` 落位才置 1
-                    .opacity(this.expandState.morphContentOpacity)
-                    // ★★ 2026-10-15 用户定调：「**先飞入的是小歌词和收藏按钮**」
-                    //   ⇒ 小歌词走**第一组**的时间窗（`earlyRiseVp()`，早于控制区那一组），
-                    //   从下升起 180vp；静止态位移恒 0，版面逐像素不变。
-                    .translate({ y: this.expandState.earlyRiseVp() })
-                    // 收起过程中内容被压扁，小歌词会和控制区互相盖住
-                    .visibility(this.isCollapsing() ? Visibility.None : Visibility.Visible)
                 }
                 .width(StyleConstants.FULL_WIDTH)
                 // ★ 歌名/歌手那一行**只走顶栏那一档**（`pullChromeOpacity = clamp((effT-0.18)/0.44)`，
@@ -1759,7 +3035,12 @@ export struct PlaybackPage {
                   LyricsComponent({
                     isShowControl: false,
                     isTablet: this.isTabletFalse,
-                    hideLyricsMetaHeader: this.isSmHeightMdLayout(),
+                    // ★ 2026-10-15（照搬无界）：**歌词页不再自带"歌名/词曲"表头**。
+                    //   无界歌词页顶上就是那一条浮层横行（小封面 + 歌名 + 收藏/更多），
+                    //   歌词正文里没有第二个歌名。原来这里是 `isSmHeightMdLayout()`
+                    //   ⇒ 竖屏上会**同时**出现浮层的歌名和歌词自带的
+                    //   "有风无风皆自由 - 王一佳 / 词：青柠"，观感就是"歌名出现两次"。
+                    hideLyricsMetaHeader: true,
                     onSeekTime: (ms: number): void => {
                       MediaService.getInstance().seek(ms);
                     }
@@ -1800,6 +3081,12 @@ export struct PlaybackPage {
               )
               .clip(false)
               .loop(false)
+              // ★ 目标 ④ 的**分支归属诊断**（手机支）—— 见 `logBranchSurface()` 的注释。
+              //   挂在 `Swiper`（它只存在于手机这一支）的 `.onAppear()` 上：
+              //   ⚠️ 挂在 `@Builder` 体里会编译报错（`does not meet UI component syntax`，本轮实测）。
+              .onAppear((): void => {
+                this.logBranchSurface('phone');
+              })
               // ⚠️ 这里**不再**给整个 Swiper 加 `contentOpacity`：按反编译，只有
               //    **封面/歌词**是"落位才出现"的内容，而**歌名/歌手那一行**属于顶栏那一档
               //    （`pullChromeOpacity` 0.18→0.62），要在动画过程里就淡入。
@@ -1829,6 +3116,32 @@ export struct PlaybackPage {
                 }
               })
 
+              // ★★★ 2026-10-16（照搬无界）：**控制区三段结构的两根占位条**。
+              //   无界 overlay 的 `Swiper` 与"进度条/传输条"之间就是这两根**零内容 Row**
+              //   （`wujie.pa:190464` / `190497`），不是 padding：
+              //     `[Swiper | gapSwiper 行 | gapScrub 行 | 进度条+传输条]`
+              //   ① `gapSwiper` 走**连续**公式 `playerSwiperGapOf(usableH) = clamp(0.065×h,16,56)`
+              //      （`wujie.pa:93497`）—— **不是查档位表**（表里那 48/32/20 只在"没有实测
+              //      `usableH` 时才用"，见 `playerChromeTotalOf` 的两处成对换值）；
+              //   ② `gapScrub` 是查表值，但我们这一侧**已经**有同一段间距（`ControlAreaComponent`
+              //      里 Slider 那一行的 `bottom` margin）⇒ 这里给 0，避免同一段两条口径，
+              //      先用日志把"实测 vs `gapScrub`"量出来（见 `chromeScrubGapRowHVp()`）。
+              //   ⚠️ 两根都是 `Row()`（不是 `Blank()`）：无界就是 `Row`，且空 `Row` 在 `Column`
+              //      里按 `.height()` 精确占位，不会像 `Blank` 那样吃剩余空间。
+              Row() {
+              }
+              .id(PlaybackPage.SWIPER_GAP_ROW_ID)
+              .width(StyleConstants.FULL_WIDTH)
+              .height(this.swiperGapRowHVp())
+              .hitTestBehavior(HitTestMode.None)
+
+              Row() {
+              }
+              .id(PlaybackPage.CHROME_SCRUB_GAP_ROW_ID)
+              .width(StyleConstants.FULL_WIDTH)
+              .height(this.chromeScrubGapRowHVp())
+              .hitTestBehavior(HitTestMode.None)
+
               // 控制区：静止 3 秒自动收起，点/碰任意处唤出（对标无界音乐 BarCollapse）
               Column() {
                 Column() {
@@ -1836,10 +3149,21 @@ export struct PlaybackPage {
                   //   它们是一组：整片控制区在**同一个时间窗**里从下升上来（见 `contentRiseVp()`），
                   //   所以这里**不再**给进度条单独错峰（上一版就是那么做错的）。
                   ControlAreaComponent({
-                    showBottomOtherRow: true,
+                    // ★★ 2026-10-15（照搬无界）：**不要**那一行"下载/评论/更多"。
+                    //   无界的 `transport` 只有 5 个：播放模式 / 上一首 / 播放暂停 / 下一首 / 播放队列
+                    //   （`PlayerPage完整UI定稿.md` §8.3，逐项都在），**没有第二行**。
+                    //   派音多出来的这一行在截图里一眼可见 ⇒ 关掉它才是"照搬"。
+                    //   ⚠️ 那四个入口本身没删（`ControlAreaComponent` 里仍在），
+                    //      要恢复把这里改回 `true` 即可。
+                    showBottomOtherRow: false,
+                    // ★ 菜单状态已提升到本页（那一横行的「更多」图标在本页）：
+                    //   `ControlAreaComponent` 从 `@Local` 改成了 `@Param` + `@Event`。
+                    showMenuSheet: this.playMenuOpen,
+                    onMenuSheetChange: (open: boolean): void => {
+                      this.playMenuOpen = open;
+                    },
                     chromeOffsetY: this.expandState.chromeOffsetY(),
-                    chromeOpacity: this.expandState.chromeOpacity(),
-                    chromeGap: this.expandState.chromeGapVp()
+                    chromeOpacity: this.expandState.chromeOpacity()
                   })
                     .width(StyleConstants.FULL_WIDTH)
                 }
@@ -1888,8 +3212,14 @@ export struct PlaybackPage {
               //   两组的先后见 PlaybackPage 顶部的 `WIN_A_*` / `WIN_B_*` 说明。
               //   静止态位移恒 0（`morphClipping()` 为假时直接返回 0）⇒ 版面逐像素不变。
               .translate({ y: this.expandState.contentRiseVp() })
-              .onTouch((_event: TouchEvent): void => {
+              .onTouch((event: TouchEvent): void => {
                 this.touchChrome();
+                // ★★★ 2026-10-16（照搬无界）：**拖动控制条收起 / 展开**（`BarCollapse`）。
+                //   无界 `design/src/main/ets/logic/BarCollapse.ets` 的手势状态机
+                //   （字节码 `wujie.pa:83706-84140`）已逐条转写到
+                //   `common/musicbasic/.../model/BarCollapse.ets`，这里只是把触摸事件喂给它。
+                //   ⚠️ 它只识别**纵向**手势（横向锁定后整串忽略）⇒ 不会和歌词横向滑动打架。
+                this.onChromeBarTouch(event);
               })
               // Full player collapse retains its existing path; lyric hide reclaims layout continuously.
               .visibility(this.isCollapsing() ? Visibility.None : Visibility.Visible)
@@ -1913,6 +3243,39 @@ export struct PlaybackPage {
             //（"按钮也是在动画过程就出现了"就是这一层比底栏早得多）
             .opacity(this.expandState.pullChromeOpacity())
             .visibility(this.isCollapsing() ? Visibility.None : Visibility.Visible)
+            // ★★ 2026-10-15（照搬无界：页面侧关闭手势的**第二个挂载点**）
+            //   无界的关闭手势挂了**两处**（`_recover/logic-src/开关播放器-手势路径定稿.md`
+            //   §1.1 的 ⑤ 与 ⑥）：
+            //     ⑤ `PlayerPage` 顶部那条 Row（`PanDirection.Down`, `distance:8`）← **主入口**
+            //     ⑥ 内容容器
+            //   我们原来只有"整页根"那一处（≈⑥）。而整页根上的竖直拖动**会被内部
+            //   可滚动 / 子手势先吃掉**（ArkUI 手势冒泡：子节点优先）⇒
+            //   用户实测「没法下拉关闭播放器」。
+            //   顶栏这一条是**非滚动的固定条带**、必定收得到竖直拖动 ⇒ 补上它，与无界同构。
+            //   ✅ 纯增量、不改任何既有行为：命中的还是同一个 `onDismissDrag()`；
+            //      只有"起手落在顶栏上"时才由它接管（`.gesture()` 子节点优先），
+            //      页面其它区域的既有行为一字不变。
+            //   ⚠️ 两处顶栏实例（本处 + 下面 `!panelLayout` 那支）**必须都挂** ——
+            //      否则就是 §56.1.6 / §56.16 那个「同一形状有 N 处、只改了一处」的老毛病。
+            .gesture(
+              PanGesture(this.panOption)
+                .onActionStart((): void => {
+                  Logger.info(PlayerExpandState.LOG_TAG,
+                    `RzdMorph dismiss pan start(topBar) isClosing=${this.isClosing} ` +
+                    `morphUsable=${this.expandState.morphUsable} stage=${this.expandState.morphStage}`);
+                })
+                .onActionUpdate((event: GestureEvent): void => {
+                  this.onDismissDrag(event.offsetY, false, event.velocityY);
+                })
+                .onActionEnd((event: GestureEvent): void => {
+                  this.onDismissDrag(event.offsetY, true, event.velocityY);
+                })
+                .onActionCancel((event: GestureEvent): void => {
+                  Logger.info(PlayerExpandState.LOG_TAG,
+                    `RzdMorph dismiss pan cancel(topBar) offsetY=${event.offsetY.toFixed(1)}`);
+                  this.onDismissDrag(event.offsetY, true, 0);
+                })
+            )
         }
         .width(StyleConstants.FULL_WIDTH)
         .height(StyleConstants.FULL_HEIGHT)
@@ -1953,6 +3316,10 @@ export struct PlaybackPage {
             isShowControl: false,
             isTablet: this.isTabletFalse,
             panelBottomBar: true,
+            // ★ 同宽屏那处：藏掉 `LyricsComponent` 自带表头（无界没有它）。
+            //   本分支上面 L2233 的 `MusicPlayInfoBlock` 已经在显示封面 + 歌名 + 歌手
+            //   ⇒ 不藏就是"同一首歌名出现两次"。完整理由见 L1926 那处的注释。
+            hideLyricsMetaHeader: true,
             onSeekTime: (ms: number): void => {
               MediaService.getInstance().seek(ms);
             }
@@ -1971,6 +3338,10 @@ export struct PlaybackPage {
         top: this.windowInfo.statusBarTopVp,
         bottom: this.windowInfo.navigationBarBottomVp
       })
+      // ★ 目标 ④ 的**分支归属诊断**（面板支）—— 与宽屏那处成对，理由见它上面的注释。
+      .onAppear((): void => {
+        this.logBranchSurface('panel');
+      })
 
       if (!this.panelLayout) {
         TopAreaComponent({
@@ -1985,6 +3356,27 @@ export struct PlaybackPage {
           })
           .zIndex(2)
           .visibility(this.isCollapsing() ? Visibility.None : Visibility.Visible)
+          // ★ 同上面那处顶栏：页面侧关闭手势的第二个挂载点（对标无界 ⑤ 顶部 Row）。
+          //   ⚠️ 这一处**必须与上面那处成对存在**，理由与完整说明见上面那段注释。
+          .gesture(
+            PanGesture(this.panOption)
+              .onActionStart((): void => {
+                Logger.info(PlayerExpandState.LOG_TAG,
+                  `RzdMorph dismiss pan start(topBar-wide) isClosing=${this.isClosing} ` +
+                  `morphUsable=${this.expandState.morphUsable} stage=${this.expandState.morphStage}`);
+              })
+              .onActionUpdate((event: GestureEvent): void => {
+                this.onDismissDrag(event.offsetY, false, event.velocityY);
+              })
+              .onActionEnd((event: GestureEvent): void => {
+                this.onDismissDrag(event.offsetY, true, event.velocityY);
+              })
+              .onActionCancel((event: GestureEvent): void => {
+                Logger.info(PlayerExpandState.LOG_TAG,
+                  `RzdMorph dismiss pan cancel(topBar-wide) offsetY=${event.offsetY.toFixed(1)}`);
+                this.onDismissDrag(event.offsetY, true, 0);
+              })
+          )
       }
     }
     .width(StyleConstants.FULL_WIDTH)
@@ -2126,15 +3518,19 @@ export struct PlaybackPage {
       //   {@link extractFlowLightColors} 需要一个现成的 PixelMap（免得为取色再下载一遍封面）。
       if (song.cover.length > 0 && this.isAlive) {
         try {
-          const coverPm: image.PixelMap | undefined =
-            await PlaybackPage.loadOnlineCoverPixelMap(song.cover);
-          if (coverPm !== undefined && this.isAlive && jobSeq === this.imageColorJobSeq) {
+          const pair: CoverDecodePair =
+            await PlaybackPage.loadOnlineCoverPair(song.cover);
+          if (pair.full !== undefined && this.isAlive && jobSeq === this.imageColorJobSeq) {
             // 流光取色：趁位图已经解码好顺手算一次，不用为它再下载一遍封面
-            await this.extractFlowLightColors(coverPm);
+            await this.extractFlowLightColors(pair.full);
           }
-          if (coverPm !== undefined) {
-            this.releasePixelMapQuiet(coverPm);
+          // ★★ 2026-10-15：网格背景的源（64×64）在同一次下载里出，交给背景层
+          if (pair.mesh !== undefined && this.isAlive && jobSeq === this.imageColorJobSeq) {
+            this.publishMeshSource(pair.mesh);
+          } else {
+            this.releasePixelMapQuiet(pair.mesh);
           }
+          this.releasePixelMapQuiet(pair.full);
         } catch (_err) {
           // 取色失败不影响播放：背景走实时模糊，不再需要这张预渲染图
         }
@@ -2163,9 +3559,29 @@ export struct PlaybackPage {
     }
 
     let pixelMap: image.PixelMap | undefined = undefined;
+    // ★★ 2026-10-15（照搬无界 `decodeCover`）：同一次解码**顺手再出一张 64×64**，
+    //   它才是网格背景的源（无界 `SRC_EDGE = 64`）。在 64×64 上做 `enhanceColors`
+    //   + `boxBlurRgba(9, 3)`，再被 `drawPixelMapMesh` **放大铺满整屏** ⇒
+    //   观感是"大色块流动"，与"全分辨率照片 + 高斯模糊"是两种东西。
+    let meshPm: image.PixelMap | undefined = undefined;
     const imageSource = image.createImageSource(mediaData.buffer as ArrayBuffer);
     try {
       pixelMap = await imageSource.createPixelMap();
+      // ★★ 2026-10-15：网格源**单独一个 try** —— 它失败**不能**把"取色"那条路一起 abort。
+      //   原来是跟主解码同一个 `try`，而那个 `catch` 会 `return`（并写默认底色）
+      //   ⇒ 64×64 那一步万一失败，连 `state.imageColor`（背景取样色）都会一起丢。
+      //   网格源拿不到只会退回"实时模糊底图"，是**可降级**的，不该拖垮取色。
+      try {
+        meshPm = await imageSource.createPixelMap({
+          desiredSize: { width: SRC_EDGE, height: SRC_EDGE },
+          desiredPixelFormat: image.PixelMapFormat.RGBA_8888,
+          editable: true
+        });
+      } catch (meshError) {
+        const me = meshError as BusinessError;
+        Logger.warn(PlaybackPage.logTag,
+          `mesh source decode failed, code=${me?.code}, message=${me?.message}`);
+      }
     } catch (error) {
       const err = error as BusinessError;
       Logger.error(PlaybackPage.logTag,
@@ -2234,11 +3650,62 @@ export struct PlaybackPage {
     //   ⚠️ 顺带解掉一个隐患：以前被释放的正是"正在当底图渲染的那张 PixelMap"
     //      （下次换歌/页面卸载时 `releaseBackgroundCoverIfPixelMap()` 会释放它），
     //      现在 `imageLabel` 恒为 Resource ⇒ **背景层不再持有任何会被释放的位图**。
+    // ★★ 2026-10-15：本地/内置封面的 64×64 网格源也交出去（背景层用），
+    //    它的生命周期改由 `meshSrc` 持有（换歌时释放上一张，见 `publishMeshSource`）。
+    this.publishMeshSource(meshPm);
     this.releasePixelMapQuiet(pixelMap);
   }
 
+  /**
+   * 把封面位图做成**网格背景的源**并交给背景层。
+   *
+   * 照搬无界的取图口径（`播放页背景-MeshGradient与MeshSource定稿.md` §0 / §4）：
+   * ```
+   * 64×64 RGBA_8888（可编辑）
+   *   → enhanceColors(u8)                              低对比 / 高饱和 / 偏暗（当背景不抢前景）
+   *   → boxBlurRgba(u8, 64, 64, 9, 3)                  盒式模糊，无 gamma
+   *   → 回写 PixelMap，交给 MeshCoverBg（网格放大铺满）
+   * ```
+   * ⚠️ `enhanceColors` 里的 `0.4` 与 `×5` 是**配套的一对**，别只改一个（会过曝或发灰）。
+   * ⚠️ 新旧交替顺序：**先释放上一张、再赋值并 `++meshSrcVersion`** ——
+   *    `MeshCoverBg` 的 `@Monitor` 监听的是**版本号**（`PixelMap` 原地改内容不会触发刷新）。
+   */
+  private publishMeshSource(pm: image.PixelMap | undefined): void {
+    if (pm === undefined) {
+      return;
+    }
+    try {
+      const bytes: number = pm.getPixelBytesNumber();
+      const buf: ArrayBuffer = new ArrayBuffer(bytes);
+      pm.readPixelsToBufferSync(buf);
+      const u8: Uint8Array = new Uint8Array(buf);
+      enhanceColors(u8);
+      boxBlurRgba(u8, SRC_EDGE, SRC_EDGE, PlaybackPage.MESH_BLUR_RADIUS, PlaybackPage.MESH_BLUR_PASSES);
+      pm.writeBufferToPixelsSync(buf);
+    } catch (err) {
+      const e = err as BusinessError;
+      Logger.warn(PlaybackPage.logTag, `mesh source build failed code=${e?.code}, message=${e?.message}`);
+      this.releasePixelMapQuiet(pm);
+      return;
+    }
+    const old: image.PixelMap | undefined = this.meshSrc;
+    this.meshSrc = pm;
+    this.meshSrcVersion = this.meshSrcVersion + 1;
+    if (old !== undefined && old !== pm) {
+      this.releasePixelMapQuiet(old);
+    }
+  }
+
   /** Downloads an online cover url and decodes it into a PixelMap (best-effort). */
-  private static async loadOnlineCoverPixelMap(url: string): Promise<image.PixelMap | undefined> {
+  /**
+   * 一次下载解出的两张位图：全尺寸（流光取色用）+ **64×64 网格源**（背景用）。
+   *
+   * ★ 2026-10-15（照搬无界的取图口径）：把 64×64 那一张放在**同一次解码**里出，
+   *   不必为背景再下载一遍封面。`desiredSize` + `editable` 是必须的 ——
+   *   网格源要在 64×64 上原地做 `enhanceColors` / `boxBlurRgba`（见 `publishMeshSource`）。
+   */
+  private static async loadOnlineCoverPair(url: string): Promise<CoverDecodePair> {
+    const out: CoverDecodePair = new CoverDecodePair();
     const req: http.HttpRequest = http.createHttp();
     try {
       const resp: http.HttpResponse = await req.request(url, {
@@ -2247,16 +3714,25 @@ export struct PlaybackPage {
         readTimeout: 15000
       });
       if (resp.responseCode !== 200 || resp.result === undefined) {
-        return undefined;
+        return out;
       }
       const src: image.ImageSource = image.createImageSource(resp.result as ArrayBuffer);
       try {
-        return await src.createPixelMap();
+        out.full = await src.createPixelMap();
+        out.mesh = await src.createPixelMap({
+          desiredSize: { width: SRC_EDGE, height: SRC_EDGE },
+          desiredPixelFormat: image.PixelMapFormat.RGBA_8888,
+          editable: true
+        });
+      } catch (err) {
+        const e = err as BusinessError;
+        Logger.warn(PlaybackPage.logTag, `online cover decode failed, code=${e?.code}, message=${e?.message}`);
       } finally {
         src.release();
       }
+      return out;
     } catch (_err) {
-      return undefined;
+      return out;
     } finally {
       req.destroy();
     }
@@ -2297,55 +3773,125 @@ export struct PlaybackPage {
     //   封面由续飞封面单独续飞，**p = 1 才落位**（2026-10-15 起那一棒画在**壳层浮层**
     //   `Index.MorphCoverClone()` 里；PC 壳层仍在本页的 `MorphCoverBridge`）。
     Stack({ alignContent: Alignment.TopStart }) {
+      // ★★★ 2026-10-16（照搬无界）：**背景整层搬到形变容器之外**。
+      //   无界的 `MeshCoverBg` 在 `playerPane` **之外**（与它同级）⇒ 它不参与播放页的
+      //   `scale / clip` ⇒ 观感是「**内容飞上来、背景不动**」。
+      //   我们原来把它放在形变容器**内部** ⇒ 跟着被等比压到约 34% 再放大，
+      //   用户实测就是「**像压缩的背景铺开**」。
+      //   ⚠️ 搬出来后它**不再被裁剪窗口裁**（整屏可见），所以形变期的可见范围靠
+      //     `backgroundRevealOpacity()`（= 无界 `pullBgIn`，0→0.30 淡入）管 —— 与无界同口径。
+      //   ⚠️ 兜底层去掉了 `borderRadius(this.expandState.morphRadius)`：整屏层不需要圆角。
+      // ★★★ 2026-10-16（修用户实测「**关闭播放器只有内容会弹，背景还是不会弹**」）：
+      //   把背景整层套进一个**与内容同一条挤压**的容器里。
+      //
+      // ## 原来为什么不弹
+      //
+      // 关播放器时那一记"弹"是 `morphSquashY`（竖向压扁）驱动的，它挂在**路由壳**
+      //   （`PlaybackPageRoute.ets` 的 `.scale({y: morphSquashY})`）与迷你条上。
+      //   而上一批我把背景**搬出了形变容器**、挂到本页根 `Stack` —— 根 `Stack` **不在路由壳那个
+      //   scale 的作用域里**（路由壳的 scale 只压它自己那棵子树里的东西）⇒ 内容弹、背景纹丝不动。
+      //
+      // ## 现在怎么弹（且形状正确）
+      //
+      // 外面套一层容器，给它 `.height(H × k)` + `.offset({y: −H(1−k)/2})` + `.scale({y: k})`，
+      // 使它的**视觉矩形恒等于 `0 … H·k²`**、且**绕窗口中心**压扁：
+      // ```
+      //   布局矩形 y ∈ [−H(1−k)/2 , −H(1−k)/2 + Hk]
+      //   （`.offset` 只挪绘制盒，`Alignment.TopStart` 下未偏移时应为 [0, Hk]
+      //     ⇒ 减去 H(1−k)/2 得到上面这个区间）
+      //   布局中心 y_c = (−H(1−k)/2 + (−H(1−k)/2 + Hk))/2 = H(2k−1)/2 = Hk − H/2
+      //   `.scale` 绕**自身中心**缩放 ⇒ 中心不动、高度 ×k
+      //   视觉高度 = Hk² 、视觉中心 = Hk − H/2
+      //   ⇒ 视觉 top = (Hk − H/2) − Hk²/2 = H(2k − 1 − k²)/2 = −H(1−k)²/2
+      //   ⇒ 视觉 bottom = 视觉 top + Hk² = H(2k − 1 + k²)/2 = H(1+k)²/2 − H
+      // ```
+      // **两端都严格正确**：`k = 1` ⇒ `[0, H]`（= 整屏，逐像素等价）；
+      // `k = SQUASH_Y` ⇒ 视觉矩形恰好是"绕窗口中心把满屏压到 k"的结果：
+      //   `(H − Hk)/2 = H(1−k)/2`…… 代入 `k` 化简得 `视觉 top = H(1−k)²/2`，
+      //   而"绕中心压到 k"的 top 是 `H(1−k)/2` ⇒ 两者在 `k = 1` 与 `k → 0` 处一致、
+      //   中间态最多差 `H(1−k)(k)/2`。
+      //   ⚠️ **这是本次唯一一处"近似"**，如实登记：静止态（`k = 1`）**逐像素不变**是红线，
+      //     形变中间态那几 vp 的偏差要上机看 —— 若真机上"压缩时背景上下露边"，
+      //     就把 `.scale` 换成 `.scale({centerY: '50%'})` 之外的另一条路（用两层裁剪补偿），
+      //     那时再改，**不要现在凭猜加常数**。
+      // ★★★ 2026-10-16（**照搬无界的层级**：背景回到形变容器**内部**）
+      //
+      // ## 我之前错在哪（连错三轮，用户四次实测打回）
+      //
+      // 我一直以为无界的 `MeshCoverBg` 在 `playerPane` **之外**，于是把它搬到本页根 `Stack`
+      // ⇒ 它**从第一帧就整屏**、而且**裁不到**。用户实测「**播放器展开还是背景全屏**」。
+      //
+      // 本轮把无界的**容器树**一路读通了（`wujie.pa`）：
+      // ```
+      //   @36**#  (190941)  observeComponentCreation2(Stack, @36***#)   ← 根 Stack
+      //   @36***# (191388)  Stack(TopStart)
+      //                       .scale({x: expand.scaleValue, y: …})      191400-191415
+      //                       .translate({x: expand.translateX, …})     191416-191431
+      //                       .width(expand.clipWidth)                  191432-191441
+      //                       .height(expand.clipHeight)                191442-191451
+      //                       .borderRadius(expand.radius)              191452-191461
+      //                       .clip(true)                               191462-191469
+      //                       .id(PLAYER_ROOT_ID)                       191470-191478
+      //                     ├─ If (191716 @36***#^4 → @36***^4*#/^1)
+      //                     │    └─ Column (191756 @36***#^5)
+      //                     │         ├─ If (191972 @36***#^7 → @36***^7*#)  = **playerPane**（Row）
+      //                     │         └─ If → **MeshCoverBg**              192105 / 192191
+      //                     └─ …
+      // ```
+      // ⇒ **`MeshCoverBg` 在 `PLAYER_ROOT_ID` 那个 Stack 的里面**
+      //   ⇒ 它**跟着容器一起 scale、一起被 clip**。
+      //   这就是"展开时背景不会整屏、而是从小窗口里长出来"的机制。
+      //
+      // ⚠️ 我上一版那句"无界的 MeshCoverBg 在 playerPane 之外（与它同级）"**是错的**，
+      //   来源是只看了片段、没把 `PLAYER_ROOT_ID` 那个 Stack 的**闭合范围**读出来。
+      //   （`RzdMusic记忆.md` §56.50 里也是这么写的 —— 一并作废。）
+      //
+      // ## 搬回去之后同时解决的两件事
+      //
+      // 1. **展开不再"背景全屏"**：形变期容器只有迷你条那么大 ⇒ 背景也只在那一小块里，
+      //    随容器长大而铺开（这才是"飞上来"的观感）；
+      // 2. **关闭时背景跟着一起压**：容器本来就在路由壳那条 `morphSquashY` 的作用域里
+      //    （`PlaybackPageRoute.ets` 的 `.scale({y})` 压整个播放页）⇒ **不再需要我上一版
+      //    加的那个 `.scale + height + offset` 补偿容器**（已删除，见 `squashWrapHVp` 的删除记录）。
       Column() {
         Stack() {
           // ★ 背景 = **半透明 → 不透明**：底色与取色层一起走反编译的
           //   `pullBgIn = clamp(effT / 0.30)`（0 → 0.30 淡入）。
-          //   用户要求"整个效果就是半透明过渡到不透明"——所以底色**不能恒为不透明**，
-          //   两层一起淡；起点透出来的正是下面那条迷你条（克隆层也画着它）。
+          // ⚠️ 上面那两句（"底色与取色层一起走 `pullBgIn`"）★ **已作废**：
+          //   自 2026-10-15 起，那两层**整屏纯色层已经整层删除**（下面就是删除后的现场）。
           //
-          // ⚠️ 但**底色（近黑 #1c1c1e）那一层必须比 `pullBgIn` 更晚到位**
-          //   （见 `backgroundRevealOpacity()`）：形变中裁剪窗口是一小块"可视矩形"，
-          //   `pullBgIn` 到 0.30 就满不透明时，窗口里从第 30% 起就是**一整块黑**
-          //   —— 用户实测的「展开中背景是黑色的」就是这个。首页底色本身是浅色
-          //   （`home_page_background` 亮色 #F1F3F5），所以那块黑只能是这里画出来的。
-          Column()
-            .width('100%')
-            .height('100%')
-            .backgroundColor('#1c1c1e')
-            .opacity(this.backgroundRevealOpacity())
-            // 圆角由每个"铺满"的图层自己带一份：容器自身没有背景色时，
-            // `.clip(true)` 不会把圆角作用到子节点上（"第二段圆角突然消失"就是这个）
-            .borderRadius(this.expandState.morphRadius)
-
-          // ★ 「颜色逐渐变成背景」那一层：`state.imageColor`（从封面取样）按
-          //   `backgroundRevealOpacity()` 淡入 —— 底色之上再加这层取样色，
-          //   才是播放页静止态真正的背景。
-          Column()
-            .width('100%')
-            .height('100%')
-            .backgroundColor(this.state.imageColor)
-            .borderRadius(this.expandState.morphRadius)
-            .opacity(this.backgroundRevealOpacity())
-
-          // 背景与控件分离：全程同一张封面底图，任意宽高铺满，不在落位帧才换彩色。
+          // ★★ 2026-10-15（照搬无界）：**无界没有纯色垫底，网格本身就是底**。
+          //   依据 `_recover/logic-src/无界vs派音-差异分析.md` L303-304：
+          //     ① 「`Column().backgroundColor('#1c1c1e').opacity(...)` 近黑垫底层」→ 无界侧 **无**；
+          //     ② 「`Column().backgroundColor(state.imageColor)` 封面取样色层」→ **没有对应物**。
+          //   两层都是派音旧路；它们叠在网格之下，只会让"展开开始那一刻"多出一块灰暗罩子
+          //   （见 `backgroundRevealOpacity()` 的注释）。
           //
-          // ★★ 2026-10-15：**实时模糊**（用户要求"播放页背景改为实时模糊"）。
-          //   底图 = {@link originalCoverSource()}（**原始封面，不做 effectKit 预渲染模糊**）；
-          //   糊度 = 组件级 `.blur()`（`CommonMethod.blur`，官方《图像效果》实时模糊接口）。
-          //   ⚠️ 旧写法是"`effectKit` 先把封面糊成 PixelMap 当底图 + 这里按源类型二选一
-          //      （PixelMap 源 `blur(0)` / 其它源 `blur(140)`）"—— 那条分叉已整体删除：
-          //      **两个源现在都走同一条实时模糊**，不再有"预渲染过的就不糊"这种行为。
-          //   ⚠️ 半径与依据见 {@link backdropBlurRadiusVp} / {@link LIVE_BACKDROP_BLUR_VP}。
-          //   ⚠️ 绘制顺序 / 圆角 / 透明度（`0.55 * backgroundRevealOpacity()`）**一字未改**。
-          Image(this.originalCoverSource())
-            .width('100%')
-            .height('100%')
-            .objectFit(ImageFit.Cover)
-            .blur(this.backdropBlurRadiusVp())
-            .opacity(0.55 * this.backgroundRevealOpacity())
-            .hitTestBehavior(HitTestMode.None)
+          //   ★ 那层"静止态不透明底"现在搬到了**路由壳**上（这是无界的位置：
+          //     `wujie.pa:190867-190884` 的 `.backgroundColor(pullMode && effT()>=1 ?
+          //     PULL_REST_BG : expand.overlayColor)`），落点见
+          //     `PlaybackPageRoute.ets` 的 `PlaybackPageRouteShell`：
+          //       · 形变期透明 ⇒ 窗口外透出首页与迷你条（形变的前提）；
+          //       · 静止态不透明 ⇒ 播放页自己的底，顺带盖住状态栏与底部那两条
+          //         （用户实测「内容没延伸进状态栏」「底部一条空白漏出后面内容」）。
+          //     ⇒ 所以**页面内不再需要**任何整屏纯色层，删掉它不会出现"背景空一块"。
+          //
+          //   ⚠️ 下面网格那层的 `backgroundRevealOpacity()` **保留**：它就是无界的 `pullBgIn`
+          //      （起点 0、跟着形变进度到 1），静止态恒为 1。
 
+          // ⚠️ 紧随其后的那段"实时模糊底图"说法★ **也已作废**：那张 `Image(封面).blur(11)`
+          //   已整层删除 —— 它原先只作"网格源缺席时的兜底"，而兜底现在改成了**纯取样色**
+          //   （见下面 `else` 分支）。删它的原因：它等于**在网格之外又画了一张封面**，
+          //   换来用户实测的「那个两张封面只会在动画过程中出现」。
+          //   ⇒ `backdropBlurRadiusVp()` / `LIVE_BACKDROP_BLUR_VP` / `originalCoverSource()`
+          //     现在**已无调用者**（留在文件里是为了不牵动 `isPixelMapCover` 那条类型分支；
+          //     它们的整体清理归入"删派音遗留"那一块，见 `RzdMusic记忆.md` §56.6）。
+          // ★★ 2026-10-15（照搬无界）：背景底座换成 **网格形变背景**（`MeshCoverBg`）。
+          //   规格：`_recover/logic-src/播放页背景-MeshGradient与MeshSource定稿.md`
+          //   （`MESH_SUB=4`、`SRC_EDGE=64`、`boxBlur(9,3)`、`displaySync` 20fps、闸门 = `playing && active`）。
+          //   它自带**径向暗角**（`scrim` 默认 true），所以下面那层独立的 `radialGradient`
+          //   在网格生效时必须关掉，否则会叠两份暗角。
+          //   ⚠️ 网格源还没建好（换歌那一瞬）时**退回实时模糊那张图**，不会出现"背景空一块"。
           // 流光背景（设置项开关）：必须在内容层之前绘制，否则会盖住封面和歌词
           if (this.flowLightState.enabled) {
             this.FlowLightBackground()
@@ -2381,16 +3927,20 @@ export struct PlaybackPage {
           //      `morphContainerActive()` 判据）—— 否则形变中那个被 scale+clip 的小窗口里
           //      会多一层压暗，与"半透明 → 不透明"那条既有口径打架。
           //      观感是否要改成恒开，**只能上机看**（见本轮报告的"只能上机确认"清单）。
-          Column()
-            .width(StyleConstants.FULL_WIDTH)
-            .height(StyleConstants.FULL_HEIGHT)
-            .radialGradient({
-              center: ['50%', '50%'],
-              radius: '70%',
-              colors: [[0x26000000, 0.0], [0x26000000, 0.45], [0x66000000, 1.0]]
-            })
-            .opacity(this.expandState.morphContainerActive() ? 0 : 1)
-            .hitTestBehavior(HitTestMode.None)
+          // ★ 网格背景自带暗角 ⇒ 只有**退回模糊底图**那条路才需要这一层
+          //   （否则会叠两份暗角，中心被压两遍）。
+          if (this.meshSrc === undefined) {
+            Column()
+              .width(StyleConstants.FULL_WIDTH)
+              .height(StyleConstants.FULL_HEIGHT)
+              .radialGradient({
+                center: ['50%', '50%'],
+                radius: '70%',
+                colors: [[0x26000000, 0.0], [0x26000000, 0.45], [0x66000000, 1.0]]
+              })
+              .opacity(this.expandState.morphContainerActive() ? 0 : 1)
+              .hitTestBehavior(HitTestMode.None)
+          }
 
           // 封面续飞浮层：夹在背景与内容之间，切页那 0.36 秒里顶替两张静态封面
           // No cover overlay: the lyric page has no matching image destination.
@@ -2424,6 +3974,81 @@ export struct PlaybackPage {
           if (this.expandState.morphBridging() && !this.expandState.hostsMorphOverlay()) {
             this.MorphCoverBridge()
           }
+
+          // ★★★ 2026-10-16（**照搬无界的层级**：背景在形变容器**内部**）
+          //
+          // ## 我之前错在哪（连错三轮，用户四次实测打回「播放器展开还是背景全屏」）
+          //
+          // 我一直以为无界的 `MeshCoverBg` 在 `playerPane` **之外**，于是把它搬到本页根
+          // `Stack` ⇒ 它**从第一帧就整屏**、而且**裁不到**。
+          //
+          // 本轮把无界的**容器树**一路读通了（`wujie.pa`）：
+          // ```
+          //   @36**#  (190941)  observeComponentCreation2(Stack, @36***#)   ← 根 Stack
+          //   @36***# (191388)  Stack(TopStart)
+          //                       .scale({x: expand.scaleValue, y: …})      191400-191415
+          //                       .translate({x: expand.translateX, …})     191416-191431
+          //                       .width(expand.clipWidth)                  191432-191441
+          //                       .height(expand.clipHeight)                191442-191451
+          //                       .borderRadius(expand.radius)              191452-191461
+          //                       .clip(true)                               191462-191469
+          //                       .id(PLAYER_ROOT_ID)                       191470-191478
+          //                     ├─ If (191716 @36***#^4)
+          //                     │    └─ Column (191756 @36***#^5)  ← 满窗宽 + winHVp + padTop/padBottom
+          //                     │         ├─ If (191972 @36***#^7 → @36***^7*#) = **playerPane**（Row）
+          //                     │         └─ If → **MeshCoverBg**             192105 / 192191
+          //                     └─ …
+          // ```
+          // ⇒ **`MeshCoverBg` 在 `PLAYER_ROOT_ID` 那个 Stack 的里面** ⇒ 它**跟着容器一起
+          //   `scale`、一起被 `clip`**。这才是"展开时背景不会整屏、而是从小窗口里长出来"的机制。
+          //
+          // ⚠️ 我此前那句"无界的 `MeshCoverBg` 在 `playerPane` 之外（与它同级）"**是错的** ——
+          //   来源是只看了片段、没把 `PLAYER_ROOT_ID` 那个 Stack 的**闭合范围**读出来。
+          //   （历史注释里凡这么写的一并作废。）
+          //
+          // ## 放在容器里同时解决两件事
+          //
+          // 1. **展开不再"背景全屏"**：形变期容器只有迷你条那么大 ⇒ 背景也只在那一小块里，
+          //    随容器长大而铺开；
+          // 2. **关闭时背景跟着一起压**：容器本来就在路由壳那条 `morphSquashY` 的作用域里
+          //    ⇒ 不再需要我上一版加的 `.scale + height + offset` 补偿容器（已删）。
+          //
+          // ⚠️ 位置：容器 `Column` 的**第一个孩子**（背景在下、内容在上），
+          //   `.position({x:0,y:0})` 覆盖整个容器 ⇒ 不参与纵向排布（否则会把内容挤下去）。
+          Column() {
+            if (this.meshSrc !== undefined) {
+              MeshCoverBg({
+                src: this.meshSrc,
+                srcVersion: this.meshSrcVersion,
+                playing: this.state.isPlay,
+                active: this.state.isShowPlay,
+                // ★ 照搬无界：`entryFade = !pullMode || effT() >= 1` —— 形变进入时不淡入
+                //   （那一刻整层的不透明度已由 `backgroundRevealOpacity()` 管着）。
+                entryFade: !this.expandState.morphContainerActive()
+              })
+                .id(PlaybackPage.MESH_BG_ID)
+                .width(StyleConstants.FULL_WIDTH)
+                .height(StyleConstants.FULL_HEIGHT)
+                .opacity(this.backgroundRevealOpacity())
+                .hitTestBehavior(HitTestMode.None)
+                .onAreaChange((): void => {
+                  this.logBgLayer();
+                })
+            } else {
+              // 网格源缺席（换歌那一瞬 / 取图失败）时的兜底：**纯取样色**，不再退成一张封面图
+              //（否则会出现"同一张封面在屏上两次"，见历史记录）。
+              Column()
+                .width(StyleConstants.FULL_WIDTH)
+                .height(StyleConstants.FULL_HEIGHT)
+                .backgroundColor(this.state.imageColor)
+                .opacity(this.backgroundRevealOpacity())
+                .hitTestBehavior(HitTestMode.None)
+            }
+          }
+          .width(StyleConstants.FULL_WIDTH)
+          .height(StyleConstants.FULL_HEIGHT)
+          .position({ x: 0, y: 0 })
+          .hitTestBehavior(HitTestMode.None)
 
           // ★ 内容层：尺寸恒为 100%（= 裁剪窗口 = 可视矩形 / 缩放），所以永远填满可视矩形
           Column() {        Column() {
@@ -2465,28 +4090,129 @@ export struct PlaybackPage {
             // 控制区：进来先唤出，3 秒没动自动收起
             this.chromeCollapsed = false;
             this.touchChrome();
+            // ★ 2026-10-15 诊断：落位之后再量一次四个块的窗口矩形（见 `logLayoutBoxes()`）。
+            //   480ms 取"展开补间（最长 560ms 的浮层那条 + 20ms 收尾）基本走完"的量级；
+            //   排查关键字 `RzdBoxes`。⚠️ 只读，不影响任何状态。
+            setTimeout((): void => {
+              if (this.isAlive) {
+                this.logLayoutBoxes();
+                // ★ 目标 ④ 的 S1 步自证（排查关键字 `RzdSizeTier`）：
+                //   核对 `sizeScaleOf` / `topPageSideOf` 在**手机档**上是否恰好等于我们
+                //   已经在用的固定值（`sizeK = 1` / `side = 16`）—— 期望 `fixedOk=true`。
+                this.expandState.logSizeTier(this.breakpointEnv.widthBreakpoint);
+                // ★ 目标 ④ 的 S2 步自证（排查关键字 `RzdWideCols`）：
+                //   把宽屏 / 面板两档的**占比与两栏宽度**打出来（手机上它们不参与布局，
+                //   只是把数算出来备查）。间距（gutter/space）**不在其中** —— 见 S2 的注释。
+                this.expandState.logWideColumns(this.breakpointEnv.widthBreakpoint, this.usePanelLayout(),
+                  this.getUIContext());
+              }
+            }, 480);
             // ⚠️ 上拉打开时进度已经在拖动中走了一部分，这里不能重置；
             //    点击/起播意图打开时进度是 0（见 aboutToAppear）。
             this.collapseProgress = 0;
-            // ★ 第一帧已经按"起点"渲染过了（见 aboutToAppear），这里再补间回完整态
-            this.playExpandIntro();
+            // ★★ 2026-10-15（照搬无界）：**形变会话归壳层时，本页不起任何展开补间**。
+            //   无界那边播放页自己不播展开 —— 它只是被壳层的 `ExpandAnimation`
+            //   按 `scale/translate/clip` 推着变，补间在壳层（`settlePullOpen`）。
+            //   本页此刻只做一件事：**把绘制门打开**（几何已经是壳层压好的起点）。
+            //   ⚠️ 这里**不许**再无条件调 `playExpandIntro()`：它会走 `tryStartMorphIntro()`，
+            //      而那条路要"量到终点锚点"才肯起补间、量不到就退化成
+            //      `playLegacyExpandIntro()`（贴底一条长上来 = 派音旧动画）
+            //      ⇒ 同一个入口有时是新动画、有时是旧动画，正是「新旧打架」的形状。
+            //
+            // ★★★ 2026-10-16（**点击打开没有封面/背景动画的真根因**）：
+            //   判据原来只有 `morphContainerActive()`，**点击路径在挂载那一刻它还是假**：
+            //   ```
+            //     点击：壳层 beginOpenMorphOnClick → pullOpenBegin
+            //            → prepareMorphEntry 发现"播放页还没挂载、封面量不到"
+            //            → 走 !ready 分支：morphStage = ENTERING、morphDrive = FINGER
+            //            → 但（同上）**morphUsable = false、morphP = 0** ⇒ morphContainerActive() 为假
+            //            → pushPlayerRoute → 本页 onAppear ⇒ 掉进 else 分支 ⇒ **播派音旧动画**！
+            //     上拉：壳层 onPullOpenStart → pullOpenBegin，**在页面挂载之前**就
+            //            morphBeginEntering()（那时迷你条量得到）⇒ 挂载时 stage = ENTERING ⇒ 走对分支
+            //   ```
+            //   ⇒ 补一条判据：**壳层已经为这一轮起过形变会话**（`morphSessionStarted`
+            //     由 `prepareMorphEntry` 第一步置位，三条入口都会经过它）。
+            //     它成立 ⇒ 这一页的第一帧就该"不画"（等壳层把几何压到起点），
+            //     而不是自己开始播那套 `collapseProgress` 旧动画。
+            if (this.expandState.morphContainerActive() || this.expandState.morphSessionStarted) {
+              this.introPaintReady = true;
+              this.expandIntroRunning = false;
+              // ★★ 2026-10-16（点击路径的**几何补量**）：
+              //   点击打开时 `pullOpenBegin` 是在"播放页还没挂载"那一刻跑的 ⇒ 它很可能
+              //   拿不到终点锚点（播放页封面节点还不存在）⇒ `morphUsable = false`。
+              //   壳层那边有 12×32ms 的补量窗口（`schedulePullAnchorRemeasure`），
+              //   但那是**壳层**的节奏；本页挂载那一刻是"封面节点**刚刚存在**"的**最早**时机，
+              //   在这里补量一次，比等壳层下一拍（最多 32ms 之后）更准。
+              //   ⚠️ 三步走，缺一步就会"补量成功但相位还停在旧态"：
+              //     ① `prepareMorphEntry` —— 量几何 + `morphInitParams` + 压到起点；
+              //     ② `morphBeginEntering` 已经由它内部调过（ready 时）；
+              //     ③ 补量成功后**必须**把浮层那一棒的补间也起起来（否则封面仍然不飞）。
+              setTimeout((): void => {
+                if (!this.isAlive || this.isClosing) {
+                  return;
+                }
+                this.diagRemeasureTries = this.diagRemeasureTries + 1;
+                if (this.expandState.morphUsable) {
+                  return;
+                }
+                UIUtils.applySync((): void => {
+                  this.expandState.prepareMorphEntry(this.getUIContext(), true);
+                });
+                if (this.expandState.morphUsable) {
+                  this.diagOverlayKicks = this.diagOverlayKicks + 1;
+                  this.expandState.focusMorphOverlayForPageIntro(this.getUIContext());
+                  Logger.info(PlaybackPage.logTag,
+                    `RzdMorphOnAppear remeasured usable=${this.expandState.morphUsable} ` +
+                    `stage=${this.expandState.morphStage} drive=${this.expandState.morphDrive} ` +
+                    `overlayP=${this.expandState.morphOverlayProgress().toFixed(3)}`);
+                }
+              }, 0);
+            } else {
+              // 兜底：形变没起来（几何没量齐的退化路径）仍旧走老那套，别让页面打不开。
+              this.playExpandIntro();
+            }
           })
           .onDisAppear(() => {
             this.isAlive = false;
             this.state.isShowPlay = false;
             // 下一次打开重新走"先量再缩"的顺序：把绘制门也关回去
             this.introPaintReady = false;
-            // ★ 页面卸载时**无条件**复位"跟手会话"的两个标记。
+            // ★ 页面卸载时复位"跟手会话"的两个标记。
             //   `pullDragging` / `morphDrive` 决定点击打开时要不要做形变初始化；
             //   只要有一轮手势没走到收尾（被系统抢走、中途卸载、硬关闭…）它就会残留，
             //   残留成 (true, FINGER) 时点击打开会**永远跳过形变**，
             //   退化成 `collapseProgress` 那套老动画（用户实测："点击/返回用的还是之前的动画"）。
             this.expandState.pullDragging = false;
             this.expandState.morphDrive = MorphDrive.NONE;
-            this.expandState.morphReset();
+            // ★★★ 2026-10-16（**"点击打开没有动画"的源头就在这里**）：
+            //   下面那句原来是**无条件**的 `morphReset()`。而 `morphReset()` 会
+            //   **`morphGen++` 且 `morphUsable = false` 且 `morphSessionStarted = false`**。
+            //   问题在于：**点击打开时，"新播放页的 `onAppear`"与"旧页面实例的 `onDisappear`"
+            //   几乎同帧发生** ⇒ 这一句会把**刚刚由壳层建立好的新一轮形变会话**一起清掉
+            //   ⇒ `morphUsable` 永远为假 ⇒ 容器停在恒等 ⇒ **背景整屏、没有动画**。
+            //
+            //   ⇒ 加一道门：**推迟一拍再清，并且"若那一拍已经有活着的会话就跳过"**。
+            //     判据用 `morphUsable`（几何已就绪）——
+            //     · 新一轮会话已经量齐 ⇒ 屏上是**下一次打开**的形变，绝不能清；
+            //     · 没有活着的会话（几何没就绪）⇒ 按原样清掉残留（保留下面的自愈目的）。
+            //     ⚠️ 推迟一拍不改变"残留清理"的语义：残留标记本来就不会在一帧内造成危害，
+            //       而 `pullDragging` / `morphDrive` 那两句**保持同步执行**（它们才是自愈的关键）。
+            setTimeout((): void => {
+              if (this.expandState.morphUsable) {
+                Logger.info(PlaybackPage.logTag,
+                  'RzdMorphOnDisappear keep session (usable=true, a live session owns it)');
+                return;
+              }
+              Logger.info(PlaybackPage.logTag, 'RzdMorphOnDisappear reset (no live session)');
+              this.expandState.morphReset();
+            }, 0);
             this.stopChromeAutoHide();
             this.imageColorJobSeq++;
             this.releaseBackgroundCoverIfPixelMap();
+            // ★ 2026-10-15：网格背景的源位图也归本页持有 ⇒ 退场必须一起释放
+            //   （否则每次进出播放页都会漏一张 64×64 的 PixelMap）。
+            this.releasePixelMapQuiet(this.meshSrc);
+            this.meshSrc = undefined;
             this.imageLabel = $r('app.media.ic_avatar1');
             // 页面退场停掉着色器动画：整屏流光是持续的 GPU 开销，后台不该白耗电
             try {
@@ -2506,7 +4232,9 @@ export struct PlaybackPage {
           //   同时它在这个被 `scale/translate/clip` 变换过的容器里 ⇒ 收起时跟着一起缩。
           //   ⚠️ 只在**手机 Swiper 分支**画：宽屏 / 面板布局没有"歌词页"这一说，
           //     多画一层会在封面右侧凭空多出一张小封面。
-          //   门在 `LyricFloatLayer()` 内部的 `lyricFloatActive()`：静止在封面页时**零节点**。
+          //   ⚠️ 2026-10-15（第 2 块·覆盖层统一）：原来这里写的是"门在 `LyricFloatLayer()` 内部的
+          //      `lyricFloatActive()`：静止在封面页时**零节点**" —— **那句已作废**：
+          //      覆盖层现在是**常驻**的（封面/歌名只有它一个渲染者），门已删除。
           if (this.usesPhoneSwiperLayout()) {
             this.LyricFloatLayer()
           }
@@ -2521,10 +4249,36 @@ export struct PlaybackPage {
       // 而且它的形状对齐语义在无设备时没法验证）
       .clip(this.expandState.morphClipping())
       // 整页缩放 + 位移：静止态 scale=1 / translate=0，与没有这套动画时逐像素一致
-      .scale({ x: this.expandState.morphScale, y: this.expandState.morphScale, z: 1 })
+      //
+      // ★★★ 2026-10-16（照搬无界的**显式锚点**）：
+      //   无界那个容器（`wujie.pa:191400-191415`）写的是
+      //     `.scale({ x: expand.scaleValue, y: expand.scaleValue })`
+      //   而它的 `initTranslateX/Y` 是**按"绕中心缩放"反解出来**的
+      //   （`initParams` 51524-51575：`(窗宽−boxW)/2 − left` / `(h − h·s)/2 − top`）——
+      //   也就是说**"绕中心"是它的前提**，只是靠默认值兑现。
+      //   我们这一侧所有几何（`initTranslateX/Y`、`coverHostW/H`、逆变换推导）用的也是
+      //   同一个前提，所以这里**把它显式写出来**：语义等价，但把假设钉死 ——
+      //   万一将来 ArkUI 改了默认锚点，这一行能挡住"整套几何一起错位"。
+      //   ⚠️ **只有 `centerX/centerY` 是"相对自身的百分比"**（50% = 节点自己的中心），
+      //     所以在任何尺寸下都等价于"绕自身中心"。
+      .scale({
+        x: this.expandState.morphScale,
+        y: this.expandState.morphScale,
+        z: 1,
+        centerX: '50%',
+        centerY: '50%'
+      })
       .translate({ x: this.expandState.morphTx, y: this.expandState.morphTy })
       .borderRadius(this.expandState.morphRadius)
       .opacity(this.morphOpacityValue())
+
+      // ★★★ 2026-10-16：**现场自证**（连点顶部 3 次开关，见 `onDiagHotspotTap()` 的注释）。
+      //   放在形变容器**之外**（不被缩放/裁剪），所以它显示的数字与读数同口径。
+      //   ⚠️ 徽标关着时 `diagText` 为空 ⇒ 热区是**完全透明**的一条、徽标零渲染。
+      this.DiagHotspot()
+      if (this.diagBadgeOn) {
+        this.DiagBadge()
+      }
 
       // 跨脚本换源醒目提示横幅（悬浮在最上面）
       if (this.switchBanner.text.length > 0) {
@@ -2542,6 +4296,22 @@ export struct PlaybackPage {
     //   所以在歌词上滚不会误触发收起（ArkUI 的手势冒泡顺序：子节点优先）。
     .gesture(
       PanGesture(this.panOption)
+        // ★★ 2026-10-15（用户实测「没法下拉关闭播放器」的排障锚点）：
+        //   无界那份手势是带 `onActionStart → dragBackStart()` 的
+        //   （`_recover/logic-src/开关播放器-手势路径定稿.md` §1.3：`Down / distance:8` +
+        //   四个回调 start/update/end/cancel 齐全）。我们原来只有 update/end
+        //   ⇒ 一旦"下拉没反应"，**分不清是手势没到这、还是到了但被门挡掉**。
+        //   现在把它打出来（`hdc shell hilog -x | Select-String 'RzdMorph dismiss pan start'`）：
+        //     · 下拉时**打得出来** ⇒ 手势路由正常，问题在门/阈值
+        //       （接着看 `RzdMorph dismiss blocked` 与 `RzdMorph dismiss commit`）；
+        //     · **打不出来** ⇒ 竖直拖动没落到本节点上（被上层或子层吃掉）⇒ 要改挂载点，
+        //       无界的做法是挂在**顶栏那一条 Row**（非滚动、必定收到）而不是整页。
+        .onActionStart((): void => {
+          Logger.info(PlayerExpandState.LOG_TAG,
+            `RzdMorph dismiss pan start isClosing=${this.isClosing} ` +
+            `morphUsable=${this.expandState.morphUsable} stage=${this.expandState.morphStage} ` +
+            `drive=${this.expandState.morphDrive}`);
+        })
         .onActionUpdate((event: GestureEvent): void => {
           // 跟手期间也给 velocityY：拖动中它不影响判定（判定只在松手那一帧用），
           // 传进去是为了日志里能同时看到"位移 + 速度"的完整曲线。
@@ -2552,7 +4322,57 @@ export struct PlaybackPage {
           //   `gesture.d.ts` @since 10，本机 SDK 已核对存在）。符号不由我们假设，见 `onDismissDrag`。
           this.onDismissDrag(event.offsetY, true, event.velocityY);
         })
+        // ★★ 2026-10-15（对齐无界"四回调"）：**这一支以前是缺的**。
+        //   壳层那三条同类手势**都有**它 —— `products/default/…/Index.ets` L1786（`onPullOpenCancel()`）、
+        //   `MiniBarPlayer.ets` L166、`HomeMiniBarPlayer.ets` L235 ⇒ 又是
+        //   "**同一形状有 N 处、只改了一处**"（§56.1.6 那条教训的第二次现形）。
+        //
+        //   缺它的后果与上一轮修的 `isClosing` 残留**同一类**：手势被中途打断时
+        //   （系统手势 / 来电横幅 / 父级抢手势 / 页面被切走）`onActionEnd` **永不触发** ⇒
+        //     · `dismissMorphActive` 残留 `true`：下次下拉时 `!ended` 分支会**跳过
+        //       `morphBeginLeaving()`**（它只在 `!dismissMorphActive` 时才起手）⇒ 几何不刷新、跟手错乱；
+        //     · 相位残留 `LEAVING` ⇒ `morphContainerActive()` 恒真 ⇒
+        //       `beginOpenMorphOnClick()` 的守卫把"点击打开"判成"**已经在会话里**"而直接 return false
+        //       ⇒ **点击打开又退化成派音旧动画**（正是用户实测的那条症状，而且很难复现成"稳定坏"）。
+        //
+        //   无界的写法就是**把取消当成松手**：`onActionCancel → dragBackEnd(0)`
+        //   （`_recover/logic-src/开关播放器-手势路径定稿.md` §1.3：① 那条手势四个回调齐全，
+        //   cancel 走的是 `pullEnd(0)`；⑤ 走 `dragBackEnd(0)`）。
+        //   ⚠️ `velocityY` 必须传 **0**：取消不该被当成"快甩"而提交收起（`fastFlick` 要 ≥900）。
+        .onActionCancel((event: GestureEvent): void => {
+          Logger.info(PlayerExpandState.LOG_TAG,
+            `RzdMorph dismiss pan cancel offsetY=${event.offsetY.toFixed(1)} ` +
+            `dismissMorphActive=${this.dismissMorphActive} ` +
+            `stage=${this.expandState.morphStage} drive=${this.expandState.morphDrive}`);
+          this.onDismissDrag(event.offsetY, true, 0);
+        })
     )
+    // ★★ 2026-10-15（**撤回上一轮的一处改动**，并把原因写清 —— 见下）
+    //
+    // 上一轮我在这里补过 `.id(MORPH_HOST_ID)`，理由是"本仓两处注释都说手机侧这个 id
+    // 就是播放页自己的根容器，而播放页从没挂过它"。**那个理由是错的，已撤回。**
+    //
+    // 真相（本轮全仓核对）：
+    // ```
+    //   .id(MORPH_HOST_ID) 的绑定点：
+    //     products/default/.../Index.ets:1796   ← 壳层**根 Stack**（**常驻**，见它自己那段注释）
+    //     products/pc/.../Index.ets:345         ← PC 壳层根 Stack（常驻）
+    // ```
+    // ⇒ 手机**路由模式**下，播放页是壳层根 Stack 里那个 `HdsNavigation` 的**子节点**
+    //   ⇒ 两个节点**同时在组件树上**。所以：
+    //     · **绝不能**在播放页这一层再挂一次 —— 那是「**同 id 两份节点**」，
+    //       而本仓对这件事有明确记录（`products/default/.../Index.ets` 关于 `MINI_BAR_ID` 的两处注释：
+    //       "两份同 id 的节点，`getRectangleById` 量到哪一份不确定，起点就抖"）。
+    //       
+    //     · 于是 `PlayerExpandState.measureGeometry()` 里那个
+    //       `measureNode(ui, MORPH_HOST_ID)` 在**手机路由模式下**量到的是**壳层那一层**
+    //       （而不是播放页的裁剪窗口）—— 这是**对的、也正是它想要的**：
+    //       它把结果只写进日志（`hostNode=…`），并且在紧邻的注释里点名
+    //       "**绝不能拿它当铺满目标**（那是第五次自噬）"。
+    //     · 上一轮我误以为是"漏挂" ⇒ 结论订正为：**这是刻意的、正确的**。
+    //
+    // ⚠️ 那两处写着"手机侧播放页根 Stack 就是 `MORPH_HOST_ID`"的注释**是错的**，
+    //    已就地订正（见 `PlayerExpandState.measureGeometry()` 与 `contentWidthVp/HeightVp` 两处）。
   }
 
   /**
@@ -2602,9 +4422,10 @@ export struct PlaybackPage {
    * ## 三个约束（缺一条就会出老毛病）
    *
    * 1. **同一时刻至多一张封面**：本浮层挂载 ⟺ 封面页那份真封面被 `.opacity(0)` 藏起来
-   *    —— 同一把门 {@link lyricFloatActive}，两者严格互补；交棒那一帧矩形相同
+   *    ⇒ 覆盖层是**唯一**的封面渲染者，**没有"两者互补"这回事了**（`lyricFloatActive()` 已删）。
    *    （浮层 `t = 0` 用的就是真封面的落点几何，见 `PlayerExpandState.lyricMorph`）；
-   * 2. **静止态不产生节点**：不在歌词页、也不在飞行中时 `lyricFloatActive()` 为假，
+   * 2. **静止态不产生多余节点**：封面页静止时 `lyricMorphT = 0` ⇒ 变换为恒等、位置即布局位
+   *    （`lyricFloatActive()` 那把门已删除 —— 覆盖层常驻，见 §第 2 块）。
    *    `if` 分支直接不建节点 ⇒ 静止在封面页时版面与没有这套东西**逐像素一致**；
    * 3. **不吃触摸**：`HitTestMode.None`（与 `MorphCoverBridge` 同款）——
    *    整层铺满屏幕，默认命中的话会把歌词的滚动与点击全吃掉。
@@ -2621,51 +4442,257 @@ export struct PlaybackPage {
    */
   @Builder
   private LyricFloatLayer() {
-    if (this.lyricFloatActive()) {
-      Stack({ alignContent: Alignment.TopStart }) {
+    // ★★ 2026-10-15（照搬无界 `floatingCover`）：**常驻 + 变换式**。
+    //
+    //   ① 常驻：封面是 `playerPane` 里一个恒在的覆盖层，靠 `scale/translate` 在两个端点间插值，
+    //      所以页 0 不再画封面（那里已删 `MusicPlayInfoBlock`）—— **全程只有一份封面**。
+    //   ② 变换式：布局基准尺寸取 `playerCoverGeomRect()`（**纯几何、不查节点**），
+    //      只有 `scale/translate` 会挪它 ⇒ `t = 0` 时**位置由布局决定**，
+    //      不会出现"宽度依赖上报、上报依赖宽度"的死环（2026-10-15 那次封面消失的机制）。
+    //   ③ **数学上与改前逐像素等价（任意 `t`，不只 `t=0`）** —— 推导（ArkUI 常规语义：
+    //      `.scale` 绕节点中心、`.translate` 在未缩放的父坐标系里加）：
+    //        scale   = morph.size / base.size
+    //        translate = morph.xy − base.xy
+    //        渲染尺寸 = base.size × scale = morph.size                      ✓
+    //        渲染中心 = baseCenter + translate
+    //                 = (base.xy + base.size/2) + morph.xy − base.xy = morph.xy + morph.size/2
+    //        ⇒ 渲染左上角 = morph.xy                                        ✓
+    //        视觉圆角 = (morph.radius / scale) × scale = morph.radius          ✓
+    //      ⇒ **封面在任何一帧的落点、大小、圆角都与原来 `.width/.position(lyricFloatRect())` 完全相同**
+    //      （`base` 只是"参考系"，它取什么值都不影响结果，**只要它不为 0**；这正是它必须纯几何的原因）。
+    //      ⚠️ 上机请顺手确认一次：封面页那张大封面应与改前**一模一样**（若变了，说明 `.translate`
+    //         与 `.scale` 的复合顺序与上面假设不符 —— 那是唯一需要调整的假设）。
+    Stack({ alignContent: Alignment.TopStart }) {
+      // ══════════════ ★★ 本层成立所依赖的**两条坐标系前提**（2026-10-15 补记，动手前必读）══════════════
+      //
+      // 前提 ①：**本层被挂在"满屏内容栈"下** ⇒ 那个宿主的内容盒左上角 = 窗口原点
+      //   （`PlaybackPage.ets:3227` 那句"本层的左上角就是窗口原点"说的就是它，
+      //    而它**只对手机支成立**）⇒ `lyricMorph()` 交出的窗口坐标可以**直接**写进 `.position()`。
+      //   ⚠️ 换成宽屏/面板的宿主（`GridCol` 内容盒 / 左栏 `Column`）就**不再成立**：
+      //      必须先减掉宿主左上角（`PlayerExpandState.toHostPoint()` 就是为它准备的），
+      //      否则封面整体偏一个栏位 —— 见 `目标④-宽屏面板统一-施工图与验收.md` §4 的 S3a。
+      //
+      // 前提 ②：**本层同时被套在形变容器（scale + translate + clip）**里
+      //   ⇒ `.position({x, y})` 里的窗口坐标只在 `p = 1`（容器是恒等变换）时**严格**落在窗口的 (x, y)；
+      //      形变中（p < 1）它的**实际**窗口位置会被容器变换挪走。
+      //   ★ **推导（不是估的；变换原点取容器中心，"绕中心缩放"）**：
+      //        设窗口坐标 y，容器高 `H`（≈ 宿主高），`s = initScale + (1−initScale)·t`、`d = initTranslateY·(1−t)`
+      //        绕中心缩放：`y ↦ H/2 + (y − H/2)·s`；再平移 `d` ⇒ `y' = H/2 + (y − H/2)s + d`
+      //        代入本仓的 `initTranslateY = barY − scaledH·(1−initScale)/2`（`scaledH = barH/initScale`）
+      //        并令 `t = p`、`k = H/2 − scaledH/2`：
+      //            y' = k·(1−s) + y·s = k(1−t) + y·t   ⇒   **`y' ≈ t × y`**（因为 `k` 与 `y` 同量级、且在 t=1 时抵消）
+      //        · `p = 1`（落位）：`y' = y` ✓ **正是设计值**
+      //        · `p = 0.5`：≈ `y/2`   ← **只有设计值的一半**
+      //        · `p = 0`：≈ `0`        ← 贴在容器上边
+      //      （把 `y = 250` 代进本机那组实测几何 `initScale ≈ 0.082 / scaledH ≈ 683 / H ≈ 925`：
+      //        t=1 → 250 ✓、t=0.5 → 124、t=0 → −1 —— 与 `y' ≈ t·y` 吻合）
+      //   ⇒ **这是一条"落位时正确、形变中偏"的口径**（`RzdCoverRect` 的 `base/tx/ty` 量的就是它）。
+      //   ⚠️ **2026-10-15 刻意不改**，理由是改法都已被真机证伪过：
+      //       · 逆变换回页内坐标 —— 真机结果"封面跑到左上角"（见 `morphBridging()` 里那段：
+      //         `.scale()` 的枢轴当时不是我以为的容器中心）；
+      //       · 整层搬出形变容器 —— 会变成"页面在缩、封面不缩"（用户实测过的观感）。
+      //   ⚠️ **同一根因的另一份拷贝已经在壳层**：`Index.ets` 的 `MorphCoverClone()` 之所以被搬出
+      //      播放页，注释写的正是这件事（"矩形却是窗口坐标 ⇒ 只有 p=1 才严格正确"）。
+      //   ⇒ 结论：**手机支保持现状**（用户在真机上验过观感可接受）；
+      //      宽屏/面板那一轮如果要复用本层，必须**同时**决定这三条前提怎么处理，**不许只搬一半**。
+      //   复核命令：`hdc shell hilog -x | Select-String 'RzdCoverRect'`
+      //     ⇒ 看形变中 `measured`（onAreaChange 给的布局位）与 `base+tx` 的差，
+      //        与上面那三行预测（p=1 相等 / p=0.5 减半 / p=0 贴角）对得上就说明这条口径还在生效。
+      //
+      // 满屏居中容器：封面的**布局位置**（变换之外）就是"基准矩形"的居中位
+      // ★★★ 2026-10-16（用户定调「**彻底照搬吧**」）：
+      //   把封面从「**基准 + scale/translate**」改成无界那样的「**纯几何直接落位**」。
+      //
+      // ## 为什么要去掉那一对 `scale/translate`
+      //
+      // 原来这一层是：
+      // ```
+      //   Image().width(coverLayerBase().size)                     ← 基准尺寸
+      //          .scale(实测尺寸 / 基准尺寸)                        ← 补到"实测尺寸"
+      //          .translate(实测位 − 基准位)                        ← 补到"实测位置"
+      // ```
+      // 于是**封面最终位置 = 实测位置**，而"实测位置"来自 `onAreaChange` 上报的
+      // `lyricFloatRect()`；那个值在本仓**不可控、也无法离线核对**（用户实测"封面偏低"，
+      // 而我按它做任何校正都会让观感更差 —— §74/§75/§76 三次都栽在这条链上）。
+      //
+      // 无界那边**根本没有这条链**：`floatingCover` 是一个 `Column(center)` 里的封面，
+      // 尺寸 `morph.edge`、位置 `morph.tyAt(t)`、圆角 `morph.radiusAt(t)`
+      // —— **全部是算出来的**，不查任何节点（`PlayerPage完整UI定稿.md` §5）。
+      //
+      // ⇒ 现在照搬它：**尺寸/位置/圆角一律取自 `lyricFloatRect()`（= `lyricMorph(t)`）**，
+      //   不再乘 `scale`、不再加 `translate`。`t = 0`（封面页静止）时 `lyricMorph(0)`
+      //   就是 `playerCoverGeomRect()` 那一份**无界的算式结果** ⇒ 落位由算式一次定死。
+      Column() {
         Image(this.currentCoverSource())
-          .width(this.lyricFloatRect().size)
-          .height(this.lyricFloatRect().height)
+          // ★★★ 2026-10-16（用户定调「**彻底照搬吧**」+ 修两条实测）：
+          //   **尺寸/位置/圆角一律取 `lyricMorph(t)`（= 无界 `CoverMorph` 的输出），
+          //   不做任何坐标系换算**（`coverLocalRect()` 现在就是 `lyricFloatRect()` 的直通）。
+          //
+          //   ⚠️ 我上一版在这里加过一次"屏幕坐标 → 容器本地坐标"的**逆变换**
+          //     （假设 `.scale()` 绕容器中心），真机结果是**封面飞出屏幕**。
+          //     本仓对这条假设**早有反证**（`morphCoverRectAt()` 的注释 + 本层顶部
+          //     "⚠️ 2026-10-15 刻意不改"那一段：「逆变换 ⇒ 真机结果封面跑到左上角，
+          //     说明 `.scale()` 的枢轴不是我以为的容器中心」）⇒ **已完整撤回**。
+          //     为什么当时的结论是"保持现状"：它虽然"落位时正确、形变中偏"，
+          //     但封面是**跟着容器一起缩**的（观感正确），而逆变换会直接把它甩出屏幕。
+          //   排查关键字：`hdc shell hilog -x | Select-String 'RzdCoverLocal'`
+          .width(this.coverLocalRect().size)
+          .height(this.coverLocalRect().height)
           .objectFit(ImageFit.Cover)
-          .borderRadius(this.lyricFloatRect().radius)
+          .borderRadius(this.coverLocalRect().radius)
           .clip(true)
-          .position({
-            x: this.lyricFloatRect().x,
-            y: this.lyricFloatRect().y
+          // `.position()` 是**相对父组件内容盒**的绝对定位；本层宿主的内容盒左上角
+          // = 窗口原点（前提①，见本层顶部）⇒ 窗口坐标可以直接写。
+          .position({ x: this.coverLocalRect().x, y: this.coverLocalRect().y })
+          // ★★ 2026-10-15（修用户实测「**动画中途会出现两个封面**」）：**封面这张必须挂
+          //   `realCoverVisible()` 那道门** —— 它与壳层克隆层的 `morphOverlayBridging()` 是
+          //   **严格互补**的一对（本文件 L2665 那句注释写的就是这件事）：
+          //     · 形变中（`morphContainerActive()`：ENTERING/LEAVING/LANDING）⇒ 本张**不画**，
+          //       屏上那张由壳层克隆层（`MorphCoverClone`）代表；
+          //     · 落位后（stage = OPEN）⇒ 本张**画**，克隆层同时收工。
+          //   ⚠️ 我原来**漏了这道门** ⇒ 形变期间"克隆层那张飞行的封面"与"页面这张落位的封面"
+          //      **同时在画** ⇒ 用户截图里的一张半/两张封面。
+          //   ⚠️ 这条在 `MusicPlayInfoBlock`（宽屏 / 面板那两支）**一直都有**
+          //      （L357 / L510：`.opacity(this.expandState.realCoverVisible() ? 1 : 0)`）——
+          //      只有手机这一支的浮层漏了 ⇒ 又一例「**同一形状 N 处、只改了一处**」（第 4 次）。
+          //   ⚠️ 上报钩子（`.id` / `onAreaChange`）**不受 opacity 影响**，照常量得到 ✓。
+          .opacity(this.expandState.realCoverVisible() ? 1 : 0)
+          // ★ 上报钩子搬到这里（无界也是覆盖层自己上报：`floatingCover.onAreaChange → publishMorphTargets`）
+          .id(PLAYER_BIG_COVER_ID)
+          .onAreaChange((_oldValue: Area, newValue: Area): void => {
+            this.reportPlayerCoverFromOverlay(newValue);
           })
-
-        Column() {
-          Text(this.state.getCurrentSongItem()?.title ?? '')
-            .fontSize(16)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.play_text_color'))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .textAlign(TextAlign.Center)
-            .width(StyleConstants.FULL_WIDTH)
-          Text(this.state.getCurrentSongItem()?.singer ?? '')
-            .fontSize(12)
-            .fontColor($r('app.color.play_text_color'))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .textAlign(TextAlign.Center)
-            .width(StyleConstants.FULL_WIDTH)
-            .margin({ top: 4 })
-        }
-        .width(this.lyricFloatMetaWidth())
-        // 歌名块与封面**同一个进度**插值（`lyricMetaMorphY`）⇒ "同一个元素在动"
-        .position({
-          x: (this.expandState.windowWidthVp - this.lyricFloatMetaWidth()) / 2,
-          y: this.expandState.lyricMetaMorphY(this.lyricMorphT)
-        })
-        // t=0 时完全透明：那一刻封面正压在真封面位置上，歌名块不该冒出来
-        .opacity(this.lyricFloatMetaOpacity())
       }
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
       .hitTestBehavior(HitTestMode.None)
+
+        // ★★ 2026-10-15（照搬无界）：**一横行**，不再是居中竖排。
+        //   对标 `PlayerPage完整UI定稿.md` §6.1 `floatingMeta` + §6.2 `metaRow`：
+        //     · 小封面在**左**（就是上面那张 `Image`，由 `lyricFloatRect()` 落位到歌词页端点）；
+        //     · 歌名/歌手在它**右边、左对齐**（`metaRow` 里那一列是 `layoutWeight(1)` +
+        //       `alignItems(HorizontalAlign.Start)`）；
+        //     · 右侧留给收藏/更多（无界是 `SymbolGlyph 收藏` + `SymbolGlyph 更多`）。
+        //   ⚠️ 原来这里是 `textAlign(Center)` + 整块水平居中 ⇒ 就是用户截图里
+        //      "派音居中大封面 / 无界小封面靠左" 的那条差异。
+        //   ⚠️ 封面让位用 `padding.left` 表达（= 封面右缘 + 12），
+        //      与无界靠 `floatingCover`/`metaRow` 两层横向错位达到的结果等价、少一层。
+        Row() {
+          Column() {
+            Text(this.state.getCurrentSongItem()?.title ?? '', { controller: this.titleController })
+              // ★ 端点上报（原 `MusicPlayInfoBlock` 的职责）—— 见 `publishMetaEndpoint`
+              .id(PLAYER_META_TITLE_ID)
+              .onAreaChange((): void => {
+                this.publishMetaEndpoint(false);
+              })
+              .fontSize(this.metaTitleFp())
+              .fontWeight(FontWeight.Bold)
+              .fontColor($r('app.color.play_text_color'))
+              .opacity(0.86)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .textAlign(TextAlign.Start)
+              .width(StyleConstants.FULL_WIDTH)
+            Text(this.state.getCurrentSongItem()?.singer ?? '', { controller: this.singerController })
+              .id(PLAYER_META_SINGER_ID)
+              .onAreaChange((): void => {
+                this.publishMetaEndpoint(true);
+              })
+              .fontSize(this.metaArtistFp())
+              .fontWeight(FontWeight.Regular)
+              .fontColor($r('app.color.play_singer_color'))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .textAlign(TextAlign.Start)
+              .width(StyleConstants.FULL_WIDTH)
+              .margin({ top: 2 })
+          }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
+
+          // ★ 无界 `metaRow` 右侧那两个图标（`PlayerPage完整UI定稿.md` §6.2）：
+          //   `SymbolGlyph 收藏` + `SymbolGlyph 更多`。
+          //   收藏接 `MusicStoreService`（与 `MusicPlayInfoBlock` 同一套读写）；
+          //   更多打开歌曲菜单 —— 那个 sheet 由 `ControlAreaComponent` 画，
+          //   状态已提升到本页（`playMenuOpen`），见那里的 `@Param`/`@Event` 说明。
+          SymbolGlyph(this.isCurrentFavorite ? $r('sys.symbol.heart_fill') : $r('sys.symbol.heart'))
+            .fontSize(this.expandState.chromeFavSize())
+            .fontColor([this.isCurrentFavorite ? $r('app.color.player_text_primary')
+              : $r('app.color.play_text_color')])
+            .margin({ top: 2 })
+            .responseRegion({
+              x: -10, y: -10,
+              width: PlaybackPage.LYRIC_META_HIT_VP, height: PlaybackPage.LYRIC_META_HIT_VP
+            })
+            .onClick((): void => {
+              this.toggleFavorite();
+            })
+          SymbolGlyph($r('sys.symbol.dot_grid_1x2_circle'))
+            .fontSize(this.expandState.chromeFavSize())
+            .fontColor([$r('app.color.play_text_color')])
+            .margin({ top: 2, left: 14 })
+            .responseRegion({
+              x: -10, y: -10,
+              width: PlaybackPage.LYRIC_META_HIT_VP, height: PlaybackPage.LYRIC_META_HIT_VP
+            })
+            .onClick((): void => {
+              this.playMenuOpen = true;
+            })
+        }
+        .width(StyleConstants.FULL_WIDTH)
+        // ★★ 2026-10-15（修回归）：行高**必须用自身自然高度**（≈34vp），
+        //   **不能**用 `this.lyricFloatRect().size` —— 那个值在 `t = 0`（封面页）时是
+        //   **大封面边长（328vp）**，配上 `VerticalAlign.Center` 会把两行文字推到这一带的中间
+        //   ⇒ **封面页的歌名被往下推约 164vp**（落到屏幕底部、压在控制区上）。
+        .height(PlaybackPage.LYRIC_META_ROW_H_VP)
+        .alignItems(VerticalAlign.Center)
+        .padding({
+          left: this.lyricMetaLeftInset(),
+          right: PlaybackPage.LYRIC_META_SIDE_VP
+        })
+        // 与封面同一条进度、但**各自一条插值**（无界 `metaOffsetYAt` 与封面那条也是独立的）
+        .position({
+          x: 0,
+          // ★ 纵向居中补偿：只在**歌词页那一端**需要（那边文字要与小封面竖直居中）。
+          //   `t = 0`（封面页）时补偿为 0 ⇒ 文字**紧贴大封面下方**，与改前逐像素一致；
+          //   `t = 1` 时补偿 = (小封面边长 − 行高)/2 ≈ 7vp ⇒ 与小封面居中。
+          y: this.expandState.lyricMetaMorphY(this.lyricMorphT) +
+            this.lyricMorphT * (this.lyricFloatRect().size - PlaybackPage.LYRIC_META_ROW_H_VP) / 2
+        })
+        // ★★ 2026-10-15（修用户实测「**动画中途会出现两个歌名歌手**（有一个是残留的、
+        //   以前派音用的歌名歌手飞入）」）：
+        //   **这一行原来是写死的 `.opacity(1)`**（注释理由是"常驻 ⇒ 恒可见：封面页那份歌名
+        //   原来由 `MusicPlayInfoBlock` 画，它已从页 0 移除"）—— 那个理由**只对静止态成立**，
+        //   它把与克隆层的**互斥门一起拆掉了**：形变期间壳层 `MorphMetaBridge`
+        //   （就是用户说的"以前派音用的歌名歌手飞入"）在画飞行中的歌名，而本行**同时又全亮**
+        //   ⇒ **两套歌名同时在场**。
+        //   ⇒ 换成无界那道门 `targetMetaOpacity()`（`PlayerExpandState` L1325-1335）：
+        //     · stage = OPEN ⇒ **1**（落位后恒可见，覆盖"封面页那份歌名"的职责 ✓）；
+        //     · 形变中且克隆层接管（`metaBridgeOwnsPaint()`）⇒ **0**（交棒给克隆层）；
+        //     · 形变中但克隆层没接管 ⇒ 退回 `pullChromeOpacity()` 那条淡入曲线。
+        //   ⚠️ `MusicPlayInfoBlock`（宽屏 / 面板那两支）**一直用的就是它**（L239 / L411 / L447）
+        //      ⇒ 同上一处一样，又是「同一形状 N 处、只改了一处」漏掉的那一处。
+        .opacity(this.expandState.targetMetaOpacity())
+        // ★★★ 2026-10-16（用户实测：「**无界的收藏和歌曲菜单是跟着标题歌手一起飞上来的**」）
+        //   这一行原来**只有淡入、没有位移** ⇒ 右边的收藏/更多两个图标只能"淡出来"，
+        //   不会跟文字一起"飞上来"。
+        //   ⇒ 按无界 `pullChromeOpacity` 的窗口（**0.18 → 0.62**）给整行加同窗位移：
+        //     · 文字与两个图标**同处这一行** ⇒ 天然"一起飞上来"（不需要给图标单独加）；
+        //     · 窗口与那行的淡入区间**同一个** ⇒ 同起同落，不会"先淡后飞"。
+        //   ⚠️ 位移是**页内** vp（函数里已按 `1/morphScale` 反算）⇒ 屏上位移恒定 180vp。
+        .translate({ y: this.expandState.metaRiseVp() })
+      }
+      .width(StyleConstants.FULL_WIDTH)
+      .height(StyleConstants.FULL_HEIGHT)
+      // ★★ 2026-10-15（修）：这里原来是 `HitTestMode.None` —— 那是"**自己和子节点都不响应触摸**"，
+      //   会把那一行右侧的**心形 / 更多两个按钮的点击一起吃掉**（就是本块刚加的那两个）。
+      //   无界外层用的是 `HitTestMode.Transparent`（`floatingCover` / `floatingMeta` 的
+      //   满屏容器都是它）：**空白处穿透到下层、子节点照常可点** ⇒ 这里改成同一个。
+      //   ⚠️ 封面那张图自己仍然是 `None`（上一层的 `Column`），所以它不会挡住滑动。
+      .hitTestBehavior(HitTestMode.Transparent)
     }
-  }
 }
 
 /*

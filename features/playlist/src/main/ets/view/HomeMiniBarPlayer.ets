@@ -14,7 +14,10 @@
  */
 
 import { AppStorageV2 } from '@kit.ArkUI';
-import { AppStorageKeys, MINI_BAR_ID, PlayerExpandState, StyleConstants } from 'musicbasic';
+import {
+  AmbientState, AppStorageKeys, getWindowInfoState, ImmersiveType, MINI_BAR_ID, PlayerExpandState,
+  StyleConstants, WindowInfo
+} from 'musicbasic';
 import { MusicAppState, PlayerConstants, PlayerViewModel } from 'player';
 import { HomeMiniBarAlbumCover } from './HomeMiniBarAlbumCover';
 import { HomeMiniBarPlayerAside } from './HomeMiniBarPlayerAside';
@@ -56,6 +59,12 @@ export struct HomeMiniBarPlayer {
   /** 上拉打开播放页（跟手）：驱动共享形变进度，收尾补间交给壳层。 */
   private panOption: PanGestureOptions = new PanGestureOptions({ direction: PanDirection.Vertical });
 
+  /** 窗口装饰状态：决定背板用哪一档底色（与 {@link PlaylistFloatingMiniBar} 同一套 token）。 */
+  @Local windowInfo: WindowInfo = getWindowInfoState();
+  /** 环境光档位：决定背板的模糊强度（与首页底栏材质同档）。 */
+  @Local ambientState: AmbientState =
+    AppStorageV2.connect(AmbientState, AppStorageKeys.AMBIENT_STATE, () => new AmbientState())!;
+
   /**
    * 上拉起手后补量终点锚点的重试次数 / 间隔（ms）。
    *
@@ -67,6 +76,68 @@ export struct HomeMiniBarPlayer {
 
   private effectiveMiniBarExpanded(): boolean {
     return this.followAppMiniBarExpanded && this.playerViewModel.appState.miniBarExpanded;
+  }
+
+  // ─────────────────────── ★ 自绘背板（修用户实测「播放条背景不弹」）───────────────────────
+
+  /**
+   * 背板底色 —— 与 {@link PlaylistFloatingMiniBar.miniBarBackground} **同一套 token**（不另造颜色）。
+   */
+  private miniBarBackplateColor(): ResourceColor {
+    if (this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE) {
+      return $r('app.color.floating_mini_bar_immersive_background');
+    }
+    return $r('app.color.floating_mini_bar_background');
+  }
+
+  /** 背板模糊档 —— 与 {@link PlaylistFloatingMiniBar.miniBarBlur} 同档。 */
+  private miniBarBackplateBlur(): BlurStyle {
+    switch (this.ambientState.level) {
+      case 1:
+        return BlurStyle.Thin;
+      case 2:
+        return BlurStyle.Regular;
+      case 3:
+        return BlurStyle.Thick;
+      default:
+        return BlurStyle.Thin;
+    }
+  }
+
+  /**
+   * ★★★ 2026-10-16（用户实测「**关闭播放器只有内容会弹，播放条背景不弹**」+ 用户拍板方案 A）：
+   * **迷你条改成自绘背板**，这样它与内容在同一棵子树里 ⇒ `morphSquashY` 一起压、一起弹。
+   *
+   * ## 为什么非要自绘
+   *
+   * 原来这条迷你条的背板是 **HDS 底栏自己画的**（我们根 `Row` 的 `backgroundColor` 从来没设过，
+   * 是透明的）⇒ `Row.scale({y: morphSquashY})` 只能压到内容，**背板压不到**
+   * —— 这正是"光文字弹一下"的机制。我们在原生 HDS 里也没法给那块背板单独加变换。
+   *
+   * ## 现在怎么接（两侧各一处开关）
+   *
+   * | 位置 | 改动 |
+   * | --- | --- |
+   * | 首页（`Index.ets` 的 `barFloatingStyle.miniBar`） | `enableMiniBarBackground: false` ⇒ HDS **不再给迷你条画背板**（页签胶囊那块背板不受影响，它是另一块） |
+   * | 二级页（`Index.floatingMiniBar` 的 HdsTabs） | `barBackgroundColor(Color.Transparent)` + `barBackgroundBlurStyle(BlurStyle.NONE)` |
+   * | 本组件 | 背板由这一层自绘，挂在**与内容同一个 `Stack`** 里 ⇒ 跟着一起压 |
+   *
+   * ⚠️ **两侧必须一起改**：只关 HDS 那份而这里不画 ⇒ 迷你条底下会空一块（能看到首页内容透上来）。
+   * ⚠️ 颜色/模糊/圆角**全部复用既有 token**（`floating_mini_bar_*` + `comp_divider` + 28vp），
+   *   与 {@link PlaylistFloatingMiniBar} 逐字一致 —— 不新增任何自编颜色。
+   */
+  @Builder
+  private MiniBarBackplate() {
+    Column()
+      .width(LayoutPolicy.matchParent)
+      .height(LayoutPolicy.matchParent)
+      .backgroundColor(this.miniBarBackplateColor())
+      .backgroundBlurStyle(this.miniBarBackplateBlur())
+      // 圆角/描边口径与 `PlaylistFloatingMiniBar` 一致（沉浸态不描边、不圆角）
+      .borderRadius(this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ? 0 : 28)
+      .borderWidth(this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ? 0 : 1)
+      .borderColor($r('app.color.comp_divider'))
+      .hitTestBehavior(HitTestMode.None)
   }
 
   /**
@@ -113,12 +184,20 @@ export struct HomeMiniBarPlayer {
    * 这是逆向规格里 `MiniPlayer.sidePad` 的原式（`MiniPlayer胶囊布局与宽度约束.md` §三）：
    * 语义是"让封面在胶囊里垂直居中、且封面左边缘与内边距左边缘对齐"。
    * 折叠态高度 `40 × 1.4 = 56`、封面 `40 × 0.8 = 32` ⇒ `sidePad = 12`。
+   *
+   * ★★ 2026-10-15（配套"播放条更粗"那条）：本仓的迷你条封面走
+   *   `HomeMiniBarAlbumCover.coverSideLengthVp()`，而**沉浸式自由窗口**那一档正好也是
+   *   `40 × MINI_COVER_RATIO` 的**视觉**尺寸（见那个方法的注释）——
+   *   所以"封面边长"这一项在这里**直接用 40**（= 无界的 `coverEdge()` 值），
+   *   而不是再乘一次 `MINI_COVER_RATIO`（那会算出 32，内边距偏大 4vp/边，
+   *   把这轮刚加厚的 8vp 又吃回去一半）。
+   *   `h/2 − cover/2 = 56/2 − 40/2 = 8` ⇒ 封面上下各贴 8vp、水平左缘贴 8vp。
    */
   private sidePadVp(): number {
     const h: number = this.effectiveMiniBarExpanded()
       ? PlayerConstants.MINI_BAR_CONTENT_H
       : PlayerConstants.MINI_BAR_CONTENT_H * PlayerConstants.MINI_BAR_COLLAPSED_RATIO;
-    const cover: number = PlayerConstants.MINI_BAR_CONTENT_H * PlayerConstants.MINI_COVER_RATIO;
+    const cover: number = PlayerConstants.MINI_BAR_CONTENT_H;
     return h / 2 - cover / 2;
   }
 
@@ -141,7 +220,15 @@ export struct HomeMiniBarPlayer {
    * Composes cover and aside in a row with gesture to open the full player on upward pan.
    */
   build() {
-    Row({ space: 8 }) {
+    // ★★★ 2026-10-16（方案 A）：外层换成 `Stack`，**背板与内容在同一个变换域里** ——
+    //   所以下面那一记 `morphSquashY`（挂在根节点的 `.scale` 上）会**连背板一起压**，
+    //   观感就是用户要的「关闭时整条播放条一起弹」。
+    //   ⚠️ 这两层必须在**同一个** `Stack` 内、且 `.scale` 挂在 `Stack` 上：
+    //     挂到内层 `Row` 上就又变成"只压内容"（那正是改前的形状）。
+    Stack({ alignContent: Alignment.Center }) {
+      // 背板在下、内容在上（`Stack` 后写者在上）
+      this.MiniBarBackplate()
+      Row({ space: 8 }) {
       HomeMiniBarAlbumCover({
         playerViewModel: this.playerViewModel,
         followAppMiniBarExpanded: this.followAppMiniBarExpanded,
@@ -167,26 +254,35 @@ export struct HomeMiniBarPlayer {
       //   折叠态（= 二级页面，`followAppMiniBarExpanded === false`）再收一份 `sidePadVp()`，
       //   与左侧封面到胶囊左缘的距离同一个口径，不放新的魔法数；首页那条完全不变。
       right: this.actionsTrailVp() + (this.followAppMiniBarExpanded ? 0 : this.sidePadVp()),
-      top: 6,
-      bottom: 6,
+      top: 8,
+      bottom: 8,
     })
     .alignItems(VerticalAlign.Center)
     .width(StyleConstants.FULL_WIDTH)
-    // 展开形变的**起点矩形**就是这条胶囊：给个 id 让 `getFrameNodeById` 量它
-    //（`onAreaChange` 给的是布局几何、不含祖先 transform，量出来的起点会偏）
+    }
+    // ⚠️ `Stack` **没有** `alignItems`（那是 `Row`/`Column` 的）—— 用 `.alignContent(Alignment.Center)`
+    //   给背板与内容同一个居中基准（本轮编译期实测：`Property 'alignItems' does not exist on type
+    //   'StackAttribute'`，ArkTS 报错码 10505001）。
+    .alignContent(Alignment.Center)
+    .width(StyleConstants.FULL_WIDTH)
+    // ★ 展开形变的**起点矩形**就是这条胶囊：给个 id 让 `getFrameNodeById` 量它
+    // （`onAreaChange` 给的是布局几何、不含祖先 transform，量出来的起点会偏）
     .id(MINI_BAR_ID)
     .visibility(this.expandState.sourceBarHidden ? Visibility.Hidden : Visibility.Visible)
+    // ★★ 挤压（`morphSquashY`）挂在**Stack**上 ⇒ 背板与内容**同一个变换域**、一起压。
+    //   出处：无界 `squashLand` / `animateSquash`（`SQUASH_Y = 0.86` 压 110ms，
+    //   再 320ms `cubic-bezier(0.34,1.56,0.64,1)` 过冲回弹）。
+    //   ⚠️ 静止态 `morphSquashY` 恒为 1 ⇒ **不改变任何静态版面**（回归红线）。
+    //   补间由 `PlayerExpandState.squashLandAnim` 用 `animateTo` 起 ⇒ 这里**不要**再加
+    //   `.animation(...)`（两套一起上会互相覆盖）。
+    .scale({ x: 1, y: this.expandState.morphSquashY })
     // ⚠️ 这里**不要**给整条 Row 加透明度：反编译里迷你条是**两档**淡出 ——
     //    右侧操作区 `1 - t/0.20` 先没、封面/元信息 `1 - t/0.35` 后没。
     //    两档分别在 `HomeMiniBarPlayerAside` 与 `HomeMiniBarAlbumCover` 上生效，
     //    在 Row 上加一份会把封面也按 0.20 提前淡掉（就分不出先后了）。
-    // ⚠️ 上拉打开播放页：**跟手** —— 手指每动一帧就写一次形变进度。
-    //    以前这条手势只在 `onActionEnd` 里"一次性打开"，所以手指拖动期间画面纹丝不动，
-    //    用户实测的「只能上拉完成后，不能跟手」就是这个。
-    //    现在：起手量几何 + 压到起点 → 更新写进度 → 松手只发"收尾请求"
-    //    （补间与挂载/卸载只有壳层能做，它拥有 `isShowPlay`）。
-    //    壳层根节点上还有一条同样的手势兜底（从别处起手也能上拉）：谁接到谁驱动，
-    //    几何与进度是同一份，不会打架。
+    .onClick((): void => {
+      this.playerViewModel.openFullScreenWithSharedElementTransition(this.getUIContext());
+    })
     .gesture(
       PanGesture(this.panOption)
         .onActionStart((): void => {
@@ -239,9 +335,5 @@ export struct HomeMiniBarPlayer {
           this.expandState.requestPullOpenSettle(false);
         })
     )
-    // 点一下也能打开（拖动与点击是两类手势，不会互相抢）
-    .onClick((): void => {
-      this.playerViewModel.openFullScreenWithSharedElementTransition(this.getUIContext());
-    })
   }
 }

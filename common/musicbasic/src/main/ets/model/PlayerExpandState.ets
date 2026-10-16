@@ -136,6 +136,88 @@ export interface LyricMorphRect {
 }
 
 /**
+ * 宽屏 / 面板那种"左右两栏"布局里，两栏的目标宽度（vp）。
+ *
+ * ★ 2026-10-15（目标 ④ 的 S2 步）：**只装宽度，不装间距** —— 间距（`gutter` / `space`）
+ * 由接线的同一处常量给出，不在这里猜（依据见 `PlayerExpandState.columnWidths()` 的注释）。
+ */
+export interface WideColumns {
+  /** 左栏（封面 + 歌名）目标宽度（vp）。 */
+  left: number;
+  /** 右栏（歌词 + 控制区）目标宽度（vp）。 */
+  right: number;
+}
+
+/**
+ * 宿主盒内的一个点（vp）。见 `PlayerExpandState.toHostPoint()`。
+ *
+ * ★ 2026-10-15（目标 ④ 的 S3 前置件）：`.position()` 是**相对父组件内容盒**的绝对定位，
+ * 而我们的浮层几何源（`lyricMorph` / `widePlayerRects`）给的是**窗口坐标** ⇒
+ * 换宿主时必须减掉宿主自己的左上角。手机宿主左上角 = 窗口原点 ⇒ 本结构恒为 `{0, 0}`。
+ */
+export interface HostPoint {
+  x: number;
+  y: number;
+}
+
+/**
+ * 无界 `PlayerChrome` 的一档控制区尺寸表（**逐字段照抄** `wujie.pa:93534 / 93554 / 93574`）。
+ *
+ * 字段顺序与反汇编里 `createobjectwithbuffer` 的书写顺序一致（`total` 除外 —— 它是算出来的，
+ * 而且**不是**"前面几项相加"：`wujie.pa:93547-93551` 里 `v2 = 58` 是三档共用的第五项）。
+ *
+ * ⚠️ 不要给任何字段"补一个合理值"：表里没有的语义（例如"统一的按钮间距"）说明**无界没有它**，
+ *   历史上我们往这类缺口里塞过 `18/24/30`，后来整族删除（见 `PlayerExpandState` 里
+ *   `chromeGapVp` / `chromePaddingVp` 的删除记录）。
+ */
+export class PlayerChromeSpec {
+  /** 顶栏那一行的高度（vp）。 */
+  public readonly topBarH: number;
+  /** Swiper 与控制区之间的**占位条**高度（vp）。⚠️ 表里这一份**只有在没有实测 `usableH` 时才用** —— 实际布局走 `playerSwiperGapOf(h)` 的连续公式。 */
+  public readonly gapSwiper: number;
+  /** 进度条那一行与传输条之间的**占位条**高度（vp）。这一段**没有**连续公式，就是查表。 */
+  public readonly gapScrub: number;
+  /** 播放/暂停主按钮的块尺寸（vp）。 */
+  public readonly playSize: number;
+  /** 进度条那一行的**块尺寸**（vp）。⚠️ 是触控块、不是轨道粗细（轨道粗细由 `trackThickness(12)` 管）。 */
+  public readonly seekSize: number;
+  /** 侧键（循环 / 播放列表）图标字号（fp）。 */
+  public readonly sideSize: number;
+  /** 歌名字号（fp）。 */
+  public readonly titleSize: number;
+  /** 歌手名字号（fp）。 */
+  public readonly artistSize: number;
+  /** 收藏 / 更多图标字号（fp）。 */
+  public readonly favSize: number;
+  /** 歌名行与封面之间的间距（vp）。 */
+  public readonly metaGap: number;
+  /** 底部安全边距（vp）。 */
+  public readonly bottomGap: number;
+  /** 歌词页整体的缩放比。 */
+  public readonly lyricScale: number;
+  /** 该档控制区**总高**（vp）= `topBarH + gapSwiper + gapScrub + playSize + 58`。 */
+  public readonly total: number;
+
+  constructor(topBarH: number, gapSwiper: number, gapScrub: number, playSize: number,
+    seekSize: number, sideSize: number, titleSize: number, artistSize: number,
+    favSize: number, metaGap: number, bottomGap: number, lyricScale: number, total: number) {
+    this.topBarH = topBarH;
+    this.gapSwiper = gapSwiper;
+    this.gapScrub = gapScrub;
+    this.playSize = playSize;
+    this.seekSize = seekSize;
+    this.sideSize = sideSize;
+    this.titleSize = titleSize;
+    this.artistSize = artistSize;
+    this.favSize = favSize;
+    this.metaGap = metaGap;
+    this.bottomGap = bottomGap;
+    this.lyricScale = lyricScale;
+    this.total = total;
+  }
+}
+
+/**
  * 把 `Area` 里的 `Length` 取成 vp 数值。
  *
  * `Area.width` / `Area.globalPosition.x` 的静态类型是 `Length = string | number | Resource`，
@@ -233,6 +315,17 @@ export class PlayerExpandState {
   @Trace public windowWidthVp: number = 360;
   /** 窗口高度（vp）：clip 窗口展开的终点。 */
   @Trace public windowHeightVp: number = 780;
+  /**
+   * 状态栏避让区高度（vp，真实值）—— 对标无界 `padTop()` 里的 `avoidTop`。
+   * ⚠️ 由壳层在 `reportWindow()` 里喂进来；**0 表示"还没量到"**，此时 `topInsetVp()`
+   *   退回比例估算（见那里的说明）。
+   */
+  @Trace public statusBarTopVp: number = 0;
+  /**
+   * 底部导航条避让区高度（vp，真实值）—— 对标无界 `padBottom()` 里的 `avoidBottom`。
+   * ⚠️ 目前**只做登记与上报**，还没有消费者（`padBottom()` 那一半见 §56.24 待办）。
+   */
+  @Trace public navigationBarBottomVp: number = 0;
   /** 一镜到底动画时长（ms）。 */
   @Trace public durationMs: number = 460;
 
@@ -287,11 +380,25 @@ export class PlayerExpandState {
     }
   }
 
-  /** 记录窗口尺寸（vp），作为 clip 窗口展开的终点。 */
-  public reportWindow(widthVp: number, heightVp: number): void {
+  /**
+   * 记录窗口尺寸（vp），作为 clip 窗口展开的终点。
+   *
+   * ★ 2026-10-15：**扩了两个可选参数**（真实避让区高度），对标无界 `padTop()`/`padBottom()`
+   *   的输入。用**默认值**而不是"新增必填参数"是为了让既有调用点（`products/default`、
+   *   `products/pc` 各一处）**不改也能编译**；随后逐个补传即可（"同一形状 N 处"那个老毛病
+   *   的防法：先让签名兼容，再数调用点）。
+   * @param widthVp 窗口宽（vp）
+   * @param heightVp 窗口高（vp）
+   * @param statusBarTopVp 状态栏避让高度（vp，0 = 未量到）—— 喂给 `topInsetVp()`
+   * @param navigationBarBottomVp 底部导航条避让高度（vp，0 = 未量到）
+   */
+  public reportWindow(widthVp: number, heightVp: number,
+    statusBarTopVp: number = 0, navigationBarBottomVp: number = 0): void {
     if (widthVp > 0 && heightVp > 0) {
       this.windowWidthVp = widthVp;
       this.windowHeightVp = heightVp;
+      this.statusBarTopVp = statusBarTopVp > 0 ? statusBarTopVp : 0;
+      this.navigationBarBottomVp = navigationBarBottomVp > 0 ? navigationBarBottomVp : 0;
     }
   }
 
@@ -313,10 +420,18 @@ export class PlayerExpandState {
 
   /**
    * 把 `progress` 在 `[from, to]` 区间内归一化到 `0…1`（区间外夹紧）。
+   *
+   * ★★ 2026-10-15（**已判定为死代码**，`RzdMusic记忆.md` §59）：**零调用者**。
+   *   它是"按进度开一个子窗口"那类公式的通用件（`clamp((p-a)/(b-a))`），
+   *   而本类现在的每一条窗口都**内联展开**了（例如 `pullChromeOpacity`：
+   *   `clamp((effT-0.18)/0.44)`）—— 提取成函数反而更难和反编译逐字对照，所以没接。
+   * ⚠️ 留着是为了**下一处**要用时别再手写一遍（手写就有写错区间的风险）；
+   *    它是 `private static` 且是**纯函数**，不会被误当成状态入口。
    * @param value 进度
    * @param from 区间起点
    * @param to 区间终点
    * @returns 归一化值
+   * 复核命令：`grep -rn 'window01' RzdMusic --include=*.ets`（期望：只有本处定义）
    */
   private static window01(value: number, from: number, to: number): number {
     if (to <= from) {
@@ -374,20 +489,40 @@ export class PlayerExpandState {
   //    所以"不被封面盖住"只能靠**错峰**：等封面飞到上半屏之后，底下这两组再依次升上来。
 
   /**
-   * 第一组（小歌词 + 收藏按钮）的时间窗。
+   * 歌名/歌手那一行（+ 收藏/更多两个图标）的时间窗 —— **照抄无界 `pullChromeOpacity`**。
+   *
+   * ★★★ 2026-10-16（用户实测：「**无界的收藏和歌曲菜单是跟着标题歌手一起飞上来的**」）：
+   *   无界那一层的公式（`MiniMorph渲染方与顶底栏淡入公式.md` §2，字节码）：`clamp((t − 0.18) / 0.44)`
+   *   ⇒ 窗口 = **0.18 → 0.62**。
+   *   ⚠️ 我们原来**没有**给这一行"升起"位移（只有 `pullChromeOpacity` 淡入），
+   *      而收藏/更多两个图标也在同一行里 ⇒ 它们**只能淡入、不会跟着飞上来**。
+   *   ⇒ 现在给整行加同窗位移（见 `metaRiseVp()`），并保留既有的 `pullChromeOpacity` 淡入
+   *     （淡入窗口与它**同一个区间**，两者同起同落）。
+   */
+  public static readonly WIN_META_START: number = 0.18;
+  public static readonly WIN_META_END: number = 0.62;
+
+  /**
+   * 第一组（小歌词）的时间窗。
    *
    * ⚠️ 顺序依据（用户 2026-10-15 原话）：「**先飞入的是小歌词和收藏按钮**」。
+   * ★ 2026-10-16 修订：收藏/更多已按无界归到**歌名那一行**（比小歌词**更早**），
+   *   所以这一组现在只剩小歌词 —— 它落在顶栏(0.18–0.62)与底栏(0.45–1.00)之间。
    */
   public static readonly WIN_A_START: number = 0.30;
   public static readonly WIN_A_END: number = 0.52;
   /**
-   * 第二组（进度条 + 底部按钮 = 整片控制区）的时间窗。
+   * 第二组（进度条 + 底部按钮 = 整片控制区）的时间窗 —— **照抄无界 `pullBottomIn`**。
    *
-   * ⚠️ 顺序依据（同一句）：「**进度条和下面的那堆按钮一起飞入**」——它们**是一组**，
-   *    所以这里只有一个窗口，不要再给进度条单独错峰（上一版就是那么做错的）。
+   * ★★★ 2026-10-16（用户实测：「**下面那堆按钮，无界是整个动画结束后飞完，
+   *   派音现在是快结束的时候就飞完了，然后最后一点就会有个放大的过程**」）：
+   *   无界那一层的公式（同文档 §3，字节码）：`clamp((t − 0.45) / 0.55)`
+   *   ⇒ 窗口 = **0.45 → 1.00** —— **正好在落位那一刻才飞完**。
+   *   ⚠️ 我们原来是 `0.60 → 0.90` ⇒ 控制区在 90% 就到位，最后 10% 只剩"整页放大"
+   *     ⇒ 观感就是用户说的"最后一点有个放大的过程"。
    */
-  public static readonly WIN_B_START: number = 0.60;
-  public static readonly WIN_B_END: number = 0.90;
+  public static readonly WIN_B_START: number = 0.45;
+  public static readonly WIN_B_END: number = 1.00;
   /** "从下升起"的幅度（屏幕 vp，形变期间按 `1/scale` 反算成页内位移）。 */
   public static readonly RISE_VP: number = 180;
 
@@ -402,32 +537,43 @@ export class PlayerExpandState {
 
   /** 浮层拷贝的补间时长（ms，对标无界 `ENTER_MS = 560`）。 */
   public static readonly MORPH_OVERLAY_DURATION_MS: number = 560;
+  /** 浮层拷贝**收起**方向的基础时长（ms）—— 对标无界 `MainPage.REVERSE_MS = 460`。 */
+  public static readonly MORPH_OVERLAY_REVERSE_MS: number = 460;
+  /** 浮层拷贝收起时长的下限比例 —— 对标无界 `MainPage.REVERSE_MIN_RATIO = 0.4`。 */
+  public static readonly MORPH_OVERLAY_REVERSE_MIN_RATIO: number = 0.4;
 
-  // ⚠️ **收起方向：无界是 `REVERSE_MS = 460` + `REVERSE_EASING = "cubic-bezier(0.85, 0, 0.5, 0.88)"`
-  //    （`_recover\logic-src\ExpandAnimation驱动与补间定稿.md` §三「两套时长表的真实关系」：
-  //     `ENTER_MS` / `REVERSE_MS` **同属 `MainPage` 那一层**，即与 560 同源；
-  //     `_recover\logic-src\pullT写入算式与形变枚举.md` §五 常量全集亦列了这两个值）
-  //    —— 本轮**有意不落地，只标注**，理由是**量化过的、且是本架构的硬约束**：
-  //      · 浮层这一棒**只活到 `morphLand()`**（`morphBridging()` 在 LANDING 为假）；
-  //        收起时播放页那层是 `PlaybackPage.MORPH_CLOSE_DURATION_MS = 350` + 20 ⇒
-  //        浮层实际只有 ~370ms 可画；
-  //      · 用现有的 560 + `(0.23,1,0.32,1)`：t=0.661 处曲线已到 **≈99%** ⇒ 撤掉时几乎无跳变；
-  //      · 换成 460 + `(0.85,0,0.5,0.88)`：同一时刻只到 **≈87%** ⇒ 撤掉瞬间会有
-  //        **约 12% 行程的"啪"一下**（封面朝迷你条方向弹一小段）—— 这正是 §48/§51 反复
-  //        出问题的那类尾跳。
-  //    ⇒ 想真正对齐这两条值，得先让**浮层的存活期跟它自己的时长对齐**（那会破坏 §60.5 ⑤
-  //      "同一时刻至多一张封面"的严格互补：浮层多活一帧就与真封面同时在场）。
-  //      这一条**留待真机**：先看 `morph overlay tween done` 与收起落位的时间差，再定。
-  //      依据行：`docs\无界形变手感-落实到RzdMusic清单.md` §一 1.6 的"收起方向 460"那一行。
-
+  // ★★★ 2026-10-15（Round 27）：**收起方向改成与播放页"同一条公式 + 同一条曲线"**。
+  //
+  // 无界 `MainPage` 那一层有一对常量（`开关播放器-手势路径定稿.md` §0 速查 L27/L29 +
+  // §八 常量表 L620-631；出处交叉见 `ExpandAnimation驱动与补间定稿.md` §三
+  // 「两套时长表的真实关系」——`ENTER_MS`/`REVERSE_MS` **同属 MainPage 那一层**）：
+  //   · 进入：`ENTER_MS = 560` + `EASE_OUT_STR (0.23,1,0.32,1)`
+  //   · 收起：`animateMorphT(reverseMs, t=0, REVERSE_EASING)`，其中
+  //     `reverseMs = round(REVERSE_MS(460) × max(REVERSE_MIN_RATIO(0.4), morphT))`、
+  //     `REVERSE_EASING = cubic-bezier(0.85, 0, 0.5, 0.88)`
+  //
+  // ⚠️ 本文件早先记过一条"**有意不落地**"的决定，理由是量化过的"12% 尾跳"：
+  //   浮层只活到 `morphLand()`，而那时播放页那层是 `MORPH_CLOSE_DURATION_MS = 350` + 20
+  //   ⇒ 浮层只有 ~370ms 可画；若浮层改用 460 + `(0.85,0,0.5,0.88)`，在 370/460 = 80% 处
+  //   只走到 ≈87% ⇒ 撤掉瞬间跳 ~12% 行程。
+  //   ★ **该前提已经不存在**：§56.20 把播放页关闭改成了
+  //     `round(460 × max(0.4, morphT))` + `REVERSE_EASING`（`MORPH_CLOSE_DURATION_MS` 已删）。
+  //   ⇒ 让浮层用**同一条公式 + 同一条曲线**之后：
+  //     · 两层**同起同落**（同一帧起、同一时长、同一曲线、起点都是各自的当前进度）
+  //       ⇒ **结构上不可能不同步**，"尾跳"这个问题**从根上消失**（不是"跳得更小"）；
+  //     · 这也正是无界 `MainPage` 层的原写法（`animateMorphT(reverseMs, 0, REVERSE_EASING)`）。
+  //
+  // ⚠️ 方向判定用形参 `progress`（true = 展开到 1；false = 收回 0），**不要**写成
+  //   `to > from`：补间中被打断时 `from` 已经动过，用它判方向会误判。
+  //
   // ⚠️ 这里**没有** `morphOverlayCurve()` 这类返回 `ICurve`/`UIShape` 的包装函数 —— 故意的：
   //   本机 SDK 里 `ICurve`（`component/common.d.ts:4154`）**唯独它没写 `declare`**
   //   （同文件其它接口都是 `declare interface`）⇒ 它不是全局可见的；`@kit.ArkUI` 也**没有**
   //   导出 `UIShape`（编译实测：`Module '"@kit.ArkUI"' has no exported member 'UIShape'`）。
-  //   ⇒ 曲线**就在唯一那个 `animateTo` 的调用点上内联写**，与工程里既有的两处同款
-  //   （`products/default .../Index.ets:611`、`PlaybackPage.ets:1350`）：
+  //   ⇒ 曲线**就在唯一那个 `animateTo` 的调用点上内联写**（本次改成按 `progress` 走两分支的三元），
+  //   与工程里既有的两处同款（`products/default .../Index.ets`、`PlaybackPage.ets`）：
   //       curve: curves.cubicBezierCurve(0.23, 1.0, 0.32, 1.0)
-  //   改这条曲线只改那**一处**（`morphOverlayTweenTo` 里），不要另起包装。
+  //   改曲线只改那**一处**（`morphOverlayTweenTo` 里），不要另起包装。
 
   /** @returns 窗口 [start, end] 内的线性进度 0…1（窗口外夹紧）。 */
   public static ramp01(p: number, start: number, end: number): number {
@@ -457,7 +603,8 @@ export class PlayerExpandState {
   /**
    * @returns 第二组「整片控制区（进度条 + 底部按钮）」的纵向位移（**页内** vp）。
    *
-   * 与第一组同一套公式、只是窗口更晚 ⇒ 展开时"小歌词+收藏"先上来、"控制区"后上来。
+   * ★ 2026-10-16：窗口已按无界 `pullBottomIn` 改成 **0.45 → 1.00**（见 `WIN_B_*` 的注释）
+   *   ⇒ 展开时控制区**到落位那一刻才飞完**，最后不再有"只剩放大"的那一段。
    */
   public contentRiseVp(): number {
     if (!this.morphClipping()) {
@@ -470,18 +617,99 @@ export class PlayerExpandState {
   }
 
   /**
-   * @returns 播放页**真封面**是否该画。
+   * @returns 「歌名/歌手 + 收藏/更多」那一行的纵向位移（**页内** vp）。
    *
-   * 形变期间由续飞封面代表它；形变容器一撤（相位回到 OPEN/NONE）就地交棒 ——
-   * 交棒那一刻容器是恒等变换、续飞封面正好落在真实封面上，所以看不到跳变。
-   *
-   * ⚠️ 不要再引入"p ≥ 某阈值就提前交棒"：续飞封面的矩形是**窗口坐标**，
-   *    容器还没撤时把两者对调一定错位（真机实测过，见 `morphBridging()` 注释）。
+   * ★★★ 2026-10-16（修用户实测：「**无界的收藏和歌曲菜单是跟着标题歌手一起飞上来的**」）：
+   *   这一行原来**只有 `pullChromeOpacity` 淡入、没有任何位移** ⇒ 收藏/更多两个图标
+   *   只能"淡出来"，不会"跟着飞上来"。
+   *   ⇒ 按无界 `pullChromeOpacity` 的窗口（**0.18 → 0.62**，同一区间也是它的淡入区间）
+   *     给整行加同窗位移，两个图标与文字因此**同一组、同时飞上来**。
    */
-  public realCoverVisible(): boolean {
-    return !this.morphContainerActive();
+  public metaRiseVp(): number {
+    if (!this.morphClipping()) {
+      return 0;
+    }
+    const w: number = PlayerExpandState.ramp01(this.morphP,
+      PlayerExpandState.WIN_META_START, PlayerExpandState.WIN_META_END);
+    const scale: number = Math.max(0.05, this.morphScale);
+    return (1 - w) * PlayerExpandState.RISE_VP / scale;
   }
 
+  /**
+   * @returns 播放页**真封面**是否该画。
+   *
+   * ★★★ 2026-10-16（用户实测两条，本处是它们**共同的根**）：
+   *   「**下拉的时候封面在动画结束才收起**」+「**点击打开播放器封面直接就到结束位置了**」
+   *
+   * ## 原来为什么两条都坏
+   *
+   * 原判据是 `!morphContainerActive()` —— 只要**相位**一进 ENTERING/LEAVING/LANDING
+   * 就立刻把真封面藏起来，改由**壳层克隆层**（`MorphCoverClone`）代表封面飞。
+   * 但克隆层的显隐门是 `morphOverlayBridging()`（= 浮层进度 `morphOverlayP` 在 (0,1) 之间），
+   * **两者不是互补关系** ⇒ 只要浮层那条补间没跑起来（或已跑到 0），就会掉进
+   * **"真封面不画 + 克隆层不画"的空档**：
+   *   · 下拉关闭：空档里屏上**没有封面**，一直等到播放页落位（`morphLand()` 之后
+   *     `morphContainerActive()` 转假）真封面才冒出来 ⇒ 观感"封面**到动画结束才收起**"；
+   *   · 点击打开：同理，起手那一段没有封面，而页面已经铺开 ⇒ 观感"封面**直接就到结束位置**"。
+   *
+   * ## 现在的判据：**与克隆层严格互补**
+   *
+   * ```
+   *   克隆层在画（覆盖层那一棒）⇒ 真封面不画（避免两份）
+   *   克隆层不在画              ⇒ 真封面画（页面自己带它一起缩放/裁剪，永远不空档）
+   * ```
+   * ⇒ 无论浮层补间起没起来，**屏上永远恰好有一张封面**，且它跟着页面一起缩小/放大。
+   * ⚠️ 这条同时消掉了原注释担心的"两份封面"：两份只在"克隆层在画"时可能重合，
+   *    而那时真封面被这条挡住。
+   */
+  public realCoverVisible(): boolean {
+    // ★★★ 2026-10-16（**恢复**；我中间两版把它改坏过两次）
+    //
+    // ## 判据 = 与壳层浮层**严格互补**（浮层在画 ⇒ 真封面让位）
+    //
+    // ```
+    //   浮层在画这一棒（`morphOverlayBridging()`）⇒ 真封面不画（避免两份）
+    //   浮层不在画                              ⇒ 真封面画（静止态就靠它）
+    // ```
+    //
+    // ## 我这几版分别错在哪（都别再犯）
+    //
+    // | 版本 | 我写的判据 | 用户实测 |
+    // | --- | --- | --- |
+    // | ① | `!morphContainerActive()` | 「下拉时封面到动画结束才收起」／「点击打开直接就到结束位置」 |
+    // | ② | `!morphOverlayBridging()` + **同时把浮层关掉** | 「关/开播放器**没有封面动画**」 |
+    // | ③ | 恒 `true`（取消交棒、真封面独担） | 「封面**从下方飞上来**」（容器变换把基准位搬到了屏幕顶部） |
+    // | ④ | `!morphOverlayBridging()`（恢复） | 正确方向 |
+    //
+    // ⇒ **①那条注释里担心的"两者不是互补"是真的**，但正解是**把浮层那份补间修好**
+    //   （它已经修好了：见 `morphOverlayBridging()` 的三条判据），**不是**把真封面改成恒画。
+    // ⚠️ 关键事实（从容器几何读出来的，别再用"推导"推翻它）：
+    //   形变中容器贴在**屏幕顶部那一条**（`morphTy ≈ +844`、`scale ≈ 0.082`）
+    //   而迷你条在**屏幕底部** ⇒ 基准位的封面在容器里会被搬到顶部去 ⇒
+    //   **真封面在形变期不能代表"一镜到底"**，那是浮层的职责。
+    //
+    // ★★★ 2026-10-16（**加固：与"浮层实际在画"互补，而不是与"门为真"互补**）：
+    //   上面那版是 `!morphOverlayBridging()`。但"门为真"与"真的画出来了"是两件事：
+    //   浮层可能因为**别的原因**画不出来（`morphCoverRectAt` 两端几何为 0 ⇒ 0×0、
+    //   宿主 `hostsMorphOverlay()` 在运行期返回假、浮层节点还没挂上…）。
+    //   那就会出现用户报过的那个形状：**`real=0 clone=0` ⇒ 两边都不画 ⇒ 屏上没有封面**。
+    //   ⇒ 现在把判据收紧到"**浮层确实在画**"：
+    //     `morphOverlayBridging() && morphOverlayBridgeOpacity() > 0 && 两端几何非零`
+    //   ⇒ 只要浮层这一棒**任何一环不成立**，真封面就顶上（宁可位置不完美，也绝不留空洞）。
+    //   ⚠️ 静止态浮层门恒假 ⇒ 本函数恒真 ⇒ 与改动前**逐像素一致**（回归红线）。
+    if (!this.morphOverlayBridging()) {
+      return true;
+    }
+    if (this.morphOverlayBridgeOpacity() <= 0) {
+      return true;
+    }
+    // 浮层这一棒能不能真的画出来：两端几何必须非零（否则画的是 0×0）
+    const rect: LyricMorphRect = this.morphOverlayCoverBridge();
+    if (rect.size <= 0 || rect.height <= 0) {
+      return true;
+    }
+    return false;
+  }
   // ⚠️ 2026-10-15 教训（别再犯）：**不要**把歌名/歌手这一行改成"p 的独立窗口"
   //    （我试过 `ramp01(p, 0.18, 0.34)` 让它在播放页里早出现、并让壳层克隆层在 0.38 前淡完）。
   //    那样做的结果是：克隆层淡出时，播放页自己那一行还压在**缩小布局**里看不见 ⇒
@@ -496,6 +724,19 @@ export class PlayerExpandState {
    *
    * ⚠️ 这一层**不是**"容器整体不透明度"：容器本身不淡，淡的是背景层。
    *    起点之所以看起来"有东西"，靠的是续飞封面那几个克隆层（见 shell 的形变克隆层）。
+   *
+   * ⚠️⚠️ **2026-10-15 补充：本函数【故意没有调用点】，不要去"接上它"。**
+   *   逆向结论确实是它（`pullBgIn = clamp(effT / 0.30)`，`effT = 形变中 ? morphT : 1`），
+   *   但播放页背景层用的是 `PlaybackPage.backgroundRevealOpacity()`：
+   *   ```
+   *   morphContainerActive() ? 0.25 + 0.75 * morphP : 1        // 线性、从 25% 起、到落位才满
+   *   ```
+   *   **为什么换掉**：这条曲线是**用户明确要求**"整个效果就是半透明过渡到不透明"时定的。
+   *   而 `pullBgIn` 在 `p = 0.30` 就**满不透明**，可那时形变裁剪窗口还只有一小块"可视矩形"
+   *   ⇒ 窗口里从第 30% 起就是**一整块不透明底色**，用户实测报过的
+   *   「**展开中背景是黑色的**」正是这个形状（记录见 `踩坑总表-RzdMusic形变动画.md` 3.4）。
+   *   ⇒ **保持 `backgroundRevealOpacity()`**；本函数留作"逆向对照物"与"若哪天要回到逐帧 effT 口径"的参考。
+   *   网格背景（`MeshCoverBg`）也**同样**用 `backgroundRevealOpacity()`，没有例外。
    */
   public pullBgIn(): number {
     if (!this.morphLive()) {
@@ -620,12 +861,104 @@ export class PlayerExpandState {
    *   列为单源未复核 ⇒ 本轮**只落了这一个数**；同一份文档 §7.4 建议的另两条
    *   （`lyricMetaYOf()` 锚点改成"封面顶边 − 26"、补 OFF/AUTO/始终开启 用户档位）**没落**，
    *   理由见该文 §8 的 U1（坐标系歧义）与"属新增功能、非数值对齐"。
+   *
+   * ★★ 2026-10-15（Round 23 对着定稿逐条复核，**结论：锚点这一半已经对了，`−26` 不许按绝对 Y 用**）：
+   *   · **锚点已对、不要改**：定稿 L1417 的原文是
+   *     「歌名的终点锚在"**小封面顶边**"上，不是"盒顶"」，而 `lyricMetaYOf()` 现在正是
+   *     `return this.lyricCoverYOf()`（与封面**同顶边**、并排摆放）⇒ 与 L1417 一致。
+   *   · **`−26` 不能直接用**：定稿 L870 / L1100 给出的是
+   *     `metaOffsetYAt(t) = lerp(metaYPlayer, topYAtLyric() + metaTopFixLyric, t)`
+   *     —— `−26` 是**这个 lerp 终点的"位移量"**（`metaTopFixLyric`），**不是绝对 Y**；
+   *     而另一端 `metaYPlayer` 出自 `fitPlayerOverlay` 的
+   *     `metaY = curMetaY + edge/2 + gap + metaH/2`（带 `+ metaH/2` ⇒ 那是**中心**）。
+   *     把"封面顶边 − 26"当成**顶边**塞进我们的**绝对定位**（`.position({ y })`）体系，
+   *     会让歌名整块再上移约 `26 + 行高/2 ≈ 43vp`（跑到小封面上方）。
+   *   · 定稿 §8 的 **U1 至今未确认**（`META_Y_PLAYER_MAX(-214)` 与 `fitPlayerOverlay`
+   *     的结果是否同一坐标系）⇒ **坐标系没定之前不许动这个数**。
+   *   ⇒ 要动它，先拿一次**上机观测定坐标**：让用户看"歌词页歌名相对小封面偏高还是偏低"，
+   *     再据此给偏移量。完整推理见 `RzdMusic记忆.md` §56.18。
    */
   private static readonly LYRIC_COVER_EDGE_VP: number = 48.72;
   /** 歌词页封面顶部相对展开页封面顶部的下移比例（占展开页封面高度）。 */
   private static readonly LYRIC_COVER_TOP_RATIO: number = 0.06;
-  /** 封面圆角占其短边的比例（展开页那一端）。 */
-  private static readonly COVER_RADIUS_RATIO: number = 0.06;
+  /** 歌词页那一横行的顶边 = 窗口高度的这个比例（状态栏估算）**加上**顶栏高度。 */
+  private static readonly LYRIC_COVER_TOP_RATIO_STATUS: number = 0.07;
+  /** 顶栏高度（vp）——与 `TopAreaComponent.height(56)` / 无界 `Tokens.BAR_H = 56` 同值。 */
+  private static readonly LYRIC_ROW_TOPBAR_H_VP: number = 56;
+  /**
+   * 顶部让位的**下限**（vp）—— 对标无界 `PlayerPage.PLAYER_TOP_FALLBACK = 56`
+   * （`歌词页浮层封面与歌名定稿.md` L1295；`padTop()` 里当"下限"用，见 `topInsetVp()`）。
+   */
+  private static readonly PLAYER_TOP_FALLBACK_VP: number = 56;
+  /**
+   * 歌词页小封面的**左边界**（vp）。
+   *
+   * ★ 2026-10-15（照搬无界）：歌词页是 `[小封面][歌名/歌手][收藏][更多]` 一横行，
+   *   封面贴行首。取值与 `PlaybackPage.LYRIC_META_SIDE_VP`（那一行的左右留白）**必须一致**，
+   *   否则封面与歌名会错开一条缝。
+   */
+  private static readonly LYRIC_COVER_LEFT_VP: number = 16;
+  /** 兜底封面边长上限（无界 `CoverMorph` 模块常量 `COVER_EDGE_CAP = 480`）。 */
+  private static readonly COVER_EDGE_CAP_VP: number = 480;
+  /** 兜底封面边长下限（无界 `COVER_EDGE_MIN = 200`）。 */
+  private static readonly COVER_EDGE_MIN_VP: number = 200;
+  /** 兜底封面边长 = 窗口短边的这个比例（无实测时的量级估计；仅兜底，正常路径用不到）。 */
+  private static readonly COVER_EDGE_FALLBACK_RATIO: number = 0.62;
+  /** `fitPlayerOverlay` 的高度预算扣减项（无界：`availH − 2·(gap + metaH + 8)`）。 */
+  private static readonly COVER_FIT_META_H_VP: number = 60;
+  /**
+   * ⚠️ 2026-10-16（**已不再使用**）：这是 `fitPlayerOverlay` 里那个"硬编码 8"的**旧估称**，
+   *   我原来还多编了一个 `COVER_FIT_GAP_VP = 20`（**无界没有这个值**，它的 gap 默认是 50）。
+   *   现在 `playerCoverGeomRect()` 已逐字照抄无界 ⇒ 用 `COVER_FIT_META_GAP_VP(50)`
+   *   与 `COVER_FIT_BOUND_INSET_VP(8)`，本常量与 `COVER_FIT_INSET_VP` 一起**下线**。
+   *   保留声明是为了不牵动别处；下一次清理时可一并删除。
+   */
+  private static readonly COVER_FIT_GAP_VP: number = 20;
+  /** ⚠️ 已不再使用（改用 {@link COVER_FIT_BOUND_INSET_VP}），理由同上。 */
+  private static readonly COVER_FIT_INSET_VP: number = 8;
+  /**
+   * 封面圆角占其短边的比例（展开页那一端）。
+   *
+   * ★★ 2026-10-15（照搬无界：修用户实测「**无界展开播放器时圆角更大**」）：
+   *   无界那一端的圆角是 `CoverMorph.radiusPlayer = 8`（vp，**绝对值**；
+   *   `_recover/logic-src/歌词页浮层封面与歌名定稿.md` §五 的类字段表 + `85481 ldai 0x8`），
+   *   而其 `edge` 默认 348（`ldai 0x15c`）⇒ **比例 = 8 / 348 ≈ 0.02299**。
+   *   ⇒ 这里用**同一个比例**而不是拍一个数：`edge` 变（不同机型）时圆角同比走，
+   *     与无界"绝对值恒定、比例随 edge 浮动"只在默认 edge 上等价 —— 但对我们这种
+   *     `edge` 由 fitPlayerOverlay 算出来的实现，比例写法更稳（不会在小屏上把圆角压成 0）。
+   *   ⚠️ 改前是 0.06（≈ 22vp @edge 369）—— 比无界大 2.6 倍，观感就是"圆角明显更大/更方圆"。
+   *      原值按"无界那 348 / 8"一算即可复现：`8 / 348`。
+   */
+  private static readonly COVER_RADIUS_RATIO: number = 8 / 348;
+
+  /**
+   * 封面在「展开页（封面页）」那一端的圆角（vp，**绝对值**）—— 照抄无界 `CoverMorph.radiusPlayer`。
+   *
+   * 出处：`wujie.pa:85471`（读默认值）→ `85481 ldai 0x8` ⇒ **8**；
+   *   类字段表见 `_recover/logic-src/歌词页浮层封面与歌名定稿.md`（`radiusPlayer = 8`）。
+   */
+  private static readonly COVER_RADIUS_PLAYER_VP: number = 8;
+
+  /**
+   * 封面在「歌词页」那一端的圆角（**视觉值**，vp）—— 照抄无界 `CoverMorph.radiusLyricVisual`。
+   *
+   * 出处：`wujie.pa:85486`（读默认值）→ `85494-85496` 的 `mov`/兜底 ⇒ 默认 **12**。
+   *
+   * ★★★ 2026-10-16（用户实测：「**歌词页面的封面圆角太小了**」）：
+   *   无界的两端圆角是 **`lerp(radiusPlayer 8, radiusLyricVisual 12, t)`**
+   *   （`wujie.pa:85731-85743` 的 `visualRadiusAt`，调的是本文件的 `lerp`），
+   *   然后 `radiusAt = visualRadiusAt / scaleAt`（`85604-85613`）。
+   *
+   *   ⚠️ 我们改前用的是 `radius = lerp(fromRect.radius, toSize × COVER_RADIUS_RATIO 8/348, t)`：
+   *     `toSize` 是歌词页那张小封面的边长（≈244vp）⇒ 终点圆角只有 **≈5.6vp**，
+   *     而无界是 **12vp** ⇒ 差一倍多，这就是"圆角太小"。
+   *   ⚠️ 那个 `8/348` 比例是**展开页**那一端的口径（`edge` 大），把它套到**歌词页小封面**
+   *     上是把两个端点用错了同一个公式 —— 典型"同一形状两处口径混用"。
+   *   ⇒ 现在两端各自取**自己的绝对值**再插值，与无界逐字一致。
+   *   ⚠️ 用户设置里的 `CoverRadiusState`（见 `MusicPlayInfoBlock`）**不受影响**：
+   *     它管的是"展开页静止态用户选的圆角"，本函数只在 `t > 0`（歌词页那一趟）参与。
+   */
+  private static readonly COVER_RADIUS_LYRIC_VISUAL_VP: number = 12;
 
   /** 歌词页封面矩形是否有效（窗口尺寸拿到了才算得出来）。 */
   public lyricGeometryReady(): boolean {
@@ -654,24 +987,107 @@ export class PlayerExpandState {
     return PlayerExpandState.LYRIC_COVER_EDGE_VP;
   }
 
-  /** @returns 歌词页封面左边界：水平居中。 */
+  /**
+   * @returns 歌词页封面左边界。
+   *
+   * ★★ 2026-10-15（照搬无界）：**靠左**，不再是水平居中。
+   *   无界的歌词页是**一横行** `[小封面][歌名/歌手][收藏][更多]`（`metaRow`，见
+   *   `PlayerPage完整UI定稿.md` §6.2），封面在行的最左端、与歌名并排 ——
+   *   原来这里返回 `(winW - size) / 2`（居中），所以派音看起来是"居中小封面 + 歌名在它下面"，
+   *   而歌名那块又被排到封面**下方**（见 `lyricMetaYOf`）⇒ 与无界完全不同。
+   */
   public lyricCoverXOf(): number {
-    return (this.windowWidthVp - this.lyricCoverSizeOf()) / 2;
+    return PlayerExpandState.LYRIC_COVER_LEFT_VP;
   }
 
   /**
-   * @returns 歌词页封面上边界。
+   * @returns 歌词页封面上边界（= 那一横行的顶边）。
    *
-   * 展开页封面顶部 + 一个下移比例，并且**顶部要避开状态栏**：
-   * 直接顶到 0 会被状态栏压住，所以取 `max(状态栏估算值, 计算值)`。
+   * ★★ 2026-10-15（照搬无界）：**贴在顶栏之下**。
+   *
+   * 原来是"展开页封面顶边 + 封面高度的 6%" ⇒ 在 780 高机型上 ≈ **246vp**，
+   * 落在屏幕约 1/3 处；而无界截图里小封面的顶边与顶栏的 `⌄` **大致齐平**（≈ 110vp）。
+   * 现在＝状态栏估算值 + 顶栏高度（`topBarH = 56`，与派音 `TopAreaComponent.height(56)` 同值）。
+   *
+   * ⚠️ 这条同时决定 `lyricMetaYOf()`（并排 ⇒ 同顶边）与 `lyricPadTop()`（歌词让位高度），
+   *    所以改它会整体上移——三处口径都跟着走，不会打架。
    */
   public lyricCoverYOf(): number {
-    const size: number = this.lyricCoverSizeOf();
-    const base: number = this.bigY > 0
-      ? this.bigY + this.bigSize * PlayerExpandState.LYRIC_COVER_TOP_RATIO
-      : this.windowHeightVp * 0.12;
-    const statusBarGuard: number = this.windowHeightVp * 0.07;
-    return Math.max(base, statusBarGuard);
+    // ★★ 2026-10-15（照搬无界；修用户实测「**内容没延伸进状态栏**」）：
+    //   这里原来是 `windowHeightVp × LYRIC_COVER_TOP_RATIO_STATUS(0.07)` ——
+    //   一个**状态栏估算比例**（925vp 高的屏上算成 ≈65vp，而真机状态栏通常只有 30~40vp）
+    //   ⇒ 顶部凭空多让位 ~25~35vp。现在改走 `topInsetVp()`（= 无界的 `padTop()`）。
+    const topInset: number = this.topInsetVp();
+    return topInset + PlayerExpandState.LYRIC_ROW_TOPBAR_H_VP;
+  }
+
+  /**
+   * 播放页内容相对窗口顶边的**顶部让位**（vp）—— 对标无界 `PlayerPage.padTop()`。
+   *
+   * ★★ 2026-10-15（照搬无界）：无界那两个函数
+   *   （`wujie.pa:175250-175353`，转写见 `_recover/logic-src/歌词页浮层封面与歌名定稿.md`
+   *   L506 / L509 / L790 / L791）是：
+   * ```
+   *   padTop()    = max(avoidTop,    PLAYER_TOP_FALLBACK = 56)   // 真实状态栏避让区，下限 56
+   *   padBottom() = max(avoidBottom, FULL.bottomGap      = 65)   // 真实导航条避让区，下限 65
+   *   usableH()   = winHVp() - padTop() - padBottom()
+   * ```
+   *   ⇒ **用"真实避让区 + 下限"**，不是比例估算。
+   *   ⚠️ 我们的**面板分支早就在用真实值**（`PlaybackPage` 那条
+   *      `.padding({ top: windowInfo.statusBarTopVp, bottom: windowInfo.navigationBarBottomVp })`），
+   *      只有手机这一支还在用比例 ⇒ 属**内部分叉**，本轮统一到"真实值 + 下限"。
+   *
+   * ⚠️ 量不到（`statusBarTopVp <= 0`：窗口信息还没回调 / 某些窗口形态）时**退回原来的比例估算**，
+   *   保证与改前行为一致 —— 不会因为"量不到"就把内容顶进状态栏里。
+   * ⚠️ `padBottom()` 那一半（下限 65）**本轮没接**：它要改的是底部/控制区的让位，
+   *   与"顶部"是两件事，登记为待办（见 `RzdMusic记忆.md` §56.24）。
+   * @returns 顶部让位（vp）
+   */
+  /**
+   * 播放页**页盒顶边**在窗口里的 y（vp，实测；0 = 还没量到）—— 喂给 {@link topInsetVp}。
+   *
+   * ★★ 2026-10-15（`RzdMusic记忆.md` §56.50）：**这是"双重让位"的解药，而且本仓早有先例** ——
+   *   `common/musicbasic/.../PageTopInsetHelper.ets` 的类注释就是为**同一个 bug** 写的
+   *   （2026-10-11 那轮真机截图量到 `+48vp`，并明确写「让位量是**相对盒顶**的：
+   *   `盒顶 = 0` 时要让 `状态栏 + 56`，而 `盒顶 = 状态栏` 时只该让 `56`」）。
+   *
+   * ⚠️ 我们原来的 `topInsetVp()` **正是那句注释点名的错法**（按"盒顶 = 0"写）——
+   *   在"框架把页盒顶到安全区内"的机器上就会**多让一个状态栏** ✓
+   *   （本机实测深色带 47/45vp、顶栏 112 ≈ 47 + 56，完全对应）。
+   *
+   * ★ 为什么把它做成"**自适应修正**"而不是直接改成盒内换算：
+   *   `topInsetVp()` 的目标是让**内容顶边落在窗口的 `max(状态栏,56)` 那条线上**，
+   *   而"内容顶边 = 盒顶 + 让位" ⇒ `让位 = target − 盒顶` ⇒ **对盒顶取 0 或 47 都给出同一个结果**：
+   *     · 盒顶 0（页根扩展生效）⇒ 让位 56 ⇒ 顶边 56 ✓
+   *     · 盒顶 47（扩展没生效）⇒ 让位 9  ⇒ 顶边 56 ✓
+   *   ⇒ **不会双重扣减**，只让结果对"扩展到底有没有生效"免疫 ✓
+   *   （这正是 §56.50 里留的兜底 (b)，本轮的接线就是它。）
+   */
+  @Trace public pageBoxTopVp: number = 0;
+
+  /**
+   * 播放页页盒顶边上报（由路由壳的 `onAreaChange` 喂，`area.position.y`）。
+   * @param boxTopVp 页盒顶（vp，窗口坐标）
+   */
+  public reportPageBoxTop(boxTopVp: number): void {
+    const v: number = boxTopVp > 0 ? boxTopVp : 0;
+    if (Math.abs(v - this.pageBoxTopVp) > 0.5) {
+      this.pageBoxTopVp = v;
+      Logger.info(PlayerExpandState.LOG_TAG,
+        `RzdPageBoxTop boxTop=${v.toFixed(1)} ⇒ topInset=${this.topInsetVp().toFixed(1)} ` +
+        `(target=${Math.max(this.statusBarTopVp, PlayerExpandState.PLAYER_TOP_FALLBACK_VP).toFixed(1)})`);
+    }
+  }
+
+  public topInsetVp(): number {
+    // 目标：**内容顶边**落在窗口的 `max(状态栏, 56)` 那条线上（= 无界 `padTop()` 的口径）。
+    const target: number = this.statusBarTopVp > 0
+      ? Math.max(this.statusBarTopVp, PlayerExpandState.PLAYER_TOP_FALLBACK_VP)
+      : this.windowHeightVp * PlayerExpandState.LYRIC_COVER_TOP_RATIO_STATUS;
+    // ★ 自适应：让位是"**相对盒顶**"的 ⇒ 减去实测盒顶（量不到时按 0，与改前完全一致）。
+    const boxTop: number = this.pageBoxTopVp > 0 ? this.pageBoxTopVp : 0;
+    const off: number = target - boxTop;
+    return off > 0 ? off : 0;
   }
 
   /**
@@ -692,8 +1108,9 @@ export class PlayerExpandState {
       size: size,
       // 歌词页那一端是算出来的正方形；展开页那一端沿用实测的落点矩形（可能不是正方形）
       height: height,
-      // 圆角跟着尺寸缩小，避免小尺寸下圆角显得过大（对标 visualRadiusAt）
-      radius: this.lerp(fromRect.radius, toSize * PlayerExpandState.COVER_RADIUS_RATIO, p)
+      // ★★★ 2026-10-16（照抄无界 `CoverMorph.visualRadiusAt`）：**两端点 lerp**
+      radius: this.lerp(PlayerExpandState.COVER_RADIUS_PLAYER_VP,
+        PlayerExpandState.COVER_RADIUS_LYRIC_VISUAL_VP, p)
     };
   }
 
@@ -711,15 +1128,164 @@ export class PlayerExpandState {
       return this.morphCoverRectAt(1);
     }
     const fallbackSize: number = this.playerCoverWidth();
+    if (fallbackSize > 0) {
+      return {
+        x: this.bigX,
+        y: this.bigY,
+        size: fallbackSize,
+        height: fallbackSize,
+        radius: this.bigRadius > 0
+          ? this.bigRadius
+          : fallbackSize * PlayerExpandState.COVER_RADIUS_RATIO
+      };
+    }
+    // ★★ 2026-10-15（照搬无界 `CoverMorph`）：实测缺失时给**纯几何兜底**，
+    //   绝不让端点变成 0×0。
+    //   无界的封面端点本来就是**算出来的**（`CoverMorph` 由 `fitPlayerOverlay` 的
+    //   `edge / metaY` 构造，全程不查节点）；派音这边靠 `MusicPlayInfoBlock` 的
+    //   `onAreaChange → reportBig` 上报，**上报没来**（换歌瞬间、组件被替换、
+    //   量测时序错开）时 `bigSize = 0` ⇒ `lyricMorph()` 起点成零矩形
+    //   ⇒ **封面缩成一点、展开动画没有端点**（2026-10-15 那次"封面消失 + 动画全废"
+    //   就是这个形状的极端版）。
+    //   ⚠️ 只在实测缺失时生效（`bigSize > 0` / `bigX/bigY` 有效时一字不改）
+    //      ⇒ 正常路径与静止态**逐像素不变**。
+    return this.fallbackBigRect();
+  }
+
+  /**
+   * @returns 播放页封面**布局基准矩形**（vp，窗口坐标）—— **纯几何、不查任何节点**。
+   *
+   * ★★ 2026-10-15（照搬无界的 `CoverMorph`）：这是"变换式覆盖层"的**基准尺寸**。
+   *
+   * 为什么必须有它：无界的 `floatingCover` 是一个**满屏居中布局**的容器，
+   * 封面在里面**按布局尺寸排**，只有 `scale / translate` 会把它挪走 ⇒
+   * `t = 0`（封面页）时变换是恒等、位置由**布局**决定。派音原来的覆盖层是
+   * `.width(lyricMorph(t).size).position(lyricMorph(t).x…)` —— **位置和尺寸都由形变给**
+   * ⇒ 一旦让它当唯一渲染者，就变成"宽度依赖上报、上报依赖宽度"，
+   * 初始上报 0 时**不动点退化在 0**（2026-10-15 那次"封面消失 + 动画全废"的机制）。
+   *
+   * 尺寸口径照抄无界 `fitPlayerOverlay`：
+   * ```
+   * edge = clamp(min(winW − 2·sidePad, winH − 2·(gap + metaH + 8)), COVER_EDGE_MIN 200, CAP 480)
+   * ```
+   * （`winW − 2·sidePad` 就是无界 `coverEdgeMaxOf(swiperBoxW, pageSide, winWVp)` 的产物 ——
+   *   360 宽机型上 ≈ 328，与 `播放页背景-*.md` 记录的"`edge` 常态 ≈ 328"一致。）
+   * 水平/竖直都居中（无界的 `floatingCover` 是 `Column(center, center)`）。
+   */
+  /** `fitPlayerOverlay` 的 `META_GAP_BELOW_COVER`（字节码默认值 50）。 */
+  private static readonly COVER_FIT_META_GAP_VP: number = 50;
+  /** `fitPlayerOverlay` 里那个"硬编码 +8"（上界夹紧用）。 */
+  private static readonly COVER_FIT_BOUND_INSET_VP: number = 8;
+  /**
+   * `CoverMorph.tyPlayer` 的默认值（= 播放页端封面中心的基准偏移）。
+   *
+   * ⚠️ 它相对**谁**我**始终没读准**：按 `topYAtPlayer() = tyPlayer − edge/2` 会算出
+   *   `−40 − 164 = −204`（在屏幕外），与无界截图（封面在屏幕上部）矛盾。
+   * ⇒ **本实现不用它**，改用"从内容顶边往下推"的等价式（见 `playerCoverGeomRect()` 的注释）。
+   *   本常量保留只为记录逆向值、并给下一轮留线索。
+   */
+  private static readonly COVER_TY_PLAYER_VP: number = -40;
+
+  /**
+   * @returns 播放页封面**锚定矩形**（vp，窗口坐标）。
+   *
+   * ★★★ 2026-10-16（**照用户指示「直接照搬无界」，把算式换成无界的纯几何**）
+   *
+   * ## 无界的算式（逐字，`歌词页浮层封面与歌名定稿.md` §4.2 / §4.1）
+   *
+   * ```ts
+   * // ① 边长上限：coverEdgeMaxOf(swiperBoxW, pageSide) —— "Swiper 宽 − 2×页面留白"
+   * const curEdgeMax = clamp(swiperBoxW - 2*pageSide, 200, 480);
+   * // ② fitPlayerOverlay(availH, metaH=60, curEdgeMax, _unused, curMetaY, gap=50)
+   * const maxForBox = availH - 2*(gap + metaH + 8);
+   * let edge = curEdgeMax;  if (!(curEdgeMax < maxForBox)) edge = maxForBox;
+   * if (edge < 200) edge = 200;
+   * const metaY = curMetaY + edge/2 + gap + metaH/2;
+   * const bound = (availH/2 - metaH/2) - 8;
+   * metaY = metaY > bound ? bound : metaY;
+   * // ③ 封面中心 = 内容顶边 + metaY
+   * ```
+   * 其中 `availH = 窗口高 − padTop(56) − padBottom(65)`、`curMetaY = 0`
+   * （= "从内容顶边往下推"，依据：`META_Y_PLAYER_MAX` 那类**负值**常量说明 `curMetaY` 的基准是"内容顶边"）。
+   *
+   * ## 手机上逐位核对（360×780 窗口）
+   *
+   * ```
+   *   availH = 780 − 56 − 65 = 659              （⚠️ 这一步是关键：**不能**把整窗高当 availH）
+   *   swiperBoxW − 2×16 = 328  ⇒ curEdgeMax = 328
+   *   maxForBox = 659 − 2×(50+60+8) = 423 ≥ 328 ⇒ edge = 328
+   *   metaY = 0 + 164 + 50 + 30 = 244 ≤ bound(291) ⇒ 244
+   *   封面中心 = 56 + 244 = **300**，顶边 = 300 − 164 = **136vp**
+   * ```
+   * ⇒ 相对"在窗口里居中"（中心 390、顶边 226）**上移 90vp** —— 这就是用户要的"高一些"。
+   *
+   * ## 为什么这次能定住（与 §72 那次失败的区别）
+   *
+   * §72 我改的也是这个函数，但**同时**把"宽预算"换成了 `swiperBoxW` 并配上了一个
+   * `COVER_FIT_GAP_VP = 20`（我自己编的 gap）⇒ 两个改动叠在一起、且 gap 是错的。
+   * 这次**只照抄算式**：`gap = 50`（无界默认）、`metaH = 60`（无界兜底）、
+   * `availH = 高 − 上下让位`（无界的 `availH` 定义）—— 三处都有字节码出处。
+   *
+   * ⚠️ 仍然**没有**用 `tyPlayer`（见上面那个常量的注释）；`curMetaY = 0` 是等价替代。
+   * ⚠️ `x` 仍然是"水平居中"（无界 `floatingCover` 是 `Column(center)`）⇒ 未改行为。
+   */
+  public playerCoverGeomRect(): LyricMorphRect {
+    const w: number = this.windowWidthVp;
+    const h: number = this.windowHeightVp;
+    if (w <= 0 || h <= 0) {
+      return { x: 0, y: 0, size: 0, height: 0, radius: 0 };
+    }
+    // ① `availH` = 无界的可用高度（**扣掉上下让位**，不是整窗高）
+    const availH: number = Math.max(1, h - this.topInsetVp() - this.navigationBarBottomVp);
+    // ② `coverEdgeMaxOf(swiperBoxW, pageSide)`
+    const pageSide: number = PlayerExpandState.LYRIC_COVER_LEFT_VP;
+    const swiperBoxW: number = Math.max(1, Math.min(w, availH));
+    let curEdgeMax: number = swiperBoxW - 2 * pageSide;
+    if (curEdgeMax > PlayerExpandState.COVER_EDGE_CAP_VP) {
+      curEdgeMax = PlayerExpandState.COVER_EDGE_CAP_VP;
+    }
+    if (curEdgeMax < PlayerExpandState.COVER_EDGE_MIN_VP) {
+      curEdgeMax = PlayerExpandState.COVER_EDGE_MIN_VP;
+    }
+    // ③ `fitPlayerOverlay`
+    const metaH: number = PlayerExpandState.COVER_FIT_META_H_VP;      // 60（无界兜底）
+    const gap: number = PlayerExpandState.COVER_FIT_META_GAP_VP;      // 50（无界默认）
+    const inset: number = PlayerExpandState.COVER_FIT_BOUND_INSET_VP; // 8（无界硬编码）
+    const maxForBox: number = availH - 2 * (gap + metaH + inset);
+    let edge: number = curEdgeMax;
+    if (!(curEdgeMax < maxForBox)) {
+      edge = maxForBox;
+    }
+    if (edge < PlayerExpandState.COVER_EDGE_MIN_VP) {
+      edge = PlayerExpandState.COVER_EDGE_MIN_VP;
+    }
+    if (edge > curEdgeMax) {
+      edge = curEdgeMax;
+    }
+    if (edge < 0) {
+      edge = 0;
+    }
+    // ④ `metaY`（`curMetaY = 0` ⇒ "从内容顶边往下推"）再被上界夹住
+    const metaYRaw: number = edge / 2 + gap + metaH / 2;
+    const bound: number = (availH / 2 - metaH / 2) - inset;
+    const metaY: number = metaYRaw > bound ? bound : metaYRaw;
+    // ⑤ 封面中心 = 内容顶边 + metaY
+    const centerY: number = this.topInsetVp() + metaY;
     return {
-      x: this.bigX,
-      y: this.bigY,
-      size: fallbackSize,
-      height: fallbackSize,
-      radius: this.bigRadius > 0
-        ? this.bigRadius
-        : fallbackSize * PlayerExpandState.COVER_RADIUS_RATIO
+      x: (w - edge) / 2,
+      y: centerY - edge / 2,
+      size: edge,
+      height: edge,
+      radius: edge * PlayerExpandState.COVER_RADIUS_RATIO
     };
+  }
+
+  /**
+   * @returns 播放页封面端点的**纯几何兜底**：直接复用 {@link playerCoverGeomRect}
+   *          （口径统一在一处，避免"两个几何值"打架）。
+   */
+  private fallbackBigRect(): LyricMorphRect {
+    return this.playerCoverGeomRect();
   }
 
   // ─────────────── 二·补（A2）：歌词页顶部的「封面 + 歌名」浮层 ───────────────
@@ -751,9 +1317,16 @@ export class PlayerExpandState {
     return this.lyricGeometryReady() && this.lyricCoverSizeOf() > 0;
   }
 
-  /** @returns 歌词页歌名块的顶边（vp，窗口坐标）= 封面底边 + 间距。 */
+  /**
+   * @returns 歌词页歌名块的顶边（vp，窗口坐标）。
+   *
+   * ★★ 2026-10-15（照搬无界）：**与封面同一个顶边**（并排），不再是"封面底边 + 间距"。
+   *   无界 `metaRow` 与 `floatingCover` 在歌词页占同一条水平带：封面在左、文字在右，
+   *   文字与封面**竖直居中**对齐（`PlaybackPage` 那边把行高设成封面边长来保证这一点）。
+   *   ⚠️ 所以歌名块的 y 与封面 y 相同，横向由**行的左内边距**（封面右缘 + 12）让开。
+   */
   public lyricMetaYOf(): number {
-    return this.lyricCoverYOf() + this.lyricCoverSizeOf() + PlayerExpandState.LYRIC_META_GAP_VP;
+    return this.lyricCoverYOf();
   }
 
   /** @returns **展开页那一端**歌名块的顶边（vp，窗口坐标）= 落点矩形底边 + 间距。 */
@@ -784,7 +1357,10 @@ export class PlayerExpandState {
     if (size <= 0) {
       return 0;
     }
-    return this.lyricMetaYOf() + PlayerExpandState.LYRIC_META_BLOCK_H_VP;
+    // ★ 2026-10-15（照搬无界）：歌名与封面**并排**之后，浮层高度 = 封面底边 + 一点呼吸间距。
+    //   （原来是 `lyricMetaYOf() + LYRIC_META_BLOCK_H_VP` —— 那是"歌名排在封面下方"时的算法，
+    //     并排之后它会把留白算多一整块。）
+    return this.lyricCoverYOf() + size + PlayerExpandState.LYRIC_META_GAP_VP;
   }
 
   /**
@@ -831,6 +1407,14 @@ export class PlayerExpandState {
    *
    * 用窗口**短边**做分母：迷你条封面在两个方向上占的比例不同，取短边能得到
    * "不会小到看不见、也不至于大到看不出动画"的那一档。
+   *
+   * ★★ 2026-10-15（**已判定为死代码**，`RzdMusic记忆.md` §59）：零调用者。
+   *   它和紧邻的 {@link morphCenterXPercent} / {@link morphCenterYPercent} 是**同一族**：
+   *   "整页 `scale` + 绕迷你条中心缩放"那套**早期形变**的残留。活的形变走
+   *   `applyMorphProgress()` 的"缩放 + 竖直裁剪窗口"（`morphScale/morphTx/morphTy/morphClipHeight`）
+   *   ⇒ 这一族**从来没被接线**（`MORPH_MIN_SCALE` 也只被它读）。
+   * @deprecated 零调用者。活的形变起点见 {@link applyMorphProgress} 与 `morphInitParams()`。
+   * 复核命令：`grep -rn 'morphStartScale\|morphCenterXPercent\|MORPH_MIN_SCALE' RzdMusic --include=*.ets`
    */
   public morphStartScale(): number {
     if (!this.morphGeometryReady()) {
@@ -844,6 +1428,8 @@ export class PlayerExpandState {
   /**
    * @returns 缩放锚点 X，**本页坐标系**下的百分比字符串（如 `'12%'`）。
    * @param progress 展开进度 0…1（终点时锚点回到居中，避免静止态偏心）
+   * @deprecated 零调用者；与 {@link morphStartScale} 同属"早期绕锚点缩放"那一族残留。
+   * 复核命令：`grep -rn 'morphCenterXPercent' RzdMusic --include=*.ets`（期望：只有本处定义）
    */
   public morphCenterXPercent(progress: number): string {
     const target: number = this.windowWidthVp > 0 ? (this.miniX + this.miniSize / 2) / this.windowWidthVp : 0.5;
@@ -866,7 +1452,15 @@ export class PlayerExpandState {
     return percent.toFixed(2) + '%';
   }
 
-  /** 回调更新请求计数（同一时刻只有一个组件挂这个回调，见 `setDragUpdate` 注释）。 */
+  /**
+   * ★★ 2026-10-15（**已判定为死代码**，`RzdMusic记忆.md` §59）：注释里那个 `setDragUpdate`
+   * **全仓不存在**（`grep -rn 'setDragUpdate' RzdMusic --include=*.ets` 无命中）⇒ 本字段
+   * 既没有写者也没有读者。它属于上一版"把跟手回调塞进共享状态"的尝试，
+   * 而活的那条路是**壳层/迷你条各自持手势、直接调 `applyMorphProgress()`**（见下面 §五点五 那段）。
+   *
+   * @deprecated 零读者零写者。跟手进度请走 {@link applyMorphProgress}。
+   * 复核命令：`grep -rn 'dragUpdateToken\|setDragUpdate' RzdMusic --include=*.ets`
+   */
   @Trace public dragUpdateToken: number = 0;
 
   // ═════════════════════════ 五点五、上拉打开（对标无界 ExpandAnimation.applyPullProgress）═════════════════════════
@@ -1099,9 +1693,51 @@ export class PlayerExpandState {
       `fontScaleAppliedByTextOnly=1`);
   }
 
+  /**
+   * @returns **壳层歌名克隆层**（`MorphMetaBridge`）现在要不要接管绘制。
+   *
+   * ★★★ 2026-10-16（用户实测：「**那个歌曲名和歌手名现在怎么还是之前的一镜到底的飞入，
+   *   改成无界一样的**」）⇒ **本方法改成恒 `false`**。
+   *
+   * ## 为什么原来那套是"一镜到底的飞入"（而它不是无界的做法）
+   *
+   * 原来 `metaBridgeOwnsPaint()` 为真时：
+   * ```
+   *   · 壳层 MorphMetaBridge 在【窗口坐标】画一份歌名/歌手克隆，
+   *     用 morphMetaFrame() 的 x/y + 字号×scale 从"迷你条那一行"一路插值飞到"落点那一行"；
+   *   · 播放页自己那一行同时被 targetMetaOpacity() 压成 0（交棒）。
+   * ```
+   * ⇒ 观感就是**一个歌名从迷你条位置长途飞到落点**（用户说的"一镜到底的飞入"）。
+   *
+   * ## 无界那边是什么样
+   *
+   * `floatingMeta` 里**只有一行** `metaRow`（`PlayerPage完整UI定稿.md` §6.1/§6.2）：
+   * ```
+   *   metaOffsetYAt(t) = lerp(metaYPlayer, topYAtLyric() + metaTopFixLyric, t)   // 位移插值
+   *   字号 = lerp(chrome().titleSize × sizeK, 15 × sizeK, metaProgress)          // 字号插值
+   *   opacity = pullChromeOpacity = clamp((t − 0.18) / 0.44)                     // 0.18→0.62 淡入
+   * ```
+   * ⇒ **没有第二个元素在飞**：那一行就是"原地淡入 + 跟着形变进度微调位置"。
+   *
+   * ## 所以本处怎么改
+   *
+   * 恒返回 `false` ⇒ 克隆层**不再画**，绘制权一直留在**播放页自己那一行**（`targetMetaOpacity()`
+   * 随之恒走 `pullChromeOpacity()` 分支）。那一行现在的动画是：
+   * ```
+   *   · 不透明度 = pullChromeOpacity = clamp((p − 0.18) / 0.44)   ← 与无界同一个窗口
+   *   · 位移     = metaRiseVp() = (1 − ramp01(p, 0.18, 0.62)) × 180vp / scale
+   *                ← 从下升起 180vp（用户 10-15 定调「不要淡入淡出，用位移出场」）
+   * ```
+   * ⇒ 与无界同构：**一行、原地、淡入 + 升起**，没有长途飞行。
+   *
+   * ⚠️ 关闭它的**代价**（如实登记）：形变期间那一行在**被缩放的容器里**，字会被一起缩小。
+   *   在早期（p < 0.4）它很小，但因为 `pullChromeOpacity` 在 p = 0.18 才起步、0.62 才满，
+   *   观感是"随着页面长大而淡入" —— 与无界的"跟着形变进度淡入"同族。
+   *   ⚠️ 若真机上显得"字一开始太小"，那说明该把这一行**也搬到形变容器之外**
+   *   （= 无界 `floatingMeta` 的位置：与 `playerPane` 同级），那是一次独立的结构改动。
+   */
   public metaBridgeOwnsPaint(): boolean {
-    return this.metaBridgeActive && this.metaBridgeGeneration === this.morphGen &&
-      this.morphSessionDriving();
+    return false;
   }
 
   public targetMetaOpacity(): number {
@@ -1175,6 +1811,16 @@ export class PlayerExpandState {
   private morphOverlayGen: number = 0;
   /** 浮层拷贝此刻是否有补间在跑（防止同一段动画被重复起一遍）。 */
   private morphOverlayAnimating: boolean = false;
+  /**
+   * 本轮收起是不是**已经有人**把浮层那一棒起过了（唯一清零点 = {@link morphOverlayReset}）。
+   * 见 `focusMorphOverlayForPageCollapse()` 里的幂等护栏说明。
+   */
+  private morphOverlayCollapseOwned: boolean = false;
+
+  /** @returns 浮层拷贝的补间是否正在跑（只读，给播放页的日志与护栏用）。 */
+  public overlayTweenAnimating(): boolean {
+    return this.morphOverlayAnimating;
+  }
   /** `hostsMorphOverlay()` 的缓存：-1 = 还没判过，0 = 否，1 = 是（见该函数的说明）。 */
   private morphOverlayHostCached: number = -1;
 
@@ -1275,6 +1921,69 @@ export class PlayerExpandState {
   private endCoverH: number = 0;
 
   /**
+   * ★★★ 2026-10-16 新增：给**现场自证徽标**（`PlaybackPage.DiagBadge()`）用的只读读数。
+   *
+   * 为什么走方法而不是把字段改 public：本仓既有的做法就是"私有字段 + 公开只读入口"
+   * （同 `morphContainerActive()` / `morphClipping()` 那一族，见 §59 的清理记录）。
+   * ⚠️ 纯只读：这些方法**不写任何状态**，不要在里面加副作用。
+   * @returns 续飞封面**起点宽度**（vp，迷你条封面）
+   */
+  public snapStartWVp(): number {
+    return this.snapStartW;
+  }
+
+  /** @returns 续飞封面**终点宽度**（vp，播放页封面）—— 为 0 表示终点锚点没量到。 */
+  public endCoverSizeVp(): number {
+    return this.endCoverSize;
+  }
+
+  /** @returns 续飞封面**终点高度**（vp）—— 非正方形封面不能当方的用。 */
+  public endCoverHVp(): number {
+    return this.endCoverH;
+  }
+
+  /** @returns 当前档位的 `bottomGap`（vp）—— 给自证徽标核"底部让位下限"用。 */
+  public chromeBottomGapVp(): number {
+    return this.chromeOf().bottomGap;
+  }
+
+  // ═══════════ ★★★ 现场自证：**动作轨迹**（不依赖 hdc 也能看出"谁先谁后"）═══════════
+  //
+  // ## 为什么需要它
+  //
+  // 「点击打开 / 点击关闭 / 系统返回没有动画」这条链上，**顺序**本身就是自变量的最大值：
+  // 同一个函数先调还是后调，结果完全不同（§93 的 `onAppear` 误判、§103 的 `onDisappear`
+  // 误杀，都是"顺序"问题）。而徽标原来只显示**当前值**，看不出**顺序**。
+  //
+  // ⇒ 在共享状态上留一条**最近 6 个动作**的轨迹，壳层与播放页两边都往里写，
+  //   徽标直接显示 ⇒ 一次就能看出"谁先谁后、谁没来"。
+  //
+  // ⚠️ **绝不影响行为**：只在 `pushMorphTrace()` 里拼字符串；不参与任何判断。
+  // ⚠️ 上限 6 段（每段最多十几字符）⇒ 字符串长度可控。
+  @Trace public morphTrace: string = '';
+
+  /**
+   * 记录一个形变动作（只给自证徽标用）。
+   * @param tag 短标签（**保持 6 字符以内**，便于一眼扫过）
+   */
+  public pushMorphTrace(tag: string): void {
+    const parts: string[] = this.morphTrace.length > 0 ? this.morphTrace.split('>') : [];
+    parts.push(tag);
+    while (parts.length > 6) {
+      parts.shift();
+    }
+    this.morphTrace = parts.join('>');
+  }
+
+  /**
+   * 清空轨迹（在一次**新的打开动作开始**时调，避免与上一次的轨迹混在一起）。
+   * ⚠️ 只在"用户发起了新的打开/关闭"这类**会话边界**上调，不要在渲染路径上调。
+   */
+  public resetMorphTrace(tag: string): void {
+    this.morphTrace = tag;
+  }
+
+  /**
    * 记录迷你条那条**胶囊**的窗口矩形。
    *
    * 用**实测**（`measureMini`，走 `getRectangleById`）而不是 `onAreaChange` 的
@@ -1362,8 +2071,18 @@ export class PlayerExpandState {
     }
     // Measurement never acquires paint ownership. OPEN must remain TARGET-owned.
     // Closing explicitly freezes while OPEN, before beginLeaving changes any transform.
-    // 宿主矩形只进日志：`MORPH_HOST_ID` 在手机壳里就是播放页自己的根 Stack，
-    // 它的高度**就是裁剪窗口高度**，绝不能当"铺满目标"（第五次自噬）。
+    // 宿主矩形只进日志。
+    // ★★ 2026-10-15 订正（**原先这里写的是"`MORPH_HOST_ID` 在手机壳里就是播放页自己的根 Stack"，
+    //    那句是错的，而且它误导过一轮改动** —— 见下）：
+    //   `.id(MORPH_HOST_ID)` 的实际绑定点**只有两个，都在 products 壳层的根 Stack 上**
+    //   （`products/default/.../Index.ets:1796`、`products/pc/.../Index.ets:345`），
+    //   两者都**常驻**；而手机路由模式下播放页是壳层里 `HdsNavigation` 的**子节点**
+    //   ⇒ 量到的是**壳层那一层**（满屏），**不是**播放页那个裁剪窗口。
+    // ⇒ 所以这里量到的 `hostNode=` 是"壳层满屏盒"：**它仍然绝不能当铺满目标**
+    //   （手机侧铺满目标走 `reportWindow()`，见 `contentWidthVp/HeightVp` 那段），
+    //   但"它的高度就是裁剪窗口高度"这个理由**不成立**（真正的原因是别拿任何**参与形变**的层当目标）。
+    // ⚠️ **不要在播放页那一层再补 `.id(MORPH_HOST_ID)`** —— 那会造出"同 id 两份节点"，
+    //   而本仓对这件事有明确记录（`MINI_BAR_ID` 那两处注释："量到哪一份不确定，起点就抖"）。
     const host: NodeRect | undefined = this.measureNode(ui, MORPH_HOST_ID);
     const hostText: string = host !== undefined
       ? `${host.w.toFixed(1)}x${host.h.toFixed(1)}@(${host.x.toFixed(1)},${host.y.toFixed(1)})`
@@ -1423,9 +2142,14 @@ export class PlayerExpandState {
    *      **裁剪高度**，一次上拉之后它就被写成 ~360（≈一个屏宽），而它同时又是
    *      `clipHeight` 的目标与缩放分母 —— 自噬：目标高度被自己的中间态覆盖，
    *      之后所有展开都只能长到 360vp（"底部缺一块"/"一块近正方形的背景"）。
-   *   2. 手机侧 `PlaybackPage` 自己的根 Stack 就是 `MORPH_HOST_ID`，它的
-   *      `.height(morphClipHeight())` **就是裁剪窗口高度** —— 同一个坑换了个位置又踩一次
-   *      （「一块黑底 + 播放页展不开」）。
+   *   2. 手机侧 `PlaybackPage` 自己的根 Stack 上也有 `.height(morphClipHeight())`
+   *      —— **同一个坑换了个位置又踩一次**（「一块黑底 + 播放页展不开」）。
+   *      ★ 2026-10-15 订正：这里原来写的是"手机侧 `PlaybackPage` 自己的根 Stack **就是**
+   *      `MORPH_HOST_ID`" —— **那句是错的**：`MORPH_HOST_ID` 的实际绑定点只有两个，
+   *      都在 products 壳层的根 Stack 上（常驻），播放页那一层**从来没有挂过**它。
+   *      但**教训不变、而且更贴切**：真正的问题不是"它叫什么 id"，而是
+   *      **任何参与形变的层都不能当"铺满目标"** —— 播放页根 Stack 的高度是**裁剪窗口高度**，
+   *      不管它挂不挂那个 id，把它喂回 `reportHost()` 都会自噬。
    *   ⇒ **唯一权威 = 窗口尺寸**：由 {@link reportWindow} 从 `windowSize` 写入。
    *     参与形变的任何节点都不许写这两个字段。
    */
@@ -1597,7 +2321,18 @@ export class PlayerExpandState {
     return 'none';
   }
 
-  /** @returns 两端的几何是否都量到了（可以走形变路径）。 */
+  /**
+   * @returns 两端的几何是否都量到了（可以走形变路径）。
+   *
+   * ★★ 2026-10-15（**已判定为死代码**，`RzdMusic记忆.md` §60）：**零调用者**。
+   *   它要求 `bigSize > 0`（那是 `reportBig` **上报值**），而活的判据是
+   *   {@link morphIntroAnchorsReady}：**同时接受** `bigNodeKnown`（FrameNode 量到的，最准）
+   *   与 `bigSize`（上报兜底），并且还要求 `morphUsable && endCoverSize > 0`。
+   *   ⇒ 本函数是那条判据**更早、更弱**的版本：真接上它会让"FrameNode 量到了但 areaChange
+   *     还没上报"那一帧被误判成"几何没齐" ⇒ 点击打开退化成无动画落位（§56.15 修过的那个坑）。
+   * @deprecated 零调用者。判据请用 {@link morphIntroAnchorsReady}。
+   * 复核命令：`grep -rn 'morphReady(' RzdMusic --include=*.ets`（期望：只有本处定义）
+   */
   public morphReady(): boolean {
     return this.miniSize > 0 && this.bigSize > 0 && this.morphBoxWidth() > 0 && this.morphBoxHeight() > 0;
   }
@@ -1607,12 +2342,19 @@ export class PlayerExpandState {
     return this.morphUsable && this.morphContainerActive();
   }
 
-  /** @returns 宿主（= 内容层固定尺寸）宽度（vp）。 */
+  /**
+   * @returns 宿主（= 内容层固定尺寸）宽度（vp）。
+   * @deprecated 零调用者（`RzdMusic记忆.md` §59）。宿主尺寸在**内部**由 `morphBoxWidth()`
+   *   直取；对外没有消费者。复核：`grep -rn 'morphHostW' RzdMusic --include=*.ets`
+   */
   public morphHostW(): number {
     return this.morphBoxW > 0 ? this.morphBoxW : this.morphBoxWidth();
   }
 
-  /** @returns 宿主（= 内容层固定尺寸）高度（vp）。 */
+  /**
+   * @returns 宿主（= 内容层固定尺寸）高度（vp）。
+   * @deprecated 零调用者（同 {@link morphHostW}）。
+   */
   public morphHostH(): number {
     return this.morphBoxH > 0 ? this.morphBoxH : this.morphBoxHeight();
   }
@@ -1680,6 +2422,25 @@ export class PlayerExpandState {
       this.morphP = 0;
     }
     // 已有起点就继续等待目标挂载，调用方不能把首次上拉直接落位。
+    // ★★ 2026-10-15 诊断锚点（`hdc shell hilog -x | Select-String 'RzdMorphStart'`）——
+    //   一次打出**形变起点**的全部量，用来判定用户报的「**动画起始位置偏下**」属于哪一种：
+    //     · `bar`  = 量到的迷你条**胶囊**渲染矩形（`getRectangleById`，**窗口坐标**、含祖先 transform）
+    //     · `mini` = 量到的迷你条**封面**矩形 —— **形变严格用的就是它**（`miniY/miniSize`）
+    //     · `win`  = 窗口尺寸；`pad` = 真实避让区（上 / 下）；`usable` = 两端锚点是否齐
+    //   **判据（配合壳层的 `RzdPlayerViewport` 那条一起看）**：
+    //     · 若 `RzdPlayerViewport` 的 `overlay` 高度 **小于** `window` 高度（差 ≈ pad 之和）
+    //       ⇒ **内容盒没铺满窗口** ⇒ 形变全走窗口坐标时就整体偏下 ⇒ 归页根那条
+    //         `expandSafeArea + ignoreLayoutSafeArea`（#4 那处修复）管；
+    //     · 若 `overlay == window` 而这里的 `mini.y` 与迷你条在屏上的**实际**位置不一致
+    //       ⇒ **量测口径**问题（该用渲染位而不是布局位）。
+    Logger.info(PlayerExpandState.LOG_TAG,
+      `RzdMorphStart ready=${ready} preferFloating=${preferFloating} ` +
+      `bar=(${this.barWinX.toFixed(1)},${this.barWinY.toFixed(1)},` +
+      `${this.barWinW.toFixed(1)},${this.barWinH.toFixed(1)}) ` +
+      `mini=(${this.miniX.toFixed(1)},${this.miniY.toFixed(1)},${this.miniSize.toFixed(1)}) ` +
+      `win=${this.windowWidthVp.toFixed(0)}x${this.windowHeightVp.toFixed(0)} ` +
+      `pad=${this.topInsetVp().toFixed(1)}/${this.navigationBarBottomVp.toFixed(1)} ` +
+      `usable=${this.morphUsable} bigKnown=${this.bigNodeKnown}`);
     return ready || (this.barWinW > 0 && this.miniSize > 0);
   }
 
@@ -1762,8 +2523,21 @@ export class PlayerExpandState {
     return this.barY > 0 && this.barH > 0;
   }
 
-  /** 上拉打开的**进度**提交阈值（0…1）：超过它就展开到底。 */
-  public static readonly PULL_OPEN_COMMIT_FRACTION: number = 0.45;
+  /**
+   * **提交阈值 `COMMIT_T`**（0…1）—— 对标无界 `MainPage.COMMIT_T = 0.32`。
+   *
+   * ★★ 2026-10-15（用户指示「**手感对齐无界**」后落地）：值从 `0.45` 改成 **`0.32`**。
+   *   ⚠️ 这条**推翻了**本文件此前的一条指令（原文："无界是 `COMMIT_T = 0.32`，这里保持
+   *   0.42 / 0.45，标注『待实测』…**不许按无界的值直接覆盖**"）—— 那条的顾虑是"没上机实测
+   *   就不动手感"，而现在**用户明确要求手感对齐无界**，该顾虑的条件不再成立 ⇒ 按无界落地。
+   *
+   * ★ **两个方向共用同一个 `T`**（无界就是这样）：
+   *   · 打开：`morphT >= COMMIT_T`（本文件 `pullOpenShouldCommit()`）；
+   *   · 关闭：**相对量** `delta >= max(baseT/2, COMMIT_T)`（`PlaybackPage.onDismissDrag`，
+   *     对标无界 `reverseQuitDelta()`）—— **不是**"缩到某个百分比就关"。
+   *   ⇒ 满展开起手关闭时阈值 = `max(0.5, 0.32) = 0.5`（要拉回去 50% 才关）。
+   */
+  public static readonly PULL_OPEN_COMMIT_FRACTION: number = 0.32;
   /**
    * 上拉打开的**速度**提交阈值（vp/s）。
    *
@@ -1791,17 +2565,24 @@ export class PlayerExpandState {
   //   §6.5 的处置结论：**性质是"两处各写一遍 + 从未定案"**（不是"方向反了"，
   //   那句"收起方向的门比打开方向高 39%"是把两把不同的尺子（`barY` / `miniY`）换算错了）。
   //
-  // ⚠️⚠️ **这两个数与 `PULL_OPEN_COMMIT_FRACTION` 只能一起改**，而且**必须先上机实测**：
-  //   `PlaybackPage` 原注释（现行版本已随本收敛一起搬到这里）明确写着
-  //   "无界是 `COMMIT_T = 0.32`，这里保持 0.42 / 0.45，标注『待实测』…**不许按无界的值直接覆盖**"。
-  //   两个方向现在的**手指绝对位移**量级（`派音动画Bug清单.md` §6.5 的表）：
+  // ⚠️⚠️ **历史记录（已被 2026-10-15 的"手感对齐无界"取代，留档不再执行）**：
+  //   这里原来写着"这两个数与 `PULL_OPEN_COMMIT_FRACTION` 只能一起改，而且**必须先上机实测**；
+  //   无界是 0.32，这里保持 0.42 / 0.45…**不许按无界的值直接覆盖**"，并给出当时的量级：
   //     打开提交 ≈ `0.45 × barY`；收起提交 ≈ `0.38 × miniY`（`barY ≈ miniY`）
-  //   ⇒ 收起其实**比打开更容易**（约 −16%），不是"收起更难"。
-  //   二者都**不等于**无界的 0.32；要不要对齐只能靠真机手感，**读代码定不了**。
+  //   ⇒ 当时的结论是「收起其实比打开更容易（约 −16%），不是"收起更难"」。
+  //   **用户 2026-10-15 明确指示"手感对齐无界"** ⇒ 那条顾虑（"没实测就不许覆盖手感"）的前提消失：
+  //     打开阈值 → `0.32`；关闭 → 相对量 `max(baseT/2, 0.32)`（满展开起手 ⇒ 要拉回 50% 才关）。
+  //   ⇒ **方向反过来了**：现在是"打开更容易、关闭更不易误关"，与无界一致。
 
   /**
-   * 下拉松手时的**进度**提交阈值（0…100，占 {@link PlayerExpandState.DISMISS_DRAG_SPAN_RATIO}
-   * 或实测 `miniY` 那把尺子的百分比）：超过它就收起，否则弹回完整态。
+   * 下拉松手时的**进度**提交阈值（0…100）—— ⚠️ **只给"退化路径"用**。
+   *
+   * ★★ 2026-10-15（手感对齐无界）：**形变路径已经不用它了** —— 那条路改成无界的
+   *   **相对量**判据 `delta >= max(baseT/2, COMMIT_T)`（见 `PlaybackPage.onDismissDrag`
+   *   与 `PULL_OPEN_COMMIT_FRACTION` 的注释）。
+   *   本常量现在只服务"**量不到几何**（`morphUsable === false`）那条退化分支"：
+   *   那里没有 `morphT` 可算 `delta`，只能仍旧按"缩到多少"判。
+   *   ⇒ 它是**降级路径的兜底**、不是主判据；无界没有对应分支（它总能量到几何）。
    */
   public static readonly DISMISS_COMMIT_PROGRESS: number = 38;
 
@@ -2064,15 +2845,128 @@ export class PlayerExpandState {
    *   2. `hostsMorphOverlay()` —— 宿主壳层这次是不是真的接管了这一棒（PC 壳层还没接 ⇒ 不画，
    *      否则会出现"播放页也不画、浮层也不画"的**无封面**空档）。
    *
-   * ⚠️ 为什么不再另加"进度 ≥ 某阈值就停笔"：浮层这一棒早于播放页落位
-   *   （560ms + 20ms 收尾 vs 播放页 350ms + 30ms），末尾那几十毫秒里两端进度都已经是 1、
-   *   矩形逐像素相同，停笔时**没有可跳的差**；而多一个阈值就会重新引入"半路消失"那类 bug。
+   * ⚠️ **2026-10-15 订正**：这里原来写着"浮层这一棒**早于**播放页落位（560 vs 350）"——
+   *   **说反了**，560 > 320，浮层是**晚**的那一条。正因为写反了，才漏掉了
+   *   "播放页落位时把浮层掐断"这个 bug（见下面第二个判据的注释）。
    */
   public morphOverlayBridging(): boolean {
+    // ★★★ 2026-10-16（**恢复**；我上一版把它恒置 `false`，那是个错误）
+    //
+    // ## 为什么必须恢复：这才叫"照搬无界的封面"
+    //
+    // 无界的封面是**一镜到底**，而它靠的是**封面画在一个没有额外变换的浮层里**、
+    // 用**窗口坐标插值**飞过去（`CoverMorph` 全程不查任何节点、也不受 `playerPane`
+    // 那套 scale/translate 影响）。
+    // 我们这一侧**本来就有同构的一层**：`products/default/.../Index.ets` 的
+    // `MorphCoverClone()` —— 它与播放页形变容器**同级**（在壳层满屏 `Stack` 上），
+    // 拿 `morphOverlayCoverBridge()`（= `morphCoverRectAt(morphOverlayP)`，窗口坐标）
+    // 直接当 `.position()` 用。**这一层在真机上是好的**（用户此前验收过"封面正常"）。
+    //
+    // 我上一版关掉它、改让播放页里那张真封面独自承担，结果是：真封面挂在**被 scale 变换过**
+    // 的形变容器里，而容器形变中"贴在屏幕顶部那一条"（`morphTy ≈ +844`、`scale ≈ 0.082`）
+    // ⇒ 基准位的封面被搬到**屏幕顶部**、而迷你条在**屏幕底部** ⇒ 观感成了
+    // 「**封面从下往上飞**」（用户 2026-10-16 实测）。
+    //
+    // ⇒ 恢复"浮层画、真封面让位"这套交棒。**这才是无界的结构。**
+    // ⚠️ 那两条"交棒固有毛病"（两条补间不同钟 / 真封面窗口坐标被变换拉偏）**是真的**，
+    //   但它们已经被下面三条判据兜住了（见第二个判据的注释）——**不要**因为那两条就再关一次。
+    // ⚠️ `metaBridgeOwnsPaint()` 仍然恒 `false`（歌名/歌手**不**跟着飞，用户明确要求过），
+    //   两者不冲突：浮层这一层在本仓**只画封面**（`MorphCoverClone` 里只有一张 `Image`）。
     if (!this.hostsMorphOverlay()) {
       return false;
     }
-    return this.morphBridging();
+    if (this.morphBridging()) {
+      return true;
+    }
+    // ★★ 2026-10-15（照搬无界「两层各跑各的、互不打断」）：
+    //   播放页落位之后**不要**立刻撤掉浮层。
+    //
+    //   实测时序（都在这份代码里）：
+    //     · 播放页那条 = `Index.settlePullOpen` 的 `PULL_OPEN_SETTLE_MS + 20`
+    //       ⇒ **320ms** 就 `morphSettleOpen()`，`morphBridging()` 随之变假；
+    //     · 浮层那条   = `MORPH_OVERLAY_DURATION_MS(560)`。
+    //   ⇒ 原来浮层在 320/560 ≈ **57% 处被撤掉**，观感就是"落位那一帧封面跳一下"
+    //      （无界没有这个毛病：它的内层与浮层是**两条独立补间**，谁先到谁先停，不互相取消）。
+    //
+    //   判据改成"**浮层自己还在半路就继续画**"：
+    //     · 展开跑到 p = 1、收起跑到 p = 0 才停笔；
+    //     · 静止态不会多画一张（展开态 p = 1、收起态 p = 0，两端都被排除）；
+    //     · 与 `morphBridging()` 是**或**关系，所以起手那一帧（p 恰好为 0）仍由它兜住，
+    //       不会出现"两边都不画"的空档。
+    const p: number = this.morphOverlayProgress();
+    if (p > 0.001 && p < 0.999) {
+      return true;
+    }
+    // ★★ 2026-10-15（修用户实测「**下拉关闭时封面动画变成展开那一套**」/「**系统返回关闭没有封面动画**」）：
+    //   上面那条"浮层自己还在半路"的判据有一个**方向性漏洞** —— 它只看 `morphOverlayP`。
+    //   而收起路上最容易出现的情况恰恰是"两条补间同起同落、浮层进度在**同一帧**就被
+    //   播放页那条落位链路清回 0"（`morphLand()` → `releaseMorphOwnership` → `morphReset()`），
+    //   那一刻 `p` 已经等于 0 ⇒ 本函数返回 false ⇒ **封面临到落位前被掐掉**：
+    //     · 用户看到的就是"封面没有按收起那一套缩回迷你条"（等于没有封面动画）；
+    //     · 而播放页那一层仍在 460ms 里缩放，于是"看起来像展开那一套"。
+    //   ⇒ 补一条**与进度无关、只看相位**的兜底：只要形变容器还活着
+    //     （ENTERING / LEAVING / LANDING），这一棒就**必须继续画**。
+    //     静止态（OPEN / NONE）仍然不画 ⇒ 不会多留一张封面。
+    //   ⚠️ 与 `morphBridging()` 仍是"或"关系：几何没量齐（`snapStartW/endCoverSize` 为 0）时
+    //      本函数也画不出来（矩形式子全是 0），所以不会画出"0×0 的封面"。
+    return this.morphContainerActive() && this.snapStartW > 0 && this.endCoverSize > 0;
+  }
+
+  /**
+   * @returns 形变容器的**自身尺寸**（vp，窗口坐标口径）—— 只给 {@link coverLocalRectFor} 做反变换用。
+   *
+   * 容器是"整宽 + 裁剪窗口高"（`PlaybackPage.build()` 里 `.height(morphClipHeight())`）：
+   * 形变中高度 = `morphClipHeight`，静止态 = 窗口高。
+   * ⚠️ 这两个量与 `applyMorphProgress()` 里算 `morphTx/morphTy` 用的是**同一组输入**
+   *   （`morphBoxWidth/Height` 那一档），改一处必须改另一处，否则反变换会差一截。
+   */
+  private coverHostW(): number {
+    // 容器是 `.width('100%')`（= 宿主满屏宽）⇒ 直接取窗口宽。
+    // ⚠️ **不要**用 `morphBoxWidth()`：那个是"被量到的内容宽"（`contentWidthVp`），
+    //   与容器自己的布局宽不是同一个量，混用会让反变换横向差一截。
+    return this.windowWidthVp;
+  }
+
+  private coverHostH(): number {
+    if (this.morphClipping() && this.morphClipHeight > 0) {
+      return this.morphClipHeight;
+    }
+    return this.windowHeightVp;
+  }
+
+  /**
+   * 把**屏幕坐标**的封面矩形，换算成形变容器**本地**的 `.position()` / `.width()` 值。
+   *
+   * @deprecated **零调用者，且方法本身在真机上被证伪过 —— 不要接上它。**
+   *
+   * ## 为什么留着它（而不是删掉）
+   *
+   * 它的推导本身是**对的**（就是容器变换 `y_屏 = H/2 + (y_本 − H/2)s + d` 的逆），
+   * 但它依赖一个**在本仓不成立的前提**：`.scale()` 绕**容器中心**。
+   *
+   * 真机反证（本仓有两次独立记录）：
+   * · `morphCoverRectAt()` 的注释：逆变换回页内坐标 ⇒ 真机结果"**封面跑到左上角**"
+   *   （说明 `.scale()` 的枢轴不是我以为的容器中心）；
+   * · 2026-10-16 `PlaybackPage.coverLocalRect()`：我原地重踩一遍，用户实测
+   *   「**封面是飞到屏幕外**」⇒ 再次证明该前提不成立。
+   *
+   * ⇒ 现在的做法是 `PlaybackPage.coverLocalRect()` **直接返回 `lyricFloatRect()`**
+   *   （纯几何、零换算）。留这个函数是为了下次有人想"逆变换一下"时，
+   *   能先看到**两次真机反证**再决定，而不是第三次重踩。
+   */
+  public coverLocalRectFor(screen: LyricMorphRect): LyricMorphRect {
+    const s: number = Math.max(0.05, this.morphScale);
+    const w: number = this.coverHostW();
+    const h: number = this.coverHostH();
+    const tx: number = this.morphTx;
+    const ty: number = this.morphTy;
+    return {
+      x: w / 2 + (screen.x - w / 2 - tx) / s,
+      y: h / 2 + (screen.y - h / 2 - ty) / s,
+      size: screen.size / s,
+      height: screen.height / s,
+      radius: screen.radius / s
+    };
   }
 
   /** @returns 浮层拷贝的不透明度（与播放页那份同口径：画的时候恒 1）。 */
@@ -2115,6 +3009,8 @@ export class PlayerExpandState {
   public morphOverlayReset(): void {
     this.morphOverlayGen = this.morphOverlayGen + 1;
     this.morphOverlayAnimating = false;
+    // ★ 会话边界：把"本轮收起已被起过"的标记也放掉，否则下一次收起会静默跳过浮层那一棒
+    this.morphOverlayCollapseOwned = false;
     this.morphOverlayP = 0;
     Logger.info(PlayerExpandState.logTag,
       `morph overlay reset gen=${this.morphOverlayGen} overlayP=0`);
@@ -2152,17 +3048,41 @@ export class PlayerExpandState {
     }
     Logger.info(PlayerExpandState.logTag,
       `morph overlay page-intro from=${this.morphOverlayP.toFixed(3)} gen=${this.morphGen}`);
+    // 进入方向一开跑，就把"本轮收起已被起过"的标记放掉：同一轮会话内先后经历
+    // "展开 → 收起"时不会被上一次的护栏挡住（护栏的语义是"同一方向只许起一次"）。
+    this.morphOverlayCollapseOwned = false;
     this.morphOverlayTweenTo(true, ui);
   }
 
   /**
-   * 播放页侧开始**收起**了 ⇒ 浮层也跟着回起点（走它自己的 560ms）。
+   * 播放页侧开始**收起**了 ⇒ 浮层也跟着回起点（走它自己的 460ms）。
+   *
+   * ⚠️ **幂等护栏**（2026-10-15）：本函数现在有**两个**调用点 ——
+   *   · 播放页的 `closeFullScreenPlayback()`（**同步**，起补间之前，这是权威调用点）；
+   *   · 壳层的 `@Monitor('expandState.morphStage')`（**异步**，兜住"相位被别人改成 LEAVING"
+   *     那种路径，比如迷你条/壳层自己发起的收起）。
+   *   两个都跑就会**各起一条** `animateTo`：后起的那条会把先起的那条覆盖掉，
+   *   而它的 `from` 已经是"刚走了几毫秒的进度" ⇒ 观感是封面回飞**卡一下**。
+   *   ⇒ 用 `morphOverlayCollapseOwned` 做"本轮收起只许起一次"的标记；
+   *     它由 {@link morphOverlayReset}（会话结束）唯一清掉。
    * @param ui 壳层的 UIContext
    */
   public focusMorphOverlayForPageCollapse(ui: UIContext): void {
     if (!this.hostsMorphOverlay()) {
       return;
     }
+    if (this.morphOverlayCollapseOwned) {
+      Logger.info(PlayerExpandState.logTag,
+        `morph overlay page-collapse skipped (owned) overlayP=${this.morphOverlayP.toFixed(3)} gen=${this.morphGen}`);
+      return;
+    }
+    if (this.morphOverlayAnimating) {
+      // 补间正在跑（例如壳层 `settlePullOpen` 起的那条方向一致的）：不要抢
+      Logger.info(PlayerExpandState.logTag,
+        `morph overlay page-collapse skipped (animating) overlayP=${this.morphOverlayP.toFixed(3)} gen=${this.morphGen}`);
+      return;
+    }
+    this.morphOverlayCollapseOwned = true;
     Logger.info(PlayerExpandState.logTag,
       `morph overlay page-collapse from=${this.morphOverlayP.toFixed(3)} gen=${this.morphGen}`);
     this.morphOverlayTweenTo(false, ui);
@@ -2204,15 +3124,30 @@ export class PlayerExpandState {
     // V2 状态是**异步标脏**、而 `animateTo` 会立刻刷新已标脏节点来决定首帧）。
     // 这里不需要 `UIUtils.applySync`：浮层的起点就是字段当前值，animateTo 的闭包只写终点。
     this.morphOverlayAnimating = true;
+    // ★★ 2026-10-15（Round 27）：时长/曲线**按方向分开**，收起方向与播放页**同一条公式**。
+    //   收起：`round(460 × max(0.4, from))` —— `from` 就是浮层起手时的当前进度，
+    //   与播放页 `closeFullScreenPlayback` 里用的 `morphP` 是**同一个量**（两层本就同步推进）
+    //   ⇒ 两层同起同落，"尾跳"从根上不可能出现。进入：维持 560（不变）。
+    const overlayMs: number = progress ? PlayerExpandState.MORPH_OVERLAY_DURATION_MS
+      : Math.round(PlayerExpandState.MORPH_OVERLAY_REVERSE_MS *
+        (from < PlayerExpandState.MORPH_OVERLAY_REVERSE_MIN_RATIO
+          ? PlayerExpandState.MORPH_OVERLAY_REVERSE_MIN_RATIO : from));
     Logger.info(PlayerExpandState.logTag,
       `morph overlay tween start from=${from.toFixed(3)} to=${to} ` +
-        `ms=${PlayerExpandState.MORPH_OVERLAY_DURATION_MS} gen=${gen}`);
+        `ms=${overlayMs} dir=${progress ? 'enter(560+EASE_OUT_STR)' : 'reverse(460*max(0.4,from)+REVERSE_EASING)'} ` +
+        `gen=${gen}`);
     ui.animateTo({
-      duration: PlayerExpandState.MORPH_OVERLAY_DURATION_MS,
-      // ★ 浮层这一层**单独**的时长/曲线（对标无界 `animateMorphT` 的 ENTER_MS + EASE_OUT_STR）。
+      duration: overlayMs,
+      // ★ 浮层这一层**单独**的时长/曲线：
+      //   进入 = 无界 `ENTER_MS(560)` + `EASE_OUT_STR`；
+      //   收起 = 无界 `MainPage.animateMorphT(reverseMs, 0, REVERSE_EASING)`
+      //          （`reverseMs = 460 × max(0.4, morphT)`、`REVERSE_EASING = (0.85,0,0.5,0.88)`）
+      //          —— 与播放页那一层**逐字同源**，所以两层不会不同步。
       //   ⚠️ 曲线内联写在这里，别抽成返回 `ICurve`/`UIShape` 的包装函数（那两个类型在本机 SDK
       //      里都不是全局可见的，见文件顶部 `MORPH_OVERLAY_DURATION_MS` 旁边那段说明）。
-      curve: curves.cubicBezierCurve(0.23, 1.0, 0.32, 1.0)
+      curve: progress
+        ? curves.cubicBezierCurve(0.23, 1.0, 0.32, 1.0)
+        : curves.cubicBezierCurve(0.85, 0, 0.5, 0.88)
     }, (): void => {
       // ⚠️ 目标值**直接写字段**，不要走 `syncMorphOverlayFromPage()`：那个会被
       //    `morphOverlayAnimating` 挡掉（此时它为 true），写不进去就等于没动画。
@@ -2264,7 +3199,21 @@ export class PlayerExpandState {
     }
   }
 
-  /** @returns 整页不透明度：0（还在迷你条那一小块、不可见）→ 1（完全铺开）。 */
+  /**
+   * @returns 整页不透明度：0（还在迷你条那一小块、不可见）→ 1（完全铺开）。
+   *
+   * ★★ 2026-10-15（**已判定为死代码**，`RzdMusic记忆.md` §59）：**零调用者** ——
+   *   只有 `products/default/.../Index.ets` 的**注释**里提到它（L837 / L1431），代码里没调。
+   * ⚠️ 这一条比同族的其他几个更值得记一笔：**注释把它说成"活的"**，
+   *    读注释的人会以为"播放页在形变早期是淡入的"。实际不是 —— 播放页是**半透明画出来**的
+   *    （绘制的观感由"整页缩放 + 裁剪窗口 + 背景层 `backgroundRevealOpacity`"三者共同决定），
+   *    而整页并没有一个 `.opacity(morphPageOpacity())`。
+   * ⇒ 两条出路，都需要真机判观感，所以本轮**只标注、不改**：
+   *   （a）接上它（加一次整页淡入）—— 会改变观感，且与"不要淡入淡出"的用户定调可能冲突；
+   *   （b）把那段注释改掉（说清"没有整页淡入"）—— 零风险，但属于文档整理。
+   * @deprecated 零调用者。
+   * 复核命令：`grep -rn 'morphPageOpacity' RzdMusic --include=*.ets`（期望：只有注释命中）
+   */
   public morphPageOpacity(): number {
     if (!this.morphUsable) {
       return 1;
@@ -2342,18 +3291,17 @@ export class PlayerExpandState {
   public applyMorphProgress(p: number): void {
     const t: number = p < 0 ? 0 : (p > 1 ? 1 : p);
     this.morphP = t;
-    // ★ 浮层那一层在**非形变期**跟着播放页一起复位（避免"残留进度画一帧大封面"）。
-    //   ⚠️ 判据是 `!morphContainerActive()` —— **不能在形变期无条件复位**：
-    //      · 起手那一刻（`morphBeginEntering` / `pullOpenBegin`）已经进了 ENTERING，
-    //        所以这里不复位；浮层的起点由壳层那两处显式压回 0
-    //        （`onPullOpenStart` 跟手起手 / `settlePullOpen` 起补间）；
-    //      · 而"落位后又被调用一次"（`morphSettleOpen` 里的 `applyMorphProgress(1)`）
-    //        发生在相位已经是 OPEN（容器不活跃）时 —— 那时复位也无害：浮层这份本来就不画了
-    //        （`morphOverlayBridging()` 已经 false），下一轮起手会重新压 0。
-    //      这条复位的真正价值是兜住"异常路径直接落位/卸载"那种没人显式复位的情况。
-    if (!this.morphContainerActive()) {
-      this.morphOverlayReset();
-    }
+    // ★★ 2026-10-15（**删除了"非形变期自动复位浮层"那一段**，依据见本条）：
+    //   原来是 `if (!morphContainerActive()) { this.morphOverlayReset(); }` ——
+    //   本意是兜住"异常路径直接落位/卸载"，但它同时**吃掉了正常收起路上的那一棒**：
+    //   `closeFullScreenPlayback()` 的补间目标是 `applyMorphProgress(0)`，而
+    //   `morphLand()`（LANDING）与 `morphReset()`（NONE）都会在**同一批任务**里再调一次
+    //   `applyMorphProgress(1)` / 直接复位 ⇒ 浮层进度被**瞬间**清回 0，
+    //   封面的回飞在最后一段被掐断 —— 用户实测的「关闭时封面动画不对 / 没有封面动画」。
+    //   ⚠️ 现在复位只由两处**显式**负责，语义清晰且都在会话边界上：
+    //     · `morphReset()`（会话结束 / 卸载）—— 里面已经调了 `morphOverlayReset()`；
+    //     · 起手那一帧由壳层/迷你条显式压 0（`onPullOpenStart` / `settlePullOpen`）。
+    //   渲染门（`morphOverlayBridging()`）自己保证静止态不画，所以不会残留一张封面。
     if (!this.morphUsable) {
       // 几何没量到：不裁剪、不缩放、不透明 —— 直接当"没有这套动画"
       this.morphScale = 1;
@@ -2596,6 +3544,76 @@ export class PlayerExpandState {
       this.morphStage === MorphStage.LANDING;
   }
 
+  // ═════════════════ 关闭落地的**播放条挤压回弹**（对标无界 `squashLand` / `animateSquash`）═════════════════
+  //
+  // ★★ 2026-10-15（修用户实测「**无界关闭时播放条会弹一下**」）：
+  //   无界 1.2.4 的收起落位不是"啪一下交还迷你条"，而是**先压扁、再弹回**：
+  //   ```
+  //     squashLand()  L153727-153800
+  //       setMorph(LANDING, ANIM)                       // 这一帧播放页不再绘制
+  //       animateSquash(SQUASH_Y=0.86, SQUASH_MS=110, EASE_OUT_STR)   // ← 压到 0.86
+  //         onDone → finishReverse(true)
+  //     紧随其后的回弹（L163786-163855，玻璃胶囊"触底弹回"）
+  //       animateSquash(→1, SQUASH_BACK_MS=320, SQUASH_BACK_EASING="cubic-bezier(0.34,1.56,0.64,1)")
+  //   ```
+  //   出处：`_recover/logic-src/开关播放器-手势路径定稿.md` §4 全表（L465-468 那三行）
+  //   + `形变引擎-源注册与参数总表.md` L153-156 的常量表。
+  //   ⚠️ `SQUASH_Y` 是**纵向比例**，乘在**迷你条胶囊**上（不是播放页）—— 无界那一侧
+  //      `PlayerPage` 只把它当"是否还画"的布尔门读（`morphSquashing`，U2 已闭合），
+  //      真正的 `× 0.86` 落在 `MainPage` 的胶囊上。所以这里也是加在迷你条上。
+  /** 挤压时的纵向比例（无界 `SQUASH_Y = 0.86`）。 */
+  public static readonly SQUASH_Y: number = 0.86;
+  /** 压下去的时长（ms，无界 `SQUASH_MS = 110`）。 */
+  public static readonly SQUASH_MS: number = 110;
+  /** 弹回来的时长（ms，无界 `SQUASH_BACK_MS = 320`）。 */
+  public static readonly SQUASH_BACK_MS: number = 320;
+
+  /**
+   * 迷你条胶囊的**纵向挤压比例**（1 = 原样）。
+   *
+   * 由播放页在"收起落位"那一刻起两条补间（见 {@link squashLandAnim}）驱动；
+   * 静止态恒为 1 ⇒ 不改变任何静态版面。
+   */
+  @Trace public morphSquashY: number = 1;
+
+  /**
+   * 跑一次无界的"落地挤压 → 回弹"（`squashLand` 的那两条补间）。
+   *
+   * ⚠️ 两条**共用同一个 `animateTo` 闭包写同一个字段**是刻意的：`morphSquashY` 只是一条
+   *   竖直线上的标量，先后两段各自由时长与曲线决定形状；分成两个补间是因为无界的
+   *   `SQUASH_MS(110)` 与 `SQUASH_BACK_MS(320)` **不是同一段**（压与弹各自计时）。
+   * ⚠️ 必须在**播放页已经进入 LANDING 之后**调用（无界 `squashLand` 的顺序就是
+   *    `setMorph(LANDING)` → `animateSquash`）—— 否则会看到"播放页还在画、迷你条先弹"。
+   * @param ui 起补间用的 UIContext（播放页自己的）
+   */
+  public squashLandAnim(ui: UIContext): void {
+    if (ui === undefined) {
+      // 拿不到 UIContext：不弹也不能把胶囊永久压在 0.86 上
+      this.morphSquashY = 1;
+      return;
+    }
+    this.morphSquashY = 1;
+    // ① 压到 SQUASH_Y（110ms，EASE_OUT_STR）
+    ui.animateTo({
+      duration: PlayerExpandState.SQUASH_MS,
+      curve: curves.cubicBezierCurve(0.23, 1.0, 0.32, 1.0)
+    }, (): void => {
+      this.morphSquashY = PlayerExpandState.SQUASH_Y;
+    });
+    // ② 弹回 1（320ms，`cubic-bezier(0.34, 1.56, 0.64, 1)` —— 那条 >1 的控制点就是"过冲回弹"）
+    setTimeout((): void => {
+      ui.animateTo({
+        duration: PlayerExpandState.SQUASH_BACK_MS,
+        curve: curves.cubicBezierCurve(0.34, 1.56, 0.64, 1)
+      }, (): void => {
+        this.morphSquashY = 1;
+      });
+    }, PlayerExpandState.SQUASH_MS);
+    Logger.info(PlayerExpandState.LOG_TAG,
+      `RzdSquash land squashY=${PlayerExpandState.SQUASH_Y} down=${PlayerExpandState.SQUASH_MS}ms ` +
+      `back=${PlayerExpandState.SQUASH_BACK_MS}ms easing=(0.34,1.56,0.64,1)`);
+  }
+
   /** @returns 是否允许跟手上拉（对标 `pullGestureAliveOf`：**仅 ENTERING**）。 */
   public pullGestureAlive(): boolean {
     return this.morphStage === MorphStage.ENTERING;
@@ -2611,29 +3629,664 @@ export class PlayerExpandState {
   // 说明：**下拉跟手收起**派音已经实现（见 `PlaybackPage.collapseProgress` + `PanGesture`），
   // 所以这里只补无界有、我们没有的两件：控制区**按档位取尺寸**、**静止自动收起**。
 
-  /** 控制区档位：0=紧凑(手机) 1=标准(折叠/小平板) 2=宽松(平板/桌面)。 */
-  @Trace public chromeTier: number = 0;
+  /** 控制区档位：0=COMPACT 1=MEDIUM 2=FULL —— **对标无界 `PlayerChrome` 的三档**。 */
+  @Trace public chromeTier: number = 2;
 
   /**
-   * 按窗口宽度决定控制区档位（对标 `playerChromeTierFor`）。
-   * @param widthVp 窗口宽度（vp）
+   * ★★★ 2026-10-16（照抄无界 `PlayerPage.padBottom()`，`wujie.pa:175250-175309`）：
+   *
+   * ```
+   *   padBottom = avoidBottom > 0 ? avoidBottom
+   *                               : px2vp(WindowInfo.navIndicatorHeight_px)      // 175251-175276
+   *   …再抬到：max(padBottom, playerChromeOf(playerChromeTierFor(usableH())).bottomGap)
+   *                                                                             // 175277-175308
+   * ```
+   * ⇒ **底部让位有一个"档位表 `bottomGap`"的下限**（FULL 65 / MEDIUM 48 / COMPACT 36）。
+   *
+   * ⚠️ 这里有个**循环**：`padBottom → tier → usableH → padBottom`。无界那边它是靠
+   *   `playerChromeTierFor` **自己不含 `padBottom`**（只吃 `usableH` 一个参数）解开的；
+   *   本仓照同一条路解：先用**只扣实测避让区**的 `u0` 定档，再拿那一档的 `bottomGap` 抬底。
+   *   `tier` 是 0/1/2 三值 ⇒ 这个递推**一定收敛**（最多三级）。
+   *
+   * ⚠️ 改前我们的写法是**只用实测避让区**（注释里写着"不取那个 floor 是为了避免循环依赖"）——
+   *   但循环其实是可解的，而无界的下限是**实实在在**的：本机 `avoidBottom`（= 我们量到的
+   *   `navigationBarBottomVp`）通常只有 30~50vp，而 FULL 档下限是 **65vp**
+   *   ⇒ 我们比无界**少了 15~35vp 的底部让位**，控制区整体偏低、`usableH` 偏大。
+   *
+   * ⚠️ **不影响封面几何**：`playerCoverGeomRect()` 用的是 raw `navigationBarBottomVp`
+   *   （1217 行），而无界的 `fitPlayerOverlay` 收的是 **`overlayBoxH()`**（= 实测 `swiperBoxH`，
+   *   `wujie.pa:177265-177268`）—— **两条都不是 `usableH()`** ⇒ 本处改动只动"控制区预算"。
+   * @returns 底部让位高度（vp）
    */
-  public updateChromeTier(widthVp: number): void {
-    const tier: number = widthVp >= 840 ? 2 : (widthVp >= 600 ? 1 : 0);
+  public padBottomVp(): number {
+    // 无界的 `avoidBottom` 分支：本仓的等价物就是实测避让区（量不到时按 0）
+    const avoid: number = this.navigationBarBottomVp > 0 ? this.navigationBarBottomVp : 0;
+    // ⚠️ 用**只扣实测避让区**的 u0 定档（与无界"tier 不含 padBottom"同构）
+    const u0: number = Math.max(0, this.windowHeightVp - this.topInsetVp() - avoid);
+    const floor: number = this.chromeOf(this.tierForUsableH(u0)).bottomGap;
+    return floor > avoid ? floor : avoid;
+  }
+
+  /**
+   * 可用高度（vp）—— 对标无界 `PlayerPage.usableH()`：
+   * `usableH = winHVp() − padTop() − padBottom()`（`wujie.pa:180610-180625`）。
+   *
+   * ★ 2026-10-16：`padBottom()` 现在按无界取**档位表 `bottomGap` 的下限**（见 {@link padBottomVp}）。
+   * @returns 可用高度（vp，≥0）
+   */
+  public usableHVp(): number {
+    const u: number = this.windowHeightVp - this.topInsetVp() - this.padBottomVp();
+    return u > 0 ? u : 0;
+  }
+
+  /**
+   * 无界 `PlayerChrome` 档位表的**基线高度**（vp）—— 照抄 `wujie.pa:93434` 的 `ldai 0x154`。
+   *
+   * ## 它的含义（这是本轮最反直觉的一条）
+   *
+   * 无界**不是**拿"各档自己的 `total`"去当分界值的，而是拿**一个固定基线 340** 去减
+   * 各档的 `total`（`playerChromeTierFor`，`wujie.pa:93433-93473`）：
+   * ```
+   *   if (340 >= FULL.total   − usableH) return FULL      // 等价：usableH >= 340 − FULL.total
+   *   if (340 >= MEDIUM.total − usableH) return MEDIUM    // 等价：usableH >= 340 − MEDIUM.total
+   *   return COMPACT
+   * ```
+   * ⇒ 阈值 = `340 − total`：
+   *
+   * | 档 | `total` | 阈值 `usableH >= 340 − total` |
+   * | --- | --- | --- |
+   * | FULL | 250 | **90** |
+   * | MEDIUM | 252 | **88** |
+   * | COMPACT | 178 | （兜底，不判） |
+   *
+   * ⚠️ 这个 340 **故意不在表里**：三档的 `total` 都 ≤ 340，所以 340 = "比最宽松那档还宽"的
+   *    参照高度；`usableH` 越接近 340，分档就越严。**不要把它和 `FULL.total` 混为一谈**
+   *    （本轮之前的实现与注释就是这么错的，见 `updateChromeTier` 的改动说明）。
+   */
+  private static readonly CHROME_BASELINE_H_VP: number = 340;
+
+  /**
+   * 无界 `PlayerChrome` 档位表（照抄 `wujie.pa:93534 / 93554 / 93574`，一行一档）。
+   *
+   * ⚠️ 下标与 `chromeTier` **同序**：`0 = COMPACT`、`1 = MEDIUM`、`2 = FULL`
+   *   （表在反汇编里的书写顺序是 FULL→MEDIUM→COMPACT，与 `tier` 相反 —— 别照书写序抄）。
+   * ⚠️ `total` **不是**「前几项相加」：`v2 = 58` 是 FULL/MEDIUM/COMPACT **三档共用**的第五项
+   *   （`wujie.pa:93547-93551`）⇒ `total = topBarH + gapSwiper + gapScrub + playSize + 58`。
+   */
+  private static readonly CHROME_TABLE: PlayerChromeSpec[] = [
+    // 0 = COMPACT（wujie.pa:93574）
+    new PlayerChromeSpec(36, 20, 14, 52, 28, 20, 18, 12, 20, 28, 36, 0.86, 178),
+    // 1 = MEDIUM（wujie.pa:93554）
+    new PlayerChromeSpec(40, 32, 20, 62, 30, 21, 19, 13, 22, 38, 48, 0.92, 252),
+    // 2 = FULL（wujie.pa:93534）
+    new PlayerChromeSpec(44, 48, 28, 72, 32, 22, 20, 14, 24, 50, 65, 1, 250)
+  ];
+
+  /** 按档取表 —— 对标 `playerChromeOf(tier)`（`wujie.pa:93404`，越界一律落 FULL）。 */
+  private chromeOf(tier: number = this.chromeTier): PlayerChromeSpec {
+    if (tier === 0) {
+      return PlayerExpandState.CHROME_TABLE[0];
+    }
+    if (tier === 1) {
+      return PlayerExpandState.CHROME_TABLE[1];
+    }
+    return PlayerExpandState.CHROME_TABLE[2];
+  }
+
+  /**
+   * `clamp(0.065 × h, 16, 56)` —— 照抄无界 `playerSwiperGapOf(h)`（`wujie.pa:93497-93519`）。
+   *
+   * ★ 它是**连续量**，不是档位查表：`SWIPER_GAP_MIN = 0x10 = 16`、`SWIPER_GAP_MAX = 0x38 = 56`。
+   * ⚠️ 这一条也是本轮用来**钉死反汇编操作数方向**的那把尺子（见 `全局记忆.md`
+   *    「`.pa` 里 `OP dst, src` 的实际语义是 `dst OP acc`」）—— 不要再"顺手改成查表"。
+   */
+  private static swiperGapOf(hVp: number): number {
+    const raw: number = 0.065 * hVp;
+    if (16 < raw) {
+      return 56 > raw ? raw : 56;
+    }
+    return 16;
+  }
+
+  /** 控制区**三段结构**里"Swiper 与进度条之间"那根占位条的**高度**（vp）：`playerSwiperGapOf(usableH)`。 */
+  public swiperGapVp(): number {
+    return PlayerExpandState.swiperGapOf(this.usableHVp());
+  }
+
+  /** 控制区**三段结构**里"进度条与传输条之间"那根占位条的**高度**（vp）：`chrome().gapScrub`。 */
+  public chromeGapScrubVp(): number {
+    return this.chromeOf().gapScrub;
+  }
+
+  /**
+   * 控制区**实际占用高度**（vp）—— 对标无界 `playerChromeTotalOf(tier, h)`（`wujie.pa:93478`）：
+   * ```
+   *   playerChromeTotalOf = playerChromeOf(tier).total − playerChromeOf(tier).gapSwiper
+   *                                                      + playerSwiperGapOf(h)
+   * ```
+   * 语义：表里的 `total` 用的是**该档固定的** `gapSwiper`，而实际那根占位条走的是**连续**公式
+   * ⇒ 把表里那一份换成实际那一份。**这两处必须成对出现**，只改一头就是"控制区高度算错几十 vp"。
+   */
+  public chromeTotalVp(): number {
+    const c: PlayerChromeSpec = this.chromeOf();
+    return c.total - c.gapSwiper + PlayerExpandState.swiperGapOf(this.usableHVp());
+  }
+
+  /**
+   * Swiper 容器（封面页/歌词页那一块）的**应有高度**（vp）—— 对标无界 `PlayerPage.estBoxH()`
+   * （`wujie.pa:171554-171589`）：
+   * ```
+   *   estBoxH = max(0, usableH() − playerChromeTotalOf(playerChromeTierFor(usableH()), usableH()))
+   * ```
+   *
+   * ⚠️ 无界那边它只是**兜底估算**：容器真量到高度（`swiperBoxH`）时一律优先用实测
+   *   （`overlayBaseH()`，`wujie.pa:175141`），只有 `chromeHidden || swiperProgress ≤ 0.001`
+   *   那一小段时间没量到才用本函数。我们这里**只把它当诊断量**（见 `PlaybackPage` 的
+   *   `RzdSwiperBox` 日志），**不参与布局** —— 理由写在下面。
+   *
+   * ## 为什么我们**不能**像无界那样拿它当硬高度
+   *
+   * 无界的 Swiper 容器是 `layoutWeight(1)` + `.height(overlayBaseH())` **两条腿**：估算值负责
+   * "控制区收起/展开时那一段过渡"，实测值一量到就接管。
+   * 我们这一侧的 Swiper 也是 `layoutWeight(1)`，但控制区高度是**由内容撑出来的**
+   * （`ControlAreaComponent` 的自然高 + 我们的 `gapSwiper`/`gapScrub` 两根占位条）
+   * ⇒ 再叠一个 `estBoxH` 就是**两个源同时决定同一段高度**，正是本轮之前反复踩的
+   * "同一形状两条口径"的形状。⇒ 先只放诊断，等真机上量出「实测 Swiper 高 vs `estBoxH`」
+   * 差多少，再决定是否照搬那两条腿。
+   */
+  public estBoxHVp(): number {
+    const u: number = this.usableHVp();
+    const inner: number = u - this.chromeTotalVp();
+    return inner > 0 ? inner : 0;
+  }
+
+  /**
+   * 按**可用高度**决定控制区档位 —— 对标无界 `playerChromeTierFor(usableH)`（`wujie.pa:93433-93473`）。
+   *
+   * ★★★ 2026-10-16（**改正一处算错的判据**，字节码逐条复核）：
+   *   改前是 `u >= 340 ? 2 : (u >= 252 ? 1 : 0)`。
+   *   ⚠️ 两个错：
+   *     ① **340 被当成了 `FULL.total`** —— 它其实是**基线高度**（见 `CHROME_BASELINE_H_VP`）；
+   *     ② 分界值方向反了 —— 无界是 `usableH >= 340 − tier.total`，不是 `usableH >= tier.total`。
+   *   ⇒ 正确阈值 **FULL 90 / MEDIUM 88**（改前是 340 / 252，差了一个量级）。
+   *
+   *   ⚠️ 为什么改前那版能在手机上"看着没事"：手机竖屏 `usableH ≈ 800`，**两版都落 FULL**
+   *     ⇒ 这是个**只在矮窗口/横屏才暴露**的错。反过来说，用户有可能看到的变化是：
+   *     极矮窗口（`usableH` 落在 88~252 之间）从"中档/紧凑档"变成"宽松档"（= 控制区变大）。
+   *     这正是无界的行为（它那边 `usableH < 88` 才给 COMPACT）。
+   *
+   *   ★ 操作数方向是怎么钉死的（别凭印象重推）：先用语义已知的 `playerSwiperGapOf`
+   *     （`clamp(0.065h,16,56)`）反证，见 `全局记忆.md`
+   *     「`.pa` 里 `OP dst, src` 的实际语义是 `dst OP acc`」。**按错的方向读也会得到一组
+   *     看起来完全自洽的阈值**，所以那条纪律不能省。
+   * @param _widthVp 旧签名保留（调用点传的宽度**不再参与定档**）：宽屏那一支的差异
+   *   由 `④ 宽屏/面板统一` 那一块负责，不在这里混进来。
+   */
+  /**
+   * @returns 按**可用高度**定档（纯函数，不读字段）—— 对标 `playerChromeTierFor(usableH)`
+   *   （`wujie.pa:93433-93473`）。
+   *
+   * ⚠️ 抽成纯函数是**必须**的：`padBottomVp()` 要用它来解那个
+   *   `padBottom → tier → usableH → padBottom` 的循环（见那边的注释），
+   *   而循环里**不能**再调 `usableHVp()`（那就真的成环了）。
+   * @param u 可用高度（vp）
+   */
+  private tierForUsableH(u: number): number {
+    const base: number = PlayerExpandState.CHROME_BASELINE_H_VP;
+    // ⚠️ 顺序 = 无界的 `if` 顺序（FULL 先判、MEDIUM 次之、否则 COMPACT），不要按 total 大小重排。
+    if (base >= this.chromeOf(2).total - u) {
+      return 2;
+    }
+    return base >= this.chromeOf(1).total - u ? 1 : 0;
+  }
+
+  public updateChromeTier(_widthVp: number = 0): void {
+    const u: number = this.usableHVp();
+    const base: number = PlayerExpandState.CHROME_BASELINE_H_VP;
+    const tier: number = this.tierForUsableH(u);
     if (tier !== this.chromeTier) {
+      Logger.info(PlayerExpandState.LOG_TAG,
+        `RzdChrome tier ${this.chromeTier} → ${tier} usableH=${u.toFixed(1)} ` +
+        `thr=${(base - this.chromeOf(2).total).toFixed(0)}/${(base - this.chromeOf(1).total).toFixed(0)} ` +
+        `(winH=${this.windowHeightVp.toFixed(1)} padTop=${this.topInsetVp().toFixed(1)} ` +
+        `padBottom=${this.padBottomVp().toFixed(1)} avoidBottom=${this.navigationBarBottomVp.toFixed(1)})`);
       this.chromeTier = tier;
     }
   }
 
-  /** @returns 控制区上下内边距（vp），随档位变。 */
-  public chromePaddingVp(): number {
-    return this.chromeTier === 0 ? 10 : (this.chromeTier === 1 ? 14 : 18);
+  // ⚠️ 2026-10-15：`chromePaddingVp()`（曾返回 10 / 14 / 18）**已删除** —— **零读取点**
+  //   （全仓 grep 只有它自己的定义），而且这三个值**不在无界档位表里**（表里没有"统一内边距"
+  //   这个概念）⇒ 又一条"自己发明 + 没人消费"的死代码。同族已删：`chromeGapVp()`（§56.30）。
+
+  // ⚠️ 2026-10-15：`chromeGapVp()`（曾返回 18 / 24 / 30）**已删除**。
+  //   两个原因，缺一个我都会留着它：
+  //   ① **它没有任何消费者** —— `PlaybackPage` 把它传给 `ControlAreaComponent` 的 `chromeGap`
+  //      `@Param`，而那个参数在组件里**只有声明、从不使用**（grep 全组件只有声明那一处）
+  //      ⇒ 它是**死管道**；而且它**曾经误导过我**：我据此以为"把档位从宽度改成高度"
+  //      会让手机上的控制区间距从 18 变 30（实际没有任何可见效果）。
+  //   ② **它的值不是无界的** —— 档位表里根本没有"统一的按钮间距"这个概念，
+  //      只有 `gapSwiper`(48/32/20) 与 `gapScrub`(28/20/14) 两个**语义不同**的间距
+  //      （`wujie.pa:93485` / `190510`）⇒ 18/24/30 是**我们自己发明的**。
+  //   ⇒ 真正要做的是 `RzdMusic待确认清单.md` 的 **D4**：把控制区按无界的三段结构
+  //      （swiper / scrubber / transport）重排，再按档取 `gapSwiper` / `gapScrub`。
+
+  /**
+   * 收藏 / 更多图标的字号（fp）—— 对标无界 `chrome().favSize`，**按档取值**。
+   *
+   * ★★ 2026-10-15（照搬无界；从字节码取到确切值）：`wujie.pa:195193 / 195316` 两处
+   *   （收藏与更多**用同一个** `favSize`）；档位表 `wujie.pa:93534/93554/93574`
+   *   ⇒ **FULL 24 / MEDIUM 22 / COMPACT 20**。
+   *   ⚠️ 我们原来写死 `22`（注释还写着"取与派音一致的一档"）—— 属"取错来源"那一族。
+   * @returns 图标字号（fp）
+   */
+  public chromeFavSize(): number {
+    return this.chromeTier === 0 ? 20 : (this.chromeTier === 1 ? 22 : 24);
   }
 
-  /** @returns 控制区按钮间距（vp）。 */
-  public chromeGapVp(): number {
-    return this.chromeTier === 0 ? 18 : (this.chromeTier === 1 ? 24 : 30);
+  /**
+   * 控制区**侧键**（循环 / 播放列表）图标的字号（fp）—— 对标无界 `chrome().sideSize`。
+   *
+   * ★★ 2026-10-15（照搬无界）：`wujie.pa:181333 / 181754` 两处（`.fontSize(chrome().sideSize)`）；
+   *   档位表 ⇒ **FULL 22 / MEDIUM 21 / COMPACT 20**。
+   *   ⚠️ 我们原来写死 `isWidthBreakpointLgOrXl(bp) ? 26 : 24` —— **按宽度**分档（同 §56.26 那个
+   *      反了的判据），且两个数都不是无界的值。现在按无界的档位表取。
+   * @returns 侧键图标字号（fp）
+   */
+  public chromeSideSize(): number {
+    return this.chromeTier === 0 ? 20 : (this.chromeTier === 1 ? 21 : 22);
   }
+
+  /**
+   * 传输条上**两个方形图标按钮**（上一首 / 下一首）的宽度（vp）—— 对标 `chrome().seekSize`。
+   *
+   * ★★★ 2026-10-16（**订正一处此前记错的语义**）：
+   *   我之前在注释里把 `seekSize` 写成"进度条那一行的**块尺寸**"，所以一直觉得
+   *   "我们 16vp 的滑块行高 vs 无界的 32 —— 两者不是同一个量，要等实测"。
+   *   **本轮把两处消费点读出来，语义完全不是那样**：
+   * ```
+   *   wujie.pa:181429   Image().width(chrome().seekSize).aspectRatio(1).objectFit(Contain).opacity(0.86)
+   *   wujie.pa:181639   同上（第二处）
+   * ```
+   *   —— 它是**两个方形图标按钮的宽度**（`aspectRatio(1)` 定成正方形），
+   *   与**进度条/Slider 毫无关系**。
+   *   ⇒ "我们的 `slider_height = 16vp` 和无界的 32 不是一个量"这句话是对的，
+   *     但结论不是"需要实测"，而是**这两个东西根本不是同一个元素、不必对齐**。
+   *
+   * 本仓的对应物：`ControlAreaComponent` 的传输条里那两个
+   * `Image(...).controlImageBuilder().width(...)` ——
+   * 而 `controlImageBuilder()`（`@Extend(Image)`）的
+   * `{ aspectRatio(1) + opacity(0.86) + objectFit(Contain) }` **与无界那两处逐字相同**
+   * ⇒ 对应关系是确定的，就用本档的 `seekSize`。
+   *
+   * ⚠️ 改前我们用的是 `app.float.control_width`(32vp) / `control_width_lg`(36vp)：
+   *   两个数**恰好**是 FULL / 一个别的档的值，但**档位一变它不变**（写死两档）。
+   *   现在改为**按档取值**：FULL 32 / MEDIUM 30 / COMPACT 28。
+   *
+   * ⚠️ **播放/暂停主按钮不在这里**：它用的是 `playSize`（72 / 62 / 52），
+   *   而本仓那个位置是 `image_play_width = 72vp`（FULL 档恰好对上；宽屏档的
+   *   88 与表里的 62/52 不同源，暂不动 —— 见 `RzdMusic记忆.md` §98）。
+   * @returns 方形图标按钮宽度（vp）
+   */
+  public chromeSeekSize(): number {
+    return this.chromeOf().seekSize;
+  }
+
+  /** 顶栏那一行的实际行高（vp）。★ 与 `topInsetVp()` 的 56 **不是同一个量**，见 `chromeTopBarH()`。 */
+  public static readonly TOP_BAR_ROW_H_VP: number = 56;
+
+  /**
+   * ★★★ 2026-10-16：封面基准矩形的**竖向校正量**（vp，负 = 往上）。
+   *
+   * ## 它为什么存在（这是"封面偏低"的**唯一**可控落点）
+   *
+   * 本仓的封面是「**量测 + 变换式**」：覆盖层按 `scale = 实测/基准`、`translate = 实测位 − 基准位`
+   * 从**基准**补到**实测**位。而**实测位由 `Column` 的排布决定** ——
+   * 真封面夹在"顶部无留白 + 下方 metA/控制区"之间被**顶到窗口竖直中部**。
+   * 无界那边是**纯几何**（`CoverMorph`，`中心 = padTop + metaY`），所以在屏幕上部。
+   *
+   * ⇒ 要真正对齐，本该改 `Column` 的排布（给封面上下对称留白）；
+   *   但那属结构改动、且**必须在真机上量**。在拿到真机数据之前，
+   *   这里用**一个常数**把基准整体上移 —— 三个量（`x/y/height`）是原始值，
+   *   只有 `y` 平移，**回归风险最小、且单行可回退**。
+   *
+   * ## ⚠️⚠️ 2026-10-16 **本条已被证伪两次，现在取值 0（= 完全不起作用）**
+   *
+   * 我曾经用截图目测校准它：`0 → −103 → −250`，两次**都让封面更偏**（用户实测
+   * "现在偏移越来越狠了"）⇒ 说明**"按截图目测的中心"推折算比**这个方法本身不可靠：
+   * 封面是**深色海报**，上下边缘与黑色背景融为一体，目测误差 ±30vp 起步，
+   * 而折算比分母只有几十 vp ⇒ 误差被放大 4 倍，越调越远。
+   *
+   * ⇒ **归零，并改走"用真机日志收敛"这条路**。要收敛只需要一条日志里的两个数：
+   * ```
+   *   hdc shell hilog -x | Select-String 'RzdCoverGeom'
+   *   ⇒ 打 `y=… centerY=… expectCenter=…`
+   *   设 delta = centerY − expectCenter（正 = 还偏低，负 = 抬过头）
+   *   则 本常量应取 ≈ −delta × k，其中 **k 由两次实测标定**：
+   *     记本常量 = A 时读到的 centerY = CA，本常量 = B 时读到 CB
+   *     则 k = (CA − CB) / (B − A)   ← **这个 k 才是真折算比**，是实测出来的，不是估的
+   * ```
+   *   目前只有一次有效观测（`0 → centerY 实测待补`），所以**先归零、等一条日志**。
+   *
+   * ⚠️ 静止态只影响封面 `y`；`x`、`size`、`radius` 一律不动。
+   */
+  private static readonly COVER_BASE_Y_OFFSET_VP: number = 0;
+
+  // ═══════════ 目标 ④ 的 S1 步：两个「尺寸档位纯函数」（先落公式，暂零消费）═══════════
+  //
+  // 施工图：`_recover/logic-src/目标④-宽屏面板统一-施工图与验收.md` §4 的 **S1**。
+  //
+  // ⚠️ 这一条**例外地允许"先有访问器、后接消费者"**，原因是它的值**已由字节码确证**、
+  //    不是我们发明的（§56.38）；而已接线的那些"没人用的访问器"（如已删的 `chromeGapVp`）
+  //    是我们自己拍的值 ⇒ 那才是死管道。两者的区别就在"值有没有出处"。
+  //
+  // ⚠️ **现在没有任何消费者**（宽屏/面板形态在本机不可构造）⇒ 加进来**对手机零影响**：
+  //    静态函数不参与 build()，不会被渲染登记，也不会改变任何布局。
+
+  /**
+   * 无界 `sizeScaleOf(winWVp)`（= `sizeK()`）—— 按**宽度断点**的阶梯缩放。
+   *
+   * 出处：`wujie.pa:84524-84548`（转写见 `RzdMusic记忆.md` §56.38 / 清单 E5）。
+   * ```
+   *   宽度断点 bp >= 4 → 1.32 ;  >= 3 → 1.24 ;  >= 2 → 1.12 ;  else → 1   （手机）
+   * ```
+   * ★ **手机（bp < 2）恒为 `1`** —— 这正是我们全仓用固定 fp/vp 在手机上**逐字正确**的原因；
+   *   而平板/PC 会放大 12% / 24% / 32%，我们的固定值在**那里整体偏小** ⇒ 归目标 ④ 的 S4–S6。
+   *
+   * 断点取值口径：与 `updateChromeTier` 同一个 `bp`（`WidthBreakpoint`：
+   * SM=0/1、MD=2、LG=3、XL=4 —— 见本仓 `isWidthBreakpointLgOrXl` 的用法）。
+   * @param winWVp 窗口宽度（vp）
+   * @param widthBp 宽度断点（`uiObserver.WindowSizeLayoutBreakpointInfo.widthBreakpoint`）
+   * @returns 缩放系数（手机 = 1）
+   */
+  public static sizeScaleOf(winWVp: number, widthBp: number): number {
+    // 无界的判据是**宽度断点**，不是宽度数值 —— 所以两参都要（`winWVp` 只用于兜底日志/未来扩展）。
+    if (widthBp >= 4) {
+      return 1.32;
+    }
+    if (widthBp >= 3) {
+      return 1.24;
+    }
+    if (widthBp >= 2) {
+      return 1.12;
+    }
+    return 1;
+  }
+
+  /**
+   * 无界 `topPageSideOf(winWVp)` —— 页面左右留白（vp）。
+   *
+   * 出处：`wujie.pa:84660-84678`（§56.38 / 清单 E5）。
+   * ```
+   *   winWVp < 600 → 16 ;  < 840 → 24 ;  else → 32
+   * ```
+   * ★ 手机（≈360~430vp）恒为 **16** —— 与 `PlaybackPage.LYRIC_META_SIDE_VP = 16`
+   *   以及 `PlayerExpandState.LYRIC_COVER_LEFT_VP = 16` **同值** ⇒ 我们已经用对了手机那一档 ✓
+   *   （清单 E5 已确认"我们的 16vp 是原值"）。
+   * @param winWVp 窗口宽度（vp）
+   * @returns 左右留白（vp）
+   */
+  public static topPageSideOf(winWVp: number): number {
+    if (winWVp < 600) {
+      return 16;
+    }
+    if (winWVp < 840) {
+      return 24;
+    }
+    return 32;
+  }
+
+  /**
+   * S1 的**自证**：把两个纯函数在"本机当前窗口"下的值打出来，用来核对它们在**手机档**上
+   * 是否恰好等于我们已经在用的固定值（`sizeK = 1` / `side = 16`）。
+   *
+   * 排查关键字：`hdc shell hilog -x | Select-String 'RzdSizeTier'`
+   * 期望（手机）：`side=16 sizeK=1`，且 `fixedOk=true`（两个固定值与档位值一致）。
+   * @param widthBp 宽度断点
+   */
+  public logSizeTier(widthBp: number): void {
+    // 量不到窗口宽时按 360 兜底（只为日志，不写回任何状态）。
+    const w: number = this.windowWidthVp > 0 ? this.windowWidthVp : 360;
+    const side: number = PlayerExpandState.topPageSideOf(w);
+    const sizeK: number = PlayerExpandState.sizeScaleOf(w, widthBp);
+    // "固定值是否与档位值一致"：手机档两个都该相等 ⇒ 反过来说明"宽屏要 ×1.12~1.32 / side 24~32"这条差在哪
+    const fixedOk: boolean = sizeK === 1 && side === 16;
+    Logger.info(PlayerExpandState.LOG_TAG,
+      `RzdSizeTier winW=${w.toFixed(0)} widthBp=${widthBp} side=${side} sizeK=${sizeK.toFixed(2)} ` +
+      `fixedOk=${fixedOk} tier=${this.chromeTier} usableH=${this.usableHVp().toFixed(1)}`);
+  }
+
+  // ═══════════ 目标 ④ 的 S2 步：宽屏 / 面板的**内容占比档位**（不含任何猜测的间距）═══════════
+  //
+  // 施工图：`_recover/logic-src/目标④-宽屏面板统一-施工图与验收.md` §4 的 **S2**。
+  //
+  // ⚠️ **S2 与 S3 的区别**（这里刻意只做 S2 的那一半）：
+  //   · 占比（`GridCol` 的 `span`）是**我们自己的布局参数**，而且**就在代码里**（见下）⇒ 能确证；
+  //   · `Row({space: …})` / `GridRow({gutter: …})` 那种**间距数值**（56 / 48）**没有出处**
+  //     ⇒ 一律**不去猜**（施工图 §6 第 2 条）。真正的间距走 `S3`：把宽屏分支接成**同一个
+  //     `Row{ layoutWeight }`** 之后，间距由**同一个常量**给出，那时它才只有一个来源。
+
+  /** 宽屏 `GridRow` 的**列数按档不同**：md/lg = 4 列，xl = 8 列。 */
+  private static readonly WIDE_COLS_MD_LG: number = 4;
+  private static readonly WIDE_COLS_XL: number = 8;
+
+  /**
+   * @returns 宽屏（非面板）左栏占比 —— **逐字取自 `PlaybackPage` 的 `GridCol` span 数组**。
+   *
+   * 出处（本轮实读，不是回忆）：`PlaybackPage.ets` L2128-2151 那两处：
+   * ```
+   *   GridRow  columns: { md: COLUMN_MD(8), lg: COLUMN_LG(12), xl: COLUMN_LG(12) }
+   *   左（封面 + 歌名）: span { md: 4, lg: 5, xl: 4 }
+   *   右（歌词）      : span { md: 4, lg: COLUMN_LYRIC_LG(7), xl: 8 }
+   * ```
+   * ⚠️ **三档的列数并不一样**（`BreakpointConstants`：`COLUMN_MD = 8`、`COLUMN_LG = 12`）：
+   * | 档 | 总列 | 左 span | 右 span | 左占比 |
+   * | --- | --- | --- | --- | --- |
+   * | md | 8 | 4 | 4 | **1/2** |
+   * | lg | 12 | 5 | 7 | **5/12** |
+   * | xl | 12 | 4 | 8 | **1/3** |
+   * ⇒ 这也是"它**能被等价收敛成一个两列 `Row`**"的依据：每档两栏的 span 都恰好填满总列数
+   *   （8=4+4 / 12=5+7 / 12=4+8），**没有第三个占位列**。
+   * @param widthBp 宽度断点（3 = LG、4 = XL，见 `WidthBreakpoint`）
+   * @returns 左栏占比（0…1）
+   */
+  public static wideLeftRatio(widthBp: number): number {
+    if (widthBp >= 4) {
+      // XL：4 / 12（总列数 COLUMN_LG = 12）
+      return 4 / 12;
+    }
+    if (widthBp >= 3) {
+      // LG：5 / 12
+      return 5 / 12;
+    }
+    // MD（也含更窄的兜底）：4 / 8
+    return 4 / 8;
+  }
+
+  /**
+   * @returns 宽屏那一档的 `GridRow` 总列数（用于换算与日志，不参与渲染）。
+   * @param widthBp 宽度断点
+   */
+  public static wideColumnCount(widthBp: number): number {
+    return widthBp >= 4 ? PlayerExpandState.WIDE_COLS_XL : PlayerExpandState.WIDE_COLS_MD_LG;
+  }
+
+  /**
+   * 把"窗口坐标的点"换成"**宿主盒内坐标**"—— 即减去宿主盒自己的左上角。
+   *
+   * ★ 2026-10-15（目标 ④ 的 **S3 前置件**）：等宽屏/面板要复用同一份浮层（`.position()` 是
+   *   **相对父组件内容盒**的绝对定位，不是窗口坐标）时，浮层会被挂到**不同的宿主**下：
+   * ```
+   *   手机：宿主 = 满屏的内容栈（左上角 = 窗口原点）⇒ 偏移 (0, 0)，本函数是恒等变换
+   *   面板：宿主 = 左栏那一列        ⇒ 偏移 = (左栏的窗口 x, 内容盒顶)
+   *   宽屏：宿主 = 左侧 GridCol 内容盒 ⇒ 偏移 = 该列内容盒的窗口 x
+   * ```
+   * ⇒ `position = 窗口坐标 − 宿主偏移`。
+   *
+   * ⚠️ **本函数故意只做这一件事**（一个减法），不参与"偏移量本身怎么来"——
+   *    偏移量的唯一来源必须是**实测**（`getPositionToWindowWithTransform()` 减去
+   *    该节点自身的布局原点），不许拿 `padding: 56` / `space: 56` 这类字面量去凑
+   *    （见 `目标④-宽屏面板统一-施工图与验收.md` §6 第 2 条：那两个数值**没有出处**）。
+   * ⚠️ **偏移为 (0,0) 时它与改前逐像素相同**（`x − 0 === x`）⇒ 手机路径接上它也是零风险的。   * @param windowX 窗口坐标 x（vp）
+   * @param windowY 窗口坐标 y（vp）
+   * @param hostX 宿主盒左上角在窗口里的 x（vp；手机 = 0）
+   * @param hostY 宿主盒左上角在窗口里的 y（vp；手机 = 0）
+   * @returns `{ x, y }` 宿主盒内坐标（vp）
+   */
+  public static toHostPoint(windowX: number, windowY: number, hostX: number, hostY: number): HostPoint {
+    return {
+      x: windowX - (hostX > 0 ? hostX : 0),
+      y: windowY - (hostY > 0 ? hostY : 0)
+    };
+  }
+
+  /**
+   * 量一个节点在**窗口坐标**里的左上角（vp）—— 用作 {@link toHostPoint} 的 `hostX/hostY`。
+   *
+   * ★ 2026-10-15（目标 ④ 的 S3 前置件 · 第二件）：这是"宿主偏移**唯一合法来源**"的取数口。
+   *   偏移量**禁止猜**（`padding: 56` / `Row({space:56})` / `GridRow({gutter:48})` 都没有出处），
+   *   只允许从这里量（内部走本类已有的 {@link measureNode}，与 `reportMini` / `bigNode` 同一条链）。
+   *
+   * ⚠️ **只读、不写任何状态**：它不缓存、不上报，量不到就返回 `{x:0, y:0}`（= 恒等偏移）。
+   *   ⇒ 未接线前调用它，行为与"写死 (0,0)"**逐像素相同**。
+   * ⚠️ 用 `getPositionToWindowWithTransform()`（**渲染后**、含祖先 transform）——
+   *   与 `measureNode` 的默认口径一致；这是量"宿主内容盒在窗口里的位置"的正确口径。
+   *   （若宿主的祖先里带了 scale/translate，量到的就是**渲染位**；这正是 `.position()` 需要的参考系。）
+   * @param ui UIContext
+   * @param hostId 宿主的组件 id（宽屏/面板接线时由调用方给出）
+   * @returns 宿主左上角（vp，窗口坐标）；量不到 ⇒ `{x:0, y:0}`
+   */
+  public measureHostOrigin(ui: UIContext, hostId: string): HostPoint {
+    const r: NodeRect | undefined = this.measureNode(ui, hostId);
+    if (r === undefined) {
+      Logger.warn(PlayerExpandState.LOG_TAG,
+        `RzdHostOrigin id='${hostId}' not-measured ⇒ (0,0) idempotent`);
+      return { x: 0, y: 0 };
+    }
+    Logger.info(PlayerExpandState.LOG_TAG,
+      `RzdHostOrigin id='${hostId}' origin=(${r.x.toFixed(1)},${r.y.toFixed(1)}) ` +
+      `size=${r.w.toFixed(1)}x${r.h.toFixed(1)} win=${this.windowWidthVp.toFixed(0)}x${this.windowHeightVp.toFixed(0)}`);
+    return { x: r.x, y: r.y };
+  }
+
+  /**
+   * @returns 面板（横屏两栏）左栏占比 —— **逐字取自 `PlaybackPage.panelControlContent()`**。
+   *
+   * 出处：`panelControlContent()` 里两个 `Column().layoutWeight(1)` ⇒ **各占一半**。
+   * ⚠️ 这里**没有**"我们自己的比例"可以搬：`layoutWeight(1)` 的语义就是"平分剩余空间"
+   * ⇒ 唯一正确的值就是 `1/2`（写成算式而不是字面量 0.5，是为了让"它来自 layoutWeight"可读）。
+   * @returns 左栏占比（0…1）
+   */
+  public static panelLeftRatio(): number {
+    return 1 / (1 + 1);
+  }
+
+  /**
+   * 把"左右占比"翻译成**两栏的目标宽度**（vp）。
+   *
+   * ⚠️ **这里不算间距**（`gutter` / `space` 一律不参与）：两个宽度加起来 = `avail`，
+   *    也就是说**两栏紧贴**。真正的间距由 S3 之后的**同一处**常量给出 ——
+   *    那时两栏宽度会各减去 `space/2`，而不是让这个函数去猜一个数。
+   * ⚠️ 手机档**不读本函数**（施工图铁律：S1–S3 对手机逐像素无影响）。
+   * @param avail 可用宽度（vp）
+   * @param leftRatio 左栏占比（`wideLeftRatio()` / `panelLeftRatio()`）
+   * @returns `{ left, right }` 两栏目标宽度（vp）
+   */
+  public static columnWidths(avail: number, leftRatio: number): WideColumns {
+    const a: number = avail > 0 ? avail : 0;
+    const r: number = leftRatio < 0 ? 0 : (leftRatio > 1 ? 1 : leftRatio);
+    const left: number = a * r;
+    return { left: left, right: a - left };
+  }
+
+  /**
+   * S2 的**自证**：把宽屏/面板两档在本机窗口下的占比与两栏宽度打出来。
+   *
+   * 排查关键字：`hdc shell hilog -x | Select-String 'RzdWideCols'`
+   * 期望（手机，横屏除外）：`isWide=false isPanel=false`（两栏都不参与布局，只是把数算出来备查）。
+   * @param widthBp 宽度断点
+   * @param isPanel 当前是否走面板布局（`PlaybackPage.usePanelLayout()`）
+   * @param ui UIContext（用于 `measureHostOrigin()` 那条探针；拿不到时探针会走"量不到"分支，
+   *   仍然打出 `hostZero=true` —— 这条护栏本身也要能被验）
+   */
+  public logWideColumns(widthBp: number, isPanel: boolean, ui: UIContext): void {
+    const w: number = this.windowWidthVp > 0 ? this.windowWidthVp : 360;
+    const side: number = PlayerExpandState.topPageSideOf(w);
+    const avail: number = w - side * 2;
+    const wl: number = PlayerExpandState.wideLeftRatio(widthBp);
+    const wc: WideColumns = PlayerExpandState.columnWidths(avail, wl);
+    const pc: WideColumns = PlayerExpandState.columnWidths(avail, PlayerExpandState.panelLeftRatio());
+    const isWide: boolean = widthBp >= 2;
+    // ★ S3 前置件的**自证**：宿主偏移为 (0,0)（= 手机那个满屏内容栈）时必须是**恒等变换**。
+    //   期望恒为 `hostId=true` —— 它保证"接上 toHostPoint() 之后手机逐像素不变"。
+    const probe: HostPoint = PlayerExpandState.toHostPoint(123.4, 567.8, 0, 0);
+    const hostId: boolean = probe.x === 123.4 && probe.y === 567.8;
+    // ★ S3 前置件第二件（`measureHostOrigin()`）的**自证**：
+    //   探针宿主 id 故意给一个**不存在的** id ⇒ 期望跑进"量不到"分支、打出 `not-measured ⇒ (0,0)`
+    //   且 `hostZero=true`。它证明的是"**量不到也绝不会让偏移变成 NaN**"这条护栏。
+    //   （真正的宿主 id 等 S4/S5 接线时由调用方给；那时这里的探针换成真 id 即可。）
+    const hostProbe: HostPoint = this.measureHostOrigin(ui, 'rzd_host_origin_probe');
+    const hostZero: boolean = hostProbe.x === 0 && hostProbe.y === 0;
+    Logger.info(PlayerExpandState.LOG_TAG,
+      `RzdWideCols winW=${w.toFixed(0)} widthBp=${widthBp} cols=${PlayerExpandState.wideColumnCount(widthBp)} ` +
+      `side=${side} avail=${avail.toFixed(0)} isWide=${isWide} isPanel=${isPanel} hostId=${hostId} ` +
+      `hostProbe=(${hostProbe.x.toFixed(1)},${hostProbe.y.toFixed(1)}) hostZero=${hostZero} ` +
+      `wide(left=${wc.left.toFixed(0)},right=${wc.right.toFixed(0)},ratio=${wl.toFixed(3)}) ` +
+      `panel(left=${pc.left.toFixed(0)},right=${pc.right.toFixed(0)},ratio=${PlayerExpandState.panelLeftRatio().toFixed(3)})`);
+  }
+
+  /**
+   * 顶栏那一行的高度（vp）—— 对标无界 `chrome().topBarH`。
+   *
+   * ★★ 2026-10-15（照搬无界档位表）：`wujie.pa:93534/93554/93574`（FULL / MEDIUM / COMPACT）
+   *   ⇒ **FULL 44 / MEDIUM 40 / COMPACT 36**。
+   *
+   * ⚠️ **它现在是"归一化 + 逐字不变"的**，不是把顶栏压到 44：
+   *   我们的 `TopAreaComponent` 原来写死 `.height(56)`，而 56 = **让位线本身**
+   *   （`PLAYER_TOP_FALLBACK_VP = 56`，也就是无界的 `padTop()` 下限）。
+   *   无界的 `topBarH = 44` 是**内容行高**，它外面还有 `padTop()` 那一圈。
+   *   两者混在一处时，直接把 56 改成 44 会**同时**动到"内容让位线"和"顶栏自身高度"
+   *   —— 而让位线已经被整套形变几何（`topInsetVp()` / `lyricCoverYOf()` /
+   *   `morphInitParams()`）依赖 ⇒ 那是"一块独立大活"（见下面「未接线字段」）。
+   *   ⇒ 本轮只做**一件事**：把那个写死的 56 换成 `TOP_BAR_ROW_H_VP`，
+   *     并让本函数在**手机档（`chromeTier` = 2 / FULL）**下**恰好返回它** ⇒
+   *     手机上**逐像素不变**（回归红线），而档位从此有了唯一入口。
+   * @returns 顶栏行高（vp）
+   */
+  public chromeTopBarH(): number {
+    // ⚠️ 手机档直接返回 `TOP_BAR_ROW_H_VP`（= 改前的 56）。
+    //    MEDIUM / COMPACT 的值已备好（40 / 36），等"内容让位线"与"顶栏行高"解耦后再接。
+    return this.chromeTier === 0 ? 36 : (this.chromeTier === 1 ? 40 : PlayerExpandState.TOP_BAR_ROW_H_VP);
+  }
+
+  // ─────────────── 无界 `PlayerChrome` 档位表：**尚未接线**的 5 个字段（D4 剩项）───────────────
+  //
+  // 出处：`wujie.pa:93534/93554/93574`（三档字面量对象），转写见
+  //       `RzdMusic记忆.md` §56.26 / §56.29 与 `RzdMusic待确认清单.md` 的 D4。
+  // 已接线（6 项）：`topBarH`（本轮，手机档逐字不变） / `sideSize` / `favSize` /
+  //               `titleSize`（= 封面页 20，配 `metaProgress` 0.75 → 歌词页 15） /
+  //               `artistSize`（= 封面页 14 → 歌词页 12） / `metaGap`（= 10vp 那一档口径）。
+  // ⚠️ **下面这 5 项不是"忘了"，是"接不了"** —— 每一项都要先动**结构**，不是改一个数：
+  //   · `gapSwiper` 48/32/20：语义是"封面/Swiper 那一块与下方控制块之间"的间距，
+  //     而我们的手机支没有这个可配的间距项（Swiper 吃 `layoutWeight(1)`，
+  //     间距是"剩余空间的自然结果"）⇒ 要先按无界的三段结构（swiper / scrubber / transport）
+  //     重排控制区。
+  //   · `gapScrub` 28/20/14：同上，是"进度条那一行与传输条那一行"之间的间距；
+  //     我们现在由 `app.float.slider_margin_bottom`(16vp) 给 ⇒ 直接改会移动传输条位置。
+  //   · `playSize` 72/62/52：★ **已经等于无界的 FULL 值** ——
+  //     `app.float.image_play_width = 72vp`（手机档）。⇒ 这一项**事实上已对齐**，
+  //     剩下的只是"MEDIUM/COMPACT 档要缩小"，属宽屏/平板（设备受限）。
+  //   · `seekSize` 32/30/28：★ **2026-10-16 订正** —— 它的语义是
+  //     **传输条上两个方形图标按钮（上一首/下一首）的宽度**（`wujie.pa:181429` / `181639`：
+  //     `Image().width(chrome().seekSize).aspectRatio(1)`），**与进度条无关**
+  //     ⇒ 已落地为 `chromeSeekSize()`，消费点 = `ControlAreaComponent` 那两个 `Image`。
+  //     旧注释里"我们给的是 `slider_height = 16vp`，两者不是同一个量"这句**结论错了**：
+  //     它们**根本不是同一个元素、不需要对齐**。
+  //   · `bottomGap` 65/48/36：★ **2026-10-16 已落地**为 `padBottomVp()`
+  //     （`= max(avoidBottom, 档位表 bottomGap)`；那个"循环依赖"是可解的，见该方法注释）。
+  // ⇒ 结论：这 5 项里 `gapSwiper` / `gapScrub` / `seekSize` / `bottomGap` 都已落地，
+  //    只剩 `playSize` 的 MEDIUM/COMPACT 两档（属宽屏/平板，设备受限）。
+  //    ⚠️ **不要**再把这些做成"只读档位访问器放那儿没人用" —— 那是 §56.30 那条
+  //    `chromeGap` 死管道的翻版（会再次误导后来人）；每一项都必须**同时接上消费点**。
 
   /** 控制区是否被自动收起（对标 `BarCollapse.isCollapsed`）。 */
   @Trace public chromeCollapsed: boolean = false;
@@ -2745,7 +4398,18 @@ export class PlayerExpandState {
     return this.lerp(this.miniRadius, this.bigRadius, this.progress);
   }
 
-  /** @returns 飞行封面不透明度：动画期间可见。 */
+  /**
+   * @returns 飞行封面不透明度：动画期间可见。
+   *
+   * ★★ 2026-10-15（**已判定为死代码**，`RzdMusic记忆.md` §60）：**零调用者**，
+   *   而且它读的 `animating` 属**旧转场**那一族（同 {@link clipActive}）——
+   *   活的形变里"封面谁在画"由 `realCoverVisible()`（播放页真封面）
+   *   与 `morphOverlayBridging()`（壳层克隆封面）**严格互补的一对门**决定，
+   *   没有任何地方用"旧转场的 `animating`"来淡入淡出封面。
+   * ⚠️ 同族的 {@link miniCoverOpacity}（读同一个 `animating`）**也是零调用者**。
+   * @deprecated 零调用者。封面的显隐请用 {@link realCoverVisible} / {@link morphOverlayBridging}。
+   * 复核命令：`grep -rn 'coverOpacity()\|miniCoverOpacity()' RzdMusic --include=*.ets`
+   */
   public coverOpacity(): number {
     return this.animating ? 1 : 0;
   }
@@ -2778,11 +4442,18 @@ export class PlayerExpandState {
   }
 
   /**
-   * @returns 现在是否需要给播放页套 clip 窗口。
+   * ★★ 2026-10-15（**已判定为死代码**，`RzdMusic记忆.md` §59）：本体是"旧转场"那一族的残留。
    *
-   * **静止态返回 false**，这一点很重要：此时播放页完全不裁剪，与"没有这个动画"时的
-   * 布局逐字节一致 —— 万一这套 path 裁剪在某些 SDK/设备上表现异常（比如把整页裁没），
-   * 影响范围也只有动画那 0.5 秒，绝不会导致"播放器打不开"。
+   * 本类里 `preparing` / `animating` / `progress` 三个字段（L202-206）属**更早的那套
+   * 「整页淡入 + 贴底上滑」转场**；活的形变链走的是 `morphStage` / `morphP` / `applyMorphProgress()`，
+   * **完全不读它们**（见 L1164 那段注释）。本方法只在它们之上做了一次或运算 ⇒ 同样没有调用者。
+   *
+   * ⚠️ **故意保留而不是删除**：它与 `morphClipping()`（活的裁剪门）语义上有重叠，
+   *    删除时若有人误把调用点从 `morphClipping()` 换成它、或反过来，就会动到裁剪行为。
+   *    留在这里的代价只是几行；把它变成"活的"才是风险。
+   * @deprecated 无调用者。要用裁剪门请用 {@link morphClipping}。
+   * @returns 旧转场相位是否处于"需要裁剪"。
+   * 复核命令：`grep -rn 'clipActive' RzdMusic --include=*.ets`（期望：只有本处定义）
    */
   public clipActive(): boolean {
     return this.preparing || this.animating;

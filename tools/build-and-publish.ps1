@@ -122,15 +122,35 @@ function Initialize-BuildEnv {
   New-Item -ItemType Directory -Force -Path $HvigorUserHome, $NpmCache | Out-Null
 }
 
+function Set-BuildStamp([string]$Stamp) {
+  # 只有 base 是必须的（en_US 缺失会回落到 base）；两个都写，避免中英显示不一致。
+  $targets = @(
+    'features\setting\src\main\resources\base\element\string.json',
+    'features\setting\src\main\resources\en_US\element\string.json'
+  )
+  foreach ($rel in $targets) {
+    $p = Join-Path $RepoRoot $rel
+    if (-not (Test-Path $p)) { Write-Warn2 "构建戳：未找到 $rel（跳过）"; continue }
+    # ⚠️ 只替换 `build_stamp` 那一条的 value，**不动别的键**（正则限定在同一对象块内）。
+    $txt = [IO.File]::ReadAllText($p)
+    $new = [regex]::Replace($txt,
+      '("name"\s*:\s*"build_stamp"\s*,\s*"value"\s*:\s*")[^"]*(")',
+      "`${1}$Stamp`${2}")
+    if ($new -eq $txt) {
+      Write-Warn2 "构建戳：$rel 里没有可替换的 build_stamp（跳过）"
+      continue
+    }
+    # 写回时保持**无 BOM 的 UTF-8**（资源文件本来就是 UTF-8；带 BOM 也能过，但没必要引入差异）
+    [IO.File]::WriteAllText($p, $new, (New-Object Text.UTF8Encoding($false)))
+  }
+  Write-Ok "构建戳已写入：$Stamp（App「关于」页会显示这一行）"
+}
+
 function Invoke-Build([string]$Product) {
-  # -Release：正式上架包 = assembleApp + buildMode=release（产出 App Pack，给 AGC 提审）
-  # 不加：日常自测包 = assembleHap + buildMode=debug（可直接 hdc install 的签名 HAP）
-  #
-  # ⚠️ mode 必须跟着任务换：`assembleApp` 是**工程级**任务，用 `--mode module` 会报
-  #    「00306054 Specification Limit Violation: Task ['assembleApp'] was not found in
-  #     the project」；module 级任务（assembleHap）反过来要用 `--mode module`。
   $task = if ($Release) { 'assembleApp' } else { 'assembleHap' }
   $mode = if ($Release) { 'release' } else { 'debug' }
+  # Build stamp -> About page marker (must run before hvigor so it lands in resources).
+  Set-BuildStamp (Get-Date -Format 'yyMMdd-HHmm')
   $scope = if ($Release) { 'project' } else { 'module' }
   Write-Step "构建 product=$Product（$task / $mode）"
   $log = Join-Path $env:TEMP "rzdmusic-build-$Product-$mode.log"
@@ -264,8 +284,18 @@ function Send-DavFile([string]$LocalPath, [string]$RemoteName) {
       Write-Ok ("上传 {0}  {1:N0} bytes  {2:N1}s" -f $RemoteName, $size, $sw.Elapsed.TotalSeconds)
       return $true
     } catch {
+      # ★ 这里必须用 PSObject.Properties 探测：StrictMode 下直接读不存在的属性
+      #   （如 RuntimeException 上的 .Response）会【二次抛异常】，
+      #   于是"凭据没配"这种配置错误会被 3 次重试掩盖成"上传失败"。
       $status = ''
-      if ($_.Exception.Response) { $status = " HTTP $([int]$_.Exception.Response.StatusCode)" }
+      $resp = $null
+      if ($_.Exception.PSObject.Properties['Response']) { $resp = $_.Exception.Response }
+      if ($resp) { $status = " HTTP $([int]$resp.StatusCode)" }
+      if ($_.Exception.Message -like '缺少 WebDAV 凭据*') {
+        $sw.Stop()
+        Write-Err2 "上传中止 $RemoteName : $($_.Exception.Message)"
+        return $false
+      }
       if ($attempt -lt $attempts) {
         Write-Warn2 "上传失败（第 $attempt/$attempts 次）$RemoteName$status，稍后重试…"
         Start-Sleep -Seconds (2 * $attempt)

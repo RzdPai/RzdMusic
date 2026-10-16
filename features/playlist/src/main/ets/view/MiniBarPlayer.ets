@@ -116,6 +116,11 @@ export struct MiniBarPlayer {
     })
     .alignItems(VerticalAlign.Center)
     .width(StyleConstants.FULL_WIDTH)
+    // ★★ 2026-10-15（照搬无界 `squashLand`）：关闭落位时胶囊挤压回弹 ——
+    //   与 `HomeMiniBarPlayer` 那一处**同一把标量、同一个语义**（静止态恒为 1）。
+    //   两处都挂的理由与"三条迷你条各自持有手势"一致：屏幕上同一时刻只渲染其中一条，
+    //   但**哪一条在渲染取决于导航栈深度**（首页底栏 / 二级页悬浮条），不能只改一处。
+    .scale({ x: 1, y: this.expandState.morphSquashY })
     // 展开形变的**起点矩形**就是这条胶囊：给个 id 让 `getFrameNodeById` 量它
     .id(MINI_BAR_FLOATING_ID)
     // ⚠️ 不要给整条 Row 加透明度：两档淡出（操作区 0.20 / 封面元信息 0.35）分别在

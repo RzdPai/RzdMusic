@@ -146,18 +146,33 @@ const PLAYER_CLONE_Z_INDEX: number = 110;
  * - `true` ：播放页作为 **NavDestination** 推入（`pushPath(..., animated = false)`），
  *   完全对标无界 1.2.4。系统转场必须关掉 —— 形变自己就是动画，两套动画叠在一起
  *   就是用户报的"动画中途封面归位 / 底部空一块"。
- * - `false`（**当前，已回退**）：旧路径，播放页作为壳层 Stack 里的浮层（`isShowPlay` 条件渲染）。
+ * - `false`：旧路径，播放页作为壳层 Stack 里的浮层（`isShowPlay` 条件渲染）。
  *
- * ⚠️ 回退原因（2026-09-25 上机）：`NavDestination` 是渲染在 `HdsNavigation` 内部的，
- *    它会把**同在该 Navigation 里的 HDS 浮动底栏（迷你条真身）盖住** —— 而形变恰恰要透出
- *    那条迷你条；透明背景也压不住 HDS 自带的底。结果就是"一推入就成一块、底部又缺一块"，
- *    比第 1 步之前更差。**要再走路由化，必须先解决"被盖住的迷你条真身"**（例如把真身也搬进
- *    壳层克隆层、或让迷你条画在 NavDestination 之上），否则不要打开这个开关。
+ * ─────────── ★★ 2026-10-15：**已打开**，因为上次回退的根因找到了 ───────────
+ * **原来为什么回退**（2026-09-25 上机）：`NavDestination` 渲染在 `HdsNavigation` 内部，
+ * 用的是 **STANDARD** 模式 —— 那个模式下它**自带不透明底**，"透明背景也压不住 HDS 自带的底"，
+ * 于是同在该 Navigation 里的 **HDS 浮动底栏（迷你条真身）被整片盖住**，
+ * 而形变恰恰要透出那条迷你条 ⇒ "一推入就成一块、底部又缺一块"。
  *
- * 保留它的价值：路由壳（`PlaybackPageRoute.ets` + router_map 的 `player` 条目）已经就位、
- * 随包编译，想再试只需把这里改成 `true`，不用重新搭一遍。
+ * **这次的解药（逆向得到，已核实到 API 层）**：
+ * 无界的播放页 `HdsNavDestination` **设了 `mode(NavDestinationMode.DIALOG)`**
+ * （`wujie.pa:190804-190811`）。官方语义（本机 SDK
+ * `openharmony/ets/component/nav_destination.d.ts:317-333`）：
+ * > "Dialog mode, where the navigation destination is **transparent by default**,
+ * >  and adding or removing the navigation destination **does not affect the underlying
+ * >  page's lifecycle**."
+ * ⇒ **默认透明 + 不影响下层页面** ⇒ 下层首页与迷你条**不被盖住、不被隐藏**，
+ * 形变全程**可见且可量**（`expand.init` 正是靠 `getFrameNodeById` 的矩形算起点）。
+ * 这一句已经加在 `features/player/.../PlaybackPageRoute.ets` 的 `.mode(...)` 上。
+ *
+ * ⚠️ **DIALOG 的两个代价**（`PlaybackPageRoute.ets` 里已处理/已注明）：
+ *   ① DIALOG 默认**不响应返回键** ⇒ 必须显式 `.onBackPressed()`（已给）；
+ *   ② 不再有系统转场与系统底 ⇒ 顶栏/背景/裁剪全由播放页自己画（本该如此）。
+ *
+ * ⚠️ **回退方法**：把这里改回 `false` 即可回到"壳层浮层"那条已验证可用的路
+ *    （浮层代码与克隆层都还在，随包编译，不用重新搭）。
  */
-const PLAYER_ROUTE_MODE: boolean = false;
+const PLAYER_ROUTE_MODE: boolean = true;
 
 /**
  * 播放页路由参数（对标反编译里的 `param.pull`）。
@@ -178,13 +193,29 @@ class PlayerRouteParam {
 const RzdShellLogTag: string = 'HomeShell';
 
 /**
- * 上拉松手后的收尾时长（ms）。
+ * 上拉松手后的收尾时长（ms）—— **提交（够阈值）** 与 **取消（不够阈值）** 两个值。
  *
- * 取无界 Tokens 里的 300（主转场）/ 180（微交互）：够 = 补间到铺满，
- * 不够 = 补间回迷你条那一小块再卸载。
+ * ★★ 2026-10-15（照搬无界：改成**它那套形变自己的常量**）：
+ *   无界的 `commitPull()` / `cancelPull()` 都走 `animateMorphT(SETTLE_MS, t, EASE_OUT_STR)`，
+ *   而 **`SETTLE_MS = 400`，且提交与取消是同一个值**
+ *   （`_recover/logic-src/开关播放器-手势路径定稿.md` §0 速查 L25/L26 与 §八 L219/L220，
+ *   后者逐条给了字节码行号 L146973 / L146866）。
+ *
+ * ⚠️ 改前是 **300 / 180**，原注释写着"取无界 Tokens 里的 300（主转场）/ 180（微交互）" ——
+ *   **取错了来源**：那是无界的**通用设计 token**，而这里要的是**这套形变自己的**常量
+ *   （`MainPage.SETTLE_MS`）。同一个错误来源在"关闭时长"上已经犯过一次（§56.20：
+ *   那处不仅时长偏短，缓动还整条抄成了"打开"用的那条 ⇒ 用户实测「关闭几乎没动画」）。
+ *
+ * ★ 顺带一个正面效果：壳层叠加层（`MorphCoverClone`）跑的是无界 `ENTER_MS = 560ms`（已对齐）。
+ *   改前播放页 `300 + 20 = 320ms` 就落位，**离叠加层的 560 差 240ms**（要靠
+ *   `morphOverlayBridging()` 兜着才不被切断）；改成 400 后落位在 `420ms`，
+ *   **差距缩到 140ms** ⇒ 被切断的风险更小。
+ *
+ * ⚠️ 这是**纯观感**改动（无功能影响）。若你上机觉得"打开变钝了"、不如原来跟手，
+ *   **回退就是把这两行改回 `300` / `180`** —— 一处一行，互不影响。
  */
-const PULL_OPEN_SETTLE_MS: number = 300;
-const PULL_OPEN_ABORT_MS: number = 180;
+const PULL_OPEN_SETTLE_MS: number = 400;
+const PULL_OPEN_ABORT_MS: number = 400;
 
 /**
  * 跟手期间补量"续飞封面终点"的重试次数 / 间隔（ms）。
@@ -434,10 +465,127 @@ struct Index {
       return;
     }
     if (this.appState.isShowPlay) {
+      // ★★ 2026-10-15（照搬无界）：**点击打开也必须走形变**。
+      //   无界里「点击播放条」和「上滑手势」**共用同一个 `beginMorphEnter`**
+      //   （全包只有 `openPlayerMorph` 与 `pullStart` 两个调用者，见
+      //   `_recover/logic-src/点击打开播放器形变链路.md` §一）。此前这里只推路由、
+      //   不启动形变 ⇒ 点击走的是播放页里那套**派音自播**（`collapseProgress`），
+      //   与上滑的壳层形变是两条互不相干的动画 —— 用户实测「点击打开播放器没有动画」
+      //   「背景不对」就是它。顺序对齐无界：① 量源并进相位 → ② 推路由挂载
+      //   → ③ 量终点（`onPullReady` 等价物）→ ④ 收尾补间 `commitPull()` 等价物。
+      const morphStarted: boolean = this.beginOpenMorphOnClick();
       this.pushPlayerRoute();
+      if (morphStarted) {
+        // ★★★ 2026-10-16（**点击打开没有封面动画**的最后一块拼图）：
+        //   显式把「浮层那一棒」（壳层 `MorphCoverClone` = 续飞封面）起起来，
+        //   **不再只依赖** `@Monitor('expandState.morphDrive')`。
+        //
+        // ## 为什么必须显式
+        //
+        // 封面那一棒有**两条独立的进度**：
+        //   · 播放页那层（`morphP`）—— 容器 scale/translate/clip，**背景也在里面**；
+        //   · 浮层那层（`morphOverlayP`）—— 壳层的续飞封面，**封面就靠它飞**。
+        // 两条驱动路径：
+        //   · 手指跟手：`onPullOpenUpdate` → `syncMorphOverlayFromPage()`（**一比一同步**）✓
+        //   · 点击/松手：`settlePullOpen` → `morphOverlayTweenTo()`，
+        //     以及 `@Monitor('expandState.morphDrive')` → `focusMorphOverlayForPageIntro()`。
+        // ⚠️ 后者是 **V2 异步回调**，而 `focusMorphOverlayForPageIntro()` 里有两道**静默 return**
+        //   （`morphDrive !== MorphDrive.ANIM` / `!morphContainerActive()`）—— 它**不写日志**，
+        //   一旦那一刻相位还没就位，这一棒就**整段不播、而且查不出来**。
+        //   用户实测「**点击播放条打开播放器 / 点击关闭 / 系统返回关闭都没有封面动画**」
+        //   而「上拉打开正常」，差异正是"跟手那条同步路走通了、非手势这条路没走通"。
+        //
+        // ⇒ 这里在**推路由之后、相位已就位**的位置显式喊一声
+        //   （与 `PlaybackPage.closeFullScreenPlayback()` 里"同步驱动浮层"那条**同款做法**，
+        //     见那边 2358-2370 行的长注释 —— 它当时修的正是"关闭没有封面动画"）。
+        //   ⚠️ 幂等：`focusMorphOverlayForPageIntro()` 的两道守卫 + `morphOverlayTweenTo()`
+        //     的"起点==终点直接返回" / `morphOverlayAnimating` 不抢 ⇒ 重复调用安全。
+        this.expandState.focusMorphOverlayForPageIntro(this.getUIContext());
+        this.schedulePullAnchorRemeasure(0);
+        // 它自带"源几何还没量齐就 32ms 重试"那条窗口，等价于无界的 `ExpandSnapshot.onPullReady`。
+        this.settlePullOpen(true);
+      }
     } else {
       this.popPlayerRoute();
     }
+  }
+
+  /**
+   * 点击打开（**非手势入口**）的形变启动 —— 对标无界 `MainPage.openPlayerMorph(src)`。
+   *
+   * 无界的原文（`点击打开播放器形变链路.md` §一 + 卷首更正）：
+   * ```ts
+   * openPlayerMorph(src?) {
+   *   const s = src ?? this.ownMorphSource;
+   *   if (!this.beginMorphEnter(s)) { this.enterAnimStarted = false;
+   *                                   this.nav.pushPath({ name: R_PLAYER }); return; }  // 退化：无形变
+   *   // beginMorphEnter 内部已经 pushPath({name, param:{pull:true}}, animated=false)
+   *   ExpandSnapshot.onPullReady = λ;      // 就绪 → commitPull() → animateMorphT(400, t=1)
+   * }
+   * ```
+   * 本方法只做①「量源并进相位」这一半；②推路由在调用点紧跟其后，③④也由调用点发起
+   * （因为 `pushPath` 是壳层的私有动作，不能让本方法反调）。这样点击与上滑
+   * **共用同一份几何、同一个相位、同一条收尾补间**，屏上只可能有一个动画主。
+   *
+   * ⚠️ 三条守卫，缺一条就会和手势或已有会话打架（每一条都有实测依据）：
+   *   · `pullDragging` —— 手指正在驱动（`onPullOpenStart` 那条路），让给它，谁也别抢；
+   *   · `morphContainerActive()` —— 已经在一个形变会话里（上滑那条路在
+   *     `onPullOpenStart` 里已经 `pullOpenBegin` 过，且 `isShowPlay` 也是它置的）
+   *     ⇒ 再 begin 一次会把刚量到的几何作废，那就是"覆盖层反复归零"的来源；
+   *   · `pullOpenBegin` 返回假（迷你条没挂载 / 宿主没尺寸）—— 退化成"直接铺满"。
+   *     这与无界量不到胶囊时打 `morph: 量不到胶囊 barId=… ⇒ 本次退回普通 push(无形变)`
+   *     是同一形状：**宁可不做动画，也不能把播放页压成一条细缝**。
+   * @returns true = 形变已进入相位（调用方应继续 ③④）；false = 已退化为无动画落位
+   */
+  private beginOpenMorphOnClick(): boolean {
+    this.expandState.resetMorphTrace('clickOpen');
+    // ★★★ 2026-10-16（**给这条守卫补自愈** —— 它此前会"永久"挡住点击打开）：
+    //   原判据是 `pullDragging || morphContainerActive()`。两条都会**残留**：
+    //   · `pullDragging`：手势被打断且没走到收尾（系统抢手势 / 页面被切走）；
+    //   · `morphContainerActive()`：相位残留 `ENTERING/LEAVING/LANDING`。
+    //   ⚠️ 而**相位残留不是"用户还在用播放页"**：用户点"打开"时 `isShowPlay`
+    //      **必然刚从 false 变成 true**（`onShowPlayChanged` 就是它触发的）。
+    //      ⇒ 只要"本轮开始时播放页**还没显示**"，那两条残留就都是**上一轮的垃圾**，
+    //        应当**清掉并继续**，而不是把这一次打开判成"重复 / 已在会话里"。
+    //   ⚠️ 原注释（本文件 4332-4336 行）已经点出这个形状会导致
+    //     「**点击打开又退化成派音旧动画**」，但它只给 `dismissMorphActive` 做了自愈，
+    //      **这条守卫本身没做**。⇒ 这就是"点了没动画"里最难复现的那一种。
+    const wasAlreadyShown: boolean = this.appState.isShowPlay;
+    if (this.expandState.pullDragging || this.expandState.morphContainerActive()) {
+      if (wasAlreadyShown) {
+        // 真的"已经在播放页里"（重复触发）⇒ 保持原行为：让给已有会话
+        this.expandState.pushMorphTrace('skip');
+        Logger.info(RzdShellLogTag,
+          `open morph: skip (pullDragging=${this.expandState.pullDragging} ` +
+          `stage=${this.expandState.morphStage} showPlay=1)`);
+        return false;
+      }
+      // 残留垃圾 + 用户确实要打开 ⇒ **先清干净再继续**
+      this.expandState.pushMorphTrace('staleClr');
+      Logger.warn(RzdShellLogTag,
+        `open morph: clearing STALE session (pullDragging=${this.expandState.pullDragging} ` +
+        `stage=${this.expandState.morphStage} drive=${this.expandState.morphDrive} showPlay=0)`);
+      this.expandState.pullDragging = false;
+      this.expandState.morphReset();
+    }
+    const ok: boolean = this.expandState.pullOpenBegin(this.getUIContext(), this.navDepth > 0);
+    this.expandState.pushMorphTrace(ok ? 'beginOk' : 'beginNo');
+    if (!ok) {
+      Logger.warn(RzdShellLogTag,
+        'open morph: mini bar / host rect unavailable ⇒ plain landing (no morph)');
+      this.expandState.pullDragging = false;
+      this.expandState.morphReset();
+      this.expandState.morphSettleOpen();
+      return false;
+    }
+    Logger.info(RzdShellLogTag, 'open morph: begin from click entry (align Wujie openPlayerMorph)');
+    // ★ 壳层浮层那一棒的进度也压回起点：它的静止态初值是 1（"已落位"语义），
+    //   不压回 0 的话浮层第一帧会按"落位的大封面"画一次（= 动画里出现第二张封面）。
+    this.expandState.morphOverlayReset();
+    // ⚠️ **不要在这里**起浮层那一棒的补间：此刻 `morphContainerActive()` 还是假
+    //   （`pullOpenBegin` 只把相位置成 ENTERING 的前一步），`focusMorphOverlayForPageIntro()`
+    //   会静默 return。浮层的显式驱动放在 `onShowPlayChanged` 里（推路由之后）。
+    return true;
   }
 
   /** 播放页路由在栈里的下标（不在栈里返回 -1）。 */
@@ -675,19 +823,68 @@ struct Index {
 
   /**
    * 收尾补间：commit = 推到铺满并落定；否则补间回起点、交还迷你条、卸载播放页。
+   *
+   * ★★★ 2026-10-16（**"点击打开没有封面/背景动画"的真断点**）：
+   *   原来的重试分支长这样：
+   * ```ts
+   *   if (!morphUsable) {
+   *     pullDragging = true; morphDrive = FINGER;
+   *     if (!measureMiniDuringPull(…)) { …重试/放弃…; return; }   // ← 失败才 return
+   *     // 补量成功 ⇒ 掉出 if，**落到下面起补间** ✓
+   *   }
+   * ```
+   *   看着没问题，**但这条 `return` 在外层**（`if (!morphUsable)` 那一层）——
+   *   我读源码时先看成了"成功也 return"。复读确认：**补量成功后确实会落到起补间那一段**，
+   *   所以这条不是断点。（留这段注释是为了记下"我一度误判过一次"。）
+   *
+   * ⚠️ 真正要记的是：**这条重试链（12×32ms）是点击路径唯一能把 `morphUsable` 变真的地方**
+   *   —— 点击时 `pullOpenBegin` 跑在"播放页还没挂载"那一刻，终点锚点必然量不到。
+   *   所以 `morphUsable` 变真之后**必须**有东西把浮层那一棒也起起来；
+   *   播放页侧的 `onAppear` 补量（`PlaybackPage` §96.1）与这里的重试是**两条并行路径**，
+   *   谁先成功都由各自负责起棒（幂等，重复调用安全）。
    * @param commit 是否提交展开
    */
   private settlePullOpen(commit: boolean, attempt: number = 0): void {
+    this.expandState.pushMorphTrace(`settle${attempt}${commit ? 'C' : 'A'}`);
     if (!this.expandState.morphUsable) {
       // 快速松手也要完成原尺寸锚点补量；不能先切 ANIM 导致补量停止。
       this.expandState.pullDragging = true;
       this.expandState.morphDrive = MorphDrive.FINGER;
+      // ★★★ 2026-10-16（**"点击/返回没有动画"的最后一条因果链**）：
+      //   这一段先做两步**抢救**，再做原来那次补量（顺序很重要）：
+      //   ① 若"形变会话"已经被清掉（`morphSessionStarted === false`）——
+      //      典型来源：播放页挂载那一刻，**旧页面实例的 `onDisappear`** 触发了
+      //      无条件的 `morphReset()`（`morphGen++`、`morphUsable=false`、
+      //      **`morphSessionStarted=false`**）—— 就先**重新起一次入口**，
+      //      把 `stage/drive` 摆回 `ENTERING/FINGER`；
+      //   ② 然后调原来那次 `measureMiniDuringPull` 补量（它要求 `stage=ENTERING &&
+      //      drive=FINGER`，所以①必须在前）。
+      //   ⚠️ 顺序反了 ⇒ 补量直接被守卫拦掉（静默返回 false）⇒ 重试 12 次全废。
+      if (!this.expandState.morphSessionStarted) {
+        this.expandState.pushMorphTrace('reEnter');
+        Logger.info(RzdShellLogTag,
+          `pull settle: re-enter morph session (was reset by an onDisappear) attempt=${attempt}`);
+        if (!this.expandState.pullOpenBegin(this.getUIContext(), this.navDepth > 0)) {
+          // 几何还是量不到：保持 `ENTERING/FINGER`，让下面的补量提前 return 去排队重试
+          this.expandState.pullDragging = true;
+          this.expandState.morphDrive = MorphDrive.FINGER;
+        }
+      }
       if (!this.expandState.measureMiniDuringPull(this.getUIContext(), this.navDepth > 0)) {
         if (attempt < PULL_ANCHOR_RETRY_MAX) {
-          const pendingGen: number = this.expandState.morphGen;
           setTimeout((): void => {
-            if (this.appState.isShowPlay && this.expandState.morphGenAlive(pendingGen)) {
+            // ★★★ 2026-10-16（**"点击/返回没有动画"的最后一条因果链**）：
+            //   这里原来是 `if (isShowPlay && morphGenAlive(pendingGen))`。
+            //   ⚠️ `morphGenAlive` 在本场景下**必然为假**，于是整条重试链在第 1 拍就断掉。
+            //   ⇒ 修法：**守卫不要挂世代号**。世代号在这里的语义是"这一轮会话是否还有效"，
+            //     而"用户还在播放页"（`isShowPlay`）才是真正的有效性判据；
+            //     中途被 `morphReset()` 清过一次，重试接着把几何量回来即可。
+            //     ⚠️ 只在 `!isShowPlay`（用户已经离开播放页）时才放弃。
+            if (this.appState.isShowPlay) {
               this.settlePullOpen(commit, attempt + 1);
+            } else {
+              Logger.info(RzdShellLogTag,
+                `pull settle: aborted (player gone) attempt=${attempt}`);
             }
           }, PULL_ANCHOR_RETRY_MS);
         } else {
@@ -702,13 +899,20 @@ struct Index {
         }
         return;
       }
+      // 补量成功 ⇒ 故意**不 return**，落下去起那两条补间（见上面那段注释）。
+      this.expandState.pushMorphTrace('measOk');
+      Logger.info(RzdShellLogTag,
+        `pull settle: remeasured at attempt=${attempt} usable=${this.expandState.morphUsable} ` +
+        `stage=${this.expandState.morphStage}`);
     }
     const duration: number = commit ? PULL_OPEN_SETTLE_MS : PULL_OPEN_ABORT_MS;
+    this.expandState.pushMorphTrace('tween');
     this.expandState.pullDragging = false;
     this.expandState.morphDrive = MorphDrive.ANIM;
     // ★★ 浮层拷贝这一层走**它自己**的时长/曲线（560ms + 快出慢收，对标无界 `animateMorphT`），
     //   与下面这条 300/180ms 的**播放页**补间**同起**（同一帧、同一个任务里两个 `animateTo`）。
-    //   ⚠️ 播放页那条一个字都不动（`PULL_OPEN_SETTLE_MS` 仍是 300 / `PULL_OPEN_ABORT_MS` 仍是 180）。
+    //   ⚠️ 播放页那条**另有一套数值**：`PULL_OPEN_SETTLE_MS` / `PULL_OPEN_ABORT_MS`
+    //      （2026-10-15 起 = 无界 `SETTLE_MS` 400 / 400，见那两个常量的注释）。
     //   起点取浮层**当前**进度（跟手停在哪儿就从哪儿接着走）。
     this.expandState.morphOverlayTweenTo(commit, this.getUIContext());
     // 标记"浮层这一棒的补间由壳层发起"：`@Monitor('expandState.morphDrive')` 在下面那行
@@ -718,7 +922,9 @@ struct Index {
     setTimeout((): void => {
       this.shellOwnsOverlayTween = false;
     }, PlayerExpandState.MORPH_OVERLAY_DURATION_MS + 20);
-    const gen: number = this.expandState.morphGen;
+    // ★ 2026-10-16：这里原来还捕获了一个 `gen` 供两处守卫用；那两处守卫已按 §102/§103
+    //   改成判 `isShowPlay`（世代号会被"旧实例卸载的 morphReset"推高，与用户意图无关）
+    //   ⇒ `gen` 不再需要，删掉声明（ArkTS 对未使用的局部变量较严格，留着会被静态告警）。
     this.getUIContext().animateTo({
       // 无界 Tokens 的标准时长：180ms 微交互 / 300ms 主转场
       duration: duration,
@@ -730,17 +936,38 @@ struct Index {
       // ⚠️ 相位在**补间之外**改：`morphSettleOpen()` 会把"是否裁剪"翻成 false，
       //    放进 animateTo 闭包里会让这种离散属性也去吃补间。
       setTimeout((): void => {
-        if (this.appState.isShowPlay && this.expandState.morphGenAlive(gen)) {
+        // ★★★ 2026-10-16（**同一条因果链的第四处**）：
+        //   这里原来是 `if (isShowPlay && morphGenAlive(gen))`。**与重试那条守卫同一个毛病**：
+        //   `morphGen` 会被"旧页面实例的 `onDisappear` 无条件 `morphReset()`"推高，
+        //   而那个原因与"用户还想不想看播放页"毫无关系。
+        //   ⇒ 一旦它变，`morphSettleOpen()` 被跳过 ⇒ **相位停在 ENTERING、`morphUsable` 保持真**
+        //     ⇒ `morphClipping()` 恒真 ⇒ 容器一直停在最后那一帧的 `scale/translate/clip`
+        //     ⇒ 观感就是「**背景整屏、封面位置不对**」。
+        //   ⇒ 改法：只判 `isShowPlay`；再补一条 `morphUsable` —— 几何没就绪时不能落位
+        //     （否则会把一帧"没量齐"的中间态固定下来）。
+        if (this.appState.isShowPlay && this.expandState.morphUsable) {
+          this.expandState.pushMorphTrace('settled');
           this.expandState.morphSettleOpen();
+        } else {
+          this.expandState.pushMorphTrace('settleSkip');
+          Logger.info(RzdShellLogTag,
+            `pull settle: skip morphSettleOpen showPlay=${this.appState.isShowPlay} ` +
+            `usable=${this.expandState.morphUsable} stage=${this.expandState.morphStage}`);
         }
       }, duration + 20);
       return;
     }
     // 没过阈值：补间回起点，**动画播完**再交还迷你条并卸载。
-    // ⚠️ `morphLand()` 不能在补间之前调：LANDING 会让播放页整体不透明度过 0
-    //    （见 morphPageOpacity），提前调就看不到"缩回去"的过程了。
+    // ⚠️ `morphLand()` 不能在补间之前调：LANDING 之后播放页整页不再绘制
+    //    （`morphPageOpacity()` 在 LANDING 返回 0；★ 见它自己的注释 —— 那个函数
+    //     **目前没有消费者**，所以"不画"实际由 `.visibility(isCollapsing)` 与
+    //     `morphClipping()` 那条裁剪门共同实现），提前调就看不到"缩回去"的过程了。
     setTimeout((): void => {
-      if (!this.appState.isShowPlay || !this.expandState.morphGenAlive(gen)) {
+      // ★★★ 2026-10-16（**同一条因果链的第五处**）：与上面那条同款订正 ——
+      //   去掉 `morphGenAlive`（它会被"旧页面实例卸载时的 `morphReset()`"推高，
+      //   与"用户还想不想打开播放页"无关）。若这里被误拦，手势没到阈值的回弹
+      //   就会**停在半路**（播放页挂在一块中间大小的窗口上、迷你条也不交还）。
+      if (!this.appState.isShowPlay) {
         return;
       }
       this.expandState.morphLand();
@@ -800,8 +1027,15 @@ struct Index {
       //    横着滑出去 —— 收起时表现成"一个暂停按钮从屏幕外飞进来"。
       .translate({ y: 0 })
     }
-    .width(LayoutPolicy.matchParent)
-    .height(LayoutPolicy.matchParent)
+    // ★★★ 2026-10-16（与 `MorphCoverClone()` **同一处修正**，理由逐字相同）：
+    //   这里原来是 `LayoutPolicy.matchParent` ×2 ⇒ 拿的是**壳层根 `Stack`** 的尺寸，
+    //   而根 `Stack` **没有 `ignoreLayoutSafeArea`** ⇒ 这一层的盒子只等于"安全区之内"那块。
+    //   而它的子节点（上面那个 `Row`）用的是 `.position({x: asideWinX, y: asideWinY})`
+    //   —— **全窗口坐标**（与迷你条量测同口径）⇒ 当迷你条靠近屏幕底部（`asideWinY ≈ 850`）
+    //   时，这一块会落在层盒子**之外** ⇒ 被裁掉 ⇒ 观感是"关闭时**操作区那三个按钮不见了**"。
+    //   ⇒ 用**实测窗口尺寸**显式给（量不到时退回 `'100%'`，与改动前逐字一致）。
+    .width(this.expandState.windowWidthVp > 0 ? this.expandState.windowWidthVp : StyleConstants.FULL_WIDTH)
+    .height(this.expandState.windowHeightVp > 0 ? this.expandState.windowHeightVp : StyleConstants.FULL_HEIGHT)
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     // 整层不吃事件：下面就是播放页，玩家的点击必须照常落到播放页上
     .hitTestBehavior(HitTestMode.None)
@@ -854,8 +1088,22 @@ struct Index {
           y: this.expandState.morphOverlayCoverBridge().y
         })
     }
-    .width(LayoutPolicy.matchParent)
-    .height(LayoutPolicy.matchParent)
+    // ★★★ 2026-10-16（**照无界把这一层显式铺满全窗口**）：
+    //   原来这里是 `LayoutPolicy.matchParent` ×2 —— 那是拿**父容器（壳层根 `Stack`）的尺寸**，
+    //   而**根 `Stack` 自己并没有 `ignoreLayoutSafeArea`**（见它的属性表：只有 `.width/.height('100%')`
+    //   + `.id(MORPH_HOST_ID)` + 手势 + `onAreaChange`）⇒ 这一层的盒子只等于"**安全区之内**"那块，
+    //   比窗口小（上下各少一个安全区）。
+    //
+    //   ⚠️ 而 `.position({x, y})` 用的是**全窗口坐标**（`morphCoverRectAt()` 的输出、
+    //      与迷你条/播放页封面的量测同口径）⇒ 当封面在**屏上部**（封面页那一端 `y ≈ 136`）
+    //      或**屏下部**（迷你条那一端 `y ≈ 850`）时，都会落在这层盒子**之外**
+    //      ⇒ 被裁掉 / 不绘制 ⇒ **观感就是"没有封面动画"**。
+    //
+    //   ⇒ 用**实测窗口尺寸**显式给（与 `PlaybackPageRouteShell.boxWidth/boxHeight()` 同款做法，
+    //     那是本仓已经验证过的"铺满窗口"写法），并保留 `ignoreLayoutSafeArea` 双保险。
+    //     ⚠️ 量不到窗口时退回 `'100%'`（与改动前逐字一致，不会更差）。
+    .width(this.expandState.windowWidthVp > 0 ? this.expandState.windowWidthVp : StyleConstants.FULL_WIDTH)
+    .height(this.expandState.windowHeightVp > 0 ? this.expandState.windowHeightVp : StyleConstants.FULL_HEIGHT)
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     .opacity(this.expandState.morphOverlayBridgeOpacity())
     // 整层不吃事件：下面就是播放页，玩家的点击必须照常落到播放页上
@@ -1189,9 +1437,23 @@ struct Index {
       .vertical(false)
       .scrollable(false)
       .animationDuration(0)
-      // ★ 不要碰 `barBackgroundColor` / `barBackgroundBlurStyle`！
-      //   官方《组件适配沉浸光感》原文：「设置悬浮材质后，**不建议**再通过 `barBackgroundColor`、
-      //   `barBackgroundBlurStyle` 为 TabBar 设置背景色或背景模糊，**避免遮挡材质效果**。」
+      // ★★★ 2026-10-16（**方案 A：自绘背板**，与首页那条成对）：
+      //   二级页这条 HdsTabs 的**栏背景**同时就是迷你条的背板（整条栏只有一个页签）
+      //   ⇒ 把它设成透明 + 无模糊，背板就交给 `HomeMiniBarPlayer.MiniBarBackplate()` 自绘，
+      //   于是那一层与内容在**同一棵子树**里 ⇒ 能跟着 `morphSquashY` 一起弹。
+      //
+      // ⚠️ **代价（如实登记）**：这一栏原来是**官方 `systemMaterialEffect` 真材质**
+      //   （`barFloatingStyle.systemMaterialEffect`）。自绘背板用的是我们既有的
+      //   `floating_mini_bar_*` token + `BlurStyle` 档位，**与官方材质不会逐像素相同**
+      //   ⇒ 二级页这条播放条的外观会与"沉浸光感"略有差别。这是用户 2026-10-16
+      //   拍板选方案 A 时接受的代价（备选是"保持官方材质、但背景不会弹"）。
+      //
+      // ⚠️ 官方《组件适配沉浸光感》原文确实写着「设置悬浮材质后，**不建议**再通过
+      //   `barBackgroundColor` / `barBackgroundBlurStyle` 为 TabBar 设置背景色或背景模糊，
+      //   避免遮挡材质效果」—— 本处是**有意的例外**：我们要的正是"让 HDS 别再画背板"，
+      //   而材质那一档由我们自己按 `ambientState.level` 给（同一套 `BlurStyle` 档位）。
+      .barBackgroundColor(Color.Transparent)
+      .barBackgroundBlurStyle(BlurStyle.NONE)
       .barFloatingStyle({
         // ★★ 栏宽**必须显式给**（官方 `HdsTabsFloatingStyle.barWidth` 三档）。
         //   ⚠️ 2026-10-11 第六轮我按"参考首页那条"把它去掉了，装到机器上**更糟**
@@ -1261,6 +1523,13 @@ struct Index {
    *
    * 尺寸与 {@link floatingMiniBar} 的宿主盒严格一致：宿主是 56vp 高，这里再写死一次，
    * 免得 HDS 的排布变化（两排/单排）把封面从 44 缩成 30。
+   *
+   * ★ 2026-10-15（"播放条更粗"那条）：`HomeMiniBarPlayer` 自己的高度已经涨到 56vp
+   *   （封面 40 + 上下各 8 —— 见 `HomeMiniBarAlbumCover.coverSideLengthVp()` 与
+   *   `HomeMiniBarPlayer.sidePadVp()` 的注释），所以这一档（封面 44）在本 Builder 里
+   *   算出来的高度是 44 + 8×2 = **60vp**，比宿主槽高 4vp —— 交给 HDS 居中即可
+   *   （多出来的 4vp 是设计上明确让步的余量，不要再加固定 height 去夹它，
+   *    2026-10-12 那次"强行定 56vp ⇒ 整排元素低 6~8vp"的教训就在下面那条注释里）。
    * 上拉/点击打开播放页的手势在 `HomeMiniBarPlayer` 内部，这里不要重复挂。
    */
   @Builder
@@ -1325,7 +1594,9 @@ struct Index {
       return false;
     }
     // ⚠️ 形变期间**必须继续显示**：播放页浮层是从这条迷你条那里长出来的，
-    //    起手那一帧播放页还是全透明的（`morphPageOpacity` 前 12% 才淡到 1），
+    //    起手那一帧播放页**几乎看不见**（它此刻只占"迷你条那么大的裁剪窗口"，
+    //    而窗口里画的又是刚起步的缩放内容 —— ★ 不是"整页淡入"：
+    //    `morphPageOpacity()` 那个函数**目前没有消费者**，见它自己的注释），
     //    这时候把迷你条藏了，用户看到的就是"屏幕下方突然空了一块"再冒出一个方块。
     //    它自己在形变期间会淡出（`miniBarOpacity`），交棒给播放页。
     if (this.appState.isShowPlay && !this.expandState.morphContainerActive()) {
@@ -1534,8 +1805,16 @@ struct Index {
               // ⚠️ 单排（HORIZONTAL）配 `EXPAND` 是**已知的错误组合**（底栏会变成
               //   「长条 Tab + 圆形播放器」，见 `onMiniBarStyleChangeFull` 的注释）⇒
               //   在「现在就听」页一并把样式压回 `COLLAPSE`。
-              enableMiniBarBackground: !this.expandState.sourceBarHidden &&
-                this.tabState.tabIndex !== NOW_PLAYING_TAB_INDEX,
+              //
+              // ★★★ 2026-10-16（**方案 A：迷你条改自绘背板**，修用户实测
+              //   「关闭播放器只有内容会弹，**播放条背景不弹**」）：
+              //   `enableMiniBarBackground` 是 HDS 给**迷你条那一块**的背板开关
+              //   （页签胶囊那块背板是**另一块**，不受它影响）。
+              //   置 `false` ⇒ HDS 不再给迷你条画背板 ⇒ 背板改由
+              //   `HomeMiniBarPlayer.MiniBarBackplate()` 自绘，于是它与内容在**同一棵子树**里，
+              //   能跟着 `morphSquashY` 一起压/一起弹。
+              //   ⚠️ 与 `HomeMiniBarPlayer` 里那一层**必须成对**：只关不画 ⇒ 迷你条底下空一块。
+              enableMiniBarBackground: false,
               miniBarStyle: this.miniBarStyleForHds(),
               onBarStyleChange: (miniBarStyle: HdsBarStyle, _tabStyle: HdsBarStyle,
                 _miniWidth: number, _tabWidth: number, mode: HdsTabsBarChangeMode): void => {
@@ -1719,7 +1998,8 @@ struct Index {
       //      踩过三次（底部缺一块 / 一块近正方形背景 / 黑底展不开）—— 被形变的那层，
       //      它自己的尺寸就是裁剪窗口，喂回去等于让目标追着自己的中间态跑。
       //      本容器只在**静止态**才等于窗口大小，形变期间并不等于，所以连它也不能信。
-      this.expandState.reportWindow(this.viewportWidthVp, this.viewportHeightVp);
+      this.expandState.reportWindow(this.viewportWidthVp, this.viewportHeightVp,
+        this.windowInfo.statusBarTopVp, this.windowInfo.navigationBarBottomVp);
       this.expandState.updateChromeTier(this.viewportWidthVp);
     })
   }

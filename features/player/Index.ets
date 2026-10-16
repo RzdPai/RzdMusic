@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -100,3 +100,13 @@ export { PLAYER_BIG_COVER_ID } from './src/main/ets/view/MusicPlayInfoBlock';
 //   （不能深链到 `src/main/ets/view/` 内部文件）⇒ 这里补一行导出，**组件本身一行未改**
 //   （用户明确"歌词渲染不在范围"）。用法见 `recommendation/.../NowPlayingFeedPage` 的 `FeedLyric`。
 export { MiniLyricLinesComponent } from './src/main/ets/view/MiniLyricLinesComponent';
+// ★★ 2026-10-15：**网格流动背景**的算法层 —— 照搬无界 1.2.4 的
+//   `design/logic/MeshGradient.ets` + `design/logic/MeshSource.ets`（两个模块**零外部依赖**）。
+//   依据：`_recover/logic-src/播放页背景-MeshGradient与MeshSource定稿.md` §2/§3。
+//   导出是为了让它们**进编译图**（本仓 hvigor 对 HAR 按引用编译：没被 import 的文件不参与编译，
+//   构建照样绿 ⇒ 必须先挂上导出面才验证得到）。下一步的 `MeshCoverBg` 组件会消费它们。
+export { MeshField, MeshCP, CP_W, CP_H, cp, defaultConf, generateConf } from './src/main/ets/util/MeshGradient';
+export { SRC_EDGE, hueOfSeed, fillFallback, enhanceColors, boxBlurRgba } from './src/main/ets/util/MeshSource';
+// ★★ 2026-10-15：**网格形变背景的组件层**（`NodeContainer` + 自定义 `RenderNode.draw`
+//   + `drawPixelMapMesh` + `displaySync` 20fps + 径向暗角），照搬无界 `MeshCoverBg`。
+export { MeshCoverBg } from './src/main/ets/view/MeshCoverBg';

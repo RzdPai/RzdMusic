@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -1188,6 +1188,26 @@ export struct SettingPage {
               .fontColor($r('sys.color.font_primary'))
             Blank()
             Text($r('app.string.mine_version'))
+              .fontSize($r('sys.float.Body_M'))
+              .fontColor($r('sys.color.font_tertiary'))
+          }
+          .width('100%')
+          .height(36)
+          // ★★ 2026-10-15（修一个**让"装没装上"变成不可判定**的坑）：
+          //   `mine_version` 是**手写资源**（`features/setting/.../base/element/string.json`
+          //   里一个字面量 `1.9.0.3`），**不是读系统的 `bundleManager`** ⇒
+          //   哪怕装了全新的包，这一行也**一字不变** ⇒ 用户无法判断自己装的是哪一版
+          //   （用户实测反馈："我安装过之后似乎没有任何区别" —— 这就是它为什么不可判定）。
+          //   ⇒ 补一行**构建标记** `app.string.build_stamp`：
+          //     · 由构建脚本每次写入（形如 `260101-0000`），**每次构建都不同**；
+          //     · 换过包就一定变 ⇒ "装上了没有"一眼可判（旧包显示旧戳）。
+          //   ⚠️ 它**只用于人眼核对**，不参与任何逻辑；`mine_version` 保持原样（对外版本号）。
+          Row() {
+            Text($r('app.string.mine_about_build'))
+              .fontSize($r('sys.float.Body_M'))
+              .fontColor($r('sys.color.font_primary'))
+            Blank()
+            Text($r('app.string.build_stamp'))
               .fontSize($r('sys.float.Body_M'))
               .fontColor($r('sys.color.font_tertiary'))
           }

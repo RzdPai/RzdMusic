@@ -155,7 +155,15 @@
     },
     {
       "name": "mine_version",
-      "value": "1.9.0.3"
+      "value": "1.9.0.4"
+    },
+    {
+      "name": "mine_about_build",
+      "value": "Build"
+    },
+    {
+      "name": "build_stamp",
+      "value": "261016-2154"
     },
     {
       "name": "mine_about_bundle",

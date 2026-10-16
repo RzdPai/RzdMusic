@@ -119,7 +119,12 @@ export struct MiniLyricLinesComponent {
       }
       .width(StyleConstants.FULL_WIDTH)
       .alignItems(HorizontalAlign.Start)
-      .margin({ top: 2, bottom: -10 })
+      // ⚠️ 2026-10-15：这里原来写 `margin({ top: 2, bottom: -10 })`。`bottom: -10` 是
+      //    "播放页那一页贴底、再往下压一点"的历史补丁 —— 它**已经**在
+      //    `PlaybackPage` 调用点上被 `MINI_LYRIC_SINK_VP` 取代（两处负边距会叠加，
+      //    小歌词会被压到页外看不见）。所以这里**不再给 bottom**，
+      //    让位量只有一个来源：调用点。`top: 2` 保留（原观感）。
+      .margin({ top: 2 })
     }
   }
 }
