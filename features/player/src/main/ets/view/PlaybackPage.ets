@@ -2494,6 +2494,12 @@ export struct PlaybackPage {
       this.colorRetryQueued = true;
       setTimeout((): void => {
         this.colorRetryQueued = false;
+        // ★ 2026-10-17：页面已退场就别再上色/补网格 ——
+        //   本页的取色链路在退场时会主动释放位图（见 `onDisappear` 里那两句 `releasePixelMapQuiet`），
+        //   若这条重试还去 `commitMeshSource`，那就是拿一张**已经释放过的**位图去换源。
+        if (!this.isAlive) {
+          return;
+        }
         // 与无界那个重试 λ 一致：先放开幂等标记，再把上色重跑一遍
         // （无界调的是 `syncReportChrome()`；本仓对应的就是这两个上色点）。
         this.applyFlowLightColors();
@@ -5770,6 +5776,12 @@ export struct PlaybackPage {
             //   （否则每次进出播放页都会漏一张 64×64 的 PixelMap）。
             this.releasePixelMapQuiet(this.meshSrc);
             this.meshSrc = undefined;
+            // ★★★ 2026-10-17（**补漏**）：`§140` 新加的"安静窗口待补网格源"也归本页持有 ——
+            //   它在窗口期内只是**挂着**（`pendingMeshPm`），若这段里页面就退场了，
+            //   上面那句只释放 `meshSrc`、**挂着的这张就永远漏掉**（同类内存卫生问题，
+            //   与 §137 那个"快照 PixelMap 漏清"同一个形状）。
+            this.releasePixelMapQuiet(this.pendingMeshPm);
+            this.pendingMeshPm = undefined;
             this.imageLabel = $r('app.media.ic_avatar1');
             // 页面退场停掉着色器动画：整屏流光是持续的 GPU 开销，后台不该白耗电
             try {
