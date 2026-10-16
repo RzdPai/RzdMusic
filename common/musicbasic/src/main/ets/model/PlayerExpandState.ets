@@ -1317,14 +1317,17 @@ export class PlayerExpandState {
    */
   public metaTopGeomY(t: number, rowH: number): number {
     const p: number = t < 0 ? 0 : (t > 1 ? 1 : t);
-    const cover: LyricMorphRect = this.playerCoverGeomRect();
-    if (cover.size <= 0) {
+    // ★ 2026-10-17：`from` 那一端改用 `bigEndpointRect()`（= 与**续飞封面落点**同一个矩形，
+    //   和 `lyricMorph()` 起点同源 ⇒ 歌名与封面在封面页那一端**逐像素对齐**，
+    //   不会出现"封面按 A 矩形落、歌名按 B 矩形摆"）。它内部已经带纯几何兜底。
+    const fromRect: LyricMorphRect = this.bigEndpointRect();
+    if (fromRect.size <= 0) {
       return 0;
     }
     const gap: number = PlayerExpandState.COVER_FIT_META_GAP_VP;      // 50（无界默认）
     const halfRow: number = rowH > 0 ? rowH / 2 : 0;
     // ① t = 0 那一端：封面底边 + gap（= `fitPlayerOverlay` 的 metaY − metaH/2）
-    const fromTop: number = cover.y + cover.size + gap;
+    const fromTop: number = fromRect.y + fromRect.height + gap;
     // ② t = 1 那一端：小封面顶边 + metaTopFixLyric(+28) − rowH/2
     const lyric: LyricMorphRect = this.lyricMorph(1);
     const toTop: number = lyric.y + PlayerExpandState.META_TOP_FIX_LYRIC_VP - halfRow;

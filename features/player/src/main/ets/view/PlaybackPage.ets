@@ -1783,27 +1783,30 @@ export struct PlaybackPage {
       `seek=${e.chromeSeekSize().toFixed(0)} edge=${coverRect.size.toFixed(0)} t=${this.lyricMorphT.toFixed(2)} ` +
       `cRad=${coverRect.radius.toFixed(2)} cRadV=${(coverRect.radius * e.morphScale).toFixed(2)} ` +
       `rad=${e.morphRadius.toFixed(2)} radVis=${(e.morphRadius * e.morphScale).toFixed(2)}`;
-    // ★★★ 2026-10-16（goal 第 1 条「元信息行照搬 `floatingMeta`」的**现场自证** —— 第二版）
-    //   `metaTop` = 元信息块顶边的**在用值**（与上面那条 `.position()` 表达式**逐字同一份**，
-    //              含那个"竖直居中补偿"项 ⇒ 见 `metaTopInUseYAt()`）；
-    //   `metaExp` = **无界算式值**（`lerp(封面底边+gap, 小封面顶边+metaTopFixLyric, t)`，
-    //              见 `metaTopGeomY(t)`）；
-    //   `metaD`   = 两者之差。
-    //   ## ★★★ 2026-10-17 判读**订正**（原判读建立在两个错上：常数写成 −26、且把"中心"当"顶边"）
-    //   无界 `metaOffsetYAt` 的两端**都是"元信息块的中心 Y"**（见 `META_TOP_FIX_LYRIC_VP` 的推导），
-    //   而本仓在用的是**顶边** ⇒ 原来的 `metaExp` 口径与 `metaTop` 不同，`metaD` 一直在报一个
-    //   **并不存在**的偏差。订正后 `metaTopGeomY(t, rowH)` 已经把两端都换算成顶边 ⇒
-    //   ```
-    //     t = 0 ⇒ metaD 应 ≈ 0（两端式子逐字同源：`封面底边 + gap`）
-    //     t = 1 ⇒ metaD 应 ≈ 0（两端式子逐字同源：`小封面顶边 + 28 − rowH/2`）
-    //     ⇒ 中段若不为 0，**那才是要查的东西**：位置 lerp 的**进度源不同**
-    //       （我们用 `lyricMorphT`，无界用 `swiperProgress`）
-    //   ```
-    const metaInUse: number = e.metaTopInUseYAt(this.lyricMorphT, PlaybackPage.LYRIC_META_ROW_H_VP);
-    const metaExp: number = e.metaTopGeomY(this.lyricMorphT, PlaybackPage.LYRIC_META_ROW_H_VP);
-    const line6: string = `metaTop=${metaInUse.toFixed(1)} metaExp=${metaExp.toFixed(1)} ` +
-      `metaD=${(metaInUse - metaExp).toFixed(1)} ` +
-      `(两端期望 metaD≈0；中段不为 0 = 进度源差异)`;
+    // ★★★ 2026-10-17（**goal 第 1 条「元信息行」的现场自证 —— 第三版，判读已定稿**）
+    //   `metaTop` = 本行**真实渲染值** = `metaTopGeomY(t, rowH)`（就是上面那条 `.position().y`，
+    //               **同一个函数、没有第二份表达式**）；
+    //   `metaOld` = **上一版那条自定式子**的值（`lyricMetaMorphY(t) + t×(size−rowH)/2`，
+    //               见 `metaTopInUseYAt()`，现在只用于对账，**不再参与渲染**）；
+    //   `metaD`   = `metaOld − metaTop`。
+    //   ## 判读（两端都是**已知常数**，所以这一行现在可证伪）
+    // ```
+    //   t = 0（封面页）：metaD ≈ **−40**
+    //       —— 旧式子的 from 用 `LYRIC_META_GAP_VP(10)`（本仓估定值），
+    //          新式子用 `COVER_FIT_META_GAP_VP(50)`（无界 `fitPlayerOverlay` 的硬编码 a8）
+    //          ⇒ 旧式子比新式子高 40vp ⇒ metaOld − metaTop = −40
+    //   t = 1（歌词页）：metaD ≈ **−3.64**
+    //       —— 旧式子到"小封面顶边 + (size−rowH)/2"，新式子到"小封面顶边 + 28 − rowH/2"；
+    //          两者差 = 28 − size/2 = 28 − 48.72/2 = 3.64 ⇒ 旧式子高 3.64vp
+    //   ⇒ 中段是这两端的线性插值。
+    //   ⚠️ 若 t=0 处 metaD 不是 ≈−40（例如 −0）⇒ 说明 `bigEndpointRect()` 与那条旧式子
+    //      用的矩形来源不同（旧式子走 `lyricMetaFromYOf()`，两者都基于 `bigEndpointRect`，
+    //      理论上同源）—— 那时才需要查。
+    // ```
+    const metaTop: number = e.metaTopGeomY(this.lyricMorphT, PlaybackPage.LYRIC_META_ROW_H_VP);
+    const metaOld: number = e.metaTopInUseYAt(this.lyricMorphT, PlaybackPage.LYRIC_META_ROW_H_VP);
+    const line6: string = `metaTop=${metaTop.toFixed(1)} metaOld=${metaOld.toFixed(1)} ` +
+      `metaD=${(metaOld - metaTop).toFixed(1)} (t=0 期望 −40 / t=1 期望 −3.6)`;
     // ★★★ 2026-10-16（**"歌词页封面没变小"的直接判据**，用户真机截图后加）：
     //   用户实测「这是歌词页，那个封面没变小」⇒ 读数 `t=0.00 edge=331`。
     //   封面尺寸 = `lyricMorph(lyricMorphT).size`，而 `lyricMorphT` 只有 0/1 两个稳定值：
@@ -5963,14 +5966,25 @@ export struct PlaybackPage {
           left: this.lyricMetaLeftInset(),
           right: PlaybackPage.LYRIC_META_SIDE_VP
         })
-        // 与封面同一条进度、但**各自一条插值**（无界 `metaOffsetYAt` 与封面那条也是独立的）
+        // ★★★★ 2026-10-17（**照搬无界的位移公式本体** —— 删掉本仓自定的那半条式子）
+        //
+        // 原来这里是：
+        // ```
+        //   y: lyricMetaMorphY(t) + t × (lyricFloatRect().size − LYRIC_META_ROW_H_VP) / 2
+        // ```
+        // 两个问题（都在 §130/§131 里给了出处）：
+        //   ① `lyricMetaMorphY` 的 `from` 端点用的是本仓自定的 `LYRIC_META_GAP_VP = 10`
+        //      （那个常量的注释自己写着「本项目估定值，非逆向值」），
+        //      而无界 `fitPlayerOverlay` 的 gap 是**硬编码 50** ——
+        //      它第 6 个实参 `chrome().metaGap` **被丢弃**（`refitOverlay` 传 6 个、
+        //      `fitPlayerOverlay` 只收 5 个）⇒ 那个 10 是把"被丢弃的参数"当成了真值。
+        //   ② `to` 端点用的是"小封面顶边"，少掉 `metaTopFixLyric`；
+        //      而 `t × (size − rowH)/2` 那个"居中补偿"又是本仓自创的第三项。
+        // ⇒ 现在直接调**一个**有出处的函数（`metaTopGeomY`，两端点逐字来自
+        //   `CoverMorph.metaOffsetYAt` + `fitPlayerOverlay`），本行不再有任何自编项。
         .position({
           x: 0,
-          // ★ 纵向居中补偿：只在**歌词页那一端**需要（那边文字要与小封面竖直居中）。
-          //   `t = 0`（封面页）时补偿为 0 ⇒ 文字**紧贴大封面下方**，与改前逐像素一致；
-          //   `t = 1` 时补偿 = (小封面边长 − 行高)/2 ≈ 7vp ⇒ 与小封面居中。
-          y: this.expandState.lyricMetaMorphY(this.lyricMorphT) +
-            this.lyricMorphT * (this.lyricFloatRect().size - PlaybackPage.LYRIC_META_ROW_H_VP) / 2
+          y: this.expandState.metaTopGeomY(this.lyricMorphT, PlaybackPage.LYRIC_META_ROW_H_VP)
         })
         // ★★ 2026-10-15（修用户实测「**动画中途会出现两个歌名歌手**（有一个是残留的、
         //   以前派音用的歌名歌手飞入）」）：
