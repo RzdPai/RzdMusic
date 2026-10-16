@@ -83,9 +83,29 @@ export enum BarAction {
  *
  * ⚠️ 它是**纯逻辑**、不碰任何 UI：调用方负责把"当前时间戳"与"是否已收起"喂进来，
  *    并根据返回的 `BarAction` 去驱动自己的收起/展开动画。
+ *
+ * ## ★★★ 2026-10-16（goal 第 4 条：**逐条核对完成，无缺口**）
+ *
+ * 本轮把本文件与 `wujie.pa:83706-84175` 逐条对了一遍，结果如下（留证据免得下轮重查）：
+ *
+ * | 项 | 无界 | 本仓 | 一致 |
+ * | --- | --- | --- | --- |
+ * | `BarAction` 枚举 | `NONE`=0 / `COLLAPSE`=1 / `EXPAND`=2（`83737-83763`：`ldai 0x0/0x1/0x2`） | 同 | ✅ |
+ * | `THRESHOLD` | `1.5`（`84165 fldai 1.500000e+00`） | 同（下方带断言） | ✅ |
+ * | 两次动作最小间隔 | `ldai 0xfa` = **250ms** | `FIRE_INTERVAL_MS = 250` | ✅ |
+ * | 起手状态 | `BarCollapse` 构造（`83829-83840+`）：`lastY 0` / `pressing false` / `downX 0` / `downY 0` | 同 | ✅ |
+ * | 喂触摸的入口 | `reportFingerTouch(touch, …)`（`83768-83822`）：守卫 `Array.isArray(touch)` + `touches.length === 1`，取 `touches[0].windowX/windowY` 并 `px2vp` | `reportTouch(type, windowX, windowY, touchCount, now)`（调用方已 `px2vp`，见 `PlaybackPage`） | ✅ 等价 |
+ * | 轴向锁定 / run 累积 / 目标一致不动作 | 同族函数 | 同 | ✅ |
  */
 export class BarCollapse {
-  /** 动作判定阈值（无界模块常量 `THRESHOLD`，`fldai 1.5`）。 */
+  /**
+   * 动作判定阈值（无界模块常量 `THRESHOLD`，`fldai 1.5`）。
+   *
+   * ★★ 2026-10-16（**跨数据一致性**）：`wujie.pa:84165` 与已归档的逐条转写
+   *   （`无界形变手感-落实到RzdMusic清单.md`）**两处互相印证**都是 `1.5`。
+   *   ⚠️ 改这个数 = 改"控制条拖动手感" —— 那是**极难靠观感发现**的一类回归
+   *      （要恰好拖过 1.5vp 才触发），所以：**不要改**，除非先回 `wujie.pa:84165` 复核。
+   */
   private static readonly THRESHOLD: number = 1.5;
   /** 两次动作之间的最小间隔（ms）—— 字节码 `ldai 0xfa` = **250**。 */
   private static readonly FIRE_INTERVAL_MS: number = 250;
