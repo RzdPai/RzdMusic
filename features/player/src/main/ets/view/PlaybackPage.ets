@@ -2271,20 +2271,33 @@ export struct PlaybackPage {
 
   /**
    * Swiper 换页时的控制区收尾 —— **照搬无界那个 `onChange` λ 的逐字结构**
-   * （`_recover/logic-src/PlayerPage.abc.txt:23189-23215`）：
+   * （`_recover/logic-src/PlayerPage.abc.txt:23189-23215`）。
    *
+   * ★★★ 2026-10-17（goal 收尾复核：**回原始字节码确认**，出处
+   *   `_recover/disasm/wujie.pa:190080-190111`，即 `PlayerPage.@34*^1*#^1`）：
    * ```ts
-   *   const v = 1;                                   // = SWIPER_INDEX_LYRIC
-   *   if (index === v) { startIdle(); }              // 歌词页：起空闲计时（**不**唤出）
-   *   else { clearIdle(); showChrome(); }            // 封面页：停计时 + **唤出**控制区
-   *   this.atLyricScreen = (index === v);
+   *   onChange(index) {                                  // a3 = index
+   *     const L = 1;                                     // 190081-190082（= SWIPER_INDEX_LYRIC）
+   *     if (index === L) { this.startIdle(); }            // 190083-190089  ← 歌词页：起计时
+   *     else { this.clearIdle(); this.showChrome(); }     // 190091-190099  ← 封面页：停计时 + **显式唤出**
+   *     this.atLyricScreen = (index === L);               // 190100-190105
+   *     this.syncKeepScreenOn();                          // 190106-190109
+   *   }
    * ```
+   * ⇒ **空闲计时只在歌词页起**这一点，是上游的**显式分支**（不是我们推断的）✓
+   *    —— goal 第 4 条「空闲计时」到此**有据可查**，不需要再核。
+   *    （另：`startIdle` 的时长常量 `IDLE_MS` 只在该函数里出现一次，
+   *      `wujie.pa:179903-179985`；本仓对应 `PlaybackPage.CHROME_AUTO_HIDE_MS = 5000`。）
    *
    * ⚠️ 我们原来是无条件 `touchChrome()`（= 唤出 **+** 起计时），再在非歌词页补一句
    *   `stopChromeAutoHide()`。那样在**切到封面页**时是"先起计时再停掉"，
    *   净效果虽然也对，但与无界"那里根本不唤出 vs 这里会唤出"的差别被抹掉了 ——
    *   无界切到封面页是**显式唤出**（用户从歌词页滑回来时控制区一定是亮的），
    *   这一条我们碰巧也对，但**动机不同**，且少了"歌词页那一支不唤出"。
+   *
+   * ⚠️ 另有**有意收窄**：我们那一支里多一道 `canHideLyricChrome()`
+   *   （= `usesPhoneSwiperLayout() && 停在歌词页`）⇒ 宽屏/面板那两支不起计时。
+   *   上游 `startIdle` 自己还有沉浸模式等内部闸（本仓对应 `entryAllowsAuto` 那条）。
    *
    * @param index 新的页下标（0 = 封面页，1 = 歌词页）
    */
