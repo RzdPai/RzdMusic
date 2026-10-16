@@ -409,11 +409,67 @@ export class PlayerExpandState {
   public reportWindow(widthVp: number, heightVp: number,
     statusBarTopVp: number = 0, navigationBarBottomVp: number = 0): void {
     if (widthVp > 0 && heightVp > 0) {
+      // ★★★ 2026-10-17（**照搬无界的 `transitionAborted`** —— 见下面那段）
+      //   先判定"这一次是真的变了"（`reportWindow` 会在每次布局时被调，尺寸没变就不该做任何事）。
+      const sizeChanged: boolean = this.windowWidthVp > 0 && this.windowHeightVp > 0 &&
+        (Math.abs(this.windowWidthVp - widthVp) > 1 || Math.abs(this.windowHeightVp - heightVp) > 1);
       this.windowWidthVp = widthVp;
       this.windowHeightVp = heightVp;
       this.statusBarTopVp = statusBarTopVp > 0 ? statusBarTopVp : 0;
       this.navigationBarBottomVp = navigationBarBottomVp > 0 ? navigationBarBottomVp : 0;
+      if (sizeChanged) {
+        this.abortTransitionOnResize();
+      }
     }
+  }
+
+  /**
+   * ★★★ 2026-10-17（**照搬无界 `PlayerPage.transitionAborted` + `expand.setFinalStatus()`**）
+   *
+   * ## 无界原文（`wujie.pa:174998-175011`，在窗口尺寸变化那条链上）
+   * ```ts
+   *   this.swiperBoxH = …;
+   *   this.refitOverlay();
+   *   this.settleWideLayout();
+   *   this.transitionAborted = true;      // ★ 转场作废
+   *   this.expand.setFinalStatus();       // ★ 直接落到最终态（无动画）
+   * ```
+   * 而 `setFinalStatus()`（`ExpandAnimation.ets:346-358`）逐条是：
+   * ```ts
+   *   overlayColor = "#00000000"; scaleValue = 1;
+   *   translateX = 0; translateY = 0;
+   *   clipWidth = "100%"; clipHeight = "100%";
+   *   snapOpacity = 0; contentOpacity = 1; radius = 0;
+   * ```
+   * ⇒ **它落的是"完全展开"那一态**（不看当时在往哪个方向走）。
+   * 语义很直白：**窗口尺寸刚变过 ⇒ 之前量到的几何全作废 ⇒ 别再演动画了，把播放页直接摊开。**
+   * （`λ@37*#^2` 那条注册在 `NavTransition` 上的内容转场里，`transitionAborted` 为真时走的也是这一对：
+   *   `expand.setFinalStatus(); proxy.finishTransition();`）
+   *
+   * ## 本仓的等价物
+   * `morphReset()` + `morphSettleOpen()` 就是本仓的"无动画落位到展开态"
+   * （`morphSettleOpen` 会 `applyMorphProgress(1)` ⇒ `scale=1/translate=0/裁剪满`，
+   *  `morphReset` 负责把浮层与本轮几何一起作废）—— 与 `setFinalStatus` 那一串逐条对应。
+   *
+   * ## ⚠️ 与无界的**一处刻意收窄**（记在案，别再当成漏搬）
+   * 无界**不分方向**，任何相位被这次尺寸变化撞上都会 `setFinalStatus()`。
+   * 本仓**只在 `ENTERING`（正在展开）时做**，理由：
+   * · 本仓的关闭链路有**自己的收尾定时器**（`closeSettleTimer`，`morphCloseMs + 20`），
+   *   它一定会把页面落位并卸载 ⇒ 尺寸变化时**不需要**别人插手；
+   * · 若那时把页面强行摊成"完全展开"，而几百毫秒后它就要被 pop，
+   *   屏上会出现**满屏播放页闪一下**（正是用户报过的第 ③ 类形状）⇒ 反而更糟。
+   * ⇒ 收窄到"正在展开"这一支：那一支**没有**收尾定时器兜底（靠 `settlePullOpen` 的补量链），
+   *   几何作废时最容易卡在半路 —— 而"直接摊开"正是最安全的落点。
+   */
+  private abortTransitionOnResize(): void {
+    if (this.morphStage !== MorphStage.ENTERING) {
+      return;
+    }
+    Logger.warn(PlayerExpandState.logTag,
+      `RzdMorphAbort window resized during ENTERING (w=${this.windowWidthVp.toFixed(0)} ` +
+      `h=${this.windowHeightVp.toFixed(0)}) ⇒ setFinalStatus (land fully open, no animation)`);
+    this.morphReset();
+    this.morphSettleOpen();
   }
 
   // ═════════════════════════ 一、逐元素 morph（对标 无界 MiniMorph / CoverMorph）═════════════════════════
