@@ -4454,12 +4454,27 @@ export struct PlaybackPage {
           //   放在 Stack C 的**最后一个孩子**：`position` 是"相对父组件左上角的绝对定位"，
           //   而本层的左上角就是窗口原点（与 `MorphCoverBridge` 同级同口径）⇒
           //   `PlayerExpandState.lyricMorph()` 交出的窗口坐标可以直接用；
-          //   同时它在这个被 `scale/translate/clip` 变换过的容器里 ⇒ 收起时跟着一起缩。
-          //   ⚠️ 只在**手机 Swiper 分支**画：宽屏 / 面板布局没有"歌词页"这一说，
-          //     多画一层会在封面右侧凭空多出一张小封面。
-          //   ⚠️ 2026-10-15（第 2 块·覆盖层统一）：原来这里写的是"门在 `LyricFloatLayer()` 内部的
-          //      `lyricFloatActive()`：静止在封面页时**零节点**" —— **那句已作废**：
-          //      覆盖层现在是**常驻**的（封面/歌名只有它一个渲染者），门已删除。
+          //   同时它在这个被 `scale/translate/clip` 变换过的容器里 ⇒ **收起时跟着一起缩**。
+          //
+          // ⛔⛔ 2026-10-16（**本轮试过一次"按无界层级搬到页面根级"，推导完就撤回了**）：
+          //   无界的层级确实是"浮动层与 `playerPane` 同级、在形变容器之外"
+          //   （`wujie.pa:1861` 的 builder 顺序表：11 `floatingCover` / 12 `metaRow` /
+          //    13 `floatingMeta`，第 **52** 才是 `playerPane`）——
+          //   但**我们不能照搬那个层级**，原因在"这个容器在这个浮层上多干了一件事"：
+          // ```
+          //     无界：封面尺寸 = edge × scaleAt(t)（CoverMorph 纯几何算出来的）
+          //     我们：封面尺寸 = morph.size × **容器的 morphScale**（"变换式"那一对
+          //           .scale(morph.size/base.size) + .translate(...) 的产物，见
+          //           `LyricFloatLayer` 的 ③ 推导）
+          // ```
+          //   ⇒ 容器 `scale` 这一棒在我们这边**同时**承担了"内容层跟着缩"与
+          //     "浮层封面从整窗那一份缩到迷你条那一份"**两件事**；无界只承担前者。
+          //   ⇒ 把浮层搬出容器 = 丢掉后者 ⇒ 封面在动画中**小 `morphScale` 倍**
+          //     （起手时 ≈ 0.082 ⇒ 只剩 8%）。那正是用户**已经实测过**的形状：
+          //     `morphOverlayBridging()` 注释里的「封面从下往上飞」/「封面缩成一点」。
+          //   ⇒ **要真照搬那个层级，前置条件是先把封面的尺寸来源改成 `scaleAt(t)`**
+          //     （去掉那一对 `.scale/.translate`），那是跨三处的结构改动 + **必须有设备逐帧看**。
+          //   完整理由见本文件根 `Stack` 里那段 `⛔⛔ 不要把浮动层搬到这里` 的注释。
           if (this.usesPhoneSwiperLayout()) {
             this.LyricFloatLayer()
           }
@@ -4496,6 +4511,45 @@ export struct PlaybackPage {
       .translate({ x: this.expandState.morphTx, y: this.expandState.morphTy })
       .borderRadius(this.expandState.morphRadius)
       .opacity(this.morphOpacityValue())
+
+      // ⛔⛔ 2026-10-16 —— **不要把浮动层（封面+歌名）搬到这里（页面根级）**。
+      //
+      // ## 我本轮试过一次，推导完就撤回了（记下来免得下次再试）
+      // 无界的**层级**确实是"浮动层与 `playerPane` 同级、在形变容器之外"
+      // （`wujie.pa:1861` 的 builder 顺序表：11 `floatingCover` / 12 `metaRow` /
+      //  13 `floatingMeta`，第 **52** 才是 `playerPane`）——
+      // 所以我一度把它搬到了本层，理由是"布局盒与枢轴都照抄 ⇒ 观感变化为零"。
+      //
+      // ## 为什么那个理由**是错的**
+      // 无界的浮动层里，封面用的是**纯几何 + 一次 `scale`**：
+      // ```
+      //   CoverMorph.scaleAt(t) = lerp(1, lyricScale, t)      // 85856-85743
+      //   渲染尺寸 = edge × scaleAt(t)                        // 85856 那一档
+      // ```
+      // 而**我们这一层的封面是"变换式"**（`LyricFloatLayer` 里那对
+      // `.scale(morph.size / base.size)` + `.translate(...)`，见那里的 ③ 推导）——
+      // 它的屏幕尺寸 = **`morph.size` × 容器的 `morphScale`**。也就是说：
+      // ```
+      //   容器 scale 这一棒**同时**负责两件事：
+      //     ① 内容层（topBar/scrubber/transport/歌词）跟着缩 —— 无界也有；
+      //     ② 浮层封面的**尺寸**从"整窗那一份"缩到"迷你条那一份" —— 无界**没有**（它靠 scaleAt）。
+      // ```
+      // ⇒ 把浮层搬出容器的那一刻，② 就丢了 ⇒ 封面在动画中**比正确值小 `morphScale` 倍**
+      //   （`morphScale` 在起手时 ≈ 0.082 ⇒ 封面只剩 8%）。
+      //   那正是**用户已经实测过**的形状：
+      //     `PlayerExpandState.morphOverlayBridging()` 的注释原文 ——
+      //     「我上一版关掉它、改让播放页里那张真封面独自承担，结果是：…观感成了
+      //       「**封面从下往上飞**」（用户 2026-10-16 实测）」，
+      //     以及 `封面缩成一点、展开动画没有端点` 那几次。
+      //
+      // ## 结论（下一个人直接照这条走）
+      //   浮层**必须留在形变容器里**。无界之所以能放在外面，是因为它的**封面自身**是
+      //   纯几何（尺寸/位置/圆角全部算出来，不吃任何祖先变换）。
+      //   ⇒ 要真正照搬那个层级，前置条件是**先把封面的尺寸来源改成 `scaleAt(t)`**
+      //     （= 去掉"变换式"那一对 `.scale/.translate`，让 `lyricMorph(t)` 直接给
+      //      屏幕尺寸），那是一次**跨三处**的结构改动，且**必须有设备逐帧看**。
+      //   复核命令：`grep -rn "LyricFloatLayer()" RzdMusic --include=*.ets`
+      //     （期望：只有**容器内**那一处调用）
 
       // ★★★ 2026-10-16：**现场自证**（连点顶部 3 次开关，见 `onDiagHotspotTap()` 的注释）。
       //   放在形变容器**之外**（不被缩放/裁剪），所以它显示的数字与读数同口径。
