@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -3726,7 +3726,14 @@ export struct PlaybackPage {
       return;
     }
     PlaybackPage.ev('CLO', `snapshot p=${this.expandState.morphP.toFixed(2)} ` +
-      `meas=${measured ? 1 : 0} bar=${srcBox.width.toFixed(0)}x${srcBox.height.toFixed(0)}`);
+      `meas=${measured ? 1 : 0} bar=${srcBox.width.toFixed(0)}x${srcBox.height.toFixed(0)} ` +
+      // ★ 2026-10-17（"有时候两个封面"要能一次判读）：把"谁在画封面"三个量记进事件日志。
+      //   `rc` = 播放页真封面在画、`oc` = 壳层克隆层在画、`ss` = 这一关归快照。
+      //   快照成功的正常态应当是 `rc=1 oc=0 ss=1`；若出现 `oc=1` ⇒ 快照门被绕过了。
+      `rc=${this.expandState.realCoverVisible() ? 1 : 0} ` +
+      `oc=${this.expandState.morphOverlayBridging() ? 1 : 0} ` +
+      `ss=${this.expandState.snapshotShrinkOwnedFlag() ? 1 : 0} ` +
+      `tint=${this.tintReady ? 1 : 0}`);
     Logger.info(PlaybackPage.logTag,
       `RzdShrinkOverlay closeWithAnimation: snapshot ${PLAYER_ROOT_ID} ` +
       `win=${winW.toFixed(0)}x${winH.toFixed(0)} ` +

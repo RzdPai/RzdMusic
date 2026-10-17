@@ -3857,10 +3857,11 @@ export class PlayerExpandState {
     this.morphOverlayAnimating = false;
     // ★ 会话边界：把"本轮收起已被起过"的标记也放掉，否则下一次收起会静默跳过浮层那一棒
     this.morphOverlayCollapseOwned = false;
-    // ★ 2026-10-17：快照收缩的所有权也只在一次会话内有效
-    this.snapshotShrinkOwned = false;
-    // ★ 2026-10-17（照搬无界）：会话结束 ⇒ 退出"下拉模式"（下一轮由 `pullOpenBegin` 重新置真）
-    this.pullMode = false;
+    // ★ 2026-10-17：**这里不再清 `snapshotShrinkOwned`**
+    //   用户实测「系统返回关闭**有时候**会出现两个封面」—— 快照那张 + 克隆层那张。
+    //   原因就是这里：快照起来之后链条里还会走到一次 `morphOverlayReset()`（例如 `morphLand()`
+    //   或卸载链），把"这一关归快照"的标记清掉 ⇒ 克隆层又活了 ⇒ 第二张封面出现。
+    //   现在该标记**整轮会话粘住**，只在 {@link prepareMorphEntry}（= 下一次打开）里清。」
     this.morphOverlayP = 0;
     Logger.info(PlayerExpandState.logTag,
       `morph overlay reset gen=${this.morphOverlayGen} overlayP=0`);
@@ -3872,8 +3873,12 @@ export class PlayerExpandState {
    * 调用点只有一个：`PlaybackPage.closeWithAnimation()` 的**快照成功支**（`morphLand()` 之前）。
    * 见 {@link morphOverlayBridging} 顶部那段说明（否则会出现两张封面同时飞）。
    */
-  public beginSnapshotShrink(): void {
-    if (this.snapshotShrinkOwned) {
+  /** @returns 「这一关是否归快照」—— 只给诊断/日志用（事件日志 `CLO` 的 `ss=`）。 */
+  public snapshotShrinkOwnedFlag(): boolean {
+    return this.snapshotShrinkOwned;
+  }
+
+  public beginSnapshotShrink(): void {    if (this.snapshotShrinkOwned) {
       return;
     }
     this.snapshotShrinkOwned = true;
