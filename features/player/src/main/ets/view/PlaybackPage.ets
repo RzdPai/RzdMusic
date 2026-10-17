@@ -465,6 +465,24 @@ export struct PlaybackPage {
     return absTop - centeredTop;
   }
   /** False after teardown to ignore async image callbacks. */
+
+  /**
+   * @returns 小歌词块应落的**页内**顶边（vp）—— 用户要求「小歌词放到歌手行下方」。
+   *
+   * 页 0 的 `Stack` 改为 `TopStart` 后，这一块用 `.position({x:0,y:...})` 绝对定位，
+   * 目标 = 歌名行顶边 + 行高 + 间距，再减去页盒顶（`lyricBoxTopVp`，结构不变量常态 0）。
+   * ⚠️ 静止态就是「歌手行下沿 + 12vp」；形变态仍由 `contentRiseVp()` 从下方升起（窗 0.45→1.00），
+   *   而歌名行走的是更早的 `metaRiseVp()`（0.18→0.62）⇒ 全程不会追到歌名行上面。
+   */
+  private miniLyricTopY(): number {
+    const rowH: number = PlaybackPage.LYRIC_META_ROW_H_VP;
+    const metaTop: number = this.expandState.metaTopGeomY(this.lyricMorphT, rowH);
+    const wantWindowTop: number = metaTop + rowH + PlaybackPage.MINI_LYRIC_GAP_VP;
+    const pageTop: number = this.expandState.lyricBoxTopVp;
+    const local: number = wantWindowTop - pageTop;
+    return local > 0 ? local : 0;
+  }
+  /** False after teardown to ignore async image callbacks. */
   private isAlive: boolean = true;
   /** Bumps on each {@link getImageColorAsync} run so stale async work skips UI updates and releases pixels. */
   private imageColorJobSeq: number = 0;
@@ -516,6 +534,8 @@ export struct PlaybackPage {
    */
   private static readonly MINI_LYRIC_SINK_VP: number = 44;
 
+  /** 小歌词块 ⇄ 歌名/歌手行 的竖直间距（vp），用户要求"落到歌手行下方"。 */
+  private static readonly MINI_LYRIC_GAP_VP: number = 12;
   /** 閻忓繐绻戦悺鏇犳嫚瀹ュ拋鍟囬柛锝冨妿濞堟垹绱掗崟顏咁偨 id闁挎稑鐗嗚ぐ褏绱?{@link PlaybackPage.logLayoutBoxes} 闂佹彃绻戠粊鎾偨椤帞绀夊☉鎾崇Т瀵剚绋夋惔婵囧床濞达絾娲熼埀顒佹缁额偊鏁嶆径鍫氬亾?*/
   private static readonly MINI_LYRIC_BOX_ID: string = 'rzd_page0_mini_lyric_box';
 
@@ -4495,7 +4515,7 @@ export struct PlaybackPage {
               //   濠㈣泛绉甸悧鎶藉礂閹惰姤鏆涢悗娑欘殣缁辨澘顕ラ懞銉у灱**缂佹鍏涚粩椋庢偘?* `sw=` / `tgt=`闁挎稑鐗婇弻濠囧礉閻欏懐绀嗛柍銉︽煛閳?
               //     `sw=1 tgt=1` 闁归潧绉靛Σ绋款潰瀹€鍐Г濡炪倗鏁稿▓鎴濐潰閿濆懐鍩楅柟顑跨筏缁辩浗sw=0` 闁兼澘濂旂紞姗€宕烽妸锔炬憙閻犲洤绉归妴?闁?閻忓繗椴稿Σ鎼佸嫉椤掍焦钂嬮柕?
               Swiper() {
-                Stack({ alignContent: Alignment.Bottom }) {                  // 闁宠棄鎳夊Σ?2026-10-15闁挎稑鐗忛崣搴ㄥ箹椤掍焦锟ラ柣锝呯焿缁辨岸鏁?*濡?0 闁哄嫷鍨抽埞鏍ㄧ珶?*闁?
+                Stack({ alignContent: Alignment.TopStart }) {
                   //   闁哄啰濮烽弲顐︽儍?`playerPane` 闂?`Swiper` 濞戞挶鍊濋妴澶愭焾閽樺娑ч柡?`Column().width/height('100%')`闁?
                   //   **閻忓繋绶氬鐗堢▔鎼淬垻鎽冮柛姘У閻楁挳寮甸璺ㄧ憹闁革负鍔戦妴澶愭煂?*闁挎稑鐭侀埀顒€鑻﹢?`Swiper` 濞戞柨顑呴ˇ濠氭儍閸曨噮娲柣鈺傜墪閻?
                   //   闁挎稑娼塮loatingCover` / `floatingMeta`闁挎稑鐭侀～?`PlayerPage閻庣懓鏈弳顤汭閻庤姘ㄩ…?md` 閹? / 閹? / 閹?闁挎稑顦埀?
@@ -4544,6 +4564,10 @@ export struct PlaybackPage {
                   //     `lyric` 閻忓繐绻戦悺鏇犳嫚?/ `title` 婵繂鑻幃?/ `singer` 婵繂鏈晶?/ `cover` 濠㈠爢鍐闂傚牜娼块埀?
                   //   闁告帇鍊栧畵渚€鏁嶅姝瓂ric.top` 濞?`singer.bottom` 闁烩晠鏅插?闁?閻忓繗椴稿Σ鎼佹偨閵婏箑鐓曢柟韬插劤濞?閺夆晜鐟╅崳鐑芥煥濞嗗海绉?闁?
                   //         濞戞挸绉跺ù澶嬬閵堝牃鍋撶仦鑲╃煗闁活亜顑囧鍐储鐎ｎ亝韬☉鎾亾閻?闁?闂侇叏绲惧Σ?*缂備焦锚閸?*闁挎稑婢僣ale/clip闁挎稑顦抽埀顒€濂旂粭澶愬及椤栨稑绗撻柣妤€鐗炵槐婵嬪矗閿旇棄顥濋柕?
+                  // ★★★★ 2026-10-17（用户：「小歌词要落到歌手行下方」；此前它下边贴着 swiper 盒底 ⇒ 必然压住歌名行）
+                  //   改成 TopStart + 绝对定位：y = metaTopGeomY + 行高 + 间距 − 盒顶（`lyricBoxTopVp` 是既有探针）。
+                  //   静止态 = 歌手行下沿 +12vp；形变态仍由 `contentRiseVp()` 从下方升上来（窗 0.45→1.00）。
+                  .position({ x: 0, y: this.miniLyricTopY() })
                   .id(PlaybackPage.MINI_LYRIC_BOX_ID)
                   .onAreaChange((): void => {
                     this.logLayoutBoxes();
