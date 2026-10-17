@@ -1495,7 +1495,7 @@ export struct PlaybackPage {
    */
   private onSwiperContentDidScroll(selectedIndex: number, index: number, position: number): void {
     this.diagScrollCount = this.diagScrollCount + 1;
-    this.diagScrollLast = `${index}/${position.toFixed(3)}`;
+    this.diagScrollLast = `${selectedIndex}/${index}/${position.toFixed(3)}`;
     // 闂佸啿鍘滈崑鎾绘煃閸忓浜?闂備緡鍋呴崝鏍ь焽椤栫偞鍋傜憸搴繆闁秴绫嶉柣妯虹仛濞呮洟鏌ｉ妸銉ヮ仼缂傚秴锕ョ粙澶愬焵椤掑嫬绀?闂佸啿鍘滈崑鎾绘煃閸忓浜?
     let p: number = position;
     if (index === 0) {
@@ -1508,20 +1508,25 @@ export struct PlaybackPage {
       this.lyricMorphT = p;
     }
     // 闁荤姳鐒︽刊鑺ュ緞?濠电姴锕ラ懝鐐叏閳哄倻顩风€广儱鎳忛煬顒勫级閳哄倻顬兼い?闂佹寧绋戦悧鎰帮綖?`lastScrollAtMs` 闂佹眹鍔岀€氼參寮悙鐑樼厒濠电姴绻掔粣妤呮煢閳ь剟鎸婃径灞炬瘞闂婎偄娲ら幊姗€濡磋箛鏇熷闁宠　鍋撶紓宥呮噽缁辨帒鈻庨幘顖氫壕闁归偊鍓氭慨搴ㄥ级閳哄倻鈽夐悗瑙勫▕閺?
+    // ★★★ 2026-10-17（③ 照搬无界：`PlayerPage.onContentDidScroll` = `wujie.pa:190026-190075`）
+    //   上游这个**逐帧**回调里只写 `swiperProgress`（= p），外加一句
+    //   `if (p > 0.5 && !chromeHidden) { showChrome(); }` —— **一处都不写"当前第几页"**；
+    //   页码只由 `onChange`（`wujie.pa:190080-190110`）与落位动画结束决定。
+    //   本仓前两轮都错在"在这个回调里写索引"：SDK 原文说 `onContentDidScroll` 对视口内
+    //   **每一页**逐帧回调 ⇒ 落位那一帧只要有一帧 selectedIndex/index 是 0，索引就被写回 0
+    //   ⇒ `canHideLyricChrome()` 恒 false ⇒ 控制区永远收不起来。
+    //   现在这里只留滚动时间戳（`syncLyricMorphToPage` 用它做 settle 窗口判定）。
     this.lastScrollAtMs = Date.now();
     // 缂備椒绌堕崹鍦閳哄啯濯奸柟宄拌嫰椤︹晠鏌ㄥ☉妯荤秮onContentDidScroll` 闂備緡鍋呴崝鏇㈠箮濮樿埖鐒鹃柣锝呯灱閼?`index`闂佹寧绋戦張顒勬儊?`onChange` 闂佸搫娲﹀娆掋亹閺屻儲顥堥柣娆忔噽缁€?
-    // 只认 selectedIndex（"选中的那一页"）：index 是对视口内每一页逐帧回调的，
-    // 落位后最后一帧可能是页 0 => 索引被写回 0 => canHideLyricChrome() 为 false => 控制区永不收起。
-    if (selectedIndex !== this.playbackSwiperIndex) {
-      Logger.info('RzdLyricChrome', `page from scroll sel=${selectedIndex} raw=${index}`);
-      this.playbackSwiperIndex = selectedIndex;
-    }
+    // ⚠️ 本函数**不再**写 `playbackSwiperIndex`（前两轮就是在这里写索引 ⇒ 收不起来）。
     // 闂傚倸鐗婇悷锕傤敆濞戞氨鍗氭い鏍ㄧ矊娴狀垶鏌涜箛鏃傜煀缂併劍濞婇弫宥咁潩閾忣偆銆婇柡?0.5 婵炴垶鏌ㄩ鍛村箖濡ゅ懎绠?`t` 闂佽В鍋撻柦妯侯槺閺嗕即鏌涢幒鎾寸凡缂傚秴顑夊畷婊冾吋婢跺牃鍋撴径灞稿亾閻㈠灚鍤€缂併劍鐓￠幆鍐礋椤撗傜磽闂?
     // 闂佹寧绋戝濉粂ncLyricMorphToPage()` 闂佸憡鍔曢幊姗€宕曢幘顔惧祦闁稿本绮庨幖濂告煥濞戞ê顨欑紒妤佺墬椤︿即鎮欐０婵囨杸婵炴垶鎼╅崢铏圭箔婢跺顕辨慨姗嗗幖閳敻鏌￠崒銈呭绩閽樼喖姊婚崒婵囧涧缂?
     this.syncLyricMorphToPage('scroll');
     // 闂佸搫鍟版慨鐑藉疾椤愶箑瑙﹂悘鐐佃檸閸庛儵鏌ㄥ☉娆戭暡缂侇噯闄勫濠氬炊瑜嶇壕鍦磼鐎ｎ亶鍎忔慨妯稿姂楠炲孩绻濋崘銊ょ帛闂佸憡甯熷▔娑氫焊椤栫偛鑸归柕鍫濇噹濮ｅ鏌℃径鍫濆姷缂佽鲸鐛媍hromeHidden` 婵炴垶鎸搁幖顐ｇ閿濆绫嶉柤鎼佹涧椤ゅ懘鏌涢悙顏勨偓褏妲?
+    // 照搬无界同一处：`if (p > 0.5 && !chromeHidden) { showChrome(); }`
+    // （只唤出，**不**在这里续 5s 定时器 —— 上游的 startIdle 只在 onChange / 点歌词时调）。
     if (this.lyricMorphT > 0.5 && !this.chromeCollapsed) {
-      this.touchChrome();
+      this.showChrome('scrollProgress>0.5');
     }
   }
 
@@ -2197,10 +2202,14 @@ export struct PlaybackPage {
    *   `onLyricInteract` / `onLyricSwipe`闂佹寧绋戦ˇ顓㈠焵椤掆偓閸婂綊宕瑰鍕浄妞ゆ巻鍋撻悽顖ｅ亰瀵爼濡烽敃鈧儫婵炴垶鎸堕崐娑㈠焵椤掆偓閹冲繐鐣风€ｎ喖绠ｉ柟閭︿簽椤忓崬鈽?`touchChrome()`闂?
    *   婵炲瓨绮岀€涒晛危閹间礁鎹?闂佸憡甯掑ú銈夊春瀹€鈧禍鍛婄瑹閳ь剙顭囬悧鍫涗簻?闂備緡鍙忕徊鎯ь焽椤栨粍宕夋い鏍ㄧ懅閻熸劕霉?*婵＄偑鍊楅崕銈嗘櫠濠婂牆绠┑鐘插閺佸嫰姊婚崒婵嗚敿妞ゆ挻鎮傚顕€寮甸悽鐢垫闁荤姍鍛効闁圭櫢缍佸?* 闂佺偨鍎查弻锟犲焵?婵炴垶鎸哥€涒晛螞閵堝鍋╃€光偓閳ь剙霉婢舵劕鐭楃€广儱绻掔粈鍕⒑椤撱劎绉柛锝囧厴瀵?`clearIdle()`闂佹寧绋戦ˇ顓㈠焵?
    */
-  private showChrome(): void {
+  private showChrome(src: string = ''): void {
+    // 照搬无界 `PlayerPage.showChrome`（`_recover/disasm/wujie.pa:179483-179528`）：
+    //   if (!chromeHidden) { return; }                      ← 已经是展开态就什么都不做
     if (!this.chromeCollapsed) {
       return;
     }
+    //   getUIContext().animateTo({ duration: CHROME_ANIM_MS(350), curve: Curve.EaseInOut },
+    //                            () => { chromeHidden = false; })     ← 闭包 λ `@5*#`（179518）
     this.getUIContext().animateTo({
       duration: PlaybackPage.CHROME_ANIM_MS,
       curve: Curve.EaseInOut
@@ -2208,7 +2217,8 @@ export struct PlaybackPage {
       this.chromeCollapsed = false;
       this.lyricChromeProgress = 1;
     });
-    Logger.info('RzdLyricChrome', `show naturalHeight=${this.lyricChromeHeight}`);
+    Logger.info('RzdLyricChrome',
+      `show 触发源=${src} naturalHeight=${this.lyricChromeHeight}`);
   }
 
   /**
@@ -2218,10 +2228,10 @@ export struct PlaybackPage {
    * "闂佹椿娼块崝宥夊春濞戙垹鎹堕柕濠忓閹藉啴鎮归崶褏效闁靛棗顦扮粙澶嬬節閸曨偂鍖栨繛?婵炴垶鎸搁鍡欏垝閿旂晫顩?闁哄鏅滈悷褏鎮?*闂佹椿浜為崰宥咁潩閿旂晫顩?*闂佸綊娼х粔鎾箖閹捐绫嶉悹楦挎〃缁潧鈽夐幘鍗炩偓鎾斥枎?闂佺偨鍎查弻锟犲焵?闂佸湱顣介崑鎾趁归悩顔煎姤缂佺粯鐗犻弻宀€浠﹂懖鈺冾啍闂佷紮绲鹃悷銊ф崲閺嶃劎鈻旀い蹇撴閻鏌涘顒傚闁告瑥妫濆畷锝夋晲韫囨洜顦?
    * 闂佹眹鍨肩划楣冩儍閻斿吋鍋ㄩ柕濞у啩鍖栭梺鐓庮殠娴滄粎鎹㈡笟鈧弻鍛緞濞戞氨顦╅梺鍛婂笒濞差參濡存径鎰劷闁挎繂妫欓拏瀣偣娓氼垰鐏犵憸鎶婂懏瀚柛鎰╁妼瀵版挸鈽夐幙鍐ㄥ箳缂佹柨鐡ㄧ粙澶愵敂鎼达絿顦柣?`onSwiperIndexChanged`闂佹寧绋戦ˇ顓㈠焵?
    */
-  private touchChrome(): void {
+  private touchChrome(src: string = ''): void {
     this.chromeTouchedAtMs = Date.now();
-    this.showChrome();
-    this.scheduleChromeAutoHide();
+    this.showChrome(`touch:${src}`);
+    this.scheduleChromeAutoHide(`touch:${src}`);
   }
 
   // 闂佸啿鍘滈崑鎾绘煃閸忓浜鹃梺鍐插帨閸嬫捇鏌嶉崗澶婁壕闂佸啿鍘滈崑鎾绘煃閸忓浜鹃梺鍐插帨閸嬫捇鏌嶉崗澶婁壕闂佸啿鍘滈崑鎾绘煃閸忓浜鹃梺鍐插帨閸嬫捇鏌嶉崗澶婁壕闂佸啿鍘滈崑鎾绘煃閸忓浜鹃梺鍐插帨閸嬫捇鏌嶉崗澶婁壕闂佸啿鍘滈崑鎾绘煃閸忓浜鹃梺鍐插帨閸嬫捇鏌嶉崗澶婁壕闂佸啿鍘滈崑鎾绘煃閸忓浜鹃梺鍐插帨閸?闁荤喍妞掔粈浣圭珶閳ь剟鎮楅崷顓熷殌婵炲懏甯熼妵鎰板閻樿尙绉梺鎸庣☉閻楀棝顢氶鈧浠嬪炊閵婏讣楠忛梺?ExpandAnimation闂佹寧绋戦ˇ顐﹀绩閵忋倕鐓橀柍褜鍓熼崺鐐哄焵椤掑嫬鐓橀柍褜鍓熼崺鐐哄焵椤掑嫬鐓橀柍褜鍓熼崺鐐哄焵椤掑嫬鐓橀柍褜鍓熼崺鐐哄焵椤掑嫬鐓橀柍褜鍓熼崺鐐哄焵椤掑嫬鐓橀柍褜鍓熼崺鐐哄焵椤掑嫬鐓橀柍褜鍓熼崺鐐哄焵椤掑嫬鐓橀柍褜鍓熼崺鐐哄焵椤掑嫬鐓橀柍褜鍓熼崺鐐哄焵椤掑嫬鐓橀柍褜鍓熼崺鐐哄焵椤掑嫬鐓橀柍褜鍓熼崺鐐哄焵?
@@ -2355,14 +2365,23 @@ export struct PlaybackPage {
    * 闂?`setTimeout` 闂佸吋婢樻總鏃傜箔婢舵劕鍙?`setInterval`闂佹寧绋掗懝鎹愩亹瑜忛幉鐗堟媴閸︻厽袞濠电偛妫岄埀顒€寮堕崬澶娒瑰鍕诞闁革絾鎮傚顒勬偋閸繄鐟╂繛鎴炴尨閸嬫挻绻涢崱蹇婂亾閾忣偆娈ゆ繝銏犲閸犲秶鑺遍敓鐘虫櫖?
    * 闁汇埄鍨遍幃鍌炲煘濡ゅ啠鍋撶憴鍕暡婵＄偛鍊垮畷鎶藉Ω閵堝洨鐛ラ梺闈╄礋閸旀垿濡存径鎰棃妞ゎ偒鍘鹃悷婵嬫煕濞嗘ê鐏ユい顐㈡瀵噣宕滄担鍙夋櫈闁哄鍎愰崜銊ф濞嗘挸绠绘い鎾跺枑閺夌懓顪冮妶鍥ㄦ毄缂侇噯绱曢弫顕€骞栨担瑙勭槪闂佸搫鍟悥鐓幬涢崸妤€绠伴柛灞剧矋缁插鏌ㄥ☉姗嗘Ф闁?
    */
-  private scheduleChromeAutoHide(): void {
+  private scheduleChromeAutoHide(src: string = ''): void {
+    // 照搬无界 `PlayerPage.startIdle`（`_recover/disasm/wujie.pa:179903-179985`）：
+    //   clearIdle();
+    //   if (!entryAllowsAuto(this.lyricImmersive)) { return; }        ← 唯一的一道门（179946-179963）
+    //   this.idleTimer = setTimeout(() => { this.idleTimer = -1; this.hideChrome(); }, IDLE_MS);
+    //                                                                  ← `IDLE_MS = 5000`（MiniMorph…md:172）
+    // ⚠️ 本仓原先在这条门里还串了 `!state.isPlay` —— 上游**没有**这一条，
+    //    它的效果是"一暂停就永远收不起来"，本轮删掉（就是用户说的"始终无法收起"）。
     if (this.chromeTimerId >= 0) {
       clearTimeout(this.chromeTimerId);
       this.chromeTimerId = -1;
     }
     this.chromeTimerId = setTimeout((): void => {
       this.chromeTimerId = -1;
-      if (!this.isAlive || this.chromeCollapsed || !this.canHideLyricChrome() || !this.state.isPlay) {
+      // 上游 `entryAllowsAuto(this.lyricImmersive)` 在本仓的等价物 = 手机 Swiper 布局的歌词页；
+      // `play=` 只作为诊断量打印，**不再当门**（上游没有这条）。
+      if (!this.isAlive || this.chromeCollapsed || !this.canHideLyricChrome()) {
         // 5s 到点却什么都没发生 = 命中这条 bail；把判据一次打全，真机 grep RzdLyricChrome 即可判读。
         Logger.info('RzdLyricChrome',
           `hide auto bail cc=${this.chromeCollapsed ? 1 : 0} ` +
@@ -2374,24 +2393,18 @@ export struct PlaybackPage {
       // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-17闂佹寧绋戦悧蹇涘矗鎼淬劌绠规い鎺嶇劍閿熴儵鏌?`hideChrome()` 闂?闂傚倸鐗勯崹鍝勵熆濡警鍤曢柍褜鍓熼幆鍫ュ焵椤掑倷鐒婇柛娆愵焽閻熸繈鏌￠埀?闂佹寧绋戦悾鐠c.txt:4124-4225`闂佹寧绋戦¨鈧紒?
       //   闂備緡鍙忕徊鑲╃博閹绢喖绾ч柍鈺佸暞绗?10 婵炴垶鎼╂禍顏勵焽娴兼潙绾?flag 闂佹眹鍔岀€氼噣鎮￠鐘冲磯妞ゆ牗绋戦悘妤呮⒑閻愵剚瀚曠紒閬嶄憾瀵敻顢栫捄銊﹀皾闂佹眹鍔岀€氼剟宕规惔銊︾厒闊洦鍑瑰?`auxSheetOpen` 闂佹眹鍔岀€氼參寮悙鐑樼厒?
       //   闂佹寧绋戦悧鎰亹瀹ュ纭€闁哄洦姘ㄩ閬嶆煛?闂?`playMenuOpen`闂佹寧绋掗惄顖毼ｉ敃鍌氱?闂佺绻戝﹢鍦垝椤掑嫭鍋嬮柛顐ゅ枑閹?闂?`auxSheetOpen`闂佹寧绋戦ˇ顓㈠焵椤掆偓閸婇鎮潏銊р枖妞ゅ繐鐗嗛崢鎾偡閺囨氨顦﹂柛銊ょ矙婵?
-      if (this.playMenuOpen || this.auxSheetOpen) {
-        Logger.info('RzdLyricChrome',
-          `hide skipped (panel open: menu=${this.playMenuOpen ? 1 : 0} aux=${this.auxSheetOpen ? 1 : 0})`);
-        return;
-      }
+      // 面板守卫已经收进 `hideChrome()`（照搬上游：守卫在 hideChrome，不在定时器起手处）。
       // 濠殿喗绻愮徊钘夛耿椤忓牆缁╅柟顖滃瀹?闁诲繒鍋炲ú鏍閹达箑绠绘い鎾跺枑閺夊綊鏌涢敐鍐ㄥ婵＄偛鍊圭粙澶婎吋閸℃せ鍙洪梺?
       if (this.isCollapsing()) {
         return;
       }
-      this.getUIContext().animateTo({
-        duration: PlaybackPage.CHROME_ANIM_MS,
-        curve: Curve.EaseInOut
-      }, (): void => {
-        this.chromeCollapsed = true;
-        this.lyricChromeProgress = 0;
-        Logger.info('RzdLyricChrome', `hide auto naturalHeight=${this.lyricChromeHeight}`);
-      });
+      // 到点就收：能不能收（面板开着/已收起/正在收起）全权交给 `hideChrome()` ——
+      // 上游同样是这个分工（`startIdle` 只管定时，守卫都在 `hideChrome`）。
+      this.hideChrome(`idle:${src}`);
+      Logger.info('RzdLyricChrome', `hide auto naturalHeight=${this.lyricChromeHeight}`);
     }, PlaybackPage.CHROME_AUTO_HIDE_MS);
+    Logger.info('RzdLyricChrome',
+      `idle arm 触发源=${src} ms=${PlaybackPage.CHROME_AUTO_HIDE_MS} sw=${this.playbackSwiperIndex}`);
   }
 
   /**
@@ -2432,12 +2445,31 @@ export struct PlaybackPage {
       this.playbackSwiperIndex === PlaybackPage.SWIPER_INDEX_LYRIC;
   }
 
-  private hideLyricChrome(): void {
-    if (!this.canHideLyricChrome() || this.chromeCollapsed) {
+  /**
+   * 照搬无界 `PlayerPage.hideChrome`（`_recover/disasm/wujie.pa:171993-172088`）。
+   *
+   * ```ts
+   *   hideChrome() {
+   *     if (this.chromeHidden) { return; }                    // 171999-172002
+   *     if (this.queueOpen || this.settingsOpen || this.addplaylistOpen ||
+   *         this.lyricmatchOpen || this.qualityOpen || this.lyricsetOpen ||
+   *         this.sleepOpen || this.customSleepOpen || this.lyricoffsetOpen ||
+   *         this.versionOpen) { return; }                     // 172004-172081（10 个面板的 || 链）
+   *     this.getUIContext().animateTo({ duration: CHROME_ANIM_MS, curve: Curve.EaseInOut },
+   *                                  () => { this.chromeHidden = true; });   // 172082-172087，闭包 λ `@6*#`
+   *   }
+   * ```
+   * ⚠️ 上游这里**没有**"必须已经在歌词页"这条门（那条门在 `startIdle` 里）；
+   *    本仓上一版的 `!canHideLyricChrome()` 与 `isCollapsing()` 都属于自造门，已删。
+   */
+  private hideChrome(src: string = ''): void {
+    if (this.chromeCollapsed) {
       return;
     }
-    // 闂?闂佸憡鑹炬總鏃傜博閹绢喖绾ч柍銉ョ－閺嗘捇鏌涘Δ濠備壕缂佽鲸鐟ч幉?`scheduleChromeAutoHide` 闂備焦褰冮惉鐓庘枔閹寸姵瀚氶悗娑櫳戦～鏍煥濞戞﹩妾х紒鍙樺嵆濡啴濮€閳╁啰鍑￠悗娈垮枓閸嬫捇鏌ｉ鐔蜂壕闁诲繐绻愯ぐ澶岀箔婢舵劕缁╅棅顒佺ゴ閸?
+    // 上游 10 个 sheet flag 在本仓只有两个真面板：更多/音质菜单 与 辅助 sheet。
     if (this.playMenuOpen || this.auxSheetOpen) {
+      Logger.info('RzdLyricChrome',
+        `hide skip 触发源=${src} panel(menu=${this.playMenuOpen ? 1 : 0} aux=${this.auxSheetOpen ? 1 : 0})`);
       return;
     }
     this.stopChromeAutoHide();
@@ -2448,7 +2480,8 @@ export struct PlaybackPage {
       this.chromeCollapsed = true;
       this.lyricChromeProgress = 0;
     });
-    Logger.info(PlaybackPage.logTag, 'lyric chrome hidden: upward gesture');
+    Logger.info('RzdLyricChrome',
+      `hide 触发源=${src} naturalHeight=${this.lyricChromeHeight}`);
   }
 
   /**
@@ -2486,11 +2519,11 @@ export struct PlaybackPage {
   private onSwiperIndexChanged(index: number): void {
     if (index === PlaybackPage.SWIPER_INDEX_LYRIC) {
       // startIdle闂佹寧绋掗悺鐚籧heduleChromeAutoHide()` 闂佸憡鍔曢幊姗€宕曢幘顔藉殜妞ゅ繐瀚弫?`canHideLyricChrome()` 婵炴垶鎸哥粔鐢稿垂濮樿京鍗氶悗锝庝簼閻ㄦ垵鈽夐幘宕囆ｉ柡?
-      this.scheduleChromeAutoHide();
+      this.scheduleChromeAutoHide('swiperOnLyric');
       return;
     }
     this.stopChromeAutoHide();
-    this.showChrome();
+    this.showChrome('swiperOffLyric');
   }
 
   /**
@@ -2527,12 +2560,12 @@ export struct PlaybackPage {
     if (action === BarAction.COLLAPSE) {
       Logger.info(PlaybackPage.logTag,
         `RzdBarCollapse action=COLLAPSE collapsed=${this.barCollapse.isCollapsed()} axis=${this.barCollapse.lockedAxis()}`);
-      this.hideLyricChrome();
+      this.hideChrome('barCollapse');
     } else if (action === BarAction.EXPAND) {
       Logger.info(PlaybackPage.logTag,
         `RzdBarCollapse action=EXPAND collapsed=${this.barCollapse.isCollapsed()} axis=${this.barCollapse.lockedAxis()}`);
       // 闁诲繒鍋炲ú鏍?= 闂佸搫鐗滈崜鐔煎Υ婢舵劕绫嶉柕蹇婂墲缁犳帡鏌?闂佸摜鍋戦崐鏇㈠吹椤撱垹绠崇憸宥夊春濡ゅ懎绀?闂佹寧绋戝濉紀uchChrome()` 闂備焦褰冮惌鍌炲磻閸涱厸鏋?240ms 闂佸憡鏌ｉ崝搴ㄥ极?+ 闂備焦褰冪粔鍫曟偪閸℃瑧鐭氭繛宸簼閿涙繈鎮规担鎻掑⒉婵＄偛鍊块弫?
-      this.touchChrome();
+      this.touchChrome('barCollapse');
     }
   }
 
@@ -2561,7 +2594,7 @@ export struct PlaybackPage {
     if (this.chromeCollapsed) {
       return;
     }
-    this.scheduleChromeAutoHide();
+    this.scheduleChromeAutoHide('lyricInteract');
   }
 
   /**
@@ -4698,10 +4731,10 @@ export struct PlaybackPage {
                   .onActionUpdate((event: GestureEvent): void => {
                     if (event.offsetY <= -PlaybackPage.SWIPE_TOGGLE_VP) {
                       if (PlaybackPage.LYRIC_SWIPE_ALLOWS_MANUAL) {
-                        this.hideLyricChrome();
+                        this.hideChrome('lyricSwipeUp');
                       }
                     } else if (event.offsetY >= PlaybackPage.SWIPE_TOGGLE_VP) {
-                      this.touchChrome();
+                      this.touchChrome('lyricSwipeDown');
                     }
                   }))
                 .margin({
@@ -4840,6 +4873,9 @@ export struct PlaybackPage {
                 this.syncLyricMorphToPage('swiperEnd');
                 Logger.info('RzdLyricFloat',
                   `swiper end index=${index} gen=${this.lyricMorphGen} t=${this.lyricMorphT.toFixed(3)}`);
+                // ③ 落位结束也是"切页完成"的权威事件：在这里再对齐一次 idle/chrome。
+                // （`onContentDidScroll` 已不再写索引 ⇒ 索引只由 `onChange` / 这里写。）
+                this.onSwiperIndexChanged(index);
               })
               .onChange((index: number): void => {
                 this.diagChg = `${index}`;
@@ -4974,7 +5010,7 @@ export struct PlaybackPage {
               //   闂傚倸鐗婇悷锕傤敆濞戙垹绠戝ù锝夘棑缁夊绱掓径宀€甯涘ù?0闂佹寧绋戝濉祇rphClipping()` 婵炴垶鎸搁幖顐ｇ閿濆绫嶉柛鎾茬劍缁绢垶鏌熼幁鎺戝姤缂佺粯鍨垮畷?0闂佹寧绋戦ˇ顐﹀闯?闂佺粯顨呴悧鎾愁焽娴煎瓨鐒婚柟閭﹀墮閸撹偐绱掓潏鈺佇＄紒妤€顦靛畷锝呂熺化鏇炰壕?
               .translate({ y: this.expandState.contentRiseVp() })
               .onTouch((event: TouchEvent): void => {
-                this.touchChrome();
+                this.touchChrome('controlTouch');
                 // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-16闂佹寧绋戦悧蹇涘矗鎼淬劌绠规い鎺嶇劍閿熴儵鏌ｉ敐鍛効缂佽鲸宀搁弫?*闂佸綊鏀遍悧鏇熸叏閳哄懎绠崇憸宥夊春濡ゅ懎绾ч柍鈺佸暞閺嗩亪鎮?/ 闁诲繒鍋炲ú鏍?*闂佹寧绋戝濉€arCollapse`闂佹寧绋戦ˇ顓㈠焵?
                 //   闂佸搫鍟版慨鐑藉疾?`design/src/main/ets/logic/BarCollapse.ets` 闂佹眹鍔岀€氼厽鏅跺鍫濈閻犳亽鍔岀瑧闂佽鍏涢悞锕€鈹冮埀?
                 //   闂佹寧绋戦悧鍡涙偤瑜旈幊鐐哄磼濠婂懎鐏?`wujie.pa:83706-84140`闂佹寧绋戦ˇ顖炲礄閿熺姵鐒婚柟閭﹀幗閽傚寮堕悜鍡楀闁哥喐鎹囧畷?
@@ -6223,7 +6259,7 @@ export struct PlaybackPage {
             this.lyricMorphVisible = false;
             // 闂佺鐭囬崘銊у幀闂佸憡鐗滅亸銊ф閻楀牊浜ゆ繛鎴炵懄闂勫秹鏌涜箛鎾跺闁轰焦绮撳畷娆撴偖鐎靛摜顦? 缂備礁顦扮敮妤呮儉閸涙潙绀夐柕濞垮妼濞堜即鏌涢弬璇插闁轰礁婀遍幐?
             this.chromeCollapsed = false;
-            this.touchChrome();
+            this.touchChrome('appear');
             // 闂?2026-10-15 闁荤姴娲ら敃銉╁蓟閸ヮ剚鏅慨妯挎珪閸庢澘霉閿濆懐小缂佺媴缍佸畷銉︽償閳ヨ櫕娅冮梻浣瑰絻缁诲绮╅弶鎴旀瀻闁炽儴娅曠壕钘夆槈閹垮啩绨绘繛纭风節閹啴宕熼鐘茬倞闂佸憡鐟辩徊鍧楁偂閳哄嫨浜规い顐枤缁€鍕偡?`logLayoutBoxes()`闂佹寧绋戦ˇ顓㈠焵?
             //   480ms 闂?闁诲繒鍋炲ú鏍閹寸姵鍋橀柕澶嗘櫆閿涚喖鏌ㄥ☉妯煎婵炴挸鐖煎?560ms 闂佹眹鍔岀€氼厾鎷犻悙鍏告勃闁稿瞼鍋涙禍婵嬫煛?+ 20ms 闂佽　鍋撻悹楦挎閸熸煡鏌ㄥ☉姗嗘Ц闁绘柡鍋撻梺鍝勭墱閸撴繈鎽傜€ｎ兘鍋?闂佹眹鍔岀€氫即宕抽搹鍦／鐟滄繄妲?
             //   闂佸湱鍎ょ敮妤呮偂閿熺姴绀傞柟鎯板Г閺嗘盯鎮?`RzdBoxes`闂侀潧妫楅崐闈涒枔閹间焦鏅?闂佸憡鐟禍锝夘敋娴煎瓨鏅悘鐐跺亹閻熸繄鎲搁弶鍨埞闁瑰ジ鏀辩粋鎺旀媼瀹曞洨协闂佺粯顭堥崺鏍焵椤戝潡妾烽柍?
