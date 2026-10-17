@@ -14,7 +14,7 @@
  */
 
 // ⚠️ `TextController` 是 ArkUI 的**全局环境类型**（不需要 import，`MusicPlayInfoBlock` 同款）
-import { AppStorageV2, componentSnapshot, curves, uiObserver, UIUtils, window } from '@kit.ArkUI';
+import { AppStorageV2, curves, uiObserver, UIUtils, window } from '@kit.ArkUI';
 import { image } from '@kit.ImageKit';
 import { effectKit } from '@kit.ArkGraphics2D';
 import { common } from '@kit.AbilityKit';
@@ -2934,10 +2934,19 @@ export struct PlaybackPage {
         return;
       }
       this.expandState.morphReset();
+      // ★ 2026-10-17（用户报「上拉播放条再回去，播放条变成**纯色半透明**」⇒ 把"谁在占着迷你条的
+      //   绘制权"也打进这一条）：`bar=` = `sourceBarHidden`（1 = 迷你条整条被藏起来了；
+      //   正常应当是 **0**）；`ovl=` = 壳层浮层那一棒的进度（`morphOverlayP`，静止态应当是 1）；
+      //   `own=` = 元信息克隆层是否还占着绘制权（1 = 还在占 ⇒ 迷你条那份歌名被压成 0）。
+      //   ⚠️ 这几个量**只在这里读**（`morphReset()` 刚刚把它们归位），所以它反映的是
+      //   "收尾做完之后"的真实状态 —— 用户下次打开徽标就能看到上一次关闭留下了什么。
       PlaybackPage.ev('RST',
         `p=${this.expandState.morphP.toFixed(2)} stage=${this.expandState.morphStage} ` +
         `cont=${this.expandState.morphContainerActive() ? 1 : 0} ` +
-        `try=${attempt} node=${nodeGone ? 1 : 0} route=${routeGone ? 1 : 0}`);
+        `try=${attempt} node=${nodeGone ? 1 : 0} route=${routeGone ? 1 : 0} ` +
+        `bar=${this.expandState.sourceBarHidden ? 1 : 0} ` +
+        `ovl=${this.expandState.morphOverlayProgress().toFixed(2)} ` +
+        `own=${this.expandState.metaBridgeOwnsPaint() ? 1 : 0}`);
     }, PlaybackPage.RESET_POLL_MS);
   }
 
@@ -3539,7 +3548,21 @@ export struct PlaybackPage {
     //   ⚠️⚠️ `restorePlaybackWindowChrome()` **不能**放在拍快照之前 —— 它会恢复窗口布局
     //     （`applyPlaybackWindowChrome(false,…)`，本项目在播放页会把窗口铺到整窗），
     //     布局一变，拍到的就不是"满窗那一张"。与旧路径一致：**收尾时才恢复**。
-    componentSnapshot.get(PLAYER_ROOT_ID, (err: BusinessError, pixmap: image.PixelMap): void => {
+    // ⚠️⚠️ 2026-10-17（**用户截图暴露的真 bug**：事件日志 `CLO:… fb=snapFail` ⇒ 快照**每次都失败**，
+    //   于是每一次返回关闭都退化到活页形变 ⇒ **用户从来没看到过无界那条快照收缩**，
+    //   他报的"封面和背景还是一模一样的问题"就是这个）。
+    //   根因：**我们调的是全局那个已废弃的重载**。`@ohos.arkui.componentSnapshot.d.ts`
+    //   `function get(id, callback, options?)` 标着 **`@deprecated since 18`**、且会抛
+    //   `100001 - Invalid ID`；而**上游用的是 `UIContext` 那一支**：
+    //   `wujie.pa:171077-171093`（`PlayerPage.closeWithAnimation` 的 λ）逐条解出来正是
+    //   ```ts
+    //     this.getUIContext().getComponentSnapshot().get(PLAYER_ROOT_ID, λ@1*#)
+    //   ```
+    //   ⇒ 现在照上游那一条改写（本文件 L3464 的注释里**早就写着**这个形状，代码却没跟上）。
+    //   ⇒ 失败原因照旧进事件日志，并**把 err.code 也带上**（`fb=snapFail(100001)`）：
+    //     401 = 参数错 / 100001 = 找不到这个 id ⇒ 一次截图即可定论。
+    this.getUIContext().getComponentSnapshot().get(PLAYER_ROOT_ID,
+      (err: BusinessError, pixmap: image.PixelMap): void => {
       // ── 提交关闭时的**本仓特有收尾**（无界没有"沉浸窗口"这套，所以它没有这两句）
       //   ① 恢复系统栏/窗口 chrome —— 不恢复的话返回关闭之后顶栏会停在"播放页沉浸"那一套配色；
       //   ② `morphLand()` 交还绘制权 ⇒ 迷你条**真身**立刻显出来
@@ -3562,7 +3585,7 @@ export struct PlaybackPage {
         //     退回去最坏也只是回到原来的观感瑕疵。
         //   ⚠️ 失败原因照旧打 `Logger.warn`，并把原因带进事件日志（`CLO` 的 `fb=`），
         //     **一次截图即可判读**（见 `closeFallbackReason`）。
-        this.closeLiveMorphFallback(`snapFail`);
+        this.closeLiveMorphFallback(`snapFail(${err.code})`);
         return;
       }
       this.restorePlaybackWindowChrome();
