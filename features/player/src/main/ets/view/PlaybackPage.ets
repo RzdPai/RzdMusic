@@ -6932,6 +6932,16 @@ export struct PlaybackPage {
           .width(StyleConstants.FULL_WIDTH)
           .alignItems(HorizontalAlign.Start)
           .offset({ y: this.metaOffsetY() })
+          // ★★★★ 2026-10-17（**恢复"从下面升上来"** —— 用户实测
+          //   「2 改的不对，正常歌手应该从下面出来。你看看无界」）
+          //   我上一版只做了"别压进控制区"的钳制，却把这一行的**升入位移**丢掉了
+          //   ⇒ 它从第一帧就钉在落点、只是淡入 ⇒ 观感与无界完全不同。
+          //   无界那一行是**跟着内容一起从下往上飞**的（时间窗 `WIN_META 0.18→0.62`，
+          //   与 `pullChromeOpacity` 同一个区间，两者同起同落）。
+          //   ⇒ 用回模型里现成的 `metaRiseVp()`（`(1 − ramp01(p,0.18,0.62)) × RISE_VP / scale`，
+          //     静止态恒 0）。它与上面的钳制是两件事：**升入**是时间上的，
+          //     **钳制**只决定落点，不许把落点压进控制区。
+          .translate({ y: this.expandState.metaRiseVp() })
         }
         .width(StyleConstants.FULL_WIDTH)
         .height(this.expandState.estBoxHVp())

@@ -60,7 +60,7 @@
  *    带 12×32ms 重试）负责，等价于反编译里 `setupExpandTransition` 的那一刻。
  */
 
-import { AppStorageKeys, areaLengthToVp, guardPlayerBack, Logger, PlayerExpandState, StyleConstants } from 'musicbasic';
+import { AppStorageKeys, areaLengthToVp, guardPlayerBack, Logger, MorphStage, PlayerExpandState, StyleConstants } from 'musicbasic';
 import { AppStorageV2 } from '@kit.ArkUI';
 import { HdsNavDestination } from '@kit.UIDesignKit';
 import { PlaybackPageCoverContent } from './PlaybackPage';
@@ -184,9 +184,17 @@ struct PlaybackPageRouteShell {
         `pad=${this.expandState.topInsetVp().toFixed(1)}/${this.expandState.navigationBarBottomVp.toFixed(1)}`);
     })
     // ★ 形变期透明 / 静止态不透明（对标无界那一句三元表达式）。
-    //   判据用 `morphContainerActive()`（stage ∈ ENTERING/LEAVING/LANDING）而不是
-    //   `effT()>=1`：两者语义等价（形变中为真、落位后为假），而前者在本仓已有稳定实现。
-    .backgroundColor(this.expandState.morphContainerActive() ? Color.Transparent : PlaybackPageRouteShell.REST_BG)
+    // ★★★★ 2026-10-17（**只在"真正落定（OPEN）"时不透明** —— 修用户实测
+    //   「系统返回关闭，动画结束的时候背景停在本来的颜色，然后**突然变成灰色**」）
+    //   原来判据是 `morphContainerActive()`（ENTERING/LEAVING/LANDING 都为真）⇒ 关闭链路上
+    //   `morphReset()` 把相位置成 NONE 的那一帧，本层**立刻刷成 `REST_BG`（深灰）**，
+    //   而播放页还要 1~2 帧才真的被 pop ⇒ 屏上就是"突然一块灰"。
+    //   上游那一句是 `pullMode && effT() >= 1 ? PULL_REST_BG : expand.overlayColor`
+    //   —— 只有在**落定展开态**才给不透明底；关闭路上它一直是那层透明/overlay 色。
+    //   ⇒ 判据改成 `stage === MorphStage.OPEN`：静止展开态不透明（需要它盖住状态栏与底部两条），
+    //     其余（含关闭落位之后的 NONE）一律透明 ⇒ 不再有灰闪。
+    .backgroundColor(this.expandState.morphStage === MorphStage.OPEN
+      ? PlaybackPageRouteShell.REST_BG : Color.Transparent)
     // ★★★ 2026-10-17（**删掉这里那条 `.scale({y: morphSquashY})` —— 它是本仓自创的消费点**）
     //
     // 上一轮为了让"关闭落位那一记弹"连背景一起压，把 `morphSquashY` 挂到了**路由壳**这一层
