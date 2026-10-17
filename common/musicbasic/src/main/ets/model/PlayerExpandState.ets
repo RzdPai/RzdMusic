@@ -744,6 +744,15 @@ export class PlayerExpandState {
    * ⚠️ 这条同时消掉了原注释担心的"两份封面"：两份只在"克隆层在画"时可能重合，
    *    而那时真封面被这条挡住。
    */
+  /** @returns 浮层那份封面**两端几何都有效**（否则它画出来是 0×0，等于没画）。 */
+  private overlayCoverDrawable(): boolean {
+    if (this.snapStartW <= 0 || this.endCoverSize <= 0) {
+      return false;
+    }
+    const rect: LyricMorphRect = this.morphOverlayCoverBridge();
+    return rect.size > 0 && rect.height > 0;
+  }
+
   public realCoverVisible(): boolean {
     // ★★★ 2026-10-16（**恢复**；我中间两版把它改坏过两次）
     //
@@ -779,6 +788,13 @@ export class PlayerExpandState {
     //     `morphOverlayBridging() && morphOverlayBridgeOpacity() > 0 && 两端几何非零`
     //   ⇒ 只要浮层这一棒**任何一环不成立**，真封面就顶上（宁可位置不完美，也绝不留空洞）。
     //   ⚠️ 静止态浮层门恒假 ⇒ 本函数恒真 ⇒ 与改动前**逐像素一致**（回归红线）。
+    // ★★★ 2026-10-17（**与 `morphOverlayBridging()` 严格互补** —— 修「两个封面随机出现」）
+    //   只要"会话在驱动 + 壳层接管 + 浮层两端几何有效"，飞的那一张就是**唯一画家**
+    //   ⇒ 真封面**恒不画**。这条与 `morphOverlayBridging()` 里新增的那条是同一个条件的正反面，
+    //   所以屏上永远恰好一张，且**不依赖两条补间谁先起**（那正是"随机"的来源）。
+    if (this.hostsMorphOverlay() && this.morphSessionDriving() && this.overlayCoverDrawable()) {
+      return false;
+    }
     if (!this.morphOverlayBridging()) {
       return true;
     }
@@ -3657,9 +3673,20 @@ export class PlayerExpandState {
     //   我们原来用"几何/进度/相位"三条**计算式**去猜"浮层是不是那一棒"，而它与壳层那条
     //   补间的起手时刻不同钟 ⇒ 总有一半的关闭会踩进空档 ⇒ 用户看到的"随机两张封面"。
     //   ⇒ 现在照上游：**不是下拉会话就一律不由浮层画**，由页面自己的封面/快照负责。
-    if (!this.pullMode) {
-      return false;
+    // ⛔ 2026-10-17（**按入口分流那一版已撤回** —— 用户实测「现在不会有封面飞入飞出，只会跟随
+    //   播放器，无界那个只有飞入飞出」）
+    //   我曾照 `MorphOverlayHost` 的 `lx_pull_active` 门把非下拉入口也挡掉，结果点击打开/关闭时
+    //   根本没有人"飞"封面 ⇒ 与无界完全不同。无界的观感是：**形变期间那张封面永远是飞的那一张**
+    //   （`floatingCover` 按纯几何 `txAt/tyAt` 插值，本身不跟着容器缩放）。
+    //   ⇒ 「随机两张封面」的正确治法是**让真封面在会话期间恒不画**（`realCoverVisible()`），
+    //     而不是把飞的那一张关掉。
+    // ★★★ 2026-10-17（照这条修「只会跟随播放器」）：**只要会话在驱动、且浮层两端几何有效，
+    //   浮层就是唯一画家**（与 `realCoverVisible()` 的那一条严格互补）。
+    if (this.hostsMorphOverlay() && this.morphSessionDriving() && this.overlayCoverDrawable()) {
+      return true;
     }
+
+
     // ⚠️ 下面这段是**上一版**「用会话正在驱动来兜时序空档」的判据，现已由上面那条
     //   `pullMode` 取代（上游就是这么门的）。留着这段说明是为了别再退回去：
     //   非手势关闭**不一定**都能拍到快照 —— 失败支会退回活页形变（`closeLiveMorphFallback`）；

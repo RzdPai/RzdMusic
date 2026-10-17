@@ -420,7 +420,24 @@ export struct PlaybackPage {
     const rowH: number = PlaybackPage.LYRIC_META_ROW_H_VP;
     const baseH: number = this.expandState.estBoxHVp();
     const centeredTop: number = (baseH - rowH) / 2;
-    return this.expandState.metaTopGeomY(this.lyricMorphT, rowH) - centeredTop;
+    let absTop: number = this.expandState.metaTopGeomY(this.lyricMorphT, rowH);
+    // ★★★★ 2026-10-17（**压住控制区的钳制** —— 用户实测「展开时标题歌手那行会和进度条重叠，
+    //   无界是正常的」）
+    //
+    // 这一行是**绝对定位的浮层**（`LyricFloatLayer`），无界那一条是在页面流里、天然排不到
+    // 控制区里去 ⇒ 我们必须自己保证"别压进控制区"。
+    // 控制区顶边 = `topInset + estBoxH(= 可用高 − 控制区总高) + swiperGap`；
+    // 钳制上限 = 控制区顶边 − 行高（宁可贴近封面底边，也不许盖住进度条）。
+    // ⚠️ 只在**真的会越界**时生效（`t = 1` 歌词页那一端远在上方，不受影响）；
+    //   静止态封面页若本来就够高（封面小/窗口高）也不受影响 ⇒ 不改变既有版面。
+    // 排查关键字：`hdc shell hilog -x | Select-String 'RzdMetaChrome'`
+    const chromeTopY: number = this.expandState.topInsetVp() +
+      this.expandState.estBoxHVp() + this.expandState.swiperGapVp();
+    const maxTop: number = chromeTopY - rowH;
+    if (absTop > maxTop) {
+      absTop = maxTop;
+    }
+    return absTop - centeredTop;
   }
   /** False after teardown to ignore async image callbacks. */
   private isAlive: boolean = true;
@@ -5053,6 +5070,15 @@ export struct PlaybackPage {
    *   ⚠️ 存**缓冲**而不是 PixelMap：所有权简单（纯内存），页面每次自己造 PixelMap、
    *     退场照旧自己释放 ⇒ 不会双重释放。
    *   ⚠️ key 不匹配（换歌）⇒ 不采用（不会把上一首的配色串到这一首）。
+   *
+   * ## ⛔ 2026-10-17 当天撤回（用户实测「**展开过程中的是上一首歌的颜色**」）
+   *   根因：**页面挂载那一拍 `state.getCurrentSongItem()` 还是上一首**（状态由调用方后写），
+   *   于是 `currentMeshKey()` 也是上一首的 key ⇒ 命中上一首的缓冲 ⇒ 开场动画放的是**上一首的配色**。
+   *   （同一拍上 `meshSeed()` 也会取到上一首 ⇒ 兜底网格同样是上一首的色相。）
+   *   ⇒ **跨页面缓存整段停用**（下面 `adoptCachedMesh()` 保留实现但**无调用点**，
+   *     写缓冲那两行也已删除）。要恢复它，必须先解决"挂载时状态是上一首"这个前提
+   *   —— 例如由壳层在 push 前把当前歌写进状态，或者把网格做成 `AppStorageV2` 共享状态、
+   *     由"正在播放的那一首"负责维护。**不要**只把缓存重新接上了事。
    */
   private static meshBufKey: string = '';
   private static meshBuf: Uint8Array | undefined = undefined;
@@ -5070,8 +5096,9 @@ export struct PlaybackPage {
   }
 
   /**
-   * 用上一关留下的缓冲**立刻**重建网格源（异步但只有 ~1ms：不下载、不解码、不模糊）。
-   * 调用前已按 key 校验；这里只造 PixelMap。
+   * 用上一关留下的缓冲重建网格源。
+   * ⛔ **当前无调用点**（见上面「当天撤回」那段）——挂载时 `getCurrentSongItem()` 可能是上一首，
+   *   直接采用会把上一首的配色放到开场动画上。保留实现是为了将来"状态先就位"之后再接回来。
    */
   private async adoptCachedMesh(): Promise<void> {
     if (this.meshSrcVersion > 0 || !this.isAlive) {
@@ -5201,10 +5228,6 @@ export struct PlaybackPage {
       return;
     }
     this.releaseBackgroundCoverIfPixelMap();
-    // ★★★★ 2026-10-17（**先试试上一关留下的网格缓冲** —— 修「展开时是蓝色」）
-    //   命中 ⇒ 1ms 内就有**真封面配色**的网格（等价于上游"本地封面一直在"），
-    //   不会再让兜底网格（按 seed 色相 ⇒ 蓝）占据整段开场动画。
-    await this.adoptCachedMesh();
     // Online songs without a resolved cover use the default art for the blurred backdrop.
     this.imageLabel = song.source.length > 0 && song.cover.length === 0 ? $r('app.media.ic_avatar1') : song.label;
 
@@ -5407,13 +5430,7 @@ export struct PlaybackPage {
       enhanceColors(u8);
       boxBlurRgba(u8, SRC_EDGE, SRC_EDGE, PlaybackPage.MESH_BLUR_RADIUS, PlaybackPage.MESH_BLUR_PASSES);
       pm.writeBufferToPixelsSync(buf);
-      // ★★★★ 2026-10-17（**留下这份"已处理好的"缓冲给下一次打开用** —— 见 `adoptCachedMesh`）
-      //   16KB 纯内存，key = 当前歌曲的封面标识；换歌自然失配 ⇒ 不会串台。
-      const cacheKey: string = this.currentMeshKey();
-      if (cacheKey.length > 0) {
-        PlaybackPage.meshBufKey = cacheKey;
-        PlaybackPage.meshBuf = u8.slice();
-      }
+      // ⛔ 2026-10-17：**不写跨页面缓冲**（见 `adoptCachedMesh` 上面那段"当天撤回"）
     } catch (err) {
       const e = err as BusinessError;
       Logger.warn(PlaybackPage.logTag, `mesh source build failed code=${e?.code}, message=${e?.message}`);
