@@ -745,10 +745,23 @@ export struct ControlAreaComponent {
       //   整片控制区的位移由宿主（`PlaybackPage`）挂在外层，这里**不再**做内部错峰。
 
       Row() {
+        // ★★★ 2026-10-17（用户实测：**关闭/收起动画期间左下「循环」与右下「播放列表」消失**，
+        //   活页形变路径与满窗快照路径**都**丢，说明丢在这两个节点的**绘制**上）。
+        //   对照无界（`_recover/logic-src/PlayerPage完整UI定稿.md` §8.3，L180503-180573）：
+        //   它的传输行 5 颗是 **SymbolGlyph(播放模式) / Image(上一首) / SymbolGlyph(播放·暂停) /
+        //   Image(下一首) / SymbolGlyph(播放队列)** —— 这两颗**上游也是 SymbolGlyph**，
+        //   所以"换成 Image"不是照搬；上游与本仓的差别只在**尺寸从哪来**：
+        //   本仓 `Image` 那两颗有 `.width(chromeSeekSize)`（显式盒子），
+        //   而这两颗 `SymbolGlyph` 只有 `fontSize`（盒子 = 符号字形的隐含测量值）。
+        //   ⇒ 按"每个图标都给显式尺寸"补盒子 + `flexShrink(0)`，别让 Row 的
+        //      `justifyContent(SpaceBetween)` 在形变/快照那一拍把宽度算成 0。
         SymbolGlyph(this.playModeSymbol())
           .fontSize(this.expandState.chromeSideSize())
           .fontWeight(FontWeight.Regular)
           .fontColor([$r('app.color.play_text_color')])
+          .width(this.expandState.chromeSideSize())
+          .height(this.expandState.chromeSideSize())
+          .flexShrink(0)
           .accessibilityText('播放模式')
           .accessibilityLevel('yes')
           .onClick(() => {
@@ -801,6 +814,11 @@ export struct ControlAreaComponent {
           .fontSize(this.expandState.chromeSideSize())
           .fontWeight(FontWeight.Regular)
           .fontColor([$r('app.color.play_text_color')])
+          // 同「播放模式」那颗：显式尺寸 + 不许被压缩（见上方长注释，对照
+          // `PlayerPage完整UI定稿.md` §8.3 L180568-181846 的播放队列 SymbolGlyph）。
+          .width(this.expandState.chromeSideSize())
+          .height(this.expandState.chromeSideSize())
+          .flexShrink(0)
           .accessibilityText('播放列表')
           .accessibilityLevel('yes')
           .onClick(() => {
