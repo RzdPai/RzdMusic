@@ -4250,7 +4250,50 @@ export class PlayerExpandState {
    */
   public applyMorphProgress(p: number): void {
     const t: number = p < 0 ? 0 : (p > 1 ? 1 : p);
-    this.morphP = t;
+    // ★★★★ 2026-10-17（**让 `morphP` 成为真正的驱动量** —— 照搬无界"一个 morphT 驱动一切"）
+    //
+    // ## 为什么必须这样（用户两轮实测都指向它）
+    //   · 「无界刚回到动画起始位置是**正常的颜色**，我们现在一开就是背景」——
+    //     上游背景不透明度 = `PULL_BG_FLOOR + pullBgIn × 0.96`，而 `pullBgIn = clamp(morphT/0.30)`
+    //     ⇒ **morphT 从 0 连续长起来**，头 30% 才淡到满 ⇒ 起始那一帧几乎透明，看到的是迷你条本身。
+    //   · 我们的补间路是 `animateTo(() => applyMorphProgress(0|1))`：闭包里**一次性**把
+    //     `morphP` 写成终点 ⇒ `pullBgIn` 立刻 0 或 1 ⇒ 起始就是满不透明（或全程 0.04 = 黑）。
+    //   ⇒ 现在把补间目标改成**只写 `morphP`**（`animateTo(() => { morphP = 1 })`），
+    //     由下面的 `@Monitor('morphP')` 在**每一帧**把几何重算一次
+    //     —— 与上游"每帧 `applyPullProgress(effT())`"同构。
+    //   ⚠️ `morphPApplying` 是防回环的：本方法自己写 `morphP` 时不要被自己的 monitor 再算一遍。
+    this.morphPApplying = true;
+    if (this.morphP !== t) {
+      this.morphP = t;
+    }
+    this.applyMorphGeometry(t);
+    this.morphPApplying = false;
+  }
+
+  /** `applyMorphProgress` 的重入护栏（见那里的说明）。 */
+  private morphPApplying: boolean = false;
+
+  /**
+   * ★★★★ 2026-10-17：**`morphP` 被补间逐帧插值时，几何跟着重算**（照搬上游"一个 morphT 驱动"）。
+   *
+   * `animateTo({...}, () => { expandState.morphP = 1 })` 之后，ArkUI 会逐帧插值 `morphP`；
+   * 本 monitor 在每一帧把它重新喂给几何计算 ⇒ `scale/translate/clipHeight/radius/contentOpacity`
+   * 以及所有"按 `morphP` 取值"的派生量（背景不透明度 `pullBgIn`、各段淡入窗口）都跟着动。
+   * ⚠️ 不要在这里做"起补间/落位"这类**状态机**动作 —— 那一律留在页面侧（本方法只算几何）。
+   */
+  @Monitor('morphP')
+  onMorphPDriven(): void {
+    if (this.morphPApplying) {
+      return;
+    }
+    const p: number = this.morphP;
+    this.morphPApplying = true;
+    this.applyMorphGeometry(p < 0 ? 0 : (p > 1 ? 1 : p));
+    this.morphPApplying = false;
+  }
+
+  /** 只算几何（不写 `morphP`）—— `applyMorphProgress` 与 `@Monitor('morphP')` 共用这一段。 */
+  private applyMorphGeometry(t: number): void {
     // ★★ 2026-10-15（**删除了"非形变期自动复位浮层"那一段**，依据见本条）：
     //   原来是 `if (!morphContainerActive()) { this.morphOverlayReset(); }` ——
     //   本意是兜住"异常路径直接落位/卸载"，但它同时**吃掉了正常收起路上的那一棒**：
