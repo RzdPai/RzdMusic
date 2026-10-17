@@ -6552,15 +6552,15 @@ export struct PlaybackPage {
         //   `CoverMorph.metaOffsetYAt` + `fitPlayerOverlay`），本行不再有任何自编项。
         .position({
           x: 0,
-          // ★★★★ 2026-10-17（**形变期用页内坐标** —— 照 `PlayerPage完整UI定稿.md` §2 的树：
-          //   `floatingMeta` 与 `scrubber/transport` 同属 `playerPane` 的直接子节点 ⇒ 同一个坐标空间。
-          //   我们这一行原来用窗口坐标，形变中卡片只有 clipHeight 那么高 ⇒ 被摆到卡片外/底部
-          //   ⇒ 压住进度条且每帧错位（= 用户说的"重合 + 抽搐"）。
-          //   ⇒ 形变期用 `metaTopLocalY()`（反解用容器自己的 morphScale/morphTy，与 applyMorphProgress 同源）；
-          //     静止态仍用窗口坐标（容器恒等 ⇒ 两者相等，逐像素不变）。
-          y: this.expandState.morphContainerActive()
-            ? this.expandState.metaTopLocalY(this.lyricMorphT, PlaybackPage.LYRIC_META_ROW_H_VP)
-            : this.expandState.metaTopGeomY(this.lyricMorphT, PlaybackPage.LYRIC_META_ROW_H_VP)
+          // ★★★★ 2026-10-17（用户：「它**先飞速飞到封面那个位置，然后再下来**」）
+          //   ⇒ 那一行原来每帧都在做"窗口 → 页内"的换算（`metaTopLocalY`），
+          //     而换算系数是 `1/morphScale`：形变初期 s ≈ 0.08 ⇒ 乘 12 倍 ⇒ 被甩到封面那边，
+          //     随着 s → 1 才落回来 = "先飞到封面、再下来"。
+          //   ★ 关键：`metaTopGeomY(t,rowH)` 的两个端点**本来就是落定态几何**
+          //     （`bigEndpointRect()` 与 `lyricMorph(1)` 都是容器恒等时算出来的值）⇒ **已经是页内坐标**
+          //     ⇒ **不需要任何换算**，直接 lerp 就是无界那条 `lerp(metaYPlayer, topYAtLyric + 28, t)`。
+          //   ⇒ 撤掉换算（`metaTopLocalY` 已无调用者，一并删除）。
+          y: this.expandState.metaTopGeomY(this.lyricMorphT, PlaybackPage.LYRIC_META_ROW_H_VP)
         })
         // ★★ 2026-10-15（修用户实测「**动画中途会出现两个歌名歌手**（有一个是残留的、
         //   以前派音用的歌名歌手飞入）」）：

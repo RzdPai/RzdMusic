@@ -1550,57 +1550,6 @@ export class PlayerExpandState {
    *   （两端式子现在逐字同源）；**中段**若不为 0，那是"位置 lerp 的进度源不同"
    *   （我们用 `lyricMorphT`，无界用 `swiperProgress`），那才是真正要看的东西。
    */
-  /**
-   * @returns 歌名行在**形变期**的**页内 y**（容器本地坐标）。
-   *
-   * ★ 依据 `PlayerPage完整UI定稿.md` §2 的树：无界的 `floatingMeta`（歌名）与
-   *   `scrubber`/`transport`（进度条/传输条）**同属 `playerPane` 的直接子节点**
-   *   ⇒ 同一个坐标空间（页内）⇒ 歌名用 `lerp(metaYPlayer, topYAtLyric + metaTopFixLyric, t)`
-   *   也不会压住进度条。
-   * ★ 我们这一行原来用**窗口坐标**写 `.position()`，而它挂在被 scale/translate 变换过的容器里
-   *   ⇒ 形变中卡片只有 clipHeight 那么高，而 y 仍是窗口坐标 ⇒ 被摆到卡片外/底部 ⇒ 压进度条。
-   * ★ 换算用**我们自己算出来的**容器参数（`morphScale` / `morphTy` / 宿主高），不猜枢轴：
-   *   `wy = H/2 + (ly − H/2)·s + ty  ⇒  ly = H/2 + (wy − ty − H/2)/s`
-   * ⚠️ `s ≈ 1`（静止态）时直接返回 `wy` ⇒ 逐像素不变。
-   */
-  public metaTopLocalY(t: number, rowH: number): number {
-    const s: number = this.morphScale;
-    if (!Number.isFinite(s) || s <= 0.001 || s >= 0.999) {
-      // 静止态 / 恒等变换 ⇒ 页内 = 窗口，直接给原式（逐像素不变）
-      return this.metaTopGeomY(t, rowH);
-    }
-    const p: number = t < 0 ? 0 : (t > 1 ? 1 : t);
-    const hostH: number = this.windowHeightVp;
-    const ty: number = this.morphTy;
-    const fromRect: LyricMorphRect = this.bigEndpointRect();
-    if (fromRect.size <= 0) {
-      return 0;
-    }
-    const halfRow: number = rowH > 0 ? rowH / 2 : 0;
-    // ★★★ 2026-10-17（**两个端点各自转页内、再在页内插值** —— 修「歌名那一行飞入不对」）
-    //   上一版是"先在窗口坐标里 lerp，再把结果转成页内" ⇒ 因为换算里有 `/s`，
-    //   两者**不等价**（窗口空间的直线在页内空间是曲线）⇒ 中段轨迹是错的。
-    //   无界的 `metaRow` 用 `lerp(metaYPlayer, topYAtLyric + metaTopFixLyric, t)` 全程**页内** ⇒ 必须同口径。
-    const fromTopW: number = fromRect.y + fromRect.height + PlayerExpandState.COVER_FIT_META_GAP_VP;
-    const lyric: LyricMorphRect = this.lyricMorph(1);
-    const toTopW: number = lyric.y + PlayerExpandState.META_TOP_FIX_LYRIC_VP - halfRow;
-    const fromTop: number = PlayerExpandState.windowYToLocalY(fromTopW, s, ty, hostH);
-    const toTop: number = PlayerExpandState.windowYToLocalY(toTopW, s, ty, hostH);
-    return this.lerp(fromTop, toTop, p);
-  }
-
-  /**
-   * 把**窗口 y** 换算成**页内 y**（形变容器的本地坐标）。
-   *
-   * 容器（`PlaybackPage.build()` 的根 Stack）的本地→窗口映射是
-   * `wy = H/2 + (ly − H/2)·s + ty`（绕容器中心缩放 + 竖直位移）
-   * ⇒ 反解 `ly = H/2 + (wy − ty − H/2)/s`。
-   * ⚠️ 不猜枢轴：`s/ty` 都来自 `applyMorphProgress()` 自己算出来的字段。
-   */
-  private static windowYToLocalY(wy: number, s: number, ty: number, hostH: number): number {
-    return hostH / 2 + (wy - ty - hostH / 2) / s;
-  }
-
   public metaTopGeomY(t: number, rowH: number): number {
     const p: number = t < 0 ? 0 : (t > 1 ? 1 : t);
     // ★ 2026-10-17：`from` 那一端改用 `bigEndpointRect()`（= 与**续飞封面落点**同一个矩形，
