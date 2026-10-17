@@ -5525,7 +5525,21 @@ export struct PlaybackPage {
                 radius: '70%',
                 colors: [[0x26000000, 0.0], [0x26000000, 0.45], [0x66000000, 1.0]]
               })
-              .opacity(this.expandState.morphContainerActive() ? 0 : 1)
+              // ★★★ 2026-10-17（用户：「上拉打开有背景，**点击展开 / 关闭 / 系统返回没有背景**」）
+              //
+              // ## 机制（读代码 + 两个读数即得）
+              // ```
+              //   网格层是 `if (meshSrc === undefined) { 兜底 } else { MeshCoverBg(...) }`
+              //   点击展开 / 关闭发生得早，此时 `song.cover` 还没到手 ⇒ meshSrc === undefined
+              //   ⇒ 网格不挂载；而兜底这两层的暗角层原来写着
+              //        .opacity(morphContainerActive() ? 0 : 1)
+              //     ⇒ **形变期正好把它关掉** ⇒ 屏上只剩近黑取样色 = "没有背景"
+              //   上拉打开总是发生在封面加载完之后 ⇒ 网格在 ⇒ 正常 ✓
+              // ```
+              // ## 改法
+              //   兜底层的暗角**不许在形变期消失** —— 它此刻是**唯一的背景**。
+              //   （网格存在时这条分支根本不进，所以不会和网格自带的暗角叠两份。）
+              .opacity(1)
               .hitTestBehavior(HitTestMode.None)
           }
 
