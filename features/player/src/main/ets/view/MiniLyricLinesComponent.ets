@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -102,7 +102,10 @@ export struct MiniLyricLinesComponent {
     if (this.miniLyricState.enabled || this.ignoreUserSetting) {
       Column({ space: 3 }) {
         Text(this.miniLyricLines()[0])
-          .fontSize(15)
+          // ★ 2026-10-17（**用户实测要求：更大**）：当前行 15 → 18fp（+3），
+          //   下一行 14 → 17fp（+3）等比加大一档；配合 `PlaybackPage.MINI_LYRIC_LINE_H_VP`
+          //   22 → 26 / 块高 49 → 57（那里有完整说明）。
+          .fontSize(18)
           // 调用方给了颜色就用它（「现在就听」页按取色底传深浅两档），没给就是原来的白 token
           .fontColor(this.mainLineColor ?? $r('app.color.player_text_primary'))
           .opacity(0.92)
@@ -110,7 +113,8 @@ export struct MiniLyricLinesComponent {
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width(StyleConstants.FULL_WIDTH)
         Text(this.miniLyricLines()[1])
-          .fontSize(14)
+          // 同上一行：14 → 17fp（用户实测要求"更大"，等比 +3）。
+          .fontSize(17)
           .fontColor(this.nextLineColor ?? $r('app.color.play_text_color'))
           .opacity(0.6)
           .maxLines(1)

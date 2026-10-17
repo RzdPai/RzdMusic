@@ -557,7 +557,7 @@ export struct PlaybackPage {
   private static readonly MINI_LYRIC_SINK_VP: number = 44;
 
   /** 灏忔瓕璇嶅潡 鈬?姝屽悕/姝屾墜琛?鐨勭珫鐩撮棿璺濓紙vp锛夛紝鐢ㄦ埛瑕佹眰"钀藉埌姝屾墜琛屼笅鏂?銆?*/
-  private static readonly MINI_LYRIC_GAP_VP: number = 8;
+  private static readonly MINI_LYRIC_GAP_VP: number = -12;
   /**
    * 小歌词块行数（当前行 + 下一行，见 `MiniLyricLinesComponent`）。
    * ★ 2026-10-17（用户实测「小歌词位置太低、跑到进度条下面」）：下面这一组常量的唯一用途就是
@@ -565,9 +565,19 @@ export struct PlaybackPage {
    */
   private static readonly MINI_LYRIC_LINES: number = 2;
   /** 小歌词单行占位高（vp）：两行字号 15fp / 14fp，按 1.4 倍行高取整。 */
-  private static readonly MINI_LYRIC_LINE_H_VP: number = 22;
-  /** 小歌词块高（vp）= `MINI_LYRIC_LINES(2) × 22 + 行距 3 + 上边距 2`。 */
-  private static readonly MINI_LYRIC_BLOCK_H_VP: number = 49;
+  private static readonly MINI_LYRIC_LINE_H_VP: number = 26;
+  /** 小歌词块高（vp）= `MINI_LYRIC_LINES(2) × 26 + 行距 3 + 上边距 2`。 */
+  private static readonly MINI_LYRIC_BLOCK_H_VP: number = 57;
+  /**
+   * ★ 2026-10-17（**用户实测要求：更大 / 更淡 / 更上**）：
+   *   ① `MINI_LYRIC_GAP_VP` **8 → -12**（往上移 20vp；"块底不越过控制区上沿"的钳制照旧保留在
+   *      {@link PlaybackPage.miniLyricTopY} 里 —— 负间距只负责"往上"，越界由 `Math.min` 兜住）。
+   *   ② 字号在 {@link MiniLyricLinesComponent} 里等比 +3fp（15→18 / 14→17），
+   *      单行占位高因此 `MINI_LYRIC_LINE_H_VP` **22 → 26**，块高 49 → **57**。
+   *   ③ 透明度：调用点 `.opacity(morphContentOpacity × MINI_LYRIC_OPACITY)`，
+   *      静止态落到 **0.55**（原来静止态是 1.0 ⇒ 用户说的"不透明度更低/更淡"）。
+   */
+  private static readonly MINI_LYRIC_OPACITY: number = 0.55;
   /** 闁诲繐绻愮换鎴︽偤閺囩姵瀚氱€广儱鎷嬮崯鍥煕閿濆啫濡挎繛鍫熷灩缁辨帡宕熼鍜佸仺 id闂佹寧绋戦悧鍡氥亹瑜忕槐?{@link PlaybackPage.logLayoutBoxes} 闂備焦褰冪换鎴犵矈閹绢喗鍋ㄦい顓熷笧缁€澶娾槈閹惧磭孝鐎殿噮鍓氱粙澶嬫償濠靛洤搴婃繛杈剧稻濞茬喖鍩€椤掍焦顫楃紒棰濆亰閺佸秵寰勯崼姘壕?*/
   private static readonly MINI_LYRIC_BOX_ID: string = 'rzd_page0_mini_lyric_box';
 
@@ -4621,7 +4631,8 @@ export struct PlaybackPage {
                         //   闂佸吋婢橀張顒勬偤閺囥垹瑙︾€广儱鐗滈弨浠嬫煟濠婂嫭绶叉繝鈧鍕靛晠闁告瑥顦伴弳顓㈡煟?*婵＄偑鍊濆褔宕幘顔奸敜闁归偊鍘鹃崹?*闂佹寧绋戦悧鍛箔閸屾哎鈧帞绮欓崹顔剧▔閻庡灚婢樼€氬摜妲愬璺虹劷?婵炴垶鎸哥粔鎾疮閳ь剟姊婚崶锝呬壕闁荤喐娲戝ù鍥╂崲閺嶃劎鈻旀い蹇撴硽婢跺鈻斿〒姘功缁€?
                         //   闂佷紮绲鹃悷褍顭囬崘顔肩煑鐎广儱鐗冮崑鎾朵沪閼测晝鐛ラ梺纭呮硾閿曘倝鎮鹃悩璇茬闁靛鍎遍悡鍌炴煛閸モ晝绡€缂佹鎳樺Λ鍐閻樿尙顔岄梺鐟板⒔閸嬬姷鎹㈠Ο缁樺劅闁挎棁濮ら拏瀣煏閸℃浜扮紒?
                       // 闁诲繐绻愮换鎴︽偤閺囩姵瀚氱€广儱鎳愬锝吤?闂佸憡鍔曢幊搴敊?闂佹寧绋掗懝鎯ь嚕閻ｅ瞼纾介柡宥庡墰濡差垶姊?`contentOpacity` 闂佽В鍋撻柟瀛樺笧缁夋挳鏌熼棃娑毿ら柣?1
-                      .opacity(this.expandState.morphContentOpacity)
+                      // ★ 2026-10-17（用户实测要求：更淡）：静止态 1.0 → 0.55。
+                      .opacity(this.expandState.morphContentOpacity * PlaybackPage.MINI_LYRIC_OPACITY)
                       // 闂佸疇妫勯幊澶娢?2026-10-15 闂佹椿娼块崝宥夊春濞戞埃鍋撶憴鍕孩闁汇劎鍠栭弫宥咁潩閵夈垹浜?*闂佺绻愰悧鎾凰夐敐澶婄闁靛／鍕殸闂佸搫瀚烽崹浼存儍椤掆偓椤垹鐣濋崘顏呅撻梺鍛婄矊閺堫剟寮ぐ鎺撳癄闊洦鏌ㄩ惁濠氭⒑?*闂?
                       //   闂?闁诲繐绻愮换鎴︽偤閺囩姵瀚氱€广儱鐗愬▔?*缂備焦顨忛崗娑氱博鐎靛摜纾?*闂佹眹鍔岀€氼厼顪冮崒鐐粹拻閻庨潧鎽滃畷鍫曟煥濞戞ɑ缍乪arlyRiseVp()`闂佹寧绋戦張顒€螞椤撶喓顩查幖娣灩娴犳﹢鏌涢幒鏇熺【閻忓浚鍨堕弻鍥晲閸曨収浼囩紓鍌欑鐎氬摜妲愬鑸垫櫖?
                       //   婵炲濮寸花鑲╃箔閸涙潙纭€闁搞儺浜濆畷?180vp闂佹寧绋掗惄顖氼焽閵堝拋娼伴柕蹇婃閸嬫挻鎷呮搴Ｐ㈢紓浣割槺缁垱绂?0闂佹寧绋戦惉鍏兼櫠濡ゅ懏顥堥柕蹇嬪€愰崑鎾诲箛椤掆偓閸撹偐绱掓潏鈺佇＄紒妤€顦靛畷锝呂熺化鏇炰壕?
