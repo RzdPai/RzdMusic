@@ -4329,17 +4329,13 @@ export struct PlaybackPage {
                       .width(StyleConstants.FULL_WIDTH)
                       .margin({
                         left: 4,
-                        right: 4,
-                        // ★★ 2026-10-15（修用户实测「播放界面这里错位」= 小歌词与歌名那一行重叠）：
-                        //   这一页的 `Stack` 是 `Alignment.Bottom`，而**歌名/歌手那一行不是本页的内容**
-                        //   —— 它是 `Swiper` 之外的覆盖层（`LyricFloatLayer`，`morphCoverRectAt` 派的位），
-                        //   所以"小歌词贴在页底"正好落在那一行的高度带里（用户复现点 ≈ 660~690vp）。
-                        //   ⇒ 把小歌词再往下推 `MINI_LYRIC_SINK_VP`：推开"歌名+歌手两行"的量级
-                        //     （= `LYRIC_META_BLOCK_H_VP` 那一档口径），而不是拍一个数。
-                        //   ⚠️ 负外边距是**唯一**能把它推出父容器内容区的手段（`offset`/`translate`
-                        //      只挪绘制、把可视区留在原位，等于没让位）；它只影响这一页的排版，
-                        //      不参与任何补间。
-                        bottom: -PlaybackPage.MINI_LYRIC_SINK_VP
+                        right: 4
+                        // ⛔ 2026-10-17（**去掉负外边距** —— 按上游/gemini 复核结论：
+                        //   页 0 里的内容必须**流式**排布在本页容器里，**不许用绝对定位/负外边距
+                        //   把它推到歌名行那一条带**，否则形变期会与歌名行、进度条相撞。
+                        //   原来这里是 `bottom: -MINI_LYRIC_SINK_VP`（把它往下推 112vp 去"避开歌名"），
+                        //   而歌名行现在已改用**页内坐标**（上游口径）⇒ 不再需要这个补丁，
+                        //   留着反而会把它推到更下面去撞进度条。）
                       })
                       // 小歌词属于"内容"：反编译里 `contentOpacity` 落位才置 1
                       .opacity(this.expandState.morphContentOpacity)
