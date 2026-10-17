@@ -3716,6 +3716,39 @@ export class PlayerExpandState {
     if (this.morphDrive !== MorphDrive.ANIM || !this.morphContainerActive()) {
       return;
     }
+    // ★★★★ 2026-10-17（**用户第 2/3 条的根因**）：**只有"正在展开"才许起进场补间**。
+    //
+    // ## 症状（用户原话）
+    // ```
+    //   ② 下拉关闭：封面直接就是最初那个小圆形，动画结束后**突然来一个"变大到中间大封面"的样式**，然后消失
+    //   ③ 系统返回关闭：**出现两个封面** —— 一个跟随播放页往下，
+    //      还有一个**从小圆圈变大到播放器那个位置**
+    // ```
+    // ## 机制（读代码即得，不是猜）
+    // ```
+    //   收起那一侧：`closeFullScreenPlayback()` → `focusMorphOverlayForPageCollapse()`（把浮层补到 **0**）
+    //              → `morphBeginLeaving()` 把 `morphDrive` 置成 **ANIM**（LEAVING 相位）
+    //   壳层监听：`@Monitor('expandState.morphDrive') onMorphDriveChanged()`
+    //              → 本函数。它只判 `morphDrive === ANIM && morphContainerActive()`，
+    //                **完全不看相位** ⇒ 收起这一路**也会命中** ⇒ 起一条 **0 → 1 的"进场"补间**
+    //              → 而且本函数下面还会把 `morphOverlayCollapseOwned` **清成 false**
+    //                （那条护栏本来是"同一方向只许起一次"）
+    //   ⇒ 同一轮里两条方向相反的补间打在**同一个 `morphOverlayP`** 上，后起的进场赢
+    //     ⇒ 壳层浮层那份"续飞封面"在**关闭过程中朝播放页那个大封面飞回去**
+    //     ⇒ 就是 ② 的"末尾突然来一个变大到中间那个大封面"、③ 的"第二个封面从小圆圈变大"
+    // ```
+    // ## 改法
+    //   相位必须是 **ENTERING**（"正在展开"）才放行 —— 与上游同构：
+    //   上游那个浮层挂在 `K_PULL_ACTIVE`（`lx_pull_active`）上，而它**只由 `setMiniOut(out)` 写**，
+    //   收起那一路走的是另一支（`retargetToLiveCover()`），**不存在两条方向相反的补间同时跑**。
+    //   ⚠️ 点击打开那条路仍然是 ENTERING（`playMorphOpenIntro` 置 ANIM 时相位就是 ENTERING）
+    //     ⇒ **不影响已确认好的"点击打开/上拉打开"**。
+    if (this.morphStage !== MorphStage.ENTERING) {
+      Logger.info(PlayerExpandState.logTag,
+        `morph overlay page-intro refused (stage=${this.morphStage} drive=${this.morphDrive}) ` +
+        `overlayP=${this.morphOverlayP.toFixed(3)} gen=${this.morphGen}`);
+      return;
+    }
     Logger.info(PlayerExpandState.logTag,
       `morph overlay page-intro from=${this.morphOverlayP.toFixed(3)} gen=${this.morphGen}`);
     // 进入方向一开跑，就把"本轮收起已被起过"的标记放掉：同一轮会话内先后经历
