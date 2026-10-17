@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { http } from '@kit.NetworkKit';
 import { pasteboard } from '@kit.BasicServicesKit';
-import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, BreakpointType, HomeSourceState, CoverRadiusState, LyricBlurState, LyricCenterState, LyricFontSizeState, LyricFpsState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, PlaybackFlowLightState, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
+import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, BreakpointType, HomeSourceState, LyricBlurState, LyricCenterState, LyricFontSizeState, LyricFpsState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, PlaybackFlowLightState, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatformsOf, lxSourceManager, MediaService } from 'player';
@@ -89,10 +89,12 @@ export struct SettingsDetailPage {
   @Local lyricBlurEnabled: boolean = true;
   @Local lyricFontSize: number = 28;
   @Local lyricFps: number = 60;
-  @Local coverRadius: number = 8;
+  // ★★★ 2026-10-17（用户：「我们的软件里面有个**自定义封面圆角**也删了吧」）
+  //   设置项已整块删除（见 `PlaybackSheet`）。封面圆角现在只有**一个来源**：
+  //   无界 `CoverMorph.radiusPlayer = 8`（`PlayerExpandState.COVER_RADIUS_PLAYER_VP`）。
+  //   ⚠️ `MusicStoreService.get/setCoverCornerRadius` 与云同步那条键**保留**（历史数据兼容），
+  //      但**不再有任何渲染读它** —— 不要再把它接回界面。
   @Local downloadLrc: boolean = true;
-  @Local coverRadiusOptions: string[] = ['直角', '小', '中', '大', '超大'];
-  @Local coverRadiusValues: number[] = [0, 8, 16, 24, 32];
   @Local lyricCenter: boolean = false;
   @Local lyricFpsOptions: string[] = ['60', '90', '120', '144'];
   @Local lyricFpsValues: number[] = [60, 90, 120, 144];
@@ -264,9 +266,9 @@ export struct SettingsDetailPage {
     this.homeSource = MusicStoreService.getInstance().getHomeSource();
     this.useAccountRec = MusicStoreService.getInstance().getUseAccountRec();
     this.lyricFontSize = MusicStoreService.getInstance().getLyricFontSize();
-    this.coverRadius = MusicStoreService.getInstance().getCoverCornerRadius();
+    // ⛔ 2026-10-17：`coverRadius` 设置项已删除（见 `PlaybackSheet`），这里不再读、也不再写
+    //   `AppStorage 'lxCoverRadius'`。
     this.downloadLrc = MusicStoreService.getInstance().getDownloadLrc();
-    AppStorage.setOrCreate('lxCoverRadius', this.coverRadius);
     this.lyricFps = MusicStoreService.getInstance().getLyricFps();
     this.lyricCenter = MusicStoreService.getInstance().getLyricCenterEnabled();
     this.lastError = AppStorage.get<string>('lxLastError') ?? '';
@@ -880,19 +882,10 @@ export struct SettingsDetailPage {
         Column() {
           this.NetworkQualitySettings(true, 'Wi-Fi / 以太网默认播放/下载音质')
           this.NetworkQualitySettings(false, '蜂窝默认播放/下载音质')
-          this.SubTitle('封面圆角')
-          this.CapsuleSelector(this.coverRadiusOptions, this.coverRadiusValues.indexOf(this.coverRadius),
-            (index: number) => {
-              const radius: number = this.coverRadiusValues[index];
-              this.coverRadius = radius;
-              MusicStoreService.getInstance().setCoverCornerRadius(radius);
-              AppStorage.setOrCreate('lxCoverRadius', radius);
-              const state = AppStorageV2.connect(CoverRadiusState, AppStorageKeys.COVER_RADIUS_STATE,
-                () => new CoverRadiusState());
-              if (state !== undefined) {
-                state.radius = radius;
-              }
-            })
+          // ⛔ 2026-10-17 删除：「封面圆角」设置项（直角/小/中/大/超大）。
+          //   用户明确要求删掉；圆角改回无界那一个绝对值（`radiusPlayer = 8`）。
+          //   删掉的不只是这一行 UI：`getCoverCornerRadius()` 的两个消费点
+          //   （`PlaybackPage.aboutToAppear` / `MusicPlayInfoBlock.aboutToAppear`）也都已改成常量。
 
           this.SubTitle($r('app.string.setting_sub_audio_mix'))
           this.CapsuleSelector(this.onOffOptions, this.audioMix ? 0 : 1,

@@ -2918,7 +2918,13 @@ export struct PlaybackPage {
       this.expandState.pullDragging = false;
       this.expandState.morphDrive = MorphDrive.NONE;
     }
-    this.coverRadiusState.radius = MusicStoreService.getInstance().getCoverCornerRadius();
+    // ★★★ 2026-10-17（用户：**「我们的软件里面有个自定义封面圆角也删了吧」**）
+    //   原来这一句是 `= MusicStoreService.getInstance().getCoverCornerRadius()`
+    //   —— 设置页那个「封面圆角（直角/小/中/大/超大）」通过它进渲染。
+    //   现在圆角只有**一个来源**：无界 `CoverMorph.radiusPlayer = 8`
+    //   （`PlayerExpandState.COVER_RADIUS_PLAYER_VP`）⇒ 设置值不再参与任何渲染。
+    //   ⚠️ 这一句必须留着（把共享状态压回合法值）：`CoverRadiusState` 里可能残留旧值。
+    this.coverRadiusState.radius = PlayerExpandState.COVER_RADIUS_PLAYER_VP;
     // ★ 流光背景开关：**必须在这里从持久化存储灌进 V2 状态**。
     //   设置页只在「用户切换开关」时写 `PlaybackFlowLightState`，冷启动时没人灌值 ⇒
     //   状态默认 false，即使设置里是"开"也永远不画流光（用户反馈的"流光背景不生效"就是这个）。
@@ -5002,6 +5008,10 @@ export struct PlaybackPage {
 
   /** Entry point: kicks off async album-color extraction without blocking UI. */
   getImageColor(): void {
+    // ★★★ 2026-10-17（照搬无界 `makeFallback` 的时机）：**先**兜底一张网格，再走异步解码。
+    //   否则"页面刚挂载、封面 URL 还没解析"这一整段（暂停态下是**永久**）背景层没有网格源
+    //   ⇒ 只剩取样色/纯色底座 ⇒ 用户看到的"背景始终是黑色"。
+    void this.publishFallbackMesh();
     void this.getImageColorAsync();
   }
 
@@ -5275,6 +5285,97 @@ export struct PlaybackPage {
    * ⚠️ 新旧交替顺序：**先释放上一张、再赋值并 `++meshSrcVersion`** ——
    *    `MeshCoverBg` 的 `@Monitor` 监听的是**版本号**（`PixelMap` 原地改内容不会触发刷新）。
    */
+  /**
+   * ★★★★ 2026-10-17（**兜底网格** —— 照搬无界 `MeshCoverBg.makeFallback()` +
+   *   `MeshSource.fillFallback()`，修用户实测「未播放时点击打开背景始终是黑色」）
+   *
+   * ## 无界为什么永远不会黑
+   * ```
+   *   MeshCoverBg.decodeCover() 失败（封面路径还没到手 / 解码失败）
+   *     ⇒ makeFallback()：按 `hueOfSeed(seed)` 造一张 64×64 的 RGBA，
+   *       fillFallback 填成"同一色相的柔和色块" → enhanceColors → boxBlurRgba
+   *     ⇒ **网格源永远存在** ⇒ 屏上永远有一层柔化色块，不会掉成纯黑。
+   * ```
+   * 我们缺的正是这一步：封面 URL 没解析出来时 `publishMeshSource` 从没被调用过
+   * ⇒ `meshSrc === undefined` ⇒ 背景层只能画那层取样色（在线歌还带 alpha）
+   * ⇒ 用户看到的就是"**黑背景**"（暂停态尤其稳定复现：连帧都不跑）。
+   *
+   * ## 本实现的对应物
+   * 用**封面取样色**（`state.imageColor`；解析不出就用 `defaultImageBgColor`）做一张
+   * 64×64 的纯色 PixelMap，然后走**同一条** {@link publishMeshSource}
+   * （`enhanceColors` + `boxBlurRgba` 都在那里）⇒ 与真封面走完全一样的管线。
+   * ⚠️ 真网格到手后会经 `publishMeshSource` 正常替换（旧的由那里释放），不会残留。
+   * ⚠️ 幂等：已经有网格源时直接返回。
+   */
+  private async publishFallbackMesh(): Promise<void> {
+    if (this.meshSrcVersion > 0 || !this.isAlive) {
+      return;
+    }
+    let r: number = 32;
+    let g: number = 32;
+    let b: number = 32;
+    const rgb: number[] | undefined = PlaybackPage.parseRgb(this.state.imageColor);
+    if (rgb !== undefined) {
+      r = rgb[0];
+      g = rgb[1];
+      b = rgb[2];
+    }
+    const buf: ArrayBuffer = new ArrayBuffer(SRC_EDGE * SRC_EDGE * 4);
+    const u8: Uint8Array = new Uint8Array(buf);
+    for (let i: number = 0; i < SRC_EDGE * SRC_EDGE; i++) {
+      const o: number = i * 4;
+      u8[o] = r;
+      u8[o + 1] = g;
+      u8[o + 2] = b;
+      u8[o + 3] = 255;
+    }
+    let pm: image.PixelMap | undefined = undefined;
+    try {
+      pm = await image.createPixelMap(buf, {
+        size: { width: SRC_EDGE, height: SRC_EDGE },
+        pixelFormat: image.PixelMapFormat.RGBA_8888,
+        editable: true
+      });
+    } catch (err) {
+      const e = err as BusinessError;
+      Logger.warn(PlaybackPage.logTag,
+        `fallback mesh create failed code=${e?.code}, message=${e?.message}`);
+      return;
+    }
+    if (!this.isAlive || this.meshSrcVersion > 0) {
+      this.releasePixelMapQuiet(pm);
+      return;
+    }
+    Logger.info(PlaybackPage.logTag, `RzdBgFallback mesh rgb=${r},${g},${b}`);
+    this.publishMeshSource(pm);
+  }
+
+  /**
+   * 把一个 `rgba(r, g, b, a)` / `#RRGGBB` 串解析成 `[r, g, b]`（解析不出返回 undefined）。
+   * 只给 {@link publishFallbackMesh} 用（`state.imageColor` 就这两种写法）。
+   */
+  private static parseRgb(color: string): number[] | undefined {
+    if (color.length === 0) {
+      return undefined;
+    }
+    if (color.charAt(0) === '#') {
+      const hex: string = color.length >= 7 ? color.substring(1, 7) : '';
+      if (hex.length !== 6) {
+        return undefined;
+      }
+      const v: number = Number.parseInt(hex, 16);
+      if (!Number.isFinite(v)) {
+        return undefined;
+      }
+      return [(v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF];
+    }
+    const m: RegExpMatchArray | null = color.match(/(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+    if (m === null) {
+      return undefined;
+    }
+    return [Number.parseInt(m[1], 10), Number.parseInt(m[2], 10), Number.parseInt(m[3], 10)];
+  }
+
   private publishMeshSource(pm: image.PixelMap | undefined): void {
     if (pm === undefined) {
       return;
@@ -5691,9 +5792,15 @@ export struct PlaybackPage {
                 srcVersion: this.meshSrcVersion,
                 playing: this.state.isPlay,
                 active: this.state.isShowPlay,
-                // ★ 照搬无界：`entryFade = !pullMode || effT() >= 1` —— 形变进入时不淡入
-                //   （那一刻整层的不透明度已由 `backgroundRevealOpacity()` 管着）。
-                entryFade: !this.expandState.morphContainerActive(),
+                // ★★★★ 2026-10-17（**一律不走 400ms 入场淡入** —— 修「点击打开背景是黑的」）
+                //   无界那 400ms 淡入是"从无到有第一次出现"用的；我们这一层在形变容器里、
+                //   而且整层的不透明度**已经**由 `backgroundRevealOpacity()` 管着 ⇒
+                //   再叠一条 `.transition(OPACITY.animation(400))` 就是**两个源管同一个不透明度**。
+                //   实测后果：`if` 那一帧若没有动画上下文，transition 会停在 opacity 0
+                //   ⇒ 网格明明在画，屏上却什么都没有（用户看到的"黑"）。
+                //   ⇒ 恒定 `false`（上游那条 `entryFade = !pullMode || effT() >= 1` 的语义
+                //     在这里由 `backgroundRevealOpacity()` 独自承担）。
+                entryFade: false,
                 // ★★★★ 2026-10-17（**只把"网格画布高度"钉住，布局仍然 100%**）
                 //   渲染/布局一律照旧（宿主 100% ⇒ 结构上不可能消失，见下面那段长注释）；
                 //   这一项只让 `NodeContainer → controller.resize(w, h)` 里的 `h` 恒定 =

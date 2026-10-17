@@ -147,7 +147,11 @@ export struct MusicPlayInfoBlock {
   }
 
   aboutToAppear(): void {
-    this.coverRadiusState.radius = MusicStoreService.getInstance().getCoverCornerRadius();
+    // ★★★ 2026-10-17（用户要求删掉"自定义封面圆角"设置）：
+    //   原来这里是 `= MusicStoreService.getInstance().getCoverCornerRadius()`。
+    //   现在封面圆角只有**一个来源** —— 无界 `CoverMorph.radiusPlayer = 8`，与内置播放页、
+    //   浮层克隆三处同值（这也顺带消掉"动画结束时圆角跳一下"）。
+    this.coverRadiusState.radius = PlayerExpandState.COVER_RADIUS_PLAYER_VP;
     this.coverSpringScale = this.state.isPlay ? 1.05 : 0.95;
     this.coverSpringTarget = this.coverSpringScale;
     // 初始缩放也要报出去：形变量测发生在同一帧，晚了就还是按 1.0 算端点

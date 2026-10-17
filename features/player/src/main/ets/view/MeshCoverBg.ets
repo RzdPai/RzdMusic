@@ -132,6 +132,13 @@ class MeshBgController extends NodeController {
     if (this.rootRender !== null) {
       this.rootRender.frame = { x: 0, y: 0, width: w, height: h };
     }
+    // ★★★★ 2026-10-17（**尺寸一变就补一帧** —— 修用户实测「懒播放时背景始终是黑的」）
+    //   `RenderNode` 的内容只在 `invalidate()` 之后才会重画。原来只有 `displaySync` 的帧回调
+    //   （闸门 = `playing && active`）会 invalidate ⇒ **暂停态根本没有帧**，而 `aboutToAppear`
+    //   那一次 `onFrameNow()` 又可能跑在 `makeNode`/首次布局**之前**（`hasRoot()` 还是假）
+    //   ⇒ 那一帧被丢掉 ⇒ 之后没有任何人再叫它 ⇒ 屏上一直是空的（用户看到的就是"黑"）。
+    //   ⇒ 只要**尺寸到位**（说明节点已经挂上、布局也出来了）就立刻补一帧，与播放状态无关。
+    this.node.invalidate();
   }
 }
 
@@ -191,6 +198,12 @@ export struct MeshCoverBg {
     this.applyGate();
     // ★ 2026-10-16：挂载时补画一帧（`active` 但未播的场景，见 `onFrameNow()` 的注释）。
     this.onFrameNow();
+    // ★★★★ 2026-10-17（**补画窗口** —— 修用户实测「未播放时点击打开背景始终是黑色」）
+    //   挂载那一刻 `makeNode` / 首次布局还没发生（`hasRoot()` 假、尺寸 0）⇒ 上面那一帧
+    //   会被丢掉，而暂停态**没有任何帧回调**再来一次 ⇒ 屏上永远是空的。
+    //   ⇒ 挂载后 1 秒内**再补几帧**（不触发动效，只是把同一帧重画），一帧落上就够。
+    //   ⚠️ 不用常驻定时器：最多 4 次 × 150ms，窗口一过就彻底安静（保住"暂停即停帧"的功耗口径）。
+    this.scheduleWarmUp(0);
   }
 
   aboutToDisappear(): void {
@@ -264,6 +277,32 @@ export struct MeshCoverBg {
   private onFrame(): void {
     this.accMs = Date.now() - this.startMs;
     this.onFrameNow();
+  }
+
+  /** 补画窗口的剩余次数（见 `aboutToAppear`）。 */
+  private warmUpLeft: number = 4;
+  /** 补画窗口的间隔（ms）。 */
+  private static readonly WARM_UP_MS: number = 150;
+
+  /**
+   * 挂载后的一小段"补画窗口"：按固定次数把同一帧重画一遍。
+   *
+   * 为什么必须有：`RenderNode` 的内容只在 `invalidate()` 后重画，而**暂停态没有任何帧回调**
+   * ⇒ 挂载那一帧若跑在 `makeNode`/首次布局之前就被丢掉，屏上就永远空着（用户看到的"黑"）。
+   * 补画**不改变时间基**（`accMs` 不动）⇒ 画出来的是同一帧静止网格，不会抖。
+   * @param attempt 已补画次数（0 起）
+   */
+  private scheduleWarmUp(attempt: number): void {
+    if (attempt >= this.warmUpLeft) {
+      return;
+    }
+    setTimeout((): void => {
+      if (this.disposed) {
+        return;
+      }
+      this.onFrameNow();
+      this.scheduleWarmUp(attempt + 1);
+    }, MeshCoverBg.WARM_UP_MS);
   }
 
   /**

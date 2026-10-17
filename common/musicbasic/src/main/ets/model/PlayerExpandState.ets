@@ -1018,8 +1018,13 @@ export class PlayerExpandState {
    *
    * 出处：`wujie.pa:85471`（读默认值）→ `85481 ldai 0x8` ⇒ **8**；
    *   类字段表见 `_recover/logic-src/歌词页浮层封面与歌名定稿.md`（`radiusPlayer = 8`）。
+   *
+   * ★★★ 2026-10-17（用户：**「我们的软件里面有个自定义封面圆角也删了吧」**）
+   *   ⇒ 本常量现在是**封面圆角的唯一来源**（内置播放页、浮层克隆、宽屏/面板三处都取它），
+   *     设置页那一项与 `MusicStoreService.getCoverCornerRadius()` **不再参与任何渲染**。
+   *   ⚠️ 这也一并修掉了"动画结束时封面圆角突然跳一下"：两端同值 ⇒ 交棒没有差。
    */
-  private static readonly COVER_RADIUS_PLAYER_VP: number = 8;
+  public static readonly COVER_RADIUS_PLAYER_VP: number = 8;
 
   /**
    * 封面在「歌词页」那一端的圆角（**视觉值**，vp）—— 照抄无界 `CoverMorph.radiusLyricVisual`。
@@ -3491,9 +3496,25 @@ export class PlayerExpandState {
     const s: number = this.bigNodeKnown ? this.bigNodeScaleX : this.coverVisualScale();
     const endSize: number = this.endCoverSize * s;
     const endH: number = (this.endCoverH > 0 ? this.endCoverH : this.endCoverSize) * s;
-    const coverR: number = this.bigCoverRadius > 0 ? this.bigCoverRadius :
-      (this.bigRadius > 0 ? this.bigRadius : endSize * 0.06);
-    const endRadius: number = Math.min(coverR * s, Math.min(endSize, endH) / 2);
+    // ★★★★ 2026-10-17（**圆角只有一个来源** —— 修用户实测「动画结束时封面圆角突然变化」）
+    //
+    // 原来这里是：
+    // ```
+    //   const coverR = bigCoverRadius > 0 ? bigCoverRadius : (bigRadius > 0 ? bigRadius : endSize * 0.06);
+    //   const endRadius = Math.min(coverR * s, …);
+    // ```
+    // 而 `bigCoverRadius / bigRadius` 是 `reportBig(..., coverRadiusState.radius)` 传进来的
+    // —— **用户设置里的"自定义封面圆角"**。于是：
+    // ```
+    //   动画终点（浮层克隆那张）= 用户设的圆角（例如 16/24/32）
+    //   落位后（播放页那张真封面）= `lyricMorph(0).radius` = COVER_RADIUS_PLAYER_VP = 8
+    //   ⇒ **交棒那一帧圆角跳一下** = 用户说的"突然圆角变化、比较割裂"
+    // ```
+    // ⇒ 现在两端都取**无界那一个绝对值**（`CoverMorph.radiusPlayer = 8`，`wujie.pa:85481`），
+    //   并且随视觉缩放 `s` 走（与"中心不变、边长乘 s"同口径）⇒ **动画终点 = 静止态**，不跳。
+    //   ⚠️ 用户要求删掉"自定义封面圆角"设置 ⇒ 这里不再有任何用户值参与。
+    const endRadius: number = Math.min(PlayerExpandState.COVER_RADIUS_PLAYER_VP * s,
+      Math.min(endSize, endH) / 2);
     const startRadius: number = Math.min(this.snapStartRadius, this.snapStartW / 2);
     // 终点是**按尺寸缩放**的：位置随中心不变、边长乘 s —— 与真实封面的
     // `scale({centerX:'50%',centerY:'50%'})` 完全同口径。
