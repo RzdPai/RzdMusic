@@ -2407,6 +2407,41 @@ export struct PlaybackPage {
   /** Fallback page background tint when art or color pick fails. */
   private static readonly defaultImageBgColor: string = 'rgba(32, 32, 32, 1)';
 
+  /** 背景网格源还没到手时的**有界重取**次数（见 {@link scheduleBackgroundRetry}）。 */
+  private static readonly BG_RETRY_MAX: number = 4;
+  /** 两次重取之间的间隔（ms）。 */
+  private static readonly BG_RETRY_MS: number = 400;
+
+  /**
+   * 背景网格源还没到手 ⇒ 隔一会儿再取一次（**有界**）。
+   *
+   * 为什么需要它（用户实测）：未播放状态点击打开播放器时背景是黑的 ——
+   * 因为在线歌曲的真正背景是**网格图**，而它要等 `song.cover` 到手才解得出来；
+   * 播放状态会顺手把 metadata 拉齐，所以"点一下播放就正常"。
+   * 背景只该跟"封面有没有到手"有关 ⇒ 这里给它一个**收敛**的机会。
+   * @param jobSeq 发起那次取色的序号（用它可以丢弃过期的一轮）
+   * @param attempt 已重试次数
+   */
+  private scheduleBackgroundRetry(jobSeq: number, attempt: number): void {
+    if (!Number.isFinite(attempt) || attempt >= PlaybackPage.BG_RETRY_MAX) {
+      Logger.info(PlaybackPage.logTag,
+        `RzdBgRetry give up attempt=${attempt} meshVer=${this.meshSrcVersion}`);
+      return;
+    }
+    setTimeout((): void => {
+      // 三道门：页面还在、这一轮没被新的一轮顶掉、页面还看得见
+      if (!this.isAlive || jobSeq !== this.imageColorJobSeq) {
+        return;
+      }
+      if (this.meshSrcVersion > 0) {
+        Logger.info(PlaybackPage.logTag, `RzdBgRetry ok attempt=${attempt}`);
+        return;
+      }
+      Logger.info(PlaybackPage.logTag, `RzdBgRetry retry attempt=${attempt + 1}`);
+      void this.getImageColorAsync();
+    }, PlaybackPage.BG_RETRY_MS);
+  }
+
   /**
    * Banner watcher: when switchBanner.ts advances, schedule a 3s clear.
    * Compares the parsed timestamp so an older clear does not blank a newer banner.
@@ -4997,6 +5032,25 @@ export struct PlaybackPage {
         } catch (_err) {
           // 取色失败不影响播放：背景走实时模糊，不再需要这张预渲染图
         }
+      }
+      // ★★★ 2026-10-17（用户「未播放状态点击打开播放器 → 背景是黑的；点一下播放就正常」）
+      //
+      // ## 机制（读代码即得，不是猜）
+      // ```
+      //   在线歌曲的背景**不是取色层**（那一层是写死的近黑 rgba(20,20,22,0.5)），
+      //   真正的背景是**网格图**（`publishMeshSource(pair.mesh)`），而它只在
+      //   `song.cover.length > 0` 时才会被解出来。
+      //   未播放时封面 URL 可能还没到手（metadata 未 resolve）⇒ 既没网格也没取色
+      //   ⇒ 屏上就是那层近黑底 = 用户看到的"背景是黑的"。
+      //   一点播放 ⇒ 封面 metadata 到位 ⇒ `onCurrentTrackForBackground` 再跑一次 ⇒ 正常。
+      // ```
+      // ## 处置（**不发明任何视觉值**，只让它自己收敛）
+      //   背景只该跟"封面有没有到手"有关、**与播放状态无关**
+      //   ⇒ 封面还没到手时，**有界地**隔一会儿再取一次（最多 `BG_RETRY_MAX` 次，
+      //     每次都要过 `isAlive` + `jobSeq` 这两道门）。
+      //   ⚠️ 不能无限重试：封面确实不存在（本地无图/接口永久失败）时要停手。
+      if (song.cover.length === 0 || this.meshSrcVersion === 0) {
+        this.scheduleBackgroundRetry(jobSeq, 0);
       }
       return;
     }
