@@ -5524,7 +5524,17 @@ export struct PlaybackPage {
       enhanceColors(u8);
       boxBlurRgba(u8, SRC_EDGE, SRC_EDGE, PlaybackPage.MESH_BLUR_RADIUS, PlaybackPage.MESH_BLUR_PASSES);
       pm.writeBufferToPixelsSync(buf);
-      // 閴€?2026-10-17閿?*娑撳秴鍟撶捄銊┿€夐棃銏㈢处閸?*閿涘牐顫?`adoptCachedMesh` 娑撳﹪娼伴柇锝嗩唽"瑜版挸銇夐幘銈呮礀"閿?
+      // ★★★★ 2026-10-17（子代理定位 + gemini 复核）：**把处理好的 64×64 存进跨页面缓冲**
+      //   在此之前 `meshBuf/meshBufKey` 全仓**只有读、没有写**、`adoptCachedMesh()` **零调用者**
+      //   ⇒ 每次打开播放页都要从 HTTP 下载封面再解 64×64，而"点击打开"的形变只有 350~400ms
+      //   ⇒ 整段形变拿不到真源，屏上是 `makeFallback()` 按 title|singer 哈希出来的色相
+      //   = 用户反复报的「点击展开背景还是有问题 / 颜色不对」。
+      //   ⚠️ 存**字节**不存 PixelMap（跨页 release 会双释放；静态 PixelMap 缓存实测会显示上一首）。
+      const warmKey: string = this.currentMeshKey();
+      if (warmKey.length > 0) {
+        PlaybackPage.meshBufKey = warmKey;
+        PlaybackPage.meshBuf = u8.slice();
+      }
     } catch (err) {
       const e = err as BusinessError;
       Logger.warn(PlaybackPage.logTag, `mesh source build failed code=${e?.code}, message=${e?.message}`);
@@ -6064,6 +6074,9 @@ export struct PlaybackPage {
           .onAppear(() => {
             this.context = this.getUIContext().getHostContext() as common.UIAbilityContext;
             this.isAlive = true;
+            // ★★★★ 2026-10-17（子代理定位）：**先吃跨页面缓冲**，再走原来的网络/资源取源。
+            //   在此之前 `adoptCachedMesh()` 零调用者 ⇒ 每次都从零下载 ⇒ 点击打开那 350ms 内没有真源。
+            void this.adoptCachedMesh();
             this.getImageColor();
             this.applyPlaybackWindowChromeImmediately();
             // 濡炪倗鏁诲鐗堬純閺嶎煈鍋ч柛鎴ｆ楠炲洭寮捄鐑樺€辨慨婵勫劙缁旀潙鈻庨垾宕囩；闁稿繐纾慨鎼佸箑娓氬﹦绀勯悹浣稿⒔閻ゅ棙銇勯棃娑樿闁煎疇妫勯崹浼村绩绾懐绠栭柨?
