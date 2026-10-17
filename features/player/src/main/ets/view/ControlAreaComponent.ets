@@ -759,8 +759,18 @@ export struct ControlAreaComponent {
           .fontSize(this.expandState.chromeSideSize())
           .fontWeight(FontWeight.Regular)
           .fontColor([$r('app.color.play_text_color')])
-          .width(this.expandState.chromeSideSize())
-          .height(this.expandState.chromeSideSize())
+          // ★★★ 2026-10-17（照搬无界 `transport()` 的外框 + 修「关闭时两颗突然下移一点」）：
+          //   盒子口径改成**与同排两颗 `Image` 完全一致**的 `chrome().seekSize`（`wujie.pa:181429` / `181639`
+          //   的 `Image().width(chrome().seekSize).aspectRatio(1)` ⇒ 本仓 `chromeSeekSize()` = 32/30/28vp），
+          //   而**字号仍按上游 `chrome().sideSize`**（`wujie.pa:181333` / `181754` 的
+          //   `.fontSize(chrome().sideSize)` ⇒ 22/21/20fp）。
+          //   ⚠️ 上一版给的是 `width/height = chromeSideSize()`（22/21/20）—— 与同排 32/30/28 的 `Image`
+          //      不是同一个高，形变/快照那一拍整行按最高者排版就把它俩往下推了一点（用户实测"突然下移一点点"）。
+          //   ✅ 核对结果：`SymbolGlyphAttribute extends CommonMethod`（SDK `symbolglyph.d.ts:982`）里
+          //      **没有 `textAlign`** ⇒ 不能写 `.textAlign(TextAlign.Center)`（编译不过）；
+          //      符号在固定方盒内本来就是居中绘制，等大方盒 + 行级 `alignItems(Center)` 即可对齐。
+          .width(this.expandState.chromeSeekSize())
+          .height(this.expandState.chromeSeekSize())
           .flexShrink(0)
           .accessibilityText('播放模式')
           .accessibilityLevel('yes')
@@ -814,10 +824,11 @@ export struct ControlAreaComponent {
           .fontSize(this.expandState.chromeSideSize())
           .fontWeight(FontWeight.Regular)
           .fontColor([$r('app.color.play_text_color')])
-          // 同「播放模式」那颗：显式尺寸 + 不许被压缩（见上方长注释，对照
-          // `PlayerPage完整UI定稿.md` §8.3 L180568-181846 的播放队列 SymbolGlyph）。
-          .width(this.expandState.chromeSideSize())
-          .height(this.expandState.chromeSideSize())
+          // 同「播放模式」那颗：盒子 = `chrome().seekSize`（与同排 `Image` 同口径），
+          // 字号 = `chrome().sideSize`（上游 `wujie.pa:181754`），并 `flexShrink(0)` 不许被压缩
+          // （见上方长注释，对照 `PlayerPage完整UI定稿.md` §8.3 L180568-181846 的播放队列 SymbolGlyph）。
+          .width(this.expandState.chromeSeekSize())
+          .height(this.expandState.chromeSeekSize())
           .flexShrink(0)
           .accessibilityText('播放列表')
           .accessibilityLevel('yes')
@@ -828,6 +839,13 @@ export struct ControlAreaComponent {
       }
       .width(StyleConstants.FULL_WIDTH)
       .justifyContent(FlexAlign.SpaceBetween)
+      // ★★★ 2026-10-17（照搬无界 `PlayerPage.transport()` 的行属性，`wujie.pa:180503-180573`
+      //   的 λ `@10*#`：`Row.width('100%').justifyContent(SpaceBetween)
+      //   .alignItems(VerticalAlign.Center).padding({left/right}).translate().opacity().transition()`）：
+      //   上游这一行**明确写了 `.alignItems(VerticalAlign.Center)`**，本仓原来漏了这一条 ——
+      //   五颗里两颗 `SymbolGlyph`（有方盒）与三颗 `Image`（`aspectRatio(1)`）在形变期间高度不一致时，
+      //   Row 默认按顶对齐 ⇒ 整行看起来往下挪一点。补上就按竖直中心对齐。
+      .alignItems(VerticalAlign.Center)
 
       if (this.showBottomOtherRow) {
         Row({ space: 0 }) {
