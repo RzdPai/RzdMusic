@@ -181,6 +181,22 @@ export struct PlaybackPage {
    */
   @Local meshSrc: image.PixelMap | undefined = undefined;
   /** 鎹㈠浘浠ょ墝锛坄MeshCoverBg` 闈犲畠瑙﹀彂閲嶆柊涓婁紶锛岃閭ｉ噷鐨?`@Monitor`锛夈€?*/  @Local meshSrcVersion: number = 0;
+  /**
+   * ★★★★ 2026-10-17（**修「展开过程中是上一首歌的颜色」**）
+   *
+   * `coverTint` 是**跨页面共享**的（`AppStorageV2` 的 `CoverTintState`），它只在
+   * `extractFlowLightColors()` 成功之后才被改成当前这一首的颜色。于是**新挂载**的播放页在
+   * 取色完成之前，`FlowLightBackground()` 画的仍然是**上一首**的颜色
+   * —— 而它是一层铺满整屏的着色器/渐变层，网格还没到位时它就是"背景"
+   * ⇒ 用户看到的就是「展开过程中是上一首歌的颜色」。
+   *
+   * ⇒ 本字段 = "**当前这一首**的颜色已经下发过了"：
+   *   · 挂载时置假（页面每次打开都是新实例）；
+   *   · `applyFlowLightColors()` 真正下发时置真；
+   *   · `FlowLightBackground()` 只在它为真时才挂载 ⇒ 屏幕永远不会出现上一首的颜色。
+   * ⚠️ 真网格（`MeshCoverBg`）与它无关：网格有自己的 `src`/兜底网格，不依赖本字段。
+   */
+  @Local tintReady: boolean = false;
 
   /** 鏇茬洰鎴栨敹钘忕増鏈彉鍖栨椂鍒锋柊蹇冨舰銆?*/
   @Monitor('state.selectIndex', 'favStore.favoriteVersion')
@@ -421,18 +437,20 @@ export struct PlaybackPage {
     const baseH: number = this.expandState.estBoxHVp();
     const centeredTop: number = (baseH - rowH) / 2;
     let absTop: number = this.expandState.metaTopGeomY(this.lyricMorphT, rowH);
-    // ★★★★ 2026-10-17（**压住控制区的钳制** —— 用户实测「展开时标题歌手那行会和进度条重叠，
-    //   无界是正常的」）
+    // ★★★★ 2026-10-17（**压住控制区的钳制 —— 用「实测」而不是「推算」**）
     //
-    // 这一行是**绝对定位的浮层**（`LyricFloatLayer`），无界那一条是在页面流里、天然排不到
-    // 控制区里去 ⇒ 我们必须自己保证"别压进控制区"。
-    // 控制区顶边 = `topInset + estBoxH(= 可用高 − 控制区总高) + swiperGap`；
-    // 钳制上限 = 控制区顶边 − 行高（宁可贴近封面底边，也不许盖住进度条）。
-    // ⚠️ 只在**真的会越界**时生效（`t = 1` 歌词页那一端远在上方，不受影响）；
-    //   静止态封面页若本来就够高（封面小/窗口高）也不受影响 ⇒ 不改变既有版面。
-    // 排查关键字：`hdc shell hilog -x | Select-String 'RzdMetaChrome'`
-    const chromeTopY: number = this.expandState.topInsetVp() +
+    // 用户两次实测「展开时标题歌手那行会和进度条重叠」。这一行是**绝对定位浮层**
+    // （`LyricFloatLayer`），无界那一条在页面流里、天然排不进控制区 ⇒ 必须自己钳制。
+    // ⚠️ 上一版我用 `topInset + estBoxHVp + swiperGap` **推算**控制区顶边 ——
+    //   而 `estBoxHVp()` 是"可用高 − 档位表里的控制区总高"，与我们控制区的**自然高度**
+    //   并不相等（本仓控制区高度由内容撑出来，`RzdSwiperBox` 日志一直在对这两个数）
+    //   ⇒ 推算值偏低 ⇒ 钳制没起作用。
+    // ⇒ 现在优先用**实测**：`gapSwiper` 那根占位条（控制区正上方那一根）的窗口顶边，
+    //   它就是控制区的真实上沿；量不到（-1）才退回推算值。
+    const measuredTop: number = this.boxTopY(PlaybackPage.SWIPER_GAP_ROW_ID);
+    const estimatedTop: number = this.expandState.topInsetVp() +
       this.expandState.estBoxHVp() + this.expandState.swiperGapVp();
+    const chromeTopY: number = measuredTop > 0 ? measuredTop : estimatedTop;
     const maxTop: number = chromeTopY - rowH;
     if (absTop > maxTop) {
       absTop = maxTop;
@@ -2656,6 +2674,7 @@ export struct PlaybackPage {
     if (this.coverTint.version === this.appliedTintVersion) {
       return;
     }
+    this.tintReady = true;
     // 鈽?褰㈠彉瀹夐潤绐楀彛鍐呬笉涓婅壊锛堣 `colorApplyWaitOrRetry`锛夛細绛夌獥鍙ｈ繃鍘诲畠浼氳嚜宸遍噸璇曚竴娆°€?
     if (this.colorApplyWaitOrRetry() > 0) {
       return;
@@ -2709,8 +2728,7 @@ export struct PlaybackPage {
   }
 
   @Builder
-  private FlowLightBackground() {
-    if (this.hdsEffectCapable()) {
+  private FlowLightBackground() {    if (this.hdsEffectCapable()) {
       Stack()
         .width(StyleConstants.FULL_WIDTH)
         .height(StyleConstants.FULL_HEIGHT)
@@ -5697,7 +5715,7 @@ export struct PlaybackPage {
           //   鍦ㄧ綉鏍肩敓鏁堟椂蹇呴』鍏虫帀锛屽惁鍒欎細鍙犱袱浠芥殫瑙掋€?
           //   鈿狅笍 缃戞牸婧愯繕娌″缓濂斤紙鎹㈡瓕閭ｄ竴鐬級鏃?*閫€鍥炲疄鏃舵ā绯婇偅寮犲浘**锛屼笉浼氬嚭鐜?鑳屾櫙绌轰竴鍧?銆?
           // 娴佸厜鑳屾櫙锛堣缃」寮€鍏筹級锛氬繀椤诲湪鍐呭灞備箣鍓嶇粯鍒讹紝鍚﹀垯浼氱洊浣忓皝闈㈠拰姝岃瘝
-          if (this.flowLightState.enabled) {
+          if (this.flowLightState.enabled && this.tintReady) {
             this.FlowLightBackground()
           }
 
