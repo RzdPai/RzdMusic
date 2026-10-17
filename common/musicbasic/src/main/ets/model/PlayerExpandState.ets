@@ -2330,11 +2330,20 @@ export class PlayerExpandState {
     if (this.morphStage === MorphStage.OPEN) {
       return 1;
     }
-    // ★★ 2026-10-15 **恢复原样**：用户明确「歌曲名和歌手咋还中间消失了，**还用原来的飞入动画不用改**」——
-    //   我上一版把这一行改成"0.18→0.34 淡入的纯函数"，它与克隆层的淡出交叉时，
-    //   播放页自己那一行还被压在缩小布局里（屏幕上看不见）⇒ 观感就是"飞入到一半突然没了"。
-    //   原来的写法是"克隆层接管期间这一行为 0，交回给播放页时才显示" —— 保持不动。
-    return this.metaBridgeOwnsPaint() ? 0 : this.pullChromeOpacity();
+    // ★★★★ 2026-10-17（用户：「**歌名/歌手那一行的飞入还是有问题**」）
+    //
+    // 原来这里是：
+    // ```
+    //   return this.metaBridgeOwnsPaint() ? 0 : this.pullChromeOpacity();
+    // ```
+    // 也就是"克隆层接管期间这一行为 0"。但**本仓的克隆层只画封面**
+    // （`MorphCoverClone()` 里只有一张 `Image`；`metaBridgeOwnsPaint()` 的注释自己也写着
+    //  "浮层这一层在本仓只画封面"）⇒ 那个 `? 0` **什么也没换回来**，
+    // 只是把这一行在**整段形变里藏起来** ⇒ 用户看到的就是"歌名的飞入不对/中途没有它"。
+    // 无界那边：`floatingMeta` 的显隐只由 `motionImmersive` 那个 `If` 管，
+    // 形变期的淡入走 `pullChromeOpacity = clamp((effT−0.18)/0.44)`（= 用户已确认的 ③）。
+    // ⇒ 照搬：**不再因为"克隆层接管"而置 0**，一律按淡入窗走。
+    return this.pullChromeOpacity();
   }
 
   public logMorphOwnership(event: string): void {
