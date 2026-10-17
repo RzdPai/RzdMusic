@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -6076,7 +6076,10 @@ export struct PlaybackPage {
             this.isAlive = true;
             // ★★★★ 2026-10-17（子代理定位）：**先吃跨页面缓冲**，再走原来的网络/资源取源。
             //   在此之前 `adoptCachedMesh()` 零调用者 ⇒ 每次都从零下载 ⇒ 点击打开那 350ms 内没有真源。
-            void this.adoptCachedMesh();
+            // ⛔ 2026-10-17 停用：挂载那一拍 `getCurrentSongItem()` 可能还是**上一首**
+            //   ⇒ 命中上一首的缓冲 ⇒ 用户实测「打开时的背景是上一首歌的颜色」。
+            //   接回来的前提：预热状态（按"当前曲目变化"写入）先落地。
+            // void this.adoptCachedMesh();
             this.getImageColor();
             this.applyPlaybackWindowChromeImmediately();
             // 濡炪倗鏁诲鐗堬純閺嶎煈鍋ч柛鎴ｆ楠炲洭寮捄鐑樺€辨慨婵勫劙缁旀潙鈻庨垾宕囩；闁稿繐纾慨鎼佸箑娓氬﹦绀勯悹浣稿⒔閻ゅ棙銇勯棃娑樿闁煎疇妫勯崹浼村绩绾懐绠栭柨?

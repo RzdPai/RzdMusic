@@ -38,6 +38,8 @@ export struct HomeMiniBarPlayer {
    * 鈿狅笍 鏀硅繖涓暟鍙湅"鑳跺泭宸﹀彸鍒板睆骞曡竟鐨勬€昏窛绂?锛屼笉瑕佸啀鍙犲姞鍒?16 鈥斺€?16 鏄〉闈㈢骇鍙ｅ緞锛屼笉鏄繖涓€灞傘€?
    */
   private static readonly MINI_BAR_SIDE_VP: number = 0;
+  /** 胶囊**内部**组件再收进来的左右呼吸（vp）—— 用户要求"组件离播放条两侧远一点"。 */
+  private static readonly MINI_BAR_INNER_PAD_VP: number = 8;
   /** Player VM shared with cover and aside. */
   @Local playerViewModel: PlayerViewModel = new PlayerViewModel();
   /** Global music UI state (mini bar expanded, play state). */
@@ -225,7 +227,9 @@ export struct HomeMiniBarPlayer {
       ? PlayerConstants.MINI_BAR_CONTENT_H
       : PlayerConstants.MINI_BAR_CONTENT_H * PlayerConstants.MINI_BAR_COLLAPSED_RATIO;
     const cover: number = PlayerConstants.MINI_BAR_CONTENT_H;
-    return h / 2 - cover / 2;
+    // ★ 2026-10-17（用户：**"组件距离播放条两侧太近"**）：原来 = h/2 - cover/2（纯"让封面垂直居中"），
+    //   再加上 8vp 的呼吸，让封面/按钮簇都离胶囊两端更远一点（只动这一处，胶囊宽度不变）。
+    return h / 2 - cover / 2 + HomeMiniBarPlayer.MINI_BAR_INNER_PAD_VP;
   }
 
   /**
