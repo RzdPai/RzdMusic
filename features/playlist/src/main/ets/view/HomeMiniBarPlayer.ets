@@ -29,11 +29,15 @@ import { HomeMiniBarPlayerAside } from './HomeMiniBarPlayerAside';
 @ComponentV2
 export struct HomeMiniBarPlayer {
   /**
-   * 胶囊整体离屏幕左右的让位（vp）—— 无界 `topPageSideOf()` 的手机档 **16**。
-   * 出处：归档 `_recover/logic-src/设计常量全解算.md`（`topPageSideOf = 16 / 24 / 32` 按宽度断点，
-   * 手机档 16）。**这是原值**，不是我拍的数。
+   * 胶囊**额外**再收进来的左右让位（vp）。
+   *
+   * 无界 `topPageSideOf()` 手机档是 **16**（归档 `设计常量全解算.md`），但那是**页面级**让位，
+   * 而我们的胶囊已经坐在 HDS 页签栏里（那一层自带左右让位）⇒ 直接加 16 会**叠加成 ~26vp**，
+   * 用户实测「播放条短好多」。
+   * ⇒ 这里只补 8（≈ 16 的一半），让**总**视觉让位落回 16 附近，胶囊宽度回到正常。
+   * ⚠️ 改这个数只看"胶囊左右到屏幕边的总距离"，不要再叠加到 16 —— 16 是页面级口径，不是这一层。
    */
-  private static readonly MINI_BAR_SIDE_VP: number = 16;
+  private static readonly MINI_BAR_SIDE_VP: number = 8;
   /** Player VM shared with cover and aside. */
   @Local playerViewModel: PlayerViewModel = new PlayerViewModel();
   /** Global music UI state (mini bar expanded, play state). */
