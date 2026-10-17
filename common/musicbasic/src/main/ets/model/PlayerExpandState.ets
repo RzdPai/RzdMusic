@@ -2359,6 +2359,12 @@ export class PlayerExpandState {
    * 见 `focusMorphOverlayForPageCollapse()` 里的幂等护栏说明。
    */
   private morphOverlayCollapseOwned: boolean = false;
+  /**
+   * ★★★ 2026-10-17：这一关是**快照收缩**（`closeWithAnimation` 成功支）收的 ⇒ 浮层不许再画封面。
+   * 唯一置真点 = {@link beginSnapshotShrink}；唯一清零点 = {@link morphOverlayReset}。
+   * 见 {@link morphOverlayBridging} 顶部那段（否则"快照里那张 + 克隆层那张"= 两个封面）。
+   */
+  private snapshotShrinkOwned: boolean = false;
 
   /** @returns 浮层拷贝的补间是否正在跑（只读，给播放页的日志与护栏用）。 */
   public overlayTweenAnimating(): boolean {
@@ -2991,6 +2997,12 @@ export class PlayerExpandState {
   public prepareMorphEntry(ui: UIContext, preferFloating: boolean): boolean {
     if (!this.morphSessionStarted) {
       this.invalidateEndAnchor();
+      // ★★★ 2026-10-17（**会话起点必须放掉"上一次是快照收缩"的所有权**）
+      //   它在 `PlaybackPage.closeWithAnimation()` 的快照成功支被置真（那一关浮层不画封面）。
+      //   正常由 `morphReset()` 清，但那个清点带门（"会话还活着就不清"）⇒ 万一某次关闭没走到
+      //   reset，这个标记会残留 ⇒ **下一次打开的续飞封面整个不画**（比"两张封面"更严重）。
+      //   ⇒ 在**每一次打开**的会话起点无条件放掉（幂等）。
+      this.snapshotShrinkOwned = false;
       // ★★★ 2026-10-16（**新会话必须把"锚点用量"也清零**）：
       //   `bigSize` 是 `MusicPlayInfoBlock.reportBig()`（`onAreaChange`）上报的**跨会话残留字段**
       //   —— `morphReset()` 不清它。于是"终点锚点是否量到"（`morphEndAnchorReady()`）在
@@ -3563,6 +3575,21 @@ export class PlayerExpandState {
    *   "播放页落位时把浮层掐断"这个 bug（见下面第二个判据的注释）。
    */
   public morphOverlayBridging(): boolean {
+    // ★★★★ 2026-10-17（**快照收缩那条路上，浮层不许再画一张封面** ——
+    //   修用户实测「关闭时会出现两个封面，一个是跟随播放器的，另一个是正常飞回去的」）
+    //
+    // 机制：非手势关闭（关闭按钮 / 系统返回）走 `PlaybackPage.closeWithAnimation()` =
+    //   照搬无界的"拍满窗快照 → 缩到胶囊"（`wujie.pa:171054-171095`）。那条路上
+    //   **画面已经在一张快照里**（当然也包含封面），而它随后会 `morphLand()` 把相位置成
+    //   `LANDING` —— 而 `LANDING` 在 `morphContainerActive()` 里算"真的在播" ⇒
+    //   下面最后那条"相位兜底"会把**壳层克隆层**也叫起来 ⇒
+    //   **快照里那张封面 + 克隆层那张封面同时飞** = 用户看到的两个封面。
+    //   ⇒ 由 `beginSnapshotShrink()` 置位期间，本函数恒假：**快照自己就是那一棒**。
+    //   ⚠️ 只在快照**成功**那一支置位（失败支退回活页形变，仍需要浮层那一棒）。
+    //   ⚠️ 会话边界由 `morphReset()` 清掉，不会残留。
+    if (this.snapshotShrinkOwned) {
+      return false;
+    }
     // ★★★ 2026-10-16（**恢复**；我上一版把它恒置 `false`，那是个错误）
     //
     // ## 为什么必须恢复：这才叫"照搬无界的封面"
@@ -3724,9 +3751,25 @@ export class PlayerExpandState {
     this.morphOverlayAnimating = false;
     // ★ 会话边界：把"本轮收起已被起过"的标记也放掉，否则下一次收起会静默跳过浮层那一棒
     this.morphOverlayCollapseOwned = false;
+    // ★ 2026-10-17：快照收缩的所有权也只在一次会话内有效
+    this.snapshotShrinkOwned = false;
     this.morphOverlayP = 0;
     Logger.info(PlayerExpandState.logTag,
       `morph overlay reset gen=${this.morphOverlayGen} overlayP=0`);
+  }
+
+  /**
+   * ★★★★ 2026-10-17：**声明"这一关是快照自己缩回去的"** ⇒ 壳层克隆层不再画封面。
+   *
+   * 调用点只有一个：`PlaybackPage.closeWithAnimation()` 的**快照成功支**（`morphLand()` 之前）。
+   * 见 {@link morphOverlayBridging} 顶部那段说明（否则会出现两张封面同时飞）。
+   */
+  public beginSnapshotShrink(): void {
+    if (this.snapshotShrinkOwned) {
+      return;
+    }
+    this.snapshotShrinkOwned = true;
+    Logger.info(PlayerExpandState.logTag, 'morph overlay off: snapshot shrink owns the cover');
   }
 
   /**

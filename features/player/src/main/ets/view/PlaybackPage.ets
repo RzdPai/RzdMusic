@@ -1976,6 +1976,10 @@ export struct PlaybackPage {
     //   `ap` = introPaintReady（整页绘制门）
     const line11: string = `ab=${this.diagAppearBranch} ap=${this.introPaintReady ? 1 : 0} ` +
       `stage=${e.morphStage} exit=${this.expandIntroRunning ? 1 : 0} bgBox=${this.diagBgBox} ` +
+      // ★ 2026-10-17：`mesh` = 网格源在不在（0 = 走兜底取样色层，那层**带 alpha**）。
+      //   判「点击播放条打开没有背景」：`mesh=0` ⇒ 是取图链没上来（看 `RzdBgRetry`）；
+      //   `mesh=1` 而屏上仍没有 ⇒ 是绘制/裁剪的事（看 `bgBox` 与 `clipH`）。
+      `mesh=${this.meshSrc !== undefined ? 1 : 0} ` +
       `lcl=${PlaybackPage.lastCloseAtMs > 0 ? (Date.now() - PlaybackPage.lastCloseAtMs).toFixed(0) : 'never'}`;
     // ★★★ 2026-10-16（**控制区自证** —— 定位用户第 1 条「有时下方几个按钮也会隐藏」）
     //   必须能分辨这三种形状（修法完全不同）：
@@ -3710,6 +3714,13 @@ export struct PlaybackPage {
         return;
       }
       this.restorePlaybackWindowChrome();
+      // ★★★★ 2026-10-17（**修用户实测「关闭时会出现两个封面」**）
+      //   快照已经拍到了封面，而下面 `morphLand()` 会把相位置成 `LANDING`
+      //   —— `LANDING` 在 `morphContainerActive()` 里算"真的在播" ⇒ 壳层克隆层会被那条
+      //   相位兜底叫起来 ⇒ **快照里那张封面 + 克隆层那张封面同时飞** = 两个封面。
+      //   ⇒ 在 `morphLand()` **之前**声明"这一关归快照"，浮层门（`morphOverlayBridging`）
+      //     随后恒假。（只在快照成功这一支声明；失败支要退回活页形变，仍需要浮层。）
+      this.expandState.beginSnapshotShrink();
       this.expandState.morphLand();
       const shrink: MorphShrinkState = this.morphShrinkState();
       shrink.start(this.getUIContext(), pixmap, srcBox, winW, winH, (): void => {
@@ -5066,6 +5077,12 @@ export struct PlaybackPage {
     }
     const song = this.state.getCurrentSongItem();
     if (!song) {
+      // ★★★ 2026-10-17（用户「点击播放条打开还是没有背景」的一条真几何可能）：
+      //   点击打开那一刻页面刚挂载，`state.getCurrentSongItem()` 可能**还没解析出来**
+      //   ⇒ 这里原来直接 `return` ⇒ 既不取色也不建网格，而且**没有任何人再来叫一次**
+      //   （同一首歌不会触发 `selectIndex`/`playQueueIds` 的 `@Monitor`）
+      //   ⇒ 这一整关都没有背景，直到用户切歌。⇒ 改成走同一条**有界重取**（最多 4 次 × 400ms）。
+      this.scheduleBackgroundRetry(jobSeq, 0);
       return;
     }
     this.releaseBackgroundCoverIfPixelMap();
@@ -5279,7 +5296,11 @@ export struct PlaybackPage {
     const old: image.PixelMap | undefined = this.meshSrc;
     // ★★★ 2026-10-17（照搬无界 `MorphGuard` 的"配色安静窗口"）：形变补间跑着的时候**不换背景**
     //   （换背景 = 整层网格重画，观感就是"动画中途背景色跳一下"）。窗口过去后自动补上最后一次。
-    if (this.colorApplyWaitOrRetry() > 0) {
+    // ★★★★ 2026-10-17（**第一张源绝不许被这道窗口推迟** —— 修用户实测「点击打开没有背景」）
+    //   `old === undefined` 表示当前**根本没有网格源**（点击打开那一刻页面刚挂载、正在解码）。
+    //   这种时候再"等安静窗口过去"就只剩兜底取样色（带 alpha ⇒ 半透明）⇒ 用户看到的是
+    //   没有背景。⇒ 第一张源**立刻提交**；只有"替换已有源"才走窗口（那才是"动画中途跳色"的场景）。
+    if (old !== undefined && this.colorApplyWaitOrRetry() > 0) {
       const dropped: image.PixelMap | undefined = this.pendingMeshPm;
       this.pendingMeshPm = pm;
       if (dropped !== undefined && dropped !== pm) {
@@ -5720,6 +5741,21 @@ export struct PlaybackPage {
           //   ⚠️ 静止态：宿主高本来就 = 窗口高 ⇒ 这一项**不影响任何像素**（回归红线）。
           .width(StyleConstants.FULL_WIDTH)
           .height(StyleConstants.FULL_HEIGHT)
+          // ★★★★ 2026-10-17（**不透明底座** —— 修用户实测「点击打开没背景」「关闭时出现两个封面」）
+          //
+          // ## 两个症状同一个根：形变期这一层是**半透明**的，后面的东西会透上来
+          //   · 网格源还没到手（点击打开那一刻正在解码）⇒ 兜底是
+          //     `state.imageColor`，而它**带 alpha**（在线歌 `rgba(20,20,22,0.5)`、
+          //     取色后 `rgba(r,g,b,0.4)`）⇒ 整页是"半透明黑"，首页/推荐卡直接透出来
+          //     ⇒ 用户看到的就是「**点击打开没有背景**」；
+          //   · 关闭时容器缩回胶囊那一路同样是半透明 ⇒ 底下迷你条自己那张封面透上来
+          //     ⇒ 用户看到的「**两个封面**：一个跟着播放器、一个正常飞回去」。
+          // ## 改法：给**宿主自己**一个恒不透明底色（网格/取样色照旧画在上面）
+          //   ⚠️ 不能加成"第二个子节点"——宿主是 `Column`，两个 100% 高的孩子会纵向排开。
+          //   ⚠️ 用 `defaultImageBgColor`（`rgba(32,32,32,1)`，本页原有的"还没有取色时的底色"），
+          //     不新造颜色、也不改 `state.imageColor` 的既有语义。
+          //   ⚠️ 静止态：网格/取样色本来就铺满 ⇒ 底色**看不见**，逐像素不变（回归红线）。
+          .backgroundColor(PlaybackPage.defaultImageBgColor)
           .position({ x: 0, y: 0 })
           .hitTestBehavior(HitTestMode.None)
           // ⛔ 2026-10-17（**不乘反缩放** —— 依据是用户给的无界中段截图）
