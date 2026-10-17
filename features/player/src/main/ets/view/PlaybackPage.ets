@@ -488,10 +488,20 @@ export struct PlaybackPage {
    */
   private miniLyricTopY(): number {
     const rowH: number = PlaybackPage.LYRIC_META_ROW_H_VP;
+    // ① 锚 = 歌名行底边 + 间距（与封面那一套同源：位置全部由 `expandState` 的量算出来，
+    //    页面里不写魔法数）。
     const metaTop: number = this.expandState.metaTopGeomY(this.lyricMorphT, rowH);
-    const wantWindowTop: number = metaTop + rowH + PlaybackPage.MINI_LYRIC_GAP_VP;
+    const target: number = metaTop + rowH + PlaybackPage.MINI_LYRIC_GAP_VP;
+    // ② 钳制：块底不许越过控制区上沿（用户实测「小歌词跑到进度条下面」就是没这一条）。
+    //    控制区上沿优先用已量到的 `chromeTopMeasured`（窗口坐标）；量不到才用估算
+    //    `estBoxHVp() + topInsetVp() + swiperGapVp()`。
+    const chromeTopWindow: number = this.chromeTopMeasured > 0 ? this.chromeTopMeasured
+      : (this.expandState.estBoxHVp() + this.expandState.topInsetVp() + this.expandState.swiperGapVp());
+    // ③ 两者都在**窗口坐标**里比，最后减页面盒顶换成页内相对位置（`position()` 要的是这个）。
+    const ceilingWindow: number = chromeTopWindow - PlaybackPage.MINI_LYRIC_BLOCK_H_VP;
     const pageTop: number = this.expandState.lyricBoxTopVp;
-    const local: number = wantWindowTop - pageTop;
+    const clamped: number = target < ceilingWindow ? target : ceilingWindow;
+    const local: number = clamped - pageTop;
     return local > 0 ? local : 0;
   }
   /** False after teardown to ignore async image callbacks. */
@@ -547,7 +557,17 @@ export struct PlaybackPage {
   private static readonly MINI_LYRIC_SINK_VP: number = 44;
 
   /** 灏忔瓕璇嶅潡 鈬?姝屽悕/姝屾墜琛?鐨勭珫鐩撮棿璺濓紙vp锛夛紝鐢ㄦ埛瑕佹眰"钀藉埌姝屾墜琛屼笅鏂?銆?*/
-  private static readonly MINI_LYRIC_GAP_VP: number = -20;
+  private static readonly MINI_LYRIC_GAP_VP: number = 8;
+  /**
+   * 小歌词块行数（当前行 + 下一行，见 `MiniLyricLinesComponent`）。
+   * ★ 2026-10-17（用户实测「小歌词位置太低、跑到进度条下面」）：下面这一组常量的唯一用途就是
+   *   "块底不许越过控制区上沿"那条钳制 —— 别再把负间距（上一轮的 `-20`）当位置微调用。
+   */
+  private static readonly MINI_LYRIC_LINES: number = 2;
+  /** 小歌词单行占位高（vp）：两行字号 15fp / 14fp，按 1.4 倍行高取整。 */
+  private static readonly MINI_LYRIC_LINE_H_VP: number = 22;
+  /** 小歌词块高（vp）= `MINI_LYRIC_LINES(2) × 22 + 行距 3 + 上边距 2`。 */
+  private static readonly MINI_LYRIC_BLOCK_H_VP: number = 49;
   /** 闁诲繐绻愮换鎴︽偤閺囩姵瀚氱€广儱鎷嬮崯鍥煕閿濆啫濡挎繛鍫熷灩缁辨帡宕熼鍜佸仺 id闂佹寧绋戦悧鍡氥亹瑜忕槐?{@link PlaybackPage.logLayoutBoxes} 闂備焦褰冪换鎴犵矈閹绢喗鍋ㄦい顓熷笧缁€澶娾槈閹惧磭孝鐎殿噮鍓氱粙澶嬫償濠靛洤搴婃繛杈剧稻濞茬喖鍩€椤掍焦顫楃紒棰濆亰閺佸秵寰勯崼姘壕?*/
   private static readonly MINI_LYRIC_BOX_ID: string = 'rzd_page0_mini_lyric_box';
 
@@ -4574,7 +4594,11 @@ export struct PlaybackPage {
                       // 闂佸疇妫勯幊澶娢?2026-10-15 闂佹椿娼块崝宥夊春濞戞埃鍋撶憴鍕孩闁汇劎鍠栭弫宥咁潩閵夈垹浜?*闂佺绻愰悧鎾凰夐敐澶婄闁靛／鍕殸闂佸搫瀚烽崹浼存儍椤掆偓椤垹鐣濋崘顏呅撻梺鍛婄矊閺堫剟寮ぐ鎺撳癄闊洦鏌ㄩ惁濠氭⒑?*闂?
                       //   闂?闁诲繐绻愮换鎴︽偤閺囩姵瀚氱€广儱鐗愬▔?*缂備焦顨忛崗娑氱博鐎靛摜纾?*闂佹眹鍔岀€氼厼顪冮崒鐐粹拻閻庨潧鎽滃畷鍫曟煥濞戞ɑ缍乪arlyRiseVp()`闂佹寧绋戦張顒€螞椤撶喓顩查幖娣灩娴犳﹢鏌涢幒鏇熺【閻忓浚鍨堕弻鍥晲閸曨収浼囩紓鍌欑鐎氬摜妲愬鑸垫櫖?
                       //   婵炲濮寸花鑲╃箔閸涙潙纭€闁搞儺浜濆畷?180vp闂佹寧绋掗惄顖氼焽閵堝拋娼伴柕蹇婃閸嬫挻鎷呮搴Ｐ㈢紓浣割槺缁垱绂?0闂佹寧绋戦惉鍏兼櫠濡ゅ懏顥堥柕蹇嬪€愰崑鎾诲箛椤掆偓閸撹偐绱掓潏鈺佇＄紒妤€顦靛畷锝呂熺化鏇炰壕?
-                      .translate({ y: this.expandState.contentRiseVp() })
+                      // ★ 2026-10-17（用户实测「小歌词位置太低 / 大小不对」）：竖直升入改走**歌名行同一个窗口**
+                      //   （`metaRiseVp()` = 0.18→0.62）。原来用的是控制区那组 `contentRiseVp()`（0.45→1.00）
+                      //   ⇒ 形变中段歌名行已经在往上飞了，小歌词还沉在下面 ~180vp ⇒ 屏上就是"压到进度条下面"。
+                      //   同一个窗口 ⇒ 小歌词与它锚定的歌名行**刚性同移**，间距全程不变，钳制也就全程成立。
+                      .translate({ y: this.expandState.metaRiseVp() })
                       // 闂佽　鍋撻柟顖滃瀹曟娊寮堕埡浣瑰窛闁宠鍚嬬粙澶愵敇閻愬弶鏆ラ柣搴℃贡椤㈠﹪锝為敃鍌氬偍閻庯綆鍋勯。鎶芥煥濞戞瀚伴柣顭戝墮椤垹鐣濋崘顏呅撴繛鏉戝悑閼归箖骞忔导鏉戠鐟滃秹宕哄Δ鍛閺夌偞澹嗛棄宥夋煟閳轰焦鎲告繛鎻掞攻閹?
                       // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-17闂佹寧绋戦悧蹇涘极閵堝绠ｉ柛鎴欏€楃粣?*闂侀潧妫楅懟顖炴儍椤掆偓椤垹鐣濋崘顏呅撻梺缁樼矋濠㈡ê锕㈤鍫濈煑婵☆垵顕ч悘鍥瑰鍐╊棞濠殿喒鏅犻幃浠嬫嚒閵堝洦灏濋梺鍝勵槺閸犲秶绮婚敐澶婅Е閹兼番鍨归·鍛存煕閹达絾顏犳鐐叉喘閺佸秶浠﹂悙顒佹瘔婵炴垶鎸撮崑鎾斥槈閹炬剚鍎滅紒?
                       //   闂佸憡鐟ラ崐浠嬪焵椤掆偓閸燁偊宕ｉ崜褉鍋撻悷鏉挎殭婵炵》绻濋獮鈧幖瀛樼箘閻ゅ嫬顪冪€ｎ剙浠滈柛娆忔婵?*闂佹寧绋戦ˇ顐﹀闯?闂侀€涘嫎閸婃洖煤閺嶃劎鈻斿┑鐘辫兌椤忛亶鏌?閻熸粏鍩囬崹纭呫亹婢舵劕瀚夐柣鏃€妞块崬銊р偓娈垮枓閸?闂佹眹鍔岀€氭澘鈻撻敐澶嬪癄闊洦绋掗敍宀勬煥?
