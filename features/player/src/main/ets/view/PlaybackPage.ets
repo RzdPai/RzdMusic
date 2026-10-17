@@ -4662,8 +4662,15 @@ export struct PlaybackPage {
                     MiniLyricLinesComponent()
                       .width(StyleConstants.FULL_WIDTH)
                       .margin({
-                        left: 4,
-                        right: 4,
+                        // ★★★ 2026-10-17（用户要求）：**小歌词左侧与歌名行左对齐**。
+                        //   上一版是硬编码 `left: 4`（自造值，与歌名行无关）；
+                        //   现与「歌名/歌手那一行」用**同一个口径**：
+                        //   歌名行（`floatingMeta`，见下方 `.padding({ left: this.lyricMetaLeftInset(), … })`）
+                        //   的左内边距就是 `lyricMetaLeftInset()` = `LYRIC_META_SIDE_VP`
+                        //   → `小封面右缘 + LYRIC_META_GAP_VP` 按 `lyricMorphT` 插值（`t=1` 时 = 小封面右缘 + gap）。
+                        //   两侧同为 `width('100%')` 的兄弟节点 ⇒ padding 与 margin 的左侧口径等价。
+                        left: this.lyricMetaLeftInset(),
+                        right: PlaybackPage.LYRIC_META_SIDE_VP,
                         // 閳藉應妲勯埥鍛 2026-10-17閿涘牏鏁ら幋鍑ょ窗閵?*鐏忓繑鐡曠拠宥嗘杹娑撳娼?*閵? 閹搭亜娴橀柌灞界暊閸樺婀灞芥倳鐞涘奔绗傞敍?
                         //   鐎瑰啯澧嶉崷銊ф畱妞?0 `Stack` 閺?`alignContent: Bottom` 閳?鏉╂瑤绔撮崸妤冩畱娑撳绔?*鐠愬娼?
                         //   swiper 閻╂帒绨虫潏?*閿涘矁鈧本鐡曢崥宥堫攽濮濓絽銈芥稊鐔锋躬闁絼绔撮弶鈥崇敨娑?閳?韫囧懐鍔ч柌宥呭綌閵?
