@@ -4689,7 +4689,14 @@ export struct PlaybackPage {
           TopAreaComponent({
             isShowPlay: this.state.isShowPlay,
             onBackClick: (): void => {
-              this.closeFullScreenPlayback();
+              // ★★★★ 2026-10-17（**照搬无界的关闭分流** —— 用户「系统返回/关闭按钮是先滑一段再飞回去」）
+              //   无界：非手势关闭（返回 / 关闭按钮）走 `closeWithAnimation()` = **拍快照缩到胶囊**，
+              //        画面根本不"滑"；**活页形变只留给下拉手势**（`onReverseMorph`）。
+              //   我们原来这里直接 `closeFullScreenPlayback()`（= 活页形变）⇒ 页面先滑一段，
+              //        再由壳层那一棒飞回去 ⇒ 就是你看到的"先滑一段，然后再飞回去"。
+              //   ⚠️ `closeWithAnimation()` 自带两级兜底（胶囊矩形/窗口尺寸不可用、快照失败）
+              //     ⇒ 都不会把播放页卡住。
+              this.closeWithAnimation();
             }
           })
             .padding({
@@ -4805,7 +4812,8 @@ export struct PlaybackPage {
         TopAreaComponent({
           isShowPlay: this.state.isShowPlay,
           onBackClick: (): void => {
-            this.closeFullScreenPlayback();
+            // ★ 同上（照搬无界：非手势关闭 = 快照收缩，不是活页形变）
+            this.closeWithAnimation();
           }
         })
           .padding({
