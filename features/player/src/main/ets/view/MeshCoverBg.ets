@@ -344,10 +344,22 @@ export struct MeshCoverBg {
         .width(HIT_FULL)
         .height(HIT_FULL)
         .onAreaChange((_oldArea: Area, newArea: Area): void => {
-          // ★ 2026-10-17：`fixedHVp > 0` 时**画布高度**用固定值（见 `fixedHVp` 的注释）——
-          //   布局尺寸照旧跟着宿主 100%，只有网格的生成尺寸被钉住。
-          const h: number = this.fixedHVp > 0 ? this.fixedHVp : Number(newArea.height);
-          this.controller.resize(Number(newArea.width), h);
+          // ★★★★ 2026-10-17（**单位必须是 px** —— 修「形变过程中背景不画/只画一角」）
+          //
+          // `RenderNode.frame` 的 `x/y/width/height` **单位是物理像素 px**（不是 vp）。
+          // 而 `Area.width/height` 给的是 **vp** ⇒ 直接把 vp 当 px 用，在 3x 屏上就等于
+          // **把画布缩到 1/3 并钉在左上角**（或让底层 Surface 因尺寸不匹配而拒绝绘制）。
+          // 形变期那个盒子本来就只有几十~几百 vp（裁剪窗口），再缩成 1/3 ⇒ 画出来的东西
+          // 整块落在裁剪窗口之外 ⇒ 屏上只剩底下的底座色 = 用户看到的「动画过程没有背景、
+          // 动画一结束就恢复」。
+          // ⇒ 这里显式做 `vp2px`。（上游 `wujie` 也是直接传 vp —— 这属于照搬过来的**上游
+          //   单位 bug**；外部复核 `gemini-4-argon-thinking` 与官方文档都说 `frame` 是 px。）
+          // ⚠️ 反过来说，即便某台机器把 frame 当 vp 解释，这里放大 3 倍也只是"画得比区域大"
+          //   （多出来的被祖先 `.clip(true)` 裁掉）⇒ **两种解释下都不会黑**，所以这个改动是安全的。
+          const ui: UIContext = this.getUIContext();
+          const wVp: number = Number(newArea.width);
+          const hVp: number = this.fixedHVp > 0 ? this.fixedHVp : Number(newArea.height);
+          this.controller.resize(ui.vp2px(wVp), ui.vp2px(hVp));
         })
 
       if (this.scrim) {

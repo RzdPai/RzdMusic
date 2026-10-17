@@ -2225,6 +2225,26 @@ export struct PlaybackPage {
     if (!this.expandState.morphContainerActive()) {
       return 1;
     }
+    // ★★★★ 2026-10-17（**补间驱动的形变不许走跟手那条淡入** —— 修用户实测
+    //   「在播放的时候关闭，背景也会变成黑色」）
+    //
+    // ## 为什么补间路会黑
+    //   `pullBgIn = clamp(morphP / 0.30)` 是**跟手**那条公式：它假设 `morphP` 跟着手指连续变化。
+    //   而补间路（点击打开 / 点击关闭 / 系统返回）的闭包里是 `applyMorphProgress(0|1)`
+    //   —— **目标值一次性写进去**，`morphP` 立刻变成 0 或 1：
+    // ```
+    //   关闭：morphP = 0 ⇒ pullBgIn = 0 ⇒ 不透明度 = PULL_BG_FLOOR = 0.04
+    //        ⇒ 整个关闭动画期间背景层**几乎全透明** ⇒ 屏上只剩不透明底座 = 用户看到的"黑"
+    //   打开：morphP = 1 ⇒ 1（这一支本来没问题）
+    // ```
+    //   ⇒ 跟手那条公式只对 `MorphDrive.FINGER` 有意义；**补间路恒 1**。
+    //   ⚠️ 这与上游一致：无界的 `effT` 在非跟手场景就是 1（`effT = 形变中 ? morphT : 1`
+    //     那条只在 `pullMode` 成立时有意义），它的非手势关闭走**快照**、根本不画活页背景。
+    //   ⚠️ 静止态与手指跟手**一个像素都没改**（`morphContainerActive()` 假 ⇒ 1；
+    //     `FINGER` 仍走原公式）。
+    if (this.expandState.morphDrive !== MorphDrive.FINGER) {
+      return 1;
+    }
     return PlaybackPage.PULL_BG_FLOOR + this.pullBgIn() * (1 - PlaybackPage.PULL_BG_FLOOR);
   }
 
@@ -5293,6 +5313,24 @@ export struct PlaybackPage {
    *    `MeshCoverBg` 的 `@Monitor` 监听的是**版本号**（`PixelMap` 原地改内容不会触发刷新）。
    */
   /**
+   * ★★★★ 2026-10-17（**背景为什么"动画过程没有、结束就有"** —— 本轮定案的三条机制）
+   *
+   * 1. **`RenderNode.frame` 的单位是 px**，而我们（以及上游 `wujie`）一直把 `onAreaChange`
+   *    给的 **vp** 直接填进去 ⇒ 3x 屏上画布只有区域的 1/3 且钉在左上角 ⇒ 形变期那个小盒子里
+   *    根本看不到网格、只剩底座色 = "黑"。已改为显式 `vp2px`（见 `MeshCoverBg`）。
+   * 2. **网格层原来用 `if (meshSrc !== undefined)` 挂载**：点击打开时网格源几十~几百 ms 后才到，
+   *    `MeshCoverBg` 于是在**形变进行到一半**才第一次挂载；`NodeContainer` 在祖先正被
+   *    `animateTo` 补间（`height`/`clip` 每帧变）的期间首次挂载时，自绘内容要等补间收尾后的
+   *    强刷才被合成 ⇒ 整段动画空着。已改为**常驻挂载**（只有 `src` 在变）。
+   * 3. **补间路的背景不透明度**：`pullBgIn = clamp(morphP/0.30)` 是**跟手**公式，而补间闭包里
+   *    `morphP` 一次性被写成 0 ⇒ 关闭动画全程只有 0.04 ⇒ "关闭时背景变黑"。
+   *    已改为：`morphDrive !== FINGER` 时恒 1（见 `backgroundRevealOpacity()`）。
+   *
+   * ⚠️ 还有一条**没做**的优化（只在"点开第一帧"更快上有意义）：跨页面缓存上一关的网格源。
+   *   现在挂载那一刻先发一张**兜底色块**（`publishFallbackMesh`），几十 ms 内就有网格。
+   */
+
+  /**
    * ★★★★ 2026-10-17（**兜底网格** —— 照搬无界 `MeshCoverBg.makeFallback()` +
    *   `MeshSource.fillFallback()`，修用户实测「未播放时点击打开背景始终是黑色」）
    *
@@ -5793,51 +5831,55 @@ export struct PlaybackPage {
           // ⚠️ 位置：容器 `Column` 的**第一个孩子**（背景在下、内容在上），
           //   `.position({x:0,y:0})` 覆盖整个容器 ⇒ 不参与纵向排布（否则会把内容挤下去）。
           Column() {
-            if (this.meshSrc !== undefined) {
-              MeshCoverBg({
-                src: this.meshSrc,
-                srcVersion: this.meshSrcVersion,
-                playing: this.state.isPlay,
-                active: this.state.isShowPlay,
-                // ★★★★ 2026-10-17（**一律不走 400ms 入场淡入** —— 修「点击打开背景是黑的」）
-                //   无界那 400ms 淡入是"从无到有第一次出现"用的；我们这一层在形变容器里、
-                //   而且整层的不透明度**已经**由 `backgroundRevealOpacity()` 管着 ⇒
-                //   再叠一条 `.transition(OPACITY.animation(400))` 就是**两个源管同一个不透明度**。
-                //   实测后果：`if` 那一帧若没有动画上下文，transition 会停在 opacity 0
-                //   ⇒ 网格明明在画，屏上却什么都没有（用户看到的"黑"）。
-                //   ⇒ 恒定 `false`（上游那条 `entryFade = !pullMode || effT() >= 1` 的语义
-                //     在这里由 `backgroundRevealOpacity()` 独自承担）。
-                entryFade: false,
-                // ⛔ 2026-10-17（**退回 0 = 画布跟着宿主实测尺寸** —— 用户实测的回归）
-                //   上一版传 `windowHeightVp` 想把画布钉住（治"压扁→拉伸"），
-                //   结果用户报「**点击播放动画过程还是没背景**，动画结束后才有」：
-                //   `fixedHVp > 0` 时 `RenderNode.frame` **比它所在的那个盒子高**，
-                //   而形变期那个盒子就是裁剪窗口（几十~几百 vp）⇒ 超出父盒的绘制被整块剔除
-                //   ⇒ **形变期什么都不画**；落位后两者相等 ⇒ 又正常。
-                //   ⇒ 可见性优先：传 0，让画布永远等于宿主盒子（= 一直能画出来）。
-                //   ⚠️ 代价是形变期网格会随裁剪窗口一起压/拉（用户早前抱怨过的那条）。
-                //     要同时满足"画得出"+"不压扁"，得换别的机制（例如把背景移到蒙版之外由壳层裁剪），
-                //     不要再用"画布比盒子大"这种写法。
-                fixedHVp: 0
+            // ★★★★ 2026-10-17（**网格层常驻，不再用 `if` 在形变中途挂载** ——
+            //   修用户实测「点击打开：动画过程没背景、动画结束就有」）
+            //
+            // ## 为什么"条件挂载"会漏掉整段动画
+            //   点击打开时页面刚挂载、`meshSrc` 还是 undefined ⇒ `if` 走兜底分支；
+            //   等网格源到手（几十~几百 ms 后）`if` 才翻真 ⇒ **`MeshCoverBg` 在形变进行到一半时
+            //   才第一次挂载**。而 `NodeContainer` + `RenderNode` 在祖先正被 `animateTo`
+            //   补间（`height`/`clip` 每帧在变）的期间首次挂载时，自绘内容要等补间收尾、
+            //   整棵树强刷那一帧才被合成出来（外部复核 `gemini-4-argon-thinking` 第 1 条：
+            //   "含 `NodeContainer` 的节点在补间期间不要动态改 `height`/重度 `clip`，
+            //    否则可能整块不参与合成"）⇒ 屏上整段动画都是空的。
+            //   ⇒ 现在**常驻**：从页面挂载那一刻就存在（形变开始之前），只有 `src` 在变。
+            //     显隐/淡入仍然只由 `backgroundRevealOpacity()` 管。
+            //   ⚠️ 兜底的"取样色"不再是一层兄弟节点（`Column` 里两个 100% 孩子会纵向排开），
+            //     它的职责已经由**宿主自己的 `.backgroundColor`**（不透明底座）承担。
+            MeshCoverBg({
+              src: this.meshSrc,
+              srcVersion: this.meshSrcVersion,
+              playing: this.state.isPlay,
+              active: this.state.isShowPlay,
+              // ★★★★ 2026-10-17（**一律不走 400ms 入场淡入** —— 修「点击打开背景是黑的」）
+              //   无界那 400ms 淡入是"从无到有第一次出现"用的；我们这一层在形变容器里、
+              //   而且整层的不透明度**已经**由 `backgroundRevealOpacity()` 管着 ⇒
+              //   再叠一条 `.transition(OPACITY.animation(400))` 就是**两个源管同一个不透明度**。
+              //   实测后果：`if` 那一帧若没有动画上下文，transition 会停在 opacity 0
+              //   ⇒ 网格明明在画，屏上却什么都没有（用户看到的"黑"）。
+              //   ⇒ 恒定 `false`（上游那条 `entryFade = !pullMode || effT() >= 1` 的语义
+              //     在这里由 `backgroundRevealOpacity()` 独自承担）。
+              entryFade: false,
+              // ⛔ 2026-10-17（**退回 0 = 画布跟着宿主实测尺寸** —— 用户实测的回归）
+              //   上一版传 `windowHeightVp` 想把画布钉住（治"压扁→拉伸"），
+              //   结果用户报「**点击播放动画过程还是没背景**，动画结束后才有」：
+              //   `fixedHVp > 0` 时 `RenderNode.frame` **比它所在的那个盒子高**，
+              //   而形变期那个盒子就是裁剪窗口（几十~几百 vp）⇒ 超出父盒的绘制被整块剔除
+              //   ⇒ **形变期什么都不画**；落位后两者相等 ⇒ 又正常。
+              //   ⇒ 可见性优先：传 0，让画布永远等于宿主盒子（= 一直能画出来）。
+              //   ⚠️ 代价是形变期网格会随裁剪窗口一起压/拉（用户早前抱怨过的那条）。
+              //     要同时满足"画得出"+"不压扁"，得换别的机制（例如把背景移到蒙版之外由壳层裁剪），
+              //     不要再用"画布比盒子大"这种写法。
+              fixedHVp: 0
+            })
+              .id(PlaybackPage.MESH_BG_ID)
+              .width(StyleConstants.FULL_WIDTH)
+              .height(StyleConstants.FULL_HEIGHT)
+              .opacity(this.backgroundRevealOpacity())
+              .hitTestBehavior(HitTestMode.None)
+              .onAreaChange((): void => {
+                this.logBgLayer();
               })
-                .id(PlaybackPage.MESH_BG_ID)
-                .width(StyleConstants.FULL_WIDTH)
-                .height(StyleConstants.FULL_HEIGHT)
-                .opacity(this.backgroundRevealOpacity())
-                .hitTestBehavior(HitTestMode.None)
-                .onAreaChange((): void => {
-                  this.logBgLayer();
-                })
-            } else {
-              // 网格源缺席（换歌那一瞬 / 取图失败）时的兜底：**纯取样色**，不再退成一张封面图
-              //（否则会出现"同一张封面在屏上两次"，见历史记录）。
-              Column()
-                .width(StyleConstants.FULL_WIDTH)
-                .height(StyleConstants.FULL_HEIGHT)
-                .backgroundColor(this.state.imageColor)
-                .opacity(this.backgroundRevealOpacity())
-                .hitTestBehavior(HitTestMode.None)
-            }
           }
           // ★★★★ 2026-10-17（**背景宿主一律 100%；"固定尺寸"只给网格画布，不给布局**）
           //
@@ -5852,12 +5894,11 @@ export struct PlaybackPage {
           // ## 真正要修的是"网格每次重排"（= 压扁→拉伸），那件事发生在**画布**上
           //   `NodeContainer.onAreaChange → controller.resize(w,h) → field.update(w,h)`
           //   ⇒ 谁的盒子在变，网格就按谁的比例重建顶点并重采样。
-          //   ⇒ 现在把这**一个数**（`MeshCoverBg.fixedHVp = windowHeightVp`）钉住：
-          //     · 布局、绘制、裁剪一切照旧（100% ⇒ 不可能消失）；
-          //     · 网格永远按**整窗比例**生成，不随 `morphClipHeight()` 每帧重算
-          //       ⇒ 卡片长大 = **揭开更多背景**（= 无界「只显示上面那一块内容」），
-          //         不再"压扁再拉伸"。
-          //   ⚠️ 静止态：宿主高本来就 = 窗口高 ⇒ 这一项**不影响任何像素**（回归红线）。
+          //   ⚠️ **2026-10-17 现状：`fixedHVp` 已退回 0**（画布跟着宿主盒子）。
+          //     曾试过把它钉成 `windowHeightVp` 治"压扁"，但**画布比盒子大 ⇒ 整块剔除**
+          //     ⇒ 形变期什么都不画（用户实测两次）。可见性优先，压扁那条先留着。
+          //     要同时满足，得把背景**移出形变容器**（外部复核建议的方案 A：背景层与容器同级、
+          //     自己用 `clip` + `scale/translate` 跟随），不是调尺寸能解决的。
           .width(StyleConstants.FULL_WIDTH)
           .height(StyleConstants.FULL_HEIGHT)
           // ★★★★ 2026-10-17（**不透明底座** —— 修用户实测「点击打开没背景」「关闭时出现两个封面」）
