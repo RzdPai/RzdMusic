@@ -2477,6 +2477,15 @@ export class PlayerExpandState {
   private initTranslateY: number = 0;
   /** 起点的**可视**圆角 = `initClipHeight * initScale / 2`（= 胶囊高度的一半）。 */
   private initRadiusVisual: number = 0;
+
+  /**
+   * 形变容器圆角在 **t = 1** 那一端的**可视值**（vp）—— 照抄无界 `doEnter` 补间的 radius 端点。
+   *
+   * 出处：`wujie.pa` 的 `ExpandAnimation.doEnter` 里那条主几何补间，`radius` 端点是 `34`；
+   * 补间跑完由 `λ1onFinish` 把 `radius` **归 0**（见 `morphSettleOpen()`）。
+   * ⚠️ 它不是"落定态圆角"（落定恒 0），只是**补间终点**。
+   */
+  private static readonly MORPH_RADIUS_END_VP: number = 34;
   /** 迷你条胶囊的原始上报值（vp，**窗口坐标**；宽高为 0 表示没量到）。 */
   @Trace public barWinX: number = 0;
   @Trace public barWinY: number = 0;
@@ -4196,7 +4205,17 @@ export class PlayerExpandState {
     const clipHeight: number = this.initClipHeight + (this.morphBoxH - this.initClipHeight) * t;
     // 圆角：`radius = (initClipHeight*initScale/2 + delta*t) / scaleValue`，
     // 起点可视圆角 = 胶囊高度的一半（= 迷你条胶囊的圆角），终点 0。
-    const visualRadius: number = this.initRadiusVisual * (1 - t);
+    // ★★★★ 2026-10-17（**照搬无界 `visualRadiusAt`** —— 用户点名「圆角啥的都不一样」）
+    // ```
+    //   无界：visualRadius = lerp(vp(miniCover.width)/2, 目标圆角绝对值 34, t)   // 两端点 lerp
+    //         然后 radius = visualRadius / scale                              // wujie.pa:85604-85613
+    //         收尾 λ1onFinish 再把 radius 归 0                                 // 落定 = 0 圆角
+    //   我们原来：visualRadius = initRadiusVisual * (1 - t)   ← 直线往 0 收，中段比上游小
+    // ```
+    // ⇒ 改成**两端点 lerp**（起点 = 胶囊高/2，终点 = 上游的 34），收尾归 0 见 `morphSettleOpen()`。
+    //   ⚠️ 起点的 34 是**上游常量**（`wujie.pa` 里 `doEnter` 那条补间的 radius 端点），不是我们拍的数。
+    const visualRadius: number = this.lerp(this.initRadiusVisual,
+      PlayerExpandState.MORPH_RADIUS_END_VP, t);
     this.morphScale = scale;
     this.morphClipHeight = Math.max(1, clipHeight);
     this.morphTx = this.initTranslateX * (1 - t);
@@ -4332,6 +4351,10 @@ export class PlayerExpandState {
     this.morphStage = MorphStage.OPEN;
     this.morphDrive = MorphDrive.NONE;
     this.applyMorphProgress(1);
+    // ★★★ 2026-10-17（**照搬无界 `λ1onFinish`**）：补间跑到 1 时圆角端点还是 34，
+    //   由 onFinish 把它**归 0** —— 上游那两行就是 `radius = 0`（`overlayColor` 同时归透明）。
+    //   不归 0 的话，落定后屏上会留 34vp 大圆角（= 用户以前报过的"圆角不一样"）。
+    this.morphRadius = 0;
     if (this.metaBridgeActive) {
       this.logMetaFont(false, 'complete');
       this.logMetaFont(true, 'complete');
