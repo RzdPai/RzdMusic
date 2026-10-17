@@ -1461,7 +1461,7 @@ export struct PlaybackPage {
    * @param index 閻熸粎澧楅幐鍛婃櫠閻樼偨浜滅痪鏉款槺缁€? = 闁诲繐绻嬬欢姘焽閻楀牄浜滅痪鏉款槺缁€? = 濠殿喗绻傞惌渚€鎯佸┑鍥ヤ簻缁炬澘顦辩粈?
    * @param position 闂佸憡鍔曢幊搴敊閹扮増鍎庣紒瀣儥閸ょ姴鈽夐幘瀛橆潡闂佹媽浜幐褎顦版惔鈥插寲闂佹眹鍔岀€氼喕绨洪梺鍛婃煟閸斿秹鎯侀鐣岀懝閻庯絽澧庣粈鍕倵鐟欏媶鎴﹀蓟?SDK 闂佸憡顭囬崰鎰板几閸愵喗鏅?
    */
-  private onSwiperContentDidScroll(index: number, position: number): void {
+  private onSwiperContentDidScroll(selectedIndex: number, index: number, position: number): void {
     this.diagScrollCount = this.diagScrollCount + 1;
     this.diagScrollLast = `${index}/${position.toFixed(3)}`;
     // 闂佸啿鍘滈崑鎾绘煃閸忓浜?闂備緡鍋呴崝鏍ь焽椤栫偞鍋傜憸搴繆闁秴绫嶉柣妯虹仛濞呮洟鏌ｉ妸銉ヮ仼缂傚秴锕ョ粙澶愬焵椤掑嫬绀?闂佸啿鍘滈崑鎾绘煃閸忓浜?
@@ -1478,8 +1478,11 @@ export struct PlaybackPage {
     // 闁荤姳鐒︽刊鑺ュ緞?濠电姴锕ラ懝鐐叏閳哄倻顩风€广儱鎳忛煬顒勫级閳哄倻顬兼い?闂佹寧绋戦悧鎰帮綖?`lastScrollAtMs` 闂佹眹鍔岀€氼參寮悙鐑樼厒濠电姴绻掔粣妤呮煢閳ь剟鎸婃径灞炬瘞闂婎偄娲ら幊姗€濡磋箛鏇熷闁宠　鍋撶紓宥呮噽缁辨帒鈻庨幘顖氫壕闁归偊鍓氭慨搴ㄥ级閳哄倻鈽夐悗瑙勫▕閺?
     this.lastScrollAtMs = Date.now();
     // 缂備椒绌堕崹鍦閳哄啯濯奸柟宄拌嫰椤︹晠鏌ㄥ☉妯荤秮onContentDidScroll` 闂備緡鍋呴崝鏇㈠箮濮樿埖鐒鹃柣锝呯灱閼?`index`闂佹寧绋戦張顒勬儊?`onChange` 闂佸搫娲﹀娆掋亹閺屻儲顥堥柣娆忔噽缁€?
-    if (index !== this.playbackSwiperIndex) {
-      this.playbackSwiperIndex = index;
+    // 只认 selectedIndex（"选中的那一页"）：index 是对视口内每一页逐帧回调的，
+    // 落位后最后一帧可能是页 0 => 索引被写回 0 => canHideLyricChrome() 为 false => 控制区永不收起。
+    if (selectedIndex !== this.playbackSwiperIndex) {
+      Logger.info('RzdLyricChrome', `page from scroll sel=${selectedIndex} raw=${index}`);
+      this.playbackSwiperIndex = selectedIndex;
     }
     // 闂傚倸鐗婇悷锕傤敆濞戞氨鍗氭い鏍ㄧ矊娴狀垶鏌涜箛鏃傜煀缂併劍濞婇弫宥咁潩閾忣偆銆婇柡?0.5 婵炴垶鏌ㄩ鍛村箖濡ゅ懎绠?`t` 闂佽В鍋撻柦妯侯槺閺嗕即鏌涢幒鎾寸凡缂傚秴顑夊畷婊冾吋婢跺牃鍋撴径灞稿亾閻㈠灚鍤€缂併劍鐓￠幆鍐礋椤撗傜磽闂?
     // 闂佹寧绋戝濉粂ncLyricMorphToPage()` 闂佸憡鍔曢幊姗€宕曢幘顔惧祦闁稿本绮庨幖濂告煥濞戞ê顨欑紒妤佺墬椤︿即鎮欐０婵囨杸婵炴垶鎼╅崢铏圭箔婢跺顕辨慨姗嗗幖閳敻鏌￠崒銈呭绩閽樼喖姊婚崒婵囧涧缂?
@@ -2328,6 +2331,12 @@ export struct PlaybackPage {
     this.chromeTimerId = setTimeout((): void => {
       this.chromeTimerId = -1;
       if (!this.isAlive || this.chromeCollapsed || !this.canHideLyricChrome() || !this.state.isPlay) {
+        // 5s 到点却什么都没发生 = 命中这条 bail；把判据一次打全，真机 grep RzdLyricChrome 即可判读。
+        Logger.info('RzdLyricChrome',
+          `hide auto bail cc=${this.chromeCollapsed ? 1 : 0} ` +
+          `canHide=${this.canHideLyricChrome() ? 1 : 0} ` +
+          `play=${this.state.isPlay ? 1 : 0} sw=${this.playbackSwiperIndex} ` +
+          `pend=${this.lyricChromeMeasurePending ? 1 : 0} chH=${this.lyricChromeHeight.toFixed(1)}`);
         return;
       }
       // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-17闂佹寧绋戦悧蹇涘矗鎼淬劌绠规い鎺嶇劍閿熴儵鏌?`hideChrome()` 闂?闂傚倸鐗勯崹鍝勵熆濡警鍤曢柍褜鍓熼幆鍫ュ焵椤掑倷鐒婇柛娆愵焽閻熸繈鏌￠埀?闂佹寧绋戦悾鐠c.txt:4124-4225`闂佹寧绋戦¨鈧紒?
@@ -4725,9 +4734,9 @@ export struct PlaybackPage {
               //   `lyricMorphT` 闁诲繐绻楁ご绋课ｉ幖浣稿珘妞ゆ垼娉曞▔銏ゆ煟?`swiperProgress` 缂備焦绋戦ˇ顕€鎮抽鐐村亱闁冲搫顑囩粈? = 闁诲繐绻嬬欢姘焽閻楀牄浜滈柣銏☆問娴?/ 1 = 濠殿喗绻傞惌渚€鎯佸┑鍥ヤ簻闁汇垺顔栨导鍌炴煥濞戞﹩妾х紒?
               //   闂佸湱顣介崑鎾趁归悩顔煎姢婵炴彃娼￠獮鎺楀Ψ閿曗偓鎯熼悷婊呭鐢﹦绮╅幘顔肩闁哄诞鍕偓鐢告煟?`p` 闂佸摜濮撮崐鑽ゅ垝閹殿喒鍋撻悷鏉挎灕缂侀亶浜跺畷妯侯吋閸ャ劍娈?`syncLyricMorphToPage()` 闁荤姵鍔楅崰鏇㈡儗?
               //   "闂佸搫鐗冮崑鎾剁磽娴ｅ摜澧︽繛绗哄€曢～銏ゅ閵忊晙绱撻梺缁樺姉閹虫挾鎹㈤埀顒€顪冮妶鍫濆惞闁烩剝鍨剁粋宥嗘償閿涘嫮歇闂佸憡鎸哥粔褰掑Υ婢跺备鍋撻悽鍨殌缂併劍鐓￠幆鍐礋椤撗傜磽闂?闂佹寧绋戦悧鎰枖閺囩喐浜?0.5 闂佸搫鍟崕鑹版＂婵炴垶鎸撮崑鎾寸箾閸″繑顫夌紒杈ㄥ哺婵?
-              .onContentDidScroll((_selectedIndex: number, index: number,
+              .onContentDidScroll((selectedIndex: number, index: number,
                 position: number, _mainAxisLength: number): void => {
-                this.onSwiperContentDidScroll(index, position);
+                this.onSwiperContentDidScroll(selectedIndex, index, position);
               })
               // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-17闂佹寧绋戦悧蹇涘矗鎼淬劌绠规い鎺嶇劍閿熴儵鏌?`onLyricInteract` 闂佺偨鍎查弻锟犲焵?濠殿喗绻傞惌渚€鎯佸┑瀣?*闁荤喐鐟遍梽鍕箠?*闁诲繐绻樻禍鍫曞闯閸濄儳纾炬い鏃堟暜閺佸嫰姊婚崒婵嗚敿妞ゆ挻鎮傚顔炬媼閸︻厾顦?
               //
