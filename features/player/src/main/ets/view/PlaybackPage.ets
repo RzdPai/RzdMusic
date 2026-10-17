@@ -4515,7 +4515,7 @@ export struct PlaybackPage {
                       // 閳藉應妲?2026-10-15 閻劍鍩涚€规俺鐨熼敍姘モ偓?*閸忓牓顥ｉ崗銉ф畱閺勵垰鐨宀冪槤閸滃本鏁归挊蹇斿瘻闁?*閵?
                       //   閳?鐏忓繑鐡曠拠宥堣泲**缁楊兛绔寸紒?*閻ㄥ嫭妞傞梻瀵哥崶閿涘潉earlyRiseVp()`閿涘本妫禍搴㈠付閸掕泛灏柇锝勭缂佸嫸绱氶敍?
                       //   娴犲簼绗呴崡鍥崳 180vp閿涙盯娼ゅ銏♀偓浣风秴缁夌粯浜?0閿涘瞼澧楅棃銏も偓鎰剼缁辩姳绗夐崣妯糕偓?
-                      .translate({ y: this.expandState.earlyRiseVp() })
+                      .translate({ y: this.expandState.contentRiseVp() })
                       // 閺€鎯版崳鏉╁洨鈻兼稉顓炲敶鐎圭顫﹂崢瀣閿涘苯鐨宀冪槤娴兼艾鎷伴幒褍鍩楅崠杞扮鞍閻╁摜娲婃担?
                       // 閳藉應妲勯埥?2026-10-17閿涘牏鏁ら幋鍑ょ窗**閵嗗苯鐨宀冪槤閻滄澘婀崣妯诲灇娴滃棗濮╅悽鑽ょ波閺夌喍绠ｉ崥搴㈠閸戣櫣骞囬敍灞炬暭娑撯偓娑撳绱?
                       //   閸欏倽鈧啫鍙剧€瑰啫娼￠幀搴濈疄妞嬬偛鍙嗛妴?*閿涘鍣?閹俱倕娲栨稉濠佺閻?瑜般垹褰夐張鐔活唨瀵偓"閻ㄥ嫰娈ｉ挊蹇涙，閿?
@@ -6797,7 +6797,7 @@ export struct PlaybackPage {
               .fontSize(this.metaTitleFp())
               .fontWeight(FontWeight.Bold)
               .fontColor($r('app.color.play_text_color'))
-              .opacity(0.86)
+              .opacity(1)
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
               .textAlign(TextAlign.Start)

@@ -1637,7 +1637,14 @@ struct Index {
     //     `openPlayer=false` / `PlaybackIntentState.openPlayerUi=false`），
     //     而能开到播放页的入口（底栏迷你条点击、系统媒体控制）在本页也不存在/不形变。
     if (this.navDepth <= 0) {
-      if (this.tabState.tabIndex === NOW_PLAYING_TAB_INDEX) {
+      if (this.tabState.tabIndex === NOW_PLAYING_TAB_INDEX || this.navDepth > 0) {
+        // ★★★★ 2026-10-17（**修用户实测「二级页面会出现两个播放条」**）
+        //   原来这里只判 `tabIndex === 正在播放`，**没判 `navDepth`** —— 二级页在栈上时，
+        //   二级页自己那条官方浮动栏（`floatingMiniBar`）已经在画，首页这条又没卸载
+        //   ⇒ 屏上两条播放条。本文件 L1617 的注释早就写明这条不变量
+        //   「⚠️ 二级页面在栈上时不渲染（`navDepth > 0`）」—— 代码没跟上。
+        //   ⇒ 补上 `navDepth > 0`：二级页在栈上时这一条同样给 0 高（**不卸载**，
+        //     保住 `MINI_BAR_ID` 仍在树上，形变起点还能量得到）。
         // ★★ 这一页**显式给 0 高**（而不是"整个 builder 不渲染"）：
         //   官方《设置页签栏的悬浮样式》原文——迷你栏是自定义区域，**跟页签栏高度相等且水平对齐**；
         //   本工程用 `barLayoutMode = VERTICAL` 把它改成上下两排，而 HDS 在那一档是**按内容量高**的

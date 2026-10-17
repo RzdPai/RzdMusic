@@ -28,6 +28,12 @@ import { HomeMiniBarPlayerAside } from './HomeMiniBarPlayerAside';
  */
 @ComponentV2
 export struct HomeMiniBarPlayer {
+  /**
+   * 胶囊整体离屏幕左右的让位（vp）—— 无界 `topPageSideOf()` 的手机档 **16**。
+   * 出处：归档 `_recover/logic-src/设计常量全解算.md`（`topPageSideOf = 16 / 24 / 32` 按宽度断点，
+   * 手机档 16）。**这是原值**，不是我拍的数。
+   */
+  private static readonly MINI_BAR_SIDE_VP: number = 16;
   /** Player VM shared with cover and aside. */
   @Local playerViewModel: PlayerViewModel = new PlayerViewModel();
   /** Global music UI state (mini bar expanded, play state). */
@@ -282,6 +288,14 @@ export struct HomeMiniBarPlayer {
     //   'StackAttribute'`，ArkTS 报错码 10505001）。
     .alignContent(Alignment.Center)
     .width(StyleConstants.FULL_WIDTH)
+    // ★★★★ 2026-10-17（**胶囊离屏幕左右边太近 → 往中间收** —— 用户第 4 条，照无界）
+    //   无界那条胶囊本身写死 `width('100%')`，宽度差来自**它的父容器**：
+    //   页面级左右让位 `topPageSideOf()` = 手机 **16vp**（归档 `设计常量全解算.md`：
+    //   `topPageSideOf = 16 / 24 / 32` 按宽度断点，手机档是 16 —— **就是原值，不是估的**）。
+    //   我们这条容器原来是**通栏**（左右 0），所以封面/按钮贴着屏幕边 ⇒ 观感"太近"。
+    //   ⇒ 在这一层加左右各 16vp 的内边距（背板与内容一起收进来，胶囊整体变窄居中）。
+    //   ⚠️ 只加**横向**内边距；上下仍由外层负责（不动高度 ⇒ 形变起点几何只变宽、不变高）。
+    .padding({ left: HomeMiniBarPlayer.MINI_BAR_SIDE_VP, right: HomeMiniBarPlayer.MINI_BAR_SIDE_VP })
     // ★ 展开形变的**起点矩形**就是这条胶囊：给个 id 让 `getFrameNodeById` 量它
     // （`onAreaChange` 给的是布局几何、不含祖先 transform，量出来的起点会偏）
     .id(MINI_BAR_ID)
