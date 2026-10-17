@@ -2153,6 +2153,30 @@ export struct PlaybackPage {
     return PlaybackPage.PULL_BG_FLOOR + this.pullBgIn() * (1 - PlaybackPage.PULL_BG_FLOOR);
   }
 
+  /**
+   * @returns 背景层的**反缩放** = `1 / morphScale`（抵消形变容器的等比缩放）。
+   *
+   * 出处/理由见页面里背景层那道 `.scale({...})` 的注释：
+   * 背景在形变容器内部，会跟着容器被压到 `morphScale`（p=0 时 ≈ 0.082）⇒ 观感是"压扁再展开"。
+   * 乘一个 `1/morphScale` 之后，背景在屏上**始终满尺寸**，由外层的 `.clip` + 增长中的窗口**从下往上揭开**
+   * —— 这才是无界那条形状。
+   *
+   * ⚠️ 三道护栏：
+   *   · 静止态 `morphScale = 1` ⇒ 返回 1 ⇒ **逐像素不变**（回归红线）；
+   *   · `morphScale` 过小（< 0.02）时不做补偿（1/0.02 = 50 倍会把背景放大到离谱）；
+   *   · 非数字/非正值一律返回 1，宁可压扁也不画出空白。
+   */
+  private bgInverseScale(): number {
+    if (!this.expandState.morphContainerActive()) {
+      return 1;
+    }
+    const s: number = this.expandState.morphScale;
+    if (!Number.isFinite(s) || s <= 0.02 || s >= 1) {
+      return 1;
+    }
+    return 1 / s;
+  }
+
   /** 无界 `PULL_BG_FLOOR`（`wujie.pa:179978-179979`，`fldai 4.0e-2`）。 */
   private static readonly PULL_BG_FLOOR: number = 0.04;
 
@@ -5612,6 +5636,27 @@ export struct PlaybackPage {
           .height(StyleConstants.FULL_HEIGHT)
           .position({ x: 0, y: 0 })
           .hitTestBehavior(HitTestMode.None)
+          // ★★★★ 2026-10-17（用户：「现在背景是**从压扁的状态展开**」—— 修成无界那样"从下往上揭开"）
+          //
+          // ## 为什么会压扁
+          //   背景层在**形变容器内部**，而容器的 `.scale(morphScale)` 在 p=0 时约 **0.082**
+          //   ⇒ 背景（网格）被等比压到 8% 再撑开 ⇒ 观感就是"压扁 → 展开"。
+          //   无界不是这样：它的背景是**满尺寸**的，只是被**裁剪窗口**从下往上揭开。
+          //
+          // ## 照搬做法
+          //   给背景这一层乘一个**反缩放** `1 / morphScale` ⇒ 与容器的 `morphScale` 抵消
+          //   ⇒ 背景在屏上**始终是满尺寸**，再由外层容器的 `.clip` + 增长的窗口去"揭开"它。
+          //   · `centerY: '100%'`：反缩放**以底边为锚** ⇒ 背景的底边始终贴着容器底边
+          //     ⇒ 窗口从迷你条往上长时，是**从下往上**露出背景（= 用户要的"从下面上来"）；
+          //   · 静止态 `morphScale = 1` ⇒ 反缩放 = 1 ⇒ **逐像素不变**（回归红线）；
+          //   · 窗口尺寸/缩放异常时返回 1（不做补偿），宁可压扁也不画出空白。
+          .scale({
+            x: this.bgInverseScale(),
+            y: this.bgInverseScale(),
+            z: 1,
+            centerX: '50%',
+            centerY: '100%'
+          })
           // ★★★ 2026-10-16（**背景层自证** —— 见 `diagBgBox` 的注释）：
           //   量的是**本层（背景宿主）**的布局矩形。用户报"有背景但高度特低"时：
           //     · `bgH` 很小而 `clipH` 也小 ⇒ 正常（动画中段，容器就只有那么大）
