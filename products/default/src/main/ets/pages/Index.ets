@@ -976,6 +976,9 @@ struct Index {
     if (!this.appState.isShowPlay) {
       return;
     }
+    // ★ 2026-10-17 现场读数：这一支到底有没有被自己的守卫挡住（`own=1` = 让给壳层那条）
+    PlaybackPage.ev('OVI', `drive=${this.expandState.morphDrive} stage=${this.expandState.morphStage} ` +
+      `p=${this.expandState.morphOverlayProgress().toFixed(3)} own=${this.shellOwnsOverlayTween ? 1 : 0}`);
     // ⚠️ 壳层自己刚起过浮层补间（`settlePullOpen`）时**让给它**：
     //    否则松手"没过阈值"那条路会被这里反向覆盖 —— 壳层在把浮层补到 0（回弹），
     //    而这里又补到 1，两层方向相反、观感是"封面不肯回去"。
@@ -994,6 +997,10 @@ struct Index {
     if (this.expandState.morphStage !== MorphStage.LEAVING) {
       return;
     }
+    // ★ 2026-10-17 现场读数：收起这一支的浮层进度与"是否已被占用"
+    PlaybackPage.ev('OVC', `stage=${this.expandState.morphStage} ` +
+      `p=${this.expandState.morphOverlayProgress().toFixed(3)} ` +
+      `bridging=${this.expandState.morphOverlayBridging() ? 1 : 0}`);
     this.expandState.focusMorphOverlayForPageCollapse(this.getUIContext());
   }
 
@@ -1110,6 +1117,13 @@ struct Index {
     //      （2026-10-15 起 = 无界 `SETTLE_MS` 400 / 400，见那两个常量的注释）。
     //   起点取浮层**当前**进度（跟手停在哪儿就从哪儿接着走）。
     this.expandState.morphOverlayTweenTo(commit, this.getUIContext());
+    // ★ 2026-10-17（**浮层这一棒的现场读数** —— 用户「封面跟着播放器走、没有独立飞行」定性用）
+    //   `from=` 是这一棒**起手那一刻**的浮层进度；`p=` 是播放页进度；
+    //   若 `from=0` 而 commit=1 ⇒ 它本该从迷你条圆圈飞到播放页封面（0→1）；
+    //   若 `from=1` ⇒ 已经贴在大封面位置（补间会被 `|to-from|<1e-4` 早退掉，等于**不飞**）。
+    PlaybackPage.ev('OVS', `commit=${commit ? 1 : 0} from=${this.expandState.morphOverlayProgress().toFixed(3)} ` +
+      `p=${this.expandState.morphP.toFixed(2)} bridging=${this.expandState.morphOverlayBridging() ? 1 : 0} ` +
+      `host=${this.expandState.hostsMorphOverlay() ? 1 : 0}`);
     // 标记"浮层这一棒的补间由壳层发起"：`@Monitor('expandState.morphDrive')` 在下面那行
     // 把 drive 置成 ANIM 之后**也会**被触发，没有这个标记的话它会再起一条**方向可能相反**的
     // 浮层补间（回弹那条路正是如此）。标记在补间结束/被新补间取代时清掉。
