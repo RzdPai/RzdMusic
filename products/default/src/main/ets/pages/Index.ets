@@ -48,7 +48,8 @@ import {
   WindowInfo,
   WindowUtil
 } from 'musicbasic';
-import { dispatchShellPlaybackIntent, LXSourceHost, PlaybackPage, PlaybackPageCoverContent, PlayerViewModel } from 'player';
+import { dispatchShellPlaybackIntent, LXSourceHost, PlaybackPage, PlaybackPageCoverContent, PlayerViewModel,
+  prewarmCurrentSongMesh } from 'player';
 import { RecommendPage } from 'recommendation';
 import { EchoReviewPage } from 'recommendation';
 // 銆岀幇鍦ㄥ氨鍚€嶏細搴曟爮绗?2 涓〉绛撅紙鎺ㄨ崘 / **鐜板湪灏卞惉** / 鍥炲搷 / 鎴戠殑锛夈€?
@@ -512,6 +513,11 @@ struct Index {
       //   涓庝笂婊戠殑澹冲眰褰㈠彉鏄袱鏉′簰涓嶇浉骞茬殑鍔ㄧ敾 鈥斺€?鐢ㄦ埛瀹炴祴銆岀偣鍑绘墦寮€鎾斁鍣ㄦ病鏈夊姩鐢汇€?
       //   銆岃儗鏅笉瀵广€嶅氨鏄畠銆傞『搴忓榻愭棤鐣岋細鈶?閲忔簮骞惰繘鐩镐綅 鈫?鈶?鎺ㄨ矾鐢辨寕杞?
       //   鈫?鈶?閲忕粓鐐癸紙`onPullReady` 绛変环鐗╋級鈫?鈶?鏀跺熬琛ラ棿 `commitPull()` 绛変环鐗┿€?
+      // ★★★ 2026-10-17（用户实测「点击打开播放页时背景是别的歌的颜色」）：
+      //   形变只有 350~400ms，而在线歌的 64×64 网格要下载 + 解码（200~2000ms）⇒
+      //   在**启动形变之前**再踢一次预热（曲目变化时也踢，见 onCurrentTrackForMeshPrewarm）。
+      //   预热是"同步返回、异步干活"，这里不会被它拖住首帧。
+      prewarmCurrentSongMesh(this.getUIContext(), this.appState.getCurrentSongItem());
       const morphStarted: boolean = this.beginOpenMorphOnClick();
       this.pushPlayerRoute();
       if (morphStarted) {
@@ -547,6 +553,18 @@ struct Index {
     } else {
       this.popPlayerRoute();
     }
+  }
+
+  /**
+   * ★★★ 2026-10-17（用户实测「点击打开播放页时背景是别的歌的颜色 / 对不上」）：
+   * **当前曲目一变就预热 64×64 网格源**（结果存 `MeshWarmState`，播放页 `onAppear` 直接采用）。
+   *
+   * 为什么放在壳层：壳层是唯一"曲目切换一定会走到"的地方；播放页在形变开始前才挂载，
+   * 那时已经来不及下载了。预热失败只记日志，不影响播放。
+   */
+  @Monitor('appState.selectIndex', 'appState.playQueueIds')
+  onCurrentTrackForMeshPrewarm(): void {
+    prewarmCurrentSongMesh(this.getUIContext(), this.appState.getCurrentSongItem());
   }
 
   /**

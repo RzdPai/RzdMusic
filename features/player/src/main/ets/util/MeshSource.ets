@@ -88,19 +88,28 @@ function hslToRgb(h: number, s: number, l: number, out: Uint8Array, off: number)
   out[off + 3] = 255;
 }
 
-/**
- * 解不出封面时的兜底：往 `u8` 里填一张**四角 HSL 双线性渐变**（α 恒 255，**轴对齐不旋转**）。
- *
- * 四角 `(相对 hue 的偏角, S, L)`：
- * `(0, .60, .40)` / `(+28, .55, .52)` / `(−20, .68, .33)` / `(+46, .50, .46)`。
- */
-export function fillFallback(u8: Uint8Array, w: number, h: number, hue: number): void {
-  const pal: Uint8Array = new Uint8Array(16);
-  hslToRgb(hue, 0.60, 0.40, pal, 0);
-  hslToRgb(hue + 28, 0.55, 0.52, pal, 4);
-  hslToRgb(hue - 20, 0.68, 0.33, pal, 8);
-  hslToRgb(hue + 46, 0.50, 0.46, pal, 12);
+/** 兜底网格的明度上下界（夹取后当背景不抢前景，也保证白字看得见）。 */
+const FALLBACK_L_MIN: number = 0.24;
+const FALLBACK_L_MAX: number = 0.44;
+/** 低于这个饱和度就认为取样色"近中性"（白/灰/黑）⇒ 走中性深渐变。 */
+const FALLBACK_NEUTRAL_S: number = 0.12;
 
+/** 夹到兜底明度区间 `[0.24, 0.44]`。 */
+function clampFallbackL(l: number): number {
+  if (l < FALLBACK_L_MIN) {
+    return FALLBACK_L_MIN;
+  }
+  if (l > FALLBACK_L_MAX) {
+    return FALLBACK_L_MAX;
+  }
+  return l;
+}
+
+/**
+ * 把 4 角调色板（16 字节 = 4 组 RGBA，顺序：左上/右上/左下/右下）按双线性铺满 `w × h`。
+ * α 恒 255；**轴对齐不旋转**（与 {@link fillFallback} 同一个铺法）。
+ */
+function fillPalette(u8: Uint8Array, w: number, h: number, pal: Uint8Array): void {
   for (let y = 0; y < h; y++) {
     const fy: number = h > 1 ? y / (h - 1) : 0;
     for (let x = 0; x < w; x++) {
@@ -114,6 +123,80 @@ export function fillFallback(u8: Uint8Array, w: number, h: number, hue: number):
       u8[off + 3] = 255;
     }
   }
+}
+
+/**
+ * 解不出封面时的兜底：往 `u8` 里填一张**四角 HSL 双线性渐变**（α 恒 255，**轴对齐不旋转**）。
+ *
+ * 四角 `(相对 hue 的偏角, S, L)`：
+ * `(0, .60, .40)` / `(+28, .55, .52)` / `(−20, .68, .33)` / `(+46, .50, .46)`。
+ */
+export function fillFallback(u8: Uint8Array, w: number, h: number, hue: number): void {
+  const pal: Uint8Array = new Uint8Array(16);
+  hslToRgb(hue, 0.60, 0.40, pal, 0);
+  hslToRgb(hue + 28, 0.55, 0.52, pal, 4);
+  hslToRgb(hue - 20, 0.68, 0.33, pal, 8);
+  hslToRgb(hue + 46, 0.50, 0.46, pal, 12);
+  fillPalette(u8, w, h, pal);
+}
+
+/**
+ * ★★★ 2026-10-17（用户实测「点击打开播放页时背景是别的歌的颜色 / 对不上」）：
+ * 用**取样色**（封面取色结果）造兜底网格 —— 色相来自封面，而不是 `hueOfSeed(title|singer)`。
+ *
+ * 为什么要这一步：在线歌的 64×64 网格要等 `http` 下载 + 解码（200~2000ms），而点击打开的形变
+ * 只有 350~400ms ⇒ 整段形变拿不到真源 ⇒ 组件画兜底网格。兜底网格若用哈希色相，屏上就是
+ * **与封面无关的颜色**（用户看到的就是"背景是别的歌的颜色"）。
+ *
+ * 规则：
+ * 1. `rgb(0..255) → HSL`；
+ * 2. `S < 0.12`（近中性：白/灰/黑封面）⇒ 退成**中性深渐变**（不做色相游戏，只做上下明暗）；
+ * 3. 明度一律夹到 `[0.24, 0.44]`（四个角色也各自夹一遍）；
+ * 4. 四角偏角沿用 {@link fillFallback} 的 `0 / +28 / −20 / +46`，保证兜底网格的"质感"不变。
+ *
+ * @param r 红通道 0..255（越界自动夹取）
+ * @param g 绿通道 0..255
+ * @param b 蓝通道 0..255
+ */
+export function fillFallbackFromColor(u8: Uint8Array, w: number, h: number,
+  r: number, g: number, b: number): void {
+  const rn: number = clamp255(r) / 255;
+  const gn: number = clamp255(g) / 255;
+  const bn: number = clamp255(b) / 255;
+  const max: number = Math.max(rn, Math.max(gn, bn));
+  const min: number = Math.min(rn, Math.min(gn, bn));
+  const l0: number = (max + min) / 2;
+  const d: number = max - min;
+  let s: number = 0;
+  let hue: number = 0;
+  if (d > 0.0001) {
+    s = l0 > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === rn) {
+      hue = 60 * (((gn - bn) / d) % 6);
+    } else if (max === gn) {
+      hue = 60 * (((bn - rn) / d) + 2);
+    } else {
+      hue = 60 * (((rn - gn) / d) + 4);
+    }
+    hue = ((hue % 360) + 360) % 360;
+  }
+  const l: number = clampFallbackL(l0);
+  const pal: Uint8Array = new Uint8Array(16);
+  if (s < FALLBACK_NEUTRAL_S) {
+    // 近中性 ⇒ 中性深渐变（只有明暗，没有色相），避免"灰封面配出一块彩色背景"。
+    hslToRgb(0, 0, clampFallbackL(l + 0.05), pal, 0);
+    hslToRgb(0, 0, clampFallbackL(l + 0.10), pal, 4);
+    hslToRgb(0, 0, clampFallbackL(l - 0.05), pal, 8);
+    hslToRgb(0, 0, clampFallbackL(l + 0.02), pal, 12);
+  } else {
+    const sc: number = s > 0.68 ? 0.68 : s;
+    const sHi: number = sc * 1.10 > 1 ? 1 : sc * 1.10;
+    hslToRgb(hue, sc, l, pal, 0);
+    hslToRgb(hue + 28, sc * 0.92, clampFallbackL(l + 0.10), pal, 4);
+    hslToRgb(hue - 20, sHi, clampFallbackL(l - 0.08), pal, 8);
+    hslToRgb(hue + 46, sc * 0.84, clampFallbackL(l + 0.06), pal, 12);
+  }
+  fillPalette(u8, w, h, pal);
 }
 
 /**

@@ -42,7 +42,7 @@ import { DrawContext, FrameNode, NodeController, RenderNode, UIContext } from '@
 import { drawing, displaySync } from '@kit.ArkGraphics2D';
 import { image } from '@kit.ImageKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { SRC_EDGE, enhanceColors, boxBlurRgba, fillFallback, hueOfSeed } from '../util/MeshSource';
+import { SRC_EDGE, enhanceColors, boxBlurRgba, fillFallback, fillFallbackFromColor, hueOfSeed } from '../util/MeshSource';
 import { MeshField } from '../util/MeshGradient';
 
 /** 每格细分数（无界 `MESH_SUB`）。 */
@@ -99,6 +99,105 @@ class MeshRenderNode extends RenderNode {
 interface BusinessErrorLike {
   code: number;
   message: string;
+}
+
+/** 解析出来的取样色（0..255）。 */
+class RgbTriple {
+  r: number = 0;
+  g: number = 0;
+  b: number = 0;
+}
+
+/** 十六进制单个字符 → 0..15（非法返回 -1）。 */
+function hexNibble(ch: string): number {
+  const code: number = ch.charCodeAt(0);
+  if (code >= 48 && code <= 57) {
+    return code - 48;
+  }
+  if (code >= 97 && code <= 102) {
+    return code - 87;
+  }
+  if (code >= 65 && code <= 70) {
+    return code - 55;
+  }
+  return -1;
+}
+
+/** 两个十六进制字符 → 0..255（非法返回 -1）。 */
+function hexByte(a: string, b: string): number {
+  const hi: number = hexNibble(a);
+  const lo: number = hexNibble(b);
+  if (hi < 0 || lo < 0) {
+    return -1;
+  }
+  return hi * 16 + lo;
+}
+
+/**
+ * 解析"取样色"字符串 → RGB（0..255）。支持本仓两处来源的写法：
+ * - `#RRGGBB` / `#AARRGGBB`（`CoverTintState.targetColor` 的口径）；
+ * - `rgb(r, g, b)` / `rgba(r, g, b, a)`（`MusicAppState.imageColor` 的口径）。
+ * @returns 解析不出时返回 `undefined`（调用方退回 `hueOfSeed(seed)`）。
+ */
+function parseSampleColor(text: string): RgbTriple | undefined {
+  const s: string = text.trim();
+  if (s.length === 0) {
+    return undefined;
+  }
+  const out: RgbTriple = new RgbTriple();
+  if (s.charAt(0) === '#') {
+    const hex: string = s.substring(1);
+    if (hex.length === 3) {
+      const r: number = hexNibble(hex.charAt(0));
+      const g: number = hexNibble(hex.charAt(1));
+      const b: number = hexNibble(hex.charAt(2));
+      if (r < 0 || g < 0 || b < 0) {
+        return undefined;
+      }
+      out.r = r * 17;
+      out.g = g * 17;
+      out.b = b * 17;
+      return out;
+    }
+    if (hex.length === 6 || hex.length === 8) {
+      // 8 位按 #AARRGGBB 解释 ⇒ 取后 6 位
+      const body: string = hex.length === 8 ? hex.substring(2) : hex;
+      const r: number = hexByte(body.charAt(0), body.charAt(1));
+      const g: number = hexByte(body.charAt(2), body.charAt(3));
+      const b: number = hexByte(body.charAt(4), body.charAt(5));
+      if (r < 0 || g < 0 || b < 0) {
+        return undefined;
+      }
+      out.r = r;
+      out.g = g;
+      out.b = b;
+      return out;
+    }
+    return undefined;
+  }
+  const open: number = s.indexOf('(');
+  const close: number = s.indexOf(')');
+  if (open <= 0 || close < open) {
+    return undefined;
+  }
+  const head: string = s.substring(0, open).trim().toLowerCase();
+  if (head !== 'rgb' && head !== 'rgba') {
+    return undefined;
+  }
+  const parts: string[] = s.substring(open + 1, close).split(',');
+  if (parts.length < 3) {
+    return undefined;
+  }
+  const r: number = Number(parts[0].trim());
+  const g: number = Number(parts[1].trim());
+  const b: number = Number(parts[2].trim());
+  if (!Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(b)) {
+    return undefined;
+  }
+  out.r = Math.max(0, Math.min(255, Math.round(r)));
+  out.g = Math.max(0, Math.min(255, Math.round(g)));
+  out.b = Math.max(0, Math.min(255, Math.round(b)));
+  return out;
 }
 
 /** 把 `MeshRenderNode` 挂进视图树（对标无界 `MeshBgController extends NodeController`）。 */
@@ -168,6 +267,16 @@ export struct MeshCoverBg {
    * ⇒ 网格源**永远存在**，屏上不会出现"背景一片黑"（上游从不会黑，就是因为有这一步）。
    */
   @Param seed: string = '';
+  /**
+   * ★★★ 2026-10-17（用户实测「点击打开播放页时背景是别的歌的颜色」）：
+   * **取样色**（封面的取色结果，`#RRGGBB` 或 `rgba(r,g,b,a)`）。
+   *
+   * 取不到封面时兜底网格的**色相**用它定，而不是 `hueOfSeed(seed)` 的哈希值 ——
+   * 在线歌的网格要下载 + 解码（200~2000ms），点击打开的形变只有 350~400ms，
+   * 整段形变都拿不到真源，兜底网格就是屏上唯一能看见的东西。
+   * 解析不出时（空串/格式不认识）自动退回 `hueOfSeed(seed)`，行为与本参数引入前一致。
+   */
+  @Param fallbackColor: string = '';
   /** 换图令牌：`src` 原地变化时靠它触发重新上传。 */
   @Param srcVersion: number = 0;
   /** 是否在播放（与 `active` 一起构成帧闸门）。 */
@@ -230,7 +339,7 @@ export struct MeshCoverBg {
   //   ⚠️ 我们原来只监听 `srcVersion` ⇒ 换歌时 `src` 还没到手、`seed` 已经变了，
   //     屏上会**继续显示上一首的兜底色**（用户看到的"展开时是蓝色"就是这个：
   //     播放的那首还没解出封面，兜底网格按旧 seed 的色相画出来了）。
-  @Monitor('srcVersion', 'seed')
+  @Monitor('srcVersion', 'seed', 'fallbackColor')
   onSourceChanged(): void {
     this.applySource();
   }
@@ -295,7 +404,15 @@ export struct MeshCoverBg {
     try {
       const buf: ArrayBuffer = new ArrayBuffer(SRC_EDGE * SRC_EDGE * 4);
       const u8: Uint8Array = new Uint8Array(buf);
-      fillFallback(u8, SRC_EDGE, SRC_EDGE, hueOfSeed(this.seed));
+      // ★★★ 2026-10-17：**取样色优先**（色相来自封面），解析不出才用 seed 的哈希色相。
+      const sample: RgbTriple | undefined = parseSampleColor(this.fallbackColor);
+      if (sample !== undefined) {
+        fillFallbackFromColor(u8, SRC_EDGE, SRC_EDGE, sample.r, sample.g, sample.b);
+        hilog.info(DOMAIN, TAG, 'fallback mesh from sample color r=%{public}d g=%{public}d b=%{public}d',
+          sample.r, sample.g, sample.b);
+      } else {
+        fillFallback(u8, SRC_EDGE, SRC_EDGE, hueOfSeed(this.seed));
+      }
       enhanceColors(u8);
       boxBlurRgba(u8, SRC_EDGE, SRC_EDGE, FALLBACK_BLUR_RADIUS, FALLBACK_BLUR_PASSES);
       const pm: image.PixelMap = await image.createPixelMap(buf, {

@@ -29,6 +29,7 @@ import {
   BarCollapse,
   CoverRadiusState,
   CoverTintState,
+  MeshWarmState,
   getWindowInfoState,
   ImmersiveType,
   isWidthBreakpointLgOrXl,
@@ -137,6 +138,17 @@ export struct PlaybackPage {
   /** 濠电偟绻濈粈渚€宕㈠鍫熷殑閻忕偟鍋撻悵顖炴煟閵娿儱顏ч悶姘抽哺缁嬪顢旈崼顐ｆ緬闂佽偐顢婇婊呮濞嗘挻鍋ㄩ柛妤冨仧濞堥亶姊婚崼娑樼仼濠殿喒鏅犻獮鈧ù锝囶焾缁插潡鏌ょ憴鍕祷闁哥喐鎹囧畷妤呭Ψ椤栨粎顦梺?*/
   @Local coverTint: CoverTintState =
     AppStorageV2.connect(CoverTintState, AppStorageKeys.COVER_TINT_STATE, () => new CoverTintState())!;
+  /**
+   * ★★★ 2026-10-17（用户实测「点击打开播放页时背景是别的歌的颜色 / 对不上」）：
+   * 壳层预热好的**当前歌曲 64×64 网格缓存**（{@link MeshWarmState}）。
+   *
+   * 挂载那一拍 `state.getCurrentSongItem()` 可能还是**上一首** ⇒ 绝不能盲用缓存
+   * （上一轮就是这么炸的：显示上一首的颜色）。所以：
+   * 1. `onAppear` 里先试一次（`adoptWarmMesh()`，内部**比对 key**）；
+   * 2. 缓存更新时（{@link onMeshWarmVersionChanged}）再试一次 —— 那时 key 已经是当前歌。
+   */
+  @Local meshWarm: MeshWarmState =
+    AppStorageV2.connect(MeshWarmState, AppStorageKeys.MESH_WARM_STATE, () => new MeshWarmState())!;
   /** 濠电偟绻濈粈渚€宕㈠鍫熷創闁逞屽墴閹虫繈骞撻幒鎾跺綔闂佺鐭囬崘銊у幀闂侀潻缍嗛悡澶屾娴兼潙绠查柕蹇ョ磿閹藉啴鏌涘顒€顒㈤悗鍨矒瀵剟寮堕崹顔炬偧闂佸憡甯楁竟鍡椻枔閹寸姳鐒婂〒姘ｅ亾婵炶偐澧楅敍鎰煥閸℃妫岄梻浣瑰絻缁夌兘顢?uniform闂?*/
   private flowLightController: hdsEffect.ShaderEffectController = new hdsEffect.ShaderEffectController();
   /** 閻庣懓鎲¤ぐ鍐姳閺屻儲鍋ㄩ柕濞垮劚閻撳倿鏌ｉ鐔蜂壕闂佽壈顫夎ぐ鍐ㄢ枍閹烘鍎嶉柛鏇ㄥ亜缁插潡鏌ょ涵鍛毢濠⒀勵殜瀵敻顢楅埀顒冦亹閸ф鏅€光偓閸曨亞绱氶梺绋跨箰缁夋挳骞冮幘瀵糕枖闁逞屽墯缁傛帗绂掔€ｅ灚婢掗梺鑹邦潐閻擄繝宕抽崨濠傜窞鐎广儱瀚悷鎾绘煕濞嗘劕鐏ョ紒鏃傚厴婵?*/
@@ -5205,6 +5217,51 @@ export struct PlaybackPage {
    * 闁粹偓?**鐟滅増鎸告晶鐘诲籍閻樿櫣娈堕柣顫妿閸?*闁挎稑鐗愰～鍡樼▔婵犲洦妗ㄩ柕鍡楄嫰缂嶅寰勯埡鍌涘闁搞儳鍋戦埀顒€绉归崑鍛枔绾板绀嗛柍銉︽煛閳ь剚姊圭€垫洘娼懞銉︻槯 `getCurrentSongItem()` 闁告瑯鍨甸崗姗€寮伴娆戠憪濞戞挴鍋撳Λ锝嗙壄缁?
    *   闁烩晛鐡ㄧ敮鎾煂閸モ晜鏆忓ù鍏肩婵″憡绋夋繝浣侯伇濡絾鐗滃▓鎴︽煀瀹ュ牆顥忛柡鈧幆褍鐓傜€殿喒鍋撻柛锕€鎼慨鈺呮偨鐠佸磭鐟愰柕鍡楀€风换姘舵偩濞嗗繒鏉介柣婊呭濡插憡绋夋潪鎵晩閻忓繐妫欏?闁绘鍩栭埀顑跨閸樻稓浜搁崣妯肩Т"濞戞柨顑呴幃妤呭礃瀹ュ棗澶嶉柛銉у仦濞肩敻濡?
    */
+  /**
+   * ★★★ 2026-10-17（用户实测「点击打开播放页时背景是别的歌的颜色」）：采用壳层预热好的网格缓存。
+   *
+   * 两条硬规矩：
+   * 1. **必须比对 key**：挂载那一拍 `state.getCurrentSongItem()` 可能还是**上一首**
+   *    （上一轮就是因为盲用缓存，屏上出现了上一首的颜色）；key 对不上就什么都不做，
+   *    等 `@Monitor('meshWarm.version')` 再来一次（那时 key 已经是当前歌）。
+   * 2. 只用 `snapshot()` 的**字节副本**新建 PixelMap，不跨页面持有 PixelMap（避免双重释放）。
+   */
+  private async adoptWarmMesh(): Promise<void> {
+    if (this.meshSrcVersion > 0 || !this.isAlive) {
+      return;
+    }
+    const key: string = this.currentMeshKey();
+    if (key.length === 0 || this.meshWarm.key !== key) {
+      return;
+    }
+    const copy: Uint8Array | undefined = this.meshWarm.snapshot();
+    if (copy === undefined) {
+      return;
+    }
+    try {
+      const pm: image.PixelMap = await image.createPixelMap(copy.buffer, {
+        size: { width: SRC_EDGE, height: SRC_EDGE },
+        pixelFormat: image.PixelMapFormat.RGBA_8888,
+        editable: true
+      });
+      if (!this.isAlive || this.meshSrcVersion > 0) {
+        this.releasePixelMapQuiet(pm);
+        return;
+      }
+      Logger.info(PlaybackPage.logTag, `RzdMeshWarm adopt mesh (prewarmed) key=${key.substring(0, 48)}`);
+      this.commitMeshSource(pm, this.meshSrc);
+    } catch (err) {
+      const e = err as BusinessError;
+      Logger.warn(PlaybackPage.logTag, `RzdMeshWarm adopt failed code=${e?.code}, message=${e?.message}`);
+    }
+  }
+
+  /** 预热缓存更新时再取一次（壳层是按 `selectIndex` 变化触发的，此时 key 已经是当前歌）。 */
+  @Monitor('meshWarm.version')
+  onMeshWarmVersionChanged(): void {
+    void this.adoptWarmMesh();
+  }
+
   private async adoptCachedMesh(): Promise<void> {
     if (this.meshSrcVersion > 0 || !this.isAlive) {
       return;
@@ -5987,7 +6044,11 @@ export struct PlaybackPage {
               //   闂佸疇娉曟刊瀵哥箔?婵炲濯寸徊濂告偝椤栫偛鍙婃い鏍ㄤ亢閸╁矂鏌涘▎鎯挎垵锕㈤敍鍕＞闁瑰鍋熸竟鎰归崗鐓庡摵婵炲牄鍨婚幉妤佹媴缁嬫姊剧紓浣瑰姈椤ㄥ懓銇愬☉娆戔枖闁逞屽墰閹秆冪暋閺夎法顏?闂佺懓鍢查¨鈧紒杈ㄧ懇閹粙濡搁敃鈧悡鏇㈡煛閸愶絾娅呭褏濞€楠炲孩娼忛妸銏犱壕闁靛鍔庣粻鏍煟閵娿儱顏柛瀣嚇瀵爼鍩ラ崨顖滎槴闂?
               //     闁荤喐娲戠粈渚€骞冮幘璇茬睄闁兼悂娼ф慨顒勬偤?闂佹眹鍨奸褏娆㈤柆宥呯?+"婵炴垶鎸哥粔瀵告暜閸ヮ剙绠?闂佹寧绋戦懟顖滄闁秴绠查柕蹇曞Т閻掑ジ鏌ｉ妸銉ヮ仾婵犙€鍋撻梺鍛婂笩椤旀劗妲愬▎鎰懝閻庯綆浜跺ú銈夋煙鐠虹尨榫氶柛搴㈩殜瀵煡顢涘┃鐐╂櫊瀹曟岸骞忕仦鎯ь嚄闂佺粯顨呴悧鍛不閿濆棗绶為柡宥庡亝閺嗙姴顭块悷鏉挎毐闁活亝澹嗛幉妤佹媴缁嬫姊鹃梺鎸庣☉椤р偓缂?
               //     婵炴垶鎸哥粔鐑姐€呴敃鍌氱鐎广儱娲﹂弳?闂佹眹鍨奸褏绮╁畡闈舵帡寮崒娑氾紛闁诲孩绋掗崝鏇㈠Φ?闁哄鏅滈悷褔锝為幒妤€绀冩繛鍡樺姉閵嗗﹪鏌?
-              fixedHVp: 0
+              fixedHVp: 0,
+              // ★★★ 2026-10-17（用户实测「点击打开播放页时背景是别的歌的颜色 / 对不上」）：
+              //   形变期（350~400ms）拿不到 64×64 真源时，兜底网格的**色相**由取样色定，
+              //   而不是 `hueOfSeed(title|singer)` 的哈希值。取色未就绪时退回页面现用的底色。
+              fallbackColor: this.tintReady ? this.coverTint.targetColor : this.state.imageColor
             })
               .id(PlaybackPage.MESH_BG_ID)
               .width(StyleConstants.FULL_WIDTH)
@@ -6091,6 +6152,9 @@ export struct PlaybackPage {
             //   鈬?鍛戒腑涓婁竴棣栫殑缂撳啿 鈬?鐢ㄦ埛瀹炴祴銆屾墦寮€鏃剁殑鑳屾櫙鏄笂涓€棣栨瓕鐨勯鑹层€嶃€?
             //   鎺ュ洖鏉ョ殑鍓嶆彁锛氶鐑姸鎬侊紙鎸?褰撳墠鏇茬洰鍙樺寲"鍐欏叆锛夊厛钀藉湴銆?
             // void this.adoptCachedMesh();
+            // ★★★ 2026-10-17：先用**壳层预热好的**缓存（内部比对 key，key 不对就等 version 变化）；
+            //   然后再走原来的网络/资源取源链路（拿不到时 MeshCoverBg 用取样色兜底）。
+            void this.adoptWarmMesh();
             this.getImageColor();
             this.applyPlaybackWindowChromeImmediately();
             // 婵＄偑鍊楅弫璇差焽閻楀牞绱旈柡宥庣厛閸嬔囨煕閹达絾顏犳鐐叉喘瀵喚鎹勯悜妯衡偓杈ㄦ叏濠靛嫬鍔欑紒鏃€娼欓埢搴ㄥ灳瀹曞洨锛涢梺绋跨箰绾绢厽鎱ㄩ幖浣哥畱濞撴艾锕︾粈鍕偣娴ｇ鈷旈柣銈呮閵囧嫰妫冨☉妯款唹闂佺厧鐤囧Λ鍕垂娴兼潙缁╃痪顓炴噽缁犳牠鏌?

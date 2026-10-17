@@ -286,4 +286,6 @@ public static readonly USE_ACCOUNT_REC_STATE: string = 'musichome_UseAccountRecS
 public static readonly HOME_PLAZA_STATE: string = 'musichome_HomePlazaState';
 /** {@link HomeRankingState} (home page shows the ranking boards section). */
 public static readonly HOME_RANKING_STATE: string = 'musichome_HomeRankingState';
+/** {@link MeshWarmState} (pre-warmed 64x64 mesh bytes of the current song cover). */
+public static readonly MESH_WARM_STATE: string = 'musichome_MeshWarmState';
 }

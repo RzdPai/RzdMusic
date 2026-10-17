@@ -106,7 +106,10 @@ export { MiniLyricLinesComponent } from './src/main/ets/view/MiniLyricLinesCompo
 //   导出是为了让它们**进编译图**（本仓 hvigor 对 HAR 按引用编译：没被 import 的文件不参与编译，
 //   构建照样绿 ⇒ 必须先挂上导出面才验证得到）。下一步的 `MeshCoverBg` 组件会消费它们。
 export { MeshField, MeshCP, CP_W, CP_H, cp, defaultConf, generateConf } from './src/main/ets/util/MeshGradient';
-export { SRC_EDGE, hueOfSeed, fillFallback, enhanceColors, boxBlurRgba } from './src/main/ets/util/MeshSource';
+export { SRC_EDGE, hueOfSeed, fillFallback, fillFallbackFromColor, enhanceColors, boxBlurRgba } from './src/main/ets/util/MeshSource';
+// ★★★ 2026-10-17（用户实测「点击打开播放页时背景是别的歌的颜色」）：**提前预热**当前歌曲的
+//   64×64 网格源（壳层按"当前曲目变化"调用，结果存 `MeshWarmState`，播放页 onAppear 采用）。
+export { prewarmCurrentSongMesh, meshWarmKeyOf } from './src/main/ets/util/MeshWarmService';
 // ★★ 2026-10-15：**网格形变背景的组件层**（`NodeContainer` + 自定义 `RenderNode.draw`
 //   + `drawPixelMapMesh` + `displaySync` 20fps + 径向暗角），照搬无界 `MeshCoverBg`。
 export { MeshCoverBg } from './src/main/ets/view/MeshCoverBg';

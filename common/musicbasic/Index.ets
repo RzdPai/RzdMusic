@@ -92,6 +92,9 @@ export { LyricFontSizeState } from './src/main/ets/model/LyricFontSizeState';
 export { UseAccountRecState } from './src/main/ets/model/UseAccountRecState';
 export { HomePlazaState } from './src/main/ets/model/HomePlazaState';
 export { HomeRankingState } from './src/main/ets/model/HomeRankingState';
+// ★★★ 2026-10-17（用户实测「点击打开播放页时背景是别的歌的颜色」）：当前歌曲 64×64 网格的
+//   预热缓存（壳层按"当前曲目变化"写入，播放页 onAppear 直接采用）。见 MeshWarmState 头部。
+export { MeshWarmState } from './src/main/ets/model/MeshWarmState';
 export { ToplistRouteParam, BoardSongParam } from './src/main/ets/model/ToplistRouteParam';
 export { RankingRouteParam } from './src/main/ets/model/RankingRouteParam';
 export { ArtistRouteParam, AlbumRouteParam } from './src/main/ets/model/ArtistRouteParam';
