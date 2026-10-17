@@ -5672,7 +5672,13 @@ export struct PlaybackPage {
                 active: this.state.isShowPlay,
                 // ★ 照搬无界：`entryFade = !pullMode || effT() >= 1` —— 形变进入时不淡入
                 //   （那一刻整层的不透明度已由 `backgroundRevealOpacity()` 管着）。
-                entryFade: !this.expandState.morphContainerActive()
+                entryFade: !this.expandState.morphContainerActive(),
+                // ★★★★ 2026-10-17（**只把"网格画布高度"钉住，布局仍然 100%**）
+                //   渲染/布局一律照旧（宿主 100% ⇒ 结构上不可能消失，见下面那段长注释）；
+                //   这一项只让 `NodeContainer → controller.resize(w, h)` 里的 `h` 恒定 =
+                //   网格按**整窗比例**生成，不再随 `morphClipHeight()` 每帧重建顶点并重采样
+                //   ⇒ 卡片长大 = **揭开更多背景**，而不是"把压扁的网格拉回来"。
+                fixedHVp: this.expandState.windowHeightVp
               })
                 .id(PlaybackPage.MESH_BG_ID)
                 .width(StyleConstants.FULL_WIDTH)
@@ -5693,40 +5699,33 @@ export struct PlaybackPage {
                 .hitTestBehavior(HitTestMode.None)
             }
           }
+          // ★★★★ 2026-10-17（**背景宿主一律 100%；"固定尺寸"只给网格画布，不给布局**）
+          //
+          // ## 上一版错在哪（用户实测：**背景完全不见了**，静止态也没有）
+          //   上一版把**宿主**的高度从 `'100%'` 改成固定 `windowHeightVp`。宿主是
+          //   `.position({x:0,y:0})` 的绝对定位子节点，而父容器高 = `morphClipHeight()`；
+          //   一个比裁剪窗口大的固定尺寸盒子参与父约束/裁剪链后，整层就**不再被绘制**
+          //   （Gemini-4-Argon 复核同结论：Stack 子节点超出被 `.clip(true)` 的父盒时，
+          //   渲染管线会整块剔除；触发过一次之后**静止态也不会自己回来**）。
+          //   ⛔ **不要**再把宿主的尺寸换成固定数 —— 它必须由父级 100% 撑开。
+          //
+          // ## 真正要修的是"网格每次重排"（= 压扁→拉伸），那件事发生在**画布**上
+          //   `NodeContainer.onAreaChange → controller.resize(w,h) → field.update(w,h)`
+          //   ⇒ 谁的盒子在变，网格就按谁的比例重建顶点并重采样。
+          //   ⇒ 现在把这**一个数**（`MeshCoverBg.fixedHVp = windowHeightVp`）钉住：
+          //     · 布局、绘制、裁剪一切照旧（100% ⇒ 不可能消失）；
+          //     · 网格永远按**整窗比例**生成，不随 `morphClipHeight()` 每帧重算
+          //       ⇒ 卡片长大 = **揭开更多背景**（= 无界「只显示上面那一块内容」），
+          //         不再"压扁再拉伸"。
+          //   ⚠️ 静止态：宿主高本来就 = 窗口高 ⇒ 这一项**不影响任何像素**（回归红线）。
           .width(StyleConstants.FULL_WIDTH)
-          // ★★★★ 2026-10-17（**背景宿主的尺寸必须是"窗口高"，不能是 '100%'** ——
-          //   这才是「压扁 → 再拉伸回去」的真正成因，也与无界的容器树逐字对上）
-          //
-          // ## 无界的容器树（`wujie.pa`，已逐行读过）
-          // ```
-          //   Stack(TopStart) .scale/.translate/.width(clipWidth='100%')
-          //                   .height(expand.clipHeight) .clip(true)     191400-191469
-          //     ├─ If → Column  ← **宽 100% + `winHVp`（固定数）+ padTop/padBottom**   191756
-          //     │    ├─ If → playerPane（Row）
-          //     │    └─ If → **MeshCoverBg**                             192105 / 192191
-          // ```
-          //   ⇒ 背景宿主的**高度是一个固定数 `winHVp`**，跟 `clipHeight` 无关。
-          //     容器（`clipHeight`）只是**裁剪窗口** ⇒ 卡片长大 = **揭开更多背景**，
-          //     背景自己**每帧都不重新排版**。这正是用户描述的
-          //     「无界的背景看着就是只显示上面那一块内容」。
-          //
-          // ## 我们原来的写法（错在这里）
-          //   `.height(FULL_HEIGHT)` = 容器的 **100%**，而容器高 = `morphClipHeight()`
-          //   ⇒ 背景宿主**每帧都被重新排版**：`NodeContainer.onAreaChange` →
-          //     `controller.resize(w, h)` → `field.update(tSec, w, h, flow)` 按新的
-          //     `(w,h)` 重建整套网格顶点 + `drawPixelMapMesh` 按新画布重采样
-          //   ⇒ 小窗口时网格是按"很扁的画布"生成的（内容被压扁），窗口长大时再按新比例
-          //     重算 ⇒ 用户看到的「**被压得很扁、然后又拉伸回去**」「框变大了背景没来得及填进去」。
-          //   ⇒ 换成**固定窗口高**（= 无界那个 `winHVp`）：网格永远按整窗比例生成，
-          //     只有裁剪窗口在变。
-          //   ⚠️ 静止态容器高本来就 = 窗口高 ⇒ **逐像素不变**（回归红线）。
-          .height(this.expandState.windowHeightVp)
+          .height(StyleConstants.FULL_HEIGHT)
           .position({ x: 0, y: 0 })
           .hitTestBehavior(HitTestMode.None)
           // ⛔ 2026-10-17（**不乘反缩放** —— 依据是用户给的无界中段截图）
           //   无界中段截图显示：**网格是铺满整张卡片的**（格子随卡片一起被压/展开）
           //   ⇒ 背景跟着容器缩放本身是对的，反缩放会让屏上只剩一张满尺寸网格的**一块切片**。
-          //   （上一版那两趟反缩放都已撤回，`bgInverseScale()` 也已删除。）
+          //   （历史那两趟反缩放都已撤回，`bgInverseScale()` 也已删除。）
           // ★★★ 2026-10-16（**背景层自证** —— 见 `diagBgBox` 的注释）：
           //   量的是**本层（背景宿主）**的布局矩形。用户报"有背景但高度特低"时：
           //     · `bgH` 很小而 `clipH` 也小 ⇒ 正常（动画中段，容器就只有那么大）

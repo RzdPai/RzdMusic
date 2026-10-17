@@ -159,6 +159,26 @@ export struct MeshCoverBg {
   @Param scrim: boolean = true;
   /** 入场是否走 400ms 淡入（无界 `entryFade`）。 */
   @Param entryFade: boolean = true;
+  /**
+   * ★★★★ 2026-10-17（**固定的网格画布高度**（vp）；0 = 用宿主实测高度）。
+   *
+   * ## 为什么需要它（播放页「背景被压扁、再拉伸」的真开关）
+   * `NodeContainer.onAreaChange` 报的是**宿主当前盒子**，而播放页背景宿主在形变容器里，
+   * 容器高度 `morphClipHeight()` **每帧都在变**（30 → 823）⇒
+   * ```
+   *   onAreaChange → controller.resize(w,h) → RenderNode.frame = (w,h)
+   *                → draw(): field.update(tSec, w, h, flow)  ← 按新画布重建整套网格顶点
+   *                → drawPixelMapMesh(...)                   ← 按新画布重采样
+   * ```
+   * ⇒ 小窗口时网格是按"很扁的画布"生成的（用户看到的**压扁**），窗口长大再按新比例重算
+   *   （**拉伸**）。
+   *
+   * ⇒ 宿主**布局**一律保持 `100%`（上一版把宿主改成固定高，用户实测「背景完全不见了」，
+   *   见 `PlaybackPage` 背景那段长注释）；只把**画布高度**钉成一个固定数
+   *   ⇒ 网格永远按整窗比例生成，卡片长大 = **揭开更多背景**（= 无界「只显示上面那一块内容」）。
+   * ⚠️ 静止态：宿主高本来就 = 窗口高 ⇒ 本参数不影响任何像素（回归红线）。
+   */
+  @Param fixedHVp: number = 0;
 
   private controller: MeshBgController = new MeshBgController();
   private sync: displaySync.DisplaySync | null = null;
@@ -285,7 +305,10 @@ export struct MeshCoverBg {
         .width(HIT_FULL)
         .height(HIT_FULL)
         .onAreaChange((_oldArea: Area, newArea: Area): void => {
-          this.controller.resize(Number(newArea.width), Number(newArea.height));
+          // ★ 2026-10-17：`fixedHVp > 0` 时**画布高度**用固定值（见 `fixedHVp` 的注释）——
+          //   布局尺寸照旧跟着宿主 100%，只有网格的生成尺寸被钉住。
+          const h: number = this.fixedHVp > 0 ? this.fixedHVp : Number(newArea.height);
+          this.controller.resize(Number(newArea.width), h);
         })
 
       if (this.scrim) {
