@@ -39,7 +39,7 @@ export struct HomeMiniBarPlayer {
    */
   private static readonly MINI_BAR_SIDE_VP: number = 0;
   /** 胶囊**内部**组件再收进来的左右呼吸（vp）—— 用户要求"组件离播放条两侧远一点"。 */
-  private static readonly MINI_BAR_INNER_PAD_VP: number = 8;
+  private static readonly MINI_BAR_INNER_PAD_VP: number = 4;
   /** Player VM shared with cover and aside. */
   @Local playerViewModel: PlayerViewModel = new PlayerViewModel();
   /** Global music UI state (mini bar expanded, play state). */
