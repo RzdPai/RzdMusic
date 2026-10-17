@@ -2152,6 +2152,36 @@ export struct PlaybackPage {
     }
     return PlaybackPage.PULL_BG_FLOOR + this.pullBgIn() * (1 - PlaybackPage.PULL_BG_FLOOR);
   }
+
+  /**
+   * @returns 背景层的**反缩放** = `1 / morphScale`（抵消形变容器的等比缩放）。
+   *
+   * ★★★★ 2026-10-17（用户描述得很准：「**无界的背景只显示上面那一块内容，而我们现在是
+   *   整个背景被压得很扁，然后又拉伸回去**」；「下方框已经变大了，但背景没来得及填进去 = 抽搐」）
+   *
+   * ## 机制
+   * 背景层在形变容器**内部**，容器的 `.scale(morphScale)` 在 p=0 时 ≈ **0.082**
+   * ⇒ 满尺寸网格被等比压成一条，再随容器长大被"拉"回去 ⇒ 就是"压扁 → 拉伸"。
+   * 无界不是这样：它的背景**不跟着缩放**，只被窗口**裁剪** ⇒ 屏上永远只看到背景的**一块区域**
+   * （卡片小的时候看到的是它的**左上那一块**）。
+   *
+   * ## 做法（关键在锚点）
+   * 给背景层乘 `1/morphScale`，并且**锚在左上角**（`centerX/centerY = '0%'`）
+   * ⇒ 背景始终是**满尺寸**、左上角贴在卡片左上角 ⇒ 卡片只露出它的左上那一块
+   * ⇒ 卡片长大时是"**揭开更多**"，而不是"把压扁的东西拉回来"。
+   * ⚠️ 护栏：静止态 `morphScale = 1` ⇒ 返回 1（逐像素不变）；`s <= 0.02` 或非有限值也返回 1
+   *   （1/0.02 = 50 倍会把背景放到离谱，宁可压扁也不画错）。
+   */
+  private bgInverseScale(): number {
+    if (!this.expandState.morphContainerActive()) {
+      return 1;
+    }
+    const s: number = this.expandState.morphScale;
+    if (!Number.isFinite(s) || s <= 0.02 || s >= 1) {
+      return 1;
+    }
+    return 1 / s;
+  }
   /** 无界 `PULL_BG_FLOOR`（`wujie.pa:179978-179979`，`fldai 4.0e-2`）。 */
   private static readonly PULL_BG_FLOOR: number = 0.04;
 
@@ -5625,6 +5655,19 @@ export struct PlaybackPage {
           .height(StyleConstants.FULL_HEIGHT)
           .position({ x: 0, y: 0 })
           .hitTestBehavior(HitTestMode.None)
+          // ★★★★ 2026-10-17（**照搬无界的背景形状** —— 用户：「无界的背景只显示上面那一块内容，
+          //   我们现在是整个背景被压得很扁、然后又拉伸回去」）
+          //   背景层在形变容器内部 ⇒ 会被容器的 `morphScale`（p=0 时 ≈0.082）压扁。
+          //   ⇒ 乘 `1/morphScale` 抵消，且**锚在左上角**：背景始终满尺寸、左上角贴卡片左上角
+          //     ⇒ 卡片只露出背景的**左上那一块**，卡片长大 = **揭开更多**（不是把压扁的拉回来）。
+          //   ⚠️ 静止态 `morphScale = 1` ⇒ 反缩放 = 1 ⇒ 逐像素不变（回归红线）。
+          .scale({
+            x: this.bgInverseScale(),
+            y: this.bgInverseScale(),
+            z: 1,
+            centerX: '0%',
+            centerY: '0%'
+          })
           // ⛔ 2026-10-17（**撤回我上一版的"反缩放"** —— 依据是用户给的无界中段截图）
           //   上一版给这一层加了 `.scale(1/morphScale)`，想让背景"不被压扁"。
           //   但无界的中段截图显示：**网格是铺满整张卡片的**（格子随卡片一起被压/展开），
