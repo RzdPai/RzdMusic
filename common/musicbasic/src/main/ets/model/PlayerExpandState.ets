@@ -1550,6 +1550,29 @@ export class PlayerExpandState {
    *   （两端式子现在逐字同源）；**中段**若不为 0，那是"位置 lerp 的进度源不同"
    *   （我们用 `lyricMorphT`，无界用 `swiperProgress`），那才是真正要看的东西。
    */
+  /**
+   * @returns 歌名行在**形变期**的**页内 y**（容器本地坐标）。
+   *
+   * ★ 依据 `PlayerPage完整UI定稿.md` §2 的树：无界的 `floatingMeta`（歌名）与
+   *   `scrubber`/`transport`（进度条/传输条）**同属 `playerPane` 的直接子节点**
+   *   ⇒ 同一个坐标空间（页内）⇒ 歌名用 `lerp(metaYPlayer, topYAtLyric + metaTopFixLyric, t)`
+   *   也不会压住进度条。
+   * ★ 我们这一行原来用**窗口坐标**写 `.position()`，而它挂在被 scale/translate 变换过的容器里
+   *   ⇒ 形变中卡片只有 clipHeight 那么高，而 y 仍是窗口坐标 ⇒ 被摆到卡片外/底部 ⇒ 压进度条。
+   * ★ 换算用**我们自己算出来的**容器参数（`morphScale` / `morphTy` / 宿主高），不猜枢轴：
+   *   `wy = H/2 + (ly − H/2)·s + ty  ⇒  ly = H/2 + (wy − ty − H/2)/s`
+   * ⚠️ `s ≈ 1`（静止态）时直接返回 `wy` ⇒ 逐像素不变。
+   */
+  public metaTopLocalY(t: number, rowH: number): number {
+    const wy: number = this.metaTopGeomY(t, rowH);
+    const s: number = this.morphScale;
+    if (!Number.isFinite(s) || s <= 0.001 || s >= 0.999) {
+      return wy;
+    }
+    const hostH: number = this.windowHeightVp;
+    return hostH / 2 + (wy - this.morphTy - hostH / 2) / s;
+  }
+
   public metaTopGeomY(t: number, rowH: number): number {
     const p: number = t < 0 ? 0 : (t > 1 ? 1 : t);
     // ★ 2026-10-17：`from` 那一端改用 `bigEndpointRect()`（= 与**续飞封面落点**同一个矩形，

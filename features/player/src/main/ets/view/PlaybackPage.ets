@@ -4348,7 +4348,13 @@ export struct PlaybackPage {
                       //   从下升起 180vp；静止态位移恒 0，版面逐像素不变。
                       .translate({ y: this.expandState.earlyRiseVp() })
                       // 收起过程中内容被压扁，小歌词会和控制区互相盖住
-                      .visibility(this.isCollapsing() ? Visibility.None : Visibility.Visible)
+                      // ★★★ 2026-10-17（**形变期让开**）：依据无界的树（`PlayerPage完整UI定稿.md` §2）
+                      //   它的**页 0 是空壳**，歌名由 `floatingMeta` 覆盖层画，`playerPane` 里
+                      //   **没有"小歌词"这一块**；而"小歌词"是派音自有、贴在页底（负外边距推到歌名那一带）
+                      //   ⇒ 歌名行改成**页内坐标**（= 无界口径）之后，两者在形变期会叠在一起。
+                      //   ⇒ 用户已定"小歌词留最后修" ⇒ 这里只做**形变期让开**，落位后照旧。
+                      .visibility(this.isCollapsing() || this.expandState.morphContainerActive()
+                        ? Visibility.None : Visibility.Visible)
                   }
                   // ★ 2026-10-15 诊断锚点（`hdc shell hilog -x | Select-String 'RzdBoxes'`）：
                   //   把**三个会互相压的块**的窗口矩形一次打出来 ——
@@ -6509,9 +6515,15 @@ export struct PlaybackPage {
         //   `CoverMorph.metaOffsetYAt` + `fitPlayerOverlay`），本行不再有任何自编项。
         .position({
           x: 0,
-          // ⛔ 2026-10-17（**撤回**：形变期改页内坐标会与"小歌词"那块撞在一起，用户实测
-          //   「歌手的飞入不对了 / 歌名压到小歌词上」）⇒ 回到窗口坐标这一版（= 用户确认"基本正常"的状态）
-          y: this.expandState.metaTopGeomY(this.lyricMorphT, PlaybackPage.LYRIC_META_ROW_H_VP)
+          // ★★★★ 2026-10-17（**形变期用页内坐标** —— 照 `PlayerPage完整UI定稿.md` §2 的树：
+          //   `floatingMeta` 与 `scrubber/transport` 同属 `playerPane` 的直接子节点 ⇒ 同一个坐标空间。
+          //   我们这一行原来用窗口坐标，形变中卡片只有 clipHeight 那么高 ⇒ 被摆到卡片外/底部
+          //   ⇒ 压住进度条且每帧错位（= 用户说的"重合 + 抽搐"）。
+          //   ⇒ 形变期用 `metaTopLocalY()`（反解用容器自己的 morphScale/morphTy，与 applyMorphProgress 同源）；
+          //     静止态仍用窗口坐标（容器恒等 ⇒ 两者相等，逐像素不变）。
+          y: this.expandState.morphContainerActive()
+            ? this.expandState.metaTopLocalY(this.lyricMorphT, PlaybackPage.LYRIC_META_ROW_H_VP)
+            : this.expandState.metaTopGeomY(this.lyricMorphT, PlaybackPage.LYRIC_META_ROW_H_VP)
         })
         // ★★ 2026-10-15（修用户实测「**动画中途会出现两个歌名歌手**（有一个是残留的、
         //   以前派音用的歌名歌手飞入）」）：
