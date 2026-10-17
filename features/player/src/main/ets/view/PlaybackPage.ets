@@ -6548,7 +6548,16 @@ export struct PlaybackPage {
         //   `CoverMorph.metaOffsetYAt` + `fitPlayerOverlay`），本行不再有任何自编项。
         .position({
           x: 0,
-          y: this.expandState.metaTopGeomY(this.lyricMorphT, PlaybackPage.LYRIC_META_ROW_H_VP)
+          // ★★★★ 2026-10-17（**形变期用页内坐标** —— 修「展开时歌名与进度条重合 / 下面抽搐」）
+          //   本行挂在**被 scale/translate 变换过的容器里**，而 `metaTopGeomY` 给的是**窗口坐标**
+          //   ⇒ 形变中卡片只有 262~567vp 高，而 y 仍是窗口坐标的 516.7 ⇒ 这一行被摆到卡片外面、
+          //     压住进度条，并且卡片每帧长大它也跟着每帧错位（= 抽搐）。
+          //   无界的 `metaRow` 在 `playerPane` 里、用**页内坐标** ⇒ 永远在卡片内。
+          //   ⇒ 形变期换成 `metaTopLocalY()`（用 `initScale/initTranslate/morphTy` 反解，与
+          //     `applyMorphProgress` 同源）；静止态仍是原窗口坐标（容器恒等 ⇒ 两者相等，逐像素不变）。
+          y: this.expandState.morphContainerActive()
+            ? this.expandState.metaTopLocalY(this.lyricMorphT, PlaybackPage.LYRIC_META_ROW_H_VP)
+            : this.expandState.metaTopGeomY(this.lyricMorphT, PlaybackPage.LYRIC_META_ROW_H_VP)
         })
         // ★★ 2026-10-15（修用户实测「**动画中途会出现两个歌名歌手**（有一个是残留的、
         //   以前派音用的歌名歌手飞入）」）：

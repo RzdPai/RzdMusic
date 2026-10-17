@@ -1550,6 +1550,45 @@ export class PlayerExpandState {
    *   （两端式子现在逐字同源）；**中段**若不为 0，那是"位置 lerp 的进度源不同"
    *   （我们用 `lyricMorphT`，无界用 `swiperProgress`），那才是真正要看的东西。
    */
+  /**
+   * @returns 歌名/歌手那一行在**形变期**应当使用的**页内 y**（vp，容器本地坐标）。
+   *
+   * ★★★★ 2026-10-17（用户：「展开的时候**进度条和歌曲名会重合**、下面**抽搐**」）
+   *
+   * ## 根因（看几何）
+   * 这一行原来一直把 {@link metaTopGeomY} 算出的**窗口坐标**写进 `.position()`，
+   * 而它挂在**被 scale/translate 变换过的形变容器里**的浮层上 ⇒ 形变中：
+   * ```
+   *   卡片可见高度只有 clipHeight（实测 p=0.28 时 262vp、p=0.67 时 567vp）
+   *   而这一行 y 仍是"窗口坐标"的 516.7
+   *   ⇒ 被摆到【卡片外面 / 卡片底部】⇒ 压住进度条（= 重合）
+   *   ⇒ 卡片每帧长大它也跟着每帧错位（= 抽搐）
+   * ```
+   * ## 无界为什么不会
+   * 它的 `metaRow` 在 `playerPane` **里面**、用**页内坐标** ⇒ 跟着卡片一起缩放，永远在卡片内
+   * （对照用户给的无界中段截图：歌名行在卡片里、封面下方那一大段空白之后）。
+   *
+   * ## 换算（用**我们自己算出来的**容器参数，不猜枢轴）
+   * ```
+   *   wy = H/2 + (ly − H/2)·s + ty        // H = 宿主高, s = morphScale, ty = morphTy
+   *   ⇒ ly = H/2 + (wy − ty − H/2)/s
+   * ```
+   * ⚠️ `s ≈ 1`（静止态）⇒ **直接返回 `wy`** ⇒ 静止态逐像素不变（回归红线）。
+   * ⚠️ 与"封面那次逆变换失败"不是同一件事：那次是**猜** `.scale()` 枢轴；
+   *    这里用的是容器中心 + `applyMorphProgress` 自己写的 `morphTy`，同源。
+   * @param t 歌词页进度（0 = 封面页端）
+   * @param rowH 这一行的行高（vp）
+   */
+  public metaTopLocalY(t: number, rowH: number): number {
+    const wy: number = this.metaTopGeomY(t, rowH);
+    const s: number = this.morphScale;
+    if (!Number.isFinite(s) || s <= 0.001 || s >= 0.999) {
+      return wy;
+    }
+    const hostH: number = this.windowHeightVp;
+    return hostH / 2 + (wy - this.morphTy - hostH / 2) / s;
+  }
+
   public metaTopGeomY(t: number, rowH: number): number {
     const p: number = t < 0 ? 0 : (t > 1 ? 1 : t);
     // ★ 2026-10-17：`from` 那一端改用 `bigEndpointRect()`（= 与**续飞封面落点**同一个矩形，
