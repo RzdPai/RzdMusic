@@ -402,6 +402,12 @@ struct Index {
       return Promise.resolve(this.resolveCommentTarget(song));
     });
     this.syncViewportWidthVp();
+    // ★★★ 2026-10-17（⑤「点击打开背景仍对不上」的第一条）：`@Monitor` 只在**变化**时触发。
+    //   冷启动这一拍：`playQueueIds` 刚从库里读回（上面第 2 行）、`selectIndex` 还是 0，
+    //   若持久化恢复出来的 selectIndex 恰好也是 0，则**没有任何变化事件** ⇒ 预热一次都没跑过
+    //   ⇒ 播放页 `adoptWarmMesh()` 永远比对不上 ⇒ 用户看到的就是兜底网格（别的歌的颜色）。
+    //   ⇒ 这里显式补一次（幂等：`MeshWarmService` 内部有 in-flight / done 去重）。
+    prewarmCurrentSongMesh(this.getUIContext(), this.appState.getCurrentSongItem());
   }
 
   /**

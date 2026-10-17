@@ -5331,6 +5331,22 @@ export struct PlaybackPage {
     void this.adoptWarmMesh();
   }
 
+  /**
+   * ★★★ 2026-10-17（⑤ 照搬无界的等价做法：**页面 `onAppear` 里先 await 一次采用、再取色**）：
+   * `adoptWarmMesh()` 内部已比对 `meshWarm.key === currentMeshKey()`，key 对不上就什么都不做；
+   * 取色（`getImageColor()`）必须在它**之后**跑，否则两条链路并发/抢先 ⇒ 背景与封面不是同一首。
+   */
+  private async adoptWarmMeshThenTint(): Promise<void> {
+    await this.adoptWarmMesh();
+    // 页面可能在这一拍已经被关掉（`onDisappear` 里 `isAlive = false`）⇒ 不再取色。
+    if (!this.isAlive) {
+      return;
+    }
+    Logger.info(PlaybackPage.logTag,
+      `RzdMeshWarm tint after adopt adopted=${this.meshSrcVersion > 0 ? 1 : 0}`);
+    this.getImageColor();
+  }
+
   private async adoptCachedMesh(): Promise<void> {
     if (this.meshSrcVersion > 0 || !this.isAlive) {
       return;
@@ -6223,8 +6239,10 @@ export struct PlaybackPage {
             // void this.adoptCachedMesh();
             // ★★★ 2026-10-17：先用**壳层预热好的**缓存（内部比对 key，key 不对就等 version 变化）；
             //   然后再走原来的网络/资源取源链路（拿不到时 MeshCoverBg 用取样色兜底）。
-            void this.adoptWarmMesh();
-            this.getImageColor();
+            // ★★★ 2026-10-17（⑤）：**先 await 一次 `adoptWarmMesh()`，再 `getImageColor()`**。
+            //   原来这里是 `void this.adoptWarmMesh(); this.getImageColor();` —— 两条链路并发，
+            //   取色那一路甚至可能先落地，屏上就出现"背景与封面不是同一首"。
+            void this.adoptWarmMeshThenTint();
             this.applyPlaybackWindowChromeImmediately();
             // 婵＄偑鍊楅弫璇差焽閻楀牞绱旈柡宥庣厛閸嬔囨煕閹达絾顏犳鐐叉喘瀵喚鎹勯悜妯衡偓杈ㄦ叏濠靛嫬鍔欑紒鏃€娼欓埢搴ㄥ灳瀹曞洨锛涢梺绋跨箰绾绢厽鎱ㄩ幖浣哥畱濞撴艾锕︾粈鍕偣娴ｇ鈷旈柣銈呮閵囧嫰妫冨☉妯款唹闂佺厧鐤囧Λ鍕垂娴兼潙缁╃痪顓炴噽缁犳牠鏌?
             this.applyFlowLightColors();
