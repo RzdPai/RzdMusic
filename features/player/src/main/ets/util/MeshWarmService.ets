@@ -82,30 +82,37 @@ async function runPrewarm(song: SongItem | undefined): Promise<void> {
   try {
     const key: string = meshWarmKeyOf(song);
     if (key.length === 0) {
+      // ★ 出口日志（逐个出口都打，真机一眼能看出"预热到底跑了没"）：
+      //   `hdc shell hilog -x | Select-String 'RzdMeshWarm'`
+      Logger.info(TAG, 'RzdMeshWarm skip-empty (no current song)');
       return;
     }
     const warm: MeshWarmState = MeshWarmState.connect();
     if (warmDoneKey === key && warm.key === key && warm.bytes !== undefined) {
+      Logger.info(TAG, `RzdMeshWarm skip-done key=${key.substring(0, 48)}`);
       return;
     }
     if (warmInFlightKey === key) {
+      Logger.info(TAG, `RzdMeshWarm skip-inflight key=${key.substring(0, 48)}`);
       return;
     }
     // 只有在线封面需要预热：本地文件/资源封面解码是毫秒级，播放页自己的链路够快。
     if (!key.startsWith('http://') && !key.startsWith('https://')) {
+      Logger.info(TAG, `RzdMeshWarm skip-local key=${key.substring(0, 48)}`);
       return;
     }
     warmInFlightKey = key;
-    Logger.info(TAG, `RzdMeshWarm start key=${key.substring(0, 64)}`);
+    Logger.info(TAG, `RzdMeshWarm start key=${key.substring(0, 48)}`);
     const bytes: Uint8Array | undefined = await loadMeshBytes(key);
     if (bytes === undefined) {
-      Logger.warn(TAG, `RzdMeshWarm empty key=${key.substring(0, 64)}`);
+      Logger.warn(TAG, `RzdMeshWarm decode-fail key=${key.substring(0, 48)} (见上一条 http-code)`);
       return;
     }
     const tint: string = averageTintOf(bytes);
     warm.put(key, bytes, tint);
     warmDoneKey = key;
-    Logger.info(TAG, `RzdMeshWarm done key=${key.substring(0, 64)} tint=${tint} v=${warm.version}`);
+    Logger.info(TAG, `RzdMeshWarm done key=${key.substring(0, 48)} tint=${tint} ` +
+      `bytes=${bytes.length} v=${warm.version}`);
   } catch (err) {
     const e = err as BusinessError;
     Logger.warn(TAG, `RzdMeshWarm failed code=${e?.code} msg=${e?.message}`);
@@ -127,6 +134,9 @@ async function loadMeshBytes(url: string): Promise<Uint8Array | undefined> {
       readTimeout: FETCH_TIMEOUT_MS
     });
     if (resp.responseCode !== 200 || resp.result === undefined) {
+      // ★ 出口日志：把 http 码打出来（401/403 = referer/UA 被拒；404 = 封面 URL 过期）
+      Logger.warn(TAG, `RzdMeshWarm http-code=${resp.responseCode} ` +
+        `hasResult=${resp.result !== undefined ? 1 : 0} url=${url.substring(0, 48)}`);
       return undefined;
     }
     const src: image.ImageSource = image.createImageSource(resp.result as ArrayBuffer);

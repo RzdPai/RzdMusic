@@ -42,7 +42,7 @@ import { DrawContext, FrameNode, NodeController, RenderNode, UIContext } from '@
 import { drawing, displaySync } from '@kit.ArkGraphics2D';
 import { image } from '@kit.ImageKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { SRC_EDGE, enhanceColors, boxBlurRgba, fillFallback, fillFallbackFromColor, hueOfSeed } from '../util/MeshSource';
+import { SRC_EDGE, enhanceColors, boxBlurRgba, fillFallback, hueOfSeed } from '../util/MeshSource';
 import { MeshField } from '../util/MeshGradient';
 
 /** 每格细分数（无界 `MESH_SUB`）。 */
@@ -107,7 +107,6 @@ class RgbTriple {
   g: number = 0;
   b: number = 0;
 }
-
 /** 十六进制单个字符 → 0..15（非法返回 -1）。 */
 function hexNibble(ch: string): number {
   const code: number = ch.charCodeAt(0);
@@ -241,6 +240,15 @@ class MeshBgController extends NodeController {
     //   那一次 `onFrameNow()` 又可能跑在 `makeNode`/首次布局**之前**（`hasRoot()` 还是假）
     //   ⇒ 那一帧被丢掉 ⇒ 之后没有任何人再叫它 ⇒ 屏上一直是空的（用户看到的就是"黑"）。
     //   ⇒ 只要**尺寸到位**（说明节点已经挂上、布局也出来了）就立刻补一帧，与播放状态无关。
+    //
+    // ⚠️ **与上游的已知分歧（保留，并给依据）**：上游 `MeshBgController.resize()`
+    //   （`wujie.pa:62886-62940`）只写 `node.frame` / `rootRender.frame`，**没有** `invalidate()`。
+    //   上游不需要它是因为：它每次 `rebuildSource()` 结束时都会 `node.src = pm; node.invalidate();`
+    //   （`:64206`），而封面是从本地文件同步解出来的，`src` 一定在"尺寸之后"到齐。
+    //   本仓的 `src` 由页面（可能要先 HTTP 下载）给、且 `NodeContainer` 在 `if (meshSrc)` 分支里，
+    //   挂载时机可能晚于那一帧 ⇒ 少这一次 invalidate 就会重现"暂停态一片黑"。
+    //   ⇒ 保留（只影响"暂停态补画一帧"，不改变任何像素内容），并在 `backgroundRevealOpacity()` 一侧
+    //     严格照搬上游的取值链。
     this.node.invalidate();
   }
 }
@@ -268,15 +276,17 @@ export struct MeshCoverBg {
    */
   @Param seed: string = '';
   /**
-   * ★★★ 2026-10-17（用户实测「点击打开播放页时背景是别的歌的颜色」）：
-   * **取样色**（封面的取色结果，`#RRGGBB` 或 `rgba(r,g,b,a)`）。
+   * ⛔ 2026-10-17 二次更正（用户原话：「背景也照着无界的改」）：**上一轮新增的 `fallbackColor` 参数已删除**。
    *
-   * 取不到封面时兜底网格的**色相**用它定，而不是 `hueOfSeed(seed)` 的哈希值 ——
-   * 在线歌的网格要下载 + 解码（200~2000ms），点击打开的形变只有 350~400ms，
-   * 整段形变都拿不到真源，兜底网格就是屏上唯一能看见的东西。
-   * 解析不出时（空串/格式不认识）自动退回 `hueOfSeed(seed)`，行为与本参数引入前一致。
+   * 上游 `MeshCoverBg` 根本没有"取样色兜底"这条路 —— `makeFallback()` 的色相只有一个来源：
+   * ```
+   *   fillFallback(u8, SRC_EDGE, SRC_EDGE, hueOfSeed(this.seed))
+   *   // wujie.pa:63687-63839：`ldexternalmodulevar "hueOfSeed"` + `lda a2; ldobjbyname 0x8, "seed"`
+   * ```
+   * 上一轮按"封面取样色"定兜底色相 ⇒ 兜底网格的色相与上游完全不同 ⇒ 点击打开那 350~400ms
+   * 里屏上的背景必然"对不上"。现在恒走 `hueOfSeed(seed)`，`seed` 在调用侧按上游
+   * `seedOfParts(title, artist)` 拼（`contract...Identity&1.0.0.#*#seedOfParts` = `title + artist`，无分隔符）。
    */
-  @Param fallbackColor: string = '';
   /** 换图令牌：`src` 原地变化时靠它触发重新上传。 */
   @Param srcVersion: number = 0;
   /** 是否在播放（与 `active` 一起构成帧闸门）。 */
@@ -339,7 +349,7 @@ export struct MeshCoverBg {
   //   ⚠️ 我们原来只监听 `srcVersion` ⇒ 换歌时 `src` 还没到手、`seed` 已经变了，
   //     屏上会**继续显示上一首的兜底色**（用户看到的"展开时是蓝色"就是这个：
   //     播放的那首还没解出封面，兜底网格按旧 seed 的色相画出来了）。
-  @Monitor('srcVersion', 'seed', 'fallbackColor')
+  @Monitor('srcVersion', 'seed')
   onSourceChanged(): void {
     this.applySource();
   }
@@ -350,10 +360,19 @@ export struct MeshCoverBg {
   }
 
   private applySource(): void {
+    // ★★★★ 2026-10-17（照搬无界 `MeshCoverBg.onSourceChanged()`，`wujie.pa:63901-63927`）：
+    // ```
+    //   this.controller.node.field.reseed(hueOfSeed(this.seed));   // ← 63906-63922（本仓原来漏了这一句）
+    //   void this.rebuildSource();
+    // ```
+    // `field.reseed(hue)` 决定**网格流动的调色/轨道相位**（`MeshField.reseed`：
+    // `applyConf(generateConf(floor(|hue|)))` + `initOrbits(seed)` + `applyBorderRules()`，
+    // `wujie.pa:90867-90920`）⇒ 少这一句，屏上网格的"流动花纹"就与上游不是同一套。
+    this.controller.node.field.reseed(hueOfSeed(this.seed));
     // ★★★★ 2026-10-17（照搬无界 `decodeCover()` 失败 ⇒ `makeFallback()` 那条链）
     // ```
     //   无界：coverPath 解不出图 ⇒ makeFallback()：按 seed 的色相造一张 64×64 的
-    //         四角 HSL 渐变 → enhanceColors → boxBlurRgba → 直接当网格源
+    //         四角 HSL 渐变 →（rebuildSource 里统一）enhanceColors → boxBlurRgba → 当网格源
     //   ⇒ **网格源永远存在**，屏上不会出现"背景一片黑"
     // ```
     // 我们这一侧的 `src` 由页面给（在线封面要下载），拿不到时就在**组件内**造兜底网格
@@ -404,15 +423,12 @@ export struct MeshCoverBg {
     try {
       const buf: ArrayBuffer = new ArrayBuffer(SRC_EDGE * SRC_EDGE * 4);
       const u8: Uint8Array = new Uint8Array(buf);
-      // ★★★ 2026-10-17：**取样色优先**（色相来自封面），解析不出才用 seed 的哈希色相。
-      const sample: RgbTriple | undefined = parseSampleColor(this.fallbackColor);
-      if (sample !== undefined) {
-        fillFallbackFromColor(u8, SRC_EDGE, SRC_EDGE, sample.r, sample.g, sample.b);
-        hilog.info(DOMAIN, TAG, 'fallback mesh from sample color r=%{public}d g=%{public}d b=%{public}d',
-          sample.r, sample.g, sample.b);
-      } else {
-        fillFallback(u8, SRC_EDGE, SRC_EDGE, hueOfSeed(this.seed));
-      }
+      // ★★★ 2026-10-17（照搬无界）：色相**只**来自 `hueOfSeed(seed)`。
+      //   上游 `makeFallback()`（`wujie.pa:63687-63839`）：
+      //   `fillFallback(new Uint8Array(buf), SRC_EDGE, SRC_EDGE, hueOfSeed(this.seed))`；
+      //   `enhanceColors` + `boxBlurRgba(64,64,9,3)` **不在**这个函数里，而在 `rebuildSource()`
+      //   的统一后处理里（`:63990-64206`）—— 本仓这两步在本函数内完成，效果等价（只作用于兜底源）。
+      fillFallback(u8, SRC_EDGE, SRC_EDGE, hueOfSeed(this.seed));
       enhanceColors(u8);
       boxBlurRgba(u8, SRC_EDGE, SRC_EDGE, FALLBACK_BLUR_RADIUS, FALLBACK_BLUR_PASSES);
       const pm: image.PixelMap = await image.createPixelMap(buf, {
@@ -556,22 +572,21 @@ export struct MeshCoverBg {
         .width(HIT_FULL)
         .height(HIT_FULL)
         .onAreaChange((_oldArea: Area, newArea: Area): void => {
-          // ★★★★ 2026-10-17（**单位必须是 px** —— 修「形变过程中背景不画/只画一角」）
+          // ★★★★ 2026-10-17（**改回上游：vp 直传，不做 vp2px** —— 上一轮的 `vp2px` 是错的）
           //
-          // `RenderNode.frame` 的 `x/y/width/height` **单位是物理像素 px**（不是 vp）。
-          // 而 `Area.width/height` 给的是 **vp** ⇒ 直接把 vp 当 px 用，在 3x 屏上就等于
-          // **把画布缩到 1/3 并钉在左上角**（或让底层 Surface 因尺寸不匹配而拒绝绘制）。
-          // 形变期那个盒子本来就只有几十~几百 vp（裁剪窗口），再缩成 1/3 ⇒ 画出来的东西
-          // 整块落在裁剪窗口之外 ⇒ 屏上只剩底下的底座色 = 用户看到的「动画过程没有背景、
-          // 动画一结束就恢复」。
-          // ⇒ 这里显式做 `vp2px`。（上游 `wujie` 也是直接传 vp —— 这属于照搬过来的**上游
-          //   单位 bug**；外部复核 `gemini-4-argon-thinking` 与官方文档都说 `frame` 是 px。）
-          // ⚠️ 反过来说，即便某台机器把 frame 当 vp 解释，这里放大 3 倍也只是"画得比区域大"
-          //   （多出来的被祖先 `.clip(true)` 裁掉）⇒ **两种解释下都不会黑**，所以这个改动是安全的。
-          const ui: UIContext = this.getUIContext();
+          // 上游 `MeshCoverBg`（`wujie.pa:64796-64824`，λ `@4*^1*#`）：
+          // ```
+          //   onAreaChange((_o, n) => this.controller.resize(Number(n.width), Number(n.height)))
+          // ```
+          // 而 `RenderNode.frame` 的单位**就是 vp** —— 本机 SDK 声明（`arkui/Graphics.d.ts`，
+          // `interface Frame`）里四个字段逐条写着 `Unit: vp`；`Number` 直传与
+          // `LengthMetricsUnit.DEFAULT = 0`（注释原文 "The default length metrics unit, in vp"）一致。
+          // ⇒ 上一轮把它改成 `ui.vp2px(...)` 属于**自造修法**（当时依据的是"第三方说 frame 是 px"），
+          //   在 3x 屏上等于把画布放大 3 倍 ⇒ 网格顶点按错误画布生成，与真机观感对不上。
+          // 本函数内 `draw()` 用的仍然是 `context.sizeInPixel`（px，绘制画布口径），两者不冲突。
           const wVp: number = Number(newArea.width);
           const hVp: number = this.fixedHVp > 0 ? this.fixedHVp : Number(newArea.height);
-          this.controller.resize(ui.vp2px(wVp), ui.vp2px(hVp));
+          this.controller.resize(wVp, hVp);
         })
 
       if (this.scrim) {

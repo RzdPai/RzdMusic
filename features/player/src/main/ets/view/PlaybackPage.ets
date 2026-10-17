@@ -2363,13 +2363,41 @@ export struct PlaybackPage {
    * @returns 0..1闂佹寧绋戦悧鎾愁焽閵堝拋娼伴柕蹇婃閸?= 1闂?
    */
   private backgroundRevealOpacity(): number {
-    if (!this.expandState.morphContainerActive()) {
-      return 1;
+    // ★★★★ 2026-10-17（**照搬无界的取值链**，修用户反复报的「点击打开背景仍对不上」）：
+    //
+    // 上游把不透明度挂在 `MeshCoverBg` 的**外层 `__Common__` 包装**上，按入口分两套取值
+    // （`wujie.pa:192150-192178`，λ `@36***^2**#`）：
+    // ```
+    //   __Common__()
+    //     .opacity(this.pullMode ? this.pullBgOpacity() : this.expand.contentOpacity)
+    //     { MeshCoverBg({ coverPath, seed, playing, active, entryFade }) }
+    // ```
+    // ⇒ **下拉那条路**（用户从迷你条往上拖）走 `pullBgOpacity()` = `0.04 + pullBgIn×0.96`（从 4% 起长）；
+    //   **其余所有入口**（点击打开 / 关闭 / 系统返回）走 `expand.contentOpacity`
+    //   —— 也就是本仓的 `expandState.morphContentOpacity`（与页面上其它内容用**同一条**透明度曲线）。
+    //
+    // ⚠️ 上一轮把两条路并成"只算 pullBgOpacity"（注释说是为了修首帧全不透明），
+    //   结果点击打开时背景在自己的 0.04→1 曲线上跑，而控件/封面在 contentOpacity 曲线上跑
+    //   ⇒ 形变整段"背景亮度和别人不一样" = 用户说的对不上。现在按上游拆回两套。
+    return this.expandState.pullMode ? this.pullBgOpacity() : this.expandState.morphContentOpacity;
+  }
+
+  /**
+   * 照搬无界 `PlayerPage.pullBgOpacity()`（`wujie.pa:176331-176372`）：
+   * ```
+   *   pullPaintable = pullGeomReady && !morphSquashing      // :176560-176579
+   *   pullBgIn      = clamp(effT / PULL_BG_IN_END)           // :176295-176326
+   *   pullBgOpacity = !pullPaintable ? 0 : PULL_BG_FLOOR + pullBgIn × (1 - PULL_BG_FLOOR)
+   * ```
+   * `pullGeomReady` 在本仓 = {@link PlayerExpandState.morphGeomReadyNow}；
+   * `morphSquashing` 在本仓 = `morphSquashY !== 1`。
+   * @returns 0..1
+   */
+  private pullBgOpacity(): number {
+    const paintable: boolean = this.expandState.morphGeomReadyNow() && this.expandState.morphSquashY === 1;
+    if (!paintable) {
+      return 0;
     }
-    // 2026-10-17: single upstream formula only (PULL_BG_FLOOR + pullBgIn * (1 - FLOOR));
-    // the pullMode / morphDrive split was MY invention and made the first frame fully opaque.
-    // It works on the tween path because the tween now writes ONLY morphP (see applyMorphProgress);
-    // @Monitor('morphP') recomputes geometry every frame, so pullBgIn animates 0 -> 1 over 30%.
     return PlaybackPage.PULL_BG_FLOOR + this.pullBgIn() * (1 - PlaybackPage.PULL_BG_FLOOR);
   }
 
@@ -5362,7 +5390,17 @@ export struct PlaybackPage {
       return;
     }
     const key: string = this.currentMeshKey();
-    if (key.length === 0 || this.meshWarm.key !== key) {
+    // ★★★ 2026-10-17（诊断：**两个 key 一次打全** —— 一眼就能判出"预热没跑"还是"key 失配"）
+    //   `hdc shell hilog -x | Select-String 'RzdMeshWarm adopt'`
+    //     hit=0 且 key-warm 为空           ⇒ 壳层预热根本没跑（见 `RzdMeshWarm skip-*`）
+    //     hit=0 且 key-warm 非空但 key 不同 ⇒ key 口径不一致（`meshWarmKeyOf` vs `currentMeshKey`）
+    //     hit=1                            ⇒ 采用成功，背景应当已是当前歌的网格
+    const warmKey: string = this.meshWarm.key;
+    const hit: boolean = key.length > 0 && warmKey === key && this.meshWarm.bytes !== undefined;
+    Logger.info(PlaybackPage.logTag,
+      `RzdMeshWarm adopt key-warm=${warmKey.substring(0, 48)} key-cur=${key.substring(0, 48)} ` +
+      `hit=${hit ? 1 : 0} ver=${this.meshSrcVersion} alive=${this.isAlive ? 1 : 0}`);
+    if (!hit) {
       return;
     }
     const copy: Uint8Array | undefined = this.meshWarm.snapshot();
@@ -5453,7 +5491,12 @@ export struct PlaybackPage {
     }
     const title: string = typeof song.title === 'string' ? song.title : '';
     const singer: string = typeof song.singer === 'string' ? song.singer : '';
-    return title.length > 0 || singer.length > 0 ? `${title}|${singer}` : '';
+    // ★★★ 2026-10-17（照搬无界 `seedOfParts(title, artist)`）：
+    //   `contract...Identity&1.0.0.#*#seedOfParts`（反编译）里是
+    //   `"" + a + "" + b + ""` ⇒ **就是 `title + artist` 直拼，没有分隔符**。
+    //   本仓原来用 `${title}|${singer}` —— 多一个 `|` 就让 `hueOfSeed()` 的哈希
+    //   （`h = h*31 + charCode`，`wujie.pa:91914-91957`）完全不同 ⇒ 兜底网格色相与上游不同。
+    return title.length > 0 || singer.length > 0 ? `${title}${singer}` : '';
   }
 
   /**
@@ -6191,11 +6234,9 @@ export struct PlaybackPage {
               //   闂佸疇娉曟刊瀵哥箔?婵炲濯寸徊濂告偝椤栫偛鍙婃い鏍ㄤ亢閸╁矂鏌涘▎鎯挎垵锕㈤敍鍕＞闁瑰鍋熸竟鎰归崗鐓庡摵婵炲牄鍨婚幉妤佹媴缁嬫姊剧紓浣瑰姈椤ㄥ懓銇愬☉娆戔枖闁逞屽墰閹秆冪暋閺夎法顏?闂佺懓鍢查¨鈧紒杈ㄧ懇閹粙濡搁敃鈧悡鏇㈡煛閸愶絾娅呭褏濞€楠炲孩娼忛妸銏犱壕闁靛鍔庣粻鏍煟閵娿儱顏柛瀣嚇瀵爼鍩ラ崨顖滎槴闂?
               //     闁荤喐娲戠粈渚€骞冮幘璇茬睄闁兼悂娼ф慨顒勬偤?闂佹眹鍨奸褏娆㈤柆宥呯?+"婵炴垶鎸哥粔瀵告暜閸ヮ剙绠?闂佹寧绋戦懟顖滄闁秴绠查柕蹇曞Т閻掑ジ鏌ｉ妸銉ヮ仾婵犙€鍋撻梺鍛婂笩椤旀劗妲愬▎鎰懝閻庯綆浜跺ú銈夋煙鐠虹尨榫氶柛搴㈩殜瀵煡顢涘┃鐐╂櫊瀹曟岸骞忕仦鎯ь嚄闂佺粯顨呴悧鍛不閿濆棗绶為柡宥庡亝閺嗙姴顭块悷鏉挎毐闁活亝澹嗛幉妤佹媴缁嬫姊鹃梺鎸庣☉椤р偓缂?
               //     婵炴垶鎸哥粔鐑姐€呴敃鍌氱鐎广儱娲﹂弳?闂佹眹鍨奸褏绮╁畡闈舵帡寮崒娑氾紛闁诲孩绋掗崝鏇㈠Φ?闁哄鏅滈悷褔锝為幒妤€绀冩繛鍡樺姉閵嗗﹪鏌?
-              fixedHVp: 0,
-              // ★★★ 2026-10-17（用户实测「点击打开播放页时背景是别的歌的颜色 / 对不上」）：
-              //   形变期（350~400ms）拿不到 64×64 真源时，兜底网格的**色相**由取样色定，
-              //   而不是 `hueOfSeed(title|singer)` 的哈希值。取色未就绪时退回页面现用的底色。
-              fallbackColor: this.tintReady ? this.coverTint.targetColor : this.state.imageColor
+              fixedHVp: 0
+              // ⛔ 2026-10-17：`fallbackColor`（取样色定兜底色相）**已删除** —— 上游没有这一路，
+              //   兜底色相恒为 `hueOfSeed(seed)`（见 `MeshCoverBg.makeFallback()` 的注释）。
             })
               .id(PlaybackPage.MESH_BG_ID)
               .width(StyleConstants.FULL_WIDTH)
@@ -6265,7 +6306,8 @@ export struct PlaybackPage {
           })
 
           // 闂?闂佸憡鍔曢幊搴敊閹邦喕娌柛宀嬪缁愭鎮樿箛鎾存儓妞ゆ洦鍙冮獮渚€骞掑鍫㈩槹 100%闂? 闁荤喍妞掔粈浣圭珶閳ь剛绱掗幇顓ф當鐟?= 闂佸憡鐟崹鐢革綖鐎ｎ喗鍎楅柍杞版祰閸?/ 缂傚倸鍊甸弲婊堝棘娓氣偓閺佸秵寰勫☉姘鳖槷闂佸湱顣介崑鎾趁归悩顔煎姕婵℃鐗婂璇差煥閸愯法绋忓┑鐘才堥埀顒€鍟跨拋鏌ユ偡濞嗗繑顥犻柣鎾櫈閵?
-          Column() {        Column() {
+          Column() {
+            Column() {
               this.buildControlStack()
             }
             // 闂?闂佸ジ顣﹀ù鍥儗閹屽殫闁告洖澧庣粈鍕煕閹寸姴小缂傚秴绉撮埢浠嬫晸閻樺弶顏￠梺鍛婂笧婢ф顪冮崒鐐村剭闁告洦鍋勯獮鎴﹀箹鐎涙ɑ绌跨紒杈ㄥ哺閺佸秴顫濋鈧弫鍫曟倵閸︻厽鍤€闁活亝澹嗛幏鍦偓闈涙啞缁插骞栫€涙ɑ绀夌紒鏃傚枛閺佸秴鐣濋崟顓炶拫闁硅壈鎻紓姘卞垝?闁荤姵鍔栧娆戣姳閾忣偆鈻旈柍褜鍓熷?闂傚倵鍋撻柛顭戝枛閻?100%
