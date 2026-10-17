@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,7 +36,7 @@ import {
   PlayerExpandState,
   MorphDrive,
   MorphMetaBridge,
-  // ★ 2026-10-17（照搬无界 `MainPage.__shrink`）：非手势关闭的快照收缩浮层状态
+  // 鈽?2026-10-17锛堢収鎼棤鐣?`MainPage.__shrink`锛夛細闈炴墜鍔垮叧闂殑蹇収鏀剁缉娴眰鐘舵€?
   MorphShrinkState,
   RouterUrlConstants,
   SdkApiUtil,
@@ -51,19 +51,19 @@ import {
 import { dispatchShellPlaybackIntent, LXSourceHost, PlaybackPage, PlaybackPageCoverContent, PlayerViewModel } from 'player';
 import { RecommendPage } from 'recommendation';
 import { EchoReviewPage } from 'recommendation';
-// 「现在就听」：底栏第 2 个页签（推荐 / **现在就听** / 回响 / 我的）。
+// 銆岀幇鍦ㄥ氨鍚€嶏細搴曟爮绗?2 涓〉绛撅紙鎺ㄨ崘 / **鐜板湪灏卞惉** / 鍥炲搷 / 鎴戠殑锛夈€?
 import { NowPlayingFeedPage } from 'recommendation';
 import { HomeMiniBarPlayer, HomeMiniBarPlayerAside, PlaylistTransitionOverlay } from 'playlist';
 import { MinePage } from 'setting';
-// 新模块：本地音乐（导入设备音频到沙箱）与洛雪同步客户端。
-// ⚠️ hvigor 对 HAR 是**按引用编译**的：没有任何代码 import 它们时，
-//    即使已登记进 build-profile.json5，这两个模块也**不会被编译**（构建照样绿）。
-//    所以这里的 import 同时承担"启动初始化"和"把它拉进构建图"两个作用。
+// 鏂版ā鍧楋細鏈湴闊充箰锛堝鍏ヨ澶囬煶棰戝埌娌欑锛変笌娲涢洩鍚屾瀹㈡埛绔€?
+// 鈿狅笍 hvigor 瀵?HAR 鏄?*鎸夊紩鐢ㄧ紪璇?*鐨勶細娌℃湁浠讳綍浠ｇ爜 import 瀹冧滑鏃讹紝
+//    鍗充娇宸茬櫥璁拌繘 build-profile.json5锛岃繖涓や釜妯″潡涔?*涓嶄細琚紪璇?*锛堟瀯寤虹収鏍风豢锛夈€?
+//    鎵€浠ヨ繖閲岀殑 import 鍚屾椂鎵挎媴"鍚姩鍒濆鍖?鍜?鎶婂畠鎷夎繘鏋勫缓鍥?涓や釜浣滅敤銆?
 import { localMusic } from 'localmusic';
 import type { MatchSongInfo } from 'localmusic';
 import { syncManager } from 'sync';
-// 歌曲评论（内置平台评论）：启动时把「本地音乐 -> 平台身份」的解析注册进 comment，
-// 这样评论面板既能看在线歌的评论，也能看本地歌（匹配过的那些）的评论。
+// 姝屾洸璇勮锛堝唴缃钩鍙拌瘎璁猴級锛氬惎鍔ㄦ椂鎶娿€屾湰鍦伴煶涔?-> 骞冲彴韬唤銆嶇殑瑙ｆ瀽娉ㄥ唽杩?comment锛?
+// 杩欐牱璇勮闈㈡澘鏃㈣兘鐪嬪湪绾挎瓕鐨勮瘎璁猴紝涔熻兘鐪嬫湰鍦版瓕锛堝尮閰嶈繃鐨勯偅浜涳級鐨勮瘎璁恒€?
 import { setCommentTargetResolver } from 'comment';
 import type { CommentSongRef } from 'comment';
 import { HdsBarLayoutMode, HdsBarStyle, HdsTabs } from '@hms.hds.hdsBaseComponent';
@@ -71,126 +71,126 @@ import { BusinessError, deviceInfo } from '@kit.BasicServicesKit';
 import { common } from '@kit.AbilityKit';
 
 /**
- * 二级页面悬浮迷你条的固定高度（vp）。
+ * 浜岀骇椤甸潰鎮诞杩蜂綘鏉＄殑鍥哄畾楂樺害锛坴p锛夈€?
  *
- * **与首页底栏里那条一致（56）**：封面 44（`HomeMiniBarAlbumCover.coverSideLengthVp()` 常规态）
- * + 上下各 6vp 内边距。用户要求二级页面也用「主页那个高一点的」，不再用 30vp 封面的矮胶囊。
- * 它是播放页形变的起点，几何只随这一处常量变化（别再按首页单排/双排去动它）。
+ * **涓庨椤靛簳鏍忛噷閭ｆ潯涓€鑷达紙56锛?*锛氬皝闈?44锛坄HomeMiniBarAlbumCover.coverSideLengthVp()` 甯歌鎬侊級
+ * + 涓婁笅鍚?6vp 鍐呰竟璺濄€傜敤鎴疯姹備簩绾ч〉闈篃鐢ㄣ€屼富椤甸偅涓珮涓€鐐圭殑銆嶏紝涓嶅啀鐢?30vp 灏侀潰鐨勭煯鑳跺泭銆?
+ * 瀹冩槸鎾斁椤靛舰鍙樼殑璧风偣锛屽嚑浣曞彧闅忚繖涓€澶勫父閲忓彉鍖栵紙鍒啀鎸夐椤靛崟鎺?鍙屾帓鍘诲姩瀹冿級銆?
  */
 const FLOATING_MINI_BAR_HEIGHT_VP: number = 56;
 
-/** 二级页面悬浮迷你条在宽屏下的最大宽度（vp）：胶囊不该铺满整个平板/桌面窗口。 */
+/** 浜岀骇椤甸潰鎮诞杩蜂綘鏉″湪瀹藉睆涓嬬殑鏈€澶у搴︼紙vp锛夛細鑳跺泭涓嶈閾烘弧鏁翠釜骞虫澘/妗岄潰绐楀彛銆?*/
 const FLOATING_MINI_BAR_MAX_WIDTH_VP: number = 560;
 
 /**
- * 底栏「现在就听」那一页的页签下标。
+ * 搴曟爮銆岀幇鍦ㄥ氨鍚€嶉偅涓€椤电殑椤电涓嬫爣銆?
  *
- * ★ 用户 2026-10-15（参考图对比）：**这一页要把浮动底栏上方那条小播放条整条藏掉**
- *   —— 参考图里 Tab 栏之上只有一行进度（左当前时间 / 中细条 / 右总时长），没有迷你条。
- *   所以本页做三件事（**排布模式一个字都不动**，见 `barLayoutModeForHds()` 的注释）：
- *   ① {@link miniBar} 条件渲染 ⇒ 那条迷你条的内容为空，HDS 按内容量高 ⇒ **没有那一排**；
- *   ② {@link miniBarStyleForHds} 恒回 `COLLAPSE` ⇒ 即便用户此前把迷你条展开过
- *      （`miniBarExpanded === true`），本页也不会画出一条展开的**空**栏；
- *   ③ `enableMiniBarBackground` 在本页为 false ⇒ 不会留下一枚空胶囊背板。
- * ⚠️ **不要**改用 `barLayoutMode = HORIZONTAL`（试过，真机反馈"tab 栏短一截"）：
- *   那个模式是"页签与迷你条**并排**"，迷你条空着时页签会被挤到左边、右端空出一格。
- * ⚠️ 顺序与 `HomeTabsPages()` 里 `TabContent` 的次序、`tabScrollTopCommands[i]` 的
- *   下标含义**必须一致**（`tab_now_playing` 那一项就是它）。
+ * 鈽?鐢ㄦ埛 2026-10-15锛堝弬鑰冨浘瀵规瘮锛夛細**杩欎竴椤佃鎶婃诞鍔ㄥ簳鏍忎笂鏂归偅鏉″皬鎾斁鏉℃暣鏉¤棌鎺?*
+ *   鈥斺€?鍙傝€冨浘閲?Tab 鏍忎箣涓婂彧鏈変竴琛岃繘搴︼紙宸﹀綋鍓嶆椂闂?/ 涓粏鏉?/ 鍙虫€绘椂闀匡級锛屾病鏈夎糠浣犳潯銆?
+ *   鎵€浠ユ湰椤靛仛涓変欢浜嬶紙**鎺掑竷妯″紡涓€涓瓧閮戒笉鍔?*锛岃 `barLayoutModeForHds()` 鐨勬敞閲婏級锛?
+ *   鈶?{@link miniBar} 鏉′欢娓叉煋 鈬?閭ｆ潯杩蜂綘鏉＄殑鍐呭涓虹┖锛孒DS 鎸夊唴瀹归噺楂?鈬?**娌℃湁閭ｄ竴鎺?*锛?
+ *   鈶?{@link miniBarStyleForHds} 鎭掑洖 `COLLAPSE` 鈬?鍗充究鐢ㄦ埛姝ゅ墠鎶婅糠浣犳潯灞曞紑杩?
+ *      锛坄miniBarExpanded === true`锛夛紝鏈〉涔熶笉浼氱敾鍑轰竴鏉″睍寮€鐨?*绌?*鏍忥紱
+ *   鈶?`enableMiniBarBackground` 鍦ㄦ湰椤典负 false 鈬?涓嶄細鐣欎笅涓€鏋氱┖鑳跺泭鑳屾澘銆?
+ * 鈿狅笍 **涓嶈**鏀圭敤 `barLayoutMode = HORIZONTAL`锛堣瘯杩囷紝鐪熸満鍙嶉"tab 鏍忕煭涓€鎴?锛夛細
+ *   閭ｄ釜妯″紡鏄?椤电涓庤糠浣犳潯**骞舵帓**"锛岃糠浣犳潯绌虹潃鏃堕〉绛句細琚尋鍒板乏杈广€佸彸绔┖鍑轰竴鏍笺€?
+ * 鈿狅笍 椤哄簭涓?`HomeTabsPages()` 閲?`TabContent` 鐨勬搴忋€乣tabScrollTopCommands[i]` 鐨?
+ *   涓嬫爣鍚箟**蹇呴』涓€鑷?*锛坄tab_now_playing` 閭ｄ竴椤瑰氨鏄畠锛夈€?
  */
 const NOW_PLAYING_TAB_INDEX: number = 1;
 
 /**
- * 键盘弹出时，二级页面悬浮迷你条**再往上抬多少**（vp）的两个常量。
+ * 閿洏寮瑰嚭鏃讹紝浜岀骇椤甸潰鎮诞杩蜂綘鏉?*鍐嶅線涓婃姮澶氬皯**锛坴p锛夌殑涓や釜甯搁噺銆?
  *
- * 背景（官方《自定义键盘》）：系统默认的键盘避让**只保证输入框不被遮挡**，
- * 输入框下面的组件（本条悬浮播放条就是）会被键盘压住 ⇒ 必须自己按键盘高度避让。
+ * 鑳屾櫙锛堝畼鏂广€婅嚜瀹氫箟閿洏銆嬶級锛氱郴缁熼粯璁ょ殑閿洏閬胯**鍙繚璇佽緭鍏ユ涓嶈閬尅**锛?
+ * 杈撳叆妗嗕笅闈㈢殑缁勪欢锛堟湰鏉℃偓娴挱鏀炬潯灏辨槸锛変細琚敭鐩樺帇浣?鈬?蹇呴』鑷繁鎸夐敭鐩橀珮搴﹂伩璁┿€?
  *
- * 算式（`floatingMiniBarKeyboardLiftVp()`）：
- *   lift = 键盘高度 + {@link FLOATING_MINI_BAR_KEYBOARD_GAP_VP} − 常态下胶囊离屏底的既有间隙
- * 其中"既有间隙"按 2026-10-12 的真机两点标定 `gap ≈ 1.8 × barBottomMargin` 反推
- * （见 {@link floatingMiniBar} 里那两条实测记录）—— 减掉它是为了**不要把已经有的那份间隙
- * 重复算一遍**，否则键盘态会比常态明显浮高一截（§29.1 用户就报过"播放条浮得太高"）。
+ * 绠楀紡锛坄floatingMiniBarKeyboardLiftVp()`锛夛細
+ *   lift = 閿洏楂樺害 + {@link FLOATING_MINI_BAR_KEYBOARD_GAP_VP} 鈭?甯告€佷笅鑳跺泭绂诲睆搴曠殑鏃㈡湁闂撮殭
+ * 鍏朵腑"鏃㈡湁闂撮殭"鎸?2026-10-12 鐨勭湡鏈轰袱鐐规爣瀹?`gap 鈮?1.8 脳 barBottomMargin` 鍙嶆帹
+ * 锛堣 {@link floatingMiniBar} 閲岄偅涓ゆ潯瀹炴祴璁板綍锛夆€斺€?鍑忔帀瀹冩槸涓轰簡**涓嶈鎶婂凡缁忔湁鐨勯偅浠介棿闅?
+ * 閲嶅绠椾竴閬?*锛屽惁鍒欓敭鐩樻€佷細姣斿父鎬佹槑鏄炬诞楂樹竴鎴紙搂29.1 鐢ㄦ埛灏辨姤杩?鎾斁鏉℃诞寰楀お楂?锛夈€?
  *
- * ⚠️ 真机调法（只动这两个常量，别改算式）：
- *   · 键盘态偏高 ⇒ 调**大** FACTOR（多减一点）；偏低 / 仍被压住 ⇒ 调**小** FACTOR（减 0 = 整条上移一个键盘高）。
- *   · 想整体再多留一点缝 ⇒ 调大 GAP。
+ * 鈿狅笍 鐪熸満璋冩硶锛堝彧鍔ㄨ繖涓や釜甯搁噺锛屽埆鏀圭畻寮忥級锛?
+ *   路 閿洏鎬佸亸楂?鈬?璋?*澶?* FACTOR锛堝鍑忎竴鐐癸級锛涘亸浣?/ 浠嶈鍘嬩綇 鈬?璋?*灏?* FACTOR锛堝噺 0 = 鏁存潯涓婄Щ涓€涓敭鐩橀珮锛夈€?
+ *   路 鎯虫暣浣撳啀澶氱暀涓€鐐圭紳 鈬?璋冨ぇ GAP銆?
  */
 const FLOATING_MINI_BAR_KEYBOARD_GAP_VP: number = 8;
 const FLOATING_MINI_BAR_CAPSULE_GAP_FACTOR: number = 1.8;
 
 /**
- * 上拉打开播放页的**起手热区**高度（vp，贴屏幕底那一条）。
+ * 涓婃媺鎵撳紑鎾斁椤电殑**璧锋墜鐑尯**楂樺害锛坴p锛岃创灞忓箷搴曢偅涓€鏉★級銆?
  *
- * 迷你条 56 + 底部避让（导航条/小白条约 14~24）+ 8 的边距，再往上一小段余量 ≈ 112。
- * 只有落在这条带里的上滑才由壳层接管（详见 `pullOpenStartsNearBottom()`）——
- * 页面中段的上滑交还给列表，避免「我的页从播放器上面一部分上滑也打开播放器」。
+ * 杩蜂綘鏉?56 + 搴曢儴閬胯锛堝鑸潯/灏忕櫧鏉＄害 14~24锛? 8 鐨勮竟璺濓紝鍐嶅線涓婁竴灏忔浣欓噺 鈮?112銆?
+ * 鍙湁钀藉湪杩欐潯甯﹂噷鐨勪笂婊戞墠鐢卞３灞傛帴绠★紙璇﹁ `pullOpenStartsNearBottom()`锛夆€斺€?
+ * 椤甸潰涓鐨勪笂婊戜氦杩樼粰鍒楄〃锛岄伩鍏嶃€屾垜鐨勯〉浠庢挱鏀惧櫒涓婇潰涓€閮ㄥ垎涓婃粦涔熸墦寮€鎾斁鍣ㄣ€嶃€?
  */
 const PULL_OPEN_HANDLE_BAND_VP: number = 112;
 
 /**
- * 播放页浮层在壳层 Stack 里的层级。
+ * 鎾斁椤垫诞灞傚湪澹冲眰 Stack 閲岀殑灞傜骇銆?
  *
- * 必须高于 HdsTabs（自己 `zIndex(1)`，浮动底栏也在它里面）和二级页面的悬浮迷你条。
- * 播放页**不再用 `bindContentCover`**：模态宿主是不透明的一层，会盖住首页与迷你条，
- * 而"从迷你条长出来"的形变恰恰要透出它们（详见 build() 里的注释）。
+ * 蹇呴』楂樹簬 HdsTabs锛堣嚜宸?`zIndex(1)`锛屾诞鍔ㄥ簳鏍忎篃鍦ㄥ畠閲岄潰锛夊拰浜岀骇椤甸潰鐨勬偓娴糠浣犳潯銆?
+ * 鎾斁椤?*涓嶅啀鐢?`bindContentCover`**锛氭ā鎬佸涓绘槸涓嶉€忔槑鐨勪竴灞傦紝浼氱洊浣忛椤典笌杩蜂綘鏉★紝
+ * 鑰?浠庤糠浣犳潯闀垮嚭鏉?鐨勫舰鍙樻伆鎭拌閫忓嚭瀹冧滑锛堣瑙?build() 閲岀殑娉ㄩ噴锛夈€?
  */
 const PLAYER_OVERLAY_Z_INDEX: number = 100;
 
 /**
- * 形变克隆层（迷你条副本）在壳层 Stack 里的层级：必须**高于**播放页浮层。
- * 反编译里克隆层挂在 `MainPage` 的最上层（三个 lambda），比播放页容器更高。
+ * 褰㈠彉鍏嬮殕灞傦紙杩蜂綘鏉″壇鏈級鍦ㄥ３灞?Stack 閲岀殑灞傜骇锛氬繀椤?*楂樹簬**鎾斁椤垫诞灞傘€?
+ * 鍙嶇紪璇戦噷鍏嬮殕灞傛寕鍦?`MainPage` 鐨勬渶涓婂眰锛堜笁涓?lambda锛夛紝姣旀挱鏀鹃〉瀹瑰櫒鏇撮珮銆?
  */
 const PLAYER_CLONE_Z_INDEX: number = 110;
 /**
- * ★ 2026-10-17：快照收缩浮层（`ShrinkOverlayHost`）的层次 —— **必须比上面所有浮层都高**。
- *   它代表"正在消失的那一屏播放页"，压在克隆层（110）与迷你条之上才不会被盖住。
- *   ⚠️ 无界那一侧它也没有专门的 z（`MainPage` 里它排在浮层宿主之后），
- *     这里显式给一个值只是为了**不依赖声明顺序**。
+ * 鈽?2026-10-17锛氬揩鐓ф敹缂╂诞灞傦紙`ShrinkOverlayHost`锛夌殑灞傛 鈥斺€?**蹇呴』姣斾笂闈㈡墍鏈夋诞灞傞兘楂?*銆?
+ *   瀹冧唬琛?姝ｅ湪娑堝け鐨勯偅涓€灞忔挱鏀鹃〉"锛屽帇鍦ㄥ厠闅嗗眰锛?10锛変笌杩蜂綘鏉′箣涓婃墠涓嶄細琚洊浣忋€?
+ *   鈿狅笍 鏃犵晫閭ｄ竴渚у畠涔熸病鏈変笓闂ㄧ殑 z锛坄MainPage` 閲屽畠鎺掑湪娴眰瀹夸富涔嬪悗锛夛紝
+ *     杩欓噷鏄惧紡缁欎竴涓€煎彧鏄负浜?*涓嶄緷璧栧０鏄庨『搴?*銆?
  */
 const SHRINK_OVERLAY_Z_INDEX: number = 130;
 
 /**
- * ★ 播放页入口**双轨开关**（施工图第 1 步）。
+ * 鈽?鎾斁椤靛叆鍙?*鍙岃建寮€鍏?*锛堟柦宸ュ浘绗?1 姝ワ級銆?
  *
- * - `true` ：播放页作为 **NavDestination** 推入（`pushPath(..., animated = false)`），
- *   完全对标无界 1.2.4。系统转场必须关掉 —— 形变自己就是动画，两套动画叠在一起
- *   就是用户报的"动画中途封面归位 / 底部空一块"。
- * - `false`：旧路径，播放页作为壳层 Stack 里的浮层（`isShowPlay` 条件渲染）。
+ * - `true` 锛氭挱鏀鹃〉浣滀负 **NavDestination** 鎺ㄥ叆锛坄pushPath(..., animated = false)`锛夛紝
+ *   瀹屽叏瀵规爣鏃犵晫 1.2.4銆傜郴缁熻浆鍦哄繀椤诲叧鎺?鈥斺€?褰㈠彉鑷繁灏辨槸鍔ㄧ敾锛屼袱濂楀姩鐢诲彔鍦ㄤ竴璧?
+ *   灏辨槸鐢ㄦ埛鎶ョ殑"鍔ㄧ敾涓€斿皝闈㈠綊浣?/ 搴曢儴绌轰竴鍧?銆?
+ * - `false`锛氭棫璺緞锛屾挱鏀鹃〉浣滀负澹冲眰 Stack 閲岀殑娴眰锛坄isShowPlay` 鏉′欢娓叉煋锛夈€?
  *
- * ─────────── ★★ 2026-10-15：**已打开**，因为上次回退的根因找到了 ───────────
- * **原来为什么回退**（2026-09-25 上机）：`NavDestination` 渲染在 `HdsNavigation` 内部，
- * 用的是 **STANDARD** 模式 —— 那个模式下它**自带不透明底**，"透明背景也压不住 HDS 自带的底"，
- * 于是同在该 Navigation 里的 **HDS 浮动底栏（迷你条真身）被整片盖住**，
- * 而形变恰恰要透出那条迷你条 ⇒ "一推入就成一块、底部又缺一块"。
+ * 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ 鈽呪槄 2026-10-15锛?*宸叉墦寮€**锛屽洜涓轰笂娆″洖閫€鐨勬牴鍥犳壘鍒颁簡 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+ * **鍘熸潵涓轰粈涔堝洖閫€**锛?026-09-25 涓婃満锛夛細`NavDestination` 娓叉煋鍦?`HdsNavigation` 鍐呴儴锛?
+ * 鐢ㄧ殑鏄?**STANDARD** 妯″紡 鈥斺€?閭ｄ釜妯″紡涓嬪畠**鑷甫涓嶉€忔槑搴?*锛?閫忔槑鑳屾櫙涔熷帇涓嶄綇 HDS 鑷甫鐨勫簳"锛?
+ * 浜庢槸鍚屽湪璇?Navigation 閲岀殑 **HDS 娴姩搴曟爮锛堣糠浣犳潯鐪熻韩锛夎鏁寸墖鐩栦綇**锛?
+ * 鑰屽舰鍙樻伆鎭拌閫忓嚭閭ｆ潯杩蜂綘鏉?鈬?"涓€鎺ㄥ叆灏辨垚涓€鍧椼€佸簳閮ㄥ張缂轰竴鍧?銆?
  *
- * **这次的解药（逆向得到，已核实到 API 层）**：
- * 无界的播放页 `HdsNavDestination` **设了 `mode(NavDestinationMode.DIALOG)`**
- * （`wujie.pa:190804-190811`）。官方语义（本机 SDK
- * `openharmony/ets/component/nav_destination.d.ts:317-333`）：
+ * **杩欐鐨勮В鑽紙閫嗗悜寰楀埌锛屽凡鏍稿疄鍒?API 灞傦級**锛?
+ * 鏃犵晫鐨勬挱鏀鹃〉 `HdsNavDestination` **璁句簡 `mode(NavDestinationMode.DIALOG)`**
+ * 锛坄wujie.pa:190804-190811`锛夈€傚畼鏂硅涔夛紙鏈満 SDK
+ * `openharmony/ets/component/nav_destination.d.ts:317-333`锛夛細
  * > "Dialog mode, where the navigation destination is **transparent by default**,
  * >  and adding or removing the navigation destination **does not affect the underlying
  * >  page's lifecycle**."
- * ⇒ **默认透明 + 不影响下层页面** ⇒ 下层首页与迷你条**不被盖住、不被隐藏**，
- * 形变全程**可见且可量**（`expand.init` 正是靠 `getFrameNodeById` 的矩形算起点）。
- * 这一句已经加在 `features/player/.../PlaybackPageRoute.ets` 的 `.mode(...)` 上。
+ * 鈬?**榛樿閫忔槑 + 涓嶅奖鍝嶄笅灞傞〉闈?* 鈬?涓嬪眰棣栭〉涓庤糠浣犳潯**涓嶈鐩栦綇銆佷笉琚殣钘?*锛?
+ * 褰㈠彉鍏ㄧ▼**鍙涓斿彲閲?*锛坄expand.init` 姝ｆ槸闈?`getFrameNodeById` 鐨勭煩褰㈢畻璧风偣锛夈€?
+ * 杩欎竴鍙ュ凡缁忓姞鍦?`features/player/.../PlaybackPageRoute.ets` 鐨?`.mode(...)` 涓娿€?
  *
- * ⚠️ **DIALOG 的两个代价**（`PlaybackPageRoute.ets` 里已处理/已注明）：
- *   ① DIALOG 默认**不响应返回键** ⇒ 必须显式 `.onBackPressed()`（已给）；
- *   ② 不再有系统转场与系统底 ⇒ 顶栏/背景/裁剪全由播放页自己画（本该如此）。
+ * 鈿狅笍 **DIALOG 鐨勪袱涓唬浠?*锛坄PlaybackPageRoute.ets` 閲屽凡澶勭悊/宸叉敞鏄庯級锛?
+ *   鈶?DIALOG 榛樿**涓嶅搷搴旇繑鍥為敭** 鈬?蹇呴』鏄惧紡 `.onBackPressed()`锛堝凡缁欙級锛?
+ *   鈶?涓嶅啀鏈夌郴缁熻浆鍦轰笌绯荤粺搴?鈬?椤舵爮/鑳屾櫙/瑁佸壀鍏ㄧ敱鎾斁椤佃嚜宸辩敾锛堟湰璇ュ姝わ級銆?
  *
- * ⚠️ **回退方法**：把这里改回 `false` 即可回到"壳层浮层"那条已验证可用的路
- *    （浮层代码与克隆层都还在，随包编译，不用重新搭）。
+ * 鈿狅笍 **鍥為€€鏂规硶**锛氭妸杩欓噷鏀瑰洖 `false` 鍗冲彲鍥炲埌"澹冲眰娴眰"閭ｆ潯宸查獙璇佸彲鐢ㄧ殑璺?
+ *    锛堟诞灞備唬鐮佷笌鍏嬮殕灞傞兘杩樺湪锛岄殢鍖呯紪璇戯紝涓嶇敤閲嶆柊鎼級銆?
  */
 const PLAYER_ROUTE_MODE: boolean = true;
 
 /**
- * 播放页路由参数（对标反编译里的 `param.pull`）。
+ * 鎾斁椤佃矾鐢卞弬鏁帮紙瀵规爣鍙嶇紪璇戦噷鐨?`param.pull`锛夈€?
  *
- * 用类而不是匿名对象字面量：ArkTS 对 `NavPathInfo.param`（`Object`）传字面量容易报类型问题，
- * 显式类型也让"这次进入要不要走形变"这件事在日志里可读。
+ * 鐢ㄧ被鑰屼笉鏄尶鍚嶅璞″瓧闈㈤噺锛欰rkTS 瀵?`NavPathInfo.param`锛坄Object`锛変紶瀛楅潰閲忓鏄撴姤绫诲瀷闂锛?
+ * 鏄惧紡绫诲瀷涔熻"杩欐杩涘叆瑕佷笉瑕佽蛋褰㈠彉"杩欎欢浜嬪湪鏃ュ織閲屽彲璇汇€?
  */
 class PlayerRouteParam {
-  /** true = 这次进入要走形变（由手指拖入或点击/意图打开时统一置 true）。 */
+  /** true = 杩欐杩涘叆瑕佽蛋褰㈠彉锛堢敱鎵嬫寚鎷栧叆鎴栫偣鍑?鎰忓浘鎵撳紑鏃剁粺涓€缃?true锛夈€?*/
   pull: boolean = true;
 
   constructor(pull: boolean) {
@@ -198,39 +198,39 @@ class PlayerRouteParam {
   }
 }
 
-/** 壳层日志标签（`hdc shell hilog | grep HomeShell` 可捞形变/路由链路）。 */
+/** 澹冲眰鏃ュ織鏍囩锛坄hdc shell hilog | grep HomeShell` 鍙崬褰㈠彉/璺敱閾捐矾锛夈€?*/
 const RzdShellLogTag: string = 'HomeShell';
 
 /**
- * 上拉松手后的收尾时长（ms）—— **提交（够阈值）** 与 **取消（不够阈值）** 两个值。
+ * 涓婃媺鏉炬墜鍚庣殑鏀跺熬鏃堕暱锛坢s锛夆€斺€?**鎻愪氦锛堝闃堝€硷級** 涓?**鍙栨秷锛堜笉澶熼槇鍊硷級** 涓や釜鍊笺€?
  *
- * ★★ 2026-10-15（照搬无界：改成**它那套形变自己的常量**）：
- *   无界的 `commitPull()` / `cancelPull()` 都走 `animateMorphT(SETTLE_MS, t, EASE_OUT_STR)`，
- *   而 **`SETTLE_MS = 400`，且提交与取消是同一个值**
- *   （`_recover/logic-src/开关播放器-手势路径定稿.md` §0 速查 L25/L26 与 §八 L219/L220，
- *   后者逐条给了字节码行号 L146973 / L146866）。
+ * 鈽呪槄 2026-10-15锛堢収鎼棤鐣岋細鏀规垚**瀹冮偅濂楀舰鍙樿嚜宸辩殑甯搁噺**锛夛細
+ *   鏃犵晫鐨?`commitPull()` / `cancelPull()` 閮借蛋 `animateMorphT(SETTLE_MS, t, EASE_OUT_STR)`锛?
+ *   鑰?**`SETTLE_MS = 400`锛屼笖鎻愪氦涓庡彇娑堟槸鍚屼竴涓€?*
+ *   锛坄_recover/logic-src/寮€鍏虫挱鏀惧櫒-鎵嬪娍璺緞瀹氱.md` 搂0 閫熸煡 L25/L26 涓?搂鍏?L219/L220锛?
+ *   鍚庤€呴€愭潯缁欎簡瀛楄妭鐮佽鍙?L146973 / L146866锛夈€?
  *
- * ⚠️ 改前是 **300 / 180**，原注释写着"取无界 Tokens 里的 300（主转场）/ 180（微交互）" ——
- *   **取错了来源**：那是无界的**通用设计 token**，而这里要的是**这套形变自己的**常量
- *   （`MainPage.SETTLE_MS`）。同一个错误来源在"关闭时长"上已经犯过一次（§56.20：
- *   那处不仅时长偏短，缓动还整条抄成了"打开"用的那条 ⇒ 用户实测「关闭几乎没动画」）。
+ * 鈿狅笍 鏀瑰墠鏄?**300 / 180**锛屽師娉ㄩ噴鍐欑潃"鍙栨棤鐣?Tokens 閲岀殑 300锛堜富杞満锛? 180锛堝井浜や簰锛? 鈥斺€?
+ *   **鍙栭敊浜嗘潵婧?*锛氶偅鏄棤鐣岀殑**閫氱敤璁捐 token**锛岃€岃繖閲岃鐨勬槸**杩欏褰㈠彉鑷繁鐨?*甯搁噺
+ *   锛坄MainPage.SETTLE_MS`锛夈€傚悓涓€涓敊璇潵婧愬湪"鍏抽棴鏃堕暱"涓婂凡缁忕姱杩囦竴娆★紙搂56.20锛?
+ *   閭ｅ涓嶄粎鏃堕暱鍋忕煭锛岀紦鍔ㄨ繕鏁存潯鎶勬垚浜?鎵撳紑"鐢ㄧ殑閭ｆ潯 鈬?鐢ㄦ埛瀹炴祴銆屽叧闂嚑涔庢病鍔ㄧ敾銆嶏級銆?
  *
- * ★ 顺带一个正面效果：壳层叠加层（`MorphCoverClone`）跑的是无界 `ENTER_MS = 560ms`（已对齐）。
- *   改前播放页 `300 + 20 = 320ms` 就落位，**离叠加层的 560 差 240ms**（要靠
- *   `morphOverlayBridging()` 兜着才不被切断）；改成 400 后落位在 `420ms`，
- *   **差距缩到 140ms** ⇒ 被切断的风险更小。
+ * 鈽?椤哄甫涓€涓闈㈡晥鏋滐細澹冲眰鍙犲姞灞傦紙`MorphCoverClone`锛夎窇鐨勬槸鏃犵晫 `ENTER_MS = 560ms`锛堝凡瀵归綈锛夈€?
+ *   鏀瑰墠鎾斁椤?`300 + 20 = 320ms` 灏辫惤浣嶏紝**绂诲彔鍔犲眰鐨?560 宸?240ms**锛堣闈?
+ *   `morphOverlayBridging()` 鍏滅潃鎵嶄笉琚垏鏂級锛涙敼鎴?400 鍚庤惤浣嶅湪 `420ms`锛?
+ *   **宸窛缂╁埌 140ms** 鈬?琚垏鏂殑椋庨櫓鏇村皬銆?
  *
- * ⚠️ 这是**纯观感**改动（无功能影响）。若你上机觉得"打开变钝了"、不如原来跟手，
- *   **回退就是把这两行改回 `300` / `180`** —— 一处一行，互不影响。
+ * 鈿狅笍 杩欐槸**绾鎰?*鏀瑰姩锛堟棤鍔熻兘褰卞搷锛夈€傝嫢浣犱笂鏈鸿寰?鎵撳紑鍙橀挐浜?銆佷笉濡傚師鏉ヨ窡鎵嬶紝
+ *   **鍥為€€灏辨槸鎶婅繖涓よ鏀瑰洖 `300` / `180`** 鈥斺€?涓€澶勪竴琛岋紝浜掍笉褰卞搷銆?
  */
 const PULL_OPEN_SETTLE_MS: number = 400;
 const PULL_OPEN_ABORT_MS: number = 400;
 
 /**
- * 跟手期间补量"续飞封面终点"的重试次数 / 间隔（ms）。
+ * 璺熸墜鏈熼棿琛ラ噺"缁灏侀潰缁堢偣"鐨勯噸璇曟鏁?/ 闂撮殧锛坢s锛夈€?
  *
- * 与 `PlaybackPage` 的 12 × 32ms 同一套窗口（对标反编译 `schedulePublishRetry`）：
- * 播放页是**起手那一刻**才挂载的，它的大封面什么时候可量取决于布局帧数。
+ * 涓?`PlaybackPage` 鐨?12 脳 32ms 鍚屼竴濂楃獥鍙ｏ紙瀵规爣鍙嶇紪璇?`schedulePublishRetry`锛夛細
+ * 鎾斁椤垫槸**璧锋墜閭ｄ竴鍒?*鎵嶆寕杞界殑锛屽畠鐨勫ぇ灏侀潰浠€涔堟椂鍊欏彲閲忓彇鍐充簬甯冨眬甯ф暟銆?
  */
 const PULL_ANCHOR_RETRY_MAX: number = 12;
 const PULL_ANCHOR_RETRY_MS: number = 32;
@@ -268,21 +268,21 @@ struct Index {
   @Local intentState: PlaybackIntentState =
     AppStorageV2.connect(PlaybackIntentState, AppStorageKeys.PLAYBACK_INTENT_STATE, () => new PlaybackIntentState())!;
   /**
-   * 收起请求通道（与播放页共用）。
+   * 鏀惰捣璇锋眰閫氶亾锛堜笌鎾斁椤靛叡鐢級銆?
    *
-   * 系统返回要求关闭播放页模态时，壳层只在这里 `requestCollapse()`；
-   * 真正的收起动画由播放页播，播完它自己把 `isShowPlay` 置 false。
+   * 绯荤粺杩斿洖瑕佹眰鍏抽棴鎾斁椤垫ā鎬佹椂锛屽３灞傚彧鍦ㄨ繖閲?`requestCollapse()`锛?
+   * 鐪熸鐨勬敹璧峰姩鐢荤敱鎾斁椤垫挱锛屾挱瀹屽畠鑷繁鎶?`isShowPlay` 缃?false銆?
    */
   @Local expandState: PlayerExpandState =
     AppStorageV2.connect(PlayerExpandState, AppStorageKeys.PLAYER_EXPAND_STATE,
       () => new PlayerExpandState())!;
   /**
-   * ★★★ 2026-10-17（照搬无界 `MainPage` 的 `__shrink` + `shrinkPixmap`）：
-   * 「非手势关闭」（关闭按钮 / 系统返回）那一棒的**满窗快照浮层**。
+   * 鈽呪槄鈽?2026-10-17锛堢収鎼棤鐣?`MainPage` 鐨?`__shrink` + `shrinkPixmap`锛夛細
+   * 銆岄潪鎵嬪娍鍏抽棴銆嶏紙鍏抽棴鎸夐挳 / 绯荤粺杩斿洖锛夐偅涓€妫掔殑**婊＄獥蹇収娴眰**銆?
    *
-   * 无界那一侧这两样都挂在 `MainPage` 上（`wujie.pa:143995` / `144006`），
-   * 渲染点也在 `MainPage`（`162465-162707`）—— 所以本仓同样由**壳层**持握与渲染。
-   * 播放页负责"拍快照 + `start(...)`"（它才知道什么时候要关），壳层负责画。
+   * 鏃犵晫閭ｄ竴渚ц繖涓ゆ牱閮芥寕鍦?`MainPage` 涓婏紙`wujie.pa:143995` / `144006`锛夛紝
+   * 娓叉煋鐐逛篃鍦?`MainPage`锛坄162465-162707`锛夆€斺€?鎵€浠ユ湰浠撳悓鏍风敱**澹冲眰**鎸佹彙涓庢覆鏌撱€?
+   * 鎾斁椤佃礋璐?鎷嶅揩鐓?+ `start(...)`"锛堝畠鎵嶇煡閬撲粈涔堟椂鍊欒鍏筹級锛屽３灞傝礋璐ｇ敾銆?
    */
   @Local shrinkState: MorphShrinkState =
     AppStorageV2.connect(MorphShrinkState, AppStorageKeys.MORPH_SHRINK_STATE,
@@ -290,79 +290,79 @@ struct Index {
   /** Cached window metrics (safe areas, size) for layout padding. */
   @Local windowInfo: WindowInfo = getWindowInfoState();
   /**
-   * 当前导航栈深度（0 = 还在首页 Tab 上，>0 = 已经推入了二级页面）。
+   * 褰撳墠瀵艰埅鏍堟繁搴︼紙0 = 杩樺湪棣栭〉 Tab 涓婏紝>0 = 宸茬粡鎺ㄥ叆浜嗕簩绾ч〉闈級銆?
    *
-   * 只用来决定「全局悬浮迷你播放条」是否显示：首页那份迷你条在 HDS 浮动底栏里，
-   * 二级页面会把整个浮动底栏盖住，所以二级页面需要在最外层再挂一份（见
-   * {@link floatingMiniBar}）。
+   * 鍙敤鏉ュ喅瀹氥€屽叏灞€鎮诞杩蜂綘鎾斁鏉°€嶆槸鍚︽樉绀猴細棣栭〉閭ｄ唤杩蜂綘鏉″湪 HDS 娴姩搴曟爮閲岋紝
+   * 浜岀骇椤甸潰浼氭妸鏁翠釜娴姩搴曟爮鐩栦綇锛屾墍浠ヤ簩绾ч〉闈㈤渶瑕佸湪鏈€澶栧眰鍐嶆寕涓€浠斤紙瑙?
+   * {@link floatingMiniBar}锛夈€?
    *
-   * ⚠️ 不要再拿它去改底部导航的 `barHeight` / `barFloatingStyle`（试过，底栏直接坏掉）。
+   * 鈿狅笍 涓嶈鍐嶆嬁瀹冨幓鏀瑰簳閮ㄥ鑸殑 `barHeight` / `barFloatingStyle`锛堣瘯杩囷紝搴曟爮鐩存帴鍧忔帀锛夈€?
    */
   @Local navDepth: number = 0;
   /**
-   * 形变克隆层用的播放器 VM。
+   * 褰㈠彉鍏嬮殕灞傜敤鐨勬挱鏀惧櫒 VM銆?
    *
-   * 克隆层要画迷你条右侧那一块的**副本**（歌名/歌手 + 播放按钮），它要读当前曲目与播控状态；
-   * 与真实迷你条各自持有一个 VM 实例是安全的（VM 只是 `MusicAppState`/`MediaService` 的门面，
-   * 状态本身仍然只有一份）。
+   * 鍏嬮殕灞傝鐢昏糠浣犳潯鍙充晶閭ｄ竴鍧楃殑**鍓湰**锛堟瓕鍚?姝屾墜 + 鎾斁鎸夐挳锛夛紝瀹冭璇诲綋鍓嶆洸鐩笌鎾帶鐘舵€侊紱
+   * 涓庣湡瀹炶糠浣犳潯鍚勮嚜鎸佹湁涓€涓?VM 瀹炰緥鏄畨鍏ㄧ殑锛圴M 鍙槸 `MusicAppState`/`MediaService` 鐨勯棬闈紝
+   * 鐘舵€佹湰韬粛鐒跺彧鏈変竴浠斤級銆?
    */
 
   /**
-   * 窗口宽度（vp），用于给悬浮迷你条算一个**稳定的显式宽度**。
+   * 绐楀彛瀹藉害锛坴p锛夛紝鐢ㄤ簬缁欐偓娴糠浣犳潯绠椾竴涓?*绋冲畾鐨勬樉寮忓搴?*銆?
    *
-   * 悬浮条是叠在页面上的独立节点，宽度必须自己算准：靠 `width('100%')` + 外层 padding
-   * 在部分形态下会算错（hugging 到右边 / 撑成整条大长方形），而百分比宽度又会在
-   * 窗口尺寸变化时跳变。这里只在首次和尺寸真正变化时更新。
+   * 鎮诞鏉℃槸鍙犲湪椤甸潰涓婄殑鐙珛鑺傜偣锛屽搴﹀繀椤昏嚜宸辩畻鍑嗭細闈?`width('100%')` + 澶栧眰 padding
+   * 鍦ㄩ儴鍒嗗舰鎬佷笅浼氱畻閿欙紙hugging 鍒板彸杈?/ 鎾戞垚鏁存潯澶ч暱鏂瑰舰锛夛紝鑰岀櫨鍒嗘瘮瀹藉害鍙堜細鍦?
+   * 绐楀彛灏哄鍙樺寲鏃惰烦鍙樸€傝繖閲屽彧鍦ㄩ娆″拰灏哄鐪熸鍙樺寲鏃舵洿鏂般€?
    */
   @Local viewportWidthVp: number = 0;
-  /** 视口高度（vp）：上拉打开的"起手是否在底部"判定与位移映射都要用它。 */
+  /** 瑙嗗彛楂樺害锛坴p锛夛細涓婃媺鎵撳紑鐨?璧锋墜鏄惁鍦ㄥ簳閮?鍒ゅ畾涓庝綅绉绘槧灏勯兘瑕佺敤瀹冦€?*/
   @Local viewportHeightVp: number = 0;
-  /** 上拉打开手势（竖直方向）。 */
+  /** 涓婃媺鎵撳紑鎵嬪娍锛堢珫鐩存柟鍚戯級銆?*/
   @Local miniBarViewModel: PlayerViewModel = new PlayerViewModel();
   private pullOpenOption: PanGestureOptions = new PanGestureOptions({ direction: PanDirection.Vertical });
 
   /**
-   * 诊断闸：本轮手势是否**已经记过一次**"跟手更新被判据拒掉"。
+   * 璇婃柇闂革細鏈疆鎵嬪娍鏄惁**宸茬粡璁拌繃涓€娆?*"璺熸墜鏇存柊琚垽鎹嫆鎺?銆?
    *
-   * 为什么需要它（而不是每次都记）：`onPullOpenUpdate` 由每个触摸移动事件调用，
-   * 而计数落在 `PlayerExpandState` 的 `@Trace` 字段上 ⇒ 每次都写会让徽标那个
-   * 13 行 `Text` 每帧重建，**诊断本身会把手感搅浑**。诊断只需要"这一轮有没有被拒"
-   * 这一个事实 ⇒ 一次手势只记一次（`onPullOpenStart` 里清零）。
-   * 读数：徽标第十行 `pd=<起手拒>/<更新拒>/<松手拒>`，见 `PlayerExpandState.pullDropBegin`。
+   * 涓轰粈涔堥渶瑕佸畠锛堣€屼笉鏄瘡娆￠兘璁帮級锛歚onPullOpenUpdate` 鐢辨瘡涓Е鎽哥Щ鍔ㄤ簨浠惰皟鐢紝
+   * 鑰岃鏁拌惤鍦?`PlayerExpandState` 鐨?`@Trace` 瀛楁涓?鈬?姣忔閮藉啓浼氳寰芥爣閭ｄ釜
+   * 13 琛?`Text` 姣忓抚閲嶅缓锛?*璇婃柇鏈韩浼氭妸鎵嬫劅鎼呮祽**銆傝瘖鏂彧闇€瑕?杩欎竴杞湁娌℃湁琚嫆"
+   * 杩欎竴涓簨瀹?鈬?涓€娆℃墜鍔垮彧璁颁竴娆★紙`onPullOpenStart` 閲屾竻闆讹級銆?
+   * 璇绘暟锛氬窘鏍囩鍗佽 `pd=<璧锋墜鎷?/<鏇存柊鎷?/<鏉炬墜鎷?`锛岃 `PlayerExpandState.pullDropBegin`銆?
    */
   private pullDropCountedThisGesture: boolean = false;
 
   /**
-   * 一张截图就能拿到 x/y/w/h，下一轮按数字改完即删。
+   * 涓€寮犳埅鍥惧氨鑳芥嬁鍒?x/y/w/h锛屼笅涓€杞寜鏁板瓧鏀瑰畬鍗冲垹銆?
    */
   private tabsController: HdsTabsController = new HdsTabsController();
   /**
-   * 进出二级页面期间抑制 HDS 的样式回调（进二级页面不再改布局状态，只用于出页面时的幂等对齐）。
+   * 杩涘嚭浜岀骇椤甸潰鏈熼棿鎶戝埗 HDS 鐨勬牱寮忓洖璋冿紙杩涗簩绾ч〉闈笉鍐嶆敼甯冨眬鐘舵€侊紝鍙敤浜庡嚭椤甸潰鏃剁殑骞傜瓑瀵归綈锛夈€?
    */
   private restoringHomeBar: boolean = false;
 
   /**
-   * 壳层此刻是否**自己**持有浮层那一棒的补间（`MorphCoverClone` 的 `morphOverlayP`）。
+   * 澹冲眰姝ゅ埢鏄惁**鑷繁**鎸佹湁娴眰閭ｄ竴妫掔殑琛ラ棿锛坄MorphCoverClone` 鐨?`morphOverlayP`锛夈€?
    *
-   * 用途只有一个：给 `@Monitor('expandState.morphDrive')` 让路 ——
-   * `settlePullOpen` 起完壳层的浮层补间之后会把 `morphDrive` 置成 `ANIM`，
-   * 那一瞬监控回调也会被触发；不回让的话它会再起一条方向相反的浮层补间
-   * （"松手没过阈值、封面已经往回补了，又被拽到落位"）。
-   * 注意它**不是**渲染门（渲染门在 `PlayerExpandState.morphOverlayBridging()` 里）。
+   * 鐢ㄩ€斿彧鏈変竴涓細缁?`@Monitor('expandState.morphDrive')` 璁╄矾 鈥斺€?
+   * `settlePullOpen` 璧峰畬澹冲眰鐨勬诞灞傝ˉ闂翠箣鍚庝細鎶?`morphDrive` 缃垚 `ANIM`锛?
+   * 閭ｄ竴鐬洃鎺у洖璋冧篃浼氳瑙﹀彂锛涗笉鍥炶鐨勮瘽瀹冧細鍐嶈捣涓€鏉℃柟鍚戠浉鍙嶇殑娴眰琛ラ棿
+   * 锛?鏉炬墜娌¤繃闃堝€笺€佸皝闈㈠凡缁忓線鍥炶ˉ浜嗭紝鍙堣鎷藉埌钀戒綅"锛夈€?
+   * 娉ㄦ剰瀹?*涓嶆槸**娓叉煋闂紙娓叉煋闂ㄥ湪 `PlayerExpandState.morphOverlayBridging()` 閲岋級銆?
    */
   private shellOwnsOverlayTween: boolean = false;
 
   /** Initializes play queue ids from local DB for the session. */
   aboutToAppear() {
     this.appState.playQueueIds = MusicDbApi.getInstance().getSongList().map((dto) => dto.id);
-    // ★ 页签从 4 个收成 2 个（推荐 / 我的）之后，`TabSwitchState.tabIndex` 可能是上一版留下的
-    //   越界下标（比如旧的「我的」= 2、「设置」= 3）—— HdsTabs 拿到越界下标会落在空白页上。
-    //   共享状态里没有"页签数"这个概念，所以在这里夹一次：越界即回首页。
-    // ★ 2026-10-15：「现在就听」插到「推荐」与「回响」之间 ⇒ 页签数变 4，上界 2 → 3。
-    //   ⚠️ 这一层没有单一真源：插/删页签必须**同时**改四组按下标取的地方 ——
-    //     ① 这里（越界夹取上界）；② `tabScrollTopCommands` 长度；
-    //     ③ `tabBounceTriggers` 长度；④ `TabBarItem(i,…)` 与各页 `scrollTopCommand` 的下标。
-    //   漏一组就是"错位 / 不弹 / 不复位"。
+    // 鈽?椤电浠?4 涓敹鎴?2 涓紙鎺ㄨ崘 / 鎴戠殑锛変箣鍚庯紝`TabSwitchState.tabIndex` 鍙兘鏄笂涓€鐗堢暀涓嬬殑
+    //   瓒婄晫涓嬫爣锛堟瘮濡傛棫鐨勩€屾垜鐨勩€? 2銆併€岃缃€? 3锛夆€斺€?HdsTabs 鎷垮埌瓒婄晫涓嬫爣浼氳惤鍦ㄧ┖鐧介〉涓娿€?
+    //   鍏变韩鐘舵€侀噷娌℃湁"椤电鏁?杩欎釜姒傚康锛屾墍浠ュ湪杩欓噷澶逛竴娆★細瓒婄晫鍗冲洖棣栭〉銆?
+    // 鈽?2026-10-15锛氥€岀幇鍦ㄥ氨鍚€嶆彃鍒般€屾帹鑽愩€嶄笌銆屽洖鍝嶃€嶄箣闂?鈬?椤电鏁板彉 4锛屼笂鐣?2 鈫?3銆?
+    //   鈿狅笍 杩欎竴灞傛病鏈夊崟涓€鐪熸簮锛氭彃/鍒犻〉绛惧繀椤?*鍚屾椂**鏀瑰洓缁勬寜涓嬫爣鍙栫殑鍦版柟 鈥斺€?
+    //     鈶?杩欓噷锛堣秺鐣屽す鍙栦笂鐣岋級锛涒憽 `tabScrollTopCommands` 闀垮害锛?
+    //     鈶?`tabBounceTriggers` 闀垮害锛涒懀 `TabBarItem(i,鈥?` 涓庡悇椤?`scrollTopCommand` 鐨勪笅鏍囥€?
+    //   婕忎竴缁勫氨鏄?閿欎綅 / 涓嶅脊 / 涓嶅浣?銆?
     if (this.tabState.tabIndex < 0 || this.tabState.tabIndex > 3) {
       Logger.warn(RzdShellLogTag, `tab index out of range (${this.tabState.tabIndex}), reset to 0`);
       this.tabState.tabIndex = 0;
@@ -373,12 +373,12 @@ struct Index {
     this.miniLyricState.enabled = MusicStoreService.getInstance().getShowMiniLyric();
     AppStorage.setOrCreate('lxPlayQuality', MusicStoreService.getInstance().getPlayQuality());
     AppStorage.setOrCreate('lxPlaybackFlowLight', MusicStoreService.getInstance().getPlaybackFlowLight());
-    // 本地音乐库与同步客户端在启动时初始化：本地音乐要建沙箱目录并载入索引，
-    // 同步客户端要读回服务器地址与开关（开关为关时不连服务端）。
+    // 鏈湴闊充箰搴撲笌鍚屾瀹㈡埛绔湪鍚姩鏃跺垵濮嬪寲锛氭湰鍦伴煶涔愯寤烘矙绠辩洰褰曞苟杞藉叆绱㈠紩锛?
+    // 鍚屾瀹㈡埛绔璇诲洖鏈嶅姟鍣ㄥ湴鍧€涓庡紑鍏筹紙寮€鍏充负鍏虫椂涓嶈繛鏈嶅姟绔級銆?
     //
-    // ⚠️ 两个都包 try/catch：它们**不是**播放的前置条件，但都在 `aboutToAppear` 里。
-    //    一旦这里抛出去，`aboutToAppear` 会中断，后面（以及将来加在这里的）初始化
-    //    全被跳过 —— 那会表现成"莫名其妙整个播放都用不了"，排查起来非常绕。
+    // 鈿狅笍 涓や釜閮藉寘 try/catch锛氬畠浠?*涓嶆槸**鎾斁鐨勫墠缃潯浠讹紝浣嗛兘鍦?`aboutToAppear` 閲屻€?
+    //    涓€鏃﹁繖閲屾姏鍑哄幓锛宍aboutToAppear` 浼氫腑鏂紝鍚庨潰锛堜互鍙婂皢鏉ュ姞鍦ㄨ繖閲岀殑锛夊垵濮嬪寲
+    //    鍏ㄨ璺宠繃 鈥斺€?閭ｄ細琛ㄧ幇鎴?鑾悕鍏跺鏁翠釜鎾斁閮界敤涓嶄簡"锛屾帓鏌ヨ捣鏉ラ潪甯哥粫銆?
     const hostContext: common.UIAbilityContext | undefined =
       this.getUIContext().getHostContext() as common.UIAbilityContext | undefined;
     if (hostContext !== undefined) {
@@ -395,8 +395,8 @@ struct Index {
         Logger.error('RzdShell', `syncManager init failed code=${e.code} msg=${e.message}`);
       }
     }
-    // 评论面板要能处理本地音乐：把「本地歌 -> 平台身份」的解析交给 comment
-    // （comment / player 都不能反向依赖 localmusic，所以这个映射只能由壳层拼）。
+    // 璇勮闈㈡澘瑕佽兘澶勭悊鏈湴闊充箰锛氭妸銆屾湰鍦版瓕 -> 骞冲彴韬唤銆嶇殑瑙ｆ瀽浜ょ粰 comment
+    // 锛坈omment / player 閮戒笉鑳藉弽鍚戜緷璧?localmusic锛屾墍浠ヨ繖涓槧灏勫彧鑳界敱澹冲眰鎷硷級銆?
     setCommentTargetResolver((song: CommentSongRef): Promise<CommentSongRef | null> => {
       return Promise.resolve(this.resolveCommentTarget(song));
     });
@@ -404,14 +404,14 @@ struct Index {
   }
 
   /**
-   * 本地音乐 -> 平台身份（评论面板内部会调用）。
+   * 鏈湴闊充箰 -> 骞冲彴韬唤锛堣瘎璁洪潰鏉垮唴閮ㄤ細璋冪敤锛夈€?
    *
-   * 本地歌只存了本地 key，要取评论得先知道它匹配到平台上的哪一首：
-   * 用 `localMusic.matchOf` 读匹配记录（自动匹配成功或用户在「匹配歌词」里手选的那条）。
-   * 没有记录就返回 null，评论面板会提示「这首歌还没匹配到平台上的版本」。
+   * 鏈湴姝屽彧瀛樹簡鏈湴 key锛岃鍙栬瘎璁哄緱鍏堢煡閬撳畠鍖归厤鍒板钩鍙颁笂鐨勫摢涓€棣栵細
+   * 鐢?`localMusic.matchOf` 璇诲尮閰嶈褰曪紙鑷姩鍖归厤鎴愬姛鎴栫敤鎴峰湪銆屽尮閰嶆瓕璇嶃€嶉噷鎵嬮€夌殑閭ｆ潯锛夈€?
+   * 娌℃湁璁板綍灏辫繑鍥?null锛岃瘎璁洪潰鏉夸細鎻愮ず銆岃繖棣栨瓕杩樻病鍖归厤鍒板钩鍙颁笂鐨勭増鏈€嶃€?
    *
-   * @param song 评论面板给的歌曲身份（本地歌的 songId 就是本地 key）。
-   * @returns 平台身份，或 null。
+   * @param song 璇勮闈㈡澘缁欑殑姝屾洸韬唤锛堟湰鍦版瓕鐨?songId 灏辨槸鏈湴 key锛夈€?
+   * @returns 骞冲彴韬唤锛屾垨 null銆?
    */
   private resolveCommentTarget(song: CommentSongRef): CommentSongRef | null {
     const matched: MatchSongInfo | null = localMusic.matchOf(song.songId);
@@ -428,11 +428,11 @@ struct Index {
   }
 
   /**
-   * 记录窗口宽度（vp），供悬浮迷你条算宽度。
+   * 璁板綍绐楀彛瀹藉害锛坴p锛夛紝渚涙偓娴糠浣犳潯绠楀搴︺€?
    *
-   * 只在这里算一次、并在 `onAreaChange` 里刷新：悬浮条是叠在页面上的独立节点，
-   * 直接读 `windowInfo.windowSize`（px）在 build 里换算会带进一个不稳定的依赖。
-   * @returns 宽度（vp）。
+   * 鍙湪杩欓噷绠椾竴娆°€佸苟鍦?`onAreaChange` 閲屽埛鏂帮細鎮诞鏉℃槸鍙犲湪椤甸潰涓婄殑鐙珛鑺傜偣锛?
+   * 鐩存帴璇?`windowInfo.windowSize`锛坧x锛夊湪 build 閲屾崲绠椾細甯﹁繘涓€涓笉绋冲畾鐨勪緷璧栥€?
+   * @returns 瀹藉害锛坴p锛夈€?
    */
   private syncViewportWidthVp(): void {
     const px: number = this.windowInfo.windowSize.width;
@@ -443,7 +443,7 @@ struct Index {
     if (Math.abs(vp - this.viewportWidthVp) > 1) {
       this.viewportWidthVp = vp;
     }
-    // 高度一起刷（同一份 windowSize，不多花代价）
+    // 楂樺害涓€璧峰埛锛堝悓涓€浠?windowSize锛屼笉澶氳姳浠ｄ环锛?
     const hPx: number = this.windowInfo.windowSize.height;
     if (hPx > 0) {
       const hVp: number = this.getUIContext().px2vp(hPx);
@@ -457,18 +457,18 @@ struct Index {
   @Monitor('intentState.requestVersion')
   onPlaybackIntentChanged() {
     dispatchShellPlaybackIntent(this.appState, this.intentState, () => {
-      // 直接挂起播放页即可：展开动画由播放页自己播（见 playExpandIntro / morphScaleValue）。
+      // 鐩存帴鎸傝捣鎾斁椤靛嵆鍙細灞曞紑鍔ㄧ敾鐢辨挱鏀鹃〉鑷繁鎾紙瑙?playExpandIntro / morphScaleValue锛夈€?
       this.appState.isShowPlay = true;
     });
   }
 
   /**
-   * 键盘避让诊断：软键盘弹出 / 收起时打一行（`hdc shell hilog | grep RzdKeyboardAvoid`）。
+   * 閿洏閬胯璇婃柇锛氳蒋閿洏寮瑰嚭 / 鏀惰捣鏃舵墦涓€琛岋紙`hdc shell hilog | grep RzdKeyboardAvoid`锛夈€?
    *
-   * ⚠️ **不要在壳层再挂一份窗口监听**：`TYPE_KEYBOARD` 的避让区由
-   * `common/musicbasic` 的 `WindowUtil.updateWindowInfo()` 统一监听（全进程唯一一处），
-   * 这里只是**读**它写进 `WindowInfo.avoidKeyboard`（`@Trace`）的结果 ——
-   * 读 `@Trace` 属性既能驱动本条悬浮条的重新布局，也正好是这个诊断断点。
+   * 鈿狅笍 **涓嶈鍦ㄥ３灞傚啀鎸備竴浠界獥鍙ｇ洃鍚?*锛歚TYPE_KEYBOARD` 鐨勯伩璁╁尯鐢?
+   * `common/musicbasic` 鐨?`WindowUtil.updateWindowInfo()` 缁熶竴鐩戝惉锛堝叏杩涚▼鍞竴涓€澶勶級锛?
+   * 杩欓噷鍙槸**璇?*瀹冨啓杩?`WindowInfo.avoidKeyboard`锛坄@Trace`锛夌殑缁撴灉 鈥斺€?
+   * 璇?`@Trace` 灞炴€ф棦鑳介┍鍔ㄦ湰鏉℃偓娴潯鐨勯噸鏂板竷灞€锛屼篃姝ｅソ鏄繖涓瘖鏂柇鐐广€?
    */
   @Monitor('windowInfo.avoidKeyboard')
   onKeyboardAvoidAreaChanged(): void {
@@ -477,18 +477,18 @@ struct Index {
         `lift=${this.floatingMiniBarKeyboardLiftVp()} baseOffset=${this.homeTabBarBottomMarginVp()}`);
   }
 
-  // ─────────────── 播放页入口：`isShowPlay` → NavDestination 推入 / 弹出 ───────────────
+  // 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ 鎾斁椤靛叆鍙ｏ細`isShowPlay` 鈫?NavDestination 鎺ㄥ叆 / 寮瑰嚭 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   //
-  // ★ 施工图第 1 步的做法：**不逐个改调用点**。
-  //   工程里"打开播放页"的写法有五六处（迷你条点击、播放意图、起播意图、上拉松手…），
-  //   "关闭"也有三处（播放页返回按钮、下拉收起完成、ControlArea），
-  //   与其逐个替换成 push/pop（漏一个就是"有的入口还是旧动画"），不如在壳层把
-  //   `MusicAppState.isShowPlay` 这个**既有唯一真源**翻译成路由动作：
-  //       isShowPlay: false → true   ⇒ 推入播放页路由
-  //       isShowPlay: true  → false  ⇒ 弹出播放页路由
-  //   既有调用点一行都不用改，新增入口也自动覆盖。
+  // 鈽?鏂藉伐鍥剧 1 姝ョ殑鍋氭硶锛?*涓嶉€愪釜鏀硅皟鐢ㄧ偣**銆?
+  //   宸ョ▼閲?鎵撳紑鎾斁椤?鐨勫啓娉曟湁浜斿叚澶勶紙杩蜂綘鏉＄偣鍑汇€佹挱鏀炬剰鍥俱€佽捣鎾剰鍥俱€佷笂鎷夋澗鎵嬧€︼級锛?
+  //   "鍏抽棴"涔熸湁涓夊锛堟挱鏀鹃〉杩斿洖鎸夐挳銆佷笅鎷夋敹璧峰畬鎴愩€丆ontrolArea锛夛紝
+  //   涓庡叾閫愪釜鏇挎崲鎴?push/pop锛堟紡涓€涓氨鏄?鏈夌殑鍏ュ彛杩樻槸鏃у姩鐢?锛夛紝涓嶅鍦ㄥ３灞傛妸
+  //   `MusicAppState.isShowPlay` 杩欎釜**鏃㈡湁鍞竴鐪熸簮**缈昏瘧鎴愯矾鐢卞姩浣滐細
+  //       isShowPlay: false 鈫?true   鈬?鎺ㄥ叆鎾斁椤佃矾鐢?
+  //       isShowPlay: true  鈫?false  鈬?寮瑰嚭鎾斁椤佃矾鐢?
+  //   鏃㈡湁璋冪敤鐐逛竴琛岄兘涓嶇敤鏀癸紝鏂板鍏ュ彛涔熻嚜鍔ㄨ鐩栥€?
 
-  /** 播放页挂载/卸载的唯一收口（所有 `isShowPlay` 写入最终都会走到这里）。 */
+  /** 鎾斁椤垫寕杞?鍗歌浇鐨勫敮涓€鏀跺彛锛堟墍鏈?`isShowPlay` 鍐欏叆鏈€缁堥兘浼氳蛋鍒拌繖閲岋級銆?*/
   @Monitor('appState.isShowPlay')
   onShowPlayChanged(): void {
     if (!PLAYER_ROUTE_MODE) {
@@ -496,52 +496,52 @@ struct Index {
       return;
     }
     if (this.appState.isShowPlay) {
-      // ★★★ 2026-10-16（**关闭过程黑匣子 · 唯一能记 `OPN` 的地方就是这里**）：
-      //   用户报的「关闭后又突然放一遍展开」—— 头号嫌疑是**壳层把播放页又推了一次**
-      //   （`isShowPlay` 在关闭途中被谁写回 true ⇒ 本 `@Monitor` 收到 false→true
-      //   ⇒ `beginOpenMorphOnClick()` + `pushPlayerRoute()` ⇒ 新实例、新展开动画）。
-      //   这一笔**只有壳层能记**（播放页那一刻已经 pop 了），所以事件日志做成了 public static
-      //   （见 `PlaybackPage.evLog` 的说明）。读法见自证徽标第十三行：正常关闭后重新打开，
-      //   日志里**只应有一条 `OPN`**；若关闭段之后紧跟一条 `OPN` 而用户并没有点开 ⇒ 就是它。
+      // 鈽呪槄鈽?2026-10-16锛?*鍏抽棴杩囩▼榛戝專瀛?路 鍞竴鑳借 `OPN` 鐨勫湴鏂瑰氨鏄繖閲?*锛夛細
+      //   鐢ㄦ埛鎶ョ殑銆屽叧闂悗鍙堢獊鐒舵斁涓€閬嶅睍寮€銆嶁€斺€?澶村彿瀚岀枒鏄?*澹冲眰鎶婃挱鏀鹃〉鍙堟帹浜嗕竴娆?*
+      //   锛坄isShowPlay` 鍦ㄥ叧闂€斾腑琚皝鍐欏洖 true 鈬?鏈?`@Monitor` 鏀跺埌 false鈫抰rue
+      //   鈬?`beginOpenMorphOnClick()` + `pushPlayerRoute()` 鈬?鏂板疄渚嬨€佹柊灞曞紑鍔ㄧ敾锛夈€?
+      //   杩欎竴绗?*鍙湁澹冲眰鑳借**锛堟挱鏀鹃〉閭ｄ竴鍒诲凡缁?pop 浜嗭級锛屾墍浠ヤ簨浠舵棩蹇楀仛鎴愪簡 public static
+      //   锛堣 `PlaybackPage.evLog` 鐨勮鏄庯級銆傝娉曡鑷瘉寰芥爣绗崄涓夎锛氭甯稿叧闂悗閲嶆柊鎵撳紑锛?
+      //   鏃ュ織閲?*鍙簲鏈変竴鏉?`OPN`**锛涜嫢鍏抽棴娈典箣鍚庣揣璺熶竴鏉?`OPN` 鑰岀敤鎴峰苟娌℃湁鐐瑰紑 鈬?灏辨槸瀹冦€?
       PlaybackPage.ev('OPN', `stage=${this.expandState.morphStage} p=${this.expandState.morphP.toFixed(2)}`);
-      // ★★ 2026-10-15（照搬无界）：**点击打开也必须走形变**。
-      //   无界里「点击播放条」和「上滑手势」**共用同一个 `beginMorphEnter`**
-      //   （全包只有 `openPlayerMorph` 与 `pullStart` 两个调用者，见
-      //   `_recover/logic-src/点击打开播放器形变链路.md` §一）。此前这里只推路由、
-      //   不启动形变 ⇒ 点击走的是播放页里那套**派音自播**（`collapseProgress`），
-      //   与上滑的壳层形变是两条互不相干的动画 —— 用户实测「点击打开播放器没有动画」
-      //   「背景不对」就是它。顺序对齐无界：① 量源并进相位 → ② 推路由挂载
-      //   → ③ 量终点（`onPullReady` 等价物）→ ④ 收尾补间 `commitPull()` 等价物。
+      // 鈽呪槄 2026-10-15锛堢収鎼棤鐣岋級锛?*鐐瑰嚮鎵撳紑涔熷繀椤昏蛋褰㈠彉**銆?
+      //   鏃犵晫閲屻€岀偣鍑绘挱鏀炬潯銆嶅拰銆屼笂婊戞墜鍔裤€?*鍏辩敤鍚屼竴涓?`beginMorphEnter`**
+      //   锛堝叏鍖呭彧鏈?`openPlayerMorph` 涓?`pullStart` 涓や釜璋冪敤鑰咃紝瑙?
+      //   `_recover/logic-src/鐐瑰嚮鎵撳紑鎾斁鍣ㄥ舰鍙橀摼璺?md` 搂涓€锛夈€傛鍓嶈繖閲屽彧鎺ㄨ矾鐢便€?
+      //   涓嶅惎鍔ㄥ舰鍙?鈬?鐐瑰嚮璧扮殑鏄挱鏀鹃〉閲岄偅濂?*娲鹃煶鑷挱**锛坄collapseProgress`锛夛紝
+      //   涓庝笂婊戠殑澹冲眰褰㈠彉鏄袱鏉′簰涓嶇浉骞茬殑鍔ㄧ敾 鈥斺€?鐢ㄦ埛瀹炴祴銆岀偣鍑绘墦寮€鎾斁鍣ㄦ病鏈夊姩鐢汇€?
+      //   銆岃儗鏅笉瀵广€嶅氨鏄畠銆傞『搴忓榻愭棤鐣岋細鈶?閲忔簮骞惰繘鐩镐綅 鈫?鈶?鎺ㄨ矾鐢辨寕杞?
+      //   鈫?鈶?閲忕粓鐐癸紙`onPullReady` 绛変环鐗╋級鈫?鈶?鏀跺熬琛ラ棿 `commitPull()` 绛変环鐗┿€?
       const morphStarted: boolean = this.beginOpenMorphOnClick();
       this.pushPlayerRoute();
       if (morphStarted) {
-        // ★★★ 2026-10-16（**点击打开没有封面动画**的最后一块拼图）：
-        //   显式把「浮层那一棒」（壳层 `MorphCoverClone` = 续飞封面）起起来，
-        //   **不再只依赖** `@Monitor('expandState.morphDrive')`。
+        // 鈽呪槄鈽?2026-10-16锛?*鐐瑰嚮鎵撳紑娌℃湁灏侀潰鍔ㄧ敾**鐨勬渶鍚庝竴鍧楁嫾鍥撅級锛?
+        //   鏄惧紡鎶娿€屾诞灞傞偅涓€妫掋€嶏紙澹冲眰 `MorphCoverClone` = 缁灏侀潰锛夎捣璧锋潵锛?
+        //   **涓嶅啀鍙緷璧?* `@Monitor('expandState.morphDrive')`銆?
         //
-        // ## 为什么必须显式
+        // ## 涓轰粈涔堝繀椤绘樉寮?
         //
-        // 封面那一棒有**两条独立的进度**：
-        //   · 播放页那层（`morphP`）—— 容器 scale/translate/clip，**背景也在里面**；
-        //   · 浮层那层（`morphOverlayP`）—— 壳层的续飞封面，**封面就靠它飞**。
-        // 两条驱动路径：
-        //   · 手指跟手：`onPullOpenUpdate` → `syncMorphOverlayFromPage()`（**一比一同步**）✓
-        //   · 点击/松手：`settlePullOpen` → `morphOverlayTweenTo()`，
-        //     以及 `@Monitor('expandState.morphDrive')` → `focusMorphOverlayForPageIntro()`。
-        // ⚠️ 后者是 **V2 异步回调**，而 `focusMorphOverlayForPageIntro()` 里有两道**静默 return**
-        //   （`morphDrive !== MorphDrive.ANIM` / `!morphContainerActive()`）—— 它**不写日志**，
-        //   一旦那一刻相位还没就位，这一棒就**整段不播、而且查不出来**。
-        //   用户实测「**点击播放条打开播放器 / 点击关闭 / 系统返回关闭都没有封面动画**」
-        //   而「上拉打开正常」，差异正是"跟手那条同步路走通了、非手势这条路没走通"。
+        // 灏侀潰閭ｄ竴妫掓湁**涓ゆ潯鐙珛鐨勮繘搴?*锛?
+        //   路 鎾斁椤甸偅灞傦紙`morphP`锛夆€斺€?瀹瑰櫒 scale/translate/clip锛?*鑳屾櫙涔熷湪閲岄潰**锛?
+        //   路 娴眰閭ｅ眰锛坄morphOverlayP`锛夆€斺€?澹冲眰鐨勭画椋炲皝闈紝**灏侀潰灏遍潬瀹冮**銆?
+        // 涓ゆ潯椹卞姩璺緞锛?
+        //   路 鎵嬫寚璺熸墜锛歚onPullOpenUpdate` 鈫?`syncMorphOverlayFromPage()`锛?*涓€姣斾竴鍚屾**锛夆湏
+        //   路 鐐瑰嚮/鏉炬墜锛歚settlePullOpen` 鈫?`morphOverlayTweenTo()`锛?
+        //     浠ュ強 `@Monitor('expandState.morphDrive')` 鈫?`focusMorphOverlayForPageIntro()`銆?
+        // 鈿狅笍 鍚庤€呮槸 **V2 寮傛鍥炶皟**锛岃€?`focusMorphOverlayForPageIntro()` 閲屾湁涓ら亾**闈欓粯 return**
+        //   锛坄morphDrive !== MorphDrive.ANIM` / `!morphContainerActive()`锛夆€斺€?瀹?*涓嶅啓鏃ュ織**锛?
+        //   涓€鏃﹂偅涓€鍒荤浉浣嶈繕娌″氨浣嶏紝杩欎竴妫掑氨**鏁存涓嶆挱銆佽€屼笖鏌ヤ笉鍑烘潵**銆?
+        //   鐢ㄦ埛瀹炴祴銆?*鐐瑰嚮鎾斁鏉℃墦寮€鎾斁鍣?/ 鐐瑰嚮鍏抽棴 / 绯荤粺杩斿洖鍏抽棴閮芥病鏈夊皝闈㈠姩鐢?*銆?
+        //   鑰屻€屼笂鎷夋墦寮€姝ｅ父銆嶏紝宸紓姝ｆ槸"璺熸墜閭ｆ潯鍚屾璺蛋閫氫簡銆侀潪鎵嬪娍杩欐潯璺病璧伴€?銆?
         //
-        // ⇒ 这里在**推路由之后、相位已就位**的位置显式喊一声
-        //   （与 `PlaybackPage.closeFullScreenPlayback()` 里"同步驱动浮层"那条**同款做法**，
-        //     见那边 2358-2370 行的长注释 —— 它当时修的正是"关闭没有封面动画"）。
-        //   ⚠️ 幂等：`focusMorphOverlayForPageIntro()` 的两道守卫 + `morphOverlayTweenTo()`
-        //     的"起点==终点直接返回" / `morphOverlayAnimating` 不抢 ⇒ 重复调用安全。
+        // 鈬?杩欓噷鍦?*鎺ㄨ矾鐢变箣鍚庛€佺浉浣嶅凡灏变綅**鐨勪綅缃樉寮忓枈涓€澹?
+        //   锛堜笌 `PlaybackPage.closeFullScreenPlayback()` 閲?鍚屾椹卞姩娴眰"閭ｆ潯**鍚屾鍋氭硶**锛?
+        //     瑙侀偅杈?2358-2370 琛岀殑闀挎敞閲?鈥斺€?瀹冨綋鏃朵慨鐨勬鏄?鍏抽棴娌℃湁灏侀潰鍔ㄧ敾"锛夈€?
+        //   鈿狅笍 骞傜瓑锛歚focusMorphOverlayForPageIntro()` 鐨勪袱閬撳畧鍗?+ `morphOverlayTweenTo()`
+        //     鐨?璧风偣==缁堢偣鐩存帴杩斿洖" / `morphOverlayAnimating` 涓嶆姠 鈬?閲嶅璋冪敤瀹夊叏銆?
         this.expandState.focusMorphOverlayForPageIntro(this.getUIContext());
         this.schedulePullAnchorRemeasure(0);
-        // 它自带"源几何还没量齐就 32ms 重试"那条窗口，等价于无界的 `ExpandSnapshot.onPullReady`。
+        // 瀹冭嚜甯?婧愬嚑浣曡繕娌￠噺榻愬氨 32ms 閲嶈瘯"閭ｆ潯绐楀彛锛岀瓑浠蜂簬鏃犵晫鐨?`ExpandSnapshot.onPullReady`銆?
         this.settlePullOpen(true);
       }
     } else {
@@ -550,74 +550,74 @@ struct Index {
   }
 
   /**
-   * 点击打开（**非手势入口**）的形变启动 —— 对标无界 `MainPage.openPlayerMorph(src)`。
+   * 鐐瑰嚮鎵撳紑锛?*闈炴墜鍔垮叆鍙?*锛夌殑褰㈠彉鍚姩 鈥斺€?瀵规爣鏃犵晫 `MainPage.openPlayerMorph(src)`銆?
    *
-   * 无界的原文（`点击打开播放器形变链路.md` §一 + 卷首更正）：
+   * 鏃犵晫鐨勫師鏂囷紙`鐐瑰嚮鎵撳紑鎾斁鍣ㄥ舰鍙橀摼璺?md` 搂涓€ + 鍗烽鏇存锛夛細
    * ```ts
    * openPlayerMorph(src?) {
    *   const s = src ?? this.ownMorphSource;
    *   if (!this.beginMorphEnter(s)) { this.enterAnimStarted = false;
-   *                                   this.nav.pushPath({ name: R_PLAYER }); return; }  // 退化：无形变
-   *   // beginMorphEnter 内部已经 pushPath({name, param:{pull:true}}, animated=false)
-   *   ExpandSnapshot.onPullReady = λ;      // 就绪 → commitPull() → animateMorphT(400, t=1)
+   *                                   this.nav.pushPath({ name: R_PLAYER }); return; }  // 閫€鍖栵細鏃犲舰鍙?
+   *   // beginMorphEnter 鍐呴儴宸茬粡 pushPath({name, param:{pull:true}}, animated=false)
+   *   ExpandSnapshot.onPullReady = 位;      // 灏辩华 鈫?commitPull() 鈫?animateMorphT(400, t=1)
    * }
    * ```
-   * 本方法只做①「量源并进相位」这一半；②推路由在调用点紧跟其后，③④也由调用点发起
-   * （因为 `pushPath` 是壳层的私有动作，不能让本方法反调）。这样点击与上滑
-   * **共用同一份几何、同一个相位、同一条收尾补间**，屏上只可能有一个动画主。
+   * 鏈柟娉曞彧鍋氣憼銆岄噺婧愬苟杩涚浉浣嶃€嶈繖涓€鍗婏紱鈶℃帹璺敱鍦ㄨ皟鐢ㄧ偣绱ц窡鍏跺悗锛屸憿鈶ｄ篃鐢辫皟鐢ㄧ偣鍙戣捣
+   * 锛堝洜涓?`pushPath` 鏄３灞傜殑绉佹湁鍔ㄤ綔锛屼笉鑳借鏈柟娉曞弽璋冿級銆傝繖鏍风偣鍑讳笌涓婃粦
+   * **鍏辩敤鍚屼竴浠藉嚑浣曘€佸悓涓€涓浉浣嶃€佸悓涓€鏉℃敹灏捐ˉ闂?*锛屽睆涓婂彧鍙兘鏈変竴涓姩鐢讳富銆?
    *
-   * ⚠️ 三条守卫，缺一条就会和手势或已有会话打架（每一条都有实测依据）：
-   *   · `pullDragging` —— 手指正在驱动（`onPullOpenStart` 那条路），让给它，谁也别抢；
-   *   · `morphContainerActive()` —— 已经在一个形变会话里（上滑那条路在
-   *     `onPullOpenStart` 里已经 `pullOpenBegin` 过，且 `isShowPlay` 也是它置的）
-   *     ⇒ 再 begin 一次会把刚量到的几何作废，那就是"覆盖层反复归零"的来源；
-   *   · `pullOpenBegin` 返回假（迷你条没挂载 / 宿主没尺寸）—— 退化成"直接铺满"。
-   *     这与无界量不到胶囊时打 `morph: 量不到胶囊 barId=… ⇒ 本次退回普通 push(无形变)`
-   *     是同一形状：**宁可不做动画，也不能把播放页压成一条细缝**。
-   * @returns true = 形变已进入相位（调用方应继续 ③④）；false = 已退化为无动画落位
+   * 鈿狅笍 涓夋潯瀹堝崼锛岀己涓€鏉″氨浼氬拰鎵嬪娍鎴栧凡鏈変細璇濇墦鏋讹紙姣忎竴鏉￠兘鏈夊疄娴嬩緷鎹級锛?
+   *   路 `pullDragging` 鈥斺€?鎵嬫寚姝ｅ湪椹卞姩锛坄onPullOpenStart` 閭ｆ潯璺級锛岃缁欏畠锛岃皝涔熷埆鎶紱
+   *   路 `morphContainerActive()` 鈥斺€?宸茬粡鍦ㄤ竴涓舰鍙樹細璇濋噷锛堜笂婊戦偅鏉¤矾鍦?
+   *     `onPullOpenStart` 閲屽凡缁?`pullOpenBegin` 杩囷紝涓?`isShowPlay` 涔熸槸瀹冪疆鐨勶級
+   *     鈬?鍐?begin 涓€娆′細鎶婂垰閲忓埌鐨勫嚑浣曚綔搴燂紝閭ｅ氨鏄?瑕嗙洊灞傚弽澶嶅綊闆?鐨勬潵婧愶紱
+   *   路 `pullOpenBegin` 杩斿洖鍋囷紙杩蜂綘鏉℃病鎸傝浇 / 瀹夸富娌″昂瀵革級鈥斺€?閫€鍖栨垚"鐩存帴閾烘弧"銆?
+   *     杩欎笌鏃犵晫閲忎笉鍒拌兌鍥婃椂鎵?`morph: 閲忎笉鍒拌兌鍥?barId=鈥?鈬?鏈閫€鍥炴櫘閫?push(鏃犲舰鍙?`
+   *     鏄悓涓€褰㈢姸锛?*瀹佸彲涓嶅仛鍔ㄧ敾锛屼篃涓嶈兘鎶婃挱鏀鹃〉鍘嬫垚涓€鏉＄粏缂?*銆?
+   * @returns true = 褰㈠彉宸茶繘鍏ョ浉浣嶏紙璋冪敤鏂瑰簲缁х画 鈶⑩懀锛夛紱false = 宸查€€鍖栦负鏃犲姩鐢昏惤浣?
    */
   private beginOpenMorphOnClick(): boolean {
     this.expandState.resetMorphTrace('clickOpen');
-    // ★★★ 2026-10-16（**给这条守卫补自愈** —— 它此前会"永久"挡住点击打开）：
-    //   原判据是 `pullDragging || morphContainerActive()`。两条都会**残留**：
-    //   · `pullDragging`：手势被打断且没走到收尾（系统抢手势 / 页面被切走）；
-    //   · `morphContainerActive()`：相位残留 `ENTERING/LEAVING/LANDING`。
-    //   ⚠️ 而**相位残留不是"用户还在用播放页"**：用户点"打开"时 `isShowPlay`
-    //      **必然刚从 false 变成 true**（`onShowPlayChanged` 就是它触发的）。
-    //      ⇒ 只要"本轮开始时播放页**还没显示**"，那两条残留就都是**上一轮的垃圾**，
-    //        应当**清掉并继续**，而不是把这一次打开判成"重复 / 已在会话里"。
-    //   ⚠️ 原注释（本文件 4332-4336 行）已经点出这个形状会导致
-    //     「**点击打开又退化成派音旧动画**」，但它只给 `dismissMorphActive` 做了自愈，
-    //      **这条守卫本身没做**。⇒ 这就是"点了没动画"里最难复现的那一种。
-    // ★★★ 2026-10-17（**判据订正 · 第二次**：第一版把**上拉手势**打断了 —— 用户实测「上滑不能自由了」）
+    // 鈽呪槄鈽?2026-10-16锛?*缁欒繖鏉″畧鍗ˉ鑷剤** 鈥斺€?瀹冩鍓嶄細"姘镐箙"鎸′綇鐐瑰嚮鎵撳紑锛夛細
+    //   鍘熷垽鎹槸 `pullDragging || morphContainerActive()`銆備袱鏉￠兘浼?*娈嬬暀**锛?
+    //   路 `pullDragging`锛氭墜鍔胯鎵撴柇涓旀病璧板埌鏀跺熬锛堢郴缁熸姠鎵嬪娍 / 椤甸潰琚垏璧帮級锛?
+    //   路 `morphContainerActive()`锛氱浉浣嶆畫鐣?`ENTERING/LEAVING/LANDING`銆?
+    //   鈿狅笍 鑰?*鐩镐綅娈嬬暀涓嶆槸"鐢ㄦ埛杩樺湪鐢ㄦ挱鏀鹃〉"**锛氱敤鎴风偣"鎵撳紑"鏃?`isShowPlay`
+    //      **蹇呯劧鍒氫粠 false 鍙樻垚 true**锛坄onShowPlayChanged` 灏辨槸瀹冭Е鍙戠殑锛夈€?
+    //      鈬?鍙"鏈疆寮€濮嬫椂鎾斁椤?*杩樻病鏄剧ず**"锛岄偅涓ゆ潯娈嬬暀灏遍兘鏄?*涓婁竴杞殑鍨冨溇**锛?
+    //        搴斿綋**娓呮帀骞剁户缁?*锛岃€屼笉鏄妸杩欎竴娆℃墦寮€鍒ゆ垚"閲嶅 / 宸插湪浼氳瘽閲?銆?
+    //   鈿狅笍 鍘熸敞閲婏紙鏈枃浠?4332-4336 琛岋級宸茬粡鐐瑰嚭杩欎釜褰㈢姸浼氬鑷?
+    //     銆?*鐐瑰嚮鎵撳紑鍙堥€€鍖栨垚娲鹃煶鏃у姩鐢?*銆嶏紝浣嗗畠鍙粰 `dismissMorphActive` 鍋氫簡鑷剤锛?
+    //      **杩欐潯瀹堝崼鏈韩娌″仛**銆傗噿 杩欏氨鏄?鐐逛簡娌″姩鐢?閲屾渶闅惧鐜扮殑閭ｄ竴绉嶃€?
+    // 鈽呪槄鈽?2026-10-17锛?*鍒ゆ嵁璁㈡ 路 绗簩娆?*锛氱涓€鐗堟妸**涓婃媺鎵嬪娍**鎵撴柇浜?鈥斺€?鐢ㄦ埛瀹炴祴銆屼笂婊戜笉鑳借嚜鐢变簡銆嶏級
     //
-    // ## 第一版错在哪（必须记下来）
-    //   第一版把判据从 `this.appState.isShowPlay`（恒真）换成 `playerRouteIndex() >= 0`，
-    //   用意是让 `staleClr` 自愈真的能跑到。但**上拉打开这条路也走本函数**：
+    // ## 绗竴鐗堥敊鍦ㄥ摢锛堝繀椤昏涓嬫潵锛?
+    //   绗竴鐗堟妸鍒ゆ嵁浠?`this.appState.isShowPlay`锛堟亽鐪燂級鎹㈡垚 `playerRouteIndex() >= 0`锛?
+    //   鐢ㄦ剰鏄 `staleClr` 鑷剤鐪熺殑鑳借窇鍒般€備絾**涓婃媺鎵撳紑杩欐潯璺篃璧版湰鍑芥暟**锛?
     //   ```ts
-    //   // 壳层 onPullOpenStart：
+    //   // 澹冲眰 onPullOpenStart锛?
     //   this.expandState.pullDragging = false;
-    //   const morphOk = this.expandState.pullOpenBegin(...);   // ← 里面把 pullDragging 置 true
-    //   if (!this.appState.isShowPlay) { this.appState.isShowPlay = true; }   // ← 触发本 Monitor
+    //   const morphOk = this.expandState.pullOpenBegin(...);   // 鈫?閲岄潰鎶?pullDragging 缃?true
+    //   if (!this.appState.isShowPlay) { this.appState.isShowPlay = true; }   // 鈫?瑙﹀彂鏈?Monitor
     //   ```
-    //   ⇒ 走到这里时 `pullDragging === true`（手指正在驱动）而**路由还没 push**
-    //     ⇒ 新判据算出 `routeOnStack === false` ⇒ 落进 `staleClr` 支
-    //     ⇒ **`pullDragging = false` + `morphReset()`** ⇒ 跟手会话被自己掐死
-    //     ⇒ 「上滑不能自由了」。(旧代码判据恒真 ⇒ 走 `skip` ⇒ 歪打正着地护住了手势。)
+    //   鈬?璧板埌杩欓噷鏃?`pullDragging === true`锛堟墜鎸囨鍦ㄩ┍鍔級鑰?*璺敱杩樻病 push**
+    //     鈬?鏂板垽鎹畻鍑?`routeOnStack === false` 鈬?钀借繘 `staleClr` 鏀?
+    //     鈬?**`pullDragging = false` + `morphReset()`** 鈬?璺熸墜浼氳瘽琚嚜宸辨帎姝?
+    //     鈬?銆屼笂婊戜笉鑳借嚜鐢变簡銆嶃€?鏃т唬鐮佸垽鎹亽鐪?鈬?璧?`skip` 鈬?姝墦姝ｇ潃鍦版姢浣忎簡鎵嬪娍銆?
     //
-    // ## 订正后的结构（**两件事分开判**，这才是原注释真正想表达的意思）
-    //   · 原注释自己写着「上拉手势在首页起手时路由还没 push。但那时 `pullDragging === true`
-    //     ⇒ 上面那条守卫会先 return（不影响手势）」—— **"手指在驱动就放行"是原有意图**，
-    //     只是被恒真的标志实现坏了。
-    //   · 所以：**`pullDragging === true` ⇒ 一律放行（那是活会话，不是残留）**；
-    //     只有"相位残留**且**没有手指在驱动"才轮到判"是不是真已经在播放页里"。
-    //   ⚠️ 第二层判据仍用**硬读数** `playerRouteIndex() >= 0`（与下面 `leakClr` 同口径）——
-    //     因为 `isShowPlay` 在唯一调用点上必然已是 true，读它等于没判。
-    //   ⚠️ 这一层是必需的：本轮把关闭收尾的 `morphReset()` 改成"等 pop 之后再复位"
-    //     （`PlaybackPage.scheduleMorphResetAfterPop`，见 `RzdMusic记忆.md` §125）
-    //     ⇒ 关闭后到复位前那一小段相位仍是 `LANDING`；点开时必须能清掉它。
+    // ## 璁㈡鍚庣殑缁撴瀯锛?*涓や欢浜嬪垎寮€鍒?*锛岃繖鎵嶆槸鍘熸敞閲婄湡姝ｆ兂琛ㄨ揪鐨勬剰鎬濓級
+    //   路 鍘熸敞閲婅嚜宸卞啓鐫€銆屼笂鎷夋墜鍔垮湪棣栭〉璧锋墜鏃惰矾鐢辫繕娌?push銆備絾閭ｆ椂 `pullDragging === true`
+    //     鈬?涓婇潰閭ｆ潯瀹堝崼浼氬厛 return锛堜笉褰卞搷鎵嬪娍锛夈€嶁€斺€?**"鎵嬫寚鍦ㄩ┍鍔ㄥ氨鏀捐"鏄師鏈夋剰鍥?*锛?
+    //     鍙槸琚亽鐪熺殑鏍囧織瀹炵幇鍧忎簡銆?
+    //   路 鎵€浠ワ細**`pullDragging === true` 鈬?涓€寰嬫斁琛岋紙閭ｆ槸娲讳細璇濓紝涓嶆槸娈嬬暀锛?*锛?
+    //     鍙湁"鐩镐綅娈嬬暀**涓?*娌℃湁鎵嬫寚鍦ㄩ┍鍔?鎵嶈疆鍒板垽"鏄笉鏄湡宸茬粡鍦ㄦ挱鏀鹃〉閲?銆?
+    //   鈿狅笍 绗簩灞傚垽鎹粛鐢?*纭鏁?* `playerRouteIndex() >= 0`锛堜笌涓嬮潰 `leakClr` 鍚屽彛寰勶級鈥斺€?
+    //     鍥犱负 `isShowPlay` 鍦ㄥ敮涓€璋冪敤鐐逛笂蹇呯劧宸叉槸 true锛岃瀹冪瓑浜庢病鍒ゃ€?
+    //   鈿狅笍 杩欎竴灞傛槸蹇呴渶鐨勶細鏈疆鎶婂叧闂敹灏剧殑 `morphReset()` 鏀规垚"绛?pop 涔嬪悗鍐嶅浣?
+    //     锛坄PlaybackPage.scheduleMorphResetAfterPop`锛岃 `RzdMusic璁板繂.md` 搂125锛?
+    //     鈬?鍏抽棴鍚庡埌澶嶄綅鍓嶉偅涓€灏忔鐩镐綅浠嶆槸 `LANDING`锛涚偣寮€鏃跺繀椤昏兘娓呮帀瀹冦€?
     if (this.expandState.pullDragging) {
-      // 手指正在驱动（上拉/下拉跟手）：**活会话**，谁也别动它
+      // 鎵嬫寚姝ｅ湪椹卞姩锛堜笂鎷?涓嬫媺璺熸墜锛夛細**娲讳細璇?*锛岃皝涔熷埆鍔ㄥ畠
       this.expandState.pushMorphTrace('skip');
       Logger.info(RzdShellLogTag,
         `open morph: skip (finger driving; stage=${this.expandState.morphStage} ` +
@@ -625,36 +625,36 @@ struct Index {
       return false;
     }
     if (this.expandState.morphContainerActive()) {
-      // 相位残留但没有手指在驱动 ⇒ 判"用户是不是真的已经在播放页里"
+      // 鐩镐綅娈嬬暀浣嗘病鏈夋墜鎸囧湪椹卞姩 鈬?鍒?鐢ㄦ埛鏄笉鏄湡鐨勫凡缁忓湪鎾斁椤甸噷"
       if (this.playerRouteIndex() >= 0) {
-        // 真的已经在播放页里（重复触发）⇒ 保持原行为：让给已有会话
+        // 鐪熺殑宸茬粡鍦ㄦ挱鏀鹃〉閲岋紙閲嶅瑙﹀彂锛夆噿 淇濇寔鍘熻涓猴細璁╃粰宸叉湁浼氳瘽
         this.expandState.pushMorphTrace('skip');
         Logger.info(RzdShellLogTag,
           `open morph: skip (already in player; stage=${this.expandState.morphStage})`);
         return false;
       }
-      // 残留垃圾 + 用户确实要打开 ⇒ **先清干净再继续**
+      // 娈嬬暀鍨冨溇 + 鐢ㄦ埛纭疄瑕佹墦寮€ 鈬?**鍏堟竻骞插噣鍐嶇户缁?*
       this.expandState.pushMorphTrace('staleClr');
       Logger.warn(RzdShellLogTag,
         `open morph: clearing STALE session (stage=${this.expandState.morphStage} ` +
         `drive=${this.expandState.morphDrive} routeOnStack=0)`);
       this.expandState.morphReset();
     }
-    // ★★★ 2026-10-16（**判据订正：给"上一会话"补一条硬条件**）：
-    //   原来只有上面那条 `pullDragging || morphContainerActive()` 守卫。上一轮把
-    //   `aboutToDisappear()` 里那句无条件 `morphReset()` 加了门（"会话活着就不清"）之后，
-    //   **会话泄漏**变成可能：`morphSessionStarted` 残留为 true，而 `pullDragging` /
-    //   `morphContainerActive()` 都已是假 ⇒ 上面那条守卫**看不见它** ⇒ 下一轮点击
-    //   读到 `isFreshSession = false` ⇒ 走"放弃会话"分支 ⇒ **又没动画**。
+    // 鈽呪槄鈽?2026-10-16锛?*鍒ゆ嵁璁㈡锛氱粰"涓婁竴浼氳瘽"琛ヤ竴鏉＄‖鏉′欢**锛夛細
+    //   鍘熸潵鍙湁涓婇潰閭ｆ潯 `pullDragging || morphContainerActive()` 瀹堝崼銆備笂涓€杞妸
+    //   `aboutToDisappear()` 閲岄偅鍙ユ棤鏉′欢 `morphReset()` 鍔犱簡闂紙"浼氳瘽娲荤潃灏变笉娓?锛変箣鍚庯紝
+    //   **浼氳瘽娉勬紡**鍙樻垚鍙兘锛歚morphSessionStarted` 娈嬬暀涓?true锛岃€?`pullDragging` /
+    //   `morphContainerActive()` 閮藉凡鏄亣 鈬?涓婇潰閭ｆ潯瀹堝崼**鐪嬩笉瑙佸畠** 鈬?涓嬩竴杞偣鍑?
+    //   璇诲埌 `isFreshSession = false` 鈬?璧?鏀惧純浼氳瘽"鍒嗘敮 鈬?**鍙堟病鍔ㄧ敾**銆?
     //
-    //   ⇒ 补一条**硬条件**：`playerRouteIndex() < 0`（播放页路由**不在**栈里）。
-    //     全工程 8 处 `isShowPlay = true` 都**不自己 push**，push 只由本文件的
-    //     `pushPlayerRoute()` 做 ⇒ **"路由不在栈里"就是"上一轮会话已经结束"的硬证据**
-    //     （无论是正常关闭还是被中间打断）。
-    //     ⚠️ 唯一要注意：上拉手势在**首页**起手时路由也还没 push。但那时
-    //       `pullDragging === true` ⇒ 上面那条守卫会先 return（不影响手势）；
-    //       而"点击打开"起手时 `isShowPlay` 刚变 true、`pullDragging` 必为假
-    //       ⇒ 落到这里清一次是安全的（清完 `pullOpenBegin` 立刻重建）。
+    //   鈬?琛ヤ竴鏉?*纭潯浠?*锛歚playerRouteIndex() < 0`锛堟挱鏀鹃〉璺敱**涓嶅湪**鏍堥噷锛夈€?
+    //     鍏ㄥ伐绋?8 澶?`isShowPlay = true` 閮?*涓嶈嚜宸?push**锛宲ush 鍙敱鏈枃浠剁殑
+    //     `pushPlayerRoute()` 鍋?鈬?**"璺敱涓嶅湪鏍堥噷"灏辨槸"涓婁竴杞細璇濆凡缁忕粨鏉?鐨勭‖璇佹嵁**
+    //     锛堟棤璁烘槸姝ｅ父鍏抽棴杩樻槸琚腑闂存墦鏂級銆?
+    //     鈿狅笍 鍞竴瑕佹敞鎰忥細涓婃媺鎵嬪娍鍦?*棣栭〉**璧锋墜鏃惰矾鐢变篃杩樻病 push銆備絾閭ｆ椂
+    //       `pullDragging === true` 鈬?涓婇潰閭ｆ潯瀹堝崼浼氬厛 return锛堜笉褰卞搷鎵嬪娍锛夛紱
+    //       鑰?鐐瑰嚮鎵撳紑"璧锋墜鏃?`isShowPlay` 鍒氬彉 true銆乣pullDragging` 蹇呬负鍋?
+    //       鈬?钀藉埌杩欓噷娓呬竴娆℃槸瀹夊叏鐨勶紙娓呭畬 `pullOpenBegin` 绔嬪埢閲嶅缓锛夈€?
     const routeOnStack: boolean = this.playerRouteIndex() >= 0;
     if (!routeOnStack && this.expandState.morphSessionStarted) {
       this.expandState.pushMorphTrace('leakClr');
@@ -665,41 +665,41 @@ struct Index {
       this.expandState.pullDragging = false;
       this.expandState.morphReset();
     }
-    // ★★★ 2026-10-16（**记住"这一轮是不是新会话"**，它决定 `false` 怎么处理）：
-    //   `pullOpenBegin()` 把 `morphSessionStarted` 置真的那一步就是"会话建立"。
-    //   在它之前读到 false ⇒ 这是**全新一轮**（用户真的要打开播放器）。
+    // 鈽呪槄鈽?2026-10-16锛?*璁颁綇"杩欎竴杞槸涓嶆槸鏂颁細璇?**锛屽畠鍐冲畾 `false` 鎬庝箞澶勭悊锛夛細
+    //   `pullOpenBegin()` 鎶?`morphSessionStarted` 缃湡鐨勯偅涓€姝ュ氨鏄?浼氳瘽寤虹珛"銆?
+    //   鍦ㄥ畠涔嬪墠璇诲埌 false 鈬?杩欐槸**鍏ㄦ柊涓€杞?*锛堢敤鎴风湡鐨勮鎵撳紑鎾斁鍣級銆?
     const isFreshSession: boolean = !this.expandState.morphSessionStarted;
     const ok: boolean = this.expandState.pullOpenBegin(this.getUIContext(), this.navDepth > 0);
     this.expandState.pushMorphTrace(ok ? 'beginOk' : 'beginNo');
     if (!ok && isFreshSession) {
-      // ★★★ 2026-10-16（**"点击打开没有动画"的最后一块拼图**）：
-      //   这一段原来是"`false` ⇒ `pullDragging=false` + `morphReset()` + `morphSettleOpen()`
-      //   + `return false`"，也就是**整段放弃形变会话**。
-      //   ⚠️ 而 `pullOpenBegin` 返回 `false` 的**唯一**原因是"这一拍量不到东西"——
-      //   点击打开时这**必然**发生（播放页还没挂载、封面节点不存在），
-      //   于是这一次打开被永久判成"几何没量到 ⇒ 无形变落位"，
-      //   **连一次补量都没试过**（用户实测「点击打开播放器没有封面/背景动画」）。
-      //   无界的形状（`MainPage.openPlayerMorph` 149679）：`beginMorphEnter` 返回 false 时
-      //   **不放弃**，而是
+      // 鈽呪槄鈽?2026-10-16锛?*"鐐瑰嚮鎵撳紑娌℃湁鍔ㄧ敾"鐨勬渶鍚庝竴鍧楁嫾鍥?*锛夛細
+      //   杩欎竴娈靛師鏉ユ槸"`false` 鈬?`pullDragging=false` + `morphReset()` + `morphSettleOpen()`
+      //   + `return false`"锛屼篃灏辨槸**鏁存鏀惧純褰㈠彉浼氳瘽**銆?
+      //   鈿狅笍 鑰?`pullOpenBegin` 杩斿洖 `false` 鐨?*鍞竴**鍘熷洜鏄?杩欎竴鎷嶉噺涓嶅埌涓滆タ"鈥斺€?
+      //   鐐瑰嚮鎵撳紑鏃惰繖**蹇呯劧**鍙戠敓锛堟挱鏀鹃〉杩樻病鎸傝浇銆佸皝闈㈣妭鐐逛笉瀛樺湪锛夛紝
+      //   浜庢槸杩欎竴娆℃墦寮€琚案涔呭垽鎴?鍑犱綍娌￠噺鍒?鈬?鏃犲舰鍙樿惤浣?锛?
+      //   **杩炰竴娆¤ˉ閲忛兘娌¤瘯杩?*锛堢敤鎴峰疄娴嬨€岀偣鍑绘墦寮€鎾斁鍣ㄦ病鏈夊皝闈?鑳屾櫙鍔ㄧ敾銆嶏級銆?
+      //   鏃犵晫鐨勫舰鐘讹紙`MainPage.openPlayerMorph` 149679锛夛細`beginMorphEnter` 杩斿洖 false 鏃?
+      //   **涓嶆斁寮?*锛岃€屾槸
       // ```ts
       //     this.enterAnimStarted = false;
-      //     ExpandSnapshot.onPullReady = () => { … };   // ← 注册回调，等播放页上报几何再接着跑
+      //     ExpandSnapshot.onPullReady = () => { 鈥?};   // 鈫?娉ㄥ唽鍥炶皟锛岀瓑鎾斁椤典笂鎶ュ嚑浣曞啀鎺ョ潃璺?
       // ```
-      //   ⇒ 我们的等价物就是**让补量链接手**：保持 `ENTERING/FINGER` 与 `pullDragging`，
-      //     由 `settlePullOpen` 的 12×32ms 补量把终点量回来，量到那一拍
-      //     （`measureMiniDuringPull` 里）把 `morphGeomReady` 置真、容器第一次落位。
-      //   ⚠️ 只在 `isFreshSession` 时这样做：**已经在会话里**（重复触发 / 残留）仍然走原来的
-      //     保守分支，免得把用户正在看的那一轮会话清掉。
+      //   鈬?鎴戜滑鐨勭瓑浠风墿灏辨槸**璁╄ˉ閲忛摼鎺ユ墜**锛氫繚鎸?`ENTERING/FINGER` 涓?`pullDragging`锛?
+      //     鐢?`settlePullOpen` 鐨?12脳32ms 琛ラ噺鎶婄粓鐐归噺鍥炴潵锛岄噺鍒伴偅涓€鎷?
+      //     锛坄measureMiniDuringPull` 閲岋級鎶?`morphGeomReady` 缃湡銆佸鍣ㄧ涓€娆¤惤浣嶃€?
+      //   鈿狅笍 鍙湪 `isFreshSession` 鏃惰繖鏍峰仛锛?*宸茬粡鍦ㄤ細璇濋噷**锛堥噸澶嶈Е鍙?/ 娈嬬暀锛変粛鐒惰蛋鍘熸潵鐨?
+      //     淇濆畧鍒嗘敮锛屽厤寰楁妸鐢ㄦ埛姝ｅ湪鐪嬬殑閭ｄ竴杞細璇濇竻鎺夈€?
       this.expandState.pushMorphTrace('awaitGeom');
       Logger.warn(RzdShellLogTag,
-        `open morph: geometry not measurable yet ⇒ keep the session and retry ` +
+        `open morph: geometry not measurable yet 鈬?keep the session and retry ` +
         `(stage=${this.expandState.morphStage} drive=${this.expandState.morphDrive} ` +
         `bigKnown=${this.expandState.bigCoverAnchored()})`);
       return true;
     }
     if (!ok) {
       Logger.warn(RzdShellLogTag,
-        'open morph: mini bar / host rect unavailable ⇒ plain landing (no morph)');
+        'open morph: mini bar / host rect unavailable 鈬?plain landing (no morph)');
       this.expandState.pullDragging = false;
       this.expandState.morphReset();
       this.expandState.pushMorphTrace('noMorph');
@@ -708,16 +708,16 @@ struct Index {
       return false;
     }
     Logger.info(RzdShellLogTag, 'open morph: begin from click entry (align Wujie openPlayerMorph)');
-    // ★ 壳层浮层那一棒的进度也压回起点：它的静止态初值是 1（"已落位"语义），
-    //   不压回 0 的话浮层第一帧会按"落位的大封面"画一次（= 动画里出现第二张封面）。
+    // 鈽?澹冲眰娴眰閭ｄ竴妫掔殑杩涘害涔熷帇鍥炶捣鐐癸細瀹冪殑闈欐鎬佸垵鍊兼槸 1锛?宸茶惤浣?璇箟锛夛紝
+    //   涓嶅帇鍥?0 鐨勮瘽娴眰绗竴甯т細鎸?钀戒綅鐨勫ぇ灏侀潰"鐢讳竴娆★紙= 鍔ㄧ敾閲屽嚭鐜扮浜屽紶灏侀潰锛夈€?
     this.expandState.morphOverlayReset();
-    // ⚠️ **不要在这里**起浮层那一棒的补间：此刻 `morphContainerActive()` 还是假
-    //   （`pullOpenBegin` 只把相位置成 ENTERING 的前一步），`focusMorphOverlayForPageIntro()`
-    //   会静默 return。浮层的显式驱动放在 `onShowPlayChanged` 里（推路由之后）。
+    // 鈿狅笍 **涓嶈鍦ㄨ繖閲?*璧锋诞灞傞偅涓€妫掔殑琛ラ棿锛氭鍒?`morphContainerActive()` 杩樻槸鍋?
+    //   锛坄pullOpenBegin` 鍙妸鐩镐綅缃垚 ENTERING 鐨勫墠涓€姝ワ級锛宍focusMorphOverlayForPageIntro()`
+    //   浼氶潤榛?return銆傛诞灞傜殑鏄惧紡椹卞姩鏀惧湪 `onShowPlayChanged` 閲岋紙鎺ㄨ矾鐢变箣鍚庯級銆?
     return true;
   }
 
-  /** 播放页路由在栈里的下标（不在栈里返回 -1）。 */
+  /** 鎾斁椤佃矾鐢卞湪鏍堥噷鐨勪笅鏍囷紙涓嶅湪鏍堥噷杩斿洖 -1锛夈€?*/
   private playerRouteIndex(): number {
     const names: string[] = this.pageIndexInfos.getAllPathName();
     if (names === undefined || names.length === 0) {
@@ -727,11 +727,11 @@ struct Index {
   }
 
   /**
-   * 推入播放页路由。
+   * 鎺ㄥ叆鎾斁椤佃矾鐢便€?
    *
-   * ⚠️ 第二参 `animated` **必须是 false**：形变自己就是动画，系统转场会和它叠加
-   *    （无界 1.2.4 关掉了它；官方《共享元素转场》指南同样要求 `pushPath()` 关动画）。
-   * `param.pull = true` = 这次进入要走形变（对标反编译里的 `param.pull`）。
+   * 鈿狅笍 绗簩鍙?`animated` **蹇呴』鏄?false**锛氬舰鍙樿嚜宸卞氨鏄姩鐢伙紝绯荤粺杞満浼氬拰瀹冨彔鍔?
+   *    锛堟棤鐣?1.2.4 鍏虫帀浜嗗畠锛涘畼鏂广€婂叡浜厓绱犺浆鍦恒€嬫寚鍗楀悓鏍疯姹?`pushPath()` 鍏冲姩鐢伙級銆?
+   * `param.pull = true` = 杩欐杩涘叆瑕佽蛋褰㈠彉锛堝鏍囧弽缂栬瘧閲岀殑 `param.pull`锛夈€?
    */
   private pushPlayerRoute(): void {
     if (this.playerRouteIndex() >= 0) {
@@ -745,12 +745,12 @@ struct Index {
   }
 
   /**
-   * 移除播放页路由：收起动画已经由播放页播完，这里不再带系统转场。
+   * 绉婚櫎鎾斁椤佃矾鐢憋細鏀惰捣鍔ㄧ敾宸茬粡鐢辨挱鏀鹃〉鎾畬锛岃繖閲屼笉鍐嶅甫绯荤粺杞満銆?
    *
-   * ⚠️ 不能写成"是栈顶才 pop"：`ControlAreaComponent` 里存在"先 `isShowPlay = false`
-   *    再 `pushPathByName(艺人页/搜索页)`"的写法，两个动作的先后顺序不确定。
-   *    所以这里按**名字找下标**再删：它在栈顶就 pop，不在栈顶就 `removeByIndexes`，
-   *    两种顺序都得到正确结果，也不会留下一条僵尸播放页路由。
+   * 鈿狅笍 涓嶈兘鍐欐垚"鏄爤椤舵墠 pop"锛歚ControlAreaComponent` 閲屽瓨鍦?鍏?`isShowPlay = false`
+   *    鍐?`pushPathByName(鑹轰汉椤?鎼滅储椤?`"鐨勫啓娉曪紝涓や釜鍔ㄤ綔鐨勫厛鍚庨『搴忎笉纭畾銆?
+   *    鎵€浠ヨ繖閲屾寜**鍚嶅瓧鎵句笅鏍?*鍐嶅垹锛氬畠鍦ㄦ爤椤跺氨 pop锛屼笉鍦ㄦ爤椤跺氨 `removeByIndexes`锛?
+   *    涓ょ椤哄簭閮藉緱鍒版纭粨鏋滐紝涔熶笉浼氱暀涓嬩竴鏉″兊灏告挱鏀鹃〉璺敱銆?
    */
   private popPlayerRoute(): void {
     const idx: number = this.playerRouteIndex();
@@ -760,13 +760,13 @@ struct Index {
     }
     const names: string[] = this.pageIndexInfos.getAllPathName();
     Logger.info(RzdShellLogTag, `route: remove player at index=${idx} (top=${names.length - 1})`);
-    // ★★★ 2026-10-16（**关闭过程黑匣子 · 第三笔**）：记"路由真的被删掉了"这一刻。
-    //   为什么必须记：现在关闭链路的收尾是**同一个 tick 里连着做**的 ——
-    //   `isShowPlay=false`（→ 本函数，但 V2 `@Monitor` 是**异步**回调）→ `morphReset()`
-    //   （**同步**把 `morphP` 复位成 1、相位清成 NONE ⇒ 容器不再裁剪/缩放 = 满屏）。
-    //   ⇒ 两者之间只要隔了哪怕一帧，屏上就是"已经缩成小圆点了" → 突然**满屏播放页**
-    //     → 再被 pop 的转场带走。用户报的「动画结束了**突然来个展开播放器的动画**」正是这个形状。
-    //   判读：`RST` 与 `REM` 之间的 `t+` 差 > ~16ms ⇒ 至少有一帧满屏中间态 ⇒ 就是它。
+    // 鈽呪槄鈽?2026-10-16锛?*鍏抽棴杩囩▼榛戝專瀛?路 绗笁绗?*锛夛細璁?璺敱鐪熺殑琚垹鎺変簡"杩欎竴鍒汇€?
+    //   涓轰粈涔堝繀椤昏锛氱幇鍦ㄥ叧闂摼璺殑鏀跺熬鏄?*鍚屼竴涓?tick 閲岃繛鐫€鍋?*鐨?鈥斺€?
+    //   `isShowPlay=false`锛堚啋 鏈嚱鏁帮紝浣?V2 `@Monitor` 鏄?*寮傛**鍥炶皟锛夆啋 `morphReset()`
+    //   锛?*鍚屾**鎶?`morphP` 澶嶄綅鎴?1銆佺浉浣嶆竻鎴?NONE 鈬?瀹瑰櫒涓嶅啀瑁佸壀/缂╂斁 = 婊″睆锛夈€?
+    //   鈬?涓よ€呬箣闂村彧瑕侀殧浜嗗摢鎬曚竴甯э紝灞忎笂灏辨槸"宸茬粡缂╂垚灏忓渾鐐逛簡" 鈫?绐佺劧**婊″睆鎾斁椤?*
+    //     鈫?鍐嶈 pop 鐨勮浆鍦哄甫璧般€傜敤鎴锋姤鐨勩€屽姩鐢荤粨鏉熶簡**绐佺劧鏉ヤ釜灞曞紑鎾斁鍣ㄧ殑鍔ㄧ敾**銆嶆鏄繖涓舰鐘躲€?
+    //   鍒よ锛歚RST` 涓?`REM` 涔嬮棿鐨?`t+` 宸?> ~16ms 鈬?鑷冲皯鏈変竴甯ф弧灞忎腑闂存€?鈬?灏辨槸瀹冦€?
     PlaybackPage.ev('REM', `idx=${idx} top=${names.length - 1}`);
     if (idx === names.length - 1) {
       this.pageIndexInfos.pop(false);
@@ -775,30 +775,30 @@ struct Index {
     }
   }
 
-  // ─────────────────────── 上拉打开播放页（跟手，壳层侧）───────────────────────
+  // 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ 涓婃媺鎵撳紑鎾斁椤碉紙璺熸墜锛屽３灞備晶锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   //
-  // 为什么手势必须在**壳层**而不是播放页：播放页在 `bindContentCover` 的模态里，
-  // 而模态在 `isShowPlay` 为 false 时**根本不存在** —— 没挂载的页面收不到手指事件。
-  // 所以链路是：
+  // 涓轰粈涔堟墜鍔垮繀椤诲湪**澹冲眰**鑰屼笉鏄挱鏀鹃〉锛氭挱鏀鹃〉鍦?`bindContentCover` 鐨勬ā鎬侀噷锛?
+  // 鑰屾ā鎬佸湪 `isShowPlay` 涓?false 鏃?*鏍规湰涓嶅瓨鍦?* 鈥斺€?娌℃寕杞界殑椤甸潰鏀朵笉鍒版墜鎸囦簨浠躲€?
+  // 鎵€浠ラ摼璺槸锛?
   //
-  //   壳层 onActionStart（从底部起手）→ 挂载模态（进度 100 = 迷你条那一小块）
-  //   → 壳层 onActionUpdate 写 transitionProgress → 播放页 @Monitor 镜像成 collapseProgress
-  //   → 高度/缩放/位置/圆角/透明度全部跟着手指走
-  //   → 壳层 onActionEnd 过阈值则补间到 0（完全展开），否则补间到 100 并卸载
+  //   澹冲眰 onActionStart锛堜粠搴曢儴璧锋墜锛夆啋 鎸傝浇妯℃€侊紙杩涘害 100 = 杩蜂綘鏉￠偅涓€灏忓潡锛?
+  //   鈫?澹冲眰 onActionUpdate 鍐?transitionProgress 鈫?鎾斁椤?@Monitor 闀滃儚鎴?collapseProgress
+  //   鈫?楂樺害/缂╂斁/浣嶇疆/鍦嗚/閫忔槑搴﹀叏閮ㄨ窡鐫€鎵嬫寚璧?
+  //   鈫?澹冲眰 onActionEnd 杩囬槇鍊煎垯琛ラ棿鍒?0锛堝畬鍏ㄥ睍寮€锛夛紝鍚﹀垯琛ラ棿鍒?100 骞跺嵏杞?
 
   /**
-   * 上拉打开：起手点是否落在「迷你条那一条带」里（迷你条 = 那个把手）。
+   * 涓婃媺鎵撳紑锛氳捣鎵嬬偣鏄惁钀藉湪銆岃糠浣犳潯閭ｄ竴鏉″甫銆嶉噷锛堣糠浣犳潯 = 閭ｄ釜鎶婃墜锛夈€?
    *
-   * ⚠️ 旧规则是「从屏幕下半部分（≥60% 屏高）起手就接管」，用户实测（2026-10-11）：
-   *   「我的页我从播放器上面一部分的位置上滑也会打开播放器（只有我的页会出现）」。
-   *   原因：旧规则把**整个下半屏**都划成拉伸手势的热区。别的页面在那一带正好是长列表 /
-   *   滚动视图，竖直拖动被列表先吃掉，壳层这条 `.gesture(PanGesture)`（冒泡阶段，优先级
-   *   低于子组件）根本收不到；而「我的」页内容不满一屏（或已经滚到底）时列表不消费拖动，
-   *   于是手势冒泡上来、播放器被顺手拉开 —— 所以只有它「漏」。
-   *   收紧成：起手点必须落在**底部那一条带**（迷你条 56 + 底部避让 + 上沿余量）内。
-   *   页面中段、列表区域的上滑一律交还给滚动视图（这也和"迷你条是把手"的交互直觉一致）。
-   * @param fingers 起手手指列表（窗口坐标 globalY，vp）。
-   * @returns 是否由壳层接管这次拖动。
+   * 鈿狅笍 鏃ц鍒欐槸銆屼粠灞忓箷涓嬪崐閮ㄥ垎锛堚墺60% 灞忛珮锛夎捣鎵嬪氨鎺ョ銆嶏紝鐢ㄦ埛瀹炴祴锛?026-10-11锛夛細
+   *   銆屾垜鐨勯〉鎴戜粠鎾斁鍣ㄤ笂闈竴閮ㄥ垎鐨勪綅缃笂婊戜篃浼氭墦寮€鎾斁鍣紙鍙湁鎴戠殑椤典細鍑虹幇锛夈€嶃€?
+   *   鍘熷洜锛氭棫瑙勫垯鎶?*鏁翠釜涓嬪崐灞?*閮藉垝鎴愭媺浼告墜鍔跨殑鐑尯銆傚埆鐨勯〉闈㈠湪閭ｄ竴甯︽濂芥槸闀垮垪琛?/
+   *   婊氬姩瑙嗗浘锛岀珫鐩存嫋鍔ㄨ鍒楄〃鍏堝悆鎺夛紝澹冲眰杩欐潯 `.gesture(PanGesture)`锛堝啋娉￠樁娈碉紝浼樺厛绾?
+   *   浣庝簬瀛愮粍浠讹級鏍规湰鏀朵笉鍒帮紱鑰屻€屾垜鐨勩€嶉〉鍐呭涓嶆弧涓€灞忥紙鎴栧凡缁忔粴鍒板簳锛夋椂鍒楄〃涓嶆秷璐规嫋鍔紝
+   *   浜庢槸鎵嬪娍鍐掓场涓婃潵銆佹挱鏀惧櫒琚『鎵嬫媺寮€ 鈥斺€?鎵€浠ュ彧鏈夊畠銆屾紡銆嶃€?
+   *   鏀剁揣鎴愶細璧锋墜鐐瑰繀椤昏惤鍦?*搴曢儴閭ｄ竴鏉″甫**锛堣糠浣犳潯 56 + 搴曢儴閬胯 + 涓婃部浣欓噺锛夊唴銆?
+   *   椤甸潰涓銆佸垪琛ㄥ尯鍩熺殑涓婃粦涓€寰嬩氦杩樼粰婊氬姩瑙嗗浘锛堣繖涔熷拰"杩蜂綘鏉℃槸鎶婃墜"鐨勪氦浜掔洿瑙変竴鑷达級銆?
+   * @param fingers 璧锋墜鎵嬫寚鍒楄〃锛堢獥鍙ｅ潗鏍?globalY锛寁p锛夈€?
+   * @returns 鏄惁鐢卞３灞傛帴绠¤繖娆℃嫋鍔ㄣ€?
    */
   private pullOpenStartsNearBottom(fingers: FingerInfo[]): boolean {
     if (fingers === undefined || fingers.length === 0) {
@@ -810,86 +810,86 @@ struct Index {
     return y >= bandTop;
   }
 
-  /** 上拉开始：进入 ENTERING 阶段（可跟手）并挂载播放页。 */
+  /** 涓婃媺寮€濮嬶細杩涘叆 ENTERING 闃舵锛堝彲璺熸墜锛夊苟鎸傝浇鎾斁椤点€?*/
   private onPullOpenStart(fingers: FingerInfo[]): void {
-    // ★ 诊断：新一轮手势开始 ⇒ 清掉"本次手势已记过一次拒绝"的闸（见 `onPullOpenUpdate`）。
+    // 鈽?璇婃柇锛氭柊涓€杞墜鍔垮紑濮?鈬?娓呮帀"鏈鎵嬪娍宸茶杩囦竴娆℃嫆缁?鐨勯椄锛堣 `onPullOpenUpdate`锛夈€?
     this.pullDropCountedThisGesture = false;
-    // ⚠️ 播放页已经开着就别接管：播放页现在是壳层 Stack 里的普通浮层（不再是模态），
-    //    壳层这条手势在它上面依然收得到 —— 不挡一下，用户在播放页里从下半屏往上拖
-    //    会把形变进度复位到 0（播放页"啪"地缩回迷你条），
-    //    而播放页自己的下拉收起手势同时在跑，两套动画直接打架。
+    // 鈿狅笍 鎾斁椤靛凡缁忓紑鐫€灏卞埆鎺ョ锛氭挱鏀鹃〉鐜板湪鏄３灞?Stack 閲岀殑鏅€氭诞灞傦紙涓嶅啀鏄ā鎬侊級锛?
+    //    澹冲眰杩欐潯鎵嬪娍鍦ㄥ畠涓婇潰渚濈劧鏀跺緱鍒?鈥斺€?涓嶆尅涓€涓嬶紝鐢ㄦ埛鍦ㄦ挱鏀鹃〉閲屼粠涓嬪崐灞忓線涓婃嫋
+    //    浼氭妸褰㈠彉杩涘害澶嶄綅鍒?0锛堟挱鏀鹃〉"鍟?鍦扮缉鍥炶糠浣犳潯锛夛紝
+    //    鑰屾挱鏀鹃〉鑷繁鐨勪笅鎷夋敹璧锋墜鍔垮悓鏃跺湪璺戯紝涓ゅ鍔ㄧ敾鐩存帴鎵撴灦銆?
     if (this.appState.isShowPlay) {
       return;
     }
-    // ⚠️ 残留在 true 的 `pullDragging` 会**让点击打开永远跳过形变初始化**（页面那边按它
-    //    判断"手指正在驱动"）。起手这一刻统一清一次，保证每次打开都是从干净状态开始。
+    // 鈿狅笍 娈嬬暀鍦?true 鐨?`pullDragging` 浼?*璁╃偣鍑绘墦寮€姘歌繙璺宠繃褰㈠彉鍒濆鍖?*锛堥〉闈㈤偅杈规寜瀹?
+    //    鍒ゆ柇"鎵嬫寚姝ｅ湪椹卞姩"锛夈€傝捣鎵嬭繖涓€鍒荤粺涓€娓呬竴娆★紝淇濊瘉姣忔鎵撳紑閮芥槸浠庡共鍑€鐘舵€佸紑濮嬨€?
     this.expandState.pullDragging = false;
     if (!this.pullOpenStartsNearBottom(fingers)) {
       return;
     }
-    // ★ 先量一次迷你条与宿主的**渲染矩形**（`getRectangleById`，口径 px → vp）：
-    //   `onAreaChange` 给的是布局几何、不含祖先 transform，HDS 浮动底栏那点偏移
-    //   会让动画起点整体偏（用户实测的"从封面偏左下角开始"）。
+    // 鈽?鍏堥噺涓€娆¤糠浣犳潯涓庡涓荤殑**娓叉煋鐭╁舰**锛坄getRectangleById`锛屽彛寰?px 鈫?vp锛夛細
+    //   `onAreaChange` 缁欑殑鏄竷灞€鍑犱綍銆佷笉鍚鍏?transform锛孒DS 娴姩搴曟爮閭ｇ偣鍋忕Щ
+    //   浼氳鍔ㄧ敾璧风偣鏁翠綋鍋忥紙鐢ㄦ埛瀹炴祴鐨?浠庡皝闈㈠亸宸︿笅瑙掑紑濮?锛夈€?
     const morphOk: boolean = this.expandState.pullOpenBegin(this.getUIContext(), this.navDepth > 0);
     if (!this.appState.isShowPlay) {
       this.appState.isShowPlay = true;
     }
     if (!morphOk) {
-      // 几何没量齐（迷你条没挂载 / 宿主没尺寸）：直接铺满，别硬做形变
-      // —— 硬做的话播放页会被压成一条细缝（见 PlayerExpandState.morphUsable）。
-      // ★ 诊断计数（徽标第十行 `pd=` 的第一个数）：这个数涨 ⇒ 上拉**没有跟手动画**，
-      //   原因是"起手那一刻几何没量齐"，与 `pullDragging` 那条路无关（见 `pullDropBegin`）。
+      // 鍑犱綍娌￠噺榻愶紙杩蜂綘鏉℃病鎸傝浇 / 瀹夸富娌″昂瀵革級锛氱洿鎺ラ摵婊★紝鍒‖鍋氬舰鍙?
+      // 鈥斺€?纭仛鐨勮瘽鎾斁椤典細琚帇鎴愪竴鏉＄粏缂濓紙瑙?PlayerExpandState.morphUsable锛夈€?
+      // 鈽?璇婃柇璁℃暟锛堝窘鏍囩鍗佽 `pd=` 鐨勭涓€涓暟锛夛細杩欎釜鏁版定 鈬?涓婃媺**娌℃湁璺熸墜鍔ㄧ敾**锛?
+      //   鍘熷洜鏄?璧锋墜閭ｄ竴鍒诲嚑浣曟病閲忛綈"锛屼笌 `pullDragging` 閭ｆ潯璺棤鍏筹紙瑙?`pullDropBegin`锛夈€?
       this.expandState.notePullDropBegin();
       this.expandState.pullDragging = false;
       this.expandState.morphReset();
       this.expandState.morphSettleOpen();
       return;
     }
-    // ★ 起手那一刻播放页刚挂载，"续飞封面"的终点（它的大封面）还量不到 —— 补量。
-    //   与迷你条自己那条手势里的补量同一套窗口（12 × 32ms，对标反编译 `onPullReady`）。
+    // 鈽?璧锋墜閭ｄ竴鍒绘挱鏀鹃〉鍒氭寕杞斤紝"缁灏侀潰"鐨勭粓鐐癸紙瀹冪殑澶у皝闈級杩橀噺涓嶅埌 鈥斺€?琛ラ噺銆?
+    //   涓庤糠浣犳潯鑷繁閭ｆ潯鎵嬪娍閲岀殑琛ラ噺鍚屼竴濂楃獥鍙ｏ紙12 脳 32ms锛屽鏍囧弽缂栬瘧 `onPullReady`锛夈€?
     this.schedulePullAnchorRemeasure(0);
-    // ★ 壳层浮层那一棒（`MorphCoverClone`）也压回起点。它的进度 `morphOverlayP`
-    //   静止态初值是 1（"已经在落位"的语义），不压回 0 的话浮层第一帧会画成大封面。
+    // 鈽?澹冲眰娴眰閭ｄ竴妫掞紙`MorphCoverClone`锛変篃鍘嬪洖璧风偣銆傚畠鐨勮繘搴?`morphOverlayP`
+    //   闈欐鎬佸垵鍊兼槸 1锛?宸茬粡鍦ㄨ惤浣?鐨勮涔夛級锛屼笉鍘嬪洖 0 鐨勮瘽娴眰绗竴甯т細鐢绘垚澶у皝闈€?
     this.expandState.morphOverlayReset();
   }
 
   /**
-   * 跟手期间补量"续飞封面"的终点锚点（播放页大封面）。
+   * 璺熸墜鏈熼棿琛ラ噺"缁灏侀潰"鐨勭粓鐐归敋鐐癸紙鎾斁椤靛ぇ灏侀潰锛夈€?
    *
-   * ⚠️ `attempt` **必须带默认值 `0`**，并且要挡住 `undefined`/`NaN`：
-   * `attempt >= PULL_ANCHOR_RETRY_MAX` 对 `undefined` 和 `NaN` **都是 false**，
-   * 于是无参调用（或某一层传了 `attempt + 1` 算出 NaN）会让这条 32ms 递归**永不停止**
-   * （`features/playlist` 的另两份副本原来就是这个形状，2026-10-15 已对齐；见无界同步 §72）。
-   * @param attempt 已尝试次数
+   * 鈿狅笍 `attempt` **蹇呴』甯﹂粯璁ゅ€?`0`**锛屽苟涓旇鎸′綇 `undefined`/`NaN`锛?
+   * `attempt >= PULL_ANCHOR_RETRY_MAX` 瀵?`undefined` 鍜?`NaN` **閮芥槸 false**锛?
+   * 浜庢槸鏃犲弬璋冪敤锛堟垨鏌愪竴灞備紶浜?`attempt + 1` 绠楀嚭 NaN锛変細璁╄繖鏉?32ms 閫掑綊**姘镐笉鍋滄**
+   * 锛坄features/playlist` 鐨勫彟涓や唤鍓湰鍘熸潵灏辨槸杩欎釜褰㈢姸锛?026-10-15 宸插榻愶紱瑙佹棤鐣屽悓姝?搂72锛夈€?
+   * @param attempt 宸插皾璇曟鏁?
    */
   private schedulePullAnchorRemeasure(attempt: number = 0): void {
     if (!Number.isFinite(attempt) || attempt >= PULL_ANCHOR_RETRY_MAX) {
       return;
     }
     setTimeout((): void => {
-      // ★★★ 2026-10-16（**同一形状的第 4 处**：`morphGenAlive` 守卫 —— 前 3 处已在 §102/§104 修过）
-      //   这里原来是 `if (!pullDragging || !morphGenAlive(gen)) return;`，其中
-      //   `gen` 是**发起那一刻**捕获的 `morphGen`。
+      // 鈽呪槄鈽?2026-10-16锛?*鍚屼竴褰㈢姸鐨勭 4 澶?*锛歚morphGenAlive` 瀹堝崼 鈥斺€?鍓?3 澶勫凡鍦?搂102/搂104 淇繃锛?
+      //   杩欓噷鍘熸潵鏄?`if (!pullDragging || !morphGenAlive(gen)) return;`锛屽叾涓?
+      //   `gen` 鏄?*鍙戣捣閭ｄ竴鍒?*鎹曡幏鐨?`morphGen`銆?
       //
-      // ## 为什么它在点击这条路上是错的
-      //   `morphGen` 的语义是"这一轮形变会话的编号"，它被 `morphReset()` **推高**。
-      //   而点击打开时，`pushPath` 会让**旧页面实例卸载**，旧实例的 `onDisAppear` 会走
-      //   （那条路上目前只有"`morphUsable` 为真就跳过"这一层保护，见 `PlaybackPage.onDisAppear`）
-      //   —— 一旦它真的调到了 `morphReset()`，本函数的世代号立刻过期
-      //   ⇒ **每一拍都在第 2 行静默 return**（不写日志，查不出来）。
-      //   这与 §102 修掉的、以及 §104 修的**完全同一个形状**：
-      //     > 用"会话编号"去判"用户还想不想看播放页" —— 两者无关。
+      // ## 涓轰粈涔堝畠鍦ㄧ偣鍑昏繖鏉¤矾涓婃槸閿欑殑
+      //   `morphGen` 鐨勮涔夋槸"杩欎竴杞舰鍙樹細璇濈殑缂栧彿"锛屽畠琚?`morphReset()` **鎺ㄩ珮**銆?
+      //   鑰岀偣鍑绘墦寮€鏃讹紝`pushPath` 浼氳**鏃ч〉闈㈠疄渚嬪嵏杞?*锛屾棫瀹炰緥鐨?`onDisAppear` 浼氳蛋
+      //   锛堥偅鏉¤矾涓婄洰鍓嶅彧鏈?`morphUsable` 涓虹湡灏辫烦杩?杩欎竴灞備繚鎶わ紝瑙?`PlaybackPage.onDisAppear`锛?
+      //   鈥斺€?涓€鏃﹀畠鐪熺殑璋冨埌浜?`morphReset()`锛屾湰鍑芥暟鐨勪笘浠ｅ彿绔嬪埢杩囨湡
+      //   鈬?**姣忎竴鎷嶉兘鍦ㄧ 2 琛岄潤榛?return**锛堜笉鍐欐棩蹇楋紝鏌ヤ笉鍑烘潵锛夈€?
+      //   杩欎笌 搂102 淇帀鐨勩€佷互鍙?搂104 淇殑**瀹屽叏鍚屼竴涓舰鐘?*锛?
+      //     > 鐢?浼氳瘽缂栧彿"鍘诲垽"鐢ㄦ埛杩樻兂涓嶆兂鐪嬫挱鏀鹃〉" 鈥斺€?涓よ€呮棤鍏炽€?
       //
-      // ## 改法（判据换成更早、更直接的事实）
-      //   `pullDragging` 表示"这一轮跟手/收尾还没走完"（`settlePullOpen` 会一直保持它，
-      //   直到补间起跑那一刻才置 false）—— 这正是"还要不要继续补量"的真判据。
-      //   世代号在这里没有任何正确用途：补量只需要"几何还没齐 + 用户还在等"。
-      //   ⇒ 去掉 `gen`，只判 `pullDragging`；再补一条 `isShowPlay`（用户已离开就别量了）。
+      // ## 鏀规硶锛堝垽鎹崲鎴愭洿鏃┿€佹洿鐩存帴鐨勪簨瀹烇級
+      //   `pullDragging` 琛ㄧず"杩欎竴杞窡鎵?鏀跺熬杩樻病璧板畬"锛坄settlePullOpen` 浼氫竴鐩翠繚鎸佸畠锛?
+      //   鐩村埌琛ラ棿璧疯窇閭ｄ竴鍒绘墠缃?false锛夆€斺€?杩欐鏄?杩樿涓嶈缁х画琛ラ噺"鐨勭湡鍒ゆ嵁銆?
+      //   涓栦唬鍙峰湪杩欓噷娌℃湁浠讳綍姝ｇ‘鐢ㄩ€旓細琛ラ噺鍙渶瑕?鍑犱綍杩樻病榻?+ 鐢ㄦ埛杩樺湪绛?銆?
+      //   鈬?鍘绘帀 `gen`锛屽彧鍒?`pullDragging`锛涘啀琛ヤ竴鏉?`isShowPlay`锛堢敤鎴峰凡绂诲紑灏卞埆閲忎簡锛夈€?
       if (!this.expandState.pullDragging) {
         return;
       }
-      // 用户已经离开播放页（`popPath` 那条路）⇒ 再补量也没人看，收工。
-      // ⚠️ 判据用 `isShowPlay` 而**不是**世代号（世代号会被无关的事推高，见上面那段）。
+      // 鐢ㄦ埛宸茬粡绂诲紑鎾斁椤碉紙`popPath` 閭ｆ潯璺級鈬?鍐嶈ˉ閲忎篃娌′汉鐪嬶紝鏀跺伐銆?
+      // 鈿狅笍 鍒ゆ嵁鐢?`isShowPlay` 鑰?*涓嶆槸**涓栦唬鍙凤紙涓栦唬鍙蜂細琚棤鍏崇殑浜嬫帹楂橈紝瑙佷笂闈㈤偅娈碉級銆?
       if (!this.appState.isShowPlay) {
         return;
       }
@@ -900,14 +900,14 @@ struct Index {
     }, PULL_ANCHOR_RETRY_MS);
   }
 
-  /** 跟手更新：位移 → 进度 0…1（**线性**，跟手阶段不加缓动）。 */
+  /** 璺熸墜鏇存柊锛氫綅绉?鈫?杩涘害 0鈥?锛?*绾挎€?*锛岃窡鎵嬮樁娈典笉鍔犵紦鍔級銆?*/
   private onPullOpenUpdate(offsetY: number): void {
     if (!this.expandState.pullDragging) {
-      // ★ 诊断计数（徽标第十行 `pd=` 的中间那个数）—— 见 `PlayerExpandState.pullDropUpdate`：
-      //   "手指在动但进度不跟"时，这个数会涨，并说明是**判据**拒的（而不是事件没到）。
-      // ⚠️ **一次手势只记一次**：本函数由每个 `onActionUpdate` 调用（≈60~120 次/秒），
-      //   而计数写的是 `@Trace` 字段 ⇒ 每次都写会让徽标那个 `Text` 每帧重建，
-      //   恰好把"手感"搅浑（诊断本身变成干扰源）。诊断只需要"这一轮有没有被拒"这一个事实。
+      // 鈽?璇婃柇璁℃暟锛堝窘鏍囩鍗佽 `pd=` 鐨勪腑闂撮偅涓暟锛夆€斺€?瑙?`PlayerExpandState.pullDropUpdate`锛?
+      //   "鎵嬫寚鍦ㄥ姩浣嗚繘搴︿笉璺?鏃讹紝杩欎釜鏁颁細娑紝骞惰鏄庢槸**鍒ゆ嵁**鎷掔殑锛堣€屼笉鏄簨浠舵病鍒帮級銆?
+      // 鈿狅笍 **涓€娆℃墜鍔垮彧璁颁竴娆?*锛氭湰鍑芥暟鐢辨瘡涓?`onActionUpdate` 璋冪敤锛堚増60~120 娆?绉掞級锛?
+      //   鑰岃鏁板啓鐨勬槸 `@Trace` 瀛楁 鈬?姣忔閮藉啓浼氳寰芥爣閭ｄ釜 `Text` 姣忓抚閲嶅缓锛?
+      //   鎭板ソ鎶?鎵嬫劅"鎼呮祽锛堣瘖鏂湰韬彉鎴愬共鎵版簮锛夈€傝瘖鏂彧闇€瑕?杩欎竴杞湁娌℃湁琚嫆"杩欎竴涓簨瀹炪€?
       if (!this.pullDropCountedThisGesture) {
         this.pullDropCountedThisGesture = true;
         this.expandState.notePullDropUpdate();
@@ -915,26 +915,26 @@ struct Index {
       return;
     }
     this.expandState.applyMorphProgress(this.expandState.pullOpenFraction(offsetY));
-    // ★ 手指跟手那条路上，浮层拷贝的进度与播放页进度**一比一同步**（不跑补间）：
-    //   两层在跟手期必须是同一个值，否则松手补间时会先"跳"到浮层自己那个进度上。
-    //   两条手势（壳层这条 + 迷你条那条）都写 `morphP`，所以浮层必须**跟着 morphP 走**
-    //   而不是等某个入口去设 —— 这样不管哪条手势接到的都能对上。
+    // 鈽?鎵嬫寚璺熸墜閭ｆ潯璺笂锛屾诞灞傛嫹璐濈殑杩涘害涓庢挱鏀鹃〉杩涘害**涓€姣斾竴鍚屾**锛堜笉璺戣ˉ闂达級锛?
+    //   涓ゅ眰鍦ㄨ窡鎵嬫湡蹇呴』鏄悓涓€涓€硷紝鍚﹀垯鏉炬墜琛ラ棿鏃朵細鍏?璺?鍒版诞灞傝嚜宸遍偅涓繘搴︿笂銆?
+    //   涓ゆ潯鎵嬪娍锛堝３灞傝繖鏉?+ 杩蜂綘鏉￠偅鏉★級閮藉啓 `morphP`锛屾墍浠ユ诞灞傚繀椤?*璺熺潃 morphP 璧?*
+    //   鑰屼笉鏄瓑鏌愪釜鍏ュ彛鍘昏 鈥斺€?杩欐牱涓嶇鍝潯鎵嬪娍鎺ュ埌鐨勯兘鑳藉涓娿€?
     this.expandState.syncMorphOverlayFromPage();
   }
 
   /**
-   * 松手：**提交判据交给 `PlayerExpandState.pullOpenShouldCommit()`**（清单 §一 1.2
-   * 「进度 OR 速度」）—— 过阈值（或快速上甩）补间到 1（展开），否则回到 0 并卸载。
+   * 鏉炬墜锛?*鎻愪氦鍒ゆ嵁浜ょ粰 `PlayerExpandState.pullOpenShouldCommit()`**锛堟竻鍗?搂涓€ 1.2
+   * 銆岃繘搴?OR 閫熷害銆嶏級鈥斺€?杩囬槇鍊硷紙鎴栧揩閫熶笂鐢╋級琛ラ棿鍒?1锛堝睍寮€锛夛紝鍚﹀垯鍥炲埌 0 骞跺嵏杞姐€?
    *
-   * ⚠️ 这里**不要再写 `morphP >= 0.45`**：那条判据原来在三个文件里各写了一遍
-   *    （本文件 + 两个迷你条），收敛到 `PlayerExpandState` 一处之后，
-   *    改阈值只改那一个常量，不会出现"两条手势临界值不一样"。
-   * @param offsetY 松手时的竖直位移（vp，上拉为负）—— 只用来判**方向**
-   * @param velocityY 松手时的竖直速度（`GestureEvent.velocityY`）—— 只用来判**快甩**
+   * 鈿狅笍 杩欓噷**涓嶈鍐嶅啓 `morphP >= 0.45`**锛氶偅鏉″垽鎹師鏉ュ湪涓変釜鏂囦欢閲屽悇鍐欎簡涓€閬?
+   *    锛堟湰鏂囦欢 + 涓や釜杩蜂綘鏉★級锛屾敹鏁涘埌 `PlayerExpandState` 涓€澶勪箣鍚庯紝
+   *    鏀归槇鍊煎彧鏀归偅涓€涓父閲忥紝涓嶄細鍑虹幇"涓ゆ潯鎵嬪娍涓寸晫鍊间笉涓€鏍?銆?
+   * @param offsetY 鏉炬墜鏃剁殑绔栫洿浣嶇Щ锛坴p锛屼笂鎷変负璐燂級鈥斺€?鍙敤鏉ュ垽**鏂瑰悜**
+   * @param velocityY 鏉炬墜鏃剁殑绔栫洿閫熷害锛坄GestureEvent.velocityY`锛夆€斺€?鍙敤鏉ュ垽**蹇敥**
    */
   private onPullOpenEnd(offsetY: number, velocityY: number): void {
     if (!this.expandState.pullDragging) {
-      // ★ 诊断计数（徽标第十行 `pd=` 的最后那个数）—— 见 `PlayerExpandState.pullDropEnd`。
+      // 鈽?璇婃柇璁℃暟锛堝窘鏍囩鍗佽 `pd=` 鐨勬渶鍚庨偅涓暟锛夆€斺€?瑙?`PlayerExpandState.pullDropEnd`銆?
       this.expandState.notePullDropEnd();
       return;
     }
@@ -943,8 +943,8 @@ struct Index {
   }
 
   /**
-   * 迷你条自己那条手势发来的收尾请求（松手时它只发请求，补间由壳层播 —— 见
-   * `PlayerExpandState.requestPullOpenSettle`）。
+   * 杩蜂綘鏉¤嚜宸遍偅鏉℃墜鍔垮彂鏉ョ殑鏀跺熬璇锋眰锛堟澗鎵嬫椂瀹冨彧鍙戣姹傦紝琛ラ棿鐢卞３灞傛挱 鈥斺€?瑙?
+   * `PlayerExpandState.requestPullOpenSettle`锛夈€?
    */
   @Monitor('expandState.pullSettleVersion')
   onPullSettleRequested(): void {
@@ -954,41 +954,41 @@ struct Index {
     this.settlePullOpen(this.expandState.pullSettleCommit);
   }
 
-  // ─────────────── 壳层浮层那一棒（续飞封面）的**独立时间线**（560ms）───────────────
+  // 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ 澹冲眰娴眰閭ｄ竴妫掞紙缁灏侀潰锛夌殑**鐙珛鏃堕棿绾?*锛?60ms锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   //
-  // 结构（对标无界 1.2.4 的 `MainPage.MorphOverlayHost`）：
-  //   · 下 层 = 播放页自己：`morphP`，**350ms `Curve.EaseInOut`**（一处没动）；
-  //   · 上 层 = **壳层浮层**（`MorphCoverClone()`）：`morphOverlayP`，**560ms + 快出慢收**。
+  // 缁撴瀯锛堝鏍囨棤鐣?1.2.4 鐨?`MainPage.MorphOverlayHost`锛夛細
+  //   路 涓?灞?= 鎾斁椤佃嚜宸憋細`morphP`锛?*350ms `Curve.EaseInOut`**锛堜竴澶勬病鍔級锛?
+  //   路 涓?灞?= **澹冲眰娴眰**锛坄MorphCoverClone()`锛夛細`morphOverlayP`锛?*560ms + 蹇嚭鎱㈡敹**銆?
   //
-  // 为什么用 `@Monitor` 去追「播放页那一层开始播了」：
-  //   点击打开那条路的补间在播放页里（`PlaybackPage.playMorphOpenIntro`），
-  //   而**播放页的 350ms 是明令不许动的**；`@Monitor` 是 V2 的**异步监听**，
-  //   回调落在播放页那次状态写入的同一轮里 ⇒ 两层"同起"，播放页一行都不用改。
-  //   两条路各自命中一个字段：
-  //     · 点击打开 → `morphDrive` 变成 `ANIM`（`playMorphOpenIntro` 第一行）；
-  //     · 首页/二级页返回、下拉提交 → `morphStage` 变成 `LEAVING`（`morphBeginLeaving`）。
-  //   ⚠️ 手指跟手那条路**不走这里**（它在 `onPullOpenUpdate` 里一比一同步），
-  //      所以这里不必判 `pullDragging`。
+  // 涓轰粈涔堢敤 `@Monitor` 鍘昏拷銆屾挱鏀鹃〉閭ｄ竴灞傚紑濮嬫挱浜嗐€嶏細
+  //   鐐瑰嚮鎵撳紑閭ｆ潯璺殑琛ラ棿鍦ㄦ挱鏀鹃〉閲岋紙`PlaybackPage.playMorphOpenIntro`锛夛紝
+  //   鑰?*鎾斁椤电殑 350ms 鏄槑浠や笉璁稿姩鐨?*锛沗@Monitor` 鏄?V2 鐨?*寮傛鐩戝惉**锛?
+  //   鍥炶皟钀藉湪鎾斁椤甸偅娆＄姸鎬佸啓鍏ョ殑鍚屼竴杞噷 鈬?涓ゅ眰"鍚岃捣"锛屾挱鏀鹃〉涓€琛岄兘涓嶇敤鏀广€?
+  //   涓ゆ潯璺悇鑷懡涓竴涓瓧娈碉細
+  //     路 鐐瑰嚮鎵撳紑 鈫?`morphDrive` 鍙樻垚 `ANIM`锛坄playMorphOpenIntro` 绗竴琛岋級锛?
+  //     路 棣栭〉/浜岀骇椤佃繑鍥炪€佷笅鎷夋彁浜?鈫?`morphStage` 鍙樻垚 `LEAVING`锛坄morphBeginLeaving`锛夈€?
+  //   鈿狅笍 鎵嬫寚璺熸墜閭ｆ潯璺?*涓嶈蛋杩欓噷**锛堝畠鍦?`onPullOpenUpdate` 閲屼竴姣斾竴鍚屾锛夛紝
+  //      鎵€浠ヨ繖閲屼笉蹇呭垽 `pullDragging`銆?
 
-  /** 播放页开始**展开**补间 ⇒ 浮层这一层也起自己那 560ms。 */
+  /** 鎾斁椤靛紑濮?*灞曞紑**琛ラ棿 鈬?娴眰杩欎竴灞備篃璧疯嚜宸遍偅 560ms銆?*/
   @Monitor('expandState.morphDrive')
   onMorphDriveChanged(): void {
     if (!this.appState.isShowPlay) {
       return;
     }
-    // ★ 2026-10-17 现场读数：这一支到底有没有被自己的守卫挡住（`own=1` = 让给壳层那条）
+    // 鈽?2026-10-17 鐜板満璇绘暟锛氳繖涓€鏀埌搴曟湁娌℃湁琚嚜宸辩殑瀹堝崼鎸′綇锛坄own=1` = 璁╃粰澹冲眰閭ｆ潯锛?
     PlaybackPage.ev('OVI', `drive=${this.expandState.morphDrive} stage=${this.expandState.morphStage} ` +
       `p=${this.expandState.morphOverlayProgress().toFixed(3)} own=${this.shellOwnsOverlayTween ? 1 : 0}`);
-    // ⚠️ 壳层自己刚起过浮层补间（`settlePullOpen`）时**让给它**：
-    //    否则松手"没过阈值"那条路会被这里反向覆盖 —— 壳层在把浮层补到 0（回弹），
-    //    而这里又补到 1，两层方向相反、观感是"封面不肯回去"。
+    // 鈿狅笍 澹冲眰鑷繁鍒氳捣杩囨诞灞傝ˉ闂达紙`settlePullOpen`锛夋椂**璁╃粰瀹?*锛?
+    //    鍚﹀垯鏉炬墜"娌¤繃闃堝€?閭ｆ潯璺細琚繖閲屽弽鍚戣鐩?鈥斺€?澹冲眰鍦ㄦ妸娴眰琛ュ埌 0锛堝洖寮癸級锛?
+    //    鑰岃繖閲屽張琛ュ埌 1锛屼袱灞傛柟鍚戠浉鍙嶃€佽鎰熸槸"灏侀潰涓嶈偗鍥炲幓"銆?
     if (this.shellOwnsOverlayTween) {
       return;
     }
     this.expandState.focusMorphOverlayForPageIntro(this.getUIContext());
   }
 
-  /** 播放页开始**收起** ⇒ 浮层这一层也按自己那 560ms 收回起点。 */
+  /** 鎾斁椤靛紑濮?*鏀惰捣** 鈬?娴眰杩欎竴灞備篃鎸夎嚜宸遍偅 560ms 鏀跺洖璧风偣銆?*/
   @Monitor('expandState.morphStage')
   onMorphStageChanged(): void {
     if (!this.appState.isShowPlay) {
@@ -997,7 +997,7 @@ struct Index {
     if (this.expandState.morphStage !== MorphStage.LEAVING) {
       return;
     }
-    // ★ 2026-10-17 现场读数：收起这一支的浮层进度与"是否已被占用"
+    // 鈽?2026-10-17 鐜板満璇绘暟锛氭敹璧疯繖涓€鏀殑娴眰杩涘害涓?鏄惁宸茶鍗犵敤"
     PlaybackPage.ev('OVC', `stage=${this.expandState.morphStage} ` +
       `p=${this.expandState.morphOverlayProgress().toFixed(3)} ` +
       `bridging=${this.expandState.morphOverlayBridging() ? 1 : 0}`);
@@ -1005,55 +1005,55 @@ struct Index {
   }
 
   /**
-   * 收尾补间：commit = 推到铺满并落定；否则补间回起点、交还迷你条、卸载播放页。
+   * 鏀跺熬琛ラ棿锛歝ommit = 鎺ㄥ埌閾烘弧骞惰惤瀹氾紱鍚﹀垯琛ラ棿鍥炶捣鐐广€佷氦杩樿糠浣犳潯銆佸嵏杞芥挱鏀鹃〉銆?
    *
-   * ★★★ 2026-10-16（**"点击打开没有封面/背景动画"的真断点**）：
-   *   原来的重试分支长这样：
+   * 鈽呪槄鈽?2026-10-16锛?*"鐐瑰嚮鎵撳紑娌℃湁灏侀潰/鑳屾櫙鍔ㄧ敾"鐨勭湡鏂偣**锛夛細
+   *   鍘熸潵鐨勯噸璇曞垎鏀暱杩欐牱锛?
    * ```ts
    *   if (!morphUsable) {
    *     pullDragging = true; morphDrive = FINGER;
-   *     if (!measureMiniDuringPull(…)) { …重试/放弃…; return; }   // ← 失败才 return
-   *     // 补量成功 ⇒ 掉出 if，**落到下面起补间** ✓
+   *     if (!measureMiniDuringPull(鈥?) { 鈥﹂噸璇?鏀惧純鈥? return; }   // 鈫?澶辫触鎵?return
+   *     // 琛ラ噺鎴愬姛 鈬?鎺夊嚭 if锛?*钀藉埌涓嬮潰璧疯ˉ闂?* 鉁?
    *   }
    * ```
-   *   看着没问题，**但这条 `return` 在外层**（`if (!morphUsable)` 那一层）——
-   *   我读源码时先看成了"成功也 return"。复读确认：**补量成功后确实会落到起补间那一段**，
-   *   所以这条不是断点。（留这段注释是为了记下"我一度误判过一次"。）
+   *   鐪嬬潃娌￠棶棰橈紝**浣嗚繖鏉?`return` 鍦ㄥ灞?*锛坄if (!morphUsable)` 閭ｄ竴灞傦級鈥斺€?
+   *   鎴戣婧愮爜鏃跺厛鐪嬫垚浜?鎴愬姛涔?return"銆傚璇荤‘璁わ細**琛ラ噺鎴愬姛鍚庣‘瀹炰細钀藉埌璧疯ˉ闂撮偅涓€娈?*锛?
+   *   鎵€浠ヨ繖鏉′笉鏄柇鐐广€傦紙鐣欒繖娈垫敞閲婃槸涓轰簡璁颁笅"鎴戜竴搴﹁鍒よ繃涓€娆?銆傦級
    *
-   * ⚠️ 真正要记的是：**这条重试链（12×32ms）是点击路径唯一能把 `morphUsable` 变真的地方**
-   *   —— 点击时 `pullOpenBegin` 跑在"播放页还没挂载"那一刻，终点锚点必然量不到。
-   *   所以 `morphUsable` 变真之后**必须**有东西把浮层那一棒也起起来；
-   *   播放页侧的 `onAppear` 补量（`PlaybackPage` §96.1）与这里的重试是**两条并行路径**，
-   *   谁先成功都由各自负责起棒（幂等，重复调用安全）。
-   * @param commit 是否提交展开
+   * 鈿狅笍 鐪熸瑕佽鐨勬槸锛?*杩欐潯閲嶈瘯閾撅紙12脳32ms锛夋槸鐐瑰嚮璺緞鍞竴鑳芥妸 `morphUsable` 鍙樼湡鐨勫湴鏂?*
+   *   鈥斺€?鐐瑰嚮鏃?`pullOpenBegin` 璺戝湪"鎾斁椤佃繕娌℃寕杞?閭ｄ竴鍒伙紝缁堢偣閿氱偣蹇呯劧閲忎笉鍒般€?
+   *   鎵€浠?`morphUsable` 鍙樼湡涔嬪悗**蹇呴』**鏈変笢瑗挎妸娴眰閭ｄ竴妫掍篃璧疯捣鏉ワ紱
+   *   鎾斁椤典晶鐨?`onAppear` 琛ラ噺锛坄PlaybackPage` 搂96.1锛変笌杩欓噷鐨勯噸璇曟槸**涓ゆ潯骞惰璺緞**锛?
+   *   璋佸厛鎴愬姛閮界敱鍚勮嚜璐熻矗璧锋锛堝箓绛夛紝閲嶅璋冪敤瀹夊叏锛夈€?
+   * @param commit 鏄惁鎻愪氦灞曞紑
    */
   private settlePullOpen(commit: boolean, attempt: number = 0): void {
     this.expandState.pushMorphTrace(`settle${attempt}${commit ? 'C' : 'A'}`);
-    // ★★★ 2026-10-16（**补量链的门换了个量**）：原来是 `if (!morphUsable)`。
-    //   `morphUsable` 是 `morphInitParams()` 的"算出来了"（会因为退回 `onAreaChange`
-    //   兜底值、甚至上一轮留下的值而为真）⇒ 用它当"还要不要补量"的判据，补量链会
-    //   **提前收工**，而真正该判的是"**终点锚点这次到底量到没有**"。
-    //   ⇒ 换成 `morphEndAnchorReady()`；真正的"可以落位"门是 `morphGeomReadyNow()`。
+    // 鈽呪槄鈽?2026-10-16锛?*琛ラ噺閾剧殑闂ㄦ崲浜嗕釜閲?*锛夛細鍘熸潵鏄?`if (!morphUsable)`銆?
+    //   `morphUsable` 鏄?`morphInitParams()` 鐨?绠楀嚭鏉ヤ簡"锛堜細鍥犱负閫€鍥?`onAreaChange`
+    //   鍏滃簳鍊笺€佺敋鑷充笂涓€杞暀涓嬬殑鍊艰€屼负鐪燂級鈬?鐢ㄥ畠褰?杩樿涓嶈琛ラ噺"鐨勫垽鎹紝琛ラ噺閾句細
+    //   **鎻愬墠鏀跺伐**锛岃€岀湡姝ｈ鍒ょ殑鏄?**缁堢偣閿氱偣杩欐鍒板簳閲忓埌娌℃湁**"銆?
+    //   鈬?鎹㈡垚 `morphEndAnchorReady()`锛涚湡姝ｇ殑"鍙互钀戒綅"闂ㄦ槸 `morphGeomReadyNow()`銆?
     if (!this.expandState.morphUsable || !this.expandState.morphEndAnchorReady()) {
-      // 快速松手也要完成原尺寸锚点补量；不能先切 ANIM 导致补量停止。
+      // 蹇€熸澗鎵嬩篃瑕佸畬鎴愬師灏哄閿氱偣琛ラ噺锛涗笉鑳藉厛鍒?ANIM 瀵艰嚧琛ラ噺鍋滄銆?
       this.expandState.pullDragging = true;
       this.expandState.morphDrive = MorphDrive.FINGER;
-      // ★★★ 2026-10-16（**"点击/返回没有动画"的最后一条因果链**）：
-      //   这一段先做两步**抢救**，再做原来那次补量（顺序很重要）：
-      //   ① 若"形变会话"已经被清掉（`morphSessionStarted === false`）——
-      //      典型来源：播放页挂载那一刻，**旧页面实例的 `onDisappear`** 触发了
-      //      无条件的 `morphReset()`（`morphGen++`、`morphUsable=false`、
-      //      **`morphSessionStarted=false`**）—— 就先**重新起一次入口**，
-      //      把 `stage/drive` 摆回 `ENTERING/FINGER`；
-      //   ② 然后调原来那次 `measureMiniDuringPull` 补量（它要求 `stage=ENTERING &&
-      //      drive=FINGER`，所以①必须在前）。
-      //   ⚠️ 顺序反了 ⇒ 补量直接被守卫拦掉（静默返回 false）⇒ 重试 12 次全废。
+      // 鈽呪槄鈽?2026-10-16锛?*"鐐瑰嚮/杩斿洖娌℃湁鍔ㄧ敾"鐨勬渶鍚庝竴鏉″洜鏋滈摼**锛夛細
+      //   杩欎竴娈靛厛鍋氫袱姝?*鎶㈡晳**锛屽啀鍋氬師鏉ラ偅娆¤ˉ閲忥紙椤哄簭寰堥噸瑕侊級锛?
+      //   鈶?鑻?褰㈠彉浼氳瘽"宸茬粡琚竻鎺夛紙`morphSessionStarted === false`锛夆€斺€?
+      //      鍏稿瀷鏉ユ簮锛氭挱鏀鹃〉鎸傝浇閭ｄ竴鍒伙紝**鏃ч〉闈㈠疄渚嬬殑 `onDisappear`** 瑙﹀彂浜?
+      //      鏃犳潯浠剁殑 `morphReset()`锛坄morphGen++`銆乣morphUsable=false`銆?
+      //      **`morphSessionStarted=false`**锛夆€斺€?灏卞厛**閲嶆柊璧蜂竴娆″叆鍙?*锛?
+      //      鎶?`stage/drive` 鎽嗗洖 `ENTERING/FINGER`锛?
+      //   鈶?鐒跺悗璋冨師鏉ラ偅娆?`measureMiniDuringPull` 琛ラ噺锛堝畠瑕佹眰 `stage=ENTERING &&
+      //      drive=FINGER`锛屾墍浠モ憼蹇呴』鍦ㄥ墠锛夈€?
+      //   鈿狅笍 椤哄簭鍙嶄簡 鈬?琛ラ噺鐩存帴琚畧鍗嫤鎺夛紙闈欓粯杩斿洖 false锛夆噿 閲嶈瘯 12 娆″叏搴熴€?
       if (!this.expandState.morphSessionStarted) {
         this.expandState.pushMorphTrace('reEnter');
         Logger.info(RzdShellLogTag,
           `pull settle: re-enter morph session (was reset by an onDisappear) attempt=${attempt}`);
         if (!this.expandState.pullOpenBegin(this.getUIContext(), this.navDepth > 0)) {
-          // 几何还是量不到：保持 `ENTERING/FINGER`，让下面的补量提前 return 去排队重试
+          // 鍑犱綍杩樻槸閲忎笉鍒帮細淇濇寔 `ENTERING/FINGER`锛岃涓嬮潰鐨勮ˉ閲忔彁鍓?return 鍘绘帓闃熼噸璇?
           this.expandState.pullDragging = true;
           this.expandState.morphDrive = MorphDrive.FINGER;
         }
@@ -1061,13 +1061,13 @@ struct Index {
       if (!this.expandState.measureMiniDuringPull(this.getUIContext(), this.navDepth > 0)) {
         if (attempt < PULL_ANCHOR_RETRY_MAX) {
           setTimeout((): void => {
-            // ★★★ 2026-10-16（**"点击/返回没有动画"的最后一条因果链**）：
-            //   这里原来是 `if (isShowPlay && morphGenAlive(pendingGen))`。
-            //   ⚠️ `morphGenAlive` 在本场景下**必然为假**，于是整条重试链在第 1 拍就断掉。
-            //   ⇒ 修法：**守卫不要挂世代号**。世代号在这里的语义是"这一轮会话是否还有效"，
-            //     而"用户还在播放页"（`isShowPlay`）才是真正的有效性判据；
-            //     中途被 `morphReset()` 清过一次，重试接着把几何量回来即可。
-            //     ⚠️ 只在 `!isShowPlay`（用户已经离开播放页）时才放弃。
+            // 鈽呪槄鈽?2026-10-16锛?*"鐐瑰嚮/杩斿洖娌℃湁鍔ㄧ敾"鐨勬渶鍚庝竴鏉″洜鏋滈摼**锛夛細
+            //   杩欓噷鍘熸潵鏄?`if (isShowPlay && morphGenAlive(pendingGen))`銆?
+            //   鈿狅笍 `morphGenAlive` 鍦ㄦ湰鍦烘櫙涓?*蹇呯劧涓哄亣**锛屼簬鏄暣鏉￠噸璇曢摼鍦ㄧ 1 鎷嶅氨鏂帀銆?
+            //   鈬?淇硶锛?*瀹堝崼涓嶈鎸備笘浠ｅ彿**銆備笘浠ｅ彿鍦ㄨ繖閲岀殑璇箟鏄?杩欎竴杞細璇濇槸鍚﹁繕鏈夋晥"锛?
+            //     鑰?鐢ㄦ埛杩樺湪鎾斁椤?锛坄isShowPlay`锛夋墠鏄湡姝ｇ殑鏈夋晥鎬у垽鎹紱
+            //     涓€旇 `morphReset()` 娓呰繃涓€娆★紝閲嶈瘯鎺ョ潃鎶婂嚑浣曢噺鍥炴潵鍗冲彲銆?
+            //     鈿狅笍 鍙湪 `!isShowPlay`锛堢敤鎴峰凡缁忕寮€鎾斁椤碉級鏃舵墠鏀惧純銆?
             if (this.appState.isShowPlay) {
               this.settlePullOpen(commit, attempt + 1);
             } else {
@@ -1078,14 +1078,14 @@ struct Index {
         } else {
           Logger.warn(RzdShellLogTag, 'pull settle: end anchor unavailable, immediate landing');
           this.expandState.pullDragging = false;
-          // ★★★ 2026-10-16（**照搬无界把"几何永远没量到"当退化路径**）：
-          //   这段原来是"`morphReset()` + commit 时再 `morphSettleOpen()`"——
-          //   自相矛盾：`morphReset()` 把几何清成恒等（`morphUsable = false`），
-          //   紧接着的 `morphSettleOpen()` 内部 `applyMorphProgress(1)` 又因为
-          //   `morphGeomReady` 为假而**什么都不做** ⇒ 容器停在恒等、相位却是 OPEN。
-          //   无界的口径更干净（`wujie.pa` 的 `pickCapsuleRect` 那段：量不到就
-          //   「**本次退回普通 push(无形变)**」）：**量不到就彻底不要这套动画**，
-          //   让播放页以恒等几何、OPEN 相位正常显示，而不是留一个半死的形变会话。
+          // 鈽呪槄鈽?2026-10-16锛?*鐓ф惉鏃犵晫鎶?鍑犱綍姘歌繙娌￠噺鍒?褰撻€€鍖栬矾寰?*锛夛細
+          //   杩欐鍘熸潵鏄?`morphReset()` + commit 鏃跺啀 `morphSettleOpen()`"鈥斺€?
+          //   鑷浉鐭涚浘锛歚morphReset()` 鎶婂嚑浣曟竻鎴愭亽绛夛紙`morphUsable = false`锛夛紝
+          //   绱ф帴鐫€鐨?`morphSettleOpen()` 鍐呴儴 `applyMorphProgress(1)` 鍙堝洜涓?
+          //   `morphGeomReady` 涓哄亣鑰?*浠€涔堥兘涓嶅仛** 鈬?瀹瑰櫒鍋滃湪鎭掔瓑銆佺浉浣嶅嵈鏄?OPEN銆?
+          //   鏃犵晫鐨勫彛寰勬洿骞插噣锛坄wujie.pa` 鐨?`pickCapsuleRect` 閭ｆ锛氶噺涓嶅埌灏?
+          //   銆?*鏈閫€鍥炴櫘閫?push(鏃犲舰鍙?**銆嶏級锛?*閲忎笉鍒板氨褰诲簳涓嶈杩欏鍔ㄧ敾**锛?
+          //   璁╂挱鏀鹃〉浠ユ亽绛夊嚑浣曘€丱PEN 鐩镐綅姝ｅ父鏄剧ず锛岃€屼笉鏄暀涓€涓崐姝荤殑褰㈠彉浼氳瘽銆?
           this.expandState.pushMorphTrace('noGeom');
           this.expandState.morphReset();
           this.expandState.morphStage = MorphStage.OPEN;
@@ -1096,69 +1096,69 @@ struct Index {
         }
         return;
       }
-      // 补量成功 ⇒ 故意**不 return**，落下去起那两条补间（见上面那段注释）。
+      // 琛ラ噺鎴愬姛 鈬?鏁呮剰**涓?return**锛岃惤涓嬪幓璧烽偅涓ゆ潯琛ラ棿锛堣涓婇潰閭ｆ娉ㄩ噴锛夈€?
       this.expandState.pushMorphTrace('measOk');
       Logger.info(RzdShellLogTag,
         `pull settle: remeasured at attempt=${attempt} usable=${this.expandState.morphUsable} ` +
         `stage=${this.expandState.morphStage}`);
     }
     const duration: number = commit ? PULL_OPEN_SETTLE_MS : PULL_OPEN_ABORT_MS;
-    // ★★★ 2026-10-17（照搬无界 `MorphGuard.animateMorph` 的第一句）：把"配色安静窗口"
-    //   推到**这条补间结束**（`quietMs` 用补间自己的时长 —— 无界那侧也是按调用点传的，
-    //   本处没有任何新造常量）。⇒ 展开动画跑着的时候"上色"往后挪，不会在动画中途跳色
-    //   （取色是异步的，换歌那一拍它极可能正好落在展开动画中间）。
+    // 鈽呪槄鈽?2026-10-17锛堢収鎼棤鐣?`MorphGuard.animateMorph` 鐨勭涓€鍙ワ級锛氭妸"閰嶈壊瀹夐潤绐楀彛"
+    //   鎺ㄥ埌**杩欐潯琛ラ棿缁撴潫**锛坄quietMs` 鐢ㄨˉ闂磋嚜宸辩殑鏃堕暱 鈥斺€?鏃犵晫閭ｄ晶涔熸槸鎸夎皟鐢ㄧ偣浼犵殑锛?
+    //   鏈娌℃湁浠讳綍鏂伴€犲父閲忥級銆傗噿 灞曞紑鍔ㄧ敾璺戠潃鐨勬椂鍊?涓婅壊"寰€鍚庢尓锛屼笉浼氬湪鍔ㄧ敾涓€旇烦鑹?
+    //   锛堝彇鑹叉槸寮傛鐨勶紝鎹㈡瓕閭ｄ竴鎷嶅畠鏋佸彲鑳芥濂借惤鍦ㄥ睍寮€鍔ㄧ敾涓棿锛夈€?
     this.expandState.markMorphQuiet(duration);
     this.expandState.pushMorphTrace('tween');
     this.expandState.pullDragging = false;
     this.expandState.morphDrive = MorphDrive.ANIM;
-    // ★★ 浮层拷贝这一层走**它自己**的时长/曲线（560ms + 快出慢收，对标无界 `animateMorphT`），
-    //   与下面这条 300/180ms 的**播放页**补间**同起**（同一帧、同一个任务里两个 `animateTo`）。
-    //   ⚠️ 播放页那条**另有一套数值**：`PULL_OPEN_SETTLE_MS` / `PULL_OPEN_ABORT_MS`
-    //      （2026-10-15 起 = 无界 `SETTLE_MS` 400 / 400，见那两个常量的注释）。
-    //   起点取浮层**当前**进度（跟手停在哪儿就从哪儿接着走）。
+    // 鈽呪槄 娴眰鎷疯礉杩欎竴灞傝蛋**瀹冭嚜宸?*鐨勬椂闀?鏇茬嚎锛?60ms + 蹇嚭鎱㈡敹锛屽鏍囨棤鐣?`animateMorphT`锛夛紝
+    //   涓庝笅闈㈣繖鏉?300/180ms 鐨?*鎾斁椤?*琛ラ棿**鍚岃捣**锛堝悓涓€甯с€佸悓涓€涓换鍔￠噷涓や釜 `animateTo`锛夈€?
+    //   鈿狅笍 鎾斁椤甸偅鏉?*鍙︽湁涓€濂楁暟鍊?*锛歚PULL_OPEN_SETTLE_MS` / `PULL_OPEN_ABORT_MS`
+    //      锛?026-10-15 璧?= 鏃犵晫 `SETTLE_MS` 400 / 400锛岃閭ｄ袱涓父閲忕殑娉ㄩ噴锛夈€?
+    //   璧风偣鍙栨诞灞?*褰撳墠**杩涘害锛堣窡鎵嬪仠鍦ㄥ摢鍎垮氨浠庡摢鍎挎帴鐫€璧帮級銆?
     this.expandState.morphOverlayTweenTo(commit, this.getUIContext());
-    // ★ 2026-10-17（**浮层这一棒的现场读数** —— 用户「封面跟着播放器走、没有独立飞行」定性用）
-    //   `from=` 是这一棒**起手那一刻**的浮层进度；`p=` 是播放页进度；
-    //   若 `from=0` 而 commit=1 ⇒ 它本该从迷你条圆圈飞到播放页封面（0→1）；
-    //   若 `from=1` ⇒ 已经贴在大封面位置（补间会被 `|to-from|<1e-4` 早退掉，等于**不飞**）。
+    // 鈽?2026-10-17锛?*娴眰杩欎竴妫掔殑鐜板満璇绘暟** 鈥斺€?鐢ㄦ埛銆屽皝闈㈣窡鐫€鎾斁鍣ㄨ蛋銆佹病鏈夌嫭绔嬮琛屻€嶅畾鎬х敤锛?
+    //   `from=` 鏄繖涓€妫?*璧锋墜閭ｄ竴鍒?*鐨勬诞灞傝繘搴︼紱`p=` 鏄挱鏀鹃〉杩涘害锛?
+    //   鑻?`from=0` 鑰?commit=1 鈬?瀹冩湰璇ヤ粠杩蜂綘鏉″渾鍦堥鍒版挱鏀鹃〉灏侀潰锛?鈫?锛夛紱
+    //   鑻?`from=1` 鈬?宸茬粡璐村湪澶у皝闈綅缃紙琛ラ棿浼氳 `|to-from|<1e-4` 鏃╅€€鎺夛紝绛変簬**涓嶉**锛夈€?
     PlaybackPage.ev('OVS', `commit=${commit ? 1 : 0} from=${this.expandState.morphOverlayProgress().toFixed(3)} ` +
       `p=${this.expandState.morphP.toFixed(2)} bridging=${this.expandState.morphOverlayBridging() ? 1 : 0} ` +
       `host=${this.expandState.hostsMorphOverlay() ? 1 : 0}`);
-    // 标记"浮层这一棒的补间由壳层发起"：`@Monitor('expandState.morphDrive')` 在下面那行
-    // 把 drive 置成 ANIM 之后**也会**被触发，没有这个标记的话它会再起一条**方向可能相反**的
-    // 浮层补间（回弹那条路正是如此）。标记在补间结束/被新补间取代时清掉。
+    // 鏍囪"娴眰杩欎竴妫掔殑琛ラ棿鐢卞３灞傚彂璧?锛歚@Monitor('expandState.morphDrive')` 鍦ㄤ笅闈㈤偅琛?
+    // 鎶?drive 缃垚 ANIM 涔嬪悗**涔熶細**琚Е鍙戯紝娌℃湁杩欎釜鏍囪鐨勮瘽瀹冧細鍐嶈捣涓€鏉?*鏂瑰悜鍙兘鐩稿弽**鐨?
+    // 娴眰琛ラ棿锛堝洖寮归偅鏉¤矾姝ｆ槸濡傛锛夈€傛爣璁板湪琛ラ棿缁撴潫/琚柊琛ラ棿鍙栦唬鏃舵竻鎺夈€?
     this.shellOwnsOverlayTween = true;
     setTimeout((): void => {
       this.shellOwnsOverlayTween = false;
     }, PlayerExpandState.MORPH_OVERLAY_DURATION_MS + 20);
-    // ★ 2026-10-16：这里原来还捕获了一个 `gen` 供两处守卫用；那两处守卫已按 §102/§103
-    //   改成判 `isShowPlay`（世代号会被"旧实例卸载的 morphReset"推高，与用户意图无关）
-    //   ⇒ `gen` 不再需要，删掉声明（ArkTS 对未使用的局部变量较严格，留着会被静态告警）。
+    // 鈽?2026-10-16锛氳繖閲屽師鏉ヨ繕鎹曡幏浜嗕竴涓?`gen` 渚涗袱澶勫畧鍗敤锛涢偅涓ゅ瀹堝崼宸叉寜 搂102/搂103
+    //   鏀规垚鍒?`isShowPlay`锛堜笘浠ｅ彿浼氳"鏃у疄渚嬪嵏杞界殑 morphReset"鎺ㄩ珮锛屼笌鐢ㄦ埛鎰忓浘鏃犲叧锛?
+    //   鈬?`gen` 涓嶅啀闇€瑕侊紝鍒犳帀澹版槑锛圓rkTS 瀵规湭浣跨敤鐨勫眬閮ㄥ彉閲忚緝涓ユ牸锛岀暀鐫€浼氳闈欐€佸憡璀︼級銆?
     this.getUIContext().animateTo({
-      // 无界 Tokens 的标准时长：180ms 微交互 / 300ms 主转场
+      // 鏃犵晫 Tokens 鐨勬爣鍑嗘椂闀匡細180ms 寰氦浜?/ 300ms 涓昏浆鍦?
       duration: duration,
       curve: curves.cubicBezierCurve(commit ? 0.23 : 0.68, 1.0, commit ? 0.32 : 0.77, 1.0)
     }, (): void => {
       this.expandState.applyMorphProgress(commit ? 1 : 0);
     });
     if (commit) {
-      // ⚠️ 相位在**补间之外**改：`morphSettleOpen()` 会把"是否裁剪"翻成 false，
-      //    放进 animateTo 闭包里会让这种离散属性也去吃补间。
+      // 鈿狅笍 鐩镐綅鍦?*琛ラ棿涔嬪**鏀癸細`morphSettleOpen()` 浼氭妸"鏄惁瑁佸壀"缈绘垚 false锛?
+      //    鏀捐繘 animateTo 闂寘閲屼細璁╄繖绉嶇鏁ｅ睘鎬т篃鍘诲悆琛ラ棿銆?
       setTimeout((): void => {
-        // ★★★ 2026-10-16（**同一条因果链的第四处**）：
-        //   这里原来是 `if (isShowPlay && morphGenAlive(gen))`。**与重试那条守卫同一个毛病**：
-        //   `morphGen` 会被"旧页面实例的 `onDisappear` 无条件 `morphReset()`"推高，
-        //   而那个原因与"用户还想不想看播放页"毫无关系。
-        //   ⇒ 一旦它变，`morphSettleOpen()` 被跳过 ⇒ **相位停在 ENTERING、`morphUsable` 保持真**
-        //     ⇒ `morphClipping()` 恒真 ⇒ 容器一直停在最后那一帧的 `scale/translate/clip`
-        //     ⇒ 观感就是「**背景整屏、封面位置不对**」。
-        //   ⇒ 改法：只判 `isShowPlay`；再补一条 `geomReady` —— **几何没就绪时不能落位**
-        //     （否则会把一帧"没量齐"的中间态固定下来）。
-        //   ★★ 2026-10-16（二次订正）：这一条判据原来是 `morphUsable`。但 `morphUsable`
-        //     会因为"退回 `onAreaChange` 兜底值"而为真（见 `morphIntroAnchorsReady` 的注释），
-        //     它**不足以**说明"终点锚点真的量到了"。`morphGeomReady()` 才是无界
-        //     `pullGeomReady` 的等价物（只在 `measureMiniDuringPull` 量到终点那一拍置位）
-        //     ⇒ 落位门必须用它，否则会把"半份几何"落定成 OPEN。
+        // 鈽呪槄鈽?2026-10-16锛?*鍚屼竴鏉″洜鏋滈摼鐨勭鍥涘**锛夛細
+        //   杩欓噷鍘熸潵鏄?`if (isShowPlay && morphGenAlive(gen))`銆?*涓庨噸璇曢偅鏉″畧鍗悓涓€涓瘺鐥?*锛?
+        //   `morphGen` 浼氳"鏃ч〉闈㈠疄渚嬬殑 `onDisappear` 鏃犳潯浠?`morphReset()`"鎺ㄩ珮锛?
+        //   鑰岄偅涓師鍥犱笌"鐢ㄦ埛杩樻兂涓嶆兂鐪嬫挱鏀鹃〉"姣棤鍏崇郴銆?
+        //   鈬?涓€鏃﹀畠鍙橈紝`morphSettleOpen()` 琚烦杩?鈬?**鐩镐綅鍋滃湪 ENTERING銆乣morphUsable` 淇濇寔鐪?*
+        //     鈬?`morphClipping()` 鎭掔湡 鈬?瀹瑰櫒涓€鐩村仠鍦ㄦ渶鍚庨偅涓€甯х殑 `scale/translate/clip`
+        //     鈬?瑙傛劅灏辨槸銆?*鑳屾櫙鏁村睆銆佸皝闈綅缃笉瀵?*銆嶃€?
+        //   鈬?鏀规硶锛氬彧鍒?`isShowPlay`锛涘啀琛ヤ竴鏉?`geomReady` 鈥斺€?**鍑犱綍娌″氨缁椂涓嶈兘钀戒綅**
+        //     锛堝惁鍒欎細鎶婁竴甯?娌￠噺榻?鐨勪腑闂存€佸浐瀹氫笅鏉ワ級銆?
+        //   鈽呪槄 2026-10-16锛堜簩娆¤姝ｏ級锛氳繖涓€鏉″垽鎹師鏉ユ槸 `morphUsable`銆備絾 `morphUsable`
+        //     浼氬洜涓?閫€鍥?`onAreaChange` 鍏滃簳鍊?鑰屼负鐪燂紙瑙?`morphIntroAnchorsReady` 鐨勬敞閲婏級锛?
+        //     瀹?*涓嶈冻浠?*璇存槑"缁堢偣閿氱偣鐪熺殑閲忓埌浜?銆俙morphGeomReady()` 鎵嶆槸鏃犵晫
+        //     `pullGeomReady` 鐨勭瓑浠风墿锛堝彧鍦?`measureMiniDuringPull` 閲忓埌缁堢偣閭ｄ竴鎷嶇疆浣嶏級
+        //     鈬?钀戒綅闂ㄥ繀椤荤敤瀹冿紝鍚﹀垯浼氭妸"鍗婁唤鍑犱綍"钀藉畾鎴?OPEN銆?
         if (this.appState.isShowPlay && this.expandState.morphGeomReadyNow() &&
           this.expandState.morphUsable) {
           this.expandState.pushMorphTrace('settled');
@@ -1169,17 +1169,17 @@ struct Index {
             `pull settle: skip morphSettleOpen showPlay=${this.appState.isShowPlay} ` +
             `usable=${this.expandState.morphUsable} geomReady=${this.expandState.morphGeomReadyNow()} ` +
             `stage=${this.expandState.morphStage}`);
-          // ★★★ 2026-10-16（与上面"end anchor unavailable"那条**同一条规则**）：
-          //   几何始终没量到 ⇒ 无界的口径是「本次退回普通 push(无形变)」——
-          //   必须把相位从 ENTERING 收回来。原来是**只打条日志、什么都不做**：
-          //   相位永远停在 ENTERING、`morphContainerActive()` 恒真 ⇒
-          //   播放页那条路可能挂着一个半死的形变会话（用户实测的"背景整屏 / 没有动画"）。
-          //   ⚠️ 只在"用户在播放页"（`isShowPlay`）时才收 —— 用户已经离开时由 `popPlayerRoute`
-          //     那条路自己收（`morphReset` 已在 `onDisAppear` 里跑过）。
+          // 鈽呪槄鈽?2026-10-16锛堜笌涓婇潰"end anchor unavailable"閭ｆ潯**鍚屼竴鏉¤鍒?*锛夛細
+          //   鍑犱綍濮嬬粓娌￠噺鍒?鈬?鏃犵晫鐨勫彛寰勬槸銆屾湰娆￠€€鍥炴櫘閫?push(鏃犲舰鍙?銆嶁€斺€?
+          //   蹇呴』鎶婄浉浣嶄粠 ENTERING 鏀跺洖鏉ャ€傚師鏉ユ槸**鍙墦鏉℃棩蹇椼€佷粈涔堥兘涓嶅仛**锛?
+          //   鐩镐綅姘歌繙鍋滃湪 ENTERING銆乣morphContainerActive()` 鎭掔湡 鈬?
+          //   鎾斁椤甸偅鏉¤矾鍙兘鎸傜潃涓€涓崐姝荤殑褰㈠彉浼氳瘽锛堢敤鎴峰疄娴嬬殑"鑳屾櫙鏁村睆 / 娌℃湁鍔ㄧ敾"锛夈€?
+          //   鈿狅笍 鍙湪"鐢ㄦ埛鍦ㄦ挱鏀鹃〉"锛坄isShowPlay`锛夋椂鎵嶆敹 鈥斺€?鐢ㄦ埛宸茬粡绂诲紑鏃剁敱 `popPlayerRoute`
+          //     閭ｆ潯璺嚜宸辨敹锛坄morphReset` 宸插湪 `onDisAppear` 閲岃窇杩囷級銆?
           if (this.appState.isShowPlay && !this.expandState.morphGeomReadyNow()) {
             this.expandState.pushMorphTrace('degrade');
             Logger.warn(RzdShellLogTag,
-              'pull settle: geometry never ready ⇒ degrade to a plain full-screen player');
+              'pull settle: geometry never ready 鈬?degrade to a plain full-screen player');
             this.expandState.morphReset();
             this.expandState.morphStage = MorphStage.OPEN;
             this.expandState.morphP = 1;
@@ -1188,16 +1188,16 @@ struct Index {
       }, duration + 20);
       return;
     }
-    // 没过阈值：补间回起点，**动画播完**再交还迷你条并卸载。
-    // ⚠️ `morphLand()` 不能在补间之前调：LANDING 之后播放页整页不再绘制
-    //    （`morphPageOpacity()` 在 LANDING 返回 0；★ 见它自己的注释 —— 那个函数
-    //     **目前没有消费者**，所以"不画"实际由 `.visibility(isCollapsing)` 与
-    //     `morphClipping()` 那条裁剪门共同实现），提前调就看不到"缩回去"的过程了。
+    // 娌¤繃闃堝€硷細琛ラ棿鍥炶捣鐐癸紝**鍔ㄧ敾鎾畬**鍐嶄氦杩樿糠浣犳潯骞跺嵏杞姐€?
+    // 鈿狅笍 `morphLand()` 涓嶈兘鍦ㄨˉ闂翠箣鍓嶈皟锛歀ANDING 涔嬪悗鎾斁椤垫暣椤典笉鍐嶇粯鍒?
+    //    锛坄morphPageOpacity()` 鍦?LANDING 杩斿洖 0锛涒槄 瑙佸畠鑷繁鐨勬敞閲?鈥斺€?閭ｄ釜鍑芥暟
+    //     **鐩墠娌℃湁娑堣垂鑰?*锛屾墍浠?涓嶇敾"瀹為檯鐢?`.visibility(isCollapsing)` 涓?
+    //     `morphClipping()` 閭ｆ潯瑁佸壀闂ㄥ叡鍚屽疄鐜帮級锛屾彁鍓嶈皟灏辩湅涓嶅埌"缂╁洖鍘?鐨勮繃绋嬩簡銆?
     setTimeout((): void => {
-      // ★★★ 2026-10-16（**同一条因果链的第五处**）：与上面那条同款订正 ——
-      //   去掉 `morphGenAlive`（它会被"旧页面实例卸载时的 `morphReset()`"推高，
-      //   与"用户还想不想打开播放页"无关）。若这里被误拦，手势没到阈值的回弹
-      //   就会**停在半路**（播放页挂在一块中间大小的窗口上、迷你条也不交还）。
+      // 鈽呪槄鈽?2026-10-16锛?*鍚屼竴鏉″洜鏋滈摼鐨勭浜斿**锛夛細涓庝笂闈㈤偅鏉″悓娆捐姝?鈥斺€?
+      //   鍘绘帀 `morphGenAlive`锛堝畠浼氳"鏃ч〉闈㈠疄渚嬪嵏杞芥椂鐨?`morphReset()`"鎺ㄩ珮锛?
+      //   涓?鐢ㄦ埛杩樻兂涓嶆兂鎵撳紑鎾斁椤?鏃犲叧锛夈€傝嫢杩欓噷琚鎷︼紝鎵嬪娍娌″埌闃堝€肩殑鍥炲脊
+      //   灏变細**鍋滃湪鍗婅矾**锛堟挱鏀鹃〉鎸傚湪涓€鍧椾腑闂村ぇ灏忕殑绐楀彛涓娿€佽糠浣犳潯涔熶笉浜よ繕锛夈€?
       if (!this.appState.isShowPlay) {
         return;
       }
@@ -1207,10 +1207,10 @@ struct Index {
     }, duration + 20);
   }
 
-  /** 手势被系统抢走：回弹到起点并卸载（否则播放页会一直挂在迷你条那一小块上）。 */
+  /** 鎵嬪娍琚郴缁熸姠璧帮細鍥炲脊鍒拌捣鐐瑰苟鍗歌浇锛堝惁鍒欐挱鏀鹃〉浼氫竴鐩存寕鍦ㄨ糠浣犳潯閭ｄ竴灏忓潡涓婏級銆?*/
   private onPullOpenCancel(): void {
     if (!this.expandState.pullDragging) {
-      // ★ 与 `onPullOpenEnd` 同族（都是"收尾被拒"）⇒ 计到同一个数上，见 `pullDropEnd`。
+      // 鈽?涓?`onPullOpenEnd` 鍚屾棌锛堥兘鏄?鏀跺熬琚嫆"锛夆噿 璁″埌鍚屼竴涓暟涓婏紝瑙?`pullDropEnd`銆?
       this.expandState.notePullDropEnd();
       return;
     }
@@ -1218,17 +1218,17 @@ struct Index {
   }
 
   /**
-   * ★★★★ 2026-10-17（照搬无界 `MainPage` 的快照收缩浮层，`wujie.pa:162465-162707`）：
-   * 「非手势关闭」= 把播放页根节点的一张**满窗快照**缩到迷你条胶囊，同时淡出。
+   * 鈽呪槄鈽呪槄 2026-10-17锛堢収鎼棤鐣?`MainPage` 鐨勫揩鐓ф敹缂╂诞灞傦紝`wujie.pa:162465-162707`锛夛細
+   * 銆岄潪鎵嬪娍鍏抽棴銆? 鎶婃挱鏀鹃〉鏍硅妭鐐圭殑涓€寮?*婊＄獥蹇収**缂╁埌杩蜂綘鏉¤兌鍥婏紝鍚屾椂娣″嚭銆?
    *
-   * ## 为什么必须是这样（用户第 ② 条「有背景但是高度特低」的正解）
-   * 我们原来（以及现在**下拉**那条路仍然）是**动活的播放页**：改裁剪窗口 + 缩放。
-   * 只要"裁剪窗口高度"与"缩放"有一点不同步，屏上就是"有背景、但只剩很矮的一条"。
-   * 无界的非手势关闭**根本不动活页面**：它在 `closeWithAnimation()` 里
-   * `componentSnapshot.get(PLAYER_ROOT_ID, λ)` 拍一张图，然后 `nav.pop(false)` 把页面卸掉，
-   * 再让**这张图**缩下去 ⇒ 图里的背景与封面**同比例一起缩** ⇒ 那种形状**不可能**出现。
+   * ## 涓轰粈涔堝繀椤绘槸杩欐牱锛堢敤鎴风 鈶?鏉°€屾湁鑳屾櫙浣嗘槸楂樺害鐗逛綆銆嶇殑姝ｈВ锛?
+   * 鎴戜滑鍘熸潵锛堜互鍙婄幇鍦?*涓嬫媺**閭ｆ潯璺粛鐒讹級鏄?*鍔ㄦ椿鐨勬挱鏀鹃〉**锛氭敼瑁佸壀绐楀彛 + 缂╂斁銆?
+   * 鍙"瑁佸壀绐楀彛楂樺害"涓?缂╂斁"鏈変竴鐐逛笉鍚屾锛屽睆涓婂氨鏄?鏈夎儗鏅€佷絾鍙墿寰堢煯鐨勪竴鏉?銆?
+   * 鏃犵晫鐨勯潪鎵嬪娍鍏抽棴**鏍规湰涓嶅姩娲婚〉闈?*锛氬畠鍦?`closeWithAnimation()` 閲?
+   * `componentSnapshot.get(PLAYER_ROOT_ID, 位)` 鎷嶄竴寮犲浘锛岀劧鍚?`nav.pop(false)` 鎶婇〉闈㈠嵏鎺夛紝
+   * 鍐嶈**杩欏紶鍥?*缂╀笅鍘?鈬?鍥鹃噷鐨勮儗鏅笌灏侀潰**鍚屾瘮渚嬩竴璧风缉** 鈬?閭ｇ褰㈢姸**涓嶅彲鑳?*鍑虹幇銆?
    *
-   * ## 逐条对照（全部直读，见 `MorphShrinkState` 文件头）
+   * ## 閫愭潯瀵圭収锛堝叏閮ㄧ洿璇伙紝瑙?`MorphShrinkState` 鏂囦欢澶达級
    * ```
    *   If (shrink.visible && shrinkPixmap !== undefined) {          // 162466-162492
    *     Column()
@@ -1241,27 +1241,27 @@ struct Index {
    *       .opacity(shrink.opacity)                                  // 162794-162803
    *       .hitTestBehavior(HitTestMode.None)                        // 162804-162812
    *       { Image(shrinkPixmap)                                     // 162820-162828
-   *           .width(整窗宽).height(整窗高)                          // 162829-162862（图恒为整窗）
+   *           .width(鏁寸獥瀹?.height(鏁寸獥楂?                          // 162829-162862锛堝浘鎭掍负鏁寸獥锛?
    *           .objectFit(ImageFit.Cover)                            // 162863-162871
    *           .syncLoad(true) }                                     // 162872-162879
    *   }
    * ```
-   * ⚠️ 那个 `Column` 的宽度是 `'100%'`（= 整窗宽）**且靠父 `Stack` 的左上角对齐**
-   *    —— `MorphShrinkState` 里那组 `endTx/endTy` 正是按"绕自身中心缩放"反解出来的，
-   *    两者是一对，**不要**给它加 `.position()` 或改对齐方式。
-   * ⚠️ 整层不吃事件（关播放器的瞬间，下面的首页要立刻可用）。
+   * 鈿狅笍 閭ｄ釜 `Column` 鐨勫搴︽槸 `'100%'`锛? 鏁寸獥瀹斤級**涓旈潬鐖?`Stack` 鐨勫乏涓婅瀵归綈**
+   *    鈥斺€?`MorphShrinkState` 閲岄偅缁?`endTx/endTy` 姝ｆ槸鎸?缁曡嚜韬腑蹇冪缉鏀?鍙嶈В鍑烘潵鐨勶紝
+   *    涓よ€呮槸涓€瀵癸紝**涓嶈**缁欏畠鍔?`.position()` 鎴栨敼瀵归綈鏂瑰紡銆?
+   * 鈿狅笍 鏁村眰涓嶅悆浜嬩欢锛堝叧鎾斁鍣ㄧ殑鐬棿锛屼笅闈㈢殑棣栭〉瑕佺珛鍒诲彲鐢級銆?
    */
   @Builder
   private ShrinkOverlayHost() {
     if (this.shrinkState.visible && this.shrinkState.pixmap !== undefined) {
-      // ⚠️ 外层 `Stack` 必须是 **`Alignment.TopStart` + 整窗盒**：
-      //   `MorphShrinkState` 那组 `endTx/endTy` 是按"`Column` 未缩放时占 `x∈[0,W], y∈[0,C]`"
-      //   反解出来的（见那个文件头的对账）—— 靠父容器的**左上角对齐**才成立。
-      //   盒尺寸用**实测窗口尺寸**显式给（与另外三个浮层同一处修正：不给就只等于安全区之内那块）。
+      // 鈿狅笍 澶栧眰 `Stack` 蹇呴』鏄?**`Alignment.TopStart` + 鏁寸獥鐩?*锛?
+      //   `MorphShrinkState` 閭ｇ粍 `endTx/endTy` 鏄寜"`Column` 鏈缉鏀炬椂鍗?`x鈭圼0,W], y鈭圼0,C]`"
+      //   鍙嶈В鍑烘潵鐨勶紙瑙侀偅涓枃浠跺ご鐨勫璐︼級鈥斺€?闈犵埗瀹瑰櫒鐨?*宸︿笂瑙掑榻?*鎵嶆垚绔嬨€?
+      //   鐩掑昂瀵哥敤**瀹炴祴绐楀彛灏哄**鏄惧紡缁欙紙涓庡彟澶栦笁涓诞灞傚悓涓€澶勪慨姝ｏ細涓嶇粰灏卞彧绛変簬瀹夊叏鍖轰箣鍐呴偅鍧楋級銆?
       Stack({ alignContent: Alignment.TopStart }) {
         Column() {
           Image(this.shrinkState.pixmap)
-            // 图恒为**整窗**（无界 `162829-162862` 就是 `px2vp(windowWidth_px/Height_px)`）
+            // 鍥炬亽涓?*鏁寸獥**锛堟棤鐣?`162829-162862` 灏辨槸 `px2vp(windowWidth_px/Height_px)`锛?
             .width(this.expandState.windowWidthVp > 0 ?
               this.expandState.windowWidthVp : StyleConstants.FULL_WIDTH)
             .height(this.expandState.windowHeightVp > 0 ?
@@ -1289,32 +1289,32 @@ struct Index {
   }
 
   /**
-   * 形变克隆层：迷你条那条"元信息 + 操作区"的**副本**，钉在它原来的位置，随进度位移并淡出。
+   * 褰㈠彉鍏嬮殕灞傦細杩蜂綘鏉￠偅鏉?鍏冧俊鎭?+ 鎿嶄綔鍖?鐨?*鍓湰**锛岄拤鍦ㄥ畠鍘熸潵鐨勪綅缃紝闅忚繘搴︿綅绉诲苟娣″嚭銆?
    *
-   * 反编译依据（`MiniMorph渲染方与顶底栏淡入公式.md`）：
-   *   · `λ1e` 元信息克隆：`position(miniMetaLeft, miniMetaTop)` + `translate({x: coverRightShiftAt(t)})`
-   *     + `opacity(metaOpacityAt(t))`（`clamp(1 - t/0.35)`）
-   *   · `λ1f` 操作区克隆：`translate({y: coverRiseAt(t)})` + `opacity(actionsOpacityAt(t))`
-   *     （`clamp(1 - t/0.20)`，比元信息更早消失 —— "右侧三个按钮慢慢隐藏"就是这条）
-   *   · 面那一棒（封面克隆）**也在这个壳层里**了 —— 见 {@link MorphCoverClone}
-   *     （2026-10-15 从 `PlaybackPage.MorphCoverBridge` 搬来；两侧矩形同源）。
+   * 鍙嶇紪璇戜緷鎹紙`MiniMorph娓叉煋鏂逛笌椤跺簳鏍忔贰鍏ュ叕寮?md`锛夛細
+   *   路 `位1e` 鍏冧俊鎭厠闅嗭細`position(miniMetaLeft, miniMetaTop)` + `translate({x: coverRightShiftAt(t)})`
+   *     + `opacity(metaOpacityAt(t))`锛坄clamp(1 - t/0.35)`锛?
+   *   路 `位1f` 鎿嶄綔鍖哄厠闅嗭細`translate({y: coverRiseAt(t)})` + `opacity(actionsOpacityAt(t))`
+   *     锛坄clamp(1 - t/0.20)`锛屾瘮鍏冧俊鎭洿鏃╂秷澶?鈥斺€?"鍙充晶涓変釜鎸夐挳鎱㈡參闅愯棌"灏辨槸杩欐潯锛?
+   *   路 闈㈤偅涓€妫掞紙灏侀潰鍏嬮殕锛?*涔熷湪杩欎釜澹冲眰閲?*浜?鈥斺€?瑙?{@link MorphCoverClone}
+   *     锛?026-10-15 浠?`PlaybackPage.MorphCoverBridge` 鎼潵锛涗袱渚х煩褰㈠悓婧愶級銆?
    *
-   * 位移量是**相对量**（`coverRightShiftAt = coverRight(t) - coverRight(0)`），
-   * 所以它只会"被封面推着往右走、跟着封面往上抬"，不会跳到别的位置。
+   * 浣嶇Щ閲忔槸**鐩稿閲?*锛坄coverRightShiftAt = coverRight(t) - coverRight(0)`锛夛紝
+   * 鎵€浠ュ畠鍙細"琚皝闈㈡帹鐫€寰€鍙宠蛋銆佽窡鐫€灏侀潰寰€涓婃姮"锛屼笉浼氳烦鍒板埆鐨勪綅缃€?
    */
   @Builder
   private MorphMiniBarClone() {
     Stack({ alignContent: Alignment.TopStart }) {
-      // ⚠️ 必须包一层**定宽的 Row**（不是 Column）：`HomeMiniBarPlayerAside` 的根节点带
-      //    `.layoutWeight(1)`，它只在 Row/Column 里生效，而且**方向要对** ——
-      //    放进 Column 会让它按"竖直剩余空间"分配、横向退化成 wrap-content，
-      //    结果就是右侧那三个按钮整体左移（用户实测两次都是这个症状）。
+      // 鈿狅笍 蹇呴』鍖呬竴灞?*瀹氬鐨?Row**锛堜笉鏄?Column锛夛細`HomeMiniBarPlayerAside` 鐨勬牴鑺傜偣甯?
+      //    `.layoutWeight(1)`锛屽畠鍙湪 Row/Column 閲岀敓鏁堬紝鑰屼笖**鏂瑰悜瑕佸** 鈥斺€?
+      //    鏀捐繘 Column 浼氳瀹冩寜"绔栫洿鍓╀綑绌洪棿"鍒嗛厤銆佹í鍚戦€€鍖栨垚 wrap-content锛?
+      //    缁撴灉灏辨槸鍙充晶閭ｄ笁涓寜閽暣浣撳乏绉伙紙鐢ㄦ埛瀹炴祴涓ゆ閮芥槸杩欎釜鐥囩姸锛夈€?
       Row() {
         HomeMiniBarPlayerAside({
           playerViewModel: this.miniBarViewModel,
           showPreviousTrack: false,
-          // 元信息（歌名/歌手）用 `clamp(1 - t/0.35)`，与操作区那一档分开；
-          // 它同时被封面"推着往右走"（`coverRightShiftAt`，反编译 λ1e）
+          // 鍏冧俊鎭紙姝屽悕/姝屾墜锛夌敤 `clamp(1 - t/0.35)`锛屼笌鎿嶄綔鍖洪偅涓€妗ｅ垎寮€锛?
+          // 瀹冨悓鏃惰灏侀潰"鎺ㄧ潃寰€鍙宠蛋"锛坄coverRightShiftAt`锛屽弽缂栬瘧 位1e锛?
           isMorphClone: true,
           metaOpacity: 0,
           metaShiftX: this.expandState.coverRightShiftAt(this.expandState.morphP)
@@ -1324,24 +1324,24 @@ struct Index {
       .height(this.expandState.asideWinH)
       .alignItems(VerticalAlign.Center)
       .position({ x: this.expandState.asideWinX, y: this.expandState.asideWinY })
-      // 操作区那一档：整块按 `clamp(1 - t/0.20)` 淡出（按钮先没、文字后没）
+      // 鎿嶄綔鍖洪偅涓€妗ｏ細鏁村潡鎸?`clamp(1 - t/0.20)` 娣″嚭锛堟寜閽厛娌°€佹枃瀛楀悗娌★級
       .opacity(PlayerExpandState.actionsOpacityAt(this.expandState.morphP))
-      // ⚠️ 只做**纵向**位移（反编译 λ1f 的 `coverRiseAt`）。
-      //    横向的 `coverRightShiftAt` 是给**元信息**那一层的，套到按钮上会让按钮
-      //    横着滑出去 —— 收起时表现成"一个暂停按钮从屏幕外飞进来"。
+      // 鈿狅笍 鍙仛**绾靛悜**浣嶇Щ锛堝弽缂栬瘧 位1f 鐨?`coverRiseAt`锛夈€?
+      //    妯悜鐨?`coverRightShiftAt` 鏄粰**鍏冧俊鎭?*閭ｄ竴灞傜殑锛屽鍒版寜閽笂浼氳鎸夐挳
+      //    妯潃婊戝嚭鍘?鈥斺€?鏀惰捣鏃惰〃鐜版垚"涓€涓殏鍋滄寜閽粠灞忓箷澶栭杩涙潵"銆?
       .translate({ y: 0 })
     }
-    // ★★★ 2026-10-16（与 `MorphCoverClone()` **同一处修正**，理由逐字相同）：
-    //   这里原来是 `LayoutPolicy.matchParent` ×2 ⇒ 拿的是**壳层根 `Stack`** 的尺寸，
-    //   而根 `Stack` **没有 `ignoreLayoutSafeArea`** ⇒ 这一层的盒子只等于"安全区之内"那块。
-    //   而它的子节点（上面那个 `Row`）用的是 `.position({x: asideWinX, y: asideWinY})`
-    //   —— **全窗口坐标**（与迷你条量测同口径）⇒ 当迷你条靠近屏幕底部（`asideWinY ≈ 850`）
-    //   时，这一块会落在层盒子**之外** ⇒ 被裁掉 ⇒ 观感是"关闭时**操作区那三个按钮不见了**"。
-    //   ⇒ 用**实测窗口尺寸**显式给（量不到时退回 `'100%'`，与改动前逐字一致）。
+    // 鈽呪槄鈽?2026-10-16锛堜笌 `MorphCoverClone()` **鍚屼竴澶勪慨姝?*锛岀悊鐢遍€愬瓧鐩稿悓锛夛細
+    //   杩欓噷鍘熸潵鏄?`LayoutPolicy.matchParent` 脳2 鈬?鎷跨殑鏄?*澹冲眰鏍?`Stack`** 鐨勫昂瀵革紝
+    //   鑰屾牴 `Stack` **娌℃湁 `ignoreLayoutSafeArea`** 鈬?杩欎竴灞傜殑鐩掑瓙鍙瓑浜?瀹夊叏鍖轰箣鍐?閭ｅ潡銆?
+    //   鑰屽畠鐨勫瓙鑺傜偣锛堜笂闈㈤偅涓?`Row`锛夌敤鐨勬槸 `.position({x: asideWinX, y: asideWinY})`
+    //   鈥斺€?**鍏ㄧ獥鍙ｅ潗鏍?*锛堜笌杩蜂綘鏉￠噺娴嬪悓鍙ｅ緞锛夆噿 褰撹糠浣犳潯闈犺繎灞忓箷搴曢儴锛坄asideWinY 鈮?850`锛?
+    //   鏃讹紝杩欎竴鍧椾細钀藉湪灞傜洅瀛?*涔嬪** 鈬?琚鎺?鈬?瑙傛劅鏄?鍏抽棴鏃?*鎿嶄綔鍖洪偅涓変釜鎸夐挳涓嶈浜?*"銆?
+    //   鈬?鐢?*瀹炴祴绐楀彛灏哄**鏄惧紡缁欙紙閲忎笉鍒版椂閫€鍥?`'100%'`锛屼笌鏀瑰姩鍓嶉€愬瓧涓€鑷达級銆?
     .width(this.expandState.windowWidthVp > 0 ? this.expandState.windowWidthVp : StyleConstants.FULL_WIDTH)
     .height(this.expandState.windowHeightVp > 0 ? this.expandState.windowHeightVp : StyleConstants.FULL_HEIGHT)
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
-    // 整层不吃事件：下面就是播放页，玩家的点击必须照常落到播放页上
+    // 鏁村眰涓嶅悆浜嬩欢锛氫笅闈㈠氨鏄挱鏀鹃〉锛岀帺瀹剁殑鐐瑰嚮蹇呴』鐓у父钀藉埌鎾斁椤典笂
     .hitTestBehavior(HitTestMode.None)
     .zIndex(PLAYER_CLONE_Z_INDEX)
     .id('rzd_player_actions_clone_host')
@@ -1356,32 +1356,32 @@ struct Index {
   }
 
   /**
-   * ★★ 形变**浮层**：续飞封面的**壳层克隆**（对标无界 `MainPage.MorphOverlayHost.morphCover`）。
+   * 鈽呪槄 褰㈠彉**娴眰**锛氱画椋炲皝闈㈢殑**澹冲眰鍏嬮殕**锛堝鏍囨棤鐣?`MainPage.MorphOverlayHost.morphCover`锛夈€?
    *
-   * 这一棒原来画在播放页内部（`PlaybackPage.MorphCoverBridge`）。搬到这里的原因是**坐标系**：
-   * 播放页那一版被画在**被 scale+translate 变换过、还带 `.clip()` 与动态 `.height(morphClipHeight())`
-   * 的容器**里，而它拿到的矩形是**窗口坐标** ⇒ 只有 p=1（恒等变换）时严格正确。
-   * 历史上它反复出问题（"封面前半段看不见""坐标口径推错""被别的元素挡住"）都出在这个前提上。
-   * 浮层这一份**不在那个容器里**：它直接躺在壳层这个满屏 Stack 上，`morphOverlayCoverBridge()`
-   * 给的窗口坐标就是它的绘制坐标，**不做任何"页内 ↔ 窗口"换算**。
+   * 杩欎竴妫掑師鏉ョ敾鍦ㄦ挱鏀鹃〉鍐呴儴锛坄PlaybackPage.MorphCoverBridge`锛夈€傛惉鍒拌繖閲岀殑鍘熷洜鏄?*鍧愭爣绯?*锛?
+   * 鎾斁椤甸偅涓€鐗堣鐢诲湪**琚?scale+translate 鍙樻崲杩囥€佽繕甯?`.clip()` 涓庡姩鎬?`.height(morphClipHeight())`
+   * 鐨勫鍣?*閲岋紝鑰屽畠鎷垮埌鐨勭煩褰㈡槸**绐楀彛鍧愭爣** 鈬?鍙湁 p=1锛堟亽绛夊彉鎹級鏃朵弗鏍兼纭€?
+   * 鍘嗗彶涓婂畠鍙嶅鍑洪棶棰橈紙"灏侀潰鍓嶅崐娈电湅涓嶈""鍧愭爣鍙ｅ緞鎺ㄩ敊""琚埆鐨勫厓绱犳尅浣?锛夐兘鍑哄湪杩欎釜鍓嶆彁涓娿€?
+   * 娴眰杩欎竴浠?*涓嶅湪閭ｄ釜瀹瑰櫒閲?*锛氬畠鐩存帴韬哄湪澹冲眰杩欎釜婊″睆 Stack 涓婏紝`morphOverlayCoverBridge()`
+   * 缁欑殑绐楀彛鍧愭爣灏辨槸瀹冪殑缁樺埗鍧愭爣锛?*涓嶅仛浠讳綍"椤靛唴 鈫?绐楀彛"鎹㈢畻**銆?
    *
-   * 两层各自的时长/曲线（这是"两层"的关键）：
-   *   · 播放页那一层：`morphP`，350ms `Curve.EaseInOut`（**没动**）；
-   *   · 这一层：`morphOverlayP`，560ms `cubic-bezier(0.23, 1.0, 0.32, 1.0)`（快出慢收）。
+   * 涓ゅ眰鍚勮嚜鐨勬椂闀?鏇茬嚎锛堣繖鏄?涓ゅ眰"鐨勫叧閿級锛?
+   *   路 鎾斁椤甸偅涓€灞傦細`morphP`锛?50ms `Curve.EaseInOut`锛?*娌″姩**锛夛紱
+   *   路 杩欎竴灞傦細`morphOverlayP`锛?60ms `cubic-bezier(0.23, 1.0, 0.32, 1.0)`锛堝揩鍑烘參鏀讹級銆?
    *
-   * ⚠️ 显隐门用 `morphOverlayBridging()`（= `morphBridging()` ∧ 宿主确实接管了这一棒），
-   *    **不是**新造一把门；三个副本（封面 / 歌名歌手 / 操作区）能不能同时成立，
-   *    以及"迷你条本体被占位顶掉、播放页真封面不画"这三条不变量见任务报告。
-   * ⚠️ 整层不吃事件（下面就是播放页，点击/手势必须照常落到播放页上）。
+   * 鈿狅笍 鏄鹃殣闂ㄧ敤 `morphOverlayBridging()`锛? `morphBridging()` 鈭?瀹夸富纭疄鎺ョ浜嗚繖涓€妫掞級锛?
+   *    **涓嶆槸**鏂伴€犱竴鎶婇棬锛涗笁涓壇鏈紙灏侀潰 / 姝屽悕姝屾墜 / 鎿嶄綔鍖猴級鑳戒笉鑳藉悓鏃舵垚绔嬶紝
+   *    浠ュ強"杩蜂綘鏉℃湰浣撹鍗犱綅椤舵帀銆佹挱鏀鹃〉鐪熷皝闈笉鐢?杩欎笁鏉′笉鍙橀噺瑙佷换鍔℃姤鍛娿€?
+   * 鈿狅笍 鏁村眰涓嶅悆浜嬩欢锛堜笅闈㈠氨鏄挱鏀鹃〉锛岀偣鍑?鎵嬪娍蹇呴』鐓у父钀藉埌鎾斁椤典笂锛夈€?
    */
   @Builder
   private MorphCoverClone() {
     Stack() {
       Image(this.miniBarViewModel.songCoverUrl().length > 0 ?
         this.miniBarViewModel.songCoverUrl() : this.miniBarViewModel.songCover())
-        // ⚠️ 矩形直接来自共享状态（vp，**窗口坐标**）：宽、高**分开取** ——
-        //    播放页封面外有 `layoutWeight(1)` + `constraintSize`，量到的矩形不保证是正方形，
-        //    按正方形画会在落位交棒那一刻跳一下（用户实测过的"结束时封面大小跳一下"）。
+        // 鈿狅笍 鐭╁舰鐩存帴鏉ヨ嚜鍏变韩鐘舵€侊紙vp锛?*绐楀彛鍧愭爣**锛夛細瀹姐€侀珮**鍒嗗紑鍙?* 鈥斺€?
+        //    鎾斁椤靛皝闈㈠鏈?`layoutWeight(1)` + `constraintSize`锛岄噺鍒扮殑鐭╁舰涓嶄繚璇佹槸姝ｆ柟褰紝
+        //    鎸夋鏂瑰舰鐢讳細鍦ㄨ惤浣嶄氦妫掗偅涓€鍒昏烦涓€涓嬶紙鐢ㄦ埛瀹炴祴杩囩殑"缁撴潫鏃跺皝闈㈠ぇ灏忚烦涓€涓?锛夈€?
         .width(this.expandState.morphOverlayCoverBridge().size)
         .height(this.expandState.morphOverlayCoverBridge().height)
         .objectFit(ImageFit.Cover)
@@ -1392,41 +1392,41 @@ struct Index {
           y: this.expandState.morphOverlayCoverBridge().y
         })
     }
-    // ★★★ 2026-10-16（**照无界把这一层显式铺满全窗口**）：
-    //   原来这里是 `LayoutPolicy.matchParent` ×2 —— 那是拿**父容器（壳层根 `Stack`）的尺寸**，
-    //   而**根 `Stack` 自己并没有 `ignoreLayoutSafeArea`**（见它的属性表：只有 `.width/.height('100%')`
-    //   + `.id(MORPH_HOST_ID)` + 手势 + `onAreaChange`）⇒ 这一层的盒子只等于"**安全区之内**"那块，
-    //   比窗口小（上下各少一个安全区）。
+    // 鈽呪槄鈽?2026-10-16锛?*鐓ф棤鐣屾妸杩欎竴灞傛樉寮忛摵婊″叏绐楀彛**锛夛細
+    //   鍘熸潵杩欓噷鏄?`LayoutPolicy.matchParent` 脳2 鈥斺€?閭ｆ槸鎷?*鐖跺鍣紙澹冲眰鏍?`Stack`锛夌殑灏哄**锛?
+    //   鑰?*鏍?`Stack` 鑷繁骞舵病鏈?`ignoreLayoutSafeArea`**锛堣瀹冪殑灞炴€ц〃锛氬彧鏈?`.width/.height('100%')`
+    //   + `.id(MORPH_HOST_ID)` + 鎵嬪娍 + `onAreaChange`锛夆噿 杩欎竴灞傜殑鐩掑瓙鍙瓑浜?**瀹夊叏鍖轰箣鍐?*"閭ｅ潡锛?
+    //   姣旂獥鍙ｅ皬锛堜笂涓嬪悇灏戜竴涓畨鍏ㄥ尯锛夈€?
     //
-    //   ⚠️ 而 `.position({x, y})` 用的是**全窗口坐标**（`morphCoverRectAt()` 的输出、
-    //      与迷你条/播放页封面的量测同口径）⇒ 当封面在**屏上部**（封面页那一端 `y ≈ 136`）
-    //      或**屏下部**（迷你条那一端 `y ≈ 850`）时，都会落在这层盒子**之外**
-    //      ⇒ 被裁掉 / 不绘制 ⇒ **观感就是"没有封面动画"**。
+    //   鈿狅笍 鑰?`.position({x, y})` 鐢ㄧ殑鏄?*鍏ㄧ獥鍙ｅ潗鏍?*锛坄morphCoverRectAt()` 鐨勮緭鍑恒€?
+    //      涓庤糠浣犳潯/鎾斁椤靛皝闈㈢殑閲忔祴鍚屽彛寰勶級鈬?褰撳皝闈㈠湪**灞忎笂閮?*锛堝皝闈㈤〉閭ｄ竴绔?`y 鈮?136`锛?
+    //      鎴?*灞忎笅閮?*锛堣糠浣犳潯閭ｄ竴绔?`y 鈮?850`锛夋椂锛岄兘浼氳惤鍦ㄨ繖灞傜洅瀛?*涔嬪**
+    //      鈬?琚鎺?/ 涓嶇粯鍒?鈬?**瑙傛劅灏辨槸"娌℃湁灏侀潰鍔ㄧ敾"**銆?
     //
-    //   ⇒ 用**实测窗口尺寸**显式给（与 `PlaybackPageRouteShell.boxWidth/boxHeight()` 同款做法，
-    //     那是本仓已经验证过的"铺满窗口"写法），并保留 `ignoreLayoutSafeArea` 双保险。
-    //     ⚠️ 量不到窗口时退回 `'100%'`（与改动前逐字一致，不会更差）。
+    //   鈬?鐢?*瀹炴祴绐楀彛灏哄**鏄惧紡缁欙紙涓?`PlaybackPageRouteShell.boxWidth/boxHeight()` 鍚屾鍋氭硶锛?
+    //     閭ｆ槸鏈粨宸茬粡楠岃瘉杩囩殑"閾烘弧绐楀彛"鍐欐硶锛夛紝骞朵繚鐣?`ignoreLayoutSafeArea` 鍙屼繚闄┿€?
+    //     鈿狅笍 閲忎笉鍒扮獥鍙ｆ椂閫€鍥?`'100%'`锛堜笌鏀瑰姩鍓嶉€愬瓧涓€鑷达紝涓嶄細鏇村樊锛夈€?
     .width(this.expandState.windowWidthVp > 0 ? this.expandState.windowWidthVp : StyleConstants.FULL_WIDTH)
     .height(this.expandState.windowHeightVp > 0 ? this.expandState.windowHeightVp : StyleConstants.FULL_HEIGHT)
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     .opacity(this.expandState.morphOverlayBridgeOpacity())
-    // 整层不吃事件：下面就是播放页，玩家的点击必须照常落到播放页上
+    // 鏁村眰涓嶅悆浜嬩欢锛氫笅闈㈠氨鏄挱鏀鹃〉锛岀帺瀹剁殑鐐瑰嚮蹇呴』鐓у父钀藉埌鎾斁椤典笂
     .hitTestBehavior(HitTestMode.None)
     .zIndex(PLAYER_CLONE_Z_INDEX)
   }
 
   /**
-   * 光感标题栏材质（HDS 官方 `systemMaterialEffect`），跟随环境光档位。
+   * 鍏夋劅鏍囬鏍忔潗璐紙HDS 瀹樻柟 `systemMaterialEffect`锛夛紝璺熼殢鐜鍏夋。浣嶃€?
    *
    *
-   * ⚠️ 这个函数**只能**喂给 HDS 的 `titleBar.style.systemMaterialEffect` 或
-   *    `HdsTabs` 的 `barFloatingStyle.systemMaterialEffect`。官方《沉浸光感功耗优化》原文：
-   *      「其他组件仅在 Navigation/NavDestination 标题栏或横向 Tabs 中 barPosition 为
-   *        BarPosition.End 的底部 TabBar 中生效。在其他区域中设置沉浸光感效果不生效。」
-   *    ⇒ 直接把它挂到普通容器（比如下面那条 `floatingMiniBar` 的 Column）上**是不生效的**，
-   *    不要那样写。留着它，是为了在"把二级播放条搬进 HdsTabs 的 miniBar"那条路
-   *    （见 {@link floatingMiniBar} 的说明）里能直接复用同一套档位。
-   * @returns HDS 材质参数（`@since 6.1.0(23)`，default/pc 的 compatible 均 ≥ 23）。
+   * 鈿狅笍 杩欎釜鍑芥暟**鍙兘**鍠傜粰 HDS 鐨?`titleBar.style.systemMaterialEffect` 鎴?
+   *    `HdsTabs` 鐨?`barFloatingStyle.systemMaterialEffect`銆傚畼鏂广€婃矇娴稿厜鎰熷姛鑰椾紭鍖栥€嬪師鏂囷細
+   *      銆屽叾浠栫粍浠朵粎鍦?Navigation/NavDestination 鏍囬鏍忔垨妯悜 Tabs 涓?barPosition 涓?
+   *        BarPosition.End 鐨勫簳閮?TabBar 涓敓鏁堛€傚湪鍏朵粬鍖哄煙涓缃矇娴稿厜鎰熸晥鏋滀笉鐢熸晥銆傘€?
+   *    鈬?鐩存帴鎶婂畠鎸傚埌鏅€氬鍣紙姣斿涓嬮潰閭ｆ潯 `floatingMiniBar` 鐨?Column锛変笂**鏄笉鐢熸晥鐨?*锛?
+   *    涓嶈閭ｆ牱鍐欍€傜暀鐫€瀹冿紝鏄负浜嗗湪"鎶婁簩绾ф挱鏀炬潯鎼繘 HdsTabs 鐨?miniBar"閭ｆ潯璺?
+   *    锛堣 {@link floatingMiniBar} 鐨勮鏄庯級閲岃兘鐩存帴澶嶇敤鍚屼竴濂楁。浣嶃€?
+   * @returns HDS 鏉愯川鍙傛暟锛坄@since 6.1.0(23)`锛宒efault/pc 鐨?compatible 鍧?鈮?23锛夈€?
    */
   private ambientTitleMaterial(): SystemMaterialParams {
     switch (this.ambientLevelIndex()) {
@@ -1468,39 +1468,39 @@ struct Index {
   }
 
   /**
-   * 单个页签被点击/选中时的弹跳触发计数（每个页签一个）。
+   * 鍗曚釜椤电琚偣鍑?閫変腑鏃剁殑寮硅烦瑙﹀彂璁℃暟锛堟瘡涓〉绛句竴涓級銆?
    *
-   * `symbolEffect(effect, trigger)` 是「trigger 变化就播一次」，所以每个页签必须
-   * **各用各的计数** —— 共用一个的话两个图标会一起弹（设计规范要的是「选中态」那一颗弹）。
+   * `symbolEffect(effect, trigger)` 鏄€宼rigger 鍙樺寲灏辨挱涓€娆°€嶏紝鎵€浠ユ瘡涓〉绛惧繀椤?
+   * **鍚勭敤鍚勭殑璁℃暟** 鈥斺€?鍏辩敤涓€涓殑璇濅袱涓浘鏍囦細涓€璧峰脊锛堣璁¤鑼冭鐨勬槸銆岄€変腑鎬併€嶉偅涓€棰楀脊锛夈€?
    *
-   * ⚠️ 长度必须等于页签数（现在是 **4**：推荐 / 现在就听 / 回响 / 我的）：`TabBarItem` 按下标取。
+   * 鈿狅笍 闀垮害蹇呴』绛変簬椤电鏁帮紙鐜板湪鏄?**4**锛氭帹鑽?/ 鐜板湪灏卞惉 / 鍥炲搷 / 鎴戠殑锛夛細`TabBarItem` 鎸変笅鏍囧彇銆?
    */
   @Local tabBounceTriggers: number[] = [0, 0, 0, 0];
   /**
-   * 「回到顶部」指令（每个页签一个，递增触发）。
+   * 銆屽洖鍒伴《閮ㄣ€嶆寚浠わ紙姣忎釜椤电涓€涓紝閫掑瑙﹀彂锛夈€?
    *
-   * 设计规范：点击**当前**页签要把界面回滚到顶部/指定位置。`onTabBarClick` 在
-   * 点已选中页签时也会触发，所以不需要在页签里自己加 onClick（那会打断页签切换）。
+   * 璁捐瑙勮寖锛氱偣鍑?*褰撳墠**椤电瑕佹妸鐣岄潰鍥炴粴鍒伴《閮?鎸囧畾浣嶇疆銆俙onTabBarClick` 鍦?
+   * 鐐瑰凡閫変腑椤电鏃朵篃浼氳Е鍙戯紝鎵€浠ヤ笉闇€瑕佸湪椤电閲岃嚜宸卞姞 onClick锛堥偅浼氭墦鏂〉绛惧垏鎹級銆?
    *
-   * ⚠️ 长度必须等于页签数（现在是 **4**）：`HomeTabsPages()` 按下标取。
+   * 鈿狅笍 闀垮害蹇呴』绛変簬椤电鏁帮紙鐜板湪鏄?**4**锛夛細`HomeTabsPages()` 鎸変笅鏍囧彇銆?
    */
   @Local tabScrollTopCommands: number[] = [0, 0, 0, 0];
 
-  /** 页签选中态弹跳（BounceSymbolEffect + EffectDirection.DOWN，见底部页签设计规范）。 */
+  /** 椤电閫変腑鎬佸脊璺筹紙BounceSymbolEffect + EffectDirection.DOWN锛岃搴曢儴椤电璁捐瑙勮寖锛夈€?*/
   private playTabBounce(index: number): void {
     const next: number[] = [...this.tabBounceTriggers];
     next[index] = (next[index] ?? 0) + 1;
     this.tabBounceTriggers = next;
   }
 
-  /** 让第 index 个页签的页面回到顶部（该页自己监听这个计数）。 */
+  /** 璁╃ index 涓〉绛剧殑椤甸潰鍥炲埌椤堕儴锛堣椤佃嚜宸辩洃鍚繖涓鏁帮級銆?*/
   private requestTabScrollTop(index: number): void {
     const next: number[] = [...this.tabScrollTopCommands];
     next[index] = (next[index] ?? 0) + 1;
     this.tabScrollTopCommands = next;
   }
 
-  /** 点页签：切到别的页签由 onChange 处理；点当前页签则回滚到顶部。 */
+  /** 鐐归〉绛撅細鍒囧埌鍒殑椤电鐢?onChange 澶勭悊锛涚偣褰撳墠椤电鍒欏洖婊氬埌椤堕儴銆?*/
   private onTabBarClicked(index: number): void {
     if (index === this.tabState.tabIndex) {
       this.playTabBounce(index);
@@ -1517,7 +1517,7 @@ struct Index {
         .fontWeight(FontWeight.Regular)
         .height(22)
         .fontColor([this.tabState.tabIndex === index ? this.themeState.color : $r('sys.color.icon_primary')])
-        // 选中态弹跳：`trigger` 变化即播一次（只有这个页签的计数在变，所以只有它弹）
+        // 閫変腑鎬佸脊璺筹細`trigger` 鍙樺寲鍗虫挱涓€娆★紙鍙湁杩欎釜椤电鐨勮鏁板湪鍙橈紝鎵€浠ュ彧鏈夊畠寮癸級
         .symbolEffect(new BounceSymbolEffect(EffectScope.WHOLE, EffectDirection.DOWN),
           this.tabBounceTriggers[index])
       Text(title)
@@ -1530,11 +1530,11 @@ struct Index {
   }
 
   /**
-   * HDS 回调：迷你条样式变化（与 musicfreeOH 的 `onBarStyleChange` 同款**受控**写法）。
+   * HDS 鍥炶皟锛氳糠浣犳潯鏍峰紡鍙樺寲锛堜笌 musicfreeOH 鐨?`onBarStyleChange` 鍚屾**鍙楁帶**鍐欐硶锛夈€?
    *
-   * USER_CLICK 点击单层圆形胶囊时恢复完整双排。
-   * NORMAL/APP_TRIGGER 仅报告输出，不能反向篡改唯一布局状态。
-   * miniBarStyle受控；控制器与布局同步切换。
+   * USER_CLICK 鐐瑰嚮鍗曞眰鍦嗗舰鑳跺泭鏃舵仮澶嶅畬鏁村弻鎺掋€?
+   * NORMAL/APP_TRIGGER 浠呮姤鍛婅緭鍑猴紝涓嶈兘鍙嶅悜绡℃敼鍞竴甯冨眬鐘舵€併€?
+   * miniBarStyle鍙楁帶锛涙帶鍒跺櫒涓庡竷灞€鍚屾鍒囨崲銆?
    */
   private onMiniBarStyleChangeFull(miniBarStyle: HdsBarStyle, mode: HdsTabsBarChangeMode): void {
     if (this.navDepth > 0 || this.restoringHomeBar) {
@@ -1557,42 +1557,42 @@ struct Index {
   }
 
   /**
-   * 传给 HDS 的排布模式。
+   * 浼犵粰 HDS 鐨勬帓甯冩ā寮忋€?
    *
-   * `barLayoutMode` / `HdsBarLayoutMode` 是 **@since 6.1.1(24)** —— 所以工程必须把
-   * `targetSdkVersion` 提到 24 以上（本项目已改为 6.1.1(24)，`compatibleSdkVersion`
-   * 保持 6.1.0(23) 不影响设备覆盖）。在 target 23 的工程里这个字段不存在，
-   * 传进去也不生效，底栏就只能是单排 —— 这正是之前"两排修不出来"的根因。
+   * `barLayoutMode` / `HdsBarLayoutMode` 鏄?**@since 6.1.1(24)** 鈥斺€?鎵€浠ュ伐绋嬪繀椤绘妸
+   * `targetSdkVersion` 鎻愬埌 24 浠ヤ笂锛堟湰椤圭洰宸叉敼涓?6.1.1(24)锛宍compatibleSdkVersion`
+   * 淇濇寔 6.1.0(23) 涓嶅奖鍝嶈澶囪鐩栵級銆傚湪 target 23 鐨勫伐绋嬮噷杩欎釜瀛楁涓嶅瓨鍦紝
+   * 浼犺繘鍘讳篃涓嶇敓鏁堬紝搴曟爮灏卞彧鑳芥槸鍗曟帓 鈥斺€?杩欐鏄箣鍓?涓ゆ帓淇笉鍑烘潵"鐨勬牴鍥犮€?
    *
-   * 低配设备（发行版 < 6.1.1(24)）上传 undefined：字段不可用，由 HDS 自行决定。
-   * @returns HdsBarLayoutMode 或 undefined。
+   * 浣庨厤璁惧锛堝彂琛岀増 < 6.1.1(24)锛変笂浼?undefined锛氬瓧娈典笉鍙敤锛岀敱 HDS 鑷鍐冲畾銆?
+   * @returns HdsBarLayoutMode 鎴?undefined銆?
    */
   private barLayoutModeForHds(): HdsBarLayoutMode | undefined {
     if (!this.supportsTwoRowLayout()) {
       return undefined;
     }
-    // ★★ 2026-10-15 真机反馈**不要**在这一页把它压成 HORIZONTAL（我上一版就是那么写的，错了）：
-    //   `HORIZONTAL` 是"页签与迷你条**并排**在同一排"的排布 ⇒ 迷你条那一格空着时，
-    //   页签被挤到左边、右边留出一格 —— 用户原话「底部 tab 栏切换到这个页面的时候**会短一截**
-    //   （像是以前那个**左侧 Tab 栏，右侧圆形播放器**的版本）」说的就是它。
-    //   正解：**排布模式完全不动**（跟别的页签逐字一致），只把 {@link miniBar} 的内容让它量成 0 高
-    //   （HDS 是按内容量高度的，空 builder ⇒ 没有那一排，见 `miniBar()` 的注释）。
+    // 鈽呪槄 2026-10-15 鐪熸満鍙嶉**涓嶈**鍦ㄨ繖涓€椤垫妸瀹冨帇鎴?HORIZONTAL锛堟垜涓婁竴鐗堝氨鏄偅涔堝啓鐨勶紝閿欎簡锛夛細
+    //   `HORIZONTAL` 鏄?椤电涓庤糠浣犳潯**骞舵帓**鍦ㄥ悓涓€鎺?鐨勬帓甯?鈬?杩蜂綘鏉￠偅涓€鏍肩┖鐫€鏃讹紝
+    //   椤电琚尋鍒板乏杈广€佸彸杈圭暀鍑轰竴鏍?鈥斺€?鐢ㄦ埛鍘熻瘽銆屽簳閮?tab 鏍忓垏鎹㈠埌杩欎釜椤甸潰鐨勬椂鍊?*浼氱煭涓€鎴?*
+    //   锛堝儚鏄互鍓嶉偅涓?*宸︿晶 Tab 鏍忥紝鍙充晶鍦嗗舰鎾斁鍣?*鐨勭増鏈級銆嶈鐨勫氨鏄畠銆?
+    //   姝ｈВ锛?*鎺掑竷妯″紡瀹屽叏涓嶅姩**锛堣窡鍒殑椤电閫愬瓧涓€鑷达級锛屽彧鎶?{@link miniBar} 鐨勫唴瀹硅瀹冮噺鎴?0 楂?
+    //   锛圚DS 鏄寜鍐呭閲忛珮搴︾殑锛岀┖ builder 鈬?娌℃湁閭ｄ竴鎺掞紝瑙?`miniBar()` 鐨勬敞閲婏級銆?
     return this.appState.hdsBarLayoutMode === BarLayoutModes.HORIZONTAL ?
       HdsBarLayoutMode.HORIZONTAL : HdsBarLayoutMode.VERTICAL;
   }
 
-  /** 设备发行版是否支持 `barLayoutMode`（6.1.1(24) 起）。 */
+  /** 璁惧鍙戣鐗堟槸鍚︽敮鎸?`barLayoutMode`锛?.1.1(24) 璧凤級銆?*/
   private supportsTwoRowLayout(): boolean {
     return SdkApiUtil.isDistributionOsApiAtLeast(SdkConstants.DISTRIBUTION_OS_6_1_1_CODE);
   }
 
   /**
-   * 传给 HDS 的迷你条样式。
+   * 浼犵粰 HDS 鐨勮糠浣犳潯鏍峰紡銆?
    *
-   * ★「现在就听」页恒为 `COLLAPSE`：那一页既没有迷你条内容（{@link miniBar} 不渲染），
-   *   又被 {@link barLayoutModeForHds} 压成单排 —— 而"单排 + `EXPAND`"是已知的错误组合
-   *   （底栏会变成「长条 Tab + 圆形播放器」）。见 {@link NOW_PLAYING_TAB_INDEX}。
-   * @returns 迷你条样式。
+   * 鈽呫€岀幇鍦ㄥ氨鍚€嶉〉鎭掍负 `COLLAPSE`锛氶偅涓€椤垫棦娌℃湁杩蜂綘鏉″唴瀹癸紙{@link miniBar} 涓嶆覆鏌擄級锛?
+   *   鍙堣 {@link barLayoutModeForHds} 鍘嬫垚鍗曟帓 鈥斺€?鑰?鍗曟帓 + `EXPAND`"鏄凡鐭ョ殑閿欒缁勫悎
+   *   锛堝簳鏍忎細鍙樻垚銆岄暱鏉?Tab + 鍦嗗舰鎾斁鍣ㄣ€嶏級銆傝 {@link NOW_PLAYING_TAB_INDEX}銆?
+   * @returns 杩蜂綘鏉℃牱寮忋€?
    */
   private miniBarStyleForHds(): HdsBarStyle {
     if (this.tabState.tabIndex === NOW_PLAYING_TAB_INDEX) {
@@ -1602,66 +1602,66 @@ struct Index {
   }
 
   /**
-   * 双层底栏占据的额外底部高度。
+   * 鍙屽眰搴曟爮鍗犳嵁鐨勯澶栧簳閮ㄩ珮搴︺€?
    *
-   * 恒为 0：排布由 HDS 自己处理，页面再额外预留就会多出一块空白。
-   * @returns 额外底部预留（vp）。
+   * 鎭掍负 0锛氭帓甯冪敱 HDS 鑷繁澶勭悊锛岄〉闈㈠啀棰濆棰勭暀灏变細澶氬嚭涓€鍧楃┖鐧姐€?
+   * @returns 棰濆搴曢儴棰勭暀锛坴p锛夈€?
    */
   private twoRowExtraBottomVp(): number {
     return 0;
   }
 
   /**
-   * HDS 浮动底栏里的迷你播放条。
+   * HDS 娴姩搴曟爮閲岀殑杩蜂綘鎾斁鏉°€?
    *
-   * ⚠️ **二级页面在栈上时不渲染**（`navDepth > 0`）：二级页面有自己的官方浮动栏
-   * （见 {@link floatingMiniBar}），两边渲染的是同一个 `HomeMiniBarPlayer`，
-   * 它硬编码 `.id(MINI_BAR_ID)` —— 同时存在就会有两份同 id 的节点，
-   * 而播放页形变的起点是 `getRectangleById(MINI_BAR_ID)` 量的，量到哪一份不确定。
-   * 2026-10-01 那次回退就是这个坑（记忆 §17.3 / §17.4-3：「两处只能留一处」）。
+   * 鈿狅笍 **浜岀骇椤甸潰鍦ㄦ爤涓婃椂涓嶆覆鏌?*锛坄navDepth > 0`锛夛細浜岀骇椤甸潰鏈夎嚜宸辩殑瀹樻柟娴姩鏍?
+   * 锛堣 {@link floatingMiniBar}锛夛紝涓よ竟娓叉煋鐨勬槸鍚屼竴涓?`HomeMiniBarPlayer`锛?
+   * 瀹冪‖缂栫爜 `.id(MINI_BAR_ID)` 鈥斺€?鍚屾椂瀛樺湪灏变細鏈変袱浠藉悓 id 鐨勮妭鐐癸紝
+   * 鑰屾挱鏀鹃〉褰㈠彉鐨勮捣鐐规槸 `getRectangleById(MINI_BAR_ID)` 閲忕殑锛岄噺鍒板摢涓€浠戒笉纭畾銆?
+   * 2026-10-01 閭ｆ鍥為€€灏辨槸杩欎釜鍧戯紙璁板繂 搂17.3 / 搂17.4-3锛氥€屼袱澶勫彧鑳界暀涓€澶勩€嶏級銆?
    *
-   * **不要给它固定高度**（原来写死 `.height(56)`）：musicfreeOH 的 `PlayBar` 根节点
-   * 只有一个 `.width('100%')`，高度是 HDS 量出来的、并由迷你条自己 `onAreaChange` 读回。
-   * 写死高度会让 HDS 在「上下两排」时拿不到正确的内容高度，排布就退化。
+   * **涓嶈缁欏畠鍥哄畾楂樺害**锛堝師鏉ュ啓姝?`.height(56)`锛夛細musicfreeOH 鐨?`PlayBar` 鏍硅妭鐐?
+   * 鍙湁涓€涓?`.width('100%')`锛岄珮搴︽槸 HDS 閲忓嚭鏉ョ殑銆佸苟鐢辫糠浣犳潯鑷繁 `onAreaChange` 璇诲洖銆?
+   * 鍐欐楂樺害浼氳 HDS 鍦ㄣ€屼笂涓嬩袱鎺掋€嶆椂鎷夸笉鍒版纭殑鍐呭楂樺害锛屾帓甯冨氨閫€鍖栥€?
    */
   @Builder
   private miniBar() {
-    // ★ 用户 2026-10-15：底栏「现在就听」那一页**不画**这条迷你条（参考图里 Tab 栏之上只有进度行）。
-    //   见 {@link NOW_PLAYING_TAB_INDEX}。用条件渲染而不是 `Visibility.Hidden`：
-    //   保留占位的话 HDS 会继续按"两排"排布，Tab 胶囊会被顶高、底下留下一块空档。
-    //   ⚠️ **排布模式不要跟着改**（`barLayoutModeForHds()` 里那段的坑）：
-    //     HORIZONTAL 是"页签与迷你条并排"，会让页签被挤到左边、右端空一格（用户看到的"短一截"）。
-    //     这里只让 HDS **量到 0 高**（它是按内容量高度的），排布模式与别的页签逐字一致。
-    //   ⚠️ 代价：这一页上 `getRectangleById(MINI_BAR_ID)` 量不到迷你条 ⇒ 形变起点只能走兜底几何。
-    //     可以接受：本页**不会打开播放页**（`NowPlayingFeedPage` 的 `playAt` 走
-    //     `openPlayer=false` / `PlaybackIntentState.openPlayerUi=false`），
-    //     而能开到播放页的入口（底栏迷你条点击、系统媒体控制）在本页也不存在/不形变。
+    // 鈽?鐢ㄦ埛 2026-10-15锛氬簳鏍忋€岀幇鍦ㄥ氨鍚€嶉偅涓€椤?*涓嶇敾**杩欐潯杩蜂綘鏉★紙鍙傝€冨浘閲?Tab 鏍忎箣涓婂彧鏈夎繘搴﹁锛夈€?
+    //   瑙?{@link NOW_PLAYING_TAB_INDEX}銆傜敤鏉′欢娓叉煋鑰屼笉鏄?`Visibility.Hidden`锛?
+    //   淇濈暀鍗犱綅鐨勮瘽 HDS 浼氱户缁寜"涓ゆ帓"鎺掑竷锛孴ab 鑳跺泭浼氳椤堕珮銆佸簳涓嬬暀涓嬩竴鍧楃┖妗ｃ€?
+    //   鈿狅笍 **鎺掑竷妯″紡涓嶈璺熺潃鏀?*锛坄barLayoutModeForHds()` 閲岄偅娈电殑鍧戯級锛?
+    //     HORIZONTAL 鏄?椤电涓庤糠浣犳潯骞舵帓"锛屼細璁╅〉绛捐鎸ゅ埌宸﹁竟銆佸彸绔┖涓€鏍硷紙鐢ㄦ埛鐪嬪埌鐨?鐭竴鎴?锛夈€?
+    //     杩欓噷鍙 HDS **閲忓埌 0 楂?*锛堝畠鏄寜鍐呭閲忛珮搴︾殑锛夛紝鎺掑竷妯″紡涓庡埆鐨勯〉绛鹃€愬瓧涓€鑷淬€?
+    //   鈿狅笍 浠ｄ环锛氳繖涓€椤典笂 `getRectangleById(MINI_BAR_ID)` 閲忎笉鍒拌糠浣犳潯 鈬?褰㈠彉璧风偣鍙兘璧板厹搴曞嚑浣曘€?
+    //     鍙互鎺ュ彈锛氭湰椤?*涓嶄細鎵撳紑鎾斁椤?*锛坄NowPlayingFeedPage` 鐨?`playAt` 璧?
+    //     `openPlayer=false` / `PlaybackIntentState.openPlayerUi=false`锛夛紝
+    //     鑰岃兘寮€鍒版挱鏀鹃〉鐨勫叆鍙ｏ紙搴曟爮杩蜂綘鏉＄偣鍑汇€佺郴缁熷獟浣撴帶鍒讹級鍦ㄦ湰椤典篃涓嶅瓨鍦?涓嶅舰鍙樸€?
     if (this.navDepth <= 0) {
       if (this.tabState.tabIndex === NOW_PLAYING_TAB_INDEX || this.navDepth > 0) {
-        // ★★★★ 2026-10-17（**修用户实测「二级页面会出现两个播放条」**）
-        //   原来这里只判 `tabIndex === 正在播放`，**没判 `navDepth`** —— 二级页在栈上时，
-        //   二级页自己那条官方浮动栏（`floatingMiniBar`）已经在画，首页这条又没卸载
-        //   ⇒ 屏上两条播放条。本文件 L1617 的注释早就写明这条不变量
-        //   「⚠️ 二级页面在栈上时不渲染（`navDepth > 0`）」—— 代码没跟上。
-        //   ⇒ 补上 `navDepth > 0`：二级页在栈上时这一条同样给 0 高（**不卸载**，
-        //     保住 `MINI_BAR_ID` 仍在树上，形变起点还能量得到）。
-        // ★★ 这一页**显式给 0 高**（而不是"整个 builder 不渲染"）：
-        //   官方《设置页签栏的悬浮样式》原文——迷你栏是自定义区域，**跟页签栏高度相等且水平对齐**；
-        //   本工程用 `barLayoutMode = VERTICAL` 把它改成上下两排，而 HDS 在那一档是**按内容量高**的
-        //   （见 `miniBar()` 上面那段"不要给它固定高度"的记录）⇒ 给一个 0 高容器，
-        //   "上面那一排"高度就是 0，页签胶囊的几何与别的页签**逐字一致**。
+        // 鈽呪槄鈽呪槄 2026-10-17锛?*淇敤鎴峰疄娴嬨€屼簩绾ч〉闈細鍑虹幇涓や釜鎾斁鏉°€?*锛?
+        //   鍘熸潵杩欓噷鍙垽 `tabIndex === 姝ｅ湪鎾斁`锛?*娌″垽 `navDepth`** 鈥斺€?浜岀骇椤靛湪鏍堜笂鏃讹紝
+        //   浜岀骇椤佃嚜宸遍偅鏉″畼鏂规诞鍔ㄦ爮锛坄floatingMiniBar`锛夊凡缁忓湪鐢伙紝棣栭〉杩欐潯鍙堟病鍗歌浇
+        //   鈬?灞忎笂涓ゆ潯鎾斁鏉°€傛湰鏂囦欢 L1617 鐨勬敞閲婃棭灏卞啓鏄庤繖鏉′笉鍙橀噺
+        //   銆屸殸锔?浜岀骇椤甸潰鍦ㄦ爤涓婃椂涓嶆覆鏌擄紙`navDepth > 0`锛夈€嶁€斺€?浠ｇ爜娌¤窡涓娿€?
+        //   鈬?琛ヤ笂 `navDepth > 0`锛氫簩绾ч〉鍦ㄦ爤涓婃椂杩欎竴鏉″悓鏍风粰 0 楂橈紙**涓嶅嵏杞?*锛?
+        //     淇濅綇 `MINI_BAR_ID` 浠嶅湪鏍戜笂锛屽舰鍙樿捣鐐硅繕鑳介噺寰楀埌锛夈€?
+        // 鈽呪槄 杩欎竴椤?*鏄惧紡缁?0 楂?*锛堣€屼笉鏄?鏁翠釜 builder 涓嶆覆鏌?锛夛細
+        //   瀹樻柟銆婅缃〉绛炬爮鐨勬偓娴牱寮忋€嬪師鏂団€斺€旇糠浣犳爮鏄嚜瀹氫箟鍖哄煙锛?*璺熼〉绛炬爮楂樺害鐩哥瓑涓旀按骞冲榻?*锛?
+        //   鏈伐绋嬬敤 `barLayoutMode = VERTICAL` 鎶婂畠鏀规垚涓婁笅涓ゆ帓锛岃€?HDS 鍦ㄩ偅涓€妗ｆ槸**鎸夊唴瀹归噺楂?*鐨?
+        //   锛堣 `miniBar()` 涓婇潰閭ｆ"涓嶈缁欏畠鍥哄畾楂樺害"鐨勮褰曪級鈬?缁欎竴涓?0 楂樺鍣紝
+        //   "涓婇潰閭ｄ竴鎺?楂樺害灏辨槸 0锛岄〉绛捐兌鍥婄殑鍑犱綍涓庡埆鐨勯〉绛?*閫愬瓧涓€鑷?*銆?
         Column()
           .width(StyleConstants.FULL_WIDTH)
           .height(0)
       } else {
-        // ★★ 2026-10-15（回退后重做）**不变量**：一次形变会话期间，迷你条**真身不参与绘制**，
-        //   由壳层克隆层（`MorphMiniBarClone` / `MorphMetaBridge`）与播放页内的续飞封面代表它。
-        //   `sourceBarHidden` 由会话拥有者唯一写（`morphBeginEntering` / `morphBeginLeaving` 置 true，
-        //   `morphLand` / `morphReset` 置 false）⇒ 三条打开路都成立。
-        //   不这么做的话：播放页形变期间是**半透明**画出来的，真身会从底下透出来 ——
-        //   一边是克隆层画的副本、一边是真身，用户看到的正是"迷你条压在播放页上"（重叠）。
-        //   ⚠️ 必须用 `Visibility.Hidden`（保留布局）：形变起点要 `getRectangleById` 量这条栏，
-        //   用 `None` 会量不到 ⇒ 动画直接退化。
+        // 鈽呪槄 2026-10-15锛堝洖閫€鍚庨噸鍋氾級**涓嶅彉閲?*锛氫竴娆″舰鍙樹細璇濇湡闂达紝杩蜂綘鏉?*鐪熻韩涓嶅弬涓庣粯鍒?*锛?
+        //   鐢卞３灞傚厠闅嗗眰锛坄MorphMiniBarClone` / `MorphMetaBridge`锛変笌鎾斁椤靛唴鐨勭画椋炲皝闈唬琛ㄥ畠銆?
+        //   `sourceBarHidden` 鐢变細璇濇嫢鏈夎€呭敮涓€鍐欙紙`morphBeginEntering` / `morphBeginLeaving` 缃?true锛?
+        //   `morphLand` / `morphReset` 缃?false锛夆噿 涓夋潯鎵撳紑璺兘鎴愮珛銆?
+        //   涓嶈繖涔堝仛鐨勮瘽锛氭挱鏀鹃〉褰㈠彉鏈熼棿鏄?*鍗婇€忔槑**鐢诲嚭鏉ョ殑锛岀湡韬細浠庡簳涓嬮€忓嚭鏉?鈥斺€?
+        //   涓€杈规槸鍏嬮殕灞傜敾鐨勫壇鏈€佷竴杈规槸鐪熻韩锛岀敤鎴风湅鍒扮殑姝ｆ槸"杩蜂綘鏉″帇鍦ㄦ挱鏀鹃〉涓?锛堥噸鍙狅級銆?
+        //   鈿狅笍 蹇呴』鐢?`Visibility.Hidden`锛堜繚鐣欏竷灞€锛夛細褰㈠彉璧风偣瑕?`getRectangleById` 閲忚繖鏉℃爮锛?
+        //   鐢?`None` 浼氶噺涓嶅埌 鈬?鍔ㄧ敾鐩存帴閫€鍖栥€?
         HomeMiniBarPlayer({ showPreviousTrack: false })
           .visibility(this.expandState.sourceBarHidden ? Visibility.Hidden : Visibility.Visible)
       }
@@ -1669,140 +1669,86 @@ struct Index {
   }
 
   /**
-   * 二级页面的悬浮迷你播放条：**官方 HDS 浮动栏 + 沉浸光感材质**（用户 2026-10-11 拍板的结构改造）。
+   * 浜岀骇椤甸潰鐨勬偓娴糠浣犳挱鏀炬潯锛?*瀹樻柟 HDS 娴姩鏍?+ 娌夋蹈鍏夋劅鏉愯川**锛堢敤鎴?2026-10-11 鎷嶆澘鐨勭粨鏋勬敼閫狅級銆?
    *
-   * ══════════════════════ 为什么必须是"一个单页签的 HdsTabs"══════════════════════
+   * 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲 涓轰粈涔堝繀椤绘槸"涓€涓崟椤电鐨?HdsTabs"鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲
    *
-   * 官方《沉浸光感功耗优化》原文：「其他组件仅在 Navigation/NavDestination 标题栏或横向 Tabs 中
-   * barPosition 为 BarPosition.End 的底部 TabBar 中生效。**在其他区域中设置沉浸光感效果不生效。**」
-   * 也就是说：光感材质只有**标题栏**与**底部 TabBar**两个合法宿主。旧写法（壳层 Stack 里一个普通
-   * Column 挂 `backgroundEffect`）**永远拿不到官方材质**，只能算自绘近似 —— 用户明确否掉了它。
+   * 瀹樻柟銆婃矇娴稿厜鎰熷姛鑰椾紭鍖栥€嬪師鏂囷細銆屽叾浠栫粍浠朵粎鍦?Navigation/NavDestination 鏍囬鏍忔垨妯悜 Tabs 涓?
+   * barPosition 涓?BarPosition.End 鐨勫簳閮?TabBar 涓敓鏁堛€?*鍦ㄥ叾浠栧尯鍩熶腑璁剧疆娌夋蹈鍏夋劅鏁堟灉涓嶇敓鏁堛€?*銆?
+   * 涔熷氨鏄锛氬厜鎰熸潗璐ㄥ彧鏈?*鏍囬鏍?*涓?*搴曢儴 TabBar**涓や釜鍚堟硶瀹夸富銆傛棫鍐欐硶锛堝３灞?Stack 閲屼竴涓櫘閫?
+   * Column 鎸?`backgroundEffect`锛?*姘歌繙鎷夸笉鍒板畼鏂规潗璐?*锛屽彧鑳界畻鑷粯杩戜技 鈥斺€?鐢ㄦ埛鏄庣‘鍚︽帀浜嗗畠銆?
    *
-   * 现在的做法（= 参考工程 `lxmusic-harmony` 的 `views/PanePage.ets` 同一套）：**只有一个页签的
-   * HdsTabs**，页签栏的内容（CustomBuilder）就是播放器本体，再加上官方三条件
+   * 鐜板湪鐨勫仛娉曪紙= 鍙傝€冨伐绋?`lxmusic-harmony` 鐨?`views/PanePage.ets` 鍚屼竴濂楋級锛?*鍙湁涓€涓〉绛剧殑
+   * HdsTabs**锛岄〉绛炬爮鐨勫唴瀹癸紙CustomBuilder锛夊氨鏄挱鏀惧櫒鏈綋锛屽啀鍔犱笂瀹樻柟涓夋潯浠?
    *   `barPosition(End)` + `barOverlap(true)` + `vertical(false)`
-   * ⇒ 这条栏就落在"底部 TabBar"这个合法宿主里，`systemMaterialEffect` 真生效。
-   * 材质档位复用标题栏那一份（{@link ambientTitleMaterial}），不要再内联一套三目。
+   * 鈬?杩欐潯鏍忓氨钀藉湪"搴曢儴 TabBar"杩欎釜鍚堟硶瀹夸富閲岋紝`systemMaterialEffect` 鐪熺敓鏁堛€?
+   * 鏉愯川妗ｄ綅澶嶇敤鏍囬鏍忛偅涓€浠斤紙{@link ambientTitleMaterial}锛夛紝涓嶈鍐嶅唴鑱斾竴濂椾笁鐩€?
    *
-   * 宿主放在**壳层 Stack 的底部**（与旧胶囊同一个位置、同一套算术），所以二级页
-   * （`NavDestination`）盖不住它 —— 这正是它能替掉旧胶囊的原因。
+   * 瀹夸富鏀惧湪**澹冲眰 Stack 鐨勫簳閮?*锛堜笌鏃ц兌鍥婂悓涓€涓綅缃€佸悓涓€濂楃畻鏈級锛屾墍浠ヤ簩绾ч〉
+   * 锛坄NavDestination`锛夌洊涓嶄綇瀹?鈥斺€?杩欐鏄畠鑳芥浛鎺夋棫鑳跺泭鐨勫師鍥犮€?
    *
-   * ══════════════════════ ★ 一条硬约束：全屏**只能存在一条**迷你条 ══════════════════════
+   * 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲 鈽?涓€鏉＄‖绾︽潫锛氬叏灞?*鍙兘瀛樺湪涓€鏉?*杩蜂綘鏉?鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲
    *
-   * 2026-10-01 09:39 试过同一套宿主，回退了，原因就是**同 id 撞车**：
-   * 首页底栏的 `miniBar` 与这条二级栏渲染的是同一个 `HomeMiniBarPlayer`，它硬编码
-   * `.id(MINI_BAR_ID)`（连带 `MINI_BAR_COVER_ID` / `MINI_BAR_ASIDE_ID`）。二级页在栈上时
-   * 首页底栏并没有卸载 ⇒ 屏幕上出现**两份同 id** 的节点，而播放页形变的起点是
-   * `getRectangleById(MINI_BAR_ID)` 量的 —— 量到哪一份不确定，起点就抖。
-   * ⇒ 所以 {@link miniBar}（首页那条）在 `navDepth > 0` 时**不渲染**，两处只留一处。
-   *    改这里之前先看那条注释。
+   * 2026-10-01 09:39 璇曡繃鍚屼竴濂楀涓伙紝鍥為€€浜嗭紝鍘熷洜灏辨槸**鍚?id 鎾炶溅**锛?
+   * 棣栭〉搴曟爮鐨?`miniBar` 涓庤繖鏉′簩绾ф爮娓叉煋鐨勬槸鍚屼竴涓?`HomeMiniBarPlayer`锛屽畠纭紪鐮?
+   * `.id(MINI_BAR_ID)`锛堣繛甯?`MINI_BAR_COVER_ID` / `MINI_BAR_ASIDE_ID`锛夈€備簩绾ч〉鍦ㄦ爤涓婃椂
+   * 棣栭〉搴曟爮骞舵病鏈夊嵏杞?鈬?灞忓箷涓婂嚭鐜?*涓や唤鍚?id** 鐨勮妭鐐癸紝鑰屾挱鏀鹃〉褰㈠彉鐨勮捣鐐规槸
+   * `getRectangleById(MINI_BAR_ID)` 閲忕殑 鈥斺€?閲忓埌鍝竴浠戒笉纭畾锛岃捣鐐瑰氨鎶栥€?
+   * 鈬?鎵€浠?{@link miniBar}锛堥椤甸偅鏉★級鍦?`navDepth > 0` 鏃?*涓嶆覆鏌?*锛屼袱澶勫彧鐣欎竴澶勩€?
+   *    鏀硅繖閲屼箣鍓嶅厛鐪嬮偅鏉℃敞閲娿€?
    *
-   * ══════════════════ 尺寸 / 触摸 / 形变语义（这些**不能**动）══════════════════
+   * 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲 灏哄 / 瑙︽懜 / 褰㈠彉璇箟锛堣繖浜?*涓嶈兘**鍔級鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲
    *
-   * 形态用**首页两排 Tab 时上面那条**的写法：同一个
-   * `HomeMiniBarPlayer({ showPreviousTrack: false, followAppMiniBarExpanded: false })`。
+   * 褰㈡€佺敤**棣栭〉涓ゆ帓 Tab 鏃朵笂闈㈤偅鏉?*鐨勫啓娉曪細鍚屼竴涓?
+   * `HomeMiniBarPlayer({ showPreviousTrack: false, followAppMiniBarExpanded: false })`銆?
    *
-   * 两个尺寸**显式**给：
-   *   - 高度：56vp（封面 44 + 上下各 6vp）。它是播放页形变的起点，几何只随
-   *     `FLOATING_MINI_BAR_HEIGHT_VP` 这一个常量变化。
-   *   - 宽度：**交给 HDS**（宿主铺满宽度，栏体/胶囊的宽度与居中由官方浮动栏自己算）。
-   *     以前我们写死过宽度（`width(窗口宽 − 边距)` + `barFloatingStyle.barWidth`），
-   *     真机反馈是"要么贴到屏幕右边、要么撑成整条大长方形，很丑"—— 那是和 HDS 的让位动画打架
-   *     （2026-10-01 那次实验的教训），现在不再自己算。
-   *   `clip(false)` 要留着：裁了会把 HDS 的背板/折射一起裁掉。
+   * 涓や釜灏哄**鏄惧紡**缁欙細
+   *   - 楂樺害锛?6vp锛堝皝闈?44 + 涓婁笅鍚?6vp锛夈€傚畠鏄挱鏀鹃〉褰㈠彉鐨勮捣鐐癸紝鍑犱綍鍙殢
+   *     `FLOATING_MINI_BAR_HEIGHT_VP` 杩欎竴涓父閲忓彉鍖栥€?
+   *   - 瀹藉害锛?*浜ょ粰 HDS**锛堝涓婚摵婊″搴︼紝鏍忎綋/鑳跺泭鐨勫搴︿笌灞呬腑鐢卞畼鏂规诞鍔ㄦ爮鑷繁绠楋級銆?
+   *     浠ュ墠鎴戜滑鍐欐杩囧搴︼紙`width(绐楀彛瀹?鈭?杈硅窛)` + `barFloatingStyle.barWidth`锛夛紝
+   *     鐪熸満鍙嶉鏄?瑕佷箞璐村埌灞忓箷鍙宠竟銆佽涔堟拺鎴愭暣鏉″ぇ闀挎柟褰紝寰堜笐"鈥斺€?閭ｆ槸鍜?HDS 鐨勮浣嶅姩鐢绘墦鏋?
+   *     锛?026-10-01 閭ｆ瀹為獙鐨勬暀璁級锛岀幇鍦ㄤ笉鍐嶈嚜宸辩畻銆?
+   *   `clip(false)` 瑕佺暀鐫€锛氳浜嗕細鎶?HDS 鐨勮儗鏉?鎶樺皠涓€璧疯鎺夈€?
    *
-   * 触摸：整屏 Stack 必须 `HitTestMode.Transparent` —— 默认的 Default 会把二级页面的
-   * 点击全吃掉（踩过）；Transparent 表示自己不吃事件但子节点照常响应。
+   * 瑙︽懜锛氭暣灞?Stack 蹇呴』 `HitTestMode.Transparent` 鈥斺€?榛樿鐨?Default 浼氭妸浜岀骇椤甸潰鐨?
+   * 鐐瑰嚮鍏ㄥ悆鎺夛紙韪╄繃锛夛紱Transparent 琛ㄧず鑷繁涓嶅悆浜嬩欢浣嗗瓙鑺傜偣鐓у父鍝嶅簲銆?
    */
   @Builder
   private floatingMiniBar() {
     Stack({ alignContent: Alignment.Bottom }) {
       /**
-       * ★★ 关键：`TabContent()` **不能是空的**。
+       * 鈽呪槄 鍏抽敭锛歚TabContent()` **涓嶈兘鏄┖鐨?*銆?
        *
-       * 2026-10-01 那次实验就是"空 TabContent + 播放器当 tabBar"，真机上**没有胶囊背板**
-       * （作者当时只能补一块自绘背板兜底）。2026-10-11 复现了同一个现象：用户报
-       * 「底下播放条是透明的，只看得见封面和按钮」。现在往 TabContent 里放一个**真实的
-       * 满尺寸容器**，让 HDS 认为这条栏有内容，从而按悬浮样式画出自己的胶囊背板 + 材质。
+       * 2026-10-01 閭ｆ瀹為獙灏辨槸"绌?TabContent + 鎾斁鍣ㄥ綋 tabBar"锛岀湡鏈轰笂**娌℃湁鑳跺泭鑳屾澘**
+       * 锛堜綔鑰呭綋鏃跺彧鑳借ˉ涓€鍧楄嚜缁樿儗鏉垮厹搴曪級銆?026-10-11 澶嶇幇浜嗗悓涓€涓幇璞★細鐢ㄦ埛鎶?
+       * 銆屽簳涓嬫挱鏀炬潯鏄€忔槑鐨勶紝鍙湅寰楄灏侀潰鍜屾寜閽€嶃€傜幇鍦ㄥ線 TabContent 閲屾斁涓€涓?*鐪熷疄鐨?
+       * 婊″昂瀵稿鍣?*锛岃 HDS 璁や负杩欐潯鏍忔湁鍐呭锛屼粠鑰屾寜鎮诞鏍峰紡鐢诲嚭鑷繁鐨勮兌鍥婅儗鏉?+ 鏉愯川銆?
        *
-       * 另外 `barFloatingStyle` 的键**与首页那条官方底栏保持一致**（只给
-       * `barBottomMargin` / `adaptToHandedness` / `systemMaterialEffect`）：
-       * 上一版多传的 `barWidth` / `barSideMargin: 0` / `gradientMask: {maskHeight: 0}` 是
-       * 2026-10-01 实验那套（**当时正是配着那块自绘背板用的**），现在一律不传，避免任何
-       * "自己接管栏体"的暗示，背板/材质全交给 HDS。
+       * 鍙﹀ `barFloatingStyle` 鐨勯敭**涓庨椤甸偅鏉″畼鏂瑰簳鏍忎繚鎸佷竴鑷?*锛堝彧缁?
+       * `barBottomMargin` / `adaptToHandedness` / `systemMaterialEffect`锛夛細
+       * 涓婁竴鐗堝浼犵殑 `barWidth` / `barSideMargin: 0` / `gradientMask: {maskHeight: 0}` 鏄?
+       * 2026-10-01 瀹為獙閭ｅ锛?*褰撴椂姝ｆ槸閰嶇潃閭ｅ潡鑷粯鑳屾澘鐢ㄧ殑**锛夛紝鐜板湪涓€寰嬩笉浼狅紝閬垮厤浠讳綍
+       * "鑷繁鎺ョ鏍忎綋"鐨勬殫绀猴紝鑳屾澘/鏉愯川鍏ㄤ氦缁?HDS銆?
        */
-      HdsTabs({ barPosition: BarPosition.End }) {
-        TabContent() {
-          Column()
-            .width('100%')
-            .height('100%')
-        }
-        .tabBar(this.floatingMiniBarContent())
+      // ★★★★ 2026-10-17（用户：「二级页面那个大的删了啊」+「小的是自绘的，大小也小一些」）
+      //   原来这里是 `HdsTabs`（一个空 TabContent + 我们的播放器当 tabBar）：
+      //   **大的是 HDS 自己画的浮动胶囊背板**，小的是我们那条内容 ⇒ 屏上一大一小。
+      //   ⇒ 去掉 HDS 这一层，直接渲染 `HomeMiniBarPlayer`（它自带 `MiniBarBackplate()` 自绘背板）
+      //     ⇒ 只剩这一个，宽度 = `floatingMiniBarWidthVp()`、高度 = `FLOATING_MINI_BAR_HEIGHT_VP`，
+      //        与首页那条同一套尺寸口径（不再有"一大一小"）。
+      Column() {
+        this.floatingMiniBarContent()
       }
-      .barMode(BarMode.Fixed)
-      .barHeight(FLOATING_MINI_BAR_HEIGHT_VP)
-      // ★ 官方三条件：barPosition(End) + barOverlap(true) + vertical(false)。
-      //   缺一 `systemMaterialEffect` 就不生效（官方《设置页签栏的悬浮样式》约束条件）。
-      .barOverlap(true)
-      .barPosition(BarPosition.End)
-      .vertical(false)
-      .scrollable(false)
-      .animationDuration(0)
-      // ★★★ 2026-10-16（**方案 A：自绘背板**，与首页那条成对）：
-      //   二级页这条 HdsTabs 的**栏背景**同时就是迷你条的背板（整条栏只有一个页签）
-      //   ⇒ 把它设成透明 + 无模糊，背板就交给 `HomeMiniBarPlayer.MiniBarBackplate()` 自绘，
-      //   于是那一层与内容在**同一棵子树**里 ⇒ 能跟着 `morphSquashY` 一起弹。
-      //
-      // ⚠️ **代价（如实登记）**：这一栏原来是**官方 `systemMaterialEffect` 真材质**
-      //   （`barFloatingStyle.systemMaterialEffect`）。自绘背板用的是我们既有的
-      //   `floating_mini_bar_*` token + `BlurStyle` 档位，**与官方材质不会逐像素相同**
-      //   ⇒ 二级页这条播放条的外观会与"沉浸光感"略有差别。这是用户 2026-10-16
-      //   拍板选方案 A 时接受的代价（备选是"保持官方材质、但背景不会弹"）。
-      //
-      // ⚠️ 官方《组件适配沉浸光感》原文确实写着「设置悬浮材质后，**不建议**再通过
-      //   `barBackgroundColor` / `barBackgroundBlurStyle` 为 TabBar 设置背景色或背景模糊，
-      //   避免遮挡材质效果」—— 本处是**有意的例外**：我们要的正是"让 HDS 别再画背板"，
-      //   而材质那一档由我们自己按 `ambientState.level` 给（同一套 `BlurStyle` 档位）。
-      .barBackgroundColor(Color.Transparent)
-      .barBackgroundBlurStyle(BlurStyle.NONE)
-      .barFloatingStyle({
-        // ★★ 栏宽**必须显式给**（官方 `HdsTabsFloatingStyle.barWidth` 三档）。
-        //   ⚠️ 2026-10-11 第六轮我按"参考首页那条"把它去掉了，装到机器上**更糟**
-        //   （用户：「播放条原本是错位，现在还没上个版本正常」）⇒ 恢复三档 `barWidth`：
-        //   不给就按 HDS 自己的默认宽度画 ⇒ 真机上那条悬浮胶囊只有"一小坨"，
-        //   而里面的播放器是按 100% 排的 ⇒ 内容整个溢出胶囊外。
-        //   按窗口宽 − 两侧留白给三档同值（宽屏再夹一个最大宽）。
-        barWidth: {
-          smallWidth: this.floatingMiniBarWidthVp(),
-          mediumWidth: this.floatingMiniBarWidthVp(),
-          largeWidth: this.floatingMiniBarWidthVp()
-        },
-        // 离底间距交给 HDS 的浮动栏自己算（与首页那条同口径）
-        // ★ 用户 2026-10-12：「播放条整个往下移动一些，就用首页的 Tab 栏的位置」——
-        //   原来用 loatingMiniBarBottomMarginVp()（= max(12, 避让 + 8)），比首页底栏高约 8vp；
-        //   现在直接用首页那条的 homeTabBarBottomMarginVp()，两条栏**同一个离底口径**。
-        // ★ GLM5.3 诊断 + 真机实测 2026-10-12：arBottomMargin 是相对**宿主盒底**算的，而这条宿主只有 56vp
-        //   高（首页那条宿主是全屏）⇒ 同一个 margin 值下胶囊被顶高约一个安全区（实测 69vp vs 首页 37vp）。
-        //   所以这里 margin 归零，改由宿主整体 offset 下移一份现有 helper 的值（不放魔法数、一行可回退）。
-        // ★★ 真机两点标定（2026-10-12）：
-        //   · margin = homeTabBarBottomMarginVp()（这台≈38）、无 offset ⇒ 胶囊离屏底 ≈ 69vp（太高）；
-        //   · margin = 0 + 宿主 offset(38) ⇒ 胶囊**紧贴屏幕底**（0vp，太低）；
-        //   ⇒ 实测近似线性：gap ≈ 1.8 × margin。要"导航条上面一点点"（≈18~22vp）⇒ 取 1/3 份。
-        //   一行调法（别动宿主那句 offset）：更贴底改 / 4，更高改 / 2。
-        barBottomMargin: this.homeTabBarBottomMarginVp() / 2,
-        adaptToHandedness: false,
-        // ★ 官方沉浸光感：档位与标题栏/首页底栏共用同一份（ambientTitleMaterial）。
-        systemMaterialEffect: this.ambientTitleMaterial()
-      })
-      .width(StyleConstants.FULL_WIDTH)
+      .width(this.floatingMiniBarWidthVp())
       .height(FLOATING_MINI_BAR_HEIGHT_VP)
-      // 与首页底栏同一屏幕位置：整块宿主向下让出底部避让那一份（barBottomMargin 已归零）
-      // ★ 键盘避让（用户 2026-10-12「二级页面播放条加上键盘避让」）：键盘弹出时在这份偏移上
-      //   再减掉 `floatingMiniBarKeyboardLiftVp()`（= 键盘高度 + 8 − 常态既有间隙）⇒ 整条宿主
-      //   连同 HDS 胶囊一起上抬到键盘上沿之上；键盘收起后 lift 恒为 0 ⇒ 这一行**逐字等于**
-      //   改动前的 `homeTabBarBottomMarginVp()`（回归红线，见那个函数的注释）。
+      // 涓庨椤靛簳鏍忓悓涓€灞忓箷浣嶇疆锛氭暣鍧楀涓诲悜涓嬭鍑哄簳閮ㄩ伩璁╅偅涓€浠斤紙barBottomMargin 宸插綊闆讹級
+      // 鈽?閿洏閬胯锛堢敤鎴?2026-10-12銆屼簩绾ч〉闈㈡挱鏀炬潯鍔犱笂閿洏閬胯銆嶏級锛氶敭鐩樺脊鍑烘椂鍦ㄨ繖浠藉亸绉讳笂
+      //   鍐嶅噺鎺?`floatingMiniBarKeyboardLiftVp()`锛? 閿洏楂樺害 + 8 鈭?甯告€佹棦鏈夐棿闅欙級鈬?鏁存潯瀹夸富
+      //   杩炲悓 HDS 鑳跺泭涓€璧蜂笂鎶埌閿洏涓婃部涔嬩笂锛涢敭鐩樻敹璧峰悗 lift 鎭掍负 0 鈬?杩欎竴琛?*閫愬瓧绛変簬**
+      //   鏀瑰姩鍓嶇殑 `homeTabBarBottomMarginVp()`锛堝洖褰掔孩绾匡紝瑙侀偅涓嚱鏁扮殑娉ㄩ噴锛夈€?
       .offset({ y: this.floatingMiniBarHostOffsetYVp() })
-      // 不要裁：HDS 的材质背板/折射范围比内容盒大，裁了会缺一圈。
+      // 涓嶈瑁侊細HDS 鐨勬潗璐ㄨ儗鏉?鎶樺皠鑼冨洿姣斿唴瀹圭洅澶э紝瑁佷簡浼氱己涓€鍦堛€?
       .clip(false)
       .onAppear((): void => {
         Logger.info('RzdSecondaryMiniMaterial',
@@ -1816,9 +1762,9 @@ struct Index {
             `keyboardVp=${this.keyboardBottomVp()} lift=${this.floatingMiniBarKeyboardLiftVp()} ` +
             `offsetY=${this.floatingMiniBarHostOffsetYVp()}`);
       })
-      // ⚠️ **不要**在这里再写一个 `.margin({ bottom: ... })`：离底距离已经由
-      //    `barFloatingStyle.barBottomMargin` 给了（与首页那条官方底栏同一口径）。
-      //    两个一起写 = 离底距离翻倍，真机上看着就是"播放条浮得太高"（用户 2026-10-11 让看的那条）。
+      // 鈿狅笍 **涓嶈**鍦ㄨ繖閲屽啀鍐欎竴涓?`.margin({ bottom: ... })`锛氱搴曡窛绂诲凡缁忕敱
+      //    `barFloatingStyle.barBottomMargin` 缁欎簡锛堜笌棣栭〉閭ｆ潯瀹樻柟搴曟爮鍚屼竴鍙ｅ緞锛夈€?
+      //    涓や釜涓€璧峰啓 = 绂诲簳璺濈缈诲€嶏紝鐪熸満涓婄湅鐫€灏辨槸"鎾斁鏉℃诞寰楀お楂?锛堢敤鎴?2026-10-11 璁╃湅鐨勯偅鏉★級銆?
     }
     .width(StyleConstants.FULL_WIDTH)
     .height(StyleConstants.FULL_HEIGHT)
@@ -1830,18 +1776,18 @@ struct Index {
   }
 
   /**
-   * 官方浮动栏里**唯一可见的内容**（页签栏 CustomBuilder）。
+   * 瀹樻柟娴姩鏍忛噷**鍞竴鍙鐨勫唴瀹?*锛堥〉绛炬爮 CustomBuilder锛夈€?
    *
-   * 尺寸与 {@link floatingMiniBar} 的宿主盒严格一致：宿主是 56vp 高，这里再写死一次，
-   * 免得 HDS 的排布变化（两排/单排）把封面从 44 缩成 30。
+   * 灏哄涓?{@link floatingMiniBar} 鐨勫涓荤洅涓ユ牸涓€鑷达細瀹夸富鏄?56vp 楂橈紝杩欓噷鍐嶅啓姝讳竴娆★紝
+   * 鍏嶅緱 HDS 鐨勬帓甯冨彉鍖栵紙涓ゆ帓/鍗曟帓锛夋妸灏侀潰浠?44 缂╂垚 30銆?
    *
-   * ★ 2026-10-15（"播放条更粗"那条）：`HomeMiniBarPlayer` 自己的高度已经涨到 56vp
-   *   （封面 40 + 上下各 8 —— 见 `HomeMiniBarAlbumCover.coverSideLengthVp()` 与
-   *   `HomeMiniBarPlayer.sidePadVp()` 的注释），所以这一档（封面 44）在本 Builder 里
-   *   算出来的高度是 44 + 8×2 = **60vp**，比宿主槽高 4vp —— 交给 HDS 居中即可
-   *   （多出来的 4vp 是设计上明确让步的余量，不要再加固定 height 去夹它，
-   *    2026-10-12 那次"强行定 56vp ⇒ 整排元素低 6~8vp"的教训就在下面那条注释里）。
-   * 上拉/点击打开播放页的手势在 `HomeMiniBarPlayer` 内部，这里不要重复挂。
+   * 鈽?2026-10-15锛?鎾斁鏉℃洿绮?閭ｆ潯锛夛細`HomeMiniBarPlayer` 鑷繁鐨勯珮搴﹀凡缁忔定鍒?56vp
+   *   锛堝皝闈?40 + 涓婁笅鍚?8 鈥斺€?瑙?`HomeMiniBarAlbumCover.coverSideLengthVp()` 涓?
+   *   `HomeMiniBarPlayer.sidePadVp()` 鐨勬敞閲婏級锛屾墍浠ヨ繖涓€妗ｏ紙灏侀潰 44锛夊湪鏈?Builder 閲?
+   *   绠楀嚭鏉ョ殑楂樺害鏄?44 + 8脳2 = **60vp**锛屾瘮瀹夸富妲介珮 4vp 鈥斺€?浜ょ粰 HDS 灞呬腑鍗冲彲
+   *   锛堝鍑烘潵鐨?4vp 鏄璁′笂鏄庣‘璁╂鐨勪綑閲忥紝涓嶈鍐嶅姞鍥哄畾 height 鍘诲す瀹冿紝
+   *    2026-10-12 閭ｆ"寮鸿瀹?56vp 鈬?鏁存帓鍏冪礌浣?6~8vp"鐨勬暀璁氨鍦ㄤ笅闈㈤偅鏉℃敞閲婇噷锛夈€?
+   * 涓婃媺/鐐瑰嚮鎵撳紑鎾斁椤电殑鎵嬪娍鍦?`HomeMiniBarPlayer` 鍐呴儴锛岃繖閲屼笉瑕侀噸澶嶆寕銆?
    */
   @Builder
   private floatingMiniBarContent() {
@@ -1849,39 +1795,39 @@ struct Index {
       showPreviousTrack: false,
       followAppMiniBarExpanded: false
     })
-      // ★★ 用户 2026-10-11 定论：「错位的是播放条上的**元素**而不是播放条本身」。
-      //   胶囊宽度由 `barFloatingStyle.barWidth` 给出（= 窗口宽 − 两侧留白 side），HDS 把它**居中**画；
-      //   而这里原来写 `width('100%')`（= 宿主盒全宽）⇒ 内容比胶囊宽 2×side，
-      //   封面贴着胶囊左缘、右侧按钮顶到胶囊右缘 ⇒ 看着就是"元素错位"。
-      //   现在把内容宽度也定成胶囊宽度（同一函数、同一口径），HDS 居中后两者**完全重合**。
-      // ★★ 2026-10-12 方案 A 实验：内容宽 = 胶囊宽（与 barFloatingStyle.barWidth 同一函数同口径）
-      //   诊断依据（另一模型交叉读码）：内容盒原本 = 宿主盒 = 窗口宽，比胶囊宽 2×side 且左对齐，
-      //   右侧按钮簇被推到胶囊右缘之外 ⇒ 「元素跑到右下角」。② 若这版仍然更糟，一句话我立刻回退。
+      // 鈽呪槄 鐢ㄦ埛 2026-10-11 瀹氳锛氥€岄敊浣嶇殑鏄挱鏀炬潯涓婄殑**鍏冪礌**鑰屼笉鏄挱鏀炬潯鏈韩銆嶃€?
+      //   鑳跺泭瀹藉害鐢?`barFloatingStyle.barWidth` 缁欏嚭锛? 绐楀彛瀹?鈭?涓や晶鐣欑櫧 side锛夛紝HDS 鎶婂畠**灞呬腑**鐢伙紱
+      //   鑰岃繖閲屽師鏉ュ啓 `width('100%')`锛? 瀹夸富鐩掑叏瀹斤級鈬?鍐呭姣旇兌鍥婂 2脳side锛?
+      //   灏侀潰璐寸潃鑳跺泭宸︾紭銆佸彸渚ф寜閽《鍒拌兌鍥婂彸缂?鈬?鐪嬬潃灏辨槸"鍏冪礌閿欎綅"銆?
+      //   鐜板湪鎶婂唴瀹瑰搴︿篃瀹氭垚鑳跺泭瀹藉害锛堝悓涓€鍑芥暟銆佸悓涓€鍙ｅ緞锛夛紝HDS 灞呬腑鍚庝袱鑰?*瀹屽叏閲嶅悎**銆?
+      // 鈽呪槄 2026-10-12 鏂规 A 瀹為獙锛氬唴瀹瑰 = 鑳跺泭瀹斤紙涓?barFloatingStyle.barWidth 鍚屼竴鍑芥暟鍚屽彛寰勶級
+      //   璇婃柇渚濇嵁锛堝彟涓€妯″瀷浜ゅ弶璇荤爜锛夛細鍐呭鐩掑師鏈?= 瀹夸富鐩?= 绐楀彛瀹斤紝姣旇兌鍥婂 2脳side 涓斿乏瀵归綈锛?
+      //   鍙充晶鎸夐挳绨囪鎺ㄥ埌鑳跺泭鍙崇紭涔嬪 鈬?銆屽厓绱犺窇鍒板彸涓嬭銆嶃€傗憽 鑻ヨ繖鐗堜粛鐒舵洿绯燂紝涓€鍙ヨ瘽鎴戠珛鍒诲洖閫€銆?
       .width(this.floatingMiniBarWidthVp())
-      // ★★ 用户 2026-10-11：「二级页面播放器依旧错位…它是跑到右下角了」——
-      //   结论：**不要改内容的宽高**（一改就与 HDS 的胶囊定位打架，元素整体右下偏），
-      // ★★ GLM5.3（provider=zai）诊断 2026-10-12：HDS 浮动胶囊给 tabBar 的**内容槽只有胶囊那么高（≈40vp）**，
-      //   而这里把内容强行定成 56vp（封面 44 + 上下 padding 6+6）⇒ 内容比槽高 ~16vp，
-      //   于是整排元素相对胶囊中心**低约 6~8vp**（真机量到 6vp，与截图一致）。
-      //   ⇒ 不再强制高度，交给 HDS 按真实槽位自量并居中；宽度仍按胶囊宽（方案 A，已见效）。
+      // 鈽呪槄 鐢ㄦ埛 2026-10-11锛氥€屼簩绾ч〉闈㈡挱鏀惧櫒渚濇棫閿欎綅鈥﹀畠鏄窇鍒板彸涓嬭浜嗐€嶁€斺€?
+      //   缁撹锛?*涓嶈鏀瑰唴瀹圭殑瀹介珮**锛堜竴鏀瑰氨涓?HDS 鐨勮兌鍥婂畾浣嶆墦鏋讹紝鍏冪礌鏁翠綋鍙充笅鍋忥級锛?
+      // 鈽呪槄 GLM5.3锛坧rovider=zai锛夎瘖鏂?2026-10-12锛欻DS 娴姩鑳跺泭缁?tabBar 鐨?*鍐呭妲藉彧鏈夎兌鍥婇偅涔堥珮锛堚増40vp锛?*锛?
+      //   鑰岃繖閲屾妸鍐呭寮鸿瀹氭垚 56vp锛堝皝闈?44 + 涓婁笅 padding 6+6锛夆噿 鍐呭姣旀Ы楂?~16vp锛?
+      //   浜庢槸鏁存帓鍏冪礌鐩稿鑳跺泭涓績**浣庣害 6~8vp**锛堢湡鏈洪噺鍒?6vp锛屼笌鎴浘涓€鑷达級銆?
+      //   鈬?涓嶅啀寮哄埗楂樺害锛屼氦缁?HDS 鎸夌湡瀹炴Ы浣嶈嚜閲忓苟灞呬腑锛涘搴︿粛鎸夎兌鍥婂锛堟柟妗?A锛屽凡瑙佹晥锛夈€?
   }
 
-  // ⚠️ 这里原来把"自己算栏宽"的两个辅助函数删掉过（2026-10-11 上午），理由是"栏宽交给 HDS"；
-  //    真机证明**不行**：HDS 默认宽度只有一小坨，播放器内容整个溢出胶囊外（用户截图"一坨"）
-  //    ⇒ 现在按官方 `barWidth` 三档显式给回来（见 `floatingMiniBar()`）。
+  // 鈿狅笍 杩欓噷鍘熸潵鎶?鑷繁绠楁爮瀹?鐨勪袱涓緟鍔╁嚱鏁板垹鎺夎繃锛?026-10-11 涓婂崍锛夛紝鐞嗙敱鏄?鏍忓浜ょ粰 HDS"锛?
+  //    鐪熸満璇佹槑**涓嶈**锛欻DS 榛樿瀹藉害鍙湁涓€灏忓潹锛屾挱鏀惧櫒鍐呭鏁翠釜婧㈠嚭鑳跺泭澶栵紙鐢ㄦ埛鎴浘"涓€鍧?锛?
+  //    鈬?鐜板湪鎸夊畼鏂?`barWidth` 涓夋。鏄惧紡缁欏洖鏉ワ紙瑙?`floatingMiniBar()`锛夈€?
 
-  /** 悬浮迷你条的左右间距（vp）：只在小屏给一点边距，宽屏居中留白。 */
+  /** 鎮诞杩蜂綘鏉＄殑宸﹀彸闂磋窛锛坴p锛夛細鍙湪灏忓睆缁欎竴鐐硅竟璺濓紝瀹藉睆灞呬腑鐣欑櫧銆?*/
   private floatingMiniBarSideMarginVp(): number {
     return new BreakpointType(12, 16, 96, 160, 9).getWidthValueWithHeightSM(
       this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint);
   }
 
   /**
-   * 悬浮迷你条宽度（vp）：写进 `barFloatingStyle.barWidth` 的三档。
+   * 鎮诞杩蜂綘鏉″搴︼紙vp锛夛細鍐欒繘 `barFloatingStyle.barWidth` 鐨勪笁妗ｃ€?
    *
-   * 手机：窗口宽 − 两侧边距（12 / 16）；宽屏：夹在 {@link FLOATING_MINI_BAR_MAX_WIDTH_VP} 内居中。
-   * 量不到窗口宽时给 336 兜底（旧胶囊同口径）。
-   * @returns 宽度（vp）。
+   * 鎵嬫満锛氱獥鍙ｅ 鈭?涓や晶杈硅窛锛?2 / 16锛夛紱瀹藉睆锛氬す鍦?{@link FLOATING_MINI_BAR_MAX_WIDTH_VP} 鍐呭眳涓€?
+   * 閲忎笉鍒扮獥鍙ｅ鏃剁粰 336 鍏滃簳锛堟棫鑳跺泭鍚屽彛寰勶級銆?
+   * @returns 瀹藉害锛坴p锛夈€?
    */
   private floatingMiniBarWidthVp(): number {
     const side: number = this.floatingMiniBarSideMarginVp();
@@ -1895,67 +1841,67 @@ struct Index {
   }
 
   /**
-   * 悬浮迷你条是否可见。
+   * 鎮诞杩蜂綘鏉℃槸鍚﹀彲瑙併€?
    *
-   * 首页不显示（HDS 底栏里的迷你条负责）；正在播放全屏页或处于批量选择模式时也不显示。
-   * @returns True 表示显示壳层这条悬浮迷你条。
+   * 棣栭〉涓嶆樉绀猴紙HDS 搴曟爮閲岀殑杩蜂綘鏉¤礋璐ｏ級锛涙鍦ㄦ挱鏀惧叏灞忛〉鎴栧浜庢壒閲忛€夋嫨妯″紡鏃朵篃涓嶆樉绀恒€?
+   * @returns True 琛ㄧず鏄剧ず澹冲眰杩欐潯鎮诞杩蜂綘鏉°€?
    */
   private shouldShowFloatingMiniBar(): boolean {
     if (this.navDepth <= 0) {
       return false;
     }
-    // ⚠️ 形变期间**必须继续显示**：播放页浮层是从这条迷你条那里长出来的，
-    //    起手那一帧播放页**几乎看不见**（它此刻只占"迷你条那么大的裁剪窗口"，
-    //    而窗口里画的又是刚起步的缩放内容 —— ★ 不是"整页淡入"：
-    //    `morphPageOpacity()` 那个函数**目前没有消费者**，见它自己的注释），
-    //    这时候把迷你条藏了，用户看到的就是"屏幕下方突然空了一块"再冒出一个方块。
-    //    它自己在形变期间会淡出（`miniBarOpacity`），交棒给播放页。
+    // 鈿狅笍 褰㈠彉鏈熼棿**蹇呴』缁х画鏄剧ず**锛氭挱鏀鹃〉娴眰鏄粠杩欐潯杩蜂綘鏉￠偅閲岄暱鍑烘潵鐨勶紝
+    //    璧锋墜閭ｄ竴甯ф挱鏀鹃〉**鍑犱箮鐪嬩笉瑙?*锛堝畠姝ゅ埢鍙崰"杩蜂綘鏉￠偅涔堝ぇ鐨勮鍓獥鍙?锛?
+    //    鑰岀獥鍙ｉ噷鐢荤殑鍙堟槸鍒氳捣姝ョ殑缂╂斁鍐呭 鈥斺€?鈽?涓嶆槸"鏁撮〉娣″叆"锛?
+    //    `morphPageOpacity()` 閭ｄ釜鍑芥暟**鐩墠娌℃湁娑堣垂鑰?*锛岃瀹冭嚜宸辩殑娉ㄩ噴锛夛紝
+    //    杩欐椂鍊欐妸杩蜂綘鏉¤棌浜嗭紝鐢ㄦ埛鐪嬪埌鐨勫氨鏄?灞忓箷涓嬫柟绐佺劧绌轰簡涓€鍧?鍐嶅啋鍑轰竴涓柟鍧椼€?
+    //    瀹冭嚜宸卞湪褰㈠彉鏈熼棿浼氭贰鍑猴紙`miniBarOpacity`锛夛紝浜ゆ缁欐挱鏀鹃〉銆?
     if (this.appState.isShowPlay && !this.expandState.morphContainerActive()) {
       return false;
     }
-    // ★ 二级页面上 HDS 浮动底栏不可见（被 NavDestination 盖住），播放器只能由壳层这一条负责 ——
-    //   所以**展开态也必须显示**。旧代码在这里 `miniBarExpanded` 为真就返回 false，
-    //   于是进二级页面时必须把 `miniBarExpanded` 强行收回折叠态，
-    //   而 HDS 的 barLayoutMode 还是 HORIZONTAL ⇒ 底栏变成「长条Tab + 圆形播放器」这种错误组合，
-    //   只能在退出二级页面时再纠正一次（用户反馈的动画异常就是这么来的）。
-    //   现在不再收：二级页面照常显示这条播放器（它同时是播放页形变的起点）。
+    // 鈽?浜岀骇椤甸潰涓?HDS 娴姩搴曟爮涓嶅彲瑙侊紙琚?NavDestination 鐩栦綇锛夛紝鎾斁鍣ㄥ彧鑳界敱澹冲眰杩欎竴鏉¤礋璐?鈥斺€?
+    //   鎵€浠?*灞曞紑鎬佷篃蹇呴』鏄剧ず**銆傛棫浠ｇ爜鍦ㄨ繖閲?`miniBarExpanded` 涓虹湡灏辫繑鍥?false锛?
+    //   浜庢槸杩涗簩绾ч〉闈㈡椂蹇呴』鎶?`miniBarExpanded` 寮鸿鏀跺洖鎶樺彔鎬侊紝
+    //   鑰?HDS 鐨?barLayoutMode 杩樻槸 HORIZONTAL 鈬?搴曟爮鍙樻垚銆岄暱鏉ab + 鍦嗗舰鎾斁鍣ㄣ€嶈繖绉嶉敊璇粍鍚堬紝
+    //   鍙兘鍦ㄩ€€鍑轰簩绾ч〉闈㈡椂鍐嶇籂姝ｄ竴娆★紙鐢ㄦ埛鍙嶉鐨勫姩鐢诲紓甯稿氨鏄繖涔堟潵鐨勶級銆?
+    //   鐜板湪涓嶅啀鏀讹細浜岀骇椤甸潰鐓у父鏄剧ず杩欐潯鎾斁鍣紙瀹冨悓鏃舵槸鎾斁椤靛舰鍙樼殑璧风偣锛夈€?
     return true;
   }
 
   /**
-   * 悬浮迷你条距底部间距。
+   * 鎮诞杩蜂綘鏉¤窛搴曢儴闂磋窛銆?
    *
-   * 二级页面没有浮动页签，所以只需避开系统导航栏 + 少量留白，
-   * 比首页那条（在底栏内）明显更靠下。
-   * @returns 底部间距（vp）。
+   * 浜岀骇椤甸潰娌℃湁娴姩椤电锛屾墍浠ュ彧闇€閬垮紑绯荤粺瀵艰埅鏍?+ 灏戦噺鐣欑櫧锛?
+   * 姣旈椤甸偅鏉★紙鍦ㄥ簳鏍忓唴锛夋槑鏄炬洿闈犱笅銆?
+   * @returns 搴曢儴闂磋窛锛坴p锛夈€?
    */
   private floatingMiniBarBottomMarginVp(): number {
-    // ★ 走 `getNavigationBarBottomVpFromWindowUtil()`：它「缓存 → 现向窗口量 → 最后一次好值 →
-    //   启动快照」逐级兜底。老代码只读缓存 + 启动快照，两者都为 0 时（避让区一次都没上报成功）
-    //   边距会退化成 12，胶囊贴着屏幕底、压在系统手势条上 —— 用户看到的「底部播放器错位」。
+    // 鈽?璧?`getNavigationBarBottomVpFromWindowUtil()`锛氬畠銆岀紦瀛?鈫?鐜板悜绐楀彛閲?鈫?鏈€鍚庝竴娆″ソ鍊?鈫?
+    //   鍚姩蹇収銆嶉€愮骇鍏滃簳銆傝€佷唬鐮佸彧璇荤紦瀛?+ 鍚姩蹇収锛屼袱鑰呴兘涓?0 鏃讹紙閬胯鍖轰竴娆￠兘娌′笂鎶ユ垚鍔燂級
+    //   杈硅窛浼氶€€鍖栨垚 12锛岃兌鍥婅创鐫€灞忓箷搴曘€佸帇鍦ㄧ郴缁熸墜鍔挎潯涓?鈥斺€?鐢ㄦ埛鐪嬪埌鐨勩€屽簳閮ㄦ挱鏀惧櫒閿欎綅銆嶃€?
     const systemInset: number = getNavigationBarBottomVpFromWindowUtil();
     return Math.max(12, systemInset + 8);
   }
 
   /**
-   * 软键盘高度（vp）：没有键盘时 0。
+   * 杞敭鐩橀珮搴︼紙vp锛夛細娌℃湁閿洏鏃?0銆?
    *
-   * 唯一监听点在 `common/musicbasic` 的 `WindowUtil`（`on('avoidAreaChange')` 的
-   * `TYPE_KEYBOARD` 分支写 `WindowInfo.avoidKeyboard`）；本函数只是只读门面，
-   * 读的是 `@Trace` 字段 ⇒ 键盘弹出/收起会自动驱动壳层重新布局。
+   * 鍞竴鐩戝惉鐐瑰湪 `common/musicbasic` 鐨?`WindowUtil`锛坄on('avoidAreaChange')` 鐨?
+   * `TYPE_KEYBOARD` 鍒嗘敮鍐?`WindowInfo.avoidKeyboard`锛夛紱鏈嚱鏁板彧鏄彧璇婚棬闈紝
+   * 璇荤殑鏄?`@Trace` 瀛楁 鈬?閿洏寮瑰嚭/鏀惰捣浼氳嚜鍔ㄩ┍鍔ㄥ３灞傞噸鏂板竷灞€銆?
    */
   private keyboardBottomVp(): number {
     return getKeyboardBottomVpFromWindowUtil();
   }
 
   /**
-   * 键盘弹出时，二级页面悬浮迷你条**再往上抬**的距离（vp）；无键盘时**恒为 0**。
+   * 閿洏寮瑰嚭鏃讹紝浜岀骇椤甸潰鎮诞杩蜂綘鏉?*鍐嶅線涓婃姮**鐨勮窛绂伙紙vp锛夛紱鏃犻敭鐩樻椂**鎭掍负 0**銆?
    *
-   * 只作用于二级页面那条悬浮条（{@link floatingMiniBar}）：首页那条迷你条在 HDS 浮动底栏里、
-   * 由官方栏体负责让位，**不要**把本值喂给它。
+   * 鍙綔鐢ㄤ簬浜岀骇椤甸潰閭ｆ潯鎮诞鏉★紙{@link floatingMiniBar}锛夛細棣栭〉閭ｆ潯杩蜂綘鏉″湪 HDS 娴姩搴曟爮閲屻€?
+   * 鐢卞畼鏂规爮浣撹礋璐ｈ浣嶏紝**涓嶈**鎶婃湰鍊煎杺缁欏畠銆?
    *
-   * 算式与两个常量怎么调，见 {@link FLOATING_MINI_BAR_KEYBOARD_GAP_VP} 头上那段。
-   * @returns 上抬距离（vp）；无键盘时为 0（此时调用方算式逐字等于改动前的值）。
+   * 绠楀紡涓庝袱涓父閲忔€庝箞璋冿紝瑙?{@link FLOATING_MINI_BAR_KEYBOARD_GAP_VP} 澶翠笂閭ｆ銆?
+   * @returns 涓婃姮璺濈锛坴p锛夛紱鏃犻敭鐩樻椂涓?0锛堟鏃惰皟鐢ㄦ柟绠楀紡閫愬瓧绛変簬鏀瑰姩鍓嶇殑鍊硷級銆?
    */
   private floatingMiniBarKeyboardLiftVp(): number {
     const keyboardVp: number = this.keyboardBottomVp();
@@ -1969,36 +1915,36 @@ struct Index {
   }
 
   /**
-   * 二级页面悬浮迷你条**宿主**的纵向偏移（vp）。
+   * 浜岀骇椤甸潰鎮诞杩蜂綘鏉?*瀹夸富**鐨勭旱鍚戝亸绉伙紙vp锛夈€?
    *
-   * ⚠️ 无键盘时必须**逐字等于** `homeTabBarBottomMarginVp()` —— 这是回归红线：
-   *    键盘避让只允许在"真的弹了键盘"时改变这条栏的位置。
-   * @returns 宿主 offset.y（vp）。
+   * 鈿狅笍 鏃犻敭鐩樻椂蹇呴』**閫愬瓧绛変簬** `homeTabBarBottomMarginVp()` 鈥斺€?杩欐槸鍥炲綊绾㈢嚎锛?
+   *    閿洏閬胯鍙厑璁稿湪"鐪熺殑寮逛簡閿洏"鏃舵敼鍙樿繖鏉℃爮鐨勪綅缃€?
+   * @returns 瀹夸富 offset.y锛坴p锛夈€?
    */
   private floatingMiniBarHostOffsetYVp(): number {
     return this.homeTabBarBottomMarginVp() - this.floatingMiniBarKeyboardLiftVp();
   }
 
   /**
-   * 底部页签：**只剩两个** —— 推荐 / 我的。
+   * 搴曢儴椤电锛?*鍙墿涓や釜** 鈥斺€?鎺ㄨ崘 / 鎴戠殑銆?
    *
-   * 为什么是这两个（用户 2026-10-11 明确要求"底栏只剩两个 Tab"，另一个由我们自己判断）：
-   *   - 「推荐」是内容主面（首页推荐流），也是全场所有"去首页"动作的落点，删掉它应用就没了入口；
-   *   - 「我的」是参考工程 lxmusic-harmony 的做法：它自己也**从四个页签（推荐/歌单/我的/设置）
-   *     收成了三个（推荐/听书/我的）**，理由逐字同构 —— 歌单与设置的**内容都搬进了「我的」页**
-   *     （快捷入口 + 歌单卡 + 设置卡），再留着那两个页签就是"同一件事两个入口"。
-   *     我们没有「听书」，所以正好是**两个**。
+   * 涓轰粈涔堟槸杩欎袱涓紙鐢ㄦ埛 2026-10-11 鏄庣‘瑕佹眰"搴曟爮鍙墿涓や釜 Tab"锛屽彟涓€涓敱鎴戜滑鑷繁鍒ゆ柇锛夛細
+   *   - 銆屾帹鑽愩€嶆槸鍐呭涓婚潰锛堥椤垫帹鑽愭祦锛夛紝涔熸槸鍏ㄥ満鎵€鏈?鍘婚椤?鍔ㄤ綔鐨勮惤鐐癸紝鍒犳帀瀹冨簲鐢ㄥ氨娌′簡鍏ュ彛锛?
+   *   - 銆屾垜鐨勩€嶆槸鍙傝€冨伐绋?lxmusic-harmony 鐨勫仛娉曪細瀹冭嚜宸变篃**浠庡洓涓〉绛撅紙鎺ㄨ崘/姝屽崟/鎴戠殑/璁剧疆锛?
+   *     鏀舵垚浜嗕笁涓紙鎺ㄨ崘/鍚功/鎴戠殑锛?*锛岀悊鐢遍€愬瓧鍚屾瀯 鈥斺€?姝屽崟涓庤缃殑**鍐呭閮芥惉杩涗簡銆屾垜鐨勩€嶉〉**
+   *     锛堝揩鎹峰叆鍙?+ 姝屽崟鍗?+ 璁剧疆鍗★級锛屽啀鐣欑潃閭ｄ袱涓〉绛惧氨鏄?鍚屼竴浠朵簨涓や釜鍏ュ彛"銆?
+   *     鎴戜滑娌℃湁銆屽惉涔︺€嶏紝鎵€浠ユ濂芥槸**涓や釜**銆?
    *
-   * 被删掉的两个页签，能力都有新入口（一条都没丢）：
-   *   - 「设置」→「我的」页那张**入口卡**的「设置」行 → `SettingPage` 二级页
-   *     （**就是我们原来那个大设置页本体**：搜索框 + 六组设置项 + 平台账号/平台音乐/下载管理；
-   *      顶上那张「登录音乐」卡已搬到「我的」页顶部，见 `LoginMusicCard.ets`；
-   *      点进去的详情仍是同一个 `SettingsDetailPage`）；
-   *   - 「歌单」→「我的」页那张**歌单卡**：卡内直接列歌单（点进详情 / 长按重命名·删除）、
-   *     动作区「新建歌单」（就地弹层）、「歌单导入」与卡头「全部」→ `MinePlaylistPage`
-   *     二级页（薄壳，渲染的仍是 `PlaylistsPage` 整页：排序 / 导出 / 改封面 / 网络导入都在）。
-   * ⚠️ 所有二级页都推**壳层共享栈** `pageIndexInfos`（`MinePage` 自带的那个内层 Navigation
-   *    已在 2026-10-11 第十二轮删除，理由见 `MinePage` 文件头）。
+   * 琚垹鎺夌殑涓や釜椤电锛岃兘鍔涢兘鏈夋柊鍏ュ彛锛堜竴鏉￠兘娌′涪锛夛細
+   *   - 銆岃缃€嶁啋銆屾垜鐨勩€嶉〉閭ｅ紶**鍏ュ彛鍗?*鐨勩€岃缃€嶈 鈫?`SettingPage` 浜岀骇椤?
+   *     锛?*灏辨槸鎴戜滑鍘熸潵閭ｄ釜澶ц缃〉鏈綋**锛氭悳绱㈡ + 鍏粍璁剧疆椤?+ 骞冲彴璐﹀彿/骞冲彴闊充箰/涓嬭浇绠＄悊锛?
+   *      椤朵笂閭ｅ紶銆岀櫥褰曢煶涔愩€嶅崱宸叉惉鍒般€屾垜鐨勩€嶉〉椤堕儴锛岃 `LoginMusicCard.ets`锛?
+   *      鐐硅繘鍘荤殑璇︽儏浠嶆槸鍚屼竴涓?`SettingsDetailPage`锛夛紱
+   *   - 銆屾瓕鍗曘€嶁啋銆屾垜鐨勩€嶉〉閭ｅ紶**姝屽崟鍗?*锛氬崱鍐呯洿鎺ュ垪姝屽崟锛堢偣杩涜鎯?/ 闀挎寜閲嶅懡鍚嵚峰垹闄わ級銆?
+   *     鍔ㄤ綔鍖恒€屾柊寤烘瓕鍗曘€嶏紙灏卞湴寮瑰眰锛夈€併€屾瓕鍗曞鍏ャ€嶄笌鍗″ご銆屽叏閮ㄣ€嶁啋 `MinePlaylistPage`
+   *     浜岀骇椤碉紙钖勫３锛屾覆鏌撶殑浠嶆槸 `PlaylistsPage` 鏁撮〉锛氭帓搴?/ 瀵煎嚭 / 鏀瑰皝闈?/ 缃戠粶瀵煎叆閮藉湪锛夈€?
+   * 鈿狅笍 鎵€鏈変簩绾ч〉閮芥帹**澹冲眰鍏变韩鏍?* `pageIndexInfos`锛坄MinePage` 鑷甫鐨勯偅涓唴灞?Navigation
+   *    宸插湪 2026-10-11 绗崄浜岃疆鍒犻櫎锛岀悊鐢辫 `MinePage` 鏂囦欢澶达級銆?
    */
   @Builder
   private HomeTabsPages() {
@@ -2017,30 +1963,30 @@ struct Index {
     }
     .tabBar(this.TabBarItem(0, $r('app.string.tab_home'), $r('sys.symbol.house_fill')))
 
-    // ★ 用户 2026-10-15：「Tab 的推荐和回响中间加个**现在就听**，上下滑动切换歌曲。」
-    //   一屏一首歌、竖向 Swiper 换歌；未登录走当前平台榜单、登录走该平台每日推荐
-    //   （两条通道都在 `NowPlayingFeedPage` 里，见该文件头）。
-    //   图标 `sys.symbol.music_note_circle_fill` 与另外三枚同为 fill 系（已在本机
-    //   `sysResource.js` 的 symbol 表里核实存在）。
+    // 鈽?鐢ㄦ埛 2026-10-15锛氥€孴ab 鐨勬帹鑽愬拰鍥炲搷涓棿鍔犱釜**鐜板湪灏卞惉**锛屼笂涓嬫粦鍔ㄥ垏鎹㈡瓕鏇层€傘€?
+    //   涓€灞忎竴棣栨瓕銆佺珫鍚?Swiper 鎹㈡瓕锛涙湭鐧诲綍璧板綋鍓嶅钩鍙版鍗曘€佺櫥褰曡蛋璇ュ钩鍙版瘡鏃ユ帹鑽?
+    //   锛堜袱鏉￠€氶亾閮藉湪 `NowPlayingFeedPage` 閲岋紝瑙佽鏂囦欢澶达級銆?
+    //   鍥炬爣 `sys.symbol.music_note_circle_fill` 涓庡彟澶栦笁鏋氬悓涓?fill 绯伙紙宸插湪鏈満
+    //   `sysResource.js` 鐨?symbol 琛ㄩ噷鏍稿疄瀛樺湪锛夈€?
     TabContent() {
       Column() {
         NowPlayingFeedPage({
-          // 底部让位与上面「推荐」页同一判据（HDS 浮动胶囊底栏 6.1.1(24)/60100 起才存在）：
-          // 56 = 胶囊高，+16 = `barBottomMargin` 的常规值。它加在**滑动卡片自己**身上，
-          // 这样每一屏都能正好躲开底栏（见 `NowPlayingFeedPage.FEED_DEFAULT_BOTTOM_RESERVE_VP`）。
+          // 搴曢儴璁╀綅涓庝笂闈€屾帹鑽愩€嶉〉鍚屼竴鍒ゆ嵁锛圚DS 娴姩鑳跺泭搴曟爮 6.1.1(24)/60100 璧锋墠瀛樺湪锛夛細
+          // 56 = 鑳跺泭楂橈紝+16 = `barBottomMargin` 鐨勫父瑙勫€笺€傚畠鍔犲湪**婊戝姩鍗＄墖鑷繁**韬笂锛?
+          // 杩欐牱姣忎竴灞忛兘鑳芥濂借翰寮€搴曟爮锛堣 `NowPlayingFeedPage.FEED_DEFAULT_BOTTOM_RESERVE_VP`锛夈€?
           bottomReserveVp: deviceInfo.distributionOSApiVersion >= 60100 ? 56 + 16 : 56,
           scrollTopCommand: this.tabScrollTopCommands[1],
-          // ★★ 2026-10-15 用户：「我启动应用过一会就会自动开始播放，**自动开始播放的逻辑应该是我打开
-          //    那个现在就听的页面的时候**」。根因是 `HdsTabs` 的 `TabContent` 子页面**启动时就挂载**
-          //    ⇒ 页面里的 `applyRows()` 一到数据就起播了（用户还在首页）。
-          //    ⇒ 下发**本页在底栏里的下标**（是个常量），页面自己连 `TabSwitchState` 判"现在在不在屏幕上"
-          //      （`@Monitor('tabState.tabIndex')`），只有在前台才起播。
-          //    ⚠️ **不要改成"壳层传 `isActive: this.tabState.tabIndex === …`"**：ArkUI V2 是"读才订阅"，
-          //      切页签时重绘的是读了 `tabIndex` 的那几个 `TabBarItem` 节点，本页这个 `@Param`
-          //      **不保证被重新求值** ⇒ `isActive` 会一直停在初值（静默失效）。
-          //    ⚠️ 参数名**不能叫 `tabIndex`**：`CustomComponent` 自己有一个同名方法
-          //      （通用属性 `tabIndex(index)`），自定义组件里同名会 **编译失败**（本机实测：
-          //      `Property 'tabIndex' … is not assignable to the same property in base type 'CustomComponent'`）。
+          // 鈽呪槄 2026-10-15 鐢ㄦ埛锛氥€屾垜鍚姩搴旂敤杩囦竴浼氬氨浼氳嚜鍔ㄥ紑濮嬫挱鏀撅紝**鑷姩寮€濮嬫挱鏀剧殑閫昏緫搴旇鏄垜鎵撳紑
+          //    閭ｄ釜鐜板湪灏卞惉鐨勯〉闈㈢殑鏃跺€?*銆嶃€傛牴鍥犳槸 `HdsTabs` 鐨?`TabContent` 瀛愰〉闈?*鍚姩鏃跺氨鎸傝浇**
+          //    鈬?椤甸潰閲岀殑 `applyRows()` 涓€鍒版暟鎹氨璧锋挱浜嗭紙鐢ㄦ埛杩樺湪棣栭〉锛夈€?
+          //    鈬?涓嬪彂**鏈〉鍦ㄥ簳鏍忛噷鐨勪笅鏍?*锛堟槸涓父閲忥級锛岄〉闈㈣嚜宸辫繛 `TabSwitchState` 鍒?鐜板湪鍦ㄤ笉鍦ㄥ睆骞曚笂"
+          //      锛坄@Monitor('tabState.tabIndex')`锛夛紝鍙湁鍦ㄥ墠鍙版墠璧锋挱銆?
+          //    鈿狅笍 **涓嶈鏀规垚"澹冲眰浼?`isActive: this.tabState.tabIndex === 鈥"**锛欰rkUI V2 鏄?璇绘墠璁㈤槄"锛?
+          //      鍒囬〉绛炬椂閲嶇粯鐨勬槸璇讳簡 `tabIndex` 鐨勯偅鍑犱釜 `TabBarItem` 鑺傜偣锛屾湰椤佃繖涓?`@Param`
+          //      **涓嶄繚璇佽閲嶆柊姹傚€?* 鈬?`isActive` 浼氫竴鐩村仠鍦ㄥ垵鍊硷紙闈欓粯澶辨晥锛夈€?
+          //    鈿狅笍 鍙傛暟鍚?*涓嶈兘鍙?`tabIndex`**锛歚CustomComponent` 鑷繁鏈変竴涓悓鍚嶆柟娉?
+          //      锛堥€氱敤灞炴€?`tabIndex(index)`锛夛紝鑷畾涔夌粍浠堕噷鍚屽悕浼?**缂栬瘧澶辫触**锛堟湰鏈哄疄娴嬶細
+          //      `Property 'tabIndex' 鈥?is not assignable to the same property in base type 'CustomComponent'`锛夈€?
           barTabIndex: NOW_PLAYING_TAB_INDEX
         })
           .layoutWeight(1)
@@ -2051,7 +1997,7 @@ struct Index {
     }
     .tabBar(this.TabBarItem(1, $r('app.string.tab_now_playing'), $r('sys.symbol.music_round_triangle_fill')))
 
-    // ★ 用户 2026-10-12：底栏中间加一页「回响」（月度听歌报告）
+    // 鈽?鐢ㄦ埛 2026-10-12锛氬簳鏍忎腑闂村姞涓€椤点€屽洖鍝嶃€嶏紙鏈堝害鍚瓕鎶ュ憡锛?
     TabContent() {
       Column() {
         EchoReviewPage({ scrollTopCommand: this.tabScrollTopCommands[2] })
@@ -2089,42 +2035,42 @@ struct Index {
           .vertical(false)
           .scrollable(true)
           .barFloatingStyle({
-            // ⚠️ 不要传 barWidth。
-            // musicfreeOH 的浮动底栏只有 barBottomMargin / systemMaterialEffect /
-            // adaptToHandedness / miniBar 四个键 —— 没有 barWidth。我们原来传的三档
-            // （smallWidth = 窗口宽 − 96 / 284 / 328）会让整条底栏明显窄于屏幕，
-            // 「上下两排」时两侧就留出很大空隙（用户反馈的就是这个）。
+            // 鈿狅笍 涓嶈浼?barWidth銆?
+            // musicfreeOH 鐨勬诞鍔ㄥ簳鏍忓彧鏈?barBottomMargin / systemMaterialEffect /
+            // adaptToHandedness / miniBar 鍥涗釜閿?鈥斺€?娌℃湁 barWidth銆傛垜浠師鏉ヤ紶鐨勪笁妗?
+            // 锛坰mallWidth = 绐楀彛瀹?鈭?96 / 284 / 328锛変細璁╂暣鏉″簳鏍忔槑鏄剧獎浜庡睆骞曪紝
+            // 銆屼笂涓嬩袱鎺掋€嶆椂涓や晶灏辩暀鍑哄緢澶х┖闅欙紙鐢ㄦ埛鍙嶉鐨勫氨鏄繖涓級銆?
             barBottomMargin: this.homeTabBarBottomMarginVp(),
-            // ★ 这条是**官方真实光感**：HdsTabs 的浮动底栏（barOverlap + !vertical +
-            //   barPosition(End) 三条件同时满足）+ `systemMaterialEffect`。
-            //   档位与标题栏共用 ambientTitleMaterial()，不要再在本处内联一套三目。
+            // 鈽?杩欐潯鏄?*瀹樻柟鐪熷疄鍏夋劅**锛欻dsTabs 鐨勬诞鍔ㄥ簳鏍忥紙barOverlap + !vertical +
+            //   barPosition(End) 涓夋潯浠跺悓鏃舵弧瓒筹級+ `systemMaterialEffect`銆?
+            //   妗ｄ綅涓庢爣棰樻爮鍏辩敤 ambientTitleMaterial()锛屼笉瑕佸啀鍦ㄦ湰澶勫唴鑱斾竴濂椾笁鐩€?
             systemMaterialEffect: this.ambientTitleMaterial(),
-            // 智感握姿：跟随握持手调整浮动条左右偏置
+            // 鏅烘劅鎻″Э锛氳窡闅忔彙鎸佹墜璋冩暣娴姩鏉″乏鍙冲亸缃?
             adaptToHandedness: true,
             miniBar: {
               miniBarBuilder: (): void => {
                 this.miniBar();
               },
-              // ★ 双层底栏的关键：`barLayoutMode = VERTICAL` 才把迷你条与页签排成上下两排。
-              //   该字段是 @since 6.1.1(24)，所以工程 targetSdkVersion 必须 ≥ 24
-              //   （本项目已由 6.1.0(23) 提到 6.1.1(24)，compatibleSdkVersion 保持 23，
-              //     设备覆盖不变）。低配发行版上传 undefined。
-              //   ⚠️「现在就听」页由 `barLayoutModeForHds()` 强制 HORIZONTAL（见它和
-              //     `NOW_PLAYING_TAB_INDEX` 的注释）：那一页不许有迷你条那一排。
+              // 鈽?鍙屽眰搴曟爮鐨勫叧閿細`barLayoutMode = VERTICAL` 鎵嶆妸杩蜂綘鏉′笌椤电鎺掓垚涓婁笅涓ゆ帓銆?
+              //   璇ュ瓧娈垫槸 @since 6.1.1(24)锛屾墍浠ュ伐绋?targetSdkVersion 蹇呴』 鈮?24
+              //   锛堟湰椤圭洰宸茬敱 6.1.0(23) 鎻愬埌 6.1.1(24)锛宑ompatibleSdkVersion 淇濇寔 23锛?
+              //     璁惧瑕嗙洊涓嶅彉锛夈€備綆閰嶅彂琛岀増涓婁紶 undefined銆?
+              //   鈿狅笍銆岀幇鍦ㄥ氨鍚€嶉〉鐢?`barLayoutModeForHds()` 寮哄埗 HORIZONTAL锛堣瀹冨拰
+              //     `NOW_PLAYING_TAB_INDEX` 鐨勬敞閲婏級锛氶偅涓€椤典笉璁告湁杩蜂綘鏉￠偅涓€鎺掋€?
               barLayoutMode: this.barLayoutModeForHds(),
-              // 受控属性：折叠态 = 窄胶囊，点击后由 onBarStyleChange 透出再回灌
-              // ⚠️ 单排（HORIZONTAL）配 `EXPAND` 是**已知的错误组合**（底栏会变成
-              //   「长条 Tab + 圆形播放器」，见 `onMiniBarStyleChangeFull` 的注释）⇒
-              //   在「现在就听」页一并把样式压回 `COLLAPSE`。
+              // 鍙楁帶灞炴€э細鎶樺彔鎬?= 绐勮兌鍥婏紝鐐瑰嚮鍚庣敱 onBarStyleChange 閫忓嚭鍐嶅洖鐏?
+              // 鈿狅笍 鍗曟帓锛圚ORIZONTAL锛夐厤 `EXPAND` 鏄?*宸茬煡鐨勯敊璇粍鍚?*锛堝簳鏍忎細鍙樻垚
+              //   銆岄暱鏉?Tab + 鍦嗗舰鎾斁鍣ㄣ€嶏紝瑙?`onMiniBarStyleChangeFull` 鐨勬敞閲婏級鈬?
+              //   鍦ㄣ€岀幇鍦ㄥ氨鍚€嶉〉涓€骞舵妸鏍峰紡鍘嬪洖 `COLLAPSE`銆?
               //
-              // ★★★ 2026-10-16（**方案 A：迷你条改自绘背板**，修用户实测
-              //   「关闭播放器只有内容会弹，**播放条背景不弹**」）：
-              //   `enableMiniBarBackground` 是 HDS 给**迷你条那一块**的背板开关
-              //   （页签胶囊那块背板是**另一块**，不受它影响）。
-              //   置 `false` ⇒ HDS 不再给迷你条画背板 ⇒ 背板改由
-              //   `HomeMiniBarPlayer.MiniBarBackplate()` 自绘，于是它与内容在**同一棵子树**里，
-              //   能跟着 `morphSquashY` 一起压/一起弹。
-              //   ⚠️ 与 `HomeMiniBarPlayer` 里那一层**必须成对**：只关不画 ⇒ 迷你条底下空一块。
+              // 鈽呪槄鈽?2026-10-16锛?*鏂规 A锛氳糠浣犳潯鏀硅嚜缁樿儗鏉?*锛屼慨鐢ㄦ埛瀹炴祴
+              //   銆屽叧闂挱鏀惧櫒鍙湁鍐呭浼氬脊锛?*鎾斁鏉¤儗鏅笉寮?*銆嶏級锛?
+              //   `enableMiniBarBackground` 鏄?HDS 缁?*杩蜂綘鏉￠偅涓€鍧?*鐨勮儗鏉垮紑鍏?
+              //   锛堥〉绛捐兌鍥婇偅鍧楄儗鏉挎槸**鍙︿竴鍧?*锛屼笉鍙楀畠褰卞搷锛夈€?
+              //   缃?`false` 鈬?HDS 涓嶅啀缁欒糠浣犳潯鐢昏儗鏉?鈬?鑳屾澘鏀圭敱
+              //   `HomeMiniBarPlayer.MiniBarBackplate()` 鑷粯锛屼簬鏄畠涓庡唴瀹瑰湪**鍚屼竴妫靛瓙鏍?*閲岋紝
+              //   鑳借窡鐫€ `morphSquashY` 涓€璧峰帇/涓€璧峰脊銆?
+              //   鈿狅笍 涓?`HomeMiniBarPlayer` 閲岄偅涓€灞?*蹇呴』鎴愬**锛氬彧鍏充笉鐢?鈬?杩蜂綘鏉″簳涓嬬┖涓€鍧椼€?
               enableMiniBarBackground: false,
               miniBarStyle: this.miniBarStyleForHds(),
               onBarStyleChange: (miniBarStyle: HdsBarStyle, _tabStyle: HdsBarStyle,
@@ -2136,18 +2082,18 @@ struct Index {
           .onChange((index: number) => {
             if (index !== this.tabState.tabIndex) {
               this.tabState.tabIndex = index;
-              // 切到新页签：选中态弹一下（点击与滑动切换都会走这里）
+              // 鍒囧埌鏂伴〉绛撅細閫変腑鎬佸脊涓€涓嬶紙鐐瑰嚮涓庢粦鍔ㄥ垏鎹㈤兘浼氳蛋杩欓噷锛?
               this.playTabBounce(index);
-              // ★ 迷你条显隐诊断（`hdc shell hilog | grep RzdMiniBarHide`）：
-              //   切到「现在就听」应打出 `hidden=true barLayout=HORIZONTAL style=COLLAPSE`，
-              //   切回来应打出 `hidden=false`。只能看日志，无设备验证。
+              // 鈽?杩蜂綘鏉℃樉闅愯瘖鏂紙`hdc shell hilog | grep RzdMiniBarHide`锛夛細
+              //   鍒囧埌銆岀幇鍦ㄥ氨鍚€嶅簲鎵撳嚭 `hidden=true barLayout=HORIZONTAL style=COLLAPSE`锛?
+              //   鍒囧洖鏉ュ簲鎵撳嚭 `hidden=false`銆傚彧鑳界湅鏃ュ織锛屾棤璁惧楠岃瘉銆?
               Logger.info(RzdShellLogTag,
                 `RzdMiniBarHide tab=${index} hidden=${index === NOW_PLAYING_TAB_INDEX} ` +
                   `barLayout=${this.barLayoutModeForHds()} style=${this.miniBarStyleForHds()} ` +
                   `navDepth=${this.navDepth}`);
             }
           })
-          // 点页签：点的是**当前**页签时回到顶部（切页签交给 onChange）
+          // 鐐归〉绛撅細鐐圭殑鏄?*褰撳墠**椤电鏃跺洖鍒伴《閮紙鍒囬〉绛句氦缁?onChange锛?
           .onTabBarClick((index: number): void => {
             this.onTabBarClicked(index);
           })
@@ -2189,34 +2135,34 @@ struct Index {
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
-      // 播放页**不再用 `bindContentCover`**：直接作为本 Stack 的浮层挂载（见下面那段注释）。
-      // 模态那条路走过很久，结论是它和"从迷你条长出来"的形变根本不兼容：
-      //   · `ModalTransition.DEFAULT` 自带"从底部推上来"的位移，会和形变的位移叠加；
-      //   · `ModalTransition.NONE` 虽然没有位移，但模态宿主是不透明的一层，
-      //     把首页和迷你条全盖住（形变要透出来的正是它们），于是只剩"黑底 + 下方空白"。
+      // 鎾斁椤?*涓嶅啀鐢?`bindContentCover`**锛氱洿鎺ヤ綔涓烘湰 Stack 鐨勬诞灞傛寕杞斤紙瑙佷笅闈㈤偅娈垫敞閲婏級銆?
+      // 妯℃€侀偅鏉¤矾璧拌繃寰堜箙锛岀粨璁烘槸瀹冨拰"浠庤糠浣犳潯闀垮嚭鏉?鐨勫舰鍙樻牴鏈笉鍏煎锛?
+      //   路 `ModalTransition.DEFAULT` 鑷甫"浠庡簳閮ㄦ帹涓婃潵"鐨勪綅绉伙紝浼氬拰褰㈠彉鐨勪綅绉诲彔鍔狅紱
+      //   路 `ModalTransition.NONE` 铏界劧娌℃湁浣嶇Щ锛屼絾妯℃€佸涓绘槸涓嶉€忔槑鐨勪竴灞傦紝
+      //     鎶婇椤靛拰杩蜂綘鏉″叏鐩栦綇锛堝舰鍙樿閫忓嚭鏉ョ殑姝ｆ槸瀹冧滑锛夛紝浜庢槸鍙墿"榛戝簳 + 涓嬫柟绌虹櫧"銆?
       .onNavBarStateChange((isVisible: boolean): void => {
-        // 每次导航栏可见性变化都刷新栈深度（推入/弹出二级页面都会触发）
+        // 姣忔瀵艰埅鏍忓彲瑙佹€у彉鍖栭兘鍒锋柊鏍堟繁搴︼紙鎺ㄥ叆/寮瑰嚭浜岀骇椤甸潰閮戒細瑙﹀彂锛?
         this.syncNavDepth();
       })
 
-      // ★ 播放页：**不用模态，直接挂在壳层的 Stack 里**（对标无界：播放页与首页在同一个
-      //   视图树里；PC 壳层本来就是这么挂的）。
+      // 鈽?鎾斁椤碉細**涓嶇敤妯℃€侊紝鐩存帴鎸傚湪澹冲眰鐨?Stack 閲?*锛堝鏍囨棤鐣岋細鎾斁椤典笌棣栭〉鍦ㄥ悓涓€涓?
+      //   瑙嗗浘鏍戦噷锛汸C 澹冲眰鏈潵灏辨槸杩欎箞鎸傜殑锛夈€?
       //
-      // 为什么把 `bindContentCover` 换掉（三个用户实测 bug 的根因都在这里）：
-      //   1. 模态的宿主是**不透明**的一层，它盖住了首页和迷你条 —— 而形变的观感靠的正是
-      //      "迷你条在那、它慢慢变大"：迷你条被盖住后，剩下的就是"一块黑背景 + 下方空白"
-      //      （模态自己的底色），跟无界的"播放条逐渐变大"完全不是一回事；
-      //   2. 形变早期可视矩形只有迷你条封面那么大，模态其余部分是模态底色，不是首页
-      //      —— 于是屏幕上是一块黑、一块空；
-      //   3. 手势：模态在 `isShowPlay=false` 时根本不存在（上拉打开必须在壳层），
-      //      而它存在时又会把壳层的手势全吃掉，导致跟手逻辑两头受制。
-      //   挂在壳层 Stack 里就没有这些问题：下层的首页/迷你条还在画，形变的透明区域
-      //   透出来的就是首页 —— "播放条逐渐变大、颜色逐渐变成背景、慢慢拓展到整屏"。
+      // 涓轰粈涔堟妸 `bindContentCover` 鎹㈡帀锛堜笁涓敤鎴峰疄娴?bug 鐨勬牴鍥犻兘鍦ㄨ繖閲岋級锛?
+      //   1. 妯℃€佺殑瀹夸富鏄?*涓嶉€忔槑**鐨勪竴灞傦紝瀹冪洊浣忎簡棣栭〉鍜岃糠浣犳潯 鈥斺€?鑰屽舰鍙樼殑瑙傛劅闈犵殑姝ｆ槸
+      //      "杩蜂綘鏉″湪閭ｃ€佸畠鎱㈡參鍙樺ぇ"锛氳糠浣犳潯琚洊浣忓悗锛屽墿涓嬬殑灏辨槸"涓€鍧楅粦鑳屾櫙 + 涓嬫柟绌虹櫧"
+      //      锛堟ā鎬佽嚜宸辩殑搴曡壊锛夛紝璺熸棤鐣岀殑"鎾斁鏉￠€愭笎鍙樺ぇ"瀹屽叏涓嶆槸涓€鍥炰簨锛?
+      //   2. 褰㈠彉鏃╂湡鍙鐭╁舰鍙湁杩蜂綘鏉″皝闈㈤偅涔堝ぇ锛屾ā鎬佸叾浣欓儴鍒嗘槸妯℃€佸簳鑹诧紝涓嶆槸棣栭〉
+      //      鈥斺€?浜庢槸灞忓箷涓婃槸涓€鍧楅粦銆佷竴鍧楃┖锛?
+      //   3. 鎵嬪娍锛氭ā鎬佸湪 `isShowPlay=false` 鏃舵牴鏈笉瀛樺湪锛堜笂鎷夋墦寮€蹇呴』鍦ㄥ３灞傦級锛?
+      //      鑰屽畠瀛樺湪鏃跺張浼氭妸澹冲眰鐨勬墜鍔垮叏鍚冩帀锛屽鑷磋窡鎵嬮€昏緫涓ゅご鍙楀埗銆?
+      //   鎸傚湪澹冲眰 Stack 閲屽氨娌℃湁杩欎簺闂锛氫笅灞傜殑棣栭〉/杩蜂綘鏉¤繕鍦ㄧ敾锛屽舰鍙樼殑閫忔槑鍖哄煙
+      //   閫忓嚭鏉ョ殑灏辨槸棣栭〉 鈥斺€?"鎾斁鏉￠€愭笎鍙樺ぇ銆侀鑹查€愭笎鍙樻垚鑳屾櫙銆佹參鎱㈡嫇灞曞埌鏁村睆"銆?
       //
-      // 系统返回不再由模态的 `onWillDismiss` 拦了，改由本页的 `onBackPress` 拦（见文件末尾）。
+      // 绯荤粺杩斿洖涓嶅啀鐢辨ā鎬佺殑 `onWillDismiss` 鎷︿簡锛屾敼鐢辨湰椤电殑 `onBackPress` 鎷︼紙瑙佹枃浠舵湯灏撅級銆?
       //
-      // ⚠️ `PLAYER_ROUTE_MODE = true` 时这一段**不渲染**：播放页由 NavDestination 负责
-      //    （见 pushPlayerRoute）。两条路都保留，回退只需改上面那个常量。
+      // 鈿狅笍 `PLAYER_ROUTE_MODE = true` 鏃惰繖涓€娈?*涓嶆覆鏌?*锛氭挱鏀鹃〉鐢?NavDestination 璐熻矗
+      //    锛堣 pushPlayerRoute锛夈€備袱鏉¤矾閮戒繚鐣欙紝鍥為€€鍙渶鏀逛笂闈㈤偅涓父閲忋€?
       PlaylistTransitionOverlay()
         .zIndex(90)
         .hitTestBehavior(HitTestMode.Transparent)
@@ -2230,7 +2176,7 @@ struct Index {
         // matchParent expands SIZE too; percent height only moved the overlay and left a bottom gap.
         // Expand ONLY the player overlay; do not relayout the retained Navigation window.
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
-        // 盖住 HdsTabs（它自己是 zIndex(1)）与二级页面的悬浮迷你条
+        // 鐩栦綇 HdsTabs锛堝畠鑷繁鏄?zIndex(1)锛変笌浜岀骇椤甸潰鐨勬偓娴糠浣犳潯
         .zIndex(PLAYER_OVERLAY_Z_INDEX)
         .id('rzd_player_overlay_viewport')
         .onAreaChange((_oldArea: Area, area: Area): void => {
@@ -2238,17 +2184,17 @@ struct Index {
         })
       }
 
-      // ★ 形变**克隆层**（对标反编译里 `MainPage` 上那三个 lambda：封面克隆 / 元信息克隆 /
-      //   操作区克隆）。反编译明确：克隆层挂在 **MainPage**（壳层）而不是播放页，
-      //   而且是"画一个副本"、不是给真实封面加 transform。
-      //   它必须在**播放页浮层之上**：迷你条真身在浮层之下，背景一不透明就被盖掉了，
-      //   所以"起点看起来还是那条迷你条"靠的就是这一层副本。
+      // 鈽?褰㈠彉**鍏嬮殕灞?*锛堝鏍囧弽缂栬瘧閲?`MainPage` 涓婇偅涓変釜 lambda锛氬皝闈㈠厠闅?/ 鍏冧俊鎭厠闅?/
+      //   鎿嶄綔鍖哄厠闅嗭級銆傚弽缂栬瘧鏄庣‘锛氬厠闅嗗眰鎸傚湪 **MainPage**锛堝３灞傦級鑰屼笉鏄挱鏀鹃〉锛?
+      //   鑰屼笖鏄?鐢讳竴涓壇鏈?銆佷笉鏄粰鐪熷疄灏侀潰鍔?transform銆?
+      //   瀹冨繀椤诲湪**鎾斁椤垫诞灞備箣涓?*锛氳糠浣犳潯鐪熻韩鍦ㄦ诞灞備箣涓嬶紝鑳屾櫙涓€涓嶉€忔槑灏辫鐩栨帀浜嗭紝
+      //   鎵€浠?璧风偣鐪嬭捣鏉ヨ繕鏄偅鏉¤糠浣犳潯"闈犵殑灏辨槸杩欎竴灞傚壇鏈€?
       //
-      // ⚠️ 渲染门用 `morphSessionDriving()`（**真的在播**），不是 `morphContainerActive()`：
-      //    点击打开会先进 ENTERING、再重试最多 12×32ms（≈400ms）等终点锚点就绪，
-      //    这段"假动画"里形变其实还没开始，但 `morphP` 已被压到 0 ⇒
-      //    `actionsOpacityAt(0) = 1` ⇒ 克隆层全亮地挂在屏上漂 ——
-      //    用户实测的"三个按钮一直漂移"就是这一段。
+      // 鈿狅笍 娓叉煋闂ㄧ敤 `morphSessionDriving()`锛?*鐪熺殑鍦ㄦ挱**锛夛紝涓嶆槸 `morphContainerActive()`锛?
+      //    鐐瑰嚮鎵撳紑浼氬厛杩?ENTERING銆佸啀閲嶈瘯鏈€澶?12脳32ms锛堚増400ms锛夌瓑缁堢偣閿氱偣灏辩华锛?
+      //    杩欐"鍋囧姩鐢?閲屽舰鍙樺叾瀹炶繕娌″紑濮嬶紝浣?`morphP` 宸茶鍘嬪埌 0 鈬?
+      //    `actionsOpacityAt(0) = 1` 鈬?鍏嬮殕灞傚叏浜湴鎸傚湪灞忎笂婕?鈥斺€?
+      //    鐢ㄦ埛瀹炴祴鐨?涓変釜鎸夐挳涓€鐩存紓绉?灏辨槸杩欎竴娈点€?
       if (this.expandState.morphSessionDriving() && this.expandState.asideWinW > 0) {
         this.MorphMiniBarClone()
       }
@@ -2256,21 +2202,21 @@ struct Index {
         .zIndex(PLAYER_CLONE_Z_INDEX)
         .hitTestBehavior(HitTestMode.None)
 
-      // ★★ 第三份拷贝 = **续飞封面**（2026-10-15 从播放页搬来的那一棒）。
-      //    它有自己的时间线（`morphOverlayP`，560ms + 快出慢收），与另两份同层（zIndex 110）。
-      //    顶点/终点量测与另外两份同源（`reportMini` / `reportBig`），所以三者是一起走的。
-      //    渲染门写在 builder 里（`morphOverlayBridging()`）。
+      // 鈽呪槄 绗笁浠芥嫹璐?= **缁灏侀潰**锛?026-10-15 浠庢挱鏀鹃〉鎼潵鐨勯偅涓€妫掞級銆?
+      //    瀹冩湁鑷繁鐨勬椂闂寸嚎锛坄morphOverlayP`锛?60ms + 蹇嚭鎱㈡敹锛夛紝涓庡彟涓や唤鍚屽眰锛坺Index 110锛夈€?
+      //    椤剁偣/缁堢偣閲忔祴涓庡彟澶栦袱浠藉悓婧愶紙`reportMini` / `reportBig`锛夛紝鎵€浠ヤ笁鑰呮槸涓€璧疯蛋鐨勩€?
+      //    娓叉煋闂ㄥ啓鍦?builder 閲岋紙`morphOverlayBridging()`锛夈€?
       if (this.expandState.morphOverlayBridging()) {
         this.MorphCoverClone()
       }
 
-      // ★★★ 2026-10-17（照搬无界 `MainPage` 的 `If (shrink.visible && shrinkPixmap)`）：
-      //   「非手势关闭」那一棒：一张满窗快照缩到迷你条胶囊 + 淡出。
-      //   放在**最上面**（zIndex 130）：它就是"正在消失的那一屏播放页"。
+      // 鈽呪槄鈽?2026-10-17锛堢収鎼棤鐣?`MainPage` 鐨?`If (shrink.visible && shrinkPixmap)`锛夛細
+      //   銆岄潪鎵嬪娍鍏抽棴銆嶉偅涓€妫掞細涓€寮犳弧绐楀揩鐓х缉鍒拌糠浣犳潯鑳跺泭 + 娣″嚭銆?
+      //   鏀惧湪**鏈€涓婇潰**锛坺Index 130锛夛細瀹冨氨鏄?姝ｅ湪娑堝け鐨勯偅涓€灞忔挱鏀鹃〉"銆?
       this.ShrinkOverlayHost()
 
-      // 全局悬浮迷你播放条：只在二级页面渲染（首页那份在 HDS 浮动底栏里）。
-      // 条件渲染而不是常驻 + visibility —— 常驻的整屏透明节点会吃掉底栏手势。
+      // 鍏ㄥ眬鎮诞杩蜂綘鎾斁鏉★細鍙湪浜岀骇椤甸潰娓叉煋锛堥椤甸偅浠藉湪 HDS 娴姩搴曟爮閲岋級銆?
+      // 鏉′欢娓叉煋鑰屼笉鏄父椹?+ visibility 鈥斺€?甯搁┗鐨勬暣灞忛€忔槑鑺傜偣浼氬悆鎺夊簳鏍忔墜鍔裤€?
       if (this.shouldShowFloatingMiniBar()) {
         this.floatingMiniBar()
       }
@@ -2280,12 +2226,12 @@ struct Index {
     }
     .width(StyleConstants.FULL_WIDTH)
     .height(StyleConstants.FULL_HEIGHT)
-    // 形变宿主：`getRectangleById(MORPH_HOST_ID)` 量的就是这层的渲染矩形
+    // 褰㈠彉瀹夸富锛歚getRectangleById(MORPH_HOST_ID)` 閲忕殑灏辨槸杩欏眰鐨勬覆鏌撶煩褰?
     .id(MORPH_HOST_ID)
-    // ★ 上拉打开播放页（跟手，对标无界 ExpandAnimation.applyPullProgress）。
-    //   必须挂在**壳层**：播放页在 `isShowPlay` 为 false 时还没挂载，收不到手指事件。
-    //   与播放页里的下拉收起方向相反，两条手势互不冲突；
-    //   并且只有"从屏幕下半部分起手"才接管，中间区域的上滑照旧交给列表/歌词滚动。
+    // 鈽?涓婃媺鎵撳紑鎾斁椤碉紙璺熸墜锛屽鏍囨棤鐣?ExpandAnimation.applyPullProgress锛夈€?
+    //   蹇呴』鎸傚湪**澹冲眰**锛氭挱鏀鹃〉鍦?`isShowPlay` 涓?false 鏃惰繕娌℃寕杞斤紝鏀朵笉鍒版墜鎸囦簨浠躲€?
+    //   涓庢挱鏀鹃〉閲岀殑涓嬫媺鏀惰捣鏂瑰悜鐩稿弽锛屼袱鏉℃墜鍔夸簰涓嶅啿绐侊紱
+    //   骞朵笖鍙湁"浠庡睆骞曚笅鍗婇儴鍒嗚捣鎵?鎵嶆帴绠★紝涓棿鍖哄煙鐨勪笂婊戠収鏃т氦缁欏垪琛?姝岃瘝婊氬姩銆?
     .gesture(
       PanGesture(this.pullOpenOption)
         .onActionStart((event: GestureEvent): void => {
@@ -2295,25 +2241,25 @@ struct Index {
           this.onPullOpenUpdate(event.offsetY);
         })
         .onActionEnd((event: GestureEvent): void => {
-          // ★ 速度项也要传进去（清单 §一 1.2「进度 OR 速度」；判据在
-          //   `PlayerExpandState.pullOpenShouldCommit()` 里，方向由位移判、大小取 abs）
+          // 鈽?閫熷害椤逛篃瑕佷紶杩涘幓锛堟竻鍗?搂涓€ 1.2銆岃繘搴?OR 閫熷害銆嶏紱鍒ゆ嵁鍦?
+          //   `PlayerExpandState.pullOpenShouldCommit()` 閲岋紝鏂瑰悜鐢变綅绉诲垽銆佸ぇ灏忓彇 abs锛?
           this.onPullOpenEnd(event.offsetY, event.velocityY);
         })
         .onActionCancel((): void => {
           this.onPullOpenCancel();
         })
     )
-    // 窗口尺寸变化（折叠展开 / PC 浮窗拖拽）时刷新悬浮条算宽用的视口宽度
+    // 绐楀彛灏哄鍙樺寲锛堟姌鍙犲睍寮€ / PC 娴獥鎷栨嫿锛夋椂鍒锋柊鎮诞鏉＄畻瀹界敤鐨勮鍙ｅ搴?
     .onAreaChange((_oldArea: Area, newArea: Area): void => {
-      // ⚠️ 视口宽高（手势阈值用）仍然只由 `syncViewportWidthVp` 从 windowSize 取整窗口径，
-      //    这里**不要**再按本容器的高度覆盖它：那是"内容区高度"，与 `globalY`（窗口坐标）
-      //    不是一个口径，混用会让"从下半屏起手"的判定偏移几十 vp。
+      // 鈿狅笍 瑙嗗彛瀹介珮锛堟墜鍔块槇鍊肩敤锛変粛鐒跺彧鐢?`syncViewportWidthVp` 浠?windowSize 鍙栨暣绐楀彛寰勶紝
+      //    杩欓噷**涓嶈**鍐嶆寜鏈鍣ㄧ殑楂樺害瑕嗙洊瀹冿細閭ｆ槸"鍐呭鍖洪珮搴?锛屼笌 `globalY`锛堢獥鍙ｅ潗鏍囷級
+      //    涓嶆槸涓€涓彛寰勶紝娣风敤浼氳"浠庝笅鍗婂睆璧锋墜"鐨勫垽瀹氬亸绉诲嚑鍗?vp銆?
       this.syncViewportWidthVp();
-      // ★ 形变几何的**尺寸**只有唯一的权威来源：**窗口尺寸**。
-      //   ⚠️ 千万别拿本容器（或任何参与形变的层）的实测高度当"铺满目标"：那种自噬已经
-      //      踩过三次（底部缺一块 / 一块近正方形背景 / 黑底展不开）—— 被形变的那层，
-      //      它自己的尺寸就是裁剪窗口，喂回去等于让目标追着自己的中间态跑。
-      //      本容器只在**静止态**才等于窗口大小，形变期间并不等于，所以连它也不能信。
+      // 鈽?褰㈠彉鍑犱綍鐨?*灏哄**鍙湁鍞竴鐨勬潈濞佹潵婧愶細**绐楀彛灏哄**銆?
+      //   鈿狅笍 鍗冧竾鍒嬁鏈鍣紙鎴栦换浣曞弬涓庡舰鍙樼殑灞傦級鐨勫疄娴嬮珮搴﹀綋"閾烘弧鐩爣"锛氶偅绉嶈嚜鍣凡缁?
+      //      韪╄繃涓夋锛堝簳閮ㄧ己涓€鍧?/ 涓€鍧楄繎姝ｆ柟褰㈣儗鏅?/ 榛戝簳灞曚笉寮€锛夆€斺€?琚舰鍙樼殑閭ｅ眰锛?
+      //      瀹冭嚜宸辩殑灏哄灏辨槸瑁佸壀绐楀彛锛屽杺鍥炲幓绛変簬璁╃洰鏍囪拷鐫€鑷繁鐨勪腑闂存€佽窇銆?
+      //      鏈鍣ㄥ彧鍦?*闈欐鎬?*鎵嶇瓑浜庣獥鍙ｅぇ灏忥紝褰㈠彉鏈熼棿骞朵笉绛変簬锛屾墍浠ヨ繛瀹冧篃涓嶈兘淇°€?
       this.expandState.reportWindow(this.viewportWidthVp, this.viewportHeightVp,
         this.windowInfo.statusBarTopVp, this.windowInfo.navigationBarBottomVp);
       this.expandState.updateChromeTier(this.viewportWidthVp);
@@ -2321,38 +2267,38 @@ struct Index {
   }
 
   /**
-   * 系统返回（返回键 / 返回手势）：播放页开着就先播收起动画，并**消费掉**这次返回。
+   * 绯荤粺杩斿洖锛堣繑鍥為敭 / 杩斿洖鎵嬪娍锛夛細鎾斁椤靛紑鐫€灏卞厛鎾敹璧峰姩鐢伙紝骞?*娑堣垂鎺?*杩欐杩斿洖銆?
    *
-   * ⚠️ 以前这一步是模态的 `onWillDismiss` 干的；播放页改成壳层 Stack 里的普通浮层之后，
-   *    必须在这里拦，否则返回会直接退出应用（或者把播放页底下的二级页面弹掉）。
-   * @returns true = 已消费，不再走默认返回逻辑
+   * 鈿狅笍 浠ュ墠杩欎竴姝ユ槸妯℃€佺殑 `onWillDismiss` 骞茬殑锛涙挱鏀鹃〉鏀规垚澹冲眰 Stack 閲岀殑鏅€氭诞灞備箣鍚庯紝
+   *    蹇呴』鍦ㄨ繖閲屾嫤锛屽惁鍒欒繑鍥炰細鐩存帴閫€鍑哄簲鐢紙鎴栬€呮妸鎾斁椤靛簳涓嬬殑浜岀骇椤甸潰寮规帀锛夈€?
+   * @returns true = 宸叉秷璐癸紝涓嶅啀璧伴粯璁よ繑鍥為€昏緫
    */
   onBackPress(): boolean {
     if (!this.appState.isShowPlay) {
       return false;
     }
-    // 真正的收起动画由播放页播（它监听 collapseVersion），播完自己把 isShowPlay 置 false
+    // 鐪熸鐨勬敹璧峰姩鐢荤敱鎾斁椤垫挱锛堝畠鐩戝惉 collapseVersion锛夛紝鎾畬鑷繁鎶?isShowPlay 缃?false
     this.expandState.requestCollapse();
     return true;
   }
 
   /**
-   * 同步导航栈深度。
+   * 鍚屾瀵艰埅鏍堟繁搴︺€?
    *
-   * 放在 `onNavBarStateChange` 的下一帧：该回调触发时栈可能还没完成推入，
-   * 立刻读 `size()` 会拿到旧值，导致迷你条不出现 / 不消失。
+   * 鏀惧湪 `onNavBarStateChange` 鐨勪笅涓€甯э細璇ュ洖璋冭Е鍙戞椂鏍堝彲鑳借繕娌″畬鎴愭帹鍏ワ紝
+   * 绔嬪埢璇?`size()` 浼氭嬁鍒版棫鍊硷紝瀵艰嚧杩蜂綘鏉′笉鍑虹幇 / 涓嶆秷澶便€?
    *
-   * ⚠️ **不要包 animateTo**：`animateTo` 会把"节点刚被创建"这件事也一起补间 ——
-   * 壳层悬浮迷你条是条件渲染出来的新节点，包进动画就成了淡入，用户明确不要。
-   * 迷你条的显隐必须一帧内直接切换；需要动效的只有 `miniBarExpanded` 的收起。
+   * 鈿狅笍 **涓嶈鍖?animateTo**锛歚animateTo` 浼氭妸"鑺傜偣鍒氳鍒涘缓"杩欎欢浜嬩篃涓€璧疯ˉ闂?鈥斺€?
+   * 澹冲眰鎮诞杩蜂綘鏉℃槸鏉′欢娓叉煋鍑烘潵鐨勬柊鑺傜偣锛屽寘杩涘姩鐢诲氨鎴愪簡娣″叆锛岀敤鎴锋槑纭笉瑕併€?
+   * 杩蜂綘鏉＄殑鏄鹃殣蹇呴』涓€甯у唴鐩存帴鍒囨崲锛涢渶瑕佸姩鏁堢殑鍙湁 `miniBarExpanded` 鐨勬敹璧枫€?
    */
   private syncNavDepth(): void {
     setTimeout((): void => {
-      // ★ `navDepth` 的口径是"**二级页面**深度"，**不含播放页**：
-      //   形变入口改成 NavDestination 之后播放页自己占一格栈深，如果把它算进来，
-      //   （1）播放页底下会凭空冒出一条悬浮迷你条（`shouldShowFloatingMiniBar`），
-      //   （2）进播放页会把用户展开的迷你胶囊强行收回折叠态（下面那段），
-      //   两条都会破坏形变的起点几何。所以统一在这里扣掉。
+      // 鈽?`navDepth` 鐨勫彛寰勬槸"**浜岀骇椤甸潰**娣卞害"锛?*涓嶅惈鎾斁椤?*锛?
+      //   褰㈠彉鍏ュ彛鏀规垚 NavDestination 涔嬪悗鎾斁椤佃嚜宸卞崰涓€鏍兼爤娣憋紝濡傛灉鎶婂畠绠楄繘鏉ワ紝
+      //   锛?锛夋挱鏀鹃〉搴曚笅浼氬嚟绌哄啋鍑轰竴鏉℃偓娴糠浣犳潯锛坄shouldShowFloatingMiniBar`锛夛紝
+      //   锛?锛夎繘鎾斁椤典細鎶婄敤鎴峰睍寮€鐨勮糠浣犺兌鍥婂己琛屾敹鍥炴姌鍙犳€侊紙涓嬮潰閭ｆ锛夛紝
+      //   涓ゆ潯閮戒細鐮村潖褰㈠彉鐨勮捣鐐瑰嚑浣曘€傛墍浠ョ粺涓€鍦ㄨ繖閲屾墸鎺夈€?
       const playerIdx: number = this.playerRouteIndex();
       const depth: number = this.pageIndexInfos.size() - (playerIdx >= 0 ? 1 : 0);
       if (depth === this.navDepth) {
@@ -2361,17 +2307,17 @@ struct Index {
       const previousDepth: number = this.navDepth;
       this.navDepth = depth;
       if (depth > 0) {
-        // ★ 进二级页面**不再**把迷你条强行收回折叠态（旧方案）。
-        //   旧方案：`miniBarExpanded = false` 而 `hdsBarLayoutMode` 保持 HORIZONTAL
-        //   ⇒ HDS 进入「长条Tab + 圆形播放器」这种错误组合，底栏动画看着就不对，
-        //   还得在退出二级页面时再纠正回「长条播放器 + 圆形Tab」。
-        //   现在保持 (barLayoutMode, miniBarExpanded) 这一对本来就一致的状态不动：
-        //     HORIZONTAL + EXPAND 仍是「长播放器 + 圆Tab」；VERTICAL + COLLAPSE 仍是双层。
-        //   二级页面上的播放器由壳层悬浮条负责显示（见 shouldShowFloatingMiniBar）。
+        // 鈽?杩涗簩绾ч〉闈?*涓嶅啀**鎶婅糠浣犳潯寮鸿鏀跺洖鎶樺彔鎬侊紙鏃ф柟妗堬級銆?
+        //   鏃ф柟妗堬細`miniBarExpanded = false` 鑰?`hdsBarLayoutMode` 淇濇寔 HORIZONTAL
+        //   鈬?HDS 杩涘叆銆岄暱鏉ab + 鍦嗗舰鎾斁鍣ㄣ€嶈繖绉嶉敊璇粍鍚堬紝搴曟爮鍔ㄧ敾鐪嬬潃灏变笉瀵癸紝
+        //   杩樺緱鍦ㄩ€€鍑轰簩绾ч〉闈㈡椂鍐嶇籂姝ｅ洖銆岄暱鏉℃挱鏀惧櫒 + 鍦嗗舰Tab銆嶃€?
+        //   鐜板湪淇濇寔 (barLayoutMode, miniBarExpanded) 杩欎竴瀵规湰鏉ュ氨涓€鑷寸殑鐘舵€佷笉鍔細
+        //     HORIZONTAL + EXPAND 浠嶆槸銆岄暱鎾斁鍣?+ 鍦員ab銆嶏紱VERTICAL + COLLAPSE 浠嶆槸鍙屽眰銆?
+        //   浜岀骇椤甸潰涓婄殑鎾斁鍣ㄧ敱澹冲眰鎮诞鏉¤礋璐ｆ樉绀猴紙瑙?shouldShowFloatingMiniBar锛夈€?
         Logger.info(RzdShellLogTag,
           `enter secondary depth=${depth} keep mode=${this.appState.hdsBarLayoutMode} expanded=${this.appState.miniBarExpanded}`);
       } else if (previousDepth > 0) {
-        // 出二级页面：状态全程没被改过，这里只跟 HDS 重新对齐一次（幂等，不产生"纠正"跳变）
+        // 鍑轰簩绾ч〉闈細鐘舵€佸叏绋嬫病琚敼杩囷紝杩欓噷鍙窡 HDS 閲嶆柊瀵归綈涓€娆★紙骞傜瓑锛屼笉浜х敓"绾犳"璺冲彉锛?
         this.restoringHomeBar = true;
         this.tabsController.applyMiniBarStyle(this.appState.miniBarExpanded ?
           HdsBarStyle.EXPAND : HdsBarStyle.COLLAPSE);

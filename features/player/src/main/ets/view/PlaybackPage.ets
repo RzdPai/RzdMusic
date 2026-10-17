@@ -3827,7 +3827,14 @@ export struct PlaybackPage {
       });
       PlaybackPage.ev('SQZ', `shrink win=${winW.toFixed(0)}x${winH.toFixed(0)}`);
       this.state.isShowPlay = false;
-    });
+      // ★★★★ 2026-10-17（修「系统返回关闭时左下循环 / 右下歌曲列表两颗按钮消失」）
+      //   那两颗 `SymbolGlyph` 不是被裁、也不是换了分支 —— 它们**没进这张快照**。
+      //   官方 `componentSnapshot` 文档对第三个参数原话：「设置是否强制系统在截图前等待所有绘制指令
+      //   执行完毕…该选项可尽可能确保截图内容是最新的状态，**应尽量开启**」，并写明「如果在组件触发
+      //   更新的同时调用截图，更新的渲染内容不会被截取到」。本方法在拍图**之前**刚标脏渲染树
+      //   （`measureGeometry` / 事件日志）⇒ 符号字形来不及画进图，`Image` 那几颗却已在图里
+      //   ⇒ 只剩 prev/play/next。给快照开 `waitUntilRenderFinished`（options 必须在第三位）。
+    }, { waitUntilRenderFinished: true });
   }
 
   /** 闁告瑦鐗曠欢閬嶅礂閸欐﹢鐓╅柣銊ュ閹烩晠鎮¤閺佸湱绱撻埡鍐ㄐ﹂柟顑跨筏缁辨瑦绋夋惔鈽呯处閻?`Index` 闁告艾濂旂粩瀛樼▔?AppStorageV2 閻庡湱鍋樼欢銉╂晬婢跺牃鍋?*/
@@ -4386,7 +4393,10 @@ export struct PlaybackPage {
                     state: this.state,
                     metaBlockTranslateYvp: 0,
                     isDismissing: this.isCollapsing(),
-                    coverLinearScale: 1
+                    coverLinearScale: 1,
+                    // 2026-10-17：`showControlArea` 默认 true 且全仓从未传过 false ⇒ 封面页里会**再画一份**
+                    // 控制区（Slider + 5 颗传输键 + 4 颗图标行），与底部共享那一份重叠。用户报的"第二个控制区"就是它。
+                    showControlArea: false
                   })
                 }
                 .margin({
