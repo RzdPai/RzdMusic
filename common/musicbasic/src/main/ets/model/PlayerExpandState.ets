@@ -698,6 +698,75 @@ export class PlayerExpandState {
     return (1 - w) * PlayerExpandState.RISE_VP / scale;
   }
 
+  // ═══════════════ 底栏（进度条 + 传输行）位移：逐字照搬上游 `pullBottom*` 三件套 ═══════════════
+  //
+  // 这一组是"关闭播放页时传输行两颗图标（播放模式/播放列表）下移一点点"这条真机反馈的收口。
+  // 上一轮补了 `Row.alignItems(Center)` 与"方盒同口径"（静态对齐已对），但**关闭路上仍在下移**
+  // ⇒ 说明位移来自**时间线**，不是静态对齐。回原文核出三件事：
+  //
+  // ```
+  //   pullBottomIn()        wujie.pa:176377-176410
+  //     const t = (effT() - 0.45) / (1 - 0.45);
+  //     return 0 < t ? (1 > t ? t : 1) : 0;
+  //
+  //   pullBottomOpacity()   wujie.pa:176411-176429
+  //     return !pullMode ? 1 : pullBottomIn();
+  //
+  //   pullBottomY()         wujie.pa:176430-176470
+  //     let y = 0;
+  //     if (!pullMode) { return y; }        // 176434-176437 callruntime.isfalse + jnez
+  //     y = 1 - pullBottomIn();             // 176445-176448 ldai 0x1 + sub2
+  //     y = y * 200;                        // 176449-176453 ldai 0xc8(=200) + mul2
+  //     return y;
+  // ```
+  //
+  // ⚠️ 反汇编操作数语义：`.pa` 里 `OP reg` 读作 `reg = reg OP acc`（见 `全局记忆.md`），
+  //   所以 `sub2 ... v2` = `v2 = v2 - acc`；`less/greater` 同理。按此读出的式子与
+  //   `_recover/logic-src/pullT写入算式与形变枚举.md:334` 的 `clamp((effT-0.45)/0.55, 0, 1)` 一致。
+  // ⚠️ 上游 `effT()`（`wujie.pa:171535-171548`）= `isMorphTarget() ? 1 : pullT`；
+  //   本仓等价量就是 {@link morphP}（0 = 迷你条，1 = 播放页展开）。
+  // ⚠️ 上游**不除 `morphScale`**：这 200vp 与卡片一起被外层 `Stack` 的 `.scale()` 缩放
+  //   （`wujie.pa:191400-191415`），屏幕上的位移随卡片一起变小。
+  //   ⛔ 旧实现 `contentRiseVp()` 除以了 `morphScale` ⇒ 屏幕上**恒为 180vp、不随卡片收缩**，
+  //      于是收起来时整排控制区相对卡片底部一路下沉（180 常数 vs 上游 `200 × scale`）——
+  //      这就是"两颗图标下移一点点"的量化来源。本方法按上游改成 200 且不除 scale。
+
+  /** `pullBottomY()` 的幅度（`wujie.pa:176449` 的 `ldai 0xc8` = 200，vp）。 */
+  public static readonly PULL_BOTTOM_Y_VP: number = 200;
+
+  // ⚠️ `pullBottomIn()` 本类**早就有了**（下面 `pullChromeOpacity()` 那一族，门是 `morphLive()`）：
+  //    `clamp01((morphP − 0.45) / (1 − 0.45))`，`!morphLive() → 1` ⇒ 与上游
+  //    `wujie.pa:176377-176410` 逐字同式，**直接复用，别再加第二个**
+  //    （本轮第一版加了一份，编译报 `Duplicate function implementation` @ 743/934）。
+  //    值域语义：形变中 = 底栏入场进度（0 = 还没出场 / 1 = 已落位）；不在形变 = 1（已落位）。
+  //    ⇒ 位移取 `1 − 它`，非形变时正好 0。
+
+  /**
+   * 上游 `PlayerPage.pullBottomY()`（`wujie.pa:176430-176470`）——**底栏（scrubber + transport）的
+   * 竖直位移**，逐字：
+   * ```
+   *   pullBottomY = pullMode ? 200 × (1 − pullBottomIn()) : 0
+   * ```
+   * 上游把这个值挂**两处**（两处取的是同一个式子）：
+   * `scrubber` 的 `Column().translate({y: pullBottomY()})`（`wujie.pa:197161`）与
+   * `transport` 的 `Row().translate({y: pullBottomY()})`（`wujie.pa:181213`）。
+   * 本仓把进度条与传输行画在同一层里 ⇒ 只需在那一层挂一次，等价。
+   *
+   * ⚠️ 门控：上游是 `pullMode`（下拉/形变会话，`wujie.pa:168193` 初值 false，
+   *   `:179312` 在 `setupExpandTransition` 里置真）；本仓等价量是形变是否在跑
+   *   （{@link morphClipping}，与旧实现同一个门），所以这里沿用它。
+   * ⛔ **不接** `pullBottomOpacity()`（`wujie.pa:176411-176429`，`!pullMode ? 1 : pullBottomIn()`）：
+   *   用户明确要求"关闭期间这两颗一直在"（上一轮修的正是"关闭时两颗消失"），
+   *   接了会在 `morphP<0.45` 附近淡没。
+   * @returns 底栏竖直位移（vp，向下为正；0 = 已在落位）
+   */
+  public pullBottomYVp(): number {
+    if (!this.morphClipping()) {
+      return 0;
+    }
+    return (1 - this.pullBottomIn()) * PlayerExpandState.PULL_BOTTOM_Y_VP;
+  }
+
   /**
    * @returns 銆屾瓕鍚?姝屾墜 + 鏀惰棌/鏇村銆嶉偅涓€琛岀殑绾靛悜浣嶇Щ锛?*椤靛唴** vp锛夈€?
    *

@@ -5109,7 +5109,19 @@ export struct PlaybackPage {
               //   闂佽　鍋撻悷娆忓閻?*婵炲濮寸花鑲╃箔閸涙潙纭€闁搞儺浜濆畷鎶芥煟閵娿儱顏х紓宥呮噽缁?*闂佹寧绋掔喊宥夊汲閿濆鍋嬮柛銉ｅ妼娴犳﹢鏌涢幒鏇熺【閻忓浚鍨跺畷鐑藉Ω閵娿儲顔囬悗瑙勭摃娴滎剙鈻撻幋锕€绫嶉柛顐ｆ礃閿涚喓绱掗幇顓ф當闁哥偛鐡ㄧ粋鎺撴償濠靛牏鎲梺?180vp 闂佸憡顨呭ú銈夊春鐏炵偓濯寸€广儱绻掔粈?
               //   婵炴垶鎸堕崐妤冨垝瀹ュ鍎嶉柛鏇ㄥ亜鐢儵鏌涘顒佸攭妞?PlaybackPage 婵＄偑鍊曢悥濂稿磿閹绢喗鍎?`WIN_A_*` / `WIN_B_*` 闁荤姴娲ら悺銊ノｉ幋锕€违?
               //   闂傚倸鐗婇悷锕傤敆濞戙垹绠戝ù锝夘棑缁夊绱掓径宀€甯涘ù?0闂佹寧绋戝濉祇rphClipping()` 婵炴垶鎸搁幖顐ｇ閿濆绫嶉柛鎾茬劍缁绢垶鏌熼幁鎺戝姤缂佺粯鍨垮畷?0闂佹寧绋戦ˇ顐﹀闯?闂佺粯顨呴悧鎾愁焽娴煎瓨鐒婚柟閭﹀墮閸撹偐绱掓潏鈺佇＄紒妤€顦靛畷锝呂熺化鏇炰壕?
-              .translate({ y: this.expandState.contentRiseVp() })
+              // ★★★ 2026-10-17（修「关闭播放页时传输行两颗图标下移一点点」——**时间线**那条，不是静态对齐）
+              //   上游把这一对**挂在底栏自己身上**（取的是同一个式子）：
+              //     · scrubber  `Column().translate({y: pullBottomY()}) .opacity(pullBottomOpacity())`
+              //       —— `wujie.pa:197161` / `197172`
+              //     · transport `Row().translate({y: pullBottomY()}) .opacity(pullBottomOpacity())`
+              //       —— `wujie.pa:181213` / `181224`
+              //   本仓这一层同时盖住进度条与传输行 ⇒ 挂一次即等价。
+              //   `pullBottomY = pullMode ? 200 × (1 − pullBottomIn()) : 0`（`wujie.pa:176430-176470`），
+              //   `pullBottomIn = clamp01((effT−0.45)/0.55)`（`wujie.pa:176377-176410`）。
+              //   ⛔ 旧实现用 `contentRiseVp()` = `(1−w) × 180 / morphScale`：**除以 scale** 使得屏幕上
+              //      恒为 180vp、不随卡片收缩 ⇒ 收起来时整排相对卡片底部一路下沉（上游是 200×scale）。
+              //   ⚠️ `pullBottomOpacity()`（`wujie.pa:176411-176429`）**不接**：用户要求关闭期间这两颗一直在。
+              .translate({ y: this.expandState.pullBottomYVp() })
               .onTouch((event: TouchEvent): void => {
                 this.touchChrome('controlTouch');
                 // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-16闂佹寧绋戦悧蹇涘矗鎼淬劌绠规い鎺嶇劍閿熴儵鏌ｉ敐鍛効缂佽鲸宀搁弫?*闂佸綊鏀遍悧鏇熸叏閳哄懎绠崇憸宥夊春濡ゅ懎绾ч柍鈺佸暞閺嗩亪鎮?/ 闁诲繒鍋炲ú鏍?*闂佹寧绋戝濉€arCollapse`闂佹寧绋戦ˇ顓㈠焵?
