@@ -5201,7 +5201,20 @@ export struct PlaybackPage {
    */
   private morphClipHeight(): Length {
     if (!this.expandState.morphClipping()) {
-      return '100%';
+      // ⚠️⚠️ 2026-10-17（**用户第 1/2 条"补间没有动画"的候选机制**）：
+      //   这里原来**无条件返回 `'100%'`（字符串）**，而形变期返回的是**数字**
+      //   ⇒ `.height()` 这个属性在**字符串 ⇄ 数字之间切换类型**，
+      //     ArkUI **无法在两种类型之间插值** ⇒ 补间一起手就**直接跳到终点**
+      //     （观感 = "封面直接就到结束位置 / 直接下去，没有动画"）。
+      //   ★ 为什么"手指跟手那条是好的"：那条路每一帧都在写**数字**，全程同类型 ✓
+      //   ★ 为什么要 return 数字而不是保留 '100%'：静止态那条注释担心的是
+      //     "**量出来的内容高度**会被某次形变写脏"（"底部缺一块"），
+      //     而**窗口高度**是 `reportWindow` 给的权威值、不参与形变 ⇒ 没有那个风险。
+      //   ⚠️ 容器父级是满屏宿主 ⇒ 数值上 `winHVp` 就等于 `'100%'`。
+      //     窗口尺寸还没上报时（极早期）才退回字符串 —— 那是唯一的一次类型切换，
+      //     且发生在本页刚挂载、还没有任何补间的时候。
+      const h: number = this.expandState.windowHeightVp;
+      return h > 0 ? h : '100%';
     }
     return Math.max(1, this.expandState.morphClipHeight);
   }
