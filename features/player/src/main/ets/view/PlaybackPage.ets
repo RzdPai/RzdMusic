@@ -3727,7 +3727,19 @@ export struct PlaybackPage {
       // ★ 先把"进入收起相位 + 冻结几何"同步刷出去：这一段是补间**之前**的额外修改，
       //   按官方规则必须用 `applySync` 同步标脏，否则补间首帧会用旧值。
       UIUtils.applySync((): void => {
-        PlaybackPage.ev('LV', `anim from=${closeFromT.toFixed(2)}`);
+        // ★ 2026-10-17（**用户 08:46 截图里那条矛盾的定性用**）：
+        //   那一张日志是 `CLO:gen=1 p=1.00` 紧接着 `LV:anim from=0.00`
+        //   —— 两行读的是**同一个字段** `morphP`，中间**没有任何写入**
+        //   （`morphP` 全仓只有 3 个写入点：`pullOpenBegin` 的失败支 / `applyMorphProgress` /
+        //     `morphReset`，都不在 `closeFullScreenPlayback` 这条直线上）。
+        //   ⇒ 只剩两种可能，必须一次读数分开：
+        //     ① 两行**不是同一次关闭**（事件缓冲是静态的、按字符裁切，
+        //        理论上可能混入另一次关闭的 `LV`）⇒ 把 **`closeGen`** 打进来即可判定
+        //        （`CLO` 那行本来就有 `gen=`）；
+        //     ② `morphP` 真的在这两行之间被改了 ⇒ `pNow=`（**此处**重新读一次）与 `from=`
+        //        会同时为 0，而 `CLO` 那行是 1.00。
+        PlaybackPage.ev('LV', `anim gen=${this.closeGen} from=${closeFromT.toFixed(2)} ` +
+          `pNow=${this.expandState.morphP.toFixed(2)}`);
         this.expandState.morphBeginLeaving();
       });
       const closeScale: number = closeFromT < PlaybackPage.REVERSE_MIN_RATIO ?
