@@ -1018,7 +1018,31 @@ export struct PlaybackPage {
    * 闂佸疇娉曟刊瀵哥箔?**闂佽　鍋撻柣鐔哄缁€鈧?true 闁诲繐绻楁ご绋课?婵炴垶鎸搁敃銉у垝閿曞倹鈷曢柟閭﹀灡椤ユ垿鏌熺挩澶婂暙閻撴垿鏌?闂備焦褰冪粔鐢稿蓟婵犲洦鍋ㄩ柣鏂挎啞濞?*闂佹寧绋戦悧鍛博鐎靛憡鍋樼€光偓鐎ｎ剛顦梺鎸庣⊕缁嬫垿宕欓敓鐘叉嵍?
    *   `RzdMusic閻庡灚婢橀幊鎰板灳濡吋濯奸柕鍫濇椤忔悂鏌?md` 缂?33 闂佸搫顧€缁绘繈宕抽悜钘夊強閹艰揪绲洪埀顒侊耿濮婂顢欓懡銈団槈"闁荤喐娲戝鎺旂箔婢跺本鍟哄ù锝囨櫕缁犵懓鈽夐幙鍐х凹濠⒀勭矒瀹?闂?
    */
-  private static readonly LYRIC_SWIPE_ALLOWS_MANUAL: boolean = false;
+  // ⚠️ 2026-10-17 订正：上一轮为「上滑是否允许手动收起」自造的 `LYRIC_SWIPE_ALLOWS_MANUAL = false` **已删除** ——
+  //   判据抄错了：上游**默认档就允许**手动收起（见下方 `LYRIC_IMMERSIVE_MODE` / `entryAllowsManual()`）。
+  /** 照搬无界 `LyricEntryMode`（`_recover/disasm/wujie.pa:264094-264130`，
+   *  反编译函数 `&entry.src.main.ets.player.LyricFollow&.#%#LyricEntryMode`）：
+   *  ```
+   *    OFF    = 0    // ldai 0x0
+   *    AUTO   = 1    // ldai 0x1
+   *    MANUAL = 2    // ldai 0x2
+   *    BOTH   = 3    // ldai 0x3
+   *  ```
+   */
+  private static readonly LYRIC_ENTRY_MANUAL: number = 2;
+  private static readonly LYRIC_ENTRY_BOTH: number = 3;
+  /**
+   * 上游 `PlayerPage.lyricImmersive` 的**默认档 = BOTH(3)**，两处独立佐证：
+   * 1) `@State` 初值：`wujie.pa:169039-169056` —— `tryldglobalbyname "ObservedPropertySimplePU"`
+   *    + `ldexternalmodulevar "LyricEntryMode"` + `ldobjbyname "BOTH"` ⇒ `__lyricImmersive` 用 **BOTH** 构造；
+   * 2) 进页从偏好读：`wujie.pa:169819-169825`（`this.lyricImmersive = this.pref.lyricImmersiveMode()`），
+   *    而 `PreferenceStore&1.0.0.#~@0>#lyricImmersiveMode` 里 `getSync(KEY_LYRIC_IMMERSIVE_MODE, v0)` 的默认值
+   *    来自 `nop / ldai 0x3 / sta v0` ⇒ **3 = BOTH**
+   *    （抽法：`node tools\extract_fn.js disasm\wujie.pa '>#lyricImmersiveMode'`）。
+   * ⇒ 上游默认档**允许手动上滑收起**：`entryAllowsManual(BOTH) === true`。
+   * 本仓没有「歌词沉浸档」这个设置项 ⇒ 恒取上游默认档 BOTH。
+   */
+  private static readonly LYRIC_IMMERSIVE_MODE: number = 3;
 
   /**
    * "濠电姴锕ラ懝鐐叏閳哄倻顩风€广儱鎳忛煬顒勫级閳哄倻顬兼い?闂佹眹鍔岀€氼剟宕归悾灞稿亾鐟欏嫭鐨戦柣娑栧劦閺佸秹宕搁。娆撴煥濞戞﹩妲撮柍褜鍓氶弻锟犲焵?闁?`lastScrollAtMs` 闂佹眹鍔岀€氼參寮悙鐑樼厒濠电偛绨遍崑?
@@ -2453,6 +2477,29 @@ export struct PlaybackPage {
   private canHideLyricChrome(): boolean {
     return this.usesPhoneSwiperLayout() &&
       this.playbackSwiperIndex === PlaybackPage.SWIPER_INDEX_LYRIC;
+  }
+
+  /**
+   * 照搬无界 `LyricFollow.entryAllowsManual(mode)`
+   * （`_recover/disasm/wujie.pa:264350-264367`，`LyricFollow&.#*#entryAllowsManual`）：
+   * ```
+   *   lda a3                        // a3 = mode
+   *   ldlocalmodulevar 0x13         // LyricEntryMode
+   *   ldobjbyname "MANUAL"
+   *   stricteq 0x2, a3              // mode === MANUAL
+   *   callruntime.istrue
+   *   jnez L                        // 命中 ⇒ true
+   *   ldlocalmodulevar 0x13
+   *   ldobjbyname "BOTH"
+   *   stricteq 0x6, a3              // mode === BOTH
+   * L: return
+   * ```
+   * ⇒ `entryAllowsManual(mode) = mode === MANUAL || mode === BOTH`。
+   * 同族 `entryAllowsAuto(mode) = mode === AUTO || mode === BOTH`（`wujie.pa:264331-264348`，
+   * 本仓 `scheduleChromeAutoHide()` 里那道门的等价物）。
+   */
+  private entryAllowsManual(mode: number): boolean {
+    return mode === PlaybackPage.LYRIC_ENTRY_MANUAL || mode === PlaybackPage.LYRIC_ENTRY_BOTH;
   }
 
   /**
@@ -4740,8 +4787,16 @@ export struct PlaybackPage {
                 //   闂佸疇娉曟刊瀵哥箔?婵炴垶鎸搁鍡欏垝閿曞倹鐒介柨婵嗗椤忛亶鏌￠埀顒勵敍濮橆叀鍚梺鍝勫暟婵兘寮查锔界厒?*濠电偛澶囬崜婵嗭耿娓氣偓濮?* 闂?闂佺懓鐡ㄩ崹鍐差煥閹达箑绫嶉柣妯挎珪閽傚霉閻樿櫕鏋勭紒缁樺哺閹儳鈻庡▎鎴狀槱`showChrome` + 闁荤姍鍛効妞ゆ挻鎮傚顔炬媼閸︻厾顦梺?
                 .parallelGesture(PanGesture({ direction: PanDirection.Vertical })
                   .onActionUpdate((event: GestureEvent): void => {
+                    // 照搬无界 `PlayerPage.onLyricSwipe(offsetY)`（`_recover/disasm/wujie.pa:174643-174689`）：
+                    //   174644-174649  ldlexvar SWIPE_TOGGLE_VP / `neg 0x0` / `lesseq` ⇒ 判 `offsetY <= -SWIPE_TOGGLE_VP`
+                    //   174650-174676  成立 ⇒ `if (entryAllowsManual(this.lyricImmersive)) { hideChrome(); clearIdle(); }`
+                    //                  （`jmp jump_label_4` 直接跳走 ⇒ 这一支**不**再判下滑阈值）
+                    //   174677-174686  不成立 ⇒ 再判 `offsetY >= 24`（174678 `ldai 0x18`）⇒ `{ showChrome(); startIdle(); }`
+                    // ⚠️ 两侧阈值**不同号**：上滑 ≤ **-24**、下滑 ≥ **+24**（同一个 `SWIPE_TOGGLE_VP`，见 `:1009`）。
+                    // ⚠️ 上游的 `clearIdle()` 本仓已并进 `hideChrome()`（它开头就 `stopChromeAutoHide()`）；
+                    //    上游的 `startIdle()` 并进 `touchChrome()`（= `showChrome()` + `scheduleChromeAutoHide()`）。
                     if (event.offsetY <= -PlaybackPage.SWIPE_TOGGLE_VP) {
-                      if (PlaybackPage.LYRIC_SWIPE_ALLOWS_MANUAL) {
+                      if (this.entryAllowsManual(PlaybackPage.LYRIC_IMMERSIVE_MODE)) {
                         this.hideChrome('lyricSwipeUp');
                       }
                     } else if (event.offsetY >= PlaybackPage.SWIPE_TOGGLE_VP) {
