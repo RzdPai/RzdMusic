@@ -4845,6 +4845,62 @@ export class PlayerExpandState {
     return u > 0 ? u : 0;
   }
 
+  // ═══════════ 上游 `padTop()` / `padBottom()` 的同名映射（给"背景宿主"那一层用） ═══════════
+  //
+  // 上游 `wujie.pa:191756-191800` 的那个 `Column()` 逐个属性（**直读字节码 `_recover/tmp/r191740.txt`**）：
+  // ```
+  //   191756  .function @36***#^5                        ← 正文列（playerPane 的父）
+  //   191761-191771  Column().width(this.winWVp())
+  //   191772-191782  .height(this.winHVp())
+  //   191783-191800  .padding({ top: this.padTop(), bottom: this.padBottom() })
+  //   191801-191822  .opacity(this.pullMode ? this.pullChromeOpacity() : this.expand.contentOpacity)
+  //   191823-191844  .width(this.winWVp()) .height(this.winHVp())      ← 再写一遍
+  // ```
+  // 两个取值的原文（同名方法，本仓同名映射见下）：
+  // ```
+  //   padTop()      wujie.pa:175314-175353
+  //     const v = this.avoidTop > 0 ? this.avoidTop
+  //                                 : this.getUIContext().px2vp(WindowInfo.topAvoidAreaHeight_px);
+  //     return 0 < v ? v : PLAYER_TOP_FALLBACK;          // 0x38 = 56
+  //
+  //   padBottom()   wujie.pa:175250-175309
+  //     const avoid = this.avoidBottom > 0 ? this.avoidBottom
+  //                                        : this.getUIContext().px2vp(WindowInfo.navIndicatorHeight_px);
+  //     const usable = this.winHVp() - this.padTop() - avoid;
+  //     const gap = playerChromeOf(playerChromeTierFor(usable)).bottomGap;
+  //     return avoid > gap ? avoid : gap;                // = max(avoid, gap)
+  // ```
+  // ⚠️ 反汇编尾部 `greater 0x1f, v0` + `jnez` + `mov v0, v1` 就是上面那两个夹取/三元
+  //   （`reg = reg OP acc` 语义，见 `全局记忆.md`）。
+  //
+  // ⛔ **这两个值不接到背景宿主** —— 回原文核清了节点归属：`wujie.pa:191756` 那个带 padding 的列是
+  //   **正文列**；`MeshCoverBg`（`wujie.pa:191616` 那支 If，包装 λ 在 `:192088`）是它的**兄弟**，
+  //   铺满 `Stack` 的 `clipHeight`，**不吃 padding**。依据：`wujie.pa:190966-190975` 创建 `If` 并立刻
+  //   `If.pop()`，`:191008-191012` 才 `Column.create()` —— 两者同一个 λ 体内、且 `If` 先 pop。
+  //   详见 `PlaybackPage` 背景宿主那段注释。
+
+  /**
+   * 上游 `PlayerPage.padTop()`（`wujie.pa:175314-175353`）⇒ 本仓等价量 {@link topInsetVp}。
+   *
+   * 上游：`avoidTop > 0 ? avoidTop : px2vp(WindowInfo.topAvoidAreaHeight_px)`，量不到兜
+   * `PLAYER_TOP_FALLBACK = 56`；本仓 `topInsetVp()` = `max(statusBarTopVp, PLAYER_TOP_FALLBACK_VP) − pageBoxTop`
+   * （同一把尺子：56 下限 + 实测让位，见该方法注释与 `RzdPageBoxTop` 日志）。
+   * @returns 顶部让位（vp）
+   */
+  public bgHostPadTopVp(): number {
+    return this.topInsetVp();
+  }
+
+  /**
+   * 上游 `PlayerPage.padBottom()`（`wujie.pa:175250-175309`）⇒ 本仓等价量 {@link padBottomVp}
+   * （`max(avoidBottom, 档位表 bottomGap)`；`bottomGap` = FULL 65 / MEDIUM 48 / COMPACT 36，
+   * 见 `CHROME_TABLE` 与 `wujie.pa:93534 / 93554 / 93574`）。
+   * @returns 底部让位（vp）
+   */
+  public bgHostPadBottomVp(): number {
+    return this.padBottomVp();
+  }
+
   /**
    * 鏃犵晫 `PlayerChrome` 妗ｄ綅琛ㄧ殑**鍩虹嚎楂樺害**锛坴p锛夆€斺€?鐓ф妱 `wujie.pa:93434` 鐨?`ldai 0x154`銆?
    *

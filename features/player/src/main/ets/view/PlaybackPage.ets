@@ -754,6 +754,12 @@ export struct PlaybackPage {
       `RzdBgLayer box=${box} win=${this.expandState.windowWidthVp.toFixed(0)}x` +
       `${this.expandState.windowHeightVp.toFixed(0)} clip=${this.expandState.morphClipHeight.toFixed(0)} ` +
       `p=${this.expandState.morphP.toFixed(3)} op=${op.toFixed(3)} ` +
+      // 上游 `padTop()/padBottom()` 的同名映射（`wujie.pa:175314-175353` / `175250-175309`）。
+      // 只打日志、不接布局：本仓背景宿主是 `MeshCoverBg` 的父，加 padding 会把网格压成中间一块，
+      // 上下露出 `defaultImageBgColor`；上游那个带 padding 的列是**正文列**、网格是它的兄弟
+      // （依据见背景宿主上方那段注释）。这两个数留给真机核对"内容让位够不够"。
+      `bgPad=${this.expandState.bgHostPadTopVp().toFixed(1)}/` +
+      `${this.expandState.bgHostPadBottomVp().toFixed(1)} ` +
       `squashing=${(this.expandState.morphSquashY !== 1)} stage=${this.expandState.morphStage} ` +
       `meshSrc=${this.meshSrc !== undefined ? 'yes' : 'no'} playing=${this.state.isPlay} ` +
       `active=${this.state.isShowPlay}`);
@@ -6296,6 +6302,41 @@ export struct PlaybackPage {
           //      闂佺懓鐡ㄩ崹鍐差煥閹达箑鍌ㄩ柣鏂挎啞闂勫秹鏌?`.position(0,0)` 闂佹眹鍔岀€氼喚鍒掓搴樺亾閻㈠灚鍤€闁伙絿鍋撻幏?闂?闂備焦婢樼粔鎾箖?闁烩剝甯掗幊搴ㄥ吹椤撶姵鍋?clip 闂佹眹鍔岀€氼噣宕哄Δ鍛剮?婵炴潙鍚嬫穱娲綖閿曞倸鏋侀柡澶嬪灦閸嬨儵鏌涢幘瀛橆棃婵?
           //      闂佹寧绋戦悡?59 闂備緡鍙忕徊楣冾敃?闂佺厧鍟块張顒€鈻嶅▎鎴斿亾閻熸媽瀚伴柛娆忕箲缁嬪顓奸崼顐ｇ秳"闁诲繐绻楁ご绋课ｉ崨濠冧氦婵炲棙鍔栭拏瀣煥濞戞﹩妲堕柍?
           //   闂佸疇娉曟刊瀵哥箔?闂傚倸鐗婇悷锕傤敆濞戙垹绠戝〒姘功缁愭鎮楅崷顓熷殌婵炲懏甯楅〃?= 缂備焦鍔栭〃鍛般亹濞戞瑯娈?闂?闂佹悶鍎遍幖顐︽偩閻愵剦娈楁俊顖氭贡閻?`'100%'` **闁诲海鎳撻懟顖炲矗韫囨洜椹冲璺侯槺楠?* 闂?闂備緡鍋呴崝鏇㈠磿濮樿鲸顫曢柣妯夸含閻熸繈鏌涘▎鎯芥粓鍩€?
+          // ═══════════ 背景宿主 vs 上游 `padTop()/padBottom()`：**故意不加 padding**（回原文核过） ═══════════
+          //
+          // 用户给的线索是"上游 `wujie.pa:191756-191800` 的背景宿主 = Column().width(winWVp)
+          // .height(winHVp).padding({top: padTop(), bottom: padBottom()})"。**直读字节码后可以确认：
+          // 那个带 padding 的列不是网格的宿主，而是【正文列】；网格是它的兄弟。**
+          //
+          // ```
+          //   191756  .function @36***#^5                       ← 正文列（playerPane 的父）
+          //   191761-191771  Column().width(this.winWVp())
+          //   191772-191782  .height(this.winHVp())
+          //   191783-191800  .padding({ top: this.padTop(), bottom: this.padBottom() })
+          //   191801-191822  .opacity(this.pullMode ? this.pullChromeOpacity() : this.expand.contentOpacity)
+          // ```
+          // 而网格（MeshCoverBg）挂在哪：**同一个 λ 体内的另一个 `If` 分支**，且在正文列之前
+          // ```
+          //   190941   .function @36**#                          ← 缩放/裁剪那个 Stack 的 builder 体
+          //   190966-190971  observeComponentCreation2(If, λ@36***#^2)      ← 背景这支 If
+          //   190972-190975  If.pop()                                       ← 先关掉
+          //   190980-191003  If(@36***#^3) motion 层 / If(@36***#^4) 快照层
+          //   191008-191012  observeComponentCreation2(Column, λ@36***#^5)  ← 才创建正文列
+          // ```
+          //   ⇒ `If.pop()` 发生在 Column 创建**之前** ⇒ 网格与正文列是**兄弟**，网格铺满
+          //     `Stack` 的 `clipHeight`（`.clip(true)` 在 `191462-191469`），**不吃 padding**。
+          //     `λ@36***#^2` 体内（`:192088-192114`）就是 `__Common__(){ MeshCoverBg() }`，
+          //     它的 `.opacity(pullMode ? pullBgOpacity() : expand.contentOpacity)` 在 `:192150-192178`。
+          //
+          // ⇒ 所以本仓这一层**保持无 padding**：本仓的 `MeshCoverBg`（`.width('100%').height('100%')`）
+          //   是**当前 Column 的子节点**，加 padding 会把网格压成"去掉上下各一段"的中间一块，
+          //   上下露出本节点的 `defaultImageBgColor` —— 正是判据里不许出现的"新露出的底色"。
+          //   上游之所以看起来"网格只铺中间那块"是错觉：网格铺的是整块 Stack，上下被 `clipHeight` 裁，
+          //   裁掉那部分由 Stack 自己的底色兜。
+          // ⇒ `PlayerExpandState.bgHostPadTopVp()/bgHostPadBottomVp()`（= 上游 padTop/padBottom 同式）
+          //   只接进诊断日志 `RzdBgLayer ... bgPad=T/B`，等真机量出"内容让位够不够"再决定要不要动结构。
+          //
+          // 判据（真机）：① 静止态封面上方/下方**不出现新露出的底色**；② 形变期背景仍随卡片裁剪。
           .height(this.expandState.windowHeightVp)
           // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀闁告侗浜濋～?2026-10-17闂?*婵炴垶鎸哥粔褰掑焵椤掆偓缁绘垵危閹寸偞鍎熼柡鍥╁仱閻?* 闂佺偨鍎查弻锟犲焵?缂傚倸鍟崹鍫曟偋閸涘﹦鈻旈柛銉椤忚鲸绻涘畝瀣？闁轰線绠栧畷娆撴倻濡妾烽梺鎸庣☉婵傛梻寮ч崘鈺冣枖鐎广儱瀚粣妤呮⒒閸ャ劌绲婚柛銈庡幗閿涘啴寮介婧惧亾?闁哄鏅炲〒鍦礊濮椻偓瀵爼鍩ラ崨顖滎槴
           //   闂?`defaultImageBgColor`闂佹寧绋戝濉篻ba(32,32,32,1)`闂佹寧绋戦張顒€锕㈤悧鍫涗簻闂傚牊绋戦弬褔鏌￠崼婵愭Ш婵?闁哄鏅滆摫闁汇儱鎳樺鍨緞婵犲倻鎮奸梺鑲╂嚀瀵泛顪冮崒鐐村剭闁告洦鍋嗘穱娲煠?闂佹寧绋戦ˇ顓㈠焵?
