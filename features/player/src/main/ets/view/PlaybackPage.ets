@@ -3727,19 +3727,26 @@ export struct PlaybackPage {
       //   ⇒ 在 `morphLand()` **之前**声明"这一关归快照"，浮层门（`morphOverlayBridging`）
       //     随后恒假。（只在快照成功这一支声明；失败支要退回活页形变，仍需要浮层。）
       this.expandState.beginSnapshotShrink();
-      this.expandState.morphLand();
+      // ★★★★ 2026-10-17（用户实测「**系统返回关闭播放器，播放条那三个按钮出现的有点早了**」）
+      //   原来这里**立刻** `morphLand()` —— 那是"交还绘制权 ⇒ 迷你条真身显出来"那一步，
+      //   于是快照还没缩完（≈350ms），底下的迷你条（含那三个按钮）就已经露出来了
+      //   ⇒ 观感"按钮先出现、封面后落位"。
+      //   ⇒ 挪到收缩**结束**（`shrink.start` 的 onDone，见下）。这一路上相位保持 ENTERING/LEAVING，
+      //     `realCoverVisible()` 也因此继续让位，不会再冒出第二张封面。
+      //   ⚠️ `morphLand()` 只剩"相位 → LANDING + 交还绘制权"两件事，晚 350ms 调没有副作用。
       const shrink: MorphShrinkState = this.morphShrinkState();
       shrink.start(this.getUIContext(), pixmap, srcBox, winW, winH, (): void => {
         // ★★★ 2026-10-17（照搬 `MainPage` 那个 **onDone λ@12*#**，`wujie.pa:154940-154949`）：
         // ```ts
         //   () => { this.miniHidden = false; this.shrinkPixmap = undefined; }
         // ```
-        //   · `miniHidden = false` —— 本仓对应的是"迷你条**真身**可见"，
-        //     那一步由本路径更早的 `morphLand()`（交还绘制权）负责，这里不重复；
+        //   · `miniHidden = false` —— 本仓对应的是"迷你条**真身**可见"：
+        //     就是 `morphLand()`（交还绘制权）。**它必须在收缩结束这一刻**，见上面的说明；
         //   · `shrinkPixmap = undefined` —— ★ **必须做**：那是一张**满窗** PixelMap
         //     （1080×2400×4B ≈ 10MB 级），共享状态一直引用着它就不会被回收。
         //     上一版**漏了这一句** ⇒ 每关一次播放器就多留一张（直到下一次关闭才被覆盖）。
         Logger.info(PlaybackPage.logTag, 'RzdShrinkOverlay onDone (overlay hidden, pixmap dropped)');
+        this.expandState.morphLand();
         shrink.clearPixmap();
         // 浮层收尾（≈350ms）之后再放开闸门：正常路径下那时页面早已被 pop，
         // 这一句只是"万一没 pop 掉"的自愈（同失败支的理由）。
@@ -5801,12 +5808,17 @@ export struct PlaybackPage {
                 //   ⇒ 恒定 `false`（上游那条 `entryFade = !pullMode || effT() >= 1` 的语义
                 //     在这里由 `backgroundRevealOpacity()` 独自承担）。
                 entryFade: false,
-                // ★★★★ 2026-10-17（**只把"网格画布高度"钉住，布局仍然 100%**）
-                //   渲染/布局一律照旧（宿主 100% ⇒ 结构上不可能消失，见下面那段长注释）；
-                //   这一项只让 `NodeContainer → controller.resize(w, h)` 里的 `h` 恒定 =
-                //   网格按**整窗比例**生成，不再随 `morphClipHeight()` 每帧重建顶点并重采样
-                //   ⇒ 卡片长大 = **揭开更多背景**，而不是"把压扁的网格拉回来"。
-                fixedHVp: this.expandState.windowHeightVp
+                // ⛔ 2026-10-17（**退回 0 = 画布跟着宿主实测尺寸** —— 用户实测的回归）
+                //   上一版传 `windowHeightVp` 想把画布钉住（治"压扁→拉伸"），
+                //   结果用户报「**点击播放动画过程还是没背景**，动画结束后才有」：
+                //   `fixedHVp > 0` 时 `RenderNode.frame` **比它所在的那个盒子高**，
+                //   而形变期那个盒子就是裁剪窗口（几十~几百 vp）⇒ 超出父盒的绘制被整块剔除
+                //   ⇒ **形变期什么都不画**；落位后两者相等 ⇒ 又正常。
+                //   ⇒ 可见性优先：传 0，让画布永远等于宿主盒子（= 一直能画出来）。
+                //   ⚠️ 代价是形变期网格会随裁剪窗口一起压/拉（用户早前抱怨过的那条）。
+                //     要同时满足"画得出"+"不压扁"，得换别的机制（例如把背景移到蒙版之外由壳层裁剪），
+                //     不要再用"画布比盒子大"这种写法。
+                fixedHVp: 0
               })
                 .id(PlaybackPage.MESH_BG_ID)
                 .width(StyleConstants.FULL_WIDTH)
