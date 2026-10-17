@@ -5655,7 +5655,12 @@ export struct PlaybackPage {
       //    （`PlaybackPageRoute.ets` 的 `.scale({y})` 压整个播放页）⇒ **不再需要我上一版
       //    加的那个 `.scale + height + offset` 补偿容器**（已删除，见 `squashWrapHVp` 的删除记录）。
       Column() {
-        Stack() {
+        // ★★★★ 2026-10-17（**照搬无界的第三层形状**：内层 `Stack` 也必须是 `TopStart`）
+        //   无界那里是一句 `Column（宽 100% + winHVp + padTop/padBottom）` 直接坐在
+        //   `Stack(TopStart)` 里 —— **流式子节点**、固定窗口高。我们这层原来是默认
+        //   （`Center`）+ 宿主 `.position(0,0)`，与上游不是同一个形状。
+        //   ⇒ 改成 `TopStart`，宿主的固定尺寸才有意义（没有它，固定高的孩子会被居中挪走）。
+        Stack({ alignContent: Alignment.TopStart }) {
           // ★ 背景 = **半透明 → 不透明**：底色与取色层一起走反编译的
           //   `pullBgIn = clamp(effT / 0.30)`（0 → 0.30 淡入）。
           // ⚠️ 上面那两句（"底色与取色层一起走 `pullBgIn`"）★ **已作废**：
@@ -5900,23 +5905,29 @@ export struct PlaybackPage {
           //     要同时满足，得把背景**移出形变容器**（外部复核建议的方案 A：背景层与容器同级、
           //     自己用 `clip` + `scale/translate` 跟随），不是调尺寸能解决的。
           .width(StyleConstants.FULL_WIDTH)
-          .height(StyleConstants.FULL_HEIGHT)
-          // ★★★★ 2026-10-17（**不透明底座** —— 修用户实测「点击打开没背景」「关闭时出现两个封面」）
+          // ★★★★★ 2026-10-17（**照搬无界：宿主的尺寸是一个固定数 `winHVp`，且是流式子节点**）
           //
-          // ## 两个症状同一个根：形变期这一层是**半透明**的，后面的东西会透上来
-          //   · 网格源还没到手（点击打开那一刻正在解码）⇒ 兜底是
-          //     `state.imageColor`，而它**带 alpha**（在线歌 `rgba(20,20,22,0.5)`、
-          //     取色后 `rgba(r,g,b,0.4)`）⇒ 整页是"半透明黑"，首页/推荐卡直接透出来
-          //     ⇒ 用户看到的就是「**点击打开没有背景**」；
-          //   · 关闭时容器缩回胶囊那一路同样是半透明 ⇒ 底下迷你条自己那张封面透上来
-          //     ⇒ 用户看到的「**两个封面**：一个跟着播放器、一个正常飞回去」。
-          // ## 改法：给**宿主自己**一个恒不透明底色（网格/取样色照旧画在上面）
-          //   ⚠️ 不能加成"第二个子节点"——宿主是 `Column`，两个 100% 高的孩子会纵向排开。
-          //   ⚠️ 用 `defaultImageBgColor`（`rgba(32,32,32,1)`，本页原有的"还没有取色时的底色"），
-          //     不新造颜色、也不改 `state.imageColor` 的既有语义。
-          //   ⚠️ 静止态：网格/取样色本来就铺满 ⇒ 底色**看不见**，逐像素不变（回归红线）。
+          // 无界的容器树（`wujie.pa:191756`，逐行核过）：
+          // ```
+          //   Stack(TopStart) .scale .translate .width('100%') .height(clipHeight) .clip(true)
+          //     └─ Column  宽 100% + **height(winHVp 固定数)** + padTop/padBottom     ← 流式孩子，无 .position
+          //          ├─ playerPane
+          //          └─ MeshCoverBg
+          // ```
+          // ⇒ 两个要点（我们之前两条都错）：
+          //   ① **背景宿主的高度是固定窗口高**，不跟 `clipHeight` 走 ⇒ `NodeContainer` 的
+          //      `onAreaChange` **只触发一次**，`RenderNode.frame` 尺寸**恒定** ⇒ 自绘内容不会
+          //      每帧被重建/失效。我们原来写 `'100%'` = 跟着裁剪窗口每帧变 ⇒ 每帧 `resize()`
+          //      ⇒ 网格每帧重新采样/重建，形变期干脆什么都不剩 ⇒ 用户看到的"全程黑"。
+          //   ② 它是**流式子节点**（没有 `.position`），靠父 `Stack(TopStart)` 贴左上角。
+          //      我们原来用 `.position(0,0)` 的绝对定位 ⇒ 配合"超出被 clip 的父盒"会被整块剔除
+          //      （§159 那次"背景完全不见"就是这条）。
+          //   ⚠️ 静止态：容器高 = 窗口高 ⇒ 固定高与 `'100%'` **完全等价** ⇒ 逐像素不变。
+          .height(this.expandState.windowHeightVp)
+          // ★★★★ 2026-10-17（**不透明底座** —— 网格万一没画出来，也不会露出首页/迷你条）
+          //   用 `defaultImageBgColor`（`rgba(32,32,32,1)`，本页原有的"还没有取色时的底色"）。
+          //   ⚠️ 不能加成"第二个子节点"—— 宿主是容器，两个 100% 孩子会纵向排开。
           .backgroundColor(PlaybackPage.defaultImageBgColor)
-          .position({ x: 0, y: 0 })
           .hitTestBehavior(HitTestMode.None)
           // ⛔ 2026-10-17（**不乘反缩放** —— 依据是用户给的无界中段截图）
           //   无界中段截图显示：**网格是铺满整张卡片的**（格子随卡片一起被压/展开）
