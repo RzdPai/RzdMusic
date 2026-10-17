@@ -3739,6 +3739,31 @@ export struct PlaybackPage {
       //        · 关闭取消（回弹）→ `EASE_OUT_STR`
       //   ⚠️ 进度必须在 `morphBeginLeaving()` **之前**取（下面那个 `applySync` 里会改相位）。
       const closeFromT: number = this.expandState.morphP;
+      // ★★★★ 2026-10-17（两个外部模型会诊后**共同指向**的那一条，加了护栏）：
+      //
+      // ## 症状
+      // 「系统返回 / 关闭按钮 / 下拉松手：封面**直接下去 / 直接到小圆形**，没有独立飞行那一棒」
+      // ## 机制
+      // 收起补间的起点是**浮层自己的进度** `morphOverlayP`，而它在下面这种情形里是 **0**：
+      //   · 打开那一棒的浮层补间没飞起来（例如被 `hostsMorphOverlay` / 早退挡掉），
+      //     或 `morphOverlayReset()` 把 P 压回 0 之后就再没被推上去；
+      // ⇒ 于是 `morphOverlayTweenTo(false)` 拿到 `from = 0`、`to = 0`
+      //   ⇒ 被 `|to - from| < 1e-4` **早退**（连 animateTo 都不建）
+      //   ⇒ 而 `morphOverlayBridging()` 的相位兜底分支**仍然为真**
+      //     （`morphContainerActive() && snapStartW > 0 && endCoverSize > 0`）
+      //   ⇒ 克隆层**整段关闭都画在 `morphCoverRectAt(0)` = 迷你条那个小圆**上，一动不动。
+      //
+      // ## 修法（护栏版：**只在"确实没飞过"时**对齐，绝不打断正在飞的进度）
+      // 若浮层进度仍停在 0、而页面当前进度 > 0 ⇒ 把它对齐到页面进度
+      // （= 已有的 `syncMorphOverlayFromPage()`，语义正是"浮层进度 := 页面进度"），
+      // 这样收起补间就有了真实起点（例如 1 → 0），一镜到底才成立。
+      // ⚠️ **不能无条件对齐**：若浮层正在 1（大封面位置）而页面已被手指拖到 0.05，
+      //   无条件对齐会让克隆层**从大封面瞬间跳到迷你条** = 一次可见的跳变。
+      if (this.expandState.morphOverlayProgress() <= 0.001 && closeFromT > 0.001) {
+        this.expandState.syncMorphOverlayFromPage();
+        PlaybackPage.ev('OVA', `align overlayP=${this.expandState.morphOverlayProgress().toFixed(3)} ` +
+          `to p=${closeFromT.toFixed(3)}`);
+      }
       // ★ 先把"进入收起相位 + 冻结几何"同步刷出去：这一段是补间**之前**的额外修改，
       //   按官方规则必须用 `applySync` 同步标脏，否则补间首帧会用旧值。
       UIUtils.applySync((): void => {

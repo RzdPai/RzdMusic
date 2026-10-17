@@ -3504,7 +3504,32 @@ export class PlayerExpandState {
    * ⚠️ 壳层直接拿它当 `.position()` / `.width()` 用，**不做任何"页内 ↔ 窗口"换算**。
    */
   public morphOverlayCoverBridge(): LyricMorphRect {
-    return this.morphCoverRectAt(this.morphOverlayProgress());
+    // ★★★★ 2026-10-17（**照搬无界的封面结构** —— 用户指示「你应该照搬无界的」）
+    //
+    // ## 无界是**一张封面、一条时间线**
+    // ```
+    //   floatingCover（画在 playerPane 里、用 .position/.width 摆）
+    //     尺寸 = edge × scaleAt(t)      ← CoverMorph 纯几何，85856 那一档
+    //     位置 = tyAt(t) / txAt(t)      ← 纯几何
+    //     圆角 = radiusAt(t)
+    //   ⇒ 它**不受任何容器 scale 影响**，进度 t 一帧一变 ⇒ 天然"一镜到底"
+    // ```
+    // ## 我们之前为什么像"封面跟着播放页走"
+    // ```
+    //   封面画在 LyricFloatLayer 里，而那一层**在形变容器内部**
+    //   ⇒ 它被"纯几何"摆好之后**又被容器的 morphScale 缩了一次**
+    //   ⇒ 屏上看到的是"页面在缩、封面跟着页面一起缩" = 用户说的「跟随着播放器」
+    // ```
+    // ## 照搬做法（本函数就是那一棒）
+    //   壳层这份"续飞封面"**在容器之外**（满屏 Stack 上），用**窗口坐标**直接落位
+    //   ⇒ 只要把它的进度接成**页面进度 `morphP`**，就等于无界那张 `floatingCover`：
+    //     一张封面、一条时间线、纯几何、不受容器变换。
+    //   ⚠️ 仍然保留 `morphOverlayProgress()` 那条独立时间线的**能力**（`morphOverlayP`
+    //     是壳层 `settlePullOpen` 用的 560ms 快出慢收那一棒）；这里改的是**落位所用几何**，
+    //     不是废弃那一棒：`morphP` 是主驱动，动画期间两者同向推进。
+    //   ⚠️ 取 `morphP` 而**不是** `morphOverlayP` 的原因：后者在异常路径上会停在 0
+    //     （见 `morphOverlayTweenTo` 的 `|to-from|<1e-4` 早退）⇒ 封面会一动不动地贴在迷你条上。
+    return this.morphCoverRectAt(this.morphP);
   }
 
   /**
