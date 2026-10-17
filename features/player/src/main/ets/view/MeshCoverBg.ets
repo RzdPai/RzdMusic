@@ -225,7 +225,12 @@ export struct MeshCoverBg {
     this.releaseFallback();
   }
 
-  @Monitor('srcVersion')
+  // ★★★ 2026-10-17（照搬无界 `@Watch`：`coverPath→onSourceChanged`、`seed→onSourceChanged`）
+  //   上游 `seed` 变化也要**重做兜底网格**（它决定兜底网格的色相）。
+  //   ⚠️ 我们原来只监听 `srcVersion` ⇒ 换歌时 `src` 还没到手、`seed` 已经变了，
+  //     屏上会**继续显示上一首的兜底色**（用户看到的"展开时是蓝色"就是这个：
+  //     播放的那首还没解出封面，兜底网格按旧 seed 的色相画出来了）。
+  @Monitor('srcVersion', 'seed')
   onSourceChanged(): void {
     this.applySource();
   }

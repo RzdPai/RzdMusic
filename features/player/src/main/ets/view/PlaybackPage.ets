@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -5036,6 +5036,72 @@ export struct PlaybackPage {
   }
 
   /**
+   * ★★★★ 2026-10-17（**跨页面网格源缓存** —— 修「展开的时候是蓝色」）
+   *
+   * ## 为什么展开时是蓝色
+   *   无界那一侧 `MeshCoverBg` 收的是 **`$$.imgLocal`（本地封面文件）** —— 播放器打开那一刻
+   *   封面已经在本地 ⇒ 背景第一帧就是**真封面**的配色，组件里那个 `makeFallback()`
+   *   （按 `seed` 色相造的**四角 HSL 渐变**）基本用不上。
+   *   我们这一侧封面多是**在线 URL**：页面每次打开都是新实例、`meshSrc` 为空 ⇒
+   *   组件内 `makeFallback()` 先顶上 ⇒ 屏上就是那张按 seed 色相画出来的兜底网格（**蓝色**）；
+   *   等真封面下载解码完才换真配色，那时动画早结束了。
+   *
+   * ## 做法（等价于上游"本地封面一直在"）
+   *   每次提交网格源时，把**已经 enhance+blur 过的 64×64 RGBA 缓冲**（16KB）连同它的 key
+   *   存成**静态字段**；下一次页面挂载时若 key 还是同一首，就直接从这份缓冲重建 PixelMap
+   *   ⇒ 打开动画第一帧就是真配色，兜底网格只真正兜底。
+   *   ⚠️ 存**缓冲**而不是 PixelMap：所有权简单（纯内存），页面每次自己造 PixelMap、
+   *     退场照旧自己释放 ⇒ 不会双重释放。
+   *   ⚠️ key 不匹配（换歌）⇒ 不采用（不会把上一首的配色串到这一首）。
+   */
+  private static meshBufKey: string = '';
+  private static meshBuf: Uint8Array | undefined = undefined;
+
+  /** @returns 当前歌曲的网格缓存 key（= 封面 URL / 本地资源标识；取不到空串）。 */
+  private currentMeshKey(): string {
+    const song = this.state.getCurrentSongItem();
+    if (song === undefined) {
+      return '';
+    }
+    if (song.cover.length > 0) {
+      return song.cover;
+    }
+    return typeof song.label === 'string' ? song.label : `res:${song.label.id}`;
+  }
+
+  /**
+   * 用上一关留下的缓冲**立刻**重建网格源（异步但只有 ~1ms：不下载、不解码、不模糊）。
+   * 调用前已按 key 校验；这里只造 PixelMap。
+   */
+  private async adoptCachedMesh(): Promise<void> {
+    if (this.meshSrcVersion > 0 || !this.isAlive) {
+      return;
+    }
+    const buf: Uint8Array | undefined = PlaybackPage.meshBuf;
+    const key: string = this.currentMeshKey();
+    if (buf === undefined || key.length === 0 || PlaybackPage.meshBufKey !== key) {
+      return;
+    }
+    try {
+      const copy: Uint8Array = buf.slice();
+      const pm: image.PixelMap = await image.createPixelMap(copy.buffer, {
+        size: { width: SRC_EDGE, height: SRC_EDGE },
+        pixelFormat: image.PixelMapFormat.RGBA_8888,
+        editable: true
+      });
+      if (!this.isAlive || this.meshSrcVersion > 0) {
+        this.releasePixelMapQuiet(pm);
+        return;
+      }
+      Logger.info(PlaybackPage.logTag, 'RzdBgCache adopt cached mesh (no download needed)');
+      this.commitMeshSource(pm, this.meshSrc);
+    } catch (err) {
+      const e = err as BusinessError;
+      Logger.warn(PlaybackPage.logTag, `adoptCachedMesh failed code=${e?.code}, message=${e?.message}`);
+    }
+  }
+
+  /**
    * @returns 鑳屾櫙缃戞牸鐨?*鍏滃簳绉嶅瓙** 鈥斺€?鐓ф惉鏃犵晫 `seedOfParts($$.title, $$.artist)`
    *   锛坄PlayerPage.ets:5252` 鐨勫疄鍙傦級銆?
    *
@@ -5135,6 +5201,10 @@ export struct PlaybackPage {
       return;
     }
     this.releaseBackgroundCoverIfPixelMap();
+    // ★★★★ 2026-10-17（**先试试上一关留下的网格缓冲** —— 修「展开时是蓝色」）
+    //   命中 ⇒ 1ms 内就有**真封面配色**的网格（等价于上游"本地封面一直在"），
+    //   不会再让兜底网格（按 seed 色相 ⇒ 蓝）占据整段开场动画。
+    await this.adoptCachedMesh();
     // Online songs without a resolved cover use the default art for the blurred backdrop.
     this.imageLabel = song.source.length > 0 && song.cover.length === 0 ? $r('app.media.ic_avatar1') : song.label;
 
@@ -5337,6 +5407,13 @@ export struct PlaybackPage {
       enhanceColors(u8);
       boxBlurRgba(u8, SRC_EDGE, SRC_EDGE, PlaybackPage.MESH_BLUR_RADIUS, PlaybackPage.MESH_BLUR_PASSES);
       pm.writeBufferToPixelsSync(buf);
+      // ★★★★ 2026-10-17（**留下这份"已处理好的"缓冲给下一次打开用** —— 见 `adoptCachedMesh`）
+      //   16KB 纯内存，key = 当前歌曲的封面标识；换歌自然失配 ⇒ 不会串台。
+      const cacheKey: string = this.currentMeshKey();
+      if (cacheKey.length > 0) {
+        PlaybackPage.meshBufKey = cacheKey;
+        PlaybackPage.meshBuf = u8.slice();
+      }
     } catch (err) {
       const e = err as BusinessError;
       Logger.warn(PlaybackPage.logTag, `mesh source build failed code=${e?.code}, message=${e?.message}`);
