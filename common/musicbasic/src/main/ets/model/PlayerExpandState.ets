@@ -1047,8 +1047,42 @@ export class PlayerExpandState {
     return this.bigSize > 0 || (this.windowWidthVp > 0 && this.windowHeightVp > 0);
   }
 
-  /** @returns 展开页封面的宽度（vp）：优先用实测的 `bigSize`。 */
+  /**
+   * @returns 展开页封面的宽度（vp）—— **上报值 OR 实测值**（两条来源，缺一不可）。
+   *
+   * ★★★ 2026-10-17（**用户截图定位到的真 bug**：徽标上 `lcEdge=0.0` + `float=0`
+   *   而 `end=331/331` —— 终点锚点明明量到了，歌词页封面却算不出来）。
+   *
+   * ## 为什么原来只有 `bigSize` 这一条来源是不行的
+   * ```
+   *   `bigSize` 的唯一来源 = 覆盖层封面 Image 的 `onAreaChange` → `reportPlayerCoverFromOverlay`
+   *   而那条上报有两道门：
+   *     ① `lyricMorphT > 0.001 ⇒ return`（只在封面页静止时报）；
+   *     ② `coverAnchorMeasurable()`（**形变中一律不报**）。
+   *   ⇒ 打开播放页时：页面一挂载就进形变（ENTERING），那一刻的 `onAreaChange` **被 ①② 拒掉**；
+   *     形变结束落位之后，封面节点的**面积不再变化** ⇒ `onAreaChange` **不会再触发**
+   *     ⇒ **`bigSize` 整场都是 0**（用户那两张截图就是 `lcEdge=0.0`）。
+   * ```
+   * ## 后果（就是用户报的第 1、4 条）
+   * ```
+   *   `lyricCoverSizeOf()` 返回 0 ⇒ `lyricFloat()` = false
+   *     ⇒ 歌词页那层浮层（小封面 + 歌名）**整场不启用** ⇒ 「第 1 次滑到歌词页封面会消失」
+   *     ⇒ 而且 `lyricMorph(1)`（歌词页端点）也跟着无效 ⇒ 切页时封面没有合法终点
+   * ```
+   * ## 改法（**不是新发明**：终点那一侧早就是这么写的）
+   *   `endCoverSize` 的取值在 `measureEndAnchor` 一带就是
+   *   ```ts
+   *     this.endCoverSize = this.bigNodeKnown && this.bigNodeW > 0 ? this.bigNodeW : this.bigSize;
+   *   ```
+   *   —— "**实测值优先，上报值兜底**"。本函数原来只认上报值 ⇒ 与它不同口径。
+   *   ⇒ 现在对齐成同一条口径（`bigNodeW` 是 FrameNode 实测宽度，本来就有、且已被终点那侧用着）。
+   *   ⚠️ `lyricCoverSizeOf()` 那道 `<= 0 ⇒ 返回 0` 的门**保留不动**（语义不变：
+   *      "大封面宽度确实未知 ⇒ 浮层不启用"），只是现在"已知"的判据不再只依赖那一条上报。
+   */
   private playerCoverWidth(): number {
+    if (this.bigNodeKnown && this.bigNodeW > 0) {
+      return this.bigNodeW;
+    }
     if (this.bigSize > 0) {
       return this.bigSize;
     }
