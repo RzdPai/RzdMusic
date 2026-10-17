@@ -4348,13 +4348,11 @@ export struct PlaybackPage {
                       //   从下升起 180vp；静止态位移恒 0，版面逐像素不变。
                       .translate({ y: this.expandState.earlyRiseVp() })
                       // 收起过程中内容被压扁，小歌词会和控制区互相盖住
-                      // ★★★ 2026-10-17（**形变期让开**）：依据无界的树（`PlayerPage完整UI定稿.md` §2）
-                      //   它的**页 0 是空壳**，歌名由 `floatingMeta` 覆盖层画，`playerPane` 里
-                      //   **没有"小歌词"这一块**；而"小歌词"是派音自有、贴在页底（负外边距推到歌名那一带）
-                      //   ⇒ 歌名行改成**页内坐标**（= 无界口径）之后，两者在形变期会叠在一起。
-                      //   ⇒ 用户已定"小歌词留最后修" ⇒ 这里只做**形变期让开**，落位后照旧。
-                      .visibility(this.isCollapsing() || this.expandState.morphContainerActive()
-                        ? Visibility.None : Visibility.Visible)
+                      // ★★★ 2026-10-17（用户：**「小歌词现在变成了动画结束之后才出现，改一下，
+                      //   参考其它块怎么飞入」**）⇒ 撤回上一版"形变期让开"的隐藏门：
+                      //   它和别的块一样，**形变期就该在场**、走第一组时间窗 `earlyRiseVp()` 从下升起
+                      //   （上面那条 `.translate`）。碰撞问题由歌名行改页内坐标解决，不靠藏它。
+                      .visibility(this.isCollapsing() ? Visibility.None : Visibility.Visible)
                   }
                   // ★ 2026-10-15 诊断锚点（`hdc shell hilog -x | Select-String 'RzdBoxes'`）：
                   //   把**三个会互相压的块**的窗口矩形一次打出来 ——

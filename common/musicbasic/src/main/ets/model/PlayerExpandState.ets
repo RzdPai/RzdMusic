@@ -1564,13 +1564,41 @@ export class PlayerExpandState {
    * ⚠️ `s ≈ 1`（静止态）时直接返回 `wy` ⇒ 逐像素不变。
    */
   public metaTopLocalY(t: number, rowH: number): number {
-    const wy: number = this.metaTopGeomY(t, rowH);
     const s: number = this.morphScale;
     if (!Number.isFinite(s) || s <= 0.001 || s >= 0.999) {
-      return wy;
+      // 静止态 / 恒等变换 ⇒ 页内 = 窗口，直接给原式（逐像素不变）
+      return this.metaTopGeomY(t, rowH);
     }
+    const p: number = t < 0 ? 0 : (t > 1 ? 1 : t);
     const hostH: number = this.windowHeightVp;
-    return hostH / 2 + (wy - this.morphTy - hostH / 2) / s;
+    const ty: number = this.morphTy;
+    const fromRect: LyricMorphRect = this.bigEndpointRect();
+    if (fromRect.size <= 0) {
+      return 0;
+    }
+    const halfRow: number = rowH > 0 ? rowH / 2 : 0;
+    // ★★★ 2026-10-17（**两个端点各自转页内、再在页内插值** —— 修「歌名那一行飞入不对」）
+    //   上一版是"先在窗口坐标里 lerp，再把结果转成页内" ⇒ 因为换算里有 `/s`，
+    //   两者**不等价**（窗口空间的直线在页内空间是曲线）⇒ 中段轨迹是错的。
+    //   无界的 `metaRow` 用 `lerp(metaYPlayer, topYAtLyric + metaTopFixLyric, t)` 全程**页内** ⇒ 必须同口径。
+    const fromTopW: number = fromRect.y + fromRect.height + PlayerExpandState.COVER_FIT_META_GAP_VP;
+    const lyric: LyricMorphRect = this.lyricMorph(1);
+    const toTopW: number = lyric.y + PlayerExpandState.META_TOP_FIX_LYRIC_VP - halfRow;
+    const fromTop: number = PlayerExpandState.windowYToLocalY(fromTopW, s, ty, hostH);
+    const toTop: number = PlayerExpandState.windowYToLocalY(toTopW, s, ty, hostH);
+    return this.lerp(fromTop, toTop, p);
+  }
+
+  /**
+   * 把**窗口 y** 换算成**页内 y**（形变容器的本地坐标）。
+   *
+   * 容器（`PlaybackPage.build()` 的根 Stack）的本地→窗口映射是
+   * `wy = H/2 + (ly − H/2)·s + ty`（绕容器中心缩放 + 竖直位移）
+   * ⇒ 反解 `ly = H/2 + (wy − ty − H/2)/s`。
+   * ⚠️ 不猜枢轴：`s/ty` 都来自 `applyMorphProgress()` 自己算出来的字段。
+   */
+  private static windowYToLocalY(wy: number, s: number, ty: number, hostH: number): number {
+    return hostH / 2 + (wy - ty - hostH / 2) / s;
   }
 
   public metaTopGeomY(t: number, rowH: number): number {
