@@ -3230,7 +3230,14 @@ export struct PlaybackPage {
     //   `UIUtils.applySync(() => { … })`：同步刷新闭包内的状态变化，再起原来的动画。
     //   本方法配合 `tryStartMorphIntro` 里那层 `applySync` 使用 ——
     //   这也是"点击打开和手指拖动打开是两个动画"的结构性根因，50ms/重试/绘制门都是它的补丁。
-    // ⚠️ 世代号：收尾回调必须比对 `morphGen`（反编译里 `animGen++` + onFinish 校验），
+    // ⚠️⚠️ 2026-10-17 纠正一处**我自己写错的注释**（它是下面那个 bug 的来源）：
+    //   这里原来还写着「官方给的写法就是在 `animateTo` 的闭包里用 `UIUtils.applySync`
+    //   同步刷新目标值」——**那是错的**。官方那个场景是
+    //   「**动效之前**有额外修改 ⇒ 先 `applySync` 把**起点**落地，**再**起 `animateTo`」；
+    //   而 **`animateTo` 闭包里只许写目标值**（写什么就补间到哪里）。
+    //   把它放进闭包里 = 把目标值立刻刷出去 ⇒ **补间被跳过** ⇒ 直接跳终点。
+    //   ⇒ 本文件里 `applySync` 的正确位置只有"补间之前"（见 :3158 / :3737 两处）。
+    //   ⚠️ 世代号：收尾回调必须比对 `morphGen`（反编译里 `animGen++` + onFinish 校验），
     //    否则快速连点/收起会串状态。
     const gen: number = this.expandState.morphGen;
     try {
@@ -3238,10 +3245,18 @@ export struct PlaybackPage {
         duration: PlaybackPage.MORPH_OPEN_DURATION_MS,
         curve: Curve.EaseInOut
       }, (): void => {
-        // 动效的目标值也走 applySync：与官方"动效场景"示例一致，保证尾帧同步落地。
-        UIUtils.applySync((): void => {
-          this.expandState.applyMorphProgress(1);
-        });
+        // ★★★★ 2026-10-17（**用户第 1 条"点击打开无动画、直接到结束位置"的根因**）
+        //
+        // 这里原来是 `UIUtils.applySync((): void => { applyMorphProgress(1); })`。
+        // **那是错的**：`applySync` 的语义是"**同步刷新**闭包内的状态变化"，
+        // 官方（`arkts-new-applysync-flushupdates-flushuiupdates`）只在
+        // **"起补间之前有额外修改"** 时用它把**起点**落地（本文件 :3158 那处就是正确用法）。
+        // 放进 `animateTo` 的闭包里 ⇒ 目标值被**立刻刷出去** ⇒ **补间被跳过**
+        // ⇒ 页面**直接跳到终点**（= 用户看到的"封面直接就到结束位置，没有动画"）。
+        // 上游那份 `doEnter` 的补间 λ（`wujie.pa:51311-51329`）**只是把目标值写进去**
+        // （`scaleValue/translateX/translateY/clipHeight` 的直接赋值）—— 没有任何"同步刷新"。
+        // ⇒ 照上游：闭包里**只写目标值**，交给 `animateTo` 去补间。
+        this.expandState.applyMorphProgress(1);
       });
     } catch (err) {
       // 补间起不来也要落到完整态，绝不能把播放页留在"迷你条那一小块"
@@ -3775,10 +3790,14 @@ export struct PlaybackPage {
         duration: morphCloseMs,
         curve: curves.cubicBezierCurve(0.85, 0, 0.5, 0.88)
       }, (): void => {
-        // 目标值同步落地（官方"动效场景"写法）。
-        UIUtils.applySync((): void => {
-          this.expandState.applyMorphProgress(0);
-        });
+        // ★★★★ 2026-10-17（**用户第 2、3 条"关闭无动画、封面直接下去"的根因**）
+        //   与 `playMorphOpenIntro` 那一处**完全同一个错误**（同一形状第 2 处）：
+        //   原来是 `UIUtils.applySync(() => applyMorphProgress(0))` —— 在 `animateTo` 的闭包里
+        //   同步刷新目标值 ⇒ **补间被跳过** ⇒ 封面直接落到终点（"直接下去了 / 直接到小圆形"）。
+        //   上游关闭那一侧（`animateMorphT(reverseMs, 0, REVERSE_EASING)`）同样只写目标值。
+        //   ⚠️ 起点（相位 + 冻结几何）那一段**仍然**用 `applySync`（见本函数上面那处 :3729）——
+        //     那是"补间之前"的正确用法，**不要**一起删掉。
+        this.expandState.applyMorphProgress(0);
       });
       this.closeSettleTimer = setTimeout((): void => {
         this.closeSettleTimer = -1;
