@@ -2370,6 +2370,26 @@ export class PlayerExpandState {
    * 见 {@link morphOverlayBridging} 顶部那段（否则"快照里那张 + 克隆层那张"= 两个封面）。
    */
   private snapshotShrinkOwned: boolean = false;
+  /**
+   * ★★★ 2026-10-17（照搬无界 `MainPage.pullMode`）：本次形变会话**是不是从下拉那条路起的**。
+   *
+   * 无界背景层的不透明度按它分流（`wujie.pa:192161-192176`）：
+   * ```
+   *   __Common__().opacity(pullMode ? pullBgOpacity() : expand.contentOpacity)
+   * ```
+   * 写点只有两个：`pullOpenBegin()` 置**真**、`morphReset()` 置**假**。
+   * ⚠️ 不要用 `morphDrive === FINGER` 代替：松手提交之后 `morphDrive` 会变成 `ANIM`，
+   *   而无界的 `pullMode` 在整段跟手 + 提交补间里**一直是真**。
+   */
+  @Trace public pullMode: boolean = false;
+
+  /**
+   * @returns 无界那个 `effT()`：`形变中 ? morphT : 1`（`wujie.pa:176295-176326` 的入参）。
+   * 静止态恒 1 ⇒ 一切"按 effT 算"的公式在静止态都取满值。
+   */
+  public effT(): number {
+    return this.morphContainerActive() ? this.morphP : 1;
+  }
 
   /** @returns 浮层拷贝的补间是否正在跑（只读，给播放页的日志与护栏用）。 */
   public overlayTweenAnimating(): boolean {
@@ -3044,6 +3064,17 @@ export class PlayerExpandState {
    */
   public pullOpenBegin(ui: UIContext, preferFloating: boolean): boolean {
     this.pullDragging = true;
+    // ★★★★ 2026-10-17（**照搬无界：进入"下拉模式"** —— `MainPage.pullMode`）
+    //   无界背景层的不透明度是分两套取值的（`wujie.pa:192161-192176`）：
+    // ```
+    //   __Common__().opacity(pullMode ? pullBgOpacity() : expand.contentOpacity)
+    // ```
+    //   ⇒ **下拉那条**才走 `pullBgOpacity`（= `PULL_BG_FLOOR + pullBgIn×0.96`）；
+    //     其余所有入口（点击打开 / 关闭 / 系统返回）走 **`expand.contentOpacity`**。
+    //   我们之前把两条路都按 `pullBgOpacity` 算 ⇒ 补间路（`morphP` 被一次性写成 0）
+    //   不透明度直接掉到 0.04 ⇒ 用户看到的"展开一直黑 / 关闭黑"就是它。
+    //   本字段只有两处写：**这里置真**、`morphReset()` 置假。
+    this.pullMode = true;
     // 记下起手时刻：残留标记靠它判定过期（见 `pullStartedAtMs` 的说明）
     this.pullStartedAtMs = Date.now();
     const ready: boolean = this.prepareMorphEntry(ui, preferFloating);
@@ -3795,6 +3826,8 @@ export class PlayerExpandState {
     this.morphOverlayCollapseOwned = false;
     // ★ 2026-10-17：快照收缩的所有权也只在一次会话内有效
     this.snapshotShrinkOwned = false;
+    // ★ 2026-10-17（照搬无界）：会话结束 ⇒ 退出"下拉模式"（下一轮由 `pullOpenBegin` 重新置真）
+    this.pullMode = false;
     this.morphOverlayP = 0;
     Logger.info(PlayerExpandState.logTag,
       `morph overlay reset gen=${this.morphOverlayGen} overlayP=0`);

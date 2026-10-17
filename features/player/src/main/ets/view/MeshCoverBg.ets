@@ -42,6 +42,7 @@ import { DrawContext, FrameNode, NodeController, RenderNode, UIContext } from '@
 import { drawing, displaySync } from '@kit.ArkGraphics2D';
 import { image } from '@kit.ImageKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { SRC_EDGE, enhanceColors, boxBlurRgba, fillFallback, hueOfSeed } from '../util/MeshSource';
 import { MeshField } from '../util/MeshGradient';
 
 /** 每格细分数（无界 `MESH_SUB`）。 */
@@ -56,6 +57,9 @@ const FPS_MAX: number = 24;
 const SCRIM_CENTER: string = '#26000000';
 const SCRIM_EDGE: string = '#66000000';
 const HIT_FULL: string = '100%';
+/** 兜底网格的盒式模糊半径 / 轮数（无界 `MeshCoverBg` 的 `BLUR_RADIUS` / `BLUR_PASSES`）。 */
+const FALLBACK_BLUR_RADIUS: number = 9;
+const FALLBACK_BLUR_PASSES: number = 3;
 
 const TAG: string = 'RzdMeshCoverBg';
 const DOMAIN: number = 0x0000;
@@ -156,6 +160,14 @@ class MeshBgController extends NodeController {
 export struct MeshCoverBg {
   /** 已解码好的封面位图（64×64 最佳；**生命周期归调用方**，本组件不 release）。 */
   @Param src: image.PixelMap | undefined = undefined;
+  /**
+   * ★★★ 2026-10-17（照搬无界 `MeshCoverBg.seed` + `makeFallback()`）：
+   * 取不到封面时按这个种子造**兜底网格**（`hueOfSeed(seed)` → `fillFallback` 四角 HSL 渐变
+   * → `enhanceColors` → `boxBlurRgba`）。上游是 `seedOfParts(title, artist)`。
+   *
+   * ⇒ 网格源**永远存在**，屏上不会出现"背景一片黑"（上游从不会黑，就是因为有这一步）。
+   */
+  @Param seed: string = '';
   /** 换图令牌：`src` 原地变化时靠它触发重新上传。 */
   @Param srcVersion: number = 0;
   /** 是否在播放（与 `active` 一起构成帧闸门）。 */
@@ -210,6 +222,7 @@ export struct MeshCoverBg {
     this.disposed = true;
     this.stopFrames();
     this.controller.node.src = null;
+    this.releaseFallback();
   }
 
   @Monitor('srcVersion')
@@ -223,11 +236,88 @@ export struct MeshCoverBg {
   }
 
   private applySource(): void {
-    this.controller.node.src = this.src ?? null;
-    this.controller.node.invalidate();
-    // ★★★ 2026-10-16（修用户实测「**歌曲不是播放状态，背景就会是一片黑**」）：
-    //   见 `onFrameNow()` 的注释 —— 暂停态必须**至少画一帧**，不能只靠帧回调。
-    this.onFrameNow();
+    // ★★★★ 2026-10-17（照搬无界 `decodeCover()` 失败 ⇒ `makeFallback()` 那条链）
+    // ```
+    //   无界：coverPath 解不出图 ⇒ makeFallback()：按 seed 的色相造一张 64×64 的
+    //         四角 HSL 渐变 → enhanceColors → boxBlurRgba → 直接当网格源
+    //   ⇒ **网格源永远存在**，屏上不会出现"背景一片黑"
+    // ```
+    // 我们这一侧的 `src` 由页面给（在线封面要下载），拿不到时就在**组件内**造兜底网格
+    // ——与上游同一个位置、同一个算法（`fillFallback` / `hueOfSeed` 已在 `MeshSource` 里）。
+    if (this.src !== undefined) {
+      this.controller.node.src = this.src;
+      // 真源来了，兜底那张没用了（本组件持有它的所有权）
+      this.releaseFallback();
+      this.controller.node.invalidate();
+      this.onFrameNow();
+      return;
+    }
+    void this.makeFallback();
+  }
+
+  /** 兜底网格（本组件持有其所有权；换源/退场时释放）。 */
+  private fallbackPm: image.PixelMap | undefined = undefined;
+  /** 兜底网格是否正在构造（防重入：`applySource` 可能连触几次）。 */
+  private fallbackBuilding: boolean = false;
+
+  private releaseFallback(): void {
+    const pm: image.PixelMap | undefined = this.fallbackPm;
+    this.fallbackPm = undefined;
+    if (pm !== undefined) {
+      try {
+        pm.release();
+      } catch (err) {
+        const e = err as BusinessErrorLike;
+        hilog.warn(DOMAIN, TAG, 'fallback release failed code=%{public}d', e.code);
+      }
+    }
+  }
+
+  /**
+   * 造兜底网格（照搬无界 `makeFallback()` / `MeshSource.fillFallback`）。
+   *
+   * ① `hueOfSeed(seed)` → 色相；② `fillFallback` 铺一张**四角 HSL 双线性渐变**；
+   * ③ `enhanceColors`（低对比/高饱和/偏暗）；④ `boxBlurRgba(64,64,9,3)`；
+   * ⑤ `image.createPixelMap` 交给渲染节点。
+   * ⚠️ 与上游唯一差别：上游从 `fs` 读封面文件，我们的 `src` 是页面给的 PixelMap
+   *   ⇒ 只在 `src` 缺席时走这一步。
+   */
+  private async makeFallback(): Promise<void> {
+    if (this.disposed || this.fallbackBuilding) {
+      return;
+    }
+    this.fallbackBuilding = true;
+    try {
+      const buf: ArrayBuffer = new ArrayBuffer(SRC_EDGE * SRC_EDGE * 4);
+      const u8: Uint8Array = new Uint8Array(buf);
+      fillFallback(u8, SRC_EDGE, SRC_EDGE, hueOfSeed(this.seed));
+      enhanceColors(u8);
+      boxBlurRgba(u8, SRC_EDGE, SRC_EDGE, FALLBACK_BLUR_RADIUS, FALLBACK_BLUR_PASSES);
+      const pm: image.PixelMap = await image.createPixelMap(buf, {
+        size: { width: SRC_EDGE, height: SRC_EDGE },
+        pixelFormat: image.PixelMapFormat.RGBA_8888,
+        editable: true
+      });
+      if (this.disposed) {
+        pm.release();
+        return;
+      }
+      // 真源在这期间到了 ⇒ 兜底作废（不要把它盖上去）
+      if (this.src !== undefined) {
+        pm.release();
+        return;
+      }
+      this.releaseFallback();
+      this.fallbackPm = pm;
+      this.controller.node.src = pm;
+      this.controller.node.invalidate();
+      this.onFrameNow();
+    } catch (err) {
+      const e = err as BusinessErrorLike;
+      hilog.warn(DOMAIN, TAG, 'makeFallback failed code=%{public}d msg=%{public}s', e.code, e.message);
+    } finally {
+      this.fallbackBuilding = false;
+    }
   }
 
   /** 闸门 = `playing && active`（**暂停即停帧**）。 */
