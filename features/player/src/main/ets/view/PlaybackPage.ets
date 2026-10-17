@@ -3712,6 +3712,8 @@ export struct PlaybackPage {
     if (this.isClosing) {
       return;
     }
+    this.closeLiveMorphFallback('snapshotOff');
+    return;
     const winW: number = this.expandState.windowWidthVp;
     const winH: number = this.expandState.windowHeightVp;
     // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-17闂?*闂婎偄娲ら幊姗€濡磋箛娑欏仢濞村吋娼欏▍銈呪槈閹绢垰浜惧┑鐐叉灤閵堝懎甯梺鎼炲劚閿曪箓鎮￠埡鍕╀汗?* 闂佺偨鍎查弻锟犲焵?闁哄鏅滈悷锕€危?闁哄鏅滈弻銊ッ洪弽顓炵闁规儼濮ら敍鏂棵归崗鑲╃叝缂佹顦扮€电厧顫濋鈧紞渚€鏌熺€涙ê濮堟俊顐犲€濆畷婵嬪Ω瑜庨弳?闂佹眹鍔岀€氼剛妲愰幋锕€绀傜紒娑樻贡缁€鍡涙煥?
