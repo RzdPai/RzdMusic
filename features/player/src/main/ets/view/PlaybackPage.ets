@@ -442,26 +442,26 @@ export struct PlaybackPage {
     const rowH: number = PlaybackPage.LYRIC_META_ROW_H_VP;
     const baseH: number = this.expandState.estBoxHVp();
     const centeredTop: number = (baseH - rowH) / 2;
-    let absTop: number = this.expandState.metaTopGeomY(this.lyricMorphT, rowH);
-    // ★★★★ 2026-10-17（**压住控制区的钳制 —— 用「实测」而不是「推算」**）
+    // ★★★★ 2026-10-17（**照无界：位移只有一条 `metaOffsetYAt(t)`，没有任何钳制**）
     //
-    // 用户两次实测「展开时标题歌手那行会和进度条重叠」。这一行是**绝对定位浮层**
-    // （`LyricFloatLayer`），无界那一条在页面流里、天然排不进控制区 ⇒ 必须自己钳制。
-    // ⚠️ 上一版我用 `topInset + estBoxHVp + swiperGap` **推算**控制区顶边 ——
-    //   而 `estBoxHVp()` 是"可用高 − 档位表里的控制区总高"，与我们控制区的**自然高度**
-    //   并不相等（本仓控制区高度由内容撑出来，`RzdSwiperBox` 日志一直在对这两个数）
-    //   ⇒ 推算值偏低 ⇒ 钳制没起作用。
-    // ⇒ 现在优先用**实测**：`gapSwiper` 那根占位条（控制区正上方那一根）的窗口顶边，
-    //   它就是控制区的真实上沿；量不到（-1）才退回推算值。
-    const measuredTop: number = this.chromeTopMeasured > 0
-      ? this.chromeTopMeasured : this.boxTopY(PlaybackPage.SWIPER_GAP_ROW_ID);
-    const estimatedTop: number = this.expandState.topInsetVp() +
-      this.expandState.estBoxHVp() + this.expandState.swiperGapVp();
-    const chromeTopY: number = measuredTop > 0 ? measuredTop : estimatedTop;
-    const maxTop: number = chromeTopY - rowH;
-    if (absTop > maxTop) {
-      absTop = maxTop;
-    }
+    // 本轮把上游那三层全部从字节码里取了出来，逐条对齐：
+    // ```
+    //   floatingMeta（L171797-171846，属性 L195907-196008）
+    //     Column().width('100%').height(this.overlayBaseH())
+    //             .justifyContent(FlexAlign.Center).hitTestBehavior(Transparent)
+    //       Column().width('100%').alignItems(Start)
+    //               .offset({ y: this.morph.metaOffsetYAt(this.swiperProgress) })
+    //         metaRow()
+    //   overlayBaseH()（PlayerPage）: swiperBoxH > 0 ? swiperBoxH
+    //                                : (!chromeHidden && swiperProgress <= 0.001 ? 0 : estBoxH())
+    //   metaOffsetYAt(t)（CoverMorph）: lerp(metaYPlayer, topYAtLyric() + metaTopFixLyric, t)
+    // ```
+    // ⇒ 上游**没有任何"别压进控制区"的钳制**：位置完全由那一条 lerp + 居中盒决定。
+    //   我前几版加的钳制（和用实测 chromeTop 的版本）都是**我自创的**，
+    //   用户实测「改得不对，比之前还差」——撤回，恢复纯几何。
+    //   ⚠️ 觉得"压住进度条"时，要动的是**封面端点 / gap(50) / 控制区预算**这三者之一，
+    //     不是在歌名行上加第二个位移源。
+    const absTop: number = this.expandState.metaTopGeomY(this.lyricMorphT, rowH);
     return absTop - centeredTop;
   }
   /** False after teardown to ignore async image callbacks. */
