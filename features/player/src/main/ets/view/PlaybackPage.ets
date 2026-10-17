@@ -197,6 +197,12 @@ export struct PlaybackPage {
    * ⚠️ 真网格（`MeshCoverBg`）与它无关：网格有自己的 `src`/兜底网格，不依赖本字段。
    */
   @Local tintReady: boolean = false;
+  /**
+   * ★★★ 2026-10-17：**控制区真实上沿**（vp，窗口坐标）—— 由 `SWIPER_GAP_ROW_ID` 那根占位条的
+   * `.onAreaChange` 写（只读量测，无副作用）。`metaOffsetY()` 用它做"别压进控制区"的钳制。
+   * ⚠️ 初值 -1 = 还没量到；那时用推算值兜底。量到之后会触发一次重建，钳制随即生效。
+   */
+  @Local chromeTopMeasured: number = -1;
 
   /** 鏇茬洰鎴栨敹钘忕増鏈彉鍖栨椂鍒锋柊蹇冨舰銆?*/
   @Monitor('state.selectIndex', 'favStore.favoriteVersion')
@@ -447,7 +453,8 @@ export struct PlaybackPage {
     //   ⇒ 推算值偏低 ⇒ 钳制没起作用。
     // ⇒ 现在优先用**实测**：`gapSwiper` 那根占位条（控制区正上方那一根）的窗口顶边，
     //   它就是控制区的真实上沿；量不到（-1）才退回推算值。
-    const measuredTop: number = this.boxTopY(PlaybackPage.SWIPER_GAP_ROW_ID);
+    const measuredTop: number = this.chromeTopMeasured > 0
+      ? this.chromeTopMeasured : this.boxTopY(PlaybackPage.SWIPER_GAP_ROW_ID);
     const estimatedTop: number = this.expandState.topInsetVp() +
       this.expandState.estBoxHVp() + this.expandState.swiperGapVp();
     const chromeTopY: number = measuredTop > 0 ? measuredTop : estimatedTop;
@@ -2674,6 +2681,10 @@ export struct PlaybackPage {
     if (this.coverTint.version === this.appliedTintVersion) {
       return;
     }
+    // ★★★★ 2026-10-17（**只有"当前这一首算出新颜色"才算 ready**）
+    //   `coverTint` 是跨页面共享的：挂载那一刻它的 `version` 已经是**上一首**留下的值。
+    //   ⇒ `aboutToAppear` 里把 `appliedTintVersion` 初始化为当前这个 version（= 视为"已消化"），
+    //     于是这里只有**version 又被推高**（= `extractFlowLightColors` 为当前歌写了新色）才走到下面。
     this.tintReady = true;
     // 鈽?褰㈠彉瀹夐潤绐楀彛鍐呬笉涓婅壊锛堣 `colorApplyWaitOrRetry`锛夛細绛夌獥鍙ｈ繃鍘诲畠浼氳嚜宸遍噸璇曚竴娆°€?
     if (this.colorApplyWaitOrRetry() > 0) {
@@ -2982,6 +2993,16 @@ export struct PlaybackPage {
     //   鐘舵€侀粯璁?false锛屽嵆浣胯缃噷鏄?寮€"涔熸案杩滀笉鐢绘祦鍏夛紙鐢ㄦ埛鍙嶉鐨?娴佸厜鑳屾櫙涓嶇敓鏁?灏辨槸杩欎釜锛夈€?
     //   涓?`AmllLyricView`锛堣嚜宸变粠 store 鐏?fps/灞呬腑/鍓瓕璇嶏級淇濇寔鍚屼竴濂楀仛娉曘€?
     this.flowLightState.enabled = MusicStoreService.getInstance().getPlaybackFlowLight();
+    // ★★★★ 2026-10-17（**把"上一首留下的流光着色"视为已消化** —— 修「展开还是上一首的颜色」）
+    //   `coverTint` 是 `AppStorageV2` 共享状态：挂载那一刻它的 `version` 已经是**上一首**留下的。
+    //   而本页 `appliedTintVersion` 初值是 -1 ⇒ `@Monitor('coverTint.version')` 一上来就命中
+    //   ⇒ `applyFlowLightColors()` 把**上一首**的颜色下发给着色器、并把 `tintReady` 置真
+    //   ⇒ 那道"等当前这首的颜色"的门当场被绕过（上一版就败在这里）。
+    //   ⇒ 挂载时**先对齐**：把当前 version 记成"已消化"，`tintReady` 保持假；
+    //     之后只有 `extractFlowLightColors()` 为**当前这一首**写出新色（version 再被推高）
+    //     才会真正下发并放行那一层。
+    this.appliedTintVersion = this.coverTint.version;
+    this.tintReady = false;
     const song = this.state.getCurrentSongItem();
     this.releaseBackgroundCoverIfPixelMap();
     this.imageLabel = song !== undefined ? song.label : $r('app.media.ic_avatar1');
@@ -3798,7 +3819,16 @@ export struct PlaybackPage {
         //     锛?080脳2400脳4B 鈮?10MB 绾э級锛屽叡浜姸鎬佷竴鐩村紩鐢ㄧ潃瀹冨氨涓嶄細琚洖鏀躲€?
         //     涓婁竴鐗?*婕忎簡杩欎竴鍙?* 鈬?姣忓叧涓€娆℃挱鏀惧櫒灏卞鐣欎竴寮狅紙鐩村埌涓嬩竴娆″叧闂墠琚鐩栵級銆?
         Logger.info(PlaybackPage.logTag, 'RzdShrinkOverlay onDone (overlay hidden, pixmap dropped)');
-        this.expandState.morphLand();
+        // ⛔ 2026-10-17（**不再在这里 `morphLand()`** —— 修用户实测
+        //   「用系统返回关闭，动画结束的时候背景停在本来的颜色，然后**突然变成灰色**」）
+        //   原因：`morphLand()` 把相位置成 `LANDING` ⇒ `morphContainerActive()` 仍为真
+        //   ⇒ 形变容器继续被 `morphClipHeight()` 裁成一条、`MeshCoverBg` 那一层跟着被裁掉/重建
+        //   ⇒ 露出宿主的不透明底座色（`defaultImageBgColor` = 深灰）= 用户看到的"突然变灰"。
+        //   上游那个 `onDone λ`（`wujie.pa:154940-154949`）只做两件事：
+        //   `miniHidden = false` + `shrinkPixmap = undefined` —— **没有**"把活页复位"这一步，
+        //   因为它的页面在快照起来的同一刻就已经 pop 掉了。
+        //   ⇒ 这里同样只清 pixmap；相位/几何的复位交给 `onDisappear → morphReset()`
+        //     （那是会话唯一的复位点，见 `morphReset` 的注释）。
         shrink.clearPixmap();
         // 娴眰鏀跺熬锛堚増350ms锛変箣鍚庡啀鏀惧紑闂搁棬锛氭甯歌矾寰勪笅閭ｆ椂椤甸潰鏃╁凡琚?pop锛?
         // 杩欎竴鍙ュ彧鏄?涓囦竴娌?pop 鎺?鐨勮嚜鎰堬紙鍚屽け璐ユ敮鐨勭悊鐢憋級銆?
@@ -4768,6 +4798,17 @@ export struct PlaybackPage {
               .width(StyleConstants.FULL_WIDTH)
               .height(this.swiperGapRowHVp())
               .hitTestBehavior(HitTestMode.None)
+              // ★★★ 2026-10-17（**把控制区的真实上沿量下来** —— 标题行钳制要用它）
+              //   这一根就是"控制区正上方"的占位条 ⇒ 它的窗口顶边 = 控制区上沿。
+              //   ⚠️ 必须写进 `@Trace`/`@Local`：量到之后要**触发一次重建**，
+              //     否则 `metaOffsetY()` 里那次钳制用的是"还没量到"的兜底推算值 ⇒ 形同没做
+              //     （这正是上一版"钳制没生效"的原因）。
+              .onAreaChange((_oldArea: Area, area: Area): void => {
+                const y: number = areaLengthToVp(area.globalPosition.y);
+                if (Math.abs(y - this.chromeTopMeasured) > 0.5) {
+                  this.chromeTopMeasured = y;
+                }
+              })
 
               Row() {
               }
