@@ -390,6 +390,38 @@ export struct PlaybackPage {
     const coverRight: number = this.lyricFloatRect().x + this.lyricFloatRect().size;
     return side + (coverRight + PlaybackPage.LYRIC_META_GAP_VP - side) * t;
   }
+
+  /**
+   * @returns 元信息行在**基准盒**里的位移（vp）—— 对标无界 `floatingMeta` 内层那条
+   *   `.offset({ y: metaOffsetYAt(swiperProgress) })`（`wujie.pa:195907-196008`）。
+   *
+   * ## 为什么要减掉"居中位置"
+   * 无界那两层是**分工**的：
+   * ```
+   *   外层 Column().width('100%').height(overlayBaseH()).justifyContent(FlexAlign.Center)
+   *        ⇒ 把子内容先摆到基准盒的**竖直中心**
+   *   内层 Column().offset({ y: metaOffsetYAt(t) })
+   *        ⇒ 只表达"相对那个居中位置的偏移"
+   * ```
+   * 我们这条 `.offset()` 里放的必须是**同一个量纲** ⇒
+   * ```
+   *   metaOffsetY() = metaTopGeomY(t, rowH) − (基准盒高 − rowH) / 2
+   *                                         └──── 居中后行顶边相对盒顶的位置 ────┘
+   * ```
+   * ⇒ 行顶边最终落在 `metaTopGeomY(t, rowH)`，与上一版那条
+   *   `.position({ y: metaTopGeomY(...) })` **逐像素等价**（换的是结构与口径，不是数值）。
+   *
+   * ⚠️ **不许再乘 `1/morphScale`**：`metaTopGeomY` 的两个端点都是"容器恒等时"的几何，
+   *   已经是页内/窗口同一套坐标；乘了就会重现用户实测的「**先飞速飞到封面，然后再下来**」。
+   * ⚠️ 基准盒高用 `estBoxHVp()`（= 可用高 − 控制区，与无界 `overlayBaseH()` 同义）。
+   *   它还没量到时为 0 —— 下面用 `(baseH − rowH)/2` 直接算，0 也自洽（不会 NaN）。
+   */
+  private metaOffsetY(): number {
+    const rowH: number = PlaybackPage.LYRIC_META_ROW_H_VP;
+    const baseH: number = this.expandState.estBoxHVp();
+    const centeredTop: number = (baseH - rowH) / 2;
+    return this.expandState.metaTopGeomY(this.lyricMorphT, rowH) - centeredTop;
+  }
   /** False after teardown to ignore async image callbacks. */
   private isAlive: boolean = true;
   /** Bumps on each {@link getImageColorAsync} run so stale async work skips UI updates and releases pixels. */
@@ -711,6 +743,20 @@ export struct PlaybackPage {
       `win=${this.expandState.windowWidthVp.toFixed(0)}x${this.expandState.windowHeightVp.toFixed(0)} ` +
       `pad=${this.expandState.topInsetVp().toFixed(1)}/${this.expandState.navigationBarBottomVp.toFixed(1)} ` +
       `sink=${PlaybackPage.MINI_LYRIC_SINK_VP} t=${this.lyricMorphT.toFixed(3)}`);
+    // ★★★ 2026-10-17（**「歌名行压在进度条上」的可量测判据**）
+    //   `chromeTop` = `gapSwiper` 那根占位条的实测窗口顶边 = **控制区正上方**；
+    //   `metaTop` = 歌名行**设计值**（`metaTopGeomY`），`metaBoxTop` = 歌名行**实测**顶边。
+    //   判据：`metaBoxTop + LYRIC_META_ROW_H_VP > chromeTop` ⇒ 确实压进控制区
+    //   （那时该动的是「封面端点 / gap(50) / 控制区预算」这三者中的一个，
+    //     **不要**在歌名行上再加补偿位移 —— 那会成为第二个位移源）。
+    //   排查关键字：`hdc shell hilog -x | Select-String 'RzdMetaChrome'`
+    Logger.info(PlayerExpandState.LOG_TAG,
+      `RzdMetaChrome chromeTop=${this.boxTopY(PlaybackPage.SWIPER_GAP_ROW_ID).toFixed(1)} ` +
+      `metaBoxTop=${this.boxTopY(PLAYER_META_TITLE_ID).toFixed(1)} ` +
+      `metaTop=${this.expandState.metaTopGeomY(this.lyricMorphT, PlaybackPage.LYRIC_META_ROW_H_VP).toFixed(1)} ` +
+      `rowH=${PlaybackPage.LYRIC_META_ROW_H_VP} ` +
+      `coverBottom=${(this.coverLocalRect().y + this.coverLocalRect().height).toFixed(1)} t=${this.lyricMorphT.toFixed(3)}`);
+
     // ★★★ 2026-10-16（照搬无界）：**控制区三段结构**的对账日志。
     //   判据（真机上一次就够）：实测 Swiper 高度 vs `estBoxH()`（= `usableH − chromeTotal`），
     //   以及两根占位条的实测高 vs 应有高。差得多 ⇒ 我们控制区的自然高和无界表对不上，
@@ -735,6 +781,31 @@ export struct PlaybackPage {
         return -1;
       }
       return this.getUIContext().px2vp(node.getMeasuredSize().height);
+    } catch (err) {
+      return -1;
+    }
+  }
+
+  /**
+   * @returns 某个组件 id 的**窗口坐标顶边**（vp，量不到返回 -1）—— 只给诊断日志用。
+   *
+   * ★ 2026-10-17：加它是为了给「**歌名行压在进度条上**」这一条一个**可量测的判据**
+   *   （我此前只能靠推算 chrome 顶边，推出来两套都自洽，等于没判据）。
+   *   现在把 `gapSwiper` 那根占位条（= 控制区正上方那一根）的实测顶边打出来：
+   * ```
+   *   判据：title.y + 行高 > gapRowTop(≈ 控制区顶边)  ⇒ 歌名行确实压进控制区
+   *   排查关键字：`hdc shell hilog -x | Select-String 'RzdBoxes'`
+   * ```
+   * ⚠️ 用 `getPositionToWindowWithTransform()`（含容器变换）⇒ 形变期读数也会跟着变，
+   *   所以只看**落定态**那几行。
+   */
+  private boxTopY(id: string): number {
+    try {
+      const node = this.getUIContext().getFrameNodeById(id);
+      if (node === null) {
+        return -1;
+      }
+      return areaLengthToVp(node.getPositionToWindowWithTransform().y);
     } catch (err) {
       return -1;
     }
@@ -2153,35 +2224,6 @@ export struct PlaybackPage {
     return PlaybackPage.PULL_BG_FLOOR + this.pullBgIn() * (1 - PlaybackPage.PULL_BG_FLOOR);
   }
 
-  /**
-   * @returns 背景层的**反缩放** = `1 / morphScale`（抵消形变容器的等比缩放）。
-   *
-   * ★★★★ 2026-10-17（用户描述得很准：「**无界的背景只显示上面那一块内容，而我们现在是
-   *   整个背景被压得很扁，然后又拉伸回去**」；「下方框已经变大了，但背景没来得及填进去 = 抽搐」）
-   *
-   * ## 机制
-   * 背景层在形变容器**内部**，容器的 `.scale(morphScale)` 在 p=0 时 ≈ **0.082**
-   * ⇒ 满尺寸网格被等比压成一条，再随容器长大被"拉"回去 ⇒ 就是"压扁 → 拉伸"。
-   * 无界不是这样：它的背景**不跟着缩放**，只被窗口**裁剪** ⇒ 屏上永远只看到背景的**一块区域**
-   * （卡片小的时候看到的是它的**左上那一块**）。
-   *
-   * ## 做法（关键在锚点）
-   * 给背景层乘 `1/morphScale`，并且**锚在左上角**（`centerX/centerY = '0%'`）
-   * ⇒ 背景始终是**满尺寸**、左上角贴在卡片左上角 ⇒ 卡片只露出它的左上那一块
-   * ⇒ 卡片长大时是"**揭开更多**"，而不是"把压扁的东西拉回来"。
-   * ⚠️ 护栏：静止态 `morphScale = 1` ⇒ 返回 1（逐像素不变）；`s <= 0.02` 或非有限值也返回 1
-   *   （1/0.02 = 50 倍会把背景放到离谱，宁可压扁也不画错）。
-   */
-  private bgInverseScale(): number {
-    if (!this.expandState.morphContainerActive()) {
-      return 1;
-    }
-    const s: number = this.expandState.morphScale;
-    if (!Number.isFinite(s) || s <= 0.02 || s >= 1) {
-      return 1;
-    }
-    return 1 / s;
-  }
   /** 无界 `PULL_BG_FLOOR`（`wujie.pa:179978-179979`，`fldai 4.0e-2`）。 */
   private static readonly PULL_BG_FLOOR: number = 0.04;
 
@@ -5652,29 +5694,39 @@ export struct PlaybackPage {
             }
           }
           .width(StyleConstants.FULL_WIDTH)
-          .height(StyleConstants.FULL_HEIGHT)
+          // ★★★★ 2026-10-17（**背景宿主的尺寸必须是"窗口高"，不能是 '100%'** ——
+          //   这才是「压扁 → 再拉伸回去」的真正成因，也与无界的容器树逐字对上）
+          //
+          // ## 无界的容器树（`wujie.pa`，已逐行读过）
+          // ```
+          //   Stack(TopStart) .scale/.translate/.width(clipWidth='100%')
+          //                   .height(expand.clipHeight) .clip(true)     191400-191469
+          //     ├─ If → Column  ← **宽 100% + `winHVp`（固定数）+ padTop/padBottom**   191756
+          //     │    ├─ If → playerPane（Row）
+          //     │    └─ If → **MeshCoverBg**                             192105 / 192191
+          // ```
+          //   ⇒ 背景宿主的**高度是一个固定数 `winHVp`**，跟 `clipHeight` 无关。
+          //     容器（`clipHeight`）只是**裁剪窗口** ⇒ 卡片长大 = **揭开更多背景**，
+          //     背景自己**每帧都不重新排版**。这正是用户描述的
+          //     「无界的背景看着就是只显示上面那一块内容」。
+          //
+          // ## 我们原来的写法（错在这里）
+          //   `.height(FULL_HEIGHT)` = 容器的 **100%**，而容器高 = `morphClipHeight()`
+          //   ⇒ 背景宿主**每帧都被重新排版**：`NodeContainer.onAreaChange` →
+          //     `controller.resize(w, h)` → `field.update(tSec, w, h, flow)` 按新的
+          //     `(w,h)` 重建整套网格顶点 + `drawPixelMapMesh` 按新画布重采样
+          //   ⇒ 小窗口时网格是按"很扁的画布"生成的（内容被压扁），窗口长大时再按新比例
+          //     重算 ⇒ 用户看到的「**被压得很扁、然后又拉伸回去**」「框变大了背景没来得及填进去」。
+          //   ⇒ 换成**固定窗口高**（= 无界那个 `winHVp`）：网格永远按整窗比例生成，
+          //     只有裁剪窗口在变。
+          //   ⚠️ 静止态容器高本来就 = 窗口高 ⇒ **逐像素不变**（回归红线）。
+          .height(this.expandState.windowHeightVp)
           .position({ x: 0, y: 0 })
           .hitTestBehavior(HitTestMode.None)
-          // ★★★★ 2026-10-17（**照搬无界的背景形状** —— 用户：「无界的背景只显示上面那一块内容，
-          //   我们现在是整个背景被压得很扁、然后又拉伸回去」）
-          //   背景层在形变容器内部 ⇒ 会被容器的 `morphScale`（p=0 时 ≈0.082）压扁。
-          //   ⇒ 乘 `1/morphScale` 抵消，且**锚在左上角**：背景始终满尺寸、左上角贴卡片左上角
-          //     ⇒ 卡片只露出背景的**左上那一块**，卡片长大 = **揭开更多**（不是把压扁的拉回来）。
-          //   ⚠️ 静止态 `morphScale = 1` ⇒ 反缩放 = 1 ⇒ 逐像素不变（回归红线）。
-          .scale({
-            x: this.bgInverseScale(),
-            y: this.bgInverseScale(),
-            z: 1,
-            centerX: '0%',
-            centerY: '0%'
-          })
-          // ⛔ 2026-10-17（**撤回我上一版的"反缩放"** —— 依据是用户给的无界中段截图）
-          //   上一版给这一层加了 `.scale(1/morphScale)`，想让背景"不被压扁"。
-          //   但无界的中段截图显示：**网格是铺满整张卡片的**（格子随卡片一起被压/展开），
-          //   也就是说"背景跟着容器缩放"本身是对的；加了反缩放之后，屏上只剩
-          //   一张满尺寸网格的**一块切片** ⇒ 反而与无界不同。
-          //   ⇒ 撤回，恢复"背景 = 卡片内满尺寸"（= 无界那条形状）。
-          //   ⚠️ `bgInverseScale()` 已无调用者，一并删除（死代码会误导后来人）。
+          // ⛔ 2026-10-17（**不乘反缩放** —— 依据是用户给的无界中段截图）
+          //   无界中段截图显示：**网格是铺满整张卡片的**（格子随卡片一起被压/展开）
+          //   ⇒ 背景跟着容器缩放本身是对的，反缩放会让屏上只剩一张满尺寸网格的**一块切片**。
+          //   （上一版那两趟反缩放都已撤回，`bgInverseScale()` 也已删除。）
           // ★★★ 2026-10-16（**背景层自证** —— 见 `diagBgBox` 的注释）：
           //   量的是**本层（背景宿主）**的布局矩形。用户报"有背景但高度特低"时：
           //     · `bgH` 很小而 `clipH` 也小 ⇒ 正常（动画中段，容器就只有那么大）
@@ -6461,7 +6513,23 @@ export struct PlaybackPage {
         //      "派音居中大封面 / 无界小封面靠左" 的那条差异。
         //   ⚠️ 封面让位用 `padding.left` 表达（= 封面右缘 + 12），
         //      与无界靠 `floatingCover`/`metaRow` 两层横向错位达到的结果等价、少一层。
-        Row() {
+        //
+        // ★★★★ 2026-10-17（**照搬无界 `floatingMeta` 的两层形状** —— 位运算级同构）
+        // ```
+        //   外层 Column().width('100%').height(overlayBaseH())
+        //                .justifyContent(FlexAlign.Center)        ← 只负责"竖直居中"
+        //                .hitTestBehavior(HitTestMode.Transparent)
+        //     内层 Column().width('100%').alignItems(HorizontalAlign.Start)
+        //                  .offset({ y: metaOffsetYAt(swiperProgress) })   ← 只负责"相对居中的位移"
+        // ```
+        // （`wujie.pa:195907-196008`）⇒ 我们照同一形状摆：外层给**基准盒**（`estBoxHVp()`，
+        //   与 `overlayBaseH()` 同义：可用高 − 控制区），内层用 `.offset()` 走那条 lerp。
+        // ⚠️ 几何上与上一版的 `.position({y: metaTopGeomY(...)})` **逐像素等价**
+        //   （`metaOffsetY()` 里已经把"居中位置"减掉了），换的只是**结构与口径**：
+        //   从此位移是"相对基准盒中心的偏移"，和无界同一个量纲，下一步调参不用再返工。
+        Column() {
+          Column() {
+            Row() {
           Column() {
             Text(this.state.getCurrentSongItem()?.title ?? '', { controller: this.titleController })
               // ★ 端点上报（原 `MusicPlayInfoBlock` 的职责）—— 见 `publishMetaEndpoint`
@@ -6550,18 +6618,15 @@ export struct PlaybackPage {
         //      而 `t × (size − rowH)/2` 那个"居中补偿"又是本仓自创的第三项。
         // ⇒ 现在直接调**一个**有出处的函数（`metaTopGeomY`，两端点逐字来自
         //   `CoverMorph.metaOffsetYAt` + `fitPlayerOverlay`），本行不再有任何自编项。
-        .position({
-          x: 0,
-          // ★★★★ 2026-10-17（用户：「它**先飞速飞到封面那个位置，然后再下来**」）
-          //   ⇒ 那一行原来每帧都在做"窗口 → 页内"的换算（`metaTopLocalY`），
-          //     而换算系数是 `1/morphScale`：形变初期 s ≈ 0.08 ⇒ 乘 12 倍 ⇒ 被甩到封面那边，
-          //     随着 s → 1 才落回来 = "先飞到封面、再下来"。
-          //   ★ 关键：`metaTopGeomY(t,rowH)` 的两个端点**本来就是落定态几何**
-          //     （`bigEndpointRect()` 与 `lyricMorph(1)` 都是容器恒等时算出来的值）⇒ **已经是页内坐标**
-          //     ⇒ **不需要任何换算**，直接 lerp 就是无界那条 `lerp(metaYPlayer, topYAtLyric + 28, t)`。
-          //   ⇒ 撤掉换算（`metaTopLocalY` 已无调用者，一并删除）。
-          y: this.expandState.metaTopGeomY(this.lyricMorphT, PlaybackPage.LYRIC_META_ROW_H_VP)
-        })
+        //
+        // ★★★★ 2026-10-17：位移**从 `.position()` 挪到外层那个 `Column` 的 `.offset()`**
+        //   （= 无界 `floatingMeta` 的形状，见上面插进来的那两层）。
+        //   `metaOffsetY()` = `metaTopGeomY(t, rowH) − (基准盒高 − rowH)/2`
+        //   ⇒ 与原来那条 `.position({ y: … })` **逐像素等价**，只换口径。
+        //   ⚠️ 原来 `.position` 里那段"窗口 → 页内换算（`metaTopLocalY`）"的教训仍然有效：
+        //     `metaTopGeomY` 的两个端点**本来就是落定态几何**（容器恒等时算出来的值）
+        //     ⇒ **已经是页内坐标，不许再乘 `1/morphScale`**（乘了就会"先飞到封面、再下来"）。
+
         // ★★ 2026-10-15（修用户实测「**动画中途会出现两个歌名歌手**（有一个是残留的、
         //   以前派音用的歌名歌手飞入）」）：
         //   **这一行原来是写死的 `.opacity(1)`**（注释理由是"常驻 ⇒ 恒可见：封面页那份歌名
@@ -6601,6 +6666,15 @@ export struct PlaybackPage {
         //   goal 第 1 条只点了元信息行；那两组是"控制区从下升上来"，用户已确认的
         //   ③ 说的就是它们那套时间窗（`pullChromeOpacity` 0.18–0.62 / `pullBottomIn` 0.45–1.00）。
         //   它们同样叠了一条 180vp —— 要不要一起去掉，等这次观感反馈再定（见 §130）。
+          }
+          .width(StyleConstants.FULL_WIDTH)
+          .alignItems(HorizontalAlign.Start)
+          .offset({ y: this.metaOffsetY() })
+        }
+        .width(StyleConstants.FULL_WIDTH)
+        .height(this.expandState.estBoxHVp())
+        .justifyContent(FlexAlign.Center)
+        .hitTestBehavior(HitTestMode.Transparent)
       }
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
