@@ -14,7 +14,14 @@
  */
 
 import { AppStorageV2 } from '@kit.ArkUI';
-import { DividerMode, HdsTabs, hdsMaterial, SystemMaterialParams } from '@kit.UIDesignKit';
+import {
+  DividerMode,
+  HdsBarLayoutMode,
+  HdsBarStyle,
+  HdsTabs,
+  hdsMaterial,
+  SystemMaterialParams
+} from '@kit.UIDesignKit';
 import { AppStorageKeys, areaLengthToVp, Logger, PlayerExpandState } from 'musicbasic';
 
 /**
@@ -124,6 +131,52 @@ const DEFAULT_MATERIAL: SystemMaterialParams = {
  *   而且"居中的内容"也会与胶囊上下错开 `(2m − slackH) / 2`。
  *   写成 `bH + 2m` 之后：上留白 ≡ 下留白 ≡ m ⇒ **胶囊恒在盒中心**，与 m 取多少无关
  *   （键盘态盒子会变高，那是纯透明的 slack，换来的是胶囊位置与内容位置恒等）。
+ *
+ * ══════════════════════ 五、2026-10-20（第五轮）：首页 / 二级页必须"是同一个" ══════════════════════
+ *
+ * 用户原话：「**首页播放条和二级页面不是一个啊**」。上一版为让首页"低调"，把首页的 `barHeight`
+ * 改成"内容自然高"（两排态 46 / 沉浸 56 / 单排展开 60 / 折叠 72），而二级页恒 56
+ * ⇒ 一眼就是两条不同的东西。本轮的收口只有一句话：
+ *
+ *   **可见高度只由宿主传进来的 `barHeight` 决定，两处必须传同一个常量**
+ *   （`Index.ets` 的 `FLOATING_MINI_BAR_HEIGHT_VP = 56`，照抄无界 `MINI_CAPSULE_H = BAR_H`）。
+ *   "低调"要落在**内容更紧凑**（封面档位）上，**不许**用减小胶囊高度去实现 —— 本组件不再有任何
+ *   按宿主切高度/切几何的分支（`barHeight` 是入参，本身不自算）。
+ *
+ * 同一性四件套（两条宿主逐项相等，代码里可指认）：
+ *   · 高度 = 56（同一个常量）；
+ *   · 宽度 = `Index.floatingMiniBarWidthVp()`（**同一个函数**）；
+ *   · 圆角 = 胶囊高/2（HDS 浮动栏自己按 `barHeight` 画 ⇒ 同高必同圆角）；
+ *   · 材质 = `Index.ambientTitleMaterial()`（**同一个函数** ⇒ 同一档 `systemMaterialEffect`）。
+ *
+ * 唯一的几何差异是**"单层"态**（`barLayoutMode === HORIZONTAL`，见第六节）：
+ * 那时胶囊要和左侧的圆形页签坞并排，所以宿主会把 `barWidth` 让出坞宽 —— 那是宽度的事，
+ * 高度仍然是 56（页签胶囊也是 56 ⇒ 整排高度恒等，官方口径「迷你栏跟页签栏高度相等且水平对齐」）。
+ *
+ * ══════════════════════ 六、`barLayoutMode` / `capsuleStyle` 两个入参为什么存在 ══════════════════════
+ *
+ * 用户原话：「**而且是可以收起为单层的，现在也不行了**」。旧版那条住在壳层 `HdsTabs` 的
+ * `barFloatingStyle.miniBar` 槽里，收起/展开是 **HDS 自己**按 `HdsTabsMiniBar.barLayoutMode`
+ * （`@hms.hds.hdsBaseComponent.d.ets:5223`，`HORIZONTAL` = "minibar and tabbar are arranged
+ * horizontally in one row" :5234 / `VERTICAL` = "in two rows" :5243）与
+ * `HdsTabsMiniBar.miniBarStyle`（:5159，`COLLAPSE`/`EXPAND`）做的。
+ * 播放器搬进我们子树之后，那两个字段**还在**（驱动方没变，见 `Index.miniBarStyleForHds()` /
+ * `barLayoutModeForHds()`，数据源是 `BarScrollHelper` 写的 `MusicAppState`），但它们只对
+ * **宿主自己的 miniBar 槽**生效 —— 槽里现在是 0 高度占位，`HdsBarStyle` 就"没人接"了。
+ *
+ * ⇒ 本组件把这两个值当 `@Param` 收下来，做**两件真事**（不是留着好看）：
+ *   ① `barLayoutMode === HORIZONTAL`（单层）⇒ **本盒横向 slack 归零**（`boxWidth == barWidth`，
+ *      胶囊左缘 = 盒左缘）。理由：单层态胶囊右边紧贴页签排的右缘、左边紧贴坞（中间只该有宿主给的
+ *      `HOME_MINI_CAPSULE_GAP_VP`），盒再各留 5vp 透明 slack 会把那道缝撑成 13vp；
+ *      左边距由盒自己给出 ⇒ 宿主算的是**胶囊矩形**，不用替本组件减 slack。
+ *      ⚠️ 横向 slack 归零**不影响**第二节那个 squash 恒等式（`scale` 只动 y，盒高仍 `bH + 2m`）。
+ *   ② 两行探针日志里如实打 `style=` / `layout=` —— 判据：单层/双层切换时它们必须跟着
+ *      `grep RzdBarLayout` 的 `target=single-row` / `target=two-rows` 一起变。
+ *
+ * ⚠️ 为什么**不**把这两个值转发给内层 `HdsTabs` 的 `.barFloatingStyle({...}).miniBar`：
+ *   内层是**单 Tab**、没有 miniBar 槽，`barLayoutMode` / `miniBarStyle` 都挂在
+ *   `HdsTabsMiniBar` 上（SDK :5132-5224）⇒ 写进去是 no-op，只会造出"日志说接了、屏上没动"的假象。
+ *   真正的几何后果由宿主算进 `barWidth` / `bottomMargin`（`Index.homeMiniCapsule*`）。
  */
 @ComponentV2
 export struct MiniBarMaterialCapsule {
@@ -135,10 +188,10 @@ export struct MiniBarMaterialCapsule {
   /**
    * 胶囊**可见**高度（vp）。
    *
-   * 两个宿主口径不同，**不要互相抄**：
-   *   · 二级页（`Index.floatingMiniBar`）：`FLOATING_MINI_BAR_HEIGHT_VP`(56) —— 用户明确说这条 OK；
-   *   · 首页（`Index.homeMiniCapsule`）：**内容自然高** = 封面 + 上下各 8（常态两排/封面 30 ⇒ 46vp）
-   *     —— 用户要求"恢复低调/矮"，这个值就是上一版之前 HDS 按其内容量出来的那一格高度。
+   * ★★★ 2026-10-20（第五轮）：**两个宿主必须传同一个常量**
+   * `Index.FLOATING_MINI_BAR_HEIGHT_VP`(= 56 = 无界 `MINI_CAPSULE_H = BAR_H`)。
+   * 上一版让首页传"内容自然高"（46/56/60/72 随封面档位变）⇒ 用户一眼看出"首页和二级页不是同一个"。
+   * "低调"属于**内容**（封面档位由 `HomeMiniBarAlbumCover` 决定），不要用减小胶囊高度实现。
    */
   @Param barHeight: number = 56;
   /** 横向余量（vp）：只参与本组件盒宽，不参与胶囊宽。 */
@@ -156,6 +209,22 @@ export struct MiniBarMaterialCapsule {
   @Param bottomMargin: number = -1;
   /** 官方材质参数（二级页 / 首页都传 `ambientTitleMaterial()`，保证同一套光感）。 */
   @Param material: SystemMaterialParams = DEFAULT_MATERIAL;
+  /**
+   * 迷你栏样式（HDS `HdsBarStyle` 的镜像）= 宿主 `barFloatingStyle.miniBar.miniBarStyle` 的同一个值。
+   *
+   * 它是"收起 / 展开"这条链路的**第二段**：`BarScrollHelper` 写 `MusicAppState` →
+   * `Index.miniBarStyleForHds()` → ①宿主 HDS 动页签胶囊；②本组件打日志（见类注释第六节）。
+   * @default HdsBarStyle.COLLAPSE —— 与 `MusicAppState.miniBarExpanded` 的缺省 `false` 一致。
+   */
+  @Param capsuleStyle: HdsBarStyle = HdsBarStyle.COLLAPSE;
+  /**
+   * 双层底栏排布模式（HDS `HdsBarLayoutMode` 的镜像）= 宿主 `miniBar.barLayoutMode` 的同一个值。
+   *
+   * `HORIZONTAL` = 迷你条与页签**并排一排**（用户说的"收起为单层"）⇒ 本盒横向 slack 归零（类注释第六节 ①）。
+   * `VERTICAL` = 上下两排（默认）。
+   * `undefined` = 发行版 < 6.1.1(24)，HDS 不支持该字段 ⇒ 保持两排，slack 照旧。
+   */
+  @Param barLayoutMode: HdsBarLayoutMode | undefined = undefined;
   /** 胶囊里画什么（内容层 ≡ 胶囊矩形，内部自行居中）。 */
   @BuilderParam content: () => void = this.emptyContent;
   /**
@@ -199,8 +268,12 @@ export struct MiniBarMaterialCapsule {
     return this.bottomMargin >= 0 ? this.bottomMargin : this.slackH / 2;
   }
 
-  /** @returns 本组件盒宽（vp）= 胶囊宽 + 横向余量（左右各 `slackW / 2`）。 */
+  /** @returns 本组件盒宽（vp）= 胶囊宽 + 横向余量（左右各 `slackW / 2`）；单层态余量为 0。 */
   private boxWidthVp(): number {
+    if (this.barLayoutMode === HdsBarLayoutMode.HORIZONTAL) {
+      // 单层（迷你条与页签并排）：盒 ≡ 胶囊 ⇒ 宿主算的是胶囊矩形，不用替本组件减 slack。
+      return this.barWidth;
+    }
     return this.barWidth + this.slackW;
   }
 
@@ -209,8 +282,11 @@ export struct MiniBarMaterialCapsule {
     return this.barHeight + this.resolvedBottomMarginVp() * 2;
   }
 
-  /** @returns 可见胶囊在本盒里的左边（vp）：横向由 HDS 居中 ⇒ 左右各留 `slackW / 2`。 */
+  /** @returns 可见胶囊在本盒里的左边（vp）：双层态横向由 HDS 居中 ⇒ 左留 `slackW / 2`；单层态盒 ≡ 胶囊 ⇒ 0。 */
   private capsuleLeftVp(): number {
+    if (this.barLayoutMode === HdsBarLayoutMode.HORIZONTAL) {
+      return 0;
+    }
     return this.slackW / 2;
   }
 
@@ -286,6 +362,7 @@ export struct MiniBarMaterialCapsule {
           `capsule x=${capX} y=${capY} w=${this.barWidth} h=${this.barHeight} ` +
           `dx=${dx} dy=${dy} slotDx=${slotDx} slotDy=${slotDy} ` +
           `barW=${this.barWidth} barH=${this.barHeight} m=${m} ` +
+          `style=${this.capsuleStyle} layout=${this.barLayoutMode} ` +
           `squashY=${this.expandState.morphSquashY}`);
     })
   }
@@ -396,6 +473,7 @@ export struct MiniBarMaterialCapsule {
           `barW=${this.barWidth} barH=${this.barHeight} slackW=${this.slackW} slackH=${this.slackH} ` +
           `bottomMargin=${this.resolvedBottomMarginVp()} ` +
           `expectW=${this.boxWidthVp()} expectH=${this.boxHeightVp()} ` +
+          `style=${this.capsuleStyle} layout=${this.barLayoutMode} ` +
           `material=${this.material.materialType}/${this.material.materialLevel} ` +
           `squashY=${this.expandState.morphSquashY}`);
     })

@@ -18,7 +18,7 @@ import {
   AmbientState, AppStorageKeys, areaLengthToVp, getWindowInfoState, ImmersiveType, Logger, MINI_BAR_ID,
   PlayerExpandState, StyleConstants, WindowInfo
 } from 'musicbasic';
-import { MusicAppState, PlayerConstants, PlayerViewModel } from 'player';
+import { MusicAppState, PlayerViewModel } from 'player';
 import { HomeMiniBarAlbumCover } from './HomeMiniBarAlbumCover';
 import { HomeMiniBarPlayerAside } from './HomeMiniBarPlayerAside';
 
@@ -47,9 +47,11 @@ export struct HomeMiniBarPlayer {
    *     · 沉浸式自由窗口：封面 40 ⇒ **56vp**
    *     · 单排 · 展开（`miniBarExpanded`）：封面 44 ⇒ **60vp**
    *     · 单排 · 折叠：封面 56 ⇒ **72vp**
-   *   这就是主页那条在"搬出 HDS `miniBar` 槽之前"的可见高度（HDS 的 miniBar 行高 = 按内容量）。
-   *   ⇒ 主页胶囊的 `barHeight` 必须按**同一个算式**给（见 `Index.homeMiniCapsuleBarHeightVp()`），
-   *     否则胶囊会胖起来（上一版写死 56 ⇒ 两排态从 46 变 56，用户一眼看出"改成大的了"）。
+   * ★★★ 2026-10-20（第五轮，用户：「首页播放条和二级页面不是一个」）：**本值只决定内容的自然高**，
+   *   **不再**决定胶囊高 —— 两条宿主的胶囊高都是 `Index.FLOATING_MINI_BAR_HEIGHT_VP`(56) 这个常量。
+   *   自然高 = 封面边长 + 2 × 本值：两排（封面 30）⇒ 46 / 沉浸（40）⇒ 56 / 单排（44）⇒ 60。
+   *   宿主用 `contentHeightVp` 把行**钉在** 56 上（`constraintSize.maxHeight` + 根 Stack 居中），
+   *   ⇒ 46 的那一档内容在胶囊里上下各留 5vp（"低调"），60 的那一档超出 2vp/边（与二级页同款）。
    *   ⚠️ 改这个数必须同时改 `products/default/.../Index.ets` 的 `HOME_MINI_BAR_CONTENT_PAD_VP`。
    */
   private static readonly CONTENT_PAD_VP: number = 8;
@@ -141,8 +143,11 @@ export struct HomeMiniBarPlayer {
    * 2026-10-20 起**内容行（`Row`）自己也吃同一个上限**：非沉浸档位行自然高 60 > 56，
    * 不钉就是"子件比容器大"（排布交给引擎兜底，2vp 向下偏差的候选来源）。
    *
-   * ⚠️ 首页那条 / 推荐页 / 歌单页**不传**（保持自然高度），不要顺手给它们也钉上 ——
-   *   首页那条的胶囊高度现在也按**同一个自然高度**给（`Index.homeMiniCapsuleBarHeightVp()`）。
+   * ⚠️ 2026-10-20（第五轮）：**首页那条也要传 56**（`Index.FLOATING_MINI_BAR_HEIGHT_VP`），
+   *   与二级页**同一个常量、同一个上限** —— 用户「首页播放条和二级页面不是一个」就是上一版
+   *   首页不钉高度（46/56/60/72 随封面档位变）、二级页钉 56 造成的。
+   *   推荐页 / 歌单页（`HomeFloatingMiniBar` / `PlaylistFloatingMiniBar`，自绘胶囊宿主）**不传**：
+   *   那两条的胶囊本身就是按内容自然高画的，钉住反而会切开自绘背板。
    */
   @Param contentHeightVp: number = 0;
   /** 涓婃媺鎵撳紑鎾斁椤碉紙璺熸墜锛夛細椹卞姩鍏变韩褰㈠彉杩涘害锛屾敹灏捐ˉ闂翠氦缁欏３灞傘€?*/
@@ -174,9 +179,11 @@ export struct HomeMiniBarPlayer {
   private static readonly PULL_ANCHOR_RETRY_MAX: number = 12;
   private static readonly PULL_ANCHOR_RETRY_MS: number = 32;
 
-  private effectiveMiniBarExpanded(): boolean {
-    return this.followAppMiniBarExpanded && this.playerViewModel.appState.miniBarExpanded;
-  }
+  // ── `effectiveMiniBarExpanded()` 已删除（2026-10-20 第五轮）──
+  //   它只被左右内距用过；左右内距改成常数（见 `sidePadVp()`），`miniBarExpanded` 在本组件里
+  //   不再影响任何几何 ⇒ 留着就是"半套机制"。
+  //   "收起 / 展开"仍然生效，只是**换了个载体**：胶囊高度/位置在宿主（`Index.homeMiniCapsule*`），
+  //   封面档位在 `HomeMiniBarAlbumCover.isTwoRowBarLayout()`（读的仍是 `MusicAppState`）。
 
   // 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ 鈽?鑷粯鑳屾澘锛堜慨鐢ㄦ埛瀹炴祴銆屾挱鏀炬潯鑳屾櫙涓嶅脊銆嶏級鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
@@ -313,13 +320,16 @@ export struct HomeMiniBarPlayer {
    *   `h/2 鈭?cover/2 = 56/2 鈭?40/2 = 8` 鈬?灏侀潰涓婁笅鍚勮创 8vp銆佹按骞冲乏缂樿创 8vp銆?
    */
   private sidePadVp(): number {
-    const h: number = this.effectiveMiniBarExpanded()
-      ? PlayerConstants.MINI_BAR_CONTENT_H
-      : PlayerConstants.MINI_BAR_CONTENT_H * PlayerConstants.MINI_BAR_COLLAPSED_RATIO;
-    const cover: number = PlayerConstants.MINI_BAR_CONTENT_H;
-    // ★ 2026-10-17（用户：**"组件距离播放条两侧太近"**）：原来 = h/2 - cover/2（纯"让封面垂直居中"），
-    //   再加上 8vp 的呼吸，让封面/按钮簇都离胶囊两端更远一点（只动这一处，胶囊宽度不变）。
-    return h / 2 - cover / 2 + HomeMiniBarPlayer.MINI_BAR_INNER_PAD_VP;
+    // ★★★ 2026-10-20（第五轮，修用户「二级页内容偏右」）：左右内距改成**同一个数**。
+    //   无界口径（`MiniPlayer胶囊布局与宽度约束.md` §三）：`sidePad() = capsuleH/2 − coverEdge/2`、
+    //   `actionsTrail() = sidePad() + (capsuleH > 0 ? 0 : MINI_EDGE_PAD)` ⇒ capsuleH 已知时**严格对称**。
+    //   本行自然高 = coverEdge + 2 × CONTENT_PAD_VP ⇒ 代入上式：
+    //     sidePad = (coverEdge + 2×8)/2 − coverEdge/2 = 8 = CONTENT_PAD_VP   （与封面档位无关）
+    //   再加 MINI_BAR_INNER_PAD_VP(4) 的呼吸（2026-10-17 用户"离两侧太近"那条）⇒ **12**。
+    //   ⇒ 内容盒 = [12, W − 12] ⇒ 内容中心 ≡ 胶囊中心（一眼可算，没有第二个口径）。
+    //   ⚠️ 旧实现的右侧是 `actionsTrail() + sidePad()`（二级页 22 + 12 = 34 vs 左 12）
+    //      ⇒ 内容中心左偏 (34−12)/2 = 11vp，那是本组件里**唯一**的横向非对称来源，已消掉。
+    return HomeMiniBarPlayer.CONTENT_PAD_VP + HomeMiniBarPlayer.MINI_BAR_INNER_PAD_VP;
   }
 
   /**
@@ -332,9 +342,13 @@ export struct HomeMiniBarPlayer {
    *    鍙充晶閭?16vp 浼氬拰鎸夐挳绨囨姠瀹藉害锛屾妸"鎾斁鍒楄〃"鎸夐挳鎸ゅ嚭鍙鑳跺泭銆?
    */
   private actionsTrailVp(): number {
-    const expanded: boolean = this.effectiveMiniBarExpanded();
-    const extra: number = expanded ? 0 : PlayerConstants.MINI_EDGE_PAD;
-    return this.sidePadVp() + extra;
+    // ★★★ 2026-10-20（第五轮）：**恒等于左内距**（`capsuleH` 已知时的无界口径）。
+    //   旧实现 = `sidePad() + (expanded ? 0 : MINI_EDGE_PAD)`，再在 `build()` 里对
+    //   `!followAppMiniBarExpanded` 的宿主（= 二级页）又加一份 `sidePad()` ⇒ 右侧 34 / 左侧 12。
+    //   那 10vp（MINI_EDGE_PAD）在无界里的语义是"**还没量到 capsuleH** 时给 actions 留的余量"——
+    //   本仓两条宿主的高度都是**给定的常量**（`Index.FLOATING_MINI_BAR_HEIGHT_VP`），这个余量的
+    //   前提根本不成立 ⇒ 按无界口径 `capsuleH > 0 ⇒ extra = 0` 处理，左右必须相等。
+    return this.sidePadVp();
   }
 
   /**
@@ -392,7 +406,11 @@ export struct HomeMiniBarPlayer {
       //   鑰?`actionsTrailVp()` 鏄収**棣栭〉閭ｆ潯**锛堝唴瀹规瘮鑳跺泭瀹斤級瀹氱殑 鈬?鎸夐挳绨囪创鐫€鑳跺泭鍙崇紭銆?
       //   鎶樺彔鎬侊紙= 浜岀骇椤甸潰锛宍followAppMiniBarExpanded === false`锛夊啀鏀朵竴浠?`sidePadVp()`锛?
       //   涓庡乏渚у皝闈㈠埌鑳跺泭宸︾紭鐨勮窛绂诲悓涓€涓彛寰勶紝涓嶆斁鏂扮殑榄旀硶鏁帮紱棣栭〉閭ｆ潯瀹屽叏涓嶅彉銆?
-      right: this.actionsTrailVp() + (this.followAppMiniBarExpanded ? 0 : this.sidePadVp()),
+      // ★ 2026-10-20（第五轮）：`right` 现在与 `left` **逐字相等**
+      //   （`actionsTrailVp() === sidePadVp()` = `CONTENT_PAD_VP + MINI_BAR_INNER_PAD_VP` = 12）
+      //   ⇒ 内容盒 = `[12, W − 12]` ⇒ **内容中心 ≡ 胶囊中心**。
+      //   上面那几段（含"折叠态右侧再多 10vp / 二级页再多一份 sidePad"）已作废。
+      right: this.actionsTrailVp(),
       top: HomeMiniBarPlayer.CONTENT_PAD_VP,
       bottom: HomeMiniBarPlayer.CONTENT_PAD_VP,
     })
@@ -432,10 +450,15 @@ export struct HomeMiniBarPlayer {
     //   顶部留白 = content.y − 胶囊顶（content 行里的 `capsule y=`）；底部留白同理。
     // 判据：`pinned > 0` 时 `cap = pinned` 且 `content h = pinned` ⇒ 行盒 ≡ 容器盒 ≡ 胶囊盒。
     .onAreaChange((_oldArea: Area, area: Area): void => {
+      // ★ 2026-10-20（第五轮）：多打 `x=` / `padL=` / `padR=` —— 「二级页内容偏右」的
+      //   横向收口判据只有一条：`padL === padR`（本组件内**唯一**的横向非对称来源，现在恒 12/12），
+      //   以及 `x === 胶囊 x`（胶囊 x 见 `RzdMiniBarCapsule` 的 `content` 行里的 `capsule x=`）。
       Logger.info('RzdMiniBarGeom',
         `content h=${areaLengthToVp(area.height)} y=${areaLengthToVp(area.globalPosition.y)} ` +
+          `x=${areaLengthToVp(area.globalPosition.x)} ` +
           `w=${areaLengthToVp(area.width)} pinned=${this.contentHeightVp} ` +
           `cap=${this.contentMaxHeightVp()} pad=${HomeMiniBarPlayer.CONTENT_PAD_VP} ` +
+          `padL=${this.sidePadVp()} padR=${this.actionsTrailVp()} ` +
           `hosting=${this.followAppMiniBarExpanded ? 'home' : 'floating'} ` +
           `selfPlate=${this.showSelfDrawnBackplate} ownSquash=${this.contentOwnsSquash} ` +
           `squashY=${this.expandState.morphSquashY}`);

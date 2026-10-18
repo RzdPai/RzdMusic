@@ -226,14 +226,32 @@ const HOME_MINI_CAPSULE_Z_INDEX: number = 19;
  */
 const HOME_MINI_CAPSULE_GAP_VP: number = 8;
 /**
+ * 「单层」态下**页签胶囊收成圆形坞**时占的宽度（vp）＝ 壳层 `HdsTabs.barHeight(56)`。
+ *
+ * 依据两条（都不用猜）：
+ *  · 官方口径「迷你栏……**跟页签栏高度相等且水平对齐**」⇒ 单层态那一排的高度 = 页签胶囊高 = 56，
+ *    页签收成圆坞时宽度也等于它的高度 ⇒ **56**（壳层两处 `.barHeight(56)` 就是同一来源）；
+ *  · `HdsBarStyle` 的语义（SDK `@hms.hds.hdsBaseComponent.d.ets:5026-5043`）：我们推到
+ *    `HORIZONTAL` 时 `miniBarExpanded = true` ⇒ `miniBarStyle = EXPAND`（见 {@link miniBarStyleForHds}）
+ *    ⇒ HDS 把**页签**收成那个圆坞、把长条位让给迷你栏。
+ * ⚠️ 真机若圆坞比 56 宽/窄（HDS 换版），**只调这一个数**；迷你胶囊宽度是按它反算的。
+ */
+const HOME_TAB_DOCK_VP: number = 56;
+/**
+ * 「单层」态迷你胶囊的宽度下限（vp）：窄屏（折叠屏 320 级）上 `full − 坞宽 − 缝` 可能不够排
+ * 封面 + 歌名 + 三颗按钮，此时宁可让圆坞与胶囊重叠一点，也不要把内容挤成 0。
+ */
+const HOME_MINI_CAPSULE_SINGLE_ROW_MIN_WIDTH_VP: number = 180;
+/**
  * 首页迷你条**内容行**的上下内距（vp）——与
  * `features/playlist/.../HomeMiniBarPlayer.ets` 的 `HomeMiniBarPlayer.CONTENT_PAD_VP` 是同一个数
  * （那里是 `Row` 的 `padding.top / padding.bottom`）。
  *
- * 为什么要在本文件再写一份：{@link homeMiniCapsule} 必须在**建胶囊之前**就知道内容会有多高
- * （HDS 的 `barHeight` 是入参、不是结果），而 `HomeMiniBarPlayer` 那个常量是 `private`。
- * ⚠️ 改那一边必须同步这一边，否则胶囊与内容差 2×Δ（判据：日志 `RzdMiniBarGeom content h=` 与
- *    `RzdHomeMiniCapsule barH=` 两行必须相等）。
+ * ★ 2026-10-20（第五轮）：本常量**不再参与胶囊高度**（胶囊高现在是
+ *   {@link FLOATING_MINI_BAR_HEIGHT_VP} 这个唯一常量，与二级页同一个）；它只剩两个用途：
+ *   ① 诊断日志里标出"内容自然高 = 封面 + 2×本值"，用来解释"为什么两排态内容比胶囊矮一档"；
+ *   ② 提醒：这一值与 `HomeMiniBarPlayer.CONTENT_PAD_VP` 必须相等（判据：日志
+ *      `RzdMiniBarGeom content h=` 与 `RzdHomeMiniCapsule barH=` 两行）。
  */
 const HOME_MINI_BAR_CONTENT_PAD_VP: number = 8;
 /**
@@ -668,6 +686,26 @@ struct Index {
   //   鏃㈡湁璋冪敤鐐逛竴琛岄兘涓嶇敤鏀癸紝鏂板鍏ュ彛涔熻嚜鍔ㄨ鐩栥€?
 
   /** 鎾斁椤垫寕杞?鍗歌浇鐨勫敮涓€鏀跺彛锛堟墍鏈?`isShowPlay` 鍐欏叆鏈€缁堥兘浼氳蛋鍒拌繖閲岋級銆?*/
+  /**
+   * 双层底栏「收起 / 展开」的**驱动落点日志**（`hdc shell hilog | grep RzdHomeBarLayout`）。
+   *
+   * 驱动方（唯一，本轮没换）：`BarScrollHelper.notifyScrollDelta` 写
+   * `MusicAppState.hdsBarLayoutMode` / `miniBarExpanded`（列表上滑 = 单层、下滑 = 双层，
+   * 500ms `springMotion` 补间）。这里只是**观测点**，同时把两侧的派生量打出来，判据一条：
+   *   `capsuleSingle=true` 时，`RzdHomeMiniCapsule` 那行的 `barW` 必须 = `fullW − 64`、
+   *   `boxBottom` 必须比双层态小 `64`（= {@link HOME_TAB_DOCK_VP} + {@link HOME_MINI_CAPSULE_GAP_VP}）。
+   */
+  @Monitor('appState.hdsBarLayoutMode', 'appState.miniBarExpanded')
+  onHomeBarLayoutChanged(): void {
+    Logger.info('RzdHomeBarLayout',
+      `layout=${this.appState.hdsBarLayoutMode} expanded=${this.appState.miniBarExpanded} ` +
+        `capsuleSingle=${this.homeMiniBarSingleRow()} ` +
+        `capsuleW=${this.homeMiniCapsuleWidthVp()} fullW=${this.floatingMiniBarWidthVp()} ` +
+        `boxBottom=${this.homeMiniCapsuleBottomVp()} rightMargin=${this.homeMiniCapsuleRightMarginVp()} ` +
+        `slotH=${this.homeMiniBarSlotHeightVp()} hdsLayout=${this.barLayoutModeForHds()} ` +
+        `hdsStyle=${this.miniBarStyleForHds()}`);
+  }
+
   @Monitor('appState.isShowPlay')
   onShowPlayChanged(): void {
     if (!PLAYER_ROUTE_MODE) {
@@ -1564,21 +1602,23 @@ struct Index {
   }
 
   /**
-   * ★★★ 2026-10-20（第三轮）：壳层 `HdsTabs` 的 `miniBar` 槽**只放这个 0 高度占位**。
+   * 壳层 `HdsTabs` 的 `miniBar` 槽里的**占位**（一个像素都不画）。
    *
-   * 判据（为什么可以留空）：
-   *  · HDS 的 `miniBar` 行高是**按内容量**出来的（本仓 `miniBar()` 顶部注释早就记着"不要给它固定高度"）
-   *    ⇒ 给一个 `height(0)` 的 `Column`，那一行就塌成 0，页签胶囊回到单排；
-   *  · 「现在就在听」那一页**一直是这么干的**（`miniBar()` 的第一个分支），真机验过没有空胶囊；
-   *  · 播放器本体已搬到 {@link homeMiniCapsule}（壳层 Stack，zIndex 19），
-   *    两处只留一处 ⇒ 不会出现两份 `MINI_BAR_ID`（§17.3 那个"量到哪一份不确定"的坑）。
-   * ⚠️ 槽空着就**必须**把 `enableMiniBarBackground` 关掉，否则会留一枚空胶囊背板。
+   * ★★★ 2026-10-20（第五轮，用户：「**而且是可以收起为单层的，现在也不行了**」）：
+   * 高度按**双层 / 单层**两档给（{@link homeMiniBarSlotHeightVp}）——
+   *  · `VERTICAL`（上下两排，默认）⇒ **0**：HDS 的 miniBar 行高按内容量 ⇒ 那一排塌成 0，
+   *    页签胶囊只剩自己一排；播放器本体在我们子树里的 {@link homeMiniCapsule}（zIndex 19）。
+   *  · `HORIZONTAL`（单层，列表上滑后）⇒ **56**（= 胶囊高）：HDS 才知道"这一排有迷你栏"，
+   *    于是把页签收成左侧圆坞、把长条位让出来 —— 我们自己的胶囊正好落在那块长条位上。
+   *    （第三轮把槽压成 0 高度之后，HDS 的 `barLayoutMode` 就没东西可收了 ⇒ "单层"消失。）
+   * ⚠️ 占位**不画像素**（`enableMiniBarBackground: false`）⇒ 不会出现第二枚空胶囊背板；
+   *    第四轮那条"槽空着就必须关背板"的前提仍然成立。
    */
   @Builder
   private miniBarSlotPlaceholder() {
     Column()
       .width(StyleConstants.FULL_WIDTH)
-      .height(0)
+      .height(this.homeMiniBarSlotHeightVp())
   }
 
   /**
@@ -1601,23 +1641,32 @@ struct Index {
    *   记  M = {@link homeTabBarBottomMarginVp}（页签胶囊到窗口底）
    *       I = {@link pageBottomInsetVp}（页盒底内缩 = 系统导航条高；壳层根 Stack 没有
    *           `ignoreLayoutSafeArea`，所以**页盒底 = 窗口底 − I**）
-   *       T = 页签胶囊高度 = 壳层 `HdsTabs.barHeight(56)`
+   *       T = 页签胶囊高度 = 壳层 `HdsTabs.barHeight(56)` = {@link HOME_TAB_DOCK_VP}
    *       G = {@link HOME_MINI_CAPSULE_GAP_VP}（迷你胶囊与页签胶囊之间的缝）
-   *       m = `CAPSULE_SLACK_H / 2`（胶囊在本组件盒内的下留白 = 上留白，盒高 = barH + 2m）
-   *   页签胶囊：底 = 窗口底 − M ⇒ 顶 = 窗口底 − M − T
-   *   迷你胶囊：底应为 `页签胶囊顶 − G` = 窗口底 − M − T − G
-   *   本组件盒（高 `barHeight + 2m`）底对齐页盒、下移 `X`：
-   *       胶囊底 = 页盒底 − X + m = (窗口底 − I) − X + m
-   *   令两者相等 ⇒ **X = (M − I) + T + G + m**
-   *   代入常态（M ≈ I ≈ 28、T = 56、G = 8、m = 10）⇒ X = **74vp**（与 `barHeight` 无关 ⇒ 见下一条）。
+   *       m = `CAPSULE_SLACK_H / 2` = 10（胶囊在本组件盒内的下留白 = 上留白，盒高 = barH + 2m）
+   *
+   *   ① **双层**（默认，`barLayoutMode = VERTICAL`）
+   *      页签胶囊：底 = 窗口底 − M ⇒ 顶 = 窗口底 − M − T
+   *      迷你胶囊底应 = `页签胶囊顶 − G` = 窗口底 − M − T − G
+   *      本盒底 = 页盒底 − X = 窗口底 − I − X，胶囊在盒内离盒底 m
+   *      ⇒ (窗口底 − I − X) + m = 窗口底 − M − T − G
+   *      ⇒ **X = (M − I) + T + G + m**，常态（M ≈ I ≈ 28、T = 56、G = 8、m = 10）⇒ **74vp**
+   *      宽 = `floatingMiniBarWidthVp()`（**与二级页同一个函数**）、高 = `FLOATING_MINI_BAR_HEIGHT_VP`
+   *
+   *   ② **单层**（`barLayoutMode = HORIZONTAL`，用户说的"收起为单层"）
+   *      迷你胶囊与页签**同一排**：底 = 页签胶囊底 = 窗口底 − M
+   *      ⇒ (窗口底 − I − X) + m = 窗口底 − M ⇒ **X = (M − I) + m**，常态 ⇒ **10vp**
+   *      ⇒ 相对双层**正好下移 `T + G` = 64vp**（一排的距离，不是猜的）
+   *      宽 = `floatingMiniBarWidthVp() − T − G`（左侧让出圆坞 + 缝；右缘与页签排右缘齐）
+   *      高 = **仍是 56**（页签胶囊也是 56 ⇒ 整排高度恒等，
+   *           官方口径「迷你栏……跟页签栏高度相等且水平对齐」）
+   *
+   *   ⇒ **两态的可见高度都是 `FLOATING_MINI_BAR_HEIGHT_VP`(56)**，与二级页**同一个常量**
+   *     —— 这就是"首页与二级页是同一个"的判据（用户第五轮第 3 条）。
    *   ⚠️ `M − I` 保留成算式而不是当 0：换机型/换装饰档位时这两项可能不等。
-   *   胶囊**可见矩形**（给 `MINI_BAR_ID` / 形变起点用的那一条）：
-   *       宽 = `floatingMiniBarWidthVp()`（**与二级页同一个函数** ⇒ 两条一样宽，不再"一大一小"）
-   *       高 = **内容自然高** = {@link homeMiniCapsuleBarHeightVp}（= 封面 + 2 × 8；常态两排 **46vp**）
-   *   ⇒ 因为 `X` 只跟 `m` 有关、`m` 又不随 `barHeight` 变，所以"高度恢复矮"**只改上沿**：
-   *     胶囊底边仍在 `页签胶囊顶 − G`，顶边随 `barHeight` 下来 ⇒ 离底账一个字都不用重算。
-   *   内容盒 ≡ 胶囊矩形（都在 {@link MiniBarMaterialCapsule} 里，同尺寸 + 盒内居中）
-   *   ⇒ 内容既然居中就没有第二个留白口径，也没有"内容偏右下"（胶囊矩形公式与内容矩形是同一个）。
+   *   内容盒 ≡ 胶囊矩形（都在 {@link MiniBarMaterialCapsule} 里，同尺寸 + 盒内居中），
+   *   且那一行内容的**左右内距对称**（`HomeMiniBarPlayer.sidePadVp() === actionsTrailVp()` = 12）
+   *   ⇒ 「内容中心 ≡ 胶囊中心」一眼可算（用户第五轮第 4 条"偏右"就靠这一条收口）。
    *
    * ══════════ 静止态 / 动画态 ══════════
    *   静止：`morphSquashY === 1` ⇒ `.scale` 是恒等变换，版面与"没有这件事"逐字一致。
@@ -1626,34 +1675,45 @@ struct Index {
    */
   @Builder
   private homeMiniCapsule() {
-    Stack({ alignContent: Alignment.Bottom }) {
+    Stack({ alignContent: Alignment.BottomEnd }) {
       // ⚠️ ArkTS 限制：带尾随 builder 的结构体调用（`Comp({...}) { ... }`）**不能再挂属性方法**
       //   （否则报 `Declaration or statement expected` + `Cannot find name 'margin'`）
       //   ⇒ 外面套一层 `Stack` 来承载 `.margin / .onAreaChange / .visibility`。
       Stack() {
         MiniBarMaterialCapsule({
-          barWidth: this.floatingMiniBarWidthVp(),
-          // ★★★ 2026-10-20（第二轮，用户：「首页是高度低调的播放条，你咋改成大的了」）：
-          //   **可见高度 = 内容自然高 = 封面 + 上下各 8vp**（逐档推导见
-          //   {@link homeMiniCapsuleBarHeightVp}）。上一版写死 `FLOATING_MINI_BAR_HEIGHT_VP`(56)
-          //   ⇒ 常态（两排 / 封面 30）从 **46 胖到 56**，这就是用户看到的"改成大的了"。
-          barHeight: this.homeMiniCapsuleBarHeightVp(),
+          // ★★★ 2026-10-20（第五轮，用户：「首页播放条和二级页面不是一个」）：
+          //   宽 / 高两条**与二级页逐项同一个来源** ——
+          //     宽 = `floatingMiniBarWidthVp()`（同一个函数；单层态再让出圆坞，见它的注释）
+          //     高 = `FLOATING_MINI_BAR_HEIGHT_VP`（**同一个常量 56**）
+          //   上一版首页传的是"内容自然高"（46/56/60/72）⇒ 一眼看出两条不是同一个东西。
+          barWidth: this.homeMiniCapsuleWidthVp(),
+          barHeight: FLOATING_MINI_BAR_HEIGHT_VP,
           // 缺省 `-1` = `slackH / 2`（无界口径）⇒ 胶囊在盒内居中 ⇒ squash 绕胶囊中心。
-          material: this.ambientTitleMaterial()
+          material: this.ambientTitleMaterial(),
+          // ★ "收起 / 展开"的两个状态镜像（同一份驱动方，见 {@link homeMiniBarSingleRow}）：
+          //   `barLayoutMode` 在 `MiniBarMaterialCapsule` 里决定本盒横向 slack 是否归零；
+          //   `capsuleStyle` 只进诊断日志（内层单 Tab 的 HdsTabs 没有 miniBar 槽，见那个文件的类注释第六节）。
+          barLayoutMode: this.barLayoutModeForHds(),
+          capsuleStyle: this.miniBarStyleForHds()
         }) {
           this.miniBar()
         }
       }
-      .margin({ bottom: this.homeMiniCapsuleBottomVp() })
-      // 诊断（`hdc shell hilog | grep RzdHomeMiniCapsule`）：盒/胶囊/离底的三个数一次打全。
+      // 离页盒底的位移：双层 `(M−I)+T+G+m` / 单层 `(M−I)+m`（推导见本 builder 的几何账）。
+      .margin({ bottom: this.homeMiniCapsuleBottomVp(), right: this.homeMiniCapsuleRightMarginVp() })
+      // 诊断（`hdc shell hilog | grep RzdHomeMiniCapsule`）：盒/胶囊/离底/单层四组数一次打全。
       .onAreaChange((_oldArea: Area, area: Area): void => {
         Logger.info('RzdHomeMiniCapsule',
           `capsuleBox=${areaLengthToVp(area.width)}x${areaLengthToVp(area.height)} ` +
-            `barW=${this.floatingMiniBarWidthVp()} barH=${this.homeMiniCapsuleBarHeightVp()} ` +
+            `x=${areaLengthToVp(area.globalPosition.x)} y=${areaLengthToVp(area.globalPosition.y)} ` +
+            `barW=${this.homeMiniCapsuleWidthVp()} barH=${FLOATING_MINI_BAR_HEIGHT_VP} ` +
+            `fullW=${this.floatingMiniBarWidthVp()} ` +
             `cover=${this.homeMiniBarCoverSideVp()} pad=${HOME_MINI_BAR_CONTENT_PAD_VP} ` +
-            `gap=${HOME_MINI_CAPSULE_GAP_VP} ` +
+            `gap=${HOME_MINI_CAPSULE_GAP_VP} dock=${HOME_TAB_DOCK_VP} ` +
+            `single=${this.homeMiniBarSingleRow()} layout=${this.barLayoutModeForHds()} ` +
+            `style=${this.miniBarStyleForHds()} ` +
             `tabMargin=${this.homeTabBarBottomMarginVp()} pageInset=${this.pageBottomInsetVp()} ` +
-            `boxBottom=${this.homeMiniCapsuleBottomVp()} ` +
+            `boxBottom=${this.homeMiniCapsuleBottomVp()} rightMargin=${this.homeMiniCapsuleRightMarginVp()} ` +
             `squashY=${this.expandState.morphSquashY} ` +
             `hidden=${this.expandState.sourceBarHidden} tabIndex=${this.tabState.tabIndex}`);
       })
@@ -1661,27 +1721,92 @@ struct Index {
     }
     .width(StyleConstants.FULL_WIDTH)
     .height(StyleConstants.FULL_HEIGHT)
-    .alignContent(Alignment.Bottom)
+    // ★ 靠 `BottomEnd` + 右外边距摆位（**不切 `alignContent`**）：双层态右外边距 = `(窗口宽 − 胶囊宽)/2`
+    //   ⇒ 水平居中（宽屏夹到 560 时也居中）；单层态 = `floatingMiniBarSideMarginVp()` ⇒ 右缘与页签排齐。
+    //   用"同一个对齐 + 变化的 margin"而不用"换对齐枚举"，是为了让 `BarScrollHelper` 那个
+    //   `animateTo` 能把**位移一起补间**（对齐枚举不可动画）。
+    .alignContent(Alignment.BottomEnd)
     // 条件渲染而非常驻：二级页 / 「现在就在听」页不挂这一层（`MINI_BAR_ID` 全局只能有一份）。
     .hitTestBehavior(HitTestMode.Transparent)
     .zIndex(HOME_MINI_CAPSULE_Z_INDEX)
   }
 
   /**
-   * 迷你胶囊的"离页盒底"距离（vp）——推导见 {@link homeMiniCapsule} 的几何账：
-   * `X = (M − I) + T + G + m`。
+   * @returns True = **单层**态（迷你条与页签并排一排）——驱动方是 HDS 的 `HdsBarLayoutMode`。
    *
-   * ⚠️ 这一项**本轮没动**（用户只报了"首页太高"与"二级页偏右下"，没报首页的上下位置）。
-   *   提醒：最后那个 `+ m` 在纸面上取决于 `barBottomMargin` 的口径 —— 若真机上迷你胶囊与页签胶囊
+   * 链路（四段全都在代码里可指认）：
+   *   `BarScrollHelper.notifyScrollDelta`（列表上滑 500ms 弹簧）
+   *     → `MusicAppState.hdsBarLayoutMode = HORIZONTAL` + `miniBarExpanded = true`
+   *     → `{@link barLayoutModeForHds}()` = `HdsBarLayoutMode.HORIZONTAL`（同一个值喂给壳层 HDS 与胶囊）
+   *     → 本函数 ⇒ 胶囊**下移一排**、宽度让出左侧圆坞（几何账 ②）。
+   * 发行版 < 6.1.1(24) 时 HDS 不支持该字段（返回 `undefined`）⇒ 恒双层。
+   */
+  private homeMiniBarSingleRow(): boolean {
+    return this.barLayoutModeForHds() === HdsBarLayoutMode.HORIZONTAL;
+  }
+
+  /**
+   * @returns 首页迷你胶囊的**可见宽度**（vp）。
+   *   双层：`floatingMiniBarWidthVp()` —— **与二级页同一个函数**（这是"两条一模一样"的一半判据）。
+   *   单层：再让出左侧圆坞 + 缝 ⇒ `full − HOME_TAB_DOCK_VP − HOME_MINI_CAPSULE_GAP_VP`
+   *        （窄屏兜底不小于 {@link HOME_MINI_CAPSULE_SINGLE_ROW_MIN_WIDTH_VP}）。
+   */
+  private homeMiniCapsuleWidthVp(): number {
+    const full: number = this.floatingMiniBarWidthVp();
+    if (!this.homeMiniBarSingleRow()) {
+      return full;
+    }
+    const single: number = full - HOME_TAB_DOCK_VP - HOME_MINI_CAPSULE_GAP_VP;
+    return single > HOME_MINI_CAPSULE_SINGLE_ROW_MIN_WIDTH_VP ? single : HOME_MINI_CAPSULE_SINGLE_ROW_MIN_WIDTH_VP;
+  }
+
+  /**
+   * @returns 本组件盒右外边距（vp）——把"水平位置"表达成**一个可补间的 margin**（几何账见 {@link homeMiniCapsule}）。
+   *   双层：`(窗口宽 − 胶囊宽)/2` ⇒ 等价于居中（宽屏被夹到 560 时也正确）。
+   *   单层：`floatingMiniBarSideMarginVp()` ⇒ 右缘与页签排右缘对齐（左侧自然空出 `坞 + 缝`）。
+   */
+  private homeMiniCapsuleRightMarginVp(): number {
+    if (this.homeMiniBarSingleRow()) {
+      return this.floatingMiniBarSideMarginVp();
+    }
+    if (this.viewportWidthVp <= 0) {
+      return this.floatingMiniBarSideMarginVp();
+    }
+    const gap: number = this.viewportWidthVp - this.homeMiniCapsuleWidthVp();
+    return gap > 0 ? gap / 2 : 0;
+  }
+
+  /**
+   * 壳层 `HdsTabs` 的 `miniBar` 槽占位高度（vp）：双层 **0**（那一排塌掉）/ 单层 **56**（= 胶囊高）。
+   * 只有单层态需要 HDS "知道这一排有迷你栏"，它才会把页签收成左侧圆坞、把长条位让给我们。
+   *
+   * ⚠️ 必须与 {@link miniBarRendersPlayer} **同门**：不画播放器时（「现在就在听」页 / 二级页在栈上）
+   *   槽里给 56 高会变成"页签被挤成圆坞 + 右边空一块"（§76.1 用户报的「tab 栏短一截」原样回来）。
+   */
+  private homeMiniBarSlotHeightVp(): number {
+    if (!this.miniBarRendersPlayer()) {
+      return 0;
+    }
+    return this.homeMiniBarSingleRow() ? HOME_TAB_DOCK_VP : 0;
+  }
+
+  /**
+   * 迷你胶囊的"离页盒底"距离（vp）——推导见 {@link homeMiniCapsule} 的几何账：
+   *   双层：`X = (M − I) + T + G + m`
+   *   单层：`X = (M − I) + m`（⇒ 比双层少 `T + G = 64vp`，正好一排）
+   *
+   * ⚠️ 最后那个 `+ m` 在纸面上取决于 `barBottomMargin` 的口径 —— 若真机上迷你胶囊与页签胶囊
    *   之间的缝看起来是 `G + m`（≈18）而不是 `G`（8），把最后一项改成 **`− m`** 即可；
-   *   那是"离底"一个数的事，**不影响** {@link homeMiniCapsuleBarHeightVp} 算出来的可见高度。
+   *   那是"离底"一个数的事，**不影响**可见高度（它恒为 `FLOATING_MINI_BAR_HEIGHT_VP`）。
    * @returns 本组件盒底相对页盒底的位移（vp，向上为正）
    */
   private homeMiniCapsuleBottomVp(): number {
-    const tabH: number = 56;
     const slackBottom: number = CAPSULE_SLACK_H / 2;
-    return (this.homeTabBarBottomMarginVp() - this.pageBottomInsetVp()) +
-      tabH + HOME_MINI_CAPSULE_GAP_VP + slackBottom;
+    const base: number = (this.homeTabBarBottomMarginVp() - this.pageBottomInsetVp()) + slackBottom;
+    if (this.homeMiniBarSingleRow()) {
+      return base;
+    }
+    return base + HOME_TAB_DOCK_VP + HOME_MINI_CAPSULE_GAP_VP;
   }
 
   /**
@@ -1689,12 +1814,11 @@ struct Index {
    *
    * 那里的四个档位（`features/playlist/.../HomeMiniBarAlbumCover.ets:128-136`，本轮不许改那个文件）：
    *   · 沉浸式自由窗口 → **40**；
-   *   · 双层底栏 · 上下两排（`followAppMiniBarExpanded && hdsBarLayoutMode === VERTICAL`
-   *     且发行版 ≥ 6.1.1(24)）→ **30**；
-   *   · 单排 · 展开（`miniBarExpanded`）→ **44**；
-   *   · 单排 · 折叠 → **56**。
-   * 本文件只复制"选哪一档"这一层判断（首页那条恒 `followAppMiniBarExpanded = true`、
-   * `lockTwoRowCoverSize = false`，所以只剩三条分支）。
+   *   · 双层底栏 · 上下两排（`hdsBarLayoutMode === VERTICAL` 且发行版 ≥ 6.1.1(24)）→ **30**；
+   *   · 单排（`HORIZONTAL`，= 用户说的"单层"）→ **44**。
+   * 本文件只复制"选哪一档"这一层判断，**只给诊断日志用**（胶囊高度已与封面档位解耦，
+   * 见 {@link homeMiniCapsule} 的几何账）—— "低调"体现在这里（两排态封面 30 < 单排 44），
+   * 而不是体现在胶囊高度上（用户第五轮第 3 条）。
    * @returns 封面边长（vp）。
    */
   private homeMiniBarCoverSideVp(): number {
@@ -1704,24 +1828,7 @@ struct Index {
     if (this.supportsTwoRowLayout() && this.appState.hdsBarLayoutMode === BarLayoutModes.VERTICAL) {
       return 30;
     }
-    return this.appState.miniBarExpanded ? 44 : 56;
-  }
-
-  /**
-   * 首页迷你**胶囊的可见高度**（vp）= `HomeMiniBarPlayer` 的**内容自然高度**。
-   *
-   * 一行式子：`可见高度 = 封面边长 + 2 × HOME_MINI_BAR_CONTENT_PAD_VP(8)`。
-   *
-   * 为什么这就是"上一版之前"的高度：那条以前住在壳层 `HdsTabs` 的 `miniBar` 槽里，
-   * 而 HDS 的 miniBar 行高是**按内容量**出来的（本文件 `miniBar()` 顶部那段"不要给它固定高度"
-   * 的注释 + §74.1 都记着这条）⇒ 槽高 ≡ `HomeMiniBarPlayer` 自然高 ≡ 本式。
-   * 逐档：(两排) 30 + 16 = **46** / (沉浸自由窗口) 40 + 16 = **56** /
-   *        (单排展开) 44 + 16 = **60** / (单排折叠) 56 + 16 = **72**。
-   * ⇒ 上一版写死 56 只在"沉浸自由窗口"那一档是对的，常态两排白胖了 10vp —— 用户一眼看出。
-   * @returns 胶囊可见高度（vp）。
-   */
-  private homeMiniCapsuleBarHeightVp(): number {
-    return this.homeMiniBarCoverSideVp() + HOME_MINI_BAR_CONTENT_PAD_VP * 2;
+    return 44;
   }
 
   /**
@@ -2080,7 +2187,13 @@ struct Index {
           //     先 <1 再回 1。
           //   ★ 挤压只在这里乘一次：外层已乘，本组件内若再乘 = 0.86² = 0.74（弹过头）。
           showSelfDrawnBackplate: false,
-          contentOwnsSquash: false
+          contentOwnsSquash: false,
+          // ★★★ 2026-10-20（第五轮，用户：「首页播放条和二级页面不是一个」）：
+          //   把内容行**钉在与二级页同一个高度**（`FLOATING_MINI_BAR_HEIGHT_VP` = 56），
+          //   与胶囊的 `barHeight` 是同一个常量 ⇒ 行盒 ≡ 胶囊盒。
+          //   不钉的话两排态是 46、单排态是 60，而胶囊恒 56 ⇒ 内容与胶囊的上下留白随档位漂，
+          //   两条播放条也就永远对不齐（这正是"偏下"在上一版被打掉的同一个机制）。
+          contentHeightVp: FLOATING_MINI_BAR_HEIGHT_VP
         })
           .visibility(this.expandState.sourceBarHidden ? Visibility.Hidden : Visibility.Visible)
           // ★★★ 2026-10-20（第三轮）：主页这条的"光感账"一行（`hdc shell hilog | grep RzdHomeMiniBarMaterial`）。
@@ -2628,6 +2741,15 @@ struct Index {
               //    与「现在就在听」那一页**逐字同一个写法**（那条路径真机已验过）。
               miniBarBuilder: (): void => {
                 this.miniBarSlotPlaceholder();
+              },
+              // ★★★ 2026-10-20（第五轮）：**给 HDS 报上"迷你栏占多宽"**（`HdsTabsMiniBar.miniBarWidth`
+              //   ：SDK `@hms.hds.hdsBaseComponent.d.ets:5150`，三档与 `HdsBarWidthRangeOptions` 同形）。
+              //   单层态必须报，否则 HDS 挤页签、让出来的长条位宽度与我们自己画的胶囊对不上。
+              //   ⚠️ 这**不是** `barFloatingStyle.barWidth`（那个管整条底栏宽，本文件明令不传）。
+              miniBarWidth: {
+                smallWidth: this.homeMiniCapsuleWidthVp(),
+                mediumWidth: this.homeMiniCapsuleWidthVp(),
+                largeWidth: this.homeMiniCapsuleWidthVp()
               },
               enableMiniBarBackground: false,
               enableMiniBarClip: false,
