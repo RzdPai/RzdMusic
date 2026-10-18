@@ -2006,7 +2006,11 @@ struct Index {
         //   宽度取**实测槽宽**（外层 `Column` 宽度 100%，量的就是 HDS 给这一格的宽），高度取估算档。
         Column() {
           MiniBarMaterialCapsule({
-            barLayoutMode: this.barLayoutModeForHds(),
+            // ★★★ 2026-10-18（用户：「单行状态下还有小背景」）：内层胶囊传 **HORIZONTAL**
+            //   ⇒ `isSingleRow()` 为真 ⇒ `capsuleBoxWidthVp(bW, true) = bW`（`MiniBarMaterialCapsule.ets:58-60`）
+            //   ⇒ 盒宽 ≡ 胶囊宽，**没有左右各 5vp 的 slack 空带**（那圈空带正是"小背景"露出来的地方）。
+            //   ⚠️ 只影响**我们自己这个盒**的宽；外层 HDS 的排布模式仍恒 VERTICAL（上游口径，见 `barLayoutModeForHds`）。
+            barLayoutMode: HdsBarLayoutMode.HORIZONTAL,
             barWidth: this.homeMiniBarBarWidthVp(),
             barHeight: this.homeMiniBarSlotHVp(),
             bottomMargin: 0,
