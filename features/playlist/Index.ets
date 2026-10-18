@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 
 export { MiniBarPlayer } from './src/main/ets/view/MiniBarPlayer';
 export { HomeMiniBarPlayer } from './src/main/ets/view/HomeMiniBarPlayer';
+export { MiniBarActions } from './src/main/ets/view/MiniBarActions';
 // 迷你条**材质胶囊**（无界 `MaterialCapsule` 的 V2 移植）：光感来自 HDS 浮动栏的
 // `systemMaterialEffect`，而整条能被父级 `.scale({y: morphSquashY})` 压到 ⇒ 光感 + 弹跳同时成立。
 export {

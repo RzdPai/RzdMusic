@@ -60,7 +60,7 @@ import {
   CAPSULE_SLACK_H,
   CAPSULE_SLACK_W,
   HomeMiniBarPlayer,
-  HomeMiniBarPlayerAside,
+  MiniBarActions,
   MiniBarMaterialCapsule,
   PlaylistTransitionOverlay
 } from 'playlist';
@@ -1531,14 +1531,12 @@ struct Index {
       //    鏀捐繘 Column 浼氳瀹冩寜"绔栫洿鍓╀綑绌洪棿"鍒嗛厤銆佹í鍚戦€€鍖栨垚 wrap-content锛?
       //    缁撴灉灏辨槸鍙充晶閭ｄ笁涓寜閽暣浣撳乏绉伙紙鐢ㄦ埛瀹炴祴涓ゆ閮芥槸杩欎釜鐥囩姸锛夈€?
       Row() {
-        HomeMiniBarPlayerAside({
+        // 上游把形变锚点挂在**操作区**上（`lx_mini_actions`，`wujie.pa:157092`），不是 meta 那一块。
+        // 本仓重构后 `HomeMiniBarPlayerAside` 只画 meta ⇒ 克隆层也改成画 `MiniBarActions`，
+        // 这样锚点矩形（`asideWinW/H`）与真正画出来的东西是同一个块。
+        MiniBarActions({
           playerViewModel: this.miniBarViewModel,
-          showPreviousTrack: false,
-          // 鍏冧俊鎭紙姝屽悕/姝屾墜锛夌敤 `clamp(1 - t/0.35)`锛屼笌鎿嶄綔鍖洪偅涓€妗ｅ垎寮€锛?
-          // 瀹冨悓鏃惰灏侀潰"鎺ㄧ潃寰€鍙宠蛋"锛坄coverRightShiftAt`锛屽弽缂栬瘧 位1e锛?
-          isMorphClone: true,
-          metaOpacity: 0,
-          metaShiftX: this.expandState.coverRightShiftAt(this.expandState.morphP)
+          actionsNodeId: 'rzd_morph_actions_clone'
         })
       }
       .width(this.expandState.asideWinW)

@@ -15,7 +15,7 @@
 
 import { PlayerConstants, PlayerViewModel, QueuePlaylistSheet } from 'player';
 import { AppStorageV2 } from '@kit.ArkUI';
-import { AppStorageKeys, MINI_BAR_ASIDE_ID, MINI_META_TITLE_ID, MINI_META_SINGER_ID,
+import { AppStorageKeys, MINI_META_TITLE_ID, MINI_META_SINGER_ID,
   MorphMetaEndpoint, PlayerExpandState } from 'musicbasic';
 
 
@@ -304,6 +304,6 @@ export struct HomeMiniBarPlayerAside {
     // ★ 量的是**整块 aside**（歌名/歌手 + 右侧按钮），不是里面那个 meta 容器：
     //   克隆层要按这个宽度还原排布 —— 只给 meta 那一列的宽度会让克隆挤成一条，
     //   右侧三个按钮被推到左边（用户实测两次都是这个症状）。
-    .id(this.isMorphClone ? 'rzd_morph_actions_clone' : MINI_BAR_ASIDE_ID)
+    // 形变锚点 MINI_BAR_ASIDE_ID 已随重构搬到 {@link MiniBarActions} 的根节点（上游挂在操作区上）。
   }
 }

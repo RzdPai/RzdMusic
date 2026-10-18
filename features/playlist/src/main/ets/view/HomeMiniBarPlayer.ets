@@ -16,7 +16,7 @@
 import { AppStorageV2 } from '@kit.ArkUI';
 import {
   AmbientState, AppStorageKeys, areaLengthToVp, BarLayoutModes, getWindowInfoState, ImmersiveType, Logger,
-  MINI_BAR_ID, PlayerExpandState, SdkApiUtil, SdkConstants, StyleConstants, WindowInfo
+  MINI_BAR_ASIDE_ID, MINI_BAR_ID, PlayerExpandState, SdkApiUtil, SdkConstants, StyleConstants, WindowInfo
 } from 'musicbasic';
 import { MusicAppState, PlayerViewModel } from 'player';
 import { HomeMiniBarAlbumCover } from './HomeMiniBarAlbumCover';
@@ -416,6 +416,8 @@ export struct HomeMiniBarPlayer {
         .alignItems(VerticalAlign.Center)
         MiniBarActions({
           playerViewModel: this.playerViewModel,
+          // 形变锚点仍挂在"操作区"上（上游 `lx_mini_actions`，`wujie.pa:157092` 那四个 id 之一）。
+          actionsNodeId: MINI_BAR_ASIDE_ID,
           showPreviousTrack: this.showPreviousTrack,
           // 操作区：`MiniMorph.actionsOpacityAt = clamp(1 - t/0.20)`，比封面那一档更早消失
           actionsOpacity: this.expandState.miniBarOpacity()
