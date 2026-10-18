@@ -1867,6 +1867,17 @@ struct Index {
   }
 
   /**
+   * HDS **报回来的**迷你栏宽（vp）—— `HdsTabsFloatingStyle.onBarStyleChange` 第三参，
+   * SDK 原文 "current mini bar width"（`@hms.hds.hdsBaseComponent.d.ets:5084/5091`）。
+   *
+   * 用途（2026-10-18，用户第十一轮/十二轮截图「歌曲列表按钮跑到播放条外面」）：
+   * 可见背板由 HDS 另画一层，槽给我们的格子**比它画的胶囊宽**（左右各溢出一截，截图里封面也贴到胶囊外）
+   * ⇒ 把差值的**一半**作为内容行的左右内距还回去，内容就重新落在胶囊里。
+   * `0` = 还没收到回调 ⇒ 不内缩（与改动前逐字一致）。
+   */
+  @Local hdsMiniBarWidthVp: number = 0;
+
+  /**
    * `miniBar` 槽里此刻是不是**真的在画播放器**（与 {@link miniBar} 里那条 `if` 逐字同义）。
    *
    * 两处消费它（语义必须一致，否则就是"背板在、内容不在"或反过来）：
@@ -1986,6 +1997,8 @@ struct Index {
           //   接住这个数，`HomeMiniBarPlayer` 用 `sidePad = (胶囊高 − 视觉封面)/2 = 5.6` 保证
           //   「视觉左边距 ≡ 上/下留白」。⇒ 旧的 `coverSideVp`（宿主按档位传 40/30/44）已删除。
           contentHeightVp: FLOATING_MINI_BAR_HEIGHT_VP,
+          // ★★★ 2026-10-18：HDS 画的胶囊宽（差值一半作为内容左右内距，见 `hdsMiniBarWidthVp`）。
+          hostBarWidthVp: this.hdsMiniBarWidthVp,
           // ★ 2026-10-21（第八轮）：封面机制换成上游"32 盒 × `scale(1.4)`"，
           //   `视觉封面 = 胶囊高 × 0.8 = 44.8`、`sidePad = (胶囊高 − 视觉封面)/2 = 5.6`
           //   全部由 `HomeMiniBarPlayer` 自己算 ⇒ 宿主**不再**传 `coverSideVp`（该参数已删除）。
@@ -2629,6 +2642,12 @@ struct Index {
                 mediumWidth: this.floatingMiniBarWidthVp(),
                 largeWidth: this.floatingMiniBarWidthVp()
               },
+              // ★★★ 2026-10-18（用户第十二轮截图：「现在就在听页应该**隐藏小播放条**，现在只隐藏了上面的元素」）：
+              //   槽内容在那一页 / 二级页在栈上时是 **0 高度占位 Column**（见 {@link miniBar} 的 if/else），
+              //   但 `enableMiniBarBackground` 缺省 **true** ⇒ HDS 照样给这一格画背板 ⇒ 页签胶囊上方
+              //   留下一枚**空胶囊**（截图里就是那圈空圆角矩形）。
+              //   语义与 {@link miniBar} 里那条 if 逐字同义：**只有真画播放器时才要 HDS 画背板**。
+              enableMiniBarBackground: this.miniBarRendersPlayer(),
               // ★★★ 2026-10-20（第五轮）：**给 HDS 报上"迷你栏占多宽"**（`HdsTabsMiniBar.miniBarWidth`
               //   ：SDK `@hms.hds.hdsBaseComponent.d.ets:5150`，三档与 `HdsBarWidthRangeOptions` 同形）。
               //   单层态必须报，否则 HDS 挤页签、让出来的长条位宽度与我们自己画的胶囊对不上。
@@ -2713,6 +2732,10 @@ struct Index {
                   `hdsMiniWidth=${miniWidth.toFixed(1)} hdsTabWidth=${tabWidth.toFixed(1)} ` +
                     `contentW=${this.floatingMiniBarWidthVp().toFixed(1)} ` +
                     `mode=${mode} style=${miniBarStyle} layout=${this.barLayoutModeForHds()}`);
+                // 把 HDS 报回来的背板宽记账 —— 差值的**一半**作为内容行左右内距还给胶囊（见字段注释）。
+                if (miniWidth > 0 && Math.abs(miniWidth - this.hdsMiniBarWidthVp) > 0.5) {
+                  this.hdsMiniBarWidthVp = miniWidth;
+                }
                 this.onMiniBarStyleChangeFull(miniBarStyle, mode);
               }
             }
