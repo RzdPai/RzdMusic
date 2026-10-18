@@ -1985,7 +1985,9 @@ struct Index {
               followAppMiniBarExpanded: true,
               showSelfDrawnBackplate: false,
               contentOwnsSquash: false,
-              contentHeightVp: 0
+              // 内容行钉在胶囊高（我们自己的胶囊 `barHeight` 就是下面这个常量）⇒ 行盒 ≡ 胶囊盒，
+              // 封面 `56×0.8 = 44.8` 在 56 里上下各留 5.6；不钉的话行高由封面自然高决定、与胶囊对不齐。
+              contentHeightVp: FLOATING_MINI_BAR_HEIGHT_VP
             })
           }
         }
