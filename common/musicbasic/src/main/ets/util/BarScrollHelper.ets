@@ -13,110 +13,116 @@
  * limitations under the License.
  */
 
-import { curves } from '@kit.ArkUI';
-import { BarLayoutModes, SdkConstants } from '../constants/Constants';
+import { SdkConstants } from '../constants/Constants';
 import { MusicAppState } from '../model/MusicAppState';
 import { SdkApiUtil } from './SdkApiUtil';
 import { Logger } from './Logger';
 
 /**
- * 双层底栏（迷你条 + 页签）的滚动联动。
+ * 底栏「迷你条展开 / 收起」的**意图判定**（滚动联动）。
  *
- * 放在 common 层而不是某个 feature 里：滚动回调发生在多个 feature 页面
- * （推荐首页 / 歌单页 / 我的 / 设置），若 helper 落在单个 feature，
- * 其它页面就要反向依赖它，容易成环。这里只依赖 `MusicAppState` 的 number 字段，
- * 不引入任何 HDS UI 类型。
+ * ══════════════════ 一、只判意图，不碰布局、不自己起动画（2026-10-18 照搬无界） ══════════════════
+ *
+ * 上游把这件事拆成**两段**（`wujie.pa:145755-145790`）：
+ * ```
+ *   ① 判意图：design/logic/BarCollapse.onDown/onMove/onUp → BarAction.COLLAPSE | EXPAND
+ *   ② 落地  ：applyBarAction(action) → controller.applyMiniBarStyle(
+ *                action === COLLAPSE ? HdsBarStyle.EXPAND : HdsBarStyle.COLLAPSE)
+ * ```
+ * 并且 **`barLayoutMode` 运行期从不改**（整份 abc 只有 4 处写、全是对象字面量、值恒 `VERTICAL`：
+ * `wujie.pa:143295` / `:144066` / `:144083` / `:520524`），`MainPage` 整模块 `animateTo` **零命中**
+ * —— 样式切换的动画由 HDS 内部默认动效给（SDK `@hms.hds.hdsBaseComponent.d.ets:5729` 原文
+ * 「Switch the display style of the mini bar. **The style switch will be accompanied by a
+ * default animation.**」）。
+ *
+ * ⇒ 本文件只做第 ① 段：判断"该展开还是该收起"，然后把意图交给壳层注册的 {@link expandApplier}。
+ *   本文件在 `common` 层，拿不到 `HdsTabsController`，所以必须走回调。
+ *
+ * ══════════════════ 二、判据照上游 `BarCollapse`（`wujie.pa:83829-84220`） ══════════════════
+ *
+ * | 量 | 值 | 出处 |
+ * | --- | --- | --- |
+ * | 触发阈值 | **1.5**（`fldai 1.5` → `stlexvar 0x0,0x0`） | `:84165-84166` |
+ * | 累计量 | `sub2 0x3b,a4` = `y − lastY`（向下为正） | `:83990` |
+ * | 方向反转 | 累计清零 | `:84005-84020` |
+ * | 节流 | **250ms**（`ldai 0xfa`、`less`） | `:84077-84078` |
+ *
+ * 本仓的入口是**滚动增量**（多个页面已经在喂 {@link BarScrollDeltaTracker}），语义与上游的
+ * "手指累计位移"同向：内容向下滚（`delta > 0`）≡ 手指上滑 ≡ 上游的 `EXPAND` 意图。
  */
 export class BarScrollHelper {
-  /** 触发切换的最小滚动增量（vp），过滤掉惯性抖动。 */
-  private static readonly DELTA_THRESHOLD: number = 2;
-  /** 弹簧动效时长（ms）。 */
-  private static readonly ANIMATION_MS: number = 500;
-  /** 只在小屏宽度断点（< lg）参与联动，宽屏保持两排。 */
-  private static readonly COMPACT_WIDTH_BREAKPOINT_MAX: number = 1;
-  /**
-   * 滚动联动总开关。
-   *
-   * **已开启**：列表上滑 → 单层（左圆Tab右长播放器）；列表下滑 → 双层。
-   * 用户明确要求「全都自动收起展开」，所以首页、歌单页、我的页、设置页**都要接**
-   * 滚动回调 —— 只要有一个页面不接，就会出现「有的页面收、有的页面不收」的不一致。
-   * 调用点见各 feature 页面的 `onScrollFrameBegin` / `onDidScroll`。
-   */
+  /** 滚动联动总开关。 */
   private static readonly SCROLL_LINK_ENABLED: boolean = true;
+  /** 宽度断点闸：大于此断点（`WIDTH_MD` 之后）不做滚动联动。 */
+  private static readonly COMPACT_WIDTH_BREAKPOINT_MAX: number = 1;
+  /** 上游 `BarCollapse` 的触发阈值（vp）：`wujie.pa:84165`。 */
+  private static readonly FLING_THRESHOLD_VP: number = 1.5;
+  /** 上游 `BarCollapse` 的节流窗口（ms）：`wujie.pa:84077`（`0xfa` = 250）。 */
+  private static readonly THROTTLE_MS: number = 250;
+  /** 上一次真正发放意图的时刻（节流用）。 */
+  private static lastFireAtMs: number = 0;
+  /**
+   * 壳层注册的落地回调：把「展开意图」交给 `HdsTabsController.applyMiniBarStyle()`。
+   * 注册点：`Index.aboutToAppear()`。
+   */
+  public static expandApplier: ((expand: boolean) => void) | undefined = undefined;
 
-  /** @returns 滚动联动是否开启。 */
+  /**
+   * @returns 是否启用滚动联动（沿用既有开关）。
+   */
   public static isEnabled(): boolean {
     return BarScrollHelper.SCROLL_LINK_ENABLED;
   }
 
   /**
-   * 根据滚动增量切换双层底栏排布模式。
+   * 滚动联动：**只表达展开意图**，不写 `barLayoutMode`、不自己起 `animateTo`。
    *
-   * 方向（**已按真机反馈确认**）：
-   *   增量 > 0（内容偏移增加、手指上滑）→ 单排（HORIZONTAL）+ 长迷你条
-   *   增量 < 0（内容偏移减少、手指下滑）→ 双排（VERTICAL）
-   *
-   * offset是内容滚动距离，不是手指位移；不要反转这两个坐标口径。
-   *
-   * 入参是**本帧滚动增量**，不是累计偏移：调用方用
-   * `onScrollFrameBegin((offset) => { ...; return { offsetRemain: offset }; })` 的 offset。
-   *
-   * @param ctx UIContext，用于 animateTo。
-   * @param appState 全局播控状态（写入 hdsBarLayoutMode / miniBarExpanded）。
-   * @param delta 本帧滚动增量（vp）。
-   * @param widthBreakpoint 当前宽度断点（0 = sm）。
+   * @param _ctx 壳层 UIContext（保留签名兼容既有调用点；本函数不再用它起动画）
+   * @param appState 全局状态（只写 `miniBarExpanded`）
+   * @param delta 本次滚动增量（vp；正 = 内容向下滚 = 手指上滑 = 展开意图）
+   * @param widthBreakpoint 宽度断点
    */
-  public static notifyScrollDelta(ctx: UIContext, appState: MusicAppState, delta: number,
+  public static notifyScrollDelta(_ctx: UIContext, appState: MusicAppState, delta: number,
     widthBreakpoint: number): void {
-    // barLayoutMode / miniBarStyle 仅在 6.1.1(24) 及以上可用，低版本直接跳过，
-    // 避免在旧机上写入无效状态。
     if (!SdkApiUtil.isDistributionOsApiAtLeast(SdkConstants.DISTRIBUTION_OS_6_1_1_CODE)) {
       return;
     }
     if (widthBreakpoint > BarScrollHelper.COMPACT_WIDTH_BREAKPOINT_MAX) {
       return;
     }
-    if (delta > BarScrollHelper.DELTA_THRESHOLD) {
-      // 列表上滑 → 单层：左侧圆页签，右侧长播放器。
-      if (appState.hdsBarLayoutMode === BarLayoutModes.HORIZONTAL && appState.miniBarExpanded) {
-        return;
-      }
-      ctx.animateTo({
-        duration: BarScrollHelper.ANIMATION_MS,
-        curve: curves.springMotion(0.5, 0.7, 0.6)
-      }, (): void => {
-        Logger.info('RzdBarLayout', `scroll delta=${delta} target=single-row`);
-        appState.hdsBarLayoutMode = BarLayoutModes.HORIZONTAL;
-        appState.miniBarExpanded = true;
-      });
-    } else if (delta < -BarScrollHelper.DELTA_THRESHOLD) {
-      // 列表下滑 → 双层：页签与播放器上下各一排。
-      if (appState.hdsBarLayoutMode === BarLayoutModes.VERTICAL && !appState.miniBarExpanded) {
-        return;
-      }
-      ctx.animateTo({
-        duration: BarScrollHelper.ANIMATION_MS,
-        curve: curves.springMotion(0.5, 0.7, 0.6)
-      }, (): void => {
-        Logger.info('RzdBarLayout', `scroll delta=${delta} target=two-rows`);
-        appState.hdsBarLayoutMode = BarLayoutModes.VERTICAL;
-        appState.miniBarExpanded = false;
-      });
+    const expand: boolean = delta > BarScrollHelper.FLING_THRESHOLD_VP;
+    const collapse: boolean = delta < -BarScrollHelper.FLING_THRESHOLD_VP;
+    if (!expand && !collapse) {
+      return;
+    }
+    const now: number = Date.now();
+    if (now - BarScrollHelper.lastFireAtMs < BarScrollHelper.THROTTLE_MS) {
+      return;
+    }
+    if (appState.miniBarExpanded === expand) {
+      return;
+    }
+    BarScrollHelper.lastFireAtMs = now;
+    appState.miniBarExpanded = expand;
+    Logger.info('RzdBarLayout', `scroll delta=${delta} expand=${expand}`);
+    if (BarScrollHelper.expandApplier !== undefined) {
+      BarScrollHelper.expandApplier(expand);
     }
   }
 }
 
 /**
- * 把连续的滚动偏移换算成增量，供 {@link BarScrollHelper} 使用。
- * ArkUI 的 `onDidScroll` 只给绝对偏移，需要调用方自己记住上一次的值。
+ * 滚动增量跟踪器：把列表的累计 `offset` 转成"本帧增量"。
+ *
+ * 只在同一轮滚动里有效；`reset()` 由调用方在滚动结束时调。
  */
 export class BarScrollDeltaTracker {
   private lastOffset: number = 0;
   private started: boolean = false;
 
   /**
-   * @param offset 本次滚动内容的绝对偏移（vp）。
-   * @returns 相对上一次的增量；首次调用返回 0。
+   * @param offset 当前累计滚动偏移（vp）
+   * @returns 相对上一帧的增量（第一帧返回 0）
    */
   public delta(offset: number): number {
     if (!this.started) {
@@ -129,7 +135,7 @@ export class BarScrollDeltaTracker {
     return d;
   }
 
-  /** 复位（页面重新出现时调用），避免切页后第一帧算出一个巨大的增量。 */
+  /** 复位（新一次滚动开始时调用）。 */
   public reset(): void {
     this.started = false;
     this.lastOffset = 0;

@@ -47,7 +47,8 @@ import {
   TabSwitchState,
   ThemeState,
   WindowInfo,
-  WindowUtil
+  WindowUtil,
+  BarScrollHelper
 } from 'musicbasic';
 import { dispatchShellPlaybackIntent, LXSourceHost, PlaybackPage, PlaybackPageCoverContent, PlayerViewModel,
   prewarmCurrentSongMesh } from 'player';
@@ -447,6 +448,11 @@ struct Index {
 
   /** Initializes play queue ids from local DB for the session. */
   aboutToAppear() {
+    // ★★★ 2026-10-18（照搬上游两段式：判意图 → controller 落地）：滚动侧只表达意图，
+    //   样式切换与动画都交给 HDS（SDK `@hms.hds.hdsBaseComponent.d.ets:5729`「default animation」）。
+    BarScrollHelper.expandApplier = (expand: boolean): void => {
+      this.applyHomeBarExpanded(expand);
+    };
     this.appState.playQueueIds = MusicDbApi.getInstance().getSongList().map((dto) => dto.id);
     // 鈽?椤电浠?4 涓敹鎴?2 涓紙鎺ㄨ崘 / 鎴戠殑锛変箣鍚庯紝`TabSwitchState.tabIndex` 鍙兘鏄笂涓€鐗堢暀涓嬬殑
     //   瓒婄晫涓嬫爣锛堟瘮濡傛棫鐨勩€屾垜鐨勩€? 2銆併€岃缃€? 3锛夆€斺€?HdsTabs 鎷垮埌瓒婄晫涓嬫爣浼氳惤鍦ㄧ┖鐧介〉涓娿€?
@@ -1821,6 +1827,21 @@ struct Index {
     }
     this.appState.miniBarExpanded = !collapsed;
     Logger.info(RzdShellLogTag, `home bar callback style=${miniBarStyle} mode=${mode} expanded=${!collapsed}`);
+  }
+
+  /**
+   * 照搬上游 `applyBarAction`（`wujie.pa:145755-145790`）的落地半段：只把**展开意图**交给
+   * `HdsTabsController.applyMiniBarStyle()`。上游整模块 `animateTo` 零命中，动画由 HDS
+   * 默认动效给（SDK `@hms.hds.hdsBaseComponent.d.ets:5729`）⇒ 这里不起任何补间。
+   * @param expand true = 迷你条展开（EXPAND 档），false = 收起（COLLAPSE 档）
+   */
+  private applyHomeBarExpanded(expand: boolean): void {
+    this.appState.miniBarExpanded = expand;
+    try {
+      this.tabsController.applyMiniBarStyle(expand ? HdsBarStyle.EXPAND : HdsBarStyle.COLLAPSE);
+    } catch (err) {
+      Logger.error(RzdShellLogTag, `applyMiniBarStyle failed ${String(err)}`);
+    }
   }
 
   /**
