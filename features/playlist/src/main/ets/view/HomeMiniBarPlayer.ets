@@ -442,7 +442,6 @@ export struct HomeMiniBarPlayer {
       //   封面的 `scale(coverScale2)` 另挂一份同名动画（见 `HomeMiniBarAlbumCover`）。
       //   ⇒ 单层↔双层切换时，格子内的高度/内距/封面缩放按 350ms Friction 补间，而不是硬切。
       //   ⚠️ 顺序照抄上游：`animation(BAR_ANIM) → 属性 → animation(null)`。
-      .animation(HomeMiniBarPlayer.BAR_ANIM)
       .padding({
         left: this.sidePadVp(),
         right: this.actionsTrailVp(),
@@ -453,7 +452,8 @@ export struct HomeMiniBarPlayer {
       .width(StyleConstants.FULL_WIDTH)
       // 钉住时 `min == max` ⇒ 行盒 ≡ 胶囊盒；未钉时 `[0, 4096]` ⇒ 完全等价于不约束。
       .constraintSize({ minHeight: this.contentMinHeightVp(), maxHeight: this.contentMaxHeightVp() })
-      .animation(null)
+      // ⚠️ `.animation()` 只作用于**它前面**已设置的属性 ⇒ 必须放在尺寸之后（写在之前等于没有动画）。
+      .animation(HomeMiniBarPlayer.BAR_ANIM)
     }
     .alignContent(Alignment.Center)
     .width(StyleConstants.FULL_WIDTH)

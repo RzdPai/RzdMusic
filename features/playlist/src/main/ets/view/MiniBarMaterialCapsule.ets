@@ -656,6 +656,7 @@ export struct MiniBarMaterialCapsule {
     }
     .width(this.contentLayerWidthVp())
     .height(this.contentLayerHeightVp())
+    .animation(MiniBarMaterialCapsule.BAR_ANIM)
     // 盒内定位：x 吃实测槽心（见 contentLayerLeftVp），y 取胶囊上缘（纵向不跟槽）。
     .position({ x: this.contentLayerLeftVp(), y: this.contentLayerTopVp() })
     // 本层不吃事件（事件要落到内容里的按钮上）
@@ -734,6 +735,8 @@ export struct MiniBarMaterialCapsule {
       }
       .barMode(BarMode.Fixed)
       .barHeight(this.barHeight)
+      // 内层浮动栏高（= 胶囊高）也要补间，否则外壳变了、里面还是瞬跳。
+      .animation(MiniBarMaterialCapsule.BAR_ANIM)
       .barPosition(BarPosition.End)
       .barOverlap(true)
       .vertical(false)
@@ -774,15 +777,19 @@ export struct MiniBarMaterialCapsule {
     //   原来**没有任何补间**（状态一变就瞬跳）。上游把 `BAR_ANIM = { duration: 350, curve: Curve.Friction }`
     //   （`wujie.pa:70120-70126`）挂在**带 height/padding 的那个节点**上（胶囊 `Row` `:69053-69057`，
     //   收口 `:69118-69121`）⇒ 这里给胶囊根同样挂一条，顺序照抄 `animation(…) → 属性 → animation(null)`。
-    .animation(MiniBarMaterialCapsule.BAR_ANIM)
     .width(this.boxWidthVp())
     .height(this.boxHeightVp())
+    // ★★★ 2026-10-18（用户：「逐帧看，切换时直接就从一长条变短了，没有过渡」）：
+    //   ArkUI 的 `.animation()` 只对**它前面已设置**的属性生效（官方 `ts-explicit-animation`：
+    //   「用于指定该组件**前面所有属性**变化的动画效果」）⇒ 必须写在 `.height()` **之后**，
+    //   写在之前等于没有动画（上一版就错在这里）。
+    //   时长/曲线取上游 `BAR_ANIM = { duration: 350, curve: Curve.Friction }`（`wujie.pa:70120-70126`）。
+    .animation(MiniBarMaterialCapsule.BAR_ANIM)
     // ★★★ 挤压：无界 `MainPage.morphGlass` 的 `.scale({ x: glassScaleX, y: glassScaleY * morphSquashY })`
     //   （`wujie.pa:155724-155745`）。glassScale = 1 ⇒ 只剩 `y = morphSquashY`。
     //   **不写 centerX/centerY**（:155728 的对象只有 x/y 两个键）⇒ 默认 50%/50% = 盒中心 = 胶囊中心。
     //   `morphSquashY`：0.86（110ms）→ 1（320ms `cubic-bezier(0.34,1.56,0.64,1)`）；静止恒为 1。
     .scale({ x: 1, y: this.expandState.morphSquashY })
-    .animation(null)
     // 本层不吃事件（事件交给胶囊里的按钮 / 宿主自己的手势）；子节点照常响应。
     .hitTestBehavior(HitTestMode.Transparent)
     .onAreaChange((_oldArea: Area, area: Area): void => {
