@@ -14,9 +14,10 @@
  */
 
 import { AppStorageV2 } from '@kit.ArkUI';
+import { hdsMaterial, SystemMaterialParams } from '@kit.UIDesignKit';
 import {
   AmbientState, AppStorageKeys, areaLengthToVp, BarLayoutModes, getWindowInfoState, ImmersiveType, Logger,
-  MINI_BAR_ASIDE_ID, MINI_BAR_ID, PlayerExpandState, SdkApiUtil, SdkConstants, StyleConstants, WindowInfo
+  buildTitleMaterial, MINI_BAR_ASIDE_ID, MINI_BAR_ID, PlayerExpandState, SdkApiUtil, SdkConstants, StyleConstants, WindowInfo
 } from 'musicbasic';
 import { MusicAppState, PlayerViewModel } from 'player';
 import { HomeMiniBarAlbumCover } from './HomeMiniBarAlbumCover';
@@ -212,15 +213,22 @@ export struct HomeMiniBarPlayer {
 
   /** 背板模糊档 —— 与 {@link PlaylistFloatingMiniBar} 同档。 */
   private miniBarBackplateBlur(): BlurStyle {
-    switch (this.ambientState.level) {
-      case 1:
+    // ★★★ 2026-10-18（用户：「光感等级对齐软件设置」）：不再自己按 level 直接切 Thin/Regular/Thick ——
+    //   那是**另一套刻度**（而且 level 0 落到了 Thin）。全应用的口径是 `buildTitleMaterial(level)`：
+    //   0 ⇒ ADAPTIVE（跟随系统）/ 1 ⇒ SMOOTH / 2 ⇒ GENTLE / 3 ⇒ EXQUISITE
+    //   （`common/musicbasic/src/main/ets/util/TitleMaterial.ets:23-33`）。
+    //   这里把同一个材质档映射成自绘背板能用的 `BlurStyle`，两侧从此吃同一份设置。
+    const material: SystemMaterialParams = buildTitleMaterial(this.ambientState.level);
+    switch (material.materialLevel) {
+      case hdsMaterial.MaterialLevel.SMOOTH:
         return BlurStyle.Thin;
-      case 2:
+      case hdsMaterial.MaterialLevel.GENTLE:
         return BlurStyle.Regular;
-      case 3:
+      case hdsMaterial.MaterialLevel.EXQUISITE:
         return BlurStyle.Thick;
       default:
-        return BlurStyle.Thin;
+        // ADAPTIVE = 跟随系统 ⇒ 用组件的最厚一档（系统会按自身策略收敛）。
+        return BlurStyle.COMPONENT_ULTRA_THICK;
     }
   }
 
