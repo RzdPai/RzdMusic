@@ -4039,6 +4039,18 @@ export struct PlaybackPage {
    */
   private refreshCollapseGeometry(): void {
     if (this.expandState.morphStage !== MorphStage.OPEN) {
+      // ★★★ B（2026-10-20，照搬上游 `MainPage.retargetToLiveCover()`，`wujie.pa:151569-151756`）：
+      //   **形变会话内**（ENTERING / LEAVING）关闭走的就是这一支 —— 原来这里直接 `return`
+      //   ⇒ `morphBeginLeaving()` 用的是会话起手时那份 `barWin*`（迷你条胶囊），落点可能是旧的。
+      //   现在补一次"反向开始前 retarget 到活的迷你条"（详见
+      //   `PlayerExpandState.retargetCollapseAnchorForReverse()` 的说明）。
+      //   ⚠️ 只重量**迷你条**（`MINI_BAR_ID` / `MINI_BAR_FLOATING_ID`：形变期是
+      //      `Visibility.Hidden` ⇒ 占布局、量得到），**不量**播放页大封面（页面正被缩放）。
+      const retargeted: boolean =
+        this.expandState.retargetCollapseAnchorForReverse(this.getUIContext());
+      Logger.info(PlaybackPage.logTag,
+        `RzdReverseRetarget collapse-anchor ok=${retargeted ? 1 : 0} ` +
+          `stage=${this.expandState.morphStage} p=${this.expandState.morphP.toFixed(3)}`);
       return;
     }
     this.expandState.measureGeometry(this.getUIContext(), true, true);
@@ -4135,6 +4147,16 @@ export struct PlaybackPage {
         `winH=${this.expandState.windowHeightVp.toFixed(1)} ` +
         `ctrlOffY=${this.expandState.chromeOffsetY().toFixed(1)} ` +
         `ctrlOpa=${this.expandState.chromeOpacity().toFixed(2)}`);
+    // ★★★ 2026-10-20：快照路的同一条口径（`path=snapshot`）。
+    //   期望：`overlayPaint=0`（拍快照前已 `snapshotShrinkOwned` 挡住克隆层）、
+    //        `realCover` 这里的值是**拍之前**那一帧；快照成功后会 `beginSnapshotShrink()`
+    //        把克隆层彻底关掉（见下方回调）。
+    Logger.info(PlaybackPage.logTag,
+      `RzdClosePath path=snapshot overlayPaint=${this.expandState.morphOverlayBridging() ? 1 : 0} ` +
+        `realCover=${this.expandState.realCoverVisible() ? 1 : 0} ` +
+        `target=(${this.expandState.barWinX.toFixed(1)},${this.expandState.barWinY.toFixed(1)},` +
+        `${this.expandState.barWinW.toFixed(1)},${this.expandState.barWinH.toFixed(1)}) ` +
+        `stage=${this.expandState.morphStage} p=${this.expandState.morphP.toFixed(3)}`);
     // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-17闂?*闂婎偄娴傞崑鍡涘矗鎼达絾宕夋い鏍ㄦ皑缁愮偤鏌涘▎妯虹仯闁轰降鍊濋獮鈧憸鏃堛€傞埡浣勬盯鍩€?* 闂佺偨鍎查弻锟犲焵?闁?`closeLiveMorphFallback` 闂佹眹鍔岀€氼剟宕规惔鈽嗘桨鐟滄垿顢氶埡鍛強閹兼惌鍨崇粈?
     //   婵炴垶鎸堕崐鎾绘煂濠婂牆绀堢€广儱妫楃徊褰掓煥濞戞瑥鐒归柟?闂佺厧鐤囧▔娑樷枖椤撱垺鍎楅柍杞版祰閸╁矂鏌ㄥ☉妯荤秮srcBox`闂佹寧绋戦ˇ鐢稿闯濞差亜绀嗗Λ棰佽兌閸熷﹪鏌ㄥ☉娆戔枔闁?缂備焦鍔栭〃鍛般亹濞戞矮鐒婇柛婵嗗閸ょ喖鏌￠崼婵愭Ц闁逞屽墰閵嗗妲愬渚籵rphShrinkState.start`
     //   闂佹眹鍔岀€氼亞鎮潏鈺冨崥妞ゆ牗鑹捐ぐ鍡欌偓娈垮枛缁绘﹢宕楀鈧畷銉╁礃閵娧勬疁闂佹寧绋戦ˇ顓㈠焵椤掆偓閸婄兘骞戦姀锛勨枖闁逞屽墯缁嬪顓奸崱妤冧海缂備焦鏌ㄩ鍛潩閵娾晜鍎庨悗娑櫭径宥夋偣瑜岄崡鎶藉焵椤戣棄浜鹃梺鍛婄墬閻楃偤鎯岄幆褜鍤楅柛鏇炲缁€?*婵炴垶鎸哥粔鎾嵁閹捐绠€广儱顦禍婵堚偓娈垮枤婵敻寮悙纰樺亾鐟欏嫮顣查柣銉ユ嚇閹粙濡歌閻ｉ亶鐓崶璺轰簽闁?*闂?
@@ -4429,6 +4451,17 @@ export struct PlaybackPage {
             `radius=${this.expandState.morphRadius.toFixed(2)} ` +
             `clipH=${this.expandState.morphClipHeight.toFixed(1)} ` +
             `winH=${this.expandState.windowHeightVp.toFixed(1)}`);
+        // ★★★ 2026-10-20：**这条路上封面归谁 + 落点在哪**，一行判死。
+        //   grep 关键字 `RzdClosePath`。`path=reverse` 的期望值：
+        //     `overlayPaint=0` —— 壳层 `MorphCoverClone` **不画**（`morphOverlayBridging()===false`）；
+        //     `realCover=1`    —— 播放页**真封面在画**（`realCoverVisible()===true`）；
+        //     `target=(x,y,w,h)` —— 与迷你条实测胶囊一致（≤1vp），即 B 那一刀 retarget 后的落点。
+        Logger.info(PlaybackPage.logTag,
+          `RzdClosePath path=reverse overlayPaint=${this.expandState.morphOverlayBridging() ? 1 : 0} ` +
+            `realCover=${this.expandState.realCoverVisible() ? 1 : 0} ` +
+            `target=(${this.expandState.barWinX.toFixed(1)},${this.expandState.barWinY.toFixed(1)},` +
+            `${this.expandState.barWinW.toFixed(1)},${this.expandState.barWinH.toFixed(1)}) ` +
+            `stage=${this.expandState.morphStage} p=${this.expandState.morphP.toFixed(3)}`);
       });
       const closeScale: number = closeFromT < PlaybackPage.REVERSE_MIN_RATIO ?
         PlaybackPage.REVERSE_MIN_RATIO : closeFromT;

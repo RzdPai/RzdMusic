@@ -887,7 +887,13 @@ export class PlayerExpandState {
     //   鍙"浼氳瘽鍦ㄩ┍鍔?+ 澹冲眰鎺ョ + 娴眰涓ょ鍑犱綍鏈夋晥"锛岄鐨勯偅涓€寮犲氨鏄?*鍞竴鐢诲**
     //   鈬?鐪熷皝闈?*鎭掍笉鐢?*銆傝繖鏉′笌 `morphOverlayBridging()` 閲屾柊澧炵殑閭ｆ潯鏄悓涓€涓潯浠剁殑姝ｅ弽闈紝
     //   鎵€浠ュ睆涓婃案杩滄伆濂戒竴寮狅紝涓?*涓嶄緷璧栦袱鏉¤ˉ闂磋皝鍏堣捣**锛堥偅姝ｆ槸"闅忔満"鐨勬潵婧愶級銆?
-    if (this.hostsMorphOverlay() && this.morphSessionDriving() && this.overlayCoverDrawable()) {
+    // ★★★ A（2026-10-20 收口「关闭时两套封面」）：外壳克隆层只允许**展开方向**（ENTERING）代表封面。
+    //   下面这条判据原来不看相位：`morphSessionDriving()` 在 `LEAVING`（drive=ANIM）为真、
+    //   `overlayCoverDrawable()` 在几何齐了以后恒真 ⇒ **反向/关闭路上真封面被这条挡住不画**。
+    //   照搬上游：反向时代表封面的是**活封面**（`MainPage.startReverseMorph` 起手先
+    //   `retargetToLiveCover()`，`wujie.pa:154070-154074`），所以真封面必须画。
+    if (this.morphOverlayEntering() && this.hostsMorphOverlay() && this.morphSessionDriving() &&
+      this.overlayCoverDrawable()) {
       return false;
     }
     if (!this.morphOverlayBridging()) {
@@ -3882,6 +3888,18 @@ export class PlayerExpandState {
     if (this.snapshotShrinkOwned) {
       return false;
     }
+    // ★★★ A（2026-10-20）—— **"反向路上仍然会画克隆层"的那一个条件就是缺这道门**。
+    //   下面三条判据（`morphSessionDriving()` / `morphBridging()` / 末尾 `morphContainerActive()`）
+    //   在 `LEAVING` / `LANDING` 相位**全部为真**，而 `morphBeginLeaving()` 恰好把
+    //   `morphStage` 置成 `LEAVING`、`morphDrive` 置成 `ANIM`（见本文件 `morphBeginLeaving()`）
+    //   ⇒ 关闭路一开始，壳层 `MorphCoverClone`（`products/default/.../Index.ets:3062`
+    //   `if (this.expandState.morphOverlayBridging())`）就跟着画。
+    //   照搬上游：`pullActive` 只在**展开方向**为真（`MorphStage.ENTERING` ⇒ `setMiniOut(true)`，
+    //   `wujie.pa:163498-163505`）；反向/关闭路由播放页**活封面**代表封面
+    //   （`startReverseMorph` → `retargetToLiveCover()`，`wujie.pa:154070-154074`）⇒ 这一层不画。
+    if (!this.morphOverlayEntering()) {
+      return false;
+    }
     // 鈽呪槄鈽呪槄 2026-10-17锛?*鐓ф惉鏃犵晫锛氬３灞傚厠闅嗗眰鍙湪"涓嬫媺浼氳瘽"閲屽瓨鍦?* 鈥斺€?
     //   淇敤鎴峰疄娴嬨€屼袱涓皝闈?*闅忔満**鍑虹幇锛岀害涓€鍗婃鐜囥€嶏級
     //
@@ -4070,6 +4088,99 @@ export class PlayerExpandState {
     return this.morphOverlayHostCached === 1;
   }
 
+  /** @returns 形变相位是否**展开方向**（外壳克隆层的唯一合法绘制区间）。 */
+  public morphOverlayEntering(): boolean {
+    return this.morphStage === MorphStage.ENTERING;
+  }
+
+  /**
+   * 把外壳克隆层的时间线**当场停掉**（不清 `snapshotShrinkOwned`）。
+   *
+   * 为什么必须显式清零，而不是"让它自己跑完"：`morphOverlayP` 只被这一层自己读
+   * （{@link morphOverlayProgress} / {@link morphOverlayCoverBridge}），而它的 `animateTo`
+   * 一次就写成了终点；不在这里覆写回 0，框架会继续朝旧终点插值到 560/460ms 结束，
+   * 于是"关闭时封面还在往外飞"。
+   */
+  public abortMorphOverlayTween(): void {
+    this.morphOverlayGen = this.morphOverlayGen + 1;
+    this.morphOverlayAnimating = false;
+    this.morphOverlayCollapseOwned = true;
+    this.morphOverlayP = 0;
+  }
+
+  /**
+   * ★★★ B（2026-10-20，照搬上游 `MainPage.retargetToLiveCover()`，`wujie.pa:151569-151756`）：
+   * **反向开始前**把"落点"重新量一次，别用会话起手时那份。
+   *
+   * 为什么必须补这一刀：`PlaybackPage.refreshCollapseGeometry()` 在 `morphStage !== OPEN` 时
+   * 直接 early-return，而**形变会话内**（ENTERING / LEAVING）关闭走的正是那一支
+   * ⇒ `morphBeginLeaving()` 用的终点胶囊矩形 = 会话起手时量的 `barWin*`；中途窗口/胶囊动过就偏。
+   *
+   * 量什么、什么时候量（与上游同一口径）：
+   *   · `getFrameNodeById(MINI_BAR_ID | MINI_BAR_FLOATING_ID)` →
+   *     `getPositionToWindowWithTransform()`：迷你条在形变期是 `Visibility.Hidden`
+   *     （**占布局、不绘制**，见壳层 `sourceBarHidden`）⇒ 此刻量到的就是"活的迷你条"窗口矩形；
+   *   · **不要**量播放页大封面：会话期页面被 scale/clip 变换过，
+   *     `getPositionToWindowWithTransform()` 给的是被压扁的那一帧 ⇒ 会把错误终点写进
+   *     `endCover*`（这正是 {@link measureGeometry} 里 `force || !morphLive()` 那道门要防的事），
+   *     所以这里传 `force = false`。
+   * @param ui 播放页的 UIContext
+   * @returns 是否拿到了可用落点（false ⇒ 调用方保持原几何，别把会话搞坏）
+   */
+  public retargetCollapseAnchorForReverse(ui: UIContext): boolean {
+    if (ui === undefined) {
+      return false;
+    }
+    if (!this.morphUsable) {
+      return false;
+    }
+    const oldX: number = this.barWinX;
+    const oldY: number = this.barWinY;
+    const oldW: number = this.barWinW;
+    const oldH: number = this.barWinH;
+    const measured: boolean = this.measureGeometry(ui, true, false);
+    if (!measured || this.barWinW <= 0 || this.barWinH <= 0) {
+      Logger.warn(PlayerExpandState.logTag,
+        `RzdReverseRetarget skip meas=${measured ? 1 : 0} ` +
+          `bar=(${this.barWinX.toFixed(1)},${this.barWinY.toFixed(1)},` +
+          `${this.barWinW.toFixed(1)}x${this.barWinH.toFixed(1)}) stage=${this.morphStage}`);
+      return false;
+    }
+    const dx: number = Math.abs(this.barWinX - oldX);
+    const dy: number = Math.abs(this.barWinY - oldY);
+    const dw: number = Math.abs(this.barWinW - oldW);
+    const dh: number = Math.abs(this.barWinH - oldH);
+    const delta: number = Math.max(dx, Math.max(dy, Math.max(dw, dh)));
+    if (delta <= PlayerExpandState.RETARGET_EPS_VP) {
+      Logger.info(PlayerExpandState.logTag,
+        `RzdReverseRetarget keep delta=${delta.toFixed(2)} ` +
+          `target=(${this.barWinX.toFixed(1)},${this.barWinY.toFixed(1)},` +
+          `${this.barWinW.toFixed(1)}x${this.barWinH.toFixed(1)}) ` +
+          `stage=${this.morphStage} p=${this.morphP.toFixed(3)}`);
+      return true;
+    }
+    if (!this.morphInitParams()) {
+      Logger.warn(PlayerExpandState.logTag,
+        `RzdReverseRetarget init FAIL delta=${delta.toFixed(2)} stage=${this.morphStage}`);
+      return false;
+    }
+    // 同一帧内按新端点重算当前帧：p≈1 时是恒等变换（scale=1 / translate=0 /
+    // clipHeight=boxH / radius=34）⇒ 逐像素不变；p<1 时避免"下一帧才跳"。
+    this.applyMorphGeometry(this.morphP);
+    Logger.info(PlayerExpandState.logTag,
+      `RzdReverseRetarget retarget delta=${delta.toFixed(2)} ` +
+        `from=(${oldX.toFixed(1)},${oldY.toFixed(1)},${oldW.toFixed(1)}x${oldH.toFixed(1)}) ` +
+        `to=(${this.barWinX.toFixed(1)},${this.barWinY.toFixed(1)},` +
+        `${this.barWinW.toFixed(1)}x${this.barWinH.toFixed(1)}) ` +
+        `init=(s=${this.initScale.toFixed(4)},clipH=${this.initClipHeight.toFixed(1)},` +
+        `tx=${this.initTranslateX.toFixed(1)},ty=${this.initTranslateY.toFixed(1)}) ` +
+        `stage=${this.morphStage} p=${this.morphP.toFixed(3)}`);
+    return true;
+  }
+
+  /** 反向 retarget 的容差（vp）：端点变化小于它就不重算几何（省掉一次无意义的重排）。 */
+  public static readonly RETARGET_EPS_VP: number = 0.5;
+
   /**
    * 浼氳瘽寮€濮?澶嶄綅锛氭妸娴眰杩涘害鍘嬪洖璧风偣骞朵腑鏂畠鑷繁鐨勮ˉ闂淬€?
    *
@@ -4194,6 +4305,20 @@ export class PlayerExpandState {
    * @param ui 澹冲眰鐨?UIContext
    */
   public focusMorphOverlayForPageCollapse(ui: UIContext): void {
+    // ★★★ A（2026-10-20）：**这一层此刻没在画 ⇒ 不另起一条反向补间，把它的进度当场清零。**
+    //   这是"抽搐 / 闪"的直接来源：调用点有两个（播放页 `closeFullScreenPlayback()` 同步、
+    //   壳层 `@Monitor('expandState.morphStage')` 异步），而原来无条件 `morphOverlayTweenTo(false)`。
+    //   展开那条 560ms 还在跑时，这条会被下面的 `morphOverlayAnimating` 挡掉
+    //   （日志 `skipped (animating)`）⇒ `morphOverlayP` **继续朝 1 跑**，与播放页那条
+    //   460ms 反向**方向相反** ⇒ 屏上就是"一个封面往外飞、页面往里收"。
+    if (!this.morphOverlayBridging()) {
+      const fromP: number = this.morphOverlayProgress();
+      this.abortMorphOverlayTween();
+      Logger.info(PlayerExpandState.logTag,
+        `morph overlay page-collapse not-painting ⇒ abort tween from=${fromP.toFixed(3)} ` +
+          `stage=${this.morphStage} drive=${this.morphDrive}`);
+      return;
+    }
     if (!this.hostsMorphOverlay()) {
       return;
     }
