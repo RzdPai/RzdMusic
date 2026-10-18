@@ -1232,7 +1232,17 @@ export class PlayerExpandState {
     if (this.bigSize > 0) {
       return this.bigSize;
     }
-    return 0;
+    // ★★★ 2026-10-21（**照搬上游结构**，这才是「打断动画后滑歌词页封面不缩」的根因）：
+    //   上游 `CoverMorph` 的构造参数是 `{ edge, metaYPlayer, tyPlayer, lyricCoverEdge,
+    //   lyricLeftInset, swiperW }`（反编译对象字面量 `wujie.pa:4526`）——**没有一个来自
+    //   "量到的大封面节点"**：`edge` 由 `coverEdgeMaxOf(swiperBoxW)` + `fitPlayerOverlay` **算**出来，
+    //   其余是常量/布局值。所以无界的歌词页浮层**永远不会因为"没量到"而停用**。
+    //   本仓原来这里两者都 0 就 `return 0` ⇒ `lyricCoverSizeOf()` 归零 ⇒ `lyricFloat()` 假
+    //   ⇒ 歌词页不缩不飞。而"没量到"恰恰是**打断展开动画后重开**的常态（大封面矩形与上一轮
+    //   相同 ⇒ `onAreaChange` 不再触发 ⇒ `bigSize` 停在 0）。
+    //   ⇒ 补上与上游同一个计算兜底：`playerCoverGeomRect()` 就是那句 `edge` 的计算
+    //     （`coverEdgeMaxOf` → `fitPlayerOverlay`，纯窗口尺寸推出来，不碰节点测量）。
+    return this.playerCoverGeomRect().size;
   }
 
   /**
