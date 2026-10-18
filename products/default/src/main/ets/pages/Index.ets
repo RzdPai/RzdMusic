@@ -1835,9 +1835,11 @@ struct Index {
    *   · 沉浸式自由窗口 → **40**；
    *   · 双层底栏 · 上下两排（`hdsBarLayoutMode === VERTICAL` 且发行版 ≥ 6.1.1(24)）→ **30**；
    *   · 单排（`HORIZONTAL`，= 用户说的"单层"）→ **44**。
-   * 本文件只复制"选哪一档"这一层判断，**只给诊断日志用**（胶囊高度已与封面档位解耦，
-   * 见 {@link homeMiniCapsule} 的几何账）—— "低调"体现在这里（两排态封面 30 < 单排 44），
-   * 而不是体现在胶囊高度上（用户第五轮第 3 条）。
+   * 本文件只复制"选哪一档"这一层判断：**第七轮起它有了真读者** ——
+   * 喂给 `HomeMiniBarPlayer.coverSideVp`（决定上游那条 `sidePad = (胶囊高 − 封面盒)/2`），
+   * 所以"与封面组件逐档同值"从此是**几何硬要求**，不再只是日志。同时它也仍进诊断日志。
+   * 胶囊高度已与封面档位解耦（见 {@link homeMiniCapsule} 的几何账）—— "低调"体现在这里
+   * （两排态封面 30 < 单排 44），而不是体现在胶囊高度上（用户第五轮第 3 条）。
    * @returns 封面边长（vp）。
    */
   private homeMiniBarCoverSideVp(): number {
@@ -1848,6 +1850,23 @@ struct Index {
       return 30;
     }
     return 44;
+  }
+
+  /**
+   * 二级页浮动胶囊那条的**封面布局盒边长**（vp）——喂给 `HomeMiniBarPlayer.coverSideVp`。
+   *
+   * 那个页面传 `followAppMiniBarExpanded: false` ⇒ `HomeMiniBarAlbumCover` 里：
+   * ```
+   *   isImmersiveFreeWindowCover()            → 40
+   *   isTwoRowBarLayout() 恒 false（!follow） ⇒ 不参与
+   *   isCompactMiniBarCover() 恒 true         → 44
+   * ```
+   * ⇒ 只剩两档：沉浸式 40 / 常规 44。**与封面组件逐档同值**是硬要求（它决定 `sidePad`，
+   * 差一档就是 2~3vp 的"封面偏左/偏右"，正是用户第七轮第 4 条）。
+   * @returns 封面边长（vp）。
+   */
+  private secondaryMiniBarCoverSideVp(): number {
+    return this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ? 40 : 44;
   }
 
   /**
@@ -2212,7 +2231,14 @@ struct Index {
           //   与胶囊的 `barHeight` 是同一个常量 ⇒ 行盒 ≡ 胶囊盒。
           //   不钉的话两排态是 46、单排态是 60，而胶囊恒 56 ⇒ 内容与胶囊的上下留白随档位漂，
           //   两条播放条也就永远对不齐（这正是"偏下"在上一版被打掉的同一个机制）。
-          contentHeightVp: FLOATING_MINI_BAR_HEIGHT_VP
+          // ★★★ 第七轮（用户：「一级页面播放条…跟无界不一样，你继续搬」）：
+          //   把**封面真实的布局盒**传进去，`HomeMiniBarPlayer` 才能用上游那条
+          //   `sidePad = 胶囊高/2 − 封面盒/2` 算出"封面内接于胶囊"的左内距
+          //   （上游 = (56−32)/2 = 12；本仓封面是 40/30/44 ⇒ 8/13/6 ⇒ 视觉左边距 ≡ 上下留白）。
+          //   档位判断与 `HomeMiniBarAlbumCover.coverSideLengthVp()` 同口径（见本文件的
+          //   {@link homeMiniBarCoverSideVp}，那个函数原先只给日志用，本轮多了一个真读者）。
+          contentHeightVp: FLOATING_MINI_BAR_HEIGHT_VP,
+          coverSideVp: this.homeMiniBarCoverSideVp()
         })
           .visibility(this.expandState.sourceBarHidden ? Visibility.Hidden : Visibility.Visible)
           // ★★★ 2026-10-20（第三轮）：主页这条的"光感账"一行（`hdc shell hilog | grep RzdHomeMiniBarMaterial`）。
@@ -2465,6 +2491,11 @@ struct Index {
       //   Row 上的 `constraintSize.maxHeight`），否则行 60 > 盒 56 = "子件比容器大"，
       //   排布交给引擎兜底 —— 那正是 2vp 向下偏差的候选来源。
       contentHeightVp: FLOATING_MINI_BAR_HEIGHT_VP,
+      // ★★★ 第七轮（用户：「二级页面…封面离左侧太远」）：与首页那条**同一个机制** ——
+      //   把封面真实的布局盒传进去，`sidePad = (胶囊高 − 封面盒)/2` ⇒ 封面内接于胶囊
+      //   （视觉左边距 ≡ 上下留白）。本页的档位与 `HomeMiniBarAlbumCover` 同口径：
+      //   `followAppMiniBarExpanded: false` 时它不再读 HDS 栏排布，只剩"沉浸式 40 / 否则 44"。
+      coverSideVp: this.secondaryMiniBarCoverSideVp(),
       // ★★★ 2026-10-20：挤压交给 {@link MiniBarMaterialCapsule} 那一层（它压在"官方材质背板 + 内容"
       //   同一个变换域上）。这里若再压一次，两个 0.86 相乘 = 0.74 —— 弹过头，是"改一改就压死"的判据。
       contentOwnsSquash: false

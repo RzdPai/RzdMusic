@@ -57,11 +57,21 @@ import { HomeMiniBarPlayerAside } from './HomeMiniBarPlayerAside';
  *    只在 `capsuleH <= 0`（还没量到高度）时给，本仓前提不成立 ⇒ 左右必须**逐字相等**。
  *    旧的"左 12 / 右 34"（右 = `sidePad + MINI_EDGE_PAD` 再叠一份 `sidePad`）就是"内容偏右"。
  *
- * ② **`sidePad = 胶囊高/2 − 封面基准/2`**（无界 `sidePad`，`:67490-67531`；
- *    封面基准 `coverEdge() = 40 × MINI_COVER_RATIO(0.8) = 32`，`:66221-66230`）。
+ * ② **`sidePad = 胶囊高/2 − 封面盒/2`**（无界 `sidePad`，`:67490-67531`；
+ *    封面盒 `coverEdge() = 40 × MINI_COVER_RATIO(0.8) = 32`，`:66221-66230`）。
  *    `capsuleH = 56` ⇒ `28 − 16 = 12`，与无界同一个数、同一个算式。
  *    未钉高度（自绘胶囊宿主）时退回 `CONTENT_PAD + MINI_BAR_INNER_PAD = 12`，
  *    **逐字等于改动前**（`HomeFloatingMiniBar` / `PlaylistFloatingMiniBar` 不受影响）。
+ *
+ * ②′ **无界的 12 是"未缩放盒 32"的左内距，视觉留白只有 5.6**（第七轮新增，用户：
+ *    「**封面离左侧太远**」）。上游把 32 的封面 `.scale(1.4)` 成 44.8（`:66289-66327`），
+ *    所以它的**视觉**左边距 = `capsuleH/2 − 44.8/2 = 5.6`，与上下留白相等（封面"内接"于胶囊）。
+ *    本仓没有 `.scale` 那一层（封面边长由 `HomeMiniBarAlbumCover.coverSideLengthVp()` 直接给，
+ *    本轮禁改），所以**同一个算式的输入必须换成"真实的封面盒"**：
+ *    `sidePad = (胶囊高 − 封面盒)/2` ⇒ 封面 44 时 **6**、40 时 **8**、30 时 **13** ——
+ *    与上游同一个公式（只是 `coverEdge` 不再写死 32）；封面盒由宿主经 {@link coverSideVp} 传入。
+ *    ⇒ 恒等式：**视觉左边距 ≡ 视觉上/下留白 = (胶囊高 − 封面盒)/2**（"内接"就是"不再偏右"）。
+ *    封面盒未知（旧调用方不传）= 退回上游常量 32 ⇒ 逐字等于改动前。
  *
  * ③ **钉住高度时没有上下内距**。无界 `#bar` 只有 `left/right` 两个 padding 键（`:69090`），
  *    内容在给定高度的胶囊里由 `.alignItems(VerticalAlign.Center)` 竖直居中。
@@ -70,10 +80,10 @@ import { HomeMiniBarPlayerAside } from './HomeMiniBarPlayerAside';
  *
  * ══════════════════════ 三、右侧内容为什么不可能被切 ══════════════════════
  *
- * `Row` 的右内距 = `actionsTrailVp()` = `sidePadVp()` = 12；操作区按固有宽度（3×40+2×2=124）
- * **先占位**（`HomeMiniBarPlayerAside` 里 meta 吃 `layoutWeight(1)`、actions 不吃）⇒
- * 被压缩的永远是歌名/歌手，按钮永远留在胶囊内。胶囊的横向几何见
- * `MiniBarMaterialCapsule` 类注释第五节的 ①~⑤ 与 `RzdMiniBarFit` 日志。
+ * `Row` 的右内距 = `actionsTrailVp()` = `sidePadVp()`（钉高度时 6~13，随封面盒变；见类注释 ②′）；
+ * 操作区按固有宽度（3×40+2×2=124，见 `HomeMiniBarPlayerAside`）**先占位**（那里 meta 吃
+ * `layoutWeight(1)`、actions 不吃）⇒ 被压缩的永远是歌名/歌手，按钮永远留在胶囊内。胶囊的横向几何见
+ * `MiniBarMaterialCapsule` 类注释第三节（内容 ⊂ 实测槽 ⊂ 胶囊）与 `RzdMiniBarRect` / `RzdMiniBarFit` 日志。
  */
 @ComponentV2
 export struct HomeMiniBarPlayer {
@@ -155,9 +165,21 @@ export struct HomeMiniBarPlayer {
    * 钉住之后（首页 / 二级页都传 `FLOATING_MINI_BAR_HEIGHT_VP` = 56）：
    * · 内容行不再有上下内距（类注释第二节 ③）；
    * · 行高 / 根 `Stack` 高 / 胶囊高**三者相等** ⇒ 封面在胶囊里几何居中；
-   * · `sidePad` 改走无界的 `胶囊高/2 − 32/2` 算式。
+   * · `sidePad` 改走无界的 `胶囊高/2 − 封面盒/2` 算式（封面盒由 {@link coverSideVp} 给，
+   *   不给则用上游常量 32）。
    */
   @Param contentHeightVp: number = 0;
+  /**
+   * **封面实际的布局盒边长**（vp）—— 用来算无界 `sidePad = 胶囊高/2 − 封面盒/2`（类注释第二节 ②′）。
+   *
+   * 为什么由宿主传：封面边长由 `HomeMiniBarAlbumCover.coverSideLengthVp()`（本轮**禁改**）
+   * 按"沉浸式 40 / 上下两排 30 / 单排 44"决定，本组件读不到；宿主侧各有一份同口径的档位函数
+   * （`Index.homeMiniBarCoverSideVp()` / `Index.secondaryMiniBarCoverSideVp()`）。
+   *
+   * `0`（缺省）= 调用方不知道 ⇒ 退回上游常量 {@link COVER_EDGE_DESIGN_VP}（32）
+   * ⇒ `sidePad = 12`，**逐字等于改动前**（自绘胶囊的两个宿主不受影响）。
+   */
+  @Param coverSideVp: number = 0;
   /** 上拉打开播放页（跟手）：驱动共享形变进度，收尾补间交给壳层。 */
   private panOption: PanGestureOptions = new PanGestureOptions({ direction: PanDirection.Vertical });
   /**
@@ -239,10 +261,23 @@ export struct HomeMiniBarPlayer {
   // ─────────────────────────── 几何（全部集中在这四个函数，别处不许再算） ───────────────────────────
 
   /**
+   * @returns 无界 `coverEdge()` 的**本仓对应量**（vp）：封面真实的布局盒边长。
+   *
+   * 上游写死 `40 × MINI_COVER_RATIO(0.8) = 32`（`wujie.pa:66221-66230`）—— 那是它"未缩放的 32 盒"，
+   * 靠 `.scale(1.4)` 才变成视觉 44.8。本仓封面没有 scale（边长由禁改文件直接给），
+   * 所以这里的输入必须是**真实盒**（由 {@link coverSideVp} 传进来）；没传时退回 32（= 逐字照搬上游）。
+   */
+  private coverEdgeVp(): number {
+    return this.coverSideVp > 0 ? this.coverSideVp : HomeMiniBarPlayer.COVER_EDGE_DESIGN_VP;
+  }
+
+  /**
    * @returns 内容行的**左**内距（vp）= 无界 `sidePad()`。
    *
-   * 钉高度（= 胶囊高已知）时：`胶囊高/2 − 封面基准(32)/2`（`wujie.pa:67490-67531` 逐行还原）。
-   *   `56 ⇒ 28 − 16 = 12`。
+   * 钉高度（= 胶囊高已知）时：`胶囊高/2 − 封面盒/2`（`wujie.pa:67490-67531` 逐行还原）。
+   *   上游 `capsuleH = 56`、封面盒 32 ⇒ `28 − 16 = 12`（本仓不传 {@link coverSideVp} 时逐字相同）；
+   *   本仓封面盒 = 40/44/30 时 ⇒ **8 / 6 / 13** ⇒ 封面**内接**于胶囊
+   *   （视觉左边距 ≡ 上/下留白，这就是用户第七轮「封面离左侧太远」的修法）。
    * 未钉高度（自绘胶囊宿主）时：`CONTENT_PAD(8) + MINI_BAR_INNER_PAD(4) = 12`，
    *   **逐字等于改动前**（那两个宿主的外观本轮不动）。
    */
@@ -250,8 +285,10 @@ export struct HomeMiniBarPlayer {
     if (this.contentHeightVp <= 0) {
       return HomeMiniBarPlayer.CONTENT_PAD_VP + HomeMiniBarPlayer.MINI_BAR_INNER_PAD_VP;
     }
-    const pad: number = (this.contentHeightVp - HomeMiniBarPlayer.COVER_EDGE_DESIGN_VP) / 2;
-    return pad > HomeMiniBarPlayer.MINI_PAD_FLOOR_VP ? pad : HomeMiniBarPlayer.MINI_PAD_FLOOR_VP;
+    const pad: number = (this.contentHeightVp - this.coverEdgeVp()) / 2;
+    // 封面盒已知 ⇒ 这个差就是"内接留白"，不再叠下限（下限只用于"盒未知"的兜底档）。
+    const floor: number = this.coverSideVp > 0 ? 0 : HomeMiniBarPlayer.MINI_PAD_FLOOR_VP;
+    return pad > floor ? pad : floor;
   }
 
   /**
@@ -335,15 +372,20 @@ export struct HomeMiniBarPlayer {
     .id(MINI_BAR_ID)
     .visibility(this.expandState.sourceBarHidden ? Visibility.Hidden : Visibility.Visible)
     // 诊断（`hdc shell hilog | grep RzdMiniBarGeom`）：本行**实测**矩形 + 左右内距。
-    // 判据：`padL == padR`（内容中心 ≡ 胶囊中心）、`cap > 0` 时 `h == cap`（行盒 ≡ 胶囊盒）。
+    // 判据：`padL == padR`（内容中心 ≡ 胶囊中心）、`cap > 0` 时 `h == cap`（行盒 ≡ 胶囊盒）、
+    //       `padL == opticalGap`（封面**内接**：视觉左边距 ≡ 上/下留白 ⇒ 用户说的"离左侧太远"消失）。
     .onAreaChange((_oldArea: Area, area: Area): void => {
+      const opticalGap: number = this.contentHeightVp > 0 ?
+        (this.contentHeightVp - this.coverEdgeVp()) / 2 : -1;
       Logger.info('RzdMiniBarGeom',
         `content h=${areaLengthToVp(area.height)} y=${areaLengthToVp(area.globalPosition.y)} ` +
           `x=${areaLengthToVp(area.globalPosition.x)} ` +
           `w=${areaLengthToVp(area.width)} pinned=${this.contentHeightVp} ` +
           `cap=${this.contentMaxHeightVp()} pad=${this.rowPadVp()} ` +
           `padL=${this.sidePadVp()} padR=${this.actionsTrailVp()} ` +
-          `space=${HomeMiniBarPlayer.CAPSULE_SPACE_VP} coverEdge=${HomeMiniBarPlayer.COVER_EDGE_DESIGN_VP} ` +
+          `coverBox=${this.coverSideVp} coverEdge=${this.coverEdgeVp()} ` +
+          `opticalGap=${opticalGap} ` +
+          `space=${HomeMiniBarPlayer.CAPSULE_SPACE_VP} ` +
           `hosting=${this.followAppMiniBarExpanded ? 'home' : 'floating'} ` +
           `selfPlate=${this.showSelfDrawnBackplate} ownSquash=${this.contentOwnsSquash} ` +
           `squashY=${this.expandState.morphSquashY}`);

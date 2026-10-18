@@ -76,11 +76,45 @@ const LOG_TAG: string = 'RzdMiniBarCapsule';
 /** 「胶囊装不装得下」专用 tag（`hdc shell hilog | grep RzdMiniBarFit`）。 */
 const FIT_LOG_TAG: string = 'RzdMiniBarFit';
 
-/** HDS 交给 `tabBar` 的**槽**探针节点 id（透明占位，尺寸 = 胶囊）。 */
+/**
+ * **三个矩形同帧实测**专用 tag（`hdc shell hilog | grep RzdMiniBarRect`，第七轮新增）。
+ *
+ * 三行 `kind=box|slot|content`（各自 `x= y= w= h=`，窗口坐标、vp）+ 一行
+ * `kind=delta`（两两之差）。判据见 {@link MiniBarMaterialCapsule.logRectDeltaOnce}。
+ */
+const RECT_LOG_TAG: string = 'RzdMiniBarRect';
+
+/** HDS 交给 `tabBar` 的**槽**探针节点 id（`barW × barH` 透明占位：喂 HDS 的"内容量"）。 */
 const SLOT_PROBE_ID: string = 'rzd_mini_capsule_slot_probe';
+
+/**
+ * **真槽**探针节点 id（`LayoutPolicy.matchParent` × 2 ⇒ 与槽同尺寸）。
+ * 只有它量到的宽/位置才能当"槽矩形"用（另一块量到的是它自己的 `barW × barH`）。
+ */
+const FIT_PROBE_ID: string = 'rzd_mini_capsule_slot_fit';
 
 /** 我们自己的**内容层**节点 id（= 胶囊矩形）。 */
 const CONTENT_PROBE_ID: string = 'rzd_mini_capsule_content';
+
+/**
+ * 槽宽的**绝对可信下限**（vp）：低于它一律不采信（见 {@link MiniBarMaterialCapsule.syncContentToSlot}）。
+ *
+ * 首帧、动画期、页面切换时 HDS 可能给一个 0 或极小的槽（`onAreaChange` 先报 0 再报真值）；
+ * 拿这种值去定内容层几何 = 内容被压成一条。本值再与 {@link MIN_SLOT_TRUST_RATIO} 的相对门槛取大者。
+ */
+const MIN_SANE_SLOT_VP: number = 40;
+
+/**
+ * 槽宽的**相对信任门槛**：实测槽宽必须 ≥ 胶囊宽 × 本值，否则不采信（见 {@link MiniBarMaterialCapsule.syncContentToSlot}）。
+ *
+ * 为什么要有这一条：内容层宽度取 `min(胶囊宽, 槽宽)`，如果在某个异常帧里 HDS 给了一个"单个页签项"
+ * 那么窄的槽（例如 40vp 而胶囊 376vp），照它定宽会把内容压成一条、封面直接溢出行盒。
+ * 0.5 是"它必须是那条条本身的内容区"的下限，正常态（槽 ≡ 胶囊 ≡ `barW`）离这个门槛很远。
+ */
+const MIN_SLOT_TRUST_RATIO: number = 0.5;
+
+/** 实测值的"写回门槛"（vp）：变化小于它的不写回 `@Local`，避免 onAreaChange ↔ 重排 自激。 */
+const MEASURE_EPS_VP: number = 0.5;
 
 /**
  * `material` 的缺省值：无界 `adaptiveMaterial()` 的兜底档。
@@ -117,17 +151,52 @@ const DEFAULT_MATERIAL: SystemMaterialParams = {
  *   本组件盒   = `s × (bH + 2m)`
  *   可见胶囊   = `bW × bH`，在本盒里**横向居中、纵向居中**
  *               ⇒ 胶囊左 = `(s − bW)/2`、胶囊上 = `m`
- *   内容层     = `bW × bH`，同尺寸子件被 `Stack(alignContent: Center)` 居中
- *   ⇒ **内容层矩形 ≡ 胶囊矩形**（两边同一个算式、同一组数）
- *   ⇒ 内容中心 ≡ 胶囊中心 ⇒ `.scale({x:1, y: squashY})`（默认绕盒中心）就是绕胶囊中心压
+ *   ⇒ `.scale({x:1, y: squashY})`（默认绕盒中心）就是绕胶囊中心压
  *
- * ══════════════════════ 三、为什么可见内容**不**画在 `tabBar` 槽里 ══════════════════════
+ * ══════════════════════ 三、内容层为什么**按实测槽摆**，而不是按"我们算的胶囊矩形" ══════════════════════
  *
- * `.tabBar` 给的那个**槽**的几何不可观测（真机上它比 `bW × bH` 小），子件比容器大时只能被
- * 锚在槽左上角向右下溢出 ⇒ 就是用户说的「内容偏右下」。
- * ⇒ `tabBar` 里只留一块与胶囊**同尺寸的透明占位**（HDS 画胶囊的输入不变），
- * 可见内容改画在我们自己算出的胶囊矩形上（第二节）。
- * ⚠️ 占位**必须**保留同一个尺寸：HDS 的浮动胶囊是"按 tabBar 内容量"的，换成 0 尺寸会让胶囊塌掉。
+ * ★★★ 第七轮现场（用户截图 + 逐字反馈）：「**封面离左侧太远，右侧跑到框框外面**」。
+ * 上一版的写法是：`tabBar` 里放同尺寸透明占位（探针），**可见内容**画在"我们自己算出来的
+ * 胶囊矩形"上（`bW × bH`，`Stack(alignContent: Center)` 居中）。
+ * 它成立的前提是「内容盒 ≡ 胶囊矩形」——**真机上这条不成立**：HDS 真正画出来的胶囊
+ * 跟我们用 `barWidth` 推出来的矩形不是同一个（横向尤甚），于是内容整块相对胶囊右溢：
+ * 左边留白被顶大、最右那颗"播放列表"图标压到圆角外/被屏右缘切。
+ *
+ * ⇒ 现在改成"**实测驱动**"，只信 HDS 自己给的槽（`TabContent().tabBar(builder)` 拿到的那个矩形）：
+ *
+ * ```
+ *   slotW   = 槽实测宽           slotCenterX = 槽实测中心（盒内坐标）
+ *   内容宽 w = min(bW, slotW)               // 槽 ⊂ 胶囊 ⇒ 取小值一定不出框
+ *   内容左 x = slotCenterX − w / 2          // 槽心 ≡ 胶囊心（HDS 的条内留白左右对称）
+ * ```
+ *
+ * 由此得到**可证明的包含关系**（这就是"内容矩形 ≡ 槽矩形"的可验证版本）：
+ *
+ * ```
+ *   content ⊂ slot ⊂ capsule
+ *   ⇒ contentR ≤ slotR ≤ capsuleR      ⇒ 右侧那颗按钮**结构上**不可能出框
+ *   ⇒ content.center ≡ slot.center     ⇒ 内容不会整块右溢（左边留白不再被顶大）
+ * ```
+ *
+ * 三种退化情形都会被这条算式自动收口：
+ *
+ * | HDS 实际行为 | w | x | 结果 |
+ * | --- | --- | --- | --- |
+ * | 槽 ≡ 胶囊 | `bW` | `胶囊左` | 与上一版**逐字相同**（本条是纯兜底） |
+ * | 槽 = 胶囊内缩 p（左右对称） | `bW − 2p` | `胶囊左 + p` | 内容再内缩 p，仍居中、仍不出框 |
+ * | 胶囊比 `bW` 窄（被 HDS 缩过） | `≈ 胶囊宽` | `胶囊心 − w/2` | 跟着缩，按钮不出框 |
+ *
+ * ★★ **"槽"到底怎么量**（本轮踩到的第一个坑）：一个 `Column` 的 `onAreaChange` 报的是**它自己**的盒，
+ *   所以"塞一块 `barW × barH` 的去量槽"永远只会量到 `barW × barH` —— 槽被 HDS 缩窄了也看不出来。
+ *   ⇒ `tabBar` 里放**两块**：尺寸占位（`barW × barH`，喂 HDS 的内容量，与改动前逐字相同）
+ *   + 真槽探针（`LayoutPolicy.matchParent`，`100%` 解析到定尺寸祖先 = 那格槽）。
+ *   判据：`RzdMiniBarRect kind=slot` 那行带 `probe=fit|spacer`，**只有 `probe=fit` 的数值能当槽**。
+ *
+ * ⚠️ **纵向不跟槽**（这是有意的、有证据的）：用户第七轮的反馈只点名"左侧/右侧"（横向），
+ * 纵向自第六轮"盒内居中"之后就没人报了 ⇒ 说明了 `slotY/slotH == 胶囊矩形` 的纵向假设成立。
+ * 因此内容层的 `y/height` 仍取 `m / bH`（胶囊矩形），只让 `x/width` 吃实测。
+ * 判据在 `RzdMiniBarRect kind=delta` 那行的 `dy=` / `dh=`：它们若明显不为 0，
+ * 下一轮把 {@link ContentLayer} 里的 `y/height` 也换成槽值即可（一处改动）。
  *
  * ══════════════════════ 四、`barSideMargin: 0` 为什么是必写项（第六轮新增） ══════════════════════
  *
@@ -139,22 +208,21 @@ const DEFAULT_MATERIAL: SystemMaterialParams = {
  * ⚠️ **这是本仓相对上游的唯一一处"加法"**：上游 `MaterialCapsule` 的 `barFloatingStyle`
  * 只有 3 个键（`systemMaterialEffect` / `barBottomMargin` / `gradientMask`，
  * `wujie.pa:60220-60238`），`barSideMargin` 走缺省。本仓显式写 0，是为了把"胶囊会不会被缩窄"
- * 这个**唯一不可观测的外部变量**消掉 —— 真机上若 `RzdMiniBarFit` 的 `contentR == capsuleR`
- * 且 `boxW == barW + slackW` 成立，删掉这一行也等价（届时可按需回归逐字照搬）。
+ * 这个**唯一不可观测的外部变量**消掉 —— 真机上若 `RzdMiniBarRect` 的 `dw=0`（内容宽 == 槽宽）
+ * 且 `RzdMiniBarFit` 的 `contentR ≈ capsuleR` 成立，删掉这一行也等价。
  *
  * ══════════════════════ 五、右侧内容为什么不可能被切（算式） ══════════════════════
  *
  *   ① 胶囊宽 `bW ≤ availableW = winW − 2×side`（宿主用 `Math.min` 夹过，见 `Index.floatingMiniBarWidthVp()`）
  *   ② 盒右缘 = `winW − rightMargin`，`rightMargin = (winW − s)/2`（两条宿主**同一个函数**）
  *      ⇒ 胶囊右缘 = `(winW − s)/2 + (s − bW)/2 + bW = (winW + bW)/2 = winW − (winW − bW)/2 ≤ winW − side`
- *   ③ 内容层 ≡ 胶囊矩形（第二节）⇒ 内容右缘 = 胶囊右缘
+ *   ③ 内容 ⊂ 槽 ⊂ 胶囊（第三节）⇒ 内容右缘 ≤ 胶囊右缘
  *   ④ 内容行右内距 = `actionsTrail`（= 12）≥ 盒的横向 slack/2（= 5）
- *      ⇒ **即使 HDS 把胶囊左对齐在盒里**，胶囊右缘也仍在最右按钮右侧 `12 − 5 = 7vp`
- *   ⑤ 最右按钮的图标右缘 = 胶囊右缘 − `actionsTrail(12)` − `Aside.margin.right(6)` − `(40−24)/2(8)`
- *      = `winW − side − 26` ⇒ 距屏幕右缘 `side + 26 = 38vp`
+ *   ⑤ 最右按钮的图标右缘 = 内容右缘 − `actionsTrail(12)` − `Aside.margin.right(6)` − `(40−24)/2(8)`
+ *      ≤ `胶囊右缘 − 26` ⇒ 距屏幕右缘 ≥ `side + 26 = 38vp`
  *
- * ⇒ 判据日志 {@link logFitOnce} 的期望值：`rightGap == side`、`contentR == capsuleR`、
- *   `asideGap ≥ actionsTrail`。三项任一不成立就说明有人绕过了上面 ①~⑤ 的某一条。
+ * ⇒ 判据日志 {@link logFitOnce} 的期望值：`rightGap == side`、`contentR <= capsuleR`、
+ *   `asideGap >= actionsTrail`。三项任一不成立就说明有人绕过了上面 ①~⑤ 的某一条。
  */
 @ComponentV2
 export struct MiniBarMaterialCapsule {
@@ -200,7 +268,7 @@ export struct MiniBarMaterialCapsule {
    * 判据：`rightGap` 应恒等于它。
    */
   @Param fitSideMarginVp: number = 0;
-  /** 胶囊里画什么（内容层 ≡ 胶囊矩形，内部自行居中）。 */
+  /** 胶囊里画什么（内容层内部自行居中）。 */
   @BuilderParam content: () => void = this.emptyContent;
   /**
    * 整页形变状态（`morphSquashY` 的唯一来源）。
@@ -210,10 +278,21 @@ export struct MiniBarMaterialCapsule {
     AppStorageV2.connect(PlayerExpandState, AppStorageKeys.PLAYER_EXPAND_STATE,
       () => new PlayerExpandState())!;
 
+  // ── 实测几何（**@Local**：内容层的 width/x 直接由它们算出来 ⇒ 必须可响应） ──
+  /**
+   * HDS 给的**槽**实测宽（vp）；`0` = 还没量到 ⇒ 内容层退回"胶囊矩形"兜底。
+   * 写入点只有 {@link BarSlotSpacer} 与 {@link syncContentToSlot}（带 `MEASURE_EPS_VP` 门槛）。
+   */
+  @Local slotW: number = 0;
+  /** 槽的实测中心（相对本组件盒左上角，vp）。 */
+  @Local slotCenterX: number = 0;
+
   // ── 诊断缓存（**普通字段**：不进状态 ⇒ 写日志不会触发重绘/自激） ──
-  /** 本组件盒左上角（窗口坐标 vp）。 */
+  /** 本组件盒左上角（窗口坐标 vp）+ 实测尺寸。 */
   private probeBoxX: number = 0;
   private probeBoxY: number = 0;
+  private probeBoxW: number = 0;
+  private probeBoxH: number = 0;
   /** HDS 给 `tabBar` 的槽（窗口坐标 vp + 实测尺寸）。 */
   private probeSlotX: number = 0;
   private probeSlotY: number = 0;
@@ -224,8 +303,15 @@ export struct MiniBarMaterialCapsule {
   private probeContentY: number = 0;
   private probeContentW: number = 0;
   private probeContentH: number = 0;
-  /** `RzdMiniBarFit` 是否已经打过（一次布局会回调多次，只打第一份完整数据）。 */
+  /** 三个矩形各自是否已经拿到过一份非零实测。 */
+  private probeBoxValid: boolean = false;
+  private probeSlotValid: boolean = false;
+  private probeContentValid: boolean = false;
+  /** `RzdMiniBarFit` / `RzdMiniBarRect kind=delta` 是否已经打过（一次布局会回调多次，只打第一份完整数据）。 */
   private fitLogged: boolean = false;
+  private deltaLogged: boolean = false;
+  private settleLogged: boolean = false;
+  private slotRejectLogged: boolean = false;
 
   /**
    * `@BuilderParam` 的缺省实现：**空 builder**。
@@ -267,7 +353,88 @@ export struct MiniBarMaterialCapsule {
   }
 
   /**
-   * 量一个节点的窗口矩形（vp）；量不到返回 `undefined`（日志里打 -1）。
+   * @returns 内容层的**宽度**（vp）= `min(胶囊宽, 槽实测宽)`。
+   *
+   * 取小值是有理由的一步，不是保守：槽一定在胶囊**内**（HDS 用它排 tabBar 内容），
+   * 所以 `w ≤ slotW` ⇒ 内容不可能横向出框；槽 ≡ 胶囊时 `w = bW`，与上一版逐字相同。
+   */
+  private contentLayerWidthVp(): number {
+    if (this.slotW <= 0) {
+      return this.barWidth;
+    }
+    const w: number = this.slotW < this.barWidth ? this.slotW : this.barWidth;
+    return w > 0 ? w : this.barWidth;
+  }
+
+  /**
+   * @returns 内容层的**左边**（相对本组件盒左上角，vp）。
+   *
+   * 有实测时：`槽心 − w/2`（槽心 ≡ 胶囊心 ⇒ 内容不会整块右溢，这就是"封面离左太远"的根）。
+   * 没实测时：退回胶囊矩形 `(s − bW)/2`（与上一版逐字相同，只用于首帧）。
+   */
+  private contentLayerLeftVp(): number {
+    if (this.slotW <= 0) {
+      return this.capsuleLeftVp();
+    }
+    return this.slotCenterX - this.contentLayerWidthVp() / 2;
+  }
+
+  /** @returns 内容层的**顶边**（相对本组件盒左上角，vp）= 胶囊上缘（纵向不跟槽，见类注释第三节）。 */
+  private contentLayerTopVp(): number {
+    return this.capsuleTopVp();
+  }
+
+  /** @returns 内容层的**高度**（vp）= 胶囊高（纵向不跟槽，见类注释第三节）。 */
+  private contentLayerHeightVp(): number {
+    return this.barHeight;
+  }
+
+  /**
+   * 把**实测槽**写进内容层的几何状态。
+   *
+   * 触发点两处（槽自己的 `onAreaChange` + 盒的 `onAreaChange`）：前者给尺寸、后者给参考原点，
+   * 两者任意一个晚到都要重算"盒内坐标"。写入带 `MEASURE_EPS_VP` 门槛 ⇒ 收敛后不再写
+   * ⇒ 不会 onAreaChange ↔ 重排 自激（槽的几何也不依赖内容层，结构上不成环）。
+   */
+  private syncContentToSlot(): void {
+    if (!this.probeSlotValid || !this.probeBoxValid) {
+      return;
+    }
+    // 采信门槛：槽宽至少要"像一条内容区"（≥ 胶囊宽的一半，且不低于 {{@link MIN_SANE_SLOT_VP}}）。
+    // 首帧 / 动画收缩期的 0 或极小槽一律拒绝 —— 拿它定几何会把内容压成一条。
+    const minTrustW: number = Math.max(MIN_SANE_SLOT_VP, this.barWidth * MIN_SLOT_TRUST_RATIO);
+    if (this.probeSlotW < minTrustW) {
+      if (!this.slotRejectLogged) {
+        this.slotRejectLogged = true;
+        Logger.info(LOG_TAG,
+          `slot-rejected slotW=${this.probeSlotW} slotH=${this.probeSlotH} minTrustW=${minTrustW} ` +
+            `barW=${this.barWidth} fallbackContentW=${this.contentLayerWidthVp()} ` +
+            `fallbackContentX=${this.contentLayerLeftVp()}`);
+      }
+      return;
+    }
+    const wantSlotW: number = this.probeSlotW;
+    const wantCenterX: number = (this.probeSlotX + this.probeSlotW / 2) - this.probeBoxX;
+    const sizeChanged: boolean = Math.abs(wantSlotW - this.slotW) > MEASURE_EPS_VP;
+    const centerChanged: boolean = Math.abs(wantCenterX - this.slotCenterX) > MEASURE_EPS_VP;
+    if (!sizeChanged && !centerChanged) {
+      return;
+    }
+    this.slotW = wantSlotW;
+    this.slotCenterX = wantCenterX;
+    const capsuleLeft: number = this.capsuleLeftVp();
+    const capsuleR: number = this.probeBoxX + capsuleLeft + this.barWidth;
+    const slotR: number = this.probeSlotX + this.probeSlotW;
+    Logger.info(LOG_TAG,
+      `follow-slot slotW=${wantSlotW} slotCenterX=${wantCenterX} ` +
+        `contentW=${this.contentLayerWidthVp()} contentX=${this.contentLayerLeftVp()} ` +
+        `capsuleLeft=${capsuleLeft} barW=${this.barWidth} ` +
+        `slotInsetL=${(this.probeSlotX - this.probeBoxX) - capsuleLeft} ` +
+        `slotInsetR=${capsuleR - slotR}`);
+  }
+
+  /**
+   * 量一个节点的窗口矩形右缘（vp）；量不到返回 `undefined`（日志里打 -1）。
    * 口径与 `Index.measureNodeBottomToWindowVp` 一致：`getComponentUtils().getRectangleById` 返回 px。
    * @param id 节点 `.id()` 值
    */
@@ -282,6 +449,92 @@ export struct MiniBarMaterialCapsule {
   }
 
   /**
+   * `RzdMiniBarRect`：**三个矩形同帧量出来的那一份证据**（第七轮新增，本轮所有改动的依据）。
+   *
+   * 口径：全部窗口坐标、单位 vp，每行 `kind=… x= y= w= h= …`。
+   * ```
+   *   kind=box      ① HdsTabs 组件盒（= 胶囊 + slackW + 上下各 m）
+   *   kind=slot     ② HDS 交给 tabBar 的槽（探针 = 同尺寸透明占位）
+   *   kind=content  ③ 我们画的内容层
+   *   kind=delta    // ②−① / ③−② / "胶囊矩形−②"（= 上一版内容相对槽的溢出量）
+   * ```
+   * 判据（一行就能定案"内容整体右溢"）：
+   * ```
+   *   delta.dxCapsuleVsSlot > 0  ⇒ 上一版内容比槽**偏右** delta 那么多（= 用户说的"封面离左太远 + 右侧出框"）
+   *   delta.dwCapsuleVsSlot > 0  ⇒ 上一版内容比槽**宽** delta（多出来的部分顶到胶囊圆角外）
+   *   delta.dxContentVsSlot ≈ 0 且 dwContentVsSlot ≈ 0  ⇒ 本轮修的"内容 ⊂ 槽"成立
+   *   delta.dy / dh              ⇒ 纵向槽与胶囊矩形的偏差（≈0 才说明"纵向不跟槽"这条选择正确）
+   * ```
+   * @param kind `box` / `slot` / `content`
+   * @param x 窗口坐标 x（vp）
+   * @param y 窗口坐标 y（vp）
+   * @param w 实测宽（vp）
+   * @param h 实测高（vp）
+   * @param extra 该行专属的附加字段（已格式化好）
+   */
+  private logRect(kind: string, x: number, y: number, w: number, h: number, extra: string): void {
+    Logger.info(RECT_LOG_TAG, `kind=${kind} x=${x} y=${y} w=${w} h=${h} ${extra}`);
+  }
+
+  /**
+   * 三行实测齐了以后打**两行**：
+   * ① 第一份 `kind=delta`（= 上一版几何留下的差，**证据行**，只在首次打）；
+   * ② 第一份 `kind=delta-settled`（= 本轮"内容 ⊂ 槽、中心 ≡ 槽心"的**验收行**）。
+   * 为什么要两行：首帧的 `content` 还是兜底几何 ⇒ ① 记的就是用户看到的那个溢出量；
+   * 采信实测之后 `content` 换成跟随几何 ⇒ ② 才是本轮改动生效的证明。
+   */
+  private logRectDeltaOnce(): void {
+    if (!this.probeBoxValid || !this.probeSlotValid || !this.probeContentValid) {
+      return;
+    }
+    const capX: number = this.probeBoxX + this.capsuleLeftVp();
+    const capY: number = this.probeBoxY + this.capsuleTopVp();
+    const dxCapsuleVsSlot: number = capX - this.probeSlotX;
+    const dyCapsuleVsSlot: number = capY - this.probeSlotY;
+    const dwCapsuleVsSlot: number = this.barWidth - this.probeSlotW;
+    const dhCapsuleVsSlot: number = this.barHeight - this.probeSlotH;
+    const dxContentVsSlot: number = this.probeContentX - this.probeSlotX;
+    const dwContentVsSlot: number = this.probeContentW - this.probeSlotW;
+    const dyContentVsSlot: number = this.probeContentY - this.probeSlotY;
+    const dhContentVsSlot: number = this.probeContentH - this.probeSlotH;
+    if (!this.deltaLogged) {
+      // 头部四个数取"内容 − 槽"：跟随生效时就是 0 0 0 0（首帧那份非 0 就是溢出量）。
+      this.logRect('delta',
+        dxContentVsSlot, dyContentVsSlot, dwContentVsSlot, dhContentVsSlot,
+        `dxCapsuleVsSlot=${dxCapsuleVsSlot} dwCapsuleVsSlot=${dwCapsuleVsSlot} ` +
+          `dyCapsuleVsSlot=${dyCapsuleVsSlot} dhCapsuleVsSlot=${dhCapsuleVsSlot} ` +
+          `dxContentVsSlot=${dxContentVsSlot} dwContentVsSlot=${dwContentVsSlot} ` +
+          `dyContentVsSlot=${dyContentVsSlot} dhContentVsSlot=${dhContentVsSlot} ` +
+          `slotW=${this.probeSlotW} slotH=${this.probeSlotH} ` +
+          `contentW=${this.probeContentW} contentH=${this.probeContentH} ` +
+          `barW=${this.barWidth} barH=${this.barHeight} ` +
+          `single=${this.isSingleRow()}`);
+      this.deltaLogged = true;
+    }
+    if (this.settleLogged) {
+      return;
+    }
+    // 验收：内容**包含在槽内**且**中心 ≡ 槽心**（w = min(bW, slotW) 时不会与槽等宽，故不用"相等"判）。
+    const contentR: number = this.probeContentX + this.probeContentW;
+    const slotR: number = this.probeSlotX + this.probeSlotW;
+    const inSlotL: boolean = this.probeContentX >= this.probeSlotX - MEASURE_EPS_VP;
+    const inSlotR: boolean = contentR <= slotR + MEASURE_EPS_VP;
+    const centerDx: number = (this.probeContentX + this.probeContentW / 2) - (this.probeSlotX + this.probeSlotW / 2);
+    const centerMatch: boolean = Math.abs(centerDx) <= MEASURE_EPS_VP;
+    if (!inSlotL || !inSlotR || !centerMatch) {
+      return;
+    }
+    this.logRect('delta-settled', centerDx, dyContentVsSlot, dwContentVsSlot, dhContentVsSlot,
+      `inSlotL=${inSlotL} inSlotR=${inSlotR} centerMatch=${centerMatch} centerDx=${centerDx} ` +
+        `contentX=${this.probeContentX} contentW=${this.probeContentW} contentR=${contentR} ` +
+        `slotX=${this.probeSlotX} slotW=${this.probeSlotW} slotR=${slotR} ` +
+        `capsuleX=${capX} capsuleR=${capX + this.barWidth} barW=${this.barWidth} barH=${this.barHeight} ` +
+        `boundByMin=${this.probeSlotW < this.barWidth} ` +
+        `dyVsSlot=${dyContentVsSlot} dhVsSlot=${dhContentVsSlot} single=${this.isSingleRow()}`);
+    this.settleLogged = true;
+  }
+
+  /**
    * `RzdMiniBarFit`：**"右侧内容装不装得下"的唯一判据**（第六轮新增）。
    *
    * 口径（全部 vp、窗口坐标）：
@@ -290,12 +543,13 @@ export struct MiniBarMaterialCapsule {
    *   side        宿主允许的单侧最小边距          期望：胶囊右缘 = winW − side
    *   availableW  winW − 2×side                 期望：barW ≤ availableW
    *   boxW/boxH   本盒（含 slack，见类注释第二节）
-   *   capsuleX/R  可见胶囊左/右缘                期望：capsuleR − contentR = 0
-   *   contentX/W/R 内容层实测                    期望：contentX == capsuleX、contentR == capsuleR
+   *   capsuleX/R  可见胶囊左/右缘                期望：contentR ≤ capsuleR
+   *   contentX/W/R 内容层实测                    期望：content 中心 ≡ slot 中心
    *   rightGap    winW − capsuleR                期望：== side（> side 说明胶囊偏左；< side 就是"贴边/被切"）
    *   asideR/gap  内容行右缘 / 胶囊右缘到它的距离  期望：asideGap ≥ actionsTrail（内容行右内距）
    * ```
-   * 判读口诀：**只要 `rightGap ≥ side` 且 `asideGap ≥ 12`，右侧那颗按钮在结构上不可能出屏**。
+   * 判读口诀：**只要 `rightGap ≥ side` 且 `asideGap ≥ 12` 且 `contentR ≤ capsuleR`，
+   * 右侧那颗按钮在结构上不可能出屏**。
    * @param boxW 盒宽实测
    * @param boxH 盒高实测
    */
@@ -319,6 +573,7 @@ export struct MiniBarMaterialCapsule {
         `capsuleX=${capsuleX} capsuleR=${capsuleR} ` +
         `contentX=${this.probeContentX} contentW=${this.probeContentW} contentR=${contentR} ` +
         `contentH=${this.probeContentH} ` +
+        `slotW=${this.probeSlotW} slotX=${this.probeSlotX} contentInCapsule=${contentR <= capsuleR} ` +
         `slackW=${this.slackW} slackH=${this.slackH} m=${this.resolvedBottomMarginVp()} ` +
         `rightGap=${rightGap} expectRightGap=${side} ` +
         `asideR=${asideR} asideGap=${asideGap} ` +
@@ -327,46 +582,94 @@ export struct MiniBarMaterialCapsule {
   }
 
   /**
-   * HDS `tabBar` 槽里的**透明占位**：尺寸 = 胶囊（`bW × bH`）。
-   * ⇒ 交给 HDS 测胶囊的输入不变（胶囊的尺寸/位置/材质不受影响），这一格不画像素；
-   * 它同时是**槽探针**（`onAreaChange` 报出来的就是 HDS 真给的那个槽的矩形）。
+   * HDS `tabBar` 槽里的**两块探针**（都不画像素）。
+   *
+   * ★★★ 为什么必须是**两块**（第七轮新增，这是"量槽"能成立的前提）：
+   * 一块 `Column` 的 `onAreaChange` 报的是**它自己的盒**，不是父槽的盒 ——
+   * 所以"塞一块 `barW × barH` 的占位去量槽"量到的永远是自己（`w == barW`），
+   * 槽真被 HDS 缩窄了也看不出来（上一版就是这么把 `slotW` 当成恒等于 `barWidth` 的）。
+   * ⇒
+   *   ① {@link BarSlotSpacer}（`barW × barH`，尺寸**保持与改动前逐字相同**）
+   *      —— 它的作用只有一个：喂给 HDS 的"tabBar 内容量"一个字都不变（胶囊几何不受扰动）；
+   *   ② 真槽探针（同一 builder 里的第二个兄弟节点，`LayoutPolicy.matchParent` × 2）
+   *      —— `100%` 解析到最近的定尺寸祖先 = HDS 给的那格槽 ⇒ 量到的**才是槽本身**。
+   * 两块是同一个槽里的兄弟节点，槽的内容量 = max(两者的固有尺寸) = `barW × barH`（百分比节点
+   * 不贡献固有尺寸）⇒ ②对 HDS 的排布是惰性的。
    */
   @Builder
   private BarSlotSpacer() {
+    // ② 真槽探针：`matchParent` ⇒ 与槽同尺寸（"内容 ≡ 槽"的唯一可靠量法）。
+    Column()
+      .width(LayoutPolicy.matchParent)
+      .height(LayoutPolicy.matchParent)
+      .hitTestBehavior(HitTestMode.None)
+      .id(FIT_PROBE_ID)
+      .onAreaChange((_oldArea: Area, area: Area): void => {
+        const w: number = areaLengthToVp(area.width);
+        const h: number = areaLengthToVp(area.height);
+        if (w <= 0 || h <= 0) {
+          return;
+        }
+        this.probeSlotX = areaLengthToVp(area.globalPosition.x);
+        this.probeSlotY = areaLengthToVp(area.globalPosition.y);
+        this.probeSlotW = w;
+        this.probeSlotH = h;
+        this.probeSlotValid = true;
+        this.logRect('slot', this.probeSlotX, this.probeSlotY, this.probeSlotW, this.probeSlotH,
+          `probe=fit expectW=${this.barWidth} expectH=${this.barHeight} ` +
+            `capsuleLeft=${this.probeBoxX + this.capsuleLeftVp()} ` +
+            `capsuleTop=${this.probeBoxY + this.capsuleTopVp()} ` +
+            `boxX=${this.probeBoxX} boxY=${this.probeBoxY} ` +
+            `barW=${this.barWidth} barH=${this.barHeight} layout=${this.barLayoutMode}`);
+        this.syncContentToSlot();
+        this.logRectDeltaOnce();
+      })
+    // ① 尺寸占位（喂 HDS 的输入，**不许改尺寸**）+ 兜底探针（真槽探针没量到时用它的原点）。
     Column()
       .width(this.barWidth)
       .height(this.barHeight)
       .hitTestBehavior(HitTestMode.None)
       .id(SLOT_PROBE_ID)
       .onAreaChange((_oldArea: Area, area: Area): void => {
+        if (this.probeSlotValid) {
+          // 真槽已经量到了 ⇒ 这一块的尺寸只是"我们自己的显式值"，不再当作槽宽。
+          return;
+        }
         this.probeSlotX = areaLengthToVp(area.globalPosition.x);
         this.probeSlotY = areaLengthToVp(area.globalPosition.y);
         this.probeSlotW = areaLengthToVp(area.width);
         this.probeSlotH = areaLengthToVp(area.height);
-        Logger.info(LOG_TAG,
-          `slot x=${this.probeSlotX} y=${this.probeSlotY} ` +
-            `w=${this.probeSlotW} h=${this.probeSlotH} ` +
-            `expectW=${this.barWidth} expectH=${this.barHeight} ` +
+        this.probeSlotValid = this.probeSlotW > 0 && this.probeSlotH > 0;
+        this.logRect('slot', this.probeSlotX, this.probeSlotY, this.probeSlotW, this.probeSlotH,
+          `probe=spacer fallback=1 expectW=${this.barWidth} expectH=${this.barHeight} ` +
+            `capsuleLeft=${this.probeBoxX + this.capsuleLeftVp()} ` +
             `capsuleTop=${this.probeBoxY + this.capsuleTopVp()} ` +
-            `capsuleLeft=${this.probeBoxX + this.capsuleLeftVp()}`);
+            `boxX=${this.probeBoxX} boxY=${this.probeBoxY} ` +
+            `barW=${this.barWidth} barH=${this.barHeight} layout=${this.barLayoutMode}`);
+        this.syncContentToSlot();
+        this.logRectDeltaOnce();
       })
   }
 
   /**
-   * 可见内容层：**尺寸 = 胶囊**，作为同尺寸子件被盒子的 `Stack(alignContent: Center)` 居中
-   * ⇒ 位置 = 胶囊矩形，与 HDS 的槽几何**无关**。
+   * 可见内容层：**几何由实测槽决定**（类注释第三节），首帧之前退回胶囊矩形。
+   *
+   * ⚠️ 这里用 `.position()` 是**结构**的一部分（把内容钉到 HDS 自己的槽矩形上），
+   * 不是为了掩盖溢出 —— 上一版正是"按我们算的胶囊矩形摆 + 差多少 offset 补多少"那条路走不通。
    */
   @Builder
   private ContentLayer() {
     Stack({ alignContent: Alignment.Center }) {
       this.content()
     }
-    .width(this.barWidth)
-    .height(this.barHeight)
+    .width(this.contentLayerWidthVp())
+    .height(this.contentLayerHeightVp())
+    // 盒内定位：x 吃实测槽心（见 contentLayerLeftVp），y 取胶囊上缘（纵向不跟槽）。
+    .position({ x: this.contentLayerLeftVp(), y: this.contentLayerTopVp() })
     // 本层不吃事件（事件要落到内容里的按钮上）
     .hitTestBehavior(HitTestMode.Transparent)
     // ★ 绝不裁：裁了就等于把"内容比胶囊宽"这件事变成可见的"被切"。
-    //   正确做法是让内容盒 ≡ 胶囊（本层宽高就是胶囊），不是靠 clip 掩盖。
+    //   正确做法是让内容 ⊂ 槽 ⊂ 胶囊（类注释第三节），不是靠 clip 掩盖。
     .clip(false)
     .id(CONTENT_PROBE_ID)
     .onAreaChange((_oldArea: Area, area: Area): void => {
@@ -378,19 +681,23 @@ export struct MiniBarMaterialCapsule {
       this.probeContentY = y;
       this.probeContentW = w;
       this.probeContentH = h;
+      this.probeContentValid = w > 0 && h > 0;
       const capX: number = this.probeBoxX + this.capsuleLeftVp();
       const capY: number = this.probeBoxY + this.capsuleTopVp();
       const dx: number = (x + w / 2) - (capX + this.barWidth / 2);
       const dy: number = (y + h / 2) - (capY + this.barHeight / 2);
       const slotDx: number = (this.probeSlotX + this.probeSlotW / 2) - (capX + this.barWidth / 2);
       const slotDy: number = (this.probeSlotY + this.probeSlotH / 2) - (capY + this.barHeight / 2);
-      Logger.info(LOG_TAG,
-        `content x=${x} y=${y} w=${w} h=${h} ` +
-          `capsule x=${capX} y=${capY} w=${this.barWidth} h=${this.barHeight} ` +
-          `dx=${dx} dy=${dy} slotDx=${slotDx} slotDy=${slotDy} ` +
-          `barW=${this.barWidth} barH=${this.barHeight} m=${this.resolvedBottomMarginVp()} ` +
-          `style=${this.capsuleStyle} layout=${this.barLayoutMode} ` +
-          `squashY=${this.expandState.morphSquashY}`);
+      this.logRect('content', x, y, w, h,
+        `capsuleX=${capX} capsuleY=${capY} capsuleW=${this.barWidth} capsuleH=${this.barHeight} ` +
+          `dxVsCapsule=${dx} dyVsCapsule=${dy} ` +
+          `slotCenterDxVsCapsule=${slotDx} slotCenterDyVsCapsule=${slotDy} ` +
+          `slotW=${this.probeSlotW} slotX=${this.probeSlotX} ` +
+          `wantW=${this.contentLayerWidthVp()} wantX=${this.contentLayerLeftVp()} ` +
+          `m=${this.resolvedBottomMarginVp()} style=${this.capsuleStyle} ` +
+          `layout=${this.barLayoutMode} squashY=${this.expandState.morphSquashY}`);
+      this.syncContentToSlot();
+      this.logRectDeltaOnce();
       this.logFitOnce(this.boxWidthVp(), this.boxHeightVp());
     })
   }
@@ -418,8 +725,10 @@ export struct MiniBarMaterialCapsule {
   build() {
     // ★★★ 这一层 `Stack` 就是无界 `morphGlass` 里那个 `Stack`（`wujie.pa:155702-155705`）：
     //   `.scale` 挂在这里，HdsTabs 在子树里 ⇒ HDS 画的胶囊背板 + 我们画的内容
-    //   **同一个变换域** ⇒ 一起压、一起弹。`alignContent: Center` 是"内容层落到胶囊上"的前提。
-    Stack({ alignContent: Alignment.Center }) {
+    //   **同一个变换域** ⇒ 一起压、一起弹。
+    //   `alignContent: TopStart`：内容层改成 `.position()` 之后就按盒左上角定位（见 ContentLayer），
+    //   不再靠 Stack 的居中"顺带"对齐（那也是上一版错位的隐因之一）。
+    Stack({ alignContent: Alignment.TopStart }) {
       HdsTabs({ barPosition: BarPosition.End }) {
         TabContent() {
           // 非空占位：空 `TabContent` 在真机上 HDS 不画浮动胶囊背板/材质（2026-10-01 实测）。
@@ -466,7 +775,7 @@ export struct MiniBarMaterialCapsule {
       .backgroundColor(Color.Transparent)
       .clip(false)
 
-      // ★ 可见内容：画在**我们算出的胶囊矩形**上（同尺寸 + 盒子居中 ⇒ 中心恒等）。
+      // ★ 可见内容：几何 = 实测槽（q.v. 类注释第三节），首帧之前 = 胶囊矩形。
       this.ContentLayer()
     }
     .width(this.boxWidthVp())
@@ -481,27 +790,22 @@ export struct MiniBarMaterialCapsule {
     .onAreaChange((_oldArea: Area, area: Area): void => {
       this.probeBoxX = areaLengthToVp(area.globalPosition.x);
       this.probeBoxY = areaLengthToVp(area.globalPosition.y);
-      const boxW: number = areaLengthToVp(area.width);
-      const boxH: number = areaLengthToVp(area.height);
-      // 盒这一行也把 `dx/dy` 打一次：`onAreaChange` 两次回调的先后不确定，
-      // 只打一处会有一侧读到还没填的缓存（0）。两行都带 dx/dy ⇒ 至少一行是真值。
+      this.probeBoxW = areaLengthToVp(area.width);
+      this.probeBoxH = areaLengthToVp(area.height);
+      this.probeBoxValid = this.probeBoxW > 0 && this.probeBoxH > 0;
       const capX: number = this.probeBoxX + this.capsuleLeftVp();
       const capY: number = this.probeBoxY + this.capsuleTopVp();
-      const dx: number = this.probeContentW > 0 ?
-        (this.probeContentX + this.probeContentW / 2) - (capX + this.barWidth / 2) : Number.NaN;
-      const dy: number = this.probeContentH > 0 ?
-        (this.probeContentY + this.probeContentH / 2) - (capY + this.barHeight / 2) : Number.NaN;
-      Logger.info(LOG_TAG,
-        `box w=${boxW} h=${boxH} ` +
-          `x=${this.probeBoxX} y=${this.probeBoxY} ` +
-          `capsule x=${capX} y=${capY} dx=${dx} dy=${dy} ` +
-          `barW=${this.barWidth} barH=${this.barHeight} slackW=${this.slackW} slackH=${this.slackH} ` +
-          `bottomMargin=${this.resolvedBottomMarginVp()} ` +
+      this.logRect('box', this.probeBoxX, this.probeBoxY, this.probeBoxW, this.probeBoxH,
+        `capsuleX=${capX} capsuleY=${capY} capsuleW=${this.barWidth} capsuleH=${this.barHeight} ` +
           `expectW=${this.boxWidthVp()} expectH=${this.boxHeightVp()} ` +
+          `slackW=${this.slackW} slackH=${this.slackH} m=${this.resolvedBottomMarginVp()} ` +
           `style=${this.capsuleStyle} layout=${this.barLayoutMode} ` +
           `material=${this.material.materialType}/${this.material.materialLevel} ` +
           `squashY=${this.expandState.morphSquashY}`);
-      this.logFitOnce(boxW, boxH);
+      // 盒的位置一变（换机型 / 键盘 / 窗口缩放），"盒内坐标"就要重算。
+      this.syncContentToSlot();
+      this.logRectDeltaOnce();
+      this.logFitOnce(this.probeBoxW, this.probeBoxH);
     })
   }
 }
