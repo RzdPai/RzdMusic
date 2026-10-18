@@ -96,13 +96,16 @@ export class BarScrollHelper {
     if (BarScrollHelper.collapse.lockedAxis() === BarAxis.NONE) {
       BarScrollHelper.collapse.onDown(0, BarScrollHelper.virtualY);
     }
-    BarScrollHelper.virtualY = BarScrollHelper.virtualY + delta;
+    // 上游 `run = y − lastY`、向下为正（`wujie.pa:83990`）；而"内容向下滚"（delta>0）≡ 手指上移
+    // ⇒ y 必须**减**：否则上下滑语义整体反过来。
+    BarScrollHelper.virtualY = BarScrollHelper.virtualY - delta;
     const action: BarAction = BarScrollHelper.collapse.onMove(0, BarScrollHelper.virtualY, Date.now());
     if (action === BarAction.NONE) {
       return;
     }
     // 方向以用户实测为准：**上滑 ⇒ 单行（展开档）**、下滑 ⇒ 两排。
-    const expand: boolean = action === BarAction.EXPAND;
+    // 上游 `applyBarAction` 的**反向**映射（`wujie.pa:145779`）：COLLAPSE 动作 ⇒ 迷你条 EXPAND 样式。
+    const expand: boolean = action === BarAction.COLLAPSE;
     Logger.info('RzdBarLayout', `scroll delta=${delta} action=${action} expand=${expand}`);
     if (appState.miniBarExpanded === expand) {
       return;

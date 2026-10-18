@@ -4214,6 +4214,38 @@ export class PlayerExpandState {
   public reverseInFlight: boolean = false;
 
   /**
+   * 上游 `MainPage.miniOut`（`wujie.pa:153305-153344` 的 `setMiniOut`）：真迷你条此刻是否**藏起**。
+   *
+   * 上游不是"进出会话各翻一次"，而是**逐帧不变量**（`wujie.pa:154600-154671`）：
+   * ```
+   *   if (!morphGeomReady) return;
+   *   if (!miniOut && morphT >= MINI_OUT_T(0.002)) setMiniOut(true);
+   *   if ( miniOut && morphT <= MINI_IN_T(0))      setMiniOut(false);
+   * ```
+   * ⇒ 形变一旦离开 0 就把真条藏起来（动画期间屏上只剩克隆层那一份，不会出现两排按钮），
+   *   直到进度回到 **0** 才放回来（落地那一拍的"弹一下"因此重新看得见）。
+   * 本仓由 {@link syncMiniOut} 在每帧的几何计算末尾维护。
+   */
+  @Trace public miniOut: boolean = false;
+
+  /**
+   * 上游那条**逐帧不变量**（`wujie.pa:154600-154671`）：按当前 `morphP` 维护 {@link miniOut}。
+   * 调用点：每帧几何计算 `applyMorphGeometry()` 的末尾（等价上游在同一帧里 `publishCoverStyle()`+`syncMotion()`）。
+   */
+  public syncMiniOut(): void {
+    if (!this.morphGeomReady) {
+      return;
+    }
+    if (!this.miniOut && this.morphP >= 0.002) {
+      this.miniOut = true;
+      Logger.info(PlayerExpandState.logTag, `miniOut=true p=${this.morphP.toFixed(3)}`);
+    } else if (this.miniOut && this.morphP <= 0) {
+      this.miniOut = false;
+      Logger.info(PlayerExpandState.logTag, 'miniOut=false p=0 (landed)');
+    }
+  }
+
+  /**
    * ★★★ 2026-10-18（用户：「用系统返回或点左上角收起过程中**按钮/封面还是两个**」）：
    * 快照收缩期必须把**真迷你条整条藏起来**——上游就是那条 `MainPage.miniHidden`：
    * ```
@@ -4752,6 +4784,8 @@ export class PlayerExpandState {
     //   鎭掍负 1锛屽嚭鍦哄畬鍏ㄤ氦缁欎綅绉伙紙`earlyRiseVp` / `contentRiseVp`锛変笌瑁佸壀绐楀彛銆?
     //   灏侀潰涓嶅湪杩欓噷绠★細瀹冩湁 `realCoverVisible()` 涓?`morphBridging()` 閭ｄ竴瀵逛弗鏍间簰琛ョ殑闂ㄣ€?
     this.morphContentOpacity = 1;
+    // 上游逐帧不变量：形变离开 0 就藏真条、回到 0 才放回（`wujie.pa:154600-154671`）。
+    this.syncMiniOut();
   }
 
   /**
@@ -4906,6 +4940,8 @@ export class PlayerExpandState {
 
   /** 钀藉洖杩蜂綘鏉★紙瀵规爣 LANDING锛氭鏃?*涓嶅啀閲嶇粯鎾斁椤靛唴瀹?*锛屽彧鐣欒糠浣犳潯锛夈€?*/
   public morphLand(): void {
+    // 上游 `finishReverse` / 会话结束都会 `setMiniOut(false)`（`wujie.pa:147562-147568`）。
+    this.miniOut = false;
     this.morphStage = MorphStage.LANDING;
     this.morphDrive = MorphDrive.NONE;
     this.releaseMorphOwnership(true);
@@ -4915,6 +4951,8 @@ export class PlayerExpandState {
 
   /** 澶嶄綅鍒?娌℃湁杩欏鍔ㄧ敾"鐨勯潤姝㈡€侊紙鍑犱綍缂哄け銆佸嵏杞姐€佸紓甯告椂閮借蛋杩欓噷锛夈€?*/
   public morphReset(): void {
+    // 上游 `finishReverse` / 会话结束都会 `setMiniOut(false)`（`wujie.pa:147562-147568`）。
+    this.miniOut = false;
     this.releaseMorphOwnership(true);
     this.morphGen = this.morphGen + 1;
     this.morphStage = MorphStage.NONE;

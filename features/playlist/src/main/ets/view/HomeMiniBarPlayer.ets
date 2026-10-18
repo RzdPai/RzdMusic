@@ -16,7 +16,7 @@
 import { AppStorageV2 } from '@kit.ArkUI';
 import {
   AmbientState, AppStorageKeys, areaLengthToVp, BarLayoutModes, getWindowInfoState, ImmersiveType, Logger,
-  MINI_BAR_ID, MorphDrive, PlayerExpandState, SdkApiUtil, SdkConstants, StyleConstants, WindowInfo
+  MINI_BAR_ID, PlayerExpandState, SdkApiUtil, SdkConstants, StyleConstants, WindowInfo
 } from 'musicbasic';
 import { MusicAppState, PlayerViewModel } from 'player';
 import { HomeMiniBarAlbumCover } from './HomeMiniBarAlbumCover';
@@ -449,7 +449,7 @@ export struct HomeMiniBarPlayer {
     // （`onAreaChange` 给的是布局几何、不含 transform，量出来的起点会偏）。
     .id(MINI_BAR_ID)
     .visibility((this.expandState.sourceBarHidden || this.expandState.shrinkHidesBar ||
-      this.expandState.morphDrive === MorphDrive.ANIM) ? Visibility.Hidden : Visibility.Visible)
+      this.expandState.miniOut) ? Visibility.Hidden : Visibility.Visible)
     // 诊断（`hdc shell hilog | grep RzdMiniBarGeom`）：本行**实测**矩形 + 左右内距。
     // 判据（钉住高度的两条迷你条）：
     //   `padL == padR`（内容中心 ≡ 胶囊中心）、`h == cap`（行盒 ≡ 胶囊盒）、
