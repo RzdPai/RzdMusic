@@ -2618,6 +2618,12 @@ struct Index {
                 //   = 上游 `MINI_H`，与页签胶囊等高（官方「迷你栏……跟页签栏高度相等且水平对齐」）。
                 this.miniBar();
               },
+              // ★★★ 2026-10-18（用户：「现在就听页面应该隐藏小播放条，现在只隐藏了上面的元素」）：
+              //   `miniBar()` 在那一页 / 二级页在栈上时给的是 **0 高度占位 Column**（不画播放器），
+              //   但 `enableMiniBarBackground` 缺省 **true**（SDK `:5169` 原文 "follow tab bar"）
+              //   ⇒ HDS 照样给这一格画背板 ⇒ 页签胶囊上方多出一枚**空胶囊**。
+              //   语义与 `miniBar()` 里那条 if 逐字同义：**只有真画播放器时才要 HDS 画背板**。
+              enableMiniBarBackground: this.miniBarRendersPlayer(),
               // ★★★ 2026-10-20（第五轮）：**给 HDS 报上"迷你栏占多宽"**（`HdsTabsMiniBar.miniBarWidth`
               //   ：SDK `@hms.hds.hdsBaseComponent.d.ets:5150`，三档与 `HdsBarWidthRangeOptions` 同形）。
               //   单层态必须报，否则 HDS 挤页签、让出来的长条位宽度与我们自己画的胶囊对不上。
