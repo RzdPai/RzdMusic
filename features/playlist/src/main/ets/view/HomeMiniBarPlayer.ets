@@ -21,6 +21,7 @@ import {
 import { MusicAppState, PlayerViewModel } from 'player';
 import { HomeMiniBarAlbumCover } from './HomeMiniBarAlbumCover';
 import { HomeMiniBarPlayerAside } from './HomeMiniBarPlayerAside';
+import { MiniBarActions } from './MiniBarActions';
 
 /**
  * 迷你播放条**内容**：无界 `design/components/MiniPlayer.ets` 的 V2 移植版。
@@ -390,21 +391,35 @@ export struct HomeMiniBarPlayer {
       // ★ 胶囊本体 Row —— 逐条照搬无界 `MiniPlayer.#~@0>#bar`（`wujie.pa:69039-69122`）：
       //   `space: 0`（类注释 ④）/ `width: 100%` / `padding: { left: sidePad, right: actionsTrail }`。
       Row({ space: HomeMiniBarPlayer.CAPSULE_SPACE_VP }) {
-        HomeMiniBarAlbumCover({
-          playerViewModel: this.playerViewModel,
-          followAppMiniBarExpanded: this.followAppMiniBarExpanded,
-          lockTwoRowCoverSize: this.lockTwoRowCoverSize,
-          // ★ 上游 `MiniPlayer.capsuleH` 的等价物：封面据此算 `coverScale2 = (capsuleH × 0.8)/32`
-          //   （56 ⇒ 1.4 ⇒ 视觉 44.8）。`0`（自绘条）时封面组件退回旧档位，逐字不变。
-          capsuleHeightVp: this.capsuleBaseHVp()
-        })
-        HomeMiniBarPlayerAside({
+        // ★★★ 2026-10-18（照搬上游胶囊 Row 的两个直接子节点，`wujie.pa:69128-69474`）：
+        //   ① 左段 `Row(space:0).layoutWeight(1)` = 封面 + meta；
+        //   ② 操作区 `Row`（**无 layoutWeight**，按固有宽先占位）。
+        //   原来操作区套在 `Aside(layoutWeight(1))` 里面 ⇒ 跟着 Aside 的盒子走、不受胶囊右内距约束，
+        //   右端那颗「播放列表」按钮就压到胶囊圆角外。
+        Row({ space: 0 }) {
+          HomeMiniBarAlbumCover({
+            playerViewModel: this.playerViewModel,
+            followAppMiniBarExpanded: this.followAppMiniBarExpanded,
+            lockTwoRowCoverSize: this.lockTwoRowCoverSize,
+            // ★ 上游 `MiniPlayer.capsuleH` 的等价物：封面据此算 `coverScale2 = (capsuleH × 0.8)/32`
+            //   （56 ⇒ 1.4 ⇒ 视觉 44.8）。`0`（自绘条）时封面组件退回旧档位，逐字不变。
+            capsuleHeightVp: this.capsuleBaseHVp()
+          })
+          HomeMiniBarPlayerAside({
+            playerViewModel: this.playerViewModel,
+            showPreviousTrack: this.showPreviousTrack,
+            floatingMeta: !this.followAppMiniBarExpanded,
+            actionsOutside: true
+          })
+        }
+        .layoutWeight(1)
+        .alignItems(VerticalAlign.Center)
+        MiniBarActions({
           playerViewModel: this.playerViewModel,
           showPreviousTrack: this.showPreviousTrack,
-          floatingMeta: !this.followAppMiniBarExpanded
-        })
           // 操作区：`MiniMorph.actionsOpacityAt = clamp(1 - t/0.20)`，比封面那一档更早消失
-          .opacity(this.expandState.miniBarOpacity())
+          actionsOpacity: this.expandState.miniBarOpacity()
+        })
       }
       // ★★★ 2026-10-18（照搬上游 `.animation(BAR_ANIM)`，`wujie.pa:69053-69057` / `:69118-69121`）：
       //   上游把 `BAR_ANIM = { duration: 350, curve: Curve.Friction }`（`wujie.pa:70120-70126`）

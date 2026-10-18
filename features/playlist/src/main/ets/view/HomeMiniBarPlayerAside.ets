@@ -59,6 +59,14 @@ export struct HomeMiniBarPlayerAside {
   @Param metaOpacity: number = 1;
   @Param isMorphClone: boolean = false;
   @Param floatingMeta: boolean = false;
+  /**
+   * 	rue = **只画 meta**（歌名/歌手），操作区由父组件按上游结构另行摆放。
+   *
+   * 上游胶囊 Row 的两个直接子节点是「左段(封面+meta，layoutWeight(1)）」与
+   * 「操作区 Row（无 weight）」（wujie.pa:69128-69474）。本仓 HomeMiniBarPlayer 传 	rue，
+   * 把操作区换成同级兄弟 {@link MiniBarActions}；克隆层不传（保持整块渲染）。
+   */
+  @Param actionsOutside: boolean = false;
   @Local expandState: PlayerExpandState =
     AppStorageV2.connect(PlayerExpandState, AppStorageKeys.PLAYER_EXPAND_STATE,
       () => new PlayerExpandState())!;
@@ -247,6 +255,7 @@ export struct HomeMiniBarPlayerAside {
           this.playerViewModel.openFullScreenWithSharedElementTransition(this.getUIContext());
         })
 
+        if (!this.actionsOutside) {
         // ══════════ ③ 操作按钮簇：**不给 layoutWeight**，每颗按钮 40 × 40 先占位 ══════════
         Row({ space: PlayerConstants.MINI_ACT_GAP }) {
           if (this.showPreviousTrack) {
@@ -276,6 +285,7 @@ export struct HomeMiniBarPlayerAside {
         .margin({ right: HomeMiniBarPlayerAside.ACTIONS_TRAIL_GAP_VP })
         .displayPriority(PlayerConstants.DISPLAY_PRIORITY_MINI_ACTIONS)
         .flexShrink(0)
+        }
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)
