@@ -15,8 +15,8 @@
 
 import { AppStorageV2 } from '@kit.ArkUI';
 import {
-  AmbientState, AppStorageKeys, areaLengthToVp, getWindowInfoState, ImmersiveType, Logger, MINI_BAR_ID,
-  PlayerExpandState, StyleConstants, WindowInfo
+  AmbientState, AppStorageKeys, areaLengthToVp, BarLayoutModes, getWindowInfoState, ImmersiveType, Logger,
+  MINI_BAR_ID, PlayerExpandState, SdkApiUtil, SdkConstants, StyleConstants, WindowInfo
 } from 'musicbasic';
 import { MusicAppState, PlayerViewModel } from 'player';
 import { HomeMiniBarAlbumCover } from './HomeMiniBarAlbumCover';
@@ -110,6 +110,11 @@ export struct HomeMiniBarPlayer {
    * 只在"宿主没给胶囊高"（`contentHeightVp === 0`）时用于诊断日志。
    */
   private static readonly COVER_EDGE_DESIGN_VP: number = 32;
+  /**
+   * 无界 `BAR_CONTENT_H = 40`（`MiniPlayer` 模块 lexvar `0x2`）—— **低矮档**的胶囊内容高。
+   * 出处是 `sidePad` 字节码的折叠支（`wujie.pa:67515-67517`：`h = BAR_CONTENT_H`）。
+   */
+  private static readonly BAR_CONTENT_H_VP: number = 40;
   /** 上游 `MINI_COVER_RATIO = 0.8`（theme/Tokens）：视觉封面边长 / 胶囊高。 */
   private static readonly MINI_COVER_RATIO: number = 0.8;
   /**
@@ -275,41 +280,74 @@ export struct HomeMiniBarPlayer {
     return HomeMiniBarPlayer.COVER_EDGE_DESIGN_VP;
   }
 
-  /** @returns 封面/内距的**基准高度**（vp）：实测行高优先，其次宿主钉的高度，都没有则 0。 */
+  /** @returns 封面/内距的**基准高度**（vp）：低矮档优先，其次是宿主钉的高度，最后是实测行高。 */
   private capsuleBaseHVp(): number {
-    if (this.measuredRowHVp > 0) {
-      return this.measuredRowHVp;
+    if (this.contentHeightVp > 0) {
+      return this.isLowProfileBar() ? HomeMiniBarPlayer.BAR_CONTENT_H_VP : this.contentHeightVp;
     }
-    return this.contentHeightVp > 0 ? this.contentHeightVp : 0;
+    return this.measuredRowHVp > 0 ? this.measuredRowHVp : 0;
   }
 
   /**
-   * @returns 内容行的**左**内距（vp）= 无界 `sidePad()` 的视觉口径（类注释第二节 ②）。
+   * @returns 是否处于**低矮档**（无界 `collapsed === true` 那一档，`h = BAR_CONTENT_H = 40`）。
    *
-   * 钉高度时：`(胶囊高 − 视觉封面)/2` ⇒ `(56 − 44.8)/2 = **5.6**`
-   *   —— 与上/下留白逐字相等（封面**内接**于胶囊）。
-   * 未钉高度时：`CONTENT_PAD(8) + MINI_BAR_INNER_PAD(4) = 12`，
-   *   **逐字等于改动前**（那两个自绘宿主的外观本轮不动）。
+   * 本仓把无界的 `MiniPlayer.collapsed` 映射到 **HDS 栏排布 = 上下两排（VERTICAL）**：
+   * 无界那个 `collapsed` 由 `design/logic/BarCollapse`（`wujie.pa:83856` `isCollapsed()`）驱动，
+   * 语义就是"迷你条处于**矮**那一档"；本仓能与它一一对应的可见状态只有 HDS 的
+   * `hdsBarLayoutMode === VERTICAL`（迷你条独占一排、与页签栏上下叠放，用户口中的"双行"）。
+   * 判据的 SDK 门槛与 `HomeMiniBarAlbumCover.isTwoRowBarLayout()` 逐字相同（同一份 HDS 字段）。
+   */
+  private isLowProfileBar(): boolean {
+    if (!this.followAppMiniBarExpanded) {
+      return false;
+    }
+    if (!SdkApiUtil.isDistributionOsApiAtLeast(SdkConstants.DISTRIBUTION_OS_6_1_1_CODE)) {
+      return false;
+    }
+    return this.appState.hdsBarLayoutMode === BarLayoutModes.VERTICAL;
+  }
+
+  /**
+   * @returns 内容行的**左**内距（vp）。
+   *
+   * 两档都落在上游那一条恒等式里 —— `视觉左边距 = 基准高/2 − 视觉封面/2`：
+   * ```
+   * 基准 56（单排）：(56 − 44.8)/2 = 5.6   ← 与上/下留白逐字相等（封面内接于胶囊）
+   * 基准 40（低矮）：(40 − 32.0)/2 = 4.0
+   * ```
+   * ⚠️ 上游写的是 `h/2 − coverEdge/2`（`coverEdge` 恒 32，`wujie.pa:66221-66230`）：
+   *   56 时上游得 12 —— 但上游参与排布的封面盒**是 32**，`scale(1.4)` 只放大像素不放大布局，
+   *   所以上游"视觉左边距"同样是 `12 − coverOverflow(6.4) = 5.6`。本仓封面外层**就是视觉盒**
+   *   （`HomeMiniBarAlbumCover` 类注释第一节 ⚠️）⇒ 同一个视觉口径直接写在这里，
+   *   可见像素与上游逐像素相同、meta 左缘仍与封面视觉右缘相接。
    */
   private sidePadVp(): number {
     if (this.contentHeightVp <= 0 && this.measuredRowHVp <= 0) {
       return HomeMiniBarPlayer.CONTENT_PAD_VP + HomeMiniBarPlayer.MINI_BAR_INNER_PAD_VP;
     }
-    // 内距 = (基准高度 − 32)/2（上游 `capsuleH/2 − coverEdge/2`，基准=实测行高优先）
-    const base: number = this.capsuleBaseHVp();
-    const pad: number = (base - HomeMiniBarPlayer.COVER_EDGE_DESIGN_VP) / 2;
+    const pad: number = (this.capsuleBaseHVp() - this.coverVisualEdgeVp()) / 2;
     return pad > 0 ? pad : 0;
   }
 
   /**
    * @returns 内容行的**右**内距（vp）= 无界 `actionsTrail()`。
    *
-   * `actionsTrail = sidePad + (capsuleH > 0 ? 0 : MINI_EDGE_PAD)`（`wujie.pa:65922-65942`）。
-   * 本组件的胶囊高**由宿主给定**（`contentHeightVp > 0`）⇒ `capsuleH > 0` 恒成立 ⇒ 增量恒为 0
-   * ⇒ **恒等于左内距**。`MINI_EDGE_PAD(10)` 是"还没量到高度"时的余量，本仓前提不成立。
+   * 上游 `actionsTrail() = sidePad() + (capsuleH > 0 ? 0 : MINI_EDGE_PAD)`（`wujie.pa:65922-65942`），
+   * 而 `sidePad` 是**未放大的 32 盒**口径 ⇒ 本仓按同口径落地：
+   * ```
+   * (基准高 − 32)/2      56 → 12（= 上游 12）   40 → 4（= 上游 4）
+   * ```
+   * ⚠️ 与左内距**不相等**是有依据的：左右不等的 6.4 正是上游"封面视觉溢出"那一段
+   *   （`coverOverflow = 32×(s−1)/2`，`wujie.pa:66259-66288`）—— 上游把它加在 meta 的
+   *   `margin.left` 上，本仓把它并进左内距（封面外层即视觉盒，不需要再补 margin）。
+   *   若把右内距也写成 5.6，操作区会比上游**往右**多跑 6.4vp。
    */
   private actionsTrailVp(): number {
-    return this.sidePadVp();
+    if (this.contentHeightVp <= 0 && this.measuredRowHVp <= 0) {
+      return HomeMiniBarPlayer.CONTENT_PAD_VP + HomeMiniBarPlayer.MINI_BAR_INNER_PAD_VP;
+    }
+    const pad: number = (this.capsuleBaseHVp() - HomeMiniBarPlayer.COVER_EDGE_DESIGN_VP) / 2;
+    return pad > 0 ? pad : 0;
   }
 
   /**
@@ -321,21 +359,21 @@ export struct HomeMiniBarPlayer {
     return this.contentHeightVp > 0 ? 0 : HomeMiniBarPlayer.CONTENT_PAD_VP;
   }
 
-  /** @returns 根 `Stack` / 内容行的**高度上限**（vp）：钉住时 = 胶囊高，否则"不约束"。 */
+  /** @returns 根 `Stack` / 内容行的**高度上限**（vp）：钉住时 = 基准高（低矮档会缩到 40），否则"不约束"。 */
   private contentMaxHeightVp(): number {
     if (this.contentHeightVp > 0) {
-      return this.contentHeightVp;
+      return this.capsuleBaseHVp();
     }
     return HomeMiniBarPlayer.CONTENT_HEIGHT_UNBOUNDED_VP;
   }
 
   /**
    * @returns 根 `Stack` / 内容行的**高度下限**（vp）。
-   * 钉住时 = 胶囊高（`min == max == 胶囊高` ⇒ 行盒 ≡ 胶囊盒，封面在其中几何居中）；
+   * 钉住时 = 基准高（`min == max` ⇒ 行盒 ≡ 胶囊盒，封面在其中几何居中）；
    * 未钉时 = 0（纯新增约束，行为与改动前逐字一致）。
    */
   private contentMinHeightVp(): number {
-    return this.contentHeightVp > 0 ? this.contentHeightVp : 0;
+    return this.contentHeightVp > 0 ? this.capsuleBaseHVp() : 0;
   }
 
   build() {
@@ -399,12 +437,12 @@ export struct HomeMiniBarPlayer {
         this.measuredRowHVp = measuredH;
       }
       const opticalGap: number = this.contentHeightVp > 0 ?
-        (this.contentHeightVp - this.coverVisualEdgeVp()) / 2 : -1;
+        (this.capsuleBaseHVp() - this.coverVisualEdgeVp()) / 2 : -1;
       Logger.info('RzdMiniBarGeom',
         `content h=${areaLengthToVp(area.height)} y=${areaLengthToVp(area.globalPosition.y)} ` +
           `x=${areaLengthToVp(area.globalPosition.x)} ` +
           `w=${areaLengthToVp(area.width)} pinned=${this.contentHeightVp} ` +
-          `cap=${this.contentMaxHeightVp()} pad=${this.rowPadVp()} ` +
+          `cap=${this.contentMaxHeightVp()} lowProfile=${this.isLowProfileBar()} pad=${this.rowPadVp()} ` +
           `padL=${this.sidePadVp()} padR=${this.actionsTrailVp()} ` +
           `coverVisual=${this.coverVisualEdgeVp()} ` +
           `coverScale=${this.coverVisualEdgeVp() / HomeMiniBarPlayer.COVER_EDGE_DESIGN_VP} ` +
