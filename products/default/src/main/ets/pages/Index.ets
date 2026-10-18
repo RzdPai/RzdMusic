@@ -48,6 +48,7 @@ import {
   ThemeState,
   WindowInfo,
   WindowUtil,
+  buildTitleMaterial,
   BarScrollHelper
 } from 'musicbasic';
 import { dispatchShellPlaybackIntent, LXSourceHost, PlaybackPage, PlaybackPageCoverContent, PlayerViewModel,
@@ -1990,7 +1991,10 @@ struct Index {
           //   `!miniHidden ⇒ NoBg`（HDS 不画背板）+ 内容自己画；`miniHidden ⇒ base`。
           //   本仓已把 `enableMiniBarBackground` 改成跟可见性同一组条件 ⇒ 可见时 HDS 不画背板，
           //   所以这里**必须**自己画，否则整条透明。
-          showSelfDrawnBackplate: true,
+          // ⛔ 一级页恢复"不自绘背板"（用户：「怎么又是一大一小两个播放条，大的有光感，小的没有」）：
+          //   自绘层与 HDS 那格不是同一个矩形 ⇒ 一大一小。回到上游口径：背板/材质由 HDS 画，
+          //   我们只把**它的材质档**对齐软件设置（见 `barFloatingStyle.systemMaterialEffect`）。
+          showSelfDrawnBackplate: false,
           // ★★★ 2026-10-21（第八轮）：**挤压回到"槽内容"上**（上游口径）。
           //   上游首页那条的 squash 挂在 `miniBar` 槽的**内容**上（也就是 `MiniPlayer` 根），
           //   不是挂在某个胶囊容器上（`上游-MiniPlayer内容组件树全量.ets` / `MainPage` 那一处）。
@@ -2606,7 +2610,14 @@ struct Index {
             // 鈽?杩欐潯鏄?*瀹樻柟鐪熷疄鍏夋劅**锛欻dsTabs 鐨勬诞鍔ㄥ簳鏍忥紙barOverlap + !vertical +
             //   barPosition(End) 涓夋潯浠跺悓鏃舵弧瓒筹級+ `systemMaterialEffect`銆?
             //   妗ｄ綅涓庢爣棰樻爮鍏辩敤 ambientTitleMaterial()锛屼笉瑕佸啀鍦ㄦ湰澶勫唴鑱斾竴濂椾笁鐩€?
-            systemMaterialEffect: this.ambientTitleMaterial(),
+              // ★★★ 2026-10-18（用户：「只有把光感等级改成我们的就行」）：
+              //   载体仍是 HDS（壳层 `HdsTabs`），但**材质档吃本应用的软件设置**：
+              //   `buildTitleMaterial(ambientState.level)`（0 跟随系统 / 1 SMOOTH / 2 GENTLE / 3 EXQUISITE），
+              //   与标题栏同一份映射。
+              // ★★★ 2026-10-18（用户：「只有把光感等级改成我们的就行」）：载体仍是 HDS（壳层 `HdsTabs`），
+              //   材质档吃本应用设置 —— 即既有的 `ambientTitleMaterial()`（= `buildTitleMaterial` 的同一份映射：
+              //   0 跟随系统 / 1 SMOOTH / 2 GENTLE / 3 EXQUISITE），与标题栏同一口径。
+              systemMaterialEffect: this.ambientTitleMaterial(),
             // 鏅烘劅鎻″Э锛氳窡闅忔彙鎸佹墜璋冩暣娴姩鏉″乏鍙冲亸缃?
             adaptToHandedness: true,
             miniBar: {
