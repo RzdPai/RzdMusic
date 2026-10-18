@@ -619,6 +619,29 @@ export class PlayerExpandState {
 
   /** 娴眰鎷疯礉鐨勮ˉ闂存椂闀匡紙ms锛屽鏍囨棤鐣?`ENTER_MS = 560`锛夈€?*/
   public static readonly MORPH_OVERLAY_DURATION_MS: number = 560;
+
+  /**
+   * **内容时间线**的进入补间时长（ms）—— 上游 `MainPage.ENTER_MS`。
+   *
+   * 字节码证据：
+   * ```
+   *   wujie.pa:154167-154169   MainPage&.#~@1>#static_initializer
+   *                            ldai 0x230                                  // 0x230 = 560
+   *                            definepropertybyname 0x0, "ENTER_MS", a2
+   *   wujie.pa:163524-163547   点击迷你条 → onPullReady 续接（λ@5**# 的 onDone = finishEnter）
+   *                            ldobjbyname 0x1d, "animateMorphT"
+   *                            ldobjbyname 0x1f, "ENTER_MS"
+   *                            ldexternalmodulevar 0x16  "EASE_OUT_STR"
+   *                            ldai 0x1                                    // 目标 1
+   * ```
+   * 曲线 `EASE_OUT_STR` = `"cubic-bezier(0.23, 1.0, 0.32, 1.0)"`
+   * （`_recover/logic-src/consts.json:1501`、`设计常量总表.md` 第 15 项 `Tokens[15]`）。
+   *
+   * ⚠️ 这与 {@link MORPH_OVERLAY_DURATION_MS} 数值相同是**有原因的**：上游那两层（浮层克隆 /
+   *   内容窗口）本来就是同一条 `morphT`；而容器几何那层是另一条 **350ms + `Curve.EaseInOut`**
+   *   （`ExpandAnimation.doEnter`），在本仓对应 {@link morphP}。
+   */
+  public static readonly MORPH_CONTENT_DURATION_MS: number = 560;
   /** 娴眰鎷疯礉**鏀惰捣**鏂瑰悜鐨勫熀纭€鏃堕暱锛坢s锛夆€斺€?瀵规爣鏃犵晫 `MainPage.REVERSE_MS = 460`銆?*/
   public static readonly MORPH_OVERLAY_REVERSE_MS: number = 460;
   /** 娴眰鎷疯礉鏀惰捣鏃堕暱鐨勪笅闄愭瘮渚?鈥斺€?瀵规爣鏃犵晫 `MainPage.REVERSE_MIN_RATIO = 0.4`銆?*/
@@ -676,7 +699,8 @@ export class PlayerExpandState {
     if (!this.morphClipping()) {
       return 0;
     }
-    const w: number = PlayerExpandState.ramp01(this.morphP,
+    // 升入窗口取**内容时间线**（上游 `pullChromeOpacity` / `pullBottomIn` 都吃 `effT = pullT`）
+    const w: number = PlayerExpandState.ramp01(this.contentProgress(),
       PlayerExpandState.WIN_A_START, PlayerExpandState.WIN_A_END);
     const scale: number = Math.max(0.05, this.morphScale);
     return (1 - w) * PlayerExpandState.RISE_VP / scale;
@@ -692,7 +716,8 @@ export class PlayerExpandState {
     if (!this.morphClipping()) {
       return 0;
     }
-    const w: number = PlayerExpandState.ramp01(this.morphP,
+    // 升入窗口取**内容时间线**（上游 `pullChromeOpacity` / `pullBottomIn` 都吃 `effT = pullT`）
+    const w: number = PlayerExpandState.ramp01(this.contentProgress(),
       PlayerExpandState.WIN_B_START, PlayerExpandState.WIN_B_END);
     const scale: number = Math.max(0.05, this.morphScale);
     return (1 - w) * PlayerExpandState.RISE_VP / scale;
@@ -780,7 +805,8 @@ export class PlayerExpandState {
     if (!this.morphClipping()) {
       return 0;
     }
-    const w: number = PlayerExpandState.ramp01(this.morphP,
+    // 升入窗口取**内容时间线**（上游 `pullChromeOpacity` / `pullBottomIn` 都吃 `effT = pullT`）
+    const w: number = PlayerExpandState.ramp01(this.contentProgress(),
       PlayerExpandState.WIN_META_START, PlayerExpandState.WIN_META_END);
     const scale: number = Math.max(0.05, this.morphScale);
     return (1 - w) * PlayerExpandState.RISE_VP / scale;
@@ -909,7 +935,8 @@ export class PlayerExpandState {
     if (!this.morphLive()) {
       return 1;
     }
-    const p: number = this.morphP < 0 ? 0 : (this.morphP > 1 ? 1 : this.morphP);
+    // 内容窗口取**内容时间线**（上游 `effT = isMorphTarget() ? 1 : pullT`，`wujie.pa:171535-171548`）
+    const p: number = this.contentProgress();
     const v: number = p / 0.30;
     const clamped: number = v > 1 ? 1 : v;
     return clamped < PlayerExpandState.PULL_BG_FLOOR ? PlayerExpandState.PULL_BG_FLOOR : clamped;
@@ -920,7 +947,8 @@ export class PlayerExpandState {
     if (!this.morphLive()) {
       return 1;
     }
-    const p: number = this.morphP < 0 ? 0 : (this.morphP > 1 ? 1 : this.morphP);
+    // 内容窗口取**内容时间线**（上游 `effT = isMorphTarget() ? 1 : pullT`，`wujie.pa:171535-171548`）
+    const p: number = this.contentProgress();
     const v: number = (p - 0.18) / (0.62 - 0.18);
     return v < 0 ? 0 : (v > 1 ? 1 : v);
   }
@@ -930,7 +958,8 @@ export class PlayerExpandState {
     if (!this.morphLive()) {
       return 1;
     }
-    const p: number = this.morphP < 0 ? 0 : (this.morphP > 1 ? 1 : this.morphP);
+    // 内容窗口取**内容时间线**（上游 `effT = isMorphTarget() ? 1 : pullT`，`wujie.pa:171535-171548`）
+    const p: number = this.contentProgress();
     const v: number = (p - 0.45) / (1 - 0.45);
     return v < 0 ? 0 : (v > 1 ? 1 : v);
   }
@@ -2407,6 +2436,96 @@ export class PlayerExpandState {
   @Trace public morphDrive: MorphDrive = MorphDrive.NONE;
   /** 璺熸墜杩涘害 0鈥?锛? = 杩樻槸杩蜂綘鏉￠偅鏉¤兌鍥婏級銆?*/
   @Trace public morphP: number = 1;
+
+  /**
+   * **内容时间线**进度 0~1 —— 上游 `PlayerPage.pullT`，与 {@link morphP}（几何时间线）**分开两条**。
+   *
+   * ## 上游为什么是两条（逐条证据）
+   * ```
+   *   容器几何（scale / translateX/Y / clipHeight / radius / overlayColor）
+   *       ← ExpandAnimation.doEnter = 350ms + Curve.EaseInOut
+   *         （_recover/logic-src/展开收起动画时间轴定稿.md §一；ExpandAnimation驱动与补间定稿.md:480）
+   *   内容窗口（歌名行 / 收藏更多 / 小歌词 / 进度条 / 传输行 / 背景）
+   *       ← MainPage.morphT = animateMorphT(1, ENTER_MS, EASE_OUT_STR, λ) = 560ms + 快出慢收
+   *         （wujie.pa:154167-154169 `ldai 0x230` → `definepropertybyname "ENTER_MS"`
+   *           wujie.pa:163524-163547 `animateMorphT` + `ENTER_MS` + `EASE_OUT_STR`
+   *           wujie.pa:145608-145661 `animateMorphT` = createAnimator + onFrame 逐帧写 `morphT`）
+   * ```
+   * 关键一环：`PlayerPage` 自己拿不到 `MainPage.morphT`，它读的是同一份 AppStorage 键
+   * （`_recover/logic-src/pullT写入算式与形变枚举.md:24-81`，字节码 L168180-168190 / L144036-144048）：
+   * ```
+   *   PlayerPage: pullT  = createStorageProp(K_PULL_T, …, "pullT")   // 单向读
+   *   MainPage:   morphT = createStorageLink(K_PULL_T, "morphT")     // 双向写
+   *   ⇒ pullT ≡ morphT
+   * ```
+   * 而 `effT()`（`wujie.pa:171535-171548`）= `isMorphTarget() ? 1 : pullT`，三个内容窗口都吃它：
+   * `pullBgIn = clamp(effT/0.30)`（`wujie.pa:176295-176326`）、
+   * `pullChromeOpacity = clamp((effT−0.18)/0.44)`（`wujie.pa:176459-176505`，`fldai 1.8e-1` / `6.2e-1`）、
+   * `pullBottomIn = clamp((effT−0.45)/0.55)`（`wujie.pa:176377-176406`，`fldai 4.5e-1`）。
+   *
+   * ⛔ 本仓原来把几何与内容都挂在 `morphP`（350ms / `Curve.EaseInOut`）上 ⇒ 所有窗口在墙钟时间上
+   *    比上游**早 37%**（350/560）跑完，这正是用户实测「进度条和下面几个控件飞入比无界早了很多」。
+   *
+   * ⚠️ 取值一律走 {@link contentProgress}（内容补间没在跑时它与 `morphP` 严格同值 ⇒ 静止态 / 关闭态
+   *    / 外部直接写 `morphP` 的路径取值与改动前**逐值相同**）。
+   */
+  @Trace public contentP: number = 1;
+  /** 内容补间的世代号：新补间 / 取消之后，旧的收尾回调直接丢弃。 */
+  private contentGen: number = 0;
+  /** 内容时间线是否正由自己的 560ms 补间驱动（true ⇒ 取值读 `contentP`，false ⇒ 读 `morphP`）。 */
+  private contentTweenOwned: boolean = false;
+
+  /**
+   * @returns 内容时间线当前进度 0~1（**所有内容窗口的唯一取值口**）。
+   *
+   * 内容补间在跑 ⇒ `contentP`（上游 `pullT`，560ms + `EASE_OUT_STR`）；
+   * 其余一切时刻 ⇒ `morphP`（与几何同一条线：静止 / 关闭 / 手势跟手都逐值一致）。
+   */
+  public contentProgress(): number {
+    const raw: number = this.contentTweenOwned ? this.contentP : this.morphP;
+    return raw < 0 ? 0 : (raw > 1 ? 1 : raw);
+  }
+
+  /**
+   * 起内容补间前调用：先把 `contentP` 对齐到几何当前进度，再接管取值口。
+   *
+   * ⚠️ 顺序是硬约束：**先赋 `contentP`、再置 owned** —— 反了的话补间第一帧会从旧值起跳。
+   * @returns 本次补间的世代号（收尾时原样交给 {@link endContentTween}）
+   */
+  public beginContentTween(): number {
+    this.contentGen = this.contentGen + 1;
+    const from: number = this.morphP < 0 ? 0 : (this.morphP > 1 ? 1 : this.morphP);
+    this.contentP = from;
+    this.contentTweenOwned = true;
+    Logger.info(PlayerExpandState.logTag,
+      `morph content tween begin from=${from.toFixed(3)} gen=${this.contentGen} ` +
+        `ms=${PlayerExpandState.MORPH_CONTENT_DURATION_MS} curve=EASE_OUT_STR`);
+    return this.contentGen;
+  }
+
+  /**
+   * 内容补间收尾：只有世代号仍是本次才生效（被打断 / 取消的旧回调直接丢弃）。
+   *
+   * 收尾后取值口回到 `morphP` —— 此时几何早已落位（350ms < 560ms），两者同为终点值。
+   */
+  public endContentTween(gen: number, landed: number): void {
+    if (gen !== this.contentGen) {
+      return;
+    }
+    this.contentTweenOwned = false;
+    if (this.contentP !== landed) {
+      this.contentP = landed;
+    }
+    Logger.info(PlayerExpandState.logTag,
+      `morph content tween done contentP=${this.contentP.toFixed(3)} ` +
+        `morphP=${this.morphP.toFixed(3)} gen=${gen}`);
+  }
+
+  /** 取消内容时间线（关闭 / 复位 / 异常路）：立刻交还给 `morphP`，并作废旧收尾回调。 */
+  public cancelContentTween(): void {
+    this.contentGen = this.contentGen + 1;
+    this.contentTweenOwned = false;
+  }
   /**
    * 褰㈠彉**涓栦唬鍙?*锛堝鏍囧弽缂栬瘧閲岀殑 `animGen`锛夈€?
    *
@@ -2475,7 +2594,9 @@ export class PlayerExpandState {
    * 闈欐鎬佹亽 1 鈬?涓€鍒?鎸?effT 绠?鐨勫叕寮忓湪闈欐鎬侀兘鍙栨弧鍊笺€?
    */
   public effT(): number {
-    return this.morphContainerActive() ? this.morphP : 1;
+    // 上游 `effT() = isMorphTarget() ? 1 : pullT`（`wujie.pa:171535-171548`），
+    // `pullT` ≡ `MainPage.morphT`（560ms + `EASE_OUT_STR`）⇒ 这里读**内容时间线**。
+    return this.morphContainerActive() ? this.contentProgress() : 1;
   }
 
   /** @returns 娴眰鎷疯礉鐨勮ˉ闂存槸鍚︽鍦ㄨ窇锛堝彧璇伙紝缁欐挱鏀鹃〉鐨勬棩蹇椾笌鎶ゆ爮鐢級銆?*/
@@ -3171,6 +3292,8 @@ export class PlayerExpandState {
       this.morphDrive = MorphDrive.FINGER;
       this.morphUsable = false;
       this.morphP = 0;
+      // 内容时间线同步落起点（静止态两条线必须一致；见 contentP 的说明）。
+      this.contentP = 0;
       // 鈽呪槄鈽?2026-10-16锛?*鐓ф惉鏃犵晫"杩涚浉浣嶆椂灏辫惤璧风偣鍑犱綍"** 鈥斺€?淇?鐐瑰嚮鎵撳紑棣栧抚闂竴鏁村睆"锛夛細
       //
       // ## 鏃犵晫鏄€庝箞鍋氱殑
@@ -4265,7 +4388,7 @@ export class PlayerExpandState {
     // 鈿狅笍 蹇呴』**鏃╀簬**杩蜂綘鏉＄殑娣″嚭锛坄miniBarOpacity`锛?锝?0%锛夎蛋瀹岋細
     //    涓よ竟閮藉湪娣＄殑鏃跺€欎腑闂翠細鍑虹幇"鍗婇€忔槑鐨勮糠浣犳潯 + 鍗婇€忔槑鐨勬挱鏀鹃〉"锛?
     //    鍙犺捣鏉ユ槸鍧楀彂鐏扮殑绯婃枒銆傝繖閲?12% 灏卞埌浣嶏紝涔嬪悗鐢辨挱鏀鹃〉閭ｅ眰鎺ョ銆?
-    return Math.min(1, this.morphP / 0.12);
+    return Math.min(1, this.contentProgress() / 0.12);
   }
 
   /**
@@ -4282,7 +4405,8 @@ export class PlayerExpandState {
     if (this.morphStage !== MorphStage.ENTERING && this.morphStage !== MorphStage.LEAVING) {
       return 1;
     }
-    const p: number = this.morphP < 0 ? 0 : (this.morphP > 1 ? 1 : this.morphP);
+    // 内容窗口取**内容时间线**（上游 `effT = isMorphTarget() ? 1 : pullT`，`wujie.pa:171535-171548`）
+    const p: number = this.contentProgress();
     const a: number = 1 - p / 0.20;
     return a < 0 ? 0 : a;
   }
@@ -4300,7 +4424,8 @@ export class PlayerExpandState {
     if (this.morphStage !== MorphStage.ENTERING && this.morphStage !== MorphStage.LEAVING) {
       return 1;
     }
-    const p: number = this.morphP < 0 ? 0 : (this.morphP > 1 ? 1 : this.morphP);
+    // 内容窗口取**内容时间线**（上游 `effT = isMorphTarget() ? 1 : pullT`，`wujie.pa:171535-171548`）
+    const p: number = this.contentProgress();
     const a: number = 1 - p / 0.35;
     return a < 0 ? 0 : a;
   }
@@ -4341,6 +4466,14 @@ export class PlayerExpandState {
     this.morphPApplying = true;
     if (this.morphP !== t) {
       this.morphP = t;
+    }
+    // ★ 两条时间线在「内容补间没在跑」时**严格同值**（回归红线：静止态 / 落位 / 复位取值逐值不变）。
+    //   手势跟手这条路上游本来就是一个量（手指写 `MainPage.morphT`，`expand.applyPullProgress(effT())`
+    //   跟着走，`wujie.pa:174862` 那条 `effT`），所以这里把 `contentP` 一起写成 `t`。
+    //   ⚠️ 内容补间（560ms + `EASE_OUT_STR`）在跑时**不抢**：否则会把内容窗口钉回几何进度，
+    //      用户实测的「飞入比无界早」就回来了。
+    if (!this.contentTweenOwned && this.contentP !== t) {
+      this.contentP = t;
     }
     this.applyMorphGeometry(t);
     this.morphPApplying = false;
@@ -4569,6 +4702,8 @@ export class PlayerExpandState {
   public morphSettleOpen(): void {
     this.morphStage = MorphStage.OPEN;
     this.morphDrive = MorphDrive.NONE;
+    // 落定 = 内容时间线也收尾（两条线回到同一档；`applyMorphProgress(1)` 会把 `contentP` 一并写 1）。
+    this.cancelContentTween();
     this.applyMorphProgress(1);
     // 鈽呪槄鈽?2026-10-17锛?*鐓ф惉鏃犵晫 `位1onFinish`**锛夛細琛ラ棿璺戝埌 1 鏃跺渾瑙掔鐐硅繕鏄?34锛?
     //   鐢?onFinish 鎶婂畠**褰?0** 鈥斺€?涓婃父閭ｄ袱琛屽氨鏄?`radius = 0`锛坄overlayColor` 鍚屾椂褰掗€忔槑锛夈€?
@@ -4588,6 +4723,10 @@ export class PlayerExpandState {
     this.sourceBarHidden = true;
     this.morphStage = MorphStage.LEAVING;
     this.morphDrive = MorphDrive.ANIM;
+    // ★ 关闭：先交还内容取值口。上游关闭那条 `animateMorphT(reverseMs, 0, REVERSE_EASING)`
+    //   驱动的是**同一条** `morphT` ⇒ 交还之后 `contentProgress()` 直接读 `morphP`，
+    //   两层共用播放页那条 `460 × max(0.4, morphT)` + `REVERSE_EASING` 的补间（不拆成两条）。
+    this.cancelContentTween();
     this.morphGen = this.morphGen + 1;
     this.metaBridgeGeneration = this.morphGen;
     this.logMorphOwnership('begin-leaving');
@@ -4611,6 +4750,9 @@ export class PlayerExpandState {
     this.morphStage = MorphStage.NONE;
     this.morphDrive = MorphDrive.NONE;
     this.morphP = 1;
+    // ★ 内容时间线一起复位（会话结束 ⇒ 两条线都回到"已落位"这一档；静止态必须同值）。
+    this.cancelContentTween();
+    this.contentP = 1;
     // 鈽?娴眰閭ｄ竴灞傦紙`morphOverlayP`锛?60ms 閭ｆ潯鏃堕棿绾匡級**涔熷繀椤诲湪杩欓噷娓?*锛?
     //   浼氳瘽缁撴潫/鍗歌浇涔嬪悗瀹冪殑琛ラ棿杩樺彲鑳芥寕鍦ㄩ偅 560ms 鐨勫熬宸翠笂锛屼笉娓呯殑璇?
     //   涓嬩竴杞捣鎵嬬涓€甯т細鎸?娈嬬暀杩涘害"鐢讳竴娆℃诞灞傚皝闈紙瑙傛劅鏄棯涓€涓嬪ぇ鍥撅級銆?

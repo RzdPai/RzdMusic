@@ -486,23 +486,55 @@ export struct PlaybackPage {
    * 鈿狅笍 闈欐鎬佸氨鏄€屾瓕鎵嬭涓嬫部 + 12vp銆嶏紱褰㈠彉鎬佷粛鐢?`contentRiseVp()` 浠庝笅鏂瑰崌璧凤紙绐?0.45鈫?.00锛夛紝
    *   鑰屾瓕鍚嶈璧扮殑鏄洿鏃╃殑 `metaRiseVp()`锛?.18鈫?.62锛夆噿 鍏ㄧ▼涓嶄細杩藉埌姝屽悕琛屼笂闈€?
    */
+  /** 上一条 `RzdMiniLyricTop` 打印时的 `y`（NaN = 还没打过；变化 > 0.5vp 才再打，避免逐帧刷屏）。 */
+  private miniLyricTopLoggedY: number = Number.NaN;
   private miniLyricTopY(): number {
     const rowH: number = PlaybackPage.LYRIC_META_ROW_H_VP;
     // ① 锚 = 歌名行底边 + 间距（与封面那一套同源：位置全部由 `expandState` 的量算出来，
     //    页面里不写魔法数）。
-    const metaTop: number = this.expandState.metaTopGeomY(this.lyricMorphT, rowH);
-    const target: number = metaTop + rowH + PlaybackPage.MINI_LYRIC_GAP_VP;
+    // ★ 2026-10-18（用户实测「第一次打开播放器时小歌词压在进度条上，滑到歌词页再滑回来就正常」）：
+    //   `metaTopGeomY(t, rowH)` 的 `t = 0` 端取的是 `bigEndpointRect()`，也就是**实测上报**的大封面矩形
+    //   （`PlayerExpandState.ets` 的 `morphCoverRectAt(1)` / `bigX/bigY/bigSize` 全来自 `reportBig`）。
+    //   首帧那份实测值可能是「窗口居中」那一档（顶边 ≈ (winH−edge)/2，360×780 上 ≈224），
+    //   稳态应是纯几何 `playerCoverGeomRect()`（顶边 ≈136）⇒ 同一份公式首帧比稳态低 88vp
+    //   （target ≈627 vs ≈539），正好压到进度条；滑一趟歌词页让几何重算成 136 那一档就"恢复正常"。
+    //   修法：锚点改吃**纯几何**（只吃窗口尺寸，不查节点、不读实测上报）⇒ 首帧与稳态同一套几何。
+    //   `COVER_FIT_META_GAP_VP`（= 无界 `META_GAP_BELOW_COVER` 默认 50）在本仓是 `private`，
+    //   故按同口径复写一份 `MINI_LYRIC_COVER_META_GAP_VP`。
+    const geom: LyricMorphRect = this.expandState.playerCoverGeomRect();
+    const useGeom: boolean = geom.size > 0;
+    const anchorTop: number = useGeom
+      ? geom.y + geom.height + PlaybackPage.MINI_LYRIC_COVER_META_GAP_VP
+      : this.expandState.metaTopGeomY(this.lyricMorphT, rowH);
+    const target: number = anchorTop + rowH + PlaybackPage.MINI_LYRIC_GAP_VP;
     // ② 钳制：块底不许越过控制区上沿（用户实测「小歌词跑到进度条下面」就是没这一条）。
     //    控制区上沿优先用已量到的 `chromeTopMeasured`（窗口坐标）；量不到才用估算
     //    `estBoxHVp() + topInsetVp() + swiperGapVp()`。
     const chromeTopWindow: number = this.chromeTopMeasured > 0 ? this.chromeTopMeasured
       : (this.expandState.estBoxHVp() + this.expandState.topInsetVp() + this.expandState.swiperGapVp());
-    // ③ 两者都在**窗口坐标**里比，最后减页面盒顶换成页内相对位置（`position()` 要的是这个）。
-    const ceilingWindow: number = chromeTopWindow - PlaybackPage.MINI_LYRIC_BLOCK_H_VP;
-    const pageTop: number = this.expandState.lyricBoxTopVp;
+    // ③ 两者都在**窗口坐标**里比；`.position()` 要的也是窗口坐标（见下），所以不再做换算。
+    //    钳制必须**第一帧就生效**：`chromeTop` 量不到时用估算（`topInset + estBoxH + swiperGap`），
+    //    ⛔ 不许写成"量不到就不钳制"——那会让首帧直接压到进度条。
+    const ceilingWindow: number = chromeTopWindow - PlaybackPage.MINI_LYRIC_BLOCK_H_VP
+      - PlaybackPage.MINI_LYRIC_CEILING_PAD_VP;
+    // ★ 2026-10-18：**不再减 `expandState.lyricBoxTopVp`**。`.position()` 的参考系 = 页 0 那个
+    //   `Stack({ alignContent: Alignment.TopStart })` 的内容盒左上角，而它在结构上 ≡ 窗口原点
+    //   —— 同一个 Stack 里的歌词浮层就是把 `lyricMorph()` 的**窗口坐标**直接写进 `.position()` 的
+    //   （见 `PlayerExpandState.lyricBoxTopVp` 的 JSDoc 逐步推导 + 真机落点正确）。
+    //   而 `lyricBoxTopVp` 是**另一棵子树**（歌词页那根 Column，且在形变容器里）的实测值：
+    //   首帧 0、量到后变几十 ⇒ 减它只会让块在读到值的那一帧往下跳一段。
     const clamped: number = target < ceilingWindow ? target : ceilingWindow;
-    const local: number = clamped - pageTop;
-    return local > 0 ? local : 0;
+    const y: number = clamped > 0 ? clamped : 0;
+    // 一次性诊断（变化 > 0.5vp 才打）：`hdc shell hilog -x | Select-String 'RzdMiniLyricTop'`
+    if (!(Math.abs(y - this.miniLyricTopLoggedY) <= 0.5)) {
+      this.miniLyricTopLoggedY = y;
+      Logger.info(PlayerExpandState.LOG_TAG,
+        `RzdMiniLyricTop anchor=${anchorTop.toFixed(1)} src=${useGeom ? 'geom' : 'meta'} ` +
+          `target=${target.toFixed(1)} chrome=${chromeTopWindow.toFixed(1)} ` +
+          `src2=${this.chromeTopMeasured > 0 ? 'measured' : 'estimate'} ` +
+          `ceil=${ceilingWindow.toFixed(1)} y=${y.toFixed(1)}`);
+    }
+    return y;
   }
   /** False after teardown to ignore async image callbacks. */
   private isAlive: boolean = true;
@@ -568,14 +600,23 @@ export struct PlaybackPage {
   private static readonly MINI_LYRIC_LINE_H_VP: number = 26;
   /** 小歌词块高（vp）= `MINI_LYRIC_LINES(2) × 26 + 行距 3 + 上边距 2`。 */
   private static readonly MINI_LYRIC_BLOCK_H_VP: number = 57;
+  /** 块底与「控制区上沿」之间再留的安全间隙（vp）：钳制值 = `chromeTop − blockH − 8`。 */
+  private static readonly MINI_LYRIC_CEILING_PAD_VP: number = 8;
+  /**
+   * 「大封面底边 → 歌名行顶边」的间距（vp）：与 `PlayerExpandState.COVER_FIT_META_GAP_VP`
+   * （无界 `META_GAP_BELOW_COVER` 默认值 **50**）**同值** —— 那边是 `private`，这里按同一口径复写一份。
+   * `metaTopGeomY(t, rowH)` 的 `t = 0` 端用的也是它 ⇒ 小歌词锚点与歌名行锚点同源。
+   */
+  private static readonly MINI_LYRIC_COVER_META_GAP_VP: number = 50;
   /**
    * ★ 2026-10-17（**用户实测要求：更大 / 更淡 / 更上**）：
    *   ① `MINI_LYRIC_GAP_VP` **8 → -12**（往上移 20vp；"块底不越过控制区上沿"的钳制照旧保留在
    *      {@link PlaybackPage.miniLyricTopY} 里 —— 负间距只负责"往上"，越界由 `Math.min` 兜住）。
    *   ② 字号在 {@link MiniLyricLinesComponent} 里等比 +3fp（15→18 / 14→17），
    *      单行占位高因此 `MINI_LYRIC_LINE_H_VP` **22 → 26**，块高 49 → **57**。
-   *   ③ 透明度：调用点 `.opacity(morphContentOpacity × MINI_LYRIC_OPACITY)`，
-   *      静止态落到 **0.55**（原来静止态是 1.0 ⇒ 用户说的"不透明度更低/更淡"）。
+   *   ③ 透明度：调用点 `.opacity(pullChromeOpacity() × MINI_LYRIC_OPACITY)`
+   *      （2026-10-18 改：原来乘的是恒为 1 的 `morphContentOpacity` ⇒ 没有淡入窗口，见调用点注释），
+   *      静止态 `pullChromeOpacity() === 1` ⇒ 落到 **0.55**（用户要求的"更淡"原样保留）。
    */
   private static readonly MINI_LYRIC_OPACITY: number = 0.55;
   /** 闁诲繐绻愮换鎴︽偤閺囩姵瀚氱€广儱鎷嬮崯鍥煕閿濆啫濡挎繛鍫熷灩缁辨帡宕熼鍜佸仺 id闂佹寧绋戦悧鍡氥亹瑜忕槐?{@link PlaybackPage.logLayoutBoxes} 闂備焦褰冪换鎴犵矈閹绢喗鍋ㄦい顓熷笧缁€澶娾槈閹惧磭孝鐎殿噮鍓氱粙澶嬫償濠靛洤搴婃繛杈剧稻濞茬喖鍩€椤掍焦顫楃紒棰濆亰閺佸秵寰勯崼姘壕?*/
@@ -763,6 +804,51 @@ export struct PlaybackPage {
       `squashing=${(this.expandState.morphSquashY !== 1)} stage=${this.expandState.morphStage} ` +
       `meshSrc=${this.meshSrc !== undefined ? 'yes' : 'no'} playing=${this.state.isPlay} ` +
       `active=${this.state.isShowPlay}`);
+  }
+
+  /** 上一次 `RzdBgPhase` 的签名（去重，避免 20fps 刷屏）。 */
+  private lastBgPhaseLog: string = '';
+
+  /**
+   * ★ 2026-10-18（**只加日志、不改行为**）：播放页背景「两团色的位置」判读专用。
+   *
+   * ## 为什么需要它
+   * 用户症状：「有些歌曲是两个背景色，动画过程中两个颜色的位置和结束后的位置**正好反过来**」。
+   * 而网格这条链已经逐条核过与上游一致 —— `vertices=(n+1)×0.5×w/h`（`wujie.pa:89748-90273`）、
+   * `fillFallback` 四角 A/B/C/D=TL/TR/BL/BR（`:91528-91611`）、`draw()` 里**没有任何**
+   * rotate/scale/镜像（`:62656-62713`）⇒ 这两件事在"形变中"和"结束后"**完全相同**，
+   * 变不出"位置互换"。所以差别只可能来自**"那一刻是谁在画 / 谁盖住谁"**，一共三条：
+   *
+   * 1. `MeshCoverBg` 的源在形变期间换过一次（兜底 64×64 → 封面 64×64）；
+   * 2. `FlowLightBackground()`（**本仓自造，上游 `grep FLOW_LIGHT|HdsEffect|visualEffect` = 0 命中**）
+   *    在这块背景栈里是最底层，被上面那层**不透明的** `backgroundColor(defaultImageBgColor)`
+   *    按 `1 − backgroundRevealOpacity()` 的比例"漏出" ⇒ **形变期可见、结束后被整片盖住**；
+   * 3. 都没有 ⇒ 回头查 `MeshCoverBg` 的 `resize w/h`（形变期应是"窄画布"）。
+   *
+   * ## 判读（`hdc shell hilog -x | Select-String 'RzdBgPhase'`）
+   * 一行 = `pull mode op p clip mesh ver tint flow playing active`。三次冷启动各点开一次、停 2s：
+   * - `flow=1` 且 `op` 从 `0.040` 涨到 `1.000` ⇒ ② 这条在（结束后流光被盖死）；
+   * - `flow=0` ⇒ ② 排除（流光层没挂载）；
+   * - 配合 `RzdBgPhaseMesh source=cover|fallback t=`：若 `t` 都远小于形变时长（≈600ms），
+   *   ⇒ ① 这条在（形变里换过源）；
+   * - 配合 `RzdBgPhaseMesh resize w= h=`：形变期 `w` 若已等于窗口宽 ⇒ 布局没跟着形变走。
+   */
+  private logBgPhase(): void {
+    const op: number = this.backgroundRevealOpacity();
+    const sig: string = `${this.expandState.pullMode ? 1 : 0}|${op.toFixed(3)}|` +
+      `${this.meshSrc !== undefined ? 1 : 0}|${this.tintReady ? 1 : 0}|` +
+      `${this.flowLightState.enabled ? 1 : 0}`;
+    if (sig === this.lastBgPhaseLog) {
+      return;
+    }
+    this.lastBgPhaseLog = sig;
+    Logger.info(PlayerExpandState.LOG_TAG,
+      `RzdBgPhase pull=${this.expandState.pullMode ? 1 : 0} ` +
+      `mode=${this.expandState.pullMode ? 'pull' : 'content'} op=${op.toFixed(3)} ` +
+      `p=${this.expandState.morphP.toFixed(3)} clip=${this.expandState.morphClipHeight.toFixed(0)} ` +
+      `mesh=${this.meshSrc !== undefined ? 1 : 0} ver=${this.meshSrcVersion} ` +
+      `tint=${this.tintReady ? 1 : 0} flow=${this.flowLightState.enabled ? 1 : 0} ` +
+      `playing=${this.state.isPlay ? 1 : 0} active=${this.state.isShowPlay ? 1 : 0}`);
   }
 
   /**
@@ -2423,7 +2509,9 @@ export struct PlaybackPage {
     if (!this.expandState.morphContainerActive()) {
       return 1;
     }
-    const raw: number = this.expandState.morphP / PlaybackPage.PULL_BG_IN_END;
+    // 内容窗口（上游 `pullBgIn = clamp(effT / PULL_BG_IN_END)`，`wujie.pa:176295-176326`）取**内容时间线**
+    // ⇒ 560ms + `EASE_OUT_STR`，与几何那条 350ms 分开（见 `PlayerExpandState.contentP` 的说明）。
+    const raw: number = this.expandState.contentProgress() / PlaybackPage.PULL_BG_IN_END;
     return raw < 0 ? 0 : (raw > 1 ? 1 : raw);
   }
 
@@ -3616,6 +3704,38 @@ export struct PlaybackPage {
         //   闁炽儲鏌￠埀?濞戞挸绨肩粭鍌氥€掗崨濠勬Ж閻?`applyPullProgress(effT())` 闁告艾鏈悗顖炲Υ?
         this.expandState.morphP = 1;
       });
+      // ★★★ 2026-10-18：**内容时间线单独一条补间**（用户实测「进度条和下面几个控件飞入比无界早了很多」）。
+      //
+      // 上游是**两条**时间线，同一起点、各走各的（`_recover/logic-src/ExpandAnimation驱动与补间定稿.md:480-483`
+      // + `MiniPlayer布局与形变栈补充定稿.md:222-235`）：
+      // ```
+      //   容器几何（scale/translateX/Y/clipHeight/radius）← ExpandAnimation.doEnter = 350ms + Curve.EaseInOut
+      //                                                      ↑ 就是上面那条 animateTo
+      //   内容窗口（歌名行 0.18→0.62 / 进度条+传输行 0.45→1.00 / 背景 0→0.30）
+      //       ← MainPage.animateMorphT(1, ENTER_MS, EASE_OUT_STR, λ) = **560ms + 快出慢收**
+      //         wujie.pa:154167-154169  ldai 0x230 → definepropertybyname "ENTER_MS"    // 0x230 = 560
+      //         wujie.pa:163524-163547  animateMorphT + ENTER_MS + ldexternalmodulevar 0x16 "EASE_OUT_STR"
+      //         wujie.pa:145608-145661  animateMorphT = createAnimator + onFrame 逐帧写 morphT
+      //   PlayerPage 那边读的是同一份 AppStorage 键（`pullT ≡ morphT`，pullT写入算式与形变枚举.md:24-81）
+      //   ⇒ `effT()`（wujie.pa:171535-171548）= isMorphTarget() ? 1 : pullT 就是这个 560ms 的进度。
+      // ```
+      // ⛔ 不许把这两层合并进同一个 animateTo：合并就等于把内容窗口压进 350ms（墙钟上早 37%），
+      //    正是用户看到"飞入比无界早"的量化来源。
+      const contentGen: number = this.expandState.beginContentTween();
+      this.getUIContext().animateTo({
+        duration: PlayerExpandState.MORPH_CONTENT_DURATION_MS,
+        curve: curves.cubicBezierCurve(0.23, 1.0, 0.32, 1.0)
+      }, (): void => {
+        this.expandState.contentP = 1;
+      });
+      Logger.info(PlaybackPage.logTag,
+        `RzdMorphOpen geoMs=${PlaybackPage.MORPH_OPEN_DURATION_MS}/EaseInOut ` +
+          `contentMs=${PlayerExpandState.MORPH_CONTENT_DURATION_MS}/EASE_OUT_STR(0.23,1,0.32,1) ` +
+          `gen=${contentGen}`);
+      // 内容补间收尾（世代号不匹配时 `endContentTween` 自己丢弃旧回调）。
+      setTimeout((): void => {
+        this.expandState.endContentTween(contentGen, 1);
+      }, PlayerExpandState.MORPH_CONTENT_DURATION_MS + 30);
     } catch (err) {
       // 闁荤偞绋忛崕闈浳涚捄銊﹀皫闁炬艾鍊婚悷婵嬫煛婢跺牆鍔欑紒鈥冲暟閹茬増鎷呴懞銉ュ姍闂佸憡甯楀姗€鎮鹃鍕瀬閻庢稒菤閸嬫挻绗熸繝鍕槷缂傚倷鐒︾换鈧紒妤€顦甸幊妤呮嚍閵夈儙鈺呮煙缂併垹骞楅柡鍌欑劍閵囧嫰鎮介崹顐ｇ暚闂?闁哄鏅炲〒鍦礊濮椻偓瀵爼鏁撻悩韫凹婵炴垶鎸撮崑鎾绘倶韫囨挾绠版繛?
       const e = err as BusinessError;
@@ -3640,6 +3760,9 @@ export struct PlaybackPage {
         this.expandState.morphReset();
         this.expandState.morphStage = MorphStage.OPEN;
         this.expandState.morphP = 1;
+        // 直接落位：内容时间线也一起落 1（两条线静止态必须同值）。
+        this.expandState.cancelContentTween();
+        this.expandState.contentP = 1;
         this.expandState.measureGeometry(this.getUIContext(), true);
         return;
       }
@@ -3649,7 +3772,14 @@ export struct PlaybackPage {
       //   闂佸疇娉曟刊瀵哥箔?闁哄鏅滈悷銈囩博閹绢喗鐓傞煫鍥ㄦ尭濞懷呮喐閺夊灝鑸归柟?*婵炴垶鎸搁鍕博鐎涙ɑ濮?*闁诲繒鍋炲ú鏍閹达附鏅柛顐ｇ矌閻熸繈鏌涢弬璇插婵犫偓閻楀牊濮滄い鏂垮⒔閻帡鏌ｉ幇顔筋仧缂佽鲸宀搁弫宥囦沪閹屾殹婵炲濮伴崕閬嶆偩閻樿鍙?婵炴垶鎸搁鍕博鐎涙ɑ濮滄い鏃囧Г缁绢垶鏌?闂佹眹鍔岀€氼亞鎹㈠鑸碘挃闁冲搫顑囩粈?
       //      婵炴垶鎸哥粔闈浳ｉ幖浣稿珘妞ゆ帒鍟伴弸鍌炴煢閳ь剟骞嬮幒鏃傂㈤柣搴ｆ暬閳ь剚绋撻悷婵嬫倵闂堟稒璐℃繛鍫熷灦缁楃喎鈹戦崶褏銈﹂梺?
       this.expandState.measureGeometry(this.getUIContext(), true);
-    }, PlaybackPage.MORPH_OPEN_DURATION_MS + 30);
+      // ★★★ 2026-10-18：**落位（ENTERING → OPEN）推到内容时间线跑完那一刻**，与上游一致。
+      //   上游 `finishEnter()` 是 `animateMorphT(1, ENTER_MS, EASE_OUT_STR, λ@5**#)` 的 **onDone**
+      //   （`wujie.pa:163537` 的 `definefunc 0x21 …@5**#` + `wujie.pa:163554-163559` 的 `finishEnter`），
+      //   它里面才 `setMorph(OPEN, NONE)`（`ExpandAnimation驱动与补间定稿.md` §四 第 4 步）。
+      //   ⛔ 这里原来用的是 `MORPH_OPEN_DURATION_MS + 30`（= 380ms，几何那层的收尾）：`morphSettleOpen()`
+      //      会把 `morphStage` 置 OPEN ⇒ `morphLive()` 变假 ⇒ `pullChromeOpacity()` / `pullBottomIn()`
+      //      全部**立刻返回 1**，内容窗口被硬切成"到点"—— 那 560ms 的内容补间就白跑了（用户实测的就是这个）。
+    }, PlayerExpandState.MORPH_CONTENT_DURATION_MS + 30);
   }
 
   /**
@@ -4222,6 +4352,10 @@ export struct PlaybackPage {
         //   闁?闁稿繑濞婂Λ瀵告崉椤栨瑧鐟?闁告瑯浜滄晶鎸庢償閺囩偤鐛撻柤?闁挎稑鏈婊堝及椤栨粍鏆忛柟鏉戝槻閻ゅ嫬霉鐎ｎ剚鐣遍柕鍡楄嫰閸櫻囨⒒椤撶喐顦ч柤鍐叉湰濞呮瑩宕ｅ鈧划锕傚Υ瀹ュ啠鍋?
         //   闁绘粍婢樺﹢顏堝矗椤忓嫬鏅搁柣鈺婂枟閻栵綁宕愮涵椋庣`@Monitor('morphP')` 闂侇偅鍔曢幎姘舵煂瀹ュ洨鏆?闁?闁煎啿鏈▍娆忊柦?`pullBgIn` 妤犵偠娅曠划锕€菐閳ュ啿姣夐柕?
         this.expandState.morphP = 0;
+        // ★ 2026-10-18：**内容时间线在同一个 animateTo 里一起写 0**（不另起一条）。
+        //   上游关闭那条 `animateMorphT(reverseMs, 0, REVERSE_EASING)` 驱动的是同一条 `morphT`
+        //   ⇒ 内容窗口与几何共用这条 `460 × max(0.4, morphT)` + `REVERSE_EASING`，两层天然同步。
+        this.expandState.contentP = 0;
       });
       this.closeSettleTimer = setTimeout((): void => {
         this.closeSettleTimer = -1;
@@ -4719,8 +4853,17 @@ export struct PlaybackPage {
                         //   闂佸吋婢橀張顒勬偤閺囥垹瑙︾€广儱鐗滈弨浠嬫煟濠婂嫭绶叉繝鈧鍕靛晠闁告瑥顦伴弳顓㈡煟?*婵＄偑鍊濆褔宕幘顔奸敜闁归偊鍘鹃崹?*闂佹寧绋戦悧鍛箔閸屾哎鈧帞绮欓崹顔剧▔閻庡灚婢樼€氬摜妲愬璺虹劷?婵炴垶鎸哥粔鎾疮閳ь剟姊婚崶锝呬壕闁荤喐娲戝ù鍥╂崲閺嶃劎鈻旀い蹇撴硽婢跺鈻斿〒姘功缁€?
                         //   闂佷紮绲鹃悷褍顭囬崘顔肩煑鐎广儱鐗冮崑鎾朵沪閼测晝鐛ラ梺纭呮硾閿曘倝鎮鹃悩璇茬闁靛鍎遍悡鍌炴煛閸モ晝绡€缂佹鎳樺Λ鍐閻樿尙顔岄梺鐟板⒔閸嬬姷鎹㈠Ο缁樺劅闁挎棁濮ら拏瀣煏閸℃浜扮紒?
                       // 闁诲繐绻愮换鎴︽偤閺囩姵瀚氱€广儱鎳愬锝吤?闂佸憡鍔曢幊搴敊?闂佹寧绋掗懝鎯ь嚕閻ｅ瞼纾介柡宥庡墰濡差垶姊?`contentOpacity` 闂佽В鍋撻柟瀛樺笧缁夋挳鏌熼棃娑毿ら柣?1
-                      // ★ 2026-10-17（用户实测要求：更淡）：静止态 1.0 → 0.55。
-                      .opacity(this.expandState.morphContentOpacity * PlaybackPage.MINI_LYRIC_OPACITY)
+                      // ★ 2026-10-18（用户：「我要的是小歌词和歌曲名歌手名一样从下面飞上来」）：
+                      //   歌名/歌手那一行（`floatingMeta`）的不透明度走 `targetMetaOpacity()` → `pullChromeOpacity()`
+                      //   = `clamp((pullT − 0.18)/0.44)`（无界 `wujie.pa:176459-176505`，吃 `effT = pullT`，
+                      //   见 `PlayerExpandState.pullChromeOpacity`）；
+                      //   小歌词原来乘的是 `morphContentOpacity`（本仓**恒 = 1**，见 `applyMorphGeometry`）
+                      //   ⇒ 它没有淡入窗口：形变裁剪窗口（`morphClipHeight()`）一扫到它，它就是"整块 0.55
+                      //   直接出现、再往上挪"，而同一时刻歌名行才刚开始淡入 ⇒ 观感上不在同一组里。
+                      //   改成与歌名行**同一个窗口、同一条曲线**，再乘用户要求的 0.55 淡（静止态仍是 0.55，
+                      //   与改动前逐值一致）。位移本来就与歌名行同名（下一行 `.translate({ y: metaRiseVp() })`）
+                      //   ⇒ 两组从此同起同落。
+                      .opacity(this.expandState.pullChromeOpacity() * PlaybackPage.MINI_LYRIC_OPACITY)
                       // 闂佸疇妫勯幊澶娢?2026-10-15 闂佹椿娼块崝宥夊春濞戞埃鍋撶憴鍕孩闁汇劎鍠栭弫宥咁潩閵夈垹浜?*闂佺绻愰悧鎾凰夐敐澶婄闁靛／鍕殸闂佸搫瀚烽崹浼存儍椤掆偓椤垹鐣濋崘顏呅撻梺鍛婄矊閺堫剟寮ぐ鎺撳癄闊洦鏌ㄩ惁濠氭⒑?*闂?
                       //   闂?闁诲繐绻愮换鎴︽偤閺囩姵瀚氱€广儱鐗愬▔?*缂備焦顨忛崗娑氱博鐎靛摜纾?*闂佹眹鍔岀€氼厼顪冮崒鐐粹拻閻庨潧鎽滃畷鍫曟煥濞戞ɑ缍乪arlyRiseVp()`闂佹寧绋戦張顒€螞椤撶喓顩查幖娣灩娴犳﹢鏌涢幒鏇熺【閻忓浚鍨堕弻鍥晲閸曨収浼囩紓鍌欑鐎氬摜妲愬鑸垫櫖?
                       //   婵炲濮寸花鑲╃箔閸涙潙纭€闁搞儺浜濆畷?180vp闂佹寧绋掗惄顖氼焽閵堝拋娼伴柕蹇婃閸嬫挻鎷呮搴Ｐ㈢紓浣割槺缁垱绂?0闂佹寧绋戦惉鍏兼櫠濡ゅ懏顥堥柕蹇嬪€愰崑鎾诲箛椤掆偓閸撹偐绱掓潏鈺佇＄紒妤€顦靛畷锝呂熺化鏇炰壕?
@@ -6263,6 +6406,7 @@ export struct PlaybackPage {
               .hitTestBehavior(HitTestMode.None)
               .onAreaChange((): void => {
                 this.logBgLayer();
+                this.logBgPhase();
               })
           }
           // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀闁告侗浜濋～?2026-10-17闂?*闂佺厧鍟块張顒€鈻嶅▎鎴斿亾閻熻埇浠掗悗闈涙湰缁嬪鍩€椤掆偓椤?100%闂?闂佹悶鍎遍幖顐︽偩閸撗傜剨闁告繂瀚烽崵?闂佸憡鐟禍鐐靛垝閹殿喚纾鹃柟瀵稿仧婢规劙鏌ｉ姀锝庡殭缂佹梻鍏橀弫宥囦沪閼测晝鎲圭紓鍌欑劍閻熴儳绮╂搴濇勃闁?*闂?
