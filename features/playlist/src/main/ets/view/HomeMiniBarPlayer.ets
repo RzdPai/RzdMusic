@@ -68,6 +68,16 @@ export struct HomeMiniBarPlayer {
    * 灏侀潰蹇呴』璺熺潃鍥哄畾锛屽惁鍒?HDS 鏍忔帓甯冨彉鍖栦細鎶婂皝闈㈢缉鍒?30vp銆?
    */
   @Param lockTwoRowCoverSize: boolean = false;
+  /**
+   * 是否由本组件自绘背板（{@link MiniBarBackplate}）。
+   *
+   * - `true`（默认，首页那条）：首页底栏走 `barFloatingStyle.miniBar` + `enableMiniBarBackground: false`
+   *   ⇒ HDS 不画迷你条那层背板，由这里自绘 —— 只有这样才能让背板跟 `morphSquashY` 一起压/一起弹。
+   * - `false`（二级页那条）：那条住在 **HDS 浮动底栏**（`HdsTabs.barFloatingStyle.systemMaterialEffect`）
+   *   ⇒ 胶囊与材质由 HDS 画；这里再自绘一层就是「真材质 + 半透明蒙版 + 模糊」叠两层，
+   *   官方材质被洗白（2026-10-18 用户要的「沉浸光感」就看不出来了）。
+   */
+  @Param showSelfDrawnBackplate: boolean = true;
   /** 涓婃媺鎵撳紑鎾斁椤碉紙璺熸墜锛夛細椹卞姩鍏变韩褰㈠彉杩涘害锛屾敹灏捐ˉ闂翠氦缁欏３灞傘€?*/
   private panOption: PanGestureOptions = new PanGestureOptions({ direction: PanDirection.Vertical });
 
@@ -258,7 +268,9 @@ export struct HomeMiniBarPlayer {
     //     鎸傚埌鍐呭眰 `Row` 涓婂氨鍙堝彉鎴?鍙帇鍐呭"锛堥偅姝ｆ槸鏀瑰墠鐨勫舰鐘讹級銆?
     Stack({ alignContent: Alignment.Center }) {
       // 鑳屾澘鍦ㄤ笅銆佸唴瀹瑰湪涓婏紙`Stack` 鍚庡啓鑰呭湪涓婏級
-      this.MiniBarBackplate()
+      if (this.showSelfDrawnBackplate) {
+        this.MiniBarBackplate()
+      }
       Row({ space: 8 }) {
       HomeMiniBarAlbumCover({
         playerViewModel: this.playerViewModel,
