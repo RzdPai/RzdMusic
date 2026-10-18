@@ -215,6 +215,17 @@ export struct PlaybackPage {
    * 闁宠法濯寸粭?闁告帗绻傞埀?-1 = 閺夆晜蓱閻ュ懘鏌岃箛鎾崇厒闁挎稒鐩崑鍛村籍閸撲焦鏆忛柟鎭掑妿閻ｅ宕愰悡搴″箲閹煎瓨娲忛埀顒€鍊块崳娲礆妫颁胶顓洪柛姘凹缁辨壆鎲撮敃鈧ぐ鍌涚▔閳ь剙鈻庨敓鐘叉鐎点倗灏ㄧ槐婵嬫煢閸愭彃鐓戦梻鍛箰瀹撳棝鎮介悢鍛婃珡闁?
    */
   @Local chromeTopMeasured: number = -1;
+  /**
+   * ★★★ 2026-10-18（用户实测「歌词位置固定了但偏了（压在进度条上）」）：
+   * **控制区（进度条 + 传输行）自己那一层的上沿**（窗口坐标，vp；-1 = 还没量到）。
+   *
+   * 为什么不能再用 `chromeTopMeasured`：那个量取自 `SWIPER_GAP_ROW_ID` 那个**空行**，
+   * 它挂在 swiper 内部（比进度条更靠下）⇒ 拿它当"控制区上沿"会让钳制值偏低，
+   * 结果小歌词照样压在进度条上（真机截图实测）。
+   * 这里量的是 chrome 那一层（`.translate({ y: pullBottomYVp() })` 所在的容器）：
+   * 它的布局全局 y 加上同一帧的 `pullBottomYVp()`（布局值不含 transform）才是屏幕上的上沿。
+   */
+  @Local chromeBlockTopVp: number = -1;
 
   /** 闂佸搫娲╃亸娆徝烘导鏉戠闁哄秲鍔嶉弳顏堟煢濡櫣绠冲褎顨婂鐢割敆閳ь剝銇愭径鎰闁哄秲鍔嶉ˇ褔鏌涢幒妤佹暠闁哄苯锕ㄧ粻娑㈠礃閵娿劌鐓傞梺?*/
   @Monitor('state.selectIndex', 'favStore.favoriteVersion')
@@ -508,10 +519,14 @@ export struct PlaybackPage {
       : this.expandState.metaTopGeomY(this.lyricMorphT, rowH);
     const target: number = anchorTop + rowH + PlaybackPage.MINI_LYRIC_GAP_VP;
     // ② 钳制：块底不许越过控制区上沿（用户实测「小歌词跑到进度条下面」就是没这一条）。
-    //    控制区上沿优先用已量到的 `chromeTopMeasured`（窗口坐标）；量不到才用估算
-    //    `estBoxHVp() + topInsetVp() + swiperGapVp()`。
-    const chromeTopWindow: number = this.chromeTopMeasured > 0 ? this.chromeTopMeasured
-      : (this.expandState.estBoxHVp() + this.expandState.topInsetVp() + this.expandState.swiperGapVp());
+    //    ★ 2026-10-18 三级优先：① 控制区**自己那一层**的实测上沿 `chromeBlockTopVp`（真机验证这条才对）
+    //      → ② 旧的 `chromeTopMeasured`（取自 swiper 内部的空行，比进度条更靠下，只作兜底）
+    //      → ③ 估算 `estBoxHVp() + topInsetVp() + swiperGapVp()`（首帧还没量到时用）。
+    const chromeTopWindow: number = this.chromeBlockTopVp > 0 ? this.chromeBlockTopVp
+      : (this.chromeTopMeasured > 0 ? this.chromeTopMeasured
+        : (this.expandState.estBoxHVp() + this.expandState.topInsetVp() + this.expandState.swiperGapVp()));
+    const chromeSrc: string = this.chromeBlockTopVp > 0 ? 'block'
+      : (this.chromeTopMeasured > 0 ? 'measured' : 'estimate');
     // ③ 两者都在**窗口坐标**里比；`.position()` 要的也是窗口坐标（见下），所以不再做换算。
     //    钳制必须**第一帧就生效**：`chromeTop` 量不到时用估算（`topInset + estBoxH + swiperGap`），
     //    ⛔ 不许写成"量不到就不钳制"——那会让首帧直接压到进度条。
@@ -531,7 +546,7 @@ export struct PlaybackPage {
       Logger.info(PlayerExpandState.LOG_TAG,
         `RzdMiniLyricTop anchor=${anchorTop.toFixed(1)} src=${useGeom ? 'geom' : 'meta'} ` +
           `target=${target.toFixed(1)} chrome=${chromeTopWindow.toFixed(1)} ` +
-          `src2=${this.chromeTopMeasured > 0 ? 'measured' : 'estimate'} ` +
+          `src2=${chromeSrc} ` +
           `ceil=${ceilingWindow.toFixed(1)} y=${y.toFixed(1)}`);
     }
     return y;
@@ -556,7 +571,26 @@ export struct PlaybackPage {
    * 闂佸搫鍟版慨鐑藉疾?Tokens 闂佹眹鍔岀€氼亞鈧潧鏈顏堫敆閳ь剙鈹冮埀顒佷繆濡ゅ瀵肩紓宥呮嚇瀵?300ms / 420ms闂佹寧绋掔粙鏍崲閺嶎厽鐓傞悘鐐舵缁?420ms 闂備緡鍙忕徊楣冨Υ閸岀偞鍎嶉柛鏇ㄥ櫘濞煎酣鏌熼幍顔兼珢缂佽鲸鐟╁顐﹀箻椤旇　鍋撴径鎰嵍闁靛ě鍛闂佽　鍋撻柟鎯ф噽缁€?
    * 濠殿噯绲鹃弻銊╂儑椤掑嫭鐒鹃柕濞垮劚鐢绱掓潏鈺佇ｇ€规洖寮堕幏鍛吋婢跺绮柣鐔告磻閻掞箑煤閹稿骸绶炴慨姗嗗幗椤ρ囨⒒閸屾繃褰х紒杈ㄥ哺閺佸秶浠﹂悙顒勬暅缂備焦宕樺▔鏇㈠极閵堝洠鍋撻悷鏉挎殶婵?`cubic-bezier(0.23, 1.0, 0.32, 1.0)`闂佹寧绋戦悧鍡涘箵閳哄懎绀勯柧蹇撴贡婢跺嫰鏌涜箛瀣姷缂佽鲸宀告俊?
    */
-  private static readonly MORPH_OPEN_DURATION_MS: number = 350;
+  // ★★★ 2026-10-18 更正（字节码直证）：**上游「点击打开」这条路上没有 350ms 的 `doEnter`。**
+  //   ```
+  //   setupExpandTransition 的 `param.pull === true` 分支（wujie.pa:179258-179317）
+  //     只做 expand.init() + pullMode=true + pullGeomReady=false 然后 return；
+  //     **没有** NavTransition.register。
+  //   doAnimation / doEnter 的唯一调用者 @37*#^2（wujie.pa:193340-193367）
+  //     只被 NavTransition.register 写进 registry（wujie.pa:179427，**只存在于 param.srcId 分支**）；
+  //   navContentTransition 在 registry 里取不到 param 就 `return undefined`（wujie.pa:52444-52482）
+  //     ⇒ 该 push 走系统默认转场，而 beginMorphEnter 是 pushPath(..., animated=false)（wujie.pa:146617-146622）
+  //     ⇒ doEnter 一次都不跑。
+  //   ```
+  //   ⇒ 形变路径的**容器几何**只由 `onPullTChanged → expand.applyPullProgress(effT())`
+  //     （wujie.pa:174826-174889）驱动；`effT = isMorphTarget() ? pullT : 1`（wujie.pa:171535-171549），
+  //     而 `pullT` 就是 `morphT` = `animateMorphT(1, ENTER_MS=560, EASE_OUT_STR)`
+  //     （wujie.pa:163524-163547 调用 / 154167-154169 常量 / 145608-145661 本体）。
+  //   ⇒ **几何与内容是同一条 560ms + `cubic-bezier(0.23,1.0,0.32,1.0)`。**
+  //   写 350/EaseInOut 的后果（= 甲方说的"飞入时间不对"）有两层：
+  //     ① 封面早 **210ms** 落位（350 vs 560）；
+  //     ② 前段几乎不动（EaseInOut 是 S 形慢起；上游 ease-out 在 20% 时间就到 66%、50% 到 88%）。
+  private static readonly MORPH_OPEN_DURATION_MS: number = 560;
   /**
    * 闁诲骸婀遍幊鎾斥枍閹烘洏浜归柕蹇曞Т缂嶄線鏌￠埀顒勫箚閻楀牆闂梺鎸庣☉閻楀棗顕ｆ禒瀣Е闁规惌鍨崇粈鍡涙煟閵娿儱顏俊鐐插€垮褰掑礌閿涘嫮顦﹎s闂佹寧绋戦¨鈧紒杈ㄦ緲琚欓柡鍌濇硶濞兼梻鈧鍠掗崑鎾绘煟閿濆啫鍔氶柟鐑╂櫊閺佸秶浠﹂悙顒佹瘑闁荤姍鍥ㄦ暠婵炶偐鏁搁幉鐗堟媴缁嬪灝褰欓梺鍏兼綑濡酣鍩€?
    */
@@ -3692,7 +3726,12 @@ export struct PlaybackPage {
     try {
       this.getUIContext().animateTo({
         duration: PlaybackPage.MORPH_OPEN_DURATION_MS,
-        curve: Curve.EaseInOut
+        // ★ 曲线必须是上游那条 `EASE_OUT_STR`（= `Tokens.EASE_OUT` 的字符串形式），
+        //   别用 `Curve.EaseInOut`：前者 20% 时间已到 66%、50% 到 88%（快出慢收），
+        //   后者是 S 形慢起 —— 观感上就是"封面先愣一下再飞"，与无界的"弹出去"完全不同。
+        //   `curves.cubicBezierCurve(x1,y1,x2,y2)` 与 `createAnimator({easing:'cubic-bezier(...)'})`
+        //   数学等价（都是固定 P0=(0,0)/P3=(1,1) 的三次贝塞尔；SDK：@ohos.curves.d.ts:578）。
+        curve: curves.cubicBezierCurve(0.23, 1.0, 0.32, 1.0)
       }, (): void => {
         // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀闁告侗浜濋～?2026-10-17闂?*闂佹椿娼块崝宥夊春濞戞氨绠?1 闂?闂佺粯鍔楅幊鎾诲吹椤曗偓楠炲秹骞樺畷鍥╋紱闂佸搫鍟版慨瀛樻叏閳哄懏鍋ㄦ慨鐟版礌閸嬫挻鎷呴悜妯煎嚱闂佽浜介崕閬嶅春瀹€鈧槐鎺楀箻鐎涙ê鐨㈡繛杈剧到缁夊爼鎮?闂佹眹鍔岀€氼參鎮ч幘顔肩倞?*闂?
         //
@@ -3729,9 +3768,9 @@ export struct PlaybackPage {
         this.expandState.contentP = 1;
       });
       Logger.info(PlaybackPage.logTag,
-        `RzdMorphOpen geoMs=${PlaybackPage.MORPH_OPEN_DURATION_MS}/EaseInOut ` +
+        `RzdMorphOpen geoMs=${PlaybackPage.MORPH_OPEN_DURATION_MS}/EASE_OUT_STR(0.23,1,0.32,1) ` +
           `contentMs=${PlayerExpandState.MORPH_CONTENT_DURATION_MS}/EASE_OUT_STR(0.23,1,0.32,1) ` +
-          `gen=${contentGen}`);
+          `settleMs=${PlayerExpandState.MORPH_CONTENT_DURATION_MS + 30} gen=${contentGen}`);
       // 内容补间收尾（世代号不匹配时 `endContentTween` 自己丢弃旧回调）。
       setTimeout((): void => {
         this.expandState.endContentTween(contentGen, 1);
@@ -5271,6 +5310,15 @@ export struct PlaybackPage {
               //      恒为 180vp、不随卡片收缩 ⇒ 收起来时整排相对卡片底部一路下沉（上游是 200×scale）。
               //   ⚠️ `pullBottomOpacity()`（`wujie.pa:176411-176429`）**不接**：用户要求关闭期间这两颗一直在。
               .translate({ y: this.expandState.pullBottomYVp() })
+              // ★ 2026-10-18：把**这一层自己的上沿**量出来（小歌词钳制要用它，别再拿 swiper 内部的空行当上沿）。
+              //   `globalPosition` 是**布局**坐标（不含 `.translate`）⇒ 补上同一帧的 `pullBottomYVp()`。
+              .onAreaChange((_oldArea: Area, area: Area): void => {
+                const y: number = areaLengthToVp(area.globalPosition.y)
+                  + this.expandState.pullBottomYVp();
+                if (Math.abs(y - this.chromeBlockTopVp) > 0.5) {
+                  this.chromeBlockTopVp = y;
+                }
+              })
               .onTouch((event: TouchEvent): void => {
                 this.touchChrome('controlTouch');
                 // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-16闂佹寧绋戦悧蹇涘矗鎼淬劌绠规い鎺嶇劍閿熴儵鏌ｉ敐鍛効缂佽鲸宀搁弫?*闂佸綊鏀遍悧鏇熸叏閳哄懎绠崇憸宥夊春濡ゅ懎绾ч柍鈺佸暞閺嗩亪鎮?/ 闁诲繒鍋炲ú鏍?*闂佹寧绋戝濉€arCollapse`闂佹寧绋戦ˇ顓㈠焵?
@@ -6485,7 +6533,15 @@ export struct PlaybackPage {
           // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀闁告侗浜濋～?2026-10-17闂?*婵炴垶鎸哥粔褰掑焵椤掆偓缁绘垵危閹寸偞鍎熼柡鍥╁仱閻?* 闂佺偨鍎查弻锟犲焵?缂傚倸鍟崹鍫曟偋閸涘﹦鈻旈柛銉椤忚鲸绻涘畝瀣？闁轰線绠栧畷娆撴倻濡妾烽梺鎸庣☉婵傛梻寮ч崘鈺冣枖鐎广儱瀚粣妤呮⒒閸ャ劌绲婚柛銈庡幗閿涘啴寮介婧惧亾?闁哄鏅炲〒鍦礊濮椻偓瀵爼鍩ラ崨顖滎槴
           //   闂?`defaultImageBgColor`闂佹寧绋戝濉篻ba(32,32,32,1)`闂佹寧绋戦張顒€锕㈤悧鍫涗簻闂傚牊绋戦弬褔鏌￠崼婵愭Ш婵?闁哄鏅滆摫闁汇儱鎳樺鍨緞婵犲倻鎮奸梺鑲╂嚀瀵泛顪冮崒鐐村剭闁告洦鍋嗘穱娲煠?闂佹寧绋戦ˇ顓㈠焵?
           //   闂佸疇娉曟刊瀵哥箔?婵炴垶鎸哥粔鐑藉礂濮椻偓瀹曟繈鎮╅崘鑼海"缂備焦顨忛崗娑氳姳閳哄倻鈻旀い蹇撳閹藉秹鏌ら崫鍕偓濠氬磻?闂佺偨鍎查弻锟犲焵?闁诲海鎳撻妵妯尖偓闈涚焸瀵即顢涘鐓庢櫍闂侀潻缍嗛悡澶屾濠靛洨鈻旈柕鍫濆閸?100% 闁诲孩绋堥弲娑㈡偤濞嗘劕顕辨慨妯块哺濡鏌涘顓炵仸閻㈩垱鎸搁锝夊焵椤掑嫬违?
-          .backgroundColor(PlaybackPage.defaultImageBgColor)
+          // ★★★ 2026-10-18（照搬无界「背景宿主没有底色」——用户「点击展开动画过程背景还是有问题，没搬全」）
+          //   上游背景宿主那一层**没有任何 `backgroundColor`**（见 `_recover/logic-src/full/差异表-背景.md` P1；
+          //   `PlayerPage完整UI定稿.md` 里那个带深色底的 Column 是 `motionLayer`，不是背景宿主 —— 旧注释记错了）。
+          //   原来这里是不透明的 `defaultImageBgColor`（`rgba(32,32,32,1)`），而形变早期 `MeshCoverBg`
+          //   自己的 opacity 只有 `pullBgOpacity() = 0.04 + pullBgIn×0.96`（`wujie.pa:176560-176579`）
+          //   ⇒ 屏上 96% 露出来的是**这块深灰卡片**；上游露出来的是**透明底（能看到下面的首页/迷你条）**。
+          //   这是"点击展开过程中背景观感与无界不一样"最直接的一条。
+          //   ⚠️ 静止态不受影响：那时 `backgroundRevealOpacity() === 1`，网格本身是不透明的。
+          .backgroundColor(Color.Transparent)
           .hitTestBehavior(HitTestMode.None)
           // 闂佺补鍋?2026-10-17闂?*婵炴垶鎸哥粔宕囩不婵犳艾鐭楃€广儱娲ㄧ槐姘舵煛閳?* 闂佺偨鍎查弻锟犲焵?婵炴挻纰嶇换鍐ㄧ暤娓氣偓瀵即顢涘鍕闂佽鎸抽ˉ鎾跺垝娴煎瓨鍎嶉柛鏇ㄥ墯閿熴儵鏌ｉ敐鍛殭闁煎灚鍨甸埢鎾诲垂椤愩垻鍔甸梺鎼炲劜閹锋繄妲?
           //   闂佸搫鍟版慨鐑藉疾椤愶絿鈻旀い鎾跺櫏閸炰粙鏌熼幖顓濈盎婵炲瓨锕㈠浼村礈瑜嬫禒娑㈡煥?*缂傚倸鍟崹鍫曟偋閹间礁鍙婃い鏍仦閹虫瑦绻濇繛鎯у⒉闁哄棴绲介锝夋偐閹绘帒鑰块梺缁橆殔濞层劌鈻?*闂佹寧绋戦悧濠囨偋閸濄儮鍋撳☉娆忓婵炲牄鍨藉畷锟犳晬閸曨偒鏆繛鎴炴尨閸嬫捇鎮硅閺屽锝為敃鍌氬偍?闁诲繒鍋炲ú鏍閹达附鏅?

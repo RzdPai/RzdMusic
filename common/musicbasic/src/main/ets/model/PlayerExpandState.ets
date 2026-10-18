@@ -2594,7 +2594,9 @@ export class PlayerExpandState {
    * 闈欐鎬佹亽 1 鈬?涓€鍒?鎸?effT 绠?鐨勫叕寮忓湪闈欐鎬侀兘鍙栨弧鍊笺€?
    */
   public effT(): number {
-    // 上游 `effT() = isMorphTarget() ? 1 : pullT`（`wujie.pa:171535-171548`），
+    // ★ 2026-10-18 更正（此前这条注释的极性写反了）：上游是
+    //   `effT() = isMorphTarget() ? pullT : 1`（`wujie.pa:171535-171549`：
+    //   `ldai 0x1` 起手，`isMorphTarget()` 为**假**才跳出去用 1，为真才改读 `pullT`）——
     // `pullT` ≡ `MainPage.morphT`（560ms + `EASE_OUT_STR`）⇒ 这里读**内容时间线**。
     return this.morphContainerActive() ? this.contentProgress() : 1;
   }
