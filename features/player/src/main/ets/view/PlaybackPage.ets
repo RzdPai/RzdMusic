@@ -2832,30 +2832,21 @@ export struct PlaybackPage {
     const morphRunning: boolean = this.expandIntroRunning || closeStage === MorphStage.ENTERING
       || closeStage === MorphStage.LANDING;
     if (morphRunning) {
-      // ★★★ 2026-10-18（用户第九轮：「展开过程中按返回**又回到闪烁**」）：
-      //   三条路都试过了，各自的真病：
-      //     · 活体反向 ⇒ 与壳层那条 560ms 打开收尾抢同一个 `morphP`（壳层到点把页面 snap 回展开态）⇒ 闪烁/抽搐；
-      //     · 落位后 48ms 拍快照 ⇒ 容器还没重排完，拍到半路小卡片 ⇒ "两套 + 全屏黑 + 从上面落下"；
-      //     · 只记标记等收尾回调 ⇒ 收尾那条路径不一定回来 ⇒ "按了没反应"。
-      //   ⇒ 这一版把**三者拼成一条确定的路**：**不动画面、只排一个 620ms 的闹钟**，
-      //     让打开动画自己跑完（`MORPH_CONTENT_DURATION_MS(560) + 60`），再从**完整的展开态**走正常快照关闭。
-      //     620ms 之后页面一定已经落位（`morphSettleOpen()` 在 590ms），所以快照拍到的就是完整展开态：
-      //     不闪、不黑、不两套，且"按了有反应"（闹钟已经排上，用户松手后 0.6s 自动开始收）。
+      // ★★★ 2026-10-18（用户第十轮：「展开中按返回**要等好久**才收起」+「会闪」）——照搬上游 `reverseIntentOf`：
+      //   上游 `ENTERING` 相位收到关闭 ⇒ `START`：`retargetToLiveCover()` → `setMorph(LEAVING,ANIM)` →
+      //   `animateMorphT(0, round(460×max(morphT,0.4)), REVERSE_EASING)`（`wujie.pa:154070-154133`）
+      //   —— **立刻反向**，不等待、不拍快照。
+      //   它之所以不闪，是因为 `pullT` 只有**一条**补间：反向就是把那条**重定向**。
+      //   ⇒ 我们这边补上缺的那半句：先 `reverseInFlight = true` 让**壳层那条 560ms 打开收尾让路**
+      //     （它原本到点会 `morphSettleOpen()` 把 `morphP` 拍回 1 ⇒ 闪；而且我们必须等它跑完 ⇒ "等好久"），
+      //     再 `closeFullScreenPlayback()` 立刻反向。
       Logger.info(PlaybackPage.logTag,
-        `RzdCloseLiveMorph after-open stage=${closeStage} intro=${this.expandIntroRunning ? 1 : 0} ` +
+        `RzdCloseLiveMorph reverse-now stage=${closeStage} intro=${this.expandIntroRunning ? 1 : 0} ` +
           `p=${this.expandState.morphP.toFixed(3)} cp=${this.expandState.contentProgress().toFixed(3)}`);
       this.closeAfterOpen = false;
-      if (this.closeAfterOpenTimer !== -1) {
-        clearTimeout(this.closeAfterOpenTimer);
-      }
-      this.closeAfterOpenTimer = setTimeout((): void => {
-        this.closeAfterOpenTimer = -1;
-        if (!this.isAlive || this.isClosing) {
-          return;
-        }
-        Logger.info(PlaybackPage.logTag, 'RzdCloseLiveMorph after-open fire');
-        this.closeWithAnimation();
-      }, PlayerExpandState.MORPH_CONTENT_DURATION_MS + 60);
+      this.expandState.reverseInFlight = true;
+      this.expandIntroRunning = false;
+      this.closeFullScreenPlayback();
       return;
     }
     this.closeWithAnimation();
@@ -3281,6 +3272,8 @@ export struct PlaybackPage {
    * 与"活体反向"抢同一个 `morphP` ⇒ 表现为"返回动画消失 → 突然完整 → 又消失"（用户实测"会闪"）。
    */
   private closeAfterOpen: boolean = false;
+  /** "快照已进手"（快照回调里置真）⇒ 真封面让位，避免"快照一颗 + 真封面一颗"。 */
+  @Local snapshotFlight: boolean = false;
   /** "展开中收到关闭"排的那个闹钟句柄（-1 = 没排；见 `onCollapseRequested`）。 */
   private closeAfterOpenTimer: number = -1;
 
@@ -4213,6 +4206,13 @@ export struct PlaybackPage {
     //     401 = 闂佸憡鐟ラ崐褰掑汲閻斿吋鐓?/ 100001 = 闂佸綊娼цぐ鐐电箔婢舵劕绀嗛柟宄扮灱缁犵懓鈽?id 闂?婵炴垶鎸撮崑鎾寸箾閸″繐澧查柛鈺佹嚇瀹曞爼骞嗚缁侇噣鏌涘▎妯虹仩闁伙絽澧介幏瀣箒閹哄棗浜?
     this.getUIContext().getComponentSnapshot().get(PLAYER_ROOT_ID,
       (err: BusinessError, pixmap: image.PixelMap): void => {
+      // ★★★ 2026-10-18（用户第十轮：「收起过程中**按钮/封面又成了两个**」）：
+      //   快照已经进手 ⇒ 接下来屏上由**快照层**代表一切（`beginSnapshotShrink()`），
+      //   页面上那颗真封面必须让位，否则就是"快照一颗 + 真封面一颗"。
+      //   ⚠️ 只在这一刻（回调里）才置真——不能在 `get()` **之前**置，否则快照本身没有封面（上一轮的病）。
+      if (err === null || err === undefined) {
+        this.snapshotFlight = true;
+      }
       // 闂佸啿鍘滈崑鎾绘煃閸忓浜?闂佸湱绮崝鎺戭潩閿曞倸绀傞柟鎯板Г閿涙棃鏌￠崘銊ヮ暢婵?*闂佸搫鐗滈崗娑氬垝閵娾晜鍋嬮悷娆忓缁犳帡鏌￠埀顒傛崉閾忕懓鏆?*闂佹寧绋戦悧濠偽涢妶澶嬪仼閻忕偛澧藉楣冩煛?濠电偛鑻ˇ浼寸叓閸垻鐜绘俊銈傚亾鐟?闁哄鏅滈悷銉┿€冨鍫熸櫖閻忕偞鍎抽。鎻捗归悩顔煎姎闁伙絿濮撮埢浠嬪焺閸愨晝鐣抽柡澶嗘櫆閻熴倗鎮柆宥呯煑闁靛鍨崇粈?
       //   闂?闂佽鍘归崹褰捤囬懠顒€瀵查柤濮愬€楅崺鐘绘煛?缂備焦鍔栭〃鍛般亹?chrome 闂佺偨鍎查弻锟犲焵?婵炴垶鎸哥粔鍨椤旇棄绶炵€广儱娲﹂悾閬嶆偣閸ャ劎绠氱紒缁樺灴瀹曞爼鎮欓幓鎺戠稑闂傚倸鍋嗛崢铏圭不閿濆瑙﹂幖娣妸閳ь剙锕鍊熺疀鎼达絿鐛ラ梺绋款儐缁苯锕?闂佸湱铏庨崢浠嬪棘娴ｅ箍浜滈柛顭戝亞閻掕姤绻?闂備緡鍙忕徊鑲╃博鐎涙闄勬俊銈呮噹鐢娊鏌ょ涵鍜佸殝缂?
       //   闂?`morphLand()` 婵炲瓨鍤庨崐娑氭崲閺囩姷纾兼俊顖氭惈閻撴垿鏌?闂?闁哄鏅炲〒鍦礊濮椻偓瀵?*闂佹椿浜為崰鏇㈡?*缂備焦鏌ㄩ鍛村春閵忋倕鍙婇柟顖嗗啯鐦旈梺?
@@ -7733,10 +7733,9 @@ export struct PlaybackPage {
           //      闂佹寧绋戝﹢?57 / L510闂佹寧绋掗悺?opacity(this.expandState.realCoverVisible() ? 1 : 0)`闂佹寧绋戦ˇ顐﹀焵椤掍焦鐓涢柍?
           //      闂佸憡鐟禍婵嗭耿娓氣偓楠炲秶鈧綆鍋呯花姘跺级閳哄倻鎳佺紒鏃€鎸冲銊╊敍濠婂嫮鏆犲┑鐐存儗閸犳牠鎯囬弶娆剧叾闊洤娴烽崯?闂?闂佸憡鐟ラ悧鍛博鐎涙鐟归悗锝冨妷閸?*闂佸憡鑹炬總鏃傜博绾惧浜归柕蹇嬪灩绗?N 婵犮垼娉涚€氥劑鍩€椤戣法顦︾憸鎶婂洤缁╅梺顐ｇ〒閸熷﹤鈽夐幘顖氫壕婵?*闂侀潧妫楃粙鍕濞嗘垹绠?4 濠电偛妫屽Σ鍕濮樿泛违?
           //   闂佸疇娉曟刊瀵哥箔?婵炴垶鎸搁敃銉︽叏閵堝鐓㈤柍杞拌兌閹藉秹鏌ㄥ☉妯荤秮.id` / `onAreaChange`闂?*婵炴垶鎸哥粔纾嬨亹?opacity 閻熸粍婢樺畷顒勫箹?*闂佹寧绋戦惉濂稿矗鎼达絾鏆滈柟闂寸濞呫倗鈧數澧楅〃鍛村春?闂佺繝鐒﹂幐鍫曞焵?
-          // ★ 2026-10-18（用户第九轮：「收起按钮**封面会消失**；返回关闭连封面带动画都没了」）：
-          //   上一轮在这里加的 `&& !this.isClosing` 是**错的**——快照是在 `isClosing = true` **之后**拍的，
-          //   于是快照里本身就没有封面 ⇒ 一关就"封面消失"。⇒ **撤掉这个附加门**，回到纯 `realCoverVisible()`。
-          .opacity(this.expandState.realCoverVisible() ? 1 : 0)
+          // ★ 2026-10-18（用户第九/十轮）：**只在"快照已经进手"之后**才把真封面藏掉。
+          //   上一轮用 `!isClosing`（在拍快照**之前**就置真）⇒ 快照里没有封面 ⇒ "一关就封面消失"。
+          .opacity(this.expandState.realCoverVisible() && !this.snapshotFlight ? 1 : 0)
           // 闂?婵炴垶鎸搁敃銉︽叏閵堝鐓㈤柍杞拌兌閹藉秹鏌熺喊鍗炲闁糕晛鏈璇测枎閹捐櫕顏為梺鎸庣☉閻楀﹤螞閵堝鍋╅悘鐐跺亹閻﹀秹鏌￠崟闈涚仴妞も晩鍋婇幆鍕冀瑜忓﹢鎾煠婵傚绨荤紒璁崇劍缁嬪绻濋崘銊愭捇鏌ㄥ☉娆戞憿floatingCover.onAreaChange 闂?publishMorphTargets`闂?
           .id(PLAYER_BIG_COVER_ID)
           .onAreaChange((_oldValue: Area, newValue: Area): void => {

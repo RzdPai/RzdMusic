@@ -1373,7 +1373,7 @@ struct Index {
         //     `pullGeomReady` 鐨勭瓑浠风墿锛堝彧鍦?`measureMiniDuringPull` 閲忓埌缁堢偣閭ｄ竴鎷嶇疆浣嶏級
         //     鈬?钀戒綅闂ㄥ繀椤荤敤瀹冿紝鍚﹀垯浼氭妸"鍗婁唤鍑犱綍"钀藉畾鎴?OPEN銆?
         if (this.appState.isShowPlay && this.expandState.morphGeomReadyNow() &&
-          this.expandState.morphUsable) {
+          this.expandState.morphUsable && !this.expandState.reverseInFlight) {
           this.expandState.pushMorphTrace('settled');
           this.expandState.morphSettleOpen();
         } else {

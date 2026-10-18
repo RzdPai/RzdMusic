@@ -4205,6 +4205,14 @@ export class PlayerExpandState {
     return this.snapshotShrinkOwned;
   }
 
+  /**
+   * ★★★ 2026-10-18（用户第九/十轮：「展开中按返回**要等好久**才能收起」+「会闪」）：
+   * 反向（`closeFullScreenPlayback()`）已经起跑时置真，**壳层那条 560ms 的打开收尾必须让路**——
+   * 否则它到点 `morphSettleOpen()` 会把 `morphP` 拍回 1（闪/抽搐），且我们只能等它跑完才能收（"等好久"）。
+   * 语义等价上游：`pullT` 只有**一条**补间，反向就是 `animateMorphT(reverseMs, 0, …)` **重定向**它。
+   */
+  public reverseInFlight: boolean = false;
+
   public beginSnapshotShrink(): void {    if (this.snapshotShrinkOwned) {
       return;
     }
