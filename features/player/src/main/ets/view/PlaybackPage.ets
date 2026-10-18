@@ -2799,10 +2799,11 @@ export struct PlaybackPage {
     const morphRunning: boolean = this.expandIntroRunning || closeStage === MorphStage.ENTERING
       || closeStage === MorphStage.LANDING;
     if (morphRunning) {
+      // 见 `playMorphOpenIntro` 末尾的说明：这里**只记标记**，等打开收尾后再关（避免两条计时器抢 `morphP` 造成闪烁）。
+      this.closeAfterOpen = true;
       Logger.info(PlaybackPage.logTag,
-        `RzdCloseLiveMorph take-over stage=${closeStage} intro=${this.expandIntroRunning ? 1 : 0} ` +
+        `RzdCloseLiveMorph defer stage=${closeStage} intro=${this.expandIntroRunning ? 1 : 0} ` +
           `p=${this.expandState.morphP.toFixed(3)} cp=${this.expandState.contentProgress().toFixed(3)}`);
-      this.closeFullScreenPlayback();
       return;
     }
     this.closeWithAnimation();
@@ -3221,6 +3222,13 @@ export struct PlaybackPage {
    //  闂備緡鍓欓悘婵嬪储?婵°倕鍊归敋閻庤濞婂畷姘紣娴ｅ搫鏅╂繛杈剧到濡稓绱撴径鎰哗闁绘劦鍓涘楣冩煕?闂佹眹鍔岀€氼亞鎮潏銊ч檮婵°倕瀚烽崥鈧梺鍝勫暙閻栧ジ寮繝鍐╁鐎广儱鍟犻崑?
    */
   @Local expandIntroRunning: boolean = false;
+  /**
+   * ★ 2026-10-18（第六轮）：展开过程中收到"关闭"请求 ⇒ **只记标记、不动画**，
+   * 等打开收尾（`morphSettleOpen()`）之后再走正常快照关闭。
+   * 原因：壳层另有一条 560ms 的打开收尾会 `applyMorphProgress(1)`，
+   * 与"活体反向"抢同一个 `morphP` ⇒ 表现为"返回动画消失 → 突然完整 → 又消失"（用户实测"会闪"）。
+   */
+  private closeAfterOpen: boolean = false;
 
   /** Seeds cover Resource from the current queue item. */
   aboutToAppear(): void {
@@ -3794,6 +3802,17 @@ export struct PlaybackPage {
       //      会把 `morphStage` 置 OPEN ⇒ `morphLive()` 变假 ⇒ `pullChromeOpacity()` / `pullBottomIn()`
       //      全部**立刻返回 1**，内容窗口被硬切成"到点"—— 那 560ms 的内容补间就白跑了（用户实测的就是这个）。
     }, PlayerExpandState.MORPH_CONTENT_DURATION_MS + 30);
+    // ★★★ 2026-10-18（用户第六轮：「展开过程中按返回**不抽搐了但会闪**（返回动画突然消失 → 突然出现完整播放器 → 又消失）」）：
+    //   闪的原因是"活体反向"与**壳层那条 560ms 的打开收尾**抢同一个 `morphP`：壳层到点会 `applyMorphProgress(1)`
+    //   把页面**snap 回展开态**（= "突然出现完整播放器"），随后我们的反向计时到点又 pop（= "又消失"）。
+    //   上游能直接反向，是因为它那边只有**一条**驱动；我们这边壳层还有一条独立计时器。
+    //   ⇒ 展开中收到关闭请求时**不动画**，只记一个标记；等打开收尾（`morphSettleOpen()`）之后再走**正常快照关闭**
+    //   （那时 `morphStage === OPEN`，快照拍到的就是完整的展开态，不会闪）。
+    if (this.closeAfterOpen) {
+      this.closeAfterOpen = false;
+      Logger.info(PlaybackPage.logTag, 'RzdCloseLiveMorph deferred-close now');
+      this.onCollapseRequested();
+    }
   }
 
   /**

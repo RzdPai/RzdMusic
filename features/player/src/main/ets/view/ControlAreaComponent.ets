@@ -769,13 +769,14 @@ export struct ControlAreaComponent {
           //   ✅ 核对结果：`SymbolGlyphAttribute extends CommonMethod`（SDK `symbolglyph.d.ts:982`）里
           //      **没有 `textAlign`** ⇒ 不能写 `.textAlign(TextAlign.Center)`（编译不过）；
           //      符号在固定方盒内本来就是居中绘制，等大方盒 + 行级 `alignItems(Center)` 即可对齐。
-          // ★★★ 2026-10-18（**照搬无界**：这两颗上游**没有任何盒子**，只有 `.fontSize(chrome().sideSize)`
-          //   —— 见 `wujie.pa:181333` / `:181754`；盒子 ≡ 字形测量值）。
-          //   我们之前给的 `.width/.height(chromeSeekSize())`（32/30/28）与字号 `chromeSideSize()`（22/21/20）
-          //   **两个档位字段不同源**，再加上根 Stack 的 `.clip(morphClipping())` 在关闭那一帧翻真、
-          //   `borderRadius(morphRadius≈34)` 首次生效 ⇒ 32vp 的方盒左右边缘被圆角切到，
-          //   中间三颗离边界远感受不到 ⇒ 用户三次反馈的「两颗侧键瞬间偏一点」。
-          //   ⇒ 按上游删掉盒子与 `flexShrink`（行内 `alignItems(Center)` 已保证竖向对齐）。
+          // ★★★ 2026-10-18（**回退"删盒子"** —— 用户第五/六轮连两次实测「系统返回关闭时这两颗**消失**」）：
+          //   上一轮按上游"这两颗只有 fontSize、没有盒子"删了 `.width/.height`，结果**快照里没有字形** ⇒ 一关就消失。
+          //   本仓的 `SymbolGlyph` 在 `componentSnapshot` 里必须**有显式方盒**才会被光栅化进截图
+          //   （与 `waitUntilRenderFinished` 是同一条历史结论 §178）。⇒ 盒子必须留着。
+          //   盒子口径与同排两颗 `Image` 一致（`chrome().seekSize`，`wujie.pa:181429`/`181639`），字号仍按 `sideSize`。
+          .width(this.expandState.chromeSeekSize())
+          .height(this.expandState.chromeSeekSize())
+          .flexShrink(0)
           .accessibilityText('播放模式')
           .accessibilityLevel('yes')
           .onClick(() => {
@@ -831,8 +832,10 @@ export struct ControlAreaComponent {
           // 同「播放模式」那颗：盒子 = `chrome().seekSize`（与同排 `Image` 同口径），
           // 字号 = `chrome().sideSize`（上游 `wujie.pa:181754`），并 `flexShrink(0)` 不许被压缩
           // （见上方长注释，对照 `PlayerPage完整UI定稿.md` §8.3 L180568-181846 的播放队列 SymbolGlyph）。
-          // ★★★ 2026-10-18（**照搬无界**）：同「播放模式」那颗——上游**没有盒子**，只有 `.fontSize(chrome().sideSize)`
-          //   （`wujie.pa:181754`）。理由见上方那颗的长注释（圆角裁剪切到 32vp 方盒边缘 = "偏一点"）。
+          // ★★★ 2026-10-18（**回退"删盒子"**，理由同「播放模式」那颗：快照里 `SymbolGlyph` 必须有显式方盒）
+          .width(this.expandState.chromeSeekSize())
+          .height(this.expandState.chromeSeekSize())
+          .flexShrink(0)
           .accessibilityText('播放列表')
           .accessibilityLevel('yes')
           .onClick(() => {
