@@ -1899,28 +1899,6 @@ struct Index {
    * 那时若让 HDS 画背板，页签胶囊上方会多出一枚**空胶囊**（本文件顶部那段第 ③ 条就是记这个）。
    * @returns True = 这一格是真正的迷你播放条。
    */
-  /**
-   * 一级页 `miniBar` 槽**实测高度**（vp，0 = 还没量到）—— 上游 `MiniPlayer.capsuleH` 的等价物。
-   *
-   * 上游 `capsuleH` 是量测值（`wujie.pa:67490-67531`），只有"还没量到"时才回落到 40 / 56 估算档；
-   * 胶囊高、内容行高、封面基准三处都读它，所以三种形态（双层窄 / 单层 / 搜索）自动各就各位。
-   */
-  @Local homeMiniBarSlotHVpRaw: number = 0;
-  /** 上游 `MiniPlayer` 的 `BAR_CONTENT_H = 40`（收起态内容高，`wujie.pa:67515-67517`）。 */
-  private static readonly BAR_CONTENT_H_VP: number = 40;
-
-  /**
-   * @returns 一级页胶囊/内容/封面共用的**基准高度**（vp）。
-   * 实测优先；量不到时回落到 `FLOATING_MINI_BAR_HEIGHT_VP`（上游"尚未量到"那一档）。
-   */
-  private homeMiniBarSlotHVp(): number {
-    // ★ 上游"还没量到高度"时的**估算档**（`wujie.pa:67503-67517`）：`collapsed ⇒ BAR_CONTENT_H(40)`，
-    //   否则 `40 × 1.4 = 56`。我们自绘胶囊 ⇒ 这一格的高度由我们决定，"实测"只会读回自己（成环），
-    //   所以走估算档：**收起态（双层窄条）= 40、展开态（单条）= 56**。
-    //   收起/展开的信号就是 `miniBarExpanded`（由 HDS `onBarStyleChange` 镜像过来）。
-    return this.appState.miniBarExpanded ? FLOATING_MINI_BAR_HEIGHT_VP : Index.BAR_CONTENT_H_VP;
-  }
-
   private miniBarRendersPlayer(): boolean {
     if (this.navDepth > 0) {
       return false;
@@ -1989,16 +1967,14 @@ struct Index {
         //   涓€杈规槸鍏嬮殕灞傜敾鐨勫壇鏈€佷竴杈规槸鐪熻韩锛岀敤鎴风湅鍒扮殑姝ｆ槸"杩蜂綘鏉″帇鍦ㄦ挱鏀鹃〉涓?锛堥噸鍙狅級銆?
         //   鈿狅笍 蹇呴』鐢?`Visibility.Hidden`锛堜繚鐣欏竷灞€锛夛細褰㈠彉璧风偣瑕?`getRectangleById` 閲忚繖鏉℃爮锛?
         //   鐢?`None` 浼氶噺涓嶅埌 鈬?鍔ㄧ敾鐩存帴閫€鍖栥€?
-        // ★★★ 2026-10-18（照搬上游 `capsuleH`：高度是**量测值**，不是常量）：
-        //   用户实测两种形态的格子高度不同（双层窄、单层更短），常量 56 一路都会溢出。
-        //   上游 `capsuleH = searchOpen ? SEARCH_MINI_H : undefined`（`wujie.pa:157276-157283`），
-        //   常态 `undefined` ⇒ 高度由 HDS 槽给，`MiniPlayer` 再按量到的 `capsuleH` 推封面
-        //   （`sidePad` `:67490-67531`、`coverScale2 = capsuleH×0.8/32` `:66289-66327`）。
-        //   本仓把"槽给的高度"落成 `homeMiniBarSlotHVp`：胶囊高 / 内容高 / 封面基准**三者同源**。
+        // ★★★ 2026-10-18（用户：「二级页面那两个都正常 = 既有光感又有弹跳」）：
+        //   一级页**复用二级页那套宿主** `MiniBarMaterialCapsule` —— 材质与 `.scale` 挤压都落在
+        //   我们自己的子树里，所以"弹一下"和光感同时成立；内容以 `contentOwnsSquash: false` 交给胶囊去压。
+        //   ⚠️ 因此 HDS 那层的背板必须关掉（下面 `enableMiniBarBackground: false`），否则又是两层。
         Stack() {
           MiniBarMaterialCapsule({
             barWidth: this.floatingMiniBarWidthVp(),
-            barHeight: this.homeMiniBarSlotHVp(),
+            barHeight: FLOATING_MINI_BAR_HEIGHT_VP,
             bottomMargin: this.floatingMiniBarBottomMarginVp(),
             material: this.ambientTitleMaterial(),
             fitWinWVp: this.viewportWidthVp,
@@ -2009,17 +1985,10 @@ struct Index {
               followAppMiniBarExpanded: true,
               showSelfDrawnBackplate: false,
               contentOwnsSquash: false,
-              contentHeightVp: this.homeMiniBarSlotHVp()
+              contentHeightVp: 0
             })
           }
         }
-        .onAreaChange((_old: Area, area: Area): void => {
-          const h: number = areaLengthToVp(area.height);
-          if (h > 0 && Math.abs(h - this.homeMiniBarSlotHVpRaw) > 0.5) {
-            this.homeMiniBarSlotHVpRaw = h;
-            Logger.info('RzdHomeBarSlot', `slotH=${h.toFixed(1)} capsuleH=${this.homeMiniBarSlotHVp().toFixed(1)}`);
-          }
-        })
         .visibility((this.expandState.sourceBarHidden || this.expandState.shrinkHidesBar || this.expandState.miniOut) ? Visibility.Hidden : Visibility.Visible)
         .onAppear((): void => {
           Logger.info('RzdHomeMiniBarMaterial',
