@@ -2030,6 +2030,13 @@ struct Index {
           const w: number = areaLengthToVp(area.width);
           if (w > 0 && Math.abs(w - this.homeMiniBarSlotWVpRaw) > 0.5) {
             this.homeMiniBarSlotWVpRaw = w;
+            // 量到槽宽就把这四个数打出来（宽度口径是否对齐只看这一行）：
+            //   `slotW >= barW` 才算对；`capH` 随展开/收起在 56 / 40 之间切。
+            Logger.info('RzdHomeMiniBarMaterial',
+              `material=capsule(systemMaterialEffect) ambient=${this.ambientLevelIndex()} ` +
+                `plate=inner-hds-tabs slotW=${w.toFixed(1)} barW=${this.homeMiniBarBarWidthVp().toFixed(1)} ` +
+                `capH=${this.homeMiniBarSlotHVp().toFixed(1)} expanded=${this.appState.miniBarExpanded} ` +
+                `squashY=${this.expandState.morphSquashY}`);
           }
         })
         .visibility((this.expandState.sourceBarHidden || this.expandState.shrinkHidesBar || this.expandState.miniOut) ? Visibility.Hidden : Visibility.Visible)
