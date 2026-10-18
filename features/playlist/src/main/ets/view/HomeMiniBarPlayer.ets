@@ -293,10 +293,15 @@ export struct HomeMiniBarPlayer {
 
   /** @returns 封面/内距的**基准高度**（vp）：低矮档优先，其次是宿主钉的高度，最后是实测行高。 */
   private capsuleBaseHVp(): number {
-    if (this.contentHeightVp > 0) {
-      return this.isLowProfileBar() ? HomeMiniBarPlayer.BAR_CONTENT_H_VP : this.contentHeightVp;
+    // ★★★ 2026-10-18（用户：「单行状态下还是双行状态的小封面（单行状态高度更高）」）：
+    //   上游 `capsuleH` 本来就是**量测值**（`wujie.pa:67490-67531`；`40 = BAR_CONTENT_H` 与 `40×1.4`
+    //   只是"还没量到高度"时的估算档，`:67503-67517`）⇒ 槽高多少，封面就按多少算。
+    //   ⛔ 不要再按"排布模式"硬切 40/56：`barLayoutMode` 现已恒 `VERTICAL`（上游口径），
+    //      那样会让单行态也吃 40 ⇒ 封面永远是小号，而单行态胶囊其实更高。
+    if (this.measuredRowHVp > 0) {
+      return this.measuredRowHVp;
     }
-    return this.measuredRowHVp > 0 ? this.measuredRowHVp : 0;
+    return this.contentHeightVp > 0 ? this.contentHeightVp : 0;
   }
 
   /**
