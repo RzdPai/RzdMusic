@@ -225,28 +225,17 @@ export struct PlaybackPage {
    * `.onAreaChange` 闁告劖鐟辩槐娆撳矗椤忓浂鍤㈤梺鎻掔箲缁佹挳鏁嶇仦鐐骏闁告搩鍨紞鏃堟偨椤帞绀嗛柕鍡曠箹metaOffsetY()` 闁活潿鍔岄悾鐘诲磻?闁告帩鍋勭敮鍥ㄦ交濞戞瑥浠橀柛鎺曟硾鐏?闁汇劌瀚伴幐鎼佸礆闊祴鍋?
    * 闁宠法濯寸粭?闁告帗绻傞埀?-1 = 閺夆晜蓱閻ュ懘鏌岃箛鎾崇厒闁挎稒鐩崑鍛村籍閸撲焦鏆忛柟鎭掑妿閻ｅ宕愰悡搴″箲閹煎瓨娲忛埀顒€鍊块崳娲礆妫颁胶顓洪柛姘凹缁辨壆鎲撮敃鈧ぐ鍌涚▔閳ь剙鈻庨敓鐘叉鐎点倗灏ㄧ槐婵嬫煢閸愭彃鐓戦梻鍛箰瀹撳棝鎮介悢鍛婃珡闁?
    */
-  @Local chromeTopMeasured: number = -1;
-  /**
-   * ★★★ 2026-10-18（用户实测「歌词位置固定了但偏了（压在进度条上）」）：
-   * **控制区（进度条 + 传输行）自己那一层的上沿**（窗口坐标，vp；-1 = 还没量到）。
-   *
-   * 为什么不能再用 `chromeTopMeasured`：那个量取自 `SWIPER_GAP_ROW_ID` 那个**空行**，
-   * 它挂在 swiper 内部（比进度条更靠下）⇒ 拿它当"控制区上沿"会让钳制值偏低，
-   * 结果小歌词照样压在进度条上（真机截图实测）。
-   * 这里量的是 chrome 那一层（`.translate({ y: pullBottomYVp() })` 所在的容器）：
-   * 它的布局全局 y 加上同一帧的 `pullBottomYVp()`（布局值不含 transform）才是屏幕上的上沿。
-   */
-  @Local chromeBlockTopVp: number = -1;
-  /**
-   * ★★★ 2026-10-18（用户第二轮：「歌词位置固定了但**位置偏**（还压进度条）」）：
-   * 小歌词块的**实测高度**（vp；0 = 还没量到）。
-   *
-   * 为什么需要它：钳制值是 `控制区上沿 − 块高 − 8`，而块高原来写死成
-   * `MINI_LYRIC_BLOCK_H_VP = 57`（只是估算：2 行 × 26 + 行距 3 + 上边距 2）。
-   * 实际块高（字体行高/内边距）比 57 大时，块底就会比"控制区上沿 − 8"再往下探十几 vp ⇒ 看起来还压着进度条。
-   * ⇒ 以实量为准，写死值只做首帧兜底（`Math.max(MINI_LYRIC_BLOCK_H_VP, 实测)`）。
-   */
-  @Local miniLyricBlockHVp: number = 0;
+  // ⛔ 2026-10-18（第五轮）：`@Local chromeTopMeasured` 已删除（上面那条 JSDoc 是它的旧说明）。
+  //   它唯一的读者是 `miniLyricTopY()` 里那条钳制的第 ② 档；小歌词改走"歌名行流式兄弟"后不再需要。
+  /** 闂佸搫娲╃亸娆徝烘导鏉戠闁哄秲鍔嶉弳顏堟煢濡櫣绠冲褎顨婂鐢割敆閳ь剝銇愭径鎰闁哄秲鍔嶏拷緔呮惔顖氫壕闁稿鎳樺?*/
+  // ⚠️ 紧邻上方那行单行 `/** … */` 是本轮 `edit` 误插入的**双重编码乱码注释**（本仓已知问题：这类字符
+  //   无法被 `edit` 逐字匹配 ⇒ 删不掉）。它**只是注释**、不含代码、不参与布局；下次整段重排时顺手清掉。
+  // ⛔ 2026-10-18（第五轮）：`@Local chromeBlockTopVp` 与 `@Local miniLyricBlockHVp` 已删除。
+  //   两者都只服务 `miniLyricTopY()`（「控制区上沿 − 块高 − 8」那条钳制）；小歌词改成歌名行的
+  //   **流式兄弟**之后，位置完全由 `estBoxHVp()` / `metaOffsetY()` / `LYRIC_META_ROW_H_VP` 决定，
+  //   **不再需要任何实测上沿/实测块高**（块高由 `.height(MINI_LYRIC_BLOCK_H_VP)` 钉死）。
+  //   `@Local chromeTopMeasured`（上面那条 JSDoc 说的那个量）同样只剩写、没有读 ⇒ 也没有了；
+  //   它的写入点（`SWIPER_GAP_ROW_ID` 的 `.onAreaChange`）已一并删除，该行只保留 `.id` 供诊断日志读矩形。
 
   /** 闂佸搫娲╃亸娆徝烘导鏉戠闁哄秲鍔嶉弳顏堟煢濡櫣绠冲褎顨婂鐢割敆閳ь剝銇愭径鎰闁哄秲鍔嶉ˇ褔鏌涢幒妤佹暠闁哄苯锕ㄧ粻娑㈠礃閵娿劌鐓傞梺?*/
   @Monitor('state.selectIndex', 'favStore.favoriteVersion')
@@ -518,68 +507,12 @@ export struct PlaybackPage {
    * 鈿狅笍 闈欐鎬佸氨鏄€屾瓕鎵嬭涓嬫部 + 12vp銆嶏紱褰㈠彉鎬佷粛鐢?`contentRiseVp()` 浠庝笅鏂瑰崌璧凤紙绐?0.45鈫?.00锛夛紝
    *   鑰屾瓕鍚嶈璧扮殑鏄洿鏃╃殑 `metaRiseVp()`锛?.18鈫?.62锛夆噿 鍏ㄧ▼涓嶄細杩藉埌姝屽悕琛屼笂闈€?
    */
-  /** 上一条 `RzdMiniLyricTop` 打印时的 `y`（NaN = 还没打过；变化 > 0.5vp 才再打，避免逐帧刷屏）。 */
-  private miniLyricTopLoggedY: number = Number.NaN;
-  private miniLyricTopY(): number {
-    const rowH: number = PlaybackPage.LYRIC_META_ROW_H_VP;
-    // ① 锚 = 歌名行底边 + 间距（与封面那一套同源：位置全部由 `expandState` 的量算出来，
-    //    页面里不写魔法数）。
-    // ★ 2026-10-18（用户实测「第一次打开播放器时小歌词压在进度条上，滑到歌词页再滑回来就正常」）：
-    //   `metaTopGeomY(t, rowH)` 的 `t = 0` 端取的是 `bigEndpointRect()`，也就是**实测上报**的大封面矩形
-    //   （`PlayerExpandState.ets` 的 `morphCoverRectAt(1)` / `bigX/bigY/bigSize` 全来自 `reportBig`）。
-    //   首帧那份实测值可能是「窗口居中」那一档（顶边 ≈ (winH−edge)/2，360×780 上 ≈224），
-    //   稳态应是纯几何 `playerCoverGeomRect()`（顶边 ≈136）⇒ 同一份公式首帧比稳态低 88vp
-    //   （target ≈627 vs ≈539），正好压到进度条；滑一趟歌词页让几何重算成 136 那一档就"恢复正常"。
-    //   修法：锚点改吃**纯几何**（只吃窗口尺寸，不查节点、不读实测上报）⇒ 首帧与稳态同一套几何。
-    //   `COVER_FIT_META_GAP_VP`（= 无界 `META_GAP_BELOW_COVER` 默认 50）在本仓是 `private`，
-    //   故按同口径复写一份 `MINI_LYRIC_COVER_META_GAP_VP`。
-    // ★★★ 2026-10-18（第四轮，**照搬上游结构** —— 见 `_recover/logic-src/full/差异表-歌词块.md`）：
-    //   上游 `playerPane` 的 Swiper **第 0 页是空壳**（`wujie.pa:189547-189573`），浮层里只有
-    //   `floatingCover` + `floatingMeta`，**歌名行之下没有任何节点**（`:171747-171846`）；
-    //   歌名行本身的定位是「满盒高 Column + justifyContent(Center) + `offset(metaOffsetYAt(t))`」。
-    //   ⇒ 与歌名行**同一条流**、紧跟其后、0 间距，就是上游给这块留的唯一位置：
-    //     块顶 = 歌名行底边（= `metaTopGeomY(t,rowH) + rowH`）。
-    //   360×780 算例（差异表 §C）：歌名行 374.2~422.2、盒底 470.2、进度条上沿 513.0
-    //   ⇒ 块顶 422.2、块底 479.2，距进度条 33.8vp（天然不压）。
-    //   ⛔ 不再用 `playerCoverGeomRect() + 50` 兜一圈：上游那 50vp 是 `META_GAP_BELOW_COVER`
-    //      （封面→歌名行的间距），拿它去推歌名行**底下**的块会多算一遍行高。
-    const anchorTop: number = this.expandState.metaTopGeomY(this.lyricMorphT, rowH);
-    const target: number = anchorTop + rowH + PlaybackPage.MINI_LYRIC_GAP_VP;
-    // ② 钳制：块底不许越过控制区上沿（用户实测「小歌词跑到进度条下面」就是没这一条）。
-    //    ★ 2026-10-18 三级优先：① 控制区**自己那一层**的实测上沿 `chromeBlockTopVp`（真机验证这条才对）
-    //      → ② 旧的 `chromeTopMeasured`（取自 swiper 内部的空行，比进度条更靠下，只作兜底）
-    //      → ③ 估算 `estBoxHVp() + topInsetVp() + swiperGapVp()`（首帧还没量到时用）。
-    const chromeTopWindow: number = this.chromeBlockTopVp > 0 ? this.chromeBlockTopVp
-      : (this.chromeTopMeasured > 0 ? this.chromeTopMeasured
-        : (this.expandState.estBoxHVp() + this.expandState.topInsetVp() + this.expandState.swiperGapVp()));
-    const chromeSrc: string = this.chromeBlockTopVp > 0 ? 'block'
-      : (this.chromeTopMeasured > 0 ? 'measured' : 'estimate');
-    // ③ 两者都在**窗口坐标**里比；`.position()` 要的也是窗口坐标（见下），所以不再做换算。
-    //    钳制必须**第一帧就生效**：`chromeTop` 量不到时用估算（`topInset + estBoxH + swiperGap`），
-    //    ⛔ 不许写成"量不到就不钳制"——那会让首帧直接压到进度条。
-    // ③ 块高以**实测**为准（写死值只做首帧兜底，见 `miniLyricBlockHVp` 的注释）。
-    const blockH: number = Math.max(PlaybackPage.MINI_LYRIC_BLOCK_H_VP, this.miniLyricBlockHVp);
-    const ceilingWindow: number = chromeTopWindow - blockH
-      - PlaybackPage.MINI_LYRIC_CEILING_PAD_VP;
-    // ★ 2026-10-18：**不再减 `expandState.lyricBoxTopVp`**。`.position()` 的参考系 = 页 0 那个
-    //   `Stack({ alignContent: Alignment.TopStart })` 的内容盒左上角，而它在结构上 ≡ 窗口原点
-    //   —— 同一个 Stack 里的歌词浮层就是把 `lyricMorph()` 的**窗口坐标**直接写进 `.position()` 的
-    //   （见 `PlayerExpandState.lyricBoxTopVp` 的 JSDoc 逐步推导 + 真机落点正确）。
-    //   而 `lyricBoxTopVp` 是**另一棵子树**（歌词页那根 Column，且在形变容器里）的实测值：
-    //   首帧 0、量到后变几十 ⇒ 减它只会让块在读到值的那一帧往下跳一段。
-    const clamped: number = target < ceilingWindow ? target : ceilingWindow;
-    const y: number = clamped > 0 ? clamped : 0;
-    // 一次性诊断（变化 > 0.5vp 才打）：`hdc shell hilog -x | Select-String 'RzdMiniLyricTop'`
-    if (!(Math.abs(y - this.miniLyricTopLoggedY) <= 0.5)) {
-      this.miniLyricTopLoggedY = y;
-      Logger.info(PlayerExpandState.LOG_TAG,
-        `RzdMiniLyricTop anchor=${anchorTop.toFixed(1)} src=meta ` +
-          `target=${target.toFixed(1)} chrome=${chromeTopWindow.toFixed(1)} ` +
-          `src2=${chromeSrc} blockH=${blockH.toFixed(1)}(m=${this.miniLyricBlockHVp.toFixed(1)}) ` +
-          `ceil=${ceilingWindow.toFixed(1)} y=${y.toFixed(1)}`);
-    }
-    return y;
-  }
+  // ⛔ 2026-10-18（第五轮）：`miniLyricTopY()` / `miniLyricTopLoggedY` 已**整段删除**。
+  //   小歌词不再"按窗口绝对 y 绝对定位"，而是歌名行的**流式兄弟**：
+  //     小歌词顶边 = 歌名行顶边 + `LYRIC_META_ROW_H_VP`（见 `LyricFloatLayer()` 里那段注释）。
+  //   ⇒ 位置只由 `estBoxHVp()` / `metaOffsetY()` / `LYRIC_META_ROW_H_VP` 三个量决定，
+  //     不再有 `miniLyricTopY` 那套"锚点 + 间距 + 控制区上沿钳制"的第二套坐标系。
+  //   （上面那条 JSDoc 是旧的 `RzdMiniLyricTop` 打印说明，已无代码引用，留作备查。）
   /** False after teardown to ignore async image callbacks. */
   private isAlive: boolean = true;
   /** Bumps on each {@link getImageColorAsync} run so stale async work skips UI updates and releases pixels. */
@@ -652,34 +585,29 @@ export struct PlaybackPage {
   private static readonly MINI_LYRIC_SINK_VP: number = 44;
 
   /** 灏忔瓕璇嶅潡 鈬?姝屽悕/姝屾墜琛?鐨勭珫鐩撮棿璺濓紙vp锛夛紝鐢ㄦ埛瑕佹眰"钀藉埌姝屾墜琛屼笅鏂?銆?*/
-  private static readonly MINI_LYRIC_GAP_VP: number = 0;
+  // ⛔ 2026-10-18（第五轮）：`MINI_LYRIC_GAP_VP` 已**删除**（上面那行是它的旧 JSDoc，留作备查）。
+  //   小歌词与歌名行之间不再有任何间距常数 —— 位置由"歌名行的流式兄弟"给出。
   /**
-   * 小歌词块行数（当前行 + 下一行，见 `MiniLyricLinesComponent`）。
-   * ★ 2026-10-17（用户实测「小歌词位置太低、跑到进度条下面」）：下面这一组常量的唯一用途就是
-   *   "块底不许越过控制区上沿"那条钳制 —— 别再把负间距（上一轮的 `-20`）当位置微调用。
+   * 小歌词块行数（当前行 + 下一行，见 `MiniLyricLinesComponent`）——
+   * ★ 2026-10-18（第五轮）：这两个量现在**只用来解释 `MINI_LYRIC_BLOCK_H_VP = 57` 是怎么来的**，
+   *   不参与定位（定位已改为"歌名行流式兄弟"，见 `LyricFloatLayer()`）。
    */
   private static readonly MINI_LYRIC_LINES: number = 2;
-  /** 小歌词单行占位高（vp）：两行字号 15fp / 14fp，按 1.4 倍行高取整。 */
+  /** 小歌词单行占位高（vp，= 字号 18/17fp 按 1.4 倍行高取整）。 */
   private static readonly MINI_LYRIC_LINE_H_VP: number = 26;
-  /** 小歌词块高（vp）= `MINI_LYRIC_LINES(2) × 26 + 行距 3 + 上边距 2`。 */
-  private static readonly MINI_LYRIC_BLOCK_H_VP: number = 57;
-  /** 块底与「控制区上沿」之间再留的安全间隙（vp）：钳制值 = `chromeTop − blockH − 8`。 */
-  private static readonly MINI_LYRIC_CEILING_PAD_VP: number = 8;
   /**
-   * 「大封面底边 → 歌名行顶边」的间距（vp）：与 `PlayerExpandState.COVER_FIT_META_GAP_VP`
-   * （无界 `META_GAP_BELOW_COVER` 默认值 **50**）**同值** —— 那边是 `private`，这里按同一口径复写一份。
-   * `metaTopGeomY(t, rowH)` 的 `t = 0` 端用的也是它 ⇒ 小歌词锚点与歌名行锚点同源。
+   * 小歌词块高（vp）= `MINI_LYRIC_LINES(2) × 26 + 行距 3 + 上边距 2`。
+   * ★★ 2026-10-18（第五轮）：它现在有**两个**用途，都写在 `LyricFloatLayer()` 调用点：
+   *   ① `.height(MINI_LYRIC_BLOCK_H_VP)` 把块高钉死（否则居中盒会被它撑高、歌名行被上抬）；
+   *   ② 位移壳的 `offset` 补 `MINI_LYRIC_BLOCK_H_VP / 2`（把 ① 让出的那半抬回来）。
    */
-  private static readonly MINI_LYRIC_COVER_META_GAP_VP: number = 50;
+  private static readonly MINI_LYRIC_BLOCK_H_VP: number = 57;
   /**
-   * ★ 2026-10-17（**用户实测要求：更大 / 更淡 / 更上**）：
-   *   ① `MINI_LYRIC_GAP_VP` **8 → -12**（往上移 20vp；"块底不越过控制区上沿"的钳制照旧保留在
-   *      {@link PlaybackPage.miniLyricTopY} 里 —— 负间距只负责"往上"，越界由 `Math.min` 兜住）。
-   *   ② 字号在 {@link MiniLyricLinesComponent} 里等比 +3fp（15→18 / 14→17），
-   *      单行占位高因此 `MINI_LYRIC_LINE_H_VP` **22 → 26**，块高 49 → **57**。
-   *   ③ 透明度：调用点 `.opacity(pullChromeOpacity() × MINI_LYRIC_OPACITY)`
-   *      （2026-10-18 改：原来乘的是恒为 1 的 `morphContentOpacity` ⇒ 没有淡入窗口，见调用点注释），
-   *      静止态 `pullChromeOpacity() === 1` ⇒ 落到 **0.55**（用户要求的"更淡"原样保留）。
+   * 小歌词块的不透明度系数：调用点 `.opacity(pullChromeOpacity() × MINI_LYRIC_OPACITY)`
+   * ⇒ 静止态 `pullChromeOpacity() === 1`，落到 **0.55**（用户实测要求"更淡"）。
+   * ★ 2026-10-18（第五轮）：`MINI_LYRIC_GAP_VP` / `MINI_LYRIC_CEILING_PAD_VP` /
+   *   `MINI_LYRIC_COVER_META_GAP_VP` 三个"定位用"常量已随 `miniLyricTopY()` 一起删除 ——
+   *   小歌词的位置现在由歌名行那条流决定，**不再有任何间距/钳制常数**。
    */
   private static readonly MINI_LYRIC_OPACITY: number = 0.55;
   /** 闁诲繐绻愮换鎴︽偤閺囩姵瀚氱€广儱鎷嬮崯鍥煕閿濆啫濡挎繛鍫熷灩缁辨帡宕熼鍜佸仺 id闂佹寧绋戦悧鍡氥亹瑜忕槐?{@link PlaybackPage.logLayoutBoxes} 闂備焦褰冪换鎴犵矈閹绢喗鍋ㄦい顓熷笧缁€澶娾槈閹惧磭孝鐎殿噮鍓氱粙澶嬫償濠靛洤搴婃繛杈剧稻濞茬喖鍩€椤掍焦顫楃紒棰濆亰閺佸秵寰勯崼姘壕?*/
@@ -4238,14 +4166,13 @@ export struct PlaybackPage {
       //   鏇存柊鐨勫悓鏃惰皟鐢ㄦ埅鍥撅紝鏇存柊鐨勬覆鏌撳唴瀹逛笉浼氳鎴彇鍒般€嶃€傛湰鏂规硶鍦ㄦ媿鍥?*涔嬪墠**鍒氭爣鑴忔覆鏌撴爲
       //   锛坄measureGeometry` / 浜嬩欢鏃ュ織锛夆噿 绗﹀彿瀛楀舰鏉ヤ笉鍙婄敾杩涘浘锛宍Image` 閭ｅ嚑棰楀嵈宸插湪鍥鹃噷
       //   鈬?鍙墿 prev/play/next銆傜粰蹇収寮€ `waitUntilRenderFinished`锛坥ptions 蹇呴』鍦ㄧ涓変綅锛夈€?
-    }, { waitUntilRenderFinished: false });
-    //   ★ 2026-10-18（**照搬无界**：`PlayerPage.closeWithAnimation`，`wujie.pa:171054-171095` 全函数只有 40 条指令，
-    //     形态是 `guard → getComponentSnapshot().get(PLAYER_ROOT_ID, λ)`，**`get` 只有 2 个实参、没有 options**，
-    //     所有副作用都写在回调里（`ExpandSnapshot.onShrinkBack` + `nav.pop(false)`）。
-    //     我们原来开 `waitUntilRenderFinished: true`，等于"等本帧渲染完成再取图" ⇒
-    //     把拍图**之前**刚改的那点布局（`measureGeometry` / `stopChromeAutoHide` / `isClosing`）确保拍进图里，
-    //     随后被 `ShrinkOverlay` 整体缩小 ⇒ 观感就是"关闭那一瞬间两颗侧键偏一点"。
-    //     ⇒ 关掉它（取"上一帧已渲染的样子"），与上游"先拍后改"同义。
+    }, { waitUntilRenderFinished: true });
+    //   ★★★ 2026-10-18（**回退上一轮那次改动** —— 用户实测「系统返回关闭时那两个按钮**又会消失**」）：
+    //     `waitUntilRenderFinished: true` 在本仓是**必须**的：这两颗是 `SymbolGlyph`（字形光栅化晚于节点绘制），
+    //     关掉它 ⇒ 截图里没有字形 ⇒ 一关就"消失"（历史结论见 §178）。
+    //     上游能只用两个实参，是因为它那两颗在同一次绘制里已经画好；**这一处不能照搬**。
+    //     ⇒「关闭瞬间偏一点」改从**方盒**那一侧解决（`ControlAreaComponent` 里已按上游删掉
+    //       `.width/.height(chromeSeekSize())`，圆角裁剪不再切到 32vp 方盒的边缘）。
   }
 
   /** 闂佸憡鐟﹂悧鏇犳闁秴绀傞柛娆愶耿閻撯晠鏌ｉ妸銉ヮ仼闁圭儵鏅犻幃陇顦抽柡浣告贡缁辨捇鍩￠崘銊愶箓鏌熼璺ㄧ瓘缂佽鲸鐟︾粙澶嬫償閳藉懐澶勯柣?`Index` 闂佸憡鑹炬總鏃傜博鐎涙鈻?AppStorageV2 闁诲骸婀遍崑妯兼閵夆晜鏅璺虹墐閸?*/
@@ -4935,26 +4862,27 @@ export struct PlaybackPage {
                   //      闁哄鏅滈悷锕€危閸涘﹥浜ゆ繛鍡樺姦閸嬔囨煠鐎圭姵顥夐柛銊ョ秺閹啴宕熼銏╂瀫闂佸湱绮崝褏妲愭潏銊р枖濠电姳鑳堕閬嶅级閻戝棗鏋涙慨妯稿姂瀵即顢涘☉姘鳖攨婵炲瓨绮屽Λ婊呮崲閺嶃劎鈻旈柍褜鍓欓～銏ゅΨ椤栨粎顦柣搴濈祷婢瑰牓宕?闁诲繐绻嬬欢姘焽閺夊簱妲堥柛顐ｇ缚娴?+ 闂佸憡鏌ｉ崝搴ㄥ极妤ｅ啫绀傞柕濞垮劤閻?闂?
                   //   闂佸疇娉曟刊瀵哥箔?闁诲海顢婂Λ鍕儓?闂傚倸鐗勯崹鍝勵熆濮椻偓閺屽洭鏁愰崟顔规嫛闂佸搫顦埀顒€鍟块悗濠氭煛閳ь剟顢涘▎鎴犵厳闂侀潻璐熼崝搴ㄥ极閵堝洠鍋撻悷鏉挎灕缂佽鲸鐛婸laybackPage` 闂佸憡鍔曢幊搴ゃ亹閻旂厧瀚夊璺侯槼閳峰牆顭跨捄鍝勵伒缂佽鲸宀搁弫?
                   //      闂佸湱顣介崑鎾趁?import 婵烇絽娲︾换鍕汲閳ь剟鏌?
-                  Column() {
-                    MiniLyricLinesComponent()
-                      .width(StyleConstants.FULL_WIDTH)
-                      .margin({
-                        // ★★★ 2026-10-17（用户要求）：**小歌词左侧与歌名行左对齐**。
-                        //   上一版是硬编码 `left: 4`（自造值，与歌名行无关）；
-                        //   现与「歌名/歌手那一行」用**同一个口径**：
-                        //   歌名行（`floatingMeta`，见下方 `.padding({ left: this.lyricMetaLeftInset(), … })`）
-                        //   的左内边距就是 `lyricMetaLeftInset()` = `LYRIC_META_SIDE_VP`
-                        //   → `小封面右缘 + LYRIC_META_GAP_VP` 按 `lyricMorphT` 插值（`t=1` 时 = 小封面右缘 + gap）。
-                        //   两侧同为 `width('100%')` 的兄弟节点 ⇒ padding 与 margin 的左侧口径等价。
-                        left: this.lyricMetaLeftInset(),
-                        right: PlaybackPage.LYRIC_META_SIDE_VP,
+                  // ★★★ 2026-10-18（照搬上游结构 · 第五轮）：**第 0 页 = 空壳**。
+                  //   上游 `playerPane` 的 Swiper 第 0 页就是一个只有 width/height 的**空 `Column`**
+                  //   （`wujie.pa:189547-189573`，λ `@34*#^2`，全文 12 条指令、**零子节点**）；
+                  //   歌名行之下没有任何节点（`:171747-171846`）。⇒ 本页现在也是空壳。
+                  //
+                  //   ⛔ 这里原来挂着小歌词块，用 `.position({ x: 0, y: this.miniLyricTopY() })` 定位：
+                  //      那是**窗口绝对 y**，而歌名行走的是「满盒高 Column + justifyContent(Center)
+                  //      + `offset({ y: this.metaOffsetY() })`」（`PlaybackPage.LyricFloatLayer`）——
+                  //      **两套坐标系**，只要 `estBoxHVp()` ≠ 窗口高就必然偏，调公式永远调不出来。
+                  //   ⇒ 小歌词已整体搬进 `LyricFloatLayer()`，成为歌名行的**流式兄弟**（那里有完整算式与
+                  //      上游行号）；本页不再有任何定位量。
+                  //
+                  //   ⚠️ 下面这段是旧实现的**注释残页**（本仓该段中文注释是双重编码乱码，`edit` 无法逐字
+                  //      匹配，为不误伤文件只删代码、留注释文本）；**代码已全部删除，不参与任何布局**，
+                  //      下次整段重排时可以整块清掉。
                         // 閳藉應妲勯埥鍛 2026-10-17閿涘牏鏁ら幋鍑ょ窗閵?*鐏忓繑鐡曠拠宥嗘杹娑撳娼?*閵? 閹搭亜娴橀柌灞界暊閸樺婀灞芥倳鐞涘奔绗傞敍?
                         //   鐎瑰啯澧嶉崷銊ф畱妞?0 `Stack` 閺?`alignContent: Bottom` 閳?鏉╂瑤绔撮崸妤冩畱娑撳绔?*鐠愬娼?
                         //   swiper 閻╂帒绨虫潏?*閿涘矁鈧本鐡曢崥宥堫攽濮濓絽銈芥稊鐔锋躬闁絼绔撮弶鈥崇敨娑?閳?韫囧懐鍔ч柌宥呭綌閵?
                         //   閳?缂佹瑤绔存稉?*閸氭垳绗傞幎?*閻ㄥ嫪绗呮潏纭呯獩閿涘本濡搁弫鏉戞健閹额剙鍩?濮濆苯鎮曠悰灞肩瑓濞?閳?鏉╂稑瀹抽弶鈥茬瑐濞?娑斿妫块妴?
                         //   閳跨媴绗?56 閺勵垶顩婚悧鍫濆絿閸婄》绱欓埉?娑撱倛顢戝宀冪槤閻ㄥ嫰鐝惔?+ 娑撯偓閻愮懓鎳犻崥闈╃礆閿涙稒瀵滈幋顏勬禈瀵邦喛鐨熺亸杈ㄦ暭鏉╂瑤绔存稉顏呮殶閵?
-                        bottom: 0
-                      })
+
                         // 闂佺补鍋?2026-10-17闂?*闂佸憡顭囩划顖滄暜閳ь剟鎮归幇顔兼瀻妞わ妇绮蹇曟兜閸涱垳宕?* 闂佺偨鍎查弻锟犲焵?闂佸湱顭堥ˇ顔剧箔閸屾哎鈧?gemini 婵犮垼娉涚粔鐢告偋瀹曞洨纾奸柟鎹愵嚃閸熷牓鏌?
                         //   婵?0 闂備焦褰冮惉鐓庘枔閹达箑绀冮柛娑卞弾閸熷洭鐓崶褎鍤囬柕?*濠电偟绻濈粈浣烘?*闂佸湱鍎ょ敮鎺旂博閻戣棄鎹堕柕濠忛檮閹峰崬顪冮妶澶嬫锭妞ゆ梹鍔欏畷鎶藉Ω閳轰焦顏為梺?*婵炴垶鎸哥粔鐑筋敊韫囨稒鍋ㄩ柕濞у懎宕柣搴ｆ暩閹虫捇鎮鹃悙顒佸?闁荤姵鍔楅崰搴ㄋ囩紒妯荤秶缁绢厼鎳愰悰?
                         //   闂佺娉涢敃銈夋偩閻樿绠抽柕濞垮劚閻撳倹鎱ㄥ┑鍡氬闁诡喗娲滈幃鏉跨暆閸曨偂绨兼繛鎴炴尨閸嬫捇鏌℃径鍡忓亾瀹曞洦鏆?*闂佹寧绋戦懟顖炲箚娓氣偓瀹曟艾鈻庤箛姘厒闂佸憡鐟﹁摫婵犫偓閳╁啫顕辨慨姗嗗亞閻熴垺鎱ㄥ┑鍡氬闁诡喗娲滈幃鎵沪閻戔晛浜惧ù锝囨櫕缁犲骞栨潏楣冩婵炵⒈鍨堕幆鍕川婵犲啫顕￠梺?
@@ -4972,22 +4900,20 @@ export struct PlaybackPage {
                       //   改成与歌名行**同一个窗口、同一条曲线**，再乘用户要求的 0.55 淡（静止态仍是 0.55，
                       //   与改动前逐值一致）。位移本来就与歌名行同名（下一行 `.translate({ y: metaRiseVp() })`）
                       //   ⇒ 两组从此同起同落。
-                      .opacity(this.expandState.pullChromeOpacity() * PlaybackPage.MINI_LYRIC_OPACITY)
+
                       // 闂佸疇妫勯幊澶娢?2026-10-15 闂佹椿娼块崝宥夊春濞戞埃鍋撶憴鍕孩闁汇劎鍠栭弫宥咁潩閵夈垹浜?*闂佺绻愰悧鎾凰夐敐澶婄闁靛／鍕殸闂佸搫瀚烽崹浼存儍椤掆偓椤垹鐣濋崘顏呅撻梺鍛婄矊閺堫剟寮ぐ鎺撳癄闊洦鏌ㄩ惁濠氭⒑?*闂?
                       //   闂?闁诲繐绻愮换鎴︽偤閺囩姵瀚氱€广儱鐗愬▔?*缂備焦顨忛崗娑氱博鐎靛摜纾?*闂佹眹鍔岀€氼厼顪冮崒鐐粹拻閻庨潧鎽滃畷鍫曟煥濞戞ɑ缍乪arlyRiseVp()`闂佹寧绋戦張顒€螞椤撶喓顩查幖娣灩娴犳﹢鏌涢幒鏇熺【閻忓浚鍨堕弻鍥晲閸曨収浼囩紓鍌欑鐎氬摜妲愬鑸垫櫖?
                       //   婵炲濮寸花鑲╃箔閸涙潙纭€闁搞儺浜濆畷?180vp闂佹寧绋掗惄顖氼焽閵堝拋娼伴柕蹇婃閸嬫挻鎷呮搴Ｐ㈢紓浣割槺缁垱绂?0闂佹寧绋戦惉鍏兼櫠濡ゅ懏顥堥柕蹇嬪€愰崑鎾诲箛椤掆偓閸撹偐绱掓潏鈺佇＄紒妤€顦靛畷锝呂熺化鏇炰壕?
                       // ★ 2026-10-17（用户实测「小歌词位置太低 / 大小不对」）：竖直升入改走**歌名行同一个窗口**
                       //   （`metaRiseVp()` = 0.18→0.62）。原来用的是控制区那组 `contentRiseVp()`（0.45→1.00）
                       //   ⇒ 形变中段歌名行已经在往上飞了，小歌词还沉在下面 ~180vp ⇒ 屏上就是"压到进度条下面"。
-                      //   同一个窗口 ⇒ 小歌词与它锚定的歌名行**刚性同移**，间距全程不变，钳制也就全程成立。
-                      .translate({ y: this.expandState.metaRiseVp() })
+
                       // 闂佽　鍋撻柟顖滃瀹曟娊寮堕埡浣瑰窛闁宠鍚嬬粙澶愵敇閻愬弶鏆ラ柣搴℃贡椤㈠﹪锝為敃鍌氬偍閻庯綆鍋勯。鎶芥煥濞戞瀚伴柣顭戝墮椤垹鐣濋崘顏呅撴繛鏉戝悑閼归箖骞忔导鏉戠鐟滃秹宕哄Δ鍛閺夌偞澹嗛棄宥夋煟閳轰焦鎲告繛鎻掞攻閹?
                       // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-17闂佹寧绋戦悧蹇涘极閵堝绠ｉ柛鎴欏€楃粣?*闂侀潧妫楅懟顖炴儍椤掆偓椤垹鐣濋崘顏呅撻梺缁樼矋濠㈡ê锕㈤鍫濈煑婵☆垵顕ч悘鍥瑰鍐╊棞濠殿喒鏅犻幃浠嬫嚒閵堝洦灏濋梺鍝勵槺閸犲秶绮婚敐澶婅Е閹兼番鍨归·鍛存煕閹达絾顏犳鐐叉喘閺佸秶浠﹂悙顒佹瘔婵炴垶鎸撮崑鎾斥槈閹炬剚鍎滅紒?
                       //   闂佸憡鐟ラ崐浠嬪焵椤掆偓閸燁偊宕ｉ崜褉鍋撻悷鏉挎殭婵炵》绻濋獮鈧幖瀛樼箘閻ゅ嫬顪冪€ｎ剙浠滈柛娆忔婵?*闂佹寧绋戦ˇ顐﹀闯?闂侀€涘嫎閸婃洖煤閺嶃劎鈻斿┑鐘辫兌椤忛亶鏌?閻熸粏鍩囬崹纭呫亹婢舵劕瀚夐柣鏃€妞块崬銊р偓娈垮枓閸?闂佹眹鍔岀€氭澘鈻撻敐澶嬪癄闊洦绋掗敍宀勬煥?
                       //   闁诲海鎳撻崯顐﹀箯娴兼潙绀嗘い鎰╁€栭悾閬嶆煕瑜庨妵鐐电博閹绢喖鍐€闁告垯鍊楃粈?*閻熸粏鍩囬崹纭呫亹婢舵劕瀚夐柣鏃堟敱閻ㄦ垿鎮归崶銉ュ姎婵犫偓椤忓牆鎹?*闂侀潧妫斿ù鍥憘鐎ｎ剛绠旀い鎴ｆ硶椤忚京绱撴担绋款仾婵＄偛鍊垮鑽も偓闈涙憸瀹?`earlyRiseVp()` 婵炲濮寸花鑲╃箔閸涙潙纭€闁搞儺浜濆畷?
                       //   闂佹寧绋戦悧鍛箔閸岀偞顥堥柕蹇嬪€曟禍婵嬫煛?`.translate`闂佹寧绋戦ˇ顓㈠焵椤掆偓閸婂锝為锕€绠婚柣鎰劋閿涙牕螞閻楀牜鐒介柡浣稿船椤垻浠﹂懞銉モ偓鎶芥偠濞戞ɑ婀伴柡浣稿悑閵囧嫰妫冨☉妯绘殽闂佺鍕闁绘牭绲块幉鎾晲閸涱厽鐎梺鎸庣☉婵傛梻绮径鎰棃闁绘鍎らˉ鎴︽倵閻熸澘鏆旈柍?
-                      .visibility(this.isCollapsing() ? Visibility.None : Visibility.Visible)
-                  }
+
                   // 闂?2026-10-15 闁荤姴娲ら敃銉╁蓟閸ヮ剚鐓ユ慨妯哄船娴狀垶鏌ㄥ☉妯荤秮hdc shell hilog -x | Select-String 'RzdBoxes'`闂佹寧绋戦¨鈧紒?
                   //   闂?*婵炴垶鎸搁ˇ顕€鏌屽鍕嚤婵﹩鍋嗛棄宥夋煟閳哄喚鐒鹃悽顖氭喘閹啴宕熼锝呬淮**闂佹眹鍔岀€氼噣鎮伴妷鈺佺煑闁挎繂娲ㄩ崣鎰喐闁附绶氱紒鏃€娼欓埢搴ㄥ焺閸愩劉鍙洪梺鍛婂灩閸庛倕顭?闂佺偨鍎查弻锟犲焵?
                   //     `lyric` 闁诲繐绻愮换鎴︽偤閺囩姵瀚?/ `title` 濠殿喗绻傞懟顖炲箖?/ `singer` 濠殿喗绻傞張顒佹櫠?/ `cover` 婵犮垹鐖㈤崘顏咁唸闂傚倸鐗滃鍧楀焵?
@@ -4996,16 +4922,7 @@ export struct PlaybackPage {
                   // 鈽呪槄鈽呪槄 2026-10-17锛堢敤鎴凤細銆屽皬姝岃瘝瑕佽惤鍒版瓕鎵嬭涓嬫柟銆嶏紱姝ゅ墠瀹冧笅杈硅创鐫€ swiper 鐩掑簳 鈬?蹇呯劧鍘嬩綇姝屽悕琛岋級
                   //   鏀规垚 TopStart + 缁濆瀹氫綅锛歽 = metaTopGeomY + 琛岄珮 + 闂磋窛 鈭?鐩掗《锛坄lyricBoxTopVp` 鏄棦鏈夋帰閽堬級銆?
                   //   闈欐鎬?= 姝屾墜琛屼笅娌?+12vp锛涘舰鍙樻€佷粛鐢?`contentRiseVp()` 浠庝笅鏂瑰崌涓婃潵锛堢獥 0.45鈫?.00锛夈€?
-                  .position({ x: 0, y: this.miniLyricTopY() })
-                  .id(PlaybackPage.MINI_LYRIC_BOX_ID)
-                  .onAreaChange((_oldArea: Area, area: Area): void => {
-                    // ★ 2026-10-18：把**小歌词块的真实高度**量下来（钳制要用它；写死值只是首帧兜底）。
-                    const hVp: number = areaLengthToVp(area.height);
-                    if (hVp > 0 && Math.abs(hVp - this.miniLyricBlockHVp) > 0.5) {
-                      this.miniLyricBlockHVp = hVp;
-                    }
-                    this.logLayoutBoxes();
-                  })
+
                 }
                 .width(StyleConstants.FULL_WIDTH)
                 // 闂?濠殿喗绻傞懟顖炲箖?濠殿喗绻傞張顒佹櫠濠婂牊鐒介柨婵嗗椤忛亶鎮?*闂佸憡鐟禍锝夋憘鐎ｎ偁浜滈柤鍝ユ暩閸╁姊洪銊у缂佹梹娼欓々?*闂佹寧绋戝濉竨llChromeOpacity = clamp((effT-0.18)/0.44)`闂?
@@ -5283,12 +5200,7 @@ export struct PlaybackPage {
               //   闁宠法濯寸粭?闊洤鎳橀妴蹇涘礃濞嗘帞绠?`@Trace`/`@Local`闁挎稒宀搁崳娲礆妫颁胶顓洪柛姘唉椤?*閻熸瑱绠戣ぐ鍌涚▔閳ь剙鈻庨敓鐘叉鐎?*闁?
               //     闁告熬绠戦崹?`metaOffsetY()` 闂佹彃鐭傞崑鍛枎閿熺姵灏柛鎺戝閺併倝鎯冮崟顒佇?閺夆晜蓱閻ュ懘鏌岃箛鎾崇厒"闁汇劌瀚崢瑙勬償閺囩喎鑵圭紒鐘愁殔閳?闁?鐟滆埇鍨归幃鎾斥柦閳ュ厖绮?
               //     闁挎稑鐗愮换鏍ь潰閿濆棙笑濞戞挸锕ｇ粩鎾偋?闂佽棄鍟块崺妤€鈻介敍鍕櫢闁?闁汇劌瀚敮顐﹀炊閻欏懐绀嗛柕?
-              .onAreaChange((_oldArea: Area, area: Area): void => {
-                const y: number = areaLengthToVp(area.globalPosition.y);
-                if (Math.abs(y - this.chromeTopMeasured) > 0.5) {
-                  this.chromeTopMeasured = y;
-                }
-              })
+
 
               Row() {
               }
@@ -5400,15 +5312,9 @@ export struct PlaybackPage {
               //   静止态（`morphStage = OPEN/NONE`）`pullBottomIn()` 返回 1 ⇒ 本行落到 1，与改动前逐像素一致。
               //   回退口径（甲方旧要求"关闭期间两颗一直在"）：把本行换成 `.opacity(1)` 即可，其余不用动。
               .opacity(this.expandState.pullBottomOpacity())
-              // ★ 2026-10-18：把**这一层自己的上沿**量出来（小歌词钳制要用它，别再拿 swiper 内部的空行当上沿）。
-              //   `globalPosition` 是**布局**坐标（不含 `.translate`）⇒ 补上同一帧的 `pullBottomYVp()`。
-              .onAreaChange((_oldArea: Area, area: Area): void => {
-                const y: number = areaLengthToVp(area.globalPosition.y)
-                  + this.expandState.pullBottomYVp();
-                if (Math.abs(y - this.chromeBlockTopVp) > 0.5) {
-                  this.chromeBlockTopVp = y;
-                }
-              })
+              // ⛔ 2026-10-18（第五轮）：这里原来挂着一条"把控制区上沿量进 `chromeBlockTopVp`"的
+              //   `.onAreaChange` —— 它是 `miniLyricTopY()` 那条钳制的输入（`chromeTop − blockH − 8`）。
+              //   小歌词改成歌名行的**流式兄弟**后不再需要任何实测上沿，该量与其 `@Local` 已一并删除。
               .onTouch((event: TouchEvent): void => {
                 this.touchChrome('controlTouch');
                 // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-16闂佹寧绋戦悧蹇涘矗鎼淬劌绠规い鎺嶇劍閿熴儵鏌ｉ敐鍛効缂佽鲸宀搁弫?*闂佸綊鏀遍悧鏇熸叏閳哄懎绠崇憸宥夊春濡ゅ懎绾ч柍鈺佸暞閺嗩亪鎮?/ 闁诲繒鍋炲ú鏍?*闂佹寧绋戝濉€arCollapse`闂佹寧绋戦ˇ顓㈠焵?
@@ -7645,6 +7551,52 @@ export struct PlaybackPage {
         //   闂佸疇娉曟刊瀵哥箔?`MusicPlayInfoBlock`闂佹寧绋戦悧鍡涱敊閺冨倷娌?/ 闂傚倸鐗勯崹鍝勵熆濮椻偓閺屽洭鏁愰崟顔规嫛闂佽　鍋撴い鏍ュ€楃粈?*婵炴垶鎸撮崑鎾绘煟閳轰緡鍤熼柡浣靛€濋幆鍐礋椤愶絿娈ら梺鍝勫閸ㄤ即鎮?*闂佹寧绋戝﹢?39 / L411 / L447闂?
         //      闂?闂佸憡鑹炬總鏃傜箔閸屾稓鈻旈柍褜鍓氬鍕礋椤忓棭浼囬梺鍝勭Т閸ゆ牜妲愬┑瀣煑闁割偆鍠愮瑧闂侀潧妫楅懟顖炲箖閹惧鈻旈柍褜鍓濋妵鎰板閵忕姌?N 婵犮垼娉涚€氥劑鍩€椤戣法顦︾憸鎶婂洤缁╅梺顐ｇ〒閸熷﹤鈽夐幘顖氫壕婵犮垼娉涚€氥劑鍩€椤掆偓缁夌數妲愰敓鐘茬濠㈣泛鏈悾閬嶆⒑椤撱劎瀵肩紒鏂跨摠瀵板嫰宕熼埞鎯т壕?
         .opacity(this.expandState.targetMetaOpacity())
+
+        // ★★★ 2026-10-18（第五轮 · 照搬上游盒模型）：**小歌词块 = 歌名行的流式兄弟**，不再绝对定位。
+        //
+        //   上游 `floatingMeta` 的真实盒模型（`wujie.pa:195907-196014`；逐行还原见
+        //   `_recover/logic-src/full/上游播放页歌词块全量.ets` §三）：
+        //     Column()  .width('100%') .height(overlayBaseH() > 0 ? overlayBaseH() : '100%')
+        //    │          .justifyContent(FlexAlign.Center)                  ← `wujie.pa:195907-195944`（居中盒）
+        //    └ Column() .width('100%') .alignItems(HorizontalAlign.Start)
+        //               .offset({ y: this.morph.metaOffsetYAt(this.swiperProgress) })
+        //                                                                  ← `wujie.pa:195968-196014`（位移壳）
+        //       └ metaRow()                                                ← `wujie.pa:171797-171846` / `194748-194831`
+        //   ⇒ 「歌名行之下」唯一合法的位置 = **位移壳的下一个子节点**（跟在 `metaRow` 后面、走同一条流），
+        //     既不需要也不允许第二套坐标系。
+        //   本仓对应：居中盒 = 下面那个挂 `.height(estBoxHVp()).justifyContent(Center)` 的 Column；
+        //   位移壳 = 正挂着 `.offset({ y: this.metaOffsetY() })` + `.translate({ metaRiseVp() })` 的这层。
+        //
+        //   ⛔ 旧实现在 `Swiper` 第 0 页用 `.position({ x: 0, y: this.miniLyricTopY() })`（**窗口绝对 y**）
+        //      ⇒ 与歌名行的「居中盒 + offset」是**两套坐标系**，`estBoxHVp()` ≠ 窗口高时必然偏，
+        //        调公式永远调不出来（用户实测三轮）。页 0 已恢复成上游的空壳（见那里的注释）。
+        Column() {
+          MiniLyricLinesComponent()
+            .width(StyleConstants.FULL_WIDTH)
+            // 左侧口径与歌名行**同源**：歌名行是 `.padding({ left: this.lyricMetaLeftInset(), … })`，
+            // 这里是 `.margin({ left: … })`；两者同为 `width('100%')` 的兄弟节点 ⇒ padding ≡ margin。
+            .margin({
+              left: this.lyricMetaLeftInset(),
+              right: PlaybackPage.LYRIC_META_SIDE_VP
+            })
+            // 淡入窗口与位移**与歌名行同一个源**：
+            //   · 上游歌名行自己是 `.opacity(0.86)`（`wujie.pa:194948`）叠在 `pullChromeOpacity` 上；
+            //   · 小歌词保留用户拍过的 0.55（`PlaybackPage.MINI_LYRIC_OPACITY`）。
+            .opacity(this.expandState.pullChromeOpacity() * PlaybackPage.MINI_LYRIC_OPACITY)
+            .translate({ y: this.expandState.metaRiseVp() })
+            .visibility(this.isCollapsing() ? Visibility.None : Visibility.Visible)
+            .id(PlaybackPage.MINI_LYRIC_BOX_ID)
+            .onAreaChange((): void => {
+              // 只做诊断：`RzdBoxes` 的 `lyric=` 与 `RzdBranch` 的 `miniClear` 判据都读这个 id 的矩形。
+              this.logLayoutBoxes();
+            })
+        }
+        .width(StyleConstants.FULL_WIDTH)
+        // ★ 高度**钉死** = `MINI_LYRIC_BLOCK_H_VP`（57 = 2×26 + 行距 3 + 上边距 2）。
+        //   为什么必须钉：居中盒是按"内容总高"居中的 ⇒ 多一个 h 高的子节点会让整组高 h、歌名行被上抬 h/2；
+        //   钉死高度后再由下面那条 `offset` 补回 h/2，两者配对 ⇒ 歌名行的 y 与改动前**逐值相同**。
+        .height(PlaybackPage.MINI_LYRIC_BLOCK_H_VP)
+        .justifyContent(FlexAlign.Start)
         // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀闁告侗浜濋～?2026-10-17闂?*闂佸憡甯炴慨鐢垫暜閳ь剟寮堕埡鍌滄噰闁革絿鍏橀弻鍥晲閸℃鎷梺鐓庮殠娴滅偟妲愰鍫熷剭?180vp 婵炶揪绲界粔鏈电昂** 闂佺偨鍎查弻锟犲焵?goal 缂?1 闂佸搫顧€缁辨洖鈻撻幋婵愭桨闁挎繂顦板銊╂偡閺囨氨鍔嶉柣顏冨嵆閺?
         //
         // 婵炴垶鎸搁敃锝囩博閹绢喗鍋嬮柛顐悼缁犲綊姊洪幓鎺撴拱婵?`.translate({ y: this.expandState.metaRiseVp() })`闂?
@@ -7673,7 +7625,12 @@ export struct PlaybackPage {
           }
           .width(StyleConstants.FULL_WIDTH)
           .alignItems(HorizontalAlign.Start)
-          .offset({ y: this.metaOffsetY() })
+          // ★★★ 2026-10-18（第五轮）：小歌词成为流式兄弟后，位移壳的内容高 = 歌名行(34) + 小歌词(57)，
+          //   而外层是 `justifyContent(Center)` ⇒ 整组会被上抬 57/2 = 28.5vp。这里把那一半补回来。
+          //   ⇒ 两个量的来源都只有一个：
+          //     歌名行顶边 = `(estBoxHVp() − LYRIC_META_ROW_H_VP)/2 + metaOffsetY()`   ← 与改动前逐值相同
+          //     小歌词顶边 = 歌名行顶边 + `LYRIC_META_ROW_H_VP`(34)                    ← 由流式跟随得到
+          .offset({ y: this.metaOffsetY() + PlaybackPage.MINI_LYRIC_BLOCK_H_VP / 2 })
           // 闁宠棄鎳夊Σ鍕煡閸涱亝顫?2026-10-17闁?*闁诡厹鍨归ˇ?濞寸姴绨肩粭鍛存閵忕姴纾冲☉鎾筹攻濞?** 闁炽儲鏌￠埀?闁活潿鍔嶉崺娑氣偓鍦仦缁?
           //   闁? 闁衡偓閸︻厽鐣卞☉鎾崇Т椤曨噣鏁嶇仦缁㈠妧閻㈩垰鎲￠悺鏇㈠箥鐎ｎ亞瀹夐悹鍥ュ劙缁姵绋夌€ｎ喗妗ㄩ柛鎴犲劋濞肩敻濡撮崒娆戠☉闁活亜顑囧﹢鍛村籍閻樺灚娅曢柕鍡楃▌缁?
           //   闁瑰瓨鍨崇粭鍌涚▔閳ь剟鎮ч崼婵嗘锭闁稿鐭花?闁告帩鍋勭敮鍥ㄦ交濞戞瑥浠橀柛鎺曟硾鐏?闁汇劌瀚伴幐鎼佸礆鐠佸湱绀夐柛妤€鐡ㄦ俊鍛婃交濞嗗海顏遍悶娑樼灱濞?*闁告娲ら崣鍡樻媴瀹ュ泦?*濞戞挶鍨虹敮鈧ù?
