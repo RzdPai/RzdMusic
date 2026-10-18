@@ -2250,6 +2250,18 @@ export class PlayerExpandState {
 
   /** Source stays mounted for measurement; only paint ownership changes. */
   @Trace public sourceBarHidden: boolean = false;
+  /**
+   * 「系统播放条」是否被**我们**暂时顶掉（上拉/展开期间）。
+   *
+   * ★★★ 2026-10-21（用户：「无界上拉一半再下拉回去还是 HDS 样式，派音会变半透明。
+   *   作者说：上拉时把系统播放条隐藏、换成自己绘制的；回来时等自绘条落到最下面再取消隐藏」）：
+   *   原来系统条只靠 `sourceBarHidden` 隐，而它在 `releaseMorphOwnership()` 里**比自绘条先**放出来
+   *   ⇒ 自绘条（半透明内容、没有 HDS 盘）还压在系统条上，肉眼看就是「半透明」。
+   *   现在多这一道闸：**上拉开始 = 置 true**（系统条 Hidden），
+   *   **落回迷你条（`morphLand()` / `morphReset()`）= 置 false**（自绘条正好落到槽位那一帧，
+   *   同一帧里系统条出现、自绘条消失 ⇒ 无缝，且不会出现两套皮叠着）。
+   */
+  @Trace public hdsBarSuppressed: boolean = false;
   @Trace public metaBridgeActive: boolean = false;
   @Trace public metaBridgeGeneration: number = 0;
   private sourceTitle: MorphMetaEndpoint | undefined = undefined;
@@ -3308,6 +3320,11 @@ export class PlayerExpandState {
    */
   public pullOpenBegin(ui: UIContext, preferFloating: boolean): boolean {
     this.pullDragging = true;
+    // ★ 2026-10-21：上拉开始的**第一帧**就把系统条顶掉（自绘条由 Shell 的克隆层接管）。
+    //   必须在这里而不是等 `morphBeginEntering()`：跟手阶段 `morphP` 还很小，
+    //   系统条若还露着，两套皮会叠成"半透明"。
+    this.hdsBarSuppressed = true;
+    Logger.info('RzdBarHandoff', 'pull begin -> hds bar hidden, self-drawn clone takes over');
     // 鈽呪槄鈽呪槄 2026-10-17锛?*鐓ф惉鏃犵晫锛氳繘鍏?涓嬫媺妯″紡"** 鈥斺€?`MainPage.pullMode`锛?
     //   鏃犵晫鑳屾櫙灞傜殑涓嶉€忔槑搴︽槸鍒嗕袱濂楀彇鍊肩殑锛坄wujie.pa:192161-192176`锛夛細
     // ```
@@ -4814,6 +4831,9 @@ export class PlayerExpandState {
     this.metaBridgeGeneration = this.morphGen;
     const ok: boolean = this.morphInitParams();
     this.sourceBarHidden = ok;
+    // ★ 2026-10-21：**点击展开**也走同一套交接（上拉那条在 `pullOpenBegin()` 里已置位）。
+    this.hdsBarSuppressed = ok;
+    Logger.info('RzdBarHandoff', `entering ok=${ok} -> hds bar hidden=${ok}`);
     Logger.info('RzdMorphOwnership', `enter gen=${this.morphGen} sourceHidden=${ok} meta=${this.metaBridgeActive}`);
     this.applyMorphProgress(0);
     Logger.info(PlayerExpandState.logTag,
@@ -5006,6 +5026,13 @@ export class PlayerExpandState {
     this.morphDrive = MorphDrive.NONE;
     this.releaseMorphOwnership(true);
     this.logMorphOwnership('land-mini');
+    // ★ 2026-10-21：自绘条已经**落到槽位**这一帧，才把系统条放回来（用户口径：回来时等自绘条
+    //   到最下面再取消隐藏）。同一帧里 `sourceBarHidden` 也被 `releaseMorphOwnership` 清掉，
+    //   所以系统条出现与自绘条消失是**同一次渲染**，不会出现两套皮叠着的"半透明"。
+    if (this.hdsBarSuppressed) {
+      this.hdsBarSuppressed = false;
+      Logger.info('RzdBarHandoff', 'landed -> hds bar restored (self-drawn clone drops)');
+    }
     Logger.info(PlayerExpandState.logTag, 'morph land (hand back to mini bar)');
   }
 
@@ -5013,6 +5040,11 @@ export class PlayerExpandState {
   public morphReset(): void {
     // 上游 `finishReverse` / 会话结束都会 `setMiniOut(false)`（`wujie.pa:147562-147568`）。
     this.miniOut = false;
+    // ★ 2026-10-21：复位 = 回到"没有形变动画"的静止态 ⇒ 系统条必须在场（交接闸清掉）。
+    if (this.hdsBarSuppressed) {
+      this.hdsBarSuppressed = false;
+      Logger.info('RzdBarHandoff', 'reset -> hds bar restored');
+    }
     this.releaseMorphOwnership(true);
     this.morphGen = this.morphGen + 1;
     this.morphStage = MorphStage.NONE;

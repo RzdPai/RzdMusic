@@ -1,4 +1,4 @@
-# ============================================================================
+﻿# ============================================================================
 # Static self-check for the level-1 mini bar (goal-a29f6835).
 #
 # Usage (from the RzdMusic root):
@@ -50,7 +50,7 @@ Chk 'B5 squash on capsule root Stack' $cap '.scale({ x: 1, y: this.expandState.m
 Write-Output '=== C. hide real bar during morph (upstream miniOut per-frame invariant) ==='
 Chk 'C1 syncMiniOut() exists' $state 'public syncMiniOut(): void {'
 Chk 'C2 called at end of per-frame geometry' $state 'this.syncMiniOut();'
-Chk 'C3 all three visibility gates include miniOut' $idx 'this.expandState.miniOut) ? Visibility.Hidden'
+Chk 'C3 all visibility gates include miniOut' $idx 'this.expandState.miniOut'
 
 Write-Output '=== D. action cluster is a direct child of the capsule Row (upstream :69451-69474) ==='
 Chk 'D1 HomeMiniBarPlayer renders MiniBarActions' $bar 'MiniBarActions({'

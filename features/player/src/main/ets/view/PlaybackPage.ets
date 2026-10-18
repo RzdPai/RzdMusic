@@ -1661,15 +1661,32 @@ export struct PlaybackPage {
     this.diagScrollCount = this.diagScrollCount + 1;
     this.diagScrollLast = `${selectedIndex}/${index}/${position.toFixed(3)}`;
     // 闂佸啿鍘滈崑鎾绘煃閸忓浜?闂備緡鍋呴崝鏍ь焽椤栫偞鍋傜憸搴繆闁秴绫嶉柣妯虹仛濞呮洟鏌ｉ妸銉ヮ仼缂傚秴锕ョ粙澶愬焵椤掑嫬绀?闂佸啿鍘滈崑鎾绘煃閸忓浜?
-    let p: number = position;
-    if (index === 0) {
-      if (p < 0) {
-        p = -p;
-      }
-      if (p > 1) {
-        p = 1;
-      }
-      this.lyricMorphT = p;
+    // ★★★ 2026-10-21（用户：「打断展开动画后重开播放器，滑到歌词页封面不会变小」）：
+    //   `onContentDidScroll(selectedIndex, index, position)` 对**视口内每一页**逐帧回调：
+    //     页 0（封面） position: 0 → -1（向左划出去）
+    //     页 1（歌词） position: 1 →  0（划进视口）
+    //   原来只认 `index === 0`：一旦页序/`selectedIndex` 与 `playbackSwiperIndex` 不同步
+    //   （打断展开动画后重开正是这种），页 0 那一路就不再回调 ⇒ `lyricMorphT` 永远停在 0
+    //   ⇒ 歌词页浮层不启用 ⇒ 封面不缩、不飞。
+    //   ⇒ 两页都接受，各自换算成同一个"歌词页进度"：页 0 用 `|position|`，页 1 用 `1 - |position|`。
+    let p: number = Math.abs(position);
+    if (p > 1) {
+      p = 1;
+    }
+    const progress: number = index >= 1 ? 1 - p : p;
+    if (Math.abs(progress - this.lyricMorphT) > 0.0005) {
+      this.lyricMorphT = progress;
+    }
+    // 诊断（`grep RzdLyricFloat`）：进度或页号变了才打一行，避免每帧刷屏。
+    const diagKey: string = `${selectedIndex}/${index}`;
+    if (diagKey !== this.lyricDiagKey || Math.abs(progress - this.lyricDiagP) > 0.08) {
+      this.lyricDiagKey = diagKey;
+      this.lyricDiagP = progress;
+      Logger.info('RzdLyricFloat',
+        `swipe sel=${selectedIndex} idx=${index} pos=${position.toFixed(3)} ` +
+          `t=${this.lyricMorphT.toFixed(3)} float=${this.expandState.lyricFloat() ? 1 : 0} ` +
+          `coverSize=${this.expandState.lyricCoverSizeOf().toFixed(1)} ` +
+          `geomReady=${this.expandState.lyricGeometryReady() ? 1 : 0}`);
     }
     // 闁荤姳鐒︽刊鑺ュ緞?濠电姴锕ラ懝鐐叏閳哄倻顩风€广儱鎳忛煬顒勫级閳哄倻顬兼い?闂佹寧绋戦悧鎰帮綖?`lastScrollAtMs` 闂佹眹鍔岀€氼參寮悙鐑樼厒濠电姴绻掔粣妤呮煢閳ь剟鎸婃径灞炬瘞闂婎偄娲ら幊姗€濡磋箛鏇熷闁宠　鍋撶紓宥呮噽缁辨帒鈻庨幘顖氫壕闁归偊鍓氭慨搴ㄥ级閳哄倻鈽夐悗瑙勫▕閺?
     // ★★★ 2026-10-17（③ 照搬无界：`PlayerPage.onContentDidScroll` = `wujie.pa:190026-190075`）
@@ -1983,6 +2000,9 @@ export struct PlaybackPage {
    */
   private diagScrollCount: number = 0;
   private diagScrollLast: string = '-';
+  /** 歌词页滑动诊断的去重键（`selectedIndex/index`）与上次打印的进度（见 `onSwiperContentDidScroll`）。 */
+  private lyricDiagKey: string = '';
+  private lyricDiagP: number = -1;
   /**
    * 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-16闂佹寧绋掗懝楣冨船鐎电硶鍋撻崷顓熷殌闁?`.onAppear()` **闁荤姍鍥舵殥缂侇煉绻濆畷顐︻敂閸涱喛鎷梺鍛婂笒濡瑩寮?* 闂佺偨鍎查弻锟犲焵?闁诲氦顫夐惌顔剧礊?闂佺绻戞繛濠偽涢幘顔艰Е閹艰揪绲垮畷鎰版煟閹烘洘纭剧€殿喚鏁诲銊╁箚瑜忓鏃傗偓娈垮枓閸?闂?
    *
