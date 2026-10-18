@@ -124,6 +124,12 @@ export struct HomeMiniBarPlayer {
 
   /** Player VM shared with cover and aside. */
   @Local playerViewModel: PlayerViewModel = new PlayerViewModel();
+  /**
+   * ★ 2026-10-18（用户第十轮）：**这一行自己的实测高度**（0 = 还没量到）。
+   * 封面与内距一律以它为准（= 上游「封面内接于胶囊」），不再吃宿主钉的那个数——
+   * 宿主钉 56 而真机双行态只有 40 时，按 56 算出来的封面（44.8）会比条还高。
+   */
+  @Local measuredRowHVp: number = 0;
   /** Global music UI state (mini bar expanded, play state). */
   @Local appState: MusicAppState =
     AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
@@ -261,10 +267,20 @@ export struct HomeMiniBarPlayer {
    *   （那种宿主不传 `sidePad` 的这条分支，见 {@link sidePadVp}）。
    */
   private coverVisualEdgeVp(): number {
-    if (this.contentHeightVp > 0) {
-      return this.contentHeightVp * HomeMiniBarPlayer.MINI_COVER_RATIO;
+    // ★ 2026-10-18（用户第十轮）：基准优先用**实测行高**（= 真实胶囊高），实测不到才用宿主钉的值。
+    const base: number = this.capsuleBaseHVp();
+    if (base > 0) {
+      return base * HomeMiniBarPlayer.MINI_COVER_RATIO;
     }
     return HomeMiniBarPlayer.COVER_EDGE_DESIGN_VP;
+  }
+
+  /** @returns 封面/内距的**基准高度**（vp）：实测行高优先，其次宿主钉的高度，都没有则 0。 */
+  private capsuleBaseHVp(): number {
+    if (this.measuredRowHVp > 0) {
+      return this.measuredRowHVp;
+    }
+    return this.contentHeightVp > 0 ? this.contentHeightVp : 0;
   }
 
   /**
@@ -276,17 +292,12 @@ export struct HomeMiniBarPlayer {
    *   **逐字等于改动前**（那两个自绘宿主的外观本轮不动）。
    */
   private sidePadVp(): number {
-    if (this.contentHeightVp <= 0) {
+    if (this.contentHeightVp <= 0 && this.measuredRowHVp <= 0) {
       return HomeMiniBarPlayer.CONTENT_PAD_VP + HomeMiniBarPlayer.MINI_BAR_INNER_PAD_VP;
     }
-    // ★★★ 2026-10-18（用户第九轮：「二级页**歌曲列表按钮跑到外面**」）：
-    //   上一版这里算的是 `(胶囊高 − 视觉封面)/2 = 5.6`，并拿它当**行内距**用 ⇒ 右侧按钮离圆角边只剩 5.6，
-    //   而胶囊圆角是 `胶囊高/2 = 28` ⇒ 最右那颗被圆角切到，看起来"跑到外面"。
-    //   上游的真实分解（`wujie.pa:67490-67531` + `:66259-66288`）是两件事分开算：
-    //     `sidePad(行内距) = 胶囊高/2 − coverEdge(32)/2 = 12`，
-    //     封面视觉 = 32 × 1.4 = 44.8 ⇒ 视觉上**溢出到内距里 6.4** ⇒ **视觉左边距 = 12 − 6.4 = 5.6**。
-    //   ⇒ 内距回到 12（左右都 12），"封面离左太远"由封面自己的视觉溢出吸收，两件事各归各位。
-    const pad: number = (this.contentHeightVp - HomeMiniBarPlayer.COVER_EDGE_DESIGN_VP) / 2;
+    // 内距 = (基准高度 − 32)/2（上游 `capsuleH/2 − coverEdge/2`，基准=实测行高优先）
+    const base: number = this.capsuleBaseHVp();
+    const pad: number = (base - HomeMiniBarPlayer.COVER_EDGE_DESIGN_VP) / 2;
     return pad > 0 ? pad : 0;
   }
 
@@ -345,7 +356,7 @@ export struct HomeMiniBarPlayer {
           lockTwoRowCoverSize: this.lockTwoRowCoverSize,
           // ★ 上游 `MiniPlayer.capsuleH` 的等价物：封面据此算 `coverScale2 = (capsuleH × 0.8)/32`
           //   （56 ⇒ 1.4 ⇒ 视觉 44.8）。`0`（自绘条）时封面组件退回旧档位，逐字不变。
-          capsuleHeightVp: this.contentHeightVp
+          capsuleHeightVp: this.capsuleBaseHVp()
         })
         HomeMiniBarPlayerAside({
           playerViewModel: this.playerViewModel,
@@ -380,6 +391,13 @@ export struct HomeMiniBarPlayer {
     //   `padL == padR`（内容中心 ≡ 胶囊中心）、`h == cap`（行盒 ≡ 胶囊盒）、
     //   `padL == opticalGap == (cap − coverVisual)/2`（封面**内接**：视觉左边距 ≡ 上/下留白）。
     .onAreaChange((_oldArea: Area, area: Area): void => {
+      // ★★★ 2026-10-18（用户第十轮：「双行低高度态**封面还是偏大的大封面**」）：
+      //   把**这一行自己的实测高度**记下来 —— 封面/内距要以"真实条高"为基准，
+      //   不能吃宿主编给我们的那个数（宿主钉 56，而真机双行态可能只有 40 ⇒ 封面 44.8 比条还高）。
+      const measuredH: number = areaLengthToVp(area.height);
+      if (measuredH > 0 && Math.abs(measuredH - this.measuredRowHVp) > 0.5) {
+        this.measuredRowHVp = measuredH;
+      }
       const opticalGap: number = this.contentHeightVp > 0 ?
         (this.contentHeightVp - this.coverVisualEdgeVp()) / 2 : -1;
       Logger.info('RzdMiniBarGeom',
