@@ -15,8 +15,8 @@
 
 import { AppStorageV2 } from '@kit.ArkUI';
 import {
-  AmbientState, AppStorageKeys, getWindowInfoState, ImmersiveType, MINI_BAR_ID, PlayerExpandState,
-  StyleConstants, WindowInfo
+  AmbientState, AppStorageKeys, areaLengthToVp, getWindowInfoState, ImmersiveType, Logger, MINI_BAR_ID,
+  PlayerExpandState, StyleConstants, WindowInfo
 } from 'musicbasic';
 import { MusicAppState, PlayerConstants, PlayerViewModel } from 'player';
 import { HomeMiniBarAlbumCover } from './HomeMiniBarAlbumCover';
@@ -40,6 +40,14 @@ export struct HomeMiniBarPlayer {
   private static readonly MINI_BAR_SIDE_VP: number = 0;
   /** 胶囊**内部**组件再收进来的左右呼吸（vp）—— 用户要求"组件离播放条两侧远一点"。 */
   private static readonly MINI_BAR_INNER_PAD_VP: number = 4;
+  /**
+   * `contentHeightVp === 0`（不钉高度）时喂给 `constraintSize.maxHeight` 的"无上限"。
+   *
+   * ArkTS 里没有 `undefined`/`Infinity` 这种"不约束"的写法（`height()` 只吃 `Length`），
+   * 而 `maxHeight` 只要**大于自然高度**就等于没约束；4096vp 既远大于任何迷你条高度，
+   * 又不会在 px 换算里溢出。
+   */
+  private static readonly CONTENT_HEIGHT_UNBOUNDED_VP: number = 4096;
   /** Player VM shared with cover and aside. */
   @Local playerViewModel: PlayerViewModel = new PlayerViewModel();
   /** Global music UI state (mini bar expanded, play state). */
@@ -71,13 +79,29 @@ export struct HomeMiniBarPlayer {
   /**
    * 是否由本组件自绘背板（{@link MiniBarBackplate}）。
    *
-   * - `true`（默认，首页那条）：首页底栏走 `barFloatingStyle.miniBar` + `enableMiniBarBackground: false`
-   *   ⇒ HDS 不画迷你条那层背板，由这里自绘 —— 只有这样才能让背板跟 `morphSquashY` 一起压/一起弹。
-   * - `false`（二级页那条）：那条住在 **HDS 浮动底栏**（`HdsTabs.barFloatingStyle.systemMaterialEffect`）
-   *   ⇒ 胶囊与材质由 HDS 画；这里再自绘一层就是「真材质 + 半透明蒙版 + 模糊」叠两层，
-   *   官方材质被洗白（2026-10-18 用户要的「沉浸光感」就看不出来了）。
+   * - `false`（**两个 HDS 宿主都传这个**）：首页那条（`Index.miniBar()`，底栏 `barFloatingStyle.miniBar`
+   *   + `enableMiniBarBackground: true`）与二级页那条（`Index.floatingMiniBar()`，HDS 浮动底栏 +
+   *   `systemMaterialEffect`）—— 胶囊与材质**都由 HDS 画**。这里再自绘一层就是
+   *   「官方材质 + 半透明蒙版 + 模糊」叠两层，材质被洗白（2026-10-18 用户要的「沉浸光感」就看不出来了）。
+   *   首页那条 2026-10-18 晚起也走这一支：用户明确要"光感"，代价是关闭播放器时**背板**不再跟着
+   *   `morphSquashY` 压/弹（内容仍然一起压，`.scale` 挂在同时包含内容的根 `Stack` 上）。
+   * - `true`（默认，**只剩**推荐页 `HomeFloatingMiniBar` / 歌单页 `PlaylistFloatingMiniBar` 这两个自绘胶囊宿主）：
+   *   它们没有 HDS 底栏材质可接，背板必须自己画，否则整条是透明的。
    */
   @Param showSelfDrawnBackplate: boolean = true;
+  /**
+   * 把本组件的**高度钉死**成宿主给的设计高度（vp）；`0`（默认）= 不钉，按自然高度排。
+   *
+   * 自然高度 = 封面边长 + 上下各 8vp 内距：常规态封面 44 ⇒ **60vp**，沉浸式自由窗口那档封面 40 ⇒ 56vp。
+   * 二级页那条的宿主（HDS 浮动底栏）有自己的槽高，两者不等就会"内容偏上/偏下"
+   * ⇒ 由宿主传设计高度（`FLOATING_MINI_BAR_HEIGHT_VP` = 56），本组件用
+   * `constraintSize.maxHeight` 钉住它，并靠根 `Stack` 的 `alignContent: Center` 让内容**居中**：
+   * 上下留白恒等于 `(钉住的高度 − 内容行自然高度) / 2`。
+   *
+   * ⚠️ 首页那条 / 推荐页 / 歌单页**不传**（保持自然高度 60/56），不要顺手给它们也钉上 ——
+   *   首页那条的胶囊高度是 HDS 按内容自量的，钉了会把它压薄。
+   */
+  @Param contentHeightVp: number = 0;
   /** 涓婃媺鎵撳紑鎾斁椤碉紙璺熸墜锛夛細椹卞姩鍏变韩褰㈠彉杩涘害锛屾敹灏捐ˉ闂翠氦缁欏３灞傘€?*/
   private panOption: PanGestureOptions = new PanGestureOptions({ direction: PanDirection.Vertical });
 
@@ -271,6 +295,22 @@ export struct HomeMiniBarPlayer {
   }
 
   /**
+   * 根 `Stack` 的高度上限（vp）：`contentHeightVp > 0` 时就是宿主给的设计高度，否则等于"不约束"。
+   *
+   * 为什么用 `constraintSize.maxHeight` 而不是 `height()`：ArkTS 里没有"auto/不设置"的表达式
+   * （`height()` 只吃 `Length`），而 `maxHeight` 大于自然高度时完全等价于不约束 ⇒ 一套代码两用。
+   * 钉住之后根 `Stack` 的高度就**与封面档位无关**（常规态 56 而不是自然 60），
+   * `MINI_BAR_ID` 量到的形变起点几何也因此不再随窗口装饰档位漂移。
+   * @returns 高度上限（vp）。
+   */
+  private contentMaxHeightVp(): number {
+    if (this.contentHeightVp > 0) {
+      return this.contentHeightVp;
+    }
+    return HomeMiniBarPlayer.CONTENT_HEIGHT_UNBOUNDED_VP;
+  }
+
+  /**
    * Composes cover and aside in a row with gesture to open the full player on upward pan.
    */
   build() {
@@ -321,6 +361,11 @@ export struct HomeMiniBarPlayer {
     //   'StackAttribute'`锛孉rkTS 鎶ラ敊鐮?10505001锛夈€?
     .alignContent(Alignment.Center)
     .width(StyleConstants.FULL_WIDTH)
+    // ★★★ 2026-10-18（晚，用户：「二级页面播放条没偏，但是上面的内容偏了」）：
+    //   钉住高度（`contentHeightVp > 0` 时；0 = 完全不约束，与改动前逐字等价）。
+    //   配合上一行的 `alignContent: Center` ⇒ 内容行在钉住的盒子里**上下等距**，
+    //   二级页那条的"内容偏上"就在这一行 + 宿主那一层 `Stack(matchParent)` 之间被消掉。
+    .constraintSize({ maxHeight: this.contentMaxHeightVp() })
     // 鈽呪槄鈽呪槄 2026-10-17锛?*鑳跺泭绂诲睆骞曞乏鍙宠竟澶繎 鈫?寰€涓棿鏀?* 鈥斺€?鐢ㄦ埛绗?4 鏉★紝鐓ф棤鐣岋級
     //   鏃犵晫閭ｆ潯鑳跺泭鏈韩鍐欐 `width('100%')`锛屽搴﹀樊鏉ヨ嚜**瀹冪殑鐖跺鍣?*锛?
     //   椤甸潰绾у乏鍙宠浣?`topPageSideOf()` = 鎵嬫満 **16vp**锛堝綊妗?`璁捐甯搁噺鍏ㄨВ绠?md`锛?
@@ -333,6 +378,16 @@ export struct HomeMiniBarPlayer {
     // 锛坄onAreaChange` 缁欑殑鏄竷灞€鍑犱綍銆佷笉鍚鍏?transform锛岄噺鍑烘潵鐨勮捣鐐逛細鍋忥級
     .id(MINI_BAR_ID)
     .visibility(this.expandState.sourceBarHidden ? Visibility.Hidden : Visibility.Visible)
+    // 诊断（`hdc shell hilog | grep RzdMiniBarGeom`）：本行**实测**高度 + 窗口 y（vp）。
+    // 与壳层 `floatingMiniBarTabBarBox` 那行 `box slotH=… boxTop=…` 一对，就能算出真实留白：
+    //   padTop = content.y − boxTop；padBottom = slotH − padTop − contentH。
+    .onAreaChange((_oldArea: Area, area: Area): void => {
+      Logger.info('RzdMiniBarGeom',
+        `content h=${areaLengthToVp(area.height)} y=${areaLengthToVp(area.globalPosition.y)} ` +
+          `w=${areaLengthToVp(area.width)} pinned=${this.contentHeightVp} ` +
+          `hosting=${this.followAppMiniBarExpanded ? 'home' : 'floating'} ` +
+          `selfPlate=${this.showSelfDrawnBackplate} squashY=${this.expandState.morphSquashY}`);
+    })
     // 鈽呪槄 鎸ゅ帇锛坄morphSquashY`锛夋寕鍦?*Stack**涓?鈬?鑳屾澘涓庡唴瀹?*鍚屼竴涓彉鎹㈠煙**銆佷竴璧峰帇銆?
     //   鍑哄锛氭棤鐣?`squashLand` / `animateSquash`锛坄SQUASH_Y = 0.86` 鍘?110ms锛?
     //   鍐?320ms `cubic-bezier(0.34,1.56,0.64,1)` 杩囧啿鍥炲脊锛夈€?
