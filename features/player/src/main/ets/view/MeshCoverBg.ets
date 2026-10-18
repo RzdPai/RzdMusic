@@ -61,6 +61,86 @@ const HIT_FULL: string = '100%';
 const FALLBACK_BLUR_RADIUS: number = 9;
 const FALLBACK_BLUR_PASSES: number = 3;
 
+/**
+ * ★★★★ 2026-10-20（第三轮「点击展开动画过程背景颜色还是不对」）：
+ * **起手「真源优先窗口」**（ms）—— 挂载后这段时间内，如果真源还没到，**先不画兜底网格**，
+ * 让画布保持空（= 无界 `node.src === null` 时 `draw()` 直接 return 的形态）。
+ *
+ * ## 为什么需要（逐帧算出来的）
+ * `__Common__.opacity = pullBgOpacity = 0.04 + clamp01(effT/0.30)·0.96`，而 `effT` 是
+ * **560ms + `cubic-bezier(0.23,1,0.32,1)`** 的内容时间线 ⇒
+ * ```
+ *   t=0ms   p=0.000 → opacity 0.04     ← 只有这一帧是"96% 透明"
+ *   t=25ms  p=0.188 → opacity 0.64
+ *   t=50ms  p=0.360 → opacity 1.00     ← 之后屏上 100% 是网格自己的颜色
+ * ```
+ * ⇒ 形变的 550/600ms 里，用户看到的"背景颜色"**就是网格源的颜色**。
+ *   若这一拍网格源还是「`hueOfSeed(seed)` 兜底」（哈希色，与封面主色平均差 ~90°），
+ *   屏上就会是一片**与封面无关的饱和色**（实测例子见 `MeshSource.fillFallback` 注释），
+ *   而真源一旦到达又硬切一次 ⇒ 用户的原话"颜色还是不对"。
+ *
+ * ## 无界为什么没有这一段
+ * 它的源身份是**本地文件**：`PlaybackService.updateCover` 在换歌那一刻就把封面
+ * `coverCache.ensure(...)` 固化成本地文件、并把 `"file://" + path` 写进 `K_IMG_LOCAL`
+ * （`wujie.pa:292406-292448`）⇒ 点开播放页时 `decodeCover()` 是 `fs.openSync` + 本地解码，
+ * **1 帧内**就能拿到真封面；拿不到时 `node.src` 是 `null` ⇒ 画布空着（透出下层），
+ * **绝不会先亮一张哈希色**。
+ *
+ * ⇒ 我们的等价物：
+ *   ① 挂载后 96ms 内不画兜底（等 `adoptWarmMesh` / 解码这 1~3 帧）；
+ *   ② 真源到手后把它的字节记进 {@link MeshSeedCache}，同一首**下次打开第 1 帧就是真封面**。
+ * 96ms ≈ 6 帧@60Hz：够覆盖"预热命中 + `image.createPixelMap`"这条 1~3 帧的链，
+ * 又短到即使没命中也不会让下层（首页）长时间外露。
+ */
+const FIRST_SOURCE_GRACE_MS: number = 96;
+
+/** 真源字节缓存容量（首）。16KB/首 ⇒ 最多 64KB 常驻内存。 */
+const SEED_CACHE_CAP: number = 4;
+
+/**
+ * ★★★★ 2026-10-20：**按 `seed`（= `title + artist`）缓存"已加工好的真源字节"**（模块级，跨挂载存活）。
+ *
+ * 这是无界「封面固化成本地文件」（`PlaybackService.updateCover` 的 `coverCache`）在本仓的**内存版**等价物：
+ * 无界靠它做到"点开那一刻就有真封面"，我们原来的 `src` 只由页面给、页面一退就没了
+ * ⇒ 每次点开都从"兜底哈希色"开始。缓存住之后，同一首再点开是**第 1 帧就真封面**。
+ *
+ * ⚠️ 只存**字节**、不存 `PixelMap`（跨页面持有 PixelMap 会双重释放）；
+ *    每次取用都 `createPixelMapSync` 一张新的，所有权归组件。
+ */
+class MeshSeedCache {
+  private keys: string[] = [];
+  private items: Uint8Array[] = [];
+
+  get(seed: string): Uint8Array | undefined {
+    if (seed.length === 0) {
+      return undefined;
+    }
+    const i: number = this.keys.indexOf(seed);
+    return i < 0 ? undefined : this.items[i];
+  }
+
+  /** 写入并把它挪到"最新"位置（`keys[0]` = 最近一次用过）。 */
+  put(seed: string, bytes: Uint8Array): void {
+    if (seed.length === 0 || bytes.length === 0) {
+      return;
+    }
+    const i: number = this.keys.indexOf(seed);
+    if (i >= 0) {
+      this.keys.splice(i, 1);
+      this.items.splice(i, 1);
+    }
+    this.keys.unshift(seed);
+    this.items.unshift(bytes);
+    while (this.keys.length > SEED_CACHE_CAP) {
+      this.keys.pop();
+      this.items.pop();
+    }
+  }
+}
+
+/** 全局唯一的真源字节缓存（模块级；跨组件挂载/卸载存活）。 */
+const seedCache: MeshSeedCache = new MeshSeedCache();
+
 const TAG: string = 'RzdMeshCoverBg';
 const DOMAIN: number = 0x0000;
 
@@ -68,6 +148,66 @@ const DOMAIN: number = 0x0000;
 function rgbAt(u8: Uint8Array, x: number, y: number): string {
   const off: number = (y * SRC_EDGE + x) * 4;
   return `${u8[off]},${u8[off + 1]},${u8[off + 2]}`;
+}
+
+/** 两位十六进制（**只给日志用**）。 */
+function hex2(v: number): string {
+  const c: number = v < 0 ? 0 : (v > 255 ? 255 : Math.round(v));
+  const s: string = c.toString(16);
+  return s.length < 2 ? `0${s}` : s;
+}
+
+/** @returns 整张 64×64 的**平均色** `#RRGGBB`（**只给日志用**）。 */
+function avgHexOf(u8: Uint8Array): string {
+  let sr: number = 0;
+  let sg: number = 0;
+  let sb: number = 0;
+  let n: number = 0;
+  for (let i = 0; i + 3 < u8.length; i += 4) {
+    sr += u8[i];
+    sg += u8[i + 1];
+    sb += u8[i + 2];
+    n++;
+  }
+  if (n === 0) {
+    return '#000000';
+  }
+  return `#${hex2(sr / n)}${hex2(sg / n)}${hex2(sb / n)}`;
+}
+
+/** @returns 整张 64×64 **平均色**的色相角 `[0,360)`（**只给日志/判据用**）。 */
+function hueOfAverage(u8: Uint8Array): number {
+  let sr: number = 0;
+  let sg: number = 0;
+  let sb: number = 0;
+  let n: number = 0;
+  for (let i = 0; i + 3 < u8.length; i += 4) {
+    sr += u8[i];
+    sg += u8[i + 1];
+    sb += u8[i + 2];
+    n++;
+  }
+  if (n === 0) {
+    return 0;
+  }
+  const r: number = sr / n / 255;
+  const g: number = sg / n / 255;
+  const b: number = sb / n / 255;
+  const max: number = Math.max(r, Math.max(g, b));
+  const min: number = Math.min(r, Math.min(g, b));
+  const d: number = max - min;
+  if (d < 0.0001) {
+    return 0;
+  }
+  let h: number = 0;
+  if (max === r) {
+    h = 60 * (((g - b) / d) % 6);
+  } else if (max === g) {
+    h = 60 * (((b - r) / d) + 2);
+  } else {
+    h = 60 * (((r - g) / d) + 4);
+  }
+  return ((h % 360) + 360) % 360;
 }
 
 /** 真正画网格的渲染节点（对标无界 `MeshRenderNode extends RenderNode`）。 */
@@ -393,7 +533,20 @@ export struct MeshCoverBg {
   /** 上次采用/丢弃那一版源时的 `seed`（配合 {@link srcVer} 判"是不是同一首"）。 */
   private srcSeed: string = '';
 
+  /** 挂载时刻（ms）—— {@link FIRST_SOURCE_GRACE_MS} 的起点。 */
+  private mountMs: number = 0;
+  /** 起手窗口是否已经用掉（一旦画过任何一张图、或真源已到，就永久置真）。 */
+  private graceSpent: boolean = false;
+  /** 起手窗口的定时器 id（-1 = 没在跑）。 */
+  private graceTimer: number = -1;
+  /** 按 `seed` 命中真源缓存后解码出来的位图（**所有权归本组件**）。 */
+  private cachedPm: image.PixelMap | undefined = undefined;
+  /** 当前 `cachedPm` 属于哪个 `seed`。 */
+  private cachedSeed: string = '';
+
   aboutToAppear(): void {
+    // ★ 起手窗口的起点（见 FIRST_SOURCE_GRACE_MS）。
+    this.mountMs = Date.now();
     // ★ 只加日志（真机判读 ②）：**挂载一次就归零一次**。若一次打开播放页出现两条 `mount`，
     //   说明组件被卸载重挂了（`tSec` 会从 0 重新走、`reseed` 会重跑 ⇒ 网格花纹整片重排）。
     hilog.info(DOMAIN, TAG, 'RzdBgPhaseMesh mount seedLen=%{public}d t=%{public}d',
@@ -412,9 +565,11 @@ export struct MeshCoverBg {
 
   aboutToDisappear(): void {
     this.disposed = true;
+    this.clearGraceTimer();
     this.stopFrames();
     this.controller.node.src = null;
     this.releaseFallback();
+    this.releaseCachedCover();
   }
 
   // ★★★ 2026-10-17（照搬无界 `@Watch`：`coverPath→onSourceChanged`、`seed→onSourceChanged`）
@@ -472,6 +627,12 @@ export struct MeshCoverBg {
         this.controller.node.src = this.src;
         // 真源来了，兜底那张没用了（本组件持有它的所有权）
         this.releaseFallback();
+        // ★ 2026-10-20：真源已到 ⇒ 起手窗口作废，并把它的字节记进模块级缓存
+        //   （= 无界「封面固化成本地文件」，见 MeshSeedCache 的注释）。
+        this.graceSpent = true;
+        this.clearGraceTimer();
+        this.releaseCachedCover();
+        this.rememberSourceBytes(this.src);
         this.controller.node.invalidate();
         this.onFrameNow();
         // ★ 只加日志：**形变期间会不会换源**由这一行判定 ——
@@ -488,7 +649,12 @@ export struct MeshCoverBg {
           'seedLen=%{public}d oldSeedLen=%{public}d t=%{public}d',
         gen, this.srcVersion, this.seed.length, this.srcSeed.length, Math.round(this.accMs));
     }
-    this.paintFallbackSync(gen);
+    // ★ 2026-10-20：**先查"这一首的真源字节缓存"**（无界靠本地封面文件做到的那一步）。
+    //   命中 ⇒ 立刻画真封面（不画哈希兜底，屏上不会有"先错后对"的那一跳）。
+    if (this.paintCachedCoverSync(gen)) {
+      return;
+    }
+    this.paintFallbackDeferred(gen);
   }
 
   /**
@@ -512,6 +678,203 @@ export struct MeshCoverBg {
       return true;
     }
     return this.seed === this.srcSeed;
+  }
+
+  // ── 2026-10-20 新增：真源字节缓存 + 起手「真源优先窗口」────────────────────────────
+
+  /** 清掉起手窗口的定时器（换源/退场时都要清，否则旧回调会把兜底画到新歌上）。 */
+  private clearGraceTimer(): void {
+    const id: number = this.graceTimer;
+    if (id < 0) {
+      return;
+    }
+    this.graceTimer = -1;
+    clearTimeout(id);
+  }
+
+  /**
+   * 把真源（**已经 enhance + blur 过的** 64×64）的字节记进模块级缓存，键 = 当前 `seed`。
+   *
+   * 为什么存字节而不是 PixelMap：见 {@link MeshSeedCache}。
+   * 为什么是"已经加工过"的：`this.src` 本来就是页面/预热那条链加工完的成品，
+   * 存它 = 下次取用时 1:1 复现同一张图（不会二次 enhance、不会二次模糊）。
+   */
+  private rememberSourceBytes(pm: image.PixelMap): void {
+    if (this.seed.length === 0) {
+      return;
+    }
+    if (seedCache.get(this.seed) !== undefined) {
+      return;
+    }
+    try {
+      const bytes: number = pm.getPixelBytesNumber();
+      if (bytes !== SRC_EDGE * SRC_EDGE * 4) {
+        // 尺寸/通道口径不对就不缓存（例如设备返回 BGRA 或带 stride）——
+        // 下次仍走"等真源 / 兜底"两条老路，不会画错。
+        hilog.info(DOMAIN, TAG, 'RzdBgPhaseMesh seed-cache skip bytes=%{public}d', bytes);
+        return;
+      }
+      const buf: ArrayBuffer = new ArrayBuffer(bytes);
+      pm.readPixelsToBufferSync(buf);
+      const u8: Uint8Array = new Uint8Array(buf);
+      seedCache.put(this.seed, u8);
+      // ★ 真机判据（对齐任务书 §3.2）：把**真封面主色**的色相打出来，
+      //   和 `fallback hue=…` 那一行一比就知道"兜底色相离封面有多远"。
+      //   `hdc shell hilog -x | Select-String 'RzdBgPhaseMesh (fallback|source-color)'`
+      hilog.info(DOMAIN, TAG,
+        'RzdBgPhaseMesh source-color avg=%{public}s hue=%{public}d seedLen=%{public}d',
+        avgHexOf(u8), Math.round(hueOfAverage(u8)), this.seed.length);
+      hilog.info(DOMAIN, TAG, 'RzdBgPhaseMesh seed-cache put seedLen=%{public}d bytes=%{public}d',
+        this.seed.length, bytes);
+    } catch (err) {
+      const e = err as BusinessErrorLike;
+      hilog.warn(DOMAIN, TAG, 'seed-cache read failed code=%{public}d msg=%{public}s',
+        e.code, e.message);
+    }
+  }
+
+  /**
+   * 若模块级缓存里已有**这一首**的真源字节 ⇒ 同步画出来并返回 `true`。
+   *
+   * 这是"点击打开第 1 帧就该是真封面"的实现路径（无界靠本地封面文件，我们靠这份缓存）。
+   * @param gen 发起这次绘制时的代际号（同拍内又换了歌 ⇒ 这张作废）
+   */
+  private paintCachedCoverSync(gen: number): boolean {
+    if (this.disposed) {
+      return false;
+    }
+    const bytes: Uint8Array | undefined = seedCache.get(this.seed);
+    if (bytes === undefined || bytes.length !== SRC_EDGE * SRC_EDGE * 4) {
+      return false;
+    }
+    // 同一 seed 的缓存图已经解码过 ⇒ 直接确保它在画
+    const cached: image.PixelMap | undefined = this.cachedPm;
+    if (cached !== undefined && this.cachedSeed === this.seed) {
+      this.graceSpent = true;
+      this.clearGraceTimer();
+      if (this.controller.node.src !== cached) {
+        // ⚠️ 顺序：**先换绑定、再释放旧图**（与上游 `node.src = pm; old.release()` 一致）
+        this.controller.node.src = cached;
+        this.releaseFallback();
+        this.controller.node.invalidate();
+        this.onFrameNow();
+      }
+      return true;
+    }
+    let pm: image.PixelMap | undefined = undefined;
+    try {
+      pm = image.createPixelMapSync(bytes.buffer, {
+        size: { width: SRC_EDGE, height: SRC_EDGE },
+        srcPixelFormat: image.PixelMapFormat.RGBA_8888,
+        pixelFormat: image.PixelMapFormat.RGBA_8888,
+        editable: true
+      });
+    } catch (err) {
+      const e = err as BusinessErrorLike;
+      hilog.warn(DOMAIN, TAG, 'cached cover createPixelMapSync failed code=%{public}d msg=%{public}s',
+        e.code, e.message);
+      return false;
+    }
+    if (pm === undefined) {
+      return false;
+    }
+    if (this.disposed || gen !== this.srcGen) {
+      pm.release();
+      return false;
+    }
+    const oldCached: image.PixelMap | undefined = this.cachedPm;
+    this.cachedPm = pm;
+    this.cachedSeed = this.seed;
+    this.graceSpent = true;
+    this.clearGraceTimer();
+    // ⚠️ 顺序：**先换绑定、再释放旧图**（与上游 `node.src = pm; old.release()` 一致）
+    this.controller.node.src = pm;
+    this.releaseFallback();
+    if (oldCached !== undefined) {
+      this.releasePixelMapQuiet(oldCached);
+    }
+    this.controller.node.invalidate();
+    this.onFrameNow();
+    hilog.info(DOMAIN, TAG,
+      'RzdBgPhaseMesh source=seed-cache gen=%{public}d seedLen=%{public}d t=%{public}d',
+      gen, this.seed.length, Math.round(this.accMs));
+    return true;
+  }
+
+  /** 静默释放（已从渲染节点上解绑的图才可调用）。 */
+  private releasePixelMapQuiet(pm: image.PixelMap): void {
+    try {
+      pm.release();
+    } catch (err) {
+      const e = err as BusinessErrorLike;
+      hilog.warn(DOMAIN, TAG, 'pixelmap release failed code=%{public}d', e.code);
+    }
+  }
+
+  /** 释放缓存图（本组件持有其所有权）。 */
+  private releaseCachedCover(): void {
+    const pm: image.PixelMap | undefined = this.cachedPm;
+    this.cachedPm = undefined;
+    this.cachedSeed = '';
+    if (pm !== undefined) {
+      try {
+        pm.release();
+      } catch (err) {
+        const e = err as BusinessErrorLike;
+        hilog.warn(DOMAIN, TAG, 'cached cover release failed code=%{public}d', e.code);
+      }
+    }
+  }
+
+  /**
+   * 走"兜底"之前的最后一关：**画布还空着、且仍处在挂载后的起手窗口内 ⇒ 先空着**。
+   *
+   * 空着 = 无界 `node.src === null` 时 `draw()` 直接 `return` 的形态（透出下层、不亮任何颜色），
+   * 比"先亮一张与封面无关的哈希色、1~3 帧后再硬切成真封面"更接近无界。
+   * 窗口到点还没真源 ⇒ 老老实实画兜底（绝不长时间空着）。
+   */
+  private paintFallbackDeferred(gen: number): void {
+    const blank: boolean = this.controller.node.src === null;
+    const elapsed: number = Date.now() - this.mountMs;
+    const withinGrace: boolean = !this.graceSpent && elapsed < FIRST_SOURCE_GRACE_MS;
+    if (blank && withinGrace) {
+      this.controller.node.src = null;
+      this.controller.node.invalidate();
+      this.onFrameNow();
+      hilog.info(DOMAIN, TAG,
+        'RzdBgPhaseMesh fallback hold-blank gen=%{public}d elapsed=%{public}d seedLen=%{public}d',
+        gen, Math.round(elapsed), this.seed.length);
+      this.scheduleGracePaint();
+      return;
+    }
+    this.graceSpent = true;
+    this.clearGraceTimer();
+    this.paintFallbackSync(gen);
+  }
+
+  /** 起手窗口到点：重走一遍 `applySource()`（有真源就上真源，没有才画兜底）。 */
+  private scheduleGracePaint(): void {
+    if (this.graceTimer >= 0) {
+      return;
+    }
+    let wait: number = FIRST_SOURCE_GRACE_MS - (Date.now() - this.mountMs);
+    if (wait < 16) {
+      wait = 16;
+    }
+    this.graceTimer = setTimeout((): void => {
+      this.graceTimer = -1;
+      this.graceSpent = true;
+      if (this.disposed) {
+        return;
+      }
+      // 真空着才需要补：真源已经到了就什么都不用做
+      if (this.controller.node.src !== null) {
+        hilog.info(DOMAIN, TAG, 'RzdBgPhaseMesh grace done src=cover');
+        return;
+      }
+      hilog.info(DOMAIN, TAG, 'RzdBgPhaseMesh grace done src=none (repaint fallback)');
+      this.applySource();
+    }, wait);
   }
 
   /**
@@ -584,10 +947,20 @@ export struct MeshCoverBg {
         gen, this.srcGen);
       return;
     }
-    this.releaseFallback();
+    // ⚠️ 顺序：**先换绑定、再释放旧图**（上游 `node.src = pm; old.release()`，`wujie.pa:64177-64184`）
+    const oldFallback: image.PixelMap | undefined = this.fallbackPm;
+    const oldCached: image.PixelMap | undefined = this.cachedPm;
     this.fallbackPm = pm;
     this.fallbackSeed = this.seed;
+    this.cachedPm = undefined;
+    this.cachedSeed = '';
     this.controller.node.src = pm;
+    if (oldFallback !== undefined) {
+      this.releasePixelMapQuiet(oldFallback);
+    }
+    if (oldCached !== undefined) {
+      this.releasePixelMapQuiet(oldCached);
+    }
     this.controller.node.invalidate();
     this.onFrameNow();
     hilog.info(DOMAIN, TAG,
@@ -681,10 +1054,20 @@ export struct MeshCoverBg {
           gen, this.srcGen);
         return;
       }
-      this.releaseFallback();
+      // ⚠️ 顺序：**先换绑定、再释放旧图**（上游 `node.src = pm; old.release()`）
+      const oldFallback: image.PixelMap | undefined = this.fallbackPm;
+      const oldCached: image.PixelMap | undefined = this.cachedPm;
       this.fallbackPm = pm;
       this.fallbackSeed = this.seed;
+      this.cachedPm = undefined;
+      this.cachedSeed = '';
       this.controller.node.src = pm;
+      if (oldFallback !== undefined) {
+        this.releasePixelMapQuiet(oldFallback);
+      }
+      if (oldCached !== undefined) {
+        this.releasePixelMapQuiet(oldCached);
+      }
       this.controller.node.invalidate();
       this.onFrameNow();
       hilog.info(DOMAIN, TAG, 'RzdBgPhaseMesh fallback adopted gen=%{public}d t=%{public}d',

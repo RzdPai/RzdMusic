@@ -533,11 +533,17 @@ export struct PlaybackPage {
     //   修法：锚点改吃**纯几何**（只吃窗口尺寸，不查节点、不读实测上报）⇒ 首帧与稳态同一套几何。
     //   `COVER_FIT_META_GAP_VP`（= 无界 `META_GAP_BELOW_COVER` 默认 50）在本仓是 `private`，
     //   故按同口径复写一份 `MINI_LYRIC_COVER_META_GAP_VP`。
-    const geom: LyricMorphRect = this.expandState.playerCoverGeomRect();
-    const useGeom: boolean = geom.size > 0;
-    const anchorTop: number = useGeom
-      ? geom.y + geom.height + PlaybackPage.MINI_LYRIC_COVER_META_GAP_VP
-      : this.expandState.metaTopGeomY(this.lyricMorphT, rowH);
+    // ★★★ 2026-10-18（第四轮，**照搬上游结构** —— 见 `_recover/logic-src/full/差异表-歌词块.md`）：
+    //   上游 `playerPane` 的 Swiper **第 0 页是空壳**（`wujie.pa:189547-189573`），浮层里只有
+    //   `floatingCover` + `floatingMeta`，**歌名行之下没有任何节点**（`:171747-171846`）；
+    //   歌名行本身的定位是「满盒高 Column + justifyContent(Center) + `offset(metaOffsetYAt(t))`」。
+    //   ⇒ 与歌名行**同一条流**、紧跟其后、0 间距，就是上游给这块留的唯一位置：
+    //     块顶 = 歌名行底边（= `metaTopGeomY(t,rowH) + rowH`）。
+    //   360×780 算例（差异表 §C）：歌名行 374.2~422.2、盒底 470.2、进度条上沿 513.0
+    //   ⇒ 块顶 422.2、块底 479.2，距进度条 33.8vp（天然不压）。
+    //   ⛔ 不再用 `playerCoverGeomRect() + 50` 兜一圈：上游那 50vp 是 `META_GAP_BELOW_COVER`
+    //      （封面→歌名行的间距），拿它去推歌名行**底下**的块会多算一遍行高。
+    const anchorTop: number = this.expandState.metaTopGeomY(this.lyricMorphT, rowH);
     const target: number = anchorTop + rowH + PlaybackPage.MINI_LYRIC_GAP_VP;
     // ② 钳制：块底不许越过控制区上沿（用户实测「小歌词跑到进度条下面」就是没这一条）。
     //    ★ 2026-10-18 三级优先：① 控制区**自己那一层**的实测上沿 `chromeBlockTopVp`（真机验证这条才对）
@@ -567,7 +573,7 @@ export struct PlaybackPage {
     if (!(Math.abs(y - this.miniLyricTopLoggedY) <= 0.5)) {
       this.miniLyricTopLoggedY = y;
       Logger.info(PlayerExpandState.LOG_TAG,
-        `RzdMiniLyricTop anchor=${anchorTop.toFixed(1)} src=${useGeom ? 'geom' : 'meta'} ` +
+        `RzdMiniLyricTop anchor=${anchorTop.toFixed(1)} src=meta ` +
           `target=${target.toFixed(1)} chrome=${chromeTopWindow.toFixed(1)} ` +
           `src2=${chromeSrc} blockH=${blockH.toFixed(1)}(m=${this.miniLyricBlockHVp.toFixed(1)}) ` +
           `ceil=${ceilingWindow.toFixed(1)} y=${y.toFixed(1)}`);
@@ -646,7 +652,7 @@ export struct PlaybackPage {
   private static readonly MINI_LYRIC_SINK_VP: number = 44;
 
   /** 灏忔瓕璇嶅潡 鈬?姝屽悕/姝屾墜琛?鐨勭珫鐩撮棿璺濓紙vp锛夛紝鐢ㄦ埛瑕佹眰"钀藉埌姝屾墜琛屼笅鏂?銆?*/
-  private static readonly MINI_LYRIC_GAP_VP: number = -12;
+  private static readonly MINI_LYRIC_GAP_VP: number = 0;
   /**
    * 小歌词块行数（当前行 + 下一行，见 `MiniLyricLinesComponent`）。
    * ★ 2026-10-17（用户实测「小歌词位置太低、跑到进度条下面」）：下面这一组常量的唯一用途就是
@@ -4232,7 +4238,14 @@ export struct PlaybackPage {
       //   鏇存柊鐨勫悓鏃惰皟鐢ㄦ埅鍥撅紝鏇存柊鐨勬覆鏌撳唴瀹逛笉浼氳鎴彇鍒般€嶃€傛湰鏂规硶鍦ㄦ媿鍥?*涔嬪墠**鍒氭爣鑴忔覆鏌撴爲
       //   锛坄measureGeometry` / 浜嬩欢鏃ュ織锛夆噿 绗﹀彿瀛楀舰鏉ヤ笉鍙婄敾杩涘浘锛宍Image` 閭ｅ嚑棰楀嵈宸插湪鍥鹃噷
       //   鈬?鍙墿 prev/play/next銆傜粰蹇収寮€ `waitUntilRenderFinished`锛坥ptions 蹇呴』鍦ㄧ涓変綅锛夈€?
-    }, { waitUntilRenderFinished: true });
+    }, { waitUntilRenderFinished: false });
+    //   ★ 2026-10-18（**照搬无界**：`PlayerPage.closeWithAnimation`，`wujie.pa:171054-171095` 全函数只有 40 条指令，
+    //     形态是 `guard → getComponentSnapshot().get(PLAYER_ROOT_ID, λ)`，**`get` 只有 2 个实参、没有 options**，
+    //     所有副作用都写在回调里（`ExpandSnapshot.onShrinkBack` + `nav.pop(false)`）。
+    //     我们原来开 `waitUntilRenderFinished: true`，等于"等本帧渲染完成再取图" ⇒
+    //     把拍图**之前**刚改的那点布局（`measureGeometry` / `stopChromeAutoHide` / `isClosing`）确保拍进图里，
+    //     随后被 `ShrinkOverlay` 整体缩小 ⇒ 观感就是"关闭那一瞬间两颗侧键偏一点"。
+    //     ⇒ 关掉它（取"上一帧已渲染的样子"），与上游"先拍后改"同义。
   }
 
   /** 闂佸憡鐟﹂悧鏇犳闁秴绀傞柛娆愶耿閻撯晠鏌ｉ妸銉ヮ仼闁圭儵鏅犻幃陇顦抽柡浣告贡缁辨捇鍩￠崘銊愶箓鏌熼璺ㄧ瓘缂佽鲸鐟︾粙澶嬫償閳藉懐澶勯柣?`Index` 闂佸憡鑹炬總鏃傜博鐎涙鈻?AppStorageV2 闁诲骸婀遍崑妯兼閵夆晜鏅璺虹墐閸?*/
@@ -5759,6 +5772,54 @@ export struct PlaybackPage {
     this.getImageColor();
   }
 
+  /**
+   * ★★★ 2026-10-18（用户第三轮「点击展开动画过程背景颜色还是不对」；**照搬无界的那一步"打开前就有本地封面"**）：
+   * **同步**采用预热缓存 ⇒ 形变**第 1 帧**就有真封面，不会先亮 `hueOfSeed(title+artist)` 那条哈希色。
+   *
+   * 上游为什么不会闪哈希色：`coverPath = K_IMG_LOCAL` 是**本地文件路径**，由 `PlaybackService.updateCover`
+   * 在 `coverCache.ensure()` 成功后写成 `"file://"+path`（`wujie.pa:292406-292448`），失败两支显式写 `""`
+   * （`:292472` / `:292490`）；`decodeCover('')` 立刻 null、且 `node.src === null` 时画布**空着**（透出下层），
+   * **绝不会先画一张哈希色的兜底再切**。我们这边 `meshSrc` 是页面异步下载/解码来的，`await` 那一拍只能先画兜底。
+   * ⇒ 这里用 `createPixelMapSync` 把已预热好的 64×64 字节**同步**变成 PixelMap 并提交，
+   *   与 `adoptWarmMeshThenTint()`（异步那条）互补；同步这条先跑，命中时 `meshSrcVersion` 已 > 0，
+   *   后面的异步 adopt 会被"这一首已有源"的守卫挡掉。
+   */
+  private adoptWarmMeshSync(): void {
+    if (!this.isAlive) {
+      return;
+    }
+    const key: string = this.currentMeshKey();
+    if (key.length === 0 || this.meshWarm.key !== key) {
+      return;
+    }
+    if (this.meshSrc !== undefined && this.meshTrackKey === key) {
+      return;
+    }
+    const copy: Uint8Array | undefined = this.meshWarm.snapshot();
+    if (copy === undefined) {
+      return;
+    }
+    let pm: image.PixelMap | undefined = undefined;
+    try {
+      pm = image.createPixelMapSync(copy.buffer, {
+        size: { width: SRC_EDGE, height: SRC_EDGE },
+        srcPixelFormat: image.PixelMapFormat.RGBA_8888,
+        pixelFormat: image.PixelMapFormat.RGBA_8888,
+        editable: true
+      });
+    } catch (err) {
+      const e = err as BusinessError;
+      Logger.warn(PlaybackPage.logTag,
+        `RzdMeshWarm adopt-sync failed code=${e?.code} msg=${e?.message}`);
+      return;
+    }
+    if (pm === undefined) {
+      return;
+    }
+    Logger.info(PlaybackPage.logTag, `RzdMeshWarm adopt-sync key=${key.substring(0, 48)}`);
+    this.commitMeshSource(pm, this.meshSrc);
+  }
+
   private async adoptCachedMesh(): Promise<void> {
     // ★ 2026-10-18：同上——只挡"这一首已经有源"，不再用"任何源都算好了"。
     if (!this.isAlive || (this.meshSrc !== undefined && this.meshTrackKey === this.currentMeshKey())) {
@@ -6706,6 +6767,10 @@ export struct PlaybackPage {
             // ★★★ 2026-10-17（⑤）：**先 await 一次 `adoptWarmMesh()`，再 `getImageColor()`**。
             //   原来这里是 `void this.adoptWarmMesh(); this.getImageColor();` —— 两条链路并发，
             //   取色那一路甚至可能先落地，屏上就出现"背景与封面不是同一首"。
+            // ★★★ 2026-10-18（第三轮）：**先同步采用一次预热缓存**（`createPixelMapSync`），
+            //   形变第 1 帧就有真封面 —— 等价上游"打开前本地封面文件已在"（`wujie.pa:292406-292448`）。
+            //   然后再走异步那条（拿网络/资源，顺便取色）。
+            this.adoptWarmMeshSync();
             void this.adoptWarmMeshThenTint();
             this.applyPlaybackWindowChromeImmediately();
             // 婵＄偑鍊楅弫璇差焽閻楀牞绱旈柡宥庣厛閸嬔囨煕閹达絾顏犳鐐叉喘瀵喚鎹勯悜妯衡偓杈ㄦ叏濠靛嫬鍔欑紒鏃€娼欓埢搴ㄥ灳瀹曞洨锛涢梺绋跨箰绾绢厽鎱ㄩ幖浣哥畱濞撴艾锕︾粈鍕偣娴ｇ鈷旈柣銈呮閵囧嫰妫冨☉妯款唹闂佺厧鐤囧Λ鍕垂娴兼潙缁╃痪顓炴噽缁犳牠鏌?
