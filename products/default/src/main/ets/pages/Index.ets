@@ -1994,7 +1994,7 @@ struct Index {
           // ⛔ 一级页恢复"不自绘背板"（用户：「怎么又是一大一小两个播放条，大的有光感，小的没有」）：
           //   自绘层与 HDS 那格不是同一个矩形 ⇒ 一大一小。回到上游口径：背板/材质由 HDS 画，
           //   我们只把**它的材质档**对齐软件设置（见 `barFloatingStyle.systemMaterialEffect`）。
-          showSelfDrawnBackplate: false,
+          showSelfDrawnBackplate: true,
           // ★★★ 2026-10-21（第八轮）：**挤压回到"槽内容"上**（上游口径）。
           //   上游首页那条的 squash 挂在 `miniBar` 槽的**内容**上（也就是 `MiniPlayer` 根），
           //   不是挂在某个胶囊容器上（`上游-MiniPlayer内容组件树全量.ets` / `MainPage` 那一处）。
@@ -2668,8 +2668,10 @@ struct Index {
               //   ⇒ 动画期看着"条还在"。上游 `morphMiniBar()`（`wujie.pa:148626-148645`）是**整份换配置**：
               //   `searchOpen ⇒ Empty` / `!miniHidden ⇒ NoBg` / 否则 `base`，三份区别就在 `enableMiniBarBackground`。
               //   ⇒ 这里让背板开关吃与内容可见性**同一组条件**（`miniOut` 是上游那条逐帧不变量）。
-              enableMiniBarBackground: this.miniBarRendersPlayer() && !this.expandState.sourceBarHidden &&
-                !this.expandState.shrinkHidesBar && !this.expandState.miniOut,
+              // ★★★ 2026-10-18（上游 `morphMiniBar()` 可见态 = `NoBg`，`wujie.pa:148626-148648` /
+              //   `:144057-144068`）：HDS **不画**背板，由内容自绘 ⇒ 挤压能压到背板，整条才会"弹"。
+              //   ⚠️ 与一级页 `showSelfDrawnBackplate: true` 必须成对：只开一边 = 两层或全透明。
+              enableMiniBarBackground: false,
               // ★★★ 2026-10-20（第五轮）：**给 HDS 报上"迷你栏占多宽"**（`HdsTabsMiniBar.miniBarWidth`
               //   ：SDK `@hms.hds.hdsBaseComponent.d.ets:5150`，三档与 `HdsBarWidthRangeOptions` 同形）。
               //   单层态必须报，否则 HDS 挤页签、让出来的长条位宽度与我们自己画的胶囊对不上。
