@@ -240,9 +240,15 @@ class MeshBgController extends NodeController {
       return;
     }
     // ★ 2026-10-18（**只加日志、不改行为**）：画布尺寸就是 `field.update(tSec, w, h, flow)` 的 w/h，
-    //   也是 `drawPixelMapMesh` 的像素口径（`context.sizeInPixel`）。真机判读"两色位置"时，
-    //   先看这两行数：形变期间应当是"**窄**画布（宿主宽 = 形变容器宽，高恒为 windowHeightVp）"，
-    //   结束后才是满窗。若形变期与结束后的 `w` 相同，说明宿主宽没跟着形变容器走（那是**布局**问题）。
+    //   也是 `drawPixelMapMesh` 的像素口径（`context.sizeInPixel`）。真机判读"两色位置"时先看这两行数。
+    // ★★★ 2026-10-19 **订正上一版这句错的判据**（原话是"形变期间应当是**窄**画布"）：
+    //   上游那条链是 `MeshCoverBg(100%×100%) → __Common__(只有 opacity，无尺寸) → 内层 Stack`
+    //   `.width(winWVp()).height(winHVp())`（`wujie.pa:191547 / 191558`）
+    //   ⇒ 百分比解析到**最近的定尺寸祖先 = 整窗** ⇒ `onAreaChange` 报的 `(w,h)` **形变全程不变**，
+    //     被"从小长大"的是外面那个 `.height(expand.clipHeight)` + `.clip(true)` 的**裁剪容器**，
+    //     网格本身**不重建也不拉伸**（=`一张恒定整窗网格被一个长大的圆角窗口揭开`）。
+    //   ⇒ **判据反过来**：形变期与结束后 `w/h` **相同**才是对的；若形变期变小，说明宿主被裁剪容器
+    //     带矮了（那才是**布局**问题）。
     if (Math.abs(w - this.logW) >= 1 || Math.abs(h - this.logH) >= 1) {
       this.logW = w;
       this.logH = h;
@@ -284,7 +290,19 @@ class MeshBgController extends NodeController {
  */
 @ComponentV2
 export struct MeshCoverBg {
-  /** 已解码好的封面位图（64×64 最佳；**生命周期归调用方**，本组件不 release）。 */
+  /**
+   * 已解码好的封面位图（64×64 最佳；**生命周期归调用方**，本组件不 release）。
+   *
+   * ★★★★ 2026-10-19（**调用方契约，务必照做**）：`src` 必须**与 `seed` 同源**。
+   * ```
+   *   换歌时：① meshSrc = undefined（并 release 旧那张）   ② meshSrcVersion++   ③ seed 跟着歌变
+   *   新封面到手：meshSrc = 新 pm                          ④ meshSrcVersion++
+   * ```
+   * 上游的 `coverPath` 天然满足这条（换歌先写 `""`）。我们这一侧如果**只换 seed 不换版本**，
+   * 组件会把这当成"上一首的残留"作废并改画新 seed 的兜底（见 {@link isSrcForCurrentSeed}），
+   * 屏上不会出现上一首的颜色；但"新封面到底哪一版"组件是判不出来的，
+   * 所以页面那边**必须**在换源时 `++meshSrcVersion`。
+   */
   @Param src: image.PixelMap | undefined = undefined;
   /**
    * ★★★ 2026-10-17（照搬无界 `MeshCoverBg.seed` + `makeFallback()`）：
@@ -347,6 +365,33 @@ export struct MeshCoverBg {
    * 每次 `applySource()` 自增；`await` 回来以后若代际已变，结果作废并释放。
    */
   private srcGen: number = 0;
+  /**
+   * ★★★★ 2026-10-19（**「点开播放页背景是上一首歌的颜色」的组件侧收口**）：
+   * 当前 `node.src` 上那份源**属于哪一首 / 哪一版**。
+   *
+   * ## 上游为什么"换歌那一刻绝不残留旧图"
+   * 它的源身份是**可判定的**：`coverPath` 是本地文件路径，而 `PlaybackService.updateCover`
+   * 换歌时先把 `K_IMG_LOCAL` 写成 `""` ⇒ `decodeCover()` 见到空串**立即** `return null`
+   * （`wujie.pa:63391-63614` 的头三行）⇒ `rebuildSource()` 直接走 `makeFallback()`
+   * （新 `seed` 的色相）⇒ 旧图那一份 `pm` 连"再被采用"的机会都没有。
+   *
+   * ## 我们这一侧的问题
+   * `src` 是页面给的 `PixelMap`（在线歌还要先下载 + 解码，实测 200~2000ms），
+   * 而页面**没有**"换歌先把源清掉"这一步（`PlaybackPage.onCurrentTrackForBackground()`
+   * 只调 `getImageColor()`，不动 `meshSrc`/`meshSrcVersion`）。于是：
+   * ```
+   *   换歌 → seed 变（本组件 @Monitor('seed') 触发）→ applySource()
+   *        → this.src 还是**上一首**那张（版本也没变）→ 被**再采用一次**
+   *        → 屏上是上一首的网格，直到新封面下载完（封面为空/失败 ⇒ 永久停留）。
+   * ```
+   * ⇒ 本组件自己造一个源身份判据：`(srcVersion, seed)` 二元组。
+   *   - `srcVersion` 与上次那版**不同** ⇒ 页面发布了新源 ⇒ 采用；
+   *   - `srcVersion` **没变**而 `seed` 变了 ⇒ 页面手里还是那张旧图 ⇒ **作废**，
+   *     并**同步**改画新 `seed` 的兜底（见 {@link paintFallbackSync}）。
+   */
+  private srcVer: number = -1;
+  /** 上次采用/丢弃那一版源时的 `seed`（配合 {@link srcVer} 判"是不是同一首"）。 */
+  private srcSeed: string = '';
 
   aboutToAppear(): void {
     // ★ 只加日志（真机判读 ②）：**挂载一次就归零一次**。若一次打开播放页出现两条 `mount`，
@@ -421,27 +466,140 @@ export struct MeshCoverBg {
     // 我们这一侧的 `src` 由页面给（在线封面要下载），拿不到时就在**组件内**造兜底网格
     // ——与上游同一个位置、同一个算法（`fillFallback` / `hueOfSeed` 已在 `MeshSource` 里）。
     if (this.src !== undefined) {
-      this.controller.node.src = this.src;
-      // 真源来了，兜底那张没用了（本组件持有它的所有权）
-      this.releaseFallback();
-      this.controller.node.invalidate();
-      this.onFrameNow();
-      // ★ 只加日志：**形变期间会不会换源**由这一行判定 ——
-      //   若 `source=cover` 出现在 `RzdBgLayer` 的 `p=1.000` 之前，就是"形变里换过一次源"
-      //   （屏上会从兜底的四角渐变切到封面取色的那两团，观感 = 两色位置突然变了）。
-      hilog.info(DOMAIN, TAG, 'RzdBgPhaseMesh source=cover gen=%{public}d t=%{public}d',
-        gen, Math.round(this.accMs));
+      if (this.isSrcForCurrentSeed()) {
+        this.srcVer = this.srcVersion;
+        this.srcSeed = this.seed;
+        this.controller.node.src = this.src;
+        // 真源来了，兜底那张没用了（本组件持有它的所有权）
+        this.releaseFallback();
+        this.controller.node.invalidate();
+        this.onFrameNow();
+        // ★ 只加日志：**形变期间会不会换源**由这一行判定 ——
+        //   若 `source=cover` 出现在 `RzdBgLayer` 的 `p=1.000` 之前，就是"形变里换过一次源"
+        //   （屏上会从兜底的四角渐变切到封面取色的那两团，观感 = 两色位置突然变了）。
+        hilog.info(DOMAIN, TAG,
+          'RzdBgPhaseMesh source=cover gen=%{public}d ver=%{public}d seedLen=%{public}d t=%{public}d',
+          gen, this.srcVersion, this.seed.length, Math.round(this.accMs));
+        return;
+      }
+      // ★★★★ 2026-10-19：换歌了，而页面手里还是**上一首**那张（`srcVersion` 没变）⇒ 绝不采用。
+      hilog.info(DOMAIN, TAG,
+        'RzdBgPhaseMesh source=stale-drop gen=%{public}d ver=%{public}d ' +
+          'seedLen=%{public}d oldSeedLen=%{public}d t=%{public}d',
+        gen, this.srcVersion, this.seed.length, this.srcSeed.length, Math.round(this.accMs));
+    }
+    this.paintFallbackSync(gen);
+  }
+
+  /**
+   * @returns `this.src` 是否是**当前这一首**的网格源（判据见 {@link srcVer} / {@link srcSeed}）。
+   *
+   * 1. `src === undefined` ⇒ `false`（调用方去画兜底）；
+   * 2. 从没记录过源身份（`srcVer === -1`，首次挂载）⇒ `true`
+   *    —— 上游"挂载时 `coverPath` 是什么就用什么"同义；那时页面还没发布过任何源，
+   *    `src` 非空只可能是它想让我们画的**第一张**；
+   * 3. `srcVersion` 与上次那版不同 ⇒ 页面发布了新源 ⇒ `true`；
+   * 4. `srcVersion` 相同 ⇒ 只能是**同一张图** ⇒ 只有 `seed` 也相同才算当前这一首。
+   */
+  private isSrcForCurrentSeed(): boolean {
+    if (this.src === undefined) {
+      return false;
+    }
+    if (this.srcVer < 0) {
+      return true;
+    }
+    if (this.srcVersion !== this.srcVer) {
+      return true;
+    }
+    return this.seed === this.srcSeed;
+  }
+
+  /**
+   * ★★★★ 2026-10-19：**同步**画兜底网格（换歌 / 无真源时的唯一出口）。
+   *
+   * ## 为什么必须同步（这就是「上一首颜色」的直接成因之一）
+   * 上一版是 `void this.makeFallback(gen)`，里面 `await image.createPixelMap(...)`。
+   * `await` 期间 `node.src` **还是上一首那张**，而 `RenderNode` 只要没有新的 `invalidate()`
+   * 就**一直保留上次画出来的像素** ⇒ 屏上继续是上一首的颜色
+   * （暂停态更明显：`playing && active` 为假 ⇒ 根本没有帧回调来刷新，能停到下一次换源为止）。
+   *
+   * 现在改用 `image.createPixelMapSync()`（`@since 12`；本机 SDK
+   * `default/openharmony/ets/api/@ohos.multimedia.image.d.ts:4481` 有声明）
+   * ⇒ **"决定换源"与"给 node.src 赋值"在同一拍** ⇒ 换歌那一帧屏上就是新 `seed` 的四角渐变，
+   * **一帧旧图都不留**。
+   *
+   * `fillFallback` + `boxBlurRgba` 本来就是同步纯 ArkTS 计算（64×64，与上游同一个量级），
+   * ⇒ 这里**没有**额外引入耗时；只是把原来 `await` 前后的两拍压成一拍。
+   *
+   * @param gen 发起这次绘制时的代际号（同拍内又换了歌 ⇒ 这张作废）
+   */
+  private paintFallbackSync(gen: number): void {
+    if (this.disposed) {
       return;
     }
-    hilog.info(DOMAIN, TAG, 'RzdBgPhaseMesh source=fallback gen=%{public}d t=%{public}d',
-      gen, Math.round(this.accMs));
-    void this.makeFallback(gen);
+    // 同一 seed 的兜底已经造好 ⇒ 直接确保它在画（`applySource` 连触几次是免费的）
+    const cached: image.PixelMap | undefined = this.fallbackPm;
+    if (cached !== undefined && this.fallbackSeed === this.seed) {
+      if (this.controller.node.src !== cached) {
+        this.controller.node.src = cached;
+        this.controller.node.invalidate();
+        this.onFrameNow();
+      }
+      return;
+    }
+    const hue: number = hueOfSeed(this.seed);
+    const buf: ArrayBuffer = new ArrayBuffer(SRC_EDGE * SRC_EDGE * 4);
+    const u8: Uint8Array = new Uint8Array(buf);
+    // ★ 与上游一致：兜底**只做 boxBlur，不做 enhanceColors**（`wujie.pa:64074-64081`）。
+    fillFallback(u8, SRC_EDGE, SRC_EDGE, hue);
+    boxBlurRgba(u8, SRC_EDGE, SRC_EDGE, FALLBACK_BLUR_RADIUS, FALLBACK_BLUR_PASSES);
+    // ★ 只加日志（真机判读用）：四角的**颜色顺序**必须与上游一致
+    //   A=TL(`hue`,.62,.40) / B=TR(`hue+28`) / C=BL(`hue−20`) / D=BR(`hue+46`)（`wujie.pa:91528-91611`）。
+    hilog.info(DOMAIN, TAG,
+      'RzdBgPhaseMesh fallback hue=%{public}d TL=%{public}s TR=%{public}s BL=%{public}s BR=%{public}s',
+      Math.round(hue), rgbAt(u8, 0, 0), rgbAt(u8, SRC_EDGE - 1, 0),
+      rgbAt(u8, 0, SRC_EDGE - 1), rgbAt(u8, SRC_EDGE - 1, SRC_EDGE - 1));
+    let pm: image.PixelMap | undefined = undefined;
+    try {
+      pm = image.createPixelMapSync(buf, {
+        size: { width: SRC_EDGE, height: SRC_EDGE },
+        srcPixelFormat: image.PixelMapFormat.RGBA_8888,
+        pixelFormat: image.PixelMapFormat.RGBA_8888,
+        editable: true
+      });
+    } catch (err) {
+      const e = err as BusinessErrorLike;
+      hilog.warn(DOMAIN, TAG, 'createPixelMapSync failed code=%{public}d msg=%{public}s (turn-async)',
+        e.code, e.message);
+      // 同步那条万一不可用（老设备 / 内存不足）⇒ 退回原来的异步链路
+      void this.makeFallback(gen);
+      return;
+    }
+    if (pm === undefined) {
+      return;
+    }
+    if (this.disposed || gen !== this.srcGen) {
+      pm.release();
+      hilog.info(DOMAIN, TAG, 'RzdBgPhaseMesh fallback skip-stale gen=%{public}d now=%{public}d',
+        gen, this.srcGen);
+      return;
+    }
+    this.releaseFallback();
+    this.fallbackPm = pm;
+    this.fallbackSeed = this.seed;
+    this.controller.node.src = pm;
+    this.controller.node.invalidate();
+    this.onFrameNow();
+    hilog.info(DOMAIN, TAG,
+      'RzdBgPhaseMesh fallback adopted sync gen=%{public}d hue=%{public}d ' +
+        'seedLen=%{public}d t=%{public}d',
+      gen, Math.round(hue), this.seed.length, Math.round(this.accMs));
   }
 
   /** 兜底网格（本组件持有其所有权；换源/退场时释放）。 */
   private fallbackPm: image.PixelMap | undefined = undefined;
-  /** 兜底网格是否正在构造（防重入：`applySource` 可能连触几次）。 */
-  private fallbackBuilding: boolean = false;
+  /** 当前 `fallbackPm` 是按哪个 `seed` 造的（`=== seed` 时可复用，见 {@link paintFallbackSync}）。 */
+  private fallbackSeed: string = '';
 
   private releaseFallback(): void {
     const pm: image.PixelMap | undefined = this.fallbackPm;
@@ -457,6 +615,9 @@ export struct MeshCoverBg {
   }
 
   /**
+   * ★ 2026-10-19：这条异步链路现在**只是保底**（`createPixelMapSync` 抛异常时才走），
+   * 正常路径是 {@link paintFallbackSync}（同步：决定与赋值同一拍 ⇒ 一帧旧图都不留）。
+   *
    * 造兜底网格（照搬无界 `makeFallback()` / `MeshSource.fillFallback`）。
    *
    * ① `hueOfSeed(seed)` → 色相；② `fillFallback` 铺一张**四角 HSL 双线性渐变**；
@@ -467,10 +628,9 @@ export struct MeshCoverBg {
    * @param gen 发起这次构造时的代际号（`await` 回来后与 `srcGen` 比对）
    */
   private async makeFallback(gen: number): Promise<void> {
-    if (this.disposed || this.fallbackBuilding) {
+    if (this.disposed) {
       return;
     }
-    this.fallbackBuilding = true;
     try {
       const buf: ArrayBuffer = new ArrayBuffer(SRC_EDGE * SRC_EDGE * 4);
       const u8: Uint8Array = new Uint8Array(buf);
@@ -491,7 +651,7 @@ export struct MeshCoverBg {
       fillFallback(u8, SRC_EDGE, SRC_EDGE, hue);
       boxBlurRgba(u8, SRC_EDGE, SRC_EDGE, FALLBACK_BLUR_RADIUS, FALLBACK_BLUR_PASSES);
       // ★ 只加日志（真机判读用）：四角的**颜色顺序**必须与上游一致
-      //   A=TL(`hue`,.60,.40) / B=TR(`hue+28`) / C=BL(`hue−20`) / D=BR(`hue+46`)（`wujie.pa:91528-91611`）。
+      //   A=TL(`hue`,.62,.40) / B=TR(`hue+28`) / C=BL(`hue−20`) / D=BR(`hue+46`)（`wujie.pa:91528-91611`）。
       //   若 TL/BR 与屏幕上的两团色位置对不上，问题就在"哪一路在画"，不在这张图。
       hilog.info(DOMAIN, TAG,
         'RzdBgPhaseMesh fallback hue=%{public}d TL=%{public}s TR=%{public}s BL=%{public}s BR=%{public}s',
@@ -506,8 +666,10 @@ export struct MeshCoverBg {
         pm.release();
         return;
       }
-      // 真源在这期间到了 ⇒ 兜底作废（不要把它盖上去）
-      if (this.src !== undefined) {
+      // 真源在这期间到了 ⇒ 兜底作废（不要把它盖上去）。
+      // ★ 2026-10-19：只认"**属于当前 seed** 的真源"—— 上一首残留那张不算（否则兜底永远画不上，
+      //   屏上就停在上一次那张旧图，正是本 bug 的形态）。
+      if (this.src !== undefined && this.isSrcForCurrentSeed()) {
         pm.release();
         hilog.info(DOMAIN, TAG, 'RzdBgPhaseMesh fallback skip-stale gen=%{public}d reason=src', gen);
         return;
@@ -521,6 +683,7 @@ export struct MeshCoverBg {
       }
       this.releaseFallback();
       this.fallbackPm = pm;
+      this.fallbackSeed = this.seed;
       this.controller.node.src = pm;
       this.controller.node.invalidate();
       this.onFrameNow();
@@ -529,8 +692,6 @@ export struct MeshCoverBg {
     } catch (err) {
       const e = err as BusinessErrorLike;
       hilog.warn(DOMAIN, TAG, 'makeFallback failed code=%{public}d msg=%{public}s', e.code, e.message);
-    } finally {
-      this.fallbackBuilding = false;
     }
   }
 

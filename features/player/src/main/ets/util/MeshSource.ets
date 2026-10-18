@@ -128,12 +128,17 @@ function fillPalette(u8: Uint8Array, w: number, h: number, pal: Uint8Array): voi
 /**
  * 解不出封面时的兜底：往 `u8` 里填一张**四角 HSL 双线性渐变**（α 恒 255，**轴对齐不旋转**）。
  *
- * 四角 `(相对 hue 的偏角, S, L)`：
- * `(0, .60, .40)` / `(+28, .55, .52)` / `(−20, .68, .33)` / `(+46, .50, .46)`。
+ * 四角 `(相对 hue 的偏角, S, L)`（**逐个 `fldai` 直读**，`wujie.pa:91553-91603`）：
+ * `(0, .62, .40)` / `(+28, .55, .52)` / `(−20, .68, .33)` / `(+46, .50, .46)`。
+ *
+ * ★ 2026-10-19：第 1 角的 **S 由 `0.60` 订正为上游的 `0.62`**
+ *   （`wujie.pa:91553-91555`：`fldai 6.2e-1 / 4.0e-1`）。
+ *   差 0.02 只让左上角"略亮一点点"，但既然口径是"照搬"，就按字节码对齐 —— 顺带消掉
+ *   `_recover/logic-src/full/差异表-背景.md` E5 这条差异。
  */
 export function fillFallback(u8: Uint8Array, w: number, h: number, hue: number): void {
   const pal: Uint8Array = new Uint8Array(16);
-  hslToRgb(hue, 0.60, 0.40, pal, 0);
+  hslToRgb(hue, 0.62, 0.40, pal, 0);
   hslToRgb(hue + 28, 0.55, 0.52, pal, 4);
   hslToRgb(hue - 20, 0.68, 0.33, pal, 8);
   hslToRgb(hue + 46, 0.50, 0.46, pal, 12);

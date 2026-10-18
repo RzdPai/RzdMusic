@@ -964,6 +964,27 @@ export class PlayerExpandState {
     return v < 0 ? 0 : (v > 1 ? 1 : v);
   }
 
+  /**
+   * 上游 `PlayerPage.pullBottomOpacity()`（`wujie.pa:176411-176429`）逐字：
+   * ```
+   *   pullBottomOpacity = !pullMode ? 1 : pullBottomIn()
+   *   // ldai 0x1 → callruntime.isfalse + jnez（!pullMode 直接返回 1）→ 否则取 pullBottomIn()
+   * ```
+   * 上游把它和 `pullBottomY()` 挂在**同一个节点**上（scrubber `wujie.pa:197161/197172`、
+   * transport `:181213/181224`）⇒ 底栏是"边淡入边升起"，窗口与 `pullBottomIn()` 完全同一条
+   * （`0.45 → 1.00`）。
+   *
+   * ⚠️ 本仓旧的判断是"不接这个值"（旧注释：用户要求关闭期间两颗图标一直在），于是整排在形变期
+   * **恒为不透明、只剩位移** —— 与"歌名行（只有淡入 `pullChromeOpacity`）"相比就少了那半条时间线。
+   * 现在按上游接上；`!morphLive()`（静止展开 / 已复位）时 `pullBottomIn()` 本来就返回 1 ⇒
+   * 静止态不透明度仍是 1，逐像素与改动前一致。
+   *
+   * @returns 底栏（进度条 + 传输行）不透明度：0 = 还没出场，1 = 已落位。
+   */
+  public pullBottomOpacity(): number {
+    return this.pullBottomIn();
+  }
+
   /** 鏂囧瓧灞傚悜涓婂亸绉伙紙vp锛夛細浠?+8 婊戝埌浣嶏紝鏀跺熬鏃剁湅璧锋潵鏄?娴笂鏉?銆?*/
   public static metaOffsetYAt(progress: number): number {
     return (1 - PlayerExpandState.metaOpacityAt(progress)) * 8;

@@ -192,6 +192,17 @@ export struct PlaybackPage {
    *   闂佺懓绠嶉崹娲偤閺囥垹绫?`publishMeshSource` 闂備焦褰冮敃銉╁棘娴ｅ湱鈻斿┑鐘辫兌椤忚京鈧鍠氭刊瀵告鏉堛劎鈻旈柧蹇撳帨閺佸嫰鏌￠崘鈺佸姸闁稿孩顨婂鏌ヮ敍濮樿鲸鍕鹃梻渚囧亐閸嬫捇鏌?闁诲骸婀遍崑鐐差渻閸屾鐔兼晬閸曨厔鍥⒑椤撱劎鍒扮紒鍗炵埣瀹?闂?
    */
   @Local meshSrc: image.PixelMap | undefined = undefined;
+  /**
+   * ★★★ 2026-10-18（用户实测「点击展开时背景**似乎是上一首歌的颜色**」）：
+   * 当前 `meshSrc` **归属的曲目 key**（`''` = 还没有源）。
+   *
+   * 为什么必须有它：`MeshCoverBg` 只认 `src`/`srcVersion`/`seed`，它无法知道"这张图是哪一首歌的"。
+   * 换歌时页面既不清 `meshSrc` 也不动 `meshSrcVersion`，而 `seed` 变了 ⇒ 组件会把**上一首的图再采用一次**，
+   * 上一首封面为空/下载失败时就整场都是上一首的颜色。
+   * ⇒ 换歌时显式作废旧源（等价上游把 `K_IMG_LOCAL` 写成 `""`，`wujie.pa:292472` / `:292490` 两支失败分支），
+   * 并把它记在这里，供 `adoptWarmMesh` / `adoptCachedMesh` 判断"这一首是不是已经有源了"。
+   */
+  private meshTrackKey: string = '';
   /** 闂佺懓绠嶉崹鐟懊瑰Ο鑽ゎ浄闁靛牆娲ら·鍌炴煥濞戞ɑ缍丮eshCoverBg` 闂傚倸鐗忔慨鎾偩閻樺灚鍠嗛柨鏇楀亾鐟滄澘鍊块弻灞筋吋閸℃鍘愭繛鎴炴尭閿曪絿妲愰崼鏇熸櫖鐎光偓閸愮偓缍勯梻渚囧弿缂嶄線宕抽悜鑺ュ剭?`@Monitor`闂佹寧绋戦ˇ顓㈠焵?*/  @Local meshSrcVersion: number = 0;
   /**
    * 闁宠棄鎳夊Σ鍕煡閸涱亝顫?2026-10-17闁?*濞ｅ浂鍠撻埀顒€鑻惈宥咁嚕閳ь剚娼婚崶鈹炬煠濞戞搩鍘藉Σ鍛婄▔婵犱胶顏卞Λ锝嗙墬閻℃洟鎯冮崟顖ｆ澒闁肩懓鐪伴埀?*闁?
@@ -226,6 +237,16 @@ export struct PlaybackPage {
    * 它的布局全局 y 加上同一帧的 `pullBottomYVp()`（布局值不含 transform）才是屏幕上的上沿。
    */
   @Local chromeBlockTopVp: number = -1;
+  /**
+   * ★★★ 2026-10-18（用户第二轮：「歌词位置固定了但**位置偏**（还压进度条）」）：
+   * 小歌词块的**实测高度**（vp；0 = 还没量到）。
+   *
+   * 为什么需要它：钳制值是 `控制区上沿 − 块高 − 8`，而块高原来写死成
+   * `MINI_LYRIC_BLOCK_H_VP = 57`（只是估算：2 行 × 26 + 行距 3 + 上边距 2）。
+   * 实际块高（字体行高/内边距）比 57 大时，块底就会比"控制区上沿 − 8"再往下探十几 vp ⇒ 看起来还压着进度条。
+   * ⇒ 以实量为准，写死值只做首帧兜底（`Math.max(MINI_LYRIC_BLOCK_H_VP, 实测)`）。
+   */
+  @Local miniLyricBlockHVp: number = 0;
 
   /** 闂佸搫娲╃亸娆徝烘导鏉戠闁哄秲鍔嶉弳顏堟煢濡櫣绠冲褎顨婂鐢割敆閳ь剝銇愭径鎰闁哄秲鍔嶉ˇ褔鏌涢幒妤佹暠闁哄苯锕ㄧ粻娑㈠礃閵娿劌鐓傞梺?*/
   @Monitor('state.selectIndex', 'favStore.favoriteVersion')
@@ -530,7 +551,9 @@ export struct PlaybackPage {
     // ③ 两者都在**窗口坐标**里比；`.position()` 要的也是窗口坐标（见下），所以不再做换算。
     //    钳制必须**第一帧就生效**：`chromeTop` 量不到时用估算（`topInset + estBoxH + swiperGap`），
     //    ⛔ 不许写成"量不到就不钳制"——那会让首帧直接压到进度条。
-    const ceilingWindow: number = chromeTopWindow - PlaybackPage.MINI_LYRIC_BLOCK_H_VP
+    // ③ 块高以**实测**为准（写死值只做首帧兜底，见 `miniLyricBlockHVp` 的注释）。
+    const blockH: number = Math.max(PlaybackPage.MINI_LYRIC_BLOCK_H_VP, this.miniLyricBlockHVp);
+    const ceilingWindow: number = chromeTopWindow - blockH
       - PlaybackPage.MINI_LYRIC_CEILING_PAD_VP;
     // ★ 2026-10-18：**不再减 `expandState.lyricBoxTopVp`**。`.position()` 的参考系 = 页 0 那个
     //   `Stack({ alignContent: Alignment.TopStart })` 的内容盒左上角，而它在结构上 ≡ 窗口原点
@@ -546,7 +569,7 @@ export struct PlaybackPage {
       Logger.info(PlayerExpandState.LOG_TAG,
         `RzdMiniLyricTop anchor=${anchorTop.toFixed(1)} src=${useGeom ? 'geom' : 'meta'} ` +
           `target=${target.toFixed(1)} chrome=${chromeTopWindow.toFixed(1)} ` +
-          `src2=${chromeSrc} ` +
+          `src2=${chromeSrc} blockH=${blockH.toFixed(1)}(m=${this.miniLyricBlockHVp.toFixed(1)}) ` +
           `ceil=${ceilingWindow.toFixed(1)} y=${y.toFixed(1)}`);
     }
     return y;
@@ -4070,6 +4093,27 @@ export struct PlaybackPage {
     this.stopChromeAutoHide();
     this.isClosing = true;
     PlaybackPage.lastCloseAtMs = Date.now();
+    // ★★★ 2026-10-18（定「系统返回关闭时两颗侧键瞬间偏一点」用）：**关闭起点那一帧的取值快照**。
+    //   一次系统返回只打一行，grep 关键字 `RzdCloseFrame`。
+    //   期望值（任何一项不满足，它就是"偏一点"的来源）：
+    //     `cl=0`（此刻还没进形变，`pullBottomYVp()` 走 0 分支）
+    //     `p=1.0000` / `cProg=1.0000`（`contentTweenOwned=false` ⇒ 内容窗口退化成 morphP）
+    //     `pbIn=1.0000` / `pbY=0.00`（底栏已在落位，位移必须为 0）
+    //     `pbOpa=1.000` / `chrome=1.000`（两处不透明度都满）
+    //     `scale=1.0000` / `ty=0.00` / `radius=0.00`（静止展开态，无缩放/位移/圆角）
+    //     `clipH == winH`（`morphClipping()` 翻真时 `.height()` 不该变，否则整页重排）
+    Logger.info(PlaybackPage.logTag,
+      `RzdCloseFrame sys-back stage=${this.expandState.morphStage} ` +
+        `cl=${this.expandState.morphClipping() ? 1 : 0} usable=${this.expandState.morphUsable ? 1 : 0} ` +
+        `p=${this.expandState.morphP.toFixed(4)} cProg=${this.expandState.contentProgress().toFixed(4)} ` +
+        `pbIn=${this.expandState.pullBottomIn().toFixed(4)} pbY=${this.expandState.pullBottomYVp().toFixed(2)} ` +
+        `pbOpa=${this.expandState.pullBottomOpacity().toFixed(3)} ` +
+        `chrome=${this.expandState.pullChromeOpacity().toFixed(3)} ` +
+        `scale=${this.expandState.morphScale.toFixed(4)} ty=${this.expandState.morphTy.toFixed(2)} ` +
+        `radius=${this.expandState.morphRadius.toFixed(2)} clipH=${this.expandState.morphClipHeight.toFixed(1)} ` +
+        `winH=${this.expandState.windowHeightVp.toFixed(1)} ` +
+        `ctrlOffY=${this.expandState.chromeOffsetY().toFixed(1)} ` +
+        `ctrlOpa=${this.expandState.chromeOpacity().toFixed(2)}`);
     // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-17闂?*闂婎偄娴傞崑鍡涘矗鎼达絾宕夋い鏍ㄦ皑缁愮偤鏌涘▎妯虹仯闁轰降鍊濋獮鈧憸鏃堛€傞埡浣勬盯鍩€?* 闂佺偨鍎查弻锟犲焵?闁?`closeLiveMorphFallback` 闂佹眹鍔岀€氼剟宕规惔鈽嗘桨鐟滄垿顢氶埡鍛強閹兼惌鍨崇粈?
     //   婵炴垶鎸堕崐鎾绘煂濠婂牆绀堢€广儱妫楃徊褰掓煥濞戞瑥鐒归柟?闂佺厧鐤囧▔娑樷枖椤撱垺鍎楅柍杞版祰閸╁矂鏌ㄥ☉妯荤秮srcBox`闂佹寧绋戦ˇ鐢稿闯濞差亜绀嗗Λ棰佽兌閸熷﹪鏌ㄥ☉娆戔枔闁?缂備焦鍔栭〃鍛般亹濞戞矮鐒婇柛婵嗗閸ょ喖鏌￠崼婵愭Ц闁逞屽墰閵嗗妲愬渚籵rphShrinkState.start`
     //   闂佹眹鍔岀€氼亞鎮潏鈺冨崥妞ゆ牗鑹捐ぐ鍡欌偓娈垮枛缁绘﹢宕楀鈧畷銉╁礃閵娧勬疁闂佹寧绋戦ˇ顓㈠焵椤掆偓閸婄兘骞戦姀锛勨枖闁逞屽墯缁嬪顓奸崱妤冧海缂備焦鏌ㄩ鍛潩閵娾晜鍎庨悗娑櫭径宥夋偣瑜岄崡鎶藉焵椤戣棄浜鹃梺鍛婄墬閻楃偤鎯岄幆褜鍤楅柛鏇炲缁€?*婵炴垶鎸哥粔鎾嵁閹捐绠€广儱顦禍婵堚偓娈垮枤婵敻寮悙纰樺亾鐟欏嫮顣查柣銉ユ嚇閹粙濡歌閻ｉ亶鐓崶璺轰簽闁?*闂?
@@ -4345,6 +4389,19 @@ export struct PlaybackPage {
         PlaybackPage.ev('LV', `anim gen=${this.closeGen} from=${closeFromT.toFixed(2)} ` +
           `pNow=${this.expandState.morphP.toFixed(2)}`);
         this.expandState.morphBeginLeaving();
+        // ★★★ 2026-10-18：**live-morph 关闭路的第一帧快照**（与上面 `RzdCloseFrame sys-back` 对照）。
+        //   这一行必须与上一行**同一帧**、且在 `morphBeginLeaving()` 之后 ⇒ 能直接看到
+        //   `morphClipping()` 从 0 翻到 1 的那一帧里 `pbY` / `pbOpa` / `radius` / `clipH` 有没有跳。
+        //   grep 关键字 `RzdCloseFrame`。期望：`cl=1 pbIn=1.0000 pbY=0.00 pbOpa=1.000 radius=0.00 clipH==winH`。
+        Logger.info(PlaybackPage.logTag,
+          `RzdCloseFrame live-morph stage=${this.expandState.morphStage} ` +
+            `cl=${this.expandState.morphClipping() ? 1 : 0} ` +
+            `p=${this.expandState.morphP.toFixed(4)} cProg=${this.expandState.contentProgress().toFixed(4)} ` +
+            `pbIn=${this.expandState.pullBottomIn().toFixed(4)} pbY=${this.expandState.pullBottomYVp().toFixed(2)} ` +
+            `pbOpa=${this.expandState.pullBottomOpacity().toFixed(3)} ` +
+            `radius=${this.expandState.morphRadius.toFixed(2)} ` +
+            `clipH=${this.expandState.morphClipHeight.toFixed(1)} ` +
+            `winH=${this.expandState.windowHeightVp.toFixed(1)}`);
       });
       const closeScale: number = closeFromT < PlaybackPage.REVERSE_MIN_RATIO ?
         PlaybackPage.REVERSE_MIN_RATIO : closeFromT;
@@ -4928,7 +4985,12 @@ export struct PlaybackPage {
                   //   闈欐鎬?= 姝屾墜琛屼笅娌?+12vp锛涘舰鍙樻€佷粛鐢?`contentRiseVp()` 浠庝笅鏂瑰崌涓婃潵锛堢獥 0.45鈫?.00锛夈€?
                   .position({ x: 0, y: this.miniLyricTopY() })
                   .id(PlaybackPage.MINI_LYRIC_BOX_ID)
-                  .onAreaChange((): void => {
+                  .onAreaChange((_oldArea: Area, area: Area): void => {
+                    // ★ 2026-10-18：把**小歌词块的真实高度**量下来（钳制要用它；写死值只是首帧兜底）。
+                    const hVp: number = areaLengthToVp(area.height);
+                    if (hVp > 0 && Math.abs(hVp - this.miniLyricBlockHVp) > 0.5) {
+                      this.miniLyricBlockHVp = hVp;
+                    }
                     this.logLayoutBoxes();
                   })
                 }
@@ -5308,8 +5370,23 @@ export struct PlaybackPage {
               //   `pullBottomIn = clamp01((effT−0.45)/0.55)`（`wujie.pa:176377-176410`）。
               //   ⛔ 旧实现用 `contentRiseVp()` = `(1−w) × 180 / morphScale`：**除以 scale** 使得屏幕上
               //      恒为 180vp、不随卡片收缩 ⇒ 收起来时整排相对卡片底部一路下沉（上游是 200×scale）。
-              //   ⚠️ `pullBottomOpacity()`（`wujie.pa:176411-176429`）**不接**：用户要求关闭期间这两颗一直在。
+              //   ⚠️ `pullBottomOpacity()`（`wujie.pa:176411-176429`）原来**没接**（旧注释的理由是
+              //      "用户要求关闭期间这两颗一直在"）—— 2026-10-18 已按上游接上，见紧接的下一行。
               .translate({ y: this.expandState.pullBottomYVp() })
+              // ★★★ 2026-10-18（修「下面那行控制飞入时间还是不对」）：**接上上游的 `pullBottomOpacity()`**
+              //   上游把这一对挂在**同一个节点**上，取的是同一个式子：
+              //     · scrubber  `Column().translate({y: pullBottomY()})` + `.opacity(pullBottomOpacity())`
+              //       —— `wujie.pa:197161` / `197172`
+              //     · transport `Row().translate({y: pullBottomY()})` + `.opacity(pullBottomOpacity())`
+              //       —— `wujie.pa:181213` / `181224`
+              //   `pullBottomOpacity = !pullMode ? 1 : pullBottomIn()`（`wujie.pa:176411-176429`），
+              //   而 `pullBottomIn = clamp01((effT − 0.45) / 0.55)`（`wujie.pa:176377-176410`）
+              //   ⇒ 底栏的**淡入窗口 = 位移窗口 = 0.45 → 1.00**，两者同起同落，一直走到形变**最后一帧**。
+              //   ⛔ 本仓原来只有位移、`opacity` 恒 1 ⇒ 整排在形变期**全程不透明**，
+              //      观感就是"出现得太早、太硬"，墙钟上永远对不上"歌名行"那一组（`pullChromeOpacity` 0.18→0.62）。
+              //   静止态（`morphStage = OPEN/NONE`）`pullBottomIn()` 返回 1 ⇒ 本行落到 1，与改动前逐像素一致。
+              //   回退口径（甲方旧要求"关闭期间两颗一直在"）：把本行换成 `.opacity(1)` 即可，其余不用动。
+              .opacity(this.expandState.pullBottomOpacity())
               // ★ 2026-10-18：把**这一层自己的上沿**量出来（小歌词钳制要用它，别再拿 swiper 内部的空行当上沿）。
               //   `globalPosition` 是**布局**坐标（不含 `.translate`）⇒ 补上同一帧的 `pullBottomYVp()`。
               .onAreaChange((_oldArea: Area, area: Area): void => {
@@ -5526,10 +5603,33 @@ export struct PlaybackPage {
   /** Refreshes dynamic background tint when the current track or queue changes. */
   @Monitor('state.selectIndex', 'state.playQueueIds')
   onCurrentTrackForBackground(): void {
+    // ★ 2026-10-18：**换歌先作废旧网格源**（等价上游把 `K_IMG_LOCAL` 写成 `""`，wujie.pa:292472 / :292490）。
+    //   不作废就会沿用上一首的 PixelMap ⇒ 用户看到的"背景似乎是上一首歌的颜色"。
+    this.dropMeshSourceForTrackChange();
     if (this.context === undefined) {
       return;
     }
     this.getImageColor();
+  }
+
+  /**
+   * 换歌时作废旧网格源（同一首只是队列增删 ⇒ key 不变 ⇒ 什么都不做）。
+   * ⚠️ `meshSrcVersion` 必须 +1：它才是 `MeshCoverBg` 的 `@Monitor` 令牌（只改 `meshSrc` 不触发重绘）。
+   */
+  private dropMeshSourceForTrackChange(): void {
+    const key: string = this.currentMeshKey();
+    if (key === this.meshTrackKey) {
+      return;
+    }
+    this.meshTrackKey = key;
+    const old: image.PixelMap | undefined = this.meshSrc;
+    this.meshSrc = undefined;
+    this.meshSrcVersion = this.meshSrcVersion + 1;
+    if (old !== undefined) {
+      this.releasePixelMapQuiet(old);
+    }
+    Logger.info(PlaybackPage.logTag,
+      `RzdBgPhase drop-stale-mesh ver=${this.meshSrcVersion} key=${key.substring(0, 48)}`);
   }
 
   /** Entry point: kicks off async album-color extraction without blocking UI. */
@@ -5595,7 +5695,10 @@ export struct PlaybackPage {
    * 2. 只用 `snapshot()` 的**字节副本**新建 PixelMap，不跨页面持有 PixelMap（避免双重释放）。
    */
   private async adoptWarmMesh(): Promise<void> {
-    if (this.meshSrcVersion > 0 || !this.isAlive) {
+    // ★ 2026-10-18：判据从"已经有源"改成"**这一首**已经有源"。
+    //   旧写法 `meshSrcVersion > 0` 会把"上一次采用（可能是上一首）"当成"已经好了"，
+    //   之后再触发也被挡死 ⇒ 整场都是上一首的颜色（用户实测「似乎是上一首歌的颜色」）。
+    if (!this.isAlive || (this.meshSrc !== undefined && this.meshTrackKey === this.currentMeshKey())) {
       return;
     }
     const key: string = this.currentMeshKey();
@@ -5622,7 +5725,7 @@ export struct PlaybackPage {
         pixelFormat: image.PixelMapFormat.RGBA_8888,
         editable: true
       });
-      if (!this.isAlive || this.meshSrcVersion > 0) {
+      if (!this.isAlive || (this.meshSrc !== undefined && this.meshTrackKey === this.currentMeshKey())) {
         this.releasePixelMapQuiet(pm);
         return;
       }
@@ -5657,7 +5760,8 @@ export struct PlaybackPage {
   }
 
   private async adoptCachedMesh(): Promise<void> {
-    if (this.meshSrcVersion > 0 || !this.isAlive) {
+    // ★ 2026-10-18：同上——只挡"这一首已经有源"，不再用"任何源都算好了"。
+    if (!this.isAlive || (this.meshSrc !== undefined && this.meshTrackKey === this.currentMeshKey())) {
       return;
     }
     const buf: Uint8Array | undefined = PlaybackPage.meshBuf;
@@ -5672,7 +5776,7 @@ export struct PlaybackPage {
         pixelFormat: image.PixelMapFormat.RGBA_8888,
         editable: true
       });
-      if (!this.isAlive || this.meshSrcVersion > 0) {
+      if (!this.isAlive || (this.meshSrc !== undefined && this.meshTrackKey === this.currentMeshKey())) {
         this.releasePixelMapQuiet(pm);
         return;
       }
@@ -6034,6 +6138,8 @@ export struct PlaybackPage {
   private commitMeshSource(pm: image.PixelMap, old: image.PixelMap | undefined): void {
     this.meshSrc = pm;
     this.meshSrcVersion = this.meshSrcVersion + 1;
+    // ★ 2026-10-18：记下这张图**归属哪一首**（`dropMeshSourceForTrackChange` 与 adopt 守卫都用它）。
+    this.meshTrackKey = this.currentMeshKey();
     if (old !== undefined && old !== pm) {
       this.releasePixelMapQuiet(old);
     }
@@ -6305,14 +6411,15 @@ export struct PlaybackPage {
           // 闂?缂傚倸鍟崹鍫曟偋閹间焦鍤勯悘鐐靛亾閻濐垶鏌ゆ總澶夌盎闁汇埄鍋婂鍐参旈崟鍨仴 闂?闂佸憡鐟禍婵嗭耿?*闂備緡鍋€閸嬫捇鏌涢妷褍浠﹂懚鈺冪磼椤栨熬宸ョ紒銊﹀▕瀹?*闂備緡鍙忕徊鎯ь焽椤栨粍宕夋い鏍ㄧ☉椤ゅ懘姊婚崶锝呬壕闁荤喐娲戝ù鍥╂崲閺嶃劎鈻旈柍褜鍓涙禒?
           //   闂佹寧绋戦悧鍡涘箚娓氣偓瀹曟艾鈻庢惔锝囩崶闂佸憡鐟ф慨宕囨偖鏉堛劎顩烽柤鎭掑劜椤斿倿鎮峰▎鎰嚋缂佽鲸绻冪粙澶愵敇閻愰潧顩柣鐐村嚬閸嬪嫮鏁崶銊р枖闁靛牆顦幉楣冩煥濞戞﹩妲堕柍?
           if (this.meshSrc === undefined) {
-            Column()
-              .width(StyleConstants.FULL_WIDTH)
-              .height(StyleConstants.FULL_HEIGHT)
-              .radialGradient({
-                center: ['50%', '50%'],
-                radius: '70%',
-                colors: [[0x26000000, 0.0], [0x26000000, 0.45], [0x66000000, 1.0]]
-              })
+            // ★★★ 2026-10-18（用户第二轮：「点击展开过程背景还是有问题（**似乎是上一首歌的颜色**）」）：
+            //   **去掉这层兜底暗角**。上游播放页背景只有网格一层、连背景宿主都没有底色
+            //   （见 `_recover/logic-src/full/差异表-背景.md` 的 P1 / B6），而这一层 `if (meshSrc === undefined)`
+            //   恰好**只在"还没有网格源"的起手几帧存在** ⇒ 打开那一瞬屏上就是
+            //   「透出来的下层首页 + 一圈 15%~40% 黑的暗角」= 用户看到的那块"上一首的颜色"。
+            //   ⇒ 起手就保持纯透明（与上游一致）；网格源到了由 `MeshCoverBg` 自己画（它恒有兜底网格，不会空）。
+            Blank()
+              .width(0)
+              .height(0)
               // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-17闂佹寧绋戦悧蹇涘极閵堝绠ｉ柛鎴欏€楃粣妤呮煏閸℃顨欑紒妤€鍊块獮蹇斿緞鐎ｎ亖鍙洪悗娈垮枓閸嬫捇鏌￠崼婵愭Ъ闁稿孩顨婂鏌ヮ敍閵堝洨顦?*闂佺粯鍔楅幊鎾诲吹椤斿彞娌柡鍥╁仧绾?/ 闂佺绻戞繛濠偽?/ 缂備緡鍨靛畷鐢靛垝閻戞ɑ浜ら柡鍌涘缁€鈧┑鐐插閸撴繂锕㈡笟鈧幊妤冧沪閻愵剛褰?*闂侀潧妫楃粙鍕?
               //
               // ## 闂佸搫鐗嗛幖顐﹀春濡ゅ懏鏅柛顐秵閸ゃ垹霉閻欏懐鎮奸柣?+ 婵炴垶鎸堕崐鎾绘煂濠婂懏瀚氱紓浣股戝▓鍫曟煕濡も偓閸熻法娆㈤柆宥嗘櫖?
