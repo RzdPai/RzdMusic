@@ -1184,6 +1184,12 @@ export struct PlaybackPage {
    */
   private static readonly SCROLL_SETTLE_WINDOW_MS: number = 120;
   /**
+   * 重发"歌词页终点几何"的最大重试次数与间隔（**照搬上游**
+   * `PlayerPage.PUBLISH_RETRY_MAX` / `schedulePublishRetry`，`wujie.pa:175916-175929`）。
+   */
+  private static readonly PUBLISH_RETRY_MAX: number = 6;
+  private static readonly PUBLISH_RETRY_MS: number = 32;
+  /**
    * 濠殿喗绻傞惌渚€鎯佸┑鍥ヤ簻闁汇垻顭堟禍婵嗏槈閹绢垰浜惧┑鈽嗗灱娴滐綁銆侀幋锔芥櫖闁割偅绻嶉崵鐘绘煛瀹ュ懏澶勬俊顐犲€濋幃?`metaRow`闂佹寧绋戦ˇ鍗炩枔閹达箑绠抽柟鐑樻煥椤ｅジ鎮介娑欏€愰柛?闂佺偨鍎查弻锟犲焵?闂佽桨鐒﹀姗€鍩€椤掑倸甯剁憸鏉挎喘閹?
    * `PlayerPage闁诲海鎳撻張顒勫汲椤ゆ杯闁诲氦顫夊銊┾€?md` 闁?.2闂佹寧绋掔喊宥夋偉閿濆棴绱?`15` / 缂備緡鍠楅妵鐐电礊?/ 闂?/ `opacity 0.86`闂佹寧绋戦張顒勬偤閺囥垹绠?`12` / 闁汇埄鍨遍悺鏇綖婢舵劕违?
    */
@@ -1661,27 +1667,37 @@ export struct PlaybackPage {
     this.diagScrollCount = this.diagScrollCount + 1;
     this.diagScrollLast = `${selectedIndex}/${index}/${position.toFixed(3)}`;
     // 闂佸啿鍘滈崑鎾绘煃閸忓浜?闂備緡鍋呴崝鏍ь焽椤栫偞鍋傜憸搴繆闁秴绫嶉柣妯虹仛濞呮洟鏌ｉ妸銉ヮ仼缂傚秴锕ョ粙澶愬焵椤掑嫬绀?闂佸啿鍘滈崑鎾绘煃閸忓浜?
-    // ★★★ 2026-10-21（用户：「打断展开动画后重开播放器，滑到歌词页封面不会变小」）：
-    //   `onContentDidScroll(selectedIndex, index, position)` 对**视口内每一页**逐帧回调：
-    //     页 0（封面） position: 0 → -1（向左划出去）
-    //     页 1（歌词） position: 1 →  0（划进视口）
-    //   原来只认 `index === 0`：一旦页序/`selectedIndex` 与 `playbackSwiperIndex` 不同步
-    //   （打断展开动画后重开正是这种），页 0 那一路就不再回调 ⇒ `lyricMorphT` 永远停在 0
-    //   ⇒ 歌词页浮层不启用 ⇒ 封面不缩、不飞。
-    //   ⇒ 两页都接受，各自换算成同一个"歌词页进度"：页 0 用 `|position|`，页 1 用 `1 - |position|`。
-    let p: number = Math.abs(position);
-    if (p > 1) {
-      p = 1;
-    }
-    const progress: number = index >= 1 ? 1 - p : p;
-    if (Math.abs(progress - this.lyricMorphT) > 0.0005) {
-      this.lyricMorphT = progress;
+    // ★★★ 2026-10-21（**照搬无界** `PlayerPage.onContentDidScroll`，`wujie.pa:190026-190075`）：
+    //   上游反编译出来就是（`a4` = index、`a5` = position）：
+    //   ```ts
+    //     if (0 !== index) return;
+    //     if (position < 0) position = -position;
+    //     swiperProgress = position > 1 ? 1 : position;
+    //     this.publishCoverStyle();      // coverScale / coverRadius
+    //     this.syncMotion();
+    //     if (swiperProgress > 0.5 && !chromeHidden) this.showChrome();
+    //   ```
+    //   ⇒ 只认页 0、只把负值翻正、上限 1 —— 与本仓上一版逐条相同。
+    //   **上一轮我擅自改成"两页都接受"，那是错的（已回退）**：页 1 的 position 语义
+    //   不同 SDK 上可能是 `1→0` 也可能是 `-1→0`，换算一旦猜错进度就整条歪掉。
+    //   ⚠️ 真正的差别不在这里，而在上游每帧还会调 `publishMorphTargets()`（见下）。
+    let p: number = position;
+    if (index === 0) {
+      if (p < 0) {
+        p = -p;
+      }
+      if (p > 1) {
+        p = 1;
+      }
+      this.lyricMorphT = p;
+      // 照搬上游 `publishMorphTargets()`：封面页静止时把"歌词页终点几何"重发一次（带重试）。
+      this.publishLyricMorphTargets();
     }
     // 诊断（`grep RzdLyricFloat`）：进度或页号变了才打一行，避免每帧刷屏。
     const diagKey: string = `${selectedIndex}/${index}`;
-    if (diagKey !== this.lyricDiagKey || Math.abs(progress - this.lyricDiagP) > 0.08) {
+    if (diagKey !== this.lyricDiagKey || Math.abs(this.lyricMorphT - this.lyricDiagP) > 0.08) {
       this.lyricDiagKey = diagKey;
-      this.lyricDiagP = progress;
+      this.lyricDiagP = this.lyricMorphT;
       Logger.info('RzdLyricFloat',
         `swipe sel=${selectedIndex} idx=${index} pos=${position.toFixed(3)} ` +
           `t=${this.lyricMorphT.toFixed(3)} float=${this.expandState.lyricFloat() ? 1 : 0} ` +
@@ -1746,8 +1762,61 @@ export struct PlaybackPage {
    *    闂佹寧绋戦悧鎰繆椤撱垺鍊烽柣鐔告緲濮ｅ鏌ｅ鍛暭婵＄偛鍊婚埀顒勬涧缂嶅﹦绱為崼鐔衡枖闁逞屽墮閳诲酣鍩ラ崨顖滎槴闂?*婵炴垶鎸哥粔鐑姐€?*闂佽　鍋撻柟瑙勫姉缁犵粯绻濇繝鍐ㄧ仴濠殿喒鏅犲畷鍫曟倷閸撲焦顔嶉梻浣瑰絻閻妲愬▎鎾寸劷闁挎繂瀚粣妤呮煙閸偅灏伴柡灞芥川閹即濡烽埡鍌︾吹闂佹寧绋戦ˇ顓㈠焵?
    * @param reason 闂佸憡鐟禍鐐哄极閵堝棛顩查幖娣灪閿涘鐓崶顭戞缂佽鲸鐛媌oot` / `appear`闂?
    */
-  private syncLyricMorphToPage(reason: string): void {
-    const want: number = this.playbackSwiperIndex === PlaybackPage.SWIPER_INDEX_LYRIC ? 1 : 0;
+  /**
+   * 重发「歌词页终点几何」——**逐条照搬上游** `PlayerPage.publishMorphTargets`
+   * （反编译 `wujie.pa:175872-175935`，逻辑还原见下）。
+   *
+   * 上游反编译原文（`a2` = 快照）：
+   * ```ts
+   *   if (swiperProgress > 0.02) return;                 // 只在"停在封面页"时重发
+   *   if (!isMorphTarget()) return;                      // 只有目标是歌词页才需要
+   *   if (swiperBoxH <= 0 || metaH <= 0) {               // 几何还没量到
+   *     if (publishRetries < PlayerPage.PUBLISH_RETRY_MAX) schedulePublishRetry();
+   *     return;                                          // ← 带**有界重试**
+   *   }
+   *   expand.scaleValue = …; expand.translateX = …; expand.translateY = …;
+   * ```
+   * ⇒ 上游之所以"打断动画后再打开也正常"，就是因为**每一帧停在封面页时都会把终点几何
+   *   重发一遍**，而且量不到时有 12×32ms 那样的重试。本仓原来只有"打开时上报一次"，
+   *   打断后重开、大封面矩形与上一轮完全相同 ⇒ `onAreaChange` 不再触发 ⇒ 几何停在 0
+   *   ⇒ `lyricCoverSizeOf()` 为 0 ⇒ 歌词页封面不缩。
+   *
+   * 本仓对应物：`expandState.lyricCoverSizeOf() > 0` = 几何就绪；
+   * 重发动作 = `expandState.resyncBigCoverAnchor()`（量一次大封面并回填 `bigSize`）。
+   */
+  private publishLyricMorphTargets(): void {
+    // 上游第一道闸：只有停在封面页（进度 ≈ 0）才重发。
+    if (this.lyricMorphT > 0.02) {
+      this.publishTargetRetries = 0;
+      return;
+    }
+    // 上游第二道闸 `if (!isMorphTarget()) return;` 的语义是"本页是不是形变的目标（展开态）"，
+    // 而我们这个方法就写在 `PlaybackPage` 里 —— **本页在渲染就一定是目标** ⇒ 等价于不过闸。
+    // ⚠️ 不能拿 `lyricMorphTarget` 来顶：那是"目标 Swiper 页是不是歌词页"，停在封面页时它是 false，
+    //   而重发终点几何**恰恰只在封面页静止时**才需要（上游第一道闸就是 `swiperProgress <= 0.02`）。
+    // 几何已就绪 ⇒ 不用重发。
+    if (this.expandState.lyricCoverSizeOf() > 0) {
+      this.publishTargetRetries = 0;
+      return;
+    }
+    // 还没量到：有界重试（上游 `publishRetries < PUBLISH_RETRY_MAX` ⇒ `schedulePublishRetry()`）。
+    if (this.publishTargetRetries >= PlaybackPage.PUBLISH_RETRY_MAX) {
+      return;
+    }
+    this.publishTargetRetries = this.publishTargetRetries + 1;
+    Logger.info('RzdLyricFloat',
+      `publish targets retry=${this.publishTargetRetries}/${PlaybackPage.PUBLISH_RETRY_MAX} ` +
+        `t=${this.lyricMorphT.toFixed(3)} coverSize=${this.expandState.lyricCoverSizeOf().toFixed(1)}`);
+    setTimeout((): void => {
+      if (!this.isAlive) {
+        return;
+      }
+      this.expandState.resyncBigCoverAnchor(this.getUIContext());
+      this.publishLyricMorphTargets();
+    }, PlaybackPage.PUBLISH_RETRY_MS);
+  }
+
+  private syncLyricMorphToPage(reason: string): void {    const want: number = this.playbackSwiperIndex === PlaybackPage.SWIPER_INDEX_LYRIC ? 1 : 0;
     // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-16闂?*闁荤姳璁查弲娆戠礊閸涱垳纾兼繛鍡樻尨閸嬫捇骞囬浣割潛闁哄鏅滅粙鎴犫偓?*闂佹寧绋戦惌渚€锝?`lastScrollAtMs` 闂佹眹鍔岀€氼參寮悙鐑樼厒濠电姴绻掔粈鍡涙煥?
     //   `onContentDidScroll` 濠殿喗绻愮徊钘夛耿椤忓牊鐒婚柟閭﹀墯婵酣鏌?`lyricMorphT` 闂佸搫鍟抽鎰濠靛洦浜ゆ繛鍡樻尭濞?*婵炴垶鎸哥粔鐑筋敊韫囨稒濯伴柦妯侯槺閺?* 闂佺偨鍎查弻锟犲焵?
     //   闂佸憡鐔粻鎴﹀垂椤栨稓鈻旈柕鍫濈墐閸嬫捇宕ㄩ鐐栭柣銏╁瀻閸屾粓鐎洪梺鐑╂櫅閹测剝鎱ㄩ悩璇茬９缁绢參顥撶粈鍕節婵犲啫鐏ラ柛鈺佹湰缁嬪鍩€椤掑嫬纭€濠电姴鎷嬪璺衡槈閹绢垰浜鹃梺纭呮硾閿曘劑顢欓弴銏犵闁规鍣导鍌炴煟?闂?闂佹眹鍨归…宄邦焽閹殿喗宕夌紒娑樻贡缁€鍡涙煏?
@@ -2003,6 +2072,8 @@ export struct PlaybackPage {
   /** 歌词页滑动诊断的去重键（`selectedIndex/index`）与上次打印的进度（见 `onSwiperContentDidScroll`）。 */
   private lyricDiagKey: string = '';
   private lyricDiagP: number = -1;
+  /** 「歌词页终点几何」重发已重试次数（上游 `publishRetries`，见 `publishLyricMorphTargets`）。 */
+  private publishTargetRetries: number = 0;
   /**
    * 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-16闂佹寧绋掗懝楣冨船鐎电硶鍋撻崷顓熷殌闁?`.onAppear()` **闁荤姍鍥舵殥缂侇煉绻濆畷顐︻敂閸涱喛鎷梺鍛婂笒濡瑩寮?* 闂佺偨鍎查弻锟犲焵?闁诲氦顫夐惌顔剧礊?闂佺绻戞繛濠偽涢幘顔艰Е閹艰揪绲垮畷鎰版煟閹烘洘纭剧€殿喚鏁诲銊╁箚瑜忓鏃傗偓娈垮枓閸?闂?
    *
