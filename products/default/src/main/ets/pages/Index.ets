@@ -1997,15 +1997,9 @@ struct Index {
         //   本仓把"槽给的高度"落成 `homeMiniBarSlotHVp`：胶囊高 / 内容高 / 封面基准**三者同源**。
         Stack() {
           MiniBarMaterialCapsule({
-            // ★★★ 2026-10-18（照搬上游：胶囊容器也要知道**排布模式** —— 上游 `MaterialCapsule` 的
-            //   `singleRow` 就是由 `barLayoutMode` 推的，`wujie.pa:520515-520524` 那份 `emptySlotCfg` 同样带着它）。
-            //   不传 ⇒ 容器按"双层"算横向 slack（`+10`），而一级页这一格是**并排单行** ⇒ 胶囊盒与内容盒
-            //   宽度口径不一致，内容（封面 + 右端按钮）就溢出到胶囊外。
-            barLayoutMode: this.barLayoutModeForHds(),
             barWidth: this.floatingMiniBarWidthVp(),
             barHeight: this.homeMiniBarSlotHVp(),
-            // 一级页这一格上下没有额外留白（它就在页签栏上方那一格里），slack 归零。
-            bottomMargin: 0,
+            bottomMargin: this.floatingMiniBarBottomMarginVp(),
             material: this.ambientTitleMaterial(),
             fitWinWVp: this.viewportWidthVp,
             fitSideMarginVp: this.floatingMiniBarSideMarginVp()
