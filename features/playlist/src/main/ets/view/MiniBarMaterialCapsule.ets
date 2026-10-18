@@ -359,24 +359,16 @@ export struct MiniBarMaterialCapsule {
    * 所以 `w ≤ slotW` ⇒ 内容不可能横向出框；槽 ≡ 胶囊时 `w = bW`，与上一版逐字相同。
    */
   private contentLayerWidthVp(): number {
-    if (this.slotW <= 0) {
-      return this.barWidth;
-    }
-    const w: number = this.slotW < this.barWidth ? this.slotW : this.barWidth;
-    return w > 0 ? w : this.barWidth;
+    // ★★★ 2026-10-18（用户第八轮：「二级页内容**整体偏右**」）：**不再跟槽**。
+    //   "跟槽"那一版用 `slotCenterX`（探针实测的槽心）来定位，真机上槽心比胶囊心偏右
+    //   ⇒ 内容整块右移，正是用户看到的那一条。槽的几何在 HDS 里不可靠/不可观测，继续跟它只会越修越偏。
+    //   ⇒ 回到**我们算得出来的**那一套：内容盒 ≡ 胶囊盒（同一个 `barWidth × barHeight`，居中）。
+    return this.barWidth;
   }
 
-  /**
-   * @returns 内容层的**左边**（相对本组件盒左上角，vp）。
-   *
-   * 有实测时：`槽心 − w/2`（槽心 ≡ 胶囊心 ⇒ 内容不会整块右溢，这就是"封面离左太远"的根）。
-   * 没实测时：退回胶囊矩形 `(s − bW)/2`（与上一版逐字相同，只用于首帧）。
-   */
   private contentLayerLeftVp(): number {
-    if (this.slotW <= 0) {
-      return this.capsuleLeftVp();
-    }
-    return this.slotCenterX - this.contentLayerWidthVp() / 2;
+    // 与 `contentLayerWidthVp` 同一条依据（不再跟槽）：内容盒 ≡ 胶囊盒。
+    return this.capsuleLeftVp();
   }
 
   /** @returns 内容层的**顶边**（相对本组件盒左上角，vp）= 胶囊上缘（纵向不跟槽，见类注释第三节）。 */

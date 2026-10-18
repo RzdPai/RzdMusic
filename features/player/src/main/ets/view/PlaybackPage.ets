@@ -2832,24 +2832,18 @@ export struct PlaybackPage {
     const morphRunning: boolean = this.expandIntroRunning || closeStage === MorphStage.ENTERING
       || closeStage === MorphStage.LANDING;
     if (morphRunning) {
-      // ★★★ 2026-10-18（用户第七轮：「展开过程中按系统返回**直接没反应了**」）：
-      //   上一轮"只记标记、等打开收尾"在真机上被吞掉了（收尾那条路径不一定回来调本函数）⇒ 返回键无响应。
-      //   ⇒ 改成**先瞬间落位、再走正常快照关闭**：按下去立刻有反应，拍到的仍是完整展开态（不闪）。
+      // ★★★ 2026-10-18（用户第八轮：「展开时按系统返回会出现**两套** —— 一套正常，然后全屏黑、播放器从上面落下来」）：
+      //   上一轮那版 `settle-then-close` 会在**形变容器还没真正展开**时就去拍快照
+      //   （`morphSettleOpen()` 之后 48ms 未必已经重排完）⇒ 拍到的是**半路的小卡片**，
+      //   收缩层再把它当"整页"缩 ⇒ 屏上先出现一套正常的、随后那套小卡片被当成全屏黑底上的东西落下来。
+      //   ⇒ **不再在形变中途拍快照**：老老实实走**活体反向**（`closeFullScreenPlayback()`，
+      //     `morphBeginLeaving()` + `460×max(0.4,p)` 的 `REVERSE_EASING`），它没有任何快照，结构上不可能是"两套"。
       Logger.info(PlaybackPage.logTag,
-        `RzdCloseLiveMorph settle-then-close stage=${closeStage} intro=${this.expandIntroRunning ? 1 : 0} ` +
+        `RzdCloseLiveMorph live-reverse stage=${closeStage} intro=${this.expandIntroRunning ? 1 : 0} ` +
           `p=${this.expandState.morphP.toFixed(3)} cp=${this.expandState.contentProgress().toFixed(3)}`);
       this.expandIntroRunning = false;
       this.closeAfterOpen = false;
-      this.expandState.cancelContentTween();
-      this.expandState.morphP = 1;
-      this.expandState.contentP = 1;
-      this.expandState.morphSettleOpen();
-      setTimeout((): void => {
-        if (!this.isAlive || this.isClosing) {
-          return;
-        }
-        this.closeWithAnimation();
-      }, 48);
+      this.closeFullScreenPlayback();
       return;
     }
     this.closeWithAnimation();
