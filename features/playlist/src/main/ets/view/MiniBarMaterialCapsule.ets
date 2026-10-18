@@ -226,6 +226,8 @@ const DEFAULT_MATERIAL: SystemMaterialParams = {
  */
 @ComponentV2
 export struct MiniBarMaterialCapsule {
+  /** 上游 `BAR_ANIM = { duration: 350, curve: Curve.Friction }`（`wujie.pa:70120-70126`）。 */
+  private static readonly BAR_ANIM: AnimateParam = { duration: 350, curve: Curve.Friction };
   /** 胶囊**可见**宽度（vp）。调用方必须与宿主算宽度用的是**同一个函数**。 */
   @Param barWidth: number = 0;
   /**
@@ -768,6 +770,11 @@ export struct MiniBarMaterialCapsule {
       // ★ 可见内容：几何 = 实测槽（q.v. 类注释第三节），首帧之前 = 胶囊矩形。
       this.ContentLayer()
     }
+    // ★★★ 2026-10-18（用户：「切换单双行动画不是很流畅」）：盒高/盒宽随形态在 56 ↔ 40 之间变，
+    //   原来**没有任何补间**（状态一变就瞬跳）。上游把 `BAR_ANIM = { duration: 350, curve: Curve.Friction }`
+    //   （`wujie.pa:70120-70126`）挂在**带 height/padding 的那个节点**上（胶囊 `Row` `:69053-69057`，
+    //   收口 `:69118-69121`）⇒ 这里给胶囊根同样挂一条，顺序照抄 `animation(…) → 属性 → animation(null)`。
+    .animation(MiniBarMaterialCapsule.BAR_ANIM)
     .width(this.boxWidthVp())
     .height(this.boxHeightVp())
     // ★★★ 挤压：无界 `MainPage.morphGlass` 的 `.scale({ x: glassScaleX, y: glassScaleY * morphSquashY })`
@@ -775,6 +782,7 @@ export struct MiniBarMaterialCapsule {
     //   **不写 centerX/centerY**（:155728 的对象只有 x/y 两个键）⇒ 默认 50%/50% = 盒中心 = 胶囊中心。
     //   `morphSquashY`：0.86（110ms）→ 1（320ms `cubic-bezier(0.34,1.56,0.64,1)`）；静止恒为 1。
     .scale({ x: 1, y: this.expandState.morphSquashY })
+    .animation(null)
     // 本层不吃事件（事件交给胶囊里的按钮 / 宿主自己的手势）；子节点照常响应。
     .hitTestBehavior(HitTestMode.Transparent)
     .onAreaChange((_oldArea: Area, area: Area): void => {
