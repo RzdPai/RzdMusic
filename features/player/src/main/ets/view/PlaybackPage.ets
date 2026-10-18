@@ -2832,11 +2832,24 @@ export struct PlaybackPage {
     const morphRunning: boolean = this.expandIntroRunning || closeStage === MorphStage.ENTERING
       || closeStage === MorphStage.LANDING;
     if (morphRunning) {
-      // 见 `playMorphOpenIntro` 末尾的说明：这里**只记标记**，等打开收尾后再关（避免两条计时器抢 `morphP` 造成闪烁）。
-      this.closeAfterOpen = true;
+      // ★★★ 2026-10-18（用户第七轮：「展开过程中按系统返回**直接没反应了**」）：
+      //   上一轮"只记标记、等打开收尾"在真机上被吞掉了（收尾那条路径不一定回来调本函数）⇒ 返回键无响应。
+      //   ⇒ 改成**先瞬间落位、再走正常快照关闭**：按下去立刻有反应，拍到的仍是完整展开态（不闪）。
       Logger.info(PlaybackPage.logTag,
-        `RzdCloseLiveMorph defer stage=${closeStage} intro=${this.expandIntroRunning ? 1 : 0} ` +
+        `RzdCloseLiveMorph settle-then-close stage=${closeStage} intro=${this.expandIntroRunning ? 1 : 0} ` +
           `p=${this.expandState.morphP.toFixed(3)} cp=${this.expandState.contentProgress().toFixed(3)}`);
+      this.expandIntroRunning = false;
+      this.closeAfterOpen = false;
+      this.expandState.cancelContentTween();
+      this.expandState.morphP = 1;
+      this.expandState.contentP = 1;
+      this.expandState.morphSettleOpen();
+      setTimeout((): void => {
+        if (!this.isAlive || this.isClosing) {
+          return;
+        }
+        this.closeWithAnimation();
+      }, 48);
       return;
     }
     this.closeWithAnimation();
@@ -7679,7 +7692,14 @@ export struct PlaybackPage {
           //      闂佹寧绋戝﹢?57 / L510闂佹寧绋掗悺?opacity(this.expandState.realCoverVisible() ? 1 : 0)`闂佹寧绋戦ˇ顐﹀焵椤掍焦鐓涢柍?
           //      闂佸憡鐟禍婵嗭耿娓氣偓楠炲秶鈧綆鍋呯花姘跺级閳哄倻鎳佺紒鏃€鎸冲銊╊敍濠婂嫮鏆犲┑鐐存儗閸犳牠鎯囬弶娆剧叾闊洤娴烽崯?闂?闂佸憡鐟ラ悧鍛博鐎涙鐟归悗锝冨妷閸?*闂佸憡鑹炬總鏃傜博绾惧浜归柕蹇嬪灩绗?N 婵犮垼娉涚€氥劑鍩€椤戣法顦︾憸鎶婂洤缁╅梺顐ｇ〒閸熷﹤鈽夐幘顖氫壕婵?*闂侀潧妫楃粙鍕濞嗘垹绠?4 濠电偛妫屽Σ鍕濮樿泛违?
           //   闂佸疇娉曟刊瀵哥箔?婵炴垶鎸搁敃銉︽叏閵堝鐓㈤柍杞拌兌閹藉秹鏌ㄥ☉妯荤秮.id` / `onAreaChange`闂?*婵炴垶鎸哥粔纾嬨亹?opacity 閻熸粍婢樺畷顒勫箹?*闂佹寧绋戦惉濂稿矗鎼达絾鏆滈柟闂寸濞呫倗鈧數澧楅〃鍛村春?闂佺繝鐒﹂幐鍫曞焵?
-          .opacity(this.expandState.realCoverVisible() ? 1 : 0)
+          // ★★★ 2026-10-18（用户第七轮：「用系统返回 / 左上角收起按钮关闭时**会出现两个封面**
+          //   —— 一个正常收回去，一个跟着播放器往下滑」）：
+          //   那个"跟着往下滑"的就是**这一颗真封面**：它在形变容器里，收缩补间会把它一起带走；
+          //   而"正常收回去"的是壳层/快照那一层。上游用 `pullCoverOpacity = (pullActive && isMorphTarget) ? 0 : 1`
+          //   （`wujie.pa:176513-176531`）在**整个形变会话期间**把真封面藏掉，交接完再显回来。
+          //   ⇒ 本仓等价做法：关闭期间（`this.isClosing`，系统返回与按钮两条路都会置真）真封面一律不画，
+          //     静止态 `isClosing === false` ⇒ 与改动前逐像素一致。
+          .opacity(this.expandState.realCoverVisible() && !this.isClosing ? 1 : 0)
           // 闂?婵炴垶鎸搁敃銉︽叏閵堝鐓㈤柍杞拌兌閹藉秹鏌熺喊鍗炲闁糕晛鏈璇测枎閹捐櫕顏為梺鎸庣☉閻楀﹤螞閵堝鍋╅悘鐐跺亹閻﹀秹鏌￠崟闈涚仴妞も晩鍋婇幆鍕冀瑜忓﹢鎾煠婵傚绨荤紒璁崇劍缁嬪绻濋崘銊愭捇鏌ㄥ☉娆戞憿floatingCover.onAreaChange 闂?publishMorphTargets`闂?
           .id(PLAYER_BIG_COVER_ID)
           .onAreaChange((_oldValue: Area, newValue: Area): void => {
