@@ -85,6 +85,39 @@ function clampRgbByte(n: number): number {
   return Math.max(0, Math.min(255, Math.floor(n)));
 }
 
+/** cubic-bezier 的单轴分量：P0 = 0、P1 = p1、P2 = p2、P3 = 1。 */
+function morphBezierAxis(p1: number, p2: number, t: number): number {
+  const u: number = 1 - t;
+  return 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t;
+}
+
+/**
+ * @returns `cubic-bezier(0.23, 1.0, 0.32, 1.0)` 的 **y(x)**。
+ *
+ * 这就是上游 `EASE_OUT_STR`（`wujie.pa` 的 `Tokens[15]`），也是本仓几何那条 `animateTo` 用的同一条曲线。
+ * 二分反解 `t` 使 `X(t) = x`（X 在本组控制点下单调），再取 `Y(t)` ⇒ 与
+ * `curves.cubicBezierCurve(0.23, 1.0, 0.32, 1.0)` 逐值同源。
+ *
+ * 为什么需要它：`animateTo` **不会**把状态变量逐帧插值（见 `startContentTicker()` 的说明），
+ * 而内容窗口（`pullChromeOpacity` / `pullBottomIn` / `pullBgIn` / `metaRiseVp`）必须吃**真进度**，
+ * 所以内容时间线改成 16ms ticker 逐帧写 `contentP = morphEaseY(t / 560)`。
+ */
+function morphEaseY(x: number): number {
+  const cx: number = x < 0 ? 0 : (x > 1 ? 1 : x);
+  let lo: number = 0;
+  let hi: number = 1;
+  let t: number = cx;
+  for (let i = 0; i < 24; i++) {
+    if (morphBezierAxis(0.23, 0.32, t) < cx) {
+      lo = t;
+    } else {
+      hi = t;
+    }
+    t = (lo + hi) / 2;
+  }
+  return morphBezierAxis(1.0, 1.0, t);
+}
+
 /** 婵炴垶鎸撮崑鎾寸箾閸″繆鍋撳畷鍥唸闂傚倸鐗滃鈧紒妤€鎳忓顏堝磹閻旀粍甯″畷娆撴惞鐟欏嫮鏆犳繛鎴炴尪閸婃洜妲愰懜鍨鐎广儱鎳忕粋鍫ユ煥濞戞澧ｆい?`PlaybackPage.loadOnlineCoverPair`闂佹寧绋戦ˇ顓㈠焵?*/
 class CoverDecodePair {
   /** 闂佺绻堥崝宀勫及閸屾壕鍋撻悽鍛婁氦缂佽鲸绻冪粭?`effectKit` 闂佸憡鐟﹂悧鐐寸珶婵犲洤违?*/
@@ -3706,6 +3739,11 @@ export struct PlaybackPage {
     //   闂佸疇娉曟刊瀵哥箔?婵炴垶鎸婚悧鏃堝船椤掑嫬鐭楅柛鎴欏€楃粣妤呮煛閳ь剛鎹勯搹鐟版殹闂佹悶鍎抽崑鐘绘儍閻旇崵鐤€闁告稒鐣埀顒€绻愯闁哄倹顑欓崵?`morphGen`闂佹寧绋戦悧鍡楊嚕閻ｅ瞼纾介柡宥庡墰濡差垶姊?`animGen++` + onFinish 闂佸搫绋勭换婵嬫偘濞嗘挻鏅鑸电〒缁€?
     //    闂佸憡鐔粻鎴﹀垂椤栨繄鐤€妞ゆ劧鑵归崑鎾绘偄閼姐倗顔曢梺?闂佽　鍋撻柟顖滃瀹曞啿霉閸忚偐鐓悷鏇炴閹晠鎳滅喊妯轰壕濞达絿顣介崑?
     const gen: number = this.expandState.morphGen;
+    // ★★★ 2026-10-18（第六轮真因）：`beginContentTween()` 必须排在几何 `animateTo` **之前**。
+    //   它内部 `from = this.morphP`（见 `PlayerExpandState.beginContentTween`），而下面那条
+    //   `animateTo` 的闭包会**同步**把 `morphP` 写成 1 ⇒ 排在后面就只能拿到 `from = 1`，
+    //   整条内容时间线退化成"始终停在终点"（这就是「底部控件出现过早」的真因）。
+    const contentGen: number = this.expandState.beginContentTween();
     try {
       this.getUIContext().animateTo({
         duration: PlaybackPage.MORPH_OPEN_DURATION_MS,
@@ -3743,25 +3781,30 @@ export struct PlaybackPage {
       // ```
       // ⛔ 不许把这两层合并进同一个 animateTo：合并就等于把内容窗口压进 350ms（墙钟上早 37%），
       //    正是用户看到"飞入比无界早"的量化来源。
-      const contentGen: number = this.expandState.beginContentTween();
-      this.getUIContext().animateTo({
-        duration: PlayerExpandState.MORPH_CONTENT_DURATION_MS,
-        curve: curves.cubicBezierCurve(0.23, 1.0, 0.32, 1.0)
-      }, (): void => {
-        this.expandState.contentP = 1;
-      });
+      // ★★★ 2026-10-18（第六轮真因）：内容时间线改由**逐帧 ticker** 驱动（见 `startContentTicker()`）。
+      //   ⛔ 这里原来是 `this.getUIContext().animateTo({duration: 560, curve}, () => { contentP = 1 })`：
+      //     `animateTo` **不会**逐帧插值状态变量（闭包里的赋值一次写成终点），
+      //     加上 `beginContentTween()` 的 `from` 当时读到的 `morphP` 已是 1
+      //     ⇒ `contentP` **第一帧就是 1** ⇒ `pullBottomIn` / `pullBottomOpacity` /
+      //     `pullChromeOpacity` / `pullBgIn` / `pullBottomYVp` 全部恒为终点值（窗口公式全废）。
+      //   ✅ 上游是 `animateMorphT` = `createAnimator` + `onFrame(v) => morphT = v`
+      //     （`wujie.pa:145608-145661`），每帧写真进度。
+      this.startContentTicker();
+      this.logChromeReveal('intro');
       Logger.info(PlaybackPage.logTag,
         `RzdMorphOpen geoMs=${PlaybackPage.MORPH_OPEN_DURATION_MS}/EASE_OUT_STR(0.23,1,0.32,1) ` +
           `contentMs=${PlayerExpandState.MORPH_CONTENT_DURATION_MS}/EASE_OUT_STR(0.23,1,0.32,1) ` +
           `settleMs=${PlayerExpandState.MORPH_CONTENT_DURATION_MS + 30} gen=${contentGen}`);
       // 内容补间收尾（世代号不匹配时 `endContentTween` 自己丢弃旧回调）。
       setTimeout((): void => {
+        this.stopContentTicker();
         this.expandState.endContentTween(contentGen, 1);
       }, PlayerExpandState.MORPH_CONTENT_DURATION_MS + 30);
     } catch (err) {
       // 闁荤偞绋忛崕闈浳涚捄銊﹀皫闁炬艾鍊婚悷婵嬫煛婢跺牆鍔欑紒鈥冲暟閹茬増鎷呴懞銉ュ姍闂佸憡甯楀姗€鎮鹃鍕瀬閻庢稒菤閸嬫挻绗熸繝鍕槷缂傚倷鐒︾换鈧紒妤€顦甸幊妤呮嚍閵夈儙鈺呮煙缂併垹骞楅柡鍌欑劍閵囧嫰鎮介崹顐ｇ暚闂?闁哄鏅炲〒鍦礊濮椻偓瀵爼鏁撻悩韫凹婵炴垶鎸撮崑鎾绘倶韫囨挾绠版繛?
       const e = err as BusinessError;
       Logger.error(PlaybackPage.logTag, `morph open animateTo failed code=${e.code} msg=${e.message}`);
+      this.stopContentTicker();
       this.expandIntroRunning = false;
       this.expandState.morphSettleOpen();
       return;
@@ -6242,6 +6285,141 @@ export struct PlaybackPage {
     return Math.max(1, this.expandState.morphClipHeight);
   }
 
+  /**
+   * @returns 「内容列」的高度 —— **恒等于整窗高**（形变期也不跟着裁剪窗缩）。
+   *
+   * ★★★ 2026-10-18（第六轮「播放器展开过程中底部控件出现过早」· 候选 1 的真身）：
+   *   上游 `wujie.pa:191772-191782` 的正文列是 `Column().width(winWVp).height(winHVp)`
+   *   —— **固定整窗高**，而裁剪窗是它的**父** `Stack`
+   *   （`:191442-191451` `.height(expand.clipHeight)`、`:191462-191469` `.clip(true)`）。
+   *   ⇒ 上游的底栏（进度条 + 传输行）挂在**整窗底边**上，形变期 `clipHeight` 还很小 ⇒
+   *     它整块落在**裁剪窗外** —— 这就是「无界连进度条都还没出现」的那道**裁剪门**。
+   *   ⛔ 本仓这一层原来是 `.height('100%')` ⇒ 高度跟着**裁剪窗**走 ⇒ 底栏永远贴着
+   *     裁剪窗的**底边**、裁剪对它**永不生效**（只剩 `pullBottomOpacity` 一道门）⇒ 只要不透明度
+   *     一抬头就整块露出来。这与「同一层的背景列早就是固定整窗高」自相矛盾
+   *     （见 `MeshCoverBg` 的 `.height(this.expandState.windowHeightVp)`，那一段的注释解释了
+   *     "形变期网格画布 = 整窗恒定，卡片长大是被 `clipHeight` **揭开**的"）。
+   *   两级高度从此一致：背景列与内容列都固定整窗，只有外层 `Column C` 吃 `clipHeight`。
+   */
+  private morphContentHeight(): Length {
+    const h: number = this.expandState.windowHeightVp;
+    return h > 0 ? h : StyleConstants.FULL_HEIGHT;
+  }
+
+  // ═══════════ 内容时间线的**逐帧驱动**（对齐上游 `animateMorphT` 的 `onFrame`） ═══════════
+  //
+  // ★★★ 2026-10-18（同一条反馈的**真因**）：
+  //   上游 `MainPage.animateMorphT(to, ms, easing, onDone)`（`wujie.pa:145608-145661`）是
+  //   `createAnimator(... primaryAnimator)` + **`onFrame(v) => morphT = v`** —— 每帧写真进度，
+  //   而 `effT() = isMorphTarget() ? pullT : 1`（`:171535-171549`）读的就是它。
+  //
+  //   ⛔ 本仓原来用 `animateTo({duration:560, curve}, () => { contentP = 1 })` 来"补间内容"：
+  //     `animateTo` **不会**逐帧插值状态变量 —— 闭包里的赋值是**一次写成终点**，
+  //     框架只把由此产生的*可动画属性*（scale/height/opacity/translate…）从旧值补到新值。
+  //     更糟的是 `beginContentTween()` 的 `from` 读的是 `this.morphP`，而那时几何那条
+  //     `animateTo` 的闭包**已经**把 `morphP` 写成 1 了 ⇒ `from = 1` ⇒ `contentP` 从第一帧就是 1。
+  //   ⇒ `pullChromeOpacity()` / `pullBottomIn()` / `pullBottomOpacity()` / `pullBottomYVp()` /
+  //     `pullBgIn()` / `metaRiseVp()` / `earlyRiseVp()` / `contentRiseVp()` **全部恒等于终点值**
+  //     （1 / 1 / 1 / 0 / 1 / 0 / 0 / 0）—— 所有内容窗口公式**一行都没生效**。
+  //     落到屏上：底栏从第一帧就是 100% 不透明、且没有那 200vp 的升入位移，只剩几何在遮它。
+  //
+  //   ✅ 照搬：内容进度改由 16ms ticker 逐帧写 `contentP = morphEaseY(elapsed / 560)`
+  //     （本文件顶部的 `morphEaseY` = `cubic-bezier(0.23,1,0.32,1)` 的 y(x)，与几何那条同源）。
+  //     `beginContentTween()` 也已挪到几何 `animateTo` **之前**，保证 `from = 0`。
+  private static readonly CONTENT_TICK_MS: number = 16;
+  private contentTickTimer: number = -1;
+  private contentTickGen: number = 0;
+  private contentTickAtMs: number = 0;
+
+  /** 起逐帧内容补间（`contentP` 从 0 走到 1，560ms + EASE_OUT_STR）。 */
+  private startContentTicker(): void {
+    this.stopContentTicker();
+    this.contentTickGen = this.contentTickGen + 1;
+    const gen: number = this.contentTickGen;
+    const dur: number = PlayerExpandState.MORPH_CONTENT_DURATION_MS;
+    this.contentTickAtMs = Date.now();
+    this.contentTickTimer = setInterval((): void => {
+      if (gen !== this.contentTickGen || !this.isAlive) {
+        this.stopContentTicker();
+        return;
+      }
+      const raw: number = (Date.now() - this.contentTickAtMs) / dur;
+      const x: number = raw < 0 ? 0 : (raw > 1 ? 1 : raw);
+      this.expandState.contentP = morphEaseY(x);
+      this.logChromeReveal('tick');
+      if (x >= 1) {
+        this.stopContentTicker();
+      }
+    }, PlaybackPage.CONTENT_TICK_MS);
+    Logger.info(PlayerExpandState.LOG_TAG,
+      `RzdMorphContentTick start gen=${gen} ms=${dur} ` +
+        `step=${PlaybackPage.CONTENT_TICK_MS} from=0 ease=EASE_OUT_STR(0.23,1,0.32,1)`);
+  }
+
+  /** 停掉逐帧内容补间（幂等；收尾 / 关闭 / 卸载都要调）。 */
+  private stopContentTicker(): void {
+    if (this.contentTickTimer >= 0) {
+      clearInterval(this.contentTickTimer);
+      this.contentTickTimer = -1;
+    }
+  }
+
+  /** `RzdChromeReveal` 的节流窗口（形变期每 50ms 最多一行）。 */
+  private static readonly CHROME_REVEAL_LOG_MS: number = 50;
+  /** `chromeTotalVp()` 取不到时的兜底底栏高（vp）。 */
+  private static readonly CHROME_REVEAL_BLOCK_FALLBACK_VP: number = 160;
+  private chromeRevealAtMs: number = 0;
+  private chromeRevealKey: string = '';
+
+  /**
+   * 形变期「底栏（进度条 + 传输行）可见度」诊断 —— **只在值变化时打**，每 50ms 最多一行。
+   * ```
+   *   RzdChromeReveal p=<几何进度> in=<pullBottomIn> opa=<pullBottomOpacity>
+   *                   y=<pullBottomYVp> clipH=<裁剪窗高> vis=<实际可见度> bh=<底栏高> src=<触发点>
+   * ```
+   * `vis` = **几何重叠比例 × `opa`**（= 屏上真正的可见度，判据就是看它 `< 0.05`）：
+   * ```
+   *   blockTop = pageH − bh + y      // 底栏挂在**整窗底边**（上游 Column().height(winHVp)）
+   *   geo      = clamp01((clipH − blockTop) / bh)
+   *   vis      = geo × opa
+   * ```
+   * ⛔ 改前这一层是 `.height('100%')` ⇒ 底栏贴的是**裁剪窗底边**（`blockTop = clipH − bh + y`）
+   *    ⇒ `geo` 恒 ≈ 1 ⇒ 裁剪门对它失效，只剩 `opa` 一道门（而 `opa` 又恒为 1，见 `startContentTicker`）。
+   * grep：`hdc shell hilog -x | Select-String 'RzdChromeReveal'`
+   */
+  private logChromeReveal(src: string): void {
+    const now: number = Date.now();
+    if (now - this.chromeRevealAtMs < PlaybackPage.CHROME_REVEAL_LOG_MS) {
+      return;
+    }
+    const st: PlayerExpandState = this.expandState;
+    const p: number = st.morphP;
+    const inp: number = st.pullBottomIn();
+    const opa: number = st.pullBottomOpacity();
+    const y: number = st.pullBottomYVp();
+    const pageH: number = st.windowHeightVp;
+    const clipRaw: number = st.morphClipHeight;
+    const clipH: number = st.morphClipping() && clipRaw > 0 ? clipRaw : pageH;
+    const bhRaw: number = st.chromeTotalVp();
+    const bh: number = bhRaw > 0 ? bhRaw : PlaybackPage.CHROME_REVEAL_BLOCK_FALLBACK_VP;
+    const blockTop: number = pageH - bh + y;
+    const geoRaw: number = bh > 0 ? (clipH - blockTop) / bh : 0;
+    const geo: number = geoRaw < 0 ? 0 : (geoRaw > 1 ? 1 : geoRaw);
+    const vis: number = geo * opa;
+    const key: string = `${p.toFixed(3)}|${inp.toFixed(3)}|${opa.toFixed(3)}|` +
+      `${y.toFixed(1)}|${clipH.toFixed(1)}|${vis.toFixed(3)}|${bh.toFixed(1)}`;
+    if (key === this.chromeRevealKey) {
+      this.chromeRevealAtMs = now;
+      return;
+    }
+    this.chromeRevealKey = key;
+    this.chromeRevealAtMs = now;
+    Logger.info(PlayerExpandState.LOG_TAG,
+      `RzdChromeReveal p=${p.toFixed(3)} in=${inp.toFixed(3)} opa=${opa.toFixed(3)} ` +
+        `y=${y.toFixed(1)} clipH=${clipH.toFixed(1)} vis=${vis.toFixed(3)} ` +
+        `bh=${bh.toFixed(1)} src=${src}`);
+  }
+
   /** Root: 闂佽桨鐒﹂幐鎶藉Υ婢跺瞼纾介柍鍝勫€归弶?+ 缂備焦姊归悧婊兠虹捄銊﹀晳濞达絿顭堥ˉ鍛磼閹邦収娈旂憸鐗堢洴閺佸秹宕煎┑鍡氼唹闁荤喐鐟ュΛ娑㈡偂閳哄嫨浜归柕蹇嬪€曞▍鈩冩叏濠垫挾鍒伴柕鍫滅矙瀵即顢涘☉娆愵啋婵＄偑鍊楅。顔炬? 濠碘剝銇滈崕鑼暜鐎甸晲鐒婂〒姘ｅ亾婵為棿鍗虫俊?*/
   build() {
     // 闂?缂備焦顨忛崗娑氳姳閺屻儲鍋嬮柛顐墰缁?*闂佽桨鐒﹂幐鎶藉Υ婢跺瞼纾介柍鍝勫€归弶?+ 缂備焦姊归悧婊兠虹捄銊﹀晳濞达絿顭堥ˉ鍛磼閹邦収娈旂憸?*闂?
@@ -6678,7 +6856,11 @@ export struct PlaybackPage {
             .height(this.sheetHeightPercent())
           }
           .width(StyleConstants.FULL_WIDTH)
-          .height(StyleConstants.FULL_HEIGHT)
+          // ★★★ 2026-10-18：**固定整窗高**（上游 `wujie.pa:191772-191782` 的
+          //   `Column().width(winWVp).height(winHVp)`）—— 原来是 `FULL_HEIGHT`（= '100%'），
+          //   高度跟着**裁剪窗** `morphClipHeight()` 走 ⇒ 底栏永远贴裁剪窗底边 ⇒ 裁剪门失效。
+          //   详见 `morphContentHeight()` 的说明。
+          .height(this.morphContentHeight())
           .justifyContent(FlexAlign.End)
           .clip(true)
           // 闂佸疇娉曟刊瀵哥箔?闁哄鏅滈悷鈺呭闯?*婵炴垶鎸哥粔鎾疮閳?*缂傚倷鐒﹂悷锕傚汲閿濆洣娌柛灞捐壘椤綁姊洪銏㈢婵″弶鍨堕幆?闁圭厧鐡ㄥú婵囩珶婵犲洦鏅慨妯虹亪閸嬫捁绠涢弮鈧～鏍箹鏉堝墽鐣遍柛鎴節楠炴劖寰勬繝鍌氬敤缂傚倸鍊归悧鐐烘儊瑜旈獮蹇涘幢濡櫣浜ｆ繛鎴炴尭椤︻垶鎯囬幍顔剧幓婵°倐鍋撶憸?

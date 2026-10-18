@@ -2515,6 +2515,13 @@ export class PlayerExpandState {
    */
   public beginContentTween(): number {
     this.contentGen = this.contentGen + 1;
+    // ★★★ 2026-10-18（第六轮「底部控件出现过早」的真因，写在这里免得再踩）：
+    //   `from` 取的是 `this.morphP`，而几何那条 `animateTo` 的闭包是**同步**把 `morphP`
+    //   写成终点的（`animateTo` 不逐帧插值状态变量）⇒ **调用方必须在几何 animateTo 之前**
+    //   调本方法，否则 `from` 恒为 1、`contentP` 从第一帧就停在终点
+    //   ⇒ `pullChromeOpacity()` / `pullBottomIn()` / `pullBottomYVp()` / `pullBgIn()` 全废。
+    //   逐帧驱动由页面侧 ticker 负责（`PlaybackPage.startContentTicker()`，
+    //   对齐上游 `animateMorphT` 的 `createAnimator.onFrame`，`wujie.pa:145608-145661`）。
     const from: number = this.morphP < 0 ? 0 : (this.morphP > 1 ? 1 : this.morphP);
     this.contentP = from;
     this.contentTweenOwned = true;

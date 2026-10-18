@@ -104,6 +104,17 @@ const FLOATING_MINI_BAR_SLOT_MAX_HEIGHT_VP: number = 80;
 const FLOATING_MINI_BAR_MAX_WIDTH_VP: number = 560;
 
 /**
+ * 还没量到窗口宽（首帧）时迷你胶囊的**保守兜底宽度**（vp）。
+ *
+ * ★★★ 2026-10-20（第六轮，修「二级页播放条右侧被切」的第一条硬因）：
+ * 旧值是**硬返回 336**，而胶囊盒宽 = `336 + CAPSULE_SLACK_W(10) = 346` ⇒
+ * 任何窗口宽 < 360vp 的场合（折叠屏外屏 / 应用小窗 / 分屏下窗）上，盒比窗口还宽 ——
+ * 盒是居中的 ⇒ **两侧同时出界**；而只要盒是右锚的（首页那条用 `Alignment.BottomEnd`），
+ * 表现就是「左边正常、右边被屏幕右缘切掉」。320 + 10 = 330 落在最小的手机窗宽之内。
+ */
+const FLOATING_MINI_BAR_FALLBACK_WIDTH_VP: number = 320;
+
+/**
  * 搴曟爮銆岀幇鍦ㄥ氨鍚€嶉偅涓€椤电殑椤电涓嬫爣銆?
  *
  * 鈽?鐢ㄦ埛 2026-10-15锛堝弬鑰冨浘瀵规瘮锛夛細**杩欎竴椤佃鎶婃诞鍔ㄥ簳鏍忎笂鏂归偅鏉″皬鎾斁鏉℃暣鏉¤棌鎺?*
@@ -1694,7 +1705,11 @@ struct Index {
           //   `barLayoutMode` 在 `MiniBarMaterialCapsule` 里决定本盒横向 slack 是否归零；
           //   `capsuleStyle` 只进诊断日志（内层单 Tab 的 HdsTabs 没有 miniBar 槽，见那个文件的类注释第六节）。
           barLayoutMode: this.barLayoutModeForHds(),
-          capsuleStyle: this.miniBarStyleForHds()
+          capsuleStyle: this.miniBarStyleForHds(),
+          // 诊断（`hdc shell hilog | grep RzdMiniBarFit`）：把窗口宽与单侧边距交给胶囊，
+          // 它才能在 `RzdMiniBarFit` 里算出 `rightGap`（胶囊右缘距屏幕右缘）并判「右侧装不装得下」。
+          fitWinWVp: this.viewportWidthVp,
+          fitSideMarginVp: this.floatingMiniBarSideMarginVp()
         }) {
           this.miniBar()
         }
@@ -1772,8 +1787,12 @@ struct Index {
     if (this.viewportWidthVp <= 0) {
       return this.floatingMiniBarSideMarginVp();
     }
-    const gap: number = this.viewportWidthVp - this.homeMiniCapsuleWidthVp();
-    return gap > 0 ? gap / 2 : 0;
+    // ★★★ 2026-10-20（第六轮）：**按"盒宽"算，不是按"胶囊宽"算**。
+    //   旧写法 `(winW − barWidth)/2` = 12，而盒宽是 `barWidth + CAPSULE_SLACK_W` = `winW − 14`
+    //   ⇒ 盒右缘被推到 `winW − 12`（应到 `winW − 7`）⇒ **首页那条整整左偏 5vp**，
+    //   与二级页那条（居中的盒）对不齐 —— 这就是「首页播放条和二级页不是一个」在几何上的那一半。
+    //   现在两条宿主都走 {@link miniBarBoxRightMarginVp}，同一份算式。
+    return this.miniBarBoxRightMarginVp(this.homeMiniCapsuleBoxWidthVp(), this.homeMiniBarSingleRow());
   }
 
   /**
@@ -2265,7 +2284,7 @@ struct Index {
    */
   @Builder
   private floatingMiniBar() {
-    Stack({ alignContent: Alignment.Bottom }) {
+    Stack({ alignContent: Alignment.BottomEnd }) {
       /**
        * 鈽呪槄 鍏抽敭锛歚TabContent()` **涓嶈兘鏄┖鐨?*銆?
        *
@@ -2327,7 +2346,10 @@ struct Index {
           //   多出来的 4vp 是**纯透明 slack 在胶囊上方**，胶囊自身的尺寸/离底（12）一个字没动。
           bottomMargin: this.floatingMiniBarBottomMarginVp(),
           // 材质档位与首页那条共用一份（`ambientTitleMaterial()`）⇒ 两条是同一套光感。
-          material: this.ambientTitleMaterial()
+          material: this.ambientTitleMaterial(),
+          // 诊断（`hdc shell hilog | grep RzdMiniBarFit`）：与首页那条**同一份**入参。
+          fitWinWVp: this.viewportWidthVp,
+          fitSideMarginVp: this.floatingMiniBarSideMarginVp()
         }) {
           this.floatingMiniBarContent()
         }
@@ -2343,6 +2365,11 @@ struct Index {
       // ★★★ 2026-10-18：这里**没有** `.offset` 了 —— 键盘避让一律走上面 `barFloatingStyle.barBottomMargin`
       //   （只挪胶囊，宿主盒与它底下那层材质原地不动）。把本条重新接回 `.offset` = "整个底下被抬上来"复现。
       .id(SECONDARY_MINI_BAR_HOST_ID)
+      // ★★★ 2026-10-20（第六轮）：横向摆位交给**与首页同一个函数**（{@link miniBarBoxRightMarginVp}）。
+      //   本轮之前这里靠 `Alignment.Bottom`（盒居中）—— 结果对，但**与首页的右锚 + margin 不是同一套写法**，
+      //   而首页那个 margin 用的是胶囊宽而不是盒宽 ⇒ 两条差 5vp。现在两者都写"右锚 + 盒宽 margin"，
+      //   算式一处、几何一致：`胶囊右缘 = winW − side`。
+      .margin({ right: this.miniBarBoxRightMarginVp(this.secondaryMiniBarBoxWidthVp(), false) })
       // 涓嶈瑁侊細HDS 鐨勬潗璐ㄨ儗鏉?鎶樺皠鑼冨洿姣斿唴瀹圭洅澶э紝瑁佷簡浼氱己涓€鍦堛€?
       .clip(false)
       .onAppear((): void => {
@@ -2384,7 +2411,7 @@ struct Index {
     }
     .width(StyleConstants.FULL_WIDTH)
     .height(StyleConstants.FULL_HEIGHT)
-    .alignContent(Alignment.Bottom)
+    .alignContent(Alignment.BottomEnd)
     .hitTestBehavior(HitTestMode.Transparent)
     .zIndex(20)
     // Hidden preserves anchors/layout and hides the floating bar with its controls immediately.
@@ -2483,13 +2510,72 @@ struct Index {
    */
   private floatingMiniBarWidthVp(): number {
     const side: number = this.floatingMiniBarSideMarginVp();
-    if (this.viewportWidthVp <= 0) {
-      return 336;
+    // ★★★ 2026-10-20（第六轮）：**恒夹到可用宽之内**。旧实现有两处会越界：
+    //   ① `viewportWidthVp <= 0`（首帧还没量到窗口宽）时硬返回 336 ⇒ 胶囊盒宽 346
+    //      > 任何 < 360vp 的窗口（折叠屏外屏 / 小窗 / 分屏）⇒ **盒出界**；
+    //   ② 手机档 `Math.max(220, full)` ⇒ 窗口 < 244vp 时把胶囊撑到**比可用宽还宽**。
+    //   现在 `want` 先与 `available` 取小、返回值再与 `available` 取小 ⇒
+    //   **`barWidth ≤ availableW = winW − 2×side` 是结构性的**（不是调数值调出来的）。
+    //   判据：`grep RzdMiniBarFit` 的 `availableW` 与 `barW` 两个数必须前者 ≥ 后者。
+    const winW: number = this.viewportWidthVp;
+    if (winW <= 0) {
+      return FLOATING_MINI_BAR_FALLBACK_WIDTH_VP;
     }
-    const full: number = this.viewportWidthVp - side * 2;
+    const full: number = winW - side * 2;
+    const available: number = full > 0 ? full : winW;
     const isWide: boolean = this.breakpointEnv.widthBreakpoint !== WidthBreakpoint.WIDTH_SM &&
       this.breakpointEnv.widthBreakpoint !== WidthBreakpoint.WIDTH_MD;
-    return isWide ? Math.min(FLOATING_MINI_BAR_MAX_WIDTH_VP, full) : Math.max(220, full);
+    const want: number = isWide ? Math.min(FLOATING_MINI_BAR_MAX_WIDTH_VP, available) : available;
+    return Math.min(want, available);
+  }
+
+  /**
+   * @returns 胶囊**盒**宽（vp）—— 与 `MiniBarMaterialCapsule.capsuleBoxWidthVp()` **同一算式**。
+   *
+   * 为什么这里要再写一遍：胶囊盒宽只在两处用到（两条宿主的横向摆位、诊断日志），
+   * 而 `features/playlist/Index.ets` 的 barrel（本轮禁改）没有导出那个函数。
+   * 两处**必须**同步：判据在 `RzdMiniBarFit`（`hdc shell hilog | grep RzdMiniBarFit`）——
+   * 实测 `boxW` 与 `barW + slackW`（单层态 `barW`）不相等，就说明这里漂了。
+   * @param barWidth 胶囊可见宽度（vp）
+   * @param singleRow 是否单层态（迷你条与页签并排 ⇒ 横向 slack 归零）
+   */
+  private miniBarBoxWidthVp(barWidth: number, singleRow: boolean): number {
+    return singleRow ? barWidth : barWidth + CAPSULE_SLACK_W;
+  }
+
+  /** @returns 首页迷你胶囊的**盒**宽（vp）= {@link miniBarBoxWidthVp} 喂上首页的胶囊宽。 */
+  private homeMiniCapsuleBoxWidthVp(): number {
+    return this.miniBarBoxWidthVp(this.homeMiniCapsuleWidthVp(), this.homeMiniBarSingleRow());
+  }
+
+  /** @returns 二级页浮动迷你胶囊的**盒**宽（vp）（二级页恒双层 ⇒ slack 照加）。 */
+  private secondaryMiniBarBoxWidthVp(): number {
+    return this.miniBarBoxWidthVp(this.floatingMiniBarWidthVp(), false);
+  }
+
+  /**
+   * @returns 胶囊盒的**右外边距**（vp）—— 两条宿主**共用这一个算式**（第六轮唯一的摆位口径）。
+   *
+   * ```
+   *   双层：rightMargin = (winW − boxW) / 2
+   *         ⇒ 盒右缘 = winW − (winW − boxW)/2 = (winW + boxW)/2
+   *         ⇒ 胶囊右缘 = 盒右缘 − (boxW − barW)/2 = (winW + barW)/2 = winW − side
+   *   单层：rightMargin = side ⇒ 盒 ≡ 胶囊（slack 归零）⇒ 右缘与页签排右缘齐
+   * ```
+   * ⇒ **`胶囊右缘 = winW − side` 是恒等式**（双层与单层同一个右缘），
+   *   即"右侧不会出屏"的算式源头。见 `RzdMiniBarFit` 的 `rightGap == side`。
+   * @param boxW 盒宽（vp）
+   * @param singleRow 是否单层态
+   */
+  private miniBarBoxRightMarginVp(boxW: number, singleRow: boolean): number {
+    if (singleRow) {
+      return this.floatingMiniBarSideMarginVp();
+    }
+    if (this.viewportWidthVp <= 0) {
+      return this.floatingMiniBarSideMarginVp();
+    }
+    const gap: number = this.viewportWidthVp - boxW;
+    return gap > 0 ? gap / 2 : 0;
   }
 
   /**
