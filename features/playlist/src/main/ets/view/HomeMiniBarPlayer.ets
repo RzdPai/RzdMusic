@@ -38,6 +38,21 @@ export struct HomeMiniBarPlayer {
    * 鈿狅笍 鏀硅繖涓暟鍙湅"鑳跺泭宸﹀彸鍒板睆骞曡竟鐨勬€昏窛绂?锛屼笉瑕佸啀鍙犲姞鍒?16 鈥斺€?16 鏄〉闈㈢骇鍙ｅ緞锛屼笉鏄繖涓€灞傘€?
    */
   private static readonly MINI_BAR_SIDE_VP: number = 0;
+  /**
+   * 内容行（`Row`）的**上下内距**（vp）——本组件自然高度的唯一"额外厚度"。
+   *
+   * ★★★ 2026-10-20（用户：「首页是高度低调的播放条，你咋改成大的了」）：
+   *   本组件的**自然高度 = 封面边长 + 2 × 本值**：
+   *     · 双层底栏 · 上下两排（`hdsBarLayoutMode === VERTICAL`）：封面 30 ⇒ **46vp**
+   *     · 沉浸式自由窗口：封面 40 ⇒ **56vp**
+   *     · 单排 · 展开（`miniBarExpanded`）：封面 44 ⇒ **60vp**
+   *     · 单排 · 折叠：封面 56 ⇒ **72vp**
+   *   这就是主页那条在"搬出 HDS `miniBar` 槽之前"的可见高度（HDS 的 miniBar 行高 = 按内容量）。
+   *   ⇒ 主页胶囊的 `barHeight` 必须按**同一个算式**给（见 `Index.homeMiniCapsuleBarHeightVp()`），
+   *     否则胶囊会胖起来（上一版写死 56 ⇒ 两排态从 46 变 56，用户一眼看出"改成大的了"）。
+   *   ⚠️ 改这个数必须同时改 `products/default/.../Index.ets` 的 `HOME_MINI_BAR_CONTENT_PAD_VP`。
+   */
+  private static readonly CONTENT_PAD_VP: number = 8;
   /** 胶囊**内部**组件再收进来的左右呼吸（vp）—— 用户要求"组件离播放条两侧远一点"。 */
   private static readonly MINI_BAR_INNER_PAD_VP: number = 4;
   /**
@@ -119,14 +134,15 @@ export struct HomeMiniBarPlayer {
   /**
    * 把本组件的**高度钉死**成宿主给的设计高度（vp）；`0`（默认）= 不钉，按自然高度排。
    *
-   * 自然高度 = 封面边长 + 上下各 8vp 内距：常规态封面 44 ⇒ **60vp**，沉浸式自由窗口那档封面 40 ⇒ 56vp。
-   * 二级页那条的宿主（HDS 浮动底栏）有自己的槽高，两者不等就会"内容偏上/偏下"
-   * ⇒ 由宿主传设计高度（`FLOATING_MINI_BAR_HEIGHT_VP` = 56），本组件用
-   * `constraintSize.maxHeight` 钉住它，并靠根 `Stack` 的 `alignContent: Center` 让内容**居中**：
-   * 上下留白恒等于 `(钉住的高度 − 内容行自然高度) / 2`。
+   * 自然高度 = 封面边长 + 2 × {@link CONTENT_PAD_VP}(8)：
+   *   两排 30 ⇒ **46** / 沉浸自由窗口 40 ⇒ **56** / 单排展开 44 ⇒ **60** / 单排折叠 56 ⇒ **72**。
+   * 二级页那条要钉在 `FLOATING_MINI_BAR_HEIGHT_VP`(56)：本组件用 `constraintSize.maxHeight` 钉住，
+   * 并靠根 `Stack` 的 `alignContent: Center` 让内容**居中** ⇒ 上下留白恒等。
+   * 2026-10-20 起**内容行（`Row`）自己也吃同一个上限**：非沉浸档位行自然高 60 > 56，
+   * 不钉就是"子件比容器大"（排布交给引擎兜底，2vp 向下偏差的候选来源）。
    *
-   * ⚠️ 首页那条 / 推荐页 / 歌单页**不传**（保持自然高度 60/56），不要顺手给它们也钉上 ——
-   *   首页那条的胶囊高度是 HDS 按内容自量的，钉了会把它压薄。
+   * ⚠️ 首页那条 / 推荐页 / 歌单页**不传**（保持自然高度），不要顺手给它们也钉上 ——
+   *   首页那条的胶囊高度现在也按**同一个自然高度**给（`Index.homeMiniCapsuleBarHeightVp()`）。
    */
   @Param contentHeightVp: number = 0;
   /** 涓婃媺鎵撳紑鎾斁椤碉紙璺熸墜锛夛細椹卞姩鍏变韩褰㈠彉杩涘害锛屾敹灏捐ˉ闂翠氦缁欏３灞傘€?*/
@@ -377,11 +393,17 @@ export struct HomeMiniBarPlayer {
       //   鎶樺彔鎬侊紙= 浜岀骇椤甸潰锛宍followAppMiniBarExpanded === false`锛夊啀鏀朵竴浠?`sidePadVp()`锛?
       //   涓庡乏渚у皝闈㈠埌鑳跺泭宸︾紭鐨勮窛绂诲悓涓€涓彛寰勶紝涓嶆斁鏂扮殑榄旀硶鏁帮紱棣栭〉閭ｆ潯瀹屽叏涓嶅彉銆?
       right: this.actionsTrailVp() + (this.followAppMiniBarExpanded ? 0 : this.sidePadVp()),
-      top: 8,
-      bottom: 8,
+      top: HomeMiniBarPlayer.CONTENT_PAD_VP,
+      bottom: HomeMiniBarPlayer.CONTENT_PAD_VP,
     })
     .alignItems(VerticalAlign.Center)
     .width(StyleConstants.FULL_WIDTH)
+    // ★★★ 2026-10-20（二级页「内容偏右下」）：**内容行自己也钉到胶囊高**。
+    //   二级页 `contentHeightVp = 56`，而内容行自然高 = 封面 44 + 8 + 8 = 60 ⇒ 行比盒子高 4vp。
+    //   "子件比容器大"时排布由引擎兜底（对齐可能退化成锚在左上），那就是 2vp 的**向下**偏差来源；
+    //   给行同一个上限之后：行盒 ≡ 容器盒 ≡ 胶囊盒，而且上下内距对称（8/8），
+    //   封面就算比行内 padding 区各高 2vp，也在 56 高的胶囊里**几何居中**（`clip` 默认 false ⇒ 不会被切）。
+    .constraintSize({ maxHeight: this.contentMaxHeightVp() })
     }
     // 鈿狅笍 `Stack` **娌℃湁** `alignItems`锛堥偅鏄?`Row`/`Column` 鐨勶級鈥斺€?鐢?`.alignContent(Alignment.Center)`
     //   缁欒儗鏉夸笌鍐呭鍚屼竴涓眳涓熀鍑嗭紙鏈疆缂栬瘧鏈熷疄娴嬶細`Property 'alignItems' does not exist on type
@@ -406,12 +428,14 @@ export struct HomeMiniBarPlayer {
     .id(MINI_BAR_ID)
     .visibility(this.expandState.sourceBarHidden ? Visibility.Hidden : Visibility.Visible)
     // 诊断（`hdc shell hilog | grep RzdMiniBarGeom`）：本行**实测**高度 + 窗口 y（vp）。
-    // 与壳层 `floatingMiniBarTabBarBox` 那行 `box slotH=… boxTop=…` 一对，就能算出真实留白：
-    //   padTop = content.y − boxTop；padBottom = slotH − padTop − contentH。
+    // 与 `MiniBarMaterialCapsule` 那两行（`grep RzdMiniBarCapsule` 的 `box …` / `content …`）一对：
+    //   顶部留白 = content.y − 胶囊顶（content 行里的 `capsule y=`）；底部留白同理。
+    // 判据：`pinned > 0` 时 `cap = pinned` 且 `content h = pinned` ⇒ 行盒 ≡ 容器盒 ≡ 胶囊盒。
     .onAreaChange((_oldArea: Area, area: Area): void => {
       Logger.info('RzdMiniBarGeom',
         `content h=${areaLengthToVp(area.height)} y=${areaLengthToVp(area.globalPosition.y)} ` +
           `w=${areaLengthToVp(area.width)} pinned=${this.contentHeightVp} ` +
+          `cap=${this.contentMaxHeightVp()} pad=${HomeMiniBarPlayer.CONTENT_PAD_VP} ` +
           `hosting=${this.followAppMiniBarExpanded ? 'home' : 'floating'} ` +
           `selfPlate=${this.showSelfDrawnBackplate} ownSquash=${this.contentOwnsSquash} ` +
           `squashY=${this.expandState.morphSquashY}`);

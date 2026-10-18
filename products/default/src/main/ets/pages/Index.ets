@@ -226,6 +226,17 @@ const HOME_MINI_CAPSULE_Z_INDEX: number = 19;
  */
 const HOME_MINI_CAPSULE_GAP_VP: number = 8;
 /**
+ * 首页迷你条**内容行**的上下内距（vp）——与
+ * `features/playlist/.../HomeMiniBarPlayer.ets` 的 `HomeMiniBarPlayer.CONTENT_PAD_VP` 是同一个数
+ * （那里是 `Row` 的 `padding.top / padding.bottom`）。
+ *
+ * 为什么要在本文件再写一份：{@link homeMiniCapsule} 必须在**建胶囊之前**就知道内容会有多高
+ * （HDS 的 `barHeight` 是入参、不是结果），而 `HomeMiniBarPlayer` 那个常量是 `private`。
+ * ⚠️ 改那一边必须同步这一边，否则胶囊与内容差 2×Δ（判据：日志 `RzdMiniBarGeom content h=` 与
+ *    `RzdHomeMiniCapsule barH=` 两行必须相等）。
+ */
+const HOME_MINI_BAR_CONTENT_PAD_VP: number = 8;
+/**
  * 鈽?2026-10-17锛氬揩鐓ф敹缂╂诞灞傦紙`ShrinkOverlayHost`锛夌殑灞傛 鈥斺€?**蹇呴』姣斾笂闈㈡墍鏈夋诞灞傞兘楂?*銆?
  *   瀹冧唬琛?姝ｅ湪娑堝け鐨勯偅涓€灞忔挱鏀鹃〉"锛屽帇鍦ㄥ厠闅嗗眰锛?10锛変笌杩蜂綘鏉′箣涓婃墠涓嶄細琚洊浣忋€?
  *   鈿狅笍 鏃犵晫閭ｄ竴渚у畠涔熸病鏈変笓闂ㄧ殑 z锛坄MainPage` 閲屽畠鎺掑湪娴眰瀹夸富涔嬪悗锛夛紝
@@ -1592,18 +1603,21 @@ struct Index {
    *           `ignoreLayoutSafeArea`，所以**页盒底 = 窗口底 − I**）
    *       T = 页签胶囊高度 = 壳层 `HdsTabs.barHeight(56)`
    *       G = {@link HOME_MINI_CAPSULE_GAP_VP}（迷你胶囊与页签胶囊之间的缝）
-   *       m = `CAPSULE_SLACK_H / 2`（胶囊在本组件盒内的下留白）
+   *       m = `CAPSULE_SLACK_H / 2`（胶囊在本组件盒内的下留白 = 上留白，盒高 = barH + 2m）
    *   页签胶囊：底 = 窗口底 − M ⇒ 顶 = 窗口底 − M − T
    *   迷你胶囊：底应为 `页签胶囊顶 − G` = 窗口底 − M − T − G
-   *   本组件盒（高 `barHeight + slackH`）底对齐页盒、下移 `X`：
+   *   本组件盒（高 `barHeight + 2m`）底对齐页盒、下移 `X`：
    *       胶囊底 = 页盒底 − X + m = (窗口底 − I) − X + m
    *   令两者相等 ⇒ **X = (M − I) + T + G + m**
-   *   代入常态（M ≈ I ≈ 28、T = 56、G = 8、m = 10）⇒ X = **74vp**。
+   *   代入常态（M ≈ I ≈ 28、T = 56、G = 8、m = 10）⇒ X = **74vp**（与 `barHeight` 无关 ⇒ 见下一条）。
    *   ⚠️ `M − I` 保留成算式而不是当 0：换机型/换装饰档位时这两项可能不等。
    *   胶囊**可见矩形**（给 `MINI_BAR_ID` / 形变起点用的那一条）：
    *       宽 = `floatingMiniBarWidthVp()`（**与二级页同一个函数** ⇒ 两条一样宽，不再"一大一小"）
-   *       高 = `FLOATING_MINI_BAR_HEIGHT_VP`(56)（同上，与二级页同高）
-   *   内容盒 ≡ 胶囊盒（都在 {@link MiniBarMaterialCapsule} 里）⇒ 内容既然居中就没有第二个留白口径。
+   *       高 = **内容自然高** = {@link homeMiniCapsuleBarHeightVp}（= 封面 + 2 × 8；常态两排 **46vp**）
+   *   ⇒ 因为 `X` 只跟 `m` 有关、`m` 又不随 `barHeight` 变，所以"高度恢复矮"**只改上沿**：
+   *     胶囊底边仍在 `页签胶囊顶 − G`，顶边随 `barHeight` 下来 ⇒ 离底账一个字都不用重算。
+   *   内容盒 ≡ 胶囊矩形（都在 {@link MiniBarMaterialCapsule} 里，同尺寸 + 盒内居中）
+   *   ⇒ 内容既然居中就没有第二个留白口径，也没有"内容偏右下"（胶囊矩形公式与内容矩形是同一个）。
    *
    * ══════════ 静止态 / 动画态 ══════════
    *   静止：`morphSquashY === 1` ⇒ `.scale` 是恒等变换，版面与"没有这件事"逐字一致。
@@ -1619,7 +1633,11 @@ struct Index {
       Stack() {
         MiniBarMaterialCapsule({
           barWidth: this.floatingMiniBarWidthVp(),
-          barHeight: FLOATING_MINI_BAR_HEIGHT_VP,
+          // ★★★ 2026-10-20（第二轮，用户：「首页是高度低调的播放条，你咋改成大的了」）：
+          //   **可见高度 = 内容自然高 = 封面 + 上下各 8vp**（逐档推导见
+          //   {@link homeMiniCapsuleBarHeightVp}）。上一版写死 `FLOATING_MINI_BAR_HEIGHT_VP`(56)
+          //   ⇒ 常态（两排 / 封面 30）从 **46 胖到 56**，这就是用户看到的"改成大的了"。
+          barHeight: this.homeMiniCapsuleBarHeightVp(),
           // 缺省 `-1` = `slackH / 2`（无界口径）⇒ 胶囊在盒内居中 ⇒ squash 绕胶囊中心。
           material: this.ambientTitleMaterial()
         }) {
@@ -1631,7 +1649,8 @@ struct Index {
       .onAreaChange((_oldArea: Area, area: Area): void => {
         Logger.info('RzdHomeMiniCapsule',
           `capsuleBox=${areaLengthToVp(area.width)}x${areaLengthToVp(area.height)} ` +
-            `barW=${this.floatingMiniBarWidthVp()} barH=${FLOATING_MINI_BAR_HEIGHT_VP} ` +
+            `barW=${this.floatingMiniBarWidthVp()} barH=${this.homeMiniCapsuleBarHeightVp()} ` +
+            `cover=${this.homeMiniBarCoverSideVp()} pad=${HOME_MINI_BAR_CONTENT_PAD_VP} ` +
             `gap=${HOME_MINI_CAPSULE_GAP_VP} ` +
             `tabMargin=${this.homeTabBarBottomMarginVp()} pageInset=${this.pageBottomInsetVp()} ` +
             `boxBottom=${this.homeMiniCapsuleBottomVp()} ` +
@@ -1651,6 +1670,11 @@ struct Index {
   /**
    * 迷你胶囊的"离页盒底"距离（vp）——推导见 {@link homeMiniCapsule} 的几何账：
    * `X = (M − I) + T + G + m`。
+   *
+   * ⚠️ 这一项**本轮没动**（用户只报了"首页太高"与"二级页偏右下"，没报首页的上下位置）。
+   *   提醒：最后那个 `+ m` 在纸面上取决于 `barBottomMargin` 的口径 —— 若真机上迷你胶囊与页签胶囊
+   *   之间的缝看起来是 `G + m`（≈18）而不是 `G`（8），把最后一项改成 **`− m`** 即可；
+   *   那是"离底"一个数的事，**不影响** {@link homeMiniCapsuleBarHeightVp} 算出来的可见高度。
    * @returns 本组件盒底相对页盒底的位移（vp，向上为正）
    */
   private homeMiniCapsuleBottomVp(): number {
@@ -1658,6 +1682,46 @@ struct Index {
     const slackBottom: number = CAPSULE_SLACK_H / 2;
     return (this.homeTabBarBottomMarginVp() - this.pageBottomInsetVp()) +
       tabH + HOME_MINI_CAPSULE_GAP_VP + slackBottom;
+  }
+
+  /**
+   * 首页迷你条的**封面边长**（vp）——**与 `HomeMiniBarAlbumCover.coverSideLengthVp()` 逐档同值**。
+   *
+   * 那里的四个档位（`features/playlist/.../HomeMiniBarAlbumCover.ets:128-136`，本轮不许改那个文件）：
+   *   · 沉浸式自由窗口 → **40**；
+   *   · 双层底栏 · 上下两排（`followAppMiniBarExpanded && hdsBarLayoutMode === VERTICAL`
+   *     且发行版 ≥ 6.1.1(24)）→ **30**；
+   *   · 单排 · 展开（`miniBarExpanded`）→ **44**；
+   *   · 单排 · 折叠 → **56**。
+   * 本文件只复制"选哪一档"这一层判断（首页那条恒 `followAppMiniBarExpanded = true`、
+   * `lockTwoRowCoverSize = false`，所以只剩三条分支）。
+   * @returns 封面边长（vp）。
+   */
+  private homeMiniBarCoverSideVp(): number {
+    if (this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE) {
+      return 40;
+    }
+    if (this.supportsTwoRowLayout() && this.appState.hdsBarLayoutMode === BarLayoutModes.VERTICAL) {
+      return 30;
+    }
+    return this.appState.miniBarExpanded ? 44 : 56;
+  }
+
+  /**
+   * 首页迷你**胶囊的可见高度**（vp）= `HomeMiniBarPlayer` 的**内容自然高度**。
+   *
+   * 一行式子：`可见高度 = 封面边长 + 2 × HOME_MINI_BAR_CONTENT_PAD_VP(8)`。
+   *
+   * 为什么这就是"上一版之前"的高度：那条以前住在壳层 `HdsTabs` 的 `miniBar` 槽里，
+   * 而 HDS 的 miniBar 行高是**按内容量**出来的（本文件 `miniBar()` 顶部那段"不要给它固定高度"
+   * 的注释 + §74.1 都记着这条）⇒ 槽高 ≡ `HomeMiniBarPlayer` 自然高 ≡ 本式。
+   * 逐档：(两排) 30 + 16 = **46** / (沉浸自由窗口) 40 + 16 = **56** /
+   *        (单排展开) 44 + 16 = **60** / (单排折叠) 56 + 16 = **72**。
+   * ⇒ 上一版写死 56 只在"沉浸自由窗口"那一档是对的，常态两排白胖了 10vp —— 用户一眼看出。
+   * @returns 胶囊可见高度（vp）。
+   */
+  private homeMiniCapsuleBarHeightVp(): number {
+    return this.homeMiniBarCoverSideVp() + HOME_MINI_BAR_CONTENT_PAD_VP * 2;
   }
 
   /**
@@ -2130,17 +2194,24 @@ struct Index {
       //        `.scale({y: morphSquashY})` 能**压到 HDS 画的材质背板**（无界 `morphGlass`
       //        `wujie.pa:155724-155745` 就是这么压的）；住在壳层 `HdsTabs` 的 `miniBar` 槽里时做不到
       //        （背板是槽的兄弟，不在我们子树里）—— 上一轮的病根。
-      //     ③ ②级页"内容偏右下"：内容盒 ≡ 胶囊盒 = `barWidth × barHeight`（同一个函数、同一组数），
-      //        不再需要"猜 HDS 给的槽高"⇒ 居中是一眼可算的，不是调出来的。
+      //     ③ ②级页"内容偏右下"：**可见内容不再画在 HDS 的 `tabBar` 槽里**（槽的几何不可观测，
+      //        上一版拿它当内容盒 ⇒ 真机上仍偏右下）。现在内容层 = `barWidth × barHeight`、
+      //        被居中在"高 = barHeight + 2 × bottomMargin"的盒里 ⇒ 与胶囊矩形**同一个算式**，
+      //        中心恒等，偏右下在结构上不可能发生（见 `MiniBarMaterialCapsule` 类注释第二/三节）。
       // ⚠️ ArkTS 限制：带尾随 builder 的结构体调用不能再挂属性方法
       //   （否则报 `Declaration or statement expected` + `Cannot find name 'id'`）
       //   ⇒ 外面套一层 `Stack` 承载 `.id / .clip / .onAppear / .onAreaChange`。
       Stack() {
         MiniBarMaterialCapsule({
           barWidth: this.floatingMiniBarWidthVp(),
+          // ⚠️ 二级页这条的高度**用户说 OK**（「3.首页是高度低调的播放条」那条只针对首页），
+          //   所以这里保持设计高度 56，**不要**跟着首页一起改矮。
           barHeight: FLOATING_MINI_BAR_HEIGHT_VP,
           // 条底到"本组件盒底"的距离：用法与 `barFloatingStyle.barBottomMargin` 完全同义
           // （SDK :5311「the distance between tab bar and bottom of tabs」）⇒ 键盘避让口径不变。
+          // ★ 2026-10-20：它同时是胶囊的**上/下留白**（盒高 = barHeight + 2 × 本值，见
+          //   `MiniBarMaterialCapsule` 类注释第四节）⇒ 常态盒高 = 56 + 2×12 = **80**（之前 76）；
+          //   多出来的 4vp 是**纯透明 slack 在胶囊上方**，胶囊自身的尺寸/离底（12）一个字没动。
           bottomMargin: this.floatingMiniBarBottomMarginVp(),
           // 材质档位与首页那条共用一份（`ambientTitleMaterial()`）⇒ 两条是同一套光感。
           material: this.ambientTitleMaterial()
@@ -2171,19 +2242,21 @@ struct Index {
             `barWidth=${this.floatingMiniBarWidthVp()} barHeight=${FLOATING_MINI_BAR_HEIGHT_VP} ` +
             `slackW=${CAPSULE_SLACK_W} slackH=${CAPSULE_SLACK_H} ` +
             `contentBox=barWidth×barHeight align=stackCenter selfPlate=off ` +
+            `contentLayer=own-capsule-rect slotProbe=on ` +
             `bottomGap=${FLOATING_MINI_BAR_BOTTOM_GAP_VP} keyGap=${FLOATING_MINI_BAR_KEYBOARD_GAP_VP} ` +
             `barBottomMargin=${this.floatingMiniBarBottomMarginVp()} ` +
             `ambient=${this.ambientLevelIndex()} squashY=${this.expandState.morphSquashY} singleVisibleBar=true`);
       })
       .onAreaChange((_oldArea: Area, area: Area): void => {
-        // 这里的 width/height 是**胶囊组件盒**（= 胶囊 + slackW/slackH），不是胶囊本身；
-        // 胶囊 = `barWidth × barHeight`，位置 = 盒内居中（横向）+ 距盒底 `barBottomMargin`（纵向）。
+        // 这里的 width/height 是**胶囊组件盒**（= 胶囊 + 横向 slackW + 上下各 `barBottomMargin`），
+        // 不是胶囊本身；胶囊 = `barWidth × barHeight`，位置 = 盒内居中（横向、纵向都居中，
+        // 因为盒高恒为 `barHeight + 2 × barBottomMargin`）。
         const boxW: number = areaLengthToVp(area.width);
         const boxH: number = areaLengthToVp(area.height);
         Logger.info('RzdSecondaryMiniMaterial',
           `capsuleBox width=${boxW} height=${boxH} ` +
             `expectW=${this.floatingMiniBarWidthVp() + CAPSULE_SLACK_W} ` +
-            `expectH=${FLOATING_MINI_BAR_HEIGHT_VP + CAPSULE_SLACK_H} ` +
+            `expectH=${FLOATING_MINI_BAR_HEIGHT_VP + 2 * this.floatingMiniBarBottomMarginVp()} ` +
             `barWidth=${this.floatingMiniBarWidthVp()} barHeight=${FLOATING_MINI_BAR_HEIGHT_VP} ` +
             `bottomGap=${FLOATING_MINI_BAR_BOTTOM_GAP_VP} keyGap=${FLOATING_MINI_BAR_KEYBOARD_GAP_VP} ` +
             `keyboardVp=${this.keyboardBottomVp()} lift=${this.floatingMiniBarKeyboardLiftVp()} ` +
@@ -2247,7 +2320,10 @@ struct Index {
       //   `HomeMiniBarPlayer` 的自然高度 = 封面 + 上下各 8vp 内距：常规态封面 44 ⇒ **60vp**
       //   （沉浸式自由窗口那一档封面 40 ⇒ 56vp），与设计高度 56 差 4vp。
       //   不钉住的话"谁比谁高"取决于窗口装饰档位；钉住之后**唯一变量只剩胶囊高度**，
-      //   内容盒 = 胶囊盒 = 56 ⇒ 上下留白恒为 0（内容自己居中，见 `MiniBarMaterialCapsule.BarContent`）。
+      //   内容盒 = 胶囊盒 = 56 ⇒ 上下留白恒为 0（内容自己居中，见 `MiniBarMaterialCapsule.ContentLayer`）。
+      // ★ 2026-10-20（第二轮）：钉住之后**内容行自己也吃同一个上限**（`HomeMiniBarPlayer` 里
+      //   Row 上的 `constraintSize.maxHeight`），否则行 60 > 盒 56 = "子件比容器大"，
+      //   排布交给引擎兜底 —— 那正是 2vp 向下偏差的候选来源。
       contentHeightVp: FLOATING_MINI_BAR_HEIGHT_VP,
       // ★★★ 2026-10-20：挤压交给 {@link MiniBarMaterialCapsule} 那一层（它压在"官方材质背板 + 内容"
       //   同一个变换域上）。这里若再压一次，两个 0.86 相乘 = 0.74 —— 弹过头，是"改一改就压死"的判据。
