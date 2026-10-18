@@ -2787,6 +2787,24 @@ export struct PlaybackPage {
     //   闂備緡鍠栭埀顒傚枙濞?`expandState.requestCollapse()` 闂?`collapseVersion++`闂佹寧绋戦ˇ顓㈠焵?
     //   婵炴垶鎸搁鍡樺垔濞差亝鐒介柨婵嗘閽傚鎮?*婵炴垶鎸哥粔鍓佸垝閳╁啯浜ら柛銉簽缁犲綊姊?*闂佹寧绋戦悧鍡涙偩閻樼粯鍎庨悗娑櫭径宥夋偣?`closeFullScreenPlayback()`闂佹寧绋戦ˇ顓㈠焵?
     //   闂?闂佸湱顣介崑鎾趁归悩顔煎姤缂佺粯鐗犻弻宀€浠︾紒銏犲Η婵犻潧鍊藉Λ鍕敋椤旇姤鍎熼柡鍐ｅ亾婵☆偁鍊濋幃鎯х暆閳ь剙鈻?`pullMode === false` 闂備緡鍙忕徊鑲╃博閹绢喖缁╂い鏍ュ€楃粣?*闂佺懓鍢茬粔鎾箵閳哄懏鍋傜憸蹇曠磽婢舵劕鐐婇柟鎯ф噽缁€澶娾槈閹惧磭孝濠殿喒鏅涚叅濠电姵鍝庨埀顒€顦靛Λ?*闂?
+    // ★★★ 2026-10-18（用户第五轮：「播放器**展开过程中**系统返回关闭会**抽搐**」）——照搬上游那道守卫：
+    //   上游 `PlayerPage.closeWithAnimation`（`wujie.pa:171058-171075`）第一件事是
+    //     `if (pullMode && ExpandSnapshot.onReverseMorph(myMorphSnap)) return;`
+    //   即"形变会话还在跑 ⇒ **不收快照**，改成把**活着的形变反向收回去**"。
+    //   我们原来无条件走"快照 + 收缩"：展开动画还在跑时，快照拍到的是**半路的样子**，
+    //   随后被 `ShrinkOverlay` 整体缩小 ⇒ 观感就是"抽搐"（半路画面定住再缩）。
+    //   ⇒ 展开中（`expandIntroRunning`）或相位还在 ENTERING/LANDING 时，走**活体反向**那条
+    //     （`closeFullScreenPlayback()` = `morphBeginLeaving()` + `460×max(0.4,p)` 的 `REVERSE_EASING` 补间）。
+    const closeStage: MorphStage = this.expandState.morphStage;
+    const morphRunning: boolean = this.expandIntroRunning || closeStage === MorphStage.ENTERING
+      || closeStage === MorphStage.LANDING;
+    if (morphRunning) {
+      Logger.info(PlaybackPage.logTag,
+        `RzdCloseLiveMorph take-over stage=${closeStage} intro=${this.expandIntroRunning ? 1 : 0} ` +
+          `p=${this.expandState.morphP.toFixed(3)} cp=${this.expandState.contentProgress().toFixed(3)}`);
+      this.closeFullScreenPlayback();
+      return;
+    }
     this.closeWithAnimation();
   }
   /** Fallback page background tint when art or color pick fails. */
@@ -7284,6 +7302,66 @@ export struct PlaybackPage {
    *
    * 闂佸疇娉曟刊瀵哥箔?濠殿喗绻傞惌渚€鎯佸┑瀣畱閹煎瓨绻勯悿鍕煟?*婵炴垶鎸撮崑鎾斥槈閹垮啩绨婚柣鈯欏啠鏌﹂柍銉ュ暱琚?*闂佹寧绋戝濉媦ricsComponent` / `AmllLyricView` 婵炴垶鎸哥粔鍫曪綖椤愶附鏅璺虹墐閸?
    */
+  // ⚠️ 读法提示：紧邻**上面**那段 JSDoc 属于下面那个 `LyricFloatLayer()`（本方法插在中间，
+  //    只是为了让"小歌词的位置"排在"浮层盒模型"之前讲）；`MiniLyricLinesBlock()` 的说明从下一行开始 ↓
+  /**
+   * 封面页的小歌词块（**只属于 Swiper 第 0 页**）。
+   *
+   * ## 一、位置：不写任何定位算式，交给主轴排布
+   * 它是 `metaRow` 里「歌名/歌手」那一列 `Column` 的**第 3 个子节点**，排在 `Text(歌名)`、`Text(歌手)`
+   * 之后，于是主轴上自然得到：
+   * ```
+   *   小歌词顶边 ≡ 歌名行盒顶边 + title.h + 2 + singer.h = **歌手文字底边**
+   *   x          ≡ 歌名/歌手文字左缘（同一个 Column；`metaRow` 的 `padding.left =
+   *                lyricMetaLeftInset()` 已在这条链上，所以两边**同一个口径**，不需要再抄一遍 margin）
+   * ```
+   * 两个等式**不经过任何实测、也不经过 `estBoxHVp()` / `metaOffsetY()`** ⇒ 字号、行高、
+   * 用户字体缩放怎么变都成立。这也正是前两轮两次错法的解药：
+   *   ① 更早那版用 `.position({ x: 0, y: miniLyricTopY() })`（**窗口绝对 y**）⇒ 与歌名行的
+   *      「居中盒 + offset」是两套坐标系，`estBoxHVp()` ≠ 窗口高就必然偏；
+   *   ② 上一轮那版用 `.offset({ y: metaOffsetY() + 块高/2 })` 去补"居中盒把整组上抬 h/2"
+   *      ⇒ 结论依赖"组高恰好 = 34 + 57"，任一子节点的高度/显隐一变（例如切到歌词页要藏起来）
+   *      这个等式立刻失效。
+   *
+   * ## 二、只在封面页显示（治"划到歌词页出现两份歌词"）
+   * 播放页上同时存在两处歌词渲染：
+   *   · **歌词页那份** = Swiper 第 1 页里的 `LyricsComponent`（`buildControlStack()` 的
+   *     `Swiper() { … 第 1 页 Column() { LyricsComponent({…}) } }`，本文件内）；
+   *   · **本浮层这份** = 本 @Builder。
+   * 上游口径：`playerPane` 的 Swiper **第 0 页是空壳**（`wujie.pa:189547-189573`，零子节点），
+   * 歌词只出现在第 1 页的 `LyricsView`（`wujie.pa:189574-189659`）；而歌名行那个浮层
+   * （`floatingMeta`）是**两页共用**的。⇒ 小歌词必须跟着"回到封面页"这件事消失。
+   *
+   * 判据只用本仓既有的量、不新造状态：`lyricMorphT`
+   * （`syncLyricMorphToPage()` 维护：0 = 封面页 / 1 = 歌词页，拖动过程中由 `onContentDidScroll`
+   * 连续写值），**与歌名行的位置用的是同一个源** ⇒ 两者不可能打架；本文件里同一个阈值
+   * `0.001` 也已用在 `lyricMorphT > 0.001` 那处判定上。
+   */
+  @Builder
+  private MiniLyricLinesBlock() {
+    Column() {
+      MiniLyricLinesComponent()
+        .width(StyleConstants.FULL_WIDTH)
+        // 淡入与歌名行同一个源（`pullChromeOpacity`，`wujie.pa:176459-176505`），再乘用户拍过的 0.55。
+        .opacity(this.expandState.pullChromeOpacity() * PlaybackPage.MINI_LYRIC_OPACITY)
+        .id(PlaybackPage.MINI_LYRIC_BOX_ID)
+        .onAreaChange((): void => {
+          // 只做诊断：`RzdBoxes` 的 `lyric=` 读这个 id 的矩形（判据见 `logLayoutBoxes()`）。
+          this.logLayoutBoxes();
+        })
+    }
+    .width(StyleConstants.FULL_WIDTH)
+    // 高度钉死（57 = 2×26 + 行距 3 + 上边距 2）：它在"定高 34"的文字列里是**溢出**的兄弟；
+    // 不钉的话块高会随风变动（字号/行高一变，歌名/歌手两行的排版跟着抖）。
+    .height(PlaybackPage.MINI_LYRIC_BLOCK_H_VP)
+    .justifyContent(FlexAlign.Start)
+    // ⛔ 不再挂 `.translate({ y: metaRiseVp() })`：外层位移壳已经在做同一条位移，再挂一次就是**双倍**升入。
+    //
+    // 只属于封面页：见本 @Builder 的 JSDoc 第二节。`Visibility.None` = 不占布局 + 不绘制，
+    // 它又只是"定高 34 的文字列"里的溢出兄弟 ⇒ 藏掉它不会让歌名行移动一个像素。
+    .visibility((!this.isCollapsing() && this.lyricMorphT <= 0.001) ? Visibility.Visible : Visibility.None)
+  }
+
   @Builder
   private LyricFloatLayer() {
     // 闂佸疇妫勯幊澶娢?2026-10-15闂佹寧绋戦悧蹇涘矗鎼淬劌绠规い鎺嶇劍閿熴儵鏌?`floatingCover`闂佹寧绋戦¨鈧紒?*闁汇埄鍨遍幃鍌炲煘?+ 闂佸憡鐟﹁摫鐎规洘褰冮?*闂?
@@ -7468,7 +7546,21 @@ export struct PlaybackPage {
               .textAlign(TextAlign.Start)
               .width(StyleConstants.FULL_WIDTH)
               .margin({ top: 2 })
+            // ★★★ 2026-10-18（第五轮）：小歌词搬回"歌名行之下"，而且**只属于封面页**（见下）。
+            //   位置 = 本 Column 的**第 3 个子节点**（主轴自然排在歌手文字之后）⇒
+            //     小歌词顶边 ≡ 歌手文字底边 = 歌名行盒顶边 + title.h + 2 + singer.h
+            //     x          ≡ 歌名/歌手文字左缘（**同一个 Column**：`metaRow` 的 `padding.left`
+            //                  = `lyricMetaLeftInset()` 已经在这条链上生效，不需要再抄一遍 margin）
+            //   两个等式都不经过实测、不经过 `estBoxHVp()`/`metaOffsetY()` ⇒ 完整推导见
+            //   `MiniLyricLinesBlock()` 的 JSDoc。
+            this.MiniLyricLinesBlock()
           }
+          // ★ 定高容器（客户口径「让居中盒按容器高居中」）：文字列高度钉死 = 歌名行高 34。
+          //   ① 小歌词是**溢出**的兄弟（34 的盒装不下 34+57），不参与这个 34 ⇒ 子节点个数/高度变化
+          //      都不会再让整组被重新居中（上一轮"组高 91 被上抬 28.5vp"的坑从结构上消失）；
+          //   ② 这个 34 与 `metaOffsetY()` 里减掉的 `centeredTop = (estBoxHVp() − 34)/2` 是同一个常量
+          //      ⇒ 位移壳顶边 = `metaTopGeomY(t, 34)`，歌名行的 y 逐值不变。
+          .height(PlaybackPage.LYRIC_META_ROW_H_VP)
           .layoutWeight(1)
           .alignItems(HorizontalAlign.Start)
 
@@ -7585,18 +7677,27 @@ export struct PlaybackPage {
             .opacity(this.expandState.pullChromeOpacity() * PlaybackPage.MINI_LYRIC_OPACITY)
             .translate({ y: this.expandState.metaRiseVp() })
             .visibility(this.isCollapsing() ? Visibility.None : Visibility.Visible)
-            .id(PlaybackPage.MINI_LYRIC_BOX_ID)
+            // ⛔ 2026-10-18（第五轮）：`.id(MINI_LYRIC_BOX_ID)` 已移交真身（`MiniLyricLinesBlock()`）。
+            //    本残页若留着同名 id，`RzdBoxes` 的 `lyric=` 会读到这个空盒（`getFrameNodeById` 取第一个）。
             .onAreaChange((): void => {
               // 只做诊断：`RzdBoxes` 的 `lyric=` 与 `RzdBranch` 的 `miniClear` 判据都读这个 id 的矩形。
               this.logLayoutBoxes();
             })
         }
         .width(StyleConstants.FULL_WIDTH)
-        // ★ 高度**钉死** = `MINI_LYRIC_BLOCK_H_VP`（57 = 2×26 + 行距 3 + 上边距 2）。
-        //   为什么必须钉：居中盒是按"内容总高"居中的 ⇒ 多一个 h 高的子节点会让整组高 h、歌名行被上抬 h/2；
-        //   钉死高度后再由下面那条 `offset` 补回 h/2，两者配对 ⇒ 歌名行的 y 与改动前**逐值相同**。
+        // ⛔ 上一轮这里写的是"高度钉死 57 + 用 offset 补回 h/2"——**这套补偿本轮已删**（见下面 `offset`）。
+        //    下面这个 57 只是残页自身的尺寸，它整块是 `Visibility.None`，对布局零影响。
         .height(PlaybackPage.MINI_LYRIC_BLOCK_H_VP)
         .justifyContent(FlexAlign.Start)
+        // ⛔⛔ 2026-10-18（第五轮）：**这一整块是旧实现的残页：代码保留，但永不参与布局、永不绘制。**
+        //   为什么留而不删：本块中间那些中文注释是**双重编码乱码**，`edit` 的 `old_string` 逐字匹配不上
+        //   （见 `全局记忆.md` 的条目：`grep` 能命中 ≠ 字面相等）。按"删代码、留注释、旁边加说明"的纪律处理。
+        //   小歌词的真身已搬到 `MiniLyricLinesBlock()`（歌名/歌手那一列的流式兄弟）。
+        //   `Visibility.None` 的语义 = **不占布局 + 不绘制** ⇒ 位移壳的子节点数回到 **1**
+        //   （只剩 `.height(LYRIC_META_ROW_H_VP)` 的 metaRow），外面那个
+        //   `justifyContent(Center)` 的居中盒因此按 **34** 居中，与 `metaOffsetY()` 里减掉的
+        //   `centeredTop = (estBoxHVp() − 34)/2` 是同一个 34 ⇒ 歌名行的 y 与"没有小歌词之前"逐值相同。
+        .visibility(Visibility.None)
         // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀闁告侗浜濋～?2026-10-17闂?*闂佸憡甯炴慨鐢垫暜閳ь剟寮堕埡鍌滄噰闁革絿鍏橀弻鍥晲閸℃鎷梺鐓庮殠娴滅偟妲愰鍫熷剭?180vp 婵炶揪绲界粔鏈电昂** 闂佺偨鍎查弻锟犲焵?goal 缂?1 闂佸搫顧€缁辨洖鈻撻幋婵愭桨闁挎繂顦板銊╂偡閺囨氨鍔嶉柣顏冨嵆閺?
         //
         // 婵炴垶鎸搁敃锝囩博閹绢喗鍋嬮柛顐悼缁犲綊姊洪幓鎺撴拱婵?`.translate({ y: this.expandState.metaRiseVp() })`闂?
@@ -7625,12 +7726,21 @@ export struct PlaybackPage {
           }
           .width(StyleConstants.FULL_WIDTH)
           .alignItems(HorizontalAlign.Start)
-          // ★★★ 2026-10-18（第五轮）：小歌词成为流式兄弟后，位移壳的内容高 = 歌名行(34) + 小歌词(57)，
-          //   而外层是 `justifyContent(Center)` ⇒ 整组会被上抬 57/2 = 28.5vp。这里把那一半补回来。
-          //   ⇒ 两个量的来源都只有一个：
-          //     歌名行顶边 = `(estBoxHVp() − LYRIC_META_ROW_H_VP)/2 + metaOffsetY()`   ← 与改动前逐值相同
-          //     小歌词顶边 = 歌名行顶边 + `LYRIC_META_ROW_H_VP`(34)                    ← 由流式跟随得到
-          .offset({ y: this.metaOffsetY() + PlaybackPage.MINI_LYRIC_BLOCK_H_VP / 2 })
+          // ⛔ 上一轮这里写着"位移壳的内容高 = 歌名行(34) + 小歌词(57) ⇒ 整组被上抬 57/2 = 28.5vp，
+          //    所以 offset 要 +57/2 补回来"——**该推导本轮作废**，保留一行记号只为不改动历史注释：
+          //    它隐含"位移壳恰有 34 与 57 两个子节点"这个前提；本轮小歌词已搬进 metaRow 内部，
+          //    旧块又被 `Visibility.None` 隐藏 ⇒ 位移壳只剩 1 个定高 34 的子节点，补偿项没有存在意义。
+          // ★★ 2026-10-18（第五轮）：**补偿项 `+ MINI_LYRIC_BLOCK_H_VP / 2` 删掉**（上一轮那半高补丁作废）。
+          //
+          //   一行算式（只做代数相消，不含任何实测值、不含第二套坐标系）：
+          //     位移壳顶边 = (estBoxHVp() − 34)/2 + metaOffsetY()
+          //                = (estBoxHVp() − 34)/2 + [ metaTopGeomY(t, 34) − (estBoxHVp() − 34)/2 ]
+          //                = metaTopGeomY(t, 34)                ← 歌名行顶边 = 与"加小歌词之前"逐值相同
+          //     小歌词顶边 = 位移壳顶边 + title.h + 2 + singer.h  ← 同一条主轴上的第 3 个子节点
+          //                = 歌手文字底边 = 歌名行盒顶边 + 歌名/歌手两行文字高
+          //   ⇒ 等式里只剩"34"这一个常量，而它出现的两处（居中盒的子节点定高 / `metaOffsetY()` 的 rowH）
+          //     就是同一个 `LYRIC_META_ROW_H_VP` ⇒ 换机型、换 `estBoxHVp()` 都不会再偏。
+          .offset({ y: this.metaOffsetY() })
           // 闁宠棄鎳夊Σ鍕煡閸涱亝顫?2026-10-17闁?*闁诡厹鍨归ˇ?濞寸姴绨肩粭鍛存閵忕姴纾冲☉鎾筹攻濞?** 闁炽儲鏌￠埀?闁活潿鍔嶉崺娑氣偓鍦仦缁?
           //   闁? 闁衡偓閸︻厽鐣卞☉鎾崇Т椤曨噣鏁嶇仦缁㈠妧閻㈩垰鎲￠悺鏇㈠箥鐎ｎ亞瀹夐悹鍥ュ劙缁姵绋夌€ｎ喗妗ㄩ柛鎴犲劋濞肩敻濡撮崒娆戠☉闁活亜顑囧﹢鍛村籍閻樺灚娅曢柕鍡楃▌缁?
           //   闁瑰瓨鍨崇粭鍌涚▔閳ь剟鎮ч崼婵嗘锭闁稿鐭花?闁告帩鍋勭敮鍥ㄦ交濞戞瑥浠橀柛鎺曟硾鐏?闁汇劌瀚伴幐鎼佸礆鐠佸湱绀夐柛妤€鐡ㄦ俊鍛婃交濞嗗海顏遍悶娑樼灱濞?*闁告娲ら崣鍡樻媴瀹ュ泦?*濞戞挶鍨虹敮鈧ù?
