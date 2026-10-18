@@ -117,10 +117,23 @@ export struct HomeMiniBarPlayer {
    * 鑳屾澘搴曡壊 鈥斺€?涓?{@link PlaylistFloatingMiniBar.miniBarBackground} **鍚屼竴濂?token**锛堜笉鍙﹂€犻鑹诧級銆?
    */
   private miniBarBackplateColor(): ResourceColor {
+    // ★★★ 2026-10-18（用户：「日间模式下这个播放条动画结束还是黑色」）：
+    //   **对齐本仓既有那一套 token**（`features/recommendation/src/main/ets/view/HomeFloatingMiniBar.ets:35-43`
+    //   给同一条迷你条画背板时用的就是下面这两枚），不另造第二套。
+    //
+    //   旧写法的两枚 token 都只有 **19% 不透明度**（base `#30F1F3F5` / dark `#33202224`），
+    //   背板的观感几乎完全由"它下面那一层"决定 ⇒ 日间模式（浅色页面）里只要背板之下偏暗，
+    //   看到的就是「一整块黑色圆角条」；深色模式页面本来就黑 ⇒ 看不出来，所以只有日间炸。
+    //   现在换成 sheet 面：
+    //     · base（日间）`#CCF1F3F5` —— 80% 不透明度的近白，与首页那条白色 HDS 胶囊同一套观感；
+    //     · dark（夜间）`#CC202224` —— 深灰，观感与改动前一致（改动前是 `#33202224` 叠在近黑页面上）。
+    //   两枚 token **亮/暗都有变体**，颜色由资源限定符切换，不需要在代码里再读一次明暗开关。
+    //   ⚠️ 只换颜色：结构/尺寸/圆角/描边一律不动 —— 这一层仍在 `Stack` 里与内容同域，
+    //      `build()` 末尾那个 `.scale({ x: 1, y: this.expandState.morphSquashY })` 照旧把背板与内容一起压、一起弹。
     if (this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE) {
-      return $r('app.color.floating_mini_bar_immersive_background');
+      return $r('app.color.pc_floating_mini_bar_immersive_surface');
     }
-    return $r('app.color.floating_mini_bar_background');
+    return $r('app.color.floating_mini_bar_sheet_background');
   }
 
   /** 鑳屾澘妯＄硦妗?鈥斺€?涓?{@link PlaylistFloatingMiniBar.miniBarBlur} 鍚屾。銆?*/

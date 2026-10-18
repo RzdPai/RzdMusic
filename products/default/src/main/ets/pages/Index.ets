@@ -30,6 +30,7 @@ import {
   MusicDbApi,
   MusicStoreService,
   Logger,
+  MINI_BAR_ID,
   MORPH_HOST_ID,
   MorphStage,
   PlaybackIntentState,
@@ -126,17 +127,44 @@ const NOW_PLAYING_TAB_INDEX: number = 1;
  *   · `.offset({ y })` 的 **+y 向下**。
  *
  * 于是离底空隙必须写进 HDS 的 `barFloatingStyle.barBottomMargin`（HDS 里它就是"条到 tabs 底边的距离"），
- * 键盘抬升写在宿主 `.offset`（负数 = 上抬），两者**各管一段、不重复算**：
- *   常态：条底 = 页盒底 − {@link FLOATING_MINI_BAR_BOTTOM_GAP_VP}(12)
- *   键盘：条底 = 页盒底 − 12 − lift，lift = 键盘高 + {@link FLOATING_MINI_BAR_KEYBOARD_GAP_VP}(24) − 12
- *              = 页盒底 − 键盘高 − 24 ⇒ 比键盘上沿（页盒底 − 键盘高）高 **24vp**。
+ * ★★★ 2026-10-18（用户：「这个键盘避让太高了吧，而且怎么整个底下的特效都被抬上来了」）：
+ * **键盘抬升不再动宿主 `.offset`，只改 HDS 的 `barBottomMargin`**；上面那套把"页盒底 ≡ 窗口底"
+ * 当成立（漏了系统避让 `I`）的账**全部作废**，以此处为准。
  *
- * ⚠️ 旧代码的"已占用间距"是 `1.8 × (barBottomMargin / 2) ≈ 25.2`（从旧实测反推的**猜测值**）；
- *   底距改成真值 12 之后再减 25.2，整条会**多压下去 13vp** ⇒ 键盘弹起时反被键盘上沿咬住
- *   （用户说的"键盘避让不明显"）。现在"已占用"直接用 12 这个真值，不再有任何系数。
+ * ## 一、几何口径（每一项都能在代码里指认，不是假设）
+ *   `H` 窗口高 vp = `viewportHeightVp`（← `WindowInfo.windowSize.height`）
+ *   `I` 页盒底内缩 vp = {@link pageBottomInsetVp}（← `getNavigationBarBottomVpFromWindowUtil()`；
+ *       根 `Stack` 没有 `ignoreLayoutSafeArea` ⇒ 它的底边就落在「窗口底 − I」）
+ *   `K` 键盘高 vp = {@link keyboardBottomVp}（← `getWindowAvoidArea(TYPE_KEYBOARD)`，**量到窗口底**）
+ *   ⇒ 页盒底 `Ypb = H − I`；键盘上沿 `Ykb = H − K`
+ *
+ * ## 二、旧算式为什么"太高"（52vp 的账）
+ *   旧式 `lift = K + 24 − 12` 等于假设 `I = 0`，而真机 `I ≈ 系统导航条高（≈28vp）`
+ *   ⇒ 键盘态条底 = `Ypb − 12 − lift = H − K − I − 24`，
+ *     离键盘上沿的空白 = **(H − K) − 条底 = I + 24 ≈ 52vp** —— 用户看到的"一大截"就是这 52。
+ *
+ * ## 三、现在的账（结果恒等于 GK，一眼可算）
+ *   常态：条底 = `Ypb − G`，`G = FLOATING_MINI_BAR_BOTTOM_GAP_VP`(12)
+ *   键盘：条底 = `Ykb − GK`，`GK = FLOATING_MINI_BAR_KEYBOARD_GAP_VP`(10)
+ *         需额外抬 `L = (Ypb − G) − (Ykb − GK) = K − I + GK − G`
+ *         ⇒ 写进 HDS：`margin = G + L = K − I + GK`
+ *         ⇒ 键盘上沿到条底的空白**恒等于 GK = 10vp**（设计口径 8~12），`I`/`K` 全取真值。
+ *
+ * ## 四、为什么必须去掉宿主 `.offset`
+ *   `.offset` 位移的是**这个组件连同它画的全部东西**（宿主 = 整条 HDS 底栏：胶囊 +
+ *   `systemMaterialEffect` 材质层 + 栏底色）⇒ 整块一抬，就是用户说的"整个底下的特效都被抬上来了"。
+ *   而 `barBottomMargin` 在 SDK 里的语义是"条到 tabs 底边的距离"
+ *   （`@hms.hds.hdsBaseComponent.d.ets:5311`）⇒ 只改胶囊在**宿主内部**的位置，
+ *   宿主盒与它底下那些整层效果原地不动（`.offset` 已从 {@link floatingMiniBar} 里删掉）。
  */
-const FLOATING_MINI_BAR_KEYBOARD_GAP_VP: number = 24;
+const FLOATING_MINI_BAR_KEYBOARD_GAP_VP: number = 10;
 const FLOATING_MINI_BAR_BOTTOM_GAP_VP: number = 12;
+/**
+ * 二级页浮动播放条**宿主**（`HdsTabs`）的 id：只给键盘态诊断量"宿主盒底边"用。
+ * 判据：它应当恒等于 `H − I`；若跟着键盘往上跑 ⇒ 整页被平移（`KeyboardAvoidMode.OFFSET`），
+ * 那种情形下手动抬升就是双抬，见 {@link logKeyboardBarGap}。
+ */
+const SECONDARY_MINI_BAR_HOST_ID: string = 'rzd_secondary_mini_bar_host';
 
 /**
  * 涓婃媺鎵撳紑鎾斁椤电殑**璧锋墜鐑尯**楂樺害锛坴p锛岃创灞忓箷搴曢偅涓€鏉★級銆?
@@ -243,7 +271,17 @@ const RzdShellLogTag: string = 'HomeShell';
  * 鈿狅笍 杩欐槸**绾鎰?*鏀瑰姩锛堟棤鍔熻兘褰卞搷锛夈€傝嫢浣犱笂鏈鸿寰?鎵撳紑鍙橀挐浜?銆佷笉濡傚師鏉ヨ窡鎵嬶紝
  *   **鍥為€€灏辨槸鎶婅繖涓よ鏀瑰洖 `300` / `180`** 鈥斺€?涓€澶勪竴琛岋紝浜掍笉褰卞搷銆?
  */
-const PULL_OPEN_SETTLE_MS: number = 400;
+// ★★★ 2026-10-18（**单时间线更正**）：上面那段"400 起步"的推导作废。
+//   上游「点击迷你条 → 播放页」这条路上**没有 350ms 那条**：`pushPath` 带 `param.pull=true` + `animated=false`
+//   ⇒ `setupExpandTransition` 走 `param.pull===true` 分支（`wujie.pa:179258-179317`）只做 `expand.init()` + `pullMode=true`
+//   + `return`，**不注册** `NavTransition`（`NavTransition.register` 全包唯一调用点 `:179419-179434` 只在 `param.srcId` 分支）
+//   ⇒ `ExpandAnimation.doEnter`（350ms + `Curve.EaseInOut`）在点击路上**一次都不跑**；
+//   容器几何改由 `onPullTChanged → applyPullProgress(effT())`（`:174826-174889`）驱动，
+//   而 `effT = isMorphTarget() ? pullT : 1`（`:171535-171549`）、`pullT ≡ MainPage.morphT = animateMorphT(1, 560, EASE_OUT_STR)`
+//   （`:163524-163547` / `:154167-154169` / `:145608-145661`）。
+//   ⇒ **全路只有一条 560ms + cubic-bezier(0.23,1.0,0.32,1.0)**，同时驱动浮层拷贝 / 容器几何 / 内容窗口。
+//   `400` 会在 420ms 就把飞行拦腰截断（浮层与克隆被撤、真封面提前现），这就是"飞入时间不对"的一部分。
+const PULL_OPEN_SETTLE_MS: number = 560;
 const PULL_OPEN_ABORT_MS: number = 400;
 
 /**
@@ -498,10 +536,77 @@ struct Index {
    */
   @Monitor('windowInfo.avoidKeyboard')
   onKeyboardAvoidAreaChanged(): void {
+    // ★★★ 2026-10-18：键盘态两行账（`hdc shell hilog | grep RzdKeyboardAvoid`）
+    //   ① `RzdKeyboardAvoid calc`    = 算式口径：K / I / margin / 目标空白 / 宿主位移（恒 0）
+    //   ② `RzdKeyboardAvoid measure` = 一帧后**实测**真身落点：键盘上沿 − 条底 = 真实空白。
+    //      若 ArkUI 默认 `KeyboardAvoidMode.OFFSET`（SDK `@ohos.arkui.UIContext.d.ts:4389`
+    //      原文「Default mode: KeyboardAvoidMode.OFFSET」）把整页也平移了，
+    //      `hostBottom` 会跟着往上跑，`gap` 会明显大于 `keyGap` ⇒ 那就是双抬，要按第四条处置。
+    const keyboardVp: number = this.keyboardBottomVp();
     Logger.info('RzdKeyboardAvoid',
-      `shell secondary bar keyboardVp=${this.keyboardBottomVp()} ` +
-        `lift=${this.floatingMiniBarKeyboardLiftVp()} offsetY=${this.floatingMiniBarHostOffsetYVp()} ` +
-        `bottomGap=${FLOATING_MINI_BAR_BOTTOM_GAP_VP} keyGap=${FLOATING_MINI_BAR_KEYBOARD_GAP_VP}`);
+      `RzdKeyboardAvoid calc keyboardVp=${keyboardVp} pageBottomInset=${this.pageBottomInsetVp()} ` +
+        `barBottomMargin=${this.floatingMiniBarBottomMarginVp()} lift=${this.floatingMiniBarKeyboardLiftVp()} ` +
+        `hostOffset=${this.floatingMiniBarHostOffsetYVp()} restGap=${FLOATING_MINI_BAR_BOTTOM_GAP_VP} ` +
+        `keyGap=${FLOATING_MINI_BAR_KEYBOARD_GAP_VP} windowH=${this.viewportHeightVp}`);
+    if (keyboardVp > 0) {
+      // 等 HDS 把胶囊按新 margin 摆完再量（两帧量级；只量一次，不进布局链）。
+      setTimeout((): void => {
+        this.logKeyboardBarGap(keyboardVp);
+      }, 96);
+    }
+  }
+
+  /**
+   * 页盒底相对**窗口底**的内缩（vp）。
+   *
+   * 本仓既有口径（`Index.ets` 顶部那段几何记录已两处确认）：根 `Stack` 没有 `ignoreLayoutSafeArea`
+   * ⇒ 它的底边 = 页盒底 = 窗口底 − 系统避让。走 `getNavigationBarBottomVpFromWindowUtil()` 而不是
+   * 直接读字段：它自带「缓存 → 现量 → 最后一次好值 → 启动快照」四级兜底，不会返回陈旧的 0。
+   * @returns 系统导航条 / 小白条高度（vp）。
+   */
+  private pageBottomInsetVp(): number {
+    return getNavigationBarBottomVpFromWindowUtil();
+  }
+
+  /**
+   * 一次性诊断：量「迷你条真身」与「宿主盒」的窗口矩形，算出**条底到键盘上沿的真实空白**。
+   *
+   * 口径用 `getComponentUtils().getRectangleById`（返回**渲染后**窗口矩形、单位 px，
+   * 与 `PlayerExpandState.measureNode` 同一套取数口径），再 `px2vp` 换成 vp。
+   * 判读（grep `RzdKeyboardAvoid measure`）：
+   *   · `gap` ≈ `expectGap`(10) ⇒ 到位；
+   *     `gap` 明显**小** ⇒ 抬少（键盘咬条）；明显**大** ⇒ 还有第二条抬升在叠加；
+   *   · `hostBottom` 应恒等于 `windowH − pageBottomInset`。它若跟着键盘往上跑，就是 ArkUI 的
+   *     `KeyboardAvoidMode.OFFSET` 把整页平移了 ⇒ 应把手动抬升关掉（`barBottomMargin` 回常态），
+   *     而不是再加 offset —— 那才是"整个底下都被抬上来"的根。
+   * @param keyboardVp 本次键盘高（vp），由 {@link onKeyboardAvoidAreaChanged} 传入
+   */
+  private logKeyboardBarGap(keyboardVp: number): void {
+    const windowHVp: number = this.viewportHeightVp;
+    const barBottomVp: number = this.measureNodeBottomToWindowVp(MINI_BAR_ID);
+    const hostBottomVp: number = this.measureNodeBottomToWindowVp(SECONDARY_MINI_BAR_HOST_ID);
+    const keyboardTopVp: number = windowHVp > 0 ? windowHVp - keyboardVp : -1;
+    const gapVp: number = (keyboardTopVp > 0 && barBottomVp > 0) ? keyboardTopVp - barBottomVp : -1;
+    Logger.info('RzdKeyboardAvoid',
+      `RzdKeyboardAvoid measure keyboardVp=${keyboardVp} windowH=${windowHVp} keyboardTop=${keyboardTopVp} ` +
+        `barBottom=${barBottomVp} hostBottom=${hostBottomVp} gap=${gapVp} ` +
+        `expectGap=${FLOATING_MINI_BAR_KEYBOARD_GAP_VP} pageBottomInset=${this.pageBottomInsetVp()} ` +
+        `barBottomMargin=${this.floatingMiniBarBottomMarginVp()}`);
+  }
+
+  /**
+   * 量某节点**底边的窗口坐标**（vp）；量不到返回 -1（日志里一眼可见，不必猜）。
+   * @param id 节点上的 `.id(...)` 值
+   * @returns 底边 y（vp），或 -1
+   */
+  private measureNodeBottomToWindowVp(id: string): number {
+    try {
+      const rect = this.getUIContext().getComponentUtils().getRectangleById(id);
+      const bottomPx: number = rect.windowOffset.y + rect.size.height;
+      return this.getUIContext().px2vp(bottomPx);
+    } catch (error) {
+      return -1;
+    }
   }
 
   // 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ 鎾斁椤靛叆鍙ｏ細`isShowPlay` 鈫?NavDestination 鎺ㄥ叆 / 寮瑰嚭 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
@@ -1714,6 +1819,18 @@ struct Index {
         //   鐢?`None` 浼氶噺涓嶅埌 鈬?鍔ㄧ敾鐩存帴閫€鍖栥€?
         HomeMiniBarPlayer({ showPreviousTrack: false })
           .visibility(this.expandState.sourceBarHidden ? Visibility.Hidden : Visibility.Visible)
+          // ★★★ 2026-10-18：主页这条迷你条的"光感账"一行（`hdc shell hilog | grep RzdHomeMiniBarMaterial`）。
+          //   判读：`material=hds systemMaterialEffect` ⇒ 宿主那份官方材质在（合法载体）；
+          //        `miniBarBackplate=selfDrawn plateToken=floating_mini_bar_sheet_background` ⇒ 迷你条那一格
+          //        的背板仍是我们自绘的、颜色已换成跟主题走的那一枚（日间近白 / 夜间深灰）。
+          //   若真机上"日间还是黑" ⇒ 直接看这行确认走的是哪一支，再按 `MiniBarBackplate` 的注释对症。
+          .onAppear((): void => {
+            Logger.info('RzdHomeMiniBarMaterial',
+              `material=hds systemMaterialEffect ambient=${this.ambientLevelIndex()} ` +
+                `miniBarBackplate=selfDrawn plateToken=floating_mini_bar_sheet_background ` +
+                `enableMiniBarBackground=false immersiveDecor=${this.windowInfo.immersiveDecor} ` +
+                `keyboardVp=${this.keyboardBottomVp()}`);
+          })
       }
     }
   }
@@ -1827,8 +1944,11 @@ struct Index {
           mediumWidth: this.floatingMiniBarWidthVp(),
           largeWidth: this.floatingMiniBarWidthVp()
         },
-        // 条底到页盒底的距离（宿主盒 = 页盒 100%；页盒底 = 窗口底 − 系统避让）。
-        barBottomMargin: FLOATING_MINI_BAR_BOTTOM_GAP_VP,
+        // 条底到**页盒底**的距离（宿主盒 = 页盒 100%；页盒底 = 窗口底 − 系统避让）。
+        // ★★★ 2026-10-18：常态 = `FLOATING_MINI_BAR_BOTTOM_GAP_VP`(12)；键盘弹起时由 HDS 自己把胶囊
+        //   抬到键盘上沿之上 `FLOATING_MINI_BAR_KEYBOARD_GAP_VP`(10) —— 见 {@link floatingMiniBarBottomMarginVp}
+        //   与文件顶部那段「三、现在的账」。**宿主不再有 `.offset`**，整块底栏不会被位移。
+        barBottomMargin: this.floatingMiniBarBottomMarginVp(),
         // 不跟随握持手左右偏置：两侧留白已由 barWidth 精确给出。
         adaptToHandedness: false,
         // 材质档位复用标题栏那一份（`ambientTitleMaterial()`：跟随环境光档位、IMMERSIVE 家族）。
@@ -1842,8 +1962,9 @@ struct Index {
       //   鍐嶅噺鎺?`floatingMiniBarKeyboardLiftVp()`锛? 閿洏楂樺害 + 8 鈭?甯告€佹棦鏈夐棿闅欙級鈬?鏁存潯瀹夸富
       //   杩炲悓 HDS 鑳跺泭涓€璧蜂笂鎶埌閿洏涓婃部涔嬩笂锛涢敭鐩樻敹璧峰悗 lift 鎭掍负 0 鈬?杩欎竴琛?*閫愬瓧绛変簬**
       //   鏀瑰姩鍓嶇殑 `homeTabBarBottomMarginVp()`锛堝洖褰掔孩绾匡紝瑙侀偅涓嚱鏁扮殑娉ㄩ噴锛夈€?
-      // 键盘避让：整条宿主（连同 HDS 画的胶囊）再上抬 lift。常态 lift=0（离底那 12vp 由 barBottomMargin 给）。
-      .offset({ y: this.floatingMiniBarHostOffsetYVp() })
+      // ★★★ 2026-10-18：这里**没有** `.offset` 了 —— 键盘避让一律走上面 `barFloatingStyle.barBottomMargin`
+      //   （只挪胶囊，宿主盒与它底下那层材质原地不动）。把本条重新接回 `.offset` = "整个底下被抬上来"复现。
+      .id(SECONDARY_MINI_BAR_HOST_ID)
       // 涓嶈瑁侊細HDS 鐨勬潗璐ㄨ儗鏉?鎶樺皠鑼冨洿姣斿唴瀹圭洅澶э紝瑁佷簡浼氱己涓€鍦堛€?
       .clip(false)
       .onAppear((): void => {
@@ -1862,7 +1983,9 @@ struct Index {
           `hostBox width=${area.width} height=${area.height} barWidth=${this.floatingMiniBarWidthVp()} ` +
             `barHeight=${FLOATING_MINI_BAR_HEIGHT_VP} bottomGap=${FLOATING_MINI_BAR_BOTTOM_GAP_VP} ` +
             `keyGap=${FLOATING_MINI_BAR_KEYBOARD_GAP_VP} keyboardVp=${this.keyboardBottomVp()} ` +
-            `lift=${this.floatingMiniBarKeyboardLiftVp()} offsetY=${this.floatingMiniBarHostOffsetYVp()} ` +
+            `lift=${this.floatingMiniBarKeyboardLiftVp()} hostOffset=${this.floatingMiniBarHostOffsetYVp()} ` +
+            `barBottomMargin=${this.floatingMiniBarBottomMarginVp()} ` +
+            `pageBottomInset=${this.pageBottomInsetVp()} ` +
             `ambient=${this.ambientLevelIndex()}`);
       })
       // 鈿狅笍 **涓嶈**鍦ㄨ繖閲屽啀鍐欎竴涓?`.margin({ bottom: ... })`锛氱搴曡窛绂诲凡缁忕敱
@@ -2005,8 +2128,23 @@ struct Index {
     // 鈽?璧?`getNavigationBarBottomVpFromWindowUtil()`锛氬畠銆岀紦瀛?鈫?鐜板悜绐楀彛閲?鈫?鏈€鍚庝竴娆″ソ鍊?鈫?
     //   鍚姩蹇収銆嶉€愮骇鍏滃簳銆傝€佷唬鐮佸彧璇荤紦瀛?+ 鍚姩蹇収锛屼袱鑰呴兘涓?0 鏃讹紙閬胯鍖轰竴娆￠兘娌′笂鎶ユ垚鍔燂級
     //   杈硅窛浼氶€€鍖栨垚 12锛岃兌鍥婅创鐫€灞忓箷搴曘€佸帇鍦ㄧ郴缁熸墜鍔挎潯涓?鈥斺€?鐢ㄦ埛鐪嬪埌鐨勩€屽簳閮ㄦ挱鏀惧櫒閿欎綅銆嶃€?
-    const systemInset: number = getNavigationBarBottomVpFromWindowUtil();
-    return Math.max(12, systemInset + 8);
+    // ★★★ 2026-10-18（用户：「这个键盘避让太高了吧」）：本函数现在就是**写进
+    //   `barFloatingStyle.barBottomMargin` 的那一个数** —— 常态 = 离页盒底 12vp；
+    //   键盘态 = 由 HDS 自己把胶囊送到键盘上沿之上 `FLOATING_MINI_BAR_KEYBOARD_GAP_VP` 处。
+    //   推导见文件顶部常量那段「三、现在的账」：
+    //       margin = K − I + GK        （K 键盘高、I 页盒底内缩、GK 目标空白 10vp）
+    //       ⇒ 条底 = Ypb − margin = (H − I) − (K − I + GK) = H − K − GK
+    //       ⇒ 条底到键盘上沿的空白**恒等于 GK = 10vp**
+    // ⚠️ 本函数上面那段旧注释（`Math.max(12, systemInset + 8)`）作废：那一版把"避开系统导航条"
+    //   又算了一遍，而 HDS 的 `barBottomMargin` 已经是"条到 tabs 底边"的距离口径 ⇒ 重复叠加。
+    const restMarginVp: number = FLOATING_MINI_BAR_BOTTOM_GAP_VP;
+    const keyboardVp: number = this.keyboardBottomVp();
+    if (keyboardVp <= 0) {
+      return restMarginVp;
+    }
+    const keyboardMarginVp: number =
+      keyboardVp - this.pageBottomInsetVp() + FLOATING_MINI_BAR_KEYBOARD_GAP_VP;
+    return keyboardMarginVp > restMarginVp ? keyboardMarginVp : restMarginVp;
   }
 
   /**
@@ -2030,14 +2168,11 @@ struct Index {
    * @returns 涓婃姮璺濈锛坴p锛夛紱鏃犻敭鐩樻椂涓?0锛堟鏃惰皟鐢ㄦ柟绠楀紡閫愬瓧绛変簬鏀瑰姩鍓嶇殑鍊硷級銆?
    */
   private floatingMiniBarKeyboardLiftVp(): number {
-    const keyboardVp: number = this.keyboardBottomVp();
-    if (keyboardVp <= 0) {
-      // 无键盘时恒为 0：常态那 12vp 离底由 `barFloatingStyle.barBottomMargin` 负责，这里一点不承担。
-      return 0;
-    }
-    // ★★★ 2026-10-18：`lift = 键盘高 + 24 − 12`（"已占用"用真值 12，见常量的推导注释）。
-    //   旧式的 1.8 × (homeTabBarBottomMargin / 2) ≈ 25.2 是猜测值 ⇒ 会多压 13vp，键盘弹起时反被咬住。
-    const lift: number = keyboardVp + FLOATING_MINI_BAR_KEYBOARD_GAP_VP - FLOATING_MINI_BAR_BOTTOM_GAP_VP;
+    // ★★★ 2026-10-18：语义改成「键盘态**比常态多抬了多少**」= `margin − G`（= K − I + GK − G）。
+    //   宿主已经没有 `.offset` 了，这个数只用于日志与回归判据：
+    //   · 无键盘时必须**逐字为 0**（契约不变，因为 margin 回落到 G）；
+    //   · 键盘态应当 ≈ `键盘高 − 页盒底内缩 + 10 − 12`。
+    const lift: number = this.floatingMiniBarBottomMarginVp() - FLOATING_MINI_BAR_BOTTOM_GAP_VP;
     return lift > 0 ? lift : 0;
   }
 
@@ -2049,13 +2184,16 @@ struct Index {
    * @returns 瀹夸富 offset.y锛坴p锛夈€?
    */
   private floatingMiniBarHostOffsetYVp(): number {
-    // ★★★ 2026-10-18：`.offset({ y })` 的 **+y 是向下** ⇒ "往上抬"一律写负数。
-    //   旧写法 `homeTabBarBottomMarginVp() − lift` 的常态值逐字等于系统导航条高（≈28vp），
-    //   等于把宿主盒往下推满那条让位 ⇒ 条底正好落在**窗口底**，用户看到的就是「直接贴底」。
-    //   现在本函数**只**承担键盘抬升；"离底 12vp" 交给 `barFloatingStyle.barBottomMargin`，
-    //   两处各管一段（HDS 侧再写一次 = 离底距离翻倍）。
-    //   条底 = 页盒底 − FLOATING_MINI_BAR_BOTTOM_GAP_VP(barBottomMargin) − lift(本函数)。
-    return -this.floatingMiniBarKeyboardLiftVp();
+    // ★★★ 2026-10-18（用户：「怎么整个底下的特效都被抬上来了」）：**宿主不再整体位移，本函数恒返回 0**。
+    //   上面那段（"无键盘时必须逐字等于 homeTabBarBottomMarginVp()"）连同它的前提一起作废。
+    //   为什么：`.offset` 位移的是这一个组件**连同它画的全部东西** —— 宿主是整条 HDS 浮动底栏，
+    //   胶囊、`systemMaterialEffect` 材质层、栏底色全在其中 ⇒ 一抬就是"整块底栏浮空"。
+    //   现在键盘避让只改 `barFloatingStyle.barBottomMargin`（SDK `@hms.hds.hdsBaseComponent.d.ets:5311`
+    //   「the distance between tab bar and bottom of tabs」）⇒ 只动胶囊**在宿主内部**的位置，
+    //   宿主盒与它底下那些整层效果原地不动。
+    //   返回 0 而不是删函数：日志里 `hostOffset=0` 就是"没有整体位移"的判据，同时防回归 ——
+    //   **不要**把 {@link floatingMiniBarKeyboardLiftVp} 再接回 `.offset`。
+    return 0;
   }
 
   /**
@@ -2204,6 +2342,20 @@ struct Index {
               //   `HomeMiniBarPlayer.MiniBarBackplate()` 鑷粯锛屼簬鏄畠涓庡唴瀹瑰湪**鍚屼竴妫靛瓙鏍?*閲岋紝
               //   鑳借窡鐫€ `morphSquashY` 涓€璧峰帇/涓€璧峰脊銆?
               //   鈿狅笍 涓?`HomeMiniBarPlayer` 閲岄偅涓€灞?*蹇呴』鎴愬**锛氬彧鍏充笉鐢?鈬?杩蜂綘鏉″簳涓嬬┖涓€鍧椼€?
+              // ★★★ 2026-10-18（用户：「你是不是忘记给主页的这个小播放条加上光感了」）——判定与结论：
+              //   **继续自绘（false）+ 把背板换成"跟主题走"的 sheet 面**，而不是交给 HDS 画。
+              //   判据（`MiniBarBackplate` 到底为谁而存在）：它的注释与唯一调用点都写明"只为让背板跟着
+              //   `morphSquashY` 一起压/一起弹"（`HomeMiniBarPlayer.ets` 的 `MiniBarBackplate()` 文档
+              //   + `build()` 里那个挂着 `.scale({ y: morphSquashY })` 的 `Stack`）；HDS 画的背板在
+              //   `miniBar` 槽**之下**、不在我们的子树里 ⇒ 一旦开 `enableMiniBarBackground: true`，
+              //   关闭播放器时"整条播放条一起弹"就会退回"只有内容弹、背板不动"（§86.3 用户报过的原病）。
+              //   而"光感"并不缺在宿主上：这一层 HdsTabs 的 `barFloatingStyle.systemMaterialEffect`
+              //   本来就是 `ambientTitleMaterial()`（见本文件 HomeTabsPages 那处），是 SDK 允许的唯一载体
+              //   （`@hms.hds.hdsBaseComponent.d.ets:5357`）。所以这一轮**只**把自绘背板的颜色换成
+              //   亮/暗都有变体、80% 不透明度的 `floating_mini_bar_sheet_background` —— 日间不再是黑块，
+              //   夜间仍是深色，观感与二级页那条（HDS 材质）同一套色系。
+              //   ⚠️ 若用户更想要"HDS 亲手画的材质背板"而不在乎挤压弹跳，唯一改法是把这里改 `true`
+              //   + `HomeMiniBarPlayer({ showSelfDrawnBackplate: false })`（两条必须成对，否则材质被蒙版洗白）。
               enableMiniBarBackground: false,
               miniBarStyle: this.miniBarStyleForHds(),
               onBarStyleChange: (miniBarStyle: HdsBarStyle, _tabStyle: HdsBarStyle,
