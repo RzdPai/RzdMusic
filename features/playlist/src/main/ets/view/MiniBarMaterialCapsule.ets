@@ -359,22 +359,14 @@ export struct MiniBarMaterialCapsule {
    * 所以 `w ≤ slotW` ⇒ 内容不可能横向出框；槽 ≡ 胶囊时 `w = bW`，与上一版逐字相同。
    */
   private contentLayerWidthVp(): number {
-    // ★★★ 2026-10-18（用户第十轮：「一级页面和二级页面播放条的歌曲列表按钮跑到播放条外面」）：
-    //   只取**槽宽上限**，不再跟槽**心**（第八轮回退的是"跟槽心"，不是"跟槽宽"）。
-    //   依据：可见胶囊由 HDS 另画一层，本仓的内容层是它的**同级兄弟**；只要 HDS 把胶囊画得
-    //   比我们算的 `barWidth` 窄，右端那颗按钮（离盒右缘只剩 `actionsTrail + margin 6 = 18`）就落到圆角外。
-    //   `slotW` 是探针**实测**（`:391-426` 的 `alignSlotIfNeeded`），槽恒在胶囊内 ⇒ `min(bW, slotW)` 不可能出框；
-    //   槽 ≡ 胶囊时 `w = bW`，与上一版逐像素相同。
-    if (this.slotW > 0 && this.slotW < this.barWidth) {
-      return this.slotW;
-    }
+    // 内容盒 ≡ 胶囊盒（同一个 `barWidth`）：不跟槽心、不跟槽宽 —— 上游的内容与胶囊**同源**（HDS 槽 / 同一节点），
+    // 我们没有那条同源关系，跟槽真机验证过一次"整块右移"，已回退（见记忆 §194.5）。
     return this.barWidth;
   }
 
   private contentLayerLeftVp(): number {
-    // 内容盒在**胶囊盒内居中**：胶囊被槽缩窄时内容**对称**内缩（左右各让一半），
-    // 这样既不出框，也不会像"跟槽心"那样整块偏一侧。
-    return this.capsuleLeftVp() + (this.barWidth - this.contentLayerWidthVp()) / 2;
+    // 与 `contentLayerWidthVp` 同一条依据：内容盒 ≡ 胶囊盒。
+    return this.capsuleLeftVp();
   }
 
   /** @returns 内容层的**顶边**（相对本组件盒左上角，vp）= 胶囊上缘（纵向不跟槽，见类注释第三节）。 */

@@ -1867,17 +1867,6 @@ struct Index {
   }
 
   /**
-   * HDS **报回来的**迷你栏宽（vp）—— `HdsTabsFloatingStyle.onBarStyleChange` 第三参，
-   * SDK 原文 "current mini bar width"（`@hms.hds.hdsBaseComponent.d.ets:5084/5091`）。
-   *
-   * 用途（2026-10-18，用户第十一轮/十二轮截图「歌曲列表按钮跑到播放条外面」）：
-   * 可见背板由 HDS 另画一层，槽给我们的格子**比它画的胶囊宽**（左右各溢出一截，截图里封面也贴到胶囊外）
-   * ⇒ 把差值的**一半**作为内容行的左右内距还回去，内容就重新落在胶囊里。
-   * `0` = 还没收到回调 ⇒ 不内缩（与改动前逐字一致）。
-   */
-  @Local hdsMiniBarWidthVp: number = 0;
-
-  /**
    * `miniBar` 槽里此刻是不是**真的在画播放器**（与 {@link miniBar} 里那条 `if` 逐字同义）。
    *
    * 两处消费它（语义必须一致，否则就是"背板在、内容不在"或反过来）：
@@ -1997,8 +1986,6 @@ struct Index {
           //   接住这个数，`HomeMiniBarPlayer` 用 `sidePad = (胶囊高 − 视觉封面)/2 = 5.6` 保证
           //   「视觉左边距 ≡ 上/下留白」。⇒ 旧的 `coverSideVp`（宿主按档位传 40/30/44）已删除。
           contentHeightVp: FLOATING_MINI_BAR_HEIGHT_VP,
-          // ★★★ 2026-10-18：HDS 画的胶囊宽（差值一半作为内容左右内距，见 `hdsMiniBarWidthVp`）。
-          hostBarWidthVp: this.hdsMiniBarWidthVp,
           // ★ 2026-10-21（第八轮）：封面机制换成上游"32 盒 × `scale(1.4)`"，
           //   `视觉封面 = 胶囊高 × 0.8 = 44.8`、`sidePad = (胶囊高 − 视觉封面)/2 = 5.6`
           //   全部由 `HomeMiniBarPlayer` 自己算 ⇒ 宿主**不再**传 `coverSideVp`（该参数已删除）。
@@ -2631,23 +2618,6 @@ struct Index {
                 //   = 上游 `MINI_H`，与页签胶囊等高（官方「迷你栏……跟页签栏高度相等且水平对齐」）。
                 this.miniBar();
               },
-              // ★★★ 2026-10-18（用户第十一轮：「一级/二级页播放条**歌曲列表按钮跑到播放条外面**」）：
-              //   **把迷你栏宽报给 HDS**。可见背板由 HDS 另画一层，而我们的内容行是 `.width('100%')`
-              //   的另一个矩形 ⇒ 不报宽就永远是"赌背板恰好等于槽宽"；HDS 一旦画窄，右端那颗按钮
-              //   （离盒右缘只剩 `actionsTrail 12 + Aside.margin 6 = 18vp`，40 档只有 10vp）就落在圆角外。
-              //   宽度用 `floatingMiniBarWidthVp()`（与二级页胶囊**同一个函数**）⇒ 两条背板同源、不会各写一套。
-              //   ⚠️ 单层态（`HORIZONTAL`，迷你条与页签并排）必须留空：那时宽度由页签让位决定，写死会把页签挤掉。
-              miniBarWidth: this.barLayoutModeForHds() === HdsBarLayoutMode.HORIZONTAL ? undefined : {
-                smallWidth: this.floatingMiniBarWidthVp(),
-                mediumWidth: this.floatingMiniBarWidthVp(),
-                largeWidth: this.floatingMiniBarWidthVp()
-              },
-              // ★★★ 2026-10-18（用户第十二轮截图：「现在就在听页应该**隐藏小播放条**，现在只隐藏了上面的元素」）：
-              //   槽内容在那一页 / 二级页在栈上时是 **0 高度占位 Column**（见 {@link miniBar} 的 if/else），
-              //   但 `enableMiniBarBackground` 缺省 **true** ⇒ HDS 照样给这一格画背板 ⇒ 页签胶囊上方
-              //   留下一枚**空胶囊**（截图里就是那圈空圆角矩形）。
-              //   语义与 {@link miniBar} 里那条 if 逐字同义：**只有真画播放器时才要 HDS 画背板**。
-              enableMiniBarBackground: this.miniBarRendersPlayer(),
               // ★★★ 2026-10-20（第五轮）：**给 HDS 报上"迷你栏占多宽"**（`HdsTabsMiniBar.miniBarWidth`
               //   ：SDK `@hms.hds.hdsBaseComponent.d.ets:5150`，三档与 `HdsBarWidthRangeOptions` 同形）。
               //   单层态必须报，否则 HDS 挤页签、让出来的长条位宽度与我们自己画的胶囊对不上。
@@ -2722,20 +2692,7 @@ struct Index {
               //        上面这一整段（2026-10-16 / 10-18 的反复）只作为来龙去脉保留。
               miniBarStyle: this.miniBarStyleForHds(),
               onBarStyleChange: (miniBarStyle: HdsBarStyle, _tabStyle: HdsBarStyle,
-                miniWidth: number, tabWidth: number, mode: HdsTabsBarChangeMode): void => {
-                // ★★★ 2026-10-18：HDS **报回来的**迷你栏宽（`HdsTabsFloatingStyle.onBarStyleChange`
-                //   第三参 = "current mini bar width"，SDK `@hms.hds.hdsBaseComponent.d.ets:5084/5091`）。
-                //   这一行是"歌曲列表按钮跑到条外"唯一能定案的读数：
-                //   `miniWidth < RzdMiniBarGeom 的 w=` ⇒ HDS 画的背板比我们的内容行窄（`miniBarWidth` 报宽对症）；
-                //   两者相等 ⇒ 背板宽没问题，要回内容行内部查（3×40+2×2+6=130 的按钮簇 + 5.6/12 内距）。
-                Logger.info('RzdHomeBarWidth',
-                  `hdsMiniWidth=${miniWidth.toFixed(1)} hdsTabWidth=${tabWidth.toFixed(1)} ` +
-                    `contentW=${this.floatingMiniBarWidthVp().toFixed(1)} ` +
-                    `mode=${mode} style=${miniBarStyle} layout=${this.barLayoutModeForHds()}`);
-                // 把 HDS 报回来的背板宽记账 —— 差值的**一半**作为内容行左右内距还给胶囊（见字段注释）。
-                if (miniWidth > 0 && Math.abs(miniWidth - this.hdsMiniBarWidthVp) > 0.5) {
-                  this.hdsMiniBarWidthVp = miniWidth;
-                }
+                _miniWidth: number, _tabWidth: number, mode: HdsTabsBarChangeMode): void => {
                 this.onMiniBarStyleChangeFull(miniBarStyle, mode);
               }
             }

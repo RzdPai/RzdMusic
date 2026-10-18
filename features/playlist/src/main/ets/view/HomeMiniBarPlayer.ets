@@ -135,11 +135,6 @@ export struct HomeMiniBarPlayer {
    * 宿主钉 56 而真机双行态只有 40 时，按 56 算出来的封面（44.8）会比条还高。
    */
   @Local measuredRowHVp: number = 0;
-  /**
-   * 本行**实测宽度**（vp，0 = 还没量到）。仅用于求"内容盒比 HDS 画的胶囊宽多少"，
-   * 见 `capsuleInsetVp()`。
-   */
-  @Local measuredRowWVp: number = 0;
   /** Global music UI state (mini bar expanded, play state). */
   @Local appState: MusicAppState =
     AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
@@ -188,15 +183,6 @@ export struct HomeMiniBarPlayer {
    * · `sidePad` 改走上游算式 `(胶囊高 − 视觉封面)/2`（类注释第二节 ②）。
    */
   @Param contentHeightVp: number = 0;
-  /**
-   * HDS **报回来的**迷你栏宽（vp）= 屏幕上那圈背板的真实宽度；`0` = 未知（不内缩）。
-   *
-   * 为什么需要：本行是 `.width('100%')`（HDS 给的**格子**），而背板由 HDS **另画一层**，
-   * 格子比背板宽时，右端那颗按钮（离盒右缘只有 `actionsTrail + Aside.margin`）就落到圆角外
-   * （用户第十一/十二轮截图：封面贴到胶囊左外、播放列表按钮压在右外）。
-   * 把差值的一半还成左右内距 ⇒ 内容重新落在胶囊里，且**对称**（不偏向任何一侧）。
-   */
-  @Param hostBarWidthVp: number = 0;
   /** 上拉打开播放页（跟手）：驱动共享形变进度，收尾补间交给壳层。 */
   private panOption: PanGestureOptions = new PanGestureOptions({ direction: PanDirection.Vertical });
   /**
@@ -322,22 +308,6 @@ export struct HomeMiniBarPlayer {
   }
 
   /**
-   * @returns 内容行为了落回 HDS 画的背板里，左右各要让出的量（vp）。
-   *
-   * `measuredRowWVp` = 本行实测宽（= HDS 给的格子宽），`hostBarWidthVp` = HDS 报回来的背板宽。
-   * 两者都有值时取差值的一半（对称内缩）；任一未知则 **0**（与改动前逐字一致）。
-   * ⚠️ 只让"一半"，不要去跟槽心：跟槽心那一版真机整块右移过（`MiniBarMaterialCapsule` 的教训）。
-   */
-  private capsuleInsetVp(): number {
-    if (this.measuredRowWVp <= 0 || this.hostBarWidthVp <= 0) {
-      return 0;
-    }
-    const inset: number = (this.measuredRowWVp - this.hostBarWidthVp) / 2;
-    return inset > 0 ? inset : 0;
-  }
-
-
-  /**
    * @returns 内容行的**左**内距（vp）。
    *
    * 两档都落在上游那一条恒等式里 —— `视觉左边距 = 基准高/2 − 视觉封面/2`：
@@ -434,10 +404,9 @@ export struct HomeMiniBarPlayer {
           // 操作区：`MiniMorph.actionsOpacityAt = clamp(1 - t/0.20)`，比封面那一档更早消失
           .opacity(this.expandState.miniBarOpacity())
       }
-      // ★★★ 2026-10-18：`+ capsuleInsetVp()` —— 内容盒比 HDS 画的背板宽时对称内缩（见该函数）。
       .padding({
-        left: this.sidePadVp() + this.capsuleInsetVp(),
-        right: this.actionsTrailVp() + this.capsuleInsetVp(),
+        left: this.sidePadVp(),
+        right: this.actionsTrailVp(),
         top: this.rowPadVp(),
         bottom: this.rowPadVp()
       })
@@ -464,11 +433,6 @@ export struct HomeMiniBarPlayer {
       //   把**这一行自己的实测高度**记下来 —— 封面/内距要以"真实条高"为基准，
       //   不能吃宿主编给我们的那个数（宿主钉 56，而真机双行态可能只有 40 ⇒ 封面 44.8 比条还高）。
       const measuredH: number = areaLengthToVp(area.height);
-      // ★★★ 2026-10-18：本行**实测宽度**也记下来 —— `capsuleInsetVp()` 用它求"格子 vs 背板"的差。
-      const measuredW: number = areaLengthToVp(area.width);
-      if (measuredW > 0 && Math.abs(measuredW - this.measuredRowWVp) > 0.5) {
-        this.measuredRowWVp = measuredW;
-      }
       if (measuredH > 0 && Math.abs(measuredH - this.measuredRowHVp) > 0.5) {
         this.measuredRowHVp = measuredH;
       }
