@@ -2618,6 +2618,17 @@ struct Index {
                 //   = 上游 `MINI_H`，与页签胶囊等高（官方「迷你栏……跟页签栏高度相等且水平对齐」）。
                 this.miniBar();
               },
+              // ★★★ 2026-10-18（用户第十一轮：「一级/二级页播放条**歌曲列表按钮跑到播放条外面**」）：
+              //   **把迷你栏宽报给 HDS**。可见背板由 HDS 另画一层，而我们的内容行是 `.width('100%')`
+              //   的另一个矩形 ⇒ 不报宽就永远是"赌背板恰好等于槽宽"；HDS 一旦画窄，右端那颗按钮
+              //   （离盒右缘只剩 `actionsTrail 12 + Aside.margin 6 = 18vp`，40 档只有 10vp）就落在圆角外。
+              //   宽度用 `floatingMiniBarWidthVp()`（与二级页胶囊**同一个函数**）⇒ 两条背板同源、不会各写一套。
+              //   ⚠️ 单层态（`HORIZONTAL`，迷你条与页签并排）必须留空：那时宽度由页签让位决定，写死会把页签挤掉。
+              miniBarWidth: this.barLayoutModeForHds() === HdsBarLayoutMode.HORIZONTAL ? undefined : {
+                smallWidth: this.floatingMiniBarWidthVp(),
+                mediumWidth: this.floatingMiniBarWidthVp(),
+                largeWidth: this.floatingMiniBarWidthVp()
+              },
               // ★★★ 2026-10-20（第五轮）：**给 HDS 报上"迷你栏占多宽"**（`HdsTabsMiniBar.miniBarWidth`
               //   ：SDK `@hms.hds.hdsBaseComponent.d.ets:5150`，三档与 `HdsBarWidthRangeOptions` 同形）。
               //   单层态必须报，否则 HDS 挤页签、让出来的长条位宽度与我们自己画的胶囊对不上。
@@ -2692,7 +2703,16 @@ struct Index {
               //        上面这一整段（2026-10-16 / 10-18 的反复）只作为来龙去脉保留。
               miniBarStyle: this.miniBarStyleForHds(),
               onBarStyleChange: (miniBarStyle: HdsBarStyle, _tabStyle: HdsBarStyle,
-                _miniWidth: number, _tabWidth: number, mode: HdsTabsBarChangeMode): void => {
+                miniWidth: number, tabWidth: number, mode: HdsTabsBarChangeMode): void => {
+                // ★★★ 2026-10-18：HDS **报回来的**迷你栏宽（`HdsTabsFloatingStyle.onBarStyleChange`
+                //   第三参 = "current mini bar width"，SDK `@hms.hds.hdsBaseComponent.d.ets:5084/5091`）。
+                //   这一行是"歌曲列表按钮跑到条外"唯一能定案的读数：
+                //   `miniWidth < RzdMiniBarGeom 的 w=` ⇒ HDS 画的背板比我们的内容行窄（`miniBarWidth` 报宽对症）；
+                //   两者相等 ⇒ 背板宽没问题，要回内容行内部查（3×40+2×2+6=130 的按钮簇 + 5.6/12 内距）。
+                Logger.info('RzdHomeBarWidth',
+                  `hdsMiniWidth=${miniWidth.toFixed(1)} hdsTabWidth=${tabWidth.toFixed(1)} ` +
+                    `contentW=${this.floatingMiniBarWidthVp().toFixed(1)} ` +
+                    `mode=${mode} style=${miniBarStyle} layout=${this.barLayoutModeForHds()}`);
                 this.onMiniBarStyleChangeFull(miniBarStyle, mode);
               }
             }

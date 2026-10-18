@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -1743,11 +1743,13 @@ export struct PlaybackPage {
     //   `onContentDidScroll` 濠殿喗绻愮徊钘夛耿椤忓牊鐒婚柟閭﹀墯婵酣鏌?`lyricMorphT` 闂佸搫鍟抽鎰濠靛洦浜ゆ繛鍡樻尭濞?*婵炴垶鎸哥粔鐑筋敊韫囨稒濯伴柦妯侯槺閺?* 闂佺偨鍎查弻锟犲焵?
     //   闂佸憡鐔粻鎴﹀垂椤栨稓鈻旈柕鍫濈墐閸嬫捇宕ㄩ鐐栭柣銏╁瀻閸屾粓鐎洪梺鐑╂櫅閹测剝鎱ㄩ悩璇茬９缁绢參顥撶粈鍕節婵犲啫鐏ラ柛鈺佹湰缁嬪鍩€椤掑嫬纭€濠电姴鎷嬪璺衡槈閹绢垰浜鹃梺纭呮硾閿曘劑顢欓弴銏犵闁规鍣导鍌炴煟?闂?闂佹眹鍨归…宄邦焽閹殿喗宕夌紒娑樻贡缁€鍡涙煏?
     //   闂佸疇娉曟刊瀵哥箔?`boot` 闂備緡鍙忕徊楣冾敃?*闂婎偄娲ら幊姗€濡磋箛娑樼哗闁硅鍔﹂弨?*闂佹寧绋戦悧鎾诲Υ婢舵劖顥堥柕蹇娾偓宕囨Ц闁哄鍋犳慨銈咁渻閸屾稒浜ゆ俊顖濆吹濮婇箖鏌￠崼婵愭Х闁瑰箍鍨洪幏鍛村即閻旂儤纭﹂梺鍛婃閻撳妲愬妾抋stScrollAtMs` 婵?0闂佹寧绋戦ˇ顓㈠焵?
-    if (reason !== 'boot' && Date.now() - this.lastScrollAtMs < PlaybackPage.SCROLL_SETTLE_WINDOW_MS) {
-      return;
-    }
-    if (this.lyricMorphVisible && Math.abs(this.lyricMorphT - want) < 0.999) {
-      // 婵＄偛顑囬崑鐘汇€侀幋鐐碘枖妞ゆ挻绻勯悷顒勫级閳哄伒鎴︽儉閸涙潙绀嗛柟娈垮櫘娴煎倿鏌?闂?闂佸憡甯╅崑鍛櫠閿曞倸妫樻い鎾煕婢舵劖鈷掗弶鍫濆⒔缁€鍕级閳哄倻鎳勬繛纰卞灦瀹曪綁顢旈崟顒冨惈闂佸搫顑勯懗鍫曨敂椤掑嫬绫嶉悹楦挎绾板秴鈽夐幘鎰佸剱濠⒀呭█瀹曪綁顢涘┑鍡楀箣闂佸憡绋掗崹婵嬫嚈閹达附鏅?
+    // ★★★ 2026-10-18（用户第十一轮：「滑到歌词页**封面不变小**」）：
+    //   `swiperEnd` 就是"滚动已经结束"的权威事件，仲裁窗只该拦**滚动进行中**的 sync。
+    //   原来它同样被 `lastScrollAtMs`（`:1691` 每帧刚盖过）挡掉 ⇒ 唯一能把 `lyricMorphT`
+    //   钉到端点 1 的那条路 100% 失效，封面尺寸只能靠 SDK 逐帧 position 的末值（常停在 0.997 甚至更小）
+    //   `⇒ 封面永远大`。上游没有这条窗口：它唯一写进度的就是逐帧回调（`wujie.pa:190026-190049`）。
+    if (reason !== 'boot' && reason !== 'swiperEnd' &&
+      Date.now() - this.lastScrollAtMs < PlaybackPage.SCROLL_SETTLE_WINDOW_MS) {
       return;
     }
     if (Math.abs(this.lyricMorphT - want) < 0.0001) {
