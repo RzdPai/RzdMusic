@@ -1405,18 +1405,6 @@ struct Index {
             this.expandState.morphP = 1;
             // 同值落位（降级路径也不许两条时间线分叉）。
             this.expandState.contentP = 1;
-          } else if (this.appState.isShowPlay) {
-            // ★★★ 2026-10-19（`0014` 日志定位：`br=1 ms=1 hs=1 op=1.00` 常驻）：
-            //   几何**已经就绪**、但 `morphUsable` / `reverseInFlight` 把上面那条落位门挡掉了
-            //   ⇒ 这个 `else` 里**什么都没做** ⇒ `morphDrive` 停在 `ANIM`
-            //   ⇒ `morphSessionDriving()` 恒真 ⇒ Shell 的 `MorphCoverClone()` **永远按 op=1 画大封面**
-            //   ⇒ 歌词页上盖着一张不会缩的大封面（浮层其实已经缩到 48.7，用户看不到）。
-            //   上游 `λ1onFinish` 是**无条件收尾**的 ⇒ 这里补上"强制落位"。
-            this.expandState.pushMorphTrace('forceSettle');
-            Logger.warn(RzdShellLogTag,
-              `pull settle: FORCE settle-open (usable=${this.expandState.morphUsable} ` +
-              `reverse=${this.expandState.reverseInFlight} stage=${this.expandState.morphStage})`);
-            this.expandState.morphSettleOpen();
           }
         }
       }, duration + 20);

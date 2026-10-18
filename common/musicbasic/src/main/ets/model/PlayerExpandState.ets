@@ -896,6 +896,12 @@ export class PlayerExpandState {
       this.overlayCoverDrawable()) {
       return false;
     }
+    // ★ 2026-10-19：落位（克隆层已按上面那条退场）⇒ **真封面必须接管**，
+    //   否则两边都不画 ⇒ 屏幕上一个封面都没有（用户以前报过的 `real=0 clone=0`）。
+    //   与 `morphOverlayBridging()` / `morphSessionDriving()` 里那两条落地判据是同一个条件。
+    if (this.morphStage !== MorphStage.LEAVING && this.morphOverlayProgress() >= 0.999) {
+      return true;
+    }
     if (!this.morphOverlayBridging()) {
       return true;
     }
@@ -3923,6 +3929,21 @@ export class PlayerExpandState {
     if (this.snapshotShrinkOwned) {
       return false;
     }
+    // ★★★ 2026-10-19（用户：「打断动画先正常回去、然后黑背景往下走」「关闭时出现两个封面」
+    //   「上拉收回还是半透明」——三件事同一个根因）：
+    //   **克隆封面层只在"还在飞"的时候画**。`morphOverlayP` 一旦贴在 1（展开落位）就交还
+    //   真封面（本函数与 `realCoverVisible()` 严格互补）；贴在 0 时同理。
+    //   为什么必须有这一条：上拉落位那条路如果 `morphUsable` / `reverseInFlight` 把
+    //   `morphSettleOpen()` 挡掉，`morphDrive` 会**停在 ANIM** ⇒ `morphSessionDriving()` 恒真
+    //   ⇒ 克隆层永远按 `op=1.00` 画那张大封面（`0014` 日志实测 `br=1 ms=1 op=1.00` 常驻）。
+    //   表现就是：歌词页封面不缩 / 关闭时两个封面 / 上拉收回后自绘条不退场（半透明）。
+    //   ⚠️ 不许改成"强制 settle"——那会硬改状态机、把布局落在半路（上一版实测：黑背景 + 播放器下滑）。
+    if (this.morphStage !== MorphStage.LEAVING) {
+      const overlayP: number = this.morphOverlayProgress();
+      if (overlayP >= 0.999) {
+        return false;
+      }
+    }
     // ★ 2026-10-18（用户第九轮：「收起按钮 / 系统返回 **封面消失、动画也没了**」）：
     //   上一轮在这里加过一道"只展开方向才画"的相位门（`if (!morphOverlayEntering()) return false;`），
     //   它把**关闭路**的克隆层也一起掐掉了，而那两条路上又没有别的东西接管封面 ⇒ 封面整段消失、连带动画没了。
@@ -5110,6 +5131,14 @@ export class PlayerExpandState {
    *    鍙湁"鎵嬫寚姝ｅ湪椹卞姩"鎴?琛ラ棿鍔ㄧ敾椹卞姩"鎵嶇畻鐪熷湪鎾€?
    */
   public morphSessionDriving(): boolean {
+    // ★ 2026-10-19：**落位即不再驱动**。`morphOverlayP` 贴到 1（展开落位）且不在收起路上时，
+    //   形变已经结束 —— 这时 `morphDrive` 可能因为落位门（`morphUsable` / `reverseInFlight`）
+    //   被挡掉而**停在 ANIM**。不在这里收口的话，`morphSessionDriving()` 恒真 ⇒
+    //   Shell 的克隆封面层与克隆操作区**永远画着**（`0014` 日志 `ms=1 op=1.00` 常驻），
+    //   正好造成：歌词页封面不缩、关闭时两个封面、上拉收回后自绘条不退场（半透明）。
+    if (this.morphStage !== MorphStage.LEAVING && this.morphOverlayProgress() >= 0.999) {
+      return false;
+    }
     if (!this.morphUsable || !this.morphContainerActive()) {
       return false;
     }
