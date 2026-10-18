@@ -1914,11 +1914,10 @@ struct Index {
    * `appState.miniBarExpanded`（由 HDS `onBarStyleChange` 镜像）。
    */
   private homeMiniBarSlotHVp(): number {
-    // ★★★ 2026-10-18（用户：「收起态胶囊本来就是更高的」）⇒ 与上一版**反**过来：
-    //   收起（`miniBarExpanded === false`）= 单层圆坞态 ⇒ 胶囊**更高** `MINI_H = 56`；
-    //   展开 = 上下两排 ⇒ 胶囊较矮 `BAR_CONTENT_H = 40`（`wujie.pa:67515-67517`）。
-    //   封面随之 `capsuleH × 0.8` ⇒ 收起态 44.8、两排态 32。
-    return this.appState.miniBarExpanded ? Index.BAR_CONTENT_H_VP : FLOATING_MINI_BAR_HEIGHT_VP;
+    // ⛔ 2026-10-18 回退（用户：「你搞反了吧…播放条本身是正常的，你先回退到上个版本（动画不用回退）」）：
+    //   高度档位回到 `b131825` 之前那一版：展开 ⇒ 56、收起 ⇒ 40（`wujie.pa:67503-67517` 的估算支）。
+    //   封面尺寸这条线另算，不在本行改。
+    return this.appState.miniBarExpanded ? FLOATING_MINI_BAR_HEIGHT_VP : Index.BAR_CONTENT_H_VP;
   }
 
   /**
