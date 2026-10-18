@@ -1990,7 +1990,7 @@ struct Index {
           //   `视觉封面 = 胶囊高 × 0.8 = 44.8`、`sidePad = (胶囊高 − 视觉封面)/2 = 5.6`
           //   全部由 `HomeMiniBarPlayer` 自己算 ⇒ 宿主**不再**传 `coverSideVp`（该参数已删除）。
         })
-          .visibility(this.expandState.sourceBarHidden ? Visibility.Hidden : Visibility.Visible)
+          .visibility((this.expandState.sourceBarHidden || this.expandState.shrinkHidesBar) ? Visibility.Hidden : Visibility.Visible)
           // ★★★ 2026-10-21（第八轮）：主页这条的"光感账"一行（`hdc shell hilog | grep RzdHomeMiniBarMaterial`）。
           //   判读（以本轮为准）：
           //     · `plate=hds-minibar-cell` ⇒ 背板/材质由**壳层 HdsTabs 的 `miniBar` 槽**画
@@ -2189,7 +2189,7 @@ struct Index {
     .hitTestBehavior(HitTestMode.Transparent)
     .zIndex(20)
     // Hidden preserves anchors/layout and hides the floating bar with its controls immediately.
-    .visibility(this.expandState.sourceBarHidden ? Visibility.Hidden : Visibility.Visible)
+    .visibility((this.expandState.sourceBarHidden || this.expandState.shrinkHidesBar) ? Visibility.Hidden : Visibility.Visible)
   }
 
   /**

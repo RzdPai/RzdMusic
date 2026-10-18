@@ -4213,11 +4213,38 @@ export class PlayerExpandState {
    */
   public reverseInFlight: boolean = false;
 
-  public beginSnapshotShrink(): void {    if (this.snapshotShrinkOwned) {
+  /**
+   * ★★★ 2026-10-18（用户：「用系统返回或点左上角收起过程中**按钮/封面还是两个**」）：
+   * 快照收缩期必须把**真迷你条整条藏起来**——上游就是那条 `MainPage.miniHidden`：
+   * ```
+   *   wujie.pa:154139  MainPage.startShrinkBack: this.shrinkPixmap = pixmap; this.shrink.start(...)
+   *   wujie.pa:154940  shrink.start 的 onDone:    this.miniHidden = false; this.shrinkPixmap = undefined;
+   *   wujie.pa:157092  MainPage.#miniBar 的内容:  .visibility(this.miniHidden ? Hidden : Visible)
+   * ```
+   * 即「快照在飞的那一段，真条不画；快照落位那一刻再把真条放出来」。
+   * 本仓原来只在 `morphBeginLeaving()`（活体反向那条路）里藏条，**快照这条路一次都没藏**
+   * ⇒ 飞行的快照里有一颗封面+一排按钮，屏上真条又有一颗+一排 = 两份。
+   */
+  @Trace public shrinkHidesBar: boolean = false;
+
+  public beginSnapshotShrink(): void {
+    if (this.snapshotShrinkOwned) {
       return;
     }
     this.snapshotShrinkOwned = true;
-    Logger.info(PlayerExpandState.logTag, 'morph overlay off: snapshot shrink owns the cover');
+    // 与上游 `MiniPlayer` 的"藏条"同义：快照这一段由快照层代表一切。
+    this.shrinkHidesBar = true;
+    Logger.info(PlayerExpandState.logTag,
+      `morph overlay off: snapshot shrink owns the cover, miniBar hidden=${this.shrinkHidesBar}`);
+  }
+
+  /** 快照落位（上游 `wujie.pa:154940-154949` 的 onDone）：把真迷你条放回来。 */
+  public endSnapshotShrink(): void {
+    if (!this.shrinkHidesBar) {
+      return;
+    }
+    this.shrinkHidesBar = false;
+    Logger.info(PlayerExpandState.logTag, 'snapshot shrink landed: miniBar shown again');
   }
 
   /**

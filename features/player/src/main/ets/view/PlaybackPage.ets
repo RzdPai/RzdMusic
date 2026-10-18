@@ -14,7 +14,7 @@
  */
 
 // 闂佸疇娉曟刊瀵哥箔?`TextController` 闂?ArkUI 闂?*闂佺绻堥崝宀勬儑椤掑嫭鍋濇い鏍ㄥ嚬閺嗘梻绱掗銉殭闁?*闂佹寧绋戦悧鍛箔婢舵劖顥嗛柍褜鍓涢幉?import闂佹寧绋戦悾鐠弖sicPlayInfoBlock` 闂佸憡鑹鹃張顒勵敄濞嗘挻鏅?
-import { AppStorageV2, curves, uiObserver, UIUtils, window } from '@kit.ArkUI';
+import { AppStorageV2, uiObserver, UIUtils, window } from '@kit.ArkUI';
 import { image } from '@kit.ImageKit';
 import { effectKit } from '@kit.ArkGraphics2D';
 import { common } from '@kit.AbilityKit';
@@ -116,6 +116,28 @@ function morphEaseY(x: number): number {
     t = (lo + hi) / 2;
   }
   return morphBezierAxis(1.0, 1.0, t);
+}
+
+/**
+ * @returns 任意 `cubic-bezier(x1, y1, x2, y2)` 的 **y(x)**（与 `morphEaseY` 同一套二分反解）。
+ *
+ * 反向那条曲线是上游 `REVERSE_EASING = cubic-bezier(0.85, 0, 0.5, 0.88)`
+ * （`wujie.pa:154103-154131`）；几何逐帧驱动必须用它的真 y(x)，不能拿 `EASE_OUT_STR` 顶替。
+ */
+function bezierEaseY(x1: number, y1: number, x2: number, y2: number, x: number): number {
+  const cx: number = x < 0 ? 0 : (x > 1 ? 1 : x);
+  let lo: number = 0;
+  let hi: number = 1;
+  let t: number = cx;
+  for (let i = 0; i < 24; i++) {
+    if (morphBezierAxis(x1, x2, t) < cx) {
+      lo = t;
+    } else {
+      hi = t;
+    }
+    t = (lo + hi) / 2;
+  }
+  return morphBezierAxis(y1, y2, t);
 }
 
 /** 婵炴垶鎸撮崑鎾寸箾閸″繆鍋撳畷鍥唸闂傚倸鐗滃鈧紒妤€鎳忓顏堝磹閻旀粍甯″畷娆撴惞鐟欏嫮鏆犳繛鎴炴尪閸婃洜妲愰懜鍨鐎广儱鎳忕粋鍫ユ煥濞戞澧ｆい?`PlaybackPage.loadOnlineCoverPair`闂佹寧绋戦ˇ顓㈠焵?*/
@@ -3759,25 +3781,9 @@ export struct PlaybackPage {
     //   整条内容时间线退化成"始终停在终点"（这就是「底部控件出现过早」的真因）。
     const contentGen: number = this.expandState.beginContentTween();
     try {
-      this.getUIContext().animateTo({
-        duration: PlaybackPage.MORPH_OPEN_DURATION_MS,
-        // ★ 曲线必须是上游那条 `EASE_OUT_STR`（= `Tokens.EASE_OUT` 的字符串形式），
-        //   别用 `Curve.EaseInOut`：前者 20% 时间已到 66%、50% 到 88%（快出慢收），
-        //   后者是 S 形慢起 —— 观感上就是"封面先愣一下再飞"，与无界的"弹出去"完全不同。
-        //   `curves.cubicBezierCurve(x1,y1,x2,y2)` 与 `createAnimator({easing:'cubic-bezier(...)'})`
-        //   数学等价（都是固定 P0=(0,0)/P3=(1,1) 的三次贝塞尔；SDK：@ohos.curves.d.ts:578）。
-        curve: curves.cubicBezierCurve(0.23, 1.0, 0.32, 1.0)
-      }, (): void => {
-        // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀闁告侗浜濋～?2026-10-17闂?*闂佹椿娼块崝宥夊春濞戞氨绠?1 闂?闂佺粯鍔楅幊鎾诲吹椤曗偓楠炲秹骞樺畷鍥╋紱闂佸搫鍟版慨瀛樻叏閳哄懏鍋ㄦ慨鐟版礌閸嬫挻鎷呴悜妯煎嚱闂佽浜介崕閬嶅春瀹€鈧槐鎺楀箻鐎涙ê鐨㈡繛杈剧到缁夊爼鎮?闂佹眹鍔岀€氼參鎮ч幘顔肩倞?*闂?
-        //
-        // 闁宠棄鎳夊Σ鍕煡閸涱亝顫?2026-10-17闁?*闂傚偆鍘肩€垫﹢鏌岀仦钘夋锭闁?`morphP` 閺夆晜鐟ょ粩瀛樼▔椤忓牆娅?* 闁炽儲鏌￠埀?闁绘挆鍕剶闁哄啰濮烽弲?濞戞挴鍋撳☉?morphT 濡炵懓宕慨鈺傜▔閳ь剟宕?闁?
-        //   闁告鍠愬鐢稿礃?`applyMorphProgress(1)`闁挎稒鑹鹃悾鐘冲?*濞戞挴鍋撴繛鍡忓墲閳?*闁?`morphP` 閺夆晝鍋涢幃鎾诲礄閻樿京绉块柛蹇嬪妼閸熸捇骞嬮幇顔剧煉闁绘劗娅㈢槐?
-        //   濞存粌瀛╁Σ鎼佸箥閳ь剟寮?闁?`morphP` 闁告瑦鐗曢埀?闁汇劌瀚ǎ鎶芥偨閻旂厧娅ら柨娑樼墣閸庢寮?`pullBgIn`闁靛棔绀侀幃鍥р枔閸偉绐楅柛蹇嬪劤閻涖儵宕ｉ敐蹇曠闁革负鍔忛幑锝夊箥鐎ｎ喖浜濆☉鎾亾閻?
-        //   閻忓繗绮鹃悜锕傚礆妫颁胶鍟婄紓浣哥墢閸?闁?闁活潿鍔嶉崺娑氣偓鍦仦缁佹挳鎯冮崟鈹惧亾?*濞戞挴鍋撶€殿喒鍋撻悘蹇氶哺濡叉悂鎳楃仦鐐彲闁?/ 閻犙冨槻椤劖绋夊鍡樞︽慨婵撶到閻栬埖锛愬鍡楊棌**闁靛棗绉查埀?
-        //   闁绘粍婢樺﹢顏堝矗椤忓嫬鏅?`morphP`闁挎稑鐬奸弫?`PlayerExpandState.@Monitor('morphP')` 闂侇偅鍔曢幎姘舵煂瀹ュ洨鏆柛鎴犲С缂嶅秵绋夋惔銏＄儲闁汇垻鍠栭崳?
-        //   闁炽儲鏌￠埀?濞戞挸绨肩粭鍌氥€掗崨濠勬Ж閻?`applyPullProgress(effT())` 闁告艾鏈悗顖炲Υ?
-        this.expandState.morphP = 1;
-      });
+      // ★★★ 2026-10-18（用户第十轮：「展开过程中返回没动画」）：几何改成**逐帧**驱动
+      //   —— 与跟手那条（手指写 `applyMorphProgress`）同一个机制，理由见 `startGeoTicker()`。
+      this.startGeoTicker(0, 1, PlaybackPage.MORPH_OPEN_DURATION_MS, false);
       // ★★★ 2026-10-18：**内容时间线单独一条补间**（用户实测「进度条和下面几个控件飞入比无界早了很多」）。
       //
       // 上游是**两条**时间线，同一起点、各走各的（`_recover/logic-src/ExpandAnimation驱动与补间定稿.md:480-483`
@@ -4109,6 +4115,8 @@ export struct PlaybackPage {
     if (this.isClosing) {
       return;
     }
+    // 同 `closeFullScreenPlayback()` 那条：打开期的逐帧内容 ticker 不认关闭请求，必须先掐掉。
+    this.stopContentTicker();
     const winW: number = this.expandState.windowWidthVp;
     const winH: number = this.expandState.windowHeightVp;
     // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-17闂?*闂婎偄娲ら幊姗€濡磋箛娑欏仢濞村吋娼欏▍銈呪槈閹绢垰浜惧┑鐐叉灤閵堝懎甯梺鎼炲劚閿曪箓鎮￠埡鍕╀汗?* 闂佺偨鍎查弻锟犲焵?闁哄鏅滈悷锕€危?闁哄鏅滈弻銊ッ洪弽顓炵闁规儼濮ら敍鏂棵归崗鑲╃叝缂佹顦扮€电厧顫濋鈧紞渚€鏌熺€涙ê濮堟俊顐犲€濆畷婵嬪Ω瑜庨弳?闂佹眹鍔岀€氼剛妲愰幋锕€绀傜紒娑樻贡缁€鍡涙煥?
@@ -4265,7 +4273,6 @@ export struct PlaybackPage {
         //     闂?080闁?400闁?B 闂?10MB 缂備胶瀚忓鍥╊槴闂佹寧绋戦懟顖炲矗閳╁啰顩叉い鎰╁€曠瑧闂佽鍏涘鎺旂博閹绢喗鍎庨柡澶嬪灩缁屽潡鏌ｉ～顒€濡挎繛鐓庡暟閳ь剛鎳撻崯顐㈩潩閵婏妇鈻旂€广儱瀚粣妤呮偠濮樼厧浜滄繛鍙夌墵瀵劑鐓ù瀣壕?
         //     婵炴垶鎸搁敃锝囩博閹绢喗鍋?*濠电姵娲栫换瀣姳閳╁啯浜ゆ繛鍡楁捣椤忛亶鏌?* 闂?濠殿噯绲界换鎰板矗瑜庣粙澶愬焵椤掆偓閳诲酣鍩勯崘鈺佸晩闂佽　鍋撻柟顖嗗嫮褰滈柣蹇撶箰瀹曨剟藝閸ф鍋╂繛鍡楁捣椤忚京鈧鍠氭刊瀵告濞嗘挻鍎庨柡澶嬪灥閻撳倸鈽夐幘鎰佸剮缂佹梹娼欓埢搴ㄥ灳閸愭彃缍橀梻鍌氬亞閸樿姤鏅堕悩鍨仏妞ゆ劑鍎哄ú顒勬煟閳哄倻澹勭紒杈ㄥ哺婵?
         Logger.info(PlaybackPage.logTag, 'RzdShrinkOverlay onDone (overlay hidden, pixmap dropped)');
-        // 闁粹偓?2026-10-17闁?*濞戞挸绉撮崯鈧柛锔哄姀缁绘牠鏌?`morphLand()`** 闁炽儲鏌￠埀?濞ｅ浂鍠氶弫銈夊箣瀹勬壆鏉芥繛?
         //   闁靛棗鐬奸弫銈囧寲閼姐倗鍩犻弶鈺傛煥濞叉牠宕楅幎鑺ワ紨闁挎稑鑻慨鈺呮偨閼姐倗娉㈤柡澶屽枔濞堟垿寮捄琛″亾濞嗘帒鍓归柡鍜佸灠娴犵娀宕烽妸锔芥嫳闁哄鍎冲▓鎴烇紣濠婂棗顥忛柨娑樼灱閸斞囧触?*缂佹劒鑳堕崝褔宕ｅΟ璇茬亣闁诲繑濯芥竟?*闁靛棗绋勭槐?
         //   闁告鍠庡ú婊堟晬濮濇orphLand()` 闁硅泛锕﹀ù澶嬫媴瀹ュ洨鏋傞柟?`LANDING` 闁?`morphContainerActive()` 濞寸姴绉崇拹鐔兼儑?
         //   闁?鐟滆埇鍨硅ぐ澶屸偓鍦嚀濞呮帞绱掕閻㈣崵鎮?`morphClipHeight()` 閻熶椒鐒﹂崹姘▔閳ь剟寮舵幊閳ь兛姊桵eshCoverBg` 闂侇叏绲肩粩瀵镐沪閸屾繄顎€闁活偀鍋撻悶姘煎亯椤ュ棝骞?闂佹彃绉寸紓?
@@ -4278,6 +4285,12 @@ export struct PlaybackPage {
         shrink.clearPixmap();
         // 濠电偞鎯岄崰鏍儑娴兼潙缁╅悹楦挎閸熸煡鏌ㄥ☉妯煎濠?50ms闂佹寧绋戦ˇ顔剧不閿濆瑙﹂幖绮光偓铏珒闂佽　鍋撻柟顖嗗懐锛涢梻鍌氬€归幃鍌毼涢鍕櫖婵﹩鍙庨崝鈧柣銏╁灡閻℃洟鎯岄幆褜鍤楅柛鏇ㄤ簽閻熸捇姊洪銊хɑ婵＄偛鍊归妵鍕偨閸涘﹥銆冮梺鍝勫暊閺呮盯宕欓敍鍕仏?pop闂?
         // 闁哄鏅滈悷銈囩博閹绢喖鐭楅柕澶堝劚濞懷囨煛?婵炴垶鎸稿ú锝囩博閺夋垟鏌?pop 闂?闂佹眹鍔岀€氼垶宕靛鍫濈疀闁割偒鍓涚粈鍕煕濮橆剝瀚伴柕鍥ㄥ灩閹峰綊濡烽敂鑺ユ闂佹眹鍔岀€氼噣骞冩繝鍥ㄥ仺闁规彃顑囩粈鍡涙煏?
+        // ★★★ 2026-10-18（用户第十轮：「收起过程中按钮/封面还是两个」）：
+        //   上游 `shrink.start` 的 onDone 是 **两件事**（`wujie.pa:154940-154949`）：
+        //   `miniHidden = false` + `shrinkPixmap = undefined`。
+        //   我们原来只做了后者 ⇒ 真迷你条从"快照起飞"到"快照落位"这一段**一直是画着的**，
+        //   屏上就同时有「飞行中的快照里那颗封面/那排按钮」+「真条那颗/那排」= 两份。
+        this.expandState.endSnapshotShrink();
         this.isClosing = false;
       });
       PlaybackPage.ev('SQZ', `shrink win=${winW.toFixed(0)}x${winH.toFixed(0)}`);
@@ -4340,6 +4353,13 @@ export struct PlaybackPage {
     if (this.isClosing) {
       return;
     }
+    // ★★★ 2026-10-18（用户：「展开过程中按返回**没有动画**」）：
+    //   打开期的那条内容时间线是**逐帧 ticker**（见 `startContentTicker()`），它一直按自己的起点
+    //   写到 560ms 为止、**不认**关闭请求 ⇒ 反向一开始就被它把 `contentP` 又顶回 1
+    //   （底栏/传输行/背景全停在展开值），容器缩、内容不缩 = 看着像"没动"。
+    //   上游只有**一条** `morphT`，`animateMorphT(reverseMs, 0, …)` 就是把它就地重定向
+    //   ⇒ 这里必须先掐掉那条 ticker，反向才真的是反向。
+    this.stopContentTicker();
     // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-16闂?*缂?闂佺绻戞繛濠偽涚€涙ɑ濯存繛鍡樺姇閻ㄥ墽绱掗幇顓ф當鐟?闂佺儵鏅滈悧婊堟偟?闂佺偨鍎查弻锟犲焵?闁哄鏅滈悷銈囩博鐎靛憡鍋橀悘鐐靛亾绗戞繛鎴炴尭閿曪絿绮╃€涙ɑ濮滄い鏃傛櫕绾偓闂佺懓鎼ˇ鍗炩枔?*闂?
     //   闁?`lastCloseAtMs` 闂佹眹鍔岀€氼參寮悙鐑樼厒濠电姴绻掔粣妤呮煕閹邦剚鍣规い鏃€鍔楁禒?`.onAppear()` 闂佹眹鍔岀€氼剟宕㈢憴鍕劅闁哄洨鍋涢悗濠氭煛閳ь剟顢涢悙瀛樼ギ闁诲海鎳撻崯顐﹀垂娴犲妫?
     //   "闁哄鏅滈悷銈囩博閺夋垟鏋庨柍銉ュ暱濮ｅ鏌ｅ鍕棆婵炲牊鍨块幊鐐哄磼濠婂啩鍖栭梺鍝勫閸垳绮径鎰強妞ゆ牗鑹鹃悘鐘绘煙闂堟稓效闁稿鎳庨埢搴ㄥ灳閸愭彃缍橀梻鍌氬亞閸樻儳鈻撻幋鐐村婵炲棙鍔曢惃?闂?*闂佸憡鐟禍婊冿耿椤忓懏浜ゆ繛鍡樻尭濞咃繝鏌涢幇顓犳噣闁逞屽厸缁舵岸宕戦崨瀛樼厒鐎光偓閸愭儳娈?*闂?
@@ -4506,27 +4526,13 @@ export struct PlaybackPage {
         `coverClone=${this.expandState.morphOverlayBridging()} ` +
         `realCover=${this.expandState.realCoverVisible()}`);
       const gen: number = this.expandState.morphGen;
-      this.getUIContext().animateTo({
-        duration: morphCloseMs,
-        curve: curves.cubicBezierCurve(0.85, 0, 0.5, 0.88)
-      }, (): void => {
-        // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀闁告侗浜濋～?2026-10-17闂?*闂佹椿娼块崝宥夊春濞戞氨绠?2闂? 闂?闂佺绻戞繛濠偽涢幘顔肩睄闁绘ɑ褰冭闂佹眹鍨洪惇褰掑焵椤戣法顦﹂柣銊︾箞濡啴濮€閵忥紕鍑介梺瑙勪航閸庢壆绮崨鏉戝偍?闂佹眹鍔岀€氼參鎮ч幘顔肩倞?*闂?
-        //   婵?`playMorphOpenIntro` 闂備緡鍙忕徊鑲╃博鐎涙ê绶?*闁诲海鎳撻懟顖炲矗韫囨稑瑙﹂悘鐐跺亹椤忓崬鈽夐幙鍐ч偗闁轰礁锕﹂幏?*闂佹寧绋戦悧鍡涘箖閹惧鈻旈柍褜鍓濋妵鎰板閵忕姌锔剧磼?2 婵犮垼娉涚€氬摜妲愬鑸垫櫖?
-        //   闂佸憡顭囬崰鎰焽閻㈢鍙?`UIUtils.applySync(() => applyMorphProgress(0))` 闂佺偨鍎查弻锟犲焵?闂?`animateTo` 闂佹眹鍔岀€氭澘螞閹绢喖绀岄柛娑欐綑濞?
-        //   闂佸憡鑹鹃張顒勵敆閻愬搫绀嗛梺鍨儐閻撯偓闂佺儵鏅╅崰妤呮偉閿濆纾?闂?**闁荤偞绋忛崕闈浳涚捄銊﹀仏妞ゆ劑鍎抽崕鏌ュ级?* 闂?闁诲繐绻嬬欢姘焽娴煎瓨鍎庨悗娑櫭径宥夋煢閳ь剟鎸婃径濠勫帓缂傚倷绀侀悧蹇涘磻閿濆鏅?闂佺儵鏅涢悺銊ф暜鐎涙鈻旈悗锝庝簻缁犻潧霉?/ 闂佺儵鏅涢悺銊ф暜閹绢喖绀嗛柡澶庢硶濮ｅ牓鏌涢敃鈧Λ妤呮嚋?闂佹寧绋戦ˇ顓㈠焵?
-        //   婵炴垶鎸搁敃銉╂偉閸洖绀傞柟鎯板Г閿涙棃姊洪銊у缂佹柨鐡ㄧ粭鐔活檪缂佽鲸鐛媋nimateMorphT(reverseMs, 0, REVERSE_EASING)`闂佹寧绋戦ˇ顖炲箖閹捐鍐€鐎瑰嫭婢樺☉褔鏌涢幇顓犳噮婵炶弓鍗冲浠嬪炊瑜夐崑鎾剁箔鐞涒€充壕?
-        //   闂佸疇娉曟刊瀵哥箔?闁荤姍鍥舵闁稿缍侀弫宥夊醇閵忥紕銈叉繛?+ 闂佸憡鍔樺畷鐢靛垝閵娾晛绀勯柣妯夸含缁夊潡鏌ㄥ☉姗嗘█闁稿鎳忕粙澶愬焵椤掆偓閳?*婵炲濮寸粔鍫曞礉?*闂?`applySync`闂佹寧绋戦悧鎰帮綖閸℃稑瀚夋い鎺嗗亾闁搞倝浜跺顐ｏ紣娴ｈ櫣鎲梻鍌氱墑閸ㄤ粙宕戦崨顔肩窞?:3729闂佹寧绋戦ˇ顐﹀焵椤掍焦鐓涢柍?
-        //     闂備緡鍙忕徊鎯?闁荤偞绋忛崕闈浳涢幐搴ｂ枙閻庯綆浜滈·?闂佹眹鍔岀€氼參顢楀鍛厹妞ゆ梻鍋撻弳蹇旂箾婢跺绌跨紒?*婵炴垶鎸哥粔鐑姐€?*婵炴垶鎸撮崑鎾绘偣瑜嶉崲鏌ュ垂瑜版帒绠冲璺虹墐閸?
-        // 闁宠棄鎳夊Σ鍕煡閸涱亝顫?2026-10-17闁挎稑鐗呯粭宀勫箥閹惧磭纾婚梺顓ㄧ导缁斿瓨绗熻閹挻绋夐埀顒勫级閳藉懐绐?*闂傚偆鍘肩€垫﹢鏌岀仦钘夋锭闁?`morphP`**闁?
-        //   `applyMorphProgress(0)` 濞村吋鐭粩鏉戔枎閳╁啠鍋撹婵℃悂宕欓悩杈╃Э+婵炴彃澧介弫鎾绘煂韫囨挸鏅搁柟瀛樺姉缁捇鎮?闁?闁煎啿鏈▍?`pullBgIn` 閻犙囨敱婢ф粎浜?0
-        //   闁?闁稿繑濞婂Λ瀵告崉椤栨瑧鐟?闁告瑯浜滄晶鎸庢償閺囩偤鐛撻柤?闁挎稑鏈婊堝及椤栨粍鏆忛柟鏉戝槻閻ゅ嫬霉鐎ｎ剚鐣遍柕鍡楄嫰閸櫻囨⒒椤撶喐顦ч柤鍐叉湰濞呮瑩宕ｅ鈧划锕傚Υ瀹ュ啠鍋?
-        //   闁绘粍婢樺﹢顏堝矗椤忓嫬鏅搁柣鈺婂枟閻栵綁宕愮涵椋庣`@Monitor('morphP')` 闂侇偅鍔曢幎姘舵煂瀹ュ洨鏆?闁?闁煎啿鏈▍娆忊柦?`pullBgIn` 妤犵偠娅曠划锕€菐閳ュ啿姣夐柕?
-        this.expandState.morphP = 0;
-        // ★ 2026-10-18：**内容时间线在同一个 animateTo 里一起写 0**（不另起一条）。
-        //   上游关闭那条 `animateMorphT(reverseMs, 0, REVERSE_EASING)` 驱动的是同一条 `morphT`
-        //   ⇒ 内容窗口与几何共用这条 `460 × max(0.4, morphT)` + `REVERSE_EASING`，两层天然同步。
-        this.expandState.contentP = 0;
-      });
+      // ★★★ 2026-10-18（用户第十轮：「展开过程中系统返回**直接没动画了**」）：反向也走逐帧
+      //   —— `animateTo` 只把状态变量一次写成终点，几何的写入口是**异步**的 `@Monitor('morphP')`，
+      //   于是"反向"没有可插值的旧值→新值，一帧跳完。上游 `animateMorphT(0, reverseMs, REVERSE_EASING)`
+      //   （`wujie.pa:154103-154131`）是 `createAnimator + onFrame(v) => morphT = v`，逐帧写真进度。
+      //   `morphBeginLeaving()` 已 `cancelContentTween()` ⇒ `applyMorphProgress` 会同时驱动内容窗口，
+      //   两层共用这一条 `460 × max(0.4, morphT)` + REVERSE_EASING（不再另写 `contentP`）。
+      this.startGeoTicker(closeFromT, 0, morphCloseMs, true);
       this.closeSettleTimer = setTimeout((): void => {
         this.closeSettleTimer = -1;
         if (!this.isAlive) {
@@ -5475,7 +5481,7 @@ export struct PlaybackPage {
               //        闂佸憡鍔曠粔鍫曞极鏉堛劎鐝堕柛鎰皺濠€鎾⒑椤撱劎瀵肩紒鏃€娼欒灋闁圭儤顨忓Λ褔鏌涢妷褍浠滄?闂?闁诲繐绻楁ご绋课ｉ崨濠冨闁绘ê鐏氱粻娆撴煕閹烘挸顥嬫繛?闂佺绻愰悧濠勫垝閿旂晫鈻旈柍褜鍓欓埢鎾跺枈婢跺瞼顦梺缁樺笩濞夋盯骞冨Δ鍛鐎广儱顦藉Λ褔鏌涢妷褍浠滄?闂?
               //   闂佸疇娉曟刊瀵哥箔?`closeWithAnimation()` 闂佺厧顨庢禍婊堟偨椤愶絿鈻旈柕鍫濇喘閻涙捇鏌涜箛鏃傜煀缂併劍濞婇弫宥夊醇閿濆懎甯梺鎼炲劚閿曪箓鎮￠埡鍕╀汗?缂備焦鍔栭〃鍛般亹濞戞矮鐒婇柛婵嗗閸ょ喎鈽夐幘宕囆㈢憸鐗堢叀閹粙濡搁敐鍌氫壕濞达絽鎲¤ぐ銉╂煟閹炬鍟ㄦ禍濂告偣閹扳晛鍔电紒?
               //     闂?闂備緡鍠楅崹婵堢箔婢跺顕辨慨姗嗗幖鎯熼梺鍦檸閸樹粙寮担骞夸簻闂傚牊绋戦獮銏犆归敐鍛疄闁?
-              this.closeWithAnimation();
+        this.expandState.requestCollapse();
             }
           })
             .padding({
@@ -5592,7 +5598,7 @@ export struct PlaybackPage {
           isShowPlay: this.state.isShowPlay,
           onBackClick: (): void => {
             // 闂?闂佸憡鑹炬總鏃傜箔閸岀偞鏅柛顐犲灩瀵箖鏌熺喊鍗炲婵☆偁鍊濋幃鎯х暆鐎ｎ剛鐛ラ梻鍌氱墢閸嬬偞鏅跺鍫濈闁割煈鍠栬ぐ鐘绘⒒?= 闂婎偄娴傞崑鍡涘矗鎼淬劌缁╅柛鎾茶兌缁辨岸鏌ㄥ☉妯侯殭缂佹顦靛浼搭敍濞戞瑣浠ф俊鐐€濆褔鎳滄导鏉戠煑婵鐗忕粈?
-            this.closeWithAnimation();
+        this.expandState.requestCollapse();
           }
         })
           .padding({
@@ -6362,6 +6368,74 @@ export struct PlaybackPage {
 
   // ═══════════ 内容时间线的**逐帧驱动**（对齐上游 `animateMorphT` 的 `onFrame`） ═══════════
   //
+  // ★★★ 2026-10-18（用户第十轮：「展开过程中系统返回**直接没动画了**；无界是动画结束才返回」）：
+  //   真因是**几何**那条也犯了和下面 `contentP` 一样的毛病 —— `playMorphOpenIntro()` 里
+  //   `animateTo({duration:560}, () => { morphP = 1 })` 的闭包把 `morphP` **一次写成 1**，
+  //   于是数据面上"进度"从第一帧就是 1：
+  //     · `closeFullScreenPlayback()` 的 `closeFromT = morphP` 恒 **1.000** ⇒ 反向时长恒 `460×1`；
+  //     · `actionsOpacityAt(1) = clamp(1 − 1/0.20) = 0` ⇒ 克隆层按钮"从全灭直接硬跳全亮"（观感＝两份按钮）；
+  //     · 反向那条 `animateTo` 只是把已经到位的终点值再写回胶囊值，**没有真进度可插值**。
+  //   上游只有**一个** `morphT`：`createAnimator + onFrame(v) => morphT = v`（`wujie.pa:145608-145661`），
+  //   跟手 / 点击打开 / 反向**三条路共用它**；本仓跟手那条（手指写 `applyMorphProgress`）明明是好的，
+  //   所以点击打开与反向也改成**同一个逐帧驱动**：几何从 `animateTo` 换成 ticker。
+  //   ⚠️ 不要退回 `animateTo`：一旦退回，`morphP` 在数据面上就又是"终值"，反向必然拿不到起点。
+  private static readonly GEO_TICK_MS: number = 16;
+  private geoTickTimer: number = -1;
+  private geoTickGen: number = 0;
+  private geoAtMs: number = 0;
+  private geoFrom: number = 0;
+  private geoTo: number = 0;
+  private geoDurMs: number = 1;
+  /** 曲线选择：`false` = `EASE_OUT_STR(0.23,1,0.32,1)`（打开）；`true` = `REVERSE_EASING(0.85,0,0.5,0.88)`。 */
+  private geoReverseCurve: boolean = false;
+
+  /**
+   * 起几何逐帧补间：`morphP` 从 `from` 走到 `to`，每 16ms 写真进度（上游 `animateMorphT` 的等价物）。
+   * @param from 起点进度（跟手/反向就是"此刻的真实进度"）
+   * @param to 终点进度（打开 1、关闭 0）
+   * @param durMs 时长（ms；`<= 0` 直接落位）
+   * @param reverseCurve 是否用反向曲线
+   */
+  private startGeoTicker(from: number, to: number, durMs: number, reverseCurve: boolean): void {
+    this.stopGeoTicker();
+    this.geoTickGen = this.geoTickGen + 1;
+    const gen: number = this.geoTickGen;
+    this.geoFrom = from;
+    this.geoTo = to;
+    this.geoDurMs = durMs > 0 ? durMs : 1;
+    this.geoReverseCurve = reverseCurve;
+    this.geoAtMs = Date.now();
+    if (durMs <= 0) {
+      this.expandState.applyMorphProgress(to);
+      return;
+    }
+    this.geoTickTimer = setInterval((): void => {
+      if (gen !== this.geoTickGen || !this.isAlive) {
+        this.stopGeoTicker();
+        return;
+      }
+      const raw: number = (Date.now() - this.geoAtMs) / this.geoDurMs;
+      const x: number = raw < 0 ? 0 : (raw > 1 ? 1 : raw);
+      const eased: number = this.geoReverseCurve ?
+        bezierEaseY(0.85, 0, 0.5, 0.88, x) : morphEaseY(x);
+      this.expandState.applyMorphProgress(this.geoFrom + (this.geoTo - this.geoFrom) * eased);
+      if (x >= 1) {
+        this.stopGeoTicker();
+      }
+    }, PlaybackPage.GEO_TICK_MS);
+    Logger.info(PlayerExpandState.LOG_TAG,
+      `RzdMorphGeoTick start gen=${gen} from=${from.toFixed(3)} to=${to} ms=${this.geoDurMs} ` +
+        `curve=${reverseCurve ? 'REVERSE_EASING(0.85,0,0.5,0.88)' : 'EASE_OUT_STR(0.23,1,0.32,1)'}`);
+  }
+
+  /** 停掉几何逐帧补间（幂等）。 */
+  private stopGeoTicker(): void {
+    if (this.geoTickTimer >= 0) {
+      clearInterval(this.geoTickTimer);
+      this.geoTickTimer = -1;
+    }
+  }
+
   // ★★★ 2026-10-18（同一条反馈的**真因**）：
   //   上游 `MainPage.animateMorphT(to, ms, easing, onDone)`（`wujie.pa:145608-145661`）是
   //   `createAnimator(... primaryAnimator)` + **`onFrame(v) => morphT = v`** —— 每帧写真进度，
