@@ -2013,7 +2013,12 @@ struct Index {
           //   （`wujie.pa:66221-66330`）；本仓 `HomeMiniBarAlbumCover` 用 `capsuleHeightVp`
           //   接住这个数，`HomeMiniBarPlayer` 用 `sidePad = (胶囊高 − 视觉封面)/2 = 5.6` 保证
           //   「视觉左边距 ≡ 上/下留白」。⇒ 旧的 `coverSideVp`（宿主按档位传 40/30/44）已删除。
-          contentHeightVp: FLOATING_MINI_BAR_HEIGHT_VP,
+          // ★★★ 2026-10-18（照搬上游：**不钉高度**）：
+          //   上游 `capsuleH = searchOpen ? SEARCH_MINI_H : undefined`（`wujie.pa:157276-157283`）⇒
+          //   常态 `undefined`，`Row.height(undefined)` 由 **HDS 槽**给高度；
+          //   封面再按**量测到的**槽高算 `coverScale2 = capsuleH×0.8/32`（`:66289-66327`）。
+          //   ⛔ 钉成常量 56 会让两排/单排都变成同一个高度 ⇒ 封面永远 44.8（用户：双行态显示了大封面）。
+          contentHeightVp: 0,
           // ★ 2026-10-21（第八轮）：封面机制换成上游"32 盒 × `scale(1.4)`"，
           //   `视觉封面 = 胶囊高 × 0.8 = 44.8`、`sidePad = (胶囊高 − 视觉封面)/2 = 5.6`
           //   全部由 `HomeMiniBarPlayer` 自己算 ⇒ 宿主**不再**传 `coverSideVp`（该参数已删除）。
