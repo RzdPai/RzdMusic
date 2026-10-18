@@ -37,7 +37,7 @@ import {
   PlayerExpandState,
   MorphDrive,
   MorphMetaBridge,
-  // 閳?2026-10-17閿涘牏鍙庨幖顒佹￥閻?`MainPage.__shrink`閿涘绱伴棃鐐村閸斿灝鍙ч梻顓犳畱韫囶偆鍙庨弨鍓佺級濞搭喖鐪伴悩鑸碘偓?
+  // 鈽?2026-10-17锛堢収鎼棤鐣?`MainPage.__shrink`锛夛細闈炴墜鍔垮叧闂殑蹇収鏀剁缉娴眰鐘舵€?
   MorphShrinkState,
   RouterUrlConstants,
   SdkApiUtil,
@@ -55,7 +55,7 @@ import { dispatchShellPlaybackIntent, LXSourceHost, PlaybackPage, PlaybackPageCo
   prewarmCurrentSongMesh } from 'player';
 import { RecommendPage } from 'recommendation';
 import { EchoReviewPage } from 'recommendation';
-// 閵嗗瞼骞囬崷銊ユ皑閸氼兙鈧稄绱版惔鏇熺埉缁?2 娑擃亪銆夌粵鎾呯礄閹恒劏宕?/ **閻滄澘婀亸鍗炴儔** / 閸ョ偛鎼?/ 閹存垹娈戦敍澶堚偓?
+// 銆岀幇鍦ㄥ氨鍚€嶏細搴曟爮绗?2 涓〉绛撅紙鎺ㄨ崘 / **鐜板湪灏卞惉** / 鍥炲搷 / 鎴戠殑锛夈€?
 import { NowPlayingFeedPage } from 'recommendation';
 import {
   CAPSULE_SLACK_H,
@@ -66,15 +66,15 @@ import {
   PlaylistTransitionOverlay
 } from 'playlist';
 import { MinePage } from 'setting';
-// 閺傜増膩閸ф绱伴張顒€婀撮棅鍏呯閿涘牆顕遍崗銉啎婢跺洭鐓舵０鎴濆煂濞屾瑧顔堥敍澶夌瑢濞叉盯娲╅崥灞绢劄鐎广垺鍩涚粩顖樷偓?
-// 閳跨媴绗?hvigor 鐎?HAR 閺?*閹稿绱╅悽銊х椽鐠?*閻ㄥ嫸绱板▽鈩冩箒娴犺缍嶆禒锝囩垳 import 鐎瑰啩婊戦弮璁圭礉
-//    閸楀厖濞囧鑼鐠佹媽绻?build-profile.json5閿涘矁绻栨稉銈勯嚋濡€虫健娑?*娑撳秳绱扮悮顐ょ椽鐠?*閿涘牊鐎铏瑰弾閺嶉璞㈤敍澶堚偓?
-//    閹碘偓娴犮儴绻栭柌宀€娈?import 閸氬本妞傞幍鎸庡"閸氼垰濮╅崚婵嗩潗閸?閸?閹跺﹤鐣犻幏澶庣箻閺嬪嫬缂撻崶?娑撱倓閲滄担婊呮暏閵?
+// 鏂版ā鍧楋細鏈湴闊充箰锛堝鍏ヨ澶囬煶棰戝埌娌欑锛変笌娲涢洩鍚屾瀹㈡埛绔€?
+// 鈿狅笍 hvigor 瀵?HAR 鏄?*鎸夊紩鐢ㄧ紪璇?*鐨勶細娌℃湁浠讳綍浠ｇ爜 import 瀹冧滑鏃讹紝
+//    鍗充娇宸茬櫥璁拌繘 build-profile.json5锛岃繖涓や釜妯″潡涔?*涓嶄細琚紪璇?*锛堟瀯寤虹収鏍风豢锛夈€?
+//    鎵€浠ヨ繖閲岀殑 import 鍚屾椂鎵挎媴"鍚姩鍒濆鍖?鍜?鎶婂畠鎷夎繘鏋勫缓鍥?涓や釜浣滅敤銆?
 import { localMusic } from 'localmusic';
 import type { MatchSongInfo } from 'localmusic';
 import { syncManager } from 'sync';
-// 濮濆本娲哥拠鍕啈閿涘牆鍞寸純顔奸挬閸欐媽鐦庣拋鐚寸礆閿涙艾鎯庨崝銊︽閹跺鈧本婀伴崷浼寸叾娑?-> 楠炲啿褰撮煬顐″敜閵嗗秶娈戠憴锝嗙€藉▔銊ュ斀鏉?comment閿?
-// 鏉╂瑦鐗辩拠鍕啈闂堛垺婢橀弮銏ｅ厴閻婀痪鎸庣摃閻ㄥ嫯鐦庣拋鐚寸礉娑旂喕鍏橀惇瀣拱閸︾増鐡曢敍鍫濆爱闁板秷绻冮惃鍕亝娴滄冻绱氶惃鍕槑鐠佹亽鈧?
+// 姝屾洸璇勮锛堝唴缃钩鍙拌瘎璁猴級锛氬惎鍔ㄦ椂鎶娿€屾湰鍦伴煶涔?-> 骞冲彴韬唤銆嶇殑瑙ｆ瀽娉ㄥ唽杩?comment锛?
+// 杩欐牱璇勮闈㈡澘鏃㈣兘鐪嬪湪绾挎瓕鐨勮瘎璁猴紝涔熻兘鐪嬫湰鍦版瓕锛堝尮閰嶈繃鐨勯偅浜涳級鐨勮瘎璁恒€?
 import { setCommentTargetResolver } from 'comment';
 import type { CommentSongRef } from 'comment';
 import { HdsBarLayoutMode, HdsBarStyle, HdsTabs } from '@hms.hds.hdsBaseComponent';
@@ -82,200 +82,200 @@ import { BusinessError, deviceInfo } from '@kit.BasicServicesKit';
 import { common } from '@kit.AbilityKit';
 
 /**
- * 娴滃瞼楠囨い鐢告桨閹剚璇炴潻铚傜稑閺夛紕娈戦崶鍝勭暰妤傛ê瀹抽敍鍧磒閿涘鈧?
+ * 浜岀骇椤甸潰鎮诞杩蜂綘鏉＄殑鍥哄畾楂樺害锛坴p锛夈€?
  *
- * **娑撳酣顩绘い闈涚俺閺嶅繘鍣烽柇锝嗘蒋娑撯偓閼疯揪绱?6閿?*閿涙艾鐨濋棃?44閿涘潉HomeMiniBarAlbumCover.coverSideLengthVp()` 鐢瓕顫夐幀渚婄礆
- * + 娑撳﹣绗呴崥?6vp 閸愬懓绔熺捄婵勨偓鍌滄暏閹寸柉顩﹀Ч鍌欑癌缁狙囥€夐棃顫瘍閻劊鈧奔瀵屾い鐢稿亝娑擃亪鐝稉鈧悙鍦畱閵嗗稄绱濇稉宥呭晙閻?30vp 鐏忎線娼伴惃鍕叝閼宠泛娉妴?
- * 鐎瑰啯妲搁幘顓熸杹妞ら潧鑸伴崣妯兼畱鐠ч鍋ｉ敍灞藉殤娴ｆ洖褰ч梾蹇氱箹娑撯偓婢跺嫬鐖堕柌蹇撳綁閸栨牭绱欓崚顐㈠晙閹稿顩绘い闈涘礋閹?閸欏本甯撻崢璇插З鐎瑰喛绱氶妴?
+ * **涓庨椤靛簳鏍忛噷閭ｆ潯涓€鑷达紙56锛?*锛氬皝闈?44锛坄HomeMiniBarAlbumCover.coverSideLengthVp()` 甯歌鎬侊級
+ * + 涓婁笅鍚?6vp 鍐呰竟璺濄€傜敤鎴疯姹備簩绾ч〉闈篃鐢ㄣ€屼富椤甸偅涓珮涓€鐐圭殑銆嶏紝涓嶅啀鐢?30vp 灏侀潰鐨勭煯鑳跺泭銆?
+ * 瀹冩槸鎾斁椤靛舰鍙樼殑璧风偣锛屽嚑浣曞彧闅忚繖涓€澶勫父閲忓彉鍖栵紙鍒啀鎸夐椤靛崟鎺?鍙屾帓鍘诲姩瀹冿級銆?
  */
 const FLOATING_MINI_BAR_HEIGHT_VP: number = 56;
 
 /**
- * 鈽?2026-10-20锛氳繖涓父閲?*宸蹭笉鍙備笌甯冨眬**锛堜繚鐣欏父閲忔湰韬彧涓轰笉鏂帀鍘嗗彶寮曠敤锛夈€?
+ * ★ 2026-10-20：这个常量**已不参与布局**（保留常量本身只为不断掉历史引用）。
  *
- * 瀹冨師鏈槸"鐚?HDS 缁?tabBar 鐨勬Ы楂?閭ｅ鍐欐硶鐨勬姢鏍忥紙`LayoutPolicy.matchParent` +
- * `constraintSize.maxHeight`锛夈€傜涓夎疆鎶婂唴瀹圭洅鏀规垚"鈮?鑳跺泭鐩?锛堢敱
- * {@link MiniBarMaterialCapsule} 鐨?`barWidth 脳 barHeight` 鍞竴纭畾锛変箣鍚庯紝
- * **鍐嶄篃娌℃湁"妲介珮"杩欎釜閲?*锛屼篃灏辨病鏈?鎾戠垎"鐨勫彲鑳姐€?
- * 鈿狅笍 涓嶈鍐嶆妸瀹冩帴鍥炰换浣?`constraintSize`锛氶偅绛変簬鎶?鐚滄Ы楂?璇峰洖鏉ャ€?
+ * 它原本是"猜 HDS 给 tabBar 的槽高"那套写法的护栏（`LayoutPolicy.matchParent` +
+ * `constraintSize.maxHeight`）。第三轮把内容盒改成"≡ 胶囊盒"（由
+ * {@link MiniBarMaterialCapsule} 的 `barWidth × barHeight` 唯一确定）之后，
+ * **再也没有"槽高"这个量**，也就没有"撑爆"的可能。
+ * ⚠️ 不要再把它接回任何 `constraintSize`：那等于把"猜槽高"请回来。
  */
 const FLOATING_MINI_BAR_SLOT_MAX_HEIGHT_VP: number = 80;
 
-/** 娴滃瞼楠囨い鐢告桨閹剚璇炴潻铚傜稑閺夆€虫躬鐎硅棄鐫嗘稉瀣畱閺堚偓婢堆冾啍鎼达讣绱檝p閿涘绱伴懗璺烘抄娑撳秷顕氶柧鐑樺姬閺佺繝閲滈獮铏緲/濡楀矂娼扮粣妤€褰涢妴?*/
+/** 浜岀骇椤甸潰鎮诞杩蜂綘鏉″湪瀹藉睆涓嬬殑鏈€澶у搴︼紙vp锛夛細鑳跺泭涓嶈閾烘弧鏁翠釜骞虫澘/妗岄潰绐楀彛銆?*/
 const FLOATING_MINI_BAR_MAX_WIDTH_VP: number = 560;
 
 /**
- * 杩樻病閲忓埌绐楀彛瀹斤紙棣栧抚锛夋椂杩蜂綘鑳跺泭鐨?*淇濆畧鍏滃簳瀹藉害**锛坴p锛夈€?
+ * 还没量到窗口宽（首帧）时迷你胶囊的**保守兜底宽度**（vp）。
  *
- * 鈽呪槄鈽?2026-10-20锛堢鍏疆锛屼慨銆屼簩绾ч〉鎾斁鏉″彸渚ц鍒囥€嶇殑绗竴鏉＄‖鍥狅級锛?
- * 鏃у€兼槸**纭繑鍥?336**锛岃€岃兌鍥婄洅瀹?= `336 + CAPSULE_SLACK_W(10) = 346` 鈬?
- * 浠讳綍绐楀彛瀹?< 360vp 鐨勫満鍚堬紙鎶樺彔灞忓灞?/ 搴旂敤灏忕獥 / 鍒嗗睆涓嬬獥锛変笂锛岀洅姣旂獥鍙ｈ繕瀹?鈥斺€?
- * 鐩掓槸灞呬腑鐨?鈬?**涓や晶鍚屾椂鍑虹晫**锛涜€屽彧瑕佺洅鏄彸閿氱殑锛堥椤甸偅鏉＄敤 `Alignment.BottomEnd`锛夛紝
- * 琛ㄧ幇灏辨槸銆屽乏杈规甯搞€佸彸杈硅灞忓箷鍙崇紭鍒囨帀銆嶃€?20 + 10 = 330 钀藉湪鏈€灏忕殑鎵嬫満绐楀涔嬪唴銆?
+ * ★★★ 2026-10-20（第六轮，修「二级页播放条右侧被切」的第一条硬因）：
+ * 旧值是**硬返回 336**，而胶囊盒宽 = `336 + CAPSULE_SLACK_W(10) = 346` ⇒
+ * 任何窗口宽 < 360vp 的场合（折叠屏外屏 / 应用小窗 / 分屏下窗）上，盒比窗口还宽 ——
+ * 盒是居中的 ⇒ **两侧同时出界**；而只要盒是右锚的（首页那条用 `Alignment.BottomEnd`），
+ * 表现就是「左边正常、右边被屏幕右缘切掉」。320 + 10 = 330 落在最小的手机窗宽之内。
  */
 const FLOATING_MINI_BAR_FALLBACK_WIDTH_VP: number = 320;
 
 /**
- * 鎼存洘鐖妴宀€骞囬崷銊ユ皑閸氼兙鈧秹鍋呮稉鈧い鐢垫畱妞ょ數顒锋稉瀣垼閵?
+ * 搴曟爮銆岀幇鍦ㄥ氨鍚€嶉偅涓€椤电殑椤电涓嬫爣銆?
  *
- * 閳?閻劍鍩?2026-10-15閿涘牆寮懓鍐ㄦ禈鐎佃鐦敍澶涚窗**鏉╂瑤绔存い浣冾洣閹跺﹥璇為崝銊ョ俺閺嶅繋绗傞弬褰掑亝閺夆€崇毈閹绢厽鏂侀弶鈩冩殻閺壜ゆ閹?*
- *   閳ユ柡鈧?閸欏倽鈧啫娴橀柌?Tab 閺嶅繋绠ｆ稉濠傚涧閺堝绔寸悰宀冪箻鎼达讣绱欏锕€缍嬮崜宥嗘闂?/ 娑擃厾绮忛弶?/ 閸欒櫕鈧粯妞傞梹鍖＄礆閿涘本鐥呴張澶庣碃娴ｇ姵娼妴?
- *   閹碘偓娴犮儲婀版い闈涗粵娑撳娆㈡禍瀣剁礄**閹烘帒绔峰Ο鈥崇础娑撯偓娑擃亜鐡ч柈鎴掔瑝閸?*閿涘矁顫?`barLayoutModeForHds()` 閻ㄥ嫭鏁為柌濠忕礆閿?
- *   閳?{@link miniBar} 閺夆€叉濞撳弶鐓?閳?闁絾娼潻铚傜稑閺夛紕娈戦崘鍛啇娑撹櫣鈹栭敍瀛扗S 閹稿鍞寸€瑰綊鍣烘?閳?**濞屸剝婀侀柇锝勭閹?*閿?
- *   閳?{@link miniBarStyleForHds} 閹帒娲?`COLLAPSE` 閳?閸楀厖绌堕悽銊﹀煕濮濄倕澧犻幎濠呯碃娴ｇ姵娼仦鏇炵磻鏉?
- *      閿涘潉miniBarExpanded === true`閿涘绱濋張顒勩€夋稊鐔剁瑝娴兼氨鏁鹃崙杞扮閺夆€崇潔瀵偓閻?*缁?*閺嶅骏绱?
- *   閳?`enableMiniBarBackground` 閸︺劍婀版い鍏歌礋 false 閳?娑撳秳绱伴悾娆庣瑓娑撯偓閺嬫氨鈹栭懗璺烘抄閼冲本婢橀妴?
- * 閳跨媴绗?**娑撳秷顩?*閺€鍦暏 `barLayoutMode = HORIZONTAL`閿涘牐鐦潻鍥风礉閻喐婧€閸欏秹顩?tab 閺嶅繒鐓稉鈧幋?閿涘绱?
- *   闁絼閲滃Ο鈥崇础閺?妞ょ數顒锋稉搴ょ碃娴ｇ姵娼?*楠炶埖甯?*"閿涘矁绯犳担鐘虫蒋缁岃櫣娼冮弮鍫曘€夌粵鍙ョ窗鐞氼偅灏嬮崚鏉夸箯鏉堝箍鈧礁褰哥粩顖溾敄閸戣桨绔撮弽绗衡偓?
- * 閳跨媴绗?妞ゅ搫绨稉?`HomeTabsPages()` 闁?`TabContent` 閻ㄥ嫭顐兼惔蹇嬧偓涔abScrollTopCommands[i]` 閻?
- *   娑撳鐖ｉ崥顐＄疅**韫囧懘銆忔稉鈧懛?*閿涘潉tab_now_playing` 闁絼绔存い鐟版皑閺勵垰鐣犻敍澶堚偓?
+ * 鈽?鐢ㄦ埛 2026-10-15锛堝弬鑰冨浘瀵规瘮锛夛細**杩欎竴椤佃鎶婃诞鍔ㄥ簳鏍忎笂鏂归偅鏉″皬鎾斁鏉℃暣鏉¤棌鎺?*
+ *   鈥斺€?鍙傝€冨浘閲?Tab 鏍忎箣涓婂彧鏈変竴琛岃繘搴︼紙宸﹀綋鍓嶆椂闂?/ 涓粏鏉?/ 鍙虫€绘椂闀匡級锛屾病鏈夎糠浣犳潯銆?
+ *   鎵€浠ユ湰椤靛仛涓変欢浜嬶紙**鎺掑竷妯″紡涓€涓瓧閮戒笉鍔?*锛岃 `barLayoutModeForHds()` 鐨勬敞閲婏級锛?
+ *   鈶?{@link miniBar} 鏉′欢娓叉煋 鈬?閭ｆ潯杩蜂綘鏉＄殑鍐呭涓虹┖锛孒DS 鎸夊唴瀹归噺楂?鈬?**娌℃湁閭ｄ竴鎺?*锛?
+ *   鈶?{@link miniBarStyleForHds} 鎭掑洖 `COLLAPSE` 鈬?鍗充究鐢ㄦ埛姝ゅ墠鎶婅糠浣犳潯灞曞紑杩?
+ *      锛坄miniBarExpanded === true`锛夛紝鏈〉涔熶笉浼氱敾鍑轰竴鏉″睍寮€鐨?*绌?*鏍忥紱
+ *   鈶?`enableMiniBarBackground` 鍦ㄦ湰椤典负 false 鈬?涓嶄細鐣欎笅涓€鏋氱┖鑳跺泭鑳屾澘銆?
+ * 鈿狅笍 **涓嶈**鏀圭敤 `barLayoutMode = HORIZONTAL`锛堣瘯杩囷紝鐪熸満鍙嶉"tab 鏍忕煭涓€鎴?锛夛細
+ *   閭ｄ釜妯″紡鏄?椤电涓庤糠浣犳潯**骞舵帓**"锛岃糠浣犳潯绌虹潃鏃堕〉绛句細琚尋鍒板乏杈广€佸彸绔┖鍑轰竴鏍笺€?
+ * 鈿狅笍 椤哄簭涓?`HomeTabsPages()` 閲?`TabContent` 鐨勬搴忋€乣tabScrollTopCommands[i]` 鐨?
+ *   涓嬫爣鍚箟**蹇呴』涓€鑷?*锛坄tab_now_playing` 閭ｄ竴椤瑰氨鏄畠锛夈€?
  */
 const NOW_PLAYING_TAB_INDEX: number = 1;
 
 /**
- * 闁款喚娲忓鐟板毉閺冭绱濇禍宀€楠囨い鐢告桨閹剚璇炴潻铚傜稑閺?*閸愬秴绶氭稉濠冨М婢舵艾鐨?*閿涘澊p閿涘娈戞稉銈勯嚋鐢悂鍣洪妴?
+ * 閿洏寮瑰嚭鏃讹紝浜岀骇椤甸潰鎮诞杩蜂綘鏉?*鍐嶅線涓婃姮澶氬皯**锛坴p锛夌殑涓や釜甯搁噺銆?
  *
- * 閼冲本娅欓敍鍫濈暭閺傚箍鈧﹨鍤滅€规矮绠熼柨顔炬磸閵嗗绱氶敍姘遍兇缂佺喖绮拋銈囨畱闁款喚娲忛柆鑳唨**閸欘亙绻氱拠浣界翻閸忋儲顢嬫稉宥堫潶闁喗灏?*閿?
- * 鏉堟挸鍙嗗鍡曠瑓闂堛垻娈戠紒鍕閿涘牊婀伴弶鈩冨亾濞搭喗鎸遍弨鐐蒋鐏忚鲸妲搁敍澶夌窗鐞氼偊鏁惄妯哄竾娴?閳?韫囧懘銆忛懛顏勭箒閹稿鏁惄姗€鐝惔锕備缉鐠佲斂鈧?
+ * 鑳屾櫙锛堝畼鏂广€婅嚜瀹氫箟閿洏銆嬶級锛氱郴缁熼粯璁ょ殑閿洏閬胯**鍙繚璇佽緭鍏ユ涓嶈閬尅**锛?
+ * 杈撳叆妗嗕笅闈㈢殑缁勪欢锛堟湰鏉℃偓娴挱鏀炬潯灏辨槸锛変細琚敭鐩樺帇浣?鈬?蹇呴』鑷繁鎸夐敭鐩橀珮搴﹂伩璁┿€?
  *
- * 缁犳绱￠敍鍧刦loatingMiniBarKeyboardLiftVp()`閿涘绱?
- *   lift = 闁款喚娲忔妯哄 + {@link FLOATING_MINI_BAR_KEYBOARD_GAP_VP} 閳?鐢憡鈧椒绗呴懗璺烘抄缁傝鐫嗘惔鏇犳畱閺冦垺婀侀梻鎾
- * 閸忔湹鑵?閺冦垺婀侀梻鎾"閹?2026-10-12 閻ㄥ嫮婀￠張杞拌⒈閻愯鐖ｇ€?`gap 閳?1.8 鑴?barBottomMargin` 閸欏秵甯?
- * 閿涘牐顫?{@link floatingMiniBar} 闁插矂鍋呮稉銈嗘蒋鐎圭偞绁寸拋鏉跨秿閿涘鈧柡鈧?閸戝繑甯€鐎瑰啯妲告稉杞扮啊**娑撳秷顩﹂幎濠傚嚒缂佸繑婀侀惃鍕亝娴犱粙妫块梾?
- * 闁插秴顦茬粻妞剧闁?*閿涘苯鎯侀崚娆撴暛閻╂ɑ鈧椒绱板В鏂跨埗閹焦妲戦弰鐐癁妤傛ü绔撮幋顏庣礄鎼?9.1 閻劍鍩涚亸杈ㄥГ鏉?閹绢厽鏂侀弶鈩冭癁瀵版銇婃?閿涘鈧?
+ * 绠楀紡锛坄floatingMiniBarKeyboardLiftVp()`锛夛細
+ *   lift = 閿洏楂樺害 + {@link FLOATING_MINI_BAR_KEYBOARD_GAP_VP} 鈭?甯告€佷笅鑳跺泭绂诲睆搴曠殑鏃㈡湁闂撮殭
+ * 鍏朵腑"鏃㈡湁闂撮殭"鎸?2026-10-12 鐨勭湡鏈轰袱鐐规爣瀹?`gap 鈮?1.8 脳 barBottomMargin` 鍙嶆帹
+ * 锛堣 {@link floatingMiniBar} 閲岄偅涓ゆ潯瀹炴祴璁板綍锛夆€斺€?鍑忔帀瀹冩槸涓轰簡**涓嶈鎶婂凡缁忔湁鐨勯偅浠介棿闅?
+ * 閲嶅绠椾竴閬?*锛屽惁鍒欓敭鐩樻€佷細姣斿父鎬佹槑鏄炬诞楂樹竴鎴紙搂29.1 鐢ㄦ埛灏辨姤杩?鎾斁鏉℃诞寰楀お楂?锛夈€?
  *
- * 閳跨媴绗?閻喐婧€鐠嬪啯纭堕敍鍫濆涧閸斻劏绻栨稉銈勯嚋鐢悂鍣洪敍灞藉焼閺€鍦暬瀵骏绱氶敍?
- *   璺?闁款喚娲忛幀浣镐焊妤?閳?鐠?*婢?* FACTOR閿涘牆顦块崙蹇庣閻愮櫢绱氶敍娑樹焊娴?/ 娴犲秷顫﹂崢瀣╃秶 閳?鐠?*鐏?* FACTOR閿涘牆鍣?0 = 閺佸瓨娼稉濠勑╂稉鈧稉顏堟暛閻╂﹢鐝敍澶堚偓?
- *   璺?閹櫕鏆ｆ担鎾冲晙婢舵氨鏆€娑撯偓閻愬湱绱?閳?鐠嬪啫銇?GAP閵?
+ * 鈿狅笍 鐪熸満璋冩硶锛堝彧鍔ㄨ繖涓や釜甯搁噺锛屽埆鏀圭畻寮忥級锛?
+ *   路 閿洏鎬佸亸楂?鈬?璋?*澶?* FACTOR锛堝鍑忎竴鐐癸級锛涘亸浣?/ 浠嶈鍘嬩綇 鈬?璋?*灏?* FACTOR锛堝噺 0 = 鏁存潯涓婄Щ涓€涓敭鐩橀珮锛夈€?
+ *   路 鎯虫暣浣撳啀澶氱暀涓€鐐圭紳 鈬?璋冨ぇ GAP銆?
  */
 /**
- * 鈽呪槄鈽?2026-10-18锛堢敤鎴凤細銆屼簩绾ч〉闈㈣繖涓挱鏀炬潯鐩存帴璐村簳浜嗭紝鍔犵偣绌洪殭锛岄敭鐩橀伩璁╂洿鏄庢樉銆嶏級锛?
- * 涓婇潰閭ｆ锛堝惈 `CAPSULE_GAP_FACTOR` 鐨勬棫鎺ㄥ锛?*浣滃簾**锛屼互鍚庨潰杩欎袱鏉″父閲忎负鍑嗐€?
+ * ★★★ 2026-10-18（用户：「二级页面这个播放条直接贴底了，加点空隙，键盘避让更明显」）：
+ * 上面那段（含 `CAPSULE_GAP_FACTOR` 的旧推导）**作废**，以后面这两条常量为准。
  *
- * 鐜板満鍑犱綍锛堟湰鏂囦欢宸蹭袱澶勭‘璁わ紝涓嶆槸鍋囪锛夛細
- *   路 瀹夸富鐩?= 鏈〉鏍?`Stack` 鐨?100%锛岃€屾牴 `Stack` **娌℃湁** `ignoreLayoutSafeArea`
- *     鈬?瀹冪殑搴曡竟 = **椤电洅搴?* = 绐楀彛搴?鈭?绯荤粺閬胯锛坄WindowInfo.navigationBarBottomVp`锛夛紱
- *   路 `.offset({ y })` 鐨?**+y 鍚戜笅**銆?
+ * 现场几何（本文件已两处确认，不是假设）：
+ *   · 宿主盒 = 本页根 `Stack` 的 100%，而根 `Stack` **没有** `ignoreLayoutSafeArea`
+ *     ⇒ 它的底边 = **页盒底** = 窗口底 − 系统避让（`WindowInfo.navigationBarBottomVp`）；
+ *   · `.offset({ y })` 的 **+y 向下**。
  *
- * 浜庢槸绂诲簳绌洪殭蹇呴』鍐欒繘 HDS 鐨?`barFloatingStyle.barBottomMargin`锛圚DS 閲屽畠灏辨槸"鏉″埌 tabs 搴曡竟鐨勮窛绂?锛夛紝
- * 鈽呪槄鈽?2026-10-18锛堢敤鎴凤細銆岃繖涓敭鐩橀伩璁╁お楂樹簡鍚э紝鑰屼笖鎬庝箞鏁翠釜搴曚笅鐨勭壒鏁堥兘琚姮涓婃潵浜嗐€嶏級锛?
- * **閿洏鎶崌涓嶅啀鍔ㄥ涓?`.offset`锛屽彧鏀?HDS 鐨?`barBottomMargin`**锛涗笂闈㈤偅濂楁妸"椤电洅搴?鈮?绐楀彛搴?
- * 褰撴垚绔嬶紙婕忎簡绯荤粺閬胯 `I`锛夌殑璐?*鍏ㄩ儴浣滃簾**锛屼互姝ゅ涓哄噯銆?
+ * 于是离底空隙必须写进 HDS 的 `barFloatingStyle.barBottomMargin`（HDS 里它就是"条到 tabs 底边的距离"），
+ * ★★★ 2026-10-18（用户：「这个键盘避让太高了吧，而且怎么整个底下的特效都被抬上来了」）：
+ * **键盘抬升不再动宿主 `.offset`，只改 HDS 的 `barBottomMargin`**；上面那套把"页盒底 ≡ 窗口底"
+ * 当成立（漏了系统避让 `I`）的账**全部作废**，以此处为准。
  *
- * ## 涓€銆佸嚑浣曞彛寰勶紙姣忎竴椤归兘鑳藉湪浠ｇ爜閲屾寚璁わ紝涓嶆槸鍋囪锛?
- *   `H` 绐楀彛楂?vp = `viewportHeightVp`锛堚啇 `WindowInfo.windowSize.height`锛?
- *   `I` 椤电洅搴曞唴缂?vp = {@link pageBottomInsetVp}锛堚啇 `getNavigationBarBottomVpFromWindowUtil()`锛?
- *       鏍?`Stack` 娌℃湁 `ignoreLayoutSafeArea` 鈬?瀹冪殑搴曡竟灏辫惤鍦ㄣ€岀獥鍙ｅ簳 鈭?I銆嶏級
- *   `K` 閿洏楂?vp = {@link keyboardBottomVp}锛堚啇 `getWindowAvoidArea(TYPE_KEYBOARD)`锛?*閲忓埌绐楀彛搴?*锛?
- *   鈬?椤电洅搴?`Ypb = H 鈭?I`锛涢敭鐩樹笂娌?`Ykb = H 鈭?K`
+ * ## 一、几何口径（每一项都能在代码里指认，不是假设）
+ *   `H` 窗口高 vp = `viewportHeightVp`（← `WindowInfo.windowSize.height`）
+ *   `I` 页盒底内缩 vp = {@link pageBottomInsetVp}（← `getNavigationBarBottomVpFromWindowUtil()`；
+ *       根 `Stack` 没有 `ignoreLayoutSafeArea` ⇒ 它的底边就落在「窗口底 − I」）
+ *   `K` 键盘高 vp = {@link keyboardBottomVp}（← `getWindowAvoidArea(TYPE_KEYBOARD)`，**量到窗口底**）
+ *   ⇒ 页盒底 `Ypb = H − I`；键盘上沿 `Ykb = H − K`
  *
- * ## 浜屻€佹棫绠楀紡涓轰粈涔?澶珮"锛?2vp 鐨勮处锛?
- *   鏃у紡 `lift = K + 24 鈭?12` 绛変簬鍋囪 `I = 0`锛岃€岀湡鏈?`I 鈮?绯荤粺瀵艰埅鏉￠珮锛堚増28vp锛塦
- *   鈬?閿洏鎬佹潯搴?= `Ypb 鈭?12 鈭?lift = H 鈭?K 鈭?I 鈭?24`锛?
- *     绂婚敭鐩樹笂娌跨殑绌虹櫧 = **(H 鈭?K) 鈭?鏉″簳 = I + 24 鈮?52vp** 鈥斺€?鐢ㄦ埛鐪嬪埌鐨?涓€澶ф埅"灏辨槸杩?52銆?
+ * ## 二、旧算式为什么"太高"（52vp 的账）
+ *   旧式 `lift = K + 24 − 12` 等于假设 `I = 0`，而真机 `I ≈ 系统导航条高（≈28vp）`
+ *   ⇒ 键盘态条底 = `Ypb − 12 − lift = H − K − I − 24`，
+ *     离键盘上沿的空白 = **(H − K) − 条底 = I + 24 ≈ 52vp** —— 用户看到的"一大截"就是这 52。
  *
- * ## 涓夈€佺幇鍦ㄧ殑璐︼紙缁撴灉鎭掔瓑浜?GK锛屼竴鐪煎彲绠楋級
- *   甯告€侊細鏉″簳 = `Ypb 鈭?G`锛宍G = FLOATING_MINI_BAR_BOTTOM_GAP_VP`(12)
- *   閿洏锛氭潯搴?= `Ykb 鈭?GK`锛宍GK = FLOATING_MINI_BAR_KEYBOARD_GAP_VP`(10)
- *         闇€棰濆鎶?`L = (Ypb 鈭?G) 鈭?(Ykb 鈭?GK) = K 鈭?I + GK 鈭?G`
- *         鈬?鍐欒繘 HDS锛歚margin = G + L = K 鈭?I + GK`
- *         鈬?閿洏涓婃部鍒版潯搴曠殑绌虹櫧**鎭掔瓑浜?GK = 10vp**锛堣璁″彛寰?8~12锛夛紝`I`/`K` 鍏ㄥ彇鐪熷€笺€?
+ * ## 三、现在的账（结果恒等于 GK，一眼可算）
+ *   常态：条底 = `Ypb − G`，`G = FLOATING_MINI_BAR_BOTTOM_GAP_VP`(12)
+ *   键盘：条底 = `Ykb − GK`，`GK = FLOATING_MINI_BAR_KEYBOARD_GAP_VP`(10)
+ *         需额外抬 `L = (Ypb − G) − (Ykb − GK) = K − I + GK − G`
+ *         ⇒ 写进 HDS：`margin = G + L = K − I + GK`
+ *         ⇒ 键盘上沿到条底的空白**恒等于 GK = 10vp**（设计口径 8~12），`I`/`K` 全取真值。
  *
- * ## 鍥涖€佷负浠€涔堝繀椤诲幓鎺夊涓?`.offset`
- *   `.offset` 浣嶇Щ鐨勬槸**杩欎釜缁勪欢杩炲悓瀹冪敾鐨勫叏閮ㄤ笢瑗?*锛堝涓?= 鏁存潯 HDS 搴曟爮锛氳兌鍥?+
- *   `systemMaterialEffect` 鏉愯川灞?+ 鏍忓簳鑹诧級鈬?鏁村潡涓€鎶紝灏辨槸鐢ㄦ埛璇寸殑"鏁翠釜搴曚笅鐨勭壒鏁堥兘琚姮涓婃潵浜?銆?
- *   鑰?`barBottomMargin` 鍦?SDK 閲岀殑璇箟鏄?鏉″埌 tabs 搴曡竟鐨勮窛绂?
- *   锛坄@hms.hds.hdsBaseComponent.d.ets:5311`锛夆噿 鍙敼鑳跺泭鍦?*瀹夸富鍐呴儴**鐨勪綅缃紝
- *   瀹夸富鐩掍笌瀹冨簳涓嬮偅浜涙暣灞傛晥鏋滃師鍦颁笉鍔紙`.offset` 宸蹭粠 {@link floatingMiniBar} 閲屽垹鎺夛級銆?
+ * ## 四、为什么必须去掉宿主 `.offset`
+ *   `.offset` 位移的是**这个组件连同它画的全部东西**（宿主 = 整条 HDS 底栏：胶囊 +
+ *   `systemMaterialEffect` 材质层 + 栏底色）⇒ 整块一抬，就是用户说的"整个底下的特效都被抬上来了"。
+ *   而 `barBottomMargin` 在 SDK 里的语义是"条到 tabs 底边的距离"
+ *   （`@hms.hds.hdsBaseComponent.d.ets:5311`）⇒ 只改胶囊在**宿主内部**的位置，
+ *   宿主盒与它底下那些整层效果原地不动（`.offset` 已从 {@link floatingMiniBar} 里删掉）。
  */
 const FLOATING_MINI_BAR_KEYBOARD_GAP_VP: number = 10;
 const FLOATING_MINI_BAR_BOTTOM_GAP_VP: number = 12;
 /**
- * 浜岀骇椤垫诞鍔ㄦ挱鏀炬潯**瀹夸富**锛坄HdsTabs`锛夌殑 id锛氬彧缁欓敭鐩樻€佽瘖鏂噺"瀹夸富鐩掑簳杈?鐢ㄣ€?
- * 鍒ゆ嵁锛氬畠搴斿綋鎭掔瓑浜?`H 鈭?I`锛涜嫢璺熺潃閿洏寰€涓婅窇 鈬?鏁撮〉琚钩绉伙紙`KeyboardAvoidMode.OFFSET`锛夛紝
- * 閭ｇ鎯呭舰涓嬫墜鍔ㄦ姮鍗囧氨鏄弻鎶紝瑙?{@link logKeyboardBarGap}銆?
+ * 二级页浮动播放条**宿主**（`HdsTabs`）的 id：只给键盘态诊断量"宿主盒底边"用。
+ * 判据：它应当恒等于 `H − I`；若跟着键盘往上跑 ⇒ 整页被平移（`KeyboardAvoidMode.OFFSET`），
+ * 那种情形下手动抬升就是双抬，见 {@link logKeyboardBarGap}。
  */
 const SECONDARY_MINI_BAR_HOST_ID: string = 'rzd_secondary_mini_bar_host';
 
 /**
- * 娑撳﹥濯洪幍鎾崇磻閹绢厽鏂佹い鐢垫畱**鐠ч攱澧滈悜顓炲隘**妤傛ê瀹抽敍鍧磒閿涘矁鍒涚仦蹇撶鎼存洟鍋呮稉鈧弶鈽呯礆閵?
+ * 涓婃媺鎵撳紑鎾斁椤电殑**璧锋墜鐑尯**楂樺害锛坴p锛岃创灞忓箷搴曢偅涓€鏉★級銆?
  *
- * 鏉╄渹缍橀弶?56 + 鎼存洟鍎撮柆鑳唨閿涘牆顕遍懜顏呮蒋/鐏忓繒娅ч弶锛勫 14~24閿? 8 閻ㄥ嫯绔熺捄婵撶礉閸愬秴绶氭稉濠佺鐏忓繑顔屾担娆撳櫤 閳?112閵?
- * 閸欘亝婀侀拃钘夋躬鏉╂瑦娼敮锕傚櫡閻ㄥ嫪绗傚鎴炲閻㈠崬锛撶仦鍌涘复缁犫槄绱欑拠锕侇潌 `pullOpenStartsNearBottom()`閿涘鈧柡鈧?
- * 妞ょ敻娼版稉顓燁唽閻ㄥ嫪绗傚鎴滄唉鏉╂绮伴崚妤勩€冮敍宀勪缉閸忓秲鈧本鍨滈惃鍕€夋禒搴㈡尡閺€鎯ф珤娑撳﹪娼版稉鈧柈銊ュ瀻娑撳﹥绮︽稊鐔稿ⅵ瀵偓閹绢厽鏂侀崳銊ｂ偓宥冣偓?
+ * 杩蜂綘鏉?56 + 搴曢儴閬胯锛堝鑸潯/灏忕櫧鏉＄害 14~24锛? 8 鐨勮竟璺濓紝鍐嶅線涓婁竴灏忔浣欓噺 鈮?112銆?
+ * 鍙湁钀藉湪杩欐潯甯﹂噷鐨勪笂婊戞墠鐢卞３灞傛帴绠★紙璇﹁ `pullOpenStartsNearBottom()`锛夆€斺€?
+ * 椤甸潰涓鐨勪笂婊戜氦杩樼粰鍒楄〃锛岄伩鍏嶃€屾垜鐨勯〉浠庢挱鏀惧櫒涓婇潰涓€閮ㄥ垎涓婃粦涔熸墦寮€鎾斁鍣ㄣ€嶃€?
  */
 const PULL_OPEN_HANDLE_BAND_VP: number = 112;
 
 /**
- * 閹绢厽鏂佹い鍨癁鐏炲倸婀竟鍐茬湴 Stack 闁插瞼娈戠仦鍌滈獓閵?
+ * 鎾斁椤垫诞灞傚湪澹冲眰 Stack 閲岀殑灞傜骇銆?
  *
- * 韫囧懘銆忔妯圭艾 HdsTabs閿涘牐鍤滃?`zIndex(1)`閿涘本璇為崝銊ョ俺閺嶅繋绡冮崷銊ョ暊闁插矂娼伴敍澶婃嫲娴滃瞼楠囨い鐢告桨閻ㄥ嫭鍋撳ù顔跨碃娴ｇ姵娼妴?
- * 閹绢厽鏂佹い?*娑撳秴鍟€閻?`bindContentCover`**閿涙碍膩閹礁顔栨稉缁樻Ц娑撳秹鈧繑妲戦惃鍕鐏炲偊绱濇导姘辨磰娴ｅ繘顩绘い鍏哥瑢鏉╄渹缍橀弶鈽呯礉
- * 閼?娴犲氦绯犳担鐘虫蒋闂€鍨毉閺?閻ㄥ嫬鑸伴崣妯讳紗閹媽顩﹂柅蹇撳毉鐎瑰啩婊戦敍鍫ｎ嚊鐟?build() 闁插瞼娈戝▔銊╁櫞閿涘鈧?
+ * 蹇呴』楂樹簬 HdsTabs锛堣嚜宸?`zIndex(1)`锛屾诞鍔ㄥ簳鏍忎篃鍦ㄥ畠閲岄潰锛夊拰浜岀骇椤甸潰鐨勬偓娴糠浣犳潯銆?
+ * 鎾斁椤?*涓嶅啀鐢?`bindContentCover`**锛氭ā鎬佸涓绘槸涓嶉€忔槑鐨勪竴灞傦紝浼氱洊浣忛椤典笌杩蜂綘鏉★紝
+ * 鑰?浠庤糠浣犳潯闀垮嚭鏉?鐨勫舰鍙樻伆鎭拌閫忓嚭瀹冧滑锛堣瑙?build() 閲岀殑娉ㄩ噴锛夈€?
  */
 const PLAYER_OVERLAY_Z_INDEX: number = 100;
 
 /**
- * 瑜般垹褰夐崗瀣畷鐏炲偊绱欐潻铚傜稑閺夆€冲閺堫剨绱氶崷銊ワ紦鐏?Stack 闁插瞼娈戠仦鍌滈獓閿涙艾绻€妞?*妤傛ü绨?*閹绢厽鏂佹い鍨癁鐏炲倶鈧?
- * 閸欏秶绱拠鎴﹀櫡閸忓娈曠仦鍌涘瘯閸?`MainPage` 閻ㄥ嫭娓舵稉濠傜湴閿涘牅绗佹稉?lambda閿涘绱濆В鏃€鎸遍弨楣冦€夌€圭懓娅掗弴鎾彯閵?
+ * 褰㈠彉鍏嬮殕灞傦紙杩蜂綘鏉″壇鏈級鍦ㄥ３灞?Stack 閲岀殑灞傜骇锛氬繀椤?*楂樹簬**鎾斁椤垫诞灞傘€?
+ * 鍙嶇紪璇戦噷鍏嬮殕灞傛寕鍦?`MainPage` 鐨勬渶涓婂眰锛堜笁涓?lambda锛夛紝姣旀挱鏀鹃〉瀹瑰櫒鏇撮珮銆?
  */
 const PLAYER_CLONE_Z_INDEX: number = 110;
-// 鈽呪槄鈽?2026-10-21锛堢鍏疆锛夛細杩欓噷鐨勪簲涓父閲忥紙`HOME_MINI_CAPSULE_Z_INDEX` /
+// ★★★ 2026-10-21（第八轮）：这里的五个常量（`HOME_MINI_CAPSULE_Z_INDEX` /
 // `HOME_MINI_CAPSULE_GAP_VP` / `HOME_TAB_DOCK_VP` / `HOME_MINI_CAPSULE_SINGLE_ROW_MIN_WIDTH_VP` /
-// `HOME_MINI_BAR_CONTENT_PAD_VP`锛?*宸查殢 `homeMiniCapsule()` 涓€璧峰垹闄?* 鈥斺€?
-// 瀹冧滑鎻忚堪鐨勬槸"鎾斁鍣ㄦ惉鍑?`miniBar` 妲戒箣鍚庢垜浠緱鑷繁绠楃旱鍚戞帓甯?鍗曞眰瀹藉害"鐨勯偅濂楀嚑浣曘€?
-// 鐜板湪涓€绾ч〉鍥炲埌涓婃父缁撴瀯锛堟挱鏀惧櫒浣?`miniBar` 妲姐€佷袱鎺?鍗曟帓鐢?HDS 鐨?`barLayoutMode` 椹卞姩锛夛紝
-// 閭ｅ鍑犱綍涓€涓兘涓嶉渶瑕侊紱涓ゆ潯杩蜂綘鏉＄殑鍙楂樺害浠嶇敱 `FLOATING_MINI_BAR_HEIGHT_VP`(56) 鍞竴鍐冲畾銆?
+// `HOME_MINI_BAR_CONTENT_PAD_VP`）**已随 `homeMiniCapsule()` 一起删除** ——
+// 它们描述的是"播放器搬出 `miniBar` 槽之后我们得自己算纵向排布/单层宽度"的那套几何。
+// 现在一级页回到上游结构（播放器住 `miniBar` 槽、两排/单排由 HDS 的 `barLayoutMode` 驱动），
+// 那套几何一个都不需要；两条迷你条的可见高度仍由 `FLOATING_MINI_BAR_HEIGHT_VP`(56) 唯一决定。
 /**
- * 閳?2026-10-17閿涙艾鎻╅悡褎鏁圭紓鈺傝癁鐏炲偊绱檂ShrinkOverlayHost`閿涘娈戠仦鍌涱偧 閳ユ柡鈧?**韫囧懘銆忓В鏂剧瑐闂堛垺澧嶉張澶嬭癁鐏炲倿鍏樻?*閵?
- *   鐎瑰啩鍞悰?濮濓絽婀☉鍫濄亼閻ㄥ嫰鍋呮稉鈧仦蹇旀尡閺€楣冦€?閿涘苯甯囬崷銊ュ帬闂呭棗鐪伴敍?10閿涘绗屾潻铚傜稑閺夆€茬娑撳﹥澧犳稉宥勭窗鐞氼偆娲婃担蹇嬧偓?
- *   閳跨媴绗?閺冪姷鏅柇锝勭娓氀冪暊娑旂喐鐥呴張澶夌瑩闂傘劎娈?z閿涘潉MainPage` 闁插苯鐣犻幒鎺戞躬濞搭喖鐪扮€瑰じ瀵屾稊瀣倵閿涘绱?
- *     鏉╂瑩鍣烽弰鎯х础缂佹瑤绔存稉顏勨偓鐓庡涧閺勵垯璐熸禍?*娑撳秳绶风挧鏍э紣閺勫酣銆庢惔?*閵?
+ * 鈽?2026-10-17锛氬揩鐓ф敹缂╂诞灞傦紙`ShrinkOverlayHost`锛夌殑灞傛 鈥斺€?**蹇呴』姣斾笂闈㈡墍鏈夋诞灞傞兘楂?*銆?
+ *   瀹冧唬琛?姝ｅ湪娑堝け鐨勯偅涓€灞忔挱鏀鹃〉"锛屽帇鍦ㄥ厠闅嗗眰锛?10锛変笌杩蜂綘鏉′箣涓婃墠涓嶄細琚洊浣忋€?
+ *   鈿狅笍 鏃犵晫閭ｄ竴渚у畠涔熸病鏈変笓闂ㄧ殑 z锛坄MainPage` 閲屽畠鎺掑湪娴眰瀹夸富涔嬪悗锛夛紝
+ *     杩欓噷鏄惧紡缁欎竴涓€煎彧鏄负浜?*涓嶄緷璧栧０鏄庨『搴?*銆?
  */
 const SHRINK_OVERLAY_Z_INDEX: number = 130;
 
 /**
- * 閳?閹绢厽鏂佹い闈涘弳閸?*閸欏矁寤哄鈧崗?*閿涘牊鏌﹀銉ユ禈缁?1 濮濄儻绱氶妴?
+ * 鈽?鎾斁椤靛叆鍙?*鍙岃建寮€鍏?*锛堟柦宸ュ浘绗?1 姝ワ級銆?
  *
- * - `true` 閿涙碍鎸遍弨楣冦€夋担婊€璐?**NavDestination** 閹恒劌鍙嗛敍鍧刾ushPath(..., animated = false)`閿涘绱?
- *   鐎瑰苯鍙忕€佃鐖ｉ弮鐘垫櫕 1.2.4閵嗗倻閮寸紒鐔绘祮閸﹀搫绻€妞よ鍙ч幒?閳ユ柡鈧?瑜般垹褰夐懛顏勭箒鐏忚鲸妲搁崝銊ф暰閿涘奔琚辨總妤€濮╅悽璇插綌閸︺劋绔寸挧?
- *   鐏忚鲸妲搁悽銊﹀煕閹躲儳娈?閸斻劎鏁炬稉顓⑩偓鏂跨殱闂堛垹缍婃担?/ 鎼存洟鍎寸粚杞扮閸?閵?
- * - `false`閿涙碍妫捄顖氱窞閿涘本鎸遍弨楣冦€夋担婊€璐熸竟鍐茬湴 Stack 闁插瞼娈戝ù顔肩湴閿涘潉isShowPlay` 閺夆€叉濞撳弶鐓嬮敍澶堚偓?
+ * - `true` 锛氭挱鏀鹃〉浣滀负 **NavDestination** 鎺ㄥ叆锛坄pushPath(..., animated = false)`锛夛紝
+ *   瀹屽叏瀵规爣鏃犵晫 1.2.4銆傜郴缁熻浆鍦哄繀椤诲叧鎺?鈥斺€?褰㈠彉鑷繁灏辨槸鍔ㄧ敾锛屼袱濂楀姩鐢诲彔鍦ㄤ竴璧?
+ *   灏辨槸鐢ㄦ埛鎶ョ殑"鍔ㄧ敾涓€斿皝闈㈠綊浣?/ 搴曢儴绌轰竴鍧?銆?
+ * - `false`锛氭棫璺緞锛屾挱鏀鹃〉浣滀负澹冲眰 Stack 閲岀殑娴眰锛坄isShowPlay` 鏉′欢娓叉煋锛夈€?
  *
- * 閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓 閳藉應妲?2026-10-15閿?*瀹稿弶澧﹀鈧?*閿涘苯娲滄稉杞扮瑐濞嗏€虫礀闁偓閻ㄥ嫭鐗撮崶鐘冲閸掗绨?閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓
- * **閸樼喐娼垫稉杞扮矆娑斿牆娲栭柅鈧?*閿?026-09-25 娑撳﹥婧€閿涘绱癭NavDestination` 濞撳弶鐓嬮崷?`HdsNavigation` 閸愬懘鍎撮敍?
- * 閻劎娈戦弰?**STANDARD** 濡€崇础 閳ユ柡鈧?闁絼閲滃Ο鈥崇础娑撳鐣?*閼奉亜鐢稉宥夆偓蹇旀鎼?*閿?闁繑妲戦懗灞炬珯娑旂喎甯囨稉宥勭秶 HDS 閼奉亜鐢惃鍕俺"閿?
- * 娴滃孩妲搁崥灞芥躬鐠?Navigation 闁插瞼娈?**HDS 濞搭喖濮╂惔鏇熺埉閿涘牐绯犳担鐘虫蒋閻喕闊╅敍澶庮潶閺佸澧栭惄鏍︾秶**閿?
- * 閼板苯鑸伴崣妯讳紗閹媽顩﹂柅蹇撳毉闁絾娼潻铚傜稑閺?閳?"娑撯偓閹恒劌鍙嗙亸杈ㄥ灇娑撯偓閸фぜ鈧礁绨抽柈銊ュ嫉缂傝桨绔撮崸?閵?
+ * 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ 鈽呪槄 2026-10-15锛?*宸叉墦寮€**锛屽洜涓轰笂娆″洖閫€鐨勬牴鍥犳壘鍒颁簡 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+ * **鍘熸潵涓轰粈涔堝洖閫€**锛?026-09-25 涓婃満锛夛細`NavDestination` 娓叉煋鍦?`HdsNavigation` 鍐呴儴锛?
+ * 鐢ㄧ殑鏄?**STANDARD** 妯″紡 鈥斺€?閭ｄ釜妯″紡涓嬪畠**鑷甫涓嶉€忔槑搴?*锛?閫忔槑鑳屾櫙涔熷帇涓嶄綇 HDS 鑷甫鐨勫簳"锛?
+ * 浜庢槸鍚屽湪璇?Navigation 閲岀殑 **HDS 娴姩搴曟爮锛堣糠浣犳潯鐪熻韩锛夎鏁寸墖鐩栦綇**锛?
+ * 鑰屽舰鍙樻伆鎭拌閫忓嚭閭ｆ潯杩蜂綘鏉?鈬?"涓€鎺ㄥ叆灏辨垚涓€鍧椼€佸簳閮ㄥ張缂轰竴鍧?銆?
  *
- * **鏉╂瑦顐奸惃鍕掗懡顖ょ礄闁棗鎮滃妤€鍩岄敍灞藉嚒閺嶇鐤勯崚?API 鐏炲偊绱?*閿?
- * 閺冪姷鏅惃鍕尡閺€楣冦€?`HdsNavDestination` **鐠佸彞绨?`mode(NavDestinationMode.DIALOG)`**
- * 閿涘潉wujie.pa:190804-190811`閿涘鈧倸鐣奸弬纭咁嚔娑斿绱欓張顒佹簚 SDK
- * `openharmony/ets/component/nav_destination.d.ts:317-333`閿涘绱?
+ * **杩欐鐨勮В鑽紙閫嗗悜寰楀埌锛屽凡鏍稿疄鍒?API 灞傦級**锛?
+ * 鏃犵晫鐨勬挱鏀鹃〉 `HdsNavDestination` **璁句簡 `mode(NavDestinationMode.DIALOG)`**
+ * 锛坄wujie.pa:190804-190811`锛夈€傚畼鏂硅涔夛紙鏈満 SDK
+ * `openharmony/ets/component/nav_destination.d.ts:317-333`锛夛細
  * > "Dialog mode, where the navigation destination is **transparent by default**,
  * >  and adding or removing the navigation destination **does not affect the underlying
  * >  page's lifecycle**."
- * 閳?**姒涙顓婚柅蹇旀 + 娑撳秴濂栭崫宥勭瑓鐏炲倿銆夐棃?* 閳?娑撳鐪版＃鏍€夋稉搴ょ碃娴ｇ姵娼?*娑撳秷顫﹂惄鏍︾秶閵嗕椒绗夌悮顐︽閽?*閿?
- * 瑜般垹褰夐崗銊р柤**閸欘垵顫嗘稉鏂垮讲闁?*閿涘潉expand.init` 濮濓絾妲搁棃?`getFrameNodeById` 閻ㄥ嫮鐓╄ぐ銏㈢暬鐠ч鍋ｉ敍澶堚偓?
- * 鏉╂瑤绔撮崣銉ュ嚒缂佸繐濮為崷?`features/player/.../PlaybackPageRoute.ets` 閻?`.mode(...)` 娑撳鈧?
+ * 鈬?**榛樿閫忔槑 + 涓嶅奖鍝嶄笅灞傞〉闈?* 鈬?涓嬪眰棣栭〉涓庤糠浣犳潯**涓嶈鐩栦綇銆佷笉琚殣钘?*锛?
+ * 褰㈠彉鍏ㄧ▼**鍙涓斿彲閲?*锛坄expand.init` 姝ｆ槸闈?`getFrameNodeById` 鐨勭煩褰㈢畻璧风偣锛夈€?
+ * 杩欎竴鍙ュ凡缁忓姞鍦?`features/player/.../PlaybackPageRoute.ets` 鐨?`.mode(...)` 涓娿€?
  *
- * 閳跨媴绗?**DIALOG 閻ㄥ嫪琚辨稉顏冨敩娴?*閿涘潉PlaybackPageRoute.ets` 闁插苯鍑℃径鍕倞/瀹稿弶鏁為弰搴礆閿?
- *   閳?DIALOG 姒涙顓?*娑撳秴鎼锋惔鏃囩箲閸ョ偤鏁?* 閳?韫囧懘銆忛弰鎯х础 `.onBackPressed()`閿涘牆鍑＄紒娆欑礆閿?
- *   閳?娑撳秴鍟€閺堝閮寸紒鐔绘祮閸﹁桨绗岀化鑽ょ埠鎼?閳?妞よ埖鐖?閼冲本娅?鐟佷礁澹€閸忋劎鏁遍幘顓熸杹妞や絻鍤滃杈╂暰閿涘牊婀扮拠銉ヮ洤濮濄倧绱氶妴?
+ * 鈿狅笍 **DIALOG 鐨勪袱涓唬浠?*锛坄PlaybackPageRoute.ets` 閲屽凡澶勭悊/宸叉敞鏄庯級锛?
+ *   鈶?DIALOG 榛樿**涓嶅搷搴旇繑鍥為敭** 鈬?蹇呴』鏄惧紡 `.onBackPressed()`锛堝凡缁欙級锛?
+ *   鈶?涓嶅啀鏈夌郴缁熻浆鍦轰笌绯荤粺搴?鈬?椤舵爮/鑳屾櫙/瑁佸壀鍏ㄧ敱鎾斁椤佃嚜宸辩敾锛堟湰璇ュ姝わ級銆?
  *
- * 閳跨媴绗?**閸ョ偤鈧偓閺傝纭?*閿涙碍濡告潻娆撳櫡閺€鐟版礀 `false` 閸楀啿褰查崶鐐插煂"婢瑰啿鐪板ù顔肩湴"闁絾娼鏌ョ崣鐠囦礁褰查悽銊ф畱鐠?
- *    閿涘牊璇炵仦鍌欏敩閻椒绗岄崗瀣畷鐏炲倿鍏樻潻妯烘躬閿涘矂娈㈤崠鍛椽鐠囨埊绱濇稉宥囨暏闁插秵鏌婇幖顓ㄧ礆閵?
+ * 鈿狅笍 **鍥為€€鏂规硶**锛氭妸杩欓噷鏀瑰洖 `false` 鍗冲彲鍥炲埌"澹冲眰娴眰"閭ｆ潯宸查獙璇佸彲鐢ㄧ殑璺?
+ *    锛堟诞灞備唬鐮佷笌鍏嬮殕灞傞兘杩樺湪锛岄殢鍖呯紪璇戯紝涓嶇敤閲嶆柊鎼級銆?
  */
 const PLAYER_ROUTE_MODE: boolean = true;
 
 /**
- * 閹绢厽鏂佹い浣冪熅閻㈠崬寮弫甯礄鐎佃鐖ｉ崣宥囩椽鐠囨垿鍣烽惃?`param.pull`閿涘鈧?
+ * 鎾斁椤佃矾鐢卞弬鏁帮紙瀵规爣鍙嶇紪璇戦噷鐨?`param.pull`锛夈€?
  *
- * 閻劎琚懓灞肩瑝閺勵垰灏堕崥宥咁嚠鐠炩€崇摟闂堛垽鍣洪敍娆皉kTS 鐎?`NavPathInfo.param`閿涘潉Object`閿涘绱剁€涙娼伴柌蹇擃啇閺勬挻濮ょ猾璇茬€烽梻顕€顣介敍?
- * 閺勬儳绱＄猾璇茬€锋稊鐔活唨"鏉╂瑦顐兼潻娑樺弳鐟曚椒绗夌憰浣借泲瑜般垹褰?鏉╂瑤娆㈡禍瀣躬閺冦儱绻旈柌灞藉讲鐠囨眹鈧?
+ * 鐢ㄧ被鑰屼笉鏄尶鍚嶅璞″瓧闈㈤噺锛欰rkTS 瀵?`NavPathInfo.param`锛坄Object`锛変紶瀛楅潰閲忓鏄撴姤绫诲瀷闂锛?
+ * 鏄惧紡绫诲瀷涔熻"杩欐杩涘叆瑕佷笉瑕佽蛋褰㈠彉"杩欎欢浜嬪湪鏃ュ織閲屽彲璇汇€?
  */
 class PlayerRouteParam {
-  /** true = 鏉╂瑦顐兼潻娑樺弳鐟曚浇铔嬭ぐ銏犲綁閿涘牏鏁遍幍瀣瘹閹锋牕鍙嗛幋鏍仯閸?閹板繐娴橀幍鎾崇磻閺冨墎绮烘稉鈧純?true閿涘鈧?*/
+  /** true = 杩欐杩涘叆瑕佽蛋褰㈠彉锛堢敱鎵嬫寚鎷栧叆鎴栫偣鍑?鎰忓浘鎵撳紑鏃剁粺涓€缃?true锛夈€?*/
   pull: boolean = true;
 
   constructor(pull: boolean) {
@@ -283,49 +283,49 @@ class PlayerRouteParam {
   }
 }
 
-/** 婢瑰啿鐪伴弮銉ョ箶閺嶅洨顒烽敍鍧刪dc shell hilog | grep HomeShell` 閸欘垱宕ぐ銏犲綁/鐠侯垳鏁遍柧鎹愮熅閿涘鈧?*/
+/** 澹冲眰鏃ュ織鏍囩锛坄hdc shell hilog | grep HomeShell` 鍙崬褰㈠彉/璺敱閾捐矾锛夈€?*/
 const RzdShellLogTag: string = 'HomeShell';
 
 /**
- * 娑撳﹥濯洪弶鐐閸氬海娈戦弨璺虹啲閺冨爼鏆遍敍鍧閿涘鈧柡鈧?**閹绘劒姘﹂敍鍫濐檮闂冨牆鈧》绱?* 娑?**閸欐牗绉烽敍鍫滅瑝婢剁喖妲囬崐纭风礆** 娑撱倓閲滈崐绗衡偓?
+ * 涓婃媺鏉炬墜鍚庣殑鏀跺熬鏃堕暱锛坢s锛夆€斺€?**鎻愪氦锛堝闃堝€硷級** 涓?**鍙栨秷锛堜笉澶熼槇鍊硷級** 涓や釜鍊笺€?
  *
- * 閳藉應妲?2026-10-15閿涘牏鍙庨幖顒佹￥閻ｅ矉绱伴弨瑙勫灇**鐎瑰啴鍋呮總妤€鑸伴崣妯垮殰瀹歌京娈戠敮鎼佸櫤**閿涘绱?
- *   閺冪姷鏅惃?`commitPull()` / `cancelPull()` 闁€熻泲 `animateMorphT(SETTLE_MS, t, EASE_OUT_STR)`閿?
- *   閼?**`SETTLE_MS = 400`閿涘奔绗栭幓鎰唉娑撳骸褰囧☉鍫熸Ц閸氬奔绔存稉顏勨偓?*
- *   閿涘潉_recover/logic-src/瀵偓閸忚櫕鎸遍弨鎯ф珤-閹靛濞嶇捄顖氱窞鐎规氨顭?md` 鎼? 闁喐鐓?L25/L26 娑?鎼傞崗?L219/L220閿?
- *   閸氬氦鈧懘鈧劖娼紒娆庣啊鐎涙濡惍浣筋攽閸?L146973 / L146866閿涘鈧?
+ * 鈽呪槄 2026-10-15锛堢収鎼棤鐣岋細鏀规垚**瀹冮偅濂楀舰鍙樿嚜宸辩殑甯搁噺**锛夛細
+ *   鏃犵晫鐨?`commitPull()` / `cancelPull()` 閮借蛋 `animateMorphT(SETTLE_MS, t, EASE_OUT_STR)`锛?
+ *   鑰?**`SETTLE_MS = 400`锛屼笖鎻愪氦涓庡彇娑堟槸鍚屼竴涓€?*
+ *   锛坄_recover/logic-src/寮€鍏虫挱鏀惧櫒-鎵嬪娍璺緞瀹氱.md` 搂0 閫熸煡 L25/L26 涓?搂鍏?L219/L220锛?
+ *   鍚庤€呴€愭潯缁欎簡瀛楄妭鐮佽鍙?L146973 / L146866锛夈€?
  *
- * 閳跨媴绗?閺€鐟板閺?**300 / 180**閿涘苯甯▔銊╁櫞閸愭瑧娼?閸欐牗妫ら悾?Tokens 闁插瞼娈?300閿涘牅瀵屾潪顒€婧€閿? 180閿涘牆浜曟禍銈勭鞍閿? 閳ユ柡鈧?
- *   **閸欐牠鏁婃禍鍡樻降濠?*閿涙岸鍋呴弰顖涙￥閻ｅ瞼娈?*闁氨鏁ょ拋鎹愵吀 token**閿涘矁鈧矁绻栭柌宀冾洣閻ㄥ嫭妲?*鏉╂瑥顨滆ぐ銏犲綁閼奉亜绻侀惃?*鐢悂鍣?
- *   閿涘潉MainPage.SETTLE_MS`閿涘鈧倸鎮撴稉鈧稉顏堟晩鐠囶垱娼靛┃鎰躬"閸忔娊妫撮弮鍫曟毐"娑撳﹤鍑＄紒蹇曞П鏉╁洣绔村▎鈽呯礄鎼?6.20閿?
- *   闁絽顦╂稉宥勭矌閺冨爼鏆遍崑蹇曠叚閿涘瞼绱﹂崝銊ㄧ箷閺佸瓨娼幎鍕灇娴?閹垫挸绱?閻劎娈戦柇锝嗘蒋 閳?閻劍鍩涚€圭偞绁撮妴灞藉彠闂傤厼鍤戞稊搴㈢梾閸斻劎鏁鹃妴宥忕礆閵?
+ * 鈿狅笍 鏀瑰墠鏄?**300 / 180**锛屽師娉ㄩ噴鍐欑潃"鍙栨棤鐣?Tokens 閲岀殑 300锛堜富杞満锛? 180锛堝井浜や簰锛? 鈥斺€?
+ *   **鍙栭敊浜嗘潵婧?*锛氶偅鏄棤鐣岀殑**閫氱敤璁捐 token**锛岃€岃繖閲岃鐨勬槸**杩欏褰㈠彉鑷繁鐨?*甯搁噺
+ *   锛坄MainPage.SETTLE_MS`锛夈€傚悓涓€涓敊璇潵婧愬湪"鍏抽棴鏃堕暱"涓婂凡缁忕姱杩囦竴娆★紙搂56.20锛?
+ *   閭ｅ涓嶄粎鏃堕暱鍋忕煭锛岀紦鍔ㄨ繕鏁存潯鎶勬垚浜?鎵撳紑"鐢ㄧ殑閭ｆ潯 鈬?鐢ㄦ埛瀹炴祴銆屽叧闂嚑涔庢病鍔ㄧ敾銆嶏級銆?
  *
- * 閳?妞ゅ搫鐢稉鈧稉顏咁劀闂堛垺鏅ラ弸婊愮窗婢瑰啿鐪伴崣鐘插鐏炲偊绱檂MorphCoverClone`閿涘绐囬惃鍕Ц閺冪姷鏅?`ENTER_MS = 560ms`閿涘牆鍑＄€靛綊缍堥敍澶堚偓?
- *   閺€鐟板閹绢厽鏂佹い?`300 + 20 = 320ms` 鐏忚精鎯ゆ担宥忕礉**缁傝褰旈崝鐘茬湴閻?560 瀹?240ms**閿涘牐顩﹂棃?
- *   `morphOverlayBridging()` 閸忔粎娼冮幍宥勭瑝鐞氼偄鍨忛弬顓ㄧ礆閿涙稒鏁奸幋?400 閸氬氦鎯ゆ担宥呮躬 `420ms`閿?
- *   **瀹割喛绐涚紓鈺佸煂 140ms** 閳?鐞氼偄鍨忛弬顓犳畱妞嬪酣娅撻弴鏉戠毈閵?
+ * 鈽?椤哄甫涓€涓闈㈡晥鏋滐細澹冲眰鍙犲姞灞傦紙`MorphCoverClone`锛夎窇鐨勬槸鏃犵晫 `ENTER_MS = 560ms`锛堝凡瀵归綈锛夈€?
+ *   鏀瑰墠鎾斁椤?`300 + 20 = 320ms` 灏辫惤浣嶏紝**绂诲彔鍔犲眰鐨?560 宸?240ms**锛堣闈?
+ *   `morphOverlayBridging()` 鍏滅潃鎵嶄笉琚垏鏂級锛涙敼鎴?400 鍚庤惤浣嶅湪 `420ms`锛?
+ *   **宸窛缂╁埌 140ms** 鈬?琚垏鏂殑椋庨櫓鏇村皬銆?
  *
- * 閳跨媴绗?鏉╂瑦妲?*缁绢垵顫囬幇?*閺€鐟板З閿涘牊妫ら崝鐔诲厴瑜板崬鎼烽敍澶堚偓鍌濆娴ｇ姳绗傞張楦款潕瀵?閹垫挸绱戦崣姗€鎸愭禍?閵嗕椒绗夋俊鍌氬斧閺夈儴绐￠幍瀣剁礉
- *   **閸ョ偤鈧偓鐏忚鲸妲搁幎濠呯箹娑撱倛顢戦弨鐟版礀 `300` / `180`** 閳ユ柡鈧?娑撯偓婢跺嫪绔寸悰宀嬬礉娴滄帊绗夎ぐ鍗炴惙閵?
+ * 鈿狅笍 杩欐槸**绾鎰?*鏀瑰姩锛堟棤鍔熻兘褰卞搷锛夈€傝嫢浣犱笂鏈鸿寰?鎵撳紑鍙橀挐浜?銆佷笉濡傚師鏉ヨ窡鎵嬶紝
+ *   **鍥為€€灏辨槸鎶婅繖涓よ鏀瑰洖 `300` / `180`** 鈥斺€?涓€澶勪竴琛岋紝浜掍笉褰卞搷銆?
  */
-// 鈽呪槄鈽?2026-10-18锛?*鍗曟椂闂寸嚎鏇存**锛夛細涓婇潰閭ｆ"400 璧锋"鐨勬帹瀵间綔搴熴€?
-//   涓婃父銆岀偣鍑昏糠浣犳潯 鈫?鎾斁椤点€嶈繖鏉¤矾涓?*娌℃湁 350ms 閭ｆ潯**锛歚pushPath` 甯?`param.pull=true` + `animated=false`
-//   鈬?`setupExpandTransition` 璧?`param.pull===true` 鍒嗘敮锛坄wujie.pa:179258-179317`锛夊彧鍋?`expand.init()` + `pullMode=true`
-//   + `return`锛?*涓嶆敞鍐?* `NavTransition`锛坄NavTransition.register` 鍏ㄥ寘鍞竴璋冪敤鐐?`:179419-179434` 鍙湪 `param.srcId` 鍒嗘敮锛?
-//   鈬?`ExpandAnimation.doEnter`锛?50ms + `Curve.EaseInOut`锛夊湪鐐瑰嚮璺笂**涓€娆￠兘涓嶈窇**锛?
-//   瀹瑰櫒鍑犱綍鏀圭敱 `onPullTChanged 鈫?applyPullProgress(effT())`锛坄:174826-174889`锛夐┍鍔紝
-//   鑰?`effT = isMorphTarget() ? pullT : 1`锛坄:171535-171549`锛夈€乣pullT 鈮?MainPage.morphT = animateMorphT(1, 560, EASE_OUT_STR)`
-//   锛坄:163524-163547` / `:154167-154169` / `:145608-145661`锛夈€?
-//   鈬?**鍏ㄨ矾鍙湁涓€鏉?560ms + cubic-bezier(0.23,1.0,0.32,1.0)**锛屽悓鏃堕┍鍔ㄦ诞灞傛嫹璐?/ 瀹瑰櫒鍑犱綍 / 鍐呭绐楀彛銆?
-//   `400` 浼氬湪 420ms 灏辨妸椋炶鎷﹁叞鎴柇锛堟诞灞備笌鍏嬮殕琚挙銆佺湡灏侀潰鎻愬墠鐜帮級锛岃繖灏辨槸"椋炲叆鏃堕棿涓嶅"鐨勪竴閮ㄥ垎銆?
+// ★★★ 2026-10-18（**单时间线更正**）：上面那段"400 起步"的推导作废。
+//   上游「点击迷你条 → 播放页」这条路上**没有 350ms 那条**：`pushPath` 带 `param.pull=true` + `animated=false`
+//   ⇒ `setupExpandTransition` 走 `param.pull===true` 分支（`wujie.pa:179258-179317`）只做 `expand.init()` + `pullMode=true`
+//   + `return`，**不注册** `NavTransition`（`NavTransition.register` 全包唯一调用点 `:179419-179434` 只在 `param.srcId` 分支）
+//   ⇒ `ExpandAnimation.doEnter`（350ms + `Curve.EaseInOut`）在点击路上**一次都不跑**；
+//   容器几何改由 `onPullTChanged → applyPullProgress(effT())`（`:174826-174889`）驱动，
+//   而 `effT = isMorphTarget() ? pullT : 1`（`:171535-171549`）、`pullT ≡ MainPage.morphT = animateMorphT(1, 560, EASE_OUT_STR)`
+//   （`:163524-163547` / `:154167-154169` / `:145608-145661`）。
+//   ⇒ **全路只有一条 560ms + cubic-bezier(0.23,1.0,0.32,1.0)**，同时驱动浮层拷贝 / 容器几何 / 内容窗口。
+//   `400` 会在 420ms 就把飞行拦腰截断（浮层与克隆被撤、真封面提前现），这就是"飞入时间不对"的一部分。
 const PULL_OPEN_SETTLE_MS: number = 560;
 const PULL_OPEN_ABORT_MS: number = 400;
 
 /**
- * 鐠虹喐澧滈張鐔兼？鐞涖儵鍣?缂侇參顥ｇ亸渚€娼扮紒鍫㈠仯"閻ㄥ嫰鍣哥拠鏇燁偧閺?/ 闂傛挳娈ч敍鍧閿涘鈧?
+ * 璺熸墜鏈熼棿琛ラ噺"缁灏侀潰缁堢偣"鐨勯噸璇曟鏁?/ 闂撮殧锛坢s锛夈€?
  *
- * 娑?`PlaybackPage` 閻?12 鑴?32ms 閸氬奔绔存總妤冪崶閸欙綇绱欑€佃鐖ｉ崣宥囩椽鐠?`schedulePublishRetry`閿涘绱?
- * 閹绢厽鏂佹い鍨Ц**鐠ч攱澧滈柇锝勭閸?*閹靛秵瀵曟潪鐣屾畱閿涘苯鐣犻惃鍕亣鐏忎線娼版禒鈧稊鍫熸閸婃瑥褰查柌蹇撳絿閸愬厖绨敮鍐ㄧ湰鐢勬殶閵?
+ * 涓?`PlaybackPage` 鐨?12 脳 32ms 鍚屼竴濂楃獥鍙ｏ紙瀵规爣鍙嶇紪璇?`schedulePublishRetry`锛夛細
+ * 鎾斁椤垫槸**璧锋墜閭ｄ竴鍒?*鎵嶆寕杞界殑锛屽畠鐨勫ぇ灏侀潰浠€涔堟椂鍊欏彲閲忓彇鍐充簬甯冨眬甯ф暟銆?
  */
 const PULL_ANCHOR_RETRY_MAX: number = 12;
 const PULL_ANCHOR_RETRY_MS: number = 32;
@@ -363,21 +363,21 @@ struct Index {
   @Local intentState: PlaybackIntentState =
     AppStorageV2.connect(PlaybackIntentState, AppStorageKeys.PLAYBACK_INTENT_STATE, () => new PlaybackIntentState())!;
   /**
-   * 閺€鎯版崳鐠囬攱鐪伴柅姘朵壕閿涘牅绗岄幘顓熸杹妞ら潧鍙￠悽顭掔礆閵?
+   * 鏀惰捣璇锋眰閫氶亾锛堜笌鎾斁椤靛叡鐢級銆?
    *
-   * 缁崵绮烘潻鏂挎礀鐟曚焦鐪伴崗鎶芥４閹绢厽鏂佹い鍨侀幀浣规閿涘苯锛撶仦鍌氬涧閸︺劏绻栭柌?`requestCollapse()`閿?
-   * 閻喐顒滈惃鍕暪鐠у嘲濮╅悽鑽ゆ暠閹绢厽鏂佹い鍨尡閿涘本鎸辩€瑰苯鐣犻懛顏勭箒閹?`isShowPlay` 缂?false閵?
+   * 绯荤粺杩斿洖瑕佹眰鍏抽棴鎾斁椤垫ā鎬佹椂锛屽３灞傚彧鍦ㄨ繖閲?`requestCollapse()`锛?
+   * 鐪熸鐨勬敹璧峰姩鐢荤敱鎾斁椤垫挱锛屾挱瀹屽畠鑷繁鎶?`isShowPlay` 缃?false銆?
    */
   @Local expandState: PlayerExpandState =
     AppStorageV2.connect(PlayerExpandState, AppStorageKeys.PLAYER_EXPAND_STATE,
       () => new PlayerExpandState())!;
   /**
-   * 閳藉應妲勯埥?2026-10-17閿涘牏鍙庨幖顒佹￥閻?`MainPage` 閻?`__shrink` + `shrinkPixmap`閿涘绱?
-   * 閵嗗矂娼幍瀣◢閸忔娊妫撮妴宥忕礄閸忔娊妫撮幐澶愭尦 / 缁崵绮烘潻鏂挎礀閿涘鍋呮稉鈧Λ鎺旀畱**濠婏紕鐛ヨ箛顐ゅ弾濞搭喖鐪?*閵?
+   * 鈽呪槄鈽?2026-10-17锛堢収鎼棤鐣?`MainPage` 鐨?`__shrink` + `shrinkPixmap`锛夛細
+   * 銆岄潪鎵嬪娍鍏抽棴銆嶏紙鍏抽棴鎸夐挳 / 绯荤粺杩斿洖锛夐偅涓€妫掔殑**婊＄獥蹇収娴眰**銆?
    *
-   * 閺冪姷鏅柇锝勭娓氀嗙箹娑撱倖鐗遍柈鑺ュ瘯閸?`MainPage` 娑撳绱檂wujie.pa:143995` / `144006`閿涘绱?
-   * 濞撳弶鐓嬮悙閫涚瘍閸?`MainPage`閿涘潉162465-162707`閿涘鈧柡鈧?閹碘偓娴犮儲婀版禒鎾虫倱閺嶉鏁?*婢瑰啿鐪?*閹镐焦褰欐稉搴㈣閺屾挶鈧?
-   * 閹绢厽鏂佹い浣冪鐠?閹峰秴鎻╅悡?+ `start(...)`"閿涘牆鐣犻幍宥囩叀闁挷绮堟稊鍫熸閸婃瑨顩﹂崗绛圭礆閿涘苯锛撶仦鍌濈鐠愶絿鏁鹃妴?
+   * 鏃犵晫閭ｄ竴渚ц繖涓ゆ牱閮芥寕鍦?`MainPage` 涓婏紙`wujie.pa:143995` / `144006`锛夛紝
+   * 娓叉煋鐐逛篃鍦?`MainPage`锛坄162465-162707`锛夆€斺€?鎵€浠ユ湰浠撳悓鏍风敱**澹冲眰**鎸佹彙涓庢覆鏌撱€?
+   * 鎾斁椤佃礋璐?鎷嶅揩鐓?+ `start(...)`"锛堝畠鎵嶇煡閬撲粈涔堟椂鍊欒鍏筹級锛屽３灞傝礋璐ｇ敾銆?
    */
   @Local shrinkState: MorphShrinkState =
     AppStorageV2.connect(MorphShrinkState, AppStorageKeys.MORPH_SHRINK_STATE,
@@ -385,84 +385,84 @@ struct Index {
   /** Cached window metrics (safe areas, size) for layout padding. */
   @Local windowInfo: WindowInfo = getWindowInfoState();
   /**
-   * 瑜版挸澧犵€佃壈鍩呴弽鍫熺箒鎼达讣绱? = 鏉╂ê婀＃鏍€?Tab 娑撳绱?0 = 瀹歌尙绮￠幒銊ュ弳娴滃棔绨╃痪褔銆夐棃顫礆閵?
+   * 褰撳墠瀵艰埅鏍堟繁搴︼紙0 = 杩樺湪棣栭〉 Tab 涓婏紝>0 = 宸茬粡鎺ㄥ叆浜嗕簩绾ч〉闈級銆?
    *
-   * 閸欘亞鏁ら弶銉ュ枀鐎规哎鈧苯鍙忕仦鈧幃顒佽癁鏉╄渹缍橀幘顓熸杹閺壜扳偓宥嗘Ц閸氾附妯夌粈鐚寸窗妫ｆ牠銆夐柇锝勫敜鏉╄渹缍橀弶鈥虫躬 HDS 濞搭喖濮╂惔鏇熺埉闁插矉绱?
-   * 娴滃瞼楠囨い鐢告桨娴兼碍濡搁弫缈犻嚋濞搭喖濮╂惔鏇熺埉閻╂牔缍囬敍灞惧娴犮儰绨╃痪褔銆夐棃銏ゆ付鐟曚礁婀張鈧径鏍х湴閸愬秵瀵曟稉鈧禒鏂ょ礄鐟?
-   * {@link floatingMiniBar}閿涘鈧?
+   * 鍙敤鏉ュ喅瀹氥€屽叏灞€鎮诞杩蜂綘鎾斁鏉°€嶆槸鍚︽樉绀猴細棣栭〉閭ｄ唤杩蜂綘鏉″湪 HDS 娴姩搴曟爮閲岋紝
+   * 浜岀骇椤甸潰浼氭妸鏁翠釜娴姩搴曟爮鐩栦綇锛屾墍浠ヤ簩绾ч〉闈㈤渶瑕佸湪鏈€澶栧眰鍐嶆寕涓€浠斤紙瑙?
+   * {@link floatingMiniBar}锛夈€?
    *
-   * 閳跨媴绗?娑撳秷顩﹂崘宥嗗瑏鐎瑰啫骞撻弨鐟扮俺闁劌顕遍懜顏嗘畱 `barHeight` / `barFloatingStyle`閿涘牐鐦潻鍥风礉鎼存洘鐖惄瀛樺复閸у繑甯€閿涘鈧?
+   * 鈿狅笍 涓嶈鍐嶆嬁瀹冨幓鏀瑰簳閮ㄥ鑸殑 `barHeight` / `barFloatingStyle`锛堣瘯杩囷紝搴曟爮鐩存帴鍧忔帀锛夈€?
    */
   @Local navDepth: number = 0;
   /**
-   * 瑜般垹褰夐崗瀣畷鐏炲倻鏁ら惃鍕尡閺€鎯ф珤 VM閵?
+   * 褰㈠彉鍏嬮殕灞傜敤鐨勬挱鏀惧櫒 VM銆?
    *
-   * 閸忓娈曠仦鍌濐洣閻㈡槒绯犳担鐘虫蒋閸欏厖鏅堕柇锝勭閸ф娈?*閸擃垱婀?*閿涘牊鐡曢崥?濮濆本澧?+ 閹绢厽鏂侀幐澶愭尦閿涘绱濈€瑰啳顩︾拠璇茬秼閸撳秵娲搁惄顔荤瑢閹绢厽甯堕悩鑸碘偓渚婄幢
-   * 娑撳海婀＄€圭偠绯犳担鐘虫蒋閸氬嫯鍤滈幐浣规箒娑撯偓娑?VM 鐎圭偘绶ラ弰顖氱暔閸忋劎娈戦敍鍦碝 閸欘亝妲?`MusicAppState`/`MediaService` 閻ㄥ嫰妫棃顫礉
-   * 閻樿埖鈧焦婀伴煬顐＄矝閻掕泛褰ч張澶夌娴犳枻绱氶妴?
+   * 鍏嬮殕灞傝鐢昏糠浣犳潯鍙充晶閭ｄ竴鍧楃殑**鍓湰**锛堟瓕鍚?姝屾墜 + 鎾斁鎸夐挳锛夛紝瀹冭璇诲綋鍓嶆洸鐩笌鎾帶鐘舵€侊紱
+   * 涓庣湡瀹炶糠浣犳潯鍚勮嚜鎸佹湁涓€涓?VM 瀹炰緥鏄畨鍏ㄧ殑锛圴M 鍙槸 `MusicAppState`/`MediaService` 鐨勯棬闈紝
+   * 鐘舵€佹湰韬粛鐒跺彧鏈変竴浠斤級銆?
    */
 
   /**
-   * 缁愭褰涚€硅棄瀹抽敍鍧磒閿涘绱濋悽銊ょ艾缂佹瑦鍋撳ù顔跨碃娴ｇ姵娼粻妞剧娑?*缁嬪啿鐣鹃惃鍕▔瀵繐顔旀惔?*閵?
+   * 绐楀彛瀹藉害锛坴p锛夛紝鐢ㄤ簬缁欐偓娴糠浣犳潯绠椾竴涓?*绋冲畾鐨勬樉寮忓搴?*銆?
    *
-   * 閹剚璇為弶鈩冩Ц閸欑姴婀い鐢告桨娑撳﹦娈戦悪顒傜彌閼哄倻鍋ｉ敍灞筋啍鎼达箑绻€妞ゆ槒鍤滃杈╃暬閸戝棴绱伴棃?`width('100%')` + 婢舵牕鐪?padding
-   * 閸︺劑鍎撮崚鍡楄埌閹椒绗呮导姘辩暬闁挎瑱绱檋ugging 閸掓澘褰告潏?/ 閹炬垶鍨氶弫瀛樻蒋婢堆囨毐閺傜懓鑸伴敍澶涚礉閼板瞼娅ㄩ崚鍡樼槷鐎硅棄瀹抽崣鍫滅窗閸?
-   * 缁愭褰涚亸鍝勵嚟閸欐ê瀵查弮鎯扮儲閸欐ǜ鈧倽绻栭柌灞藉涧閸︺劑顩诲▎鈥虫嫲鐏忓搫顕惇鐔割劀閸欐ê瀵查弮鑸垫纯閺傝埇鈧?
+   * 鎮诞鏉℃槸鍙犲湪椤甸潰涓婄殑鐙珛鑺傜偣锛屽搴﹀繀椤昏嚜宸辩畻鍑嗭細闈?`width('100%')` + 澶栧眰 padding
+   * 鍦ㄩ儴鍒嗗舰鎬佷笅浼氱畻閿欙紙hugging 鍒板彸杈?/ 鎾戞垚鏁存潯澶ч暱鏂瑰舰锛夛紝鑰岀櫨鍒嗘瘮瀹藉害鍙堜細鍦?
+   * 绐楀彛灏哄鍙樺寲鏃惰烦鍙樸€傝繖閲屽彧鍦ㄩ娆″拰灏哄鐪熸鍙樺寲鏃舵洿鏂般€?
    */
   @Local viewportWidthVp: number = 0;
-  /** 鐟欏棗褰涙妯哄閿涘澊p閿涘绱版稉濠冨閹垫挸绱戦惃?鐠ч攱澧滈弰顖氭儊閸︺劌绨抽柈?閸掋倕鐣炬稉搴濈秴缁夌粯妲х亸鍕厴鐟曚胶鏁ょ€瑰啨鈧?*/
+  /** 瑙嗗彛楂樺害锛坴p锛夛細涓婃媺鎵撳紑鐨?璧锋墜鏄惁鍦ㄥ簳閮?鍒ゅ畾涓庝綅绉绘槧灏勯兘瑕佺敤瀹冦€?*/
   @Local viewportHeightVp: number = 0;
-  /** 娑撳﹥濯洪幍鎾崇磻閹靛濞嶉敍鍫㈢彨閻╁瓨鏌熼崥鎴礆閵?*/
+  /** 涓婃媺鎵撳紑鎵嬪娍锛堢珫鐩存柟鍚戯級銆?*/
   @Local miniBarViewModel: PlayerViewModel = new PlayerViewModel();
   private pullOpenOption: PanGestureOptions = new PanGestureOptions({ direction: PanDirection.Vertical });
 
   /**
-   * 鐠囧﹥鏌囬梻闈╃窗閺堫剝鐤嗛幍瀣◢閺勵垰鎯?*瀹歌尙绮＄拋鎷岀箖娑撯偓濞?*"鐠虹喐澧滈弴瀛樻煀鐞氼偄鍨介幑顔藉珕閹?閵?
+   * 璇婃柇闂革細鏈疆鎵嬪娍鏄惁**宸茬粡璁拌繃涓€娆?*"璺熸墜鏇存柊琚垽鎹嫆鎺?銆?
    *
-   * 娑撹桨绮堟稊鍫ユ付鐟曚礁鐣犻敍鍫ｂ偓灞肩瑝閺勵垱鐦″▎锟犲厴鐠佸府绱氶敍姝歰nPullOpenUpdate` 閻㈣鲸鐦℃稉顏囆曢幗鍝バ╅崝銊ょ皑娴犳儼鐨熼悽顭掔礉
-   * 閼板矁顓搁弫鎷屾儰閸?`PlayerExpandState` 閻?`@Trace` 鐎涙顔屾稉?閳?濮ｅ繑顐奸柈钘夊晸娴兼俺顔€瀵拌姤鐖ｉ柇锝勯嚋
-   * 13 鐞?`Text` 濮ｅ繐鎶氶柌宥呯紦閿?*鐠囧﹥鏌囬張顒冮煩娴兼碍濡搁幍瀣妳閹煎懏绁?*閵嗗倽鐦栭弬顓炲涧闂団偓鐟?鏉╂瑤绔存潪顔芥箒濞屸剝婀佺悮顐ｅ珕"
-   * 鏉╂瑤绔存稉顏冪皑鐎?閳?娑撯偓濞嗏剝澧滈崝鍨涧鐠侀绔村▎鈽呯礄`onPullOpenStart` 闁插本绔婚梿璁圭礆閵?
-   * 鐠囩粯鏆熼敍姘獦閺嶅洨顑囬崡浣筋攽 `pd=<鐠ч攱澧滈幏?/<閺囧瓨鏌婇幏?/<閺夌偓澧滈幏?`閿涘矁顫?`PlayerExpandState.pullDropBegin`閵?
+   * 涓轰粈涔堥渶瑕佸畠锛堣€屼笉鏄瘡娆￠兘璁帮級锛歚onPullOpenUpdate` 鐢辨瘡涓Е鎽哥Щ鍔ㄤ簨浠惰皟鐢紝
+   * 鑰岃鏁拌惤鍦?`PlayerExpandState` 鐨?`@Trace` 瀛楁涓?鈬?姣忔閮藉啓浼氳寰芥爣閭ｄ釜
+   * 13 琛?`Text` 姣忓抚閲嶅缓锛?*璇婃柇鏈韩浼氭妸鎵嬫劅鎼呮祽**銆傝瘖鏂彧闇€瑕?杩欎竴杞湁娌℃湁琚嫆"
+   * 杩欎竴涓簨瀹?鈬?涓€娆℃墜鍔垮彧璁颁竴娆★紙`onPullOpenStart` 閲屾竻闆讹級銆?
+   * 璇绘暟锛氬窘鏍囩鍗佽 `pd=<璧锋墜鎷?/<鏇存柊鎷?/<鏉炬墜鎷?`锛岃 `PlayerExpandState.pullDropBegin`銆?
    */
   private pullDropCountedThisGesture: boolean = false;
 
   /**
-   * 娑撯偓瀵姵鍩呴崶鎯ф皑閼宠姤瀣侀崚?x/y/w/h閿涘奔绗呮稉鈧潪顔藉瘻閺佹澘鐡ч弨鐟扮暚閸楀啿鍨归妴?
+   * 涓€寮犳埅鍥惧氨鑳芥嬁鍒?x/y/w/h锛屼笅涓€杞寜鏁板瓧鏀瑰畬鍗冲垹銆?
    */
   private tabsController: HdsTabsController = new HdsTabsController();
   /**
-   * 鏉╂稑鍤禍宀€楠囨い鐢告桨閺堢喖妫块幎鎴濆煑 HDS 閻ㄥ嫭鐗卞蹇撴礀鐠嬪喛绱欐潻娑楃癌缁狙囥€夐棃顫瑝閸愬秵鏁肩敮鍐ㄧ湰閻樿埖鈧緤绱濋崣顏嗘暏娴滃骸鍤い鐢告桨閺冨墎娈戦獮鍌滅搼鐎靛綊缍堥敍澶堚偓?
+   * 杩涘嚭浜岀骇椤甸潰鏈熼棿鎶戝埗 HDS 鐨勬牱寮忓洖璋冿紙杩涗簩绾ч〉闈笉鍐嶆敼甯冨眬鐘舵€侊紝鍙敤浜庡嚭椤甸潰鏃剁殑骞傜瓑瀵归綈锛夈€?
    */
   private restoringHomeBar: boolean = false;
 
   /**
-   * 婢瑰啿鐪板銈呭煝閺勵垰鎯?*閼奉亜绻?*閹镐焦婀佸ù顔肩湴闁絼绔村Λ鎺旀畱鐞涖儵妫块敍鍧凪orphCoverClone` 閻?`morphOverlayP`閿涘鈧?
+   * 澹冲眰姝ゅ埢鏄惁**鑷繁**鎸佹湁娴眰閭ｄ竴妫掔殑琛ラ棿锛坄MorphCoverClone` 鐨?`morphOverlayP`锛夈€?
    *
-   * 閻劑鈧柨褰ч張澶夌娑擃亷绱扮紒?`@Monitor('expandState.morphDrive')` 鐠佲晞鐭?閳ユ柡鈧?
-   * `settlePullOpen` 鐠у嘲鐣竟鍐茬湴閻ㄥ嫭璇炵仦鍌澦夐梻缈犵閸氬簼绱伴幎?`morphDrive` 缂冾喗鍨?`ANIM`閿?
-   * 闁絼绔撮惉顒傛磧閹貉冩礀鐠嬪啩绡冩导姘愁潶鐟欙箑褰傞敍娑楃瑝閸ョ偠顔€閻ㄥ嫯鐦界€瑰啩绱伴崘宥堟崳娑撯偓閺夆剝鏌熼崥鎴犳祲閸欏秶娈戝ù顔肩湴鐞涖儵妫?
-   * 閿?閺夌偓澧滃▽陇绻冮梼鍫濃偓绗衡偓浣哥殱闂堛垹鍑＄紒蹇撶窔閸ョ偠藟娴滃棴绱濋崣鍫ｎ潶閹疯棄鍩岄拃鎴掔秴"閿涘鈧?
-   * 濞夈劍鍓扮€?*娑撳秵妲?*濞撳弶鐓嬮梻顭掔礄濞撳弶鐓嬮梻銊ユ躬 `PlayerExpandState.morphOverlayBridging()` 闁插矉绱氶妴?
+   * 鐢ㄩ€斿彧鏈変竴涓細缁?`@Monitor('expandState.morphDrive')` 璁╄矾 鈥斺€?
+   * `settlePullOpen` 璧峰畬澹冲眰鐨勬诞灞傝ˉ闂翠箣鍚庝細鎶?`morphDrive` 缃垚 `ANIM`锛?
+   * 閭ｄ竴鐬洃鎺у洖璋冧篃浼氳瑙﹀彂锛涗笉鍥炶鐨勮瘽瀹冧細鍐嶈捣涓€鏉℃柟鍚戠浉鍙嶇殑娴眰琛ラ棿
+   * 锛?鏉炬墜娌¤繃闃堝€笺€佸皝闈㈠凡缁忓線鍥炶ˉ浜嗭紝鍙堣鎷藉埌钀戒綅"锛夈€?
+   * 娉ㄦ剰瀹?*涓嶆槸**娓叉煋闂紙娓叉煋闂ㄥ湪 `PlayerExpandState.morphOverlayBridging()` 閲岋級銆?
    */
   private shellOwnsOverlayTween: boolean = false;
 
   /** Initializes play queue ids from local DB for the session. */
   aboutToAppear() {
-    // 鈽呪槄鈽?2026-10-18锛堢収鎼笂娓镐袱娈靛紡锛氬垽鎰忓浘 鈫?controller 钀藉湴锛夛細婊氬姩渚у彧琛ㄨ揪鎰忓浘锛?
-    //   鏍峰紡鍒囨崲涓庡姩鐢婚兘浜ょ粰 HDS锛圫DK `@hms.hds.hdsBaseComponent.d.ets:5729`銆宒efault animation銆嶏級銆?
+    // ★★★ 2026-10-18（照搬上游两段式：判意图 → controller 落地）：滚动侧只表达意图，
+    //   样式切换与动画都交给 HDS（SDK `@hms.hds.hdsBaseComponent.d.ets:5729`「default animation」）。
     BarScrollHelper.expandApplier = (expand: boolean): void => {
       this.applyHomeBarExpanded(expand);
     };
     this.appState.playQueueIds = MusicDbApi.getInstance().getSongList().map((dto) => dto.id);
-    // 閳?妞ょ數顒锋禒?4 娑擃亝鏁归幋?2 娑擃亷绱欓幒銊ㄥ礃 / 閹存垹娈戦敍澶夌閸氬函绱漙TabSwitchState.tabIndex` 閸欘垵鍏橀弰顖欑瑐娑撯偓閻楀牏鏆€娑撳娈?
-    //   鐡掑﹦鏅稉瀣垼閿涘牊鐦俊鍌涙＋閻ㄥ嫨鈧本鍨滈惃鍕┾偓? 2閵嗕降鈧矁顔曠純顔衡偓? 3閿涘鈧柡鈧?HdsTabs 閹峰灝鍩岀搾濠勬櫕娑撳鐖ｆ导姘虫儰閸︺劎鈹栭惂浠嬨€夋稉濞库偓?
-    //   閸忓彉闊╅悩鑸碘偓渚€鍣峰▽鈩冩箒"妞ょ數顒烽弫?鏉╂瑤閲滃鍌氬悍閿涘本澧嶆禒銉ユ躬鏉╂瑩鍣锋径閫涚濞嗏槄绱扮搾濠勬櫕閸楀啿娲栨＃鏍€夐妴?
-    // 閳?2026-10-15閿涙哎鈧瞼骞囬崷銊ユ皑閸氼兙鈧秵褰冮崚鑸偓灞惧腹閼芥劑鈧秳绗岄妴灞芥礀閸濆秲鈧秳绠ｉ梻?閳?妞ょ數顒烽弫鏉垮綁 4閿涘奔绗傞悾?2 閳?3閵?
-    //   閳跨媴绗?鏉╂瑤绔寸仦鍌涚梾閺堝宕熸稉鈧惇鐔哥爱閿涙碍褰?閸掔娀銆夌粵鎯х箑妞?*閸氬本妞?*閺€鐟版磽缂佸嫭瀵滄稉瀣垼閸欐牜娈戦崷鐗堟煙 閳ユ柡鈧?
-    //     閳?鏉╂瑩鍣烽敍鍫ｇШ閻ｅ苯銇欓崣鏍︾瑐閻ｅ矉绱氶敍娑掓喗 `tabScrollTopCommands` 闂€鍨閿?
-    //     閳?`tabBounceTriggers` 闂€鍨閿涙稈鎳€ `TabBarItem(i,閳?` 娑撳骸鎮囨い?`scrollTopCommand` 閻ㄥ嫪绗呴弽鍥モ偓?
-    //   濠曞繋绔寸紒鍕皑閺?闁挎瑤缍?/ 娑撳秴鑴?/ 娑撳秴顦叉担?閵?
+    // 鈽?椤电浠?4 涓敹鎴?2 涓紙鎺ㄨ崘 / 鎴戠殑锛変箣鍚庯紝`TabSwitchState.tabIndex` 鍙兘鏄笂涓€鐗堢暀涓嬬殑
+    //   瓒婄晫涓嬫爣锛堟瘮濡傛棫鐨勩€屾垜鐨勩€? 2銆併€岃缃€? 3锛夆€斺€?HdsTabs 鎷垮埌瓒婄晫涓嬫爣浼氳惤鍦ㄧ┖鐧介〉涓娿€?
+    //   鍏变韩鐘舵€侀噷娌℃湁"椤电鏁?杩欎釜姒傚康锛屾墍浠ュ湪杩欓噷澶逛竴娆★細瓒婄晫鍗冲洖棣栭〉銆?
+    // 鈽?2026-10-15锛氥€岀幇鍦ㄥ氨鍚€嶆彃鍒般€屾帹鑽愩€嶄笌銆屽洖鍝嶃€嶄箣闂?鈬?椤电鏁板彉 4锛屼笂鐣?2 鈫?3銆?
+    //   鈿狅笍 杩欎竴灞傛病鏈夊崟涓€鐪熸簮锛氭彃/鍒犻〉绛惧繀椤?*鍚屾椂**鏀瑰洓缁勬寜涓嬫爣鍙栫殑鍦版柟 鈥斺€?
+    //     鈶?杩欓噷锛堣秺鐣屽す鍙栦笂鐣岋級锛涒憽 `tabScrollTopCommands` 闀垮害锛?
+    //     鈶?`tabBounceTriggers` 闀垮害锛涒懀 `TabBarItem(i,鈥?` 涓庡悇椤?`scrollTopCommand` 鐨勪笅鏍囥€?
+    //   婕忎竴缁勫氨鏄?閿欎綅 / 涓嶅脊 / 涓嶅浣?銆?
     if (this.tabState.tabIndex < 0 || this.tabState.tabIndex > 3) {
       Logger.warn(RzdShellLogTag, `tab index out of range (${this.tabState.tabIndex}), reset to 0`);
       this.tabState.tabIndex = 0;
@@ -473,12 +473,12 @@ struct Index {
     this.miniLyricState.enabled = MusicStoreService.getInstance().getShowMiniLyric();
     AppStorage.setOrCreate('lxPlayQuality', MusicStoreService.getInstance().getPlayQuality());
     AppStorage.setOrCreate('lxPlaybackFlowLight', MusicStoreService.getInstance().getPlaybackFlowLight());
-    // 閺堫剙婀撮棅鍏呯鎼存挷绗岄崥灞绢劄鐎广垺鍩涚粩顖氭躬閸氼垰濮╅弮璺哄灥婵瀵查敍姘拱閸︿即鐓舵稊鎰洣瀵ょ儤鐭欑粻杈╂窗瑜版洖鑻熸潪钘夊弳缁便垹绱╅敍?
-    // 閸氬本顒炵€广垺鍩涚粩顖濐洣鐠囪娲栭張宥呭閸ｃ劌婀撮崸鈧稉搴＄磻閸忕绱欏鈧崗鍏呰礋閸忚櫕妞傛稉宥堢箾閺堝秴濮熺粩顖ょ礆閵?
+    // 鏈湴闊充箰搴撲笌鍚屾瀹㈡埛绔湪鍚姩鏃跺垵濮嬪寲锛氭湰鍦伴煶涔愯寤烘矙绠辩洰褰曞苟杞藉叆绱㈠紩锛?
+    // 鍚屾瀹㈡埛绔璇诲洖鏈嶅姟鍣ㄥ湴鍧€涓庡紑鍏筹紙寮€鍏充负鍏虫椂涓嶈繛鏈嶅姟绔級銆?
     //
-    // 閳跨媴绗?娑撱倓閲滈柈钘夊瘶 try/catch閿涙艾鐣犳禒?*娑撳秵妲?*閹绢厽鏂侀惃鍕缂冾喗娼禒璁圭礉娴ｅ棝鍏橀崷?`aboutToAppear` 闁插被鈧?
-    //    娑撯偓閺冿箒绻栭柌灞惧閸戝搫骞撻敍瀹峚boutToAppear` 娴兼矮鑵戦弬顓ㄧ礉閸氬酣娼伴敍鍫滀簰閸欏﹤鐨㈤弶銉ュ閸︺劏绻栭柌宀€娈戦敍澶婂灥婵瀵?
-    //    閸忋劏顫︾捄瀹犵箖 閳ユ柡鈧?闁絼绱扮悰銊у箛閹?閼绢偄鎮曢崗璺侯浘閺佺繝閲滈幘顓熸杹闁晫鏁ゆ稉宥勭啊"閿涘本甯撻弻銉ㄦ崳閺夈儵娼敮鍝ョ搏閵?
+    // 鈿狅笍 涓や釜閮藉寘 try/catch锛氬畠浠?*涓嶆槸**鎾斁鐨勫墠缃潯浠讹紝浣嗛兘鍦?`aboutToAppear` 閲屻€?
+    //    涓€鏃﹁繖閲屾姏鍑哄幓锛宍aboutToAppear` 浼氫腑鏂紝鍚庨潰锛堜互鍙婂皢鏉ュ姞鍦ㄨ繖閲岀殑锛夊垵濮嬪寲
+    //    鍏ㄨ璺宠繃 鈥斺€?閭ｄ細琛ㄧ幇鎴?鑾悕鍏跺鏁翠釜鎾斁閮界敤涓嶄簡"锛屾帓鏌ヨ捣鏉ラ潪甯哥粫銆?
     const hostContext: common.UIAbilityContext | undefined =
       this.getUIContext().getHostContext() as common.UIAbilityContext | undefined;
     if (hostContext !== undefined) {
@@ -495,29 +495,29 @@ struct Index {
         Logger.error('RzdShell', `syncManager init failed code=${e.code} msg=${e.message}`);
       }
     }
-    // 鐠囧嫯顔戦棃銏℃緲鐟曚浇鍏樻径鍕倞閺堫剙婀撮棅鍏呯閿涙碍濡搁妴灞炬拱閸︾増鐡?-> 楠炲啿褰撮煬顐″敜閵嗗秶娈戠憴锝嗙€芥禍銈囩舶 comment
-    // 閿涘潏omment / player 闁垝绗夐懗钘夊冀閸氭垳绶风挧?localmusic閿涘本澧嶆禒銉ㄧ箹娑擃亝妲х亸鍕涧閼崇晫鏁辨竟鍐茬湴閹风》绱氶妴?
+    // 璇勮闈㈡澘瑕佽兘澶勭悊鏈湴闊充箰锛氭妸銆屾湰鍦版瓕 -> 骞冲彴韬唤銆嶇殑瑙ｆ瀽浜ょ粰 comment
+    // 锛坈omment / player 閮戒笉鑳藉弽鍚戜緷璧?localmusic锛屾墍浠ヨ繖涓槧灏勫彧鑳界敱澹冲眰鎷硷級銆?
     setCommentTargetResolver((song: CommentSongRef): Promise<CommentSongRef | null> => {
       return Promise.resolve(this.resolveCommentTarget(song));
     });
     this.syncViewportWidthVp();
-    // 鈽呪槄鈽?2026-10-17锛堚懁銆岀偣鍑绘墦寮€鑳屾櫙浠嶅涓嶄笂銆嶇殑绗竴鏉★級锛歚@Monitor` 鍙湪**鍙樺寲**鏃惰Е鍙戙€?
-    //   鍐峰惎鍔ㄨ繖涓€鎷嶏細`playQueueIds` 鍒氫粠搴撻噷璇诲洖锛堜笂闈㈢ 2 琛岋級銆乣selectIndex` 杩樻槸 0锛?
-    //   鑻ユ寔涔呭寲鎭㈠鍑烘潵鐨?selectIndex 鎭板ソ涔熸槸 0锛屽垯**娌℃湁浠讳綍鍙樺寲浜嬩欢** 鈬?棰勭儹涓€娆￠兘娌¤窇杩?
-    //   鈬?鎾斁椤?`adoptWarmMesh()` 姘歌繙姣斿涓嶄笂 鈬?鐢ㄦ埛鐪嬪埌鐨勫氨鏄厹搴曠綉鏍硷紙鍒殑姝岀殑棰滆壊锛夈€?
-    //   鈬?杩欓噷鏄惧紡琛ヤ竴娆★紙骞傜瓑锛歚MeshWarmService` 鍐呴儴鏈?in-flight / done 鍘婚噸锛夈€?
+    // ★★★ 2026-10-17（⑤「点击打开背景仍对不上」的第一条）：`@Monitor` 只在**变化**时触发。
+    //   冷启动这一拍：`playQueueIds` 刚从库里读回（上面第 2 行）、`selectIndex` 还是 0，
+    //   若持久化恢复出来的 selectIndex 恰好也是 0，则**没有任何变化事件** ⇒ 预热一次都没跑过
+    //   ⇒ 播放页 `adoptWarmMesh()` 永远比对不上 ⇒ 用户看到的就是兜底网格（别的歌的颜色）。
+    //   ⇒ 这里显式补一次（幂等：`MeshWarmService` 内部有 in-flight / done 去重）。
     prewarmCurrentSongMesh(this.getUIContext(), this.appState.getCurrentSongItem());
   }
 
   /**
-   * 閺堫剙婀撮棅鍏呯 -> 楠炲啿褰撮煬顐″敜閿涘牐鐦庣拋娲桨閺夊灝鍞撮柈銊ょ窗鐠嬪啰鏁ら敍澶堚偓?
+   * 鏈湴闊充箰 -> 骞冲彴韬唤锛堣瘎璁洪潰鏉垮唴閮ㄤ細璋冪敤锛夈€?
    *
-   * 閺堫剙婀村灞藉涧鐎涙ü绨￠張顒€婀?key閿涘矁顩﹂崣鏍槑鐠佸搫绶遍崗鍫㈢叀闁挸鐣犻崠褰掑帳閸掓澘閽╅崣棰佺瑐閻ㄥ嫬鎽㈡稉鈧＃鏍电窗
-   * 閻?`localMusic.matchOf` 鐠囪灏柊宥堫唶瑜版洩绱欓懛顏勫З閸栧綊鍘ら幋鎰閹存牜鏁ら幋宄版躬閵嗗苯灏柊宥嗙摃鐠囧秲鈧秹鍣烽幍瀣偓澶屾畱闁絾娼敍澶堚偓?
-   * 濞屸剝婀佺拋鏉跨秿鐏忚精绻戦崶?null閿涘矁鐦庣拋娲桨閺夊じ绱伴幓鎰仛閵嗗矁绻栨＃鏍ㄧ摃鏉╂ɑ鐥呴崠褰掑帳閸掓澘閽╅崣棰佺瑐閻ㄥ嫮澧楅張顑锯偓宥冣偓?
+   * 鏈湴姝屽彧瀛樹簡鏈湴 key锛岃鍙栬瘎璁哄緱鍏堢煡閬撳畠鍖归厤鍒板钩鍙颁笂鐨勫摢涓€棣栵細
+   * 鐢?`localMusic.matchOf` 璇诲尮閰嶈褰曪紙鑷姩鍖归厤鎴愬姛鎴栫敤鎴峰湪銆屽尮閰嶆瓕璇嶃€嶉噷鎵嬮€夌殑閭ｆ潯锛夈€?
+   * 娌℃湁璁板綍灏辫繑鍥?null锛岃瘎璁洪潰鏉夸細鎻愮ず銆岃繖棣栨瓕杩樻病鍖归厤鍒板钩鍙颁笂鐨勭増鏈€嶃€?
    *
-   * @param song 鐠囧嫯顔戦棃銏℃緲缂佹瑧娈戝灞炬锤闊偂鍞ら敍鍫熸拱閸︾増鐡曢惃?songId 鐏忚鲸妲搁張顒€婀?key閿涘鈧?
-   * @returns 楠炲啿褰撮煬顐″敜閿涘本鍨?null閵?
+   * @param song 璇勮闈㈡澘缁欑殑姝屾洸韬唤锛堟湰鍦版瓕鐨?songId 灏辨槸鏈湴 key锛夈€?
+   * @returns 骞冲彴韬唤锛屾垨 null銆?
    */
   private resolveCommentTarget(song: CommentSongRef): CommentSongRef | null {
     const matched: MatchSongInfo | null = localMusic.matchOf(song.songId);
@@ -534,11 +534,11 @@ struct Index {
   }
 
   /**
-   * 鐠佹澘缍嶇粣妤€褰涚€硅棄瀹抽敍鍧磒閿涘绱濇笟娑欏亾濞搭喛绯犳担鐘虫蒋缁犳顔旀惔锔衡偓?
+   * 璁板綍绐楀彛瀹藉害锛坴p锛夛紝渚涙偓娴糠浣犳潯绠楀搴︺€?
    *
-   * 閸欘亜婀潻娆撳櫡缁犳ぞ绔村▎掳鈧礁鑻熼崷?`onAreaChange` 闁插苯鍩涢弬甯窗閹剚璇為弶鈩冩Ц閸欑姴婀い鐢告桨娑撳﹦娈戦悪顒傜彌閼哄倻鍋ｉ敍?
-   * 閻╁瓨甯寸拠?`windowInfo.windowSize`閿涘潷x閿涘婀?build 闁插本宕茬粻妞剧窗鐢箒绻樻稉鈧稉顏冪瑝缁嬪啿鐣鹃惃鍕贩鐠ф牓鈧?
-   * @returns 鐎硅棄瀹抽敍鍧磒閿涘鈧?
+   * 鍙湪杩欓噷绠椾竴娆°€佸苟鍦?`onAreaChange` 閲屽埛鏂帮細鎮诞鏉℃槸鍙犲湪椤甸潰涓婄殑鐙珛鑺傜偣锛?
+   * 鐩存帴璇?`windowInfo.windowSize`锛坧x锛夊湪 build 閲屾崲绠椾細甯﹁繘涓€涓笉绋冲畾鐨勪緷璧栥€?
+   * @returns 瀹藉害锛坴p锛夈€?
    */
   private syncViewportWidthVp(): void {
     const px: number = this.windowInfo.windowSize.width;
@@ -549,7 +549,7 @@ struct Index {
     if (Math.abs(vp - this.viewportWidthVp) > 1) {
       this.viewportWidthVp = vp;
     }
-    // 妤傛ê瀹虫稉鈧挧宄板煕閿涘牆鎮撴稉鈧禒?windowSize閿涘奔绗夋径姘冲С娴狅絼鐜敍?
+    // 楂樺害涓€璧峰埛锛堝悓涓€浠?windowSize锛屼笉澶氳姳浠ｄ环锛?
     const hPx: number = this.windowInfo.windowSize.height;
     if (hPx > 0) {
       const hVp: number = this.getUIContext().px2vp(hPx);
@@ -563,27 +563,27 @@ struct Index {
   @Monitor('intentState.requestVersion')
   onPlaybackIntentChanged() {
     dispatchShellPlaybackIntent(this.appState, this.intentState, () => {
-      // 閻╁瓨甯撮幐鍌濇崳閹绢厽鏂佹い闈涘祮閸欘垽绱扮仦鏇炵磻閸斻劎鏁鹃悽杈ㄦ尡閺€楣冦€夐懛顏勭箒閹绢叏绱欑憴?playExpandIntro / morphScaleValue閿涘鈧?
+      // 鐩存帴鎸傝捣鎾斁椤靛嵆鍙細灞曞紑鍔ㄧ敾鐢辨挱鏀鹃〉鑷繁鎾紙瑙?playExpandIntro / morphScaleValue锛夈€?
       this.appState.isShowPlay = true;
     });
   }
 
   /**
-   * 闁款喚娲忛柆鑳唨鐠囧﹥鏌囬敍姘宠拫闁款喚娲忓鐟板毉 / 閺€鎯版崳閺冭埖澧︽稉鈧悰宀嬬礄`hdc shell hilog | grep RzdKeyboardAvoid`閿涘鈧?
+   * 閿洏閬胯璇婃柇锛氳蒋閿洏寮瑰嚭 / 鏀惰捣鏃舵墦涓€琛岋紙`hdc shell hilog | grep RzdKeyboardAvoid`锛夈€?
    *
-   * 閳跨媴绗?**娑撳秷顩﹂崷銊ワ紦鐏炲倸鍟€閹稿倷绔存禒鐣岀崶閸欙絿娲冮崥?*閿涙瓪TYPE_KEYBOARD` 閻ㄥ嫰浼╃拋鈺佸隘閻?
-   * `common/musicbasic` 閻?`WindowUtil.updateWindowInfo()` 缂佺喍绔撮惄鎴濇儔閿涘牆鍙忔潻娑氣柤閸烆垯绔存稉鈧径鍕剁礆閿?
-   * 鏉╂瑩鍣烽崣顏呮Ц**鐠?*鐎瑰啫鍟撴潻?`WindowInfo.avoidKeyboard`閿涘潉@Trace`閿涘娈戠紒鎾寸亯 閳ユ柡鈧?
-   * 鐠?`@Trace` 鐏炵偞鈧勬＆閼充粙鈹嶉崝銊︽拱閺夆剝鍋撳ù顔芥蒋閻ㄥ嫰鍣搁弬鏉跨鐏炩偓閿涘奔绡冨锝呫偨閺勵垵绻栨稉顏囩槚閺傤厽鏌囬悙骞库偓?
+   * 鈿狅笍 **涓嶈鍦ㄥ３灞傚啀鎸備竴浠界獥鍙ｇ洃鍚?*锛歚TYPE_KEYBOARD` 鐨勯伩璁╁尯鐢?
+   * `common/musicbasic` 鐨?`WindowUtil.updateWindowInfo()` 缁熶竴鐩戝惉锛堝叏杩涚▼鍞竴涓€澶勶級锛?
+   * 杩欓噷鍙槸**璇?*瀹冨啓杩?`WindowInfo.avoidKeyboard`锛坄@Trace`锛夌殑缁撴灉 鈥斺€?
+   * 璇?`@Trace` 灞炴€ф棦鑳介┍鍔ㄦ湰鏉℃偓娴潯鐨勯噸鏂板竷灞€锛屼篃姝ｅソ鏄繖涓瘖鏂柇鐐广€?
    */
   @Monitor('windowInfo.avoidKeyboard')
   onKeyboardAvoidAreaChanged(): void {
-    // 鈽呪槄鈽?2026-10-18锛氶敭鐩樻€佷袱琛岃处锛坄hdc shell hilog | grep RzdKeyboardAvoid`锛?
-    //   鈶?`RzdKeyboardAvoid calc`    = 绠楀紡鍙ｅ緞锛欿 / I / margin / 鐩爣绌虹櫧 / 瀹夸富浣嶇Щ锛堟亽 0锛?
-    //   鈶?`RzdKeyboardAvoid measure` = 涓€甯у悗**瀹炴祴**鐪熻韩钀界偣锛氶敭鐩樹笂娌?鈭?鏉″簳 = 鐪熷疄绌虹櫧銆?
-    //      鑻?ArkUI 榛樿 `KeyboardAvoidMode.OFFSET`锛圫DK `@ohos.arkui.UIContext.d.ts:4389`
-    //      鍘熸枃銆孌efault mode: KeyboardAvoidMode.OFFSET銆嶏級鎶婃暣椤典篃骞崇Щ浜嗭紝
-    //      `hostBottom` 浼氳窡鐫€寰€涓婅窇锛宍gap` 浼氭槑鏄惧ぇ浜?`keyGap` 鈬?閭ｅ氨鏄弻鎶紝瑕佹寜绗洓鏉″缃€?
+    // ★★★ 2026-10-18：键盘态两行账（`hdc shell hilog | grep RzdKeyboardAvoid`）
+    //   ① `RzdKeyboardAvoid calc`    = 算式口径：K / I / margin / 目标空白 / 宿主位移（恒 0）
+    //   ② `RzdKeyboardAvoid measure` = 一帧后**实测**真身落点：键盘上沿 − 条底 = 真实空白。
+    //      若 ArkUI 默认 `KeyboardAvoidMode.OFFSET`（SDK `@ohos.arkui.UIContext.d.ts:4389`
+    //      原文「Default mode: KeyboardAvoidMode.OFFSET」）把整页也平移了，
+    //      `hostBottom` 会跟着往上跑，`gap` 会明显大于 `keyGap` ⇒ 那就是双抬，要按第四条处置。
     const keyboardVp: number = this.keyboardBottomVp();
     Logger.info('RzdKeyboardAvoid',
       `RzdKeyboardAvoid calc keyboardVp=${keyboardVp} pageBottomInset=${this.pageBottomInsetVp()} ` +
@@ -591,7 +591,7 @@ struct Index {
         `hostOffset=${this.floatingMiniBarHostOffsetYVp()} restGap=${FLOATING_MINI_BAR_BOTTOM_GAP_VP} ` +
         `keyGap=${FLOATING_MINI_BAR_KEYBOARD_GAP_VP} windowH=${this.viewportHeightVp}`);
     if (keyboardVp > 0) {
-      // 绛?HDS 鎶婅兌鍥婃寜鏂?margin 鎽嗗畬鍐嶉噺锛堜袱甯ч噺绾э紱鍙噺涓€娆★紝涓嶈繘甯冨眬閾撅級銆?
+      // 等 HDS 把胶囊按新 margin 摆完再量（两帧量级；只量一次，不进布局链）。
       setTimeout((): void => {
         this.logKeyboardBarGap(keyboardVp);
       }, 96);
@@ -599,29 +599,29 @@ struct Index {
   }
 
   /**
-   * 椤电洅搴曠浉瀵?*绐楀彛搴?*鐨勫唴缂╋紙vp锛夈€?
+   * 页盒底相对**窗口底**的内缩（vp）。
    *
-   * 鏈粨鏃㈡湁鍙ｅ緞锛坄Index.ets` 椤堕儴閭ｆ鍑犱綍璁板綍宸蹭袱澶勭‘璁わ級锛氭牴 `Stack` 娌℃湁 `ignoreLayoutSafeArea`
-   * 鈬?瀹冪殑搴曡竟 = 椤电洅搴?= 绐楀彛搴?鈭?绯荤粺閬胯銆傝蛋 `getNavigationBarBottomVpFromWindowUtil()` 鑰屼笉鏄?
-   * 鐩存帴璇诲瓧娈碉細瀹冭嚜甯︺€岀紦瀛?鈫?鐜伴噺 鈫?鏈€鍚庝竴娆″ソ鍊?鈫?鍚姩蹇収銆嶅洓绾у厹搴曪紝涓嶄細杩斿洖闄堟棫鐨?0銆?
-   * @returns 绯荤粺瀵艰埅鏉?/ 灏忕櫧鏉￠珮搴︼紙vp锛夈€?
+   * 本仓既有口径（`Index.ets` 顶部那段几何记录已两处确认）：根 `Stack` 没有 `ignoreLayoutSafeArea`
+   * ⇒ 它的底边 = 页盒底 = 窗口底 − 系统避让。走 `getNavigationBarBottomVpFromWindowUtil()` 而不是
+   * 直接读字段：它自带「缓存 → 现量 → 最后一次好值 → 启动快照」四级兜底，不会返回陈旧的 0。
+   * @returns 系统导航条 / 小白条高度（vp）。
    */
   private pageBottomInsetVp(): number {
     return getNavigationBarBottomVpFromWindowUtil();
   }
 
   /**
-   * 涓€娆℃€ц瘖鏂細閲忋€岃糠浣犳潯鐪熻韩銆嶄笌銆屽涓荤洅銆嶇殑绐楀彛鐭╁舰锛岀畻鍑?*鏉″簳鍒伴敭鐩樹笂娌跨殑鐪熷疄绌虹櫧**銆?
+   * 一次性诊断：量「迷你条真身」与「宿主盒」的窗口矩形，算出**条底到键盘上沿的真实空白**。
    *
-   * 鍙ｅ緞鐢?`getComponentUtils().getRectangleById`锛堣繑鍥?*娓叉煋鍚?*绐楀彛鐭╁舰銆佸崟浣?px锛?
-   * 涓?`PlayerExpandState.measureNode` 鍚屼竴濂楀彇鏁板彛寰勶級锛屽啀 `px2vp` 鎹㈡垚 vp銆?
-   * 鍒よ锛坓rep `RzdKeyboardAvoid measure`锛夛細
-   *   路 `gap` 鈮?`expectGap`(10) 鈬?鍒颁綅锛?
-   *     `gap` 鏄庢樉**灏?* 鈬?鎶皯锛堥敭鐩樺挰鏉★級锛涙槑鏄?*澶?* 鈬?杩樻湁绗簩鏉℃姮鍗囧湪鍙犲姞锛?
-   *   路 `hostBottom` 搴旀亽绛変簬 `windowH 鈭?pageBottomInset`銆傚畠鑻ヨ窡鐫€閿洏寰€涓婅窇锛屽氨鏄?ArkUI 鐨?
-   *     `KeyboardAvoidMode.OFFSET` 鎶婃暣椤靛钩绉讳簡 鈬?搴旀妸鎵嬪姩鎶崌鍏虫帀锛坄barBottomMargin` 鍥炲父鎬侊級锛?
-   *     鑰屼笉鏄啀鍔?offset 鈥斺€?閭ｆ墠鏄?鏁翠釜搴曚笅閮借鎶笂鏉?鐨勬牴銆?
-   * @param keyboardVp 鏈閿洏楂橈紙vp锛夛紝鐢?{@link onKeyboardAvoidAreaChanged} 浼犲叆
+   * 口径用 `getComponentUtils().getRectangleById`（返回**渲染后**窗口矩形、单位 px，
+   * 与 `PlayerExpandState.measureNode` 同一套取数口径），再 `px2vp` 换成 vp。
+   * 判读（grep `RzdKeyboardAvoid measure`）：
+   *   · `gap` ≈ `expectGap`(10) ⇒ 到位；
+   *     `gap` 明显**小** ⇒ 抬少（键盘咬条）；明显**大** ⇒ 还有第二条抬升在叠加；
+   *   · `hostBottom` 应恒等于 `windowH − pageBottomInset`。它若跟着键盘往上跑，就是 ArkUI 的
+   *     `KeyboardAvoidMode.OFFSET` 把整页平移了 ⇒ 应把手动抬升关掉（`barBottomMargin` 回常态），
+   *     而不是再加 offset —— 那才是"整个底下都被抬上来"的根。
+   * @param keyboardVp 本次键盘高（vp），由 {@link onKeyboardAvoidAreaChanged} 传入
    */
   private logKeyboardBarGap(keyboardVp: number): void {
     const windowHVp: number = this.viewportHeightVp;
@@ -637,9 +637,9 @@ struct Index {
   }
 
   /**
-   * 閲忔煇鑺傜偣**搴曡竟鐨勭獥鍙ｅ潗鏍?*锛坴p锛夛紱閲忎笉鍒拌繑鍥?-1锛堟棩蹇楅噷涓€鐪煎彲瑙侊紝涓嶅繀鐚滐級銆?
-   * @param id 鑺傜偣涓婄殑 `.id(...)` 鍊?
-   * @returns 搴曡竟 y锛坴p锛夛紝鎴?-1
+   * 量某节点**底边的窗口坐标**（vp）；量不到返回 -1（日志里一眼可见，不必猜）。
+   * @param id 节点上的 `.id(...)` 值
+   * @returns 底边 y（vp），或 -1
    */
   private measureNodeBottomToWindowVp(id: string): number {
     try {
@@ -651,31 +651,31 @@ struct Index {
     }
   }
 
-  // 閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓 閹绢厽鏂佹い闈涘弳閸欙綇绱癭isShowPlay` 閳?NavDestination 閹恒劌鍙?/ 瀵懓鍤?閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓
+  // 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ 鎾斁椤靛叆鍙ｏ細`isShowPlay` 鈫?NavDestination 鎺ㄥ叆 / 寮瑰嚭 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   //
-  // 閳?閺傝棄浼愰崶鍓ь儑 1 濮濄儳娈戦崑姘《閿?*娑撳秹鈧劒閲滈弨纭呯殶閻劎鍋?*閵?
-  //   瀹搞儳鈻奸柌?閹垫挸绱戦幘顓熸杹妞?閻ㄥ嫬鍟撳▔鏇熸箒娴滄柨鍙氭径鍕剁礄鏉╄渹缍橀弶锛勫仯閸戞眹鈧焦鎸遍弨鐐壈閸ヤ勘鈧浇鎹ｉ幘顓熷壈閸ヤ勘鈧椒绗傞幏澶嬫緱閹靛鈧讣绱氶敍?
-  //   "閸忔娊妫?娑旂喐婀佹稉澶婎槱閿涘牊鎸遍弨楣冦€夋潻鏂挎礀閹稿鎸抽妴浣风瑓閹峰鏁圭挧宄扮暚閹存劑鈧竼ontrolArea閿涘绱?
-  //   娑撳骸鍙鹃柅鎰嚋閺囨寧宕查幋?push/pop閿涘牊绱℃稉鈧稉顏勬皑閺?閺堝娈戦崗銉ュ經鏉╂ɑ妲搁弮褍濮╅悽?閿涘绱濇稉宥咁洤閸︺劌锛撶仦鍌涘Ω
-  //   `MusicAppState.isShowPlay` 鏉╂瑤閲?*閺冦垺婀侀崬顖欑閻喐绨?*缂堟槒鐦ч幋鎰熅閻㈠崬濮╂担婊愮窗
-  //       isShowPlay: false 閳?true   閳?閹恒劌鍙嗛幘顓熸杹妞や絻鐭鹃悽?
-  //       isShowPlay: true  閳?false  閳?瀵懓鍤幘顓熸杹妞や絻鐭鹃悽?
-  //   閺冦垺婀佺拫鍐暏閻愰€涚鐞涘矂鍏樻稉宥囨暏閺€鐧哥礉閺傛澘顤冮崗銉ュ經娑旂喕鍤滈崝銊洬閻╂牓鈧?
+  // 鈽?鏂藉伐鍥剧 1 姝ョ殑鍋氭硶锛?*涓嶉€愪釜鏀硅皟鐢ㄧ偣**銆?
+  //   宸ョ▼閲?鎵撳紑鎾斁椤?鐨勫啓娉曟湁浜斿叚澶勶紙杩蜂綘鏉＄偣鍑汇€佹挱鏀炬剰鍥俱€佽捣鎾剰鍥俱€佷笂鎷夋澗鎵嬧€︼級锛?
+  //   "鍏抽棴"涔熸湁涓夊锛堟挱鏀鹃〉杩斿洖鎸夐挳銆佷笅鎷夋敹璧峰畬鎴愩€丆ontrolArea锛夛紝
+  //   涓庡叾閫愪釜鏇挎崲鎴?push/pop锛堟紡涓€涓氨鏄?鏈夌殑鍏ュ彛杩樻槸鏃у姩鐢?锛夛紝涓嶅鍦ㄥ３灞傛妸
+  //   `MusicAppState.isShowPlay` 杩欎釜**鏃㈡湁鍞竴鐪熸簮**缈昏瘧鎴愯矾鐢卞姩浣滐細
+  //       isShowPlay: false 鈫?true   鈬?鎺ㄥ叆鎾斁椤佃矾鐢?
+  //       isShowPlay: true  鈫?false  鈬?寮瑰嚭鎾斁椤佃矾鐢?
+  //   鏃㈡湁璋冪敤鐐逛竴琛岄兘涓嶇敤鏀癸紝鏂板鍏ュ彛涔熻嚜鍔ㄨ鐩栥€?
 
-  /** 閹绢厽鏂佹い鍨瘯鏉?閸楁瓕娴囬惃鍕暜娑撯偓閺€璺哄經閿涘牊澧嶉張?`isShowPlay` 閸愭瑥鍙嗛張鈧紒鍫ュ厴娴兼俺铔嬮崚鎷岀箹闁插矉绱氶妴?*/
+  /** 鎾斁椤垫寕杞?鍗歌浇鐨勫敮涓€鏀跺彛锛堟墍鏈?`isShowPlay` 鍐欏叆鏈€缁堥兘浼氳蛋鍒拌繖閲岋級銆?*/
   /**
-   * 鍙屽眰搴曟爮銆屾敹璧?/ 灞曞紑銆嶇殑**椹卞姩钀界偣鏃ュ織**锛坄hdc shell hilog | grep RzdHomeBarLayout`锛夈€?
+   * 双层底栏「收起 / 展开」的**驱动落点日志**（`hdc shell hilog | grep RzdHomeBarLayout`）。
    *
-   * 鈽呪槄鈽?2026-10-21锛堢鍏疆锛夛細椹卞姩鏂逛笌钀界偣**閮藉洖鍒?HDS**锛堜笂涓€杞偅濂?鑷繁绠楄兌鍥婂/绂诲簳/鍗曞眰"
-   * 鐨勬淳鐢熼噺宸查殢 `homeMiniCapsule()` 涓€璧峰垹闄わ紝鏈嚱鏁板彧浣?*瑙傛祴鐐?*锛夈€?
+   * ★★★ 2026-10-21（第八轮）：驱动方与落点**都回到 HDS**（上一轮那套"自己算胶囊宽/离底/单层"
+   * 的派生量已随 `homeMiniCapsule()` 一起删除，本函数只作**观测点**）。
    *
-   * 閾捐矾锛歚BarScrollHelper.notifyScrollDelta` 鍐?`MusicAppState.hdsBarLayoutMode` / `miniBarExpanded`
-   * 锛堝垪琛ㄤ笂婊?= 鍗曞眰 `HORIZONTAL`銆佷笅婊?= 鍙屽眰 `VERTICAL`锛?00ms `springMotion` 琛ラ棿锛?
-   * 鈬?{@link barLayoutModeForHds} / {@link miniBarStyleForHds} 鈬?澹冲眰 `HdsTabs` 鐨?
-   * `barFloatingStyle.miniBar.{barLayoutMode, miniBarStyle}`锛堜袱涓瓧娈典粛鍦紝瑙?{@link miniBar} 鐨勫涓伙級銆?
-   * 鍒ゆ嵁涓€鏉★細`singleRow=true`锛? HORIZONTAL锛夋椂 HDS 浼氭妸**椤电鏀舵垚宸︿晶鍦嗗潪**銆佹妸闀挎潯浣嶈缁欒糠浣犳爮锛?
-   * 杩蜂綘鏍忎笌椤电鍚屾帓锛沗false` 鏃舵槸涓婁笅涓ゆ帓 鈥斺€?涓や晶閮戒互 `RzdMiniBarGeom content h=` 閭ｈ鐨?
-   * `h == cap == 56` 涓哄噯锛堜袱鏉¤矾寰勭殑鍙楂樺害閮芥槸 `FLOATING_MINI_BAR_HEIGHT_VP`锛夈€?
+   * 链路：`BarScrollHelper.notifyScrollDelta` 写 `MusicAppState.hdsBarLayoutMode` / `miniBarExpanded`
+   * （列表上滑 = 单层 `HORIZONTAL`、下滑 = 双层 `VERTICAL`，500ms `springMotion` 补间）
+   * ⇒ {@link barLayoutModeForHds} / {@link miniBarStyleForHds} ⇒ 壳层 `HdsTabs` 的
+   * `barFloatingStyle.miniBar.{barLayoutMode, miniBarStyle}`（两个字段仍在，见 {@link miniBar} 的宿主）。
+   * 判据一条：`singleRow=true`（= HORIZONTAL）时 HDS 会把**页签收成左侧圆坞**、把长条位让给迷你栏，
+   * 迷你栏与页签同排；`false` 时是上下两排 —— 两侧都以 `RzdMiniBarGeom content h=` 那行的
+   * `h == cap == 56` 为准（两条路径的可见高度都是 `FLOATING_MINI_BAR_HEIGHT_VP`）。
    */
   @Monitor('appState.hdsBarLayoutMode', 'appState.miniBarExpanded')
   onHomeBarLayoutChanged(): void {
@@ -695,57 +695,57 @@ struct Index {
       return;
     }
     if (this.appState.isShowPlay) {
-      // 閳藉應妲勯埥?2026-10-16閿?*閸忔娊妫存潻鍥┾柤姒涙垵灏堢€?璺?閸烆垯绔撮懗鍊燁唶 `OPN` 閻ㄥ嫬婀撮弬鐟版皑閺勵垵绻栭柌?*閿涘绱?
-      //   閻劍鍩涢幎銉ф畱閵嗗苯鍙ч梻顓炴倵閸欏牏鐛婇悞鑸垫杹娑撯偓闁秴鐫嶅鈧妴宥佲偓鏂衡偓?婢舵潙褰跨€氬瞼鏋掗弰?*婢瑰啿鐪伴幎濠冩尡閺€楣冦€夐崣鍫熷腹娴滃棔绔村▎?*
-      //   閿涘潉isShowPlay` 閸︺劌鍙ч梻顓⑩偓鏂捐厬鐞氼偉鐨濋崘娆忔礀 true 閳?閺?`@Monitor` 閺€璺哄煂 false閳姲rue
-      //   閳?`beginOpenMorphOnClick()` + `pushPlayerRoute()` 閳?閺傛澘鐤勬笟瀣ㄢ偓浣规煀鐏炴洖绱戦崝銊ф暰閿涘鈧?
-      //   鏉╂瑤绔寸粭?*閸欘亝婀佹竟鍐茬湴閼冲€燁唶**閿涘牊鎸遍弨楣冦€夐柇锝勭閸掕鍑＄紒?pop 娴滃棴绱氶敍灞惧娴犮儰绨ㄦ禒鑸垫）韫囨浠涢幋鎰啊 public static
-      //   閿涘牐顫?`PlaybackPage.evLog` 閻ㄥ嫯顕╅弰搴礆閵嗗倽顕板▔鏇☆潌閼奉亣鐦夊鑺ョ垼缁楊剙宕勬稉澶庮攽閿涙碍顒滅敮绋垮彠闂傤厼鎮楅柌宥嗘煀閹垫挸绱戦敍?
-      //   閺冦儱绻旈柌?*閸欘亜绨查張澶夌閺?`OPN`**閿涙稖瀚㈤崗鎶芥４濞堝吀绠ｉ崥搴ｆ彛鐠虹喍绔撮弶?`OPN` 閼板瞼鏁ら幋宄拌嫙濞屸剝婀侀悙鐟扮磻 閳?鐏忚鲸妲哥€瑰啨鈧?
+      // 鈽呪槄鈽?2026-10-16锛?*鍏抽棴杩囩▼榛戝專瀛?路 鍞竴鑳借 `OPN` 鐨勫湴鏂瑰氨鏄繖閲?*锛夛細
+      //   鐢ㄦ埛鎶ョ殑銆屽叧闂悗鍙堢獊鐒舵斁涓€閬嶅睍寮€銆嶁€斺€?澶村彿瀚岀枒鏄?*澹冲眰鎶婃挱鏀鹃〉鍙堟帹浜嗕竴娆?*
+      //   锛坄isShowPlay` 鍦ㄥ叧闂€斾腑琚皝鍐欏洖 true 鈬?鏈?`@Monitor` 鏀跺埌 false鈫抰rue
+      //   鈬?`beginOpenMorphOnClick()` + `pushPlayerRoute()` 鈬?鏂板疄渚嬨€佹柊灞曞紑鍔ㄧ敾锛夈€?
+      //   杩欎竴绗?*鍙湁澹冲眰鑳借**锛堟挱鏀鹃〉閭ｄ竴鍒诲凡缁?pop 浜嗭級锛屾墍浠ヤ簨浠舵棩蹇楀仛鎴愪簡 public static
+      //   锛堣 `PlaybackPage.evLog` 鐨勮鏄庯級銆傝娉曡鑷瘉寰芥爣绗崄涓夎锛氭甯稿叧闂悗閲嶆柊鎵撳紑锛?
+      //   鏃ュ織閲?*鍙簲鏈変竴鏉?`OPN`**锛涜嫢鍏抽棴娈典箣鍚庣揣璺熶竴鏉?`OPN` 鑰岀敤鎴峰苟娌℃湁鐐瑰紑 鈬?灏辨槸瀹冦€?
       PlaybackPage.ev('OPN', `stage=${this.expandState.morphStage} p=${this.expandState.morphP.toFixed(2)}`);
-      // 閳藉應妲?2026-10-15閿涘牏鍙庨幖顒佹￥閻ｅ矉绱氶敍?*閻愮懓鍤幍鎾崇磻娑旂喎绻€妞ゆ槒铔嬭ぐ銏犲綁**閵?
-      //   閺冪姷鏅柌灞烩偓宀€鍋ｉ崙缁樻尡閺€鐐蒋閵嗗秴鎷伴妴灞肩瑐濠婃垶澧滈崝瑁も偓?*閸忚京鏁ら崥灞肩娑?`beginMorphEnter`**
-      //   閿涘牆鍙忛崠鍛涧閺?`openPlayerMorph` 娑?`pullStart` 娑撱倓閲滅拫鍐暏閼板拑绱濈憴?
-      //   `_recover/logic-src/閻愮懓鍤幍鎾崇磻閹绢厽鏂侀崳銊ヨ埌閸欐﹢鎽肩捄?md` 鎼傛稉鈧敍澶堚偓鍌涱劃閸撳秷绻栭柌灞藉涧閹恒劏鐭鹃悽渚库偓?
-      //   娑撳秴鎯庨崝銊ヨ埌閸?閳?閻愮懓鍤挧鎵畱閺勵垱鎸遍弨楣冦€夐柌宀勫亝婵?*濞查箖鐓堕懛顏呮尡**閿涘潉collapseProgress`閿涘绱?
-      //   娑撳簼绗傚鎴犳畱婢瑰啿鐪拌ぐ銏犲綁閺勵垯琚遍弶鈥茬鞍娑撳秶娴夐獮鑼畱閸斻劎鏁?閳ユ柡鈧?閻劍鍩涚€圭偞绁撮妴宀€鍋ｉ崙缁樺ⅵ瀵偓閹绢厽鏂侀崳銊︾梾閺堝濮╅悽姹団偓?
-      //   閵嗗矁鍎楅弲顖欑瑝鐎靛箍鈧秴姘ㄩ弰顖氱暊閵嗗倿銆庢惔蹇擃嚠姒绘劖妫ら悾宀嬬窗閳?闁插繑绨獮鎯扮箻閻╅晲缍?閳?閳?閹恒劏鐭鹃悽杈ㄥ瘯鏉?
-      //   閳?閳?闁插繒绮撻悙鐧哥礄`onPullReady` 缁涘鐜悧鈺嬬礆閳?閳?閺€璺虹啲鐞涖儵妫?`commitPull()` 缁涘鐜悧鈹库偓?
-      // 鈽呪槄鈽?2026-10-17锛堢敤鎴峰疄娴嬨€岀偣鍑绘墦寮€鎾斁椤垫椂鑳屾櫙鏄埆鐨勬瓕鐨勯鑹层€嶏級锛?
-      //   褰㈠彉鍙湁 350~400ms锛岃€屽湪绾挎瓕鐨?64脳64 缃戞牸瑕佷笅杞?+ 瑙ｇ爜锛?00~2000ms锛夆噿
-      //   鍦?*鍚姩褰㈠彉涔嬪墠**鍐嶈涪涓€娆￠鐑紙鏇茬洰鍙樺寲鏃朵篃韪紝瑙?onCurrentTrackForMeshPrewarm锛夈€?
-      //   棰勭儹鏄?鍚屾杩斿洖銆佸紓姝ュ共娲?锛岃繖閲屼笉浼氳瀹冩嫋浣忛甯с€?
+      // 鈽呪槄 2026-10-15锛堢収鎼棤鐣岋級锛?*鐐瑰嚮鎵撳紑涔熷繀椤昏蛋褰㈠彉**銆?
+      //   鏃犵晫閲屻€岀偣鍑绘挱鏀炬潯銆嶅拰銆屼笂婊戞墜鍔裤€?*鍏辩敤鍚屼竴涓?`beginMorphEnter`**
+      //   锛堝叏鍖呭彧鏈?`openPlayerMorph` 涓?`pullStart` 涓や釜璋冪敤鑰咃紝瑙?
+      //   `_recover/logic-src/鐐瑰嚮鎵撳紑鎾斁鍣ㄥ舰鍙橀摼璺?md` 搂涓€锛夈€傛鍓嶈繖閲屽彧鎺ㄨ矾鐢便€?
+      //   涓嶅惎鍔ㄥ舰鍙?鈬?鐐瑰嚮璧扮殑鏄挱鏀鹃〉閲岄偅濂?*娲鹃煶鑷挱**锛坄collapseProgress`锛夛紝
+      //   涓庝笂婊戠殑澹冲眰褰㈠彉鏄袱鏉′簰涓嶇浉骞茬殑鍔ㄧ敾 鈥斺€?鐢ㄦ埛瀹炴祴銆岀偣鍑绘墦寮€鎾斁鍣ㄦ病鏈夊姩鐢汇€?
+      //   銆岃儗鏅笉瀵广€嶅氨鏄畠銆傞『搴忓榻愭棤鐣岋細鈶?閲忔簮骞惰繘鐩镐綅 鈫?鈶?鎺ㄨ矾鐢辨寕杞?
+      //   鈫?鈶?閲忕粓鐐癸紙`onPullReady` 绛変环鐗╋級鈫?鈶?鏀跺熬琛ラ棿 `commitPull()` 绛変环鐗┿€?
+      // ★★★ 2026-10-17（用户实测「点击打开播放页时背景是别的歌的颜色」）：
+      //   形变只有 350~400ms，而在线歌的 64×64 网格要下载 + 解码（200~2000ms）⇒
+      //   在**启动形变之前**再踢一次预热（曲目变化时也踢，见 onCurrentTrackForMeshPrewarm）。
+      //   预热是"同步返回、异步干活"，这里不会被它拖住首帧。
       prewarmCurrentSongMesh(this.getUIContext(), this.appState.getCurrentSongItem());
       const morphStarted: boolean = this.beginOpenMorphOnClick();
       this.pushPlayerRoute();
       if (morphStarted) {
-        // 閳藉應妲勯埥?2026-10-16閿?*閻愮懓鍤幍鎾崇磻濞屸剝婀佺亸渚€娼伴崝銊ф暰**閻ㄥ嫭娓堕崥搴濈閸ф瀚鹃崶鎾呯礆閿?
-        //   閺勬儳绱￠幎濞库偓灞捐癁鐏炲倿鍋呮稉鈧Λ鎺嬧偓宥忕礄婢瑰啿鐪?`MorphCoverClone` = 缂侇參顥ｇ亸渚€娼伴敍澶庢崳鐠ч攱娼甸敍?
-        //   **娑撳秴鍟€閸欘亙绶风挧?* `@Monitor('expandState.morphDrive')`閵?
+        // 鈽呪槄鈽?2026-10-16锛?*鐐瑰嚮鎵撳紑娌℃湁灏侀潰鍔ㄧ敾**鐨勬渶鍚庝竴鍧楁嫾鍥撅級锛?
+        //   鏄惧紡鎶娿€屾诞灞傞偅涓€妫掋€嶏紙澹冲眰 `MorphCoverClone` = 缁灏侀潰锛夎捣璧锋潵锛?
+        //   **涓嶅啀鍙緷璧?* `@Monitor('expandState.morphDrive')`銆?
         //
-        // ## 娑撹桨绮堟稊鍫濈箑妞ょ粯妯夊?
+        // ## 涓轰粈涔堝繀椤绘樉寮?
         //
-        // 鐏忎線娼伴柇锝勭濡帗婀?*娑撱倖娼悪顒傜彌閻ㄥ嫯绻樻惔?*閿?
-        //   璺?閹绢厽鏂佹い鐢稿亝鐏炲偊绱檂morphP`閿涘鈧柡鈧?鐎圭懓娅?scale/translate/clip閿?*閼冲本娅欐稊鐔锋躬闁插矂娼?*閿?
-        //   璺?濞搭喖鐪伴柇锝呯湴閿涘潉morphOverlayP`閿涘鈧柡鈧?婢瑰啿鐪伴惃鍕敾妞嬬偛鐨濋棃顫礉**鐏忎線娼扮亸閬嶆浆鐎瑰啴顥?*閵?
-        // 娑撱倖娼す鍗炲З鐠侯垰绶為敍?
-        //   璺?閹靛瀵氱捄鐔稿閿涙瓪onPullOpenUpdate` 閳?`syncMorphOverlayFromPage()`閿?*娑撯偓濮ｆ柧绔撮崥灞绢劄**閿涘婀?
-        //   璺?閻愮懓鍤?閺夌偓澧滈敍姝歴ettlePullOpen` 閳?`morphOverlayTweenTo()`閿?
-        //     娴犮儱寮?`@Monitor('expandState.morphDrive')` 閳?`focusMorphOverlayForPageIntro()`閵?
-        // 閳跨媴绗?閸氬氦鈧懏妲?**V2 瀵倹顒為崶鐐剁殶**閿涘矁鈧?`focusMorphOverlayForPageIntro()` 闁插本婀佹稉銈変壕**闂堟瑩绮?return**
-        //   閿涘潉morphDrive !== MorphDrive.ANIM` / `!morphContainerActive()`閿涘鈧柡鈧?鐎?*娑撳秴鍟撻弮銉ョ箶**閿?
-        //   娑撯偓閺冿箓鍋呮稉鈧崚鑽ゆ祲娴ｅ秷绻曞▽鈥虫皑娴ｅ稄绱濇潻娆庣濡帒姘?*閺佸瓨顔屾稉宥嗘尡閵嗕浇鈧奔绗栭弻銉ょ瑝閸戠儤娼?*閵?
-        //   閻劍鍩涚€圭偞绁撮妴?*閻愮懓鍤幘顓熸杹閺夆剝澧﹀鈧幘顓熸杹閸?/ 閻愮懓鍤崗鎶芥４ / 缁崵绮烘潻鏂挎礀閸忔娊妫撮柈鑺ョ梾閺堝鐨濋棃銏犲З閻?*閵?
-        //   閼板被鈧奔绗傞幏澶嬪ⅵ瀵偓濮濓絽鐖堕妴宥忕礉瀹割喖绱撳锝嗘Ц"鐠虹喐澧滈柇锝嗘蒋閸氬本顒炵捄顖濊泲闁矮绨￠妴渚€娼幍瀣◢鏉╂瑦娼捄顖涚梾鐠т即鈧?閵?
+        // 灏侀潰閭ｄ竴妫掓湁**涓ゆ潯鐙珛鐨勮繘搴?*锛?
+        //   路 鎾斁椤甸偅灞傦紙`morphP`锛夆€斺€?瀹瑰櫒 scale/translate/clip锛?*鑳屾櫙涔熷湪閲岄潰**锛?
+        //   路 娴眰閭ｅ眰锛坄morphOverlayP`锛夆€斺€?澹冲眰鐨勭画椋炲皝闈紝**灏侀潰灏遍潬瀹冮**銆?
+        // 涓ゆ潯椹卞姩璺緞锛?
+        //   路 鎵嬫寚璺熸墜锛歚onPullOpenUpdate` 鈫?`syncMorphOverlayFromPage()`锛?*涓€姣斾竴鍚屾**锛夆湏
+        //   路 鐐瑰嚮/鏉炬墜锛歚settlePullOpen` 鈫?`morphOverlayTweenTo()`锛?
+        //     浠ュ強 `@Monitor('expandState.morphDrive')` 鈫?`focusMorphOverlayForPageIntro()`銆?
+        // 鈿狅笍 鍚庤€呮槸 **V2 寮傛鍥炶皟**锛岃€?`focusMorphOverlayForPageIntro()` 閲屾湁涓ら亾**闈欓粯 return**
+        //   锛坄morphDrive !== MorphDrive.ANIM` / `!morphContainerActive()`锛夆€斺€?瀹?*涓嶅啓鏃ュ織**锛?
+        //   涓€鏃﹂偅涓€鍒荤浉浣嶈繕娌″氨浣嶏紝杩欎竴妫掑氨**鏁存涓嶆挱銆佽€屼笖鏌ヤ笉鍑烘潵**銆?
+        //   鐢ㄦ埛瀹炴祴銆?*鐐瑰嚮鎾斁鏉℃墦寮€鎾斁鍣?/ 鐐瑰嚮鍏抽棴 / 绯荤粺杩斿洖鍏抽棴閮芥病鏈夊皝闈㈠姩鐢?*銆?
+        //   鑰屻€屼笂鎷夋墦寮€姝ｅ父銆嶏紝宸紓姝ｆ槸"璺熸墜閭ｆ潯鍚屾璺蛋閫氫簡銆侀潪鎵嬪娍杩欐潯璺病璧伴€?銆?
         //
-        // 閳?鏉╂瑩鍣烽崷?*閹恒劏鐭鹃悽鍙樼閸氬簺鈧胶娴夋担宥呭嚒鐏忓彉缍?*閻ㄥ嫪缍呯純顔芥▔瀵繐鏋堟稉鈧竟?
-        //   閿涘牅绗?`PlaybackPage.closeFullScreenPlayback()` 闁?閸氬本顒炴す鍗炲З濞搭喖鐪?闁絾娼?*閸氬本顑欓崑姘《**閿?
-        //     鐟欎線鍋呮潏?2358-2370 鐞涘瞼娈戦梹鎸庢暈闁?閳ユ柡鈧?鐎瑰啫缍嬮弮鏈垫叏閻ㄥ嫭顒滈弰?閸忔娊妫村▽鈩冩箒鐏忎線娼伴崝銊ф暰"閿涘鈧?
-        //   閳跨媴绗?楠炲倻鐡戦敍姝歠ocusMorphOverlayForPageIntro()` 閻ㄥ嫪琚遍柆鎾崇暓閸?+ `morphOverlayTweenTo()`
-        //     閻?鐠ч鍋?=缂佸牏鍋ｉ惄瀛樺复鏉╂柨娲? / `morphOverlayAnimating` 娑撳秵濮?閳?闁插秴顦茬拫鍐暏鐎瑰鍙忛妴?
+        // 鈬?杩欓噷鍦?*鎺ㄨ矾鐢变箣鍚庛€佺浉浣嶅凡灏变綅**鐨勪綅缃樉寮忓枈涓€澹?
+        //   锛堜笌 `PlaybackPage.closeFullScreenPlayback()` 閲?鍚屾椹卞姩娴眰"閭ｆ潯**鍚屾鍋氭硶**锛?
+        //     瑙侀偅杈?2358-2370 琛岀殑闀挎敞閲?鈥斺€?瀹冨綋鏃朵慨鐨勬鏄?鍏抽棴娌℃湁灏侀潰鍔ㄧ敾"锛夈€?
+        //   鈿狅笍 骞傜瓑锛歚focusMorphOverlayForPageIntro()` 鐨勪袱閬撳畧鍗?+ `morphOverlayTweenTo()`
+        //     鐨?璧风偣==缁堢偣鐩存帴杩斿洖" / `morphOverlayAnimating` 涓嶆姠 鈬?閲嶅璋冪敤瀹夊叏銆?
         this.expandState.focusMorphOverlayForPageIntro(this.getUIContext());
         this.schedulePullAnchorRemeasure(0);
-        // 鐎瑰啳鍤滅敮?濠ф劕鍤戞担鏇＄箷濞岋繝鍣烘鎰皑 32ms 闁插秷鐦?闁絾娼粣妤€褰涢敍宀€鐡戞禒铚傜艾閺冪姷鏅惃?`ExpandSnapshot.onPullReady`閵?
+        // 瀹冭嚜甯?婧愬嚑浣曡繕娌￠噺榻愬氨 32ms 閲嶈瘯"閭ｆ潯绐楀彛锛岀瓑浠蜂簬鏃犵晫鐨?`ExpandSnapshot.onPullReady`銆?
         this.settlePullOpen(true);
       }
     } else {
@@ -754,11 +754,11 @@ struct Index {
   }
 
   /**
-   * 鈽呪槄鈽?2026-10-17锛堢敤鎴峰疄娴嬨€岀偣鍑绘墦寮€鎾斁椤垫椂鑳屾櫙鏄埆鐨勬瓕鐨勯鑹?/ 瀵逛笉涓娿€嶏級锛?
-   * **褰撳墠鏇茬洰涓€鍙樺氨棰勭儹 64脳64 缃戞牸婧?*锛堢粨鏋滃瓨 `MeshWarmState`锛屾挱鏀鹃〉 `onAppear` 鐩存帴閲囩敤锛夈€?
+   * ★★★ 2026-10-17（用户实测「点击打开播放页时背景是别的歌的颜色 / 对不上」）：
+   * **当前曲目一变就预热 64×64 网格源**（结果存 `MeshWarmState`，播放页 `onAppear` 直接采用）。
    *
-   * 涓轰粈涔堟斁鍦ㄥ３灞傦細澹冲眰鏄敮涓€"鏇茬洰鍒囨崲涓€瀹氫細璧板埌"鐨勫湴鏂癸紱鎾斁椤靛湪褰㈠彉寮€濮嬪墠鎵嶆寕杞斤紝
-   * 閭ｆ椂宸茬粡鏉ヤ笉鍙婁笅杞戒簡銆傞鐑け璐ュ彧璁版棩蹇楋紝涓嶅奖鍝嶆挱鏀俱€?
+   * 为什么放在壳层：壳层是唯一"曲目切换一定会走到"的地方；播放页在形变开始前才挂载，
+   * 那时已经来不及下载了。预热失败只记日志，不影响播放。
    */
   @Monitor('appState.selectIndex', 'appState.playQueueIds')
   onCurrentTrackForMeshPrewarm(): void {
@@ -766,74 +766,74 @@ struct Index {
   }
 
   /**
-   * 閻愮懓鍤幍鎾崇磻閿?*闂堢偞澧滈崝鍨弳閸?*閿涘娈戣ぐ銏犲綁閸氼垰濮?閳ユ柡鈧?鐎佃鐖ｉ弮鐘垫櫕 `MainPage.openPlayerMorph(src)`閵?
+   * 鐐瑰嚮鎵撳紑锛?*闈炴墜鍔垮叆鍙?*锛夌殑褰㈠彉鍚姩 鈥斺€?瀵规爣鏃犵晫 `MainPage.openPlayerMorph(src)`銆?
    *
-   * 閺冪姷鏅惃鍕斧閺傚浄绱檂閻愮懓鍤幍鎾崇磻閹绢厽鏂侀崳銊ヨ埌閸欐﹢鎽肩捄?md` 鎼傛稉鈧?+ 閸楃兘顩婚弴瀛橆劀閿涘绱?
+   * 鏃犵晫鐨勫師鏂囷紙`鐐瑰嚮鎵撳紑鎾斁鍣ㄥ舰鍙橀摼璺?md` 搂涓€ + 鍗烽鏇存锛夛細
    * ```ts
    * openPlayerMorph(src?) {
    *   const s = src ?? this.ownMorphSource;
    *   if (!this.beginMorphEnter(s)) { this.enterAnimStarted = false;
-   *                                   this.nav.pushPath({ name: R_PLAYER }); return; }  // 闁偓閸栨牭绱伴弮鐘茶埌閸?
-   *   // beginMorphEnter 閸愬懘鍎村鑼病 pushPath({name, param:{pull:true}}, animated=false)
-   *   ExpandSnapshot.onPullReady = 浣?      // 鐏忚京鍗?閳?commitPull() 閳?animateMorphT(400, t=1)
+   *                                   this.nav.pushPath({ name: R_PLAYER }); return; }  // 閫€鍖栵細鏃犲舰鍙?
+   *   // beginMorphEnter 鍐呴儴宸茬粡 pushPath({name, param:{pull:true}}, animated=false)
+   *   ExpandSnapshot.onPullReady = 位;      // 灏辩华 鈫?commitPull() 鈫?animateMorphT(400, t=1)
    * }
    * ```
-   * 閺堫剚鏌熷▔鏇炲涧閸嬫埃鎲奸妴宀勫櫤濠ф劕鑻熸潻娑氭祲娴ｅ秲鈧秷绻栨稉鈧崡濠忕幢閳垛剝甯圭捄顖滄暠閸︺劏鐨熼悽銊у仯缁毖嗙閸忚泛鎮楅敍灞告喛閳讹絼绡冮悽杈殶閻劎鍋ｉ崣鎴ｆ崳
-   * 閿涘牆娲滄稉?`pushPath` 閺勵垰锛撶仦鍌滄畱缁変焦婀侀崝銊ょ稊閿涘奔绗夐懗鍊燁唨閺堫剚鏌熷▔鏇炲冀鐠嬪喛绱氶妴鍌濈箹閺嶉鍋ｉ崙璁崇瑢娑撳﹥绮?
-   * **閸忚京鏁ら崥灞肩娴犺棄鍤戞担鏇樷偓浣告倱娑撯偓娑擃亞娴夋担宥冣偓浣告倱娑撯偓閺夆剝鏁圭亸鎹愃夐梻?*閿涘苯鐫嗘稉濠傚涧閸欘垵鍏橀張澶夌娑擃亜濮╅悽璁冲瘜閵?
+   * 鏈柟娉曞彧鍋氣憼銆岄噺婧愬苟杩涚浉浣嶃€嶈繖涓€鍗婏紱鈶℃帹璺敱鍦ㄨ皟鐢ㄧ偣绱ц窡鍏跺悗锛屸憿鈶ｄ篃鐢辫皟鐢ㄧ偣鍙戣捣
+   * 锛堝洜涓?`pushPath` 鏄３灞傜殑绉佹湁鍔ㄤ綔锛屼笉鑳借鏈柟娉曞弽璋冿級銆傝繖鏍风偣鍑讳笌涓婃粦
+   * **鍏辩敤鍚屼竴浠藉嚑浣曘€佸悓涓€涓浉浣嶃€佸悓涓€鏉℃敹灏捐ˉ闂?*锛屽睆涓婂彧鍙兘鏈変竴涓姩鐢讳富銆?
    *
-   * 閳跨媴绗?娑撳娼€瑰牆宕奸敍宀€宸辨稉鈧弶鈥虫皑娴兼艾鎷伴幍瀣◢閹存牕鍑￠張澶夌窗鐠囨繃澧﹂弸璁圭礄濮ｅ繋绔撮弶锟犲厴閺堝鐤勫ù瀣╃贩閹诡噯绱氶敍?
-   *   璺?`pullDragging` 閳ユ柡鈧?閹靛瀵氬锝呮躬妞瑰崬濮╅敍鍧刼nPullOpenStart` 闁絾娼捄顖ょ礆閿涘矁顔€缂佹瑥鐣犻敍宀冪殱娑旂喎鍩嗛幎顫幢
-   *   璺?`morphContainerActive()` 閳ユ柡鈧?瀹歌尙绮￠崷銊ょ娑擃亜鑸伴崣妯圭窗鐠囨繈鍣烽敍鍫滅瑐濠婃垿鍋呴弶陇鐭鹃崷?
-   *     `onPullOpenStart` 闁插苯鍑＄紒?`pullOpenBegin` 鏉╁浄绱濇稉?`isShowPlay` 娑旂喐妲哥€瑰啰鐤嗛惃鍕剁礆
-   *     閳?閸?begin 娑撯偓濞嗏€茬窗閹跺﹤鍨伴柌蹇撳煂閻ㄥ嫬鍤戞担鏇氱稊鎼寸噦绱濋柇锝呮皑閺?鐟曞棛娲婄仦鍌氬冀婢跺秴缍婇梿?閻ㄥ嫭娼靛┃鎰剁幢
-   *   璺?`pullOpenBegin` 鏉╂柨娲栭崑鍥风礄鏉╄渹缍橀弶鈩冪梾閹稿倽娴?/ 鐎瑰じ瀵屽▽鈥虫槀鐎甸潻绱氶垾鏂衡偓?闁偓閸栨牗鍨?閻╁瓨甯撮柧鐑樺姬"閵?
-   *     鏉╂瑤绗岄弮鐘垫櫕闁插繋绗夐崚鎷屽厡閸ュ﹥妞傞幍?`morph: 闁插繋绗夐崚鎷屽厡閸?barId=閳?閳?閺堫剚顐奸柅鈧崶鐐存珮闁?push(閺冪姴鑸伴崣?`
-   *     閺勵垰鎮撴稉鈧ぐ銏㈠Ц閿?*鐎逛礁褰叉稉宥呬粵閸斻劎鏁鹃敍灞肩瘍娑撳秷鍏橀幎濠冩尡閺€楣冦€夐崢瀣灇娑撯偓閺夛紕绮忕紓?*閵?
-   * @returns true = 瑜般垹褰夊鑼剁箻閸忋儳娴夋担宥忕礄鐠嬪啰鏁ら弬鐟扮安缂佈呯敾 閳垛懇鎳€閿涘绱眆alse = 瀹告煡鈧偓閸栨牔璐熼弮鐘插З閻㈡槒鎯ゆ担?
+   * 鈿狅笍 涓夋潯瀹堝崼锛岀己涓€鏉″氨浼氬拰鎵嬪娍鎴栧凡鏈変細璇濇墦鏋讹紙姣忎竴鏉￠兘鏈夊疄娴嬩緷鎹級锛?
+   *   路 `pullDragging` 鈥斺€?鎵嬫寚姝ｅ湪椹卞姩锛坄onPullOpenStart` 閭ｆ潯璺級锛岃缁欏畠锛岃皝涔熷埆鎶紱
+   *   路 `morphContainerActive()` 鈥斺€?宸茬粡鍦ㄤ竴涓舰鍙樹細璇濋噷锛堜笂婊戦偅鏉¤矾鍦?
+   *     `onPullOpenStart` 閲屽凡缁?`pullOpenBegin` 杩囷紝涓?`isShowPlay` 涔熸槸瀹冪疆鐨勶級
+   *     鈬?鍐?begin 涓€娆′細鎶婂垰閲忓埌鐨勫嚑浣曚綔搴燂紝閭ｅ氨鏄?瑕嗙洊灞傚弽澶嶅綊闆?鐨勬潵婧愶紱
+   *   路 `pullOpenBegin` 杩斿洖鍋囷紙杩蜂綘鏉℃病鎸傝浇 / 瀹夸富娌″昂瀵革級鈥斺€?閫€鍖栨垚"鐩存帴閾烘弧"銆?
+   *     杩欎笌鏃犵晫閲忎笉鍒拌兌鍥婃椂鎵?`morph: 閲忎笉鍒拌兌鍥?barId=鈥?鈬?鏈閫€鍥炴櫘閫?push(鏃犲舰鍙?`
+   *     鏄悓涓€褰㈢姸锛?*瀹佸彲涓嶅仛鍔ㄧ敾锛屼篃涓嶈兘鎶婃挱鏀鹃〉鍘嬫垚涓€鏉＄粏缂?*銆?
+   * @returns true = 褰㈠彉宸茶繘鍏ョ浉浣嶏紙璋冪敤鏂瑰簲缁х画 鈶⑩懀锛夛紱false = 宸查€€鍖栦负鏃犲姩鐢昏惤浣?
    */
   private beginOpenMorphOnClick(): boolean {
     this.expandState.resetMorphTrace('clickOpen');
-    // 閳藉應妲勯埥?2026-10-16閿?*缂佹瑨绻栭弶鈥崇暓閸楊偉藟閼奉亝鍓?* 閳ユ柡鈧?鐎瑰啯顒濋崜宥勭窗"濮橀晲绠?閹糕€茬秶閻愮懓鍤幍鎾崇磻閿涘绱?
-    //   閸樼喎鍨介幑顔芥Ц `pullDragging || morphContainerActive()`閵嗗倷琚遍弶锟犲厴娴?*濞堝鏆€**閿?
-    //   璺?`pullDragging`閿涙碍澧滈崝鑳潶閹垫挻鏌囨稉鏃€鐥呯挧鏉垮煂閺€璺虹啲閿涘牏閮寸紒鐔稿閹靛濞?/ 妞ょ敻娼扮悮顐㈠瀼鐠у府绱氶敍?
-    //   璺?`morphContainerActive()`閿涙氨娴夋担宥嗙暙閻?`ENTERING/LEAVING/LANDING`閵?
-    //   閳跨媴绗?閼?*閻╅晲缍呭▓瀣殌娑撳秵妲?閻劍鍩涙潻妯烘躬閻劍鎸遍弨楣冦€?**閿涙氨鏁ら幋椋庡仯"閹垫挸绱?閺?`isShowPlay`
-    //      **韫囧懐鍔ч崚姘矤 false 閸欐ɑ鍨?true**閿涘潉onShowPlayChanged` 鐏忚鲸妲哥€瑰啳袝閸欐垹娈戦敍澶堚偓?
-    //      閳?閸欘亣顩?閺堫剝鐤嗗鈧慨瀣閹绢厽鏂佹い?*鏉╂ɑ鐥呴弰鍓с仛**"閿涘矂鍋呮稉銈嗘蒋濞堝鏆€鐏忛亶鍏橀弰?*娑撳﹣绔存潪顔炬畱閸ㄥ啫婧?*閿?
-    //        鎼存柨缍?*濞撳懏甯€楠炲墎鎴风紒?*閿涘矁鈧奔绗夐弰顖涘Ω鏉╂瑤绔村▎鈩冨ⅵ瀵偓閸掋倖鍨?闁插秴顦?/ 瀹告彃婀导姘崇樈闁?閵?
-    //   閳跨媴绗?閸樼喐鏁為柌濠忕礄閺堫剚鏋冩禒?4332-4336 鐞涘矉绱氬鑼病閻愮懓鍤潻娆庨嚋瑜般垻濮告导姘嚤閼?
-    //     閵?*閻愮懓鍤幍鎾崇磻閸欏牓鈧偓閸栨牗鍨氬ú楣冪叾閺冄冨З閻?*閵嗗稄绱濇担鍡楃暊閸欘亞绮?`dismissMorphActive` 閸嬫矮绨￠懛顏呭墹閿?
-    //      **鏉╂瑦娼€瑰牆宕奸張顒冮煩濞屸€充粵**閵嗗倵鍣?鏉╂瑥姘ㄩ弰?閻愰€涚啊濞屸€冲З閻?闁插本娓堕梾鎯ь槻閻滄壆娈戦柇锝勭缁夊秲鈧?
-    // 閳藉應妲勯埥?2026-10-17閿?*閸掋倖宓佺拋銏☆劀 璺?缁楊兛绨╁▎?*閿涙氨顑囨稉鈧悧鍫熷Ω**娑撳﹥濯洪幍瀣◢**閹垫挻鏌囨禍?閳ユ柡鈧?閻劍鍩涚€圭偞绁撮妴灞肩瑐濠婃垳绗夐懗鍊熷殰閻㈠彉绨￠妴宥忕礆
+    // 鈽呪槄鈽?2026-10-16锛?*缁欒繖鏉″畧鍗ˉ鑷剤** 鈥斺€?瀹冩鍓嶄細"姘镐箙"鎸′綇鐐瑰嚮鎵撳紑锛夛細
+    //   鍘熷垽鎹槸 `pullDragging || morphContainerActive()`銆備袱鏉￠兘浼?*娈嬬暀**锛?
+    //   路 `pullDragging`锛氭墜鍔胯鎵撴柇涓旀病璧板埌鏀跺熬锛堢郴缁熸姠鎵嬪娍 / 椤甸潰琚垏璧帮級锛?
+    //   路 `morphContainerActive()`锛氱浉浣嶆畫鐣?`ENTERING/LEAVING/LANDING`銆?
+    //   鈿狅笍 鑰?*鐩镐綅娈嬬暀涓嶆槸"鐢ㄦ埛杩樺湪鐢ㄦ挱鏀鹃〉"**锛氱敤鎴风偣"鎵撳紑"鏃?`isShowPlay`
+    //      **蹇呯劧鍒氫粠 false 鍙樻垚 true**锛坄onShowPlayChanged` 灏辨槸瀹冭Е鍙戠殑锛夈€?
+    //      鈬?鍙"鏈疆寮€濮嬫椂鎾斁椤?*杩樻病鏄剧ず**"锛岄偅涓ゆ潯娈嬬暀灏遍兘鏄?*涓婁竴杞殑鍨冨溇**锛?
+    //        搴斿綋**娓呮帀骞剁户缁?*锛岃€屼笉鏄妸杩欎竴娆℃墦寮€鍒ゆ垚"閲嶅 / 宸插湪浼氳瘽閲?銆?
+    //   鈿狅笍 鍘熸敞閲婏紙鏈枃浠?4332-4336 琛岋級宸茬粡鐐瑰嚭杩欎釜褰㈢姸浼氬鑷?
+    //     銆?*鐐瑰嚮鎵撳紑鍙堥€€鍖栨垚娲鹃煶鏃у姩鐢?*銆嶏紝浣嗗畠鍙粰 `dismissMorphActive` 鍋氫簡鑷剤锛?
+    //      **杩欐潯瀹堝崼鏈韩娌″仛**銆傗噿 杩欏氨鏄?鐐逛簡娌″姩鐢?閲屾渶闅惧鐜扮殑閭ｄ竴绉嶃€?
+    // 鈽呪槄鈽?2026-10-17锛?*鍒ゆ嵁璁㈡ 路 绗簩娆?*锛氱涓€鐗堟妸**涓婃媺鎵嬪娍**鎵撴柇浜?鈥斺€?鐢ㄦ埛瀹炴祴銆屼笂婊戜笉鑳借嚜鐢变簡銆嶏級
     //
-    // ## 缁楊兛绔撮悧鍫ユ晩閸︺劌鎽㈤敍鍫濈箑妞ゆ槒顔囨稉瀣降閿?
-    //   缁楊兛绔撮悧鍫熷Ω閸掋倖宓佹禒?`this.appState.isShowPlay`閿涘牊浜介惇鐕傜礆閹广垺鍨?`playerRouteIndex() >= 0`閿?
-    //   閻劍鍓伴弰顖濐唨 `staleClr` 閼奉亝鍓ら惇鐔烘畱閼冲€熺獓閸掕埇鈧倷绲?*娑撳﹥濯洪幍鎾崇磻鏉╂瑦娼捄顖欑瘍鐠х増婀伴崙鑺ユ殶**閿?
+    // ## 绗竴鐗堥敊鍦ㄥ摢锛堝繀椤昏涓嬫潵锛?
+    //   绗竴鐗堟妸鍒ゆ嵁浠?`this.appState.isShowPlay`锛堟亽鐪燂級鎹㈡垚 `playerRouteIndex() >= 0`锛?
+    //   鐢ㄦ剰鏄 `staleClr` 鑷剤鐪熺殑鑳借窇鍒般€備絾**涓婃媺鎵撳紑杩欐潯璺篃璧版湰鍑芥暟**锛?
     //   ```ts
-    //   // 婢瑰啿鐪?onPullOpenStart閿?
+    //   // 澹冲眰 onPullOpenStart锛?
     //   this.expandState.pullDragging = false;
-    //   const morphOk = this.expandState.pullOpenBegin(...);   // 閳?闁插矂娼伴幎?pullDragging 缂?true
-    //   if (!this.appState.isShowPlay) { this.appState.isShowPlay = true; }   // 閳?鐟欙箑褰傞張?Monitor
+    //   const morphOk = this.expandState.pullOpenBegin(...);   // 鈫?閲岄潰鎶?pullDragging 缃?true
+    //   if (!this.appState.isShowPlay) { this.appState.isShowPlay = true; }   // 鈫?瑙﹀彂鏈?Monitor
     //   ```
-    //   閳?鐠ф澘鍩屾潻娆撳櫡閺?`pullDragging === true`閿涘牊澧滈幐鍥劀閸︺劑鈹嶉崝顭掔礆閼?*鐠侯垳鏁辨潻妯荤梾 push**
-    //     閳?閺傛澘鍨介幑顔剧暬閸?`routeOnStack === false` 閳?閽€鍊熺箻 `staleClr` 閺€?
-    //     閳?**`pullDragging = false` + `morphReset()`** 閳?鐠虹喐澧滄导姘崇樈鐞氼偉鍤滃杈ㄥ笌濮?
-    //     閳?閵嗗奔绗傚鎴滅瑝閼冲€熷殰閻㈠彉绨￠妴宥冣偓?閺冄傚敩閻礁鍨介幑顔戒航閻?閳?鐠?`skip` 閳?濮濐亝澧﹀锝囨絻閸︾増濮㈡担蹇庣啊閹靛濞嶉妴?
+    //   鈬?璧板埌杩欓噷鏃?`pullDragging === true`锛堟墜鎸囨鍦ㄩ┍鍔級鑰?*璺敱杩樻病 push**
+    //     鈬?鏂板垽鎹畻鍑?`routeOnStack === false` 鈬?钀借繘 `staleClr` 鏀?
+    //     鈬?**`pullDragging = false` + `morphReset()`** 鈬?璺熸墜浼氳瘽琚嚜宸辨帎姝?
+    //     鈬?銆屼笂婊戜笉鑳借嚜鐢变簡銆嶃€?鏃т唬鐮佸垽鎹亽鐪?鈬?璧?`skip` 鈬?姝墦姝ｇ潃鍦版姢浣忎簡鎵嬪娍銆?
     //
-    // ## 鐠併垺顒滈崥搴ｆ畱缂佹挻鐎敍?*娑撱倓娆㈡禍瀣瀻瀵偓閸?*閿涘矁绻栭幍宥嗘Ц閸樼喐鏁為柌濠勬埂濮濓絾鍏傜悰銊ㄦ彧閻ㄥ嫭鍓伴幀婵撶礆
-    //   璺?閸樼喐鏁為柌濠呭殰瀹稿崬鍟撻惈鈧妴灞肩瑐閹峰澧滈崝鍨躬妫ｆ牠銆夌挧閿嬪閺冩儼鐭鹃悽杈箷濞?push閵嗗倷绲鹃柇锝嗘 `pullDragging === true`
-    //     閳?娑撳﹪娼伴柇锝嗘蒋鐎瑰牆宕兼导姘帥 return閿涘牅绗夎ぐ鍗炴惙閹靛濞嶉敍澶堚偓宥佲偓鏂衡偓?**"閹靛瀵氶崷銊┾攳閸斻劌姘ㄩ弨鎹愵攽"閺勵垰甯張澶嬪壈閸?*閿?
-    //     閸欘亝妲哥悮顐ｄ航閻喓娈戦弽鍥х箶鐎圭偟骞囬崸蹇庣啊閵?
-    //   璺?閹碘偓娴犮儻绱?*`pullDragging === true` 閳?娑撯偓瀵板鏂佺悰宀嬬礄闁絾妲稿ú璁崇窗鐠囨繐绱濇稉宥嗘Ц濞堝鏆€閿?*閿?
-    //     閸欘亝婀?閻╅晲缍呭▓瀣殌**娑?*濞屸剝婀侀幍瀣瘹閸︺劑鈹嶉崝?閹靛秷鐤嗛崚鏉垮灲"閺勵垯绗夐弰顖滄埂瀹歌尙绮￠崷銊︽尡閺€楣冦€夐柌?閵?
-    //   閳跨媴绗?缁楊兛绨╃仦鍌氬灲閹诡喕绮涢悽?*绾剝顕伴弫?* `playerRouteIndex() >= 0`閿涘牅绗屾稉瀣桨 `leakClr` 閸氬苯褰涘鍕剁礆閳ユ柡鈧?
-    //     閸ョ姳璐?`isShowPlay` 閸︺劌鏁稉鈧拫鍐暏閻愰€涚瑐韫囧懐鍔у鍙夋Ц true閿涘矁顕扮€瑰啰鐡戞禍搴㈢梾閸掋們鈧?
-    //   閳跨媴绗?鏉╂瑤绔寸仦鍌涙Ц韫囧懘娓堕惃鍕剁窗閺堫剝鐤嗛幎濠傚彠闂傤厽鏁圭亸鍓ф畱 `morphReset()` 閺€瑙勫灇"缁?pop 娑斿鎮楅崘宥咁槻娴?
-    //     閿涘潉PlaybackPage.scheduleMorphResetAfterPop`閿涘矁顫?`RzdMusic鐠佹澘绻?md` 鎼?25閿?
-    //     閳?閸忔娊妫撮崥搴″煂婢跺秳缍呴崜宥夊亝娑撯偓鐏忓繑顔岄惄闀愮秴娴犲秵妲?`LANDING`閿涙稓鍋ｅ鈧弮璺虹箑妞ゆ槒鍏樺〒鍛竴鐎瑰啨鈧?
+    // ## 璁㈡鍚庣殑缁撴瀯锛?*涓や欢浜嬪垎寮€鍒?*锛岃繖鎵嶆槸鍘熸敞閲婄湡姝ｆ兂琛ㄨ揪鐨勬剰鎬濓級
+    //   路 鍘熸敞閲婅嚜宸卞啓鐫€銆屼笂鎷夋墜鍔垮湪棣栭〉璧锋墜鏃惰矾鐢辫繕娌?push銆備絾閭ｆ椂 `pullDragging === true`
+    //     鈬?涓婇潰閭ｆ潯瀹堝崼浼氬厛 return锛堜笉褰卞搷鎵嬪娍锛夈€嶁€斺€?**"鎵嬫寚鍦ㄩ┍鍔ㄥ氨鏀捐"鏄師鏈夋剰鍥?*锛?
+    //     鍙槸琚亽鐪熺殑鏍囧織瀹炵幇鍧忎簡銆?
+    //   路 鎵€浠ワ細**`pullDragging === true` 鈬?涓€寰嬫斁琛岋紙閭ｆ槸娲讳細璇濓紝涓嶆槸娈嬬暀锛?*锛?
+    //     鍙湁"鐩镐綅娈嬬暀**涓?*娌℃湁鎵嬫寚鍦ㄩ┍鍔?鎵嶈疆鍒板垽"鏄笉鏄湡宸茬粡鍦ㄦ挱鏀鹃〉閲?銆?
+    //   鈿狅笍 绗簩灞傚垽鎹粛鐢?*纭鏁?* `playerRouteIndex() >= 0`锛堜笌涓嬮潰 `leakClr` 鍚屽彛寰勶級鈥斺€?
+    //     鍥犱负 `isShowPlay` 鍦ㄥ敮涓€璋冪敤鐐逛笂蹇呯劧宸叉槸 true锛岃瀹冪瓑浜庢病鍒ゃ€?
+    //   鈿狅笍 杩欎竴灞傛槸蹇呴渶鐨勶細鏈疆鎶婂叧闂敹灏剧殑 `morphReset()` 鏀规垚"绛?pop 涔嬪悗鍐嶅浣?
+    //     锛坄PlaybackPage.scheduleMorphResetAfterPop`锛岃 `RzdMusic璁板繂.md` 搂125锛?
+    //     鈬?鍏抽棴鍚庡埌澶嶄綅鍓嶉偅涓€灏忔鐩镐綅浠嶆槸 `LANDING`锛涚偣寮€鏃跺繀椤昏兘娓呮帀瀹冦€?
     if (this.expandState.pullDragging) {
-      // 閹靛瀵氬锝呮躬妞瑰崬濮╅敍鍫滅瑐閹?娑撳濯虹捄鐔稿閿涘绱?*濞茶绱扮拠?*閿涘矁鐨濇稊鐔峰焼閸斻劌鐣?
+      // 鎵嬫寚姝ｅ湪椹卞姩锛堜笂鎷?涓嬫媺璺熸墜锛夛細**娲讳細璇?*锛岃皝涔熷埆鍔ㄥ畠
       this.expandState.pushMorphTrace('skip');
       Logger.info(RzdShellLogTag,
         `open morph: skip (finger driving; stage=${this.expandState.morphStage} ` +
@@ -841,36 +841,36 @@ struct Index {
       return false;
     }
     if (this.expandState.morphContainerActive()) {
-      // 閻╅晲缍呭▓瀣殌娴ｅ棙鐥呴張澶嬪閹稿洤婀す鍗炲З 閳?閸?閻劍鍩涢弰顖欑瑝閺勵垳婀￠惃鍕嚒缂佸繐婀幘顓熸杹妞ょ敻鍣?
+      // 鐩镐綅娈嬬暀浣嗘病鏈夋墜鎸囧湪椹卞姩 鈬?鍒?鐢ㄦ埛鏄笉鏄湡鐨勫凡缁忓湪鎾斁椤甸噷"
       if (this.playerRouteIndex() >= 0) {
-        // 閻喓娈戝鑼病閸︺劍鎸遍弨楣冦€夐柌宀嬬礄闁插秴顦茬憴锕€褰傞敍澶嗗櫩 娣囨繃瀵旈崢鐔活攽娑撶尨绱扮拋鈺冪舶瀹稿弶婀佹导姘崇樈
+        // 鐪熺殑宸茬粡鍦ㄦ挱鏀鹃〉閲岋紙閲嶅瑙﹀彂锛夆噿 淇濇寔鍘熻涓猴細璁╃粰宸叉湁浼氳瘽
         this.expandState.pushMorphTrace('skip');
         Logger.info(RzdShellLogTag,
           `open morph: skip (already in player; stage=${this.expandState.morphStage})`);
         return false;
       }
-      // 濞堝鏆€閸ㄥ啫婧?+ 閻劍鍩涚涵顔肩杽鐟曚焦澧﹀鈧?閳?**閸忓牊绔婚獮鎻掑櫍閸愬秶鎴风紒?*
+      // 娈嬬暀鍨冨溇 + 鐢ㄦ埛纭疄瑕佹墦寮€ 鈬?**鍏堟竻骞插噣鍐嶇户缁?*
       this.expandState.pushMorphTrace('staleClr');
       Logger.warn(RzdShellLogTag,
         `open morph: clearing STALE session (stage=${this.expandState.morphStage} ` +
         `drive=${this.expandState.morphDrive} routeOnStack=0)`);
       this.expandState.morphReset();
     }
-    // 閳藉應妲勯埥?2026-10-16閿?*閸掋倖宓佺拋銏☆劀閿涙氨绮?娑撳﹣绔存导姘崇樈"鐞涖儰绔撮弶锛勨€栭弶鈥叉**閿涘绱?
-    //   閸樼喐娼甸崣顏呮箒娑撳﹪娼伴柇锝嗘蒋 `pullDragging || morphContainerActive()` 鐎瑰牆宕奸妴鍌欑瑐娑撯偓鏉烆喗濡?
-    //   `aboutToDisappear()` 闁插矂鍋呴崣銉︽￥閺夆€叉 `morphReset()` 閸旂姳绨￠梻顭掔礄"娴兼俺鐦藉ú鑽ゆ絻鐏忓彉绗夊〒?閿涘绠ｉ崥搴礉
-    //   **娴兼俺鐦藉▔鍕础**閸欐ɑ鍨氶崣顖濆厴閿涙瓪morphSessionStarted` 濞堝鏆€娑?true閿涘矁鈧?`pullDragging` /
-    //   `morphContainerActive()` 闁棄鍑￠弰顖氫海 閳?娑撳﹪娼伴柇锝嗘蒋鐎瑰牆宕?*閻绗夌憴浣哥暊** 閳?娑撳绔存潪顔惧仯閸?
-    //   鐠囪鍩?`isFreshSession = false` 閳?鐠?閺€鎯х磾娴兼俺鐦?閸掑棙鏁?閳?**閸欏牊鐥呴崝銊ф暰**閵?
+    // 鈽呪槄鈽?2026-10-16锛?*鍒ゆ嵁璁㈡锛氱粰"涓婁竴浼氳瘽"琛ヤ竴鏉＄‖鏉′欢**锛夛細
+    //   鍘熸潵鍙湁涓婇潰閭ｆ潯 `pullDragging || morphContainerActive()` 瀹堝崼銆備笂涓€杞妸
+    //   `aboutToDisappear()` 閲岄偅鍙ユ棤鏉′欢 `morphReset()` 鍔犱簡闂紙"浼氳瘽娲荤潃灏变笉娓?锛変箣鍚庯紝
+    //   **浼氳瘽娉勬紡**鍙樻垚鍙兘锛歚morphSessionStarted` 娈嬬暀涓?true锛岃€?`pullDragging` /
+    //   `morphContainerActive()` 閮藉凡鏄亣 鈬?涓婇潰閭ｆ潯瀹堝崼**鐪嬩笉瑙佸畠** 鈬?涓嬩竴杞偣鍑?
+    //   璇诲埌 `isFreshSession = false` 鈬?璧?鏀惧純浼氳瘽"鍒嗘敮 鈬?**鍙堟病鍔ㄧ敾**銆?
     //
-    //   閳?鐞涖儰绔撮弶?*绾剚娼禒?*閿涙瓪playerRouteIndex() < 0`閿涘牊鎸遍弨楣冦€夌捄顖滄暠**娑撳秴婀?*閺嶅牓鍣烽敍澶堚偓?
-    //     閸忋劌浼愮粙?8 婢?`isShowPlay = true` 闁?*娑撳秷鍤滃?push**閿涘ush 閸欘亞鏁遍張顒佹瀮娴犲墎娈?
-    //     `pushPlayerRoute()` 閸?閳?**"鐠侯垳鏁辨稉宥呮躬閺嶅牓鍣?鐏忚鲸妲?娑撳﹣绔存潪顔荤窗鐠囨繂鍑＄紒蹇曠波閺?閻ㄥ嫮鈥栫拠浣瑰祦**
-    //     閿涘牊妫ょ拋鐑樻Ц濮濓絽鐖堕崗鎶芥４鏉╂ɑ妲哥悮顐¤厬闂傚瓨澧﹂弬顓ㄧ礆閵?
-    //     閳跨媴绗?閸烆垯绔寸憰浣规暈閹板骏绱版稉濠冨閹靛濞嶉崷?*妫ｆ牠銆?*鐠ч攱澧滈弮鎯扮熅閻㈠彉绡冩潻妯荤梾 push閵嗗倷绲鹃柇锝嗘
-    //       `pullDragging === true` 閳?娑撳﹪娼伴柇锝嗘蒋鐎瑰牆宕兼导姘帥 return閿涘牅绗夎ぐ鍗炴惙閹靛濞嶉敍澶涚幢
-    //       閼?閻愮懓鍤幍鎾崇磻"鐠ч攱澧滈弮?`isShowPlay` 閸掓艾褰?true閵嗕梗pullDragging` 韫囧懍璐熼崑?
-    //       閳?閽€钘夊煂鏉╂瑩鍣峰〒鍛濞嗏剝妲哥€瑰鍙忛惃鍕剁礄濞撳懎鐣?`pullOpenBegin` 缁斿鍩㈤柌宥呯紦閿涘鈧?
+    //   鈬?琛ヤ竴鏉?*纭潯浠?*锛歚playerRouteIndex() < 0`锛堟挱鏀鹃〉璺敱**涓嶅湪**鏍堥噷锛夈€?
+    //     鍏ㄥ伐绋?8 澶?`isShowPlay = true` 閮?*涓嶈嚜宸?push**锛宲ush 鍙敱鏈枃浠剁殑
+    //     `pushPlayerRoute()` 鍋?鈬?**"璺敱涓嶅湪鏍堥噷"灏辨槸"涓婁竴杞細璇濆凡缁忕粨鏉?鐨勭‖璇佹嵁**
+    //     锛堟棤璁烘槸姝ｅ父鍏抽棴杩樻槸琚腑闂存墦鏂級銆?
+    //     鈿狅笍 鍞竴瑕佹敞鎰忥細涓婃媺鎵嬪娍鍦?*棣栭〉**璧锋墜鏃惰矾鐢变篃杩樻病 push銆備絾閭ｆ椂
+    //       `pullDragging === true` 鈬?涓婇潰閭ｆ潯瀹堝崼浼氬厛 return锛堜笉褰卞搷鎵嬪娍锛夛紱
+    //       鑰?鐐瑰嚮鎵撳紑"璧锋墜鏃?`isShowPlay` 鍒氬彉 true銆乣pullDragging` 蹇呬负鍋?
+    //       鈬?钀藉埌杩欓噷娓呬竴娆℃槸瀹夊叏鐨勶紙娓呭畬 `pullOpenBegin` 绔嬪埢閲嶅缓锛夈€?
     const routeOnStack: boolean = this.playerRouteIndex() >= 0;
     if (!routeOnStack && this.expandState.morphSessionStarted) {
       this.expandState.pushMorphTrace('leakClr');
@@ -881,61 +881,61 @@ struct Index {
       this.expandState.pullDragging = false;
       this.expandState.morphReset();
     }
-    // 閳藉應妲勯埥?2026-10-16閿?*鐠侀缍?鏉╂瑤绔存潪顔芥Ц娑撳秵妲搁弬棰佺窗鐠?**閿涘苯鐣犻崘鍐茬暰 `false` 閹簼绠炴径鍕倞閿涘绱?
-    //   `pullOpenBegin()` 閹?`morphSessionStarted` 缂冾喚婀￠惃鍕亝娑撯偓濮濄儱姘ㄩ弰?娴兼俺鐦藉铏圭彌"閵?
-    //   閸︺劌鐣犳稊瀣鐠囪鍩?false 閳?鏉╂瑦妲?*閸忋劍鏌婃稉鈧潪?*閿涘牏鏁ら幋椋庢埂閻ㄥ嫯顩﹂幍鎾崇磻閹绢厽鏂侀崳顭掔礆閵?
+    // 鈽呪槄鈽?2026-10-16锛?*璁颁綇"杩欎竴杞槸涓嶆槸鏂颁細璇?**锛屽畠鍐冲畾 `false` 鎬庝箞澶勭悊锛夛細
+    //   `pullOpenBegin()` 鎶?`morphSessionStarted` 缃湡鐨勯偅涓€姝ュ氨鏄?浼氳瘽寤虹珛"銆?
+    //   鍦ㄥ畠涔嬪墠璇诲埌 false 鈬?杩欐槸**鍏ㄦ柊涓€杞?*锛堢敤鎴风湡鐨勮鎵撳紑鎾斁鍣級銆?
     const isFreshSession: boolean = !this.expandState.morphSessionStarted;
     const ok: boolean = this.expandState.pullOpenBegin(this.getUIContext(), this.navDepth > 0);
     this.expandState.pushMorphTrace(ok ? 'beginOk' : 'beginNo');
     if (!ok && isFreshSession) {
-      // 閳藉應妲勯埥?2026-10-16閿?*"閻愮懓鍤幍鎾崇磻濞屸剝婀侀崝銊ф暰"閻ㄥ嫭娓堕崥搴濈閸ф瀚鹃崶?*閿涘绱?
-      //   鏉╂瑤绔村▓闈涘斧閺夈儲妲?`false` 閳?`pullDragging=false` + `morphReset()` + `morphSettleOpen()`
-      //   + `return false`"閿涘奔绡冪亸杈ㄦЦ**閺佸瓨顔岄弨鎯х磾瑜般垹褰夋导姘崇樈**閵?
-      //   閳跨媴绗?閼?`pullOpenBegin` 鏉╂柨娲?`false` 閻?*閸烆垯绔?*閸樼喎娲滈弰?鏉╂瑤绔撮幏宥夊櫤娑撳秴鍩屾稉婊嗐偪"閳ユ柡鈧?
-      //   閻愮懓鍤幍鎾崇磻閺冩儼绻?*韫囧懐鍔?*閸欐垹鏁撻敍鍫熸尡閺€楣冦€夋潻妯荤梾閹稿倽娴囬妴浣哥殱闂堛垼濡悙閫涚瑝鐎涙ê婀敍澶涚礉
-      //   娴滃孩妲告潻娆庣濞嗏剝澧﹀鈧悮顐ｆ娑斿懎鍨介幋?閸戠姳缍嶅▽锟犲櫤閸?閳?閺冪姴鑸伴崣妯挎儰娴?閿?
-      //   **鏉╃偘绔村▎陇藟闁插繘鍏樺▽陇鐦潻?*閿涘牏鏁ら幋宄扮杽濞村鈧瞼鍋ｉ崙缁樺ⅵ瀵偓閹绢厽鏂侀崳銊︾梾閺堝鐨濋棃?閼冲本娅欓崝銊ф暰閵嗗稄绱氶妴?
-      //   閺冪姷鏅惃鍕埌閻樿绱檂MainPage.openPlayerMorph` 149679閿涘绱癭beginMorphEnter` 鏉╂柨娲?false 閺?
-      //   **娑撳秵鏂佸?*閿涘矁鈧本妲?
+      // 鈽呪槄鈽?2026-10-16锛?*"鐐瑰嚮鎵撳紑娌℃湁鍔ㄧ敾"鐨勬渶鍚庝竴鍧楁嫾鍥?*锛夛細
+      //   杩欎竴娈靛師鏉ユ槸"`false` 鈬?`pullDragging=false` + `morphReset()` + `morphSettleOpen()`
+      //   + `return false`"锛屼篃灏辨槸**鏁存鏀惧純褰㈠彉浼氳瘽**銆?
+      //   鈿狅笍 鑰?`pullOpenBegin` 杩斿洖 `false` 鐨?*鍞竴**鍘熷洜鏄?杩欎竴鎷嶉噺涓嶅埌涓滆タ"鈥斺€?
+      //   鐐瑰嚮鎵撳紑鏃惰繖**蹇呯劧**鍙戠敓锛堟挱鏀鹃〉杩樻病鎸傝浇銆佸皝闈㈣妭鐐逛笉瀛樺湪锛夛紝
+      //   浜庢槸杩欎竴娆℃墦寮€琚案涔呭垽鎴?鍑犱綍娌￠噺鍒?鈬?鏃犲舰鍙樿惤浣?锛?
+      //   **杩炰竴娆¤ˉ閲忛兘娌¤瘯杩?*锛堢敤鎴峰疄娴嬨€岀偣鍑绘墦寮€鎾斁鍣ㄦ病鏈夊皝闈?鑳屾櫙鍔ㄧ敾銆嶏級銆?
+      //   鏃犵晫鐨勫舰鐘讹紙`MainPage.openPlayerMorph` 149679锛夛細`beginMorphEnter` 杩斿洖 false 鏃?
+      //   **涓嶆斁寮?*锛岃€屾槸
       // ```ts
       //     this.enterAnimStarted = false;
-      //     ExpandSnapshot.onPullReady = () => { 閳?};   // 閳?濞夈劌鍞介崶鐐剁殶閿涘瞼鐡戦幘顓熸杹妞ゅ吀绗傞幎銉ュ殤娴ｆ洖鍟€閹恒儳娼冪捄?
+      //     ExpandSnapshot.onPullReady = () => { 鈥?};   // 鈫?娉ㄥ唽鍥炶皟锛岀瓑鎾斁椤典笂鎶ュ嚑浣曞啀鎺ョ潃璺?
       // ```
-      //   閳?閹存垳婊戦惃鍕搼娴犻澧跨亸杈ㄦЦ**鐠佲晞藟闁插繘鎽奸幒銉﹀**閿涙矮绻氶幐?`ENTERING/FINGER` 娑?`pullDragging`閿?
-      //     閻?`settlePullOpen` 閻?12鑴?2ms 鐞涖儵鍣洪幎濠勭矒閻愬綊鍣洪崶鐐存降閿涘矂鍣洪崚浼村亝娑撯偓閹?
-      //     閿涘潉measureMiniDuringPull` 闁插矉绱氶幎?`morphGeomReady` 缂冾喚婀￠妴浣割啇閸ｃ劎顑囨稉鈧▎陇鎯ゆ担宥冣偓?
-      //   閳跨媴绗?閸欘亜婀?`isFreshSession` 閺冩儼绻栭弽宄颁粵閿?*瀹歌尙绮￠崷銊ょ窗鐠囨繈鍣?*閿涘牓鍣告径宥埿曢崣?/ 濞堝鏆€閿涘绮涢悞鎯拌泲閸樼喐娼甸惃?
-      //     娣囨繂鐣ч崚鍡樻暜閿涘苯鍘ゅ妤佸Ω閻劍鍩涘锝呮躬閻娈戦柇锝勭鏉烆喕绱扮拠婵囩閹哄鈧?
+      //   鈬?鎴戜滑鐨勭瓑浠风墿灏辨槸**璁╄ˉ閲忛摼鎺ユ墜**锛氫繚鎸?`ENTERING/FINGER` 涓?`pullDragging`锛?
+      //     鐢?`settlePullOpen` 鐨?12脳32ms 琛ラ噺鎶婄粓鐐归噺鍥炴潵锛岄噺鍒伴偅涓€鎷?
+      //     锛坄measureMiniDuringPull` 閲岋級鎶?`morphGeomReady` 缃湡銆佸鍣ㄧ涓€娆¤惤浣嶃€?
+      //   鈿狅笍 鍙湪 `isFreshSession` 鏃惰繖鏍峰仛锛?*宸茬粡鍦ㄤ細璇濋噷**锛堥噸澶嶈Е鍙?/ 娈嬬暀锛変粛鐒惰蛋鍘熸潵鐨?
+      //     淇濆畧鍒嗘敮锛屽厤寰楁妸鐢ㄦ埛姝ｅ湪鐪嬬殑閭ｄ竴杞細璇濇竻鎺夈€?
       this.expandState.pushMorphTrace('awaitGeom');
       Logger.warn(RzdShellLogTag,
-        `open morph: geometry not measurable yet 閳?keep the session and retry ` +
+        `open morph: geometry not measurable yet 鈬?keep the session and retry ` +
         `(stage=${this.expandState.morphStage} drive=${this.expandState.morphDrive} ` +
         `bigKnown=${this.expandState.bigCoverAnchored()})`);
       return true;
     }
     if (!ok) {
       Logger.warn(RzdShellLogTag,
-        'open morph: mini bar / host rect unavailable 閳?plain landing (no morph)');
+        'open morph: mini bar / host rect unavailable 鈬?plain landing (no morph)');
       this.expandState.pullDragging = false;
       this.expandState.morphReset();
       this.expandState.pushMorphTrace('noMorph');
       this.expandState.morphStage = MorphStage.OPEN;
       this.expandState.morphP = 1;
-      // 鍐呭鏃堕棿绾夸笌鍑犱綍鏃堕棿绾垮湪闈欐鎬佸繀椤诲悓鍊硷紙瑙?`PlayerExpandState.contentP` 鐨勮鏄庯級銆?
+      // 内容时间线与几何时间线在静止态必须同值（见 `PlayerExpandState.contentP` 的说明）。
       this.expandState.contentP = 1;
       return false;
     }
     Logger.info(RzdShellLogTag, 'open morph: begin from click entry (align Wujie openPlayerMorph)');
-    // 閳?婢瑰啿鐪板ù顔肩湴闁絼绔村Λ鎺旀畱鏉╂稑瀹虫稊鐔峰竾閸ョ偠鎹ｉ悙鐧哥窗鐎瑰啰娈戦棃娆愵剾閹礁鍨甸崐鍏兼Ц 1閿?瀹歌尪鎯ゆ担?鐠囶厺绠熼敍澶涚礉
-    //   娑撳秴甯囬崶?0 閻ㄥ嫯鐦藉ù顔肩湴缁楊兛绔寸敮褌绱伴幐?閽€鎴掔秴閻ㄥ嫬銇囩亸渚€娼?閻㈣绔村▎鈽呯礄= 閸斻劎鏁鹃柌灞藉毉閻滄壆顑囨禍灞界炊鐏忎線娼伴敍澶堚偓?
+    // 鈽?澹冲眰娴眰閭ｄ竴妫掔殑杩涘害涔熷帇鍥炶捣鐐癸細瀹冪殑闈欐鎬佸垵鍊兼槸 1锛?宸茶惤浣?璇箟锛夛紝
+    //   涓嶅帇鍥?0 鐨勮瘽娴眰绗竴甯т細鎸?钀戒綅鐨勫ぇ灏侀潰"鐢讳竴娆★紙= 鍔ㄧ敾閲屽嚭鐜扮浜屽紶灏侀潰锛夈€?
     this.expandState.morphOverlayReset();
-    // 閳跨媴绗?**娑撳秷顩﹂崷銊ㄧ箹闁?*鐠ч攱璇炵仦鍌炲亝娑撯偓濡帞娈戠悰銉╂？閿涙碍顒濋崚?`morphContainerActive()` 鏉╂ɑ妲搁崑?
-    //   閿涘潉pullOpenBegin` 閸欘亝濡搁惄闀愮秴缂冾喗鍨?ENTERING 閻ㄥ嫬澧犳稉鈧銉礆閿涘畭focusMorphOverlayForPageIntro()`
-    //   娴兼岸娼ゆ?return閵嗗倹璇炵仦鍌滄畱閺勬儳绱℃す鍗炲З閺€鎯ф躬 `onShowPlayChanged` 闁插矉绱欓幒銊ㄧ熅閻㈠彉绠ｉ崥搴礆閵?
+    // 鈿狅笍 **涓嶈鍦ㄨ繖閲?*璧锋诞灞傞偅涓€妫掔殑琛ラ棿锛氭鍒?`morphContainerActive()` 杩樻槸鍋?
+    //   锛坄pullOpenBegin` 鍙妸鐩镐綅缃垚 ENTERING 鐨勫墠涓€姝ワ級锛宍focusMorphOverlayForPageIntro()`
+    //   浼氶潤榛?return銆傛诞灞傜殑鏄惧紡椹卞姩鏀惧湪 `onShowPlayChanged` 閲岋紙鎺ㄨ矾鐢变箣鍚庯級銆?
     return true;
   }
 
-  /** 閹绢厽鏂佹い浣冪熅閻㈠崬婀弽鍫ュ櫡閻ㄥ嫪绗呴弽鍥风礄娑撳秴婀弽鍫ュ櫡鏉╂柨娲?-1閿涘鈧?*/
+  /** 鎾斁椤佃矾鐢卞湪鏍堥噷鐨勪笅鏍囷紙涓嶅湪鏍堥噷杩斿洖 -1锛夈€?*/
   private playerRouteIndex(): number {
     const names: string[] = this.pageIndexInfos.getAllPathName();
     if (names === undefined || names.length === 0) {
@@ -945,11 +945,11 @@ struct Index {
   }
 
   /**
-   * 閹恒劌鍙嗛幘顓熸杹妞や絻鐭鹃悽渚库偓?
+   * 鎺ㄥ叆鎾斁椤佃矾鐢便€?
    *
-   * 閳跨媴绗?缁楊兛绨╅崣?`animated` **韫囧懘銆忛弰?false**閿涙艾鑸伴崣妯垮殰瀹稿崬姘ㄩ弰顖氬З閻紮绱濈化鑽ょ埠鏉烆剙婧€娴兼艾鎷扮€瑰啫褰旈崝?
-   *    閿涘牊妫ら悾?1.2.4 閸忚櫕甯€娴滃棗鐣犻敍娑樼暭閺傚箍鈧﹤鍙℃禍顐㈠帗缁辩姾娴嗛崷鎭掆偓瀣瘹閸楁鎮撻弽鐤洣濮?`pushPath()` 閸忓啿濮╅悽浼欑礆閵?
-   * `param.pull = true` = 鏉╂瑦顐兼潻娑樺弳鐟曚浇铔嬭ぐ銏犲綁閿涘牆顕弽鍥у冀缂傛牞鐦ч柌宀€娈?`param.pull`閿涘鈧?
+   * 鈿狅笍 绗簩鍙?`animated` **蹇呴』鏄?false**锛氬舰鍙樿嚜宸卞氨鏄姩鐢伙紝绯荤粺杞満浼氬拰瀹冨彔鍔?
+   *    锛堟棤鐣?1.2.4 鍏虫帀浜嗗畠锛涘畼鏂广€婂叡浜厓绱犺浆鍦恒€嬫寚鍗楀悓鏍疯姹?`pushPath()` 鍏冲姩鐢伙級銆?
+   * `param.pull = true` = 杩欐杩涘叆瑕佽蛋褰㈠彉锛堝鏍囧弽缂栬瘧閲岀殑 `param.pull`锛夈€?
    */
   private pushPlayerRoute(): void {
     if (this.playerRouteIndex() >= 0) {
@@ -963,12 +963,12 @@ struct Index {
   }
 
   /**
-   * 缁夊娅庨幘顓熸杹妞や絻鐭鹃悽鎲嬬窗閺€鎯版崳閸斻劎鏁惧鑼病閻㈣鲸鎸遍弨楣冦€夐幘顓炵暚閿涘矁绻栭柌灞肩瑝閸愬秴鐢化鑽ょ埠鏉烆剙婧€閵?
+   * 绉婚櫎鎾斁椤佃矾鐢憋細鏀惰捣鍔ㄧ敾宸茬粡鐢辨挱鏀鹃〉鎾畬锛岃繖閲屼笉鍐嶅甫绯荤粺杞満銆?
    *
-   * 閳跨媴绗?娑撳秷鍏橀崘娆愬灇"閺勵垱鐖ゆい鑸靛 pop"閿涙瓪ControlAreaComponent` 闁插苯鐡ㄩ崷?閸?`isShowPlay = false`
-   *    閸?`pushPathByName(閼硅桨姹夋い?閹兼粎鍌ㄦい?`"閻ㄥ嫬鍟撳▔鏇礉娑撱倓閲滈崝銊ょ稊閻ㄥ嫬鍘涢崥搴ㄣ€庢惔蹇庣瑝绾喖鐣鹃妴?
-   *    閹碘偓娴犮儴绻栭柌灞惧瘻**閸氬秴鐡ч幍鍙ョ瑓閺?*閸愬秴鍨归敍姘暊閸︺劍鐖ゆい璺烘皑 pop閿涘奔绗夐崷銊︾垽妞よ泛姘?`removeByIndexes`閿?
-   *    娑撱倗顫掓い鍝勭碍闁棄绶遍崚鐗堫劀绾喚绮ㄩ弸婊愮礉娑旂喍绗夋导姘辨殌娑撳绔撮弶鈥冲厞鐏忓憡鎸遍弨楣冦€夌捄顖滄暠閵?
+   * 鈿狅笍 涓嶈兘鍐欐垚"鏄爤椤舵墠 pop"锛歚ControlAreaComponent` 閲屽瓨鍦?鍏?`isShowPlay = false`
+   *    鍐?`pushPathByName(鑹轰汉椤?鎼滅储椤?`"鐨勫啓娉曪紝涓や釜鍔ㄤ綔鐨勫厛鍚庨『搴忎笉纭畾銆?
+   *    鎵€浠ヨ繖閲屾寜**鍚嶅瓧鎵句笅鏍?*鍐嶅垹锛氬畠鍦ㄦ爤椤跺氨 pop锛屼笉鍦ㄦ爤椤跺氨 `removeByIndexes`锛?
+   *    涓ょ椤哄簭閮藉緱鍒版纭粨鏋滐紝涔熶笉浼氱暀涓嬩竴鏉″兊灏告挱鏀鹃〉璺敱銆?
    */
   private popPlayerRoute(): void {
     const idx: number = this.playerRouteIndex();
@@ -978,13 +978,13 @@ struct Index {
     }
     const names: string[] = this.pageIndexInfos.getAllPathName();
     Logger.info(RzdShellLogTag, `route: remove player at index=${idx} (top=${names.length - 1})`);
-    // 閳藉應妲勯埥?2026-10-16閿?*閸忔娊妫存潻鍥┾柤姒涙垵灏堢€?璺?缁楊兛绗佺粭?*閿涘绱扮拋?鐠侯垳鏁遍惇鐔烘畱鐞氼偄鍨归幒澶夌啊"鏉╂瑤绔撮崚姹団偓?
-    //   娑撹桨绮堟稊鍫濈箑妞ゆ槒顔囬敍姘卞箛閸︺劌鍙ч梻顓㈡懠鐠侯垳娈戦弨璺虹啲閺?*閸氬奔绔存稉?tick 闁插矁绻涢惈鈧崑?*閻?閳ユ柡鈧?
-    //   `isShowPlay=false`閿涘牃鍟?閺堫剙鍤遍弫甯礉娴?V2 `@Monitor` 閺?*瀵倹顒?*閸ョ偠鐨熼敍澶嗗晪 `morphReset()`
-    //   閿?*閸氬本顒?*閹?`morphP` 婢跺秳缍呴幋?1閵嗕胶娴夋担宥嗙閹?NONE 閳?鐎圭懓娅掓稉宥呭晙鐟佷礁澹€/缂傗晜鏂?= 濠娾€崇潌閿涘鈧?
-    //   閳?娑撱倛鈧懍绠ｉ梻鏉戝涧鐟曚線娈ф禍鍡楁憿閹洑绔寸敮褝绱濈仦蹇庣瑐鐏忚鲸妲?瀹歌尙绮＄紓鈺傚灇鐏忓繐娓鹃悙閫涚啊" 閳?缁愪胶鍔?*濠娾€崇潌閹绢厽鏂佹い?*
-    //     閳?閸愬秷顫?pop 閻ㄥ嫯娴嗛崷鍝勭敨鐠ц埇鈧倻鏁ら幋閿嬪Г閻ㄥ嫨鈧苯濮╅悽鑽ょ波閺夌喍绨?*缁愪胶鍔ч弶銉ら嚋鐏炴洖绱戦幘顓熸杹閸ｃ劎娈戦崝銊ф暰**閵嗗秵顒滈弰顖濈箹娑擃亜鑸伴悩韬测偓?
-    //   閸掋倛顕伴敍姝歊ST` 娑?`REM` 娑斿妫块惃?`t+` 瀹?> ~16ms 閳?閼峰啿鐨張澶夌鐢勫姬鐏炲繋鑵戦梻瀛樷偓?閳?鐏忚鲸妲哥€瑰啨鈧?
+    // 鈽呪槄鈽?2026-10-16锛?*鍏抽棴杩囩▼榛戝專瀛?路 绗笁绗?*锛夛細璁?璺敱鐪熺殑琚垹鎺変簡"杩欎竴鍒汇€?
+    //   涓轰粈涔堝繀椤昏锛氱幇鍦ㄥ叧闂摼璺殑鏀跺熬鏄?*鍚屼竴涓?tick 閲岃繛鐫€鍋?*鐨?鈥斺€?
+    //   `isShowPlay=false`锛堚啋 鏈嚱鏁帮紝浣?V2 `@Monitor` 鏄?*寮傛**鍥炶皟锛夆啋 `morphReset()`
+    //   锛?*鍚屾**鎶?`morphP` 澶嶄綅鎴?1銆佺浉浣嶆竻鎴?NONE 鈬?瀹瑰櫒涓嶅啀瑁佸壀/缂╂斁 = 婊″睆锛夈€?
+    //   鈬?涓よ€呬箣闂村彧瑕侀殧浜嗗摢鎬曚竴甯э紝灞忎笂灏辨槸"宸茬粡缂╂垚灏忓渾鐐逛簡" 鈫?绐佺劧**婊″睆鎾斁椤?*
+    //     鈫?鍐嶈 pop 鐨勮浆鍦哄甫璧般€傜敤鎴锋姤鐨勩€屽姩鐢荤粨鏉熶簡**绐佺劧鏉ヤ釜灞曞紑鎾斁鍣ㄧ殑鍔ㄧ敾**銆嶆鏄繖涓舰鐘躲€?
+    //   鍒よ锛歚RST` 涓?`REM` 涔嬮棿鐨?`t+` 宸?> ~16ms 鈬?鑷冲皯鏈変竴甯ф弧灞忎腑闂存€?鈬?灏辨槸瀹冦€?
     PlaybackPage.ev('REM', `idx=${idx} top=${names.length - 1}`);
     if (idx === names.length - 1) {
       this.pageIndexInfos.pop(false);
@@ -993,30 +993,30 @@ struct Index {
     }
   }
 
-  // 閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓 娑撳﹥濯洪幍鎾崇磻閹绢厽鏂佹い纰夌礄鐠虹喐澧滈敍灞斤紦鐏炲倷鏅堕敍澶嗘敘閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓
+  // 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ 涓婃媺鎵撳紑鎾斁椤碉紙璺熸墜锛屽３灞備晶锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   //
-  // 娑撹桨绮堟稊鍫熷閸斿灝绻€妞よ婀?*婢瑰啿鐪?*閼板奔绗夐弰顖涙尡閺€楣冦€夐敍姘尡閺€楣冦€夐崷?`bindContentCover` 閻ㄥ嫭膩閹線鍣烽敍?
-  // 閼板本膩閹礁婀?`isShowPlay` 娑?false 閺?*閺嶈婀版稉宥呯摠閸?* 閳ユ柡鈧?濞屸剝瀵曟潪鐣屾畱妞ょ敻娼伴弨鏈电瑝閸掔増澧滈幐鍥︾皑娴犺翰鈧?
-  // 閹碘偓娴犮儵鎽肩捄顖涙Ц閿?
+  // 涓轰粈涔堟墜鍔垮繀椤诲湪**澹冲眰**鑰屼笉鏄挱鏀鹃〉锛氭挱鏀鹃〉鍦?`bindContentCover` 鐨勬ā鎬侀噷锛?
+  // 鑰屾ā鎬佸湪 `isShowPlay` 涓?false 鏃?*鏍规湰涓嶅瓨鍦?* 鈥斺€?娌℃寕杞界殑椤甸潰鏀朵笉鍒版墜鎸囦簨浠躲€?
+  // 鎵€浠ラ摼璺槸锛?
   //
-  //   婢瑰啿鐪?onActionStart閿涘牅绮犳惔鏇㈠劥鐠ч攱澧滈敍澶嗗晪 閹稿倽娴囧Ο鈩冣偓渚婄礄鏉╂稑瀹?100 = 鏉╄渹缍橀弶锟犲亝娑撯偓鐏忓繐娼￠敍?
-  //   閳?婢瑰啿鐪?onActionUpdate 閸?transitionProgress 閳?閹绢厽鏂佹い?@Monitor 闂€婊冨剼閹?collapseProgress
-  //   閳?妤傛ê瀹?缂傗晜鏂?娴ｅ秶鐤?閸﹀棜顫?闁繑妲戞惔锕€鍙忛柈銊ㄧ閻偓閹靛瀵氱挧?
-  //   閳?婢瑰啿鐪?onActionEnd 鏉╁洭妲囬崐鐓庡灟鐞涖儵妫块崚?0閿涘牆鐣崗銊ョ潔瀵偓閿涘绱濋崥锕€鍨悰銉╂？閸?100 楠炶泛宓忔潪?
+  //   澹冲眰 onActionStart锛堜粠搴曢儴璧锋墜锛夆啋 鎸傝浇妯℃€侊紙杩涘害 100 = 杩蜂綘鏉￠偅涓€灏忓潡锛?
+  //   鈫?澹冲眰 onActionUpdate 鍐?transitionProgress 鈫?鎾斁椤?@Monitor 闀滃儚鎴?collapseProgress
+  //   鈫?楂樺害/缂╂斁/浣嶇疆/鍦嗚/閫忔槑搴﹀叏閮ㄨ窡鐫€鎵嬫寚璧?
+  //   鈫?澹冲眰 onActionEnd 杩囬槇鍊煎垯琛ラ棿鍒?0锛堝畬鍏ㄥ睍寮€锛夛紝鍚﹀垯琛ラ棿鍒?100 骞跺嵏杞?
 
   /**
-   * 娑撳﹥濯洪幍鎾崇磻閿涙俺鎹ｉ幍瀣仯閺勵垰鎯侀拃钘夋躬閵嗗矁绯犳担鐘虫蒋闁絼绔撮弶鈥崇敨閵嗗秹鍣烽敍鍫ｇ碃娴ｇ姵娼?= 闁絼閲滈幎濠冨閿涘鈧?
+   * 涓婃媺鎵撳紑锛氳捣鎵嬬偣鏄惁钀藉湪銆岃糠浣犳潯閭ｄ竴鏉″甫銆嶉噷锛堣糠浣犳潯 = 閭ｄ釜鎶婃墜锛夈€?
    *
-   * 閳跨媴绗?閺冄嗩潐閸掓瑦妲搁妴灞肩矤鐏炲繐绠锋稉瀣磹闁劌鍨庨敍鍫氬⒑60% 鐏炲繘鐝敍澶庢崳閹靛姘ㄩ幒銉ь吀閵嗗稄绱濋悽銊﹀煕鐎圭偞绁撮敍?026-10-11閿涘绱?
-   *   閵嗗本鍨滈惃鍕€夐幋鎴滅矤閹绢厽鏂侀崳銊ょ瑐闂堫澀绔撮柈銊ュ瀻閻ㄥ嫪缍呯純顔荤瑐濠婃垳绡冩导姘ⅵ瀵偓閹绢厽鏂侀崳顭掔礄閸欘亝婀侀幋鎴犳畱妞ゅ吀绱伴崙铏瑰箛閿涘鈧秲鈧?
-   *   閸樼喎娲滈敍姘＋鐟欏嫬鍨幎?*閺佺繝閲滄稉瀣磹鐏?*闁棄鍨濋幋鎰娴煎憡澧滈崝璺ㄦ畱閻戭厼灏妴鍌氬焼閻ㄥ嫰銆夐棃銏犳躬闁絼绔寸敮锔筋劀婵傝姤妲搁梹鍨灙鐞?/
-   *   濠婃艾濮╃憴鍡楁禈閿涘瞼鐝惄瀛樺珛閸斻劏顫﹂崚妤勩€冮崗鍫濇倖閹哄绱濇竟鍐茬湴鏉╂瑦娼?`.gesture(PanGesture)`閿涘牆鍟嬪▔锟犳▉濞堢绱濇导妯哄帥缁?
-   *   娴ｅ簼绨€涙劗绮嶆禒璁圭礆閺嶈婀伴弨鏈电瑝閸掑府绱遍懓灞烩偓灞惧灉閻ㄥ嫨鈧秹銆夐崘鍛啇娑撳秵寮ф稉鈧仦蹇ョ礄閹存牕鍑＄紒蹇旂泊閸掓澘绨抽敍澶嬫閸掓銆冩稉宥嗙Х鐠愯瀚嬮崝顭掔礉
-   *   娴滃孩妲搁幍瀣◢閸愭帗鍦烘稉濠冩降閵嗕焦鎸遍弨鎯ф珤鐞氼偊銆庨幍瀣瀵偓 閳ユ柡鈧?閹碘偓娴犮儱褰ч張澶婄暊閵嗗本绱￠妴宥冣偓?
-   *   閺€鍓佹彛閹存劧绱扮挧閿嬪閻愮懓绻€妞ゆ槒鎯ら崷?*鎼存洟鍎撮柇锝勭閺夆€崇敨**閿涘牐绯犳担鐘虫蒋 56 + 鎼存洟鍎撮柆鑳唨 + 娑撳﹥閮ㄦ担娆撳櫤閿涘鍞撮妴?
-   *   妞ょ敻娼版稉顓燁唽閵嗕礁鍨悰銊ュ隘閸╃喓娈戞稉濠冪拨娑撯偓瀵板姘︽潻妯肩舶濠婃艾濮╃憴鍡楁禈閿涘牐绻栨稊鐔锋嫲"鏉╄渹缍橀弶鈩冩Ц閹跺﹥澧?閻ㄥ嫪姘︽禍鎺旀纯鐟欏绔撮懛杈剧礆閵?
-   * @param fingers 鐠ч攱澧滈幍瀣瘹閸掓銆冮敍鍫㈢崶閸欙絽娼楅弽?globalY閿涘瘉p閿涘鈧?
-   * @returns 閺勵垰鎯侀悽鍗烇紦鐏炲倹甯寸粻陇绻栧▎鈩冨珛閸斻劊鈧?
+   * 鈿狅笍 鏃ц鍒欐槸銆屼粠灞忓箷涓嬪崐閮ㄥ垎锛堚墺60% 灞忛珮锛夎捣鎵嬪氨鎺ョ銆嶏紝鐢ㄦ埛瀹炴祴锛?026-10-11锛夛細
+   *   銆屾垜鐨勯〉鎴戜粠鎾斁鍣ㄤ笂闈竴閮ㄥ垎鐨勪綅缃笂婊戜篃浼氭墦寮€鎾斁鍣紙鍙湁鎴戠殑椤典細鍑虹幇锛夈€嶃€?
+   *   鍘熷洜锛氭棫瑙勫垯鎶?*鏁翠釜涓嬪崐灞?*閮藉垝鎴愭媺浼告墜鍔跨殑鐑尯銆傚埆鐨勯〉闈㈠湪閭ｄ竴甯︽濂芥槸闀垮垪琛?/
+   *   婊氬姩瑙嗗浘锛岀珫鐩存嫋鍔ㄨ鍒楄〃鍏堝悆鎺夛紝澹冲眰杩欐潯 `.gesture(PanGesture)`锛堝啋娉￠樁娈碉紝浼樺厛绾?
+   *   浣庝簬瀛愮粍浠讹級鏍规湰鏀朵笉鍒帮紱鑰屻€屾垜鐨勩€嶉〉鍐呭涓嶆弧涓€灞忥紙鎴栧凡缁忔粴鍒板簳锛夋椂鍒楄〃涓嶆秷璐规嫋鍔紝
+   *   浜庢槸鎵嬪娍鍐掓场涓婃潵銆佹挱鏀惧櫒琚『鎵嬫媺寮€ 鈥斺€?鎵€浠ュ彧鏈夊畠銆屾紡銆嶃€?
+   *   鏀剁揣鎴愶細璧锋墜鐐瑰繀椤昏惤鍦?*搴曢儴閭ｄ竴鏉″甫**锛堣糠浣犳潯 56 + 搴曢儴閬胯 + 涓婃部浣欓噺锛夊唴銆?
+   *   椤甸潰涓銆佸垪琛ㄥ尯鍩熺殑涓婃粦涓€寰嬩氦杩樼粰婊氬姩瑙嗗浘锛堣繖涔熷拰"杩蜂綘鏉℃槸鎶婃墜"鐨勪氦浜掔洿瑙変竴鑷达級銆?
+   * @param fingers 璧锋墜鎵嬫寚鍒楄〃锛堢獥鍙ｅ潗鏍?globalY锛寁p锛夈€?
+   * @returns 鏄惁鐢卞３灞傛帴绠¤繖娆℃嫋鍔ㄣ€?
    */
   private pullOpenStartsNearBottom(fingers: FingerInfo[]): boolean {
     if (fingers === undefined || fingers.length === 0) {
@@ -1028,86 +1028,86 @@ struct Index {
     return y >= bandTop;
   }
 
-  /** 娑撳﹥濯哄鈧慨瀣剁窗鏉╂稑鍙?ENTERING 闂冭埖顔岄敍鍫濆讲鐠虹喐澧滈敍澶婅嫙閹稿倽娴囬幘顓熸杹妞ょ偣鈧?*/
+  /** 涓婃媺寮€濮嬶細杩涘叆 ENTERING 闃舵锛堝彲璺熸墜锛夊苟鎸傝浇鎾斁椤点€?*/
   private onPullOpenStart(fingers: FingerInfo[]): void {
-    // 閳?鐠囧﹥鏌囬敍姘煀娑撯偓鏉烆喗澧滈崝鍨磻婵?閳?濞撳懏甯€"閺堫剚顐奸幍瀣◢瀹歌尪顔囨潻鍥︾濞嗏剝瀚嗙紒?閻ㄥ嫰妞勯敍鍫ｎ潌 `onPullOpenUpdate`閿涘鈧?
+    // 鈽?璇婃柇锛氭柊涓€杞墜鍔垮紑濮?鈬?娓呮帀"鏈鎵嬪娍宸茶杩囦竴娆℃嫆缁?鐨勯椄锛堣 `onPullOpenUpdate`锛夈€?
     this.pullDropCountedThisGesture = false;
-    // 閳跨媴绗?閹绢厽鏂佹い闈涘嚒缂佸繐绱戦惈鈧亸鍗炲焼閹恒儳顓搁敍姘尡閺€楣冦€夐悳鏉挎躬閺勵垰锛撶仦?Stack 闁插瞼娈戦弲顕€鈧碍璇炵仦鍌︾礄娑撳秴鍟€閺勵垱膩閹緤绱氶敍?
-    //    婢瑰啿鐪版潻娆愭蒋閹靛濞嶉崷銊ョ暊娑撳﹪娼版笟婵堝姧閺€璺虹繁閸?閳ユ柡鈧?娑撳秵灏呮稉鈧稉瀣剁礉閻劍鍩涢崷銊︽尡閺€楣冦€夐柌灞肩矤娑撳宕愮仦蹇撶窔娑撳﹥瀚?
-    //    娴兼碍濡歌ぐ銏犲綁鏉╂稑瀹虫径宥勭秴閸?0閿涘牊鎸遍弨楣冦€?閸?閸︽壆缂夐崶鐐剁碃娴ｇ姵娼敍澶涚礉
-    //    閼板本鎸遍弨楣冦€夐懛顏勭箒閻ㄥ嫪绗呴幏澶嬫暪鐠ч攱澧滈崝鍨倱閺冭泛婀捄鎴礉娑撱倕顨滈崝銊ф暰閻╁瓨甯撮幍鎾寸仸閵?
+    // 鈿狅笍 鎾斁椤靛凡缁忓紑鐫€灏卞埆鎺ョ锛氭挱鏀鹃〉鐜板湪鏄３灞?Stack 閲岀殑鏅€氭诞灞傦紙涓嶅啀鏄ā鎬侊級锛?
+    //    澹冲眰杩欐潯鎵嬪娍鍦ㄥ畠涓婇潰渚濈劧鏀跺緱鍒?鈥斺€?涓嶆尅涓€涓嬶紝鐢ㄦ埛鍦ㄦ挱鏀鹃〉閲屼粠涓嬪崐灞忓線涓婃嫋
+    //    浼氭妸褰㈠彉杩涘害澶嶄綅鍒?0锛堟挱鏀鹃〉"鍟?鍦扮缉鍥炶糠浣犳潯锛夛紝
+    //    鑰屾挱鏀鹃〉鑷繁鐨勪笅鎷夋敹璧锋墜鍔垮悓鏃跺湪璺戯紝涓ゅ鍔ㄧ敾鐩存帴鎵撴灦銆?
     if (this.appState.isShowPlay) {
       return;
     }
-    // 閳跨媴绗?濞堝鏆€閸?true 閻?`pullDragging` 娴?*鐠佲晝鍋ｉ崙缁樺ⅵ瀵偓濮樻瓕绻欑捄瀹犵箖瑜般垹褰夐崚婵嗩潗閸?*閿涘牓銆夐棃銏ゅ亝鏉堣瀵滅€?
-    //    閸掋倖鏌?閹靛瀵氬锝呮躬妞瑰崬濮?閿涘鈧倽鎹ｉ幍瀣箹娑撯偓閸掕崵绮烘稉鈧〒鍛濞嗏槄绱濇穱婵婄槈濮ｅ繑顐奸幍鎾崇磻闁姤妲告禒搴″叡閸戔偓閻樿埖鈧礁绱戞慨瀣ㄢ偓?
+    // 鈿狅笍 娈嬬暀鍦?true 鐨?`pullDragging` 浼?*璁╃偣鍑绘墦寮€姘歌繙璺宠繃褰㈠彉鍒濆鍖?*锛堥〉闈㈤偅杈规寜瀹?
+    //    鍒ゆ柇"鎵嬫寚姝ｅ湪椹卞姩"锛夈€傝捣鎵嬭繖涓€鍒荤粺涓€娓呬竴娆★紝淇濊瘉姣忔鎵撳紑閮芥槸浠庡共鍑€鐘舵€佸紑濮嬨€?
     this.expandState.pullDragging = false;
     if (!this.pullOpenStartsNearBottom(fingers)) {
       return;
     }
-    // 閳?閸忓牓鍣烘稉鈧▎陇绯犳担鐘虫蒋娑撳骸顔栨稉鑽ゆ畱**濞撳弶鐓嬮惌鈺佽埌**閿涘潉getRectangleById`閿涘苯褰涘?px 閳?vp閿涘绱?
-    //   `onAreaChange` 缂佹瑧娈戦弰顖氱鐏炩偓閸戠姳缍嶉妴浣风瑝閸氼偆顨涢崗?transform閿涘瓛DS 濞搭喖濮╂惔鏇熺埉闁絿鍋ｉ崑蹇曅?
-    //   娴兼俺顔€閸斻劎鏁剧挧椋庡仯閺佺繝缍嬮崑蹇ョ礄閻劍鍩涚€圭偞绁撮惃?娴犲骸鐨濋棃銏犱焊瀹革缚绗呯憴鎺戠磻婵?閿涘鈧?
+    // 鈽?鍏堥噺涓€娆¤糠浣犳潯涓庡涓荤殑**娓叉煋鐭╁舰**锛坄getRectangleById`锛屽彛寰?px 鈫?vp锛夛細
+    //   `onAreaChange` 缁欑殑鏄竷灞€鍑犱綍銆佷笉鍚鍏?transform锛孒DS 娴姩搴曟爮閭ｇ偣鍋忕Щ
+    //   浼氳鍔ㄧ敾璧风偣鏁翠綋鍋忥紙鐢ㄦ埛瀹炴祴鐨?浠庡皝闈㈠亸宸︿笅瑙掑紑濮?锛夈€?
     const morphOk: boolean = this.expandState.pullOpenBegin(this.getUIContext(), this.navDepth > 0);
     if (!this.appState.isShowPlay) {
       this.appState.isShowPlay = true;
     }
     if (!morphOk) {
-      // 閸戠姳缍嶅▽锟犲櫤姒绘劧绱欐潻铚傜稑閺夆剝鐥呴幐鍌濇祰 / 鐎瑰じ瀵屽▽鈥虫槀鐎甸潻绱氶敍姘辨纯閹恒儵鎽靛鈽呯礉閸掝偆鈥栭崑姘埌閸?
-      // 閳ユ柡鈧?绾剙浠涢惃鍕樈閹绢厽鏂佹い鍏哥窗鐞氼偄甯囬幋鎰閺夛紕绮忕紓婵撶礄鐟?PlayerExpandState.morphUsable閿涘鈧?
-      // 閳?鐠囧﹥鏌囩拋鈩冩殶閿涘牆绐橀弽鍥╊儑閸椾浇顢?`pd=` 閻ㄥ嫮顑囨稉鈧稉顏呮殶閿涘绱版潻娆庨嚋閺佺増瀹?閳?娑撳﹥濯?*濞屸剝婀佺捄鐔稿閸斻劎鏁?*閿?
-      //   閸樼喎娲滈弰?鐠ч攱澧滈柇锝勭閸掕鍤戞担鏇熺梾闁插繘缍?閿涘奔绗?`pullDragging` 闁絾娼捄顖涙￥閸忕绱欑憴?`pullDropBegin`閿涘鈧?
+      // 鍑犱綍娌￠噺榻愶紙杩蜂綘鏉℃病鎸傝浇 / 瀹夸富娌″昂瀵革級锛氱洿鎺ラ摵婊★紝鍒‖鍋氬舰鍙?
+      // 鈥斺€?纭仛鐨勮瘽鎾斁椤典細琚帇鎴愪竴鏉＄粏缂濓紙瑙?PlayerExpandState.morphUsable锛夈€?
+      // 鈽?璇婃柇璁℃暟锛堝窘鏍囩鍗佽 `pd=` 鐨勭涓€涓暟锛夛細杩欎釜鏁版定 鈬?涓婃媺**娌℃湁璺熸墜鍔ㄧ敾**锛?
+      //   鍘熷洜鏄?璧锋墜閭ｄ竴鍒诲嚑浣曟病閲忛綈"锛屼笌 `pullDragging` 閭ｆ潯璺棤鍏筹紙瑙?`pullDropBegin`锛夈€?
       this.expandState.notePullDropBegin();
       this.expandState.pullDragging = false;
       this.expandState.morphReset();
       this.expandState.morphSettleOpen();
       return;
     }
-    // 閳?鐠ч攱澧滈柇锝勭閸掔粯鎸遍弨楣冦€夐崚姘瘯鏉炴枻绱?缂侇參顥ｇ亸渚€娼?閻ㄥ嫮绮撻悙鐧哥礄鐎瑰啰娈戞径褍鐨濋棃顫礆鏉╂﹢鍣烘稉宥呭煂 閳ユ柡鈧?鐞涖儵鍣洪妴?
-    //   娑撳氦绯犳担鐘虫蒋閼奉亜绻侀柇锝嗘蒋閹靛濞嶉柌宀€娈戠悰銉╁櫤閸氬奔绔存總妤冪崶閸欙綇绱?2 鑴?32ms閿涘苯顕弽鍥у冀缂傛牞鐦?`onPullReady`閿涘鈧?
+    // 鈽?璧锋墜閭ｄ竴鍒绘挱鏀鹃〉鍒氭寕杞斤紝"缁灏侀潰"鐨勭粓鐐癸紙瀹冪殑澶у皝闈級杩橀噺涓嶅埌 鈥斺€?琛ラ噺銆?
+    //   涓庤糠浣犳潯鑷繁閭ｆ潯鎵嬪娍閲岀殑琛ラ噺鍚屼竴濂楃獥鍙ｏ紙12 脳 32ms锛屽鏍囧弽缂栬瘧 `onPullReady`锛夈€?
     this.schedulePullAnchorRemeasure(0);
-    // 閳?婢瑰啿鐪板ù顔肩湴闁絼绔村Λ鎺炵礄`MorphCoverClone`閿涘绡冮崢瀣礀鐠ч鍋ｉ妴鍌氱暊閻ㄥ嫯绻樻惔?`morphOverlayP`
-    //   闂堟瑦顒涢幀浣稿灥閸婂吋妲?1閿?瀹歌尙绮￠崷銊ㄦ儰娴?閻ㄥ嫯顕㈡稊澶涚礆閿涘奔绗夐崢瀣礀 0 閻ㄥ嫯鐦藉ù顔肩湴缁楊兛绔寸敮褌绱伴悽缁樺灇婢堆冪殱闂堫潿鈧?
+    // 鈽?澹冲眰娴眰閭ｄ竴妫掞紙`MorphCoverClone`锛変篃鍘嬪洖璧风偣銆傚畠鐨勮繘搴?`morphOverlayP`
+    //   闈欐鎬佸垵鍊兼槸 1锛?宸茬粡鍦ㄨ惤浣?鐨勮涔夛級锛屼笉鍘嬪洖 0 鐨勮瘽娴眰绗竴甯т細鐢绘垚澶у皝闈€?
     this.expandState.morphOverlayReset();
   }
 
   /**
-   * 鐠虹喐澧滈張鐔兼？鐞涖儵鍣?缂侇參顥ｇ亸渚€娼?閻ㄥ嫮绮撻悙褰掓晪閻愮櫢绱欓幘顓熸杹妞ら潧銇囩亸渚€娼伴敍澶堚偓?
+   * 璺熸墜鏈熼棿琛ラ噺"缁灏侀潰"鐨勭粓鐐归敋鐐癸紙鎾斁椤靛ぇ灏侀潰锛夈€?
    *
-   * 閳跨媴绗?`attempt` **韫囧懘銆忕敮锕傜帛鐠併倕鈧?`0`**閿涘苯鑻熸稉鏃囶洣閹糕€茬秶 `undefined`/`NaN`閿?
-   * `attempt >= PULL_ANCHOR_RETRY_MAX` 鐎?`undefined` 閸?`NaN` **闁姤妲?false**閿?
-   * 娴滃孩妲搁弮鐘插棘鐠嬪啰鏁ら敍鍫熷灗閺屾劒绔寸仦鍌欑炊娴?`attempt + 1` 缁犳鍤?NaN閿涘绱扮拋鈺勭箹閺?32ms 闁帒缍?*濮橀晲绗夐崑婊勵剾**
-   * 閿涘潉features/playlist` 閻ㄥ嫬褰熸稉銈勫敜閸擃垱婀伴崢鐔告降鐏忚鲸妲告潻娆庨嚋瑜般垻濮搁敍?026-10-15 瀹告彃顕鎰剁幢鐟欎焦妫ら悾灞芥倱濮?鎼?2閿涘鈧?
-   * @param attempt 瀹告彃鐨剧拠鏇燁偧閺?
+   * 鈿狅笍 `attempt` **蹇呴』甯﹂粯璁ゅ€?`0`**锛屽苟涓旇鎸′綇 `undefined`/`NaN`锛?
+   * `attempt >= PULL_ANCHOR_RETRY_MAX` 瀵?`undefined` 鍜?`NaN` **閮芥槸 false**锛?
+   * 浜庢槸鏃犲弬璋冪敤锛堟垨鏌愪竴灞備紶浜?`attempt + 1` 绠楀嚭 NaN锛変細璁╄繖鏉?32ms 閫掑綊**姘镐笉鍋滄**
+   * 锛坄features/playlist` 鐨勫彟涓や唤鍓湰鍘熸潵灏辨槸杩欎釜褰㈢姸锛?026-10-15 宸插榻愶紱瑙佹棤鐣屽悓姝?搂72锛夈€?
+   * @param attempt 宸插皾璇曟鏁?
    */
   private schedulePullAnchorRemeasure(attempt: number = 0): void {
     if (!Number.isFinite(attempt) || attempt >= PULL_ANCHOR_RETRY_MAX) {
       return;
     }
     setTimeout((): void => {
-      // 閳藉應妲勯埥?2026-10-16閿?*閸氬奔绔磋ぐ銏㈠Ц閻ㄥ嫮顑?4 婢?*閿涙瓪morphGenAlive` 鐎瑰牆宕?閳ユ柡鈧?閸?3 婢跺嫬鍑￠崷?鎼?02/鎼?04 娣囶喛绻冮敍?
-      //   鏉╂瑩鍣烽崢鐔告降閺?`if (!pullDragging || !morphGenAlive(gen)) return;`閿涘苯鍙炬稉?
-      //   `gen` 閺?*閸欐垼鎹ｉ柇锝勭閸?*閹规洝骞忛惃?`morphGen`閵?
+      // 鈽呪槄鈽?2026-10-16锛?*鍚屼竴褰㈢姸鐨勭 4 澶?*锛歚morphGenAlive` 瀹堝崼 鈥斺€?鍓?3 澶勫凡鍦?搂102/搂104 淇繃锛?
+      //   杩欓噷鍘熸潵鏄?`if (!pullDragging || !morphGenAlive(gen)) return;`锛屽叾涓?
+      //   `gen` 鏄?*鍙戣捣閭ｄ竴鍒?*鎹曡幏鐨?`morphGen`銆?
       //
-      // ## 娑撹桨绮堟稊鍫濈暊閸︺劎鍋ｉ崙鏄忕箹閺壜ょ熅娑撳﹥妲搁柨娆戞畱
-      //   `morphGen` 閻ㄥ嫯顕㈡稊澶嬫Ц"鏉╂瑤绔存潪顔艰埌閸欐ü绱扮拠婵堟畱缂傛牕褰?閿涘苯鐣犵悮?`morphReset()` **閹恒劑鐝?*閵?
-      //   閼板瞼鍋ｉ崙缁樺ⅵ瀵偓閺冭绱漙pushPath` 娴兼俺顔€**閺冄囥€夐棃銏犵杽娓氬宓忔潪?*閿涘本妫€圭偘绶ラ惃?`onDisAppear` 娴兼俺铔?
-      //   閿涘牓鍋呴弶陇鐭炬稉濠勬窗閸撳秴褰ч張?`morphUsable` 娑撹櫣婀＄亸杈儲鏉?鏉╂瑤绔寸仦鍌欑箽閹躲倧绱濈憴?`PlaybackPage.onDisAppear`閿?
-      //   閳ユ柡鈧?娑撯偓閺冿箑鐣犻惇鐔烘畱鐠嬪啫鍩屾禍?`morphReset()`閿涘本婀伴崙鑺ユ殶閻ㄥ嫪绗樻禒锝呭娇缁斿鍩㈡潻鍥ㄦ埂
-      //   閳?**濮ｅ繋绔撮幏宥夊厴閸︺劎顑?2 鐞涘矂娼ゆ?return**閿涘牅绗夐崘娆愭）韫囨绱濋弻銉ょ瑝閸戠儤娼甸敍澶堚偓?
-      //   鏉╂瑤绗?鎼?02 娣囶喗甯€閻ㄥ嫨鈧椒浜掗崣?鎼?04 娣囶喚娈?*鐎瑰苯鍙忛崥灞肩娑擃亜鑸伴悩?*閿?
-      //     > 閻?娴兼俺鐦界紓鏍у娇"閸樿鍨?閻劍鍩涙潻妯诲厒娑撳秵鍏傞惇瀣尡閺€楣冦€? 閳ユ柡鈧?娑撱倛鈧懏妫ら崗鐐解偓?
+      // ## 涓轰粈涔堝畠鍦ㄧ偣鍑昏繖鏉¤矾涓婃槸閿欑殑
+      //   `morphGen` 鐨勮涔夋槸"杩欎竴杞舰鍙樹細璇濈殑缂栧彿"锛屽畠琚?`morphReset()` **鎺ㄩ珮**銆?
+      //   鑰岀偣鍑绘墦寮€鏃讹紝`pushPath` 浼氳**鏃ч〉闈㈠疄渚嬪嵏杞?*锛屾棫瀹炰緥鐨?`onDisAppear` 浼氳蛋
+      //   锛堥偅鏉¤矾涓婄洰鍓嶅彧鏈?`morphUsable` 涓虹湡灏辫烦杩?杩欎竴灞備繚鎶わ紝瑙?`PlaybackPage.onDisAppear`锛?
+      //   鈥斺€?涓€鏃﹀畠鐪熺殑璋冨埌浜?`morphReset()`锛屾湰鍑芥暟鐨勪笘浠ｅ彿绔嬪埢杩囨湡
+      //   鈬?**姣忎竴鎷嶉兘鍦ㄧ 2 琛岄潤榛?return**锛堜笉鍐欐棩蹇楋紝鏌ヤ笉鍑烘潵锛夈€?
+      //   杩欎笌 搂102 淇帀鐨勩€佷互鍙?搂104 淇殑**瀹屽叏鍚屼竴涓舰鐘?*锛?
+      //     > 鐢?浼氳瘽缂栧彿"鍘诲垽"鐢ㄦ埛杩樻兂涓嶆兂鐪嬫挱鏀鹃〉" 鈥斺€?涓よ€呮棤鍏炽€?
       //
-      // ## 閺€瑙勭《閿涘牆鍨介幑顔藉床閹存劖娲块弮鈹库偓浣规纯閻╁瓨甯撮惃鍕皑鐎圭儑绱?
-      //   `pullDragging` 鐞涖劎銇?鏉╂瑤绔存潪顔跨閹?閺€璺虹啲鏉╂ɑ鐥呯挧鏉跨暚"閿涘潉settlePullOpen` 娴兼矮绔撮惄缈犵箽閹镐礁鐣犻敍?
-      //   閻╂潙鍩岀悰銉╂？鐠х柉绐囬柇锝勭閸掔粯澧犵純?false閿涘鈧柡鈧?鏉╂瑦顒滈弰?鏉╂顩︽稉宥堫洣缂佈呯敾鐞涖儵鍣?閻ㄥ嫮婀￠崚銈嗗祦閵?
-      //   娑撴牔鍞崣宄版躬鏉╂瑩鍣峰▽鈩冩箒娴犺缍嶅锝団€橀悽銊┾偓鏃撶窗鐞涖儵鍣洪崣顏堟付鐟?閸戠姳缍嶆潻妯荤梾姒?+ 閻劍鍩涙潻妯烘躬缁?閵?
-      //   閳?閸樼粯甯€ `gen`閿涘苯褰ч崚?`pullDragging`閿涙稑鍟€鐞涖儰绔撮弶?`isShowPlay`閿涘牏鏁ら幋宄板嚒缁傝绱戠亸鍗炲焼闁插繋绨￠敍澶堚偓?
+      // ## 鏀规硶锛堝垽鎹崲鎴愭洿鏃┿€佹洿鐩存帴鐨勪簨瀹烇級
+      //   `pullDragging` 琛ㄧず"杩欎竴杞窡鎵?鏀跺熬杩樻病璧板畬"锛坄settlePullOpen` 浼氫竴鐩翠繚鎸佸畠锛?
+      //   鐩村埌琛ラ棿璧疯窇閭ｄ竴鍒绘墠缃?false锛夆€斺€?杩欐鏄?杩樿涓嶈缁х画琛ラ噺"鐨勭湡鍒ゆ嵁銆?
+      //   涓栦唬鍙峰湪杩欓噷娌℃湁浠讳綍姝ｇ‘鐢ㄩ€旓細琛ラ噺鍙渶瑕?鍑犱綍杩樻病榻?+ 鐢ㄦ埛杩樺湪绛?銆?
+      //   鈬?鍘绘帀 `gen`锛屽彧鍒?`pullDragging`锛涘啀琛ヤ竴鏉?`isShowPlay`锛堢敤鎴峰凡绂诲紑灏卞埆閲忎簡锛夈€?
       if (!this.expandState.pullDragging) {
         return;
       }
-      // 閻劍鍩涘鑼病缁傝绱戦幘顓熸杹妞ょ绱檂popPath` 闁絾娼捄顖ょ礆閳?閸愬秷藟闁插繋绡冨▽鈥叉眽閻绱濋弨璺轰紣閵?
-      // 閳跨媴绗?閸掋倖宓侀悽?`isShowPlay` 閼?*娑撳秵妲?*娑撴牔鍞崣鍑ょ礄娑撴牔鍞崣铚傜窗鐞氼偅妫ら崗宕囨畱娴滃甯规姗堢礉鐟欎椒绗傞棃銏ゅ亝濞堢绱氶妴?
+      // 鐢ㄦ埛宸茬粡绂诲紑鎾斁椤碉紙`popPath` 閭ｆ潯璺級鈬?鍐嶈ˉ閲忎篃娌′汉鐪嬶紝鏀跺伐銆?
+      // 鈿狅笍 鍒ゆ嵁鐢?`isShowPlay` 鑰?*涓嶆槸**涓栦唬鍙凤紙涓栦唬鍙蜂細琚棤鍏崇殑浜嬫帹楂橈紝瑙佷笂闈㈤偅娈碉級銆?
       if (!this.appState.isShowPlay) {
         return;
       }
@@ -1118,14 +1118,14 @@ struct Index {
     }, PULL_ANCHOR_RETRY_MS);
   }
 
-  /** 鐠虹喐澧滈弴瀛樻煀閿涙矮缍呯粔?閳?鏉╂稑瀹?0閳?閿?*缁炬寧鈧?*閿涘矁绐￠幍瀣▉濞堝吀绗夐崝鐘电处閸旑煉绱氶妴?*/
+  /** 璺熸墜鏇存柊锛氫綅绉?鈫?杩涘害 0鈥?锛?*绾挎€?*锛岃窡鎵嬮樁娈典笉鍔犵紦鍔級銆?*/
   private onPullOpenUpdate(offsetY: number): void {
     if (!this.expandState.pullDragging) {
-      // 閳?鐠囧﹥鏌囩拋鈩冩殶閿涘牆绐橀弽鍥╊儑閸椾浇顢?`pd=` 閻ㄥ嫪鑵戦梻鎾亝娑擃亝鏆熼敍澶嗏偓鏂衡偓?鐟?`PlayerExpandState.pullDropUpdate`閿?
-      //   "閹靛瀵氶崷銊ュЗ娴ｅ棜绻樻惔锔跨瑝鐠?閺冭绱濇潻娆庨嚋閺侀绱板☉顭掔礉楠炴儼顕╅弰搴㈡Ц**閸掋倖宓?*閹锋帞娈戦敍鍫ｂ偓灞肩瑝閺勵垯绨ㄦ禒鑸电梾閸掑府绱氶妴?
-      // 閳跨媴绗?**娑撯偓濞嗏剝澧滈崝鍨涧鐠侀绔村▎?*閿涙碍婀伴崙鑺ユ殶閻㈣鲸鐦℃稉?`onActionUpdate` 鐠嬪啰鏁ら敍鍫氬60~120 濞?缁夋帪绱氶敍?
-      //   閼板矁顓搁弫鏉垮晸閻ㄥ嫭妲?`@Trace` 鐎涙顔?閳?濮ｅ繑顐奸柈钘夊晸娴兼俺顔€瀵拌姤鐖ｉ柇锝勯嚋 `Text` 濮ｅ繐鎶氶柌宥呯紦閿?
-      //   閹澘銈介幎?閹靛鍔?閹煎懏绁介敍鍫ｇ槚閺傤厽婀伴煬顐㈠綁閹存劕鍏遍幍鐗堢爱閿涘鈧倽鐦栭弬顓炲涧闂団偓鐟?鏉╂瑤绔存潪顔芥箒濞屸剝婀佺悮顐ｅ珕"鏉╂瑤绔存稉顏冪皑鐎圭偑鈧?
+      // 鈽?璇婃柇璁℃暟锛堝窘鏍囩鍗佽 `pd=` 鐨勪腑闂撮偅涓暟锛夆€斺€?瑙?`PlayerExpandState.pullDropUpdate`锛?
+      //   "鎵嬫寚鍦ㄥ姩浣嗚繘搴︿笉璺?鏃讹紝杩欎釜鏁颁細娑紝骞惰鏄庢槸**鍒ゆ嵁**鎷掔殑锛堣€屼笉鏄簨浠舵病鍒帮級銆?
+      // 鈿狅笍 **涓€娆℃墜鍔垮彧璁颁竴娆?*锛氭湰鍑芥暟鐢辨瘡涓?`onActionUpdate` 璋冪敤锛堚増60~120 娆?绉掞級锛?
+      //   鑰岃鏁板啓鐨勬槸 `@Trace` 瀛楁 鈬?姣忔閮藉啓浼氳寰芥爣閭ｄ釜 `Text` 姣忓抚閲嶅缓锛?
+      //   鎭板ソ鎶?鎵嬫劅"鎼呮祽锛堣瘖鏂湰韬彉鎴愬共鎵版簮锛夈€傝瘖鏂彧闇€瑕?杩欎竴杞湁娌℃湁琚嫆"杩欎竴涓簨瀹炪€?
       if (!this.pullDropCountedThisGesture) {
         this.pullDropCountedThisGesture = true;
         this.expandState.notePullDropUpdate();
@@ -1133,26 +1133,26 @@ struct Index {
       return;
     }
     this.expandState.applyMorphProgress(this.expandState.pullOpenFraction(offsetY));
-    // 閳?閹靛瀵氱捄鐔稿闁絾娼捄顖欑瑐閿涘本璇炵仦鍌涘鐠愭繄娈戞潻娑樺娑撳孩鎸遍弨楣冦€夋潻娑樺**娑撯偓濮ｆ柧绔撮崥灞绢劄**閿涘牅绗夌捄鎴Ｋ夐梻杈剧礆閿?
-    //   娑撱倕鐪伴崷銊ㄧ閹靛婀¤箛鍛淬€忛弰顖氭倱娑撯偓娑擃亜鈧》绱濋崥锕€鍨弶鐐鐞涖儵妫块弮鏈电窗閸?鐠?閸掔増璇炵仦鍌濆殰瀹搁亶鍋呮稉顏囩箻鎼达缚绗傞妴?
-    //   娑撱倖娼幍瀣◢閿涘牆锛撶仦鍌濈箹閺?+ 鏉╄渹缍橀弶锟犲亝閺夆槄绱氶柈钘夊晸 `morphP`閿涘本澧嶆禒銉﹁癁鐏炲倸绻€妞?*鐠虹喓娼?morphP 鐠?*
-    //   閼板奔绗夐弰顖滅搼閺屾劒閲滈崗銉ュ經閸樻槒顔?閳ユ柡鈧?鏉╂瑦鐗辨稉宥囶吀閸濐亝娼幍瀣◢閹恒儱鍩岄惃鍕厴閼宠棄顕稉濞库偓?
+    // 鈽?鎵嬫寚璺熸墜閭ｆ潯璺笂锛屾诞灞傛嫹璐濈殑杩涘害涓庢挱鏀鹃〉杩涘害**涓€姣斾竴鍚屾**锛堜笉璺戣ˉ闂达級锛?
+    //   涓ゅ眰鍦ㄨ窡鎵嬫湡蹇呴』鏄悓涓€涓€硷紝鍚﹀垯鏉炬墜琛ラ棿鏃朵細鍏?璺?鍒版诞灞傝嚜宸遍偅涓繘搴︿笂銆?
+    //   涓ゆ潯鎵嬪娍锛堝３灞傝繖鏉?+ 杩蜂綘鏉￠偅鏉★級閮藉啓 `morphP`锛屾墍浠ユ诞灞傚繀椤?*璺熺潃 morphP 璧?*
+    //   鑰屼笉鏄瓑鏌愪釜鍏ュ彛鍘昏 鈥斺€?杩欐牱涓嶇鍝潯鎵嬪娍鎺ュ埌鐨勯兘鑳藉涓娿€?
     this.expandState.syncMorphOverlayFromPage();
   }
 
   /**
-   * 閺夌偓澧滈敍?*閹绘劒姘﹂崚銈嗗祦娴溿倗绮?`PlayerExpandState.pullOpenShouldCommit()`**閿涘牊绔婚崡?鎼傛稉鈧?1.2
-   * 閵嗗矁绻樻惔?OR 闁喎瀹抽妴宥忕礆閳ユ柡鈧?鏉╁洭妲囬崐纭风礄閹存牕鎻╅柅鐔剁瑐閻⑩晪绱氱悰銉╂？閸?1閿涘牆鐫嶅鈧敍澶涚礉閸氾箑鍨崶鐐插煂 0 楠炶泛宓忔潪濮愨偓?
+   * 鏉炬墜锛?*鎻愪氦鍒ゆ嵁浜ょ粰 `PlayerExpandState.pullOpenShouldCommit()`**锛堟竻鍗?搂涓€ 1.2
+   * 銆岃繘搴?OR 閫熷害銆嶏級鈥斺€?杩囬槇鍊硷紙鎴栧揩閫熶笂鐢╋級琛ラ棿鍒?1锛堝睍寮€锛夛紝鍚﹀垯鍥炲埌 0 骞跺嵏杞姐€?
    *
-   * 閳跨媴绗?鏉╂瑩鍣?*娑撳秷顩﹂崘宥呭晸 `morphP >= 0.45`**閿涙岸鍋呴弶鈥冲灲閹诡喖甯弶銉ユ躬娑撳閲滈弬鍥︽闁插苯鎮囬崘娆庣啊娑撯偓闁?
-   *    閿涘牊婀伴弬鍥︽ + 娑撱倓閲滄潻铚傜稑閺夆槄绱氶敍灞炬暪閺佹稑鍩?`PlayerExpandState` 娑撯偓婢跺嫪绠ｉ崥搴礉
-   *    閺€褰掓閸婄厧褰ч弨褰掑亝娑撯偓娑擃亜鐖堕柌蹇ョ礉娑撳秳绱伴崙铏瑰箛"娑撱倖娼幍瀣◢娑撳鏅崐闂寸瑝娑撯偓閺?閵?
-   * @param offsetY 閺夌偓澧滈弮鍓佹畱缁旀牜娲挎担宥囆╅敍鍧磒閿涘奔绗傞幏澶夎礋鐠愮噦绱氶垾鏂衡偓?閸欘亞鏁ら弶銉ュ灲**閺傜懓鎮?*
-   * @param velocityY 閺夌偓澧滈弮鍓佹畱缁旀牜娲块柅鐔峰閿涘潉GestureEvent.velocityY`閿涘鈧柡鈧?閸欘亞鏁ら弶銉ュ灲**韫囶偆鏁?*
+   * 鈿狅笍 杩欓噷**涓嶈鍐嶅啓 `morphP >= 0.45`**锛氶偅鏉″垽鎹師鏉ュ湪涓変釜鏂囦欢閲屽悇鍐欎簡涓€閬?
+   *    锛堟湰鏂囦欢 + 涓や釜杩蜂綘鏉★級锛屾敹鏁涘埌 `PlayerExpandState` 涓€澶勪箣鍚庯紝
+   *    鏀归槇鍊煎彧鏀归偅涓€涓父閲忥紝涓嶄細鍑虹幇"涓ゆ潯鎵嬪娍涓寸晫鍊间笉涓€鏍?銆?
+   * @param offsetY 鏉炬墜鏃剁殑绔栫洿浣嶇Щ锛坴p锛屼笂鎷変负璐燂級鈥斺€?鍙敤鏉ュ垽**鏂瑰悜**
+   * @param velocityY 鏉炬墜鏃剁殑绔栫洿閫熷害锛坄GestureEvent.velocityY`锛夆€斺€?鍙敤鏉ュ垽**蹇敥**
    */
   private onPullOpenEnd(offsetY: number, velocityY: number): void {
     if (!this.expandState.pullDragging) {
-      // 閳?鐠囧﹥鏌囩拋鈩冩殶閿涘牆绐橀弽鍥╊儑閸椾浇顢?`pd=` 閻ㄥ嫭娓堕崥搴ㄥ亝娑擃亝鏆熼敍澶嗏偓鏂衡偓?鐟?`PlayerExpandState.pullDropEnd`閵?
+      // 鈽?璇婃柇璁℃暟锛堝窘鏍囩鍗佽 `pd=` 鐨勬渶鍚庨偅涓暟锛夆€斺€?瑙?`PlayerExpandState.pullDropEnd`銆?
       this.expandState.notePullDropEnd();
       return;
     }
@@ -1161,8 +1161,8 @@ struct Index {
   }
 
   /**
-   * 鏉╄渹缍橀弶陇鍤滃閬嶅亝閺夆剝澧滈崝鍨絺閺夈儳娈戦弨璺虹啲鐠囬攱鐪伴敍鍫熸緱閹靛妞傜€瑰啫褰ч崣鎴ｎ嚞濮瑰偊绱濈悰銉╂？閻㈠崬锛撶仦鍌涙尡 閳ユ柡鈧?鐟?
-   * `PlayerExpandState.requestPullOpenSettle`閿涘鈧?
+   * 杩蜂綘鏉¤嚜宸遍偅鏉℃墜鍔垮彂鏉ョ殑鏀跺熬璇锋眰锛堟澗鎵嬫椂瀹冨彧鍙戣姹傦紝琛ラ棿鐢卞３灞傛挱 鈥斺€?瑙?
+   * `PlayerExpandState.requestPullOpenSettle`锛夈€?
    */
   @Monitor('expandState.pullSettleVersion')
   onPullSettleRequested(): void {
@@ -1172,41 +1172,41 @@ struct Index {
     this.settlePullOpen(this.expandState.pullSettleCommit);
   }
 
-  // 閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓 婢瑰啿鐪板ù顔肩湴闁絼绔村Λ鎺炵礄缂侇參顥ｇ亸渚€娼伴敍澶屾畱**閻欘剛鐝涢弮鍫曟？缁?*閿?60ms閿涘鏀㈤埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧埞鈧?
+  // 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ 澹冲眰娴眰閭ｄ竴妫掞紙缁灏侀潰锛夌殑**鐙珛鏃堕棿绾?*锛?60ms锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   //
-  // 缂佹挻鐎敍鍫濐嚠閺嶅洦妫ら悾?1.2.4 閻?`MainPage.MorphOverlayHost`閿涘绱?
-  //   璺?娑?鐏?= 閹绢厽鏂佹い浣冨殰瀹告唻绱癭morphP`閿?*350ms `Curve.EaseInOut`**閿涘牅绔存径鍕梾閸旑煉绱氶敍?
-  //   璺?娑?鐏?= **婢瑰啿鐪板ù顔肩湴**閿涘潉MorphCoverClone()`閿涘绱癭morphOverlayP`閿?*560ms + 韫囶偄鍤幈銏℃暪**閵?
+  // 缁撴瀯锛堝鏍囨棤鐣?1.2.4 鐨?`MainPage.MorphOverlayHost`锛夛細
+  //   路 涓?灞?= 鎾斁椤佃嚜宸憋細`morphP`锛?*350ms `Curve.EaseInOut`**锛堜竴澶勬病鍔級锛?
+  //   路 涓?灞?= **澹冲眰娴眰**锛坄MorphCoverClone()`锛夛細`morphOverlayP`锛?*560ms + 蹇嚭鎱㈡敹**銆?
   //
-  // 娑撹桨绮堟稊鍫㈡暏 `@Monitor` 閸樻槒鎷烽妴灞炬尡閺€楣冦€夐柇锝勭鐏炲倸绱戞慨瀣尡娴滃棎鈧稄绱?
-  //   閻愮懓鍤幍鎾崇磻闁絾娼捄顖滄畱鐞涖儵妫块崷銊︽尡閺€楣冦€夐柌宀嬬礄`PlaybackPage.playMorphOpenIntro`閿涘绱?
-  //   閼?*閹绢厽鏂佹い鐢垫畱 350ms 閺勵垱妲戞禒銈勭瑝鐠佺濮╅惃?*閿涙矖@Monitor` 閺?V2 閻?*瀵倹顒為惄鎴濇儔**閿?
-  //   閸ョ偠鐨熼拃钘夋躬閹绢厽鏂佹い鐢稿亝濞嗭紕濮搁幀浣稿晸閸忋儳娈戦崥灞肩鏉烆噣鍣?閳?娑撱倕鐪?閸氬矁鎹?閿涘本鎸遍弨楣冦€夋稉鈧悰宀勫厴娑撳秶鏁ら弨骞库偓?
-  //   娑撱倖娼捄顖氭倗閼奉亜鎳℃稉顓濈娑擃亜鐡у▓纰夌窗
-  //     璺?閻愮懓鍤幍鎾崇磻 閳?`morphDrive` 閸欐ɑ鍨?`ANIM`閿涘潉playMorphOpenIntro` 缁楊兛绔寸悰宀嬬礆閿?
-  //     璺?妫ｆ牠銆?娴滃瞼楠囨い浣冪箲閸ョ偑鈧椒绗呴幏澶嬪絹娴?閳?`morphStage` 閸欐ɑ鍨?`LEAVING`閿涘潉morphBeginLeaving`閿涘鈧?
-  //   閳跨媴绗?閹靛瀵氱捄鐔稿闁絾娼捄?*娑撳秷铔嬫潻娆撳櫡**閿涘牆鐣犻崷?`onPullOpenUpdate` 闁插奔绔村В鏂剧閸氬本顒為敍澶涚礉
-  //      閹碘偓娴犮儴绻栭柌灞肩瑝韫囧懎鍨?`pullDragging`閵?
+  // 涓轰粈涔堢敤 `@Monitor` 鍘昏拷銆屾挱鏀鹃〉閭ｄ竴灞傚紑濮嬫挱浜嗐€嶏細
+  //   鐐瑰嚮鎵撳紑閭ｆ潯璺殑琛ラ棿鍦ㄦ挱鏀鹃〉閲岋紙`PlaybackPage.playMorphOpenIntro`锛夛紝
+  //   鑰?*鎾斁椤电殑 350ms 鏄槑浠や笉璁稿姩鐨?*锛沗@Monitor` 鏄?V2 鐨?*寮傛鐩戝惉**锛?
+  //   鍥炶皟钀藉湪鎾斁椤甸偅娆＄姸鎬佸啓鍏ョ殑鍚屼竴杞噷 鈬?涓ゅ眰"鍚岃捣"锛屾挱鏀鹃〉涓€琛岄兘涓嶇敤鏀广€?
+  //   涓ゆ潯璺悇鑷懡涓竴涓瓧娈碉細
+  //     路 鐐瑰嚮鎵撳紑 鈫?`morphDrive` 鍙樻垚 `ANIM`锛坄playMorphOpenIntro` 绗竴琛岋級锛?
+  //     路 棣栭〉/浜岀骇椤佃繑鍥炪€佷笅鎷夋彁浜?鈫?`morphStage` 鍙樻垚 `LEAVING`锛坄morphBeginLeaving`锛夈€?
+  //   鈿狅笍 鎵嬫寚璺熸墜閭ｆ潯璺?*涓嶈蛋杩欓噷**锛堝畠鍦?`onPullOpenUpdate` 閲屼竴姣斾竴鍚屾锛夛紝
+  //      鎵€浠ヨ繖閲屼笉蹇呭垽 `pullDragging`銆?
 
-  /** 閹绢厽鏂佹い闈涚磻婵?*鐏炴洖绱?*鐞涖儵妫?閳?濞搭喖鐪版潻娆庣鐏炲倷绡冪挧鐤殰瀹搁亶鍋?560ms閵?*/
+  /** 鎾斁椤靛紑濮?*灞曞紑**琛ラ棿 鈬?娴眰杩欎竴灞備篃璧疯嚜宸遍偅 560ms銆?*/
   @Monitor('expandState.morphDrive')
   onMorphDriveChanged(): void {
     if (!this.appState.isShowPlay) {
       return;
     }
-    // 閳?2026-10-17 閻滄澘婧€鐠囩粯鏆熼敍姘崇箹娑撯偓閺€顖氬煂鎼存洘婀佸▽鈩冩箒鐞氼偉鍤滃杈╂畱鐎瑰牆宕奸幐鈥茬秶閿涘潉own=1` = 鐠佲晝绮版竟鍐茬湴闁絾娼敍?
+    // 鈽?2026-10-17 鐜板満璇绘暟锛氳繖涓€鏀埌搴曟湁娌℃湁琚嚜宸辩殑瀹堝崼鎸′綇锛坄own=1` = 璁╃粰澹冲眰閭ｆ潯锛?
     PlaybackPage.ev('OVI', `drive=${this.expandState.morphDrive} stage=${this.expandState.morphStage} ` +
       `p=${this.expandState.morphOverlayProgress().toFixed(3)} own=${this.shellOwnsOverlayTween ? 1 : 0}`);
-    // 閳跨媴绗?婢瑰啿鐪伴懛顏勭箒閸掓俺鎹ｆ潻鍥ㄨ癁鐏炲倽藟闂傝揪绱檂settlePullOpen`閿涘妞?*鐠佲晝绮扮€?*閿?
-    //    閸氾箑鍨弶鐐"濞屄ょ箖闂冨牆鈧?闁絾娼捄顖欑窗鐞氼偉绻栭柌灞藉冀閸氭垼顩惄?閳ユ柡鈧?婢瑰啿鐪伴崷銊﹀Ω濞搭喖鐪扮悰銉ュ煂 0閿涘牆娲栧鐧哥礆閿?
-    //    閼板矁绻栭柌灞藉嫉鐞涖儱鍩?1閿涘奔琚辩仦鍌涙煙閸氭垹娴夐崣宥冣偓浣筋潎閹扮喐妲?鐏忎線娼版稉宥堝仐閸ョ偛骞?閵?
+    // 鈿狅笍 澹冲眰鑷繁鍒氳捣杩囨诞灞傝ˉ闂达紙`settlePullOpen`锛夋椂**璁╃粰瀹?*锛?
+    //    鍚﹀垯鏉炬墜"娌¤繃闃堝€?閭ｆ潯璺細琚繖閲屽弽鍚戣鐩?鈥斺€?澹冲眰鍦ㄦ妸娴眰琛ュ埌 0锛堝洖寮癸級锛?
+    //    鑰岃繖閲屽張琛ュ埌 1锛屼袱灞傛柟鍚戠浉鍙嶃€佽鎰熸槸"灏侀潰涓嶈偗鍥炲幓"銆?
     if (this.shellOwnsOverlayTween) {
       return;
     }
     this.expandState.focusMorphOverlayForPageIntro(this.getUIContext());
   }
 
-  /** 閹绢厽鏂佹い闈涚磻婵?*閺€鎯版崳** 閳?濞搭喖鐪版潻娆庣鐏炲倷绡冮幐澶庡殰瀹搁亶鍋?560ms 閺€璺烘礀鐠ч鍋ｉ妴?*/
+  /** 鎾斁椤靛紑濮?*鏀惰捣** 鈬?娴眰杩欎竴灞備篃鎸夎嚜宸遍偅 560ms 鏀跺洖璧风偣銆?*/
   @Monitor('expandState.morphStage')
   onMorphStageChanged(): void {
     if (!this.appState.isShowPlay) {
@@ -1215,7 +1215,7 @@ struct Index {
     if (this.expandState.morphStage !== MorphStage.LEAVING) {
       return;
     }
-    // 閳?2026-10-17 閻滄澘婧€鐠囩粯鏆熼敍姘暪鐠х柉绻栨稉鈧弨顖滄畱濞搭喖鐪版潻娑樺娑?閺勵垰鎯佸鑼额潶閸楃姷鏁?
+    // 鈽?2026-10-17 鐜板満璇绘暟锛氭敹璧疯繖涓€鏀殑娴眰杩涘害涓?鏄惁宸茶鍗犵敤"
     PlaybackPage.ev('OVC', `stage=${this.expandState.morphStage} ` +
       `p=${this.expandState.morphOverlayProgress().toFixed(3)} ` +
       `bridging=${this.expandState.morphOverlayBridging() ? 1 : 0}`);
@@ -1223,55 +1223,55 @@ struct Index {
   }
 
   /**
-   * 閺€璺虹啲鐞涖儵妫块敍姝漮mmit = 閹恒劌鍩岄柧鐑樺姬楠炴儼鎯ょ€规熬绱遍崥锕€鍨悰銉╂？閸ョ偠鎹ｉ悙骞库偓浣锋唉鏉╂绯犳担鐘虫蒋閵嗕礁宓忔潪鑺ユ尡閺€楣冦€夐妴?
+   * 鏀跺熬琛ラ棿锛歝ommit = 鎺ㄥ埌閾烘弧骞惰惤瀹氾紱鍚﹀垯琛ラ棿鍥炶捣鐐广€佷氦杩樿糠浣犳潯銆佸嵏杞芥挱鏀鹃〉銆?
    *
-   * 閳藉應妲勯埥?2026-10-16閿?*"閻愮懓鍤幍鎾崇磻濞屸剝婀佺亸渚€娼?閼冲本娅欓崝銊ф暰"閻ㄥ嫮婀￠弬顓犲仯**閿涘绱?
-   *   閸樼喐娼甸惃鍕櫢鐠囨洖鍨庨弨顖炴毐鏉╂瑦鐗遍敍?
+   * 鈽呪槄鈽?2026-10-16锛?*"鐐瑰嚮鎵撳紑娌℃湁灏侀潰/鑳屾櫙鍔ㄧ敾"鐨勭湡鏂偣**锛夛細
+   *   鍘熸潵鐨勯噸璇曞垎鏀暱杩欐牱锛?
    * ```ts
    *   if (!morphUsable) {
    *     pullDragging = true; morphDrive = FINGER;
-   *     if (!measureMiniDuringPull(閳?) { 閳ワ箓鍣哥拠?閺€鎯х磾閳? return; }   // 閳?婢惰精瑙﹂幍?return
-   *     // 鐞涖儵鍣洪幋鎰 閳?閹哄鍤?if閿?*閽€钘夊煂娑撳娼扮挧鐤夐梻?* 閴?
+   *     if (!measureMiniDuringPull(鈥?) { 鈥﹂噸璇?鏀惧純鈥? return; }   // 鈫?澶辫触鎵?return
+   *     // 琛ラ噺鎴愬姛 鈬?鎺夊嚭 if锛?*钀藉埌涓嬮潰璧疯ˉ闂?* 鉁?
    *   }
    * ```
-   *   閻娼冨▽锟犳６妫版﹫绱?*娴ｅ棜绻栭弶?`return` 閸︺劌顦荤仦?*閿涘潉if (!morphUsable)` 闁絼绔寸仦鍌︾礆閳ユ柡鈧?
-   *   閹存垼顕板┃鎰垳閺冭泛鍘涢惇瀣灇娴?閹存劕濮涙稊?return"閵嗗倸顦茬拠鑽も€樼拋銈忕窗**鐞涖儵鍣洪幋鎰閸氬海鈥樼€圭偘绱伴拃钘夊煂鐠х柉藟闂傛挳鍋呮稉鈧▓?*閿?
-   *   閹碘偓娴犮儴绻栭弶鈥茬瑝閺勵垱鏌囬悙骞库偓鍌︾礄閻ｆ瑨绻栧▓鍨暈闁插﹥妲告稉杞扮啊鐠侀绗?閹存垳绔存惔锕侇嚖閸掋倛绻冩稉鈧▎?閵嗗偊绱?
+   *   鐪嬬潃娌￠棶棰橈紝**浣嗚繖鏉?`return` 鍦ㄥ灞?*锛坄if (!morphUsable)` 閭ｄ竴灞傦級鈥斺€?
+   *   鎴戣婧愮爜鏃跺厛鐪嬫垚浜?鎴愬姛涔?return"銆傚璇荤‘璁わ細**琛ラ噺鎴愬姛鍚庣‘瀹炰細钀藉埌璧疯ˉ闂撮偅涓€娈?*锛?
+   *   鎵€浠ヨ繖鏉′笉鏄柇鐐广€傦紙鐣欒繖娈垫敞閲婃槸涓轰簡璁颁笅"鎴戜竴搴﹁鍒よ繃涓€娆?銆傦級
    *
-   * 閳跨媴绗?閻喐顒滅憰浣筋唶閻ㄥ嫭妲搁敍?*鏉╂瑦娼柌宥堢槸闁炬拝绱?2鑴?2ms閿涘妲搁悙鐟板毊鐠侯垰绶為崬顖欑閼宠姤濡?`morphUsable` 閸欐婀￠惃鍕勾閺?*
-   *   閳ユ柡鈧?閻愮懓鍤弮?`pullOpenBegin` 鐠烘垵婀?閹绢厽鏂佹い浣冪箷濞屸剝瀵曟潪?闁絼绔撮崚浼欑礉缂佸牏鍋ｉ柨姘卞仯韫囧懐鍔ч柌蹇庣瑝閸掕埇鈧?
-   *   閹碘偓娴?`morphUsable` 閸欐婀℃稊瀣倵**韫囧懘銆?*閺堝绗㈢憲鎸庡Ω濞搭喖鐪伴柇锝勭濡帊绡冪挧鐤崳閺夈儻绱?
-   *   閹绢厽鏂佹い鍏告櫠閻?`onAppear` 鐞涖儵鍣洪敍鍧凱laybackPage` 鎼?6.1閿涘绗屾潻娆撳櫡閻ㄥ嫰鍣哥拠鏇熸Ц**娑撱倖娼獮鎯邦攽鐠侯垰绶?*閿?
-   *   鐠嬩礁鍘涢幋鎰闁晫鏁遍崥鍕殰鐠愮喕鐭楃挧閿嬵棗閿涘牆绠撶粵澶涚礉闁插秴顦茬拫鍐暏鐎瑰鍙忛敍澶堚偓?
-   * @param commit 閺勵垰鎯侀幓鎰唉鐏炴洖绱?
+   * 鈿狅笍 鐪熸瑕佽鐨勬槸锛?*杩欐潯閲嶈瘯閾撅紙12脳32ms锛夋槸鐐瑰嚮璺緞鍞竴鑳芥妸 `morphUsable` 鍙樼湡鐨勫湴鏂?*
+   *   鈥斺€?鐐瑰嚮鏃?`pullOpenBegin` 璺戝湪"鎾斁椤佃繕娌℃寕杞?閭ｄ竴鍒伙紝缁堢偣閿氱偣蹇呯劧閲忎笉鍒般€?
+   *   鎵€浠?`morphUsable` 鍙樼湡涔嬪悗**蹇呴』**鏈変笢瑗挎妸娴眰閭ｄ竴妫掍篃璧疯捣鏉ワ紱
+   *   鎾斁椤典晶鐨?`onAppear` 琛ラ噺锛坄PlaybackPage` 搂96.1锛変笌杩欓噷鐨勯噸璇曟槸**涓ゆ潯骞惰璺緞**锛?
+   *   璋佸厛鎴愬姛閮界敱鍚勮嚜璐熻矗璧锋锛堝箓绛夛紝閲嶅璋冪敤瀹夊叏锛夈€?
+   * @param commit 鏄惁鎻愪氦灞曞紑
    */
   private settlePullOpen(commit: boolean, attempt: number = 0): void {
     this.expandState.pushMorphTrace(`settle${attempt}${commit ? 'C' : 'A'}`);
-    // 閳藉應妲勯埥?2026-10-16閿?*鐞涖儵鍣洪柧鍓ф畱闂傘劍宕叉禍鍡曢嚋闁?*閿涘绱伴崢鐔告降閺?`if (!morphUsable)`閵?
-    //   `morphUsable` 閺?`morphInitParams()` 閻?缁犳鍤弶銉ょ啊"閿涘牅绱伴崶鐘辫礋闁偓閸?`onAreaChange`
-    //   閸忔粌绨抽崐绗衡偓浣烘晪閼峰厖绗傛稉鈧潪顔炬殌娑撳娈戦崐鑹扳偓灞艰礋閻噦绱氶埇?閻劌鐣犺ぐ?鏉╂顩︽稉宥堫洣鐞涖儵鍣?閻ㄥ嫬鍨介幑顕嗙礉鐞涖儵鍣洪柧鍙ョ窗
-    //   **閹绘劕澧犻弨璺轰紣**閿涘矁鈧瞼婀″锝堫嚉閸掋倗娈戦弰?**缂佸牏鍋ｉ柨姘卞仯鏉╂瑦顐奸崚鏉跨俺闁插繐鍩屽▽鈩冩箒**"閵?
-    //   閳?閹广垺鍨?`morphEndAnchorReady()`閿涙稓婀″锝囨畱"閸欘垯浜掗拃鎴掔秴"闂傘劍妲?`morphGeomReadyNow()`閵?
+    // 鈽呪槄鈽?2026-10-16锛?*琛ラ噺閾剧殑闂ㄦ崲浜嗕釜閲?*锛夛細鍘熸潵鏄?`if (!morphUsable)`銆?
+    //   `morphUsable` 鏄?`morphInitParams()` 鐨?绠楀嚭鏉ヤ簡"锛堜細鍥犱负閫€鍥?`onAreaChange`
+    //   鍏滃簳鍊笺€佺敋鑷充笂涓€杞暀涓嬬殑鍊艰€屼负鐪燂級鈬?鐢ㄥ畠褰?杩樿涓嶈琛ラ噺"鐨勫垽鎹紝琛ラ噺閾句細
+    //   **鎻愬墠鏀跺伐**锛岃€岀湡姝ｈ鍒ょ殑鏄?**缁堢偣閿氱偣杩欐鍒板簳閲忓埌娌℃湁**"銆?
+    //   鈬?鎹㈡垚 `morphEndAnchorReady()`锛涚湡姝ｇ殑"鍙互钀戒綅"闂ㄦ槸 `morphGeomReadyNow()`銆?
     if (!this.expandState.morphUsable || !this.expandState.morphEndAnchorReady()) {
-      // 韫囶偊鈧喐婢楅幍瀣╃瘍鐟曚礁鐣幋鎰斧鐏忓搫顕柨姘卞仯鐞涖儵鍣洪敍娑楃瑝閼宠棄鍘涢崚?ANIM 鐎佃壈鍤х悰銉╁櫤閸嬫粍顒涢妴?
+      // 蹇€熸澗鎵嬩篃瑕佸畬鎴愬師灏哄閿氱偣琛ラ噺锛涗笉鑳藉厛鍒?ANIM 瀵艰嚧琛ラ噺鍋滄銆?
       this.expandState.pullDragging = true;
       this.expandState.morphDrive = MorphDrive.FINGER;
-      // 閳藉應妲勯埥?2026-10-16閿?*"閻愮懓鍤?鏉╂柨娲栧▽鈩冩箒閸斻劎鏁?閻ㄥ嫭娓堕崥搴濈閺夆€虫礈閺嬫粓鎽?*閿涘绱?
-      //   鏉╂瑤绔村▓闈涘帥閸嬫矮琚卞?*閹躲垺鏅?*閿涘苯鍟€閸嬫艾甯弶銉╁亝濞喡に夐柌蹇ョ礄妞ゅ搫绨鍫ュ櫢鐟曚緤绱氶敍?
-      //   閳?閼?瑜般垹褰夋导姘崇樈"瀹歌尙绮＄悮顐ｇ閹哄绱檂morphSessionStarted === false`閿涘鈧柡鈧?
-      //      閸忕鐎烽弶銉︾爱閿涙碍鎸遍弨楣冦€夐幐鍌濇祰闁絼绔撮崚浼欑礉**閺冄囥€夐棃銏犵杽娓氬娈?`onDisappear`** 鐟欙箑褰傛禍?
-      //      閺冪姵娼禒鍓佹畱 `morphReset()`閿涘潉morphGen++`閵嗕梗morphUsable=false`閵?
-      //      **`morphSessionStarted=false`**閿涘鈧柡鈧?鐏忓崬鍘?*闁插秵鏌婄挧铚傜濞嗏€冲弳閸?*閿?
-      //      閹?`stage/drive` 閹藉棗娲?`ENTERING/FINGER`閿?
-      //   閳?閻掕泛鎮楃拫鍐ㄥ斧閺夈儵鍋呭▎?`measureMiniDuringPull` 鐞涖儵鍣洪敍鍫濈暊鐟曚焦鐪?`stage=ENTERING &&
-      //      drive=FINGER`閿涘本澧嶆禒銉㈡喖韫囧懘銆忛崷銊ュ閿涘鈧?
-      //   閳跨媴绗?妞ゅ搫绨崣宥勭啊 閳?鐞涖儵鍣洪惄瀛樺复鐞氼偄鐣ч崡顐ｅ閹哄绱欓棃娆撶帛鏉╂柨娲?false閿涘鍣?闁插秷鐦?12 濞嗏€冲弿鎼寸喆鈧?
+      // 鈽呪槄鈽?2026-10-16锛?*"鐐瑰嚮/杩斿洖娌℃湁鍔ㄧ敾"鐨勬渶鍚庝竴鏉″洜鏋滈摼**锛夛細
+      //   杩欎竴娈靛厛鍋氫袱姝?*鎶㈡晳**锛屽啀鍋氬師鏉ラ偅娆¤ˉ閲忥紙椤哄簭寰堥噸瑕侊級锛?
+      //   鈶?鑻?褰㈠彉浼氳瘽"宸茬粡琚竻鎺夛紙`morphSessionStarted === false`锛夆€斺€?
+      //      鍏稿瀷鏉ユ簮锛氭挱鏀鹃〉鎸傝浇閭ｄ竴鍒伙紝**鏃ч〉闈㈠疄渚嬬殑 `onDisappear`** 瑙﹀彂浜?
+      //      鏃犳潯浠剁殑 `morphReset()`锛坄morphGen++`銆乣morphUsable=false`銆?
+      //      **`morphSessionStarted=false`**锛夆€斺€?灏卞厛**閲嶆柊璧蜂竴娆″叆鍙?*锛?
+      //      鎶?`stage/drive` 鎽嗗洖 `ENTERING/FINGER`锛?
+      //   鈶?鐒跺悗璋冨師鏉ラ偅娆?`measureMiniDuringPull` 琛ラ噺锛堝畠瑕佹眰 `stage=ENTERING &&
+      //      drive=FINGER`锛屾墍浠モ憼蹇呴』鍦ㄥ墠锛夈€?
+      //   鈿狅笍 椤哄簭鍙嶄簡 鈬?琛ラ噺鐩存帴琚畧鍗嫤鎺夛紙闈欓粯杩斿洖 false锛夆噿 閲嶈瘯 12 娆″叏搴熴€?
       if (!this.expandState.morphSessionStarted) {
         this.expandState.pushMorphTrace('reEnter');
         Logger.info(RzdShellLogTag,
           `pull settle: re-enter morph session (was reset by an onDisappear) attempt=${attempt}`);
         if (!this.expandState.pullOpenBegin(this.getUIContext(), this.navDepth > 0)) {
-          // 閸戠姳缍嶆潻妯绘Ц闁插繋绗夐崚甯窗娣囨繃瀵?`ENTERING/FINGER`閿涘矁顔€娑撳娼伴惃鍕夐柌蹇斿絹閸?return 閸樼粯甯撻梼鐔煎櫢鐠?
+          // 鍑犱綍杩樻槸閲忎笉鍒帮細淇濇寔 `ENTERING/FINGER`锛岃涓嬮潰鐨勮ˉ閲忔彁鍓?return 鍘绘帓闃熼噸璇?
           this.expandState.pullDragging = true;
           this.expandState.morphDrive = MorphDrive.FINGER;
         }
@@ -1279,13 +1279,13 @@ struct Index {
       if (!this.expandState.measureMiniDuringPull(this.getUIContext(), this.navDepth > 0)) {
         if (attempt < PULL_ANCHOR_RETRY_MAX) {
           setTimeout((): void => {
-            // 閳藉應妲勯埥?2026-10-16閿?*"閻愮懓鍤?鏉╂柨娲栧▽鈩冩箒閸斻劎鏁?閻ㄥ嫭娓堕崥搴濈閺夆€虫礈閺嬫粓鎽?*閿涘绱?
-            //   鏉╂瑩鍣烽崢鐔告降閺?`if (isShowPlay && morphGenAlive(pendingGen))`閵?
-            //   閳跨媴绗?`morphGenAlive` 閸︺劍婀伴崷鐑樻珯娑?*韫囧懐鍔ф稉鍝勪海**閿涘奔绨弰顖涙殻閺夛繝鍣哥拠鏇㈡懠閸︺劎顑?1 閹峰秴姘ㄩ弬顓熷竴閵?
-            //   閳?娣囶喗纭堕敍?*鐎瑰牆宕兼稉宥堫洣閹稿倷绗樻禒锝呭娇**閵嗗倷绗樻禒锝呭娇閸︺劏绻栭柌宀€娈戠拠顓濈疅閺?鏉╂瑤绔存潪顔荤窗鐠囨繃妲搁崥锕佺箷閺堝鏅?閿?
-            //     閼?閻劍鍩涙潻妯烘躬閹绢厽鏂佹い?閿涘潉isShowPlay`閿涘澧犻弰顖滄埂濮濓絿娈戦張澶嬫櫏閹冨灲閹诡噯绱?
-            //     娑擃參鈧棁顫?`morphReset()` 濞撳懓绻冩稉鈧▎鈽呯礉闁插秷鐦幒銉ф絻閹跺﹤鍤戞担鏇㈠櫤閸ョ偞娼甸崡鍐插讲閵?
-            //     閳跨媴绗?閸欘亜婀?`!isShowPlay`閿涘牏鏁ら幋宄板嚒缂佸繒顬囧鈧幘顓熸杹妞ょ绱氶弮鑸靛閺€鎯х磾閵?
+            // 鈽呪槄鈽?2026-10-16锛?*"鐐瑰嚮/杩斿洖娌℃湁鍔ㄧ敾"鐨勬渶鍚庝竴鏉″洜鏋滈摼**锛夛細
+            //   杩欓噷鍘熸潵鏄?`if (isShowPlay && morphGenAlive(pendingGen))`銆?
+            //   鈿狅笍 `morphGenAlive` 鍦ㄦ湰鍦烘櫙涓?*蹇呯劧涓哄亣**锛屼簬鏄暣鏉￠噸璇曢摼鍦ㄧ 1 鎷嶅氨鏂帀銆?
+            //   鈬?淇硶锛?*瀹堝崼涓嶈鎸備笘浠ｅ彿**銆備笘浠ｅ彿鍦ㄨ繖閲岀殑璇箟鏄?杩欎竴杞細璇濇槸鍚﹁繕鏈夋晥"锛?
+            //     鑰?鐢ㄦ埛杩樺湪鎾斁椤?锛坄isShowPlay`锛夋墠鏄湡姝ｇ殑鏈夋晥鎬у垽鎹紱
+            //     涓€旇 `morphReset()` 娓呰繃涓€娆★紝閲嶈瘯鎺ョ潃鎶婂嚑浣曢噺鍥炴潵鍗冲彲銆?
+            //     鈿狅笍 鍙湪 `!isShowPlay`锛堢敤鎴峰凡缁忕寮€鎾斁椤碉級鏃舵墠鏀惧純銆?
             if (this.appState.isShowPlay) {
               this.settlePullOpen(commit, attempt + 1);
             } else {
@@ -1296,19 +1296,19 @@ struct Index {
         } else {
           Logger.warn(RzdShellLogTag, 'pull settle: end anchor unavailable, immediate landing');
           this.expandState.pullDragging = false;
-          // 閳藉應妲勯埥?2026-10-16閿?*閻撗勬儔閺冪姷鏅幎?閸戠姳缍嶅姝岀箼濞岋繝鍣洪崚?瑜版捇鈧偓閸栨牞鐭惧?*閿涘绱?
-          //   鏉╂瑦顔岄崢鐔告降閺?`morphReset()` + commit 閺冭泛鍟€ `morphSettleOpen()`"閳ユ柡鈧?
-          //   閼奉亞娴夐惌娑氭禈閿涙瓪morphReset()` 閹跺﹤鍤戞担鏇熺閹存劖浜界粵澶涚礄`morphUsable = false`閿涘绱?
-          //   缁毖勫复閻偓閻?`morphSettleOpen()` 閸愬懘鍎?`applyMorphProgress(1)` 閸欏牆娲滄稉?
-          //   `morphGeomReady` 娑撳搫浜ｉ懓?*娴犫偓娑斿牓鍏樻稉宥呬粵** 閳?鐎圭懓娅掗崑婊冩躬閹帞鐡戦妴浣烘祲娴ｅ秴宓堥弰?OPEN閵?
-          //   閺冪姷鏅惃鍕經瀵板嫭娲块獮鎻掑櫍閿涘潉wujie.pa` 閻?`pickCapsuleRect` 闁絾顔岄敍姘跺櫤娑撳秴鍩岀亸?
-          //   閵?*閺堫剚顐奸柅鈧崶鐐存珮闁?push(閺冪姴鑸伴崣?**閵嗗稄绱氶敍?*闁插繋绗夐崚鏉挎皑瑜拌绨虫稉宥堫洣鏉╂瑥顨滈崝銊ф暰**閿?
-          //   鐠佲晜鎸遍弨楣冦€夋禒銉︿航缁涘鍤戞担鏇樷偓涓盤EN 閻╅晲缍呭锝呯埗閺勫墽銇氶敍宀冣偓灞肩瑝閺勵垳鏆€娑撯偓娑擃亜宕愬鑽ゆ畱瑜般垹褰夋导姘崇樈閵?
+          // 鈽呪槄鈽?2026-10-16锛?*鐓ф惉鏃犵晫鎶?鍑犱綍姘歌繙娌￠噺鍒?褰撻€€鍖栬矾寰?*锛夛細
+          //   杩欐鍘熸潵鏄?`morphReset()` + commit 鏃跺啀 `morphSettleOpen()`"鈥斺€?
+          //   鑷浉鐭涚浘锛歚morphReset()` 鎶婂嚑浣曟竻鎴愭亽绛夛紙`morphUsable = false`锛夛紝
+          //   绱ф帴鐫€鐨?`morphSettleOpen()` 鍐呴儴 `applyMorphProgress(1)` 鍙堝洜涓?
+          //   `morphGeomReady` 涓哄亣鑰?*浠€涔堥兘涓嶅仛** 鈬?瀹瑰櫒鍋滃湪鎭掔瓑銆佺浉浣嶅嵈鏄?OPEN銆?
+          //   鏃犵晫鐨勫彛寰勬洿骞插噣锛坄wujie.pa` 鐨?`pickCapsuleRect` 閭ｆ锛氶噺涓嶅埌灏?
+          //   銆?*鏈閫€鍥炴櫘閫?push(鏃犲舰鍙?**銆嶏級锛?*閲忎笉鍒板氨褰诲簳涓嶈杩欏鍔ㄧ敾**锛?
+          //   璁╂挱鏀鹃〉浠ユ亽绛夊嚑浣曘€丱PEN 鐩镐綅姝ｅ父鏄剧ず锛岃€屼笉鏄暀涓€涓崐姝荤殑褰㈠彉浼氳瘽銆?
           this.expandState.pushMorphTrace('noGeom');
           this.expandState.morphReset();
           this.expandState.morphStage = MorphStage.OPEN;
           this.expandState.morphP = 1;
-          // 鍚屽€艰惤浣嶏紙`contentP` = 涓婃父 `PlayerPage.pullT` 鈮?`MainPage.morphT`锛夈€?
+          // 同值落位（`contentP` = 上游 `PlayerPage.pullT` ≡ `MainPage.morphT`）。
           this.expandState.contentP = 1;
           if (!commit) {
             this.appState.isShowPlay = false;
@@ -1316,69 +1316,69 @@ struct Index {
         }
         return;
       }
-      // 鐞涖儵鍣洪幋鎰 閳?閺佸懏鍓?*娑?return**閿涘矁鎯ゆ稉瀣箵鐠х兘鍋呮稉銈嗘蒋鐞涖儵妫块敍鍫ｎ潌娑撳﹪娼伴柇锝嗩唽濞夈劑鍣撮敍澶堚偓?
+      // 琛ラ噺鎴愬姛 鈬?鏁呮剰**涓?return**锛岃惤涓嬪幓璧烽偅涓ゆ潯琛ラ棿锛堣涓婇潰閭ｆ娉ㄩ噴锛夈€?
       this.expandState.pushMorphTrace('measOk');
       Logger.info(RzdShellLogTag,
         `pull settle: remeasured at attempt=${attempt} usable=${this.expandState.morphUsable} ` +
         `stage=${this.expandState.morphStage}`);
     }
     const duration: number = commit ? PULL_OPEN_SETTLE_MS : PULL_OPEN_ABORT_MS;
-    // 閳藉應妲勯埥?2026-10-17閿涘牏鍙庨幖顒佹￥閻?`MorphGuard.animateMorph` 閻ㄥ嫮顑囨稉鈧崣銉礆閿涙碍濡?闁板秷澹婄€瑰娼ょ粣妤€褰?
-    //   閹恒劌鍩?*鏉╂瑦娼悰銉╂？缂佹挻娼?*閿涘潉quietMs` 閻劏藟闂傜鍤滃杈╂畱閺冨爼鏆?閳ユ柡鈧?閺冪姷鏅柇锝勬櫠娑旂喐妲搁幐澶庣殶閻劎鍋ｆ导鐘垫畱閿?
-    //   閺堫剙顦╁▽鈩冩箒娴犺缍嶉弬浼粹偓鐘茬埗闁插骏绱氶妴鍌楀櫩 鐏炴洖绱戦崝銊ф暰鐠烘垹娼冮惃鍕閸?娑撳﹨澹?瀵扳偓閸氬孩灏撻敍灞肩瑝娴兼艾婀崝銊ф暰娑擃參鈧棁鐑﹂懝?
-    //   閿涘牆褰囬懝鍙夋Ц瀵倹顒為惃鍕剁礉閹广垺鐡曢柇锝勭閹峰秴鐣犻弸浣稿讲閼宠姤顒滄總鍊熸儰閸︺劌鐫嶅鈧崝銊ф暰娑擃參妫块敍澶堚偓?
+    // 鈽呪槄鈽?2026-10-17锛堢収鎼棤鐣?`MorphGuard.animateMorph` 鐨勭涓€鍙ワ級锛氭妸"閰嶈壊瀹夐潤绐楀彛"
+    //   鎺ㄥ埌**杩欐潯琛ラ棿缁撴潫**锛坄quietMs` 鐢ㄨˉ闂磋嚜宸辩殑鏃堕暱 鈥斺€?鏃犵晫閭ｄ晶涔熸槸鎸夎皟鐢ㄧ偣浼犵殑锛?
+    //   鏈娌℃湁浠讳綍鏂伴€犲父閲忥級銆傗噿 灞曞紑鍔ㄧ敾璺戠潃鐨勬椂鍊?涓婅壊"寰€鍚庢尓锛屼笉浼氬湪鍔ㄧ敾涓€旇烦鑹?
+    //   锛堝彇鑹叉槸寮傛鐨勶紝鎹㈡瓕閭ｄ竴鎷嶅畠鏋佸彲鑳芥濂借惤鍦ㄥ睍寮€鍔ㄧ敾涓棿锛夈€?
     this.expandState.markMorphQuiet(duration);
     this.expandState.pushMorphTrace('tween');
     this.expandState.pullDragging = false;
     this.expandState.morphDrive = MorphDrive.ANIM;
-    // 閳藉應妲?濞搭喖鐪伴幏鐤鏉╂瑤绔寸仦鍌濊泲**鐎瑰啳鍤滃?*閻ㄥ嫭妞傞梹?閺囪尙鍤庨敍?60ms + 韫囶偄鍤幈銏℃暪閿涘苯顕弽鍥ㄦ￥閻?`animateMorphT`閿涘绱?
-    //   娑撳簼绗呴棃銏ｇ箹閺?300/180ms 閻?*閹绢厽鏂佹い?*鐞涖儵妫?*閸氬矁鎹?*閿涘牆鎮撴稉鈧敮褋鈧礁鎮撴稉鈧稉顏冩崲閸旓繝鍣锋稉銈勯嚋 `animateTo`閿涘鈧?
-    //   閳跨媴绗?閹绢厽鏂佹い鐢稿亝閺?*閸欙附婀佹稉鈧總妤佹殶閸?*閿涙瓪PULL_OPEN_SETTLE_MS` / `PULL_OPEN_ABORT_MS`
-    //      閿?026-10-15 鐠?= 閺冪姷鏅?`SETTLE_MS` 400 / 400閿涘矁顫嗛柇锝勮⒈娑擃亜鐖堕柌蹇曟畱濞夈劑鍣撮敍澶堚偓?
-    //   鐠ч鍋ｉ崣鏍ㄨ癁鐏?*瑜版挸澧?*鏉╂稑瀹抽敍鍫ｇ閹靛浠犻崷銊ユ憿閸庡灝姘ㄦ禒搴℃憿閸庢寧甯撮惈鈧挧甯礆閵?
+    // 鈽呪槄 娴眰鎷疯礉杩欎竴灞傝蛋**瀹冭嚜宸?*鐨勬椂闀?鏇茬嚎锛?60ms + 蹇嚭鎱㈡敹锛屽鏍囨棤鐣?`animateMorphT`锛夛紝
+    //   涓庝笅闈㈣繖鏉?300/180ms 鐨?*鎾斁椤?*琛ラ棿**鍚岃捣**锛堝悓涓€甯с€佸悓涓€涓换鍔￠噷涓や釜 `animateTo`锛夈€?
+    //   鈿狅笍 鎾斁椤甸偅鏉?*鍙︽湁涓€濂楁暟鍊?*锛歚PULL_OPEN_SETTLE_MS` / `PULL_OPEN_ABORT_MS`
+    //      锛?026-10-15 璧?= 鏃犵晫 `SETTLE_MS` 400 / 400锛岃閭ｄ袱涓父閲忕殑娉ㄩ噴锛夈€?
+    //   璧风偣鍙栨诞灞?*褰撳墠**杩涘害锛堣窡鎵嬪仠鍦ㄥ摢鍎垮氨浠庡摢鍎挎帴鐫€璧帮級銆?
     this.expandState.morphOverlayTweenTo(commit, this.getUIContext());
-    // 閳?2026-10-17閿?*濞搭喖鐪版潻娆庣濡帞娈戦悳鏉挎簚鐠囩粯鏆?* 閳ユ柡鈧?閻劍鍩涢妴灞界殱闂堛垼绐￠惈鈧幘顓熸杹閸ｃ劏铔嬮妴浣圭梾閺堝瀚粩瀣棧鐞涘被鈧秴鐣鹃幀褏鏁ら敍?
-    //   `from=` 閺勵垵绻栨稉鈧Λ?*鐠ч攱澧滈柇锝勭閸?*閻ㄥ嫭璇炵仦鍌濈箻鎼达讣绱盽p=` 閺勵垱鎸遍弨楣冦€夋潻娑樺閿?
-    //   閼?`from=0` 閼?commit=1 閳?鐎瑰啯婀扮拠銉ょ矤鏉╄渹缍橀弶鈥虫妇閸﹀牓顥ｉ崚鐗堟尡閺€楣冦€夌亸渚€娼伴敍?閳?閿涘绱?
-    //   閼?`from=1` 閳?瀹歌尙绮＄拹鏉戞躬婢堆冪殱闂堫澀缍呯純顕嗙礄鐞涖儵妫挎导姘愁潶 `|to-from|<1e-4` 閺冣晠鈧偓閹哄绱濈粵澶夌艾**娑撳秹顥?*閿涘鈧?
+    // 鈽?2026-10-17锛?*娴眰杩欎竴妫掔殑鐜板満璇绘暟** 鈥斺€?鐢ㄦ埛銆屽皝闈㈣窡鐫€鎾斁鍣ㄨ蛋銆佹病鏈夌嫭绔嬮琛屻€嶅畾鎬х敤锛?
+    //   `from=` 鏄繖涓€妫?*璧锋墜閭ｄ竴鍒?*鐨勬诞灞傝繘搴︼紱`p=` 鏄挱鏀鹃〉杩涘害锛?
+    //   鑻?`from=0` 鑰?commit=1 鈬?瀹冩湰璇ヤ粠杩蜂綘鏉″渾鍦堥鍒版挱鏀鹃〉灏侀潰锛?鈫?锛夛紱
+    //   鑻?`from=1` 鈬?宸茬粡璐村湪澶у皝闈綅缃紙琛ラ棿浼氳 `|to-from|<1e-4` 鏃╅€€鎺夛紝绛変簬**涓嶉**锛夈€?
     PlaybackPage.ev('OVS', `commit=${commit ? 1 : 0} from=${this.expandState.morphOverlayProgress().toFixed(3)} ` +
       `p=${this.expandState.morphP.toFixed(2)} bridging=${this.expandState.morphOverlayBridging() ? 1 : 0} ` +
       `host=${this.expandState.hostsMorphOverlay() ? 1 : 0}`);
-    // 閺嶅洩顔?濞搭喖鐪版潻娆庣濡帞娈戠悰銉╂？閻㈠崬锛撶仦鍌氬絺鐠?閿涙瓪@Monitor('expandState.morphDrive')` 閸︺劋绗呴棃銏ゅ亝鐞?
-    // 閹?drive 缂冾喗鍨?ANIM 娑斿鎮?*娑旂喍绱?*鐞氼偉袝閸欐埊绱濆▽鈩冩箒鏉╂瑤閲滈弽鍥唶閻ㄥ嫯鐦界€瑰啩绱伴崘宥堟崳娑撯偓閺?*閺傜懓鎮滈崣顖濆厴閻╃寮?*閻?
-    // 濞搭喖鐪扮悰銉╂？閿涘牆娲栧褰掑亝閺壜ょ熅濮濓絾妲告俊鍌涱劃閿涘鈧倹鐖ｇ拋鏉挎躬鐞涖儵妫跨紒鎾存将/鐞氼偅鏌婄悰銉╂？閸欐牔鍞弮鑸电閹哄鈧?
+    // 鏍囪"娴眰杩欎竴妫掔殑琛ラ棿鐢卞３灞傚彂璧?锛歚@Monitor('expandState.morphDrive')` 鍦ㄤ笅闈㈤偅琛?
+    // 鎶?drive 缃垚 ANIM 涔嬪悗**涔熶細**琚Е鍙戯紝娌℃湁杩欎釜鏍囪鐨勮瘽瀹冧細鍐嶈捣涓€鏉?*鏂瑰悜鍙兘鐩稿弽**鐨?
+    // 娴眰琛ラ棿锛堝洖寮归偅鏉¤矾姝ｆ槸濡傛锛夈€傛爣璁板湪琛ラ棿缁撴潫/琚柊琛ラ棿鍙栦唬鏃舵竻鎺夈€?
     this.shellOwnsOverlayTween = true;
     setTimeout((): void => {
       this.shellOwnsOverlayTween = false;
     }, PlayerExpandState.MORPH_OVERLAY_DURATION_MS + 20);
-    // 閳?2026-10-16閿涙俺绻栭柌灞藉斧閺夈儴绻曢幑鏇″箯娴滃棔绔存稉?`gen` 娓氭稐琚辨径鍕暓閸楊偆鏁ら敍娑㈠亝娑撱倕顦╃€瑰牆宕煎鍙夊瘻 鎼?02/鎼?03
-    //   閺€瑙勫灇閸?`isShowPlay`閿涘牅绗樻禒锝呭娇娴兼俺顫?閺冄冪杽娓氬宓忔潪鐣屾畱 morphReset"閹恒劑鐝敍灞肩瑢閻劍鍩涢幇蹇撴禈閺冪姴鍙ч敍?
-    //   閳?`gen` 娑撳秴鍟€闂団偓鐟曚緤绱濋崚鐘冲竴婢圭増妲戦敍鍦搑kTS 鐎佃婀担璺ㄦ暏閻ㄥ嫬鐪柈銊ュ綁闁插繗绶濇稉銉︾壐閿涘瞼鏆€閻偓娴兼俺顫﹂棃娆愨偓浣告啞鐠€锔肩礆閵?
+    // 鈽?2026-10-16锛氳繖閲屽師鏉ヨ繕鎹曡幏浜嗕竴涓?`gen` 渚涗袱澶勫畧鍗敤锛涢偅涓ゅ瀹堝崼宸叉寜 搂102/搂103
+    //   鏀规垚鍒?`isShowPlay`锛堜笘浠ｅ彿浼氳"鏃у疄渚嬪嵏杞界殑 morphReset"鎺ㄩ珮锛屼笌鐢ㄦ埛鎰忓浘鏃犲叧锛?
+    //   鈬?`gen` 涓嶅啀闇€瑕侊紝鍒犳帀澹版槑锛圓rkTS 瀵规湭浣跨敤鐨勫眬閮ㄥ彉閲忚緝涓ユ牸锛岀暀鐫€浼氳闈欐€佸憡璀︼級銆?
     this.getUIContext().animateTo({
-      // 閺冪姷鏅?Tokens 閻ㄥ嫭鐖ｉ崙鍡樻闂€鍖＄窗180ms 瀵邦喕姘︽禍?/ 300ms 娑撴槒娴嗛崷?
+      // 鏃犵晫 Tokens 鐨勬爣鍑嗘椂闀匡細180ms 寰氦浜?/ 300ms 涓昏浆鍦?
       duration: duration,
       curve: curves.cubicBezierCurve(commit ? 0.23 : 0.68, 1.0, commit ? 0.32 : 0.77, 1.0)
     }, (): void => {
       this.expandState.applyMorphProgress(commit ? 1 : 0);
     });
     if (commit) {
-      // 閳跨媴绗?閻╅晲缍呴崷?*鐞涖儵妫挎稊瀣樆**閺€鐧哥窗`morphSettleOpen()` 娴兼碍濡?閺勵垰鎯佺憗浣稿"缂堢粯鍨?false閿?
-      //    閺€鎹愮箻 animateTo 闂傤厼瀵橀柌灞肩窗鐠佲晞绻栫粔宥囶瀲閺侊絽鐫橀幀褌绡冮崢璇叉倖鐞涖儵妫块妴?
+      // 鈿狅笍 鐩镐綅鍦?*琛ラ棿涔嬪**鏀癸細`morphSettleOpen()` 浼氭妸"鏄惁瑁佸壀"缈绘垚 false锛?
+      //    鏀捐繘 animateTo 闂寘閲屼細璁╄繖绉嶇鏁ｅ睘鎬т篃鍘诲悆琛ラ棿銆?
       setTimeout((): void => {
-        // 閳藉應妲勯埥?2026-10-16閿?*閸氬奔绔撮弶鈥虫礈閺嬫粓鎽奸惃鍕儑閸ユ稑顦?*閿涘绱?
-        //   鏉╂瑩鍣烽崢鐔告降閺?`if (isShowPlay && morphGenAlive(gen))`閵?*娑撳酣鍣哥拠鏇㈠亝閺夆€崇暓閸楊偄鎮撴稉鈧稉顏呯樅閻?*閿?
-        //   `morphGen` 娴兼俺顫?閺冄囥€夐棃銏犵杽娓氬娈?`onDisappear` 閺冪姵娼禒?`morphReset()`"閹恒劑鐝敍?
-        //   閼板矂鍋呮稉顏勫斧閸ョ姳绗?閻劍鍩涙潻妯诲厒娑撳秵鍏傞惇瀣尡閺€楣冦€?濮ｎ偅妫ら崗宕囬兇閵?
-        //   閳?娑撯偓閺冿箑鐣犻崣姗堢礉`morphSettleOpen()` 鐞氼偉鐑︽潻?閳?**閻╅晲缍呴崑婊冩躬 ENTERING閵嗕梗morphUsable` 娣囨繃瀵旈惇?*
-        //     閳?`morphClipping()` 閹帞婀?閳?鐎圭懓娅掓稉鈧惄鏉戜粻閸︺劍娓堕崥搴ㄥ亝娑撯偓鐢呮畱 `scale/translate/clip`
-        //     閳?鐟欏倹鍔呯亸杈ㄦЦ閵?*閼冲本娅欓弫鏉戠潌閵嗕礁鐨濋棃顫秴缂冾喕绗夌€?*閵嗗秲鈧?
-        //   閳?閺€瑙勭《閿涙艾褰ч崚?`isShowPlay`閿涙稑鍟€鐞涖儰绔撮弶?`geomReady` 閳ユ柡鈧?**閸戠姳缍嶅▽鈥虫皑缂侇亝妞傛稉宥堝厴閽€鎴掔秴**
-        //     閿涘牆鎯侀崚娆庣窗閹跺﹣绔寸敮?濞岋繝鍣烘?閻ㄥ嫪鑵戦梻瀛樷偓浣告祼鐎规矮绗呴弶銉礆閵?
-        //   閳藉應妲?2026-10-16閿涘牅绨╁▎陇顓瑰锝忕礆閿涙俺绻栨稉鈧弶鈥冲灲閹诡喖甯弶銉︽Ц `morphUsable`閵嗗倷绲?`morphUsable`
-        //     娴兼艾娲滄稉?闁偓閸?`onAreaChange` 閸忔粌绨抽崐?閼板奔璐熼惇鐕傜礄鐟?`morphIntroAnchorsReady` 閻ㄥ嫭鏁為柌濠忕礆閿?
-        //     鐎?*娑撳秷鍐绘禒?*鐠囧瓨妲?缂佸牏鍋ｉ柨姘卞仯閻喓娈戦柌蹇撳煂娴?閵嗕繖morphGeomReady()` 閹靛秵妲搁弮鐘垫櫕
-        //     `pullGeomReady` 閻ㄥ嫮鐡戞禒椋庡⒖閿涘牆褰ч崷?`measureMiniDuringPull` 闁插繐鍩岀紒鍫㈠仯闁絼绔撮幏宥囩枂娴ｅ稄绱?
-        //     閳?閽€鎴掔秴闂傘劌绻€妞よ崵鏁ょ€瑰喛绱濋崥锕€鍨导姘Ω"閸楀﹣鍞ら崙鐘辩秿"閽€钘夌暰閹?OPEN閵?
+        // 鈽呪槄鈽?2026-10-16锛?*鍚屼竴鏉″洜鏋滈摼鐨勭鍥涘**锛夛細
+        //   杩欓噷鍘熸潵鏄?`if (isShowPlay && morphGenAlive(gen))`銆?*涓庨噸璇曢偅鏉″畧鍗悓涓€涓瘺鐥?*锛?
+        //   `morphGen` 浼氳"鏃ч〉闈㈠疄渚嬬殑 `onDisappear` 鏃犳潯浠?`morphReset()`"鎺ㄩ珮锛?
+        //   鑰岄偅涓師鍥犱笌"鐢ㄦ埛杩樻兂涓嶆兂鐪嬫挱鏀鹃〉"姣棤鍏崇郴銆?
+        //   鈬?涓€鏃﹀畠鍙橈紝`morphSettleOpen()` 琚烦杩?鈬?**鐩镐綅鍋滃湪 ENTERING銆乣morphUsable` 淇濇寔鐪?*
+        //     鈬?`morphClipping()` 鎭掔湡 鈬?瀹瑰櫒涓€鐩村仠鍦ㄦ渶鍚庨偅涓€甯х殑 `scale/translate/clip`
+        //     鈬?瑙傛劅灏辨槸銆?*鑳屾櫙鏁村睆銆佸皝闈綅缃笉瀵?*銆嶃€?
+        //   鈬?鏀规硶锛氬彧鍒?`isShowPlay`锛涘啀琛ヤ竴鏉?`geomReady` 鈥斺€?**鍑犱綍娌″氨缁椂涓嶈兘钀戒綅**
+        //     锛堝惁鍒欎細鎶婁竴甯?娌￠噺榻?鐨勪腑闂存€佸浐瀹氫笅鏉ワ級銆?
+        //   鈽呪槄 2026-10-16锛堜簩娆¤姝ｏ級锛氳繖涓€鏉″垽鎹師鏉ユ槸 `morphUsable`銆備絾 `morphUsable`
+        //     浼氬洜涓?閫€鍥?`onAreaChange` 鍏滃簳鍊?鑰屼负鐪燂紙瑙?`morphIntroAnchorsReady` 鐨勬敞閲婏級锛?
+        //     瀹?*涓嶈冻浠?*璇存槑"缁堢偣閿氱偣鐪熺殑閲忓埌浜?銆俙morphGeomReady()` 鎵嶆槸鏃犵晫
+        //     `pullGeomReady` 鐨勭瓑浠风墿锛堝彧鍦?`measureMiniDuringPull` 閲忓埌缁堢偣閭ｄ竴鎷嶇疆浣嶏級
+        //     鈬?钀戒綅闂ㄥ繀椤荤敤瀹冿紝鍚﹀垯浼氭妸"鍗婁唤鍑犱綍"钀藉畾鎴?OPEN銆?
         if (this.appState.isShowPlay && this.expandState.morphGeomReadyNow() &&
           this.expandState.morphUsable && !this.expandState.reverseInFlight) {
           this.expandState.pushMorphTrace('settled');
@@ -1389,37 +1389,37 @@ struct Index {
             `pull settle: skip morphSettleOpen showPlay=${this.appState.isShowPlay} ` +
             `usable=${this.expandState.morphUsable} geomReady=${this.expandState.morphGeomReadyNow()} ` +
             `stage=${this.expandState.morphStage}`);
-          // 閳藉應妲勯埥?2026-10-16閿涘牅绗屾稉濠囨桨"end anchor unavailable"闁絾娼?*閸氬奔绔撮弶陇顫夐崚?*閿涘绱?
-          //   閸戠姳缍嶆慨瀣矒濞岋繝鍣洪崚?閳?閺冪姷鏅惃鍕經瀵板嫭妲搁妴灞炬拱濞嗭繝鈧偓閸ョ偞娅橀柅?push(閺冪姴鑸伴崣?閵嗗秮鈧柡鈧?
-          //   韫囧懘銆忛幎濠勬祲娴ｅ秳绮?ENTERING 閺€璺烘礀閺夈儯鈧倸甯弶銉︽Ц**閸欘亝澧﹂弶鈩冩）韫囨ぜ鈧椒绮堟稊鍫ュ厴娑撳秴浠?*閿?
-          //   閻╅晲缍呭姝岀箼閸嬫粌婀?ENTERING閵嗕梗morphContainerActive()` 閹帞婀?閳?
-          //   閹绢厽鏂佹い鐢稿亝閺壜ょ熅閸欘垵鍏橀幐鍌滄絻娑撯偓娑擃亜宕愬鑽ゆ畱瑜般垹褰夋导姘崇樈閿涘牏鏁ら幋宄扮杽濞村娈?閼冲本娅欓弫鏉戠潌 / 濞屸剝婀侀崝銊ф暰"閿涘鈧?
-          //   閳跨媴绗?閸欘亜婀?閻劍鍩涢崷銊︽尡閺€楣冦€?閿涘潉isShowPlay`閿涘妞傞幍宥嗘暪 閳ユ柡鈧?閻劍鍩涘鑼病缁傝绱戦弮鍓佹暠 `popPlayerRoute`
-          //     闁絾娼捄顖濆殰瀹歌鲸鏁归敍鍧刴orphReset` 瀹告彃婀?`onDisAppear` 闁插矁绐囨潻鍥风礆閵?
+          // 鈽呪槄鈽?2026-10-16锛堜笌涓婇潰"end anchor unavailable"閭ｆ潯**鍚屼竴鏉¤鍒?*锛夛細
+          //   鍑犱綍濮嬬粓娌￠噺鍒?鈬?鏃犵晫鐨勫彛寰勬槸銆屾湰娆￠€€鍥炴櫘閫?push(鏃犲舰鍙?銆嶁€斺€?
+          //   蹇呴』鎶婄浉浣嶄粠 ENTERING 鏀跺洖鏉ャ€傚師鏉ユ槸**鍙墦鏉℃棩蹇椼€佷粈涔堥兘涓嶅仛**锛?
+          //   鐩镐綅姘歌繙鍋滃湪 ENTERING銆乣morphContainerActive()` 鎭掔湡 鈬?
+          //   鎾斁椤甸偅鏉¤矾鍙兘鎸傜潃涓€涓崐姝荤殑褰㈠彉浼氳瘽锛堢敤鎴峰疄娴嬬殑"鑳屾櫙鏁村睆 / 娌℃湁鍔ㄧ敾"锛夈€?
+          //   鈿狅笍 鍙湪"鐢ㄦ埛鍦ㄦ挱鏀鹃〉"锛坄isShowPlay`锛夋椂鎵嶆敹 鈥斺€?鐢ㄦ埛宸茬粡绂诲紑鏃剁敱 `popPlayerRoute`
+          //     閭ｆ潯璺嚜宸辨敹锛坄morphReset` 宸插湪 `onDisAppear` 閲岃窇杩囷級銆?
           if (this.appState.isShowPlay && !this.expandState.morphGeomReadyNow()) {
             this.expandState.pushMorphTrace('degrade');
             Logger.warn(RzdShellLogTag,
-              'pull settle: geometry never ready 閳?degrade to a plain full-screen player');
+              'pull settle: geometry never ready 鈬?degrade to a plain full-screen player');
             this.expandState.morphReset();
             this.expandState.morphStage = MorphStage.OPEN;
             this.expandState.morphP = 1;
-            // 鍚屽€艰惤浣嶏紙闄嶇骇璺緞涔熶笉璁镐袱鏉℃椂闂寸嚎鍒嗗弶锛夈€?
+            // 同值落位（降级路径也不许两条时间线分叉）。
             this.expandState.contentP = 1;
           }
         }
       }, duration + 20);
       return;
     }
-    // 濞屄ょ箖闂冨牆鈧》绱扮悰銉╂？閸ョ偠鎹ｉ悙鐧哥礉**閸斻劎鏁鹃幘顓炵暚**閸愬秳姘︽潻妯跨碃娴ｇ姵娼獮璺哄祻鏉炲鈧?
-    // 閳跨媴绗?`morphLand()` 娑撳秷鍏橀崷銊ㄋ夐梻缈犵閸撳秷鐨熼敍姝€ANDING 娑斿鎮楅幘顓熸杹妞ゅ灚鏆ｆい鍏哥瑝閸愬秶绮崚?
-    //    閿涘潉morphPageOpacity()` 閸?LANDING 鏉╂柨娲?0閿涙稈妲?鐟欎礁鐣犻懛顏勭箒閻ㄥ嫭鏁為柌?閳ユ柡鈧?闁絼閲滈崙鑺ユ殶
-    //     **閻╊喖澧犲▽鈩冩箒濞戝牐鍨傞懓?*閿涘本澧嶆禒?娑撳秶鏁?鐎圭偤妾悽?`.visibility(isCollapsing)` 娑?
-    //     `morphClipping()` 闁絾娼憗浣稿闂傘劌鍙￠崥灞界杽閻滃府绱氶敍灞惧絹閸撳秷鐨熺亸杈╂箙娑撳秴鍩?缂傗晛娲栭崢?閻ㄥ嫯绻冪粙瀣╃啊閵?
+    // 娌¤繃闃堝€硷細琛ラ棿鍥炶捣鐐癸紝**鍔ㄧ敾鎾畬**鍐嶄氦杩樿糠浣犳潯骞跺嵏杞姐€?
+    // 鈿狅笍 `morphLand()` 涓嶈兘鍦ㄨˉ闂翠箣鍓嶈皟锛歀ANDING 涔嬪悗鎾斁椤垫暣椤典笉鍐嶇粯鍒?
+    //    锛坄morphPageOpacity()` 鍦?LANDING 杩斿洖 0锛涒槄 瑙佸畠鑷繁鐨勬敞閲?鈥斺€?閭ｄ釜鍑芥暟
+    //     **鐩墠娌℃湁娑堣垂鑰?*锛屾墍浠?涓嶇敾"瀹為檯鐢?`.visibility(isCollapsing)` 涓?
+    //     `morphClipping()` 閭ｆ潯瑁佸壀闂ㄥ叡鍚屽疄鐜帮級锛屾彁鍓嶈皟灏辩湅涓嶅埌"缂╁洖鍘?鐨勮繃绋嬩簡銆?
     setTimeout((): void => {
-      // 閳藉應妲勯埥?2026-10-16閿?*閸氬奔绔撮弶鈥虫礈閺嬫粓鎽奸惃鍕儑娴滄柨顦?*閿涘绱版稉搴濈瑐闂堛垽鍋呴弶鈥虫倱濞嗘崘顓瑰?閳ユ柡鈧?
-      //   閸樼粯甯€ `morphGenAlive`閿涘牆鐣犳导姘愁潶"閺冄囥€夐棃銏犵杽娓氬宓忔潪鑺ユ閻?`morphReset()`"閹恒劑鐝敍?
-      //   娑?閻劍鍩涙潻妯诲厒娑撳秵鍏傞幍鎾崇磻閹绢厽鏂佹い?閺冪姴鍙ч敍澶堚偓鍌濆鏉╂瑩鍣风悮顐ヮ嚖閹凤讣绱濋幍瀣◢濞屸€冲煂闂冨牆鈧偐娈戦崶鐐茶剨
-      //   鐏忓彉绱?*閸嬫粌婀崡濠呯熅**閿涘牊鎸遍弨楣冦€夐幐鍌氭躬娑撯偓閸фぞ鑵戦梻鏉戙亣鐏忓繒娈戠粣妤€褰涙稉濞库偓浣界碃娴ｇ姵娼稊鐔剁瑝娴溿倛绻曢敍澶堚偓?
+      // 鈽呪槄鈽?2026-10-16锛?*鍚屼竴鏉″洜鏋滈摼鐨勭浜斿**锛夛細涓庝笂闈㈤偅鏉″悓娆捐姝?鈥斺€?
+      //   鍘绘帀 `morphGenAlive`锛堝畠浼氳"鏃ч〉闈㈠疄渚嬪嵏杞芥椂鐨?`morphReset()`"鎺ㄩ珮锛?
+      //   涓?鐢ㄦ埛杩樻兂涓嶆兂鎵撳紑鎾斁椤?鏃犲叧锛夈€傝嫢杩欓噷琚鎷︼紝鎵嬪娍娌″埌闃堝€肩殑鍥炲脊
+      //   灏变細**鍋滃湪鍗婅矾**锛堟挱鏀鹃〉鎸傚湪涓€鍧椾腑闂村ぇ灏忕殑绐楀彛涓娿€佽糠浣犳潯涔熶笉浜よ繕锛夈€?
       if (!this.appState.isShowPlay) {
         return;
       }
@@ -1429,10 +1429,10 @@ struct Index {
     }, duration + 20);
   }
 
-  /** 閹靛濞嶇悮顐ら兇缂佺喐濮犵挧甯窗閸ョ偛鑴婇崚鎷屾崳閻愮懓鑻熼崡姝屾祰閿涘牆鎯侀崚娆愭尡閺€楣冦€夋导姘閻╁瓨瀵曢崷銊ㄧ碃娴ｇ姵娼柇锝勭鐏忓繐娼℃稉濠忕礆閵?*/
+  /** 鎵嬪娍琚郴缁熸姠璧帮細鍥炲脊鍒拌捣鐐瑰苟鍗歌浇锛堝惁鍒欐挱鏀鹃〉浼氫竴鐩存寕鍦ㄨ糠浣犳潯閭ｄ竴灏忓潡涓婏級銆?*/
   private onPullOpenCancel(): void {
     if (!this.expandState.pullDragging) {
-      // 閳?娑?`onPullOpenEnd` 閸氬本妫岄敍鍫ュ厴閺?閺€璺虹啲鐞氼偅瀚?閿涘鍣?鐠佲€冲煂閸氬奔绔存稉顏呮殶娑撳绱濈憴?`pullDropEnd`閵?
+      // 鈽?涓?`onPullOpenEnd` 鍚屾棌锛堥兘鏄?鏀跺熬琚嫆"锛夆噿 璁″埌鍚屼竴涓暟涓婏紝瑙?`pullDropEnd`銆?
       this.expandState.notePullDropEnd();
       return;
     }
@@ -1440,17 +1440,17 @@ struct Index {
   }
 
   /**
-   * 閳藉應妲勯埥鍛 2026-10-17閿涘牏鍙庨幖顒佹￥閻?`MainPage` 閻ㄥ嫬鎻╅悡褎鏁圭紓鈺傝癁鐏炲偊绱漙wujie.pa:162465-162707`閿涘绱?
-   * 閵嗗矂娼幍瀣◢閸忔娊妫撮妴? 閹跺﹥鎸遍弨楣冦€夐弽纭呭Ν閻愬湱娈戞稉鈧?*濠婏紕鐛ヨ箛顐ゅ弾**缂傗晛鍩屾潻铚傜稑閺壜ゅ厡閸ュ绱濋崥灞炬濞ｂ€冲毉閵?
+   * 鈽呪槄鈽呪槄 2026-10-17锛堢収鎼棤鐣?`MainPage` 鐨勫揩鐓ф敹缂╂诞灞傦紝`wujie.pa:162465-162707`锛夛細
+   * 銆岄潪鎵嬪娍鍏抽棴銆? 鎶婃挱鏀鹃〉鏍硅妭鐐圭殑涓€寮?*婊＄獥蹇収**缂╁埌杩蜂綘鏉¤兌鍥婏紝鍚屾椂娣″嚭銆?
    *
-   * ## 娑撹桨绮堟稊鍫濈箑妞ょ粯妲告潻娆愮壉閿涘牏鏁ら幋椋庮儑 閳?閺壜扳偓灞炬箒閼冲本娅欐担鍡樻Ц妤傛ê瀹抽悧閫涚秵閵嗗秶娈戝锝埿掗敍?
-   * 閹存垳婊戦崢鐔告降閿涘牅浜掗崣濠勫箛閸?*娑撳濯?*闁絾娼捄顖欑矝閻掕绱氶弰?*閸斻劍妞块惃鍕尡閺€楣冦€?*閿涙碍鏁肩憗浣稿缁愭褰?+ 缂傗晜鏂侀妴?
-   * 閸欘亣顩?鐟佷礁澹€缁愭褰涙妯哄"娑?缂傗晜鏂?閺堝绔撮悙閫涚瑝閸氬本顒為敍灞界潌娑撳﹤姘ㄩ弰?閺堝鍎楅弲顖樷偓浣风稻閸欘亜澧垮鍫㈢叝閻ㄥ嫪绔撮弶?閵?
-   * 閺冪姷鏅惃鍕姜閹靛濞嶉崗鎶芥４**閺嶈婀版稉宥呭З濞插銆夐棃?*閿涙艾鐣犻崷?`closeWithAnimation()` 闁?
-   * `componentSnapshot.get(PLAYER_ROOT_ID, 浣?` 閹峰秳绔村鐘叉禈閿涘瞼鍔ч崥?`nav.pop(false)` 閹跺﹪銆夐棃銏犲祻閹哄绱?
-   * 閸愬秷顔€**鏉╂瑥绱堕崶?*缂傗晙绗呴崢?閳?閸ラ箖鍣烽惃鍕剹閺咁垯绗岀亸渚€娼?*閸氬本鐦笟瀣╃鐠ч缂?* 閳?闁絿顫掕ぐ銏㈠Ц**娑撳秴褰查懗?*閸戣櫣骞囬妴?
+   * ## 涓轰粈涔堝繀椤绘槸杩欐牱锛堢敤鎴风 鈶?鏉°€屾湁鑳屾櫙浣嗘槸楂樺害鐗逛綆銆嶇殑姝ｈВ锛?
+   * 鎴戜滑鍘熸潵锛堜互鍙婄幇鍦?*涓嬫媺**閭ｆ潯璺粛鐒讹級鏄?*鍔ㄦ椿鐨勬挱鏀鹃〉**锛氭敼瑁佸壀绐楀彛 + 缂╂斁銆?
+   * 鍙"瑁佸壀绐楀彛楂樺害"涓?缂╂斁"鏈変竴鐐逛笉鍚屾锛屽睆涓婂氨鏄?鏈夎儗鏅€佷絾鍙墿寰堢煯鐨勪竴鏉?銆?
+   * 鏃犵晫鐨勯潪鎵嬪娍鍏抽棴**鏍规湰涓嶅姩娲婚〉闈?*锛氬畠鍦?`closeWithAnimation()` 閲?
+   * `componentSnapshot.get(PLAYER_ROOT_ID, 位)` 鎷嶄竴寮犲浘锛岀劧鍚?`nav.pop(false)` 鎶婇〉闈㈠嵏鎺夛紝
+   * 鍐嶈**杩欏紶鍥?*缂╀笅鍘?鈬?鍥鹃噷鐨勮儗鏅笌灏侀潰**鍚屾瘮渚嬩竴璧风缉** 鈬?閭ｇ褰㈢姸**涓嶅彲鑳?*鍑虹幇銆?
    *
-   * ## 闁劖娼€靛湱鍙庨敍鍫濆弿闁劎娲跨拠浼欑礉鐟?`MorphShrinkState` 閺傚洣娆㈡径杈剧礆
+   * ## 閫愭潯瀵圭収锛堝叏閮ㄧ洿璇伙紝瑙?`MorphShrinkState` 鏂囦欢澶达級
    * ```
    *   If (shrink.visible && shrinkPixmap !== undefined) {          // 162466-162492
    *     Column()
@@ -1463,27 +1463,27 @@ struct Index {
    *       .opacity(shrink.opacity)                                  // 162794-162803
    *       .hitTestBehavior(HitTestMode.None)                        // 162804-162812
    *       { Image(shrinkPixmap)                                     // 162820-162828
-   *           .width(閺佸鐛ョ€?.height(閺佸鐛ユ?                          // 162829-162862閿涘牆娴橀幁鎺嶈礋閺佸鐛ラ敍?
+   *           .width(鏁寸獥瀹?.height(鏁寸獥楂?                          // 162829-162862锛堝浘鎭掍负鏁寸獥锛?
    *           .objectFit(ImageFit.Cover)                            // 162863-162871
    *           .syncLoad(true) }                                     // 162872-162879
    *   }
    * ```
-   * 閳跨媴绗?闁絼閲?`Column` 閻ㄥ嫬顔旀惔锔芥Ц `'100%'`閿? 閺佸鐛ョ€规枻绱?*娑撴棃娼悥?`Stack` 閻ㄥ嫬涔忔稉濠咁潡鐎靛綊缍?*
-   *    閳ユ柡鈧?`MorphShrinkState` 闁插矂鍋呯紒?`endTx/endTy` 濮濓絾妲搁幐?缂佹洝鍤滈煬顐¤厬韫囧啰缂夐弨?閸欏秷袙閸戠儤娼甸惃鍕剁礉
-   *    娑撱倛鈧懏妲告稉鈧€电櫢绱?*娑撳秷顩?*缂佹瑥鐣犻崝?`.position()` 閹存牗鏁肩€靛綊缍堥弬鐟扮础閵?
-   * 閳跨媴绗?閺佹潙鐪版稉宥呮倖娴滃娆㈤敍鍫濆彠閹绢厽鏂侀崳銊ф畱閻剟妫块敍灞肩瑓闂堛垻娈戞＃鏍€夌憰浣虹彌閸掕褰查悽顭掔礆閵?
+   * 鈿狅笍 閭ｄ釜 `Column` 鐨勫搴︽槸 `'100%'`锛? 鏁寸獥瀹斤級**涓旈潬鐖?`Stack` 鐨勫乏涓婅瀵归綈**
+   *    鈥斺€?`MorphShrinkState` 閲岄偅缁?`endTx/endTy` 姝ｆ槸鎸?缁曡嚜韬腑蹇冪缉鏀?鍙嶈В鍑烘潵鐨勶紝
+   *    涓よ€呮槸涓€瀵癸紝**涓嶈**缁欏畠鍔?`.position()` 鎴栨敼瀵归綈鏂瑰紡銆?
+   * 鈿狅笍 鏁村眰涓嶅悆浜嬩欢锛堝叧鎾斁鍣ㄧ殑鐬棿锛屼笅闈㈢殑棣栭〉瑕佺珛鍒诲彲鐢級銆?
    */
   @Builder
   private ShrinkOverlayHost() {
     if (this.shrinkState.visible && this.shrinkState.pixmap !== undefined) {
-      // 閳跨媴绗?婢舵牕鐪?`Stack` 韫囧懘銆忛弰?**`Alignment.TopStart` + 閺佸鐛ラ惄?*閿?
-      //   `MorphShrinkState` 闁絿绮?`endTx/endTy` 閺勵垱瀵?`Column` 閺堫亞缂夐弨鐐閸?`x閳溂0,W], y閳溂0,C]`"
-      //   閸欏秷袙閸戠儤娼甸惃鍕剁礄鐟欎線鍋呮稉顏呮瀮娴犺泛銇旈惃鍕嚠鐠愶讣绱氶垾鏂衡偓?闂堢姷鍩楃€圭懓娅掗惃?*瀹革缚绗傜憴鎺戭嚠姒?*閹靛秵鍨氱粩瀣ㄢ偓?
-      //   閻╂帒鏄傜€靛摜鏁?*鐎圭偞绁寸粣妤€褰涚亸鍝勵嚟**閺勬儳绱＄紒娆欑礄娑撳骸褰熸径鏍︾瑏娑擃亝璇炵仦鍌氭倱娑撯偓婢跺嫪鎱ㄥ锝忕窗娑撳秶绮扮亸鍗炲涧缁涘绨€瑰鍙忛崠杞扮閸愬懘鍋呴崸妤嬬礆閵?
+      // 鈿狅笍 澶栧眰 `Stack` 蹇呴』鏄?**`Alignment.TopStart` + 鏁寸獥鐩?*锛?
+      //   `MorphShrinkState` 閭ｇ粍 `endTx/endTy` 鏄寜"`Column` 鏈缉鏀炬椂鍗?`x鈭圼0,W], y鈭圼0,C]`"
+      //   鍙嶈В鍑烘潵鐨勶紙瑙侀偅涓枃浠跺ご鐨勫璐︼級鈥斺€?闈犵埗瀹瑰櫒鐨?*宸︿笂瑙掑榻?*鎵嶆垚绔嬨€?
+      //   鐩掑昂瀵哥敤**瀹炴祴绐楀彛灏哄**鏄惧紡缁欙紙涓庡彟澶栦笁涓诞灞傚悓涓€澶勪慨姝ｏ細涓嶇粰灏卞彧绛変簬瀹夊叏鍖轰箣鍐呴偅鍧楋級銆?
       Stack({ alignContent: Alignment.TopStart }) {
         Column() {
           Image(this.shrinkState.pixmap)
-            // 閸ョ偓浜芥稉?*閺佸鐛?*閿涘牊妫ら悾?`162829-162862` 鐏忚鲸妲?`px2vp(windowWidth_px/Height_px)`閿?
+            // 鍥炬亽涓?*鏁寸獥**锛堟棤鐣?`162829-162862` 灏辨槸 `px2vp(windowWidth_px/Height_px)`锛?
             .width(this.expandState.windowWidthVp > 0 ?
               this.expandState.windowWidthVp : StyleConstants.FULL_WIDTH)
             .height(this.expandState.windowHeightVp > 0 ?
@@ -1511,30 +1511,30 @@ struct Index {
   }
 
   /**
-   * 瑜般垹褰夐崗瀣畷鐏炲偊绱版潻铚傜稑閺夛繝鍋呴弶?閸忓啩淇婇幁?+ 閹垮秳缍旈崠?閻?*閸擃垱婀?*閿涘矂鎷ら崷銊ョ暊閸樼喐娼甸惃鍕秴缂冾噯绱濋梾蹇氱箻鎼达缚缍呯粔璇茶嫙濞ｂ€冲毉閵?
+   * 褰㈠彉鍏嬮殕灞傦細杩蜂綘鏉￠偅鏉?鍏冧俊鎭?+ 鎿嶄綔鍖?鐨?*鍓湰**锛岄拤鍦ㄥ畠鍘熸潵鐨勪綅缃紝闅忚繘搴︿綅绉诲苟娣″嚭銆?
    *
-   * 閸欏秶绱拠鎴滅贩閹诡噯绱檂MiniMorph濞撳弶鐓嬮弬閫涚瑢妞よ泛绨抽弽蹇旇窗閸忋儱鍙曞?md`閿涘绱?
-   *   璺?`浣?e` 閸忓啩淇婇幁顖氬帬闂呭棴绱癭position(miniMetaLeft, miniMetaTop)` + `translate({x: coverRightShiftAt(t)})`
-   *     + `opacity(metaOpacityAt(t))`閿涘潉clamp(1 - t/0.35)`閿?
-   *   璺?`浣?f` 閹垮秳缍旈崠鍝勫帬闂呭棴绱癭translate({y: coverRiseAt(t)})` + `opacity(actionsOpacityAt(t))`
-   *     閿涘潉clamp(1 - t/0.20)`閿涘本鐦崗鍐т繆閹垱娲块弮鈺傜Х婢?閳ユ柡鈧?"閸欏厖鏅舵稉澶夐嚋閹稿鎸抽幈銏″弮闂呮劘妫?鐏忚鲸妲告潻娆愭蒋閿?
-   *   璺?闂堛垽鍋呮稉鈧Λ鎺炵礄鐏忎線娼伴崗瀣畷閿?*娑旂喎婀潻娆庨嚋婢瑰啿鐪伴柌?*娴?閳ユ柡鈧?鐟?{@link MorphCoverClone}
-   *     閿?026-10-15 娴?`PlaybackPage.MorphCoverBridge` 閹碱剚娼甸敍娑楄⒈娓氀呯叐瑜般垹鎮撳┃鎰剁礆閵?
+   * 鍙嶇紪璇戜緷鎹紙`MiniMorph娓叉煋鏂逛笌椤跺簳鏍忔贰鍏ュ叕寮?md`锛夛細
+   *   路 `位1e` 鍏冧俊鎭厠闅嗭細`position(miniMetaLeft, miniMetaTop)` + `translate({x: coverRightShiftAt(t)})`
+   *     + `opacity(metaOpacityAt(t))`锛坄clamp(1 - t/0.35)`锛?
+   *   路 `位1f` 鎿嶄綔鍖哄厠闅嗭細`translate({y: coverRiseAt(t)})` + `opacity(actionsOpacityAt(t))`
+   *     锛坄clamp(1 - t/0.20)`锛屾瘮鍏冧俊鎭洿鏃╂秷澶?鈥斺€?"鍙充晶涓変釜鎸夐挳鎱㈡參闅愯棌"灏辨槸杩欐潯锛?
+   *   路 闈㈤偅涓€妫掞紙灏侀潰鍏嬮殕锛?*涔熷湪杩欎釜澹冲眰閲?*浜?鈥斺€?瑙?{@link MorphCoverClone}
+   *     锛?026-10-15 浠?`PlaybackPage.MorphCoverBridge` 鎼潵锛涗袱渚х煩褰㈠悓婧愶級銆?
    *
-   * 娴ｅ秶些闁插繑妲?*閻╃顕柌?*閿涘潉coverRightShiftAt = coverRight(t) - coverRight(0)`閿涘绱?
-   * 閹碘偓娴犮儱鐣犻崣顏冪窗"鐞氼偄鐨濋棃銏″腹閻偓瀵扳偓閸欏疇铔嬮妴浣界閻偓鐏忎線娼板鈧稉濠冨М"閿涘奔绗夋导姘崇儲閸掓澘鍩嗛惃鍕秴缂冾喓鈧?
+   * 浣嶇Щ閲忔槸**鐩稿閲?*锛坄coverRightShiftAt = coverRight(t) - coverRight(0)`锛夛紝
+   * 鎵€浠ュ畠鍙細"琚皝闈㈡帹鐫€寰€鍙宠蛋銆佽窡鐫€灏侀潰寰€涓婃姮"锛屼笉浼氳烦鍒板埆鐨勪綅缃€?
    */
   @Builder
   private MorphMiniBarClone() {
     Stack({ alignContent: Alignment.TopStart }) {
-      // 閳跨媴绗?韫囧懘銆忛崠鍛鐏?*鐎规艾顔旈惃?Row**閿涘牅绗夐弰?Column閿涘绱癭HomeMiniBarPlayerAside` 閻ㄥ嫭鐗撮懞鍌滃仯鐢?
-      //    `.layoutWeight(1)`閿涘苯鐣犻崣顏勬躬 Row/Column 闁插瞼鏁撻弫鍫礉閼板奔绗?*閺傜懓鎮滅憰浣割嚠** 閳ユ柡鈧?
-      //    閺€鎹愮箻 Column 娴兼俺顔€鐎瑰啯瀵?缁旀牜娲块崜鈺€缍戠粚娲？"閸掑棝鍘ら妴浣姑崥鎴︹偓鈧崠鏍ㄥ灇 wrap-content閿?
-      //    缂佹挻鐏夌亸杈ㄦЦ閸欏厖鏅堕柇锝勭瑏娑擃亝瀵滈柦顔芥殻娴ｆ挸涔忕粔浼欑礄閻劍鍩涚€圭偞绁存稉銈嗩偧闁姤妲告潻娆庨嚋閻ュ洨濮搁敍澶堚偓?
+      // 鈿狅笍 蹇呴』鍖呬竴灞?*瀹氬鐨?Row**锛堜笉鏄?Column锛夛細`HomeMiniBarPlayerAside` 鐨勬牴鑺傜偣甯?
+      //    `.layoutWeight(1)`锛屽畠鍙湪 Row/Column 閲岀敓鏁堬紝鑰屼笖**鏂瑰悜瑕佸** 鈥斺€?
+      //    鏀捐繘 Column 浼氳瀹冩寜"绔栫洿鍓╀綑绌洪棿"鍒嗛厤銆佹í鍚戦€€鍖栨垚 wrap-content锛?
+      //    缁撴灉灏辨槸鍙充晶閭ｄ笁涓寜閽暣浣撳乏绉伙紙鐢ㄦ埛瀹炴祴涓ゆ閮芥槸杩欎釜鐥囩姸锛夈€?
       Row() {
-        // 涓婃父鎶婂舰鍙橀敋鐐规寕鍦?*鎿嶄綔鍖?*涓婏紙`lx_mini_actions`锛宍wujie.pa:157092`锛夛紝涓嶆槸 meta 閭ｄ竴鍧椼€?
-        // 鏈粨閲嶆瀯鍚?`HomeMiniBarPlayerAside` 鍙敾 meta 鈬?鍏嬮殕灞備篃鏀规垚鐢?`MiniBarActions`锛?
-        // 杩欐牱閿氱偣鐭╁舰锛坄asideWinW/H`锛変笌鐪熸鐢诲嚭鏉ョ殑涓滆タ鏄悓涓€涓潡銆?
+        // 上游把形变锚点挂在**操作区**上（`lx_mini_actions`，`wujie.pa:157092`），不是 meta 那一块。
+        // 本仓重构后 `HomeMiniBarPlayerAside` 只画 meta ⇒ 克隆层也改成画 `MiniBarActions`，
+        // 这样锚点矩形（`asideWinW/H`）与真正画出来的东西是同一个块。
         MiniBarActions({
           playerViewModel: this.miniBarViewModel,
           actionsNodeId: 'rzd_morph_actions_clone'
@@ -1544,30 +1544,30 @@ struct Index {
       .height(this.expandState.asideWinH)
       .alignItems(VerticalAlign.Center)
       .position({ x: this.expandState.asideWinX, y: this.expandState.asideWinY })
-      // 閹垮秳缍旈崠娲亝娑撯偓濡楋綇绱伴弫鏉戞健閹?`clamp(1 - t/0.20)` 濞ｂ€冲毉閿涘牊瀵滈柦顔煎帥濞屄扳偓浣规瀮鐎涙鎮楀▽鈽呯礆
+      // 鎿嶄綔鍖洪偅涓€妗ｏ細鏁村潡鎸?`clamp(1 - t/0.20)` 娣″嚭锛堟寜閽厛娌°€佹枃瀛楀悗娌★級
       .opacity(PlayerExpandState.actionsOpacityAt(this.expandState.morphP))
-      // 閳跨媴绗?閸欘亜浠?*缁鹃潧鎮?*娴ｅ秶些閿涘牆寮界紓鏍槯 浣?f 閻?`coverRiseAt`閿涘鈧?
-      //    濡亜鎮滈惃?`coverRightShiftAt` 閺勵垳绮?*閸忓啩淇婇幁?*闁絼绔寸仦鍌滄畱閿涘苯顨滈崚鐗堝瘻闁筋喕绗傛导姘愁唨閹稿鎸?
-      //    濡亞娼冨鎴濆毉閸?閳ユ柡鈧?閺€鎯版崳閺冩儼銆冮悳鐗堝灇"娑撯偓娑擃亝娈忛崑婊勫瘻闁筋喕绮犵仦蹇撶婢舵牠顥ｆ潻娑欐降"閵?
+      // 鈿狅笍 鍙仛**绾靛悜**浣嶇Щ锛堝弽缂栬瘧 位1f 鐨?`coverRiseAt`锛夈€?
+      //    妯悜鐨?`coverRightShiftAt` 鏄粰**鍏冧俊鎭?*閭ｄ竴灞傜殑锛屽鍒版寜閽笂浼氳鎸夐挳
+      //    妯潃婊戝嚭鍘?鈥斺€?鏀惰捣鏃惰〃鐜版垚"涓€涓殏鍋滄寜閽粠灞忓箷澶栭杩涙潵"銆?
       .translate({ y: 0 })
-      // 鈽呪槄鈽?2026-10-20锛堢収鎼棤鐣岀殑绾靛悜鎸ゅ帇锛夛細鏃犵晫 `morphMiniMeta` / `morphActions` 閮藉啓浜?
-      //   `.scale({ x: 1, y: this.morphSquashY })`锛坄椋炲叆娴眰瀹夸富涓庡嚑浣曟彃鍊煎畾绋?md` 搂浜?搂鍏紝
-      //   瀵瑰簲瀛楄妭鐮?`wujie.pa:155740-155743`锛夈€傝繖涓€灞傛槸"鍏冧俊鎭?+ 鎿嶄綔鍖?鐨勫厠闅嗭紝
-      //   **蹇呴』**璺熻兌鍥婂厠闅嗗悓涓€涓郴鏁帮紝鍚﹀垯鍏虫挱鏀惧櫒鏃?鑳屾澘鍘嬩簡銆佸唴瀹逛笉鍘?銆?
-      //   缂╂斁涓績 = 鏈?`Row` 鐨勫嚑浣曚腑蹇冿紙鏃犵晫涔熸病鍐?centerX/centerY锛夈€?
+      // ★★★ 2026-10-20（照搬无界的纵向挤压）：无界 `morphMiniMeta` / `morphActions` 都写了
+      //   `.scale({ x: 1, y: this.morphSquashY })`（`飞入浮层宿主与几何插值定稿.md` §五/§六，
+      //   对应字节码 `wujie.pa:155740-155743`）。这一层是"元信息 + 操作区"的克隆，
+      //   **必须**跟胶囊克隆同一个系数，否则关播放器时"背板压了、内容不压"。
+      //   缩放中心 = 本 `Row` 的几何中心（无界也没写 centerX/centerY）。
       .scale({ x: 1, y: this.expandState.morphSquashY })
     }
-    // 閳藉應妲勯埥?2026-10-16閿涘牅绗?`MorphCoverClone()` **閸氬奔绔存径鍕叏濮?*閿涘瞼鎮婇悽閬嶁偓鎰摟閻╃鎮撻敍澶涚窗
-    //   鏉╂瑩鍣烽崢鐔告降閺?`LayoutPolicy.matchParent` 鑴? 閳?閹疯法娈戦弰?*婢瑰啿鐪伴弽?`Stack`** 閻ㄥ嫬鏄傜€甸潻绱?
-    //   閼板本鐗?`Stack` **濞屸剝婀?`ignoreLayoutSafeArea`** 閳?鏉╂瑤绔寸仦鍌滄畱閻╂帒鐡欓崣顏嗙搼娴?鐎瑰鍙忛崠杞扮閸?闁絽娼￠妴?
-    //   閼板苯鐣犻惃鍕摍閼哄倻鍋ｉ敍鍫滅瑐闂堛垽鍋呮稉?`Row`閿涘鏁ら惃鍕Ц `.position({x: asideWinX, y: asideWinY})`
-    //   閳ユ柡鈧?**閸忋劎鐛ラ崣锝呮綏閺?*閿涘牅绗屾潻铚傜稑閺夛繝鍣哄ù瀣倱閸欙絽绶為敍澶嗗櫩 瑜版捁绯犳担鐘虫蒋闂堢姾绻庣仦蹇撶鎼存洟鍎撮敍鍧刟sideWinY 閳?850`閿?
-    //   閺冭绱濇潻娆庣閸фぞ绱伴拃钘夋躬鐏炲倻娲呯€?*娑斿顦?* 閳?鐞氼偉顥嗛幒?閳?鐟欏倹鍔呴弰?閸忔娊妫撮弮?*閹垮秳缍旈崠娲亝娑撳閲滈幐澶愭尦娑撳秷顫嗘禍?*"閵?
-    //   閳?閻?*鐎圭偞绁寸粣妤€褰涚亸鍝勵嚟**閺勬儳绱＄紒娆欑礄闁插繋绗夐崚鐗堟闁偓閸?`'100%'`閿涘奔绗岄弨鐟板З閸撳秹鈧劕鐡ф稉鈧懛杈剧礆閵?
+    // 鈽呪槄鈽?2026-10-16锛堜笌 `MorphCoverClone()` **鍚屼竴澶勪慨姝?*锛岀悊鐢遍€愬瓧鐩稿悓锛夛細
+    //   杩欓噷鍘熸潵鏄?`LayoutPolicy.matchParent` 脳2 鈬?鎷跨殑鏄?*澹冲眰鏍?`Stack`** 鐨勫昂瀵革紝
+    //   鑰屾牴 `Stack` **娌℃湁 `ignoreLayoutSafeArea`** 鈬?杩欎竴灞傜殑鐩掑瓙鍙瓑浜?瀹夊叏鍖轰箣鍐?閭ｅ潡銆?
+    //   鑰屽畠鐨勫瓙鑺傜偣锛堜笂闈㈤偅涓?`Row`锛夌敤鐨勬槸 `.position({x: asideWinX, y: asideWinY})`
+    //   鈥斺€?**鍏ㄧ獥鍙ｅ潗鏍?*锛堜笌杩蜂綘鏉￠噺娴嬪悓鍙ｅ緞锛夆噿 褰撹糠浣犳潯闈犺繎灞忓箷搴曢儴锛坄asideWinY 鈮?850`锛?
+    //   鏃讹紝杩欎竴鍧椾細钀藉湪灞傜洅瀛?*涔嬪** 鈬?琚鎺?鈬?瑙傛劅鏄?鍏抽棴鏃?*鎿嶄綔鍖洪偅涓変釜鎸夐挳涓嶈浜?*"銆?
+    //   鈬?鐢?*瀹炴祴绐楀彛灏哄**鏄惧紡缁欙紙閲忎笉鍒版椂閫€鍥?`'100%'`锛屼笌鏀瑰姩鍓嶉€愬瓧涓€鑷达級銆?
     .width(this.expandState.windowWidthVp > 0 ? this.expandState.windowWidthVp : StyleConstants.FULL_WIDTH)
     .height(this.expandState.windowHeightVp > 0 ? this.expandState.windowHeightVp : StyleConstants.FULL_HEIGHT)
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
-    // 閺佹潙鐪版稉宥呮倖娴滃娆㈤敍姘瑓闂堛垹姘ㄩ弰顖涙尡閺€楣冦€夐敍宀€甯虹€瑰墎娈戦悙鐟板毊韫囧懘銆忛悡褍鐖堕拃钘夊煂閹绢厽鏂佹い鍏哥瑐
+    // 鏁村眰涓嶅悆浜嬩欢锛氫笅闈㈠氨鏄挱鏀鹃〉锛岀帺瀹剁殑鐐瑰嚮蹇呴』鐓у父钀藉埌鎾斁椤典笂
     .hitTestBehavior(HitTestMode.None)
     .zIndex(PLAYER_CLONE_Z_INDEX)
     .id('rzd_player_actions_clone_host')
@@ -1581,73 +1581,73 @@ struct Index {
     })
   }
 
-  // 鈽呪槄鈽?2026-10-21锛堢鍏疆锛夛細`miniBarSlotPlaceholder()` **宸插垹闄?*銆?
+  // ★★★ 2026-10-21（第八轮）：`miniBarSlotPlaceholder()` **已删除**。
   //
-  // 瀹冨瓨鍦ㄧ殑鍘熷洜鍙湁涓€鏉★細涓婁竴杞妸鎾斁鍣ㄦ惉鍑轰簡 `miniBar` 妲斤紝妲介噷蹇呴』鐣欎竴鍧?
-  // 0 楂橈紙鍙屽眰锛? 56 楂橈紙鍗曞眰锛夌殑**閫忔槑鍗犱綅**鍘婚獥 HDS 鎸夊唴瀹归噺鎺掔増銆?
-  // 绗叓杞敳鏂瑰彛寰勫凡鏄庣‘銆屼竴绾ч〉鐨勬挱鏀炬潯鍜屼簩绾ч〉鐨勬挱鏀炬潯涓嶆槸涓€涓笢瑗裤€佺粨鏋勫畬鍏ㄤ笉涓€鏍枫€嶏紝
-  // 涓婃父 `MainPage` 閭ｄ竴渚э紙`wujie.pa:157082-157228`锛夋槸**鐩存帴鎶?`MiniPlayer` 鏀捐繘妲介噷**锛?
-  // 妲介珮澶╃劧鐢卞唴瀹归噺鍐冲畾 鈬?鍗犱綅娌℃湁瀛樺湪鎰忎箟锛坄miniBarBuilder` 鐜板湪缁欑殑灏辨槸 `this.miniBar()`锛夈€?
+  // 它存在的原因只有一条：上一轮把播放器搬出了 `miniBar` 槽，槽里必须留一块
+  // 0 高（双层）/ 56 高（单层）的**透明占位**去骗 HDS 按内容量排版。
+  // 第八轮甲方口径已明确「一级页的播放条和二级页的播放条不是一个东西、结构完全不一样」，
+  // 上游 `MainPage` 那一侧（`wujie.pa:157082-157228`）是**直接把 `MiniPlayer` 放进槽里**，
+  // 槽高天然由内容量决定 ⇒ 占位没有存在意义（`miniBarBuilder` 现在给的就是 `this.miniBar()`）。
 
-  // 锛堜笂闈㈣繖娈?JSDoc 鎻忚堪鐨勬槸**宸插垹闄?*鐨?`homeMiniCapsule()`锛屼繚鐣欎細璇 鈬?鏁存绉婚櫎锛?
-  //   瀹冧富寮犵殑"鍏夋劅 + 寮逛竴涓嬪繀椤婚潬鎶?HdsTabs 鎼繘鎴戜滑瀛愭爲"宸茶鐢叉柟 2026-10-21 鐨勭粨璁哄彇浠ｏ細
-  //   涓€绾ч〉鎸変笂娓镐綇 `miniBar` 妲斤紝寮硅烦钀藉湪妲藉唴瀹逛笂锛岃儗鏉?鍏夋劅浜ょ粰 HDS銆傦級
-  // 鈽呪槄鈽?2026-10-21锛堢鍏疆锛夛細`homeMiniCapsule()` **宸插垹闄?*锛堣繛鍚屽畠鐨?
+  // （上面这段 JSDoc 描述的是**已删除**的 `homeMiniCapsule()`，保留会误导 ⇒ 整段移除；
+  //   它主张的"光感 + 弹一下必须靠把 HdsTabs 搬进我们子树"已被甲方 2026-10-21 的结论取代：
+  //   一级页按上游住 `miniBar` 槽，弹跳落在槽内容上，背板/光感交给 HDS。）
+  // ★★★ 2026-10-21（第八轮）：`homeMiniCapsule()` **已删除**（连同它的
   // `miniBarSlotPlaceholder` / `homeMiniCapsuleWidthVp` / `homeMiniCapsuleRightMarginVp` /
   // `homeMiniCapsuleBottomVp` / `homeMiniCapsuleBoxWidthVp` / `homeMiniBarSingleRow` /
-  // `homeMiniBarSlotHeightVp` / `homeMiniBarCoverSideVp` / `secondaryMiniBarCoverSideVp`锛夈€?
+  // `homeMiniBarSlotHeightVp` / `homeMiniBarCoverSideVp` / `secondaryMiniBarCoverSideVp`）。
   //
-  // 瀹冨瓨鍦ㄧ殑鍞竴鐞嗙敱鏄?鎯宠 HDS 鐢荤殑鏉愯川鑳屾澘涔熶竴璧峰脊"锛?026-10-20 绗笁杞級锛?
-  // 鎶?`HdsTabs` 鎼繘鎴戜滑鑷繁鐨勫瓙鏍戯紙`MiniBarMaterialCapsule`锛夛紝鍐嶆妸鏁存潯鐢诲湪澹冲眰 `Stack` 閲屻€?
-  // 绗叓杞敳鏂瑰凡鏄庣‘锛?*涓€绾ч〉涓庝簩绾ч〉鏄袱濂楃粨鏋勩€佷笉鑳界粺涓€** 鈥斺€?涓婃父 `MainPage`
-  // 锛坄wujie.pa:157082-157228`锛夐椤甸偅鏉?*涓嶆槸** `MaterialCapsule`锛屽畠鐩存帴浣忓湪澹冲眰
-  // `HdsTabs` 鐨?`miniBar` 妲介噷 鈬?鏈枃浠跺洖鍒颁笂娓哥粨鏋勶細
-  //   路 涓€绾ч〉锛歚barFloatingStyle.miniBar.miniBarBuilder = () => this.miniBar()`
-  //     锛堝唴瀹?= `MiniPlayer`锛屽昂瀵镐氦缁欐Ы锛汬DS 鎸夊唴瀹归噺缁欐Ы楂橈紝鑳屾澘/鍏夋劅鐢?HDS 鐢伙級锛?
-  //   路 浜岀骇椤碉細{@link floatingMiniBar} 鈫?{@link MiniBarMaterialCapsule}锛堣嚜宸变竴涓?HdsTabs 娴姩鑳跺泭锛夈€?
-  // 鎸ゅ帇锛堝脊涓€涓嬶級鐨勮惤鐐逛篃鍥犳浠?鑳跺泭閭ｄ竴灞?鍥炲埌"妲藉唴瀹癸紙`MiniPlayer` 鏍癸級"锛岃 {@link miniBar}銆?
+  // 它存在的唯一理由是"想让 HDS 画的材质背板也一起弹"（2026-10-20 第三轮）：
+  // 把 `HdsTabs` 搬进我们自己的子树（`MiniBarMaterialCapsule`），再把整条画在壳层 `Stack` 里。
+  // 第八轮甲方已明确：**一级页与二级页是两套结构、不能统一** —— 上游 `MainPage`
+  // （`wujie.pa:157082-157228`）首页那条**不是** `MaterialCapsule`，它直接住在壳层
+  // `HdsTabs` 的 `miniBar` 槽里 ⇒ 本文件回到上游结构：
+  //   · 一级页：`barFloatingStyle.miniBar.miniBarBuilder = () => this.miniBar()`
+  //     （内容 = `MiniPlayer`，尺寸交给槽；HDS 按内容量给槽高，背板/光感由 HDS 画）；
+  //   · 二级页：{@link floatingMiniBar} → {@link MiniBarMaterialCapsule}（自己一个 HdsTabs 浮动胶囊）。
+  // 挤压（弹一下）的落点也因此从"胶囊那一层"回到"槽内容（`MiniPlayer` 根）"，见 {@link miniBar}。
 
-  // 鈽呪槄鈽?2026-10-21锛堢鍏疆锛夛細杩欎竴鏁存"鑷畻鑳跺泭鍑犱綍"鐨勫嚱鏁?*鍏ㄩ儴鍒犻櫎** 鈥斺€?
+  // ★★★ 2026-10-21（第八轮）：这一整段"自算胶囊几何"的函数**全部删除** ——
   //   `homeMiniBarSingleRow()` / `homeMiniCapsuleWidthVp()` / `homeMiniCapsuleRightMarginVp()` /
   //   `homeMiniBarSlotHeightVp()` / `homeMiniCapsuleBottomVp()` / `homeMiniBarCoverSideVp()` /
-  //   `secondaryMiniBarCoverSideVp()`銆?
+  //   `secondaryMiniBarCoverSideVp()`。
   //
-  // 涓轰粈涔堬細瀹冧滑鏄?鎶婃挱鏀惧櫒鎼嚭 `miniBar` 妲?鐨勯厤濂楋紙鑷繁绠楀/绂诲簳/鍗曞眰瀹藉害/灏侀潰妗ｄ綅锛夈€?
-  // 绗叓杞挱鏀惧櫒鍥炲埌妲介噷涔嬪悗锛岃繖鍥涚被閲忓悇鏈?*鍞竴鏉冨▉鏉ユ簮**锛屼笉璁稿湪鏈枃浠跺啀绠楃浜岄亶锛?
-  //   路 鎺掑竷锛堜袱鎺?/ 鍗曟帓锛夆啋 HDS锛歚miniBar.barLayoutMode` + `miniBar.miniBarStyle`
-  //     锛坽@link barLayoutModeForHds} / {@link miniBarStyleForHds}锛屼袱涓瓧娈典粛鍦?`miniBar` 閰嶇疆閲岋級锛?
-  //   路 妲介珮 鈫?HDS 鎸夊唴瀹归噺锛堝唴瀹硅閽夊湪 `FLOATING_MINI_BAR_HEIGHT_VP` = 涓婃父 `MINI_H` = 56锛夛紱
-  //   路 鑳跺泭妯悜鍑犱綍锛堝乏鍙冲唴璺?/ 灏侀潰瑙嗚妗ｄ綅锛夆啋 `HomeMiniBarPlayer` + `HomeMiniBarAlbumCover`
-  //     锛坄sidePad = (鑳跺泭楂?鈭?瑙嗚灏侀潰)/2`锛屽皝闈?= 32 鐩?脳 `scale(capsuleH脳0.8/32)`锛夛紱
-  //   路 浜岀骇椤佃兌鍥婂 鈫?{@link floatingMiniBarWidthVp} + {@link miniBarBoxRightMarginVp}锛堜粛鍦ㄧ敤锛夈€?
+  // 为什么：它们是"把播放器搬出 `miniBar` 槽"的配套（自己算宽/离底/单层宽度/封面档位）。
+  // 第八轮播放器回到槽里之后，这四类量各有**唯一权威来源**，不许在本文件再算第二遍：
+  //   · 排布（两排 / 单排）→ HDS：`miniBar.barLayoutMode` + `miniBar.miniBarStyle`
+  //     （{@link barLayoutModeForHds} / {@link miniBarStyleForHds}，两个字段仍在 `miniBar` 配置里）；
+  //   · 槽高 → HDS 按内容量（内容被钉在 `FLOATING_MINI_BAR_HEIGHT_VP` = 上游 `MINI_H` = 56）；
+  //   · 胶囊横向几何（左右内距 / 封面视觉档位）→ `HomeMiniBarPlayer` + `HomeMiniBarAlbumCover`
+  //     （`sidePad = (胶囊高 − 视觉封面)/2`，封面 = 32 盒 × `scale(capsuleH×0.8/32)`）；
+  //   · 二级页胶囊宽 → {@link floatingMiniBarWidthVp} + {@link miniBarBoxRightMarginVp}（仍在用）。
 
   /**
-   * 閳藉應妲?瑜般垹褰?*濞搭喖鐪?*閿涙氨鐢绘鐐茬殱闂堛垻娈?*婢瑰啿鐪伴崗瀣畷**閿涘牆顕弽鍥ㄦ￥閻?`MainPage.MorphOverlayHost.morphCover`閿涘鈧?
+   * 鈽呪槄 褰㈠彉**娴眰**锛氱画椋炲皝闈㈢殑**澹冲眰鍏嬮殕**锛堝鏍囨棤鐣?`MainPage.MorphOverlayHost.morphCover`锛夈€?
    *
-   * 鏉╂瑤绔村Λ鎺戝斧閺夈儳鏁鹃崷銊︽尡閺€楣冦€夐崘鍛村劥閿涘潉PlaybackPage.MorphCoverBridge`閿涘鈧倹鎯夐崚鎷岀箹闁插瞼娈戦崢鐔锋礈閺?*閸ф劖鐖ｇ化?*閿?
-   * 閹绢厽鏂佹い鐢稿亝娑撯偓閻楀牐顫﹂悽璇叉躬**鐞?scale+translate 閸欐ɑ宕叉潻鍥モ偓浣界箷鐢?`.clip()` 娑撳骸濮╅幀?`.height(morphClipHeight())`
-   * 閻ㄥ嫬顔愰崳?*闁插矉绱濋懓灞界暊閹峰灝鍩岄惃鍕叐瑜般垺妲?*缁愭褰涢崸鎰垼** 閳?閸欘亝婀?p=1閿涘牊浜界粵澶婂綁閹诡澁绱氶弮鏈靛紬閺嶅吋顒滅涵顔衡偓?
-   * 閸樺棗褰舵稉濠傜暊閸欏秴顦查崙娲６妫版﹫绱?鐏忎線娼伴崜宥呭磹濞堢數婀呮稉宥堫潌""閸ф劖鐖ｉ崣锝呯窞閹恒劑鏁?"鐞氼偄鍩嗛惃鍕帗缁辩姵灏呮担?閿涘鍏橀崙鍝勬躬鏉╂瑤閲滈崜宥嗗絹娑撳鈧?
-   * 濞搭喖鐪版潻娆庣娴?*娑撳秴婀柇锝勯嚋鐎圭懓娅掗柌?*閿涙艾鐣犻惄瀛樺复闊搫婀竟鍐茬湴鏉╂瑤閲滃鈥崇潌 Stack 娑撳绱漙morphOverlayCoverBridge()`
-   * 缂佹瑧娈戠粣妤€褰涢崸鎰垼鐏忚鲸妲哥€瑰啰娈戠紒妯哄煑閸ф劖鐖ｉ敍?*娑撳秴浠涙禒璁崇秿"妞ら潧鍞?閳?缁愭褰?閹广垻鐣?*閵?
+   * 杩欎竴妫掑師鏉ョ敾鍦ㄦ挱鏀鹃〉鍐呴儴锛坄PlaybackPage.MorphCoverBridge`锛夈€傛惉鍒拌繖閲岀殑鍘熷洜鏄?*鍧愭爣绯?*锛?
+   * 鎾斁椤甸偅涓€鐗堣鐢诲湪**琚?scale+translate 鍙樻崲杩囥€佽繕甯?`.clip()` 涓庡姩鎬?`.height(morphClipHeight())`
+   * 鐨勫鍣?*閲岋紝鑰屽畠鎷垮埌鐨勭煩褰㈡槸**绐楀彛鍧愭爣** 鈬?鍙湁 p=1锛堟亽绛夊彉鎹級鏃朵弗鏍兼纭€?
+   * 鍘嗗彶涓婂畠鍙嶅鍑洪棶棰橈紙"灏侀潰鍓嶅崐娈电湅涓嶈""鍧愭爣鍙ｅ緞鎺ㄩ敊""琚埆鐨勫厓绱犳尅浣?锛夐兘鍑哄湪杩欎釜鍓嶆彁涓娿€?
+   * 娴眰杩欎竴浠?*涓嶅湪閭ｄ釜瀹瑰櫒閲?*锛氬畠鐩存帴韬哄湪澹冲眰杩欎釜婊″睆 Stack 涓婏紝`morphOverlayCoverBridge()`
+   * 缁欑殑绐楀彛鍧愭爣灏辨槸瀹冪殑缁樺埗鍧愭爣锛?*涓嶅仛浠讳綍"椤靛唴 鈫?绐楀彛"鎹㈢畻**銆?
    *
-   * 娑撱倕鐪伴崥鍕殰閻ㄥ嫭妞傞梹?閺囪尙鍤庨敍鍫ｇ箹閺?娑撱倕鐪?閻ㄥ嫬鍙ч柨顕嗙礆閿?
-   *   璺?閹绢厽鏂佹い鐢稿亝娑撯偓鐏炲偊绱癭morphP`閿?50ms `Curve.EaseInOut`閿?*濞屸€冲З**閿涘绱?
-   *   璺?鏉╂瑤绔寸仦鍌︾窗`morphOverlayP`閿?60ms `cubic-bezier(0.23, 1.0, 0.32, 1.0)`閿涘牆鎻╅崙鐑樺弮閺€璁圭礆閵?
+   * 涓ゅ眰鍚勮嚜鐨勬椂闀?鏇茬嚎锛堣繖鏄?涓ゅ眰"鐨勫叧閿級锛?
+   *   路 鎾斁椤甸偅涓€灞傦細`morphP`锛?50ms `Curve.EaseInOut`锛?*娌″姩**锛夛紱
+   *   路 杩欎竴灞傦細`morphOverlayP`锛?60ms `cubic-bezier(0.23, 1.0, 0.32, 1.0)`锛堝揩鍑烘參鏀讹級銆?
    *
-   * 閳跨媴绗?閺勯箖娈ｉ梻銊ф暏 `morphOverlayBridging()`閿? `morphBridging()` 閳?鐎瑰じ瀵岀涵顔肩杽閹恒儳顓告禍鍡氱箹娑撯偓濡帪绱氶敍?
-   *    **娑撳秵妲?*閺備即鈧姳绔撮幎濠囨，閿涙稐绗佹稉顏勫閺堫剨绱欑亸渚€娼?/ 濮濆苯鎮曞灞惧 / 閹垮秳缍旈崠鐚寸礆閼虫垝绗夐懗钘夋倱閺冭埖鍨氱粩瀣剁礉
-   *    娴犮儱寮?鏉╄渹缍橀弶鈩冩拱娴ｆ捁顫﹂崡鐘辩秴妞よ埖甯€閵嗕焦鎸遍弨楣冦€夐惇鐔风殱闂堫澀绗夐悽?鏉╂瑤绗侀弶鈥茬瑝閸欐﹢鍣虹憴浣锋崲閸斺剝濮ら崨濞库偓?
-   * 閳跨媴绗?閺佹潙鐪版稉宥呮倖娴滃娆㈤敍鍫滅瑓闂堛垹姘ㄩ弰顖涙尡閺€楣冦€夐敍宀€鍋ｉ崙?閹靛濞嶈箛鍛淬€忛悡褍鐖堕拃钘夊煂閹绢厽鏂佹い鍏哥瑐閿涘鈧?
+   * 鈿狅笍 鏄鹃殣闂ㄧ敤 `morphOverlayBridging()`锛? `morphBridging()` 鈭?瀹夸富纭疄鎺ョ浜嗚繖涓€妫掞級锛?
+   *    **涓嶆槸**鏂伴€犱竴鎶婇棬锛涗笁涓壇鏈紙灏侀潰 / 姝屽悕姝屾墜 / 鎿嶄綔鍖猴級鑳戒笉鑳藉悓鏃舵垚绔嬶紝
+   *    浠ュ強"杩蜂綘鏉℃湰浣撹鍗犱綅椤舵帀銆佹挱鏀鹃〉鐪熷皝闈笉鐢?杩欎笁鏉′笉鍙橀噺瑙佷换鍔℃姤鍛娿€?
+   * 鈿狅笍 鏁村眰涓嶅悆浜嬩欢锛堜笅闈㈠氨鏄挱鏀鹃〉锛岀偣鍑?鎵嬪娍蹇呴』鐓у父钀藉埌鎾斁椤典笂锛夈€?
    */
   @Builder
   private MorphCoverClone() {
     Stack() {
       Image(this.miniBarViewModel.songCoverUrl().length > 0 ?
         this.miniBarViewModel.songCoverUrl() : this.miniBarViewModel.songCover())
-        // 閳跨媴绗?閻晛鑸伴惄瀛樺复閺夈儴鍤滈崗鍙橀煩閻樿埖鈧緤绱檝p閿?*缁愭褰涢崸鎰垼**閿涘绱扮€瑰鈧線鐝?*閸掑棗绱戦崣?* 閳ユ柡鈧?
-        //    閹绢厽鏂佹い闈涚殱闂堛垹顦婚張?`layoutWeight(1)` + `constraintSize`閿涘矂鍣洪崚鎵畱閻晛鑸版稉宥勭箽鐠囦焦妲稿锝嗘煙瑜邦澁绱?
-        //    閹稿顒滈弬鐟拌埌閻㈣绱伴崷銊ㄦ儰娴ｅ秳姘﹀Λ鎺楀亝娑撯偓閸掓槒鐑︽稉鈧稉瀣剁礄閻劍鍩涚€圭偞绁存潻鍥╂畱"缂佹挻娼弮璺虹殱闂堛垹銇囩亸蹇氱儲娑撯偓娑?閿涘鈧?
+        // 鈿狅笍 鐭╁舰鐩存帴鏉ヨ嚜鍏变韩鐘舵€侊紙vp锛?*绐楀彛鍧愭爣**锛夛細瀹姐€侀珮**鍒嗗紑鍙?* 鈥斺€?
+        //    鎾斁椤靛皝闈㈠鏈?`layoutWeight(1)` + `constraintSize`锛岄噺鍒扮殑鐭╁舰涓嶄繚璇佹槸姝ｆ柟褰紝
+        //    鎸夋鏂瑰舰鐢讳細鍦ㄨ惤浣嶄氦妫掗偅涓€鍒昏烦涓€涓嬶紙鐢ㄦ埛瀹炴祴杩囩殑"缁撴潫鏃跺皝闈㈠ぇ灏忚烦涓€涓?锛夈€?
         .width(this.expandState.morphOverlayCoverBridge().size)
         .height(this.expandState.morphOverlayCoverBridge().height)
         .objectFit(ImageFit.Cover)
@@ -1657,46 +1657,46 @@ struct Index {
           x: this.expandState.morphOverlayCoverBridge().x,
           y: this.expandState.morphOverlayCoverBridge().y
         })
-        // 鈽呪槄鈽?2026-10-20锛堢収鎼棤鐣岋級锛歚morphCover` 鐨?`.scale.y = coverScaleAt(t) 脳 morphSquashY`
-        //   锛坄椋炲叆娴眰瀹夸富涓庡嚑浣曟彃鍊煎畾绋?md` 搂涓夛紱瀛楄妭鐮?`wujie.pa:155724-155745` 鍚屼竴澶勫啓娉曪級銆?
-        //   鎴戜滑杩欎竴灞傜殑灏哄鏄?*鐩存帴缁欏楂?*锛堜笉鏄畾杈圭洅 + coverScale锛夛紝鎵€浠ュ彧鍓?squash 杩欎竴椤广€?
+        // ★★★ 2026-10-20（照搬无界）：`morphCover` 的 `.scale.y = coverScaleAt(t) × morphSquashY`
+        //   （`飞入浮层宿主与几何插值定稿.md` §三；字节码 `wujie.pa:155724-155745` 同一处写法）。
+        //   我们这一层的尺寸是**直接给宽高**（不是定边盒 + coverScale），所以只剩 squash 这一项。
         .scale({ x: 1, y: this.expandState.morphSquashY })
     }
-    // 閳藉應妲勯埥?2026-10-16閿?*閻撗勬￥閻ｅ本濡告潻娆庣鐏炲倹妯夊蹇涙懙濠娾€冲弿缁愭褰?*閿涘绱?
-    //   閸樼喐娼垫潻娆撳櫡閺?`LayoutPolicy.matchParent` 鑴? 閳ユ柡鈧?闁絾妲搁幏?*閻栬泛顔愰崳顭掔礄婢瑰啿鐪伴弽?`Stack`閿涘娈戠亸鍝勵嚟**閿?
-    //   閼?*閺?`Stack` 閼奉亜绻侀獮鑸电梾閺?`ignoreLayoutSafeArea`**閿涘牐顫嗙€瑰啰娈戠仦鐐粹偓褑銆冮敍姘涧閺?`.width/.height('100%')`
-    //   + `.id(MORPH_HOST_ID)` + 閹靛濞?+ `onAreaChange`閿涘鍣?鏉╂瑤绔寸仦鍌滄畱閻╂帒鐡欓崣顏嗙搼娴?**鐎瑰鍙忛崠杞扮閸?*"闁絽娼￠敍?
-    //   濮ｆ梻鐛ラ崣锝呯毈閿涘牅绗傛稉瀣倗鐏忔垳绔存稉顏勭暔閸忋劌灏敍澶堚偓?
+    // 鈽呪槄鈽?2026-10-16锛?*鐓ф棤鐣屾妸杩欎竴灞傛樉寮忛摵婊″叏绐楀彛**锛夛細
+    //   鍘熸潵杩欓噷鏄?`LayoutPolicy.matchParent` 脳2 鈥斺€?閭ｆ槸鎷?*鐖跺鍣紙澹冲眰鏍?`Stack`锛夌殑灏哄**锛?
+    //   鑰?*鏍?`Stack` 鑷繁骞舵病鏈?`ignoreLayoutSafeArea`**锛堣瀹冪殑灞炴€ц〃锛氬彧鏈?`.width/.height('100%')`
+    //   + `.id(MORPH_HOST_ID)` + 鎵嬪娍 + `onAreaChange`锛夆噿 杩欎竴灞傜殑鐩掑瓙鍙瓑浜?**瀹夊叏鍖轰箣鍐?*"閭ｅ潡锛?
+    //   姣旂獥鍙ｅ皬锛堜笂涓嬪悇灏戜竴涓畨鍏ㄥ尯锛夈€?
     //
-    //   閳跨媴绗?閼?`.position({x, y})` 閻劎娈戦弰?*閸忋劎鐛ラ崣锝呮綏閺?*閿涘潉morphCoverRectAt()` 閻ㄥ嫯绶崙鎭掆偓?
-    //      娑撳氦绯犳担鐘虫蒋/閹绢厽鏂佹い闈涚殱闂堛垻娈戦柌蹇旂ゴ閸氬苯褰涘鍕剁礆閳?瑜版挸鐨濋棃銏犳躬**鐏炲繋绗傞柈?*閿涘牆鐨濋棃銏ゃ€夐柇锝勭缁?`y 閳?136`閿?
-    //      閹?*鐏炲繋绗呴柈?*閿涘牐绯犳担鐘虫蒋闁絼绔寸粩?`y 閳?850`閿涘妞傞敍宀勫厴娴兼俺鎯ら崷銊ㄧ箹鐏炲倻娲呯€?*娑斿顦?*
-    //      閳?鐞氼偉顥嗛幒?/ 娑撳秶绮崚?閳?**鐟欏倹鍔呯亸杈ㄦЦ"濞屸剝婀佺亸渚€娼伴崝銊ф暰"**閵?
+    //   鈿狅笍 鑰?`.position({x, y})` 鐢ㄧ殑鏄?*鍏ㄧ獥鍙ｅ潗鏍?*锛坄morphCoverRectAt()` 鐨勮緭鍑恒€?
+    //      涓庤糠浣犳潯/鎾斁椤靛皝闈㈢殑閲忔祴鍚屽彛寰勶級鈬?褰撳皝闈㈠湪**灞忎笂閮?*锛堝皝闈㈤〉閭ｄ竴绔?`y 鈮?136`锛?
+    //      鎴?*灞忎笅閮?*锛堣糠浣犳潯閭ｄ竴绔?`y 鈮?850`锛夋椂锛岄兘浼氳惤鍦ㄨ繖灞傜洅瀛?*涔嬪**
+    //      鈬?琚鎺?/ 涓嶇粯鍒?鈬?**瑙傛劅灏辨槸"娌℃湁灏侀潰鍔ㄧ敾"**銆?
     //
-    //   閳?閻?*鐎圭偞绁寸粣妤€褰涚亸鍝勵嚟**閺勬儳绱＄紒娆欑礄娑?`PlaybackPageRouteShell.boxWidth/boxHeight()` 閸氬本顑欓崑姘《閿?
-    //     闁絾妲搁張顑跨波瀹歌尙绮℃宀冪槈鏉╁洨娈?闁剧儤寮х粣妤€褰?閸愭瑦纭堕敍澶涚礉楠炴湹绻氶悾?`ignoreLayoutSafeArea` 閸欏奔绻氶梽鈹库偓?
-    //     閳跨媴绗?闁插繋绗夐崚鎵崶閸欙絾妞傞柅鈧崶?`'100%'`閿涘牅绗岄弨鐟板З閸撳秹鈧劕鐡ф稉鈧懛杈剧礉娑撳秳绱伴弴鏉戞▕閿涘鈧?
+    //   鈬?鐢?*瀹炴祴绐楀彛灏哄**鏄惧紡缁欙紙涓?`PlaybackPageRouteShell.boxWidth/boxHeight()` 鍚屾鍋氭硶锛?
+    //     閭ｆ槸鏈粨宸茬粡楠岃瘉杩囩殑"閾烘弧绐楀彛"鍐欐硶锛夛紝骞朵繚鐣?`ignoreLayoutSafeArea` 鍙屼繚闄┿€?
+    //     鈿狅笍 閲忎笉鍒扮獥鍙ｆ椂閫€鍥?`'100%'`锛堜笌鏀瑰姩鍓嶉€愬瓧涓€鑷达紝涓嶄細鏇村樊锛夈€?
     .width(this.expandState.windowWidthVp > 0 ? this.expandState.windowWidthVp : StyleConstants.FULL_WIDTH)
     .height(this.expandState.windowHeightVp > 0 ? this.expandState.windowHeightVp : StyleConstants.FULL_HEIGHT)
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     .opacity(this.expandState.morphOverlayBridgeOpacity())
-    // 閺佹潙鐪版稉宥呮倖娴滃娆㈤敍姘瑓闂堛垹姘ㄩ弰顖涙尡閺€楣冦€夐敍宀€甯虹€瑰墎娈戦悙鐟板毊韫囧懘銆忛悡褍鐖堕拃钘夊煂閹绢厽鏂佹い鍏哥瑐
+    // 鏁村眰涓嶅悆浜嬩欢锛氫笅闈㈠氨鏄挱鏀鹃〉锛岀帺瀹剁殑鐐瑰嚮蹇呴』鐓у父钀藉埌鎾斁椤典笂
     .hitTestBehavior(HitTestMode.None)
     .zIndex(PLAYER_CLONE_Z_INDEX)
   }
 
   /**
-   * 閸忓鍔呴弽鍥暯閺嶅繑娼楃拹顭掔礄HDS 鐎规ɑ鏌?`systemMaterialEffect`閿涘绱濈捄鐔兼閻滎垰顣ㄩ崗澶嬨€傛担宥冣偓?
+   * 鍏夋劅鏍囬鏍忔潗璐紙HDS 瀹樻柟 `systemMaterialEffect`锛夛紝璺熼殢鐜鍏夋。浣嶃€?
    *
    *
-   * 閳跨媴绗?鏉╂瑤閲滈崙鑺ユ殶**閸欘亣鍏?*閸犲倻绮?HDS 閻?`titleBar.style.systemMaterialEffect` 閹?
-   *    `HdsTabs` 閻?`barFloatingStyle.systemMaterialEffect`閵嗗倸鐣奸弬骞库偓濠冪焽濞寸鍘滈幇鐔峰閼版ぞ绱崠鏍モ偓瀣斧閺傚浄绱?
-   *      閵嗗苯鍙炬禒鏍矋娴犳湹绮庨崷?Navigation/NavDestination 閺嶅洭顣介弽蹇斿灗濡亜鎮?Tabs 娑?barPosition 娑?
-   *        BarPosition.End 閻ㄥ嫬绨抽柈?TabBar 娑擃厾鏁撻弫鍫涒偓鍌氭躬閸忔湹绮崠鍝勭厵娑擃叀顔曠純顔界焽濞寸鍘滈幇鐔告櫏閺嬫粈绗夐悽鐔告櫏閵嗗倶鈧?
-   *    閳?閻╁瓨甯撮幎濠傜暊閹稿倸鍩岄弲顕€鈧艾顔愰崳顭掔礄濮ｆ柨顩ф稉瀣桨闁絾娼?`floatingMiniBar` 閻?Column閿涘绗?*閺勵垯绗夐悽鐔告櫏閻?*閿?
-   *    娑撳秷顩﹂柇锝嗙壉閸愭瑣鈧倻鏆€閻偓鐎瑰喛绱濋弰顖欒礋娴滃棗婀?閹跺﹣绨╃痪褎鎸遍弨鐐蒋閹碱剝绻?HdsTabs 閻?miniBar"闁絾娼捄?
-   *    閿涘牐顫?{@link floatingMiniBar} 閻ㄥ嫯顕╅弰搴礆闁插矁鍏橀惄瀛樺复婢跺秶鏁ら崥灞肩婵傛銆傛担宥冣偓?
-   * @returns HDS 閺夋劘宸濋崣鍌涙殶閿涘潉@since 6.1.0(23)`閿涘畳efault/pc 閻?compatible 閸?閳?23閿涘鈧?
+   * 鈿狅笍 杩欎釜鍑芥暟**鍙兘**鍠傜粰 HDS 鐨?`titleBar.style.systemMaterialEffect` 鎴?
+   *    `HdsTabs` 鐨?`barFloatingStyle.systemMaterialEffect`銆傚畼鏂广€婃矇娴稿厜鎰熷姛鑰椾紭鍖栥€嬪師鏂囷細
+   *      銆屽叾浠栫粍浠朵粎鍦?Navigation/NavDestination 鏍囬鏍忔垨妯悜 Tabs 涓?barPosition 涓?
+   *        BarPosition.End 鐨勫簳閮?TabBar 涓敓鏁堛€傚湪鍏朵粬鍖哄煙涓缃矇娴稿厜鎰熸晥鏋滀笉鐢熸晥銆傘€?
+   *    鈬?鐩存帴鎶婂畠鎸傚埌鏅€氬鍣紙姣斿涓嬮潰閭ｆ潯 `floatingMiniBar` 鐨?Column锛変笂**鏄笉鐢熸晥鐨?*锛?
+   *    涓嶈閭ｆ牱鍐欍€傜暀鐫€瀹冿紝鏄负浜嗗湪"鎶婁簩绾ф挱鏀炬潯鎼繘 HdsTabs 鐨?miniBar"閭ｆ潯璺?
+   *    锛堣 {@link floatingMiniBar} 鐨勮鏄庯級閲岃兘鐩存帴澶嶇敤鍚屼竴濂楁。浣嶃€?
+   * @returns HDS 鏉愯川鍙傛暟锛坄@since 6.1.0(23)`锛宒efault/pc 鐨?compatible 鍧?鈮?23锛夈€?
    */
   private ambientTitleMaterial(): SystemMaterialParams {
     switch (this.ambientLevelIndex()) {
@@ -1738,39 +1738,39 @@ struct Index {
   }
 
   /**
-   * 閸楁洑閲滄い鐢殿劮鐞氼偆鍋ｉ崙?闁鑵戦弮鍓佹畱瀵鐑︾憴锕€褰傜拋鈩冩殶閿涘牊鐦℃稉顏堛€夌粵鍙ョ娑擃亷绱氶妴?
+   * 鍗曚釜椤电琚偣鍑?閫変腑鏃剁殑寮硅烦瑙﹀彂璁℃暟锛堟瘡涓〉绛句竴涓級銆?
    *
-   * `symbolEffect(effect, trigger)` 閺勵垬鈧rigger 閸欐ê瀵茬亸杈ㄦ尡娑撯偓濞喡扳偓宥忕礉閹碘偓娴犮儲鐦℃稉顏堛€夌粵鎯х箑妞?
-   * **閸氬嫮鏁ら崥鍕畱鐠佲剝鏆?* 閳ユ柡鈧?閸忚京鏁ゆ稉鈧稉顏嗘畱鐠囨繀琚辨稉顏勬禈閺嶅洣绱版稉鈧挧宄拌剨閿涘牐顔曠拋陇顫夐懠鍐洣閻ㄥ嫭妲搁妴宀勨偓澶夎厬閹降鈧秹鍋呮稉鈧０妤€鑴婇敍澶堚偓?
+   * `symbolEffect(effect, trigger)` 鏄€宼rigger 鍙樺寲灏辨挱涓€娆°€嶏紝鎵€浠ユ瘡涓〉绛惧繀椤?
+   * **鍚勭敤鍚勭殑璁℃暟** 鈥斺€?鍏辩敤涓€涓殑璇濅袱涓浘鏍囦細涓€璧峰脊锛堣璁¤鑼冭鐨勬槸銆岄€変腑鎬併€嶉偅涓€棰楀脊锛夈€?
    *
-   * 閳跨媴绗?闂€鍨韫囧懘銆忕粵澶夌艾妞ょ數顒烽弫甯礄閻滄澘婀弰?**4**閿涙碍甯归懡?/ 閻滄澘婀亸鍗炴儔 / 閸ョ偛鎼?/ 閹存垹娈戦敍澶涚窗`TabBarItem` 閹稿绗呴弽鍥у絿閵?
+   * 鈿狅笍 闀垮害蹇呴』绛変簬椤电鏁帮紙鐜板湪鏄?**4**锛氭帹鑽?/ 鐜板湪灏卞惉 / 鍥炲搷 / 鎴戠殑锛夛細`TabBarItem` 鎸変笅鏍囧彇銆?
    */
   @Local tabBounceTriggers: number[] = [0, 0, 0, 0];
   /**
-   * 閵嗗苯娲栭崚浼淬€婇柈銊ｂ偓宥嗗瘹娴犮倧绱欏В蹇庨嚋妞ょ數顒锋稉鈧稉顏庣礉闁帒顤冪憴锕€褰傞敍澶堚偓?
+   * 銆屽洖鍒伴《閮ㄣ€嶆寚浠わ紙姣忎釜椤电涓€涓紝閫掑瑙﹀彂锛夈€?
    *
-   * 鐠佹崘顓哥憴鍕瘱閿涙氨鍋ｉ崙?*瑜版挸澧?*妞ょ數顒风憰浣瑰Ω閻ｅ矂娼伴崶鐐寸泊閸掍即銆婇柈?閹稿洤鐣炬担宥囩枂閵嗕繖onTabBarClick` 閸?
-   * 閻愮懓鍑￠柅澶夎厬妞ょ數顒烽弮鏈电瘍娴兼俺袝閸欐埊绱濋幍鈧禒銉ょ瑝闂団偓鐟曚礁婀い鐢殿劮闁插矁鍤滃鍗炲 onClick閿涘牓鍋呮导姘ⅵ閺傤參銆夌粵鎯у瀼閹诡澁绱氶妴?
+   * 璁捐瑙勮寖锛氱偣鍑?*褰撳墠**椤电瑕佹妸鐣岄潰鍥炴粴鍒伴《閮?鎸囧畾浣嶇疆銆俙onTabBarClick` 鍦?
+   * 鐐瑰凡閫変腑椤电鏃朵篃浼氳Е鍙戯紝鎵€浠ヤ笉闇€瑕佸湪椤电閲岃嚜宸卞姞 onClick锛堥偅浼氭墦鏂〉绛惧垏鎹級銆?
    *
-   * 閳跨媴绗?闂€鍨韫囧懘銆忕粵澶夌艾妞ょ數顒烽弫甯礄閻滄澘婀弰?**4**閿涘绱癭HomeTabsPages()` 閹稿绗呴弽鍥у絿閵?
+   * 鈿狅笍 闀垮害蹇呴』绛変簬椤电鏁帮紙鐜板湪鏄?**4**锛夛細`HomeTabsPages()` 鎸変笅鏍囧彇銆?
    */
   @Local tabScrollTopCommands: number[] = [0, 0, 0, 0];
 
-  /** 妞ょ數顒烽柅澶夎厬閹礁鑴婄捄绛圭礄BounceSymbolEffect + EffectDirection.DOWN閿涘矁顫嗘惔鏇㈠劥妞ょ數顒风拋鎹愵吀鐟欏嫯瀵栭敍澶堚偓?*/
+  /** 椤电閫変腑鎬佸脊璺筹紙BounceSymbolEffect + EffectDirection.DOWN锛岃搴曢儴椤电璁捐瑙勮寖锛夈€?*/
   private playTabBounce(index: number): void {
     const next: number[] = [...this.tabBounceTriggers];
     next[index] = (next[index] ?? 0) + 1;
     this.tabBounceTriggers = next;
   }
 
-  /** 鐠佲晝顑?index 娑擃亪銆夌粵鍓ф畱妞ょ敻娼伴崶鐐插煂妞ゅ爼鍎撮敍鍫ｎ嚉妞や絻鍤滃杈╂磧閸氼剝绻栨稉顏囶吀閺佸府绱氶妴?*/
+  /** 璁╃ index 涓〉绛剧殑椤甸潰鍥炲埌椤堕儴锛堣椤佃嚜宸辩洃鍚繖涓鏁帮級銆?*/
   private requestTabScrollTop(index: number): void {
     const next: number[] = [...this.tabScrollTopCommands];
     next[index] = (next[index] ?? 0) + 1;
     this.tabScrollTopCommands = next;
   }
 
-  /** 閻愬綊銆夌粵鎾呯窗閸掑洤鍩岄崚顐ゆ畱妞ょ數顒烽悽?onChange 婢跺嫮鎮婇敍娑氬仯瑜版挸澧犳い鐢殿劮閸掓瑥娲栧姘煂妞ゅ爼鍎撮妴?*/
+  /** 鐐归〉绛撅細鍒囧埌鍒殑椤电鐢?onChange 澶勭悊锛涚偣褰撳墠椤电鍒欏洖婊氬埌椤堕儴銆?*/
   private onTabBarClicked(index: number): void {
     if (index === this.tabState.tabIndex) {
       this.playTabBounce(index);
@@ -1787,7 +1787,7 @@ struct Index {
         .fontWeight(FontWeight.Regular)
         .height(22)
         .fontColor([this.tabState.tabIndex === index ? this.themeState.color : $r('sys.color.icon_primary')])
-        // 闁鑵戦幀浣歌剨鐠虹绱癭trigger` 閸欐ê瀵查崡铏尡娑撯偓濞嗏槄绱欓崣顏呮箒鏉╂瑤閲滄い鐢殿劮閻ㄥ嫯顓搁弫鏉挎躬閸欐﹫绱濋幍鈧禒銉ュ涧閺堝鐣犲鐧哥礆
+        // 閫変腑鎬佸脊璺筹細`trigger` 鍙樺寲鍗虫挱涓€娆★紙鍙湁杩欎釜椤电鐨勮鏁板湪鍙橈紝鎵€浠ュ彧鏈夊畠寮癸級
         .symbolEffect(new BounceSymbolEffect(EffectScope.WHOLE, EffectDirection.DOWN),
           this.tabBounceTriggers[index])
       Text(title)
@@ -1800,20 +1800,20 @@ struct Index {
   }
 
   /**
-   * HDS 閸ョ偠鐨熼敍姘崇碃娴ｇ姵娼弽宄扮础閸欐ê瀵查敍鍫滅瑢 musicfreeOH 閻?`onBarStyleChange` 閸氬本顑?*閸欐甯?*閸愭瑦纭堕敍澶堚偓?
+   * HDS 鍥炶皟锛氳糠浣犳潯鏍峰紡鍙樺寲锛堜笌 musicfreeOH 鐨?`onBarStyleChange` 鍚屾**鍙楁帶**鍐欐硶锛夈€?
    *
-   * USER_CLICK 閻愮懓鍤崡鏇炵湴閸﹀棗鑸伴懗璺烘抄閺冭埖浠径宥呯暚閺佹潙寮婚幒鎺嬧偓?
-   * NORMAL/APP_TRIGGER 娴犲懏濮ら崨濠呯翻閸戠尨绱濇稉宥堝厴閸欏秴鎮滅弧鈩冩暭閸烆垯绔寸敮鍐ㄧ湰閻樿埖鈧降鈧?
-   * miniBarStyle閸欐甯堕敍娑欏付閸掕泛娅掓稉搴＄鐏炩偓閸氬本顒為崚鍥ㄥ床閵?
+   * USER_CLICK 鐐瑰嚮鍗曞眰鍦嗗舰鑳跺泭鏃舵仮澶嶅畬鏁村弻鎺掋€?
+   * NORMAL/APP_TRIGGER 浠呮姤鍛婅緭鍑猴紝涓嶈兘鍙嶅悜绡℃敼鍞竴甯冨眬鐘舵€併€?
+   * miniBarStyle鍙楁帶锛涙帶鍒跺櫒涓庡竷灞€鍚屾鍒囨崲銆?
    */
   /**
-   * 鐓ф惉涓婃父 `onMiniBarStyleChanged`锛坄wujie.pa:149113-149336`锛夛細**鍙暅鍍?HDS 鎶ユ潵鐨勬牱寮?*锛?
-   * 涓嶅弽鍚戞敼甯冨眬銆佷笉琛?`animateTo`锛堜笂娓告暣涓?`MainPage` 妯″潡閲?`animateTo` 闆跺懡涓紱
-   * 鍒囨崲鍔ㄧ敾鐢?HDS 鍐呴儴榛樿鍔ㄦ晥缁欙紝SDK `@hms.hds.hdsBaseComponent.d.ets:5729` 鍘熸枃
-   * "The style switch will be accompanied by a default animation."锛夈€?
-   * 鍙︼細涓婃父瀵?`USER_CLICK + COLLAPSE`锛堢偣杩蜂綘鏉℃敹璧凤級**鐩存帴蹇界暐**锛坄:149215` 涓€甯︼級銆?
-   * @param miniBarStyle HDS 鎶ュ洖鏉ョ殑鏍峰紡
-   * @param mode 鍙樻洿鏉ユ簮
+   * 照搬上游 `onMiniBarStyleChanged`（`wujie.pa:149113-149336`）：**只镜像 HDS 报来的样式**，
+   * 不反向改布局、不补 `animateTo`（上游整个 `MainPage` 模块里 `animateTo` 零命中；
+   * 切换动画由 HDS 内部默认动效给，SDK `@hms.hds.hdsBaseComponent.d.ets:5729` 原文
+   * "The style switch will be accompanied by a default animation."）。
+   * 另：上游对 `USER_CLICK + COLLAPSE`（点迷你条收起）**直接忽略**（`:149215` 一带）。
+   * @param miniBarStyle HDS 报回来的样式
+   * @param mode 变更来源
    */
   private onMiniBarStyleChangeFull(miniBarStyle: HdsBarStyle, mode: HdsTabsBarChangeMode): void {
     if (this.navDepth > 0 || this.restoringHomeBar) {
@@ -1829,19 +1829,19 @@ struct Index {
   }
 
   /**
-   * 鈽呪槄鈽?2026-10-18锛堢敤鎴风鍗佷竷杞細銆屽畠鍒囨崲鐨勬椂鍊欏張鏄洿鎺ュ彉澶э紝娌℃湁杩囨浮锛岀湅鐫€涓嶅お娴佺晠銆嶏級锛?
+   * ★★★ 2026-10-18（用户第十七轮：「它切换的时候又是直接变大，没有过渡，看着不太流畅」）：
    *
-   * 涓婁竴鐗堟妸琛ラ棿浜ょ粰鍚勮妭鐐硅嚜宸辩殑 `.animation(BAR_ANIM)`锛屼絾**浠嶆湁灞炴€т笉琛ラ棿**锛?
-   *   - `constraintSize` 涓嶅湪鍙姩鐢诲睘鎬ц〃閲岋紙宸插湪 `HomeMiniBarPlayer` 渚у垹鎺夎鐩掗偅鏉★級锛?
-   *   - 鏉愯川鐩樼敱鍐呭眰 HDS `HdsTabs` 鐢伙紝`barHeight` 鎹㈡。鏃?HDS 鍐呴儴杩樹細鎸夎嚜宸辩殑榛樿鍔ㄦ晥璧颁竴閬嶏紝
-   *     鍜屽灞傞€愯妭鐐瑰姩鐢?*鍚勭畻鍚勭殑**銆?
+   * 上一版把补间交给各节点自己的 `.animation(BAR_ANIM)`，但**仍有属性不补间**：
+   *   - `constraintSize` 不在可动画属性表里（已在 `HomeMiniBarPlayer` 侧删掉行盒那条）；
+   *   - 材质盘由内层 HDS `HdsTabs` 画，`barHeight` 换档时 HDS 内部还会按自己的默认动效走一遍，
+   *     和外层逐节点动画**各算各的**。
    *
-   * 鈬?鏀逛负鍦?*鍞竴鐨勭姸鎬佸啓鍏ョ偣**鐢ㄤ竴娆?`animateTo` 鏀跺彛锛堝悓涓€涓?`BAR_ANIM = 350ms Friction`锛?
-   *   `wujie.pa:70120-70126`锛夛細杩欎竴甯ч噷鎵€鏈変緷璧?`miniBarExpanded` 鐨?*鍙姩鐢?*灞炴€?
-   *   锛堟Ы楂?/ 鑳跺泭楂?/ 琛屽唴璺?/ 灏侀潰瑙嗚杈?/ 灏侀潰缂╂斁锛夊悆**鍚屼竴鏉?*鏃堕棿绾匡紝涓嶅啀鏈夌‖璺炽€?
-   *   锛堜笂娓告暣妯″潡 `animateTo` 闆跺懡涓槸鍥犱负瀹冮潬 HDS 鑷繁鐨勯粯璁ゅ姩鏁堬紝鑰屾垜浠殑鑳跺泭鐩掓槸鎴戜滑鑷繁鐨勶紝
-   *     HDS 鐨勯粯璁ゅ姩鏁堢涓嶅埌 鈬?蹇呴』鑷繁琛ヨ繖涓€灞傘€傦級
-   * @param expand true = 鍗曡锛堝睍寮€妗ｏ級锛宖alse = 涓ゆ帓锛堟敹璧锋。锛?
+   * ⇒ 改为在**唯一的状态写入点**用一次 `animateTo` 收口（同一个 `BAR_ANIM = 350ms Friction`，
+   *   `wujie.pa:70120-70126`）：这一帧里所有依赖 `miniBarExpanded` 的**可动画**属性
+   *   （槽高 / 胶囊高 / 行内距 / 封面视觉边 / 封面缩放）吃**同一条**时间线，不再有硬跳。
+   *   （上游整模块 `animateTo` 零命中是因为它靠 HDS 自己的默认动效，而我们的胶囊盒是我们自己的，
+   *     HDS 的默认动效管不到 ⇒ 必须自己补这一层。）
+   * @param expand true = 单行（展开档），false = 两排（收起档）
    */
   private setHomeBarExpandedAnimated(expand: boolean): void {
     if (this.appState.miniBarExpanded === expand) {
@@ -1863,13 +1863,13 @@ struct Index {
   }
 
   /**
-   * 鐓ф惉涓婃父 `applyBarAction`锛坄wujie.pa:145755-145790`锛夌殑钀藉湴鍗婃锛氬彧鎶?*灞曞紑鎰忓浘**浜ょ粰
-   * `HdsTabsController.applyMiniBarStyle()`銆備笂娓告暣妯″潡 `animateTo` 闆跺懡涓紝鍔ㄧ敾鐢?HDS
-   * 榛樿鍔ㄦ晥缁欙紙SDK `@hms.hds.hdsBaseComponent.d.ets:5729`锛夆噿 杩欓噷涓嶈捣浠讳綍琛ラ棿銆?
-   * @param expand true = 杩蜂綘鏉″睍寮€锛圗XPAND 妗ｏ級锛宖alse = 鏀惰捣锛圕OLLAPSE 妗ｏ級
+   * 照搬上游 `applyBarAction`（`wujie.pa:145755-145790`）的落地半段：只把**展开意图**交给
+   * `HdsTabsController.applyMiniBarStyle()`。上游整模块 `animateTo` 零命中，动画由 HDS
+   * 默认动效给（SDK `@hms.hds.hdsBaseComponent.d.ets:5729`）⇒ 这里不起任何补间。
+   * @param expand true = 迷你条展开（EXPAND 档），false = 收起（COLLAPSE 档）
    */
   private applyHomeBarExpanded(expand: boolean): void {
-    // 鈽?鍐欏叆璧板甫 `animateTo` 鐨勬敹鍙ｏ紙鍚﹀垯婊氬姩/鐐瑰嚮瑙﹀彂鐨勬崲妗ｆ槸纭烦锛夈€?
+    // ★ 写入走带 `animateTo` 的收口（否则滚动/点击触发的换档是硬跳）。
     this.setHomeBarExpandedAnimated(expand);
     try {
       this.tabsController.applyMiniBarStyle(expand ? HdsBarStyle.EXPAND : HdsBarStyle.COLLAPSE);
@@ -1879,21 +1879,21 @@ struct Index {
   }
 
   /**
-   * 娴肩姷绮?HDS 閻ㄥ嫭甯撶敮鍐┠佸蹇嬧偓?
+   * 浼犵粰 HDS 鐨勬帓甯冩ā寮忋€?
    *
-   * `barLayoutMode` / `HdsBarLayoutMode` 閺?**@since 6.1.1(24)** 閳ユ柡鈧?閹碘偓娴犮儱浼愮粙瀣箑妞ょ粯濡?
-   * `targetSdkVersion` 閹绘劕鍩?24 娴犮儰绗傞敍鍫熸拱妞ゅ湱娲板鍙夋暭娑?6.1.1(24)閿涘畭compatibleSdkVersion`
-   * 娣囨繃瀵?6.1.0(23) 娑撳秴濂栭崫宥堫啎婢跺洩顩惄鏍电礆閵嗗倸婀?target 23 閻ㄥ嫬浼愮粙瀣櫡鏉╂瑤閲滅€涙顔屾稉宥呯摠閸︻煉绱?
-   * 娴肩姾绻橀崢璁崇瘍娑撳秶鏁撻弫鍫礉鎼存洘鐖亸鍗炲涧閼宠姤妲搁崡鏇熷笓 閳ユ柡鈧?鏉╂瑦顒滈弰顖欑閸?娑撱倖甯撴穱顔荤瑝閸戠儤娼?閻ㄥ嫭鐗撮崶鐘偓?
+   * `barLayoutMode` / `HdsBarLayoutMode` 鏄?**@since 6.1.1(24)** 鈥斺€?鎵€浠ュ伐绋嬪繀椤绘妸
+   * `targetSdkVersion` 鎻愬埌 24 浠ヤ笂锛堟湰椤圭洰宸叉敼涓?6.1.1(24)锛宍compatibleSdkVersion`
+   * 淇濇寔 6.1.0(23) 涓嶅奖鍝嶈澶囪鐩栵級銆傚湪 target 23 鐨勫伐绋嬮噷杩欎釜瀛楁涓嶅瓨鍦紝
+   * 浼犺繘鍘讳篃涓嶇敓鏁堬紝搴曟爮灏卞彧鑳芥槸鍗曟帓 鈥斺€?杩欐鏄箣鍓?涓ゆ帓淇笉鍑烘潵"鐨勬牴鍥犮€?
    *
-   * 娴ｅ酣鍘ょ拋鎯ь槵閿涘牆褰傜悰宀€澧?< 6.1.1(24)閿涘绗傛导?undefined閿涙艾鐡у▓鍏哥瑝閸欘垳鏁ら敍宀€鏁?HDS 閼奉亣顢戦崘鍐茬暰閵?
-   * @returns HdsBarLayoutMode 閹?undefined閵?
+   * 浣庨厤璁惧锛堝彂琛岀増 < 6.1.1(24)锛変笂浼?undefined锛氬瓧娈典笉鍙敤锛岀敱 HDS 鑷鍐冲畾銆?
+   * @returns HdsBarLayoutMode 鎴?undefined銆?
    */
   /**
-   * 涓婃父 `barLayoutMode` 鍦ㄦ暣浠?abc 閲屽彧鏈?4 澶勫啓锛?*鍏ㄦ槸瀵硅薄瀛楅潰閲忋€佸€兼亽 `VERTICAL`**
-   * 锛坄wujie.pa:143295` / `:144066` / `:144083` / `:520524`锛夆噿 **鎺掑竷妯″紡杩愯鏈熶粠涓嶅垏鎹?*銆?
-   * 鏈粨鍘熸潵闅忔粴鍔ㄥ湪 HORIZONTAL/VERTICAL 涔嬮棿缈?鈥斺€?涓婃父娌℃湁杩欎釜鍔ㄤ綔锛屽凡鐓ф惉銆?
-   * @returns HdsBarLayoutMode锛屾垨涓嶆敮鎸佹椂 undefined
+   * 上游 `barLayoutMode` 在整份 abc 里只有 4 处写，**全是对象字面量、值恒 `VERTICAL`**
+   * （`wujie.pa:143295` / `:144066` / `:144083` / `:520524`）⇒ **排布模式运行期从不切换**。
+   * 本仓原来随滚动在 HORIZONTAL/VERTICAL 之间翻 —— 上游没有这个动作，已照搬。
+   * @returns HdsBarLayoutMode，或不支持时 undefined
    */
   private barLayoutModeForHds(): HdsBarLayoutMode | undefined {
     if (!this.supportsTwoRowLayout()) {
@@ -1902,18 +1902,18 @@ struct Index {
     return HdsBarLayoutMode.VERTICAL;
   }
 
-  /** 鐠佹儳顦崣鎴ｎ攽閻楀牊妲搁崥锔芥暜閹?`barLayoutMode`閿?.1.1(24) 鐠у嚖绱氶妴?*/
+  /** 璁惧鍙戣鐗堟槸鍚︽敮鎸?`barLayoutMode`锛?.1.1(24) 璧凤級銆?*/
   private supportsTwoRowLayout(): boolean {
     return SdkApiUtil.isDistributionOsApiAtLeast(SdkConstants.DISTRIBUTION_OS_6_1_1_CODE);
   }
 
   /**
-   * 娴肩姷绮?HDS 閻ㄥ嫯绯犳担鐘虫蒋閺嶅嘲绱￠妴?
+   * 浼犵粰 HDS 鐨勮糠浣犳潯鏍峰紡銆?
    *
-   * 閳藉懌鈧瞼骞囬崷銊ユ皑閸氼兙鈧秹銆夐幁鎺嶈礋 `COLLAPSE`閿涙岸鍋呮稉鈧い鍨＆濞屸剝婀佹潻铚傜稑閺夆€冲敶鐎圭櫢绱檣@link miniBar} 娑撳秵瑕嗛弻鎿勭礆閿?
-   *   閸欏牐顫?{@link barLayoutModeForHds} 閸樺鍨氶崡鏇熷笓 閳ユ柡鈧?閼?閸楁洘甯?+ `EXPAND`"閺勵垰鍑￠惌銉ф畱闁挎瑨顕ょ紒鍕値
-   *   閿涘牆绨抽弽蹇庣窗閸欐ɑ鍨氶妴宀勬毐閺?Tab + 閸﹀棗鑸伴幘顓熸杹閸ｃ劊鈧稄绱氶妴鍌濐潌 {@link NOW_PLAYING_TAB_INDEX}閵?
-   * @returns 鏉╄渹缍橀弶鈩冪壉瀵繈鈧?
+   * 鈽呫€岀幇鍦ㄥ氨鍚€嶉〉鎭掍负 `COLLAPSE`锛氶偅涓€椤垫棦娌℃湁杩蜂綘鏉″唴瀹癸紙{@link miniBar} 涓嶆覆鏌擄級锛?
+   *   鍙堣 {@link barLayoutModeForHds} 鍘嬫垚鍗曟帓 鈥斺€?鑰?鍗曟帓 + `EXPAND`"鏄凡鐭ョ殑閿欒缁勫悎
+   *   锛堝簳鏍忎細鍙樻垚銆岄暱鏉?Tab + 鍦嗗舰鎾斁鍣ㄣ€嶏級銆傝 {@link NOW_PLAYING_TAB_INDEX}銆?
+   * @returns 杩蜂綘鏉℃牱寮忋€?
    */
   private miniBarStyleForHds(): HdsBarStyle {
     if (this.tabState.tabIndex === NOW_PLAYING_TAB_INDEX) {
@@ -1923,49 +1923,49 @@ struct Index {
   }
 
   /**
-   * `miniBar` 妲介噷姝ゅ埢鏄笉鏄?*鐪熺殑鍦ㄧ敾鎾斁鍣?*锛堜笌 {@link miniBar} 閲岄偅鏉?`if` 閫愬瓧鍚屼箟锛夈€?
+   * `miniBar` 槽里此刻是不是**真的在画播放器**（与 {@link miniBar} 里那条 `if` 逐字同义）。
    *
-   * 涓ゅ娑堣垂瀹冿紙璇箟蹇呴』涓€鑷达紝鍚﹀垯灏辨槸"鑳屾澘鍦ㄣ€佸唴瀹逛笉鍦?鎴栧弽杩囨潵锛夛細
-   *   路 `barFloatingStyle.miniBar.enableMiniBarBackground` 鈥斺€?鍙湁鐪熺敾鎾斁鍣ㄦ椂鎵嶈 HDS 鐢昏儗鏉匡紱
-   *   路 `RzdHomeMiniBarMaterial` 閭ｈ璇婃柇銆?
+   * 两处消费它（语义必须一致，否则就是"背板在、内容不在"或反过来）：
+   *   · `barFloatingStyle.miniBar.enableMiniBarBackground` —— 只有真画播放器时才要 HDS 画背板；
+   *   · `RzdHomeMiniBarMaterial` 那行诊断。
    *
-   * 涓轰粈涔堜笉鑳芥亽涓?true锛歿@link miniBar} 鍦ㄣ€岀幇鍦ㄥ氨鍦ㄥ惉銆嶉偅涓€椤碉紙`NOW_PLAYING_TAB_INDEX`锛?
-   * 涓庝簩绾ч〉鍦ㄦ爤涓婃椂锛坄navDepth > 0`锛夌粰鐨勬槸 **0 楂樺害鍗犱綅 Column**锛堜笉鐢绘挱鏀惧櫒锛夆€斺€?
-   * 閭ｆ椂鑻ヨ HDS 鐢昏儗鏉匡紝椤电鑳跺泭涓婃柟浼氬鍑轰竴鏋?*绌鸿兌鍥?*锛堟湰鏂囦欢椤堕儴閭ｆ绗?鈶?鏉″氨鏄杩欎釜锛夈€?
-   * @returns True = 杩欎竴鏍兼槸鐪熸鐨勮糠浣犳挱鏀炬潯銆?
+   * 为什么不能恒为 true：{@link miniBar} 在「现在就在听」那一页（`NOW_PLAYING_TAB_INDEX`）
+   * 与二级页在栈上时（`navDepth > 0`）给的是 **0 高度占位 Column**（不画播放器）——
+   * 那时若让 HDS 画背板，页签胶囊上方会多出一枚**空胶囊**（本文件顶部那段第 ③ 条就是记这个）。
+   * @returns True = 这一格是真正的迷你播放条。
    */
-  /** 涓婃父 `MiniPlayer` 鐨?`BAR_CONTENT_H = 40`锛堟敹璧锋€佸唴瀹归珮锛宍wujie.pa:67515-67517`锛夈€?*/
+  /** 上游 `MiniPlayer` 的 `BAR_CONTENT_H = 40`（收起态内容高，`wujie.pa:67515-67517`）。 */
   private static readonly BAR_CONTENT_H_VP: number = 40;
 
   /**
-   * 杩蜂綘鏉°€屽崟琛?鈬?涓ゆ帓銆嶆崲妗ｇ殑琛ラ棿鏃堕暱锛坢s锛夈€傜収鎶勪笂娓?
-   * `BAR_ANIM = { duration: 350, curve: Curve.Friction }`锛坄wujie.pa:70120-70126`锛夛紝
-   * 涓?`HomeMiniBarPlayer.BAR_ANIM` / `MiniBarMaterialCapsule.BAR_ANIM` 鍚屼竴涓暟銆?
+   * 迷你条「单行 ⇄ 两排」换档的补间时长（ms）。照抄上游
+   * `BAR_ANIM = { duration: 350, curve: Curve.Friction }`（`wujie.pa:70120-70126`），
+   * 与 `HomeMiniBarPlayer.BAR_ANIM` / `MiniBarMaterialCapsule.BAR_ANIM` 同一个数。
    */
   private static readonly HOME_BAR_SWITCH_MS: number = 350;
 
-  /** 涓€绾ч〉 `miniBar` 杩欎竴鏍?*瀹炴祴瀹藉害**锛坴p锛? = 杩樻病閲忓埌锛涢噺鐨勬槸澶栧眰 100% 瀹界殑 `Column`锛夈€?*/
+  /** 一级页 `miniBar` 这一格**实测宽度**（vp，0 = 还没量到；量的是外层 100% 宽的 `Column`）。 */
   @Local homeMiniBarSlotWVpRaw: number = 0;
 
   /**
-   * @returns 涓€绾ч〉鑳跺泭/鍐呭/灏侀潰鍏辩敤鐨?*鍩哄噯楂樺害**锛坴p锛夈€?
+   * @returns 一级页胶囊/内容/封面共用的**基准高度**（vp）。
    *
-   * 鈿狅笍 涓嶈兘"瀹炴祴"锛氳兌鍥婃槸鎴戜滑鑷繁鐢荤殑锛屽灞傞噺鍒扮殑灏辨槸鑳跺泭鑷繁鐨勯珮搴?鈬?鑷縺鎴愮幆銆?
-   * 璧颁笂娓?杩樻病閲忓埌楂樺害"鐨?*浼扮畻妗?*锛坄wujie.pa:67503-67517`锛夛細
-   * `collapsed 鈬?BAR_CONTENT_H(40)`锛屽惁鍒?`40 脳 1.4 = 56`锛涙湰浠撶殑 `collapsed` 绛変环淇″彿鏄?
-   * `appState.miniBarExpanded`锛堢敱 HDS `onBarStyleChange` 闀滃儚锛夈€?
+   * ⚠️ 不能"实测"：胶囊是我们自己画的，外层量到的就是胶囊自己的高度 ⇒ 自激成环。
+   * 走上游"还没量到高度"的**估算档**（`wujie.pa:67503-67517`）：
+   * `collapsed ⇒ BAR_CONTENT_H(40)`，否则 `40 × 1.4 = 56`；本仓的 `collapsed` 等价信号是
+   * `appState.miniBarExpanded`（由 HDS `onBarStyleChange` 镜像）。
    */
   private homeMiniBarSlotHVp(): number {
-    // 鈽呪槄鈽?2026-10-18锛堢敤鎴凤細銆屽弻琛岀姸鎬佺殑鐭挱鏀炬潯涔熸樉绀哄ぇ灏侀潰浜嗐€嶏級鈬?妗ｄ綅**淇濇寔涓ゆ。**锛堣繖鎵嶆槸瀵圭殑锛夛細
-    //   鏀惰捣锛堝崟灞傚渾鍧烇級= **楂?*鏉?56锛涘弻琛?= **鐭?*鏉?40锛堜笂娓镐及绠楁敮 `wujie.pa:67503-67517`锛夈€?
-    //   鉀?鎭?56 鏄敊鐨勶細鍙岃閭ｆ潯鏈潵灏辨槸鐭潯锛屾亽 56 浼氳瀹冧篃椤朵竴涓ぇ灏侀潰銆?
-    //   灏侀潰灏哄涓嶅湪杩欓噷瑙ｅ喅 鈥斺€?瑙?`HomeMiniBarPlayer.capsuleBaseHVp()` 鏀逛负**閽変綇鍊间紭鍏?*銆?
+    // ★★★ 2026-10-18（用户：「双行状态的矮播放条也显示大封面了」）⇒ 档位**保持两档**（这才是对的）：
+    //   收起（单层圆坞）= **高**条 56；双行 = **矮**条 40（上游估算支 `wujie.pa:67503-67517`）。
+    //   ⛔ 恒 56 是错的：双行那条本来就是矮条，恒 56 会让它也顶一个大封面。
+    //   封面尺寸不在这里解决 —— 见 `HomeMiniBarPlayer.capsuleBaseHVp()` 改为**钉住值优先**。
     return this.appState.miniBarExpanded ? FLOATING_MINI_BAR_HEIGHT_VP : Index.BAR_CONTENT_H_VP;
   }
 
   /**
-   * @returns 涓€绾ч〉鑳跺泭鐨勫彲瑙佸搴︼紙vp锛? `min(瀹炴祴妲藉, floatingMiniBarWidthVp())`銆?
-   * 瀹炴祴妲藉鏄灞?100% `Column` 閲忓埌鐨勶紙= HDS 缁欒繖涓€鏍肩殑瀹斤級锛涘彇灏忓€间繚璇佽兌鍥婁笉浼氭瘮鏍煎瓙瀹姐€?
+   * @returns 一级页胶囊的可见宽度（vp）= `min(实测槽宽, floatingMiniBarWidthVp())`。
+   * 实测槽宽是外层 100% `Column` 量到的（= HDS 给这一格的宽）；取小值保证胶囊不会比格子宽。
    */
   private homeMiniBarBarWidthVp(): number {
     const want: number = this.floatingMiniBarWidthVp();
@@ -1983,79 +1983,79 @@ struct Index {
   }
 
   /**
-   * 閸欏苯鐪版惔鏇熺埉閸楃姵宓侀惃鍕杺婢舵牕绨抽柈銊╃彯鎼达负鈧?
+   * 鍙屽眰搴曟爮鍗犳嵁鐨勯澶栧簳閮ㄩ珮搴︺€?
    *
-   * 閹帊璐?0閿涙碍甯撶敮鍐暠 HDS 閼奉亜绻佹径鍕倞閿涘矂銆夐棃銏犲晙妫版繂顦绘０鍕殌鐏忓彉绱版径姘毉娑撯偓閸ф鈹栭惂濮愨偓?
-   * @returns 妫版繂顦绘惔鏇㈠劥妫板嫮鏆€閿涘澊p閿涘鈧?
+   * 鎭掍负 0锛氭帓甯冪敱 HDS 鑷繁澶勭悊锛岄〉闈㈠啀棰濆棰勭暀灏变細澶氬嚭涓€鍧楃┖鐧姐€?
+   * @returns 棰濆搴曢儴棰勭暀锛坴p锛夈€?
    */
   private twoRowExtraBottomVp(): number {
     return 0;
   }
 
   /**
-   * HDS 濞搭喖濮╂惔鏇熺埉闁插瞼娈戞潻铚傜稑閹绢厽鏂侀弶掳鈧?
+   * HDS 娴姩搴曟爮閲岀殑杩蜂綘鎾斁鏉°€?
    *
-   * 閳跨媴绗?**娴滃瞼楠囨い鐢告桨閸︺劍鐖ゆ稉濠冩娑撳秵瑕嗛弻?*閿涘潉navDepth > 0`閿涘绱版禍宀€楠囨い鐢告桨閺堝鍤滃杈╂畱鐎规ɑ鏌熷ù顔煎З閺?
-   * 閿涘牐顫?{@link floatingMiniBar}閿涘绱濇稉銈堢珶濞撳弶鐓嬮惃鍕Ц閸氬奔绔存稉?`HomeMiniBarPlayer`閿?
-   * 鐎瑰啰鈥栫紓鏍垳 `.id(MINI_BAR_ID)` 閳ユ柡鈧?閸氬本妞傜€涙ê婀亸鍙樼窗閺堝琚辨禒钘夋倱 id 閻ㄥ嫯濡悙鐧哥礉
-   * 閼板本鎸遍弨楣冦€夎ぐ銏犲綁閻ㄥ嫯鎹ｉ悙瑙勬Ц `getRectangleById(MINI_BAR_ID)` 闁插繒娈戦敍宀勫櫤閸掓澘鎽㈡稉鈧禒鎴掔瑝绾喖鐣鹃妴?
-   * 2026-10-01 闁絾顐奸崶鐐衡偓鈧亸杈ㄦЦ鏉╂瑤閲滈崸鎴礄鐠佹澘绻?鎼?7.3 / 鎼?7.4-3閿涙哎鈧奔琚辨径鍕涧閼崇晫鏆€娑撯偓婢跺嫨鈧稄绱氶妴?
+   * 鈿狅笍 **浜岀骇椤甸潰鍦ㄦ爤涓婃椂涓嶆覆鏌?*锛坄navDepth > 0`锛夛細浜岀骇椤甸潰鏈夎嚜宸辩殑瀹樻柟娴姩鏍?
+   * 锛堣 {@link floatingMiniBar}锛夛紝涓よ竟娓叉煋鐨勬槸鍚屼竴涓?`HomeMiniBarPlayer`锛?
+   * 瀹冪‖缂栫爜 `.id(MINI_BAR_ID)` 鈥斺€?鍚屾椂瀛樺湪灏变細鏈変袱浠藉悓 id 鐨勮妭鐐癸紝
+   * 鑰屾挱鏀鹃〉褰㈠彉鐨勮捣鐐规槸 `getRectangleById(MINI_BAR_ID)` 閲忕殑锛岄噺鍒板摢涓€浠戒笉纭畾銆?
+   * 2026-10-01 閭ｆ鍥為€€灏辨槸杩欎釜鍧戯紙璁板繂 搂17.3 / 搂17.4-3锛氥€屼袱澶勫彧鑳界暀涓€澶勩€嶏級銆?
    *
-   * **娑撳秷顩︾紒娆忕暊閸ュ搫鐣炬妯哄**閿涘牆甯弶銉ュ晸濮?`.height(56)`閿涘绱癿usicfreeOH 閻?`PlayBar` 閺嶇濡悙?
-   * 閸欘亝婀佹稉鈧稉?`.width('100%')`閿涘矂鐝惔锔芥Ц HDS 闁插繐鍤弶銉ф畱閵嗕礁鑻熼悽杈碃娴ｇ姵娼懛顏勭箒 `onAreaChange` 鐠囪娲栭妴?
-   * 閸愭瑦顒存妯哄娴兼俺顔€ HDS 閸︺劊鈧奔绗傛稉瀣╄⒈閹烘帇鈧秵妞傞幏澶哥瑝閸掔増顒滅涵顔炬畱閸愬懎顔愭妯哄閿涘本甯撶敮鍐ㄦ皑闁偓閸栨牓鈧?
+   * **涓嶈缁欏畠鍥哄畾楂樺害**锛堝師鏉ュ啓姝?`.height(56)`锛夛細musicfreeOH 鐨?`PlayBar` 鏍硅妭鐐?
+   * 鍙湁涓€涓?`.width('100%')`锛岄珮搴︽槸 HDS 閲忓嚭鏉ョ殑銆佸苟鐢辫糠浣犳潯鑷繁 `onAreaChange` 璇诲洖銆?
+   * 鍐欐楂樺害浼氳 HDS 鍦ㄣ€屼笂涓嬩袱鎺掋€嶆椂鎷夸笉鍒版纭殑鍐呭楂樺害锛屾帓甯冨氨閫€鍖栥€?
    */
   @Builder
   private miniBar() {
-    // 閳?閻劍鍩?2026-10-15閿涙艾绨抽弽蹇嬧偓宀€骞囬崷銊ユ皑閸氼兙鈧秹鍋呮稉鈧い?*娑撳秶鏁?*鏉╂瑦娼潻铚傜稑閺夆槄绱欓崣鍌濃偓鍐ㄦ禈闁?Tab 閺嶅繋绠ｆ稉濠傚涧閺堝绻樻惔锕侇攽閿涘鈧?
-    //   鐟?{@link NOW_PLAYING_TAB_INDEX}閵嗗倻鏁ら弶鈥叉濞撳弶鐓嬮懓灞肩瑝閺?`Visibility.Hidden`閿?
-    //   娣囨繄鏆€閸楃姳缍呴惃鍕樈 HDS 娴兼氨鎴风紒顓熷瘻"娑撱倖甯?閹烘帒绔烽敍瀛碼b 閼宠泛娉导姘愁潶妞ゅ爼鐝妴浣哥俺娑撳鏆€娑撳绔撮崸妤冣敄濡楋絻鈧?
-    //   閳跨媴绗?**閹烘帒绔峰Ο鈥崇础娑撳秷顩︾捄鐔烘絻閺€?*閿涘潉barLayoutModeForHds()` 闁插矂鍋呭▓鐢垫畱閸ф埊绱氶敍?
-    //     HORIZONTAL 閺?妞ょ數顒锋稉搴ょ碃娴ｇ姵娼獮鑸靛笓"閿涘奔绱扮拋鈺呫€夌粵鎹愵潶閹搞倕鍩屽锕佺珶閵嗕礁褰哥粩顖溾敄娑撯偓閺嶇》绱欓悽銊﹀煕閻鍩岄惃?閻厺绔撮幋?閿涘鈧?
-    //     鏉╂瑩鍣烽崣顏囶唨 HDS **闁插繐鍩?0 妤?*閿涘牆鐣犻弰顖涘瘻閸愬懎顔愰柌蹇涚彯鎼达妇娈戦敍澶涚礉閹烘帒绔峰Ο鈥崇础娑撳骸鍩嗛惃鍕€夌粵楣冣偓鎰摟娑撯偓閼锋番鈧?
-    //   閳跨媴绗?娴狅絼鐜敍姘崇箹娑撯偓妞ゅ吀绗?`getRectangleById(MINI_BAR_ID)` 闁插繋绗夐崚鎷岀碃娴ｇ姵娼?閳?瑜般垹褰夌挧椋庡仯閸欘亣鍏樼挧鏉垮幑鎼存洖鍤戞担鏇樷偓?
-    //     閸欘垯浜掗幒銉ュ綀閿涙碍婀版い?*娑撳秳绱伴幍鎾崇磻閹绢厽鏂佹い?*閿涘潉NowPlayingFeedPage` 閻?`playAt` 鐠?
-    //     `openPlayer=false` / `PlaybackIntentState.openPlayerUi=false`閿涘绱?
-    //     閼板矁鍏樺鈧崚鐗堟尡閺€楣冦€夐惃鍕弳閸欙綇绱欐惔鏇熺埉鏉╄渹缍橀弶锛勫仯閸戞眹鈧胶閮寸紒鐔风崯娴ｆ挻甯堕崚璁圭礆閸︺劍婀版い鍏哥瘍娑撳秴鐡ㄩ崷?娑撳秴鑸伴崣妯糕偓?
+    // 鈽?鐢ㄦ埛 2026-10-15锛氬簳鏍忋€岀幇鍦ㄥ氨鍚€嶉偅涓€椤?*涓嶇敾**杩欐潯杩蜂綘鏉★紙鍙傝€冨浘閲?Tab 鏍忎箣涓婂彧鏈夎繘搴﹁锛夈€?
+    //   瑙?{@link NOW_PLAYING_TAB_INDEX}銆傜敤鏉′欢娓叉煋鑰屼笉鏄?`Visibility.Hidden`锛?
+    //   淇濈暀鍗犱綅鐨勮瘽 HDS 浼氱户缁寜"涓ゆ帓"鎺掑竷锛孴ab 鑳跺泭浼氳椤堕珮銆佸簳涓嬬暀涓嬩竴鍧楃┖妗ｃ€?
+    //   鈿狅笍 **鎺掑竷妯″紡涓嶈璺熺潃鏀?*锛坄barLayoutModeForHds()` 閲岄偅娈电殑鍧戯級锛?
+    //     HORIZONTAL 鏄?椤电涓庤糠浣犳潯骞舵帓"锛屼細璁╅〉绛捐鎸ゅ埌宸﹁竟銆佸彸绔┖涓€鏍硷紙鐢ㄦ埛鐪嬪埌鐨?鐭竴鎴?锛夈€?
+    //     杩欓噷鍙 HDS **閲忓埌 0 楂?*锛堝畠鏄寜鍐呭閲忛珮搴︾殑锛夛紝鎺掑竷妯″紡涓庡埆鐨勯〉绛鹃€愬瓧涓€鑷淬€?
+    //   鈿狅笍 浠ｄ环锛氳繖涓€椤典笂 `getRectangleById(MINI_BAR_ID)` 閲忎笉鍒拌糠浣犳潯 鈬?褰㈠彉璧风偣鍙兘璧板厹搴曞嚑浣曘€?
+    //     鍙互鎺ュ彈锛氭湰椤?*涓嶄細鎵撳紑鎾斁椤?*锛坄NowPlayingFeedPage` 鐨?`playAt` 璧?
+    //     `openPlayer=false` / `PlaybackIntentState.openPlayerUi=false`锛夛紝
+    //     鑰岃兘寮€鍒版挱鏀鹃〉鐨勫叆鍙ｏ紙搴曟爮杩蜂綘鏉＄偣鍑汇€佺郴缁熷獟浣撴帶鍒讹級鍦ㄦ湰椤典篃涓嶅瓨鍦?涓嶅舰鍙樸€?
     if (this.navDepth <= 0) {
       if (this.tabState.tabIndex === NOW_PLAYING_TAB_INDEX || this.navDepth > 0) {
-        // 閳藉應妲勯埥鍛 2026-10-17閿?*娣囶喚鏁ら幋宄扮杽濞村鈧奔绨╃痪褔銆夐棃顫窗閸戣櫣骞囨稉銈勯嚋閹绢厽鏂侀弶掳鈧?*閿?
-        //   閸樼喐娼垫潻娆撳櫡閸欘亜鍨?`tabIndex === 濮濓絽婀幘顓熸杹`閿?*濞屸€冲灲 `navDepth`** 閳ユ柡鈧?娴滃瞼楠囨い闈涙躬閺嶅牅绗傞弮璁圭礉
-        //   娴滃瞼楠囨い浣冨殰瀹搁亶鍋呴弶鈥崇暭閺傝璇為崝銊︾埉閿涘潉floatingMiniBar`閿涘鍑＄紒蹇撴躬閻紮绱濇＃鏍€夋潻娆愭蒋閸欏牊鐥呴崡姝屾祰
-        //   閳?鐏炲繋绗傛稉銈嗘蒋閹绢厽鏂侀弶掳鈧倹婀伴弬鍥︽ L1617 閻ㄥ嫭鏁為柌濠冩－鐏忓崬鍟撻弰搴ょ箹閺夆€茬瑝閸欐﹢鍣?
-        //   閵嗗备娈搁敂?娴滃瞼楠囨い鐢告桨閸︺劍鐖ゆ稉濠冩娑撳秵瑕嗛弻鎿勭礄`navDepth > 0`閿涘鈧秮鈧柡鈧?娴狅絿鐖滃▽陇绐℃稉濞库偓?
-        //   閳?鐞涖儰绗?`navDepth > 0`閿涙矮绨╃痪褔銆夐崷銊︾垽娑撳﹥妞傛潻娆庣閺夆€虫倱閺嶉绮?0 妤傛﹫绱?*娑撳秴宓忔潪?*閿?
-        //     娣囨繀缍?`MINI_BAR_ID` 娴犲秴婀弽鎴滅瑐閿涘苯鑸伴崣妯挎崳閻愮绻曢懗浠嬪櫤瀵版鍩岄敍澶堚偓?
-        // 閳藉應妲?鏉╂瑤绔存い?*閺勬儳绱＄紒?0 妤?*閿涘牐鈧奔绗夐弰?閺佺繝閲?builder 娑撳秵瑕嗛弻?閿涘绱?
-        //   鐎规ɑ鏌熼妴濠咁啎缂冾噣銆夌粵鐐埉閻ㄥ嫭鍋撳ù顔界壉瀵繈鈧甯弬鍥ｂ偓鏂衡偓鏃囩碃娴ｇ姵鐖弰顖濆殰鐎规矮绠熼崠鍝勭厵閿?*鐠虹喖銆夌粵鐐埉妤傛ê瀹抽惄鍝ョ搼娑撴梹鎸夐獮鍐差嚠姒?*閿?
-        //   閺堫剙浼愮粙瀣暏 `barLayoutMode = VERTICAL` 閹跺﹤鐣犻弨瑙勫灇娑撳﹣绗呮稉銈嗗笓閿涘矁鈧?HDS 閸︺劑鍋呮稉鈧锝嗘Ц**閹稿鍞寸€瑰綊鍣烘?*閻?
-        //   閿涘牐顫?`miniBar()` 娑撳﹪娼伴柇锝嗩唽"娑撳秷顩︾紒娆忕暊閸ュ搫鐣炬妯哄"閻ㄥ嫯顔囪ぐ鏇礆閳?缂佹瑤绔存稉?0 妤傛ê顔愰崳顭掔礉
-        //   "娑撳﹪娼伴柇锝勭閹?妤傛ê瀹崇亸杈ㄦЦ 0閿涘矂銆夌粵鎹愬厡閸ュ﹦娈戦崙鐘辩秿娑撳骸鍩嗛惃鍕€夌粵?*闁劕鐡ф稉鈧懛?*閵?
+        // 鈽呪槄鈽呪槄 2026-10-17锛?*淇敤鎴峰疄娴嬨€屼簩绾ч〉闈細鍑虹幇涓や釜鎾斁鏉°€?*锛?
+        //   鍘熸潵杩欓噷鍙垽 `tabIndex === 姝ｅ湪鎾斁`锛?*娌″垽 `navDepth`** 鈥斺€?浜岀骇椤靛湪鏍堜笂鏃讹紝
+        //   浜岀骇椤佃嚜宸遍偅鏉″畼鏂规诞鍔ㄦ爮锛坄floatingMiniBar`锛夊凡缁忓湪鐢伙紝棣栭〉杩欐潯鍙堟病鍗歌浇
+        //   鈬?灞忎笂涓ゆ潯鎾斁鏉°€傛湰鏂囦欢 L1617 鐨勬敞閲婃棭灏卞啓鏄庤繖鏉′笉鍙橀噺
+        //   銆屸殸锔?浜岀骇椤甸潰鍦ㄦ爤涓婃椂涓嶆覆鏌擄紙`navDepth > 0`锛夈€嶁€斺€?浠ｇ爜娌¤窡涓娿€?
+        //   鈬?琛ヤ笂 `navDepth > 0`锛氫簩绾ч〉鍦ㄦ爤涓婃椂杩欎竴鏉″悓鏍风粰 0 楂橈紙**涓嶅嵏杞?*锛?
+        //     淇濅綇 `MINI_BAR_ID` 浠嶅湪鏍戜笂锛屽舰鍙樿捣鐐硅繕鑳介噺寰楀埌锛夈€?
+        // 鈽呪槄 杩欎竴椤?*鏄惧紡缁?0 楂?*锛堣€屼笉鏄?鏁翠釜 builder 涓嶆覆鏌?锛夛細
+        //   瀹樻柟銆婅缃〉绛炬爮鐨勬偓娴牱寮忋€嬪師鏂団€斺€旇糠浣犳爮鏄嚜瀹氫箟鍖哄煙锛?*璺熼〉绛炬爮楂樺害鐩哥瓑涓旀按骞冲榻?*锛?
+        //   鏈伐绋嬬敤 `barLayoutMode = VERTICAL` 鎶婂畠鏀规垚涓婁笅涓ゆ帓锛岃€?HDS 鍦ㄩ偅涓€妗ｆ槸**鎸夊唴瀹归噺楂?*鐨?
+        //   锛堣 `miniBar()` 涓婇潰閭ｆ"涓嶈缁欏畠鍥哄畾楂樺害"鐨勮褰曪級鈬?缁欎竴涓?0 楂樺鍣紝
+        //   "涓婇潰閭ｄ竴鎺?楂樺害灏辨槸 0锛岄〉绛捐兌鍥婄殑鍑犱綍涓庡埆鐨勯〉绛?*閫愬瓧涓€鑷?*銆?
         Column()
           .width(StyleConstants.FULL_WIDTH)
           .height(0)
       } else {
-        // 閳藉應妲?2026-10-15閿涘牆娲栭柅鈧崥搴ㄥ櫢閸嬫熬绱?*娑撳秴褰夐柌?*閿涙矮绔村▎鈥宠埌閸欐ü绱扮拠婵囨埂闂傝揪绱濇潻铚傜稑閺?*閻喕闊╂稉宥呭棘娑撳海绮崚?*閿?
-        //   閻㈠崬锛撶仦鍌氬帬闂呭棗鐪伴敍鍧凪orphMiniBarClone` / `MorphMetaBridge`閿涘绗岄幘顓熸杹妞ら潧鍞撮惃鍕敾妞嬬偛鐨濋棃顫敩鐞涖劌鐣犻妴?
-        //   `sourceBarHidden` 閻㈠彉绱扮拠婵囧閺堝鈧懎鏁稉鈧崘娆欑礄`morphBeginEntering` / `morphBeginLeaving` 缂?true閿?
-        //   `morphLand` / `morphReset` 缂?false閿涘鍣?娑撳娼幍鎾崇磻鐠侯垶鍏橀幋鎰彌閵?
-        //   娑撳秷绻栨稊鍫濅粵閻ㄥ嫯鐦介敍姘尡閺€楣冦€夎ぐ銏犲綁閺堢喖妫块弰?*閸楀﹪鈧繑妲?*閻㈣鍤弶銉ф畱閿涘瞼婀￠煬顐＄窗娴犲骸绨虫稉瀣偓蹇撳毉閺?閳ユ柡鈧?
-        //   娑撯偓鏉堣妲搁崗瀣畷鐏炲倻鏁鹃惃鍕閺堫兙鈧椒绔存潏瑙勬Ц閻喕闊╅敍宀€鏁ら幋椋庢箙閸掓壆娈戝锝嗘Ц"鏉╄渹缍橀弶鈥冲竾閸︺劍鎸遍弨楣冦€夋稉?閿涘牓鍣搁崣鐙呯礆閵?
-        //   閳跨媴绗?韫囧懘銆忛悽?`Visibility.Hidden`閿涘牅绻氶悾娆忕鐏炩偓閿涘绱拌ぐ銏犲綁鐠ч鍋ｇ憰?`getRectangleById` 闁插繗绻栭弶鈩冪埉閿?
-        //   閻?`None` 娴兼岸鍣烘稉宥呭煂 閳?閸斻劎鏁鹃惄瀛樺复闁偓閸栨牓鈧?
-        // 鈽呪槄鈽?2026-10-18锛堢洰鏍?goal-a29f6835 / 璁板繂 搂197锛夛細涓€绾ч〉涔?*鑷涓讳竴涓?`HdsTabs` 鑳跺泭**
-        //   鈥斺€?涓庝簩绾ч〉鍚屾瀯銆傜悊鐢憋紙鏈満 SDK 鍘熸枃锛夛細`systemMaterialEffect` 鍙瓨鍦ㄤ簬
-        //   `TitleBarStyleOptions`锛坄@hms.hds.hdsBaseComponent.d.ets:1472`锛変笌 `HdsTabsFloatingStyle`锛坄:5357`锛?
-        //   涓や釜缁勪欢閫夐」鎺ュ彛涓婏紝**娌℃湁** CommonAttribute 绾ф潗璐?鈬?鍏夋劅鍙兘鐢?HDS 缁勪欢鐢伙紱
-        //   鑰?HDS `miniBar` 妲界敾鐨勮儗鏉垮湪瀹冭嚜宸卞瓙鏍戦噷锛屾垜浠帇涓嶅埌 鈬?鍙湁"鑷涓?HdsTabs"鑳藉悓鏃舵嬁鍒?
-        //   銆屾潗璐ㄣ€嶄笌銆屾尋鍘嬨€嶏紙浜岀骇椤靛氨鏄繖鏉¤矾锛夈€?
-        //   瀹藉害鍙?*瀹炴祴妲藉**锛堝灞?`Column` 瀹藉害 100%锛岄噺鐨勫氨鏄?HDS 缁欒繖涓€鏍肩殑瀹斤級锛岄珮搴﹀彇浼扮畻妗ｃ€?
+        // 鈽呪槄 2026-10-15锛堝洖閫€鍚庨噸鍋氾級**涓嶅彉閲?*锛氫竴娆″舰鍙樹細璇濇湡闂达紝杩蜂綘鏉?*鐪熻韩涓嶅弬涓庣粯鍒?*锛?
+        //   鐢卞３灞傚厠闅嗗眰锛坄MorphMiniBarClone` / `MorphMetaBridge`锛変笌鎾斁椤靛唴鐨勭画椋炲皝闈唬琛ㄥ畠銆?
+        //   `sourceBarHidden` 鐢变細璇濇嫢鏈夎€呭敮涓€鍐欙紙`morphBeginEntering` / `morphBeginLeaving` 缃?true锛?
+        //   `morphLand` / `morphReset` 缃?false锛夆噿 涓夋潯鎵撳紑璺兘鎴愮珛銆?
+        //   涓嶈繖涔堝仛鐨勮瘽锛氭挱鏀鹃〉褰㈠彉鏈熼棿鏄?*鍗婇€忔槑**鐢诲嚭鏉ョ殑锛岀湡韬細浠庡簳涓嬮€忓嚭鏉?鈥斺€?
+        //   涓€杈规槸鍏嬮殕灞傜敾鐨勫壇鏈€佷竴杈规槸鐪熻韩锛岀敤鎴风湅鍒扮殑姝ｆ槸"杩蜂綘鏉″帇鍦ㄦ挱鏀鹃〉涓?锛堥噸鍙狅級銆?
+        //   鈿狅笍 蹇呴』鐢?`Visibility.Hidden`锛堜繚鐣欏竷灞€锛夛細褰㈠彉璧风偣瑕?`getRectangleById` 閲忚繖鏉℃爮锛?
+        //   鐢?`None` 浼氶噺涓嶅埌 鈬?鍔ㄧ敾鐩存帴閫€鍖栥€?
+        // ★★★ 2026-10-18（目标 goal-a29f6835 / 记忆 §197）：一级页也**自宿主一个 `HdsTabs` 胶囊**
+        //   —— 与二级页同构。理由（本机 SDK 原文）：`systemMaterialEffect` 只存在于
+        //   `TitleBarStyleOptions`（`@hms.hds.hdsBaseComponent.d.ets:1472`）与 `HdsTabsFloatingStyle`（`:5357`）
+        //   两个组件选项接口上，**没有** CommonAttribute 级材质 ⇒ 光感只能由 HDS 组件画；
+        //   而 HDS `miniBar` 槽画的背板在它自己子树里，我们压不到 ⇒ 只有"自宿主 HdsTabs"能同时拿到
+        //   「材质」与「挤压」（二级页就是这条路）。
+        //   宽度取**实测槽宽**（外层 `Column` 宽度 100%，量的就是 HDS 给这一格的宽），高度取估算档。
         Column() {
           MiniBarMaterialCapsule({
-            // 鈽呪槄鈽?2026-10-18锛堢敤鎴凤細銆屽崟琛岀姸鎬佷笅杩樻湁灏忚儗鏅€嶏級锛氬唴灞傝兌鍥婁紶 **HORIZONTAL**
-            //   鈬?`isSingleRow()` 涓虹湡 鈬?`capsuleBoxWidthVp(bW, true) = bW`锛坄MiniBarMaterialCapsule.ets:58-60`锛?
-            //   鈬?鐩掑 鈮?鑳跺泭瀹斤紝**娌℃湁宸﹀彸鍚?5vp 鐨?slack 绌哄甫**锛堥偅鍦堢┖甯︽鏄?灏忚儗鏅?闇插嚭鏉ョ殑鍦版柟锛夈€?
-            //   鈿狅笍 鍙奖鍝?*鎴戜滑鑷繁杩欎釜鐩?*鐨勫锛涘灞?HDS 鐨勬帓甯冩ā寮忎粛鎭?VERTICAL锛堜笂娓稿彛寰勶紝瑙?`barLayoutModeForHds`锛夈€?
+            // ★★★ 2026-10-18（用户：「单行状态下还有小背景」）：内层胶囊传 **HORIZONTAL**
+            //   ⇒ `isSingleRow()` 为真 ⇒ `capsuleBoxWidthVp(bW, true) = bW`（`MiniBarMaterialCapsule.ets:58-60`）
+            //   ⇒ 盒宽 ≡ 胶囊宽，**没有左右各 5vp 的 slack 空带**（那圈空带正是"小背景"露出来的地方）。
+            //   ⚠️ 只影响**我们自己这个盒**的宽；外层 HDS 的排布模式仍恒 VERTICAL（上游口径，见 `barLayoutModeForHds`）。
             barLayoutMode: HdsBarLayoutMode.HORIZONTAL,
             barWidth: this.homeMiniBarBarWidthVp(),
             barHeight: this.homeMiniBarSlotHVp(),
@@ -2067,9 +2067,9 @@ struct Index {
             HomeMiniBarPlayer({
               showPreviousTrack: false,
               followAppMiniBarExpanded: true,
-              // 鏉愯川鐢卞唴灞?`HdsTabs` 鐢?鈬?鏈綋涓€涓儚绱犻兘涓嶈嚜缁橈紙鍚﹀垯娲楃櫧锛夈€?
+              // 材质由内层 `HdsTabs` 画 ⇒ 本体一个像素都不自绘（否则洗白）。
               showSelfDrawnBackplate: false,
-              // 鎸ゅ帇浜ょ粰鑳跺泭灞傦紙涓庝簩绾ч〉閫愬瓧鐩稿悓锛氬帇鐨勬槸鍚潗璐ㄧ殑閭ｄ竴灞傦級銆?
+              // 挤压交给胶囊层（与二级页逐字相同：压的是含材质的那一层）。
               contentOwnsSquash: false,
               contentHeightVp: this.homeMiniBarSlotHVp()
             })
@@ -2080,8 +2080,8 @@ struct Index {
           const w: number = areaLengthToVp(area.width);
           if (w > 0 && Math.abs(w - this.homeMiniBarSlotWVpRaw) > 0.5) {
             this.homeMiniBarSlotWVpRaw = w;
-            // 閲忓埌妲藉灏辨妸杩欏洓涓暟鎵撳嚭鏉ワ紙瀹藉害鍙ｅ緞鏄惁瀵归綈鍙湅杩欎竴琛岋級锛?
-            //   `slotW >= barW` 鎵嶇畻瀵癸紱`capH` 闅忓睍寮€/鏀惰捣鍦?56 / 40 涔嬮棿鍒囥€?
+            // 量到槽宽就把这四个数打出来（宽度口径是否对齐只看这一行）：
+            //   `slotW >= barW` 才算对；`capH` 随展开/收起在 56 / 40 之间切。
             Logger.info('RzdHomeMiniBarMaterial',
               `material=capsule(systemMaterialEffect) ambient=${this.ambientLevelIndex()} ` +
                 `plate=inner-hds-tabs slotW=${w.toFixed(1)} barW=${this.homeMiniBarBarWidthVp().toFixed(1)} ` +
@@ -2103,160 +2103,160 @@ struct Index {
   }
 
   /**
-   * 娴滃瞼楠囨い鐢告桨閻ㄥ嫭鍋撳ù顔跨碃娴ｇ姵鎸遍弨鐐蒋閿?*鐎规ɑ鏌?HDS 濞搭喖濮╅弽?+ 濞屽韫堥崗澶嬪妳閺夋劘宸?*閿涘牏鏁ら幋?2026-10-11 閹峰秵婢橀惃鍕波閺嬪嫭鏁奸柅鐙呯礆閵?
+   * 浜岀骇椤甸潰鐨勬偓娴糠浣犳挱鏀炬潯锛?*瀹樻柟 HDS 娴姩鏍?+ 娌夋蹈鍏夋劅鏉愯川**锛堢敤鎴?2026-10-11 鎷嶆澘鐨勭粨鏋勬敼閫狅級銆?
    *
-   * 閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅?娑撹桨绮堟稊鍫濈箑妞ょ粯妲?娑撯偓娑擃亜宕熸い鐢殿劮閻?HdsTabs"閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅?
+   * 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲 涓轰粈涔堝繀椤绘槸"涓€涓崟椤电鐨?HdsTabs"鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲
    *
-   * 鐎规ɑ鏌熼妴濠冪焽濞寸鍘滈幇鐔峰閼版ぞ绱崠鏍モ偓瀣斧閺傚浄绱伴妴灞藉従娴犳牜绮嶆禒鏈电矌閸?Navigation/NavDestination 閺嶅洭顣介弽蹇斿灗濡亜鎮?Tabs 娑?
-   * barPosition 娑?BarPosition.End 閻ㄥ嫬绨抽柈?TabBar 娑擃厾鏁撻弫鍫涒偓?*閸︺劌鍙炬禒鏍у隘閸╃喍鑵戠拋鍓х枂濞屽韫堥崗澶嬪妳閺佸牊鐏夋稉宥囨晸閺佸牄鈧?*閵?
-   * 娑旂喎姘ㄩ弰顖濐嚛閿涙艾鍘滈幇鐔告綏鐠愩劌褰ч張?*閺嶅洭顣介弽?*娑?*鎼存洟鍎?TabBar**娑撱倓閲滈崥鍫熺《鐎瑰じ瀵岄妴鍌涙＋閸愭瑦纭堕敍鍫濓紦鐏?Stack 闁插奔绔存稉顏呮珮闁?
-   * Column 閹?`backgroundEffect`閿?*濮樻瓕绻欓幏澶哥瑝閸掓澘鐣奸弬瑙勬綏鐠?*閿涘苯褰ч懗鐣岀暬閼奉亞绮潻鎴滄妧 閳ユ柡鈧?閻劍鍩涢弰搴ｂ€橀崥锔藉竴娴滃棗鐣犻妴?
+   * 瀹樻柟銆婃矇娴稿厜鎰熷姛鑰椾紭鍖栥€嬪師鏂囷細銆屽叾浠栫粍浠朵粎鍦?Navigation/NavDestination 鏍囬鏍忔垨妯悜 Tabs 涓?
+   * barPosition 涓?BarPosition.End 鐨勫簳閮?TabBar 涓敓鏁堛€?*鍦ㄥ叾浠栧尯鍩熶腑璁剧疆娌夋蹈鍏夋劅鏁堟灉涓嶇敓鏁堛€?*銆?
+   * 涔熷氨鏄锛氬厜鎰熸潗璐ㄥ彧鏈?*鏍囬鏍?*涓?*搴曢儴 TabBar**涓や釜鍚堟硶瀹夸富銆傛棫鍐欐硶锛堝３灞?Stack 閲屼竴涓櫘閫?
+   * Column 鎸?`backgroundEffect`锛?*姘歌繙鎷夸笉鍒板畼鏂规潗璐?*锛屽彧鑳界畻鑷粯杩戜技 鈥斺€?鐢ㄦ埛鏄庣‘鍚︽帀浜嗗畠銆?
    *
-   * 閻滄澘婀惃鍕粵濞夋洩绱? 閸欏倽鈧啫浼愮粙?`lxmusic-harmony` 閻?`views/PanePage.ets` 閸氬奔绔存總妤嬬礆閿?*閸欘亝婀佹稉鈧稉顏堛€夌粵鍓ф畱
-   * HdsTabs**閿涘矂銆夌粵鐐埉閻ㄥ嫬鍞寸€圭櫢绱機ustomBuilder閿涘姘ㄩ弰顖涙尡閺€鎯ф珤閺堫兛缍嬮敍灞藉晙閸旂姳绗傜€规ɑ鏌熸稉澶嬫蒋娴?
+   * 鐜板湪鐨勫仛娉曪紙= 鍙傝€冨伐绋?`lxmusic-harmony` 鐨?`views/PanePage.ets` 鍚屼竴濂楋級锛?*鍙湁涓€涓〉绛剧殑
+   * HdsTabs**锛岄〉绛炬爮鐨勫唴瀹癸紙CustomBuilder锛夊氨鏄挱鏀惧櫒鏈綋锛屽啀鍔犱笂瀹樻柟涓夋潯浠?
    *   `barPosition(End)` + `barOverlap(true)` + `vertical(false)`
-   * 閳?鏉╂瑦娼弽蹇撴皑閽€钘夋躬"鎼存洟鍎?TabBar"鏉╂瑤閲滈崥鍫熺《鐎瑰じ瀵岄柌宀嬬礉`systemMaterialEffect` 閻喓鏁撻弫鍫涒偓?
-   * 閺夋劘宸濆锝勭秴婢跺秶鏁ら弽鍥暯閺嶅繘鍋呮稉鈧禒鏂ょ礄{@link ambientTitleMaterial}閿涘绱濇稉宥堫洣閸愬秴鍞撮懕鏂剧婵傛ぞ绗侀惄顔衡偓?
+   * 鈬?杩欐潯鏍忓氨钀藉湪"搴曢儴 TabBar"杩欎釜鍚堟硶瀹夸富閲岋紝`systemMaterialEffect` 鐪熺敓鏁堛€?
+   * 鏉愯川妗ｄ綅澶嶇敤鏍囬鏍忛偅涓€浠斤紙{@link ambientTitleMaterial}锛夛紝涓嶈鍐嶅唴鑱斾竴濂椾笁鐩€?
    *
-   * 鐎瑰じ瀵岄弨鎯ф躬**婢瑰啿鐪?Stack 閻ㄥ嫬绨抽柈?*閿涘牅绗岄弮褑鍏岄崶濠傛倱娑撯偓娑擃亙缍呯純顔衡偓浣告倱娑撯偓婵傛鐣婚張顖ょ礆閿涘本澧嶆禒銉ょ癌缁狙囥€?
-   * 閿涘潉NavDestination`閿涘娲婃稉宥勭秶鐎?閳ユ柡鈧?鏉╂瑦顒滈弰顖氱暊閼宠姤娴涢幒澶嬫＋閼宠泛娉惃鍕斧閸ョ姰鈧?
+   * 瀹夸富鏀惧湪**澹冲眰 Stack 鐨勫簳閮?*锛堜笌鏃ц兌鍥婂悓涓€涓綅缃€佸悓涓€濂楃畻鏈級锛屾墍浠ヤ簩绾ч〉
+   * 锛坄NavDestination`锛夌洊涓嶄綇瀹?鈥斺€?杩欐鏄畠鑳芥浛鎺夋棫鑳跺泭鐨勫師鍥犮€?
    *
-   * 閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅?閳?娑撯偓閺夛紕鈥栫痪锔芥将閿涙艾鍙忕仦?*閸欘亣鍏樼€涙ê婀稉鈧弶?*鏉╄渹缍橀弶?閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅?
+   * 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲 鈽?涓€鏉＄‖绾︽潫锛氬叏灞?*鍙兘瀛樺湪涓€鏉?*杩蜂綘鏉?鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲
    *
-   * 2026-10-01 09:39 鐠囨洝绻冮崥灞肩婵傛顔栨稉浼欑礉閸ョ偤鈧偓娴滃棴绱濋崢鐔锋礈鐏忚鲸妲?*閸?id 閹剧偠婧?*閿?
-   * 妫ｆ牠銆夋惔鏇熺埉閻?`miniBar` 娑撳氦绻栭弶鈥茬癌缁狙勭埉濞撳弶鐓嬮惃鍕Ц閸氬奔绔存稉?`HomeMiniBarPlayer`閿涘苯鐣犵涵顒傜椽閻?
-   * `.id(MINI_BAR_ID)`閿涘牐绻涚敮?`MINI_BAR_COVER_ID` / `MINI_BAR_ASIDE_ID`閿涘鈧倷绨╃痪褔銆夐崷銊︾垽娑撳﹥妞?
-   * 妫ｆ牠銆夋惔鏇熺埉楠炶埖鐥呴張澶婂祻鏉?閳?鐏炲繐绠锋稉濠傚毉閻?*娑撱倓鍞ら崥?id** 閻ㄥ嫯濡悙鐧哥礉閼板本鎸遍弨楣冦€夎ぐ銏犲綁閻ㄥ嫯鎹ｉ悙瑙勬Ц
-   * `getRectangleById(MINI_BAR_ID)` 闁插繒娈?閳ユ柡鈧?闁插繐鍩岄崫顏冪娴犳垝绗夌涵顔肩暰閿涘矁鎹ｉ悙鐟版皑閹舵牓鈧?
-   * 閳?閹碘偓娴?{@link miniBar}閿涘牓顩绘い鐢稿亝閺夆槄绱氶崷?`navDepth > 0` 閺?*娑撳秵瑕嗛弻?*閿涘奔琚辨径鍕涧閻ｆ瑤绔存径鍕┾偓?
-   *    閺€纭呯箹闁插奔绠ｉ崜宥呭帥閻鍋呴弶鈩冩暈闁插鈧?
+   * 2026-10-01 09:39 璇曡繃鍚屼竴濂楀涓伙紝鍥為€€浜嗭紝鍘熷洜灏辨槸**鍚?id 鎾炶溅**锛?
+   * 棣栭〉搴曟爮鐨?`miniBar` 涓庤繖鏉′簩绾ф爮娓叉煋鐨勬槸鍚屼竴涓?`HomeMiniBarPlayer`锛屽畠纭紪鐮?
+   * `.id(MINI_BAR_ID)`锛堣繛甯?`MINI_BAR_COVER_ID` / `MINI_BAR_ASIDE_ID`锛夈€備簩绾ч〉鍦ㄦ爤涓婃椂
+   * 棣栭〉搴曟爮骞舵病鏈夊嵏杞?鈬?灞忓箷涓婂嚭鐜?*涓や唤鍚?id** 鐨勮妭鐐癸紝鑰屾挱鏀鹃〉褰㈠彉鐨勮捣鐐规槸
+   * `getRectangleById(MINI_BAR_ID)` 閲忕殑 鈥斺€?閲忓埌鍝竴浠戒笉纭畾锛岃捣鐐瑰氨鎶栥€?
+   * 鈬?鎵€浠?{@link miniBar}锛堥椤甸偅鏉★級鍦?`navDepth > 0` 鏃?*涓嶆覆鏌?*锛屼袱澶勫彧鐣欎竴澶勩€?
+   *    鏀硅繖閲屼箣鍓嶅厛鐪嬮偅鏉℃敞閲娿€?
    *
-   * 閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅?鐏忓搫顕?/ 鐟欙附鎳?/ 瑜般垹褰夌拠顓濈疅閿涘牐绻栨禍?*娑撳秷鍏?*閸旑煉绱氶埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜閳烘劏鏅查埡鎰ㄦ櫜
+   * 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲 灏哄 / 瑙︽懜 / 褰㈠彉璇箟锛堣繖浜?*涓嶈兘**鍔級鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲
    *
-   * 瑜般垺鈧胶鏁?*妫ｆ牠銆夋稉銈嗗笓 Tab 閺冩湹绗傞棃銏ゅ亝閺?*閻ㄥ嫬鍟撳▔鏇窗閸氬奔绔存稉?
-   * `HomeMiniBarPlayer({ showPreviousTrack: false, followAppMiniBarExpanded: false })`閵?
+   * 褰㈡€佺敤**棣栭〉涓ゆ帓 Tab 鏃朵笂闈㈤偅鏉?*鐨勫啓娉曪細鍚屼竴涓?
+   * `HomeMiniBarPlayer({ showPreviousTrack: false, followAppMiniBarExpanded: false })`銆?
    *
-   * 娑撱倓閲滅亸鍝勵嚟**閺勬儳绱?*缂佹瑱绱?
-   *   - 妤傛ê瀹抽敍?6vp閿涘牆鐨濋棃?44 + 娑撳﹣绗呴崥?6vp閿涘鈧倸鐣犻弰顖涙尡閺€楣冦€夎ぐ銏犲綁閻ㄥ嫯鎹ｉ悙鐧哥礉閸戠姳缍嶉崣顏堟
-   *     `FLOATING_MINI_BAR_HEIGHT_VP` 鏉╂瑤绔存稉顏勭埗闁插繐褰夐崠鏍モ偓?
-   *   - 鐎硅棄瀹抽敍?*娴溿倗绮?HDS**閿涘牆顔栨稉濠氭懙濠娾€愁啍鎼达讣绱濋弽蹇庣秼/閼宠泛娉惃鍕啍鎼达缚绗岀仦鍛厬閻㈠崬鐣奸弬瑙勮癁閸斻劍鐖懛顏勭箒缁犳绱氶妴?
-   *     娴犮儱澧犻幋鎴滄粦閸愭瑦顒存潻鍥ь啍鎼达讣绱檂width(缁愭褰涚€?閳?鏉堢绐?` + `barFloatingStyle.barWidth`閿涘绱?
-   *     閻喐婧€閸欏秹顩弰?鐟曚椒绠炵拹鏉戝煂鐏炲繐绠烽崣瀹犵珶閵嗕浇顩︽稊鍫熸嫼閹存劖鏆ｉ弶鈥炽亣闂€鎸庢煙瑜邦澁绱濆鍫滅瑦"閳ユ柡鈧?闁絾妲搁崪?HDS 閻ㄥ嫯顔€娴ｅ秴濮╅悽缁樺ⅵ閺?
-   *     閿?026-10-01 闁絾顐肩€圭偤鐛欓惃鍕殌鐠侇叏绱氶敍宀€骞囬崷銊ょ瑝閸愬秷鍤滃杈╃暬閵?
-   *   `clip(false)` 鐟曚胶鏆€閻偓閿涙俺顥嗘禍鍡曠窗閹?HDS 閻ㄥ嫯鍎楅弶?閹舵ê鐨犳稉鈧挧鐤梿閹哄鈧?
+   * 涓や釜灏哄**鏄惧紡**缁欙細
+   *   - 楂樺害锛?6vp锛堝皝闈?44 + 涓婁笅鍚?6vp锛夈€傚畠鏄挱鏀鹃〉褰㈠彉鐨勮捣鐐癸紝鍑犱綍鍙殢
+   *     `FLOATING_MINI_BAR_HEIGHT_VP` 杩欎竴涓父閲忓彉鍖栥€?
+   *   - 瀹藉害锛?*浜ょ粰 HDS**锛堝涓婚摵婊″搴︼紝鏍忎綋/鑳跺泭鐨勫搴︿笌灞呬腑鐢卞畼鏂规诞鍔ㄦ爮鑷繁绠楋級銆?
+   *     浠ュ墠鎴戜滑鍐欐杩囧搴︼紙`width(绐楀彛瀹?鈭?杈硅窛)` + `barFloatingStyle.barWidth`锛夛紝
+   *     鐪熸満鍙嶉鏄?瑕佷箞璐村埌灞忓箷鍙宠竟銆佽涔堟拺鎴愭暣鏉″ぇ闀挎柟褰紝寰堜笐"鈥斺€?閭ｆ槸鍜?HDS 鐨勮浣嶅姩鐢绘墦鏋?
+   *     锛?026-10-01 閭ｆ瀹為獙鐨勬暀璁級锛岀幇鍦ㄤ笉鍐嶈嚜宸辩畻銆?
+   *   `clip(false)` 瑕佺暀鐫€锛氳浜嗕細鎶?HDS 鐨勮儗鏉?鎶樺皠涓€璧疯鎺夈€?
    *
-   * 鐟欙附鎳滈敍姘殻鐏?Stack 韫囧懘銆?`HitTestMode.Transparent` 閳ユ柡鈧?姒涙顓婚惃?Default 娴兼碍濡告禍宀€楠囨い鐢告桨閻?
-   * 閻愮懓鍤崗銊ユ倖閹哄绱欓煪鈺勭箖閿涘绱盩ransparent 鐞涖劎銇氶懛顏勭箒娑撳秴鎮嗘禍瀣╂娴ｅ棗鐡欓懞鍌滃仯閻撗冪埗閸濆秴绨查妴?
+   * 瑙︽懜锛氭暣灞?Stack 蹇呴』 `HitTestMode.Transparent` 鈥斺€?榛樿鐨?Default 浼氭妸浜岀骇椤甸潰鐨?
+   * 鐐瑰嚮鍏ㄥ悆鎺夛紙韪╄繃锛夛紱Transparent 琛ㄧず鑷繁涓嶅悆浜嬩欢浣嗗瓙鑺傜偣鐓у父鍝嶅簲銆?
    */
   @Builder
   private floatingMiniBar() {
     Stack({ alignContent: Alignment.BottomEnd }) {
       /**
-       * 閳藉應妲?閸忔娊鏁敍姝歍abContent()` **娑撳秷鍏橀弰顖溾敄閻?*閵?
+       * 鈽呪槄 鍏抽敭锛歚TabContent()` **涓嶈兘鏄┖鐨?*銆?
        *
-       * 2026-10-01 闁絾顐肩€圭偤鐛欑亸杈ㄦЦ"缁?TabContent + 閹绢厽鏂侀崳銊ョ秼 tabBar"閿涘瞼婀￠張杞扮瑐**濞屸剝婀侀懗璺烘抄閼冲本婢?*
-       * 閿涘牅缍旈懓鍛秼閺冭泛褰ч懗鍊熕夋稉鈧崸妤勫殰缂佹鍎楅弶鍨幑鎼存洩绱氶妴?026-10-11 婢跺秶骞囨禍鍡楁倱娑撯偓娑擃亞骞囩挒鈽呯窗閻劍鍩涢幎?
-       * 閵嗗苯绨虫稉瀣尡閺€鐐蒋閺勵垶鈧繑妲戦惃鍕剁礉閸欘亞婀呭妤勵潌鐏忎線娼伴崪灞惧瘻闁筋喓鈧秲鈧倻骞囬崷銊ョ窔 TabContent 闁插本鏂佹稉鈧稉?*閻喎鐤勯惃?
-       * 濠娾€虫槀鐎电顔愰崳?*閿涘矁顔€ HDS 鐠併倓璐熸潻娆愭蒋閺嶅繑婀侀崘鍛啇閿涘奔绮犻懓灞惧瘻閹剚璇為弽宄扮础閻㈣鍤懛顏勭箒閻ㄥ嫯鍏岄崶濠呭剹閺?+ 閺夋劘宸濋妴?
+       * 2026-10-01 閭ｆ瀹為獙灏辨槸"绌?TabContent + 鎾斁鍣ㄥ綋 tabBar"锛岀湡鏈轰笂**娌℃湁鑳跺泭鑳屾澘**
+       * 锛堜綔鑰呭綋鏃跺彧鑳借ˉ涓€鍧楄嚜缁樿儗鏉垮厹搴曪級銆?026-10-11 澶嶇幇浜嗗悓涓€涓幇璞★細鐢ㄦ埛鎶?
+       * 銆屽簳涓嬫挱鏀炬潯鏄€忔槑鐨勶紝鍙湅寰楄灏侀潰鍜屾寜閽€嶃€傜幇鍦ㄥ線 TabContent 閲屾斁涓€涓?*鐪熷疄鐨?
+       * 婊″昂瀵稿鍣?*锛岃 HDS 璁や负杩欐潯鏍忔湁鍐呭锛屼粠鑰屾寜鎮诞鏍峰紡鐢诲嚭鑷繁鐨勮兌鍥婅儗鏉?+ 鏉愯川銆?
        *
-       * 閸欙箑顦?`barFloatingStyle` 閻ㄥ嫰鏁?*娑撳酣顩绘い鐢稿亝閺夆€崇暭閺傜懓绨抽弽蹇庣箽閹镐椒绔撮懛?*閿涘牆褰х紒?
-       * `barBottomMargin` / `adaptToHandedness` / `systemMaterialEffect`閿涘绱?
-       * 娑撳﹣绔撮悧鍫濐樋娴肩姷娈?`barWidth` / `barSideMargin: 0` / `gradientMask: {maskHeight: 0}` 閺?
-       * 2026-10-01 鐎圭偤鐛欓柇锝咁殰閿?*瑜版挻妞傚锝嗘Ц闁板秶娼冮柇锝呮健閼奉亞绮懗灞炬緲閻劎娈?*閿涘绱濋悳鏉挎躬娑撯偓瀵板绗夋导鐙呯礉闁灝鍘ゆ禒璁崇秿
-       * "閼奉亜绻侀幒銉ь吀閺嶅繋缍?閻ㄥ嫭娈粈鐚寸礉閼冲本婢?閺夋劘宸濋崗銊ゆ唉缂?HDS閵?
+       * 鍙﹀ `barFloatingStyle` 鐨勯敭**涓庨椤甸偅鏉″畼鏂瑰簳鏍忎繚鎸佷竴鑷?*锛堝彧缁?
+       * `barBottomMargin` / `adaptToHandedness` / `systemMaterialEffect`锛夛細
+       * 涓婁竴鐗堝浼犵殑 `barWidth` / `barSideMargin: 0` / `gradientMask: {maskHeight: 0}` 鏄?
+       * 2026-10-01 瀹為獙閭ｅ锛?*褰撴椂姝ｆ槸閰嶇潃閭ｅ潡鑷粯鑳屾澘鐢ㄧ殑**锛夛紝鐜板湪涓€寰嬩笉浼狅紝閬垮厤浠讳綍
+       * "鑷繁鎺ョ鏍忎綋"鐨勬殫绀猴紝鑳屾澘/鏉愯川鍏ㄤ氦缁?HDS銆?
        */
-      // 鈽呪槄鈽呪槄 2026-10-17锛堢敤鎴凤細銆屼簩绾ч〉闈㈤偅涓ぇ鐨勫垹浜嗗晩銆?銆屽皬鐨勬槸鑷粯鐨勶紝澶у皬涔熷皬涓€浜涖€嶏級
-      //   鍘熸潵杩欓噷鏄?`HdsTabs`锛堜竴涓┖ TabContent + 鎴戜滑鐨勬挱鏀惧櫒褰?tabBar锛夛細
-      //   **澶х殑鏄?HDS 鑷繁鐢荤殑娴姩鑳跺泭鑳屾澘**锛屽皬鐨勬槸鎴戜滑閭ｆ潯鍐呭 鈬?灞忎笂涓€澶т竴灏忋€?
-      //   鈬?鍘绘帀 HDS 杩欎竴灞傦紝鐩存帴娓叉煋 `HomeMiniBarPlayer`锛堝畠鑷甫 `MiniBarBackplate()` 鑷粯鑳屾澘锛?
-      //     鈬?鍙墿杩欎竴涓紝瀹藉害 = `floatingMiniBarWidthVp()`銆侀珮搴?= `FLOATING_MINI_BAR_HEIGHT_VP`锛?
-      //        涓庨椤甸偅鏉″悓涓€濂楀昂瀵稿彛寰勶紙涓嶅啀鏈?涓€澶т竴灏?锛夈€?
-      // 鈽呪槄鈽?2026-10-18锛堢敤鎴凤細銆岃繖涓挱鏀炬潯鍔犱笂娌夋蹈鍏夋劅銆嶏級锛氭妸杩欐潯鎼洖 **HDS 娴姩搴曟爮**銆?
-      //   鏈満 SDK 閫愯鏍歌繃锛坄D:\command-line-tools\sdk\default\hms\ets\api\@hms.hds.hdsBaseComponent.d.ets`锛夛細
-      //   `systemMaterialEffect` 鍦?API 23/24 妗ｅ彧鏈変袱涓悎娉曡浇浣擄紝閮?@since 6.1.0(23)锛?
-      //     路 `TitleBarStyleOptions.systemMaterialEffect`锛?1472锛夆啇 Navigation/NavDestination 鏍囬鏍忥紱
-      //     路 `HdsTabsFloatingStyle.systemMaterialEffect`锛?5357锛夆啇 `HdsTabs.barFloatingStyle`锛?5582锛夈€?
-      //   `CommonMethod` 涓婃病鏈夎繖涓睘鎬э紝鎸傚湪鏅€?`Column`/`Stack` 涓?*鏍规湰鍐欎笉鍑烘潵**锛?
-      //   鑰屽畼鏂广€婃矇娴稿厜鎰熷姛鑳戒紭鍖栥€嬪張鎶婂畠闄愬埗鍦ㄣ€孨avigation/NavDestination 鏍囬鏍忋€嶆垨
-      //   銆屾í鍚?Tabs 涓?barPosition == BarPosition.End 鐨勫簳閮?TabBar銆嶉噷 鈬?缁撹锛?
-      //   杩欐潯娴姩鏉″彧鏈変綇杩?`HdsTabs` 鐨勬诞鍔ㄥ簳鏍忥紝鎵嶆嬁寰楀埌鐪熸鐨勫畼鏂规潗璐ㄣ€?
-      //   鈿狅笍 鍗?Tab + **闈炵┖** TabContent锛氱┖ TabContent 鍦ㄧ湡鏈轰笂 HDS 涓嶇敾鑳跺泭鑳屾澘锛?026-10-01 瀹炴祴杩囷級銆?
-      // 鈽呪槄鈽呪槄 2026-10-20锛堢涓夎疆锛夛細瀹夸富鎹㈡垚 {@link MiniBarMaterialCapsule} 鈥斺€?鏃犵晫
-      //   `design/components/MaterialCapsule.ets` 鐨?V2 绉绘锛堢収鎶勶紝涓嶈嚜閫狅級锛?
-      //     `HdsTabs` + `TabContent().tabBar(鍐呭)` + `barOverlap(true)` + `barPosition(End)`
+      // ★★★★ 2026-10-17（用户：「二级页面那个大的删了啊」+「小的是自绘的，大小也小一些」）
+      //   原来这里是 `HdsTabs`（一个空 TabContent + 我们的播放器当 tabBar）：
+      //   **大的是 HDS 自己画的浮动胶囊背板**，小的是我们那条内容 ⇒ 屏上一大一小。
+      //   ⇒ 去掉 HDS 这一层，直接渲染 `HomeMiniBarPlayer`（它自带 `MiniBarBackplate()` 自绘背板）
+      //     ⇒ 只剩这一个，宽度 = `floatingMiniBarWidthVp()`、高度 = `FLOATING_MINI_BAR_HEIGHT_VP`，
+      //        与首页那条同一套尺寸口径（不再有"一大一小"）。
+      // ★★★ 2026-10-18（用户：「这个播放条加上沉浸光感」）：把这条搬回 **HDS 浮动底栏**。
+      //   本机 SDK 逐行核过（`D:\command-line-tools\sdk\default\hms\ets\api\@hms.hds.hdsBaseComponent.d.ets`）：
+      //   `systemMaterialEffect` 在 API 23/24 档只有两个合法载体，都 @since 6.1.0(23)：
+      //     · `TitleBarStyleOptions.systemMaterialEffect`（:1472）← Navigation/NavDestination 标题栏；
+      //     · `HdsTabsFloatingStyle.systemMaterialEffect`（:5357）← `HdsTabs.barFloatingStyle`（:5582）。
+      //   `CommonMethod` 上没有这个属性，挂在普通 `Column`/`Stack` 上**根本写不出来**；
+      //   而官方《沉浸光感功能优化》又把它限制在「Navigation/NavDestination 标题栏」或
+      //   「横向 Tabs 且 barPosition == BarPosition.End 的底部 TabBar」里 ⇒ 结论：
+      //   这条浮动条只有住进 `HdsTabs` 的浮动底栏，才拿得到真正的官方材质。
+      //   ⚠️ 单 Tab + **非空** TabContent：空 TabContent 在真机上 HDS 不画胶囊背板（2026-10-01 实测过）。
+      // ★★★★ 2026-10-20（第三轮）：宿主换成 {@link MiniBarMaterialCapsule} —— 无界
+      //   `design/components/MaterialCapsule.ets` 的 V2 移植（照抄，不自造）：
+      //     `HdsTabs` + `TabContent().tabBar(内容)` + `barOverlap(true)` + `barPosition(End)`
       //     + `vertical(false)` + `barHeight(barHeight)` + `barWidth(barWidth)`
-      //     + `barFloatingStyle{ systemMaterialEffect, barBottomMargin: slackH/2, gradientMask: 閫忔槑 }`銆?
-      //   涓轰粈涔堜笉鍐嶆槸"鎶婂唴瀹瑰杩?HdsTabs 鐨?tabBar 妲?锛?
-      //     鈶?鍏夋劅锛氭潗璐ㄤ粛鐒舵潵鑷?`HdsTabsFloatingStyle.systemMaterialEffect`锛圫DK :5357锛屽敮涓€鍚堟硶杞戒綋锛夛紱
-      //     鈶?鎸ゅ帇锛氭暣涓?`HdsTabs` 鐜板湪钀藉湪**鎴戜滑鑷繁鐨勫瓙鏍?*閲岋紝鑳跺泭閭ｅ眰 `Stack` 涓婄殑
-      //        `.scale({y: morphSquashY})` 鑳?*鍘嬪埌 HDS 鐢荤殑鏉愯川鑳屾澘**锛堟棤鐣?`morphGlass`
-      //        `wujie.pa:155724-155745` 灏辨槸杩欎箞鍘嬬殑锛夛紱浣忓湪澹冲眰 `HdsTabs` 鐨?`miniBar` 妲介噷鏃跺仛涓嶅埌
-      //        锛堣儗鏉挎槸妲界殑鍏勫紵锛屼笉鍦ㄦ垜浠瓙鏍戦噷锛夆€斺€?涓婁竴杞殑鐥呮牴銆?
-      //     鈶?鈶＄骇椤?鍐呭鍋忓彸涓?锛?*鍙鍐呭涓嶅啀鐢诲湪 HDS 鐨?`tabBar` 妲介噷**锛堟Ы鐨勫嚑浣曚笉鍙娴嬶紝
-      //        涓婁竴鐗堟嬁瀹冨綋鍐呭鐩?鈬?鐪熸満涓婁粛鍋忓彸涓嬶級銆傜幇鍦ㄥ唴瀹瑰眰 = `barWidth 脳 barHeight`銆?
-      //        琚眳涓湪"楂?= barHeight + 2 脳 bottomMargin"鐨勭洅閲?鈬?涓庤兌鍥婄煩褰?*鍚屼竴涓畻寮?*锛?
-      //        涓績鎭掔瓑锛屽亸鍙充笅鍦ㄧ粨鏋勪笂涓嶅彲鑳藉彂鐢燂紙瑙?`MiniBarMaterialCapsule` 绫绘敞閲婄浜?涓夎妭锛夈€?
-      // 鈿狅笍 ArkTS 闄愬埗锛氬甫灏鹃殢 builder 鐨勭粨鏋勪綋璋冪敤涓嶈兘鍐嶆寕灞炴€ф柟娉?
-      //   锛堝惁鍒欐姤 `Declaration or statement expected` + `Cannot find name 'id'`锛?
-      //   鈬?澶栭潰濂椾竴灞?`Stack` 鎵胯浇 `.id / .clip / .onAppear / .onAreaChange`銆?
+      //     + `barFloatingStyle{ systemMaterialEffect, barBottomMargin: slackH/2, gradientMask: 透明 }`。
+      //   为什么不再是"把内容塞进 HdsTabs 的 tabBar 槽"：
+      //     ① 光感：材质仍然来自 `HdsTabsFloatingStyle.systemMaterialEffect`（SDK :5357，唯一合法载体）；
+      //     ② 挤压：整个 `HdsTabs` 现在落在**我们自己的子树**里，胶囊那层 `Stack` 上的
+      //        `.scale({y: morphSquashY})` 能**压到 HDS 画的材质背板**（无界 `morphGlass`
+      //        `wujie.pa:155724-155745` 就是这么压的）；住在壳层 `HdsTabs` 的 `miniBar` 槽里时做不到
+      //        （背板是槽的兄弟，不在我们子树里）—— 上一轮的病根。
+      //     ③ ②级页"内容偏右下"：**可见内容不再画在 HDS 的 `tabBar` 槽里**（槽的几何不可观测，
+      //        上一版拿它当内容盒 ⇒ 真机上仍偏右下）。现在内容层 = `barWidth × barHeight`、
+      //        被居中在"高 = barHeight + 2 × bottomMargin"的盒里 ⇒ 与胶囊矩形**同一个算式**，
+      //        中心恒等，偏右下在结构上不可能发生（见 `MiniBarMaterialCapsule` 类注释第二/三节）。
+      // ⚠️ ArkTS 限制：带尾随 builder 的结构体调用不能再挂属性方法
+      //   （否则报 `Declaration or statement expected` + `Cannot find name 'id'`）
+      //   ⇒ 外面套一层 `Stack` 承载 `.id / .clip / .onAppear / .onAreaChange`。
       Stack() {
         MiniBarMaterialCapsule({
           barWidth: this.floatingMiniBarWidthVp(),
-          // 鈿狅笍 浜岀骇椤佃繖鏉＄殑楂樺害**鐢ㄦ埛璇?OK**锛堛€?.棣栭〉鏄珮搴︿綆璋冪殑鎾斁鏉°€嶉偅鏉″彧閽堝棣栭〉锛夛紝
-          //   鎵€浠ヨ繖閲屼繚鎸佽璁￠珮搴?56锛?*涓嶈**璺熺潃棣栭〉涓€璧锋敼鐭€?
+          // ⚠️ 二级页这条的高度**用户说 OK**（「3.首页是高度低调的播放条」那条只针对首页），
+          //   所以这里保持设计高度 56，**不要**跟着首页一起改矮。
           barHeight: FLOATING_MINI_BAR_HEIGHT_VP,
-          // 鏉″簳鍒?鏈粍浠剁洅搴?鐨勮窛绂伙細鐢ㄦ硶涓?`barFloatingStyle.barBottomMargin` 瀹屽叏鍚屼箟
-          // 锛圫DK :5311銆宼he distance between tab bar and bottom of tabs銆嶏級鈬?閿洏閬胯鍙ｅ緞涓嶅彉銆?
-          // 鈽?2026-10-20锛氬畠鍚屾椂鏄兌鍥婄殑**涓?涓嬬暀鐧?*锛堢洅楂?= barHeight + 2 脳 鏈€硷紝瑙?
-          //   `MiniBarMaterialCapsule` 绫绘敞閲婄鍥涜妭锛夆噿 甯告€佺洅楂?= 56 + 2脳12 = **80**锛堜箣鍓?76锛夛紱
-          //   澶氬嚭鏉ョ殑 4vp 鏄?*绾€忔槑 slack 鍦ㄨ兌鍥婁笂鏂?*锛岃兌鍥婅嚜韬殑灏哄/绂诲簳锛?2锛変竴涓瓧娌″姩銆?
+          // 条底到"本组件盒底"的距离：用法与 `barFloatingStyle.barBottomMargin` 完全同义
+          // （SDK :5311「the distance between tab bar and bottom of tabs」）⇒ 键盘避让口径不变。
+          // ★ 2026-10-20：它同时是胶囊的**上/下留白**（盒高 = barHeight + 2 × 本值，见
+          //   `MiniBarMaterialCapsule` 类注释第四节）⇒ 常态盒高 = 56 + 2×12 = **80**（之前 76）；
+          //   多出来的 4vp 是**纯透明 slack 在胶囊上方**，胶囊自身的尺寸/离底（12）一个字没动。
           bottomMargin: this.floatingMiniBarBottomMarginVp(),
-          // 鏉愯川妗ｄ綅涓庨椤甸偅鏉″叡鐢ㄤ竴浠斤紙`ambientTitleMaterial()`锛夆噿 涓ゆ潯鏄悓涓€濂楀厜鎰熴€?
+          // 材质档位与首页那条共用一份（`ambientTitleMaterial()`）⇒ 两条是同一套光感。
           material: this.ambientTitleMaterial(),
-          // 璇婃柇锛坄hdc shell hilog | grep RzdMiniBarFit`锛夛細涓庨椤甸偅鏉?*鍚屼竴浠?*鍏ュ弬銆?
+          // 诊断（`hdc shell hilog | grep RzdMiniBarFit`）：与首页那条**同一份**入参。
           fitWinWVp: this.viewportWidthVp,
           fitSideMarginVp: this.floatingMiniBarSideMarginVp()
         }) {
           this.floatingMiniBarContent()
         }
       }
-      // 鈿狅笍 涓嬮潰杩欎簺 HdsTabs 灞炴€?*宸叉暣娈电Щ璧?*锛氬畠浠幇鍦ㄤ綇鍦?`MiniBarMaterialCapsule`
-      //   鑷繁鐨?`build()` 閲岋紙閫愭潯瀵圭収 `wujie.pa:60093-60240`锛岃閭ｄ釜鏂囦欢鐨勭被娉ㄩ噴琛級銆?
-      //   杩欓噷**涓嶈**鍐嶅啓涓€閬嶏紙涓ゅ鍚勫啓涓€浠?= 鏃╂櫄婕傜Щ锛夈€?
-      // 娑撳酣顩绘い闈涚俺閺嶅繐鎮撴稉鈧仦蹇撶娴ｅ秶鐤嗛敍姘殻閸ф顔栨稉璇叉倻娑撳顔€閸戝搫绨抽柈銊╀缉鐠佲晠鍋呮稉鈧禒鏂ょ礄barBottomMargin 瀹告彃缍婇梿璁圭礆
-      // 閳?闁款喚娲忛柆鑳唨閿涘牏鏁ら幋?2026-10-12閵嗗奔绨╃痪褔銆夐棃銏℃尡閺€鐐蒋閸旂姳绗傞柨顔炬磸闁儻顔€閵嗗稄绱氶敍姘舵暛閻╂ê鑴婇崙鐑樻閸︺劏绻栨禒钘変焊缁夎绗?
-      //   閸愬秴鍣洪幒?`floatingMiniBarKeyboardLiftVp()`閿? 闁款喚娲忔妯哄 + 8 閳?鐢憡鈧焦妫﹂張澶愭？闂呮瑱绱氶埇?閺佸瓨娼€瑰じ瀵?
-      //   鏉╃偛鎮?HDS 閼宠泛娉稉鈧挧铚傜瑐閹额剙鍩岄柨顔炬磸娑撳﹥閮ㄦ稊瀣╃瑐閿涙盯鏁惄妯绘暪鐠у嘲鎮?lift 閹帊璐?0 閳?鏉╂瑤绔寸悰?*闁劕鐡х粵澶夌艾**
-      //   閺€鐟板З閸撳秶娈?`homeTabBarBottomMarginVp()`閿涘牆娲栬ぐ鎺斿缁惧尅绱濈憴渚€鍋呮稉顏勫毐閺佹壆娈戝▔銊╁櫞閿涘鈧?
-      // 鈽呪槄鈽?2026-10-18锛氳繖閲?*娌℃湁** `.offset` 浜?鈥斺€?閿洏閬胯涓€寰嬭蛋涓婇潰 `barFloatingStyle.barBottomMargin`
-      //   锛堝彧鎸兌鍥婏紝瀹夸富鐩掍笌瀹冨簳涓嬮偅灞傛潗璐ㄥ師鍦颁笉鍔級銆傛妸鏈潯閲嶆柊鎺ュ洖 `.offset` = "鏁翠釜搴曚笅琚姮涓婃潵"澶嶇幇銆?
+      // ⚠️ 下面这些 HdsTabs 属性**已整段移走**：它们现在住在 `MiniBarMaterialCapsule`
+      //   自己的 `build()` 里（逐条对照 `wujie.pa:60093-60240`，见那个文件的类注释表）。
+      //   这里**不要**再写一遍（两处各写一份 = 早晚漂移）。
+      // 涓庨椤靛簳鏍忓悓涓€灞忓箷浣嶇疆锛氭暣鍧楀涓诲悜涓嬭鍑哄簳閮ㄩ伩璁╅偅涓€浠斤紙barBottomMargin 宸插綊闆讹級
+      // 鈽?閿洏閬胯锛堢敤鎴?2026-10-12銆屼簩绾ч〉闈㈡挱鏀炬潯鍔犱笂閿洏閬胯銆嶏級锛氶敭鐩樺脊鍑烘椂鍦ㄨ繖浠藉亸绉讳笂
+      //   鍐嶅噺鎺?`floatingMiniBarKeyboardLiftVp()`锛? 閿洏楂樺害 + 8 鈭?甯告€佹棦鏈夐棿闅欙級鈬?鏁存潯瀹夸富
+      //   杩炲悓 HDS 鑳跺泭涓€璧蜂笂鎶埌閿洏涓婃部涔嬩笂锛涢敭鐩樻敹璧峰悗 lift 鎭掍负 0 鈬?杩欎竴琛?*閫愬瓧绛変簬**
+      //   鏀瑰姩鍓嶇殑 `homeTabBarBottomMarginVp()`锛堝洖褰掔孩绾匡紝瑙侀偅涓嚱鏁扮殑娉ㄩ噴锛夈€?
+      // ★★★ 2026-10-18：这里**没有** `.offset` 了 —— 键盘避让一律走上面 `barFloatingStyle.barBottomMargin`
+      //   （只挪胶囊，宿主盒与它底下那层材质原地不动）。把本条重新接回 `.offset` = "整个底下被抬上来"复现。
       .id(SECONDARY_MINI_BAR_HOST_ID)
-      // 鈽呪槄鈽?2026-10-20锛堢鍏疆锛夛細妯悜鎽嗕綅浜ょ粰**涓庨椤靛悓涓€涓嚱鏁?*锛坽@link miniBarBoxRightMarginVp}锛夈€?
-      //   鏈疆涔嬪墠杩欓噷闈?`Alignment.Bottom`锛堢洅灞呬腑锛夆€斺€?缁撴灉瀵癸紝浣?*涓庨椤电殑鍙抽敋 + margin 涓嶆槸鍚屼竴濂楀啓娉?*锛?
-      //   鑰岄椤甸偅涓?margin 鐢ㄧ殑鏄兌鍥婂鑰屼笉鏄洅瀹?鈬?涓ゆ潯宸?5vp銆傜幇鍦ㄤ袱鑰呴兘鍐?鍙抽敋 + 鐩掑 margin"锛?
-      //   绠楀紡涓€澶勩€佸嚑浣曚竴鑷达細`鑳跺泭鍙崇紭 = winW 鈭?side`銆?
+      // ★★★ 2026-10-20（第六轮）：横向摆位交给**与首页同一个函数**（{@link miniBarBoxRightMarginVp}）。
+      //   本轮之前这里靠 `Alignment.Bottom`（盒居中）—— 结果对，但**与首页的右锚 + margin 不是同一套写法**，
+      //   而首页那个 margin 用的是胶囊宽而不是盒宽 ⇒ 两条差 5vp。现在两者都写"右锚 + 盒宽 margin"，
+      //   算式一处、几何一致：`胶囊右缘 = winW − side`。
       .margin({ right: this.miniBarBoxRightMarginVp(this.secondaryMiniBarBoxWidthVp(), false) })
-      // 娑撳秷顩︾憗渚婄窗HDS 閻ㄥ嫭娼楃拹銊ㄥ剹閺?閹舵ê鐨犻懠鍐ㄦ纯濮ｆ柨鍞寸€瑰湱娲呮径褝绱濈憗浣风啊娴兼氨宸辨稉鈧崷鍫涒偓?
+      // 涓嶈瑁侊細HDS 鐨勬潗璐ㄨ儗鏉?鎶樺皠鑼冨洿姣斿唴瀹圭洅澶э紝瑁佷簡浼氱己涓€鍦堛€?
       .clip(false)
       .onAppear((): void => {
-        // 鈿狅笍 杩欒蹇呴』涓庝唬鐮?*鍚屼箟**锛堝亣鏃ュ織姣旀病鏃ュ織鏇村浜猴紝搂183 韪╄繃锛夛細
-        //   瀹夸富宸蹭笉鏄?澹冲眰 HdsTabs 鐨?tabBar 妲?锛岃€屾槸鎴戜滑瀛愭爲閲岀殑 `MiniBarMaterialCapsule`
-        //   锛堝畠鍐呴儴浠嶆槸涓€涓?`HdsTabs` 娴姩搴曟爮锛夆噿 鍏夋劅鏉ユ簮浠嶆槸 `systemMaterialEffect`锛?
-        //   浣?瀹樻柟鍖哄煙"杩欏彞璇濆凡涓嶉€傜敤锛屾敼鎴愬瀹炴弿杩般€?
+        // ⚠️ 这行必须与代码**同义**（假日志比没日志更害人，§183 踩过）：
+        //   宿主已不是"壳层 HdsTabs 的 tabBar 槽"，而是我们子树里的 `MiniBarMaterialCapsule`
+        //   （它内部仍是一个 `HdsTabs` 浮动底栏）⇒ 光感来源仍是 `systemMaterialEffect`，
+        //   但"官方区域"这句话已不适用，改成如实描述。
         Logger.info('RzdSecondaryMiniMaterial',
           `mode=capsule-hds-material host=our-subtree-hdstabs ` +
             `barWidth=${this.floatingMiniBarWidthVp()} barHeight=${FLOATING_MINI_BAR_HEIGHT_VP} ` +
             `slackW=${CAPSULE_SLACK_W} slackH=${CAPSULE_SLACK_H} ` +
-            `contentBox=barWidth脳barHeight align=stackCenter selfPlate=off ` +
+            `contentBox=barWidth×barHeight align=stackCenter selfPlate=off ` +
             `contentLayer=own-capsule-rect slotProbe=on ` +
             `bottomGap=${FLOATING_MINI_BAR_BOTTOM_GAP_VP} keyGap=${FLOATING_MINI_BAR_KEYBOARD_GAP_VP} ` +
             `barBottomMargin=${this.floatingMiniBarBottomMarginVp()} ` +
             `ambient=${this.ambientLevelIndex()} squashY=${this.expandState.morphSquashY} singleVisibleBar=true`);
       })
       .onAreaChange((_oldArea: Area, area: Area): void => {
-        // 杩欓噷鐨?width/height 鏄?*鑳跺泭缁勪欢鐩?*锛? 鑳跺泭 + 妯悜 slackW + 涓婁笅鍚?`barBottomMargin`锛夛紝
-        // 涓嶆槸鑳跺泭鏈韩锛涜兌鍥?= `barWidth 脳 barHeight`锛屼綅缃?= 鐩掑唴灞呬腑锛堟í鍚戙€佺旱鍚戦兘灞呬腑锛?
-        // 鍥犱负鐩掗珮鎭掍负 `barHeight + 2 脳 barBottomMargin`锛夈€?
+        // 这里的 width/height 是**胶囊组件盒**（= 胶囊 + 横向 slackW + 上下各 `barBottomMargin`），
+        // 不是胶囊本身；胶囊 = `barWidth × barHeight`，位置 = 盒内居中（横向、纵向都居中，
+        // 因为盒高恒为 `barHeight + 2 × barBottomMargin`）。
         const boxW: number = areaLengthToVp(area.width);
         const boxH: number = areaLengthToVp(area.height);
         Logger.info('RzdSecondaryMiniMaterial',
@@ -2271,9 +2271,9 @@ struct Index {
             `pageBottomInset=${this.pageBottomInsetVp()} squashY=${this.expandState.morphSquashY} ` +
             `ambient=${this.ambientLevelIndex()}`);
       })
-      // 閳跨媴绗?**娑撳秷顩?*閸︺劏绻栭柌灞藉晙閸愭瑤绔存稉?`.margin({ bottom: ... })`閿涙氨顬囨惔鏇＄獩缁傝鍑＄紒蹇曟暠
-      //    `barFloatingStyle.barBottomMargin` 缂佹瑤绨￠敍鍫滅瑢妫ｆ牠銆夐柇锝嗘蒋鐎规ɑ鏌熸惔鏇熺埉閸氬奔绔撮崣锝呯窞閿涘鈧?
-      //    娑撱倓閲滄稉鈧挧宄板晸 = 缁傝绨崇捄婵堫瀲缂堣鈧稄绱濋惇鐔告簚娑撳﹦婀呴惈鈧亸杈ㄦЦ"閹绢厽鏂侀弶鈩冭癁瀵版銇婃?閿涘牏鏁ら幋?2026-10-11 鐠佲晝婀呴惃鍕亝閺夆槄绱氶妴?
+      // 鈿狅笍 **涓嶈**鍦ㄨ繖閲屽啀鍐欎竴涓?`.margin({ bottom: ... })`锛氱搴曡窛绂诲凡缁忕敱
+      //    `barFloatingStyle.barBottomMargin` 缁欎簡锛堜笌棣栭〉閭ｆ潯瀹樻柟搴曟爮鍚屼竴鍙ｅ緞锛夈€?
+      //    涓や釜涓€璧峰啓 = 绂诲簳璺濈缈诲€嶏紝鐪熸満涓婄湅鐫€灏辨槸"鎾斁鏉℃诞寰楀お楂?锛堢敤鎴?2026-10-11 璁╃湅鐨勯偅鏉★級銆?
     }
     .width(StyleConstants.FULL_WIDTH)
     .height(StyleConstants.FULL_HEIGHT)
@@ -2285,111 +2285,111 @@ struct Index {
   }
 
   /**
-   * 鈽呪槄鈽?2026-10-20锛堢涓夎疆锛夛細鍘熸潵杩欓噷鐨?`floatingMiniBarTabBarBox()` **宸插垹闄?*銆?
+   * ★★★ 2026-10-20（第三轮）：原来这里的 `floatingMiniBarTabBarBox()` **已删除**。
    *
-   * 瀹冪殑鍘嗗彶浣垮懡鏄?鐚?HDS 缁?tabBar 鐨?*妲介珮**"锛坄LayoutPolicy.matchParent` + `constraintSize`
-   * 涓婁笅闄?+ `alignContent: Center`锛夛紝鍐嶇敤 `(妲介珮 鈭?56) / 2` 鍙嶆帹鐣欑櫧 鈥斺€?閭ｆ鏄?
-   * 銆屽唴瀹瑰亸鍙充笅銆嶇殑鏉ユ簮锛氭Ы楂樹笉绛変簬鑳跺泭楂橈紝灞呬腑瀵硅薄閿欎簡锛屽氨鍙兘闈犺皟鏁板€煎噾銆?
+   * 它的历史使命是"猜 HDS 给 tabBar 的**槽高**"（`LayoutPolicy.matchParent` + `constraintSize`
+   * 上下限 + `alignContent: Center`），再用 `(槽高 − 56) / 2` 反推留白 —— 那正是
+   * 「内容偏右下」的来源：槽高不等于胶囊高，居中对象错了，就只能靠调数值凑。
    *
-   * 鐜板湪**鍐呭鐩?鈮?鑳跺泭鐩?*锛氬唴瀹圭洿鎺ョ敾鍦?{@link MiniBarMaterialCapsule} 鐨?`tabBar`
-   * builder 閲岋紝鐩掑瓙鐢?`barWidth 脳 barHeight` 缁欏嚭锛堝悓涓€涓嚱鏁般€佸悓涓€缁勬暟锛夛紝
-   * 鍐呴儴 `Stack(alignContent: Center)` 鈬?灞呬腑鏄竴鐪煎彲绠楃殑锛屼笉闇€瑕佷换浣?妲介珮"鍋囪銆?
-   * 鈿狅笍 涓嶈鍐嶆妸 `matchParent` / `constraintSize` 閭ｄ竴濂楁惉鍥炴潵銆?
+   * 现在**内容盒 ≡ 胶囊盒**：内容直接画在 {@link MiniBarMaterialCapsule} 的 `tabBar`
+   * builder 里，盒子由 `barWidth × barHeight` 给出（同一个函数、同一组数），
+   * 内部 `Stack(alignContent: Center)` ⇒ 居中是一眼可算的，不需要任何"槽高"假设。
+   * ⚠️ 不要再把 `matchParent` / `constraintSize` 那一套搬回来。
    */
 
   /**
-   * 鐎规ɑ鏌熷ù顔煎З閺嶅繘鍣?*閸烆垯绔撮崣顖濐潌閻ㄥ嫬鍞寸€?*閿涘牓銆夌粵鐐埉 CustomBuilder閿涘鈧?
+   * 瀹樻柟娴姩鏍忛噷**鍞竴鍙鐨勫唴瀹?*锛堥〉绛炬爮 CustomBuilder锛夈€?
    *
-   * 鐏忓搫顕稉?{@link floatingMiniBar} 閻ㄥ嫬顔栨稉鑽ゆ磪娑撱儲鐗告稉鈧懛杈剧窗鐎瑰じ瀵岄弰?56vp 妤傛﹫绱濇潻娆撳櫡閸愬秴鍟撳璁崇濞嗏槄绱?
-   * 閸忓秴绶?HDS 閻ㄥ嫭甯撶敮鍐ㄥ綁閸栨牭绱欐稉銈嗗笓/閸楁洘甯撻敍澶嬪Ω鐏忎線娼版禒?44 缂傗晜鍨?30閵?
+   * 灏哄涓?{@link floatingMiniBar} 鐨勫涓荤洅涓ユ牸涓€鑷达細瀹夸富鏄?56vp 楂橈紝杩欓噷鍐嶅啓姝讳竴娆★紝
+   * 鍏嶅緱 HDS 鐨勬帓甯冨彉鍖栵紙涓ゆ帓/鍗曟帓锛夋妸灏侀潰浠?44 缂╂垚 30銆?
    *
-   * 閳?2026-10-15閿?閹绢厽鏂侀弶鈩冩纯缁?闁絾娼敍澶涚窗`HomeMiniBarPlayer` 閼奉亜绻侀惃鍕彯鎼达箑鍑＄紒蹇斿畾閸?56vp
-   *   閿涘牆鐨濋棃?40 + 娑撳﹣绗呴崥?8 閳ユ柡鈧?鐟?`HomeMiniBarAlbumCover.coverSideLengthVp()` 娑?
-   *   `HomeMiniBarPlayer.sidePadVp()` 閻ㄥ嫭鏁為柌濠忕礆閿涘本澧嶆禒銉ㄧ箹娑撯偓濡楋綇绱欑亸渚€娼?44閿涘婀張?Builder 闁?
-   *   缁犳鍤弶銉ф畱妤傛ê瀹抽弰?44 + 8鑴? = **60vp**閿涘本鐦€瑰じ瀵屽Σ浠嬬彯 4vp 閳ユ柡鈧?娴溿倗绮?HDS 鐏炲懍鑵戦崡鍐插讲
-   *   閿涘牆顦块崙鐑樻降閻?4vp 閺勵垵顔曠拋鈥茬瑐閺勫海鈥樼拋鈺傤劄閻ㄥ嫪缍戦柌蹇ョ礉娑撳秷顩﹂崘宥呭閸ュ搫鐣?height 閸樿銇欑€瑰喛绱?
-   *    2026-10-12 闁絾顐?瀵缚顢戠€?56vp 閳?閺佸瓨甯撻崗鍐娴?6~8vp"閻ㄥ嫭鏆€鐠侇厼姘ㄩ崷銊ょ瑓闂堛垽鍋呴弶鈩冩暈闁插﹪鍣烽敍澶堚偓?
-   * 娑撳﹥濯?閻愮懓鍤幍鎾崇磻閹绢厽鏂佹い鐢垫畱閹靛濞嶉崷?`HomeMiniBarPlayer` 閸愬懘鍎撮敍宀冪箹闁插奔绗夌憰渚€鍣告径宥嗗瘯閵?
+   * 鈽?2026-10-15锛?鎾斁鏉℃洿绮?閭ｆ潯锛夛細`HomeMiniBarPlayer` 鑷繁鐨勯珮搴﹀凡缁忔定鍒?56vp
+   *   锛堝皝闈?40 + 涓婁笅鍚?8 鈥斺€?瑙?`HomeMiniBarAlbumCover.coverSideLengthVp()` 涓?
+   *   `HomeMiniBarPlayer.sidePadVp()` 鐨勬敞閲婏級锛屾墍浠ヨ繖涓€妗ｏ紙灏侀潰 44锛夊湪鏈?Builder 閲?
+   *   绠楀嚭鏉ョ殑楂樺害鏄?44 + 8脳2 = **60vp**锛屾瘮瀹夸富妲介珮 4vp 鈥斺€?浜ょ粰 HDS 灞呬腑鍗冲彲
+   *   锛堝鍑烘潵鐨?4vp 鏄璁′笂鏄庣‘璁╂鐨勪綑閲忥紝涓嶈鍐嶅姞鍥哄畾 height 鍘诲す瀹冿紝
+   *    2026-10-12 閭ｆ"寮鸿瀹?56vp 鈬?鏁存帓鍏冪礌浣?6~8vp"鐨勬暀璁氨鍦ㄤ笅闈㈤偅鏉℃敞閲婇噷锛夈€?
+   * 涓婃媺/鐐瑰嚮鎵撳紑鎾斁椤电殑鎵嬪娍鍦?`HomeMiniBarPlayer` 鍐呴儴锛岃繖閲屼笉瑕侀噸澶嶆寕銆?
    */
   @Builder
   private floatingMiniBarContent() {
     HomeMiniBarPlayer({
       showPreviousTrack: false,
       followAppMiniBarExpanded: false,
-      // 鈽呪槄鈽?2026-10-18锛氳繖鏉′綇鍦?HDS 娴姩搴曟爮閲岋紝鑳跺泭涓庢潗璐ㄧ敱 `barFloatingStyle.systemMaterialEffect`
-      //   鐢伙紙瀹樻柟鏉愯川锛夆噿 鑷粯鑳屾澘蹇呴』鍏虫帀銆備笉鍏冲氨鏄€岀湡鏉愯川 + 涓€灞?#30F1F3F5 + 涓€灞傛ā绯娿€嶄袱灞傚彔鐫€锛?
-      //   鏉愯川琚礂鐧?鈥斺€?涓婁竴杞敤鎴疯鐨勩€屽ぇ鐨勶紙HDS 鑳跺泭锛夊拰灏忎竴鍦堢殑锛堣嚜缁橈級銆嶄篃鏄繖涓彔娉曘€?
-      //   锛堥椤甸偅鏉?2026-10-18 鏅氫篃鏀规垚鍚屼竴涓彛寰勶細`enableMiniBarBackground: true` + 杩欓噷浼?false锛?
-      //      瑙?{@link miniBar}銆備袱澶勭幇鍦ㄦ槸鍚屼竴濂?鈥斺€?"鏉愯川鐢?HDS 鐢伙紝鎴戜滑鍙敾鍐呭"銆傦級
+      // ★★★ 2026-10-18：这条住在 HDS 浮动底栏里，胶囊与材质由 `barFloatingStyle.systemMaterialEffect`
+      //   画（官方材质）⇒ 自绘背板必须关掉。不关就是「真材质 + 一层 #30F1F3F5 + 一层模糊」两层叠着，
+      //   材质被洗白 —— 上一轮用户说的「大的（HDS 胶囊）和小一圈的（自绘）」也是这个叠法。
+      //   （首页那条 2026-10-18 晚也改成同一个口径：`enableMiniBarBackground: true` + 这里传 false，
+      //      见 {@link miniBar}。两处现在是同一套 —— "材质由 HDS 画，我们只画内容"。）
       showSelfDrawnBackplate: false,
-      // 鈽呪槄鈽?2026-10-18锛堟櫄锛夛細**鎶婂唴瀹归拤鍦ㄨ璁￠珮搴?* `FLOATING_MINI_BAR_HEIGHT_VP`(56)銆?
-      //   `HomeMiniBarPlayer` 鐨勮嚜鐒堕珮搴?= 灏侀潰 + 涓婁笅鍚?8vp 鍐呰窛锛氬父瑙勬€佸皝闈?44 鈬?**60vp**
-      //   锛堟矇娴稿紡鑷敱绐楀彛閭ｄ竴妗ｅ皝闈?40 鈬?56vp锛夛紝涓庤璁￠珮搴?56 宸?4vp銆?
-      //   涓嶉拤浣忕殑璇?璋佹瘮璋侀珮"鍙栧喅浜庣獥鍙ｈ楗版。浣嶏紱閽変綇涔嬪悗**鍞竴鍙橀噺鍙墿鑳跺泭楂樺害**锛?
-      //   鍐呭鐩?= 鑳跺泭鐩?= 56 鈬?涓婁笅鐣欑櫧鎭掍负 0锛堝唴瀹硅嚜宸卞眳涓紝瑙?`MiniBarMaterialCapsule.ContentLayer`锛夈€?
-      // 鈽?2026-10-20锛堢浜岃疆锛夛細閽変綇涔嬪悗**鍐呭琛岃嚜宸变篃鍚冨悓涓€涓笂闄?*锛坄HomeMiniBarPlayer` 閲?
-      //   Row 涓婄殑 `constraintSize.maxHeight`锛夛紝鍚﹀垯琛?60 > 鐩?56 = "瀛愪欢姣斿鍣ㄥぇ"锛?
-      //   鎺掑竷浜ょ粰寮曟搸鍏滃簳 鈥斺€?閭ｆ鏄?2vp 鍚戜笅鍋忓樊鐨勫€欓€夋潵婧愩€?
+      // ★★★ 2026-10-18（晚）：**把内容钉在设计高度** `FLOATING_MINI_BAR_HEIGHT_VP`(56)。
+      //   `HomeMiniBarPlayer` 的自然高度 = 封面 + 上下各 8vp 内距：常规态封面 44 ⇒ **60vp**
+      //   （沉浸式自由窗口那一档封面 40 ⇒ 56vp），与设计高度 56 差 4vp。
+      //   不钉住的话"谁比谁高"取决于窗口装饰档位；钉住之后**唯一变量只剩胶囊高度**，
+      //   内容盒 = 胶囊盒 = 56 ⇒ 上下留白恒为 0（内容自己居中，见 `MiniBarMaterialCapsule.ContentLayer`）。
+      // ★ 2026-10-20（第二轮）：钉住之后**内容行自己也吃同一个上限**（`HomeMiniBarPlayer` 里
+      //   Row 上的 `constraintSize.maxHeight`），否则行 60 > 盒 56 = "子件比容器大"，
+      //   排布交给引擎兜底 —— 那正是 2vp 向下偏差的候选来源。
       contentHeightVp: FLOATING_MINI_BAR_HEIGHT_VP,
-      // 鈽呪槄鈽?绗竷杞紙鐢ㄦ埛锛氥€屼簩绾ч〉闈⑩€﹀皝闈㈢宸︿晶澶繙銆嶏級锛氫笌棣栭〉閭ｆ潯**鍚屼竴涓満鍒?* 鈥斺€?
-      //   鎶婂皝闈㈢湡瀹炵殑甯冨眬鐩掍紶杩涘幓锛宍sidePad = (鑳跺泭楂?鈭?灏侀潰鐩?/2` 鈬?灏侀潰鍐呮帴浜庤兌鍥?
-      //   锛堣瑙夊乏杈硅窛 鈮?涓婁笅鐣欑櫧锛夈€傛湰椤电殑妗ｄ綅涓?`HomeMiniBarAlbumCover` 鍚屽彛寰勶細
-      //   `followAppMiniBarExpanded: false` 鏃跺畠涓嶅啀璇?HDS 鏍忔帓甯冿紝鍙墿"娌夋蹈寮?40 / 鍚﹀垯 44"銆?
-      // 鈽?2026-10-21锛堢鍏疆锛夛細涓庨椤甸偅鏉?*鍚屼竴涓皝闈㈡満鍒?*锛?2 鐩?脳 `scale(1.4)`锛夆噿 涓嶅啀浼?
-      //   `coverSideVp`銆備笂娓镐笁褰㈡€佽〃瀵逛簩绾ч〉閫愰」涓€鑷达細鑳跺泭 56 / 瑙嗚灏侀潰 44.8 / 瑙嗚宸﹁竟璺?5.6锛?
-      //   涓夎€呴兘鐢?`HomeMiniBarPlayer.sidePadVp()` + `HomeMiniBarAlbumCover.coverScale()` 鑷畻銆?
-      // 鈽呪槄鈽?2026-10-20锛氭尋鍘嬩氦缁?{@link MiniBarMaterialCapsule} 閭ｄ竴灞傦紙瀹冨帇鍦?瀹樻柟鏉愯川鑳屾澘 + 鍐呭"
-      //   鍚屼竴涓彉鎹㈠煙涓婏級銆傝繖閲岃嫢鍐嶅帇涓€娆★紝涓や釜 0.86 鐩镐箻 = 0.74 鈥斺€?寮硅繃澶达紝鏄?鏀逛竴鏀瑰氨鍘嬫"鐨勫垽鎹€?
+      // ★★★ 第七轮（用户：「二级页面…封面离左侧太远」）：与首页那条**同一个机制** ——
+      //   把封面真实的布局盒传进去，`sidePad = (胶囊高 − 封面盒)/2` ⇒ 封面内接于胶囊
+      //   （视觉左边距 ≡ 上下留白）。本页的档位与 `HomeMiniBarAlbumCover` 同口径：
+      //   `followAppMiniBarExpanded: false` 时它不再读 HDS 栏排布，只剩"沉浸式 40 / 否则 44"。
+      // ★ 2026-10-21（第八轮）：与首页那条**同一个封面机制**（32 盒 × `scale(1.4)`）⇒ 不再传
+      //   `coverSideVp`。上游三形态表对二级页逐项一致：胶囊 56 / 视觉封面 44.8 / 视觉左边距 5.6，
+      //   三者都由 `HomeMiniBarPlayer.sidePadVp()` + `HomeMiniBarAlbumCover.coverScale()` 自算。
+      // ★★★ 2026-10-20：挤压交给 {@link MiniBarMaterialCapsule} 那一层（它压在"官方材质背板 + 内容"
+      //   同一个变换域上）。这里若再压一次，两个 0.86 相乘 = 0.74 —— 弹过头，是"改一改就压死"的判据。
       contentOwnsSquash: false
     })
-      // 閳藉應妲?閻劍鍩?2026-10-11 鐎规俺顔戦敍姘モ偓宀勬晩娴ｅ秶娈戦弰顖涙尡閺€鐐蒋娑撳﹦娈?*閸忓啰绀?*閼板奔绗夐弰顖涙尡閺€鐐蒋閺堫剝闊╅妴宥冣偓?
-      //   閼宠泛娉€硅棄瀹抽悽?`barFloatingStyle.barWidth` 缂佹瑥鍤敍? 缁愭褰涚€?閳?娑撱倓鏅堕悾娆戞 side閿涘绱滺DS 閹跺﹤鐣?*鐏炲懍鑵?*閻紮绱?
-      //   閼板矁绻栭柌灞藉斧閺夈儱鍟?`width('100%')`閿? 鐎瑰じ瀵岄惄鎺戝弿鐎规枻绱氶埇?閸愬懎顔愬В鏃囧厡閸ュ﹤顔?2鑴硈ide閿?
-      //   鐏忎線娼扮拹瀵告絻閼宠泛娉锔剧喘閵嗕礁褰告笟褎瀵滈柦顕€銆婇崚鎷屽厡閸ュ﹤褰哥紓?閳?閻娼冪亸杈ㄦЦ"閸忓啰绀岄柨娆庣秴"閵?
-      //   閻滄澘婀幎濠傚敶鐎圭懓顔旀惔锔跨瘍鐎规碍鍨氶懗璺烘抄鐎硅棄瀹抽敍鍫濇倱娑撯偓閸戣姤鏆熼妴浣告倱娑撯偓閸欙絽绶為敍澶涚礉HDS 鐏炲懍鑵戦崥搴濊⒈閼?*鐎瑰苯鍙忛柌宥呮値**閵?
-      // 閳藉應妲?2026-10-12 閺傝顢?A 鐎圭偤鐛欓敍姘敶鐎圭懓顔?= 閼宠泛娉€规枻绱欐稉?barFloatingStyle.barWidth 閸氬奔绔撮崙鑺ユ殶閸氬苯褰涘鍕剁礆
-      //   鐠囧﹥鏌囨笟婵囧祦閿涘牆褰熸稉鈧Ο鈥崇€锋禍銈呭级鐠囪崵鐖滈敍澶涚窗閸愬懎顔愰惄鎺戝斧閺?= 鐎瑰じ瀵岄惄?= 缁愭褰涚€规枻绱濆В鏃囧厡閸ュ﹤顔?2鑴硈ide 娑撴柨涔忕€靛綊缍堥敍?
-      //   閸欏厖鏅堕幐澶愭尦缁ㄥ洩顫﹂幒銊ュ煂閼宠泛娉崣宕囩喘娑斿顦?閳?閵嗗苯鍘撶槐鐘虹獓閸掓澘褰告稉瀣潡閵嗗秲鈧倵鎲?閼汇儴绻栭悧鍫滅矝閻掕埖娲跨化鐕傜礉娑撯偓閸欍儴鐦介幋鎴犵彌閸掕娲栭柅鈧妴?
-      // 鈽呪槄鈽?2026-10-20锛?*鍐呭鐩?鈮?鑳跺泭鐩?*锛堥兘鍦?`MiniBarMaterialCapsule` 閲岋紝鐢?`barWidth 脳 barHeight`
-      //   鍞竴纭畾锛夆噿 杩欓噷鍙渶瑕?閾烘弧鍐呭鐩?锛屽搴?*涓嶅啀**鐢辨湰鏂囦欢绠楃浜岄亶銆?
-      //   鍘嗗彶锛氳繖閲屾浘鍐?`width(this.floatingMiniBarWidthVp())`锛堝唴瀹瑰 == 鑳跺泭瀹斤級鈥斺€?
-      //   瀹藉害閭ｄ竴缁存槸瀵圭殑锛岄敊鍦ㄩ珮搴﹀悆鐨勬槸 HDS 鐨勬Ы楂樿€屼笉鏄兌鍥婇珮 鈬?瑙傛劅"鍋忓彸涓?銆?
+      // 鈽呪槄 鐢ㄦ埛 2026-10-11 瀹氳锛氥€岄敊浣嶇殑鏄挱鏀炬潯涓婄殑**鍏冪礌**鑰屼笉鏄挱鏀炬潯鏈韩銆嶃€?
+      //   鑳跺泭瀹藉害鐢?`barFloatingStyle.barWidth` 缁欏嚭锛? 绐楀彛瀹?鈭?涓や晶鐣欑櫧 side锛夛紝HDS 鎶婂畠**灞呬腑**鐢伙紱
+      //   鑰岃繖閲屽師鏉ュ啓 `width('100%')`锛? 瀹夸富鐩掑叏瀹斤級鈬?鍐呭姣旇兌鍥婂 2脳side锛?
+      //   灏侀潰璐寸潃鑳跺泭宸︾紭銆佸彸渚ф寜閽《鍒拌兌鍥婂彸缂?鈬?鐪嬬潃灏辨槸"鍏冪礌閿欎綅"銆?
+      //   鐜板湪鎶婂唴瀹瑰搴︿篃瀹氭垚鑳跺泭瀹藉害锛堝悓涓€鍑芥暟銆佸悓涓€鍙ｅ緞锛夛紝HDS 灞呬腑鍚庝袱鑰?*瀹屽叏閲嶅悎**銆?
+      // 鈽呪槄 2026-10-12 鏂规 A 瀹為獙锛氬唴瀹瑰 = 鑳跺泭瀹斤紙涓?barFloatingStyle.barWidth 鍚屼竴鍑芥暟鍚屽彛寰勶級
+      //   璇婃柇渚濇嵁锛堝彟涓€妯″瀷浜ゅ弶璇荤爜锛夛細鍐呭鐩掑師鏈?= 瀹夸富鐩?= 绐楀彛瀹斤紝姣旇兌鍥婂 2脳side 涓斿乏瀵归綈锛?
+      //   鍙充晶鎸夐挳绨囪鎺ㄥ埌鑳跺泭鍙崇紭涔嬪 鈬?銆屽厓绱犺窇鍒板彸涓嬭銆嶃€傗憽 鑻ヨ繖鐗堜粛鐒舵洿绯燂紝涓€鍙ヨ瘽鎴戠珛鍒诲洖閫€銆?
+      // ★★★ 2026-10-20：**内容盒 ≡ 胶囊盒**（都在 `MiniBarMaterialCapsule` 里，由 `barWidth × barHeight`
+      //   唯一确定）⇒ 这里只需要"铺满内容盒"，宽度**不再**由本文件算第二遍。
+      //   历史：这里曾写 `width(this.floatingMiniBarWidthVp())`（内容宽 == 胶囊宽）——
+      //   宽度那一维是对的，错在高度吃的是 HDS 的槽高而不是胶囊高 ⇒ 观感"偏右下"。
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
-      // 閳藉應妲?閻劍鍩?2026-10-11閿涙哎鈧奔绨╃痪褔銆夐棃銏℃尡閺€鎯ф珤娓氭繃妫柨娆庣秴閳ワ箑鐣犻弰顖濈獓閸掓澘褰告稉瀣潡娴滃棎鈧秮鈧柡鈧?
-      //   缂佹捁顔戦敍?*娑撳秷顩﹂弨鐟板敶鐎瑰湱娈戠€逛粙鐝?*閿涘牅绔撮弨鐟版皑娑?HDS 閻ㄥ嫯鍏岄崶濠傜暰娴ｅ秵澧﹂弸璁圭礉閸忓啰绀岄弫缈犵秼閸欏厖绗呴崑蹇ョ礆閿?
-      // 閳藉應妲?GLM5.3閿涘潷rovider=zai閿涘鐦栭弬?2026-10-12閿涙DS 濞搭喖濮╅懗璺烘抄缂?tabBar 閻?*閸愬懎顔愬Σ钘夊涧閺堝鍏岄崶濠囧亝娑斿牓鐝敍鍫氬40vp閿?*閿?
-      //   閼板矁绻栭柌灞惧Ω閸愬懎顔愬楦款攽鐎规碍鍨?56vp閿涘牆鐨濋棃?44 + 娑撳﹣绗?padding 6+6閿涘鍣?閸愬懎顔愬В鏃€蝎妤?~16vp閿?
-      //   娴滃孩妲搁弫瀛樺笓閸忓啰绀岄惄绋款嚠閼宠泛娉稉顓炵妇**娴ｅ海瀹?6~8vp**閿涘牏婀￠張娲櫤閸?6vp閿涘奔绗岄幋顏勬禈娑撯偓閼疯揪绱氶妴?
-      //   閳?娑撳秴鍟€瀵搫鍩楁妯哄閿涘奔姘︾紒?HDS 閹稿婀＄€圭偞蝎娴ｅ秷鍤滈柌蹇撹嫙鐏炲懍鑵戦敍娑橆啍鎼达缚绮涢幐澶庡厡閸ュ﹤顔旈敍鍫熸煙濡?A閿涘苯鍑＄憴浣规櫏閿涘鈧?
+      // 鈽呪槄 鐢ㄦ埛 2026-10-11锛氥€屼簩绾ч〉闈㈡挱鏀惧櫒渚濇棫閿欎綅鈥﹀畠鏄窇鍒板彸涓嬭浜嗐€嶁€斺€?
+      //   缁撹锛?*涓嶈鏀瑰唴瀹圭殑瀹介珮**锛堜竴鏀瑰氨涓?HDS 鐨勮兌鍥婂畾浣嶆墦鏋讹紝鍏冪礌鏁翠綋鍙充笅鍋忥級锛?
+      // 鈽呪槄 GLM5.3锛坧rovider=zai锛夎瘖鏂?2026-10-12锛欻DS 娴姩鑳跺泭缁?tabBar 鐨?*鍐呭妲藉彧鏈夎兌鍥婇偅涔堥珮锛堚増40vp锛?*锛?
+      //   鑰岃繖閲屾妸鍐呭寮鸿瀹氭垚 56vp锛堝皝闈?44 + 涓婁笅 padding 6+6锛夆噿 鍐呭姣旀Ы楂?~16vp锛?
+      //   浜庢槸鏁存帓鍏冪礌鐩稿鑳跺泭涓績**浣庣害 6~8vp**锛堢湡鏈洪噺鍒?6vp锛屼笌鎴浘涓€鑷达級銆?
+      //   鈬?涓嶅啀寮哄埗楂樺害锛屼氦缁?HDS 鎸夌湡瀹炴Ы浣嶈嚜閲忓苟灞呬腑锛涘搴︿粛鎸夎兌鍥婂锛堟柟妗?A锛屽凡瑙佹晥锛夈€?
   }
 
-  // 閳跨媴绗?鏉╂瑩鍣烽崢鐔告降閹?閼奉亜绻佺粻妤佺埉鐎?閻ㄥ嫪琚辨稉顏囩窡閸斺晛鍤遍弫鏉垮灩閹哄绻冮敍?026-10-11 娑撳﹤宕嶉敍澶涚礉閻炲棛鏁遍弰?閺嶅繐顔旀禍銈囩舶 HDS"閿?
-  //    閻喐婧€鐠囦焦妲?*娑撳秷顢?*閿涙DS 姒涙顓荤€硅棄瀹抽崣顏呮箒娑撯偓鐏忓繐娼归敍灞炬尡閺€鎯ф珤閸愬懎顔愰弫缈犻嚋濠с垹鍤懗璺烘抄婢舵牭绱欓悽銊﹀煕閹搭亜娴?娑撯偓閸?閿?
-  //    閳?閻滄澘婀幐澶婄暭閺?`barWidth` 娑撳銆傞弰鎯х础缂佹瑥娲栭弶銉礄鐟?`floatingMiniBar()`閿涘鈧?
+  // 鈿狅笍 杩欓噷鍘熸潵鎶?鑷繁绠楁爮瀹?鐨勪袱涓緟鍔╁嚱鏁板垹鎺夎繃锛?026-10-11 涓婂崍锛夛紝鐞嗙敱鏄?鏍忓浜ょ粰 HDS"锛?
+  //    鐪熸満璇佹槑**涓嶈**锛欻DS 榛樿瀹藉害鍙湁涓€灏忓潹锛屾挱鏀惧櫒鍐呭鏁翠釜婧㈠嚭鑳跺泭澶栵紙鐢ㄦ埛鎴浘"涓€鍧?锛?
+  //    鈬?鐜板湪鎸夊畼鏂?`barWidth` 涓夋。鏄惧紡缁欏洖鏉ワ紙瑙?`floatingMiniBar()`锛夈€?
 
-  /** 閹剚璇炴潻铚傜稑閺夛紕娈戝锕€褰搁梻纾嬬獩閿涘澊p閿涘绱伴崣顏勬躬鐏忓繐鐫嗙紒娆庣閻愮绔熺捄婵撶礉鐎硅棄鐫嗙仦鍛厬閻ｆ瑧娅ч妴?*/
+  /** 鎮诞杩蜂綘鏉＄殑宸﹀彸闂磋窛锛坴p锛夛細鍙湪灏忓睆缁欎竴鐐硅竟璺濓紝瀹藉睆灞呬腑鐣欑櫧銆?*/
   private floatingMiniBarSideMarginVp(): number {
     return new BreakpointType(12, 16, 96, 160, 9).getWidthValueWithHeightSM(
       this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint);
   }
 
   /**
-   * 閹剚璇炴潻铚傜稑閺夆€愁啍鎼达讣绱檝p閿涘绱伴崘娆掔箻 `barFloatingStyle.barWidth` 閻ㄥ嫪绗佸锝冣偓?
+   * 鎮诞杩蜂綘鏉″搴︼紙vp锛夛細鍐欒繘 `barFloatingStyle.barWidth` 鐨勪笁妗ｃ€?
    *
-   * 閹靛婧€閿涙氨鐛ラ崣锝咁啍 閳?娑撱倓鏅舵潏纭呯獩閿?2 / 16閿涘绱辩€硅棄鐫嗛敍姘仚閸?{@link FLOATING_MINI_BAR_MAX_WIDTH_VP} 閸愬懎鐪虫稉顓溾偓?
-   * 闁插繋绗夐崚鎵崶閸欙絽顔旈弮鍓佺舶 336 閸忔粌绨抽敍鍫熸＋閼宠泛娉崥灞藉經瀵板嫸绱氶妴?
-   * @returns 鐎硅棄瀹抽敍鍧磒閿涘鈧?
+   * 鎵嬫満锛氱獥鍙ｅ 鈭?涓や晶杈硅窛锛?2 / 16锛夛紱瀹藉睆锛氬す鍦?{@link FLOATING_MINI_BAR_MAX_WIDTH_VP} 鍐呭眳涓€?
+   * 閲忎笉鍒扮獥鍙ｅ鏃剁粰 336 鍏滃簳锛堟棫鑳跺泭鍚屽彛寰勶級銆?
+   * @returns 瀹藉害锛坴p锛夈€?
    */
   private floatingMiniBarWidthVp(): number {
     const side: number = this.floatingMiniBarSideMarginVp();
-    // 鈽呪槄鈽?2026-10-20锛堢鍏疆锛夛細**鎭掑す鍒板彲鐢ㄥ涔嬪唴**銆傛棫瀹炵幇鏈変袱澶勪細瓒婄晫锛?
-    //   鈶?`viewportWidthVp <= 0`锛堥甯ц繕娌￠噺鍒扮獥鍙ｅ锛夋椂纭繑鍥?336 鈬?鑳跺泭鐩掑 346
-    //      > 浠讳綍 < 360vp 鐨勭獥鍙ｏ紙鎶樺彔灞忓灞?/ 灏忕獥 / 鍒嗗睆锛夆噿 **鐩掑嚭鐣?*锛?
-    //   鈶?鎵嬫満妗?`Math.max(220, full)` 鈬?绐楀彛 < 244vp 鏃舵妸鑳跺泭鎾戝埌**姣斿彲鐢ㄥ杩樺**銆?
-    //   鐜板湪 `want` 鍏堜笌 `available` 鍙栧皬銆佽繑鍥炲€煎啀涓?`available` 鍙栧皬 鈬?
-    //   **`barWidth 鈮?availableW = winW 鈭?2脳side` 鏄粨鏋勬€х殑**锛堜笉鏄皟鏁板€艰皟鍑烘潵鐨勶級銆?
-    //   鍒ゆ嵁锛歚grep RzdMiniBarFit` 鐨?`availableW` 涓?`barW` 涓や釜鏁板繀椤诲墠鑰?鈮?鍚庤€呫€?
+    // ★★★ 2026-10-20（第六轮）：**恒夹到可用宽之内**。旧实现有两处会越界：
+    //   ① `viewportWidthVp <= 0`（首帧还没量到窗口宽）时硬返回 336 ⇒ 胶囊盒宽 346
+    //      > 任何 < 360vp 的窗口（折叠屏外屏 / 小窗 / 分屏）⇒ **盒出界**；
+    //   ② 手机档 `Math.max(220, full)` ⇒ 窗口 < 244vp 时把胶囊撑到**比可用宽还宽**。
+    //   现在 `want` 先与 `available` 取小、返回值再与 `available` 取小 ⇒
+    //   **`barWidth ≤ availableW = winW − 2×side` 是结构性的**（不是调数值调出来的）。
+    //   判据：`grep RzdMiniBarFit` 的 `availableW` 与 `barW` 两个数必须前者 ≥ 后者。
     const winW: number = this.viewportWidthVp;
     if (winW <= 0) {
       return FLOATING_MINI_BAR_FALLBACK_WIDTH_VP;
@@ -2403,39 +2403,39 @@ struct Index {
   }
 
   /**
-   * @returns 鑳跺泭**鐩?*瀹斤紙vp锛夆€斺€?涓?`MiniBarMaterialCapsule.capsuleBoxWidthVp()` **鍚屼竴绠楀紡**銆?
+   * @returns 胶囊**盒**宽（vp）—— 与 `MiniBarMaterialCapsule.capsuleBoxWidthVp()` **同一算式**。
    *
-   * 涓轰粈涔堣繖閲岃鍐嶅啓涓€閬嶏細鑳跺泭鐩掑鍙湪涓ゅ鐢ㄥ埌锛堜袱鏉″涓荤殑妯悜鎽嗕綅銆佽瘖鏂棩蹇楋級锛?
-   * 鑰?`features/playlist/Index.ets` 鐨?barrel锛堟湰杞鏀癸級娌℃湁瀵煎嚭閭ｄ釜鍑芥暟銆?
-   * 涓ゅ**蹇呴』**鍚屾锛氬垽鎹湪 `RzdMiniBarFit`锛坄hdc shell hilog | grep RzdMiniBarFit`锛夆€斺€?
-   * 瀹炴祴 `boxW` 涓?`barW + slackW`锛堝崟灞傛€?`barW`锛変笉鐩哥瓑锛屽氨璇存槑杩欓噷婕備簡銆?
-   * @param barWidth 鑳跺泭鍙瀹藉害锛坴p锛?
-   * @param singleRow 鏄惁鍗曞眰鎬侊紙杩蜂綘鏉′笌椤电骞舵帓 鈬?妯悜 slack 褰掗浂锛?
+   * 为什么这里要再写一遍：胶囊盒宽只在两处用到（两条宿主的横向摆位、诊断日志），
+   * 而 `features/playlist/Index.ets` 的 barrel（本轮禁改）没有导出那个函数。
+   * 两处**必须**同步：判据在 `RzdMiniBarFit`（`hdc shell hilog | grep RzdMiniBarFit`）——
+   * 实测 `boxW` 与 `barW + slackW`（单层态 `barW`）不相等，就说明这里漂了。
+   * @param barWidth 胶囊可见宽度（vp）
+   * @param singleRow 是否单层态（迷你条与页签并排 ⇒ 横向 slack 归零）
    */
   private miniBarBoxWidthVp(barWidth: number, singleRow: boolean): number {
     return singleRow ? barWidth : barWidth + CAPSULE_SLACK_W;
   }
 
-  // 锛堥椤甸偅鏉″凡缁忎笉鍦ㄨ繖閲岀畻鐩掑浜嗭細瀹冧綇 HDS 鐨?`miniBar` 妲斤紝瀹藉害鐢辨Ы鎸夊唴瀹归噺缁欍€傦級
+  // （首页那条已经不在这里算盒宽了：它住 HDS 的 `miniBar` 槽，宽度由槽按内容量给。）
 
-  /** @returns 浜岀骇椤垫诞鍔ㄨ糠浣犺兌鍥婄殑**鐩?*瀹斤紙vp锛夛紙浜岀骇椤垫亽鍙屽眰 鈬?slack 鐓у姞锛夈€?*/
+  /** @returns 二级页浮动迷你胶囊的**盒**宽（vp）（二级页恒双层 ⇒ slack 照加）。 */
   private secondaryMiniBarBoxWidthVp(): number {
     return this.miniBarBoxWidthVp(this.floatingMiniBarWidthVp(), false);
   }
 
   /**
-   * @returns 鑳跺泭鐩掔殑**鍙冲杈硅窛**锛坴p锛夆€斺€?涓ゆ潯瀹夸富**鍏辩敤杩欎竴涓畻寮?*锛堢鍏疆鍞竴鐨勬憜浣嶅彛寰勶級銆?
+   * @returns 胶囊盒的**右外边距**（vp）—— 两条宿主**共用这一个算式**（第六轮唯一的摆位口径）。
    *
    * ```
-   *   鍙屽眰锛歳ightMargin = (winW 鈭?boxW) / 2
-   *         鈬?鐩掑彸缂?= winW 鈭?(winW 鈭?boxW)/2 = (winW + boxW)/2
-   *         鈬?鑳跺泭鍙崇紭 = 鐩掑彸缂?鈭?(boxW 鈭?barW)/2 = (winW + barW)/2 = winW 鈭?side
-   *   鍗曞眰锛歳ightMargin = side 鈬?鐩?鈮?鑳跺泭锛坰lack 褰掗浂锛夆噿 鍙崇紭涓庨〉绛炬帓鍙崇紭榻?
+   *   双层：rightMargin = (winW − boxW) / 2
+   *         ⇒ 盒右缘 = winW − (winW − boxW)/2 = (winW + boxW)/2
+   *         ⇒ 胶囊右缘 = 盒右缘 − (boxW − barW)/2 = (winW + barW)/2 = winW − side
+   *   单层：rightMargin = side ⇒ 盒 ≡ 胶囊（slack 归零）⇒ 右缘与页签排右缘齐
    * ```
-   * 鈬?**`鑳跺泭鍙崇紭 = winW 鈭?side` 鏄亽绛夊紡**锛堝弻灞備笌鍗曞眰鍚屼竴涓彸缂橈級锛?
-   *   鍗?鍙充晶涓嶄細鍑哄睆"鐨勭畻寮忔簮澶淬€傝 `RzdMiniBarFit` 鐨?`rightGap == side`銆?
-   * @param boxW 鐩掑锛坴p锛?
-   * @param singleRow 鏄惁鍗曞眰鎬?
+   * ⇒ **`胶囊右缘 = winW − side` 是恒等式**（双层与单层同一个右缘），
+   *   即"右侧不会出屏"的算式源头。见 `RzdMiniBarFit` 的 `rightGap == side`。
+   * @param boxW 盒宽（vp）
+   * @param singleRow 是否单层态
    */
   private miniBarBoxRightMarginVp(boxW: number, singleRow: boolean): number {
     if (singleRow) {
@@ -2449,53 +2449,53 @@ struct Index {
   }
 
   /**
-   * 閹剚璇炴潻铚傜稑閺夆剝妲搁崥锕€褰茬憴浣碘偓?
+   * 鎮诞杩蜂綘鏉℃槸鍚﹀彲瑙併€?
    *
-   * 妫ｆ牠銆夋稉宥嗘▔缁€鐚寸礄HDS 鎼存洘鐖柌宀€娈戞潻铚傜稑閺壜ょ鐠愶綇绱氶敍娑欘劀閸︺劍鎸遍弨鎯у弿鐏炲繘銆夐幋鏍ь槱娴滃孩澹掗柌蹇涒偓澶嬪濡€崇础閺冩湹绡冩稉宥嗘▔缁€鎭掆偓?
-   * @returns True 鐞涖劎銇氶弰鍓с仛婢瑰啿鐪版潻娆愭蒋閹剚璇炴潻铚傜稑閺壜扳偓?
+   * 棣栭〉涓嶆樉绀猴紙HDS 搴曟爮閲岀殑杩蜂綘鏉¤礋璐ｏ級锛涙鍦ㄦ挱鏀惧叏灞忛〉鎴栧浜庢壒閲忛€夋嫨妯″紡鏃朵篃涓嶆樉绀恒€?
+   * @returns True 琛ㄧず鏄剧ず澹冲眰杩欐潯鎮诞杩蜂綘鏉°€?
    */
   private shouldShowFloatingMiniBar(): boolean {
     if (this.navDepth <= 0) {
       return false;
     }
-    // 閳跨媴绗?瑜般垹褰夐張鐔兼？**韫囧懘銆忕紒褏鐢婚弰鍓с仛**閿涙碍鎸遍弨楣冦€夊ù顔肩湴閺勵垯绮犳潻娆愭蒋鏉╄渹缍橀弶锟犲亝闁插矂鏆遍崙鐑樻降閻ㄥ嫸绱?
-    //    鐠ч攱澧滈柇锝勭鐢勬尡閺€楣冦€?*閸戠姳绠惇瀣╃瑝鐟?*閿涘牆鐣犲銈呭煝閸欘亜宕?鏉╄渹缍橀弶锟犲亝娑斿牆銇囬惃鍕梿閸擃亞鐛ラ崣?閿?
-    //    閼板瞼鐛ラ崣锝夊櫡閻㈣崵娈戦崣鍫熸Ц閸掓俺鎹ｅ銉ф畱缂傗晜鏂侀崘鍛啇 閳ユ柡鈧?閳?娑撳秵妲?閺佹挳銆夊ǎ鈥冲弳"閿?
-    //    `morphPageOpacity()` 闁絼閲滈崙鑺ユ殶**閻╊喖澧犲▽鈩冩箒濞戝牐鍨傞懓?*閿涘矁顫嗙€瑰啳鍤滃杈╂畱濞夈劑鍣撮敍澶涚礉
-    //    鏉╂瑦妞傞崐娆愬Ω鏉╄渹缍橀弶陇妫屾禍鍡礉閻劍鍩涢惇瀣煂閻ㄥ嫬姘ㄩ弰?鐏炲繐绠锋稉瀣煙缁愪胶鍔х粚杞扮啊娑撯偓閸?閸愬秴鍟嬮崙杞扮娑擃亝鏌熼崸妞尖偓?
-    //    鐎瑰啳鍤滃鍗炴躬瑜般垹褰夐張鐔兼？娴兼碍璐伴崙鐚寸礄`miniBarOpacity`閿涘绱濇禍銈嗩棗缂佹瑦鎸遍弨楣冦€夐妴?
+    // 鈿狅笍 褰㈠彉鏈熼棿**蹇呴』缁х画鏄剧ず**锛氭挱鏀鹃〉娴眰鏄粠杩欐潯杩蜂綘鏉￠偅閲岄暱鍑烘潵鐨勶紝
+    //    璧锋墜閭ｄ竴甯ф挱鏀鹃〉**鍑犱箮鐪嬩笉瑙?*锛堝畠姝ゅ埢鍙崰"杩蜂綘鏉￠偅涔堝ぇ鐨勮鍓獥鍙?锛?
+    //    鑰岀獥鍙ｉ噷鐢荤殑鍙堟槸鍒氳捣姝ョ殑缂╂斁鍐呭 鈥斺€?鈽?涓嶆槸"鏁撮〉娣″叆"锛?
+    //    `morphPageOpacity()` 閭ｄ釜鍑芥暟**鐩墠娌℃湁娑堣垂鑰?*锛岃瀹冭嚜宸辩殑娉ㄩ噴锛夛紝
+    //    杩欐椂鍊欐妸杩蜂綘鏉¤棌浜嗭紝鐢ㄦ埛鐪嬪埌鐨勫氨鏄?灞忓箷涓嬫柟绐佺劧绌轰簡涓€鍧?鍐嶅啋鍑轰竴涓柟鍧椼€?
+    //    瀹冭嚜宸卞湪褰㈠彉鏈熼棿浼氭贰鍑猴紙`miniBarOpacity`锛夛紝浜ゆ缁欐挱鏀鹃〉銆?
     if (this.appState.isShowPlay && !this.expandState.morphContainerActive()) {
       return false;
     }
-    // 閳?娴滃瞼楠囨い鐢告桨娑?HDS 濞搭喖濮╂惔鏇熺埉娑撳秴褰茬憴渚婄礄鐞?NavDestination 閻╂牔缍囬敍澶涚礉閹绢厽鏂侀崳銊ュ涧閼崇晫鏁辨竟鍐茬湴鏉╂瑤绔撮弶陇绀嬬拹?閳ユ柡鈧?
-    //   閹碘偓娴?*鐏炴洖绱戦幀浣风瘍韫囧懘銆忛弰鍓с仛**閵嗗倹妫禒锝囩垳閸︺劏绻栭柌?`miniBarExpanded` 娑撹櫣婀＄亸杈箲閸?false閿?
-    //   娴滃孩妲告潻娑楃癌缁狙囥€夐棃銏℃韫囧懘銆忛幎?`miniBarExpanded` 瀵缚顢戦弨璺烘礀閹舵ê褰旈幀渚婄礉
-    //   閼?HDS 閻?barLayoutMode 鏉╂ɑ妲?HORIZONTAL 閳?鎼存洘鐖崣妯诲灇閵嗗矂鏆遍弶顡歛b + 閸﹀棗鑸伴幘顓熸杹閸ｃ劊鈧秷绻栫粔宥夋晩鐠囶垳绮嶉崥鍫礉
-    //   閸欘亣鍏橀崷銊┾偓鈧崙杞扮癌缁狙囥€夐棃銏℃閸愬秶绫傚锝勭濞嗏槄绱欓悽銊﹀煕閸欏秹顩惃鍕З閻㈣绱撶敮绋挎皑閺勵垵绻栨稊鍫熸降閻ㄥ嫸绱氶妴?
-    //   閻滄澘婀稉宥呭晙閺€璁圭窗娴滃瞼楠囨い鐢告桨閻撗冪埗閺勫墽銇氭潻娆愭蒋閹绢厽鏂侀崳顭掔礄鐎瑰啫鎮撻弮鑸垫Ц閹绢厽鏂佹い闈涜埌閸欐娈戠挧椋庡仯閿涘鈧?
+    // 鈽?浜岀骇椤甸潰涓?HDS 娴姩搴曟爮涓嶅彲瑙侊紙琚?NavDestination 鐩栦綇锛夛紝鎾斁鍣ㄥ彧鑳界敱澹冲眰杩欎竴鏉¤礋璐?鈥斺€?
+    //   鎵€浠?*灞曞紑鎬佷篃蹇呴』鏄剧ず**銆傛棫浠ｇ爜鍦ㄨ繖閲?`miniBarExpanded` 涓虹湡灏辫繑鍥?false锛?
+    //   浜庢槸杩涗簩绾ч〉闈㈡椂蹇呴』鎶?`miniBarExpanded` 寮鸿鏀跺洖鎶樺彔鎬侊紝
+    //   鑰?HDS 鐨?barLayoutMode 杩樻槸 HORIZONTAL 鈬?搴曟爮鍙樻垚銆岄暱鏉ab + 鍦嗗舰鎾斁鍣ㄣ€嶈繖绉嶉敊璇粍鍚堬紝
+    //   鍙兘鍦ㄩ€€鍑轰簩绾ч〉闈㈡椂鍐嶇籂姝ｄ竴娆★紙鐢ㄦ埛鍙嶉鐨勫姩鐢诲紓甯稿氨鏄繖涔堟潵鐨勶級銆?
+    //   鐜板湪涓嶅啀鏀讹細浜岀骇椤甸潰鐓у父鏄剧ず杩欐潯鎾斁鍣紙瀹冨悓鏃舵槸鎾斁椤靛舰鍙樼殑璧风偣锛夈€?
     return true;
   }
 
   /**
-   * 閹剚璇炴潻铚傜稑閺壜ょ獩鎼存洟鍎撮梻纾嬬獩閵?
+   * 鎮诞杩蜂綘鏉¤窛搴曢儴闂磋窛銆?
    *
-   * 娴滃瞼楠囨い鐢告桨濞屸剝婀佸ù顔煎З妞ょ數顒烽敍灞惧娴犮儱褰ч棁鈧柆鍨磻缁崵绮虹€佃壈鍩呴弽?+ 鐏忔垿鍣洪悾娆戞閿?
-   * 濮ｆ棃顩绘い鐢稿亝閺夆槄绱欓崷銊ョ俺閺嶅繐鍞撮敍澶嬫閺勭偓娲块棃鐘辩瑓閵?
-   * @returns 鎼存洟鍎撮梻纾嬬獩閿涘澊p閿涘鈧?
+   * 浜岀骇椤甸潰娌℃湁娴姩椤电锛屾墍浠ュ彧闇€閬垮紑绯荤粺瀵艰埅鏍?+ 灏戦噺鐣欑櫧锛?
+   * 姣旈椤甸偅鏉★紙鍦ㄥ簳鏍忓唴锛夋槑鏄炬洿闈犱笅銆?
+   * @returns 搴曢儴闂磋窛锛坴p锛夈€?
    */
   private floatingMiniBarBottomMarginVp(): number {
-    // 閳?鐠?`getNavigationBarBottomVpFromWindowUtil()`閿涙艾鐣犻妴宀€绱︾€?閳?閻滄澘鎮滅粣妤€褰涢柌?閳?閺堚偓閸氬簼绔村▎鈥炽偨閸?閳?
-    //   閸氼垰濮╄箛顐ゅ弾閵嗗秹鈧劗楠囬崗婊冪俺閵嗗倽鈧椒鍞惍浣稿涧鐠囪崵绱︾€?+ 閸氼垰濮╄箛顐ゅ弾閿涘奔琚遍懓鍛村厴娑?0 閺冭绱欓柆鑳唨閸栬桨绔村▎锟犲厴濞屸€茬瑐閹躲儲鍨氶崝鐕傜礆
-    //   鏉堢绐涙导姘垛偓鈧崠鏍ㄥ灇 12閿涘矁鍏岄崶濠呭垱閻偓鐏炲繐绠锋惔鏇樷偓浣稿竾閸︺劎閮寸紒鐔稿閸旀寧娼稉?閳ユ柡鈧?閻劍鍩涢惇瀣煂閻ㄥ嫨鈧苯绨抽柈銊︽尡閺€鎯ф珤闁挎瑤缍呴妴宥冣偓?
-    // 鈽呪槄鈽?2026-10-18锛堢敤鎴凤細銆岃繖涓敭鐩橀伩璁╁お楂樹簡鍚с€嶏級锛氭湰鍑芥暟鐜板湪灏辨槸**鍐欒繘
-    //   `barFloatingStyle.barBottomMargin` 鐨勯偅涓€涓暟** 鈥斺€?甯告€?= 绂婚〉鐩掑簳 12vp锛?
-    //   閿洏鎬?= 鐢?HDS 鑷繁鎶婅兌鍥婇€佸埌閿洏涓婃部涔嬩笂 `FLOATING_MINI_BAR_KEYBOARD_GAP_VP` 澶勩€?
-    //   鎺ㄥ瑙佹枃浠堕《閮ㄥ父閲忛偅娈点€屼笁銆佺幇鍦ㄧ殑璐︺€嶏細
-    //       margin = K 鈭?I + GK        锛圞 閿洏楂樸€両 椤电洅搴曞唴缂┿€丟K 鐩爣绌虹櫧 10vp锛?
-    //       鈬?鏉″簳 = Ypb 鈭?margin = (H 鈭?I) 鈭?(K 鈭?I + GK) = H 鈭?K 鈭?GK
-    //       鈬?鏉″簳鍒伴敭鐩樹笂娌跨殑绌虹櫧**鎭掔瓑浜?GK = 10vp**
-    // 鈿狅笍 鏈嚱鏁颁笂闈㈤偅娈垫棫娉ㄩ噴锛坄Math.max(12, systemInset + 8)`锛変綔搴燂細閭ｄ竴鐗堟妸"閬垮紑绯荤粺瀵艰埅鏉?
-    //   鍙堢畻浜嗕竴閬嶏紝鑰?HDS 鐨?`barBottomMargin` 宸茬粡鏄?鏉″埌 tabs 搴曡竟"鐨勮窛绂诲彛寰?鈬?閲嶅鍙犲姞銆?
+    // 鈽?璧?`getNavigationBarBottomVpFromWindowUtil()`锛氬畠銆岀紦瀛?鈫?鐜板悜绐楀彛閲?鈫?鏈€鍚庝竴娆″ソ鍊?鈫?
+    //   鍚姩蹇収銆嶉€愮骇鍏滃簳銆傝€佷唬鐮佸彧璇荤紦瀛?+ 鍚姩蹇収锛屼袱鑰呴兘涓?0 鏃讹紙閬胯鍖轰竴娆￠兘娌′笂鎶ユ垚鍔燂級
+    //   杈硅窛浼氶€€鍖栨垚 12锛岃兌鍥婅创鐫€灞忓箷搴曘€佸帇鍦ㄧ郴缁熸墜鍔挎潯涓?鈥斺€?鐢ㄦ埛鐪嬪埌鐨勩€屽簳閮ㄦ挱鏀惧櫒閿欎綅銆嶃€?
+    // ★★★ 2026-10-18（用户：「这个键盘避让太高了吧」）：本函数现在就是**写进
+    //   `barFloatingStyle.barBottomMargin` 的那一个数** —— 常态 = 离页盒底 12vp；
+    //   键盘态 = 由 HDS 自己把胶囊送到键盘上沿之上 `FLOATING_MINI_BAR_KEYBOARD_GAP_VP` 处。
+    //   推导见文件顶部常量那段「三、现在的账」：
+    //       margin = K − I + GK        （K 键盘高、I 页盒底内缩、GK 目标空白 10vp）
+    //       ⇒ 条底 = Ypb − margin = (H − I) − (K − I + GK) = H − K − GK
+    //       ⇒ 条底到键盘上沿的空白**恒等于 GK = 10vp**
+    // ⚠️ 本函数上面那段旧注释（`Math.max(12, systemInset + 8)`）作废：那一版把"避开系统导航条"
+    //   又算了一遍，而 HDS 的 `barBottomMargin` 已经是"条到 tabs 底边"的距离口径 ⇒ 重复叠加。
     const restMarginVp: number = FLOATING_MINI_BAR_BOTTOM_GAP_VP;
     const keyboardVp: number = this.keyboardBottomVp();
     if (keyboardVp <= 0) {
@@ -2507,74 +2507,74 @@ struct Index {
   }
 
   /**
-   * 鏉烆垶鏁惄姗€鐝惔锔肩礄vp閿涘绱板▽鈩冩箒闁款喚娲忛弮?0閵?
+   * 杞敭鐩橀珮搴︼紙vp锛夛細娌℃湁閿洏鏃?0銆?
    *
-   * 閸烆垯绔撮惄鎴濇儔閻愮懓婀?`common/musicbasic` 閻?`WindowUtil`閿涘潉on('avoidAreaChange')` 閻?
-   * `TYPE_KEYBOARD` 閸掑棙鏁崘?`WindowInfo.avoidKeyboard`閿涘绱遍張顒€鍤遍弫鏉垮涧閺勵垰褰х拠濠氭，闂堫澁绱?
-   * 鐠囪崵娈戦弰?`@Trace` 鐎涙顔?閳?闁款喚娲忓鐟板毉/閺€鎯版崳娴兼俺鍤滈崝銊┾攳閸斻劌锛撶仦鍌炲櫢閺傛澘绔风仦鈧妴?
+   * 鍞竴鐩戝惉鐐瑰湪 `common/musicbasic` 鐨?`WindowUtil`锛坄on('avoidAreaChange')` 鐨?
+   * `TYPE_KEYBOARD` 鍒嗘敮鍐?`WindowInfo.avoidKeyboard`锛夛紱鏈嚱鏁板彧鏄彧璇婚棬闈紝
+   * 璇荤殑鏄?`@Trace` 瀛楁 鈬?閿洏寮瑰嚭/鏀惰捣浼氳嚜鍔ㄩ┍鍔ㄥ３灞傞噸鏂板竷灞€銆?
    */
   private keyboardBottomVp(): number {
     return getKeyboardBottomVpFromWindowUtil();
   }
 
   /**
-   * 闁款喚娲忓鐟板毉閺冭绱濇禍宀€楠囨い鐢告桨閹剚璇炴潻铚傜稑閺?*閸愬秴绶氭稉濠冨М**閻ㄥ嫯绐涚粋浼欑礄vp閿涘绱遍弮鐘绘暛閻╂ɑ妞?*閹帊璐?0**閵?
+   * 閿洏寮瑰嚭鏃讹紝浜岀骇椤甸潰鎮诞杩蜂綘鏉?*鍐嶅線涓婃姮**鐨勮窛绂伙紙vp锛夛紱鏃犻敭鐩樻椂**鎭掍负 0**銆?
    *
-   * 閸欘亙缍旈悽銊ょ艾娴滃瞼楠囨い鐢告桨闁絾娼幃顒佽癁閺夆槄绱檣@link floatingMiniBar}閿涘绱版＃鏍€夐柇锝嗘蒋鏉╄渹缍橀弶鈥虫躬 HDS 濞搭喖濮╂惔鏇熺埉闁插被鈧?
-   * 閻㈠崬鐣奸弬瑙勭埉娴ｆ捁绀嬬拹锝堫唨娴ｅ稄绱?*娑撳秷顩?*閹跺﹥婀伴崐鐓庢澓缂佹瑥鐣犻妴?
+   * 鍙綔鐢ㄤ簬浜岀骇椤甸潰閭ｆ潯鎮诞鏉★紙{@link floatingMiniBar}锛夛細棣栭〉閭ｆ潯杩蜂綘鏉″湪 HDS 娴姩搴曟爮閲屻€?
+   * 鐢卞畼鏂规爮浣撹礋璐ｈ浣嶏紝**涓嶈**鎶婃湰鍊煎杺缁欏畠銆?
    *
-   * 缁犳绱℃稉搴濊⒈娑擃亜鐖堕柌蹇斺偓搴濈疄鐠嬪喛绱濈憴?{@link FLOATING_MINI_BAR_KEYBOARD_GAP_VP} 婢剁繝绗傞柇锝嗩唽閵?
-   * @returns 娑撳﹥濮捄婵堫瀲閿涘澊p閿涘绱遍弮鐘绘暛閻╂ɑ妞傛稉?0閿涘牊顒濋弮鎯扮殶閻劍鏌熺粻妤€绱￠柅鎰摟缁涘绨弨鐟板З閸撳秶娈戦崐纭风礆閵?
+   * 绠楀紡涓庝袱涓父閲忔€庝箞璋冿紝瑙?{@link FLOATING_MINI_BAR_KEYBOARD_GAP_VP} 澶翠笂閭ｆ銆?
+   * @returns 涓婃姮璺濈锛坴p锛夛紱鏃犻敭鐩樻椂涓?0锛堟鏃惰皟鐢ㄦ柟绠楀紡閫愬瓧绛変簬鏀瑰姩鍓嶇殑鍊硷級銆?
    */
   private floatingMiniBarKeyboardLiftVp(): number {
-    // 鈽呪槄鈽?2026-10-18锛氳涔夋敼鎴愩€岄敭鐩樻€?*姣斿父鎬佸鎶簡澶氬皯**銆? `margin 鈭?G`锛? K 鈭?I + GK 鈭?G锛夈€?
-    //   瀹夸富宸茬粡娌℃湁 `.offset` 浜嗭紝杩欎釜鏁板彧鐢ㄤ簬鏃ュ織涓庡洖褰掑垽鎹細
-    //   路 鏃犻敭鐩樻椂蹇呴』**閫愬瓧涓?0**锛堝绾︿笉鍙橈紝鍥犱负 margin 鍥炶惤鍒?G锛夛紱
-    //   路 閿洏鎬佸簲褰?鈮?`閿洏楂?鈭?椤电洅搴曞唴缂?+ 10 鈭?12`銆?
+    // ★★★ 2026-10-18：语义改成「键盘态**比常态多抬了多少**」= `margin − G`（= K − I + GK − G）。
+    //   宿主已经没有 `.offset` 了，这个数只用于日志与回归判据：
+    //   · 无键盘时必须**逐字为 0**（契约不变，因为 margin 回落到 G）；
+    //   · 键盘态应当 ≈ `键盘高 − 页盒底内缩 + 10 − 12`。
     const lift: number = this.floatingMiniBarBottomMarginVp() - FLOATING_MINI_BAR_BOTTOM_GAP_VP;
     return lift > 0 ? lift : 0;
   }
 
   /**
-   * 娴滃瞼楠囨い鐢告桨閹剚璇炴潻铚傜稑閺?*鐎瑰じ瀵?*閻ㄥ嫮鏃遍崥鎴濅焊缁変紮绱檝p閿涘鈧?
+   * 浜岀骇椤甸潰鎮诞杩蜂綘鏉?*瀹夸富**鐨勭旱鍚戝亸绉伙紙vp锛夈€?
    *
-   * 閳跨媴绗?閺冪娀鏁惄妯绘韫囧懘銆?*闁劕鐡х粵澶夌艾** `homeTabBarBottomMarginVp()` 閳ユ柡鈧?鏉╂瑦妲搁崶鐐茬秺缁俱垻鍤庨敍?
-   *    闁款喚娲忛柆鑳唨閸欘亜鍘戠拋绋挎躬"閻喓娈戝閫涚啊闁款喚娲?閺冭埖鏁奸崣妯跨箹閺夆剝鐖惃鍕秴缂冾喓鈧?
-   * @returns 鐎瑰じ瀵?offset.y閿涘澊p閿涘鈧?
+   * 鈿狅笍 鏃犻敭鐩樻椂蹇呴』**閫愬瓧绛変簬** `homeTabBarBottomMarginVp()` 鈥斺€?杩欐槸鍥炲綊绾㈢嚎锛?
+   *    閿洏閬胯鍙厑璁稿湪"鐪熺殑寮逛簡閿洏"鏃舵敼鍙樿繖鏉℃爮鐨勪綅缃€?
+   * @returns 瀹夸富 offset.y锛坴p锛夈€?
    */
   private floatingMiniBarHostOffsetYVp(): number {
-    // 鈽呪槄鈽?2026-10-18锛堢敤鎴凤細銆屾€庝箞鏁翠釜搴曚笅鐨勭壒鏁堥兘琚姮涓婃潵浜嗐€嶏級锛?*瀹夸富涓嶅啀鏁翠綋浣嶇Щ锛屾湰鍑芥暟鎭掕繑鍥?0**銆?
-    //   涓婇潰閭ｆ锛?鏃犻敭鐩樻椂蹇呴』閫愬瓧绛変簬 homeTabBarBottomMarginVp()"锛夎繛鍚屽畠鐨勫墠鎻愪竴璧蜂綔搴熴€?
-    //   涓轰粈涔堬細`.offset` 浣嶇Щ鐨勬槸杩欎竴涓粍浠?*杩炲悓瀹冪敾鐨勫叏閮ㄤ笢瑗?* 鈥斺€?瀹夸富鏄暣鏉?HDS 娴姩搴曟爮锛?
-    //   鑳跺泭銆乣systemMaterialEffect` 鏉愯川灞傘€佹爮搴曡壊鍏ㄥ湪鍏朵腑 鈬?涓€鎶氨鏄?鏁村潡搴曟爮娴┖"銆?
-    //   鐜板湪閿洏閬胯鍙敼 `barFloatingStyle.barBottomMargin`锛圫DK `@hms.hds.hdsBaseComponent.d.ets:5311`
-    //   銆宼he distance between tab bar and bottom of tabs銆嶏級鈬?鍙姩鑳跺泭**鍦ㄥ涓诲唴閮?*鐨勪綅缃紝
-    //   瀹夸富鐩掍笌瀹冨簳涓嬮偅浜涙暣灞傛晥鏋滃師鍦颁笉鍔ㄣ€?
-    //   杩斿洖 0 鑰屼笉鏄垹鍑芥暟锛氭棩蹇楅噷 `hostOffset=0` 灏辨槸"娌℃湁鏁翠綋浣嶇Щ"鐨勫垽鎹紝鍚屾椂闃插洖褰?鈥斺€?
-    //   **涓嶈**鎶?{@link floatingMiniBarKeyboardLiftVp} 鍐嶆帴鍥?`.offset`銆?
+    // ★★★ 2026-10-18（用户：「怎么整个底下的特效都被抬上来了」）：**宿主不再整体位移，本函数恒返回 0**。
+    //   上面那段（"无键盘时必须逐字等于 homeTabBarBottomMarginVp()"）连同它的前提一起作废。
+    //   为什么：`.offset` 位移的是这一个组件**连同它画的全部东西** —— 宿主是整条 HDS 浮动底栏，
+    //   胶囊、`systemMaterialEffect` 材质层、栏底色全在其中 ⇒ 一抬就是"整块底栏浮空"。
+    //   现在键盘避让只改 `barFloatingStyle.barBottomMargin`（SDK `@hms.hds.hdsBaseComponent.d.ets:5311`
+    //   「the distance between tab bar and bottom of tabs」）⇒ 只动胶囊**在宿主内部**的位置，
+    //   宿主盒与它底下那些整层效果原地不动。
+    //   返回 0 而不是删函数：日志里 `hostOffset=0` 就是"没有整体位移"的判据，同时防回归 ——
+    //   **不要**把 {@link floatingMiniBarKeyboardLiftVp} 再接回 `.offset`。
     return 0;
   }
 
   /**
-   * 鎼存洟鍎存い鐢殿劮閿?*閸欘亜澧挎稉銈勯嚋** 閳ユ柡鈧?閹恒劏宕?/ 閹存垹娈戦妴?
+   * 搴曢儴椤电锛?*鍙墿涓や釜** 鈥斺€?鎺ㄨ崘 / 鎴戠殑銆?
    *
-   * 娑撹桨绮堟稊鍫熸Ц鏉╂瑤琚辨稉顏庣礄閻劍鍩?2026-10-11 閺勫海鈥樼憰浣圭湴"鎼存洘鐖崣顏勫⒖娑撱倓閲?Tab"閿涘苯褰熸稉鈧稉顏嗘暠閹存垳婊戦懛顏勭箒閸掋倖鏌囬敍澶涚窗
-   *   - 閵嗗本甯归懡鎰┾偓宥嗘Ц閸愬懎顔愭稉濠氭桨閿涘牓顩绘い鍨腹閼芥劖绁﹂敍澶涚礉娑旂喐妲搁崗銊ユ簚閹碘偓閺?閸樺顩绘い?閸斻劋缍旈惃鍕儰閻愮櫢绱濋崚鐘冲竴鐎瑰啫绨查悽銊ユ皑濞屸€茬啊閸忋儱褰涢敍?
-   *   - 閵嗗本鍨滈惃鍕┾偓宥嗘Ц閸欏倽鈧啫浼愮粙?lxmusic-harmony 閻ㄥ嫬浠涘▔鏇窗鐎瑰啳鍤滃鍙樼瘍**娴犲骸娲撴稉顏堛€夌粵鎾呯礄閹恒劏宕?濮濆苯宕?閹存垹娈?鐠佸墽鐤嗛敍?
-   *     閺€鑸靛灇娴滃棔绗佹稉顏庣礄閹恒劏宕?閸氼兛鍔?閹存垹娈戦敍?*閿涘瞼鎮婇悽閬嶁偓鎰摟閸氬本鐎?閳ユ柡鈧?濮濆苯宕熸稉搴ゎ啎缂冾喚娈?*閸愬懎顔愰柈鑺ユ儔鏉╂稐绨￠妴灞惧灉閻ㄥ嫨鈧秹銆?*
-   *     閿涘牆鎻╅幑宄板弳閸?+ 濮濆苯宕熼崡?+ 鐠佸墽鐤嗛崡鈽呯礆閿涘苯鍟€閻ｆ瑧娼冮柇锝勮⒈娑擃亪銆夌粵鎯ф皑閺?閸氬奔绔存禒鏈电皑娑撱倓閲滈崗銉ュ經"閵?
-   *     閹存垳婊戝▽鈩冩箒閵嗗苯鎯夋稊锔衡偓宥忕礉閹碘偓娴犮儲顒滄總鑺ユЦ**娑撱倓閲?*閵?
+   * 涓轰粈涔堟槸杩欎袱涓紙鐢ㄦ埛 2026-10-11 鏄庣‘瑕佹眰"搴曟爮鍙墿涓や釜 Tab"锛屽彟涓€涓敱鎴戜滑鑷繁鍒ゆ柇锛夛細
+   *   - 銆屾帹鑽愩€嶆槸鍐呭涓婚潰锛堥椤垫帹鑽愭祦锛夛紝涔熸槸鍏ㄥ満鎵€鏈?鍘婚椤?鍔ㄤ綔鐨勮惤鐐癸紝鍒犳帀瀹冨簲鐢ㄥ氨娌′簡鍏ュ彛锛?
+   *   - 銆屾垜鐨勩€嶆槸鍙傝€冨伐绋?lxmusic-harmony 鐨勫仛娉曪細瀹冭嚜宸变篃**浠庡洓涓〉绛撅紙鎺ㄨ崘/姝屽崟/鎴戠殑/璁剧疆锛?
+   *     鏀舵垚浜嗕笁涓紙鎺ㄨ崘/鍚功/鎴戠殑锛?*锛岀悊鐢遍€愬瓧鍚屾瀯 鈥斺€?姝屽崟涓庤缃殑**鍐呭閮芥惉杩涗簡銆屾垜鐨勩€嶉〉**
+   *     锛堝揩鎹峰叆鍙?+ 姝屽崟鍗?+ 璁剧疆鍗★級锛屽啀鐣欑潃閭ｄ袱涓〉绛惧氨鏄?鍚屼竴浠朵簨涓や釜鍏ュ彛"銆?
+   *     鎴戜滑娌℃湁銆屽惉涔︺€嶏紝鎵€浠ユ濂芥槸**涓や釜**銆?
    *
-   * 鐞氼偄鍨归幒澶屾畱娑撱倓閲滄い鐢殿劮閿涘矁鍏橀崝娑㈠厴閺堝鏌婇崗銉ュ經閿涘牅绔撮弶锟犲厴濞屸€叉丢閿涘绱?
-   *   - 閵嗗矁顔曠純顔衡偓宥佸晪閵嗗本鍨滈惃鍕┾偓宥夈€夐柇锝呯炊**閸忋儱褰涢崡?*閻ㄥ嫨鈧矁顔曠純顔衡偓宥堫攽 閳?`SettingPage` 娴滃瞼楠囨い?
-   *     閿?*鐏忚鲸妲搁幋鎴滄粦閸樼喐娼甸柇锝勯嚋婢堆嗩啎缂冾噣銆夐張顑跨秼**閿涙碍鎮崇槐銏☆攱 + 閸忣厾绮嶇拋鍓х枂妞?+ 楠炲啿褰寸拹锕€褰?楠炲啿褰撮棅鍏呯/娑撳娴囩粻锛勬倞閿?
-   *      妞ゆ湹绗傞柇锝呯炊閵嗗瞼娅ヨぐ鏇㈢叾娑旀劑鈧秴宕卞鍙夋儔閸掕埇鈧本鍨滈惃鍕┾偓宥夈€夋い鍫曞劥閿涘矁顫?`LoginMusicCard.ets`閿?
-   *      閻愮绻橀崢鑽ゆ畱鐠囷附鍎忔禒宥嗘Ц閸氬奔绔存稉?`SettingsDetailPage`閿涘绱?
-   *   - 閵嗗本鐡曢崡鏇樷偓宥佸晪閵嗗本鍨滈惃鍕┾偓宥夈€夐柇锝呯炊**濮濆苯宕熼崡?*閿涙艾宕遍崘鍛纯閹恒儱鍨灞藉礋閿涘牏鍋ｆ潻娑滎嚊閹?/ 闂€鎸庡瘻闁插秴鎳￠崥宓氬嘲鍨归梽銈忕礆閵?
-   *     閸斻劋缍旈崠鎭掆偓灞炬煀瀵ょ儤鐡曢崡鏇樷偓宥忕礄鐏忓崬婀村鐟扮湴閿涘鈧降鈧本鐡曢崡鏇烆嚤閸忋儯鈧秳绗岄崡鈥炽仈閵嗗苯鍙忛柈銊ｂ偓宥佸晪 `MinePlaylistPage`
-   *     娴滃瞼楠囨い纰夌礄閽栧嫬锛撻敍灞捐閺屾挾娈戞禒宥嗘Ц `PlaylistsPage` 閺佹挳銆夐敍姘笓鎼?/ 鐎电厧鍤?/ 閺€鐟扮殱闂?/ 缂冩垹绮剁€电厧鍙嗛柈钘夋躬閿涘鈧?
-   * 閳跨媴绗?閹碘偓閺堝绨╃痪褔銆夐柈鑺ュ腹**婢瑰啿鐪伴崗鍙橀煩閺?* `pageIndexInfos`閿涘潉MinePage` 閼奉亜鐢惃鍕亝娑擃亜鍞寸仦?Navigation
-   *    瀹告彃婀?2026-10-11 缁楊剙宕勬禍宀冪枂閸掔娀娅庨敍宀€鎮婇悽杈潌 `MinePage` 閺傚洣娆㈡径杈剧礆閵?
+   * 琚垹鎺夌殑涓や釜椤电锛岃兘鍔涢兘鏈夋柊鍏ュ彛锛堜竴鏉￠兘娌′涪锛夛細
+   *   - 銆岃缃€嶁啋銆屾垜鐨勩€嶉〉閭ｅ紶**鍏ュ彛鍗?*鐨勩€岃缃€嶈 鈫?`SettingPage` 浜岀骇椤?
+   *     锛?*灏辨槸鎴戜滑鍘熸潵閭ｄ釜澶ц缃〉鏈綋**锛氭悳绱㈡ + 鍏粍璁剧疆椤?+ 骞冲彴璐﹀彿/骞冲彴闊充箰/涓嬭浇绠＄悊锛?
+   *      椤朵笂閭ｅ紶銆岀櫥褰曢煶涔愩€嶅崱宸叉惉鍒般€屾垜鐨勩€嶉〉椤堕儴锛岃 `LoginMusicCard.ets`锛?
+   *      鐐硅繘鍘荤殑璇︽儏浠嶆槸鍚屼竴涓?`SettingsDetailPage`锛夛紱
+   *   - 銆屾瓕鍗曘€嶁啋銆屾垜鐨勩€嶉〉閭ｅ紶**姝屽崟鍗?*锛氬崱鍐呯洿鎺ュ垪姝屽崟锛堢偣杩涜鎯?/ 闀挎寜閲嶅懡鍚嵚峰垹闄わ級銆?
+   *     鍔ㄤ綔鍖恒€屾柊寤烘瓕鍗曘€嶏紙灏卞湴寮瑰眰锛夈€併€屾瓕鍗曞鍏ャ€嶄笌鍗″ご銆屽叏閮ㄣ€嶁啋 `MinePlaylistPage`
+   *     浜岀骇椤碉紙钖勫３锛屾覆鏌撶殑浠嶆槸 `PlaylistsPage` 鏁撮〉锛氭帓搴?/ 瀵煎嚭 / 鏀瑰皝闈?/ 缃戠粶瀵煎叆閮藉湪锛夈€?
+   * 鈿狅笍 鎵€鏈変簩绾ч〉閮芥帹**澹冲眰鍏变韩鏍?* `pageIndexInfos`锛坄MinePage` 鑷甫鐨勯偅涓唴灞?Navigation
+   *    宸插湪 2026-10-11 绗崄浜岃疆鍒犻櫎锛岀悊鐢辫 `MinePage` 鏂囦欢澶达級銆?
    */
   @Builder
   private HomeTabsPages() {
@@ -2593,30 +2593,30 @@ struct Index {
     }
     .tabBar(this.TabBarItem(0, $r('app.string.tab_home'), $r('sys.symbol.house_fill')))
 
-    // 閳?閻劍鍩?2026-10-15閿涙哎鈧ab 閻ㄥ嫭甯归懡鎰嫲閸ョ偛鎼锋稉顓㈡？閸旂姳閲?*閻滄澘婀亸鍗炴儔**閿涘奔绗傛稉瀣拨閸斻劌鍨忛幑銏＄摃閺囧眰鈧倶鈧?
-    //   娑撯偓鐏炲繋绔存＃鏍ㄧ摃閵嗕胶鐝崥?Swiper 閹广垺鐡曢敍娑欐弓閻ц缍嶇挧鏉跨秼閸撳秴閽╅崣鐗堫渷閸楁洏鈧胶娅ヨぐ鏇¤泲鐠囥儱閽╅崣鐗堢槨閺冦儲甯归懡?
-    //   閿涘牅琚遍弶锟犫偓姘朵壕闁棄婀?`NowPlayingFeedPage` 闁插矉绱濈憴浣筋嚉閺傚洣娆㈡径杈剧礆閵?
-    //   閸ョ偓鐖?`sys.symbol.music_note_circle_fill` 娑撳骸褰熸径鏍︾瑏閺嬫艾鎮撴稉?fill 缁紮绱欏鎻掓躬閺堫剚婧€
-    //   `sysResource.js` 閻?symbol 鐞涖劑鍣烽弽绋跨杽鐎涙ê婀敍澶堚偓?
+    // 鈽?鐢ㄦ埛 2026-10-15锛氥€孴ab 鐨勬帹鑽愬拰鍥炲搷涓棿鍔犱釜**鐜板湪灏卞惉**锛屼笂涓嬫粦鍔ㄥ垏鎹㈡瓕鏇层€傘€?
+    //   涓€灞忎竴棣栨瓕銆佺珫鍚?Swiper 鎹㈡瓕锛涙湭鐧诲綍璧板綋鍓嶅钩鍙版鍗曘€佺櫥褰曡蛋璇ュ钩鍙版瘡鏃ユ帹鑽?
+    //   锛堜袱鏉￠€氶亾閮藉湪 `NowPlayingFeedPage` 閲岋紝瑙佽鏂囦欢澶达級銆?
+    //   鍥炬爣 `sys.symbol.music_note_circle_fill` 涓庡彟澶栦笁鏋氬悓涓?fill 绯伙紙宸插湪鏈満
+    //   `sysResource.js` 鐨?symbol 琛ㄩ噷鏍稿疄瀛樺湪锛夈€?
     TabContent() {
       Column() {
         NowPlayingFeedPage({
-          // 鎼存洟鍎寸拋鈺€缍呮稉搴濈瑐闂堫潿鈧本甯归懡鎰┾偓宥夈€夐崥灞肩閸掋倖宓侀敍鍦欴S 濞搭喖濮╅懗璺烘抄鎼存洘鐖?6.1.1(24)/60100 鐠ч攱澧犵€涙ê婀敍澶涚窗
-          // 56 = 閼宠泛娉姗堢礉+16 = `barBottomMargin` 閻ㄥ嫬鐖剁憴鍕偓绗衡偓鍌氱暊閸旂姴婀?*濠婃垵濮╅崡锛勫閼奉亜绻?*闊偂绗傞敍?
-          // 鏉╂瑦鐗卞В蹇庣鐏炲繘鍏橀懗鑺ヮ劀婵傚€熺堪瀵偓鎼存洘鐖敍鍫ｎ潌 `NowPlayingFeedPage.FEED_DEFAULT_BOTTOM_RESERVE_VP`閿涘鈧?
+          // 搴曢儴璁╀綅涓庝笂闈€屾帹鑽愩€嶉〉鍚屼竴鍒ゆ嵁锛圚DS 娴姩鑳跺泭搴曟爮 6.1.1(24)/60100 璧锋墠瀛樺湪锛夛細
+          // 56 = 鑳跺泭楂橈紝+16 = `barBottomMargin` 鐨勫父瑙勫€笺€傚畠鍔犲湪**婊戝姩鍗＄墖鑷繁**韬笂锛?
+          // 杩欐牱姣忎竴灞忛兘鑳芥濂借翰寮€搴曟爮锛堣 `NowPlayingFeedPage.FEED_DEFAULT_BOTTOM_RESERVE_VP`锛夈€?
           bottomReserveVp: deviceInfo.distributionOSApiVersion >= 60100 ? 56 + 16 : 56,
           scrollTopCommand: this.tabScrollTopCommands[1],
-          // 閳藉應妲?2026-10-15 閻劍鍩涢敍姘モ偓灞惧灉閸氼垰濮╂惔鏃傛暏鏉╁洣绔存导姘皑娴兼俺鍤滈崝銊ョ磻婵鎸遍弨鎾呯礉**閼奉亜濮╁鈧慨瀣尡閺€鍓ф畱闁槒绶惔鏃囶嚉閺勵垱鍨滈幍鎾崇磻
-          //    闁絼閲滈悳鏉挎躬鐏忓崬鎯夐惃鍕€夐棃銏㈡畱閺冭泛鈧?*閵嗗秲鈧倹鐗撮崶鐘虫Ц `HdsTabs` 閻?`TabContent` 鐎涙劙銆夐棃?*閸氼垰濮╅弮璺烘皑閹稿倽娴?*
-          //    閳?妞ょ敻娼伴柌宀€娈?`applyRows()` 娑撯偓閸掔増鏆熼幑顔兼皑鐠ч攱鎸辨禍鍡礄閻劍鍩涙潻妯烘躬妫ｆ牠銆夐敍澶堚偓?
-          //    閳?娑撳褰?*閺堫剟銆夐崷銊ョ俺閺嶅繘鍣烽惃鍕瑓閺?*閿涘牊妲告稉顏勭埗闁插骏绱氶敍宀勩€夐棃銏ｅ殰瀹歌精绻?`TabSwitchState` 閸?閻滄澘婀崷銊ょ瑝閸︺劌鐫嗛獮鏇氱瑐"
-          //      閿涘潉@Monitor('tabState.tabIndex')`閿涘绱濋崣顏呮箒閸︺劌澧犻崣鐗堝鐠ч攱鎸遍妴?
-          //    閳跨媴绗?**娑撳秷顩﹂弨瑙勫灇"婢瑰啿鐪版导?`isActive: this.tabState.tabIndex === 閳ヮ泦"**閿涙rkUI V2 閺?鐠囩粯澧犵拋銏ゆ"閿?
-          //      閸掑洭銆夌粵鐐闁插秶绮惃鍕Ц鐠囪绨?`tabIndex` 閻ㄥ嫰鍋呴崙鐘遍嚋 `TabBarItem` 閼哄倻鍋ｉ敍灞炬拱妞や絻绻栨稉?`@Param`
-          //      **娑撳秳绻氱拠浣筋潶闁插秵鏌婂Ч鍌氣偓?* 閳?`isActive` 娴兼矮绔撮惄鏉戜粻閸︺劌鍨甸崐纭风礄闂堟瑩绮径杈ㄦ櫏閿涘鈧?
-          //    閳跨媴绗?閸欏倹鏆熼崥?*娑撳秷鍏橀崣?`tabIndex`**閿涙瓪CustomComponent` 閼奉亜绻侀張澶夌娑擃亜鎮撻崥宥嗘煙濞?
-          //      閿涘牓鈧氨鏁ょ仦鐐粹偓?`tabIndex(index)`閿涘绱濋懛顏勭暰娑斿绮嶆禒鍫曞櫡閸氬苯鎮曟导?**缂傛牞鐦ф径杈Е**閿涘牊婀伴張鍝勭杽濞村绱?
-          //      `Property 'tabIndex' 閳?is not assignable to the same property in base type 'CustomComponent'`閿涘鈧?
+          // 鈽呪槄 2026-10-15 鐢ㄦ埛锛氥€屾垜鍚姩搴旂敤杩囦竴浼氬氨浼氳嚜鍔ㄥ紑濮嬫挱鏀撅紝**鑷姩寮€濮嬫挱鏀剧殑閫昏緫搴旇鏄垜鎵撳紑
+          //    閭ｄ釜鐜板湪灏卞惉鐨勯〉闈㈢殑鏃跺€?*銆嶃€傛牴鍥犳槸 `HdsTabs` 鐨?`TabContent` 瀛愰〉闈?*鍚姩鏃跺氨鎸傝浇**
+          //    鈬?椤甸潰閲岀殑 `applyRows()` 涓€鍒版暟鎹氨璧锋挱浜嗭紙鐢ㄦ埛杩樺湪棣栭〉锛夈€?
+          //    鈬?涓嬪彂**鏈〉鍦ㄥ簳鏍忛噷鐨勪笅鏍?*锛堟槸涓父閲忥級锛岄〉闈㈣嚜宸辫繛 `TabSwitchState` 鍒?鐜板湪鍦ㄤ笉鍦ㄥ睆骞曚笂"
+          //      锛坄@Monitor('tabState.tabIndex')`锛夛紝鍙湁鍦ㄥ墠鍙版墠璧锋挱銆?
+          //    鈿狅笍 **涓嶈鏀规垚"澹冲眰浼?`isActive: this.tabState.tabIndex === 鈥"**锛欰rkUI V2 鏄?璇绘墠璁㈤槄"锛?
+          //      鍒囬〉绛炬椂閲嶇粯鐨勬槸璇讳簡 `tabIndex` 鐨勯偅鍑犱釜 `TabBarItem` 鑺傜偣锛屾湰椤佃繖涓?`@Param`
+          //      **涓嶄繚璇佽閲嶆柊姹傚€?* 鈬?`isActive` 浼氫竴鐩村仠鍦ㄥ垵鍊硷紙闈欓粯澶辨晥锛夈€?
+          //    鈿狅笍 鍙傛暟鍚?*涓嶈兘鍙?`tabIndex`**锛歚CustomComponent` 鑷繁鏈変竴涓悓鍚嶆柟娉?
+          //      锛堥€氱敤灞炴€?`tabIndex(index)`锛夛紝鑷畾涔夌粍浠堕噷鍚屽悕浼?**缂栬瘧澶辫触**锛堟湰鏈哄疄娴嬶細
+          //      `Property 'tabIndex' 鈥?is not assignable to the same property in base type 'CustomComponent'`锛夈€?
           barTabIndex: NOW_PLAYING_TAB_INDEX
         })
           .layoutWeight(1)
@@ -2627,7 +2627,7 @@ struct Index {
     }
     .tabBar(this.TabBarItem(1, $r('app.string.tab_now_playing'), $r('sys.symbol.music_round_triangle_fill')))
 
-    // 閳?閻劍鍩?2026-10-12閿涙艾绨抽弽蹇庤厬闂傛潙濮炴稉鈧い鐐光偓灞芥礀閸濆秲鈧稄绱欓張鍫濆閸氼剚鐡曢幎銉ユ啞閿?
+    // 鈽?鐢ㄦ埛 2026-10-12锛氬簳鏍忎腑闂村姞涓€椤点€屽洖鍝嶃€嶏紙鏈堝害鍚瓕鎶ュ憡锛?
     TabContent() {
       Column() {
         EchoReviewPage({ scrollTopCommand: this.tabScrollTopCommands[2] })
@@ -2665,147 +2665,147 @@ struct Index {
           .vertical(false)
           .scrollable(true)
           .barFloatingStyle({
-            // 閳跨媴绗?娑撳秷顩︽导?barWidth閵?
-            // musicfreeOH 閻ㄥ嫭璇為崝銊ョ俺閺嶅繐褰ч張?barBottomMargin / systemMaterialEffect /
-            // adaptToHandedness / miniBar 閸ユ稐閲滈柨?閳ユ柡鈧?濞屸剝婀?barWidth閵嗗倹鍨滄禒顒€甯弶銉ょ炊閻ㄥ嫪绗佸?
-            // 閿涘澃mallWidth = 缁愭褰涚€?閳?96 / 284 / 328閿涘绱扮拋鈺傛殻閺夆€崇俺閺嶅繑妲戦弰鍓х崕娴滃骸鐫嗛獮鏇礉
-            // 閵嗗奔绗傛稉瀣╄⒈閹烘帇鈧秵妞傛稉銈勬櫠鐏忚京鏆€閸戝搫绶㈡径褏鈹栭梾娆欑礄閻劍鍩涢崣宥夘洯閻ㄥ嫬姘ㄩ弰顖濈箹娑擃亷绱氶妴?
+            // 鈿狅笍 涓嶈浼?barWidth銆?
+            // musicfreeOH 鐨勬诞鍔ㄥ簳鏍忓彧鏈?barBottomMargin / systemMaterialEffect /
+            // adaptToHandedness / miniBar 鍥涗釜閿?鈥斺€?娌℃湁 barWidth銆傛垜浠師鏉ヤ紶鐨勪笁妗?
+            // 锛坰mallWidth = 绐楀彛瀹?鈭?96 / 284 / 328锛変細璁╂暣鏉″簳鏍忔槑鏄剧獎浜庡睆骞曪紝
+            // 銆屼笂涓嬩袱鎺掋€嶆椂涓や晶灏辩暀鍑哄緢澶х┖闅欙紙鐢ㄦ埛鍙嶉鐨勫氨鏄繖涓級銆?
             barBottomMargin: this.homeTabBarBottomMarginVp(),
-            // 閳?鏉╂瑦娼弰?*鐎规ɑ鏌熼惇鐔风杽閸忓鍔?*閿涙dsTabs 閻ㄥ嫭璇為崝銊ョ俺閺嶅骏绱檅arOverlap + !vertical +
-            //   barPosition(End) 娑撳娼禒璺烘倱閺冭埖寮х搾绛圭礆+ `systemMaterialEffect`閵?
-            //   濡楋絼缍呮稉搴㈢垼妫版ɑ鐖崗杈╂暏 ambientTitleMaterial()閿涘奔绗夌憰浣稿晙閸︺劍婀版径鍕敶閼辨柧绔存總妞剧瑏閻╊喓鈧?
-              // 鈽呪槄鈽?2026-10-18锛堢敤鎴凤細銆屽彧鏈夋妸鍏夋劅绛夌骇鏀规垚鎴戜滑鐨勫氨琛屻€嶏級锛?
-              //   杞戒綋浠嶆槸 HDS锛堝３灞?`HdsTabs`锛夛紝浣?*鏉愯川妗ｅ悆鏈簲鐢ㄧ殑杞欢璁剧疆**锛?
-              //   `buildTitleMaterial(ambientState.level)`锛? 璺熼殢绯荤粺 / 1 SMOOTH / 2 GENTLE / 3 EXQUISITE锛夛紝
-              //   涓庢爣棰樻爮鍚屼竴浠芥槧灏勩€?
-              // 鈽呪槄鈽?2026-10-18锛堢敤鎴凤細銆屽彧鏈夋妸鍏夋劅绛夌骇鏀规垚鎴戜滑鐨勫氨琛屻€嶏級锛氳浇浣撲粛鏄?HDS锛堝３灞?`HdsTabs`锛夛紝
-              //   鏉愯川妗ｅ悆鏈簲鐢ㄨ缃?鈥斺€?鍗虫棦鏈夌殑 `ambientTitleMaterial()`锛? `buildTitleMaterial` 鐨勫悓涓€浠芥槧灏勶細
-              //   0 璺熼殢绯荤粺 / 1 SMOOTH / 2 GENTLE / 3 EXQUISITE锛夛紝涓庢爣棰樻爮鍚屼竴鍙ｅ緞銆?
+            // 鈽?杩欐潯鏄?*瀹樻柟鐪熷疄鍏夋劅**锛欻dsTabs 鐨勬诞鍔ㄥ簳鏍忥紙barOverlap + !vertical +
+            //   barPosition(End) 涓夋潯浠跺悓鏃舵弧瓒筹級+ `systemMaterialEffect`銆?
+            //   妗ｄ綅涓庢爣棰樻爮鍏辩敤 ambientTitleMaterial()锛屼笉瑕佸啀鍦ㄦ湰澶勫唴鑱斾竴濂椾笁鐩€?
+              // ★★★ 2026-10-18（用户：「只有把光感等级改成我们的就行」）：
+              //   载体仍是 HDS（壳层 `HdsTabs`），但**材质档吃本应用的软件设置**：
+              //   `buildTitleMaterial(ambientState.level)`（0 跟随系统 / 1 SMOOTH / 2 GENTLE / 3 EXQUISITE），
+              //   与标题栏同一份映射。
+              // ★★★ 2026-10-18（用户：「只有把光感等级改成我们的就行」）：载体仍是 HDS（壳层 `HdsTabs`），
+              //   材质档吃本应用设置 —— 即既有的 `ambientTitleMaterial()`（= `buildTitleMaterial` 的同一份映射：
+              //   0 跟随系统 / 1 SMOOTH / 2 GENTLE / 3 EXQUISITE），与标题栏同一口径。
               systemMaterialEffect: this.ambientTitleMaterial(),
-            // 閺呯儤鍔呴幓鈥承敍姘崇闂呭繑褰欓幐浣瑰鐠嬪啯鏆ｅù顔煎З閺夆€充箯閸欏啿浜哥純?
+            // 鏅烘劅鎻″Э锛氳窡闅忔彙鎸佹墜璋冩暣娴姩鏉″乏鍙冲亸缃?
             adaptToHandedness: true,
             miniBar: {
-              // 鈿狅笍 涓嬮潰銆?026-10-20锛堢涓夎疆锛夈€嶉偅娈碉紙"妲藉彧鐣?0 楂樺害鍗犱綅"锛?*宸蹭綔搴?*锛?
-              //   绗叓杞敳鏂圭粨璁烘槸涓€绾ч〉涓庝簩绾ч〉涓ゅ缁撴瀯 鈬?妲介噷鐜板湪鐢荤殑灏辨槸**鎾斁鍣ㄦ湰浣?*锛?
-              //   `enableMiniBarBackground` / `enableMiniBarClip` 涔熷洖鍒颁笂娓哥己鐪侊紙涓嶅啓锛夈€?
-              //   淇鐞嗙敱瑙佹湰鍧楀唴 2026-10-21 鐨勪笁娈垫敞閲娿€?
-              // 鈽呪槄鈽呪槄 2026-10-20锛堢涓夎疆锛夛細`miniBar` 妲?*鍙暀 0 楂樺害鍗犱綅**锛屼笉鍐嶇敾鎾斁鍣ㄣ€?
+              // ⚠️ 下面「2026-10-20（第三轮）」那段（"槽只留 0 高度占位"）**已作废**：
+              //   第八轮甲方结论是一级页与二级页两套结构 ⇒ 槽里现在画的就是**播放器本体**，
+              //   `enableMiniBarBackground` / `enableMiniBarClip` 也回到上游缺省（不写）。
+              //   修正理由见本块内 2026-10-21 的三段注释。
+              // ★★★★ 2026-10-20（第三轮）：`miniBar` 槽**只留 0 高度占位**，不再画播放器。
               //
-              //  涓轰粈涔堬紙涓€鍙ヨ瘽锛夛細妲介噷鐨勮儗鏉挎槸**澹冲眰 HdsTabs 鑷繁鐨勫瓙鏍?*锛屾垜浠?`.scale` 鍘嬩笉鍒板畠
-              //  鈬?浣忓湪杩欓噷鐨勮糠浣犳潯姘歌繙鎷夸笉鍒?鏉愯川鑳屾澘璺熺潃寮逛竴涓?銆傝€?鍏夋劅"鍙堝彧鑳芥潵鑷?
-              //  `HdsTabsFloatingStyle.systemMaterialEffect`锛坄CommonMethod` 涓婃病鏈夎繖涓睘鎬э級
-              //  鈬?鍞竴鍑鸿矾鏄?鑳跺泭鑷繁灏辨槸涓€涓?HdsTabs銆佷笖杩欎釜 HdsTabs 鍦ㄦ垜浠殑瀛愭爲閲?
-              //  = 鏃犵晫鐨?`MaterialCapsule`锛坄wujie.pa:60082-60279`锛夈€?
-              //  鈬?鎾斁鍣ㄦ湰浣撴惉鍒?{@link homeMiniCapsule}锛堝３灞?Stack锛寊Index 19锛夛紝
-              //    涓庝簩绾ч〉閭ｆ潯**鍚屼竴涓粍浠躲€佸悓涓€濂楀昂瀵稿彛寰?*銆?
+              //  为什么（一句话）：槽里的背板是**壳层 HdsTabs 自己的子树**，我们 `.scale` 压不到它
+              //  ⇒ 住在这里的迷你条永远拿不到"材质背板跟着弹一下"。而"光感"又只能来自
+              //  `HdsTabsFloatingStyle.systemMaterialEffect`（`CommonMethod` 上没有这个属性）
+              //  ⇒ 唯一出路是"胶囊自己就是一个 HdsTabs、且这个 HdsTabs 在我们的子树里"
+              //  = 无界的 `MaterialCapsule`（`wujie.pa:60082-60279`）。
+              //  ⇒ 播放器本体搬到 {@link homeMiniCapsule}（壳层 Stack，zIndex 19），
+              //    与二级页那条**同一个组件、同一套尺寸口径**。
               //
-              //  鈿狅笍 `enableMiniBarBackground` 蹇呴』 **false**锛氭Ы閲屽凡缁忔病鏈夋挱鏀惧櫒锛?
-              //    寮€鐫€瀹冧細鐣欎笅涓€鏋?*绌鸿兌鍥婅儗鏉?*锛堟湰鏂囦欢椤堕儴绗?鈶?鏉″氨鏄杩欎釜锛夈€?
-              //     杩欎篃椤烘墜瑙ｅ喅浜?鍙岃儗鏉?鏉愯川琚礂鐧?鈥斺€旀Ы閲屼竴涓儚绱犻兘涓嶇敾銆?
-              //  鈿狅笍 `enableMiniBarClip` 蹇呴』 **false**锛氭垜浠殑鑳跺泭鏈?slack 澶栨孩锛?
-              //    鐪熸満涓€鏃﹀紑鍚鍓氨浼氭妸鏉愯川杈圭紭鍒囨帀涓€鍦堛€?
-              //  鈿狅笍 妲介珮鐢辫繖鍧?0 楂樺害鐨?Column 鍐冲畾锛圚DS 鎸夊唴瀹归噺楂樺害锛夆噿 鍙墿椤电涓€鎺掞紝
-              //    涓庛€岀幇鍦ㄥ氨鍦ㄥ惉銆嶉偅涓€椤?*閫愬瓧鍚屼竴涓啓娉?*锛堥偅鏉¤矾寰勭湡鏈哄凡楠岃繃锛夈€?
+              //  ⚠️ `enableMiniBarBackground` 必须 **false**：槽里已经没有播放器，
+              //    开着它会留下一枚**空胶囊背板**（本文件顶部第 ③ 条就是记这个）。
+              //     这也顺手解决了"双背板/材质被洗白"——槽里一个像素都不画。
+              //  ⚠️ `enableMiniBarClip` 必须 **false**：我们的胶囊有 slack 外溢，
+              //    真机一旦开启裁剪就会把材质边缘切掉一圈。
+              //  ⚠️ 槽高由这块 0 高度的 Column 决定（HDS 按内容量高度）⇒ 只剩页签一排，
+              //    与「现在就在听」那一页**逐字同一个写法**（那条路径真机已验过）。
               miniBarBuilder: (): void => {
-                // 鈽呪槄鈽?2026-10-21锛堢鍏疆锛岀敳鏂圭粨璁猴級锛?*涓€绾ч〉鐨勬挱鏀炬潯灏变綇鍦ㄨ繖涓Ы閲?* 鈥斺€?
-                //   涓庝笂娓?`MainPage` 鍚屾瀯锛坄wujie.pa:157082-157228`锛歚__Common__().visibility().gesture(...)`
-                //   鐩存帴鍖?`MiniPlayer`锛屾病鏈夎兌鍥婂鍣ㄣ€佹病鏈?slack锛夈€?
-                //   鈬?杩欓噷缁欑殑灏辨槸 `MiniPlayer` 鏈綋锛坽@link miniBar}锛夛紝涓婁竴杞偅鍧?0 楂?56 楂?
-                //   閫忔槑鍗犱綅锛坄miniBarSlotPlaceholder`锛変笌澹冲眰 `Stack` 閲岀殑鑷缓鑳跺泭瀹夸富
-                //   锛坄homeMiniCapsule` 鈫?`MiniBarMaterialCapsule`锛?*閮藉凡鍒犻櫎**銆?
-                //   妲介珮鐢?HDS 鎸?*鍐呭閲?*缁欙細鍐呭琚拤鍦?`FLOATING_MINI_BAR_HEIGHT_VP`(56)
-                //   = 涓婃父 `MINI_H`锛屼笌椤电鑳跺泭绛夐珮锛堝畼鏂广€岃糠浣犳爮鈥︹€﹁窡椤电鏍忛珮搴︾浉绛変笖姘村钩瀵归綈銆嶏級銆?
+                // ★★★ 2026-10-21（第八轮，甲方结论）：**一级页的播放条就住在这个槽里** ——
+                //   与上游 `MainPage` 同构（`wujie.pa:157082-157228`：`__Common__().visibility().gesture(...)`
+                //   直接包 `MiniPlayer`，没有胶囊容器、没有 slack）。
+                //   ⇒ 这里给的就是 `MiniPlayer` 本体（{@link miniBar}），上一轮那块 0 高/56 高
+                //   透明占位（`miniBarSlotPlaceholder`）与壳层 `Stack` 里的自建胶囊宿主
+                //   （`homeMiniCapsule` → `MiniBarMaterialCapsule`）**都已删除**。
+                //   槽高由 HDS 按**内容量**给：内容被钉在 `FLOATING_MINI_BAR_HEIGHT_VP`(56)
+                //   = 上游 `MINI_H`，与页签胶囊等高（官方「迷你栏……跟页签栏高度相等且水平对齐」）。
                 this.miniBar();
               },
-              // 鈽呪槄鈽?2026-10-18锛堢敤鎴凤細銆岀幇鍦ㄥ氨鍚〉闈㈠簲璇ラ殣钘忓皬鎾斁鏉★紝鐜板湪鍙殣钘忎簡涓婇潰鐨勫厓绱犮€嶏級锛?
-              //   `miniBar()` 鍦ㄩ偅涓€椤?/ 浜岀骇椤靛湪鏍堜笂鏃剁粰鐨勬槸 **0 楂樺害鍗犱綅 Column**锛堜笉鐢绘挱鏀惧櫒锛夛紝
-              //   浣?`enableMiniBarBackground` 缂虹渷 **true**锛圫DK `:5169` 鍘熸枃 "follow tab bar"锛?
-              //   鈬?HDS 鐓ф牱缁欒繖涓€鏍肩敾鑳屾澘 鈬?椤电鑳跺泭涓婃柟澶氬嚭涓€鏋?*绌鸿兌鍥?*銆?
-              //   璇箟涓?`miniBar()` 閲岄偅鏉?if 閫愬瓧鍚屼箟锛?*鍙湁鐪熺敾鎾斁鍣ㄦ椂鎵嶈 HDS 鐢昏儗鏉?*銆?
-              // 鈽呪槄鈽?2026-10-18锛堢敤鎴凤細銆岃繕鏄笉浼氶殣钘忋€嶏級锛氳儗鏉夸篃瑕佽窡鍐呭涓€璧疯蛋銆?
-              //   `.visibility(Hidden)` 鍙棌**鍐呭**锛孒DS 閭ｅ眰鑳屾澘浠嶆寜杩欎竴鏍肩殑 56 楂樺害鐢?
-              //   鈬?鍔ㄧ敾鏈熺湅鐫€"鏉¤繕鍦?銆備笂娓?`morphMiniBar()`锛坄wujie.pa:148626-148645`锛夋槸**鏁翠唤鎹㈤厤缃?*锛?
-              //   `searchOpen 鈬?Empty` / `!miniHidden 鈬?NoBg` / 鍚﹀垯 `base`锛屼笁浠藉尯鍒氨鍦?`enableMiniBarBackground`銆?
-              //   鈬?杩欓噷璁╄儗鏉垮紑鍏冲悆涓庡唴瀹瑰彲瑙佹€?*鍚屼竴缁勬潯浠?*锛坄miniOut` 鏄笂娓搁偅鏉￠€愬抚涓嶅彉閲忥級銆?
-              // 鈽呪槄鈽?2026-10-18锛堜笂娓?`morphMiniBar()` 鍙鎬?= `NoBg`锛宍wujie.pa:148626-148648` /
-              //   `:144057-144068`锛夛細HDS **涓嶇敾**鑳屾澘锛岀敱鍐呭鑷粯 鈬?鎸ゅ帇鑳藉帇鍒拌儗鏉匡紝鏁存潯鎵嶄細"寮?銆?
-              //   鈿狅笍 涓庝竴绾ч〉 `showSelfDrawnBackplate: true` 蹇呴』鎴愬锛氬彧寮€涓€杈?= 涓ゅ眰鎴栧叏閫忔槑銆?
+              // ★★★ 2026-10-18（用户：「现在就听页面应该隐藏小播放条，现在只隐藏了上面的元素」）：
+              //   `miniBar()` 在那一页 / 二级页在栈上时给的是 **0 高度占位 Column**（不画播放器），
+              //   但 `enableMiniBarBackground` 缺省 **true**（SDK `:5169` 原文 "follow tab bar"）
+              //   ⇒ HDS 照样给这一格画背板 ⇒ 页签胶囊上方多出一枚**空胶囊**。
+              //   语义与 `miniBar()` 里那条 if 逐字同义：**只有真画播放器时才要 HDS 画背板**。
+              // ★★★ 2026-10-18（用户：「还是不会隐藏」）：背板也要跟内容一起走。
+              //   `.visibility(Hidden)` 只藏**内容**，HDS 那层背板仍按这一格的 56 高度画
+              //   ⇒ 动画期看着"条还在"。上游 `morphMiniBar()`（`wujie.pa:148626-148645`）是**整份换配置**：
+              //   `searchOpen ⇒ Empty` / `!miniHidden ⇒ NoBg` / 否则 `base`，三份区别就在 `enableMiniBarBackground`。
+              //   ⇒ 这里让背板开关吃与内容可见性**同一组条件**（`miniOut` 是上游那条逐帧不变量）。
+              // ★★★ 2026-10-18（上游 `morphMiniBar()` 可见态 = `NoBg`，`wujie.pa:148626-148648` /
+              //   `:144057-144068`）：HDS **不画**背板，由内容自绘 ⇒ 挤压能压到背板，整条才会"弹"。
+              //   ⚠️ 与一级页 `showSelfDrawnBackplate: true` 必须成对：只开一边 = 两层或全透明。
               enableMiniBarBackground: false,
-              // 鈽呪槄鈽?2026-10-20锛堢浜旇疆锛夛細**缁?HDS 鎶ヤ笂"杩蜂綘鏍忓崰澶氬"**锛坄HdsTabsMiniBar.miniBarWidth`
-              //   锛歋DK `@hms.hds.hdsBaseComponent.d.ets:5150`锛屼笁妗ｄ笌 `HdsBarWidthRangeOptions` 鍚屽舰锛夈€?
-              //   鍗曞眰鎬佸繀椤绘姤锛屽惁鍒?HDS 鎸ら〉绛俱€佽鍑烘潵鐨勯暱鏉′綅瀹藉害涓庢垜浠嚜宸辩敾鐨勮兌鍥婂涓嶄笂銆?
-              //   鈿狅笍 杩?*涓嶆槸** `barFloatingStyle.barWidth`锛堥偅涓鏁存潯搴曟爮瀹斤紝鏈枃浠舵槑浠や笉浼狅級銆?
-              // 鈽呪槄鈽?2026-10-21锛堢鍏疆锛夛細`miniBarWidth` **涓嶅啀鎶?* 鈥斺€?涓婃父 `MainPage` 鐨?
-              //   `floatStyleOf()` 閲屾病鏈夎繖涓敭锛氶椤甸偅鏉＄殑瀹藉害鐢?HDS 鐨?`miniBar` 妲芥寜鍐呭閲?
-              //   "璺熼〉绛炬爮鍚屽"缁欙紙`涓婃父-杩蜂綘鏉′笁褰㈡€佷笌棣栭〉浜岀骇椤靛樊寮?md` 搂3.1锛夈€?
-              //   涓婁竴杞姤瀹冩槸鍥犱负鎾斁鍣ㄦ惉鍑轰簡妲斤紙瑕佽嚜宸辩畻闀挎潯浣嶏級锛岀幇鍦ㄦ挱鏀惧櫒鍥炲埌妲介噷锛岃繖涓暟澶氫綑銆?
-              // 鈽呪槄鈽?2026-10-21锛堢鍏疆锛夛細`enableMiniBarBackground` / `enableMiniBarClip`
-              //   **涓€寰嬩笉鍐?*锛堟寜涓婃父缂虹渷锛夈€俙enableMiniBarBackground` 鐨勭己鐪佹槸 `true`
-              //   锛坄@hms.hds.hdsBaseComponent.d.ets:5169`锛屾敞閲婂師鏂囥€孍nables mini bar background
-              //   follow tab bar銆嶏級鈬?杩蜂綘鏉￠偅鏍肩殑**鑳屾澘 + 娌夋蹈鍏夋劅鐢?HDS 鐢?*锛屽悆鐨勬槸鏈眰
-              //   `barFloatingStyle.systemMaterialEffect`锛圫DK `:5357`锛孉PI23/24 鍞竴鍚堟硶杞戒綋涔嬩竴锛夈€?
-              //   鈬?銆屽厜鎰熴€嶇殑鎻愪緵鏂?= **澹冲眰 HdsTabs**锛涖€屽脊涓€涓嬨€嶇殑钀界偣 = 妲藉唴瀹癸紙`MiniPlayer` 鏍癸紝
-              //     瑙?{@link miniBar} 鐨?`contentOwnsSquash: true`锛夈€備笂娓搁椤甸偅鏉℃鏄繖涓ゆ潯鐨勭粍鍚堛€?
-              //   鈿狅笍 濡傚疄璁板綍锛堢湡鏈哄緟楠岋級锛欻DS 鐢荤殑鑳屾澘鍦?*澹冲眰瀛愭爲**閲屻€佸帇涓嶅埌 鈬?鍏抽棴鎾斁鍣ㄦ椂
-              //     `morphSquashY` 鍙帇鍐呭銆佷笉鍘嬭儗鏉裤€傜敳鏂瑰凡鏄庣‘"涓€绾ч〉涓庝簩绾ч〉鏄袱濂楃粨鏋勩€佷笉鑳界粺涓€"
-              //     鈬?杩欎竴鏉?*鎺ュ彈**锛涜嫢鐪熸満涓?miniBar 娌℃湁鏉愯川/娌℃湁鑳屾澘"锛岃 `BLOCKED`锛?
-              //     **涓嶈**鍦?`HomeMiniBarPlayer` 閲屽啀閫犺嚜缁樻潗璐紙閭ｄ細鎶婂畼鏂规潗璐ㄦ礂鐧斤級銆?
-              //   鈿狅笍 绗簩涓緟楠岀偣锛氥€岀幇鍦ㄥ氨鍦ㄥ惉銆嶉偅涓€椤?/ 浜岀骇椤靛湪鏍堜笂鏃讹紝`miniBar` 妲介噷缁欑殑鏄?
-              //     0 楂?`Column`锛堣 {@link miniBar} 鐨?if/else锛夈€傜己鐪佸紑鐫€鐨?miniBar 鑳屾澘浼氫笉浼氬湪
-              //     椤电鑳跺泭涓婃柟鐣欎竴鏋?*绌鸿兌鍥?*锛屽彧鑳界湡鏈虹湅銆傝嫢鍑虹幇浜嗭紝**鍞竴鏀规硶**鏄湪杩欓噷琛?
-              //     `enableMiniBarBackground: this.miniBarRendersPlayer(),`锛堜竴琛岋紝璇箟涓?
-              //     {@link miniBar} 閲岄偅鏉?if 閫愬瓧鍚屼箟锛夆€斺€旈櫎姝や箣澶栦笉瑕佸幓鍔ㄦ潗璐?鑳屾澘鏉ユ簮銆?
-              // 閳?閸欏苯鐪版惔鏇熺埉閻ㄥ嫬鍙ч柨顕嗙窗`barLayoutMode = VERTICAL` 閹靛秵濡告潻铚傜稑閺夆€茬瑢妞ょ數顒烽幒鎺撳灇娑撳﹣绗呮稉銈嗗笓閵?
-              //   鐠囥儱鐡у▓鍨Ц @since 6.1.1(24)閿涘本澧嶆禒銉ヤ紣缁?targetSdkVersion 韫囧懘銆?閳?24
-              //   閿涘牊婀版い鍦窗瀹歌尙鏁?6.1.0(23) 閹绘劕鍩?6.1.1(24)閿涘畱ompatibleSdkVersion 娣囨繃瀵?23閿?
-              //     鐠佹儳顦憰鍡欐磰娑撳秴褰夐敍澶堚偓鍌欑秵闁板秴褰傜悰宀€澧楁稉濠佺炊 undefined閵?
-              //   閳跨媴绗嶉妴宀€骞囬崷銊ユ皑閸氼兙鈧秹銆夐悽?`barLayoutModeForHds()` 瀵搫鍩?HORIZONTAL閿涘牐顫嗙€瑰啫鎷?
-              //     `NOW_PLAYING_TAB_INDEX` 閻ㄥ嫭鏁為柌濠忕礆閿涙岸鍋呮稉鈧い鍏哥瑝鐠佸憡婀佹潻铚傜稑閺夛繝鍋呮稉鈧幒鎺嬧偓?
+              // ★★★ 2026-10-20（第五轮）：**给 HDS 报上"迷你栏占多宽"**（`HdsTabsMiniBar.miniBarWidth`
+              //   ：SDK `@hms.hds.hdsBaseComponent.d.ets:5150`，三档与 `HdsBarWidthRangeOptions` 同形）。
+              //   单层态必须报，否则 HDS 挤页签、让出来的长条位宽度与我们自己画的胶囊对不上。
+              //   ⚠️ 这**不是** `barFloatingStyle.barWidth`（那个管整条底栏宽，本文件明令不传）。
+              // ★★★ 2026-10-21（第八轮）：`miniBarWidth` **不再报** —— 上游 `MainPage` 的
+              //   `floatStyleOf()` 里没有这个键：首页那条的宽度由 HDS 的 `miniBar` 槽按内容量
+              //   "跟页签栏同宽"给（`上游-迷你条三形态与首页二级页差异.md` §3.1）。
+              //   上一轮报它是因为播放器搬出了槽（要自己算长条位），现在播放器回到槽里，这个数多余。
+              // ★★★ 2026-10-21（第八轮）：`enableMiniBarBackground` / `enableMiniBarClip`
+              //   **一律不写**（按上游缺省）。`enableMiniBarBackground` 的缺省是 `true`
+              //   （`@hms.hds.hdsBaseComponent.d.ets:5169`，注释原文「Enables mini bar background
+              //   follow tab bar」）⇒ 迷你条那格的**背板 + 沉浸光感由 HDS 画**，吃的是本层
+              //   `barFloatingStyle.systemMaterialEffect`（SDK `:5357`，API23/24 唯一合法载体之一）。
+              //   ⇒ 「光感」的提供方 = **壳层 HdsTabs**；「弹一下」的落点 = 槽内容（`MiniPlayer` 根，
+              //     见 {@link miniBar} 的 `contentOwnsSquash: true`）。上游首页那条正是这两条的组合。
+              //   ⚠️ 如实记录（真机待验）：HDS 画的背板在**壳层子树**里、压不到 ⇒ 关闭播放器时
+              //     `morphSquashY` 只压内容、不压背板。甲方已明确"一级页与二级页是两套结构、不能统一"
+              //     ⇒ 这一条**接受**；若真机上"miniBar 没有材质/没有背板"，记 `BLOCKED`，
+              //     **不要**在 `HomeMiniBarPlayer` 里再造自绘材质（那会把官方材质洗白）。
+              //   ⚠️ 第二个待验点：「现在就在听」那一页 / 二级页在栈上时，`miniBar` 槽里给的是
+              //     0 高 `Column`（见 {@link miniBar} 的 if/else）。缺省开着的 miniBar 背板会不会在
+              //     页签胶囊上方留一枚**空胶囊**，只能真机看。若出现了，**唯一改法**是在这里补
+              //     `enableMiniBarBackground: this.miniBarRendersPlayer(),`（一行，语义与
+              //     {@link miniBar} 里那条 if 逐字同义）——除此之外不要去动材质/背板来源。
+              // 鈽?鍙屽眰搴曟爮鐨勫叧閿細`barLayoutMode = VERTICAL` 鎵嶆妸杩蜂綘鏉′笌椤电鎺掓垚涓婁笅涓ゆ帓銆?
+              //   璇ュ瓧娈垫槸 @since 6.1.1(24)锛屾墍浠ュ伐绋?targetSdkVersion 蹇呴』 鈮?24
+              //   锛堟湰椤圭洰宸茬敱 6.1.0(23) 鎻愬埌 6.1.1(24)锛宑ompatibleSdkVersion 淇濇寔 23锛?
+              //     璁惧瑕嗙洊涓嶅彉锛夈€備綆閰嶅彂琛岀増涓婁紶 undefined銆?
+              //   鈿狅笍銆岀幇鍦ㄥ氨鍚€嶉〉鐢?`barLayoutModeForHds()` 寮哄埗 HORIZONTAL锛堣瀹冨拰
+              //     `NOW_PLAYING_TAB_INDEX` 鐨勬敞閲婏級锛氶偅涓€椤典笉璁告湁杩蜂綘鏉￠偅涓€鎺掋€?
               barLayoutMode: this.barLayoutModeForHds(),
-              // 閸欐甯剁仦鐐粹偓褝绱伴幎妯哄綌閹?= 缁愬嫯鍏岄崶濠忕礉閻愮懓鍤崥搴ｆ暠 onBarStyleChange 闁繐鍤崘宥呮礀閻?
-              // 閳跨媴绗?閸楁洘甯撻敍鍦歄RIZONTAL閿涘鍘?`EXPAND` 閺?*瀹歌尙鐓￠惃鍕晩鐠囶垳绮嶉崥?*閿涘牆绨抽弽蹇庣窗閸欐ɑ鍨?
-              //   閵嗗矂鏆遍弶?Tab + 閸﹀棗鑸伴幘顓熸杹閸ｃ劊鈧稄绱濈憴?`onMiniBarStyleChangeFull` 閻ㄥ嫭鏁為柌濠忕礆閳?
-              //   閸︺劊鈧瞼骞囬崷銊ユ皑閸氼兙鈧秹銆夋稉鈧獮鑸靛Ω閺嶅嘲绱￠崢瀣礀 `COLLAPSE`閵?
+              // 鍙楁帶灞炴€э細鎶樺彔鎬?= 绐勮兌鍥婏紝鐐瑰嚮鍚庣敱 onBarStyleChange 閫忓嚭鍐嶅洖鐏?
+              // 鈿狅笍 鍗曟帓锛圚ORIZONTAL锛夐厤 `EXPAND` 鏄?*宸茬煡鐨勯敊璇粍鍚?*锛堝簳鏍忎細鍙樻垚
+              //   銆岄暱鏉?Tab + 鍦嗗舰鎾斁鍣ㄣ€嶏紝瑙?`onMiniBarStyleChangeFull` 鐨勬敞閲婏級鈬?
+              //   鍦ㄣ€岀幇鍦ㄥ氨鍚€嶉〉涓€骞舵妸鏍峰紡鍘嬪洖 `COLLAPSE`銆?
               //
-              // 閳藉應妲勯埥?2026-10-16閿?*閺傝顢?A閿涙俺绯犳担鐘虫蒋閺€纭呭殰缂佹鍎楅弶?*閿涘奔鎱ㄩ悽銊﹀煕鐎圭偞绁?
-              //   閵嗗苯鍙ч梻顓熸尡閺€鎯ф珤閸欘亝婀侀崘鍛啇娴兼艾鑴婇敍?*閹绢厽鏂侀弶陇鍎楅弲顖欑瑝瀵?*閵嗗稄绱氶敍?
-              //   `enableMiniBarBackground` 閺?HDS 缂?*鏉╄渹缍橀弶锟犲亝娑撯偓閸?*閻ㄥ嫯鍎楅弶鍨磻閸?
-              //   閿涘牓銆夌粵鎹愬厡閸ュ﹪鍋呴崸妤勫剹閺夋寧妲?*閸欙缚绔撮崸?*閿涘奔绗夐崣妤€鐣犺ぐ鍗炴惙閿涘鈧?
-              //   缂?`false` 閳?HDS 娑撳秴鍟€缂佹瑨绯犳担鐘虫蒋閻㈡槒鍎楅弶?閳?閼冲本婢橀弨鍦暠
-              //   `HomeMiniBarPlayer.MiniBarBackplate()` 閼奉亞绮敍灞肩艾閺勵垰鐣犳稉搴″敶鐎圭懓婀?*閸氬奔绔村Λ闈涚摍閺?*闁插矉绱?
-              //   閼冲€熺閻偓 `morphSquashY` 娑撯偓鐠у嘲甯?娑撯偓鐠у嘲鑴婇妴?
-              //   閳跨媴绗?娑?`HomeMiniBarPlayer` 闁插矂鍋呮稉鈧仦?*韫囧懘銆忛幋鎰嚠**閿涙艾褰ч崗鍏呯瑝閻?閳?鏉╄渹缍橀弶鈥崇俺娑撳鈹栨稉鈧崸妞尖偓?
-              // 鈽呪槄鈽?2026-10-18锛堢敤鎴凤細銆屼綘鏄笉鏄繕璁扮粰涓婚〉鐨勮繖涓皬鎾斁鏉″姞涓婂厜鎰熶簡銆嶏級鈥斺€斿垽瀹氫笌缁撹锛?
-              //   **缁х画鑷粯锛坒alse锛? 鎶婅儗鏉挎崲鎴?璺熶富棰樿蛋"鐨?sheet 闈?*锛岃€屼笉鏄氦缁?HDS 鐢汇€?
-              //   鍒ゆ嵁锛坄MiniBarBackplate` 鍒板簳涓鸿皝鑰屽瓨鍦級锛氬畠鐨勬敞閲婁笌鍞竴璋冪敤鐐归兘鍐欐槑"鍙负璁╄儗鏉胯窡鐫€
-              //   `morphSquashY` 涓€璧峰帇/涓€璧峰脊"锛坄HomeMiniBarPlayer.ets` 鐨?`MiniBarBackplate()` 鏂囨。
-              //   + `build()` 閲岄偅涓寕鐫€ `.scale({ y: morphSquashY })` 鐨?`Stack`锛夛紱HDS 鐢荤殑鑳屾澘鍦?
-              //   `miniBar` 妲?*涔嬩笅**銆佷笉鍦ㄦ垜浠殑瀛愭爲閲?鈬?涓€鏃﹀紑 `enableMiniBarBackground: true`锛?
-              //   鍏抽棴鎾斁鍣ㄦ椂"鏁存潯鎾斁鏉′竴璧峰脊"灏变細閫€鍥?鍙湁鍐呭寮广€佽儗鏉夸笉鍔?锛埪?6.3 鐢ㄦ埛鎶ヨ繃鐨勫師鐥咃級銆?
-              //   鑰?鍏夋劅"骞朵笉缂哄湪瀹夸富涓婏細杩欎竴灞?HdsTabs 鐨?`barFloatingStyle.systemMaterialEffect`
-              //   鏈潵灏辨槸 `ambientTitleMaterial()`锛堣鏈枃浠?HomeTabsPages 閭ｅ锛夛紝鏄?SDK 鍏佽鐨勫敮涓€杞戒綋
-              //   锛坄@hms.hds.hdsBaseComponent.d.ets:5357`锛夈€傛墍浠ヨ繖涓€杞?*鍙?*鎶婅嚜缁樿儗鏉跨殑棰滆壊鎹㈡垚
-              //   浜?鏆楅兘鏈夊彉浣撱€?0% 涓嶉€忔槑搴︾殑 `floating_mini_bar_sheet_background` 鈥斺€?鏃ラ棿涓嶅啀鏄粦鍧楋紝
-              //   澶滈棿浠嶆槸娣辫壊锛岃鎰熶笌浜岀骇椤甸偅鏉★紙HDS 鏉愯川锛夊悓涓€濂楄壊绯汇€?
-              //   鈿狅笍 鑻ョ敤鎴锋洿鎯宠"HDS 浜叉墜鐢荤殑鏉愯川鑳屾澘"鑰屼笉鍦ㄤ箮鎸ゅ帇寮硅烦锛屽敮涓€鏀规硶鏄妸杩欓噷鏀?`true`
-              //   + `HomeMiniBarPlayer({ showSelfDrawnBackplate: false })`锛堜袱鏉″繀椤绘垚瀵癸紝鍚﹀垯鏉愯川琚挋鐗堟礂鐧斤級銆?
-              //   鉁?**2026-10-18 鏅氬凡鐓ф鎵ц**锛堜笂闈?缁х画鑷粯"閭ｆ浣滃簾锛屽彧鐣欎綔鏉ラ緳鍘昏剦锛夈€?
-              // 鈽呪槄鈽?2026-10-18锛堟櫄锛?*鎺ㄧ炕涓婇潰 2026-10-16 / 10-18 涓ゆ鐨勭粨璁?*锛夛細
-              //   鐢ㄦ埛锛氥€屼綘鏄笉鏄繕璁扮粰涓婚〉鐨勮繖涓皬鎾斁鏉″姞涓婂厜鎰熶簡锛?*鍥犱负浜岀骇椤甸潰姝ｅ父**锛夈€嶃€?
-              //   渚濇嵁锛堟湰鏈?SDK 閫愯鏍歌繃锛宍D:\command-line-tools\sdk\default\hms\ets\api\@hms.hds.hdsBaseComponent.d.ets`锛夛細
-              //     `HdsTabsMiniBar.enableMiniBarBackground`锛?5169锛夋敞閲婂師鏂?
-              //     銆孍nables mini bar background **follow tab bar**銆嶏紝`@default true`銆?
-              //   鈬?瀹冧竴涓?true锛?*杩蜂綘鏉￠偅涓€鏍肩殑鑳屾澘灏辩敱 HDS 鐢?*锛岃€屾湰椤?`barFloatingStyle` 涓婂凡缁忔湁
-              //     `systemMaterialEffect: this.ambientTitleMaterial()`锛?5357锛孲DK 鍏佽鐨勪袱涓悎娉曡浇浣撲箣涓€锛?
-              //     鈬?miniBar 鎷垮埌鐨勬槸**鍚屼竴浠藉畼鏂规潗璐?* 鈥斺€?杩欐鏄簩绾ч〉閭ｆ潯姝ｅ父鐨?鍏夋劅"鐨勬潵婧愩€?
-              //   浠ｄ环锛堝繀椤昏璐︼級锛欻DS 鐢荤殑鑳屾澘鍦?`miniBar` 妲介噷銆?*涓嶅湪鎴戜滑鐨勫瓙鏍戦噷**
-              //     鈬?鍏抽棴鎾斁鍣ㄦ椂 `morphSquashY` 鍙帇鍒?*鍐呭**锛岃儗鏉夸笉鍐嶈窡鐫€涓€璧峰帇/寮癸紙搂86.3 閭ｄ釜鍘熺梾鍥炴潵涓€鍗婏級銆?
-              //     鉁?鏈疆宸叉寜"涓よ€呴兘瑕?鏀跺彛锛歚miniBar` 妲界暀绌恒€佹挱鏀惧櫒鎼埌 {@link homeMiniCapsule}
-              //        锛堟垜浠瓙鏍戦噷鐨?{@link MiniBarMaterialCapsule}锛夆噿 鍏夋劅涓庡脊璺冲悓鏃舵垚绔嬨€?
-              //        涓婇潰杩欎竴鏁存锛?026-10-16 / 10-18 鐨勫弽澶嶏級鍙綔涓烘潵榫欏幓鑴変繚鐣欍€?
-              // 鉀?涓婃父涓変唤 miniBar 閰嶇疆閲?*娌℃湁 `miniBarStyle` 杩欎釜閿?*锛坄wujie.pa:143286` / `:144057` / `:144074`锛夛細
-              //   鏍峰紡鍙粡 `HdsTabsController.applyMiniBarStyle()` 杩涳紙`wujie.pa:145779` / `:147178`锛夈€?
-              //   鈬?杩欓噷涓嶅０鏄庡紡璁撅紝鍒濇€佷氦缁?HDS + 涓婇潰閭ｆ潯 `applyMiniBarStyle`銆?
+              // 鈽呪槄鈽?2026-10-16锛?*鏂规 A锛氳糠浣犳潯鏀硅嚜缁樿儗鏉?*锛屼慨鐢ㄦ埛瀹炴祴
+              //   銆屽叧闂挱鏀惧櫒鍙湁鍐呭浼氬脊锛?*鎾斁鏉¤儗鏅笉寮?*銆嶏級锛?
+              //   `enableMiniBarBackground` 鏄?HDS 缁?*杩蜂綘鏉￠偅涓€鍧?*鐨勮儗鏉垮紑鍏?
+              //   锛堥〉绛捐兌鍥婇偅鍧楄儗鏉挎槸**鍙︿竴鍧?*锛屼笉鍙楀畠褰卞搷锛夈€?
+              //   缃?`false` 鈬?HDS 涓嶅啀缁欒糠浣犳潯鐢昏儗鏉?鈬?鑳屾澘鏀圭敱
+              //   `HomeMiniBarPlayer.MiniBarBackplate()` 鑷粯锛屼簬鏄畠涓庡唴瀹瑰湪**鍚屼竴妫靛瓙鏍?*閲岋紝
+              //   鑳借窡鐫€ `morphSquashY` 涓€璧峰帇/涓€璧峰脊銆?
+              //   鈿狅笍 涓?`HomeMiniBarPlayer` 閲岄偅涓€灞?*蹇呴』鎴愬**锛氬彧鍏充笉鐢?鈬?杩蜂綘鏉″簳涓嬬┖涓€鍧椼€?
+              // ★★★ 2026-10-18（用户：「你是不是忘记给主页的这个小播放条加上光感了」）——判定与结论：
+              //   **继续自绘（false）+ 把背板换成"跟主题走"的 sheet 面**，而不是交给 HDS 画。
+              //   判据（`MiniBarBackplate` 到底为谁而存在）：它的注释与唯一调用点都写明"只为让背板跟着
+              //   `morphSquashY` 一起压/一起弹"（`HomeMiniBarPlayer.ets` 的 `MiniBarBackplate()` 文档
+              //   + `build()` 里那个挂着 `.scale({ y: morphSquashY })` 的 `Stack`）；HDS 画的背板在
+              //   `miniBar` 槽**之下**、不在我们的子树里 ⇒ 一旦开 `enableMiniBarBackground: true`，
+              //   关闭播放器时"整条播放条一起弹"就会退回"只有内容弹、背板不动"（§86.3 用户报过的原病）。
+              //   而"光感"并不缺在宿主上：这一层 HdsTabs 的 `barFloatingStyle.systemMaterialEffect`
+              //   本来就是 `ambientTitleMaterial()`（见本文件 HomeTabsPages 那处），是 SDK 允许的唯一载体
+              //   （`@hms.hds.hdsBaseComponent.d.ets:5357`）。所以这一轮**只**把自绘背板的颜色换成
+              //   亮/暗都有变体、80% 不透明度的 `floating_mini_bar_sheet_background` —— 日间不再是黑块，
+              //   夜间仍是深色，观感与二级页那条（HDS 材质）同一套色系。
+              //   ⚠️ 若用户更想要"HDS 亲手画的材质背板"而不在乎挤压弹跳，唯一改法是把这里改 `true`
+              //   + `HomeMiniBarPlayer({ showSelfDrawnBackplate: false })`（两条必须成对，否则材质被蒙版洗白）。
+              //   ✅ **2026-10-18 晚已照此执行**（上面"继续自绘"那段作废，只留作来龙去脉）。
+              // ★★★ 2026-10-18（晚，**推翻上面 2026-10-16 / 10-18 两段的结论**）：
+              //   用户：「你是不是忘记给主页的这个小播放条加上光感了（**因为二级页面正常**）」。
+              //   依据（本机 SDK 逐行核过，`D:\command-line-tools\sdk\default\hms\ets\api\@hms.hds.hdsBaseComponent.d.ets`）：
+              //     `HdsTabsMiniBar.enableMiniBarBackground`（:5169）注释原文
+              //     「Enables mini bar background **follow tab bar**」，`@default true`。
+              //   ⇒ 它一为 true，**迷你条那一格的背板就由 HDS 画**，而本页 `barFloatingStyle` 上已经有
+              //     `systemMaterialEffect: this.ambientTitleMaterial()`（:5357，SDK 允许的两个合法载体之一）
+              //     ⇒ miniBar 拿到的是**同一份官方材质** —— 这正是二级页那条正常的"光感"的来源。
+              //   代价（必须认账）：HDS 画的背板在 `miniBar` 槽里、**不在我们的子树里**
+              //     ⇒ 关闭播放器时 `morphSquashY` 只压到**内容**，背板不再跟着一起压/弹（§86.3 那个原病回来一半）。
+              //     ✅ 本轮已按"两者都要"收口：`miniBar` 槽留空、播放器搬到 {@link homeMiniCapsule}
+              //        （我们子树里的 {@link MiniBarMaterialCapsule}）⇒ 光感与弹跳同时成立。
+              //        上面这一整段（2026-10-16 / 10-18 的反复）只作为来龙去脉保留。
+              // ⛔ 上游三份 miniBar 配置里**没有 `miniBarStyle` 这个键**（`wujie.pa:143286` / `:144057` / `:144074`）：
+              //   样式只经 `HdsTabsController.applyMiniBarStyle()` 进（`wujie.pa:145779` / `:147178`）。
+              //   ⇒ 这里不声明式设，初态交给 HDS + 上面那条 `applyMiniBarStyle`。
               onBarStyleChange: (miniBarStyle: HdsBarStyle, _tabStyle: HdsBarStyle,
                 _miniWidth: number, _tabWidth: number, mode: HdsTabsBarChangeMode): void => {
                 this.onMiniBarStyleChangeFull(miniBarStyle, mode);
@@ -2815,18 +2815,18 @@ struct Index {
           .onChange((index: number) => {
             if (index !== this.tabState.tabIndex) {
               this.tabState.tabIndex = index;
-              // 閸掑洤鍩岄弬浼淬€夌粵鎾呯窗闁鑵戦幀浣歌剨娑撯偓娑撳绱欓悙鐟板毊娑撳孩绮﹂崝銊ュ瀼閹广垽鍏樻导姘宠泲鏉╂瑩鍣烽敍?
+              // 鍒囧埌鏂伴〉绛撅細閫変腑鎬佸脊涓€涓嬶紙鐐瑰嚮涓庢粦鍔ㄥ垏鎹㈤兘浼氳蛋杩欓噷锛?
               this.playTabBounce(index);
-              // 閳?鏉╄渹缍橀弶鈩冩▔闂呮劘鐦栭弬顓ㄧ礄`hdc shell hilog | grep RzdMiniBarHide`閿涘绱?
-              //   閸掑洤鍩岄妴宀€骞囬崷銊ユ皑閸氼兙鈧秴绨查幍鎾冲毉 `hidden=true barLayout=HORIZONTAL style=COLLAPSE`閿?
-              //   閸掑洤娲栭弶銉ョ安閹垫挸鍤?`hidden=false`閵嗗倸褰ч懗鐣屾箙閺冦儱绻旈敍灞炬￥鐠佹儳顦宀冪槈閵?
+              // 鈽?杩蜂綘鏉℃樉闅愯瘖鏂紙`hdc shell hilog | grep RzdMiniBarHide`锛夛細
+              //   鍒囧埌銆岀幇鍦ㄥ氨鍚€嶅簲鎵撳嚭 `hidden=true barLayout=HORIZONTAL style=COLLAPSE`锛?
+              //   鍒囧洖鏉ュ簲鎵撳嚭 `hidden=false`銆傚彧鑳界湅鏃ュ織锛屾棤璁惧楠岃瘉銆?
               Logger.info(RzdShellLogTag,
                 `RzdMiniBarHide tab=${index} hidden=${index === NOW_PLAYING_TAB_INDEX} ` +
                   `barLayout=${this.barLayoutModeForHds()} style=${this.miniBarStyleForHds()} ` +
                   `navDepth=${this.navDepth}`);
             }
           })
-          // 閻愬綊銆夌粵鎾呯窗閻愬湱娈戦弰?*瑜版挸澧?*妞ょ數顒烽弮璺烘礀閸掍即銆婇柈顭掔礄閸掑洭銆夌粵鍙ユ唉缂?onChange閿?
+          // 鐐归〉绛撅細鐐圭殑鏄?*褰撳墠**椤电鏃跺洖鍒伴《閮紙鍒囬〉绛句氦缁?onChange锛?
           .onTabBarClick((index: number): void => {
             this.onTabBarClicked(index);
           })
@@ -2868,34 +2868,34 @@ struct Index {
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
-      // 閹绢厽鏂佹い?*娑撳秴鍟€閻?`bindContentCover`**閿涙氨娲块幒銉ょ稊娑撶儤婀?Stack 閻ㄥ嫭璇炵仦鍌涘瘯鏉炴枻绱欑憴浣风瑓闂堛垽鍋呭▓鍨暈闁插绱氶妴?
-      // 濡剝鈧線鍋呴弶陇鐭剧挧鎷岀箖瀵板牅绠欓敍宀€绮ㄧ拋鐑樻Ц鐎瑰啫鎷?娴犲氦绯犳担鐘虫蒋闂€鍨毉閺?閻ㄥ嫬鑸伴崣妯荤壌閺堫兛绗夐崗鐓庮啇閿?
-      //   璺?`ModalTransition.DEFAULT` 閼奉亜鐢?娴犲骸绨抽柈銊﹀腹娑撳﹥娼?閻ㄥ嫪缍呯粔浼欑礉娴兼艾鎷拌ぐ銏犲綁閻ㄥ嫪缍呯粔璇插綌閸旂媴绱?
-      //   璺?`ModalTransition.NONE` 閾忕晫鍔у▽鈩冩箒娴ｅ秶些閿涘奔绲惧Ο鈩冣偓浣割問娑撶粯妲告稉宥夆偓蹇旀閻ㄥ嫪绔寸仦鍌︾礉
-      //     閹跺﹪顩绘い闈涙嫲鏉╄渹缍橀弶鈥冲弿閻╂牔缍囬敍鍫濊埌閸欐顩﹂柅蹇撳毉閺夈儳娈戝锝嗘Ц鐎瑰啩婊戦敍澶涚礉娴滃孩妲搁崣顏勫⒖"姒涙垵绨?+ 娑撳鏌熺粚铏规"閵?
+      // 鎾斁椤?*涓嶅啀鐢?`bindContentCover`**锛氱洿鎺ヤ綔涓烘湰 Stack 鐨勬诞灞傛寕杞斤紙瑙佷笅闈㈤偅娈垫敞閲婏級銆?
+      // 妯℃€侀偅鏉¤矾璧拌繃寰堜箙锛岀粨璁烘槸瀹冨拰"浠庤糠浣犳潯闀垮嚭鏉?鐨勫舰鍙樻牴鏈笉鍏煎锛?
+      //   路 `ModalTransition.DEFAULT` 鑷甫"浠庡簳閮ㄦ帹涓婃潵"鐨勪綅绉伙紝浼氬拰褰㈠彉鐨勪綅绉诲彔鍔狅紱
+      //   路 `ModalTransition.NONE` 铏界劧娌℃湁浣嶇Щ锛屼絾妯℃€佸涓绘槸涓嶉€忔槑鐨勪竴灞傦紝
+      //     鎶婇椤靛拰杩蜂綘鏉″叏鐩栦綇锛堝舰鍙樿閫忓嚭鏉ョ殑姝ｆ槸瀹冧滑锛夛紝浜庢槸鍙墿"榛戝簳 + 涓嬫柟绌虹櫧"銆?
       .onNavBarStateChange((isVisible: boolean): void => {
-        // 濮ｅ繑顐肩€佃壈鍩呴弽蹇撳讲鐟欎焦鈧冨綁閸栨牠鍏橀崚閿嬫煀閺嶅牊绻佹惔锔肩礄閹恒劌鍙?瀵懓鍤禍宀€楠囨い鐢告桨闁垝绱扮憴锕€褰傞敍?
+        // 姣忔瀵艰埅鏍忓彲瑙佹€у彉鍖栭兘鍒锋柊鏍堟繁搴︼紙鎺ㄥ叆/寮瑰嚭浜岀骇椤甸潰閮戒細瑙﹀彂锛?
         this.syncNavDepth();
       })
 
-      // 閳?閹绢厽鏂佹い纰夌窗**娑撳秶鏁ゅΟ鈩冣偓渚婄礉閻╁瓨甯撮幐鍌氭躬婢瑰啿鐪伴惃?Stack 闁?*閿涘牆顕弽鍥ㄦ￥閻ｅ矉绱伴幘顓熸杹妞ゅ吀绗屾＃鏍€夐崷銊ユ倱娑撯偓娑?
-      //   鐟欏棗娴橀弽鎴﹀櫡閿涙备C 婢瑰啿鐪伴張顒佹降鐏忚鲸妲告潻娆庣疄閹稿倻娈戦敍澶堚偓?
+      // 鈽?鎾斁椤碉細**涓嶇敤妯℃€侊紝鐩存帴鎸傚湪澹冲眰鐨?Stack 閲?*锛堝鏍囨棤鐣岋細鎾斁椤典笌棣栭〉鍦ㄥ悓涓€涓?
+      //   瑙嗗浘鏍戦噷锛汸C 澹冲眰鏈潵灏辨槸杩欎箞鎸傜殑锛夈€?
       //
-      // 娑撹桨绮堟稊鍫熷Ω `bindContentCover` 閹广垺甯€閿涘牅绗佹稉顏嗘暏閹村嘲鐤勫ù?bug 閻ㄥ嫭鐗撮崶鐘诲厴閸︺劏绻栭柌宀嬬礆閿?
-      //   1. 濡剝鈧胶娈戠€瑰じ瀵岄弰?*娑撳秹鈧繑妲?*閻ㄥ嫪绔寸仦鍌︾礉鐎瑰啰娲婃担蹇庣啊妫ｆ牠銆夐崪宀冪碃娴ｇ姵娼?閳ユ柡鈧?閼板苯鑸伴崣妯兼畱鐟欏倹鍔呴棃鐘垫畱濮濓絾妲?
-      //      "鏉╄渹缍橀弶鈥虫躬闁絻鈧礁鐣犻幈銏″弮閸欐ê銇?閿涙俺绯犳担鐘虫蒋鐞氼偆娲婃担蹇撴倵閿涘苯澧挎稉瀣畱鐏忚鲸妲?娑撯偓閸ф绮﹂懗灞炬珯 + 娑撳鏌熺粚铏规"
-      //      閿涘牊膩閹浇鍤滃杈╂畱鎼存洝澹婇敍澶涚礉鐠虹喐妫ら悾宀€娈?閹绢厽鏂侀弶锟犫偓鎰瑤閸欐ê銇?鐎瑰苯鍙忔稉宥嗘Ц娑撯偓閸ョ偘绨ㄩ敍?
-      //   2. 瑜般垹褰夐弮鈺傛埂閸欘垵顫嬮惌鈺佽埌閸欘亝婀佹潻铚傜稑閺夆€崇殱闂堛垽鍋呮稊鍫濄亣閿涘本膩閹礁鍙炬担娆撳劥閸掑棙妲稿Ο鈩冣偓浣哥俺閼硅绱濇稉宥嗘Ц妫ｆ牠銆?
-      //      閳ユ柡鈧?娴滃孩妲哥仦蹇撶娑撳﹥妲告稉鈧崸妤呯拨閵嗕椒绔撮崸妤冣敄閿?
-      //   3. 閹靛濞嶉敍姘侀幀浣告躬 `isShowPlay=false` 閺冭埖鐗撮張顑跨瑝鐎涙ê婀敍鍫滅瑐閹峰澧﹀鈧箛鍛淬€忛崷銊ワ紦鐏炲偊绱氶敍?
-      //      閼板苯鐣犵€涙ê婀弮璺哄嫉娴兼碍濡告竟鍐茬湴閻ㄥ嫭澧滈崝鍨弿閸氬啯甯€閿涘苯顕遍懛纾嬬閹靛鈧槒绶稉銈呫仈閸欐鍩楅妴?
-      //   閹稿倸婀竟鍐茬湴 Stack 闁插苯姘ㄥ▽鈩冩箒鏉╂瑤绨洪梻顕€顣介敍姘瑓鐏炲倻娈戞＃鏍€?鏉╄渹缍橀弶陇绻曢崷銊ф暰閿涘苯鑸伴崣妯兼畱闁繑妲戦崠鍝勭厵
-      //   闁繐鍤弶銉ф畱鐏忚鲸妲告＃鏍€?閳ユ柡鈧?"閹绢厽鏂侀弶锟犫偓鎰瑤閸欐ê銇囬妴渚€顤侀懝鏌モ偓鎰瑤閸欐ɑ鍨氶懗灞炬珯閵嗕焦鍙冮幈銏″珖鐏炴洖鍩岄弫鏉戠潌"閵?
+      // 涓轰粈涔堟妸 `bindContentCover` 鎹㈡帀锛堜笁涓敤鎴峰疄娴?bug 鐨勬牴鍥犻兘鍦ㄨ繖閲岋級锛?
+      //   1. 妯℃€佺殑瀹夸富鏄?*涓嶉€忔槑**鐨勪竴灞傦紝瀹冪洊浣忎簡棣栭〉鍜岃糠浣犳潯 鈥斺€?鑰屽舰鍙樼殑瑙傛劅闈犵殑姝ｆ槸
+      //      "杩蜂綘鏉″湪閭ｃ€佸畠鎱㈡參鍙樺ぇ"锛氳糠浣犳潯琚洊浣忓悗锛屽墿涓嬬殑灏辨槸"涓€鍧楅粦鑳屾櫙 + 涓嬫柟绌虹櫧"
+      //      锛堟ā鎬佽嚜宸辩殑搴曡壊锛夛紝璺熸棤鐣岀殑"鎾斁鏉￠€愭笎鍙樺ぇ"瀹屽叏涓嶆槸涓€鍥炰簨锛?
+      //   2. 褰㈠彉鏃╂湡鍙鐭╁舰鍙湁杩蜂綘鏉″皝闈㈤偅涔堝ぇ锛屾ā鎬佸叾浣欓儴鍒嗘槸妯℃€佸簳鑹诧紝涓嶆槸棣栭〉
+      //      鈥斺€?浜庢槸灞忓箷涓婃槸涓€鍧楅粦銆佷竴鍧楃┖锛?
+      //   3. 鎵嬪娍锛氭ā鎬佸湪 `isShowPlay=false` 鏃舵牴鏈笉瀛樺湪锛堜笂鎷夋墦寮€蹇呴』鍦ㄥ３灞傦級锛?
+      //      鑰屽畠瀛樺湪鏃跺張浼氭妸澹冲眰鐨勬墜鍔垮叏鍚冩帀锛屽鑷磋窡鎵嬮€昏緫涓ゅご鍙楀埗銆?
+      //   鎸傚湪澹冲眰 Stack 閲屽氨娌℃湁杩欎簺闂锛氫笅灞傜殑棣栭〉/杩蜂綘鏉¤繕鍦ㄧ敾锛屽舰鍙樼殑閫忔槑鍖哄煙
+      //   閫忓嚭鏉ョ殑灏辨槸棣栭〉 鈥斺€?"鎾斁鏉￠€愭笎鍙樺ぇ銆侀鑹查€愭笎鍙樻垚鑳屾櫙銆佹參鎱㈡嫇灞曞埌鏁村睆"銆?
       //
-      // 缁崵绮烘潻鏂挎礀娑撳秴鍟€閻㈣鲸膩閹胶娈?`onWillDismiss` 閹凤缚绨￠敍灞炬暭閻㈣鲸婀版い鐢垫畱 `onBackPress` 閹凤讣绱欑憴浣规瀮娴犺埖婀亸鎾呯礆閵?
+      // 绯荤粺杩斿洖涓嶅啀鐢辨ā鎬佺殑 `onWillDismiss` 鎷︿簡锛屾敼鐢辨湰椤电殑 `onBackPress` 鎷︼紙瑙佹枃浠舵湯灏撅級銆?
       //
-      // 閳跨媴绗?`PLAYER_ROUTE_MODE = true` 閺冩儼绻栨稉鈧▓?*娑撳秵瑕嗛弻?*閿涙碍鎸遍弨楣冦€夐悽?NavDestination 鐠愮喕鐭?
-      //    閿涘牐顫?pushPlayerRoute閿涘鈧倷琚遍弶陇鐭鹃柈鎴掔箽閻ｆ瑱绱濋崶鐐衡偓鈧崣顏堟付閺€閫涚瑐闂堛垽鍋呮稉顏勭埗闁插繈鈧?
+      // 鈿狅笍 `PLAYER_ROUTE_MODE = true` 鏃惰繖涓€娈?*涓嶆覆鏌?*锛氭挱鏀鹃〉鐢?NavDestination 璐熻矗
+      //    锛堣 pushPlayerRoute锛夈€備袱鏉¤矾閮戒繚鐣欙紝鍥為€€鍙渶鏀逛笂闈㈤偅涓父閲忋€?
       PlaylistTransitionOverlay()
         .zIndex(90)
         .hitTestBehavior(HitTestMode.Transparent)
@@ -2909,7 +2909,7 @@ struct Index {
         // matchParent expands SIZE too; percent height only moved the overlay and left a bottom gap.
         // Expand ONLY the player overlay; do not relayout the retained Navigation window.
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
-        // 閻╂牔缍?HdsTabs閿涘牆鐣犻懛顏勭箒閺?zIndex(1)閿涘绗屾禍宀€楠囨い鐢告桨閻ㄥ嫭鍋撳ù顔跨碃娴ｇ姵娼?
+        // 鐩栦綇 HdsTabs锛堝畠鑷繁鏄?zIndex(1)锛変笌浜岀骇椤甸潰鐨勬偓娴糠浣犳潯
         .zIndex(PLAYER_OVERLAY_Z_INDEX)
         .id('rzd_player_overlay_viewport')
         .onAreaChange((_oldArea: Area, area: Area): void => {
@@ -2917,24 +2917,24 @@ struct Index {
         })
       }
 
-      // 閳?瑜般垹褰?*閸忓娈曠仦?*閿涘牆顕弽鍥у冀缂傛牞鐦ч柌?`MainPage` 娑撳﹪鍋呮稉澶夐嚋 lambda閿涙艾鐨濋棃銏犲帬闂?/ 閸忓啩淇婇幁顖氬帬闂?/
-      //   閹垮秳缍旈崠鍝勫帬闂呭棴绱氶妴鍌氬冀缂傛牞鐦ч弰搴ｂ€橀敍姘帬闂呭棗鐪伴幐鍌氭躬 **MainPage**閿涘牆锛撶仦鍌︾礆閼板奔绗夐弰顖涙尡閺€楣冦€夐敍?
-      //   閼板奔绗栭弰?閻㈣绔存稉顏勫閺?閵嗕椒绗夐弰顖滅舶閻喎鐤勭亸渚€娼伴崝?transform閵?
-      //   鐎瑰啫绻€妞よ婀?*閹绢厽鏂佹い鍨癁鐏炲倷绠ｆ稉?*閿涙俺绯犳担鐘虫蒋閻喕闊╅崷銊﹁癁鐏炲倷绠ｆ稉瀣剁礉閼冲本娅欐稉鈧稉宥夆偓蹇旀鐏忚精顫﹂惄鏍ㄥ竴娴滃棴绱?
-      //   閹碘偓娴?鐠ч鍋ｉ惇瀣崳閺夈儴绻曢弰顖炲亝閺壜ょ碃娴ｇ姵娼?闂堢姷娈戠亸杈ㄦЦ鏉╂瑤绔寸仦鍌氬閺堫兙鈧?
+      // 鈽?褰㈠彉**鍏嬮殕灞?*锛堝鏍囧弽缂栬瘧閲?`MainPage` 涓婇偅涓変釜 lambda锛氬皝闈㈠厠闅?/ 鍏冧俊鎭厠闅?/
+      //   鎿嶄綔鍖哄厠闅嗭級銆傚弽缂栬瘧鏄庣‘锛氬厠闅嗗眰鎸傚湪 **MainPage**锛堝３灞傦級鑰屼笉鏄挱鏀鹃〉锛?
+      //   鑰屼笖鏄?鐢讳竴涓壇鏈?銆佷笉鏄粰鐪熷疄灏侀潰鍔?transform銆?
+      //   瀹冨繀椤诲湪**鎾斁椤垫诞灞備箣涓?*锛氳糠浣犳潯鐪熻韩鍦ㄦ诞灞備箣涓嬶紝鑳屾櫙涓€涓嶉€忔槑灏辫鐩栨帀浜嗭紝
+      //   鎵€浠?璧风偣鐪嬭捣鏉ヨ繕鏄偅鏉¤糠浣犳潯"闈犵殑灏辨槸杩欎竴灞傚壇鏈€?
       //
-      // 閳跨媴绗?濞撳弶鐓嬮梻銊ф暏 `morphSessionDriving()`閿?*閻喓娈戦崷銊︽尡**閿涘绱濇稉宥嗘Ц `morphContainerActive()`閿?
-      //    閻愮懓鍤幍鎾崇磻娴兼艾鍘涙潻?ENTERING閵嗕礁鍟€闁插秷鐦張鈧径?12鑴?2ms閿涘牃澧?00ms閿涘鐡戠紒鍫㈠仯闁挎氨鍋ｇ亸杈╁崕閿?
-      //    鏉╂瑦顔?閸嬪洤濮╅悽?闁插苯鑸伴崣妯哄従鐎圭偠绻曞▽鈥崇磻婵绱濇担?`morphP` 瀹歌尪顫﹂崢瀣煂 0 閳?
-      //    `actionsOpacityAt(0) = 1` 閳?閸忓娈曠仦鍌氬弿娴滎喖婀撮幐鍌氭躬鐏炲繋绗傚?閳ユ柡鈧?
-      //    閻劍鍩涚€圭偞绁撮惃?娑撳閲滈幐澶愭尦娑撯偓閻╁瓨绱撶粔?鐏忚鲸妲告潻娆庣濞堢偣鈧?
-      // 锛?026-10-20 绗笁杞偅娈点€屼富椤甸偅鏉℃敼鐢辨湰灞傛覆鏌?{@link homeMiniCapsule()}銆?*宸蹭綔搴?* 鈥斺€?
-      //   鐞嗙敱瑙佷笅闈?2026-10-21 閭ｆ潯銆傦級
-      // 鈽呪槄鈽?2026-10-21锛堢鍏疆锛岀敳鏂瑰彛寰勶級锛氳繖閲?*涓嶅啀**娓叉煋 `homeMiniCapsule()`銆?
-      //   涓€绾ч〉鐨勬挱鏀炬潯宸叉媶鍥炲３灞?`HdsTabs.barFloatingStyle.miniBar.miniBarBuilder`锛堣 {@link miniBar}锛?
-      //   鈥斺€?涓庝笂娓?`MainPage` 鍚屾瀯锛氫竴绾ч〉 = `miniBar` 妲斤紙鏃犺兌鍥婂鍣ㄣ€佹棤 slack锛夛紱
-      //   浜岀骇椤?= {@link MiniBarMaterialCapsule}锛堣嚜宸变竴涓?HdsTabs 娴姩鑳跺泭锛屾湰鏂囦欢 {@link floatingMiniBar}锛夈€?
-      //   鈬?涓ゆ潯鎾斁鏉′粠姝ゆ槸"鍚屼竴涓唴瀹圭粍浠?+ 涓ゅ瀹夸富"锛屼笉鍐嶅叡鐢ㄥ悓涓€涓涓荤粍浠躲€?
+      // 鈿狅笍 娓叉煋闂ㄧ敤 `morphSessionDriving()`锛?*鐪熺殑鍦ㄦ挱**锛夛紝涓嶆槸 `morphContainerActive()`锛?
+      //    鐐瑰嚮鎵撳紑浼氬厛杩?ENTERING銆佸啀閲嶈瘯鏈€澶?12脳32ms锛堚増400ms锛夌瓑缁堢偣閿氱偣灏辩华锛?
+      //    杩欐"鍋囧姩鐢?閲屽舰鍙樺叾瀹炶繕娌″紑濮嬶紝浣?`morphP` 宸茶鍘嬪埌 0 鈬?
+      //    `actionsOpacityAt(0) = 1` 鈬?鍏嬮殕灞傚叏浜湴鎸傚湪灞忎笂婕?鈥斺€?
+      //    鐢ㄦ埛瀹炴祴鐨?涓変釜鎸夐挳涓€鐩存紓绉?灏辨槸杩欎竴娈点€?
+      // （2026-10-20 第三轮那段「主页那条改由本层渲染 {@link homeMiniCapsule()}」**已作废** ——
+      //   理由见下面 2026-10-21 那条。）
+      // ★★★ 2026-10-21（第八轮，甲方口径）：这里**不再**渲染 `homeMiniCapsule()`。
+      //   一级页的播放条已拆回壳层 `HdsTabs.barFloatingStyle.miniBar.miniBarBuilder`（见 {@link miniBar}）
+      //   —— 与上游 `MainPage` 同构：一级页 = `miniBar` 槽（无胶囊容器、无 slack）；
+      //   二级页 = {@link MiniBarMaterialCapsule}（自己一个 HdsTabs 浮动胶囊，本文件 {@link floatingMiniBar}）。
+      //   ⇒ 两条播放条从此是"同一个内容组件 + 两套宿主"，不再共用同一个宿主组件。
       if ((this.expandState.morphSessionDriving() || this.expandState.hdsBarSuppressed) &&
         this.expandState.asideWinW > 0) {
         this.MorphMiniBarClone()
@@ -2943,21 +2943,21 @@ struct Index {
         .zIndex(PLAYER_CLONE_Z_INDEX)
         .hitTestBehavior(HitTestMode.None)
 
-      // 閳藉應妲?缁楊兛绗佹禒鑺ュ鐠?= **缂侇參顥ｇ亸渚€娼?*閿?026-10-15 娴犲孩鎸遍弨楣冦€夐幖顒佹降閻ㄥ嫰鍋呮稉鈧Λ鎺炵礆閵?
-      //    鐎瑰啯婀侀懛顏勭箒閻ㄥ嫭妞傞梻瀵稿殠閿涘潉morphOverlayP`閿?60ms + 韫囶偄鍤幈銏℃暪閿涘绱濇稉搴″綗娑撱倓鍞ら崥灞界湴閿涘澓Index 110閿涘鈧?
-      //    妞ゅ墎鍋?缂佸牏鍋ｉ柌蹇旂ゴ娑撳骸褰熸径鏍﹁⒈娴犺棄鎮撳┃鎰剁礄`reportMini` / `reportBig`閿涘绱濋幍鈧禒銉ょ瑏閼板懏妲告稉鈧挧鐤泲閻ㄥ嫨鈧?
-      //    濞撳弶鐓嬮梻銊ュ晸閸?builder 闁插矉绱檂morphOverlayBridging()`閿涘鈧?
+      // 鈽呪槄 绗笁浠芥嫹璐?= **缁灏侀潰**锛?026-10-15 浠庢挱鏀鹃〉鎼潵鐨勯偅涓€妫掞級銆?
+      //    瀹冩湁鑷繁鐨勬椂闂寸嚎锛坄morphOverlayP`锛?60ms + 蹇嚭鎱㈡敹锛夛紝涓庡彟涓や唤鍚屽眰锛坺Index 110锛夈€?
+      //    椤剁偣/缁堢偣閲忔祴涓庡彟澶栦袱浠藉悓婧愶紙`reportMini` / `reportBig`锛夛紝鎵€浠ヤ笁鑰呮槸涓€璧疯蛋鐨勩€?
+      //    娓叉煋闂ㄥ啓鍦?builder 閲岋紙`morphOverlayBridging()`锛夈€?
       if (this.expandState.morphOverlayBridging() || this.expandState.hdsBarSuppressed) {
         this.MorphCoverClone()
       }
 
-      // 閳藉應妲勯埥?2026-10-17閿涘牏鍙庨幖顒佹￥閻?`MainPage` 閻?`If (shrink.visible && shrinkPixmap)`閿涘绱?
-      //   閵嗗矂娼幍瀣◢閸忔娊妫撮妴宥夊亝娑撯偓濡帪绱版稉鈧鐘冲姬缁愭鎻╅悡褏缂夐崚鎷岀碃娴ｇ姵娼懗璺烘抄 + 濞ｂ€冲毉閵?
-      //   閺€鎯ф躬**閺堚偓娑撳﹪娼?*閿涘澓Index 130閿涘绱扮€瑰啫姘ㄩ弰?濮濓絽婀☉鍫濄亼閻ㄥ嫰鍋呮稉鈧仦蹇旀尡閺€楣冦€?閵?
+      // 鈽呪槄鈽?2026-10-17锛堢収鎼棤鐣?`MainPage` 鐨?`If (shrink.visible && shrinkPixmap)`锛夛細
+      //   銆岄潪鎵嬪娍鍏抽棴銆嶉偅涓€妫掞細涓€寮犳弧绐楀揩鐓х缉鍒拌糠浣犳潯鑳跺泭 + 娣″嚭銆?
+      //   鏀惧湪**鏈€涓婇潰**锛坺Index 130锛夛細瀹冨氨鏄?姝ｅ湪娑堝け鐨勯偅涓€灞忔挱鏀鹃〉"銆?
       this.ShrinkOverlayHost()
 
-      // 閸忋劌鐪幃顒佽癁鏉╄渹缍橀幘顓熸杹閺夆槄绱伴崣顏勬躬娴滃瞼楠囨い鐢告桨濞撳弶鐓嬮敍鍫ヮ浕妞ょ敻鍋呮禒钘夋躬 HDS 濞搭喖濮╂惔鏇熺埉闁插矉绱氶妴?
-      // 閺夆€叉濞撳弶鐓嬮懓灞肩瑝閺勵垰鐖舵す?+ visibility 閳ユ柡鈧?鐢悂鈹楅惃鍕殻鐏炲繘鈧繑妲戦懞鍌滃仯娴兼艾鎮嗛幒澶婄俺閺嶅繑澧滈崝瑁も偓?
+      // 鍏ㄥ眬鎮诞杩蜂綘鎾斁鏉★細鍙湪浜岀骇椤甸潰娓叉煋锛堥椤甸偅浠藉湪 HDS 娴姩搴曟爮閲岋級銆?
+      // 鏉′欢娓叉煋鑰屼笉鏄父椹?+ visibility 鈥斺€?甯搁┗鐨勬暣灞忛€忔槑鑺傜偣浼氬悆鎺夊簳鏍忔墜鍔裤€?
       if (this.shouldShowFloatingMiniBar()) {
         this.floatingMiniBar()
       }
@@ -2967,12 +2967,12 @@ struct Index {
     }
     .width(StyleConstants.FULL_WIDTH)
     .height(StyleConstants.FULL_HEIGHT)
-    // 瑜般垹褰夌€瑰じ瀵岄敍姝歡etRectangleById(MORPH_HOST_ID)` 闁插繒娈戠亸杈ㄦЦ鏉╂瑥鐪伴惃鍕閺屾挾鐓╄ぐ?
+    // 褰㈠彉瀹夸富锛歚getRectangleById(MORPH_HOST_ID)` 閲忕殑灏辨槸杩欏眰鐨勬覆鏌撶煩褰?
     .id(MORPH_HOST_ID)
-    // 閳?娑撳﹥濯洪幍鎾崇磻閹绢厽鏂佹い纰夌礄鐠虹喐澧滈敍灞筋嚠閺嶅洦妫ら悾?ExpandAnimation.applyPullProgress閿涘鈧?
-    //   韫囧懘銆忛幐鍌氭躬**婢瑰啿鐪?*閿涙碍鎸遍弨楣冦€夐崷?`isShowPlay` 娑?false 閺冩儼绻曞▽鈩冨瘯鏉炴枻绱濋弨鏈电瑝閸掔増澧滈幐鍥︾皑娴犺翰鈧?
-    //   娑撳孩鎸遍弨楣冦€夐柌宀€娈戞稉瀣閺€鎯版崳閺傜懓鎮滈惄绋垮冀閿涘奔琚遍弶鈩冨閸斿じ绨版稉宥呭暱缁愪緤绱?
-    //   楠炴湹绗栭崣顏呮箒"娴犲骸鐫嗛獮鏇氱瑓閸楀﹪鍎撮崚鍡氭崳閹?閹靛秵甯寸粻鈽呯礉娑擃參妫块崠鍝勭厵閻ㄥ嫪绗傚鎴犲弾閺冄傛唉缂佹瑥鍨悰?濮濆矁鐦濆姘З閵?
+    // 鈽?涓婃媺鎵撳紑鎾斁椤碉紙璺熸墜锛屽鏍囨棤鐣?ExpandAnimation.applyPullProgress锛夈€?
+    //   蹇呴』鎸傚湪**澹冲眰**锛氭挱鏀鹃〉鍦?`isShowPlay` 涓?false 鏃惰繕娌℃寕杞斤紝鏀朵笉鍒版墜鎸囦簨浠躲€?
+    //   涓庢挱鏀鹃〉閲岀殑涓嬫媺鏀惰捣鏂瑰悜鐩稿弽锛屼袱鏉℃墜鍔夸簰涓嶅啿绐侊紱
+    //   骞朵笖鍙湁"浠庡睆骞曚笅鍗婇儴鍒嗚捣鎵?鎵嶆帴绠★紝涓棿鍖哄煙鐨勪笂婊戠収鏃т氦缁欏垪琛?姝岃瘝婊氬姩銆?
     .gesture(
       PanGesture(this.pullOpenOption)
         .onActionStart((event: GestureEvent): void => {
@@ -2982,25 +2982,25 @@ struct Index {
           this.onPullOpenUpdate(event.offsetY);
         })
         .onActionEnd((event: GestureEvent): void => {
-          // 閳?闁喎瀹虫い閫涚瘍鐟曚椒绱舵潻娑樺箵閿涘牊绔婚崡?鎼傛稉鈧?1.2閵嗗矁绻樻惔?OR 闁喎瀹抽妴宥忕幢閸掋倖宓侀崷?
-          //   `PlayerExpandState.pullOpenShouldCommit()` 闁插矉绱濋弬鐟版倻閻㈠彉缍呯粔璇插灲閵嗕礁銇囩亸蹇撳絿 abs閿?
+          // 鈽?閫熷害椤逛篃瑕佷紶杩涘幓锛堟竻鍗?搂涓€ 1.2銆岃繘搴?OR 閫熷害銆嶏紱鍒ゆ嵁鍦?
+          //   `PlayerExpandState.pullOpenShouldCommit()` 閲岋紝鏂瑰悜鐢变綅绉诲垽銆佸ぇ灏忓彇 abs锛?
           this.onPullOpenEnd(event.offsetY, event.velocityY);
         })
         .onActionCancel((): void => {
           this.onPullOpenCancel();
         })
     )
-    // 缁愭褰涚亸鍝勵嚟閸欐ê瀵查敍鍫熷閸欑姴鐫嶅鈧?/ PC 濞搭喚鐛ラ幏鏍ㄥ閿涘妞傞崚閿嬫煀閹剚璇為弶锛勭暬鐎圭晫鏁ら惃鍕潒閸欙絽顔旀惔?
+    // 绐楀彛灏哄鍙樺寲锛堟姌鍙犲睍寮€ / PC 娴獥鎷栨嫿锛夋椂鍒锋柊鎮诞鏉＄畻瀹界敤鐨勮鍙ｅ搴?
     .onAreaChange((_oldArea: Area, newArea: Area): void => {
-      // 閳跨媴绗?鐟欏棗褰涚€逛粙鐝敍鍫熷閸斿潡妲囬崐鑲╂暏閿涘绮涢悞璺哄涧閻?`syncViewportWidthVp` 娴?windowSize 閸欐牗鏆ｇ粣妤€褰涘鍕剁礉
-      //    鏉╂瑩鍣?*娑撳秷顩?*閸愬秵瀵滈張顒€顔愰崳銊ф畱妤傛ê瀹崇憰鍡欐磰鐎瑰喛绱伴柇锝嗘Ц"閸愬懎顔愰崠娲彯鎼?閿涘奔绗?`globalY`閿涘牏鐛ラ崣锝呮綏閺嶅浄绱?
-      //    娑撳秵妲告稉鈧稉顏勫經瀵板嫸绱濆ǎ椋庢暏娴兼俺顔€"娴犲簼绗呴崡濠傜潌鐠ч攱澧?閻ㄥ嫬鍨界€规艾浜哥粔璇插殤閸?vp閵?
+      // 鈿狅笍 瑙嗗彛瀹介珮锛堟墜鍔块槇鍊肩敤锛変粛鐒跺彧鐢?`syncViewportWidthVp` 浠?windowSize 鍙栨暣绐楀彛寰勶紝
+      //    杩欓噷**涓嶈**鍐嶆寜鏈鍣ㄧ殑楂樺害瑕嗙洊瀹冿細閭ｆ槸"鍐呭鍖洪珮搴?锛屼笌 `globalY`锛堢獥鍙ｅ潗鏍囷級
+      //    涓嶆槸涓€涓彛寰勶紝娣风敤浼氳"浠庝笅鍗婂睆璧锋墜"鐨勫垽瀹氬亸绉诲嚑鍗?vp銆?
       this.syncViewportWidthVp();
-      // 閳?瑜般垹褰夐崙鐘辩秿閻?*鐏忓搫顕?*閸欘亝婀侀崬顖欑閻ㄥ嫭娼堟繛浣规降濠ф劧绱?*缁愭褰涚亸鍝勵嚟**閵?
-      //   閳跨媴绗?閸楀啩绔鹃崚顐ｅ瑏閺堫剙顔愰崳顭掔礄閹存牔鎹㈡担鏇炲棘娑撳骸鑸伴崣妯兼畱鐏炲偊绱氶惃鍕杽濞村鐝惔锕€缍?闁剧儤寮ч惄顔界垼"閿涙岸鍋呯粔宥堝殰閸ｎ剙鍑＄紒?
-      //      闊晞绻冩稉澶嬵偧閿涘牆绨抽柈銊у繁娑撯偓閸?/ 娑撯偓閸ф绻庡锝嗘煙瑜般垼鍎楅弲?/ 姒涙垵绨崇仦鏇氱瑝瀵偓閿涘鈧柡鈧?鐞氼偄鑸伴崣妯兼畱闁絽鐪伴敍?
-      //      鐎瑰啳鍤滃杈╂畱鐏忓搫顕亸杈ㄦЦ鐟佷礁澹€缁愭褰涢敍灞芥澓閸ョ偛骞撶粵澶夌艾鐠佲晝娲伴弽鍥嫹閻偓閼奉亜绻侀惃鍕厬闂傚瓨鈧浇绐囬妴?
-      //      閺堫剙顔愰崳銊ュ涧閸?*闂堟瑦顒涢幀?*閹靛秶鐡戞禍搴ｇ崶閸欙絽銇囩亸蹇ョ礉瑜般垹褰夐張鐔兼？楠炴湹绗夌粵澶夌艾閿涘本澧嶆禒銉ㄧ箾鐎瑰啩绡冩稉宥堝厴娣嚶扳偓?
+      // 鈽?褰㈠彉鍑犱綍鐨?*灏哄**鍙湁鍞竴鐨勬潈濞佹潵婧愶細**绐楀彛灏哄**銆?
+      //   鈿狅笍 鍗冧竾鍒嬁鏈鍣紙鎴栦换浣曞弬涓庡舰鍙樼殑灞傦級鐨勫疄娴嬮珮搴﹀綋"閾烘弧鐩爣"锛氶偅绉嶈嚜鍣凡缁?
+      //      韪╄繃涓夋锛堝簳閮ㄧ己涓€鍧?/ 涓€鍧楄繎姝ｆ柟褰㈣儗鏅?/ 榛戝簳灞曚笉寮€锛夆€斺€?琚舰鍙樼殑閭ｅ眰锛?
+      //      瀹冭嚜宸辩殑灏哄灏辨槸瑁佸壀绐楀彛锛屽杺鍥炲幓绛変簬璁╃洰鏍囪拷鐫€鑷繁鐨勪腑闂存€佽窇銆?
+      //      鏈鍣ㄥ彧鍦?*闈欐鎬?*鎵嶇瓑浜庣獥鍙ｅぇ灏忥紝褰㈠彉鏈熼棿骞朵笉绛変簬锛屾墍浠ヨ繛瀹冧篃涓嶈兘淇°€?
       this.expandState.reportWindow(this.viewportWidthVp, this.viewportHeightVp,
         this.windowInfo.statusBarTopVp, this.windowInfo.navigationBarBottomVp);
       this.expandState.updateChromeTier(this.viewportWidthVp);
@@ -3008,38 +3008,38 @@ struct Index {
   }
 
   /**
-   * 缁崵绮烘潻鏂挎礀閿涘牐绻戦崶鐐烘暛 / 鏉╂柨娲栭幍瀣◢閿涘绱伴幘顓熸杹妞ら潧绱戦惈鈧亸鍗炲帥閹绢厽鏁圭挧宄板З閻紮绱濋獮?*濞戝牐鍨傞幒?*鏉╂瑦顐兼潻鏂挎礀閵?
+   * 绯荤粺杩斿洖锛堣繑鍥為敭 / 杩斿洖鎵嬪娍锛夛細鎾斁椤靛紑鐫€灏卞厛鎾敹璧峰姩鐢伙紝骞?*娑堣垂鎺?*杩欐杩斿洖銆?
    *
-   * 閳跨媴绗?娴犮儱澧犳潻娆庣濮濄儲妲稿Ο鈩冣偓浣烘畱 `onWillDismiss` 楠炶尙娈戦敍娑欐尡閺€楣冦€夐弨瑙勫灇婢瑰啿鐪?Stack 闁插瞼娈戦弲顕€鈧碍璇炵仦鍌欑閸氬函绱?
-   *    韫囧懘銆忛崷銊ㄧ箹闁插本瀚ら敍灞芥儊閸掓瑨绻戦崶鐐扮窗閻╁瓨甯撮柅鈧崙鍝勭安閻㈩煉绱欓幋鏍偓鍛Ω閹绢厽鏂佹い闈涚俺娑撳娈戞禍宀€楠囨い鐢告桨瀵甯€閿涘鈧?
-   * @returns true = 瀹稿弶绉风拹鐧哥礉娑撳秴鍟€鐠т即绮拋銈堢箲閸ョ偤鈧槒绶?
+   * 鈿狅笍 浠ュ墠杩欎竴姝ユ槸妯℃€佺殑 `onWillDismiss` 骞茬殑锛涙挱鏀鹃〉鏀规垚澹冲眰 Stack 閲岀殑鏅€氭诞灞備箣鍚庯紝
+   *    蹇呴』鍦ㄨ繖閲屾嫤锛屽惁鍒欒繑鍥炰細鐩存帴閫€鍑哄簲鐢紙鎴栬€呮妸鎾斁椤靛簳涓嬬殑浜岀骇椤甸潰寮规帀锛夈€?
+   * @returns true = 宸叉秷璐癸紝涓嶅啀璧伴粯璁よ繑鍥為€昏緫
    */
   onBackPress(): boolean {
     if (!this.appState.isShowPlay) {
       return false;
     }
-    // 閻喐顒滈惃鍕暪鐠у嘲濮╅悽鑽ゆ暠閹绢厽鏂佹い鍨尡閿涘牆鐣犻惄鎴濇儔 collapseVersion閿涘绱濋幘顓炵暚閼奉亜绻侀幎?isShowPlay 缂?false
+    // 鐪熸鐨勬敹璧峰姩鐢荤敱鎾斁椤垫挱锛堝畠鐩戝惉 collapseVersion锛夛紝鎾畬鑷繁鎶?isShowPlay 缃?false
     this.expandState.requestCollapse();
     return true;
   }
 
   /**
-   * 閸氬本顒炵€佃壈鍩呴弽鍫熺箒鎼达负鈧?
+   * 鍚屾瀵艰埅鏍堟繁搴︺€?
    *
-   * 閺€鎯ф躬 `onNavBarStateChange` 閻ㄥ嫪绗呮稉鈧敮褝绱扮拠銉ユ礀鐠嬪啳袝閸欐垶妞傞弽鍫濆讲閼冲€熺箷濞屸€崇暚閹存劖甯归崗銉礉
-   * 缁斿鍩㈢拠?`size()` 娴兼碍瀣侀崚鐗堟＋閸婄》绱濈€佃壈鍤ф潻铚傜稑閺夆€茬瑝閸戣櫣骞?/ 娑撳秵绉锋径渚库偓?
+   * 鏀惧湪 `onNavBarStateChange` 鐨勪笅涓€甯э細璇ュ洖璋冭Е鍙戞椂鏍堝彲鑳借繕娌″畬鎴愭帹鍏ワ紝
+   * 绔嬪埢璇?`size()` 浼氭嬁鍒版棫鍊硷紝瀵艰嚧杩蜂綘鏉′笉鍑虹幇 / 涓嶆秷澶便€?
    *
-   * 閳跨媴绗?**娑撳秷顩﹂崠?animateTo**閿涙瓪animateTo` 娴兼碍濡?閼哄倻鍋ｉ崚姘愁潶閸掓稑缂?鏉╂瑤娆㈡禍瀣╃瘍娑撯偓鐠х柉藟闂?閳ユ柡鈧?
-   * 婢瑰啿鐪伴幃顒佽癁鏉╄渹缍橀弶鈩冩Ц閺夆€叉濞撳弶鐓嬮崙鐑樻降閻ㄥ嫭鏌婇懞鍌滃仯閿涘苯瀵樻潻娑樺З閻㈣姘ㄩ幋鎰啊濞ｂ€冲弳閿涘瞼鏁ら幋閿嬫绾喕绗夌憰浣碘偓?
-   * 鏉╄渹缍橀弶锛勬畱閺勯箖娈ｈ箛鍛淬€忔稉鈧敮褍鍞撮惄瀛樺复閸掑洦宕查敍娑㈡付鐟曚礁濮╅弫鍫㈡畱閸欘亝婀?`miniBarExpanded` 閻ㄥ嫭鏁圭挧鏋偓?
+   * 鈿狅笍 **涓嶈鍖?animateTo**锛歚animateTo` 浼氭妸"鑺傜偣鍒氳鍒涘缓"杩欎欢浜嬩篃涓€璧疯ˉ闂?鈥斺€?
+   * 澹冲眰鎮诞杩蜂綘鏉℃槸鏉′欢娓叉煋鍑烘潵鐨勬柊鑺傜偣锛屽寘杩涘姩鐢诲氨鎴愪簡娣″叆锛岀敤鎴锋槑纭笉瑕併€?
+   * 杩蜂綘鏉＄殑鏄鹃殣蹇呴』涓€甯у唴鐩存帴鍒囨崲锛涢渶瑕佸姩鏁堢殑鍙湁 `miniBarExpanded` 鐨勬敹璧枫€?
    */
   private syncNavDepth(): void {
     setTimeout((): void => {
-      // 閳?`navDepth` 閻ㄥ嫬褰涘鍕Ц"**娴滃瞼楠囨い鐢告桨**濞ｅ崬瀹?閿?*娑撳秴鎯堥幘顓熸杹妞?*閿?
-      //   瑜般垹褰夐崗銉ュ經閺€瑙勫灇 NavDestination 娑斿鎮楅幘顓熸杹妞や絻鍤滃鍗炲窗娑撯偓閺嶅吋鐖ゅǎ鎲嬬礉婵″倹鐏夐幎濠傜暊缁犳绻橀弶銉礉
-      //   閿?閿涘鎸遍弨楣冦€夋惔鏇氱瑓娴兼艾鍤熺粚鍝勫晪閸戣桨绔撮弶鈩冨亾濞搭喛绯犳担鐘虫蒋閿涘潉shouldShowFloatingMiniBar`閿涘绱?
-      //   閿?閿涘绻橀幘顓熸杹妞ゅ吀绱伴幎濠勬暏閹村嘲鐫嶅鈧惃鍕碃娴ｇ姾鍏岄崶濠傚繁鐞涘本鏁归崶鐐村閸欑姵鈧緤绱欐稉瀣桨闁絾顔岄敍澶涚礉
-      //   娑撱倖娼柈鎴掔窗閻潙娼栬ぐ銏犲綁閻ㄥ嫯鎹ｉ悙鐟板殤娴ｆ洏鈧倹澧嶆禒銉х埠娑撯偓閸︺劏绻栭柌灞惧⒏閹哄鈧?
+      // 鈽?`navDepth` 鐨勫彛寰勬槸"**浜岀骇椤甸潰**娣卞害"锛?*涓嶅惈鎾斁椤?*锛?
+      //   褰㈠彉鍏ュ彛鏀规垚 NavDestination 涔嬪悗鎾斁椤佃嚜宸卞崰涓€鏍兼爤娣憋紝濡傛灉鎶婂畠绠楄繘鏉ワ紝
+      //   锛?锛夋挱鏀鹃〉搴曚笅浼氬嚟绌哄啋鍑轰竴鏉℃偓娴糠浣犳潯锛坄shouldShowFloatingMiniBar`锛夛紝
+      //   锛?锛夎繘鎾斁椤典細鎶婄敤鎴峰睍寮€鐨勮糠浣犺兌鍥婂己琛屾敹鍥炴姌鍙犳€侊紙涓嬮潰閭ｆ锛夛紝
+      //   涓ゆ潯閮戒細鐮村潖褰㈠彉鐨勮捣鐐瑰嚑浣曘€傛墍浠ョ粺涓€鍦ㄨ繖閲屾墸鎺夈€?
       const playerIdx: number = this.playerRouteIndex();
       const depth: number = this.pageIndexInfos.size() - (playerIdx >= 0 ? 1 : 0);
       if (depth === this.navDepth) {
@@ -3048,17 +3048,17 @@ struct Index {
       const previousDepth: number = this.navDepth;
       this.navDepth = depth;
       if (depth > 0) {
-        // 閳?鏉╂稐绨╃痪褔銆夐棃?*娑撳秴鍟€**閹跺﹨绯犳担鐘虫蒋瀵缚顢戦弨璺烘礀閹舵ê褰旈幀渚婄礄閺冄勬煙濡楀牞绱氶妴?
-        //   閺冄勬煙濡楀牞绱癭miniBarExpanded = false` 閼?`hdsBarLayoutMode` 娣囨繃瀵?HORIZONTAL
-        //   閳?HDS 鏉╂稑鍙嗛妴宀勬毐閺夘摎ab + 閸﹀棗鑸伴幘顓熸杹閸ｃ劊鈧秷绻栫粔宥夋晩鐠囶垳绮嶉崥鍫礉鎼存洘鐖崝銊ф暰閻娼冪亸鍙樼瑝鐎电櫢绱?
-        //   鏉╂ê绶遍崷銊┾偓鈧崙杞扮癌缁狙囥€夐棃銏℃閸愬秶绫傚锝呮礀閵嗗矂鏆遍弶鈩冩尡閺€鎯ф珤 + 閸﹀棗鑸癟ab閵嗗秲鈧?
-        //   閻滄澘婀穱婵囧瘮 (barLayoutMode, miniBarExpanded) 鏉╂瑤绔寸€佃婀伴弶銉ユ皑娑撯偓閼峰娈戦悩鑸碘偓浣风瑝閸旑煉绱?
-        //     HORIZONTAL + EXPAND 娴犲秵妲搁妴宀勬毐閹绢厽鏂侀崳?+ 閸﹀摗ab閵嗗稄绱盫ERTICAL + COLLAPSE 娴犲秵妲搁崣灞界湴閵?
-        //   娴滃瞼楠囨い鐢告桨娑撳﹦娈戦幘顓熸杹閸ｃ劎鏁辨竟鍐茬湴閹剚璇為弶陇绀嬬拹锝嗘▔缁€鐚寸礄鐟?shouldShowFloatingMiniBar閿涘鈧?
+        // 鈽?杩涗簩绾ч〉闈?*涓嶅啀**鎶婅糠浣犳潯寮鸿鏀跺洖鎶樺彔鎬侊紙鏃ф柟妗堬級銆?
+        //   鏃ф柟妗堬細`miniBarExpanded = false` 鑰?`hdsBarLayoutMode` 淇濇寔 HORIZONTAL
+        //   鈬?HDS 杩涘叆銆岄暱鏉ab + 鍦嗗舰鎾斁鍣ㄣ€嶈繖绉嶉敊璇粍鍚堬紝搴曟爮鍔ㄧ敾鐪嬬潃灏变笉瀵癸紝
+        //   杩樺緱鍦ㄩ€€鍑轰簩绾ч〉闈㈡椂鍐嶇籂姝ｅ洖銆岄暱鏉℃挱鏀惧櫒 + 鍦嗗舰Tab銆嶃€?
+        //   鐜板湪淇濇寔 (barLayoutMode, miniBarExpanded) 杩欎竴瀵规湰鏉ュ氨涓€鑷寸殑鐘舵€佷笉鍔細
+        //     HORIZONTAL + EXPAND 浠嶆槸銆岄暱鎾斁鍣?+ 鍦員ab銆嶏紱VERTICAL + COLLAPSE 浠嶆槸鍙屽眰銆?
+        //   浜岀骇椤甸潰涓婄殑鎾斁鍣ㄧ敱澹冲眰鎮诞鏉¤礋璐ｆ樉绀猴紙瑙?shouldShowFloatingMiniBar锛夈€?
         Logger.info(RzdShellLogTag,
           `enter secondary depth=${depth} keep mode=${this.appState.hdsBarLayoutMode} expanded=${this.appState.miniBarExpanded}`);
       } else if (previousDepth > 0) {
-        // 閸戣桨绨╃痪褔銆夐棃顫窗閻樿埖鈧礁鍙忕粙瀣梾鐞氼偅鏁兼潻鍥风礉鏉╂瑩鍣烽崣顏囩 HDS 闁插秵鏌婄€靛綊缍堟稉鈧▎鈽呯礄楠炲倻鐡戦敍灞肩瑝娴溠呮晸"缁剧姵顒?鐠哄啿褰夐敍?
+        // 鍑轰簩绾ч〉闈細鐘舵€佸叏绋嬫病琚敼杩囷紝杩欓噷鍙窡 HDS 閲嶆柊瀵归綈涓€娆★紙骞傜瓑锛屼笉浜х敓"绾犳"璺冲彉锛?
         this.restoringHomeBar = true;
         this.tabsController.applyMiniBarStyle(this.appState.miniBarExpanded ?
           HdsBarStyle.EXPAND : HdsBarStyle.COLLAPSE);
