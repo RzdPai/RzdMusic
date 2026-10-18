@@ -1967,35 +1967,78 @@ struct Index {
         //   涓€杈规槸鍏嬮殕灞傜敾鐨勫壇鏈€佷竴杈规槸鐪熻韩锛岀敤鎴风湅鍒扮殑姝ｆ槸"杩蜂綘鏉″帇鍦ㄦ挱鏀鹃〉涓?锛堥噸鍙狅級銆?
         //   鈿狅笍 蹇呴』鐢?`Visibility.Hidden`锛堜繚鐣欏竷灞€锛夛細褰㈠彉璧风偣瑕?`getRectangleById` 閲忚繖鏉℃爮锛?
         //   鐢?`None` 浼氶噺涓嶅埌 鈬?鍔ㄧ敾鐩存帴閫€鍖栥€?
-        // ★★★ 2026-10-18（用户：「二级页面那两个都正常 = 既有光感又有弹跳」）：
-        //   一级页**复用二级页那套宿主** `MiniBarMaterialCapsule` —— 材质与 `.scale` 挤压都落在
-        //   我们自己的子树里，所以"弹一下"和光感同时成立；内容以 `contentOwnsSquash: false` 交给胶囊去压。
-        //   ⚠️ 因此 HDS 那层的背板必须关掉（下面 `enableMiniBarBackground: false`），否则又是两层。
-        Stack() {
-          MiniBarMaterialCapsule({
-            barWidth: this.floatingMiniBarWidthVp(),
-            barHeight: FLOATING_MINI_BAR_HEIGHT_VP,
-            bottomMargin: this.floatingMiniBarBottomMarginVp(),
-            material: this.ambientTitleMaterial(),
-            fitWinWVp: this.viewportWidthVp,
-            fitSideMarginVp: this.floatingMiniBarSideMarginVp()
-          }) {
-            HomeMiniBarPlayer({
-              showPreviousTrack: false,
-              followAppMiniBarExpanded: true,
-              showSelfDrawnBackplate: false,
-              contentOwnsSquash: false,
-              contentHeightVp: 0
-            })
-          }
-        }
-        .visibility((this.expandState.sourceBarHidden || this.expandState.shrinkHidesBar || this.expandState.miniOut) ? Visibility.Hidden : Visibility.Visible)
-        .onAppear((): void => {
-          Logger.info('RzdHomeMiniBarMaterial',
-            `material=capsule systemMaterialEffect ambient=${this.ambientLevelIndex()} ` +
-              `plate=our-capsule rendersPlayer=${this.miniBarRendersPlayer()} ` +
-              `squashY=${this.expandState.morphSquashY} keyboardVp=${this.keyboardBottomVp()}`);
+        HomeMiniBarPlayer({
+          showPreviousTrack: false,
+          // ★★★ 2026-10-18（用户：「你是不是忘记给主页的这个小播放条加上光感了（因为二级页面正常）」）：
+          //   迷你条那格背板**交给宿主画**，本组件因此**一个像素的蒙版都不许自绘** ——
+          //   官方材质就是被那层 80% 不透明的自绘背板洗白的。
+          //   （宿主已从"壳层 HdsTabs 的 miniBar 槽"换成"我们子树里的
+          //     {@link MiniBarMaterialCapsule}"，见下面 2026-10-20 那段；结论不变：本体不自绘。）
+          // ★★★ 2026-10-21（第八轮，甲方口径 —— **覆盖上面/下面所有旧结论**）：
+          //   一级页这条**回到上游结构**：内容组件仍然**不自绘背板**（`showSelfDrawnBackplate: false`），
+          //   因为背板/材质**由 HDS 画** —— 它现在就住在外层 `HdsTabs` 的 `miniBar` 槽里，
+          //   `enableMiniBarBackground` 走缺省 true（SDK `@hms.hds.hdsBaseComponent.d.ets:5169`
+          //   「Enables mini bar background follow tab bar」）⇒ 那一格吃的是壳层
+          //   `barFloatingStyle.systemMaterialEffect`（`:5357`，API23/24 唯一合法载体之一）。
+          //   「弹一下」也回到上游的落点：槽**内容**（= `MiniPlayer` 根）上的 `.scale({y: morphSquashY})`
+          //   ⇒ `contentOwnsSquash: true`（见下一条注释）。
+          //   ⚠️ 已知代价（如实记录）：HDS 画的背板在**壳层子树**里 ⇒ 这次挤压压不到它；
+          //     甲方已确认「一级页与二级页是两套结构、不能统一」⇒ **接受**，
+          //     不再为它把 `HdsTabs` 搬进我们子树（那是上一轮的做法，本轮已撤销）。
+          //   判据（真机一眼验）：`hdc shell hilog | grep -E "RzdMiniBarGeom|RzdHomeMiniBarMaterial"` ——
+          //   内容行 `h == cap == 56`、`padL == padR == opticalGap`；关闭播放器时 `squashY` 先 <1 再回 1。
+          // ★★★ 2026-10-18（照搬上游 `morphMiniBar()` 三份配置，`wujie.pa:148626-148645`）：
+          //   `!miniHidden ⇒ NoBg`（HDS 不画背板）+ 内容自己画；`miniHidden ⇒ base`。
+          //   本仓已把 `enableMiniBarBackground` 改成跟可见性同一组条件 ⇒ 可见时 HDS 不画背板，
+          //   所以这里**必须**自己画，否则整条透明。
+          // ⛔ 一级页恢复"不自绘背板"（用户：「怎么又是一大一小两个播放条，大的有光感，小的没有」）：
+          //   自绘层与 HDS 那格不是同一个矩形 ⇒ 一大一小。回到上游口径：背板/材质由 HDS 画，
+          //   我们只把**它的材质档**对齐软件设置（见 `barFloatingStyle.systemMaterialEffect`）。
+          showSelfDrawnBackplate: false,
+          // ★★★ 2026-10-21（第八轮）：**挤压回到"槽内容"上**（上游口径）。
+          //   上游首页那条的 squash 挂在 `miniBar` 槽的**内容**上（也就是 `MiniPlayer` 根），
+          //   不是挂在某个胶囊容器上（`上游-MiniPlayer内容组件树全量.ets` / `MainPage` 那一处）。
+          //   ⇒ 本组件根 `Stack` 就是那个落点：`contentOwnsSquash: true` 让
+          //     `.scale({x:1, y: morphSquashY})` 挂 `MiniPlayer` 根（0.86 压 110ms → 320ms 过冲回弹）。
+          //   ⚠️ HDS 画的那块背板不在我们的子树里，所以它**不参与**这次挤压（见上一段 ⚠️ 的说明）。
+          contentOwnsSquash: true,
+          // ★★★ 2026-10-20（第五轮，用户：「首页播放条和二级页面不是一个」）：
+          //   把内容行**钉在与二级页同一个高度**（`FLOATING_MINI_BAR_HEIGHT_VP` = 56），
+          //   与胶囊的 `barHeight` 是同一个常量 ⇒ 行盒 ≡ 胶囊盒。
+          //   不钉的话两排态是 46、单排态是 60，而胶囊恒 56 ⇒ 内容与胶囊的上下留白随档位漂，
+          //   两条播放条也就永远对不齐（这正是"偏下"在上一版被打掉的同一个机制）。
+          // ★★★ 2026-10-21（第八轮）：**封面不再由宿主给尺寸**。
+          //   上游 `MiniPlayer` 自己拿 `capsuleH` 推封面：`coverEdge = 32`（未缩放盒）、
+          //   `coverScale2 = (capsuleH × 0.8)/32`（56 ⇒ 1.4）、视觉 44.8
+          //   （`wujie.pa:66221-66330`）；本仓 `HomeMiniBarAlbumCover` 用 `capsuleHeightVp`
+          //   接住这个数，`HomeMiniBarPlayer` 用 `sidePad = (胶囊高 − 视觉封面)/2 = 5.6` 保证
+          //   「视觉左边距 ≡ 上/下留白」。⇒ 旧的 `coverSideVp`（宿主按档位传 40/30/44）已删除。
+          // ★★★ 2026-10-18（照搬上游：**不钉高度**）：
+          //   上游 `capsuleH = searchOpen ? SEARCH_MINI_H : undefined`（`wujie.pa:157276-157283`）⇒
+          //   常态 `undefined`，`Row.height(undefined)` 由 **HDS 槽**给高度；
+          //   封面再按**量测到的**槽高算 `coverScale2 = capsuleH×0.8/32`（`:66289-66327`）。
+          //   ⛔ 钉成常量 56 会让两排/单排都变成同一个高度 ⇒ 封面永远 44.8（用户：双行态显示了大封面）。
+          contentHeightVp: 0,
+          // ★ 2026-10-21（第八轮）：封面机制换成上游"32 盒 × `scale(1.4)`"，
+          //   `视觉封面 = 胶囊高 × 0.8 = 44.8`、`sidePad = (胶囊高 − 视觉封面)/2 = 5.6`
+          //   全部由 `HomeMiniBarPlayer` 自己算 ⇒ 宿主**不再**传 `coverSideVp`（该参数已删除）。
         })
+          .visibility((this.expandState.sourceBarHidden || this.expandState.shrinkHidesBar || this.expandState.miniOut) ? Visibility.Hidden : Visibility.Visible)
+          // ★★★ 2026-10-21（第八轮）：主页这条的"光感账"一行（`hdc shell hilog | grep RzdHomeMiniBarMaterial`）。
+          //   判读（以本轮为准）：
+          //     · `plate=hds-minibar-cell` ⇒ 背板/材质由**壳层 HdsTabs 的 `miniBar` 槽**画
+          //       （`enableMiniBarBackground` 缺省 true + 壳层 `systemMaterialEffect`）⇒ 光感在这一支；
+          //     · `selfPlate=off` ⇒ 本体没有自绘蒙版，不存在"材质被洗白"；
+          //     · `rendersPlayer` 与 {@link miniBar} 里那条 `if` 逐字同义（「现在就在听」/ 二级页在栈上 = false）；
+          //     · `squashY` ⇒ 关闭播放器时的挤压系数（压在**槽内容**上，不等于 1 就是"正在弹"）。
+          .onAppear((): void => {
+            Logger.info('RzdHomeMiniBarMaterial',
+              `material=hds systemMaterialEffect ambient=${this.ambientLevelIndex()} ` +
+                `plate=hds-minibar-cell selfPlate=off ` +
+                `rendersPlayer=${this.miniBarRendersPlayer()} ` +
+                `immersiveDecor=${this.windowInfo.immersiveDecor} ` +
+                `squashY=${this.expandState.morphSquashY} keyboardVp=${this.keyboardBottomVp()}`);
+          })
       }
     }
   }
@@ -2625,10 +2668,8 @@ struct Index {
               //   ⇒ 动画期看着"条还在"。上游 `morphMiniBar()`（`wujie.pa:148626-148645`）是**整份换配置**：
               //   `searchOpen ⇒ Empty` / `!miniHidden ⇒ NoBg` / 否则 `base`，三份区别就在 `enableMiniBarBackground`。
               //   ⇒ 这里让背板开关吃与内容可见性**同一组条件**（`miniOut` 是上游那条逐帧不变量）。
-              // ★★★ 2026-10-18（一级页改用我们自己的 `MiniBarMaterialCapsule` 宿主）⇒
-              //   HDS 那层背板**必须整份关掉**，否则又是"两层"（对应上游 `NoBg` 那份配置，
-              //   `wujie.pa:144057-144068` 的 `enableMiniBarBackground: false`）。
-              enableMiniBarBackground: false,
+              enableMiniBarBackground: this.miniBarRendersPlayer() && !this.expandState.sourceBarHidden &&
+                !this.expandState.shrinkHidesBar && !this.expandState.miniOut,
               // ★★★ 2026-10-20（第五轮）：**给 HDS 报上"迷你栏占多宽"**（`HdsTabsMiniBar.miniBarWidth`
               //   ：SDK `@hms.hds.hdsBaseComponent.d.ets:5150`，三档与 `HdsBarWidthRangeOptions` 同形）。
               //   单层态必须报，否则 HDS 挤页签、让出来的长条位宽度与我们自己画的胶囊对不上。
