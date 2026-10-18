@@ -85,6 +85,15 @@ export struct SettingsDetailPage {
   @Local desktopLyricSupport: boolean | undefined = undefined;
   /** 播放页是否启用流光背景（颜色随封面动态取色）。 */
   @Local playbackFlowLight: boolean = false;
+  /**
+   * 锁屏继续播放（默认 **开**）。
+   *
+   * ★ 2026-10-18（用户：「现在似乎不能锁屏播放，你在播放设置里加一下，默认开」）：
+   *   开 = 播放时申请"音频后台长时任务"（`backgroundModes: ["audioPlayback"]` +
+   *   `KEEP_BACKGROUND_RUNNING`），息屏/锁屏/切后台都继续放；关 = 不申请（锁屏就停）。
+   *   存储口径见 `MusicStoreService.getLockScreenPlay()`（读不到一律按"开"）。
+   */
+  @Local lockScreenPlay: boolean = true;
   @Local audioMix: boolean = false;
   @Local lyricBlurEnabled: boolean = true;
   @Local lyricFontSize: number = 28;
@@ -256,6 +265,8 @@ export struct SettingsDetailPage {
       this.desktopLyricSupport = supported;
     });
     this.playbackFlowLight = MusicStoreService.getInstance().getPlaybackFlowLight();
+    // 锁屏继续播放：缺省（没有这条记录）= 开
+    this.lockScreenPlay = MusicStoreService.getInstance().getLockScreenPlay();
     this.audioMix = MusicStoreService.getInstance().getAudioMix();
     this.lyricBlurEnabled = MusicStoreService.getInstance().getLyricBlurEnabled();
     this.saveToDownloadDir = MusicStoreService.getInstance().getDownloadSaveMode() === 'download';
@@ -928,6 +939,20 @@ export struct SettingsDetailPage {
               if (state !== undefined) {
                 state.enabled = isOn;
               }
+            })
+
+          // ★★★ 2026-10-18（用户：「现在似乎不能锁屏播放，你在播放设置里加一下，默认开」）：
+          //   这一项控制"音频后台长时任务"（息屏/锁屏/切后台是否继续放）。
+          //   切换后**立刻**通知播放器（`MediaService.applyLockScreenPlay`）：
+          //     开 ⇒ 正在播就马上补上长时任务；关 ⇒ 立刻停掉长时任务。
+          //   不这样做的话，用户以为"已经关了"，实际要等下一首才生效。
+          this.SubTitle($r('app.string.setting_sub_lock_screen_play'))
+          this.CapsuleSelector(this.onOffOptions, this.lockScreenPlay ? 0 : 1,
+            (index: number) => {
+              const isOn: boolean = index === 0;
+              this.lockScreenPlay = isOn;
+              MusicStoreService.getInstance().setLockScreenPlay(isOn);
+              MediaService.getInstance().applyLockScreenPlay(isOn);
             })
 
           this.SubTitle($r('app.string.setting_sub_lyric_blur'))

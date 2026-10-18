@@ -190,7 +190,7 @@
     },
     {
       "name": "build_stamp",
-      "value": "261018-2147"
+      "value": "261018-2247"
     },
     {
       "name": "mine_about_bundle",
@@ -299,6 +299,10 @@
     {
       "name": "setting_sub_playback_flow_light",
       "value": "播放页流光背景"
+    },
+    {
+      "name": "setting_sub_lock_screen_play",
+      "value": "锁屏继续播放"
     },
     {
       "name": "setting_sub_audio_mix",

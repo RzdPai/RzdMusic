@@ -42,6 +42,16 @@ const KEY_HUAWEI_ACCOUNT: string = 'huawei_account';
 /** 华为云盘访问令牌（JSON：accessToken / refreshToken / expiresAt）。 */
 const KEY_HUAWEI_DRIVE_TOKEN: string = 'huawei_drive_token';
 const KEY_PLAYBACK_FLOW_LIGHT: string = 'playback_flow_light';
+/**
+ * 锁屏/后台继续播放（默认 **开**）。
+ *
+ * ★ 2026-10-18（用户：「现在似乎不能锁屏播放，你在播放设置里加一下，默认开」）：
+ *   对应"音频后台长时任务"（`BackgroundUtil.startContinuousTask` /
+ *   `module.json5` 的 `backgroundModes: ["audioPlayback"]` + `KEEP_BACKGROUND_RUNNING`）。
+ *   ⚠️ 默认值必须是 `true`：老用户升级上来没有这条记录，读不到就得按"开"处理，
+ *     否则装上就是"锁屏不播"，正好是用户报的那个现象。
+ */
+const KEY_LOCK_SCREEN_PLAY: string = 'lock_screen_play';
 const KEY_SHOW_SUB_LYRIC: string = 'show_sub_lyric';
 const KEY_SHOW_LYRIC_TRANSLATION: string = 'show_lyric_translation';
 const KEY_SHOW_LYRIC_ROMA: string = 'show_lyric_roma';
@@ -702,6 +712,37 @@ export class MusicStoreService {
       return;
     }
     store.putSync(KEY_PLAYBACK_FLOW_LIGHT, enabled);
+    store.flush();
+  }
+
+  /**
+   * 是否允许**锁屏/后台继续播放**（默认 **开**）。
+   *
+   * 语义：开 = 播放时申请"音频后台长时任务"，息屏/锁屏/切到后台都继续放；
+   * 关 = 不加长时任务，退到后台由系统按普通应用处理（听感上就是"锁屏就停"）。
+   *
+   * ⚠️ 读不到存储时**返回 true**（不是 false）：老用户装机没有这条记录，
+   *   按"开"处理才不会一升级就丢锁屏播放。
+   * @returns True = 允许锁屏/后台继续播放
+   */
+  public getLockScreenPlay(): boolean {
+    const store = this.getStore();
+    if (store === undefined) {
+      return true;
+    }
+    return store.getSync(KEY_LOCK_SCREEN_PLAY, true) as boolean;
+  }
+
+  /**
+   * 持久化「锁屏播放」开关。
+   * @param enabled True = 允许锁屏/后台继续播放
+   */
+  public setLockScreenPlay(enabled: boolean): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_LOCK_SCREEN_PLAY, enabled);
     store.flush();
   }
 

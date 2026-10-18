@@ -633,7 +633,39 @@ export class MediaService {
 
   /** Starts or refreshes continuous background audio task (required after some track-switch paths). */
   private ensureBackgroundAudioTask(): void {
+    // ★★★ 2026-10-18（用户：「现在似乎不能锁屏播放，你在播放设置里加一下，默认开」）：
+    //   设置项 = `MusicStoreService.getLockScreenPlay()`（默认 **true**）。
+    //   关掉时**不申请**长时任务（并把可能在跑的停掉），开时照旧走 `BackgroundUtil`。
+    if (!MusicStoreService.getInstance().getLockScreenPlay()) {
+      Logger.info(TAG, '[RzdLockScreen] continuous task skipped (setting off)');
+      if (this.abilityContext) {
+        BackgroundUtil.stopContinuousTask(this.abilityContext);
+      }
+      return;
+    }
+    Logger.info(TAG, '[RzdLockScreen] continuous task start (setting on)');
     BackgroundUtil.startContinuousTask(this.abilityContext);
+  }
+
+  /**
+   * 应用「锁屏播放」开关（设置页切换后直接调，立即生效，不必等下一次起播）。
+   *
+   * · 开：正在播就立刻补上长时任务；
+   * · 关：立刻停掉长时任务（当前这首不会被打断，只是不再受"锁屏保活"保护）。
+   * @param enabled True = 允许锁屏/后台继续播放
+   */
+  public applyLockScreenPlay(enabled: boolean): void {
+    const playing: boolean = this.getAppState().isPlay;
+    Logger.info(TAG, `[RzdLockScreen] setting changed enabled=${enabled} playing=${playing}`);
+    if (enabled) {
+      if (playing) {
+        this.ensureBackgroundAudioTask();
+      }
+      return;
+    }
+    if (this.abilityContext) {
+      BackgroundUtil.stopContinuousTask(this.abilityContext);
+    }
   }
 
   /** Called when the app goes to background while playing; keeps continuous task if needed. */
