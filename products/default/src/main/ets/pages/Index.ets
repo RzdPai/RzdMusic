@@ -1986,7 +1986,11 @@ struct Index {
           //     不再为它把 `HdsTabs` 搬进我们子树（那是上一轮的做法，本轮已撤销）。
           //   判据（真机一眼验）：`hdc shell hilog | grep -E "RzdMiniBarGeom|RzdHomeMiniBarMaterial"` ——
           //   内容行 `h == cap == 56`、`padL == padR == opticalGap`；关闭播放器时 `squashY` 先 <1 再回 1。
-          showSelfDrawnBackplate: false,
+          // ★★★ 2026-10-18（照搬上游 `morphMiniBar()` 三份配置，`wujie.pa:148626-148645`）：
+          //   `!miniHidden ⇒ NoBg`（HDS 不画背板）+ 内容自己画；`miniHidden ⇒ base`。
+          //   本仓已把 `enableMiniBarBackground` 改成跟可见性同一组条件 ⇒ 可见时 HDS 不画背板，
+          //   所以这里**必须**自己画，否则整条透明。
+          showSelfDrawnBackplate: true,
           // ★★★ 2026-10-21（第八轮）：**挤压回到"槽内容"上**（上游口径）。
           //   上游首页那条的 squash 挂在 `miniBar` 槽的**内容**上（也就是 `MiniPlayer` 根），
           //   不是挂在某个胶囊容器上（`上游-MiniPlayer内容组件树全量.ets` / `MainPage` 那一处）。
@@ -2643,7 +2647,13 @@ struct Index {
               //   但 `enableMiniBarBackground` 缺省 **true**（SDK `:5169` 原文 "follow tab bar"）
               //   ⇒ HDS 照样给这一格画背板 ⇒ 页签胶囊上方多出一枚**空胶囊**。
               //   语义与 `miniBar()` 里那条 if 逐字同义：**只有真画播放器时才要 HDS 画背板**。
-              enableMiniBarBackground: this.miniBarRendersPlayer(),
+              // ★★★ 2026-10-18（用户：「还是不会隐藏」）：背板也要跟内容一起走。
+              //   `.visibility(Hidden)` 只藏**内容**，HDS 那层背板仍按这一格的 56 高度画
+              //   ⇒ 动画期看着"条还在"。上游 `morphMiniBar()`（`wujie.pa:148626-148645`）是**整份换配置**：
+              //   `searchOpen ⇒ Empty` / `!miniHidden ⇒ NoBg` / 否则 `base`，三份区别就在 `enableMiniBarBackground`。
+              //   ⇒ 这里让背板开关吃与内容可见性**同一组条件**（`miniOut` 是上游那条逐帧不变量）。
+              enableMiniBarBackground: this.miniBarRendersPlayer() && !this.expandState.sourceBarHidden &&
+                !this.expandState.shrinkHidesBar && !this.expandState.miniOut,
               // ★★★ 2026-10-20（第五轮）：**给 HDS 报上"迷你栏占多宽"**（`HdsTabsMiniBar.miniBarWidth`
               //   ：SDK `@hms.hds.hdsBaseComponent.d.ets:5150`，三档与 `HdsBarWidthRangeOptions` 同形）。
               //   单层态必须报，否则 HDS 挤页签、让出来的长条位宽度与我们自己画的胶囊对不上。
