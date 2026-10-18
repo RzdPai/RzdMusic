@@ -2832,18 +2832,30 @@ export struct PlaybackPage {
     const morphRunning: boolean = this.expandIntroRunning || closeStage === MorphStage.ENTERING
       || closeStage === MorphStage.LANDING;
     if (morphRunning) {
-      // ★★★ 2026-10-18（用户第八轮：「展开时按系统返回会出现**两套** —— 一套正常，然后全屏黑、播放器从上面落下来」）：
-      //   上一轮那版 `settle-then-close` 会在**形变容器还没真正展开**时就去拍快照
-      //   （`morphSettleOpen()` 之后 48ms 未必已经重排完）⇒ 拍到的是**半路的小卡片**，
-      //   收缩层再把它当"整页"缩 ⇒ 屏上先出现一套正常的、随后那套小卡片被当成全屏黑底上的东西落下来。
-      //   ⇒ **不再在形变中途拍快照**：老老实实走**活体反向**（`closeFullScreenPlayback()`，
-      //     `morphBeginLeaving()` + `460×max(0.4,p)` 的 `REVERSE_EASING`），它没有任何快照，结构上不可能是"两套"。
+      // ★★★ 2026-10-18（用户第九轮：「展开过程中按返回**又回到闪烁**」）：
+      //   三条路都试过了，各自的真病：
+      //     · 活体反向 ⇒ 与壳层那条 560ms 打开收尾抢同一个 `morphP`（壳层到点把页面 snap 回展开态）⇒ 闪烁/抽搐；
+      //     · 落位后 48ms 拍快照 ⇒ 容器还没重排完，拍到半路小卡片 ⇒ "两套 + 全屏黑 + 从上面落下"；
+      //     · 只记标记等收尾回调 ⇒ 收尾那条路径不一定回来 ⇒ "按了没反应"。
+      //   ⇒ 这一版把**三者拼成一条确定的路**：**不动画面、只排一个 620ms 的闹钟**，
+      //     让打开动画自己跑完（`MORPH_CONTENT_DURATION_MS(560) + 60`），再从**完整的展开态**走正常快照关闭。
+      //     620ms 之后页面一定已经落位（`morphSettleOpen()` 在 590ms），所以快照拍到的就是完整展开态：
+      //     不闪、不黑、不两套，且"按了有反应"（闹钟已经排上，用户松手后 0.6s 自动开始收）。
       Logger.info(PlaybackPage.logTag,
-        `RzdCloseLiveMorph live-reverse stage=${closeStage} intro=${this.expandIntroRunning ? 1 : 0} ` +
+        `RzdCloseLiveMorph after-open stage=${closeStage} intro=${this.expandIntroRunning ? 1 : 0} ` +
           `p=${this.expandState.morphP.toFixed(3)} cp=${this.expandState.contentProgress().toFixed(3)}`);
-      this.expandIntroRunning = false;
       this.closeAfterOpen = false;
-      this.closeFullScreenPlayback();
+      if (this.closeAfterOpenTimer !== -1) {
+        clearTimeout(this.closeAfterOpenTimer);
+      }
+      this.closeAfterOpenTimer = setTimeout((): void => {
+        this.closeAfterOpenTimer = -1;
+        if (!this.isAlive || this.isClosing) {
+          return;
+        }
+        Logger.info(PlaybackPage.logTag, 'RzdCloseLiveMorph after-open fire');
+        this.closeWithAnimation();
+      }, PlayerExpandState.MORPH_CONTENT_DURATION_MS + 60);
       return;
     }
     this.closeWithAnimation();
@@ -3269,6 +3281,8 @@ export struct PlaybackPage {
    * 与"活体反向"抢同一个 `morphP` ⇒ 表现为"返回动画消失 → 突然完整 → 又消失"（用户实测"会闪"）。
    */
   private closeAfterOpen: boolean = false;
+  /** "展开中收到关闭"排的那个闹钟句柄（-1 = 没排；见 `onCollapseRequested`）。 */
+  private closeAfterOpenTimer: number = -1;
 
   /** Seeds cover Resource from the current queue item. */
   aboutToAppear(): void {
@@ -7719,14 +7733,10 @@ export struct PlaybackPage {
           //      闂佹寧绋戝﹢?57 / L510闂佹寧绋掗悺?opacity(this.expandState.realCoverVisible() ? 1 : 0)`闂佹寧绋戦ˇ顐﹀焵椤掍焦鐓涢柍?
           //      闂佸憡鐟禍婵嗭耿娓氣偓楠炲秶鈧綆鍋呯花姘跺级閳哄倻鎳佺紒鏃€鎸冲銊╊敍濠婂嫮鏆犲┑鐐存儗閸犳牠鎯囬弶娆剧叾闊洤娴烽崯?闂?闂佸憡鐟ラ悧鍛博鐎涙鐟归悗锝冨妷閸?*闂佸憡鑹炬總鏃傜博绾惧浜归柕蹇嬪灩绗?N 婵犮垼娉涚€氥劑鍩€椤戣法顦︾憸鎶婂洤缁╅梺顐ｇ〒閸熷﹤鈽夐幘顖氫壕婵?*闂侀潧妫楃粙鍕濞嗘垹绠?4 濠电偛妫屽Σ鍕濮樿泛违?
           //   闂佸疇娉曟刊瀵哥箔?婵炴垶鎸搁敃銉︽叏閵堝鐓㈤柍杞拌兌閹藉秹鏌ㄥ☉妯荤秮.id` / `onAreaChange`闂?*婵炴垶鎸哥粔纾嬨亹?opacity 閻熸粍婢樺畷顒勫箹?*闂佹寧绋戦惉濂稿矗鎼达絾鏆滈柟闂寸濞呫倗鈧數澧楅〃鍛村春?闂佺繝鐒﹂幐鍫曞焵?
-          // ★★★ 2026-10-18（用户第七轮：「用系统返回 / 左上角收起按钮关闭时**会出现两个封面**
-          //   —— 一个正常收回去，一个跟着播放器往下滑」）：
-          //   那个"跟着往下滑"的就是**这一颗真封面**：它在形变容器里，收缩补间会把它一起带走；
-          //   而"正常收回去"的是壳层/快照那一层。上游用 `pullCoverOpacity = (pullActive && isMorphTarget) ? 0 : 1`
-          //   （`wujie.pa:176513-176531`）在**整个形变会话期间**把真封面藏掉，交接完再显回来。
-          //   ⇒ 本仓等价做法：关闭期间（`this.isClosing`，系统返回与按钮两条路都会置真）真封面一律不画，
-          //     静止态 `isClosing === false` ⇒ 与改动前逐像素一致。
-          .opacity(this.expandState.realCoverVisible() && !this.isClosing ? 1 : 0)
+          // ★ 2026-10-18（用户第九轮：「收起按钮**封面会消失**；返回关闭连封面带动画都没了」）：
+          //   上一轮在这里加的 `&& !this.isClosing` 是**错的**——快照是在 `isClosing = true` **之后**拍的，
+          //   于是快照里本身就没有封面 ⇒ 一关就"封面消失"。⇒ **撤掉这个附加门**，回到纯 `realCoverVisible()`。
+          .opacity(this.expandState.realCoverVisible() ? 1 : 0)
           // 闂?婵炴垶鎸搁敃銉︽叏閵堝鐓㈤柍杞拌兌閹藉秹鏌熺喊鍗炲闁糕晛鏈璇测枎閹捐櫕顏為梺鎸庣☉閻楀﹤螞閵堝鍋╅悘鐐跺亹閻﹀秹鏌￠崟闈涚仴妞も晩鍋婇幆鍕冀瑜忓﹢鎾煠婵傚绨荤紒璁崇劍缁嬪绻濋崘銊愭捇鏌ㄥ☉娆戞憿floatingCover.onAreaChange 闂?publishMorphTargets`闂?
           .id(PLAYER_BIG_COVER_ID)
           .onAreaChange((_oldValue: Area, newValue: Area): void => {

@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -279,7 +279,14 @@ export struct HomeMiniBarPlayer {
     if (this.contentHeightVp <= 0) {
       return HomeMiniBarPlayer.CONTENT_PAD_VP + HomeMiniBarPlayer.MINI_BAR_INNER_PAD_VP;
     }
-    const pad: number = (this.contentHeightVp - this.coverVisualEdgeVp()) / 2;
+    // ★★★ 2026-10-18（用户第九轮：「二级页**歌曲列表按钮跑到外面**」）：
+    //   上一版这里算的是 `(胶囊高 − 视觉封面)/2 = 5.6`，并拿它当**行内距**用 ⇒ 右侧按钮离圆角边只剩 5.6，
+    //   而胶囊圆角是 `胶囊高/2 = 28` ⇒ 最右那颗被圆角切到，看起来"跑到外面"。
+    //   上游的真实分解（`wujie.pa:67490-67531` + `:66259-66288`）是两件事分开算：
+    //     `sidePad(行内距) = 胶囊高/2 − coverEdge(32)/2 = 12`，
+    //     封面视觉 = 32 × 1.4 = 44.8 ⇒ 视觉上**溢出到内距里 6.4** ⇒ **视觉左边距 = 12 − 6.4 = 5.6**。
+    //   ⇒ 内距回到 12（左右都 12），"封面离左太远"由封面自己的视觉溢出吸收，两件事各归各位。
+    const pad: number = (this.contentHeightVp - HomeMiniBarPlayer.COVER_EDGE_DESIGN_VP) / 2;
     return pad > 0 ? pad : 0;
   }
 

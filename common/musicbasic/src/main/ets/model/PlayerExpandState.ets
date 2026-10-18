@@ -892,7 +892,7 @@ export class PlayerExpandState {
     //   `overlayCoverDrawable()` 在几何齐了以后恒真 ⇒ **反向/关闭路上真封面被这条挡住不画**。
     //   照搬上游：反向时代表封面的是**活封面**（`MainPage.startReverseMorph` 起手先
     //   `retargetToLiveCover()`，`wujie.pa:154070-154074`），所以真封面必须画。
-    if (this.morphOverlayEntering() && this.hostsMorphOverlay() && this.morphSessionDriving() &&
+    if (this.hostsMorphOverlay() && this.morphSessionDriving() &&
       this.overlayCoverDrawable()) {
       return false;
     }
@@ -3888,18 +3888,10 @@ export class PlayerExpandState {
     if (this.snapshotShrinkOwned) {
       return false;
     }
-    // ★★★ A（2026-10-20）—— **"反向路上仍然会画克隆层"的那一个条件就是缺这道门**。
-    //   下面三条判据（`morphSessionDriving()` / `morphBridging()` / 末尾 `morphContainerActive()`）
-    //   在 `LEAVING` / `LANDING` 相位**全部为真**，而 `morphBeginLeaving()` 恰好把
-    //   `morphStage` 置成 `LEAVING`、`morphDrive` 置成 `ANIM`（见本文件 `morphBeginLeaving()`）
-    //   ⇒ 关闭路一开始，壳层 `MorphCoverClone`（`products/default/.../Index.ets:3062`
-    //   `if (this.expandState.morphOverlayBridging())`）就跟着画。
-    //   照搬上游：`pullActive` 只在**展开方向**为真（`MorphStage.ENTERING` ⇒ `setMiniOut(true)`，
-    //   `wujie.pa:163498-163505`）；反向/关闭路由播放页**活封面**代表封面
-    //   （`startReverseMorph` → `retargetToLiveCover()`，`wujie.pa:154070-154074`）⇒ 这一层不画。
-    if (!this.morphOverlayEntering()) {
-      return false;
-    }
+    // ★ 2026-10-18（用户第九轮：「收起按钮 / 系统返回 **封面消失、动画也没了**」）：
+    //   上一轮在这里加过一道"只展开方向才画"的相位门（`if (!morphOverlayEntering()) return false;`），
+    //   它把**关闭路**的克隆层也一起掐掉了，而那两条路上又没有别的东西接管封面 ⇒ 封面整段消失、连带动画没了。
+    //   ⇒ **已撤掉**。这里是上游那套互补语义：「克隆层在画 ⇒ 真封面不画；克隆层不画 ⇒ 真封面画」。
     // 鈽呪槄鈽呪槄 2026-10-17锛?*鐓ф惉鏃犵晫锛氬３灞傚厠闅嗗眰鍙湪"涓嬫媺浼氳瘽"閲屽瓨鍦?* 鈥斺€?
     //   淇敤鎴峰疄娴嬨€屼袱涓皝闈?*闅忔満**鍑虹幇锛岀害涓€鍗婃鐜囥€嶏級
     //
@@ -4305,20 +4297,8 @@ export class PlayerExpandState {
    * @param ui 澹冲眰鐨?UIContext
    */
   public focusMorphOverlayForPageCollapse(ui: UIContext): void {
-    // ★★★ A（2026-10-20）：**这一层此刻没在画 ⇒ 不另起一条反向补间，把它的进度当场清零。**
-    //   这是"抽搐 / 闪"的直接来源：调用点有两个（播放页 `closeFullScreenPlayback()` 同步、
-    //   壳层 `@Monitor('expandState.morphStage')` 异步），而原来无条件 `morphOverlayTweenTo(false)`。
-    //   展开那条 560ms 还在跑时，这条会被下面的 `morphOverlayAnimating` 挡掉
-    //   （日志 `skipped (animating)`）⇒ `morphOverlayP` **继续朝 1 跑**，与播放页那条
-    //   460ms 反向**方向相反** ⇒ 屏上就是"一个封面往外飞、页面往里收"。
-    if (!this.morphOverlayBridging()) {
-      const fromP: number = this.morphOverlayProgress();
-      this.abortMorphOverlayTween();
-      Logger.info(PlayerExpandState.logTag,
-        `morph overlay page-collapse not-painting ⇒ abort tween from=${fromP.toFixed(3)} ` +
-          `stage=${this.morphStage} drive=${this.morphDrive}`);
-      return;
-    }
+    // ★ 2026-10-18（用户第九轮：「动画都没了」）：上一轮在这里加的"没在画就 abort 补间"把关闭路的
+    //   那条补间也掐掉了（它正是收起的动画主体）⇒ **已撤掉**，恢复无条件 `morphOverlayTweenTo(false)`。
     if (!this.hostsMorphOverlay()) {
       return;
     }
