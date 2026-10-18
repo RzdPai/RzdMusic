@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -4850,8 +4850,68 @@ export class PlayerExpandState {
    * @param ui UIContext
    * @returns 鏄惁閲忓埌浜嗙粓鐐归敋鐐?
    */
-  public measureEndAnchor(ui: UIContext): boolean {
+  /**
+   * 重新上报 / 重新量测「播放页大封面」的终点锚点（**幂等**，随时可调）。
+   *
+   * ★★★ 2026-10-18（用户：「点展开时用系统返回打断动画，再打开播放器，这时滑到歌词页封面不会变小」）：
+   *
+   * 根因链（源码可证）：
+   * ```
+   *   prepareMorphEntry() / armExpand()   →  bigSize = 0        // 每个形变会话开头清零
+   *   playerCoverWidth()                  →  bigNodeW 与 bigSize 都为 0 ⇒ 返回 0
+   *   lyricCoverSizeOf()                  →  0
+   *   lyricMorph() / lyricFloat()         →  不启用浮层 ⇒ 封面不缩、不飞
+   * ```
+   * 而 `bigSize` 的**唯一补给**是 `MusicPlayInfoBlock` 的 `onAreaChange → reportBig()`。
+   * 打断动画后重开播放器时，大封面的布局矩形与上一轮**完全相同** ⇒ `onAreaChange` 不再触发
+   * ⇒ `bigSize` 停在 0 ⇒ 滑到歌词页封面永远是大图。上游没有这个问题：它的
+   * `ExpandSnapshot.playerCoverRect` 是**每轮由播放页重新上报**的（见 `prepareMorphEntry` 注释）。
+   * ⇒ 这里补上"每轮重报"：直接量 `PLAYER_BIG_COVER_ID` 的当前窗口矩形（`measureEndAnchor`），
+   *   量到就把 `bigSize` 一起填好 —— 于是"能不能缩封面"不再依赖一次可能永远不来的
+   *   `onAreaChange`。
+   *
+   * ⚠️ 只在**真的量到**（`node.w > 0`）时才写，量不到就保持原状、下次再试：
+   *   这就是原本"大封面还没量到就不启用浮层"那条防线的等价物（不会提前露出浮层）。
+   * @param ui UIContext
+   * @returns True = 这一次量到了（此后 `playerCoverWidth()` 不再为 0）
+   */
+  public resyncBigCoverAnchor(ui: UIContext): boolean {
+    // ⚠️ **不能**直接复用 `measureEndAnchor()`：它无条件下写。而本方法会在"进场动画刚把页面
+    //    压到 p=0（= 迷你条大小）"之后被调用，那时量到的矩形是**被压扁的**，
+    //    照写就会把 `bigSize` 染成一个几十 vp 的假值 ⇒ 歌词页封面缩成一个小点。
+    //    ⇒ 先自己量一份、通过"量级校验"再写。
     const node: NodeRect | undefined = this.measureNode(ui, PLAYER_BIG_COVER_ID, true);
+    if (node === undefined || node.w <= 0) {
+      Logger.info(PlayerExpandState.logTag, 'resync big anchor pending (cover node not laid out yet)');
+      return false;
+    }
+    // 大封面的合理下限：窗口宽的 40%（真值 ≈ winW − 2×边距，手机档 ≈ 0.9×winW）。
+    // 被压扁的形变中矩形远小于这个数 ⇒ 直接拒收，保留上一轮的值，下次再量。
+    const minPlausible: number = Math.max(120, this.windowWidthVp * 0.4);
+    if (node.w < minPlausible) {
+      Logger.info('RzdLyricFloat',
+        `resync skipped implausible anchor w=${node.w.toFixed(1)} min=${minPlausible.toFixed(1)}`);
+      return false;
+    }
+    const s: number = this.coverScaleLive();
+    this.bigNodeScaleX = s;
+    this.bigNodeScaleY = s;
+    this.bigNodeW = node.w;
+    this.bigNodeH = node.h;
+    this.bigNodeX = node.x;
+    this.bigNodeY = node.y;
+    this.bigNodeKnown = true;
+    if (this.bigSize !== this.bigNodeW) {
+      this.bigSize = this.bigNodeW;
+    }
+    Logger.info('RzdLyricFloat',
+      `resync big anchor bigSize=${this.bigSize.toFixed(1)} nodeW=${this.bigNodeW.toFixed(1)} ` +
+        `nodeH=${this.bigNodeH.toFixed(1)} known=${this.bigNodeKnown} ` +
+        `lyricCover=${this.lyricCoverSizeOf().toFixed(1)}`);
+    return true;
+  }
+
+  public measureEndAnchor(ui: UIContext): boolean {    const node: NodeRect | undefined = this.measureNode(ui, PLAYER_BIG_COVER_ID, true);
     if (node === undefined || node.w <= 0) {
       return false;
     }

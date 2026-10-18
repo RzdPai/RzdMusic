@@ -7107,6 +7107,26 @@ export struct PlaybackPage {
             //     闂?`prepareMorphEntry` 缂備焦顨忛崗娑氱博閺夋埈娼伴柕澹懏鐎繛杈剧到缁嬪嫮妲愬┑鍥┾枖濠㈣泛顑嗛拏瀣煕韫囧鍔氱憸鐗堢洴閺屽牓骞嬮幒鏃傜崶缂傚倷绀佺换妤冩崲閸愵亖鍋撻悷鏉挎灕缂佽鲸宀告俊?
             //     闁诲海鎳撻崯顖炲垂濮樿京鍗?闂?闁哄鏅滈悷銈囩博鐎涙ǜ浜滈柣銏犵仛閻ｈ京绱掑Δ濠傚幐缂佹柨顕弫顔款槻婵ǜ鍔庨幏?婵炴垶鎸哥粔鍫曞极?闂佹寧绋戦悧蹇涙偤閹寸偟鐝堕柛鎰皺濠€鎾煙鐠虹尨宸ラ柛銈嗗灦閹峰懘寮撮悙鑼伝闂佸憡甯楁刊浠嬪箲閿濆鍊烽柣褍鎽滅粈鍡涙煥?
             //     闂佸吋婢樻總鏃傜箔婢舵劕鍙婃い鏍ㄧ箓濞堟壆鈧湱顭堝畷顒傛閹寸偞鍙忛悗锝庡亝鐏忥繝姊洪銊у埌妞?`collapseProgress` 闂佸搫鍞查崘銊愭鏌ｉ姀锛勬菇闁?
+            // ★★★ 2026-10-18（用户：「点展开时用系统返回打断动画，再打开播放器，滑到歌词页封面不会变小」）：
+            //   每轮进场都**重新上报一次**大封面锚点（幂等）。原因见
+            //   `PlayerExpandState.resyncBigCoverAnchor()` 的注释：`bigSize` 每个形变会话开头会被清零，
+            //   而它唯一的补给是 `MusicPlayInfoBlock` 的 `onAreaChange` —— 打断动画后重开时
+            //   大封面矩形与上一轮完全相同 ⇒ 那个回调**不再触发** ⇒ `bigSize` 停在 0
+            //   ⇒ `lyricCoverSizeOf() === 0` ⇒ 滑到歌词页封面不缩、不飞。
+            //   ⚠️ 打两枪：`onAppear` 这一帧布局可能还没算完，量不到就再来一次；
+            //     两枪都量不到（例如页面还在进场动画里被压扁）也没关系 —— 下次进场还会再试。
+            setTimeout((): void => {
+              if (!this.isAlive) {
+                return;
+              }
+              this.expandState.resyncBigCoverAnchor(this.getUIContext());
+            }, 0);
+            setTimeout((): void => {
+              if (!this.isAlive) {
+                return;
+              }
+              this.expandState.resyncBigCoverAnchor(this.getUIContext());
+            }, 96);
             if (this.expandState.morphContainerActive() || this.expandState.morphSessionStarted) {
               this.diagAppearBranch = 'morph';
               this.introPaintReady = true;
