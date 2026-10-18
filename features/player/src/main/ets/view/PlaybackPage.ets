@@ -1708,7 +1708,13 @@ export struct PlaybackPage {
       // ★ 2026-10-19（用户用不了 hdc）：同一条诊断也写进**应用内运行日志**
       //   （设置 → 播放/关于里那块"运行日志"，`AppStorage['lxPlayLog']`），
       //   用户截图就能把 `t / anchor / big / win / cover / float` 全带回来。
-      appendPlayLog(`[歌词页] t=${this.lyricMorphT.toFixed(3)} ${this.expandState.lyricDiagLine()}`);
+      //   `rect=` 是**浮层封面的最终矩形**（x,y,size,height）：t=1 时它必须是 48.7 的小方块，
+      //   `rv=` 是 `realCoverVisible()`（真封面是否该显示）—— 这两个数一起看就能判定
+      //   "是浮层没缩小" 还是 "真封面没让位（两张封面同时在）"。
+      const rect: LyricMorphRect = this.coverLocalRect();
+      appendPlayLog(`[歌词页] t=${this.lyricMorphT.toFixed(3)} ${this.expandState.lyricDiagLine()} ` +
+        `rect=${rect.x.toFixed(0)},${rect.y.toFixed(0)},${rect.size.toFixed(1)},${rect.height.toFixed(1)} ` +
+        `rv=${this.expandState.realCoverVisible() ? 1 : 0}`);
     }
     // 闁荤姳鐒︽刊鑺ュ緞?濠电姴锕ラ懝鐐叏閳哄倻顩风€广儱鎳忛煬顒勫级閳哄倻顬兼い?闂佹寧绋戦悧鎰帮綖?`lastScrollAtMs` 闂佹眹鍔岀€氼參寮悙鐑樼厒濠电姴绻掔粣妤呮煢閳ь剟鎸婃径灞炬瘞闂婎偄娲ら幊姗€濡磋箛鏇熷闁宠　鍋撶紓宥呮噽缁辨帒鈻庨幘顖氫壕闁归偊鍓氭慨搴ㄥ级閳哄倻鈽夐悗瑙勫▕閺?
     // ★★★ 2026-10-17（③ 照搬无界：`PlayerPage.onContentDidScroll` = `wujie.pa:190026-190075`）
