@@ -293,15 +293,15 @@ export struct HomeMiniBarPlayer {
 
   /** @returns 封面/内距的**基准高度**（vp）：低矮档优先，其次是宿主钉的高度，最后是实测行高。 */
   private capsuleBaseHVp(): number {
-    // ★★★ 2026-10-18（用户：「单行状态下还是双行状态的小封面（单行状态高度更高）」）：
-    //   上游 `capsuleH` 本来就是**量测值**（`wujie.pa:67490-67531`；`40 = BAR_CONTENT_H` 与 `40×1.4`
-    //   只是"还没量到高度"时的估算档，`:67503-67517`）⇒ 槽高多少，封面就按多少算。
-    //   ⛔ 不要再按"排布模式"硬切 40/56：`barLayoutMode` 现已恒 `VERTICAL`（上游口径），
-    //      那样会让单行态也吃 40 ⇒ 封面永远是小号，而单行态胶囊其实更高。
-    if (this.measuredRowHVp > 0) {
-      return this.measuredRowHVp;
+    // ★★★ 2026-10-18（用户：「收起状态是高播放条，却画着双行矮条的小封面」）：
+    //   病根是这里**先取实测行高**：`measuredRowHVp` 来自根 `Stack` 的 `onAreaChange`，
+    //   在形态切换（而且现在有 350ms `BAR_ANIM` 补间）期间它是**中间值/上一档的残值**，
+    //   于是封面拿到 40 那一档 ⇒ 高条里画小封面。
+    //   ⇒ 改为**宿主钉住的值优先**（`contentHeightVp` 就是胶囊高，同一个数），实测只在没钉时兜底。
+    if (this.contentHeightVp > 0) {
+      return this.contentHeightVp;
     }
-    return this.contentHeightVp > 0 ? this.contentHeightVp : 0;
+    return this.measuredRowHVp > 0 ? this.measuredRowHVp : 0;
   }
 
   /**
