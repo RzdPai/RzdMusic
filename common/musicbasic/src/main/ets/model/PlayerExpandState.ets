@@ -5004,6 +5004,13 @@ export class PlayerExpandState {
   public morphSettleOpen(): void {
     this.morphStage = MorphStage.OPEN;
     this.morphDrive = MorphDrive.NONE;
+    // ★ 2026-10-19：落位到 OPEN = 形变结束、播放器全屏接管 ⇒ 系统条交接闸必须释放，
+    //   否则 `hdsBarSuppressed` 常驻 true（`0014` 日志里 `hs=1` 就是它），
+    //   既让 `MorphCoverClone()` 一直画，又让迷你条永远处于"被顶掉"状态。
+    if (this.hdsBarSuppressed) {
+      this.hdsBarSuppressed = false;
+      Logger.info('RzdBarHandoff', 'settle open -> hds bar restored (handoff done)');
+    }
     // 落定 = 内容时间线也收尾（两条线回到同一档；`applyMorphProgress(1)` 会把 `contentP` 一并写 1）。
     this.cancelContentTween();
     this.applyMorphProgress(1);
