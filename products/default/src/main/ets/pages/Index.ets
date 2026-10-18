@@ -1801,24 +1801,26 @@ struct Index {
    * NORMAL/APP_TRIGGER 浠呮姤鍛婅緭鍑猴紝涓嶈兘鍙嶅悜绡℃敼鍞竴甯冨眬鐘舵€併€?
    * miniBarStyle鍙楁帶锛涙帶鍒跺櫒涓庡竷灞€鍚屾鍒囨崲銆?
    */
+  /**
+   * 照搬上游 `onMiniBarStyleChanged`（`wujie.pa:149113-149336`）：**只镜像 HDS 报来的样式**，
+   * 不反向改布局、不补 `animateTo`（上游整个 `MainPage` 模块里 `animateTo` 零命中；
+   * 切换动画由 HDS 内部默认动效给，SDK `@hms.hds.hdsBaseComponent.d.ets:5729` 原文
+   * "The style switch will be accompanied by a default animation."）。
+   * 另：上游对 `USER_CLICK + COLLAPSE`（点迷你条收起）**直接忽略**（`:149215` 一带）。
+   * @param miniBarStyle HDS 报回来的样式
+   * @param mode 变更来源
+   */
   private onMiniBarStyleChangeFull(miniBarStyle: HdsBarStyle, mode: HdsTabsBarChangeMode): void {
     if (this.navDepth > 0 || this.restoringHomeBar) {
       return;
     }
-    if (mode === HdsTabsBarChangeMode.USER_CLICK &&
-      this.appState.hdsBarLayoutMode === BarLayoutModes.HORIZONTAL) {
-      // HDS expands the round tab inside a horizontal row; restore the entire two-row layout instead.
-      this.getUIContext().animateTo({ duration: 300, curve: Curve.Smooth }, (): void => {
-        this.appState.hdsBarLayoutMode = BarLayoutModes.VERTICAL;
-        this.appState.miniBarExpanded = false;
-      });
-      this.tabsController.applyMiniBarStyle(HdsBarStyle.COLLAPSE);
-      Logger.info(RzdShellLogTag, 'home bar user click restored two rows');
+    const collapsed: boolean = miniBarStyle === HdsBarStyle.COLLAPSE;
+    if (collapsed && mode === HdsTabsBarChangeMode.USER_CLICK) {
+      Logger.info(RzdShellLogTag, 'home bar user click on mini ignored (upstream :149215)');
       return;
     }
-    const expectedStyle: HdsBarStyle = this.appState.miniBarExpanded ? HdsBarStyle.EXPAND : HdsBarStyle.COLLAPSE;
-    Logger.info(RzdShellLogTag, `home bar callback style=${miniBarStyle} expected=${expectedStyle} mode=${mode}`);
-    // NORMAL/APP_TRIGGER reports are output, not a second source of layout state.
+    this.appState.miniBarExpanded = !collapsed;
+    Logger.info(RzdShellLogTag, `home bar callback style=${miniBarStyle} mode=${mode} expanded=${!collapsed}`);
   }
 
   /**
@@ -1832,18 +1834,17 @@ struct Index {
    * 浣庨厤璁惧锛堝彂琛岀増 < 6.1.1(24)锛変笂浼?undefined锛氬瓧娈典笉鍙敤锛岀敱 HDS 鑷鍐冲畾銆?
    * @returns HdsBarLayoutMode 鎴?undefined銆?
    */
+  /**
+   * 上游 `barLayoutMode` 在整份 abc 里只有 4 处写，**全是对象字面量、值恒 `VERTICAL`**
+   * （`wujie.pa:143295` / `:144066` / `:144083` / `:520524`）⇒ **排布模式运行期从不切换**。
+   * 本仓原来随滚动在 HORIZONTAL/VERTICAL 之间翻 —— 上游没有这个动作，已照搬。
+   * @returns HdsBarLayoutMode，或不支持时 undefined
+   */
   private barLayoutModeForHds(): HdsBarLayoutMode | undefined {
     if (!this.supportsTwoRowLayout()) {
       return undefined;
     }
-    // 鈽呪槄 2026-10-15 鐪熸満鍙嶉**涓嶈**鍦ㄨ繖涓€椤垫妸瀹冨帇鎴?HORIZONTAL锛堟垜涓婁竴鐗堝氨鏄偅涔堝啓鐨勶紝閿欎簡锛夛細
-    //   `HORIZONTAL` 鏄?椤电涓庤糠浣犳潯**骞舵帓**鍦ㄥ悓涓€鎺?鐨勬帓甯?鈬?杩蜂綘鏉￠偅涓€鏍肩┖鐫€鏃讹紝
-    //   椤电琚尋鍒板乏杈广€佸彸杈圭暀鍑轰竴鏍?鈥斺€?鐢ㄦ埛鍘熻瘽銆屽簳閮?tab 鏍忓垏鎹㈠埌杩欎釜椤甸潰鐨勬椂鍊?*浼氱煭涓€鎴?*
-    //   锛堝儚鏄互鍓嶉偅涓?*宸︿晶 Tab 鏍忥紝鍙充晶鍦嗗舰鎾斁鍣?*鐨勭増鏈級銆嶈鐨勫氨鏄畠銆?
-    //   姝ｈВ锛?*鎺掑竷妯″紡瀹屽叏涓嶅姩**锛堣窡鍒殑椤电閫愬瓧涓€鑷达級锛屽彧鎶?{@link miniBar} 鐨勫唴瀹硅瀹冮噺鎴?0 楂?
-    //   锛圚DS 鏄寜鍐呭閲忛珮搴︾殑锛岀┖ builder 鈬?娌℃湁閭ｄ竴鎺掞紝瑙?`miniBar()` 鐨勬敞閲婏級銆?
-    return this.appState.hdsBarLayoutMode === BarLayoutModes.HORIZONTAL ?
-      HdsBarLayoutMode.HORIZONTAL : HdsBarLayoutMode.VERTICAL;
+    return HdsBarLayoutMode.VERTICAL;
   }
 
   /** 璁惧鍙戣鐗堟槸鍚︽敮鎸?`barLayoutMode`锛?.1.1(24) 璧凤級銆?*/
@@ -2696,7 +2697,9 @@ struct Index {
               //     ✅ 本轮已按"两者都要"收口：`miniBar` 槽留空、播放器搬到 {@link homeMiniCapsule}
               //        （我们子树里的 {@link MiniBarMaterialCapsule}）⇒ 光感与弹跳同时成立。
               //        上面这一整段（2026-10-16 / 10-18 的反复）只作为来龙去脉保留。
-              miniBarStyle: this.miniBarStyleForHds(),
+              // ⛔ 上游三份 miniBar 配置里**没有 `miniBarStyle` 这个键**（`wujie.pa:143286` / `:144057` / `:144074`）：
+              //   样式只经 `HdsTabsController.applyMiniBarStyle()` 进（`wujie.pa:145779` / `:147178`）。
+              //   ⇒ 这里不声明式设，初态交给 HDS + 上面那条 `applyMiniBarStyle`。
               onBarStyleChange: (miniBarStyle: HdsBarStyle, _tabStyle: HdsBarStyle,
                 _miniWidth: number, _tabWidth: number, mode: HdsTabsBarChangeMode): void => {
                 this.onMiniBarStyleChangeFull(miniBarStyle, mode);

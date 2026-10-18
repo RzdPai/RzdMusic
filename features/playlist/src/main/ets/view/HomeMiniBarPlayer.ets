@@ -123,6 +123,8 @@ export struct HomeMiniBarPlayer {
    * 而 `maxHeight` 只要**大于自然高度**就等于没约束。
    */
   private static readonly CONTENT_HEIGHT_UNBOUNDED_VP: number = 4096;
+  /** 上游 BAR_ANIM = { duration: 350, curve: Curve.Friction }（wujie.pa:70120-70126）。 */
+  private static readonly BAR_ANIM: AnimateParam = { duration: 350, curve: Curve.Friction };
   /** 上拉起点锚点补量的次数 / 间隔（ms）——与 `PlaybackPage` 的 12×32ms 同一个窗口。 */
   private static readonly PULL_ANCHOR_RETRY_MAX: number = 12;
   private static readonly PULL_ANCHOR_RETRY_MS: number = 32;
@@ -404,6 +406,13 @@ export struct HomeMiniBarPlayer {
           // 操作区：`MiniMorph.actionsOpacityAt = clamp(1 - t/0.20)`，比封面那一档更早消失
           .opacity(this.expandState.miniBarOpacity())
       }
+      // ★★★ 2026-10-18（照搬上游 `.animation(BAR_ANIM)`，`wujie.pa:69053-69057` / `:69118-69121`）：
+      //   上游把 `BAR_ANIM = { duration: 350, curve: Curve.Friction }`（`wujie.pa:70120-70126`）
+      //   挂在**胶囊 Row** 上，被它带的是 `height(capsuleH)` 与 `padding(left: sidePad, right: actionsTrail)`；
+      //   封面的 `scale(coverScale2)` 另挂一份同名动画（见 `HomeMiniBarAlbumCover`）。
+      //   ⇒ 单层↔双层切换时，格子内的高度/内距/封面缩放按 350ms Friction 补间，而不是硬切。
+      //   ⚠️ 顺序照抄上游：`animation(BAR_ANIM) → 属性 → animation(null)`。
+      .animation(HomeMiniBarPlayer.BAR_ANIM)
       .padding({
         left: this.sidePadVp(),
         right: this.actionsTrailVp(),
@@ -414,6 +423,7 @@ export struct HomeMiniBarPlayer {
       .width(StyleConstants.FULL_WIDTH)
       // 钉住时 `min == max` ⇒ 行盒 ≡ 胶囊盒；未钉时 `[0, 4096]` ⇒ 完全等价于不约束。
       .constraintSize({ minHeight: this.contentMinHeightVp(), maxHeight: this.contentMaxHeightVp() })
+      .animation(null)
     }
     .alignContent(Alignment.Center)
     .width(StyleConstants.FULL_WIDTH)

@@ -105,7 +105,8 @@ export struct HomeMiniBarAlbumCover {
   /** 上游 `MINI_COVER_RATIO = 0.8`（theme/Tokens）：视觉封面边长 / 胶囊高。 */
   private static readonly MINI_COVER_RATIO: number = 0.8;
   /** 尺寸过渡（上下两排 <-> 单排、或胶囊高档位切换）时长，沿用旧值。 */
-  private static readonly COVER_SIZE_ANIM_MS: number = 500;
+  /** 上游 BAR_ANIM：封面 scale(coverScale2) 也挂这条动画（wujie.pa:69167-69209，值 :70120）。 */
+  private static readonly COVER_SIZE_ANIM_MS: number = 350;
 
   /**
    * @returns Progress denominator for the ring; at least 1 to avoid division issues.
@@ -289,7 +290,7 @@ export struct HomeMiniBarAlbumCover {
     // 档位切换（上下两排 30 <-> 单排 44；或胶囊高档位变化）时尺寸平滑过渡，不要瞬跳。
     // ⚠️ 只能紧跟 `width/height` —— `.animation()` 只作用于**它前面**那些属性；
     //   放到 `opacity/translate` 之后会把形变期逐帧驱动的透明度也变成 500ms 补间（观感错）。
-    .animation({ duration: HomeMiniBarAlbumCover.COVER_SIZE_ANIM_MS, curve: Curve.Smooth })
+    .animation({ duration: HomeMiniBarAlbumCover.COVER_SIZE_ANIM_MS, curve: Curve.Friction })
     // 展开形变的起点端点就用这一层：它是"没被 scale 的那一层"，
     // `getMeasuredSize()` 拿到的就是视觉边长（44.8），与 `reportMini` 同一个坐标口径。
     .id(MINI_BAR_COVER_ID)
