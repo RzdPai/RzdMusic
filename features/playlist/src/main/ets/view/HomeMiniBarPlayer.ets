@@ -88,7 +88,34 @@ export struct HomeMiniBarPlayer {
    * - `true`（默认，**只剩**推荐页 `HomeFloatingMiniBar` / 歌单页 `PlaylistFloatingMiniBar` 这两个自绘胶囊宿主）：
    *   它们没有 HDS 底栏材质可接，背板必须自己画，否则整条是透明的。
    */
+  /**
+   * ★★★ 2026-10-20（第三轮，用户：「看看无界，它有光感又有弹一下」）——**背板到底谁画，本轮的判据**：
+   *
+   * 无界的迷你条背板**从来不是 MiniPlayer 自己画的**，它有两个来源，字节码逐条核过：
+   *   · 首页那条：`MainPage.#miniBar`（`wujie.pa:148147-148177`）= `__Common__() { MiniPlayer(...) }`，
+   *     **没有任何背板节点**；背板来自宿主 `HdsTabs` 的 `miniBar` 槽
+   *     （`MainPage` 的 `miniBarCfg`（:143286-143289）**没写** `enableMiniBarBackground` ⇒ 取 SDK 缺省 `true`）。
+   *   · 关闭播放器时那记"弹一下"：来源是形变浮层里的 **`morphGlass` 克隆**（`MainPage.morphGlass`，
+   *     `wujie.pa:155701-155766`）= 一个 `MaterialCapsule`（我们子树里的 `HdsTabs` + 官方材质）
+   *     被父级 `.scale({y: morphSquashY})` 压。
+   * ⇒ 结论（本轮落地口径）：
+   *   · **自绘背板（`true`）只在"没有 HDS 底栏可接"的宿主上保留**（推荐页 `HomeFloatingMiniBar`、
+   *     歌单页 `PlaylistFloatingMiniBar`，它们没有官方材质可挂，只能自己画）；
+   *   · 首页那条 / 二级页那条一律 `false`（背板/材质由 HDS 浮动栏画，见 {@link MiniBarMaterialCapsule}）；
+   *   · "弹一下"由**形变克隆层**（壳层 `MiniBarGlassClone` + 三份克隆一起 `.scale({y: morphSquashY})`）
+   *     负责，而不是靠本体背板 —— 这与无界把挤压挂在 `morphGlass` 克隆上是同一件事。
+   */
   @Param showSelfDrawnBackplate: boolean = true;
+  /**
+   * 本组件根 `Stack` 是否**自己**承担挤压（`.scale({y: morphSquashY})`）。
+   *
+   * - `true`（缺省 = 推荐页 / 歌单页那两个自绘胶囊宿主，以及首页 HDS `miniBar` 槽里那条）：
+   *   `.scale` 挂在根 `Stack` 上 ⇒ 自绘背板与内容一起压/弹。
+   * - `false`（**住进 {@link MiniBarMaterialCapsule} 的宿主必须传**）：挤压由胶囊那层的 `.scale`
+   *   统一负责（它压在"官方材质背板 + 内容"同一个变换域上）。这里若再压一次，
+   *   两个 0.86 相乘 = **0.74**，会压过头（这是"一改就弹得太狠"的机械判据）。
+   */
+  @Param contentOwnsSquash: boolean = true;
   /**
    * 把本组件的**高度钉死**成宿主给的设计高度（vp）；`0`（默认）= 不钉，按自然高度排。
    *
@@ -386,7 +413,8 @@ export struct HomeMiniBarPlayer {
         `content h=${areaLengthToVp(area.height)} y=${areaLengthToVp(area.globalPosition.y)} ` +
           `w=${areaLengthToVp(area.width)} pinned=${this.contentHeightVp} ` +
           `hosting=${this.followAppMiniBarExpanded ? 'home' : 'floating'} ` +
-          `selfPlate=${this.showSelfDrawnBackplate} squashY=${this.expandState.morphSquashY}`);
+          `selfPlate=${this.showSelfDrawnBackplate} ownSquash=${this.contentOwnsSquash} ` +
+          `squashY=${this.expandState.morphSquashY}`);
     })
     // 鈽呪槄 鎸ゅ帇锛坄morphSquashY`锛夋寕鍦?*Stack**涓?鈬?鑳屾澘涓庡唴瀹?*鍚屼竴涓彉鎹㈠煙**銆佷竴璧峰帇銆?
     //   鍑哄锛氭棤鐣?`squashLand` / `animateSquash`锛坄SQUASH_Y = 0.86` 鍘?110ms锛?
@@ -394,7 +422,10 @@ export struct HomeMiniBarPlayer {
     //   鈿狅笍 闈欐鎬?`morphSquashY` 鎭掍负 1 鈬?**涓嶆敼鍙樹换浣曢潤鎬佺増闈?*锛堝洖褰掔孩绾匡級銆?
     //   琛ラ棿鐢?`PlayerExpandState.squashLandAnim` 鐢?`animateTo` 璧?鈬?杩欓噷**涓嶈**鍐嶅姞
     //   `.animation(...)`锛堜袱濂椾竴璧蜂笂浼氫簰鐩歌鐩栵級銆?
-    .scale({ x: 1, y: this.expandState.morphSquashY })
+    // ★★★ 2026-10-20：挤压由**谁**负责，看 {@link contentOwnsSquash}。
+    //   自绘胶囊宿主（`true`）自己压；住进 {@link MiniBarMaterialCapsule} 的宿主（`false`）交给胶囊那层，
+    //   否则两层 0.86 相乘 = 0.74（弹过头）。
+    .scale({ x: 1, y: this.contentOwnsSquash ? this.expandState.morphSquashY : 1 })
     // 鈿狅笍 杩欓噷**涓嶈**缁欐暣鏉?Row 鍔犻€忔槑搴︼細鍙嶇紪璇戦噷杩蜂綘鏉℃槸**涓ゆ。**娣″嚭 鈥斺€?
     //    鍙充晶鎿嶄綔鍖?`1 - t/0.20` 鍏堟病銆佸皝闈?鍏冧俊鎭?`1 - t/0.35` 鍚庢病銆?
     //    涓ゆ。鍒嗗埆鍦?`HomeMiniBarPlayerAside` 涓?`HomeMiniBarAlbumCover` 涓婄敓鏁堬紝

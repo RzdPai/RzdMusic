@@ -15,6 +15,13 @@
 
 export { MiniBarPlayer } from './src/main/ets/view/MiniBarPlayer';
 export { HomeMiniBarPlayer } from './src/main/ets/view/HomeMiniBarPlayer';
+// 迷你条**材质胶囊**（无界 `MaterialCapsule` 的 V2 移植）：光感来自 HDS 浮动栏的
+// `systemMaterialEffect`，而整条能被父级 `.scale({y: morphSquashY})` 压到 ⇒ 光感 + 弹跳同时成立。
+export {
+  MiniBarMaterialCapsule,
+  CAPSULE_SLACK_H,
+  CAPSULE_SLACK_W
+} from './src/main/ets/view/MiniBarMaterialCapsule';
 // 形变克隆层（挂在壳层）要复用迷你条右侧那一块的**副本**（歌名/歌手 + 播放按钮）——
 // 反编译里 `MainPage` 的元信息克隆/操作区克隆就是这么画的，所以 Aside 也要导出。
 export { HomeMiniBarPlayerAside } from './src/main/ets/view/HomeMiniBarPlayerAside';

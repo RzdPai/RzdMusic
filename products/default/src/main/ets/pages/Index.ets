@@ -56,7 +56,14 @@ import { RecommendPage } from 'recommendation';
 import { EchoReviewPage } from 'recommendation';
 // 銆岀幇鍦ㄥ氨鍚€嶏細搴曟爮绗?2 涓〉绛撅紙鎺ㄨ崘 / **鐜板湪灏卞惉** / 鍥炲搷 / 鎴戠殑锛夈€?
 import { NowPlayingFeedPage } from 'recommendation';
-import { HomeMiniBarPlayer, HomeMiniBarPlayerAside, PlaylistTransitionOverlay } from 'playlist';
+import {
+  CAPSULE_SLACK_H,
+  CAPSULE_SLACK_W,
+  HomeMiniBarPlayer,
+  HomeMiniBarPlayerAside,
+  MiniBarMaterialCapsule,
+  PlaylistTransitionOverlay
+} from 'playlist';
 import { MinePage } from 'setting';
 // 鏂版ā鍧楋細鏈湴闊充箰锛堝鍏ヨ澶囬煶棰戝埌娌欑锛変笌娲涢洩鍚屾瀹㈡埛绔€?
 // 鈿狅笍 hvigor 瀵?HAR 鏄?*鎸夊紩鐢ㄧ紪璇?*鐨勶細娌℃湁浠讳綍浠ｇ爜 import 瀹冧滑鏃讹紝
@@ -83,12 +90,13 @@ import { common } from '@kit.AbilityKit';
 const FLOATING_MINI_BAR_HEIGHT_VP: number = 56;
 
 /**
- * 二级页浮动条**槽高上限**（vp）：给 `LayoutPolicy.matchParent` 当护栏。
+ * ★ 2026-10-20：这个常量**已不参与布局**（保留常量本身只为不断掉历史引用）。
  *
- * 内容由 `HomeMiniBarPlayer.contentHeightVp` 钉死在 {@link FLOATING_MINI_BAR_HEIGHT_VP}(56)，
- * 槽再高也只是"上下各多一点留白"；一旦 matchParent 解析到页面级容器（几百 vp），
- * 不夹住就会把整条页签栏撑爆（胶囊被顶到屏幕外）。
- * 取 `56 + 24 = 80`：HDS 浮动胶囊的内距按 2×12vp 已经很宽，超过它一定是解析错了。
+ * 它原本是"猜 HDS 给 tabBar 的槽高"那套写法的护栏（`LayoutPolicy.matchParent` +
+ * `constraintSize.maxHeight`）。第三轮把内容盒改成"≡ 胶囊盒"（由
+ * {@link MiniBarMaterialCapsule} 的 `barWidth × barHeight` 唯一确定）之后，
+ * **再也没有"槽高"这个量**，也就没有"撑爆"的可能。
+ * ⚠️ 不要再把它接回任何 `constraintSize`：那等于把"猜槽高"请回来。
  */
 const FLOATING_MINI_BAR_SLOT_MAX_HEIGHT_VP: number = 80;
 
@@ -200,6 +208,23 @@ const PLAYER_OVERLAY_Z_INDEX: number = 100;
  * 鍙嶇紪璇戦噷鍏嬮殕灞傛寕鍦?`MainPage` 鐨勬渶涓婂眰锛堜笁涓?lambda锛夛紝姣旀挱鏀鹃〉瀹瑰櫒鏇撮珮銆?
  */
 const PLAYER_CLONE_Z_INDEX: number = 110;
+/**
+ * 主页迷你胶囊（{@link homeMiniCapsule}）在壳层 `Stack` 里的层次。
+ *
+ * 必须：**高于**壳层 `HdsTabs`（它自己 `.zIndex(1)`，浮动底栏在它里面）；
+ * **低于**二级页那条浮动条（`zIndex(20)`）与播放页浮层（{@link PLAYER_OVERLAY_Z_INDEX}）。
+ */
+const HOME_MINI_CAPSULE_Z_INDEX: number = 19;
+/**
+ * 主页迷你胶囊与**页签胶囊**之间的缝（vp）。
+ *
+ * 依据：把迷你条从 HDS 的 `miniBar` 槽搬到我们子树之后，两行之间的间距必须自己给。
+ * 无界的 `MaterialCapsule` 用 `CAPSULE_SLACK_H / 2 = 10` 当留白（`wujie.pa:60229-60233`），
+ * 而 HDS 自己叠两行时的内距没有对外的口径 —— 取 **8**（与 HDS 浮动栏内距 8/12 同档，
+ * 也比 slack 的 10 略小，肉眼看是"贴着但不粘")。
+ * ⚠️ 真机若显太挤/太散，**只调这一个数**（几何账见 {@link homeMiniCapsule}）。
+ */
+const HOME_MINI_CAPSULE_GAP_VP: number = 8;
 /**
  * 鈽?2026-10-17锛氬揩鐓ф敹缂╂诞灞傦紙`ShrinkOverlayHost`锛夌殑灞傛 鈥斺€?**蹇呴』姣斾笂闈㈡墍鏈夋诞灞傞兘楂?*銆?
  *   瀹冧唬琛?姝ｅ湪娑堝け鐨勯偅涓€灞忔挱鏀鹃〉"锛屽帇鍦ㄥ厠闅嗗眰锛?10锛変笌杩蜂綘鏉′箣涓婃墠涓嶄細琚洊浣忋€?
@@ -1496,6 +1521,12 @@ struct Index {
       //    妯悜鐨?`coverRightShiftAt` 鏄粰**鍏冧俊鎭?*閭ｄ竴灞傜殑锛屽鍒版寜閽笂浼氳鎸夐挳
       //    妯潃婊戝嚭鍘?鈥斺€?鏀惰捣鏃惰〃鐜版垚"涓€涓殏鍋滄寜閽粠灞忓箷澶栭杩涙潵"銆?
       .translate({ y: 0 })
+      // ★★★ 2026-10-20（照搬无界的纵向挤压）：无界 `morphMiniMeta` / `morphActions` 都写了
+      //   `.scale({ x: 1, y: this.morphSquashY })`（`飞入浮层宿主与几何插值定稿.md` §五/§六，
+      //   对应字节码 `wujie.pa:155740-155743`）。这一层是"元信息 + 操作区"的克隆，
+      //   **必须**跟胶囊克隆同一个系数，否则关播放器时"背板压了、内容不压"。
+      //   缩放中心 = 本 `Row` 的几何中心（无界也没写 centerX/centerY）。
+      .scale({ x: 1, y: this.expandState.morphSquashY })
     }
     // 鈽呪槄鈽?2026-10-16锛堜笌 `MorphCoverClone()` **鍚屼竴澶勪慨姝?*锛岀悊鐢遍€愬瓧鐩稿悓锛夛細
     //   杩欓噷鍘熸潵鏄?`LayoutPolicy.matchParent` 脳2 鈬?鎷跨殑鏄?*澹冲眰鏍?`Stack`** 鐨勫昂瀵革紝
@@ -1519,6 +1550,114 @@ struct Index {
         Logger.info('RzdPlayerViewport', `clone origin=${point.x},${point.y} sizePx=${size.width}x${size.height}`);
       }
     })
+  }
+
+  /**
+   * ★★★ 2026-10-20（第三轮）：壳层 `HdsTabs` 的 `miniBar` 槽**只放这个 0 高度占位**。
+   *
+   * 判据（为什么可以留空）：
+   *  · HDS 的 `miniBar` 行高是**按内容量**出来的（本仓 `miniBar()` 顶部注释早就记着"不要给它固定高度"）
+   *    ⇒ 给一个 `height(0)` 的 `Column`，那一行就塌成 0，页签胶囊回到单排；
+   *  · 「现在就在听」那一页**一直是这么干的**（`miniBar()` 的第一个分支），真机验过没有空胶囊；
+   *  · 播放器本体已搬到 {@link homeMiniCapsule}（壳层 Stack，zIndex 19），
+   *    两处只留一处 ⇒ 不会出现两份 `MINI_BAR_ID`（§17.3 那个"量到哪一份不确定"的坑）。
+   * ⚠️ 槽空着就**必须**把 `enableMiniBarBackground` 关掉，否则会留一枚空胶囊背板。
+   */
+  @Builder
+  private miniBarSlotPlaceholder() {
+    Column()
+      .width(StyleConstants.FULL_WIDTH)
+      .height(0)
+  }
+
+  /**
+   * ★★★ 2026-10-20（第三轮）：**主页那条迷你条的新宿主** = 我们子树里的材质胶囊
+   * （无界 `MainPage.miniBar()` 的写法：`__Common__() { MiniPlayer(...) }` + HDS 胶囊，
+   * 只是无界把胶囊交给宿主画、我们把胶囊**搬进自己的子树**）。
+   *
+   * ══════════ 为什么必须搬出来（这是本轮的核心结论）══════════
+   * 「光感」只有一个来源：`HdsTabsFloatingStyle.systemMaterialEffect`
+   * （`@hms.hds.hdsBaseComponent.d.ets:5357` ← `HdsTabs.barFloatingStyle` :5582；`CommonMethod` 上没有）。
+   * 「弹一下」只有一种做法：把 `morphSquashY` 乘进 `.scale.y`，而**被压的东西必须在能压到的子树里**。
+   * 住在**壳层** `HdsTabs` 的 `miniBar` 槽里时，HDS 画的那块材质背板是槽的兄弟、在壳层子树里
+   * ⇒ 我们的 `.scale` 只压得到内容、压不到背板（2026-10-18 那一轮的病根）。
+   * ⇒ 唯一同时满足两者的结构：**胶囊自己就是一个 `HdsTabs`，而这个 `HdsTabs` 在我们的子树里**
+   *    —— 也就是无界的 `MaterialCapsule`（`wujie.pa:60082-60279`），本仓实现在
+   *    {@link MiniBarMaterialCapsule}。它内部的 `.scale({y: morphSquashY})` 天然压到
+   *    "材质背板 + 内容"同一个变换域（无界 `morphGlass` 就是这么压的，`wujie.pa:155724-155745`）。
+   *
+   * ══════════ 几何账（每一项都能在代码里指认，可一眼算）══════════
+   *   记  M = {@link homeTabBarBottomMarginVp}（页签胶囊到窗口底）
+   *       I = {@link pageBottomInsetVp}（页盒底内缩 = 系统导航条高；壳层根 Stack 没有
+   *           `ignoreLayoutSafeArea`，所以**页盒底 = 窗口底 − I**）
+   *       T = 页签胶囊高度 = 壳层 `HdsTabs.barHeight(56)`
+   *       G = {@link HOME_MINI_CAPSULE_GAP_VP}（迷你胶囊与页签胶囊之间的缝）
+   *       m = `CAPSULE_SLACK_H / 2`（胶囊在本组件盒内的下留白）
+   *   页签胶囊：底 = 窗口底 − M ⇒ 顶 = 窗口底 − M − T
+   *   迷你胶囊：底应为 `页签胶囊顶 − G` = 窗口底 − M − T − G
+   *   本组件盒（高 `barHeight + slackH`）底对齐页盒、下移 `X`：
+   *       胶囊底 = 页盒底 − X + m = (窗口底 − I) − X + m
+   *   令两者相等 ⇒ **X = (M − I) + T + G + m**
+   *   代入常态（M ≈ I ≈ 28、T = 56、G = 8、m = 10）⇒ X = **74vp**。
+   *   ⚠️ `M − I` 保留成算式而不是当 0：换机型/换装饰档位时这两项可能不等。
+   *   胶囊**可见矩形**（给 `MINI_BAR_ID` / 形变起点用的那一条）：
+   *       宽 = `floatingMiniBarWidthVp()`（**与二级页同一个函数** ⇒ 两条一样宽，不再"一大一小"）
+   *       高 = `FLOATING_MINI_BAR_HEIGHT_VP`(56)（同上，与二级页同高）
+   *   内容盒 ≡ 胶囊盒（都在 {@link MiniBarMaterialCapsule} 里）⇒ 内容既然居中就没有第二个留白口径。
+   *
+   * ══════════ 静止态 / 动画态 ══════════
+   *   静止：`morphSquashY === 1` ⇒ `.scale` 是恒等变换，版面与"没有这件事"逐字一致。
+   *   关闭播放器：`morphLand()` 把真实迷你条放回来，紧跟 `squashLandAnim()` 压 0.86（110ms）
+   *   再 320ms `cubic-bezier(0.34,1.56,0.64,1)` 过冲回弹 ⇒ **真实那条整条一起弹**（不是克隆）。
+   */
+  @Builder
+  private homeMiniCapsule() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      // ⚠️ ArkTS 限制：带尾随 builder 的结构体调用（`Comp({...}) { ... }`）**不能再挂属性方法**
+      //   （否则报 `Declaration or statement expected` + `Cannot find name 'margin'`）
+      //   ⇒ 外面套一层 `Stack` 来承载 `.margin / .onAreaChange / .visibility`。
+      Stack() {
+        MiniBarMaterialCapsule({
+          barWidth: this.floatingMiniBarWidthVp(),
+          barHeight: FLOATING_MINI_BAR_HEIGHT_VP,
+          // 缺省 `-1` = `slackH / 2`（无界口径）⇒ 胶囊在盒内居中 ⇒ squash 绕胶囊中心。
+          material: this.ambientTitleMaterial()
+        }) {
+          this.miniBar()
+        }
+      }
+      .margin({ bottom: this.homeMiniCapsuleBottomVp() })
+      // 诊断（`hdc shell hilog | grep RzdHomeMiniCapsule`）：盒/胶囊/离底的三个数一次打全。
+      .onAreaChange((_oldArea: Area, area: Area): void => {
+        Logger.info('RzdHomeMiniCapsule',
+          `capsuleBox=${areaLengthToVp(area.width)}x${areaLengthToVp(area.height)} ` +
+            `barW=${this.floatingMiniBarWidthVp()} barH=${FLOATING_MINI_BAR_HEIGHT_VP} ` +
+            `gap=${HOME_MINI_CAPSULE_GAP_VP} ` +
+            `tabMargin=${this.homeTabBarBottomMarginVp()} pageInset=${this.pageBottomInsetVp()} ` +
+            `boxBottom=${this.homeMiniCapsuleBottomVp()} ` +
+            `squashY=${this.expandState.morphSquashY} ` +
+            `hidden=${this.expandState.sourceBarHidden} tabIndex=${this.tabState.tabIndex}`);
+      })
+      .visibility(this.expandState.sourceBarHidden ? Visibility.Hidden : Visibility.Visible)
+    }
+    .width(StyleConstants.FULL_WIDTH)
+    .height(StyleConstants.FULL_HEIGHT)
+    .alignContent(Alignment.Bottom)
+    // 条件渲染而非常驻：二级页 / 「现在就在听」页不挂这一层（`MINI_BAR_ID` 全局只能有一份）。
+    .hitTestBehavior(HitTestMode.Transparent)
+    .zIndex(HOME_MINI_CAPSULE_Z_INDEX)
+  }
+
+  /**
+   * 迷你胶囊的"离页盒底"距离（vp）——推导见 {@link homeMiniCapsule} 的几何账：
+   * `X = (M − I) + T + G + m`。
+   * @returns 本组件盒底相对页盒底的位移（vp，向上为正）
+   */
+  private homeMiniCapsuleBottomVp(): number {
+    const tabH: number = 56;
+    const slackBottom: number = CAPSULE_SLACK_H / 2;
+    return (this.homeTabBarBottomMarginVp() - this.pageBottomInsetVp()) +
+      tabH + HOME_MINI_CAPSULE_GAP_VP + slackBottom;
   }
 
   /**
@@ -1557,6 +1696,10 @@ struct Index {
           x: this.expandState.morphOverlayCoverBridge().x,
           y: this.expandState.morphOverlayCoverBridge().y
         })
+        // ★★★ 2026-10-20（照搬无界）：`morphCover` 的 `.scale.y = coverScaleAt(t) × morphSquashY`
+        //   （`飞入浮层宿主与几何插值定稿.md` §三；字节码 `wujie.pa:155724-155745` 同一处写法）。
+        //   我们这一层的尺寸是**直接给宽高**（不是定边盒 + coverScale），所以只剩 squash 这一项。
+        .scale({ x: 1, y: this.expandState.morphSquashY })
     }
     // 鈽呪槄鈽?2026-10-16锛?*鐓ф棤鐣屾妸杩欎竴灞傛樉寮忛摵婊″叏绐楀彛**锛夛細
     //   鍘熸潵杩欓噷鏄?`LayoutPolicy.matchParent` 脳2 鈥斺€?閭ｆ槸鎷?*鐖跺鍣紙澹冲眰鏍?`Stack`锛夌殑灏哄**锛?
@@ -1849,26 +1992,47 @@ struct Index {
         //   鐢?`None` 浼氶噺涓嶅埌 鈬?鍔ㄧ敾鐩存帴閫€鍖栥€?
         HomeMiniBarPlayer({
           showPreviousTrack: false,
-          // ★★★ 2026-10-18（晚，用户：「你是不是忘记给主页的这个小播放条加上光感了（因为二级页面正常）」）：
-          //   迷你条那格背板**交给 HDS 画**（下面 `barFloatingStyle.miniBar.enableMiniBarBackground: true`），
-          //   本组件因此**一个像素的蒙版都不许自绘** —— 官方材质就是被那层 80% 不透明的自绘背板洗白的。
-          //   ⚠️ 这两处**必须成对**：`enableMiniBarBackground: true` + `showSelfDrawnBackplate: false`。
-          showSelfDrawnBackplate: false
+          // ★★★ 2026-10-18（用户：「你是不是忘记给主页的这个小播放条加上光感了（因为二级页面正常）」）：
+          //   迷你条那格背板**交给宿主画**，本组件因此**一个像素的蒙版都不许自绘** ——
+          //   官方材质就是被那层 80% 不透明的自绘背板洗白的。
+          //   （宿主已从"壳层 HdsTabs 的 miniBar 槽"换成"我们子树里的
+          //     {@link MiniBarMaterialCapsule}"，见下面 2026-10-20 那段；结论不变：本体不自绘。）
+          // ★★★ 2026-10-20（第三轮，用户：「看看无界，它有光感又有弹一下」）—— 主页这条的**最终判据**：
+          //   · 无界首页那条迷你条的本体**也没有背板**：`MainPage.#miniBar`（`wujie.pa:148147-148177`）
+          //     = `__Common__() { MiniPlayer(...) }`；背板由**宿主**给，材质来自
+          //     `HdsTabsFloatingStyle.systemMaterialEffect`。
+          //   · 无界的"弹一下"挂在 `MaterialCapsule` 那层父 `Stack` 的
+          //     `.scale({y: morphSquashY})` 上（`MainPage.morphGlass`，`wujie.pa:155724-155745`）。
+          //   ⇒ 本轮落地（结构上照搬，不再反复）：
+          //     ① 本体仍然**不自绘背板**（`showSelfDrawnBackplate: false`）；
+          //     ② 背板 + 材质由外层 {@link MiniBarMaterialCapsule}（我们子树里的 `HdsTabs`）画；
+          //     ③ 挤压由那一层的 `.scale({y: morphSquashY})` 统一负责
+          //        ⇒ 关闭播放器落位时**整条（材质背板 + 封面 + 元信息 + 按钮）**一起压下 0.86、
+          //        再 320ms 过冲回弹（无界 `squashLand` / `animateSquash` 同一套时序）。
+          //   ⚠️ 2026-10-16/18 那两版注释（"开 HDS 背板就压不到" / "改自绘背板"）都已作废：
+          //     现在槽是空的（{@link miniBarSlotPlaceholder}），背板在我们自己子树里，两者不再冲突。
+          //   判据（真机一眼验）：`hdc shell hilog | grep -E "RzdHomeMiniCapsule|RzdMiniBarCapsule"` ——
+          //     `capsuleBox`/`content box` 两行必须在**同一位置**出现、且 `squashY` 在关闭播放器时
+          //     先 <1 再回 1。
+          //   ★ 挤压只在这里乘一次：外层已乘，本组件内若再乘 = 0.86² = 0.74（弹过头）。
+          showSelfDrawnBackplate: false,
+          contentOwnsSquash: false
         })
           .visibility(this.expandState.sourceBarHidden ? Visibility.Hidden : Visibility.Visible)
-          // ★★★ 2026-10-18（晚）：主页这条迷你条的"光感账"一行（`hdc shell hilog | grep RzdHomeMiniBarMaterial`）。
+          // ★★★ 2026-10-20（第三轮）：主页这条的"光感账"一行（`hdc shell hilog | grep RzdHomeMiniBarMaterial`）。
           //   判读（以本轮为准，上一版的判读口径作废）：
-          //     · `plate=hds-follow-tabbar` ⇒ 迷你条那格背板由 HDS 画，且用的是**同一份**
-          //       `barFloatingStyle.systemMaterialEffect`（= `ambientTitleMaterial()`）⇒ 用户要的"光感"在这一支；
-          //     · `selfPlate=off` ⇒ 我们这层没有自绘蒙版，不存在"材质被洗白"；
-          //     · `followTabBar=true|false` ⇒ 与 `miniBar()` 里"这一页到底有没有真播放器"同义
-          //       （「现在就在听」那页给的是 0 高度占位 ⇒ false，避免页签上方多一枚空胶囊）；
-          //     · `squashY` ⇒ 关闭播放器时的挤压系数（`.scale` 仍挂在**同时包含内容**的根 `Stack` 上）。
+          //     · `plate=our-capsule-hds` ⇒ 背板/材质由**我们子树里的** {@link MiniBarMaterialCapsule}
+          //       画（它内部仍是一个 `HdsTabs` 浮动栏 + `systemMaterialEffect`）⇒ 光感在这一支，
+          //       而且这一支能被 `.scale({y: squashY})` 压到 ⇒ 与二级页那条**同一套**；
+          //     · `selfPlate=off` ⇒ 本体没有自绘蒙版，不存在"材质被洗白"；
+          //     · `followTabBar` 不在这里判（壳层 `miniBar` 槽已空），真正的开关是
+          //       `miniBarRendersPlayer()`：它决定壳层要不要挂 {@link homeMiniCapsule}；
+          //     · `squashY` ⇒ 关闭播放器时的挤压系数（现在压在胶囊那层，不等于 1 就是"正在弹"）。
           .onAppear((): void => {
             Logger.info('RzdHomeMiniBarMaterial',
               `material=hds systemMaterialEffect ambient=${this.ambientLevelIndex()} ` +
-                `plate=hds-follow-tabbar selfPlate=off ` +
-                `followTabBar=${this.miniBarRendersPlayer()} ` +
+                `plate=our-capsule-hds selfPlate=off ` +
+                `rendersPlayer=${this.miniBarRendersPlayer()} ` +
                 `immersiveDecor=${this.windowInfo.immersiveDecor} ` +
                 `squashY=${this.expandState.morphSquashY} keyboardVp=${this.keyboardBottomVp()}`);
           })
@@ -1955,49 +2119,38 @@ struct Index {
       //   「横向 Tabs 且 barPosition == BarPosition.End 的底部 TabBar」里 ⇒ 结论：
       //   这条浮动条只有住进 `HdsTabs` 的浮动底栏，才拿得到真正的官方材质。
       //   ⚠️ 单 Tab + **非空** TabContent：空 TabContent 在真机上 HDS 不画胶囊背板（2026-10-01 实测过）。
-      HdsTabs({ barPosition: BarPosition.End }) {
-        TabContent() {
-          // 非空占位：只为让 HDS 认下"这条栏有内容"。它整屏铺开，所以必须
-          // `hitTestBehavior(None)` —— 不许吃掉下面 NavDestination 的点击。
-          Column()
-            .width(StyleConstants.FULL_WIDTH)
-            .height(StyleConstants.FULL_HEIGHT)
-            .hitTestBehavior(HitTestMode.None)
+      // ★★★★ 2026-10-20（第三轮）：宿主换成 {@link MiniBarMaterialCapsule} —— 无界
+      //   `design/components/MaterialCapsule.ets` 的 V2 移植（照抄，不自造）：
+      //     `HdsTabs` + `TabContent().tabBar(内容)` + `barOverlap(true)` + `barPosition(End)`
+      //     + `vertical(false)` + `barHeight(barHeight)` + `barWidth(barWidth)`
+      //     + `barFloatingStyle{ systemMaterialEffect, barBottomMargin: slackH/2, gradientMask: 透明 }`。
+      //   为什么不再是"把内容塞进 HdsTabs 的 tabBar 槽"：
+      //     ① 光感：材质仍然来自 `HdsTabsFloatingStyle.systemMaterialEffect`（SDK :5357，唯一合法载体）；
+      //     ② 挤压：整个 `HdsTabs` 现在落在**我们自己的子树**里，胶囊那层 `Stack` 上的
+      //        `.scale({y: morphSquashY})` 能**压到 HDS 画的材质背板**（无界 `morphGlass`
+      //        `wujie.pa:155724-155745` 就是这么压的）；住在壳层 `HdsTabs` 的 `miniBar` 槽里时做不到
+      //        （背板是槽的兄弟，不在我们子树里）—— 上一轮的病根。
+      //     ③ ②级页"内容偏右下"：内容盒 ≡ 胶囊盒 = `barWidth × barHeight`（同一个函数、同一组数），
+      //        不再需要"猜 HDS 给的槽高"⇒ 居中是一眼可算的，不是调出来的。
+      // ⚠️ ArkTS 限制：带尾随 builder 的结构体调用不能再挂属性方法
+      //   （否则报 `Declaration or statement expected` + `Cannot find name 'id'`）
+      //   ⇒ 外面套一层 `Stack` 承载 `.id / .clip / .onAppear / .onAreaChange`。
+      Stack() {
+        MiniBarMaterialCapsule({
+          barWidth: this.floatingMiniBarWidthVp(),
+          barHeight: FLOATING_MINI_BAR_HEIGHT_VP,
+          // 条底到"本组件盒底"的距离：用法与 `barFloatingStyle.barBottomMargin` 完全同义
+          // （SDK :5311「the distance between tab bar and bottom of tabs」）⇒ 键盘避让口径不变。
+          bottomMargin: this.floatingMiniBarBottomMarginVp(),
+          // 材质档位与首页那条共用一份（`ambientTitleMaterial()`）⇒ 两条是同一套光感。
+          material: this.ambientTitleMaterial()
+        }) {
+          this.floatingMiniBarContent()
         }
-        .tabBar(this.floatingMiniBarTabBarBox())
       }
-      // 官方三条件（与首页那条 HdsTabs 底栏同一套）：barPosition(End) + barOverlap(true) + vertical(false)。
-      .barMode(BarMode.Fixed)
-      .barHeight(FLOATING_MINI_BAR_HEIGHT_VP)
-      .barPosition(BarPosition.End)
-      .barOverlap(true)
-      .vertical(false)
-      // 只有一个页签、没有可切的东西：关掉左右滑动，别让内容区的 Swiper 抢页面的手势。
-      .scrollable(false)
-      // `barOverlap` 自带一层隐式厚模糊，会盖住材质背板 ⇒ 一律关掉，材质交回 HDS 自己画。
-      .barBackgroundColor(Color.Transparent)
-      .barBackgroundBlurStyle(BlurStyle.NONE)
-      .barFloatingStyle({
-        // 宽度口径：与内容**同一个函数**（`floatingMiniBarContent()` 里也是 `floatingMiniBarWidthVp()`），
-        // 三档同值 ⇒ 胶囊与内容严格重合，不会再有「HDS 一大只 + 我们小一圈」的一大一小。
-        barWidth: {
-          smallWidth: this.floatingMiniBarWidthVp(),
-          mediumWidth: this.floatingMiniBarWidthVp(),
-          largeWidth: this.floatingMiniBarWidthVp()
-        },
-        // 条底到**页盒底**的距离（宿主盒 = 页盒 100%；页盒底 = 窗口底 − 系统避让）。
-        // ★★★ 2026-10-18：常态 = `FLOATING_MINI_BAR_BOTTOM_GAP_VP`(12)；键盘弹起时由 HDS 自己把胶囊
-        //   抬到键盘上沿之上 `FLOATING_MINI_BAR_KEYBOARD_GAP_VP`(10) —— 见 {@link floatingMiniBarBottomMarginVp}
-        //   与文件顶部那段「三、现在的账」。**宿主不再有 `.offset`**，整块底栏不会被位移。
-        barBottomMargin: this.floatingMiniBarBottomMarginVp(),
-        // 不跟随握持手左右偏置：两侧留白已由 barWidth 精确给出。
-        adaptToHandedness: false,
-        // 材质档位复用标题栏那一份（`ambientTitleMaterial()`：跟随环境光档位、IMMERSIVE 家族）。
-        systemMaterialEffect: this.ambientTitleMaterial()
-      })
-      // 宿主盒给满页盒：HDS 按 `barBottomMargin` 把它自己的胶囊放到盒底之上 12vp 处。
-      .width(StyleConstants.FULL_WIDTH)
-      .height(StyleConstants.FULL_HEIGHT)
+      // ⚠️ 下面这些 HdsTabs 属性**已整段移走**：它们现在住在 `MiniBarMaterialCapsule`
+      //   自己的 `build()` 里（逐条对照 `wujie.pa:60093-60240`，见那个文件的类注释表）。
+      //   这里**不要**再写一遍（两处各写一份 = 早晚漂移）。
       // 涓庨椤靛簳鏍忓悓涓€灞忓箷浣嶇疆锛氭暣鍧楀涓诲悜涓嬭鍑哄簳閮ㄩ伩璁╅偅涓€浠斤紙barBottomMargin 宸插綊闆讹級
       // 鈽?閿洏閬胯锛堢敤鎴?2026-10-12銆屼簩绾ч〉闈㈡挱鏀炬潯鍔犱笂閿洏閬胯銆嶏級锛氶敭鐩樺脊鍑烘椂鍦ㄨ繖浠藉亸绉讳笂
       //   鍐嶅噺鎺?`floatingMiniBarKeyboardLiftVp()`锛? 閿洏楂樺害 + 8 鈭?甯告€佹棦鏈夐棿闅欙級鈬?鏁存潯瀹夸富
@@ -2009,25 +2162,34 @@ struct Index {
       // 涓嶈瑁侊細HDS 鐨勬潗璐ㄨ儗鏉?鎶樺皠鑼冨洿姣斿唴瀹圭洅澶э紝瑁佷簡浼氱己涓€鍦堛€?
       .clip(false)
       .onAppear((): void => {
-        // ⚠️ 这行必须与代码**同义**：`hds-systemMaterialEffect` + `officialRegion=yes` 只有在
-        //    宿主真的是 `HdsTabs` 浮动底栏时才成立（否则就是假日志，§183 踩过）。
+        // ⚠️ 这行必须与代码**同义**（假日志比没日志更害人，§183 踩过）：
+        //   宿主已不是"壳层 HdsTabs 的 tabBar 槽"，而是我们子树里的 `MiniBarMaterialCapsule`
+        //   （它内部仍是一个 `HdsTabs` 浮动底栏）⇒ 光感来源仍是 `systemMaterialEffect`，
+        //   但"官方区域"这句话已不适用，改成如实描述。
         Logger.info('RzdSecondaryMiniMaterial',
-          `mode=hds-systemMaterialEffect officialRegion=yes host=single-tab-hdstabs ` +
-            `tabContent=nonEmpty barHeight=${FLOATING_MINI_BAR_HEIGHT_VP} ` +
-            `contentH=${FLOATING_MINI_BAR_HEIGHT_VP} contentPin=pinned align=stackCenter ` +
-            `barWidth=${this.floatingMiniBarWidthVp()} bottomGap=${FLOATING_MINI_BAR_BOTTOM_GAP_VP} ` +
-            `keyGap=${FLOATING_MINI_BAR_KEYBOARD_GAP_VP} selfPlate=off ` +
-            `ambient=${this.ambientLevelIndex()} singleVisibleBar=true`);
+          `mode=capsule-hds-material host=our-subtree-hdstabs ` +
+            `barWidth=${this.floatingMiniBarWidthVp()} barHeight=${FLOATING_MINI_BAR_HEIGHT_VP} ` +
+            `slackW=${CAPSULE_SLACK_W} slackH=${CAPSULE_SLACK_H} ` +
+            `contentBox=barWidth×barHeight align=stackCenter selfPlate=off ` +
+            `bottomGap=${FLOATING_MINI_BAR_BOTTOM_GAP_VP} keyGap=${FLOATING_MINI_BAR_KEYBOARD_GAP_VP} ` +
+            `barBottomMargin=${this.floatingMiniBarBottomMarginVp()} ` +
+            `ambient=${this.ambientLevelIndex()} squashY=${this.expandState.morphSquashY} singleVisibleBar=true`);
       })
       .onAreaChange((_oldArea: Area, area: Area): void => {
-        // 这里的 width/height 是**宿主盒**（= 页盒 100%），不是胶囊；胶囊口径看 barWidth/barHeight 两项。
+        // 这里的 width/height 是**胶囊组件盒**（= 胶囊 + slackW/slackH），不是胶囊本身；
+        // 胶囊 = `barWidth × barHeight`，位置 = 盒内居中（横向）+ 距盒底 `barBottomMargin`（纵向）。
+        const boxW: number = areaLengthToVp(area.width);
+        const boxH: number = areaLengthToVp(area.height);
         Logger.info('RzdSecondaryMiniMaterial',
-          `hostBox width=${area.width} height=${area.height} barWidth=${this.floatingMiniBarWidthVp()} ` +
-            `barHeight=${FLOATING_MINI_BAR_HEIGHT_VP} bottomGap=${FLOATING_MINI_BAR_BOTTOM_GAP_VP} ` +
-            `keyGap=${FLOATING_MINI_BAR_KEYBOARD_GAP_VP} keyboardVp=${this.keyboardBottomVp()} ` +
-            `lift=${this.floatingMiniBarKeyboardLiftVp()} hostOffset=${this.floatingMiniBarHostOffsetYVp()} ` +
+          `capsuleBox width=${boxW} height=${boxH} ` +
+            `expectW=${this.floatingMiniBarWidthVp() + CAPSULE_SLACK_W} ` +
+            `expectH=${FLOATING_MINI_BAR_HEIGHT_VP + CAPSULE_SLACK_H} ` +
+            `barWidth=${this.floatingMiniBarWidthVp()} barHeight=${FLOATING_MINI_BAR_HEIGHT_VP} ` +
+            `bottomGap=${FLOATING_MINI_BAR_BOTTOM_GAP_VP} keyGap=${FLOATING_MINI_BAR_KEYBOARD_GAP_VP} ` +
+            `keyboardVp=${this.keyboardBottomVp()} lift=${this.floatingMiniBarKeyboardLiftVp()} ` +
+            `hostOffset=${this.floatingMiniBarHostOffsetYVp()} ` +
             `barBottomMargin=${this.floatingMiniBarBottomMarginVp()} ` +
-            `pageBottomInset=${this.pageBottomInsetVp()} ` +
+            `pageBottomInset=${this.pageBottomInsetVp()} squashY=${this.expandState.morphSquashY} ` +
             `ambient=${this.ambientLevelIndex()}`);
       })
       // 鈿狅笍 **涓嶈**鍦ㄨ繖閲屽啀鍐欎竴涓?`.margin({ bottom: ... })`锛氱搴曡窛绂诲凡缁忕敱
@@ -2044,51 +2206,17 @@ struct Index {
   }
 
   /**
-   * HDS 浮动底栏的 tabBar 内容盒：宽 = 胶囊宽（与 `barFloatingStyle.barWidth` 同一个函数），
-   * 高 = **HDS 真正给的那一份槽高**（`LayoutPolicy.matchParent`，上下限都兜底成
-   * `FLOATING_MINI_BAR_HEIGHT_VP` / `FLOATING_MINI_BAR_SLOT_MAX_HEIGHT_VP`）。
+   * ★★★ 2026-10-20（第三轮）：原来这里的 `floatingMiniBarTabBarBox()` **已删除**。
    *
-   * ★★★ 2026-10-18（晚，用户：「二级页面播放条没偏，但是**上面的内容**偏了」）：
-   *   上一版这里写死 `height(56)`，理由是"HDS 是按页签栏内容排胶囊的，写死 56 之后胶囊高度就是 56"。
-   *   这只说对了一半：写死高度确实把**内容**钉住了，但 HDS 给 tabBar 的**槽**并不等于 56
-   *   （槽高 / 胶囊内距由 HDS 自己算），而原来的 `Column` **主轴默认顶对齐**（`FlexAlign.Start`）
-   *   ⇒ 内容贴槽的上沿 ⇒ 观感正是"内容整体偏上、胶囊下缘留的空隙比上缘大"。
-   *   ⇒ 现在把「钉住」和「居中」拆成两件事，各自可指认：
-   *     · **钉住**：`HomeMiniBarPlayer.contentHeightVp = FLOATING_MINI_BAR_HEIGHT_VP`（内容 = 56）；
-   *     · **居中**：这一层 `Stack({ alignContent: Alignment.Center })`（默认就是 Center）。
-   *   ⇒ 上下留白 **= (槽高 − 56) / 2**，一眼可算，不再靠 `.offset` 凑。
-   * ⚠️ **不要**改成 `clip(true)` 去夹内容（会切掉封面一圈）。
+   * 它的历史使命是"猜 HDS 给 tabBar 的**槽高**"（`LayoutPolicy.matchParent` + `constraintSize`
+   * 上下限 + `alignContent: Center`），再用 `(槽高 − 56) / 2` 反推留白 —— 那正是
+   * 「内容偏右下」的来源：槽高不等于胶囊高，居中对象错了，就只能靠调数值凑。
+   *
+   * 现在**内容盒 ≡ 胶囊盒**：内容直接画在 {@link MiniBarMaterialCapsule} 的 `tabBar`
+   * builder 里，盒子由 `barWidth × barHeight` 给出（同一个函数、同一组数），
+   * 内部 `Stack(alignContent: Center)` ⇒ 居中是一眼可算的，不需要任何"槽高"假设。
+   * ⚠️ 不要再把 `matchParent` / `constraintSize` 那一套搬回来。
    */
-  @Builder
-  private floatingMiniBarTabBarBox() {
-    // ★★★ 2026-10-18（晚）：槽高 / 设计高 / 内容高 三件事对齐，并且**显式垂直居中**：
-    //   ① `barHeight(FLOATING_MINI_BAR_HEIGHT_VP)` —— HDS 槽的设计高度（见 {@link floatingMiniBar}）；
-    //   ② 本内容盒：`LayoutPolicy.matchParent` 吃 HDS **真正给的那一份槽高**，
-    //      `constraintSize.minHeight` 兜底成同一个常量（matchParent 万一解析不出来也不会塌成 0），
-    //      `constraintSize.maxHeight` 夹一层上限（解析到页面级容器时宁可多留白，也不把整条栏撑爆）；
-    //   ③ `HomeMiniBarPlayer.contentHeightVp = FLOATING_MINI_BAR_HEIGHT_VP` —— 内容钉在设计高度。
-    //   `Stack` 的 `alignContent` 默认就是 `Alignment.Center` ⇒ 上下留白 = (槽高 − 内容高) / 2。
-    Stack({ alignContent: Alignment.Center }) {
-      this.floatingMiniBarContent()
-    }
-    .width(this.floatingMiniBarWidthVp())
-    .height(LayoutPolicy.matchParent)
-    .constraintSize({
-      minHeight: FLOATING_MINI_BAR_HEIGHT_VP,
-      maxHeight: FLOATING_MINI_BAR_SLOT_MAX_HEIGHT_VP
-    })
-    // 诊断（`hdc shell hilog | grep RzdMiniBarGeom`）：槽高 / 设计高 / 每侧"理想"留白 / 盒顶坐标。
-    // 与 `HomeMiniBarPlayer` 那行 `content …` 的**实测**高与 `y` 一对，就能算出真实的上/下留白：
-    //   padTop = content.y − boxTop；padBottom = slotH − padTop − contentH。
-    .onAreaChange((_oldArea: Area, area: Area): void => {
-      const slotHVp: number = areaLengthToVp(area.height);
-      Logger.info('RzdMiniBarGeom',
-        `box slotH=${slotHVp} designH=${FLOATING_MINI_BAR_HEIGHT_VP} ` +
-          `padEachIdeal=${(slotHVp - FLOATING_MINI_BAR_HEIGHT_VP) / 2} ` +
-          `boxTop=${areaLengthToVp(area.globalPosition.y)} slotW=${areaLengthToVp(area.width)} ` +
-          `capsuleW=${this.floatingMiniBarWidthVp()} pageInset=${this.pageBottomInsetVp()}`);
-    })
-  }
 
   /**
    * 瀹樻柟娴姩鏍忛噷**鍞竴鍙鐨勫唴瀹?*锛堥〉绛炬爮 CustomBuilder锛夈€?
@@ -2118,9 +2246,12 @@ struct Index {
       // ★★★ 2026-10-18（晚）：**把内容钉在设计高度** `FLOATING_MINI_BAR_HEIGHT_VP`(56)。
       //   `HomeMiniBarPlayer` 的自然高度 = 封面 + 上下各 8vp 内距：常规态封面 44 ⇒ **60vp**
       //   （沉浸式自由窗口那一档封面 40 ⇒ 56vp），与设计高度 56 差 4vp。
-      //   不钉住的话"谁比谁高"取决于窗口装饰档位，钉住之后**唯一变量只剩 HDS 的槽高**，
-      //   上下留白恒等于 `(槽高 − 56) / 2`（算式见 {@link floatingMiniBarTabBarBox}）。
-      contentHeightVp: FLOATING_MINI_BAR_HEIGHT_VP
+      //   不钉住的话"谁比谁高"取决于窗口装饰档位；钉住之后**唯一变量只剩胶囊高度**，
+      //   内容盒 = 胶囊盒 = 56 ⇒ 上下留白恒为 0（内容自己居中，见 `MiniBarMaterialCapsule.BarContent`）。
+      contentHeightVp: FLOATING_MINI_BAR_HEIGHT_VP,
+      // ★★★ 2026-10-20：挤压交给 {@link MiniBarMaterialCapsule} 那一层（它压在"官方材质背板 + 内容"
+      //   同一个变换域上）。这里若再压一次，两个 0.86 相乘 = 0.74 —— 弹过头，是"改一改就压死"的判据。
+      contentOwnsSquash: false
     })
       // 鈽呪槄 鐢ㄦ埛 2026-10-11 瀹氳锛氥€岄敊浣嶇殑鏄挱鏀炬潯涓婄殑**鍏冪礌**鑰屼笉鏄挱鏀炬潯鏈韩銆嶃€?
       //   鑳跺泭瀹藉害鐢?`barFloatingStyle.barWidth` 缁欏嚭锛? 绐楀彛瀹?鈭?涓や晶鐣欑櫧 side锛夛紝HDS 鎶婂畠**灞呬腑**鐢伙紱
@@ -2130,7 +2261,12 @@ struct Index {
       // 鈽呪槄 2026-10-12 鏂规 A 瀹為獙锛氬唴瀹瑰 = 鑳跺泭瀹斤紙涓?barFloatingStyle.barWidth 鍚屼竴鍑芥暟鍚屽彛寰勶級
       //   璇婃柇渚濇嵁锛堝彟涓€妯″瀷浜ゅ弶璇荤爜锛夛細鍐呭鐩掑師鏈?= 瀹夸富鐩?= 绐楀彛瀹斤紝姣旇兌鍥婂 2脳side 涓斿乏瀵归綈锛?
       //   鍙充晶鎸夐挳绨囪鎺ㄥ埌鑳跺泭鍙崇紭涔嬪 鈬?銆屽厓绱犺窇鍒板彸涓嬭銆嶃€傗憽 鑻ヨ繖鐗堜粛鐒舵洿绯燂紝涓€鍙ヨ瘽鎴戠珛鍒诲洖閫€銆?
-      .width(this.floatingMiniBarWidthVp())
+      // ★★★ 2026-10-20：**内容盒 ≡ 胶囊盒**（都在 `MiniBarMaterialCapsule` 里，由 `barWidth × barHeight`
+      //   唯一确定）⇒ 这里只需要"铺满内容盒"，宽度**不再**由本文件算第二遍。
+      //   历史：这里曾写 `width(this.floatingMiniBarWidthVp())`（内容宽 == 胶囊宽）——
+      //   宽度那一维是对的，错在高度吃的是 HDS 的槽高而不是胶囊高 ⇒ 观感"偏右下"。
+      .width(StyleConstants.FULL_WIDTH)
+      .height(StyleConstants.FULL_HEIGHT)
       // 鈽呪槄 鐢ㄦ埛 2026-10-11锛氥€屼簩绾ч〉闈㈡挱鏀惧櫒渚濇棫閿欎綅鈥﹀畠鏄窇鍒板彸涓嬭浜嗐€嶁€斺€?
       //   缁撹锛?*涓嶈鏀瑰唴瀹圭殑瀹介珮**锛堜竴鏀瑰氨涓?HDS 鐨勮兌鍥婂畾浣嶆墦鏋讹紝鍏冪礌鏁翠綋鍙充笅鍋忥級锛?
       // 鈽呪槄 GLM5.3锛坧rovider=zai锛夎瘖鏂?2026-10-12锛欻DS 娴姩鑳跺泭缁?tabBar 鐨?*鍐呭妲藉彧鏈夎兌鍥婇偅涔堥珮锛堚増40vp锛?*锛?
@@ -2397,9 +2533,28 @@ struct Index {
             // 鏅烘劅鎻″Э锛氳窡闅忔彙鎸佹墜璋冩暣娴姩鏉″乏鍙冲亸缃?
             adaptToHandedness: true,
             miniBar: {
+              // ★★★★ 2026-10-20（第三轮）：`miniBar` 槽**只留 0 高度占位**，不再画播放器。
+              //
+              //  为什么（一句话）：槽里的背板是**壳层 HdsTabs 自己的子树**，我们 `.scale` 压不到它
+              //  ⇒ 住在这里的迷你条永远拿不到"材质背板跟着弹一下"。而"光感"又只能来自
+              //  `HdsTabsFloatingStyle.systemMaterialEffect`（`CommonMethod` 上没有这个属性）
+              //  ⇒ 唯一出路是"胶囊自己就是一个 HdsTabs、且这个 HdsTabs 在我们的子树里"
+              //  = 无界的 `MaterialCapsule`（`wujie.pa:60082-60279`）。
+              //  ⇒ 播放器本体搬到 {@link homeMiniCapsule}（壳层 Stack，zIndex 19），
+              //    与二级页那条**同一个组件、同一套尺寸口径**。
+              //
+              //  ⚠️ `enableMiniBarBackground` 必须 **false**：槽里已经没有播放器，
+              //    开着它会留下一枚**空胶囊背板**（本文件顶部第 ③ 条就是记这个）。
+              //     这也顺手解决了"双背板/材质被洗白"——槽里一个像素都不画。
+              //  ⚠️ `enableMiniBarClip` 必须 **false**：我们的胶囊有 slack 外溢，
+              //    真机一旦开启裁剪就会把材质边缘切掉一圈。
+              //  ⚠️ 槽高由这块 0 高度的 Column 决定（HDS 按内容量高度）⇒ 只剩页签一排，
+              //    与「现在就在听」那一页**逐字同一个写法**（那条路径真机已验过）。
               miniBarBuilder: (): void => {
-                this.miniBar();
+                this.miniBarSlotPlaceholder();
               },
+              enableMiniBarBackground: false,
+              enableMiniBarClip: false,
               // 鈽?鍙屽眰搴曟爮鐨勫叧閿細`barLayoutMode = VERTICAL` 鎵嶆妸杩蜂綘鏉′笌椤电鎺掓垚涓婁笅涓ゆ帓銆?
               //   璇ュ瓧娈垫槸 @since 6.1.1(24)锛屾墍浠ュ伐绋?targetSdkVersion 蹇呴』 鈮?24
               //   锛堟湰椤圭洰宸茬敱 6.1.0(23) 鎻愬埌 6.1.1(24)锛宑ompatibleSdkVersion 淇濇寔 23锛?
@@ -2445,13 +2600,9 @@ struct Index {
               //     ⇒ miniBar 拿到的是**同一份官方材质** —— 这正是二级页那条正常的"光感"的来源。
               //   代价（必须认账）：HDS 画的背板在 `miniBar` 槽里、**不在我们的子树里**
               //     ⇒ 关闭播放器时 `morphSquashY` 只压到**内容**，背板不再跟着一起压/弹（§86.3 那个原病回来一半）。
-              //     但 `HomeMiniBarPlayer.build()` 里 `.scale({ y: morphSquashY })` 挂在**同时包含内容**的根
-              //     `Stack` 上 ⇒ "整条内容一起压/一起弹"仍然成立，只是背板不再参与形变。
-              //   ⚠️ 与 `HomeMiniBarPlayer({ showSelfDrawnBackplate: false })` **必须成对**（见 {@link miniBar}）：
-              //     一开一关 = 「官方材质 + 自绘 80% 不透明蒙版」两层叠着 ⇒ 材质被洗白（上一轮已踩过）。
-              //   ⚠️ 但「现在就在听」那一页 {@link miniBar} 给的是 **0 高度占位**（不画播放器）⇒ 那里必须关掉，
-              //     否则页签胶囊上方会多出一枚**空胶囊背板**（本文件顶部第 ③ 条就是为此写的）。
-              enableMiniBarBackground: this.miniBarRendersPlayer(),
+              //     ✅ 本轮已按"两者都要"收口：`miniBar` 槽留空、播放器搬到 {@link homeMiniCapsule}
+              //        （我们子树里的 {@link MiniBarMaterialCapsule}）⇒ 光感与弹跳同时成立。
+              //        上面这一整段（2026-10-16 / 10-18 的反复）只作为来龙去脉保留。
               miniBarStyle: this.miniBarStyleForHds(),
               onBarStyleChange: (miniBarStyle: HdsBarStyle, _tabStyle: HdsBarStyle,
                 _miniWidth: number, _tabWidth: number, mode: HdsTabsBarChangeMode): void => {
@@ -2575,6 +2726,13 @@ struct Index {
       //    杩欐"鍋囧姩鐢?閲屽舰鍙樺叾瀹炶繕娌″紑濮嬶紝浣?`morphP` 宸茶鍘嬪埌 0 鈬?
       //    `actionsOpacityAt(0) = 1` 鈬?鍏嬮殕灞傚叏浜湴鎸傚湪灞忎笂婕?鈥斺€?
       //    鐢ㄦ埛瀹炴祴鐨?涓変釜鎸夐挳涓€鐩存紓绉?灏辨槸杩欎竴娈点€?
+      // ★★★ 2026-10-20（第三轮）：主页那条迷你条**不再由壳层 HDS 的 `miniBar` 槽承载**，
+      //   改由本层自己渲染 {@link homeMiniCapsule()}（胶囊 + 官方材质都在**我们的子树**里）
+      //   ⇒ `.scale({y: morphSquashY})` 能压到材质背板 ⇒ 关闭播放器落位时"整条一起弹"。
+      //   条件与原来的 `miniBar()` 逐字同义（{@link miniBarRendersPlayer}）：二级页在栈上 / 「现在就在听」页都不画。
+      if (this.miniBarRendersPlayer()) {
+        this.homeMiniCapsule()
+      }
       if (this.expandState.morphSessionDriving() && this.expandState.asideWinW > 0) {
         this.MorphMiniBarClone()
       }
