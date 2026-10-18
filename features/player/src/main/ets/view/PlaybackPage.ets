@@ -14,7 +14,7 @@
  */
 
 // 闂佸疇娉曟刊瀵哥箔?`TextController` 闂?ArkUI 闂?*闂佺绻堥崝宀勬儑椤掑嫭鍋濇い鏍ㄥ嚬閺嗘梻绱掗銉殭闁?*闂佹寧绋戦悧鍛箔婢舵劖顥嗛柍褜鍓涢幉?import闂佹寧绋戦悾鐠弖sicPlayInfoBlock` 闂佸憡鑹鹃張顒勵敄濞嗘挻鏅?
-import { AppStorageV2, uiObserver, UIUtils, window } from '@kit.ArkUI';
+import { AnimatorOptions, AnimatorResult, AppStorageV2, uiObserver, UIUtils, window } from '@kit.ArkUI';
 import { image } from '@kit.ImageKit';
 import { effectKit } from '@kit.ArkGraphics2D';
 import { common } from '@kit.AbilityKit';
@@ -118,27 +118,6 @@ function morphEaseY(x: number): number {
   return morphBezierAxis(1.0, 1.0, t);
 }
 
-/**
- * @returns 任意 `cubic-bezier(x1, y1, x2, y2)` 的 **y(x)**（与 `morphEaseY` 同一套二分反解）。
- *
- * 反向那条曲线是上游 `REVERSE_EASING = cubic-bezier(0.85, 0, 0.5, 0.88)`
- * （`wujie.pa:154103-154131`）；几何逐帧驱动必须用它的真 y(x)，不能拿 `EASE_OUT_STR` 顶替。
- */
-function bezierEaseY(x1: number, y1: number, x2: number, y2: number, x: number): number {
-  const cx: number = x < 0 ? 0 : (x > 1 ? 1 : x);
-  let lo: number = 0;
-  let hi: number = 1;
-  let t: number = cx;
-  for (let i = 0; i < 24; i++) {
-    if (morphBezierAxis(x1, x2, t) < cx) {
-      lo = t;
-    } else {
-      hi = t;
-    }
-    t = (lo + hi) / 2;
-  }
-  return morphBezierAxis(y1, y2, t);
-}
 
 /** 婵炴垶鎸撮崑鎾寸箾閸″繆鍋撳畷鍥唸闂傚倸鐗滃鈧紒妤€鎳忓顏堝磹閻旀粍甯″畷娆撴惞鐟欏嫮鏆犳繛鎴炴尪閸婃洜妲愰懜鍨鐎广儱鎳忕粋鍫ユ煥濞戞澧ｆい?`PlaybackPage.loadOnlineCoverPair`闂佹寧绋戦ˇ顓㈠焵?*/
 class CoverDecodePair {
@@ -3784,8 +3763,8 @@ export struct PlaybackPage {
     const contentGen: number = this.expandState.beginContentTween();
     try {
       // ★★★ 2026-10-18（用户第十轮：「展开过程中返回没动画」）：几何改成**逐帧**驱动
-      //   —— 与跟手那条（手指写 `applyMorphProgress`）同一个机制，理由见 `startGeoTicker()`。
-      this.startGeoTicker(0, 1, PlaybackPage.MORPH_OPEN_DURATION_MS, false);
+      //   —— 与跟手那条（手指写 `applyMorphProgress`）同一个机制，理由见 `startGeoDriver()`。
+      this.startGeoDriver(0, 1, PlaybackPage.MORPH_OPEN_DURATION_MS, false);
       // ★★★ 2026-10-18：**内容时间线单独一条补间**（用户实测「进度条和下面几个控件飞入比无界早了很多」）。
       //
       // 上游是**两条**时间线，同一起点、各走各的（`_recover/logic-src/ExpandAnimation驱动与补间定稿.md:480-483`
@@ -4534,7 +4513,7 @@ export struct PlaybackPage {
       //   （`wujie.pa:154103-154131`）是 `createAnimator + onFrame(v) => morphT = v`，逐帧写真进度。
       //   `morphBeginLeaving()` 已 `cancelContentTween()` ⇒ `applyMorphProgress` 会同时驱动内容窗口，
       //   两层共用这一条 `460 × max(0.4, morphT)` + REVERSE_EASING（不再另写 `contentP`）。
-      this.startGeoTicker(closeFromT, 0, morphCloseMs, true);
+      this.startGeoDriver(closeFromT, 0, morphCloseMs, true);
       this.closeSettleTimer = setTimeout((): void => {
         this.closeSettleTimer = -1;
         if (!this.isAlive) {
@@ -6381,60 +6360,58 @@ export struct PlaybackPage {
   //   跟手 / 点击打开 / 反向**三条路共用它**；本仓跟手那条（手指写 `applyMorphProgress`）明明是好的，
   //   所以点击打开与反向也改成**同一个逐帧驱动**：几何从 `animateTo` 换成 ticker。
   //   ⚠️ 不要退回 `animateTo`：一旦退回，`morphP` 在数据面上就又是"终值"，反向必然拿不到起点。
-  private static readonly GEO_TICK_MS: number = 16;
-  private geoTickTimer: number = -1;
-  private geoTickGen: number = 0;
-  private geoAtMs: number = 0;
+  private geoAnimator: AnimatorResult | undefined = undefined;
   private geoFrom: number = 0;
   private geoTo: number = 0;
-  private geoDurMs: number = 1;
-  /** 曲线选择：`false` = `EASE_OUT_STR(0.23,1,0.32,1)`（打开）；`true` = `REVERSE_EASING(0.85,0,0.5,0.88)`。 */
-  private geoReverseCurve: boolean = false;
 
   /**
-   * 起几何逐帧补间：`morphP` 从 `from` 走到 `to`，每 16ms 写真进度（上游 `animateMorphT` 的等价物）。
+   * 起几何补间：`morphP` 从 `from` 走到 `to`。
    * @param from 起点进度（跟手/反向就是"此刻的真实进度"）
    * @param to 终点进度（打开 1、关闭 0）
    * @param durMs 时长（ms；`<= 0` 直接落位）
-   * @param reverseCurve 是否用反向曲线
+   * @param reverseCurve 是否用反向曲线 `REVERSE_EASING`
    */
-  private startGeoTicker(from: number, to: number, durMs: number, reverseCurve: boolean): void {
-    this.stopGeoTicker();
-    this.geoTickGen = this.geoTickGen + 1;
-    const gen: number = this.geoTickGen;
+  private startGeoDriver(from: number, to: number, durMs: number, reverseCurve: boolean): void {
+    this.stopGeoDriver();
     this.geoFrom = from;
     this.geoTo = to;
-    this.geoDurMs = durMs > 0 ? durMs : 1;
-    this.geoReverseCurve = reverseCurve;
-    this.geoAtMs = Date.now();
     if (durMs <= 0) {
       this.expandState.applyMorphProgress(to);
       return;
     }
-    this.geoTickTimer = setInterval((): void => {
-      if (gen !== this.geoTickGen || !this.isAlive) {
-        this.stopGeoTicker();
+    const options: AnimatorOptions = {
+      duration: durMs,
+      // 上游两条曲线原样交给 animator（`EASE_OUT_STR` / `REVERSE_EASING`），不在这里自己解贝塞尔。
+      easing: reverseCurve ? 'cubic-bezier(0.85, 0, 0.5, 0.88)' : 'cubic-bezier(0.23, 1, 0.32, 1)',
+      delay: 0,
+      fill: 'forwards',
+      direction: 'normal',
+      iterations: 1,
+      begin: 0,
+      end: 1
+    };
+    const anim: AnimatorResult = this.getUIContext().createAnimator(options);
+    anim.onFrame = (value: number): void => {
+      if (!this.isAlive) {
         return;
       }
-      const raw: number = (Date.now() - this.geoAtMs) / this.geoDurMs;
-      const x: number = raw < 0 ? 0 : (raw > 1 ? 1 : raw);
-      const eased: number = this.geoReverseCurve ?
-        bezierEaseY(0.85, 0, 0.5, 0.88, x) : morphEaseY(x);
-      this.expandState.applyMorphProgress(this.geoFrom + (this.geoTo - this.geoFrom) * eased);
-      if (x >= 1) {
-        this.stopGeoTicker();
-      }
-    }, PlaybackPage.GEO_TICK_MS);
+      this.expandState.applyMorphProgress(this.geoFrom + (this.geoTo - this.geoFrom) * value);
+    };
+    anim.onFinish = (): void => {
+      this.expandState.applyMorphProgress(this.geoTo);
+    };
+    this.geoAnimator = anim;
+    anim.play();
     Logger.info(PlayerExpandState.LOG_TAG,
-      `RzdMorphGeoTick start gen=${gen} from=${from.toFixed(3)} to=${to} ms=${this.geoDurMs} ` +
+      `RzdMorphGeoTick start from=${from.toFixed(3)} to=${to} ms=${durMs} ` +
         `curve=${reverseCurve ? 'REVERSE_EASING(0.85,0,0.5,0.88)' : 'EASE_OUT_STR(0.23,1,0.32,1)'}`);
   }
 
-  /** 停掉几何逐帧补间（幂等）。 */
-  private stopGeoTicker(): void {
-    if (this.geoTickTimer >= 0) {
-      clearInterval(this.geoTickTimer);
-      this.geoTickTimer = -1;
+  /** 停掉几何补间（幂等）。 */
+  private stopGeoDriver(): void {
+    if (this.geoAnimator !== undefined) {
+      this.geoAnimator.cancel();
+      this.geoAnimator = undefined;
     }
   }
 
