@@ -1914,10 +1914,14 @@ struct Index {
    * `appState.miniBarExpanded`（由 HDS `onBarStyleChange` 镜像）。
    */
   private homeMiniBarSlotHVp(): number {
-    // ⛔ 2026-10-18 回退（用户：「你搞反了吧…播放条本身是正常的，你先回退到上个版本（动画不用回退）」）：
-    //   高度档位回到 `b131825` 之前那一版：展开 ⇒ 56、收起 ⇒ 40（`wujie.pa:67503-67517` 的估算支）。
-    //   封面尺寸这条线另算，不在本行改。
-    return this.appState.miniBarExpanded ? FLOATING_MINI_BAR_HEIGHT_VP : Index.BAR_CONTENT_H_VP;
+    // ★★★ 2026-10-18（用户：「封面还是小」，让我自己看代码定尺寸）：
+    //   本仓**三形态的可见高度都是 56**（官方口径「迷你栏与页签栏等高且水平对齐」）——
+    //   依据是本仓自己的逆向定稿 `_recover/logic-src/full/上游-MiniPlayer内容组件树全量.ets` §5：
+    //   「`collapsed`/`miniBarStyle` 在本仓只影响封面档位与页签是否收成圆坞，**不改变胶囊高度**
+    //     ⇒ 上表第 3 行那个 `40` 在本仓**不实现**（`BAR_CONTENT_H = 40` 在上游只用于
+    //     "`capsuleH` 还没量到时的估算档"）」⇒ 这里**恒 56**。
+    //   ⇒ 封面 `56 × 0.8 = 44.8`、内距 `(56−44.8)/2 = 5.6`、右内距 `(56−32)/2 = 12`，两种形态一致。
+    return FLOATING_MINI_BAR_HEIGHT_VP;
   }
 
   /**
