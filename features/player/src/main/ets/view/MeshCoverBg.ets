@@ -42,7 +42,7 @@ import { DrawContext, FrameNode, NodeController, RenderNode, UIContext } from '@
 import { drawing, displaySync } from '@kit.ArkGraphics2D';
 import { image } from '@kit.ImageKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { SRC_EDGE, enhanceColors, boxBlurRgba, fillFallback, hueOfSeed } from '../util/MeshSource';
+import { SRC_EDGE, boxBlurRgba, fillFallback, hueOfSeed } from '../util/MeshSource';
 import { MeshField } from '../util/MeshGradient';
 
 /** 每格细分数（无界 `MESH_SUB`）。 */
@@ -63,6 +63,12 @@ const FALLBACK_BLUR_PASSES: number = 3;
 
 const TAG: string = 'RzdMeshCoverBg';
 const DOMAIN: number = 0x0000;
+
+/** 读回 64×64 缓冲里 `(x, y)` 的 `R,G,B` 文本（**只给日志用**，判读四角顺序）。 */
+function rgbAt(u8: Uint8Array, x: number, y: number): string {
+  const off: number = (y * SRC_EDGE + x) * 4;
+  return `${u8[off]},${u8[off + 1]},${u8[off + 2]}`;
+}
 
 /** 真正画网格的渲染节点（对标无界 `MeshRenderNode extends RenderNode`）。 */
 class MeshRenderNode extends RenderNode {
@@ -206,6 +212,9 @@ class MeshBgController extends NodeController {
   private rootRender: RenderNode | null = null;
   private w: number = 0;
   private h: number = 0;
+  /** 上一次打日志的画布尺寸（只给 `RzdBgPhaseMesh resize` 去重用）。 */
+  private logW: number = -1;
+  private logH: number = -1;
 
   makeNode(uiContext: UIContext): FrameNode | null {
     const frame: FrameNode = new FrameNode(uiContext);
@@ -229,6 +238,16 @@ class MeshBgController extends NodeController {
     this.h = h;
     if (w <= 0 || h <= 0) {
       return;
+    }
+    // ★ 2026-10-18（**只加日志、不改行为**）：画布尺寸就是 `field.update(tSec, w, h, flow)` 的 w/h，
+    //   也是 `drawPixelMapMesh` 的像素口径（`context.sizeInPixel`）。真机判读"两色位置"时，
+    //   先看这两行数：形变期间应当是"**窄**画布（宿主宽 = 形变容器宽，高恒为 windowHeightVp）"，
+    //   结束后才是满窗。若形变期与结束后的 `w` 相同，说明宿主宽没跟着形变容器走（那是**布局**问题）。
+    if (Math.abs(w - this.logW) >= 1 || Math.abs(h - this.logH) >= 1) {
+      this.logW = w;
+      this.logH = h;
+      hilog.info(DOMAIN, TAG, 'RzdBgPhaseMesh resize w=%{public}d h=%{public}d',
+        Math.round(w), Math.round(h));
     }
     this.node.frame = { x: 0, y: 0, width: w, height: h };
     if (this.rootRender !== null) {
@@ -323,8 +342,17 @@ export struct MeshCoverBg {
   private startMs: number = 0;
   private accMs: number = 0;
   private disposed: boolean = false;
+  /**
+   * 网格源的**代际号**（照搬无界 `MeshCoverBg.srcGen`，`wujie.pa:63996-63999`）。
+   * 每次 `applySource()` 自增；`await` 回来以后若代际已变，结果作废并释放。
+   */
+  private srcGen: number = 0;
 
   aboutToAppear(): void {
+    // ★ 只加日志（真机判读 ②）：**挂载一次就归零一次**。若一次打开播放页出现两条 `mount`，
+    //   说明组件被卸载重挂了（`tSec` 会从 0 重新走、`reseed` 会重跑 ⇒ 网格花纹整片重排）。
+    hilog.info(DOMAIN, TAG, 'RzdBgPhaseMesh mount seedLen=%{public}d t=%{public}d',
+      this.seed.length, Math.round(this.accMs));
     this.applySource();
     this.applyGate();
     // ★ 2026-10-16：挂载时补画一帧（`active` 但未播的场景，见 `onFrameNow()` 的注释）。
@@ -368,13 +396,28 @@ export struct MeshCoverBg {
     // `field.reseed(hue)` 决定**网格流动的调色/轨道相位**（`MeshField.reseed`：
     // `applyConf(generateConf(floor(|hue|)))` + `initOrbits(seed)` + `applyBorderRules()`，
     // `wujie.pa:90867-90920`）⇒ 少这一句，屏上网格的"流动花纹"就与上游不是同一套。
-    this.controller.node.field.reseed(hueOfSeed(this.seed));
+    // ★★★ 2026-10-18（照搬无界 `rebuildSource()` 的**代际校验**，`wujie.pa:63994-63999 / 64151-64166`）：
+    // ```
+    //   const gen = ++this.srcGen;                                          // 63996-63999
+    //   ...
+    //   if (this.disposed || this.srcGen !== gen) { pm.release(); return; }  // 64151-64166
+    // ```
+    // 兜底/解码都要 `await`（`image.createPixelMap`），**换歌很快时旧结果会晚到** ⇒
+    // 没有代际校验时，旧那张会把新那张盖掉（屏上表现为"颜色/花纹突然回到上一首"）。
+    const hue: number = hueOfSeed(this.seed);
+    const gen: number = this.srcGen + 1;
+    this.srcGen = gen;
+    this.controller.node.field.reseed(hue);
+    hilog.info(DOMAIN, TAG, 'RzdBgPhaseMesh reseed gen=%{public}d hue=%{public}d seedLen=%{public}d',
+      gen, Math.round(hue), this.seed.length);
     // ★★★★ 2026-10-17（照搬无界 `decodeCover()` 失败 ⇒ `makeFallback()` 那条链）
     // ```
     //   无界：coverPath 解不出图 ⇒ makeFallback()：按 seed 的色相造一张 64×64 的
-    //         四角 HSL 渐变 →（rebuildSource 里统一）enhanceColors → boxBlurRgba → 当网格源
+    //         四角 HSL 渐变 →（rebuildSource 里）**只做 boxBlurRgba**、**不做 enhanceColors** → 当网格源
     //   ⇒ **网格源永远存在**，屏上不会出现"背景一片黑"
     // ```
+    // ⚠️ 2026-10-18 订正：上一版注释写"rebuildSource 里统一 enhanceColors"是**错的** ——
+    //   上游对兜底**不做** `enhanceColors`（`wujie.pa:64074-64081`，只有 `decoded` 为真才做）。
     // 我们这一侧的 `src` 由页面给（在线封面要下载），拿不到时就在**组件内**造兜底网格
     // ——与上游同一个位置、同一个算法（`fillFallback` / `hueOfSeed` 已在 `MeshSource` 里）。
     if (this.src !== undefined) {
@@ -383,9 +426,16 @@ export struct MeshCoverBg {
       this.releaseFallback();
       this.controller.node.invalidate();
       this.onFrameNow();
+      // ★ 只加日志：**形变期间会不会换源**由这一行判定 ——
+      //   若 `source=cover` 出现在 `RzdBgLayer` 的 `p=1.000` 之前，就是"形变里换过一次源"
+      //   （屏上会从兜底的四角渐变切到封面取色的那两团，观感 = 两色位置突然变了）。
+      hilog.info(DOMAIN, TAG, 'RzdBgPhaseMesh source=cover gen=%{public}d t=%{public}d',
+        gen, Math.round(this.accMs));
       return;
     }
-    void this.makeFallback();
+    hilog.info(DOMAIN, TAG, 'RzdBgPhaseMesh source=fallback gen=%{public}d t=%{public}d',
+      gen, Math.round(this.accMs));
+    void this.makeFallback(gen);
   }
 
   /** 兜底网格（本组件持有其所有权；换源/退场时释放）。 */
@@ -410,12 +460,13 @@ export struct MeshCoverBg {
    * 造兜底网格（照搬无界 `makeFallback()` / `MeshSource.fillFallback`）。
    *
    * ① `hueOfSeed(seed)` → 色相；② `fillFallback` 铺一张**四角 HSL 双线性渐变**；
-   * ③ `enhanceColors`（低对比/高饱和/偏暗）；④ `boxBlurRgba(64,64,9,3)`；
-   * ⑤ `image.createPixelMap` 交给渲染节点。
-   * ⚠️ 与上游唯一差别：上游从 `fs` 读封面文件，我们的 `src` 是页面给的 PixelMap
+   * ③ `boxBlurRgba(64,64,9,3)`；④ `image.createPixelMap` 交给渲染节点。
+   * ⚠️ **没有 `enhanceColors`** —— 上游只对真封面做（见下方注释与 `wujie.pa:64074-64081`）。
+   * ⚠️ 与上游另一处差别：上游从 `fs` 读封面文件，我们的 `src` 是页面给的 PixelMap
    *   ⇒ 只在 `src` 缺席时走这一步。
+   * @param gen 发起这次构造时的代际号（`await` 回来后与 `srcGen` 比对）
    */
-  private async makeFallback(): Promise<void> {
+  private async makeFallback(gen: number): Promise<void> {
     if (this.disposed || this.fallbackBuilding) {
       return;
     }
@@ -423,14 +474,29 @@ export struct MeshCoverBg {
     try {
       const buf: ArrayBuffer = new ArrayBuffer(SRC_EDGE * SRC_EDGE * 4);
       const u8: Uint8Array = new Uint8Array(buf);
-      // ★★★ 2026-10-17（照搬无界）：色相**只**来自 `hueOfSeed(seed)`。
-      //   上游 `makeFallback()`（`wujie.pa:63687-63839`）：
-      //   `fillFallback(new Uint8Array(buf), SRC_EDGE, SRC_EDGE, hueOfSeed(this.seed))`；
-      //   `enhanceColors` + `boxBlurRgba(64,64,9,3)` **不在**这个函数里，而在 `rebuildSource()`
-      //   的统一后处理里（`:63990-64206`）—— 本仓这两步在本函数内完成，效果等价（只作用于兜底源）。
-      fillFallback(u8, SRC_EDGE, SRC_EDGE, hueOfSeed(this.seed));
-      enhanceColors(u8);
+      // ★★★ 2026-10-18（照搬无界，**订正上一版的错**）：兜底网格**只做 boxBlur，不做 enhanceColors**。
+      //
+      // 上游 `makeFallback()`（`wujie.pa:63687-63840`）只有一步：
+      //   `fillFallback(new Uint8Array(buf), SRC_EDGE, SRC_EDGE, hueOfSeed(this.seed))`
+      // 后处理在 `rebuildSource()`（`:63990-64207`）里，而且是**有条件**的：
+      //   64025-64026  v7 = (decodeCover() 返回非 null)      ← 只有真封面才为真
+      //   64074-64081  `lda v7; callruntime.isfalse; jnez jump_label_8`
+      //                ⇒ `if (decoded) { enhanceColors(u8); }`   ← **兜底不做**
+      //   64083-64104  `boxBlurRgba(u8, SRC_EDGE, SRC_EDGE, 9, 3)`  ← **两条路都做**
+      // ⇒ 上一版注释写"效果等价"是错的：`enhanceColors` 是 对比×0.4 → 饱和×5 → 对比×0.9 → ×0.75，
+      //   作用在 `fillFallback` 那四角（S=.50~.68 / L=.33~.52）上会把它们**推到接近纯色**
+      //   （实测 A→(6,116,171) / B→(46,83,228) / C→(0,136,136) / D→(75,60,218)），
+      //   兜底就从"柔和四角渐变"变成"几块硬色" —— 与上游观感不同。此处按字节码改回来。
+      const hue: number = hueOfSeed(this.seed);
+      fillFallback(u8, SRC_EDGE, SRC_EDGE, hue);
       boxBlurRgba(u8, SRC_EDGE, SRC_EDGE, FALLBACK_BLUR_RADIUS, FALLBACK_BLUR_PASSES);
+      // ★ 只加日志（真机判读用）：四角的**颜色顺序**必须与上游一致
+      //   A=TL(`hue`,.60,.40) / B=TR(`hue+28`) / C=BL(`hue−20`) / D=BR(`hue+46`)（`wujie.pa:91528-91611`）。
+      //   若 TL/BR 与屏幕上的两团色位置对不上，问题就在"哪一路在画"，不在这张图。
+      hilog.info(DOMAIN, TAG,
+        'RzdBgPhaseMesh fallback hue=%{public}d TL=%{public}s TR=%{public}s BL=%{public}s BR=%{public}s',
+        Math.round(hue), rgbAt(u8, 0, 0), rgbAt(u8, SRC_EDGE - 1, 0),
+        rgbAt(u8, 0, SRC_EDGE - 1), rgbAt(u8, SRC_EDGE - 1, SRC_EDGE - 1));
       const pm: image.PixelMap = await image.createPixelMap(buf, {
         size: { width: SRC_EDGE, height: SRC_EDGE },
         pixelFormat: image.PixelMapFormat.RGBA_8888,
@@ -443,6 +509,14 @@ export struct MeshCoverBg {
       // 真源在这期间到了 ⇒ 兜底作废（不要把它盖上去）
       if (this.src !== undefined) {
         pm.release();
+        hilog.info(DOMAIN, TAG, 'RzdBgPhaseMesh fallback skip-stale gen=%{public}d reason=src', gen);
+        return;
+      }
+      // 代际校验（照搬无界 `rebuildSource()`）：换过歌 ⇒ 这张兜底作废
+      if (gen !== this.srcGen) {
+        pm.release();
+        hilog.info(DOMAIN, TAG, 'RzdBgPhaseMesh fallback skip-stale gen=%{public}d now=%{public}d',
+          gen, this.srcGen);
         return;
       }
       this.releaseFallback();
@@ -450,6 +524,8 @@ export struct MeshCoverBg {
       this.controller.node.src = pm;
       this.controller.node.invalidate();
       this.onFrameNow();
+      hilog.info(DOMAIN, TAG, 'RzdBgPhaseMesh fallback adopted gen=%{public}d t=%{public}d',
+        gen, Math.round(this.accMs));
     } catch (err) {
       const e = err as BusinessErrorLike;
       hilog.warn(DOMAIN, TAG, 'makeFallback failed code=%{public}d msg=%{public}s', e.code, e.message);
@@ -474,6 +550,9 @@ export struct MeshCoverBg {
     }
     // ⚠️ 起点要**减掉累计时间**（暂停过的话 `accMs > 0`），否则恢复播放的那一帧会跳。
     this.startMs = Date.now() - this.accMs;
+    // ★ 只加日志（真机判读 ②）：`accMs` 不会被清零 ⇒ 若每次 `frames=start` 的 `accMs` 都递增，
+    //   则"两色位置变化"与 `tSec` 归零无关（网格几何的时间基是连续的）。
+    hilog.info(DOMAIN, TAG, 'RzdBgPhaseMesh frames=start accMs=%{public}d', Math.round(this.accMs));
     // ★ 2026-10-16：起帧之前先补画一帧（暂停期间屏上已经有一帧静止网格，
     //   这里保证"点播放"那一刻不用等到 50ms 后的第一个回调才有画面）。
     this.onFrameNow();
@@ -497,6 +576,7 @@ export struct MeshCoverBg {
       return;
     }
     this.accMs = Date.now() - this.startMs;
+    hilog.info(DOMAIN, TAG, 'RzdBgPhaseMesh frames=stop accMs=%{public}d', Math.round(this.accMs));
     this.sync = null;
     sync.off('frame');
     sync.stop();
