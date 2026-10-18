@@ -1,4 +1,4 @@
-﻿import { qualityDisplayName } from '../util/SourceFallbackUtil';
+import { qualityDisplayName } from '../util/SourceFallbackUtil';
 /*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +16,7 @@
 
 import { AppStorageV2, uiObserver } from '@kit.ArkUI';
 import { AVCastPicker } from '@kit.AVSessionKit';
-import { AppStorageKeys, ArtistRouteParam, BreakpointType, isWidthBreakpointLgOrXl, MusicStoreService, PlaybackPreferenceService, PlaybackIntentState, PlayedSongRecord, PlaylistDto, PlayerExpandState, RouterUrlConstants, SongItem, StyleConstants, ThemeState } from 'musicbasic';
+import { AppStorageKeys, ArtistRouteParam, BreakpointType, isWidthBreakpointLgOrXl, Logger, MusicStoreService, PlaybackPreferenceService, PlaybackIntentState, PlayedSongRecord, PlaylistDto, PlayerExpandState, RouterUrlConstants, SongItem, StyleConstants, ThemeState } from 'musicbasic';
 import { PlayerConstants } from '../constant/PlayerConstants';
 import { MusicPlayMode } from '../model/MusicData';
 import { PlayerDataUtil } from '../util/PlayerDataUtil';
@@ -43,6 +43,8 @@ const SHEET_REOPEN_GUARD_MS: number = 360;
 /** Full-screen transport: progress, main controls, and auxiliary icon row inside a single bottom panel. */
 @ComponentV2
 export struct ControlAreaComponent {
+  /** 本组件的日志 tag（`hdc shell hilog | grep RzdControlArea`）。 */
+  private static readonly logTag: string = 'RzdControlArea';
   /** Navigation stack from shell for opening playlist / song list routes. */
   @Consumer('pageIndexInfos') pageIndexInfos: NavPathStack = new NavPathStack();
   /** Window breakpoint for responsive control sizing. */
@@ -190,6 +192,47 @@ export struct ControlAreaComponent {
    * 「添加到歌单」一样是**同一个弹层里的一个子页**，靠这个标志切换。
    */
   @Local showMenuComment: boolean = false;
+  /**
+   * 共享播放意图（`AppStorageV2`）。
+   *
+   * ★★★ 2026-10-18（用户：右上角分享→歌曲菜单 / 收藏旁歌曲菜单→评论）：
+   *   两个新入口的**按钮**分别住在 `TopAreaComponent`（右上角）和播放页 meta 行，
+   *   而弹层只有本组件能挂（一个组件只能挂一个 `bindSheet`）。
+   *   它们与本组件之间没有父子参数链（本组件被挂 4 处以上），所以统一走这条既有共享状态：
+   *   点方 bump 序号（`menuRequestSeq` / `commentRequestSeq`），这里 `@Monitor` 响应。
+   */
+  @Local intent: PlaybackIntentState = AppStorageV2.connect(PlaybackIntentState,
+    AppStorageKeys.PLAYBACK_INTENT_STATE, () => new PlaybackIntentState())!;
+
+  /**
+   * 宿主请求「打开歌曲菜单」（右上角那颗按钮）。
+   *
+   * ⚠️ 只认**外部持有弹层状态的那个实例**（`showMenuSheet !== undefined`，即播放页直挂的那一份）：
+   *   本组件在 `MusicPlayInfoBlock` / `LyricsComponent` 里还有几份自带 `bindSheet` 的实例，
+   *   不设这道闸，一次点击会同时弹出多个同样的弹层。
+   */
+  @Monitor('intent.menuRequestSeq')
+  onHostMenuRequest(): void {
+    if (this.intent.menuRequestSeq <= 0 || this.showMenuSheet === undefined) {
+      return;
+    }
+    Logger.info(ControlAreaComponent.logTag, `host request song menu seq=${this.intent.menuRequestSeq}`);
+    this.openMenuSheet();
+  }
+
+  /**
+   * 宿主请求「打开评论」（播放页 meta 行那颗新评论按钮）。闸门同 {@link onHostMenuRequest}。
+   */
+  @Monitor('intent.commentRequestSeq')
+  onHostCommentRequest(): void {
+    if (this.intent.commentRequestSeq <= 0 || this.showMenuSheet === undefined) {
+      return;
+    }
+    Logger.info(ControlAreaComponent.logTag,
+      `host request comment seq=${this.intent.commentRequestSeq}`);
+    this.openCommentSheet();
+  }
+
   /** 上一次弹层关闭动画结束的时间戳（见 {@link openSheetFor} 的冷却逻辑）。 */
   private sheetClosedAtMs: number = 0;
   /** 选择器中的歌单列表。 */
@@ -996,6 +1039,22 @@ export struct ControlAreaComponent {
           (): void => {
             this.openSheetFor('quality');
           })
+        // ★★★ 2026-10-18（用户：「播放页歌曲菜单里加个投播」）：
+        //   投播**没有第二套实现** —— 底部那排那颗就是 `AVCastPicker`（`@kit.AVSessionKit`，
+        //   api 10+，`SystemCapability.Multimedia.AVSession.AVCast`），系统自己弹设备列表。
+        //   这里把**整行**做成它的 `customPicker`：视觉与 `MenuRow` 逐项一致，
+        //   点击热区 = 整个 52vp 行（不挂在 `MenuRow` 的 onClick 上 —— 那会挡住系统设备列表）。
+        //   ⚠️ 不给 `normalColor/activeColor` 传 `$r(...)`：SDK 签名是 `Color | number | string`，
+        //     `Resource` 不在其中；外观已完全由 customPicker 决定，这里传全透明兜底。
+        AVCastPicker({
+          normalColor: '#00000000',
+          activeColor: '#00000000',
+          customPicker: (): void => {
+            this.CastMenuRow()
+          }
+        })
+          .width('100%')
+          .height(ControlAreaComponent.MENU_ROW_H_VP)
         this.MenuRow($r('app.string.player_menu_share'), $r('sys.symbol.share'),
           (): void => {
             this.closeMenuSheet();
@@ -1083,6 +1142,38 @@ export struct ControlAreaComponent {
       .scrollBar(BarState.Off)
       .margin({ top: 8 })
     }
+  }
+
+  /** 歌曲菜单每一行的高度（vp）。`MenuRow` 与「投播」行共用，保证行高一致。 */
+  private static readonly MENU_ROW_H_VP: number = 52;
+
+  /**
+   * 歌曲菜单里的「投播」行。
+   *
+   * 视觉与 {@link MenuRow} **逐项相同**（图标 20 / 文字 16 / 右侧 chevron / 52 行高 / 同样的圆角与底色），
+   * 但**不挂 `onClick`**：点击行为由外层的 `AVCastPicker` 接管（它自己弹系统的可投播设备列表）。
+   * 图标沿用底部那排投播的 `sys.symbol.shareplay`，两处入口看起来是同一个功能。
+   */
+  @Builder
+  private CastMenuRow() {
+    Row({ space: 12 }) {
+      SymbolGlyph($r('sys.symbol.shareplay'))
+        .fontSize(20)
+        .fontWeight(FontWeight.Regular)
+        .fontColor([$r('app.color.font_primary')])
+      Text('投播')
+        .fontSize(16)
+        .fontColor($r('app.color.font_primary'))
+      Blank()
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(18)
+        .fontColor([$r('app.color.font_tertiary')])
+    }
+    .width('100%')
+    .height(ControlAreaComponent.MENU_ROW_H_VP)
+    .padding({ left: 16, right: 16 })
+    .borderRadius(10)
+    .backgroundColor($r('app.color.background_secondary'))
   }
 
   /** One menu row: icon + label, tap triggers the given action. */

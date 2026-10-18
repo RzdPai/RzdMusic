@@ -18,16 +18,19 @@ import {
   AppStorageKeys,
   getWindowInfoState,
   ImmersiveType,
+  Logger,
+  PlaybackIntentState,
   PlayerExpandState,
   StyleConstants,
   WindowInfo
 } from 'musicbasic';
 import { MusicAppState } from '../model/PlayerModels';
-import { buildSongShareText, showSystemShare } from '../util/ShareUtil';
 
-/** Full-screen playback top bar: back action and share affordance. */
+/** Full-screen playback top bar: back action and song-menu affordance. */
 @ComponentV2
 export struct TopAreaComponent {
+  /** 本组件的日志 tag（`hdc shell hilog | grep RzdTopArea`）。 */
+  private static readonly logTag: string = 'RzdTopArea';
   /** Window breakpoint (reserved for future responsive tweaks). */
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
   /** Whether full-screen player chrome is visible (passed from parent). */
@@ -36,6 +39,17 @@ export struct TopAreaComponent {
   /** Invoked when the back affordance is tapped. */
   @Param onBackClick: () => void = (): void => {
   };
+  /**
+   * 共享播放意图（`AppStorageV2`）—— 右上角这颗按钮靠它把「打开歌曲菜单」传给
+   * 真正挂弹层的 `ControlAreaComponent`（本组件被挂两处，不做父子参数链）。
+   *
+   * ★★★ 2026-10-18（用户：「把右上角的分享改成歌曲菜单」）：
+   *   右上角原来是**分享**（`shareCurrentSong()`），现在改成**歌曲菜单**的第二个入口
+   *   —— 分享没有丢，它还在歌曲菜单里（`ControlAreaComponent` 的「分享」行）。
+   *   图标沿用底部那排「更多」的 `sys.symbol.dot_grid_1x2_circle`（= 同一个菜单）。
+   */
+  @Local intent: PlaybackIntentState = AppStorageV2.connect(PlaybackIntentState,
+    AppStorageKeys.PLAYBACK_INTENT_STATE, () => new PlaybackIntentState())!;
   /** Shared app state (read-only usage in this bar). */
   @Local state: MusicAppState =
     AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
@@ -59,17 +73,7 @@ export struct TopAreaComponent {
     AppStorageV2.connect(PlayerExpandState, AppStorageKeys.PLAYER_EXPAND_STATE,
       () => new PlayerExpandState())!;
 
-  /** Opens the system share panel with the current song info and its link. */
-  private shareCurrentSong(): void {
-    const song = this.state.getCurrentSongItem();
-    const title: string = song !== undefined && typeof song.title === 'string' ? song.title : '未知歌曲';
-    const singer: string = song !== undefined && typeof song.singer === 'string' ? song.singer : '未知歌手';
-    const source: string = song !== undefined ? song.source : '';
-    const songId: string = song !== undefined ? song.songId : '';
-    showSystemShare(this.getUIContext(), buildSongShareText(title, singer, source, songId), '歌曲分享');
-  }
-
-  /** Renders back and share row with safe-area aware trailing padding. */
+  /** Renders back and song-menu row with safe-area aware trailing padding. */
   build() {
     Row() {
       Image($r('app.media.ic_back_down'))
@@ -80,14 +84,16 @@ export struct TopAreaComponent {
         .onClick((): void => {
           this.onBackClick();
         })
-      SymbolGlyph($r('sys.symbol.share'))
+      SymbolGlyph($r('sys.symbol.dot_grid_1x2_circle'))
         .fontSize(24)
         .fontWeight(FontWeight.Regular)
         .fontColor([$r('app.color.play_text_color')])
-        .accessibilityText('分享')
+        .accessibilityText('歌曲菜单')
         .accessibilityLevel('yes')
         .onClick((): void => {
-          this.shareCurrentSong();
+          // bump 序号 ⇒ `ControlAreaComponent` 的 `@Monitor` 打开歌曲菜单。
+          this.intent.menuRequestSeq = this.intent.menuRequestSeq + 1;
+          Logger.info(TopAreaComponent.logTag, `top area song menu tap seq=${this.intent.menuRequestSeq}`);
         })
     }
     // ★ 2026-10-17：由 `PlayerExpandState.chromeTopBarH()` 给，而它现在**直接取档位表**

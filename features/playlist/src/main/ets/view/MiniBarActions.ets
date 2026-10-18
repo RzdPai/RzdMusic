@@ -87,9 +87,28 @@ export struct MiniBarActions {
             this.playerViewModel.playPrevious();
           })
         }
-        this.ActionButton(this.playerViewModel.appState.isPlay ?
-          $r('sys.symbol.pause_round_triangle_fill') :
-          $r('sys.symbol.play_round_triangle_fill'), $r('app.color.icon_primary'), (): void => {
+        // ★★★ 2026-10-18（用户：「点暂停/播放，歌会停/放，但按钮样式不刷新」）：
+        //   根因**不是**状态没变（`MusicAppState.isPlay` 是 `@Trace`，`MediaService.updateIsPlay`
+        //   在 `stateChange` 里逐次回写），而是**图标走了 `@Builder` 的按值传参**：
+        //   官方《@Builder 参数传递》——「按值传递时，状态变量的改变不会引起 @Builder 内的 UI 刷新」。
+        //   原来写成 `this.ActionButton(this.playerViewModel.appState.isPlay ? A : B, ...)`：
+        //   三目在**调用点**就求值成一个 `Resource` 传进去，`isPlay` 变化时那个 `SymbolGlyph`
+        //   没有任何依赖登记 ⇒ 图标永远停在首次渲染的那一张。
+        //   ⇒ 播放/暂停这颗**必须**在 `build()` 里直接读状态（与 `PlaylistLaneListSection`
+        //     `SymbolGlyph(this.listVm.appState.isPlay ? …)` 同款写法），不能再走 builder 参数。
+        //   其余三颗图标是常量、不随状态变，留在 `ActionButton` 里没问题。
+        Stack({ alignContent: Alignment.Center }) {
+          SymbolGlyph(this.playerViewModel.appState.isPlay ?
+            $r('sys.symbol.pause_round_triangle_fill') :
+            $r('sys.symbol.play_round_triangle_fill'))
+            .fontSize(PlayerConstants.MINI_ACT_ICON)
+            .fontWeight(FontWeight.Regular)
+            .fontColor([$r('app.color.icon_primary')])
+        }
+        .width(PlayerConstants.MINI_ACT_SIZE)
+        .height(PlayerConstants.MINI_ACT_SIZE)
+        .clickEffect({ level: ClickEffectLevel.LIGHT })
+        .onClick((): void => {
           this.playerViewModel.togglePlayPause();
         })
         this.ActionButton($r('sys.symbol.forward_end_fill'), $r('app.color.mini_bar_primary'), (): void => {

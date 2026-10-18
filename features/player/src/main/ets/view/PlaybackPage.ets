@@ -56,6 +56,8 @@ import {
   RouterUrlConstants,
   ShowMiniLyricState,
   StyleConstants,
+  // 2026-10-18：meta 行「评论」按钮靠它把请求传给 `ControlAreaComponent`（共享序号，见字段注释）。
+  PlaybackIntentState,
   WindowInfo,
   WindowUtil
 } from 'musicbasic';
@@ -215,6 +217,17 @@ export struct PlaybackPage {
   @Local playbackSwiperIndex: number = 0;
   /** 濠殿喗绻傞張顒€煤閹间焦鍤曟繝濠傚暙缁€瀣煥濞戞澧﹂柛瀣噺缁嬪鍩€椤掆偓铻ｆい蹇撴祩閺€浠嬫煟閵娿儱顏ラ柍褜鍓欓張顒€煤閹稿骸绶炴慨妯稿劗閸嬫挸顓艰箛鏇狀槴闂佸搫瀚烽崹浼村箚娴ｈ桨娌柡鍥╁仧绾惧鏌ㄥ☉娆戭敚heet 闂?`ControlAreaComponent` 闂佹眹鍨洪惇褰掑焵?*/
   @Local playMenuOpen: boolean = false;
+  /**
+   * 共享播放意图（`AppStorageV2`）：本页只负责 bump 评论入口的序号，
+   * 真正挂评论面板的是 `ControlAreaComponent`（它 `@Monitor('intent.commentRequestSeq')`）。
+   *
+   * ★★★ 2026-10-18（用户：「收藏旁边的歌曲菜单改成评论（已有实现）」）：
+   *   评论面板是 `ControlAreaComponent` 那个**唯一**弹层里的子页（一个组件只能挂一个
+   *   `bindSheet`），所以这里不新建面板，也不复制实现 —— 只递增序号，那边走
+   *   它自己的 `openCommentSheet()`（= 底部「评论」按钮同一条路径）。
+   */
+  @Local intent: PlaybackIntentState = AppStorageV2.connect(PlaybackIntentState,
+    AppStorageKeys.PLAYBACK_INTENT_STATE, () => new PlaybackIntentState())!;
   /** 閻熸粎澧楅幐鍛婃櫠閻樿鍗抽柛娆忣槹绗戦梺鍛婄啲缁犳垿宕欓敓鐘茬哗闁诡垳澧楅ˉ鎴︽煥濞戞澧﹂柛瀣噺缁嬪鍩€椤掆偓铻ｆい蹇撴祩閺€浠嬫煕濞嗗繐甯犻柡鍛埣閹啴宕熼銈咁洭閻熸粓鍋婂浣烘濮樿泛违闁稿本鐟ч悷?`MusicPlayInfoBlock` 闂佸憡鑹炬總鏃傜博鐎涙闄勬俊銈呭閸ゃ垽鏌涢幇顓犳噣闁?*/
   @Local isCurrentFavorite: boolean = false;
   @Local favStore: MusicStoreService = MusicStoreService.getInstance();
@@ -7891,7 +7904,14 @@ export struct PlaybackPage {
             .onClick((): void => {
               this.toggleFavorite();
             })
-          SymbolGlyph($r('sys.symbol.dot_grid_1x2_circle'))
+          // ★★★ 2026-10-18（用户：「收藏旁边的歌曲菜单改成评论（已有实现）」）：
+          //   这颗原来是**歌曲菜单**（`dot_grid_1x2_circle` → `playMenuOpen = true`）。
+          //   现在改成**评论**：图标用底部那排评论按钮同一个 `sys.symbol.text_bubble_left_2`，
+          //   点击只 bump 共享序号 `intent.commentRequestSeq`，由 `ControlAreaComponent` 的
+          //   `@Monitor('intent.commentRequestSeq')` 打开它那个弹层的评论子页
+          //   （**没有第二份面板**：一个组件只能挂一个 `bindSheet`）。
+          //   歌曲菜单本身没丢：它搬到了右上角（`TopAreaComponent`，同样走共享序号）。
+          SymbolGlyph($r('sys.symbol.text_bubble_left_2'))
             .fontSize(this.expandState.chromeFavSize())
             .fontColor([$r('app.color.play_text_color')])
             .margin({ top: 2, left: 14 })
@@ -7900,7 +7920,8 @@ export struct PlaybackPage {
               width: PlaybackPage.LYRIC_META_HIT_VP, height: PlaybackPage.LYRIC_META_HIT_VP
             })
             .onClick((): void => {
-              this.playMenuOpen = true;
+              this.intent.commentRequestSeq = this.intent.commentRequestSeq + 1;
+              Logger.info(PlaybackPage.logTag, `meta comment tap seq=${this.intent.commentRequestSeq}`);
             })
         }
         .width(StyleConstants.FULL_WIDTH)

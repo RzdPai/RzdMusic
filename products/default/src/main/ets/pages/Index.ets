@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -1824,8 +1824,42 @@ struct Index {
       Logger.info(RzdShellLogTag, 'home bar user click on mini ignored (upstream :149215)');
       return;
     }
-    this.appState.miniBarExpanded = !collapsed;
+    this.setHomeBarExpandedAnimated(!collapsed);
     Logger.info(RzdShellLogTag, `home bar callback style=${miniBarStyle} mode=${mode} expanded=${!collapsed}`);
+  }
+
+  /**
+   * ★★★ 2026-10-18（用户第十七轮：「它切换的时候又是直接变大，没有过渡，看着不太流畅」）：
+   *
+   * 上一版把补间交给各节点自己的 `.animation(BAR_ANIM)`，但**仍有属性不补间**：
+   *   - `constraintSize` 不在可动画属性表里（已在 `HomeMiniBarPlayer` 侧删掉行盒那条）；
+   *   - 材质盘由内层 HDS `HdsTabs` 画，`barHeight` 换档时 HDS 内部还会按自己的默认动效走一遍，
+   *     和外层逐节点动画**各算各的**。
+   *
+   * ⇒ 改为在**唯一的状态写入点**用一次 `animateTo` 收口（同一个 `BAR_ANIM = 350ms Friction`，
+   *   `wujie.pa:70120-70126`）：这一帧里所有依赖 `miniBarExpanded` 的**可动画**属性
+   *   （槽高 / 胶囊高 / 行内距 / 封面视觉边 / 封面缩放）吃**同一条**时间线，不再有硬跳。
+   *   （上游整模块 `animateTo` 零命中是因为它靠 HDS 自己的默认动效，而我们的胶囊盒是我们自己的，
+   *     HDS 的默认动效管不到 ⇒ 必须自己补这一层。）
+   * @param expand true = 单行（展开档），false = 两排（收起档）
+   */
+  private setHomeBarExpandedAnimated(expand: boolean): void {
+    if (this.appState.miniBarExpanded === expand) {
+      return;
+    }
+    try {
+      this.getUIContext().animateTo({
+        duration: Index.HOME_BAR_SWITCH_MS,
+        curve: Curve.Friction
+      }, (): void => {
+        this.appState.miniBarExpanded = expand;
+      });
+    } catch (err) {
+      Logger.error(RzdShellLogTag, `animateTo home bar switch failed ${String(err)}`);
+      this.appState.miniBarExpanded = expand;
+    }
+    Logger.info(RzdShellLogTag,
+      `home bar switch expand=${expand} dur=${Index.HOME_BAR_SWITCH_MS} curve=Friction`);
   }
 
   /**
@@ -1835,7 +1869,8 @@ struct Index {
    * @param expand true = 迷你条展开（EXPAND 档），false = 收起（COLLAPSE 档）
    */
   private applyHomeBarExpanded(expand: boolean): void {
-    this.appState.miniBarExpanded = expand;
+    // ★ 写入走带 `animateTo` 的收口（否则滚动/点击触发的换档是硬跳）。
+    this.setHomeBarExpandedAnimated(expand);
     try {
       this.tabsController.applyMiniBarStyle(expand ? HdsBarStyle.EXPAND : HdsBarStyle.COLLAPSE);
     } catch (err) {
@@ -1901,6 +1936,13 @@ struct Index {
    */
   /** 上游 `MiniPlayer` 的 `BAR_CONTENT_H = 40`（收起态内容高，`wujie.pa:67515-67517`）。 */
   private static readonly BAR_CONTENT_H_VP: number = 40;
+
+  /**
+   * 迷你条「单行 ⇄ 两排」换档的补间时长（ms）。照抄上游
+   * `BAR_ANIM = { duration: 350, curve: Curve.Friction }`（`wujie.pa:70120-70126`），
+   * 与 `HomeMiniBarPlayer.BAR_ANIM` / `MiniBarMaterialCapsule.BAR_ANIM` 同一个数。
+   */
+  private static readonly HOME_BAR_SWITCH_MS: number = 350;
 
   /** 一级页 `miniBar` 这一格**实测宽度**（vp，0 = 还没量到；量的是外层 100% 宽的 `Column`）。 */
   @Local homeMiniBarSlotWVpRaw: number = 0;

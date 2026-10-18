@@ -263,9 +263,22 @@ export struct HomeMiniBarPlayerAside {
               this.playerViewModel.playPrevious();
             })
           }
-          this.ActionButton(this.playerViewModel.appState.isPlay ?
-            $r('sys.symbol.pause_round_triangle_fill') :
-            $r('sys.symbol.play_round_triangle_fill'), $r('app.color.icon_primary'), () => {
+          // ★★★ 2026-10-18（用户：「点暂停/播放，歌会停/放，但按钮样式不刷新」）：
+          //   与 `MiniBarActions` 同一处根因：`@Builder` **按值传参**不登记依赖（官方
+          //   《@Builder 参数传递》），三目在调用点就求值成 `Resource` 传进去 ⇒ 图标永不刷新。
+          //   改成在 `build()` 里**直接**读 `appState.isPlay`。
+          Stack({ alignContent: Alignment.Center }) {
+            SymbolGlyph(this.playerViewModel.appState.isPlay ?
+              $r('sys.symbol.pause_round_triangle_fill') :
+              $r('sys.symbol.play_round_triangle_fill'))
+              .fontSize(PlayerConstants.MINI_ACT_ICON)
+              .fontWeight(FontWeight.Regular)
+              .fontColor([$r('app.color.icon_primary')])
+          }
+          .width(PlayerConstants.MINI_ACT_SIZE)
+          .height(PlayerConstants.MINI_ACT_SIZE)
+          .clickEffect({ level: ClickEffectLevel.LIGHT })
+          .onClick(() => {
             this.playerViewModel.togglePlayPause();
           })
           this.ActionButton($r('sys.symbol.forward_end_fill'), $r('app.color.mini_bar_primary'), () => {

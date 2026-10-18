@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -110,9 +110,13 @@ export class BarScrollHelper {
     if (appState.miniBarExpanded === expand) {
       return;
     }
-    appState.miniBarExpanded = expand;
+    // ★ 2026-10-18：状态写入**必须**交给 `expandApplier`（= `Index.applyHomeBarExpanded`）——
+    //   那里把写入包在 `animateTo(350ms, Curve.Friction)` 里，胶囊高/封面/内距才会补间；
+    //   在这里直写会让状态在动画闭包**外**翻转 ⇒ 换档硬跳（用户实测「直接变大，没有过渡」）。
     if (BarScrollHelper.expandApplier !== undefined) {
       BarScrollHelper.expandApplier(expand);
+    } else {
+      appState.miniBarExpanded = expand;
     }
   }
 

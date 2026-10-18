@@ -450,8 +450,16 @@ export struct HomeMiniBarPlayer {
       })
       .alignItems(VerticalAlign.Center)
       .width(StyleConstants.FULL_WIDTH)
-      // 钉住时 `min == max` ⇒ 行盒 ≡ 胶囊盒；未钉时 `[0, 4096]` ⇒ 完全等价于不约束。
-      .constraintSize({ minHeight: this.contentMinHeightVp(), maxHeight: this.contentMaxHeightVp() })
+      // ★★★ 2026-10-18（用户第十七轮：「切换的时候又是直接变大，没有过渡」——根因就在这两行）：
+      //   `constraintSize` **不在** ArkUI 的可动画属性表里（`ts-explicit-animation` 只列
+      //   width/height/padding/margin/scale/opacity/translate/backgroundColor 等），
+      //   写了 `.animation()` 也**不会补间** ⇒ 行盒在切档那一帧 56↔40 硬跳，把封面一起顶上去。
+      //   上游是 `.height(capsuleH)`（`wujie.pa:69070-69085`，可动画），不是 constraintSize。
+      //   这里**删掉行盒的钉高**：钉住态下 `rowPadVp() === 0`、封面取 `capsuleBaseHVp() × 0.8`
+      //   （56⇒44.8 / 40⇒32），行盒的自然高就等于封面高且 ≤ 胶囊盒，居中即可，
+      //   于是行盒/封面/内距全部由**可动画**的属性驱动，切档天然是 350ms 补间。
+      //   （外层 `Stack` 上的 constraintSize 保留：它是 `MINI_BAR_ID` 的形变起点量测口，
+      //    且无底色、不裁剪、中心随 `ContentLayer` 走 ⇒ 它硬跳在视觉上不可见。）
       // ⚠️ `.animation()` 只作用于**它前面**已设置的属性 ⇒ 必须放在尺寸之后（写在之前等于没有动画）。
       .animation(HomeMiniBarPlayer.BAR_ANIM)
     }

@@ -27,4 +27,21 @@ export class PlaybackIntentState {
   @Trace public pendingQueueIndex: number = -1;
   /** When true, the shell should present full-screen player UI. */
   @Trace public openPlayerUi: boolean = false;
+  /**
+   * 播放页 chrome 的「打开歌曲菜单」请求序号（每次点击 +1）。
+   *
+   * ★ 2026-10-18（用户：「把右上角的分享改成歌曲菜单」）：右上角那颗按钮在
+   *   `TopAreaComponent` 里，而菜单弹层只有 `ControlAreaComponent` 能挂（一个组件只能挂一个
+   *   `bindSheet`）。两者之间**没有**父子参数链（`TopAreaComponent` 被挂两处、
+   *   `ControlAreaComponent` 被挂更多处），所以走这条已经存在的共享状态：点方只 bump 序号，
+   *   菜单方 `@Monitor` 响应。序号而非布尔：连点两次也要能重新打开。
+   */
+  @Trace public menuRequestSeq: number = 0;
+  /**
+   * 播放页 meta 行「评论」按钮的请求序号（每次点击 +1），语义同 {@link menuRequestSeq}。
+   *
+   * 评论面板是 `ControlAreaComponent` 那个弹层里的**子页**（复用底部「评论」按钮的
+   * `openCommentSheet()`），所以同样只传一个序号，不复制面板。
+   */
+  @Trace public commentRequestSeq: number = 0;
 }
