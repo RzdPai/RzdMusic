@@ -1232,17 +1232,13 @@ export class PlayerExpandState {
     if (this.bigSize > 0) {
       return this.bigSize;
     }
-    // ★★★ 2026-10-21（**照搬上游结构**，这才是「打断动画后滑歌词页封面不缩」的根因）：
-    //   上游 `CoverMorph` 的构造参数是 `{ edge, metaYPlayer, tyPlayer, lyricCoverEdge,
-    //   lyricLeftInset, swiperW }`（反编译对象字面量 `wujie.pa:4526`）——**没有一个来自
-    //   "量到的大封面节点"**：`edge` 由 `coverEdgeMaxOf(swiperBoxW)` + `fitPlayerOverlay` **算**出来，
-    //   其余是常量/布局值。所以无界的歌词页浮层**永远不会因为"没量到"而停用**。
-    //   本仓原来这里两者都 0 就 `return 0` ⇒ `lyricCoverSizeOf()` 归零 ⇒ `lyricFloat()` 假
-    //   ⇒ 歌词页不缩不飞。而"没量到"恰恰是**打断展开动画后重开**的常态（大封面矩形与上一轮
-    //   相同 ⇒ `onAreaChange` 不再触发 ⇒ `bigSize` 停在 0）。
-    //   ⇒ 补上与上游同一个计算兜底：`playerCoverGeomRect()` 就是那句 `edge` 的计算
-    //     （`coverEdgeMaxOf` → `fitPlayerOverlay`，纯窗口尺寸推出来，不碰节点测量）。
-    return this.playerCoverGeomRect().size;
+    // ★ 2026-10-21 回退：**不能**用 `playerCoverGeomRect().size` 兜底。
+    //   实测（`261018-2359`）这样会让 `lyricFloat()` 在 t=0 就为真 ⇒ 浮层用"算出来的矩形"
+    //   提前接管封面 ⇒ 封面页的封面**溢出右边缘**（用户截图）。
+    //   原因：浮层的坐标基准是**窗口坐标的实测值**（`reportBig` / `measureEndAnchor` 给的那套），
+    //   而 `playerCoverGeomRect()` 是"内容页坐标 + 计算值"，两者不是一个基准。
+    //   ⇒ 这里必须保留"量到才可用"的语义；真正要修的是**让测量每轮都真的发生**。
+    return 0;
   }
 
   /**
@@ -1252,8 +1248,20 @@ export class PlayerExpandState {
    *    绗簩闂紙`lyricCoverSizeOf() > 0`锛夆€斺€?澶у皝闈㈡湭涓婃姤鏃惰嫢杩樿繑鍥炲父閲忥紝娴眰浼氭彁鍓嶅惎鐢ㄣ€?
    *    璁╂瓕璇嶅嚟绌哄鍑轰竴娈甸《閮ㄧ暀鐧姐€?
    */
-  public lyricCoverSizeOf(): number {
-    if (this.playerCoverWidth() <= 0) {
+  /**
+   * 「大封面锚点 + 歌词页浮层」的一行诊断串（**给应用内运行日志用**，用户没有 hdc）。
+   *
+   * 一旦 `lyricFloat()` 该真不真，就要能一眼看出是哪条输入没到：
+   * `anchor=0/0` ⇒ 一次都没量到；`win=0x0` ⇒ 窗口尺寸没到；`cover=0` ⇒ 浮层被关。
+   * @returns 形如 `anchor=331.0/1 big=331.0 win=360.0x780.0 cover=48.7 float=1`
+   */
+  public lyricDiagLine(): string {
+    return `anchor=${this.bigNodeW.toFixed(1)}/${this.bigNodeKnown ? 1 : 0} ` +
+      `big=${this.bigSize.toFixed(1)} win=${this.windowWidthVp.toFixed(1)}x${this.windowHeightVp.toFixed(1)} ` +
+      `cover=${this.lyricCoverSizeOf().toFixed(1)} float=${this.lyricFloat() ? 1 : 0}`;
+  }
+
+  public lyricCoverSizeOf(): number {    if (this.playerCoverWidth() <= 0) {
       return 0;
     }
     return PlayerExpandState.LYRIC_COVER_EDGE_VP;

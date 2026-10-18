@@ -42,6 +42,8 @@ import {
   PLAYER_BIG_COVER_ID,
   // 闂?2026-10-17闂佹寧绋戦悧蹇涘矗鎼淬劌绠规い鎺嶇劍閿熴儵鏌?`PLAYER_ROOT_ID`闂佹寧绋戦¨鈧紒鍙樺嵆濡啴鎮欓弶鎴澒闂佸憡鏌ㄩ悘婵嬪矗瑜斿濠氼敇閳藉棙鐭楅梺鐟板槻缁夋挳骞撻埡鍛亗鐟滃繐鈻撻幋锔界劷闁挎繂瀚伴崵瀣煠閸濆嫬鈧宕戦敐澶嬫櫖? 閻熸粏鍩囬崹纭呫亹婢跺备鍋撻崷顓熷殌婵炲懏甯￠弫?
   PLAYER_ROOT_ID,
+  // 2026-10-19：诊断写进应用内运行日志（用户没有 hdc，设置里能看）。
+  appendPlayLog,
   // 闂?2026-10-17闂佹寧绋戦悧蹇涘矗鎼淬劌绠规い鎺嶇劍閿熴儵鏌?ShrinkOverlay闂佹寧绋戦¨鈧紒鍙樺嵆濡啴鎮欓弶鎴澒闂佸憡鏌ㄩ悘婵嬪矗瑜斿濠氼敇閻樺磭鏆犻棅顐㈡祩閸嬪棝宕ｆ惔銊ョ哗闁告挷鑳剁槐姘箾閹碱厼鏋涢柣?
   MorphShrinkState,
   type MorphShrinkRect,
@@ -1703,6 +1705,10 @@ export struct PlaybackPage {
           `t=${this.lyricMorphT.toFixed(3)} float=${this.expandState.lyricFloat() ? 1 : 0} ` +
           `coverSize=${this.expandState.lyricCoverSizeOf().toFixed(1)} ` +
           `geomReady=${this.expandState.lyricGeometryReady() ? 1 : 0}`);
+      // ★ 2026-10-19（用户用不了 hdc）：同一条诊断也写进**应用内运行日志**
+      //   （设置 → 播放/关于里那块"运行日志"，`AppStorage['lxPlayLog']`），
+      //   用户截图就能把 `t / anchor / big / win / cover / float` 全带回来。
+      appendPlayLog(`[歌词页] t=${this.lyricMorphT.toFixed(3)} ${this.expandState.lyricDiagLine()}`);
     }
     // 闁荤姳鐒︽刊鑺ュ緞?濠电姴锕ラ懝鐐叏閳哄倻顩风€广儱鎳忛煬顒勫级閳哄倻顬兼い?闂佹寧绋戦悧鎰帮綖?`lastScrollAtMs` 闂佹眹鍔岀€氼參寮悙鐑樼厒濠电姴绻掔粣妤呮煢閳ь剟鎸婃径灞炬瘞闂婎偄娲ら幊姗€濡磋箛鏇熷闁宠　鍋撶紓宥呮噽缁辨帒鈻庨幘顖氫壕闁归偊鍓氭慨搴ㄥ级閳哄倻鈽夐悗瑙勫▕閺?
     // ★★★ 2026-10-17（③ 照搬无界：`PlayerPage.onContentDidScroll` = `wujie.pa:190026-190075`）
