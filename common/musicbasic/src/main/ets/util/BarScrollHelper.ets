@@ -101,8 +101,8 @@ export class BarScrollHelper {
     if (action === BarAction.NONE) {
       return;
     }
-    // 上游 `applyBarAction` 的**反向**映射：COLLAPSE 动作 ⇒ 迷你条 EXPAND 样式。
-    const expand: boolean = action === BarAction.COLLAPSE;
+    // 方向以用户实测为准：**上滑 ⇒ 单行（展开档）**、下滑 ⇒ 两排。
+    const expand: boolean = action === BarAction.EXPAND;
     Logger.info('RzdBarLayout', `scroll delta=${delta} action=${action} expand=${expand}`);
     if (appState.miniBarExpanded === expand) {
       return;
