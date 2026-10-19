@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -474,10 +474,11 @@ export struct PlaylistDetailSongListSection {
             titleFontSize: $r('sys.float.Body_M'),
             // ★ 用户 2026-10-19：正在播放那首的**歌名用主题色**（用户可自定义颜色）
             titleFontColor: this.isCurrentSong(item) ? this.themeState.color : this.surfaceInk(),
-            titleFontWeight: FontWeight.Medium
+            titleFontWeight: FontWeight.Medium,
+            // ★ 用户 2026-10-19 第二轮：小竖条要**紧贴歌名右侧**（不是整行最右边）
+            hugContent: true
           })
-            .layoutWeight(1)
-          // 播放中动态小竖条（暂停就停）
+          // 播放中动态小竖条（5 根；暂停就停）
           if (this.isCurrentSong(item)) {
             NowPlayingIndicator({
               playing: this.appState.isPlay,

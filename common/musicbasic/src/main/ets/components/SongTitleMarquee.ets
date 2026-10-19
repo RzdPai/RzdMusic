@@ -92,9 +92,39 @@ export struct SongTitleMarquee {
    *    也不能在 Column 里用 `layoutWeight(1)`（那是**竖直**方向分配，语义错位）。
    */
   @Param fillByWidth: boolean = true;
+  /**
+   * 父容器是 Row，且**右侧紧贴着一个要跟歌名走的小徽标**（如正在播放的 5 根小竖条）时用。
+   *
+   * 语义：不占满主轴（**不**用 `layoutWeight(1)`，那样徽标会被顶到整行最右边），
+   * 改为 `.flexShrink(1)`（`Row` 里 `flexShrink` 默认是 0，所以必须显式给）：
+   * - 歌名短 ⇒ 宽度 = 内容宽，徽标**紧贴歌名右侧**（用户 2026-10-19 的要求）；
+   * - 歌名长 ⇒ 被压到剩余宽度，超出的部分在里面跑马灯（不会把徽标挤出屏幕）。
+   *
+   * 优先级高于 {@link fillByWidth}（两者同时给时按本参数走）。
+   */
+  @Param hugContent: boolean = false;
 
   build() {
-    if (this.fillByWidth) {
+    if (this.hugContent) {
+      // 父容器是 Row + 右侧有小徽标：跟内容走，允许被压缩
+      Text(this.text)
+        .fontSize(this.titleFontSize)
+        .fontColor(this.titleFontColor)
+        .fontWeight(this.titleFontWeight)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.MARQUEE })
+        .marqueeOptions({
+          start: true,
+          fromStart: this.marqueeFromStart,
+          step: this.marqueeStep,
+          loop: this.marqueeLoop,
+          delay: this.marqueeDelay,
+          fadeout: this.marqueeFadeout,
+          marqueeStartPolicy: MarqueeStartPolicy.DEFAULT
+        })
+        .flexShrink(1)
+        .constraintSize({ minWidth: 0 })
+    } else if (this.fillByWidth) {
       // 父容器是 Column/Stack：交叉轴占满
       Text(this.text)
         .fontSize(this.titleFontSize)

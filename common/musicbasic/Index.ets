@@ -160,3 +160,11 @@ export {
 } from './src/main/ets/model/PlayerExpandState';
 export { traditionalize } from './src/main/ets/util/SimplifiedToTraditional';
 export { NowPlayingIndicator } from './src/main/ets/view/NowPlayingIndicator';
+export { SelectionActionCell } from './src/main/ets/view/SelectionActionCell';
+export { LocateFloatButton } from './src/main/ets/view/LocateFloatButton';
+export {
+  buildBarBlurStyle,
+  barBlurOptions,
+  pressLightEffect,
+  illuminatedEffect
+} from './src/main/ets/util/BarMaterial';

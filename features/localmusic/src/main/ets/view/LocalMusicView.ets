@@ -25,7 +25,19 @@ import { common } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions } from '@kit.UIDesignKit';
 import { guardPlayerBack } from 'musicbasic';
-import { AppStorageKeys, MusicAppState, SongItem, SongTitleMarquee, ThemeState, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
+import {
+  AmbientState,
+  AppStorageKeys,
+  barBlurOptions,
+  buildBarBlurStyle,
+  illuminatedEffect,
+  MusicAppState,
+  SelectionActionCell,
+  SongItem,
+  SongTitleMarquee,
+  ThemeState,
+  getStatusBarTopVpFromWindowUtil
+} from 'musicbasic';
 import { MediaService } from 'player';
 import {
   ImportResult,
@@ -53,6 +65,9 @@ export struct LocalMusicPage {
     AppStorageV2.connect(ThemeState, AppStorageKeys.THEME_STATE, () => new ThemeState())!;
   @Local appState: MusicAppState =
     AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
+  /** 底部操作条的光感档位（与标题栏同档，见 musicbasic `BarMaterial`）。 */
+  @Local ambientState: AmbientState =
+    AppStorageV2.connect(AmbientState, AppStorageKeys.AMBIENT_STATE, () => new AmbientState())!;
   /** 导入进度 / 库版本（导入、删除、歌词匹配变化都会 +1） */
   @Local importState: LocalMusicImportState = localMusicImportState();
   /** 当前列表快照（倒序：新导入在最前） */
@@ -76,6 +91,18 @@ export struct LocalMusicPage {
   aboutToAppear(): void {
     this.ensureInit();
     this.refresh();
+  }
+
+  /**
+   * 页面销毁时**必须**把 `selectionActive` 复位。
+   *
+   * 否则用户在多选态直接返回上一页 ⇒ 壳层那条悬浮播放条会一直不显示（全局开关卡在 true）。
+   */
+  aboutToDisappear(): void {
+    if (this.appState.selectionActive) {
+      this.appState.selectionActive = false;
+      hilog.info(DOMAIN, TAG, 'reset selectionActive on disappear');
+    }
   }
 
   /** 库变化（导入完成 / 删除 / 歌词匹配）后重新读列表 */
@@ -229,11 +256,15 @@ export struct LocalMusicPage {
   private enterSelectionMode(): void {
     this.selectionMode = true;
     this.selectedMap = {};
+    // ★ 用户 2026-10-19：多选时底部要放操作条 ⇒ 让壳层把那条悬浮播放条**临时隐藏**
+    //   （全局唯一开关 `MusicAppState.selectionActive`，与历史/收藏页同一口径）
+    this.appState.selectionActive = true;
   }
 
   private exitSelectionMode(): void {
     this.selectionMode = false;
     this.selectedMap = {};
+    this.appState.selectionActive = false;
   }
 
   private toggleSelectAll(): void {
@@ -331,7 +362,8 @@ export struct LocalMusicPage {
    * 与 `RecordListPage.bottomReservedVp()` 同一口径。
    */
   private bottomReservedVp(): number {
-    return 56 + 16 + 16;
+    // 多选时壳层那条播放条已临时隐藏（`MusicAppState.selectionActive`），改为给底部操作条让位
+    return 56 + 16 + 16 + (this.selectionMode ? 76 : 0);
   }
 
   /**
@@ -466,43 +498,51 @@ export struct LocalMusicPage {
     .backgroundColor($r('sys.color.background_secondary'))
   }
 
-  /** 多选模式操作条：全选 / 删除(n) / 取消 */
+  /**
+   * 多选底部操作条（用户 2026-10-19：本地音乐「沿用新样式」）。
+   *
+   * 与 `RecordListPage.SelectionActionBar()` **同一套观感**（同为 musicbasic 的
+   * `SelectionActionCell` + `BarMaterial` 材质背板）：
+   * - 悬浮胶囊：材质背板（`adaptiveColor = AVERAGE` 才有光感）+ 细分隔线 + 投影；
+   * - 每格按下有 `hdsEffect` 点光，条子本体 `illuminatedEffect()` 受光；
+   * - **没有蓝色底**：删除用用户自定义主题色，其余文字走 `font_primary`。
+   */
   @Builder
   private SelectionBar() {
-    Row({ space: 12 }) {
-      Text(this.selectedCount() === this.items.length && this.items.length > 0 ? '取消全选' : '全选')
-        .fontSize($r('sys.float.Body_S'))
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('sys.color.font_secondary'))
-        .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-        .borderRadius($r('sys.float.corner_radius_level12'))
-        .backgroundColor($r('sys.color.background_secondary'))
-        .onClick(() => {
+    Row({ space: 4 }) {
+      SelectionActionCell({
+        icon: $r('sys.symbol.checkmark_circle'),
+        label: this.selectedCount() === this.items.length && this.items.length > 0 ? '取消全选' : '全选',
+        tint: $r('sys.color.font_primary'),
+        onTap: (): void => {
           this.toggleSelectAll();
-        })
-      Text(this.selectedCount() > 0 ? `删除(${this.selectedCount()})` : '删除')
-        .fontSize($r('sys.float.Body_S'))
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.selectedCount() > 0 ?
-          $r('sys.color.font_on_primary') : $r('sys.color.font_tertiary'))
-        .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-        .borderRadius($r('sys.float.corner_radius_level12'))
-        .backgroundColor(this.selectedCount() > 0 ? this.themeState.color : '#1A000000')
-        .onClick(() => {
+        }
+      })
+      SelectionActionCell({
+        icon: $r('sys.symbol.trash'),
+        label: this.selectedCount() > 0 ? `删除(${this.selectedCount()})` : '删除',
+        tint: this.themeState.color,
+        onTap: (): void => {
           this.confirmRemove();
-        })
-      Text('取消')
-        .fontSize($r('sys.float.Body_S'))
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('sys.color.font_secondary'))
-        .padding({ left: 4, right: 4 })
-        .onClick(() => {
+        }
+      })
+      SelectionActionCell({
+        icon: $r('sys.symbol.xmark'),
+        label: '取消',
+        tint: $r('sys.color.font_primary'),
+        onTap: (): void => {
           this.exitSelectionMode();
-        })
-      Blank()
+        }
+      })
     }
     .width('100%')
-    .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+    .height(66)
+    .padding({ left: 6, right: 6 })
+    .borderRadius(33)
+    .backgroundBlurStyle(buildBarBlurStyle(this.ambientState.level), barBlurOptions())
+    .border({ width: 0.5, color: $r('sys.color.comp_divider') })
+    .visualEffect(illuminatedEffect())
+    .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 8 })
   }
 
   /** 单条本地歌行 */
@@ -651,28 +691,39 @@ export struct LocalMusicPage {
           this.MatchProgressBar()
         }
 
-        if (this.selectionMode) {
-          this.SelectionBar()
-        }
-
         if (this.items.length === 0) {
           this.EmptyGuide()
         } else {
-          List({ space: 2 }) {
-            ForEach(this.items, (item: SongItem) => {
-              ListItem() {
-                this.SongRow(item)
+          // ★ 用户 2026-10-19：多选操作条改成**底部悬浮胶囊**（与历史/收藏页同款）⇒
+          //   列表与操作条在同一个 Stack 里，操作条盖在列表上，不压缩列表高度。
+          Stack({ alignContent: Alignment.Bottom }) {
+            List({ space: 2 }) {
+              ForEach(this.items, (item: SongItem) => {
+                ListItem() {
+                  this.SongRow(item)
+                }
+              }, (item: SongItem) => `${item.songId}_${item.interval}`)
+            }
+            .scrollBar(BarState.Off)
+            .width('100%')
+            .height('100%')
+            .divider({ strokeWidth: 0.6, color: $r('sys.color.background_tertiary') })
+            // ★ 底部"给悬浮播放条让位"的留白留在**列表里**（`contentEndOffset` = 内容末端到显示区
+            //   边界的距离，官方 `ScrollableCommonMethod` @since 22，List/Scroll 通用）—— 它随内容
+            //   一起滚走。**不要**写到容器的 `padding({ bottom })` 上：那是固定在屏幕底部的死带。
+            .contentEndOffset(this.bottomReservedVp())
+
+            if (this.selectionMode) {
+              Column() {
+                this.SelectionBar()
               }
-            }, (item: SongItem) => `${item.songId}_${item.interval}`)
+              .width('100%')
+              .padding({ left: 16, right: 16, bottom: 28 })
+              .hitTestBehavior(HitTestMode.Transparent)
+            }
           }
-          .scrollBar(BarState.Off)
           .layoutWeight(1)
           .width('100%')
-          .divider({ strokeWidth: 0.6, color: $r('sys.color.background_tertiary') })
-          // ★ 底部"给悬浮播放条让位"的留白留在**列表里**（`contentEndOffset` = 内容末端到显示区
-          //   边界的距离，官方 `ScrollableCommonMethod` @since 22，List/Scroll 通用）—— 它随内容
-          //   一起滚走。**不要**写到容器的 `padding({ bottom })` 上：那是固定在屏幕底部的死带。
-          .contentEndOffset(this.bottomReservedVp())
         }
       }
       .width('100%')
@@ -712,6 +763,11 @@ export struct LocalMusicPage {
     .onBackPressed((): boolean => {
       if (this.showMatchSheet) {
         this.showMatchSheet = false;
+        return true;
+      }
+      // ★ 多选态返回 = 先退出多选（与底栏「取消」同义），不要一下子把整页弹掉
+      if (this.selectionMode) {
+        this.exitSelectionMode();
         return true;
       }
       return guardPlayerBack('LocalMusicView');

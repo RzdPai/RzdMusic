@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -50,9 +50,10 @@ import { AppStorageV2, uiObserver } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { guardPlayerBack, PlaybackIntentState, SongItem } from 'musicbasic';
 import {
-  AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, FavoriteEntry,
+  AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, barBlurOptions,
+  buildBarBlurStyle, FavoriteEntry, illuminatedEffect, LocateFloatButton,
   MusicAppState, MusicStoreService, NowPlayingIndicator, PageTopInsetHelper, PlayedSongRecord, PlaylistDto,
-  RouterUrlConstants,
+  RouterUrlConstants, SelectionActionCell,
   SongTitleMarquee, ThemeState, TitleBarConstants,
   buildTitleMaterial, getStatusBarTopVpFromWindowUtil
 } from 'musicbasic';
@@ -209,6 +210,17 @@ export struct RecordListPage {
   aboutToAppear(): void {
     hilog.info(DOMAIN, TAG, 'appear mode=%{public}s', this.mode);
     this.refreshRecords();
+  }
+
+  /**
+   * 页面销毁时**必须**把 `selectionActive` 复位：否则用户在多选态直接返回上一页，
+   * 壳层那条悬浮播放条会一直不显示（全局开关卡在 true）。
+   */
+  aboutToDisappear(): void {
+    if (this.appState.selectionActive) {
+      this.appState.selectionActive = false;
+      hilog.info(DOMAIN, TAG, 'reset selectionActive on disappear');
+    }
   }
 
   /** 历史 / 收藏在别处被改动（播放器、歌曲菜单…）时刷新列表。 */
@@ -528,58 +540,64 @@ export struct RecordListPage {
    * 多选底栏（用户 2026-10-19：全选/删除/取消 那一排改成**HDS 底栏那种操作条**）。
    *
    * 参照用户给的参考图：底部是一条悬浮胶囊，里面是「删除 / 添加至歌单 / 取消收藏」三格
-   * （图标 + 小字，删除用用户自定义强调色）。「全选」上移到标题栏右侧（见 getTitleBar）。
+   * （图标 + 小字）。「全选」上移到标题栏右侧（见 getTitleBar）。
    * 多选期间壳层那条悬浮播放条会被 `MusicAppState.selectionActive` 临时隐藏，所以两者不叠。
+   *
+   * ★★ 2026-10-19 第二轮（用户：「颜色不对，不能是蓝色」「要接入光感」）：
+   *   原来整条 `backgroundColor(sys.color.background_emphasize)` = 一坨蓝。
+   *   现在改成 **HDS 风格材质背板 + 光感**：
+   *   - 背板：`backgroundBlurStyle(buildBarBlurStyle(档位), barBlurOptions())` ——
+   *     `adaptiveColor = AVERAGE` 才会"取背后画面平均色"，底下的画面换色它跟着换；
+   *   - 光感：每格 `SelectionActionCell` 自带 `hdsEffect` 点光（按下那一格亮、相邻的受光），
+   *     条子本体再挂一次 `illuminatedEffect()` ⇒ 条子边缘也会被照亮；
+   *   - 颜色：删除用**用户自定义主题色**，其余文字用 `font_primary`（不再有写死的蓝）。
    */
   @Builder
   private SelectionActionBar() {
     Row({ space: 4 }) {
-      this.SelectionAction($r('sys.symbol.trash'),
-        this.selectedCount() > 0 ? '删除(' + this.selectedCount() + ')' : '删除',
-        this.themeState.color, (): void => {
+      SelectionActionCell({
+        icon: $r('sys.symbol.trash'),
+        label: this.selectedCount() > 0 ? '删除(' + this.selectedCount() + ')' : '删除',
+        tint: this.themeState.color,
+        onTap: (): void => {
           this.deleteSelected();
-        })
-      this.SelectionAction($r('sys.symbol.plus'),
-        '添加至歌单', $r('sys.color.font_primary'), (): void => {
+        }
+      })
+      SelectionActionCell({
+        icon: $r('sys.symbol.plus'),
+        label: '添加至歌单',
+        tint: $r('sys.color.font_primary'),
+        onTap: (): void => {
           this.addSheetOpen = true;
-        })
+        }
+      })
       if (!this.isHistory()) {
-        this.SelectionAction($r('sys.symbol.heart_fill'),
-          '取消收藏', $r('sys.color.font_primary'), (): void => {
+        SelectionActionCell({
+          icon: $r('sys.symbol.heart_fill'),
+          label: '取消收藏',
+          tint: $r('sys.color.font_primary'),
+          onTap: (): void => {
             this.unfavoriteSelected();
-          })
-      }
-      this.SelectionAction($r('sys.symbol.xmark'),
-        '取消', $r('sys.color.font_primary'), (): void => {
-          this.exitSelectionMode();
+          }
         })
+      }
+      SelectionActionCell({
+        icon: $r('sys.symbol.xmark'),
+        label: '取消',
+        tint: $r('sys.color.font_primary'),
+        onTap: (): void => {
+          this.exitSelectionMode();
+        }
+      })
     }
     .width('100%')
     .height(66)
     .padding({ left: 6, right: 6 })
     .borderRadius(33)
-    .backgroundColor($r('sys.color.background_emphasize'))
-    .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.45)', offsetX: 0, offsetY: 8 })
-  }
-
-  /** 底栏里的一格（图标 + 小字）。 */
-  @Builder
-  private SelectionAction(icon: Resource, label: string, color: ResourceColor, action: () => void) {
-    Column({ space: 4 }) {
-      SymbolGlyph(icon)
-        .fontSize(20)
-        .fontColor([color])
-      Text(label)
-        .fontSize(11)
-        .fontColor(color)
-        .maxLines(1)
-    }
-    .layoutWeight(1)
-    .height('100%')
-    .justifyContent(FlexAlign.Center)
-    .onClick(() => {
-      action();
-    })
+    .backgroundBlurStyle(buildBarBlurStyle(this.ambientState.level), barBlurOptions())
+    .border({ width: 0.5, color: $r('sys.color.comp_divider') })
+    .visualEffect(illuminatedEffect())
+    .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 8 })
   }
 
   /** 把选中的歌一次性加进某个本地歌单（多选底栏「添加至歌单」）。 */
@@ -704,10 +722,12 @@ export struct RecordListPage {
               titleFontSize: F_ITEM,
               // ★ 用户 2026-10-19：正在播放的那首**歌名用主题色**（用户可自定义颜色）
               titleFontColor: this.isCurrentRecord(record) ? this.themeState.color : $r('sys.color.font_primary'),
-              titleFontWeight: FontWeight.Normal
+              titleFontWeight: FontWeight.Normal,
+              // ★ 用户 2026-10-19 第二轮：小竖条要**紧贴歌名右侧**（不是整行最右边）⇒
+              //   歌名不再占满主轴（去掉 layoutWeight），改 `hugContent`（`flexShrink(1)`）。
+              hugContent: true
             })
-              .layoutWeight(1)
-            // 播放中的动态小竖条（暂停就停，见 musicbasic 的 NowPlayingIndicator）
+            // 播放中的动态小竖条（5 根；暂停就停，见 musicbasic 的 NowPlayingIndicator）
             if (this.isCurrentRecord(record)) {
               NowPlayingIndicator({
                 playing: this.appState.isPlay,
@@ -1045,29 +1065,16 @@ export struct RecordListPage {
           .padding({ left: 16, right: 16, bottom: 28 })
           .hitTestBehavior(HitTestMode.Transparent)
         } else if (!this.isHistory() || this.records.length > 0) {
-          // ★ 定位到当前播放（浮动圆按钮，贴右下角；智感握姿三方不可用，见 locateCurrent 注释）
-          Column() {
-            Row() {
-              SymbolGlyph($r('sys.symbol.arrow_down_circle'))
-                .fontSize(22)
-                .fontColor([this.themeState.color])
-            }
-            .width(52)
-            .height(52)
-            .borderRadius(26)
-            .justifyContent(FlexAlign.Center)
-            .backgroundColor($r('sys.color.background_emphasize'))
-            .shadow({ radius: 18, color: 'rgba(0, 0, 0, 0.4)', offsetX: 0, offsetY: 6 })
-            .onClick(() => {
+          // ★ 定位到当前播放（用户 2026-10-19 第二轮：图标换成本播放列表那颗、缩小、
+          //   去掉蓝底、加智感握姿 ⇒ 统一用 musicbasic 的 `LocateFloatButton`，
+          //   与播放器播放列表里的定位按钮同一个 SVG，见该组件头部注释）
+          LocateFloatButton({
+            tint: this.themeState.color,
+            clickable: this.currentRecordIndex() >= 0,
+            onTap: (): void => {
               this.locateCurrent();
-            })
-          }
-          .width('100%')
-          .height('100%')
-          .justifyContent(FlexAlign.End)
-          .alignItems(HorizontalAlign.End)
-          .padding({ right: 18, bottom: 96 })
-          .hitTestBehavior(HitTestMode.Transparent)
+            }
+          })
         }
       }
       .width('100%')
@@ -1076,7 +1083,14 @@ export struct RecordListPage {
       //   状态栏那一条变死背景 —— 用户要的是"**延伸进状态栏**"（见 `titleTopInset()` 说明）。
       //   让开状态栏 + 标题栏的偏移在**滚动内容里**（下面那个 `Blank()`）。
     }
-    .onBackPressed((): boolean => guardPlayerBack('RecordListPage'))
+    .onBackPressed((): boolean => {
+      // ★ 多选态返回 = 先退出多选（与底栏「取消」同义），不要一下子把整页弹掉
+      if (this.selectionMode) {
+        this.exitSelectionMode();
+        return true;
+      }
+      return guardPlayerBack('RecordListPage');
+    })
     .hideTitleBar(false)
     .hideBackButton(false)
     .titleBar(this.getTitleBar())

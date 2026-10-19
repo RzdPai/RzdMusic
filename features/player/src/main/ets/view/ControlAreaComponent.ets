@@ -21,6 +21,7 @@ import { PlayerConstants } from '../constant/PlayerConstants';
 import { MusicPlayMode } from '../model/MusicData';
 import { PlayerDataUtil } from '../util/PlayerDataUtil';
 import { PlayerViewModel } from '../viewmodel/PlayerViewModel';
+import { MediaService } from '../model/MediaService';
 import { DownloadUtil } from '../util/DownloadUtil';
 import { LXSearchSong } from '../source/LXMusicSDK';
 import { LXQualityOption, lxGetQualityOptions } from '../source/LXQualityApi';
@@ -261,6 +262,13 @@ export struct ControlAreaComponent {
   private otherVersionsOpenGeneration: number = 0;
   /** When true the menu sheet shows the quality sub-list instead of the main menu. */
   @Local showMenuQuality: boolean = false;
+  /**
+   * 歌曲菜单里的「倍速」子页（用户 2026-10-19：「倍速应该在**播放页**的歌曲菜单里」）。
+   *
+   * 与「切换音质」「添加到歌单」「评论」同样是**同一个弹层里的子页**（一个组件只能挂一个
+   * `bindSheet`），靠这个标志切换；进任何子页前都要先过 `resetMenuSubPages()`。
+   */
+  @Local showMenuSpeed: boolean = false;
   /** Quality sub-list mode: 'download' picks a quality to download, 'switch' sets playback quality. */
   @Local menuQualityMode: string = 'switch';
   @Local currentNetworkWifi: boolean = false;
@@ -355,6 +363,7 @@ export struct ControlAreaComponent {
     this.showMenuComment = false;
     this.showMenuPlaylist = false;
     this.showMenuQuality = false;
+    this.showMenuSpeed = false;
     this.menuQualityMode = 'switch';
   }
 
@@ -381,6 +390,8 @@ export struct ControlAreaComponent {
       this.showMenuPlaylist = true;
     } else if (page === 'comment') {
       this.showMenuComment = true;
+    } else if (page === 'speed') {
+      this.showMenuSpeed = true;
     }
     if (this.menuSheetOpen()) {
       return;   // 已经开着：只切子页
@@ -505,6 +516,7 @@ export struct ControlAreaComponent {
     this.requestMenuSheet(false);
     this.showMenuQuality = false;
     this.showMenuComment = false;
+    this.showMenuSpeed = false;
   }
 
   /**
@@ -1079,6 +1091,8 @@ export struct ControlAreaComponent {
         .height('100%')
       } else if (this.showMenuPlaylist) {
         this.PlaylistPickerRows()
+      } else if (this.showMenuSpeed) {
+        this.SpeedRows()
       } else if (this.showMenuQuality) {
         Text(this.menuQualityMode === 'download' ? '选择下载音质' : '切换音质')
           .fontSize(18)
@@ -1156,6 +1170,14 @@ export struct ControlAreaComponent {
           (): void => {
             this.openSheetFor('quality');
           })
+        // ★★ 用户 2026-10-19：「倍速应该在**播放页**的歌曲菜单里」
+        //   ⇒ 与「切换音质」同一层级的入口，右侧直接显示当前档位（不用点进去才知道）。
+        //   子页见本文件的 `SpeedRows()`；应用走 `MediaService.applyPlaybackRate`
+        //   （`AVPlayer.setSpeed` 在本 SDK 返回 void、没有 then，见 MediaService 里的注释）。
+        this.MenuRow(this.speedMenuLabel(), $r('sys.symbol.rhythm'),
+          (): void => {
+            this.openSheetFor('speed');
+          })
         // ★★★ 2026-10-18（用户：「播放页歌曲菜单里加个投播」）：
         //   投播**没有第二套实现** —— 底部那排那颗就是 `AVCastPicker`（`@kit.AVSessionKit`，
         //   api 10+，`SystemCapability.Multimedia.AVSession.AVCast`），系统自己弹设备列表。
@@ -1202,6 +1224,70 @@ export struct ControlAreaComponent {
     .padding(this.showMenuComment ?
       { left: 0, right: 0, bottom: 0 } : { left: 16, right: 16, bottom: 24 })
     .backgroundColor($r('app.color.background_secondary'))
+  }
+
+  /** 倍速档位（用户 2026-10-19：播放页歌曲菜单里要有倍速）。 */
+  private static readonly SPEED_OPTIONS: number[] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+
+  /** 菜单项文案：`倍速 1.25x`（1.0 显示成 `1.0x`，去掉多余尾零）。 */
+  private speedMenuLabel(): string {
+    return '倍速 ' + ControlAreaComponent.rateText(this.playerViewModel.appState.playbackRate);
+  }
+
+  /** 档位 → 文本：1.0 → `1.0x`、1.25 → `1.25x`、0.5 → `0.5x`。 */
+  private static rateText(rate: number): string {
+    return rate.toFixed(2).replace(/0$/, '') + 'x';
+  }
+
+  /**
+   * 「倍速」子页（与「切换音质」同一套行样式）。
+   *
+   * 应用：写共享状态 `MusicAppState.playbackRate`（列表行、SongMoreMenu 菜单项都读它）
+   * + `MediaService.applyPlaybackRate()` 让 AVPlayer 立刻生效，然后收起弹层。
+   *
+   * 排查日志关键字：`RzdPlaybackRate`。
+   */
+  @Builder
+  private SpeedRows() {
+    Text('播放倍速')
+      .fontSize(18)
+      .fontWeight(FontWeight.Bold)
+      .fontColor($r('app.color.font_primary'))
+      .margin({ top: 8, bottom: 12 })
+
+    ForEach(ControlAreaComponent.SPEED_OPTIONS, (rate: number) => {
+      Row() {
+        Text(rate === 1.0 ? '1.0x（原速）' : ControlAreaComponent.rateText(rate))
+          .fontSize(16)
+          .fontColor($r('app.color.font_primary'))
+          .layoutWeight(1)
+        if (this.playerViewModel.appState.playbackRate === rate) {
+          SymbolGlyph($r('sys.symbol.checkmark'))
+            .fontSize(18)
+            .fontColor([this.themeState.color])
+        }
+      }
+      .width('100%')
+      .height(48)
+      .padding({ left: 16, right: 16 })
+      .borderRadius(10)
+      .backgroundColor($r('app.color.background_secondary'))
+      .onClick((): void => {
+        this.applySpeedRate(rate);
+      })
+    }, (rate: number) => 'menu-speed-' + rate)
+  }
+
+  /** 应用倍速：写共享状态 + 让播放器生效，然后收起弹层。 */
+  private applySpeedRate(rate: number): void {
+    this.playerViewModel.appState.playbackRate = rate;
+    MediaService.getInstance().applyPlaybackRate(rate);
+    Logger.info(ControlAreaComponent.logTag, `RzdPlaybackRate applied rate=${rate}`);
+    this.closeMenuSheet();
+    this.getUIContext().getPromptAction().showToast({
+      message: '倍速已设为 ' + (rate === 1.0 ? '1.0x（原速）' : ControlAreaComponent.rateText(rate)),
+      duration: 1500
+    });
   }
 
   /** 添加到歌单选择器内容：新建歌单输入 + 歌单列表。 */

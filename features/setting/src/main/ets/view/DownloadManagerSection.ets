@@ -1,5 +1,4 @@
 import { AppStorageV2 } from '@kit.ArkUI';
-import { pasteboard } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { AppStorageKeys, MusicAppState, PlayedSongRecord, SongTitleMarquee, ThemeState } from 'musicbasic';
 import { DownloadService, DownloadStatus, DownloadTask, OnlinePlayUtil } from 'player';
@@ -11,7 +10,7 @@ import { DownloadService, DownloadStatus, DownloadTask, OnlinePlayUtil } from 'p
  * 2026-10-19 重构（用户点名）：
  *   · 进度条与文字**跟着刷新**（原来 key 只带整数百分比，同一百分比内字节变了但行不重绘）；
  *   · 完成后显示「已完成 xx / xx」（原来只一句"已完成"，没有体量）；
- *   · 行改成**左滑**出「打开 / 位置 / 删除」（参照 RzdSchool 选人界面的 swipe 图标组）。
+ *   · 行改成**左滑删除**（用户第二轮：「只留删除且按钮改圆形」），点整行 = 播放（已完成的）。
  */
 @ComponentV2
 export struct DownloadManagerSection {
@@ -102,54 +101,51 @@ export struct DownloadManagerSection {
   }
 
   /**
-   * 左滑操作组：打开 / 位置 / 删除（参照 RzdSchool `PickPage`/`ManagePage` 的 swipe 图标组）。
+   * 左滑操作组：**只留「删除」**（用户 2026-10-19：「下载管理左滑只留删除且按钮改圆形」）。
    *
-   * · 打开 = 就地播放这首（下载文件已在本地，走 `source='local'` 直路）；
-   * · 位置 = 把文件路径复制到剪贴板（下载目录是用户挑的授权目录，没法直接拉起系统文件管理器）；
-   * · 删除 = 移除任务（已有能力）。
+   * 原来的「打开 / 位置」两颗已**撤掉**：
+   * - 打开 = 点整行本来就是播放（`Row.onClick` → 已下载的走 `openDownloaded`），左滑再给一颗是重复入口；
+   * - 位置 = 只是把路径复制到剪贴板（下载目录是用户挑的授权目录，没法拉起系统文件管理器定位），
+   *   一个"复制路径"占一格左滑不值得，而且它和删除并排很容易误触。
+   *
+   * 形状：56 × 56、`borderRadius(28)` = **正圆**，只有图标（不再塞小字，圆圈里塞字会挤）。
    */
   @Builder
   private SwipeActions(t: DownloadTask) {
-    Row({ space: 8 }) {
-      this.SwipeIcon($r('sys.symbol.play_fill'), '打开', this.themeState.color, (): void => {
-        this.openDownloaded(t);
-      })
-      this.SwipeIcon($r('sys.symbol.folder'), '位置', '#4C7DFF', (): void => {
-        this.revealPath(t);
-      })
-      this.SwipeIcon($r('sys.symbol.trash'), '删除', '#E53935', (): void => {
+    Row() {
+      this.SwipeIcon($r('sys.symbol.trash'), '#E53935', (): void => {
         DownloadService.getInstance().remove(t.id);
       })
     }
-    .padding({ left: 8, right: 10 })
+    .padding({ left: 8, right: 12 })
     .height('100%')
     .alignItems(VerticalAlign.Center)
   }
 
-  /** 左滑里的一颗按钮（图标 + 小字，圆角方块）。 */
+  /** 左滑里的一颗圆形按钮（只有图标）。 */
   @Builder
-  private SwipeIcon(icon: Resource, label: string, bg: string, action: () => void) {
-    Column({ space: 2 }) {
+  private SwipeIcon(icon: Resource, bg: string, action: () => void) {
+    Column() {
       SymbolGlyph(icon)
-        .fontSize(18)
+        .fontSize(20)
         .fontColor([Color.White])
-      Text(label)
-        .fontSize(10)
-        .fontColor(Color.White)
-        .maxLines(1)
     }
     .width(56)
     .height(56)
-    .borderRadius(14)
+    .borderRadius(28)
     .justifyContent(FlexAlign.Center)
     .backgroundColor(bg)
+    .accessibilityText('删除')
     .onClick(() => {
       action();
     })
   }
 
-  /** 打开：就地播放这个下载文件。 */
+  /** 打开：就地播放这个下载文件（点整行触发；已完成的才有意义）。 */
   private openDownloaded(t: DownloadTask): void {
+    if (t.status !== DownloadStatus.COMPLETED) {
+      return;
+    }
     const record: PlayedSongRecord = new PlayedSongRecord();
     record.source = 'local';
     record.songId = t.id;
@@ -163,17 +159,6 @@ export struct DownloadManagerSection {
     hilog.info(0x0000, 'RzdDownload',
       'open downloaded name=%{public}s path=%{public}s', t.name, record.url);
     void OnlinePlayUtil.playRecord(this.appState, record, this.getUIContext());
-  }
-
-  /** 位置：把文件路径复制到剪贴板（目录是用户授权的外部目录，无法直接拉起文件管理器定位）。 */
-  private revealPath(t: DownloadTask): void {
-    const path: string = t.tempPath.length > 0 ? t.tempPath : t.fileName;
-    const data: pasteboard.PasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, path);
-    pasteboard.getSystemPasteboard().setData(data).then((): void => {
-      this.getUIContext().getPromptAction().showToast({ message: '文件路径已复制', duration: 1600 });
-    }).catch((err: Error): void => {
-      hilog.error(0x0000, 'RzdDownload', 'copy path failed: %{public}s', err.message);
-    });
   }
 
   build() {
@@ -291,6 +276,10 @@ export struct DownloadManagerSection {
               .padding({ left: 14, right: 14, top: 10, bottom: 10 })
               .borderRadius($r('sys.float.corner_radius_level12'))
               .backgroundColor($r('app.color.card_background'))
+              // ★ 用户 2026-10-19：左滑「打开」撤掉后，改成**点整行即播放**（只有已完成的任务可点）
+              .onClick(() => {
+                this.openDownloaded(t);
+              })
             }
             // ★ 用户 2026-10-19：左滑出「打开 / 位置 / 删除」（参照 RzdSchool 选人界面的 swipe 图标组）
             .swipeAction({
