@@ -432,8 +432,8 @@ export struct HomeMiniBarPlayer {
           // 形变锚点仍挂在"操作区"上（上游 `lx_mini_actions`，`wujie.pa:157092` 那四个 id 之一）。
           actionsNodeId: MINI_BAR_ASIDE_ID,
           showPreviousTrack: this.showPreviousTrack,
-          // 操作区：`MiniMorph.actionsOpacityAt = clamp(1 - t/0.20)`，比封面那一档更早消失
-          actionsOpacity: this.expandState.returnHdsVisible ? 1 : this.expandState.miniBarOpacity()
+          // Source capsule fades as a whole in the last 3%; do not multiply content alpha again.
+          actionsOpacity: 1
         })
       }
       // ★★★ 2026-10-18（照搬上游 `.animation(BAR_ANIM)`，`wujie.pa:69053-69057` / `:69118-69121`）：

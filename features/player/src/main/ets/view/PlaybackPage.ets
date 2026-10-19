@@ -2519,9 +2519,6 @@ export struct PlaybackPage {
    *    闂佹椿娼块崝宥夊春濞戞埃鍋撻崷顓炰沪缂佷礁鐡ㄧ粙濠囨偄鐞涒檧鍋撳Ο鍏煎闁靛牆鐗忕粻鏍级閳哄倻鎳佺紒鏃€鎸抽幃娆撴儌閸濄儳鐛?闂佸搫鍟版慨鐑藉疾椤愶箑绀夐柕濞у嫭姣庨悗娈垮枓閸嬫挸鈹戦纰卞剮缂佹顦靛浼搭敍閻愨晛浜鹃煫鍥ㄦ⒐椤牠鏌?闂?
    */
   private morphOpacityValue(): number {
-    if (this.expandState.returnHdsVisible) {
-      return 0;
-    }
     // 闂?闂佺厧顨庢禍锝夋儊婢跺鍤楅柤鎭掑劤閸ㄥジ鏌ㄥ☉娆掑濠殿喒鏅犻幃鐣岀磼濡鐒搁梻鍌氬€归幐鎶藉焵椤掍礁濮囬柟鑸靛哺瀹曟岸鏌ㄧ€ｎ偆鍘愰柣鐘叉川缁垶寮抽悢鍏兼櫖闁割偅绻勯悰锕傛煛瀹ュ懏鎼愰柛娅诲洦鍎撻柍褜鍓熷顔炬崉閾忚娈滅紓浣规煥椤戝懘宕?return闂佹寧绋戦惌鍌毭归崒姘煎殨闁逞屽墴閺屻劑鍩€椤掑嫭鏅璺虹墐閸?
     //   闂佽　鍋撻柟顖嗗嫯鍚柡澶嗘櫆閻熲晠宕抽悜钘夊強妞ゆ牗纰嶇粈鍫濃槈閹捐泛鍔嬫繝鈧导鏉戠闁兼亽鍎插▓?*濠殿噯绲界换鎰板箮濮樿埖鐒鹃柛濠勫櫏濞煎爼鎮圭€ｎ亜鏆熼柡?*闂佹寧绋戞總鏃傜箔閺嶎厼绀冩繛鍡樺灦閻ｉ亶鏌￠崟闈涚仧閻炴俺椴哥粙澶愵敂閸涱喗瀚虫俊?`@Local` 闁诲孩绋掗〃鍡涱敊瀹€鍕櫖?
     //   婵炴垶鎸告鍛婃叏閳哄懏鍋ㄩ柤濮愬€曠瑧闂佽鍏涚粈渚€鎮鹃鍕闁靛闄勯敓銉╂煕韫囨洦鍔滅紒杈ㄧ懅閻ヮ亪顢涘顒侀敪闁荤姴娲ｇ槐顔炬濮樿泛违闁稿本绮嶉弳蹇涙煙閺夋垵妲绘繝鈧鍫濈闁靛ě鍕瘞**缂傚倷鐒﹂幐璇差焽椤愶絿鈻曢悗锝庝簼閸?*闁荤姴娲╅褔宕哄畝鍕剭闁告洦鍋呴惃鎴︽煛閸曢潧鐏￠柡浣告贡娴滃憡銈ｉ崘銊ょ凹婵炴垶鎸撮崑鎾绘煕閹烘洖鍚规繛鍫熷灴瀹曟劗绮悰鈥充壕?
@@ -2622,6 +2619,7 @@ export struct PlaybackPage {
       }
       .width(this.expandState.windowWidthVp)
       .height(this.expandState.windowHeightVp)
+      .opacity(this.backgroundRevealOpacity())
       .hitTestBehavior(HitTestMode.None)
     }
   }
@@ -2638,7 +2636,8 @@ export struct PlaybackPage {
     this.surfaceLogTime = now;
     Logger.info('RzdMorphSolid',
       `p=${p.toFixed(3)} stage=${this.expandState.morphStage} ` +
-        `solid=${this.expandState.morphClipping()} scale=${this.expandState.morphScale} ` +
+        `solid=${this.expandState.morphClipping()} bgAlpha=${this.backgroundRevealOpacity().toFixed(4)} ` +
+        `tailAlpha=${this.expandState.morphTailOpacity().toFixed(4)} scale=${this.expandState.morphScale} ` +
         `clipH=${this.expandState.morphClipHeight} radius=${this.expandState.morphRadius} ` +
         `tx=${this.expandState.morphTx} ty=${this.expandState.morphTy} ` +
         `sourceHidden=${this.expandState.sourceBarHidden} miniOut=${this.expandState.miniOut} ` +
@@ -7586,7 +7585,8 @@ export struct PlaybackPage {
       })
       .translate({ x: this.expandState.morphTx, y: this.expandState.morphTy })
       .borderRadius(this.expandState.morphRadius)
-      .opacity(this.morphOpacityValue())
+      .opacity(this.morphOpacityValue() * (this.expandState.morphClipping() ?
+          this.expandState.morphTailOpacity() : 1))
 
       // 闂佺补鍋撻柡鍌滃劋绾?2026-10-16 闂佺偨鍎查弻锟犲焵?**婵炴垶鎸哥粔鐑姐€呴敃鍌氱濠电姴鍟抽惂渚€鏌涢弬璇插闁活亙鍗抽弫宥夊醇濠靛牊顔堥梻?濠殿喗绻傞懟顖炲箖閺囥垺鏅璺侯儐閸庢棃鏌涢幒鎾愁€滅紒缁樼墵閺屽苯鐣濈€ｎ剛顦╂俊鐐€楅弫璇差焽娴兼潙鍐€闁革富鍙冮悰鎾绘煥?*闂?
       //

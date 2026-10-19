@@ -1545,7 +1545,7 @@ struct Index {
       .alignItems(VerticalAlign.Center)
       .position({ x: this.expandState.asideWinX, y: this.expandState.asideWinY })
       // 鎿嶄綔鍖洪偅涓€妗ｏ細鏁村潡鎸?`clamp(1 - t/0.20)` 娣″嚭锛堟寜閽厛娌°€佹枃瀛楀悗娌★級
-      .opacity(PlayerExpandState.actionsOpacityAt(this.expandState.morphP))
+      .opacity(PlayerExpandState.actionsOpacityAt(this.expandState.morphP) * this.expandState.morphTailOpacity())
       // 鈿狅笍 鍙仛**绾靛悜**浣嶇Щ锛堝弽缂栬瘧 位1f 鐨?`coverRiseAt`锛夈€?
       //    妯悜鐨?`coverRightShiftAt` 鏄粰**鍏冧俊鎭?*閭ｄ竴灞傜殑锛屽鍒版寜閽笂浼氳鎸夐挳
       //    妯潃婊戝嚭鍘?鈥斺€?鏀惰捣鏃惰〃鐜版垚"涓€涓殏鍋滄寜閽粠灞忓箷澶栭杩涙潵"銆?
@@ -1679,7 +1679,7 @@ struct Index {
     .width(this.expandState.windowWidthVp > 0 ? this.expandState.windowWidthVp : StyleConstants.FULL_WIDTH)
     .height(this.expandState.windowHeightVp > 0 ? this.expandState.windowHeightVp : StyleConstants.FULL_HEIGHT)
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
-    .opacity(this.expandState.morphOverlayBridgeOpacity())
+    .opacity(this.expandState.morphOverlayBridgeOpacity() * this.expandState.morphTailOpacity())
     // 鏁村眰涓嶅悆浜嬩欢锛氫笅闈㈠氨鏄挱鏀鹃〉锛岀帺瀹剁殑鐐瑰嚮蹇呴』鐓у父钀藉埌鎾斁椤典笂
     .hitTestBehavior(HitTestMode.None)
     .zIndex(PLAYER_CLONE_Z_INDEX)
@@ -2089,6 +2089,7 @@ struct Index {
                 `squashY=${this.expandState.morphSquashY}`);
           }
         })
+        .opacity(this.expandState.sourceBarOpacity())
         .visibility(this.expandState.sourceBarPaintHidden() ? Visibility.Hidden : Visibility.Visible)
         .onAppear((): void => {
           Logger.info('RzdHomeMiniBarMaterial',
@@ -2280,7 +2281,8 @@ struct Index {
     .alignContent(Alignment.BottomEnd)
     .hitTestBehavior(HitTestMode.Transparent)
     .zIndex(20)
-    // Hidden preserves anchors/layout and hides the floating bar with its controls immediately.
+    // Fade the complete source capsule once; keep measurement and gesture nodes mounted.
+    .opacity(this.expandState.sourceBarOpacity())
     .visibility(this.expandState.sourceBarPaintHidden() ? Visibility.Hidden : Visibility.Visible)
   }
 
@@ -2935,8 +2937,7 @@ struct Index {
       //   —— 与上游 `MainPage` 同构：一级页 = `miniBar` 槽（无胶囊容器、无 slack）；
       //   二级页 = {@link MiniBarMaterialCapsule}（自己一个 HdsTabs 浮动胶囊，本文件 {@link floatingMiniBar}）。
       //   ⇒ 两条播放条从此是"同一个内容组件 + 两套宿主"，不再共用同一个宿主组件。
-      if (!this.expandState.returnHdsVisible &&
-        (this.expandState.morphSessionDriving() || this.expandState.hdsBarSuppressed) &&
+      if ((this.expandState.morphSessionDriving() || this.expandState.hdsBarSuppressed) &&
         this.expandState.asideWinW > 0) {
         this.MorphMiniBarClone()
       }
@@ -2948,8 +2949,7 @@ struct Index {
       //    瀹冩湁鑷繁鐨勬椂闂寸嚎锛坄morphOverlayP`锛?60ms + 蹇嚭鎱㈡敹锛夛紝涓庡彟涓や唤鍚屽眰锛坺Index 110锛夈€?
       //    椤剁偣/缁堢偣閲忔祴涓庡彟澶栦袱浠藉悓婧愶紙`reportMini` / `reportBig`锛夛紝鎵€浠ヤ笁鑰呮槸涓€璧疯蛋鐨勩€?
       //    娓叉煋闂ㄥ啓鍦?builder 閲岋紙`morphOverlayBridging()`锛夈€?
-      if (!this.expandState.returnHdsVisible &&
-        (this.expandState.morphOverlayBridging() || this.expandState.hdsBarSuppressed)) {
+      if ((this.expandState.morphOverlayBridging() || this.expandState.hdsBarSuppressed)) {
         this.MorphCoverClone()
       }
 

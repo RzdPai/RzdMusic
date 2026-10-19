@@ -2286,46 +2286,47 @@ export class PlayerExpandState {
    *   同一帧里系统条出现、自绘条消失 ⇒ 无缝，且不会出现两套皮叠着）。
    */
   @Trace public hdsBarSuppressed: boolean = false;
-  // RzdReturnHdsV9: paint ownership only; gesture/geometry/settle rules stay live.
-  @Trace public returnHdsVisible: boolean = false;
-  private returnHdsLogAt: number = 0;
-  private returnFingerP: number = -1;
+  // V10: a reversible progress window, never a direction/first-reverse-frame latch.
+  private static readonly SOURCE_HDS_IN_T: number = 0.03;
+  private tailHandoffLogAt: number = 0;
+  private tailHandoffLogBand: string = '';
 
-  public sourceBarPaintHidden(): boolean {
-    return this.shrinkHidesBar || (!this.returnHdsVisible &&
-      (this.sourceBarHidden || this.miniOut || this.hdsBarSuppressed));
+  public sourceBarOpacity(): number {
+    if (this.shrinkHidesBar) {
+      return 0;
+    }
+    if (!(this.sourceBarHidden || this.miniOut || this.hdsBarSuppressed)) {
+      return 1;
+    }
+    if (!this.morphUsable || !this.morphGeomReady) {
+      return 0;
+    }
+    return Math.max(0, Math.min(1, 1 - this.morphP / PlayerExpandState.SOURCE_HDS_IN_T));
   }
 
-  private syncReturnHds(t: number): void {
-    const previous: number = this.morphP;
-    let next: boolean = this.returnHdsVisible;
-    if (this.morphDrive === MorphDrive.FINGER && this.pullDragging) {
-      if (this.returnFingerP >= 0) {
-        if (t < this.returnFingerP - 0.0001) {
-          next = true;
-        } else if (t > this.returnFingerP + 0.0001) {
-          next = false;
-        }
-      }
-      this.returnFingerP = t;
-    } else {
-      this.returnFingerP = -1;
-      if (t > previous + 0.0001) {
-        // Commit/reopen returns drawing to the player before its first frame.
-        next = false;
-      }
-    }
-    const changed: boolean = next !== this.returnHdsVisible;
-    this.returnHdsVisible = next;
+  public sourceBarPaintHidden(): boolean {
+    return this.sourceBarOpacity() <= 0;
+  }
+
+  public morphTailOpacity(): number {
+    return Math.max(0, Math.min(1, this.morphP / PlayerExpandState.SOURCE_HDS_IN_T));
+  }
+
+  private logTailHandoff(): void {
+    const p: number = this.morphP;
+    const band: string = p <= 0 ? 'source' : (p < PlayerExpandState.SOURCE_HDS_IN_T ? 'tail' : 'morph');
     const now: number = Date.now();
-    if (changed || (next && now - this.returnHdsLogAt >= 80)) {
-      this.returnHdsLogAt = now;
-      Logger.info('RzdReturnHdsV9',
-        `owner=${next ? 'source-hds' : 'morph'} p=${t.toFixed(3)} prev=${previous.toFixed(3)} ` +
-          `finger=${this.pullDragging} drive=${this.morphDrive} stage=${this.morphStage} ` +
-          `sourcePaintHidden=${this.sourceBarPaintHidden()} playerPaint=${next ? 0 : 1} ` +
-          `clonePaint=${next ? 0 : 1} squash=${this.morphSquashY}`);
+    if (band === this.tailHandoffLogBand && now - this.tailHandoffLogAt < 80) {
+      return;
     }
+    this.tailHandoffLogBand = band;
+    this.tailHandoffLogAt = now;
+    Logger.info('RzdTailHandoffV10',
+      `band=${band} p=${p.toFixed(4)} effT=${this.contentP.toFixed(4)} ` +
+        `sourceAlpha=${this.sourceBarOpacity().toFixed(4)} morphAlpha=${this.morphTailOpacity().toFixed(4)} ` +
+        `finger=${this.pullDragging} drive=${this.morphDrive} stage=${this.morphStage} ` +
+        `scale=${this.morphScale.toFixed(4)} clipH=${this.morphClipHeight.toFixed(2)} ` +
+        `miniOut=${this.miniOut} squash=${this.morphSquashY}`);
   }
   @Trace public metaBridgeActive: boolean = false;
   @Trace public metaBridgeGeneration: number = 0;
@@ -4762,7 +4763,6 @@ export class PlayerExpandState {
     //     鐢变笅闈㈢殑 `@Monitor('morphP')` 鍦?*姣忎竴甯?*鎶婂嚑浣曢噸绠椾竴娆?
     //     鈥斺€?涓庝笂娓?姣忓抚 `applyPullProgress(effT())`"鍚屾瀯銆?
     //   鈿狅笍 `morphPApplying` 鏄槻鍥炵幆鐨勶細鏈柟娉曡嚜宸卞啓 `morphP` 鏃朵笉瑕佽鑷繁鐨?monitor 鍐嶇畻涓€閬嶃€?
-    this.syncReturnHds(t);
     this.morphPApplying = true;
     if (this.morphP !== t) {
       this.morphP = t;
@@ -4776,6 +4776,7 @@ export class PlayerExpandState {
       this.contentP = t;
     }
     this.applyMorphGeometry(t);
+    this.logTailHandoff();
     this.morphPApplying = false;
   }
 
@@ -4906,8 +4907,6 @@ export class PlayerExpandState {
    *          锛堝惁鍒欎細鎶婃挱鏀鹃〉鍘嬫垚 1vp 鐨勪竴鏉＄粏缂濓級銆?
    */
   public morphBeginEntering(): boolean {
-    this.returnHdsVisible = false;
-    this.returnFingerP = -1;
     this.morphStage = MorphStage.ENTERING;
     this.morphDrive = MorphDrive.FINGER;
     this.morphGen = this.morphGen + 1;
@@ -5128,8 +5127,6 @@ export class PlayerExpandState {
 
   /** 澶嶄綅鍒?娌℃湁杩欏鍔ㄧ敾"鐨勯潤姝㈡€侊紙鍑犱綍缂哄け銆佸嵏杞姐€佸紓甯告椂閮借蛋杩欓噷锛夈€?*/
   public morphReset(): void {
-    this.returnHdsVisible = false;
-    this.returnFingerP = -1;
     // 上游 `finishReverse` / 会话结束都会 `setMiniOut(false)`（`wujie.pa:147562-147568`）。
     this.miniOut = false;
     // ★ 2026-10-21：复位 = 回到"没有形变动画"的静止态 ⇒ 系统条必须在场（交接闸清掉）。

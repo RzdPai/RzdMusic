@@ -294,10 +294,8 @@ export struct HomeMiniBarAlbumCover {
     // 展开形变的起点端点就用这一层：它是"没被 scale 的那一层"，
     // `getMeasuredSize()` 拿到的就是视觉边长（44.8），与 `reportMini` 同一个坐标口径。
     .id(MINI_BAR_COVER_ID)
-    // 形变期间按反编译的 `MiniMorph.metaOpacityAt = clamp(1 - t/0.35)` 淡出：
-    // 封面这一档比右侧按钮（`actionsOpacityAt = 1 - t/0.20`）**晚**消失，
-    // 观感就是用户描述的"按钮先没、文字/封面后没"。
-    .opacity(this.expandState.returnHdsVisible ? 1 : this.expandState.miniBarMetaOpacity())
+    // Source alpha belongs to the capsule host; clone cover retains its own timeline.
+    .opacity(1)
     .translate({ x: this.coverOffsetXVp() })
     // 把迷你条封面的窗口矩形报给共享状态：它是"展开动画"的起点端点。
     // 与播放页大封面的 reportBig 配对，两个端点齐了以后整页形变才有依据。
