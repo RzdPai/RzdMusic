@@ -14,6 +14,7 @@
  */
 
 import { AppStorageV2, Chip, ChipSize, LengthMetrics, uiObserver } from '@kit.ArkUI';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import { guardPlayerBack } from 'musicbasic';
 import { AlbumRouteParam, ArtistRouteParam, BreakpointType, ThemeState, TitleBarConstants, WindowUtil, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
@@ -23,6 +24,10 @@ import { AlbumInfo, LXQualityOption, LXSearchSong, LXSearchResult, SingerInfo, l
 import type { SearchPlaylistInfo, SearchPlaylistSong } from 'player';
 import { sourceName } from 'player';
 import { SongMoreMenu } from 'playlist';
+
+/** 日志域与标签（真机排查：`hdc shell hilog | findstr RzdSearchPage`）。 */
+const SEARCH_LOG_DOMAIN: number = 0x0000;
+const SEARCH_LOG_TAG: string = 'RzdSearchPage';
 
 /** Observable per-source checkbox state. */
 @ObservedV2
@@ -155,8 +160,10 @@ struct SongRowItem {
     }
     .width('100%')
     .padding({ top: 6, bottom: 6, left: 16, right: 16 })
-    .borderRadius($r('sys.float.corner_radius_level8'))
-    .backgroundColor($r('app.color.card_background'))
+    // ★ 用户 2026-10-20（截图口径）：**歌曲行去卡片、改分隔线**。
+    //   原来这里是 `borderRadius + backgroundColor(card_background)`（= 一行一张卡片），
+    //   现在只留一条底部细分隔线，行与行贴在一起。
+    .border({ width: { bottom: 0.5 }, color: $r('sys.color.comp_divider') })
     .gesture(LongPressGesture().onAction((): void => {
       // 长按进入批量选择模式并勾选该歌曲
       this.selection.batchMode = true;
@@ -225,6 +232,18 @@ struct OnlineSearchPage {
     { value: '歌手' },
     { value: '专辑' }
   ];
+  /**
+   * 页签清单（用户 2026-10-20 截图）：**综合 / 歌曲 / 歌单 / 歌手 / 专辑**，纯文字胶囊。
+   *
+   * 第 0 格「综合」不对应 `searchMode`（那套枚举 0..3 是给"单类结果页"用的），
+   * 它由 {@link overview} 单独控制；1..4 与 `searchMode` 0..3 一一对应。
+   */
+  private readonly tabLabels: string[] = ['综合', '歌曲', '歌单', '歌手', '专辑'];
+  /**
+   * 是否停在「综合」页签（用户 2026-10-20：综合页 = 歌手卡 + 歌曲区 + 专辑区 + 查看更多）。
+   * 默认 true —— 一进来搜完就是综合页，与华为音乐一致。
+   */
+  @Local overview: boolean = true;
   @Local searchHistory: string[] = [];
   @Local hotWords: string[] = [];
   /** Lazily fetched cover urls keyed by source_songId. */
@@ -676,6 +695,23 @@ struct OnlineSearchPage {
     }
     this.searching = true;
     this.errorMsg = '';
+    // ★ 用户 2026-10-20：综合页要**一次**同时拿到歌曲/歌手/专辑（三份并发），
+    //   任一有结果就清掉错误提示（单类搜索各自会写 errorMsg，这里统一兜回来）。
+    if (this.overview) {
+      this.songs = [];
+      this.singers = [];
+      this.albums = [];
+      this.covers = {};
+      await Promise.all([this.doSongSearch(), this.doSingerSearch(), this.doAlbumSearch()]);
+      if (this.songs.length > 0 || this.singers.length > 0 || this.albums.length > 0) {
+        this.errorMsg = '';
+        this.store.addSearchHistory(this.query);
+      }
+      this.searching = false;
+      hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'overview songs=%{public}d singers=%{public}d albums=%{public}d',
+        this.songs.length, this.singers.length, this.albums.length);
+      return;
+    }
     if (this.searchMode === 1) {
       this.playlists = [];
       await this.doPlaylistSearch();
@@ -694,6 +730,18 @@ struct OnlineSearchPage {
       this.searching = false;
       return;
     }
+    await this.doSongSearch();
+    this.searching = false;
+    return;
+  }
+
+  /**
+   * 歌曲搜索（用户 2026-10-20：「综合」页签要一次同时有歌曲/歌手/专辑）。
+   *
+   * 从 `doSearch()` 里**原样抽出来**，不碰 `this.searching`（由调用方管），
+   * 这样「综合」页签可以 `Promise.all` 三份搜索，「歌曲」页签仍走原来的单份路径。
+   */
+  private async doSongSearch(): Promise<void> {
     this.songs = [];
     this.covers = {};
     const activeSources: string[] = [];
@@ -703,7 +751,6 @@ struct OnlineSearchPage {
       }
     }
     if (activeSources.length === 0) {
-      this.searching = false;
       return;
     }
     const cacheKey: string = this.searchCacheKey();
@@ -744,7 +791,6 @@ struct OnlineSearchPage {
     } else {
       this.store.addSearchHistory(this.query);
     }
-    this.searching = false;
   }
 
   /** Searches playlists across the enabled sources. */
@@ -1247,36 +1293,208 @@ struct OnlineSearchPage {
     })
   }
 
-  /** Title-bar bottom area: search input plus the fixed mode chips right below it. */
+  /**
+   * 顶部固定区（用户 2026-10-20 截图口径，**整页自绘顶栏**）：
+   * 第 1 行 = [返回] + [搜索框（内含音源钮）]；第 2 行 = [综合/歌曲/歌单/歌手/专辑] 胶囊页签。
+   *
+   * ★ 为什么改成自绘顶栏：HDS 标题栏只能给 `title` 写字符串、给 `bottomBuilder` 塞自定义内容，
+   *   **没有"把自定义内容放进标题行"的口子** ⇒ 想做到"搜索框和返回箭头同一行"（搜索框上提）
+   *   只能 `hideTitleBar(true)` 自己画。代价是丢掉 HDS 的渐变模糊标题栏，截图里本来也没有。
+   *   整页盒子仍从屏幕 y=0 起排（`ignoreLayoutSafeArea(TOP)`），所以这里自己补**状态栏高度**。
+   */
   @Builder
   private SearchHeaderBar() {
-    Column() {
-      this.SearchInputBar()
-
-      // 有联想时隐藏模式栏，让内容区顶到搜索框下方，悬浮层可紧贴
-      if (!(this.showSuggest && this.suggestWords.length > 0 && !this.searching)) {
-        Row({ space: 8 }) {
-          ForEach(this.modeSelectOptions, (opt: SelectOption, index: number) => {
-            this.ModeTabChip(opt.value as string, this.modeTabIcon(index), this.searchMode === index,
-              (): void => {
-                this.changeSearchMode(index);
-              })
-          }, (opt: SelectOption) => 'mode-' + opt.value + '-' + this.searchMode)
+    Column({ space: 6 }) {
+      Row({ space: 8 }) {
+        Row() {
+          SymbolGlyph($r('sys.symbol.chevron_left'))
+            .fontSize(22)
+            .fontColor([$r('sys.color.font_primary')])
         }
-        .width('100%')
+        .width(40)
         .height(40)
-        .padding({ left: 16, right: 16 })
-        .margin({ top: 8 })
-        .justifyContent(FlexAlign.Start)
+        .borderRadius(20)
+        .backgroundColor($r('app.color.floating_mini_bar_background'))
+        .backgroundBlurStyle(this.searchControlBlur())
+        .justifyContent(FlexAlign.Center)
+        .accessibilityText('返回')
+        .onClick((): void => {
+          this.pageStack.pop();
+        })
+        this.SearchInputBar()
       }
+      .width('100%')
+      .padding({ left: 8, right: 12 })
+      .alignItems(VerticalAlign.Center)
+
+      this.SearchTabRow()
     }
     .width('100%')
-    .padding({ bottom: 8 })
+    .padding({ top: Math.max(getStatusBarTopVpFromWindowUtil(), 0), bottom: 6 })
     .onAreaChange((_oldArea: Area, newArea: Area): void => {
       const height: number = Number(newArea.height);
       if (height > 0 && Math.abs(height - this.searchHeaderHeight) > 0.5) {
         this.searchHeaderHeight = height;
       }
+    })
+  }
+
+  /**
+   * 页签行：**综合 / 歌曲 / 歌单 / 歌手 / 专辑**（纯文字胶囊，选中 = 主题色实心）。
+   * 用户截图里就是这套：没有图标、可横滚。
+   */
+  @Builder
+  private SearchTabRow() {
+    Scroll() {
+      Row({ space: 8 }) {
+        ForEach(this.tabLabels, (label: string, idx: number) => {
+          Text(label)
+            .fontSize($r('sys.float.Body_M'))
+            .fontWeight(this.currentTabIndex() === idx ? FontWeight.Medium : FontWeight.Regular)
+            .fontColor(this.currentTabIndex() === idx ?
+              $r('sys.color.font_on_primary') : $r('sys.color.font_primary'))
+            .padding({ left: 16, right: 16, top: 7, bottom: 7 })
+            .borderRadius(18)
+            .backgroundColor(this.currentTabIndex() === idx ?
+              this.themeState.color : $r('app.color.background_secondary'))
+            .onClick((): void => {
+              this.selectTab(idx);
+            })
+        }, (label: string) => 'findtab-' + label)
+      }
+      .padding({ left: 16, right: 16 })
+    }
+    .scrollable(ScrollDirection.Horizontal)
+    .scrollBar(BarState.Off)
+    .width('100%')
+    .height(44)
+    .align(Alignment.Start)
+  }
+
+  /** 当前选中的页签下标（0 = 综合，1..4 = `searchMode` 0..3）。 */
+  private currentTabIndex(): number {
+    return this.overview ? 0 : this.searchMode + 1;
+  }
+
+  /** 点页签：综合只切标志，其余走既有的 `changeSearchMode`（会自己重搜）。 */
+  private selectTab(index: number): void {
+    if (index === 0) {
+      if (!this.overview) {
+        this.overview = true;
+        if (this.query.trim().length > 0 && !this.searching) {
+          void this.doSearch();
+        }
+      }
+      return;
+    }
+    const mode: number = index - 1;
+    this.overview = false;
+    if (this.searchMode === mode) {
+      if (this.query.trim().length > 0 && !this.searching) {
+        void this.doSearch();
+      }
+      return;
+    }
+    this.changeSearchMode(mode);
+    hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'tab switch mode=%{public}d', mode);
+  }
+
+  /** 综合页的分区标题（可带一颗"播放全部"主题色圆钮）。 */
+  @Builder
+  private SectionHeader(label: string, withPlay: boolean) {
+    Row({ space: 10 }) {
+      Text(label)
+        .fontSize($r('sys.float.Title_S'))
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('sys.color.font_primary'))
+      if (withPlay) {
+        Row() {
+          SymbolGlyph($r('sys.symbol.play_fill'))
+            .fontSize(13)
+            .fontColor([$r('sys.color.font_on_primary')])
+        }
+        .width(28)
+        .height(28)
+        .borderRadius(14)
+        .backgroundColor(this.themeState.color)
+        .justifyContent(FlexAlign.Center)
+        .onClick((): void => {
+          this.playAll();
+        })
+      }
+      Blank()
+    }
+    .width('100%')
+    .height(48)
+    .padding({ left: 16, right: 16 })
+    .alignItems(VerticalAlign.Center)
+  }
+
+  /** 综合页底部的「查看更多 ›」。 */
+  @Builder
+  private MoreRow(label: string, tabIndex: number) {
+    Row({ space: 2 }) {
+      Text(label)
+        .fontSize($r('sys.float.Caption_L'))
+        .fontColor($r('sys.color.font_tertiary'))
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(14)
+        .fontColor([$r('sys.color.font_tertiary')])
+    }
+    .width('100%')
+    .height(44)
+    .justifyContent(FlexAlign.Center)
+    .onClick((): void => {
+      this.selectTab(tabIndex);
+    })
+  }
+
+  /** 综合页顶部的歌手卡：头像 + 「歌手：X」+ 歌曲/专辑数，点进歌手详情。 */
+  @Builder
+  private OverviewSingerCard(s: SingerInfo) {
+    Row({ space: 12 }) {
+      Image(s.picUrl.length > 0 ? s.picUrl : $r('app.media.ic_avatar1'))
+        .width(56)
+        .height(56)
+        .borderRadius(28)
+        .objectFit(ImageFit.Cover)
+      Column({ space: 4 }) {
+        Text('歌手：' + s.name)
+          .fontSize($r('sys.float.Body_L'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('sys.color.font_primary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text((s.songNum > 0 ? `歌曲：${s.songNum}` : `歌曲：${this.songs.length}`) +
+          ' ｜ ' + (s.albumSize > 0 ? `专辑：${s.albumSize}` : `专辑：${this.albums.length}`))
+          .fontSize($r('sys.float.Caption_M'))
+          .fontColor($r('sys.color.font_tertiary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(18)
+        .fontColor([$r('sys.color.font_tertiary')])
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+    .onClick((): void => {
+      const param = new ArtistRouteParam();
+      const sep: number = s.id.indexOf('_');
+      if (sep > 0 && sep < s.id.length - 1) {
+        param.source = Number(s.id.substring(0, sep));
+        param.id = s.id.substring(sep + 1);
+      } else {
+        param.source = 2;
+        param.id = s.id;
+      }
+      param.name = s.name;
+      param.picUrl = s.picUrl;
+      param.albumSize = s.albumSize;
+      param.songNum = s.songNum;
+      this.pageStack.pushPathByName(RouterUrlConstants.ARTIST_DETAIL, param);
     })
   }
 
@@ -1334,8 +1552,10 @@ struct OnlineSearchPage {
       .backgroundBlurStyle(this.searchControlBlur())
       // 注意：左右 padding 由调用方（build 主体顶部）控制，保证与 List padding(12,12) 严格对
     }
-    .width('100%')
-    .padding({ left: 16, right: 16 })
+    // ★ 2026-10-20：本行现在和「返回」按钮同排 ⇒ 用 `layoutWeight(1)` 吃剩余宽度，
+    //   左右内边距交给外层 Row（`TopSearchRow`）统一给。
+    .layoutWeight(1)
+    .padding({ left: 0, right: 0 })
     .onAreaChange((_oldArea: Area, newArea: Area): void => {
       const height: number = Number(newArea.height);
       if (height > 0 && Math.abs(height - this.searchBarHeight) > 0.5) {
@@ -1615,8 +1835,9 @@ struct OnlineSearchPage {
   build() {
     HdsNavDestination() {
       Column() {
-        // 模式切换/加载/错误态统一放进下方 List 作为滚动内容：
-        // 初始位于标题栏与搜索框下方，滚动时可滑到标题栏后面（内容延伸至屏幕顶部）。
+        // ★ 用户 2026-10-20：整页自绘顶栏（返回 + 搜索框同一行 + 五个页签），
+        //   所以列表不再需要 `contentStartOffset` 那套"把标题栏高度让进滚动内容里"的算法。
+        this.SearchHeaderBar()
 
         Stack({ alignContent: Alignment.Center }) {
           List({ scroller: this.listScroller }) {
@@ -1724,7 +1945,77 @@ struct OnlineSearchPage {
             }
           }
 
-          if (this.searchMode === 1) {
+          if (this.overview && !this.searching) {
+            // ── 综合页（用户 2026-10-20 截图）：歌手卡 → 歌曲区 → 专辑区 → 歌手区，各带「查看更多」
+            if (this.singers.length > 0) {
+              ListItem() {
+                this.OverviewSingerCard(this.singers[0])
+              }
+            }
+            if (this.songs.length > 0) {
+              ListItem() {
+                this.SectionHeader('歌曲', true)
+              }
+              ForEach(this.songs.slice(0, 5), (song: LXSearchSong) => {
+                ListItem() {
+                  SongRowItem({
+                    song: song,
+                    selection: this.selection,
+                    coverUrl: this.songCover(song),
+                    sourceLabel: this.sourceLabel(song.source),
+                    sourceColor: this.sourceColor(song.source),
+                    onLoadCover: (s: LXSearchSong): void => {
+                      this.loadSongCover(s);
+                    },
+                    onPlay: (s: LXSearchSong): void => {
+                      this.playSong(s);
+                    }
+                  })
+                }
+              }, (song: LXSearchSong) => 'ovw-s-' + song.source + '_' + song.songId + '_' + song.img)
+              if (this.songs.length > 5) {
+                ListItem() {
+                  this.MoreRow('查看更多歌曲', 1)
+                }
+              }
+            }
+            if (this.albums.length > 0) {
+              ListItem() {
+                this.SectionHeader('专辑', false)
+              }
+              ForEach(this.albums.slice(0, 3), (a: AlbumInfo) => {
+                ListItem() {
+                  this.AlbumResultRow(a)
+                }
+              }, (a: AlbumInfo) => 'ovw-a-' + a.id + '_' + a.name)
+              ListItem() {
+                this.MoreRow('查看更多专辑', 4)
+              }
+            }
+            if (this.singers.length > 1) {
+              ListItem() {
+                this.SectionHeader('歌手', false)
+              }
+              ForEach(this.singers.slice(1, 3), (s: SingerInfo) => {
+                ListItem() {
+                  this.SingerResultRow(s)
+                }
+              }, (s: SingerInfo) => 'ovw-g-' + s.id)
+              ListItem() {
+                this.MoreRow('查看更多歌手', 3)
+              }
+            }
+            if (this.songs.length === 0 && this.singers.length === 0 && this.albums.length === 0) {
+              ListItem() {
+                Text('没有找到相关内容')
+                  .fontSize($r('sys.float.Caption_L'))
+                  .fontColor($r('sys.color.font_tertiary'))
+                  .width('100%')
+                  .height(88)
+                  .textAlign(TextAlign.Center)
+              }
+            }
+          } else if (this.searchMode === 1) {
             ForEach(this.playlists, (p: SearchPlaylistInfo) => {
               ListItem() {
                 this.PlaylistRow(p)
@@ -1762,7 +2053,8 @@ struct OnlineSearchPage {
                   }
                 })
               }
-              .margin({ bottom: 12 })
+              // ★ 用户 2026-10-20：去卡片改分隔线 ⇒ 行间不再留 12vp 空隙
+              //   （细线由 `SongRowItem` 自己那条 bottom border 画，左右各内缩 16）
             }, (song: LXSearchSong) => song.source + '_' + song.songId + '_' + song.img)
           }
         }
@@ -1774,7 +2066,7 @@ struct OnlineSearchPage {
           //    歌曲行本身是「封面 + 标题/歌手 + 来源/时长」的整行卡片，铺成多栏会把
           //    文字挤窄、行与行长度还参差不齐，看起来就是"文字被拉伸对齐了"。
           //    搜索结果统一单栏、左对齐。
-          .contentStartOffset(this.contentPaddingTop)
+          .contentStartOffset(0)
           .padding({
             left: 12,
             right: 12,
@@ -1818,17 +2110,25 @@ struct OnlineSearchPage {
               Scroll() {
                 Column({ space: 0 }) {
                   ForEach(this.suggestWords, (word: string, idx: number) => {
-                    Text(word)
-                      .fontSize(15)
-                      .fontColor($r('sys.color.font_primary'))
-                      .maxLines(1)
-                      .textOverflow({ overflow: TextOverflow.Ellipsis })
-                      .width('100%')
-                      .textAlign(TextAlign.Start)
-                      .padding({ left: 108, right: 16, top: 11, bottom: 11 })
-                      .onClick(() => {
-                        this.pickSuggest(word);
-                      })
+                    // ★ 用户 2026-10-20 截图：联想词每行 = 放大镜 + 文字 + 一条分隔线
+                    Row({ space: 12 }) {
+                      SymbolGlyph($r('sys.symbol.magnifyingglass'))
+                        .fontSize(17)
+                        .fontColor([$r('sys.color.font_tertiary')])
+                      Text(word)
+                        .fontSize(15)
+                        .fontColor($r('sys.color.font_primary'))
+                        .maxLines(1)
+                        .textOverflow({ overflow: TextOverflow.Ellipsis })
+                        .layoutWeight(1)
+                        .textAlign(TextAlign.Start)
+                    }
+                    .width('100%')
+                    .padding({ left: 20, right: 16, top: 11, bottom: 11 })
+                    .border({ width: { bottom: 0.5 }, color: $r('sys.color.comp_divider') })
+                    .onClick(() => {
+                      this.pickSuggest(word);
+                    })
                   }, (word: string, idx: number) => 'sgf-' + idx + '-' + word)
                 }
                 .width('100%')
@@ -1849,7 +2149,8 @@ struct OnlineSearchPage {
             .padding({
               left: 16,
               right: 16,
-              top: this.titleBarTopHeight + this.searchBarHeight
+              // ★ 顶栏已改成页面内固定区 ⇒ 联想层贴在 Stack 顶部（= 搜索框正下方）
+              top: 0
             })
             .alignItems(HorizontalAlign.Start)
             .justifyContent(FlexAlign.Start)
@@ -1916,11 +2217,10 @@ struct OnlineSearchPage {
       .padding({ top: 0 })
     }
     .onBackPressed((): boolean => guardPlayerBack('OnlineSearchPage'))
-    .hideTitleBar(false)
-    // 返回按钮必须显示：原先 hideBackButton(true) 却给了 backIcon 配置 —— HDS 以
-    // hideBackButton 为准，返回键被整颗藏掉，用户反馈的「搜索页没有返回按钮」就是这个。
-    .hideBackButton(false)
-    .titleBar(this.getSearchTitleBar())
+    // ★ 用户 2026-10-20：顶栏整页自绘（返回 + 搜索框同一行 + 五页签）⇒ HDS 标题栏整条隐藏。
+    //   HDS 标题栏没有"把自定义内容放进标题行"的口子，这是"搜索框上提"唯一的做法。
+    .hideTitleBar(true)
+    .hideBackButton(true)
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .dynamicHideTitleBar({
       hideTitleArea: false,
