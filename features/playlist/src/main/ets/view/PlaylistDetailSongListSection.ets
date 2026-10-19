@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 
 
 import { AppStorageV2, uiObserver } from '@kit.ArkUI';
+import { MusicAppState, SongItem } from 'musicbasic';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import {
   AppStorageKeys,
@@ -22,6 +23,7 @@ import {
   BreakpointType,
   MusicStoreService,
   PlayedSongRecord,
+  NowPlayingIndicator,
   SongTitleMarquee,
   StyleConstants,
   ThemeState
@@ -106,6 +108,9 @@ export struct PlaylistDetailSongListSection {
   /** 主题色：多选勾选圈选中态用。 */
   @Local themeState: ThemeState =
     AppStorageV2.connect(ThemeState, AppStorageKeys.THEME_STATE, () => new ThemeState())!;
+  /** 共享播放状态：判定「当前正在播放」那一行（歌名变色 + 动态竖条），以及播放/暂停态。 */
+  @Local appState: MusicAppState =
+    AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
   /** The page binds HDS title effects to this same bounded List. */
   @Param pageScroller: Scroller = new Scroller();
   @Param bottomPaddingVp: number = 96;
@@ -350,6 +355,22 @@ export struct PlaylistDetailSongListSection {
   //   ② 本组件侧：取色底上的前景色**只认这一条结论**（恒白字），不再自己按底色现算一次
   //      —— 同一个量两处各算一遍，必然在临界底色上打架（一边白字一边黑字）。
   /** 取色底上的主文字色（与 `StickyPlayAllHeader` 铺的 `backdropColor` 成对）。 */
+  /**
+   * 这一行是不是**当前正在播放**的那首（用户 2026-10-19：歌名变色 + 动态竖条）。
+   * @param item 列表行
+   * @returns 是否当前播放
+   */
+  private isCurrentSong(item: PlaylistSongUi): boolean {
+    const cur: SongItem | undefined = this.appState.getCurrentSongItem();
+    if (cur === undefined) {
+      return false;
+    }
+    if (cur.source !== item.source) {
+      return false;
+    }
+    return cur.songId === item.songId;
+  }
+
   private surfaceInk(): ResourceColor {
     return '#FFFFFF';
   }
@@ -447,12 +468,25 @@ export struct PlaylistDetailSongListSection {
         //   本源同时服务「每日30首」与「歌单详情」⇒ 这一处替换把两块一起覆盖。
         //   字号/字色/字重逐字保留（字色是随底取色的 `surfaceInk()`），
         //   唯一变化是溢出行为：`Ellipsis` → `MARQUEE`。
-        SongTitleMarquee({
-          text: item.title,
-          titleFontSize: $r('sys.float.Body_M'),
-          titleFontColor: this.surfaceInk(),
-          titleFontWeight: FontWeight.Medium
-        })
+        Row({ space: 6 }) {
+          SongTitleMarquee({
+            text: item.title,
+            titleFontSize: $r('sys.float.Body_M'),
+            // ★ 用户 2026-10-19：正在播放那首的**歌名用主题色**（用户可自定义颜色）
+            titleFontColor: this.isCurrentSong(item) ? this.themeState.color : this.surfaceInk(),
+            titleFontWeight: FontWeight.Medium
+          })
+            .layoutWeight(1)
+          // 播放中动态小竖条（暂停就停）
+          if (this.isCurrentSong(item)) {
+            NowPlayingIndicator({
+              playing: this.appState.isPlay,
+              color: this.themeState.color
+            })
+          }
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
         Row({ space: 6 }) {
           // VIP / 空间音频标识已按需求**移除**：这两枚标签目前是写死的（不看歌曲真实
           // 版权字段），只会让每一行都挂两个没有信息量的角标，视觉上很吵。
