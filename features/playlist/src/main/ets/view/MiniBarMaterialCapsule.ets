@@ -722,6 +722,15 @@ export struct MiniBarMaterialCapsule {
     //   `alignContent: TopStart`：内容层改成 `.position()` 之后就按盒左上角定位（见 ContentLayer），
     //   不再靠 Stack 的居中"顺带"对齐（那也是上一版错位的隐因之一）。
     Stack({ alignContent: Alignment.TopStart }) {
+      // RzdReturnHdsV9: opaque underlay belongs to the source capsule only.
+      // HDS above remains the sole systemMaterialEffect renderer; never clips the player.
+      Column()
+        .width(this.barWidth)
+        .height(this.barHeight)
+        .backgroundColor($r('app.color.morph_mini_solid_surface'))
+        .borderRadius(this.barHeight / 2)
+        .position({ x: this.capsuleLeftVp(), y: this.capsuleTopVp() })
+        .hitTestBehavior(HitTestMode.None)
       HdsTabs({ barPosition: BarPosition.End }) {
         TabContent() {
           // 非空占位：空 `TabContent` 在真机上 HDS 不画浮动胶囊背板/材质（2026-10-01 实测）。

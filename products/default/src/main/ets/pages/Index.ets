@@ -2089,7 +2089,7 @@ struct Index {
                 `squashY=${this.expandState.morphSquashY}`);
           }
         })
-        .visibility((this.expandState.sourceBarHidden || this.expandState.shrinkHidesBar || this.expandState.miniOut || this.expandState.hdsBarSuppressed) ? Visibility.Hidden : Visibility.Visible)
+        .visibility(this.expandState.sourceBarPaintHidden() ? Visibility.Hidden : Visibility.Visible)
         .onAppear((): void => {
           Logger.info('RzdHomeMiniBarMaterial',
             `material=capsule(systemMaterialEffect) ambient=${this.ambientLevelIndex()} ` +
@@ -2281,7 +2281,7 @@ struct Index {
     .hitTestBehavior(HitTestMode.Transparent)
     .zIndex(20)
     // Hidden preserves anchors/layout and hides the floating bar with its controls immediately.
-    .visibility((this.expandState.sourceBarHidden || this.expandState.shrinkHidesBar || this.expandState.miniOut || this.expandState.hdsBarSuppressed) ? Visibility.Hidden : Visibility.Visible)
+    .visibility(this.expandState.sourceBarPaintHidden() ? Visibility.Hidden : Visibility.Visible)
   }
 
   /**
@@ -2935,7 +2935,8 @@ struct Index {
       //   —— 与上游 `MainPage` 同构：一级页 = `miniBar` 槽（无胶囊容器、无 slack）；
       //   二级页 = {@link MiniBarMaterialCapsule}（自己一个 HdsTabs 浮动胶囊，本文件 {@link floatingMiniBar}）。
       //   ⇒ 两条播放条从此是"同一个内容组件 + 两套宿主"，不再共用同一个宿主组件。
-      if ((this.expandState.morphSessionDriving() || this.expandState.hdsBarSuppressed) &&
+      if (!this.expandState.returnHdsVisible &&
+        (this.expandState.morphSessionDriving() || this.expandState.hdsBarSuppressed) &&
         this.expandState.asideWinW > 0) {
         this.MorphMiniBarClone()
       }
@@ -2947,7 +2948,8 @@ struct Index {
       //    瀹冩湁鑷繁鐨勬椂闂寸嚎锛坄morphOverlayP`锛?60ms + 蹇嚭鎱㈡敹锛夛紝涓庡彟涓や唤鍚屽眰锛坺Index 110锛夈€?
       //    椤剁偣/缁堢偣閲忔祴涓庡彟澶栦袱浠藉悓婧愶紙`reportMini` / `reportBig`锛夛紝鎵€浠ヤ笁鑰呮槸涓€璧疯蛋鐨勩€?
       //    娓叉煋闂ㄥ啓鍦?builder 閲岋紙`morphOverlayBridging()`锛夈€?
-      if (this.expandState.morphOverlayBridging() || this.expandState.hdsBarSuppressed) {
+      if (!this.expandState.returnHdsVisible &&
+        (this.expandState.morphOverlayBridging() || this.expandState.hdsBarSuppressed)) {
         this.MorphCoverClone()
       }
 

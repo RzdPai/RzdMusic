@@ -433,7 +433,7 @@ export struct HomeMiniBarPlayer {
           actionsNodeId: MINI_BAR_ASIDE_ID,
           showPreviousTrack: this.showPreviousTrack,
           // 操作区：`MiniMorph.actionsOpacityAt = clamp(1 - t/0.20)`，比封面那一档更早消失
-          actionsOpacity: this.expandState.miniBarOpacity()
+          actionsOpacity: this.expandState.returnHdsVisible ? 1 : this.expandState.miniBarOpacity()
         })
       }
       // ★★★ 2026-10-18（照搬上游 `.animation(BAR_ANIM)`，`wujie.pa:69053-69057` / `:69118-69121`）：
@@ -471,8 +471,7 @@ export struct HomeMiniBarPlayer {
     // 展开形变的**起点矩形**就是这一层：给个 id 让 `getFrameNodeById` 量它
     // （`onAreaChange` 给的是布局几何、不含 transform，量出来的起点会偏）。
     .id(MINI_BAR_ID)
-    .visibility((this.expandState.sourceBarHidden || this.expandState.shrinkHidesBar ||
-      this.expandState.miniOut) ? Visibility.Hidden : Visibility.Visible)
+    .visibility(this.expandState.sourceBarPaintHidden() ? Visibility.Hidden : Visibility.Visible)
     // 诊断（`hdc shell hilog | grep RzdMiniBarGeom`）：本行**实测**矩形 + 左右内距。
     // 判据（钉住高度的两条迷你条）：
     //   `padL == padR`（内容中心 ≡ 胶囊中心）、`h == cap`（行盒 ≡ 胶囊盒）、

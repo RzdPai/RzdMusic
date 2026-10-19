@@ -248,7 +248,7 @@ export struct HomeMiniBarPlayerAside {
         .overlay((): void => { this.MetaFadeMask(); }, { align: Alignment.TopStart })
         // 元信息那一档的透明度（真实迷你条恒 1，克隆层按 metaOpacityAt 传值）
         .opacity(this.isMorphClone ? this.metaOpacity :
-          (this.expandState.sourceBarHidden ? 0 : this.metaOpacity))
+          (this.expandState.sourceBarPaintHidden() ? 0 : this.metaOpacity))
         // 被封面"推着往右走"（反编译 λ1e 的 `coverRightShiftAt`）；真实迷你条恒 0
         .translate({ x: this.metaShiftX })
         .onClick(() => {
