@@ -68,14 +68,93 @@ export struct ControlAreaComponent {
   // RzdScrubberV19: scale only the decorative rail; keep native input/block geometry fixed.
   @Local scrubberPressed: boolean = false;
   @Local scrubberPreviewValue: number = 0;
+  // RzdScrubberV20: preview ownership is independent of the rail's pressed animation.
+  @Local scrubberPreviewActive: boolean = false;
+  private scrubberEditing: boolean = false;
+  private scrubberSeekPending: boolean = false;
+  private scrubberSeekTarget: number = 0;
+  private scrubberSeekSequence: number = 0;
+  private scrubberSubmitRevision: number = 0;
+  // Positions are milliseconds; allow a small decoder-position difference, not an elapsed-time delay.
+  private static readonly SCRUBBER_ACK_TOLERANCE_MS: number = 250;
+
+  @Computed
+  get scrubberDisplayValue(): number {
+    return this.scrubberPreviewActive ? this.scrubberPreviewValue : this.playerViewModel.appState.progress;
+  }
+
+  private logScrubberV20(mode: string, value: number, reason: string): void {
+    appendPlayLog(`[RzdScrubberV20] mode=${mode} value=${value.toFixed(1)}` +
+      ` progress=${this.playerViewModel.appState.progress.toFixed(1)}` +
+      ` preview=${this.scrubberPreviewValue.toFixed(1)} active=${this.scrubberPreviewActive}` +
+      ` display=${this.scrubberDisplayValue.toFixed(1)} editing=${this.scrubberEditing}` +
+      ` pending=${this.scrubberSeekPending} target=${this.scrubberSeekTarget.toFixed(1)}` +
+      ` seq=${this.scrubberSeekSequence} reason=${reason}`);
+  }
+
+  private reconcileScrubberPreview(mode: string): void {
+    if (!this.scrubberPreviewActive || this.scrubberEditing || !this.scrubberSeekPending) {
+      return;
+    }
+    const progress: number = this.playerViewModel.appState.progress;
+    if (this.playerViewModel.appState.seekDoneRevision > this.scrubberSubmitRevision &&
+      Math.abs(progress - this.scrubberSeekTarget) <= ControlAreaComponent.SCRUBBER_ACK_TOLERANCE_MS) {
+      this.scrubberSeekPending = false;
+      this.scrubberPreviewActive = false;
+      this.logScrubberV20(mode, this.scrubberSeekTarget, 'handoff-near-target');
+    } else {
+      this.logScrubberV20(mode, this.scrubberSeekTarget, 'hold-until-target');
+    }
+  }
+
+  @Monitor('playerViewModel.appState.progress', 'playerViewModel.appState.seekDoneRevision')
+  onScrubberProgressChanged(): void {
+    this.reconcileScrubberPreview('Progress');
+  }
+
+  @Monitor('playerViewModel.appState.selectIndex', 'playerViewModel.appState.progressMax',
+    'playerViewModel.appState.seekResetRevision')
+  onScrubberTrackChanged(): void {
+    if (this.scrubberPreviewActive) {
+      this.scrubberEditing = false;
+      this.scrubberSeekPending = false;
+      this.scrubberPreviewActive = false;
+      this.logScrubberV20('TrackChanged', this.playerViewModel.appState.progress, 'reset-track-duration-or-seek-failure');
+    }
+  }
+
+  private onScrubberChange(value: number, mode: SliderChangeMode): void {
+    this.scrubberPreviewValue = value;
+    this.scrubberPreviewActive = true;
+    this.scrubberEditing = mode === SliderChangeMode.Begin || mode === SliderChangeMode.Moving;
+    const modeName: string = mode === SliderChangeMode.Begin ? 'Begin' :
+      mode === SliderChangeMode.Moving ? 'Moving' : mode === SliderChangeMode.End ? 'End' : 'Click';
+    if (mode === SliderChangeMode.End || mode === SliderChangeMode.Begin || mode === SliderChangeMode.Click) {
+      this.scrubberSeekTarget = value;
+      this.scrubberSeekPending = true;
+      this.scrubberSeekSequence++;
+      this.scrubberSubmitRevision = this.playerViewModel.appState.seekDoneRevision;
+      this.logScrubberV20(modeName, value, 'seek-submit');
+      if (!this.playerViewModel.seek(value)) {
+        this.scrubberSeekPending = false;
+        this.scrubberPreviewActive = false;
+        this.scrubberEditing = false;
+        this.logScrubberV20(modeName, value, 'seek-rejected');
+      }
+    } else {
+      this.logScrubberV20(modeName, value, 'preview-only');
+    }
+    this.playerViewModel.appState.pageShowTime = 0;
+  }
 
   private setScrubberPressed(pressed: boolean): void {
     if (this.scrubberPressed === pressed) {
       return;
     }
     if (pressed) {
-      this.scrubberPreviewValue = this.playerViewModel.appState.progress;
+      this.scrubberPreviewValue = this.scrubberDisplayValue;
     }
+    this.logScrubberV20(pressed ? 'TouchDown' : 'TouchRelease', this.scrubberPreviewValue, 'pressed-visual-only');
     const scaleY: number = pressed ? 24 / 14 : 1;
     appendPlayLog(`[RzdScrubberV19] pressed=${pressed} scaleY=${scaleY.toFixed(4)} idleVp=14 pressedVp=24`);
     this.getUIContext().animateTo({ curve: curves.springMotion(0.4, 0.8) }, (): void => {
@@ -705,7 +784,7 @@ export struct ControlAreaComponent {
             min: 0,
             max: this.playerViewModel.appState.progressMax,
             step: 1,
-            value: this.scrubberPressed ? this.scrubberPreviewValue : this.playerViewModel.appState.progress
+            value: this.scrubberDisplayValue
           })
             .blockColor(Color.Transparent)
             .selectedColor($r('app.color.slider_select'))
@@ -724,7 +803,7 @@ export struct ControlAreaComponent {
             min: 0,
             max: this.playerViewModel.appState.progressMax,
             step: 1,
-            value: this.scrubberPressed ? this.scrubberPreviewValue : this.playerViewModel.appState.progress
+            value: this.scrubberDisplayValue
           })
             .blockColor($r('app.color.slider_block'))
             .selectedColor(Color.Transparent)
@@ -739,15 +818,17 @@ export struct ControlAreaComponent {
                 this.setScrubberPressed(true);
               } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
                 this.setScrubberPressed(false);
+                if (event.type === TouchType.Cancel) {
+                  this.scrubberEditing = false;
+                  this.scrubberPreviewValue = this.scrubberSeekTarget;
+                  this.scrubberPreviewActive = this.scrubberSeekPending;
+                  this.logScrubberV20('Cancel', this.scrubberSeekTarget, 'retain-last-submitted-target');
+                  this.reconcileScrubberPreview('Cancel');
+                }
               }
             })
             .onChange((value: number, mode: SliderChangeMode) => {
-              this.scrubberPreviewValue = value;
-              if (mode === SliderChangeMode.End || mode === SliderChangeMode.Begin ||
-                mode === SliderChangeMode.Click) {
-                this.playerViewModel.seek(value);
-              }
-              this.playerViewModel.appState.pageShowTime = 0;
+              this.onScrubberChange(value, mode);
             })
             .height(32)
             .hitTestBehavior(HitTestMode.Block)

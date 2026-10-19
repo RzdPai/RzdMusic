@@ -83,8 +83,8 @@ export class PlayerViewModel {
   }
 
   /** Seeks current playback to ms (delegates to MediaService). */
-  public seek(ms: number): void {
-    PlayerDataUtil.seek(ms);
+  public seek(ms: number): boolean {
+    return PlayerDataUtil.seek(ms);
   }
 
   /** Toggles play/pause using current appState and MediaService first-load rules. */

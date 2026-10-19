@@ -76,8 +76,8 @@ export class PlayerDataUtil {
   }
 
   /** Seeks current playback to the given position in milliseconds. */
-  public static seek(ms: number): void {
-    MediaService.getInstance().seek(ms);
+  public static seek(ms: number): boolean {
+    return MediaService.getInstance().seek(ms);
   }
 
   /**

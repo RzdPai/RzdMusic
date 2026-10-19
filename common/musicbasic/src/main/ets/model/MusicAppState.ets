@@ -33,6 +33,9 @@ export class  MusicAppState {
   @Trace public isPlay: boolean = false;
   /** Elapsed position for the progress bar (0..progressMax when known). */
   @Trace public progress: number = 0;
+  /** RzdScrubberV20: actual seekDone publication, including a seek to an unchanged position. */
+  @Trace public seekDoneRevision: number = 0;
+  @Trace public seekResetRevision: number = 0;
   /** Duration for the current track, or 0/1 when unknown. */
   @Trace public progressMax: number = 0;
   /** Formatted current time string for UI. */

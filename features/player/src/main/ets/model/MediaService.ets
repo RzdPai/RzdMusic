@@ -170,14 +170,33 @@ export class MediaService {
   /** Owns the system live view (实况窗) lifecycle and lock screen lyric sync. */
   private liveViewController: LyricLiveViewController = new LyricLiveViewController();
 
+  // RzdScrubberV20: one native seek in flight; coalesce overlapping input to the latest target.
+  private scrubberSeekInFlight: boolean = false;
+  private scrubberQueuedSeek: number | undefined = undefined;
+
   /** AVPlayer seekDone: marks seek finished and updates AVSession position. */
   private seekCall: (seekDoneTime: number) => void = (seekDoneTime: number) => {
+    this.scrubberSeekInFlight = false;
+    const queued: number | undefined = this.scrubberQueuedSeek;
+    this.scrubberQueuedSeek = undefined;
+    if (queued !== undefined) {
+      appendPlayLog(`[RzdScrubberV20] mode=SeekIntermediate value=${seekDoneTime}` +
+        ` progress=${this.getAppState().progress} preview=component-owned next=${queued}`);
+      this.isCurrent = true;
+      if (this.seek(queued)) {
+        return;
+      }
+      this.getAppState().seekResetRevision++;
+    }
     this.isCurrent = true;
     Logger.info(TAG, `AVPlayer seek succeeded, seek time is ${seekDoneTime}`);
     // 立即同步进度到 UI（暂停时无 timeUpdate 事件，不更新则歌词/进度条不跟随）
     const appState = this.getAppState();
     appState.progress = seekDoneTime;
     appState.currentTime = MediaTools.msToCountdownTime(seekDoneTime);
+    appState.seekDoneRevision++;
+    appendPlayLog(`[RzdScrubberV20] mode=SeekDone value=${seekDoneTime}` +
+      ` progress=${appState.progress} preview=component-owned ack=${appState.seekDoneRevision}`);
     this.liveViewController.update(seekDoneTime, appState.isPlay);
     this.setPlayState({
       position: {
@@ -190,6 +209,9 @@ export class MediaService {
   private errorCall: (err: BusinessError) => void = (err: BusinessError) => {
     Logger.error(TAG, `Invoke avPlayer failed, code is ${err.code}, message is ${err.message}`);
     appendPlayLog('[播放] AVPlayer 报错 code=' + err.code + ' msg=' + err.message);
+    this.scrubberSeekInFlight = false;
+    this.scrubberQueuedSeek = undefined;
+    this.getAppState().seekResetRevision++;
     // 记录本次失败的 url / 音质，后续 fallback 不得再把同一条地址返回（否则会对同一条
     // 死链无限重试，这正是播放页被卡住的根因）。
     const failedUrlNow: string = this.avPlayer?.url ?? '';
@@ -1734,6 +1756,9 @@ export class MediaService {
    * @param loadOnly When true, only load without starting playback.
    */
   public async loadAsset(musicIndex: number, loadOnly?: boolean): Promise<void> {
+    this.scrubberSeekInFlight = false;
+    this.scrubberQueuedSeek = undefined;
+    this.getAppState().seekResetRevision++;
     // 主动加载新歌即取消尚未执行的一次错误恢复，避免旧定时器干扰新播放
     this.errorRecoveryPending = false;
     // ★ 起播意图必须在**函数最前面**声明：下面 resolveOnlineUrl 是异步的，期间可能
@@ -1926,15 +1951,32 @@ export class MediaService {
    *
    * @param ms Target position in ms, clamped to [0, duration].
    */
-  public seek(ms: number) {
+  public seek(ms: number): boolean {
     if (this.isPrepared && this.state != AudioPlayerState.ERROR && this.avPlayer) {
       // SeekMode.SEEK_CLOSEST(2)：帧级精确 seek，跳转到距目标最近的帧（不限于关键帧），
       // 保证点击歌词/进度条拖拽准确落在目标时间，不会落到目标前最近的关键帧
       let seekMode: number = 2;
       let realTime = (ms <= 0 ? 0 : (ms >= this.getDuration() ? this.getDuration() : ms));
+      if (this.scrubberSeekInFlight) {
+        this.scrubberQueuedSeek = realTime;
+        return true;
+      }
+      const wasCurrent: boolean = this.isCurrent;
       this.isCurrent = false;
-      this.avPlayer.seek(realTime, seekMode);
+      this.scrubberSeekInFlight = true;
+      try {
+        this.avPlayer.seek(realTime, seekMode);
+        return true;
+      } catch (error) {
+        this.scrubberSeekInFlight = false;
+        this.scrubberQueuedSeek = undefined;
+        this.getAppState().seekResetRevision++;
+        this.isCurrent = wasCurrent;
+        appendPlayLog(`[RzdScrubberV20] mode=SeekRejected value=${ms}` +
+          ` progress=${this.getAppState().progress} preview=component-owned reason=${JSON.stringify(error)}`);
+      }
     }
+    return false;
   }
 
   /** Current playback position in ms from AVPlayer, or 0 if not prepared. */
