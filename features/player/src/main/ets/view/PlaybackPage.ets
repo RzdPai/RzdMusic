@@ -6324,8 +6324,12 @@ export struct PlaybackPage {
     this.stopGeoDriver();
     this.geoFrom = from;
     this.geoTo = to;
+    const openToken: number = to === 1 ? this.expandState.beginOpenGeometryAnimation() : -1;
     if (durMs <= 0) {
       this.expandState.applyMorphProgress(to);
+      if (to === 1) {
+        this.expandState.finishOpenGeometryAnimation(openToken);
+      }
       return;
     }
     const options: AnimatorOptions = {
@@ -6347,7 +6351,13 @@ export struct PlaybackPage {
       this.expandState.applyMorphProgress(this.geoFrom + (this.geoTo - this.geoFrom) * value);
     };
     anim.onFinish = (): void => {
-      this.expandState.applyMorphProgress(this.geoTo);
+      if (!this.isAlive || this.geoAnimator !== anim) {
+        return;
+      }
+      this.expandState.applyMorphProgress(to);
+      if (to === 1) {
+        this.expandState.finishOpenGeometryAnimation(openToken);
+      }
     };
     this.geoAnimator = anim;
     anim.play();

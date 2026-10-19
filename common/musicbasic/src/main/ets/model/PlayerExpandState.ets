@@ -899,7 +899,7 @@ export class PlayerExpandState {
     // ★ 2026-10-19：落位（克隆层已按上面那条退场）⇒ **真封面必须接管**，
     //   否则两边都不画 ⇒ 屏幕上一个封面都没有（用户以前报过的 `real=0 clone=0`）。
     //   与 `morphOverlayBridging()` / `morphSessionDriving()` 里那两条落地判据是同一个条件。
-    if (this.morphStage !== MorphStage.LEAVING && this.morphP >= 0.999) {
+    if (this.morphStage !== MorphStage.LEAVING && this.isOpenGeometryFinished()) {
       return true;
     }
     if (!this.morphOverlayBridging()) {
@@ -2578,6 +2578,31 @@ export class PlayerExpandState {
   /** 璺熸墜杩涘害 0鈥?锛? = 杩樻槸杩蜂綘鏉￠偅鏉¤兌鍥婏級銆?*/
   @Trace public morphP: number = 1;
 
+  // V17: data targets are not rendered completion. Only an engine completion may hand off.
+  @Trace private openGeometryFinished: boolean = true;
+  private openGeometryGeneration: number = 0;
+
+  public isOpenGeometryFinished(): boolean {
+    return this.openGeometryFinished;
+  }
+
+  public beginOpenGeometryAnimation(): number {
+    this.openGeometryGeneration++;
+    this.openGeometryFinished = false;
+    Logger.info('RzdCoverOwnerV17', `geometry-start token=${this.openGeometryGeneration} p=${this.morphP}`);
+    return this.openGeometryGeneration;
+  }
+
+  public finishOpenGeometryAnimation(token: number): boolean {
+    if (token !== this.openGeometryGeneration || this.morphStage !== MorphStage.ENTERING) {
+      Logger.info('RzdCoverOwnerV17', `geometry-finish stale token=${token} current=${this.openGeometryGeneration} stage=${this.morphStage}`);
+      return false;
+    }
+    this.openGeometryFinished = true;
+    Logger.info('RzdCoverOwnerV17', `geometry-finish token=${token} p=${this.morphP} clone=${this.morphOverlayBridging()} real=${this.realCoverVisible()}`);
+    return true;
+  }
+
   /**
    * **内容时间线**进度 0~1 —— 上游 `PlayerPage.pullT`，与 {@link morphP}（几何时间线）**分开两条**。
    *
@@ -3424,6 +3449,7 @@ export class PlayerExpandState {
    * @returns 鍑犱綍鏄惁鍙敤锛坒alse 鏃惰皟鐢ㄦ柟搴旂洿鎺ラ摵婊★紝鍒‖鍋氬舰鍙橈級
    */
   public pullOpenBegin(ui: UIContext, preferFloating: boolean): boolean {
+    this.beginOpenGeometryAnimation();
     this.pullDragging = true;
     // ★ 2026-10-21：上拉开始的**第一帧**就把系统条顶掉（自绘条由 Shell 的克隆层接管）。
     //   必须在这里而不是等 `morphBeginEntering()`：跟手阶段 `morphP` 还很小，
@@ -4020,9 +4046,8 @@ export class PlayerExpandState {
     //   表现就是：歌词页封面不缩 / 关闭时两个封面 / 上拉收回后自绘条不退场（半透明）。
     //   ⚠️ 不许改成"强制 settle"——那会硬改状态机、把布局落在半路（上一版实测：黑背景 + 播放器下滑）。
     if (this.morphStage !== MorphStage.LEAVING) {
-      // V15: use the same sampled progress as morphOverlayCoverBridge().
-      // morphOverlayP is an animateTo target and reaches 1 before the geometry does.
-      if (this.morphP >= 0.999) {
+      // V17: neither morphP nor morphOverlayP proves rendered completion.
+      if (this.isOpenGeometryFinished()) {
         return false;
       }
     }
@@ -4951,6 +4976,7 @@ export class PlayerExpandState {
    *          锛堝惁鍒欎細鎶婃挱鏀鹃〉鍘嬫垚 1vp 鐨勪竴鏉＄粏缂濓級銆?
    */
   public morphBeginEntering(): boolean {
+    this.beginOpenGeometryAnimation();
     this.morphStage = MorphStage.ENTERING;
     this.morphDrive = MorphDrive.FINGER;
     this.morphGen = this.morphGen + 1;
@@ -5110,6 +5136,10 @@ export class PlayerExpandState {
 
   /** 灞曞紑鏀跺熬瀹屾垚锛氳繘鍏ョǔ瀹氬睍寮€鎬併€?*/
   public morphSettleOpen(): void {
+    if (this.morphStage === MorphStage.ENTERING && !this.isOpenGeometryFinished()) {
+      Logger.info('RzdCoverOwnerV17', 'settle deferred: engine geometry still active');
+      return;
+    }
     this.morphStage = MorphStage.OPEN;
     this.morphDrive = MorphDrive.NONE;
     // ★ 2026-10-19：落位到 OPEN = 形变结束、播放器全屏接管 ⇒ 系统条交接闸必须释放，
@@ -5171,6 +5201,8 @@ export class PlayerExpandState {
 
   /** 澶嶄綅鍒?娌℃湁杩欏鍔ㄧ敾"鐨勯潤姝㈡€侊紙鍑犱綍缂哄け銆佸嵏杞姐€佸紓甯告椂閮借蛋杩欓噷锛夈€?*/
   public morphReset(): void {
+    this.openGeometryGeneration++;
+    this.openGeometryFinished = true;
     // 上游 `finishReverse` / 会话结束都会 `setMiniOut(false)`（`wujie.pa:147562-147568`）。
     this.miniOut = false;
     // ★ 2026-10-21：复位 = 回到"没有形变动画"的静止态 ⇒ 系统条必须在场（交接闸清掉）。
@@ -5223,7 +5255,7 @@ export class PlayerExpandState {
     //   被挡掉而**停在 ANIM**。不在这里收口的话，`morphSessionDriving()` 恒真 ⇒
     //   Shell 的克隆封面层与克隆操作区**永远画着**（`0014` 日志 `ms=1 op=1.00` 常驻），
     //   正好造成：歌词页封面不缩、关闭时两个封面、上拉收回后自绘条不退场（半透明）。
-    if (this.morphStage !== MorphStage.LEAVING && this.morphP >= 0.999) {
+    if (this.morphStage !== MorphStage.LEAVING && this.isOpenGeometryFinished()) {
       return false;
     }
     if (!this.morphUsable || !this.morphContainerActive()) {

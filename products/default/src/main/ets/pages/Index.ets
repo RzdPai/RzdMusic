@@ -1403,17 +1403,34 @@ struct Index {
     // 鈽?2026-10-16锛氳繖閲屽師鏉ヨ繕鎹曡幏浜嗕竴涓?`gen` 渚涗袱澶勫畧鍗敤锛涢偅涓ゅ瀹堝崼宸叉寜 搂102/搂103
     //   鏀规垚鍒?`isShowPlay`锛堜笘浠ｅ彿浼氳"鏃у疄渚嬪嵏杞界殑 morphReset"鎺ㄩ珮锛屼笌鐢ㄦ埛鎰忓浘鏃犲叧锛?
     //   鈬?`gen` 涓嶅啀闇€瑕侊紝鍒犳帀澹版槑锛圓rkTS 瀵规湭浣跨敤鐨勫眬閮ㄥ彉閲忚緝涓ユ牸锛岀暀鐫€浼氳闈欐€佸憡璀︼級銆?
-    this.getUIContext().animateTo({
+    const geometryToken: number = this.expandState.beginOpenGeometryAnimation();
+    let onGeometryFinished: () => void = (): void => {};
+    setTimeout((): void => {
+      Logger.info('RzdCoverOwnerV17',
+        `sample=mid commit=${commit} finished=${this.expandState.isOpenGeometryFinished()} ` +
+          `p=${this.expandState.morphP} clone=${this.expandState.morphOverlayBridging()} ` +
+          `real=${this.expandState.realCoverVisible()}`);
+    }, duration / 2);
+    const startGeometryAnimation = (): void => {
+      this.getUIContext().animateTo({
+        finishCallbackType: FinishCallbackType.REMOVED,
+        onFinish: (): void => {
+          if (commit && this.appState.isShowPlay &&
+            this.expandState.finishOpenGeometryAnimation(geometryToken)) {
+            onGeometryFinished();
+          }
+        },
       // 鏃犵晫 Tokens 鐨勬爣鍑嗘椂闀匡細180ms 寰氦浜?/ 300ms 涓昏浆鍦?
       duration: duration,
       curve: curves.cubicBezierCurve(commit ? 0.23 : 0.68, 1.0, commit ? 0.32 : 0.77, 1.0)
     }, (): void => {
       this.expandState.applyMorphProgress(commit ? 1 : 0);
-    });
+      });
+    };
     if (commit) {
       // 鈿狅笍 鐩镐綅鍦?*琛ラ棿涔嬪**鏀癸細`morphSettleOpen()` 浼氭妸"鏄惁瑁佸壀"缈绘垚 false锛?
       //    鏀捐繘 animateTo 闂寘閲屼細璁╄繖绉嶇鏁ｅ睘鎬т篃鍘诲悆琛ラ棿銆?
-      setTimeout((): void => {
+      onGeometryFinished = (): void => {
         // 鈽呪槄鈽?2026-10-16锛?*鍚屼竴鏉″洜鏋滈摼鐨勭鍥涘**锛夛細
         //   杩欓噷鍘熸潵鏄?`if (isShowPlay && morphGenAlive(gen))`銆?*涓庨噸璇曢偅鏉″畧鍗悓涓€涓瘺鐥?*锛?
         //   `morphGen` 浼氳"鏃ч〉闈㈠疄渚嬬殑 `onDisappear` 鏃犳潯浠?`morphReset()`"鎺ㄩ珮锛?
@@ -1456,9 +1473,11 @@ struct Index {
             this.expandState.contentP = 1;
           }
         }
-      }, duration + 20);
+      };
+      startGeometryAnimation();
       return;
     }
+    startGeometryAnimation();
     // 娌¤繃闃堝€硷細琛ラ棿鍥炶捣鐐癸紝**鍔ㄧ敾鎾畬**鍐嶄氦杩樿糠浣犳潯骞跺嵏杞姐€?
     // 鈿狅笍 `morphLand()` 涓嶈兘鍦ㄨˉ闂翠箣鍓嶈皟锛歀ANDING 涔嬪悗鎾斁椤垫暣椤典笉鍐嶇粯鍒?
     //    锛坄morphPageOpacity()` 鍦?LANDING 杩斿洖 0锛涒槄 瑙佸畠鑷繁鐨勬敞閲?鈥斺€?閭ｄ釜鍑芥暟

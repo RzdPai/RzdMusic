@@ -65,52 +65,18 @@ export struct ControlAreaComponent {
    */
   private static readonly SHOW_SCRUBBER_BADGES: boolean = false;
 
-  // Upstream: Progress.strokeWidth and Slider.trackThickness both use scrubbing ? 12 : 7.
-  // wujie.pa:197260-197319 / 197352-197382. Local visual tuning doubles 7:12 to 14:24,
-  // so idle is thicker than this repository's original fixed 12vp rail (14 / 12 > 1).
-  private static readonly SCRUBBER_IDLE_VP: number = 14;
-  private static readonly SCRUBBER_PRESSED_VP: number = 24;
-  // Tokens SP_BOUNCE (slot 0x2e), wujie.pa:98170-98178. Spring determines duration.
-  private static readonly SCRUBBER_SPRING_RESPONSE: number = 0.4;
-  private static readonly SCRUBBER_SPRING_DAMPING: number = 0.8;
-  // Keep the original interactive Slider geometry independent of the painted rail.
-  private static readonly SCRUBBER_INPUT_TRACK_VP: number = 12;
-  @Local scrubberPreviewValue: number | undefined = undefined;
-  @Local scrubberPressed: boolean = false;
-  private scrubberTouchHeld: boolean = false;
-  @Local scrubberPaintHeightVp: number = ControlAreaComponent.SCRUBBER_IDLE_VP;
+  // One native Slider: animate only its rail, never scale its block or a second paint layer.
+  @Local scrubberTrackThicknessVp: number = 14;
 
-  private setScrubberPressed(pressed: boolean, reason: string): void {
-    if (this.scrubberPressed === pressed) {
+  private setScrubberPressed(pressed: boolean): void {
+    const targetVp: number = pressed ? 24 : 14;
+    if (this.scrubberTrackThicknessVp === targetVp) {
       return;
     }
-    this.scrubberPressed = pressed;
-    const target: number = pressed ? ControlAreaComponent.SCRUBBER_PRESSED_VP :
-      ControlAreaComponent.SCRUBBER_IDLE_VP;
-    console.info(`[RzdScrubberThickness] revision=14c reason=${reason} pressed=${pressed} targetVp=${target} ` +
-      `scaleY=${target / ControlAreaComponent.SCRUBBER_INPUT_TRACK_VP} idleVp=14 pressedVp=24 ` +
-      `spring=0.4/0.8 inputTrackVp=12 inputHeightVp=16 blockVp=1`);
-    this.getUIContext().animateTo({
-      curve: curves.springMotion(ControlAreaComponent.SCRUBBER_SPRING_RESPONSE,
-        ControlAreaComponent.SCRUBBER_SPRING_DAMPING)
-    }, (): void => {
-      this.scrubberPaintHeightVp = target;
+    console.info(`[RzdScrubberV16] pressed=${pressed} targetVp=${targetVp} spring=0.4/0.8 singleSlider=1`);
+    this.getUIContext().animateTo({ curve: curves.springMotion(0.4, 0.8) }, (): void => {
+      this.scrubberTrackThicknessVp = targetVp;
     });
-  }
-
-  @Monitor('playerViewModel.appState.progress')
-  onScrubberProgressChanged(): void {
-    if (!this.scrubberPressed && this.scrubberPreviewValue !== undefined &&
-      Math.abs(this.playerViewModel.appState.progress - this.scrubberPreviewValue) < 1000) {
-      this.scrubberPreviewValue = undefined;
-    }
-  }
-
-  private scrubberFraction(): number {
-    const max: number = this.playerViewModel.appState.progressMax;
-    const value: number = this.scrubberPreviewValue !== undefined ? this.scrubberPreviewValue :
-      this.playerViewModel.appState.progress;
-    return max > 0 ? Math.max(0, Math.min(1, value / max)) : 0;
   }
 
   // ─────────── 控制区动效（由播放页驱动，对标无界音乐 PlayerChrome + BarCollapse）───────────
@@ -635,10 +601,6 @@ export struct ControlAreaComponent {
   }
 
   aboutToDisappear(): void {
-    this.scrubberTouchHeld = false;
-    this.scrubberPressed = false;
-    this.scrubberPaintHeightVp = ControlAreaComponent.SCRUBBER_IDLE_VP;
-    this.scrubberPreviewValue = undefined;
     this.otherVersionsOpenGeneration++;
     this.showOtherVersionsSheet = false;
   }
@@ -733,74 +695,36 @@ export struct ControlAreaComponent {
   bottomPanel() {
     Column() {
       Column() {
-        Stack() {
-          // Paint-only Slider shares the native horizontal mapping with the input Slider.
-          // Its block is transparent; only this rail layer receives vertical scaling.
-          Slider({
-            min: 0,
-            max: this.playerViewModel.appState.progressMax,
-            step: 1,
-            value: this.scrubberFraction() * this.playerViewModel.appState.progressMax
+        Slider({
+          min: 0,
+          max: this.playerViewModel.appState.progressMax,
+          step: 1,
+          value: this.playerViewModel.appState.progress
+        })
+          .blockColor($r('app.color.slider_block'))
+          .selectedColor($r('app.color.slider_select'))
+          .trackColor($r('app.color.slider_track'))
+          .trackThickness(this.scrubberTrackThicknessVp)
+          .blockSize({
+            width: $r('app.float.slider_block'),
+            height: $r('app.float.slider_block')
           })
-            .blockColor(Color.Transparent)
-            .selectedColor($r('app.color.slider_select'))
-            .trackColor($r('app.color.slider_track'))
-            .trackThickness(ControlAreaComponent.SCRUBBER_INPUT_TRACK_VP)
-            .blockSize({
-              width: $r('app.float.slider_block'),
-              height: $r('app.float.slider_block')
-            })
-            .width('100%')
-            .height($r('app.float.slider_height'))
-            .scale({ x: 1, y: this.scrubberPaintHeightVp / ControlAreaComponent.SCRUBBER_INPUT_TRACK_VP })
-            .hitTestBehavior(HitTestMode.None)
-            .focusable(false)
-            .accessibilityLevel('no')
-          Slider({
-            min: 0,
-            max: this.playerViewModel.appState.progressMax,
-            step: 1,
-            value: this.playerViewModel.appState.progress
+          .onTouch((event: TouchEvent) => {
+            if (event.type === TouchType.Down) {
+              this.setScrubberPressed(true);
+            } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+              this.setScrubberPressed(false);
+            }
           })
-            .blockColor($r('app.color.slider_block'))
-            .selectedColor(Color.Transparent)
-            .trackColor(Color.Transparent)
-            .trackThickness(ControlAreaComponent.SCRUBBER_INPUT_TRACK_VP)
-            .blockSize({
-              width: $r('app.float.slider_block'),
-              height: $r('app.float.slider_block')
-            })
-            .onTouch((event: TouchEvent) => {
-              if (event.type === TouchType.Down) {
-                this.scrubberTouchHeld = true;
-                this.setScrubberPressed(true, 'down');
-              } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
-                this.scrubberTouchHeld = false;
-                this.setScrubberPressed(false, event.type === TouchType.Up ? 'up' : 'cancel');
-                if (event.type === TouchType.Cancel) {
-                  this.scrubberPreviewValue = undefined;
-                }
-              }
-            })
-            .onChange((value: number, mode: SliderChangeMode) => {
-              this.scrubberPreviewValue = value;
-              if (mode === SliderChangeMode.Begin || mode === SliderChangeMode.Moving) {
-                this.setScrubberPressed(true, 'drag');
-              } else if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click) {
-                // A click callback must not collapse the rail while touch is still held.
-                this.setScrubberPressed(this.scrubberTouchHeld, 'end-or-click');
-              }
-              if (mode === SliderChangeMode.End || mode === SliderChangeMode.Begin ||
-                mode === SliderChangeMode.Click) {
-                this.playerViewModel.seek(value);
-              }
-              this.playerViewModel.appState.pageShowTime = 0;
-            })
-            .height($r('app.float.slider_height'))
-            .width('100%')
-            .hitTestBehavior(HitTestMode.Block)
-        }
-          .height($r('app.float.slider_height'))
+          .onChange((value: number, mode: SliderChangeMode) => {
+            if (mode === SliderChangeMode.End || mode === SliderChangeMode.Begin ||
+              mode === SliderChangeMode.Click) {
+              this.playerViewModel.seek(value);
+            }
+            this.playerViewModel.appState.pageShowTime = 0;
+          })
+          // Native trackThickness must fit inside the Slider height (24vp plus spring headroom).
+          .height(32)
           .margin({
             left: new BreakpointType(
               $r('app.float.slider_margin_sm'),
@@ -815,7 +739,7 @@ export struct ControlAreaComponent {
               $r('app.float.slider_margin_lg')
             ).getValue(this.breakpointEnv.widthBreakpoint)
           })
-          .hitTestBehavior(HitTestMode.Default)
+          .hitTestBehavior(HitTestMode.Block)
         Row() {
           Text(this.playerViewModel.appState.currentTime)
             .fontColor($r('app.color.play_text_color'))
