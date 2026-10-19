@@ -32,13 +32,14 @@ import {
   buildBarBlurStyle,
   illuminatedEffect,
   MusicAppState,
+  PlayedSongRecord,
   SelectionActionCell,
   SongItem,
   SongTitleMarquee,
   ThemeState,
   getStatusBarTopVpFromWindowUtil
 } from 'musicbasic';
-import { MediaService } from 'player';
+import { DownloadService, DownloadStatus, DownloadTask, MediaService, OnlinePlayUtil } from 'player';
 import {
   ImportResult,
   LocalMusicImportState,
@@ -50,6 +51,18 @@ import type { MatchSongInfo } from '../core/LyricMatch';
 
 const DOMAIN: number = 0x0001;
 const TAG: string = 'LocalMusicPage';
+
+/** 歌手 / 专辑格的分组条目（本地库按 `singer` / `albumName` 聚合出来的临时结构）。 */
+class LocalGroupEntry {
+  /** 组名（歌手名 / 专辑名）。 */
+  name: string = '';
+  /** 组内首数。 */
+  count: number = 0;
+  /** 封面（取组里第一首的）。 */
+  img: string = '';
+  /** 组内第一首在 `items` 里的下标（点一行就从这首开始播）。 */
+  firstIndex: number = 0;
+}
 
 /**
  * 本地音乐页（路由页）
@@ -76,6 +89,15 @@ export struct LocalMusicPage {
   @Local selectionMode: boolean = false;
   /** 多选勾选表（key = 本地 key） */
   @Local selectedMap: Record<string, boolean> = {};
+  /**
+   * 分类页签（用户 2026-10-20）：`song` / `singer` / `album` / `download`。
+   *
+   * 「本地=歌曲/歌手/专辑」是 6a 点名的三格；`download` 是 6b「下载页并入本地页面」的落点
+   * （原来「我的 → 下载管理」那一页的内容，已完成的下载任务就在这里）。
+   */
+  @Local category: string = 'song';
+  /** 「已下载」格的数据源（`DownloadService` 里 COMPLETED 的任务快照）。 */
+  @Local downloadedTasks: DownloadTask[] = [];
   /** 一键匹配进行中 */
   @Local matchingAll: boolean = false;
   @Local matchProgress: string = '';
@@ -124,6 +146,19 @@ export struct LocalMusicPage {
 
   private refresh(): void {
     this.items = localMusic.getSongItems();
+    this.refreshDownloaded();
+  }
+
+  /** 拉一次「已下载」快照（只取 COMPLETED，未完成的仍在下载管理页里看）。 */
+  private refreshDownloaded(): void {
+    const all: DownloadTask[] = DownloadService.getInstance().getTasksSnapshot();
+    const done: DownloadTask[] = [];
+    for (let i: number = 0; i < all.length; i++) {
+      if (all[i].status === DownloadStatus.COMPLETED) {
+        done.push(all[i]);
+      }
+    }
+    this.downloadedTasks = done;
   }
 
   private toast(message: string): void {
@@ -499,6 +534,257 @@ export struct LocalMusicPage {
   }
 
   /**
+   * 分类页签（用户 2026-10-20 截图口径）：文字页签，选中项 `font_primary` + 下方主题色短横线。
+   * 四格：歌曲 / 歌手 / 专辑 / 已下载（已下载 = 下载管理并进本页）。
+   */
+  @Builder
+  private CategoryTabs() {
+    Scroll() {
+      Row({ space: 0 }) {
+        this.CategoryTab('歌曲', 'song')
+        this.CategoryTab('歌手', 'singer')
+        this.CategoryTab('专辑', 'album')
+        this.CategoryTab('已下载', 'download')
+      }
+    }
+    .scrollable(ScrollDirection.Horizontal)
+    .scrollBar(BarState.Off)
+    .width('100%')
+    .height(46)
+    .padding({ left: 6, right: 6 })
+  }
+
+  /** 单个页签。 */
+  @Builder
+  private CategoryTab(label: string, key: string) {
+    Column({ space: 4 }) {
+      Text(label)
+        .fontSize($r('sys.float.Body_L'))
+        .fontWeight(this.category === key ? FontWeight.Medium : FontWeight.Regular)
+        .fontColor(this.category === key ? $r('sys.color.font_primary') : $r('sys.color.font_secondary'))
+      Row()
+        .width(this.category === key ? 18 : 0)
+        .height(2.5)
+        .borderRadius(1.25)
+        .backgroundColor(this.themeState.color)
+        .animation({ duration: 160, curve: Curve.Friction })
+    }
+    .height(46)
+    .justifyContent(FlexAlign.Center)
+    .padding({ left: 10, right: 10 })
+    .onClick((): void => {
+      if (this.category !== key) {
+        this.category = key;
+        hilog.info(DOMAIN, TAG, 'category=%{public}s', key);
+      }
+    })
+  }
+
+  /** 「播放全部 N」：当前分类能播的行数（已下载 = 下载任务数）。 */
+  @Builder
+  private PlayAllRow() {
+    Row({ space: 10 }) {
+      Row() {
+        SymbolGlyph($r('sys.symbol.play_fill'))
+          .fontSize(16)
+          .fontColor([$r('sys.color.font_on_primary')])
+      }
+      .width(34)
+      .height(34)
+      .borderRadius(17)
+      .backgroundColor(this.themeState.color)
+      .justifyContent(FlexAlign.Center)
+      Text('播放全部 ' + this.playAllCount())
+        .fontSize($r('sys.float.Body_L'))
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('sys.color.font_primary'))
+      Blank()
+    }
+    .width('100%')
+    .height(58)
+    .padding({ left: 10, right: 10 })
+    .alignItems(VerticalAlign.Center)
+    .onClick((): void => {
+      this.playAll();
+    })
+  }
+
+  /** 「播放全部」按钮上的条数。 */
+  private playAllCount(): number {
+    if (this.category === 'download') {
+      return this.downloadedTasks.length;
+    }
+    if (this.category === 'song') {
+      return this.items.length;
+    }
+    return this.groupEntries().length;
+  }
+
+  /** 播放全部：歌曲格 = 整列表；别的格 = 把该分类里能播的歌拼成一队。 */
+  private playAll(): void {
+    if (this.category === 'song') {
+      this.playAt(0);
+      return;
+    }
+    let first: number = -1;
+    for (let i: number = 0; i < this.items.length; i++) {
+      if (this.matchesCategory(this.items[i])) {
+        first = i;
+        break;
+      }
+    }
+    if (first < 0) {
+      this.toast('这个分类里还没有歌曲');
+      return;
+    }
+    this.playAt(first);
+  }
+
+  /** 本地歌是否属于当前分类（歌手/专辑按名字取；已下载走下载任务，与本地库无关）。 */
+  private matchesCategory(item: SongItem): boolean {
+    if (this.category === 'singer' || this.category === 'album') {
+      return this.groupNameOf(item).length > 0;
+    }
+    return true;
+  }
+
+  /** 分组的名字：歌手格取 `singer`，专辑格取 `albumName`。 */
+  private groupNameOf(item: SongItem): string {
+    if (this.category === 'album') {
+      return typeof item.albumName === 'string' ? item.albumName : '';
+    }
+    return typeof item.singer === 'string' ? item.singer : '';
+  }
+
+  /** 歌手 / 专辑格的分组条目（按名字聚合，保留首次出现顺序）。 */
+  private groupEntries(): LocalGroupEntry[] {
+    if (this.category === 'song' || this.category === 'download') {
+      return [];
+    }
+    const out: LocalGroupEntry[] = [];
+    const indexByName: Map<string, number> = new Map<string, number>();
+    for (let i: number = 0; i < this.items.length; i++) {
+      const item: SongItem = this.items[i];
+      const raw: string = this.groupNameOf(item);
+      const name: string = raw.length > 0 ? raw : (this.category === 'album' ? '未知专辑' : '未知歌手');
+      const hit: number | undefined = indexByName.get(name);
+      if (hit === undefined) {
+        const entry: LocalGroupEntry = new LocalGroupEntry();
+        entry.name = name;
+        entry.count = 1;
+        entry.img = item.cover;
+        entry.firstIndex = i;
+        indexByName.set(name, out.length);
+        out.push(entry);
+      } else {
+        out[hit].count = out[hit].count + 1;
+      }
+    }
+    return out;
+  }
+
+  /** 歌手 / 专辑格的一行：封面 + 名字 + 首数，点一行就从这组第一首开始播。 */
+  @Builder
+  private GroupRow(entry: LocalGroupEntry) {
+    Row({ space: 12 }) {
+      if (entry.img.length > 0) {
+        Image(entry.img)
+          .width(44)
+          .height(44)
+          .borderRadius($r('sys.float.corner_radius_level3'))
+          .objectFit(ImageFit.Cover)
+          .backgroundColor($r('sys.color.background_tertiary'))
+      } else {
+        Row() {
+          SymbolGlyph(this.category === 'album' ?
+            $r('sys.symbol.square_stack_3d_fill') : $r('sys.symbol.person_crop_circle_fill_1'))
+            .fontSize(18)
+            .fontColor([$r('sys.color.font_tertiary')])
+        }
+        .width(44)
+        .height(44)
+        .borderRadius($r('sys.float.corner_radius_level3'))
+        .backgroundColor($r('sys.color.background_tertiary'))
+        .justifyContent(FlexAlign.Center)
+      }
+      Column({ space: 3 }) {
+        Text(entry.name)
+          .fontSize($r('sys.float.Body_L'))
+          .fontColor($r('sys.color.font_primary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(entry.count + ' 首')
+          .fontSize($r('sys.float.Caption_M'))
+          .fontColor($r('sys.color.font_tertiary'))
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+      SymbolGlyph($r('sys.symbol.play_fill'))
+        .fontSize(18)
+        .fontColor([$r('sys.color.icon_tertiary')])
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+    .onClick((): void => {
+      this.playAt(entry.firstIndex);
+    })
+  }
+
+  /** 「已下载」格的一行：点一下就地播这个下载文件。 */
+  @Builder
+  private DownloadedRow(task: DownloadTask) {
+    Row({ space: 12 }) {
+      Row() {
+        SymbolGlyph($r('sys.symbol.download_fill'))
+          .fontSize(18)
+          .fontColor([this.themeState.color])
+      }
+      .width(44)
+      .height(44)
+      .borderRadius($r('sys.float.corner_radius_level3'))
+      .backgroundColor($r('sys.color.background_tertiary'))
+      .justifyContent(FlexAlign.Center)
+      Column({ space: 3 }) {
+        Text(task.name)
+          .fontSize($r('sys.float.Body_L'))
+          .fontColor($r('sys.color.font_primary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(task.singer + (task.quality.length > 0 ? ' · ' + task.quality : ''))
+          .fontSize($r('sys.float.Caption_M'))
+          .fontColor($r('sys.color.font_tertiary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+      SymbolGlyph($r('sys.symbol.play_fill'))
+        .fontSize(18)
+        .fontColor([$r('sys.color.icon_tertiary')])
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+    .onClick((): void => {
+      this.playDownloaded(task);
+    })
+  }
+
+  /** 播一个已下载的文件（与下载管理页同一条路：`source='local'` 直接播）。 */
+  private playDownloaded(task: DownloadTask): void {
+    const record: PlayedSongRecord = new PlayedSongRecord();
+    record.source = 'local';
+    record.songId = task.id;
+    record.name = task.name;
+    record.singer = task.singer;
+    record.albumName = task.albumName;
+    record.img = task.imgUrl;
+    record.quality = task.quality;
+    record.url = task.tempPath.length > 0 ? task.tempPath : task.fileName;
+    record.time = Date.now();
+    void OnlinePlayUtil.playRecord(this.appState, record, this.getUIContext());
+  }
+
+  /**
    * 多选底部操作条（用户 2026-10-19：本地音乐「沿用新样式」）。
    *
    * 与 `RecordListPage.SelectionActionBar()` **同一套观感**（同为 musicbasic 的
@@ -696,13 +982,35 @@ export struct LocalMusicPage {
         } else {
           // ★ 用户 2026-10-19：多选操作条改成**底部悬浮胶囊**（与历史/收藏页同款）⇒
           //   列表与操作条在同一个 Stack 里，操作条盖在列表上，不压缩列表高度。
+          // ★ 用户 2026-10-20：上部分类 Tab（歌曲 / 歌手 / 专辑 / 已下载）+ 下方「播放全部」。
+          //   已下载 = 下载管理并进本页（`DownloadService` 里 COMPLETED 的任务）。
           Stack({ alignContent: Alignment.Bottom }) {
             List({ space: 2 }) {
-              ForEach(this.items, (item: SongItem) => {
-                ListItem() {
-                  this.SongRow(item)
-                }
-              }, (item: SongItem) => `${item.songId}_${item.interval}`)
+              ListItem() {
+                this.CategoryTabs()
+              }
+              ListItem() {
+                this.PlayAllRow()
+              }
+              if (this.category === 'song') {
+                ForEach(this.items, (item: SongItem) => {
+                  ListItem() {
+                    this.SongRow(item)
+                  }
+                }, (item: SongItem) => `${item.songId}_${item.interval}`)
+              } else if (this.category === 'download') {
+                ForEach(this.downloadedTasks, (task: DownloadTask) => {
+                  ListItem() {
+                    this.DownloadedRow(task)
+                  }
+                }, (task: DownloadTask) => 'dl_' + task.id + '_' + task.downloaded + '_' + task.total)
+              } else {
+                ForEach(this.groupEntries(), (entry: LocalGroupEntry) => {
+                  ListItem() {
+                    this.GroupRow(entry)
+                  }
+                }, (entry: LocalGroupEntry) => 'grp_' + this.category + '_' + entry.name)
+              }
             }
             .scrollBar(BarState.Off)
             .width('100%')

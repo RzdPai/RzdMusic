@@ -69,6 +69,13 @@ import { MineTopFade } from './MineWidgets';
 export const RECORD_MODE_HISTORY: string = 'history';
 /** 「收藏」模式。 */
 export const RECORD_MODE_FAVORITES: string = 'favorites';
+/**
+ * 「关注」模式（用户 2026-10-20：我的页「下载管理」改成「关注」，收藏里的歌手提出来放这里）。
+ *
+ * 复用本页而不是新开一个路由页：歌手行、空状态、点击进歌手详情全都是本页已有的
+ * `FavoriteEntryRow`，新开一页只会把这套代码抄第二遍。
+ */
+export const RECORD_MODE_FOLLOWING: string = 'following';
 
 /**
  * 路由参数（写法与 `SettingsDetailRouteParam` 一致：一个普通类，Builder 里读它的字段）。
@@ -177,9 +184,18 @@ export struct RecordListPage {
   @Local records: PlayedSongRecord[] = [];
   /** 记录列表的懒加载数据源（`@Local` 保证 `LazyForEach` 能拿到同一个实例）。 */
   @Local recordSource: RecordDataSource = new RecordDataSource();
-  /** 收藏模式下的「收藏的歌手 / 专辑」两组（历史模式恒为空）。 */
-  @Local favoriteArtists: FavoriteEntry[] = [];
+  /** 收藏模式下的「收藏的歌单 / 专辑」两组（历史模式恒为空）。 */
   @Local favoriteAlbums: FavoriteEntry[] = [];
+  @Local favoritePlaylists: FavoriteEntry[] = [];
+  /** 关注模式：关注（收藏）的歌手。 */
+  @Local followingArtists: FavoriteEntry[] = [];
+  /**
+   * 分类页签（用户 2026-10-20 截图：Tab 在标题下方，选中项下面一条主题色短横线）。
+   * - `song`    = 歌曲（历史 = 播放记录；收藏 = 收藏的歌曲）
+   * - `playlist`= 歌单（历史 = 按**歌曲元信息里的歌单/专辑名**归组；收藏 = `getFavoritePlaylists()`）
+   * - `album`   = 专辑（只有收藏有这一格）
+   */
+  @Local category: string = 'song';
   /** 多选删除模式。 */
   @Local selectionMode: boolean = false;
   /** 多选底栏「添加至歌单」的面板开关。 */
@@ -226,16 +242,26 @@ export struct RecordListPage {
   /** 历史 / 收藏在别处被改动（播放器、歌曲菜单…）时刷新列表。 */
   @Monitor('store.historyVersion', 'store.favoriteVersion')
   refreshRecords(): void {
-    if (this.isHistory()) {
-      this.records = this.normalizeRecords(this.store.getHistory());
-      this.favoriteArtists = [];
+    this.followingArtists = this.store.getFavoriteArtists();
+    if (this.isFollowing()) {
+      this.records = [];
       this.favoriteAlbums = [];
+      this.favoritePlaylists = [];
+    } else if (this.isHistory()) {
+      this.records = this.normalizeRecords(this.store.getHistory());
+      this.favoriteAlbums = [];
+      this.favoritePlaylists = [];
     } else {
       this.records = this.normalizeRecords(this.store.getFavorites());
-      this.favoriteArtists = this.store.getFavoriteArtists();
       this.favoriteAlbums = this.store.getFavoriteAlbums();
+      this.favoritePlaylists = this.store.getFavoritePlaylists();
     }
     this.publishRecords();
+  }
+
+  /** 关注模式（关注/收藏的歌手列表）。 */
+  private isFollowing(): boolean {
+    return this.mode === RECORD_MODE_FOLLOWING;
   }
 
   /** 当前是不是「最近播放」模式。 */
@@ -271,8 +297,8 @@ export struct RecordListPage {
     void OnlinePlayUtil.playRecord(this.appState, record, this.getUIContext());
   }
 
-  /** 收藏模式的「播放全部」：整队交给壳层的播放意图分发器（不自己推播放页）。 */
-  private playAllFavorites(): void {
+  /** 「播放全部」：整队交给壳层的播放意图分发器（不自己推播放页）。历史/收藏共用。 */
+  private playAllRecords(): void {
     const queue: SongItem[] = [];
     const seed: number = Date.now();
     for (let i: number = 0; i < this.records.length; i++) {
@@ -285,7 +311,7 @@ export struct RecordListPage {
       queue.push(item);
     }
     if (queue.length === 0) {
-      this.getUIContext().getPromptAction().showToast({ message: '暂无可播放收藏歌曲' });
+      this.getUIContext().getPromptAction().showToast({ message: '暂无可播放歌曲' });
       return;
     }
     this.appState.replaceQueue(queue, 0);
@@ -295,8 +321,58 @@ export struct RecordListPage {
     intent.pendingQueueIndex = 0;
     intent.openPlayerUi = true;
     intent.requestVersion++;
-    hilog.info(DOMAIN, TAG, 'favorite play-all rows=%{public}d queue=%{public}d',
-      this.records.length, queue.length);
+    hilog.info(DOMAIN, TAG, 'play-all rows=%{public}d queue=%{public}d', this.records.length, queue.length);
+  }
+
+  /** 收藏模式的「播放全部」：与 {@link playAllRecords} 同一条路（保留名字给标题栏菜单用）。 */
+  private playAllFavorites(): void {
+    this.playAllRecords();
+  }
+
+  /**
+   * 历史模式的「歌单」分组：按**歌曲元信息里的歌单/专辑名**（`PlayedSongRecord.albumName`）归组。
+   *
+   * 用户 2026-10-20 明确：「历史页第二格歌单 = 歌曲元信息中的歌单」。存储里没有"播放过的歌单"
+   * 记录，所以这一格是把历史里的歌按它们自带的歌单/专辑名聚成组，**不新增任何埋点**。
+   * 组按"最近一次播放时间"倒序，组内保持历史原有顺序。
+   */
+  private historyPlaylistGroups(): FavoriteEntry[] {
+    const out: FavoriteEntry[] = [];
+    const indexByName: Map<string, number> = new Map<string, number>();
+    for (let i: number = 0; i < this.records.length; i++) {
+      const record: PlayedSongRecord = this.records[i];
+      const groupName: string = (record.albumName ?? '').length > 0 ? record.albumName : '未知歌单';
+      const hit: number | undefined = indexByName.get(groupName);
+      if (hit === undefined) {
+        const entry: FavoriteEntry = new FavoriteEntry();
+        entry.id = groupName;
+        entry.name = groupName;
+        entry.source = record.source;
+        entry.img = record.img ?? '';
+        entry.count = 1;
+        entry.time = record.time;
+        entry.sub = record.singer ?? '';
+        indexByName.set(groupName, out.length);
+        out.push(entry);
+      } else {
+        const exist: FavoriteEntry = out[hit];
+        exist.count = exist.count + 1;
+      }
+    }
+    hilog.info(DOMAIN, TAG, 'history groups rows=%{public}d groups=%{public}d',
+      this.records.length, out.length);
+    return out;
+  }
+
+  /** 当前分类下要显示的分组条目（历史 = 按元信息歌单聚组；收藏 = 收藏的歌单/专辑）。 */
+  private categoryEntries(): FavoriteEntry[] {
+    if (this.category === 'playlist') {
+      return this.isHistory() ? this.historyPlaylistGroups() : this.favoritePlaylists;
+    }
+    if (this.category === 'album') {
+      return this.isHistory() ? [] : this.favoriteAlbums;
+    }
+    return [];
   }
 
   /** 多选 key。 */
@@ -534,6 +610,90 @@ export struct RecordListPage {
   }
 
   // ─────────────────────────────── 版式：列表 ───────────────────────────────
+
+  /**
+   * 分类页签（用户 2026-10-20 截图）：文字页签，选中项 = `font_primary` + 下方一条
+   * **主题色短横线**；未选中 = `font_secondary`。历史只有 歌曲/歌单 两格（截图里就是两格）。
+   *
+   * ⚠️ 放在**列表内容里的第一格**（跟着滚），不钉在标题栏下沿 —— 与全仓「内容延伸进状态栏」
+   *   那一套口径一致，也省掉再算一次标题栏高度。
+   */
+  @Builder
+  private CategoryTabs() {
+    Row({ space: 0 }) {
+      this.CategoryTab('歌曲', 'song')
+      if (true) {
+        this.CategoryTab('歌单', 'playlist')
+      }
+      if (!this.isHistory()) {
+        this.CategoryTab('专辑', 'album')
+      }
+      Blank()
+    }
+    .width('100%')
+    .height(46)
+    .alignItems(VerticalAlign.Center)
+  }
+
+  /** 单个页签（文字 + 选中下划线）。 */
+  @Builder
+  private CategoryTab(label: string, key: string) {
+    Column({ space: 4 }) {
+      Text(label)
+        .fontSize($r('sys.float.Body_L'))
+        .fontWeight(this.category === key ? FontWeight.Medium : FontWeight.Regular)
+        .fontColor(this.category === key ? $r('sys.color.font_primary') : $r('sys.color.font_secondary'))
+      Row()
+        .width(this.category === key ? 18 : 0)
+        .height(2.5)
+        .borderRadius(1.25)
+        .backgroundColor(this.themeState.color)
+        .animation({ duration: 160, curve: Curve.Friction })
+    }
+    .height(46)
+    .justifyContent(FlexAlign.Center)
+    .padding({ left: 10, right: 10 })
+    .onClick((): void => {
+      if (this.category !== key) {
+        this.category = key;
+        hilog.info(DOMAIN, TAG, 'category=%{public}s', key);
+      }
+    })
+  }
+
+  /**
+   * 「播放全部 N」那一行（用户 2026-10-20 截图）：左侧一颗主题色实心圆 + 播放三角，
+   * 右边紧跟「播放全部 N」，最右侧是列表管理图标（本仓没有"管理列表"，留白不画）。
+   */
+  @Builder
+  private PlayAllRow() {
+    Row({ space: 10 }) {
+      Row() {
+        SymbolGlyph($r('sys.symbol.play_fill'))
+          .fontSize(16)
+          .fontColor([$r('sys.color.font_on_primary')])
+      }
+      .width(34)
+      .height(34)
+      .borderRadius(17)
+      .backgroundColor(this.themeState.color)
+      .justifyContent(FlexAlign.Center)
+      .onClick((): void => {
+        this.playAllRecords();
+      })
+      Text('播放全部 ' + this.records.length)
+        .fontSize($r('sys.float.Body_L'))
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('sys.color.font_primary'))
+      Blank()
+    }
+    .width('100%')
+    .height(58)
+    .alignItems(VerticalAlign.Center)
+    .onClick((): void => {
+      this.playAllRecords();
+    })
+  }
 
   /** 多选模式操作条：全选 / 删除(n) / 取消。 */
   /**
@@ -943,7 +1103,8 @@ export struct RecordListPage {
         title: {
           // ★ 多选时标题显示「已选中 N 项」（参照用户给的参考图）
           mainTitle: this.selectionMode ? ('已选中 ' + this.selectedCount() + ' 项') :
-            (this.isHistory() ? $r('app.string.mine_history_title') : $r('app.string.mine_favorites_title')),
+            (this.isFollowing() ? '关注' :
+              (this.isHistory() ? $r('app.string.mine_history_title') : $r('app.string.mine_favorites_title'))),
           mainTitleSize: TitleSize.TITLE_ML
         },
         backIcon: {
@@ -978,27 +1139,56 @@ export struct RecordListPage {
               .width('100%')
           }
 
-          if (!this.isHistory() && this.favoriteArtists.length > 0) {
+          // ★ 用户 2026-10-20：分类页签 + 「播放全部 N」（都在列表内容里，跟着滚）
+          if (!this.selectionMode && !this.isFollowing()) {
             ListItem() {
-              this.FavoriteGroupHeader('歌手', this.favoriteArtists.length)
+              this.CategoryTabs()
             }
-            ForEach(this.favoriteArtists, (entry: FavoriteEntry) => {
+            ListItem() {
+              this.PlayAllRow()
+            }
+          }
+
+          // ★ 关注模式（用户 2026-10-20）：只列关注的歌手，点进歌手详情
+          if (this.isFollowing()) {
+            ForEach(this.followingArtists, (entry: FavoriteEntry) => {
               ListItem() {
                 this.FavoriteEntryRow(entry, false)
               }
-            }, (entry: FavoriteEntry) => 'rla_' + entry.source + '_' + entry.id)
-          }
-          if (!this.isHistory() && this.favoriteAlbums.length > 0) {
-            ListItem() {
-              this.FavoriteGroupHeader('专辑', this.favoriteAlbums.length)
-            }
-            ForEach(this.favoriteAlbums, (entry: FavoriteEntry) => {
+            }, (entry: FavoriteEntry) => 'flw_' + entry.source + '_' + entry.id)
+            if (this.followingArtists.length === 0) {
               ListItem() {
-                this.FavoriteEntryRow(entry, true)
+                Text('还没有关注任何歌手（在歌手页点「关注」）')
+                  .fontSize($r('sys.float.Caption_L'))
+                  .fontColor($r('sys.color.font_tertiary'))
+                  .width('100%')
+                  .height(96)
+                  .padding({ left: 14, right: 14 })
+                  .textAlign(TextAlign.Center)
               }
-            }, (entry: FavoriteEntry) => 'rlb_' + entry.source + '_' + entry.id)
+            }
           }
-          if (!this.isHistory() && this.records.length > 0) {
+
+          // ★ 用户 2026-10-20（6b）：收藏里的**歌手**已独立成「关注」页，这一组从本页移除。
+          if (!this.isFollowing() && (this.category === 'playlist' || this.category === 'album')) {
+            ForEach(this.categoryEntries(), (entry: FavoriteEntry) => {
+              ListItem() {
+                this.FavoriteEntryRow(entry, this.category === 'album')
+              }
+            }, (entry: FavoriteEntry) => 'cat_' + this.category + '_' + entry.source + '_' + entry.id)
+            if (this.categoryEntries().length === 0) {
+              ListItem() {
+                Text(this.category === 'album' ? '暂无收藏专辑' : '暂无歌单')
+                  .fontSize($r('sys.float.Caption_L'))
+                  .fontColor($r('sys.color.font_tertiary'))
+                  .width('100%')
+                  .height(72)
+                  .textAlign(TextAlign.Center)
+              }
+            }
+          }
+
+          if (this.category === 'song' && !this.isHistory() && !this.isFollowing() && this.records.length > 0) {
             ListItem() {
               this.FavoriteGroupHeader('歌曲', this.records.length)
             }
@@ -1007,13 +1197,15 @@ export struct RecordListPage {
           // ★ 多选操作条已移到**底部**（见 build 里的 SelectionActionBar），列表内不再插入
 
           // ★ 长列表用 LazyForEach + 稳定 key（数据源见 RecordDataSource）
-          LazyForEach(this.recordSource, (record: PlayedSongRecord, index: number) => {
-            ListItem() {
-              this.RecordRow(record, index)
-            }
-          }, (record: PlayedSongRecord, index: number) => this.recordSource.keyOf(index))
+          if (this.category === 'song' && !this.isFollowing()) {
+            LazyForEach(this.recordSource, (record: PlayedSongRecord, index: number) => {
+              ListItem() {
+                this.RecordRow(record, index)
+              }
+            }, (record: PlayedSongRecord, index: number) => this.recordSource.keyOf(index))
+          }
 
-          if (this.records.length === 0) {
+          if (this.category === 'song' && !this.isFollowing() && this.records.length === 0) {
             ListItem() {
               Text(this.isHistory() ? '暂无播放历史' : '暂无收藏歌曲')
                 .fontSize($r('sys.float.Caption_L'))
@@ -1064,7 +1256,7 @@ export struct RecordListPage {
           .justifyContent(FlexAlign.End)
           .padding({ left: 16, right: 16, bottom: 28 })
           .hitTestBehavior(HitTestMode.Transparent)
-        } else if (!this.isHistory() || this.records.length > 0) {
+        } else if (!this.isFollowing() && (!this.isHistory() || this.records.length > 0)) {
           // ★ 定位到当前播放（用户 2026-10-19 第二轮：图标换成本播放列表那颗、缩小、
           //   去掉蓝底、加智感握姿 ⇒ 统一用 musicbasic 的 `LocateFloatButton`，
           //   与播放器播放列表里的定位按钮同一个 SVG，见该组件头部注释）

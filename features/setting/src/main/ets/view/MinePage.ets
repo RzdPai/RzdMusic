@@ -103,7 +103,7 @@ import { AccountService, DownloadService, DownloadStatus, DownloadTask, sourceNa
 import { NetworkImportSheet } from 'playlist';
 import { LoginMusicCard } from './LoginMusicCard';
 import { MineTopFade } from './MineWidgets';
-import { RECORD_MODE_FAVORITES, RECORD_MODE_HISTORY, RecordListRouteParam } from './RecordListPage';
+import { RECORD_MODE_FAVORITES, RECORD_MODE_FOLLOWING, RECORD_MODE_HISTORY, RecordListRouteParam } from './RecordListPage';
 import { SettingsDetailRouteParam } from './SettingsDetailPage';
 
 // ─────────────── 照抄参考工程 `ui/Theme.ets` 的尺寸常量（数值照搬，颜色换成我们的 token） ───────────────
@@ -262,6 +262,8 @@ export struct MinePage {
   @Local localCount: number = 0;
   /** 「下载管理」那一格的条数 = **已下载完成**的任务数（一首一个任务）。 */
   @Local downloadedCount: number = 0;
+  /** 「关注」那一格的条数 = 关注过的歌手数（单位「个」）。 */
+  @Local followingCount: number = 0;
   /** 「平台音乐」那一格的条数 = 已登录的平台账号数（单位「个」，见 `countOf`）。 */
   @Local platformAccountCount: number = 0;
   /** 「歌单导入」面板（`NetworkImportSheet`，与全部歌单页同一个组件）。 */
@@ -359,6 +361,7 @@ export struct MinePage {
   refreshCounts(): void {
     this.historyCount = this.store.getHistory().length;
     this.favoriteCount = this.store.getFavorites().length;
+    this.followingCount = this.store.getFavoriteArtists().length;
   }
 
   /** 本地音乐导入 / 删除 / 歌词匹配后更新条数。 */
@@ -429,8 +432,8 @@ export struct MinePage {
     if (action === 'local') {
       return this.localCount;
     }
-    if (action === 'downloads') {
-      return this.downloadedCount;
+    if (action === 'following') {
+      return this.followingCount;
     }
     if (action === 'platform') {
       return this.platformAccountCount;
@@ -440,7 +443,7 @@ export struct MinePage {
 
   /** 条数的显示单位：「平台音乐」报的是账号数，其余都是曲目数。 */
   private countUnitOf(action: string): string {
-    return action === 'platform' ? '个' : '首';
+    return action === 'platform' || action === 'following' ? '个' : '首';
   }
 
   /**
@@ -464,10 +467,14 @@ export struct MinePage {
     favorite.symbol = $r('sys.symbol.star_square_stack_fill');
     favorite.label = '收藏';
     favorite.action = 'favorites';
-    const download = new MineQuickEntry();
-    download.symbol = $r('sys.symbol.download_fill');
-    download.label = '下载管理';
-    download.action = 'downloads';
+    // ★ 用户 2026-10-20：「我的」页这一格「下载管理」→「关注」。
+    //   下载管理没有消失：它仍是设置详情页 index 10 那一档（`DOWNLOAD_SHEET_INDEX`），
+    //   本地音乐页里也直接能看到已下载的歌曲。
+    //   图标 `person_badge_checkmark_fill` = 人像 + 对勾，是用户点名的那个。
+    const following = new MineQuickEntry();
+    following.symbol = $r('sys.symbol.person_badge_checkmark_fill');
+    following.label = '关注';
+    following.action = 'following';
     // ★ 第 5 格用**我们自己的「平台音乐」**（原「云端音乐」= 参考那套 WebDAV 曲库）：
     //   用户 2026-10-11 明确「那个云端音乐还是不要用他那套逻辑了，正好用我们多出来的这个平台音乐」。
     //   平台音乐页仍在 `features/setting/.../account/PlatformMusicPage.ets`，
@@ -476,7 +483,7 @@ export struct MinePage {
     platform.symbol = $r('sys.symbol.auditorium');
     platform.label = '平台音乐';
     platform.action = 'platform';
-    return [local, history, favorite, download, platform];
+    return [local, history, favorite, following, platform];
   }
 
   /** 快捷入口的无障碍播报文本（带单位的条数一起播报）。 */
@@ -540,9 +547,11 @@ export struct MinePage {
       this.pushOnShellStack(RouterUrlConstants.RECORD_LIST, param);
       return;
     }
-    if (action === 'downloads') {
-      // 下载管理 = 设置详情页的 index 10（与设置页那一档是同一个页面、同一份实现）
-      this.pushSettingsDetail(DOWNLOAD_SHEET_INDEX);
+    if (action === 'following') {
+      // 关注 = 关注过的歌手（`RecordListPage` 的第三种模式，复用它的歌手行与详情跳转）
+      const param = new RecordListRouteParam();
+      param.mode = RECORD_MODE_FOLLOWING;
+      this.pushOnShellStack(RouterUrlConstants.RECORD_LIST, param);
       return;
     }
     if (action === 'platform') {
