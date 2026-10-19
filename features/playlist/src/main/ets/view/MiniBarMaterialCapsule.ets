@@ -94,7 +94,7 @@ const SLOT_PROBE_ID: string = 'rzd_mini_capsule_slot_probe';
 const FIT_PROBE_ID: string = 'rzd_mini_capsule_slot_fit';
 
 /** 我们自己的**内容层**节点 id（= 胶囊矩形）。 */
-const CONTENT_PROBE_ID: string = 'rzd_mini_capsule_content';
+// V11: content probe uses PlayerExpandState.SOURCE_CAPSULE_RECT_ID for handoff measurement.
 
 /**
  * 槽宽的**绝对可信下限**（vp）：低于它一律不采信（见 {@link MiniBarMaterialCapsule.syncContentToSlot}）。
@@ -664,7 +664,7 @@ export struct MiniBarMaterialCapsule {
     // ★ 绝不裁：裁了就等于把"内容比胶囊宽"这件事变成可见的"被切"。
     //   正确做法是让内容 ⊂ 槽 ⊂ 胶囊（类注释第三节），不是靠 clip 掩盖。
     .clip(false)
-    .id(CONTENT_PROBE_ID)
+    .id(PlayerExpandState.SOURCE_CAPSULE_RECT_ID)
     .onAreaChange((_oldArea: Area, area: Area): void => {
       const w: number = areaLengthToVp(area.width);
       const h: number = areaLengthToVp(area.height);
@@ -722,15 +722,7 @@ export struct MiniBarMaterialCapsule {
     //   `alignContent: TopStart`：内容层改成 `.position()` 之后就按盒左上角定位（见 ContentLayer），
     //   不再靠 Stack 的居中"顺带"对齐（那也是上一版错位的隐因之一）。
     Stack({ alignContent: Alignment.TopStart }) {
-      // RzdReturnHdsV9: opaque underlay belongs to the source capsule only.
-      // HDS above remains the sole systemMaterialEffect renderer; never clips the player.
-      Column()
-        .width(this.barWidth)
-        .height(this.barHeight)
-        .backgroundColor($r('app.color.morph_mini_solid_surface'))
-        .borderRadius(this.barHeight / 2)
-        .position({ x: this.capsuleLeftVp(), y: this.capsuleTopVp() })
-        .hitTestBehavior(HitTestMode.None)
+      // V11: no separate opaque underlay; only the genuine HDS material paints the capsule.
       HdsTabs({ barPosition: BarPosition.End }) {
         TabContent() {
           // 非空占位：空 `TabContent` 在真机上 HDS 不画浮动胶囊背板/材质（2026-10-01 实测）。

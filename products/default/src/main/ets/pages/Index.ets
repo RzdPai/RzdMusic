@@ -1546,6 +1546,7 @@ struct Index {
       .position({ x: this.expandState.asideWinX, y: this.expandState.asideWinY })
       // 鎿嶄綔鍖洪偅涓€妗ｏ細鏁村潡鎸?`clamp(1 - t/0.20)` 娣″嚭锛堟寜閽厛娌°€佹枃瀛楀悗娌★級
       .opacity(PlayerExpandState.actionsOpacityAt(this.expandState.morphP) * this.expandState.morphTailOpacity())
+      .visibility(this.expandState.morphPaintHidden() ? Visibility.Hidden : Visibility.Visible)
       // 鈿狅笍 鍙仛**绾靛悜**浣嶇Щ锛堝弽缂栬瘧 位1f 鐨?`coverRiseAt`锛夈€?
       //    妯悜鐨?`coverRightShiftAt` 鏄粰**鍏冧俊鎭?*閭ｄ竴灞傜殑锛屽鍒版寜閽笂浼氳鎸夐挳
       //    妯潃婊戝嚭鍘?鈥斺€?鏀惰捣鏃惰〃鐜版垚"涓€涓殏鍋滄寜閽粠灞忓箷澶栭杩涙潵"銆?
@@ -1680,6 +1681,7 @@ struct Index {
     .height(this.expandState.windowHeightVp > 0 ? this.expandState.windowHeightVp : StyleConstants.FULL_HEIGHT)
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     .opacity(this.expandState.morphOverlayBridgeOpacity() * this.expandState.morphTailOpacity())
+    .visibility(this.expandState.morphPaintHidden() ? Visibility.Hidden : Visibility.Visible)
     // 鏁村眰涓嶅悆浜嬩欢锛氫笅闈㈠氨鏄挱鏀鹃〉锛岀帺瀹剁殑鐐瑰嚮蹇呴』鐓у父钀藉埌鎾斁椤典笂
     .hitTestBehavior(HitTestMode.None)
     .zIndex(PLAYER_CLONE_Z_INDEX)

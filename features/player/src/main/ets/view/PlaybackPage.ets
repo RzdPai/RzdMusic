@@ -7557,7 +7557,9 @@ export struct PlaybackPage {
       // 闂佸疇娉曟刊瀵哥箔?闂婎偄娴傞崑鍡涘矗鎼淬劌鎹?`morphLand()` **婵炴垶鏌ㄩ鍛櫠?*闂佺懓鍢茬粙鍕濞嗘垶鍠?`closeWithAnimation` 闂佹眹鍔岀€氫即濡存惔銏″劅闊洢鍎崇粈鍡涙煃?闂佸搫鐗滈崜鐔肺涢鍌滅閻犲洩寮撳ù鐑芥煛?
       //    闂佹悶鍎查崕鎶藉礄閿涘嫮纾奸煫鍥ㄦ尭閻撳倿鏌熼棃娑卞劀缂佽鲸绻冪粙澶婎吋閸曨厾鐛ラ梺鐟板槻缁夋挳宕虹仦鍓р枖闁逞屽墮椤曪綁鎮╃喊妯绘櫈闂佹悶鍎伴崟姗€鍩€?
       // 闂佸疇娉曟刊瀵哥箔?婵炴垶鎸搁敃锝囩博鐎靛憡鏆滅憸宀€鍒掑☉銏犲強?LEAVING闂佹寧绋戦悧鍡楋耿椤忓牊鍋ㄥù鍏肩懅缁€鍡涙煃?闂佺绻戞繛濠偽涢幘顔肩闁靛ě鍕瘞闂佸搫鐗滈崜婵嬫閳哄倻鈻旂€广儱鎳庣紞鈧悷婊勬緲瀹曨剟骞栭悜钘壩?
-      .visibility(this.expandState.playerPaints() ? Visibility.Visible : Visibility.Hidden)
+      .visibility(this.expandState.playerPaints() &&
+        (!this.expandState.morphClipping() || !this.expandState.morphPaintHidden()) ?
+        Visibility.Visible : Visibility.Hidden)
       // 闁荤喍妞掔粈浣圭珶閳ь剛绱掗幇顓ф當鐟滅増绋掗〃鍥熼崫鍕靛敽 = 闂佸憡鐟崹鐢革綖鐎ｎ偒娈楁俊顖氭惈椤?/ 缂傚倸鍊甸弲婊堝棘?闂?缂傚倸鍊甸弲婊堝棘娓氣偓瀹曘儲鎯旈姀鈺佸Η婵犻潧鍊芥慨銈呂ｉ幖浣圭劷闁挎繂鎳忛崑銉╂煕濞嗘ê鐏ユい顐㈩儔閹矂鍩℃担钘夌厒
       .height(this.morphClipHeight())
       // 闁哄鐗嗗﹢閬嶅疾椤愩倖鍟戝ù锝囶焾椤ュ懘鏌ㄥ☉妯煎婵炴挸澧介幉鎾箳閺冣偓閺嗙娀鏌涘顒€顏╂繛瀛橆焽娴狅箓宕掑┑鍡橆唶闁汇埄鍨界拋锝囨鏉堛劎鈻旂€广儱娲﹂弳?clipShape闂佹寧绋掗懝楣冩偩閻樺啿顕辨慨妯诲墯濞差剟鏌?borderRadius闂?

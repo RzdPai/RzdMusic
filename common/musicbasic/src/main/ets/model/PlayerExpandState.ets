@@ -2286,8 +2286,10 @@ export class PlayerExpandState {
    *   同一帧里系统条出现、自绘条消失 ⇒ 无缝，且不会出现两套皮叠着）。
    */
   @Trace public hdsBarSuppressed: boolean = false;
-  // V10: a reversible progress window, never a direction/first-reverse-frame latch.
-  private static readonly SOURCE_HDS_IN_T: number = 0.03;
+  // V11: disjoint paint intervals. Geometry reaches the source before paint release.
+  private static readonly SOURCE_HDS_IN_T: number = 0.02;
+  private static readonly MORPH_PAINT_END_T: number = 0.03;
+  private static readonly MORPH_PAINT_FULL_T: number = 0.05;
   private tailHandoffLogAt: number = 0;
   private tailHandoffLogBand: string = '';
 
@@ -2295,7 +2297,7 @@ export class PlayerExpandState {
     if (this.shrinkHidesBar) {
       return 0;
     }
-    if (!(this.sourceBarHidden || this.miniOut || this.hdsBarSuppressed)) {
+    if (!(this.sourceBarHidden || this.miniOut || this.hdsBarSuppressed || this.morphSessionDriving())) {
       return 1;
     }
     if (!this.morphUsable || !this.morphGeomReady) {
@@ -2309,24 +2311,52 @@ export class PlayerExpandState {
   }
 
   public morphTailOpacity(): number {
-    return Math.max(0, Math.min(1, this.morphP / PlayerExpandState.SOURCE_HDS_IN_T));
+    // Source wins even if an ownership flag is released before the session finishes.
+    if (this.sourceBarOpacity() > 0) {
+      return 0;
+    }
+    return Math.max(0, Math.min(1,
+      (this.morphP - PlayerExpandState.MORPH_PAINT_END_T) /
+      (PlayerExpandState.MORPH_PAINT_FULL_T - PlayerExpandState.MORPH_PAINT_END_T)));
   }
+
+  public morphPaintHidden(): boolean {
+    return this.morphTailOpacity() <= 0;
+  }
+
+  /** Shared local capsule rect: both HDS inputs and source content use this node. */
+  public static readonly SOURCE_CAPSULE_RECT_ID: string = 'rzd_source_capsule_rect';
 
   private logTailHandoff(): void {
     const p: number = this.morphP;
-    const band: string = p <= 0 ? 'source' : (p < PlayerExpandState.SOURCE_HDS_IN_T ? 'tail' : 'morph');
+    const band: string = p < PlayerExpandState.SOURCE_HDS_IN_T ? 'source' :
+      (p <= PlayerExpandState.MORPH_PAINT_END_T ? 'gap' : 'morph');
     const now: number = Date.now();
     if (band === this.tailHandoffLogBand && now - this.tailHandoffLogAt < 80) {
       return;
     }
     this.tailHandoffLogBand = band;
     this.tailHandoffLogAt = now;
-    Logger.info('RzdTailHandoffV10',
+    Logger.info('RzdSingleLayerV11',
       `band=${band} p=${p.toFixed(4)} effT=${this.contentP.toFixed(4)} ` +
         `sourceAlpha=${this.sourceBarOpacity().toFixed(4)} morphAlpha=${this.morphTailOpacity().toFixed(4)} ` +
+        `sum=${(this.sourceBarOpacity() + this.morphTailOpacity()).toFixed(4)} ` +
+        `overlap=${this.sourceBarOpacity() > 0 && this.morphTailOpacity() > 0} ` +
+        `sourceHidden=${this.sourceBarPaintHidden()} morphHidden=${this.morphPaintHidden()} ` +
+        `rect=${this.barX},${this.barY},${this.barW},${this.barH},r=${this.barRadius} ` +
         `finger=${this.pullDragging} drive=${this.morphDrive} stage=${this.morphStage} ` +
         `scale=${this.morphScale.toFixed(4)} clipH=${this.morphClipHeight.toFixed(2)} ` +
         `miniOut=${this.miniOut} squash=${this.morphSquashY}`);
+    const x: number = this.morphBoxW * (1 - this.morphScale) / 2 + this.morphTx;
+    const y: number = this.morphClipHeight * (1 - this.morphScale) / 2 + this.morphTy;
+    Logger.info('RzdHandoffRectV11',
+      `p=${p.toFixed(4)} source=${this.barX},${this.barY},${this.barW},${this.barH},${this.barRadius} ` +
+      `surface=${x},${y},${this.morphBoxW * this.morphScale},` +
+      `${this.morphClipHeight * this.morphScale},${this.morphRadius * this.morphScale} ` +
+      `delta=${x - this.barX},${y - this.barY},${this.morphBoxW * this.morphScale - this.barW},` +
+      `${this.morphClipHeight * this.morphScale - this.barH},` +
+      `${this.morphRadius * this.morphScale - this.barRadius} ` +
+      `endpoint=${p <= PlayerExpandState.MORPH_PAINT_END_T} sourceRectId=${PlayerExpandState.SOURCE_CAPSULE_RECT_ID}`);
   }
   @Trace public metaBridgeActive: boolean = false;
   @Trace public metaBridgeGeneration: number = 0;
@@ -2967,11 +2997,14 @@ export class PlayerExpandState {
     //    韪╄繃鐨勫潙锛氬湪褰㈠彉涓殑瀹夸富鑺傜偣涓婇噺灏哄鍠傚洖鍘?= 璁?閾烘弧鐩爣"杩界潃鑷繁鐨勪腑闂存€佽窇
     //    锛堣鍓獥鍙ｉ珮搴?鈫?鐩爣楂樺害锛岃秺璺戣秺鐭紝灞忎笂灏辨槸"涓€鍧楅粦搴曘€佹挱鏀鹃〉灞曚笉寮€"锛夈€?
     // 杩蜂綘鏉¤兌鍥婏紙浼樺厛閭ｆ潯鎸夊弬鏁板喅瀹氾紝鎵句笉鍒板氨鎹㈠彟涓€鏉★級
-    const barIds: string[] = preferFloating ? [MINI_BAR_FLOATING_ID, MINI_BAR_ID] : [MINI_BAR_ID, MINI_BAR_FLOATING_ID];
+    const barIds: string[] = preferFloating ?
+      [PlayerExpandState.SOURCE_CAPSULE_RECT_ID, MINI_BAR_FLOATING_ID, MINI_BAR_ID] :
+      [PlayerExpandState.SOURCE_CAPSULE_RECT_ID, MINI_BAR_ID, MINI_BAR_FLOATING_ID];
     for (const id of barIds) {
       const bar: NodeRect | undefined = this.measureNode(ui, id);
       if (bar !== undefined) {
-        this.metaSourceFloating = id === MINI_BAR_FLOATING_ID;
+        this.metaSourceFloating = id === PlayerExpandState.SOURCE_CAPSULE_RECT_ID ? preferFloating :
+          id === MINI_BAR_FLOATING_ID;
         this.reportMiniBar(bar.x, bar.y, bar.w, bar.h, bar.h / 2);
         ok = true;
         break;
@@ -4803,7 +4836,11 @@ export class PlayerExpandState {
   }
 
   /** 鍙畻鍑犱綍锛堜笉鍐?`morphP`锛夆€斺€?`applyMorphProgress` 涓?`@Monitor('morphP')` 鍏辩敤杩欎竴娈点€?*/
-  private applyMorphGeometry(t: number): void {
+  private applyMorphGeometry(progress: number): void {
+    // Reach exactly the measured source rect before the morph family disappears.
+    // This changes the transform's progress only, never clips the page to a capsule.
+    const t: number = Math.max(0, Math.min(1,
+      (progress - PlayerExpandState.MORPH_PAINT_END_T) / (1 - PlayerExpandState.MORPH_PAINT_END_T)));
     // 鈽呪槄 2026-10-15锛?*鍒犻櫎浜?闈炲舰鍙樻湡鑷姩澶嶄綅娴眰"閭ｄ竴娈?*锛屼緷鎹鏈潯锛夛細
     //   鍘熸潵鏄?`if (!morphContainerActive()) { this.morphOverlayReset(); }` 鈥斺€?
     //   鏈剰鏄厹浣?寮傚父璺緞鐩存帴钀戒綅/鍗歌浇"锛屼絾瀹冨悓鏃?*鍚冩帀浜嗘甯告敹璧疯矾涓婄殑閭ｄ竴妫?*锛?
