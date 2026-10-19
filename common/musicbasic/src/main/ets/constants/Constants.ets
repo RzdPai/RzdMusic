@@ -257,8 +257,6 @@ public static readonly THEME_STATE: string = 'musichome_ThemeState';
 public static readonly HOME_SOURCE_STATE: string = 'musichome_HomeSourceState';
 /** {@link ShowMiniLyricState} (playback page mini lyric lines). */
 public static readonly SHOW_MINI_LYRIC_STATE: string = 'musichome_ShowMiniLyricState';
-/** {@link PlaybackFlowLightState} (playback page flow-light background toggle). */
-public static readonly PLAYBACK_FLOW_LIGHT_STATE: string = 'musichome_PlaybackFlowLightState';
 /** {@link CoverTintState} (flow-light colors extracted from the current cover). */
 public static readonly COVER_TINT_STATE: string = 'musichome_CoverTintState';
   /** {@link PlayerExpandState} (playback page one-shot expand animation). */

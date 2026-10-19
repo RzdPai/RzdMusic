@@ -20,7 +20,6 @@ import { effectKit } from '@kit.ArkGraphics2D';
 import { common } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { http } from '@kit.NetworkKit';
-import { hdsEffect } from '@kit.UIDesignKit';
 import {
   AppStorageKeys,
   BreakpointConstants,
@@ -51,7 +50,6 @@ import {
   PLAYER_META_SINGER_ID,
   MorphMetaEndpoint,
   areaLengthToVp,
-  PlaybackFlowLightState,
   PlaybackShellConstants,
   PlayerExpandState,
   // 闂?2026-10-16闂佹寧绋掔喊宥咃耿閻楀牄浜滈梻鍫熺⊕闊?`.onDisAppear()` 闂備焦褰冮惌渚€銆呴敃鍌氱?闂佸湱铏庨崢浠嬪棘娴ｅ箍浜滃ù锝呭暟閻斿懘鏌ｉ姀锝囩翱缂佺粯娲熷畷鐑藉Ω閵堝洨鎲归梺闈╄礋閸斿秹鎮ラ妶澶嬬厒?闂佹寧绋戦悧鎰帮綖?`playerRouteStillPushed`闂?
@@ -136,11 +134,6 @@ interface PixelMapReleaseProbe {
   release?: () => void;
 }
 
-/** 婵炴垶鎸撮崑鎾绘煕閿曗偓閻楀﹦绮婇敃鍌氱濠㈣泛顑嗛ˇ褔姊婚埀顒勫礌閿涘嫮顦﹎s闂佹寧绋戦¨鈧紒鍙樺嵆楠炲牓锝為鐙€浼囬梺缁樺姌椤鏅堕悩璇茬＝?闂佸憡绋撻崢褔骞?闂佸吋婢樻總鏃傜箔婢舵劕鍙婃い鏍仦閿涘繘鏌?*/
-const FLOW_LIGHT_DURATION_MS: number = 12000;
-/** 濠电偟绻濈粈渚€宕㈠鍛勃闁稿本绋掑▓璇裁归敐鍡樺矮缂佹顦甸弻鍛扮疀閺冣偓椤牠骞栨潏鎹愵吅缂佽京澧楀鍕敂閸垹钂嬫繛鏉戝悑濮樸劌煤婵犲啯濯撮煫鍥ㄦ尵濞堥亶姊婚崼顐ｇ窔缂佹鑻～銏犵暆閸愵亝袚闂?*/
-const FLOW_LIGHT_OPACITY: number = 0.55;
-
 /**
  * Full-screen playback page: layered background, breakpoint-specific layout, dismiss gestures,
  * and dynamic tint from album art.
@@ -169,10 +162,6 @@ export struct PlaybackPage {
   @Local windowInfo: WindowInfo = getWindowInfoState();
   @Local coverRadiusState: CoverRadiusState =
     AppStorageV2.connect(CoverRadiusState, AppStorageKeys.COVER_RADIUS_STATE, () => new CoverRadiusState())!;
-  /** 闂佸湱铏庨崢浠嬪棘娴ｅ箍浜滈柛顭戝亞閵堬箓鏌涜箛鎿冩Ъ闁稿孩顨婂鏌ヮ敍濮樿京锛涢梺绋跨箳椤掕尙妲愬▎鎴炲闁告挆鍛€俊鐐€楀▍銏㈡濠婄湑pStorageV2 闂佺绻愯ぐ澶愭閳哄懏鏅悘鐐靛亾閺嗩參鎮规担绋库挃闁汇倕妫涚划鈺冣偓锝庝簻閻撴繈鏌ｉ姀銏犳瀾闁哄懌鍎甸弫宥嗗緞閸艾浜?*/
-  @Local flowLightState: PlaybackFlowLightState =
-    AppStorageV2.connect(PlaybackFlowLightState, AppStorageKeys.PLAYBACK_FLOW_LIGHT_STATE,
-      () => new PlaybackFlowLightState())!;
   /** 濠电偟绻濈粈渚€宕㈠鍫熷殑閻忕偟鍋撻悵顖炴煟閵娿儱顏ч悶姘抽哺缁嬪顢旈崼顐ｆ緬闂佽偐顢婇婊呮濞嗘挻鍋ㄩ柛妤冨仧濞堥亶姊婚崼娑樼仼濠殿喒鏅犻獮鈧ù锝囶焾缁插潡鏌ょ憴鍕祷闁哥喐鎹囧畷妤呭Ψ椤栨粎顦梺?*/
   @Local coverTint: CoverTintState =
     AppStorageV2.connect(CoverTintState, AppStorageKeys.COVER_TINT_STATE, () => new CoverTintState())!;
@@ -187,8 +176,6 @@ export struct PlaybackPage {
    */
   @Local meshWarm: MeshWarmState =
     AppStorageV2.connect(MeshWarmState, AppStorageKeys.MESH_WARM_STATE, () => new MeshWarmState())!;
-  /** 濠电偟绻濈粈渚€宕㈠鍫熷創闁逞屽墴閹虫繈骞撻幒鎾跺綔闂佺鐭囬崘銊у幀闂侀潻缍嗛悡澶屾娴兼潙绠查柕蹇ョ磿閹藉啴鏌涘顒€顒㈤悗鍨矒瀵剟寮堕崹顔炬偧闂佸憡甯楁竟鍡椻枔閹寸姳鐒婂〒姘ｅ亾婵炶偐澧楅敍鎰煥閸℃妫岄梻浣瑰絻缁夌兘顢?uniform闂?*/
-  private flowLightController: hdsEffect.ShaderEffectController = new hdsEffect.ShaderEffectController();
   /** 閻庣懓鎲¤ぐ鍐姳閺屻儲鍋ㄩ柕濞垮劚閻撳倿鏌ｉ鐔蜂壕闂佽壈顫夎ぐ鍐ㄢ枍閹烘鍎嶉柛鏇ㄥ亜缁插潡鏌ょ涵鍛毢濠⒀勵殜瀵敻顢楅埀顒冦亹閸ф鏅€光偓閸曨亞绱氶梺绋跨箰缁夋挳骞冮幘瀵糕枖闁逞屽墯缁傛帗绂掔€ｅ灚婢掗梺鑹邦潐閻擄繝宕抽崨濠傜窞鐎广儱瀚悷鎾绘煕濞嗘劕鐏ョ紒鏃傚厴婵?*/
   private appliedTintVersion: number = -1;
   /**
@@ -257,15 +244,12 @@ export struct PlaybackPage {
    * 闁宠棄鎳夊Σ鍕煡閸涱亝顫?2026-10-17闁?*濞ｅ浂鍠撻埀顒€鑻惈宥咁嚕閳ь剚娼婚崶鈹炬煠濞戞搩鍘藉Σ鍛婄▔婵犱胶顏卞Λ锝嗙墬閻℃洟鎯冮崟顖ｆ澒闁肩懓鐪伴埀?*闁?
    *
    * `coverTint` 闁?*閻犳亽鍔戦妴澶愭閵忕姴褰欏ù?*闁汇劌瀚哥槐妾侫ppStorageV2` 闁?`CoverTintState`闁挎稑顧€缁辨繄鈧懓鍟ぐ褔宕?
-   * `extractFlowLightColors()` 闁瑰瓨鍔曟慨娑欑▕鐎ｎ亝鍊甸柟闈涚Х椤箓寮ㄧ憴鍕亣鐟滅増鎸告晶鐘虫交濞嗗海顏卞Λ锝嗙墱濞堟垶锛愬鍡楊棌闁靛棗鍊风花顒勫及?*闁哄倻澧楃€垫洘娼?*闁汇劌瀚幐閬嶅绩妤ｅ啨鈧宕?
-   * 闁告瑦鐗炴竟濠勨偓鐟版湰閸ㄦ碍绋婄€ｎ亜顤呴柨娑樼暛FlowLightBackground()` 闁汇垼宕靛▓鎴炵瀹ュ洤濮ч柡?*濞戞挸锕ｇ粩瀛橈純?*闁汇劌瀚伴·渚€鎳?
    * 闁炽儲鏌￠埀?闁兼澘鑻悾鐘诲及椤栨瑧顏遍悘鐐插€块幗闈涱煥閳╁啯娈婚悘鐐茬箳濞堟垿鎯堥埀顒勬嚌閹绘帗鐝?婵炴挻鍔曡ぐ澶屼沪閸岋妇绀夌紓鍐╁灦閻楀憡娼诲Ο鑽ゆ⒕闁告帡顣︾紞鍛村籍鐠鸿櫣鏆婇悘蹇氶哺濡?闁煎啿鏈▍?
    * 闁?闁活潿鍔嶉崺娑㈡儑鐎ｎ亜鐓傞柣銊ュ濮樸劑寮伴妯峰亾鐏炵晫娼旂€殿喒鍋撻弶鈺佹川閳诲吋绋夐鐔感﹀☉鎾筹梗缁斿瓨锛冮弽銊ф憙闁汇劌瀚伴·渚€鎳濈仦鍌楀亾瀹ュ啠鍋?
    *
    * 闁?闁哄牜鍓欓悺褍鈻?= "**鐟滅増鎸告晶鐘虫交濞嗗海顏卞Λ?*闁汇劌瀚伴·渚€鎳濋幓鎺戝殥缂備礁绻嬬粭鍛村矗閹达絿绠栧ù?闁?
    *   鐠?闁圭鍊藉ù鍥籍閸撲胶鏋傞柛瀣祫缁辨瑦銇勯悽鍛婃〃婵絽绻戦濂稿箥閹惧磭纾婚梺顔垮Г濡叉悂寮弶璺ㄦ澖濞撴艾顑戠槐姘舵晬?
-   *   鐠?`applyFlowLightColors()` 闁活亞鍠愰婊勭▔鐎ｎ亜绲洪柡鍐ㄥ閻ゅ棝鎯囬悤鍌滃耿
-   *   鐠?`FlowLightBackground()` 闁告瑯浜滃﹢顏嗏偓鐟板暕鐠愮喖鎯囬悢鍛婎槯闁归潧绉电€垫洘娼?闁?閻忕偛绻愮粻宄邦潩濮濆瞼绠煎☉鎾崇С缁变即宕欓搹鐟扮疀濞戞挸锕ｇ粩瀛橈純閺嶎偅鐣卞Λ鐗堢矎婢瑰﹪濡?
+   *   鐠?`applyCoverTint()` 闁活亞鍠愰婊勭▔鐎ｎ亜绲洪柡鍐ㄥ閻ゅ棝鎯囬悤鍌滃耿
    * 闁宠法濯寸粭?闁活亞鍠撶紞澶愬冀绾绀刞MeshCoverBg`闁挎稑顦粭宀€鈧懓鍟Λ銈夊礂缁涘湱绐楃紓鍐╁灦閻楁悂寮垫径搴℃鐎规瓕浜▓?`src`/闁稿繑绮岀花宕囩磾閹寸偟澹愰柨娑樺缁楀绗熷┑濠勵洬闁哄牜鍓欓悺褍鈻撻悙鍏夊亾?
    */
   @Local tintReady: boolean = false;
@@ -849,35 +833,11 @@ export struct PlaybackPage {
   /** 上一次 `RzdBgPhase` 的签名（去重，避免 20fps 刷屏）。 */
   private lastBgPhaseLog: string = '';
 
-  /**
-   * ★ 2026-10-18（**只加日志、不改行为**）：播放页背景「两团色的位置」判读专用。
-   *
-   * ## 为什么需要它
-   * 用户症状：「有些歌曲是两个背景色，动画过程中两个颜色的位置和结束后的位置**正好反过来**」。
-   * 而网格这条链已经逐条核过与上游一致 —— `vertices=(n+1)×0.5×w/h`（`wujie.pa:89748-90273`）、
-   * `fillFallback` 四角 A/B/C/D=TL/TR/BL/BR（`:91528-91611`）、`draw()` 里**没有任何**
-   * rotate/scale/镜像（`:62656-62713`）⇒ 这两件事在"形变中"和"结束后"**完全相同**，
-   * 变不出"位置互换"。所以差别只可能来自**"那一刻是谁在画 / 谁盖住谁"**，一共三条：
-   *
-   * 1. `MeshCoverBg` 的源在形变期间换过一次（兜底 64×64 → 封面 64×64）；
-   * 2. `FlowLightBackground()`（**本仓自造，上游 `grep FLOW_LIGHT|HdsEffect|visualEffect` = 0 命中**）
-   *    在这块背景栈里是最底层，被上面那层**不透明的** `backgroundColor(defaultImageBgColor)`
-   *    按 `1 − backgroundRevealOpacity()` 的比例"漏出" ⇒ **形变期可见、结束后被整片盖住**；
-   * 3. 都没有 ⇒ 回头查 `MeshCoverBg` 的 `resize w/h`（形变期应是"窄画布"）。
-   *
-   * ## 判读（`hdc shell hilog -x | Select-String 'RzdBgPhase'`）
-   * 一行 = `pull mode op p clip mesh ver tint flow playing active`。三次冷启动各点开一次、停 2s：
-   * - `flow=1` 且 `op` 从 `0.040` 涨到 `1.000` ⇒ ② 这条在（结束后流光被盖死）；
-   * - `flow=0` ⇒ ② 排除（流光层没挂载）；
-   * - 配合 `RzdBgPhaseMesh source=cover|fallback t=`：若 `t` 都远小于形变时长（≈600ms），
-   *   ⇒ ① 这条在（形变里换过源）；
-   * - 配合 `RzdBgPhaseMesh resize w= h=`：形变期 `w` 若已等于窗口宽 ⇒ 布局没跟着形变走。
-   */
+  /** 网格背景诊断：结合 RzdBgPhaseMesh 检查取源版本、透明度与画布尺寸。 */
   private logBgPhase(): void {
     const op: number = this.backgroundRevealOpacity();
     const sig: string = `${this.expandState.pullMode ? 1 : 0}|${op.toFixed(3)}|` +
-      `${this.meshSrc !== undefined ? 1 : 0}|${this.tintReady ? 1 : 0}|` +
-      `${this.flowLightState.enabled ? 1 : 0}`;
+      `${this.meshSrc !== undefined ? 1 : 0}|${this.tintReady ? 1 : 0}`;
     if (sig === this.lastBgPhaseLog) {
       return;
     }
@@ -887,7 +847,7 @@ export struct PlaybackPage {
       `mode=${this.expandState.pullMode ? 'pull' : 'content'} op=${op.toFixed(3)} ` +
       `p=${this.expandState.morphP.toFixed(3)} clip=${this.expandState.morphClipHeight.toFixed(0)} ` +
       `mesh=${this.meshSrc !== undefined ? 1 : 0} ver=${this.meshSrcVersion} ` +
-      `tint=${this.tintReady ? 1 : 0} flow=${this.flowLightState.enabled ? 1 : 0} ` +
+      `tint=${this.tintReady ? 1 : 0} background=mesh ` +
       `playing=${this.state.isPlay ? 1 : 0} active=${this.state.isShowPlay ? 1 : 0}`);
   }
 
@@ -3091,35 +3051,7 @@ export struct PlaybackPage {
    */
   @Monitor('coverTint.version')
   onCoverTintVersionChange(): void {
-    this.applyFlowLightColors();
-  }
-
-  /**
-   * 闂佸疇妫勯幊澶娢?2026-10-14 婵烇絽娴傞崰鎾诲焵椤掆偓閺堫剛绮婇敃鍌氱濠㈣泛楠搁崜褰掓煛閸滀礁鐏犵紒杈ㄥ灴瀹曟鐣烽崶鈺冩⒕闁汇埄鍨堕弲鑼箔婢跺本宕夐柣鏂垮悑椤撳綊鎮规担绋库挃闁汇倕妫濇俊鏉戭吋韫囨洜鐛?
-   *
-   * 闂佺绻愯ぐ澶愭閳哄懏鍋愰柤鍝ヮ暯閸?`PlaybackFlowLightState` 闂?*闂佸搫鍊瑰姗€宕归崡鐑嗗殘?*闂佹眹鍔岀€氬摜妲愬▎鎰垫付婵☆垱顑欓崥?false闂佹寧绋戦¨鈧紒杈ㄧ箘閹奉偅绗熼埀顒勫礂濡　鏌﹂柍鈺佸暙鎯?`MusicStoreService`
-   * 闂備焦褰冮張顒傗偓鍨⒐缁嬪﹪宕ㄩ鐑嗗殭闂佹眹鍔岀€氫即宕戦崨顔锯枖妞ゅ繐瀚ч崑鎾绘嚃閳衡偓閹瑰秹寮堕埡鍌溾槈妤?闂佺偨鍎查弻锟犲焵?闂佸憡鐟禍婵嗭耿娴ｇ儤濯奸柛鎾楀懏鐎俊鐐€濆褔宕硅箛鎿冨殨闁逞屽墴瀹曟鎼归锝庢Н闂佸綊娼х粔宕囨娴兼潙绀冩繛鍡楃箰瑜版瑥霉濠婂骸浜炲┑顔芥倐楠炩偓濞达絿顣介崑鎾诲磼濞嗘垼澹橀梺鍝勫閸ㄧ晫妲?*閻庢鍠掗崑鎾绘煟椤愮喎浜惧┑鐐电節缁€渚€宕?闂?闂備焦褰冪粔鎾箚?App 闂?
-   * 闂佸湱铏庨崢浠嬪棘娴ｅ箍浜滃ù锝呭枤閸ゃ垽鏌涢幒鎾愁棆婵炲牊鍨跺璇参熺紒妯烇箑顫楀☉娆樼劸妞?false**闂佹寧绋戦悧鎰邦敊閺囩姷纾炬い鏇楀亾闁靛棗顦埢浠嬫缂佺粯锕㈠畷銏ゅ及韫囨洜鐣洪柣蹇撶箰瑜板绮╅幘顔藉剮闁圭虎鍠楅弲鈺呮煟椤愮喎浜鹃梺鎸庣☉椤р偓缂佽鲸绻堥幃浠嬪Ω閿曗偓閻撴洟鏌ｉ鍕靛剰闁糕晛鐭傞幆鍐礋椤愶絿娈ら梺?閻庢鍠掗崑鎾绘煕韫囨挸甯犵紒妤€顦遍幑鍕偄閸忕⒈鍚傞柣鐘辩婢т粙鎮?闂?
-   *
-   * 闂佸疇娉曟刊瀵哥箔?2026-10-17闂?*闂佸憡甯炴繛鈧繛鍛缁傚秹宕遍弴鐙€浼囬梺绋跨箰閸㈡煡骞冮幘璇茶Е鐎广儱鎳忛、宥吤?*闂佹寧绋戦¨鈧紒杈╁濞艰鈻庨幘铏仦闂佸憡顭囬崰鎰焽閸偅浜ゆ俊顖滅帛缁犳帒鈽夐幘顖氫壕婵?
-   *   `syncFlowLightPreference(reason)` 闂佸搫鍊介～澶屾兜閸洘鏅悘鐐村灊缁敻鏌ｉ妸銉ヮ仾婵?**store 闂?闂佺绻愯ぐ澶愭閳哄懏鍋愰柤鍝ヮ暯閸?*"闁哄鏅滈悷銈囩博閹绢喖瑙﹂柟鎼灣楠?
-   *   婵炶揪绲藉Λ娑橈耿閳ユ剚娼伴柨婵嗙墢閻涙捇鏌ｉ妸銉ヮ仾婵?`aboutToAppear` 闂備焦褰冮惌鍌炲磻閸涙潙鐭楅柕澹嫮鍑介梺瑙勪航閸庡绮婇幘顔肩９?
-   *   闂佹寧绋戝濉糷is.flowLightState.enabled = MusicStoreService闂佺偨鍎哄▔绛玹PlaybackFlowLight()`闂佹寧绋戦¨鈧紒?
-   *   闂?*闂佸憡鐟ョ粔鎾箖?*闂佹寧绋戦悧鍡涘矗閳╁啰顩叉い鎰╁€曠瑧闂?闂?闂佽В鍋撻柦妯侯槺濮樸劑鏌ㄥ☉姗嗘Ш闁轰浇椴哥粙澶屸偓锝庡枟濡椼劑鏌?`onFlowLightEnabledChange()` 闁荤姵鍔楅崰鏇㈡儗濡ゅ懎违?
-   *   闂?闂備緡鍙忕徊濂告煂濠婂牆妫橀悷娆忓閵?*闂傚倸妫欓崕濂告儍閻斿吋鍋ㄩ柕濞у啩鍖?*闂侀潧妫旂粈浣姐亹瑜斿?闂佸憡鑹炬總鏃傜博鐎涙顩烽柡鍫㈡暩閻ㄦ垿鏌ｉ妸銉ヮ仹閻炴俺椴哥缓钘壩旈埀顒勫疮閹炬枼鏋?闂佹寧绋戦悧鍡涙偩閻樺啿绶炴慨姗嗗亞椤忛亶鏌℃径鍡楀⒉婵☆偀鏅炵粻?+ 婵炴垶鎸撮崑鎾寸箾閸″繆鍋撻幇浣光柤婵炶揪绲鹃悷褍鈻撻幋锕€鐭楅柡宥庡墮椤ュ繘鏌ㄥ☉姗嗘缂?
-   *     闂佷紮绲鹃悷褍顭囬崘顏冪剨閺夊牄鍔嶇瑧"闂佸憡鑹剧€涒晛顭囬崹顐ゎ洸闁绘垶蓱閺嗩參姊洪幐搴ｆ噧婵犫偓閹绢喖妫?闂佹眹鍔岀€氼剟宕ｉ崱娑樼煑?闂?閻庣懓鎲¤ぐ鍐垂瑜版帗鈷旈柕鍫濈箳楠炪垺鎱ㄥ┑鍕偓鏇⑺囬埡鍌溾攳婵犻潧鐗婂▓宀勬偣閸パ呮憼婵″弶鍨块弫宥囦沪閽樺璧嬮悗鐢靛椤ㄥ懎顕ｉ悽鍨仏妞ゆ劧绠戝▍銏ゆ煛閸屾稒绶插┑顔惧仱瀹曞爼鎮欑€涙﹢妾烽梺?
-   */
-  @Monitor('flowLightState.enabled')
-  onFlowLightEnabledChange(): void {
-    const stored: boolean = MusicStoreService.getInstance().getPlaybackFlowLight();
-    if (stored !== this.flowLightState.enabled) {
-      MusicStoreService.getInstance().setPlaybackFlowLight(this.flowLightState.enabled);
-      Logger.info('RzdFlowLight', `pref persist enabled=${this.flowLightState.enabled}`);
-    }
-    if (!this.flowLightState.enabled || this.context === undefined || !this.isAlive) {
-      return;
-    }
-    this.getImageColor();
+    this.applyCoverTint();
   }
 
   /**
@@ -3146,7 +3078,7 @@ export struct PlaybackPage {
         }
         // 婵炴垶鎸哥€涒晛螞閵堝鍋╃€光偓閸曨偂绨兼繛鎴炴惄娴滎亪宕抽崫銉﹀珰?濞?婵炴垶鎸撮崑鎾绘煠閻ゎ垱褰х紒鍙樺嵆瀹曟宕奸悢鍛婃緬閻庢鍠掗崑鎾搭殽閻愭彃鈧鎮洪幋锕€鍐€闁搞儺浜堕崬鍫曟煥濞戞瀚伴柛鐔插亾闂佺娉涢敃锝囩箔閸岀偞鍤岄柡灞诲劚濞呫垽鎮归悜妯虹仯缂佹梹鎸抽弻?
         // 闂佹寧绋戦悧濠偽涢妶澶嬪仼鐎光偓閸愵亝顔嶉梺姹囧妼鐎氼厼危?`syncReportChrome()`闂佹寧绋掔粙鎺戯耿閻楀牏顩烽柟鐐墯閸ょ娀骞栫€涙ɑ鈷掓繛鍫熷灩娴滃憡娼忛妸蟺锕傚级閳哄倻鎳侀悶姘抽哺缁嬪顢旈崘顏嗘啰闂佽偐顢婄亸娆撳磻閿濆鏅璺虹墐閸?
-        this.applyFlowLightColors();
+        this.applyCoverTint();
         this.republishMeshSourceIfAny();
       }, wait + 32);
     }
@@ -3156,124 +3088,19 @@ export struct PlaybackPage {
   }
 
   /** 闂?{@link coverTint} 闂備焦褰冮惉鐓庘枔閹寸儑绱ｆ繝濠傛椤ュ繘鏌熼幁鎺戝缂侇喕鍗抽幆鍫ュ焵椤掑嫭鍤岄柟缁樺笚閻濄倝鏌ㄥ☉妯煎闁诡喗鎹囬幃褔宕奸悢鍛婂闂佸憡鐟ラ崲鑼躲亹瑜旈獮鎺楀Ω閵堝浂浼囧┑鐐叉濡插嫮妲愬璺何?*/
-  private applyFlowLightColors(): void {
+  private applyCoverTint(): void {
     if (this.coverTint.version === this.appliedTintVersion) {
       return;
     }
     // 闁宠棄鎳夊Σ鍕煡閸涱亝顫?2026-10-17闁?*闁告瑯浜濆﹢?鐟滅増鎸告晶鐘虫交濞嗗海顏卞Λ锝嗙墱閻ｅ宕欓悜妯荤厐濡増绮忔竟?闁归潧绉堕悾?ready**闁?
     //   `coverTint` 闁哄嫷鍨靛▔鏇熴亜閻㈠憡妗ㄩ柛蹇撳綁闂娾晠鎯冮崟鍓佺獥闁圭鍊藉ù鍥焽閿濆嫮顏遍柛鎺曨嚙閻ｇ娀鎯?`version` 鐎规瓕灏欑划锟犲及?*濞戞挸锕ｇ粩瀛橈純?*闁伙絾鐟ょ粭鍛存儍閸曨偀鍋撶粭琛″亾?
     //   闁?`aboutToAppear` 闂佹彃鏈俊?`appliedTintVersion` 闁告帗绻傞～鎰板礌閺嶏箒绀嬬憸鐗堟尭婢х姵娼诲▎搴ㄥ殝 version闁? 閻熸瑥妫旂拹?鐎圭寮剁粔鐑藉礌?闁挎稑顧€缁?
-    //     濞存粌瀛╁Σ鍛婃交濞嗘挸娅￠柛娆樹簼濠€?*version 闁告瑥鐗愰～锕傚箳閵娾晝褰?*闁? `extractFlowLightColors` 濞戞挸鎼紞瀣礈瀹ュ棛鎽冮柛鎰懁缁繝寮幏灞筋棌闁挎稑顦版晶鐘垫導閺夊灝鐓傚☉鎾愁儔濞间即濡?
     this.tintReady = true;
     // 闂?閻熸粏鍩囬崹纭呫亹婢跺备鍋撻悷閭︽█婵炵鍊楃划锝呂旈埀顒冦亹濞戙垹绀冮柛娑卞墰閻熸繂鈽夐幘绛归練濠㈢懓锕弫宥夊醇閿濆孩缍?`colorApplyWaitOrRetry`闂佹寧绋戦¨鈧紒杈ㄥ缁灚寰勫畝鈧畷鍫曟煕濞嗘瑧绉紒璇插暣瀹曘垻鎷犻懠顒佹疁婵炴潙鍚嬫穱娲吹濠婂喚鍟呴梺顒€绉村▍銏ゆ偣閸ャ劍纾荤紒鏃€娼欓埢搴㈠箠闁?
     if (this.colorApplyWaitOrRetry() > 0) {
       return;
     }
     this.appliedTintVersion = this.coverTint.version;
-    try {
-      this.flowLightController.setEffectParams({
-        colorSource: [this.coverTint.sourceColor],
-        colorTarget: [this.coverTint.targetColor]
-      });
-      Logger.info(PlaybackPage.logTag,
-        `flow light colors applied v=${this.coverTint.version} src=${this.coverTint.sourceColor}`);
-    } catch (error) {
-      const err = error as BusinessError;
-      Logger.warn(PlaybackPage.logTag,
-        `setEffectParams failed, code=${err?.code}, message=${err?.message}`);
-    }
-  }
-
-  /**
-   * 闂佸湱铏庨崢浠嬪棘娴ｅ箍浜滈柛顭戝亞閵堬箓鏌涜箛鎿冩Ъ闁稿孩顨婂鏌ヮ敍濮樿鲸鍕鹃梺鎸庣☉濠€娆碨 `UV_BACKGROUND_FLOW_LIGHT` 闂佹椿鍋€閸嬫捇鏌ょ憴鍕祷婵炲懏甯￠弫宥嗗緞閸艾浜?
-   *
-   * 闂佸憡鐟ラ崐浠嬪焵椤掆偓閸熲晝绮崒姘モ偓?PR #1 闂侀潻璐熼崝鎴︺€呯紒妯镐簻闁汇垹鐏氶悾閬嶆煟椤剙濡界痪顓炵埣閺佸秶浠﹂懖鈺兩戞俊顐ゅ缁繑绔熸繝鍐枖鐎广儱妫欑瑧闂佸憡鍔栭悷锕傤敆閹绢喗鍎嶉柛鏇炲缁愭colorSource` /
-   * `colorTarget` 闂佸搫顦崕鎾吹濠婂棎浜归柟鎯у暱椤ゅ懘鎮樿箛搴ｇ獢婵為棿鍗冲畷婵嬪Ω閿旂懓浜惧ù锝囶焾缁插潡鏌ょ涵鍜佸殝缂佽鲸鐟ч幉?{@link publishFlowLightColors}闂佹寧绋戦¨鈧紒?
-   * 濠殿噯绲界换鎴︻敃婵傜绠查柕蹇ョ磿閹藉啴姊洪钘夌亰缂佸彉鍗抽弻灞筋吋閸℃鍘愮紓浣哄У閵囩偟绮╅弶鎴旀瀻閹烘娊鍩€?
-   *
-   * 婵炶揪绲剧划鍫㈡嫻?`Stack` 闂?*婵☆偓绲鹃悧鏃堟煂濠婂應鍋撳☉娆忓濠碘槅鍙冮幃?*缂傚倷鐒﹂敋闁糕晜顨婇弫宥咁潩椤掍浇鍚俊鐐€楅弫璇差焽閻楀牊鍎熼柡鍥ｂ偓鎰佹婵炴垶鏌ㄩ鍕箔閸岀偛违濞达絽鎽滃▓閬嶆⒒?濠殿喗绻傞惌渚€鎯佸┑鍥┾枙閻庯絺鏅濋悷鎾绘煏?
-   * `HitTestMode.Transparent` 闂佸搫瀚烽崹鎵崲閳ь剙顪冮妶鍫濆惞婵?闂佺偨鍎查弻锟犲焵?闂佽桨鐒﹀娆撴儑娴兼潙鍙婃い鏍ㄨ壘瀵潡鎮橀悙鑼婵炲牊鍨块弫宥呯暆閸曨厼绗￠柣鐘遍檷閸婃洟骞婇埄鍐枖妞ゆ挾濮甸悾閬嶆偣閸ャ劎绠戠紒鍙樺嵆楠?
-   * 闂佸湱铏庨崢浠嬪棘娴ｅ箍浜滈柛顭戝亜椤ｆ煡鏌￠崼婵愭Ч閻庡灚绮撻弻锕傤敊閻愵剛鏆犻梺缁樺姉閹虫捇宕甸鈧畷妤呭Ω閵夛箑鈧牠鏌熼崫鍕垫Ф闁?
-   */
-  /**
-   * 闂佸搫鐗滈崜姘攦閳ь剟鏌￠崟闈涚仩闁诡垯绶氬畷妤€鐣￠柇锔叫?HDS 闁荤喐鐟ュΛ娆撳疾閵夆晜鍤勯柦妯侯槸椤柨霉閿濆懐袪闁?
-   *
-   * 闂佸疇娉曟刊瀵哥箔?濠电偟绻濈粈渚€宕㈠鍫濆強?HDS `hdsEffect` 闂?shader 闁荤喐鐟ュΛ娆撳疾閵夆晜鏅?*闁荤姳鐒﹂崕鎶剿囬鈧埢浠嬪焺閸愨晝鐣抽柡澶嗘櫆閻熴倝鏌屽鍫熷殑闁芥ê顦～鏂棵归敐鍛ｆ俊鐐插€婚埀顒傛嚀閸熲晝妲愭导瀛橆棃婵炲棙鎸剧敮娑樷槈閹惧磭肖闁?*
-   *    闂佹寧绋戦悧鍛箔婢舵劕绠柕澶嗘櫆閺呪晠鏌曢崱鏇燁樂缂佹顦甸獮搴♀槈濡偐锛濋柣銏╁灦濞艰崵妲愬鑸垫櫖鐎光偓閸愶腹鍋撻崘顔藉仢闁哄瀵ч惃鎴︽煛閸曢潧鐏ｉ柡浣靛€濋獮瀣偪椤栵絽娈梺?閻庢鍠掗崑鎾趁瑰鍐╊棞缂佽鲸鍨垮畷妤呭礂閸涱垳蓱婵炲濮崑鎾斥槈閺傝法澧﹂柛蹇斆埢浠嬪灳閸愯尙宀涢梺?闂?
-   *    闂佸湱顣介崑鎾趁归悩顔煎姤缂佺粯鐗犻弻宀€浠﹂悙顑芥灃閻庢鍠栫换鎰板垂娴犲妫?+ 闁荤姳鑳舵晶妤€螞閳哄嫮鐤€婵°倕顑囩粈澶嬵殽閻愯埖纭炬繝鈧鍛枖鐎广儱妫欓弳婊堟煙闂€鎰妽婵＄偛鍊块弻鍛村焵椤掑嫬鐐婇柣鎰椤忛亶鎮橀悙鎻掆偓鍨焽閵堝绠戝ù锝呮贡閻熴倝鏌涘▎鎰跺叕缂佽鲸鐟╅幊娑㈠礃閼碱剚鐦滈梺娲讳簻椤戝懐娆㈡潏鈺傚枂濞撴埃鍋撴い銈勭窔閹虫繈骞撻幒鎴犵М闂佸憡鐗楅悧顓犳濮樿泛违?
-   */
-  /** 濠电偟绻濈粈渚€宕㈠鍫熷剭?HDS 闂佺厧鐤囧Λ鍕叏韫囨梹濯寸€广儱绻掔粣妤冪磽閸屾碍鎯堥柕鍥ㄥ灴瀵?shader 闁荤喐鐟ュΛ娆撳疾閵夛箑顕辨慨妯垮煐妤楊垰顫楀☉娅偐绮径鎰仺濞村吋鐟х粈鍕偡?{@link hdsEffectCapable}闂佹寧绋戦ˇ顓㈠焵?*/
-  private static readonly HDS_CORE_SYSCAP: string = 'SystemCapability.UIDesign.HDSComponent.Core';
-
-  // 闂佸疇妫勯幊澶娢?2026-10-15闂佹寧绋戦悧蹇涱敄閸ャ劎鈻斿璺猴工绾锯晛鈽夐弮鈧换鍡涙偪?/ Round 20闂佹寧绋戦¨鈧紒杈╂珬COVER_BLUR` 婵?`imageBlurRadius()` **閻庣懓鎲¤ぐ鍐垂瑜版帗鈷?*
-  //   闂佹寧绋戦悧濠囧箰闁秴缁╁Δ锝呭暔閳ь剙顦甸幊妤冧沪閻愵剛褰查梺琛″亾閻熸瑥瀚悘鍥╃磽閸愨晛鐏﹂柣妤佹倐閹虫浠﹂悙顒傚讲闂佸憡鑹鹃崙鐣屾濠靛浄绱ｉ柛鏇ㄥ墲椤╊偊鏌＄仦鐐鞍閼垛晝绱掗姘捐含闁稿鎳樺鍫曟晬閸曨偅鐤囬梺闈╄礋閸斿海妲愰鍡樺珰闁瑰瓨绻冪粋鍫ユ⒑閹绘帟瀚伴柛鎴節瀵噣鎮╂潏銊ュ簥婵炶揪绲惧ú婵嬫儍閻斿吋鍋ㄩ柕濞垮妷閸嬫捇宕崘顏嗩槴闂?
-  //   闂佸憡甯炴繛鈧繛鍛缁楃喎鈹戦崶褏銈︽繛鎴炴尭缁ㄥ吋顨ラ崶顒佸亱闁冲搫鍠氶崕濠囨煕濞嗘垶鐒块柛銈嗙矊铻為柍褜鍓熼弫宥夊锤椤ｆ槴ules.abc GONE闂佹寧绋戦ˇ鎶斤綖?RzdMusic闁荤姳鐒﹀妯兼崲?md 闁?6.15闂?
-
-  private hdsEffectCapable(): boolean {
-    try {
-      return canIUse(PlaybackPage.HDS_CORE_SYSCAP);
-    } catch (_err) {
-      return false;
-    }
-  }
-
-  @Builder
-  private FlowLightBackground() {    if (this.hdsEffectCapable()) {
-      Stack()
-        .width(StyleConstants.FULL_WIDTH)
-        .height(StyleConstants.FULL_HEIGHT)
-        .hitTestBehavior(HitTestMode.Transparent)
-        .opacity(FLOW_LIGHT_OPACITY * this.backgroundRevealOpacity())
-        // 闁诲氦顫夎摫闁哄瞼鍠撶划鍫熸姜閹殿喕绱ｉ梻浣瑰絻閺堫剛鈧?shader 闁荤喐鐟ュΛ娆撳疾閵夆晜鍎嶉柛鏇ㄥ亽閸熷洭鏌涢敐鍐ㄥ闁稿繑顭囬弫顕€鏁冮埀顒傝姳閹惰姤鍤岄悹鍥囧懐顦ーbackgroundColor('#383838')`闂佹寧绋戦¨鈧紒?
-        // 闁哄鏅滈悷鈺呭闯妞嬪海纾兼繛鍡楁捣椤忛亶鎮?*閻庡灚婢橀悧濠勬嫻娴煎瓨鍎嶉柛鏇ㄥ墯椤斿倿骞?*闂佹寧绋戦張顒€螞閿斿墽纾兼繛鍡樺俯濞兼帡鏌℃担鍝ュ缂佹柨鐡ㄧ粙澶愵敂閸曨偉顔夊┑鐐存尭瀵爼鎮＄€ｎ喗鍎嶉柛鏇ㄥ亞娣囨椽鏌ㄥ☉妯垮鐎殿喖鐏氱粙澶婎吋婢跺纾挎繛杈剧到缁绘劙鎯冨┑瀣棃妞ゎ偒鍏橀崑?
-        .backgroundColor('#33000000')
-        .visualEffect(new hdsEffect.HdsEffectBuilder()
-          .shaderEffect({
-            effectType: hdsEffect.EffectType.UV_BACKGROUND_FLOW_LIGHT,
-            animation: {
-              duration: FLOW_LIGHT_DURATION_MS,
-              iterations: -1,
-              autoPlay: true
-            },
-            // 闂佸憡甯楃换鍌炲焵椤掑啫浜归柡浣靛€濆畷妤€顭ㄩ崘顏冧孩闂佽偐顢婇婊呮闁秵鍎戦柣鏂垮閸斺偓闂佹眹鍔岀€氫即路娓氣偓閹虫繈鎳犻浣规 applyFlowLightColors 闂侀潻璐熼崝宀冦亹閸ヮ剚鍤岄柟缁樺笧閺嗘岸鏌熺€涙ê濮囬柟顔筋殕缁嬪鈧綆浜滅徊娲煥?
-            // 闁哄鏅滈悷锕傛偋闁秴纭€闁稿繐鎳庨埢蹇涙煕濞嗘劗澧冲鐟帮工椤曘儵宕奸悢宄扮睄婵炴垶姊婚崰鏇㈠礂濡偐鍗氶悗锝庝簻閻撴繈鏌ｉ鍕靛剰闁糕晛鑻湁濞达絿顭堢敮銊╂煕閿斿搫濡煎┑顔规櫊閺佸秹宕奸敐鍌氫壕閻忕偠鍋愰悷婵嬫煛閸曢潧鐏︾紒顕嗗娴狅箒绠涢弴鐘虫儯闂佸憡顨呴敃銈夊Φ婢舵劖鏅璺虹墐閸?
-            params: {
-              colorSource: [this.coverTint.sourceColor],
-              colorTarget: [this.coverTint.targetColor]
-            },
-            controller: this.flowLightController
-          })
-          .buildEffect())
-        .onAppear((): void => {
-          Logger.info('RzdFlowLight',
-            `layer mounted capable=1 enabled=${this.flowLightState.enabled} ` +
-            `opacity=${FLOW_LIGHT_OPACITY * this.backgroundRevealOpacity()} ` +
-            `src=${this.coverTint.sourceColor} dst=${this.coverTint.targetColor} v=${this.coverTint.version}`);
-          // autoPlay 閻庣懓鎲¤ぐ鍐閹达附鏅悘鐐舵閺呮瑩鏌￠崟顒€鍔ょ紒?play 婵炴垶鎸撮崑鎾寸箾閸犅板€ら崬銊╂煟濡灝鐓愰柍褜鍏涢懗鍫曞灳濡皷鍋撶憴鍕暡缂佽鲸鐟╅獮鎴﹀閿涘嫭鎲欓梻浣瑰絻缁夊绱撻幘鑸靛珰闁靛鍎冲﹢鎾煛閸愨晜鏋勭紒妤€顦扮€电厧顫濋璺ㄤ笉闂侀潻璐熼崝宥呪枔韫囨稑纾绘繝濠傚閸嬫挻绗熸繝鍕槴
-          try {
-            this.flowLightController.play();
-          } catch (error) {
-            const err = error as BusinessError;
-            Logger.warn('RzdFlowLight', `play failed code=${err?.code} message=${err?.message}`);
-          }
-        })
-    } else {
-      // 闂佺厧鐤囧Λ鍕叏韫囨梹濯寸€广儱娲ょ换浣割熆閼搁潧鏁剧紒鍙樺嵆閺屽懘鍩€椤掑嫬鐐婇柣鎰劋妤楊垶鏌熼璺ㄥ妽缂佹閰ｅ畷锝咁潨閸垻顦╂俊顐ゅ缁繑绔熸繝鍐浄鐎广儱鐗忛鈧柣蹇撶箣缁舵艾顭囬幍顔藉皫閻㈩垼鍠氱粈鍡涙煥濞戞ê顨欑紒缁樻皑閹?閻庢鍠掗崑鎾绘煕韫囨碍鐝褝绠戦锝夊焵椤掑嫭鍎戦悗锝庝簽缁讳線鎮峰▎搴㈩樂缂佹ぜ鍨婚幉?
-      Column()
-        .width(StyleConstants.FULL_WIDTH)
-        .height(StyleConstants.FULL_HEIGHT)
-        .hitTestBehavior(HitTestMode.Transparent)
-        .opacity(FLOW_LIGHT_OPACITY * this.backgroundRevealOpacity())
-        .linearGradient({
-          direction: GradientDirection.Bottom,
-          colors: [[this.coverTint.sourceColor, 0], [this.coverTint.targetColor, 1]]
-        })
-        .onAppear((): void => {
-          Logger.warn('RzdFlowLight',
-            `layer mounted capable=0闂佹寧绋戦悧濠偽?HDS 闁荤喐鐟ュΛ娆撳疾閵夆晜鍤勯柦妯侯槸椤柨霉閿濆懐鈻岀紒杈ㄧ箞瀵劑宕烽鐔告闂傚倸鐗婇悷锕傚焵椤戣法鍔嶇紒妤€閰ｅ畷锝咁潨閸垻顦玡nabled=${this.flowLightState.enabled} ` +
-            `src=${this.coverTint.sourceColor} dst=${this.coverTint.targetColor}`);
-        })
-    }
   }
 
   /** 闂備浇椴哥敮鐐裁烘导鏉戠闁归偊鍠撴禒娑欎繆椤栵絼绨荤紒鐘崇懇閺佸秴顫濋崜浣稿緭濠电姍鍕闁告挸銈稿鐢割敆閸愨晝銆婇梺鐓庣摠绾板秴锕㈡导鏉戠闁搞儯鍔屾惔濠囨煛閸愵厼鐓愭俊顖氼槺缁牓鎮€靛摜顦? 缂備礁顦扮敮鎺楀箖濡ゅ懏鍤婃い蹇撳琚熼梻鍌氭噺閸旀ê螞瀹€鍕?*/
@@ -3479,20 +3306,16 @@ export struct PlaybackPage {
     //   闂佸疇娉曟刊瀵哥箔?闁哄鏅滈悷銈囩博閹绢喖鐭楅柕澶堝劤缁犳垵顪冮妶鍫濆惞闁哄棌鍋撻梺娲诲亐閸嬫捇鏌ㄥ☉妯煎濠碘剝鎮傚畷妤呭矗濮椻偓閻撯晠鏌ｅΟ鍨厫闁逞屽厸缁€浣烘暜閸ヮ剙鐐婇柣鎰级閸娿倖绻涙径瀣闁逞屽墰閵嗗妲愬鑸垫櫖婵繃顑巓verRadiusState` 闂備焦褰冮懟顖濄亹閺屻儲鍤勯柤鎭掑劤閺嗘瑩鏌ｉ敐鍡欐噭婵☆偒鍋婂畷鎰箔鐞涒€充壕?
     this.coverRadiusState.radius = PlayerExpandState.COVER_RADIUS_PLAYER_VP;
     // 闂?濠电偟绻濈粈渚€宕㈠鍫熷殑閻忕偟鍋撻悵顖溾偓娈垮枓閸嬫捇鏌涜箛鏇ㄥ姕缂?*闂婎偄娲ら幊姗€濡磋箛娑樻嵍闁靛鍔庣粻褰掓⒑閹绘帒顨欑紒顔惧█楠炴劖鎷呮搴ｆ毌闂佸憡鐗楅悧鏇㈡偤閵娾晛纾奸柕濞у倹宕撻柡?V2 闂佺粯顭堥崺鏍焵?*闂?
-    //   闁荤姳绀佹晶浠嬫偪閸℃ǜ浜滈梻鍫熺☉濞懷囨煕閿斿搫濡搁柍褜鍓欓惉濂稿极閵堝绠ｇ€瑰嫭婢橀悗濂告煙楠炲灝鐏╃紒杈ㄥ灴瀹曟鎮欑憴锝呬壕鐎广儱妫欓ˇ褔鏌?`PlaybackFlowLightState`闂佹寧绋戦懟顖炲窗鎼淬劌瑙︽い鏍ㄨ壘琚熼梺鍝勫暢閸╂牠鎯€閸涱喚顩查柧蹇涒偓娑欏磽闂?闂?
-    //   闂佺粯顭堥崺鏍焵椤戣法绐旂紒顕呭灣閹?false闂佹寧绋戦懟顖氱暤閸℃ɑ濯撮柤鎰佸灱閸熷海绱撻崘鎯ф珝闁革絿鍏樺?閻庢鍠掗崑?婵炴垶姊婚崰鎰浖閸喐浜ゆ繝濞惧亾缂佹顦甸幃鐣岀磼濡鍋婇梺绋跨箰椤р偓缂佽鲸鐟╅幃浠嬪Ω閿曗偓閻撴洟鏌涘▎蹇曅фい鈺婂弮閹?濠电偟绻濈粈渚€宕㈠鍫熷殑閻忕偟鍋撻悵顖氣槈閹惧磭肖闁轰焦鎹囧?闁诲繐绻楁ご绋课ｉ崨濠冧氦婵炲棗閰ｉ崵瀣煥濞戞﹩妲堕柍?
-    //   婵?`AmllLyricView`闂佹寧绋戦悧鎰板吹濠婂喚鍟呴柛娆愵焽閻?store 闂?fps/闁诲繒鍋涢幊宥夋嚈?闂佸憡鎼╅崹閬嶆偤閺囩姵瀚氱€广儱绻掔粈鍡椙庨崶銊х畺閻庡灚妫冨畷銉т沪閼测晩浼囨繝闈涘€归〃鍛濞戞ǚ鏋栭柡鍥ㄇ氶崑?
-    this.flowLightState.enabled = MusicStoreService.getInstance().getPlaybackFlowLight();
     // 闁宠棄鎳夊Σ鍕煡閸涱亝顫?2026-10-17闁?*闁?濞戞挸锕ｇ粩瀛橈純閺嶎偅娈屽☉鎾愁儑濞堟垵霉娴ｇ甯ㄩ柣顐熷亾闁?閻熸瑥妫旂拹鐔奉啅閸欏啸闁?* 闁炽儲鏌￠埀?濞ｅ浂鍠撻埀顒€鑻惈宥咁嚕閳ь剚娼诲Ο缁樞﹀☉鎾筹梗缁斿瓨锛冮弽顐ｇ暠濡増绮忔竟濠囧Υ瀹ュ繒绀?
     //   `coverTint` 闁?`AppStorageV2` 闁稿繐褰夐棅鈺呮偐閼哥鍋撴笟濠勭獥闁圭鍊藉ù鍥焽閿濆嫮顏遍柛鎺曨嚙閻ｇ娀鎯?`version` 鐎规瓕灏欑划锟犲及?*濞戞挸锕ｇ粩瀛橈純?*闁伙絾鐟ょ粭鍛存儍閸曗斁鍋?
     //   闁兼澘鏈﹢鐗堛亜?`appliedTintVersion` 闁告帗绻傞埀顒€鍚嬪Σ?-1 闁?`@Monitor('coverTint.version')` 濞戞挴鍋撳☉鎾筹攻濞肩數浜搁崡鐐村殥濞?
-    //   闁?`applyFlowLightColors()` 闁?*濞戞挸锕ｇ粩瀛橈純?*闁汇劌瀚伴·渚€鎳濋煫顓犵憮闁告瑦鍨圭划浼存儓閳ь剟鎳濋幓鎺撶彜闁靛棔绀侀懟鐔煎箮?`tintReady` 缂傚喚鍠氬﹢?
+    //   闁?`applyCoverTint()` 闁?*濞戞挸锕ｇ粩瀛橈純?*闁汇劌瀚伴·渚€鎳濋煫顓犵憮闁告瑦鍨圭划浼存儓閳ь剟鎳濋幓鎺撶彜闁靛棔绀侀懟鐔煎箮?`tintReady` 缂傚喚鍠氬﹢?
     //   闁?闂侇叏缍佹禍?缂佹稑顦紞瀣礈瀹ュ牏绠瑰Λ锝嗙墱濞堟垶锛愬鍡楊棌"闁汇劌瀚板Λ顒冦亹閹捐櫕绨氶悶姘煎亞缁偅娼婚崶椋庣濞戞挸锕ｇ粩鎾偋閸繃鐨戦悹鎰╁劚濠€顏呮交濞嗘挸娅￠柨娑橆槶閳?
     //   闁?闁圭鍊藉ù鍥籍?*闁稿繐鐗嗛顔筋瀲?*闁挎稒纰嶆俊姝屻亹閹惧啿顤?version 閻犱胶澧楅崹?鐎圭寮剁粔鐑藉礌?闁挎稑鐣璽intReady` 濞ｅ洦绻冪€垫棃宕戦崶椋庡耿
-    //     濞戞柨顑呴幃妤呭矗椤忓懏绠?`extractFlowLightColors()` 濞?*鐟滅増鎸告晶鐘虫交濞嗗海顏卞Λ?*闁告劖鐟ラ崵顓㈠棘閹峰苯顥忛柨娑樻緤ersion 闁告劕绉烽～锕傚箳閵娾晝褰柨?
     //     闁归潧绉崇槐浼存儑閻斿壊鍔€濞戞挸顑呰ぐ鍌炵嵁閼稿灚鏉归悶娑樼焸閸嬪懏绋夐埀顒備沪閸屾ǚ鍋?
     this.appliedTintVersion = this.coverTint.version;
     this.tintReady = false;
+    Logger.info('RzdPlaybackMeshOnly', 'background=mesh fixed=1');
     const song = this.state.getCurrentSongItem();
     this.releaseBackgroundCoverIfPixelMap();
     this.imageLabel = song !== undefined ? song.label : $r('app.media.ic_avatar1');
@@ -6064,44 +5887,12 @@ export struct PlaybackPage {
   }
 
   /**
-   * 闂佹眹鍨瑰畷顒勬儍濠靛顥堥柕蹇嬪灮閺嗩剟鏌涢幋鐘插妺缂佷緤绠撳畷妤佸緞鎼粹€冲闂佸搫鎷嬮崹鍐测枔閹寸偟鈻旈柕鍫濆閸ゅ螞閻楀牏鐭庡鐟帮躬閻涱喚鎹勯崫鍕闁?{@link coverTint}闂?
-   *
-   * 闂佸憡鐟禍婊冿耿椤忓嫷鍤曢柍褜鍓熷畷妤呮惞椤愨懇鍙洪悗娈垮枓閸嬫捇鏌￠崘顓炵厫濠⒀呭█瀹曟垵顫濋崜褏鐛ラ梺鍛婄懄閻楃偞绔熸繝鍕暫濞达絽鈧喐宸㈡繛鎴炴尨閸嬫挻绻涢崰掳浼嗛幒妤佸剺濞撴艾锕︾粈鍕煕閿斿搫濡块柛銈呮捣娴滃憡绗熼埀顒€顭囬悧鍫熶氦婵☆垱顑欏ú锝夋煕韫囨挾澧旂紒妤€鎳忓顏堝棘閵堝洨顦梺鎸庣☉閼活垶宕ｈ楠炴帗寰勬繝鍐闂佸憡甯╅崑鍡椻枍瑜旈幊鐐存綇椤愩倗顔愭繛瀵稿Ь濡嫮妲愰幋锔界叆闁逞屽墴婵?
-   * 婵犮垺鍎肩划鍓ф喆閿旂晫鈻旂€广儱妫楄闂備焦瀵ч悷銈囧姬閸愨晝鈻旂€广儱妫欓弳顓炍涢悧鍫㈢煄濠?闂佺偨鍎查弻锟犲焵?婵烇絽娲︾换鍕汲閳ь剙鈽夐幘绛规缂佹柨鐡ㄩ敍鍐冀椤愶絿鏆犳俊顐ゅ缁繑绔熸繝鍥х闁哄诞鍐ㄧ闁圭厧鐡ㄥú婵囩珶婵犲洦鏅悘鐐插⒔閵堬箓鏌涜箛鎿冩Ш闁告瑥閰ｅ浠嬫偪椤栨艾骞嬮梺娲讳簻椤戝啴鍩€?
-   *
-   * @param pixelMap 閻庤鐡曠亸顏囶暰闂佹椿鍠曢懗璺衡枔閹寸姳鐒婂〒姘ｅ亾婵炶偐澧楅幏鍛吋閸涱喚顩梺鎸庣☉閻ジ寮潏鈺傚闁告劦浜濋弳蹇涙煛閸屾粠鏀扮紒鈧€ｎ剚瀚婚柨婵嗩槸濞呯偤鏌￠埀顒佺┍閹典礁浜?
-   */
-  private async extractFlowLightColors(pixelMap: image.PixelMap): Promise<void> {
-    if (!this.flowLightState.enabled || !this.isAlive) {
-      return;
-    }
-    await new Promise<void>((resolve: () => void) => {
-      effectKit.createColorPicker(pixelMap,
-        (error: Error | undefined, colorPicker: effectKit.ColorPicker | undefined) => {
-          try {
-            if (!this.isAlive || error || colorPicker === undefined) {
-              return;
-            }
-            // 闂佹椿娼块崝灞界暦閺夊晝鎺楀籍閳ь剙銆掗懜闈涚窞鐟滃繐鈻撻幋鐑囩矗婵犲﹤妫楅ˉ蹇撁归敐鍡欑焼閻犳劗鍠栧畷鐑樸偊鐠恒劍顔嶉梺鎸庣☉閼活垶宕埀顒勬煕?vividFlowColors 闂備焦褰冮張顒佷繆閸涘娈伴柛妤冨仦鐎氭煡骞?婵炲瓨绮犻崰鏍偓瑙勫▕楠炲繑寰勬惔銏犻棷闂佸搫顦崕鑽ゆ?
-            // 闁诲繐绻嬬欢姘焽閻楀牏鈻旈柡鍕箰椤ュ繒绱撴担鍝ョ闁绘牕鐖煎浼搭敍濞嗘埈浼囨繝銏犵垻閸涱収鏆梺瑙勪航閸庡鎹㈡惔銏╂付闁瑰濮甸悾閬嶆煠閸愬弶婀版繛鍛懇閺佸秴鐣濋埀顒€煤閸ф绠抽柕澶涚畱閻熷繘鎮楅悷鏉挎殭濞寸姵绋戦湁濞达絿顭堢敮銊╂煕閳哄啫鍔嬫繝鈧导瀛樺剳閻庯絺鏅濋悷婵嬫偡?
-            // 闂佹寧绋戦悧鎾汇€呯紒妯镐簻?PR 闂備緡鍙忕徊鎸庢櫠濡ゅ懎绀冩繛鍡樺姦閸斻儱鈽夐幘顖氫壕婵炴垶鎼╂禍鐐村閻樼粯鍤岄悹鍥囧懐顦梺鍦暯閸嬫挸霉閻橆喖鍔滈柣銉ユ噺濞艰鈻庢惔銊ユ疂闂傚倸鍋嗛崳锝夈€傛禒瀣櫖濠㈣泛鐗冮崑?
-            const color = colorPicker.getLargestProportionColor();
-            this.publishFlowLightColors(color.red, color.green, color.blue);
-          } finally {
-            resolve();
-          }
-        });
-    });
-  }
-
-  /**
    * 闂佺娉涢敃銈夋儍濠靛顥堟い顐幖閻︽粓鏌ら悷鏉跨骇鐎规洝灏欑划璇参旀担鍝ヤ海濠电偟绻濈粈渚€宕㈠鍫熷仺闁靛ě鍕殸婵炴垶鎸堕崐鎾绘煂濠婂嫸绱ｆ繝濠傛椤ュ繑顨ラ悙鑸电【鐟滄澘鍊婚弫顕€宕橀敂鐟颁壕?
    *
    * 闂?`coverTint` 婵炴潙鍚嬫穱楦款杺闂?{@link onCoverTintVersionChange}闂佹寧绋戦惉濂稿极鏉堚斁鍋撻悷鏉挎殲濠碘€虫啞閿涙劕顭ㄩ崱妤婃婵炴垶鎸搁鍛般亹閸屾粎纾兼繛鍡樺灦缁插鏌ょ憴鍕祷婵炲懏甯℃俊?
    *
    * **婵炴垶鎸哥粔鎾垂娴犲妫樻い鎾跺仧绾惧鏌?*闂佹寧绋掔喊宥呯暦閼碱剛涓嶆俊銈勭劍閹烽亶妫呴澶婁簻鐟滄妸鍥у強妞ゆ牗鑹惧▓銈嗙箾閸☆厾纾块柣锝咁煼瀵敻顢涢妶鍥╊槷闂佺绻愮壕顓烆焽閸愨晝鈻曢柣鏂垮槻鐢儳绱掗悩鎰佹當闁靛牏鏅埀顒佺⊕椤牓骞戦敐澶婄骇?闂佺偨鍎查弻锟犲焵?闁哄鏅滈悷锕傛偋闁秵鍋ㄩ柕濠忕畱閻?
    * 闂侀潻璐熼崝蹇涱敊閺囩姷纾炬い鏇楀亾闁革綁鏀辩粙澶愬焵椤掑嫬绠ラ柟鎯х－绾捐崵鈧鍠掗崑鎾绘煕韫囨洦鍔滅紒杈ㄧ箘缁參顢栫捄顭戜紘闁汇埄鍨庨崨顔炬殸濠电偟绻濈粈渚€宕㈠鍕剁矗婵犲﹤妫楅ˉ蹇涙倶韫囨挸鑸归柛鎴磿缁辨帟绠涢弮鈧瑧閻熸粎澧楅幐鍛婃櫠閻樺吀鐒婂〒姘ｅ亾婵為棿鍗抽幊婵堟嫚瑜忕粈澶娾槈閹惧磭小缂佸彉鍗冲畷妤呭醇閵夛讣绱℃繛鎴炴尨閸嬫挸鈽夐幘鎰佸剰闁告顫夐幆鏃堝即閳ユ剚妫岄梺?
-   * 闂佹椿浜為崰鎰邦敆濠婂懏鍟哄ù锝堟灏忛梻浣糕偓鐔跺惈婵炲牊鍨垮浼搭敍濠㈩剚甯￠幆宥嗘媴閸濄儲顔堥梻鍌氱墱濠胶妲愬┑瀣劷闁挎繂顦崝銉╂煕閹烘垶顥犻柡?{@link extractFlowLightColors} 闂佺娉涢敃銈夊矗瑜旀俊?
    *
    * @param red 闁诲繐绻嬬欢姘焽閻楀牏鈻旈柡鍕箰椤ュ繒绱掓穱鍗炵伈闁逞屽墯瀹€鍛婄?0闂?55闂?
    * @param green 闁诲繐绻嬬欢姘焽閻楀牏鈻旈柡鍕箰椤ュ繒绱撴担鍛婂仴闁逞屽墯瀹€鍛婄?0闂?55闂?
@@ -6159,15 +5950,10 @@ export struct PlaybackPage {
       //   婵☆偅婢樼€氼厾鎲伴崱娑樿摕闁规崘灏欓杈┾偓娈垮枤婵絻鍟紓?PixelMap 閻熸粎澧楅幐鍝ヨ姳閹惰棄鐐?闂佺偨鍎查弻锟犲焵?**闁荤姴娲㈤崕鐢搞€傞埡浣碘偓鎺楀矗婢跺苯甯悗鍦焾瀵爼寮抽敐鍡樺闁规儳鍘栫划濠氭煟?*闂佹寧绋戦悧鎰板磿濡ゅ懎鐤炬い鏍ㄧ⊕閺嗩參鎮楅崷顓炰沪婵＄偛鍊歌灒闁挎稑瀚棟闂?
       //   闁圭厧鐡ㄥú鏍瑰Ο鑲╃＜婵炲棙鍨堕悾閬嶆煛?{@link originalCoverSource()} 闂佹眹鍔岀€氼剛鏁锝嗗弿閻庯綆浜炲▓閬嶆⒒閸偅绶涚紒杈ㄥ哺婵?
       //   闂?`imageLabel` 婵炴垶鎸哥粔鎾疮閳ь剟鎮跺鐓庝函缂佷焦鎸抽獮瀣箛椤掓垝鑳堕崠鏍ㄧ節閸屾稓顩梺鎸庣⊕缁嬫牞顣鹃梺娲诲枙濞村洨鎹㈤弽銊р枖闁逞屽墮椤垽濡烽妶鍥╊啍闂佷紮绲鹃悷杈╂濠靛鐐婇柣妯跨簿缁€?
-      //   {@link extractFlowLightColors} 闂傚倸娲犻崑鎾绘偡閺囨碍顦风紒鏂跨摠缁嬪顢旈崱妤冪杸闂佺懓鐡ㄩ崝妤€鈻?PixelMap闂佹寧绋戦悧鍡涘储閵堝拋鍤楁俊鐐村礃缁€瀣煕濞嗘劗澧冲鐟帮躬瀹曟ê顓奸崟顓犳啴闁哄鍋為崹婵堢博閹绢喗鐒肩€广儱鎳愬▓閬嶆⒒閸偅绶涚紒杈ㄥ哺婵?
       if (song.cover.length > 0 && this.isAlive) {
         try {
           const pair: CoverDecodePair =
             await PlaybackPage.loadOnlineCoverPair(song.cover);
-          if (pair.full !== undefined && this.isAlive && jobSeq === this.imageColorJobSeq) {
-            // 濠电偟绻濈粈渚€宕㈠鍫濈煑闁哄稁鍓欓ˉ蹇涙煥濞戞瑤浜㈢紒澶樺枟閹峰懎顓奸崨顔绢洯閻庤鐡曠亸娆戝垝閿涘嫭鍠嗛柨婵嗘川閸ㄥ啿鈹戦崒娆戠煓闁靛棗閰ｉ獮宥団偓锝庡墰閺嗩剙鈽夐幘顖氫壕濠电偛妫屽Σ鍕濠靛洨鈻旂€广儱娲﹂弳蹇撯槈閹捐櫕鎯堥柣锝囧█瀹曟ê顓奸崟顓犳啴闁哄鍋為崹婵堢博閹绢喗鐒肩€广儱鎳愬▓閬嶆⒒?
-            await this.extractFlowLightColors(pair.full);
-          }
           // 闂佸疇妫勯幊澶娢?2026-10-15闂佹寧绋掑銊х礊婢舵劕鍐€闁艰婢橀崜褰掓煛閸滀礁鐏ｆ繛鍫熷灥閳瑰啴骞囬崜浣侯槱64闁?4闂佹寧绋戦ˇ顖氾耿椤忓牆瑙﹂悘鐐跺亹椤忚鲸绻涢崱蹇婂亾閼碱剛鎲柡澶屽仒缁瑩宕抽悜钘夌闁绘艾顕粈澶娒瑰┃鍨偓妤冨垝娴煎瓨鍤勯悘鐐靛亾閻濐垶鎮?
           if (pair.mesh !== undefined && this.isAlive && jobSeq === this.imageColorJobSeq) {
             this.publishMeshSource(pair.mesh);
@@ -6827,9 +6613,7 @@ export struct PlaybackPage {
           //   闂佸疇娉曟刊瀵哥箔?缂傚倸鍟崹鍫曟偋缁嬪簱鏀﹂柟閭﹀灣缁犻攱绻涚仦绯曞亾瀹曞洨澶勬繝闈涘€归弸鑽ゆ濞嗘挸绠查柕蹇ョ磿閹藉啴姊洪銊у缂佹梹鎸抽幆澶愵敆婵犲嫮顦梺?*闂備緡鍋€閸嬫捇鏌涢妷褍浠滈柣銈呭瀵噣鎳滈惃鍕兌閸栨牗绻濋崶褌绨奸悗娈垮枤婵潙霉?*闂佹寧绋戞總鏃傜箔婢跺顕辨慨姗嗗墮濮ｅ鏌?闂佺厧鍟块張顒€鈻嶅▎鎴犵煔閺夌偞澹嗛閬嶆煕?闂?
           // 濠电偟绻濈粈渚€宕㈠鍫熷殑閻忕偟鍋撻悵顖炴煥濞戞澧ｆい鏃€娲滅槐鏃堫敋閳ь剟濡村鍜佸殨闁逞屽墴瀹曟绮甸崷顓狀槴闂佹寧绋掗懝鍓ф崲閳ь剙顪冮妶鍫殭婵犫偓椤忓牆绀冮柛娑卞弾閸熷洭鎮橀悙鎻掆偓椋庣不閿濆绀堢€广儱娲ㄧ敮娑㈡煕閹烘洦鍟囩紒杈ㄧ箞瀹曘儵鏁冮埀顒勫垂椤栨稑顕辨慨妯块哺绾炬澘霉閿濆懐绠伴柣銊︾箞濡啴濮€閻樺啿顏┑顔界箓閻線鎯?
           this.MorphSolidSurface()
-          if (this.flowLightState.enabled && this.tintReady) {
-            this.FlowLightBackground()
-          }
+          // RzdPlaybackMeshOnly: 已固定为网格背景，保留现有 MeshCoverBg 绘制与取源链路。
 
           // 闂佸疇妫勯幊澶娢?2026-10-15闂?*閻庡灚婢樼€氼剟骞冨鍫濇辈婵°倕瀚峰?*闂佹寧绋戝澶愭煛閸愵亜啸闁哄懐骞梥濠电偞鐓＄粻鏍偂?閻庣懓澹婇崰鏍閹捐绀嗛柛鈩冾焽閳?md` 闁?.4闂侀潧妫楅懟顖烆敋椤旂瓔鐎查柟閭﹀墰缁憋箓鎮?閻?闂?闂佸憡鐟禍婊勬叏閻愬樊鍤楅柛鏇ㄥ亝閸婂鏌￠崱姗嗘畽妞ゎ偅顨婃俊鏉戭吋韫囨洜顦梺?
           //   闁哄鏅滈悷銈囩博閹绢喖绾ч柍鈺佸暞绗戦梻渚囧弿缁插ジ宕妶澶婃闁搞儯鍔婇埀顒€鍊荤槐鎺戔枎閹寸偟鏆?*闂佸搫鐗冮崑鎾绘倶韫囨挾绠洪柣顓炲⒔閻?*闂佹寧绋掑銊╁礄閼恒儳鐝堕柣妤€鐗婇～鏍偓娈垮枛缁诲牓鍩€椤戣法绐旀繛鏉戝€垮顒侊紣娴ｉ缚绌块柣鐘欏嫮澧﹂柍褜鍏涢懗鍫曟偟濞戙垹绀嗛悹鍥ㄥ絻鐠佹煡鏌?
@@ -7170,7 +6954,7 @@ export struct PlaybackPage {
             void this.adoptWarmMeshThenTint();
             this.applyPlaybackWindowChromeImmediately();
             // 婵＄偑鍊楅弫璇差焽閻楀牞绱旈柡宥庣厛閸嬔囨煕閹达絾顏犳鐐叉喘瀵喚鎹勯悜妯衡偓杈ㄦ叏濠靛嫬鍔欑紒鏃€娼欓埢搴ㄥ灳瀹曞洨锛涢梺绋跨箰绾绢厽鎱ㄩ幖浣哥畱濞撴艾锕︾粈鍕偣娴ｇ鈷旈柣銈呮閵囧嫰妫冨☉妯款唹闂佺厧鐤囧Λ鍕垂娴兼潙缁╃痪顓炴噽缁犳牠鏌?
-            this.applyFlowLightColors();
+            this.applyCoverTint();
             // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-16闂?*闂佸憡甯炴慨鐢垫暜閳?`playbackSwiperIndex = 0`闂佹寧绋掔粙鎾诲磼閵娿儺鍤曢柡鍥╁仧缁?闂佺懓鐏氶幐鍝ユ閹达箑绠涢煫鍥ㄦ尰缁?缂?*闂?
             //
             // ## 闂佸憡顭囬崰鎰焽閻㈠憡鐒介柨婵嗘噹缂嶆牕鈽夐幘瑙勩€冪紒顔肩墛缁嬪﹪宕奸悢鍝ョ暢闁?
@@ -7470,10 +7254,6 @@ export struct PlaybackPage {
             this.pendingMeshPm = undefined;
             this.imageLabel = $r('app.media.ic_avatar1');
             // 婵＄偑鍊楅弫璇差焽娴煎瓨鐒婚柍褜鍓熷畷鐑藉传閸曨亞涓嶉梺鐟版惈椤﹀崬顭囬崘顔藉殞闁圭粯甯楅悵銈夋煕閺傝濡块柡渚€绠栭弫宥咁潩椤撶喐顔掗柣蹇曞仜缁绘垹绮婇敃鍌氱濠㈣泛顑嗙瑧闂佸綊鏅查懗鍫曟偨婵犳碍鍎?GPU 閻庢鍠掗崑鎾绘⒑鎼存挸浜鹃梺鎸庣☉閼活垶骞冨Δ鍛煑濡鑳堕悷婵嬫偣閸ャ儱鍔ゆ繛鍛囧洦鍤€婵°倕鍟弳?
-            try {
-              this.flowLightController.stop();
-            } catch (_err) {
-            }
             const wu = WindowUtil.getInstance();
             wu.applyPlaybackWindowChrome(false, false);
             Logger.info('RzdPlayerRoute', 'leave overlay: window layout unchanged');

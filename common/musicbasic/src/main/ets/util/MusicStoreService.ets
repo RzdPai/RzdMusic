@@ -696,7 +696,7 @@ export class MusicStoreService {
     return store.getSync(KEY_SHOW_MINI_LYRIC, false) as boolean;
   }
 
-  /** 是否启用播放页流光背景（封面动态取色）。 */
+  /** 仅供旧备份/云同步兼容读取；播放页已固定为网格背景。 */
   public getPlaybackFlowLight(): boolean {
     const store = this.getStore();
     if (store === undefined) {
@@ -705,7 +705,7 @@ export class MusicStoreService {
     return store.getSync(KEY_PLAYBACK_FLOW_LIGHT, false) as boolean;
   }
 
-  /** Persists the playback-page flow-light background switch. */
+  /** 仅供旧备份/云同步兼容写入；播放页已固定为网格背景。 */
   public setPlaybackFlowLight(enabled: boolean): void {
     const store = this.getStore();
     if (store === undefined) {

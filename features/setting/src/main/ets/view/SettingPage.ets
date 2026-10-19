@@ -21,7 +21,7 @@ import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { http } from '@kit.NetworkKit';
 import { pasteboard } from '@kit.BasicServicesKit';
-import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, BarScrollHelper, RouterUrlConstants, BreakpointType, HomeSourceState, LocalCoverImage, LyricBlurState, LyricFontSizeState, MusicAppState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, PlaybackFlowLightState, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, WindowInfo, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, getWindowInfoState } from 'musicbasic';
+import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, BarScrollHelper, RouterUrlConstants, BreakpointType, HomeSourceState, LocalCoverImage, LyricBlurState, LyricFontSizeState, MusicAppState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, WindowInfo, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, getWindowInfoState } from 'musicbasic';
 import { BlurStrategy, HdsNavigation, HdsNavigationTitleMode, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatformsOf, lxSourceManager, MediaService } from 'player';
@@ -159,8 +159,6 @@ export struct SettingPage {
   @Local playlistAddPosition: string = 'bottom';
   /** Whether the playback page shows mini lyric lines below the cover. */
   @Local showMiniLyric: boolean = false;
-  /** 播放页是否启用流光背景（颜色随封面动态取色）。 */
-  @Local playbackFlowLight: boolean = false;
   /** Whether playback shares audio focus with other apps. */
   @Local audioMix: boolean = false;
   @Local crossScriptFallback: boolean = true;
@@ -237,7 +235,6 @@ export struct SettingPage {
     this.engineSources = AppStorage.get<string>('lxEngineSources') ?? '{}';
     this.ambientLevel = MusicStoreService.getInstance().getAmbientLevel();
     this.showMiniLyric = MusicStoreService.getInstance().getShowMiniLyric();
-    this.playbackFlowLight = MusicStoreService.getInstance().getPlaybackFlowLight();
     this.crossScriptFallback = MusicStoreService.getInstance().getCrossScriptFallback();
     this.audioMix = MusicStoreService.getInstance().getAudioMix();
     this.lyricBlurEnabled = MusicStoreService.getInstance().getLyricBlurEnabled();
@@ -910,19 +907,6 @@ export struct SettingPage {
               MusicStoreService.getInstance().setShowMiniLyric(isOn);
               const state = AppStorageV2.connect(ShowMiniLyricState, AppStorageKeys.SHOW_MINI_LYRIC_STATE,
                 () => new ShowMiniLyricState());
-              if (state !== undefined) {
-                state.enabled = isOn;
-              }
-            })
-
-          this.SubTitle($r('app.string.setting_sub_playback_flow_light'))
-          this.CapsuleSelector(this.onOffOptions, this.playbackFlowLight ? 0 : 1,
-            (index: number) => {
-              const isOn: boolean = index === 0;
-              this.playbackFlowLight = isOn;
-              MusicStoreService.getInstance().setPlaybackFlowLight(isOn);
-              const state = AppStorageV2.connect(PlaybackFlowLightState,
-                AppStorageKeys.PLAYBACK_FLOW_LIGHT_STATE, () => new PlaybackFlowLightState());
               if (state !== undefined) {
                 state.enabled = isOn;
               }

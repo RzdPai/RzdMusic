@@ -21,7 +21,7 @@ import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { http } from '@kit.NetworkKit';
 import { pasteboard } from '@kit.BasicServicesKit';
-import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, BreakpointType, HomeSourceState, LyricBlurState, LyricCenterState, LyricFontSizeState, LyricFpsState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, PlaybackFlowLightState, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
+import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, BreakpointType, HomeSourceState, LyricBlurState, LyricCenterState, LyricFontSizeState, LyricFpsState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatformsOf, lxSourceManager, MediaService } from 'player';
@@ -83,8 +83,6 @@ export struct SettingsDetailPage {
   @Local bluetoothLyric: boolean = false;
   /** 系统是否支持桌面歌词：undefined = 还没探测过。 */
   @Local desktopLyricSupport: boolean | undefined = undefined;
-  /** 播放页是否启用流光背景（颜色随封面动态取色）。 */
-  @Local playbackFlowLight: boolean = false;
   /**
    * 锁屏继续播放（默认 **开**）。
    *
@@ -264,7 +262,6 @@ export struct SettingsDetailPage {
     void MediaService.getInstance().probeDesktopLyricSupport().then((supported: boolean): void => {
       this.desktopLyricSupport = supported;
     });
-    this.playbackFlowLight = MusicStoreService.getInstance().getPlaybackFlowLight();
     // 锁屏继续播放：缺省（没有这条记录）= 开
     this.lockScreenPlay = MusicStoreService.getInstance().getLockScreenPlay();
     this.audioMix = MusicStoreService.getInstance().getAudioMix();
@@ -921,21 +918,6 @@ export struct SettingsDetailPage {
               MusicStoreService.getInstance().setShowMiniLyric(isOn);
               const state = AppStorageV2.connect(ShowMiniLyricState, AppStorageKeys.SHOW_MINI_LYRIC_STATE,
                 () => new ShowMiniLyricState());
-              if (state !== undefined) {
-                state.enabled = isOn;
-              }
-            })
-
-          // 播放页流光背景：颜色不是写死的，由 PlaybackPage 从封面动态取色
-          // （见 features/player 的 PlaybackPage.FlowLightBackground）
-          this.SubTitle($r('app.string.setting_sub_playback_flow_light'))
-          this.CapsuleSelector(this.onOffOptions, this.playbackFlowLight ? 0 : 1,
-            (index: number) => {
-              const isOn: boolean = index === 0;
-              this.playbackFlowLight = isOn;
-              MusicStoreService.getInstance().setPlaybackFlowLight(isOn);
-              const state = AppStorageV2.connect(PlaybackFlowLightState,
-                AppStorageKeys.PLAYBACK_FLOW_LIGHT_STATE, () => new PlaybackFlowLightState());
               if (state !== undefined) {
                 state.enabled = isOn;
               }

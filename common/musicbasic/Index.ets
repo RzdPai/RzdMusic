@@ -71,7 +71,6 @@ export { AmbientState } from './src/main/ets/model/AmbientState';
 export { ThemeState } from './src/main/ets/model/ThemeState';
 export { HomeSourceState } from './src/main/ets/model/HomeSourceState';
 export { ShowMiniLyricState } from './src/main/ets/model/ShowMiniLyricState';
-export { PlaybackFlowLightState } from './src/main/ets/model/PlaybackFlowLightState';
 export { CoverTintState } from './src/main/ets/model/CoverTintState';
 export { ShowSubLyricState } from './src/main/ets/model/ShowSubLyricState';
 export { LyricFpsState } from './src/main/ets/model/LyricFpsState';
