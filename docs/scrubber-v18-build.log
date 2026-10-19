@@ -1,0 +1,110 @@
+hvigorw.bat : > hvigor [33mWARN: Current product is 'default'. No output wi
+ll be generated because of no executable target in module: 'musichomepcsampl
+e.'[39m
+At line:1 char:452
++ ... $env:PATH"; & 'D:\command-line-tools\bin\hvigorw.bat' assembleHap --m 
+...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (> hvigor [33mW...pcsample.'[ 
+   39m:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+> hvigor [32mUP-TO-DATE :musichomesample:default@PreBuild...  [39m
+> hvigor [32mUP-TO-DATE :musicbasic:default@PreBuild...  [39m
+> hvigor [32mUP-TO-DATE :playlist:default@PreBuild...  [39m
+> hvigor [32mUP-TO-DATE :player:default@PreBuild...  [39m
+> hvigor [32mUP-TO-DATE :comment:default@PreBuild...  [39m
+> hvigor [32mUP-TO-DATE :localmusic:default@PreBuild...  [39m
+> hvigor [32mUP-TO-DATE :recommendation:default@PreBuild...  [39m
+> hvigor [32mUP-TO-DATE :setting:default@PreBuild...  [39m
+> hvigor [32mUP-TO-DATE :sync:default@PreBuild...  [39m
+> hvigor [32mFinished :musichomepcsample:assembleHap... after 1 ms [39m
+> hvigor [32mFinished :musichomesample:default@CreateModuleInfo... after 2 ms [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@GenerateMetadata...  [39m
+> hvigor [32mFinished :musichomesample:default@PreCheckSyscap... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@GeneratePkgContextInfo...  [39m
+> hvigor [32mFinished :musichomesample:default@GeneratePkgSdkInfo... after 7 ms [39m
+> hvigor [32mFinished :musichomesample:default@ProcessIntegratedHsp... after 2 ms [39m
+> hvigor [32mUP-TO-DATE :musicbasic:default@CreateHarBuildProfile...  [39m
+> hvigor [32mFinished :musicbasic:default@ConfigureCmake... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :musicbasic:default@MergeProfile...  [39m
+> hvigor [32mFinished :musichomesample:default@SyscapTransform... after 25 ms [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@ProcessRouterMap...  [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@ProcessShareConfig...  [39m
+> hvigor [32mFinished :musichomesample:default@ProcessStartupConfig... after 6 ms [39m
+> hvigor [32mUP-TO-DATE :comment:default@CreateHarBuildProfile...  [39m
+> hvigor [32mFinished :musicbasic:default@BuildNativeWithCmake... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :comment:default@MergeProfile...  [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@GenerateLoaderJson...  [39m
+> hvigor [32mUP-TO-DATE :player:default@CreateHarBuildProfile...  [39m
+> hvigor [32mFinished :musicbasic:default@BuildNativeWithNinja... after 1 ms [39m
+> hvigor [32mFinished :comment:default@ConfigureCmake... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :player:default@MergeProfile...  [39m
+> hvigor [32mUP-TO-DATE :localmusic:default@CreateHarBuildProfile...  [39m
+> hvigor [32mUP-TO-DATE :musicbasic:default@ProcessLibs...  [39m
+> hvigor [32mFinished :comment:default@BuildNativeWithCmake... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :localmusic:default@MergeProfile...  [39m
+> hvigor [32mUP-TO-DATE :playlist:default@CreateHarBuildProfile...  [39m
+> hvigor [32mUP-TO-DATE :sync:default@CreateHarBuildProfile...  [39m
+> hvigor [32mUP-TO-DATE :musicbasic:default@DoNativeStrip...  [39m
+> hvigor [32mFinished :player:default@ConfigureCmake... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :playlist:default@MergeProfile...  [39m
+> hvigor [32mUP-TO-DATE :sync:default@MergeProfile...  [39m
+> hvigor [32mUP-TO-DATE :recommendation:default@CreateHarBuildProfile...  [39m
+> hvigor [32mUP-TO-DATE :setting:default@CreateHarBuildProfile...  [39m
+> hvigor [32mFinished :comment:default@BuildNativeWithNinja... after 1 ms [39m
+> hvigor [32mFinished :player:default@BuildNativeWithCmake... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :recommendation:default@MergeProfile...  [39m
+> hvigor [32mUP-TO-DATE :setting:default@MergeProfile...  [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@CreateBuildProfile...  [39m
+> hvigor [32mUP-TO-DATE :comment:default@ProcessLibs...  [39m
+> hvigor [32mFinished :localmusic:default@ConfigureCmake... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@MergeProfile...  [39m
+> hvigor [32mUP-TO-DATE :comment:default@DoNativeStrip...  [39m
+> hvigor [32mFinished :localmusic:default@BuildNativeWithCmake... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@MakePackInfo...  [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@ProcessProfile...  [39m
+> hvigor [32mFinished :player:default@BuildNativeWithNinja... after 1 ms [39m
+> hvigor [32mFinished :playlist:default@ConfigureCmake... after 1 ms [39m
+> hvigor [32mFinished :sync:default@ConfigureCmake... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@ProcessResource...  [39m
+> hvigor [32mUP-TO-DATE :player:default@ProcessLibs...  [39m
+> hvigor [32mFinished :playlist:default@BuildNativeWithCmake... after 1 ms [39m
+> hvigor [32mFinished :sync:default@BuildNativeWithCmake... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@CompileResource...  [39m
+> hvigor [32mUP-TO-DATE :player:default@DoNativeStrip...  [39m
+> hvigor [32mFinished :recommendation:default@ConfigureCmake... after 1 ms [39m
+> hvigor [32mFinished :setting:default@ConfigureCmake... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@CompileArkTS...  [39m
+> hvigor [32mFinished :musichomesample:default@BuildJS... after 7 ms [39m
+> hvigor [32mFinished :localmusic:default@BuildNativeWithNinja... after 1 ms [39m
+> hvigor [32mFinished :recommendation:default@BuildNativeWithCmake... after 1 ms [39m
+> hvigor [32mFinished :setting:default@BuildNativeWithCmake... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :localmusic:default@ProcessLibs...  [39m
+> hvigor [32mFinished :musichomesample:default@ConfigureCmake... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :localmusic:default@DoNativeStrip...  [39m
+> hvigor [32mFinished :musichomesample:default@BuildNativeWithCmake... after 1 ms [39m
+> hvigor [32mFinished :playlist:default@BuildNativeWithNinja... after 1 ms [39m
+> hvigor [32mFinished :sync:default@BuildNativeWithNinja... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :playlist:default@ProcessLibs...  [39m
+> hvigor [32mUP-TO-DATE :sync:default@ProcessLibs...  [39m
+> hvigor [32mUP-TO-DATE :playlist:default@DoNativeStrip...  [39m
+> hvigor [32mUP-TO-DATE :sync:default@DoNativeStrip...  [39m
+> hvigor [32mFinished :recommendation:default@BuildNativeWithNinja... after 1 ms [39m
+> hvigor [32mFinished :setting:default@BuildNativeWithNinja... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :recommendation:default@ProcessLibs...  [39m
+> hvigor [32mUP-TO-DATE :setting:default@ProcessLibs...  [39m
+> hvigor [32mUP-TO-DATE :recommendation:default@DoNativeStrip...  [39m
+> hvigor [32mUP-TO-DATE :setting:default@DoNativeStrip...  [39m
+> hvigor [32mFinished :musichomesample:default@BuildNativeWithNinja... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@ProcessLibs...  [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@DoNativeStrip...  [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@CacheNativeLibs...  [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@GeneratePkgModuleJson...  [39m
+> hvigor [32mFinished :musichomesample:default@ProcessCompiledResources... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@PackageHap...  [39m
+> hvigor [32mFinished :musichomesample:default@PackingCheck... after 11 ms [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@SignHap...  [39m
+> hvigor [32mFinished :musichomesample:default@CollectDebugSymbol... after 2 ms [39m
+> hvigor [32mFinished :musichomesample:assembleHap... after 1 ms [39m
+> hvigor [32mBUILD SUCCESSFUL in 4 s 234 ms [39m
