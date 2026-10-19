@@ -899,7 +899,7 @@ export class PlayerExpandState {
     // ★ 2026-10-19：落位（克隆层已按上面那条退场）⇒ **真封面必须接管**，
     //   否则两边都不画 ⇒ 屏幕上一个封面都没有（用户以前报过的 `real=0 clone=0`）。
     //   与 `morphOverlayBridging()` / `morphSessionDriving()` 里那两条落地判据是同一个条件。
-    if (this.morphStage !== MorphStage.LEAVING && this.morphOverlayProgress() >= 0.999) {
+    if (this.morphStage !== MorphStage.LEAVING && this.morphP >= 0.999) {
       return true;
     }
     if (!this.morphOverlayBridging()) {
@@ -4020,8 +4020,9 @@ export class PlayerExpandState {
     //   表现就是：歌词页封面不缩 / 关闭时两个封面 / 上拉收回后自绘条不退场（半透明）。
     //   ⚠️ 不许改成"强制 settle"——那会硬改状态机、把布局落在半路（上一版实测：黑背景 + 播放器下滑）。
     if (this.morphStage !== MorphStage.LEAVING) {
-      const overlayP: number = this.morphOverlayProgress();
-      if (overlayP >= 0.999) {
+      // V15: use the same sampled progress as morphOverlayCoverBridge().
+      // morphOverlayP is an animateTo target and reaches 1 before the geometry does.
+      if (this.morphP >= 0.999) {
         return false;
       }
     }
@@ -5222,7 +5223,7 @@ export class PlayerExpandState {
     //   被挡掉而**停在 ANIM**。不在这里收口的话，`morphSessionDriving()` 恒真 ⇒
     //   Shell 的克隆封面层与克隆操作区**永远画着**（`0014` 日志 `ms=1 op=1.00` 常驻），
     //   正好造成：歌词页封面不缩、关闭时两个封面、上拉收回后自绘条不退场（半透明）。
-    if (this.morphStage !== MorphStage.LEAVING && this.morphOverlayProgress() >= 0.999) {
+    if (this.morphStage !== MorphStage.LEAVING && this.morphP >= 0.999) {
       return false;
     }
     if (!this.morphUsable || !this.morphContainerActive()) {

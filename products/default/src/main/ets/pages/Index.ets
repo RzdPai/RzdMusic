@@ -1213,6 +1213,31 @@ struct Index {
         `${this.expandState.asideWinW},${this.expandState.asideWinH} squash=${this.expandState.morphSquashY}`);
   }
 
+  private coverOwnerLogKey: string = '';
+
+  @Monitor('expandState.morphP', 'expandState.morphOverlayP', 'expandState.morphStage',
+    'expandState.morphDrive')
+  onCoverOwnerChanged(): void {
+    const e: PlayerExpandState = this.expandState;
+    if (!e.hostsMorphOverlay()) {
+      return;
+    }
+    const clone: boolean = e.morphOverlayBridging();
+    const real: boolean = e.realCoverVisible();
+    const alpha: number = e.morphOverlayBridgeOpacity() * e.morphTailOpacity();
+    const key: string = `${e.morphStage}/${e.morphDrive}/${Math.floor(e.morphP * 20)}/${clone}/${real}`;
+    if (key === this.coverOwnerLogKey) {
+      return;
+    }
+    this.coverOwnerLogKey = key;
+    const rect = e.morphOverlayCoverBridge();
+    Logger.info('RzdCoverOwnerV15',
+      `p=${e.morphP.toFixed(4)} op=${e.morphOverlayProgress().toFixed(4)} ` +
+        `stage=${e.morphStage} drive=${e.morphDrive} clone=${clone} real=${real} ` +
+        `cloneAlpha=${alpha.toFixed(4)} hidden=${e.morphPaintHidden()} ` +
+        `snapshot=${e.snapshotShrinkOwnedFlag()} rect=${rect.x},${rect.y},${rect.size},${rect.height}`);
+  }
+
   @Monitor('expandState.morphDrive')
   onMorphDriveChanged(): void {
     if (!this.appState.isShowPlay) {
