@@ -57,6 +57,10 @@
             "value": "#17181A"
         },
         {
+            "name": "morph_mini_solid_surface",
+            "value": "#FF202224"
+        },
+        {
             "name": "floating_mini_bar_sheet_background",
             "value": "#CC202224"
         },

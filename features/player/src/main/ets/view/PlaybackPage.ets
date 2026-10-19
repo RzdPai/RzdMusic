@@ -2602,6 +2602,46 @@ export struct PlaybackPage {
    * 闂佸湱鍎ょ敮妤呮偂閿熺姴绀傞柟鎯板Г閺嗘盯鎮楀☉娆樻缂佽京娅梙dc shell hilog -x | Select-String 'RzdBgOpacity'`
    * @returns 0..1闂佹寧绋戦悧鎾愁焽閵堝拋娼伴柕蹇婃閸?= 1闂?
    */
+  /** 实心承托与播放器共用既有表面几何，不另建裁剪或缩放域。 */
+  @Builder
+  private MorphSolidSurface() {
+    if (this.expandState.morphClipping()) {
+      Stack() {
+        Column()
+          .width('100%')
+          .height('100%')
+          .backgroundColor($r('app.color.morph_mini_solid_surface'))
+        Column()
+          .width('100%')
+          .height('100%')
+          .backgroundColor(this.state.imageColor)
+          .opacity(Math.max(0, Math.min(1, this.expandState.contentP)))
+      }
+      .width(this.expandState.windowWidthVp)
+      .height(this.expandState.windowHeightVp)
+      .hitTestBehavior(HitTestMode.None)
+    }
+  }
+
+  private surfaceLogTime: number = 0;
+
+  @Monitor('expandState.contentP', 'expandState.morphStage')
+  private logSolidSurface(): void {
+    const now: number = Date.now();
+    const p: number = this.expandState.contentP;
+    if (now - this.surfaceLogTime < 80 && p > 0 && p < 1) {
+      return;
+    }
+    this.surfaceLogTime = now;
+    Logger.info('RzdMorphSolid',
+      `p=${p.toFixed(3)} stage=${this.expandState.morphStage} ` +
+        `solid=${this.expandState.morphClipping()} scale=${this.expandState.morphScale} ` +
+        `clipH=${this.expandState.morphClipHeight} radius=${this.expandState.morphRadius} ` +
+        `tx=${this.expandState.morphTx} ty=${this.expandState.morphTy} ` +
+        `sourceHidden=${this.expandState.sourceBarHidden} miniOut=${this.expandState.miniOut} ` +
+        `squash=${this.expandState.morphSquashY}`);
+  }
+
   private backgroundRevealOpacity(): number {
     // ★★★★ 2026-10-17（**照搬无界的取值链**，修用户反复报的「点击打开背景仍对不上」）：
     //
@@ -6784,6 +6824,7 @@ export struct PlaybackPage {
           //   闂侀潻璐熼崝搴ｇ礊婢舵劕鍐€闁兼祴鏅滈弲鎼佹煛娴ｅ摜澧涙俊鐐插€界粻娑㈠川濞ｎ兘鍋撹箛娑樼闁惧浚鍋勭粩鎾煥濞戞瀚伴柟顖欑窔瀹曟艾鈻庢惔锝囩崶闂佸憡鐟ф慨宕囨偖鏉堛劎顩烽柤鎭掑劜椤斿倿鎮峰▎鎰闁?
           //   闂佸疇娉曟刊瀵哥箔?缂傚倸鍟崹鍫曟偋缁嬪簱鏀﹂柟閭﹀灣缁犻攱绻涚仦绯曞亾瀹曞洨澶勬繝闈涘€归弸鑽ゆ濞嗘挸绠查柕蹇ョ磿閹藉啴姊洪銊у缂佹梹鎸抽幆澶愵敆婵犲嫮顦梺?*闂備緡鍋€閸嬫捇鏌涢妷褍浠滈柣銈呭瀵噣鎳滈惃鍕兌閸栨牗绻濋崶褌绨奸悗娈垮枤婵潙霉?*闂佹寧绋戞總鏃傜箔婢跺顕辨慨姗嗗墮濮ｅ鏌?闂佺厧鍟块張顒€鈻嶅▎鎴犵煔閺夌偞澹嗛閬嶆煕?闂?
           // 濠电偟绻濈粈渚€宕㈠鍫熷殑閻忕偟鍋撻悵顖炴煥濞戞澧ｆい鏃€娲滅槐鏃堫敋閳ь剟濡村鍜佸殨闁逞屽墴瀹曟绮甸崷顓狀槴闂佹寧绋掗懝鍓ф崲閳ь剙顪冮妶鍫殭婵犫偓椤忓牆绀冮柛娑卞弾閸熷洭鎮橀悙鎻掆偓椋庣不閿濆绀堢€广儱娲ㄧ敮娑㈡煕閹烘洦鍟囩紒杈ㄧ箞瀹曘儵鏁冮埀顒勫垂椤栨稑顕辨慨妯块哺绾炬澘霉閿濆懐绠伴柣銊︾箞濡啴濮€閻樺啿顏┑顔界箓閻線鎯?
+          this.MorphSolidSurface()
           if (this.flowLightState.enabled && this.tintReady) {
             this.FlowLightBackground()
           }
