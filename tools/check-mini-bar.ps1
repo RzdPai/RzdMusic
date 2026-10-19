@@ -63,6 +63,25 @@ Chk 'E2 throttle 250 (wujie.pa:84077)' $collapse 'public static readonly THROTTL
 Chk 'E3 action -> intent uses upstream reverse mapping (:145779)' $helper 'const expand: boolean = action === BarAction.COLLAPSE;'
 Chk 'E4 scroll y sign follows upstream (:83990)' $helper 'BarScrollHelper.virtualY - delta;'
 
+Write-Output '=== F. V12 independent, exclusive action handoff ==='
+$actions = Join-Path $root 'features\playlist\src\main\ets\view\MiniBarActions.ets'
+Chk 'F1 binary clone owner requires p > 0' $state 'this.hostsMorphOverlay() && this.morphP > 0 && this.asideWinW > 0 &&'
+Chk 'F2 source buttons use the same owner gate' $bar 'paintHidden: this.expandState.morphActionsOwned(),'
+Chk 'F3 clone visibility uses the owner gate' $idx '.visibility(this.expandState.morphActionsOwned() ? Visibility.Visible : Visibility.Hidden)'
+Chk 'F4 complete cluster owns the measured id' $actions '    .id(this.actionsNodeId)'
+Chk 'F5 source hide retains layout' $actions '.visibility(this.paintHidden ? Visibility.Hidden : Visibility.Visible)'
+Chk 'F6 handoff diagnostic anchor' $idx "Logger.info('RzdActionsHandoffV12',"
+$idxText = [IO.File]::ReadAllText($idx)
+$cloneStart = $idxText.IndexOf('private MorphMiniBarClone()')
+$cloneEnd = $idxText.IndexOf(".id('rzd_player_actions_clone_host')", $cloneStart)
+$cloneText = $idxText.Substring($cloneStart, $cloneEnd - $cloneStart)
+if ($cloneText.Contains('.opacity(1)') -and -not $cloneText.Contains('actionsOpacityAt(') -and -not $cloneText.Contains('morphTailOpacity(')) {
+  Write-Output '[PASS] F7 clone alpha is 1 and independent of both old fade windows'
+} else {
+  Write-Output '[FAIL] F7 clone alpha still fades'
+  $script:fail++
+}
+
 Write-Output ''
 if ($script:fail -eq 0) {
   Write-Output 'STATIC CHECK OK. Still device-only: material visible / whole bar squashes on close / only one bar.'

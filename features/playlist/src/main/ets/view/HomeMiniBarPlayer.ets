@@ -432,7 +432,9 @@ export struct HomeMiniBarPlayer {
           // 形变锚点仍挂在"操作区"上（上游 `lx_mini_actions`，`wujie.pa:157092` 那四个 id 之一）。
           actionsNodeId: MINI_BAR_ASIDE_ID,
           showPreviousTrack: this.showPreviousTrack,
-          // Source capsule fades as a whole in the last 3%; do not multiply content alpha again.
+          // RzdActionsHandoffV12: source paints buttons only after the clone releases at p=0.
+          // Hidden retains the exact cluster layout while the V11 capsule fades in.
+          paintHidden: this.expandState.morphActionsOwned(),
           actionsOpacity: 1
         })
       }

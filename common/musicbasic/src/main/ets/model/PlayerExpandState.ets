@@ -2324,6 +2324,12 @@ export class PlayerExpandState {
     return this.morphTailOpacity() <= 0;
   }
 
+  /** RzdActionsHandoffV12: binary ownership, independent of the V11 surface fade. */
+  public morphActionsOwned(): boolean {
+    return this.hostsMorphOverlay() && this.morphP > 0 && this.asideWinW > 0 &&
+      this.asideWinH > 0 && (this.morphSessionDriving() || this.hdsBarSuppressed);
+  }
+
   /** Shared local capsule rect: both HDS inputs and source content use this node. */
   public static readonly SOURCE_CAPSULE_RECT_ID: string = 'rzd_source_capsule_rect';
 

@@ -1189,6 +1189,28 @@ struct Index {
   //      鎵€浠ヨ繖閲屼笉蹇呭垽 `pullDragging`銆?
 
   /** 鎾斁椤靛紑濮?*灞曞紑**琛ラ棿 鈬?娴眰杩欎竴灞備篃璧疯嚜宸遍偅 560ms銆?*/
+  private actionsHandoffLogAt: number = 0;
+  private actionsHandoffLogKey: string = '';
+
+  @Monitor('expandState.morphP', 'expandState.hdsBarSuppressed', 'appState.isPlay')
+  onActionsHandoffChanged(): void {
+    const clone: boolean = this.expandState.morphActionsOwned();
+    const p: number = this.expandState.morphP;
+    const key: string = `${clone}/${p <= 0}/${this.appState.isPlay}/${Math.floor(p * 100)}`;
+    const now: number = Date.now();
+    if (key === this.actionsHandoffLogKey && now - this.actionsHandoffLogAt < 80) {
+      return;
+    }
+    this.actionsHandoffLogKey = key;
+    this.actionsHandoffLogAt = now;
+    Logger.info('RzdActionsHandoffV12',
+      `p=${p.toFixed(4)} owner=${clone ? 'clone' : 'source'} cloneAlpha=${clone ? 1 : 0} ` +
+        `sourceButtonsHidden=${clone} sourceHostAlpha=${this.expandState.sourceBarOpacity().toFixed(4)} ` +
+        `surfaceAlpha=${this.expandState.morphTailOpacity().toFixed(4)} isPlay=${this.appState.isPlay} ` +
+        `rect=${this.expandState.asideWinX},${this.expandState.asideWinY},` +
+        `${this.expandState.asideWinW},${this.expandState.asideWinH} squash=${this.expandState.morphSquashY}`);
+  }
+
   @Monitor('expandState.morphDrive')
   onMorphDriveChanged(): void {
     if (!this.appState.isShowPlay) {
@@ -1545,8 +1567,9 @@ struct Index {
       .alignItems(VerticalAlign.Center)
       .position({ x: this.expandState.asideWinX, y: this.expandState.asideWinY })
       // 鎿嶄綔鍖洪偅涓€妗ｏ細鏁村潡鎸?`clamp(1 - t/0.20)` 娣″嚭锛堟寜閽厛娌°€佹枃瀛楀悗娌★級
-      .opacity(PlayerExpandState.actionsOpacityAt(this.expandState.morphP) * this.expandState.morphTailOpacity())
-      .visibility(this.expandState.morphPaintHidden() ? Visibility.Hidden : Visibility.Visible)
+      // RzdActionsHandoffV12: buttons have binary paint ownership, not the surface fade.
+      .opacity(1)
+      .visibility(this.expandState.morphActionsOwned() ? Visibility.Visible : Visibility.Hidden)
       // 鈿狅笍 鍙仛**绾靛悜**浣嶇Щ锛堝弽缂栬瘧 位1f 鐨?`coverRiseAt`锛夈€?
       //    妯悜鐨?`coverRightShiftAt` 鏄粰**鍏冧俊鎭?*閭ｄ竴灞傜殑锛屽鍒版寜閽笂浼氳鎸夐挳
       //    妯潃婊戝嚭鍘?鈥斺€?鏀惰捣鏃惰〃鐜版垚"涓€涓殏鍋滄寜閽粠灞忓箷澶栭杩涙潵"銆?

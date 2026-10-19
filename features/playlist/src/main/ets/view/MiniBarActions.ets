@@ -14,6 +14,7 @@
  */
 
 import { PlayerConstants, PlayerViewModel, QueuePlaylistSheet } from 'player';
+import { Logger } from 'musicbasic';
 
 /**
  * 迷你播放条的**操作区**（上游 `MiniPlayer` 胶囊 `Row` 的第二个直接子节点）。
@@ -49,6 +50,8 @@ export struct MiniBarActions {
   @Param actionsOpacity: number = 1;
   /** 本组件自己的节点 id（形变起点锚点 / 克隆层锚点）。 */
   @Param actionsNodeId: string = '';
+  /** V12: hide paint only; retain the source cluster's measured layout. */
+  @Param paintHidden: boolean = false;
   /** 队列半模态开关。 */
   @Local showPlaylistSheet: boolean = false;
   /** 操作按钮簇右侧的留白（vp）：用户自定需求，见类注释。 */
@@ -122,7 +125,6 @@ export struct MiniBarActions {
       .alignItems(VerticalAlign.Center)
       .margin({ right: MiniBarActions.ACTIONS_TRAIL_GAP_VP })
       .opacity(this.actionsOpacity)
-      .id(this.actionsNodeId)
 
       QueuePlaylistSheet({
         isShow: this.showPlaylistSheet,
@@ -130,6 +132,36 @@ export struct MiniBarActions {
           this.showPlaylistSheet = false;
         }
       })
+    }
+    // Measure the complete cluster, including the Row's 6vp trailing margin.
+    // Source and clone now anchor the same component root (no nested margin replay).
+    .id(this.actionsNodeId)
+    .visibility(this.paintHidden ? Visibility.Hidden : Visibility.Visible)
+    .onAreaChange((): void => {
+      this.logHandoffRect();
+    })
+  }
+
+  @Monitor('paintHidden', 'playerViewModel.appState.isPlay')
+  onPaintOwnerChanged(): void {
+    this.logHandoffRect();
+  }
+
+  private logHandoffRect(): void {
+    if (this.actionsNodeId.length === 0) {
+      return;
+    }
+    try {
+      const ui: UIContext = this.getUIContext();
+      const rect = ui.getComponentUtils().getRectangleById(this.actionsNodeId);
+      Logger.info('RzdActionsHandoffV12',
+        `kind=measured id=${this.actionsNodeId} hidden=${this.paintHidden} ` +
+          `rect=${ui.px2vp(rect.windowOffset.x)},${ui.px2vp(rect.windowOffset.y)},` +
+          `${ui.px2vp(rect.size.width)},${ui.px2vp(rect.size.height)} ` +
+          `isPlay=${this.playerViewModel.appState.isPlay} iconFp=${PlayerConstants.MINI_ACT_ICON} ` +
+          `buttonVp=${PlayerConstants.MINI_ACT_SIZE} gapVp=${PlayerConstants.MINI_ACT_GAP}`);
+    } catch (error) {
+      Logger.warn('RzdActionsHandoffV12', `kind=measure-miss id=${this.actionsNodeId} error=${error}`);
     }
   }
 }
