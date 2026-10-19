@@ -1203,8 +1203,10 @@ struct Index {
     }
     this.actionsHandoffLogKey = key;
     this.actionsHandoffLogAt = now;
-    Logger.info('RzdActionsHandoffV12',
-      `p=${p.toFixed(4)} owner=${clone ? 'clone' : 'source'} cloneAlpha=${clone ? 1 : 0} ` +
+    Logger.info('RzdActionsFadeV13',
+      `p=${p.toFixed(4)} owner=${clone ? 'clone' : 'source'} ` +
+        `curveAlpha=${PlayerExpandState.actionsOpacityAt(p).toFixed(4)} ` +
+        `cloneAlpha=${(clone ? PlayerExpandState.actionsOpacityAt(p) : 0).toFixed(4)} ` +
         `sourceButtonsHidden=${clone} sourceHostAlpha=${this.expandState.sourceBarOpacity().toFixed(4)} ` +
         `surfaceAlpha=${this.expandState.morphTailOpacity().toFixed(4)} isPlay=${this.appState.isPlay} ` +
         `rect=${this.expandState.asideWinX},${this.expandState.asideWinY},` +
@@ -1567,8 +1569,8 @@ struct Index {
       .alignItems(VerticalAlign.Center)
       .position({ x: this.expandState.asideWinX, y: this.expandState.asideWinY })
       // 鎿嶄綔鍖洪偅涓€妗ｏ細鏁村潡鎸?`clamp(1 - t/0.20)` 娣″嚭锛堟寜閽厛娌°€佹枃瀛楀悗娌★級
-      // RzdActionsHandoffV12: buttons have binary paint ownership, not the surface fade.
-      .opacity(1)
+      // RzdActionsFadeV13: upstream MiniMorph.actionsOpacityAt; V12 ownership stays exclusive.
+      .opacity(PlayerExpandState.actionsOpacityAt(this.expandState.morphP))
       .visibility(this.expandState.morphActionsOwned() ? Visibility.Visible : Visibility.Hidden)
       // 鈿狅笍 鍙仛**绾靛悜**浣嶇Щ锛堝弽缂栬瘧 位1f 鐨?`coverRiseAt`锛夈€?
       //    妯悜鐨?`coverRightShiftAt` 鏄粰**鍏冧俊鎭?*閭ｄ竴灞傜殑锛屽鍒版寜閽笂浼氳鎸夐挳

@@ -70,15 +70,15 @@ Chk 'F2 source buttons use the same owner gate' $bar 'paintHidden: this.expandSt
 Chk 'F3 clone visibility uses the owner gate' $idx '.visibility(this.expandState.morphActionsOwned() ? Visibility.Visible : Visibility.Hidden)'
 Chk 'F4 complete cluster owns the measured id' $actions '    .id(this.actionsNodeId)'
 Chk 'F5 source hide retains layout' $actions '.visibility(this.paintHidden ? Visibility.Hidden : Visibility.Visible)'
-Chk 'F6 handoff diagnostic anchor' $idx "Logger.info('RzdActionsHandoffV12',"
+Chk 'F6 upstream fade diagnostic anchor' $idx "Logger.info('RzdActionsFadeV13',"
 $idxText = [IO.File]::ReadAllText($idx)
 $cloneStart = $idxText.IndexOf('private MorphMiniBarClone()')
 $cloneEnd = $idxText.IndexOf(".id('rzd_player_actions_clone_host')", $cloneStart)
 $cloneText = $idxText.Substring($cloneStart, $cloneEnd - $cloneStart)
-if ($cloneText.Contains('.opacity(1)') -and -not $cloneText.Contains('actionsOpacityAt(') -and -not $cloneText.Contains('morphTailOpacity(')) {
-  Write-Output '[PASS] F7 clone alpha is 1 and independent of both old fade windows'
+if ($cloneText.Contains('.opacity(PlayerExpandState.actionsOpacityAt(this.expandState.morphP))') -and -not $cloneText.Contains('morphTailOpacity(') -and -not $cloneText.Contains('morphPaintHidden(')) {
+  Write-Output '[PASS] F7 clone uses upstream action curve independently of V11 surface gates'
 } else {
-  Write-Output '[FAIL] F7 clone alpha still fades'
+  Write-Output '[FAIL] F7 clone action curve or independence is incorrect'
   $script:fail++
 }
 
