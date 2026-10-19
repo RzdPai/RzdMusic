@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -2484,6 +2484,10 @@ struct Index {
    * @returns True 琛ㄧず鏄剧ず澹冲眰杩欐潯鎮诞杩蜂綘鏉°€?
    */
   private shouldShowFloatingMiniBar(): boolean {
+    // ★ 用户 2026-10-19：列表页多选时底部要放操作条，播放条临时隐藏（否则两条会叠）
+    if (this.appState.selectionActive) {
+      return false;
+    }
     if (this.navDepth <= 0) {
       return false;
     }

@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -65,6 +65,21 @@ export class  MusicAppState {
    * @see BarLayoutModes
    */
   @Trace public hdsBarLayoutMode: number = 1;
+
+  /**
+   * 列表页是否处于**多选模式**（历史/收藏/歌单详情共用）。
+   *
+   * 壳层据此临时隐藏二级页那条悬浮播放条：多选时底部要放操作条（删除/添加至歌单/取消收藏），
+   * 两条都留着会叠在一起（用户 2026-10-19：「注意我们原本二级页面统一会有的一个播放条得临时隐藏」）。
+   */
+  @Trace public selectionActive: boolean = false;
+
+  /**
+   * 播放倍速（用户 2026-10-19：「播放页面歌曲菜单加个倍速」）。
+   *
+   * 1.0 = 原速；由 MediaService 调 AVPlayer.setSpeed 应用，换源后要重新应用一次。
+   */
+  @Trace public playbackRate: number = 1.0;
   /** Bumped whenever the current track's lyric text is refreshed (async fill). */
   @Trace public lyricVersion: number = 0;
   /** 当前实际播放音质（含自动降级后的结果；空表示尚未解析）。 */

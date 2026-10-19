@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -253,6 +253,9 @@ export struct SongMoreMenu {
     if (this.sheetType === 4) {
       return { title: '评论' };
     }
+    if (this.sheetType === 5) {
+      return { title: '倍速' };
+    }
     return { title: '选择下载音质' };
   }
 
@@ -279,7 +282,64 @@ export struct SongMoreMenu {
       }
       .width('100%')
       .height('100%')
+    } else if (this.sheetType === 5) {
+      this.SpeedSheet()
     }
+  }
+
+  /** 倍速档位（用户 2026-10-19：「播放页面歌曲菜单加个倍速」）。 */
+  private static readonly SPEED_OPTIONS: number[] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+
+  /** 菜单项文案：`倍速 1.0x`。 */
+  private speedLabel(): string {
+    return '倍速 ' + this.appState.playbackRate.toFixed(2).replace(/0$/, '') + 'x';
+  }
+
+  /**
+   * 「倍速」弹层：点一档就应用到 AVPlayer（`MediaService.applyPlaybackRate`）。
+   *
+   * 现在值用**用户自定义强调色**标出来；选完自动关闭弹层并把菜单项的文案刷新成新档位。
+   */
+  @Builder
+  private SpeedSheet() {
+    Column({ space: 10 }) {
+      ForEach(SongMoreMenu.SPEED_OPTIONS, (rate: number) => {
+        Row() {
+          Text(rate === 1.0 ? '1.0x（原速）' : rate.toFixed(2).replace(/0$/, '') + 'x')
+            .fontSize(15)
+            .fontWeight(this.appState.playbackRate === rate ? FontWeight.Bold : FontWeight.Normal)
+            .fontColor(this.appState.playbackRate === rate ?
+            this.themeState.color : $r('sys.color.font_primary'))
+            .layoutWeight(1)
+          if (this.appState.playbackRate === rate) {
+            SymbolGlyph($r('sys.symbol.checkmark'))
+              .fontSize(18)
+              .fontColor([this.themeState.color])
+          }
+        }
+        .width('100%')
+        .height(52)
+        .padding({ left: 16, right: 16 })
+        .borderRadius(14)
+        .backgroundColor($r('sys.color.background_primary'))
+        .onClick(() => {
+          this.applySpeed(rate);
+        })
+      }, (rate: number) => 'speed_' + rate)
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 8 })
+  }
+
+  /** 应用倍速：写共享状态 + 让播放器生效，然后收起弹层。 */
+  private applySpeed(rate: number): void {
+    this.appState.playbackRate = rate;
+    MediaService.getInstance().applyPlaybackRate(rate);
+    this.showSheet = false;
+    this.getUIContext().getPromptAction().showToast({
+      message: '倍速已设为 ' + (rate === 1.0 ? '1.0x（原速）' : rate.toFixed(2).replace(/0$/, '') + 'x'),
+      duration: 1500
+    });
   }
 
   /** 评论面板要的歌曲身份（在线歌直接用；本地歌由面板里的解析器查匹配记录）。 */
@@ -507,6 +567,13 @@ export struct SongMoreMenu {
         action: (): void => {
           this.openSheet(4);
         }
+      },
+      {
+        // ★ 用户 2026-10-19：「播放页面歌曲菜单加个倍速」
+        value: this.speedLabel(),
+        action: (): void => {
+          this.openSheet(5);
+        }
       }
     ];
     if (this.playlistId.length > 0) {
@@ -521,8 +588,7 @@ export struct SongMoreMenu {
   }
 
   /** Adds the song to favorites. */
-  private addFavorite(): void {
-    const record = new PlayedSongRecord();
+  private addFavorite(): void {    const record = new PlayedSongRecord();
     record.songId = this.song.songId;
     record.name = this.song.name;
     record.singer = this.song.singer;

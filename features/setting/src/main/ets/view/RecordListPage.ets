@@ -51,8 +51,8 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { guardPlayerBack, PlaybackIntentState, SongItem } from 'musicbasic';
 import {
   AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, FavoriteEntry,
-  MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord, RouterUrlConstants, SongTitleMarquee,
-  ThemeState, TitleBarConstants,
+  MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord, PlaylistDto, RouterUrlConstants,
+  SongTitleMarquee, ThemeState, TitleBarConstants,
   buildTitleMaterial, getStatusBarTopVpFromWindowUtil
 } from 'musicbasic';
 import {
@@ -180,6 +180,8 @@ export struct RecordListPage {
   @Local favoriteAlbums: FavoriteEntry[] = [];
   /** 多选删除模式。 */
   @Local selectionMode: boolean = false;
+  /** 多选底栏「添加至歌单」的面板开关。 */
+  @Local addSheetOpen: boolean = false;
   /** 多选勾选表（key = source_songId）。 */
   @Local selectedMap: Record<string, boolean> = {};
   /**
@@ -325,12 +327,15 @@ export struct RecordListPage {
   private enterSelectionMode(): void {
     this.selectionMode = true;
     this.selectedMap = {};
+    // ★ 用户 2026-10-19：让壳层把二级页那条悬浮播放条**临时隐藏**（底部要放多选操作条）
+    this.appState.selectionActive = true;
   }
 
   /** Exits multi-select mode and clears the selection. */
   private exitSelectionMode(): void {
     this.selectionMode = false;
     this.selectedMap = {};
+    this.appState.selectionActive = false;
   }
 
   /** Selects or clears all entries of the current mode. */
@@ -465,49 +470,143 @@ export struct RecordListPage {
 
   /** 底部预留：壳层那条官方浮动播放条(56) + 间距(16) + 呼吸空间(16)。 */
   private bottomReservedVp(): number {
-    return 56 + 16 + 16;
+    // 多选时播放条已临时隐藏（见 MusicAppState.selectionActive），改为给底部操作条让位
+    return 56 + 16 + 16 + (this.selectionMode ? 76 : 0);
   }
 
   // ─────────────────────────────── 版式：列表 ───────────────────────────────
 
   /** 多选模式操作条：全选 / 删除(n) / 取消。 */
+  /**
+   * 多选底栏（用户 2026-10-19：全选/删除/取消 那一排改成**HDS 底栏那种操作条**）。
+   *
+   * 参照用户给的参考图：底部是一条悬浮胶囊，里面是「删除 / 添加至歌单 / 取消收藏」三格
+   * （图标 + 小字，删除用用户自定义强调色）。「全选」上移到标题栏右侧（见 getTitleBar）。
+   * 多选期间壳层那条悬浮播放条会被 `MusicAppState.selectionActive` 临时隐藏，所以两者不叠。
+   */
   @Builder
-  private SelectionBar() {
-    Row({ space: 12 }) {
-      Text(this.selectedCount() === this.records.length && this.records.length > 0 ? '取消全选' : '全选')
-        .fontSize($r('sys.float.Body_S'))
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('sys.color.font_secondary'))
-        .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-        .borderRadius($r('sys.float.corner_radius_level12'))
-        .backgroundColor($r('sys.color.background_primary'))
-        .onClick(() => {
-          this.toggleSelectAll();
-        })
-      Text(this.selectedCount() > 0 ? '删除(' + this.selectedCount() + ')' : '删除')
-        .fontSize($r('sys.float.Body_S'))
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.selectedCount() > 0 ? $r('sys.color.font_on_primary') : $r('sys.color.font_tertiary'))
-        .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-        .borderRadius($r('sys.float.corner_radius_level12'))
-        // 可用时是**用户自定义的强调色**；不可用时退回中性底（原来是写死的 10% 黑）
-        .backgroundColor(this.selectedCount() > 0 ? this.themeState.color : $r('sys.color.background_tertiary'))
-        .onClick(() => {
+  private SelectionActionBar() {
+    Row({ space: 4 }) {
+      this.SelectionAction($r('sys.symbol.trash'),
+        this.selectedCount() > 0 ? '删除(' + this.selectedCount() + ')' : '删除',
+        this.themeState.color, (): void => {
           this.deleteSelected();
         })
-      Text('取消')
-        .fontSize($r('sys.float.Body_S'))
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('sys.color.font_secondary'))
-        .padding({ left: 4, right: 4 })
-        .onClick(() => {
+      this.SelectionAction($r('sys.symbol.plus'),
+        '添加至歌单', $r('sys.color.font_primary'), (): void => {
+          this.addSheetOpen = true;
+        })
+      if (!this.isHistory()) {
+        this.SelectionAction($r('sys.symbol.heart_fill'),
+          '取消收藏', $r('sys.color.font_primary'), (): void => {
+            this.unfavoriteSelected();
+          })
+      }
+      this.SelectionAction($r('sys.symbol.xmark'),
+        '取消', $r('sys.color.font_primary'), (): void => {
           this.exitSelectionMode();
         })
-      Blank()
     }
     .width('100%')
-    .padding({ left: 14, right: 14, top: 8, bottom: 8 })
-    .backgroundColor(Color.Transparent)
+    .height(66)
+    .padding({ left: 6, right: 6 })
+    .borderRadius(33)
+    .backgroundColor($r('sys.color.background_emphasize'))
+    .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.45)', offsetX: 0, offsetY: 8 })
+  }
+
+  /** 底栏里的一格（图标 + 小字）。 */
+  @Builder
+  private SelectionAction(icon: Resource, label: string, color: ResourceColor, action: () => void) {
+    Column({ space: 4 }) {
+      SymbolGlyph(icon)
+        .fontSize(20)
+        .fontColor([color])
+      Text(label)
+        .fontSize(11)
+        .fontColor(color)
+        .maxLines(1)
+    }
+    .layoutWeight(1)
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+    .onClick(() => {
+      action();
+    })
+  }
+
+  /** 把选中的歌一次性加进某个本地歌单（多选底栏「添加至歌单」）。 */
+  private addSelectedToPlaylist(playlistId: string): void {
+    let added: number = 0;
+    for (let i: number = 0; i < this.records.length; i++) {
+      if (this.isSelected(this.records[i])) {
+        if (this.store.addSongToPlaylist(playlistId, this.records[i])) {
+          added++;
+        }
+      }
+    }
+    this.addSheetOpen = false;
+    this.getUIContext().getPromptAction().showToast({ message: '已添加 ' + added + ' 首', duration: 1800 });
+    this.exitSelectionMode();
+  }
+
+  /** 把选中的歌从收藏里移除（只对收藏模式有意义）。 */
+  private unfavoriteSelected(): void {
+    let removed: number = 0;
+    for (let i: number = 0; i < this.records.length; i++) {
+      if (this.isSelected(this.records[i])) {
+        this.store.removeFavorite(this.records[i].source, this.records[i].songId);
+        removed++;
+      }
+    }
+    this.getUIContext().getPromptAction().showToast({ message: '已取消收藏 ' + removed + ' 首', duration: 1800 });
+    this.exitSelectionMode();
+  }
+
+  /** 「添加至歌单」选择面板：列出本地歌单。 */
+  @Builder
+  private AddToPlaylistSheet() {
+    Column({ space: 8 }) {
+      Text('添加到歌单')
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('sys.color.font_primary'))
+        .width('100%')
+        .padding({ left: 4, bottom: 4 })
+      List({ space: 4 }) {
+        ForEach(this.store.getPlaylists(), (p: PlaylistDto) => {
+          ListItem() {
+            Row() {
+              Text(p.name)
+                .fontSize(15)
+                .fontColor($r('sys.color.font_primary'))
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .layoutWeight(1)
+              Text(p.songs.length + ' 首')
+                .fontSize(12)
+                .fontColor($r('sys.color.font_tertiary'))
+            }
+            .width('100%')
+            .height(52)
+            .padding({ left: 14, right: 14 })
+            .borderRadius(14)
+            .backgroundColor($r('sys.color.background_primary'))
+            .onClick(() => {
+              this.addSelectedToPlaylist(p.id);
+            })
+          }
+        }, (p: PlaylistDto) => 'atl_' + p.id)
+      }
+      .width('100%')
+      .layoutWeight(1)
+      .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ left: 16, right: 16, top: 8, bottom: 16 })
+    .backgroundColor($r('sys.color.background_secondary'))
   }
 
   /** 单条播放记录行（多选模式下带勾选框；行高与封面照搬参考的行规格）。 */
@@ -681,6 +780,20 @@ export struct RecordListPage {
   /** HDS 标题栏：大标题（最近播放 / 我的收藏）+ 播放全部 / 多选删除 / 返回。 */
   private getTitleBar(): HdsNavigationTitleBarOptions {
     const menus: HdsNavigationMenuItemOptions[] = [];
+    if (this.selectionMode) {
+      // ★ 用户 2026-10-19：多选时「全选」放标题栏右侧（参照参考图），底部只留操作按钮
+      const allSelected: boolean = this.selectedCount() === this.records.length && this.records.length > 0;
+      menus.push({
+        content: {
+          label: allSelected ? '取消全选' : '全选',
+          icon: allSelected ? $r('sys.symbol.checkmark_circle_fill') : $r('sys.symbol.checkmark_circle'),
+          isEnabled: true,
+          action: (): void => {
+            this.toggleSelectAll();
+          }
+        }
+      });
+    }
     if (!this.isHistory() && this.records.length > 0 && !this.selectionMode) {
       menus.push({
         content: {
@@ -748,7 +861,9 @@ export struct RecordListPage {
       },
       content: {
         title: {
-          mainTitle: this.isHistory() ? $r('app.string.mine_history_title') : $r('app.string.mine_favorites_title'),
+          // ★ 多选时标题显示「已选中 N 项」（参照用户给的参考图）
+          mainTitle: this.selectionMode ? ('已选中 ' + this.selectedCount() + ' 项') :
+            (this.isHistory() ? $r('app.string.mine_history_title') : $r('app.string.mine_favorites_title')),
           mainTitleSize: TitleSize.TITLE_ML
         },
         backIcon: {
@@ -756,7 +871,11 @@ export struct RecordListPage {
           icon: $r('sys.symbol.chevron_left'),
           isEnabled: true,
           action: (): void => {
-            // 返回 = 弹壳层共享栈（本页不自带 Navigation）
+            // ★ 多选时返回键先退出多选，否则才弹壳层共享栈（本页不自带 Navigation）
+            if (this.selectionMode) {
+              this.exitSelectionMode();
+              return;
+            }
             this.pageIndexInfos.pop();
           }
         },
@@ -805,11 +924,7 @@ export struct RecordListPage {
             }
           }
 
-          if (this.selectionMode) {
-            ListItem() {
-              this.SelectionBar()
-            }
-          }
+          // ★ 多选操作条已移到**底部**（见 build 里的 SelectionActionBar），列表内不再插入
 
           // ★ 长列表用 LazyForEach + 稳定 key（数据源见 RecordDataSource）
           LazyForEach(this.recordSource, (record: PlayedSongRecord, index: number) => {
@@ -857,6 +972,19 @@ export struct RecordListPage {
 
         // 顶栏渐隐：行从透明标题栏底下穿过时靠近顶部淡出（与「我的」页同一个件）
         MineTopFade({ fadeHeight: this.titleTopInset() + 10 })
+
+        // ★ 用户 2026-10-19：多选时底部放一条**HDS 风格操作条**（删除 / 添加至歌单 / 取消收藏 / 取消）；
+        //   同一时刻壳层那条悬浮播放条会被 `selectionActive` 隐藏，两者不重叠。
+        if (this.selectionMode) {
+          Column() {
+            this.SelectionActionBar()
+          }
+          .width('100%')
+          .height('100%')
+          .justifyContent(FlexAlign.End)
+          .padding({ left: 16, right: 16, bottom: 28 })
+          .hitTestBehavior(HitTestMode.Transparent)
+        }
       }
       .width('100%')
       .height('100%')
@@ -895,6 +1023,15 @@ export struct RecordListPage {
       }
     })
     .backgroundColor($r('app.color.background_secondary'))
+    // 多选底栏「添加至歌单」面板
+    .bindSheet(this.addSheetOpen, this.AddToPlaylistSheet(), {
+      height: 420,
+      dragBar: true,
+      showClose: true,
+      onDisappear: (): void => {
+        this.addSheetOpen = false;
+      }
+    })
   }
 }
 

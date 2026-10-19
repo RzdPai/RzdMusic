@@ -403,6 +403,8 @@ export class MediaService {
         Logger.info(TAG, 'AVPlayer state prepared called.');
         this.state = AudioPlayerState.PREPARED;
         this.isPrepared = true;
+        // ★ 换源后 AVPlayer 的倍速会回到 1.0x ⇒ 每次 prepared 都补应用一次（用户 2026-10-19 倍速需求）
+        this.applyPlaybackRate();
         // 地址已就绪：结束「解析中」状态
         this.getAppState().isResolving = false;
         const appState = this.getAppState();
@@ -668,8 +670,35 @@ export class MediaService {
     }
   }
 
-  /** Called when the app goes to background while playing; keeps continuous task if needed. */
-  public onApplicationBackground(): void {
+  /**
+   * 把 `MusicAppState.playbackRate` 应用到 AVPlayer（`setSpeed`）。
+   *
+   * 用户 2026-10-19：「播放页面歌曲菜单加个倍速」。
+   * ⚠️ 每次 `prepared` 都要重新应用一次：AVPlayer 换源后会回到 1.0x，不补就会"换首歌倍速就没了"。
+   * @param rate 目标倍速；不传则取共享状态里当前值
+   */
+  public applyPlaybackRate(rate?: number): void {
+    const state = this.getAppState();
+    const target: number = rate ?? state.playbackRate;
+    if (rate !== undefined) {
+      state.playbackRate = target;
+    }
+    const player: media.AVPlayer | undefined = this.avPlayer;
+    if (player === undefined) {
+      return;
+    }
+    // ⚠️ 本 SDK 的 `AVPlayer.setSpeed()` 返回 **void**（不是 Promise）⇒ 不能 `.then`，
+    //   用 try/catch 兜住即可（倍速设置失败不影响播放）。
+    try {
+      player.setSpeed(target);
+      Logger.info(TAG, `[RzdSpeed] AVPlayer setSpeed ${target} ok`);
+    } catch (err) {
+      const e = err as BusinessError;
+      Logger.error(TAG, `[RzdSpeed] AVPlayer setSpeed failed: ${e.code} ${e.message}`);
+    }
+  }
+
+  /** Called when the app goes to background while playing; keeps continuous task if needed. */  public onApplicationBackground(): void {
     if (this.getAppState().isPlay) {
       this.ensureBackgroundAudioTask();
     }
@@ -2219,4 +2248,3 @@ export class MediaService {
     this.syncDesktopLyric();
   }
 }
-
