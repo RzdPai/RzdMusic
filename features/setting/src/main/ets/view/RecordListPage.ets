@@ -51,7 +51,8 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { guardPlayerBack, PlaybackIntentState, SongItem } from 'musicbasic';
 import {
   AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, FavoriteEntry,
-  MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord, PlaylistDto, RouterUrlConstants,
+  MusicAppState, MusicStoreService, NowPlayingIndicator, PageTopInsetHelper, PlayedSongRecord, PlaylistDto,
+  RouterUrlConstants,
   SongTitleMarquee, ThemeState, TitleBarConstants,
   buildTitleMaterial, getStatusBarTopVpFromWindowUtil
 } from 'musicbasic';
@@ -304,6 +305,52 @@ export struct RecordListPage {
     }
     next[this.songKeyOf(record)] = on;
     this.selectedMap = next;
+  }
+
+  /**
+   * 这一行是不是**当前正在播放**的那首（用户 2026-10-19：歌名变色 + 动态竖条）。
+   *
+   * 判定口径与播放队列一致：`source + songId`；本地歌（`source='local'`）用 songId 直接比。
+   * @param record 列表行记录
+   * @returns 是否当前播放
+   */
+  private isCurrentRecord(record: PlayedSongRecord): boolean {
+    const cur: SongItem | undefined = this.appState.getCurrentSongItem();
+    if (cur === undefined) {
+      return false;
+    }
+    if (cur.source !== record.source) {
+      return false;
+    }
+    return cur.songId === record.songId;
+  }
+
+  /** 当前播放那首在本列表里的下标（找不到 -1）。 */
+  private currentRecordIndex(): number {
+    for (let i: number = 0; i < this.records.length; i++) {
+      if (this.isCurrentRecord(this.records[i])) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  /**
+   * 定位到当前播放：把列滚动到那首歌（用户 2026-10-19：「加个定位到当前播放」）。
+   *
+   * ⚠️「智感握姿」在 HarmonyOS 里**没有对三方应用开放**（SDK 只有 HDS 自己的
+   * `adaptToHandedness`，那是给 HDS 底栏用的，不能拿来给自绘按钮用），所以这里做成
+   * **贴右下角的浮动圆按钮**：拇指自然落点，且不挡列表内容。
+   */
+  private locateCurrent(): void {
+    const index: number = this.currentRecordIndex();
+    if (index < 0) {
+      this.getUIContext().getPromptAction().showToast({ message: '当前没有正在播放的歌曲', duration: 1600 });
+      return;
+    }
+    this.recordSource.getData(index);
+    this.pageScroller.scrollToIndex(index, true, ScrollAlign.CENTER);
+    hilog.info(DOMAIN, TAG, 'locate current index=%{public}d', index);
   }
 
   /** Selected keys. */
@@ -651,12 +698,25 @@ export struct RecordListPage {
           // ★ 2026-10-15（用户实测反馈）：历史页歌名原来还是 `Ellipsis` ⇒ 换成跑马灯
           //   （用户要求「各个页面歌曲名过长时改为用跑马灯显示」，这一处漏了）。
           //   字号/字色逐字保留；父容器是 `Column` ⇒ 用组件默认的 `width('100%')` 约束宽度。
-          SongTitleMarquee({
-            text: record.name,
-            titleFontSize: F_ITEM,
-            titleFontColor: $r('sys.color.font_primary'),
-            titleFontWeight: FontWeight.Normal
-          })
+          Row({ space: 6 }) {
+            SongTitleMarquee({
+              text: record.name,
+              titleFontSize: F_ITEM,
+              // ★ 用户 2026-10-19：正在播放的那首**歌名用主题色**（用户可自定义颜色）
+              titleFontColor: this.isCurrentRecord(record) ? this.themeState.color : $r('sys.color.font_primary'),
+              titleFontWeight: FontWeight.Normal
+            })
+              .layoutWeight(1)
+            // 播放中的动态小竖条（暂停就停，见 musicbasic 的 NowPlayingIndicator）
+            if (this.isCurrentRecord(record)) {
+              NowPlayingIndicator({
+                playing: this.appState.isPlay,
+                color: this.themeState.color
+              })
+            }
+          }
+          .width('100%')
+          .alignItems(VerticalAlign.Center)
           Text(((record.singer ?? '').length > 0 ? record.singer : ''))
             .fontSize(F_SUB)
             .fontColor($r('sys.color.font_tertiary'))
@@ -983,6 +1043,30 @@ export struct RecordListPage {
           .height('100%')
           .justifyContent(FlexAlign.End)
           .padding({ left: 16, right: 16, bottom: 28 })
+          .hitTestBehavior(HitTestMode.Transparent)
+        } else if (!this.isHistory() || this.records.length > 0) {
+          // ★ 定位到当前播放（浮动圆按钮，贴右下角；智感握姿三方不可用，见 locateCurrent 注释）
+          Column() {
+            Row() {
+              SymbolGlyph($r('sys.symbol.arrow_down_circle'))
+                .fontSize(22)
+                .fontColor([this.themeState.color])
+            }
+            .width(52)
+            .height(52)
+            .borderRadius(26)
+            .justifyContent(FlexAlign.Center)
+            .backgroundColor($r('sys.color.background_emphasize'))
+            .shadow({ radius: 18, color: 'rgba(0, 0, 0, 0.4)', offsetX: 0, offsetY: 6 })
+            .onClick(() => {
+              this.locateCurrent();
+            })
+          }
+          .width('100%')
+          .height('100%')
+          .justifyContent(FlexAlign.End)
+          .alignItems(HorizontalAlign.End)
+          .padding({ right: 18, bottom: 96 })
           .hitTestBehavior(HitTestMode.Transparent)
         }
       }

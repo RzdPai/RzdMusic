@@ -160,3 +160,4 @@ export {
   MORPH_HOST_ID
 } from './src/main/ets/model/PlayerExpandState';
 export { traditionalize } from './src/main/ets/util/SimplifiedToTraditional';
+export { NowPlayingIndicator } from './src/main/ets/view/NowPlayingIndicator';
