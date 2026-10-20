@@ -1532,14 +1532,7 @@ export struct OnlineSearchPage {
     this.hideSuggest();
     this.getUIContext().getFocusController().clearFocus();
     morphLog('close request');
-    this.getUIContext().animateTo({
-      curve: curves.interpolatingSpring(0, 1, 342, 38),
-      // ★ 底栏恢复放在**动画结束之后**：转场帧里动壳层状态会把两端拆到不同帧（见 aboutToDisappear 注释）。
-      onFinish: (): void => {
-        morphLog('close animate finish');
-        this.onShowChange(false);
-      }
-    }, (): void => {
+    this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, (): void => {
       this.searchClosing = false;
       // ★ 必须弹**本页所在的那个栈**（官方示例用 `NavDestinationContext.pathStack`）。
       //   本页可能被推到壳层共享栈，也可能被推到首页 Tab 的内层栈。
@@ -1547,13 +1540,17 @@ export struct OnlineSearchPage {
       morphLog(`pop inside-animate own=${this.ownStack !== undefined} size=${stack.size()}`);
       stack.pop(false);
     });
-    // 保险：动画若因外部原因没回调 onFinish，800ms 后强制把底栏恢复回来。
+    // 底栏恢复：**等转场结束再恢复**（在转场帧里改壳层状态会把两端拆到不同帧）。
+    // 弹簧的 onFinish 实测要到 1s 才来，所以这里用固定 320ms（转场时长量级）先恢复，
+    // 450ms 再补一次幂等兜底。
     setTimeout((): void => {
-      if (this.onShowChange !== undefined) {
-        morphLog('close safety restore');
-        this.onShowChange(false);
-      }
-    }, 800);
+      morphLog('bar restore 320ms');
+      this.onShowChange(false);
+    }, 320);
+    setTimeout((): void => {
+      morphLog('bar restore 450ms fallback');
+      this.onShowChange(false);
+    }, 450);
   }
 
   private searchSideVp(): number {
@@ -2316,7 +2313,8 @@ export struct OnlineSearchPage {
           //    歌曲行本身是「封面 + 标题/歌手 + 来源/时长」的整行卡片，铺成多栏会把
           //    文字挤窄、行与行长度还参差不齐，看起来就是"文字被拉伸对齐了"。
           //    搜索结果统一单栏、左对齐。
-          .contentStartOffset(this.contentPaddingTop)
+          // 搜索行/类型栏已排在内容流里（见 `routedContent`），列表不需要额外顶部偏移。
+          .contentStartOffset(0)
           .padding({
             left: 12,
             right: 12,
@@ -2481,8 +2479,29 @@ export struct OnlineSearchPage {
 
   @Builder
   private routedContent() {
-    HdsNavDestination() {
-      this.searchContent()
+    // ★★ 2026-10-20（甲方口径：不用 HDS 的实色背板，顶栏保持透明）：
+    //   目标页改成**普通 `NavDestination`**，与官方示例一致
+    //   （`transitions-collection/SearchLongTakeTransitionPageTwo.ets` 就是普通 NavDestination
+    //     + `.hideTitleBar(true)` + 搜索行画在页面内容里）。
+    //   之前的 `HdsNavDestination` 会在 pop 时跑自己的页面转场（真机日志里源节点被甩到 x=-一屏宽），
+    //   把 `geometryTransition` 的一镜到底挤掉 —— 这就是"进有动画、退没有"的根。
+    //   搜索行的**位置与外观不变**：状态栏下方 0~56，玻璃胶囊 40、间距 10、右侧音源胶囊；
+    //   区别只是它不再由 HDS 标题栏承载，页面顶部也没有任何实色背板。
+    NavDestination() {
+      Column() {
+        // 状态栏让位（`hideTitleBar(true)` 后没人让位，自己补）
+        Column().height(WindowUtil.getInstance().resolveStatusBarTopVp())
+        this.searchRow()
+        this.typeBar()
+        Column() {
+          this.searchContent()
+        }
+        .layoutWeight(1)
+        .width('100%')
+      }
+      .width('100%')
+      .height('100%')
+      .backgroundColor($r('app.color.background_secondary'))
     }
     .onBackPressed((): boolean => {
       this.closeSearch();
@@ -2492,24 +2511,11 @@ export struct OnlineSearchPage {
     .onReady((context: NavDestinationContext): void => {
       this.ownStack = context.pathStack;
     })
-    // Search row replaces the title content; only the type bar occupies bottomBuilder.
-    .hideTitleBar(false)
+    // 搜索行已画在页面内容里（见上面那个 Column），这里彻底关掉标题栏：
+    // 没有 HDS 的实色背板，也不会在 pop 时被标题栏子树拆解拖累转场。
+    .hideTitleBar(true)
     .hideBackButton(true)
-    .titleBar(this.getSearchTitleBar())
-    .titleMode(HdsNavDestinationTitleMode.MINI)
-    .dynamicHideTitleBar({
-      hideTitleArea: false,
-      hideBottomBuilder: false,
-      hideStatusBar: false,
-      mode: HideMode.SCROLL_UP,
-      hideOffset: 0,
-      hideRatio: 2.0
-    })
-    .bindToScrollable([this.listScroller])
     .backgroundColor($r('app.color.background_secondary'))
-    .systemBarStyle(
-      { statusBarContentColor: this.isDarkTheme() ? '#FFFFFF' : '#000000' },
-      { statusBarContentColor: this.isDarkTheme() ? '#FFFFFF' : '#000000' })
     // ★★ 用户 2026-10-11：「顶栏标题错位的问题还在，你应该参考一下其他显示正常的页面是怎么写的」。
     //   逐页对比后：显示正常的 MinePage / RecommendPage **都没有** expandSafeArea，
     //   而所有标题偏低的页面都有 ⇒ 照正常页面去掉它（官方语义：expandSafeArea 只延伸**绘制区**，
