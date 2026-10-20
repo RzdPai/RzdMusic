@@ -330,6 +330,121 @@ owPlayingCoverUrl），**不是**实时读在播歌曲 ——
     return tint.length > 0 ? tint : '#2E4A78';
   }
 
+  /** 无界 `gradientOf` 的固定角度（`wujie126.pa`：`{ angle: 150 }`）。 */
+  private static readonly HERO_GRADIENT_ANGLE: number = 150;
+  /** 起色 `hsl(h, .62, .62)`（无界原值）。 */
+  private static readonly GRADIENT_START_S: number = 0.62;
+  private static readonly GRADIENT_START_L: number = 0.62;
+  /** 止色色相偏移（无界原值 `+130°`，再 `% 360`）。 */
+  private static readonly GRADIENT_END_HUE_SHIFT: number = 130;
+  /** 止色 `hsl(h+130, .55, .38)`（无界原值）。 */
+  private static readonly GRADIENT_END_S: number = 0.55;
+  private static readonly GRADIENT_END_L: number = 0.38;
+
+  /**
+   * 「现在就听」卡背景的两个渐变停靠色。
+   *
+   * ★★★ 2026-10-21（甲方：「背景用纯色也不好看，参考无界的」）：
+   *   无界 `design/src/main/ets/components/Cover` 的 `gradientOf()`（`wujie126.pa:67670` 起）是：
+   *   `linearGradient({ angle: 150, colors: [[hsl(h, .62, .62), 0], [hsl((h+130)%360, .55, .38), 1]] })`
+   *   —— 起色取封面主色相的**中亮**档，止色**色相 +130°**、更暗 ⇒ 一张卡里出两种色调，
+   *   所以它看起来不像纯色。这里逐值照搬，色相 h 取自本卡已有的封面取色 `nowPlayingTint`
+   *   （`vividFlowColors(...)[0]`，本身就是封面主色的鲜艳档）。
+   * @returns `[[起色, 0], [止色, 1]]`
+   */
+  private nowPlayingGradientStops(): Array<[string, number]> {
+    const hsl: number[] = HeroBannerSection.hexToHsl(this.nowPlayingTint());
+    const start: string = HeroBannerSection.hslToHex(hsl[0],
+      HeroBannerSection.GRADIENT_START_S, HeroBannerSection.GRADIENT_START_L);
+    const end: string = HeroBannerSection.hslToHex(hsl[0] + HeroBannerSection.GRADIENT_END_HUE_SHIFT,
+      HeroBannerSection.GRADIENT_END_S, HeroBannerSection.GRADIENT_END_L);
+    return [[start, 0], [end, 1]];
+  }
+
+  /**
+   * `#RRGGBB` / `#AARRGGBB` → `[色相 0–360, 饱和度 0–1, 亮度 0–1]`。
+   * 解析失败时退中性蓝紫（与 `vividFlowColors` 的灰度兜底同一个色系）。
+   * @param hex 颜色串
+   * @returns `[h, s, l]`
+   */
+  private static hexToHsl(hex: string): number[] {
+    let body: string = hex.trim();
+    if (body.startsWith('#')) {
+      body = body.substring(1);
+    }
+    if (body.length === 8) {
+      body = body.substring(2);
+    }
+    if (body.length !== 6) {
+      return [233, 0.45, 0.62];
+    }
+    const r: number = parseInt(body.substring(0, 2), 16) / 255;
+    const g: number = parseInt(body.substring(2, 4), 16) / 255;
+    const b: number = parseInt(body.substring(4, 6), 16) / 255;
+    const max: number = Math.max(Math.max(r, g), b);
+    const min: number = Math.min(Math.min(r, g), b);
+    const l: number = (max + min) / 2;
+    const delta: number = max - min;
+    if (delta < 0.000001) {
+      return [0, 0, l];
+    }
+    const s: number = l > 0.5 ? delta / (2 - max - min) : delta / (max + min);
+    let h: number = 0;
+    if (max === r) {
+      h = ((g - b) / delta) % 6;
+    } else if (max === g) {
+      h = (b - r) / delta + 2;
+    } else {
+      h = (r - g) / delta + 4;
+    }
+    return [(h * 60 + 360) % 360, s, l];
+  }
+
+  /**
+   * HSL → `#RRGGBB`（`h` 0–360，`s` / `l` 0–1）。
+   * @param h 色相
+   * @param s 饱和度
+   * @param l 亮度
+   * @returns `#RRGGBB`
+   */
+  private static hslToHex(h: number, s: number, l: number): string {
+    const c: number = (1 - Math.abs(2 * l - 1)) * s;
+    const hp: number = (((h % 360) + 360) % 360) / 60;
+    const x: number = c * (1 - Math.abs((hp % 2) - 1));
+    let r: number = 0;
+    let g: number = 0;
+    let b: number = 0;
+    if (hp < 1) {
+      r = c;
+      g = x;
+    } else if (hp < 2) {
+      r = x;
+      g = c;
+    } else if (hp < 3) {
+      g = c;
+      b = x;
+    } else if (hp < 4) {
+      g = x;
+      b = c;
+    } else if (hp < 5) {
+      r = x;
+      b = c;
+    } else {
+      r = c;
+      b = x;
+    }
+    const m: number = l - c / 2;
+    return '#' + HeroBannerSection.toHexByte(r + m) + HeroBannerSection.toHexByte(g + m) +
+      HeroBannerSection.toHexByte(b + m);
+  }
+
+  /** 0–1 通道 → 两位大写十六进制。 */
+  private static toHexByte(value: number): string {
+    const byte: number = Math.max(0, Math.min(255, Math.round(value * 255)));
+    const hex: string = byte.toString(16).toUpperCase();
+    return hex.length === 1 ? '0' + hex : hex;
+  }
+
   private homeScrollGutterH(): number {
     return new BreakpointType(16, 24, 32, 32).getValue(this.breakpointEnv.widthBreakpoint);
   }
@@ -433,8 +548,16 @@ owPlayingCoverUrl），**不是**实时读在播歌曲 ——
   private static readonly WING_WIDTH_RATIO: number = 0.1125;
   private static readonly WING_HEIGHT_RATIO: number = 0.8625;
   private static readonly WING_OVERLAP_RATIO: number = 0.22;
-  /** 整组相对卡片中心的纵向偏移（0 = 正中）。 */
-  private static readonly WING_GROUP_SHIFT_RATIO: number = 0;
+  /**
+   * 装饰组相对卡片中心的纵向偏移（**负 = 上移**，按卡高比例，保证平板上等比）。
+   *
+   * ★★★ 2026-10-21（甲方：「首页这个现在就听，卡片里的封面/装饰组本身偏下」）：
+   *   卡面被"顶部角标行 + 底部标题带"夹着，装饰组原来按**整卡**居中 ⇒ 视觉重心落在
+   *   那条半透明标题带上，看着就往下坠。把可见空区（角标下沿 ~ 标题带上沿）当参考框后，
+   *   它的中心比卡片中心高约 5% 卡高 ⇒ 取 −0.05（234 高卡 ≈ 上移 11.7vp）。
+   *   要再高/再低就只改这一个数（0 = 回退到"整卡居中"）。
+   */
+  private static readonly WING_GROUP_SHIFT_RATIO: number = -0.05;
 
   /** 侧翼宽度（vp）。 */
   private wingWidth(): number {
@@ -462,23 +585,29 @@ owPlayingCoverUrl），**不是**实时读在播歌曲 ——
   }
 
   /**
-   * 「现在就听」卡：**封面取色底 + 两侧竖等腰梯形侧翼 + 中间动态封面**。
+   * 「现在就听」卡：**封面取色的双色调渐变底 + 两侧竖等腰梯形侧翼 + 中间动态封面**。
    *
    * 侧翼见 {@link CoverWing}。这里只负责按卡片尺寸算比例：
    * 三件东西用 `Row` 自然排布（翼 + 间隙 + 封面 + 间隙 + 翼），
    * 因为封面在卡面里本来就是水平居中的，Row 居中之后侧翼的落点自动与参考图一致
    * （187 宽的卡片算下来两侧各留 11.7vp，正是参考图量到的 11.7vp）。
-   * 整组再上移 0.039 × 卡高 —— 参考图的装饰组中心比卡片中心偏上 9.1vp。
+   * 整组再按 {@link WING_GROUP_SHIFT_RATIO} 上移 —— 卡片底部那条半透明标题带会把装饰组的
+   * 下半段压住，按整卡居中会让视觉重心往下坠（甲方 2026-10-21：「装饰组本身偏下」）。
    * @param item 卡片数据（取不到动态封面时回落到打包内配图）。
    */
   @Builder
   private NowPlayingCard(item: RecommendHeroCardUi) {
     Stack({ alignContent: Alignment.Center }) {
-      // 1) 底色：封面动态取色
+      // 1) 底色：照搬无界 `HeroTile` 的**双色调渐变**（`Cover.gradientOf`，见
+      //    {@link nowPlayingGradientStops}）。原来这里是 `backgroundColor(封面取色)` 的**纯色**，
+      //    甲方口径：「背景用纯色也不好看」⇒ 换渐变（角度 150°，止色色相 +130°）。
       Column()
         .width(StyleConstants.FULL_WIDTH)
         .height(StyleConstants.FULL_HEIGHT)
-        .backgroundColor(this.nowPlayingTint())
+        .linearGradient({
+          colors: this.nowPlayingGradientStops(),
+          angle: HeroBannerSection.HERO_GRADIENT_ANGLE
+        })
 
       // 2) 侧翼 + 封面。三件都是正立形状，靠 Row 居中排布；Row 默认垂直居中，
       //    所以侧翼和封面天然同心（不存在谁偏上偏下）。
