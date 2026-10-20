@@ -797,7 +797,10 @@ export struct OnlineSearchPage {
     this.hideSuggest();
     this.appState.selectionActive = false;
     morphLog('target aboutToDisappear');
-    this.onShowChange(false);
+    // ⚠️ 这里**不要**再 `onShowChange(false)`：它在转场那一帧里改壳层状态（底栏高度 0→56），
+    //    壳层随即重排，源节点（首页的 Search）被推迟到下一帧才创建 ⇒ 两端配不成一对 ⇒ 退出没有动画。
+    //    真机日志实证：target disappear → target aboutToDisappear → bar searching=false → source appear。
+    //    底栏恢复改到 `closeSearch()` 的 animateTo.onFinish 里。
   }
 
   private async doSearchOnce(): Promise<void> {
@@ -1529,7 +1532,14 @@ export struct OnlineSearchPage {
     this.hideSuggest();
     this.getUIContext().getFocusController().clearFocus();
     morphLog('close request');
-    this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, (): void => {
+    this.getUIContext().animateTo({
+      curve: curves.interpolatingSpring(0, 1, 342, 38),
+      // ★ 底栏恢复放在**动画结束之后**：转场帧里动壳层状态会把两端拆到不同帧（见 aboutToDisappear 注释）。
+      onFinish: (): void => {
+        morphLog('close animate finish');
+        this.onShowChange(false);
+      }
+    }, (): void => {
       this.searchClosing = false;
       // ★ 必须弹**本页所在的那个栈**（官方示例用 `NavDestinationContext.pathStack`）。
       //   本页可能被推到壳层共享栈，也可能被推到首页 Tab 的内层栈。
@@ -1537,6 +1547,13 @@ export struct OnlineSearchPage {
       morphLog(`pop inside-animate own=${this.ownStack !== undefined} size=${stack.size()}`);
       stack.pop(false);
     });
+    // 保险：动画若因外部原因没回调 onFinish，800ms 后强制把底栏恢复回来。
+    setTimeout((): void => {
+      if (this.onShowChange !== undefined) {
+        morphLog('close safety restore');
+        this.onShowChange(false);
+      }
+    }, 800);
   }
 
   private searchSideVp(): number {

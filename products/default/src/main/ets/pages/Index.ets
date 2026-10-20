@@ -2567,8 +2567,14 @@ struct Index {
     }
     Logger.info(RzdShellLogTag, 'home search pop');
     appendPlayLog('[RzdSearchMorph] shell pop');
-    this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, (): void => {
-      this.homeSearchOpen = false;
+    this.getUIContext().animateTo({
+      curve: curves.interpolatingSpring(0, 1, 342, 38),
+      // 底栏恢复同样放到动画结束之后：转场帧里改壳层状态会把两端拆到不同帧（退出就没有一镜到底）。
+      onFinish: (): void => {
+        this.homeSearchOpen = false;
+        appendPlayLog('[RzdSearchMorph] shell bar restore');
+      }
+    }, (): void => {
       this.homeStack.pop(false);
     });
   }
