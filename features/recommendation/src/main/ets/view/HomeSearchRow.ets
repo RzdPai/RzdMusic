@@ -41,6 +41,13 @@ export struct HomeSearchRow {
           .focusOnTouch(false)
           .defaultFocus(false)
           .geometryTransition(SEARCH_GEO_ID, { follow: true })
+          // 诊断用：源节点在 push/pop 时是"保留"还是"重建"——退出没动画的关键判据。
+          .onAppear((): void => {
+            Logger.info('RzdSearchMorph', 'source appear');
+          })
+          .onDisAppear((): void => {
+            Logger.info('RzdSearchMorph', 'source disappear');
+          })
           .onAreaChange((_oldArea: Area, area: Area): void => {
             Logger.info('RzdSearchMorph',
               `source rect x=${area.globalPosition.x} y=${area.globalPosition.y} w=${area.width} h=${area.height}`);

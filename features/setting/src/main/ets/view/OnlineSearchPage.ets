@@ -185,6 +185,13 @@ struct SongRowItem {
  */
 @ComponentV2
 export struct OnlineSearchPage {
+  /**
+   * 本页是否在最上面（首页那套底栏据此隐藏/恢复）。
+   * 由页自身的 `aboutToAppear` / `aboutToDisappear` 驱动：返回键、系统返回、手势任何退出路径都会走到。
+   * ⚠️ 不要用 `Navigation.onNavBarStateChange` 去推：首页自己也是内层栈的路由页，
+   *    navBar 永远不可见，会把底栏高度压成 0（Tab 栏 + 迷你条一起消失）。
+   */
+  @Event onShowChange: (open: boolean) => void = (_open: boolean): void => {};
   /** Window width breakpoint for responsive result columns. */
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
   /** Initial search query supplied by the route param (e.g. singer name). */
@@ -551,6 +558,8 @@ export struct OnlineSearchPage {
   }
 
   aboutToAppear(): void {
+    hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph target aboutToAppear');
+    this.onShowChange(true);
     this.refreshContentPaddingTop();
     this.searchHistory = this.store.getSearchHistory();
     this.restoreSearchSource();
@@ -775,6 +784,8 @@ export struct OnlineSearchPage {
     this.searchRequestQueued = false;
     this.hideSuggest();
     this.appState.selectionActive = false;
+    hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph target aboutToDisappear');
+    this.onShowChange(false);
   }
 
   private async doSearchOnce(): Promise<void> {
@@ -1495,9 +1506,11 @@ export struct OnlineSearchPage {
    */
   private closeSearch(): void {
     if (guardPlayerBack('OnlineSearchPage')) {
+      hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph close blocked by player');
       return;
     }
     if (this.searchClosing) {
+      hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph close already running');
       return;
     }
     this.searchClosing = true;
@@ -1508,7 +1521,11 @@ export struct OnlineSearchPage {
       this.searchClosing = false;
       // ★ 必须弹**本页所在的那个栈**（官方示例用 `NavDestinationContext.pathStack`）。
       //   本页可能被推到壳层共享栈，也可能被推到首页 Tab 的内层栈。
-      (this.ownStack ?? this.pageStack).pop(false);
+      const stack: NavPathStack = this.ownStack ?? this.pageStack;
+      hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
+        'RzdSearchMorph pop inside-animate own=%{public}s size=%{public}d',
+        String(this.ownStack !== undefined), stack.size());
+      stack.pop(false);
     });
   }
 
@@ -1809,6 +1826,13 @@ export struct OnlineSearchPage {
         }
       })
       .width('100%')
+      // 诊断用：目标节点是否被卸载/重建（退出没动画的第一手判据）。
+      .onAppear((): void => {
+        hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph target appear');
+      })
+      .onDisAppear((): void => {
+        hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph target disappear');
+      })
       .onAreaChange((_oldArea: Area, newArea: Area): void => {
         hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
           'RzdSearchMorph target x=%{public}f y=%{public}f w=%{public}f h=%{public}f',

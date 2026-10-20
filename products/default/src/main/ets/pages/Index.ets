@@ -2599,7 +2599,16 @@ struct Index {
       })
     } else if (name === SEARCH_ROUTE_NAME) {
       OnlineSearchPage({
-        routeParam: param
+        routeParam: param,
+        // 底栏（Tab 栏 + 迷你条）显隐由搜索页**自己的生命周期**驱动：
+        // 首页本身也是内层栈的路由页，所以不能用 navBar 可见性去推"是否在搜索页"
+        // （那会让 homeSearchOpen 永远是 true，Tab 栏被压成 0 高度）。
+        onShowChange: (open: boolean): void => {
+          if (open !== this.homeSearchOpen) {
+            this.homeSearchOpen = open;
+            Logger.info(RzdShellLogTag, `home search page shown=${open}`);
+          }
+        }
       })
     }
   }
@@ -2755,16 +2764,6 @@ struct Index {
       .height(StyleConstants.FULL_HEIGHT)
       .onAppear((): void => {
         this.ensureHomeRoute();
-      })
-      // ★★ 底栏显隐跟着**内层栈的真实状态**走：
-      //   之前只在 closeHomeSearch() 里翻标志，而从搜索页自己的返回键退出时没人恢复 ⇒ 底栏一直 0 高度。
-      //   `onNavBarStateChange`：路由推入时 navBar 不可见 ⇒ 搜索页在最上面；弹回 ⇒ 首页回来了。
-      .onNavBarStateChange((isVisible: boolean): void => {
-        const searching: boolean = !isVisible;
-        if (searching !== this.homeSearchOpen) {
-          this.homeSearchOpen = searching;
-          Logger.info(RzdShellLogTag, `home search bar searching=${searching}`);
-        }
       })
       .expandSafeArea([SafeAreaType.SYSTEM, SafeAreaType.CUTOUT], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
     }
