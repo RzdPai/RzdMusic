@@ -17,6 +17,7 @@ import { AppStorageV2, curves, uiObserver } from '@kit.ArkUI';
 import { HdsNavigation, HdsTabsController, HdsTabsBarChangeMode, SystemMaterialParams, hdsMaterial } from '@kit.UIDesignKit';
 import {
   AmbientState,
+  appendPlayLog,
   AppStorageKeys,
   areaLengthToVp,
   BarLayoutModes,
@@ -2553,6 +2554,7 @@ struct Index {
       this.ensureHomeRoute();
     }
     Logger.info(RzdShellLogTag, `home search push from=${this.homeStack.getAllPathName()}`);
+    appendPlayLog(`[RzdSearchMorph] shell push from=${this.homeStack.size()}`);
     this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, (): void => {
       this.homeSearchOpen = true;
       this.homeStack.pushPath({ name: SEARCH_ROUTE_NAME }, false);
@@ -2564,6 +2566,7 @@ struct Index {
       return;
     }
     Logger.info(RzdShellLogTag, 'home search pop');
+    appendPlayLog('[RzdSearchMorph] shell pop');
     this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, (): void => {
       this.homeSearchOpen = false;
       this.homeStack.pop(false);
@@ -2607,6 +2610,7 @@ struct Index {
           if (open !== this.homeSearchOpen) {
             this.homeSearchOpen = open;
             Logger.info(RzdShellLogTag, `home search page shown=${open}`);
+            appendPlayLog(`[RzdSearchMorph] bar searching=${open}`);
           }
         }
       })

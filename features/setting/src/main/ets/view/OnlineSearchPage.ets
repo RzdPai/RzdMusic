@@ -19,7 +19,7 @@ import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import { guardPlayerBack, SearchGlassModifier } from 'musicbasic';
 import { AlbumRouteParam, ArtistRouteParam, BreakpointType, ThemeState, WindowUtil } from 'musicbasic';
 import { BlurStrategy, BottomBuilderShowType, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, HideMode, ScrollEffectType } from '@kit.UIDesignKit';
-import { AppStorageKeys, AmbientState, FavoriteEntry, MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord, QualityInfo, RouterUrlConstants, SongItem, SongTitleMarquee, ToplistRouteParam, barBlurOptions, buildTitleMaterial } from 'musicbasic';
+import { AppStorageKeys, AmbientState, FavoriteEntry, MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord, QualityInfo, RouterUrlConstants, SongItem, SongTitleMarquee, ToplistRouteParam, appendPlayLog, barBlurOptions, buildTitleMaterial } from 'musicbasic';
 import { AlbumInfo, LXQualityOption, LXSearchSong, LXSearchResult, SingerInfo, lxGetPicFallback, lxGetQualityOptions, lxSearch, lxTxHotSearch, lxSearchSuggest, searchAlbums, searchSingers, sourceToCode, DownloadTask, DownloadUtil, OnlinePlayUtil, PlaylistSearchApi } from 'player';
 import type { SearchPlaylistInfo, SearchPlaylistSong } from 'player';
 import { sourceName } from 'player';
@@ -29,6 +29,18 @@ import { SourceChip } from './SourceChip';
 /** 日志域与标签（真机排查：`hdc shell hilog | findstr RzdSearchPage`）。 */
 const SEARCH_LOG_DOMAIN: number = 0x0000;
 const SEARCH_LOG_TAG: string = 'RzdSearchPage';
+
+/**
+ * 一镜到底诊断。
+ *
+ * ⚠️ 只写 `hilog` 是不够的：应用内「设置 → 运行日志」看的是 `appendPlayLog`
+ *    （AppStorage 里的 `lxPlayLog` 环形缓冲），没有 hdc 时那是**唯一**能取证的地方。
+ *    所以这里两个都写。
+ */
+function morphLog(message: string): void {
+  appendPlayLog('[RzdSearchMorph] ' + message);
+  hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph ' + message);
+}
 
 /** Observable per-source checkbox state. */
 @ObservedV2
@@ -558,7 +570,7 @@ export struct OnlineSearchPage {
   }
 
   aboutToAppear(): void {
-    hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph target aboutToAppear');
+    morphLog('target aboutToAppear');
     this.onShowChange(true);
     this.refreshContentPaddingTop();
     this.searchHistory = this.store.getSearchHistory();
@@ -784,7 +796,7 @@ export struct OnlineSearchPage {
     this.searchRequestQueued = false;
     this.hideSuggest();
     this.appState.selectionActive = false;
-    hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph target aboutToDisappear');
+    morphLog('target aboutToDisappear');
     this.onShowChange(false);
   }
 
@@ -1506,25 +1518,23 @@ export struct OnlineSearchPage {
    */
   private closeSearch(): void {
     if (guardPlayerBack('OnlineSearchPage')) {
-      hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph close blocked by player');
+      morphLog('close blocked by player');
       return;
     }
     if (this.searchClosing) {
-      hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph close already running');
+      morphLog('close already running');
       return;
     }
     this.searchClosing = true;
     this.hideSuggest();
     this.getUIContext().getFocusController().clearFocus();
-    hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph close request');
+    morphLog('close request');
     this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, (): void => {
       this.searchClosing = false;
       // ★ 必须弹**本页所在的那个栈**（官方示例用 `NavDestinationContext.pathStack`）。
       //   本页可能被推到壳层共享栈，也可能被推到首页 Tab 的内层栈。
       const stack: NavPathStack = this.ownStack ?? this.pageStack;
-      hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
-        'RzdSearchMorph pop inside-animate own=%{public}s size=%{public}d',
-        String(this.ownStack !== undefined), stack.size());
+      morphLog(`pop inside-animate own=${this.ownStack !== undefined} size=${stack.size()}`);
       stack.pop(false);
     });
   }
@@ -1828,16 +1838,15 @@ export struct OnlineSearchPage {
       .width('100%')
       // 诊断用：目标节点是否被卸载/重建（退出没动画的第一手判据）。
       .onAppear((): void => {
-        hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph target appear');
+        morphLog('target appear');
       })
       .onDisAppear((): void => {
-        hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph target disappear');
+        morphLog('target disappear');
       })
       .onAreaChange((_oldArea: Area, newArea: Area): void => {
-        hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
-          'RzdSearchMorph target x=%{public}f y=%{public}f w=%{public}f h=%{public}f',
-          newArea.globalPosition.x as number, newArea.globalPosition.y as number,
-          Number(newArea.width), Number(newArea.height));
+        morphLog(`target rect x=${(newArea.globalPosition.x as number).toFixed(1)} ` +
+          `y=${(newArea.globalPosition.y as number).toFixed(1)} ` +
+          `w=${Number(newArea.width).toFixed(1)} h=${Number(newArea.height).toFixed(1)}`);
       })
   }
 

@@ -1,4 +1,10 @@
-import { Logger, SearchGlassModifier } from 'musicbasic';
+import { appendPlayLog, Logger, SearchGlassModifier } from 'musicbasic';
+
+/** 一镜到底诊断：同时写 HiLog 与**应用内运行日志**（设置→运行日志，无设备时只能靠它取证）。 */
+function morphLog(message: string): void {
+  appendPlayLog('[RzdSearchMorph] ' + message);
+  Logger.info('RzdSearchMorph', message);
+}
 
 const SEARCH_FIELD_H: number = 40;
 // wujie126.pa 113552–113587 (Tokens export slot 0x10).
@@ -43,18 +49,18 @@ export struct HomeSearchRow {
           .geometryTransition(SEARCH_GEO_ID, { follow: true })
           // 诊断用：源节点在 push/pop 时是"保留"还是"重建"——退出没动画的关键判据。
           .onAppear((): void => {
-            Logger.info('RzdSearchMorph', 'source appear');
+            morphLog('source appear');
           })
           .onDisAppear((): void => {
-            Logger.info('RzdSearchMorph', 'source disappear');
+            morphLog('source disappear');
           })
           .onAreaChange((_oldArea: Area, area: Area): void => {
-            Logger.info('RzdSearchMorph',
-              `source rect x=${area.globalPosition.x} y=${area.globalPosition.y} w=${area.width} h=${area.height}`);
+            morphLog(`source rect x=${area.globalPosition.x} y=${area.globalPosition.y} ` +
+              `w=${area.width} h=${area.height}`);
           })
           .onTouch((event: TouchEvent): void => {
             if (event.type === TouchType.Up) {
-              Logger.info('RzdSearchHome', 'tap-open');
+              morphLog('source tap-open');
               this.onOpenSearch();
             }
           })
