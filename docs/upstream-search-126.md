@@ -158,15 +158,157 @@ Row() {                                     // @12*#  width('100%') height('100%
 
 `design` 的 `Tokens` 模块是**纯常量模块**（`func_main_0` 113551-113763 只做 `stmodulevar`，
 模块内没有函数读它们），ark_disasm 输出里**没有 module var 槽位 → 名字的映射表**，
-所以下列 vp 数值**没有从字节码取到确切值**，只能给候选集合：
+所以下列 vp 数值**没有从字节码取到确切值**，只能给候选集合。
 
 | Token | 用途 | 候选（来自 Tokens `stmodulevar` 数值集合） |
 | --- | --- | --- |
-| `SEARCH_FIELD_H` | 搜索框/玻璃胶囊高度 | 40 / 44 |
-| `PAGE_H` | 页面左右留白 | 16（断点更大时另有值；本仓 `BreakpointType(16,24,32,32)` 同源） |
-| `FIELD_GAP` | 搜索行下边距 | 12 / 14 |
-| `RECOGNIZE_GAP` | 搜索框与识曲按钮间距 | 8 / 12 |
-| `RECOGNIZE_BTN_W` | 识曲胶囊宽度 | 与高同（方形胶囊）或在 40~56 之间 |
-| `CONTENT_TOP` | 内容顶部内边距 | 148（候选集合里唯一的大值） |
+| `SEARCH_FIELD_H` | 首页搜索框/玻璃胶囊高度 | **40**（§8 已核：搜索页玻璃胶囊 = 40，两侧框同源） |
+| `PAGE_H` | 页面左右留白 | 16（`Tokens` 里 16 出现两次；本仓 `BreakpointType(16,24,32,32)` 同源） |
+| `FIELD_GAP` | 搜索行下边距 | 12 / 14（**未取证**） |
+| `RECOGNIZE_GAP` | 首页搜索框与识曲胶囊间距 | **10**（§11 已核，HomeTab 局部常量） |
+| `RECOGNIZE_BTN_W`（首页识曲胶囊宽） | **= `SEARCH_FIELD_H`**（方形胶囊） | 同 slot 13 = `ldexternalmodulevar …SEARCH_FIELD_H`（508101-508105） |
+| `RECOGNIZE_ICON_SIZE` | **24** | 同 slot 14 |
+| `CONTENT_TOP` | 内容顶部内边距 | **未取证**（候选 148） |
 
-实现时按本仓既有断点常量取值，并把它们收敛成**单个命名常量**，后续取值确定时只改一处。
+取数方法见 `docs/reverse-toolkit.md` §3（`func_main_0` 的 `ldai → stlexvar` + 方法体
+`ldlexvar + throw.undefinedifholewithname` 两次扫描）。`Tokens` 这类**纯 export const 模块取不到值**。
+
+补充（`HomeTab.func_main_0` 508095-508214 原样读出）：
+
+```ets
+const SHOW_HERO_CARD = false;
+const RECOGNIZE_GAP = 10;
+const RECOGNIZE_BTN_W = SEARCH_FIELD_H;      // ← 方形胶囊，别再当 10 用
+const RECOGNIZE_ICON_SIZE = 24;
+const HERO_COVER = 90;
+const HERO_PAD = 10;
+const HERO_CARD_H = HERO_PAD * 2 + HERO_COVER;   // = 110
+const HERO_BTN_SIZE = 40, HERO_BTN_BOX = 46, HERO_BTN_MR = 6;
+const SEARCH_PAGE_TRANSITION = TransitionEffect.asymmetric(
+  TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.Friction }),
+  TransitionEffect.OPACITY.animation({ duration: 120, curve: Curve.Sharp }));
+const HOME_BRANCH_TRANSITION = TransitionEffect.asymmetric(
+  TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.Friction }),
+  TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -56 }))
+    .animation({ duration: 120, curve: Curve.Sharp }));
+```
+
+⚠️ 这个 slot 的教训：我的第一个解码脚本不认 `ldexternalmodulevar`，把
+`RECOGNIZE_BTN_W = SEARCH_FIELD_H` 误读成 `10`。**任何“取到的值”都要回头看一遍原始几行字节码**。
+
+
+## 8. 搜索页本体（`SearchPageNew`）的结构 —— 上一版我们做错的地方
+
+`SearchPageNew.initialRender`（579425 区段的 extract 行 5349-5385；原 `.pa` 584733）：
+
+```
+HdsNavigation(this.nav) {              // @2a*#
+  If (this.wide()) { 两列 columnList }  // @2a*^1*#   （宽屏）
+  Else            { 单列 … }           // @2a*^1*#^1
+}
+```
+
+`HdsNavigation` 属性闭包 `@2a*#`（extract 17090-17233）原文顺序：
+
+```ets
+.titleBar({
+  avoidLayoutSafeArea: true,
+  enableComponentSafeArea: true,
+  content: {
+    stackBuilder: () => this.searchBar(),                  // ★ 搜索框整行在标题栏里
+    bottomBuilder: {
+      builder: () => this.typeBar(),                        // ★ 综合/单曲/… 类型栏在标题栏底栏
+      height: this.wide() ? undefined : TYPE_BAR_H,          // TYPE_BAR_H = 40（已核）
+      showType: BottomBuilderShowType.DIRECTLY_SHOW
+    }
+  },
+  style: immersiveTitleBarStyle(this.uiDark())
+})
+.titleMode(HdsNavigationTitleMode.MINI)
+.mode(NavigationMode.Stack)
+.hideBackButton(true)
+.bindToScrollable(this.wide() ? this.scrollersWide : this.scrollersNarrow)
+.ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+```
+
+`searchBar()`（586014）→ 属性闭包 `@8*#` / `@8*#^1` / `@8*#^2` / `@8*#^3` / `@8*#^4`
+（extract 17613-17896）：
+
+```ets
+Row({ space: SEARCH_ROW_GAP }) {           // =10
+  //  width('100%')  height(SEARCH_BAR_H) =56  alignItems(VerticalAlign.Center)
+  //  padding({ left: PAGE_H + pageSideExtraOf(winWVp, PAGE_H),
+  //            right: PAGE_H + pageSideExtraOf(winWVp, PAGE_H) })
+  MaterialGlass({ fixedH: SEARCH_GLASS_H }) { this.backButton() }        // =40   ← 返回玻璃胶囊
+  __Common__().layoutWeight(1) {
+    MaterialGlass({ fixedH: SEARCH_GLASS_H }) { this.searchField() }     // 搜索框玻璃胶囊
+  }
+  MaterialGlass({ fixedH: SEARCH_GLASS_H }) { this.cancel() }            // 取消玻璃胶囊
+}
+```
+
+`searchField()`（586119）→ 属性闭包 `@b*#`（extract 18189-18305）原文顺序：
+
+```ets
+Search({ value: this.keyword(), placeholder: SEARCH_PLACEHOLDER, controller: this.searchCtl })
+  .id('searchField')
+  .attributeModifier(searchFieldStyleOnGlassOf(this.uiDark()))   // §4 那套样式
+  .layoutWeight(1)
+  .geometryTransition(SEARCH_GEO_ID, { follow: true })           // ★ 一镜到底这一端
+  .responseRegion({ x: 0, y: -4, width: '100%', height: HIT })    // 扩大点击区
+  .onFocus(...)  .onBlur(...)  .onChange(...)  .onSubmit(...)
+```
+
+⇒ **上一轮的错**：把首页那侧挂在"内容流里的自绘 header + 我们自己的搜索页（内容里的自绘搜索条）"上，
+搜索页那侧根本没有"标题栏 stackBuilder 里的原生 Search"这个结构，两端几何/宿主都对不上，
+`geometryTransition` 自然没有效果。
+
+## 9. 首页"上滑后标题栏出现搜索按钮" —— 机制已找到
+
+1. 首页 `List` 挂了 `onDidScroll`（501261-501268），回调 `@13*^1*#^1`（503127-503152）：
+
+   ```ets
+   const y = this.scroller.currentOffset().yOffset;
+   const shown = y > SEARCH_FIELD_H / 2;          // ★ 阈值 = 搜索框高度的一半（40/2 = 20vp）
+   if (this.titleSearchShown !== shown) {
+     this.titleSearchShown = shown;
+   }
+   ```
+2. 标题栏 `menu` = `this.titleSearchMenu()`（501026-501029）。`titleSearchMenu`（500067-500219）逻辑
+   （已按 §4 的取反修正复核过）：
+
+   ```ets
+   if (this.wideHead()) { /* 宽屏：恒定出菜单 */ }
+   else if (!(this.compact() || this.titleSearchShown())) { return undefined; }
+   // ⇒ 手机竖屏：静止时没有菜单；滚过 SEARCH_FIELD_H/2 之后才出现 [搜索, 识曲] 两个图标
+   ```
+   菜单内容：两个 `SymbolGlyphModifier`（`fontSize = 22`，`fontColor = pal.label`），
+   符号资源 id `125831500`（放大镜）与 `125831884`（识曲），各自的 `action` 分别走
+   `@1*#action`（→ `openSearch()`）与 `@1*#action^1`。
+3. 从搜索页回来时复位：`onSearchOpenFlip()`（498612-498621）= `if (searchOpen()) titleSearchShown = false;`
+4. 另外首页 `List` 还有：`cachedCount(2)`、`scrollBar(BarState.Off)`、
+   `edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })`、`width/height('100%')`、`clip(false)`、
+   `onTouch(reportFingerTouch)`（501201-501268）。
+
+## 10. 已核实的常量表（方法见 `docs/reverse-toolkit.md` §3）
+
+| 常量 | 值 | 出处 |
+| --- | --- | --- |
+| `SEARCH_BAR_H`（搜索页顶栏行高） | **56** | `SearchPageNew.func_main_0` slot 9 |
+| `SEARCH_GLASS_H`（玻璃胶囊高） | **40** | 同 slot 10 |
+| `SEARCH_ROW_GAP`（三块之间的间距） | **10** | 同 slot 8 |
+| `TYPE_BAR_H`（类型栏高） | **40** | 同 slot 15 |
+| `RECOGNIZE_GAP`（首页搜索框↔识曲） | **10** | `HomeTab.func_main_0` slot 15 |
+| `RECOGNIZE_ICON_SIZE` | **24** | 同 slot 14 |
+| `HERO_BTN_SIZE` / `HERO_BTN_BOX` / `HERO_BTN_MR` | 40 / 46 / 6 | 同 slot 8/9/10 |
+| `SHOW_HERO_CARD` | false | 同 slot 2 |
+| 首页 `List` 的 `SEARCH_PAGE_TRANSITION` / `HOME_BRANCH_TRANSITION` | 对象（过渡参数） | 同 slot 11/12 |
+
+## 11. 待办（下一步要照搬的）
+
+1. 搜索页整页结构按 §8 重排（标题栏 stackBuilder = 搜索行；底栏 = 类型栏）。
+2. 首页 §9 的"滚动阈值 → 标题栏搜索/识曲图标"。
+3. 仍缺：`FIELD_GAP`、`RECOGNIZE_BTN_W`、`CONTENT_TOP`、`PAGE_H`（大断点值）——
+   按 `reverse-toolkit.md` §3 继续取证（HomeTab 的 `RECOGNIZE_BTN_W` 值走 `lda vN` 转存，
+   需把 `func_main_0` 里对应 `sta vN` 之前的 `ldai` 也跟出来）。
+
