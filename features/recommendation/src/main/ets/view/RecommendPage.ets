@@ -42,7 +42,6 @@ import {
   buildTitleMaterial
 } from 'musicbasic';
 import { AccountChangedState, PlayerConstants } from 'player';
-import { OnlineSearchPage } from 'setting';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { RecommendViewModel } from '../viewmodel/RecommendViewModel';
 import { CategoryContentSection } from './CategoryContentSection';
@@ -63,16 +62,6 @@ import { HomeSearchRow } from './HomeSearchRow';
 const HOME_SCROLL_RESTORE_MAX_FRAMES: number = 30;
 /** 判定"补到位"的容差（vp）：小于它就认为已经在目标位置了。 */
 const HOME_SCROLL_RESTORE_EPS_VP: number = 1;
-
-const SEARCH_PAGE_TRANSITION: TransitionEffect = TransitionEffect.asymmetric(
-  TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.Friction }),
-  TransitionEffect.OPACITY.animation({ duration: 120, curve: Curve.Sharp })
-);
-const HOME_BRANCH_TRANSITION: TransitionEffect = TransitionEffect.asymmetric(
-  TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.Friction }),
-  TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -56 }))
-    .animation({ duration: 120, curve: Curve.Sharp })
-);
 
 @ComponentV2
 export struct RecommendPage {
@@ -202,15 +191,17 @@ export struct RecommendPage {
    */
   @Local chipStickyActive: boolean = false;
   @Local titleSearchShown: boolean = false;
-  @Local searchOpen: boolean = false;
 
-  @Monitor('searchOpen')
-  onSearchOpenChanged(): void {
-    if (this.titleSearchShown) {
-      this.titleSearchShown = false;
-    }
-    Logger.info('RzdSearchMorph', `home search visibility reset searchOpen=${this.searchOpen}`);
-  }
+  /**
+   * 打开搜索页（由壳层 `Index` 以「页内分支」渲染真正的搜索页）。
+   *
+   * ★ 结构说明：上游无界不是路由推页，而是 `HomeTab` 里
+   *   `If (searchOpen) { 搜索页分支 } else { 首页分支 }`（wujie126.pa 507578-507611）。
+   *   本仓把这条分支放在**壳层**（`Index.ets` 的 `homeSearchOpen`），首页只负责发起，
+   *   这样既能让两端 `Search` 同一帧并存、走 `geometryTransition` 一镜到底，
+   *   又不用在本页里挂搜索页（上一版这么做会让点击直接闪退）。
+   */
+  @Event onOpenSearch: () => void = (): void => {};
   /**
    * 分类 Tab 行**在滚动内容里的顶边**（vp）；0 = 还没量到（此时不判吸顶）。
    *
@@ -683,35 +674,18 @@ export struct RecommendPage {
     this.recommendViewModel.load();
   }
 
-  /** Switch both geometry endpoints within the same conditional rendering update. */
+  /**
+   * 首页搜索入口：先复位标题栏那个「滚动后才出现」的搜索图标，再把打开动作交给壳层。
+   *
+   * 复位口径照上游 `onSearchOpenFlip()`：`if (searchOpen()) titleSearchShown = false;`
+   * （wujie126.pa 498612-498621）。
+   */
   private openSearch(): void {
-    if (this.searchOpen) {
-      return;
+    if (this.titleSearchShown) {
+      this.titleSearchShown = false;
     }
-    Logger.info('RzdSearchMorph', 'branch=open geometry=start');
-    this.getUIContext().animateTo({
-      curve: curves.interpolatingSpring(0, 1, 342, 38),
-      onFinish: (): void => {
-        Logger.info('RzdSearchMorph', `branch=open geometry=finish searchOpen=${this.searchOpen}`);
-      }
-    }, (): void => {
-      this.searchOpen = true;
-    });
-  }
-
-  private closeSearch(): void {
-    if (!this.searchOpen) {
-      return;
-    }
-    Logger.info('RzdSearchMorph', 'branch=close geometry=start');
-    this.getUIContext().animateTo({
-      curve: curves.interpolatingSpring(0, 1, 342, 38),
-      onFinish: (): void => {
-        Logger.info('RzdSearchMorph', `branch=close geometry=finish searchOpen=${this.searchOpen}`);
-      }
-    }, (): void => {
-      this.searchOpen = false;
-    });
+    Logger.info('RzdSearchMorph', 'step=home-open request');
+    this.onOpenSearch();
   }
 
   /** HDS title bar with system material and gradient blur. */
@@ -996,38 +970,14 @@ export struct RecommendPage {
       .onVisibleAreaChange([0.0], (isVisible: boolean, _ratio: number): void => {
         this.onHomeVisibleChanged(isVisible);
       })
-      .transition(HOME_BRANCH_TRANSITION)
   }
 
   build() {
     HdsNavDestination() {
-      if (this.searchOpen) {
-        Column() {
-          OnlineSearchPage({
-            inlineMode: true,
-            onClosed: (): void => {
-              this.closeSearch();
-            }
-          })
-        }
-        .width(StyleConstants.FULL_WIDTH)
-        .height(StyleConstants.FULL_HEIGHT)
-        .transition(SEARCH_PAGE_TRANSITION)
-      } else {
-        this.HomeBranch()
-      }
+      this.HomeBranch()
     }
-    .onBackPressed((): boolean => {
-      if (guardPlayerBack('RecommendPage')) {
-        return true;
-      }
-      if (this.searchOpen) {
-        this.closeSearch();
-        return true;
-      }
-      return false;
-    })
-    .hideTitleBar(this.searchOpen)
+    .onBackPressed((): boolean => guardPlayerBack('RecommendPage'))
+    .hideTitleBar(false)
     .hideBackButton(true)
     .titleBar(this.getTitleBar())
     .titleMode(HdsNavDestinationTitleMode.MINI)

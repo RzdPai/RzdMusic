@@ -8,7 +8,6 @@
   "dependencies": {
     "musicbasic": "file:../../common/musicbasic",
     "player": "file:../player",
-    "playlist": "file:../playlist",
-    "setting": "file:../setting"
+    "playlist": "file:../playlist"
   }
 }

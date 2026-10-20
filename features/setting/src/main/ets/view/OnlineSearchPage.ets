@@ -549,6 +549,8 @@ export struct OnlineSearchPage {
   }
 
   aboutToAppear(): void {
+    MusicStoreService.getInstance().appendRuntimeDiagnostic(
+      `step=inline-aboutToAppear inline=${this.inlineMode}`);
     this.refreshContentPaddingTop();
     this.searchHistory = this.store.getSearchHistory();
     this.restoreSearchSource();
@@ -1512,7 +1514,9 @@ export struct OnlineSearchPage {
       .onClick((): void => {
         this.showSources = true;
       })
-      .bindMenu($$this.showSources, this.SourceMenuBuilder(), {
+      // 上游 SearchPageNew 597928 就是 `bindMenu(showSources, elements, {onDisappear})`，没有 `$$`。
+      // `$$` 只对少数内置两向绑定参数保证生效，这里跟上游保持一致，避免运行时行为不确定。
+      .bindMenu(this.showSources, this.SourceMenuBuilder(), {
         onDisappear: (): void => {
           this.showSources = false;
         }
@@ -2378,6 +2382,10 @@ export struct OnlineSearchPage {
     .width('100%')
     .height('100%')
     .backgroundColor($r('app.color.background_secondary'))
+    .onAppear((): void => {
+      MusicStoreService.getInstance().appendRuntimeDiagnostic('step=inline-root-built');
+      hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph step=inline-root-built');
+    })
     .onAreaChange((_oldArea: Area, area: Area): void => {
       const top: number = area.globalPosition.y as number;
       if (Math.abs(top - this.inlineRootTopVp) > 0.5) {

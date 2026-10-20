@@ -61,8 +61,8 @@ export struct SourceChip {
   build() {
     Row({ space: 6 }) {
       Circle()
-        .width('10vp')
-        .height('10vp')
+        .width(10)
+        .height(10)
         .fill(Color.Transparent)
         .borderRadius(5)
         .clip(true)
@@ -71,7 +71,7 @@ export struct SourceChip {
           colors: [[this.gradientStart(), 0], [this.gradientEnd(), 1]]
         })
       Text(this.sourceLabel())
-        .fontSize('14fp')
+        .fontSize(14)
         .fontColor($r('sys.color.font_primary'))
         .maxLines(1)
     }
