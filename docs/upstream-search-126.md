@@ -244,7 +244,7 @@ Row({ space: SEARCH_ROW_GAP }) {           // =10
   __Common__().layoutWeight(1) {
     MaterialGlass({ fixedH: SEARCH_GLASS_H }) { this.searchField() }     // 搜索框玻璃胶囊
   }
-  MaterialGlass({ fixedH: SEARCH_GLASS_H }) { this.cancel() }            // 取消玻璃胶囊
+  MaterialGlass({ fixedH: SEARCH_GLASS_H }) { this.sourcePill() }        // 音源胶囊（纠正旧版取消误读）
 }
 ```
 

@@ -24,6 +24,7 @@ import { AlbumInfo, LXQualityOption, LXSearchSong, LXSearchResult, SingerInfo, l
 import type { SearchPlaylistInfo, SearchPlaylistSong } from 'player';
 import { sourceName } from 'player';
 import { SongMoreMenu } from 'playlist';
+import { SourceChip } from './SourceChip';
 
 /** 日志域与标签（真机排查：`hdc shell hilog | findstr RzdSearchPage`）。 */
 const SEARCH_LOG_DOMAIN: number = 0x0000;
@@ -183,7 +184,10 @@ struct SongRowItem {
  * Online multi-source music search page (routed from the home top bar search entry).
  */
 @ComponentV2
-struct OnlineSearchPage {
+export struct OnlineSearchPage {
+  @Param inlineMode: boolean = false;
+  @Event onClosed: () => void = (): void => {};
+  @Local inlineRootTopVp: number = 0;
   /** Window width breakpoint for responsive result columns. */
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
   /** Initial search query supplied by the route param (e.g. singer name). */
@@ -221,6 +225,9 @@ struct OnlineSearchPage {
   ];
   /** Index of the selected source in {@link sourceSelectOptions}; 0 means all sources. */
   @Local selectedSourceIndex: number = 0;
+  @Local searchSource: string = 'all';
+  @Local showSources: boolean = false;
+  private readonly sourceMenuIds: string[] = ['kw', 'kg', 'tx', 'wy', 'mg', 'all'];
   /** Display text of the selected source on the dropdown button. */
   @Local selectedSourceText: string = '全部';
   private readonly sourceSelectOptions: SelectOption[] = [
@@ -318,8 +325,12 @@ struct OnlineSearchPage {
     for (let i: number = 0; i < this.sources.length; i++) {
       this.sources[i].checked = (semanticIndex === 0) || (i === semanticIndex - 1);
     }
-    this.store.setSearchSource(semanticIndex === 0 ? 'all' : this.sources[semanticIndex - 1].id);
-    if (this.query.trim().length > 0 && !this.searching) {
+    this.searchSource = semanticIndex === 0 ? 'all' : this.sources[semanticIndex - 1].id;
+    this.showSources = false;
+    this.store.setSearchSource(this.searchSource);
+    hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'source-selected source=%{public}s searching=%{public}s',
+      this.searchSource, String(this.searching));
+    if (this.query.trim().length > 0) {
       void this.doSearch();
     }
   }
@@ -566,6 +577,7 @@ struct OnlineSearchPage {
       }
     }
     this.selectedSourceIndex = index;
+    this.searchSource = index === 0 ? 'all' : this.sources[index - 1].id;
     this.selectedSourceText = index === 0 ? '全部' : this.sourceSelectOptions[index].value as string;
     for (let i: number = 0; i < this.sources.length; i++) {
       this.sources[i].checked = (index === 0) || (i === index - 1);
@@ -730,7 +742,40 @@ struct OnlineSearchPage {
     void this.doSearch();
   }
 
+  private searchRequestRunning: boolean = false;
+  private searchRequestQueued: boolean = false;
+  private searchDisposed: boolean = false;
+
+  /** Serialize changes so the latest selected source always receives a fresh result pass. */
   private async doSearch(): Promise<void> {
+    this.searchRequestQueued = true;
+    if (this.searchRequestRunning || this.searchDisposed) {
+      return;
+    }
+    this.searchRequestRunning = true;
+    try {
+      while (this.searchRequestQueued && !this.searchDisposed) {
+        this.searchRequestQueued = false;
+        hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
+          'RzdSearchSource request start source=%{public}s', this.currentSuggestSource());
+        await this.doSearchOnce();
+        hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
+          'RzdSearchSource request end queued=%{public}s', String(this.searchRequestQueued));
+      }
+    } finally {
+      this.searchRequestRunning = false;
+      this.searching = false;
+    }
+  }
+
+  aboutToDisappear(): void {
+    this.searchDisposed = true;
+    this.searchRequestQueued = false;
+    this.hideSuggest();
+    this.appState.selectionActive = false;
+  }
+
+  private async doSearchOnce(): Promise<void> {
     // ★ 2026-10-20（用户：「点击词条跳转搜索时还会显示联想词」）：真因是这里只把
     //   `showSuggest` 置 false、**没清 280ms 防抖定时器**，定时器一到又把联想层打开。
     //   `hideSuggest()` 现在会一起 clearTimeout + `suggestSeq++`，所以这里统一走它
@@ -1414,16 +1459,13 @@ struct OnlineSearchPage {
     this.searchClosing = true;
     this.hideSuggest();
     this.getUIContext().getFocusController().clearFocus();
-    hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph close start');
-    this.getUIContext().animateTo({
-      curve: curves.interpolatingSpring(0, 1, 342, 38),
-      onFinish: (): void => {
-        this.searchClosing = false;
-        hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph close end');
-      }
-    }, (): void => {
-      this.pageStack.pop(false);
-    });
+    hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
+      'RzdSearchMorph close request inline=%{public}s', String(this.inlineMode));
+    if (this.inlineMode) {
+      this.onClosed();
+      return;
+    }
+    this.pageStack.pop();
   }
 
   private searchSideVp(): number {
@@ -1461,15 +1503,19 @@ struct OnlineSearchPage {
       .attributeModifier(new SearchGlassModifier())
 
       Stack() {
-        Text('取消')
-          .fontSize($r('sys.float.Body_M'))
-          .fontColor($r('sys.color.font_primary'))
-          .padding({ left: 14, right: 14 })
+        SourceChip({ source: this.searchSource })
       }
       .height(40)
+      .padding({ left: 12, right: 12 })
       .attributeModifier(new SearchGlassModifier())
+      .accessibilityText('选择搜索音源，当前' + (this.searchSource === 'all' ? '聚合' : this.selectedSourceText))
       .onClick((): void => {
-        this.closeSearch();
+        this.showSources = true;
+      })
+      .bindMenu($$this.showSources, this.SourceMenuBuilder(), {
+        onDisappear: (): void => {
+          this.showSources = false;
+        }
       })
     }
     .width('100%')
@@ -1478,7 +1524,13 @@ struct OnlineSearchPage {
     .alignItems(VerticalAlign.Center)
     .onAreaChange((_oldArea: Area, newArea: Area): void => {
       this.titleWidthVp = Number(newArea.width);
-      this.searchRowBottomVp = (newArea.globalPosition.y as number) + Number(newArea.height);
+      const top: number = newArea.globalPosition.y as number;
+      const height: number = Number(newArea.height);
+      this.searchRowBottomVp = top + height;
+      const status: number = WindowUtil.getInstance().resolveStatusBarTopVp();
+      hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
+        'RzdSearchTitleMeasure mode=%{public}s rowTop=%{public}f rowBottom=%{public}f height=%{public}f status=%{public}f deltaTop=%{public}f expectedBottom=%{public}f',
+        this.inlineMode ? 'inline' : 'route', top, top + height, height, status, top - status, status + 56);
       this.refreshContentPaddingTop();
     })
   }
@@ -1509,20 +1561,6 @@ struct OnlineSearchPage {
               this.selectTab(idx);
             })
         }, (label: string) => 'findtab-' + label)
-        // Local business extension: keep source selection outside the shared Search geometry.
-        Row({ space: 4 }) {
-          Text(this.sourceOptionsForMode()[this.displaySourceIndex()].value as string)
-            .fontSize(14)
-            .fontColor($r('sys.color.font_secondary'))
-            .maxLines(1)
-          SymbolGlyph($r('sys.symbol.chevron_down'))
-            .fontSize(12)
-            .fontColor([$r('sys.color.font_secondary')])
-        }
-        .height(40)
-        .padding({ left: 6, right: 6 })
-        .accessibilityText('选择搜索音源，当前' + this.selectedSourceText)
-        .bindMenu(this.SourceMenuBuilder())
       }
       .height('100%')
       .padding({ left: this.searchSideVp(), right: this.searchSideVp() })
@@ -1682,7 +1720,6 @@ struct OnlineSearchPage {
       })
       .layoutWeight(1)
       .geometryTransition('wanting_search_field', { follow: true })
-      .transition(TransitionEffect.OPACITY)
       .responseRegion({ x: 0, y: -4, width: '100%', height: 40 })
       .onFocus((): void => {
         hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph target focus');
@@ -1718,27 +1755,24 @@ struct OnlineSearchPage {
       })
   }
 
-  /** 音源下拉菜单：菜单项文字居中、整体宽度贴合内容（替代系统 Select 的宽菜单）。 */
+  /** Fixed source menu order; semantic source indices remain 0=all, 1..5=kw..mg. */
   @Builder
   private SourceMenuBuilder() {
     Column({ space: 2 }) {
-      ForEach(this.sourceOptionsForMode(), (opt: SelectOption, idx: number) => {
-        Text(opt.value as string)
-          .fontSize(14)
-          .fontWeight(FontWeight.Regular)
-          .textAlign(TextAlign.Center)
-          .width(88)
-          .padding({ top: 9, bottom: 9, left: 16, right: 16 })
-          .borderRadius(10)
-          .fontColor(this.displaySourceIndex() === idx ? $r('sys.color.brand') :
-            $r('sys.color.font_primary'))
-          .backgroundColor(this.displaySourceIndex() === idx ? $r('sys.color.comp_background_tertiary') :
-            Color.Transparent)
-          .onClick(() => {
-            const semantic: number = (this.searchMode === 2 || this.searchMode === 3) ? idx + 1 : idx;
-            this.applySourceSelection(semantic);
-          })
-      }, (opt: SelectOption) => opt.value as string)
+      ForEach(this.sourceMenuIds, (source: string, idx: number) => {
+        Row() {
+          SourceChip({ source: source, label: source === 'all' ? '聚合搜索' : '' })
+        }
+        .width(128)
+        .height(40)
+        .padding({ left: 12, right: 12 })
+        .borderRadius(10)
+        .backgroundColor(this.searchSource === source ? $r('sys.color.comp_background_tertiary') :
+          Color.Transparent)
+        .onClick((): void => {
+          this.applySourceSelection(source === 'all' ? 0 : idx + 1);
+        })
+      }, (source: string) => source)
     }
     .padding(6)
   }
@@ -1847,8 +1881,7 @@ struct OnlineSearchPage {
             }
           }
         },
-        avoidLayoutSafeArea: true,
-        enableComponentSafeArea: true,
+        avoidLayoutSafeArea: false,
         content: {
           stackBuilder: (): void => {
             this.searchRow()
@@ -1931,8 +1964,8 @@ struct OnlineSearchPage {
     .padding({ left: 16, right: 16, top: 12, bottom: 12 })
   }
 
-  build() {
-    HdsNavDestination() {
+  @Builder
+  private searchContent() {
       Column() {
         // ★ 2026-10-20 第六轮：搜索框 + 页签回到 **HDS 标题栏的 bottomBuilder**（见
         //   `getSearchTitleBar()`），页面主体只剩列表 ⇒ 顶部让位/状态栏延伸全由 HDS + 
@@ -2167,7 +2200,7 @@ struct OnlineSearchPage {
           //    歌曲行本身是「封面 + 标题/歌手 + 来源/时长」的整行卡片，铺成多栏会把
           //    文字挤窄、行与行长度还参差不齐，看起来就是"文字被拉伸对齐了"。
           //    搜索结果统一单栏、左对齐。
-          .contentStartOffset(this.contentPaddingTop)
+          .contentStartOffset(this.inlineMode ? 0 : this.contentPaddingTop)
           .padding({
             left: 12,
             right: 12,
@@ -2314,8 +2347,53 @@ struct OnlineSearchPage {
       })
       // 页面主体从屏幕顶起排，让位由 `List.contentStartOffset(contentPaddingTop)` 负责
       .padding({ top: 0 })
+      .bindSheet(this.showQualitySheet, this.BatchQualitySheet(), {
+        detents: [SheetSize.FIT_CONTENT],
+        dragBar: true,
+        showClose: true,
+        backgroundColor: $r('app.color.background_secondary'),
+        onWillDismiss: (action: DismissSheetAction): void => {
+          action.dismiss();
+          this.showQualitySheet = false;
+        }
+      })
+  }
+
+  private inlineTopInsetVp(): number {
+    return Math.max(0, WindowUtil.getInstance().resolveStatusBarTopVp() - this.inlineRootTopVp);
+  }
+
+  @Builder
+  private inlineContent() {
+    Column() {
+      Column().height(this.inlineTopInsetVp())
+      this.searchRow()
+      this.typeBar()
+      Column() {
+        this.searchContent()
+      }
+      .layoutWeight(1)
+      .width('100%')
     }
-    .transition(TransitionEffect.OPACITY)
+    .width('100%')
+    .height('100%')
+    .backgroundColor($r('app.color.background_secondary'))
+    .onAreaChange((_oldArea: Area, area: Area): void => {
+      const top: number = area.globalPosition.y as number;
+      if (Math.abs(top - this.inlineRootTopVp) > 0.5) {
+        this.inlineRootTopVp = top;
+      }
+      hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
+        'RzdSearchTitleMeasure inlineRootTop=%{public}f status=%{public}f spacer=%{public}f rowHeight=56',
+        top, WindowUtil.getInstance().resolveStatusBarTopVp(), this.inlineTopInsetVp());
+    })
+  }
+
+  @Builder
+  private routedContent() {
+    HdsNavDestination() {
+      this.searchContent()
+    }
     .onBackPressed((): boolean => {
       this.closeSearch();
       return true;
@@ -2352,16 +2430,14 @@ struct OnlineSearchPage {
     //   里的 `titleBarTopHeight`（= 状态栏 + 56 = 94）正好落在 94 ✔。
     //   ⚠️ 旧注释里"根节点带 TOP 会把标题/搜索按钮顶进状态栏 / 只能留 BOTTOM"那句**是错的**，已作废。
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
-    .bindSheet(this.showQualitySheet, this.BatchQualitySheet(), {
-      detents: [SheetSize.FIT_CONTENT],
-      dragBar: true,
-      showClose: true,
-      backgroundColor: $r('app.color.background_secondary'),
-      onWillDismiss: (action: DismissSheetAction) => {
-        action.dismiss();
-        this.showQualitySheet = false;
-      }
-    })
+  }
+
+  build() {
+    if (this.inlineMode) {
+      this.inlineContent()
+    } else {
+      this.routedContent()
+    }
   }
 }
 

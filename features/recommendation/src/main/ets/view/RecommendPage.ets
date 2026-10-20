@@ -42,6 +42,7 @@ import {
   buildTitleMaterial
 } from 'musicbasic';
 import { AccountChangedState, PlayerConstants } from 'player';
+import { OnlineSearchPage } from 'setting';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { RecommendViewModel } from '../viewmodel/RecommendViewModel';
 import { CategoryContentSection } from './CategoryContentSection';
@@ -62,6 +63,16 @@ import { HomeSearchRow } from './HomeSearchRow';
 const HOME_SCROLL_RESTORE_MAX_FRAMES: number = 30;
 /** 判定"补到位"的容差（vp）：小于它就认为已经在目标位置了。 */
 const HOME_SCROLL_RESTORE_EPS_VP: number = 1;
+
+const SEARCH_PAGE_TRANSITION: TransitionEffect = TransitionEffect.asymmetric(
+  TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.Friction }),
+  TransitionEffect.OPACITY.animation({ duration: 120, curve: Curve.Sharp })
+);
+const HOME_BRANCH_TRANSITION: TransitionEffect = TransitionEffect.asymmetric(
+  TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.Friction }),
+  TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -56 }))
+    .animation({ duration: 120, curve: Curve.Sharp })
+);
 
 @ComponentV2
 export struct RecommendPage {
@@ -672,17 +683,34 @@ export struct RecommendPage {
     this.recommendViewModel.load();
   }
 
-  /** Routes to the online multi-source search page. */
+  /** Switch both geometry endpoints within the same conditional rendering update. */
   private openSearch(): void {
-    this.searchOpen = true;
-    Logger.info('RzdSearchMorph', `start route=${RouterUrlConstants.ONLINE_SEARCH}`);
+    if (this.searchOpen) {
+      return;
+    }
+    Logger.info('RzdSearchMorph', 'branch=open geometry=start');
     this.getUIContext().animateTo({
       curve: curves.interpolatingSpring(0, 1, 342, 38),
       onFinish: (): void => {
-        Logger.info('RzdSearchMorph', `end route=${RouterUrlConstants.ONLINE_SEARCH}`);
+        Logger.info('RzdSearchMorph', `branch=open geometry=finish searchOpen=${this.searchOpen}`);
       }
     }, (): void => {
-      this.pageIndexInfos.pushPath({ name: RouterUrlConstants.ONLINE_SEARCH }, false);
+      this.searchOpen = true;
+    });
+  }
+
+  private closeSearch(): void {
+    if (!this.searchOpen) {
+      return;
+    }
+    Logger.info('RzdSearchMorph', 'branch=close geometry=start');
+    this.getUIContext().animateTo({
+      curve: curves.interpolatingSpring(0, 1, 342, 38),
+      onFinish: (): void => {
+        Logger.info('RzdSearchMorph', `branch=close geometry=finish searchOpen=${this.searchOpen}`);
+      }
+    }, (): void => {
+      this.searchOpen = false;
     });
   }
 
@@ -804,8 +832,8 @@ export struct RecommendPage {
     return { offsetRemain: offset };
   }
 
-  build() {
-    HdsNavDestination() {
+  @Builder
+  private HomeBranch() {
       Column() {
         if (this.recommendViewModel.homeLoaded) {
           // ★ 结构**照 RzdVideo 首页**（`HomePage.ets` 的 `build()`，真机迭代过几十个 build）：
@@ -968,13 +996,38 @@ export struct RecommendPage {
       .onVisibleAreaChange([0.0], (isVisible: boolean, _ratio: number): void => {
         this.onHomeVisibleChanged(isVisible);
       })
+      .transition(HOME_BRANCH_TRANSITION)
+  }
+
+  build() {
+    HdsNavDestination() {
+      if (this.searchOpen) {
+        Column() {
+          OnlineSearchPage({
+            inlineMode: true,
+            onClosed: (): void => {
+              this.closeSearch();
+            }
+          })
+        }
+        .width(StyleConstants.FULL_WIDTH)
+        .height(StyleConstants.FULL_HEIGHT)
+        .transition(SEARCH_PAGE_TRANSITION)
+      } else {
+        this.HomeBranch()
+      }
     }
-    .onShown((): void => {
-      this.searchOpen = false;
+    .onBackPressed((): boolean => {
+      if (guardPlayerBack('RecommendPage')) {
+        return true;
+      }
+      if (this.searchOpen) {
+        this.closeSearch();
+        return true;
+      }
+      return false;
     })
-    .onBackPressed((): boolean => guardPlayerBack('RecommendPage'))
-    .transition(TransitionEffect.OPACITY)
-    .hideTitleBar(false)
+    .hideTitleBar(this.searchOpen)
     .hideBackButton(true)
     .titleBar(this.getTitleBar())
     .titleMode(HdsNavDestinationTitleMode.MINI)

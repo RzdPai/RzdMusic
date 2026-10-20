@@ -34,7 +34,6 @@ export struct HomeSearchRow {
             .focusOnTouch(false)
             .defaultFocus(false)
             .geometryTransition(SEARCH_GEO_ID, { follow: true })
-            .transition(TransitionEffect.OPACITY)
             .onAreaChange((_oldArea: Area, area: Area): void => {
               Logger.info('RzdSearchMorph',
                 `source rect x=${area.globalPosition.x} y=${area.globalPosition.y} w=${area.width} h=${area.height}`);
