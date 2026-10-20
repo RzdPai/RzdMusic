@@ -1391,6 +1391,23 @@ export struct PlaybackPage {
     } finally {
       this.isClosing = false;
     }
+    // ★★ 2026-10-20（甲方：「能动了，但大封面还在、播放条也没回来」）：
+    //   这三个开关同时控制 ① HDS 底栏/迷你条是否被顶掉 ② 壳层克隆封面是否还要画：
+    //     `hdsBarSuppressed` → Index 里 `MorphCoverClone()` / `MorphMiniBarClone()` 的渲染门 + 迷你条隐藏
+    //     `sourceBarHidden`  → 真条不画（由克隆层接管）
+    //     `miniOut`          → 迷你条出场态
+    //   只要有一条没归位，就正好是"能点了，但满屏封面还挂着 + 播放条不回来"。
+    //   `morphReset()` 里虽然也清，但它在 try 块里且条件分支多；这里**无条件**再兜一次，并打前后值。
+    const hsBefore: boolean = this.expandState.hdsBarSuppressed;
+    const srcBefore: boolean = this.expandState.sourceBarHidden;
+    const miniBefore: boolean = this.expandState.miniOut;
+    this.expandState.hdsBarSuppressed = false;
+    this.expandState.sourceBarHidden = false;
+    this.expandState.miniOut = false;
+    MusicStoreService.getInstance().appendRuntimeDiagnostic(
+      `RzdCloseState flags hs ${hsBefore ? 1 : 0}->0 src ${srcBefore ? 1 : 0}->0 mini ${miniBefore ? 1 : 0}->0 ` +
+        `drv=${this.expandState.morphSessionDriving() ? 1 : 0} ` +
+        `br=${this.expandState.morphOverlayBridging() ? 1 : 0}`);
     this.snapshotFlight = false;
     const pixmap: image.PixelMap | undefined = this.morphShrinkState().pixmap;
     this.morphShrinkState().reset();

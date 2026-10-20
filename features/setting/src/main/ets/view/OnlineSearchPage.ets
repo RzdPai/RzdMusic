@@ -820,16 +820,20 @@ export struct OnlineSearchPage {
     if (this.overview) {
       this.songs = [];
       this.singers = [];
+      this.playlists = [];
       this.albums = [];
       this.covers = {};
-      await Promise.all([this.doSongSearch(), this.doSingerSearch(), this.doAlbumSearch()]);
-      if (this.songs.length > 0 || this.singers.length > 0 || this.albums.length > 0) {
+      await Promise.all([this.doSongSearch(), this.doSingerSearch(), this.doAlbumSearch(),
+        this.doPlaylistSearch()]);
+      if (this.songs.length > 0 || this.singers.length > 0 || this.albums.length > 0 ||
+        this.playlists.length > 0) {
         this.errorMsg = '';
         this.store.addSearchHistory(this.query);
       }
       this.searching = false;
-      hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'overview songs=%{public}d singers=%{public}d albums=%{public}d',
-        this.songs.length, this.singers.length, this.albums.length);
+      hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
+        'overview songs=%{public}d singers=%{public}d albums=%{public}d playlists=%{public}d',
+        this.songs.length, this.singers.length, this.albums.length, this.playlists.length);
       return;
     }
     if (this.searchMode === 1) {
@@ -1553,6 +1557,11 @@ export struct OnlineSearchPage {
     }, 450);
   }
 
+  /** 内容首行要让开的浮层高度：状态栏 + 搜索行 56 + 类型栏 44。 */
+  private searchContentTopInsetVp(): number {
+    return WindowUtil.getInstance().resolveStatusBarTopVp() + 56 + 44;
+  }
+
   private searchSideVp(): number {
     if (this.titleWidthVp >= 840) {
       return 32;
@@ -1620,46 +1629,39 @@ export struct OnlineSearchPage {
     })
   }
 
-  /** Upstream plain type labels; retain all five local search modes and horizontal scrolling. */
+  /**
+   * 类型栏：**胶囊样式**（甲方 2026-10-20：改回我们之前的胶囊，不要上游那种纯文字+竖线）。
+   * 选中 = 主题色实心 + 反白字；未选中 = 卡片底 + 主文字色。
+   */
   @Builder
   private typeBar() {
     Scroll() {
-      // Upstream 587601–587794: plain type labels, space 10, vertical divider 14/1.
-      // Keep this app's five existing modes as a business extension.
-      Row({ space: 10 }) {
+      Row({ space: 8 }) {
         ForEach(this.tabLabels, (label: string, idx: number) => {
-          if (idx > 0) {
-            Divider()
-              .vertical(true)
-              .height(14)
-              .strokeWidth(1)
-              .color($r('sys.color.comp_divider'))
-          }
           Text(label)
             .fontSize($r('sys.float.Body_M'))
-            .fontWeight(this.currentTabIndex() === idx ? FontWeight.Bold : FontWeight.Medium)
+            .fontWeight(this.currentTabIndex() === idx ? FontWeight.Medium : FontWeight.Regular)
             .fontColor(this.currentTabIndex() === idx ?
-              $r('sys.color.font_primary') : $r('sys.color.font_secondary'))
+              $r('sys.color.font_on_primary') : $r('sys.color.font_primary'))
             .maxLines(1)
-            .padding({ top: 4, bottom: 4 })
+            .padding({ left: 16, right: 16, top: 7, bottom: 7 })
+            .borderRadius(18)
+            .backgroundColor(this.currentTabIndex() === idx ?
+              this.themeState.color : $r('app.color.background_secondary'))
             .onClick((): void => {
               this.selectTab(idx);
             })
         }, (label: string) => 'findtab-' + label)
       }
+      .padding({ left: 16, right: 16 })
       .height('100%')
-      .padding({ left: this.searchSideVp(), right: this.searchSideVp() })
       .alignItems(VerticalAlign.Center)
     }
     .scrollable(ScrollDirection.Horizontal)
     .scrollBar(BarState.Off)
     .width('100%')
-    .height(40)
+    .height(44)
     .align(Alignment.Start)
-    .onAreaChange((_oldArea: Area, newArea: Area): void => {
-      this.typeBarBottomVp = (newArea.globalPosition.y as number) + Number(newArea.height);
-      this.refreshContentPaddingTop();
-    })
   }
 
   /** 当前选中的页签下标（0 = 综合，1..4 = `searchMode` 0..3）。 */
@@ -2226,6 +2228,20 @@ export struct OnlineSearchPage {
                 }
               }
             }
+            if (this.playlists.length > 0) {
+              ListItem() {
+                this.SectionHeader('歌单', false)
+              }
+              ForEach(this.playlists.slice(0, 3), (p: SearchPlaylistInfo) => {
+                ListItem() {
+                  this.PlaylistRow(p)
+                }
+                .margin({ bottom: 12 })
+              }, (p: SearchPlaylistInfo) => 'ovw-p-' + p.source + '_' + p.id)
+              ListItem() {
+                this.MoreRow('查看更多歌单', 2)
+              }
+            }
             if (this.albums.length > 0) {
               ListItem() {
                 this.SectionHeader('专辑', false)
@@ -2313,8 +2329,8 @@ export struct OnlineSearchPage {
           //    歌曲行本身是「封面 + 标题/歌手 + 来源/时长」的整行卡片，铺成多栏会把
           //    文字挤窄、行与行长度还参差不齐，看起来就是"文字被拉伸对齐了"。
           //    搜索结果统一单栏、左对齐。
-          // 搜索行/类型栏已排在内容流里（见 `routedContent`），列表不需要额外顶部偏移。
-          .contentStartOffset(0)
+          // 内容铺到状态栏底下（可滚进去），但**首行**要让开浮层：状态栏 + 搜索行 56 + 类型栏 44。
+          .contentStartOffset(this.searchContentTopInsetVp())
           .padding({
             left: 12,
             right: 12,
@@ -2488,16 +2504,24 @@ export struct OnlineSearchPage {
     //   搜索行的**位置与外观不变**：状态栏下方 0~56，玻璃胶囊 40、间距 10、右侧音源胶囊；
     //   区别只是它不再由 HDS 标题栏承载，页面顶部也没有任何实色背板。
     NavDestination() {
-      Column() {
-        // 状态栏让位（`hideTitleBar(true)` 后没人让位，自己补）
-        Column().height(WindowUtil.getInstance().resolveStatusBarTopVp())
-        this.searchRow()
-        this.typeBar()
+      // 内容铺满整页（含状态栏区域），搜索行/类型栏**浮**在上面：
+      // 甲方 2026-10-20：「内容还是没延伸进状态栏」——列表要能滚到状态栏底下，
+      // 所以不能再用"状态栏占位 → 行 → 类型栏 → 内容"的竖排，改成 Stack 覆盖。
+      Stack({ alignContent: Alignment.TopStart }) {
         Column() {
           this.searchContent()
         }
-        .layoutWeight(1)
         .width('100%')
+        .height('100%')
+
+        Column() {
+          this.searchRow()
+          this.typeBar()
+        }
+        .width('100%')
+        // 浮层自己让状态栏：搜索行仍是 56 高（玻璃胶囊 40），位置就是状态栏正下方。
+        .padding({ top: WindowUtil.getInstance().resolveStatusBarTopVp() })
+        .backgroundColor(Color.Transparent)
       }
       .width('100%')
       .height('100%')
