@@ -65,7 +65,7 @@ import {
   MiniBarMaterialCapsule,
   PlaylistTransitionOverlay
 } from 'playlist';
-import { MinePage } from 'setting';
+import { MinePage, OnlineSearchPage } from 'setting';
 // 鏂版ā鍧楋細鏈湴闊充箰锛堝鍏ヨ澶囬煶棰戝埌娌欑锛変笌娲涢洩鍚屾瀹㈡埛绔€?
 // 鈿狅笍 hvigor 瀵?HAR 鏄?*鎸夊紩鐢ㄧ紪璇?*鐨勶細娌℃湁浠讳綍浠ｇ爜 import 瀹冧滑鏃讹紝
 //    鍗充娇宸茬櫥璁拌繘 build-profile.json5锛岃繖涓や釜妯″潡涔?*涓嶄細琚紪璇?*锛堟瀯寤虹収鏍风豢锛夈€?
@@ -394,6 +394,11 @@ struct Index {
    * 鈿狅笍 涓嶈鍐嶆嬁瀹冨幓鏀瑰簳閮ㄥ鑸殑 `barHeight` / `barFloatingStyle`锛堣瘯杩囷紝搴曟爮鐩存帴鍧忔帀锛夈€?
    */
   @Local navDepth: number = 0;
+  /**
+   * 首页搜索页是否占据「首页那支」（见 `HomeTabsPages` 里那段 if/else 结构说明）。
+   * 打开/关闭都用官方示例的弹簧包住，让两端 `Search` 的 `geometryTransition` 形变。
+   */
+  @Local homeSearchOpen: boolean = false;
   /**
    * 褰㈠彉鍏嬮殕灞傜敤鐨勬挱鏀惧櫒 VM銆?
    *
@@ -2530,6 +2535,32 @@ struct Index {
    * 棣栭〉涓嶆樉绀猴紙HDS 搴曟爮閲岀殑杩蜂綘鏉¤礋璐ｏ級锛涙鍦ㄦ挱鏀惧叏灞忛〉鎴栧浜庢壒閲忛€夋嫨妯″紡鏃朵篃涓嶆樉绀恒€?
    * @returns True 琛ㄧず鏄剧ず澹冲眰杩欐潯鎮诞杩蜂綘鏉°€?
    */
+  /**
+   * 打开/关闭首页搜索页。
+   *
+   * 弹簧参数照官方示例：`curves.interpolatingSpring(0, 1, 342, 38)`；
+   * 状态翻转必须包在 `animateTo` 里，两端的 `geometryTransition` 才会走同一条时间线。
+   */
+  private openHomeSearch(): void {
+    if (this.homeSearchOpen) {
+      return;
+    }
+    Logger.info('RzdSearchMorph', 'branch open');
+    this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, (): void => {
+      this.homeSearchOpen = true;
+    });
+  }
+
+  private closeHomeSearch(): void {
+    if (!this.homeSearchOpen) {
+      return;
+    }
+    Logger.info('RzdSearchMorph', 'branch close');
+    this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, (): void => {
+      this.homeSearchOpen = false;
+    });
+  }
+
   private shouldShowFloatingMiniBar(): boolean {
     // ★ 用户 2026-10-19：列表页多选时底部要放操作条，播放条临时隐藏（否则两条会叠）
     if (this.appState.selectionActive) {
@@ -2660,12 +2691,32 @@ struct Index {
   private HomeTabsPages() {
     TabContent() {
       Column() {
-        RecommendPage({
-          shellProvidesFloatingMiniBar: deviceInfo.distributionOSApiVersion >= 60100,
-          floatingBarExtraBottomReserveVp: this.twoRowExtraBottomVp(),
-          scrollTopCommand: this.tabScrollTopCommands[0]
-        })
-          .layoutWeight(1)
+        // ★★ 一镜到底的关键结构（2026-10-20）：**真正的 if/else 分支**。
+        //   官方示例（transitions-collection `SearchLongTakeTransitionPageOne/Two.ets`）里
+        //   源页和目标页都是同一个 Navigation 路由区的 NavDestination，push 时源节点会随页面转场消失；
+        //   而本仓首页在 `HdsNavigation` 的**导航栏内容区**（HdsTabs 的 TabContent），
+        //   push 一个路由时它根本不会消失 ⇒ 两端配不成一对，`geometryTransition` 永远不触发
+        //   （这就是前几轮"没有/生硬"的结构性原因）。
+        //   ⇒ 这里让首内容与搜索页成为同一父容器的两支：首页那支（连同它的 `Search`）被卸载，
+        //     搜索页那支的 `Search` 同时出现，两端同 id 才能接成一镜到底。
+        if (this.homeSearchOpen) {
+          OnlineSearchPage({
+            inlineMode: true,
+            onClosed: (): void => {
+              this.closeHomeSearch();
+            }
+          })
+        } else {
+          RecommendPage({
+            shellProvidesFloatingMiniBar: deviceInfo.distributionOSApiVersion >= 60100,
+            floatingBarExtraBottomReserveVp: this.twoRowExtraBottomVp(),
+            scrollTopCommand: this.tabScrollTopCommands[0],
+            onOpenSearch: (): void => {
+              this.openHomeSearch();
+            }
+          })
+            .layoutWeight(1)
+        }
       }
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)

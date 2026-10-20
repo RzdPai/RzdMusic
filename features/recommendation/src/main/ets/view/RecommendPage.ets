@@ -191,6 +191,19 @@ export struct RecommendPage {
    */
   @Local chipStickyActive: boolean = false;
   @Local titleSearchShown: boolean = false;
+
+  /**
+   * 打开搜索页。
+   *
+   * ★ 为什么是事件而不是自己 push：一镜到底要求**源节点在同一个分支里被卸载**，
+   *   官方示例（transitions-collection `SearchLongTakeTransitionPageOne/Two`）里
+   *   源页和目标页都是同一个 Navigation 路由区的 NavDestination；
+   *   而本仓首页在 `HdsNavigation` 的**导航栏内容区**（HdsTabs 的 TabContent），
+   *   push 时它不会消失 ⇒ 两端配不成一对，形变永远不触发。
+   *   ⇒ 由壳层把首页内容与搜索页做成 `if/else` 两支（见 `Index.ets` 的 `homeSearchOpen`），
+   *     首页那支连同这个 `Search` 一起卸载，搜索页那支的 `Search` 同时出现。
+   */
+  @Event onOpenSearch: () => void = (): void => {};
   /**
    * 分类 Tab 行**在滚动内容里的顶边**（vp）；0 = 还没量到（此时不判吸顶）。
    *
@@ -664,30 +677,17 @@ export struct RecommendPage {
   }
 
   /**
-   * 首页搜索入口。
+   * 首页搜索入口：复位标题栏那个「滚动后才出现」的搜索图标，然后把打开动作交给壳层分支。
    *
-   * 一镜到底的写法**照官方示例**（`transitions-collection` 的
-   * `SearchLongTakeTransition/SearchLongTakeTransitionPageOne.ets:74-81`）：
-   *
-   * ```ts
-   * this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, () => {
-   *   this.pageInfos.pushPath({ name: '...' }, false);   // ★ animated=false：关掉系统推页动画
-   * });
-   * ```
-   * 只有关掉系统转场、再用 `animateTo` 包住 push，两端的 `geometryTransition` 才会接成一镜到底；
-   * 页面本身的淡入淡出由目标页 `NavDestination.transition(TransitionEffect.OPACITY)` 负责。
-   *
-   * 顺手复位标题栏那个「滚动后才出现」的搜索图标（照上游 `onSearchOpenFlip`，
-   * wujie126.pa 498612-498621）。
+   * 复位口径照上游 `onSearchOpenFlip()`：`if (searchOpen()) titleSearchShown = false;`
+   * （wujie126.pa 498612-498621）。
    */
   private openSearch(): void {
     if (this.titleSearchShown) {
       this.titleSearchShown = false;
     }
-    Logger.info('RzdSearchMorph', `open route=${RouterUrlConstants.ONLINE_SEARCH}`);
-    this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, (): void => {
-      this.pageIndexInfos.pushPath({ name: RouterUrlConstants.ONLINE_SEARCH }, false);
-    });
+    Logger.info('RzdSearchMorph', 'home-open request');
+    this.onOpenSearch();
   }
 
   /** HDS title bar with system material and gradient blur. */

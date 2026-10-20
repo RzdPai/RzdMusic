@@ -185,6 +185,13 @@ struct SongRowItem {
  */
 @ComponentV2
 export struct OnlineSearchPage {
+  /**
+   * 内联模式：由壳层做成"首页 / 搜索页"两支之一（见 `Index.ets` 的 `homeSearchOpen`）。
+   * 内联时不再自己造 `HdsNavDestination`，而是自己排标题行 + 类型栏 + 内容。
+   */
+  @Param inlineMode: boolean = false;
+  /** 内联模式下的关闭回调（路由模式仍走 `pageStack.pop`）。 */
+  @Event onClosed: () => void = (): void => {};
   /** Window width breakpoint for responsive result columns. */
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
   /** Initial search query supplied by the route param (e.g. singer name). */
@@ -1498,7 +1505,13 @@ export struct OnlineSearchPage {
     this.searchClosing = true;
     this.hideSuggest();
     this.getUIContext().getFocusController().clearFocus();
-    hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph close request');
+    hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph close request inline=%{public}s',
+      String(this.inlineMode));
+    if (this.inlineMode) {
+      this.searchClosing = false;
+      this.onClosed();
+      return;
+    }
     this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, (): void => {
       this.searchClosing = false;
       this.pageStack.pop(false);
@@ -2253,7 +2266,7 @@ export struct OnlineSearchPage {
           //    歌曲行本身是「封面 + 标题/歌手 + 来源/时长」的整行卡片，铺成多栏会把
           //    文字挤窄、行与行长度还参差不齐，看起来就是"文字被拉伸对齐了"。
           //    搜索结果统一单栏、左对齐。
-          .contentStartOffset(this.contentPaddingTop)
+          .contentStartOffset(this.inlineMode ? 0 : this.contentPaddingTop)
           .padding({
             left: 12,
             right: 12,
@@ -2412,7 +2425,41 @@ export struct OnlineSearchPage {
       })
   }
 
+  /**
+   * 内联模式（壳层"首页 / 搜索页"两支里的搜索页那支）。
+   *
+   * 没有 `HdsNavDestination`，所以标题行、类型栏自己排：
+   * 状态栏让位 → `searchRow()`（返回 / 原生 Search / 音源胶囊）→ `typeBar()` → 内容。
+   * 顶部让位用实测窗口状态栏值；两支切换时它和首页那支是**同一个父容器**，
+   * 两端的 `Search` 才会被 `geometryTransition` 配成一对。
+   */
+  @Builder
+  private inlineContent() {
+    Column() {
+      Column().height(WindowUtil.getInstance().resolveStatusBarTopVp())
+      this.searchRow()
+      this.typeBar()
+      Column() {
+        this.searchContent()
+      }
+      .layoutWeight(1)
+      .width('100%')
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor($r('app.color.background_secondary'))
+  }
+
   build() {
+    if (this.inlineMode) {
+      this.inlineContent()
+    } else {
+      this.routedContent()
+    }
+  }
+
+  @Builder
+  private routedContent() {
     HdsNavDestination() {
       this.searchContent()
     }
