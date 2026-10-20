@@ -156,9 +156,10 @@ Row() {                                     // @12*#  width('100%') height('100%
 
 ## 7. 历史待核记录（已由 §12 纠正，不再作为当前数值结论）
 
-`design` 的 `Tokens` 模块是**纯常量模块**（`func_main_0` 113551-113763 只做 `stmodulevar`，
-模块内没有函数读它们），ark_disasm 输出里**没有 module var 槽位 → 名字的映射表**，
-所以下列 vp 数值**没有从字节码取到确切值**，只能给候选集合。
+> 本节原先写的是「纯 `export const` 模块取不到值」——**这个结论是错的**，正确做法见 §12 与
+> `docs/reverse-toolkit.md` §3：`stmodulevar` 槽位 = 模块 record 里 `LOCAL_EXPORT` 的排列顺序，
+> 因此 Tokens 的每个常量都能解出来（`PAGE_H=16`、`FIELD_GAP=16`、`CONTENT_TOP=0`、`SEARCH_FIELD_H=40`…）。
+> 下面这段只作错误留档，别再引用：
 
 | Token | 用途 | 候选（来自 Tokens `stmodulevar` 数值集合） |
 | --- | --- | --- |

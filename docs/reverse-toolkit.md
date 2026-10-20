@@ -112,10 +112,18 @@ stlexvar 0x0, 0xd             ← slot 13 = SEARCH_FIELD_H（不是我第一版�
 
 ⚠️ 两种 module 形态别混：
 - **页面/结构体文件**的 `const` 走 `newlexenv + stlexvar`（能拿到值）；
-- **纯导出常量模块**（如 `design/src/main/ets/theme/Tokens.ets`）的 `export const` 走
-  `stmodulevar`。本样本可用模块记录的 LOCAL_EXPORT 零基顺序映射，并用具名函数或另一版本反验。
-  本轮已由 12404–12456 与 113552–113593 取到 PAGE_H=16、FIELD_GAP=16、CONTENT_TOP=0；
-  旧版 11231–11283 与 98055–98097 一致。若缺少能反验的模块记录，才继续查调用点或诚实标未取证。
+- **纯导出常量模块**（如 `design/src/main/ets/theme/Tokens.ets`）的 `export const` 走 `stmodulevar`。
+  **它们的槽位 = 模块 record 里 `LOCAL_EXPORT` 的零基排列顺序**（编译器按名字排序），
+  所以照样能解：把「导出名按序」与「`func_main_0` 里 `ldai/lda.str → stmodulevar <slot>`」两条一对即可。
+  本样本已取到 `PAGE_H=16`、`FIELD_GAP=16`、`CONTENT_TOP=0`、`SEARCH_FIELD_H=40`（1.2.6 行
+  12404–12456 + 113552–113593；1.2.4 行 11231–11283 + 98055–98097 复核一致）。
+
+⚠️ **列导出名时窗口必须精确**：Tokens 的 record 前面紧挨着上一个模块（HeroPull）的两条
+`LOCAL_EXPORT`（`heroStickyTop` / `resetHeroPull`）。窗口多带这两行，整张表就**整体错位 2 格**
+（我曾因此把 `SEARCH_FIELD_H` 读成 34、把 `FIELD_GAP` 读成 44）。
+**错位自检锚点**：`D_PRESS/D_FAST/D_BASE/D_SHEET` 必须是 `110/180/300/420`，
+`EASE_IN_STR/EASE_OUT_STR` 必须是两条 `cubic-bezier(…)` 字符串，`RANK_GOLD=#FFE9A8`、
+`ROW_COVER=52` —— 对不上就是错位，别往下用。
 
 ## 4. ★ 分支条件别读反（血的教训）
 
