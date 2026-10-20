@@ -16,6 +16,10 @@
       },
       {
         "name": "ohos.permission.GET_NETWORK_INFO"
+      },
+      // 智感握姿（motion.on('operatingHandChanged')）需要的系统级权限，声明即生效。
+      {
+        "name": "ohos.permission.DETECT_GESTURE"
       }
     ],
     "abilities": [

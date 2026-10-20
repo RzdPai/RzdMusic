@@ -165,6 +165,5 @@ export { LocateFloatButton } from './src/main/ets/view/LocateFloatButton';
 export {
   buildBarBlurStyle,
   barBlurOptions,
-  pressLightEffect,
-  illuminatedEffect
+  barMaterial
 } from './src/main/ets/util/BarMaterial';

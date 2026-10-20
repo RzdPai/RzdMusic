@@ -19,7 +19,7 @@ import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import { guardPlayerBack } from 'musicbasic';
 import { AlbumRouteParam, ArtistRouteParam, BreakpointType, ThemeState, TitleBarConstants, WindowUtil, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions, HdsNavigationTitleBarOptions, HideMode, ScrollEffectType, TextStyleMode, TitleSize } from '@kit.UIDesignKit';
-import { AppStorageKeys, AmbientState, FavoriteEntry, MusicAppState, MusicStoreService, PlayedSongRecord, QualityInfo, RouterUrlConstants, SongItem, SongTitleMarquee, ToplistRouteParam, buildTitleMaterial } from 'musicbasic';
+import { AppStorageKeys, AmbientState, FavoriteEntry, MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord, QualityInfo, RouterUrlConstants, SongItem, SongTitleMarquee, ToplistRouteParam, barBlurOptions, buildTitleMaterial } from 'musicbasic';
 import { AlbumInfo, LXQualityOption, LXSearchSong, LXSearchResult, SingerInfo, lxGetPicFallback, lxGetQualityOptions, lxSearch, lxTxHotSearch, lxSearchSuggest, searchAlbums, searchSingers, sourceToCode, DownloadTask, DownloadUtil, OnlinePlayUtil, PlaylistSearchApi } from 'player';
 import type { SearchPlaylistInfo, SearchPlaylistSong } from 'player';
 import { sourceName } from 'player';
@@ -271,6 +271,17 @@ struct OnlineSearchPage {
    *   那一档是"盒子从状态栏下沿起排"时代的旧口径）。
    */
   @Local titleBarTopHeight: number = 94;
+  /**
+   * 页根在**窗口坐标**里的顶边 y（vp），由页根 `onAreaChange` 实测。
+   *
+   * ★ 2026-10-20（用户：「搜索页顶部怎么又一块空白。之前是正常的，你参考一下之前怎么写的」）：
+   *   自绘顶栏后顶部留白**不能写死** —— `hideTitleBar(true)` 之后 HDS 的 NavDestination 究竟
+   *   有没有把标题栏那 56vp 让出来，取决于系统版本，写死 `状态栏高度` 就会在"系统已经让过"的
+   *   机型上**多空一条**。所以照其它页（`RecordListPage` / `MinePage`）的成熟做法：
+   *   量盒顶 → 用 `PageTopInsetHelper.targetContentTopVp() - 标题栏高度` 反推"标题行顶边"，
+   *   两者相减就是**还差多少**（盒顶已在标题行下方时正好为 0，不会多空）。
+   */
+  @Local boxTopVp: number = 0;
   /** Search mode: 0 = songs, 1 = playlists, 2 = singers, 3 = albums. */
   @Local searchMode: number = 0;
   /** Playlist search results. */
@@ -619,8 +630,24 @@ struct OnlineSearchPage {
     }
   }
 
+  /**
+   * 收起联想层。
+   *
+   * ★ 2026-10-20（用户：「**回车搜索时联想词不会消失**」）：
+   *   原来这里只把 `showSuggest` 置 false，但 `scheduleSuggest` 那个 **280ms 防抖定时器还在跑**，
+   *   定时器一到就把 `showSuggest` 又置回 true ⇒ 表现就是"按了回车，联想层过一会儿又冒出来"。
+   *   现在顺手**清定时器**并 `suggestSeq++`（让已经在途的请求作废，不再写回状态）。
+   */
   private hideSuggest(): void {
     this.showSuggest = false;
+    this.suggestSeq++;
+    if (this.suggestTimerId >= 0) {
+      try {
+        clearTimeout(this.suggestTimerId);
+      } catch (_e) {
+      }
+      this.suggestTimerId = -1;
+    }
   }
 
   private pickSuggest(word: string): void {
@@ -1188,9 +1215,9 @@ struct OnlineSearchPage {
         .fontColor([$r('sys.color.font_tertiary')])
     }
     .width('100%')
-    .padding({ top: 6, bottom: 6, left: 16, right: 16 })
-    .borderRadius($r('sys.float.corner_radius_level8'))
-    .backgroundColor($r('app.color.card_background'))
+    .padding({ top: 8, bottom: 8, left: 16, right: 16 })
+    // ★ 2026-10-20（用户：「专辑和歌手怎么还是卡片」）⇒ 歌单行同样去卡片、改分隔线
+    .border({ width: { bottom: 0.5 }, color: $r('sys.color.comp_divider') })
     .onClick(() => {
       void this.openPlaylist(p);
     })
@@ -1226,9 +1253,9 @@ struct OnlineSearchPage {
         .fontColor([$r('sys.color.font_tertiary')])
     }
     .width('100%')
-    .padding({ top: 6, bottom: 6, left: 16, right: 16 })
-    .borderRadius($r('sys.float.corner_radius_level8'))
-    .backgroundColor($r('app.color.card_background'))
+    .padding({ top: 8, bottom: 8, left: 16, right: 16 })
+    // ★ 2026-10-20（用户：「专辑和歌手怎么还是卡片」）⇒ 去卡片、改分隔线
+    .border({ width: { bottom: 0.5 }, color: $r('sys.color.comp_divider') })
     .onClick(() => {
       const param = new ArtistRouteParam();
       const sep: number = s.id.indexOf('_');
@@ -1278,9 +1305,9 @@ struct OnlineSearchPage {
         .fontColor([$r('sys.color.font_tertiary')])
     }
     .width('100%')
-    .padding({ top: 6, bottom: 6, left: 16, right: 16 })
-    .borderRadius($r('sys.float.corner_radius_level8'))
-    .backgroundColor($r('app.color.card_background'))
+    .padding({ top: 8, bottom: 8, left: 16, right: 16 })
+    // ★ 2026-10-20（用户：「专辑和歌手怎么还是卡片」）⇒ 去卡片、改分隔线
+    .border({ width: { bottom: 0.5 }, color: $r('sys.color.comp_divider') })
     .onClick(() => {
       const param = new AlbumRouteParam();
       param.source = 2;
@@ -1302,6 +1329,16 @@ struct OnlineSearchPage {
    *   只能 `hideTitleBar(true)` 自己画。代价是丢掉 HDS 的渐变模糊标题栏，截图里本来也没有。
    *   整页盒子仍从屏幕 y=0 起排（`ignoreLayoutSafeArea(TOP)`），所以这里自己补**状态栏高度**。
    */
+  /**
+   * 自绘顶栏**还要往下让多少**（vp）：目标是让搜索行顶边落在"标题行顶边"。
+   * = (状态栏 + 56) - 56 - 盒顶 = 状态栏 - 盒顶，负数取 0（系统已经让过就不再让）。
+   */
+  private headerTopInset(): number {
+    const titleRowTop: number =
+      PageTopInsetHelper.targetContentTopVp() - PageTopInsetHelper.TITLE_BAR_HEIGHT_VP;
+    return Math.max(0, titleRowTop - this.boxTopVp);
+  }
+
   @Builder
   private SearchHeaderBar() {
     Column({ space: 6 }) {
@@ -1330,7 +1367,7 @@ struct OnlineSearchPage {
       this.SearchTabRow()
     }
     .width('100%')
-    .padding({ top: Math.max(getStatusBarTopVpFromWindowUtil(), 0), bottom: 6 })
+    .padding({ top: this.headerTopInset(), bottom: 6 })
     .onAreaChange((_oldArea: Area, newArea: Area): void => {
       const height: number = Number(newArea.height);
       if (height > 0 && Math.abs(height - this.searchHeaderHeight) > 0.5) {
@@ -1529,8 +1566,12 @@ struct OnlineSearchPage {
           .height(40)
           .borderWidth(0)
           .backgroundColor(Color.Transparent)
-          .backgroundBlurStyle(this.searchControlBlur())
-          .searchButton($r('app.string.search_button'))
+          // ★ 2026-10-20（用户：「搜索框也加上光感」）：材质模糊必须带
+          //   `adaptiveColor = AVERAGE`（取背后画面平均色）才是光感，默认 DEFAULT 只是一层死蒙版。
+          .backgroundBlurStyle(this.searchControlBlur(), barBlurOptions())
+          // ★ 2026-10-20（用户：「搜索页右侧的**搜索两个字去掉**」）：
+          //   原来这里 `.searchButton(...)` 会在输入框右端塞一颗「搜索」文字按钮，已移除；
+          //   提交走键盘回车（`onSubmit`）与下面的清除按钮。
           .onChange((value: string) => {
             this.query = value;
             this.scheduleSuggest(value);
@@ -1869,6 +1910,9 @@ struct OnlineSearchPage {
                         .padding({ left: 14, right: 14, top: 8, bottom: 8 })
                         .borderRadius(18)
                         .backgroundColor($r('app.color.background_secondary'))
+                        // ★ 2026-10-20（用户：「搜索页词条的胶囊背景加上」）：词条胶囊也走材质背板，
+                        //   与搜索框/浮层同一套光感（`adaptiveColor = AVERAGE` 取背后画面色）。
+                        .backgroundBlurStyle(this.searchControlBlur(), barBlurOptions())
                         .margin({ right: 8, bottom: 8 })
                         .onClick(() => {
                           this.query = keyword;
@@ -1917,6 +1961,8 @@ struct OnlineSearchPage {
                         .padding({ left: 14, right: 14, top: 8, bottom: 8 })
                         .borderRadius(18)
                         .backgroundColor($r('app.color.background_secondary'))
+                        // ★ 2026-10-20：词条胶囊与热搜同一套材质背板（光感）
+                        .backgroundBlurStyle(this.searchControlBlur(), barBlurOptions())
                         .margin({ right: 8, bottom: 8 })
                         .onClick(() => {
                           this.query = keyword;
@@ -1956,7 +2002,7 @@ struct OnlineSearchPage {
               ListItem() {
                 this.SectionHeader('歌曲', true)
               }
-              ForEach(this.songs.slice(0, 5), (song: LXSearchSong) => {
+              ForEach(this.songs.slice(0, 10), (song: LXSearchSong) => {
                 ListItem() {
                   SongRowItem({
                     song: song,
@@ -1973,7 +2019,7 @@ struct OnlineSearchPage {
                   })
                 }
               }, (song: LXSearchSong) => 'ovw-s-' + song.source + '_' + song.songId + '_' + song.img)
-              if (this.songs.length > 5) {
+              if (this.songs.length > 10) {
                 ListItem() {
                   this.MoreRow('查看更多歌曲', 1)
                 }
@@ -2202,18 +2248,17 @@ struct OnlineSearchPage {
       }
       .width('100%')
       .height('100%')
-      // ⚠️ 这里原来写 `.clip(true)`（上一轮"要挡住内容"的错误口径下加的）**已删除** ——
-      //   官方《开发应用沉浸式效果》：「子节点可以单独设置该属性……**需要确保父组件未设置 clip
-      //   等裁剪属性**」⇒ 祖先有一层 `clip(true)`，里面 List 的
-      //   `clipContent(ContentClipMode.SAFE_AREA)` 就白设了，行到状态栏那条仍被裁掉。
-      //   （`List` 自己默认的裁剪语义保持不变，别再动。）
-      // ★ 状态栏那一条归页面（2026-10-11，用户：「我想让它延伸进状态栏」）：
-      //   这里是**内容容器**，顶部 padding 回到 0（== 不让位）—— 容器从屏幕 y=0 起排、
-      //   `List` 拿整屏视口；"状态栏 + 标题栏 + 搜索行"那段留白改由
-      //   `List.contentStartOffset(this.contentPaddingTop)` 给在**滚动内容里**（见
-      //   `refreshContentPaddingTop()`：`titleBarTopHeight` = 状态栏 + 56 = 94），
-      //   静止时位置不变、上滑则整行从标题栏底下穿进状态栏。
-      //   页根的 `expandSafeArea(TOP)` + `backgroundColor` 继续把页面底色铺到状态栏那一条。
+      .onAreaChange((_oldArea: Area, newArea: Area): void => {
+        // 量盒顶（窗口坐标 vp）：顶部留白由 `headerTopInset()` 按它反推，不写死状态栏高度
+        const top: number = newArea.globalPosition.y as number;
+        if (Math.abs(top - this.boxTopVp) > 0.5) {
+          this.boxTopVp = top;
+          hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
+            'RzdSearchTop boxTop=%{public}f inset=%{public}f', top, this.headerTopInset());
+        }
+      })
+      // ★ 状态栏那一条归页面：内容是**自己自绘的固定顶栏**（`boxTopVp` 实测后由
+      //   `headerTopInset()` 让位），所以容器本身 padding 保持 0。
       .padding({ top: 0 })
     }
     .onBackPressed((): boolean => guardPlayerBack('OnlineSearchPage'))

@@ -18,6 +18,15 @@
       {
         "name": "ohos.permission.GET_NETWORK_INFO"
       },
+      // ★★ 2026-10-20：**智感握姿**（交互手/握持手）必需。
+      //   `motion.on('operatingHandChanged')` 的 d.ts 明确标注
+      //   `@permission ohos.permission.ACTIVITY_MOTION or ohos.permission.DETECT_GESTURE`；
+      //   缺权限只抛 201 Permission denied ⇒ 表现就是「定位按钮不跟手换边」。
+      //   `DETECT_GESTURE` 是 **system_grant / normal**（已查 `PermissionDefinitions.json`），
+      //   声明即生效、不需要运行时弹窗；`ACTIVITY_MOTION` 是 user_grant，不要用它。
+      {
+        "name": "ohos.permission.DETECT_GESTURE"
+      },
       {
         "name": "ohos.permission.MICROPHONE",
         "reason": "$string:reason_microphone",

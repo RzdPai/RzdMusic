@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,7 +51,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { guardPlayerBack, PlaybackIntentState, SongItem } from 'musicbasic';
 import {
   AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, barBlurOptions,
-  buildBarBlurStyle, FavoriteEntry, illuminatedEffect, LocateFloatButton,
+  buildBarBlurStyle, FavoriteEntry, LocateFloatButton,
   MusicAppState, MusicStoreService, NowPlayingIndicator, PageTopInsetHelper, PlayedSongRecord, PlaylistDto,
   RouterUrlConstants, SelectionActionCell,
   SongTitleMarquee, ThemeState, TitleBarConstants,
@@ -615,16 +615,14 @@ export struct RecordListPage {
    * 分类页签（用户 2026-10-20 截图）：文字页签，选中项 = `font_primary` + 下方一条
    * **主题色短横线**；未选中 = `font_secondary`。历史只有 歌曲/歌单 两格（截图里就是两格）。
    *
-   * ⚠️ 放在**列表内容里的第一格**（跟着滚），不钉在标题栏下沿 —— 与全仓「内容延伸进状态栏」
-   *   那一套口径一致，也省掉再算一次标题栏高度。
+   * ★ 2026-10-20 第二轮（用户：「Tab 和播放全部按钮**固定在顶部**」）：从列表内容里搬出来，
+   *   现在是页面顶部固定头的一部分（见 `build()`），不再跟着列表滚。
    */
   @Builder
   private CategoryTabs() {
     Row({ space: 0 }) {
       this.CategoryTab('歌曲', 'song')
-      if (true) {
-        this.CategoryTab('歌单', 'playlist')
-      }
+      this.CategoryTab('歌单', 'playlist')
       if (!this.isHistory()) {
         this.CategoryTab('专辑', 'album')
       }
@@ -632,6 +630,7 @@ export struct RecordListPage {
     }
     .width('100%')
     .height(46)
+    .padding({ left: 6 })
     .alignItems(VerticalAlign.Center)
   }
 
@@ -662,33 +661,34 @@ export struct RecordListPage {
   }
 
   /**
-   * 「播放全部 N」那一行（用户 2026-10-20 截图）：左侧一颗主题色实心圆 + 播放三角，
-   * 右边紧跟「播放全部 N」，最右侧是列表管理图标（本仓没有"管理列表"，留白不画）。
+   * 「播放全部 N」行（用户 2026-10-20：「参考歌单页的，圆形按钮太难看」）。
+   *
+   * 与 `PlaylistDetailSongListSection.PlayAllHeader()` **逐项对齐**：
+   * `sys.symbol.play_round_triangle_fill` 32vp 描边三角（**没有圆形底**）+「播放全部」+ 首数。
    */
   @Builder
   private PlayAllRow() {
-    Row({ space: 10 }) {
-      Row() {
-        SymbolGlyph($r('sys.symbol.play_fill'))
-          .fontSize(16)
-          .fontColor([$r('sys.color.font_on_primary')])
-      }
-      .width(34)
-      .height(34)
-      .borderRadius(17)
-      .backgroundColor(this.themeState.color)
-      .justifyContent(FlexAlign.Center)
-      .onClick((): void => {
-        this.playAllRecords();
-      })
-      Text('播放全部 ' + this.records.length)
-        .fontSize($r('sys.float.Body_L'))
+    Row({ space: 8 }) {
+      SymbolGlyph($r('sys.symbol.play_round_triangle_fill'))
+        .fontSize(32)
+        .fontWeight(FontWeight.Regular)
+        .height(32)
+        .fontColor([$r('sys.color.font_primary')])
+      Text('播放全部')
+        .fontSize($r('sys.float.Subtitle_L'))
         .fontWeight(FontWeight.Medium)
+        .lineHeight(24)
+        .fontColor($r('sys.color.font_primary'))
+      Text(`${this.records.length}`)
+        .fontSize($r('sys.float.Subtitle_L'))
+        .fontWeight(FontWeight.Medium)
+        .lineHeight(24)
         .fontColor($r('sys.color.font_primary'))
       Blank()
     }
     .width('100%')
-    .height(58)
+    .height(48)
+    .padding({ left: 16, right: 16 })
     .alignItems(VerticalAlign.Center)
     .onClick((): void => {
       this.playAllRecords();
@@ -708,8 +708,8 @@ export struct RecordListPage {
    *   现在改成 **HDS 风格材质背板 + 光感**：
    *   - 背板：`backgroundBlurStyle(buildBarBlurStyle(档位), barBlurOptions())` ——
    *     `adaptiveColor = AVERAGE` 才会"取背后画面平均色"，底下的画面换色它跟着换；
-   *   - 光感：每格 `SelectionActionCell` 自带 `hdsEffect` 点光（按下那一格亮、相邻的受光），
-   *     条子本体再挂一次 `illuminatedEffect()` ⇒ 条子边缘也会被照亮；
+   *   - ⚠️ 2026-10-20（用户：「接入的是**沉浸光感**，不是发光，把这堆发光删了」）：
+   *     原来这里还挂了 `hdsEffect` 点光（每格按下发亮 + 条子本体受光），**已全部删除**；
    *   - 颜色：删除用**用户自定义主题色**，其余文字用 `font_primary`（不再有写死的蓝）。
    */
   @Builder
@@ -756,7 +756,6 @@ export struct RecordListPage {
     .borderRadius(33)
     .backgroundBlurStyle(buildBarBlurStyle(this.ambientState.level), barBlurOptions())
     .border({ width: 0.5, color: $r('sys.color.comp_divider') })
-    .visualEffect(illuminatedEffect())
     .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 8 })
   }
 
@@ -1130,24 +1129,26 @@ export struct RecordListPage {
 
   build() {
     HdsNavDestination() {
-      Stack({ alignContent: Alignment.TopStart }) {
-        List({ space: 0, scroller: this.pageScroller }) {
-          // 顶部占位：第一行落在透明标题栏下方，但它跟着列表一起滚走
-          ListItem() {
-            Column()
-              .height(this.titleTopInset() + 6)
-              .width('100%')
-          }
-
-          // ★ 用户 2026-10-20：分类页签 + 「播放全部 N」（都在列表内容里，跟着滚）
+      Column() {
+        // ★★ 用户 2026-10-20：「历史收藏那几个 Tab 和播放全部按钮**固定在顶部**」。
+        //   所以从列表内容里搬出来，做成页面顶部的固定头（不跟列表滚）。
+        //   头里第一段是让开"状态栏 + 标题栏"的空高（`titleTopInset()`）。
+        //   ★ 底色用**材质背板**（不是死底色）：`adaptiveColor = AVERAGE` ⇒ 取列表滚过去时的
+        //     背后画面色，这才有光感（与标题栏 `buildTitleMaterial` 同一档）。
+        Column() {
+          Column()
+            .height(this.titleTopInset())
+            .width('100%')
           if (!this.selectionMode && !this.isFollowing()) {
-            ListItem() {
-              this.CategoryTabs()
-            }
-            ListItem() {
-              this.PlayAllRow()
-            }
+            this.CategoryTabs()
+            this.PlayAllRow()
           }
+        }
+        .width('100%')
+        .backgroundBlurStyle(buildBarBlurStyle(this.ambientState.level), barBlurOptions())
+
+        Stack({ alignContent: Alignment.TopStart }) {
+          List({ space: 0, scroller: this.pageScroller }) {
 
           // ★ 关注模式（用户 2026-10-20）：只列关注的歌手，点进歌手详情
           if (this.isFollowing()) {
@@ -1270,10 +1271,14 @@ export struct RecordListPage {
         }
       }
       .width('100%')
-      .height('100%')
+      // ★ 列表占满"固定头"以下的剩余高度（原来这里是页根，给的是 height('100%')）
+      .layoutWeight(1)
       // ★ 这里**不加** `padding({ top: 状态栏 })`：那会让列表视口从状态栏下沿起排，
       //   状态栏那一条变死背景 —— 用户要的是"**延伸进状态栏**"（见 `titleTopInset()` 说明）。
-      //   让开状态栏 + 标题栏的偏移在**滚动内容里**（下面那个 `Blank()`）。
+      //   让开状态栏 + 标题栏的空高现在由**固定头**里那段 `titleTopInset()` 给。
+      }
+      .width('100%')
+      .height('100%')
     }
     .onBackPressed((): boolean => {
       // ★ 多选态返回 = 先退出多选（与底栏「取消」同义），不要一下子把整页弹掉

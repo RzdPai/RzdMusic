@@ -13,18 +13,17 @@
  * limitations under the License.
  */
 
-import { pressLightEffect } from '../util/BarMaterial';
-
 /**
- * 多选底部操作条里的**一格**（图标 + 小字 + 点光）。
+ * 多选底部操作条里的**一格**（图标 + 小字）。
  *
  * 用户 2026-10-19 的参考图：底部一条悬浮胶囊，里面是「删除 / 添加至歌单 / 取消收藏 / 取消」
  * 几格，每格 = 图标 + 小字。抽成组件是为了：
- * 1. **光感**只有一个出处（`pressLightEffect`，见 `util/BarMaterial.ets` 的长注释）；
- * 2. 本地音乐页、播放历史页、收藏页三处多选条**长得一模一样**（用户明确要求"沿用新样式"）；
- * 3. 每格自带 `pressed`，点光只亮按下的那一格 —— 写在外层就没有"哪一格"的粒度了。
+ * 1. 本地音乐页、播放历史页、收藏页三处多选条**长得一模一样**（用户明确要求"沿用新样式"）；
+ * 2. 光感只有一处出处（材质背板在父容器上，见 `util/BarMaterial.ets`）。
  *
- * ⚠️ 根节点必须是 `Column`：点光宿主不支持 `Text`，图标和文字都得包在 Column 里。
+ * ⚠️ 2026-10-20（用户：「接入的是沉浸光感，不是发光，把这堆发光删了」）：
+ *   这里原来挂 `hdsEffect` 的**点光**（按下一格发亮）+ 一个 `@Local pressed` 状态，**已删除**。
+ *   不要再往这一格上加任何 `.visualEffect(...)`。
  */
 @ComponentV2
 export struct SelectionActionCell {
@@ -37,8 +36,6 @@ export struct SelectionActionCell {
   /** 点击回调。 */
   @Event onTap: () => void = (): void => {
   };
-  /** 是否按下（只驱动点光，不改尺寸）。 */
-  @Local pressed: boolean = false;
 
   build() {
     Column({ space: 4 }) {
@@ -54,14 +51,6 @@ export struct SelectionActionCell {
     .layoutWeight(1)
     .height('100%')
     .justifyContent(FlexAlign.Center)
-    .visualEffect(pressLightEffect(this.pressed))
-    .onTouch((event: TouchEvent): void => {
-      if (event.type === TouchType.Down) {
-        this.pressed = true;
-      } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
-        this.pressed = false;
-      }
-    })
     .onClick((): void => {
       this.onTap();
     })

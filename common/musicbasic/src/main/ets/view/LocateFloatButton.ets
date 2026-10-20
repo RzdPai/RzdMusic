@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@
 import { motion } from '@kit.MultimodalAwarenessKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BusinessError } from '@kit.BasicServicesKit';
-import { illuminatedEffect, pressLightEffect } from '../util/BarMaterial';
 
 const DOMAIN: number = 0x0001;
 const TAG: string = 'RzdLocateGrip';
@@ -63,8 +62,6 @@ export struct LocateFloatButton {
   };
   /** 当前在右侧还是左侧（智感握姿驱动）。 */
   @Local rightSide: boolean = true;
-  /** 是否按下（只驱动点光）。 */
-  @Local pressed: boolean = false;
 
   /** 操作手是否已经识别过（识别过就不再听握持手）。 */
   private operatingKnown: boolean = false;
@@ -164,17 +161,9 @@ export struct LocateFloatButton {
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
     .shadow({ radius: 14, color: 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 4 })
-    .visualEffect(pressLightEffect(this.pressed))
     .enabled(this.clickable)
     .opacity(this.clickable ? 1 : 0.45)
     .transition(TransitionEffect.move(edge).animation({ duration: 250, curve: Curve.Friction }))
-    .onTouch((event: TouchEvent): void => {
-      if (event.type === TouchType.Down) {
-        this.pressed = true;
-      } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
-        this.pressed = false;
-      }
-    })
     .onClick((): void => {
       hilog.info(DOMAIN, TAG, 'tap side=%{public}s', this.rightSide ? 'right' : 'left');
       this.onTap();
@@ -195,8 +184,6 @@ export struct LocateFloatButton {
       .justifyContent(this.rightSide ? FlexAlign.End : FlexAlign.Start)
       .padding({ left: this.sideMargin, right: this.sideMargin, bottom: this.bottomInset })
       .hitTestBehavior(HitTestMode.Transparent)
-      // 只受光不发光：条子/按钮被相邻格子照亮时边缘有高光
-      .visualEffect(illuminatedEffect())
     }
     .width('100%')
     .height('100%')

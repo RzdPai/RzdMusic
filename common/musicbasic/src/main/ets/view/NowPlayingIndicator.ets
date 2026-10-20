@@ -174,6 +174,8 @@ export struct NowPlayingIndicator {
       this.Bar(4)
     }
     .height(this.barHeight)
-    .alignItems(VerticalAlign.Center)
+    // ★ 用户 2026-10-20：「正在播放的歌曲那个线条**底部对齐**」—— 原来 `VerticalAlign.Center`
+    //   会让 5 根柱子上下都在动，看着像一团乱跳；底部对齐后是"从地上长出来"的等化器。
+    .alignItems(VerticalAlign.Bottom)
   }
 }

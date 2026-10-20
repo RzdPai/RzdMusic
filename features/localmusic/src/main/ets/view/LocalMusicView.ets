@@ -30,9 +30,9 @@ import {
   AppStorageKeys,
   barBlurOptions,
   buildBarBlurStyle,
-  illuminatedEffect,
   MusicAppState,
   PlayedSongRecord,
+  RouterUrlConstants,
   SelectionActionCell,
   SongItem,
   SongTitleMarquee,
@@ -63,6 +63,20 @@ class LocalGroupEntry {
   /** 组内第一首在 `items` 里的下标（点一行就从这首开始播）。 */
   firstIndex: number = 0;
 }
+
+/**
+ * 跳到设置详情页「下载管理」那一档用的路由参数。
+ *
+ * ⚠️ 形状必须与 `features/setting` 的 `SettingsDetailRouteParam`（`{ index: number }`）一致：
+ *    三层架构禁止 features 之间互相 import（`setting → localmusic` 是既有方向，反向会成环），
+ *    所以这里放一个**同形**的本地类；接收端 `SettingsDetailPageBuilder` 是按字段读的，跑得通。
+ */
+class LocalSettingsDetailParam {
+  index: number = 10;
+}
+
+/** 设置详情页里「下载管理」那一档的下标（与 `MinePage.DOWNLOAD_SHEET_INDEX` 同一口径）。 */
+const DOWNLOAD_SHEET_INDEX: number = 10;
 
 /**
  * 本地音乐页（路由页）
@@ -433,6 +447,22 @@ export struct LocalMusicPage {
       });
     }
     if (!this.selectionMode && !this.matchingAll) {
+      // ★ 用户 2026-10-20：「下载管理页面是放到标题栏的按钮跳转」⇒ 这里加一颗入口，
+      //   跳到设置详情页的「下载管理」那一档（`SettingsDetailRouteParam.index = 10`，
+      //   与「我的」页原来那一格是同一个页面、同一份实现，没有第二套代码）。
+      out.push({
+        content: {
+          label: '下载管理',
+          icon: $r('sys.symbol.download_fill'),
+          isEnabled: true,
+          action: (): void => {
+            const param = new LocalSettingsDetailParam();
+            param.index = DOWNLOAD_SHEET_INDEX;
+            this.pageStack.pushPathByName(RouterUrlConstants.SETTINGS_DETAIL, param);
+            hilog.info(DOMAIN, TAG, 'open download manager');
+          }
+        }
+      });
       out.push({
         content: {
           label: '导入音乐',
@@ -535,23 +565,26 @@ export struct LocalMusicPage {
 
   /**
    * 分类页签（用户 2026-10-20 截图口径）：文字页签，选中项 `font_primary` + 下方主题色短横线。
-   * 四格：歌曲 / 歌手 / 专辑 / 已下载（已下载 = 下载管理并进本页）。
+   *
+   * ★ 2026-10-20 第二轮：
+   *  · 「已下载」这一格**删掉**（用户：「不要已下载 Tab，已下载直接放歌曲里」），
+   *    下载完成的歌现在直接混在「歌曲」列表尾部（见 build 里的 `DownloadedRow`）；
+   *  · 页签**左对齐**（原来套了 `Scroll(Horizontal)` 且内容居中，看着像居中排版）——
+   *    三格用普通 Row + `justifyContent(Start)` 就够，不需要横滚。
    */
   @Builder
   private CategoryTabs() {
-    Scroll() {
-      Row({ space: 0 }) {
-        this.CategoryTab('歌曲', 'song')
-        this.CategoryTab('歌手', 'singer')
-        this.CategoryTab('专辑', 'album')
-        this.CategoryTab('已下载', 'download')
-      }
+    Row({ space: 0 }) {
+      this.CategoryTab('歌曲', 'song')
+      this.CategoryTab('歌手', 'singer')
+      this.CategoryTab('专辑', 'album')
+      Blank()
     }
-    .scrollable(ScrollDirection.Horizontal)
-    .scrollBar(BarState.Off)
     .width('100%')
     .height(46)
-    .padding({ left: 6, right: 6 })
+    .padding({ left: 6 })
+    .justifyContent(FlexAlign.Start)
+    .alignItems(VerticalAlign.Center)
   }
 
   /** 单个页签。 */
@@ -580,42 +613,44 @@ export struct LocalMusicPage {
     })
   }
 
-  /** 「播放全部 N」：当前分类能播的行数（已下载 = 下载任务数）。 */
+  /**
+   * 「播放全部 N」（用户 2026-10-20：参考歌单页的，不要圆形按钮）。
+   * 与 `PlaylistDetailSongListSection.PlayAllHeader()` 逐项对齐：
+   * `play_round_triangle_fill` 32vp 描边三角（无圆底）+「播放全部」+ 首数。
+   */
   @Builder
   private PlayAllRow() {
-    Row({ space: 10 }) {
-      Row() {
-        SymbolGlyph($r('sys.symbol.play_fill'))
-          .fontSize(16)
-          .fontColor([$r('sys.color.font_on_primary')])
-      }
-      .width(34)
-      .height(34)
-      .borderRadius(17)
-      .backgroundColor(this.themeState.color)
-      .justifyContent(FlexAlign.Center)
-      Text('播放全部 ' + this.playAllCount())
-        .fontSize($r('sys.float.Body_L'))
+    Row({ space: 8 }) {
+      SymbolGlyph($r('sys.symbol.play_round_triangle_fill'))
+        .fontSize(32)
+        .fontWeight(FontWeight.Regular)
+        .height(32)
+        .fontColor([$r('sys.color.font_primary')])
+      Text('播放全部')
+        .fontSize($r('sys.float.Subtitle_L'))
         .fontWeight(FontWeight.Medium)
+        .lineHeight(24)
+        .fontColor($r('sys.color.font_primary'))
+      Text(`${this.playAllCount()}`)
+        .fontSize($r('sys.float.Subtitle_L'))
+        .fontWeight(FontWeight.Medium)
+        .lineHeight(24)
         .fontColor($r('sys.color.font_primary'))
       Blank()
     }
     .width('100%')
-    .height(58)
-    .padding({ left: 10, right: 10 })
+    .height(48)
+    .padding({ left: 16, right: 16 })
     .alignItems(VerticalAlign.Center)
     .onClick((): void => {
       this.playAll();
     })
   }
 
-  /** 「播放全部」按钮上的条数。 */
+  /** 「播放全部」按钮上的条数（歌曲格 = 本地歌 + 已下载）。 */
   private playAllCount(): number {
-    if (this.category === 'download') {
-      return this.downloadedTasks.length;
-    }
     if (this.category === 'song') {
-      return this.items.length;
+      return this.items.length + this.downloadedTasks.length;
     }
     return this.groupEntries().length;
   }
@@ -658,7 +693,7 @@ export struct LocalMusicPage {
 
   /** 歌手 / 专辑格的分组条目（按名字聚合，保留首次出现顺序）。 */
   private groupEntries(): LocalGroupEntry[] {
-    if (this.category === 'song' || this.category === 'download') {
+    if (this.category === 'song') {
       return [];
     }
     const out: LocalGroupEntry[] = [];
@@ -790,7 +825,7 @@ export struct LocalMusicPage {
    * 与 `RecordListPage.SelectionActionBar()` **同一套观感**（同为 musicbasic 的
    * `SelectionActionCell` + `BarMaterial` 材质背板）：
    * - 悬浮胶囊：材质背板（`adaptiveColor = AVERAGE` 才有光感）+ 细分隔线 + 投影；
-   * - 每格按下有 `hdsEffect` 点光，条子本体 `illuminatedEffect()` 受光；
+   * - ⚠️ 2026-10-20：点光（发光）按用户要求**已删除**，不要再加 `.visualEffect(...)`；
    * - **没有蓝色底**：删除用用户自定义主题色，其余文字走 `font_primary`。
    */
   @Builder
@@ -827,7 +862,6 @@ export struct LocalMusicPage {
     .borderRadius(33)
     .backgroundBlurStyle(buildBarBlurStyle(this.ambientState.level), barBlurOptions())
     .border({ width: 0.5, color: $r('sys.color.comp_divider') })
-    .visualEffect(illuminatedEffect())
     .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 8 })
   }
 
@@ -977,28 +1011,36 @@ export struct LocalMusicPage {
           this.MatchProgressBar()
         }
 
+        // ★ 2026-10-20 第二轮（用户：「Tab 和播放全部固定在顶部」）：页签 + 播放全部
+        //   从列表里搬出来做成固定头（不跟列表滚）。
+        // ★ 2026-10-20 第三轮（用户：「本地音乐上方按钮的光感咋没了」）：固定头不能是死底色，
+        //   要挂**材质背板**（`adaptiveColor = AVERAGE` ⇒ 取列表滚过去时的背后画面色），
+        //   这才是光感；纯 `backgroundColor` 看着就是一块死板。
+        if (this.items.length > 0) {
+          Column() {
+            this.CategoryTabs()
+            this.PlayAllRow()
+          }
+          .width('100%')
+          .backgroundBlurStyle(buildBarBlurStyle(this.ambientState.level), barBlurOptions())
+        }
+
         if (this.items.length === 0) {
           this.EmptyGuide()
         } else {
           // ★ 用户 2026-10-19：多选操作条改成**底部悬浮胶囊**（与历史/收藏页同款）⇒
           //   列表与操作条在同一个 Stack 里，操作条盖在列表上，不压缩列表高度。
-          // ★ 用户 2026-10-20：上部分类 Tab（歌曲 / 歌手 / 专辑 / 已下载）+ 下方「播放全部」。
-          //   已下载 = 下载管理并进本页（`DownloadService` 里 COMPLETED 的任务）。
+          // ★ 2026-10-20 第二轮（用户：「Tab 和播放全部固定在顶部」「不要已下载 Tab，
+          //   已下载直接放歌曲里」）：页签与播放全部搬到**固定头**（见上面那个 Column），
+          //   下载完成的歌直接接在「歌曲」列表尾部。
           Stack({ alignContent: Alignment.Bottom }) {
             List({ space: 2 }) {
-              ListItem() {
-                this.CategoryTabs()
-              }
-              ListItem() {
-                this.PlayAllRow()
-              }
               if (this.category === 'song') {
                 ForEach(this.items, (item: SongItem) => {
                   ListItem() {
                     this.SongRow(item)
                   }
                 }, (item: SongItem) => `${item.songId}_${item.interval}`)
-              } else if (this.category === 'download') {
                 ForEach(this.downloadedTasks, (task: DownloadTask) => {
                   ListItem() {
                     this.DownloadedRow(task)

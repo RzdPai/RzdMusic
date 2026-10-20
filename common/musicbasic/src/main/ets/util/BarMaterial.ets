@@ -13,37 +13,33 @@
  * limitations under the License.
  */
 
-import { hdsEffect } from '@kit.UIDesignKit';
-
 /**
- * 自绘「底部操作条 / 悬浮胶囊」的**光感 + 材质**三件套。
+ * 自绘「底部操作条 / 悬浮胶囊 / 搜索框」的**沉浸光感材质**。
  *
- * ## 为什么自绘条不能用 `systemMaterialEffect`
- * 本机 SDK（`D:\command-line-tools\sdk`）里 `SystemMaterialParams` 只挂在**HDS 组件**上：
- * `HdsNavigationTitleBarOptions.systemMaterialEffect`（@since 23）与
- * `HdsTabsFloatingStyle.systemMaterialEffect`（@since 23）。
- * 普通 `Row/Column` **没有**这个属性（写了编译不过）。所以自绘条走官方另一条路：
+ * ## ★★★ 2026-10-20 第二轮（用户：「接入的是**沉浸光感**，不是发光，把这堆发光删了」）
+ * 上一版这里还有 `hdsEffect` 的**点光**（`pressLightEffect` / `illuminatedEffect`：按下那一格发亮、
+ * 相邻格子受光）。用户明确否掉 —— 那不是光感，是"发光"。**已全部删除**（连带所有
+ * `.visualEffect(...)` 调用点），不要再加回来。
  *
- * - **材质背板** = `backgroundBlurStyle(档位, { adaptiveColor: AdaptiveColor.AVERAGE })`。
- *   `adaptiveColor.DEFAULT` 是"固定色蒙版"（= 死板、没有光感）；`AVERAGE` 才表示
- *   "取背后画面平均色"⇒ 底下的画面换色，条子跟着换 ⇒ 这就是三方布局下的"光感"。
- * - **点光** = `hdsEffect` 的 `PointLight`（`@kit.UIDesignKit`，API 20+），
- *   按在某一格上时那一格亮，相邻格子"等着被照亮"（`BORDER_CONTENT`）。
+ * ## 三方自绘控件怎么拿"沉浸光感"
+ * SDK 里 `SystemMaterialParams`（沉浸材质）只挂在 **HDS 组件**上：
+ * `HdsNavigationTitleBarOptions.systemMaterialEffect` 与 `HdsTabsFloatingStyle.systemMaterialEffect`
+ * （@since 23）。普通 `Row/Column/Search` **没有**这个属性（写了编译不过）。
  *
- * ## 两条实测教训（照 RzdSchool `CommonUi.ets` 的结论，别自己改）
- * 1. `pointLight` 里 **`sourceType` 优先于其它选项**；同时给别的东西会让组件**常亮**。
- *    所以只在 `sourceType` 上做开关：没按 = `NONE`，按下 = `BRIGHT`。
- * 2. 点光宿主只支持 `Button / Toggle / Row / Column / Image / Flex / Stack / Select /
- *    Menu / MenuItem`，`Text` **不支持** ⇒ 每一格必须是 `Column`（图标和文字都在里面）。
+ * 所以自绘控件用**同源的材质背板**来表达光感：
+ * `backgroundBlurStyle(档位, { colorMode: SYSTEM, adaptiveColor: AVERAGE })`。
+ * - `adaptiveColor.DEFAULT` = 一层固定色蒙版（死板、看着像普通半透明）；
+ * - `adaptiveColor.AVERAGE` = 取**背后画面平均色**再叠加 ⇒ 底下的画面换色，条子跟着变，这才是"光感"。
+ * - `colorMode = SYSTEM` ⇒ 深/浅色跟随系统，不写死黑/白蒙版。
  *
  * 排查日志关键字：无（纯静态样式，无状态）。
  */
 
 /**
- * 按"光感强度"取底部悬浮条要用的模糊档位。
+ * 按"光感强度"取材质档位。
  *
- * 与标题栏 `buildTitleMaterial` 同一个档位表（0 = 跟随系统），保证一屏里
- * 标题栏和底部条的光感**同档**，不会一浓一淡。
+ * 与标题栏 `buildTitleMaterial` 用**同一张档位表**（0 = 跟随系统），保证一屏里
+ * 标题栏与自绘浮层的材质**同档**，不会一浓一淡。
  * @param level 光感强度（0 = 跟随系统 / 1 = 弱 / 2 = 均衡 / 3 = 强）
  * @returns `BlurStyle`（ArkUI 全局枚举，不需要 import）
  */
@@ -62,7 +58,7 @@ export function buildBarBlurStyle(level: number): BlurStyle {
 
 /**
  * 材质背板的选项：**必须** `adaptiveColor = AVERAGE` 才有"随背后画面变色"的光感。
- * `colorMode = SYSTEM` ⇒ 深/浅色跟随系统，不在代码里写死黑/白蒙版。
+ * `colorMode = SYSTEM` ⇒ 深/浅色跟随系统。
  */
 export function barBlurOptions(): BackgroundBlurStyleOptions {
   return {
@@ -73,21 +69,9 @@ export function barBlurOptions(): BackgroundBlurStyleOptions {
 }
 
 /**
- * 「按下才亮」的点光（给操作条的每一格）。
- * @param pressed 当前是否按下
+ * 给「浮层背板」用的完整外观参数（一条调用拿到同一套观感）。
+ * 现在只剩材质模糊一项 —— 点光（发光）按用户要求已删除。
  */
-export function pressLightEffect(pressed: boolean): VisualEffect {
-  return new hdsEffect.HdsEffectBuilder()
-    .pointLight({
-      sourceType: pressed ? hdsEffect.PointLightSourceType.BRIGHT : hdsEffect.PointLightSourceType.NONE,
-      illuminatedType: hdsEffect.PointLightIlluminatedType.BORDER_CONTENT
-    })
-    .buildEffect();
-}
-
-/** 「只受光不发光」：给条子本体用（旁边有格子按下时，条子边缘被照亮）。 */
-export function illuminatedEffect(): VisualEffect {
-  return new hdsEffect.HdsEffectBuilder()
-    .pointLight({ illuminatedType: hdsEffect.PointLightIlluminatedType.BORDER_CONTENT })
-    .buildEffect();
+export function barMaterial(level: number): BlurStyle {
+  return buildBarBlurStyle(level);
 }
