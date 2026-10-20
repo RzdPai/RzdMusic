@@ -14,7 +14,7 @@
  */
 
 import { guardPlayerBack } from 'musicbasic';
-import { AppStorageV2, uiObserver } from '@kit.ArkUI';
+import { AppStorageV2, curves, SymbolGlyphModifier, uiObserver } from '@kit.ArkUI';
 import {
   AmbientState,
   AppStorageKeys,
@@ -190,6 +190,16 @@ export struct RecommendPage {
    *      这一刻副本与流内那一行的像素位置**完全重合** ⇒ 吸顶瞬间零跳变。
    */
   @Local chipStickyActive: boolean = false;
+  @Local titleSearchShown: boolean = false;
+  @Local searchOpen: boolean = false;
+
+  @Monitor('searchOpen')
+  onSearchOpenChanged(): void {
+    if (this.titleSearchShown) {
+      this.titleSearchShown = false;
+    }
+    Logger.info('RzdSearchMorph', `home search visibility reset searchOpen=${this.searchOpen}`);
+  }
   /**
    * 分类 Tab 行**在滚动内容里的顶边**（vp）；0 = 还没量到（此时不判吸顶）。
    *
@@ -465,6 +475,10 @@ export struct RecommendPage {
    */
   private onHomeScrollDidScroll(_frameDelta: number, scrollState: ScrollState): void {
     const offset: number = this.readHomeScrollOffset();
+    const titleSearchShown: boolean = offset > 20;
+    if (titleSearchShown !== this.titleSearchShown) {
+      this.titleSearchShown = titleSearchShown;
+    }
     if (scrollState === ScrollState.Scroll || scrollState === ScrollState.Fling) {
       // ① 用户真的在滚：记下位置（用户的停位就是他的意愿）。
       //    ★ 这里**只记录**，不再设任何"滚过就永久放弃"的闩 —— 那是第 2 版把整个
@@ -660,8 +674,16 @@ export struct RecommendPage {
 
   /** Routes to the online multi-source search page. */
   private openSearch(): void {
-    this.pageIndexInfos.pushPathByName(RouterUrlConstants.ONLINE_SEARCH, null);
-    Logger.info('RzdSearchHome', `push-success route=${RouterUrlConstants.ONLINE_SEARCH}`);
+    this.searchOpen = true;
+    Logger.info('RzdSearchMorph', `start route=${RouterUrlConstants.ONLINE_SEARCH}`);
+    this.getUIContext().animateTo({
+      curve: curves.interpolatingSpring(0, 1, 342, 38),
+      onFinish: (): void => {
+        Logger.info('RzdSearchMorph', `end route=${RouterUrlConstants.ONLINE_SEARCH}`);
+      }
+    }, (): void => {
+      this.pageIndexInfos.pushPath({ name: RouterUrlConstants.ONLINE_SEARCH }, false);
+    });
   }
 
   /** HDS title bar with system material and gradient blur. */
@@ -706,30 +728,34 @@ export struct RecommendPage {
             $r('app.string.home_page_title'),
           mainTitleSize: TitleSize.TITLE_ML
         },
-        menu: this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_SM ? undefined : {
+        menu: this.breakpointEnv.widthBreakpoint !== WidthBreakpoint.WIDTH_SM || this.titleSearchShown ? {
           value: [
             {
               content: {
-                label: 'identify',
-                icon: $r('sys.symbol.identify_song'),
-                isEnabled: true,
-                action: (): void => {
-                  this.pageIndexInfos.pushPathByName(RouterUrlConstants.MUSIC_RECOGNITION, null);
-                }
-              }
-            },
-            {
-              content: {
                 label: 'search',
-                icon: $r('sys.symbol.magnifyingglass'),
+                icon: new SymbolGlyphModifier($r('sys.symbol.magnifyingglass'))
+                  .fontSize(22)
+                  .fontColor([$r('sys.color.font_primary')]),
                 isEnabled: true,
                 action: (): void => {
                   this.openSearch();
                 }
               }
+            },
+            {
+              content: {
+                label: 'identify',
+                icon: new SymbolGlyphModifier($r('sys.symbol.identify_song'))
+                  .fontSize(22)
+                  .fontColor([$r('sys.color.font_primary')]),
+                isEnabled: true,
+                action: (): void => {
+                  this.pageIndexInfos.pushPathByName(RouterUrlConstants.MUSIC_RECOGNITION, null);
+                }
+              }
             }
           ]
-        }
+        } : undefined
       }
     };
   }
@@ -943,7 +969,11 @@ export struct RecommendPage {
         this.onHomeVisibleChanged(isVisible);
       })
     }
+    .onShown((): void => {
+      this.searchOpen = false;
+    })
     .onBackPressed((): boolean => guardPlayerBack('RecommendPage'))
+    .transition(TransitionEffect.OPACITY)
     .hideTitleBar(false)
     .hideBackButton(true)
     .titleBar(this.getTitleBar())

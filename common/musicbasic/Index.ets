@@ -36,6 +36,7 @@ export {
 } from './src/main/ets/constants/Constants';
 export { LiveViewConst } from './src/main/ets/constants/LiveViewConst';
 
+export { SearchGlassModifier } from './src/main/ets/components/SearchGlassModifier';
 export { TabItem } from './src/main/ets/model/TabItem';
 
 // Data and in-memory DB mocks

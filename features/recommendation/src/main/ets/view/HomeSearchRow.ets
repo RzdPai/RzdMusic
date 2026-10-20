@@ -1,8 +1,9 @@
-import { Logger } from 'musicbasic';
+import { Logger, SearchGlassModifier } from 'musicbasic';
 
 const SEARCH_FIELD_H: number = 40;
-const FIELD_GAP: number = 12;
-const RECOGNIZE_GAP: number = 8;
+// wujie126.pa 113552–113587 (Tokens export slot 0x10).
+const FIELD_GAP: number = 16;
+const RECOGNIZE_GAP: number = 10;
 const SEARCH_GEO_ID: string = 'wanting_search_field';
 
 @ComponentV2
@@ -33,6 +34,11 @@ export struct HomeSearchRow {
             .focusOnTouch(false)
             .defaultFocus(false)
             .geometryTransition(SEARCH_GEO_ID, { follow: true })
+            .transition(TransitionEffect.OPACITY)
+            .onAreaChange((_oldArea: Area, area: Area): void => {
+              Logger.info('RzdSearchMorph',
+                `source rect x=${area.globalPosition.x} y=${area.globalPosition.y} w=${area.width} h=${area.height}`);
+            })
             .onTouch((event: TouchEvent): void => {
               if (event.type === TouchType.Up) {
                 Logger.info('RzdSearchHome', 'tap-open');
@@ -41,13 +47,7 @@ export struct HomeSearchRow {
             })
         }
         .layoutWeight(1)
-        .height(SEARCH_FIELD_H)
-        .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
-          colorMode: ThemeColorMode.SYSTEM,
-          adaptiveColor: AdaptiveColor.AVERAGE
-        })
-        .backgroundColor('#1AFFFFFF')
-        .borderRadius(SEARCH_FIELD_H / 2)
+        .attributeModifier(new SearchGlassModifier())
 
         Stack() {
           SymbolGlyph($r('sys.symbol.identify_song'))
@@ -55,13 +55,7 @@ export struct HomeSearchRow {
             .fontColor([$r('sys.color.font_primary')])
         }
         .width(SEARCH_FIELD_H)
-        .height(SEARCH_FIELD_H)
-        .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
-          colorMode: ThemeColorMode.SYSTEM,
-          adaptiveColor: AdaptiveColor.AVERAGE
-        })
-        .backgroundColor('#1AFFFFFF')
-        .borderRadius(SEARCH_FIELD_H / 2)
+        .attributeModifier(new SearchGlassModifier())
         .onClick((): void => {
           this.onOpenRecognize();
         })

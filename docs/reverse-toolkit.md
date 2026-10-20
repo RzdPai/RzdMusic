@@ -51,8 +51,11 @@ $z=[IO.Compression.ZipFile]::OpenRead("$PWD\wujie.app"); $z.Entries | Select Ful
 - `&<module>&.#~@0>@<N>*#`：**属性闭包**。ArkUI 的声明式写法会被拆成
   「创建组件的方法」+「按顺序设置属性的闭包」，闭包里的 `ldobjbyname "xxx"` 就是属性名。
   `^1`、`^2`… 是同一个方法里的第 2、3… 个分支/子闭包。
-- 末尾有一堆 `ModuleTag: REGULAR_IMPORT / LOCAL_EXPORT / INDIRECT_EXPORT`
-  与 `[offset:0x…, name_value:…]` 名字表：**导出表是按字母序排的，跟槽位号无关**，别拿它当槽位映射。
+- 模块记录包含 `ModuleTag: REGULAR_IMPORT / LOCAL_EXPORT / INDIRECT_EXPORT`。
+  **纠正（本轮经两版和具名函数交叉验证）**：本样本 Tokens、Breakpoint 模块的 LOCAL_EXPORT 顺序
+  可从 0 开始对应 `stmodulevar` 槽位；不能因为名字按字母排列就认定与槽位无关。
+  必须先用同模块具名 definefunc→stmodulevar 或具名 ldlocalmodulevar 反验，混合别名导出不可盲推。
+  证据：1.2.6 10878–10912、99153–99194、99218–99247；Tokens 12404–12456。
 
 ## 2. 怎么定位
 
@@ -110,8 +113,9 @@ stlexvar 0x0, 0xd             ← slot 13 = SEARCH_FIELD_H（不是我第一版�
 ⚠️ 两种 module 形态别混：
 - **页面/结构体文件**的 `const` 走 `newlexenv + stlexvar`（能拿到值）；
 - **纯导出常量模块**（如 `design/src/main/ets/theme/Tokens.ets`）的 `export const` 走
-  `stmodulevar`，**`.pa` 里没有任何槽位→名字映射** ⇒ 拿不到值。
-  这种情况下只能：① 找同值在别处以字面量出现；② 把常量收敛成单个命名常量并在报告里标注"未取证"。
+  `stmodulevar`。本样本可用模块记录的 LOCAL_EXPORT 零基顺序映射，并用具名函数或另一版本反验。
+  本轮已由 12404–12456 与 113552–113593 取到 PAGE_H=16、FIELD_GAP=16、CONTENT_TOP=0；
+  旧版 11231–11283 与 98055–98097 一致。若缺少能反验的模块记录，才继续查调用点或诚实标未取证。
 
 ## 4. ★ 分支条件别读反（血的教训）
 
