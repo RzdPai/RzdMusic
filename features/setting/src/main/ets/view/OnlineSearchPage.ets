@@ -185,18 +185,16 @@ struct SongRowItem {
  */
 @ComponentV2
 export struct OnlineSearchPage {
-  /**
-   * 内联模式：由壳层做成"首页 / 搜索页"两支之一（见 `Index.ets` 的 `homeSearchOpen`）。
-   * 内联时不再自己造 `HdsNavDestination`，而是自己排标题行 + 类型栏 + 内容。
-   */
-  @Param inlineMode: boolean = false;
-  /** 内联模式下的关闭回调（路由模式仍走 `pageStack.pop`）。 */
-  @Event onClosed: () => void = (): void => {};
   /** Window width breakpoint for responsive result columns. */
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
   /** Initial search query supplied by the route param (e.g. singer name). */
   @Param routeParam: Object = '';
   @Consumer('pageIndexInfos') pageStack: NavPathStack = new NavPathStack();
+  /**
+   * 本页**实际所在**的导航栈（由 `NavDestination.onReady` 给出，官方示例同款）。
+   * 搜索页可能被推到壳层共享栈，也可能被推到首页 Tab 的内层栈，关闭时必须弹对应那个。
+   */
+  private ownStack: NavPathStack | undefined = undefined;
   @Local query: string = '';
   /** 输入中的联想候选（洛雪式：输入后下方弹出推荐） */
   @Local suggestWords: string[] = [];
@@ -1505,16 +1503,12 @@ export struct OnlineSearchPage {
     this.searchClosing = true;
     this.hideSuggest();
     this.getUIContext().getFocusController().clearFocus();
-    hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph close request inline=%{public}s',
-      String(this.inlineMode));
-    if (this.inlineMode) {
-      this.searchClosing = false;
-      this.onClosed();
-      return;
-    }
+    hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph close request');
     this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, (): void => {
       this.searchClosing = false;
-      this.pageStack.pop(false);
+      // ★ 必须弹**本页所在的那个栈**（官方示例用 `NavDestinationContext.pathStack`）。
+      //   本页可能被推到壳层共享栈，也可能被推到首页 Tab 的内层栈。
+      (this.ownStack ?? this.pageStack).pop(false);
     });
   }
 
@@ -1769,17 +1763,18 @@ export struct OnlineSearchPage {
       .id('online_search_input')
       .height(40)
       .backgroundColor(Color.Transparent)
-      // 占位色与首页那端**同一套**（官方示例两端都用 mask_secondary）：
-      // 两端不同色就会在形变瞬间看到"白字突然变灰"。
-      .placeholderColor($r('sys.color.mask_secondary'))
+      // 占位色与首页那端**同一套**：两端不同色就会在形变瞬间看到"白字突然变灰"。
+      // （官方示例用 sys.color.mask_secondary；我们深色主题下它太淡、看着像"文字消失"，
+      //   所以两端统一成已验证可见的 font_secondary —— 关键是两端一致。）
+      .placeholderColor($r('sys.color.font_secondary'))
       .placeholderFont({ size: 16 })
       .textFont({ size: 16 })
       .fontColor($r('sys.color.font_primary'))
       .caretStyle({ color: $r('sys.color.font_primary') })
-      .searchIcon({ size: 16, color: $r('sys.color.mask_secondary') })
+      .searchIcon({ size: 16, color: $r('sys.color.font_secondary') })
       .cancelButton({
         style: CancelButtonStyle.INPUT,
-        icon: { size: 17, color: $r('sys.color.mask_secondary') }
+        icon: { size: 17, color: $r('sys.color.font_secondary') }
       })
       .layoutWeight(1)
       .geometryTransition('wanting_search_field')
@@ -2266,7 +2261,7 @@ export struct OnlineSearchPage {
           //    歌曲行本身是「封面 + 标题/歌手 + 来源/时长」的整行卡片，铺成多栏会把
           //    文字挤窄、行与行长度还参差不齐，看起来就是"文字被拉伸对齐了"。
           //    搜索结果统一单栏、左对齐。
-          .contentStartOffset(this.inlineMode ? 0 : this.contentPaddingTop)
+          .contentStartOffset(this.contentPaddingTop)
           .padding({
             left: 12,
             right: 12,
@@ -2425,37 +2420,8 @@ export struct OnlineSearchPage {
       })
   }
 
-  /**
-   * 内联模式（壳层"首页 / 搜索页"两支里的搜索页那支）。
-   *
-   * 没有 `HdsNavDestination`，所以标题行、类型栏自己排：
-   * 状态栏让位 → `searchRow()`（返回 / 原生 Search / 音源胶囊）→ `typeBar()` → 内容。
-   * 顶部让位用实测窗口状态栏值；两支切换时它和首页那支是**同一个父容器**，
-   * 两端的 `Search` 才会被 `geometryTransition` 配成一对。
-   */
-  @Builder
-  private inlineContent() {
-    Column() {
-      Column().height(WindowUtil.getInstance().resolveStatusBarTopVp())
-      this.searchRow()
-      this.typeBar()
-      Column() {
-        this.searchContent()
-      }
-      .layoutWeight(1)
-      .width('100%')
-    }
-    .width('100%')
-    .height('100%')
-    .backgroundColor($r('app.color.background_secondary'))
-  }
-
   build() {
-    if (this.inlineMode) {
-      this.inlineContent()
-    } else {
-      this.routedContent()
-    }
+    this.routedContent()
   }
 
   @Builder
@@ -2466,6 +2432,10 @@ export struct OnlineSearchPage {
     .onBackPressed((): boolean => {
       this.closeSearch();
       return true;
+    })
+    // 官方示例：从 `NavDestinationContext` 拿本页所在的栈（`PageOne.ets:61-64`）。
+    .onReady((context: NavDestinationContext): void => {
+      this.ownStack = context.pathStack;
     })
     // Search row replaces the title content; only the type bar occupies bottomBuilder.
     .hideTitleBar(false)

@@ -66,6 +66,7 @@ import {
   PlaylistTransitionOverlay
 } from 'playlist';
 import { MinePage, OnlineSearchPage } from 'setting';
+import { HOME_ROUTE_NAME, SEARCH_ROUTE_NAME } from './HomeRouteNames';
 // 鏂版ā鍧楋細鏈湴闊充箰锛堝鍏ヨ澶囬煶棰戝埌娌欑锛変笌娲涢洩鍚屾瀹㈡埛绔€?
 // 鈿狅笍 hvigor 瀵?HAR 鏄?*鎸夊紩鐢ㄧ紪璇?*鐨勶細娌℃湁浠讳綍浠ｇ爜 import 瀹冧滑鏃讹紝
 //    鍗充娇宸茬櫥璁拌繘 build-profile.json5锛岃繖涓や釜妯″潡涔?*涓嶄細琚紪璇?*锛堟瀯寤虹収鏍风豢锛夈€?
@@ -395,10 +396,10 @@ struct Index {
    */
   @Local navDepth: number = 0;
   /**
-   * 首页搜索页是否占据「首页那支」（见 `HomeTabsPages` 里那段 if/else 结构说明）。
-   * 打开/关闭都用官方示例的弹簧包住，让两端 `Search` 的 `geometryTransition` 形变。
+   * 首页 Tab 自己的内层导航栈（只放两条路由：首页 / 搜索页）。
+   * 见 `HomeRouteNames.ets` 里那段"为什么必须这样"的说明。
    */
-  @Local homeSearchOpen: boolean = false;
+  private homeStack: NavPathStack = new NavPathStack();
   /**
    * 褰㈠彉鍏嬮殕灞傜敤鐨勬挱鏀惧櫒 VM銆?
    *
@@ -2536,29 +2537,64 @@ struct Index {
    * @returns True 琛ㄧず鏄剧ず澹冲眰杩欐潯鎮诞杩蜂綘鏉°€?
    */
   /**
-   * 打开/关闭首页搜索页。
+   * 打开/关闭首页搜索页：内层导航栈 push / pop。
    *
-   * 弹簧参数照官方示例：`curves.interpolatingSpring(0, 1, 342, 38)`；
-   * 状态翻转必须包在 `animateTo` 里，两端的 `geometryTransition` 才会走同一条时间线。
+   * 照官方示例（`SearchLongTakeTransitionPageOne.ets:74-81`、`PageTwo.ets:86-92`）：
+   * `animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, () => pushPath(..., false))`
+   * —— **必须** `animated = false` 关掉系统推页动画，否则两套动画叠加，形变会被压掉。
    */
   private openHomeSearch(): void {
-    if (this.homeSearchOpen) {
-      return;
+    if (this.homeStack.size() === 0) {
+      this.ensureHomeRoute();
     }
-    Logger.info('RzdSearchMorph', 'branch open');
+    Logger.info(RzdShellLogTag, `home search push from=${this.homeStack.getAllPathName()}`);
     this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, (): void => {
-      this.homeSearchOpen = true;
+      this.homeStack.pushPath({ name: SEARCH_ROUTE_NAME }, false);
     });
   }
 
   private closeHomeSearch(): void {
-    if (!this.homeSearchOpen) {
+    if (this.homeStack.size() <= 1) {
       return;
     }
-    Logger.info('RzdSearchMorph', 'branch close');
+    Logger.info(RzdShellLogTag, 'home search pop');
     this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, (): void => {
-      this.homeSearchOpen = false;
+      this.homeStack.pop(false);
     });
+  }
+
+  /** 首次显示时把首页本身也推进内层栈（这样"源页"才是真正的路由页）。 */
+  private ensureHomeRoute(): void {
+    if (this.homeStack.size() > 0) {
+      return;
+    }
+    this.homeStack.pushPath({ name: HOME_ROUTE_NAME }, false);
+    Logger.info(RzdShellLogTag, `home route pushed size=${this.homeStack.size()}`);
+  }
+
+  /**
+   * 首页 Tab 的内层路由表。
+   *
+   * ⚠️ 这两支必须是**同一个 Navigation 的两个 NavDestination**：
+   *    源端（首页的 `Search`，带 `{follow:true}`）与目标端（搜索页的 `Search`，带
+   *    `transition(opacity 0.99)`）才会被框架配成一对，形变才会发生。
+   */
+  @Builder
+  private HomeRouteMap(name: string, param: Object) {
+    if (name === HOME_ROUTE_NAME) {
+      RecommendPage({
+        shellProvidesFloatingMiniBar: deviceInfo.distributionOSApiVersion >= 60100,
+        floatingBarExtraBottomReserveVp: this.twoRowExtraBottomVp(),
+        scrollTopCommand: this.tabScrollTopCommands[0],
+        onOpenSearch: (): void => {
+          this.openHomeSearch();
+        }
+      })
+    } else if (name === SEARCH_ROUTE_NAME) {
+      OnlineSearchPage({
+        routeParam: param
+      })
+    }
   }
 
   private shouldShowFloatingMiniBar(): boolean {
@@ -2690,36 +2726,29 @@ struct Index {
   @Builder
   private HomeTabsPages() {
     TabContent() {
-      Column() {
-        // ★★ 一镜到底的关键结构（2026-10-20）：**真正的 if/else 分支**。
-        //   官方示例（transitions-collection `SearchLongTakeTransitionPageOne/Two.ets`）里
-        //   源页和目标页都是同一个 Navigation 路由区的 NavDestination，push 时源节点会随页面转场消失；
-        //   而本仓首页在 `HdsNavigation` 的**导航栏内容区**（HdsTabs 的 TabContent），
-        //   push 一个路由时它根本不会消失 ⇒ 两端配不成一对，`geometryTransition` 永远不触发
-        //   （这就是前几轮"没有/生硬"的结构性原因）。
-        //   ⇒ 这里让首内容与搜索页成为同一父容器的两支：首页那支（连同它的 `Search`）被卸载，
-        //     搜索页那支的 `Search` 同时出现，两端同 id 才能接成一镜到底。
-        if (this.homeSearchOpen) {
-          OnlineSearchPage({
-            inlineMode: true,
-            onClosed: (): void => {
-              this.closeHomeSearch();
-            }
-          })
-        } else {
-          RecommendPage({
-            shellProvidesFloatingMiniBar: deviceInfo.distributionOSApiVersion >= 60100,
-            floatingBarExtraBottomReserveVp: this.twoRowExtraBottomVp(),
-            scrollTopCommand: this.tabScrollTopCommands[0],
-            onOpenSearch: (): void => {
-              this.openHomeSearch();
-            }
-          })
-            .layoutWeight(1)
+      // ★★ 一镜到底的结构要求（2026-10-20）：首页与搜索页必须是**同一个 Navigation 的两个路由页**。
+      //   官方示例 `transitions-collection/SearchLongTakeTransition/PageOne|PageTwo` 就是这个结构：
+      //   源页（NavDestination，Search 带 {follow:true}）→ push(false) → 目标页（NavDestination，
+      //   Search 带 transition(opacity 0.99)）；两端同 id 才配得上，转场才发生。
+      //   首页原来直接挂在 `HdsNavigation` 的导航栏内容区里，push 时它不会消失 ⇒ 永远配不成一对。
+      //   所以这里加一层内层 Navigation：首页自己也是它的路由页。
+      Navigation(this.homeStack) {
+        Stack() {
         }
+        .width(StyleConstants.FULL_WIDTH)
+        .height(StyleConstants.FULL_HEIGHT)
       }
+      .navDestination(this.HomeRouteMap)
+      .hideTitleBar(true)
+      .hideToolBar(true)
+      .mode(NavigationMode.Stack)
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+      .backgroundColor($r('app.color.background_secondary'))
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
+      .onAppear((): void => {
+        this.ensureHomeRoute();
+      })
       .expandSafeArea([SafeAreaType.SYSTEM, SafeAreaType.CUTOUT], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
     }
     .tabBar(this.TabBarItem(0, $r('app.string.tab_home'), $r('sys.symbol.house_fill')))
@@ -3146,6 +3175,11 @@ struct Index {
    * @returns true = 宸叉秷璐癸紝涓嶅啀璧伴粯璁よ繑鍥為€昏緫
    */
   onBackPress(): boolean {
+    // 内层栈（首页/搜索页）还有可弹的路由时先弹它，别直接退出应用。
+    if (this.homeStack.size() > 1) {
+      this.closeHomeSearch();
+      return true;
+    }
     if (!this.appState.isShowPlay) {
       return false;
     }
