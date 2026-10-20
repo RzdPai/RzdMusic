@@ -507,6 +507,11 @@ export class MediaService {
         break;
       case 'stopped':
         Logger.info(TAG, 'AVPlayer state stopped called.');
+        // ★ 锁屏后「声音停 + 进度不走」如果落在 STOP 而不是 PAUSE，就是焦点/系统策略把它停掉的
+        //   （见 audioInterruptMode 那段注释：INDEPENDENT_MODE 是"停止且不恢复"策略）。
+        this.lockScreenDiagnostic(`event=stopped origin=${this.pauseOrigin.length > 0 ? this.pauseOrigin : 'system'} ` +
+          `pos=${this.getCurrentTime()} bg=${this.bgEnterWall > 0 ? 1 : 0} ` + BackgroundUtil.snapshot());
+        this.pauseOrigin = '';
         this.state = AudioPlayerState.STOP;
         // 关键：stop 后 avPlayer 会被 reset 回 idle，isPrepared 必须同步置 false，
         // 否则 play() 会误判 isPrepared=true 而直接对无 url 的 avPlayer 调 play()，
@@ -514,6 +519,10 @@ export class MediaService {
         this.isPrepared = false;
         if (this.avPlayer) {
           this.avPlayer.reset();
+        }
+        // 官方《后台播放》要求：停止时主动取消长时任务（不停任务但也不再放音频会被系统终止）
+        if (this.abilityContext) {
+          BackgroundUtil.stopContinuousTask(this.abilityContext);
         }
         break;
       case 'released':
@@ -1214,12 +1223,21 @@ export class MediaService {
       if (avPlayer !== null) {
         this.avPlayer = avPlayer;
         this.registerAudioDeviceListener();
-        // Shared audio focus lets this app play alongside other apps when enabled.
+        // ★★★ 2026-10-20 夜（用户：「锁屏后声音直接停了，进度也不走」；根因按官方文档定）：
+        //   官方《处理音频焦点变化》原文：
+        //     · SHARE_MODE 是**默认且推荐**：「推荐使用共享焦点模式（SHARE_MODE）……避免系统默认策略
+        //       （如 STOP）导致音频流无法恢复」；
+        //     · INDEPENDENT_MODE：「音乐与音乐之间为停止策略——后播的流会停止前播的流，
+        //       且前播的流不会收到恢复事件，无法自动恢复」。
+        //   原代码在"混音关"（默认）时把焦点模式设成 INDEPENDENT_MODE ⇒ 只要出现后续音乐类音频流，
+        //   AVPlayer 就被**停止**（声音停、进度不走，正是用户看到的症状），且收不到恢复事件。
+        //   上游无界音乐**从不设 audioInterruptMode**（保持默认 SHARE_MODE），它的"混音"
+        //   只走 `activateAudioSession(CONCURRENCY_MIX_WITH_OTHERS)`。⇒ 这里照上游改成恒 SHARE_MODE。
+        //   排查关键字：`RzdLockScreenB` 的 `audio-interrupt-mode=share`。
         try {
-          const mixEnabled: boolean = MusicStoreService.getInstance().getAudioMix();
-          this.avPlayer.audioInterruptMode = mixEnabled ?
-            audio.InterruptMode.SHARE_MODE : audio.InterruptMode.INDEPENDENT_MODE;
-          this.appendPlayLog('[播放] 音频焦点模式=' + (mixEnabled ? '共享' : '独占'));
+          this.avPlayer.audioInterruptMode = audio.InterruptMode.SHARE_MODE;
+          MusicStoreService.getInstance().appendRuntimeDiagnostic(
+            '[RzdLockScreenB] audio-interrupt-mode=share (official default; independent = stop-without-resume)');
         } catch (e) {
           this.appendPlayLog('[播放] 设置音频焦点失败: ' + JSON.stringify(e).substring(0, 100));
         }
