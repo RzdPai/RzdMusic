@@ -1942,7 +1942,11 @@ export struct OnlineSearchPage {
             }
           }
         },
-        avoidLayoutSafeArea: false,
+        // ★ 2026-10-20：本页现在被推到**首页 Tab 的内层 Navigation**（宿主结构见 Index.ets）。
+        //   那层导航的坐标原点是 0（外层 HdsNavigation 的导航栏内容区），
+        //   所以 HDS 顶栏必须 avoidLayoutSafeArea: true 才会自己让出状态栏那 38vp；
+        //   之前写 false 是因为当时它被推到外层 HdsNavigation，基准已经是 38 —— 两个宿主别混用口径。
+        avoidLayoutSafeArea: true,
         content: {
           stackBuilder: (): void => {
             this.searchRow()

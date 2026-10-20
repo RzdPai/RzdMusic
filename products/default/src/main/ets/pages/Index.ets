@@ -401,6 +401,11 @@ struct Index {
    */
   private homeStack: NavPathStack = new NavPathStack();
   /**
+   * 搜索页是否在最上面（内层栈被推到第二条）。
+   * 用来把外层 `HdsTabs` 的浮动底栏收掉 —— 上游无界在搜索页里是没有底栏/迷你条的。
+   */
+  @Local homeSearchOpen: boolean = false;
+  /**
    * 褰㈠彉鍏嬮殕灞傜敤鐨勬挱鏀惧櫒 VM銆?
    *
    * 鍏嬮殕灞傝鐢昏糠浣犳潯鍙充晶閭ｄ竴鍧楃殑**鍓湰**锛堟瓕鍚?姝屾墜 + 鎾斁鎸夐挳锛夛紝瀹冭璇诲綋鍓嶆洸鐩笌鎾帶鐘舵€侊紱
@@ -2549,6 +2554,7 @@ struct Index {
     }
     Logger.info(RzdShellLogTag, `home search push from=${this.homeStack.getAllPathName()}`);
     this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, (): void => {
+      this.homeSearchOpen = true;
       this.homeStack.pushPath({ name: SEARCH_ROUTE_NAME }, false);
     });
   }
@@ -2559,6 +2565,7 @@ struct Index {
     }
     Logger.info(RzdShellLogTag, 'home search pop');
     this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, (): void => {
+      this.homeSearchOpen = false;
       this.homeStack.pop(false);
     });
   }
@@ -2818,7 +2825,7 @@ struct Index {
             this.HomeTabsPages()
           }
           .barMode(BarMode.Fixed)
-          .barHeight(56)
+          .barHeight(this.homeSearchOpen ? 0 : 56)
           .zIndex(1)
           .barOverlap(true)
           .barPosition(BarPosition.End)
@@ -2997,7 +3004,7 @@ struct Index {
             this.HomeTabsPages()
           }
           .barMode(BarMode.Fixed)
-          .barHeight(56)
+          .barHeight(this.homeSearchOpen ? 0 : 56)
           .zIndex(1)
           .barOverlap(true)
           .barPosition(BarPosition.End)
