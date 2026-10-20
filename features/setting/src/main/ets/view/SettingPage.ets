@@ -247,7 +247,9 @@ export struct SettingPage {
     this.useAccountRec = MusicStoreService.getInstance().getUseAccountRec();
     this.lyricFontSize = MusicStoreService.getInstance().getLyricFontSize();
     this.lastError = AppStorage.get<string>('lxLastError') ?? '';
-    this.playLog = AppStorage.get<string>('lxPlayLog') ?? '';
+    const persistentLog: string = MusicStoreService.getInstance().getRuntimeDiagnostics();
+    this.playLog = (AppStorage.get<string>('lxPlayLog') ?? '') +
+      (persistentLog.length > 0 ? '\n──── 持久诊断（重启保留）────\n' + persistentLog : '');
     this.colorMode = MusicStoreService.getInstance().getColorMode();
   }
 

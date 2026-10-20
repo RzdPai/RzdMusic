@@ -367,7 +367,16 @@ export default class EntryAbility extends UIAbility {
   onBackground() {
     // Ability has back to background
     Logger.info('EntryAbility: Ability onBackground');
-    MediaService.getInstance().onApplicationBackground();
+    const media: MediaService = MediaService.getInstance();
+    MusicStoreService.getInstance().appendRuntimeDiagnostic(
+      `[RzdLockScreenB] onBackground(playing=${media.isPlayingState()}) source=EntryAbility`);
+    try {
+      media.onApplicationBackground();
+    } catch (error) {
+      const err: BusinessError = error as BusinessError;
+      MusicStoreService.getInstance().appendRuntimeDiagnostic(
+        `[RzdLockScreenB] onBackground(err=${err.code}) msg=${err.message}`);
+    }
   }
   /** Warm-start delivery (no card payload here: card actions arrive on the callee channel). */
   onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {

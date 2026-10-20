@@ -280,7 +280,9 @@ export struct SettingsDetailPage {
     this.lyricFps = MusicStoreService.getInstance().getLyricFps();
     this.lyricCenter = MusicStoreService.getInstance().getLyricCenterEnabled();
     this.lastError = AppStorage.get<string>('lxLastError') ?? '';
-    this.playLog = AppStorage.get<string>('lxPlayLog') ?? '';
+    const persistentLog: string = MusicStoreService.getInstance().getRuntimeDiagnostics();
+    this.playLog = (AppStorage.get<string>('lxPlayLog') ?? '') +
+      (persistentLog.length > 0 ? '\n──── 持久诊断（重启保留）────\n' + persistentLog : '');
     this.colorMode = MusicStoreService.getInstance().getColorMode();
   }
 

@@ -13,78 +13,113 @@
  * limitations under the License.
  */
 
-/*
- * Moved from common/mediacommon/src/main/ets/utils/BackgroundUtil.ets
- */
-
 import { wantAgent, common } from '@kit.AbilityKit';
 import { backgroundTaskManager } from '@kit.BackgroundTasksKit';
 import { BusinessError } from '@kit.BasicServicesKit';
-import { Logger } from 'musicbasic';
+import { Logger, MusicStoreService } from 'musicbasic';
 
-/** Wraps BackgroundTasksKit audio background running start/stop for playback in background. */
+/** Serializes start/stop so a pending WantAgent cannot restart a disabled task. */
 export class BackgroundUtil {
-  /**
-   * Requests continuous audio background running with a WantAgent back to this ability.
-   *
-   * @param context UIAbility context; no-op when undefined.
-   */
-  public static startContinuousTask(context?: common.UIAbilityContext): void {
-    if (!context) {
-      Logger.error('this avPlayer: ', `context undefined`);
-      return;
-    }
-    let wantAgentInfo: wantAgent.WantAgentInfo = {
-      wants: [
-        {
-          bundleName: context.abilityInfo.bundleName,
-          abilityName: context.abilityInfo.name
-        }
-      ],
-      actionType: wantAgent.OperationType.START_ABILITY,
-      requestCode: 0,
-      actionFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG]
-    };
+  private static requested: boolean = false;
+  private static running: boolean = false;
+  private static observingCancel: boolean = false;
+  private static failureShown: boolean = false;
+  private static operations: Promise<void> = Promise.resolve();
 
-    wantAgent.getWantAgent(wantAgentInfo).then((wantAgentObj: Object) => {
-      try {
-        if (canIUse('SystemCapability.ResourceSchedule.BackgroundTaskManager.ContinuousTask')) {
-          backgroundTaskManager.startBackgroundRunning(context,
-            backgroundTaskManager.BackgroundMode.AUDIO_PLAYBACK, wantAgentObj).then(() => {
-            Logger.info('this avPlayer: ', 'startBackgroundRunning succeeded');
-          }).catch((error: BusinessError) => {
-            Logger.error('this avPlayer: ', `startBackgroundRunning failed Cause: code ${error.code}`);
-          });
-        }
-      } catch (error) {
-        Logger.error('this avPlayer: ',
-          `startBackgroundRunning failed. code ${(error as BusinessError).code} ` +
-          `message ${(error as BusinessError).message}`);
-      }
-    }).catch((err: BusinessError) => {
-      Logger.error(`getWantAgent failed, code: ${JSON.stringify(err.code)}, message: ${JSON.stringify(err.message)}`);
-    })
+  private static diagnostic(message: string): void {
+    const line: string = '[RzdLockScreenB] ' + message;
+    Logger.info(line);
+    MusicStoreService.getInstance().appendRuntimeDiagnostic(line);
   }
 
-  /**
-   * Stops continuous background running when the capability is available on device.
-   *
-   * @param context UIAbility context that started background running.
-   */
+  public static startContinuousTask(context?: common.UIAbilityContext): void {
+    BackgroundUtil.requested = true;
+    BackgroundUtil.enqueue(context);
+  }
+
   public static stopContinuousTask(context: common.UIAbilityContext): void {
-    if (canIUse('SystemCapability.ResourceSchedule.BackgroundTaskManager.Core')) {
+    BackgroundUtil.requested = false;
+    BackgroundUtil.diagnostic('stop-continuous requested');
+    BackgroundUtil.enqueue(context);
+  }
+
+  private static enqueue(context?: common.UIAbilityContext): void {
+    BackgroundUtil.operations = BackgroundUtil.operations.then(async (): Promise<void> => {
+      await BackgroundUtil.reconcile(context);
+    }).catch((error: BusinessError): void => {
+      BackgroundUtil.diagnostic(`continuous-queue(err=${error.code}) msg=${error.message}`);
+    });
+  }
+
+  private static async reconcile(context?: common.UIAbilityContext): Promise<void> {
+    if (!context) {
+      BackgroundUtil.diagnostic('start-continuous(err=context-undefined)');
+      return;
+    }
+    if (!canIUse('SystemCapability.ResourceSchedule.BackgroundTaskManager.ContinuousTask')) {
+      BackgroundUtil.diagnostic('start-continuous(err=capability-unavailable)');
+      return;
+    }
+    if (!BackgroundUtil.requested) {
+      if (!BackgroundUtil.running) {
+        BackgroundUtil.diagnostic('stop-continuous idle');
+        return;
+      }
       try {
-        backgroundTaskManager.stopBackgroundRunning(context).then(() => {
-          Logger.info('this avPlayer: ', 'stopBackgroundRunning succeeded');
-        }).catch((error: BusinessError) => {
-          Logger.error('this avPlayer: ', `stopBackgroundRunning failed Cause: code ${error.code}`);
-        });
+        await backgroundTaskManager.stopBackgroundRunning(context);
+        BackgroundUtil.running = false;
+        BackgroundUtil.diagnostic('stop-continuous ok');
       } catch (error) {
-        Logger.error('this avPlayer: ',
-          `stopBackgroundRunning failed. code ${(error as BusinessError).code} ` +
-          `message ${(error as BusinessError).message}`);
+        const err: BusinessError = error as BusinessError;
+        BackgroundUtil.diagnostic(`stop-continuous(err=${err.code}) msg=${err.message}`);
+      }
+      return;
+    }
+    if (BackgroundUtil.running) {
+      return;
+    }
+    if (!BackgroundUtil.observingCancel) {
+      try {
+        backgroundTaskManager.on('continuousTaskCancel', (info): void => {
+          BackgroundUtil.running = false;
+          BackgroundUtil.diagnostic('stop-continuous system-cancel info=' + JSON.stringify(info));
+        });
+        BackgroundUtil.observingCancel = true;
+      } catch (error) {
+        const err: BusinessError = error as BusinessError;
+        BackgroundUtil.diagnostic(`observe-cancel(err=${err.code}) msg=${err.message}`);
+      }
+    }
+    let stage: string = 'wantAgent';
+    try {
+      const info: wantAgent.WantAgentInfo = {
+        wants: [{
+          bundleName: context.abilityInfo.bundleName,
+          moduleName: context.abilityInfo.moduleName,
+          abilityName: context.abilityInfo.name
+        }],
+        actionType: wantAgent.OperationType.START_ABILITY,
+        requestCode: 0,
+        actionFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG]
+      };
+      const agent = await wantAgent.getWantAgent(info);
+      // Stop may have arrived while getWantAgent was pending.
+      if (!BackgroundUtil.requested) {
+        BackgroundUtil.diagnostic('stop-continuous cancelled-pending-start');
+        return;
+      }
+      stage = 'startBackgroundRunning';
+      await backgroundTaskManager.startBackgroundRunning(context,
+        backgroundTaskManager.BackgroundMode.AUDIO_PLAYBACK, agent);
+      BackgroundUtil.running = true;
+      BackgroundUtil.diagnostic('start-continuous(err=0) ok');
+    } catch (error) {
+      const err: BusinessError = error as BusinessError;
+      BackgroundUtil.diagnostic(`start-continuous(err=${err.code}) stage=${stage} msg=${err.message}`);
+      if (!BackgroundUtil.failureShown) {
+        BackgroundUtil.failureShown = true;
+        AppStorage.setOrCreate('lxLastError', '后台播放任务申请失败，请查看运行日志（' + err.code + '）');
       }
     }
   }
 }
-

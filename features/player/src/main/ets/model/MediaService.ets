@@ -208,6 +208,7 @@ export class MediaService {
   /** AVPlayer error: logs and resets the player. */
   private errorCall: (err: BusinessError) => void = (err: BusinessError) => {
     Logger.error(TAG, `Invoke avPlayer failed, code is ${err.code}, message is ${err.message}`);
+    this.lockScreenDiagnostic(`avplayer(err=${err.code}) msg=${err.message}`);
     appendPlayLog('[播放] AVPlayer 报错 code=' + err.code + ' msg=' + err.message);
     this.scrubberSeekInFlight = false;
     this.scrubberQueuedSeek = undefined;
@@ -474,7 +475,11 @@ export class MediaService {
         break;
       case 'paused':
         Logger.info(TAG, 'AVPlayer state paused called.');
+        this.lockScreenDiagnostic('event=paused reason=unknown');
         this.state = AudioPlayerState.PAUSE;
+        if (this.abilityContext) {
+          BackgroundUtil.stopContinuousTask(this.abilityContext);
+        }
         break;
       case 'completed':
         Logger.info(TAG, 'AVPlayer state completed called.');
@@ -655,19 +660,23 @@ export class MediaService {
     }
   }
 
+  private lockScreenDiagnostic(message: string): void {
+    MusicStoreService.getInstance().appendRuntimeDiagnostic('[RzdLockScreenB] ' + message);
+  }
+
   /** Starts or refreshes continuous background audio task (required after some track-switch paths). */
   private ensureBackgroundAudioTask(): void {
     // ★★★ 2026-10-18（用户：「现在似乎不能锁屏播放，你在播放设置里加一下，默认开」）：
     //   设置项 = `MusicStoreService.getLockScreenPlay()`（默认 **true**）。
     //   关掉时**不申请**长时任务（并把可能在跑的停掉），开时照旧走 `BackgroundUtil`。
     if (!MusicStoreService.getInstance().getLockScreenPlay()) {
-      Logger.info(TAG, '[RzdLockScreen] continuous task skipped (setting off)');
+      this.lockScreenDiagnostic('lockscreen enabled=false continuous=skipped');
       if (this.abilityContext) {
         BackgroundUtil.stopContinuousTask(this.abilityContext);
       }
       return;
     }
-    Logger.info(TAG, '[RzdLockScreen] continuous task start (setting on)');
+    this.lockScreenDiagnostic('lockscreen enabled=true continuous=requested');
     BackgroundUtil.startContinuousTask(this.abilityContext);
   }
 
@@ -680,20 +689,29 @@ export class MediaService {
    *
    * 排查日志关键字：`RzdLockScreen`。
    */
-  private applyBackgroundPlayMode(): void {
-    const session: avSession.AVSession | undefined = this.session;
-    if (session === undefined) {
-      return;
-    }
-    const enabled: boolean = MusicStoreService.getInstance().getLockScreenPlay();
-    const mode: avSession.BackgroundPlayMode = enabled ?
-      avSession.BackgroundPlayMode.ENABLE_BACKGROUND_PLAY :
-      avSession.BackgroundPlayMode.DISABLE_BACKGROUND_PLAY;
-    session.setBackgroundPlayMode(mode).then((): void => {
-      Logger.info(TAG, `[RzdLockScreen] background play mode=${enabled ? 'ENABLE' : 'DISABLE'} ok`);
-    }).catch((err: BusinessError): void => {
-      Logger.warn(TAG, `[RzdLockScreen] setBackgroundPlayMode failed code=${err.code} msg=${err.message}`);
+  private backgroundModeOperations: Promise<void> = Promise.resolve();
+
+  private applyBackgroundPlayMode(): Promise<void> {
+    // Serialize rapid setting changes; read the latest persisted setting when executing.
+    this.backgroundModeOperations = this.backgroundModeOperations.then(async (): Promise<void> => {
+      const enabled: boolean = MusicStoreService.getInstance().getLockScreenPlay();
+      const session: avSession.AVSession | undefined = this.session;
+      if (session === undefined) {
+        this.lockScreenDiagnostic(`lockscreen enabled=${enabled} avsession=idle mode=deferred`);
+        return;
+      }
+      try {
+        const mode: avSession.BackgroundPlayMode = enabled ?
+          avSession.BackgroundPlayMode.ENABLE_BACKGROUND_PLAY :
+          avSession.BackgroundPlayMode.DISABLE_BACKGROUND_PLAY;
+        await session.setBackgroundPlayMode(mode);
+        this.lockScreenDiagnostic(`lockscreen enabled=${enabled} background-mode=ok`);
+      } catch (error) {
+        const err: BusinessError = error as BusinessError;
+        this.lockScreenDiagnostic(`background-mode(err=${err.code}) msg=${err.message}`);
+      }
     });
+    return this.backgroundModeOperations;
   }
 
   /**
@@ -705,7 +723,7 @@ export class MediaService {
    */
   public applyLockScreenPlay(enabled: boolean): void {
     const playing: boolean = this.getAppState().isPlay;
-    Logger.info(TAG, `[RzdLockScreen] setting changed enabled=${enabled} playing=${playing}`);
+    this.lockScreenDiagnostic(`lockscreen enabled=${enabled} source=setting playing=${playing}`);
     // ★ 两种状态都同步给系统（见 applyBackgroundPlayMode 的注释）
     this.applyBackgroundPlayMode();
     if (enabled) {
@@ -747,9 +765,18 @@ export class MediaService {
     }
   }
 
-  /** Called when the app goes to background while playing; keeps continuous task if needed. */  public onApplicationBackground(): void {
-    if (this.getAppState().isPlay) {
+  /** Reconciles background policy without changing the user's current playback intent. */
+  public onApplicationBackground(): void {
+    const playing: boolean = this.isPlayingState();
+    const enabled: boolean = MusicStoreService.getInstance().getLockScreenPlay();
+    this.lockScreenDiagnostic(`onBackground(playing=${playing}) lockscreen enabled=${enabled}`);
+    void this.applyBackgroundPlayMode();
+    if (enabled && playing) {
       this.ensureBackgroundAudioTask();
+    } else if (!enabled) {
+      if (this.abilityContext) {
+        BackgroundUtil.stopContinuousTask(this.abilityContext);
+      }
     }
   }
 
@@ -1146,7 +1173,7 @@ export class MediaService {
           this.appendPlayLog('[播放] 设置音频焦点失败: ' + JSON.stringify(e).substring(0, 100));
         }
         this.setAVPlayerCallback();
-        this.createSession();
+        await this.createSession();
         this.applyAudioSession(MusicStoreService.getInstance().getAudioMix());
         this.applyPendingLoadRequest();
         this.restoreLastQueue();
@@ -1180,6 +1207,8 @@ export class MediaService {
    */
   private audioInterruptCall: (interruptEvent: audio.InterruptEvent) => Promise<void> =
     async (interruptEvent: audio.InterruptEvent) => {
+      this.lockScreenDiagnostic(`event=audioInterrupt force=${interruptEvent.forceType} ` +
+        `hint=${interruptEvent.hintType} eventType=${interruptEvent.eventType}`);
       if (interruptEvent.forceType === audio.InterruptForceType.INTERRUPT_FORCE) {
         switch (interruptEvent.hintType) {
           case audio.InterruptHint.INTERRUPT_HINT_PAUSE:
@@ -1265,41 +1294,39 @@ export class MediaService {
       Logger.info(TAG, `session create done : sessionId : ${this.session.sessionId}`);
       // Preserve one session for background and lock-screen control; do not deactivate for UI preferences.
       await this.session.activate();
-      Logger.info(TAG, '[RzdLockScreen] system AVSession active (default enabled)');
-      // ★★ 2026-10-20（用户：「锁屏播放还是不行，你翻翻官方文档」）——
-      //   官方《本地媒体会话常见问题》→「应用退至后台后音视频被强制暂停」解决措施第 5 条原文：
-      //     「应用退至后台前通过 `setBackgroundPlayMode` 设置后台播放模式……
-      //       **如果应用内提供了"是否支持后台播放"的开关，设置的后台播放模式务必与开关状态保持一致，
-      //       否则可能导致退后台后被强制暂停**或系统实况窗展示错误。」
-      //   本仓正好有这个开关（`MusicStoreService.getLockScreenPlay()`），但之前**从来没有**告诉系统
-      //   ⇒ 这是"锁屏/后台播放不生效"的官方点名叫法。这里建会话后立刻按开关同步一次。
-      this.applyBackgroundPlayMode();
+      this.lockScreenDiagnostic('avsession=active activate=ok');
+      // Existing background mode support is retained; wait for it before draining pending playback.
+      // Official avsession-background-scene requires the mode to match the in-app setting.
+      await this.applyBackgroundPlayMode();
       void this.enableSystemLyric(this.session);
     } catch (error) {
-      Logger.error(TAG, `${error.code} + ${error.message}`);
+      const err: BusinessError = error as BusinessError;
+      this.lockScreenDiagnostic(`avsession=idle create-or-activate(err=${err.code}) msg=${err.message}`);
     }
     this.setAVMetadata();
     let wantAgentInfo: wantAgent.WantAgentInfo = {
       wants: [
         {
           bundleName: this.abilityContext.abilityInfo.bundleName,
+          moduleName: this.abilityContext.abilityInfo.moduleName,
           abilityName: this.abilityContext.abilityInfo.name
         }
       ],
-      actionType: wantAgent.OperationType.START_ABILITIES,
+      actionType: wantAgent.OperationType.START_ABILITY,
       requestCode: 0,
       actionFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG]
     };
-    wantAgent.getWantAgent(wantAgentInfo).then((agent) => {
+    try {
+      const agent = await wantAgent.getWantAgent(wantAgentInfo);
       if (this.session) {
-        this.session.setLaunchAbility(agent);
+        await this.session.setLaunchAbility(agent);
+        this.lockScreenDiagnostic('wantAgent launch=ok');
       }
-    })
-      .catch((err: BusinessError) => {
-        Logger.error(TAG, `getWantAgent failed, code: ${JSON.stringify(err.code)}, ` +
-        `message: ${JSON.stringify(err.message)}`);
-      });
-    this.registerSessionControlListeners();
+    } catch (error) {
+      const err: BusinessError = error as BusinessError;
+      this.lockScreenDiagnostic(`wantAgent launch(err=${err.code}) msg=${err.message}`);
+    }
+    await this.registerSessionControlListeners();
   }
 
   /** Subscribe to AVSession controller commands (play / pause / next / previous). */
@@ -1767,7 +1794,16 @@ export class MediaService {
       return;
     }
     this.appendPlayLog('[播放] 起播(' + reason + ') gen=' + playedGen);
-    this.avPlayer.play();
+    this.ensureBackgroundAudioTask();
+    this.lockScreenDiagnostic(`play branch=${reason} gen=${playedGen}`);
+    try {
+      this.avPlayer.play().catch((err: BusinessError): void => {
+        this.lockScreenDiagnostic(`play(err=${err.code}) branch=${reason} msg=${err.message}`);
+      });
+    } catch (error) {
+      const err: BusinessError = error as BusinessError;
+      this.lockScreenDiagnostic(`play(err=${err.code}) branch=${reason} msg=${err.message}`);
+    }
   }
 
   /**
@@ -1849,7 +1885,10 @@ export class MediaService {
     } else if (queueSong.source.length > 0) {
       await this.enrichOnlineTrack(queueSong);
     }
-    this.ensureBackgroundAudioTask();
+    // Load-only startup restoration must not claim an audio playback background task.
+    if (loadOnly !== true) {
+      this.ensureBackgroundAudioTask();
+    }
     this.updateMusicIndex(musicIndex);
     if (!this.avPlayer) {
       // Defer play until initAudioPlayer creates AVPlayer; loadAsset is applied then.
@@ -2056,14 +2095,14 @@ export class MediaService {
       this.start(0);
     } else if (this.avPlayer) {
       try {
-        this.avPlayer.play().then(() => {
-          // 恢复播放后无需再 seek 到当前时间：暂停位置原地续播，避免立刻 seek 造成短暂音频毛刺
-          // （进度由 timeUpdate 事件自动同步）
-          this.updateIsPlay(true);
-          this.state = AudioPlayerState.PLAY;
-        });
+        this.lockScreenDiagnostic('play branch=resume');
+        await this.avPlayer.play();
+        // Resume at the current position; timeUpdate publishes progress.
+        this.updateIsPlay(true);
+        this.state = AudioPlayerState.PLAY;
       } catch (error) {
-        Logger.error(TAG, `${error.code} + ${error.message}`);
+        const err: BusinessError = error as BusinessError;
+        this.lockScreenDiagnostic(`play(err=${err.code}) branch=resume msg=${err.message}`);
       }
     }
   }
@@ -2088,7 +2127,7 @@ export class MediaService {
           BackgroundUtil.stopContinuousTask(this.abilityContext);
         }
       }).catch((err: BusinessError) => {
-        Logger.error(TAG, 'Failed to pause,error message is :' + err.message);
+        this.lockScreenDiagnostic(`pause(err=${err.code}) msg=${err.message}`);
       })
     }
   }
@@ -2105,11 +2144,7 @@ export class MediaService {
         if (isFromControl) {
           this.playNext();
         } else if (this.avPlayer) {
-          try {
-            this.avPlayer.play();
-          } catch (error) {
-            Logger.error(TAG, `${error.code} + ${error.message}`);
-          }
+          this.startPlayback('single-cycle', this.loadGen);
         }
         break;
       case MusicPlayMode.ORDER:

@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -695,6 +695,7 @@ struct Index {
       return;
     }
     if (this.appState.isShowPlay) {
+      PlaybackPage.cancelPendingCloseForOpen();
       // 鈽呪槄鈽?2026-10-16锛?*鍏抽棴杩囩▼榛戝專瀛?路 鍞竴鑳借 `OPN` 鐨勫湴鏂瑰氨鏄繖閲?*锛夛細
       //   鐢ㄦ埛鎶ョ殑銆屽叧闂悗鍙堢獊鐒舵斁涓€閬嶅睍寮€銆嶁€斺€?澶村彿瀚岀枒鏄?*澹冲眰鎶婃挱鏀鹃〉鍙堟帹浜嗕竴娆?*
       //   锛坄isShowPlay` 鍦ㄥ叧闂€斾腑琚皝鍐欏洖 true 鈬?鏈?`@Monitor` 鏀跺埌 false鈫抰rue
@@ -991,6 +992,8 @@ struct Index {
     } else {
       this.pageIndexInfos.removeByIndexes([idx]);
     }
+    MusicStoreService.getInstance().appendRuntimeDiagnostic(
+      `RzdCloseChain route-remove source=Index index=${idx}`);
   }
 
   // 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ 涓婃媺鎵撳紑鎾斁椤碉紙璺熸墜锛屽３灞備晶锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€

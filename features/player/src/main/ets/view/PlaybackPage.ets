@@ -1260,6 +1260,122 @@ export struct PlaybackPage {
    */
   private closeGen: number = 0;
   private closeSettleTimer: number = -1;
+  // 2500ms is a failure deadline, well beyond snapshot 350ms / live <=460ms
+  // plus render/snapshot dispatch. Only normal completion decides animation completion.
+  private static readonly CLOSE_WATCHDOG_MS: number = 2500;
+  private static closeSerial: number = 0;
+  private static closeOwner: number = 0;
+  private static instanceSerial: number = 0;
+  private static ownerInstance: number = 0;
+  private static cancelCloseOwner: (() => void) | undefined = undefined;
+  private closeInstance: number = 0;
+  private closeToken: number = 0;
+  private closeWatchdogTimer: number = -1;
+  private closePath: string = 'live';
+
+  public static cancelPendingCloseForOpen(): void {
+    const cancel: (() => void) | undefined = PlaybackPage.cancelCloseOwner;
+    PlaybackPage.closeOwner = 0;
+    PlaybackPage.ownerInstance = 0;
+    PlaybackPage.cancelCloseOwner = undefined;
+    if (cancel !== undefined) {
+      cancel();
+    }
+  }
+
+  private closeDiagnostic(event: string, path: string = this.closePath): void {
+    MusicStoreService.getInstance().appendRuntimeDiagnostic(
+      `RzdCloseChain path=${path} instance=${this.closeInstance} close=${this.closeToken} ${event}`);
+  }
+
+  private ownsClose(token: number, event: string): boolean {
+    const owns: boolean = token !== 0 && token === this.closeToken &&
+      token === PlaybackPage.closeOwner && this.closeInstance === PlaybackPage.ownerInstance;
+    if (!owns) {
+      this.closeDiagnostic(`stale-callback-dropped event=${event} token=${token}`);
+    }
+    return owns;
+  }
+
+  private beginCloseGuard(path: string): number {
+    this.clearCloseGuard();
+    this.closePath = path;
+    this.closeToken = ++PlaybackPage.closeSerial;
+    PlaybackPage.closeOwner = this.closeToken;
+    PlaybackPage.ownerInstance = this.closeInstance;
+    const token: number = this.closeToken;
+    PlaybackPage.cancelCloseOwner = (): void => {
+      this.closeDiagnostic('stale-callback-dropped event=new-open');
+      this.clearCloseGuard();
+      this.stopGeoDriver();
+      const pixmap: image.PixelMap | undefined = this.morphShrinkState().pixmap;
+      this.morphShrinkState().reset();
+      this.releasePixelMapQuiet(pixmap);
+      this.expandState.endSnapshotShrink();
+      this.snapshotFlight = false;
+      this.isClosing = false;
+      ++this.closeGen;
+    };
+    this.closeWatchdogTimer = setTimeout((): void => {
+      if (!this.ownsClose(token, 'watchdog')) {
+        return;
+      }
+      this.closeDiagnostic(`watchdog-fire source=${this.closePath}`, 'fallback');
+      this.finishCloseGuard(token, true);
+    }, PlaybackPage.CLOSE_WATCHDOG_MS);
+    return token;
+  }
+
+  private clearCloseGuard(): void {
+    if (this.closeWatchdogTimer !== -1) {
+      clearTimeout(this.closeWatchdogTimer);
+      this.closeWatchdogTimer = -1;
+    }
+    if (this.closeSettleTimer !== -1) {
+      clearTimeout(this.closeSettleTimer);
+      this.closeSettleTimer = -1;
+    }
+  }
+
+  private finishCloseGuard(token: number, fallback: boolean = false): void {
+    if (!this.ownsClose(token, 'finish')) {
+      return;
+    }
+    const path: string = fallback ? 'fallback' : this.closePath;
+    // Hide intent -> synchronously remove only player route -> reset -> release ownership.
+    this.state.isShowPlay = false;
+    const names: string[] = this.pageIndexInfos.getAllPathName();
+    const index: number = names.indexOf(RouterUrlConstants.PLAYER_PAGE);
+    try {
+      if (index >= 0) {
+        this.pageIndexInfos.removeByIndexes([index]);
+      }
+      this.closeDiagnostic(`route-remove index=${index}`, path);
+    } catch (error) {
+      this.closeDiagnostic(`route-remove-failed error=${error}`, path);
+    }
+    try {
+      this.stopGeoDriver();
+      this.expandState.morphReset();
+      this.closeDiagnostic('reset', path);
+    } catch (error) {
+      this.closeDiagnostic(`reset-failed error=${error}`, path);
+    } finally {
+      this.isClosing = false;
+    }
+    this.snapshotFlight = false;
+    const pixmap: image.PixelMap | undefined = this.morphShrinkState().pixmap;
+    this.morphShrinkState().reset();
+    if (fallback) {
+      this.releasePixelMapQuiet(pixmap);
+    }
+    this.expandState.endSnapshotShrink();
+    this.clearCloseGuard();
+    ++this.closeGen;
+    PlaybackPage.closeOwner = 0;
+    PlaybackPage.ownerInstance = 0;
+    PlaybackPage.cancelCloseOwner = undefined;
+  }
   /**
    * 闂佸搫鐗滈崜姘额敃閸忚偐鈻旈悗锝庡亜椤庢瑩鎮归搹鐟版瀾濠⒀勭矒瀵即顢涘顓炲墾閻庤鐡曠亸娆戝垝閿熺姴绠┑鐘插€介崺宀勬煕濞嗘劦鐒芥繛鏉戭槹閹峰懎顓奸崨顓犫偓濂告煕?LEAVING闂佹寧绋戦悧鍡涱敋椤曗偓瀵粙宕堕妸锔奸獜闂佷紮绲介惉鐓庘枔?`drive = FINGER`闂佹寧绋戦ˇ顓㈠焵?
    *
@@ -3272,6 +3388,8 @@ export struct PlaybackPage {
 
   /** Seeds cover Resource from the current queue item. */
   aboutToAppear(): void {
+    PlaybackPage.cancelPendingCloseForOpen();
+    this.closeInstance = ++PlaybackPage.instanceSerial;
     // 闂佺绻愰悧鎰邦敊閸ャ劎鈻旈柍褜鍓熷?闁哄鏅滈悷銈囩博鐎涙ǜ浜滈柛顭戝亜閻︻垶寮堕悙璺盒撴俊鐐插€婚幐褔骞嶉鐣屾殸闂佸搫瀚烽崹浼村箺閵忋倕绾ч梽鍥儗?闂佹寧绋掑銊╁磻閿濆绀勭紓浣姑埅鐢碘偓娈垮枓閸?vs 婵炴垶鎸搁敃銉﹀垔濞差亜绠ラ柟鎯х－绾惧鏌ｉ妸銉ヮ仼閻忓浚鍨跺畷姘额敃閵忥紕娈ら梺?`pullDragging`闂?
     // 闂佸湱鍎ょ敮妤呮偂?闂佺粯鍔楅幊鎾诲吹椤曗偓楠炲秹骞樺畷鍥╋紱闁哄鏅滆摫婵″弶鎮傚顔款槻濠殿喒鏅犻幃?闂佸搫鍟崕鑲╂崲閺嶃劎鈻旈柍褜鍓涢幃鎵沪閻愵兛绮梺绋跨箲婵炲﹪寮銏℃櫖闁秆冨焻dc shell hilog | grep "expand intro"`闂佹寧绋戦ˇ顓㈠焵?
     Logger.info(PlaybackPage.logTag,
@@ -3543,7 +3661,9 @@ export struct PlaybackPage {
     // ```
     //   闂佸疇娉曟刊瀵哥箔?闂佺懓鐡ㄩ崹鐢稿储濞戙垹瑙﹂幖娣€楀Σ鎼佸级?`morphUsable` 婵?`playerRouteStillPushed()`闂佹寧绋戞總鏃傛偖鏉堛劎鈻旀い蹇撶墕閸樻挳姊洪幐搴ｆ嚂缂佽鲸绻堝畷銏ゆ偄闁垮顦柣?
     //      `morphSessionOughtToLive()` 闂佹眹鍔岀€氼參寮悙鐑樼厒濠电姴绻掔粈鍕槈閹绢垰浜炬繛鎴炴惄娴滄粓濡垫繝鍥х柧婵ǜ鍎崑鎾存媴妞嬪寒浼囨繛鎴炴惄娴滄瑧娆㈡搴㈠皫闁哄稁鐓堥弨閬嶆煛鐎ｎ偄鍔堕柣銊у枑閹棃鏁傞懖鈺冾槴闂?
-    if (!this.morphSessionOughtToLive()) {
+    if (this.closeInstance === PlaybackPage.instanceSerial && !this.morphSessionOughtToLive() &&
+      !(this.closeToken !== 0 && this.closeToken === PlaybackPage.closeOwner &&
+      this.closeInstance === PlaybackPage.ownerInstance)) {
       this.expandState.morphReset();
     } else {
       Logger.info(PlaybackPage.logTag,
@@ -4107,6 +4227,7 @@ export struct PlaybackPage {
     // 闂佺绻楀▍鏇㈠箰闁秴缁╅柟顖嗗嫮褰滈柡澶嗘櫆閻熴倗绮╃€涙鈻旈悗锝傛櫇閻熸繈鎮烽弴姘鳖槮闁哥啿鍋撻梺鐓庮殠娴滄粍鎱ㄩ埡鍛哗闁兼悂娼ф禒姗€鏌涢幒鏇熺【閻忓浚鍨堕弫宥夊醇濠婂懐鎲?closeFullScreenPlayback 闂佸憡鑹炬總鏃傜博閹绢喖绾ч柍钘夋噽缁€?
     this.stopChromeAutoHide();
     this.isClosing = true;
+    const closeToken: number = this.beginCloseGuard('snapshot');
     PlaybackPage.lastCloseAtMs = Date.now();
     // ★★★ 2026-10-18（定「系统返回关闭时两颗侧键瞬间偏一点」用）：**关闭起点那一帧的取值快照**。
     //   一次系统返回只打一行，grep 关键字 `RzdCloseFrame`。
@@ -4179,8 +4300,24 @@ export struct PlaybackPage {
     //   闂?闂佺粯绮嶅妯猴耿椤忓牊鍋傜憸宀€绮崒姘モ偓鎺楀箹娴ｉ晲绨兼繛鎴炴尨閸嬫捇鏌℃径鍡楀⒉闁轰礁銈稿畷妯衡枎濞嗘垹顦╅梺鍝勭墱閸撴岸寮搁崘鈺冾浄?L3464 闂佹眹鍔岀€氼參寮悙鐑樼厒濠电姴娲ゅ▍?*闂佸搫鍟犻弲娑橆潩閵娾晛绀冩繛鍡樺灦缁?*闁哄鏅滈悷銈夋煂濠婂棎浜归柕蹇嬪灩绗戦梺鎸庣☉婵傛棃宕鍕剺濞达絿顭堢粊杈ㄧ箾鐏炲嫨鍊楅鈧繛鎴炴尭椤厾妲愬璺何?
     //   闂?婵犮垺鍎肩划鍓ф喆閿曞倸鍌ㄩ柣鏃堟敱缁€鍫ユ煟閹炬瀚敍瀣级閳哄倻鈼ョ紒銊ｅ妽缁傛帡鎳滈崹顐礆闂婎偄娲﹂〃鎰濠靛宓?*闂?err.code 婵炴垶姊婚崰搴ㄦ偨椤愶絿鈻?*闂佹寧绋戝濉産=snapFail(100001)`闂佹寧绋戦¨鈧紒?
     //     401 = 闂佸憡鐟ラ崐褰掑汲閻斿吋鐓?/ 100001 = 闂佸綊娼цぐ鐐电箔婢舵劕绀嗛柟宄扮灱缁犵懓鈽?id 闂?婵炴垶鎸撮崑鎾寸箾閸″繐澧查柛鈺佹嚇瀹曞爼骞嗚缁侇噣鏌涘▎妯虹仩闁伙絽澧介幏瀣箒閹哄棗浜?
-    this.getUIContext().getComponentSnapshot().get(PLAYER_ROOT_ID,
+    this.closeDiagnostic('snapshot-request');
+    let snapshotReturned: boolean = false;
+    try {
+      this.getUIContext().getComponentSnapshot().get(PLAYER_ROOT_ID,
       (err: BusinessError, pixmap: image.PixelMap): void => {
+      if (snapshotReturned || !this.ownsClose(closeToken, 'snapshot-callback')) {
+        this.closeDiagnostic('stale-callback-dropped event=snapshot-callback');
+        if (pixmap !== undefined && pixmap !== this.morphShrinkState().pixmap) {
+          this.releasePixelMapQuiet(pixmap);
+        }
+        return;
+      }
+      snapshotReturned = true;
+      this.closeDiagnostic(`snapshot-callback ${(err === null || err === undefined) && pixmap !== undefined ? 'ok' : 'miss'}`);
+      if (pixmap === undefined && (err === null || err === undefined)) {
+        this.closeLiveMorphFallback('snapshot-empty');
+        return;
+      }
       // ★★★ 2026-10-18（用户第十轮：「收起过程中**按钮/封面又成了两个**」）：
       //   快照已经进手 ⇒ 接下来屏上由**快照层**代表一切（`beginSnapshotShrink()`），
       //   页面上那颗真封面必须让位，否则就是"快照一颗 + 真封面一颗"。
@@ -4229,7 +4366,12 @@ export struct PlaybackPage {
       //     `realCoverVisible()` 婵炴垶姊婚崰搴∶哄鍐炬桨闁靛牆娲﹂崺娑氱磽娓氬洤寮ㄦい鏂哄亾婵炶揪绲界粙鍕濠靛洨鈻旂€广儱瀚粣妤呮煕閹邦剛孝闁哥喎顑夊畷娆撴惞鐠団€冲壋婵炲瓨绮岄懟顖滄閸撲椒鐒婂〒姘ｅ亾婵為棿鍗虫俊?
       //   闂佸疇娉曟刊瀵哥箔?`morphLand()` 闂佸憡鐟禍婊勬櫠?闂佺儵鏅犻弲鑼礊?闂?LANDING + 婵炲瓨鍤庨崐娑氭崲閺囩姷纾兼俊顖氭惈閻撴垿鏌?婵炴垶鎸堕崐鎾斥枎閵忥紕顩查悗锝呭缁€澶愭煛?350ms 闁荤姴顑呴崯顖炴儉閸涙潙瀚夊璺猴工椤ュ苯霉閿濆棛鐭岄柡浣靛€濇俊?
       const shrink: MorphShrinkState = this.morphShrinkState();
+      this.closeDiagnostic('shrink START');
       shrink.start(this.getUIContext(), pixmap, srcBox, winW, winH, (): void => {
+        if (!this.ownsClose(closeToken, 'shrink-finish')) {
+          return;
+        }
+        this.closeDiagnostic('shrink FINISH');
         // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-17闂佹寧绋戦悧蹇涘矗鎼淬劌绠?`MainPage` 闂備緡鍙忕徊濂告煂?**onDone 濞达絽鍕?2*#**闂佹寧绋戦悾鐡€ujie.pa:154940-154949`闂佹寧绋戦¨鈧紒?
         // ```ts
         //   () => { this.miniHidden = false; this.shrinkPixmap = undefined; }
@@ -4258,7 +4400,7 @@ export struct PlaybackPage {
         //   我们原来只做了后者 ⇒ 真迷你条从"快照起飞"到"快照落位"这一段**一直是画着的**，
         //   屏上就同时有「飞行中的快照里那颗封面/那排按钮」+「真条那颗/那排」= 两份。
         this.expandState.endSnapshotShrink();
-        this.isClosing = false;
+        this.finishCloseGuard(closeToken);
       });
       PlaybackPage.ev('SQZ', `shrink win=${winW.toFixed(0)}x${winH.toFixed(0)}`);
       this.state.isShowPlay = false;
@@ -4270,6 +4412,12 @@ export struct PlaybackPage {
       //   锛坄measureGeometry` / 浜嬩欢鏃ュ織锛夆噿 绗﹀彿瀛楀舰鏉ヤ笉鍙婄敾杩涘浘锛宍Image` 閭ｅ嚑棰楀嵈宸插湪鍥鹃噷
       //   鈬?鍙墿 prev/play/next銆傜粰蹇収寮€ `waitUntilRenderFinished`锛坥ptions 蹇呴』鍦ㄧ涓変綅锛夈€?
     }, { waitUntilRenderFinished: true });
+    } catch (error) {
+      if (this.ownsClose(closeToken, 'snapshot-throw')) {
+        this.closeDiagnostic(`snapshot-callback miss throw=${error}`);
+        this.finishCloseGuard(closeToken, true);
+      }
+    }
     //   ★★★ 2026-10-18（**回退上一轮那次改动** —— 用户实测「系统返回关闭时那两个按钮**又会消失**」）：
     //     `waitUntilRenderFinished: true` 在本仓是**必须**的：这两颗是 `SymbolGlyph`（字形光栅化晚于节点绘制），
     //     关掉它 ⇒ 截图里没有字形 ⇒ 一关就"消失"（历史结论见 §178）。
@@ -4308,6 +4456,7 @@ export struct PlaybackPage {
    * @param reason 闂備緡鍋€閸嬫捇鏌涢弽銊уⅹ閻㈩垼鍋婂畷鍫曟偑閸涱垳顦╅梺娲诲弾閸樹粙鎮ラ敐鍥╅┏闁规儳鎳愮粈澶娒归崗闂翠孩缂佺粯蓱缁傚秶鈧絺鏅滈浠嬫煛閸愶箑鍔氱紒缁樻閺?
    */
   private closeLiveMorphFallback(reason: string): void {
+    this.closeDiagnostic(`live-fallback reason=${reason}`, 'fallback');
     Logger.warn(PlaybackPage.logTag,
       `RzdShrinkOverlay fallback 闂?live morph (${reason})`);
     PlaybackPage.closeFallbackReason = reason;
@@ -4352,6 +4501,8 @@ export struct PlaybackPage {
     }
     this.refreshCollapseGeometry();
     this.isClosing = true;
+    const closeToken: number = this.beginCloseGuard('live');
+    this.closeDiagnostic('shrink START');
     // 濠殿喗绻愮徊钘夛耿椤忓牆缁╅柟顖滃瀹曟娊鏌熺紒銏犲箺闁哄倷绶氬畷鎶藉Ω閿旂瓔妲繛鎴炴尭缁夌兘銆呴敃鍌氱鐎广儱鐗嗗▓浼存煕閺傝濡介柡浣哥秺楠炴帟顦查柛鈺傤殜瀹曠娀鎮€靛摜顦╂繛鎴炴尪閸婃捇鏌屽鍫濈闁靛ě鍕瘞闂佸憡鐟ф慨宕囩博鐎靛憡灏庨柧姘€荤粣妤冣偓鍨緲閻楀懐鎷归敓鐘虫櫖?
     this.stopChromeAutoHide();
     // 闂佺绻戞繛濠偽涢幘顔煎珘闁绘柨鍚嬮敍鐔煎级閳哄倻鈽夐悗纭呮珪鐎电厧顫濋璺ㄤ笉闂?闂佽　鍋撻柟顖滃瀹?闂佸憡鍨规慨宄扳枍閵娿儛鎺楊敃閵堝孩鍋ラ梺鎸庣☉閼活垶宕洪崱娆愬闁宠桨鑳跺鏃傗偓娈垮枓閸嬫捇鏌ｉ鍕靛剶婵☆偒鍓熼幃顏勎旀担鑲濃晠鎮楅悷鏉挎殲濠殿喚濞€瀹曞爼鎮欓懠顒佹闂佽桨绀侀悺銊╁焵?
@@ -4499,9 +4650,15 @@ export struct PlaybackPage {
       //   （`wujie.pa:154103-154131`）是 `createAnimator + onFrame(v) => morphT = v`，逐帧写真进度。
       //   `morphBeginLeaving()` 已 `cancelContentTween()` ⇒ `applyMorphProgress` 会同时驱动内容窗口，
       //   两层共用这一条 `460 × max(0.4, morphT)` + REVERSE_EASING（不再另写 `contentP`）。
-      this.startGeoDriver(closeFromT, 0, morphCloseMs, true);
-      this.closeSettleTimer = setTimeout((): void => {
-        this.closeSettleTimer = -1;
+      this.startGeoDriver(closeFromT, 0, morphCloseMs, true, (): void => {
+        if (!this.ownsClose(closeToken, 'live-finish')) {
+          return;
+        }
+        this.closeDiagnostic('shrink FINISH');
+        if (!this.isAlive || !this.expandState.morphGenAlive(gen)) {
+          this.finishCloseGuard(closeToken, true);
+          return;
+        }
         if (!this.isAlive) {
           // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-17闂?*闂佹椿娼块崝宥夊春濞戞氨绠?闂?闂佸搫顥￠幍鍐蹭壕閻忕偟鍋撶粻鎺楁煠閸愬弶婀版繛鍛懄閹峰懘宕卞Ο鎭嶏箑螖閸屾耽顏嗏偓瑙勫▕閹囨焻濞戞氨校闂侀潧妫楃粔璺衡枔閹寸偛绶為柡澶嬪灥婵炲洭鎮楀顒傜伇闁哄甯炴禍鎼佸础閻愮鍚柡澶嗘櫆閻熲晠宕?*闂佹寧绋戦ˇ顓㈠焵?
           //
@@ -4619,8 +4776,8 @@ export struct PlaybackPage {
         // 闂佸疇娉曟刊瀵哥箔?婵炶揪绲藉Λ鏃傚姬閸愨晝鈻旂€广儱鐗嗛崢鏉戔槈閹惧磭孝濞寸姵鐩弫宥咁潩椤掆偓濞堛倕霉閿濆棙绀冩俊鍙夋倐瀹曟宕ｅ鈧悡鈺呮煟閵娿儱顏电紒杈ㄧ箖缁嬪顓奸崪浣剐╂繛杈剧到缁夊磭妲愰弶鍟冄囧焺閸愵亜甯繛鎴炴尭椤戝嫮绮╃€涙ɑ濮滄い鏇炴缁€鍕偡?`morphGenAlive` 闂備緡鍙忕紞浣圭妤ｅ啯鈷掓い顓熷笧缁€鍡涙煏?
         // 闂?婵炲瓨鍤庨崐妤冨垝?`scheduleMorphResetAfterPop()`闂?*闁哄鍎愰崰娑㈩敋濡ゅ懎绀?闂佸湱铏庨崢浠嬪棘娴ｅ箍浜滃ù锝呭暟閻斿懘鏌ｉ姀鐘茶埞闁告埊绱曠槐鎺曠疀鎼达絿鎲归梺闈╄礋閸斿秹鎮ラ妶澶嬬厒?闂佸綊娼х粔鎾囬崣澶嬪?*闂?
         //   濡ょ姷鍋犲▔娑㈡偨?闂佸搫鍊块。锔剧博鐎涙ɑ濮滄い鏃囧吹缁愭鎮归崶銊х畵闁告埊绻濋獮鎺楀Ψ瑜滈崥鈧柣蹇撶箰瑜板绮径灞惧闁告稑锕﹂?闂佹眹鍔岀€氼剙顕ｉ懡銈傚亾閻熸壆澧曠€规洖銈告俊?
-        this.scheduleMorphResetAfterPop(closeGen, this.expandState.morphGen, 0);
-      }, morphCloseMs + 20);
+        this.finishCloseGuard(closeToken);
+      });
       return;
     }
     // 濠电偛澶囬崜婵嗭耿娓氣偓瀹曪綁顢涢悙瀛樼ギ闂佸憡鍨规慨宕囩礊瀹ュ绫嶉柛鎾茬劍缁绢垶鏌熼幁鎺戝姎闁告鍥ㄢ拻妞ゆ挶鍔庣粈澶岀磽娴ｅ湱绠戠紒妤€顦靛畷鍫曟倷鐞涒€充壕闁逞屽墴瀹曟岸寮堕崹顔绢伝闂佺懓鍚€缁€渚€宕€电硶鍋撻崷顓熷殌闁活亙鍗抽幆鍐礋椤掍緤绱滈柡澶屽剱閸撴瑥鈹冮埀顒勬煏?
@@ -4634,6 +4791,8 @@ export struct PlaybackPage {
     this.scheduleMorphResetAfterPop(this.closeGen, this.expandState.morphGen, 0);
     // 闂佺绻戠划宀€鑺卞畷鍥ㄥ磯妞ゆ牗姘ㄧ粣鐐测槈閺冨倸鏋欐い鈺嬬畱椤曪綁鏌呭☉姘间紘婵炴垶鎸搁鎴犳娴兼潙瑙﹂柨鏇楀亾闁?闂佸憡鍨规慨宕囩礊瀹ュ應鏌﹂柨鐔哄Т濞呫倝鏌?闂佸搫鍟崕鑲╂崲閺嶎厼绾ч柍銉ㄦ珪閺嗘粌鈽夐幘顖氫壕闂佹眹鍔岀€氼參寮崷顓熷皫鐎瑰嫭婢橀崘鈧俊顐到閻楀棗顫濋妸鈺佹瀬缂傚牏濞€閸ゅ绻涚仦绋垮⒉婵犫偓?
     this.expandState.squashLandAnim(this.getUIContext());
+    this.closeDiagnostic('shrink FINISH no-geometry');
+    this.finishCloseGuard(closeToken);
   }
 
   /** 婵炴垶鎸搁敃銉╊敃?`logBranchSurface()` 闂佺懓鐏氶幑浣烘崲閸愵喗鍎嶉柛鏇ㄥ弾閸旑噣鏌涘顒傗枌缂佽鲸鐟╅幃浠嬪Ω閿斾粙妾烽梺纭呮硾閿曨亪宕抽崨濠傜窞鐎广儱顦▍銏㈢磽娴ｅ顏嗘暜閸ヮ剙绠ｉ柟閭︿簽椤忛亶鏌℃径鍡橆潐缂佽精浜幉瀛樻媴缁涘娈欓梺鍝勫€介～澶屾兜鐠鸿　鏋栭柕濞炬櫅濞呯偤鏌ㄥ☉姗嗘Ф闁?*/
@@ -6320,7 +6479,8 @@ export struct PlaybackPage {
    * @param durMs 时长（ms；`<= 0` 直接落位）
    * @param reverseCurve 是否用反向曲线 `REVERSE_EASING`
    */
-  private startGeoDriver(from: number, to: number, durMs: number, reverseCurve: boolean): void {
+  private startGeoDriver(from: number, to: number, durMs: number, reverseCurve: boolean,
+    onDone?: () => void): void {
     this.stopGeoDriver();
     this.geoFrom = from;
     this.geoTo = to;
@@ -6345,18 +6505,24 @@ export struct PlaybackPage {
     };
     const anim: AnimatorResult = this.getUIContext().createAnimator(options);
     anim.onFrame = (value: number): void => {
-      if (!this.isAlive) {
+      if (!this.isAlive || this.geoAnimator !== anim) {
         return;
       }
       this.expandState.applyMorphProgress(this.geoFrom + (this.geoTo - this.geoFrom) * value);
     };
     anim.onFinish = (): void => {
       if (!this.isAlive || this.geoAnimator !== anim) {
+        if (onDone !== undefined) {
+          this.closeDiagnostic('stale-callback-dropped event=geo-finish');
+        }
         return;
       }
       this.expandState.applyMorphProgress(to);
       if (to === 1) {
         this.expandState.finishOpenGeometryAnimation(openToken);
+      }
+      if (onDone !== undefined) {
+        onDone();
       }
     };
     this.geoAnimator = anim;
@@ -7204,7 +7370,7 @@ export struct PlaybackPage {
             //       闂備焦褰冪粔鎾囬弻銉ョ婵炲棙鍔栫瑧濡ょ姷鍋涢崐濠氭偤閹达附鍎嶉柛鏇ㄥ幐閺佸嫰鏌熼崹顔拘＄紓宥嗘閺佸秵寰勯崱妯碱唵
             //     閻?Hard exit 婵炴垶鎸诲褰掓儉閸涱喚顩查柛婵嗗閺呮悂鏌ㄥ☉娆忓摵闁稿鎳忕粙澶愬焵椤掑嫬绠€广儱妫涢崹浠嬫⒑閹绘帗婀伴柣銉ユ嚇瀵灚寰勭€ｎ偄鍟婇梺琛″亾濡わ絽鍟ㄩ埀?闂?闂?false 闂?婵犮垻鎳撻崯鍧楁儑娴兼潙缁╅悹楦挎閸?闂?
             setTimeout((): void => {
-              if (this.playerRouteStillPushed()) {
+              if (this.closeInstance !== PlaybackPage.instanceSerial || this.playerRouteStillPushed()) {
                 Logger.info(PlaybackPage.logTag,
                   'RzdMorphOnDisappear keep isShowPlay (player route still on the stack)');
                 return;
@@ -7241,7 +7407,9 @@ export struct PlaybackPage {
             //         闂佹寧绋戦悧鍛箔閸屾稓鈻斿┑鐘辫兌椤忛亶鏌ｅΔ鈧悧鐐垫濮樿埖鐒鹃柟瀛樺笧閻熸繈鎮楅悽鍨仧缂佽鲸绻堥幃鍫曞幢濞嗘劖娈搁柣?{@link morphSessionOughtToLive} 闂佹眹鍔岀€氼剟顢氶鈧幃陇顦堕柕鍡楀暣婵?
             //       闂佸疇娉曟刊瀵哥箔?婵?`aboutToDisappear()` **闂婎偄娲ら幊姗€濡磋箛娑樿Е閻忕偠鍋愰鍗炩槈閹垮啩绨婚柛銊ょ矙楠?*闂佹寧绋戦悧鍡涘箖閹惧鈻旈柍褜鍓濋妵鎰板閵忕姌锕傛煥濞戞ê顨欑紒妤€顦遍幏瀣矙閹稿骸鈧鏌涢幇顓犳噥缂佹柨鐡ㄧ缓钘壩旂€ｎ剛顦梺?
             setTimeout((): void => {
-              if (this.morphSessionOughtToLive(wasAlive)) {
+              if (this.closeInstance !== PlaybackPage.instanceSerial ||
+                (this.closeToken !== 0 && this.closeToken === PlaybackPage.closeOwner) ||
+                this.morphSessionOughtToLive(wasAlive)) {
                 Logger.info(PlaybackPage.logTag,
                   'RzdMorphOnDisappear keep session (morphSessionOughtToLive)');
                 return;

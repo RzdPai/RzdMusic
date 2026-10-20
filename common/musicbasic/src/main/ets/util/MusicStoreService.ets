@@ -22,8 +22,11 @@ import { PlayedSongRecord } from '../model/PlayedSongRecord';
 import { PlaylistDto } from '../model/PlaylistDto';
 import { SongItem } from '../model/SongData';
 import { getAppRuntime } from '../model/AppRuntimeStorage';
+import { appendPlayLog } from './LxLogger';
 
 const STORE_NAME: string = 'music_store';
+const KEY_RUNTIME_DIAGNOSTICS: string = 'runtime_diagnostics_v1';
+const MAX_RUNTIME_DIAGNOSTICS: number = 5000;
 const KEY_HISTORY: string = 'history_list';
 const KEY_FAVORITES: string = 'favorite_list';
 const KEY_FAVORITE_ARTISTS: string = 'favorite_artists';
@@ -169,6 +172,71 @@ export class MusicStoreService {
     }
     this.store = preferences.getPreferencesSync(ctx, { name: STORE_NAME });
     return this.store;
+  }
+
+  private diagnosticPending: string = '';
+  private diagnosticFlushRunning: boolean = false;
+  private diagnosticDirty: boolean = false;
+
+  /** RzdRuntimeDiag: event-only diagnostics; never call from frame/ticker callbacks. */
+  public appendRuntimeDiagnostic(message: string): void {
+    const entry: string = `[${new Date().toISOString()}] ${message}\n`;
+    appendPlayLog(message);
+    console.info('[RzdRuntimeDiag] ' + message);
+    this.diagnosticPending = (this.diagnosticPending + entry).slice(-MAX_RUNTIME_DIAGNOSTICS);
+    try {
+      const store: preferences.Preferences | undefined = this.getStore();
+      if (store === undefined) {
+        console.warn('[RzdRuntimeDiag] persistence pending: context unavailable');
+        return;
+      }
+      const previous: string = store.getSync(KEY_RUNTIME_DIAGNOSTICS, '') as string;
+      const combined: string = previous + this.diagnosticPending;
+      let bounded: string = combined.slice(-MAX_RUNTIME_DIAGNOSTICS);
+      if (combined.length > MAX_RUNTIME_DIAGNOSTICS) {
+        const firstBreak: number = bounded.indexOf('\n');
+        if (firstBreak >= 0) {
+          bounded = bounded.substring(firstBreak + 1);
+        }
+      }
+      store.putSync(KEY_RUNTIME_DIAGNOSTICS, bounded);
+      this.diagnosticPending = '';
+      this.diagnosticDirty = true;
+      this.flushRuntimeDiagnostics(store);
+    } catch (err) {
+      console.error('[RzdRuntimeDiag] persistence-write-failed ' + JSON.stringify(err));
+    }
+  }
+
+  /** Serial, coalesced disk writes; a later event retries a failed flush. */
+  private async flushRuntimeDiagnostics(store: preferences.Preferences): Promise<void> {
+    if (this.diagnosticFlushRunning) {
+      return;
+    }
+    this.diagnosticFlushRunning = true;
+    try {
+      while (this.diagnosticDirty) {
+        this.diagnosticDirty = false;
+        await store.flush();
+      }
+    } catch (err) {
+      this.diagnosticDirty = true;
+      const failure: string = '[RzdRuntimeDiag] persistence-flush-failed ' + JSON.stringify(err);
+      appendPlayLog(failure);
+      console.error(failure);
+    } finally {
+      this.diagnosticFlushRunning = false;
+    }
+  }
+
+  public getRuntimeDiagnostics(): string {
+    try {
+      const store: preferences.Preferences | undefined = this.getStore();
+      const persisted: string = store === undefined ? '' : store.getSync(KEY_RUNTIME_DIAGNOSTICS, '') as string;
+      return (persisted + this.diagnosticPending).slice(-MAX_RUNTIME_DIAGNOSTICS);
+    } catch (err) {
+      return '[RzdRuntimeDiag] persistence-read-failed ' + JSON.stringify(err);
+    }
   }
 
   /** Backup restore completion barrier: propagate persistence failures to the caller. */
@@ -743,7 +811,7 @@ export class MusicStoreService {
       return;
     }
     store.putSync(KEY_LOCK_SCREEN_PLAY, enabled);
-    store.flush();
+    this.appendRuntimeDiagnostic(`[RzdLockscreen] lockscreen enabled=${enabled} event=setting-write`);
   }
 
   /** Whether the lyrics/playback page keeps the screen on. */
