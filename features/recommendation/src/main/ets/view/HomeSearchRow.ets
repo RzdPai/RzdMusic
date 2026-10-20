@@ -15,41 +15,42 @@ export struct HomeSearchRow {
   build() {
     Column() {
       Row({ space: RECOGNIZE_GAP }) {
-        Stack() {
-          Search({ placeholder: '艺人、歌曲或专辑' })
-            .height(SEARCH_FIELD_H)
-            .backgroundColor(Color.Transparent)
-            // ★ 目标页那端必须用**同一个**占位色：两端不同色时形变中途会看到"白字突然变灰"。
-            //   （官方示例用 sys.color.mask_secondary；我们的深色主题下它太淡、看着像"文字消失"，
-            //     所以两端统一成已验证可见的 font_secondary —— 关键是**两端一致**。）
-            .placeholderColor($r('sys.color.font_secondary'))
-            .placeholderFont({ size: 16 })
-            .textFont({ size: 16 })
-            .fontColor($r('sys.color.font_primary'))
-            .caretStyle({ color: $r('sys.color.font_primary') })
-            .searchIcon({ size: 16, color: $r('sys.color.font_secondary') })
-            .cancelButton({
-              style: CancelButtonStyle.INPUT,
-              icon: { size: 17, color: $r('sys.color.font_secondary') }
-            })
-            .width('100%')
-            .focusable(false)
-            .focusOnTouch(false)
-            .defaultFocus(false)
-            .geometryTransition(SEARCH_GEO_ID, { follow: true })
-            .onAreaChange((_oldArea: Area, area: Area): void => {
-              Logger.info('RzdSearchMorph',
-                `source rect x=${area.globalPosition.x} y=${area.globalPosition.y} w=${area.width} h=${area.height}`);
-            })
-            .onTouch((event: TouchEvent): void => {
-              if (event.type === TouchType.Up) {
-                Logger.info('RzdSearchHome', 'tap-open');
-                this.onOpenSearch();
-              }
-            })
-        }
-        .layoutWeight(1)
-        .attributeModifier(new SearchGlassModifier())
+        // ★★ 2026-10-20：**不要**把搜索框包在"玻璃 Stack"里。
+        //   一镜到底做形变的是挂 `geometryTransition` 的那个节点；玻璃如果挂在外面那层 Stack 上，
+        //   飞起来就只有框里的文字、框本身不动（甲方原话："只有搜索框里的文字有动画"）。
+        //   官方示例就是把背景直接挂在 `Search` 上（`.backgroundColor('#0D000000')`），这里照抄：
+        //   背景/圆角/高度全部落在 `Search` 自己身上，两端同一套。
+        Search({ placeholder: '艺人、歌曲或专辑' })
+          .height(SEARCH_FIELD_H)
+          .backgroundColor($r('sys.color.comp_background_tertiary'))
+          .borderRadius(SEARCH_FIELD_H / 2)
+          .clip(true)
+          // 两端占位色必须同一个 token：不同色时形变中途会看到"白字突然变灰"。
+          .placeholderColor($r('sys.color.font_secondary'))
+          .placeholderFont({ size: 16 })
+          .textFont({ size: 16 })
+          .fontColor($r('sys.color.font_primary'))
+          .caretStyle({ color: $r('sys.color.font_primary') })
+          .searchIcon({ size: 16, color: $r('sys.color.font_secondary') })
+          .cancelButton({
+            style: CancelButtonStyle.INPUT,
+            icon: { size: 17, color: $r('sys.color.font_secondary') }
+          })
+          .layoutWeight(1)
+          .focusable(false)
+          .focusOnTouch(false)
+          .defaultFocus(false)
+          .geometryTransition(SEARCH_GEO_ID, { follow: true })
+          .onAreaChange((_oldArea: Area, area: Area): void => {
+            Logger.info('RzdSearchMorph',
+              `source rect x=${area.globalPosition.x} y=${area.globalPosition.y} w=${area.width} h=${area.height}`);
+          })
+          .onTouch((event: TouchEvent): void => {
+            if (event.type === TouchType.Up) {
+              Logger.info('RzdSearchHome', 'tap-open');
+              this.onOpenSearch();
+            }
+          })
 
         Stack() {
           SymbolGlyph($r('sys.symbol.identify_song'))

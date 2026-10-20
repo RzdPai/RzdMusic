@@ -2756,6 +2756,16 @@ struct Index {
       .onAppear((): void => {
         this.ensureHomeRoute();
       })
+      // ★★ 底栏显隐跟着**内层栈的真实状态**走：
+      //   之前只在 closeHomeSearch() 里翻标志，而从搜索页自己的返回键退出时没人恢复 ⇒ 底栏一直 0 高度。
+      //   `onNavBarStateChange`：路由推入时 navBar 不可见 ⇒ 搜索页在最上面；弹回 ⇒ 首页回来了。
+      .onNavBarStateChange((isVisible: boolean): void => {
+        const searching: boolean = !isVisible;
+        if (searching !== this.homeSearchOpen) {
+          this.homeSearchOpen = searching;
+          Logger.info(RzdShellLogTag, `home search bar searching=${searching}`);
+        }
+      })
       .expandSafeArea([SafeAreaType.SYSTEM, SafeAreaType.CUTOUT], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
     }
     .tabBar(this.TabBarItem(0, $r('app.string.tab_home'), $r('sys.symbol.house_fill')))

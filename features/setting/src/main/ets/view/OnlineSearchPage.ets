@@ -1539,12 +1539,10 @@ export struct OnlineSearchPage {
         this.closeSearch();
       })
 
-      Stack() {
-        this.SearchInputBar()
-      }
-      .layoutWeight(1)
-      .height(40)
-      .attributeModifier(new SearchGlassModifier())
+      // ★★ 搜索框**不再包玻璃 Stack**：做形变的是挂 `geometryTransition` 的节点，
+      //   背景必须落在 `Search` 自己身上，否则飞起来的只有文字、框不动
+      //   （官方示例 `PageTwo.ets:47-57` 就是把 backgroundColor 挂在 Search 上）。
+      this.SearchInputBar()
 
       Stack() {
         SourceChip({ source: this.searchSource })
@@ -1762,7 +1760,10 @@ export struct OnlineSearchPage {
     Search({ value: this.query, placeholder: '艺人、歌曲或专辑', controller: this.searchController })
       .id('online_search_input')
       .height(40)
-      .backgroundColor(Color.Transparent)
+      // 背景/圆角挂在 Search 自己身上（与首页那端完全同一套）——这样形变时"整个框"都在动。
+      .backgroundColor($r('sys.color.comp_background_tertiary'))
+      .borderRadius(20)
+      .clip(true)
       // 占位色与首页那端**同一套**：两端不同色就会在形变瞬间看到"白字突然变灰"。
       // （官方示例用 sys.color.mask_secondary；我们深色主题下它太淡、看着像"文字消失"，
       //   所以两端统一成已验证可见的 font_secondary —— 关键是两端一致。）
