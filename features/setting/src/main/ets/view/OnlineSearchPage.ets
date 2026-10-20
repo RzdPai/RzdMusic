@@ -194,6 +194,12 @@ struct OnlineSearchPage {
   @Local suggestWords: string[] = [];
   @Local showSuggest: boolean = false;
   private suggestTimerId: number = -1;
+  /**
+   * 程序化改 `query` 后要"吃掉"一次 `onChange`（不排联想请求）。
+   * 见 `applyKeyword()` 的注释：点词条会先把 query 赋好，`onChange` 若照常排联想，
+   * 联想层就会在搜索结果出来后再冒出来。
+   */
+  private suppressSuggestOnce: boolean = false;
   private suggestSeq: number = 0;
   @Local searching: boolean = false;
   @Local songs: LXSearchSong[] = [];
@@ -651,8 +657,9 @@ struct OnlineSearchPage {
   }
 
   private pickSuggest(word: string): void {
+    this.hideSuggest();
+    this.suppressSuggestOnce = true;
     this.query = word;
-    this.showSuggest = false;
     this.suggestWords = [];
     void this.doSearch();
   }
@@ -714,6 +721,22 @@ struct OnlineSearchPage {
     return this.query.trim() + '|' + active.join(',');
   }
 
+  /**
+   * 点词条（最近搜索 / 热搜）发起搜索。
+   *
+   * ★★ 2026-10-20（用户：「点击词条搜索后会出现联想词（之前修过一次）」—— 回归了）：
+   *   真因是 `this.query = keyword` 是**程序化赋值**，`Search.onChange` 照样会触发 ⇒
+   *   `scheduleSuggest()` 又排了一个 280ms 的联想请求，定时器一到联想层就冒出来。
+   *   上一轮只清了 `doSearch()` 之前的那批定时器，清不到"赋值之后新排的那个"。
+   *   现在用 `suppressSuggestOnce` 标记：程序化赋值后**第一次** `onChange` 只同步值、不排联想。
+   */
+  private applyKeyword(keyword: string): void {
+    this.hideSuggest();
+    this.suppressSuggestOnce = true;
+    this.query = keyword;
+    void this.doSearch();
+  }
+
   private async doSearch(): Promise<void> {
     // ★ 2026-10-20（用户：「点击词条跳转搜索时还会显示联想词」）：真因是这里只把
     //   `showSuggest` 置 false、**没清 280ms 防抖定时器**，定时器一到又把联想层打开。
@@ -772,15 +795,30 @@ struct OnlineSearchPage {
    * 从 `doSearch()` 里**原样抽出来**，不碰 `this.searching`（由调用方管），
    * 这样「综合」页签可以 `Promise.all` 三份搜索，「歌曲」页签仍走原来的单份路径。
    */
+  /**
+   * 本次搜索要走哪些音源。
+   *
+   * ★ 2026-10-20（用户：「搜索页还是卡」）：综合页要同时拉 歌曲/歌手/专辑 三份，
+   *   若再乘上"已勾选的 N 个音源"就是十几条并发请求，进页面会明显卡。
+   *   ⇒ **综合页只取第一个勾选的音源**；单类页签（歌曲/歌单/歌手/专辑）保持原样，全勾的都搜。
+   */
+  private searchSources(): string[] {
+    const out: string[] = [];
+    for (let i: number = 0; i < this.sources.length; i++) {
+      if (this.sources[i].checked) {
+        out.push(this.sources[i].id);
+        if (this.overview) {
+          break;
+        }
+      }
+    }
+    return out;
+  }
+
   private async doSongSearch(): Promise<void> {
     this.songs = [];
     this.covers = {};
-    const activeSources: string[] = [];
-    for (let i: number = 0; i < this.sources.length; i++) {
-      if (this.sources[i].checked) {
-        activeSources.push(this.sources[i].id);
-      }
-    }
+    const activeSources: string[] = this.searchSources();
     if (activeSources.length === 0) {
       return;
     }
@@ -826,12 +864,7 @@ struct OnlineSearchPage {
 
   /** Searches playlists across the enabled sources. */
   private async doPlaylistSearch(): Promise<void> {
-    const activeSources: string[] = [];
-    for (let i: number = 0; i < this.sources.length; i++) {
-      if (this.sources[i].checked) {
-        activeSources.push(this.sources[i].id);
-      }
-    }
+    const activeSources: string[] = this.searchSources();
     if (activeSources.length === 0) {
       this.errorMsg = '请至少选择一个音源';
       return;
@@ -858,12 +891,7 @@ struct OnlineSearchPage {
 
   /** Searches singers across the enabled sources (geuz source codes). */
   private async doSingerSearch(): Promise<void> {
-    const activeSources: string[] = [];
-    for (let i: number = 0; i < this.sources.length; i++) {
-      if (this.sources[i].checked) {
-        activeSources.push(this.sources[i].id);
-      }
-    }
+    const activeSources: string[] = this.searchSources();
     if (activeSources.length === 0) {
       this.errorMsg = '请至少选择一个音源';
       return;
@@ -892,12 +920,7 @@ struct OnlineSearchPage {
 
   /** Searches albums across the enabled sources. */
   private async doAlbumSearch(): Promise<void> {
-    const activeSources: string[] = [];
-    for (let i: number = 0; i < this.sources.length; i++) {
-      if (this.sources[i].checked) {
-        activeSources.push(this.sources[i].id);
-      }
-    }
+    const activeSources: string[] = this.searchSources();
     if (activeSources.length === 0) {
       this.errorMsg = '请至少选择一个音源';
       return;
@@ -1385,55 +1408,25 @@ struct OnlineSearchPage {
   }
 
   /**
-   * 顶部固定区（用户 2026-10-20 截图口径，**整页自绘顶栏**）：
-   * 第 1 行 = [返回] + [搜索框（内含音源钮）]；第 2 行 = [综合/歌曲/歌单/歌手/专辑] 胶囊页签。
+   * 顶部固定区（挂在 HDS 标题栏的 `bottomBuilder` 里，与「我的」页/历史页同一套）：
+   * 第 1 行 = [音源钮 + 搜索框] 胶囊；第 2 行 = [综合/歌曲/歌单/歌手/专辑] 胶囊页签。
    *
-   * ★ 为什么改成自绘顶栏：HDS 标题栏只能给 `title` 写字符串、给 `bottomBuilder` 塞自定义内容，
-   *   **没有"把自定义内容放进标题行"的口子** ⇒ 想做到"搜索框和返回箭头同一行"（搜索框上提）
-   *   只能 `hideTitleBar(true)` 自己画。代价是丢掉 HDS 的渐变模糊标题栏，截图里本来也没有。
-   *   整页盒子仍从屏幕 y=0 起排（`ignoreLayoutSafeArea(TOP)`），所以这里自己补**状态栏高度**。
+   * ★★ 2026-10-20 第六轮（用户第三次反馈「顶部还是没延伸到状态栏」）：**不再自绘顶栏**。
+   *   自绘那套要自己算状态栏让位，怎么调都差一截；而「我的」页/历史页用 HDS 标题栏出来的位置
+   *   一直是准的（用户自己也说「参考 RzdSchool 的标题栏和我的页的配色」）⇒ 回到 HDS：
+   *   - 标题栏保留（返回键、状态栏让位、渐变托底全由 HDS 负责），只是**不写标题文字**；
+   *   - 搜索框 + 页签挂 `bottomBuilder`（HDS 自己会把它们排在标题行下面）；
+   *   - 列表用 `contentStartOffset(contentPaddingTop)` 把这段高度让进**滚动内容**里，
+   *     行才能一路画进状态栏（与历史页 `titleTopInset()` 同一口径）。
    */
-  /**
-   * 自绘顶栏**还要往下让多少**（vp）= 状态栏高度 - 盒顶，负数取 0。
-   *
-   * ★ 2026-10-20 第三轮（用户：「我怀疑你想加顶部留白，却加进了屏幕顶部而不是列表顶部」）：
-   *   上一版还额外用 `margin top: -headerPullUp()` 把顶栏往上提，等于**同时**做了两套补偿，
-   *   反而把整块头部顶歪。现在只保留这一处、只让一次：盒顶已经在状态栏下沿时结果为 0，不重复让位。
-   */
-  private headerTopInset(): number {
-    const statusBar: number = Math.max(0, getStatusBarTopVpFromWindowUtil());
-    return Math.max(0, statusBar - this.boxTopVp);
-  }
-
   @Builder
   private SearchHeaderBar() {
     Column({ space: 6 }) {
-      Row({ space: 8 }) {
-        Row() {
-          SymbolGlyph($r('sys.symbol.chevron_left'))
-            .fontSize(22)
-            .fontColor([$r('sys.color.font_primary')])
-        }
-        .width(40)
-        .height(40)
-        .borderRadius(20)
-        .backgroundColor($r('app.color.floating_mini_bar_background'))
-        .backgroundBlurStyle(this.searchControlBlur())
-        .justifyContent(FlexAlign.Center)
-        .accessibilityText('返回')
-        .onClick((): void => {
-          this.pageStack.pop();
-        })
-        this.SearchInputBar()
-      }
-      .width('100%')
-      .padding({ left: 8, right: 12 })
-      .alignItems(VerticalAlign.Center)
-
+      this.SearchInputBar()
       this.SearchTabRow()
     }
     .width('100%')
-    .padding({ top: this.headerTopInset(), bottom: 6 })
+    .padding({ bottom: 6 })
     .onAreaChange((_oldArea: Area, newArea: Area): void => {
       const height: number = Number(newArea.height);
       if (height > 0 && Math.abs(height - this.searchHeaderHeight) > 0.5) {
@@ -1629,14 +1622,18 @@ struct OnlineSearchPage {
           .height(40)
           .borderWidth(0)
           .backgroundColor(Color.Transparent)
-          // ★ 2026-10-20（用户：「搜索框也加上光感」）：材质模糊必须带
-          //   `adaptiveColor = AVERAGE`（取背后画面平均色）才是光感，默认 DEFAULT 只是一层死蒙版。
-          .backgroundBlurStyle(this.searchControlBlur(), barBlurOptions())
+          // ★ 2026-10-20：搜索框本体不再挂模糊 —— 外层胶囊已经是实色卡片底，
+          //   里面再模糊一层等于白开销（用户反馈"进页面很卡"就有它的份）。
           // ★ 2026-10-20（用户：「搜索页右侧的**搜索两个字去掉**」）：
           //   原来这里 `.searchButton(...)` 会在输入框右端塞一颗「搜索」文字按钮，已移除；
           //   提交走键盘回车（`onSubmit`）与下面的清除按钮。
           .onChange((value: string) => {
             this.query = value;
+            // 程序化赋值引起的那一次 onChange：只同步值，不排联想（见 applyKeyword）
+            if (this.suppressSuggestOnce) {
+              this.suppressSuggestOnce = false;
+              return;
+            }
             this.scheduleSuggest(value);
           })
           .onSubmit(() => {
@@ -1655,12 +1652,12 @@ struct OnlineSearchPage {
       .width('100%')
       .height(40)
       .borderRadius(20)
-      // ★ 2026-10-20（用户：「深色模式下看不到搜索条胶囊」）：
-      //   `floating_mini_bar_background` 在纯黑底上几乎是纯黑 ⇒ 胶囊边界消失。
-      //   深色下给一层**白色低透明**打底（约 12%），浅色下给黑色 8%，两边都能看出胶囊轮廓。
-      .backgroundColor(this.isDarkTheme() ? '#1FFFFFFF' : '#14000000')
-      .backgroundBlurStyle(this.searchControlBlur())
-      // 注意：左右 padding 由调用方（build 主体顶部）控制，保证与 List padding(12,12) 严格对
+      // ★ 2026-10-20（用户：「深色模式下依旧看不到搜索胶囊」「参考我的页的配色」）：
+      //   改用**卡片底色** `app.color.card_background`（我的页的快捷卡/歌单卡就是这个），
+      //   深浅两套里都是"比页面底亮一档"的实色 ⇒ 一定看得见，也不再依赖模糊。
+      //   `backgroundBlurStyle` 一并去掉：标题栏外层本来就是材质，再叠一层既没效果又更慢。
+      .backgroundColor($r('app.color.card_background'))
+      // 注意：左右 padding 由调用方（`SearchHeaderBar`）控制
     }
     // ★ 2026-10-20：本行现在和「返回」按钮同排 ⇒ 用 `layoutWeight(1)` 吃剩余宽度，
     //   左右内边距交给外层 Row（`TopSearchRow`）统一给。
@@ -1858,7 +1855,9 @@ struct OnlineSearchPage {
         },
         content: {
           title: {
-            mainTitle: $r('app.string.search_title'),
+            // ★ 2026-10-20（用户：顶部「搜索」二字去掉）：标题留空，标题行只留返回键 ——
+            //   HDS 仍照常给标题行让状态栏，只是不画文字。
+            mainTitle: '',
             mainTitleSize: TitleSize.TITLE_ML
           },
           backIcon: {
@@ -1945,9 +1944,9 @@ struct OnlineSearchPage {
   build() {
     HdsNavDestination() {
       Column() {
-        // ★ 用户 2026-10-20：整页自绘顶栏（返回 + 搜索框同一行 + 五个页签），
-        //   所以列表不再需要 `contentStartOffset` 那套"把标题栏高度让进滚动内容里"的算法。
-        this.SearchHeaderBar()
+        // ★ 2026-10-20 第六轮：搜索框 + 页签回到 **HDS 标题栏的 bottomBuilder**（见
+        //   `getSearchTitleBar()`），页面主体只剩列表 ⇒ 顶部让位/状态栏延伸全由 HDS + 
+        //   `List.contentStartOffset(contentPaddingTop)` 负责，与历史页/我的页同一套。
 
         Stack({ alignContent: Alignment.Center }) {
           List({ scroller: this.listScroller }) {
@@ -1978,14 +1977,13 @@ struct OnlineSearchPage {
                         .textAlign(TextAlign.Start)
                         .padding({ left: 14, right: 14, top: 8, bottom: 8 })
                         .borderRadius(18)
-                        .backgroundColor($r('app.color.background_secondary'))
-                        // ★ 2026-10-20（用户：「搜索页词条的胶囊背景加上」）：词条胶囊也走材质背板，
-                        //   与搜索框/浮层同一套光感（`adaptiveColor = AVERAGE` 取背后画面色）。
-                        .backgroundBlurStyle(this.searchControlBlur(), barBlurOptions())
+                        // ★ 2026-10-20（用户：「刚进搜索页非常卡」）：词条**不再挂模糊**
+                        //   ——每屏 20 来个胶囊各挂一层 blur，进页面就是一卡。改纯色卡片底，
+                        //   与我的页卡片同色（深色下也看得见）。
+                        .backgroundColor($r('app.color.card_background'))
                         .margin({ right: 8, bottom: 8 })
                         .onClick(() => {
-                          this.query = keyword;
-                          void this.doSearch();
+                          this.applyKeyword(keyword);
                         })
                     }, (keyword: string) => 'hot-' + keyword)
                   }
@@ -2029,13 +2027,11 @@ struct OnlineSearchPage {
                         .textAlign(TextAlign.Start)
                         .padding({ left: 14, right: 14, top: 8, bottom: 8 })
                         .borderRadius(18)
-                        .backgroundColor($r('app.color.background_secondary'))
-                        // ★ 2026-10-20：词条胶囊与热搜同一套材质背板（光感）
-                        .backgroundBlurStyle(this.searchControlBlur(), barBlurOptions())
+                        // 与热搜同一处理：纯色卡片底、不挂模糊（卡顿根因之一）
+                        .backgroundColor($r('app.color.card_background'))
                         .margin({ right: 8, bottom: 8 })
                         .onClick(() => {
-                          this.query = keyword;
-                          void this.doSearch();
+                          this.applyKeyword(keyword);
                         })
                     }, (keyword: string) => keyword)
                   }
@@ -2181,7 +2177,7 @@ struct OnlineSearchPage {
           //    歌曲行本身是「封面 + 标题/歌手 + 来源/时长」的整行卡片，铺成多栏会把
           //    文字挤窄、行与行长度还参差不齐，看起来就是"文字被拉伸对齐了"。
           //    搜索结果统一单栏、左对齐。
-          .contentStartOffset(0)
+          .contentStartOffset(this.contentPaddingTop)
           .padding({
             left: 12,
             right: 12,
@@ -2318,23 +2314,24 @@ struct OnlineSearchPage {
       .width('100%')
       .height('100%')
       .onAreaChange((_oldArea: Area, newArea: Area): void => {
-        // 量盒顶（窗口坐标 vp）：顶部留白由 `headerTopInset()` 按它反推，不写死状态栏高度
+        // 量盒顶（窗口坐标 vp）只用于排查日志：HDS 标题栏方案下顶部由 HDS 自己让位
         const top: number = newArea.globalPosition.y as number;
         if (Math.abs(top - this.boxTopVp) > 0.5) {
           this.boxTopVp = top;
-          hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
-            'RzdSearchTop boxTop=%{public}f inset=%{public}f', top, this.headerTopInset());
+          hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchTop boxTop=%{public}f', top);
         }
       })
-      // ★ 状态栏那一条归页面：内容是**自己自绘的固定顶栏**（`boxTopVp` 实测后由
-      //   `headerTopInset()` 让位），所以容器本身 padding 保持 0。
+      // 页面主体从屏幕顶起排，让位由 `List.contentStartOffset(contentPaddingTop)` 负责
       .padding({ top: 0 })
     }
     .onBackPressed((): boolean => guardPlayerBack('OnlineSearchPage'))
-    // ★ 用户 2026-10-20：顶栏整页自绘（返回 + 搜索框同一行 + 五页签）⇒ HDS 标题栏整条隐藏。
-    //   HDS 标题栏没有"把自定义内容放进标题行"的口子，这是"搜索框上提"唯一的做法。
-    .hideTitleBar(true)
-    .hideBackButton(true)
+    // ★★ 2026-10-20 第六轮（用户第三次说「顶部没延伸到状态栏」+「参考 RzdSchool 的标题栏和我的页」）：
+    //   **回到 HDS 标题栏**（不再自绘、不再 hideTitleBar）。标题栏只保留返回键（标题文字留空），
+    //   搜索框与页签挂在 `bottomBuilder`，状态栏让位 / 沉浸托底全交给 HDS —— 与「我的」页、
+    //   历史页完全同一套，位置不会再偏。
+    .hideTitleBar(false)
+    .hideBackButton(false)
+    .titleBar(this.getSearchTitleBar())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .dynamicHideTitleBar({
       hideTitleArea: false,
