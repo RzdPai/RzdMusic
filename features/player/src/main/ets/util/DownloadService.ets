@@ -960,38 +960,25 @@ export class DownloadService {
   /**
    * 保存到目标位置。
    *
-   * ★ 2026-10-20（用户：「不要单独做导入的和下载的，就默认下载时保存到**应用私有目录**，
-   *   然后直接扫一下私有目录列出来；保存到 Download 文件夹再按用户设置进一步处理」）：
-   *   新增第一档 `'private'`（现在也是**默认值**）—— 直接落到
-   *   `<filesDir>/local_music/<文件名>`，也就是本地音乐模块的索引目录。
-   *   本地音乐页进页时会扫这个目录把没有索引的音频补登记，所以下载完**直接就出现在列表里**，
-   *   既不弹系统窗口、也不需要"下载管理"另存一份数据。
-   *   ⚠️ 目录名 `local_music` 必须与 `features/localmusic/core/LocalMusic.ets` 的 `DIR_NAME`
-   *      保持一致（跨 features 不能互相 import，只能靠这个约定；改一处必须改两处）。
+   * ★ 2026-10-20 修正（用户：「**不是新增保存方式**，就是无论用户选哪个，都会在私有目录留一份」）：
+   *   上一版把 `'private'` 做成了第三种保存方式（默认值），理解错了。正确语义是：
+   *   1. **不管用户选什么**，都先在 `<filesDir>/local_music/` 留一份私有副本 ——
+   *      本地音乐页扫这个目录，所以"下载完就在本地音乐里"永远成立；
+   *   2. 用户设置 = `'download'` 时，再往系统 Download 目录**导出一份**；
+   *      设置 = `'ask'` 时，再弹系统保存对话框导出。
+   *   即"私有副本是保底，导出是额外的"。
+   *
+   * ⚠️ 目录名 `local_music` 必须与 `features/localmusic/core/LocalMusic.ets` 的 `DIR_NAME` 一致
+   *    （跨 features 不能互相 import，只能靠这个约定；改一处必须改两处）。
    */
   private async saveToDestination(task: DownloadTask, tmpPath: string, lrcText: string): Promise<void> {
     const saveMode: string = MusicStoreService.getInstance().getDownloadSaveMode();
     let finalPath: string = '';
-    if (saveMode === 'private') {
-      const hostContext: common.Context | undefined =
-        this.uiContext !== undefined ? this.uiContext.getHostContext() : undefined;
-      if (hostContext === undefined) {
-        throw new Error('拿不到应用上下文');
-      }
-      const dir: string = `${hostContext.filesDir}/local_music`;
-      if (!fs.accessSync(dir)) {
-        fs.mkdirSync(dir);
-      }
-      let destPath: string = `${dir}/${task.fileName}`;
-      if (fs.accessSync(destPath)) {
-        const uniqueName: string = task.fileName.replace(/(\.[^.]+)$/, '_' + Date.now() +
-          '_' + Math.floor(Math.random() * 1000000) + '$1');
-        destPath = `${dir}/${uniqueName}`;
-      }
-      await this.copyTo(tmpPath, destPath);
-      finalPath = destPath;
-      appendPlayLog('[下载] 已存入应用私有目录 ' + destPath);
-    } else if (saveMode === 'download') {
+    // ── 第 1 步：私有副本（无条件，本地音乐列表靠它）
+    const privatePath: string = await this.keepPrivateCopy(task, tmpPath);
+    appendPlayLog('[下载] 私有目录已留档 ' + privatePath);
+    // ── 第 2 步：按用户设置再导出（可选）
+    if (saveMode === 'download') {
       await this.ensureDownloadDir();
       if (this.downloadDirUri.length === 0) {
         throw new Error('未授权下载目录');
@@ -1021,7 +1008,7 @@ export class DownloadService {
       await this.copyTo(tmpPath, uris[0]);
       finalPath = new fileUri.FileUri(uris[0]).path;
     }
-    appendPlayLog('[下载] 已保存 ' + finalPath);
+    appendPlayLog('[下载] 已导出 ' + finalPath);
     const wantLrc: boolean = MusicStoreService.getInstance().getDownloadLrc();
     if (lrcText.length > 0 && wantLrc) {
       try {
@@ -1035,6 +1022,43 @@ export class DownloadService {
         // lrc is optional
       }
     }
+  }
+
+  /**
+   * 在应用私有目录里留一份副本（**无条件**，本地音乐靠它列出已下载的歌）。
+   * @param task 下载任务
+   * @param tmpPath 刚下完的临时文件
+   * @returns 私有副本的绝对路径
+   */
+  private async keepPrivateCopy(task: DownloadTask, tmpPath: string): Promise<string> {
+    const hostContext: common.Context | undefined =
+      this.uiContext !== undefined ? this.uiContext.getHostContext() : undefined;
+    if (hostContext === undefined) {
+      throw new Error('拿不到应用上下文');
+    }
+    const dir: string = `${hostContext.filesDir}/local_music`;
+    if (!fs.accessSync(dir)) {
+      fs.mkdirSync(dir);
+    }
+    let destPath: string = `${dir}/${task.fileName}`;
+    if (!fs.accessSync(destPath)) {
+      await this.copyTo(tmpPath, destPath);
+      return destPath;
+    }
+    // 同名已存在：内容一样（同一次下载重试）就复用，不一样再起新名，避免覆盖用户已有的歌
+    try {
+      const existSize: number = fs.statSync(destPath).size;
+      const tmpSize: number = fs.statSync(tmpPath).size;
+      if (existSize === tmpSize) {
+        return destPath;
+      }
+    } catch (_e) {
+    }
+    const uniqueName: string = task.fileName.replace(/(\.[^.]+)$/, '_' + Date.now() +
+      '_' + Math.floor(Math.random() * 1000000) + '$1');
+    destPath = `${dir}/${uniqueName}`;
+    await this.copyTo(tmpPath, destPath);
+    return destPath;
   }
 
   private async copyTo(srcPath: string, destPathOrUri: string): Promise<void> {

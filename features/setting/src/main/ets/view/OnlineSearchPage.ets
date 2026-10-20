@@ -1227,7 +1227,65 @@ struct OnlineSearchPage {
     })
   }
 
-  /** 歌手搜索结果行：圆头像 + 名字 + 专辑/歌曲数；点击进入歌手详情页。 */
+  /** 歌手 id 形如 `source_rawId`（见 `doSingerSearch`）：拆出音源号。 */
+  private singerSource(s: SingerInfo): number {
+    const sep: number = s.id.indexOf('_');
+    return sep > 0 ? Number(s.id.substring(0, sep)) : 2;
+  }
+
+  /** 歌手 id 里真正的原始 id（去掉 `source_` 前缀）。 */
+  private singerRawId(s: SingerInfo): string {
+    const sep: number = s.id.indexOf('_');
+    return sep > 0 && sep < s.id.length - 1 ? s.id.substring(sep + 1) : s.id;
+  }
+
+  /** 是否已关注（关注 = 收藏歌手，与「我的 → 关注」页共用同一份数据）。 */
+  private isFollowingSinger(s: SingerInfo): boolean {
+    return this.store.isFavoriteArtist(String(this.singerSource(s)), this.singerRawId(s));
+  }
+
+  /** 关注 / 取消关注。 */
+  private toggleFollowSinger(s: SingerInfo): void {
+    const source: string = String(this.singerSource(s));
+    const rawId: string = this.singerRawId(s);
+    if (this.store.isFavoriteArtist(source, rawId)) {
+      this.store.removeFavoriteArtist(source, rawId);
+      this.toast('已取消关注');
+      hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'unfollow singer=%{public}s', s.name);
+      return;
+    }
+    const entry: FavoriteEntry = new FavoriteEntry();
+    entry.source = source;
+    entry.id = rawId;
+    entry.name = s.name;
+    entry.img = s.picUrl;
+    entry.sub = s.albumSize > 0 ? `专辑 ${s.albumSize}` : '';
+    entry.count = s.songNum;
+    entry.time = Date.now();
+    this.store.addFavoriteArtist(entry);
+    this.toast('已关注');
+    hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'follow singer=%{public}s', s.name);
+  }
+
+  /**
+   * 关注 / 已关注 胶囊按钮（用户 2026-10-20：「搜索页的歌手部分后面加上关注/已关注」）。
+   * 搜索结果的歌手行、综合页顶部歌手卡共用这一个。
+   */
+  @Builder
+  private FollowButton(s: SingerInfo) {
+    Text(this.isFollowingSinger(s) ? '已关注' : '+ 关注')
+      .fontSize($r('sys.float.Caption_M'))
+      .fontWeight(FontWeight.Medium)
+      .fontColor(this.isFollowingSinger(s) ? $r('sys.color.font_tertiary') : this.themeState.color)
+      .padding({ left: 12, right: 12, top: 5, bottom: 5 })
+      .borderRadius(14)
+      .backgroundColor($r('sys.color.comp_background_tertiary'))
+      .onClick((): void => {
+        this.toggleFollowSinger(s);
+      })
+  }
+
+  /** 歌手搜索结果行：封面 + 名字 + 专辑/歌曲数；点击进入歌手详情页。 */
   @Builder
   private SingerResultRow(s: SingerInfo) {
     Row({ space: 12 }) {
@@ -1250,6 +1308,8 @@ struct OnlineSearchPage {
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
+      // ★ 2026-10-20（用户：「搜索页的歌手部分后面加上关注/已关注」）
+      this.FollowButton(s)
       SymbolGlyph($r('sys.symbol.chevron_right'))
         .fontSize(18)
         .fontWeight(FontWeight.Regular)
@@ -1334,23 +1394,15 @@ struct OnlineSearchPage {
    *   整页盒子仍从屏幕 y=0 起排（`ignoreLayoutSafeArea(TOP)`），所以这里自己补**状态栏高度**。
    */
   /**
-   * 自绘顶栏**还要往下让多少**（vp）。
+   * 自绘顶栏**还要往下让多少**（vp）= 状态栏高度 - 盒顶，负数取 0。
    *
-   * ★ 2026-10-20（用户第二次提「搜索页顶部还是一块空白，我指的是让内容延伸到顶部一直到状态栏」）：
-   *   原来只做"盒顶在 0 时补状态栏高度"，但如果 `hideTitleBar(true)` 之后系统仍把页盒压到
-   *   标题栏下沿（盒顶 ≈ 状态栏 + 56），那一整条就永远空着、页内怎么调都填不上。
-   *   现在两头都兜：**先用 `headerPullUp()` 把顶栏往上提回状态栏下沿**，再用本函数补最小的
-   *   状态栏让位 —— 两种布局（盒顶 0 / 盒顶 94）最后都落在"搜索行紧贴状态栏下沿"。
+   * ★ 2026-10-20 第三轮（用户：「我怀疑你想加顶部留白，却加进了屏幕顶部而不是列表顶部」）：
+   *   上一版还额外用 `margin top: -headerPullUp()` 把顶栏往上提，等于**同时**做了两套补偿，
+   *   反而把整块头部顶歪。现在只保留这一处、只让一次：盒顶已经在状态栏下沿时结果为 0，不重复让位。
    */
   private headerTopInset(): number {
     const statusBar: number = Math.max(0, getStatusBarTopVpFromWindowUtil());
     return Math.max(0, statusBar - this.boxTopVp);
-  }
-
-  /** 盒顶被系统压到状态栏以下时，把自绘顶栏**往上提**这么多（vp），填掉顶部那条空白。 */
-  private headerPullUp(): number {
-    const statusBar: number = Math.max(0, getStatusBarTopVpFromWindowUtil());
-    return Math.max(0, this.boxTopVp - statusBar);
   }
 
   @Builder
@@ -1382,8 +1434,6 @@ struct OnlineSearchPage {
     }
     .width('100%')
     .padding({ top: this.headerTopInset(), bottom: 6 })
-    // 盒顶被系统压到状态栏下沿时往上提，把那条空白填掉（0 时无影响）
-    .margin({ top: -this.headerPullUp() })
     .onAreaChange((_oldArea: Area, newArea: Area): void => {
       const height: number = Number(newArea.height);
       if (height > 0 && Math.abs(height - this.searchHeaderHeight) > 0.5) {
@@ -1522,6 +1572,8 @@ struct OnlineSearchPage {
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
+      // ★ 2026-10-20：综合页的歌手卡也带关注按钮
+      this.FollowButton(s)
       SymbolGlyph($r('sys.symbol.chevron_right'))
         .fontSize(18)
         .fontColor([$r('sys.color.font_tertiary')])
@@ -1603,7 +1655,10 @@ struct OnlineSearchPage {
       .width('100%')
       .height(40)
       .borderRadius(20)
-      .backgroundColor($r('app.color.floating_mini_bar_background'))
+      // ★ 2026-10-20（用户：「深色模式下看不到搜索条胶囊」）：
+      //   `floating_mini_bar_background` 在纯黑底上几乎是纯黑 ⇒ 胶囊边界消失。
+      //   深色下给一层**白色低透明**打底（约 12%），浅色下给黑色 8%，两边都能看出胶囊轮廓。
+      .backgroundColor(this.isDarkTheme() ? '#1FFFFFFF' : '#14000000')
       .backgroundBlurStyle(this.searchControlBlur())
       // 注意：左右 padding 由调用方（build 主体顶部）控制，保证与 List padding(12,12) 严格对
     }

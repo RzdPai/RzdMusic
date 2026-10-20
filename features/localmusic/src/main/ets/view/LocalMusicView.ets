@@ -165,12 +165,16 @@ export struct LocalMusicPage {
   }
 
   private refresh(): void {
-    // ★ 2026-10-20：先扫私有目录（下载默认落在这里）⇒ 下载完的曲子直接出现在歌曲列表里，
-    //   不需要"下载管理"另存一份数据（用户：「直接扫一下私有目录列出来」）。
+    // ★ 2026-10-20：先扫私有目录（下载会**无条件**在这里留一份）⇒ 下载完的曲子直接出现在
+    //   歌曲列表里，不需要"下载管理"另存一份数据（用户：「直接扫一下私有目录列出来」）。
     const scanned: number = localMusic.scanDir();
     if (scanned > 0) {
       hilog.info(DOMAIN, TAG, 'scanDir adopted %{public}d file(s)', scanned);
     }
+    // ★ 2026-10-20（用户：「看看现在有没有处理本地文件被删除的情况」）：
+    //   `sweepOrphans()` 会把「索引里有、文件已经不在」的条目清掉。原来它只在初始化时跑一次，
+    //   运行中被删掉的歌要等重启才消失 ⇒ 每次进页/刷新都补跑一次（内部有 ready 判断，很轻）。
+    localMusic.sweepOrphans();
     this.items = localMusic.getSongItems();
     this.refreshDownloaded();
   }
@@ -662,7 +666,7 @@ export struct LocalMusicPage {
   /** 「播放全部」按钮上的条数（歌曲格 = 本地歌 + 已下载）。 */
   private playAllCount(): number {
     if (this.category === 'song') {
-      return this.items.length + this.downloadedTasks.length;
+      return this.items.length;
     }
     return this.groupEntries().length;
   }
@@ -1014,91 +1018,74 @@ export struct LocalMusicPage {
   build() {
     HdsNavDestination() {
       Column() {
-        // ★★ 2026-10-20 第四轮（用户：「本地音乐改沉浸一些」「上方按钮的光感还是没有」）：
-        //   **沉浸**的做法不是给头部刷一层模糊就完事 —— 模糊要有东西可采。之前头部是列表的
-        //   **兄弟节点**（Column 上下排），它背后什么都没有，`backgroundBlurStyle` 自然一片死板。
-        //   这里改成 **Stack 浮层**：列表占满并给 `contentStartOffset(头部实测高度)`，
-        //   头部**压在**列表上 ⇒ 列表从它下面滚过，材质才能取到背后的封面/文字色 = 真光感。
-        Stack({ alignContent: Alignment.TopStart }) {
+        // ★ 2026-10-20 第五轮（用户：「**本地音乐上方改回去吧**」）：
+        //   上一版把头部做成 Stack 浮层（想让材质有东西可采），用户不要那个观感 ⇒ **改回**普通
+        //   Column 上下排：文案行 → 页签 → 播放全部 → 列表。列表第一行不会被浮层盖住，
+        //   也不再需要 `contentStartOffset`。
+        this.Header()
+
+        if (this.importState.importing || this.importState.progress.length > 0) {
+          this.ProgressBar()
+        }
+        if (this.matchingAll) {
+          this.MatchProgressBar()
+        }
+
+        // 页签 + 播放全部：固定在列表上方（不跟列表滚）
+        if (this.items.length > 0) {
           Column() {
-            if (this.importState.importing || this.importState.progress.length > 0) {
-              this.ProgressBar()
-            }
-            if (this.matchingAll) {
-              this.MatchProgressBar()
-            }
-
-            if (this.items.length === 0) {
-              this.EmptyGuide()
-            } else {
-              // ★ 用户 2026-10-19：多选操作条是**底部悬浮胶囊**，盖在列表上，不压缩列表高度。
-              Stack({ alignContent: Alignment.Bottom }) {
-                List({ space: 2 }) {
-                  if (this.category === 'song') {
-                    ForEach(this.items, (item: SongItem) => {
-                      ListItem() {
-                        this.SongRow(item)
-                      }
-                    }, (item: SongItem) => `${item.songId}_${item.interval}`)
-                    ForEach(this.downloadedTasks, (task: DownloadTask) => {
-                      ListItem() {
-                        this.DownloadedRow(task)
-                      }
-                    }, (task: DownloadTask) => 'dl_' + task.id + '_' + task.downloaded + '_' + task.total)
-                  } else {
-                    ForEach(this.groupEntries(), (entry: LocalGroupEntry) => {
-                      ListItem() {
-                        this.GroupRow(entry)
-                      }
-                    }, (entry: LocalGroupEntry) => 'grp_' + this.category + '_' + entry.name)
-                  }
-                }
-                .scrollBar(BarState.Off)
-                .width('100%')
-                .height('100%')
-                .divider({ strokeWidth: 0.6, color: $r('sys.color.background_tertiary') })
-                // 开头让出"浮层头"的高度（它压在列表上），这样第一行不会被头部盖住
-                .contentStartOffset(this.topOverlayH)
-                // ★ 底部"给悬浮播放条让位"的留白留在**列表里**（`contentEndOffset` 随内容滚走，
-                //   不要写到容器 padding 上 —— 那是固定在屏幕底部的死带）。
-                .contentEndOffset(this.bottomReservedVp())
-
-                if (this.selectionMode) {
-                  Column() {
-                    this.SelectionBar()
-                  }
-                  .width('100%')
-                  .padding({ left: 16, right: 16, bottom: 28 })
-                  .hitTestBehavior(HitTestMode.Transparent)
-                }
-              }
-              .layoutWeight(1)
-              .width('100%')
-            }
+            this.CategoryTabs()
+            this.PlayAllRow()
           }
           .width('100%')
-          .height('100%')
-
-          // ── 浮层头：文案行 + 页签 + 播放全部，整块材质背板（列表从它下面滚过 ⇒ 有光感）
-          if (this.items.length > 0) {
-            Column() {
-              this.Header()
-              this.CategoryTabs()
-              this.PlayAllRow()
-            }
-            .width('100%')
-            .backgroundBlurStyle(buildBarBlurStyle(this.ambientState.level), barBlurOptions())
-            .onAreaChange((_oldArea: Area, newArea: Area): void => {
-              const height: number = Number(newArea.height);
-              if (height > 0 && Math.abs(height - this.topOverlayH) > 0.5) {
-                this.topOverlayH = height;
-                hilog.info(DOMAIN, TAG, 'RzdLocalHead h=%{public}f', height);
-              }
-            })
-          }
+          .backgroundColor($r('app.color.page_background'))
         }
-        .layoutWeight(1)
-        .width('100%')
+
+        if (this.items.length === 0) {
+          this.EmptyGuide()
+        } else {
+          // ★ 多选操作条是**底部悬浮胶囊**，盖在列表上，不压缩列表高度。
+          // ★ 2026-10-20 第五轮（用户：「我看到的还是两种分隔的列表」）：
+          //   原来「歌曲」格把 `items` 和 `downloadedTasks` **两套**都列了一遍 ——
+          //   而下载的文件早被 `scanDir()` 收进 `items` 了，于是同一首歌出现两次、
+          //   分隔线也是两套（本地行一套 + DownloadedRow 一套带红图标）。
+          //   ⇒ 这里**只列 `items`**，下载来的歌就靠 scanDir 正常混在里面。
+          Stack({ alignContent: Alignment.Bottom }) {
+            List({ space: 2 }) {
+              if (this.category === 'song') {
+                ForEach(this.items, (item: SongItem) => {
+                  ListItem() {
+                    this.SongRow(item)
+                  }
+                }, (item: SongItem) => `${item.songId}_${item.interval}`)
+              } else {
+                ForEach(this.groupEntries(), (entry: LocalGroupEntry) => {
+                  ListItem() {
+                    this.GroupRow(entry)
+                  }
+                }, (entry: LocalGroupEntry) => 'grp_' + this.category + '_' + entry.name)
+              }
+            }
+            .scrollBar(BarState.Off)
+            .width('100%')
+            .height('100%')
+            .divider({ strokeWidth: 0.6, color: $r('sys.color.background_tertiary') })
+            // ★ 底部"给悬浮播放条让位"的留白留在**列表里**（`contentEndOffset` 随内容滚走，
+            //   不要写到容器 padding 上 —— 那是固定在屏幕底部的死带）。
+            .contentEndOffset(this.bottomReservedVp())
+
+            if (this.selectionMode) {
+              Column() {
+                this.SelectionBar()
+              }
+              .width('100%')
+              .padding({ left: 16, right: 16, bottom: 28 })
+              .hitTestBehavior(HitTestMode.Transparent)
+            }
+          }
+          .layoutWeight(1)
+          .width('100%')
+        }
       }
       .width('100%')
       .height('100%')

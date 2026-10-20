@@ -499,7 +499,7 @@ export struct SettingPage {
   private selectSaveLocation(download: boolean): void {
     this.saveToDownloadDir = download;
     // ★ 2026-10-20：开关关掉 = 存**应用私有目录**（默认，下载完直接出现在本地音乐里），sk 不再用
-      MusicStoreService.getInstance().setDownloadSaveMode(download ? 'download' : 'private');
+      MusicStoreService.getInstance().setDownloadSaveMode(download ? 'download' : 'ask');
   }
 
   @Builder

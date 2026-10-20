@@ -1617,31 +1617,32 @@ export class MusicStoreService {
   }
 
   /**
-   * @returns 下载保存方式：
-   *  - `'private'`（**默认**，用户 2026-10-20 要求）= 存进应用私有目录的本地音乐目录，
-   *    下载完直接出现在「本地音乐」列表里（那边会扫这个目录），**不弹任何系统窗口**；
-   *  - `'download'` = 存到系统 Download 目录（首次要授权）；
-   *  - `'ask'` = 每次弹系统保存对话框。
+   * @returns 下载**导出**方式（注意：不是"存哪儿"）：
+   *  - `'download'` = 下载完再导出到系统 Download 目录（首次要授权）；
+   *  - `'ask'` = 下载完弹系统保存对话框导出。
    *
-   * ⚠️ 默认值从 `'download'` 改成 `'private'`：这样"下载 → 本地音乐里就有"是默认行为，
-   *    想放外部目录的用户再到设置里改。
+   * ★ 2026-10-20 修正（用户：「**不是新增保存方式**，就是无论用户选哪个，都会在私有目录留一份」）：
+   *   上一版把 `'private'` 当成第三档保存方式（还设成默认）理解错了。正确语义是
+   *   **私有目录永远留一份**（`DownloadService.keepPrivateCopy`，本地音乐靠它列出已下载的歌），
+   *   这里这个开关只决定"要不要再导出到外部一份"。
    */
   public getDownloadSaveMode(): string {
     const store = this.getStore();
     if (store === undefined) {
-      return 'private';
+      return 'ask';
     }
-    const mode = store.getSync(KEY_DOWNLOAD_SAVE_MODE, 'private') as string;
-    return mode.length > 0 ? mode : 'private';
+    const mode = store.getSync(KEY_DOWNLOAD_SAVE_MODE, 'ask') as string;
+    return mode.length > 0 ? mode : 'ask';
   }
 
-  /** Persists the download save mode ('private'|'download'|'ask'). */
+  /** Persists the download export mode ('download'|'ask'). */
   public setDownloadSaveMode(mode: string): void {
     const store = this.getStore();
     if (store === undefined) {
       return;
     }
-    store.putSync(KEY_DOWNLOAD_SAVE_MODE, mode);
+    // 兼容上一版误存的 'private'：映射回 'ask'（私有副本本来就是无条件留的）
+    store.putSync(KEY_DOWNLOAD_SAVE_MODE, mode === 'private' ? 'ask' : mode);
     store.flush();
   }
 
