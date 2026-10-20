@@ -64,41 +64,6 @@ export struct HomeTopBar {
             .fontWeight(FontWeight.Bold)
             .fontColor($r('app.color.font_primary'))
           Blank()
-          Row({ space: 12 }) {
-            Row() {
-              SymbolGlyph($r('sys.symbol.magnifyingglass'))
-                .fontSize(24)
-                .fontWeight(FontWeight.Regular)
-                .height(24)
-                .fontColor([$r('app.color.font_primary')])
-            }
-            .width(40)
-            .height(40)
-            .borderRadius(20)
-            .backgroundColor($r('app.color.home_icon_button_background'))
-            .alignItems(VerticalAlign.Center)
-            .justifyContent(FlexAlign.Center)
-            .borderWidth(1)
-            .borderColor($r('app.color.home_icon_button_border'))
-            .onClick(() => {
-              this.openSearch();
-            })
-            Row() {
-              SymbolGlyph($r('sys.symbol.identify_song'))
-                .fontSize(24)
-                .fontWeight(FontWeight.Regular)
-                .height(24)
-                .fontColor([$r('app.color.font_primary')])
-            }
-            .width(40)
-            .height(40)
-            .borderRadius(20)
-            .backgroundColor($r('app.color.home_icon_button_background'))
-            .alignItems(VerticalAlign.Center)
-            .justifyContent(FlexAlign.Center)
-            .borderWidth(1)
-            .borderColor($r('app.color.home_icon_button_border'))
-          }
         }
         .width(StyleConstants.FULL_WIDTH)
         .padding({
@@ -118,41 +83,6 @@ export struct HomeTopBar {
             .lineHeight(32)
             .fontColor($r('app.color.font_primary'))
           Blank()
-          Row({ space: 12 }) {
-            Row() {
-              SymbolGlyph($r('sys.symbol.magnifyingglass'))
-                .fontSize(24)
-                .fontWeight(FontWeight.Regular)
-                .height(24)
-                .fontColor([$r('app.color.font_primary')])
-            }
-            .width(40)
-            .height(40)
-            .borderRadius(20)
-            .backgroundColor($r('app.color.home_icon_button_background'))
-            .alignItems(VerticalAlign.Center)
-            .justifyContent(FlexAlign.Center)
-            .borderWidth(1)
-            .borderColor($r('app.color.home_icon_button_border'))
-            .onClick(() => {
-              this.openSearch();
-            })
-            Row() {
-              SymbolGlyph($r('sys.symbol.identify_song'))
-                .fontSize(24)
-                .fontWeight(FontWeight.Regular)
-                .height(24)
-                .fontColor([$r('app.color.font_primary')])
-            }
-            .width(40)
-            .height(40)
-            .borderRadius(20)
-            .backgroundColor($r('app.color.home_icon_button_background'))
-            .alignItems(VerticalAlign.Center)
-            .justifyContent(FlexAlign.Center)
-            .borderWidth(1)
-            .borderColor($r('app.color.home_icon_button_border'))
-          }
         }
         .width(StyleConstants.FULL_WIDTH)
         .height(56)

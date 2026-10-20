@@ -1618,6 +1618,7 @@ struct OnlineSearchPage {
         // 搜索框
         Search({ value: this.query, placeholder: $r('app.string.home_search_placeholder') })
           .id('online_search_input')
+          .geometryTransition('wanting_search_field', { follow: true })
           .layoutWeight(1)
           .height(40)
           .borderWidth(0)
