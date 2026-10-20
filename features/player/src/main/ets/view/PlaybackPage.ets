@@ -1346,13 +1346,41 @@ export struct PlaybackPage {
     this.state.isShowPlay = false;
     const names: string[] = this.pageIndexInfos.getAllPathName();
     const index: number = names.indexOf(RouterUrlConstants.PLAYER_PAGE);
+    const top: number = names.length - 1;
+    // ★★ 2026-10-20（「退出后满屏封面 + 整屏点不动」的诊断结论）：
+    //   原来**一律** `removeByIndexes([index])`，而且**丢弃返回值**、诊断无条件打印成功。
+    //   两次真机事故的播放页都在**栈顶**（index===top，分别 0 / 1）。栈顶只 remove 不 pop 时，
+    //   栈账腾了但 NavDestination 节点未必卸掉；紧接着 `morphReset()` 又把几何复位成满屏
+    //   （morphP=1 / clipHeight→整窗）⇒ 满屏封面留在最上层并独占整屏触控；
+    //   而壳层安全网 `popPlayerRoute()` 因为栈里查不到 player 下标而空跑
+    //   —— 这正是日志里**缺** `RzdCloseChain route-remove source=Index` 的指纹。
+    //   ⇒ 栈顶必须 `pop(false)`；非栈顶才 remove，校验返回值，为 0 时兜底 pop。
+    let removed: number = -1;
+    let removeMode: string = 'none';
     try {
       if (index >= 0) {
-        this.pageIndexInfos.removeByIndexes([index]);
+        if (index === top) {
+          removeMode = 'pop';
+          this.pageIndexInfos.pop(false);
+        } else {
+          removeMode = 'remove';
+          removed = this.pageIndexInfos.removeByIndexes([index]);
+          if (removed === 0) {
+            removeMode = 'remove-then-pop';
+            this.pageIndexInfos.pop(false);
+          }
+        }
       }
-      this.closeDiagnostic(`route-remove index=${index}`, path);
+      this.closeDiagnostic(
+        `route-remove ${removeMode} index=${index} top=${top} size=${names.length} removed=${removed}`, path);
     } catch (error) {
-      this.closeDiagnostic(`route-remove-failed error=${error}`, path);
+      this.closeDiagnostic(`route-remove-failed error=${error} index=${index} top=${top}`, path);
+      try {
+        this.pageIndexInfos.pop(false);
+        this.closeDiagnostic('route-remove-fallback-pop', path);
+      } catch (inner) {
+        this.closeDiagnostic(`route-remove-fallback-failed error=${inner}`, path);
+      }
     }
     try {
       this.stopGeoDriver();
@@ -1375,6 +1403,27 @@ export struct PlaybackPage {
     PlaybackPage.closeOwner = 0;
     PlaybackPage.ownerInstance = 0;
     PlaybackPage.cancelCloseOwner = undefined;
+    // ★ 64ms 存活自检：路由没真的卸掉时（节点残留 = 满屏封面 + 吃触摸），再弹一次。
+    setTimeout((): void => {
+      try {
+        const left: string[] = this.pageIndexInfos.getAllPathName();
+        const still: number = left.indexOf(RouterUrlConstants.PLAYER_PAGE);
+        MusicStoreService.getInstance().appendRuntimeDiagnostic(
+          `RzdCloseState +64 alive=${this.isAlive ? 1 : 0} show=${this.state.isShowPlay ? 1 : 0} ` +
+            `size=${left.length} idx=${still} names=${left.join(',')}`);
+        if (still >= 0) {
+          if (still === left.length - 1) {
+            this.pageIndexInfos.pop(false);
+          } else {
+            this.pageIndexInfos.removeByIndexes([still]);
+          }
+          MusicStoreService.getInstance().appendRuntimeDiagnostic(
+            `RzdCloseState +64 re-pop idx=${still} top=${left.length - 1}`);
+        }
+      } catch (error) {
+        MusicStoreService.getInstance().appendRuntimeDiagnostic(`RzdCloseState +64 failed error=${error}`);
+      }
+    }, 64);
   }
   /**
    * 闂佸搫鐗滈崜姘额敃閸忚偐鈻旈悗锝庡亜椤庢瑩鎮归搹鐟版瀾濠⒀勭矒瀵即顢涘顓炲墾閻庤鐡曠亸娆戝垝閿熺姴绠┑鐘插€介崺宀勬煕濞嗘劦鐒芥繛鏉戭槹閹峰懎顓奸崨顓犫偓濂告煕?LEAVING闂佹寧绋戦悧鍡涱敋椤曗偓瀵粙宕堕妸锔奸獜闂佷紮绲介惉鐓庘枔?`drive = FINGER`闂佹寧绋戦ˇ顓㈠焵?
