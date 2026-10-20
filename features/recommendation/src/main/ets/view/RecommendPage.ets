@@ -191,17 +191,6 @@ export struct RecommendPage {
    */
   @Local chipStickyActive: boolean = false;
   @Local titleSearchShown: boolean = false;
-
-  /**
-   * 打开搜索页（由壳层 `Index` 以「页内分支」渲染真正的搜索页）。
-   *
-   * ★ 结构说明：上游无界不是路由推页，而是 `HomeTab` 里
-   *   `If (searchOpen) { 搜索页分支 } else { 首页分支 }`（wujie126.pa 507578-507611）。
-   *   本仓把这条分支放在**壳层**（`Index.ets` 的 `homeSearchOpen`），首页只负责发起，
-   *   这样既能让两端 `Search` 同一帧并存、走 `geometryTransition` 一镜到底，
-   *   又不用在本页里挂搜索页（上一版这么做会让点击直接闪退）。
-   */
-  @Event onOpenSearch: () => void = (): void => {};
   /**
    * 分类 Tab 行**在滚动内容里的顶边**（vp）；0 = 还没量到（此时不判吸顶）。
    *
@@ -675,17 +664,30 @@ export struct RecommendPage {
   }
 
   /**
-   * 首页搜索入口：先复位标题栏那个「滚动后才出现」的搜索图标，再把打开动作交给壳层。
+   * 首页搜索入口。
    *
-   * 复位口径照上游 `onSearchOpenFlip()`：`if (searchOpen()) titleSearchShown = false;`
-   * （wujie126.pa 498612-498621）。
+   * 一镜到底的写法**照官方示例**（`transitions-collection` 的
+   * `SearchLongTakeTransition/SearchLongTakeTransitionPageOne.ets:74-81`）：
+   *
+   * ```ts
+   * this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, () => {
+   *   this.pageInfos.pushPath({ name: '...' }, false);   // ★ animated=false：关掉系统推页动画
+   * });
+   * ```
+   * 只有关掉系统转场、再用 `animateTo` 包住 push，两端的 `geometryTransition` 才会接成一镜到底；
+   * 页面本身的淡入淡出由目标页 `NavDestination.transition(TransitionEffect.OPACITY)` 负责。
+   *
+   * 顺手复位标题栏那个「滚动后才出现」的搜索图标（照上游 `onSearchOpenFlip`，
+   * wujie126.pa 498612-498621）。
    */
   private openSearch(): void {
     if (this.titleSearchShown) {
       this.titleSearchShown = false;
     }
-    Logger.info('RzdSearchMorph', 'step=home-open request');
-    this.onOpenSearch();
+    Logger.info('RzdSearchMorph', `open route=${RouterUrlConstants.ONLINE_SEARCH}`);
+    this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, (): void => {
+      this.pageIndexInfos.pushPath({ name: RouterUrlConstants.ONLINE_SEARCH }, false);
+    });
   }
 
   /** HDS title bar with system material and gradient blur. */
@@ -984,6 +986,9 @@ export struct RecommendPage {
     .bindToScrollable([this.pageScroller])
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     .backgroundColor($r('app.color.background_secondary'))
+    // 官方一镜到底示例里源页也挂这个（PageOne 的 `NavDestination().transition(OPACITY)`）：
+    // 推入时源页保持不动（animated=false），返回时它淡回来，不会"啪"地出现。
+    .transition(TransitionEffect.OPACITY)
   }
 
   pageTransition() {

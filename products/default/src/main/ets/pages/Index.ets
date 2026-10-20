@@ -65,7 +65,7 @@ import {
   MiniBarMaterialCapsule,
   PlaylistTransitionOverlay
 } from 'playlist';
-import { MinePage, OnlineSearchPage } from 'setting';
+import { MinePage } from 'setting';
 // 鏂版ā鍧楋細鏈湴闊充箰锛堝鍏ヨ澶囬煶棰戝埌娌欑锛変笌娲涢洩鍚屾瀹㈡埛绔€?
 // 鈿狅笍 hvigor 瀵?HAR 鏄?*鎸夊紩鐢ㄧ紪璇?*鐨勶細娌℃湁浠讳綍浠ｇ爜 import 瀹冧滑鏃讹紝
 //    鍗充娇宸茬櫥璁拌繘 build-profile.json5锛岃繖涓や釜妯″潡涔?*涓嶄細琚紪璇?*锛堟瀯寤虹収鏍风豢锛夈€?
@@ -235,28 +235,6 @@ const PLAYER_CLONE_Z_INDEX: number = 110;
 const SHRINK_OVERLAY_Z_INDEX: number = 130;
 
 /**
- * 首页 → 搜索页 的「页内换分支」层（2026-10-20）。
- *
- * 上游无界不是路由推页：`HomeTab` 里是
- * `If (searchOpen) { 搜索页分支.transition(SEARCH_PAGE_TRANSITION) } else { 首页分支.transition(HOME_BRANCH_TRANSITION) }`
- * （wujie126.pa 507578-507611 / 507616-507642 / 507647-507672）。
- * 这里等价地把搜索页作为壳层 Stack 里的**条件覆盖层**：只有打开时才存在，
- * 所以不会像常驻透明节点那样吃掉底下的点击（见 2026-10-20 那次点击回归）。
- * 两个过渡参数照抄 `HomeTab.func_main_0`（508130-508214）。
- */
-const HOME_SEARCH_Z_INDEX: number = 96;
-
-const SEARCH_PAGE_TRANSITION: TransitionEffect = TransitionEffect.asymmetric(
-  TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.Friction }),
-  TransitionEffect.OPACITY.animation({ duration: 120, curve: Curve.Sharp })
-);
-
-/** 搜索页打开/关闭驱动窗的弹簧（上游 SP_SEARCH + SP_SEARCH_SETTLE_MS=400）。 */
-const SEARCH_MORPH_SPRING: AnimateParam = {
-  curve: curves.interpolatingSpring(0, 1, 342, 38)
-};
-
-/**
  * 鈽?鎾斁椤靛叆鍙?*鍙岃建寮€鍏?*锛堟柦宸ュ浘绗?1 姝ワ級銆?
  *
  * - `true` 锛氭挱鏀鹃〉浣滀负 **NavDestination** 鎺ㄥ叆锛坄pushPath(..., animated = false)`锛夛紝
@@ -416,8 +394,6 @@ struct Index {
    * 鈿狅笍 涓嶈鍐嶆嬁瀹冨幓鏀瑰簳閮ㄥ鑸殑 `barHeight` / `barFloatingStyle`锛堣瘯杩囷紝搴曟爮鐩存帴鍧忔帀锛夈€?
    */
   @Local navDepth: number = 0;
-  /** 首页搜索页是否以「页内分支」形式覆盖在壳层上（见 {@link SEARCH_PAGE_TRANSITION}）。 */
-  @Local homeSearchOpen: boolean = false;
   /**
    * 褰㈠彉鍏嬮殕灞傜敤鐨勬挱鏀惧櫒 VM銆?
    *
@@ -2554,35 +2530,6 @@ struct Index {
    * 棣栭〉涓嶆樉绀猴紙HDS 搴曟爮閲岀殑杩蜂綘鏉¤礋璐ｏ級锛涙鍦ㄦ挱鏀惧叏灞忛〉鎴栧浜庢壒閲忛€夋嫨妯″紡鏃朵篃涓嶆樉绀恒€?
    * @returns True 琛ㄧず鏄剧ず澹冲眰杩欐潯鎮诞杩蜂綘鏉°€?
    */
-  /**
-   * 打开首页搜索页（页内分支，不走路由）。
-   *
-   * 上游 `HomeTab.openSearch()` = `animateMorph(uiContext, SP_SEARCH, SP_SEARCH_SETTLE_MS, () => { searchOpen = true })`
-   * （wujie126.pa 498636 / 503760）。这里同样只翻一个布尔，页面切换靠 `if` 分支 + `transition`。
-   */
-  private openHomeSearch(): void {
-    if (this.homeSearchOpen) {
-      return;
-    }
-    MusicStoreService.getInstance().appendRuntimeDiagnostic('step=shell-open begin');
-    Logger.info('RzdSearchMorph', 'step=shell-open begin');
-    this.getUIContext().animateTo(SEARCH_MORPH_SPRING, (): void => {
-      this.homeSearchOpen = true;
-    });
-  }
-
-  /** 关闭首页搜索页：只翻布尔，几何过渡由两端 `geometryTransition` 负责。 */
-  private closeHomeSearch(): void {
-    if (!this.homeSearchOpen) {
-      return;
-    }
-    MusicStoreService.getInstance().appendRuntimeDiagnostic('step=shell-close begin');
-    Logger.info('RzdSearchMorph', 'step=shell-close begin');
-    this.getUIContext().animateTo(SEARCH_MORPH_SPRING, (): void => {
-      this.homeSearchOpen = false;
-    });
-  }
-
   private shouldShowFloatingMiniBar(): boolean {
     // ★ 用户 2026-10-19：列表页多选时底部要放操作条，播放条临时隐藏（否则两条会叠）
     if (this.appState.selectionActive) {
@@ -2716,10 +2663,7 @@ struct Index {
         RecommendPage({
           shellProvidesFloatingMiniBar: deviceInfo.distributionOSApiVersion >= 60100,
           floatingBarExtraBottomReserveVp: this.twoRowExtraBottomVp(),
-          scrollTopCommand: this.tabScrollTopCommands[0],
-          onOpenSearch: (): void => {
-            this.openHomeSearch();
-          }
+          scrollTopCommand: this.tabScrollTopCommands[0]
         })
           .layoutWeight(1)
       }
@@ -3098,27 +3042,6 @@ struct Index {
         this.floatingMiniBar()
       }
 
-      // 首页搜索页：**页内分支**（条件渲染，开着才存在），盖住整页含 HDS 标题栏。
-      // 上游 HomeTab 就是 if (searchOpen) { SearchPage } else { homeBody }（见 SEARCH_PAGE_TRANSITION 注释）。
-      if (this.homeSearchOpen) {
-        Column() {
-          OnlineSearchPage({
-            inlineMode: true,
-            onClosed: (): void => {
-              this.closeHomeSearch();
-            }
-          })
-        }
-        .width(StyleConstants.FULL_WIDTH)
-        .height(StyleConstants.FULL_HEIGHT)
-        .zIndex(HOME_SEARCH_Z_INDEX)
-        .transition(SEARCH_PAGE_TRANSITION)
-        .onAppear((): void => {
-          MusicStoreService.getInstance().appendRuntimeDiagnostic('step=overlay-appeared');
-          Logger.info('RzdSearchMorph', 'step=overlay-appeared');
-        })
-      }
-
       // Persistent hidden LX source engine host (webview sandbox for user API scripts).
       LXSourceHost()
     }
@@ -3172,11 +3095,6 @@ struct Index {
    * @returns true = 宸叉秷璐癸紝涓嶅啀璧伴粯璁よ繑鍥為€昏緫
    */
   onBackPress(): boolean {
-    // 首页搜索页开着：先收搜索页（等价上游 `searchOpen = false`），不要退出应用。
-    if (this.homeSearchOpen) {
-      this.closeHomeSearch();
-      return true;
-    }
     if (!this.appState.isShowPlay) {
       return false;
     }

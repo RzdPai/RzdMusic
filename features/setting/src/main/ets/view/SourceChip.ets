@@ -1,4 +1,4 @@
-/** Native source identity shared by the search title pill and its menu. */
+/** 搜索页右上角「音源平台」胶囊里的文字（用户 2026-10-20：把平台那个圆点去掉）。 */
 @ComponentV2
 export struct SourceChip {
   @Param source: string = 'all';
@@ -24,57 +24,10 @@ export struct SourceChip {
     }
   }
 
-  private gradientStart(): string {
-    switch (this.source) {
-      case 'kw':
-        return '#FFB13D';
-      case 'kg':
-        return '#4DA6FF';
-      case 'tx':
-        return '#4BD97F';
-      case 'wy':
-        return '#FF5A5A';
-      case 'mg':
-        return '#FF7BA8';
-      default:
-        return '#8E97A6';
-    }
-  }
-
-  private gradientEnd(): string {
-    switch (this.source) {
-      case 'kw':
-        return '#F5860A';
-      case 'kg':
-        return '#1273E6';
-      case 'tx':
-        return '#12B04B';
-      case 'wy':
-        return '#D81E17';
-      case 'mg':
-        return '#E62E6B';
-      default:
-        return '#5A6472';
-    }
-  }
-
   build() {
-    Row({ space: 6 }) {
-      Circle()
-        .width(10)
-        .height(10)
-        .fill(Color.Transparent)
-        .borderRadius(5)
-        .clip(true)
-        .linearGradient({
-          direction: GradientDirection.Bottom,
-          colors: [[this.gradientStart(), 0], [this.gradientEnd(), 1]]
-        })
-      Text(this.sourceLabel())
-        .fontSize(14)
-        .fontColor($r('sys.color.font_primary'))
-        .maxLines(1)
-    }
-    .alignItems(VerticalAlign.Center)
+    Text(this.sourceLabel())
+      .fontSize(14)
+      .fontColor($r('sys.color.font_primary'))
+      .maxLines(1)
   }
 }

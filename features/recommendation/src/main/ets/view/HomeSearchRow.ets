@@ -19,15 +19,17 @@ export struct HomeSearchRow {
           Search({ placeholder: '艺人、歌曲或专辑' })
             .height(SEARCH_FIELD_H)
             .backgroundColor(Color.Transparent)
-            .placeholderColor($r('sys.color.font_secondary'))
-            .placeholderFont({ size: '16fp' })
-            .textFont({ size: '16fp' })
+            // ★ 目标页那端必须用**同一个**占位色（官方示例两端都是 sys.color.mask_secondary）：
+            //   两端不同色时，形变中途会看到"白字突然变灰"，很割裂。
+            .placeholderColor($r('sys.color.mask_secondary'))
+            .placeholderFont({ size: 16 })
+            .textFont({ size: 16 })
             .fontColor($r('sys.color.font_primary'))
             .caretStyle({ color: $r('sys.color.font_primary') })
-            .searchIcon({ size: 16, color: $r('sys.color.font_secondary') })
+            .searchIcon({ size: 16, color: $r('sys.color.mask_secondary') })
             .cancelButton({
               style: CancelButtonStyle.INPUT,
-              icon: { size: 17, color: $r('sys.color.font_secondary') }
+              icon: { size: 17, color: $r('sys.color.mask_secondary') }
             })
             .width('100%')
             .focusable(false)

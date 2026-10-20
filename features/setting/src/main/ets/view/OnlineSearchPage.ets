@@ -185,9 +185,6 @@ struct SongRowItem {
  */
 @ComponentV2
 export struct OnlineSearchPage {
-  @Param inlineMode: boolean = false;
-  @Event onClosed: () => void = (): void => {};
-  @Local inlineRootTopVp: number = 0;
   /** Window width breakpoint for responsive result columns. */
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
   /** Initial search query supplied by the route param (e.g. singer name). */
@@ -549,8 +546,6 @@ export struct OnlineSearchPage {
   }
 
   aboutToAppear(): void {
-    MusicStoreService.getInstance().appendRuntimeDiagnostic(
-      `step=inline-aboutToAppear inline=${this.inlineMode}`);
     this.refreshContentPaddingTop();
     this.searchHistory = this.store.getSearchHistory();
     this.restoreSearchSource();
@@ -929,9 +924,33 @@ export struct OnlineSearchPage {
     }
   }
 
+  /**
+   * 「综合」页签的歌手/专辑要有兜底音源。
+   *
+   * ★ 用户 2026-10-20：「我们原本的搜索页的综合不止有歌曲，还有歌手啥的」——
+   *   `searchSources()` 在综合页只返回**第一个勾选**的音源（当时为了不卡做的取舍），
+   *   而个别平台的歌手/专辑接口会返回空 ⇒ 综合页就只剩歌曲。
+   *   ⇒ 综合页先把所有勾选音源都试一遍（歌手/专辑各一次请求、命中即停），
+   *     单类页签仍走 `searchSources()` 的原口径。
+   */
+  private overviewFallbackSources(): string[] {
+    const out: string[] = [];
+    for (let i: number = 0; i < this.sources.length; i++) {
+      if (this.sources[i].checked) {
+        out.push(this.sources[i].id);
+      }
+    }
+    if (out.length === 0) {
+      for (let i: number = 0; i < this.sources.length; i++) {
+        out.push(this.sources[i].id);
+      }
+    }
+    return out;
+  }
+
   /** Searches singers across the enabled sources (geuz source codes). */
   private async doSingerSearch(): Promise<void> {
-    const activeSources: string[] = this.searchSources();
+    const activeSources: string[] = this.overview ? this.overviewFallbackSources() : this.searchSources();
     if (activeSources.length === 0) {
       this.errorMsg = '请至少选择一个音源';
       return;
@@ -946,8 +965,15 @@ export struct OnlineSearchPage {
           singer.id = code + '_' + singer.id;
           all.push(singer);
         }
-      } catch (_err) {
-        // skip failing source
+        hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
+          'singer source=%{public}s hits=%{public}d', activeSources[i], result.list.length);
+      } catch (err) {
+        hilog.warn(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
+          'singer source=%{public}s failed %{public}s', activeSources[i], JSON.stringify(err));
+      }
+      // 综合页：拿到就停，避免多平台重复拉同一批歌手。
+      if (this.overview && all.length > 0) {
+        break;
       }
     }
     this.singers = all;
@@ -960,7 +986,7 @@ export struct OnlineSearchPage {
 
   /** Searches albums across the enabled sources. */
   private async doAlbumSearch(): Promise<void> {
-    const activeSources: string[] = this.searchSources();
+    const activeSources: string[] = this.overview ? this.overviewFallbackSources() : this.searchSources();
     if (activeSources.length === 0) {
       this.errorMsg = '请至少选择一个音源';
       return;
@@ -973,8 +999,14 @@ export struct OnlineSearchPage {
         for (let j: number = 0; j < result.list.length; j++) {
           all.push(result.list[j]);
         }
-      } catch (_err) {
-        // skip failing source
+        hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
+          'album source=%{public}s hits=%{public}d', activeSources[i], result.list.length);
+      } catch (err) {
+        hilog.warn(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
+          'album source=%{public}s failed %{public}s', activeSources[i], JSON.stringify(err));
+      }
+      if (this.overview && all.length > 0) {
+        break;
       }
     }
     this.albums = all;
@@ -1450,7 +1482,12 @@ export struct OnlineSearchPage {
   private searchController: SearchController = new SearchController();
   private searchClosing: boolean = false;
 
-  /** Consume every close entry so Navigation does not apply a second default transition. */
+  /**
+   * 关闭搜索页。
+   *
+   * 关掉系统转场 + 用同一个弹簧包住 `pop(false)`，两端的 `geometryTransition`
+   * 才会把搜索框原路收回首页（官方示例 `SearchLongTakeTransitionPageTwo.ets:86-92`）。
+   */
   private closeSearch(): void {
     if (guardPlayerBack('OnlineSearchPage')) {
       return;
@@ -1461,13 +1498,11 @@ export struct OnlineSearchPage {
     this.searchClosing = true;
     this.hideSuggest();
     this.getUIContext().getFocusController().clearFocus();
-    hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
-      'RzdSearchMorph close request inline=%{public}s', String(this.inlineMode));
-    if (this.inlineMode) {
-      this.onClosed();
-      return;
-    }
-    this.pageStack.pop();
+    hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph close request');
+    this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, (): void => {
+      this.searchClosing = false;
+      this.pageStack.pop(false);
+    });
   }
 
   private searchSideVp(): number {
@@ -1533,8 +1568,8 @@ export struct OnlineSearchPage {
       this.searchRowBottomVp = top + height;
       const status: number = WindowUtil.getInstance().resolveStatusBarTopVp();
       hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
-        'RzdSearchTitleMeasure mode=%{public}s rowTop=%{public}f rowBottom=%{public}f height=%{public}f status=%{public}f deltaTop=%{public}f expectedBottom=%{public}f',
-        this.inlineMode ? 'inline' : 'route', top, top + height, height, status, top - status, status + 56);
+        'RzdSearchTitleMeasure rowTop=%{public}f rowBottom=%{public}f height=%{public}f status=%{public}f deltaTop=%{public}f expectedBottom=%{public}f',
+        top, top + height, height, status, top - status, status + 56);
       this.refreshContentPaddingTop();
     })
   }
@@ -1705,25 +1740,39 @@ export struct OnlineSearchPage {
     })
   }
 
-  /** Full-width native Search; its only glass host is the middle capsule Stack. */
+  /**
+   * 目标端原生 Search。
+   *
+   * ★ 一镜到底的属性**照官方示例**（`transitions-collection` 的
+   *   `SearchLongTakeTransition/SearchLongTakeTransitionPageTwo.ets:47-57`）：
+   *   - `geometryTransition(ID)` **不带 follow**（follow 只写在源端）；
+   *   - `.transition(TransitionEffect.opacity(0.99))` —— 让它自己全程"可见地"参与形变，
+   *     不加这一条会被系统当成"淡入"，看起来就是一坨生硬的替换；
+   *   - `defaultFocus(true)` + `focusOnTouch(true)`：落位即聚焦、点心即出键盘。
+   */
   @Builder
   private SearchInputBar() {
     Search({ value: this.query, placeholder: '艺人、歌曲或专辑', controller: this.searchController })
       .id('online_search_input')
       .height(40)
       .backgroundColor(Color.Transparent)
-      .placeholderColor($r('sys.color.font_secondary'))
+      // 占位色与首页那端**同一套**（官方示例两端都用 mask_secondary）：
+      // 两端不同色就会在形变瞬间看到"白字突然变灰"。
+      .placeholderColor($r('sys.color.mask_secondary'))
       .placeholderFont({ size: 16 })
       .textFont({ size: 16 })
       .fontColor($r('sys.color.font_primary'))
       .caretStyle({ color: $r('sys.color.font_primary') })
-      .searchIcon({ size: 16, color: $r('sys.color.font_secondary') })
+      .searchIcon({ size: 16, color: $r('sys.color.mask_secondary') })
       .cancelButton({
         style: CancelButtonStyle.INPUT,
-        icon: { size: 17, color: $r('sys.color.font_secondary') }
+        icon: { size: 17, color: $r('sys.color.mask_secondary') }
       })
       .layoutWeight(1)
-      .geometryTransition('wanting_search_field', { follow: true })
+      .geometryTransition('wanting_search_field')
+      .transition(TransitionEffect.opacity(0.99))
+      .defaultFocus(true)
+      .focusOnTouch(true)
       .responseRegion({ x: 0, y: -4, width: '100%', height: 40 })
       .onFocus((): void => {
         hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph target focus');
@@ -2204,7 +2253,7 @@ export struct OnlineSearchPage {
           //    歌曲行本身是「封面 + 标题/歌手 + 来源/时长」的整行卡片，铺成多栏会把
           //    文字挤窄、行与行长度还参差不齐，看起来就是"文字被拉伸对齐了"。
           //    搜索结果统一单栏、左对齐。
-          .contentStartOffset(this.inlineMode ? 0 : this.contentPaddingTop)
+          .contentStartOffset(this.contentPaddingTop)
           .padding({
             left: 12,
             right: 12,
@@ -2363,42 +2412,7 @@ export struct OnlineSearchPage {
       })
   }
 
-  private inlineTopInsetVp(): number {
-    return Math.max(0, WindowUtil.getInstance().resolveStatusBarTopVp() - this.inlineRootTopVp);
-  }
-
-  @Builder
-  private inlineContent() {
-    Column() {
-      Column().height(this.inlineTopInsetVp())
-      this.searchRow()
-      this.typeBar()
-      Column() {
-        this.searchContent()
-      }
-      .layoutWeight(1)
-      .width('100%')
-    }
-    .width('100%')
-    .height('100%')
-    .backgroundColor($r('app.color.background_secondary'))
-    .onAppear((): void => {
-      MusicStoreService.getInstance().appendRuntimeDiagnostic('step=inline-root-built');
-      hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph step=inline-root-built');
-    })
-    .onAreaChange((_oldArea: Area, area: Area): void => {
-      const top: number = area.globalPosition.y as number;
-      if (Math.abs(top - this.inlineRootTopVp) > 0.5) {
-        this.inlineRootTopVp = top;
-      }
-      hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
-        'RzdSearchTitleMeasure inlineRootTop=%{public}f status=%{public}f spacer=%{public}f rowHeight=56',
-        top, WindowUtil.getInstance().resolveStatusBarTopVp(), this.inlineTopInsetVp());
-    })
-  }
-
-  @Builder
-  private routedContent() {
+  build() {
     HdsNavDestination() {
       this.searchContent()
     }
@@ -2438,14 +2452,9 @@ export struct OnlineSearchPage {
     //   里的 `titleBarTopHeight`（= 状态栏 + 56 = 94）正好落在 94 ✔。
     //   ⚠️ 旧注释里"根节点带 TOP 会把标题/搜索按钮顶进状态栏 / 只能留 BOTTOM"那句**是错的**，已作废。
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
-  }
-
-  build() {
-    if (this.inlineMode) {
-      this.inlineContent()
-    } else {
-      this.routedContent()
-    }
+    // 官方一镜到底示例里目标页也挂这个（PageTwo 的 `NavDestination().transition(OPACITY)`）：
+    // 配合 push(false) + animateTo，页面自己淡入，看起来只剩搜索框在飞。
+    .transition(TransitionEffect.OPACITY)
   }
 }
 
