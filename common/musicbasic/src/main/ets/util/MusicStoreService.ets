@@ -1616,17 +1616,26 @@ export class MusicStoreService {
     }
   }
 
-  /** @returns Download save mode: 'ask' (manual folder picker) or 'download' (app Download dir). */
+  /**
+   * @returns 下载保存方式：
+   *  - `'private'`（**默认**，用户 2026-10-20 要求）= 存进应用私有目录的本地音乐目录，
+   *    下载完直接出现在「本地音乐」列表里（那边会扫这个目录），**不弹任何系统窗口**；
+   *  - `'download'` = 存到系统 Download 目录（首次要授权）；
+   *  - `'ask'` = 每次弹系统保存对话框。
+   *
+   * ⚠️ 默认值从 `'download'` 改成 `'private'`：这样"下载 → 本地音乐里就有"是默认行为，
+   *    想放外部目录的用户再到设置里改。
+   */
   public getDownloadSaveMode(): string {
     const store = this.getStore();
     if (store === undefined) {
-      return 'download';
+      return 'private';
     }
-    const mode = store.getSync(KEY_DOWNLOAD_SAVE_MODE, 'download') as string;
-    return mode.length > 0 ? mode : 'download';
+    const mode = store.getSync(KEY_DOWNLOAD_SAVE_MODE, 'private') as string;
+    return mode.length > 0 ? mode : 'private';
   }
 
-  /** Persists the download save mode ('ask'|'download'). */
+  /** Persists the download save mode ('private'|'download'|'ask'). */
   public setDownloadSaveMode(mode: string): void {
     const store = this.getStore();
     if (store === undefined) {

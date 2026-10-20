@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -550,7 +550,8 @@ export struct SettingsDetailPage {
 
   private selectSaveLocation(download: boolean): void {
     this.saveToDownloadDir = download;
-    MusicStoreService.getInstance().setDownloadSaveMode(download ? 'download' : 'ask');
+    // ★ 2026-10-20：开关关掉 = 存**应用私有目录**（默认，下载完直接出现在本地音乐里），sk 不再用
+      MusicStoreService.getInstance().setDownloadSaveMode(download ? 'download' : 'private');
   }
 
   @Builder

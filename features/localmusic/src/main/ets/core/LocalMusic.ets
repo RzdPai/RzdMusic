@@ -1328,7 +1328,78 @@ export class LocalMusic {
       this.byKey.set(song.key, song);
       this.byFingerprint.add(song.fingerprint);
     }
+    // ★ 2026-10-20：先"认领"目录里没登记过的音频（下载默认落在这里），再清垃圾，
+    //   否则刚下载完的文件会被 sweep 当垃圾删掉。
+    this.scanDir();
     this.sweepOrphans();
+  }
+
+  /**
+   * 扫一遍私有目录，把**没有索引的音频文件**补登记（用户 2026-10-20：
+   * 「默认下载时保存到应用私有目录，然后直接扫一下私有目录列出来」）。
+   *
+   * 下载服务现在默认把文件写进 `<filesDir>/local_music/`（本模块的索引目录），
+   * 所以下载完不需要任何"下载列表"数据 —— 进本页扫一遍就出现在「歌曲」里。
+   * 元信息只从**文件名**猜（`歌手 - 歌名` / `歌名 - 歌手`），封面/时长等下次播放时再补。
+   *
+   * @returns 新登记的文件数
+   */
+  scanDir(): number {
+    if (!this.ready || this.dir.length === 0) {
+      return 0;
+    }
+    let added: number = 0;
+    try {
+      const known: Set<string> = new Set<string>();
+      for (const song of this.songs) {
+        known.add(song.file);
+      }
+      const names: string[] = fs.listFileSync(this.dir);
+      for (const name of names) {
+        if (name === INDEX_FILE || name === COVER_DIR || known.has(name)) {
+          continue;
+        }
+        const ext: string = extOf(name);
+        if (ext.length === 0 || UNSUPPORTED_AUDIO_EXTS.includes(ext)) {
+          continue;   // 不是音频（或明确不支持的格式）⇒ 交给 sweepOrphans 清掉
+        }
+        let size: number = 0;
+        try {
+          size = fs.statSync(`${this.dir}/${name}`).size;
+        } catch (_e) {
+          continue;
+        }
+        const key: string = this.nextKey();
+        const entry: LocalSongEntry = {
+          key: key,
+          file: name,
+          cover: '',
+          lrc: '',
+          matchJson: '',
+          matchSource: '',
+          matchAt: 0,
+          name: titleFromFileName(name),
+          singer: singerFromFileName(name),
+          album: '',
+          durationMs: 0,
+          sizeBytes: size,
+          addedAt: Date.now(),
+          fingerprint: `${size}_${name.toLowerCase()}`
+        };
+        this.songs.push(entry);
+        this.byKey.set(key, entry);
+        this.byFingerprint.add(entry.fingerprint);
+        added++;
+        appendPlayLog(`[本地音乐] 扫到未登记文件 ${name}`);
+      }
+      if (added > 0) {
+        this.persist();
+        this.bumpVersion();
+      }
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'scanDir failed: %{public}s', JSON.stringify(e));
+    }
+    return added;
   }
 
   /**

@@ -112,6 +112,12 @@ export struct LocalMusicPage {
   @Local category: string = 'song';
   /** 「已下载」格的数据源（`DownloadService` 里 COMPLETED 的任务快照）。 */
   @Local downloadedTasks: DownloadTask[] = [];
+  /**
+   * 顶部**浮层头**的实测高度（vp）：文案行 + 页签 + 播放全部。
+   * 列表用它做 `contentStartOffset`，这样第一行不会被浮层盖住，而列表滚动时又能**从浮层下面穿过**
+   * （材质背板才有东西可采 = 真光感）。
+   */
+  @Local topOverlayH: number = 128;
   /** 一键匹配进行中 */
   @Local matchingAll: boolean = false;
   @Local matchProgress: string = '';
@@ -159,6 +165,12 @@ export struct LocalMusicPage {
   }
 
   private refresh(): void {
+    // ★ 2026-10-20：先扫私有目录（下载默认落在这里）⇒ 下载完的曲子直接出现在歌曲列表里，
+    //   不需要"下载管理"另存一份数据（用户：「直接扫一下私有目录列出来」）。
+    const scanned: number = localMusic.scanDir();
+    if (scanned > 0) {
+      hilog.info(DOMAIN, TAG, 'scanDir adopted %{public}d file(s)', scanned);
+    }
     this.items = localMusic.getSongItems();
     this.refreshDownloaded();
   }
@@ -1002,94 +1014,95 @@ export struct LocalMusicPage {
   build() {
     HdsNavDestination() {
       Column() {
-        this.Header()
-
-        if (this.importState.importing || this.importState.progress.length > 0) {
-          this.ProgressBar()
-        }
-        if (this.matchingAll) {
-          this.MatchProgressBar()
-        }
-
-        // ★ 2026-10-20 第二轮（用户：「Tab 和播放全部固定在顶部」）：页签 + 播放全部
-        //   从列表里搬出来做成固定头（不跟列表滚）。
-        // ★ 2026-10-20 第三轮（用户：「本地音乐上方按钮的光感咋没了」）：固定头不能是死底色，
-        //   要挂**材质背板**（`adaptiveColor = AVERAGE` ⇒ 取列表滚过去时的背后画面色），
-        //   这才是光感；纯 `backgroundColor` 看着就是一块死板。
-        if (this.items.length > 0) {
+        // ★★ 2026-10-20 第四轮（用户：「本地音乐改沉浸一些」「上方按钮的光感还是没有」）：
+        //   **沉浸**的做法不是给头部刷一层模糊就完事 —— 模糊要有东西可采。之前头部是列表的
+        //   **兄弟节点**（Column 上下排），它背后什么都没有，`backgroundBlurStyle` 自然一片死板。
+        //   这里改成 **Stack 浮层**：列表占满并给 `contentStartOffset(头部实测高度)`，
+        //   头部**压在**列表上 ⇒ 列表从它下面滚过，材质才能取到背后的封面/文字色 = 真光感。
+        Stack({ alignContent: Alignment.TopStart }) {
           Column() {
-            this.CategoryTabs()
-            this.PlayAllRow()
-          }
-          .width('100%')
-          .backgroundBlurStyle(buildBarBlurStyle(this.ambientState.level), barBlurOptions())
-        }
-
-        if (this.items.length === 0) {
-          this.EmptyGuide()
-        } else {
-          // ★ 用户 2026-10-19：多选操作条改成**底部悬浮胶囊**（与历史/收藏页同款）⇒
-          //   列表与操作条在同一个 Stack 里，操作条盖在列表上，不压缩列表高度。
-          // ★ 2026-10-20 第二轮（用户：「Tab 和播放全部固定在顶部」「不要已下载 Tab，
-          //   已下载直接放歌曲里」）：页签与播放全部搬到**固定头**（见上面那个 Column），
-          //   下载完成的歌直接接在「歌曲」列表尾部。
-          Stack({ alignContent: Alignment.Bottom }) {
-            List({ space: 2 }) {
-              if (this.category === 'song') {
-                ForEach(this.items, (item: SongItem) => {
-                  ListItem() {
-                    this.SongRow(item)
-                  }
-                }, (item: SongItem) => `${item.songId}_${item.interval}`)
-                ForEach(this.downloadedTasks, (task: DownloadTask) => {
-                  ListItem() {
-                    this.DownloadedRow(task)
-                  }
-                }, (task: DownloadTask) => 'dl_' + task.id + '_' + task.downloaded + '_' + task.total)
-              } else {
-                ForEach(this.groupEntries(), (entry: LocalGroupEntry) => {
-                  ListItem() {
-                    this.GroupRow(entry)
-                  }
-                }, (entry: LocalGroupEntry) => 'grp_' + this.category + '_' + entry.name)
-              }
+            if (this.importState.importing || this.importState.progress.length > 0) {
+              this.ProgressBar()
             }
-            .scrollBar(BarState.Off)
-            .width('100%')
-            .height('100%')
-            .divider({ strokeWidth: 0.6, color: $r('sys.color.background_tertiary') })
-            // ★ 底部"给悬浮播放条让位"的留白留在**列表里**（`contentEndOffset` = 内容末端到显示区
-            //   边界的距离，官方 `ScrollableCommonMethod` @since 22，List/Scroll 通用）—— 它随内容
-            //   一起滚走。**不要**写到容器的 `padding({ bottom })` 上：那是固定在屏幕底部的死带。
-            .contentEndOffset(this.bottomReservedVp())
+            if (this.matchingAll) {
+              this.MatchProgressBar()
+            }
 
-            if (this.selectionMode) {
-              Column() {
-                this.SelectionBar()
+            if (this.items.length === 0) {
+              this.EmptyGuide()
+            } else {
+              // ★ 用户 2026-10-19：多选操作条是**底部悬浮胶囊**，盖在列表上，不压缩列表高度。
+              Stack({ alignContent: Alignment.Bottom }) {
+                List({ space: 2 }) {
+                  if (this.category === 'song') {
+                    ForEach(this.items, (item: SongItem) => {
+                      ListItem() {
+                        this.SongRow(item)
+                      }
+                    }, (item: SongItem) => `${item.songId}_${item.interval}`)
+                    ForEach(this.downloadedTasks, (task: DownloadTask) => {
+                      ListItem() {
+                        this.DownloadedRow(task)
+                      }
+                    }, (task: DownloadTask) => 'dl_' + task.id + '_' + task.downloaded + '_' + task.total)
+                  } else {
+                    ForEach(this.groupEntries(), (entry: LocalGroupEntry) => {
+                      ListItem() {
+                        this.GroupRow(entry)
+                      }
+                    }, (entry: LocalGroupEntry) => 'grp_' + this.category + '_' + entry.name)
+                  }
+                }
+                .scrollBar(BarState.Off)
+                .width('100%')
+                .height('100%')
+                .divider({ strokeWidth: 0.6, color: $r('sys.color.background_tertiary') })
+                // 开头让出"浮层头"的高度（它压在列表上），这样第一行不会被头部盖住
+                .contentStartOffset(this.topOverlayH)
+                // ★ 底部"给悬浮播放条让位"的留白留在**列表里**（`contentEndOffset` 随内容滚走，
+                //   不要写到容器 padding 上 —— 那是固定在屏幕底部的死带）。
+                .contentEndOffset(this.bottomReservedVp())
+
+                if (this.selectionMode) {
+                  Column() {
+                    this.SelectionBar()
+                  }
+                  .width('100%')
+                  .padding({ left: 16, right: 16, bottom: 28 })
+                  .hitTestBehavior(HitTestMode.Transparent)
+                }
               }
+              .layoutWeight(1)
               .width('100%')
-              .padding({ left: 16, right: 16, bottom: 28 })
-              .hitTestBehavior(HitTestMode.Transparent)
             }
           }
-          .layoutWeight(1)
           .width('100%')
+          .height('100%')
+
+          // ── 浮层头：文案行 + 页签 + 播放全部，整块材质背板（列表从它下面滚过 ⇒ 有光感）
+          if (this.items.length > 0) {
+            Column() {
+              this.Header()
+              this.CategoryTabs()
+              this.PlayAllRow()
+            }
+            .width('100%')
+            .backgroundBlurStyle(buildBarBlurStyle(this.ambientState.level), barBlurOptions())
+            .onAreaChange((_oldArea: Area, newArea: Area): void => {
+              const height: number = Number(newArea.height);
+              if (height > 0 && Math.abs(height - this.topOverlayH) > 0.5) {
+                this.topOverlayH = height;
+                hilog.info(DOMAIN, TAG, 'RzdLocalHead h=%{public}f', height);
+              }
+            })
+          }
         }
+        .layoutWeight(1)
+        .width('100%')
       }
       .width('100%')
       .height('100%')
-      // ★★ "延伸进状态栏"的前提：**链上任何祖先都不许 `clip(true)`**
-      //   （官方《开发应用沉浸式效果》：「子节点可以单独设置该属性……**需要确保父组件未设置 clip
-      //   等裁剪属性**」）。这里原来写 `.clip(true)`（第十九轮"要挡住内容"的错误口径下加的）**已删除** ——
-      //   本页的 `List` 将来要能画进状态栏，全靠祖先这一层不裁。
-      // ★ 状态栏那一条：本页 `hideTitleBar(true)` + **自绘固定 `Header()`**（它不入滚动内容），
-      //   所以只有"整容器让开状态栏"这一档能选 —— 同 §30 的手表向页口径。
-      //   `Header()` 是滚动内容之外的兄弟节点 ⇒ 它自己的避让只能由容器来给，给**只给状态栏高度**
-      //   （**不能**加 56 —— 本页没有 HDS 标题栏，加了就是白白空掉一条标题栏）。
-      //   页根的 `expandSafeArea(TOP)` + `backgroundColor` 继续负责把页面底色铺到状态栏那一条。
-      // ★ 用户 2026-10-11：「本地音乐界面改成历史页同款 HDS 标题」⇒ 标题栏交给 HDS，
-      //   自绘 Header 退到它下面（所以这里让位 = 状态栏 + HDS 标题栏 56）。
-      // ★ 用户 2026-10-11：「本地音乐界面改成历史页同款 HDS 标题」⇒ 让位 = 状态栏 + HDS 标题栏 56
+      // ★ 让位 = 状态栏 + HDS 标题栏 56（本页标题栏交给 HDS，自绘头部退到它下面）。
       .padding({ top: getStatusBarTopVpFromWindowUtil() + 56 })
     }
     .onBackPressed((): boolean => guardPlayerBack('LocalMusicView'))

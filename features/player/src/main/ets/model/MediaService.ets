@@ -672,6 +672,31 @@ export class MediaService {
   }
 
   /**
+   * 把「锁屏播放」开关同步给系统的**后台播放模式**（`avSession.setBackgroundPlayMode`，@since 24）。
+   *
+   * 官方 FAQ 明确要求应用内的"是否支持后台播放"开关必须与这个模式一致，
+   * 否则退后台会被强制暂停 / 实况窗展示错误。audio 类型的默认值是 ENABLE，
+   * 但既然我们有开关，就必须显式下发，不能依赖默认值。
+   *
+   * 排查日志关键字：`RzdLockScreen`。
+   */
+  private applyBackgroundPlayMode(): void {
+    const session: avSession.AVSession | undefined = this.session;
+    if (session === undefined) {
+      return;
+    }
+    const enabled: boolean = MusicStoreService.getInstance().getLockScreenPlay();
+    const mode: avSession.BackgroundPlayMode = enabled ?
+      avSession.BackgroundPlayMode.ENABLE_BACKGROUND_PLAY :
+      avSession.BackgroundPlayMode.DISABLE_BACKGROUND_PLAY;
+    session.setBackgroundPlayMode(mode).then((): void => {
+      Logger.info(TAG, `[RzdLockScreen] background play mode=${enabled ? 'ENABLE' : 'DISABLE'} ok`);
+    }).catch((err: BusinessError): void => {
+      Logger.warn(TAG, `[RzdLockScreen] setBackgroundPlayMode failed code=${err.code} msg=${err.message}`);
+    });
+  }
+
+  /**
    * 应用「锁屏播放」开关（设置页切换后直接调，立即生效，不必等下一次起播）。
    *
    * · 开：正在播就立刻补上长时任务；
@@ -681,6 +706,8 @@ export class MediaService {
   public applyLockScreenPlay(enabled: boolean): void {
     const playing: boolean = this.getAppState().isPlay;
     Logger.info(TAG, `[RzdLockScreen] setting changed enabled=${enabled} playing=${playing}`);
+    // ★ 两种状态都同步给系统（见 applyBackgroundPlayMode 的注释）
+    this.applyBackgroundPlayMode();
     if (enabled) {
       if (playing) {
         this.ensureBackgroundAudioTask();
@@ -1239,6 +1266,14 @@ export class MediaService {
       // Preserve one session for background and lock-screen control; do not deactivate for UI preferences.
       await this.session.activate();
       Logger.info(TAG, '[RzdLockScreen] system AVSession active (default enabled)');
+      // ★★ 2026-10-20（用户：「锁屏播放还是不行，你翻翻官方文档」）——
+      //   官方《本地媒体会话常见问题》→「应用退至后台后音视频被强制暂停」解决措施第 5 条原文：
+      //     「应用退至后台前通过 `setBackgroundPlayMode` 设置后台播放模式……
+      //       **如果应用内提供了"是否支持后台播放"的开关，设置的后台播放模式务必与开关状态保持一致，
+      //       否则可能导致退后台后被强制暂停**或系统实况窗展示错误。」
+      //   本仓正好有这个开关（`MusicStoreService.getLockScreenPlay()`），但之前**从来没有**告诉系统
+      //   ⇒ 这是"锁屏/后台播放不生效"的官方点名叫法。这里建会话后立刻按开关同步一次。
+      this.applyBackgroundPlayMode();
       void this.enableSystemLyric(this.session);
     } catch (error) {
       Logger.error(TAG, `${error.code} + ${error.message}`);

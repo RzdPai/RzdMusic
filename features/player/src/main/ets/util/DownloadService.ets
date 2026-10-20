@@ -957,11 +957,41 @@ export class DownloadService {
     return this.pad2(Math.floor(totalSec / 60)) + ':' + this.pad2(totalSec % 60) + '.' + m3;
   }
 
-  /** 保存到目标位置：Download 目录（授权一次复用）或系统保存对话框。 */
+  /**
+   * 保存到目标位置。
+   *
+   * ★ 2026-10-20（用户：「不要单独做导入的和下载的，就默认下载时保存到**应用私有目录**，
+   *   然后直接扫一下私有目录列出来；保存到 Download 文件夹再按用户设置进一步处理」）：
+   *   新增第一档 `'private'`（现在也是**默认值**）—— 直接落到
+   *   `<filesDir>/local_music/<文件名>`，也就是本地音乐模块的索引目录。
+   *   本地音乐页进页时会扫这个目录把没有索引的音频补登记，所以下载完**直接就出现在列表里**，
+   *   既不弹系统窗口、也不需要"下载管理"另存一份数据。
+   *   ⚠️ 目录名 `local_music` 必须与 `features/localmusic/core/LocalMusic.ets` 的 `DIR_NAME`
+   *      保持一致（跨 features 不能互相 import，只能靠这个约定；改一处必须改两处）。
+   */
   private async saveToDestination(task: DownloadTask, tmpPath: string, lrcText: string): Promise<void> {
     const saveMode: string = MusicStoreService.getInstance().getDownloadSaveMode();
     let finalPath: string = '';
-    if (saveMode === 'download') {
+    if (saveMode === 'private') {
+      const hostContext: common.Context | undefined =
+        this.uiContext !== undefined ? this.uiContext.getHostContext() : undefined;
+      if (hostContext === undefined) {
+        throw new Error('拿不到应用上下文');
+      }
+      const dir: string = `${hostContext.filesDir}/local_music`;
+      if (!fs.accessSync(dir)) {
+        fs.mkdirSync(dir);
+      }
+      let destPath: string = `${dir}/${task.fileName}`;
+      if (fs.accessSync(destPath)) {
+        const uniqueName: string = task.fileName.replace(/(\.[^.]+)$/, '_' + Date.now() +
+          '_' + Math.floor(Math.random() * 1000000) + '$1');
+        destPath = `${dir}/${uniqueName}`;
+      }
+      await this.copyTo(tmpPath, destPath);
+      finalPath = destPath;
+      appendPlayLog('[下载] 已存入应用私有目录 ' + destPath);
+    } else if (saveMode === 'download') {
       await this.ensureDownloadDir();
       if (this.downloadDirUri.length === 0) {
         throw new Error('未授权下载目录');

@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -55,15 +55,14 @@ import {
   MusicAppState, MusicStoreService, NowPlayingIndicator, PageTopInsetHelper, PlayedSongRecord, PlaylistDto,
   RouterUrlConstants, SelectionActionCell,
   SongTitleMarquee, ThemeState, TitleBarConstants,
-  buildTitleMaterial, getStatusBarTopVpFromWindowUtil
+  getStatusBarTopVpFromWindowUtil
 } from 'musicbasic';
 import {
   BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions,
-  HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize
+  HdsNavigationTitleBarOptions, TitleSize
 } from '@kit.UIDesignKit';
 import { OnlinePlayUtil, sourceDisplayName, sourceToCode } from 'player';
 import { SongMoreMenu } from 'playlist';
-import { MineTopFade } from './MineWidgets';
 
 /** 「最近播放」模式。 */
 export const RECORD_MODE_HISTORY: string = 'history';
@@ -1061,12 +1060,15 @@ export struct RecordListPage {
       // ★ 盒顶实测贴屏幕顶（0）时才让 HDS 标题栏自己退回状态栏下方；盒顶已在状态栏下沿时
       //   不能再退（否则标题掉到 38+38，用户报的「历史/收藏页标题下移」）。
       avoidLayoutSafeArea: PageTopInsetHelper.avoidLayoutSafeArea(this.boxTopVp),
+      // ★★ 2026-10-20（用户：「历史页收藏页上方不要**渐变模糊**了，直接一块大黑板就行了」）：
+      //   去掉 `scrollEffectOpts: IMMERSIVE_GRADIENT_BLUR`（那玩意是滚动渐变的模糊托底），
+      //   也去掉 `systemMaterialEffect`，背景直接给**页面底色**（深浅色自动适配 = 深色下就是一块黑板）。
       style: {
-        blurStrategy: BlurStrategy.ENABLE,
-        scrollEffectOpts: {
-          scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR
-        },
+        blurStrategy: BlurStrategy.DISABLE,
         originalStyle: {
+          backgroundStyle: {
+            backgroundColor: $r('app.color.background_secondary')
+          },
           contentStyle: {
             titleStyle: {
               mainTitleColor: $r('sys.color.font_primary')
@@ -1082,6 +1084,9 @@ export struct RecordListPage {
           }
         },
         scrollEffectStyle: {
+          backgroundStyle: {
+            backgroundColor: $r('app.color.background_secondary')
+          },
           contentStyle: {
             titleStyle: {
               mainTitleColor: $r('sys.color.font_primary')
@@ -1095,8 +1100,7 @@ export struct RecordListPage {
               backgroundColor: '#1AFFFFFF'
             }
           }
-        },
-        systemMaterialEffect: buildTitleMaterial(this.ambientState.level)
+        }
       },
       content: {
         title: {
@@ -1243,8 +1247,6 @@ export struct RecordListPage {
           right: this.contentPaddingSide()
         })
 
-        // 顶栏渐隐：行从透明标题栏底下穿过时靠近顶部淡出（与「我的」页同一个件）
-        MineTopFade({ fadeHeight: this.titleTopInset() + 10 })
 
         // ★ 用户 2026-10-19：多选时底部放一条**HDS 风格操作条**（删除 / 添加至歌单 / 取消收藏 / 取消）；
         //   同一时刻壳层那条悬浮播放条会被 `selectionActive` 隐藏，两者不重叠。

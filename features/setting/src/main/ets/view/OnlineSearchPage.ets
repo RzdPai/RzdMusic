@@ -715,7 +715,11 @@ struct OnlineSearchPage {
   }
 
   private async doSearch(): Promise<void> {
-    this.showSuggest = false;
+    // ★ 2026-10-20（用户：「点击词条跳转搜索时还会显示联想词」）：真因是这里只把
+    //   `showSuggest` 置 false、**没清 280ms 防抖定时器**，定时器一到又把联想层打开。
+    //   `hideSuggest()` 现在会一起 clearTimeout + `suggestSeq++`，所以这里统一走它
+    //   （回车提交、点词条、点联想词三条路都覆盖）。
+    this.hideSuggest();
     this.suggestWords = [];
     if (this.query.trim().length === 0) {
       return;
@@ -1330,13 +1334,23 @@ struct OnlineSearchPage {
    *   整页盒子仍从屏幕 y=0 起排（`ignoreLayoutSafeArea(TOP)`），所以这里自己补**状态栏高度**。
    */
   /**
-   * 自绘顶栏**还要往下让多少**（vp）：目标是让搜索行顶边落在"标题行顶边"。
-   * = (状态栏 + 56) - 56 - 盒顶 = 状态栏 - 盒顶，负数取 0（系统已经让过就不再让）。
+   * 自绘顶栏**还要往下让多少**（vp）。
+   *
+   * ★ 2026-10-20（用户第二次提「搜索页顶部还是一块空白，我指的是让内容延伸到顶部一直到状态栏」）：
+   *   原来只做"盒顶在 0 时补状态栏高度"，但如果 `hideTitleBar(true)` 之后系统仍把页盒压到
+   *   标题栏下沿（盒顶 ≈ 状态栏 + 56），那一整条就永远空着、页内怎么调都填不上。
+   *   现在两头都兜：**先用 `headerPullUp()` 把顶栏往上提回状态栏下沿**，再用本函数补最小的
+   *   状态栏让位 —— 两种布局（盒顶 0 / 盒顶 94）最后都落在"搜索行紧贴状态栏下沿"。
    */
   private headerTopInset(): number {
-    const titleRowTop: number =
-      PageTopInsetHelper.targetContentTopVp() - PageTopInsetHelper.TITLE_BAR_HEIGHT_VP;
-    return Math.max(0, titleRowTop - this.boxTopVp);
+    const statusBar: number = Math.max(0, getStatusBarTopVpFromWindowUtil());
+    return Math.max(0, statusBar - this.boxTopVp);
+  }
+
+  /** 盒顶被系统压到状态栏以下时，把自绘顶栏**往上提**这么多（vp），填掉顶部那条空白。 */
+  private headerPullUp(): number {
+    const statusBar: number = Math.max(0, getStatusBarTopVpFromWindowUtil());
+    return Math.max(0, this.boxTopVp - statusBar);
   }
 
   @Builder
@@ -1368,6 +1382,8 @@ struct OnlineSearchPage {
     }
     .width('100%')
     .padding({ top: this.headerTopInset(), bottom: 6 })
+    // 盒顶被系统压到状态栏下沿时往上提，把那条空白填掉（0 时无影响）
+    .margin({ top: -this.headerPullUp() })
     .onAreaChange((_oldArea: Area, newArea: Area): void => {
       const height: number = Number(newArea.height);
       if (height > 0 && Math.abs(height - this.searchHeaderHeight) > 0.5) {
@@ -1436,7 +1452,7 @@ struct OnlineSearchPage {
     hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'tab switch mode=%{public}d', mode);
   }
 
-  /** 综合页的分区标题（可带一颗"播放全部"主题色圆钮）。 */
+  /** 综合页的分区标题（可带一颗"播放全部"三角钮 —— 用户 2026-10-20：圆形不好看，要三角）。 */
   @Builder
   private SectionHeader(label: string, withPlay: boolean) {
     Row({ space: 10 }) {
@@ -1445,19 +1461,14 @@ struct OnlineSearchPage {
         .fontWeight(FontWeight.Bold)
         .fontColor($r('sys.color.font_primary'))
       if (withPlay) {
-        Row() {
-          SymbolGlyph($r('sys.symbol.play_fill'))
-            .fontSize(13)
-            .fontColor([$r('sys.color.font_on_primary')])
-        }
-        .width(28)
-        .height(28)
-        .borderRadius(14)
-        .backgroundColor(this.themeState.color)
-        .justifyContent(FlexAlign.Center)
-        .onClick((): void => {
-          this.playAll();
-        })
+        SymbolGlyph($r('sys.symbol.play_round_triangle_fill'))
+          .fontSize(30)
+          .fontWeight(FontWeight.Regular)
+          .height(30)
+          .fontColor([this.themeState.color])
+          .onClick((): void => {
+            this.playAll();
+          })
       }
       Blank()
     }
@@ -1581,8 +1592,11 @@ struct OnlineSearchPage {
             void this.doSearch();
           })
           .onEditChange((isEditing: boolean) => {
-            if (!isEditing) {
-              this.hideSuggest();
+            // ★ 2026-10-20（用户：「我输入搜索词后**收起键盘联想词就会消失**」）：
+            //   原来这里 `!isEditing` 就 `hideSuggest()` ⇒ 键盘一收联想层跟着没了。
+            //   现在收键盘**不动**联想层（只有真的提交/点词条/滚动列表才收起）。
+            if (isEditing) {
+              this.showSuggest = this.suggestWords.length > 0 && this.query.trim().length > 0;
             }
           })
       }
