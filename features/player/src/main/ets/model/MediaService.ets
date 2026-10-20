@@ -151,6 +151,21 @@ export class MediaService {
   private pendingLoadOnly: boolean = false;
   /** True while playback was paused by a temporary audio interruption and should auto-resume. */
   private pausedByInterrupt: boolean = false;
+  /**
+   * 锁屏/后台取证（2026-10-20 夜，用户报「锁屏播放不工作，开关开关都一样」）。
+   *
+   * ★ 这一组只**取证**，不改变任何播放行为：
+   *   进后台记一次「墙钟 + 播放位置」，回前台再算「墙钟走了多久 / 播放位置走了多久」：
+   *   · 位置几乎不动 ⇒ 后台被暂停或进程被冻结（再看 state / 长时任务标志 / paused 事件定性）；
+   *   · 位置照常前进 ⇒ 后台其实在放，那用户说的"不工作"就是锁屏卡片/播控控件那条线；
+   *   · 位置前进但没声音 ⇒ 属于系统"后台管控静音"，不是暂停。
+   *   进程被冻结时定时器一起停，所以不靠定时器取样，只靠进出后台这一对时间戳。
+   * 排查关键字：`RzdLockScreenB` 的 `bg-enter` / `bg-leave(stall|keep)` / `event=paused origin=`。
+   */
+  private bgEnterWall: number = 0;
+  private bgEnterPosition: number = 0;
+  /** 最近一次暂停是谁发起的：`app`（应用内 UI）/ `avsession`（锁屏、耳机、播控中心），空 = 系统事件。 */
+  private pauseOrigin: string = '';
   /** True after we've already attempted one cross-source fallback for the current track; prevents
    *  an infinite loop when the fallback source also fails AVPlayer. */
   private hasFallbackOnce: boolean = false;
@@ -453,6 +468,7 @@ export class MediaService {
         // 播放成功：该音质档位健康，清除冷却/失败计数（冷却到期后自动升回高档位）
         this.recordQualityTierSuccess();
         this.ensureBackgroundAudioTask();
+        this.lockScreenDiagnostic(`event=playing bg=${this.bgEnterWall > 0 ? 1 : 0} ` + BackgroundUtil.snapshot());
         const playingSong = this.getSongItemAtQueueIndex(this.musicIndex);
         if (playingSong !== undefined) {
           // 实况窗随播放创建（本地实况窗仅前台可建，失败自动降级）
@@ -475,7 +491,10 @@ export class MediaService {
         break;
       case 'paused':
         Logger.info(TAG, 'AVPlayer state paused called.');
-        this.lockScreenDiagnostic('event=paused reason=unknown');
+        // ★ 谁暂停的：空来源 = 系统自己（焦点/后台管控），不是我们调的
+        this.lockScreenDiagnostic(`event=paused origin=${this.pauseOrigin.length > 0 ? this.pauseOrigin : 'system'} ` +
+          `pos=${this.getCurrentTime()} bg=${this.bgEnterWall > 0 ? 1 : 0} ` + BackgroundUtil.snapshot());
+        this.pauseOrigin = '';
         this.state = AudioPlayerState.PAUSE;
         if (this.abilityContext) {
           BackgroundUtil.stopContinuousTask(this.abilityContext);
@@ -575,6 +594,7 @@ export class MediaService {
   private pauseCall: () =>void = () => {
     Logger.info(TAG, `on pause , do pause task`);
     this.pausedByInterrupt = false;
+    this.pauseOrigin = 'avsession';
     this.pause();
   };
   /** AVSession remote next track. */
@@ -770,6 +790,12 @@ export class MediaService {
     const playing: boolean = this.isPlayingState();
     const enabled: boolean = MusicStoreService.getInstance().getLockScreenPlay();
     this.lockScreenDiagnostic(`onBackground(playing=${playing}) lockscreen enabled=${enabled}`);
+    // ★ 取证起点：进后台的墙钟 + 播放位置（回前台用 onApplicationForeground 结算差值）
+    this.bgEnterWall = Date.now();
+    this.bgEnterPosition = this.getCurrentTime();
+    const playerState: string = this.avPlayer !== undefined ? this.avPlayer.state : 'none';
+    this.lockScreenDiagnostic(`bg-enter playing=${playing ? 1 : 0} pos=${this.bgEnterPosition} ` +
+      `state=${playerState} session=${this.session !== undefined ? 'yes' : 'no'} ${BackgroundUtil.snapshot()}`);
     void this.applyBackgroundPlayMode();
     if (enabled && playing) {
       this.ensureBackgroundAudioTask();
@@ -777,6 +803,31 @@ export class MediaService {
       if (this.abilityContext) {
         BackgroundUtil.stopContinuousTask(this.abilityContext);
       }
+    }
+  }
+
+  /**
+   * 应用回到前台：结算后台那段的「墙钟时间 vs 播放位置」差值（见 `bgEnterWall` 的注释）。
+   *
+   * 另外按官方《后台播放》的要求补一次长时任务申请：系统可能在后台自行取消长时任务
+   * （焦点打断、通知被移除等），而音频没有停的情况下原代码不会重新申请，
+   * 下一次锁屏就会因为"没有长时任务"被挂起。
+   */
+  public onApplicationForeground(): void {
+    const wall: number = this.bgEnterWall > 0 ? Date.now() - this.bgEnterWall : 0;
+    const advance: number = this.bgEnterPosition > 0 ? this.getCurrentTime() - this.bgEnterPosition : 0;
+    const playerState: string = this.avPlayer !== undefined ? this.avPlayer.state : 'none';
+    const enabled: boolean = MusicStoreService.getInstance().getLockScreenPlay();
+    const playing: boolean = this.isPlayingState();
+    if (wall > 0) {
+      const stalled: boolean = wall > 1000 && advance < wall / 2;
+      this.lockScreenDiagnostic(`bg-leave(${stalled ? 'stall' : 'keep'}) wall=${wall} pos-delta=${advance} ` +
+        `playing=${playing ? 1 : 0} state=${playerState} lockscreen enabled=${enabled} ` + BackgroundUtil.snapshot());
+    }
+    this.bgEnterWall = 0;
+    this.bgEnterPosition = 0;
+    if (enabled && playing) {
+      this.ensureBackgroundAudioTask();
     }
   }
 
@@ -2112,6 +2163,10 @@ export class MediaService {
    */
   public pause() {
     Logger.info(TAG, 'AVPlayer pause() isPrepared:' + this.isPrepared + ', state:' + this.state);
+    // 记录暂停来源：调用方（avsession）已置位则保留，否则就是应用内 UI 点的
+    if (this.pauseOrigin.length === 0) {
+      this.pauseOrigin = 'app';
+    }
     // 用户的暂停是最终意图：丢掉任何还没被 prepared 消费掉的「自动起播」意图，
     // 否则暂停期间完成的那次 resolveOnlineUrl/重试仍会把音乐放起来。
     if (this.playWhenPrepared) {

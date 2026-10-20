@@ -207,6 +207,15 @@ export default class EntryAbility extends UIAbility {
     } catch (error) {
       Logger.error(`syncLiveViewOnForeground ${JSON.stringify(error)}`);
     }
+    // ★ 结算后台那段"墙钟 vs 播放位置"的差值，并按官方《后台播放》补一次长时任务申请。
+    //   排查关键字：RzdLockScreenB 的 bg-enter / bg-leave(stall|keep)。
+    try {
+      MediaService.getInstance().onApplicationForeground();
+    } catch (error) {
+      const err: BusinessError = error as BusinessError;
+      MusicStoreService.getInstance().appendRuntimeDiagnostic(
+        `[RzdLockScreenB] onForeground(err=${err.code}) msg=${err.message}`);
+    }
     MusicCardBridge.notify();
     this.consumeCardAction();
     // 热启动的脚本导入结果在这里提示（onNewWant 时窗口已经就绪，通常当场就提示过了）

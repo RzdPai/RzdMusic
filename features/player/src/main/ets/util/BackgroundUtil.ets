@@ -32,6 +32,14 @@ export class BackgroundUtil {
     MusicStoreService.getInstance().appendRuntimeDiagnostic(line);
   }
 
+  /**
+   * 长时任务状态快照，只用于日志取证（`requested` = 应用想要，`running` = 系统已受理）。
+   * @returns 形如 `task req=1 run=1` 的一行文本
+   */
+  public static snapshot(): string {
+    return `task req=${BackgroundUtil.requested ? 1 : 0} run=${BackgroundUtil.running ? 1 : 0}`;
+  }
+
   public static startContinuousTask(context?: common.UIAbilityContext): void {
     BackgroundUtil.requested = true;
     BackgroundUtil.enqueue(context);
@@ -81,8 +89,10 @@ export class BackgroundUtil {
     if (!BackgroundUtil.observingCancel) {
       try {
         backgroundTaskManager.on('continuousTaskCancel', (info): void => {
+          // ★ 系统取消是"为什么锁屏会停"的头号证据：reason 见 ContinuousTaskCancelReason
+          //   （1=已取消/完成，2=后台负载过高，3=用户移除通知…），必须原样落进持久诊断。
           BackgroundUtil.running = false;
-          BackgroundUtil.diagnostic('stop-continuous system-cancel info=' + JSON.stringify(info));
+          BackgroundUtil.diagnostic(`stop-continuous system-cancel reason=${info.reason} info=${JSON.stringify(info)}`);
         });
         BackgroundUtil.observingCancel = true;
       } catch (error) {
