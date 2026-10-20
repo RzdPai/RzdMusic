@@ -227,6 +227,8 @@ export struct OnlineSearchPage {
   private suppressSuggestOnce: boolean = false;
   private suggestSeq: number = 0;
   @Local searching: boolean = false;
+  /** 是否**真的发起过**一次搜索（空态提示只在搜过之后才显示，入场态不该出现）。 */
+  @Local searchedOnce: boolean = false;
   @Local songs: LXSearchSong[] = [];
   @Local errorMsg: string = '';
   @Local playingNow: string = '';
@@ -544,9 +546,28 @@ export struct OnlineSearchPage {
 
   /** 进页前先把状态栏图标色翻到本页应有的值，避免从首页（彩色 Hero 上白图标）push 过来时
    *  状态栏颜色比页面晚一帧更新、产生一小会割裂。 */
+  /**
+   * 预热状态栏文字色。
+   *
+   * ★ 性能（甲方 2026-10-20：「切换到搜索页有点卡」）：`setWindowSystemBarProperties` 是一次
+   *   **窗口 IPC**，原来每次进搜索页都在 `aboutToAppear` 里同步调一次，正好压在转场首帧上。
+   *   ⇒ 整个进程只做一次，且延到首帧之后。
+   */
+  private static statusBarPreapplied: boolean = false;
+
   private preapplyStatusBarColor(): void {
-    const color: string = this.isDarkTheme() ? '#FFFFFF' : '#000000';
-    WindowUtil.getInstance().setWindowSystemBarProperties({ statusBarContentColor: color });
+    if (OnlineSearchPage.statusBarPreapplied) {
+      return;
+    }
+    OnlineSearchPage.statusBarPreapplied = true;
+    setTimeout((): void => {
+      const color: string = this.isDarkTheme() ? '#FFFFFF' : '#000000';
+      try {
+        WindowUtil.getInstance().setWindowSystemBarProperties({ statusBarContentColor: color });
+      } catch (_err) {
+        // 状态栏次要属性，失败不影响页面
+      }
+    }, 0);
   }
 
   /** 搜索框/Select 的磨砂强度，跟随软件内沉浸光感设置（与浮层迷你播放器一致）。 */
@@ -575,8 +596,11 @@ export struct OnlineSearchPage {
     this.refreshContentPaddingTop();
     this.searchHistory = this.store.getSearchHistory();
     this.restoreSearchSource();
+    // 首帧之后再碰窗口 IPC / 网络（它们压在转场首帧上就是"进页面卡一下"）。
     this.preapplyStatusBarColor();
-    void this.loadHotWords();
+    setTimeout((): void => {
+      void this.loadHotWords();
+    }, 0);
     if (this.routeParam !== '' && typeof this.routeParam === 'string' && (this.routeParam as string).length > 0) {
       this.query = this.routeParam as string;
       void this.doSearch();
@@ -608,9 +632,26 @@ export struct OnlineSearchPage {
   }
 
   /** Loads the QQ hot search words for the search hint area. */
+  /**
+   * 热搜词。
+   *
+   * ★ 性能（`切换到搜索页有点卡`）：原来是**每次进页面都发一次网络请求**，且首帧就在跑。
+   *   改成：进程内缓存 + 首帧之后异步拉；有缓存就直接用，不再发请求。
+   */
+  private static hotWordsCache: string[] = [];
+
   private async loadHotWords(): Promise<void> {
-    const words = await lxTxHotSearch();
-    this.hotWords = words.slice(0, 10);
+    if (OnlineSearchPage.hotWordsCache.length > 0) {
+      this.hotWords = OnlineSearchPage.hotWordsCache.slice(0, 10);
+      return;
+    }
+    try {
+      const words: string[] = await lxTxHotSearch();
+      OnlineSearchPage.hotWordsCache = words.slice(0, 10);
+      this.hotWords = OnlineSearchPage.hotWordsCache;
+    } catch (_err) {
+      // 热搜是装饰性内容，失败就留空
+    }
   }
 
   /** 输入防抖后拉联想词（对齐 lx-music 搜索框下方候选） */
@@ -814,6 +855,7 @@ export struct OnlineSearchPage {
       return;
     }
     this.searching = true;
+    this.searchedOnce = true;
     this.errorMsg = '';
     // ★ 用户 2026-10-20：综合页要**一次**同时拿到歌曲/歌手/专辑（三份并发），
     //   任一有结果就清掉错误提示（单类搜索各自会写 errorMsg，这里统一兜回来）。
@@ -2238,8 +2280,27 @@ export struct OnlineSearchPage {
                 }
                 .margin({ bottom: 12 })
               }, (p: SearchPlaylistInfo) => 'ovw-p-' + p.source + '_' + p.id)
+              if (this.playlists.length > 3) {
+                ListItem() {
+                  this.MoreRow('查看更多歌单', 2)
+                }
+              }
+            }
+            // ── 综合页（甲方 2026-10-20 参考华为音乐）：
+            //    顶部歌手卡（搜到的第一个歌手）→ 歌曲 → 歌单(3) → 歌手(3) → 专辑(3)，后三段各带「查看更多」
+            if (this.singers.length > 0) {
               ListItem() {
-                this.MoreRow('查看更多歌单', 2)
+                this.SectionHeader('歌手', false)
+              }
+              ForEach(this.singers.slice(0, 3), (s: SingerInfo) => {
+                ListItem() {
+                  this.SingerResultRow(s)
+                }
+              }, (s: SingerInfo) => 'ovw-g-' + s.id)
+              if (this.singers.length > 3) {
+                ListItem() {
+                  this.MoreRow('查看更多歌手', 3)
+                }
               }
             }
             if (this.albums.length > 0) {
@@ -2251,24 +2312,17 @@ export struct OnlineSearchPage {
                   this.AlbumResultRow(a)
                 }
               }, (a: AlbumInfo) => 'ovw-a-' + a.id + '_' + a.name)
-              ListItem() {
-                this.MoreRow('查看更多专辑', 4)
-              }
-            }
-            if (this.singers.length > 1) {
-              ListItem() {
-                this.SectionHeader('歌手', false)
-              }
-              ForEach(this.singers.slice(1, 3), (s: SingerInfo) => {
+              if (this.albums.length > 3) {
                 ListItem() {
-                  this.SingerResultRow(s)
+                  this.MoreRow('查看更多专辑', 4)
                 }
-              }, (s: SingerInfo) => 'ovw-g-' + s.id)
-              ListItem() {
-                this.MoreRow('查看更多歌手', 3)
               }
             }
-            if (this.songs.length === 0 && this.singers.length === 0 && this.albums.length === 0) {
+            // ⚠️ 空态只在**真的搜过且一条都没有**时出现：
+            //   原来只判"三类结果都为空"，于是**未搜索的入场态（热搜/历史）也会显示"没有找到相关内容"**。
+            if (this.searchedOnce && !this.searching &&
+              this.songs.length === 0 && this.singers.length === 0 &&
+              this.albums.length === 0 && this.playlists.length === 0) {
               ListItem() {
                 Text('没有找到相关内容')
                   .fontSize($r('sys.float.Caption_L'))
