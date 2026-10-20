@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -44,6 +44,14 @@ export class  MusicAppState {
   @Trace public totalTime: string = '00:00';
   /** Whether the full-screen player overlay is visible. */
   @Trace public isShowPlay: boolean = false;
+  /**
+   * 壳层重绘信号（每关闭一次播放页 +1）。
+   *
+   * ★ 2026-10-20（真机：「退出后概率性残留满屏封面，但 alive=0 / 栈已空 / 三个交接开关都是 false」）：
+   *   收尾那一拍里 `isShowPlay` 从 false → false **不构成状态变化**，壳层就不重绘，
+   *   屏幕上留的是最后一帧封面。壳层监听这个 tick，用它当 `ForEach` 的 key 强制重绘一次。
+   */
+  @Trace public closeTick: number = 0;
   /** Time spent on the now-playing sub-page (e.g. to auto-hide chrome). */
   @Trace public pageShowTime: number = 0;
   /** UI volume in 0..1; mirrored to the player when applied. */

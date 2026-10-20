@@ -1408,6 +1408,9 @@ export struct PlaybackPage {
       `RzdCloseState flags hs ${hsBefore ? 1 : 0}->0 src ${srcBefore ? 1 : 0}->0 mini ${miniBefore ? 1 : 0}->0 ` +
         `drv=${this.expandState.morphSessionDriving() ? 1 : 0} ` +
         `br=${this.expandState.morphOverlayBridging() ? 1 : 0}`);
+    // ★ 强制壳层重绘一次：这时 `isShowPlay` 往往已经是 false（false→false 不算变化），
+    //   壳层不重绘 ⇒ 屏幕上留最后一帧满屏封面（真机：概率性、alive=0 且栈已空）。
+    this.state.closeTick = (this.state.closeTick + 1) % 100000;
     this.snapshotFlight = false;
     const pixmap: image.PixelMap | undefined = this.morphShrinkState().pixmap;
     this.morphShrinkState().reset();

@@ -2623,6 +2623,23 @@ struct Index {
     }
   }
 
+  /**
+   * 关闭播放页后的"补一帧"。
+   *
+   * 真机证据（`RzdCloseState +64 alive=0 show=0 size=0 idx=-1 names=`）：
+   * 路由已弹、节点已死、交接开关全 false，但屏幕上**概率性**留着最后一帧满屏封面 ——
+   * 因为收尾那一拍里所有被壳层读取的状态都是 false→false，ArkUI 认为"没变化、不重绘"。
+   * ⇒ 播放页关闭收尾时 `appState.closeTick + 1`，这里翻一个本地计数并当 `ForEach` 的 key 用，
+   *   强制壳层重绘一次。
+   */
+  @Local shellRepaintTick: number = 0;
+
+  @Monitor('appState.closeTick')
+  onCloseTickChanged(): void {
+    this.shellRepaintTick = (this.shellRepaintTick + 1) % 100000;
+    Logger.info(RzdShellLogTag, `shell repaint tick=${this.shellRepaintTick}`);
+  }
+
   private shouldShowFloatingMiniBar(): boolean {
     // ★ 用户 2026-10-19：列表页多选时底部要放操作条，播放条临时隐藏（否则两条会叠）
     if (this.appState.selectionActive) {
@@ -3150,6 +3167,11 @@ struct Index {
 
       // Persistent hidden LX source engine host (webview sandbox for user API scripts).
       LXSourceHost()
+
+      // 只为"强制重绘"存在的空节点：`shellRepaintTick` 变化 → key 变 → 壳层重画一次。
+      ForEach([this.shellRepaintTick], (_t: number) => {
+        Row().width(0).height(0)
+      }, (t: number) => 'rzd-shell-repaint-' + t)
     }
     .width(StyleConstants.FULL_WIDTH)
     .height(StyleConstants.FULL_HEIGHT)
