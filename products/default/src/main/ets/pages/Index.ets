@@ -691,6 +691,11 @@ struct Index {
    */
   @Monitor('appState.hdsBarLayoutMode', 'appState.miniBarExpanded')
   onHomeBarLayoutChanged(): void {
+    // ★ 这条要能在**应用内**看到（甲方拿不到 hilog）：槽高/封面全从 `miniBarExpanded` 派生，
+    //   一旦它与 HDS 实际样式分叉，就是「大条内容塞进矮条」。grep 关键字：`[RzdHomeBar]`。
+    appendPlayLog(`[RzdHomeBar] layout=${this.appState.hdsBarLayoutMode} ` +
+      `expanded=${this.appState.miniBarExpanded} hdsStyle=${this.miniBarStyleForHds()} ` +
+      `slotH=${this.homeMiniBarSlotHVp()} tabIndex=${this.tabState.tabIndex} navDepth=${this.navDepth}`);
     Logger.info('RzdHomeBarLayout',
       `layout=${this.appState.hdsBarLayoutMode} expanded=${this.appState.miniBarExpanded} ` +
         `hdsLayout=${this.barLayoutModeForHds()} hdsStyle=${this.miniBarStyleForHds()} ` +
@@ -1902,16 +1907,27 @@ struct Index {
    * @param mode 变更来源
    */
   private onMiniBarStyleChangeFull(miniBarStyle: HdsBarStyle, mode: HdsTabsBarChangeMode): void {
-    if (this.navDepth > 0 || this.restoringHomeBar) {
-      return;
-    }
     const collapsed: boolean = miniBarStyle === HdsBarStyle.COLLAPSE;
-    if (collapsed && mode === HdsTabsBarChangeMode.USER_CLICK) {
-      Logger.info(RzdShellLogTag, 'home bar user click on mini ignored (upstream :149215)');
+    const expand: boolean = !collapsed;
+    // ★★★ 2026-10-21（甲方：「先上滑收成单行，再点那个圆形 Tab 按钮展开成两栏，上面那条播放条
+    //   还是单层状态的大封面，背板圆角上面大下面小 —— 像大播放条被小播放条截了一段」）：
+    //   根因就是**这里曾经早退**。原来照搬上游那句「USER_CLICK + COLLAPSE 直接忽略」
+    //   （`wujie.pa:149215`），但上游的几何**不**从这条样式派生（它 `barLayoutMode` 恒 VERTICAL）；
+    //   本仓的槽高/封面尺寸却是 `homeMiniBarSlotHVp() = miniBarExpanded ? 56 : 40` 派生的
+    //   ⇒ 一旦忽略，HDS 已经切到两栏（矮条 40），我们仍按 56 画大封面 + 大字号
+    //   ⇒ 大条内容被矮条框「截」出上面大下面小的圆角。**样式是 HDS 的实际状态，必须无条件镜像。**
+    //   排查关键字：`[RzdHomeBar]`。
+    appendPlayLog(`[RzdHomeBar] style=${miniBarStyle} mode=${mode} expand=${expand} ` +
+      `navDepth=${this.navDepth} restoring=${this.restoringHomeBar ? 1 : 0} ` +
+      `slotH=${this.homeMiniBarSlotHVp()}`);
+    if (this.navDepth > 0 || this.restoringHomeBar) {
+      Logger.info(RzdShellLogTag,
+        `home bar callback skipped (navDepth=${this.navDepth} restoring=${this.restoringHomeBar}) ` +
+          `style=${miniBarStyle} mode=${mode}`);
       return;
     }
-    this.setHomeBarExpandedAnimated(!collapsed);
-    Logger.info(RzdShellLogTag, `home bar callback style=${miniBarStyle} mode=${mode} expanded=${!collapsed}`);
+    this.setHomeBarExpandedAnimated(expand);
+    Logger.info(RzdShellLogTag, `home bar callback style=${miniBarStyle} mode=${mode} expanded=${expand}`);
   }
 
   /**
