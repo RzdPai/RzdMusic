@@ -140,7 +140,7 @@ export async function lxResolveTxNumId(songId: string, name?: string, singer?: s
 }
 
 export async function lxSearch(source: string, query: string, page: number,
-  limit: number): Promise<LXSearchResult> {
+  limit: number, throwOnError: boolean = false): Promise<LXSearchResult> {
   try {
     switch (source) {
       case 'kw': return await kwSearch(query, page, limit);
@@ -149,8 +149,11 @@ export async function lxSearch(source: string, query: string, page: number,
       case 'wy': return await wySearch(query, page, limit);
       case 'mg': return await mgSearch(query, page, limit);
     }
-  } catch (_err) {
-    // fall through
+  } catch (error) {
+    if (throwOnError) {
+      throw new Error('Search request failed');
+    }
+    // Preserve the empty-result fallback for existing callers.
   }
   return { list: [], total: 0, limit: limit, source: source };
 }

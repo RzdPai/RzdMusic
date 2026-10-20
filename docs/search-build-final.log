@@ -1,0 +1,2312 @@
+﻿hvigorw.bat : > hvigor [33mWARN: Current product is 'default'. No output wi
+ll be generated because of no executable target in module: 'musichomepcsampl
+e.'[39m
+At line:1 char:452
++ ... $env:PATH"; & 'D:\command-line-tools\bin\hvigorw.bat' assembleHap --m 
+...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (> hvigor [33mW...pcsample.'[ 
+   39m:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+> hvigor [32mUP-TO-DATE :musichomesample:default@PreBuild...  [39m
+> hvigor [32mUP-TO-DATE :musicbasic:default@PreBuild...  [39m
+> hvigor [32mUP-TO-DATE :playlist:default@PreBuild...  [39m
+> hvigor [32mUP-TO-DATE :player:default@PreBuild...  [39m
+> hvigor [32mUP-TO-DATE :comment:default@PreBuild...  [39m
+> hvigor [32mUP-TO-DATE :localmusic:default@PreBuild...  [39m
+> hvigor [32mUP-TO-DATE :recommendation:default@PreBuild...  [39m
+> hvigor [32mUP-TO-DATE :setting:default@PreBuild...  [39m
+> hvigor [32mUP-TO-DATE :sync:default@PreBuild...  [39m
+> hvigor [32mFinished :musichomepcsample:assembleHap... after 1 ms [39m
+> hvigor [32mFinished :musichomesample:default@CreateModuleInfo... after 2 ms [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@GenerateMetadata...  [39m
+> hvigor [32mFinished :musichomesample:default@PreCheckSyscap... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@GeneratePkgContextInfo...  [39m
+> hvigor [32mFinished :musichomesample:default@GeneratePkgSdkInfo... after 8 ms [39m
+> hvigor [32mFinished :musichomesample:default@ProcessIntegratedHsp... after 2 ms [39m
+> hvigor [32mUP-TO-DATE :musicbasic:default@CreateHarBuildProfile...  [39m
+> hvigor [32mFinished :musicbasic:default@ConfigureCmake... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :musicbasic:default@MergeProfile...  [39m
+> hvigor [32mFinished :musichomesample:default@SyscapTransform... after 21 ms [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@ProcessRouterMap...  [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@ProcessShareConfig...  [39m
+> hvigor [32mFinished :musichomesample:default@ProcessStartupConfig... after 7 ms [39m
+> hvigor [32mUP-TO-DATE :comment:default@CreateHarBuildProfile...  [39m
+> hvigor [32mFinished :musicbasic:default@BuildNativeWithCmake... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :comment:default@MergeProfile...  [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@GenerateLoaderJson...  [39m
+> hvigor [32mUP-TO-DATE :player:default@CreateHarBuildProfile...  [39m
+> hvigor [32mFinished :musicbasic:default@BuildNativeWithNinja... after 1 ms [39m
+> hvigor [32mFinished :comment:default@ConfigureCmake... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :player:default@MergeProfile...  [39m
+> hvigor [32mUP-TO-DATE :localmusic:default@CreateHarBuildProfile...  [39m
+> hvigor [32mUP-TO-DATE :musicbasic:default@ProcessLibs...  [39m
+> hvigor [32mFinished :comment:default@BuildNativeWithCmake... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :localmusic:default@MergeProfile...  [39m
+> hvigor [32mUP-TO-DATE :playlist:default@CreateHarBuildProfile...  [39m
+> hvigor [32mUP-TO-DATE :sync:default@CreateHarBuildProfile...  [39m
+> hvigor [32mUP-TO-DATE :musicbasic:default@DoNativeStrip...  [39m
+> hvigor [32mFinished :player:default@ConfigureCmake... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :playlist:default@MergeProfile...  [39m
+> hvigor [32mUP-TO-DATE :sync:default@MergeProfile...  [39m
+> hvigor [32mUP-TO-DATE :recommendation:default@CreateHarBuildProfile...  [39m
+> hvigor [32mUP-TO-DATE :setting:default@CreateHarBuildProfile...  [39m
+> hvigor [32mFinished :comment:default@BuildNativeWithNinja... after 1 ms [39m
+> hvigor [32mFinished :player:default@BuildNativeWithCmake... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :recommendation:default@MergeProfile...  [39m
+> hvigor [32mUP-TO-DATE :setting:default@MergeProfile...  [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@CreateBuildProfile...  [39m
+> hvigor [32mUP-TO-DATE :comment:default@ProcessLibs...  [39m
+> hvigor [32mFinished :localmusic:default@ConfigureCmake... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@MergeProfile...  [39m
+> hvigor [32mUP-TO-DATE :comment:default@DoNativeStrip...  [39m
+> hvigor [32mFinished :localmusic:default@BuildNativeWithCmake... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@MakePackInfo...  [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@ProcessProfile...  [39m
+> hvigor [32mFinished :player:default@BuildNativeWithNinja... after 1 ms [39m
+> hvigor [32mFinished :playlist:default@ConfigureCmake... after 1 ms [39m
+> hvigor [32mFinished :sync:default@ConfigureCmake... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@ProcessResource...  [39m
+> hvigor [32mUP-TO-DATE :player:default@ProcessLibs...  [39m
+> hvigor [32mFinished :playlist:default@BuildNativeWithCmake... after 1 ms [39m
+> hvigor [32mFinished :sync:default@BuildNativeWithCmake... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@CompileResource...  [39m
+> hvigor [32mUP-TO-DATE :player:default@DoNativeStrip...  [39m
+> hvigor [32mFinished :recommendation:default@ConfigureCmake... after 1 ms [39m
+> hvigor [32mFinished :setting:default@ConfigureCmake... after 1 ms [39m
+> hvigor [33mWARN: [33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administr
+ator/Desktop/RzdProject/RzdMusic/common/musicbasic/src/main/ets/services/Cov
+erCacheService.ets:67:16
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/services/CoverCacheService.ets:6
+8:13
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/services/CoverCacheService.ets:7
+3:20
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/services/CoverCacheService.ets:7
+4:11
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/services/CoverCacheService.ets:7
+5:26
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/services/CoverCacheService.ets:2
+28:35
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/services/CoverCacheService.ets:2
+37:26
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/services/CoverCacheService.ets:2
+38:12
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/services/CoverCacheService.ets:2
+42:15
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/services/CoverCacheService.ets:2
+55:13
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/components/CoverCacheSettingsCar
+d.ets:61:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:173:1
+8
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:248:1
+1
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:256:2
+6
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:270:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:271:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:388:2
+9
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:389:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:393:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:435:1
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:448:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:449:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:458:1
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:468:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:469:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:478:1
+2
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:487:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:488:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:506:2
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:539:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:540:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:548:1
+2
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:557:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:558:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:571:2
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:587:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:588:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:597:1
+2
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:606:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:607:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:616:1
+2
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:625:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:626:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:680:1
+2
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:689:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:690:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:699:1
+8
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:713:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:714:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:723:1
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:733:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:734:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:743:1
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:753:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:754:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:764:1
+2
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:773:1
+2
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:782:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:783:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:801:1
+2
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:813:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:823:1
+2
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:832:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:833:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:842:1
+2
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:851:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:852:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:861:1
+2
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:870:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:871:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:880:1
+2
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:889:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:890:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:899:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:900:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:914:1
+2
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:923:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:924:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:937:1
+2
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:946:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:947:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:956:1
+2
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:965:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:966:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:975:1
+2
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:984:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:985:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1024:
+23
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1034:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1035:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1044:
+12
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1053:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1054:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1063:
+12
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1072:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1073:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1082:
+23
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1092:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1093:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1102:
+12
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1111:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1112:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1125:
+12
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1126:
+7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1134:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1137:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1138:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1150:
+12
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1151:
+7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1159:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1161:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1162:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1173:
+12
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1181:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1182:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1196:
+9
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1196:
+41
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1197:
+7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1201:
+9
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1202:
+14
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1210:
+10
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1211:
+7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1213:
+10
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1214:
+7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1216:
+10
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1217:
+7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1228:
+7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1237:
+7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1245:
+35
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1259:
+30
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1260:
+26
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1261:
+30
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1263:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1279:
+7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1291:
+7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1300:
+7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1317:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1318:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1324:
+39
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1332:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1333:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1342:
+15
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1352:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1354:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1363:
+12
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1371:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1372:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1381:
+12
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1389:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1390:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1399:
+12
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1408:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1409:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1465:
+26
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1478:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1479:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1488:
+12
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1497:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1498:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1507:
+12
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1516:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1525:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1526:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1535:
+28
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1537:
+7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1538:
+7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1561:
+12
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1570:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1571:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1580:
+12
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1589:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1590:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1599:
+12
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1608:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1609:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1618:
+12
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1627:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1628:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1639:
+18
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1643:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1644:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1655:
+7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1656:
+7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1666:
+21
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1670:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1671:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1681:
+7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1682:
+7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1702:
+18
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1713:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1714:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1723:
+20
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1733:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1734:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1743:
+22
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1753:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1754:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1764:
+26
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1816:
+26
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1868:
+26
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1919:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1920:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1940:
+26
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1968:
+7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1969:
+7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1978:
+7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1979:
+7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:1990:
+24
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:2000:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:2001:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:2010:
+26
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:2028:
+26
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:2039:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:2040:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:2126:
+26
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:2165:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/util/MusicStoreService.ets:2166:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/model/BarCollapse.ets:257:23
+ 'px2vp' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/model/BarCollapse.ets:258:23
+ 'px2vp' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/view/LocateFloatButton.ets:71:20
+ The API is not supported on all devices. Use the canIUse condition to deter
+mine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/view/LocateFloatButton.ets:71:27
+ The API is not supported on all devices. Use the canIUse condition to deter
+mine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/view/LocateFloatButton.ets:71:47
+ The API is not supported on all devices. Use the canIUse condition to deter
+mine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/view/LocateFloatButton.ets:75:27
+ The API is not supported on all devices. Use the canIUse condition to deter
+mine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/view/LocateFloatButton.ets:75:34
+ The API is not supported on all devices. Use the canIUse condition to deter
+mine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/view/LocateFloatButton.ets:75:54
+ The API is not supported on all devices. Use the canIUse condition to deter
+mine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/view/LocateFloatButton.ets:87:20
+ The API is not supported on all devices. Use the canIUse condition to deter
+mine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/view/LocateFloatButton.ets:87:27
+ The API is not supported on all devices. Use the canIUse condition to deter
+mine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/view/LocateFloatButton.ets:87:45
+ The API is not supported on all devices. Use the canIUse condition to deter
+mine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/view/LocateFloatButton.ets:90:27
+ The API is not supported on all devices. Use the canIUse condition to deter
+mine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/view/LocateFloatButton.ets:90:34
+ The API is not supported on all devices. Use the canIUse condition to deter
+mine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/view/LocateFloatButton.ets:90:52
+ The API is not supported on all devices. Use the canIUse condition to deter
+mine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/view/LocateFloatButton.ets:102:5
+0
+ The API is not supported on all devices. Use the canIUse condition to deter
+mine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/view/LocateFloatButton.ets:102:5
+7
+ The API is not supported on all devices. Use the canIUse condition to deter
+mine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/view/LocateFloatButton.ets:103:2
+2
+ The API is not supported on all devices. Use the canIUse condition to deter
+mine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/view/LocateFloatButton.ets:103:2
+9
+ The API is not supported on all devices. Use the canIUse condition to deter
+mine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/view/LocateFloatButton.ets:103:4
+9
+ The API is not supported on all devices. Use the canIUse condition to deter
+mine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/view/LocateFloatButton.ets:107:2
+9
+ The API is not supported on all devices. Use the canIUse condition to deter
+mine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/view/LocateFloatButton.ets:107:3
+6
+ The API is not supported on all devices. Use the canIUse condition to deter
+mine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/view/LocateFloatButton.ets:107:5
+6
+ The API is not supported on all devices. Use the canIUse condition to deter
+mine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/view/LocateFloatButton.ets:116:7
+ The API is not supported on all devices. Use the canIUse condition to deter
+mine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/view/LocateFloatButton.ets:116:1
+4
+ The API is not supported on all devices. Use the canIUse condition to deter
+mine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/view/LocateFloatButton.ets:121:7
+ The API is not supported on all devices. Use the canIUse condition to deter
+mine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/view/LocateFloatButton.ets:121:1
+4
+ The API is not supported on all devices. Use the canIUse condition to deter
+mine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/view/LocateFloatButton.ets:132:7
+ The API is not supported on all devices. Use the canIUse condition to deter
+mine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/view/LocateFloatButton.ets:132:1
+4
+ The API is not supported on all devices. Use the canIUse condition to deter
+mine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/view/LocateFloatButton.ets:137:7
+ The API is not supported on all devices. Use the canIUse condition to deter
+mine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/common/musicbasic/src/main/ets/view/LocateFloatButton.ets:137:1
+4
+ The API is not supported on all devices. Use the canIUse condition to deter
+mine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/source/LXSourceManager.ets:326:10
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/source/LXSourceManager.ets:526:10
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/model/MediaService.ets:548:15
+ 'on' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/model/MediaService.ets:563:15
+ 'off' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/model/MediaService.ets:792:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/util/DownloadService.ets:494:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/util/DownloadService.ets:988:11
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/util/DownloadService.ets:1040:10
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/util/DownloadService.ets:1041:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/util/DownloadService.ets:1044:10
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/util/DownloadService.ets:1065:31
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/util/DownloadService.ets:1068:13
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/util/DownloadService.ets:1070:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/util/DownloadUtil.ets:77:9
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/geuz/service/CryptoUtils.ets:30:12
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/geuz/service/CryptoUtils.ets:31:9
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/geuz/service/CryptoUtils.ets:32:22
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/geuz/service/CryptoUtils.ets:38:25
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/geuz/service/CryptoUtils.ets:39:22
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/geuz/service/CryptoUtils.ets:40:16
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/geuz/service/CryptoUtils.ets:41:9
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/geuz/service/CryptoUtils.ets:42:22
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/geuz/service/WySearch.ets:64:24
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/geuz/service/KgGateway.ets:86:24
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/geuz/service/HttpUtils.ets:19:26
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/geuz/service/KwRequest.ets:95:26
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/geuz/service/KwRequest.ets:163:24
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/geuz/service/Weapi.ets:22:25
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/geuz/service/Weapi.ets:23:22
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/geuz/service/Weapi.ets:28:16
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/geuz/service/Weapi.ets:29:9
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/geuz/service/Weapi.ets:30:22
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/geuz/service/Weapi.ets:38:19
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/geuz/service/Weapi.ets:39:23
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/geuz/service/Weapi.ets:40:16
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/geuz/service/Weapi.ets:41:9
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/geuz/service/Weapi.ets:42:22
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/geuz/service/WyDetailApi.ets:23:24
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/geuz/service/KwDetailApi.ets:53:24
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/util/OnlinePlayUtil.ets:34:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/view/OtherVersionsSheet.ets:224:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/view/OtherVersionsSheet.ets:229:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/view/OtherVersionsSheet.ets:253:11
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/comment/src/main/ets/core/CommentHttp.ets:64:43
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/comment/src/main/ets/core/CommentImageSaver.ets:51:43
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/comment/src/main/ets/core/CommentImageSaver.ets:68:25
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/comment/src/main/ets/core/CommentImageSaver.ets:70:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/comment/src/main/ets/core/CommentImageSaver.ets:72:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/comment/src/main/ets/core/CommentImageSaver.ets:78:25
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/comment/src/main/ets/core/CommentImageSaver.ets:80:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/comment/src/main/ets/core/CommentImageSaver.ets:82:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/comment/src/main/ets/core/CommentImageSaver.ets:105:35
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/comment/src/main/ets/view/CommentPanel.ets:290:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/view/ControlAreaComponent.ets:497:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/view/ControlAreaComponent.ets:666:
+7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/view/ControlAreaComponent.ets:741:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/view/ControlAreaComponent.ets:1287
+:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/amll/render/AmllCanvasLyricRendere
+r.ets:613:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/amll/render/AmllLyricView.ets:229:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/amll/render/AmllLyricView.ets:237:
+7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/view/MeshCoverBg.ets:363:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/view/MusicPlayInfoBlock.ets:84:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/view/PlaybackPage.ets:435:9
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/view/PlaybackPage.ets:3780:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/view/PlaybackPage.ets:4578:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/HuaweiAccountService.ets:3
+82:9
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/HuaweiAccountService.ets:5
+04:67
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/HuaweiCloudSync.ets:353:45
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/HuaweiCloudSync.ets:419:20
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/HuaweiCloudSync.ets:533:20
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/HuaweiNativeCloudBackup.et
+s:248:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/HuaweiNativeCloudBackup.et
+s:250:38
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/HuaweiNativeCloudBackup.et
+s:252:13
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/HuaweiNativeCloudBackup.et
+s:272:39
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/HuaweiNativeCloudBackup.et
+s:283:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/HuaweiNativeCloudBackup.et
+s:302:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/HuaweiNativeCloudBackup.et
+s:304:13
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/HuaweiNativeCloudBackup.et
+s:313:15
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/HuaweiNativeCloudBackup.et
+s:317:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/CryptoUtil.ets:20:26
+ 'encodeInto' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/CryptoUtil.ets:51:34
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/CryptoUtil.ets:52:9
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/CryptoUtil.ets:53:50
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/CryptoUtil.ets:62:57
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/CryptoUtil.ets:63:45
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/CryptoUtil.ets:64:42
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/CryptoUtil.ets:65:9
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/CryptoUtil.ets:66:53
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/CryptoUtil.ets:71:57
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/CryptoUtil.ets:72:45
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/CryptoUtil.ets:73:42
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/CryptoUtil.ets:78:9
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/CryptoUtil.ets:79:53
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/CryptoUtil.ets:84:57
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/CryptoUtil.ets:93:50
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/CryptoUtil.ets:95:42
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/CryptoUtil.ets:96:9
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/CryptoUtil.ets:97:53
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/CryptoUtil.ets:102:42
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/CryptoUtil.ets:103:48
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/MqttUtil.ets:74:26
+ 'encodeInto' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/MqttUtil.ets:80:18
+ 'decode' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/providers/TxProvider.ets:4
+88:18
+ 'decode' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/AccountService.ets:29:26
+ 'encodeInto' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/AccountService.ets:35:18
+ 'decode' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/AccountService.ets:96:28
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/AccountService.ets:118:25
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/AccountService.ets:139:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/AccountService.ets:140:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/AccountService.ets:141:11
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/AccountService.ets:149:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/AccountService.ets:150:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/AccountService.ets:151:11
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/AccountService.ets:196:25
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/account/AccountService.ets:218:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/player/src/main/ets/util/MeshWarmService.ets:197:43
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/playlist/src/main/ets/view/PlaylistBatchActionBar.ets:
+125:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/localmusic/src/main/ets/core/LocalMusic.ets:658:15
+ The system capacity of this api 'selectMode' is not supported on all device
+s
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/localmusic/src/main/ets/core/LocalMusic.ets:658:35
+ The system capacity of this api 'DocumentSelectMode' is not supported on al
+l devices
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/localmusic/src/main/ets/core/LocalMusic.ets:658:54
+ The system capacity of this api 'FOLDER' is not supported on all devices
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/playlist/src/main/ets/view/SongMoreMenu.ets:93:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/playlist/src/main/ets/view/PlaylistDetailSongListSecti
+on.ets:166:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/playlist/src/main/ets/view/PlaylistDetailSongListSecti
+on.ets:168:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/playlist/src/main/ets/view/PlaylistDetailSongListSecti
+on.ets:336:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/playlist/src/main/ets/util/PlaylistCoverUtil.ets:57:24
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/playlist/src/main/ets/util/PlaylistCoverUtil.ets:59:27
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/playlist/src/main/ets/util/PlaylistCoverUtil.ets:62:26
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/playlist/src/main/ets/util/PlaylistCoverUtil.ets:64:9
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/playlist/src/main/ets/util/PlaylistCoverUtil.ets:65:16
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/playlist/src/main/ets/util/PlaylistCoverUtil.ets:68:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/playlist/src/main/ets/util/PlaylistCoverUtil.ets:71:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/playlist/src/main/ets/util/PlaylistCoverUtil.ets:88:60
+ 'PhotoViewPicker' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/playlist/src/main/ets/util/PlaylistCoverUtil.ets:89:59
+ 'PhotoSelectOptions' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/playlist/src/main/ets/util/PlaylistCoverUtil.ets:90:13
+ 'MIMEType' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/playlist/src/main/ets/util/PlaylistCoverUtil.ets:90:31
+ 'PhotoViewMIMETypes' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/playlist/src/main/ets/util/PlaylistCoverUtil.ets:90:50
+ 'IMAGE_TYPE' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/playlist/src/main/ets/util/PlaylistCoverUtil.ets:91:13
+ 'maxSelectNumber' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/playlist/src/main/ets/util/PlaylistCoverUtil.ets:92:64
+ 'select' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/playlist/src/main/ets/util/PlaylistCoverUtil.ets:93:21
+ 'photoUris' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/playlist/src/main/ets/view/PlaylistDetailPage.ets:1221
+:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/playlist/src/main/ets/view/HomeMiniBarPlayerAside.ets:
+119:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/playlist/src/main/ets/view/NetworkImportSheet.ets:51:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/playlist/src/main/ets/view/NetworkImportSheet.ets:82:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/playlist/src/main/ets/view/PlaylistsPage.ets:483:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/playlist/src/main/ets/view/PlaylistsPage.ets:540:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/playlist/src/main/ets/view/PlaylistsPage.ets:686:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/playlist/src/main/ets/view/PlaylistsPage.ets:691:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/OnlineSearchPage.ets:674:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/OnlineSearchPage.ets:1001:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/OnlineSearchPage.ets:1017:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/OnlineSearchPage.ets:1029:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/OnlineSearchPage.ets:1060:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/CapsuleSegmentedSelector.ets
+:49:30
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/CapsuleSegmentedSelector.ets
+:56:22
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/CapsuleSegmentedSelector.ets
+:57:30
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/CapsuleSegmentedSelector.ets
+:58:36
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/ArtistDetailPage.ets:819:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/ArtistDetailPage.ets:825:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/ArtistDetailPage.ets:838:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/AlbumDetailPage.ets:586:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/AlbumDetailPage.ets:593:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/AlbumDetailPage.ets:605:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/core/SyncStore.ets:118:29
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/core/SyncStore.ets:120:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/core/SyncStore.ets:122:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/core/SyncCrypto.ets:202:54
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/core/SyncCrypto.ets:203:47
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/core/SyncCrypto.ets:204:44
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/core/SyncCrypto.ets:205:44
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/core/SyncCrypto.ets:214:54
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/core/SyncCrypto.ets:216:47
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/core/SyncCrypto.ets:217:42
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/core/SyncCrypto.ets:218:9
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/core/SyncCrypto.ets:220:50
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/core/SyncGzip.ets:70:25
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/core/SyncGzip.ets:72:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/core/SyncGzip.ets:74:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/core/SyncGzip.ets:79:25
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/core/SyncGzip.ets:80:25
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/core/SyncGzip.ets:83:26
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/core/SyncGzip.ets:86:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/core/SyncGzip.ets:111:9
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/core/SyncGzip.ets:113:11
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/core/SyncGzip.ets:115:11
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/core/SyncGzip.ets:130:9
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/core/SyncGzip.ets:136:34
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/core/SyncGzip.ets:152:11
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/core/SyncClient.ets:339:49
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/core/WebDavBackupService.ets:61:30
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/core/WebDavLibrary.ets:248:49
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/core/WebDavLibrary.ets:799:32
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/sync/src/main/ets/view/CloudMusicPage.ets:519:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/account/HuaweiAccountCard.ets:66:
+5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/util/SourceFileImport.ets:40:9
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/SettingsDetailPage.ets:297:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/SettingsDetailPage.ets:395:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/SettingsDetailPage.ets:421:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/SettingsDetailPage.ets:545:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/SettingsDetailPage.ets:547:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/SettingsDetailPage.ets:549:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/SettingsDetailPage.ets:861:3
+2
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/SettingsDetailPage.ets:866:2
+4
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/SettingsDetailPage.ets:867:3
+2
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/SettingsDetailPage.ets:868:3
+8
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/SettingsDetailPage.ets:1046:
+30
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/SettingsDetailPage.ets:1051:
+22
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/SettingsDetailPage.ets:1052:
+30
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/SettingsDetailPage.ets:1053:
+36
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/SettingPage.ets:264:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/SettingPage.ets:345:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/SettingPage.ets:371:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/SettingPage.ets:493:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/SettingPage.ets:495:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/SettingPage.ets:497:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/SettingPage.ets:847:32
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/SettingPage.ets:852:24
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/SettingPage.ets:853:32
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/SettingPage.ets:854:38
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/SettingPage.ets:991:30
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/SettingPage.ets:996:22
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/SettingPage.ets:997:30
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/SettingPage.ets:998:36
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/RecordListPage.ets:313:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/RecordListPage.ets:435:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/RecordListPage.ets:772:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/setting/src/main/ets/view/RecordListPage.ets:785:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/products/default/src/main/ets/entryability/EntryAbility.ets:123
+:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/products/default/src/main/ets/entryability/EntryAbility.ets:125
+:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/products/default/src/main/ets/entryability/EntryAbility.ets:127
+:7
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/recommendation/src/main/ets/util/MusicDataService.ets:
+1174:28
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/recommendation/src/main/ets/util/MusicDataService.ets:
+1192:18
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/recommendation/src/main/ets/util/MusicDataService.ets:
+1193:18
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/recommendation/src/main/ets/util/MusicDataService.ets:
+1195:3
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/recommendation/src/main/ets/util/MusicDataService.ets:
+1195:66
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/recommendation/src/main/ets/util/MusicDataService.ets:
+1196:21
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/recommendation/src/main/ets/util/MusicDataService.ets:
+1197:21
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/features/recommendation/src/main/ets/view/NowPlayingFeedPage.et
+s:1991:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: C:/Users/Administrator/Desktop/RzdProj
+ect/RzdMusic/products/default/src/main/ets/pages/SearchResults.ets:152:9
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33m[39m [33mArkTS:WARN Property 'sourceMapsPath' not fou
+nd in '@dabing/taglib_harmony'.[39m [33m[39m[39m[39m
+[39m
+> hvigor [32mFinished :musichomesample:default@CompileArkTS... after 26 s 594 ms [39m
+> hvigor [32mFinished :musichomesample:default@BuildJS... after 10 ms [39m
+> hvigor [32mFinished :localmusic:default@BuildNativeWithNinja... after 1 ms [39m
+> hvigor [32mFinished :recommendation:default@BuildNativeWithCmake... after 1 ms [39m
+> hvigor [32mFinished :setting:default@BuildNativeWithCmake... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :localmusic:default@ProcessLibs...  [39m
+> hvigor [32mFinished :musichomesample:default@ConfigureCmake... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :localmusic:default@DoNativeStrip...  [39m
+> hvigor [32mFinished :musichomesample:default@BuildNativeWithCmake... after 1 ms [39m
+> hvigor [32mFinished :playlist:default@BuildNativeWithNinja... after 1 ms [39m
+> hvigor [32mFinished :sync:default@BuildNativeWithNinja... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :playlist:default@ProcessLibs...  [39m
+> hvigor [32mUP-TO-DATE :sync:default@ProcessLibs...  [39m
+> hvigor [32mUP-TO-DATE :playlist:default@DoNativeStrip...  [39m
+> hvigor [32mUP-TO-DATE :sync:default@DoNativeStrip...  [39m
+> hvigor [32mFinished :recommendation:default@BuildNativeWithNinja... after 1 ms [39m
+> hvigor [32mFinished :setting:default@BuildNativeWithNinja... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :recommendation:default@ProcessLibs...  [39m
+> hvigor [32mUP-TO-DATE :setting:default@ProcessLibs...  [39m
+> hvigor [32mUP-TO-DATE :recommendation:default@DoNativeStrip...  [39m
+> hvigor [32mUP-TO-DATE :setting:default@DoNativeStrip...  [39m
+> hvigor [32mFinished :musichomesample:default@BuildNativeWithNinja... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@ProcessLibs...  [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@DoNativeStrip...  [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@CacheNativeLibs...  [39m
+> hvigor [32mUP-TO-DATE :musichomesample:default@GeneratePkgModuleJson...  [39m
+> hvigor [32mFinished :musichomesample:default@ProcessCompiledResources... after 1 ms [39m
+> hvigor [32mFinished :musichomesample:default@PackageHap... after 922 ms [39m
+> hvigor [32mFinished :musichomesample:default@PackingCheck... after 15 ms [39m
+> hvigor [32mFinished :musichomesample:default@SignHap... after 3 s 766 ms [39m
+> hvigor [32mFinished :musichomesample:default@CollectDebugSymbol... after 3 ms [39m
+> hvigor [32mFinished :musichomesample:assembleHap... after 1 ms [39m
+> hvigor [32mBUILD SUCCESSFUL in 35 s 895 ms [39m

@@ -76,6 +76,9 @@ export struct RecommendPage {
    * 底部页签设计规范要求：点击已选中的页签要把界面回滚至顶部。
    */
   @Param scrollTopCommand: number = 0;
+  @Event onSearchScroll: (offset: number) => void = () => {};
+  @Event onSearchRequest: () => void = () => {};
+  @Param shellSearchEnabled: boolean = false;
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
   @Local windowInfo: WindowInfo = getWindowInfoState();
   @Local recommendViewModel: RecommendViewModel = new RecommendViewModel();
@@ -398,6 +401,7 @@ export struct RecommendPage {
       return;
     }
     const measured: number = this.readHomeScrollOffset();
+    this.onSearchScroll(measured);
     // ★ 补位帧里顺手把吸顶也复算一次：重建这一路不触发 `onDidScroll`，
     //   而恢复后的偏移恰恰决定"分类 Tab 是不是已经滚过去了"。
     this.updateChipSticky(measured);
@@ -464,6 +468,7 @@ export struct RecommendPage {
    */
   private onHomeScrollDidScroll(_frameDelta: number, scrollState: ScrollState): void {
     const offset: number = this.readHomeScrollOffset();
+    this.onSearchScroll(offset);
     if (scrollState === ScrollState.Scroll || scrollState === ScrollState.Fling) {
       // ① 用户真的在滚：记下位置（用户的停位就是他的意愿）。
       //    ★ 这里**只记录**，不再设任何"滚过就永久放弃"的闩 —— 那是第 2 版把整个
@@ -659,7 +664,11 @@ export struct RecommendPage {
 
   /** Routes to the online multi-source search page. */
   private openSearch(): void {
-    this.pageIndexInfos.pushPathByName(RouterUrlConstants.ONLINE_SEARCH, null);
+    if (this.shellSearchEnabled) {
+      this.onSearchRequest();
+    } else {
+      this.pageIndexInfos.pushPathByName(RouterUrlConstants.ONLINE_SEARCH, null);
+    }
   }
 
   /** HDS title bar with system material and gradient blur. */
@@ -801,7 +810,7 @@ export struct RecommendPage {
                   //   而这一步正是 `initialOffset` 失效的地方（见 onHomeScrollAttach 注释）。
                   Column()
                     .width(StyleConstants.FULL_WIDTH)
-                    .height(this.contentTopInsetVp())
+                    .height(this.contentTopInsetVp() + (this.shellSearchEnabled ? 64 : 0))
                     .onAreaChange((_old: Area, _area: Area): void => {
                       this.notifyHomeContentLaidOut();
                     })

@@ -80,6 +80,7 @@ import type { CommentSongRef } from 'comment';
 import { HdsBarLayoutMode, HdsBarStyle, HdsTabs } from '@hms.hds.hdsBaseComponent';
 import { BusinessError, deviceInfo } from '@kit.BasicServicesKit';
 import { common } from '@kit.AbilityKit';
+import { SearchExperience } from './SearchExperience';
 
 /**
  * 浜岀骇椤甸潰鎮诞杩蜂綘鏉＄殑鍥哄畾楂樺害锛坴p锛夈€?
@@ -339,6 +340,10 @@ const PULL_ANCHOR_RETRY_MS: number = 32;
 struct Index {
   /** Navigation stack for HdsNavigation routes and modal playback cover. */
   @Provider('pageIndexInfos') pageIndexInfos: NavPathStack = new NavPathStack();
+  @Local searchScrollOffset: number = 0;
+  @Local searchActive: boolean = false;
+  @Local searchCloseRevision: number = 0;
+  @Local searchOpenRevision: number = 0;
   /** Reactive window width / height breakpoint from the system. */
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
   /** Index of the selected bottom tab (0 = home), shared for cross-tab navigation. */
@@ -2663,7 +2668,10 @@ struct Index {
         RecommendPage({
           shellProvidesFloatingMiniBar: deviceInfo.distributionOSApiVersion >= 60100,
           floatingBarExtraBottomReserveVp: this.twoRowExtraBottomVp(),
-          scrollTopCommand: this.tabScrollTopCommands[0]
+          scrollTopCommand: this.tabScrollTopCommands[0],
+          shellSearchEnabled: true,
+          onSearchScroll: (offset: number): void => { this.searchScrollOffset = offset; },
+          onSearchRequest: (): void => { this.searchOpenRevision++; }
         })
           .layoutWeight(1)
       }
@@ -3042,6 +3050,17 @@ struct Index {
         this.floatingMiniBar()
       }
 
+      SearchExperience({
+        homeVisible: this.tabState.tabIndex === 0 && this.navDepth === 0 && !this.appState.isShowPlay,
+        scrollOffset: this.searchScrollOffset,
+        topInset: this.windowInfo.statusBarTopVp,
+        closeRevision: this.searchCloseRevision,
+        openRevision: this.searchOpenRevision,
+        onActiveChange: (active: boolean): void => { this.searchActive = active; }
+      })
+        .visibility(this.appState.isShowPlay ? Visibility.Hidden : Visibility.Visible)
+        .zIndex(95)
+
       // Persistent hidden LX source engine host (webview sandbox for user API scripts).
       LXSourceHost()
     }
@@ -3056,15 +3075,21 @@ struct Index {
     .gesture(
       PanGesture(this.pullOpenOption)
         .onActionStart((event: GestureEvent): void => {
-          this.onPullOpenStart(event.fingerList);
+          if (!this.searchActive) {
+            this.onPullOpenStart(event.fingerList);
+          }
         })
         .onActionUpdate((event: GestureEvent): void => {
-          this.onPullOpenUpdate(event.offsetY);
+          if (!this.searchActive) {
+            this.onPullOpenUpdate(event.offsetY);
+          }
         })
         .onActionEnd((event: GestureEvent): void => {
           // 鈽?閫熷害椤逛篃瑕佷紶杩涘幓锛堟竻鍗?搂涓€ 1.2銆岃繘搴?OR 閫熷害銆嶏紱鍒ゆ嵁鍦?
           //   `PlayerExpandState.pullOpenShouldCommit()` 閲岋紝鏂瑰悜鐢变綅绉诲垽銆佸ぇ灏忓彇 abs锛?
-          this.onPullOpenEnd(event.offsetY, event.velocityY);
+          if (!this.searchActive) {
+            this.onPullOpenEnd(event.offsetY, event.velocityY);
+          }
         })
         .onActionCancel((): void => {
           this.onPullOpenCancel();
@@ -3095,6 +3120,10 @@ struct Index {
    * @returns true = 宸叉秷璐癸紝涓嶅啀璧伴粯璁よ繑鍥為€昏緫
    */
   onBackPress(): boolean {
+    if (this.searchActive && !this.appState.isShowPlay) {
+      this.searchCloseRevision++;
+      return true;
+    }
     if (!this.appState.isShowPlay) {
       return false;
     }
