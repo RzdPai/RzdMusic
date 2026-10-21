@@ -5817,11 +5817,39 @@ export struct PlaybackPage {
     //    闂佺厧鍟块張顒€鈻嶅▎鎾村殞闂婎偒鍘鹃杈┾偓鍨緲椤戝洭寮潏銊р枖濠电姴娲﹀?*闁汇埄鍨介梽鍕嫻娴兼潙绀傞柕澹懎鐐婇梺?*闂佹眹鍔岀€氼亞鎮潏鈺€娌柛灞剧箘椤︿即鎮归幇鍓佺Ф缂佽鲸鐟﹂幆鏃堝即閳ユ剚妫?+ 闂佸憡鐟﹂悧鐐寸珶婵犲嫪娌柛宀嬪缁€鍡涙煥濞戞鐒风紒缁樼墵閺屽瞼浠﹂懖鈺冾啍闂佸綊鏅茬欢姘跺焵椤掆偓缁绘垵危閹达箑违?
   }
 
+  /**
+   * 宽屏/横屏并排（panel）版式的三档内距 —— **矮窗必须收**，否则一坨。
+   *
+   * ★★★ 2026-10-21（真机横屏 823×363「还是一坨」）：面板版式原来沿用平板数值
+   *   `Row({space:56})` + `padding({top:80, bottom:48})` ⇒ 363 高的窗口里先被吃掉 128vp，
+   *   剩下的才给「封面 + 歌名 + 进度条 + 控件」。
+   *   无界那边（`PlayerPage.playerPane` → `flatPane` + `wideLyricsPane`）在宽屏下没有这么厚的内距，
+   *   内容直接铺在顶栏之下。⇒ 这里按窗口高度分两档：矮窗（HEIGHT_SM）用 24/12/12，其余保持平板值。
+   */
+  private isShortWindowLayout(): boolean {
+    return this.breakpointEnv.heightBreakpoint === HeightBreakpoint.HEIGHT_SM;
+  }
+
+  /** 并排两栏之间的间距（vp）。 */
+  private panelPaneGapVp(): number {
+    return this.isShortWindowLayout() ? 24 : 56;
+  }
+
+  /** 并排时左栏上内距（vp）。 */
+  private panelPaneTopPadVp(): number {
+    return this.isShortWindowLayout() ? 12 : 80;
+  }
+
+  /** 并排时左栏下内距（vp）。 */
+  private panelPaneBottomPadVp(): number {
+    return this.isShortWindowLayout() ? 12 : 48;
+  }
+
   /** Wide split panel layout: cover + controls on the left, lyrics + dual-action bar on the right. */
   @Builder
   private panelControlContent() {
     Stack({ alignContent: Alignment.TopStart }) {
-      Row({ space: 56 }) {
+      Row({ space: this.panelPaneGapVp() }) {
         Column() {
           MusicPlayInfoBlock({
             state: this.state,
@@ -5837,7 +5865,7 @@ export struct PlaybackPage {
         .onAreaChange((): void => {
           this.logLayoutBoxes();
         })
-        .padding({ top: 80, bottom: 48 })
+        .padding({ top: this.panelPaneTopPadVp(), bottom: this.panelPaneBottomPadVp() })
 
         Column() {
           LyricsComponent({

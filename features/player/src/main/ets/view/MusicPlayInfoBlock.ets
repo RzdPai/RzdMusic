@@ -91,9 +91,10 @@ export struct MusicPlayInfoBlock {
    * 并且把控件顶出屏幕（真机复现）。⇒ 按窗口高收：矮窗最多取一半。
    */
   private panelInfoBlockHVp(): number {
-    // 矮窗（横屏手机 / 折叠展开的横屏）只给 196：276 会把封面区挤成一条、控件顶出屏幕。
+    // 矮窗（横屏手机 / 折叠展开的横屏）只给 156：276 会把封面区挤成一条、控件顶出屏幕；
+    // 196 在 363 高的窗口里仍然偏大（顶栏 + 上下内距之后只剩 ~300 可用）。
     const shortWindow: boolean = this.breakpointEnv.heightBreakpoint === HeightBreakpoint.HEIGHT_SM;
-    return shortWindow ? 196 : 276;
+    return shortWindow ? 156 : 276;
   }
   /** When false, omits the embedded ControlAreaComponent (external shared control area used instead). */
   @Param showControlArea: boolean = true;

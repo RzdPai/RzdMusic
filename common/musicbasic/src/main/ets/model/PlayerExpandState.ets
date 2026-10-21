@@ -2346,6 +2346,18 @@ export class PlayerExpandState {
     if (this.shrinkHidesBar) {
       return 0;
     }
+    // ★★★ 2026-10-21（真机：**首页看不到播放条**，要"打开一次播放器再关掉"它才出现）：
+    //   下面那条公式里 `morphP` 默认是 **1**，一旦有任何一个交接标志（`sourceBarHidden` /
+    //   `miniOut` / `hdsBarSuppressed`）在启动时就残留为真，就会算出 `1 − 1/T = 0`
+    //   ⇒ 播放条被判定"该藏"。而把播放页开关一次会走 `morphReset()`，标志被清掉 ⇒ 条又出现，
+    //   正好是甲方描述的现象。
+    //   ⇒ 判据补一条：**没有正在进行的形变阶段**（`NONE`/`OPEN`，即播放页没在飞）时，
+    //   残留标志一律不许藏条。真会话（ENTERING/LEAVING/LANDING）仍按原公式算。
+    const sessionStage: boolean = this.morphStage === MorphStage.ENTERING ||
+      this.morphStage === MorphStage.LEAVING || this.morphStage === MorphStage.LANDING;
+    if (!sessionStage) {
+      return 1;
+    }
     if (!(this.sourceBarHidden || this.miniOut || this.hdsBarSuppressed || this.morphSessionDriving())) {
       return 1;
     }
