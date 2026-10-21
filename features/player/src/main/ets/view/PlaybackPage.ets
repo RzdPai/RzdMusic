@@ -5996,8 +5996,13 @@ export struct PlaybackPage {
             .constraintSize({ maxWidth: '100%', maxHeight: '100%' })
             .borderRadius(this.flatCoverEdgeVp() * 0.06)
             .clip(true)
-            // 关闭一开始就压掉（`publishCoverHidden` 的等价物），避免退出一帧残留
-            .opacity(this.coverPublishHidden ? 0 : 1)
+            // ★★★ 2026-10-21（甲方：横屏「上拉展开播放器出现两个封面」+「收起按钮关闭又是两个封面」）：
+            //   **必须挂 `realCoverVisible()` 这道门**。形变期间（开、关两个方向）代表封面的是
+            //   壳层克隆封面（`Index.MorphCoverClone()`，窗坐标），播放页这一侧必须让位；
+            //   这一张原来只挂了 `coverPublishHidden`，所以形变全程恒定画着 ⇒ 屏上两份。
+            //   参照：封面页那条（`LyricFloatLayer`）从第一天起就是 `realCoverVisible()`。
+            //   排查关键字：`RzdCoverOwner`（`real=1 clone=1` 就是两份）。
+            .opacity(this.expandState.realCoverVisible() && !this.coverPublishHidden ? 1 : 0)
             .onAreaChange((_oldValue: Area, newValue: Area): void => {
               this.expandState.reportBig(
                 areaLengthToVp(newValue.globalPosition.x),
@@ -6053,25 +6058,34 @@ export struct PlaybackPage {
           .layoutWeight(1)
           .alignItems(HorizontalAlign.Start)
 
-          // 播放/暂停（`:232228`）：字号 40 / 热区 44×44
-          Stack({ alignContent: Alignment.Center }) {
-            Image(this.state.isPlay ? $r('app.media.ic_public_pause') : $r('app.media.ic_public_play'))
-              .width(22)
-              .height(22)
-              .objectFit(ImageFit.Contain)
-              .opacity(0.86)
-          }
-          .width(PlaybackPage.FLAT_HIT_VP)
-          .height(PlaybackPage.FLAT_HIT_VP)
-          .borderRadius(PlaybackPage.FLAT_HIT_VP / 2)
-          .backgroundColor($r('app.color.player_text_primary'))
-          .onClick((): void => {
-            if (this.state.isPlay) {
-              MediaService.getInstance().pause();
-            } else {
-              void MediaService.getInstance().play();
-            }
-          })
+          // 播放/暂停（`:232227-232312`，**逐行照搬**）：
+          //   无界这一颗是**裸 `SymbolGlyph`** —— `fontSize`(40) + `fontWeight(Bold)` +
+          //   `fontColor([…])` + `opacity(0.86)` + `responseRegion(x:-4,y:-4,w:48,h:48)` + `onClick`，
+          //   **没有白色圆底、没有 `Image`**。
+          //   我上一版自己加了个 `backgroundColor(player_text_primary)`（白）的 `Stack` + 白色
+          //   `ic_public_play` 图标 ⇒ 白底白字，甲方看到的就是「一个白色圆形」。
+          //   ⇒ 改回裸 SymbolGlyph；字形用圆三角那两颗（无界那颗字形本身就是"圆里一个三角"）。
+          SymbolGlyph(this.state.isPlay ? $r('sys.symbol.pause_round_triangle_fill') :
+            $r('sys.symbol.play_round_triangle_fill'))
+            .fontSize(PlaybackPage.FLAT_PLAY_SIZE_FP)
+            .fontWeight(FontWeight.Bold)
+            // 字形给纯白、亮度靠无界那颗 `.opacity(0.86)` 交出来
+            // （`play_text_color` 是 #99FFFFFF 的次级白，叠 0.86 会灰掉，别用在主按钮上）。
+            .fontColor([$r('app.color.player_text_primary')])
+            .opacity(0.86)
+            .responseRegion({
+              x: -4,
+              y: -4,
+              width: PlaybackPage.FLAT_HIT_VP + 4,
+              height: PlaybackPage.FLAT_HIT_VP + 4
+            })
+            .onClick((): void => {
+              if (this.state.isPlay) {
+                MediaService.getInstance().pause();
+              } else {
+                void MediaService.getInstance().play();
+              }
+            })
 
           // 下一首（`:232319`）：28vp、热区 44×44
           Image($r('app.media.ic_public_next'))
