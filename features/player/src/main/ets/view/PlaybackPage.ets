@@ -5186,6 +5186,17 @@ export struct PlaybackPage {
    *   `_recover/logic-src/闂佺儵鏅╅崰妤呮偉閿濆鐓?闁诲海顢婂Λ鍕儓閸℃稒顥堥柕蹇婂墲缁惰尙绱撴担鍝勬瀺缂?闂佸搫鍊藉Λ鍕閹版澘鐐婇柛娆嶅劤閻熴垹螖閻樺弶婀伴柡?md` 闁?闂侀潧妫楅懟顖炲垂娴犲绠叉い鏇楀亾闁革絾鎮傚畷锝夋偐椤旂懓浜剧€广儱鍟犻崑?
    */
   private usesPhoneSwiperLayout(): boolean {
+    // ★★★ 2026-10-22（甲方：「横屏打开播放器切到竖屏，封面错位」「横竖屏要正常」）：
+    //   **宽度 ≥ 600 就是宽屏，一律不用手机 Swiper 那一档** —— 这条判据必须**只看宽度**，
+    //   不能掺方向（§29.1 当年就是这么修的，那版横竖屏是好的）。
+    //   掺了方向（`landscape && …` / `!usePanelLayout()`）的后果：转屏那一拍方向标志先翻、
+    //   布局后翻，于是"宽屏 + 手机浮层"会同时成立 ⇒ 浮层那颗按**旧方向窗口坐标**画的封面
+    //   就留在竖屏里（= 甲方截图那张歪封面）。
+    //   宽度判据与方向无关，转屏前后自洽。
+    //   排查关键字：`[RzdBranch]` 里的 `swiper= short= panel=`。
+    if (this.expandState.windowWidthVp >= PlaybackPage.WIDE_LAYOUT_MIN_W_VP) {
+      return false;
+    }
     if (this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_SM) {
       return true;
     }
@@ -5931,8 +5942,7 @@ export struct PlaybackPage {
 
   /** `FLAT_SWAP_D`（vp，`:244231`）：两面纵向错位量。 */
   private static readonly FLAT_SWAP_D_VP: number = 24;
-  /** `FLAT_SWAP_COVER_SCALE`（`:244239` = 1/3）：控制面打开时封面的终态缩放。 */
-  private static readonly FLAT_SWAP_COVER_SCALE: number = 1 / 3;
+  /** `FLAT_SWAP_COVER_SCALE`（`:244239` = 1/3）：控制面打开时封面的终态缩放。 */  private static readonly FLAT_SWAP_COVER_SCALE: number = 1 / 3;
   /** `FLAT_SWAP_MS`（`:244235`）：换面补间时长。 */
   private static readonly FLAT_SWAP_MS: number = 400;
   /** `FLAT_PLAY_SIZE`（`:244301`）：播放钮字号。 */
@@ -5941,6 +5951,14 @@ export struct PlaybackPage {
   private static readonly FLAT_HIT_VP: number = 44;
   /** `IMMERSIVE_META_GAP`（`:244219`）：歌名/歌手行距。 */
   private static readonly FLAT_META_GAP_VP: number = 1;
+  /**
+   * 宽屏门槛（vp）—— 参考工程 `Layout.isWideWindow(w >= 600)`（`BP_MEDIUM = 600`）。
+   *
+   * ★ 2026-10-22：`usesPhoneSwiperLayout()` 用它兜底（宽度 ≥ 600 一律不挂手机浮层封面）。
+   *   **只看宽度、不看方向**，转屏前后自洽 —— 掺方向的判据会在转屏那一拍出现
+   *   "宽屏 + 手机浮层同时成立"，把按旧方向窗口坐标画的封面留在屏上（甲方截图里的歪封面）。
+   */
+  private static readonly WIDE_LAYOUT_MIN_W_VP: number = 600;
   /** `IDLE_MS`（`:244225`）：控制面自动收回时长。 */
   private static readonly FLAT_IDLE_MS: number = 5000;
 
@@ -6392,6 +6410,21 @@ export struct PlaybackPage {
     }
     this.lastMeshWindowPxW = w;
     this.lastMeshWindowPxH = h;
+    // ★★★ 2026-10-22（甲方：「转屏后退出播放器封面残留 + 背景消失」「横屏切竖屏封面错位」）：
+    //   真·换尺寸 ⇒ **必须把形变会话当场收掉**（照无界 `handleWindowResize`：
+    //   `morphReset(); refitOverlay(); setFinalStatus();` 的顺序，我们这里等价于 `morphSettleOpen()`）。
+    //   不收的后果（本仓实测）：
+    //     · `morphStage` 停在 ENTERING/LEAVING/LANDING ⇒ 壳层克隆封面继续按**旧方向**的窗口矩形画
+    //       ⇒ 竖屏里看到一张横屏几何的歪封面；
+    //     · 关闭时那段残留的形变状态没人清 ⇒ 退出后留一层封面。
+    //   排查关键字：`window-resize settle`。
+    if (this.expandState.morphContainerActive() || this.expandState.morphBridging() ||
+      this.expandState.morphOverlayBridging()) {
+      this.expandState.morphSettleOpen();
+      this.closeDiagnostic(
+        `window-resize settle(bridge->off) win=${w}x${h} ` +
+          `stage=${this.expandState.morphStage} p=${this.expandState.morphP.toFixed(3)}`);
+    }
     this.meshSrcVersion = this.meshSrcVersion + 1;
     appendPlayLog(`[RzdBgPhase] refresh-on-resize ver=${this.meshSrcVersion} win=${w}x${h}`);
   }
