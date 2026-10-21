@@ -1326,12 +1326,13 @@ export struct PlaybackPage {
   private beginCloseGuard(path: string): number {
     this.clearCloseGuard();
     this.closePath = path;
-    // ★★★ 2026-10-21（照无界 `closeWithAnimation` 的第一行 `publishCoverHidden()`）：
-    //   关闭一开始就把**播放页自己那颗封面**压掉（`coverPublishHidden=true`），
-    //   后面无论是 ③ 的 pixmap 收缩还是 ② 的反形变，屏上都不会再有一张"活的封面"留在最后
-    //   ⇒ 从结构上消掉「退出后满屏封面遮挡」。
+    // ★★★ 2026-10-21（甲方：「用收起按钮关闭播放器，封面会先消失一瞬间再出现」）：
+    //   **不能在这里压封面**。上一版把它放在关闭起手 ⇒ 真页面先丢掉封面（第一帧就没了），
+    //   而顶替它的壳层克隆层要等 `morphStage` 翻到 LEAVING 之后由壳层下一帧才挂上来
+    //   ⇒ 中间空一帧 = "先消失再出现"。
+    //   现在只在**快照成功之后**（快照里本来就带着封面）才压，见 `closeWithAnimation()` 的回调；
+    //   第 ② 支反形变则全程不压（封面归"续飞封面"那一套交棒）。
     //   重新打开时在 `onAppear`（`resetPublishCoverHidden`）复位。
-    this.coverPublishHidden = true;
     this.publishCoverHidden();
     this.logCoverOwner('close-begin');
     this.closeToken = ++PlaybackPage.closeSerial;
@@ -4435,6 +4436,11 @@ export struct PlaybackPage {
       //   ⚠️ 只在这一刻（回调里）才置真——不能在 `get()` **之前**置，否则快照本身没有封面（上一轮的病）。
       if (err === null || err === undefined) {
         this.snapshotFlight = true;
+        // ★★★ 2026-10-21：**快照已经进手**才把真封面压掉（快照里本来就带着封面）。
+        //   放在关闭起手会让真页面第一帧就丢掉封面、而克隆层要等下一帧才挂上来
+        //   ⇒ 甲方实测的「封面会先消失一瞬间再出现」。只在③（pixmap 路）生效，
+        //   第 ② 支反形变全程不压（`coverLiveMorphFallback` 里会显式清回 false）。
+        this.coverPublishHidden = true;
       }
       // 闂佸啿鍘滈崑鎾绘煃閸忓浜?闂佸湱绮崝鎺戭潩閿曞倸绀傞柟鎯板Г閿涙棃鏌￠崘銊ヮ暢婵?*闂佸搫鐗滈崗娑氬垝閵娾晜鍋嬮悷娆忓缁犳帡鏌￠埀顒傛崉閾忕懓鏆?*闂佹寧绋戦悧濠偽涢妶澶嬪仼閻忕偛澧藉楣冩煛?濠电偛鑻ˇ浼寸叓閸垻鐜绘俊銈傚亾鐟?闁哄鏅滈悷銉┿€冨鍫熸櫖閻忕偞鍎抽。鎻捗归悩顔煎姎闁伙絿濮撮埢浠嬪焺閸愨晝鐣抽柡澶嗘櫆閻熴倗鎮柆宥呯煑闁靛鍨崇粈?
       //   闂?闂佽鍘归崹褰捤囬懠顒€瀵查柤濮愬€楅崺鐘绘煛?缂備焦鍔栭〃鍛般亹?chrome 闂佺偨鍎查弻锟犲焵?婵炴垶鎸哥粔鍨椤旇棄绶炵€广儱娲﹂悾閬嶆偣閸ャ劎绠氱紒缁樺灴瀹曞爼鎮欓幓鎺戠稑闂傚倸鍋嗛崢铏圭不閿濆瑙﹂幖娣妸閳ь剙锕鍊熺疀鎼达絿鐛ラ梺绋款儐缁苯锕?闂佸湱铏庨崢浠嬪棘娴ｅ箍浜滈柛顭戝亞閻掕姤绻?闂備緡鍙忕徊鑲╃博鐎涙闄勬俊銈呮噹鐢娊鏌ょ涵鍜佸殝缂?
@@ -4582,6 +4588,9 @@ export struct PlaybackPage {
   private closeLiveMorphFallback(reason: string): void {
     this.closeDiagnostic(`reverse-morph-fallback reason=${reason}`, 'fallback');
     PlaybackPage.closeFallbackReason = reason;
+    // 第 ② 支不要压封面：这条路上封面由"续飞封面 / 真封面"那套互补门负责，
+    // 压掉就只剩壳层克隆那一张，且中间会空一帧（甲方：「封面会先消失一瞬间再出现」）。
+    this.coverPublishHidden = false;
     this.isClosing = false;
     // 第 ② 支：容器反形变缩回（无界 `onReverseMorph` 的等价物）。
     this.closeFullScreenPlayback();
@@ -7962,7 +7971,17 @@ export struct PlaybackPage {
           //   闂?**闁荤喐娲戦懗璺猴耿閿熺姵鍋傜憸搴ㄥ箚婢舵劖鐒介柨婵嗗閸ゅ鎮橀悙鎻掆偓缁橆殽閸ヮ剚鏅悘鐐舵椤ゅ懐绱撻崘鎯ф灍婵炵⒈鍨辩粋鎺楁嚋閸倣锕傛煕韫囨挾澧涘┑鈥虫憸娴滃憡绗熼埀顒€顭囨导瀛樺剭闁告洦鍋呭Σ鈧柣搴ㄦ涧閹测€愁焽闂堟稈鏀﹂柟閭﹀幗閺嗩參鏌?`scaleAt(t)`**
           //     闂佹寧绋戦悧鍡涚嵁閹捐绠冲鑸靛姇娴滄繂鈽夐幘顖氫壕闁?`.scale/.translate`闂佹寧绋戦¨鈧紒杈ㄧ箞閺屽洭鏁愰崱妯烇箓鎮归幁鎺戝缂佹ぞ鐒﹀鍕礋椤撶喓鏆犵紓鍌欑劍閹稿鎮楅鐐茬哗闁荤喐婢樿 + **闂婎偄娲ら幊姗€濡磋箛娑樺珘濠㈣泛瀵掗崯搴☆熆鐠虹儤鍠橀柍褜鍓氶崝鏇㈠箮濮樿埖鍎?*闂?
           //   闁诲海鎳撻張顒勫汲閿濆鍋犻柛鈩冪懄閺嗙娀鎮峰▎搴ｅ妽婵犫偓娴兼潙妫橀柛銉檮椤愪粙鏌?`Stack` 闂備焦褰冮惌鍌炲磻閸涱厸鏋?`闂佺补鍋撻柡鍌滃劋绾?婵炴垶鎸哥粔鐑姐€呴敃鍌氱濠电姴鍟抽惂渚€鏌涢弬璇插闁活亙鍗抽獮鏍敆閳ь剟宕虹仦鐐氦婵炲棙鎸稿▍顡?闂佹眹鍔岀€氼參寮悙鐑樼厒濠电偛绨遍崑?
-          if (this.usesPhoneSwiperLayout()) {
+          // ★★★ 2026-10-21（甲方两张横屏截图：一张「大封面压着一张小封面」，一张「两个封面并排 +
+          //   歌名/歌手各两份」）：
+          //   无界里 `floatingCover` 只属于 `playerPane`（竖屏 Swiper 那一档），`flatPane` /
+          //   `wideLyricsPane` 那一档**没有**浮层封面。
+          //   而本仓 `usesPhoneSwiperLayout()`（宽度 SM/MD，**含横屏 MD**）与
+          //   `usePanelLayout()`（横屏且非 SM）会**同时为真** ⇒ 横屏时 panel 内容已经画过一次封面
+          //   （`flatPane` 的方封面 / `MusicPlayInfoBlock` 的封面），这一层又按窗口坐标画第二张，
+          //   还额外带一份歌名/歌手 ⇒ 屏上就是两套。
+          //   ⇒ 浮层只跑在"不是 panel"的那一档（= 无界 `playerPane` 独占的情况）。
+          //   排查关键字：`usesPhoneSwiperLayout` + `usePanelLayout` 的 `[RzdBranch]` 日志。
+          if (this.usesPhoneSwiperLayout() && !this.usePanelLayout()) {
             this.LyricFloatLayer()
           }
         }
