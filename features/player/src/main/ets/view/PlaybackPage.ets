@@ -274,6 +274,8 @@ export struct PlaybackPage {
    */
   private lastMeshWindowPxW: number = 0;
   private lastMeshWindowPxH: number = 0;
+  /** 转屏后补刷背景网格的那一拍定时器（见 `refreshBgMeshOnResize()`；-1 = 没有在排）。 */
+  private meshResizeFollowUpTimer: number = -1;
   /**
    * 闁宠棄鎳夊Σ鍕煡閸涱亝顫?2026-10-17闁?*濞ｅ浂鍠撻埀顒€鑻惈宥咁嚕閳ь剚娼婚崶鈹炬煠濞戞搩鍘藉Σ鍛婄▔婵犱胶顏卞Λ锝嗙墬閻℃洟鎯冮崟顖ｆ澒闁肩懓鐪伴埀?*闁?
    *
@@ -5238,7 +5240,7 @@ export struct PlaybackPage {
                     isDismissing: this.isCollapsing(),
                     coverLinearScale: 1,
                     // 关闭期由壳层克隆封面独占（见 `MusicPlayInfoBlock.coverMuted` 注释）
-                    coverMuted: this.coverPublishHidden,
+                    coverMuted: this.coverPublishHidden || this.expandState.morphOverlayBridging(),
                     // 2026-10-17锛歚showControlArea` 榛樿 true 涓斿叏浠撲粠鏈紶杩?false 鈬?灏侀潰椤甸噷浼?*鍐嶇敾涓€浠?*
                     // 鎺у埗鍖猴紙Slider + 5 棰椾紶杈撻敭 + 4 棰楀浘鏍囪锛夛紝涓庡簳閮ㄥ叡浜偅涓€浠介噸鍙犮€傜敤鎴锋姤鐨?绗簩涓帶鍒跺尯"灏辨槸瀹冦€?
                     showControlArea: false
@@ -6041,9 +6043,13 @@ export struct PlaybackPage {
             //   **必须挂 `realCoverVisible()` 这道门**。形变期间（开、关两个方向）代表封面的是
             //   壳层克隆封面（`Index.MorphCoverClone()`，窗坐标），播放页这一侧必须让位；
             //   这一张原来只挂了 `coverPublishHidden`，所以形变全程恒定画着 ⇒ 屏上两份。
-            //   参照：封面页那条（`LyricFloatLayer`）从第一天起就是 `realCoverVisible()`。
-            //   排查关键字：`RzdCoverOwner`（`real=1 clone=1` 就是两份）。
-            .opacity(this.expandState.realCoverVisible() && !this.coverPublishHidden ? 1 : 0)
+            //   ★ 2026-10-22：再加 `!morphOverlayBridging()` —— 壳层既然在画，页面这张一律不画。
+            //   原来只靠 `realCoverVisible()` 的"互补"推断，而它会因为
+            //   `overlayCoverDrawable()`（两端几何有一端为 0）判假而**重新返回 true**
+            //   ⇒ 那一帧壳层和页面**同时**在画 = 甲方连报的「两个封面」。
+            //   现在这一条不依赖任何推断：壳层在画 ⇒ 页面不画。
+            .opacity(this.expandState.realCoverVisible() && !this.coverPublishHidden &&
+              !this.expandState.morphOverlayBridging() ? 1 : 0)
             .onAreaChange((_oldValue: Area, newValue: Area): void => {
               this.expandState.reportBig(
                 areaLengthToVp(newValue.globalPosition.x),
@@ -6201,7 +6207,7 @@ export struct PlaybackPage {
               isDismissing: this.isCollapsing(),
               coverLinearScale: 1,
               // 关闭期由壳层克隆封面独占（见 `MusicPlayInfoBlock.coverMuted` 注释）
-              coverMuted: this.coverPublishHidden,
+              coverMuted: this.coverPublishHidden || this.expandState.morphOverlayBridging(),
               panelLayout: true
             })
           }
@@ -6394,6 +6400,21 @@ export struct PlaybackPage {
     this.lastMeshWindowPxH = h;
     this.meshSrcVersion = this.meshSrcVersion + 1;
     appendPlayLog(`[RzdBgPhase] refresh-on-resize ver=${this.meshSrcVersion} win=${w}x${h}`);
+    // ★ 2026-10-22（转屏后背景仍偶尔消失）：转屏那一拍 `MeshCoverBg` 的画布是**新建**的，
+    //   同帧 bump 有可能被旧实例吃掉 ⇒ 160ms 后再补一拍（只有真换尺寸才排，动画期不排）。
+    //   排查关键字：`refresh-on-resize followup`。
+    if (this.meshResizeFollowUpTimer !== -1) {
+      clearTimeout(this.meshResizeFollowUpTimer);
+      this.meshResizeFollowUpTimer = -1;
+    }
+    this.meshResizeFollowUpTimer = setTimeout((): void => {
+      this.meshResizeFollowUpTimer = -1;
+      if (!this.isAlive || this.meshSrc === undefined) {
+        return;
+      }
+      this.meshSrcVersion = this.meshSrcVersion + 1;
+      appendPlayLog(`[RzdBgPhase] refresh-on-resize followup ver=${this.meshSrcVersion}`);
+    }, 160);
   }
 
   /**
@@ -8536,7 +8557,8 @@ export struct PlaybackPage {
           //   闂佸疇娉曟刊瀵哥箔?婵炴垶鎸搁敃銉︽叏閵堝鐓㈤柍杞拌兌閹藉秹鏌ㄥ☉妯荤秮.id` / `onAreaChange`闂?*婵炴垶鎸哥粔纾嬨亹?opacity 閻熸粍婢樺畷顒勫箹?*闂佹寧绋戦惉濂稿矗鎼达絾鏆滈柟闂寸濞呫倗鈧數澧楅〃鍛村春?闂佺繝鐒﹂幐鍫曞焵?
           // ★ 2026-10-18（用户第九/十轮）：**只在"快照已经进手"之后**才把真封面藏掉。
           //   上一轮用 `!isClosing`（在拍快照**之前**就置真）⇒ 快照里没有封面 ⇒ "一关就封面消失"。
-          .opacity(this.expandState.realCoverVisible() && !this.snapshotFlight && !this.coverPublishHidden ? 1 : 0)
+          .opacity(this.expandState.realCoverVisible() && !this.snapshotFlight && !this.coverPublishHidden &&
+            !this.expandState.morphOverlayBridging() ? 1 : 0)
           // 闂?婵炴垶鎸搁敃銉︽叏閵堝鐓㈤柍杞拌兌閹藉秹鏌熺喊鍗炲闁糕晛鏈璇测枎閹捐櫕顏為梺鎸庣☉閻楀﹤螞閵堝鍋╅悘鐐跺亹閻﹀秹鏌￠崟闈涚仴妞も晩鍋婇幆鍕冀瑜忓﹢鎾煠婵傚绨荤紒璁崇劍缁嬪绻濋崘銊愭捇鏌ㄥ☉娆戞憿floatingCover.onAreaChange 闂?publishMorphTargets`闂?
           .id(PLAYER_BIG_COVER_ID)
           .onAreaChange((_oldValue: Area, newValue: Area): void => {
