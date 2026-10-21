@@ -370,7 +370,11 @@ export class LyricLiveViewController {
       type: liveViewManager.CapsuleType.CAPSULE_TYPE_TEXT,
       status: 1,
       title: this.capsuleText(),
-      content: this.fitText(this.curSinger, CAPSULE_TEXT_MAX)
+      content: this.fitText(this.curSinger, CAPSULE_TEXT_MAX),
+      // ★ 2026-10-21（真机：图标补上后又报 `capsule.backgroundColor must be string
+      //   [or the parameter is mandatory]`）：SDK 标可选、服务端同样按必填校验 ⇒ 显式给一个
+      //   深色底（与播放页胶囊同一色系），避免每次起播都 401。
+      backgroundColor: '#FF1F1F23'
     };
     const icon: image.PixelMap | undefined = this.ensureCapsuleIcon();
     if (icon !== undefined) {

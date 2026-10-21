@@ -5822,6 +5822,11 @@ export struct PlaybackPage {
           })
         }
         .layoutWeight(1)
+        // ★ 2026-10-21：横屏走的是 panel 分支，而 `logLayoutBoxes()` 原来只挂在手机分支的节点上
+        //   ⇒ 横屏从来没打过 `[RzdPlayerGeom]`。这里补一个，横屏几何也能进应用内日志。
+        .onAreaChange((): void => {
+          this.logLayoutBoxes();
+        })
         .padding({ top: 80, bottom: 48 })
 
         Column() {

@@ -538,10 +538,12 @@ export struct MusicPlayInfoBlock {
             Image(this.currentCoverSource())
               .id(PLAYER_BIG_COVER_ID)
               // ★ 2026-10-21（真机横屏：封面撑满左栏、上下被切、控件被挤出屏）：按实测封面区
-              //   取「正方形 = min(盒宽, 盒高)」；还没量到的那一帧才回退到"铺满 + 1:1"。
+              //   取「正方形 = min(盒宽, 盒高)」。
+              //   ⚠️ 上一版把「还没量到」写成 `.height(undefined)` / `.aspectRatio(undefined)` ——
+              //   ArkUI 这两个属性不接受 undefined，整张封面直接不画了（真机横屏"没有封面"）。
+              //   ⇒ 未量到时改用 `'100%'` 铺满（首帧），量到后立刻变正方形。
               .width(this.panelCoverEdgeVp() > 0 ? this.panelCoverEdgeVp() : StyleConstants.FULL_WIDTH)
-              .height(this.panelCoverEdgeVp() > 0 ? this.panelCoverEdgeVp() : undefined)
-              .aspectRatio(this.panelCoverEdgeVp() > 0 ? undefined : 1)
+              .height(this.panelCoverEdgeVp() > 0 ? this.panelCoverEdgeVp() : StyleConstants.FULL_HEIGHT)
               .objectFit(ImageFit.Cover)
               .syncLoad(true)
               .constraintSize({
