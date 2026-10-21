@@ -4434,11 +4434,21 @@ export struct PlaybackPage {
         return;
       }
       snapshotReturned = true;
-      this.closeDiagnostic(`snapshot-callback ${(err === null || err === undefined) && pixmap !== undefined ? 'ok' : 'miss'}`);
-      if (pixmap === undefined && (err === null || err === undefined)) {
-        this.closeLiveMorphFallback('snapshot-empty');
+      // ★★★ 2026-10-21（真机日志每次都 `snapshot-callback miss` → `live-fallback reason=snapFail(undefined)`，
+      //   即 `err.code` 是 undefined，等于"失败了但不知道原因"）：
+      //   ⇒ ① 判据改成**以 pixmap 为准**：只要拿到图就算成功（部分版本会同时回一个没有 code 的 err）；
+      //      ② 失败时把整个 err 原样打进持久诊断（`JSON.stringify`），下次日志就能看到真实 code/message。
+      this.closeDiagnostic(`snapshot-callback ${pixmap !== undefined ? 'ok' : 'miss'} ` +
+        `err=${err === null || err === undefined ? 'none' : JSON.stringify(err)}`);
+      if (pixmap === undefined) {
+        this.closeLiveMorphFallback(`snapFail(${err === null || err === undefined ? 'none' : JSON.stringify(err)})`);
         return;
       }
+      // ★★★ 2026-10-18（用户第十轮：「收起过程中**按钮/封面又成了两个**」）：
+      //   快照已经进手 ⇒ 接下来屏上由**快照层**代表一切（`beginSnapshotShrink()`），
+      //   页面上那颗真封面必须让位，否则就是"快照一颗 + 真封面一颗"。
+      //   ⚠️ 只在这一刻（回调里）才置真——不能在 `get()` **之前**置，否则快照本身没有封面（上一轮的病）。
+      this.snapshotFlight = true;
       // ★★★ 2026-10-18（用户第十轮：「收起过程中**按钮/封面又成了两个**」）：
       //   快照已经进手 ⇒ 接下来屏上由**快照层**代表一切（`beginSnapshotShrink()`），
       //   页面上那颗真封面必须让位，否则就是"快照一颗 + 真封面一颗"。
@@ -4455,7 +4465,7 @@ export struct PlaybackPage {
       //      闂?闂傚倸妫欓崕濂革綖閸ヮ剙绠涢柣鏂垮槻缂嶄線鏌涢弽銊у缂佽精椴搁幏鍛村即閻愬弶鐎搁梻?1~2 闁汇埄鍨庨崒婊呮啰闂傚倸鐗勯崹鑲╂崲閺囥垺鍎庨柡宥庡亝缁茶鈽夐幘宕囆ч柍褜鍓欑换鎴澪ｉ幋锔藉剭闁告洦鍋呰ぐ銉╂煟閹炬瀚惂渚€鎮橀悙鎻掆偓鍫曞焵?
       //   闂佸疇娉曟刊瀵哥箔?**婵犮垺鍎肩划鍓ф喆閿曞倸缁╂い鏍ㄧ懅閻熸繈寮堕埡鍌滎灱缂佺粯鐗楃粙澶愬焵椤掑倵鍋?*闂佹寧绋戦悧鍡涙偩閻樺灚鍟哄ù锝呪偓鐔稿发闂備緡鍋€閸嬫捇鏌涢弽銊у⒊闁活厽鍎抽銉╁礋閸撲胶顦梻渚囧弿缁叉儳顪?`morphLand()` 婵炴潙鍚嬬喊宥嗕繆閹间焦鍎庨梻鈧幇顔拘㈤梺鍦帛閸旀洘鏅堕悩鐢电缂備焦锚缁旀挳鏌?
       //      闂?`closeFullScreenPlayback()` 闂傚倸娲犻崑鎾绘偡閺囨碍顦风紒?闁哄鏅滈敋婵犫偓椤忓棔娌柡鍥╁仧绾惧鏌?闁荤姍鍥ㄦ暠濠⒀勭矒閺佸秵寰勯崱妤侇仸 闁荤喐鐟ゅ鎺旂箔閸涘瓨顥?`if` 闂佹眹鍔岀€氼亞绱為崨顖滅＞妞ゆ棁銆€閸?
-      if (err !== null && err !== undefined) {
+      if (err !== null && err !== undefined && pixmap === undefined) {
         Logger.warn(PlaybackPage.logTag,
           'RzdShrinkOverlay root snapshot failed, fallback: ' + JSON.stringify(err));
         // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-17闂?*闂佸搫鐗滈崗娑氬垝閵娾晛绀嗙紓浣姑竟鍫ユ煟閵娿儱顏╅柛銊ラ椤垼顦撮柛?*闂佹寧绋戦¨鈧紒鍙樺嵆瀵噣鎮╅崹顐ｇ彧闂佹眹鍔岀€氼剟濡甸幋鐘冲闁靛闄勯弳婊堟煛?`nav.pop()`闂佹寧绋戦悧濠偽涢妶鍡樺妞ゆ巻鍋撴繝褉鍋撻梺鎸庣☉椤р偓缂?
