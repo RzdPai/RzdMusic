@@ -1380,6 +1380,43 @@ export struct PlaybackPage {
     }
   }
 
+  /**
+   * 只做"把播放页从路由栈上摘掉"这一步 —— 无界 `nav.pop(false)`（`wujie.pa:216387-216395`）的等价物。
+   *
+   * 快照路要在 `shrink.start(...)` 之后**同一拍**调用它：屏上只留那张 pixmap 在飞，
+   * 活页面立刻退场 ⇒ 结构上不可能出现"两张封面"。`finishCloseGuard()` 稍后调它同一段时
+   * 已经找不到 player 下标（-1）⇒ 自然空跑，不会重复删。
+   *
+   * 排查关键字：`route-remove … ` 里带 `source=snapshot-immediate` 的那一行。
+   */
+  private popPlayerRouteNow(event: string): void {
+    const names: string[] = this.pageIndexInfos.getAllPathName();
+    const index: number = names.indexOf(RouterUrlConstants.PLAYER_PAGE);
+    const top: number = names.length - 1;
+    let removed: number = -1;
+    let removeMode: string = 'none';
+    try {
+      if (index >= 0) {
+        if (index === top) {
+          removeMode = 'pop';
+          this.pageIndexInfos.pop(false);
+        } else {
+          removeMode = 'remove';
+          removed = this.pageIndexInfos.removeByIndexes([index]);
+          if (removed === 0) {
+            removeMode = 'remove-then-pop';
+            this.pageIndexInfos.pop(false);
+          }
+        }
+      }
+      this.closeDiagnostic(
+        `route-remove ${removeMode} source=${event} index=${index} top=${top} ` +
+          `size=${names.length} removed=${removed}`);
+    } catch (error) {
+      this.closeDiagnostic(`route-remove-failed source=${event} error=${error} index=${index} top=${top}`);
+    }
+  }
+
   private finishCloseGuard(token: number, fallback: boolean = false): void {
     if (!this.ownsClose(token, 'finish')) {
       return;
@@ -4439,25 +4476,27 @@ export struct PlaybackPage {
         `${(err as BusinessError).code}`;
       const errMsg: string = (err === null || err === undefined) ? '-' :
         `${(err as BusinessError).message}`;
+      // ★★★ 2026-10-22（真机日志破了这个案子 —— 快照**一直**是成功的）：
+      //   `snapshot-callback miss code=undefined pix=1 msg=undefined`
+      //   ⇒ `pixmap` 有值，只是 `err` 是个"没有 code 的壳"，我们却把它当失败
+      //   ⇒ 每次都退回第 ② 支反形变 ⇒ 屏上"活页面那张 + 壳层克隆那张" = 甲方连报四次的「两个封面」。
+      //   判据**只看 `pixmap`**（§34.3 就写过这条，但下面那个 `if (err …)` 没收干净）。
+      //   排查关键字：`snapshot-callback` 现在应该是 `ok … pix=1`。
+      const snapped: boolean = pixmap !== undefined;
       this.closeDiagnostic(
-        `snapshot-callback ${(err === null || err === undefined) && pixmap !== undefined ? 'ok' : 'miss'} ` +
-          `code=${errCode} pix=${pixmap !== undefined ? 1 : 0} msg=${errMsg}`);
-      if (pixmap === undefined && (err === null || err === undefined)) {
-        this.closeLiveMorphFallback('snapshot-empty');
+        `snapshot-callback ${snapped ? 'ok' : 'miss'} code=${errCode} pix=${pixmap !== undefined ? 1 : 0} msg=${errMsg}`);
+      if (!snapped) {
+        this.closeLiveMorphFallback(`snapFail(${errCode})`);
         return;
       }
+      // 快照已经进手 ⇒ 屏上由**快照层**代表一切（`beginSnapshotShrink()`），页面侧封面让位。
+      // ⚠️ 只在这一刻才置真：放在 `get()` 之前会让快照本身没有封面。
+      this.snapshotFlight = true;
+      this.coverPublishHidden = true;
       // ★★★ 2026-10-18（用户第十轮：「收起过程中**按钮/封面又成了两个**」）：
       //   快照已经进手 ⇒ 接下来屏上由**快照层**代表一切（`beginSnapshotShrink()`），
       //   页面上那颗真封面必须让位，否则就是"快照一颗 + 真封面一颗"。
-      //   ⚠️ 只在这一刻（回调里）才置真——不能在 `get()` **之前**置，否则快照本身没有封面（上一轮的病）。
-      if (err === null || err === undefined) {
-        this.snapshotFlight = true;
-        // ★★★ 2026-10-21：**快照已经进手**才把真封面压掉（快照里本来就带着封面）。
-        //   放在关闭起手会让真页面第一帧就丢掉封面、而克隆层要等下一帧才挂上来
-        //   ⇒ 甲方实测的「封面会先消失一瞬间再出现」。只在③（pixmap 路）生效，
-        //   第 ② 支反形变全程不压（`coverLiveMorphFallback` 里会显式清回 false）。
-        this.coverPublishHidden = true;
-      }
+      //   （置真已经提到上面 `snapped` 那一支里，见本节顶部：判据只看 `pixmap`。）
       // 闂佸啿鍘滈崑鎾绘煃閸忓浜?闂佸湱绮崝鎺戭潩閿曞倸绀傞柟鎯板Г閿涙棃鏌￠崘銊ヮ暢婵?*闂佸搫鐗滈崗娑氬垝閵娾晜鍋嬮悷娆忓缁犳帡鏌￠埀顒傛崉閾忕懓鏆?*闂佹寧绋戦悧濠偽涢妶澶嬪仼閻忕偛澧藉楣冩煛?濠电偛鑻ˇ浼寸叓閸垻鐜绘俊銈傚亾鐟?闁哄鏅滈悷銉┿€冨鍫熸櫖閻忕偞鍎抽。鎻捗归悩顔煎姎闁伙絿濮撮埢浠嬪焺閸愨晝鐣抽柡澶嗘櫆閻熴倗鎮柆宥呯煑闁靛鍨崇粈?
       //   闂?闂佽鍘归崹褰捤囬懠顒€瀵查柤濮愬€楅崺鐘绘煛?缂備焦鍔栭〃鍛般亹?chrome 闂佺偨鍎查弻锟犲焵?婵炴垶鎸哥粔鍨椤旇棄绶炵€广儱娲﹂悾閬嶆偣閸ャ劎绠氱紒缁樺灴瀹曞爼鎮欓幓鎺戠稑闂傚倸鍋嗛崢铏圭不閿濆瑙﹂幖娣妸閳ь剙锕鍊熺疀鎼达絿鐛ラ梺绋款儐缁苯锕?闂佸湱铏庨崢浠嬪棘娴ｅ箍浜滈柛顭戝亞閻掕姤绻?闂備緡鍙忕徊鑲╃博鐎涙闄勬俊銈呮噹鐢娊鏌ょ涵鍜佸殝缂?
       //   闂?`morphLand()` 婵炲瓨鍤庨崐娑氭崲閺囩姷纾兼俊顖氭惈閻撴垿鏌?闂?闁哄鏅炲〒鍦礊濮椻偓瀵?*闂佹椿浜為崰鏇㈡?*缂備焦鏌ㄩ鍛村春閵忋倕鍙婇柟顖嗗啯鐦旈梺?
@@ -4467,7 +4506,9 @@ export struct PlaybackPage {
       //      闂?闂傚倸妫欓崕濂革綖閸ヮ剙绠涢柣鏂垮槻缂嶄線鏌涢弽銊у缂佽精椴搁幏鍛村即閻愬弶鐎搁梻?1~2 闁汇埄鍨庨崒婊呮啰闂傚倸鐗勯崹鑲╂崲閺囥垺鍎庨柡宥庡亝缁茶鈽夐幘宕囆ч柍褜鍓欑换鎴澪ｉ幋锔藉剭闁告洦鍋呰ぐ銉╂煟閹炬瀚惂渚€鎮橀悙鎻掆偓鍫曞焵?
       //   闂佸疇娉曟刊瀵哥箔?**婵犮垺鍎肩划鍓ф喆閿曞倸缁╂い鏍ㄧ懅閻熸繈寮堕埡鍌滎灱缂佺粯鐗楃粙澶愬焵椤掑倵鍋?*闂佹寧绋戦悧鍡涙偩閻樺灚鍟哄ù锝呪偓鐔稿发闂備緡鍋€閸嬫捇鏌涢弽銊у⒊闁活厽鍎抽銉╁礋閸撲胶顦梻渚囧弿缁叉儳顪?`morphLand()` 婵炴潙鍚嬬喊宥嗕繆閹间焦鍎庨梻鈧幇顔拘㈤梺鍦帛閸旀洘鏅堕悩鐢电缂備焦锚缁旀挳鏌?
       //      闂?`closeFullScreenPlayback()` 闂傚倸娲犻崑鎾绘偡閺囨碍顦风紒?闁哄鏅滈敋婵犫偓椤忓棔娌柡鍥╁仧绾惧鏌?闁荤姍鍥ㄦ暠濠⒀勭矒閺佸秵寰勯崱妤侇仸 闁荤喐鐟ゅ鎺旂箔閸涘瓨顥?`if` 闂佹眹鍔岀€氼亞绱為崨顖滅＞妞ゆ棁銆€閸?
-      if (err !== null && err !== undefined) {
+      // ⚠️ 下面这一段（`err` 判失败）现在是**死支**：成功与否只看 `pixmap`（见本节顶部），
+      //   `snapped === false` 已经在上面 return 掉了。留着只为读代码时不误会"err 会拦快照"。
+      if (!snapped && (err !== null && err !== undefined)) {
         Logger.warn(PlaybackPage.logTag,
           'RzdShrinkOverlay root snapshot failed, fallback: ' + JSON.stringify(err));
         // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-17闂?*闂佸搫鐗滈崗娑氬垝閵娾晛绀嗙紓浣姑竟鍫ユ煟閵娿儱顏╅柛銊ラ椤垼顦撮柛?*闂佹寧绋戦¨鈧紒鍙樺嵆瀵噣鎮╅崹顐ｇ彧闂佹眹鍔岀€氼剟濡甸幋鐘冲闁靛闄勯弳婊堟煛?`nav.pop()`闂佹寧绋戦悧濠偽涢妶鍡樺妞ゆ巻鍋撴繝褉鍋撻梺鎸庣☉椤р偓缂?
@@ -4537,6 +4578,14 @@ export struct PlaybackPage {
       });
       PlaybackPage.ev('SQZ', `shrink win=${winW.toFixed(0)}x${winH.toFixed(0)}`);
       this.state.isShowPlay = false;
+      // ★★★ 2026-10-22（照无界 `:216376-216395` 的**同一拍**顺序）：
+      //   `onShrinkBack(pixmap, mySrcBox); nav.pop(false);`
+      //   快照已经进手 ⇒ **立刻**把播放页从路由栈上摘掉，屏上只留那张 pixmap 在飞。
+      //   我们原来是"等 shrink 的 onDone 才 pop"（整页活着飞 500ms）——
+      //   这正是"活页面那张封面 + 快照/克隆那张"并存的根源。
+      //   `finishCloseGuard()` 里那段删除会在 onDone 时找不到 index（-1）⇒ 自然空跑。
+      //   排查关键字：`snapshot-immediate`。
+      this.popPlayerRouteNow('snapshot-immediate');
       // 鈽呪槄鈽呪槄 2026-10-17锛堜慨銆岀郴缁熻繑鍥炲叧闂椂宸︿笅寰幆 / 鍙充笅姝屾洸鍒楄〃涓ら鎸夐挳娑堝け銆嶏級
       //   閭ｄ袱棰?`SymbolGlyph` 涓嶆槸琚銆佷篃涓嶆槸鎹簡鍒嗘敮 鈥斺€?瀹冧滑**娌¤繘杩欏紶蹇収**銆?
       //   瀹樻柟 `componentSnapshot` 鏂囨。瀵圭涓変釜鍙傛暟鍘熻瘽锛氥€岃缃槸鍚﹀己鍒剁郴缁熷湪鎴浘鍓嶇瓑寰呮墍鏈夌粯鍒舵寚浠?
