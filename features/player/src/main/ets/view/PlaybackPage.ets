@@ -199,13 +199,6 @@ export struct PlaybackPage {
   @Local isTablet: boolean = true;
   /** Inverse tablet flag for lyric column variants. */
   @Local isTabletFalse: boolean = false;
-  /**
-   * 宽屏/横屏并排版式的宽度门槛（vp）。
-   *
-   * 逐值照搬参考工程 `ui/Layout.ets`：`BP_MEDIUM = 600`，`isWideWindow(w) = w >= BP_MEDIUM`。
-   * ≥ 600 ⇒ 左右并排（左：封面+信息；右：歌词），竖屏手机（≈421vp）不受影响。
-   */
-  private static readonly WIDE_LAYOUT_MIN_W_VP: number = 600;
   /** When true, renders the wide split panel layout (no top bar, custom paddings). */
   @Param panelLayout: boolean = false;
   /** Swiper page index (lyrics vs main stack on some layouts). */
@@ -974,42 +967,6 @@ export struct PlaybackPage {
       `estBoxH=${this.expandState.estBoxHVp().toFixed(1)} ` +
       `gapSwiper want=${gapWanted.toFixed(1)} got=${gapGot.toFixed(1)} ` +
       `gapScrub want=${scrubWanted.toFixed(1)} got=${this.boxH(PlaybackPage.CHROME_SCRUB_GAP_ROW_ID).toFixed(1)}`);
-
-    // ★ 2026-10-21（甲方：PuraXMax 阔屏竖屏下封面/歌词/进度条挤在一起）：上面这些**只有 hilog 能看**，
-    //   真机拿不到 ⇒ 同一条关键几何再写一份到**应用内日志**（按窗口尺寸+档位去重，一次尺寸只落一行）。
-    //   grep 关键字：`[RzdPlayerGeom]`。
-    //   判读：`usableH` 是扣掉上下让位后的可用高，`chromeTotal` 是控制区应占高，
-    //   二者之差 `estBoxH` 就是封面区**应得**的高度；`coverRectH` 是封面实际占的高度
-    //   ⇒ 只要 `coverRectH + coverY > estBoxH`，就是"封面比自己的框还高"，会压到歌名/进度条。
-    const geomKey: string = `${this.expandState.windowWidthVp.toFixed(0)}x` +
-      `${this.expandState.windowHeightVp.toFixed(0)}/tier${this.expandState.chromeTier}`;
-    if (geomKey !== this.lastPlayerGeomKey) {
-      const resized: boolean = this.lastPlayerGeomKey.length > 0;
-      this.lastPlayerGeomKey = geomKey;
-      // ★★★ 2026-10-21（真机横屏 823x363：屏上出现**两个封面 + 两份歌名**）：
-      //   形变桥接层（`MorphCoverBridge` 的封面 + `MorphMetaBridge` 的歌名/操作区）里的矩形
-      //   全部是**窗口坐标**，且它的不透明度恒为 1（`morphBridgeOpacity()` = `morphBridging()?1:0`）——
-      //   手机竖屏时它与浮层里的真封面/真歌名**同位置同图**所以看不出来；
-      //   一旦旋转/改窗，旧矩形与新几何分叉 ⇒ 立刻变成"两个播放器"。
-      //   无界在 `handleWindowResize` 里做的是 `morphReset(); refitOverlay(); setFinalStatus();`
-      //   ⇒ 这里做等价的事：尺寸真的变了、且桥接层还开着，就立刻落位到"已展开"。
-      //   排查关键字：`window-resize settle`。
-      if (resized && this.expandState.morphBridging()) {
-        this.expandState.morphSettleOpen();
-        appendPlayLog(`[RzdPlayerGeom] window-resize settle(bridge->off) ${geomKey}`);
-      }
-      const cover: LyricMorphRect = this.coverLocalRect();
-      appendPlayLog(`[RzdPlayerGeom] win=${geomKey} ` +
-        `usableH=${this.expandState.usableHVp().toFixed(1)} ` +
-        `chromeTotal=${this.expandState.chromeTotalVp().toFixed(1)} ` +
-        `estBoxH=${this.expandState.estBoxHVp().toFixed(1)} ` +
-        `coverLocalY=${cover.y.toFixed(1)} coverLocalH=${cover.height.toFixed(1)} ` +
-        `coverGeomSize=${this.expandState.playerCoverGeomRect().size.toFixed(1)} ` +
-        `wide=${this.expandState.windowWidthVp >= 600 ? 1 : 0} ` +
-        `coverNodeH=${this.boxH(PLAYER_BIG_COVER_ID).toFixed(1)} ` +
-        `metaTitleH=${this.boxH(PLAYER_META_TITLE_ID).toFixed(1)} ` +
-        `gapSwiperGot=${gapGot.toFixed(1)} scrubGot=${this.boxH(PlaybackPage.CHROME_SCRUB_GAP_ROW_ID).toFixed(1)}`);
-    }
   }
 
   /** @returns 闂佸搫鏈崝鎺楁煂濠婂懐纾奸柛鏇ㄤ簼椤?id 闂?*闁诲骸婀遍崑鐐电矈鐎涙﹩娈楁俊顖氭惈椤?*闂佹寧绋戝濡忛梺鎸庣☉閻倿宕抽悜妯尖枖鐎广儱鎳庨悡鍌炲级閳哄倹鐓ユ繛?-1闂佹寧绋戦ˇ顐﹀焵椤掍焦鐓涢柍?闂佸憡鐟禍鐐靛垝閹殿喗瀚氬┑鐘插暞閻掍粙鏌￠崘锕€鍔氱紒缁樻閹粙濡搁敐鍌氫壕?*/
@@ -1451,9 +1408,6 @@ export struct PlaybackPage {
       `RzdCloseState flags hs ${hsBefore ? 1 : 0}->0 src ${srcBefore ? 1 : 0}->0 mini ${miniBefore ? 1 : 0}->0 ` +
         `drv=${this.expandState.morphSessionDriving() ? 1 : 0} ` +
         `br=${this.expandState.morphOverlayBridging() ? 1 : 0}`);
-    // ★ 强制壳层重绘一次：这时 `isShowPlay` 往往已经是 false（false→false 不算变化），
-    //   壳层不重绘 ⇒ 屏幕上留最后一帧满屏封面（真机：概率性、alive=0 且栈已空）。
-    this.state.closeTick = (this.state.closeTick + 1) % 100000;
     this.snapshotFlight = false;
     const pixmap: image.PixelMap | undefined = this.morphShrinkState().pixmap;
     this.morphShrinkState().reset();
@@ -2135,15 +2089,6 @@ export struct PlaybackPage {
   /** `RzdCoverLocal` 闂佹眹鍔岀€氫即宕虫导鏉戝唨闁汇値鍨拌灐濠电偟绻濈欢銈囨濡炬悞闂佹寧绋戦懟顖炴嚋娴兼潙鐭楁俊顖滅帛椤ρ勬叏閿濆懐绠伴柟鑸靛哺閺屽牓骞嬮幒鏃傜崶闂佸憡鐟﹂敃顐ゆ濠靛洤绶炴い蹇撳濡叉洖霉閸忚壈澹橀柛鈺傜〒娴狅箒绠涢妷褏顦梺?*/
   private static readonly COVER_LOCAL_LOG_MS: number = 100;
   private lastCoverLocalAtMs: number = 0;
-  /**
-   * 几何诊断的**去重键**（`窗口宽x高/宽度断点/控制区档位`）。
-   *
-   * ★ 2026-10-21（甲方：PuraXMax 阔屏竖屏下播放页的封面/歌词/进度条挤在一起）：
-   *   真机拿不到 hilog，所以把 `RzdSwiperBox` 那组几何**同时写进应用内日志**；
-   *   按这个键去重 ⇒ 一次窗口尺寸只落一行，不会刷爆 20k 缓冲。
-   *   排查关键字：`[RzdPlayerGeom]`。
-   */
-  private lastPlayerGeomKey: string = '';
 
   /**
    * 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-16 闂佸搫鍊瑰姗€路閸愵亝瀚氬┑鐘插暞閻掍粙鏌?*闁诲繐绻嬬欢姘焽娴煎瓨濯伴柟瀛樺笧缁夋挳鏌ｉ妸銉ヮ仾妞?闂佸憡鐟ョ粔纾嬨亹婢舵劕绠查柕蹇曞閸ょ娀鎮?*闂?
@@ -4434,21 +4379,11 @@ export struct PlaybackPage {
         return;
       }
       snapshotReturned = true;
-      // ★★★ 2026-10-21（真机日志每次都 `snapshot-callback miss` → `live-fallback reason=snapFail(undefined)`，
-      //   即 `err.code` 是 undefined，等于"失败了但不知道原因"）：
-      //   ⇒ ① 判据改成**以 pixmap 为准**：只要拿到图就算成功（部分版本会同时回一个没有 code 的 err）；
-      //      ② 失败时把整个 err 原样打进持久诊断（`JSON.stringify`），下次日志就能看到真实 code/message。
-      this.closeDiagnostic(`snapshot-callback ${pixmap !== undefined ? 'ok' : 'miss'} ` +
-        `err=${err === null || err === undefined ? 'none' : JSON.stringify(err)}`);
-      if (pixmap === undefined) {
-        this.closeLiveMorphFallback(`snapFail(${err === null || err === undefined ? 'none' : JSON.stringify(err)})`);
+      this.closeDiagnostic(`snapshot-callback ${(err === null || err === undefined) && pixmap !== undefined ? 'ok' : 'miss'}`);
+      if (pixmap === undefined && (err === null || err === undefined)) {
+        this.closeLiveMorphFallback('snapshot-empty');
         return;
       }
-      // ★★★ 2026-10-18（用户第十轮：「收起过程中**按钮/封面又成了两个**」）：
-      //   快照已经进手 ⇒ 接下来屏上由**快照层**代表一切（`beginSnapshotShrink()`），
-      //   页面上那颗真封面必须让位，否则就是"快照一颗 + 真封面一颗"。
-      //   ⚠️ 只在这一刻（回调里）才置真——不能在 `get()` **之前**置，否则快照本身没有封面（上一轮的病）。
-      this.snapshotFlight = true;
       // ★★★ 2026-10-18（用户第十轮：「收起过程中**按钮/封面又成了两个**」）：
       //   快照已经进手 ⇒ 接下来屏上由**快照层**代表一切（`beginSnapshotShrink()`），
       //   页面上那颗真封面必须让位，否则就是"快照一颗 + 真封面一颗"。
@@ -4465,7 +4400,7 @@ export struct PlaybackPage {
       //      闂?闂傚倸妫欓崕濂革綖閸ヮ剙绠涢柣鏂垮槻缂嶄線鏌涢弽銊у缂佽精椴搁幏鍛村即閻愬弶鐎搁梻?1~2 闁汇埄鍨庨崒婊呮啰闂傚倸鐗勯崹鑲╂崲閺囥垺鍎庨柡宥庡亝缁茶鈽夐幘宕囆ч柍褜鍓欑换鎴澪ｉ幋锔藉剭闁告洦鍋呰ぐ銉╂煟閹炬瀚惂渚€鎮橀悙鎻掆偓鍫曞焵?
       //   闂佸疇娉曟刊瀵哥箔?**婵犮垺鍎肩划鍓ф喆閿曞倸缁╂い鏍ㄧ懅閻熸繈寮堕埡鍌滎灱缂佺粯鐗楃粙澶愬焵椤掑倵鍋?*闂佹寧绋戦悧鍡涙偩閻樺灚鍟哄ù锝呪偓鐔稿发闂備緡鍋€閸嬫捇鏌涢弽銊у⒊闁活厽鍎抽銉╁礋閸撲胶顦梻渚囧弿缁叉儳顪?`morphLand()` 婵炴潙鍚嬬喊宥嗕繆閹间焦鍎庨梻鈧幇顔拘㈤梺鍦帛閸旀洘鏅堕悩鐢电缂備焦锚缁旀挳鏌?
       //      闂?`closeFullScreenPlayback()` 闂傚倸娲犻崑鎾绘偡閺囨碍顦风紒?闁哄鏅滈敋婵犫偓椤忓棔娌柡鍥╁仧绾惧鏌?闁荤姍鍥ㄦ暠濠⒀勭矒閺佸秵寰勯崱妤侇仸 闁荤喐鐟ゅ鎺旂箔閸涘瓨顥?`if` 闂佹眹鍔岀€氼亞绱為崨顖滅＞妞ゆ棁銆€閸?
-      if (err !== null && err !== undefined && pixmap === undefined) {
+      if (err !== null && err !== undefined) {
         Logger.warn(PlaybackPage.logTag,
           'RzdShrinkOverlay root snapshot failed, fallback: ' + JSON.stringify(err));
         // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-17闂?*闂佸搫鐗滈崗娑氬垝閵娾晛绀嗙紓浣姑竟鍫ユ煟閵娿儱顏╅柛銊ラ椤垼顦撮柛?*闂佹寧绋戦¨鈧紒鍙樺嵆瀵噣鎮╅崹顐ｇ彧闂佹眹鍔岀€氼剟濡甸幋鐘冲闁靛闄勯弳婊堟煛?`nav.pop()`闂佹寧绋戦悧濠偽涢妶鍡樺妞ゆ巻鍋撴繝褉鍋撻梺鎸庣☉椤р偓缂?
@@ -5056,18 +4991,10 @@ export struct PlaybackPage {
 
   /** True when the wide split panel layout should be used (param or wide window). */
   private usePanelLayout(): boolean {
-    // ★★★ 2026-10-21（真机横屏 823x363 两轮修正）：
-    //   参考工程的宽屏并排 = **左「封面 + 控制」/ 右「歌词 + 底栏」**；本仓对应物**就是**
-    //   `panelControlContent()`：
-    //     `Row(space 56){ Column{ MusicPlayInfoBlock({panelLayout:true}) }.layoutWeight(1) |
-    //                     Column{ LyricsComponent({panelBottomBar:true}) }.layoutWeight(1) }`
-    //   它原来只给 PC 面板用 ⇒ 横屏被 `usePanelLayout()` 里的 `landscape` 判进来过（那是碰巧对的），
-    //   我上一轮把横屏摘掉后落到 `GridRow` 分支（那边 `showControlArea: false`）
-    //   ⇒ 甲方看到的「左侧没有控件」。
-    //   ⇒ 现在按参考工程只认宽度：**≥600vp 一律走 panel 并排**（横屏、平板都算宽），
-    //     `panelLayout`（真 PC 面板）也仍然走它。竖屏手机（≈421vp）逐像素不变。
-    //   排查关键字：`logBranchSurface('panel')` / `('wide')` / `('phone')`。
-    return this.panelLayout || this.expandState.windowWidthVp >= PlaybackPage.WIDE_LAYOUT_MIN_W_VP;
+    const size = this.windowInfo.windowSize;
+    const landscape: boolean = size.width > size.height && size.height > 0;
+    return this.panelLayout || (landscape &&
+      this.breakpointEnv.widthBreakpoint !== WidthBreakpoint.WIDTH_SM);
   }
 
   /**
@@ -5103,11 +5030,6 @@ export struct PlaybackPage {
    *   `_recover/logic-src/闂佺儵鏅╅崰妤呮偉閿濆鐓?闁诲海顢婂Λ鍕儓閸℃稒顥堥柕蹇婂墲缁惰尙绱撴担鍝勬瀺缂?闂佸搫鍊藉Λ鍕閹版澘鐐婇柛娆嶅劤閻熴垹螖閻樺弶婀伴柡?md` 闁?闂侀潧妫楅懟顖炲垂娴犲绠叉い鏇楀亾闁革絾鎮傚畷锝夋偐椤旂懓浜剧€广儱鍟犻崑?
    */
   private usesPhoneSwiperLayout(): boolean {
-    // ★ 2026-10-21：宽屏/横屏（≥600vp）走左右并排，**不再**挂手机那套 Swiper + `LyricFloatLayer`
-    //   （那套自带一个封面浮层，和并排版式的封面会叠成两个）。
-    if (this.expandState.windowWidthVp >= PlaybackPage.WIDE_LAYOUT_MIN_W_VP) {
-      return false;
-    }
     if (this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_SM) {
       return true;
     }
@@ -5142,12 +5064,9 @@ export struct PlaybackPage {
         this.panelControlContent()
       } else {
         Stack({ alignContent: Alignment.TopStart }) {
-          // ★★★ 2026-10-21（照参考工程 `PlayerView.ets`：`isWideWindow(w >= 600)` ⇒ 左右并排）：
-          //   原门槛是「非 SM，且非（MD 且矮屏）」—— 而横屏 823x363 正好是 MD+矮屏 ⇒ 被排除
-          //   ⇒ 掉进手机 Swiper + 浮层封面那套 ⇒ 竖向放不下、还和别的层各画一个封面。
-          //   现在只认宽度：≥600vp 就走**左右并排**（左：封面+信息；右：歌词），
-          //   与原平板分支**同一段代码**，只把门槛换成参考工程那条。竖屏手机（≈421vp）不受影响。
-          if (this.expandState.windowWidthVp >= PlaybackPage.WIDE_LAYOUT_MIN_W_VP) {
+          if (!(this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_SM ||
+            (this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_MD &&
+              this.breakpointEnv.heightBreakpoint === HeightBreakpoint.HEIGHT_SM))) {
             // 濡ょ姷鍋犲▍鏇烆熆?濠碘剝顨呴惌鍌氼焽娴煎瓨鏅繛鍡欘仧idRow 閻庡綊娼荤粻鎴ｃ亹閹间礁绀嗛柛鈩冾焽閸╁鏌ㄥ☉妯煎闁汇劍绻堝Λ?| 濠殿喗绻傞惌渚€鎯佸┑瀣櫖濠㈣埖绋撶粈澶婎渻閵堝懐鍩ｉ柛?padding 闁荤姳璁查弲娆戠礊閸涱垳纾兼繛鍡樺灩閸╃姴鈽夐幘顖氫壕 TopArea
             Column() {
               GridRow({
@@ -5817,39 +5736,11 @@ export struct PlaybackPage {
     //    闂佺厧鍟块張顒€鈻嶅▎鎾村殞闂婎偒鍘鹃杈┾偓鍨緲椤戝洭寮潏銊р枖濠电姴娲﹀?*闁汇埄鍨介梽鍕嫻娴兼潙绀傞柕澹懎鐐婇梺?*闂佹眹鍔岀€氼亞鎮潏鈺€娌柛灞剧箘椤︿即鎮归幇鍓佺Ф缂佽鲸鐟﹂幆鏃堝即閳ユ剚妫?+ 闂佸憡鐟﹂悧鐐寸珶婵犲嫪娌柛宀嬪缁€鍡涙煥濞戞鐒风紒缁樼墵閺屽瞼浠﹂懖鈺冾啍闂佸綊鏅茬欢姘跺焵椤掆偓缁绘垵危閹达箑违?
   }
 
-  /**
-   * 宽屏/横屏并排（panel）版式的三档内距 —— **矮窗必须收**，否则一坨。
-   *
-   * ★★★ 2026-10-21（真机横屏 823×363「还是一坨」）：面板版式原来沿用平板数值
-   *   `Row({space:56})` + `padding({top:80, bottom:48})` ⇒ 363 高的窗口里先被吃掉 128vp，
-   *   剩下的才给「封面 + 歌名 + 进度条 + 控件」。
-   *   无界那边（`PlayerPage.playerPane` → `flatPane` + `wideLyricsPane`）在宽屏下没有这么厚的内距，
-   *   内容直接铺在顶栏之下。⇒ 这里按窗口高度分两档：矮窗（HEIGHT_SM）用 24/12/12，其余保持平板值。
-   */
-  private isShortWindowLayout(): boolean {
-    return this.breakpointEnv.heightBreakpoint === HeightBreakpoint.HEIGHT_SM;
-  }
-
-  /** 并排两栏之间的间距（vp）。 */
-  private panelPaneGapVp(): number {
-    return this.isShortWindowLayout() ? 24 : 56;
-  }
-
-  /** 并排时左栏上内距（vp）。 */
-  private panelPaneTopPadVp(): number {
-    return this.isShortWindowLayout() ? 12 : 80;
-  }
-
-  /** 并排时左栏下内距（vp）。 */
-  private panelPaneBottomPadVp(): number {
-    return this.isShortWindowLayout() ? 12 : 48;
-  }
-
   /** Wide split panel layout: cover + controls on the left, lyrics + dual-action bar on the right. */
   @Builder
   private panelControlContent() {
     Stack({ alignContent: Alignment.TopStart }) {
-      Row({ space: this.panelPaneGapVp() }) {
+      Row({ space: 56 }) {
         Column() {
           MusicPlayInfoBlock({
             state: this.state,
@@ -5860,12 +5751,7 @@ export struct PlaybackPage {
           })
         }
         .layoutWeight(1)
-        // ★ 2026-10-21：横屏走的是 panel 分支，而 `logLayoutBoxes()` 原来只挂在手机分支的节点上
-        //   ⇒ 横屏从来没打过 `[RzdPlayerGeom]`。这里补一个，横屏几何也能进应用内日志。
-        .onAreaChange((): void => {
-          this.logLayoutBoxes();
-        })
-        .padding({ top: this.panelPaneTopPadVp(), bottom: this.panelPaneBottomPadVp() })
+        .padding({ top: 80, bottom: 48 })
 
         Column() {
           LyricsComponent({

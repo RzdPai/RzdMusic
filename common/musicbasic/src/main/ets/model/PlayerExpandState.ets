@@ -462,23 +462,7 @@ export class PlayerExpandState {
    *   鍑犱綍浣滃簾鏃舵渶瀹规槗鍗″湪鍗婅矾 鈥斺€?鑰?鐩存帴鎽婂紑"姝ｆ槸鏈€瀹夊叏鐨勮惤鐐广€?
    */
   private abortTransitionOnResize(): void {
-    // ★★★ 2026-10-21（真机：**横屏打开播放页 → 转竖屏，封面错位**）：
-    //   上一次量到的封面锚点（`bigX/bigY/bigSize`）属于**旧窗口**，旋转后仍被拿去算几何
-    //   ⇒ 竖屏里 `x` 变成负值、封面偏到一边。尺寸真的变了就**作废锚点**，
-    //   让几何退回"按新窗口算"那条路，等新节点的 `onAreaChange` 再上报。
-    this.bigX = 0;
-    this.bigY = 0;
-    this.bigSize = 0;
-    this.bigNodeKnown = false;
     if (this.morphStage !== MorphStage.ENTERING) {
-      // 已落位的页面：桥接层几何同样作废，直接落位到"已展开"（等价无界 handleWindowResize）
-      if (this.morphBridging()) {
-        this.morphReset();
-      }
-      this.morphSettleOpen();
-      Logger.info(PlayerExpandState.logTag,
-        `RzdMorphResize w=${this.windowWidthVp.toFixed(0)} h=${this.windowHeightVp.toFixed(0)} ` +
-          `big-anchor invalidated, settle open`);
       return;
     }
     Logger.warn(PlayerExpandState.logTag,
@@ -1147,10 +1131,6 @@ export class PlayerExpandState {
   private static readonly COVER_EDGE_CAP_VP: number = 480;
   /** 鍏滃簳灏侀潰杈归暱涓嬮檺锛堟棤鐣?`COVER_EDGE_MIN = 200`锛夈€?*/
   private static readonly COVER_EDGE_MIN_VP: number = 200;
-  /** 参考工程 `PlayerView.COVER_BLOCK_CHROME = 84`：封面块里除封面以外占的高度（vp）。 */
-  private static readonly COVER_BLOCK_CHROME_VP: number = 84;
-  /** 参考工程 `COVER_SIZE_MIN = 120`：上面那道「按封面区高度收紧」的下限（vp）。 */
-  private static readonly COVER_FIT_HEIGHT_MIN_VP: number = 120;
   /** 鍏滃簳灏侀潰杈归暱 = 绐楀彛鐭竟鐨勮繖涓瘮渚嬶紙鏃犲疄娴嬫椂鐨勯噺绾т及璁★紱浠呭厹搴曪紝姝ｅ父璺緞鐢ㄤ笉鍒帮級銆?*/
   private static readonly COVER_EDGE_FALLBACK_RATIO: number = 0.62;
   /** `fitPlayerOverlay` 鐨勯珮搴﹂绠楁墸鍑忛」锛堟棤鐣岋細`availH 鈭?2路(gap + metaH + 8)`锛夈€?*/
@@ -1868,35 +1848,6 @@ export class PlayerExpandState {
     if (edge < 0) {
       edge = 0;
     }
-    // ★★★ 2026-10-21（甲方：「PuraXMax 这种阔屏竖屏下，封面把歌名/歌词/进度条压在一起」）：
-    //   **按"封面区高度"再收一道** —— 逐字照抄参考工程（同一血脉，无界播放页即由此而来）
-    //   `PlayerView.coverBoxSize()` 的最后一步：
-    //     `if (area > 0) size = min(size, round(area) - COVER_BLOCK_CHROME)`
-    //     （`COVER_BLOCK_CHROME = 84`，下限 `COVER_SIZE_MIN = 120`）
-    //   它治的正是我们这个病：上一步只按 `availH - 2*(gap+metaH+inset)` 收，
-    //   而真正分给封面区的只有 `availH - chromeTotal`（FULL 档 250）——
-    //   阔屏竖屏窗口矮时前者更大 ⇒ 封面比自己的框还高 ⇒ 溢出压到控件上。
-    //   ⚠️ 只在"框比封面矮"时才生效 ⇒ 手机竖屏（框 456 > 封面 328）逐像素不变。
-    //   排查关键字：`[RzdCoverFit]`。
-    const boxH: number = this.estBoxHVp();
-    let fitClamped: boolean = false;
-    if (boxH > 0) {
-      // ★ 2026-10-21（真机横屏日志 `win=823x363 usableH=241.7 chromeTotal=218.0 estBoxH=23.7`）：
-      //   横屏时 `boxH` 连 84 都不到（甚至为负）⇒ 旧写法 `byHeight > 0` 直接放行，
-      //   封面还是画 200 ⇒ 必然压满整屏。**框小到装不下时也要收到下限**，让溢出尽可能小。
-      const byHeight: number = Math.round(boxH) - PlayerExpandState.COVER_BLOCK_CHROME_VP;
-      const want: number = byHeight > PlayerExpandState.COVER_FIT_HEIGHT_MIN_VP ?
-        byHeight : PlayerExpandState.COVER_FIT_HEIGHT_MIN_VP;
-      if (want < edge) {
-        edge = want;
-        fitClamped = true;
-      }
-    }
-    if (fitClamped) {
-      Logger.info(PlayerExpandState.LOG_TAG,
-        `[RzdCoverFit] byHeight boxH=${boxH.toFixed(1)} win=${w.toFixed(0)}x${h.toFixed(0)} ` +
-        `edge=${edge.toFixed(1)} chromeTotal=${this.chromeTotalVp().toFixed(1)} tier=${this.chromeTier}`);
-    }
     // 鈶?`metaY`锛坄curMetaY = 0` 鈬?"浠庡唴瀹归《杈瑰線涓嬫帹"锛夊啀琚笂鐣屽す浣?
     const metaYRaw: number = edge / 2 + gap + metaH / 2;
     const bound: number = (availH / 2 - metaH / 2) - inset;
@@ -2345,18 +2296,6 @@ export class PlayerExpandState {
   public sourceBarOpacity(): number {
     if (this.shrinkHidesBar) {
       return 0;
-    }
-    // ★★★ 2026-10-21（真机：**首页看不到播放条**，要"打开一次播放器再关掉"它才出现）：
-    //   下面那条公式里 `morphP` 默认是 **1**，一旦有任何一个交接标志（`sourceBarHidden` /
-    //   `miniOut` / `hdsBarSuppressed`）在启动时就残留为真，就会算出 `1 − 1/T = 0`
-    //   ⇒ 播放条被判定"该藏"。而把播放页开关一次会走 `morphReset()`，标志被清掉 ⇒ 条又出现，
-    //   正好是甲方描述的现象。
-    //   ⇒ 判据补一条：**没有正在进行的形变阶段**（`NONE`/`OPEN`，即播放页没在飞）时，
-    //   残留标志一律不许藏条。真会话（ENTERING/LEAVING/LANDING）仍按原公式算。
-    const sessionStage: boolean = this.morphStage === MorphStage.ENTERING ||
-      this.morphStage === MorphStage.LEAVING || this.morphStage === MorphStage.LANDING;
-    if (!sessionStage) {
-      return 1;
     }
     if (!(this.sourceBarHidden || this.miniOut || this.hdsBarSuppressed || this.morphSessionDriving())) {
       return 1;
