@@ -650,15 +650,6 @@ export struct PlaybackPage {
    *   小歌词的位置现在由歌名行那条流决定，**不再有任何间距/钳制常数**。
    */
   private static readonly MINI_LYRIC_OPACITY: number = 0.55;
-
-  /**
-   * 播放页宿主：`false` = **壳层浮层**（照参考工程 `playerSheet()` 半模态：关闭即整块卸载，
-   * 不会留快照/克隆残留）；`true` = `NavDestination` 路由页（旧结构）。
-   *
-   * ⚠️ 必须与 `products/default/src/main/ets/pages/Index.ets` 的 `PLAYER_ROUTE_MODE` **同值**。
-   * 回退（浮层出问题时）：两处一起改回 `true`。
-   */
-  private static readonly PLAYER_ROUTE_HOST: boolean = false;
   /** 闁诲繐绻愮换鎴︽偤閺囩姵瀚氱€广儱鎷嬮崯鍥煕閿濆啫濡挎繛鍫熷灩缁辨帡宕熼鍜佸仺 id闂佹寧绋戦悧鍡氥亹瑜忕槐?{@link PlaybackPage.logLayoutBoxes} 闂備焦褰冪换鎴犵矈閹绢喗鍋ㄦい顓熷笧缁€澶娾槈閹惧磭孝鐎殿噮鍓氱粙澶嬫償濠靛洤搴婃繛杈剧稻濞茬喖鍩€椤掍焦顫楃紒棰濆亰閺佸秵寰勯崼姘壕?*/
   private static readonly MINI_LYRIC_BOX_ID: string = 'rzd_page0_mini_lyric_box';
 
@@ -1409,13 +1400,6 @@ export struct PlaybackPage {
     //   ⇒ 栈顶必须 `pop(false)`；非栈顶才 remove，校验返回值，为 0 时兜底 pop。
     let removed: number = -1;
     let removeMode: string = 'none';
-    // ★★★ 2026-10-21（结构切换 · 照参考工程）：播放页宿主改成**壳层浮层**
-    //   （`Index` 里 `if (appState.isShowPlay && !PLAYER_ROUTE_MODE) { 浮层 }`，
-    //   等价参考工程的 `playerSheet()` 半模态）。关闭 = `isShowPlay=false` ⇒ 整块卸载，
-    //   快照/克隆/路由全部随之消失 ⇒「退出后满屏封面残留」从结构上不可能再发生。
-    //   ⇒ 浮层模式下**绝不能 pop 路由**：此时 `pageIndexInfos` 是首页栈，pop 会关掉首页。
-    //   回退：把本文件 `PLAYER_ROUTE_HOST` 与 `Index.PLAYER_ROUTE_MODE` 一起改回 `true`。
-    if (PlaybackPage.PLAYER_ROUTE_HOST) {
     try {
       if (index >= 0) {
         if (index === top) {
@@ -1440,9 +1424,6 @@ export struct PlaybackPage {
       } catch (inner) {
         this.closeDiagnostic(`route-remove-fallback-failed error=${inner}`, path);
       }
-    }
-    } else {
-      this.closeDiagnostic(`overlay-close host=overlay stack=${names.length}`, path);
     }
     try {
       this.stopGeoDriver();

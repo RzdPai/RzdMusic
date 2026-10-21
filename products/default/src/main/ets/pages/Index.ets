@@ -268,7 +268,7 @@ const SHRINK_OVERLAY_Z_INDEX: number = 130;
  * 鈿狅笍 **鍥為€€鏂规硶**锛氭妸杩欓噷鏀瑰洖 `false` 鍗冲彲鍥炲埌"澹冲眰娴眰"閭ｆ潯宸查獙璇佸彲鐢ㄧ殑璺?
  *    锛堟诞灞備唬鐮佷笌鍏嬮殕灞傞兘杩樺湪锛岄殢鍖呯紪璇戯紝涓嶇敤閲嶆柊鎼級銆?
  */
-const PLAYER_ROUTE_MODE: boolean = false;
+const PLAYER_ROUTE_MODE: boolean = true;
 
 /**
  * 鎾斁椤佃矾鐢卞弬鏁帮紙瀵规爣鍙嶇紪璇戦噷鐨?`param.pull`锛夈€?
