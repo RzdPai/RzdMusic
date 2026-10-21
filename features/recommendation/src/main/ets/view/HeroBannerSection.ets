@@ -510,10 +510,40 @@ owPlayingCoverUrl），**不是**实时读在播歌曲 ——
    * 写死尺寸在平板上会明显偏小。
    * @returns 卡片宽度（vp）。
    */
+  /** 大卡宽度的下限（vp）：再挤也别缩成一条。 */
+  private static readonly MIN_CARD_WIDTH_VP: number = 140;
+
   private cardWidth(): number {
-    return this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ? 187 :
+    const want: number = this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ? 187 :
       new BreakpointType(223, 223, 292, 292, 203).getWidthValueWithHeightSM(this.breakpointEnv.widthBreakpoint,
         this.breakpointEnv.heightBreakpoint);
+    // ★★★ 2026-10-21（真机：横屏转回竖屏后，首页第一张大卡变成"整屏宽"的大封面，
+    //   把 hero 行和底部迷你条都顶掉）：
+    //   `cardWidth()` 只吃 `breakpointEnv`（ArkUI 的 BREAK_POINT 环境值），旋转后它可能**还是上一档**
+    //   ⇒ 竖屏 363vp 的窗口按 292 宽出卡 ⇒ 溢出画面。
+    //   ⇒ 再按**实测窗口宽**夹一道（破折点错了也不会画错尺寸）：
+    //   卡宽 ≤ 窗口宽 − 左右两侧 gutter。
+    const win: number = this.liveWindowWidthVp();
+    if (win <= 0) {
+      return want;
+    }
+    const maxW: number = Math.max(HeroBannerSection.MIN_CARD_WIDTH_VP, win - 2 * this.homeScrollGutterH());
+    return Math.min(want, maxW);
+  }
+
+  /**
+   * @returns 实测窗口宽（vp，0 = 还没量到）。
+   *
+   * 与 `breakpointEnv` 的区别：这个来自 `WindowInfo.windowSize`（`windowSizeChange` 实时写），
+   * 旋转/分屏后**立刻**是真实值；破折点环境值可能滞后一档，所以尺寸要用它兜底。
+   */
+  private liveWindowWidthVp(): number {
+    const size = this.windowInfo.windowSize;
+    const px: number = size !== undefined && size !== null ? size.width : 0;
+    if (px <= 0) {
+      return 0;
+    }
+    return this.getUIContext().px2vp(px);
   }
 
   /**
