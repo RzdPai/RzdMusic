@@ -240,6 +240,13 @@ export struct PlaybackPage {
    */
   private meshTrackKey: string = '';
   /** 闂佺懓绠嶉崹鐟懊瑰Ο鑽ゎ浄闁靛牆娲ら·鍌炴煥濞戞ɑ缍丮eshCoverBg` 闂傚倸鐗忔慨鎾偩閻樺灚鍠嗛柨鏇楀亾鐟滄澘鍊块弻灞筋吋閸℃鍘愭繛鎴炴尭閿曪絿妲愰崼鏇熸櫖鐎光偓閸愮偓缍勯梻渚囧弿缂嶄線宕抽悜鑺ュ剭?`@Monitor`闂佹寧绋戦ˇ顓㈠焵?*/  @Local meshSrcVersion: number = 0;
+  /**
+   * 无界 `publishCoverHidden()` 的等价物：关闭一开始就置真 ⇒ 播放页自己那颗封面立即不画。
+   *
+   * 目的只有一个：**关闭动画期间/之后屏上不能有"活的封面"**，否则最后一帧会留在壳层上
+   * （= 甲方报的「退出播放器封面遮挡」）。复位点在 `onAppear`。
+   */
+  @Local coverPublishHidden: boolean = false;
   /** 横屏左栏封面区的实测盒尺寸（vp）——见 `flatLandscapeCoverEdgeVp()`。 */
   @Local flatCoverBoxWVp: number = 0;
   @Local flatCoverBoxHVp: number = 0;
@@ -1306,6 +1313,12 @@ export struct PlaybackPage {
   private beginCloseGuard(path: string): number {
     this.clearCloseGuard();
     this.closePath = path;
+    // ★★★ 2026-10-21（照无界 `closeWithAnimation` 的第一行 `publishCoverHidden()`）：
+    //   关闭一开始就把**播放页自己那颗封面**压掉（`coverPublishHidden=true`），
+    //   后面无论是 ③ 的 pixmap 收缩还是 ② 的反形变，屏上都不会再有一张"活的封面"留在最后
+    //   ⇒ 从结构上消掉「退出后满屏封面遮挡」。
+    //   重新打开时在 `onAppear`（`resetPublishCoverHidden`）复位。
+    this.coverPublishHidden = true;
     this.closeToken = ++PlaybackPage.closeSerial;
     PlaybackPage.closeOwner = this.closeToken;
     PlaybackPage.ownerInstance = this.closeInstance;
@@ -7415,6 +7428,8 @@ export struct PlaybackPage {
             //     `syncLyricMorphToPage()` 闂佺偨鍎查弻锟犲焵?闂佹悶鍎虫慨宕囨嫻?*闂佸憡鑹炬總鏃傜博鐎涙鈻旀い蹇撳閸ょ姴顫楃紒妯哄濠殿喒鏅滈幏鍛煥閸愨晞鍚梺鍦焾閸婅棄霉閸ヮ剙绫嶉柡鍫㈡暩閻﹀秹鎮烽弴姘鳖槮濞寸姵绋掔粙澶愬焵椤掆偓閳?*
             //     闂佹寧绋戝濉outToAppear`闂佹寧绋戦¨鈧紒杈ㄧ箖缁嬪濡堕崪浣剐熼棅顐㈡搐閹虫﹢濡磋箛娑樿Е閻忕偠鍋愰閬嶆煕濞嗘瑧鍒扮紒鍓佸仱閺佸秹宕奸敐搴㈢秳闂備緡鍙忕徊濂告煂濠婂牆妫橀悷娆忓閵嗗﹪鏌ｉ妸銉ヮ仾闁轰胶鍋ら弻灞剧節韫囨洜顦梺?
             this.syncLyricMorphToPage('appear');
+    // 每次进入播放页都复位「关闭时压掉封面」的开关（无界 `publishCoverHidden` 的对偶）。
+    this.coverPublishHidden = false;
             // 闂佸疇娉曟刊瀵哥箔?闁哄鏅滈悷銈囩博閹绢喖鐭?*闂婎偄娲ら幊姗€濡磋箛娑欏仼婵炲棗绻戦煬顒€顭块懜鐢靛⒌婵?*闂佹寧绋掗悺鐚粂ncLyricMorphToPage()` 闂?閻庤鐡曠亸娆戝垝閿涘嫧鍋撻棃娑氱Ш缂?闂佸搫鍟﹢鍦?*闂佸搫鍟犻弲鐘诲焵椤戣棄浜?*闂?
             //   闂?闂佺厧鎼崐濠氬磻閿濆鐓傜€广儱鎳愮槐锕傛煕濮橆剛鍑圭紒妤€顦遍幏瀣矙婢跺摜涓嶉梺闈╄礋閸斿繗妫㈤梻鍌氬€荤换婵嬫嚈閹达附鈷掗悗娑櫱氶崑?闁哄鏅滈悷锕€顭囬婊勫暫濞达絽婀卞﹢瀛樻叏閿濆懐绠叉い?`onAppear` 闂備緡鍠栭埀顒傚櫏濞诧絾绻濇繛鎰╁€曢崰鏇㈡煏?
             this.lyricMorphVisible = false;
@@ -8196,7 +8211,7 @@ export struct PlaybackPage {
           //   闂佸疇娉曟刊瀵哥箔?婵炴垶鎸搁敃銉︽叏閵堝鐓㈤柍杞拌兌閹藉秹鏌ㄥ☉妯荤秮.id` / `onAreaChange`闂?*婵炴垶鎸哥粔纾嬨亹?opacity 閻熸粍婢樺畷顒勫箹?*闂佹寧绋戦惉濂稿矗鎼达絾鏆滈柟闂寸濞呫倗鈧數澧楅〃鍛村春?闂佺繝鐒﹂幐鍫曞焵?
           // ★ 2026-10-18（用户第九/十轮）：**只在"快照已经进手"之后**才把真封面藏掉。
           //   上一轮用 `!isClosing`（在拍快照**之前**就置真）⇒ 快照里没有封面 ⇒ "一关就封面消失"。
-          .opacity(this.expandState.realCoverVisible() && !this.snapshotFlight ? 1 : 0)
+          .opacity(this.expandState.realCoverVisible() && !this.snapshotFlight && !this.coverPublishHidden ? 1 : 0)
           // 闂?婵炴垶鎸搁敃銉︽叏閵堝鐓㈤柍杞拌兌閹藉秹鏌熺喊鍗炲闁糕晛鏈璇测枎閹捐櫕顏為梺鎸庣☉閻楀﹤螞閵堝鍋╅悘鐐跺亹閻﹀秹鏌￠崟闈涚仴妞も晩鍋婇幆鍕冀瑜忓﹢鎾煠婵傚绨荤紒璁崇劍缁嬪绻濋崘銊愭捇鏌ㄥ☉娆戞憿floatingCover.onAreaChange 闂?publishMorphTargets`闂?
           .id(PLAYER_BIG_COVER_ID)
           .onAreaChange((_oldValue: Area, newValue: Area): void => {
