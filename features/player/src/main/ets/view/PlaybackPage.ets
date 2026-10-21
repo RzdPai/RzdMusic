@@ -4524,15 +4524,29 @@ export struct PlaybackPage {
    * 婵炴垶鎸撮崑鎾绘偣瑜旈弨杈ㄦ櫠閿旇姤浜ゆ繛鎴烆殘閻ㄦ垵霉閻樺搫鐓愭俊顐熸櫈缁犳稑螖鐎ｎ剛顦╅悗鍨婵倝鎮ラ敐鍥╃當妞ゆ巻鍋撶€规洖瀚粙澶嬪緞鎼搭喗鏂€闂?`fb=`闂佹寧绋戦ˇ顐﹀闯?**婵炴垶鎸撮崑鎾寸箾閸″繐澧查柛鈺佹嚇瀹曞爼骞嗚閻ㄦ垿鏌ゅ畷鍥ㄦ珪婵犫偓閸涙潙绀勫Δ锕佸劵濞夊弶绻涚仦鍕╁€涘▔鏌ユ⒑椤愮喎浜鹃梺?*闂?
    * @param reason 闂備緡鍋€閸嬫捇鏌涢弽銊уⅹ閻㈩垼鍋婂畷鍫曟偑閸涱垳顦╅梺娲诲弾閸樹粙鎮ラ敐鍥╅┏闁规儳鎳愮粈澶娒归崗闂翠孩缂佺粯蓱缁傚秶鈧絺鏅滈浠嬫煛閸愶箑鍔氱紒缁樻閺?
    */
+  /**
+   * 快照拿不到时的收尾 —— **逐字照搬无界 `closeWithAnimation` 的失败支**。
+   *
+   * 无界（`wujie126.pa:200775-200844` + 回调 `:216340-216397`）只分三支：
+   * ① `lyricsOnly` ⇒ `nav.pop(false)`；
+   * ② `pullMode && onReverseMorph(myMorphSnap)` ⇒ 反形变（**不 pop**）；
+   * ③ 其余：`getComponentSnapshot(PLAYER_ROOT_ID, (err, pixmap) => { if (err) { warn; nav.pop(); return; } … })`
+   *    —— **快照失败就直接 pop，不演动画**。
+   * ★★★ 2026-10-21（甲方：「第一次关闭播放器没有动画」）：本仓原来在这里跑的是
+   *   "拿真页面做 live 收缩"（无界根本没有这条），既不是无界的动画，又会留下最后一帧
+   *   （= 退出后满屏封面残留）。⇒ 改成无界第 ③ 支：**快照失败不演动画，直接收尾**。
+   * 排查关键字：`snapshot-failed-plain-close`。
+   * @param reason 失败原因（写进持久诊断）
+   */
   private closeLiveMorphFallback(reason: string): void {
-    this.closeDiagnostic(`live-fallback reason=${reason}`, 'fallback');
-    Logger.warn(PlaybackPage.logTag,
-      `RzdShrinkOverlay fallback 闂?live morph (${reason})`);
+    this.closeDiagnostic(`snapshot-failed-plain-close reason=${reason}`, 'fallback');
     PlaybackPage.closeFallbackReason = reason;
-    // `closeFullScreenPlayback()` 闂佹眹鍔岀€氼噣顢栭崶銊р枖闁逞屽墴閺屽棝骞樼紒姗嗘П闁诲繐绻楁ご绋课?`isClosing`闂佹寧绋戦懟顖滄崲閳ь剙顪冮妶鍥╁笡闁哄倷绀侀锝夊焵椤掑嫬绠ョ€广儱鐗忕粻鑽も偓鐢靛椤ㄥ懘鐛幘璇参?
     this.isClosing = false;
-    this.closeFullScreenPlayback();
+    // 直接收尾（等价无界 `nav.pop()`）：`finishCloseGuard` 负责 isShowPlay=false + 删路由 + reset + 归位开关。
+    this.finishCloseGuard(this.closeToken, true);
   }
+
+
 
   private closeFullScreenPlayback(): void {
     if (this.isClosing) {
