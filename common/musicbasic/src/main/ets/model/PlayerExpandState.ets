@@ -1131,6 +1131,10 @@ export class PlayerExpandState {
   private static readonly COVER_EDGE_CAP_VP: number = 480;
   /** 鍏滃簳灏侀潰杈归暱涓嬮檺锛堟棤鐣?`COVER_EDGE_MIN = 200`锛夈€?*/
   private static readonly COVER_EDGE_MIN_VP: number = 200;
+  /** 参考工程 `PlayerView.COVER_BLOCK_CHROME = 84`：封面块里除封面以外占的高度（vp）。 */
+  private static readonly COVER_BLOCK_CHROME_VP: number = 84;
+  /** 参考工程 `COVER_SIZE_MIN = 120`：上面那道「按封面区高度收紧」的下限（vp）。 */
+  private static readonly COVER_FIT_HEIGHT_MIN_VP: number = 120;
   /** 鍏滃簳灏侀潰杈归暱 = 绐楀彛鐭竟鐨勮繖涓瘮渚嬶紙鏃犲疄娴嬫椂鐨勯噺绾т及璁★紱浠呭厹搴曪紝姝ｅ父璺緞鐢ㄤ笉鍒帮級銆?*/
   private static readonly COVER_EDGE_FALLBACK_RATIO: number = 0.62;
   /** `fitPlayerOverlay` 鐨勯珮搴﹂绠楁墸鍑忛」锛堟棤鐣岋細`availH 鈭?2路(gap + metaH + 8)`锛夈€?*/
@@ -1847,6 +1851,31 @@ export class PlayerExpandState {
     }
     if (edge < 0) {
       edge = 0;
+    }
+    // ★★★ 2026-10-21（甲方：「PuraXMax 这种阔屏竖屏下，封面把歌名/歌词/进度条压在一起」）：
+    //   **按"封面区高度"再收一道** —— 逐字照抄参考工程（同一血脉，无界播放页即由此而来）
+    //   `PlayerView.coverBoxSize()` 的最后一步：
+    //     `if (area > 0) size = min(size, round(area) - COVER_BLOCK_CHROME)`
+    //     （`COVER_BLOCK_CHROME = 84`，下限 `COVER_SIZE_MIN = 120`）
+    //   它治的正是我们这个病：上一步只按 `availH - 2*(gap+metaH+inset)` 收，
+    //   而真正分给封面区的只有 `availH - chromeTotal`（FULL 档 250）——
+    //   阔屏竖屏窗口矮时前者更大 ⇒ 封面比自己的框还高 ⇒ 溢出压到控件上。
+    //   ⚠️ 只在"框比封面矮"时才生效 ⇒ 手机竖屏（框 456 > 封面 328）逐像素不变。
+    //   排查关键字：`[RzdCoverFit]`。
+    const boxH: number = this.estBoxHVp();
+    let fitClamped: boolean = false;
+    if (boxH > 0) {
+      const byHeight: number = Math.round(boxH) - PlayerExpandState.COVER_BLOCK_CHROME_VP;
+      if (byHeight > 0 && byHeight < edge) {
+        edge = byHeight > PlayerExpandState.COVER_FIT_HEIGHT_MIN_VP ?
+          byHeight : PlayerExpandState.COVER_FIT_HEIGHT_MIN_VP;
+        fitClamped = true;
+      }
+    }
+    if (fitClamped) {
+      Logger.info(PlayerExpandState.LOG_TAG,
+        `[RzdCoverFit] byHeight boxH=${boxH.toFixed(1)} win=${w.toFixed(0)}x${h.toFixed(0)} ` +
+        `edge=${edge.toFixed(1)} chromeTotal=${this.chromeTotalVp().toFixed(1)} tier=${this.chromeTier}`);
     }
     // 鈶?`metaY`锛坄curMetaY = 0` 鈬?"浠庡唴瀹归《杈瑰線涓嬫帹"锛夊啀琚笂鐣屽す浣?
     const metaYRaw: number = edge / 2 + gap + metaH / 2;
