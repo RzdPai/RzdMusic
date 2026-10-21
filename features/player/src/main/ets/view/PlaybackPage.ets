@@ -240,6 +240,9 @@ export struct PlaybackPage {
    */
   private meshTrackKey: string = '';
   /** 闂佺懓绠嶉崹鐟懊瑰Ο鑽ゎ浄闁靛牆娲ら·鍌炴煥濞戞ɑ缍丮eshCoverBg` 闂傚倸鐗忔慨鎾偩閻樺灚鍠嗛柨鏇楀亾鐟滄澘鍊块弻灞筋吋閸℃鍘愭繛鎴炴尭閿曪絿妲愰崼鏇熸櫖鐎光偓閸愮偓缍勯梻渚囧弿缂嶄線宕抽悜鑺ュ剭?`@Monitor`闂佹寧绋戦ˇ顓㈠焵?*/  @Local meshSrcVersion: number = 0;
+  /** 页面根节点上次量到的尺寸（vp）——只为判断"窗口真的变了"，见 `refreshBgMeshOnResize()`。 */
+  private lastRootAreaWVp: number = 0;
+  private lastRootAreaHVp: number = 0;
   /**
    * 闁宠棄鎳夊Σ鍕煡閸涱亝顫?2026-10-17闁?*濞ｅ浂鍠撻埀顒€鑻惈宥咁嚕閳ь剚娼婚崶鈹炬煠濞戞搩鍘藉Σ鍛婄▔婵犱胶顏卞Λ锝嗙墬閻℃洟鎯冮崟顖ｆ澒闁肩懓鐪伴埀?*闁?
    *
@@ -5889,6 +5892,23 @@ export struct PlaybackPage {
   }
 
   /**
+   * 窗口尺寸变化后重刷背景网格 —— 对应无界 `PlayerPage.refreshBgCache`。
+   *
+   * ★★★ 2026-10-21（真机：**竖屏打开播放页 → 切横屏，背景直接消失**）：
+   *   背景是 `MeshCoverBg({ src: meshSrc, srcVersion: meshSrcVersion, … })`，它只认这个版本令牌；
+   *   窗口一变，那层画布会被重建，但令牌没变 ⇒ 不再出图（屏上就是"没有背景"）。
+   *   ⇒ 这里只 bump 令牌（不重新下载、不重新取色），让 `MeshCoverBg` 用同一张 PixelMap 重新出图。
+   *   排查关键字：`[RzdBgPhase] refresh-on-resize`。
+   */
+  private refreshBgMeshOnResize(): void {
+    if (this.meshSrc === undefined) {
+      return;
+    }
+    this.meshSrcVersion = this.meshSrcVersion + 1;
+    appendPlayLog(`[RzdBgPhase] refresh-on-resize ver=${this.meshSrcVersion}`);
+  }
+
+  /**
    * 闁宠棄鎳夊Σ鍕煡閸涱亝顫?2026-10-17闁?*閻犳亽鍔戦妴澶愭閵忋垻绉归柡宥呭悑缁喚绱撻幘宕囨憼** 闁炽儲鏌￠埀?濞ｅ浂鍠撻埀顒€鑻惈宥咁嚕閳ь剟鎯冮崟顒侇槯闁稿﹥鐟﹀Σ鎼佹嫅濠靛﹤顥忛柕鍡楃▌缁?
    *
    * ## 濞戞捁妗ㄧ划鍫熺▕閸繄娼旂€殿喒鍋撻柡鍐煐濡叉悂鎷戝┑濠傤棌
@@ -7589,6 +7609,22 @@ export struct PlaybackPage {
       // 闁哄鐗嗗﹢閬嶅疾椤愩倖鍟戝ù锝囶焾椤ュ懘鏌ㄥ☉妯煎婵炴挸澧介幉鎾箳閺冣偓閺嗙娀鏌涘顒€顏╂繛瀛橆焽娴狅箓宕掑┑鍡橆唶闁汇埄鍨界拋锝囨鏉堛劎鈻旂€广儱娲﹂弳?clipShape闂佹寧绋掗懝楣冩偩閻樺啿顕辨慨妯诲墯濞差剟鏌?borderRadius闂?
       // 闂佸吋婢樻總鏃傜箔閺嶎偀鍋撻悷鏉挎殶婵炲牊鍨奸妵鎰板閵忕姌锕傛倵闂堟稓绉虹紓宥呯墢閹风娀顢樺┑鍫㈡瀫闂侀潻璐熼崝宥呂涢妶鍥ㄥ闁诡垎灞拘ｉ梺鍝勫暢閸╂牠鎯€閸涱厸鏋栭柡鍥ュ灮瀹曪綁鎮归崶锔剧瓘缂?
       .clip(this.expandState.morphClipping())
+      // ★ 2026-10-21（真机：竖屏打开 → 切横屏，背景消失）：根节点尺寸真的变了就重刷背景网格
+      //   （等价无界 `PlayerPage.refreshBgCache`）。只 bump 令牌，不动 `meshSrc`。
+      .onAreaChange((_oldArea: Area, area: Area): void => {
+        const w: number = areaLengthToVp(area.width);
+        const h: number = areaLengthToVp(area.height);
+        if (w <= 0 || h <= 0) {
+          return;
+        }
+        const changed: boolean = Math.abs(w - this.lastRootAreaWVp) > 1 ||
+          Math.abs(h - this.lastRootAreaHVp) > 1;
+        this.lastRootAreaWVp = w;
+        this.lastRootAreaHVp = h;
+        if (changed) {
+          this.refreshBgMeshOnResize();
+        }
+      })
       // 闂佽桨鐒﹂幐鎶藉Υ婢跺瞼纾介柍鍝勫€归弶?+ 婵炶揪绲界粔鏈电昂闂佹寧绋掑畝绋款焽閵堝拋娼伴柕蹇婃閸?scale=1 / translate=0闂佹寧绋戞總鏃傜箔鐏炶В鏌﹂柍鈺佸暞缁犳帡寮堕埡鍌滄噧妞ゃ劍绮撳畷婵嬪Ω瑜庨弳浼存煛閸愩劎鍩ｉ柍褜鍓氶崝鏇㈠磿濮樿鲸顫曢柣妯夸含椤忛亶鏌?
       //
       // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-16闂佹寧绋戦悧蹇涘矗鎼淬劌绠规い鎺嶇劍閿熴儵鏌ｉ敐鍛伇婵?*闂佸搫瀚崕宕囨閿熺姵鐓ユ慨妯哄船娴?*闂佹寧绋戦¨鈧紒?
