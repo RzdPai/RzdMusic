@@ -199,6 +199,13 @@ export struct PlaybackPage {
   @Local isTablet: boolean = true;
   /** Inverse tablet flag for lyric column variants. */
   @Local isTabletFalse: boolean = false;
+  /**
+   * 宽屏/横屏并排版式的宽度门槛（vp）。
+   *
+   * 逐值照搬参考工程 `ui/Layout.ets`：`BP_MEDIUM = 600`，`isWideWindow(w) = w >= BP_MEDIUM`。
+   * ≥ 600 ⇒ 左右并排（左：封面+信息；右：歌词），竖屏手机（≈421vp）不受影响。
+   */
+  private static readonly WIDE_LAYOUT_MIN_W_VP: number = 600;
   /** When true, renders the wide split panel layout (no top bar, custom paddings). */
   @Param panelLayout: boolean = false;
   /** Swiper page index (lyrics vs main stack on some layouts). */
@@ -5039,10 +5046,13 @@ export struct PlaybackPage {
 
   /** True when the wide split panel layout should be used (param or wide window). */
   private usePanelLayout(): boolean {
-    const size = this.windowInfo.windowSize;
-    const landscape: boolean = size.width > size.height && size.height > 0;
-    return this.panelLayout || (landscape &&
-      this.breakpointEnv.widthBreakpoint !== WidthBreakpoint.WIDTH_SM);
+    // ★★★ 2026-10-21（真机横屏 823x363：屏上两个封面 + 控件被挤掉）：
+    //   原来这里把**横屏**也判成 panel（`landscape && 不是 SM`），而横屏手机的宽度档恰好是 MD
+    //   ⇒ `panelControlContent()` 画一套、`usesPhoneSwiperLayout()` 同时为真又挂上
+    //   `LyricFloatLayer()`（它自带封面浮层）⇒ 两套叠在一起。
+    //   参考工程（无界播放页同一血脉）横屏/宽屏只有一个分支：`isWideWindow(w >= 600)` ⇒ 左右并排。
+    //   ⇒ 本函数只留给**真正的 PC 面板**（`panelLayout`）。
+    return this.panelLayout;
   }
 
   /**
@@ -5078,6 +5088,11 @@ export struct PlaybackPage {
    *   `_recover/logic-src/闂佺儵鏅╅崰妤呮偉閿濆鐓?闁诲海顢婂Λ鍕儓閸℃稒顥堥柕蹇婂墲缁惰尙绱撴担鍝勬瀺缂?闂佸搫鍊藉Λ鍕閹版澘鐐婇柛娆嶅劤閻熴垹螖閻樺弶婀伴柡?md` 闁?闂侀潧妫楅懟顖炲垂娴犲绠叉い鏇楀亾闁革絾鎮傚畷锝夋偐椤旂懓浜剧€广儱鍟犻崑?
    */
   private usesPhoneSwiperLayout(): boolean {
+    // ★ 2026-10-21：宽屏/横屏（≥600vp）走左右并排，**不再**挂手机那套 Swiper + `LyricFloatLayer`
+    //   （那套自带一个封面浮层，和并排版式的封面会叠成两个）。
+    if (this.expandState.windowWidthVp >= PlaybackPage.WIDE_LAYOUT_MIN_W_VP) {
+      return false;
+    }
     if (this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_SM) {
       return true;
     }
@@ -5112,9 +5127,12 @@ export struct PlaybackPage {
         this.panelControlContent()
       } else {
         Stack({ alignContent: Alignment.TopStart }) {
-          if (!(this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_SM ||
-            (this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_MD &&
-              this.breakpointEnv.heightBreakpoint === HeightBreakpoint.HEIGHT_SM))) {
+          // ★★★ 2026-10-21（照参考工程 `PlayerView.ets`：`isWideWindow(w >= 600)` ⇒ 左右并排）：
+          //   原门槛是「非 SM，且非（MD 且矮屏）」—— 而横屏 823x363 正好是 MD+矮屏 ⇒ 被排除
+          //   ⇒ 掉进手机 Swiper + 浮层封面那套 ⇒ 竖向放不下、还和别的层各画一个封面。
+          //   现在只认宽度：≥600vp 就走**左右并排**（左：封面+信息；右：歌词），
+          //   与原平板分支**同一段代码**，只把门槛换成参考工程那条。竖屏手机（≈421vp）不受影响。
+          if (this.expandState.windowWidthVp >= PlaybackPage.WIDE_LAYOUT_MIN_W_VP) {
             // 濡ょ姷鍋犲▍鏇烆熆?濠碘剝顨呴惌鍌氼焽娴煎瓨鏅繛鍡欘仧idRow 閻庡綊娼荤粻鎴ｃ亹閹间礁绀嗛柛鈩冾焽閸╁鏌ㄥ☉妯煎闁汇劍绻堝Λ?| 濠殿喗绻傞惌渚€鎯佸┑瀣櫖濠㈣埖绋撶粈澶婎渻閵堝懐鍩ｉ柛?padding 闁荤姳璁查弲娆戠礊閸涱垳纾兼繛鍡樺灩閸╃姴鈽夐幘顖氫壕 TopArea
             Column() {
               GridRow({
