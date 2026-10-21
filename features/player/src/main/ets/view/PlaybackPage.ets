@@ -967,6 +967,27 @@ export struct PlaybackPage {
       `estBoxH=${this.expandState.estBoxHVp().toFixed(1)} ` +
       `gapSwiper want=${gapWanted.toFixed(1)} got=${gapGot.toFixed(1)} ` +
       `gapScrub want=${scrubWanted.toFixed(1)} got=${this.boxH(PlaybackPage.CHROME_SCRUB_GAP_ROW_ID).toFixed(1)}`);
+
+    // ★ 2026-10-21（甲方：PuraXMax 阔屏竖屏下封面/歌词/进度条挤在一起）：上面这些**只有 hilog 能看**，
+    //   真机拿不到 ⇒ 同一条关键几何再写一份到**应用内日志**（按窗口尺寸+档位去重，一次尺寸只落一行）。
+    //   grep 关键字：`[RzdPlayerGeom]`。
+    //   判读：`usableH` 是扣掉上下让位后的可用高，`chromeTotal` 是控制区应占高，
+    //   二者之差 `estBoxH` 就是封面区**应得**的高度；`coverRectH` 是封面实际占的高度
+    //   ⇒ 只要 `coverRectH + coverY > estBoxH`，就是"封面比自己的框还高"，会压到歌名/进度条。
+    const geomKey: string = `${this.expandState.windowWidthVp.toFixed(0)}x` +
+      `${this.expandState.windowHeightVp.toFixed(0)}/tier${this.expandState.chromeTier}`;
+    if (geomKey !== this.lastPlayerGeomKey) {
+      this.lastPlayerGeomKey = geomKey;
+      const cover: LyricMorphRect = this.coverLocalRect();
+      appendPlayLog(`[RzdPlayerGeom] win=${geomKey} ` +
+        `usableH=${this.expandState.usableHVp().toFixed(1)} ` +
+        `chromeTotal=${this.expandState.chromeTotalVp().toFixed(1)} ` +
+        `estBoxH=${this.expandState.estBoxHVp().toFixed(1)} ` +
+        `coverLocalY=${cover.y.toFixed(1)} coverLocalH=${cover.height.toFixed(1)} ` +
+        `coverNodeH=${this.boxH(PLAYER_BIG_COVER_ID).toFixed(1)} ` +
+        `metaTitleH=${this.boxH(PLAYER_META_TITLE_ID).toFixed(1)} ` +
+        `gapSwiperGot=${gapGot.toFixed(1)} scrubGot=${this.boxH(PlaybackPage.CHROME_SCRUB_GAP_ROW_ID).toFixed(1)}`);
+    }
   }
 
   /** @returns 闂佸搫鏈崝鎺楁煂濠婂懐纾奸柛鏇ㄤ簼椤?id 闂?*闁诲骸婀遍崑鐐电矈鐎涙﹩娈楁俊顖氭惈椤?*闂佹寧绋戝濡忛梺鎸庣☉閻倿宕抽悜妯尖枖鐎广儱鎳庨悡鍌炲级閳哄倹鐓ユ繛?-1闂佹寧绋戦ˇ顐﹀焵椤掍焦鐓涢柍?闂佸憡鐟禍鐐靛垝閹殿喗瀚氬┑鐘插暞閻掍粙鏌￠崘锕€鍔氱紒缁樻閹粙濡搁敐鍌氫壕?*/
@@ -2092,6 +2113,15 @@ export struct PlaybackPage {
   /** `RzdCoverLocal` 闂佹眹鍔岀€氫即宕虫导鏉戝唨闁汇値鍨拌灐濠电偟绻濈欢銈囨濡炬悞闂佹寧绋戦懟顖炴嚋娴兼潙鐭楁俊顖滅帛椤ρ勬叏閿濆懐绠伴柟鑸靛哺閺屽牓骞嬮幒鏃傜崶闂佸憡鐟﹂敃顐ゆ濠靛洤绶炴い蹇撳濡叉洖霉閸忚壈澹橀柛鈺傜〒娴狅箒绠涢妷褏顦梺?*/
   private static readonly COVER_LOCAL_LOG_MS: number = 100;
   private lastCoverLocalAtMs: number = 0;
+  /**
+   * 几何诊断的**去重键**（`窗口宽x高/宽度断点/控制区档位`）。
+   *
+   * ★ 2026-10-21（甲方：PuraXMax 阔屏竖屏下播放页的封面/歌词/进度条挤在一起）：
+   *   真机拿不到 hilog，所以把 `RzdSwiperBox` 那组几何**同时写进应用内日志**；
+   *   按这个键去重 ⇒ 一次窗口尺寸只落一行，不会刷爆 20k 缓冲。
+   *   排查关键字：`[RzdPlayerGeom]`。
+   */
+  private lastPlayerGeomKey: string = '';
 
   /**
    * 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-16 闂佸搫鍊瑰姗€路閸愵亝瀚氬┑鐘插暞閻掍粙鏌?*闁诲繐绻嬬欢姘焽娴煎瓨濯伴柟瀛樺笧缁夋挳鏌ｉ妸銉ヮ仾妞?闂佸憡鐟ョ粔纾嬨亹婢舵劕绠查柕蹇曞閸ょ娀鎮?*闂?

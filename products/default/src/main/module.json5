@@ -63,7 +63,18 @@
         "exported": true,
         "minWindowHeight": 480,
         "minWindowWidth": 360,
-        "orientation": "follow_desktop",
+        // ★★★ 2026-10-21（甲方：「手机上现在即便关闭旋转锁定也不能横屏，你处理一下」）：
+        //   原来这里是 `follow_desktop`（= 跟随桌面旋转：桌面能转才转）。
+        //   手机/阔屏手机（如 PuraXMax）的桌面本身固定竖屏 ⇒ 本应用被"锁死"在竖屏，
+        //   连系统旋转开关关了也转不了 —— 这正是甲方看到的现象。
+        //   官方《应用配置文件 module.json5 · abilities.orientation》原文：
+        //     · `auto_rotation`：随传感器旋转（不看系统开关）；
+        //     · `auto_rotation_restricted`：**传感器开关打开，方向可随传感器旋转** ← 语义正是
+        //       "关掉旋转锁定才能转、开着锁定就锁住"，与甲方要求一致；
+        //     · `follow_desktop`：跟随桌面的旋转模式。
+        //   官方《横竖屏开发指导》也写「如果应用是可旋转应用，建议配置 auto_rotation_restricted」。
+        //   文档已落 `docs/official-orientation.md`。排查关键字：设置里关掉旋转锁定后转动设备。
+        "orientation": "auto_rotation_restricted",
         "backgroundModes": [
           "audioPlayback"
         ],
