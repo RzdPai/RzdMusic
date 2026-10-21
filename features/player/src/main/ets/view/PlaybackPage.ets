@@ -240,6 +240,9 @@ export struct PlaybackPage {
    */
   private meshTrackKey: string = '';
   /** 闂佺懓绠嶉崹鐟懊瑰Ο鑽ゎ浄闁靛牆娲ら·鍌炴煥濞戞ɑ缍丮eshCoverBg` 闂傚倸鐗忔慨鎾偩閻樺灚鍠嗛柨鏇楀亾鐟滄澘鍊块弻灞筋吋閸℃鍘愭繛鎴炴尭閿曪絿妲愰崼鏇熸櫖鐎光偓閸愮偓缍勯梻渚囧弿缂嶄線宕抽悜鑺ュ剭?`@Monitor`闂佹寧绋戦ˇ顓㈠焵?*/  @Local meshSrcVersion: number = 0;
+  /** 横屏左栏封面区的实测盒尺寸（vp）——见 `flatLandscapeCoverEdgeVp()`。 */
+  @Local flatCoverBoxWVp: number = 0;
+  @Local flatCoverBoxHVp: number = 0;
   /** 页面根节点上次量到的尺寸（vp）——只为判断"窗口真的变了"，见 `refreshBgMeshOnResize()`。 */
   private lastRootAreaWVp: number = 0;
   private lastRootAreaHVp: number = 0;
@@ -5753,22 +5756,153 @@ export struct PlaybackPage {
     //    闂佺厧鍟块張顒€鈻嶅▎鎾村殞闂婎偒鍘鹃杈┾偓鍨緲椤戝洭寮潏銊р枖濠电姴娲﹀?*闁汇埄鍨介梽鍕嫻娴兼潙绀傞柕澹懎鐐婇梺?*闂佹眹鍔岀€氼亞鎮潏鈺€娌柛灞剧箘椤︿即鎮归幇鍓佺Ф缂佽鲸鐟﹂幆鏃堝即閳ユ剚妫?+ 闂佸憡鐟﹂悧鐐寸珶婵犲嫪娌柛宀嬪缁€鍡涙煥濞戞鐒风紒缁樼墵閺屽瞼浠﹂懖鈺冾啍闂佸綊鏅茬欢姘跺焵椤掆偓缁绘垵危閹达箑违?
   }
 
+  /**
+   * @returns 是否矮窗（横屏手机 / 折叠展开的横屏）—— `HEIGHT_SM` 档。
+   *
+   * 无界横屏（`flatPane` 那一面）就是把内容压到很少几行：方封面 + 一行「歌名 + 播放 + 下一首」。
+   */
+  private isShortHeightWindow(): boolean {
+    return this.breakpointEnv.heightBreakpoint === HeightBreakpoint.HEIGHT_SM;
+  }
+
+  /**
+   * 横屏左栏 —— 照无界 `flatPane` 的**封面面**（甲方实拍图）：
+   * 上：正方形封面（居中，边长 = min(盒宽, 盒高)）；下：一行 `歌名/歌手 + 播放圆钮 + 下一首`。
+   * **不含进度条与传输行**（那两面属于 `flatCtl` 打开后的另一面，本轮不做翻面）。
+   */
+  @Builder
+  private flatLandscapePane() {
+    Column() {
+      Column() {
+        Image(this.currentCoverSource())
+          .id(PLAYER_BIG_COVER_ID)
+          .width(this.flatLandscapeCoverEdgeVp() > 0 ? this.flatLandscapeCoverEdgeVp() : StyleConstants.FULL_WIDTH)
+          .height(this.flatLandscapeCoverEdgeVp() > 0 ? this.flatLandscapeCoverEdgeVp() : StyleConstants.FULL_HEIGHT)
+          .objectFit(ImageFit.Cover)
+          .syncLoad(true)
+          .constraintSize({ maxWidth: '100%', maxHeight: '100%' })
+          .borderRadius(this.flatLandscapeCoverEdgeVp() * 0.06)
+          .clip(true)
+          .opacity(this.expandState.realCoverVisible() ? 1 : 0)
+          .onAreaChange((_oldValue: Area, newValue: Area): void => {
+            this.expandState.reportBig(
+              areaLengthToVp(newValue.globalPosition.x),
+              areaLengthToVp(newValue.globalPosition.y),
+              areaLengthToVp(newValue.width),
+              this.flatLandscapeCoverEdgeVp() * 0.06);
+          })
+      }
+      .layoutWeight(1)
+      .width(StyleConstants.FULL_WIDTH)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+      .clip(true)
+      .onAreaChange((_oldValue: Area, newValue: Area): void => {
+        const w: number = areaLengthToVp(newValue.width);
+        const h: number = areaLengthToVp(newValue.height);
+        if (w > 0 && Math.abs(w - this.flatCoverBoxWVp) > 0.5) {
+          this.flatCoverBoxWVp = w;
+        }
+        if (h > 0 && Math.abs(h - this.flatCoverBoxHVp) > 0.5) {
+          this.flatCoverBoxHVp = h;
+        }
+      })
+
+      Row({ space: 12 }) {
+        Column({ space: 2 }) {
+          Text(this.state.getCurrentSongItem()?.title ?? '')
+            .fontSize(20)
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.player_text_primary'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .width(StyleConstants.FULL_WIDTH)
+            .textAlign(TextAlign.Start)
+          Text(this.state.getCurrentSongItem()?.singer ?? '')
+            .fontSize(13)
+            .fontColor($r('app.color.play_text_color'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .width(StyleConstants.FULL_WIDTH)
+            .textAlign(TextAlign.Start)
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        // 播放 / 暂停圆钮（与无界同一形态：白色实心圆 + 深色图标）
+        Stack({ alignContent: Alignment.Center }) {
+          Image(this.state.isPlay ? $r('app.media.ic_public_pause') : $r('app.media.ic_public_play'))
+            .width(22)
+            .height(22)
+            .objectFit(ImageFit.Contain)
+            .fillColor('#FF1F1F23')
+        }
+        .width(48)
+        .height(48)
+        .borderRadius(24)
+        .backgroundColor($r('app.color.player_text_primary'))
+        .onClick((): void => {
+          if (this.state.isPlay) {
+            MediaService.getInstance().pause();
+          } else {
+            void MediaService.getInstance().play();
+          }
+        })
+
+        Image($r('app.media.ic_public_next'))
+          .width(26)
+          .height(26)
+          .objectFit(ImageFit.Contain)
+          .onClick((): void => {
+            MediaService.getInstance().playNextAuto(true);
+          })
+      }
+      .width(StyleConstants.FULL_WIDTH)
+      .padding({ left: 8, right: 8, top: 8, bottom: 8 })
+      .alignItems(VerticalAlign.Center)
+    }
+    .width(StyleConstants.FULL_WIDTH)
+    .height(StyleConstants.FULL_HEIGHT)
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  /** @returns 横屏左栏封面边长（vp）：`min(封面区盒宽, 盒高)`；0 = 还没量到。 */
+  private flatLandscapeCoverEdgeVp(): number {
+    const w: number = this.flatCoverBoxWVp;
+    const h: number = this.flatCoverBoxHVp;
+    if (w <= 0 || h <= 0) {
+      return 0;
+    }
+    return Math.min(w, h);
+  }
+
   /** Wide split panel layout: cover + controls on the left, lyrics + dual-action bar on the right. */
   @Builder
   private panelControlContent() {
     Stack({ alignContent: Alignment.TopStart }) {
-      Row({ space: 56 }) {
+      Row({ space: this.isShortHeightWindow() ? 24 : 56 }) {
         Column() {
-          MusicPlayInfoBlock({
-            state: this.state,
-            metaBlockTranslateYvp: 0,
-            isDismissing: this.isCollapsing(),
-            coverLinearScale: 1,
-            panelLayout: true
-          })
+          // ★★★ 2026-10-21（甲方给了无界横屏实拍图）：横屏左栏 = **flatPane 的那一面** ——
+          //   方封面 + 底部一行「歌名/歌手 + 播放圆钮 + 下一首」，**没有进度条/传输行**
+          //   （进度与传输是另一面，点一下才翻过去）。这里就按这一面画，
+          //   不再用「封面+歌名+进度+传输」竖着堆（那正是"一坨"的来源）。
+          if (this.isShortHeightWindow()) {
+            this.flatLandscapePane()
+          } else {
+            MusicPlayInfoBlock({
+              state: this.state,
+              metaBlockTranslateYvp: 0,
+              isDismissing: this.isCollapsing(),
+              coverLinearScale: 1,
+              panelLayout: true
+            })
+          }
         }
         .layoutWeight(1)
-        .padding({ top: 80, bottom: 48 })
+        .padding({
+          top: this.isShortHeightWindow() ? 12 : 80,
+          bottom: this.isShortHeightWindow() ? 12 : 48
+        })
 
         Column() {
           LyricsComponent({
