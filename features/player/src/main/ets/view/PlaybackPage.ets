@@ -5692,7 +5692,14 @@ export struct PlaybackPage {
               //        闂佸憡鍔曠粔鍫曞极鏉堛劎鐝堕柛鎰皺濠€鎾⒑椤撱劎瀵肩紒鏃€娼欒灋闁圭儤顨忓Λ褔鏌涢妷褍浠滄?闂?闁诲繐绻楁ご绋课ｉ崨濠冨闁绘ê鐏氱粻娆撴煕閹烘挸顥嬫繛?闂佺绻愰悧濠勫垝閿旂晫鈻旈柍褜鍓欓埢鎾跺枈婢跺瞼顦梺缁樺笩濞夋盯骞冨Δ鍛鐎广儱顦藉Λ褔鏌涢妷褍浠滄?闂?
               //   闂佸疇娉曟刊瀵哥箔?`closeWithAnimation()` 闂佺厧顨庢禍婊堟偨椤愶絿鈻旈柕鍫濇喘閻涙捇鏌涜箛鏃傜煀缂併劍濞婇弫宥夊醇閿濆懎甯梺鎼炲劚閿曪箓鎮￠埡鍕╀汗?缂備焦鍔栭〃鍛般亹濞戞矮鐒婇柛婵嗗閸ょ喎鈽夐幘宕囆㈢憸鐗堢叀閹粙濡搁敐鍌氫壕濞达絽鎲¤ぐ銉╂煟閹炬鍟ㄦ禍濂告偣閹扳晛鍔电紒?
               //     闂?闂備緡鍠楅崹婵堢箔婢跺顕辨慨姗嗗幖鎯熼梺鍦檸閸樹粙寮担骞夸簻闂傚牊绋戦獮銏犆归敐鍛疄闁?
-        this.expandState.requestCollapse();
+        // ★★★ 2026-10-21（甲方：「用播放器左上角那个收起按钮退出**没有动画**，系统返回/下拉都有」）：
+        //   无界顶栏的 `onClose` 调的就是 **`closeWithAnimation()`**（`wujie126.pa:200775`），
+        //   也就是和"下拉/返回"同一条关闭链；而本仓这个收起按钮只调了 `requestCollapse()`
+        //   （只置一个"请求收起"的意图，不走形变）⇒ 视觉上就是"一动不动"。
+        //   ⇒ 顶栏收起按钮改调同一条动画关闭链 `closeFullScreenPlayback()`（= 无界第 ② 支反形变）。
+        //   排查关键字：`top-bar-close`。
+        this.closeDiagnostic('top-bar-close');
+        this.closeFullScreenPlayback();
             }
           })
             .padding({
@@ -5940,7 +5947,14 @@ export struct PlaybackPage {
           isShowPlay: this.state.isShowPlay,
           onBackClick: (): void => {
             // 闂?闂佸憡鑹炬總鏃傜箔閸岀偞鏅柛顐犲灩瀵箖鏌熺喊鍗炲婵☆偁鍊濋幃鎯х暆鐎ｎ剛鐛ラ梻鍌氱墢閸嬬偞鏅跺鍫濈闁割煈鍠栬ぐ鐘绘⒒?= 闂婎偄娴傞崑鍡涘矗鎼淬劌缁╅柛鎾茶兌缁辨岸鏌ㄥ☉妯侯殭缂佹顦靛浼搭敍濞戞瑣浠ф俊鐐€濆褔鎳滄导鏉戠煑婵鐗忕粈?
-        this.expandState.requestCollapse();
+        // ★★★ 2026-10-21（甲方：「用播放器左上角那个收起按钮退出**没有动画**，系统返回/下拉都有」）：
+        //   无界顶栏的 `onClose` 调的就是 **`closeWithAnimation()`**（`wujie126.pa:200775`），
+        //   也就是和"下拉/返回"同一条关闭链；而本仓这个收起按钮只调了 `requestCollapse()`
+        //   （只置一个"请求收起"的意图，不走形变）⇒ 视觉上就是"一动不动"。
+        //   ⇒ 顶栏收起按钮改调同一条动画关闭链 `closeFullScreenPlayback()`（= 无界第 ② 支反形变）。
+        //   排查关键字：`top-bar-close`。
+        this.closeDiagnostic('top-bar-close');
+        this.closeFullScreenPlayback();
           }
         })
           .padding({
