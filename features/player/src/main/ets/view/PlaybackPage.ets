@@ -241,12 +241,25 @@ export struct PlaybackPage {
   private meshTrackKey: string = '';
   /** 闂佺懓绠嶉崹鐟懊瑰Ο鑽ゎ浄闁靛牆娲ら·鍌炴煥濞戞ɑ缍丮eshCoverBg` 闂傚倸鐗忔慨鎾偩閻樺灚鍠嗛柨鏇楀亾鐟滄澘鍊块弻灞筋吋閸℃鍘愭繛鎴炴尭閿曪絿妲愰崼鏇熸櫖鐎光偓閸愮偓缍勯梻渚囧弿缂嶄線宕抽悜鑺ュ剭?`@Monitor`闂佹寧绋戦ˇ顓㈠焵?*/  @Local meshSrcVersion: number = 0;
   /**
-   * 无界 `publishCoverHidden()` 的等价物：关闭一开始就置真 ⇒ 播放页自己那颗封面立即不画。
+   * **本仓适配门**（不是无界的语义，无界那个 `publishCoverHidden()` 只是 flat 换面的缩放值，
+   * 见下面 `coverHiddenScale` 的注释）：关闭一开始就置真 ⇒ 播放页自己那几颗封面立即不画。
    *
    * 目的只有一个：**关闭动画期间/之后屏上不能有"活的封面"**，否则最后一帧会留在壳层上
    * （= 甲方报的「退出播放器封面遮挡」）。复位点在 `onAppear`。
    */
   @Local coverPublishHidden: boolean = false;
+  /**
+   * 无界 `ExpandSnapshot.playerCoverHiddenScale` 的忠实移植值
+   * （定义 `wujie126.pa:63684`、写入 `:208381`、消费 `:181875-181899`）。
+   *
+   * ★ 2026-10-21 纠正上一版的误读：它**不是**"把播放页封面压掉"的总开关。
+   *   上游写法 = `publishCoverHidden()` ⇒ `flatWide() && flatCtl() ? FLAT_SWAP_COVER_SCALE(1/3) : 0`，
+   *   只有 flat 换到控制面那一种情况才写 1/3，普通布局恒写 0；消费者是形变同步函数：
+   *   读走后清零，并按这个比例缩小**形变目标封面**（`targetCover.width/height × scale`）。
+   *   本仓 flat 换面不做缩放 ⇒ 这里只按原式算值 + 记进持久诊断，不参与渲染。
+   *   与它无关的"关闭期不给播放页封面出图"是本仓适配门，见上面 `coverPublishHidden`。
+   */
+  private coverHiddenScale: number = 0;
   /** 横屏左栏封面区的实测盒尺寸（vp）——见 `flatLandscapeCoverEdgeVp()`。 */
   @Local flatCoverBoxWVp: number = 0;
   @Local flatCoverBoxHVp: number = 0;
@@ -1319,6 +1332,8 @@ export struct PlaybackPage {
     //   ⇒ 从结构上消掉「退出后满屏封面遮挡」。
     //   重新打开时在 `onAppear`（`resetPublishCoverHidden`）复位。
     this.coverPublishHidden = true;
+    this.publishCoverHidden();
+    this.logCoverOwner('close-begin');
     this.closeToken = ++PlaybackPage.closeSerial;
     PlaybackPage.closeOwner = this.closeToken;
     PlaybackPage.ownerInstance = this.closeInstance;
@@ -1405,6 +1420,7 @@ export struct PlaybackPage {
       this.stopGeoDriver();
       this.expandState.morphReset();
       this.closeDiagnostic('reset', path);
+      this.logCoverOwner('close-finish');
     } catch (error) {
       this.closeDiagnostic(`reset-failed error=${error}`, path);
     } finally {
@@ -4398,7 +4414,17 @@ export struct PlaybackPage {
         return;
       }
       snapshotReturned = true;
-      this.closeDiagnostic(`snapshot-callback ${(err === null || err === undefined) && pixmap !== undefined ? 'ok' : 'miss'}`);
+      // ★★★ 2026-10-21（把 `err` 打全，别再一次只留个 `miss`）：
+      //   `code` 是判死的关键 —— `100001` = 拍的时候 `PLAYER_ROOT_ID` 已不在树上；
+      //   其它 code 按文档处理；`pix=0 code=-` = 回调给了空图（`err` 也没有）。
+      //   排查关键字：`snapshot-callback`。
+      const errCode: string = (err === null || err === undefined) ? '-' :
+        `${(err as BusinessError).code}`;
+      const errMsg: string = (err === null || err === undefined) ? '-' :
+        `${(err as BusinessError).message}`;
+      this.closeDiagnostic(
+        `snapshot-callback ${(err === null || err === undefined) && pixmap !== undefined ? 'ok' : 'miss'} ` +
+          `code=${errCode} pix=${pixmap !== undefined ? 1 : 0} msg=${errMsg}`);
       if (pixmap === undefined && (err === null || err === undefined)) {
         this.closeLiveMorphFallback('snapshot-empty');
         return;
@@ -4559,6 +4585,54 @@ export struct PlaybackPage {
     this.isClosing = false;
     // 第 ② 支：容器反形变缩回（无界 `onReverseMorph` 的等价物）。
     this.closeFullScreenPlayback();
+  }
+
+  /**
+   * 无界 `PlayerPage.publishCoverHidden()`（`wujie126.pa:208361-208401`）的忠实移植。
+   *
+   * 上游只算一个数并塞进共享状态 `ExpandSnapshot.playerCoverHiddenScale`：
+   * ```
+   *   ExpandSnapshot.playerCoverHiddenScale = (flatWide() && flatCtl()) ? FLAT_SWAP_COVER_SCALE : 0;
+   * ```
+   * 消费者是形变同步（`:181875-181899`）：读走后清零，并在 `scale > 0` 时把**形变目标封面**
+   * 按这个比例缩小、同时置 `morphCoverFadeIn = true`。也就是说它服务于 flat 的"封面面 ⇄ 控制面"
+   * 换面——封面面被压到 1/3，关闭/开着那一刻的落点要跟着缩。
+   *
+   * 本仓 flat 换面没有走缩放（A/F 两面是 opacity+scale 交叉），所以这里只做两件事：
+   * 算值 + 记进持久诊断；**不参与任何渲染门**（上一版把它当"压掉封面"用，已在注释里纠正）。
+   * 排查关键字：`publish-cover-hidden`。
+   */
+  private publishCoverHidden(): void {
+    const flatSide: boolean = this.isShortHeightWindow() && this.usePanelLayout();
+    const flatCtl: boolean = this.flatCtlSwapped;
+    this.coverHiddenScale = (flatSide && flatCtl) ? PlaybackPage.FLAT_SWAP_COVER_SCALE : 0;
+    this.closeDiagnostic(
+      `publish-cover-hidden scale=${this.coverHiddenScale.toFixed(3)} flatWide=${flatSide ? 1 : 0} ` +
+        `flatCtl=${flatCtl ? 1 : 0}`);
+  }
+
+  /**
+   * 关闭链的**封面归属**一行判定（写进持久诊断，重启保留）。
+   *
+   * 判读（甲方这次报的「两个封面」就是前两项同时为 1）：
+   * ```
+   *   real=1   播放页自己那颗封面在画（`realCoverVisible()`，含面板/浮动/flat 三处门）
+   *   clone=1  壳层克隆封面在画（`morphOverlayBridging()` ⇒ `Index.MorphCoverClone()`）
+   *   mask=1   本仓"关闭期不给播放页封面出图"的适配门（`coverPublishHidden`）
+   *   swiper/short/panel  当前走的是哪条版式分支（三选一，用于对齐"上一版是哪个方向"）
+   * ```
+   * 排查关键字：`RzdCoverOwner`。
+   */
+  private logCoverOwner(moment: string): void {
+    MusicStoreService.getInstance().appendRuntimeDiagnostic(
+      `RzdCoverOwner ${moment} real=${this.expandState.realCoverVisible() ? 1 : 0} ` +
+        `clone=${this.expandState.morphOverlayBridging() ? 1 : 0} ` +
+        `tail=${this.expandState.morphTailOpacity().toFixed(2)} ` +
+        `snapOwned=${this.expandState.snapshotShrinkOwnedFlag() ? 1 : 0} ` +
+        `mask=${this.coverPublishHidden ? 1 : 0} ` +
+        `stage=${this.expandState.morphStage} p=${this.expandState.morphP.toFixed(3)} ` +
+        `swiper=${this.usesPhoneSwiperLayout() ? 1 : 0} short=${this.isShortHeightWindow() ? 1 : 0} ` +
+        `panel=${this.usePanelLayout() ? 1 : 0}`);
   }
 
 
@@ -5113,6 +5187,8 @@ export struct PlaybackPage {
                     metaBlockTranslateYvp: 0,
                     isDismissing: this.isCollapsing(),
                     coverLinearScale: 1,
+                    // 关闭期由壳层克隆封面独占（见 `MusicPlayInfoBlock.coverMuted` 注释）
+                    coverMuted: this.coverPublishHidden,
                     // 2026-10-17锛歚showControlArea` 榛樿 true 涓斿叏浠撲粠鏈紶杩?false 鈬?灏侀潰椤甸噷浼?*鍐嶇敾涓€浠?*
                     // 鎺у埗鍖猴紙Slider + 5 棰椾紶杈撻敭 + 4 棰楀浘鏍囪锛夛紝涓庡簳閮ㄥ叡浜偅涓€浠介噸鍙犮€傜敤鎴锋姤鐨?绗簩涓帶鍒跺尯"灏辨槸瀹冦€?
                     showControlArea: false
@@ -5709,10 +5785,12 @@ export struct PlaybackPage {
         //   无界顶栏的 `onClose` 调的就是 **`closeWithAnimation()`**（`wujie126.pa:200775`），
         //   也就是和"下拉/返回"同一条关闭链；而本仓这个收起按钮只调了 `requestCollapse()`
         //   （只置一个"请求收起"的意图，不走形变）⇒ 视觉上就是"一动不动"。
-        //   ⇒ 顶栏收起按钮改调同一条动画关闭链 `closeFullScreenPlayback()`（= 无界第 ② 支反形变）。
-        //   排查关键字：`top-bar-close`。
+        //   ⇒ 顶栏收起按钮改走**同一条链** `closeWithAnimation()`：
+        //     ① 先拍 `PLAYER_ROOT_ID` 的 pixmap，交壳层 `MorphShrinkState` 收缩到胶囊再 pop；
+        //     ② 快照失败才落到第 ② 支反形变（`closeFullScreenPlayback()`）。
+        //   排查关键字：`top-bar-close` → `snapshot-request` / `snapshot-callback`。
         this.closeDiagnostic('top-bar-close');
-        this.closeFullScreenPlayback();
+        this.closeWithAnimation();
             }
           })
             .padding({
@@ -6058,6 +6136,8 @@ export struct PlaybackPage {
               metaBlockTranslateYvp: 0,
               isDismissing: this.isCollapsing(),
               coverLinearScale: 1,
+              // 关闭期由壳层克隆封面独占（见 `MusicPlayInfoBlock.coverMuted` 注释）
+              coverMuted: this.coverPublishHidden,
               panelLayout: true
             })
           }
@@ -6109,10 +6189,12 @@ export struct PlaybackPage {
         //   无界顶栏的 `onClose` 调的就是 **`closeWithAnimation()`**（`wujie126.pa:200775`），
         //   也就是和"下拉/返回"同一条关闭链；而本仓这个收起按钮只调了 `requestCollapse()`
         //   （只置一个"请求收起"的意图，不走形变）⇒ 视觉上就是"一动不动"。
-        //   ⇒ 顶栏收起按钮改调同一条动画关闭链 `closeFullScreenPlayback()`（= 无界第 ② 支反形变）。
-        //   排查关键字：`top-bar-close`。
+        //   ⇒ 顶栏收起按钮改走**同一条链** `closeWithAnimation()`：
+        //     ① 先拍 `PLAYER_ROOT_ID` 的 pixmap，交壳层 `MorphShrinkState` 收缩到胶囊再 pop；
+        //     ② 快照失败才落到第 ② 支反形变（`closeFullScreenPlayback()`）。
+        //   排查关键字：`top-bar-close` → `snapshot-request` / `snapshot-callback`。
         this.closeDiagnostic('top-bar-close');
-        this.closeFullScreenPlayback();
+        this.closeWithAnimation();
           }
         })
           .padding({
@@ -6221,6 +6303,15 @@ export struct PlaybackPage {
    */
   private refreshBgMeshOnResize(): void {
     if (this.meshSrc === undefined) {
+      return;
+    }
+    // ★★★ 2026-10-21（真机日志：**一次关闭里 `refresh-on-resize` 刷了 24~28 次**）：
+    //   形变/关闭期间根节点每帧都在换高（`.height(morphClipHeight())` + 缩放/裁剪），
+    //   那不是"窗口换了尺寸"，而是动画在跑。这里重刷 ⇒ `MeshCoverBg` 每帧重建网格背景，
+    //   关闭时背景忽大忽小、看着就像"又一张图跟着播放器走"。
+    //   ⇒ 只在**静止态且没有关闭请求**时刷（竖屏 → 横屏那种真改尺寸都发生在静止态）。
+    //   排查关键字：`refresh-on-resize`。
+    if (this.isClosing || this.expandState.morphContainerActive()) {
       return;
     }
     this.meshSrcVersion = this.meshSrcVersion + 1;
@@ -7575,6 +7666,7 @@ export struct PlaybackPage {
             this.syncLyricMorphToPage('appear');
     // 每次进入播放页都复位「关闭时压掉封面」的开关（无界 `publishCoverHidden` 的对偶）。
     this.coverPublishHidden = false;
+    this.coverHiddenScale = 0;
             // 闂佸疇娉曟刊瀵哥箔?闁哄鏅滈悷銈囩博閹绢喖鐭?*闂婎偄娲ら幊姗€濡磋箛娑欏仼婵炲棗绻戦煬顒€顭块懜鐢靛⒌婵?*闂佹寧绋掗悺鐚粂ncLyricMorphToPage()` 闂?閻庤鐡曠亸娆戝垝閿涘嫧鍋撻棃娑氱Ш缂?闂佸搫鍟﹢鍦?*闂佸搫鍟犻弲鐘诲焵椤戣棄浜?*闂?
             //   闂?闂佺厧鎼崐濠氬磻閿濆鐓傜€广儱鎳愮槐锕傛煕濮橆剛鍑圭紒妤€顦遍幏瀣矙婢跺摜涓嶉梺闈╄礋閸斿繗妫㈤梻鍌氬€荤换婵嬫嚈閹达附鈷掗悗娑櫱氶崑?闁哄鏅滈悷锕€顭囬婊勫暫濞达絽婀卞﹢瀛樻叏閿濆懐绠叉い?`onAppear` 闂備緡鍠栭埀顒傚櫏濞诧絾绻濇繛鎰╁€曢崰鏇㈡煏?
             this.lyricMorphVisible = false;

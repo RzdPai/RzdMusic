@@ -58,6 +58,16 @@ export struct MusicPlayInfoBlock {
   @Param panelLayout: boolean = false;
   /** When false, omits the embedded ControlAreaComponent (external shared control area used instead). */
   @Param showControlArea: boolean = true;
+  /**
+   * 关闭期封口（宿主 `PlaybackPage` 的 `coverPublishHidden`）。
+   *
+   * ★ 2026-10-21（甲方：「点收起按钮关闭播放器会出现两个封面，一个正常飞回去，一个跟随播放器下移」）：
+   *   本仓关闭动画是**壳层克隆封面**在窗坐标里飞到胶囊，播放页这一侧必须一张封面都不出；
+   *   而下面 `.opacity(realCoverVisible() ? 1 : 0)` 只封了"形变相位"那一段——
+   *   `finishCloseGuard` 里 `morphReset()` 把相位写回静止态之后、pop 过渡还没走完的那几帧，
+   *   门会重新打开 ⇒ 面板布局这两处就是"第二张封面跟着播放器下移"的缝。由宿主显式封口。
+   */
+  @Param coverMuted: boolean = false;
 
   /** 共享的展开几何：大封面要把自己的窗口矩形上报进去（封面续飞到歌词页的起点）。 */
   @Local expandState: PlayerExpandState =
@@ -358,7 +368,8 @@ export struct MusicPlayInfoBlock {
         // ★★ 2026-10-15：形变期间由**续飞封面**代表它（续飞封面一直飞到 p=1，真机实测这样最稳）；
         //   形变容器一撤（`realCoverVisible()` = `!morphContainerActive()`）就地交棒 ——
         //   那一刻容器是恒等变换、续飞封面正好落在真实封面上，不会跳，也不会同时出现两个封面。
-        .opacity(this.expandState.realCoverVisible() ? 1 : 0)
+        // ★★★ 2026-10-21：再加宿主封口 `coverMuted`（关闭期恒不画，见 @Param 注释）。
+        .opacity(this.expandState.realCoverVisible() && !this.coverMuted ? 1 : 0)
         // 把大封面的窗口矩形报给共享状态：封面「续飞到歌词页」要靠它当起点。
         // 用 onAreaChange 而不是 getRectangleById —— 后者的单位没有文档保证（实测是 px），
         // 而 onAreaChange 的 globalPosition/width 明确是 vp。
@@ -511,7 +522,8 @@ export struct MusicPlayInfoBlock {
               // ★★ 2026-10-15：形变期间由**续飞封面**代表它（续飞封面一直飞到 p=1，真机实测这样最稳）；
         //   形变容器一撤（`realCoverVisible()` = `!morphContainerActive()`）就地交棒 ——
         //   那一刻容器是恒等变换、续飞封面正好落在真实封面上，不会跳，也不会同时出现两个封面。
-        .opacity(this.expandState.realCoverVisible() ? 1 : 0)
+        // ★★★ 2026-10-21：再加宿主封口 `coverMuted`（关闭期恒不画，见 @Param 注释）。
+        .opacity(this.expandState.realCoverVisible() && !this.coverMuted ? 1 : 0)
               // 同上：面板布局下的大封面也要上报矩形
               .onAreaChange((_oldValue: Area, newValue: Area) => {
                 this.expandState.reportBig(
