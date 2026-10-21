@@ -4528,25 +4528,24 @@ export struct PlaybackPage {
    * @param reason 闂備緡鍋€閸嬫捇鏌涢弽銊уⅹ閻㈩垼鍋婂畷鍫曟偑閸涱垳顦╅梺娲诲弾閸樹粙鎮ラ敐鍥╅┏闁规儳鎳愮粈澶娒归崗闂翠孩缂佺粯蓱缁傚秶鈧絺鏅滈浠嬫煛閸愶箑鍔氱紒缁樻閺?
    */
   /**
-   * 快照拿不到时的收尾 —— **逐字照搬无界 `closeWithAnimation` 的失败支**。
+   * 快照拿不到时的收尾 —— **按无界 `closeWithAnimation` 的第 ② 支做「反形变」**。
    *
-   * 无界（`wujie126.pa:200775-200844` + 回调 `:216340-216397`）只分三支：
-   * ① `lyricsOnly` ⇒ `nav.pop(false)`；
-   * ② `pullMode && onReverseMorph(myMorphSnap)` ⇒ 反形变（**不 pop**）；
-   * ③ 其余：`getComponentSnapshot(PLAYER_ROOT_ID, (err, pixmap) => { if (err) { warn; nav.pop(); return; } … })`
-   *    —— **快照失败就直接 pop，不演动画**。
-   * ★★★ 2026-10-21（甲方：「第一次关闭播放器没有动画」）：本仓原来在这里跑的是
-   *   "拿真页面做 live 收缩"（无界根本没有这条），既不是无界的动画，又会留下最后一帧
-   *   （= 退出后满屏封面残留）。⇒ 改成无界第 ③ 支：**快照失败不演动画，直接收尾**。
-   * 排查关键字：`snapshot-failed-plain-close`。
-   * @param reason 失败原因（写进持久诊断）
+   * 无界的关闭动画只有两条路（`wujie126.pa:200775-200844` + 回调 `:216340-216397`）：
+   * ② `pullMode && ExpandSnapshot.onReverseMorph(myMorphSnap)` ⇒ **容器直接缩回迷你条矩形**（不 pop）；
+   * ③ 其余 ⇒ 拍 `PLAYER_ROOT_ID` 的 pixmap，交**壳层** `onShrinkBack(pixmap, mySrcBox)` 做收缩再 `nav.pop(false)`。
+   * 本仓的 ③ 一直失败（日志 `snapshot-callback miss`），所以动画只能走 ②：让容器按几何缩回。
+   * ★★★ 2026-10-21（甲方：「退出播放器没动画了」）：上一版我把这条路也删了、改成直接收尾 ⇒ 连动画都没了。
+   *   ⇒ 恢复成第 ② 支：调 `closeFullScreenPlayback()`（掐 ticker → 反向形变 → 缩回迷你条 → 收尾）。
+   *   ③ 失败只作为**日志**，不再改变动画路径。
+   * 排查关键字：`reverse-morph-fallback`。
+   * @param reason 为什么没走 pixmap 那条（写进持久诊断）
    */
   private closeLiveMorphFallback(reason: string): void {
-    this.closeDiagnostic(`snapshot-failed-plain-close reason=${reason}`, 'fallback');
+    this.closeDiagnostic(`reverse-morph-fallback reason=${reason}`, 'fallback');
     PlaybackPage.closeFallbackReason = reason;
     this.isClosing = false;
-    // 直接收尾（等价无界 `nav.pop()`）：`finishCloseGuard` 负责 isShowPlay=false + 删路由 + reset + 归位开关。
-    this.finishCloseGuard(this.closeToken, true);
+    // 第 ② 支：容器反形变缩回（无界 `onReverseMorph` 的等价物）。
+    this.closeFullScreenPlayback();
   }
 
 
