@@ -731,23 +731,12 @@ export struct LyricsComponent {
       .layoutWeight(1)
       .width(StyleConstants.FULL_WIDTH)
 
-      if (this.panelBottomBar) {
-        Row({ space: 48 }) {
-          SymbolGlyph($r('sys.symbol.arrow_up_left_and_arrow_down_right'))
-            .fontSize(32)
-            .fontWeight(FontWeight.Regular)
-            .height(32)
-            .fontColor([$r('app.color.play_text_color')])
-          SymbolGlyph($r('sys.symbol.dot_grid_1x2_circle'))
-            .fontSize(32)
-            .fontWeight(FontWeight.Regular)
-            .height(32)
-            .fontColor([$r('app.color.play_text_color')])
-        }
-        .width(StyleConstants.FULL_WIDTH)
-        .height($r('app.float.control_icon_height'))
-        .justifyContent(FlexAlign.End)
-      }
+      // ★★★ 2026-10-21（甲方：「横屏播放页右下角那两个按钮去掉，没用还占空间」）：
+      //   这里原来在 `panelBottomBar` 档画两颗 `SymbolGlyph`（全屏箭头 `arrow_up_left_and_arrow_down_right`
+      //   + 菜单圆点 `dot_grid_1x2_circle`），**两颗都没有 `onClick`** —— 纯占位的死 UI，
+      //   而且吃掉一行 `control_icon_height` 的歌词高度。⇒ 整块删掉。
+      //   `panelBottomBar` 这个参数本身保留：它还在控制横屏歌词的**字号/行距**档
+      //   （见本文件 `lyricFontSize()` / `renderLines()` 里的 0.85 / 0.8 缩放）。
 
       if (this.isShowControl) {
         ControlAreaComponent()

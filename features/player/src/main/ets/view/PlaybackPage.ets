@@ -4649,11 +4649,13 @@ export struct PlaybackPage {
    * 排查关键字：`RzdCoverOwner`。
    */
   private logCoverOwner(moment: string): void {
+    const pixmap: image.PixelMap | undefined = this.morphShrinkState().pixmap;
     MusicStoreService.getInstance().appendRuntimeDiagnostic(
       `RzdCoverOwner ${moment} real=${this.expandState.realCoverVisible() ? 1 : 0} ` +
         `clone=${this.expandState.morphOverlayBridging() ? 1 : 0} ` +
         `tail=${this.expandState.morphTailOpacity().toFixed(2)} ` +
         `snapOwned=${this.expandState.snapshotShrinkOwnedFlag() ? 1 : 0} ` +
+        `snapFlight=${this.snapshotFlight ? 1 : 0} pix=${pixmap !== undefined ? 1 : 0} ` +
         `mask=${this.coverPublishHidden ? 1 : 0} ` +
         `stage=${this.expandState.morphStage} p=${this.expandState.morphP.toFixed(3)} ` +
         `swiper=${this.usesPhoneSwiperLayout() ? 1 : 0} short=${this.isShortHeightWindow() ? 1 : 0} ` +
