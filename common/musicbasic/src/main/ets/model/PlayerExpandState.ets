@@ -4036,6 +4036,18 @@ export class PlayerExpandState {
     if (this.snapshotShrinkOwned) {
       return false;
     }
+    // ★★★ 2026-10-22（甲方：「横屏打开播放器切到竖屏，封面错位」「转屏后退出还留一层封面」）：
+    //   **壳层克隆封面只允许在两个"真在飞"的相位上画**：ENTERING（开）/ LEAVING（关）。
+    //   原来这里没有相位白名单，最后那条兜底（`morphContainerActive() && snapStartW>0 && endCoverSize>0`）
+    //   在 **LANDING 以及"相位卡住"的静止态** 也能为真 ⇒
+    //     · 转屏后几何是上一个方向量到的 ⇒ 克隆层画在**错位的窗口坐标**上（= 甲方截图里那张歪封面）；
+    //     · 关闭/转屏之后它还可能赖着不走 ⇒ 「退出后封面残留」。
+    //   静态位（OPEN / NONE / LANDING）一律不画：那一段由 `realCoverVisible()` 交回页面自己那张。
+    //   上游同构：无界 `floatingCover` 只跟随 morphT 的两个方向跑，落位后由页面自己的封面接管。
+    //   排查关键字：`RzdCoverOwner`（静止态应该是 `clone=0 real=1`）。
+    if (this.morphStage !== MorphStage.ENTERING && this.morphStage !== MorphStage.LEAVING) {
+      return false;
+    }
     // ★★★ 2026-10-19（用户：「打断动画先正常回去、然后黑背景往下走」「关闭时出现两个封面」
     //   「上拉收回还是半透明」——三件事同一个根因）：
     //   **克隆封面层只在"还在飞"的时候画**。`morphOverlayP` 一旦贴在 1（展开落位）就交还
