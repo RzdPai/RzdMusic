@@ -275,17 +275,6 @@ export struct PlaybackPage {
   private lastMeshWindowPxW: number = 0;
   private lastMeshWindowPxH: number = 0;
   /**
-   * 快照收缩期间把**整个播放页**藏起来（`Visibility.Hidden`，仍参与布局与测量）。
-   *
-   * 背景（2026-10-22）：关闭的两条路都会出现"两张封面"——
-   *   · ③ 快照路：pixmap 里有一张 + 活页面自己那张；
-   *   · ② 反形变路：壳层克隆一张 + 活页面一张。
-   * 前者用这个开关把活页面藏掉（pixmap 就是它的图，藏掉无缝）；
-   * 后者由 `realCoverVisible()` 那三道门负责。`onAppear` 复位。
-   * 排查关键字：`RzdCloseShrink page-hidden=1`。
-   */
-  @Local shrinkPageHidden: boolean = false;
-  /**
    * 闁宠棄鎳夊Σ鍕煡閸涱亝顫?2026-10-17闁?*濞ｅ浂鍠撻埀顒€鑻惈宥咁嚕閳ь剚娼婚崶鈹炬煠濞戞搩鍘藉Σ鍛婄▔婵犱胶顏卞Λ锝嗙墬閻℃洟鎯冮崟顖ｆ澒闁肩懓鐪伴埀?*闁?
    *
    * `coverTint` 闁?*閻犳亽鍔戦妴澶愭閵忕姴褰欏ù?*闁汇劌瀚哥槐妾侫ppStorageV2` 闁?`CoverTintState`闁挎稑顧€缁辨繄鈧懓鍟ぐ褔宕?
@@ -1308,6 +1297,18 @@ export struct PlaybackPage {
   // 2500ms is a failure deadline, well beyond snapshot 350ms / live <=460ms
   // plus render/snapshot dispatch. Only normal completion decides animation completion.
   private static readonly CLOSE_WATCHDOG_MS: number = 2500;
+  /**
+   * 关闭时是否走**第 ③ 支**（拍 `PLAYER_ROOT_ID` 的 pixmap，交壳层 `MorphShrinkState` 收缩到胶囊）。
+   *
+   * 现在是 **false**，原因（2026-10-22 回退）：
+   *   · 快照本身是成功的（真机日志 `snapshot-callback … pix=1`，见记忆 §42）；
+   *   · 但本仓的壳层收缩补间从来没在这条路上跑过，一启用就"没有动画"
+   *     （藏活页面、同拍 pop 这两种变体都试过，都是没动画）。
+   *   ⇒ 固定走第 ② 支反形变（甲方两轮确认"有动画"）；快照照拍、结果照记日志，
+   *     等壳层那条补间单独验过再把这个开关打开。
+   *   排查关键字：`snapshot-disabled`。
+   */
+  private static readonly CLOSE_USE_SNAPSHOT_PATH: boolean = false;
   private static closeSerial: number = 0;
   private static closeOwner: number = 0;
   private static instanceSerial: number = 0;
@@ -4450,34 +4451,36 @@ export struct PlaybackPage {
         `${(err as BusinessError).code}`;
       const errMsg: string = (err === null || err === undefined) ? '-' :
         `${(err as BusinessError).message}`;
-      // ★★★ 2026-10-22（真机日志破了这个案子 —— 快照**一直**是成功的）：
-      //   `snapshot-callback miss code=undefined pix=1 msg=undefined`
-      //   ⇒ `pixmap` 有值，只是 `err` 是个"没有 code 的壳"，我们却把它当失败
-      //   ⇒ 每次都退回第 ② 支反形变 ⇒ 屏上"活页面那张 + 壳层克隆那张" = 甲方连报四次的「两个封面」。
-      //   判据**只看 `pixmap`**（§34.3 就写过这条，但下面那个 `if (err …)` 没收干净）。
-      //   排查关键字：`snapshot-callback` 现在应该是 `ok … pix=1`。
-      const snapped: boolean = pixmap !== undefined;
       this.closeDiagnostic(
-        `snapshot-callback ${snapped ? 'ok' : 'miss'} code=${errCode} pix=${pixmap !== undefined ? 1 : 0} msg=${errMsg}`);
-      if (!snapped) {
-        this.closeLiveMorphFallback(`snapFail(${errCode})`);
+        `snapshot-callback ${(err === null || err === undefined) && pixmap !== undefined ? 'ok' : 'miss'} ` +
+          `code=${errCode} pix=${pixmap !== undefined ? 1 : 0} msg=${errMsg}`);
+      // ★★★ 2026-10-22（回退后的闸门）：**③ 快照路暂时不用**。
+      //   真机已经证明快照本身是成功的（`code=undefined pix=1`，见 §42），
+      //   但本仓的壳层收缩补间（`MorphShrinkState` + `Index.ShrinkOverlayHost`）从来没在这条路上跑过，
+      //   一启用就是"没有动画"（连试两版都一样，其中一版还是把活页面藏了也一样）。
+      //   ⇒ 先固定走第 ② 支反形变（甲方两轮确认"有动画"的那条），把快照当成**证据**记在日志里，
+      //     等 ③ 的壳层补间单独验过再开这个开关。
+      //   排查关键字：`snapshot-disabled`（应紧跟在 `snapshot-callback … pix=1` 之后）。
+      if (!(err === null || err === undefined) || pixmap === undefined) {
+        this.closeLiveMorphFallback(`snapshot-unusable(${errCode})`);
         return;
       }
-      // 快照已经进手 ⇒ 屏上由**快照层**代表一切（`beginSnapshotShrink()`），页面侧封面让位。
-      // ⚠️ 只在这一刻才置真：放在 `get()` 之前会让快照本身没有封面。
-      this.snapshotFlight = true;
-      this.coverPublishHidden = true;
-      // ★★★ 2026-10-22（治「两个封面」而不动动画）：快照 = 这一页的图，已经在壳层手里
-      //   ⇒ 把**活页面整页藏起来**（`Visibility.Hidden`，不隐藏布局、不影响 `PLAYER_ROOT_ID` 的测量）。
-      //   屏上只剩那张 pixmap 在往胶囊里缩 ⇒ 结构上不可能出现第二张封面，
-      //   而 pop 仍然等 `shrink` 的 onDone（甲方确认过有动画的那一版）。
-      //   排查关键字：`RzdCloseShrink page-hidden=1`。
-      this.shrinkPageHidden = true;
-      this.closeDiagnostic(`RzdCloseShrink page-hidden=1 pix=1`);
+      if (!PlaybackPage.CLOSE_USE_SNAPSHOT_PATH) {
+        this.closeLiveMorphFallback('snapshot-disabled');
+        return;
+      }
       // ★★★ 2026-10-18（用户第十轮：「收起过程中**按钮/封面又成了两个**」）：
       //   快照已经进手 ⇒ 接下来屏上由**快照层**代表一切（`beginSnapshotShrink()`），
       //   页面上那颗真封面必须让位，否则就是"快照一颗 + 真封面一颗"。
-      //   （置真已经提到上面 `snapped` 那一支里，见本节顶部：判据只看 `pixmap`。）
+      //   ⚠️ 只在这一刻（回调里）才置真——不能在 `get()` **之前**置，否则快照本身没有封面（上一轮的病）。
+      if (err === null || err === undefined) {
+        this.snapshotFlight = true;
+        // ★★★ 2026-10-21：**快照已经进手**才把真封面压掉（快照里本来就带着封面）。
+        //   放在关闭起手会让真页面第一帧就丢掉封面、而克隆层要等下一帧才挂上来
+        //   ⇒ 甲方实测的「封面会先消失一瞬间再出现」。只在③（pixmap 路）生效，
+        //   第 ② 支反形变全程不压（`coverLiveMorphFallback` 里会显式清回 false）。
+        this.coverPublishHidden = true;
+      }
       // 闂佸啿鍘滈崑鎾绘煃閸忓浜?闂佸湱绮崝鎺戭潩閿曞倸绀傞柟鎯板Г閿涙棃鏌￠崘銊ヮ暢婵?*闂佸搫鐗滈崗娑氬垝閵娾晜鍋嬮悷娆忓缁犳帡鏌￠埀顒傛崉閾忕懓鏆?*闂佹寧绋戦悧濠偽涢妶澶嬪仼閻忕偛澧藉楣冩煛?濠电偛鑻ˇ浼寸叓閸垻鐜绘俊銈傚亾鐟?闁哄鏅滈悷銉┿€冨鍫熸櫖閻忕偞鍎抽。鎻捗归悩顔煎姎闁伙絿濮撮埢浠嬪焺閸愨晝鐣抽柡澶嗘櫆閻熴倗鎮柆宥呯煑闁靛鍨崇粈?
       //   闂?闂佽鍘归崹褰捤囬懠顒€瀵查柤濮愬€楅崺鐘绘煛?缂備焦鍔栭〃鍛般亹?chrome 闂佺偨鍎查弻锟犲焵?婵炴垶鎸哥粔鍨椤旇棄绶炵€广儱娲﹂悾閬嶆偣閸ャ劎绠氱紒缁樺灴瀹曞爼鎮欓幓鎺戠稑闂傚倸鍋嗛崢铏圭不閿濆瑙﹂幖娣妸閳ь剙锕鍊熺疀鎼达絿鐛ラ梺绋款儐缁苯锕?闂佸湱铏庨崢浠嬪棘娴ｅ箍浜滈柛顭戝亞閻掕姤绻?闂備緡鍙忕徊鑲╃博鐎涙闄勬俊銈呮噹鐢娊鏌ょ涵鍜佸殝缂?
       //   闂?`morphLand()` 婵炲瓨鍤庨崐娑氭崲閺囩姷纾兼俊顖氭惈閻撴垿鏌?闂?闁哄鏅炲〒鍦礊濮椻偓瀵?*闂佹椿浜為崰鏇㈡?*缂備焦鏌ㄩ鍛村春閵忋倕鍙婇柟顖嗗啯鐦旈梺?
@@ -4487,9 +4490,7 @@ export struct PlaybackPage {
       //      闂?闂傚倸妫欓崕濂革綖閸ヮ剙绠涢柣鏂垮槻缂嶄線鏌涢弽銊у缂佽精椴搁幏鍛村即閻愬弶鐎搁梻?1~2 闁汇埄鍨庨崒婊呮啰闂傚倸鐗勯崹鑲╂崲閺囥垺鍎庨柡宥庡亝缁茶鈽夐幘宕囆ч柍褜鍓欑换鎴澪ｉ幋锔藉剭闁告洦鍋呰ぐ銉╂煟閹炬瀚惂渚€鎮橀悙鎻掆偓鍫曞焵?
       //   闂佸疇娉曟刊瀵哥箔?**婵犮垺鍎肩划鍓ф喆閿曞倸缁╂い鏍ㄧ懅閻熸繈寮堕埡鍌滎灱缂佺粯鐗楃粙澶愬焵椤掑倵鍋?*闂佹寧绋戦悧鍡涙偩閻樺灚鍟哄ù锝呪偓鐔稿发闂備緡鍋€閸嬫捇鏌涢弽銊у⒊闁活厽鍎抽銉╁礋閸撲胶顦梻渚囧弿缁叉儳顪?`morphLand()` 婵炴潙鍚嬬喊宥嗕繆閹间焦鍎庨梻鈧幇顔拘㈤梺鍦帛閸旀洘鏅堕悩鐢电缂備焦锚缁旀挳鏌?
       //      闂?`closeFullScreenPlayback()` 闂傚倸娲犻崑鎾绘偡閺囨碍顦风紒?闁哄鏅滈敋婵犫偓椤忓棔娌柡鍥╁仧绾惧鏌?闁荤姍鍥ㄦ暠濠⒀勭矒閺佸秵寰勯崱妤侇仸 闁荤喐鐟ゅ鎺旂箔閸涘瓨顥?`if` 闂佹眹鍔岀€氼亞绱為崨顖滅＞妞ゆ棁銆€閸?
-      // ⚠️ 下面这一段（`err` 判失败）现在是**死支**：成功与否只看 `pixmap`（见本节顶部），
-      //   `snapped === false` 已经在上面 return 掉了。留着只为读代码时不误会"err 会拦快照"。
-      if (!snapped && (err !== null && err !== undefined)) {
+      if (err !== null && err !== undefined) {
         Logger.warn(PlaybackPage.logTag,
           'RzdShrinkOverlay root snapshot failed, fallback: ' + JSON.stringify(err));
         // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-17闂?*闂佸搫鐗滈崗娑氬垝閵娾晛绀嗙紓浣姑竟鍫ユ煟閵娿儱顏╅柛銊ラ椤垼顦撮柛?*闂佹寧绋戦¨鈧紒鍙樺嵆瀵噣鎮╅崹顐ｇ彧闂佹眹鍔岀€氼剟濡甸幋鐘冲闁靛闄勯弳婊堟煛?`nav.pop()`闂佹寧绋戦悧濠偽涢妶鍡樺妞ゆ巻鍋撴繝褉鍋撻梺鎸庣☉椤р偓缂?
@@ -4502,7 +4503,7 @@ export struct PlaybackPage {
         //     闂備緡鍋€閸嬫捇鏌涢妷褍浠滄鐐存崌瀵敻鍩€椤掑嫬閿ら煫鍥ф捣閻﹀秹鏌涘▎妯圭凹婵″弶鎮傚畷鍫曟倷閹绘帞鍘掗梺鍛婎焽閸犳劕顭囬悽鍛婂剭闁告洦鍣搴ㄦ煙閹殿喖鏋旈柟韫嵆閹潡鎮欓崗澶婁壕?
         //   闂佸疇娉曟刊瀵哥箔?婵犮垺鍎肩划鍓ф喆閿曞倸鍌ㄩ柣鏃堟敱缁€鍫ユ煟閹炬瀚敍瀣煙?`Logger.warn`闂佹寧绋戦懟顖炴嚐閻旂厧绠┑鐘插€搁弬褔鏌涢妷褍孝闁汇埄鍋呭璇测槈濡ゅ啰娈ゆ繛瀵稿Ь閸╂牕螞閳哄嫮鐤€婵°倕顑囩粈鍒濩LO` 闂?`fb=`闂佹寧绋戦¨鈧紒?
         //     **婵炴垶鎸撮崑鎾寸箾閸″繐澧查柛鈺佹嚇瀹曞爼骞嗚缁侇噣鏌涘▎妯虹仩闁搞劎鏅幏?*闂佹寧绋戦悧鎰帮綖?`closeFallbackReason`闂佹寧绋戦ˇ顓㈠焵?
-        this.closeLiveMorphFallback(`snapFail(${err.code})`);
+        this.closeLiveMorphFallback(`snapFail(${errCode})`);
         return;
       }
       this.restorePlaybackWindowChrome();
@@ -4559,13 +4560,6 @@ export struct PlaybackPage {
       });
       PlaybackPage.ev('SQZ', `shrink win=${winW.toFixed(0)}x${winH.toFixed(0)}`);
       this.state.isShowPlay = false;
-      // ★★★ 2026-10-22 第二次修正（甲方：「点击收起按钮关闭，又**没有动画**了」）：
-      //   **不能在这里 pop 路由**。上一版照无界"同一拍 pop"，结果活页面一卸，
-      //   壳层那张 pixmap 的收缩动画也跟着没了（页面卸载会带走它那条补间 / UIContext 的时序）。
-      //   ⇒ 恢复"等 `shrink` 的 onDone 再 pop"（这一版甲方确认过**有动画**），
-      //   而"两张封面"改用**把活页面整页藏起来**解决（见 `shrinkPageHidden`）：
-      //   快照就是这一页的图，藏掉活页、只留 pixmap，视觉上仍是"整页往胶囊里缩"。
-      //   排查关键字：`RzdCloseShrink page-hidden`。
       // 鈽呪槄鈽呪槄 2026-10-17锛堜慨銆岀郴缁熻繑鍥炲叧闂椂宸︿笅寰幆 / 鍙充笅姝屾洸鍒楄〃涓ら鎸夐挳娑堝け銆嶏級
       //   閭ｄ袱棰?`SymbolGlyph` 涓嶆槸琚銆佷篃涓嶆槸鎹簡鍒嗘敮 鈥斺€?瀹冧滑**娌¤繘杩欏紶蹇収**銆?
       //   瀹樻柟 `componentSnapshot` 鏂囨。瀵圭涓変釜鍙傛暟鍘熻瘽锛氥€岃缃槸鍚﹀己鍒剁郴缁熷湪鎴浘鍓嶇瓑寰呮墍鏈夌粯鍒舵寚浠?
@@ -7751,8 +7745,6 @@ export struct PlaybackPage {
     // 每次进入播放页都复位「关闭时压掉封面」的开关（无界 `publishCoverHidden` 的对偶）。
     this.coverPublishHidden = false;
     this.coverHiddenScale = 0;
-    // 快照收缩期间藏页面的开关也要复位，否则下次打开播放页会整页不显示。
-    this.shrinkPageHidden = false;
             // 闂佸疇娉曟刊瀵哥箔?闁哄鏅滈悷銈囩博閹绢喖鐭?*闂婎偄娲ら幊姗€濡磋箛娑欏仼婵炲棗绻戦煬顒€顭块懜鐢靛⒌婵?*闂佹寧绋掗悺鐚粂ncLyricMorphToPage()` 闂?閻庤鐡曠亸娆戝垝閿涘嫧鍋撻棃娑氱Ш缂?闂佸搫鍟﹢鍦?*闂佸搫鍟犻弲鐘诲焵椤戣棄浜?*闂?
             //   闂?闂佺厧鎼崐濠氬磻閿濆鐓傜€广儱鎳愮槐锕傛煕濮橆剛鍑圭紒妤€顦遍幏瀣矙婢跺摜涓嶉梺闈╄礋閸斿繗妫㈤梻鍌氬€荤换婵嬫嚈閹达附鈷掗悗娑櫱氶崑?闁哄鏅滈悷锕€顭囬婊勫暫濞达絽婀卞﹢瀛樻叏閿濆懐绠叉い?`onAppear` 闂備緡鍠栭埀顒傚櫏濞诧絾绻濇繛鎰╁€曢崰鏇㈡煏?
             this.lyricMorphVisible = false;
@@ -8110,7 +8102,7 @@ export struct PlaybackPage {
       // 闂佸疇娉曟刊瀵哥箔?闂婎偄娴傞崑鍡涘矗鎼淬劌鎹?`morphLand()` **婵炴垶鏌ㄩ鍛櫠?*闂佺懓鍢茬粙鍕濞嗘垶鍠?`closeWithAnimation` 闂佹眹鍔岀€氫即濡存惔銏″劅闊洢鍎崇粈鍡涙煃?闂佸搫鐗滈崜鐔肺涢鍌滅閻犲洩寮撳ù鐑芥煛?
       //    闂佹悶鍎查崕鎶藉礄閿涘嫮纾奸煫鍥ㄦ尭閻撳倿鏌熼棃娑卞劀缂佽鲸绻冪粙澶婎吋閸曨厾鐛ラ梺鐟板槻缁夋挳宕虹仦鍓р枖闁逞屽墮椤曪綁鎮╃喊妯绘櫈闂佹悶鍎伴崟姗€鍩€?
       // 闂佸疇娉曟刊瀵哥箔?婵炴垶鎸搁敃锝囩博鐎靛憡鏆滅憸宀€鍒掑☉銏犲強?LEAVING闂佹寧绋戦悧鍡楋耿椤忓牊鍋ㄥù鍏肩懅缁€鍡涙煃?闂佺绻戞繛濠偽涢幘顔肩闁靛ě鍕瘞闂佸搫鐗滈崜婵嬫閳哄倻鈻旂€广儱鎳庣紞鈧悷婊勬緲瀹曨剟骞栭悜钘壩?
-      .visibility(this.expandState.playerPaints() && !this.shrinkPageHidden &&
+      .visibility(this.expandState.playerPaints() &&
         (!this.expandState.morphClipping() || !this.expandState.morphPaintHidden()) ?
         Visibility.Visible : Visibility.Hidden)
       // 闁荤喍妞掔粈浣圭珶閳ь剛绱掗幇顓ф當鐟滅増绋掗〃鍥熼崫鍕靛敽 = 闂佸憡鐟崹鐢革綖鐎ｎ偒娈楁俊顖氭惈椤?/ 缂傚倸鍊甸弲婊堝棘?闂?缂傚倸鍊甸弲婊堝棘娓氣偓瀹曘儲鎯旈姀鈺佸Η婵犻潧鍊芥慨銈呂ｉ幖浣圭劷闁挎繂鎳忛崑銉╂煕濞嗘ê鐏ユい顐㈩儔閹矂鍩℃担钘夌厒
