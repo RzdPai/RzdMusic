@@ -5784,115 +5784,260 @@ export struct PlaybackPage {
     return this.breakpointEnv.heightBreakpoint === HeightBreakpoint.HEIGHT_SM;
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 无界 `PlayerPage.flatPane` 的移植（**结构照搬**，不是自写布局）
+  //
+  // 证据：树/顺序来自 `wujie126.pa:201839-202048`，属性链来自 `:231471-233800`，
+  // 常量真值来自模块 lexenv `:244154-244302` 与 Tokens `:113551-113757`：
+  //   FLAT_SWAP_D = 24 / FLAT_SWAP_COVER_SCALE = 1/3 / FLAT_SWAP_MS = 400
+  //   FLAT_PLAY_SIZE = 40 / HIT = 44 / IMMERSIVE_META_GAP = 1 / IDLE_MS = 5000
+  //   pageSide(w)     = clamp(round(w*0.05/4)*4, 20, 64)          (`:98752` / `:99057`)
+  //   flatCoverEdge() = max(0, min(flatBoxW - 2*pageSide, flatBoxH - 28))   (`:201671`)
+  //   flatMetaSide()  = min(8, pageSide/3)                        (`:201817`)
+  // 两面交叉（`:231650` / `:231944` / `:232364`）：
+  //   A 面（封面）：scale = 1-(1-1/3)*flatT、opacity = 1-flatT、Row translate.y = -24*flatT
+  //   F 面（控制）：translate.y = -24*(1-flatT)、opacity = flatT
+  // 切换驱动（`:210985` / `:215755`）：`setFlatCtl` 用 400ms Curve.Friction 补 `flatT`，
+  //   `flatSwapping` 在 onFinish 里按代次清；`touchFlatCtl` 打开后 5s 自动切回封面面。
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /** `FLAT_SWAP_D`（vp，`:244231`）：两面纵向错位量。 */
+  private static readonly FLAT_SWAP_D_VP: number = 24;
+  /** `FLAT_SWAP_COVER_SCALE`（`:244239` = 1/3）：控制面打开时封面的终态缩放。 */
+  private static readonly FLAT_SWAP_COVER_SCALE: number = 1 / 3;
+  /** `FLAT_SWAP_MS`（`:244235`）：换面补间时长。 */
+  private static readonly FLAT_SWAP_MS: number = 400;
+  /** `FLAT_PLAY_SIZE`（`:244301`）：播放钮字号。 */
+  private static readonly FLAT_PLAY_SIZE_FP: number = 40;
+  /** `HIT`（Tokens `:113596`）：热区边长（外扩到 44×44）。 */
+  private static readonly FLAT_HIT_VP: number = 44;
+  /** `IMMERSIVE_META_GAP`（`:244219`）：歌名/歌手行距。 */
+  private static readonly FLAT_META_GAP_VP: number = 1;
+  /** `IDLE_MS`（`:244225`）：控制面自动收回时长。 */
+  private static readonly FLAT_IDLE_MS: number = 5000;
+
+  /** 封面面↔控制面的补间进度（无界 `flatT`，`:202140`）。 */
+  @Local flatT: number = 0;
+  /** 当前是否停在控制面（无界 `flatCtl`，`:201712`）。 */
+  @Local flatCtlSwapped: boolean = false;
+  /** 换面补间进行中（无界 `flatSwapping`，`:202053`）。 */
+  @Local flatSwapping: boolean = false;
+  /** 换面代次：旧 onFinish 不许清标志（`:210999-211037`）。 */
+  private flatSwapGen: number = 0;
+  /** 控制面自动收回定时器（`touchFlatCtl`，`:215755`）。 */
+  private flatIdleTimer: number = -1;
+
+  /** @returns `pageSide(w)`：页面左右留白（`:98752`，20~64，4 的倍数）。 */
+  private flatPageSideVp(): number {
+    const w: number = this.expandState.windowWidthVp;
+    if (w <= 0) {
+      return 20;
+    }
+    const raw: number = Math.round(w * 0.05 / 4) * 4;
+    return Math.min(64, Math.max(20, raw));
+  }
+
+  /** @returns `flatCoverEdge()`（`:201671`）：封面边长 = min(盒宽 − 2·pageSide, 盒高 − 28)。 */
+  private flatCoverEdgeVp(): number {
+    const byW: number = this.flatCoverBoxWVp - 2 * this.flatPageSideVp();
+    const byH: number = this.flatCoverBoxHVp - 28;
+    return Math.max(0, Math.min(byW, byH));
+  }
+
+  /** @returns `flatMetaSide()`（`:201817`）：meta 行左右内距 = min(8, pageSide/3)。 */
+  private flatMetaSideVp(): number {
+    return Math.min(8, this.flatPageSideVp() / 3);
+  }
+
+  /** 换面（无界 `setFlatCtl`，`:210985`）：400ms Friction 补 `flatT`，按代次清 `flatSwapping`。 */
+  private setFlatCtl(next: boolean): void {
+    if (this.flatCtlSwapped === next) {
+      return;
+    }
+    this.flatCtlSwapped = next;
+    this.flatSwapping = true;
+    const gen: number = ++this.flatSwapGen;
+    try {
+      this.getUIContext().animateTo({
+        duration: PlaybackPage.FLAT_SWAP_MS,
+        curve: Curve.Friction,
+        onFinish: (): void => {
+          if (this.flatSwapGen === gen) {
+            this.flatSwapping = false;
+          }
+        }
+      }, (): void => {
+        this.flatT = next ? 1 : 0;
+      });
+    } catch (err) {
+      this.flatSwapping = false;
+      this.flatT = next ? 1 : 0;
+    }
+  }
+
+  /** 点封面/控制面（无界 `touchFlatCtl`，`:215755`）：切到控制面，5s 后自动收回封面面。 */
+  private touchFlatCtl(): void {
+    this.setFlatCtl(true);
+    if (this.flatIdleTimer !== -1) {
+      clearTimeout(this.flatIdleTimer);
+      this.flatIdleTimer = -1;
+    }
+    this.flatIdleTimer = setTimeout((): void => {
+      this.flatIdleTimer = -1;
+      this.setFlatCtl(false);
+    }, PlaybackPage.FLAT_IDLE_MS);
+  }
+
   /**
-   * 横屏左栏 —— 照无界 `flatPane` 的**封面面**（甲方实拍图）：
-   * 上：正方形封面（居中，边长 = min(盒宽, 盒高)）；下：一行 `歌名/歌手 + 播放圆钮 + 下一首`。
-   * **不含进度条与传输行**（那两面属于 `flatCtl` 打开后的另一面，本轮不做翻面）。
+   * 横屏左栏 = 无界 `flatPane`（`pa:201839-202048`）：
+   * `Stack(TopStart)` 里 A 面（封面 + 一行 meta/播放/下一首）与 F 面（控制区）按 `flatT` 交叉。
    */
   @Builder
-  private flatLandscapePane() {
-    Column() {
+  private flatPane() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      // ───── A 面（`:231505`）：visibility = (!flatCtl || flatSwapping) ? Visible : None；
+      //       zIndex = flatCtl ? 0 : 1
       Column() {
-        Image(this.currentCoverSource())
-          .id(PLAYER_BIG_COVER_ID)
-          .width(this.flatLandscapeCoverEdgeVp() > 0 ? this.flatLandscapeCoverEdgeVp() : StyleConstants.FULL_WIDTH)
-          .height(this.flatLandscapeCoverEdgeVp() > 0 ? this.flatLandscapeCoverEdgeVp() : StyleConstants.FULL_HEIGHT)
-          .objectFit(ImageFit.Cover)
-          .syncLoad(true)
-          .constraintSize({ maxWidth: '100%', maxHeight: '100%' })
-          .borderRadius(this.flatLandscapeCoverEdgeVp() * 0.06)
-          .clip(true)
-          .opacity(this.expandState.realCoverVisible() ? 1 : 0)
-          .onAreaChange((_oldValue: Area, newValue: Area): void => {
-            this.expandState.reportBig(
-              areaLengthToVp(newValue.globalPosition.x),
-              areaLengthToVp(newValue.globalPosition.y),
-              areaLengthToVp(newValue.width),
-              this.flatLandscapeCoverEdgeVp() * 0.06);
-          })
-      }
-      .layoutWeight(1)
-      .width(StyleConstants.FULL_WIDTH)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
-      .clip(true)
-      .onAreaChange((_oldValue: Area, newValue: Area): void => {
-        const w: number = areaLengthToVp(newValue.width);
-        const h: number = areaLengthToVp(newValue.height);
-        if (w > 0 && Math.abs(w - this.flatCoverBoxWVp) > 0.5) {
-          this.flatCoverBoxWVp = w;
-        }
-        if (h > 0 && Math.abs(h - this.flatCoverBoxHVp) > 0.5) {
-          this.flatCoverBoxHVp = h;
-        }
-      })
-
-      Row({ space: 12 }) {
-        Column({ space: 2 }) {
-          Text(this.state.getCurrentSongItem()?.title ?? '')
-            .fontSize(20)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.player_text_primary'))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width(StyleConstants.FULL_WIDTH)
-            .textAlign(TextAlign.Start)
-          Text(this.state.getCurrentSongItem()?.singer ?? '')
-            .fontSize(13)
-            .fontColor($r('app.color.play_text_color'))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width(StyleConstants.FULL_WIDTH)
-            .textAlign(TextAlign.Start)
+        // 封面区（`:231650`）：layoutWeight(1) 居中；scale = 1-(1-1/3)*flatT；opacity = 1-flatT
+        Column() {
+          Image(this.currentCoverSource())
+            .id(PLAYER_BIG_COVER_ID)
+            .width(this.flatCoverEdgeVp() > 0 ? this.flatCoverEdgeVp() : StyleConstants.FULL_WIDTH)
+            .height(this.flatCoverEdgeVp() > 0 ? this.flatCoverEdgeVp() : StyleConstants.FULL_HEIGHT)
+            .objectFit(ImageFit.Cover)
+            .syncLoad(true)
+            .constraintSize({ maxWidth: '100%', maxHeight: '100%' })
+            .borderRadius(this.flatCoverEdgeVp() * 0.06)
+            .clip(true)
+            // 关闭一开始就压掉（`publishCoverHidden` 的等价物），避免退出一帧残留
+            .opacity(this.coverPublishHidden ? 0 : 1)
+            .onAreaChange((_oldValue: Area, newValue: Area): void => {
+              this.expandState.reportBig(
+                areaLengthToVp(newValue.globalPosition.x),
+                areaLengthToVp(newValue.globalPosition.y),
+                areaLengthToVp(newValue.width),
+                this.flatCoverEdgeVp() * 0.06);
+            })
         }
         .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-
-        // 播放 / 暂停圆钮（与无界同一形态：白色实心圆 + 深色图标）
-        Stack({ alignContent: Alignment.Center }) {
-          Image(this.state.isPlay ? $r('app.media.ic_public_pause') : $r('app.media.ic_public_play'))
-            .width(22)
-            .height(22)
-            .objectFit(ImageFit.Contain)
-            .fillColor('#FF1F1F23')
-        }
-        .width(48)
-        .height(48)
-        .borderRadius(24)
-        .backgroundColor($r('app.color.player_text_primary'))
+        .width(StyleConstants.FULL_WIDTH)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+        .scale({
+          x: 1 - (1 - PlaybackPage.FLAT_SWAP_COVER_SCALE) * this.flatT,
+          y: 1 - (1 - PlaybackPage.FLAT_SWAP_COVER_SCALE) * this.flatT
+        })
+        .opacity(1 - this.flatT)
         .onClick((): void => {
-          if (this.state.isPlay) {
-            MediaService.getInstance().pause();
-          } else {
-            void MediaService.getInstance().play();
+          this.touchFlatCtl();
+        })
+        .onAreaChange((_oldValue: Area, newValue: Area): void => {
+          const w: number = areaLengthToVp(newValue.width);
+          const h: number = areaLengthToVp(newValue.height);
+          if (w > 0 && Math.abs(w - this.flatCoverBoxWVp) > 0.5) {
+            this.flatCoverBoxWVp = w;
+          }
+          if (h > 0 && Math.abs(h - this.flatCoverBoxHVp) > 0.5) {
+            this.flatCoverBoxHVp = h;
           }
         })
 
-        Image($r('app.media.ic_public_next'))
-          .width(26)
-          .height(26)
-          .objectFit(ImageFit.Contain)
+        // meta 行（`:231944`）：space 16 / padding L,R = flatMetaSide()、T,B = 12 /
+        //   translate.y = -24*flatT / opacity = 1-flatT
+        Row({ space: 16 }) {
+          Column({ space: PlaybackPage.FLAT_META_GAP_VP }) {
+            Text(this.state.getCurrentSongItem()?.title ?? '')
+              .fontSize(22)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(Color.White)
+              .opacity(0.86)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .width(StyleConstants.FULL_WIDTH)
+              .textAlign(TextAlign.Start)
+            Text(this.state.getCurrentSongItem()?.singer ?? '')
+              .fontSize(14)
+              .fontColor($r('app.color.play_text_color'))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .width(StyleConstants.FULL_WIDTH)
+              .textAlign(TextAlign.Start)
+          }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
+
+          // 播放/暂停（`:232228`）：字号 40 / 热区 44×44
+          Stack({ alignContent: Alignment.Center }) {
+            Image(this.state.isPlay ? $r('app.media.ic_public_pause') : $r('app.media.ic_public_play'))
+              .width(22)
+              .height(22)
+              .objectFit(ImageFit.Contain)
+              .opacity(0.86)
+          }
+          .width(PlaybackPage.FLAT_HIT_VP)
+          .height(PlaybackPage.FLAT_HIT_VP)
+          .borderRadius(PlaybackPage.FLAT_HIT_VP / 2)
+          .backgroundColor($r('app.color.player_text_primary'))
           .onClick((): void => {
-            MediaService.getInstance().playNextAuto(true);
+            if (this.state.isPlay) {
+              MediaService.getInstance().pause();
+            } else {
+              void MediaService.getInstance().play();
+            }
           })
+
+          // 下一首（`:232319`）：28vp、热区 44×44
+          Image($r('app.media.ic_public_next'))
+            .width(28)
+            .height(28)
+            .objectFit(ImageFit.Contain)
+            .opacity(0.86)
+            .onClick((): void => {
+              MediaService.getInstance().playNextAuto(false);
+            })
+        }
+        .width(StyleConstants.FULL_WIDTH)
+        .padding({
+          left: this.flatMetaSideVp(),
+          right: this.flatMetaSideVp(),
+          top: 12,
+          bottom: 12
+        })
+        .alignItems(VerticalAlign.Center)
+        .translate({ y: -PlaybackPage.FLAT_SWAP_D_VP * this.flatT })
+        .opacity(1 - this.flatT)
       }
       .width(StyleConstants.FULL_WIDTH)
-      .padding({ left: 8, right: 8, top: 8, bottom: 8 })
-      .alignItems(VerticalAlign.Center)
+      .height(StyleConstants.FULL_HEIGHT)
+      .visibility(!this.flatCtlSwapped || this.flatSwapping ? Visibility.Visible : Visibility.None)
+      .zIndex(this.flatCtlSwapped ? 0 : 1)
+
+      // ───── F 面（`:232364`）：visibility = (flatCtl || flatSwapping) ? Visible : Hidden；
+      //       translate.y = -24*(1-flatT)；opacity = flatT
+      Column() {
+        Column() {
+          ControlAreaComponent({ showBottomOtherRow: false })
+        }
+        .layoutWeight(1)
+        .width(StyleConstants.FULL_WIDTH)
+        .justifyContent(FlexAlign.Center)
+        .translate({ y: -PlaybackPage.FLAT_SWAP_D_VP * 2 * (1 - this.flatT) })
+        .opacity(this.flatT)
+        .onTouch((event: TouchEvent): void => {
+          if (event.type === TouchType.Down) {
+            this.touchFlatCtl();
+          }
+        })
+      }
+      .width(StyleConstants.FULL_WIDTH)
+      .height(StyleConstants.FULL_HEIGHT)
+      .visibility(this.flatCtlSwapped || this.flatSwapping ? Visibility.Visible : Visibility.Hidden)
+      .zIndex(this.flatCtlSwapped ? 1 : 0)
+      .translate({ y: -PlaybackPage.FLAT_SWAP_D_VP * (1 - this.flatT) })
+      .opacity(this.flatT)
     }
     .width(StyleConstants.FULL_WIDTH)
     .height(StyleConstants.FULL_HEIGHT)
-    .alignItems(HorizontalAlign.Start)
-  }
-
-  /** @returns 横屏左栏封面边长（vp）：`min(封面区盒宽, 盒高)`；0 = 还没量到。 */
-  private flatLandscapeCoverEdgeVp(): number {
-    const w: number = this.flatCoverBoxWVp;
-    const h: number = this.flatCoverBoxHVp;
-    if (w <= 0 || h <= 0) {
-      return 0;
-    }
-    return Math.min(w, h);
   }
 
   /** Wide split panel layout: cover + controls on the left, lyrics + dual-action bar on the right. */
@@ -5906,7 +6051,7 @@ export struct PlaybackPage {
           //   （进度与传输是另一面，点一下才翻过去）。这里就按这一面画，
           //   不再用「封面+歌名+进度+传输」竖着堆（那正是"一坨"的来源）。
           if (this.isShortHeightWindow()) {
-            this.flatLandscapePane()
+            this.flatPane()
           } else {
             MusicPlayInfoBlock({
               state: this.state,
