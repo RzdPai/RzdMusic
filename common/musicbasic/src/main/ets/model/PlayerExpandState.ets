@@ -462,7 +462,23 @@ export class PlayerExpandState {
    *   鍑犱綍浣滃簾鏃舵渶瀹规槗鍗″湪鍗婅矾 鈥斺€?鑰?鐩存帴鎽婂紑"姝ｆ槸鏈€瀹夊叏鐨勮惤鐐广€?
    */
   private abortTransitionOnResize(): void {
+    // ★★★ 2026-10-21（真机：**横屏打开播放页 → 转竖屏，封面错位**）：
+    //   上一次量到的封面锚点（`bigX/bigY/bigSize`）属于**旧窗口**，旋转后仍被拿去算几何
+    //   ⇒ 竖屏里 `x` 变成负值、封面偏到一边。尺寸真的变了就**作废锚点**，
+    //   让几何退回"按新窗口算"那条路，等新节点的 `onAreaChange` 再上报。
+    this.bigX = 0;
+    this.bigY = 0;
+    this.bigSize = 0;
+    this.bigNodeKnown = false;
     if (this.morphStage !== MorphStage.ENTERING) {
+      // 已落位的页面：桥接层几何同样作废，直接落位到"已展开"（等价无界 handleWindowResize）
+      if (this.morphBridging()) {
+        this.morphReset();
+      }
+      this.morphSettleOpen();
+      Logger.info(PlayerExpandState.logTag,
+        `RzdMorphResize w=${this.windowWidthVp.toFixed(0)} h=${this.windowHeightVp.toFixed(0)} ` +
+          `big-anchor invalidated, settle open`);
       return;
     }
     Logger.warn(PlayerExpandState.logTag,

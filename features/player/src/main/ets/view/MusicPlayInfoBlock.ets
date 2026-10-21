@@ -56,6 +56,45 @@ export struct MusicPlayInfoBlock {
   @Param coverLinearScale: number = 1;
   /** When true, use compact panel stacking and hide the auxiliary 4-icon control row. */
   @Param panelLayout: boolean = false;
+  /**
+   * 面板（横屏/宽屏并排）版式里，左侧封面区**实测**的盒尺寸（vp）。
+   *
+   * ★ 2026-10-21（真机横屏 823×363：封面撑满左栏、上下被切、控件被挤出屏幕）：
+   *   参考工程 `wideLeftPane()` 是「封面区 `layoutWeight(1)` + 两个 `Blank` 居中 + `.clip(true)`」，
+   *   封面边长按**量到的封面区高度**收紧（`coverBoxSize()` 里 `area − COVER_BLOCK_CHROME`）。
+   *   ⇒ 这里同样量出来再用：`封面边长 = min(盒宽, 盒高)`，永远是正方形、永远装得下。
+   */
+  @Local panelCoverBoxWVp: number = 0;
+  @Local panelCoverBoxHVp: number = 0;
+
+  /**
+   * @returns 面板版式下封面边长（vp）；0 = 还没量到（首帧回退"铺满 + 1:1"）。
+   *
+   * 参考工程 `wideLeftPane()` 让封面在「封面区」里居中，边长受**区高**约束
+   * （`coverBoxSize()`：`size = min(size, area − COVER_BLOCK_CHROME)`）。
+   * 这里直接量盒子，取 `min(盒宽, 盒高)`，正方形、永不过界。
+   */
+  private panelCoverEdgeVp(): number {
+    const w: number = this.panelCoverBoxWVp;
+    const h: number = this.panelCoverBoxHVp;
+    if (w <= 0 || h <= 0) {
+      return 0;
+    }
+    const edge: number = Math.min(w, h);
+    return edge > 24 ? edge : 0;
+  }
+
+  /**
+   * @returns 面板版式底部「歌名/歌手 + 控制区」块的高度（vp）。
+   *
+   * 原来是写死 276 —— 横屏 363vp 高的窗口里，276 加上下 padding 会把封面区挤成一条、
+   * 并且把控件顶出屏幕（真机复现）。⇒ 按窗口高收：矮窗最多取一半。
+   */
+  private panelInfoBlockHVp(): number {
+    // 矮窗（横屏手机 / 折叠展开的横屏）只给 196：276 会把封面区挤成一条、控件顶出屏幕。
+    const shortWindow: boolean = this.breakpointEnv.heightBreakpoint === HeightBreakpoint.HEIGHT_SM;
+    return shortWindow ? 196 : 276;
+  }
   /** When false, omits the embedded ControlAreaComponent (external shared control area used instead). */
   @Param showControlArea: boolean = true;
 
@@ -498,12 +537,16 @@ export struct MusicPlayInfoBlock {
           Column() {
             Image(this.currentCoverSource())
               .id(PLAYER_BIG_COVER_ID)
-              .width(StyleConstants.FULL_WIDTH)
-              .aspectRatio(1)
+              // ★ 2026-10-21（真机横屏：封面撑满左栏、上下被切、控件被挤出屏）：按实测封面区
+              //   取「正方形 = min(盒宽, 盒高)」；还没量到的那一帧才回退到"铺满 + 1:1"。
+              .width(this.panelCoverEdgeVp() > 0 ? this.panelCoverEdgeVp() : StyleConstants.FULL_WIDTH)
+              .height(this.panelCoverEdgeVp() > 0 ? this.panelCoverEdgeVp() : undefined)
+              .aspectRatio(this.panelCoverEdgeVp() > 0 ? undefined : 1)
               .objectFit(ImageFit.Cover)
               .syncLoad(true)
               .constraintSize({
-                maxHeight: '100%'
+                maxHeight: '100%',
+                maxWidth: '100%'
               })
               .borderRadius(this.coverRadiusState.radius)
               .clip(true)
@@ -530,6 +573,19 @@ export struct MusicPlayInfoBlock {
           }
           .layoutWeight(1)
           .justifyContent(FlexAlign.Center)
+          .clip(true)
+          // ★ 2026-10-21：量封面区盒尺寸（参考工程 `wideLeftPane()` 同款做法）——
+          //   封面边长 = min(盒宽, 盒高)，横屏矮窗也不会溢出到控件上。
+          .onAreaChange((_oldValue: Area, newValue: Area): void => {
+            const w: number = areaLengthToVp(newValue.width);
+            const h: number = areaLengthToVp(newValue.height);
+            if (w > 0 && Math.abs(w - this.panelCoverBoxWVp) > 0.5) {
+              this.panelCoverBoxWVp = w;
+            }
+            if (h > 0 && Math.abs(h - this.panelCoverBoxHVp) > 0.5) {
+              this.panelCoverBoxHVp = h;
+            }
+          })
 
           Column() {
             this.MusicInfoTexts()
@@ -537,7 +593,7 @@ export struct MusicPlayInfoBlock {
               ControlAreaComponent({ showBottomOtherRow: false })
             }
           }
-          .height(276)
+          .height(this.panelInfoBlockHVp())
           .justifyContent(FlexAlign.End)
         }
         .height(StyleConstants.FULL_HEIGHT)
