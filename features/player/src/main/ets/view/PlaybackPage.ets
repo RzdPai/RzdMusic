@@ -5046,13 +5046,18 @@ export struct PlaybackPage {
 
   /** True when the wide split panel layout should be used (param or wide window). */
   private usePanelLayout(): boolean {
-    // ★★★ 2026-10-21（真机横屏 823x363：屏上两个封面 + 控件被挤掉）：
-    //   原来这里把**横屏**也判成 panel（`landscape && 不是 SM`），而横屏手机的宽度档恰好是 MD
-    //   ⇒ `panelControlContent()` 画一套、`usesPhoneSwiperLayout()` 同时为真又挂上
-    //   `LyricFloatLayer()`（它自带封面浮层）⇒ 两套叠在一起。
-    //   参考工程（无界播放页同一血脉）横屏/宽屏只有一个分支：`isWideWindow(w >= 600)` ⇒ 左右并排。
-    //   ⇒ 本函数只留给**真正的 PC 面板**（`panelLayout`）。
-    return this.panelLayout;
+    // ★★★ 2026-10-21（真机横屏 823x363 两轮修正）：
+    //   参考工程的宽屏并排 = **左「封面 + 控制」/ 右「歌词 + 底栏」**；本仓对应物**就是**
+    //   `panelControlContent()`：
+    //     `Row(space 56){ Column{ MusicPlayInfoBlock({panelLayout:true}) }.layoutWeight(1) |
+    //                     Column{ LyricsComponent({panelBottomBar:true}) }.layoutWeight(1) }`
+    //   它原来只给 PC 面板用 ⇒ 横屏被 `usePanelLayout()` 里的 `landscape` 判进来过（那是碰巧对的），
+    //   我上一轮把横屏摘掉后落到 `GridRow` 分支（那边 `showControlArea: false`）
+    //   ⇒ 甲方看到的「左侧没有控件」。
+    //   ⇒ 现在按参考工程只认宽度：**≥600vp 一律走 panel 并排**（横屏、平板都算宽），
+    //     `panelLayout`（真 PC 面板）也仍然走它。竖屏手机（≈421vp）逐像素不变。
+    //   排查关键字：`logBranchSurface('panel')` / `('wide')` / `('phone')`。
+    return this.panelLayout || this.expandState.windowWidthVp >= PlaybackPage.WIDE_LAYOUT_MIN_W_VP;
   }
 
   /**
