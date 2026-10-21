@@ -1297,18 +1297,6 @@ export struct PlaybackPage {
   // 2500ms is a failure deadline, well beyond snapshot 350ms / live <=460ms
   // plus render/snapshot dispatch. Only normal completion decides animation completion.
   private static readonly CLOSE_WATCHDOG_MS: number = 2500;
-  /**
-   * 关闭时是否走**第 ③ 支**（拍 `PLAYER_ROOT_ID` 的 pixmap，交壳层 `MorphShrinkState` 收缩到胶囊）。
-   *
-   * 现在是 **false**，原因（2026-10-22 回退）：
-   *   · 快照本身是成功的（真机日志 `snapshot-callback … pix=1`，见记忆 §42）；
-   *   · 但本仓的壳层收缩补间从来没在这条路上跑过，一启用就"没有动画"
-   *     （藏活页面、同拍 pop 这两种变体都试过，都是没动画）。
-   *   ⇒ 固定走第 ② 支反形变（甲方两轮确认"有动画"）；快照照拍、结果照记日志，
-   *     等壳层那条补间单独验过再把这个开关打开。
-   *   排查关键字：`snapshot-disabled`。
-   */
-  private static readonly CLOSE_USE_SNAPSHOT_PATH: boolean = false;
   private static closeSerial: number = 0;
   private static closeOwner: number = 0;
   private static instanceSerial: number = 0;
@@ -4454,19 +4442,8 @@ export struct PlaybackPage {
       this.closeDiagnostic(
         `snapshot-callback ${(err === null || err === undefined) && pixmap !== undefined ? 'ok' : 'miss'} ` +
           `code=${errCode} pix=${pixmap !== undefined ? 1 : 0} msg=${errMsg}`);
-      // ★★★ 2026-10-22（回退后的闸门）：**③ 快照路暂时不用**。
-      //   真机已经证明快照本身是成功的（`code=undefined pix=1`，见 §42），
-      //   但本仓的壳层收缩补间（`MorphShrinkState` + `Index.ShrinkOverlayHost`）从来没在这条路上跑过，
-      //   一启用就是"没有动画"（连试两版都一样，其中一版还是把活页面藏了也一样）。
-      //   ⇒ 先固定走第 ② 支反形变（甲方两轮确认"有动画"的那条），把快照当成**证据**记在日志里，
-      //     等 ③ 的壳层补间单独验过再开这个开关。
-      //   排查关键字：`snapshot-disabled`（应紧跟在 `snapshot-callback … pix=1` 之后）。
-      if (!(err === null || err === undefined) || pixmap === undefined) {
-        this.closeLiveMorphFallback(`snapshot-unusable(${errCode})`);
-        return;
-      }
-      if (!PlaybackPage.CLOSE_USE_SNAPSHOT_PATH) {
-        this.closeLiveMorphFallback('snapshot-disabled');
+      if (pixmap === undefined && (err === null || err === undefined)) {
+        this.closeLiveMorphFallback('snapshot-empty');
         return;
       }
       // ★★★ 2026-10-18（用户第十轮：「收起过程中**按钮/封面又成了两个**」）：
@@ -4503,7 +4480,7 @@ export struct PlaybackPage {
         //     闂備緡鍋€閸嬫捇鏌涢妷褍浠滄鐐存崌瀵敻鍩€椤掑嫬閿ら煫鍥ф捣閻﹀秹鏌涘▎妯圭凹婵″弶鎮傚畷鍫曟倷閹绘帞鍘掗梺鍛婎焽閸犳劕顭囬悽鍛婂剭闁告洦鍣搴ㄦ煙閹殿喖鏋旈柟韫嵆閹潡鎮欓崗澶婁壕?
         //   闂佸疇娉曟刊瀵哥箔?婵犮垺鍎肩划鍓ф喆閿曞倸鍌ㄩ柣鏃堟敱缁€鍫ユ煟閹炬瀚敍瀣煙?`Logger.warn`闂佹寧绋戦懟顖炴嚐閻旂厧绠┑鐘插€搁弬褔鏌涢妷褍孝闁汇埄鍋呭璇测槈濡ゅ啰娈ゆ繛瀵稿Ь閸╂牕螞閳哄嫮鐤€婵°倕顑囩粈鍒濩LO` 闂?`fb=`闂佹寧绋戦¨鈧紒?
         //     **婵炴垶鎸撮崑鎾寸箾閸″繐澧查柛鈺佹嚇瀹曞爼骞嗚缁侇噣鏌涘▎妯虹仩闁搞劎鏅幏?*闂佹寧绋戦悧鎰帮綖?`closeFallbackReason`闂佹寧绋戦ˇ顓㈠焵?
-        this.closeLiveMorphFallback(`snapFail(${errCode})`);
+        this.closeLiveMorphFallback(`snapFail(${err.code})`);
         return;
       }
       this.restorePlaybackWindowChrome();
@@ -5186,17 +5163,6 @@ export struct PlaybackPage {
    *   `_recover/logic-src/闂佺儵鏅╅崰妤呮偉閿濆鐓?闁诲海顢婂Λ鍕儓閸℃稒顥堥柕蹇婂墲缁惰尙绱撴担鍝勬瀺缂?闂佸搫鍊藉Λ鍕閹版澘鐐婇柛娆嶅劤閻熴垹螖閻樺弶婀伴柡?md` 闁?闂侀潧妫楅懟顖炲垂娴犲绠叉い鏇楀亾闁革絾鎮傚畷锝夋偐椤旂懓浜剧€广儱鍟犻崑?
    */
   private usesPhoneSwiperLayout(): boolean {
-    // ★★★ 2026-10-22（甲方：「横屏打开播放器切到竖屏，封面错位」「横竖屏要正常」）：
-    //   **宽度 ≥ 600 就是宽屏，一律不用手机 Swiper 那一档** —— 这条判据必须**只看宽度**，
-    //   不能掺方向（§29.1 当年就是这么修的，那版横竖屏是好的）。
-    //   掺了方向（`landscape && …` / `!usePanelLayout()`）的后果：转屏那一拍方向标志先翻、
-    //   布局后翻，于是"宽屏 + 手机浮层"会同时成立 ⇒ 浮层那颗按**旧方向窗口坐标**画的封面
-    //   就留在竖屏里（= 甲方截图那张歪封面）。
-    //   宽度判据与方向无关，转屏前后自洽。
-    //   排查关键字：`[RzdBranch]` 里的 `swiper= short= panel=`。
-    if (this.expandState.windowWidthVp >= PlaybackPage.WIDE_LAYOUT_MIN_W_VP) {
-      return false;
-    }
     if (this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_SM) {
       return true;
     }
@@ -5942,7 +5908,8 @@ export struct PlaybackPage {
 
   /** `FLAT_SWAP_D`（vp，`:244231`）：两面纵向错位量。 */
   private static readonly FLAT_SWAP_D_VP: number = 24;
-  /** `FLAT_SWAP_COVER_SCALE`（`:244239` = 1/3）：控制面打开时封面的终态缩放。 */  private static readonly FLAT_SWAP_COVER_SCALE: number = 1 / 3;
+  /** `FLAT_SWAP_COVER_SCALE`（`:244239` = 1/3）：控制面打开时封面的终态缩放。 */
+  private static readonly FLAT_SWAP_COVER_SCALE: number = 1 / 3;
   /** `FLAT_SWAP_MS`（`:244235`）：换面补间时长。 */
   private static readonly FLAT_SWAP_MS: number = 400;
   /** `FLAT_PLAY_SIZE`（`:244301`）：播放钮字号。 */
@@ -5951,14 +5918,6 @@ export struct PlaybackPage {
   private static readonly FLAT_HIT_VP: number = 44;
   /** `IMMERSIVE_META_GAP`（`:244219`）：歌名/歌手行距。 */
   private static readonly FLAT_META_GAP_VP: number = 1;
-  /**
-   * 宽屏门槛（vp）—— 参考工程 `Layout.isWideWindow(w >= 600)`（`BP_MEDIUM = 600`）。
-   *
-   * ★ 2026-10-22：`usesPhoneSwiperLayout()` 用它兜底（宽度 ≥ 600 一律不挂手机浮层封面）。
-   *   **只看宽度、不看方向**，转屏前后自洽 —— 掺方向的判据会在转屏那一拍出现
-   *   "宽屏 + 手机浮层同时成立"，把按旧方向窗口坐标画的封面留在屏上（甲方截图里的歪封面）。
-   */
-  private static readonly WIDE_LAYOUT_MIN_W_VP: number = 600;
   /** `IDLE_MS`（`:244225`）：控制面自动收回时长。 */
   private static readonly FLAT_IDLE_MS: number = 5000;
 
@@ -6410,21 +6369,6 @@ export struct PlaybackPage {
     }
     this.lastMeshWindowPxW = w;
     this.lastMeshWindowPxH = h;
-    // ★★★ 2026-10-22（甲方：「转屏后退出播放器封面残留 + 背景消失」「横屏切竖屏封面错位」）：
-    //   真·换尺寸 ⇒ **必须把形变会话当场收掉**（照无界 `handleWindowResize`：
-    //   `morphReset(); refitOverlay(); setFinalStatus();` 的顺序，我们这里等价于 `morphSettleOpen()`）。
-    //   不收的后果（本仓实测）：
-    //     · `morphStage` 停在 ENTERING/LEAVING/LANDING ⇒ 壳层克隆封面继续按**旧方向**的窗口矩形画
-    //       ⇒ 竖屏里看到一张横屏几何的歪封面；
-    //     · 关闭时那段残留的形变状态没人清 ⇒ 退出后留一层封面。
-    //   排查关键字：`window-resize settle`。
-    if (this.expandState.morphContainerActive() || this.expandState.morphBridging() ||
-      this.expandState.morphOverlayBridging()) {
-      this.expandState.morphSettleOpen();
-      this.closeDiagnostic(
-        `window-resize settle(bridge->off) win=${w}x${h} ` +
-          `stage=${this.expandState.morphStage} p=${this.expandState.morphP.toFixed(3)}`);
-    }
     this.meshSrcVersion = this.meshSrcVersion + 1;
     appendPlayLog(`[RzdBgPhase] refresh-on-resize ver=${this.meshSrcVersion} win=${w}x${h}`);
   }
