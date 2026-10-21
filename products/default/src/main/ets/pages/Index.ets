@@ -384,6 +384,18 @@ struct Index {
   @Local shrinkState: MorphShrinkState =
     AppStorageV2.connect(MorphShrinkState, AppStorageKeys.MORPH_SHRINK_STATE,
       () => new MorphShrinkState())!;
+
+  /**
+   * ★★★ 2026-10-22（照无界：**收缩补间由壳层起**）：页面只把 `pixmap + srcBox` 递进来
+   * （`MorphShrinkState.requestStart`），壳层在收到令牌后用**自己的** UIContext 起补间。
+   * 无界的等价物是 `MainPage.startShrinkBack`（`wujie.pa:1549xx`）——
+   * 补间归壳层 ⇒ 页面才可以像无界那样同拍 `nav.pop(false)`，屏上只留那一张快照。
+   * 排查关键字：`shrink request consumed by shell`。
+   */
+  @Monitor('shrinkState.startToken')
+  onShrinkStartRequest(): void {
+    this.shrinkState.consumeStart(this.getUIContext());
+  }
   /** Cached window metrics (safe areas, size) for layout padding. */
   @Local windowInfo: WindowInfo = getWindowInfoState();
   /**
