@@ -267,6 +267,14 @@ export struct PlaybackPage {
   private lastRootAreaWVp: number = 0;
   private lastRootAreaHVp: number = 0;
   /**
+   * 上次刷背景网格时**窗口本身**的尺寸（px，`windowInfo.windowSize`）。
+   *
+   * 判"真·换尺寸"只能用它：转屏它会变；形变/关闭动画（根节点每帧换高）它不变。
+   * 排查关键字：`[RzdBgPhase] refresh-on-resize … win=`.
+   */
+  private lastMeshWindowPxW: number = 0;
+  private lastMeshWindowPxH: number = 0;
+  /**
    * 闁宠棄鎳夊Σ鍕煡閸涱亝顫?2026-10-17闁?*濞ｅ浂鍠撻埀顒€鑻惈宥咁嚕閳ь剚娼婚崶鈹炬煠濞戞搩鍘藉Σ鍛婄▔婵犱胶顏卞Λ锝嗙墬閻℃洟鎯冮崟顖ｆ澒闁肩懓鐪伴埀?*闁?
    *
    * `coverTint` 闁?*閻犳亽鍔戦妴澶愭閵忕姴褰欏ù?*闁汇劌瀚哥槐妾侫ppStorageV2` 闁?`CoverTintState`闁挎稑顧€缁辨繄鈧懓鍟ぐ褔宕?
@@ -1379,6 +1387,14 @@ export struct PlaybackPage {
     const path: string = fallback ? 'fallback' : this.closePath;
     // Hide intent -> synchronously remove only player route -> reset -> release ownership.
     this.state.isShowPlay = false;
+    // ★★★ 2026-10-21（甲方：「在播放页内旋转屏幕后关闭，还会留一层封面」）：
+    //   **关闭链走到这一步，播放页这一侧就不许再出封面了**。
+    //   原因：`pop(false)` 之后、`morphReset()` 把几何复位成满屏（`morphP=1 / clipHeight→整窗`），
+    //   只要 NavDestination 的退场还有一帧（转屏后尤其容易多一帧），
+    //   那一帧画的就是"满屏播放页 + 它的封面" = 甲方看到的「封面残留」。
+    //   在这一刻无条件压掉封面（`coverPublishHidden`，`onAppear` 复位），
+    //   无论后面路由删得干不干净，屏上都不会再出现"播放页那张封面"。
+    this.coverPublishHidden = true;
     const names: string[] = this.pageIndexInfos.getAllPathName();
     const index: number = names.indexOf(RouterUrlConstants.PLAYER_PAGE);
     const top: number = names.length - 1;
@@ -6322,23 +6338,37 @@ export struct PlaybackPage {
    *   背景是 `MeshCoverBg({ src: meshSrc, srcVersion: meshSrcVersion, … })`，它只认这个版本令牌；
    *   窗口一变，那层画布会被重建，但令牌没变 ⇒ 不再出图（屏上就是"没有背景"）。
    *   ⇒ 这里只 bump 令牌（不重新下载、不重新取色），让 `MeshCoverBg` 用同一张 PixelMap 重新出图。
-   *   排查关键字：`[RzdBgPhase] refresh-on-resize`。
+   *
+   * ★★★ 2026-10-21 第二次修正（甲方：「在播放页内旋转屏幕 → 背景消失，关闭时还会留封面」）：
+   *   上一版这里挂过 `morphContainerActive()` 白名单，**是错的**：
+   *   `morphContainerActive()` 含 **LANDING**，而播放页静止后相位不一定会落回 `OPEN`
+   *   （`morphSettleOpen` 被 `morphUsable`/`reverseInFlight` 挡掉就停在 LANDING）
+   *   ⇒ 在播放页里转屏时这道白名单把**真·转屏**也挡掉了 ⇒ 背景消失。
+   *   ⇒ 判据改成**窗口本身的尺寸**（`windowInfo.windowSize`，px）：转屏它变，形变/关闭动画它不变。
+   *   这样一次关闭里 `onAreaChange` 刷几十次也不会再触发网格重建（窗口没变），
+   *   而真转屏一定触发。
+   *   排查关键字：`[RzdBgPhase] refresh-on-resize`（现在带 `win=宽x高`）。
    */
   private refreshBgMeshOnResize(): void {
     if (this.meshSrc === undefined) {
       return;
     }
-    // ★★★ 2026-10-21（真机日志：**一次关闭里 `refresh-on-resize` 刷了 24~28 次**）：
-    //   形变/关闭期间根节点每帧都在换高（`.height(morphClipHeight())` + 缩放/裁剪），
-    //   那不是"窗口换了尺寸"，而是动画在跑。这里重刷 ⇒ `MeshCoverBg` 每帧重建网格背景，
-    //   关闭时背景忽大忽小、看着就像"又一张图跟着播放器走"。
-    //   ⇒ 只在**静止态且没有关闭请求**时刷（竖屏 → 横屏那种真改尺寸都发生在静止态）。
-    //   排查关键字：`refresh-on-resize`。
-    if (this.isClosing || this.expandState.morphContainerActive()) {
+    if (this.isClosing) {
       return;
     }
+    const size = this.windowInfo.windowSize;
+    const w: number = size.width;
+    const h: number = size.height;
+    if (w <= 0 || h <= 0) {
+      return;
+    }
+    if (w === this.lastMeshWindowPxW && h === this.lastMeshWindowPxH) {
+      return;
+    }
+    this.lastMeshWindowPxW = w;
+    this.lastMeshWindowPxH = h;
     this.meshSrcVersion = this.meshSrcVersion + 1;
-    appendPlayLog(`[RzdBgPhase] refresh-on-resize ver=${this.meshSrcVersion}`);
+    appendPlayLog(`[RzdBgPhase] refresh-on-resize ver=${this.meshSrcVersion} win=${w}x${h}`);
   }
 
   /**
