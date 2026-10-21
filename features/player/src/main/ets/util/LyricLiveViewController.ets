@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 
 import { commonEventManager, BusinessError } from '@kit.BasicServicesKit';
 import { wantAgent, WantAgent } from '@kit.AbilityKit';
+import { image } from '@kit.ImageKit';
 import { liveViewManager } from '@kit.LiveViewKit';
 import { appendPlayLog, getAppRuntime, LiveViewConst, Logger } from 'musicbasic';
 import { AmllLyricLine } from '../amll/model/AmllTypes';
@@ -81,6 +82,17 @@ export class LyricLiveViewController {
   private wantAgentInstance?: WantAgent = undefined;
   /** Timestamp of the last push; throttles word-level lyric updates. */
   private lastPushTime: number = 0;
+  /**
+   * 胶囊图标（`capsule.icon`）—— **运行时必填**。
+   *
+   * ★★★ 2026-10-21（真机日志：`[实况窗] 创建异常 code=401 msg=The type of capsule.icon must be
+   *   string | image.PixelMap [or the parameter is mandatory]`，每次起播都失败）：
+   *   SDK 里 `CapsuleData.icon?: string | image.PixelMap` 标的是可选，**服务端却校验必填**。
+   *   这里把 `resources/rawfile/liveview_icon.png` 解码成 `PixelMap`（比传路径稳，不受沙箱路径规则影响），
+   *   缓存一份反复用；拿不到就只记日志、不阻断实况窗。
+   */
+  private capsuleIcon?: image.PixelMap = undefined;
+  private capsuleIconTried: boolean = false;
 
   /**
    * Creates the live view for the given track. No-op when the live view is
@@ -338,18 +350,65 @@ export class LyricLiveViewController {
           liveViewLockScreenAbilityName: LiveViewConst.LIVE_VIEW_LOCK_ABILITY,
           liveViewLockScreenAbilityParameters: lockScreenParams
         },
-        capsule: {
-          type: liveViewManager.CapsuleType.CAPSULE_TYPE_TEXT,
-          status: 1,
-          title: this.capsuleText(),
-          content: this.fitText(this.curSinger, CAPSULE_TEXT_MAX)
-        }
+        capsule: this.buildCapsule()
       }
     };
     if (agent !== undefined) {
       liveView.liveViewData.primary.clickAction = agent;
     }
     return liveView;
+  }
+
+  /**
+   * 组装胶囊（含**必填**的 `icon`）。
+   *
+   * `capsule.icon` 在 SDK 里是可选项、服务端却按必填校验（401），所以这里显式带上；
+   * 图标取自 `resources/rawfile/liveview_icon.png`，解码成 `PixelMap` 后缓存。
+   */
+  private buildCapsule(): liveViewManager.TextCapsule {
+    const capsule: liveViewManager.TextCapsule = {
+      type: liveViewManager.CapsuleType.CAPSULE_TYPE_TEXT,
+      status: 1,
+      title: this.capsuleText(),
+      content: this.fitText(this.curSinger, CAPSULE_TEXT_MAX)
+    };
+    const icon: image.PixelMap | undefined = this.ensureCapsuleIcon();
+    if (icon !== undefined) {
+      capsule.icon = icon;
+    }
+    return capsule;
+  }
+
+  /**
+   * @returns 胶囊图标 PixelMap（首次调用时从 rawfile 解码，之后走缓存；失败返回 undefined 并记日志）。
+   */
+  private ensureCapsuleIcon(): image.PixelMap | undefined {
+    if (this.capsuleIcon !== undefined) {
+      return this.capsuleIcon;
+    }
+    if (this.capsuleIconTried) {
+      return undefined;
+    }
+    this.capsuleIconTried = true;
+    const ctx = getAppRuntime().context;
+    if (ctx === undefined) {
+      Logger.warn(TAG, 'capsule icon skipped: context undefined');
+      return undefined;
+    }
+    try {
+      const bytes: Uint8Array = ctx.resourceManager.getRawFileContentSync(LIVE_VIEW_ICON);
+      const src: image.ImageSource = image.createImageSource(bytes.buffer as ArrayBuffer);
+      const pixmap: image.PixelMap = src.createPixelMapSync();
+      src.release();
+      this.capsuleIcon = pixmap;
+      appendPlayLog('[实况窗] 图标已加载 (rawfile/' + LIVE_VIEW_ICON + ')');
+      return pixmap;
+    } catch (error) {
+      const err: BusinessError = error as BusinessError;
+      Logger.warn(TAG, 'capsule icon load failed: ' + err.code + ' ' + err.message);
+      appendPlayLog('[实况窗] 图标加载失败 code=' + err.code);
+      return undefined;
+    }
   }
 
   /** Updates the live view card/capsule and broadcasts the payload to the lock screen. Throttled. */
