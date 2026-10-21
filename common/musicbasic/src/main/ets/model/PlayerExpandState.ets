@@ -1865,10 +1865,14 @@ export class PlayerExpandState {
     const boxH: number = this.estBoxHVp();
     let fitClamped: boolean = false;
     if (boxH > 0) {
+      // ★ 2026-10-21（真机横屏日志 `win=823x363 usableH=241.7 chromeTotal=218.0 estBoxH=23.7`）：
+      //   横屏时 `boxH` 连 84 都不到（甚至为负）⇒ 旧写法 `byHeight > 0` 直接放行，
+      //   封面还是画 200 ⇒ 必然压满整屏。**框小到装不下时也要收到下限**，让溢出尽可能小。
       const byHeight: number = Math.round(boxH) - PlayerExpandState.COVER_BLOCK_CHROME_VP;
-      if (byHeight > 0 && byHeight < edge) {
-        edge = byHeight > PlayerExpandState.COVER_FIT_HEIGHT_MIN_VP ?
-          byHeight : PlayerExpandState.COVER_FIT_HEIGHT_MIN_VP;
+      const want: number = byHeight > PlayerExpandState.COVER_FIT_HEIGHT_MIN_VP ?
+        byHeight : PlayerExpandState.COVER_FIT_HEIGHT_MIN_VP;
+      if (want < edge) {
+        edge = want;
         fitClamped = true;
       }
     }

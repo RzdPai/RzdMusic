@@ -977,13 +977,28 @@ export struct PlaybackPage {
     const geomKey: string = `${this.expandState.windowWidthVp.toFixed(0)}x` +
       `${this.expandState.windowHeightVp.toFixed(0)}/tier${this.expandState.chromeTier}`;
     if (geomKey !== this.lastPlayerGeomKey) {
+      const resized: boolean = this.lastPlayerGeomKey.length > 0;
       this.lastPlayerGeomKey = geomKey;
+      // ★★★ 2026-10-21（真机横屏 823x363：屏上出现**两个封面 + 两份歌名**）：
+      //   形变桥接层（`MorphCoverBridge` 的封面 + `MorphMetaBridge` 的歌名/操作区）里的矩形
+      //   全部是**窗口坐标**，且它的不透明度恒为 1（`morphBridgeOpacity()` = `morphBridging()?1:0`）——
+      //   手机竖屏时它与浮层里的真封面/真歌名**同位置同图**所以看不出来；
+      //   一旦旋转/改窗，旧矩形与新几何分叉 ⇒ 立刻变成"两个播放器"。
+      //   无界在 `handleWindowResize` 里做的是 `morphReset(); refitOverlay(); setFinalStatus();`
+      //   ⇒ 这里做等价的事：尺寸真的变了、且桥接层还开着，就立刻落位到"已展开"。
+      //   排查关键字：`window-resize settle`。
+      if (resized && this.expandState.morphBridging()) {
+        this.expandState.morphSettleOpen();
+        appendPlayLog(`[RzdPlayerGeom] window-resize settle(bridge->off) ${geomKey}`);
+      }
       const cover: LyricMorphRect = this.coverLocalRect();
       appendPlayLog(`[RzdPlayerGeom] win=${geomKey} ` +
         `usableH=${this.expandState.usableHVp().toFixed(1)} ` +
         `chromeTotal=${this.expandState.chromeTotalVp().toFixed(1)} ` +
         `estBoxH=${this.expandState.estBoxHVp().toFixed(1)} ` +
         `coverLocalY=${cover.y.toFixed(1)} coverLocalH=${cover.height.toFixed(1)} ` +
+        `coverGeomSize=${this.expandState.playerCoverGeomRect().size.toFixed(1)} ` +
+        `wide=${this.expandState.windowWidthVp >= 600 ? 1 : 0} ` +
         `coverNodeH=${this.boxH(PLAYER_BIG_COVER_ID).toFixed(1)} ` +
         `metaTitleH=${this.boxH(PLAYER_META_TITLE_ID).toFixed(1)} ` +
         `gapSwiperGot=${gapGot.toFixed(1)} scrubGot=${this.boxH(PlaybackPage.CHROME_SCRUB_GAP_ROW_ID).toFixed(1)}`);
