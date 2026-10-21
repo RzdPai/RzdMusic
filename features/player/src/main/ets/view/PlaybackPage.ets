@@ -275,6 +275,17 @@ export struct PlaybackPage {
   private lastMeshWindowPxW: number = 0;
   private lastMeshWindowPxH: number = 0;
   /**
+   * 快照收缩期间把**整个播放页**藏起来（`Visibility.Hidden`，仍参与布局与测量）。
+   *
+   * 背景（2026-10-22）：关闭的两条路都会出现"两张封面"——
+   *   · ③ 快照路：pixmap 里有一张 + 活页面自己那张；
+   *   · ② 反形变路：壳层克隆一张 + 活页面一张。
+   * 前者用这个开关把活页面藏掉（pixmap 就是它的图，藏掉无缝）；
+   * 后者由 `realCoverVisible()` 那三道门负责。`onAppear` 复位。
+   * 排查关键字：`RzdCloseShrink page-hidden=1`。
+   */
+  @Local shrinkPageHidden: boolean = false;
+  /**
    * 闁宠棄鎳夊Σ鍕煡閸涱亝顫?2026-10-17闁?*濞ｅ浂鍠撻埀顒€鑻惈宥咁嚕閳ь剚娼婚崶鈹炬煠濞戞搩鍘藉Σ鍛婄▔婵犱胶顏卞Λ锝嗙墬閻℃洟鎯冮崟顖ｆ澒闁肩懓鐪伴埀?*闁?
    *
    * `coverTint` 闁?*閻犳亽鍔戦妴澶愭閵忕姴褰欏ù?*闁汇劌瀚哥槐妾侫ppStorageV2` 闁?`CoverTintState`闁挎稑顧€缁辨繄鈧懓鍟ぐ褔宕?
@@ -1377,43 +1388,6 @@ export struct PlaybackPage {
     if (this.closeSettleTimer !== -1) {
       clearTimeout(this.closeSettleTimer);
       this.closeSettleTimer = -1;
-    }
-  }
-
-  /**
-   * 只做"把播放页从路由栈上摘掉"这一步 —— 无界 `nav.pop(false)`（`wujie.pa:216387-216395`）的等价物。
-   *
-   * 快照路要在 `shrink.start(...)` 之后**同一拍**调用它：屏上只留那张 pixmap 在飞，
-   * 活页面立刻退场 ⇒ 结构上不可能出现"两张封面"。`finishCloseGuard()` 稍后调它同一段时
-   * 已经找不到 player 下标（-1）⇒ 自然空跑，不会重复删。
-   *
-   * 排查关键字：`route-remove … ` 里带 `source=snapshot-immediate` 的那一行。
-   */
-  private popPlayerRouteNow(event: string): void {
-    const names: string[] = this.pageIndexInfos.getAllPathName();
-    const index: number = names.indexOf(RouterUrlConstants.PLAYER_PAGE);
-    const top: number = names.length - 1;
-    let removed: number = -1;
-    let removeMode: string = 'none';
-    try {
-      if (index >= 0) {
-        if (index === top) {
-          removeMode = 'pop';
-          this.pageIndexInfos.pop(false);
-        } else {
-          removeMode = 'remove';
-          removed = this.pageIndexInfos.removeByIndexes([index]);
-          if (removed === 0) {
-            removeMode = 'remove-then-pop';
-            this.pageIndexInfos.pop(false);
-          }
-        }
-      }
-      this.closeDiagnostic(
-        `route-remove ${removeMode} source=${event} index=${index} top=${top} ` +
-          `size=${names.length} removed=${removed}`);
-    } catch (error) {
-      this.closeDiagnostic(`route-remove-failed source=${event} error=${error} index=${index} top=${top}`);
     }
   }
 
@@ -4493,6 +4467,13 @@ export struct PlaybackPage {
       // ⚠️ 只在这一刻才置真：放在 `get()` 之前会让快照本身没有封面。
       this.snapshotFlight = true;
       this.coverPublishHidden = true;
+      // ★★★ 2026-10-22（治「两个封面」而不动动画）：快照 = 这一页的图，已经在壳层手里
+      //   ⇒ 把**活页面整页藏起来**（`Visibility.Hidden`，不隐藏布局、不影响 `PLAYER_ROOT_ID` 的测量）。
+      //   屏上只剩那张 pixmap 在往胶囊里缩 ⇒ 结构上不可能出现第二张封面，
+      //   而 pop 仍然等 `shrink` 的 onDone（甲方确认过有动画的那一版）。
+      //   排查关键字：`RzdCloseShrink page-hidden=1`。
+      this.shrinkPageHidden = true;
+      this.closeDiagnostic(`RzdCloseShrink page-hidden=1 pix=1`);
       // ★★★ 2026-10-18（用户第十轮：「收起过程中**按钮/封面又成了两个**」）：
       //   快照已经进手 ⇒ 接下来屏上由**快照层**代表一切（`beginSnapshotShrink()`），
       //   页面上那颗真封面必须让位，否则就是"快照一颗 + 真封面一颗"。
@@ -4578,14 +4559,13 @@ export struct PlaybackPage {
       });
       PlaybackPage.ev('SQZ', `shrink win=${winW.toFixed(0)}x${winH.toFixed(0)}`);
       this.state.isShowPlay = false;
-      // ★★★ 2026-10-22（照无界 `:216376-216395` 的**同一拍**顺序）：
-      //   `onShrinkBack(pixmap, mySrcBox); nav.pop(false);`
-      //   快照已经进手 ⇒ **立刻**把播放页从路由栈上摘掉，屏上只留那张 pixmap 在飞。
-      //   我们原来是"等 shrink 的 onDone 才 pop"（整页活着飞 500ms）——
-      //   这正是"活页面那张封面 + 快照/克隆那张"并存的根源。
-      //   `finishCloseGuard()` 里那段删除会在 onDone 时找不到 index（-1）⇒ 自然空跑。
-      //   排查关键字：`snapshot-immediate`。
-      this.popPlayerRouteNow('snapshot-immediate');
+      // ★★★ 2026-10-22 第二次修正（甲方：「点击收起按钮关闭，又**没有动画**了」）：
+      //   **不能在这里 pop 路由**。上一版照无界"同一拍 pop"，结果活页面一卸，
+      //   壳层那张 pixmap 的收缩动画也跟着没了（页面卸载会带走它那条补间 / UIContext 的时序）。
+      //   ⇒ 恢复"等 `shrink` 的 onDone 再 pop"（这一版甲方确认过**有动画**），
+      //   而"两张封面"改用**把活页面整页藏起来**解决（见 `shrinkPageHidden`）：
+      //   快照就是这一页的图，藏掉活页、只留 pixmap，视觉上仍是"整页往胶囊里缩"。
+      //   排查关键字：`RzdCloseShrink page-hidden`。
       // 鈽呪槄鈽呪槄 2026-10-17锛堜慨銆岀郴缁熻繑鍥炲叧闂椂宸︿笅寰幆 / 鍙充笅姝屾洸鍒楄〃涓ら鎸夐挳娑堝け銆嶏級
       //   閭ｄ袱棰?`SymbolGlyph` 涓嶆槸琚銆佷篃涓嶆槸鎹簡鍒嗘敮 鈥斺€?瀹冧滑**娌¤繘杩欏紶蹇収**銆?
       //   瀹樻柟 `componentSnapshot` 鏂囨。瀵圭涓変釜鍙傛暟鍘熻瘽锛氥€岃缃槸鍚﹀己鍒剁郴缁熷湪鎴浘鍓嶇瓑寰呮墍鏈夌粯鍒舵寚浠?
@@ -7771,6 +7751,8 @@ export struct PlaybackPage {
     // 每次进入播放页都复位「关闭时压掉封面」的开关（无界 `publishCoverHidden` 的对偶）。
     this.coverPublishHidden = false;
     this.coverHiddenScale = 0;
+    // 快照收缩期间藏页面的开关也要复位，否则下次打开播放页会整页不显示。
+    this.shrinkPageHidden = false;
             // 闂佸疇娉曟刊瀵哥箔?闁哄鏅滈悷銈囩博閹绢喖鐭?*闂婎偄娲ら幊姗€濡磋箛娑欏仼婵炲棗绻戦煬顒€顭块懜鐢靛⒌婵?*闂佹寧绋掗悺鐚粂ncLyricMorphToPage()` 闂?閻庤鐡曠亸娆戝垝閿涘嫧鍋撻棃娑氱Ш缂?闂佸搫鍟﹢鍦?*闂佸搫鍟犻弲鐘诲焵椤戣棄浜?*闂?
             //   闂?闂佺厧鎼崐濠氬磻閿濆鐓傜€广儱鎳愮槐锕傛煕濮橆剛鍑圭紒妤€顦遍幏瀣矙婢跺摜涓嶉梺闈╄礋閸斿繗妫㈤梻鍌氬€荤换婵嬫嚈閹达附鈷掗悗娑櫱氶崑?闁哄鏅滈悷锕€顭囬婊勫暫濞达絽婀卞﹢瀛樻叏閿濆懐绠叉い?`onAppear` 闂備緡鍠栭埀顒傚櫏濞诧絾绻濇繛鎰╁€曢崰鏇㈡煏?
             this.lyricMorphVisible = false;
@@ -8128,7 +8110,7 @@ export struct PlaybackPage {
       // 闂佸疇娉曟刊瀵哥箔?闂婎偄娴傞崑鍡涘矗鎼淬劌鎹?`morphLand()` **婵炴垶鏌ㄩ鍛櫠?*闂佺懓鍢茬粙鍕濞嗘垶鍠?`closeWithAnimation` 闂佹眹鍔岀€氫即濡存惔銏″劅闊洢鍎崇粈鍡涙煃?闂佸搫鐗滈崜鐔肺涢鍌滅閻犲洩寮撳ù鐑芥煛?
       //    闂佹悶鍎查崕鎶藉礄閿涘嫮纾奸煫鍥ㄦ尭閻撳倿鏌熼棃娑卞劀缂佽鲸绻冪粙澶婎吋閸曨厾鐛ラ梺鐟板槻缁夋挳宕虹仦鍓р枖闁逞屽墮椤曪綁鎮╃喊妯绘櫈闂佹悶鍎伴崟姗€鍩€?
       // 闂佸疇娉曟刊瀵哥箔?婵炴垶鎸搁敃锝囩博鐎靛憡鏆滅憸宀€鍒掑☉銏犲強?LEAVING闂佹寧绋戦悧鍡楋耿椤忓牊鍋ㄥù鍏肩懅缁€鍡涙煃?闂佺绻戞繛濠偽涢幘顔肩闁靛ě鍕瘞闂佸搫鐗滈崜婵嬫閳哄倻鈻旂€广儱鎳庣紞鈧悷婊勬緲瀹曨剟骞栭悜钘壩?
-      .visibility(this.expandState.playerPaints() &&
+      .visibility(this.expandState.playerPaints() && !this.shrinkPageHidden &&
         (!this.expandState.morphClipping() || !this.expandState.morphPaintHidden()) ?
         Visibility.Visible : Visibility.Hidden)
       // 闁荤喍妞掔粈浣圭珶閳ь剛绱掗幇顓ф當鐟滅増绋掗〃鍥熼崫鍕靛敽 = 闂佸憡鐟崹鐢革綖鐎ｎ偒娈楁俊顖氭惈椤?/ 缂傚倸鍊甸弲婊堝棘?闂?缂傚倸鍊甸弲婊堝棘娓氣偓瀹曘儲鎯旈姀鈺佸Η婵犻潧鍊芥慨銈呂ｉ幖浣圭劷闁挎繂鎳忛崑銉╂煕濞嗘ê鐏ユい顐㈩儔閹矂鍩℃担钘夌厒
