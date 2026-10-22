@@ -764,6 +764,10 @@ struct Index {
       //   预热是"同步返回、异步干活"，这里不会被它拖住首帧。
       prewarmCurrentSongMesh(this.getUIContext(), this.appState.getCurrentSongItem());
       const morphStarted: boolean = this.beginOpenMorphOnClick();
+      appendPlayLog('RzdOpenEntry morphStarted=' + (morphStarted ? 1 : 0) +
+        ' stage=' + this.expandState.morphStage + ' p=' + this.expandState.morphP.toFixed(3) +
+        ' usable=' + (this.expandState.morphUsable ? 1 : 0) +
+        ' geom=' + (this.expandState.morphGeomReadyNow() ? 1 : 0));
       this.pushPlayerRoute();
       if (morphStarted) {
         // 鈽呪槄鈽?2026-10-16锛?*鐐瑰嚮鎵撳紑娌℃湁灏侀潰鍔ㄧ敾**鐨勬渶鍚庝竴鍧楁嫾鍥撅級锛?
@@ -1413,6 +1417,11 @@ struct Index {
     }, 32);
   }
   private settlePullOpen(commit: boolean, attempt: number = 0): void {
+    appendPlayLog('RzdSettleStart commit=' + (commit ? 1 : 0) + ' attempt=' + attempt +
+      ' stage=' + this.expandState.morphStage + ' p=' + this.expandState.morphP.toFixed(3) +
+      ' usable=' + (this.expandState.morphUsable ? 1 : 0) +
+      ' geom=' + (this.expandState.morphGeomReadyNow() ? 1 : 0) +
+      ' reverse=' + (this.expandState.reverseInFlight ? 1 : 0));
     this.expandState.pushMorphTrace(`settle${attempt}${commit ? 'C' : 'A'}`);
     // 鈽呪槄鈽?2026-10-16锛?*琛ラ噺閾剧殑闂ㄦ崲浜嗕釜閲?*锛夛細鍘熸潵鏄?`if (!morphUsable)`銆?
     //   `morphUsable` 鏄?`morphInitParams()` 鐨?绠楀嚭鏉ヤ簡"锛堜細鍥犱负閫€鍥?`onAreaChange`
@@ -1566,6 +1575,8 @@ struct Index {
         if (this.appState.isShowPlay && this.expandState.morphGeomReadyNow() &&
           this.expandState.morphUsable && !this.expandState.reverseInFlight) {
           this.expandState.pushMorphTrace('settled');
+          appendPlayLog('RzdShellSettle landed stage=' + this.expandState.morphStage +
+            ' p=' + this.expandState.morphP.toFixed(3));
           this.expandState.morphSettleOpen();
         } else {
           this.expandState.pushMorphTrace('settleSkip');
