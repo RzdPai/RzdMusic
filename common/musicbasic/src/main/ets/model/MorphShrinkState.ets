@@ -230,13 +230,26 @@ export class MorphShrinkState {
     // ── 两条补间（`52959-52999`）
     //    ① 350ms EaseInOut：缩到胶囊；`onFinish` 收尾（`53056-53089`）
     //    ② delay 260 / 90ms Sharp：淡出（`53045-53051`）
-    ui.animateTo({
-      duration: MorphShrinkState.D_SHRINK,
-      curve: Curve.EaseInOut,
-      onFinish: (): void => {
-        if (genNow !== this.gen) {
-          return;
-        }
+    //
+    // ★★★ 2026-10-22 13:52（真机日志：`RzdShrinkOverlay host mounted … clipH=44 scale=0.904 op=0.00`）：
+    //   浮层**挂上来的时候就已经是终点值**（`clipH` 已缩到胶囊、`opacity` 已经是 0）⇒ 屏上什么都看不见。
+    //   原因：`animateTo` 闭包里的状态写入是**立即生效**的（它只对"已经在树上、已在渲染"的节点做插值），
+    //   而这里 `visible = true` 让浮层**本帧才挂载** ⇒ 它第一次渲染读到的就是终点值。
+    //   上游那两句是"节点已在树上"的前提下写的；本仓浮层是条件挂载（`If(visible && pixmap)`），
+    //   所以**必须先挂载、下一帧再起补间**。
+    //   修法：把两条 `animateTo` 推到下一帧（16ms），起始值（scale=1 / clipH=整窗 / op=1）保持不变。
+    //   验收：`host mounted … clipH≈整窗高 scale=1.000 op=1.00`。
+    setTimeout((): void => {
+      if (genNow !== this.gen || !this.visible) {
+        return;
+      }
+      ui.animateTo({
+        duration: MorphShrinkState.D_SHRINK,
+        curve: Curve.EaseInOut,
+        onFinish: (): void => {
+          if (genNow !== this.gen) {
+            return;
+          }
         this.visible = false;
         Logger.info(MorphShrinkState.logTag, 'shrink FINISH');
         onDone();
@@ -255,6 +268,7 @@ export class MorphShrinkState {
     }, (): void => {
       this.opacity = 0;
     });
+    }, 16);
   }
 
   /** 日志 tag（无界那侧是 `"WantingMusic-Shrink"`，本仓统一 `Rzd` 前缀）。 */
