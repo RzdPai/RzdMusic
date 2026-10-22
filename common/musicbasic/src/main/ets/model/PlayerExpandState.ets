@@ -5136,10 +5136,13 @@ export class PlayerExpandState {
 
   /** 灞曞紑鏀跺熬瀹屾垚锛氳繘鍏ョǔ瀹氬睍寮€鎬併€?*/
   public morphSettleOpen(): void {
-    if (this.morphStage === MorphStage.ENTERING && !this.isOpenGeometryFinished()) {
-      Logger.info('RzdCoverOwnerV17', 'settle deferred: engine geometry still active');
-      return;
-    }
+    // ★★★ 2026-10-22（**抄作业**：上游落位就是 `setMorph(OPEN, NONE)`，无条件写相位）
+    //   原来这里有一道自造闸门：`if (stage===ENTERING && !isOpenGeometryFinished()) { log; return; }`
+    //   ⇒ "几何完成"标志一旦没被标上，本函数**永久 return**，相位**永远停在 ENTERING**。
+    //   真机后果（13:24 日志）：静止态 `stage=1` ⇒ `closeWithAnimation()` 的
+    //   `morphRunning`（`expandIntroRunning || stage===ENTERING || stage===LANDING`）恒为真
+    //   ⇒ **只有顶栏收起按钮**走活体反向（两张封面），而系统返回 / 下拉走快照路（一张）。
+    //   ⇒ **与上游对齐：落位回调一到就写 `OPEN`**。
     this.morphStage = MorphStage.OPEN;
     this.morphDrive = MorphDrive.NONE;
     // ★ 2026-10-19：落位到 OPEN = 形变结束、播放器全屏接管 ⇒ 系统条交接闸必须释放，
