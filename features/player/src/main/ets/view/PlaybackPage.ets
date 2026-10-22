@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -5851,8 +5851,8 @@ export struct PlaybackPage {
         //     ① 先拍 `PLAYER_ROOT_ID` 的 pixmap，交壳层 `MorphShrinkState` 收缩到胶囊再 pop；
         //     ② 快照失败才落到第 ② 支反形变（`closeFullScreenPlayback()`）。
         //   排查关键字：`top-bar-close` → `snapshot-request` / `snapshot-callback`。
-        this.closeDiagnostic('top-bar-close');
-        this.closeWithAnimation();
+        this.closeDiagnostic('top-bar-close = same as system-back');
+        this.state.isShowPlay = false;
             }
           })
             .padding({
@@ -6269,8 +6269,8 @@ export struct PlaybackPage {
         //     ① 先拍 `PLAYER_ROOT_ID` 的 pixmap，交壳层 `MorphShrinkState` 收缩到胶囊再 pop；
         //     ② 快照失败才落到第 ② 支反形变（`closeFullScreenPlayback()`）。
         //   排查关键字：`top-bar-close` → `snapshot-request` / `snapshot-callback`。
-        this.closeDiagnostic('top-bar-close');
-        this.closeWithAnimation();
+        this.closeDiagnostic('top-bar-close = same as system-back');
+        this.state.isShowPlay = false;
           }
         })
           .padding({
