@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -249,6 +249,22 @@ export struct PlaybackPage {
    */
   @Local coverPublishHidden: boolean = false;
   /**
+   * 快照收缩期间把**整个播放页**藏掉（`Visibility.Hidden`，仍参与布局与测量）。
+   *
+   * 只在 `MorphShrinkState.started` 变真（= 补间真的起来了）才置真 —— 见下面的 `@Monitor`。
+   * 屏上只剩壳层那张 pixmap 在缩，画面就是 wujie 那条路的观感；页面不再贡献第二张封面。
+   */
+  @Local shrinkPageHidden: boolean = false;
+
+  /** 补间真起来（壳层消费成功 或 页面兜底自起）⇒ 把活页面藏掉，避免"两张封面"。 */
+  @Monitor('shrinkState.started')
+  onShrinkStarted(): void {
+    if (this.morphShrinkState().started && !this.shrinkPageHidden) {
+      this.shrinkPageHidden = true;
+      this.closeDiagnostic('page-hidden for shrink (started=1)');
+    }
+  }
+  /**
    * 无界 `ExpandSnapshot.playerCoverHiddenScale` 的忠实移植值
    * （定义 `wujie126.pa:63684`、写入 `:208381`、消费 `:181875-181899`）。
    *
@@ -274,8 +290,6 @@ export struct PlaybackPage {
    */
   private lastMeshWindowPxW: number = 0;
   private lastMeshWindowPxH: number = 0;
-  /** 转屏后补刷背景网格的那一拍（见 `refreshBgMeshOnResize()`；-1 = 没有在排）。 */
-  private meshResizeFollowUpTimer: number = -1;
   /**
    * 闁宠棄鎳夊Σ鍕煡閸涱亝顫?2026-10-17闁?*濞ｅ浂鍠撻埀顒€鑻惈宥咁嚕閳ь剚娼婚崶鈹炬煠濞戞搩鍘藉Σ鍛婄▔婵犱胶顏卞Λ锝嗙墬閻℃洟鎯冮崟顖ｆ澒闁肩懓鐪伴埀?*闁?
    *
@@ -1344,14 +1358,6 @@ export struct PlaybackPage {
     //   第 ② 支反形变则全程不压（封面归"续飞封面"那一套交棒）。
     //   重新打开时在 `onAppear`（`resetPublishCoverHidden`）复位。
     this.publishCoverHidden();
-    // ★★★ 2026-10-22（照搬无界关闭起手的 `setMiniOut(true)`，`wujie.pa:184791-184796`）：
-    //   无界反向/收缩一开始就把迷你条置成"出场态"（`setMiniOut(true)`），会话结束
-    //   （`morphReset()` / `finishReverse`）再 `setMiniOut(false)`。
-    //   本仓 `morphReset()` 里同样写着 `miniOut = false`（照搬的），所以这里只管置真。
-    //   它和 `sourceBarHidden`（上一轮的 `miniHidden`）是同一族开关：真条在收缩期间不画。
-    //   排查关键字：`RzdCloseShrink mini-out=1`。
-    this.expandState.miniOut = true;
-    this.closeDiagnostic('RzdCloseShrink mini-out=1');
     this.logCoverOwner('close-begin');
     this.closeToken = ++PlaybackPage.closeSerial;
     PlaybackPage.closeOwner = this.closeToken;
@@ -3201,17 +3207,7 @@ export struct PlaybackPage {
     const closeStage: MorphStage = this.expandState.morphStage;
     const morphRunning: boolean = this.expandIntroRunning || closeStage === MorphStage.ENTERING
       || closeStage === MorphStage.LANDING;
-    // ★★★ 2026-10-22（**抄作业**：上游那道守卫是 `pullMode &&`，我们把它丢了）
-    //   无界 `PlayerPage.closeWithAnimation`（`wujie.pa:171058-171075`）：
-    //     `if (pullMode && ExpandSnapshot.onReverseMorph(myMorphSnap)) return;`
-    //   —— 反形变那一支**只在 `pullMode`（手指还在下拉的会话）里**才走；
-    //   **不是** pullMode 时一律往下走快照（③）。
-    //   本仓原来把 `pullMode` 这半边换成了 `morphRunning`（相位/展开中）⇒ 只要相位不是 OPEN
-    //   （实测静止态会停在 ENTERING，见 §56），**顶栏收起按钮就会落到第②支活体反向**，
-    //   于是只有它出现两张封面，而系统返回 / 下拉（不进这里）走 ③ 只有一张。
-    //   ⇒ 把 `pullMode` 这一半补回来：`morphRunning && pullDragging`（本仓 `pullDragging` = pullMode）。
-    //   排查关键字：`RzdCloseLiveMorph reverse-now`（应只在手指下拉的会话里出现）。
-    if (morphRunning && this.expandState.pullDragging) {
+    if (morphRunning) {
       // ★★★ 2026-10-18（用户第十轮：「展开中按返回**要等好久**才收起」+「会闪」）——照搬上游 `reverseIntentOf`：
       //   上游 `ENTERING` 相位收到关闭 ⇒ `START`：`retargetToLiveCover()` → `setMorph(LEAVING,ANIM)` →
       //   `animateMorphT(0, round(460×max(morphT,0.4)), REVERSE_EASING)`（`wujie.pa:154070-154133`）
@@ -4462,22 +4458,22 @@ export struct PlaybackPage {
       this.closeDiagnostic(
         `snapshot-callback ${(err === null || err === undefined) && pixmap !== undefined ? 'ok' : 'miss'} ` +
           `code=${errCode} pix=${pixmap !== undefined ? 1 : 0} msg=${errMsg}`);
-      if (pixmap === undefined && (err === null || err === undefined)) {
-        this.closeLiveMorphFallback('snapshot-empty');
+      // ★★★ 2026-10-22（**照无界**：判据只看 `pixmap`）：真机日志 `code=undefined pix=1` 证明
+      //   快照一直是成功的；`err` 只是个没有 code 的空壳。按 `err` 判失败 = 白扔一张好图、
+      //   退回第 ② 支反形变（那才是"两张封面"的来源）。
+      if (pixmap === undefined) {
+        this.closeLiveMorphFallback(`snapshot-empty(${errCode})`);
         return;
       }
       // ★★★ 2026-10-18（用户第十轮：「收起过程中**按钮/封面又成了两个**」）：
       //   快照已经进手 ⇒ 接下来屏上由**快照层**代表一切（`beginSnapshotShrink()`），
       //   页面上那颗真封面必须让位，否则就是"快照一颗 + 真封面一颗"。
       //   ⚠️ 只在这一刻（回调里）才置真——不能在 `get()` **之前**置，否则快照本身没有封面（上一轮的病）。
-      if (err === null || err === undefined) {
-        this.snapshotFlight = true;
-        // ★★★ 2026-10-21：**快照已经进手**才把真封面压掉（快照里本来就带着封面）。
-        //   放在关闭起手会让真页面第一帧就丢掉封面、而克隆层要等下一帧才挂上来
-        //   ⇒ 甲方实测的「封面会先消失一瞬间再出现」。只在③（pixmap 路）生效，
-        //   第 ② 支反形变全程不压（`coverLiveMorphFallback` 里会显式清回 false）。
-        this.coverPublishHidden = true;
-      }
+      this.snapshotFlight = true;
+      // ★★★ 2026-10-21：**快照已经进手**才把真封面压掉（快照里本来就带着封面）。
+      //   放在关闭起手会让真页面第一帧就丢掉封面、而克隆层要等下一帧才挂上来
+      //   ⇒ 甲方实测的「封面会先消失一瞬间再出现」。
+      this.coverPublishHidden = true;
       // 闂佸啿鍘滈崑鎾绘煃閸忓浜?闂佸湱绮崝鎺戭潩閿曞倸绀傞柟鎯板Г閿涙棃鏌￠崘銊ヮ暢婵?*闂佸搫鐗滈崗娑氬垝閵娾晜鍋嬮悷娆忓缁犳帡鏌￠埀顒傛崉閾忕懓鏆?*闂佹寧绋戦悧濠偽涢妶澶嬪仼閻忕偛澧藉楣冩煛?濠电偛鑻ˇ浼寸叓閸垻鐜绘俊銈傚亾鐟?闁哄鏅滈悷銉┿€冨鍫熸櫖閻忕偞鍎抽。鎻捗归悩顔煎姎闁伙絿濮撮埢浠嬪焺閸愨晝鐣抽柡澶嗘櫆閻熴倗鎮柆宥呯煑闁靛鍨崇粈?
       //   闂?闂佽鍘归崹褰捤囬懠顒€瀵查柤濮愬€楅崺鐘绘煛?缂備焦鍔栭〃鍛般亹?chrome 闂佺偨鍎查弻锟犲焵?婵炴垶鎸哥粔鍨椤旇棄绶炵€广儱娲﹂悾閬嶆偣閸ャ劎绠氱紒缁樺灴瀹曞爼鎮欓幓鎺戠稑闂傚倸鍋嗛崢铏圭不閿濆瑙﹂幖娣妸閳ь剙锕鍊熺疀鎼达絿鐛ラ梺绋款儐缁苯锕?闂佸湱铏庨崢浠嬪棘娴ｅ箍浜滈柛顭戝亞閻掕姤绻?闂備緡鍙忕徊鑲╃博鐎涙闄勬俊銈呮噹鐢娊鏌ょ涵鍜佸殝缂?
       //   闂?`morphLand()` 婵炲瓨鍤庨崐娑氭崲閺囩姷纾兼俊顖氭惈閻撴垿鏌?闂?闁哄鏅炲〒鍦礊濮椻偓瀵?*闂佹椿浜為崰鏇㈡?*缂備焦鏌ㄩ鍛村春閵忋倕鍙婇柟顖嗗啯鐦旈梺?
@@ -4487,7 +4483,7 @@ export struct PlaybackPage {
       //      闂?闂傚倸妫欓崕濂革綖閸ヮ剙绠涢柣鏂垮槻缂嶄線鏌涢弽銊у缂佽精椴搁幏鍛村即閻愬弶鐎搁梻?1~2 闁汇埄鍨庨崒婊呮啰闂傚倸鐗勯崹鑲╂崲閺囥垺鍎庨柡宥庡亝缁茶鈽夐幘宕囆ч柍褜鍓欑换鎴澪ｉ幋锔藉剭闁告洦鍋呰ぐ銉╂煟閹炬瀚惂渚€鎮橀悙鎻掆偓鍫曞焵?
       //   闂佸疇娉曟刊瀵哥箔?**婵犮垺鍎肩划鍓ф喆閿曞倸缁╂い鏍ㄧ懅閻熸繈寮堕埡鍌滎灱缂佺粯鐗楃粙澶愬焵椤掑倵鍋?*闂佹寧绋戦悧鍡涙偩閻樺灚鍟哄ù锝呪偓鐔稿发闂備緡鍋€閸嬫捇鏌涢弽銊у⒊闁活厽鍎抽銉╁礋閸撲胶顦梻渚囧弿缁叉儳顪?`morphLand()` 婵炴潙鍚嬬喊宥嗕繆閹间焦鍎庨梻鈧幇顔拘㈤梺鍦帛閸旀洘鏅堕悩鐢电缂備焦锚缁旀挳鏌?
       //      闂?`closeFullScreenPlayback()` 闂傚倸娲犻崑鎾绘偡閺囨碍顦风紒?闁哄鏅滈敋婵犫偓椤忓棔娌柡鍥╁仧绾惧鏌?闁荤姍鍥ㄦ暠濠⒀勭矒閺佸秵寰勯崱妤侇仸 闁荤喐鐟ゅ鎺旂箔閸涘瓨顥?`if` 闂佹眹鍔岀€氼亞绱為崨顖滅＞妞ゆ棁銆€閸?
-      if (err !== null && err !== undefined) {
+      if (pixmap === undefined && err !== null && err !== undefined) {
         Logger.warn(PlaybackPage.logTag,
           'RzdShrinkOverlay root snapshot failed, fallback: ' + JSON.stringify(err));
         // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-17闂?*闂佸搫鐗滈崗娑氬垝閵娾晛绀嗙紓浣姑竟鍫ユ煟閵娿儱顏╅柛銊ラ椤垼顦撮柛?*闂佹寧绋戦¨鈧紒鍙樺嵆瀵噣鎮╅崹顐ｇ彧闂佹眹鍔岀€氼剟濡甸幋鐘冲闁靛闄勯弳婊堟煛?`nav.pop()`闂佹寧绋戦悧濠偽涢妶鍡樺妞ゆ巻鍋撴繝褉鍋撻梺鎸庣☉椤р偓缂?
@@ -4511,19 +4507,6 @@ export struct PlaybackPage {
       //   闂?闂?`morphLand()` **婵炴垶鏌ㄩ鍛櫠?*婵犮垹婀辨晶妤€危?闁哄鏅滈悷銈囩博閹绢喖绀傞柛鎰皺缁夋椽鐓崶璺轰簽闁?闂佹寧绋戦張顒傛嫚閻愬吀娌柛宀€鍋為敍宀勬煥濞戞ɑ缍乵orphOverlayBridging`闂?
       //     闂傚倸鎳庣换鎰板箖濡ゅ懎绠掗柟鐑樺灣濞寸兘鏌曢崱妤€浜扮紒杈ㄧ懇瀹曪綁顢旈崟顒冨惈闂婎偄娴傞崑鍡涘矗鎼淬劌绠ｉ柟閭﹀墮椤娀寮堕埡鍌滄噥缂佹梹鎸冲銊╊敍濮樺墽鐭楅梺鍝勫閸戠晫妲愭潏銊ョ窞閺夊牜鍋夎闂佽　鍋撴い鏍ㄧ箥濞诧綁姊洪鐔蜂壕闂佹悶鍎抽崑鐐差渻閹稿簺浜滈梻鍫熺閸╁矂鏌涘▎鎰跺叕缂佽鲸绻冪粋鎺戭吋婢跺绮柣鐔告磻閻掞妇鎷犻悙鍏告勃闁稿本菤閸嬫捇宕掗敂鍓ь槴
       this.expandState.beginSnapshotShrink();
-      // ★★★ 2026-10-22（**逐字照搬无界 `miniHidden`**，甲方：「直接抄答案」）：
-      //   无界 `MainPage` 在快照收缩期间把**真迷你条**藏起来，落位那一刻再放出来：
-      //     · 字段/读：`MainPage.miniHidden`（`wujie.pa:172332-172339` 初始化、`:177701/177713` 存取器）
-      //     · 置真：`:183174-183181`（`shrinkPixmap` 就位、开始收缩之前）
-      //     · 置假：`:185822` 与 onDone 的 `λ@12*#`（`:154940-154949`：`miniHidden = false;
-      //       shrinkPixmap = undefined;`）——我们这边 onDone 走 `finishCloseGuard()`，
-      //       它本来就会把 `sourceBarHidden` 复位成 false，生命周期与无界一致。
-      //   本仓对应字段 = `PlayerExpandState.sourceBarHidden`（Index 里真条的不透明度/可见性就认它，
-      //   `Index.ets:2207-2208 / 2400-2401`；而且它**不会**像 `hdsBarSuppressed` 那样把克隆迷你条也挂起来）。
-      //   ⇒ 收缩期间屏上只剩那张 pixmap，迷你条自带的封面不会再算一张。
-      //   排查关键字：`RzdCloseShrink mini-hidden=1`。
-      this.expandState.sourceBarHidden = true;
-      this.closeDiagnostic('RzdCloseShrink mini-hidden=1');
       // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀闁告侗浜濋～?2026-10-17闂佹寧绋戦悧蹇涘极閵堝绠ｇ€瑰嫭澹嗛弶鑺ョ箾閺夋埈鍎嶉柍?*缂備緡鍨靛畷鐢靛垝閻戞ɑ浜ら柡鍌涘缁€鈧梺绋跨箲婵炲﹤螞閹绢喖绠绘い鎾跺枑閺夊綊鏌涢敐搴ｅ帨缂佽鲸绻堥獮姗€顢橀悢鍛婃緬闂佸搫顧€缁绘繈宕戦崨顔锯枖濠㈣泛顦甸崵瀣煙缁嬫妯€闁瑰憡濞婂畷娆撴惞閻熸壆鐤€闂佹眹鍔岀€氼厼锕㈡笟鈧幃娆戞喆閸曨剨绱炴繛?*闂侀潧妫楃粙鍕?
       //   闂佸憡顭囬崰鎰焽閸偅浜ゆ繛鍡樻尭濞?*缂備焦鏌ㄩ鍛村春?* `morphLand()` 闂佺偨鍎查弻锟犲焵?闂備緡鍙忕徊鎯?婵炲瓨鍤庨崐娑氭崲閺囩姷纾兼俊顖氭惈閻撴垿鏌?闂?闁哄鏅炲〒鍦礊濮椻偓瀵爼鏁嶉崟顒€鐒搁梻濠庡墻閸嬪懎螣婢舵劕绀勯柣鎴炆戦梽?闂備緡鍙忕徊鑲╃博閺夋埈娼伴柕澶樺灣缁€?
       //   婵炲瓨绮岀€涒晛危濮濆瞼鐤€妞ゆ劑鍊曞楣冨级閳哄伒鎴︽儉閸涱垳纾介柍杞拌兌閺嗘岸鏌ㄥ☉妯煎濠?50ms闂佹寧绋戦¨鈧紒杈ㄧ箖閹棃寮村杈╂啴闂佹眹鍔岀€氼垳鍖栭悩铏闁绘娅曢拏瀣煥濞戞澧曢柟顖氱墦閺屽洭鏁愰崟顓犳啨婵炴垶鎼╂禍婵堚偓鍨矒閺岋箓顢氶崱娆戭槴闁诲繐绻愬畷顒勫礄閿涘嫮纾奸煫鍥ㄧ⊕閼荤喖鏌涢幋鐘插妺婵炵厧鐏氱粋?
@@ -4533,7 +4516,7 @@ export struct PlaybackPage {
       //   闂佸疇娉曟刊瀵哥箔?`morphLand()` 闂佸憡鐟禍婊勬櫠?闂佺儵鏅犻弲鑼礊?闂?LANDING + 婵炲瓨鍤庨崐娑氭崲閺囩姷纾兼俊顖氭惈閻撴垿鏌?婵炴垶鎸堕崐鎾斥枎閵忥紕顩查悗锝呭缁€澶愭煛?350ms 闁荤姴顑呴崯顖炴儉閸涙潙瀚夊璺猴工椤ュ苯霉閿濆棛鐭岄柡浣靛€濇俊?
       const shrink: MorphShrinkState = this.morphShrinkState();
       this.closeDiagnostic('shrink START');
-      shrink.start(this.getUIContext(), pixmap, srcBox, winW, winH, (): void => {
+      const onShrinkDone = (): void => {
         if (!this.ownsClose(closeToken, 'shrink-finish')) {
           return;
         }
@@ -4567,7 +4550,26 @@ export struct PlaybackPage {
         //   屏上就同时有「飞行中的快照里那颗封面/那排按钮」+「真条那颗/那排」= 两份。
         this.expandState.endSnapshotShrink();
         this.finishCloseGuard(closeToken);
-      });
+      };
+      // ★★★ 2026-10-22（**照无界把补间交给壳层**，甲方：「你别乱搞了，全都照着无界改」）：
+      //   无界 `MainPage.startShrinkBack` 是壳层起补间，所以页面能同拍 `nav.pop(false)`；
+      //   我们原来在这一行直接 `shrink.start(this.getUIContext(), …)` ⇒ 补间归页面 ⇒
+      //   "提前 pop 就没动画 / 不 pop 就两张封面"互斥。
+      //   现在：先 `requestStart` 把 pixmap+srcBox 交给共享状态，壳层 `Index` 用
+      //   `@Monitor('shrinkState.startToken')` 收到后用**自己的** UIContext 起补间。
+      //   60ms 兜底：壳层没来消费就自己起（**绝不退回"没有动画"**）。
+      //   排查关键字：`shrink request token=` → `shrink request consumed by shell`。
+      const queued: boolean = shrink.requestStart(pixmap, srcBox, winW, winH, onShrinkDone);
+      if (!queued) {
+        shrink.start(this.getUIContext(), pixmap, srcBox, winW, winH, onShrinkDone);
+      } else {
+        setTimeout((): void => {
+          if (shrink.takePendingIfAny()) {
+            this.closeDiagnostic('shrink shell-timeout self-start');
+            shrink.consumeStart(this.getUIContext());
+          }
+        }, 60);
+      }
       PlaybackPage.ev('SQZ', `shrink win=${winW.toFixed(0)}x${winH.toFixed(0)}`);
       this.state.isShowPlay = false;
       // 鈽呪槄鈽呪槄 2026-10-17锛堜慨銆岀郴缁熻繑鍥炲叧闂椂宸︿笅寰幆 / 鍙充笅姝屾洸鍒楄〃涓ら鎸夐挳娑堝け銆嶏級
@@ -5248,7 +5250,7 @@ export struct PlaybackPage {
                     isDismissing: this.isCollapsing(),
                     coverLinearScale: 1,
                     // 关闭期由壳层克隆封面独占（见 `MusicPlayInfoBlock.coverMuted` 注释）
-                    coverMuted: this.coverPublishHidden || this.expandState.morphOverlayBridging(),
+                    coverMuted: this.coverPublishHidden,
                     // 2026-10-17锛歚showControlArea` 榛樿 true 涓斿叏浠撲粠鏈紶杩?false 鈬?灏侀潰椤甸噷浼?*鍐嶇敾涓€浠?*
                     // 鎺у埗鍖猴紙Slider + 5 棰椾紶杈撻敭 + 4 棰楀浘鏍囪锛夛紝涓庡簳閮ㄥ叡浜偅涓€浠介噸鍙犮€傜敤鎴锋姤鐨?绗簩涓帶鍒跺尯"灏辨槸瀹冦€?
                     showControlArea: false
@@ -5975,35 +5977,10 @@ export struct PlaybackPage {
     return Math.min(64, Math.max(20, raw));
   }
 
-  /**
-   * @returns `flatCoverEdge()`（`wujie.pa:201671`）：封面边长 = min(盒宽 − 2·pageSide, 盒高 − 28)。
-   *
-   * ★★★ 2026-10-22（甲方：「横屏打开播放器，封面一开始非常大，动画结束后突然变小」）：
-   *   **盒还没量到的那几帧不能退成 `100%`**。上一版写的是
-   *   `edge > 0 ? edge : FULL_WIDTH/HEIGHT` ⇒ 首帧画成"铺满整栏"的巨大封面，
-   *   等 `onAreaChange` 量到盒（≈302vp）才突然变小 —— 甲方看到的就是这一下。
-   *   无界 `refitOverlay()`（`:210208-210360`）的做法是"**盒高/meta 高没齐就先不动**"：
-   *   它只在量到 `overlayBoxH/metaH/chrome` 之后才算 `edge`，没量到时保持上一次的值。
-   *   ⇒ 这里给出**同一公式的窗口兜底**：盒没量到就用窗口高扣掉状态栏/导航栏/上下 12
-   *   （`panelControlContent()` 左栏的 padding）当盒高，宽同理取整窗宽。
-   *   兜底值必然 > 0，于是**首帧就是一个合理尺寸的方封面**，不会再有"巨大→变小"。
-   */
+  /** @returns `flatCoverEdge()`（`:201671`）：封面边长 = min(盒宽 − 2·pageSide, 盒高 − 28)。 */
   private flatCoverEdgeVp(): number {
-    // 盒没量到时用窗口推一个（与 `panelControlContent()` 的 padding 一致：上 12 / 下 12）。
-    const winW: number = this.expandState.windowWidthVp;
-    const winH: number = this.expandState.windowHeightVp;
-    const boxW: number = this.flatCoverBoxWVp > 0 ? this.flatCoverBoxWVp :
-      (winW > 0 ? winW : 0);
-    const boxH: number = this.flatCoverBoxHVp > 0 ? this.flatCoverBoxHVp :
-      (winH > 0 ?
-        winH - this.windowInfo.statusBarTopVp - this.windowInfo.navigationBarBottomVp -
-          // 上 12 + 下 12（`panelControlContent()`）**再扣掉 meta 那一行**：
-          // 封面区是 `layoutWeight(1)`，量到的盒高 = 窗口高 − 这些；兜底不扣 meta 就会偏大约一行，
-          // 量到真盒时再"缩一下" = 甲方说的「还是大一点，然后突然变小」。
-          // meta 行高 = 上下内距 12×2 + 热区 44（`FLAT_HIT_VP`）。
-          24 - (PlaybackPage.FLAT_HIT_VP + 24) : 0);
-    const byW: number = boxW - 2 * this.flatPageSideVp();
-    const byH: number = boxH - 28;
+    const byW: number = this.flatCoverBoxWVp - 2 * this.flatPageSideVp();
+    const byH: number = this.flatCoverBoxHVp - 28;
     return Math.max(0, Math.min(byW, byH));
   }
 
@@ -6065,10 +6042,8 @@ export struct PlaybackPage {
         Column() {
           Image(this.currentCoverSource())
             .id(PLAYER_BIG_COVER_ID)
-            // 兜底不再给 `100%`（那会先画一张铺满整栏的巨封面再变小）：`flatCoverEdgeVp()`
-            // 内部已经用窗口推导出兜底盒，恒 > 0；这里再取一次 max(1) 只防 0 尺寸的非法值。
-            .width(Math.max(1, this.flatCoverEdgeVp()))
-            .height(Math.max(1, this.flatCoverEdgeVp()))
+            .width(this.flatCoverEdgeVp() > 0 ? this.flatCoverEdgeVp() : StyleConstants.FULL_WIDTH)
+            .height(this.flatCoverEdgeVp() > 0 ? this.flatCoverEdgeVp() : StyleConstants.FULL_HEIGHT)
             .objectFit(ImageFit.Cover)
             .syncLoad(true)
             .constraintSize({ maxWidth: '100%', maxHeight: '100%' })
@@ -6080,12 +6055,7 @@ export struct PlaybackPage {
             //   这一张原来只挂了 `coverPublishHidden`，所以形变全程恒定画着 ⇒ 屏上两份。
             //   参照：封面页那条（`LyricFloatLayer`）从第一天起就是 `realCoverVisible()`。
             //   排查关键字：`RzdCoverOwner`（`real=1 clone=1` 就是两份）。
-            //   ★ 2026-10-22（甲方：「一个正常飞回去，一个跟随播放器下去」）：
-            //   "飞回去"那张由**壳层克隆封面**负责（`Index.MorphCoverClone()`）；
-            //   页面这张就是"跟着播放器缩下去"那张 ⇒ 壳层在画时它**一律不画**。
-            //   不能只靠 `realCoverVisible()` 的互补推断（`overlayCoverDrawable()` 两端几何有一端为 0 时会反转）。
-            .opacity(this.expandState.realCoverVisible() && !this.coverPublishHidden &&
-              !this.expandState.morphOverlayBridging() ? 1 : 0)
+            .opacity(this.expandState.realCoverVisible() && !this.coverPublishHidden ? 1 : 0)
             .onAreaChange((_oldValue: Area, newValue: Area): void => {
               this.expandState.reportBig(
                 areaLengthToVp(newValue.globalPosition.x),
@@ -6243,7 +6213,7 @@ export struct PlaybackPage {
               isDismissing: this.isCollapsing(),
               coverLinearScale: 1,
               // 关闭期由壳层克隆封面独占（见 `MusicPlayInfoBlock.coverMuted` 注释）
-              coverMuted: this.coverPublishHidden || this.expandState.morphOverlayBridging(),
+              coverMuted: this.coverPublishHidden,
               panelLayout: true
             })
           }
@@ -6432,49 +6402,10 @@ export struct PlaybackPage {
     if (w === this.lastMeshWindowPxW && h === this.lastMeshWindowPxH) {
       return;
     }
-    // ★★★ 2026-10-22 12:40（**我 11:59 那版把打开播放器弄坏了，这里回退 + 加护栏**）：
-    //   新实例的第一次量测 `lastMesh*` 还是 0 ⇒ "换尺寸"必然成立 ⇒ 下面那段会在
-    //   **打开动画刚起步**（`stage=ENTERING`）时就把形变会话收掉/清掉 ⇒ 打开过程被打断，
-    //   屏上只剩一个不可见的 NavDestination 吃触摸（甲方：「点播放条后播放条消失、界面点不动」）。
-    //   ⇒ 第一次量测只记基线，**什么都不做**；只有"页面活着时尺寸真的变了"（转屏/改窗）才往下走。
-    if (this.lastMeshWindowPxW === 0 || this.lastMeshWindowPxH === 0) {
-      this.lastMeshWindowPxW = w;
-      this.lastMeshWindowPxH = h;
-      this.meshSrcVersion = this.meshSrcVersion + 1;
-      appendPlayLog(`[RzdBgPhase] refresh-on-resize first-measure ver=${this.meshSrcVersion} win=${w}x${h}`);
-      return;
-    }
     this.lastMeshWindowPxW = w;
     this.lastMeshWindowPxH = h;
-    // ★★★ 2026-10-22（甲方：「旋转之后背景消失，你也不处理一下」）：
-    //   真·换尺寸时做三件事（照无界 `handleWindowResize`：`morphReset(); refitOverlay(); setFinalStatus();`）：
-    //   ① 把形变会话当场收掉 —— 否则 `morphStage` 停在 ENTERING/LEAVING/LANDING，
-    //      壳层克隆封面继续按**旧方向**的窗口矩形画（= 甲方截图里的歪封面）+ 退出后留一层封面；
-    //   ② 立刻 bump 网格令牌；
-    //   ③ 160ms 后再补一拍 —— 转屏那一拍 `MeshCoverBg` 的画布是**新建**的，
-    //      同帧 bump 有可能被旧实例吃掉（背景消失就是这个原因）。
-    //   排查关键字：`window-resize settle` / `refresh-on-resize followup`。
-    if (this.expandState.morphContainerActive() || this.expandState.morphBridging() ||
-      this.expandState.morphOverlayBridging()) {
-      this.expandState.morphSettleOpen();
-      this.closeDiagnostic(
-        `window-resize settle(bridge->off) win=${w}x${h} ` +
-          `stage=${this.expandState.morphStage} p=${this.expandState.morphP.toFixed(3)}`);
-    }
     this.meshSrcVersion = this.meshSrcVersion + 1;
     appendPlayLog(`[RzdBgPhase] refresh-on-resize ver=${this.meshSrcVersion} win=${w}x${h}`);
-    if (this.meshResizeFollowUpTimer !== -1) {
-      clearTimeout(this.meshResizeFollowUpTimer);
-      this.meshResizeFollowUpTimer = -1;
-    }
-    this.meshResizeFollowUpTimer = setTimeout((): void => {
-      this.meshResizeFollowUpTimer = -1;
-      if (!this.isAlive || this.meshSrc === undefined) {
-        return;
-      }
-      this.meshSrcVersion = this.meshSrcVersion + 1;
-      appendPlayLog(`[RzdBgPhase] refresh-on-resize followup ver=${this.meshSrcVersion}`);
-    }, 160);
   }
 
   /**
@@ -7825,6 +7756,7 @@ export struct PlaybackPage {
             this.syncLyricMorphToPage('appear');
     // 每次进入播放页都复位「关闭时压掉封面」的开关（无界 `publishCoverHidden` 的对偶）。
     this.coverPublishHidden = false;
+    this.shrinkPageHidden = false;
     this.coverHiddenScale = 0;
             // 闂佸疇娉曟刊瀵哥箔?闁哄鏅滈悷銈囩博閹绢喖鐭?*闂婎偄娲ら幊姗€濡磋箛娑欏仼婵炲棗绻戦煬顒€顭块懜鐢靛⒌婵?*闂佹寧绋掗悺鐚粂ncLyricMorphToPage()` 闂?閻庤鐡曠亸娆戝垝閿涘嫧鍋撻棃娑氱Ш缂?闂佸搫鍟﹢鍦?*闂佸搫鍟犻弲鐘诲焵椤戣棄浜?*闂?
             //   闂?闂佺厧鎼崐濠氬磻閿濆鐓傜€广儱鎳愮槐锕傛煕濮橆剛鍑圭紒妤€顦遍幏瀣矙婢跺摜涓嶉梺闈╄礋閸斿繗妫㈤梻鍌氬€荤换婵嬫嚈閹达附鈷掗悗娑櫱氶崑?闁哄鏅滈悷锕€顭囬婊勫暫濞达絽婀卞﹢瀛樻叏閿濆懐绠叉い?`onAppear` 闂備緡鍠栭埀顒傚櫏濞诧絾绻濇繛鎰╁€曢崰鏇㈡煏?
@@ -8183,7 +8115,7 @@ export struct PlaybackPage {
       // 闂佸疇娉曟刊瀵哥箔?闂婎偄娴傞崑鍡涘矗鎼淬劌鎹?`morphLand()` **婵炴垶鏌ㄩ鍛櫠?*闂佺懓鍢茬粙鍕濞嗘垶鍠?`closeWithAnimation` 闂佹眹鍔岀€氫即濡存惔銏″劅闊洢鍎崇粈鍡涙煃?闂佸搫鐗滈崜鐔肺涢鍌滅閻犲洩寮撳ù鐑芥煛?
       //    闂佹悶鍎查崕鎶藉礄閿涘嫮纾奸煫鍥ㄦ尭閻撳倿鏌熼棃娑卞劀缂佽鲸绻冪粙澶婎吋閸曨厾鐛ラ梺鐟板槻缁夋挳宕虹仦鍓р枖闁逞屽墮椤曪綁鎮╃喊妯绘櫈闂佹悶鍎伴崟姗€鍩€?
       // 闂佸疇娉曟刊瀵哥箔?婵炴垶鎸搁敃锝囩博鐎靛憡鏆滅憸宀€鍒掑☉銏犲強?LEAVING闂佹寧绋戦悧鍡楋耿椤忓牊鍋ㄥù鍏肩懅缁€鍡涙煃?闂佺绻戞繛濠偽涢幘顔肩闁靛ě鍕瘞闂佸搫鐗滈崜婵嬫閳哄倻鈻旂€广儱鎳庣紞鈧悷婊勬緲瀹曨剟骞栭悜钘壩?
-      .visibility(this.expandState.playerPaints() &&
+      .visibility(this.expandState.playerPaints() && !this.shrinkPageHidden &&
         (!this.expandState.morphClipping() || !this.expandState.morphPaintHidden()) ?
         Visibility.Visible : Visibility.Hidden)
       // 闁荤喍妞掔粈浣圭珶閳ь剛绱掗幇顓ф當鐟滅増绋掗〃鍥熼崫鍕靛敽 = 闂佸憡鐟崹鐢革綖鐎ｎ偒娈楁俊顖氭惈椤?/ 缂傚倸鍊甸弲婊堝棘?闂?缂傚倸鍊甸弲婊堝棘娓氣偓瀹曘儲鎯旈姀鈺佸Η婵犻潧鍊芥慨銈呂ｉ幖浣圭劷闁挎繂鎳忛崑銉╂煕濞嗘ê鐏ユい顐㈩儔閹矂鍩℃担钘夌厒
@@ -8617,7 +8549,7 @@ export struct PlaybackPage {
           //   闂佸疇娉曟刊瀵哥箔?婵炴垶鎸搁敃銉︽叏閵堝鐓㈤柍杞拌兌閹藉秹鏌ㄥ☉妯荤秮.id` / `onAreaChange`闂?*婵炴垶鎸哥粔纾嬨亹?opacity 閻熸粍婢樺畷顒勫箹?*闂佹寧绋戦惉濂稿矗鎼达絾鏆滈柟闂寸濞呫倗鈧數澧楅〃鍛村春?闂佺繝鐒﹂幐鍫曞焵?
           // ★ 2026-10-18（用户第九/十轮）：**只在"快照已经进手"之后**才把真封面藏掉。
           //   上一轮用 `!isClosing`（在拍快照**之前**就置真）⇒ 快照里没有封面 ⇒ "一关就封面消失"。
-          .opacity(this.expandState.realCoverVisible() && !this.snapshotFlight && !this.coverPublishHidden && !this.expandState.morphOverlayBridging() ? 1 : 0)
+          .opacity(this.expandState.realCoverVisible() && !this.snapshotFlight && !this.coverPublishHidden ? 1 : 0)
           // 闂?婵炴垶鎸搁敃銉︽叏閵堝鐓㈤柍杞拌兌閹藉秹鏌熺喊鍗炲闁糕晛鏈璇测枎閹捐櫕顏為梺鎸庣☉閻楀﹤螞閵堝鍋╅悘鐐跺亹閻﹀秹鏌￠崟闈涚仴妞も晩鍋婇幆鍕冀瑜忓﹢鎾煠婵傚绨荤紒璁崇劍缁嬪绻濋崘銊愭捇鏌ㄥ☉娆戞憿floatingCover.onAreaChange 闂?publishMorphTargets`闂?
           .id(PLAYER_BIG_COVER_ID)
           .onAreaChange((_oldValue: Area, newValue: Area): void => {
