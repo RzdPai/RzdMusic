@@ -6064,8 +6064,21 @@ export struct PlaybackPage {
         Column() {
           Image(this.currentCoverSource())
             .id(PLAYER_BIG_COVER_ID)
-            .width(this.flatCoverEdgeVp() > 0 ? this.flatCoverEdgeVp() : StyleConstants.FULL_WIDTH)
-            .height(this.flatCoverEdgeVp() > 0 ? this.flatCoverEdgeVp() : StyleConstants.FULL_HEIGHT)
+            // ★★★ 2026-10-22（「横屏点击打开：先一个超大封面再缩回来」的**根**）：
+            //   原来这里是 `flatCoverEdgeVp() > 0 ? edge : FULL_WIDTH/FULL_HEIGHT` ——
+            //   **"量不到就铺满"这句是我自己加的，无界没有**。
+            //   上游 `PlayerPage.flatCoverEdge()`（`wujie.pa:201671`）就一句：
+            //     `max(0, min(flatBoxW - 2*pageSide, flatBoxH - 28))`
+            //   ⇒ 盒子还没量到（= 0）时它就是 **0**，于是 `Image` 是 **0×0 = 什么都不画**，
+            //     量到之后才画真尺寸。**永远不会先画一个假尺寸**。
+            //   本仓的后果链（甲方看到的）：横屏点击打开 → 首帧 `flatCoverBoxW/H` 还是 0
+            //   ⇒ 走 FULL ⇒ 铺满整栏的巨图；次帧 `onAreaChange` 量到盒子 ⇒ 才缩回真尺寸；
+            //   而且这一帧的巨图还被 `.onAreaChange → reportBig()` 当成"大封面矩形"上报，
+            //   形变终点锚点（`endCoverSize`）跟着吃进这个假值 ⇒ 克隆封面也按巨图飞。
+            //   上拉打开之所以正常：手指在拖，量测在页面露出来之前就完成了。
+            //   排查关键字：`morph init … end=(…,` 里的 `endCoverSize` 若 ≈ 整栏尺寸就是它。
+            .width(this.flatCoverEdgeVp())
+            .height(this.flatCoverEdgeVp())
             .objectFit(ImageFit.Cover)
             .syncLoad(true)
             .constraintSize({ maxWidth: '100%', maxHeight: '100%' })
