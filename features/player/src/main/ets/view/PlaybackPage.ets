@@ -1223,9 +1223,6 @@ export struct PlaybackPage {
    */
   private static readonly PUBLISH_RETRY_MAX: number = 6;
   private static readonly PUBLISH_RETRY_MS: number = 32;
-  /** 打开形变"端点未量到"的重试计数/定时器（照无界 `publishRetries` / `publishTimer`）。 */
-  private introRetries: number = 0;
-  private introRetryTimer: number = -1;
   /**
    * 濠殿喗绻傞惌渚€鎯佸┑鍥ヤ簻闁汇垻顭堟禍婵嗏槈閹绢垰浜惧┑鈽嗗灱娴滐綁銆侀幋锔芥櫖闁割偅绻嶉崵鐘绘煛瀹ュ懏澶勬俊顐犲€濋幃?`metaRow`闂佹寧绋戦ˇ鍗炩枔閹达箑绠抽柟鐑樻煥椤ｅジ鎮介娑欏€愰柛?闂佺偨鍎查弻锟犲焵?闂佽桨鐒﹀姗€鍩€椤掑倸甯剁憸鏉挎喘閹?
    * `PlayerPage闁诲海鎳撻張顒勫汲椤ゆ杯闁诲氦顫夊銊┾€?md` 闁?.2闂佹寧绋掔喊宥夋偉閿濆棴绱?`15` / 缂備緡鍠楅妵鐐电礊?/ 闂?/ `opacity 0.86`闂佹寧绋戦張顒勬偤閺囥垹绠?`12` / 闁汇埄鍨遍悺鏇綖婢舵劕违?
@@ -3940,62 +3937,20 @@ export struct PlaybackPage {
       prepared = this.expandState.prepareMorphEntry(this.getUIContext(), true);
     });
     if (!prepared) {
-      // ★★★ 2026-10-22（照抄无界 publishMorphTargets 退避重试, :208429-208528 + schedulePublishRetry :210793-210838）:
-      //   上游端点没量到时**不放弃动画**，而是 publishRetries++ 后 setTimeout(publishMorphTargets, PUBLISH_RETRY_MS)。
-      //   本仓这里原来直接 return false ⇒ 点击打开时端点没量到就画成"铺满整栏的兜底尺寸"，几帧后才量到 =
-      //   甲方看到的"大背景突然变小"。上拉打开之所以正常：手指在驱动，量测在拖动过程中已完成。
-      return this.scheduleIntroRetry('prepare');
+      // 婵烇絽娲︾换鍕汲閳ь剟鏌￠崼顐㈠⒉闁汇倕妫涙禍鍛婃綇閳轰礁纾块梺缁橆焾閸╂牠鍩€椤戣法绛忕紒杈ㄧ箘缁灚寰勬繝鍕€€婵炴垶鎸搁鍕博閺夋垟鏋庨柍銉ュ暱閺傃囨倶韫囨挻鎯堟い鏇ㄥ幘閺侇噣宕橀妸褎鎷遍梺鎸庣☉婵傛梻绮径鎰嵍闁靛ň鏅涘▍銏ゆ偣閸ャ劍绀嬫俊顐㈡健瀹曘垻鈧綆鍓涚槐?婵犮垼娉涚粔宕囩礊閸涱垱鏆滈柛鎰╁妿濠€浼存煏?
+      return false;
     }
     if (!this.expandState.morphIntroAnchorsReady()) {
       Logger.warn(PlaybackPage.logTag,
         `expand intro: anchors not ready ` +
         `(usable=${this.expandState.morphUsable} bigKnown=${this.expandState.bigCoverAnchored()})`);
-      // ★ 照抄无界 schedulePublishRetry：端点没到不放弃，退避重发。
-      return this.scheduleIntroRetry('anchors');
+      return false;
     }
-    this.introRetries = 0;
     // 闂佸憡鍨规慨宕囩礊瀹ュ洣鐒婇弶鍫氭櫅瀹曟洟鏌ㄥ☉娆掑缂佽鲸鍨垮濠氣€﹂幒鏃傤槷闂佺绻嬪ù鍥敊韫囨洜纾兼俊顖氭惈閻撴垿鏌ㄥ☉妯煎妞ゆ帗绻堝顔炬崉閸濆嫬娈ョ紓鍌欑缁绘垵危?闁哄鏅炲〒鍦礊濮椻偓瀵爼鏁撻悩韫凹婵炴垶鎸撮崑鎾绘倶韫囨挾绠版繛?闂佹眹鍔岀€氼垶骞戦敐澶嬪€烽悷娆忓閸嬫挻绗熸繝鍕槴
     this.introPaintReady = true;
     this.expandIntroRunning = false;
     this.collapseProgress = 0;
     this.playMorphOpenIntro();
-    return true;
-  }
-
-  /**
-   * 打开形变"端点/量测没到"时的退避重试（**照搬上游** `PlayerPage.schedulePublishRetry`，
-   * `wujie.pa:210793-210838`）。
-   *
-   * ```
-   * schedulePublishRetry() {                       // 上游伪码
-   *   if (this.publishRetryCount >= PUBLISH_RETRY_MAX) { return; }   // 放弃 → 动画照旧用现有几何
-   *   this.publishRetryCount++;
-   *   this.publishRetryTimer = setTimeout(publishMorphTargets, PUBLISH_RETRY_MS);
-   * }
-   * ```
-   * 返回 `true` = 已排重试（本轮算"处理过"，不再落到不带动画的兜底）。
-   */
-  private scheduleIntroRetry(reason: string): boolean {
-    if (this.introRetries >= PlaybackPage.PUBLISH_RETRY_MAX) {
-      this.introRetries = 0;
-      Logger.warn(PlaybackPage.logTag, `[RzdMorphIntro] retry-exhausted reason=${reason}`);
-      return false;
-    }
-    if (this.introRetryTimer !== -1) {
-      return true;
-    }
-    this.introRetries = this.introRetries + 1;
-    Logger.info(PlaybackPage.logTag,
-      `[RzdMorphIntro] publish-retry reason=${reason} n=${this.introRetries}`);
-    this.introRetryTimer = setTimeout((): void => {
-      this.introRetryTimer = -1;
-      if (!this.isAlive || this.isClosing) {
-        return;
-      }
-      const ok: boolean = this.tryStartMorphIntro();
-      Logger.info(PlaybackPage.logTag,
-        `[RzdMorphIntro] publish-retry done n=${this.introRetries} ok=${ok ? 1 : 0}`);
-    }, PlaybackPage.PUBLISH_RETRY_MS);
     return true;
   }
 
