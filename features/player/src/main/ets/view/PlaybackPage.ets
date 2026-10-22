@@ -3261,13 +3261,12 @@ export struct PlaybackPage {
     const closeStage: MorphStage = this.expandState.morphStage;
     const morphRunning: boolean = this.expandIntroRunning || closeStage === MorphStage.ENTERING
       || closeStage === MorphStage.LANDING;
-    // 2026-10-23: non-finger close waits for the landing, then takes the snapshot (see deferCloseUntilLanded).
-    if (morphRunning && !this.expandState.pullDragging) {
-      appendPlayLog(`RzdCloseDefer start stage=${closeStage} p=${this.expandState.morphP.toFixed(3)} intro=${this.expandIntroRunning ? 1 : 0} src=${this.closeEntrySource}`);
-      this.deferCloseUntilLanded(0);
-      return;
-    }
-    if (morphRunning) {
+    // 2026-10-23: 一律"展开动画反过来"（甲方要的是封面飞回去，不是整屏缩下去）。
+    // 所以只要形变几何还在（`morphUsable`），关闭就走活体反向；不再等落位、不再拍快照。
+    appendPlayLog(`RzdCloseReverse src=${this.closeEntrySource} stage=${closeStage} ` +
+      `p=${this.expandState.morphP.toFixed(3)} usable=${this.expandState.morphUsable ? 1 : 0} ` +
+      `finger=${this.expandState.pullDragging ? 1 : 0}`);
+    if (this.expandState.morphUsable) {
       // ★★★ 2026-10-18（用户第十轮：「展开中按返回**要等好久**才收起」+「会闪」）——照搬上游 `reverseIntentOf`：
       //   上游 `ENTERING` 相位收到关闭 ⇒ `START`：`retargetToLiveCover()` → `setMorph(LEAVING,ANIM)` →
       //   `animateMorphT(0, round(460×max(morphT,0.4)), REVERSE_EASING)`（`wujie.pa:154070-154133`）
