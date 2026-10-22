@@ -1378,6 +1378,40 @@ struct Index {
    *   璋佸厛鎴愬姛閮界敱鍚勮嚜璐熻矗璧锋锛堝箓绛夛紝閲嶅璋冪敤瀹夊叏锛夈€?
    * @param commit 鏄惁鎻愪氦灞曞紑
    */
+  /**
+   * 落位重试（**只重试合法的落位，不硬写 OPEN**）。
+   *
+   * 为什么需要：`settlePullOpen()` 的 `onGeometryFinished` 里，落位条件是
+   * `isShowPlay && morphGeomReadyNow() && morphUsable && !reverseInFlight`；
+   * 只要有一条暂时不成立，它**只打一条日志**就结束了 ⇒ 相位永远停在 ENTERING
+   * （真机日志：`stage=1 p=1.000`、关闭时 `RzdCoverOwner close-begin real=0 clone=1`
+   *  = 克隆层还在代表封面 = 形变从未落位）。
+   * ⇒ 照"几何重试"那套做法：32ms 一次、最多 12 次，等到条件成立的**那一刻**再落位。
+   *   全程不改相位、不碰动画时间线；等不到就放弃（保持原行为）。
+   * @param attempt 已重试次数
+   */
+  private retrySettleLanding(attempt: number): void {
+    if (!this.appState.isShowPlay) {
+      return;
+    }
+    if (this.expandState.morphGeomReadyNow() && this.expandState.morphUsable &&
+      !this.expandState.reverseInFlight) {
+      appendPlayLog(`RzdShellSettle land-retry attempt=${attempt} stage=${this.expandState.morphStage} ` +
+        `p=${this.expandState.morphP.toFixed(3)}`);
+      this.expandState.pushMorphTrace('retrySettled');
+      this.expandState.morphSettleOpen();
+      return;
+    }
+    if (attempt >= 12) {
+      appendPlayLog(`RzdShellSettle give-up attempt=${attempt} usable=${this.expandState.morphUsable ? 1 : 0} ` +
+        `geom=${this.expandState.morphGeomReadyNow() ? 1 : 0} ` +
+        `reverse=${this.expandState.reverseInFlight ? 1 : 0} stage=${this.expandState.morphStage}`);
+      return;
+    }
+    setTimeout((): void => {
+      this.retrySettleLanding(attempt + 1);
+    }, 32);
+  }
   private settlePullOpen(commit: boolean, attempt: number = 0): void {
     this.expandState.pushMorphTrace(`settle${attempt}${commit ? 'C' : 'A'}`);
     // 鈽呪槄鈽?2026-10-16锛?*琛ラ噺閾剧殑闂ㄦ崲浜嗕釜閲?*锛夛細鍘熸潵鏄?`if (!morphUsable)`銆?
@@ -1535,6 +1569,12 @@ struct Index {
           this.expandState.morphSettleOpen();
         } else {
           this.expandState.pushMorphTrace('settleSkip');
+          appendPlayLog('RzdShellSettle skip showPlay=' + (this.appState.isShowPlay ? 1 : 0) +
+            ' usable=' + (this.expandState.morphUsable ? 1 : 0) +
+            ' geom=' + (this.expandState.morphGeomReadyNow() ? 1 : 0) +
+            ' reverse=' + (this.expandState.reverseInFlight ? 1 : 0) +
+            ' stage=' + this.expandState.morphStage);
+          this.retrySettleLanding(0);
           Logger.info(RzdShellLogTag,
             `pull settle: skip morphSettleOpen showPlay=${this.appState.isShowPlay} ` +
             `usable=${this.expandState.morphUsable} geomReady=${this.expandState.morphGeomReadyNow()} ` +
