@@ -3307,6 +3307,13 @@ struct Index {
    * @returns true = 宸叉秷璐癸紝涓嶅啀璧伴粯璁よ繑鍥為€昏緫
    */
   onBackPress(): boolean {
+    // ★ 2026-10-23（甲方：「首页返回还是会变成空白」）：前几份日志里**从来没有 `RzdHomeBack`**，
+    //   ⇒ 那次返回可能根本没走到这里（被 HDS/Navigation 自己吃了），也可能走到了但
+    //   `homeStack.size() > 1` 把返回改写成了 `closeHomeSearch()`。
+    //   ⇒ 进门第一件事先记账，三条判据一起打，下次日志就能定"走没走到 / 走了哪一支"。
+    appendPlayLog(`RzdHomeBackEnter homeStack=${this.homeStack.size()} ` +
+      `navSize=${this.pageIndexInfos.size()} playerIdx=${this.playerRouteIndex()} ` +
+      `showPlay=${this.appState.isShowPlay ? 1 : 0} navDepth=${this.navDepth}`);
     // 内层栈（首页/搜索页）还有可弹的路由时先弹它，别直接退出应用。
     if (this.homeStack.size() > 1) {
       this.closeHomeSearch();
