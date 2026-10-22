@@ -3229,20 +3229,6 @@ export struct PlaybackPage {
    */
   @Monitor('expandState.collapseVersion')
   onCollapseRequested(): void {
-    // ★★★★ 2026-10-22（真机日志给出的分岔原因，一次说清）：
-    // ```
-    //   23:02:39 RzdCloseEntry src=systemBack stage=2 …      ⇒ path=snapshot（飞回）✓
-    //   23:02:40 RzdCloseEntry src=systemBack stage=1 drv=1  ⇒ path=live（整页跟着缩下去）✗
-    //   23:02:48 RzdCloseEntry src=topbar     stage=1 …      ⇒ path=live ✗
-    //   23:03:42 RzdCloseEntry src=systemBack stage=1 …      ⇒ path=live ✗
-    // ```
-    //   分岔判据就是下面那个 `morphRunning`：**相位停在 ENTERING(1)** 就一律走活体反向
-    //   （= 甲方说的"封面跟着背景下滑"），只有已经落到 OPEN(2) 才走快照飞回。
-    //   而 `stage=1` 时 `p=1.000` —— **几何早就跑完了，只是"落位"那一步没写成 OPEN**
-    //   （`playMorphOpenIntro()` 里那条 590ms 收尾回调会因为 `morphGenAlive` 不成立等原因静默 return）。
-    //   ⇒ 在**读判据之前**先把该落位的补齐：几何已到终点 + 没有手指 ⇒ 立刻 `morphSettleOpen()`。
-    //     这是照上游语义（"land ⇒ setMorph(OPEN, NONE)"）补的一条兜底，不改任何动画时间线。
-    this.ensureOpenSettled('collapse-entry');
     // ★★★ 2026-10-22（甲方：**收起按钮**关闭时"封面跟着背景下滑（活体反向）"而不是飞回去；
     //   而**系统返回**正常；且"先用一次系统返回，之后按钮也正常"）：
     //   下面这条 if 就是两个观感的分岔点 —— 走 `closeFullScreenPlayback()`（活体反向：整页跟着
@@ -3288,39 +3274,6 @@ export struct PlaybackPage {
     }
     this.closeWithAnimation();
   }
-
-  /**
-   * 「相位该落位了却还停在 ENTERING/LANDING」的兜底（照上游 `land ⇒ setMorph(OPEN, NONE)` 的语义）。
-   *
-   * 真机日志（`RzdCloseEntry`）里的分岔：
-   * ```
-   *   stage=2（OPEN）          ⇒ 关闭走 snapshot（飞回）✓
-   *   stage=1（ENTERING）p=1.0 ⇒ 关闭走 live（整页跟着缩下去）✗ = 甲方说的"封面跟着背景下滑"
-   * ```
-   * 也就是说几何已经跑到终点（`p=1`），只是落位那一步没写成 OPEN。这里在"关闭判据之前"
-   * 补一次落位：几何终点 + 没有手指 + 没在关闭 ⇒ `morphSettleOpen()`。
-   * @param reason 日志用
-   */
-  private ensureOpenSettled(reason: string): void {
-    if (!this.isAlive || this.isClosing) {
-      return;
-    }
-    const stage: MorphStage = this.expandState.morphStage;
-    if (stage !== MorphStage.ENTERING && stage !== MorphStage.LANDING) {
-      return;
-    }
-    if (this.expandState.pullDragging) {
-      return;
-    }
-    if (this.expandState.morphP < 0.999) {
-      return;
-    }
-    appendPlayLog(`RzdSettleWatchdog ${reason} stage=${stage} p=${this.expandState.morphP.toFixed(3)} ` +
-      `drv=${this.expandState.morphSessionDriving() ? 1 : 0}`);
-    this.expandIntroRunning = false;
-    this.expandState.morphSettleOpen();
-  }
-
   /** Fallback page background tint when art or color pick fails. */
   private static readonly defaultImageBgColor: string = 'rgba(32, 32, 32, 1)';
 
@@ -4135,16 +4088,6 @@ export struct PlaybackPage {
         this.stopContentTicker();
         this.expandState.endContentTween(contentGen, 1);
       }, PlayerExpandState.MORPH_CONTENT_DURATION_MS + 30);
-      // ★★★ 2026-10-22（真机日志：`stage=1 / p=1.000` 时关闭会掉进"活体反向下滑"）：
-      //   落位兜底两拍 —— 正常情况下上面那条 590ms 收尾回调已经把相位写成 OPEN；
-      //   它一旦因为代次/几何判据静默 return，相位就永远停在 ENTERING，
-      //   **之后每一次关闭都会走活体反向**（甲方看到的"封面跟着背景下滑"）。
-      setTimeout((): void => {
-        this.ensureOpenSettled('intro+700');
-      }, 700);
-      setTimeout((): void => {
-        this.ensureOpenSettled('intro+1200');
-      }, 1200);
     } catch (err) {
       // 闁荤偞绋忛崕闈浳涚捄銊﹀皫闁炬艾鍊婚悷婵嬫煛婢跺牆鍔欑紒鈥冲暟閹茬増鎷呴懞銉ュ姍闂佸憡甯楀姗€鎮鹃鍕瀬閻庢稒菤閸嬫挻绗熸繝鍕槷缂傚倷鐒︾换鈧紒妤€顦甸幊妤呮嚍閵夈儙鈺呮煙缂併垹骞楅柡鍌欑劍閵囧嫰鎮介崹顐ｇ暚闂?闁哄鏅炲〒鍦礊濮椻偓瀵爼鏁撻悩韫凹婵炴垶鎸撮崑鎾绘倶韫囨挾绠版繛?
       const e = err as BusinessError;
