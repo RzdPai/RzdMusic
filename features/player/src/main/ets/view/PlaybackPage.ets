@@ -5944,10 +5944,30 @@ export struct PlaybackPage {
     return Math.min(64, Math.max(20, raw));
   }
 
-  /** @returns `flatCoverEdge()`（`:201671`）：封面边长 = min(盒宽 − 2·pageSide, 盒高 − 28)。 */
+  /**
+   * @returns `flatCoverEdge()`（`wujie.pa:201671`）：封面边长 = min(盒宽 − 2·pageSide, 盒高 − 28)。
+   *
+   * ★★★ 2026-10-22（甲方：「横屏打开播放器，封面一开始非常大，动画结束后突然变小」）：
+   *   **盒还没量到的那几帧不能退成 `100%`**。上一版写的是
+   *   `edge > 0 ? edge : FULL_WIDTH/HEIGHT` ⇒ 首帧画成"铺满整栏"的巨大封面，
+   *   等 `onAreaChange` 量到盒（≈302vp）才突然变小 —— 甲方看到的就是这一下。
+   *   无界 `refitOverlay()`（`:210208-210360`）的做法是"**盒高/meta 高没齐就先不动**"：
+   *   它只在量到 `overlayBoxH/metaH/chrome` 之后才算 `edge`，没量到时保持上一次的值。
+   *   ⇒ 这里给出**同一公式的窗口兜底**：盒没量到就用窗口高扣掉状态栏/导航栏/上下 12
+   *   （`panelControlContent()` 左栏的 padding）当盒高，宽同理取整窗宽。
+   *   兜底值必然 > 0，于是**首帧就是一个合理尺寸的方封面**，不会再有"巨大→变小"。
+   */
   private flatCoverEdgeVp(): number {
-    const byW: number = this.flatCoverBoxWVp - 2 * this.flatPageSideVp();
-    const byH: number = this.flatCoverBoxHVp - 28;
+    // 盒没量到时用窗口推一个（与 `panelControlContent()` 的 padding 一致：上 12 / 下 12）。
+    const winW: number = this.expandState.windowWidthVp;
+    const winH: number = this.expandState.windowHeightVp;
+    const boxW: number = this.flatCoverBoxWVp > 0 ? this.flatCoverBoxWVp :
+      (winW > 0 ? winW : 0);
+    const boxH: number = this.flatCoverBoxHVp > 0 ? this.flatCoverBoxHVp :
+      (winH > 0 ?
+        winH - this.windowInfo.statusBarTopVp - this.windowInfo.navigationBarBottomVp - 24 : 0);
+    const byW: number = boxW - 2 * this.flatPageSideVp();
+    const byH: number = boxH - 28;
     return Math.max(0, Math.min(byW, byH));
   }
 
@@ -6009,8 +6029,10 @@ export struct PlaybackPage {
         Column() {
           Image(this.currentCoverSource())
             .id(PLAYER_BIG_COVER_ID)
-            .width(this.flatCoverEdgeVp() > 0 ? this.flatCoverEdgeVp() : StyleConstants.FULL_WIDTH)
-            .height(this.flatCoverEdgeVp() > 0 ? this.flatCoverEdgeVp() : StyleConstants.FULL_HEIGHT)
+            // 兜底不再给 `100%`（那会先画一张铺满整栏的巨封面再变小）：`flatCoverEdgeVp()`
+            // 内部已经用窗口推导出兜底盒，恒 > 0；这里再取一次 max(1) 只防 0 尺寸的非法值。
+            .width(Math.max(1, this.flatCoverEdgeVp()))
+            .height(Math.max(1, this.flatCoverEdgeVp()))
             .objectFit(ImageFit.Cover)
             .syncLoad(true)
             .constraintSize({ maxWidth: '100%', maxHeight: '100%' })
