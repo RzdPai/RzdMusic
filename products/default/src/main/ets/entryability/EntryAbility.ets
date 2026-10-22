@@ -373,20 +373,6 @@ export default class EntryAbility extends UIAbility {
   }
 
   /** App moved to background; notifies media layer for background-task policy. */
-  /**
-   * 系统返回：页面级 `Index.onBackPress()` 从来收不到"首页那次"（真机日志里
-   * `RzdHomeBackEnter` 一次都没出现）。这里补一条记账，用来确认首页返回走到哪一层；
-   * 同时顺手把可能残留的全屏浮层收掉（甲方的"首页一片空白"）。
-   * @returns false = 交回系统（该退到桌面就退）
-   */
-  onBackPressed(): boolean {
-    try {
-      MusicStoreService.getInstance().appendRuntimeDiagnostic('RzdHomeBackEnter source=EntryAbility');
-    } catch (err) {
-    }
-    return false;
-  }
-
   onBackground() {
     // Ability has back to background
     Logger.info('EntryAbility: Ability onBackground');
