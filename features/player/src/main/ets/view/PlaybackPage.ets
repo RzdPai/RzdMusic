@@ -1344,6 +1344,14 @@ export struct PlaybackPage {
     //   第 ② 支反形变则全程不压（封面归"续飞封面"那一套交棒）。
     //   重新打开时在 `onAppear`（`resetPublishCoverHidden`）复位。
     this.publishCoverHidden();
+    // ★★★ 2026-10-22（照搬无界关闭起手的 `setMiniOut(true)`，`wujie.pa:184791-184796`）：
+    //   无界反向/收缩一开始就把迷你条置成"出场态"（`setMiniOut(true)`），会话结束
+    //   （`morphReset()` / `finishReverse`）再 `setMiniOut(false)`。
+    //   本仓 `morphReset()` 里同样写着 `miniOut = false`（照搬的），所以这里只管置真。
+    //   它和 `sourceBarHidden`（上一轮的 `miniHidden`）是同一族开关：真条在收缩期间不画。
+    //   排查关键字：`RzdCloseShrink mini-out=1`。
+    this.expandState.miniOut = true;
+    this.closeDiagnostic('RzdCloseShrink mini-out=1');
     this.logCoverOwner('close-begin');
     this.closeToken = ++PlaybackPage.closeSerial;
     PlaybackPage.closeOwner = this.closeToken;
@@ -5978,7 +5986,12 @@ export struct PlaybackPage {
       (winW > 0 ? winW : 0);
     const boxH: number = this.flatCoverBoxHVp > 0 ? this.flatCoverBoxHVp :
       (winH > 0 ?
-        winH - this.windowInfo.statusBarTopVp - this.windowInfo.navigationBarBottomVp - 24 : 0);
+        winH - this.windowInfo.statusBarTopVp - this.windowInfo.navigationBarBottomVp -
+          // 上 12 + 下 12（`panelControlContent()`）**再扣掉 meta 那一行**：
+          // 封面区是 `layoutWeight(1)`，量到的盒高 = 窗口高 − 这些；兜底不扣 meta 就会偏大约一行，
+          // 量到真盒时再"缩一下" = 甲方说的「还是大一点，然后突然变小」。
+          // meta 行高 = 上下内距 12×2 + 热区 44（`FLAT_HIT_VP`）。
+          24 - (PlaybackPage.FLAT_HIT_VP + 24) : 0);
     const byW: number = boxW - 2 * this.flatPageSideVp();
     const byH: number = boxH - 28;
     return Math.max(0, Math.min(byW, byH));
