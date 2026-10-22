@@ -2931,7 +2931,15 @@ export struct PlaybackPage {
     //   `pullPgOpacity` / `contentOpacity` 把它在动画前半段**透明掉**（`wujie.pa:192150-192178`）。
     //   ⇒ 几何门必须留着（几何没齐 = 容器还没铺开 = 这时画背景就是那个"右下角小块"）。
     //   排查关键字：`[RzdBgPhase] refresh-on-resize` / `paintable`。
-    const paintable: boolean = this.expandState.morphGeomReadyNow() && this.expandState.morphSquashY === 1;
+    // 2026-10-23（横屏点击打开，动画期间没背景）: 日志 `RzdSettleStart attempt=0/1/2 geom=0`
+    //   ⇒ 横屏这一拍形变几何从来没就绪 ⇒ 形变根本没跑 ⇒ 容器没被裁剪 ⇒ 页面一直整屏。
+    //   旧判据只看"几何就绪"⇒ 整段动画把背景透明掉（= 甲方说的"动画过程中没背景"）。
+    //   但**不能**把几何门整个去掉：上一版那样连竖屏也一起放开，结果竖屏动画期间会露出
+    //   "贴在播放条位置的小块"（容器被裁剪时的背景）。
+    //   ⇒ 判据保留几何门，**只在"容器压根没被裁剪"时放行**：没裁剪 = 没有那个小块的成因。
+    //     真正的开/关动画里 `morphClipping()` 为真 ⇒ 行为与旧版逐帧一致。
+    const paintable: boolean = this.expandState.morphSquashY === 1 &&
+      (this.expandState.morphGeomReadyNow() || !this.expandState.morphClipping());
     if (!paintable) {
       return 0;
     }
