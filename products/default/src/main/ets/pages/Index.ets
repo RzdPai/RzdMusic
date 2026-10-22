@@ -384,18 +384,6 @@ struct Index {
   @Local shrinkState: MorphShrinkState =
     AppStorageV2.connect(MorphShrinkState, AppStorageKeys.MORPH_SHRINK_STATE,
       () => new MorphShrinkState())!;
-
-  /**
-   * ★★★ 2026-10-22（照无界：**收缩补间由壳层起**）：页面只把 `pixmap + srcBox` 递进来
-   * （`MorphShrinkState.requestStart`），壳层在收到令牌后用**自己的** UIContext 起补间。
-   * 无界的等价物是 `MainPage.startShrinkBack`（`wujie.pa:1549xx`）——
-   * 补间归壳层 ⇒ 页面才可以像无界那样同拍 `nav.pop(false)`，屏上只留那一张快照。
-   * 排查关键字：`shrink request consumed by shell`。
-   */
-  @Monitor('shrinkState.startToken')
-  onShrinkStartRequest(): void {
-    this.shrinkState.consumeStart(this.getUIContext());
-  }
   /** Cached window metrics (safe areas, size) for layout padding. */
   @Local windowInfo: WindowInfo = getWindowInfoState();
   /**
@@ -1607,6 +1595,19 @@ struct Index {
       .hitTestBehavior(HitTestMode.None)
       .zIndex(SHRINK_OVERLAY_Z_INDEX)
       .id('rzd_shrink_overlay_host')
+      // ★★★ 2026-10-22（收口取证）：这一层到底有没有挂上来 / 挂上来时几何是多少，
+      //   一行写进持久诊断。`shrink START → shrink FINISH` 已经证明**补间在跑**，
+      //   那么"看不到动画"只剩两种可能：① 这一层没挂上（没有这行就当没挂上）② 挂上了但被盖住。
+      //   另外给一层淡底：万一快照图本身没画出来，也能看到"一块正在缩的暗色矩形"，便于分辨。
+      //   排查关键字：`RzdShrinkOverlay host mounted`。
+      .backgroundColor('#66000000')
+      .onAppear((): void => {
+        MusicStoreService.getInstance().appendRuntimeDiagnostic(
+          `RzdShrinkOverlay host mounted win=${this.expandState.windowWidthVp.toFixed(0)}x` +
+            `${this.expandState.windowHeightVp.toFixed(0)} clipH=${this.shrinkState.clipHeight.toFixed(0)} ` +
+            `scale=${this.shrinkState.scaleValue.toFixed(3)} op=${this.shrinkState.opacity.toFixed(2)} ` +
+            `pix=${this.shrinkState.pixmap !== undefined ? 1 : 0}`);
+      })
     }
   }
 
