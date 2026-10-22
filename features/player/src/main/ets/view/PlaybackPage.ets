@@ -2924,16 +2924,14 @@ export struct PlaybackPage {
     if (!this.expandState.morphSessionDriving()) {
       return 1;
     }
-    // ★★★ 2026-10-23（甲方：「横屏点击打开，动画期间**没有背景**，动画结束才有；首启横屏 100%」）：
-    //   真机日志证明图一直在（`[RzdBgPhase] shared-mesh adopt ver=2` 每次打开都有），
-    //   是这里把它的透明度判成了 0 —— 判据里那一半 `morphGeomReadyNow()`。
-    //   横屏点击打开时"源/终点几何"要等重试链（12×32ms）才齐，整段动画期间它是假 ⇒ 背景全透明。
-    //   上游的 `pullGeomReady` 只服务**手指跟手**那一路（几何没齐就 0，免得露馅）；
-    //   而点击打开走的是 `contentOpacity`，**没有几何门**（`wujie.pa:192150-192178`）。
-    //   本仓两个入口都经过 `pullOpenBegin()` ⇒ `pullMode` 恒真，于是点击打开也被几何门连带挡住。
-    //   ⇒ 几何那半**去掉**，只保留"正在压扁（`morphSquashY !== 1`）才不画"这条真正的视觉理由：
-    //     压扁那一瞬画不透明的背景会露出边框。
-    const paintable: boolean = this.expandState.morphSquashY === 1;
+    // ★★★ 2026-10-23（甲方实测把我上一版这条改回去了，证据是截图）：
+    //   「封面已经飞到左上角了，背景还在右下角播放条的位置」—— 背景**不是没有，是错误的尺寸/位置**。
+    //   原因：`MeshCoverBg` 是**播放页那棵树里的节点**，形变期间整页被 `scale/translate/clip` 压到
+    //   胶囊大小 ⇒ 背景跟着变成一个"贴在播放条位置的小块"。上游正是因为这一点才用
+    //   `pullPgOpacity` / `contentOpacity` 把它在动画前半段**透明掉**（`wujie.pa:192150-192178`）。
+    //   ⇒ 几何门必须留着（几何没齐 = 容器还没铺开 = 这时画背景就是那个"右下角小块"）。
+    //   排查关键字：`[RzdBgPhase] refresh-on-resize` / `paintable`。
+    const paintable: boolean = this.expandState.morphGeomReadyNow() && this.expandState.morphSquashY === 1;
     if (!paintable) {
       return 0;
     }
@@ -4107,7 +4105,24 @@ export struct PlaybackPage {
       return;
     }
     setTimeout((): void => {
-      if (!this.expandState.morphGenAlive(gen) || this.isClosing || !this.isAlive) {
+      if (this.isClosing || !this.isAlive) {
+        this.expandState.logMorphOwnership('open-finish-expired');
+        return;
+      }
+      // ★★★ 2026-10-23（甲方：「收起按钮要先用一次系统返回才正常」；真机日志里
+      //   `RzdCloseEntry … stage=1 p=1.000` 的关闭全部掉进"活体反向下滑"）：
+      //   **代次不再当作"直接放弃落位"的理由**。原来这一行是
+      //   `if (!morphGenAlive(gen) || …) { log; return; }` ⇒ 只要中途有任何一次
+      //   `morphReset()`（转屏/重开/主动清理）把代次推进，这条落位回调就**静默 return**，
+      //   相位永远停在 ENTERING ⇒ 之后每一次关闭都走活体反向（封面跟着背景缩下去）。
+      //   ⇒ 改成：**几何已经跑到终点（p≥0.999）就必须落位**；只有"代次过期且几何还没到位"
+      //     才放弃（那说明有一条新的动画在跑，别去抢它）。
+      const stageNow: MorphStage = this.expandState.morphStage;
+      const pNow: number = this.expandState.morphP;
+      const aliveNow: boolean = this.expandState.morphGenAlive(gen);
+      appendPlayLog(`RzdIntroLanding open+590 genAlive=${aliveNow ? 1 : 0} stage=${stageNow} ` +
+        `p=${pNow.toFixed(3)} geom=${this.expandState.morphGeomReadyNow() ? 1 : 0}`);
+      if (!aliveNow && pNow < 0.999) {
         this.expandState.logMorphOwnership('open-finish-expired');
         return;
       }
