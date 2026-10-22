@@ -3201,7 +3201,17 @@ export struct PlaybackPage {
     const closeStage: MorphStage = this.expandState.morphStage;
     const morphRunning: boolean = this.expandIntroRunning || closeStage === MorphStage.ENTERING
       || closeStage === MorphStage.LANDING;
-    if (morphRunning) {
+    // ★★★ 2026-10-22（**抄作业**：上游那道守卫是 `pullMode &&`，我们把它丢了）
+    //   无界 `PlayerPage.closeWithAnimation`（`wujie.pa:171058-171075`）：
+    //     `if (pullMode && ExpandSnapshot.onReverseMorph(myMorphSnap)) return;`
+    //   —— 反形变那一支**只在 `pullMode`（手指还在下拉的会话）里**才走；
+    //   **不是** pullMode 时一律往下走快照（③）。
+    //   本仓原来把 `pullMode` 这半边换成了 `morphRunning`（相位/展开中）⇒ 只要相位不是 OPEN
+    //   （实测静止态会停在 ENTERING，见 §56），**顶栏收起按钮就会落到第②支活体反向**，
+    //   于是只有它出现两张封面，而系统返回 / 下拉（不进这里）走 ③ 只有一张。
+    //   ⇒ 把 `pullMode` 这一半补回来：`morphRunning && pullDragging`（本仓 `pullDragging` = pullMode）。
+    //   排查关键字：`RzdCloseLiveMorph reverse-now`（应只在手指下拉的会话里出现）。
+    if (morphRunning && this.expandState.pullDragging) {
       // ★★★ 2026-10-18（用户第十轮：「展开中按返回**要等好久**才收起」+「会闪」）——照搬上游 `reverseIntentOf`：
       //   上游 `ENTERING` 相位收到关闭 ⇒ `START`：`retargetToLiveCover()` → `setMorph(LEAVING,ANIM)` →
       //   `animateMorphT(0, round(460×max(morphT,0.4)), REVERSE_EASING)`（`wujie.pa:154070-154133`）
