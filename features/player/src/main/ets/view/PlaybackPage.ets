@@ -3978,23 +3978,21 @@ export struct PlaybackPage {
   private scheduleIntroRetry(reason: string): boolean {
     if (this.introRetries >= PlaybackPage.PUBLISH_RETRY_MAX) {
       this.introRetries = 0;
-      Logger.warn(PlaybackPage.logTag, `[RzdMorphIntro] retry-exhausted reason=${reason}`);
+      appendPlayLog(`[RzdMorphIntro] retry-exhausted reason=${reason}`);
       return false;
     }
     if (this.introRetryTimer !== -1) {
       return true;
     }
     this.introRetries = this.introRetries + 1;
-    Logger.info(PlaybackPage.logTag,
-      `[RzdMorphIntro] publish-retry reason=${reason} n=${this.introRetries}`);
+    appendPlayLog(`[RzdMorphIntro] publish-retry reason=${reason} n=${this.introRetries}`);
     this.introRetryTimer = setTimeout((): void => {
       this.introRetryTimer = -1;
       if (!this.isAlive || this.isClosing) {
         return;
       }
       const ok: boolean = this.tryStartMorphIntro();
-      Logger.info(PlaybackPage.logTag,
-        `[RzdMorphIntro] publish-retry done n=${this.introRetries} ok=${ok ? 1 : 0}`);
+      appendPlayLog(`[RzdMorphIntro] publish-retry done n=${this.introRetries} ok=${ok ? 1 : 0}`);
     }, PlaybackPage.PUBLISH_RETRY_MS);
     return true;
   }
