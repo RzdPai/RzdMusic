@@ -3261,22 +3261,7 @@ export struct PlaybackPage {
     const closeStage: MorphStage = this.expandState.morphStage;
     const morphRunning: boolean = this.expandIntroRunning || closeStage === MorphStage.ENTERING
       || closeStage === MorphStage.LANDING;
-    // ★★★★ 2026-10-23（真机日志 `00:36:14` vs `00:36:16` 两次关闭 + 照抄上游那一行）：
-    //   上游 `PlayerPage.closeWithAnimation`（`wujie.pa:171058-171075`）的**第一句**是
-    //     `if (pullMode && ExpandSnapshot.onReverseMorph(myMorphSnap)) return;`
-    //   —— 反向（活体收回去）**必须同时满足"手指会话还活着"**。
-    //   本仓这半句一直没搬：只要相位停在 ENTERING/LANDING 就一律走活体反向
-    //   ⇒ 「点开 → 还没落位就关闭」永远是"整页跟着背景缩下去"（= 甲方说的下滑），
-    //     而且**跟入口无关**（顶栏按钮 / 系统返回一样中招），落位早一点晚一点全凭运气。
-    //   日志实证：`00:36:14` 顶栏关闭 `stage=2 drv=0` → `path=snapshot`（飞回，正常）；
-    //            `00:36:16` 系统返回 `stage=1 drv=1 finger=0` → `path=live`（下滑）。
-    //   ⇒ 补上 `finger`（= 本仓的 `pullDragging`，等价上游 `pullMode` 的"手指还在驱动"）。
-    //     没有手指在驱动 ⇒ 照常拍快照飞回，哪怕形变还在跑。
-    const fingerDriving: boolean = this.expandState.pullDragging;
-    appendPlayLog(`RzdCloseBranch src=${this.closeEntrySource} morphRunning=${morphRunning ? 1 : 0} ` +
-      `finger=${fingerDriving ? 1 : 0} stage=${closeStage} intro=${this.expandIntroRunning ? 1 : 0} -> ` +
-      `${morphRunning && fingerDriving ? 'live' : 'snapshot'}`);
-    if (morphRunning && fingerDriving) {
+    if (morphRunning) {
       // ★★★ 2026-10-18（用户第十轮：「展开中按返回**要等好久**才收起」+「会闪」）——照搬上游 `reverseIntentOf`：
       //   上游 `ENTERING` 相位收到关闭 ⇒ `START`：`retargetToLiveCover()` → `setMorph(LEAVING,ANIM)` →
       //   `animateMorphT(0, round(460×max(morphT,0.4)), REVERSE_EASING)`（`wujie.pa:154070-154133`）
