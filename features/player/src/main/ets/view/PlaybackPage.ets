@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -5217,7 +5217,7 @@ export struct PlaybackPage {
                     isDismissing: this.isCollapsing(),
                     coverLinearScale: 1,
                     // 关闭期由壳层克隆封面独占（见 `MusicPlayInfoBlock.coverMuted` 注释）
-                    coverMuted: this.coverPublishHidden || this.expandState.morphOverlayBridging(),
+                    coverMuted: this.coverPublishHidden,
                     // 2026-10-17锛歚showControlArea` 榛樿 true 涓斿叏浠撲粠鏈紶杩?false 鈬?灏侀潰椤甸噷浼?*鍐嶇敾涓€浠?*
                     // 鎺у埗鍖猴紙Slider + 5 棰椾紶杈撻敭 + 4 棰楀浘鏍囪锛夛紝涓庡簳閮ㄥ叡浜偅涓€浠介噸鍙犮€傜敤鎴锋姤鐨?绗簩涓帶鍒跺尯"灏辨槸瀹冦€?
                     showControlArea: false
@@ -6022,14 +6022,7 @@ export struct PlaybackPage {
             //   这一张原来只挂了 `coverPublishHidden`，所以形变全程恒定画着 ⇒ 屏上两份。
             //   参照：封面页那条（`LyricFloatLayer`）从第一天起就是 `realCoverVisible()`。
             //   排查关键字：`RzdCoverOwner`（`real=1 clone=1` 就是两份）。
-            // ★★★ 2026-10-22（甲方：「又是关闭两个封面」）：**壳层在画 ⇒ 页面一律不画**。
-            //   只靠 `realCoverVisible()` 是不够的 —— 它和 `morphOverlayBridging()` **不是严格互补**
-            //   （`overlayCoverDrawable()` 在两端几何有一端为 0 时判假 ⇒ `realCoverVisible()` 会重新返回 true，
-            //   而 `morphOverlayBridging()` 靠 `morphContainerActive() && snapStartW>0 && endCoverSize>0` 仍为 true）
-            //   ⇒ 那一帧壳层克隆和页面各自画一张 = 两个封面。这一条不依赖推断。
-            //   静止态的"克隆残留"由 `refreshBgMeshOnResize()` 里的 `morphReset()` 清掉（见那里）。
-            .opacity(this.expandState.realCoverVisible() && !this.coverPublishHidden &&
-              !this.expandState.morphOverlayBridging() ? 1 : 0)
+            .opacity(this.expandState.realCoverVisible() && !this.coverPublishHidden ? 1 : 0)
             .onAreaChange((_oldValue: Area, newValue: Area): void => {
               this.expandState.reportBig(
                 areaLengthToVp(newValue.globalPosition.x),
@@ -6187,7 +6180,7 @@ export struct PlaybackPage {
               isDismissing: this.isCollapsing(),
               coverLinearScale: 1,
               // 关闭期由壳层克隆封面独占（见 `MusicPlayInfoBlock.coverMuted` 注释）
-              coverMuted: this.coverPublishHidden || this.expandState.morphOverlayBridging(),
+              coverMuted: this.coverPublishHidden,
               panelLayout: true
             })
           }
@@ -6376,6 +6369,18 @@ export struct PlaybackPage {
     if (w === this.lastMeshWindowPxW && h === this.lastMeshWindowPxH) {
       return;
     }
+    // ★★★ 2026-10-22 12:40（**我 11:59 那版把打开播放器弄坏了，这里回退 + 加护栏**）：
+    //   新实例的第一次量测 `lastMesh*` 还是 0 ⇒ "换尺寸"必然成立 ⇒ 下面那段会在
+    //   **打开动画刚起步**（`stage=ENTERING`）时就把形变会话收掉/清掉 ⇒ 打开过程被打断，
+    //   屏上只剩一个不可见的 NavDestination 吃触摸（甲方：「点播放条后播放条消失、界面点不动」）。
+    //   ⇒ 第一次量测只记基线，**什么都不做**；只有"页面活着时尺寸真的变了"（转屏/改窗）才往下走。
+    if (this.lastMeshWindowPxW === 0 || this.lastMeshWindowPxH === 0) {
+      this.lastMeshWindowPxW = w;
+      this.lastMeshWindowPxH = h;
+      this.meshSrcVersion = this.meshSrcVersion + 1;
+      appendPlayLog(`[RzdBgPhase] refresh-on-resize first-measure ver=${this.meshSrcVersion} win=${w}x${h}`);
+      return;
+    }
     this.lastMeshWindowPxW = w;
     this.lastMeshWindowPxH = h;
     // ★★★ 2026-10-22（甲方：「旋转之后背景消失，你也不处理一下」）：
@@ -6386,19 +6391,11 @@ export struct PlaybackPage {
     //   ③ 160ms 后再补一拍 —— 转屏那一拍 `MeshCoverBg` 的画布是**新建**的，
     //      同帧 bump 有可能被旧实例吃掉（背景消失就是这个原因）。
     //   排查关键字：`window-resize settle` / `refresh-on-resize followup`。
-    // ★★★ 2026-10-22 第二次修正（甲方：「横屏打开播放器，封面一开始非常大，动画结束后突然变小」）：
-    //   `morphSettleOpen()` 只把进度推回 1、**不清任何几何**（`morphUsable`/`morphGeomReady`/
-    //   两端矩形都留着）⇒ 转屏后克隆封面继续用**上一个方向量到的矩形**（很大），
-    //   等落位那一刻交回页面真封面（flatPane 的小方封面）就"突然变小"。
-    //   无界 `handleWindowResize` 做的是 `morphReset(); refitOverlay(); setFinalStatus();`
-    //   —— 第一步就是 **`morphReset()`**（清几何、清相位、`morphUsable=false`、`morphGeomReady=false`）。
-    //   这里照它改成 `morphReset()`：下一轮形变必须重新量两个端点。
-    //   排查关键字：`window-resize reset`。
     if (this.expandState.morphContainerActive() || this.expandState.morphBridging() ||
-      this.expandState.morphOverlayBridging() || this.expandState.morphUsable) {
-      this.expandState.morphReset();
+      this.expandState.morphOverlayBridging()) {
+      this.expandState.morphSettleOpen();
       this.closeDiagnostic(
-        `window-resize reset(geometry cleared) win=${w}x${h} ` +
+        `window-resize settle(bridge->off) win=${w}x${h} ` +
           `stage=${this.expandState.morphStage} p=${this.expandState.morphP.toFixed(3)}`);
     }
     this.meshSrcVersion = this.meshSrcVersion + 1;
@@ -8557,8 +8554,7 @@ export struct PlaybackPage {
           //   闂佸疇娉曟刊瀵哥箔?婵炴垶鎸搁敃銉︽叏閵堝鐓㈤柍杞拌兌閹藉秹鏌ㄥ☉妯荤秮.id` / `onAreaChange`闂?*婵炴垶鎸哥粔纾嬨亹?opacity 閻熸粍婢樺畷顒勫箹?*闂佹寧绋戦惉濂稿矗鎼达絾鏆滈柟闂寸濞呫倗鈧數澧楅〃鍛村春?闂佺繝鐒﹂幐鍫曞焵?
           // ★ 2026-10-18（用户第九/十轮）：**只在"快照已经进手"之后**才把真封面藏掉。
           //   上一轮用 `!isClosing`（在拍快照**之前**就置真）⇒ 快照里没有封面 ⇒ "一关就封面消失"。
-          .opacity(this.expandState.realCoverVisible() && !this.snapshotFlight && !this.coverPublishHidden &&
-            !this.expandState.morphOverlayBridging() ? 1 : 0)
+          .opacity(this.expandState.realCoverVisible() && !this.snapshotFlight && !this.coverPublishHidden ? 1 : 0)
           // 闂?婵炴垶鎸搁敃銉︽叏閵堝鐓㈤柍杞拌兌閹藉秹鏌熺喊鍗炲闁糕晛鏈璇测枎閹捐櫕顏為梺鎸庣☉閻楀﹤螞閵堝鍋╅悘鐐跺亹閻﹀秹鏌￠崟闈涚仴妞も晩鍋婇幆鍕冀瑜忓﹢鎾煠婵傚绨荤紒璁崇劍缁嬪绻濋崘銊愭捇鏌ㄥ☉娆戞憿floatingCover.onAreaChange 闂?publishMorphTargets`闂?
           .id(PLAYER_BIG_COVER_ID)
           .onAreaChange((_oldValue: Area, newValue: Area): void => {
