@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -6387,9 +6387,6 @@ export struct PlaybackPage {
    *   排查关键字：`[RzdBgPhase] refresh-on-resize`（现在带 `win=宽x高`）。
    */
   private refreshBgMeshOnResize(): void {
-    if (this.meshSrc === undefined) {
-      return;
-    }
     if (this.isClosing) {
       return;
     }
@@ -6397,6 +6394,31 @@ export struct PlaybackPage {
     const w: number = size.width;
     const h: number = size.height;
     if (w <= 0 || h <= 0) {
+      return;
+    }
+    // 第一次量测只记基线（打开页面的首帧不是"窗口变了"，不能在这里重建背景）。
+    if (this.lastMeshWindowPxW === 0 || this.lastMeshWindowPxH === 0) {
+      this.lastMeshWindowPxW = w;
+      this.lastMeshWindowPxH = h;
+      return;
+    }
+    // ★★★ 2026-10-22（甲方：「播放器内横竖切换，有可能会背景消失」）：
+    //   无界 `refreshBgCache()`（`wujie.pa:210498-210542`）在窗口变化时做的是
+    //   **`bgCache.clear()` + 对 `pgPrev/pgCur/pgNext` 三页逐个重新出图**，
+    //   不是"只换个版本号"。本仓原来 `meshSrc === undefined` 就直接 return
+    //   ⇒ 只要转屏那一拍缓存已被清掉（`aboutToDisappear` 会 `releasePixelMapQuiet(meshSrc)`），
+    //   背景就**再也回不来** —— 正是"有时会消失"。
+    //   ⇒ 照无界：缓存没了就**重跑一遍取图取色**；缓存还在才只 bump 令牌。
+    //   排查关键字：`refresh-on-resize rebuild`（重建）/ `refresh-on-resize ver=`（只 bump）。
+    if (this.meshSrc === undefined) {
+      if (w === this.lastMeshWindowPxW && h === this.lastMeshWindowPxH) {
+        return;
+      }
+      this.lastMeshWindowPxW = w;
+      this.lastMeshWindowPxH = h;
+      this.meshSrcVersion = this.meshSrcVersion + 1;
+      appendPlayLog(`[RzdBgPhase] refresh-on-resize rebuild ver=${this.meshSrcVersion} win=${w}x${h}`);
+      this.getImageColor();
       return;
     }
     if (w === this.lastMeshWindowPxW && h === this.lastMeshWindowPxH) {
