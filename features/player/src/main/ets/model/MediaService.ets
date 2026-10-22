@@ -2181,10 +2181,13 @@ export class MediaService {
    */
   public pause() {
     Logger.info(TAG, 'AVPlayer pause() isPrepared:' + this.isPrepared + ', state:' + this.state);
-    // 记录暂停来源：调用方（avsession）已置位则保留，否则就是应用内 UI 点的
+    // 记录暂停来源：调用方（avsession / 各处 UI）已置位则保留，否则记 'app'。
     if (this.pauseOrigin.length === 0) {
       this.pauseOrigin = 'app';
     }
+    // ★ 2026-10-22（排查「锁屏后自己停」）：每次 pause 先记一行来源，配合各调用点的
+    //   `markPauseOrigin('…')` 就能一次定位是谁按停的。grep 关键字：`pause-called origin=`。
+    this.lockScreenDiagnostic(`pause-called origin=${this.pauseOrigin}`);
     // 用户的暂停是最终意图：丢掉任何还没被 prepared 消费掉的「自动起播」意图，
     // 否则暂停期间完成的那次 resolveOnlineUrl/重试仍会把音乐放起来。
     if (this.playWhenPrepared) {
