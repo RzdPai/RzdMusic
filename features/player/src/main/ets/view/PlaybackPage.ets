@@ -1344,6 +1344,8 @@ export struct PlaybackPage {
   private closeToken: number = 0;
   private closeWatchdogTimer: number = -1;
   private closePath: string = 'live';
+  /** 本次关闭是哪个入口触发的（	opbar = 顶栏收起按钮，systemBack = 系统返回/下拉）。只给日志用。 */
+  private closeEntrySource: string = 'systemBack';
 
   public static cancelPendingCloseForOpen(): void {
     const cancel: (() => void) | undefined = PlaybackPage.cancelCloseOwner;
@@ -3227,6 +3229,15 @@ export struct PlaybackPage {
    */
   @Monitor('expandState.collapseVersion')
   onCollapseRequested(): void {
+    // ★★★ 2026-10-22（甲方：**收起按钮**关闭时"封面跟着背景下滑（活体反向）"而不是飞回去；
+    //   而**系统返回**正常；且"先用一次系统返回，之后按钮也正常"）：
+    //   下面这条 if 就是两个观感的分岔点 —— 走 `closeFullScreenPlayback()`（活体反向：整页跟着
+    //   缩下去）还是 `closeWithAnimation()`（快照：整屏拍一张再缩成胶囊飞回去）。
+    //   所以**必须能一眼看出每次关闭走了哪条、以及为什么**：把进入时的三个判据打出来。
+    //   运行日志 grep `RzdCloseEntry`：`src=topbar|systemBack stage=? intro=? drv=? p=?`。
+    appendPlayLog(`RzdCloseEntry src=${this.closeEntrySource} stage=${this.expandState.morphStage} ` +
+      `intro=${this.expandIntroRunning ? 1 : 0} drv=${this.expandState.morphSessionDriving() ? 1 : 0} ` +
+      `finger=${this.expandState.pullDragging ? 1 : 0} p=${this.expandState.morphP.toFixed(3)}`);
     // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀闁告侗浜濋～?2026-10-17闂佹寧绋戦悧蹇涘矗鎼淬劌绠规い鎺嶇劍閿熴儵鏌?`MainPage.closeWithAnimation()` 闂佹眹鍔岀€氭澘顭囬鍫濈閻庯綆浜滈埣銏ゆ煕閹烘垶顥為柡渚囧櫍閺佸秵寰勫☉姘辩崶
     //   闁哄鏅滈悷锕€顭?Monitor 闂?*闂佸摜鍎愰崹顖滅博?*闂?闂傚倸鐗忛崑鐐存櫠濠婂牆绀夐柛顭戝枛瑜扮娀姊?闂佺绻堥崕杈亹濞戙垺鏅柛褍鍩€uardPlayerBack()` / 婵犮垻鎳撻崯鍧楁儑?`onBackPress()`
     //   闂備緡鍠栭埀顒傚枙濞?`expandState.requestCollapse()` 闂?`collapseVersion++`闂佹寧绋戦ˇ顓㈠焵?
@@ -5887,6 +5898,7 @@ export struct PlaybackPage {
         //     ① 先拍 `PLAYER_ROOT_ID` 的 pixmap，交壳层 `MorphShrinkState` 收缩到胶囊再 pop；
         //     ② 快照失败才落到第 ② 支反形变（`closeFullScreenPlayback()`）。
         //   排查关键字：`top-bar-close` → `snapshot-request` / `snapshot-callback`。
+        this.closeEntrySource = 'topbar';
         this.closeDiagnostic('top-bar-close -> requestCollapse (= same entry as system back)');
         this.expandState.requestCollapse();
             }
@@ -6318,6 +6330,7 @@ export struct PlaybackPage {
         //     ① 先拍 `PLAYER_ROOT_ID` 的 pixmap，交壳层 `MorphShrinkState` 收缩到胶囊再 pop；
         //     ② 快照失败才落到第 ② 支反形变（`closeFullScreenPlayback()`）。
         //   排查关键字：`top-bar-close` → `snapshot-request` / `snapshot-callback`。
+        this.closeEntrySource = 'topbar';
         this.closeDiagnostic('top-bar-close -> requestCollapse (= same entry as system back)');
         this.expandState.requestCollapse();
           }

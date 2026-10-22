@@ -568,10 +568,17 @@ export class MediaService {
         if (!lostOutput) {
           return;
         }
-        appendPlayLog('[播放] 音频输出设备断开，自动暂停');
-        if (this.avPlayer !== undefined && !this.isPlayPaused()) {
-          this.pause();
-        }
+        // ★★★ 2026-10-22（甲方：「锁屏不能播放」；真机日志 `未命名1_1792679196597.txt` 直接给出证据）：
+        // ```
+        //   22:19:58  [RzdLockScreenB] bg-enter playing=1 … background-mode=ok   ← 后台任务成功
+        //   22:20:05  [播放] 音频输出设备断开，自动暂停
+        //   22:20:05  [RzdLockScreenB] pause-called origin=app                    ← 是**我们自己**停的
+        // ```
+        //   锁屏那一下系统会重排音频路由（尤其蓝牙/耳机），这里收到 DISCONNECT 就 `pause()`
+        //   ⇒ 熄屏即停。**无界没有这条监听**（它后台就老实播），这是本仓从 LX 移植时自己加的。
+        //   ⇒ 照上游：断开只记一行日志，**不自动暂停**。要继续暂停请用系统音频中断那条路
+        //     （`audioInterrupt` / AVSession 的 pause），那是用户真正按停才触发的。
+        appendPlayLog('[播放] 音频输出设备断开（不自动暂停，照无界）');
       };
       manager.on('deviceChange', this.routingCallback);
     } catch (error) {

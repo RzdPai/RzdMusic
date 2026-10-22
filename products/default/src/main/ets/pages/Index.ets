@@ -3313,6 +3313,26 @@ struct Index {
       return true;
     }
     if (!this.appState.isShowPlay) {
+      // ★★★ 2026-10-22（甲方：「在首页时使用系统返回，首页就会变成一片空白」）：
+      //   首页按返回 = 把控制权交回系统（退到桌面）。这一刻必须**确认屏上没有残留的全屏浮层**：
+      //   本页最上面那两层（克隆封面 / 快照收缩层）都是 `Stack` 里的整屏节点，
+      //   任何一个还挂着 opacity>0 就会把首页整块盖住 —— 观感正是"一片空白"。
+      //   所以先把不该留的都收干净，再交还给系统；同时留一行日志好定位是谁没退场。
+      appendPlayLog(`RzdHomeBack stage=${this.expandState.morphStage} ` +
+        `br=${this.expandState.morphOverlayBridging() ? 1 : 0} ` +
+        `drv=${this.expandState.morphSessionDriving() ? 1 : 0} ` +
+        `hs=${this.expandState.hdsBarSuppressed ? 1 : 0} alive=${this.playerRouteAlive ? 1 : 0} ` +
+        `shrink=${this.shrinkState.visible ? 1 : 0} route=${this.playerRouteIndex()}`);
+      if (this.playerRouteAlive) {
+        this.playerRouteAlive = false;
+      }
+      if (this.expandState.morphOverlayBridging() || this.expandState.morphSessionDriving() ||
+        this.expandState.hdsBarSuppressed) {
+        this.expandState.morphReset();
+      }
+      if (this.shrinkState.visible) {
+        this.shrinkState.reset();
+      }
       return false;
     }
     // 鐪熸鐨勬敹璧峰姩鐢荤敱鎾斁椤垫挱锛堝畠鐩戝惉 collapseVersion锛夛紝鎾畬鑷繁鎶?isShowPlay 缃?false
