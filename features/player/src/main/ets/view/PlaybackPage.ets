@@ -2931,7 +2931,13 @@ export struct PlaybackPage {
     //   `pullPgOpacity` / `contentOpacity` 把它在动画前半段**透明掉**（`wujie.pa:192150-192178`）。
     //   ⇒ 几何门必须留着（几何没齐 = 容器还没铺开 = 这时画背景就是那个"右下角小块"）。
     //   排查关键字：`[RzdBgPhase] refresh-on-resize` / `paintable`。
-    const paintable: boolean = this.expandState.morphGeomReadyNow() && this.expandState.morphSquashY === 1;
+    // 2026-10-23: 判据改成"页面有没有真的被形变容器压小"，而不是"几何量到没有"。
+    //   真机日志（横屏点击打开）：RzdSettleStart attempt=0/1/2 geom=0 -> give-up geom=0，
+    //   即横屏这一拍几何从来没就绪 ⇒ 形变其实没跑、页面一直是整屏的，
+    //   可老判据仍然认为"不可画" ⇒ 整段动画背景透明 = 甲方说的"动画过程中没背景"。
+    //   反过来，几何就绪但容器确实被压小时（真正的跟手/开动画），才需要透明掉（否则是播放条位置的小块）。
+    const transformed: boolean = this.expandState.morphScale < 0.99 || this.expandState.morphClipping();
+    const paintable: boolean = this.expandState.morphSquashY === 1 && !transformed;
     if (!paintable) {
       return 0;
     }
@@ -6521,11 +6527,38 @@ export struct PlaybackPage {
    * @param reason 日志用
    */
   private syncBigSizeFromNode(reason: string): void {
+    // 只接受可信尺寸：横屏那张小封面（≈172vp）不能被当成"播放页大封面"写进 bigSize。
+    const minPlausible: number = Math.max(120, this.expandState.windowWidthVp * 0.4);
+    const measured: number = this.expandState.measuredCoverWidth();
+    if (measured > 0 && measured < minPlausible) {
+      appendPlayLog(`[RzdBgPhase] big-size-resync skip ${reason} w=${measured.toFixed(1)} ` +
+        `min=${minPlausible.toFixed(1)}`);
+      return;
+    }
     const size: number = this.expandState.adoptMeasuredBigSize();
     if (size <= 0) {
       return;
     }
     appendPlayLog(`[RzdBgPhase] big-size-resync ${reason} big=${size.toFixed(1)}`);
+  }
+
+  /**
+   * 转屏后补量封面端点（延后若干毫秒，等新布局真的落定）。
+   * @param delayMs 延迟
+   */
+  private scheduleAnchorRemeasure(delayMs: number): void {
+    setTimeout((): void => {
+      if (!this.isAlive || this.isClosing) {
+        return;
+      }
+      try {
+        if (this.expandState.measureEndAnchor(this.getUIContext())) {
+          this.syncBigSizeFromNode(`resize+${delayMs}`);
+        }
+      } catch (error) {
+        appendPlayLog(`[RzdBgPhase] window-anchor-remeasure-deferred failed error=${error}`);
+      }
+    }, delayMs);
   }
 
   private refreshBgMeshOnResize(): void {
@@ -6614,18 +6647,11 @@ export struct PlaybackPage {
       //   ⇒ 量到就同步写回（与 `PlayerExpandState` 里 resync 那条同一口径），
       //     并**再延迟补量一次**：转屏那一拍量到的可能还是旧布局。
       this.syncBigSizeFromNode('resize');
-      setTimeout((): void => {
-        if (!this.isAlive || this.isClosing) {
-          return;
-        }
-        try {
-          if (this.expandState.measureEndAnchor(this.getUIContext())) {
-            this.syncBigSizeFromNode('resize+48');
-          }
-        } catch (error) {
-          appendPlayLog(`[RzdBgPhase] window-anchor-remeasure-deferred failed error=${error}`);
-        }
-      }, 48);
+      // 2026-10-23: 转屏当拍量到的常常还是**旧朝向**的值（日志里 `big-size-resync resize big=172.5`
+      //   就是横屏那张小封面的宽度，写进去正好让竖屏错位）。⇒ 多补三拍，并且只接受"可信尺寸"。
+      this.scheduleAnchorRemeasure(48);
+      this.scheduleAnchorRemeasure(140);
+      this.scheduleAnchorRemeasure(280);
     } catch (error) {
       appendPlayLog(`[RzdBgPhase] window-anchor-remeasure failed error=${error}`);
     }

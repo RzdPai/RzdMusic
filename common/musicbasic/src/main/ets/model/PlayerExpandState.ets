@@ -5112,6 +5112,11 @@ export class PlayerExpandState {
    * "整栏/整窗"那一档 ⇒ 观感就是"横屏打开后切竖屏会错位"。
    * ⇒ 只要 `measureEndAnchor()` 量到了节点宽度，就照同口径写回去（与 §resync 那条一致）。
    */
+  /** @returns 实测到的封面节点宽度（拿不到返回 0）——只给"尺寸可信度"判据用。 */
+  public measuredCoverWidth(): number {
+    return this.bigNodeKnown && this.bigNodeW > 0 ? this.bigNodeW : 0;
+  }
+
   public adoptMeasuredBigSize(): number {
     if (!this.bigNodeKnown || this.bigNodeW <= 0) {
       return 0;
