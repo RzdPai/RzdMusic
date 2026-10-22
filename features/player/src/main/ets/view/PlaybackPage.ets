@@ -6106,6 +6106,32 @@ export struct PlaybackPage {
     return Math.max(0, Math.min(byW, byH));
   }
 
+  /**
+   * 横屏封面边长（**保证非 0**）。
+   *
+   * `flatCoverEdgeVp()`（照抄上游 `flatCoverEdge()`）在盒子没量到时是 **0** ⇒ Image 0x0 = 没有封面。
+   * 真机上横屏这条路确实会量不到（同日日志里 `RzdSettleStart … geom=0` 同批出现），
+   * 所以这里补一个**按窗口推算**的兜底：横屏左栏边长 ≈ min(窗口高 − 96, 窗口宽 × 0.42)。
+   * 量到盒子时仍然走上游公式，逐像素不变。
+   * @returns 边长（vp）
+   */
+  private flatCoverSizeVp(): number {
+    const edge: number = this.flatCoverEdgeVp();
+    if (edge > 0) {
+      return edge;
+    }
+    const winW: number = this.expandState.windowWidthVp;
+    const winH: number = this.expandState.windowHeightVp;
+    if (winW <= 0 || winH <= 0) {
+      return 160;
+    }
+    const fallback: number = Math.min(winH - 96, winW * 0.42);
+    appendPlayLog(`RzdProbe flatCover fallback size=${Math.max(120, fallback).toFixed(1)} ` +
+      `box=${this.flatCoverBoxWVp.toFixed(1)}x${this.flatCoverBoxHVp.toFixed(1)} ` +
+      `edge=${edge.toFixed(1)} win=${winW.toFixed(0)}x${winH.toFixed(0)}`);
+    return Math.max(120, fallback);
+  }
+
   /** @returns `flatMetaSide()`（`:201817`）：meta 行左右内距 = min(8, pageSide/3)。 */
   private flatMetaSideVp(): number {
     return Math.min(8, this.flatPageSideVp() / 3);
@@ -6177,8 +6203,13 @@ export struct PlaybackPage {
             //   形变终点锚点（`endCoverSize`）跟着吃进这个假值 ⇒ 克隆封面也按巨图飞。
             //   上拉打开之所以正常：手指在拖，量测在页面露出来之前就完成了。
             //   排查关键字：`morph init … end=(…,` 里的 `endCoverSize` 若 ≈ 整栏尺寸就是它。
-            .width(this.flatCoverEdgeVp())
-            .height(this.flatCoverEdgeVp())
+            // 2026-10-23: 横屏"打开没有封面"的根 = `flatCoverEdgeVp()` 在盒子还没量到时返回 **0**
+            //   （`max(0, ...)`）⇒ Image 就是 0x0 = 什么都不画。本仓横屏这条路 `flatCoverBoxWVp/HVp`
+            //   有时永远量不到（真机日志里 `geom=0` 是同一批现象）。
+            //   ⇒ 走 `flatCoverSizeVp()`：量到用上游公式；量不到按**窗口**推算（横屏左栏边长），
+            //     既不会 0，也不会是"铺满整栏"那张巨图。
+            .width(this.flatCoverSizeVp())
+            .height(this.flatCoverSizeVp())
             .objectFit(ImageFit.Cover)
             .syncLoad(true)
             .constraintSize({ maxWidth: '100%', maxHeight: '100%' })
@@ -6637,6 +6668,14 @@ export struct PlaybackPage {
     } catch (error) {
       appendPlayLog(`[RzdBgPhase] window-anchor-remeasure failed error=${error}`);
     }
+      // 2026-10-23: 转屏一次性探针（甲方一次测试就能定位"横屏打开→切竖屏错位"）。
+      appendPlayLog(`RzdProbe rotate win=${w}x${h} short=${this.isShortHeightWindow() ? 1 : 0} ` +
+        `panel=${this.usePanelLayout() ? 1 : 0} swiper=${this.usesPhoneSwiperLayout() ? 1 : 0} ` +
+        `flatBox=${this.flatCoverBoxWVp.toFixed(1)}x${this.flatCoverBoxHVp.toFixed(1)} ` +
+        `edge=${this.flatCoverEdgeVp().toFixed(1)} big=${this.expandState.bigSize.toFixed(1)} ` +
+        `flatT=${this.flatT.toFixed(3)} flatCtl=${this.flatCtlSwapped ? 1 : 0} ` +
+        `collapse=${this.collapseProgress.toFixed(3)} swIdx=${this.playbackSwiperIndex} ` +
+        `stage=${this.expandState.morphStage}`);
     this.meshSrcVersion = this.meshSrcVersion + 1;
     appendPlayLog(`[RzdBgPhase] refresh-on-resize ver=${this.meshSrcVersion} win=${w}x${h}`);
   }
