@@ -5851,8 +5851,8 @@ export struct PlaybackPage {
         //     ① 先拍 `PLAYER_ROOT_ID` 的 pixmap，交壳层 `MorphShrinkState` 收缩到胶囊再 pop；
         //     ② 快照失败才落到第 ② 支反形变（`closeFullScreenPlayback()`）。
         //   排查关键字：`top-bar-close` → `snapshot-request` / `snapshot-callback`。
-        this.closeDiagnostic('top-bar-close = same as system-back');
-        this.state.isShowPlay = false;
+        this.closeDiagnostic('top-bar-close -> requestCollapse (= same entry as system back)');
+        this.expandState.requestCollapse();
             }
           })
             .padding({
@@ -6269,8 +6269,8 @@ export struct PlaybackPage {
         //     ① 先拍 `PLAYER_ROOT_ID` 的 pixmap，交壳层 `MorphShrinkState` 收缩到胶囊再 pop；
         //     ② 快照失败才落到第 ② 支反形变（`closeFullScreenPlayback()`）。
         //   排查关键字：`top-bar-close` → `snapshot-request` / `snapshot-callback`。
-        this.closeDiagnostic('top-bar-close = same as system-back');
-        this.state.isShowPlay = false;
+        this.closeDiagnostic('top-bar-close -> requestCollapse (= same entry as system back)');
+        this.expandState.requestCollapse();
           }
         })
           .padding({
@@ -7970,7 +7970,7 @@ export struct PlaybackPage {
               }
               Logger.warn(PlaybackPage.logTag,
                 'RzdMorphOnDisappear fallback: player route gone but isShowPlay still true 闂?release it');
-              this.state.isShowPlay = false;
+        this.expandState.requestCollapse();
             }, 0);
             // 婵炴垶鎸搁鍕博閺夋垟鏋庨柍鈺佸暙閳數鈧鍠掗崑鎾绘⒑閹绘帞校闁哄苯锕﹂幐?闂佺绻愰悧鎾诲闯濞差亜绀冪€广儱娲ㄧ槐?闂佹眹鍔岀€氫即濡存惔銏″劅闊洢鍎崇粣妤呮煙鐠虹尨鍔熺紒顕呭灦瀹曟岸宕奸弴鐕傜礉婵炴垶姊婚崰搴ㄥ矗瑜斿畷鍫曟倷閹绘帞顔?
             this.introPaintReady = false;
