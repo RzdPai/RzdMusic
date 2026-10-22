@@ -1535,25 +1535,21 @@ struct Index {
           this.expandState.morphSettleOpen();
         } else {
           this.expandState.pushMorphTrace('settleSkip');
-          // ★★★★ 2026-10-23（真机日志 + 甲方截图把这条钉死了）：
-          //   原来这里只打一条 hilog 就完了，**只有"几何一直没就绪"那一支才降级落位**；
-          //   于是另一种失败原因（`morphUsable === false` / `reverseInFlight === true`）会
-          //   **什么都不做** ⇒ 相位永远停在 ENTERING ⇒ `morphContainerActive()` / `morphClipping()`
-          //   恒真 ⇒ 播放页容器**停在最后一帧的 scale/translate/clip** 上：
-          //     · 观感 A：内容整体偏移（甲方「横屏打开播放器，切到竖屏会错位」）
-          //     · 观感 B：背景停在迷你条那一小块（甲方「背景一直在播放条的位置」）
-          //     · 观感 C：之后每次关闭都走活体反向（`RzdCloseEntry … stage=1` → `path=live`）
-          //   日志证据（构建 `261022-2349`）：`stage=1 p=1.000` 的关闭全是 `path=live`；
-          //   而且**页内那条 `RzdIntroLanding` 一次都没出现** ⇒ 这说明这些打开根本不是页面
-          //   驱动的那条路，落位就发生在这里、而且被跳过了。
-          //   ⇒ 只要用户还在播放页，**无论什么原因没落位，都必须把相位收回来**。
-          appendPlayLog(`RzdShellSettle skip showPlay=${this.appState.isShowPlay ? 1 : 0} ` +
-            `usable=${this.expandState.morphUsable ? 1 : 0} ` +
-            `geom=${this.expandState.morphGeomReadyNow() ? 1 : 0} ` +
-            `reverse=${this.expandState.reverseInFlight ? 1 : 0} ` +
-            `stage=${this.expandState.morphStage} p=${this.expandState.morphP.toFixed(3)}`);
-          if (this.appState.isShowPlay) {
+          Logger.info(RzdShellLogTag,
+            `pull settle: skip morphSettleOpen showPlay=${this.appState.isShowPlay} ` +
+            `usable=${this.expandState.morphUsable} geomReady=${this.expandState.morphGeomReadyNow()} ` +
+            `stage=${this.expandState.morphStage}`);
+          // 鈽呪槄鈽?2026-10-16锛堜笌涓婇潰"end anchor unavailable"閭ｆ潯**鍚屼竴鏉¤鍒?*锛夛細
+          //   鍑犱綍濮嬬粓娌￠噺鍒?鈬?鏃犵晫鐨勫彛寰勬槸銆屾湰娆￠€€鍥炴櫘閫?push(鏃犲舰鍙?銆嶁€斺€?
+          //   蹇呴』鎶婄浉浣嶄粠 ENTERING 鏀跺洖鏉ャ€傚師鏉ユ槸**鍙墦鏉℃棩蹇椼€佷粈涔堥兘涓嶅仛**锛?
+          //   鐩镐綅姘歌繙鍋滃湪 ENTERING銆乣morphContainerActive()` 鎭掔湡 鈬?
+          //   鎾斁椤甸偅鏉¤矾鍙兘鎸傜潃涓€涓崐姝荤殑褰㈠彉浼氳瘽锛堢敤鎴峰疄娴嬬殑"鑳屾櫙鏁村睆 / 娌℃湁鍔ㄧ敾"锛夈€?
+          //   鈿狅笍 鍙湪"鐢ㄦ埛鍦ㄦ挱鏀鹃〉"锛坄isShowPlay`锛夋椂鎵嶆敹 鈥斺€?鐢ㄦ埛宸茬粡绂诲紑鏃剁敱 `popPlayerRoute`
+          //     閭ｆ潯璺嚜宸辨敹锛坄morphReset` 宸插湪 `onDisAppear` 閲岃窇杩囷級銆?
+          if (this.appState.isShowPlay && !this.expandState.morphGeomReadyNow()) {
             this.expandState.pushMorphTrace('degrade');
+            Logger.warn(RzdShellLogTag,
+              'pull settle: geometry never ready 鈬?degrade to a plain full-screen player');
             this.expandState.morphReset();
             this.expandState.morphStage = MorphStage.OPEN;
             this.expandState.morphP = 1;
