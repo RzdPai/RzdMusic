@@ -396,6 +396,23 @@ struct Index {
   onShrinkStartRequest(): void {
     this.shrinkState.consumeStart(this.getUIContext());
   }
+
+  /**
+   * ★★★ 2026-10-22（甲方：「退出后封面残留」）—— **浮层封面只允许活到播放页消失为止**。
+   *
+   * 上游（无界）把"续飞封面"挂在**播放页自己的容器**里（`MainPage` 的 `MorphOverlayHost`
+   * 包在 player 那一层），所以**页面一卸，封面自然没了** —— 它不需要任何"收尾闸"。
+   * 本仓这一层挂在 **Shell（`Index`，永远在树上）**，只能靠共享状态里的
+   * `morphOverlayBridging()` / `morphPaintHidden()` 决定画不画：
+   * 一旦哪一个标志没归位（转屏、被中途打断、动画 onFinish 丢代次……），
+   * 屏幕上就会永远留着一张封面 —— 这正是甲方这次的截图（首页上孤零零一张专辑图，
+   * 位置恰好是播放页大封面的位置 = `p≈1` 的克隆封面）。
+   *
+   * ⇒ 补一条**结构性**判据（不猜状态机）：路由在栈上 ⇔ 封面层可以存在。
+   *   由壳层自己在 `pushPlayerRoute()` / `popPlayerRoute()` 里维护，与动画时序无关。
+   * 排查关键字：`RzdCloneGate`。
+   */
+  @Local playerRouteAlive: boolean = false;
   /** Cached window metrics (safe areas, size) for layout padding. */
   @Local windowInfo: WindowInfo = getWindowInfoState();
   /**
@@ -990,6 +1007,9 @@ struct Index {
       name: RouterUrlConstants.PLAYER_PAGE,
       param: new PlayerRouteParam(true)
     }, false);
+    // 播放页真的进栈了 ⇒ 浮层封面可以存在（见 `playerRouteAlive` 的说明）。
+    this.playerRouteAlive = true;
+    appendPlayLog(`RzdCloneGate push routeAlive=1`);
   }
 
   /**
@@ -1004,6 +1024,11 @@ struct Index {
     const idx: number = this.playerRouteIndex();
     if (idx < 0) {
       PlaybackPage.ev('REM', 'noIdx');
+      // 路由本来就不在栈上 ⇒ 封面层必须已经关掉（幂等重放一次，防"上一轮漏关"）。
+      if (this.playerRouteAlive) {
+        this.playerRouteAlive = false;
+        appendPlayLog('RzdCloneGate pop noIdx routeAlive=0');
+      }
       return;
     }
     const names: string[] = this.pageIndexInfos.getAllPathName();
@@ -1023,6 +1048,33 @@ struct Index {
     }
     MusicStoreService.getInstance().appendRuntimeDiagnostic(
       `RzdCloseChain route-remove source=Index index=${idx}`);
+    // ★ 播放页已经离开栈 ⇒ **浮层封面立刻不许再画**（见 `playerRouteAlive` 的说明）。
+    //   上游靠"浮层挂在播放页容器里"得到这条语义，本仓浮层在 Shell，必须显式关。
+    this.playerRouteAlive = false;
+    appendPlayLog(`RzdCloneGate pop routeAlive=0 br=${this.expandState.morphOverlayBridging() ? 1 : 0} ` +
+      `drv=${this.expandState.morphSessionDriving() ? 1 : 0} ` +
+      `hs=${this.expandState.hdsBarSuppressed ? 1 : 0}`);
+    // ★ 收尾自愈（同 `finishCloseGuard` 里那条 64ms 自检的同一路数）：
+    //   路由已经不在栈上 ⇒ 不管动画链条有没有走完，共享状态都必须回到"没有形变"。
+    //   留着不清的后果：下一次打开被 `leakClr` 判"残局"或克隆层按 `p≈1` 挂着（甲方这次的截图）。
+    setTimeout((): void => {
+      try {
+        if (this.playerRouteIndex() >= 0) {
+          return;
+        }
+        const bridging: boolean = this.expandState.morphOverlayBridging();
+        const driving: boolean = this.expandState.morphSessionDriving();
+        const sup: boolean = this.expandState.hdsBarSuppressed;
+        if (!bridging && !driving && !sup) {
+          return;
+        }
+        appendPlayLog(`RzdCloneGate +400 heal br=${bridging ? 1 : 0} drv=${driving ? 1 : 0} ` +
+          `hs=${sup ? 1 : 0} stage=${this.expandState.morphStage}`);
+        this.expandState.morphReset();
+      } catch (error) {
+        appendPlayLog(`RzdCloneGate +400 heal failed error=${error}`);
+      }
+    }, 400);
   }
 
   // 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ 涓婃媺鎵撳紑鎾斁椤碉紙璺熸墜锛屽３灞備晶锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
@@ -1782,7 +1834,11 @@ struct Index {
     .height(this.expandState.windowHeightVp > 0 ? this.expandState.windowHeightVp : StyleConstants.FULL_HEIGHT)
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     .opacity(this.expandState.morphOverlayBridgeOpacity() * this.expandState.morphTailOpacity())
-    .visibility(this.expandState.morphPaintHidden() ? Visibility.Hidden : Visibility.Visible)
+    // ★★★ 2026-10-22（甲方：「退出后封面残留」）：除了状态机那道门，再挂一条**结构性**判据 ——
+    //   播放页路由不在栈上就不许画。上游的浮层挂在播放页容器里（页面一卸自然消失），
+    //   本仓浮层在 Shell，必须靠 `playerRouteAlive` 补齐这条语义。见它的字段注释。
+    .visibility(this.expandState.morphPaintHidden() || !this.playerRouteAlive ?
+      Visibility.Hidden : Visibility.Visible)
     // 鏁村眰涓嶅悆浜嬩欢锛氫笅闈㈠氨鏄挱鏀鹃〉锛岀帺瀹剁殑鐐瑰嚮蹇呴』鐓у父钀藉埌鎾斁椤典笂
     .hitTestBehavior(HitTestMode.None)
     .zIndex(PLAYER_CLONE_Z_INDEX)
