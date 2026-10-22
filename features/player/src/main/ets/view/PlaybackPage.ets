@@ -229,6 +229,28 @@ export struct PlaybackPage {
    */
   @Local meshSrc: image.PixelMap | undefined = undefined;
   /**
+   * ★ 2026-10-22（＝无界 `svc.bgCache`）：背景图**进程级**缓存。
+   *
+   * 无界的背景缓存挂在服务里（`PlayerPage.refreshBgCache` 里 `this.svc.bgCache.clear()`），
+   * 不属于页面实例 ⇒ 页面重建（转屏）不会丢。本仓原来是页面字段，`aboutToDisappear` 一放就没，
+   * 于是「切换横竖屏背景必消失」。
+   */
+  private static bgCacheKey: string = '';
+  private static bgCachePm: image.PixelMap | undefined = undefined;
+
+  /** 把静态缓存里那一张拿回本实例（key 必须与当前曲目一致）。命中返回 true。 */
+  private adoptSharedMesh(): boolean {
+    const key: string = this.currentMeshKey();
+    if (key.length === 0 || PlaybackPage.bgCacheKey !== key || PlaybackPage.bgCachePm === undefined) {
+      return false;
+    }
+    this.meshSrc = PlaybackPage.bgCachePm;
+    this.meshTrackKey = key;
+    this.meshSrcVersion = this.meshSrcVersion + 1;
+    appendPlayLog(`[RzdBgPhase] shared-mesh adopt ver=${this.meshSrcVersion}`);
+    return true;
+  }
+  /**
    * ★★★ 2026-10-18（用户实测「点击展开时背景**似乎是上一首歌的颜色**」）：
    * 当前 `meshSrc` **归属的曲目 key**（`''` = 还没有源）。
    *
@@ -6416,6 +6438,11 @@ export struct PlaybackPage {
       }
       this.lastMeshWindowPxW = w;
       this.lastMeshWindowPxH = h;
+      // ① 先吃静态缓存（＝无界 `svc.bgCache`，转屏后同一首一定有）；② 没有才重跑取图取色。
+      if (this.adoptSharedMesh()) {
+        appendPlayLog(`[RzdBgPhase] refresh-on-resize shared-cache win=${w}x${h}`);
+        return;
+      }
       this.meshSrcVersion = this.meshSrcVersion + 1;
       appendPlayLog(`[RzdBgPhase] refresh-on-resize rebuild ver=${this.meshSrcVersion} win=${w}x${h}`);
       this.getImageColor();
@@ -6426,6 +6453,16 @@ export struct PlaybackPage {
     }
     this.lastMeshWindowPxW = w;
     this.lastMeshWindowPxH = h;
+    // ★★★ 2026-10-22（甲方：「横屏打开→切竖屏封面错位」「横屏展开时是大背景，结束突然变小」）：
+    //   照无界 `refitOverlay()`（`:210208-210360`）的做法——**换了窗口就把封面的端点作废、下次重新量**，
+    //   但**不动相位/进度**（上一轮我把 `morphReset()` 放这里，把打开动画一起清了，别再犯）。
+    //   作废 `bigSize` ⇒ 下一次 `prepareMorphEntry()` 必须重新从节点 onAreaChange 拿封面矩形，
+    //   克隆封面与页面那张才不会各用一个尺寸。
+    //   排查关键字：`window-anchor-invalidate`。
+    if (this.expandState.bigSize > 0) {
+      this.expandState.bigSize = 0;
+      appendPlayLog(`[RzdBgPhase] window-anchor-invalidate bigSize=0 win=${w}x${h}`);
+    }
     this.meshSrcVersion = this.meshSrcVersion + 1;
     appendPlayLog(`[RzdBgPhase] refresh-on-resize ver=${this.meshSrcVersion} win=${w}x${h}`);
   }
@@ -6941,6 +6978,13 @@ export struct PlaybackPage {
    */
   private commitMeshSource(pm: image.PixelMap, old: image.PixelMap | undefined): void {
     this.meshSrc = pm;
+    // ★★★ 2026-10-22（照搬无界 `svc.bgCache`：背景图缓存**不属于页面实例**）：
+    //   无界的背景缓存放在服务里（`PlayerPage.refreshBgCache` 里那句 `this.svc.bgCache.clear()`），
+    //   页面重建/转屏都不会丢；本仓原来是页面字段 + `aboutToDisappear` 里 `releasePixelMapQuiet`，
+    //   一转屏（页面重建）就彻底没有源 ⇒ 「切换横竖屏背景必消失」。
+    //   ⇒ 这里把同一张 PixelMap 挂到**静态缓存**上，新实例/转屏后一句 `adoptSharedMesh()` 就回来了。
+    PlaybackPage.bgCacheKey = this.currentMeshKey();
+    PlaybackPage.bgCachePm = pm;
     this.meshSrcVersion = this.meshSrcVersion + 1;
     // ★ 2026-10-18：记下这张图**归属哪一首**（`dropMeshSourceForTrackChange` 与 adopt 守卫都用它）。
     this.meshTrackKey = this.currentMeshKey();
@@ -7735,6 +7779,9 @@ export struct PlaybackPage {
             //   形变第 1 帧就有真封面 —— 等价上游"打开前本地封面文件已在"（`wujie.pa:292406-292448`）。
             //   然后再走异步那条（拿网络/资源，顺便取色）。
             this.adoptWarmMeshSync();
+            // ★ 2026-10-22（＝无界 `svc.bgCache`）：页面重建（转屏/开关播放器）后，
+            //   先吃静态缓存里那**同一张**背景图，避免"背景消失后再慢慢取"。
+            this.adoptSharedMesh();
             void this.adoptWarmMeshThenTint();
             this.applyPlaybackWindowChromeImmediately();
             // 婵＄偑鍊楅弫璇差焽閻楀牞绱旈柡宥庣厛閸嬔囨煕閹达絾顏犳鐐叉喘瀵喚鎹勯悜妯衡偓杈ㄦ叏濠靛嫬鍔欑紒鏃€娼欓埢搴ㄥ灳瀹曞洨锛涢梺绋跨箰绾绢厽鎱ㄩ幖浣哥畱濞撴艾锕︾粈鍕偣娴ｇ鈷旈柣銈呮閵囧嫰妫冨☉妯款唹闂佺厧鐤囧Λ鍕垂娴兼潙缁╃痪顓炴噽缁犳牠鏌?
