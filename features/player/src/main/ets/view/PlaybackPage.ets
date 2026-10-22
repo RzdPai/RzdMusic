@@ -2908,6 +2908,20 @@ export struct PlaybackPage {
    * @returns 0..1
    */
   private pullBgOpacity(): number {
+    // ★★★ 2026-10-22（甲方实测矩阵：「竖屏打开有背景 → 切横屏**没背景**」；
+    //   「点击打开有时有有时没有」）：
+    //   上游 `pullGeomReady` 是**下拉会话**的条件；会话落位之后它在无界那边一直是"就绪"，
+    //   因为无界转屏会跑 `refitOverlay()`（`:210208-210360`）**重新量**封面端点。
+    //   本仓的等价动作是"转屏时把 `bigSize` 作废"（`window-anchor-invalidate`），
+    //   但**作废之后没有立刻重量** ⇒ `morphGeomReadyNow()` 变假 ⇒ 下面 `paintable` 假 ⇒
+    //   **背景透明度直接 0**（不是"图没了"，是"图被透明掉了"）—— 这就是"没背景"。
+    //   而且 `pullMode` 只在 `morphReset()` 里清 ⇒ 上一次上拉打开的会话残留会让
+    //   **下一次点击打开**也走这条曲线 ⇒ "有时有有时没有"。
+    //   ⇒ 判据改成：**会话不处于驱动中（= 已落位/静止）⇒ 背景恒不透明**。
+    //     与其它各处"静止态 `backgroundRevealOpacity() === 1`"的约定一致。
+    if (!this.expandState.morphSessionDriving()) {
+      return 1;
+    }
     const paintable: boolean = this.expandState.morphGeomReadyNow() && this.expandState.morphSquashY === 1;
     if (!paintable) {
       return 0;
@@ -6475,6 +6489,30 @@ export struct PlaybackPage {
     if (this.expandState.bigSize > 0) {
       this.expandState.bigSize = 0;
       appendPlayLog(`[RzdBgPhase] window-anchor-invalidate bigSize=0 win=${w}x${h}`);
+    }
+    // ★★★ 2026-10-22（甲方：「竖屏打开有背景 → 切横屏没背景」「横屏切竖屏还是错位」）：
+    //   两个毛病同一个机制：**窗口一变，封面端点在窗口坐标里就全部作废了**，而本仓
+    //   只做了"作废"（上面那句），没做上游 `refitOverlay()`（`:210208-210360`）的**重量**。
+    //   作废后：① `morphGeomReadyNow()` 变假 ⇒ 背景透明度那条链判"不可画" ⇒ 背景没了；
+    //          ② `bigNodeX/Y`（窗口坐标）还是旧朝向的值 ⇒ 任何用到端点/克隆封面的地方**错位**。
+    //   ⇒ 这里补两件事（只在真转屏这一支、且**不碰动效相位**的前提下）：
+    //     · 会话已经落位（没有手指、没有形变在跑）⇒ `morphReset()` 清掉上一轮的会话残留
+    //       （它同时把 `pullMode` 归假 ⇒ 背景走 `contentOpacity`，静止态恒为 1）；
+    //     · 立刻按新窗口重量一次封面端点（= refitOverlay 的等价物）。
+    //   ⚠️ 形变进行中**不许**清（上一轮放在这里的 `morphReset()` 把打开动画一起清了，别再犯）。
+    const atRest: boolean = !this.expandState.pullDragging && !this.expandIntroRunning &&
+      !this.expandState.morphSessionDriving() && this.expandState.morphStage !== MorphStage.ENTERING &&
+      this.expandState.morphStage !== MorphStage.LANDING && this.expandState.morphStage !== MorphStage.LEAVING;
+    if (atRest) {
+      this.expandState.morphReset();
+      appendPlayLog(`[RzdBgPhase] window-rest-session-reset win=${w}x${h}`);
+    }
+    try {
+      const ok: boolean = this.expandState.measureEndAnchor(this.getUIContext());
+      appendPlayLog(`[RzdBgPhase] window-anchor-remeasure ok=${ok ? 1 : 0} win=${w}x${h} ` +
+        `big=${this.expandState.bigSize.toFixed(1)}`);
+    } catch (error) {
+      appendPlayLog(`[RzdBgPhase] window-anchor-remeasure failed error=${error}`);
     }
     this.meshSrcVersion = this.meshSrcVersion + 1;
     appendPlayLog(`[RzdBgPhase] refresh-on-resize ver=${this.meshSrcVersion} win=${w}x${h}`);
