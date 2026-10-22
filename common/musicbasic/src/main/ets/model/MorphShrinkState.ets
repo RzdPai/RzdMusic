@@ -165,6 +165,75 @@ export class MorphShrinkState {
   private gen: number = 0;
 
   /**
+   * ★★★ 2026-10-22（**照无界把收缩补间搬到壳层起**）：
+   *   无界那条关闭路里，补间是**壳层**起的（`MainPage.startShrinkBack`，`wujie.pa:1549xx`）：
+   *   页面只把 `pixmap + srcBox` 递出去，然后同拍 `nav.pop(false)`；
+   *   补间由壳层自己的 `animateTo` 持有 ⇒ 页面卸了动画还在。
+   *   本仓原来是从**页面**起补间（`PlaybackPage` 里 `shrink.start(this.getUIContext(), …)`），
+   *   于是"提前 pop 就没动画 / 不 pop 就两张封面"互斥。
+   *
+   *   这里加一条"请求 → 壳层消费"的握手：
+   *     · 页面调 {@link requestStart}（只写数据 + `startToken++`）；
+   *     · `Index`（壳层）用 `@Monitor('shrinkState.startToken')` 收到后调 {@link consumeStart}，
+   *       用**壳层自己的 UIContext** 起补间（`start()` 本体一字未改）。
+   *   页面侧另有 60ms 兜底：壳层没来消费就自己起（绝不退回"没有动画"）。
+   */
+  @Trace public startToken: number = 0;
+  /**
+   * 补间是否**真的起来了**（`start()` 里置真、`reset()` 里置假）。
+   * 页面侧据此决定"把活页面藏掉"——只有确认补间在跑才藏，避免又变成"没动画"。
+   */
+  @Trace public started: boolean = false;
+  private pendingPixmap: image.PixelMap | undefined = undefined;
+  private pendingBox: MorphShrinkRect | undefined = undefined;
+  private pendingWinW: number = 0;
+  private pendingWinH: number = 0;
+  private pendingDone: (() => void) | undefined = undefined;
+
+  /**
+   * 页面侧入口：把"要缩的那张图 + 目标矩形"交给共享状态，等壳层来起补间。
+   * @returns true = 已入队（等壳层消费）；false = 没接住（调用方自己起）
+   */
+  public requestStart(pixmap: image.PixelMap, srcBoxVp: MorphShrinkRect,
+    winWVp: number, winHVp: number, onDone: () => void): boolean {
+    if (srcBoxVp === undefined || srcBoxVp.width <= 0 || srcBoxVp.height <= 0 ||
+      winWVp <= 0 || winHVp <= 0) {
+      Logger.warn(MorphShrinkState.logTag, 'shrink request skipped: no srcBox');
+      return false;
+    }
+    this.pendingPixmap = pixmap;
+    this.pendingBox = srcBoxVp;
+    this.pendingWinW = winWVp;
+    this.pendingWinH = winHVp;
+    this.pendingDone = onDone;
+    this.startToken = this.startToken + 1;
+    Logger.info(MorphShrinkState.logTag, `shrink request token=${this.startToken} (await shell)`);
+    return true;
+  }
+
+  /** 壳层侧入口：用**壳层** UIContext 起那条补间（`@Monitor('shrinkState.startToken')` 里调）。 */
+  public consumeStart(ui: UIContext): void {
+    const pixmap: image.PixelMap | undefined = this.pendingPixmap;
+    const box: MorphShrinkRect | undefined = this.pendingBox;
+    const done: (() => void) | undefined = this.pendingDone;
+    if (pixmap === undefined || box === undefined || done === undefined) {
+      return;
+    }
+    const winW: number = this.pendingWinW;
+    const winH: number = this.pendingWinH;
+    this.pendingPixmap = undefined;
+    this.pendingBox = undefined;
+    this.pendingDone = undefined;
+    Logger.info(MorphShrinkState.logTag, `shrink request consumed by shell token=${this.startToken}`);
+    this.start(ui, pixmap, box, winW, winH, done);
+  }
+
+  /** 页面侧兜底：壳层迟迟没来消费（60ms）时自己起，**绝不退回"没有动画"**。 */
+  public takePendingIfAny(): boolean {
+    return this.pendingPixmap !== undefined && this.pendingBox !== undefined;
+  }
+
+  /**
    * 无界 `reset()`（`wujie.pa:52691-52715`）：
    * `gen++` / `visible=false` / `opacity=1` / `scale=1` / `translate=(0,0)`。
    * ⚠️ 它**不清 `clipHeight` 与 `radius`**（与无界逐字一致：那两项只由 `start` 写）。
@@ -172,6 +241,7 @@ export class MorphShrinkState {
   public reset(): void {
     this.gen = this.gen + 1;
     this.visible = false;
+    this.started = false;
     this.opacity = 1;
     this.scaleValue = 1;
     this.translateX = 0;
@@ -220,6 +290,7 @@ export class MorphShrinkState {
     this.radius = MorphShrinkState.START_RADIUS;
     this.opacity = 1;
     this.visible = true;
+    this.started = true;
     this.gen = this.gen + 1;
     const genNow: number = this.gen;
     Logger.info(MorphShrinkState.logTag,
@@ -231,14 +302,11 @@ export class MorphShrinkState {
     //    ① 350ms EaseInOut：缩到胶囊；`onFinish` 收尾（`53056-53089`）
     //    ② delay 260 / 90ms Sharp：淡出（`53045-53051`）
     //
-    // ★★★ 2026-10-22 13:52（真机日志：`RzdShrinkOverlay host mounted … clipH=44 scale=0.904 op=0.00`）：
-    //   浮层**挂上来的时候就已经是终点值**（`clipH` 已缩到胶囊、`opacity` 已经是 0）⇒ 屏上什么都看不见。
-    //   原因：`animateTo` 闭包里的状态写入是**立即生效**的（它只对"已经在树上、已在渲染"的节点做插值），
-    //   而这里 `visible = true` 让浮层**本帧才挂载** ⇒ 它第一次渲染读到的就是终点值。
-    //   上游那两句是"节点已在树上"的前提下写的；本仓浮层是条件挂载（`If(visible && pixmap)`），
-    //   所以**必须先挂载、下一帧再起补间**。
-    //   修法：把两条 `animateTo` 推到下一帧（16ms），起始值（scale=1 / clipH=整窗 / op=1）保持不变。
-    //   验收：`host mounted … clipH≈整窗高 scale=1.000 op=1.00`。
+    // ★★★ 2026-10-22（真机日志：`RzdShrinkOverlay host mounted … clipH=44 scale=0.904 op=0.00`）：
+    //   浮层**挂载那一刻就读到终点值**（已经缩到胶囊、已经透明）⇒ 画面看不见。
+    //   `animateTo` 闭包里的状态写入立即生效（只对**已在树上**的节点插值），
+    //   而本仓浮层是条件挂载（`If(visible && pixmap)`）⇒ 必须**先挂载、下一帧再起补间**。
+    //   起始值不变（`scale=1 / clipH=整窗高 / opacity=1`）。
     setTimeout((): void => {
       if (genNow !== this.gen || !this.visible) {
         return;
@@ -247,9 +315,9 @@ export class MorphShrinkState {
         duration: MorphShrinkState.D_SHRINK,
         curve: Curve.EaseInOut,
         onFinish: (): void => {
-          if (genNow !== this.gen) {
-            return;
-          }
+        if (genNow !== this.gen) {
+          return;
+        }
         this.visible = false;
         Logger.info(MorphShrinkState.logTag, 'shrink FINISH');
         onDone();
