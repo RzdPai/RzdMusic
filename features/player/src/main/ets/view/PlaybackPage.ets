@@ -2924,7 +2924,16 @@ export struct PlaybackPage {
     if (!this.expandState.morphSessionDriving()) {
       return 1;
     }
-    const paintable: boolean = this.expandState.morphGeomReadyNow() && this.expandState.morphSquashY === 1;
+    // ★★★ 2026-10-23（甲方：「横屏点击打开，动画期间**没有背景**，动画结束才有；首启横屏 100%」）：
+    //   真机日志证明图一直在（`[RzdBgPhase] shared-mesh adopt ver=2` 每次打开都有），
+    //   是这里把它的透明度判成了 0 —— 判据里那一半 `morphGeomReadyNow()`。
+    //   横屏点击打开时"源/终点几何"要等重试链（12×32ms）才齐，整段动画期间它是假 ⇒ 背景全透明。
+    //   上游的 `pullGeomReady` 只服务**手指跟手**那一路（几何没齐就 0，免得露馅）；
+    //   而点击打开走的是 `contentOpacity`，**没有几何门**（`wujie.pa:192150-192178`）。
+    //   本仓两个入口都经过 `pullOpenBegin()` ⇒ `pullMode` 恒真，于是点击打开也被几何门连带挡住。
+    //   ⇒ 几何那半**去掉**，只保留"正在压扁（`morphSquashY !== 1`）才不画"这条真正的视觉理由：
+    //     压扁那一瞬画不透明的背景会露出边框。
+    const paintable: boolean = this.expandState.morphSquashY === 1;
     if (!paintable) {
       return 0;
     }
@@ -6448,6 +6457,20 @@ export struct PlaybackPage {
    *   而真转屏一定触发。
    *   排查关键字：`[RzdBgPhase] refresh-on-resize`（现在带 `win=宽x高`）。
    */
+  /**
+   * 把"实测到的封面节点宽度"同步回 `bigSize`（`bigSize` 的唯一来源是封面 `onAreaChange`，
+   * 转屏后它不一定再触发 ⇒ 会永远停在 0，让所有读它的地方退回"整栏/整窗"那一档 = 错位）。
+   * 与 `PlayerExpandState` 里那条 resync（`bigSize !== bigNodeW` ⇒ 写回）同一口径。
+   * @param reason 日志用
+   */
+  private syncBigSizeFromNode(reason: string): void {
+    const size: number = this.expandState.adoptMeasuredBigSize();
+    if (size <= 0) {
+      return;
+    }
+    appendPlayLog(`[RzdBgPhase] big-size-resync ${reason} big=${size.toFixed(1)}`);
+  }
+
   private refreshBgMeshOnResize(): void {
     if (this.isClosing) {
       return;
@@ -6524,6 +6547,28 @@ export struct PlaybackPage {
       const ok: boolean = this.expandState.measureEndAnchor(this.getUIContext());
       appendPlayLog(`[RzdBgPhase] window-anchor-remeasure ok=${ok ? 1 : 0} win=${w}x${h} ` +
         `big=${this.expandState.bigSize.toFixed(1)}`);
+      // ★★★ 2026-10-23（甲方：「横屏打开播放器，切到竖屏会错位」；竖屏开再转就没事）：
+      //   日志坐实了这条链断在哪：
+      //   `window-anchor-remeasure ok=1 win=1224x2776 big=0.0`
+      //   ⇒ `measureEndAnchor()` 只写 `bigNodeW/Known`，**不写 `bigSize`**；
+      //     而 `bigSize` 的唯一来源是封面的 `onAreaChange`（转屏后不一定再触发）。
+      //   `bigSize = 0` 时凡是读它算尺寸的地方（克隆封面、歌词页浮层、形变终点兜底）
+      //   都退回"整栏/整窗"那一档 ⇒ 观感就是"错位"。
+      //   ⇒ 量到就同步写回（与 `PlayerExpandState` 里 resync 那条同一口径），
+      //     并**再延迟补量一次**：转屏那一拍量到的可能还是旧布局。
+      this.syncBigSizeFromNode('resize');
+      setTimeout((): void => {
+        if (!this.isAlive || this.isClosing) {
+          return;
+        }
+        try {
+          if (this.expandState.measureEndAnchor(this.getUIContext())) {
+            this.syncBigSizeFromNode('resize+48');
+          }
+        } catch (error) {
+          appendPlayLog(`[RzdBgPhase] window-anchor-remeasure-deferred failed error=${error}`);
+        }
+      }, 48);
     } catch (error) {
       appendPlayLog(`[RzdBgPhase] window-anchor-remeasure failed error=${error}`);
     }

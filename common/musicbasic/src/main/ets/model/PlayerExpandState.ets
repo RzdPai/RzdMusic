@@ -5104,6 +5104,25 @@ export class PlayerExpandState {
   }
 
   /**
+   * 把**实测到的封面节点宽度**同步回 `bigSize`，返回同步后的值（拿不到返回 0）。
+   *
+   * 为什么需要它：`bigSize` 的唯一来源是覆盖层/封面的 `onAreaChange → reportBig()`，
+   * 而**转屏之后它不一定再触发**（面积没变的那几种情况），于是一路停在 0；
+   * 凡是读 `bigSize` 算尺寸的地方（克隆封面、歌词页浮层、形变终点兜底）都会退回
+   * "整栏/整窗"那一档 ⇒ 观感就是"横屏打开后切竖屏会错位"。
+   * ⇒ 只要 `measureEndAnchor()` 量到了节点宽度，就照同口径写回去（与 §resync 那条一致）。
+   */
+  public adoptMeasuredBigSize(): number {
+    if (!this.bigNodeKnown || this.bigNodeW <= 0) {
+      return 0;
+    }
+    if (Math.abs(this.bigSize - this.bigNodeW) >= 0.5) {
+      this.bigSize = this.bigNodeW;
+    }
+    return this.bigSize;
+  }
+
+  /**
    * @returns 褰㈠彉灞曞紑鎵€闇€鐨?*涓や釜閿氱偣**鏄惁閮界湡鐨勫氨缁紙璧风偣 = 杩蜂綘鏉★紝缁堢偣 = 鎾斁椤靛皝闈級銆?
    *
    * 涓轰粈涔堝崟鐙垽瀹冿紙杩欐槸"绗竴娆″睍寮€娌℃湁灏侀潰椋炲叆 / 鐐瑰嚮鎵撳紑鍍忔棫鍔ㄧ敾"鐨勫叧閿級锛?
