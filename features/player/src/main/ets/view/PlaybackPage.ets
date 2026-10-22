@@ -3261,6 +3261,12 @@ export struct PlaybackPage {
     const closeStage: MorphStage = this.expandState.morphStage;
     const morphRunning: boolean = this.expandIntroRunning || closeStage === MorphStage.ENTERING
       || closeStage === MorphStage.LANDING;
+    // 2026-10-23: non-finger close waits for the landing, then takes the snapshot (see deferCloseUntilLanded).
+    if (morphRunning && !this.expandState.pullDragging) {
+      appendPlayLog(`RzdCloseDefer start stage=${closeStage} p=${this.expandState.morphP.toFixed(3)} intro=${this.expandIntroRunning ? 1 : 0} src=${this.closeEntrySource}`);
+      this.deferCloseUntilLanded(0);
+      return;
+    }
     if (morphRunning) {
       // ★★★ 2026-10-18（用户第十轮：「展开中按返回**要等好久**才收起」+「会闪」）——照搬上游 `reverseIntentOf`：
       //   上游 `ENTERING` 相位收到关闭 ⇒ `START`：`retargetToLiveCover()` → `setMorph(LEAVING,ANIM)` →
@@ -3280,6 +3286,43 @@ export struct PlaybackPage {
       return;
     }
     this.closeWithAnimation();
+  }
+  /**
+   * 关闭**等落位再拍快照**（不改变任何动画时间线，只把"关闭"这个动作延后到落位那一拍）。
+   *
+   * 真机日志（`261023-0102`）把最后一层原因摆平了：
+   * ```
+   *   RzdSettleStart attempt=0 geom=0 → attempt=1 geom=1
+   *   RzdShellSettle landed stage=1 p=1.000     ← 落位发生在打开后 ≈600ms
+   *   RzdCloseEntry stage=2 → path=snapshot     ← 落位之后关闭 = 飞回 ✓
+   *   RzdCloseEntry stage=1 drv=1 → path=live   ← 落位之前关闭 = 下滑 ✗
+   * ```
+   * 也就是说"下滑"的唯一成因是**关闭赶在落位之前**，而落位要等壳层那条 560ms 补间收尾。
+   * 上游没有这个洞，因为它的关闭动作在等会话落位（`onReverseMorph` 只在手指会话里成立）。
+   * ⇒ 非手指关闭：每 32ms 看一眼 `morphP`，一旦到终点就 `morphSettleOpen()` 再拍快照；
+   *   最多等 20 拍（≈640ms），等不到才退回原来的活体反向。
+   * @param attempt 已等待拍数
+   */
+  private deferCloseUntilLanded(attempt: number): void {
+    if (!this.isAlive || !this.ownsClose(this.closeToken, 'defer')) {
+      return;
+    }
+    if (this.expandState.morphP >= 0.999) {
+      appendPlayLog(`RzdCloseDefer landed attempt=${attempt} stage=${this.expandState.morphStage}`);
+      this.expandIntroRunning = false;
+      this.expandState.morphSettleOpen();
+      this.closeWithAnimation();
+      return;
+    }
+    if (attempt >= 20) {
+      appendPlayLog(`RzdCloseDefer give-up attempt=${attempt} p=${this.expandState.morphP.toFixed(3)} ` +
+        `stage=${this.expandState.morphStage}`);
+      this.closeFullScreenPlayback();
+      return;
+    }
+    setTimeout((): void => {
+      this.deferCloseUntilLanded(attempt + 1);
+    }, 32);
   }
   /** Fallback page background tint when art or color pick fails. */
   private static readonly defaultImageBgColor: string = 'rgba(32, 32, 32, 1)';
