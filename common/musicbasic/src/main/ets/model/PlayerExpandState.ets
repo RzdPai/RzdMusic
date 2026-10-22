@@ -5223,6 +5223,12 @@ export class PlayerExpandState {
 
   /** 澶嶄綅鍒?娌℃湁杩欏鍔ㄧ敾"鐨勯潤姝㈡€侊紙鍑犱綍缂哄け銆佸嵏杞姐€佸紓甯告椂閮借蛋杩欓噷锛夈€?*/
   public morphReset(): void {
+    // ★★★★ 2026-10-23（真机日志 `RzdShellSettle skip ... reverse=1` / `give-up ... reverse=1`）:
+    //   `reverseInFlight` 只在"活体反向"那一支被置真，**全仓没有一处清它**
+    //   ⇒ 只要有一次关闭走了活体反向，之后每一次打开都落不了位（壳层落位门 !reverseInFlight 恒假）
+    //   ⇒ 相位永远停在 ENTERING ⇒ 之后每次关闭都走活体反向 = 自我锁死。
+    //   ⇒ 会话边界必须清掉（"这一次反向已经结束"的唯一收口点）。
+    this.reverseInFlight = false;
     this.openGeometryGeneration++;
     this.openGeometryFinished = true;
     // 上游 `finishReverse` / 会话结束都会 `setMiniOut(false)`（`wujie.pa:147562-147568`）。
