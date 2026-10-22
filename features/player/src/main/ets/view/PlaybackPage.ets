@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -4462,24 +4462,22 @@ export struct PlaybackPage {
       this.closeDiagnostic(
         `snapshot-callback ${(err === null || err === undefined) && pixmap !== undefined ? 'ok' : 'miss'} ` +
           `code=${errCode} pix=${pixmap !== undefined ? 1 : 0} msg=${errMsg}`);
-      // ★★★ 2026-10-22（**判据只看 `pixmap`** —— 真机日志反复证明 `code=undefined pix=1`）：
-      //   平台在成功时也会回一个"没有 code 的 err 壳"，按 `err` 判失败 = 白扔一张好图、
-      //   退回第②支活体反向（= 甲方只在这一条入口看到的两张封面）。
-      //   ⇒ 有 `pixmap` 就算成功；只有真的没图才走兜底。
-      if (pixmap === undefined) {
-        this.closeLiveMorphFallback(`snapshot-empty(${errCode})`);
+      if (pixmap === undefined && (err === null || err === undefined)) {
+        this.closeLiveMorphFallback('snapshot-empty');
         return;
       }
       // ★★★ 2026-10-18（用户第十轮：「收起过程中**按钮/封面又成了两个**」）：
       //   快照已经进手 ⇒ 接下来屏上由**快照层**代表一切（`beginSnapshotShrink()`），
       //   页面上那颗真封面必须让位，否则就是"快照一颗 + 真封面一颗"。
       //   ⚠️ 只在这一刻（回调里）才置真——不能在 `get()` **之前**置，否则快照本身没有封面（上一轮的病）。
-      this.snapshotFlight = true;
-      // ★★★ 2026-10-21：**快照已经进手**才把真封面压掉（快照里本来就带着封面）。
-      //   放在关闭起手会让真页面第一帧就丢掉封面、而克隆层要等下一帧才挂上来
-      //   ⇒ 甲方实测的「封面会先消失一瞬间再出现」。只在③（pixmap 路）生效，
-      //   第 ② 支反形变全程不压（`coverLiveMorphFallback` 里会显式清回 false）。
-      this.coverPublishHidden = true;
+      if (err === null || err === undefined) {
+        this.snapshotFlight = true;
+        // ★★★ 2026-10-21：**快照已经进手**才把真封面压掉（快照里本来就带着封面）。
+        //   放在关闭起手会让真页面第一帧就丢掉封面、而克隆层要等下一帧才挂上来
+        //   ⇒ 甲方实测的「封面会先消失一瞬间再出现」。只在③（pixmap 路）生效，
+        //   第 ② 支反形变全程不压（`coverLiveMorphFallback` 里会显式清回 false）。
+        this.coverPublishHidden = true;
+      }
       // 闂佸啿鍘滈崑鎾绘煃閸忓浜?闂佸湱绮崝鎺戭潩閿曞倸绀傞柟鎯板Г閿涙棃鏌￠崘銊ヮ暢婵?*闂佸搫鐗滈崗娑氬垝閵娾晜鍋嬮悷娆忓缁犳帡鏌￠埀顒傛崉閾忕懓鏆?*闂佹寧绋戦悧濠偽涢妶澶嬪仼閻忕偛澧藉楣冩煛?濠电偛鑻ˇ浼寸叓閸垻鐜绘俊銈傚亾鐟?闁哄鏅滈悷銉┿€冨鍫熸櫖閻忕偞鍎抽。鎻捗归悩顔煎姎闁伙絿濮撮埢浠嬪焺閸愨晝鐣抽柡澶嗘櫆閻熴倗鎮柆宥呯煑闁靛鍨崇粈?
       //   闂?闂佽鍘归崹褰捤囬懠顒€瀵查柤濮愬€楅崺鐘绘煛?缂備焦鍔栭〃鍛般亹?chrome 闂佺偨鍎查弻锟犲焵?婵炴垶鎸哥粔鍨椤旇棄绶炵€广儱娲﹂悾閬嶆偣閸ャ劎绠氱紒缁樺灴瀹曞爼鎮欓幓鎺戠稑闂傚倸鍋嗛崢铏圭不閿濆瑙﹂幖娣妸閳ь剙锕鍊熺疀鎼达絿鐛ラ梺绋款儐缁苯锕?闂佸湱铏庨崢浠嬪棘娴ｅ箍浜滈柛顭戝亞閻掕姤绻?闂備緡鍙忕徊鑲╃博鐎涙闄勬俊銈呮噹鐢娊鏌ょ涵鍜佸殝缂?
       //   闂?`morphLand()` 婵炲瓨鍤庨崐娑氭崲閺囩姷纾兼俊顖氭惈閻撴垿鏌?闂?闁哄鏅炲〒鍦礊濮椻偓瀵?*闂佹椿浜為崰鏇㈡?*缂備焦鏌ㄩ鍛村春閵忋倕鍙婇柟顖嗗啯鐦旈梺?
@@ -4489,8 +4487,7 @@ export struct PlaybackPage {
       //      闂?闂傚倸妫欓崕濂革綖閸ヮ剙绠涢柣鏂垮槻缂嶄線鏌涢弽銊у缂佽精椴搁幏鍛村即閻愬弶鐎搁梻?1~2 闁汇埄鍨庨崒婊呮啰闂傚倸鐗勯崹鑲╂崲閺囥垺鍎庨柡宥庡亝缁茶鈽夐幘宕囆ч柍褜鍓欑换鎴澪ｉ幋锔藉剭闁告洦鍋呰ぐ銉╂煟閹炬瀚惂渚€鎮橀悙鎻掆偓鍫曞焵?
       //   闂佸疇娉曟刊瀵哥箔?**婵犮垺鍎肩划鍓ф喆閿曞倸缁╂い鏍ㄧ懅閻熸繈寮堕埡鍌滎灱缂佺粯鐗楃粙澶愬焵椤掑倵鍋?*闂佹寧绋戦悧鍡涙偩閻樺灚鍟哄ù锝呪偓鐔稿发闂備緡鍋€閸嬫捇鏌涢弽銊у⒊闁活厽鍎抽銉╁礋閸撲胶顦梻渚囧弿缁叉儳顪?`morphLand()` 婵炴潙鍚嬬喊宥嗕繆閹间焦鍎庨梻鈧幇顔拘㈤梺鍦帛閸旀洘鏅堕悩鐢电缂備焦锚缁旀挳鏌?
       //      闂?`closeFullScreenPlayback()` 闂傚倸娲犻崑鎾绘偡閺囨碍顦风紒?闁哄鏅滈敋婵犫偓椤忓棔娌柡鍥╁仧绾惧鏌?闁荤姍鍥ㄦ暠濠⒀勭矒閺佸秵寰勯崱妤侇仸 闁荤喐鐟ゅ鎺旂箔閸涘瓨顥?`if` 闂佹眹鍔岀€氼亞绱為崨顖滅＞妞ゆ棁銆€閸?
-      // 死支：快照成败只看 `pixmap`（上面已 return），这里保留只为对齐上游那句 `warn`。
-      if (pixmap === undefined && err !== null && err !== undefined) {
+      if (err !== null && err !== undefined) {
         Logger.warn(PlaybackPage.logTag,
           'RzdShrinkOverlay root snapshot failed, fallback: ' + JSON.stringify(err));
         // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-17闂?*闂佸搫鐗滈崗娑氬垝閵娾晛绀嗙紓浣姑竟鍫ユ煟閵娿儱顏╅柛銊ラ椤垼顦撮柛?*闂佹寧绋戦¨鈧紒鍙樺嵆瀵噣鎮╅崹顐ｇ彧闂佹眹鍔岀€氼剟濡甸幋鐘冲闁靛闄勯弳婊堟煛?`nav.pop()`闂佹寧绋戦悧濠偽涢妶鍡樺妞ゆ巻鍋撴繝褉鍋撻梺鎸庣☉椤р偓缂?
@@ -4503,7 +4500,7 @@ export struct PlaybackPage {
         //     闂備緡鍋€閸嬫捇鏌涢妷褍浠滄鐐存崌瀵敻鍩€椤掑嫬閿ら煫鍥ф捣閻﹀秹鏌涘▎妯圭凹婵″弶鎮傚畷鍫曟倷閹绘帞鍘掗梺鍛婎焽閸犳劕顭囬悽鍛婂剭闁告洦鍣搴ㄦ煙閹殿喖鏋旈柟韫嵆閹潡鎮欓崗澶婁壕?
         //   闂佸疇娉曟刊瀵哥箔?婵犮垺鍎肩划鍓ф喆閿曞倸鍌ㄩ柣鏃堟敱缁€鍫ユ煟閹炬瀚敍瀣煙?`Logger.warn`闂佹寧绋戦懟顖炴嚐閻旂厧绠┑鐘插€搁弬褔鏌涢妷褍孝闁汇埄鍋呭璇测槈濡ゅ啰娈ゆ繛瀵稿Ь閸╂牕螞閳哄嫮鐤€婵°倕顑囩粈鍒濩LO` 闂?`fb=`闂佹寧绋戦¨鈧紒?
         //     **婵炴垶鎸撮崑鎾寸箾閸″繐澧查柛鈺佹嚇瀹曞爼骞嗚缁侇噣鏌涘▎妯虹仩闁搞劎鏅幏?*闂佹寧绋戦悧鎰帮綖?`closeFallbackReason`闂佹寧绋戦ˇ顓㈠焵?
-        this.closeLiveMorphFallback(`snapFail(${errCode})`);
+        this.closeLiveMorphFallback(`snapFail(${err.code})`);
         return;
       }
       this.restorePlaybackWindowChrome();
@@ -5251,7 +5248,7 @@ export struct PlaybackPage {
                     isDismissing: this.isCollapsing(),
                     coverLinearScale: 1,
                     // 关闭期由壳层克隆封面独占（见 `MusicPlayInfoBlock.coverMuted` 注释）
-                    coverMuted: this.coverPublishHidden,
+                    coverMuted: this.coverPublishHidden || this.expandState.morphOverlayBridging(),
                     // 2026-10-17锛歚showControlArea` 榛樿 true 涓斿叏浠撲粠鏈紶杩?false 鈬?灏侀潰椤甸噷浼?*鍐嶇敾涓€浠?*
                     // 鎺у埗鍖猴紙Slider + 5 棰椾紶杈撻敭 + 4 棰楀浘鏍囪锛夛紝涓庡簳閮ㄥ叡浜偅涓€浠介噸鍙犮€傜敤鎴锋姤鐨?绗簩涓帶鍒跺尯"灏辨槸瀹冦€?
                     showControlArea: false
@@ -6083,7 +6080,12 @@ export struct PlaybackPage {
             //   这一张原来只挂了 `coverPublishHidden`，所以形变全程恒定画着 ⇒ 屏上两份。
             //   参照：封面页那条（`LyricFloatLayer`）从第一天起就是 `realCoverVisible()`。
             //   排查关键字：`RzdCoverOwner`（`real=1 clone=1` 就是两份）。
-            .opacity(this.expandState.realCoverVisible() && !this.coverPublishHidden ? 1 : 0)
+            //   ★ 2026-10-22（甲方：「一个正常飞回去，一个跟随播放器下去」）：
+            //   "飞回去"那张由**壳层克隆封面**负责（`Index.MorphCoverClone()`）；
+            //   页面这张就是"跟着播放器缩下去"那张 ⇒ 壳层在画时它**一律不画**。
+            //   不能只靠 `realCoverVisible()` 的互补推断（`overlayCoverDrawable()` 两端几何有一端为 0 时会反转）。
+            .opacity(this.expandState.realCoverVisible() && !this.coverPublishHidden &&
+              !this.expandState.morphOverlayBridging() ? 1 : 0)
             .onAreaChange((_oldValue: Area, newValue: Area): void => {
               this.expandState.reportBig(
                 areaLengthToVp(newValue.globalPosition.x),
@@ -6241,7 +6243,7 @@ export struct PlaybackPage {
               isDismissing: this.isCollapsing(),
               coverLinearScale: 1,
               // 关闭期由壳层克隆封面独占（见 `MusicPlayInfoBlock.coverMuted` 注释）
-              coverMuted: this.coverPublishHidden,
+              coverMuted: this.coverPublishHidden || this.expandState.morphOverlayBridging(),
               panelLayout: true
             })
           }
@@ -8615,7 +8617,7 @@ export struct PlaybackPage {
           //   闂佸疇娉曟刊瀵哥箔?婵炴垶鎸搁敃銉︽叏閵堝鐓㈤柍杞拌兌閹藉秹鏌ㄥ☉妯荤秮.id` / `onAreaChange`闂?*婵炴垶鎸哥粔纾嬨亹?opacity 閻熸粍婢樺畷顒勫箹?*闂佹寧绋戦惉濂稿矗鎼达絾鏆滈柟闂寸濞呫倗鈧數澧楅〃鍛村春?闂佺繝鐒﹂幐鍫曞焵?
           // ★ 2026-10-18（用户第九/十轮）：**只在"快照已经进手"之后**才把真封面藏掉。
           //   上一轮用 `!isClosing`（在拍快照**之前**就置真）⇒ 快照里没有封面 ⇒ "一关就封面消失"。
-          .opacity(this.expandState.realCoverVisible() && !this.snapshotFlight && !this.coverPublishHidden ? 1 : 0)
+          .opacity(this.expandState.realCoverVisible() && !this.snapshotFlight && !this.coverPublishHidden && !this.expandState.morphOverlayBridging() ? 1 : 0)
           // 闂?婵炴垶鎸搁敃銉︽叏閵堝鐓㈤柍杞拌兌閹藉秹鏌熺喊鍗炲闁糕晛鏈璇测枎閹捐櫕顏為梺鎸庣☉閻楀﹤螞閵堝鍋╅悘鐐跺亹閻﹀秹鏌￠崟闈涚仴妞も晩鍋婇幆鍕冀瑜忓﹢鎾煠婵傚绨荤紒璁崇劍缁嬪绻濋崘銊愭捇鏌ㄥ☉娆戞憿floatingCover.onAreaChange 闂?publishMorphTargets`闂?
           .id(PLAYER_BIG_COVER_ID)
           .onAreaChange((_oldValue: Area, newValue: Area): void => {
