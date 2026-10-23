@@ -6646,6 +6646,17 @@ export struct PlaybackPage {
       this.expandState.morphStage !== MorphStage.LANDING && this.expandState.morphStage !== MorphStage.LEAVING;
     if (atRest) {
       this.expandState.morphReset();
+      // 2026-10-23（甲方：整块"封面+歌名+歌手"一起偏，顶栏/进度条不偏）：
+      //   顶栏/进度条是**流式布局**，不受 transform 影响；封面/歌名/歌手是**窗口坐标绝对定位**
+      //   （`coverLocalRect()` 用 morphScale/morphTx/morphTy 反解、`LyricFloatLayer` 同一套）。
+      //   ⇒ 转屏后把这套变换连同锚点全部清零（`morphReset()` 已做大部分，这里再显式兜一次），
+      //     并把当时的数值打出来，下一次日志即可确认是谁残留。
+      this.expandState.morphScale = 1;
+      this.expandState.morphTx = 0;
+      this.expandState.morphTy = 0;
+      appendPlayLog(`RzdProbe local scale=${this.expandState.morphScale.toFixed(3)} ` +
+        `tx=${this.expandState.morphTx.toFixed(1)} ty=${this.expandState.morphTy.toFixed(1)} ` +
+        `stage=${this.expandState.morphStage} win=${this.expandState.windowWidthVp.toFixed(0)}x${this.expandState.windowHeightVp.toFixed(0)}`);
       appendPlayLog(`[RzdBgPhase] window-rest-session-reset win=${w}x${h}`);
     }
     try {
