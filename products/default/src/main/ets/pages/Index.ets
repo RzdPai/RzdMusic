@@ -82,6 +82,7 @@ import type { CommentSongRef } from 'comment';
 import { HdsBarLayoutMode, HdsBarStyle, HdsTabs } from '@hms.hds.hdsBaseComponent';
 import { BusinessError, deviceInfo } from '@kit.BasicServicesKit';
 import { common } from '@kit.AbilityKit';
+import { HomeBackBridge } from './HomeBackBridge';
 
 /**
  * 浜岀骇椤甸潰鎮诞杩蜂綘鏉＄殑鍥哄畾楂樺害锛坴p锛夈€?
@@ -413,6 +414,8 @@ struct Index {
    * 排查关键字：`RzdCloneGate`。
    */
   @Local playerRouteAlive: boolean = false;
+  /** Ability 层的"首页返回"信号（`EntryAbility.onBackPressed` 写入，见 `onHomeBackSignal`）。 */
+  @Local homeBackAt: number = 0;
   /** Cached window metrics (safe areas, size) for layout padding. */
   @Local windowInfo: WindowInfo = getWindowInfoState();
   /**
@@ -490,6 +493,10 @@ struct Index {
 
   /** Initializes play queue ids from local DB for the session. */
   aboutToAppear() {
+    // 2026-10-23：把"首页返回收尾"注册给 Ability 层（页面级 onBackPress 收不到首页返回）。
+    HomeBackBridge.register((): void => {
+      this.onHomeBackSignal();
+    });
     const bs = this.windowInfo.windowSize;
     appendPlayLog(`RzdProbe boot first win=${bs.width}x${bs.height} ${bs.width > bs.height ? 'landscape' : 'portrait'}`);
     // ★★★ 2026-10-18（照搬上游两段式：判意图 → controller 落地）：滚动侧只表达意图，
@@ -623,6 +630,35 @@ struct Index {
    * 2026-10-23 探针：窗口尺寸轨迹。甲方怀疑"应用总是先在竖屏出生、再转横屏"，
    * 这行能直接证实/否定：启动后应看到 portrait(1224x2776) 然后 landscape(2776x1224)。
    */
+  /**
+   * 2026-10-23（甲方：首页按返回后「首页一片空白」）：
+   *   首页那次返回**根本进不了页面级 `onBackPress`**（日志实证），只能在 Ability 层打信号；
+   *   这里收到信号后把**所有可能盖住首页的整屏状态**收干净，再让系统退到桌面。
+   *   关键：这一步必须在返回生效前后都能跑，且只做"收"，不碰任何动画。
+   */
+  @Monitor('homeBackAt')
+  onHomeBackSignal(): void {
+    appendPlayLog(`RzdHomeBackEnter src=Index stage=${this.expandState.morphStage} ` +
+      `alive=${this.playerRouteAlive ? 1 : 0} ` +
+      `br=${this.expandState.morphOverlayBridging() ? 1 : 0} ` +
+      `drv=${this.expandState.morphSessionDriving() ? 1 : 0} ` +
+      `hs=${this.expandState.hdsBarSuppressed ? 1 : 0} shrink=${this.shrinkState.visible ? 1 : 0}`);
+    if (this.playerRouteAlive) {
+      this.playerRouteAlive = false;
+    }
+    if (this.expandState.morphOverlayBridging() || this.expandState.morphSessionDriving() ||
+      this.expandState.hdsBarSuppressed || this.expandState.sourceBarHidden || this.expandState.miniOut) {
+      this.expandState.hdsBarSuppressed = false;
+      this.expandState.sourceBarHidden = false;
+      this.expandState.miniOut = false;
+      this.expandState.morphReset();
+      appendPlayLog('RzdHomeBackEnter cleaned overlays');
+    }
+    if (this.shrinkState.visible) {
+      this.shrinkState.reset();
+    }
+  }
+
   @Monitor('windowInfo.windowSize')
   onWindowSizeProbe(): void {
     const s = this.windowInfo.windowSize;

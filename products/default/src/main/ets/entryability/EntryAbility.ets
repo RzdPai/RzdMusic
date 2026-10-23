@@ -22,6 +22,7 @@ import { formBindingData, formProvider } from '@kit.FormKit';
 import { rpc } from '@kit.IPCKit';
 import { CardImageHelper } from '../musiccard/CardImageHelper';
 import { appendPlayLog, getAppRuntime, Logger, MusicCardBridge, MusicCardSnapshot, MusicStoreService, WindowUtil } from 'musicbasic';
+import { HomeBackBridge } from '../pages/HomeBackBridge';
 import { AppStorageKeys, MorphShrinkState, PlayerExpandState } from 'musicbasic';
 import { lxSourceManager, MediaService } from 'player';
 import type { LXApiImportResult } from 'player';
@@ -381,6 +382,9 @@ export default class EntryAbility extends UIAbility {
   onBackPressed(): boolean {
     try {
       MusicStoreService.getInstance().appendRuntimeDiagnostic('RzdHomeBackEnter src=EntryAbility');
+      // 通知页面层做收尾（Ability 里拿不到 AppStorageV2，用 AppStorage 打信号，Index 监听）。
+      const cleaned: boolean = HomeBackBridge.runCleanup();
+      MusicStoreService.getInstance().appendRuntimeDiagnostic(`RzdHomeBackEnter cleaned=${cleaned ? 1 : 0} calls=${HomeBackBridge.calls}`);
     } catch (err) {
     }
     return false;
