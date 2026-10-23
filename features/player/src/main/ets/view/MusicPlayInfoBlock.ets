@@ -277,17 +277,6 @@ export struct MusicPlayInfoBlock {
 
   /** 播放/暂停封面弹簧缩放：播放放大、暂停缩小（手写阻尼弹簧，可见回弹） */
   @Local coverSpringScale: number = 1;
-  /** 封面容器实测尺寸（vp）：面板/横屏下用它算"能放得下的正方形"，避免被父容器裁掉一条。 */
-  @Local coverBoxWVp: number = 0;
-  @Local coverBoxHVp: number = 0;
-
-  /** @returns 封面可用的正方形边长（vp）：容器实测的 min(宽,高)；没量到返回 0（走 100% 老行为）。 */
-  private coverEdgeVp(): number {
-    if (this.coverBoxWVp <= 0 || this.coverBoxHVp <= 0) {
-      return 0;
-    }
-    return Math.max(1, Math.min(this.coverBoxWVp, this.coverBoxHVp));
-  }
   private coverSpringTarget: number = 1;
   private coverSpringVelocity: number = 0;
   private coverSpringTimer: number = 0;
@@ -365,10 +354,6 @@ export struct MusicPlayInfoBlock {
     Stack({ alignContent: Alignment.Center }) {
       Image(this.currentCoverSource())
         .id(PLAYER_BIG_COVER_ID)
-        // 2026-10-23: 横屏/面板下父容器可能比封面窄或矮，光靠 constraintSize+aspectRatio 会被裁掉一条
-        //   （甲方截图里封面变成 390x315 的非方形 = 方形被裁）。⇒ 量到容器就显式给 min(宽,高)。
-        .width(this.coverEdgeVp() > 0 ? this.coverEdgeVp() : '100%')
-        .height(this.coverEdgeVp() > 0 ? this.coverEdgeVp() : '100%')
         .constraintSize({ maxWidth: '100%', maxHeight: '100%' })
         .aspectRatio(1)
         .objectFit(ImageFit.Cover)
@@ -400,16 +385,6 @@ export struct MusicPlayInfoBlock {
     .layoutWeight(1)
     .borderRadius(this.coverRadiusState.radius)
     .clip(true)
-    .onAreaChange((_o: Area, n: Area): void => {
-      const w: number = areaLengthToVp(n.width);
-      const h: number = areaLengthToVp(n.height);
-      if (w > 0 && Math.abs(w - this.coverBoxWVp) > 0.5) {
-        this.coverBoxWVp = w;
-      }
-      if (h > 0 && Math.abs(h - this.coverBoxHVp) > 0.5) {
-        this.coverBoxHVp = h;
-      }
-    })
     .scale({
       x: this.coverDisplayScale() * this.coverSpringScale,
       y: this.coverDisplayScale() * this.coverSpringScale,
