@@ -404,6 +404,14 @@ export struct PlaybackPage {
     // 2026-10-23 探针（最后一条：横屏开→切竖屏整块右移）：
     //   这里报的就是"屏上那张封面"的真实窗口矩形；配合 `anchor-fix`/`bigX/bigY` 就能判定
     //   到底是位置错（我方算的 x）还是容器错（报出来的 x 与算的不同）。
+    // 2026-10-23（真机实证的**自锁闭环**）：封面位置由 bigX 算，而它又把自己的位置写回 bigX。
+    //   转屏后它带着横屏的旧位置画一次（pos=141.5 / bigX=-88.4 互踢），一旦画稳就不再触发
+    //   onAreaChange ⇒ bigX 永远停在 141.5，我算好的居中值 95.3 被覆盖后再也回不来。
+    //   ⇒ 换窗口后的冷静期内**拒收**这个上报，并用冷静期结束前反复重设居中锚点。
+    if (Date.now() < this.anchorFixUntil) {
+      appendPlayLog(`RzdProbe coverReport skip stale pos=${areaLengthToVp(area.globalPosition.x).toFixed(1)}`);
+      return;
+    }
     appendPlayLog(`RzdProbe coverReport pos=${areaLengthToVp(area.globalPosition.x).toFixed(1)},` +
       `${areaLengthToVp(area.globalPosition.y).toFixed(1)} ` +
       `size=${areaLengthToVp(area.width).toFixed(1)}x${areaLengthToVp(area.height).toFixed(1)} ` +
@@ -1354,6 +1362,8 @@ export struct PlaybackPage {
   private closePath: string = 'live';
   /** 本次关闭是哪个入口触发的（	opbar = 顶栏收起按钮，systemBack = 系统返回/下拉）。只给日志用。 */
   private closeEntrySource: string = 'systemBack';
+  /** 换窗口后的"锚点冷静期"截止时间：期间忽略封面自己上报的旧位置（见 reportPlayerCoverFromOverlay）。 */
+  private anchorFixUntil: number = 0;
 
   public static cancelPendingCloseForOpen(): void {
     const cancel: (() => void) | undefined = PlaybackPage.cancelCloseOwner;
@@ -6669,10 +6679,21 @@ export struct PlaybackPage {
       //   ⇒ 换窗口时按新窗口**把锚点重新算成"水平居中"**（封面在当前布局里就是居中的），
       //     并把结果打出来；下一次 onAreaChange 一上报就会覆盖它。
       const winW: number = this.expandState.windowWidthVp;
+      // 冷静期 + 反复重设：封面会把旧位置写回 bigX（自锁闭环），所以要多钉几次。
+      this.anchorFixUntil = Date.now() + 900;
       const winH: number = this.expandState.windowHeightVp;
       const coverW: number = this.expandState.bigSize > 0 ? this.expandState.bigSize : 172;
       if (winW > 0 && winH > 0) {
         this.expandState.bigX = Math.round((winW - coverW) / 2 * 10) / 10;
+        const centeredX: number = this.expandState.bigX;
+        for (const delayMs of [80, 240, 480]) {
+          setTimeout((): void => {
+            if (!this.isAlive || this.isClosing) {
+              return;
+            }
+            this.expandState.bigX = centeredX;
+          }, delayMs);
+        }
         appendPlayLog(`RzdProbe anchor-fix bigX=${this.expandState.bigX.toFixed(1)} ` +
           `bigY=${this.expandState.bigY.toFixed(1)} big=${coverW.toFixed(1)} win=${winW.toFixed(0)}x${winH.toFixed(0)}`);
       }
