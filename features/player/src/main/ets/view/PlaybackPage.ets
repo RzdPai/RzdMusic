@@ -401,6 +401,14 @@ export struct PlaybackPage {
    *    闂佺娉涢敃锔跨昂闂佸憡鏌ｉ崝瀣嚈閹达附鍎嶉柛鏇ㄥ幘閸欐劗鎲搁懜顒€鐏╅柛鐔告崌瀹曞爼鎮欏▓澶哥磽闂佺粯鍔欓埀顒佺〒缁愭鎲搁懜顒€鐏柛銊﹁壘椤垽鏁愰崨顓炲敤婵☆偓绲介悧鐐垫濞嗘垹鍗氭い鏍ㄧ矊娴狀垶鎮洪幒鎴練缂佹劕娲ㄩ幖鐐節閸屾瑧鍓ㄩ梺鎸庣☉椤︻參鍩€?
    */
   private reportPlayerCoverFromOverlay(area: Area): void {
+    // 2026-10-23 探针（最后一条：横屏开→切竖屏整块右移）：
+    //   这里报的就是"屏上那张封面"的真实窗口矩形；配合 `anchor-fix`/`bigX/bigY` 就能判定
+    //   到底是位置错（我方算的 x）还是容器错（报出来的 x 与算的不同）。
+    appendPlayLog(`RzdProbe coverReport pos=${areaLengthToVp(area.globalPosition.x).toFixed(1)},` +
+      `${areaLengthToVp(area.globalPosition.y).toFixed(1)} ` +
+      `size=${areaLengthToVp(area.width).toFixed(1)}x${areaLengthToVp(area.height).toFixed(1)} ` +
+      `bigX=${this.expandState.bigX.toFixed(1)} bigY=${this.expandState.bigY.toFixed(1)} ` +
+      `big=${this.expandState.bigSize.toFixed(1)} win=${this.expandState.windowWidthVp.toFixed(0)}x${this.expandState.windowHeightVp.toFixed(0)}`);
     if (this.lyricMorphT > 0.001) {
       return;
     }
