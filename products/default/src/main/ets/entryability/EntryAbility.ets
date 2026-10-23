@@ -22,6 +22,7 @@ import { formBindingData, formProvider } from '@kit.FormKit';
 import { rpc } from '@kit.IPCKit';
 import { CardImageHelper } from '../musiccard/CardImageHelper';
 import { appendPlayLog, getAppRuntime, Logger, MusicCardBridge, MusicCardSnapshot, MusicStoreService, WindowUtil } from 'musicbasic';
+import { AppStorageKeys, MorphShrinkState, PlayerExpandState } from 'musicbasic';
 import { lxSourceManager, MediaService } from 'player';
 import type { LXApiImportResult } from 'player';
 
@@ -372,18 +373,19 @@ export default class EntryAbility extends UIAbility {
     }
   }
 
-  /** App moved to background; notifies media layer for background-task policy. */
   /**
-   * 系统返回探针：页面级 `Index.onBackPress()` 从来没被调用（日志里没有 RzdHomeBackEnter），
-   * 这里确认"首页返回"到底走到哪一层；return false = 交回系统。
+   * 2026-10-23：首页系统返回时页面级 `Index.onBackPress()` 收不到（日志里从无 RzdHomeBackEnter）。
+   * 这里只记账 + 交回系统；清理浮层的逻辑放在页面层（Ability 里拿不到 AppStorageV2）。
+   * @returns false = 交回系统（该退到桌面就退）
    */
   onBackPressed(): boolean {
     try {
-      MusicStoreService.getInstance().appendRuntimeDiagnostic('RzdHomeBackEnter source=EntryAbility');
+      MusicStoreService.getInstance().appendRuntimeDiagnostic('RzdHomeBackEnter src=EntryAbility');
     } catch (err) {
     }
     return false;
   }
+
 
   onBackground() {
     // Ability has back to background
