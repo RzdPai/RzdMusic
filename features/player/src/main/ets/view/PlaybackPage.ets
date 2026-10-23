@@ -620,8 +620,6 @@ export struct PlaybackPage {
   //   （上面那条 JSDoc 是旧的 `RzdMiniLyricTop` 打印说明，已无代码引用，留作备查。）
   /** False after teardown to ignore async image callbacks. */
   private isAlive: boolean = true;
-  /** 竖屏玩家页的 Swiper 控制器（转屏后用它把页索引/内部偏移复位一次）。 */
-  private playbackSwiperCtl: SwiperController = new SwiperController();
   /** Playback page appear timestamp (grace period for flatCoverSizeVp). */
   private static pageAppearAtMs: number = 0;
   /** Bumps on each {@link getImageColorAsync} run so stale async work skips UI updates and releases pixels. */
@@ -5476,7 +5474,7 @@ export struct PlaybackPage {
               //      "闂佺懓鐏氶幐鍝ユ閹达箑绠绘い鎾跺枑閺夊綊鏌涢敐鍐ㄥ婵炲弶鐗滄禍鍛婄瑹閳ь剙顭囬悧鍫涗簻?闂?*闂佺懓鐏氶幐鍝ユ閹达箑绠涢煫鍥ㄦ尰缁?*闂佹眹鍔岀€氼垱绂嶇€靛憡瀚婚柨婵嗙箳缁€鍕偡濞嗗海顦﹂柛鐐差嚟閳ь剙婀遍幊鎾绘儑?`onAppear` 闂備緡鍙忕徊楣冾敊瀹€鍕拹闁圭瀛╅弳鍫ユ⒑閹绘帩鐓紒杈ㄥ哺婵?
               //   婵犮垼娉涚粔鐢告偋閹惰棄绀傞柟鎯板Г閺嗘盯鎮楀☉娆樻缂佽鲸婢橀銉╂嚍閵壯冪伇**缂備焦顨忛崗娑氱博妞嬪孩鍋?* `sw=` / `tgt=`闂佹寧绋戦悧濠囧蓟婵犲洤绀夐柣娆忔噽缁€鍡涙煃閵夛附鐓涢柍?
               //     `sw=1 tgt=1` 闂佸綊娼х粔闈浳ｇ粙娆炬桨鐎光偓閸愵亝袚婵＄偑鍊楅弫绋库枔閹存繍娼伴柨婵嗘噽閸╂鏌熼璺ㄧ瓘缂佽京娴梥w=0` 闂佸吋婢樻總鏃傜礊濮椻偓瀹曠兘濡搁敂鐐啓闁荤姴娲ょ粔褰掑Υ?闂?闁诲繐绻楁ご绋课ｉ幖浣稿珘妞ゆ帊鐒﹂拏瀣煏?
-              Swiper(this.playbackSwiperCtl) {
+              Swiper() {
                 Stack({ alignContent: Alignment.TopStart }) {
                   //   闂佸搫鍟版慨鐑藉疾椤愶附鍎?`playerPane` 闂?`Swiper` 婵炴垶鎸堕崐婵嬪Υ婢舵劖鐒鹃柦妯侯槸濞懷囨煛?`Column().width/height('100%')`闂?
                   //   **闁诲繐绻嬬欢姘焽閻楀牏鈻旈幖娣灮閹藉啴鏌涘顒傂ｉ柣妤佹尦瀵敻顢栫捄銊ф喒闂侀潻璐熼崝鎴﹀Υ婢舵劖鐓?*闂佹寧绋戦惌渚€鍩€椤掆偓閼活垰锕?`Swiper` 婵炴垶鏌ㄩ鍛此囨繝姘剭闁告洦鍣ú顒勬煟閳哄倻澧柣?
@@ -6660,19 +6658,6 @@ export struct PlaybackPage {
       this.flatCtlSwapped = false;
       this.flatSwapping = false;
       this.collapseProgress = 0;
-      // 2026-10-23: 竖屏玩家页是 Swiper（第 0 页空壳 + 内容页）；转屏后它内部偏移不会随宽度复位，
-      //   整块内容会整体横移（= 甲方截图"封面偏右 + 中间大片空"）⇒ 无动画地把索引重设一次。
-      setTimeout((): void => {
-        if (!this.isAlive || this.isClosing) {
-          return;
-        }
-        try {
-          this.playbackSwiperCtl.changeIndex(this.playbackSwiperIndex, false);
-          appendPlayLog(`RzdProbe swiper-reset idx=${this.playbackSwiperIndex}`);
-        } catch (error) {
-          appendPlayLog(`RzdProbe swiper-reset failed error=${error}`);
-        }
-      }, 60);
     }
     try {
       const ok: boolean = this.expandState.measureEndAnchor(this.getUIContext());
