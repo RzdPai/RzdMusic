@@ -620,8 +620,6 @@ export struct PlaybackPage {
   //   （上面那条 JSDoc 是旧的 `RzdMiniLyricTop` 打印说明，已无代码引用，留作备查。）
   /** False after teardown to ignore async image callbacks. */
   private isAlive: boolean = true;
-  /** 播放页出现时间戳：`flatCoverSizeVp()` 的宽限期用（0 = 还没出现）。 */
-  private static pageAppearAtMs: number = 0;
   /** Bumps on each {@link getImageColorAsync} run so stale async work skips UI updates and releases pixels. */
   private imageColorJobSeq: number = 0;
   /** Cached UIAbility context for resource and color extraction. */
@@ -3628,7 +3626,6 @@ export struct PlaybackPage {
 
   /** Seeds cover Resource from the current queue item. */
   aboutToAppear(): void {
-    PlaybackPage.pageAppearAtMs = Date.now();
     PlaybackPage.cancelPendingCloseForOpen();
     this.closeInstance = ++PlaybackPage.instanceSerial;
     // 闂佺绻愰悧鎰邦敊閸ャ劎鈻旈柍褜鍓熷?闁哄鏅滈悷銈囩博鐎涙ǜ浜滈柛顭戝亜閻︻垶寮堕悙璺盒撴俊鐐插€婚幐褔骞嶉鐣屾殸闂佸搫瀚烽崹浼村箺閵忋倕绾ч梽鍥儗?闂佹寧绋掑銊╁磻閿濆绀勭紓浣姑埅鐢碘偓娈垮枓閸?vs 婵炴垶鎸搁敃銉﹀垔濞差亜绠ラ柟鎯х－绾惧鏌ｉ妸銉ヮ仼閻忓浚鍨跺畷姘额敃閵忥紕娈ら梺?`pullDragging`闂?
@@ -6128,17 +6125,7 @@ export struct PlaybackPage {
     if (winW <= 0 || winH <= 0) {
       return 160;
     }
-    // 2026-10-23 探针实证（`RzdProbe endAnchor`）：打开时节点先量不到（node=none），一帧后量到
-    //   `266.7x200.5`（= 兜底宽 + 容器裁高），落位后真实封面是 `172.5x172.5` ⇒ 兜底值大 55%，
-    //   这就是"动画中封面大小和结束后不一致"。
-    //   ⇒ 头 400ms 内还没量到盒子就**不画**（0 = 不显示，形变期间由壳层克隆封面代表封面），
-    //     等真实盒子量到就用上游公式 —— 全程只有一个尺寸，不会再跳。
-    const appearedAt: number = PlaybackPage.pageAppearAtMs;
-    if (appearedAt <= 0 || Date.now() - appearedAt < 400) {
-      return 0;
-    }
-    // 宽限期后仍量不到才估算：横屏左栏盒高 ≈ 窗口高 − 内距24 − 歌名行≈130。
-    const fallback: number = Math.min(winH - 154, winW * 0.42);
+    const fallback: number = Math.min(winH - 96, winW * 0.42);
     appendPlayLog(`RzdProbe flatCover fallback size=${Math.max(120, fallback).toFixed(1)} ` +
       `box=${this.flatCoverBoxWVp.toFixed(1)}x${this.flatCoverBoxHVp.toFixed(1)} ` +
       `edge=${edge.toFixed(1)} win=${winW.toFixed(0)}x${winH.toFixed(0)}`);
