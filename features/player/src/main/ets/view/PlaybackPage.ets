@@ -8386,7 +8386,10 @@ export struct PlaybackPage {
           //   ⇒ 浮层只跑在"不是 panel"的那一档（= 无界 `playerPane` 独占的情况）。
           //   排查关键字：`usesPhoneSwiperLayout` + `usePanelLayout` 的 `[RzdBranch]` 日志。
           if (this.usesPhoneSwiperLayout() && !this.usePanelLayout()) {
-            this.LyricFloatLayer()
+            // 2026-10-23: 这一层同样按窗口坐标绝对定位（歌名/歌手/小封面），转屏后跟着重挂一次。
+            if (this.coverLayerMounted) {
+              this.LyricFloatLayer()
+            }
           }
         }
         .width(StyleConstants.FULL_WIDTH)
