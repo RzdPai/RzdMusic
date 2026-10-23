@@ -620,8 +620,6 @@ export struct PlaybackPage {
   //   （上面那条 JSDoc 是旧的 `RzdMiniLyricTop` 打印说明，已无代码引用，留作备查。）
   /** False after teardown to ignore async image callbacks. */
   private isAlive: boolean = true;
-  /** Playback page appear timestamp (grace period for flatCoverSizeVp). */
-  private static pageAppearAtMs: number = 0;
   /** Bumps on each {@link getImageColorAsync} run so stale async work skips UI updates and releases pixels. */
   private imageColorJobSeq: number = 0;
   /** Cached UIAbility context for resource and color extraction. */
@@ -6122,13 +6120,6 @@ export struct PlaybackPage {
     if (edge > 0) {
       return edge;
     }
-    // 2026-10-23: fallback 266.7 vs real 172.5 => a visible jump once the box is measured.
-    // Only use the fallback after a grace period; within it return 0 (nothing painted, the shell
-    // clone owns the cover) so the animation never shows two different sizes.
-    const appearedAt: number = PlaybackPage.pageAppearAtMs;
-    if (appearedAt <= 0 || Date.now() - appearedAt < 800) {
-      return 0;
-    }
     const winW: number = this.expandState.windowWidthVp;
     const winH: number = this.expandState.windowHeightVp;
     if (winW <= 0 || winH <= 0) {
@@ -6647,17 +6638,6 @@ export struct PlaybackPage {
     if (atRest) {
       this.expandState.morphReset();
       appendPlayLog(`[RzdBgPhase] window-rest-session-reset win=${w}x${h}`);
-      // 2026-10-23: 转屏 = 布局整个换一支。横屏专属量必须归零，否则它们会在竖屏布局里继续生效
-      //   （探针实证：转到竖屏后 flatBox 仍是横屏的 343.3x200.5、edge 仍是横屏的 172.5）。
-      //   这些量全都有"新布局会重新量/重新算"的兜底：flatBox 由 flatPane 的 onAreaChange 重报，
-      //   flatT/flatCtl 只在两面交叉时有意义，collapse 由下拉手势重新驱动。
-      appendPlayLog(`RzdProbe rotate-clear flatBox=${this.flatCoverBoxWVp.toFixed(1)}x${this.flatCoverBoxHVp.toFixed(1)} flatT=${this.flatT.toFixed(3)} flatCtl=${this.flatCtlSwapped ? 1 : 0} collapse=${this.collapseProgress.toFixed(3)}`);
-      this.flatCoverBoxWVp = 0;
-      this.flatCoverBoxHVp = 0;
-      this.flatT = 0;
-      this.flatCtlSwapped = false;
-      this.flatSwapping = false;
-      this.collapseProgress = 0;
     }
     try {
       const ok: boolean = this.expandState.measureEndAnchor(this.getUIContext());
@@ -7997,7 +7977,6 @@ export struct PlaybackPage {
           .onAppear(() => {
             this.context = this.getUIContext().getHostContext() as common.UIAbilityContext;
             this.isAlive = true;
-    PlaybackPage.pageAppearAtMs = Date.now();
             // 鈽呪槄鈽呪槄 2026-10-17锛堝瓙浠ｇ悊瀹氫綅锛夛細**鍏堝悆璺ㄩ〉闈㈢紦鍐?*锛屽啀璧板師鏉ョ殑缃戠粶/璧勬簮鍙栨簮銆?
             //   鍦ㄦ涔嬪墠 `adoptCachedMesh()` 闆惰皟鐢ㄨ€?鈬?姣忔閮戒粠闆朵笅杞?鈬?鐐瑰嚮鎵撳紑閭?350ms 鍐呮病鏈夌湡婧愩€?
             // 鉀?2026-10-17 鍋滅敤锛氭寕杞介偅涓€鎷?`getCurrentSongItem()` 鍙兘杩樻槸**涓婁竴棣?*
