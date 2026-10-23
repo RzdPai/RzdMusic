@@ -6692,6 +6692,22 @@ export struct PlaybackPage {
       //   不只是封面端点。本仓原来只调 `measureEndAnchor()`，盒子/内容盒仍可能是旧朝向的值，
       //   于是按这些量反解出来的窗口坐标整体偏掉。
       this.expandState.measureGeometry(this.getUIContext(), true);
+      // 2026-10-23（方案A + 延迟重量）：转屏那一拍量到的还是**旧布局**，所以量完等于没量。
+      //   ① 把横屏期算出来的量先归零（新布局会重算它们）；
+      //   ② 等新布局落定（+150ms）再整份重量一次。
+      this.flatCoverBoxWVp = 0;
+      this.flatCoverBoxHVp = 0;
+      this.flatT = 0;
+      this.flatCtlSwapped = false;
+      this.flatSwapping = false;
+      this.collapseProgress = 0;
+      setTimeout((): void => {
+        if (!this.isAlive || this.isClosing) {
+          return;
+        }
+        this.expandState.measureEndAnchor(this.getUIContext());
+        this.expandState.measureGeometry(this.getUIContext(), true);
+      }, 150);
       appendPlayLog(`[RzdBgPhase] window-anchor-remeasure ok=${ok ? 1 : 0} win=${w}x${h} ` +
         `big=${this.expandState.bigSize.toFixed(1)}`);
       // ★★★ 2026-10-23（甲方：「横屏打开播放器，切到竖屏会错位」；竖屏开再转就没事）：
