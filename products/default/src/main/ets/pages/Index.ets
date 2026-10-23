@@ -490,6 +490,8 @@ struct Index {
 
   /** Initializes play queue ids from local DB for the session. */
   aboutToAppear() {
+    const bs = this.windowInfo.windowSize;
+    appendPlayLog(`RzdProbe boot first win=${bs.width}x${bs.height} ${bs.width > bs.height ? 'landscape' : 'portrait'}`);
     // ★★★ 2026-10-18（照搬上游两段式：判意图 → controller 落地）：滚动侧只表达意图，
     //   样式切换与动画都交给 HDS（SDK `@hms.hds.hdsBaseComponent.d.ets:5729`「default animation」）。
     BarScrollHelper.expandApplier = (expand: boolean): void => {
@@ -617,6 +619,17 @@ struct Index {
    * 杩欓噷鍙槸**璇?*瀹冨啓杩?`WindowInfo.avoidKeyboard`锛坄@Trace`锛夌殑缁撴灉 鈥斺€?
    * 璇?`@Trace` 灞炴€ф棦鑳介┍鍔ㄦ湰鏉℃偓娴潯鐨勯噸鏂板竷灞€锛屼篃姝ｅソ鏄繖涓瘖鏂柇鐐广€?
    */
+  /**
+   * 2026-10-23 探针：窗口尺寸轨迹。甲方怀疑"应用总是先在竖屏出生、再转横屏"，
+   * 这行能直接证实/否定：启动后应看到 portrait(1224x2776) 然后 landscape(2776x1224)。
+   */
+  @Monitor('windowInfo.windowSize')
+  onWindowSizeProbe(): void {
+    const s = this.windowInfo.windowSize;
+    appendPlayLog(`RzdProbe boot win=${s.width}x${s.height} ` +
+      `wires=${s.width > s.height ? 'landscape' : 'portrait'} t=${Date.now() % 100000}`);
+  }
+
   @Monitor('windowInfo.avoidKeyboard')
   onKeyboardAvoidAreaChanged(): void {
     // ★★★ 2026-10-18：键盘态两行账（`hdc shell hilog | grep RzdKeyboardAvoid`）
