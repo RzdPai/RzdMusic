@@ -6672,23 +6672,19 @@ export struct PlaybackPage {
       //   都退回"整栏/整窗"那一档 ⇒ 观感就是"错位"。
       //   ⇒ 量到就同步写回（与 `PlayerExpandState` 里 resync 那条同一口径），
       //     并**再延迟补量一次**：转屏那一拍量到的可能还是旧布局。
-      // 2026-10-23: rotation must NOT write the just-measured width into bigSize - at that
-      // moment it still measures the landscape image (log: rotate ... big=266.7 = landscape
-      // fallback), which then makes the portrait layout use the wrong anchor.
-      // Let the portrait cover report via onAreaChange; only sync later, filtered.
+      this.syncBigSizeFromNode('resize');
       setTimeout((): void => {
         if (!this.isAlive || this.isClosing) {
           return;
         }
         try {
           if (this.expandState.measureEndAnchor(this.getUIContext())) {
-            this.syncBigSizeFromNode('resize+220');
-            appendPlayLog(`RzdProbe anchor-late big=${this.expandState.bigSize.toFixed(1)}`);
+            this.syncBigSizeFromNode('resize+48');
           }
         } catch (error) {
           appendPlayLog(`[RzdBgPhase] window-anchor-remeasure-deferred failed error=${error}`);
         }
-      }, 220);
+      }, 48);
     } catch (error) {
       appendPlayLog(`[RzdBgPhase] window-anchor-remeasure failed error=${error}`);
     }
