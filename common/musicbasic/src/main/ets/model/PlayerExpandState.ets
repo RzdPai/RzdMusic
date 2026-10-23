@@ -3573,8 +3573,6 @@ export class PlayerExpandState {
    */
   public measureMiniDuringPull(ui: UIContext, preferFloating: boolean): boolean {
     // 2026-10-23 探针：横屏点击打开时 geom 一直是假，先确认是"闸门不过"还是"节点量不到"。
-    appendPlayLog(`RzdProbe mini stage=${this.morphStage} drive=${this.morphDrive} ` +
-      `known=${this.bigNodeKnown ? 1 : 0} usable=${this.morphUsable ? 1 : 0} geom=${this.morphGeomReady ? 1 : 0}`);
     if (this.morphStage !== MorphStage.ENTERING || this.morphDrive !== MorphDrive.FINGER) {
       return false;
     }
@@ -5089,10 +5087,7 @@ export class PlayerExpandState {
   public measureEndAnchor(ui: UIContext): boolean {
     const node: NodeRect | undefined = this.measureNode(ui, PLAYER_BIG_COVER_ID, true);
     // 2026-10-23 探针：这一行能直接回答"横屏为什么量不到终点锚点"。
-    appendPlayLog(`RzdProbe endAnchor id=${PLAYER_BIG_COVER_ID} ` +
-      `node=${node === undefined ? 'none' : node.w.toFixed(1) + 'x' + node.h.toFixed(1)}`);
     if (node !== undefined && node.w > 0 && Math.abs(node.w - node.h) > 8) {
-      appendPlayLog(`RzdProbe endAnchor reject nonSquare ${node.w.toFixed(1)}x${node.h.toFixed(1)}`);
       return false;
     }
     if (node === undefined || node.w <= 0) {

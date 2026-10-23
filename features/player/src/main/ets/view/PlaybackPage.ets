@@ -409,14 +409,8 @@ export struct PlaybackPage {
     //   onAreaChange ⇒ bigX 永远停在 141.5，我算好的居中值 95.3 被覆盖后再也回不来。
     //   ⇒ 换窗口后的冷静期内**拒收**这个上报，并用冷静期结束前反复重设居中锚点。
     if (Date.now() < this.anchorFixUntil) {
-      appendPlayLog(`RzdProbe coverReport skip stale pos=${areaLengthToVp(area.globalPosition.x).toFixed(1)}`);
       return;
     }
-    appendPlayLog(`RzdProbe coverReport pos=${areaLengthToVp(area.globalPosition.x).toFixed(1)},` +
-      `${areaLengthToVp(area.globalPosition.y).toFixed(1)} ` +
-      `size=${areaLengthToVp(area.width).toFixed(1)}x${areaLengthToVp(area.height).toFixed(1)} ` +
-      `bigX=${this.expandState.bigX.toFixed(1)} bigY=${this.expandState.bigY.toFixed(1)} ` +
-      `big=${this.expandState.bigSize.toFixed(1)} win=${this.expandState.windowWidthVp.toFixed(0)}x${this.expandState.windowHeightVp.toFixed(0)}`);
     if (this.lyricMorphT > 0.001) {
       return;
     }
@@ -3268,9 +3262,6 @@ export struct PlaybackPage {
     //   缩下去）还是 `closeWithAnimation()`（快照：整屏拍一张再缩成胶囊飞回去）。
     //   所以**必须能一眼看出每次关闭走了哪条、以及为什么**：把进入时的三个判据打出来。
     //   运行日志 grep `RzdCloseEntry`：`src=topbar|systemBack stage=? intro=? drv=? p=?`。
-    appendPlayLog(`RzdCloseEntry src=${this.closeEntrySource} stage=${this.expandState.morphStage} ` +
-      `intro=${this.expandIntroRunning ? 1 : 0} drv=${this.expandState.morphSessionDriving() ? 1 : 0} ` +
-      `finger=${this.expandState.pullDragging ? 1 : 0} p=${this.expandState.morphP.toFixed(3)}`);
     // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀闁告侗浜濋～?2026-10-17闂佹寧绋戦悧蹇涘矗鎼淬劌绠规い鎺嶇劍閿熴儵鏌?`MainPage.closeWithAnimation()` 闂佹眹鍔岀€氭澘顭囬鍫濈閻庯綆浜滈埣銏ゆ煕閹烘垶顥為柡渚囧櫍閺佸秵寰勫☉姘辩崶
     //   闁哄鏅滈悷锕€顭?Monitor 闂?*闂佸摜鍎愰崹顖滅博?*闂?闂傚倸鐗忛崑鐐存櫠濠婂牆绀夐柛顭戝枛瑜扮娀姊?闂佺绻堥崕杈亹濞戙垺鏅柛褍鍩€uardPlayerBack()` / 婵犮垻鎳撻崯鍧楁儑?`onBackPress()`
     //   闂備緡鍠栭埀顒傚枙濞?`expandState.requestCollapse()` 闂?`collapseVersion++`闂佹寧绋戦ˇ顓㈠焵?
@@ -3289,9 +3280,6 @@ export struct PlaybackPage {
       || closeStage === MorphStage.LANDING;
     // 2026-10-23: 一律"展开动画反过来"（甲方要的是封面飞回去，不是整屏缩下去）。
     // 所以只要形变几何还在（`morphUsable`），关闭就走活体反向；不再等落位、不再拍快照。
-    appendPlayLog(`RzdCloseReverse src=${this.closeEntrySource} stage=${closeStage} ` +
-      `p=${this.expandState.morphP.toFixed(3)} usable=${this.expandState.morphUsable ? 1 : 0} ` +
-      `finger=${this.expandState.pullDragging ? 1 : 0}`);
     if (this.expandState.morphUsable) {
       // ★★★ 2026-10-18（用户第十轮：「展开中按返回**要等好久**才收起」+「会闪」）——照搬上游 `reverseIntentOf`：
       //   上游 `ENTERING` 相位收到关闭 ⇒ `START`：`retargetToLiveCover()` → `setMorph(LEAVING,ANIM)` →
@@ -3333,15 +3321,12 @@ export struct PlaybackPage {
       return;
     }
     if (this.expandState.morphP >= 0.999) {
-      appendPlayLog(`RzdCloseDefer landed attempt=${attempt} stage=${this.expandState.morphStage}`);
       this.expandIntroRunning = false;
       this.expandState.morphSettleOpen();
       this.closeWithAnimation();
       return;
     }
     if (attempt >= 20) {
-      appendPlayLog(`RzdCloseDefer give-up attempt=${attempt} p=${this.expandState.morphP.toFixed(3)} ` +
-        `stage=${this.expandState.morphStage}`);
       this.closeFullScreenPlayback();
       return;
     }
@@ -4188,8 +4173,6 @@ export struct PlaybackPage {
       const stageNow: MorphStage = this.expandState.morphStage;
       const pNow: number = this.expandState.morphP;
       const aliveNow: boolean = this.expandState.morphGenAlive(gen);
-      appendPlayLog(`RzdIntroLanding open+590 genAlive=${aliveNow ? 1 : 0} stage=${stageNow} ` +
-        `p=${pNow.toFixed(3)} geom=${this.expandState.morphGeomReadyNow() ? 1 : 0}`);
       if (!aliveNow && pNow < 0.999) {
         this.expandState.logMorphOwnership('open-finish-expired');
         return;
@@ -5395,7 +5378,6 @@ export struct PlaybackPage {
                     showControlArea: false
                   })
                 .onAreaChange((_o: Area, n: Area): void => {
-                  appendPlayLog(`RzdProbe info pos=${areaLengthToVp(n.globalPosition.x).toFixed(1)},${areaLengthToVp(n.globalPosition.y).toFixed(1)} size=${areaLengthToVp(n.width).toFixed(1)}x${areaLengthToVp(n.height).toFixed(1)} win=${this.expandState.windowWidthVp.toFixed(0)}x${this.expandState.windowHeightVp.toFixed(0)}`);
                 })
                 }
                 .margin({
@@ -6150,9 +6132,6 @@ export struct PlaybackPage {
     //   而 boxH ≈ winH × 0.552；原来按 winH−96 估成 266.7（大 55%）⇒ 首帧封面会先大后小。
     //   ⇒ 按实测比例估：min(winH × 0.475, winW × 0.30)，下限 120。仅兜底一两帧用。
     const fallback: number = Math.min(winH * 0.475, winW * 0.30);
-    appendPlayLog(`RzdProbe flatCover fallback size=${Math.max(120, fallback).toFixed(1)} ` +
-      `box=${this.flatCoverBoxWVp.toFixed(1)}x${this.flatCoverBoxHVp.toFixed(1)} ` +
-      `edge=${edge.toFixed(1)} win=${winW.toFixed(0)}x${winH.toFixed(0)}`);
     return Math.max(120, fallback);
   }
 
@@ -6407,7 +6386,6 @@ export struct PlaybackPage {
               panelLayout: true
             })
                 .onAreaChange((_o: Area, n: Area): void => {
-                  appendPlayLog(`RzdProbe info pos=${areaLengthToVp(n.globalPosition.x).toFixed(1)},${areaLengthToVp(n.globalPosition.y).toFixed(1)} size=${areaLengthToVp(n.width).toFixed(1)}x${areaLengthToVp(n.height).toFixed(1)} win=${this.expandState.windowWidthVp.toFixed(0)}x${this.expandState.windowHeightVp.toFixed(0)}`);
                 })
           }
         }
@@ -6694,12 +6672,7 @@ export struct PlaybackPage {
             this.expandState.bigX = centeredX;
           }, delayMs);
         }
-        appendPlayLog(`RzdProbe anchor-fix bigX=${this.expandState.bigX.toFixed(1)} ` +
-          `bigY=${this.expandState.bigY.toFixed(1)} big=${coverW.toFixed(1)} win=${winW.toFixed(0)}x${winH.toFixed(0)}`);
       }
-      appendPlayLog(`RzdProbe local scale=${this.expandState.morphScale.toFixed(3)} ` +
-        `tx=${this.expandState.morphTx.toFixed(1)} ty=${this.expandState.morphTy.toFixed(1)} ` +
-        `stage=${this.expandState.morphStage} win=${this.expandState.windowWidthVp.toFixed(0)}x${this.expandState.windowHeightVp.toFixed(0)}`);
       appendPlayLog(`[RzdBgPhase] window-rest-session-reset win=${w}x${h}`);
     }
     try {
@@ -6732,13 +6705,6 @@ export struct PlaybackPage {
       appendPlayLog(`[RzdBgPhase] window-anchor-remeasure failed error=${error}`);
     }
       // 2026-10-23: 转屏一次性探针（甲方一次测试就能定位"横屏打开→切竖屏错位"）。
-      appendPlayLog(`RzdProbe rotate win=${w}x${h} short=${this.isShortHeightWindow() ? 1 : 0} ` +
-        `panel=${this.usePanelLayout() ? 1 : 0} swiper=${this.usesPhoneSwiperLayout() ? 1 : 0} ` +
-        `flatBox=${this.flatCoverBoxWVp.toFixed(1)}x${this.flatCoverBoxHVp.toFixed(1)} ` +
-        `edge=${this.flatCoverEdgeVp().toFixed(1)} big=${this.expandState.bigSize.toFixed(1)} ` +
-        `flatT=${this.flatT.toFixed(3)} flatCtl=${this.flatCtlSwapped ? 1 : 0} ` +
-        `collapse=${this.collapseProgress.toFixed(3)} swIdx=${this.playbackSwiperIndex} ` +
-        `stage=${this.expandState.morphStage}`);
     this.meshSrcVersion = this.meshSrcVersion + 1;
     appendPlayLog(`[RzdBgPhase] refresh-on-resize ver=${this.meshSrcVersion} win=${w}x${h}`);
   }

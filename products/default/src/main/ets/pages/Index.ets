@@ -498,7 +498,6 @@ struct Index {
       this.onHomeBackSignal();
     });
     const bs = this.windowInfo.windowSize;
-    appendPlayLog(`RzdProbe boot first win=${bs.width}x${bs.height} ${bs.width > bs.height ? 'landscape' : 'portrait'}`);
     // ★★★ 2026-10-18（照搬上游两段式：判意图 → controller 落地）：滚动侧只表达意图，
     //   样式切换与动画都交给 HDS（SDK `@hms.hds.hdsBaseComponent.d.ets:5729`「default animation」）。
     BarScrollHelper.expandApplier = (expand: boolean): void => {
@@ -638,11 +637,6 @@ struct Index {
    */
   @Monitor('homeBackAt')
   onHomeBackSignal(): void {
-    appendPlayLog(`RzdHomeBackEnter src=Index stage=${this.expandState.morphStage} ` +
-      `alive=${this.playerRouteAlive ? 1 : 0} ` +
-      `br=${this.expandState.morphOverlayBridging() ? 1 : 0} ` +
-      `drv=${this.expandState.morphSessionDriving() ? 1 : 0} ` +
-      `hs=${this.expandState.hdsBarSuppressed ? 1 : 0} shrink=${this.shrinkState.visible ? 1 : 0}`);
     if (this.playerRouteAlive) {
       this.playerRouteAlive = false;
     }
@@ -652,7 +646,6 @@ struct Index {
       this.expandState.sourceBarHidden = false;
       this.expandState.miniOut = false;
       this.expandState.morphReset();
-      appendPlayLog('RzdHomeBackEnter cleaned overlays');
     }
     if (this.shrinkState.visible) {
       this.shrinkState.reset();
@@ -662,8 +655,6 @@ struct Index {
   @Monitor('windowInfo.windowSize')
   onWindowSizeProbe(): void {
     const s = this.windowInfo.windowSize;
-    appendPlayLog(`RzdProbe boot win=${s.width}x${s.height} ` +
-      `wires=${s.width > s.height ? 'landscape' : 'portrait'} t=${Date.now() % 100000}`);
   }
 
   @Monitor('windowInfo.avoidKeyboard')
@@ -813,10 +804,6 @@ struct Index {
       //   预热是"同步返回、异步干活"，这里不会被它拖住首帧。
       prewarmCurrentSongMesh(this.getUIContext(), this.appState.getCurrentSongItem());
       const morphStarted: boolean = this.beginOpenMorphOnClick();
-      appendPlayLog('RzdOpenEntry morphStarted=' + (morphStarted ? 1 : 0) +
-        ' stage=' + this.expandState.morphStage + ' p=' + this.expandState.morphP.toFixed(3) +
-        ' usable=' + (this.expandState.morphUsable ? 1 : 0) +
-        ' geom=' + (this.expandState.morphGeomReadyNow() ? 1 : 0));
       this.pushPlayerRoute();
       if (morphStarted) {
         // 鈽呪槄鈽?2026-10-16锛?*鐐瑰嚮鎵撳紑娌℃湁灏侀潰鍔ㄧ敾**鐨勬渶鍚庝竴鍧楁嫾鍥撅級锛?
@@ -1062,7 +1049,6 @@ struct Index {
     }, false);
     // 播放页真的进栈了 ⇒ 浮层封面可以存在（见 `playerRouteAlive` 的说明）。
     this.playerRouteAlive = true;
-    appendPlayLog(`RzdCloneGate push routeAlive=1`);
   }
 
   /**
@@ -1080,7 +1066,6 @@ struct Index {
       // 路由本来就不在栈上 ⇒ 封面层必须已经关掉（幂等重放一次，防"上一轮漏关"）。
       if (this.playerRouteAlive) {
         this.playerRouteAlive = false;
-        appendPlayLog('RzdCloneGate pop noIdx routeAlive=0');
       }
       return;
     }
@@ -1104,9 +1089,6 @@ struct Index {
     // ★ 播放页已经离开栈 ⇒ **浮层封面立刻不许再画**（见 `playerRouteAlive` 的说明）。
     //   上游靠"浮层挂在播放页容器里"得到这条语义，本仓浮层在 Shell，必须显式关。
     this.playerRouteAlive = false;
-    appendPlayLog(`RzdCloneGate pop routeAlive=0 br=${this.expandState.morphOverlayBridging() ? 1 : 0} ` +
-      `drv=${this.expandState.morphSessionDriving() ? 1 : 0} ` +
-      `hs=${this.expandState.hdsBarSuppressed ? 1 : 0}`);
     // ★ 收尾自愈（同 `finishCloseGuard` 里那条 64ms 自检的同一路数）：
     //   路由已经不在栈上 ⇒ 不管动画链条有没有走完，共享状态都必须回到"没有形变"。
     //   留着不清的后果：下一次打开被 `leakClr` 判"残局"或克隆层按 `p≈1` 挂着（甲方这次的截图）。
@@ -1121,11 +1103,8 @@ struct Index {
         if (!bridging && !driving && !sup) {
           return;
         }
-        appendPlayLog(`RzdCloneGate +400 heal br=${bridging ? 1 : 0} drv=${driving ? 1 : 0} ` +
-          `hs=${sup ? 1 : 0} stage=${this.expandState.morphStage}`);
         this.expandState.morphReset();
       } catch (error) {
-        appendPlayLog(`RzdCloneGate +400 heal failed error=${error}`);
       }
     }, 400);
   }
@@ -1449,16 +1428,11 @@ struct Index {
     }
     if (this.expandState.morphGeomReadyNow() && this.expandState.morphUsable &&
       !this.expandState.reverseInFlight) {
-      appendPlayLog(`RzdShellSettle land-retry attempt=${attempt} stage=${this.expandState.morphStage} ` +
-        `p=${this.expandState.morphP.toFixed(3)}`);
       this.expandState.pushMorphTrace('retrySettled');
       this.expandState.morphSettleOpen();
       return;
     }
     if (attempt >= 12) {
-      appendPlayLog(`RzdShellSettle give-up attempt=${attempt} usable=${this.expandState.morphUsable ? 1 : 0} ` +
-        `geom=${this.expandState.morphGeomReadyNow() ? 1 : 0} ` +
-        `reverse=${this.expandState.reverseInFlight ? 1 : 0} stage=${this.expandState.morphStage}`);
       return;
     }
     setTimeout((): void => {
@@ -1466,11 +1440,6 @@ struct Index {
     }, 32);
   }
   private settlePullOpen(commit: boolean, attempt: number = 0): void {
-    appendPlayLog('RzdSettleStart commit=' + (commit ? 1 : 0) + ' attempt=' + attempt +
-      ' stage=' + this.expandState.morphStage + ' p=' + this.expandState.morphP.toFixed(3) +
-      ' usable=' + (this.expandState.morphUsable ? 1 : 0) +
-      ' geom=' + (this.expandState.morphGeomReadyNow() ? 1 : 0) +
-      ' reverse=' + (this.expandState.reverseInFlight ? 1 : 0));
     this.expandState.pushMorphTrace(`settle${attempt}${commit ? 'C' : 'A'}`);
     // 鈽呪槄鈽?2026-10-16锛?*琛ラ噺閾剧殑闂ㄦ崲浜嗕釜閲?*锛夛細鍘熸潵鏄?`if (!morphUsable)`銆?
     //   `morphUsable` 鏄?`morphInitParams()` 鐨?绠楀嚭鏉ヤ簡"锛堜細鍥犱负閫€鍥?`onAreaChange`
@@ -1624,16 +1593,9 @@ struct Index {
         if (this.appState.isShowPlay && this.expandState.morphGeomReadyNow() &&
           this.expandState.morphUsable && !this.expandState.reverseInFlight) {
           this.expandState.pushMorphTrace('settled');
-          appendPlayLog('RzdShellSettle landed stage=' + this.expandState.morphStage +
-            ' p=' + this.expandState.morphP.toFixed(3));
           this.expandState.morphSettleOpen();
         } else {
           this.expandState.pushMorphTrace('settleSkip');
-          appendPlayLog('RzdShellSettle skip showPlay=' + (this.appState.isShowPlay ? 1 : 0) +
-            ' usable=' + (this.expandState.morphUsable ? 1 : 0) +
-            ' geom=' + (this.expandState.morphGeomReadyNow() ? 1 : 0) +
-            ' reverse=' + (this.expandState.reverseInFlight ? 1 : 0) +
-            ' stage=' + this.expandState.morphStage);
           this.retrySettleLanding(0);
           Logger.info(RzdShellLogTag,
             `pull settle: skip morphSettleOpen showPlay=${this.appState.isShowPlay} ` +
@@ -2797,7 +2759,6 @@ struct Index {
       }
       .hideTitleBar(true)
       .onBackPressed((): boolean => {
-        appendPlayLog('RzdHomeBackEnter src=NavDest consumed');
         return true;
       })
     } else if (name === SEARCH_ROUTE_NAME) {
