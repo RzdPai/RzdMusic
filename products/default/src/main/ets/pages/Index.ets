@@ -2782,13 +2782,23 @@ struct Index {
   @Builder
   private HomeRouteMap(name: string, param: Object) {
     if (name === HOME_ROUTE_NAME) {
-      RecommendPage({
-        shellProvidesFloatingMiniBar: deviceInfo.distributionOSApiVersion >= 60100,
-        floatingBarExtraBottomReserveVp: this.twoRowExtraBottomVp(),
-        scrollTopCommand: this.tabScrollTopCommands[0],
-        onOpenSearch: (): void => {
-          this.openHomeSearch();
-        }
+      // 2026-10-23（甲方 A 型：「按返回后仍停在应用里、首页内容一片空白、底栏还在」）：
+      //   返回被 Navigation 吃掉并 pop 掉**最后一条首页路由** ⇒ 内容区空、Tab 条还在。
+      //   ⇒ 用 `NavDestination` 包起来并在首页这一层**显式消费返回**，内容就再也不会被弹空。
+      NavDestination() {
+        RecommendPage({
+          shellProvidesFloatingMiniBar: deviceInfo.distributionOSApiVersion >= 60100,
+          floatingBarExtraBottomReserveVp: this.twoRowExtraBottomVp(),
+          scrollTopCommand: this.tabScrollTopCommands[0],
+          onOpenSearch: (): void => {
+            this.openHomeSearch();
+          }
+        })
+      }
+      .hideTitleBar(true)
+      .onBackPressed((): boolean => {
+        appendPlayLog('RzdHomeBackEnter src=NavDest consumed');
+        return true;
       })
     } else if (name === SEARCH_ROUTE_NAME) {
       OnlineSearchPage({
