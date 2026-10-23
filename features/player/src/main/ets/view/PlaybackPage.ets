@@ -6125,7 +6125,10 @@ export struct PlaybackPage {
     if (winW <= 0 || winH <= 0) {
       return 160;
     }
-    const fallback: number = Math.min(winH - 96, winW * 0.42);
+    // 2026-10-23（真机实测标定）：横屏 win=823x363 时，真封面边长 172.5 = boxH(200.5) − 28，
+    //   而 boxH ≈ winH × 0.552；原来按 winH−96 估成 266.7（大 55%）⇒ 首帧封面会先大后小。
+    //   ⇒ 按实测比例估：min(winH × 0.475, winW × 0.30)，下限 120。仅兜底一两帧用。
+    const fallback: number = Math.min(winH * 0.475, winW * 0.30);
     appendPlayLog(`RzdProbe flatCover fallback size=${Math.max(120, fallback).toFixed(1)} ` +
       `box=${this.flatCoverBoxWVp.toFixed(1)}x${this.flatCoverBoxHVp.toFixed(1)} ` +
       `edge=${edge.toFixed(1)} win=${winW.toFixed(0)}x${winH.toFixed(0)}`);

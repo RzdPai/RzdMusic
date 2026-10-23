@@ -5058,7 +5058,6 @@ export class PlayerExpandState {
     //    ⇒ 先自己量一份、通过"量级校验"再写。
     const node: NodeRect | undefined = this.measureNode(ui, PLAYER_BIG_COVER_ID, true);
     if (node === undefined || node.w <= 0) {
-      Logger.info(PlayerExpandState.logTag, 'resync big anchor pending (cover node not laid out yet)');
       return false;
     }
     // 大封面的合理下限：窗口宽的 40%（真值 ≈ winW − 2×边距，手机档 ≈ 0.9×winW）。
@@ -5092,6 +5091,10 @@ export class PlayerExpandState {
     // 2026-10-23 探针：这一行能直接回答"横屏为什么量不到终点锚点"。
     appendPlayLog(`RzdProbe endAnchor id=${PLAYER_BIG_COVER_ID} ` +
       `node=${node === undefined ? 'none' : node.w.toFixed(1) + 'x' + node.h.toFixed(1)}`);
+    if (node !== undefined && node.w > 0 && Math.abs(node.w - node.h) > 8) {
+      appendPlayLog(`RzdProbe endAnchor reject nonSquare ${node.w.toFixed(1)}x${node.h.toFixed(1)}`);
+      return false;
+    }
     if (node === undefined || node.w <= 0) {
       return false;
     }
