@@ -6688,6 +6688,10 @@ export struct PlaybackPage {
     }
     try {
       const ok: boolean = this.expandState.measureEndAnchor(this.getUIContext());
+      // 2026-10-23（抄无界 `refitOverlay` :210208-210360）：换窗口时**整份几何重量**，
+      //   不只是封面端点。本仓原来只调 `measureEndAnchor()`，盒子/内容盒仍可能是旧朝向的值，
+      //   于是按这些量反解出来的窗口坐标整体偏掉。
+      this.expandState.measureGeometry(this.getUIContext(), true);
       appendPlayLog(`[RzdBgPhase] window-anchor-remeasure ok=${ok ? 1 : 0} win=${w}x${h} ` +
         `big=${this.expandState.bigSize.toFixed(1)}`);
       // ★★★ 2026-10-23（甲方：「横屏打开播放器，切到竖屏会错位」；竖屏开再转就没事）：
