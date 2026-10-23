@@ -6654,6 +6654,20 @@ export struct PlaybackPage {
       this.expandState.morphScale = 1;
       this.expandState.morphTx = 0;
       this.expandState.morphTy = 0;
+      // 2026-10-23（最后一条：横屏开→切竖屏错位）：
+      //   日志实证：转屏后 `endAnchor node=172.3x172.3` **不再更新**（竖屏封面没重新上报），
+      //   而封面是**窗口坐标绝对定位**（`.position({x: coverLocalRect().x})`，s=1/tx=0 时
+      //   局部坐标 == 窗口坐标 == bigX），所以 bigX/bigY 一旦停留在横屏值，整块就横移。
+      //   ⇒ 换窗口时按新窗口**把锚点重新算成"水平居中"**（封面在当前布局里就是居中的），
+      //     并把结果打出来；下一次 onAreaChange 一上报就会覆盖它。
+      const winW: number = this.expandState.windowWidthVp;
+      const winH: number = this.expandState.windowHeightVp;
+      const coverW: number = this.expandState.bigSize > 0 ? this.expandState.bigSize : 172;
+      if (winW > 0 && winH > 0) {
+        this.expandState.bigX = Math.round((winW - coverW) / 2 * 10) / 10;
+        appendPlayLog(`RzdProbe anchor-fix bigX=${this.expandState.bigX.toFixed(1)} ` +
+          `bigY=${this.expandState.bigY.toFixed(1)} big=${coverW.toFixed(1)} win=${winW.toFixed(0)}x${winH.toFixed(0)}`);
+      }
       appendPlayLog(`RzdProbe local scale=${this.expandState.morphScale.toFixed(3)} ` +
         `tx=${this.expandState.morphTx.toFixed(1)} ty=${this.expandState.morphTy.toFixed(1)} ` +
         `stage=${this.expandState.morphStage} win=${this.expandState.windowWidthVp.toFixed(0)}x${this.expandState.windowHeightVp.toFixed(0)}`);
