@@ -5376,6 +5376,9 @@ export struct PlaybackPage {
                     // 鎺у埗鍖猴紙Slider + 5 棰椾紶杈撻敭 + 4 棰楀浘鏍囪锛夛紝涓庡簳閮ㄥ叡浜偅涓€浠介噸鍙犮€傜敤鎴锋姤鐨?绗簩涓帶鍒跺尯"灏辨槸瀹冦€?
                     showControlArea: false
                   })
+                .onAreaChange((_o: Area, n: Area): void => {
+                  appendPlayLog(`RzdProbe info pos=${areaLengthToVp(n.globalPosition.x).toFixed(1)},${areaLengthToVp(n.globalPosition.y).toFixed(1)} size=${areaLengthToVp(n.width).toFixed(1)}x${areaLengthToVp(n.height).toFixed(1)} win=${this.expandState.windowWidthVp.toFixed(0)}x${this.expandState.windowHeightVp.toFixed(0)}`);
+                })
                 }
                 .margin({
                   bottom: 20
@@ -6385,6 +6388,9 @@ export struct PlaybackPage {
               coverMuted: this.coverPublishHidden,
               panelLayout: true
             })
+                .onAreaChange((_o: Area, n: Area): void => {
+                  appendPlayLog(`RzdProbe info pos=${areaLengthToVp(n.globalPosition.x).toFixed(1)},${areaLengthToVp(n.globalPosition.y).toFixed(1)} size=${areaLengthToVp(n.width).toFixed(1)}x${areaLengthToVp(n.height).toFixed(1)} win=${this.expandState.windowWidthVp.toFixed(0)}x${this.expandState.windowHeightVp.toFixed(0)}`);
+                })
           }
         }
         .layoutWeight(1)
