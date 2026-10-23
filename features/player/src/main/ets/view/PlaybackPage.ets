@@ -1358,6 +1358,8 @@ export struct PlaybackPage {
   private closeEntrySource: string = 'systemBack';
   /** 换窗口后的"锚点冷静期"截止时间：期间忽略封面自己上报的旧位置（见 reportPlayerCoverFromOverlay）。 */
   private anchorFixUntil: number = 0;
+  /** 转屏后重挂绝对定位封面层（打断 bigX 自锁闭环，见 refreshBgMeshOnResize）。 */
+  @Local coverLayerMounted: boolean = true;
 
   public static cancelPendingCloseForOpen(): void {
     const cancel: (() => void) | undefined = PlaybackPage.cancelCloseOwner;
@@ -6659,6 +6661,15 @@ export struct PlaybackPage {
       const winW: number = this.expandState.windowWidthVp;
       // 冷静期 + 反复重设：封面会把旧位置写回 bigX（自锁闭环），所以要多钉几次。
       this.anchorFixUntil = Date.now() + 900;
+      // 2026-10-23: 强制重挂那一层绝对定位封面（if 由假变真 = 节点重建），
+      //   让它按**新布局**重新上报一次位置/尺寸，彻底打断 bigX 自锁闭环。
+      this.coverLayerMounted = false;
+      setTimeout((): void => {
+        if (!this.isAlive || this.isClosing) {
+          return;
+        }
+        this.coverLayerMounted = true;
+      }, 32);
       const winH: number = this.expandState.windowHeightVp;
       const coverW: number = this.expandState.bigSize > 0 ? this.expandState.bigSize : 172;
       if (winW > 0 && winH > 0) {
@@ -8824,6 +8835,9 @@ export struct PlaybackPage {
       // 闂?闂佺粯绮嶅妯猴耿椤忓牊鍋傜憸搴ㄥ箚婢跺备鍋撻悷鏉挎灕缂?*闁诲繐绻愰幖顐︻敋?婵炶揪绲界粔鍫曟偪?闂侀潻绠戝Λ婊堬綖濡や胶鈻旈柍褜鍓欓銉р偓锝庝簻缁插潡鏌?`lyricFloatRect()`闂? `lyricMorph(t)`闂?*闂?
       //   婵炴垶鎸哥粔鎾疮閳ь剙鈽?`scale`闂侀潧妫斿鎺旂箔婢舵劕绀冪€广儱鎳庨～?`translate`闂侀潧妫旂换鏉?= 0`闂佹寧绋戦悧鍡涙儍濠靛顥堥柕蹇嬪€戦埀顒€顦靛Λ鍐ㄢ枎閹伴潧澹橀梺鎸庣☉椤︽澘顪?`lyricMorph(0)`
       //   闁诲繐绻楁ご绋课?`playerCoverGeomRect()` 闂備緡鍙忕徊鑲╃博鐎涙顩?*闂佸搫鍟版慨鐑藉疾椤愶附鍎嶉柛鏇ㄥ幘閺嗩剛鈧鍠栫换鎺斿垝閵娾晛鍑?* 闂?闂佽В鍋撻柟瀛樺笧缁夋挳鏌ｉ姀锝勫惈闁伙綀顕ч锝堢疀鎼达綆浼囧┑鐐叉閳ь剙纾弳鐗堟叏濠靛洨婀介柍?
+    // 2026-10-23: remount this absolutely-positioned cover after a rotation to break the
+    // bigX -> .position -> onAreaChange -> bigX feedback loop (see refreshBgMeshOnResize).
+    if (this.coverLayerMounted) {
       Column() {
         Image(this.currentCoverSource())
           // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-16闂佹寧绋戦悧蹇涘极閵堝绠ｇ€瑰嫭澹嗛弳浼存偣鐎ｎ亜鏆旈柍?*閻熸粍濯介褏鑺遍幎鑺ュ亗鐟滃酣骞嗘径鎰Е?*闂? 婵烇絽娴傞崰鏇犳偖闁秴绾ч柍銉ョ－閺夎姤绻涢弶鎴劀缂佽鲸宀搁弫?
@@ -8872,6 +8886,7 @@ export struct PlaybackPage {
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
       .hitTestBehavior(HitTestMode.None)
+    }
 
         // 闂佸疇妫勯幊澶娢?2026-10-15闂佹寧绋戦悧蹇涘矗鎼淬劌绠规い鎺嶇劍閿熴儵鏌ｉ敐鍛効缂佽鲸宀搁弫?*婵炴垶鎸撮崑鎾翠繆椤栵絼娴锋い?*闂佹寧绋戞總鏃傜箔婢舵劕绀冪€广儱妫欑瑧闁诲繒鍋涢幊宥夋嚈閹寸姷鍗氶柡宥冨妼缁楁捇鏌?
         //   闁诲簼绲婚～澶愭偉?`PlayerPage闁诲海鎳撻張顒勫汲椤ゆ杯闁诲氦顫夊銊┾€?md` 闁?.1 `floatingMeta` + 闁?.2 `metaRow`闂?
