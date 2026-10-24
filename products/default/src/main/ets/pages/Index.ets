@@ -2770,6 +2770,18 @@ struct Index {
         onShowChange: (open: boolean): void => {
           if (open !== this.homeSearchOpen) {
             this.homeSearchOpen = open;
+            // ★ 2026-10-24（甲方：「搜索页底下的播放条能不能改一下…其他二级页面都是那种粗的播放条，
+            //   唯独搜索是这样」）：
+            //   搜索页会把 HdsTabs 整条底栏压成 0 高（见下面 `barHeight(this.homeSearchOpen ? 0 : 56)`），
+            //   屏上那条是壳层的**浮动**迷你条；它的内容高度由 `appState.miniBarExpanded` 决定
+            //   （展开 = 56「粗条」/ 收起 = 40「细条」，见 `homeMiniBarSlotHVp()`）。
+            //   而搜索页自己**不驱动**滚动展开（不调 `BarScrollHelper.notifyScrollDelta`），
+            //   于是会沿用进页前那一刻的状态 ⇒ 常看到细条。
+            //   ⇒ 进搜索页时强制展开一次（不改首页那套 HDS miniBar，避免踩壳层那堆坑）；
+            //     离开后仍由滚动驱动恢复。
+            if (open) {
+              this.appState.miniBarExpanded = true;
+            }
             Logger.info(RzdShellLogTag, `home search page shown=${open}`);
             appendPlayLog(`[RzdSearchMorph] bar searching=${open}`);
           }

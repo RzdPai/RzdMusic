@@ -19,7 +19,7 @@ import { image } from '@kit.ImageKit';
 import { effectKit } from '@kit.ArkGraphics2D';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { guardPlayerBack } from 'musicbasic';
-import { AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, SongTitleMarquee, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, isWidthBreakpointLgOrXl } from 'musicbasic';
+import { AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, SongTitleMarquee, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, shouldUseSplitDetailLayout, splitDetailCardWidthVp } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType } from '@kit.UIDesignKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import {
@@ -1062,19 +1062,24 @@ export struct ArtistDetailPage {
   }
 
   /**
-   * @returns 宽屏（平板 / 阔屏 / 横屏）走「**左侧歌手卡 + 右侧列表**」。
+   * @returns 宽屏（平板 / 阔屏 / **手机横屏**）走「**左侧歌手卡 + 右侧列表**」。
    *
-   * 甲方 2026-10-24：「回响页、现在就听页…歌手页…都适配一下其它比例（平板、阔屏、横屏等）。
-   * 像歌手页左侧显示一张歌手卡片，右侧是列表」——本页就是那个**参考实现**。
-   * 判据用 `isWidthBreakpointLgOrXl`（宽度 ≥ 600vp），手机竖屏/横屏仍是单列。
+   * 甲方 2026-10-24：「回响页、现在就听页…歌手页…都适配一下其它比例。
+   * 像歌手页左侧显示一张歌手卡片，右侧是列表」+ 第二轮：「我手机横屏看，那两个页面还是之前的样式」。
+   * ⇒ 判据放进 `shouldUseSplitDetailLayout`：LG/XL **或** MD 宽 + SM 高（手机横屏）。
    */
   private isWideLayout(): boolean {
-    return isWidthBreakpointLgOrXl(this.breakpointEnv.widthBreakpoint);
+    return shouldUseSplitDetailLayout(this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint);
   }
 
-  /** 左侧歌手卡宽度（vp）：XL 420 / LG 360。 */
+  /**
+   * 左侧歌手卡宽度（vp）：随可用高度收（手机横屏可用高只有 300 出头，卡片必须跟着变窄，
+   * 否则方形封面 + 文字放不下）。算法见 `splitDetailCardWidthVp`。
+   */
   private heroCardWidthVp(): number {
-    return this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_XL ? 420 : 360;
+    const available: number = this.getUIContext().px2vp(this.windowInfo.windowSize.height) -
+      this.titleTopInset() - 32;
+    return splitDetailCardWidthVp(this.breakpointEnv.widthBreakpoint, available);
   }
 
   private openAlbum(item: AlbumInfo): void {
@@ -1536,43 +1541,138 @@ export struct ArtistDetailPage {
     .padding({ left: 24, right: 24, top: this.titleTopInset(), bottom: 16 })
   }
 
-  /** 宽屏左侧那张歌手卡：方形封面 + 底部渐隐 + 名字/三颗圆钮（复用 `ArtistHero` 的前景层）。 */
+  /**
+   * 宽屏左侧那张歌手卡 —— **与歌单页的卡同一套结构**（甲方 2026-10-24 第三轮指定）：
+   *
+   * 甲方原话：「各大平台返回的歌手图通常不是竖着的（有的甚至是横的），所以左侧也改成歌单一样的吧
+   * （方形照片的接口都是有的）。顺带提醒你一下，因为它是放在左侧的，所以左侧那个卡片是竖着的。」
+   *
+   * ⇒ 卡是**竖的**；封面区强制成**方形**（`aspectRatio(1)` + `ImageFit.Cover` 居中裁），
+   *   空白用**同一张图的模糊**铺满 ⇒ 横图/竖图都不会把卡片撑变形；
+   *   有动态封面时（Apple 的 `previewFrame` 本身就是 1:1）方形那一张直接换成它。
+   */
   @Builder
   private ArtistWideCard() {
-    Stack({ alignContent: Alignment.Bottom }) {
+    Stack({ alignContent: Alignment.TopStart }) {
+      // ① 背景 = 同一张歌手图的模糊（横图也不会露白边）
       if (this.artistPicUrlText.length > 0 && !this.imageFailed) {
         Image(this.artistPicUrlText)
           .width('100%')
           .height('100%')
           .objectFit(ImageFit.Cover)
+          .blur(48)
+          .scale({ x: 1.2, y: 1.2 })
       }
-      // 动态封面：与窄屏同一套（静图 → 首帧 → 视频），开关在「其它设置 → 动态封面」。
-      if (this.artistNameText.length > 0) {
-        MotionCoverLayer({
-          kind: 'artist',
-          name: this.artistNameText,
-          fallbackPoster: this.artistPicUrlText,
-          onPosterReady: (posterUrl: string): void => {
-            this.motionColorApplied = true;
-            void this.loadBackdropColorFrom(posterUrl);
-          }
-        })
-          .width('100%')
-          .height('100%')
-      }
-      // 底部渐隐：名字与圆钮压在图上也看得清
+      // ② 压暗一层：白字压在模糊图上才稳
       Column()
         .width('100%')
-        .height(200)
-        .linearGradient({
-          direction: GradientDirection.Bottom,
-          colors: [[Color.Transparent, 0], ['#B3000000', 1]]
-        })
-      this.ArtistHero()
+        .height('100%')
+        .backgroundColor('#66000000')
+
+      Column({ space: 12 }) {
+        // ③ 方形封面（+ 动态封面层）
+        Stack({ alignContent: Alignment.TopStart }) {
+          Image(this.artistPicUrlText.length > 0 ? this.artistPicUrlText : $r('app.media.ic_avatar1'))
+            .width('100%')
+            .aspectRatio(1)
+            .objectFit(ImageFit.Cover)
+          if (this.artistNameText.length > 0) {
+            MotionCoverLayer({
+              kind: 'artist',
+              name: this.artistNameText,
+              fallbackPoster: this.artistPicUrlText,
+              onPosterReady: (posterUrl: string): void => {
+                this.motionColorApplied = true;
+                void this.loadBackdropColorFrom(posterUrl);
+              }
+            })
+              .width('100%')
+              .aspectRatio(1)
+          }
+        }
+        .width('100%')
+        .aspectRatio(1)
+        .borderRadius(18)
+        .clip(true)
+        .shadow({ radius: 24, color: '#4D000000', offsetX: 0, offsetY: 8 })
+
+        Text(this.artistNameText.length > 0 ? this.artistNameText : '歌手')
+          .fontSize(24)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.fgPrimary())
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+
+        Row({ space: 10 }) {
+          // 关于（歌手信息）
+          Row() {
+            SymbolGlyph($r('sys.symbol.info_circle_fill'))
+              .fontSize(18)
+              .height(18)
+              .fontColor([this.playAllGlyphColor()])
+          }
+          .width(40)
+          .height(40)
+          .borderRadius(20)
+          .backgroundColor(this.playAllButtonColor())
+          .justifyContent(FlexAlign.Center)
+          .onClick(() => {
+            this.showAboutPopup = !this.showAboutPopup;
+          })
+          .bindPopup($$this.showAboutPopup, {
+            builder: this.AboutPopup,
+            placement: Placement.Top,
+            enableArrow: true,
+            onStateChange: (event: PopupStateChangeParam): void => {
+              if (!event.isVisible) {
+                this.showAboutPopup = false;
+              }
+            }
+          })
+
+          // 播放全部（实心白圆，与窄屏那颗一致）
+          Row() {
+            SymbolGlyph($r('sys.symbol.play_fill'))
+              .fontSize(26)
+              .height(26)
+              .fontColor([this.playAllGlyphColor()])
+          }
+          .width(56)
+          .height(56)
+          .borderRadius(28)
+          .backgroundColor(this.playAllButtonColor())
+          .justifyContent(FlexAlign.Center)
+          .enabled(!this.loading && this.songs.length > 0)
+          .opacity(this.loading || this.songs.length === 0 ? 0.5 : 1)
+          .onClick(() => {
+            this.playAll();
+          })
+
+          // 收藏（添加到以歌手名命名的歌单）
+          Row() {
+            SymbolGlyph(this.isFavoriteArtist ? $r('sys.symbol.heart_fill') : $r('sys.symbol.heart'))
+              .fontSize(18)
+              .height(18)
+              .fontColor([this.playAllGlyphColor()])
+          }
+          .width(40)
+          .height(40)
+          .borderRadius(20)
+          .backgroundColor(this.playAllButtonColor())
+          .justifyContent(FlexAlign.Center)
+          .onClick(() => {
+            this.toggleFavoriteArtist();
+          })
+        }
+        .padding({ top: 2 })
+      }
+      .width('100%')
+      .padding(16)
+      .alignItems(HorizontalAlign.Start)
     }
     .width(this.heroCardWidthVp())
-    // 方形封面 + 名字/按钮那一条（`ArtistHero` 自身 320 高，底对齐）
-    .height(this.heroCardWidthVp() + 120)
+    .height('100%')
     .borderRadius(24)
     .clip(true)
     .backgroundColor(this.avgColor)

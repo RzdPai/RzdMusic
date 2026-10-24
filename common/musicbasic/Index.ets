@@ -101,7 +101,7 @@ export { ArtistRouteParam, AlbumRouteParam } from './src/main/ets/model/ArtistRo
 export { PlaylistDto } from './src/main/ets/model/PlaylistDto';
 
 // util
-export { BreakpointType, isWidthBreakpointLgOrXl } from './src/main/ets/util/BreakpointSystem';
+export { BreakpointType, isWidthBreakpointLgOrXl, shouldUseSplitDetailLayout, splitDetailCardWidthVp } from './src/main/ets/util/BreakpointSystem';
 export { Logger } from './src/main/ets/util/Logger';
 export { StringResourceUtil } from './src/main/ets/util/StringResourceUtil';
 export { ImmersiveType } from './src/main/ets/util/ImmersiveType';

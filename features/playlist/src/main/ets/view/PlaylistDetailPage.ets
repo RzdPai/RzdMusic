@@ -17,7 +17,7 @@ import { AppStorageV2, ComponentContent, LengthMetrics, uiObserver } from '@kit.
 import { BusinessError } from '@kit.BasicServicesKit';
 import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
-import { guardPlayerBack } from 'musicbasic';
+import { guardPlayerBack, shouldUseSplitDetailLayout, splitDetailCardWidthVp } from 'musicbasic';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { http } from '@kit.NetworkKit';
 import { image } from '@kit.ImageKit';
@@ -355,20 +355,21 @@ export struct PlaylistDetailPage {
   }
 
   /**
-   * @returns 宽屏（平板 / 阔屏 / 横屏）走「**左侧歌单卡 + 右侧列表**」。
+   * @returns 宽屏（平板 / 阔屏 / **手机横屏**）走「**左侧歌单卡 + 右侧列表**」。
    *
    * 甲方 2026-10-24：「歌单页也使用这种样式，但是因为通常封面是方形的，
-   * 就用一张**矩形卡片**上面一张方形的封面，背景是封面模糊」。
-   * 判据与歌手页同口径（宽度 ≥ 600vp = LG/XL）。
+   * 就用一张**矩形卡片**上面一张方形的封面，背景是封面模糊」+ 第二轮：「我手机横屏看，
+   * 那两个页面还是之前的样式」⇒ 判据用 `shouldUseSplitDetailLayout`（LG/XL 或 MD宽+SM高）。
    */
   private isWidePlaylistLayout(): boolean {
-    const w: WidthBreakpoint = this.breakpointEnv.widthBreakpoint;
-    return w === WidthBreakpoint.WIDTH_LG || w === WidthBreakpoint.WIDTH_XL;
+    return shouldUseSplitDetailLayout(this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint);
   }
 
-  /** 左侧歌单卡宽度（vp）：XL 420 / LG 360（与歌手页同口径）。 */
+  /** 左侧歌单卡宽度（vp）：随可用高度收（手机横屏会变窄，见 `splitDetailCardWidthVp`）。 */
   private playlistCardWidthVp(): number {
-    return this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_XL ? 420 : 360;
+    const available: number = this.getUIContext().px2vp(this.windowInfo.windowSize.height) -
+      this.titleTopInset() - 32;
+    return splitDetailCardWidthVp(this.breakpointEnv.widthBreakpoint, available);
   }
 
   /**
