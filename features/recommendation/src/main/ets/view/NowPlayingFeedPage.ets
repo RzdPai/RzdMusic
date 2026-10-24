@@ -1485,7 +1485,7 @@ export struct NowPlayingFeedPage {
     // ★★ 队列是否"就是屏幕上这一份"——**必须在 appendRows 之前取**：
     //    append 之后 feed 先变长、队列还是旧的，`queueMatchesFeed`（比总长度）会直接返回 false
     //    ⇒ 队列就再也同步不上了（`syncQueueWithNewRows` 会永远走"不动队列"那一支）。
-    this.queueWasFeed = this.queueMatchesFeed(this.feedPlayback.queue);
+    this.queueWasFeed = this.queueMatchesFeed(this.appState.playQueue);
     try {
       let rows: RecommendPrivateSongUi[] | undefined;
       if (this.feedOrigin === FeedOrigin.BOARD && this.feedPage < FEED_MAX_PAGES) {
@@ -1986,7 +1986,7 @@ export struct NowPlayingFeedPage {
     }
     const target: number = index < 0 || index >= songs.length ? 0 : index;
     const row: RecommendPrivateSongUi = this.feedSource.getData(target);
-    const queue: FeedQueueEntry[] = this.feedPlayback.queue;
+    const queue: SongItem[] = this.appState.playQueue;
     if (this.isCurrentSong(row)) {
       // 已经在播这一首（含"点封面/点播放键"重复点同一屏）：不动队列、不重置进度
       Logger.info(RZD_TAG, `play skip (already current) index=${target} ${row.source}_${row.songId}`);
@@ -2025,6 +2025,8 @@ export struct NowPlayingFeedPage {
       entries.push(entry);
     }
     this.feedPlayback.resetTo(entries, target);
+    // ⚠️ 这份 entries 只是"本页认为的队列"；判断"播放器里装的是不是它"仍要拿 `appState.playQueue` 比对
+    //   （用户可能在别的页面换过队列 —— 那是**外部事实**，feed 自己的栈不能拿来当真相）。
     Logger.info(RZD_TAG, `feed stack queue=${entries.length} index=${target} v=${this.feedPlayback.version}`);
   }
 
@@ -2036,7 +2038,7 @@ export struct NowPlayingFeedPage {
    * @param queue 全局播放队列。
    * @returns true = 同一批歌、顺序也一致。
    */
-  private queueMatchesFeed(queue: FeedQueueEntry[]): boolean {
+  private queueMatchesFeed(queue: SongItem[]): boolean {
     const total: number = this.feedSource.totalCount();
     if (queue.length !== total) {
       return false;
@@ -2272,7 +2274,8 @@ export struct NowPlayingFeedPage {
         // ★ 2026-10-24（甲方：「在正常播放器播了一首歌，再切到现在就听，始终是那首歌」）：
         //   原来只要"正在播的那首恰好在 feed 里"就直接早退 ⇒ 用户在**别的页面**起的播，
         //   本页永远不接管、一直是那一首。判据必须再加一条：**队列得是本页自己的栈**。
-        if (this.feedPlayback.active && this.feedPlayback.index === index) {
+        if (this.feedPlayback.active && this.feedPlayback.index === index &&
+          this.queueMatchesFeed(this.appState.playQueue)) {
           Logger.info(RZD_TAG, `activate skip (feed owns this queue) index=${index}`);
           return;
         }
