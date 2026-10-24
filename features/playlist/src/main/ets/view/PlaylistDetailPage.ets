@@ -448,6 +448,15 @@ export struct PlaylistDetailPage {
   }
 
   /**
+   * 动态封面查询用的歌单名：拿不到真名（回落成占位「歌单」）就返回空串 ——
+   * 否则会拿"歌单"两个字去 Apple Music 搜，白拉两次 HTML 还必然搜不到。
+   */
+  private motionQueryName(): string {
+    const title: string = this.heroTitle();
+    return title === '歌单' ? '' : title;
+  }
+
+  /**
    * Hero 封面（带一个**显式的重建信号** `coverVersion`）。
    *
    * 用户在「设置歌单封面」里换完图之后我们把它 +1：@Local 的读取会被记成构建依赖，
@@ -1322,7 +1331,9 @@ export struct PlaylistDetailPage {
           color: this.backdropColor,
           topAvoidVp: this.windowInfo.statusBarTopVp,
           scrollVp: this.detailScrollVp,
-          transitionToken: this.transitionToken
+          transitionToken: this.transitionToken,
+          // 动态封面（其它设置里可关）：按歌单名去 Apple Music 解析 motion artwork
+          motionName: this.motionQueryName()
         })
         this.PlaylistNavDestinationSlot()
       }

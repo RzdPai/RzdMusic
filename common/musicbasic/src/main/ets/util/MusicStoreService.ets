@@ -40,6 +40,11 @@ const KEY_SHOW_MINI_LYRIC: string = 'show_mini_lyric';
 const KEY_DESKTOP_LYRIC: string = 'desktop_lyric';
 /** 车载蓝牙歌词：通过 AVMetadata.singleLyricText 向蓝牙设备推送当前句（默认关）。 */
 const KEY_BLUETOOTH_LYRIC: string = 'bluetooth_lyric';
+/**
+ * 动态封面（歌手 / 专辑 / 歌单页的 Apple Music motion artwork，**默认开**）。
+ * 消费方：`MotionCoverLayer`（`common/musicbasic/view`）+ `MotionCoverState`（共享状态）。
+ */
+const KEY_MOTION_COVER: string = 'motion_cover_enabled';
 /** 华为账号登录资料（JSON，形状由 features/player 的 HuaweiAccountService 定义，这里只当字符串存）。 */
 const KEY_HUAWEI_ACCOUNT: string = 'huawei_account';
 /** 华为云盘访问令牌（JSON：accessToken / refreshToken / expiresAt）。 */
@@ -1751,6 +1756,30 @@ export class MusicStoreService {
       return;
     }
     store.putSync(KEY_PLAYLIST_ADD_POSITION, position);
+    store.flush();
+  }
+
+  /**
+   * @returns 是否启用「动态封面」（歌手 / 专辑 / 歌单页；**默认开**）。
+   *
+   * 语义：开关只管"要不要去解析并播放 Apple Music 的 motion artwork"。
+   * 关掉后三页立刻退回静图，`MotionCoverLayer` 连请求都不发（见那里的 `reload()`）。
+   */
+  public getMotionCoverEnabled(): boolean {
+    const store = this.getStore();
+    if (store === undefined) {
+      return true;
+    }
+    return store.getSync(KEY_MOTION_COVER, true) as boolean;
+  }
+
+  /** Persists the dynamic-cover switch. */
+  public setMotionCoverEnabled(enabled: boolean): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_MOTION_COVER, enabled);
     store.flush();
   }
 

@@ -286,4 +286,6 @@ public static readonly HOME_PLAZA_STATE: string = 'musichome_HomePlazaState';
 public static readonly HOME_RANKING_STATE: string = 'musichome_HomeRankingState';
 /** {@link MeshWarmState} (pre-warmed 64x64 mesh bytes of the current song cover). */
 public static readonly MESH_WARM_STATE: string = 'musichome_MeshWarmState';
+/** {@link MotionCoverState}（歌手 / 专辑 / 歌单页的「动态封面」开关，默认开）。 */
+public static readonly MOTION_COVER_STATE: string = 'musichome_MotionCoverState';
 }

@@ -766,6 +766,21 @@ export struct ArtistDetailPage {
     return this.isLightBackdrop() ? '#1A000000' : '#33FFFFFF';
   }
 
+  /**
+   * Hero 中间那颗「播放全部」圆钮的底色 —— **固定白色**（用户 2026-10-24 指定）。
+   *
+   * 不跟 `fgTint()`（照片明暗派生的半透明底）走：那颗按钮是这一页唯一的主动作，
+   * 实心白圆 + 深色三角，在深浅照片上都一样清楚。
+   */
+  private playAllButtonColor(): string {
+    return '#FFFFFF';
+  }
+
+  /** 白圆上的播放三角：固定深色（白底上用 `fgPrimary()` 会变成"白底白字"看不见）。 */
+  private playAllGlyphColor(): string {
+    return '#1F1F22';
+  }
+
   /** 分隔线颜色。 */
   private fgDivider(): string {
     return this.isLightBackdrop() ? '#1F000000' : '#26FFFFFF';
@@ -1170,13 +1185,13 @@ export struct ArtistDetailPage {
                   .fontSize(26)
                   .fontWeight(FontWeight.Regular)
                   .height(26)
-                  .fontColor([this.fgPrimary()])
+                  // 实心白圆 + 深色三角（用户 2026-10-24：「中间那个播放全部按钮改成白色」）
+                  .fontColor([this.playAllGlyphColor()])
               }
               .width(60)
               .height(60)
               .borderRadius(30)
-              .backgroundColor(this.fgTint())
-              .backgroundBlurStyle(this.buttonBlur())
+              .backgroundColor(this.playAllButtonColor())
               .alignItems(VerticalAlign.Center)
               .justifyContent(FlexAlign.Center)
               .enabled(!this.loading && this.songs.length > 0)
@@ -1218,23 +1233,10 @@ export struct ArtistDetailPage {
   @Builder
   private ArtistStickyHeader() {
     Column() {
-      if (this.activeTab === 0) {
-        Row({ space: 8 }) {
-          SymbolGlyph($r('sys.symbol.play_round_triangle_fill'))
-            .fontSize(28)
-            .fontColor([this.fgPrimary()])
-          Text('播放全部 · 已加载 ' + this.songs.length + ' 首')
-            .fontSize(16)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.fgPrimary())
-        }
-        .width('100%')
-        .height(52)
-        .padding({ left: 16, right: 16 })
-        .opacity(this.loading || this.songs.length === 0 ? 0.5 : 1)
-        .enabled(!this.loading && this.songs.length > 0)
-        .onClick((): void => { this.playAll(); })
-      }
+      // ⛔ 2026-10-24（用户：「歌手页的播放全部有两个，多余了，只保留中间那个圆形的」）：
+      //   这里原来还有一行 `▶ 播放全部 · 已加载 N 首`（52vp、整行可点）。它和 Hero 里那颗
+      //   圆形播放按钮是同一个 `playAll()`，重复了 ⇒ 整行删除，只留 Hero 中间那颗圆钮。
+      //   （吸顶行现在只剩「专辑 / 最新 / 最热」分段选择器。）
         Row({ space: 8 }) {
           Column() {
             CapsuleSegmentedSelector({
@@ -1268,7 +1270,10 @@ export struct ArtistDetailPage {
           // ★ 页内可用高度（vp）：照片层必须拿到**显式数值**才画得出来（见该组件类注释）。
           pageHeightVp: this.pageContentHeightVp(),
           scrollVp: this.detailScrollVp,
-          page: 'artist'
+          page: 'artist',
+          // 动态封面（其它设置里可关）：按歌手名去 Apple Music 解析 motion artwork
+          motionKind: 'artist',
+          motionName: this.artistNameText
         })
       List({ scroller: this.scroller }) {
         ListItem() { this.ArtistHero() }

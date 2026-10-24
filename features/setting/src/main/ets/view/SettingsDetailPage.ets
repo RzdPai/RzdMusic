@@ -21,7 +21,7 @@ import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { http } from '@kit.NetworkKit';
 import { pasteboard } from '@kit.BasicServicesKit';
-import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, BreakpointType, HomeSourceState, LyricBlurState, LyricCenterState, LyricFontSizeState, LyricFpsState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
+import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, BreakpointType, HomeSourceState, LyricBlurState, LyricCenterState, LyricFontSizeState, LyricFpsState, MotionCoverState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatformsOf, lxSourceManager, MediaService } from 'player';
@@ -109,6 +109,8 @@ export struct SettingsDetailPage {
   @Local downloadQualityTag: boolean = false;
   @Local homeSource: string = 'qq';
   @Local useAccountRec: boolean = false;
+  /** 动态封面（歌手 / 专辑 / 歌单页）：默认开。 */
+  @Local motionCover: boolean = true;
   /** 仅保存静态选项；选中态由分网 store 唯一真源派生。 */
   private readonly networkQualityModeItems: SegmentButtonV2Items = new SegmentButtonV2Items([
     { text: '关' },
@@ -273,6 +275,8 @@ export struct SettingsDetailPage {
     this.downloadQualityTag = MusicStoreService.getInstance().getDownloadQualityTag();
     this.homeSource = MusicStoreService.getInstance().getHomeSource();
     this.useAccountRec = MusicStoreService.getInstance().getUseAccountRec();
+    // 动态封面：缺省（没有这条记录）= 开
+    this.motionCover = MusicStoreService.getInstance().getMotionCoverEnabled();
     this.lyricFontSize = MusicStoreService.getInstance().getLyricFontSize();
     // ⛔ 2026-10-17：`coverRadius` 设置项已删除（见 `PlaybackSheet`），这里不再读、也不再写
     //   `AppStorage 'lxCoverRadius'`。
@@ -1193,6 +1197,31 @@ export struct SettingsDetailPage {
       Column({ space: 12 }) {
         Blank().height(this.panelTopInset())
         CoverCacheSettingsCard()
+        // 动态封面：歌手 / 专辑 / 歌单页的大封面在联网时播放 Apple Music 的 motion artwork
+        // （规格见 docs/apple-motion-cover.md；解析与缓存都在 MotionCoverService，默认开）。
+        Column() {
+          this.SubTitle('动态封面')
+          this.CapsuleSelector(this.onOffOptions, this.motionCover ? 0 : 1,
+            (index: number) => {
+              const isOn: boolean = index === 0;
+              this.motionCover = isOn;
+              MusicStoreService.getInstance().setMotionCoverEnabled(isOn);
+              const state = AppStorageV2.connect(MotionCoverState, AppStorageKeys.MOTION_COVER_STATE,
+                () => new MotionCoverState());
+              if (state !== undefined) {
+                state.enabled = isOn;
+              }
+            })
+          Text('歌手、专辑、歌单页的封面在联网时播放 Apple Music 的动态封面（静音循环，失败自动退回静态封面）。')
+            .fontSize($r('sys.float.Caption_M'))
+            .fontColor($r('sys.color.font_tertiary'))
+            .width('100%')
+            .padding({ top: 6 })
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 4, bottom: 8 })
+        .borderRadius($r('sys.float.corner_radius_level12'))
+        .backgroundColor($r('app.color.card_background'))
         Column() {
           this.SubTitle($r('app.string.setting_sub_add_position'))
           this.CapsuleSelector(this.addPositionOptions,

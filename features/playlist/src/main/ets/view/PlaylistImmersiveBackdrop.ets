@@ -2,6 +2,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import {
   getPlaylistTransitionState,
   LocalCoverImage,
+  MotionCoverLayer,
   PLAYLIST_HERO_COVER_ID,
   PlaylistTransitionState
 } from 'musicbasic';
@@ -30,6 +31,12 @@ export struct PlaylistImmersiveBackdrop {
   @Param scrollVp: number = 0;
   /** 一镜到底转场的会话 token（由页面 claim 后传入）。 */
   @Param transitionToken: number = 0;
+  /**
+   * 动态封面（歌手 / 专辑 / 歌单页统一入口，规格见 `docs/apple-motion-cover.md`）：
+   * 歌单名交给 `MotionCoverLayer` 去 Apple Music 解析 motion artwork；空串 = 本页不启用。
+   * 关掉「其它设置 → 动态封面」时它零请求、零解码（内部门控）。
+   */
+  @Param motionName: string = '';
   @Local failed: boolean = false;
   @Local transitionState: PlaylistTransitionState = getPlaylistTransitionState();
 
@@ -71,6 +78,16 @@ export struct PlaylistImmersiveBackdrop {
               fit: ImageFit.Cover,
               onFailed: (): void => { this.onPhotoFailed(); }
             })
+          }
+          // 动态封面：盖在静图之上、遮罩之下；只在视频起播后淡入，失败自动退回静图。
+          if (this.motionName.length > 0) {
+            MotionCoverLayer({
+              kind: 'playlist',
+              name: this.motionName,
+              fallbackPoster: this.photo
+            })
+              .width('100%')
+              .height(this.frameHeightVp())
           }
         }
         .width('100%')

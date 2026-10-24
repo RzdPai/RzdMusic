@@ -168,3 +168,10 @@ export {
   barBlurOptions,
   barMaterial
 } from './src/main/ets/util/BarMaterial';
+// 动态封面（Apple Music motion artwork；规格 docs/apple-motion-cover.md）：
+//   MotionCoverState = 其它设置里的总开关（默认开）；MotionCoverService = SSR 解析 + 缓存；
+//   MotionCoverLayer = 盖在歌手/专辑/歌单页大封面之上的那一层 Video（静音循环 + 失败退回静图）。
+export { MotionCoverState } from './src/main/ets/model/MotionCoverState';
+export { MotionCover, MotionCoverKind } from './src/main/ets/model/MotionCover';
+export { MotionCoverService } from './src/main/ets/services/MotionCoverService';
+export { MotionCoverLayer } from './src/main/ets/view/MotionCoverLayer';

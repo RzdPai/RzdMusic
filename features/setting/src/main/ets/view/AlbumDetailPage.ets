@@ -799,7 +799,11 @@ export struct AlbumDetailPage {
           // ★ 页内可用高度（vp）：照片层必须拿到**显式数值**才画得出来。
           pageHeightVp: this.pageContentHeightVp(),
           scrollVp: this.detailScrollVp,
-          page: 'album'
+          page: 'album',
+          // 动态封面（其它设置里可关）：按「专辑名 + 歌手名」去 Apple Music 解析 motion artwork
+          motionKind: 'album',
+          motionName: this.infoName,
+          motionArtist: this.infoArtist
         })
         List({ scroller: this.scroller }) {
           ListItem() {

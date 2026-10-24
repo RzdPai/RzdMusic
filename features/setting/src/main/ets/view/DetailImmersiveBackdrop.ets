@@ -1,8 +1,14 @@
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { MotionCoverLayer } from 'musicbasic';
 
 /**
  * 歌手页 / 专辑页的**唯一照片层**（装饰用）：铺到状态栏、随列表滚动上移，
  * 并在照片之上盖一条「顶部纯透明 → 底部页面取色不透明」的遮罩。
+ *
+ * ★ 2026-10-24：本层同时是**动态封面**的落点（`MotionCoverLayer`，见
+ *   `common/musicbasic/view/MotionCoverLayer` 与 `docs/apple-motion-cover.md`）。
+ *   次序是「静图 → 动态封面层 → 渐变遮罩」：静图永远在，视频只在真的起播后淡入，
+ *   任何一步失败都不会白屏；关掉「其它设置 → 动态封面」时这一层零请求。
  *
  * ⚠️ 尺寸为什么给**显式数值**而不是 `LayoutPolicy.matchParent` / `'100%'`：
  *   本层挂在一个**内容驱动的 Stack** 里（`Stack(){ 本层; List{…} }`，List 的高度是
@@ -35,6 +41,12 @@ export struct DetailImmersiveBackdrop {
   /** 列表滚动位移（vp）：照片跟着上移。 */
   @Param scrollVp: number = 0;
   @Param page: string = '';
+  /** 动态封面：实体类型（`artist` / `album`；空串 = 本页不启用）。 */
+  @Param motionKind: string = '';
+  /** 动态封面：实体名（歌手名 / 专辑名）。 */
+  @Param motionName: string = '';
+  /** 动态封面：歌手名（专辑页用来挑对同名专辑；歌手页留空）。 */
+  @Param motionArtist: string = '';
   @Local failed: boolean = false;
 
   @Monitor('photo')
@@ -63,6 +75,17 @@ export struct DetailImmersiveBackdrop {
               hilog.warn(0, 'RzdDetailImmersive', '%{public}s backdrop photo failed, fallback to color',
                 this.page);
             })
+        }
+        // 动态封面：盖在静图**之上**、遮罩**之下**；只在视频真的起播后淡入（失败自动退回静图）。
+        if (this.motionName.length > 0) {
+          MotionCoverLayer({
+            kind: this.motionKind,
+            name: this.motionName,
+            artist: this.motionArtist,
+            fallbackPoster: this.photo
+          })
+            .width('100%')
+            .height(this.frameHeightVp())
         }
         Column()
           .width('100%')
