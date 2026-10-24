@@ -45,6 +45,15 @@ const ALBUM_PAGE_LIMIT: number = 50;
 const BACKDROP_HERO_VP: number = 320;
 const BACKDROP_ROW_VP: number = 56;
 
+/**
+ * 列表行封面边长（vp）：**歌曲行与专辑行必须同尺寸**。
+ *
+ * ★ 2026-10-24（甲方：「歌手页的专辑这个列表的封面大小刚刚好，你把最热和最新也改成这个大小」）：
+ *   专辑列表一直是 56；歌曲行原来是 42。现在两边都用这个常量（含行高 72、圆角 6），
+ *   以后要调大小只改这一处。
+ */
+const SONG_ROW_COVER_VP: number = 56;
+
 /** 秒数 → mm:ss 时长文本。 */
 function formatInterval(seconds: number): string {
   let s: number = Math.max(0, Math.floor(seconds));
@@ -929,21 +938,27 @@ export struct ArtistDetailPage {
     this.pageIndexInfos.pop();
   }
 
-  /** 歌曲行：封面 + 歌名/歌手 + 时长 + 更多菜单。 */
+  /**
+   * 歌曲行：封面 + 歌名/歌手 + 时长 + 更多菜单。
+   *
+   * ★ 2026-10-24（甲方：「歌手页的专辑这个列表的封面大小刚刚好，你把最热和最新也改成这个大小」）：
+   *   封面从 42×42 改成 **56×56**（与 `AlbumRowView` 逐像素同尺寸、同圆角），行高 56 → 72
+   *   （56 的封面塞进 56 的行会顶满、没有上下留白）。两个列表现在视觉上是同一套。
+   */
   @Builder
   private SongRowView(item: SongInfo, index: number) {
-    Row({ space: 10 }) {
+    Row({ space: 12 }) {
       if (item.picUrl.length > 0) {
         Image(item.picUrl)
-          .width(42)
-          .height(42)
-          .borderRadius(8)
+          .width(SONG_ROW_COVER_VP)
+          .height(SONG_ROW_COVER_VP)
+          .borderRadius(6)
           .objectFit(ImageFit.Cover)
       } else if (this.artistPicUrlText.length > 0 && !this.imageFailed) {
         Image(this.artistPicUrlText)
-          .width(42)
-          .height(42)
-          .borderRadius(8)
+          .width(SONG_ROW_COVER_VP)
+          .height(SONG_ROW_COVER_VP)
+          .borderRadius(6)
           .objectFit(ImageFit.Cover)
       } else {
         Row() {
@@ -953,9 +968,9 @@ export struct ArtistDetailPage {
             .height(20)
             .fontColor(['#B3FFFFFF'])
         }
-        .width(42)
-        .height(42)
-        .borderRadius(8)
+        .width(SONG_ROW_COVER_VP)
+        .height(SONG_ROW_COVER_VP)
+        .borderRadius(6)
         .justifyContent(FlexAlign.Center)
         .backgroundColor('#22FFFFFF')
       }
@@ -992,7 +1007,8 @@ export struct ArtistDetailPage {
       })
     }
     .width('100%')
-    .height(56)
+    // 与 `AlbumRowView` 同高（56 的封面 + 上下各 8 的留白）
+    .height(72)
     .padding({ left: 16, right: 16 })
     .alignItems(VerticalAlign.Center)
     .onClick(() => {
@@ -1000,14 +1016,14 @@ export struct ArtistDetailPage {
     })
   }
 
-  /** 专辑行。 */
+  /** 专辑行（封面尺寸 = {@link SONG_ROW_COVER_VP}，歌曲行必须与它一致）。 */
   @Builder
   private AlbumRowView(item: AlbumInfo) {
     Row({ space: 12 }) {
       Image(item.picUrl.length > 0 ? item.picUrl : this.artistPicUrlText.length > 0 ?
         this.artistPicUrlText : $r('app.media.ic_avatar1'))
-        .width(56)
-        .height(56)
+        .width(SONG_ROW_COVER_VP)
+        .height(SONG_ROW_COVER_VP)
         .borderRadius(6)
         .objectFit(ImageFit.Cover)
       Column({ space: 3 }) {
@@ -1311,15 +1327,17 @@ export struct ArtistDetailPage {
   private SectionTab(label: string, index: number, count: string) {
     Column({ space: 5 }) {
       Row({ space: 6 }) {
+        // ⚠️ 字号**保持原本这一档**（19/17）—— 甲方 2026-10-24：「不用改大，改回原本那个大小，
+        //   只要改大封面那些就行了」⇒ 页签回到原尺寸，要变大的是**列表里的封面**（见 `SongRowView`）。
         Text(label)
-          .fontSize(this.segmentIndex === index ? 24 : 22)
+          .fontSize(this.segmentIndex === index ? 19 : 17)
           .fontWeight(this.segmentIndex === index ? FontWeight.Bold : FontWeight.Medium)
           .fontColor(this.segmentIndex === index ? this.fgPrimary() : this.fgSecondary())
           .maxLines(1)
         if (count.length > 0) {
-          // 数字比汉字小一号（截图里也是这个关系）：位数据多时（1708 这种）在窄屏上才放得下
+          // 数字比汉字再小一号（截图里也是这个关系）：位数据多时（1708 这种）在窄屏才放得下
           Text(count)
-            .fontSize(this.segmentIndex === index ? 20 : 18)
+            .fontSize(this.segmentIndex === index ? 16 : 15)
             .fontWeight(this.segmentIndex === index ? FontWeight.Bold : FontWeight.Medium)
             .fontColor(this.segmentIndex === index ? this.fgPrimary() : this.fgSecondary())
             .maxLines(1)
@@ -1327,7 +1345,7 @@ export struct ArtistDetailPage {
       }
       // 短横线：选中 = 主题色；未选中 = 同高空位（切换时整行高度不跳）
       Column()
-        .width(this.segmentIndex === index ? 28 : 0)
+        .width(this.segmentIndex === index ? 24 : 0)
         .height(3)
         .borderRadius(1.5)
         .backgroundColor(this.segmentIndex === index ? this.themeState.color : Color.Transparent)
