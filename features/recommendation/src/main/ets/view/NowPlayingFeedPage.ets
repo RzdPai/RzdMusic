@@ -2770,27 +2770,18 @@ export struct NowPlayingFeedPage {
       Image(row.coverUrl.length > 0 ? row.coverUrl : $r('app.media.ic_avatar1'))
         .width(StyleConstants.FULL_WIDTH)
         .height(this.coverHeightVp())
-        .objectFit(ImageFit.Cover)
-        .alt($r('app.media.ic_avatar1'))
-        .draggable(false)
-      // 上渐变：封面顶边 = 页底色（与背后的取色底无缝），往下 FEED_COVER_TOP_FADE 之内回到原图
+      // ★ 甲方 2026-10-24（截图："效果还是不行"）：原来封面上下各压一层"化进页底色"的渐变
+      //   （上 = 高度 × TOP_FADE、下 = 高度 × BOTTOM_FADE ≈ 40%）⇒ 七成画面被灰调盖住，封面发闷。
+      //   现在只留**底部 64vp** 一条过渡把封面接到页底渐变；顶部不再压任何东西
+      //   （顶栏图标靠 `inkPrimary()` 自动切墨保证可读性）。
       Column()
         .width(StyleConstants.FULL_WIDTH)
-        .height(this.coverHeightVp() * FEED_COVER_TOP_FADE)
+        .height(64)
         .linearGradient({
           direction: GradientDirection.Bottom,
-          colors: [[this.pageTint, 0], [Color.Transparent, 1]]
+          colors: [[Color.Transparent, 0], [feedTintShade(this.pageTint, 1.0), 1]]
         })
-        .hitTestBehavior(HitTestMode.None)
-      // 下渐变：从封面下沿往上 FEED_COVER_BOTTOM_FADE 开始化开，下沿那一行 = 页底色
-      Column()
-        .width(StyleConstants.FULL_WIDTH)
-        .height(this.coverHeightVp() * FEED_COVER_BOTTOM_FADE)
-        .linearGradient({
-          direction: GradientDirection.Bottom,
-          colors: [[Color.Transparent, 0], [this.pageTint, 1]]
-        })
-        .position({ x: 0, y: this.coverHeightVp() * (1 - FEED_COVER_BOTTOM_FADE) })
+        .position({ x: 0, y: this.coverHeightVp() - 64 })
         .hitTestBehavior(HitTestMode.None)
     }
     .width(StyleConstants.FULL_WIDTH)
