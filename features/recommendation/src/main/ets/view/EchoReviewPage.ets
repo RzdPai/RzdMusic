@@ -881,18 +881,6 @@ export struct EchoReviewPage {
   }
 
   /** 页面主体（原 build 的内容；2026-10-12 标题交给 HDS 标题栏后原样搬进来）。 */
-  /**
-   * @returns 宽屏（平板 / 阔屏 / **手机横屏**）时回响页分**左右两栏**，但仍是**一个整体**：
-   * 一颗 `Scroll`、一次滚动，不是两个独立列表。
-   *
-   * 甲方 2026-10-24：「回响页这种不好排布，就把它分左右（不要分两个列表，是一个整体）」。
-   * 实现 = 同一个 `Scroll` 里放 `Row{ 主列 layoutWeight(3) ; 副列 layoutWeight(2) }`，
-   * 两列高度不同也不会有独立滚动条。
-   */
-  private isWideEchoLayout(): boolean {
-    return shouldUseSplitDetailLayout(this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint);
-  }
-
   /** 宽屏左（主）列：页头 / 三格统计 / 年月选择 / 榜前三 / 听众画像。 */
   @Builder
   private EchoMainColumn() {
@@ -904,7 +892,8 @@ export struct EchoReviewPage {
       this.TopSongsSection()
       this.AudienceSection()
     }
-    .layoutWeight(3)
+    // 甲方 2026-10-24：「回响页左右改成平分，不要一边大一边小」⇒ 两列等宽（1:1）
+    .layoutWeight(1)
     .alignItems(HorizontalAlign.Start)
   }
 
@@ -917,8 +906,19 @@ export struct EchoReviewPage {
       this.CompletionSection()
       this.NewDiscoverySection()
     }
-    .layoutWeight(2)
+    .layoutWeight(1)
     .alignItems(HorizontalAlign.Start)
+  }
+
+  /**
+   * @returns 宽屏（平板 / 阔屏 / **手机横屏**）时回响页分**左右两栏**，但仍是**一个整体**：
+   * 一颗 `Scroll`、一次滚动，不是两个独立列表；两列**等宽（1:1）**。
+   *
+   * 甲方 2026-10-24：「回响页这种不好排布，就把它分左右（不要分两个列表，是一个整体）」
+   * + 第二轮「左右改成平分，不要一边大一边小」。
+   */
+  private isWideEchoLayout(): boolean {
+    return shouldUseSplitDetailLayout(this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint);
   }
 
   @Builder
