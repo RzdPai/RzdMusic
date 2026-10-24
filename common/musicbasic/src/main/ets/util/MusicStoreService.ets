@@ -56,6 +56,8 @@ const KEY_MOTION_COVER: string = 'motion_cover_enabled';
  *   - 探索：偏向**没出现过**的分类，减少重复。
  */
 const KEY_FEED_MODE: string = 'feed_mode';
+/** 自建推荐：分类 id → 点过的次数（JSON）。 */
+const KEY_FEED_CATEGORY_PLAYS: string = 'feed_category_plays';
 /** 华为账号登录资料（JSON，形状由 features/player 的 HuaweiAccountService 定义，这里只当字符串存）。 */
 const KEY_HUAWEI_ACCOUNT: string = 'huawei_account';
 /** 华为云盘访问令牌（JSON：accessToken / refreshToken / expiresAt）。 */
@@ -1779,6 +1781,39 @@ export class MusicStoreService {
   /**
    * @returns 「现在就听」的选择模式：0 = 常规 / 1 = 熟悉 / 2 = 探索（默认常规）。
    */
+  /**
+   * @returns 分类 id → 被点过的次数（自建推荐算法的加权依据，JSON 存 preferences）。
+   */
+  public getFeedCategoryPlays(): Record<string, number> {
+    const store = this.getStore();
+    if (store === undefined) {
+      return {};
+    }
+    const raw: string = store.getSync(KEY_FEED_CATEGORY_PLAYS, '') as string;
+    if (raw.length === 0) {
+      return {};
+    }
+    try {
+      return JSON.parse(raw) as Record<string, number>;
+    } catch (_err) {
+      return {};
+    }
+  }
+
+  /** 记录一次"点了这个分类下的歌"（推荐算法据此提高该分类的权重）。 */
+  public addFeedCategoryPlay(categoryId: string): void {
+    if (categoryId.length === 0) {
+      return;
+    }
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    const plays: Record<string, number> = this.getFeedCategoryPlays();
+    plays[categoryId] = (plays[categoryId] ?? 0) + 1;
+    store.putSync(KEY_FEED_CATEGORY_PLAYS, JSON.stringify(plays));
+  }
+
   public getFeedMode(): number {
     const store = this.getStore();
     if (store === undefined) {
