@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -137,8 +137,14 @@ export struct SettingsDetailPage {
   private readonly nameFormatValues: string[] = ['title', 'artist_title', 'title_artist'];
   private readonly addPositionOptions: string[] = ['顶部', '底部'];
   private readonly addPositionValues: string[] = ['top', 'bottom'];
-  private readonly homeSourceOptions: string[] = ['QQ', '酷狗', '网易'];
-  private readonly homeSourceValues: string[] = ['qq', 'kg', 'wy'];
+  /**
+   * 首页 / 现在就听的来源平台。
+   * ★ 2026-10-24（甲方第 ⑥ 条：「给首页推荐加上另外两个平台」）：补上酷我（kw）与咪咕（mg），
+   *   这两个平台的歌单广场接口可用，自建推荐在它们上面也能取到"分类 → 歌单 → 歌"。
+   *   ⚠️ 值域与 `RecommendDataUtil.mapHomeSource()` 一致：qq 是 tx 的别名，其余直接用 source id。
+   */
+  private readonly homeSourceOptions: string[] = ['QQ', '酷狗', '网易', '酷我', '咪咕'];
+  private readonly homeSourceValues: string[] = ['qq', 'kg', 'wy', 'kw', 'mg'];
   private readonly onOffOptions: string[] = ['开', '关'];
   private readonly saveLocationOptions: string[] = ['手动选择', 'Download目录'];
   private readonly colorModeOptions: string[] = ['日间', '夜间', '跟随系统'];
@@ -388,6 +394,11 @@ export struct SettingsDetailPage {
       return false;
     }
     return ctx.config.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK;
+  }
+
+  /** @returns 当前平台是否支持"用登录状态获取推荐"（只有 QQ / 酷狗 / 网易 有 provider 实现）。 */
+  private accountRecSupported(): boolean {
+    return this.homeSource === 'qq' || this.homeSource === 'kg' || this.homeSource === 'wy';
   }
 
   private homeSourceLabel(): string {
@@ -1252,18 +1263,29 @@ export struct SettingsDetailPage {
               notifyHomeSourceRefresh();
             })
 
-          this.SubTitle($r('app.string.setting_sub_use_account_rec'))
-          this.CapsuleSelector(this.onOffOptions, this.useAccountRec ? 0 : 1,
-            (index: number) => {
-              const isOn: boolean = index === 0;
-              this.useAccountRec = isOn;
-              MusicStoreService.getInstance().setUseAccountRec(isOn);
-              const state = AppStorageV2.connect(UseAccountRecState, AppStorageKeys.USE_ACCOUNT_REC_STATE,
-                () => new UseAccountRecState());
-              if (state !== undefined) {
-                state.enabled = isOn;
-              }
-            })
+          // ★ 2026-10-24（甲方第 ⑥ 条）：「如果选择的不是 QQ 酷狗网易，就不显示使用登录状态获取推荐的选项」。
+          //   酷我 / 咪咕没有 provider 实现 ⇒ 整项隐藏，并留一行说明，免得用户以为设置丢了。
+          if (this.accountRecSupported()) {
+            this.SubTitle($r('app.string.setting_sub_use_account_rec'))
+            this.CapsuleSelector(this.onOffOptions, this.useAccountRec ? 0 : 1,
+              (index: number) => {
+                const isOn: boolean = index === 0;
+                this.useAccountRec = isOn;
+                MusicStoreService.getInstance().setUseAccountRec(isOn);
+                const state = AppStorageV2.connect(UseAccountRecState, AppStorageKeys.USE_ACCOUNT_REC_STATE,
+                  () => new UseAccountRecState());
+                if (state !== undefined) {
+                  state.enabled = isOn;
+                }
+              })
+          } else {
+            Text('当前平台（' + this.homeSourceLabel() + '）不支持"用登录状态获取推荐"，切回 QQ / 酷狗 / 网易 可开启')
+              .fontSize($r('sys.float.Caption_M'))
+              .fontColor($r('sys.color.font_tertiary'))
+              .width('100%')
+              .margin({ top: 8 })
+              .maxLines(2)
+          }
         }
         .width('100%')
         .padding({ left: 16, right: 16, top: 4, bottom: 8 })
