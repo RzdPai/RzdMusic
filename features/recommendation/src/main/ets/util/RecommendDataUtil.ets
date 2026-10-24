@@ -26,6 +26,8 @@ import {
 } from 'musicbasic';
 import { AccountService, getLeaderboardEntries, lxGetPicFallback, lxKgSingerList, lxTxSingerList, lxWySingerList, lxKwSingerList, lxMgSingerList, lxLeaderboard, lxTxToplist, lxTxToplistInfo, lxTxToplistList, LXLeaderboardEntry, LXSearchSong, PlatformAccount, PlatformTrackInfo, TxSinger } from 'player';
 import { BoardData, MusicDataService, pickDedicatedBoardId, pickDedicatedBoardName, TrackData } from './MusicDataService';
+import { FeedRecommendEngine, FeedRecommendPick } from './FeedRecommendEngine';
+import { MusicStoreService } from 'musicbasic';
 import {
   RecommendCardUi,
   RecommendCategoryTabUi,
@@ -285,6 +287,36 @@ export class RecommendDataUtil {
     // QQ 新歌榜 / 酷狗飙升榜 / 网易飙升榜（见 MusicDataService.pickDedicatedBoardId）。
     // 这样出来的歌内容稳定、封面也齐，不需要靠多榜单轮询去凑。
     const dedicatedId: string = pickDedicatedBoardId(svcSource);
+    // ★ 2026-10-24（甲方第 ⑥ 条：把首页的「精选推荐」也换成自建算法）：
+    //   先用 `FeedRecommendEngine`（歌单广场分类 → 歌单 → 歌，按播放加权）凑一批；
+    //   凑到目标数量就直接用，凑不到再用下面的"指定榜单"补齐。
+    try {
+      const plays: Record<string, number> = MusicStoreService.getInstance().getFeedCategoryPlays();
+      const mode: number = MusicStoreService.getInstance().getFeedMode();
+      const picks: FeedRecommendPick[] = await FeedRecommendEngine.build(svcSource, mode, targetCount, plays);
+      for (let i: number = 0; i < picks.length && merged.length < targetCount; i++) {
+        const pick: FeedRecommendPick = picks[i];
+        const key: string = pick.song.source + '_' + pick.song.songId;
+        if (pick.song.songId.length === 0 || seen.indexOf(key) >= 0) {
+          continue;
+        }
+        seen.push(key);
+        const ui = new RecommendPrivateSongUi();
+        ui.id = merged.length;
+        ui.title = pick.song.name;
+        ui.singer = pick.song.singer;
+        ui.source = pick.song.source.length > 0 ? pick.song.source : svcSource;
+        ui.songId = pick.song.songId;
+        ui.coverUrl = pick.song.picUrl;
+        ui.categoryId = pick.categoryId;
+        merged.push(ui);
+      }
+      if (merged.length > 0) {
+        Logger.info('RzdHomeRec', `self-built rec songs=${merged.length} mode=${mode} source=${svcSource}`);
+      }
+    } catch (err) {
+      Logger.warn('RzdHomeRec', `self-built rec failed: ${(err as Error).message ?? ''}`);
+    }
     if (dedicatedId.length > 0) {
       try {
         const tracks: TrackData[] = await MusicDataService.tracks(svcSource, dedicatedId);
