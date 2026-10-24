@@ -22,6 +22,12 @@ import { MotionCoverState } from '../model/MotionCoverState';
 import { MotionCoverService } from '../services/MotionCoverService';
 
 /**
+ * 首帧（Apple `previewFrame`）先单独展示多久，之后才让视频层上场。
+ * 320ms 是首帧自己的淡入时长，再留 100ms 让它"停一下" ⇒ 观感是"先静帧、再起播"。
+ */
+const MOTION_POSTER_PREROLL_MS: number = 420;
+
+/**
  * **动态封面**那一层：盖在页面原有的大封面（静图）**之上**，只在视频真的起播后淡入。
  *
  * 为什么这么设计（而不是"用动态封面替换静图"）：
@@ -52,6 +58,12 @@ export struct MotionCoverLayer {
   @Local state: MotionCoverState =
     AppStorageV2.connect(MotionCoverState, AppStorageKeys.MOTION_COVER_STATE, () => new MotionCoverState())!;
   @Local cover: MotionCover | undefined = undefined;
+  /** 首帧海报**已经解码完**（此后才淡入，避免半张图闪一下）。 */
+  @Local posterReady: boolean = false;
+  /** 首帧海报加载失败（失败就不再画那一层，退回页面静图）。 */
+  @Local posterFailed: boolean = false;
+  /** 首帧已经先上场（或确定上不了场）⇒ 此刻才允许视频这一层挂载/起播。 */
+  @Local videoAllowed: boolean = false;
   /** 视频准备就绪（此后才允许 `start()`）。 */
   @Local prepared: boolean = false;
   /** 已经真的在播（据此淡入）。 */
@@ -63,6 +75,8 @@ export struct MotionCoverLayer {
   private controller: VideoController = new VideoController();
   /** 当前查询指纹：异步回来时用它判断"结果是不是还是这一页要的"。 */
   private queryKey: string = '';
+  /** 首帧 preroll 定时器（-1 = 没在跑）。 */
+  private rollTimer: number = -1;
   private alive: boolean = true;
 
   aboutToAppear(): void {
@@ -72,6 +86,7 @@ export struct MotionCoverLayer {
 
   aboutToDisappear(): void {
     this.alive = false;
+    this.clearRollTimer();
     this.controller.stop();
   }
 
@@ -89,6 +104,10 @@ export struct MotionCoverLayer {
   private async reload(): Promise<void> {
     this.started = false;
     this.prepared = false;
+    this.posterReady = false;
+    this.posterFailed = false;
+    this.videoAllowed = false;
+    this.clearRollTimer();
     if (!this.state.enabled || !this.queryable(this.name)) {
       this.cover = undefined;
       this.queryKey = '';
@@ -106,9 +125,40 @@ export struct MotionCoverLayer {
       return;
     }
     this.cover = resolved;
+    this.armVideoAfterPoster();
     hilog.info(0, 'RzdMotionCover',
       'layer kind=%{public}s name=%{public}s hit=%{public}d field=%{public}s',
       this.kind, this.name, resolved !== undefined ? 1 : 0, resolved !== undefined ? resolved.field : 'none');
+  }
+
+  /**
+   * 让视频层**晚一步**上场：先把 Apple 的首帧（`previewFrame`）淡进来，停一下再挂 `Video`。
+   *
+   * 这就是甲方报的「开始播放时画面突然变化一下」的修法：原来视频层一挂上就起播，
+   * 屏上从"页面静图"直接跳到"视频第一帧"；现在改成
+   * `静图 →（320ms 淡变）首帧 →（240ms 淡变）视频`，后一段是同图换源，视觉上不跳。
+   *
+   * 三种情况直接放行，不让首帧挡住视频：
+   * ① 这个实体没有首帧（`posterUrl` 为空）；② 首帧加载失败；③ 超过 preroll 时长还没解码完。
+   */
+  private armVideoAfterPoster(): void {
+    this.videoAllowed = false;
+    if (this.cover === undefined || this.cover.posterUrl.length === 0) {
+      this.videoAllowed = true;
+      return;
+    }
+    this.clearRollTimer();
+    this.rollTimer = setTimeout((): void => {
+      this.rollTimer = -1;
+      this.videoAllowed = true;
+    }, MOTION_POSTER_PREROLL_MS);
+  }
+
+  private clearRollTimer(): void {
+    if (this.rollTimer !== -1) {
+      clearTimeout(this.rollTimer);
+      this.rollTimer = -1;
+    }
   }
 
   /**
@@ -156,7 +206,41 @@ export struct MotionCoverLayer {
 
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
-      if (this.drawable() && this.cover !== undefined) {
+      // ★ 2026-10-24 甲方：「现在开始播放的时候，画面突然变化一下，不是很沉浸；
+      //   请求返回里面是有第一帧画面的」⇒ 把 Apple 的 `previewFrame`（= 视频第一帧）
+      //   **在解析完成时就淡入**，而不是等视频起播才一起冒出来：
+      //   观感是「静图 →（320ms 淡变）首帧 →（240ms 淡变）视频」，
+      //   后一段是同图换源（首帧与视频第一帧对齐）⇒ 起播那一下视觉上不跳。
+      if (this.state.enabled && !this.posterFailed && this.cover !== undefined &&
+        this.cover.posterUrl.length > 0) {
+        Image(this.cover.posterUrl)
+          .width('100%')
+          .height('100%')
+          .objectFit(ImageFit.Cover)
+          .draggable(false)
+          .interpolation(ImageInterpolation.Medium)
+          .opacity(this.posterReady ? 1 : 0)
+          .animation({ duration: 320, curve: Curve.EaseOut })
+          .onComplete((): void => {
+            this.posterReady = true;
+            if (!this.videoAllowed) {
+              // 首帧已经出来了 ⇒ 不必等满 preroll，再给 120ms 让它"停住"就放视频上场
+              this.clearRollTimer();
+              this.rollTimer = setTimeout((): void => {
+                this.rollTimer = -1;
+                this.videoAllowed = true;
+              }, 120);
+            }
+          })
+          .onError((): void => {
+            this.posterFailed = true;
+            this.posterReady = false;
+            // 首帧不可用 ⇒ 立刻放行视频（否则这一页永远只有静图）
+            this.videoAllowed = true;
+            hilog.warn(0, 'RzdMotionCover', 'layer poster failed name=%{public}s', this.name);
+          })
+      }
+      if (this.drawable() && this.videoAllowed && this.cover !== undefined) {
         Video({
           src: this.cover.videoUrl,
           previewUri: this.previewUri(),
@@ -171,8 +255,9 @@ export struct MotionCoverLayer {
           .loop(true)
           .autoPlay(true)
           .hitTestBehavior(HitTestMode.None)
+          // 首帧海报已经在下面了 ⇒ 视频这一层等真的起播再淡入（同图换源，不跳）
           .opacity(this.started ? 1 : 0)
-          .animation({ duration: 260, curve: Curve.EaseOut })
+          .animation({ duration: 240, curve: Curve.EaseOut })
           .onPrepared((): void => {
             this.prepared = true;
             if (this.onScreen) {

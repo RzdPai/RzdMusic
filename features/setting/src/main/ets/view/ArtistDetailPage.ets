@@ -29,7 +29,6 @@ import {
 } from 'player';
 import { FavoriteEntry } from 'musicbasic';
 import { SongMoreMenu } from 'playlist';
-import { CapsuleSegmentedSelector } from './CapsuleSegmentedSelector';
 import { DetailImmersiveBackdrop } from './DetailImmersiveBackdrop';
 import { WindowInfo, getWindowInfoState } from 'musicbasic';
 import { ArtistDetailDataSource } from './ArtistDetailDataSource';
@@ -96,7 +95,13 @@ export struct ArtistDetailPage {
   @Local songs: SongInfo[] = [];
   @Local albums: AlbumInfo[] = [];
   @Local activeTab: number = 1;
-  @Local segmentIndex: number = 0;
+  /**
+   * 吸顶行三页签的选中项：`0=最热 / 1=最新 / 2=专辑`（顺序照甲方 2026-10-24 的指定）。
+   *
+   * 缺省仍是「专辑」= 2（与 `activeTab = 1` + `aboutToAppear` 里的 `loadAlbums(1)` 一致）；
+   * 改顺序时这一对默认值必须一起改，否则首屏会「标签说专辑、内容却是歌曲列表」。
+   */
+  @Local segmentIndex: number = 2;
   @Local loading: boolean = false;
   @Local loadingMore: boolean = false;
   @Local songsHasMore: boolean = true;
@@ -541,16 +546,17 @@ export struct ArtistDetailPage {
     }
   }
 
-  /** 三块分段：0=专辑，1=最新，2=最热。 */
+  /** 三块分段：**0=最热，1=最新，2=专辑**（甲方 2026-10-24 指定顺序，原来是 专辑/最新/最热）。 */
   private onSegmentSelect(index: number): void {
     this.segmentIndex = index;
-    if (index === 0) {
+    if (index === 2) {
       this.activeTab = 1;
       if (this.albums.length === 0) {
         void this.loadAlbums(1);
       }
       return;
     }
+    // 1 = 最新（sort 1）、0 = 最热（sort 0）
     const sort: number = index === 1 ? 1 : 0;
     const needReload: boolean = this.activeTab !== 0 || this.songSort !== sort || this.songs.length === 0;
     this.activeTab = 0;
@@ -1236,28 +1242,71 @@ export struct ArtistDetailPage {
       // ⛔ 2026-10-24（用户：「歌手页的播放全部有两个，多余了，只保留中间那个圆形的」）：
       //   这里原来还有一行 `▶ 播放全部 · 已加载 N 首`（52vp、整行可点）。它和 Hero 里那颗
       //   圆形播放按钮是同一个 `playAll()`，重复了 ⇒ 整行删除，只留 Hero 中间那颗圆钮。
-      //   （吸顶行现在只剩「专辑 / 最新 / 最热」分段选择器。）
-        Row({ space: 8 }) {
-          Column() {
-            CapsuleSegmentedSelector({
-              labels: ['专辑', '最新', '最热'],
-              selectedIndex: this.segmentIndex,
-              accentColor: this.themeState.color,
-              compact: true,
-              onSelect: (index: number): void => {
-                this.onSegmentSelect(index);
-              }
-            })
-          }
-          .width(216)
-        }
-        .width('100%')
-        .justifyContent(FlexAlign.Center)
-        .padding({ left: 16, right: 16, top: 6, bottom: 4 })
-
+      // ★ 2026-10-24（用户给了截图）：「专辑、最新、最热的样式改成这样的，胶囊不是很好看」：
+      //   胶囊换成**纯文字页签 + 选中项主题色短横线**；顺序按用户指定：最热 → 最新 → 专辑。
+      this.ArtistSectionTabs()
     }
     .width('100%')
+    .alignItems(HorizontalAlign.Center)
     .backgroundColor(this.avgColor)
+  }
+
+  /**
+   * 吸顶行的三个页签（甲方截图那套样式）。
+   *
+   * 样式：纯文字、数字紧跟在文字后面、选中的那个更亮更粗、下面一条主题色短横线；
+   *       **没有胶囊底**（原来的 `CapsuleSegmentedSelector` 已撤掉）。
+   * 顺序：**最热 → 最新 → 专辑**（`onSegmentSelect()` 的映射已同步改成 0/1/2）。
+   */
+  @Builder
+  private ArtistSectionTabs() {
+    Row() {
+      this.SectionTab('最热', 0, '')
+      this.SectionTab('最新', 1, '')
+      this.SectionTab('专辑', 2, this.albumTabCount())
+    }
+    .width('100%')
+    // 宽屏（平板/折叠展开）别把三个词摊到两头去：最宽 420 后居中
+    .constraintSize({ maxWidth: 420 })
+    .padding({ left: 8, right: 8, top: 6, bottom: 2 })
+  }
+
+  /** 一个页签：文字（+数量）+ 选中时的主题色短横线。 */
+  @Builder
+  private SectionTab(label: string, index: number, count: string) {
+    Column({ space: 5 }) {
+      Row({ space: 6 }) {
+        Text(label)
+          .fontSize(this.segmentIndex === index ? 19 : 17)
+          .fontWeight(this.segmentIndex === index ? FontWeight.Bold : FontWeight.Medium)
+          .fontColor(this.segmentIndex === index ? this.fgPrimary() : this.fgSecondary())
+          .maxLines(1)
+        if (count.length > 0) {
+          Text(count)
+            .fontSize(this.segmentIndex === index ? 19 : 17)
+            .fontWeight(this.segmentIndex === index ? FontWeight.Bold : FontWeight.Medium)
+            .fontColor(this.segmentIndex === index ? this.fgPrimary() : this.fgSecondary())
+            .maxLines(1)
+        }
+      }
+      // 短横线：选中 = 主题色；未选中 = 同高空位（切换时整行高度不跳）
+      Column()
+        .width(this.segmentIndex === index ? 24 : 0)
+        .height(3)
+        .borderRadius(1.5)
+        .backgroundColor(this.segmentIndex === index ? this.themeState.color : Color.Transparent)
+    }
+    .layoutWeight(1)
+    .justifyContent(FlexAlign.Center)
+    .onClick((): void => {
+      this.onSegmentSelect(index);
+    })
+  }
+
+  /** 「专辑」标签后的数字：优先用路由带来的专辑数，没有就用已加载的条数。 */
+  private albumTabCount(): string {
+    const n: number = this.albumSize > 0 ? this.albumSize : this.albums.length;
+    return n > 0 ? String(n) : '';
   }
 
   build() {
