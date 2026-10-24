@@ -771,6 +771,26 @@ export struct RecommendPage {
   @Monitor('homeSourceState.source')
   onHomeSourceChanged(): void {
     this.applyHomeSourceIfChanged();
+    this.enforceAccountRecSupported();
+  }
+
+  /**
+   * 「用登录状态获取推荐」只对 QQ / 酷狗 / 网易（tx / kg / wy）有 provider 实现。
+   * ★ 2026-10-24（甲方第 ⑥ 条）：非这三个平台就**强制关掉**，别白等一次没有 provider 的请求。
+   */
+  private enforceAccountRecSupported(): void {
+    const source: string = this.homeSourceState.source;
+    const supported: boolean = source === 'tx' || source === 'kg' || source === 'wy';
+    if (!supported && this.useAccountRecState.enabled) {
+      Logger.info('RzdRecPage', `account-rec off: source=${source} has no provider`);
+      this.useAccountRecState.enabled = false;
+    }
+  }
+
+  /** @returns 当前平台是否支持"用登录状态获取推荐"（首页据此隐藏那个选项）。 */
+  private accountRecSupported(): boolean {
+    const source: string = this.homeSourceState.source;
+    return source === 'tx' || source === 'kg' || source === 'wy';
   }
 
   @Monitor('useAccountRecState.enabled')
