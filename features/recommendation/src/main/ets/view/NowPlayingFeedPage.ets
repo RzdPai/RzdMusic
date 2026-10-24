@@ -219,6 +219,7 @@ import {
   lxGetQualityOptions,
   lxLeaderboard,
   LXQualityOption,
+  MediaService,
   MiniLyricLinesComponent,
   OnlinePlayUtil,
   PlatformAccount,
@@ -489,9 +490,10 @@ const FEED_NEUTRAL_HEX: number = 0x202020;
  * 取色完成后由 `@Local pageTint` 覆盖成封面主色。
  */
 const FEED_BASE_NEUTRAL: string = ((): string => {
-  const tuned: number[] = ColorConversion.dealColor(
-    (FEED_DARK_SURFACE_ARGB >>> 16) & 0xFF, (FEED_DARK_SURFACE_ARGB >>> 8) & 0xFF, FEED_DARK_SURFACE_ARGB & 0xFF);
-  return `rgb(${tuned[0]}, ${tuned[1]}, ${tuned[2]})`;
+  // ★ 2026-10-24（甲方：「那个过渡还是发黑」）：兜底色不再用 `dealColor(1C1C1E)`
+  //   （那是被压暗过的深灰，浅色封面上看着就是一条发黑的底）。改成中性中灰：
+  //   不管下一张封面是深是浅，都不会突兀地压暗。
+  return 'rgb(96, 96, 102)';
 })();
 
 /**
@@ -555,6 +557,9 @@ const FEED_TINT_ANIM_MS: number = 400;
  *   不在本次范围内）⇒ 不存在"滑块会不会超过 12vp"这一项。
  */
 const FEED_PROGRESS_TRACK_VP: number = 6;
+  /** 拖动进度条时的加粗轨高（vp）：细轨的 ~2 倍，手感对齐播放页 trackThickness(14)。 */
+const FEED_PROGRESS_THICK_VP: number = 8;
+
 
 /**
  * ⑦ 进度行**整行**高度（vp）= 条厚 + 两端时间与条之间的余量。
@@ -771,6 +776,11 @@ export struct NowPlayingFeedPage {
   @Local feedMode: number = 0;
   /** 左上角模式菜单是否展开（菜单绑在 `FeedModeMenuAnchor()` 上）。 */
   @Local showFeedModeMenu: boolean = false;
+
+  /** 进度条是否正在拖动（拖动时轨高/填充加粗，松手复位）。 */
+  @Local feedScrubbing: boolean = false;
+  /** 拖动中的目标位置（ms）：只在松手时 seek，避免一路 seek 抖乱播放器。 */
+  @Local scrubValue: number = 0;
   @Local appState: MusicAppState =
     AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
   /**
@@ -2920,17 +2930,44 @@ export struct NowPlayingFeedPage {
         .fontSize(12)
         .fontColor(this.inkSoft())
 
-      Row() {
-        Column()
-          .width(this.playedPercentOf(row))
-          .height(FEED_PROGRESS_TRACK_VP)
-          .borderRadius(FEED_PROGRESS_TRACK_VP / 2)
-          .backgroundColor(this.inkTrackPlayed())
+      // ★ 2026-10-24（甲方：「现在就听页进度条加上播放页同款滑动时变粗」）：
+      //   视觉仍是原来那条细轨，但**上面盖一层全透明 Slider** 吃手势：
+      //   - 拖动中 `feedScrubbing = true` ⇒ 轨高与填充**加粗**（`FEED_PROGRESS_THICK_VP`）；
+      //   - 只有 End / Click 才真正 `MediaService.seek()`，拖动过程只更新本地值（不抖流）。
+      //   ⚠️ Slider 自带的三条色全部透明：颜色一律由本页 `inkTrackPlayed()/inkTrack()` 决定，
+      //      否则浅底/深底两套墨色就管不住了。
+      Stack({ alignContent: Alignment.Start }) {
+        Row() {
+          Column()
+            .width(this.scrubbedPercentOf(row))
+            .height(this.feedScrubbing ? FEED_PROGRESS_THICK_VP : FEED_PROGRESS_TRACK_VP)
+            .borderRadius((this.feedScrubbing ? FEED_PROGRESS_THICK_VP : FEED_PROGRESS_TRACK_VP) / 2)
+            .backgroundColor(this.inkTrackPlayed())
+        }
+        .width('100%')
+        .height(this.feedScrubbing ? FEED_PROGRESS_THICK_VP : FEED_PROGRESS_TRACK_VP)
+        .borderRadius((this.feedScrubbing ? FEED_PROGRESS_THICK_VP : FEED_PROGRESS_TRACK_VP) / 2)
+        .backgroundColor(this.inkTrack())
+        .alignItems(VerticalAlign.Center)
+        .hitTestBehavior(HitTestMode.None)
+
+        Slider({
+          value: this.scrubSliderValue(row),
+          max: this.scrubSliderMax(),
+          style: SliderStyle.OutSet
+        })
+          .width('100%')
+          .trackThickness(FEED_PROGRESS_THICK_VP + 16)
+          .trackColor(Color.Transparent)
+          .selectedColor(Color.Transparent)
+          .blockColor(Color.Transparent)
+          .enabled(this.isCurrentSong(row))
+          .onChange((value: number, mode: SliderChangeMode): void => {
+            this.onFeedScrub(value, mode);
+          })
       }
       .layoutWeight(1)
-      .height(FEED_PROGRESS_TRACK_VP)
-      .borderRadius(FEED_PROGRESS_TRACK_VP / 2)
-      .backgroundColor(this.inkTrack())
+      .height(FEED_PROGRESS_ROW_VP)
 
       Text(this.durationOf(row))
         .fontSize(12)
@@ -2940,6 +2977,42 @@ export struct NowPlayingFeedPage {
     .height(FEED_PROGRESS_ROW_VP)
     .alignItems(VerticalAlign.Center)
     .padding({ left: FEED_SIDE_PADDING_VP, right: FEED_SIDE_PADDING_VP })
+  }
+
+  /** 拖动中的百分比（拖动时用本地值；否则用真实播放进度）。 */
+  private scrubbedPercentOf(row: RecommendPrivateSongUi): string {
+    if (this.feedScrubbing && this.isCurrentSong(row)) {
+      const max: number = this.scrubSliderMax();
+      if (max > 0) {
+        return Math.round((this.scrubValue / max) * 100) + '%';
+      }
+    }
+    return this.playedPercentOf(row);
+  }
+
+  private scrubSliderMax(): number {
+    const max: number = this.appState.progressMax;
+    return max > 0 ? max : 1;
+  }
+
+  private scrubSliderValue(row: RecommendPrivateSongUi): number {
+    if (!this.isCurrentSong(row)) {
+      return 0;
+    }
+    return this.feedScrubbing ? this.scrubValue : this.appState.progress;
+  }
+
+  /** 进度条拖动：Begin/Moving 只更新本地值并加粗；End/Click 才真正 seek。 */
+  private onFeedScrub(value: number, mode: SliderChangeMode): void {
+    this.scrubValue = value;
+    if (mode === SliderChangeMode.Begin || mode === SliderChangeMode.Moving) {
+      this.feedScrubbing = true;
+      return;
+    }
+    this.feedScrubbing = false;
+    const ms: number = Math.max(0, Math.round(value));
+    Logger.info(RZD_TAG, `feed scrub seek ms=${ms}`);
+    MediaService.getInstance().seek(ms);
   }
 
   /** 这一屏右端的"总时长"文案。 */
@@ -3216,10 +3289,12 @@ export struct NowPlayingFeedPage {
                       //   异步 / 网络 / 解码 / 日志**都不在**这个闭包里 —— 包进去会被补间吃掉时间。
                       //   墨色两个状态位必须**写在一起**：只动其中一个会出现"底色已经渐变到浅色、
                       //   墨色还是白"的中间帧。
-                      this.getUIContext().animateTo({ duration: FEED_TINT_ANIM_MS, curve: Curve.EaseInOut }, () => {
-                        this.pageTint = result.tint;
-                        this.pageTintIsLight = light;
-                      });
+                      // ★ 2026-10-24（甲方：「那个过渡还是发黑，并且现在过渡的很不自然」）：
+                      //   原来包 `animateTo(400ms, EaseInOut)` ⇒ 换歌时底色要"渐变"过去，
+                      //   中间那 400ms 正是上一首的深色 → 这一首的浅色，白歌看着像"先黑一下"。
+                      //   ⇒ 改为**即时切换**（不插值）：颜色一到就是它。
+                      this.pageTint = result.tint;
+                      this.pageTintIsLight = light;
                       // 日志必须在 animateTo 之外（与上面同一条纪律）
                       Logger.info(RZD_TAG,
                         `tint ink light=${light} lum=${result.luminance} tint=${result.tint} url=${url}`);
