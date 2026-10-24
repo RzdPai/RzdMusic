@@ -2770,19 +2770,8 @@ export struct NowPlayingFeedPage {
       Image(row.coverUrl.length > 0 ? row.coverUrl : $r('app.media.ic_avatar1'))
         .width(StyleConstants.FULL_WIDTH)
         .height(this.coverHeightVp())
-      // ★ 甲方 2026-10-24（截图："效果还是不行"）：原来封面上下各压一层"化进页底色"的渐变
-      //   （上 = 高度 × TOP_FADE、下 = 高度 × BOTTOM_FADE ≈ 40%）⇒ 七成画面被灰调盖住，封面发闷。
-      //   现在只留**底部 64vp** 一条过渡把封面接到页底渐变；顶部不再压任何东西
-      //   （顶栏图标靠 `inkPrimary()` 自动切墨保证可读性）。
-      Column()
-        .width(StyleConstants.FULL_WIDTH)
-        .height(64)
-        .linearGradient({
-          direction: GradientDirection.Bottom,
-          colors: [[Color.Transparent, 0], [feedTintShade(this.pageTint, 1.0), 1]]
-        })
-        .position({ x: 0, y: this.coverHeightVp() - 64 })
-        .hitTestBehavior(HitTestMode.None)
+      // 甲方 2026-10-24：「我不明白你为啥非要用遮罩，直接渐变封面本身不就行了吗」
+      //   ⇒ 封面上**不叠任何遮罩**，取色与渐变全部由页底那一层负责（见 build 的第 1 层）。
     }
     .width(StyleConstants.FULL_WIDTH)
     .height(this.coverHeightVp())
@@ -3269,6 +3258,20 @@ export struct NowPlayingFeedPage {
    */
   /**
    * @param scale 亮度系数（1 = 原色；0.94 / 0.86 = 逐段压暗）。（官方 linearGradient：stops 递增）
+  /**
+   * @returns 封面上沿高度占整页高度的比例（0.2–0.8）。
+   * 页底渐变按它对齐色标，保证"封面以下那一段"能看出明显的明暗过渡（甲方：顶部也要有渐变）。
+   */
+  private coverRatioOfPage(): number {
+    const ui: UIContext = this.getUIContext();
+    const pageH: number = ui.px2vp(this.windowInfo.windowSize.height);
+    if (!(pageH > 0)) {
+      return 0.45;
+    }
+    const ratio: number = this.coverHeightVp() / pageH;
+    return Math.max(0.2, Math.min(0.8, ratio));
+  }
+
   private coverFadeColor(): ResourceColor {
     return this.tintReady ? this.pageTint : Color.Transparent;
   }
@@ -3315,12 +3318,11 @@ export struct NowPlayingFeedPage {
             direction: GradientDirection.Bottom,
             colors: [
               [feedTintShade(this.pageTint, 1.0), 0],
-              [feedTintShade(this.pageTint, 0.94), 0.55],
-              [feedTintShade(this.pageTint, 0.86), 1]
+              // 色标对齐"看得见的那一段"：封面下沿 = coverRatioOfPage()，再明显压暗到底
+              [feedTintShade(this.pageTint, 0.96), this.coverRatioOfPage()],
+              [feedTintShade(this.pageTint, 0.72), 1]
             ]
           })
-          .hitTestBehavior(HitTestMode.None)
-          .backgroundColor(this.pageTint)
           .hitTestBehavior(HitTestMode.None)
         // ── 层 2：顶部压深（深底才有）────────────────────────────────────────
         // · 只压最上面一段（α 从 0.35 渐隐到 0），**高度 = 封面顶边**（{@link topScrimHeightVp}）：
