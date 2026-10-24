@@ -50,7 +50,7 @@
  *   一律未动（`dayColor()` 的返回类型 `string` → `ResourceColor` 是颜色切换的必要改动，算法未改）。
  */
 
-import { AlbumRouteParam, AppStorageKeys, ArtistRouteParam, BarScrollHelper, MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord, RouterUrlConstants } from 'musicbasic';
+import { AlbumRouteParam, AppStorageKeys, ArtistRouteParam, BarScrollHelper, MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord, RouterUrlConstants, shouldUseSplitDetailLayout } from 'musicbasic';
 import { OnlinePlayUtil } from 'player';
 import { AppStorageV2, matrix4, uiObserver } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
@@ -881,6 +881,46 @@ export struct EchoReviewPage {
   }
 
   /** 页面主体（原 build 的内容；2026-10-12 标题交给 HDS 标题栏后原样搬进来）。 */
+  /**
+   * @returns 宽屏（平板 / 阔屏 / **手机横屏**）时回响页分**左右两栏**，但仍是**一个整体**：
+   * 一颗 `Scroll`、一次滚动，不是两个独立列表。
+   *
+   * 甲方 2026-10-24：「回响页这种不好排布，就把它分左右（不要分两个列表，是一个整体）」。
+   * 实现 = 同一个 `Scroll` 里放 `Row{ 主列 layoutWeight(3) ; 副列 layoutWeight(2) }`，
+   * 两列高度不同也不会有独立滚动条。
+   */
+  private isWideEchoLayout(): boolean {
+    return shouldUseSplitDetailLayout(this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint);
+  }
+
+  /** 宽屏左（主）列：页头 / 三格统计 / 年月选择 / 榜前三 / 听众画像。 */
+  @Builder
+  private EchoMainColumn() {
+    Column({ space: 18 }) {
+      this.Header()
+      this.OverviewCard()
+      // ★ 用户 2026-10-14：年 / 月选择器要在**三格统计下面**（官方版式）
+      this.MonthPicker()
+      this.TopSongsSection()
+      this.AudienceSection()
+    }
+    .layoutWeight(3)
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  /** 宽屏右（副）列：最爱歌手 / 最爱专辑 / 完成度 / 新发现。 */
+  @Builder
+  private EchoSideColumn() {
+    Column({ space: 18 }) {
+      this.TopArtistSection()
+      this.TopAlbumsSection()
+      this.CompletionSection()
+      this.NewDiscoverySection()
+    }
+    .layoutWeight(2)
+    .alignItems(HorizontalAlign.Start)
+  }
+
   @Builder
   private EchoBody() {
     Stack({ alignContent: Alignment.Top }) {
@@ -891,19 +931,31 @@ export struct EchoReviewPage {
         .backgroundColor($r('app.color.page_background'))
         .opacity(0.86)
 
-      // ② 内容
+      // ② 内容（宽屏两栏、窄屏一栏，都是同一颗 Scroll）
       Scroll(this.scroller) {
-        Column({ space: 18 }) {
-          this.Header()
-          this.OverviewCard()
-          // ★ 用户 2026-10-14：年 / 月选择器要在**三格统计下面**（官方版式）
-          this.MonthPicker()
-          this.TopSongsSection()
-          this.TopArtistSection()
-          this.TopAlbumsSection()
-          this.AudienceSection()
-          this.CompletionSection()
-          this.NewDiscoverySection()
+        Column() {
+          if (this.isWideEchoLayout()) {
+            Row({ space: 18 }) {
+              this.EchoMainColumn()
+              this.EchoSideColumn()
+            }
+            .width('100%')
+            .alignItems(VerticalAlign.Top)
+          } else {
+            Column({ space: 18 }) {
+              this.Header()
+              this.OverviewCard()
+              // ★ 用户 2026-10-14：年 / 月选择器要在**三格统计下面**（官方版式）
+              this.MonthPicker()
+              this.TopSongsSection()
+              this.TopArtistSection()
+              this.TopAlbumsSection()
+              this.AudienceSection()
+              this.CompletionSection()
+              this.NewDiscoverySection()
+            }
+            .width('100%')
+          }
           // 末尾占位（纯留白，让最后一屏能滚上来；标题已不再依赖"到底哨兵"）
           Column().width('100%').height(120)
         }

@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -55,7 +55,7 @@ import {
   MusicAppState, MusicStoreService, NowPlayingIndicator, PageTopInsetHelper, PlayedSongRecord, PlaylistDto,
   RouterUrlConstants, SelectionActionCell,
   SongTitleMarquee, ThemeState, TitleBarConstants,
-  getStatusBarTopVpFromWindowUtil
+  getStatusBarTopVpFromWindowUtil, shouldUseSplitDetailLayout
 } from 'musicbasic';
 import {
   BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions,
@@ -1131,6 +1131,21 @@ export struct RecordListPage {
     return bar;
   }
 
+  /**
+   * @returns 宽屏（平板 / 阔屏 / **手机横屏**）用多列列表（历史、收藏两页共用本页）。
+   *
+   * 甲方 2026-10-24：「回响页…历史页、收藏页…都适配一下其它比例（平板、阔屏、横屏等）」。
+   * 本页没有封面 hero（历史/收藏都是 70vp 的行），所以宽屏只做**列数**，不做左卡。
+   */
+  private isWideRecordLayout(): boolean {
+    return shouldUseSplitDetailLayout(this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint);
+  }
+
+  /** @returns 宽屏列数：XL 3 列，其余（含手机横屏）2 列。 */
+  private wideRecordLanes(): number {
+    return this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_XL ? 3 : 2;
+  }
+
   build() {
     HdsNavDestination() {
       Column() {
@@ -1193,7 +1208,8 @@ export struct RecordListPage {
             }
           }
 
-          if (this.category === 'song' && !this.isHistory() && !this.isFollowing() && this.records.length > 0) {
+          if (this.category === 'song' && !this.isHistory() && !this.isFollowing() && this.records.length > 0 &&
+            !this.isWideRecordLayout()) {
             ListItem() {
               this.FavoriteGroupHeader('歌曲', this.records.length)
             }
@@ -1230,6 +1246,8 @@ export struct RecordListPage {
         }
         .width('100%')
         .height('100%')
+        // 宽屏多列（历史/收藏都是短行 ⇒ 两列才不浪费横向空间）；窄屏仍是单列
+        .lanes(this.isWideRecordLayout() ? this.wideRecordLanes() : 1, 16)
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring)
         // ★★ 让内容能画进状态栏（"延伸进状态栏"）的**官方正解**。

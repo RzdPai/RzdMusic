@@ -23,6 +23,7 @@
 import { AppStorageV2 } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { uiObserver } from '@kit.ArkUI';
 import { HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions } from '@kit.UIDesignKit';
 import { guardPlayerBack } from 'musicbasic';
 import {
@@ -37,7 +38,8 @@ import {
   SongItem,
   SongTitleMarquee,
   ThemeState,
-  getStatusBarTopVpFromWindowUtil
+  getStatusBarTopVpFromWindowUtil,
+  shouldUseSplitDetailLayout
 } from 'musicbasic';
 import { DownloadService, DownloadStatus, DownloadTask, MediaService, OnlinePlayUtil } from 'player';
 import {
@@ -88,6 +90,26 @@ const DOWNLOAD_SHEET_INDEX: number = 10;
  */
 @ComponentV2
 export struct LocalMusicPage {
+  /**
+   * 断点（宽屏 / 手机横屏判据，甲方 2026-10-24：「本地音乐页…适配一下其它比例」）。
+   */
+  @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
+
+  /**
+   * @returns 宽屏时本地列表走多列。
+   *
+   * ⚠️ 本页列表仍是 `ForEach`（未换 `LazyForEach`）—— 换懒加载是**独立的一项**优化，
+   * 这轮只加列数，不给它添新的行为风险；列数变化不影响既有渲染量。
+   */
+  private isWideLocalLayout(): boolean {
+    return shouldUseSplitDetailLayout(this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint);
+  }
+
+  /** @returns 宽屏列数：XL 3 列，其余（含手机横屏）2 列。 */
+  private wideLocalLanes(): number {
+    return this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_XL ? 3 : 2;
+  }
+
   @Local themeState: ThemeState =
     AppStorageV2.connect(ThemeState, AppStorageKeys.THEME_STATE, () => new ThemeState())!;
   @Local appState: MusicAppState =
@@ -1069,6 +1091,8 @@ export struct LocalMusicPage {
             .scrollBar(BarState.Off)
             .width('100%')
             .height('100%')
+            // 宽屏多列（手机横屏 / 平板 2 列，XL 3 列）
+            .lanes(this.isWideLocalLayout() ? this.wideLocalLanes() : 1, 16)
             .divider({ strokeWidth: 0.6, color: $r('sys.color.background_tertiary') })
             // ★ 底部"给悬浮播放条让位"的留白留在**列表里**（`contentEndOffset` 随内容滚走，
             //   不要写到容器 padding 上 —— 那是固定在屏幕底部的死带）。
