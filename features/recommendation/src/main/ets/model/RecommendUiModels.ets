@@ -38,6 +38,11 @@ export class RecommendPrivateSongUi {
   @Trace public source: string = '';
   /** Song id within the music source for online songs. */
   @Trace public songId: string = '';
+  /**
+   * 这一首来自歌单广场的哪个分类（自建推荐算法的加权依据）。
+   * 榜单/每日推荐等非算法通道留空，播放时不会回写权重。
+   */
+  @Trace public categoryId: string = '';
   /** Online cover image url; empty when unavailable. */
   @Trace public coverUrl: string = '';
 }

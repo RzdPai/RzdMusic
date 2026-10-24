@@ -232,6 +232,7 @@ import {
 import type { LXSearchSong, LXSearchResult } from 'player';
 import { SongMoreMenu } from 'playlist';
 import { RecommendPrivateSongUi } from '../model/RecommendUiModels';
+import { FeedRecommendEngine, FeedRecommendPick } from '../util/FeedRecommendEngine';
 import { pickFeatureBoardId } from '../util/RecommendDataUtil';
 
 /** hilog 标签：`hdc shell hilog | grep RzdNowPlaying` 可捞本页整条链路。 */
@@ -1157,6 +1158,15 @@ export struct NowPlayingFeedPage {
    */
   private async loadChart(src: string): Promise<void> {
     const boardId: string = pickFeatureBoardId('newSongs', src);
+    // ★ 2026-10-24（甲方第 ⑥ 条）：未登录时**先用自建推荐**（歌单广场分类 → 歌单 → 歌），
+    //   取不到（音源不支持广场 / 网络失败 / 一首都没成）再退回原来的"新歌榜"。
+    const recRows: RecommendPrivateSongUi[] =
+      await this.loadSelfBuiltRecommend(src, this.feedRecommendWant());
+    if (recRows.length > 0) {
+      Logger.info(RZD_TAG, `load self-built rec songs=${recRows.length} mode=${this.feedMode}`);
+      this.applyRows(recRows, FeedOrigin.BOARD);
+      return;
+    }
     if (boardId.length === 0) {
       Logger.warn(RZD_TAG, `load no-board platform=${src}`);
       this.applyEmpty(`「${this.sourceLabel()}」暂无可用榜单`);
@@ -1224,6 +1234,41 @@ export struct NowPlayingFeedPage {
   }
 
   /** 把榜单歌转成本页的行模型（顺带记下它自带的时长，进度条右端要用）。 */
+  /** 自建推荐这一轮要几首（够几屏就行，翻页时再补）。 */
+  private feedRecommendWant(): number {
+    return 12;
+  }
+
+  /**
+   * 自建推荐：调 `FeedRecommendEngine`（歌单广场分类 → 歌单 → 歌，按播放加权），转成本页行模型。
+   * ★ 失败一律返回空数组 —— 调用方据此退回"新歌榜"，算法挂了也不会没歌听。
+   */
+  private async loadSelfBuiltRecommend(src: string, want: number): Promise<RecommendPrivateSongUi[]> {
+    const rows: RecommendPrivateSongUi[] = [];
+    try {
+      const picks: FeedRecommendPick[] = await FeedRecommendEngine.build(
+        src, this.feedMode, want, this.store.getFeedCategoryPlays());
+      for (let i: number = 0; i < picks.length; i++) {
+        const pick: FeedRecommendPick = picks[i];
+        const ui = new RecommendPrivateSongUi();
+        ui.id = i;
+        ui.title = pick.song.name;
+        ui.singer = pick.song.singer;
+        ui.source = pick.song.source.length > 0 ? pick.song.source : src;
+        ui.songId = pick.song.songId;
+        ui.coverUrl = pick.song.picUrl;
+        ui.categoryId = pick.categoryId;
+        this.feedDurations.set(this.songKey(ui), pick.song.interval);
+        rows.push(ui);
+      }
+      Logger.info(RZD_TAG, `self-built rec picks=${picks.length} rows=${rows.length}`);
+    } catch (err) {
+      Logger.warn(RZD_TAG, `self-built rec failed: ${(err as Error).message ?? ''}`);
+      return [];
+    }
+    return rows;
+  }
+
   private toRow(song: LXSearchSong, index: number): RecommendPrivateSongUi {
     const ui = new RecommendPrivateSongUi();
     ui.id = index;
@@ -1954,6 +1999,11 @@ export struct NowPlayingFeedPage {
     Logger.info(RZD_TAG, `play index=${target} songs=${songs.length} (playList openPlayer=false)`);
     // ★ 2026-10-24（⑧）：这条队列归「现在就听」所有 ⇒ 打上来源标记。
     //   壳层迷你条点击据此分流：`'feed'` 切到本页 Tab，其余照旧打开播放页。
+    // ⑥ 权重回写：这一首来自歌单广场的某个分类 ⇒ 该分类 +1（下轮抽样更容易被选中）
+    if (row.categoryId.length > 0) {
+      this.store.addFeedCategoryPlay(row.categoryId);
+      Logger.info(RZD_TAG, `rec weight +1 category=${row.categoryId}`);
+    }
     this.appState.queueOrigin = 'feed';
     void OnlinePlayUtil.playList(this.appState, songs, target, this.getUIContext(), false);
   }
