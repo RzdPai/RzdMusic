@@ -626,6 +626,28 @@ class FeedTintResult {
  * @param b 已夹到 0–255 的蓝通道。
  * @returns 感知亮度 0–255。
  */
+/**
+ * 把 `rgb(r, g, b)` 按比例压暗（用于页底渐变的中/下两挡）。
+ * 官方《颜色渐变》要求 `colors` 的 stop **递增**，所以三挡用同一函数不同 scale 生成同色系。
+ * @param tint 形如 `rgb(24, 30, 40)` 的颜色串
+ * @param scale 亮度系数（1 = 原色）
+ * @returns 压暗后的 `rgb(...)`；解析失败时原样返回
+ */
+function feedTintShade(tint: string, scale: number): string {
+  const m: RegExpMatchArray | null = tint.match(new RegExp('rgb\\((\\d+),\\s*(\\d+),\\s*(\\d+)\\)'));
+  if (m === null) {
+    return tint;
+  }
+  const parts: string[] = m as string[];
+  if (parts.length < 4) {
+    return tint;
+  }
+  const r: number = Math.max(0, Math.round(Number(parts[1]) * scale));
+  const g: number = Math.max(0, Math.round(Number(parts[2]) * scale));
+  const b: number = Math.max(0, Math.round(Number(parts[3]) * scale));
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
 function feedTintLuminanceOf(r: number, g: number, b: number): number {
   const toHex: (v: number) => string =
     (v: number): string => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
@@ -3255,21 +3277,7 @@ export struct NowPlayingFeedPage {
    *   否则两端透明，让封面保持原样；颜色回来时是**即时切换**，不会有过渡抖动。
    */
   /**
-   * @returns 页底渐变的下端颜色：由 `pageTint` 压暗 ~12%（歌手页那套"同色压暗"的渐变手感）。
-   *   `pageTint` 是 `rgb(r, g, b)` 字符串，这里按通道算，不引入任何写死 hex。
-   */
-  private pageTintDeep(): string {
-    const m: RegExpMatchArray | null = this.pageTint.match(new RegExp('rgb\\((\\d+),\\s*(\\d+),\\s*(\\d+)\\)'));
-    if (m === null || m.length < 4) {
-      return this.pageTint;
-    }
-    const scale: number = 0.88;
-    const r: number = Math.max(0, Math.round(Number(m[1]) * scale));
-    const g: number = Math.max(0, Math.round(Number(m[2]) * scale));
-    const b: number = Math.max(0, Math.round(Number(m[3]) * scale));
-    return `rgb(${r}, ${g}, ${b})`;
-  }
-
+   * @param scale 亮度系数（1 = 原色；0.94 / 0.86 = 逐段压暗）。（官方 linearGradient：stops 递增）
   private coverFadeColor(): ResourceColor {
     return this.tintReady ? this.pageTint : Color.Transparent;
   }
@@ -3314,7 +3322,11 @@ export struct NowPlayingFeedPage {
           .height(StyleConstants.FULL_HEIGHT)
           .linearGradient({
             direction: GradientDirection.Bottom,
-            colors: [[this.pageTint, 0], [this.pageTintDeep(), 1]]
+            colors: [
+              [feedTintShade(this.pageTint, 1.0), 0],
+              [feedTintShade(this.pageTint, 0.94), 0.55],
+              [feedTintShade(this.pageTint, 0.86), 1]
+            ]
           })
           .hitTestBehavior(HitTestMode.None)
           .backgroundColor(this.pageTint)
