@@ -2,7 +2,7 @@
 
 - 日期：2026-10-24
 - 基线：`98cc2ad`（上一轮转屏"候选"，甲方实测仍错位）
-- 构建：`261024-1349`，`BUILD SUCCESSFUL`，HAP 24,051,396 B，已上传 WebDAV
+- 构建：`261024-1400`，`BUILD SUCCESSFUL`，HAP 24,050,655 B，已上传 WebDAV
   `https://pan.rzdpai.com/dav/RzdMusic-default-signed.hap`
 - 验证等级：**源码级 + 编译级 + 产物级**（`hdc list targets` = Empty，未上机）
 
@@ -124,7 +124,7 @@ node docs/rotate-cover-geometry-check.mjs
 
 ## 5. 上机怎么验（甲方一步）
 
-1. 装 `RzdMusic-default-signed.hap`（构建戳 `261024-1349`，设置→关于可见）；
+1. 装 `RzdMusic-default-signed.hap`（构建戳 `261024-1400`，设置→关于可见）；
 2. **横屏**打开播放器 → 等 1 秒 → 转竖屏：封面应回到"水平居中、宽 ≈ 91%"、歌名在封面下方；
    再切回横屏、再切回竖屏，重复几轮都应稳定；
 3. 设置 → 运行日志，看这两行（`grep` 关键字）：

@@ -6726,6 +6726,21 @@ export struct PlaybackPage {
     } catch (error) {
       appendPlayLog(`[RzdBgPhase] window-anchor-remeasure failed error=${error}`);
     }
+    // 转屏那一拍 panel 分支可能还没挂上（封面节点刚创建、`measureEndAnchor()` 量不到）⇒
+    // 150ms 后补量一次（**只给"实测口径"这一支**；浮层那一支靠纯几何，不需要也不应该补量）。
+    setTimeout((): void => {
+      if (!this.isAlive || this.isClosing || this.usesFloatingCoverLayout()) {
+        return;
+      }
+      try {
+        if (this.expandState.measureEndAnchor(this.getUIContext())) {
+          this.expandState.measureGeometry(this.getUIContext(), true);
+          this.syncBigSizeFromNode('resize+150');
+        }
+      } catch (error) {
+        appendPlayLog(`[RzdBgPhase] window-anchor-remeasure-deferred failed error=${error}`);
+      }
+    }, 150);
   }
 
   /**
