@@ -497,7 +497,10 @@ const FEED_BASE_NEUTRAL: string = ((): string => {
   // ★ 2026-10-24（甲方：「那个过渡还是发黑」）：兜底色不再用 `dealColor(1C1C1E)`
   //   （那是被压暗过的深灰，浅色封面上看着就是一条发黑的底）。改成中性中灰：
   //   不管下一张封面是深是浅，都不会突兀地压暗。
-  return 'rgb(242, 242, 244)';
+  // 甲方 2026-10-24：兜底白在夜间模式下像闪光弹 ⇒ 回到由深色 token 算出的中性色
+  const base: number[] = ColorConversion.dealColor(
+    (FEED_DARK_SURFACE_ARGB >>> 16) & 0xFF, (FEED_DARK_SURFACE_ARGB >>> 8) & 0xFF, FEED_DARK_SURFACE_ARGB & 0xFF);
+  return `rgb(${base[0]}, ${base[1]}, ${base[2]})`;
 })();
 
 /**
@@ -906,7 +909,7 @@ export struct NowPlayingFeedPage {
    * ★ 初始值 `false`（深色档）与兜底底色 {@link FEED_BASE_NEUTRAL} **一致**：
    *   兜底底是 `FEED_DARK_SURFACE_ARGB` 的 RGB `1C1C1E`，感知亮度 ≈ 28 < 140 ⇒ 就是深底。
    */
-  @Local pageTintIsLight: boolean = true;
+  @Local pageTintIsLight: boolean = false;
   /** 是否已拿到真实取色（没拿到时封面不做任何压暗）。 */
   @Local tintReady: boolean = false;
   /** 已经取过色的封面地址（去重：同一张封面不要反复下载+解码）。 */
@@ -2754,7 +2757,7 @@ export struct NowPlayingFeedPage {
         .height(this.coverHeightVp() * FEED_COVER_TOP_FADE)
         .linearGradient({
           direction: GradientDirection.Bottom,
-          colors: [[this.coverFadeColor(), 0], [Color.Transparent, 1]]
+          colors: [[this.pageTint, 0], [Color.Transparent, 1]]
         })
         .hitTestBehavior(HitTestMode.None)
       // 下渐变：从封面下沿往上 FEED_COVER_BOTTOM_FADE 开始化开，下沿那一行 = 页底色
@@ -2763,7 +2766,7 @@ export struct NowPlayingFeedPage {
         .height(this.coverHeightVp() * FEED_COVER_BOTTOM_FADE)
         .linearGradient({
           direction: GradientDirection.Bottom,
-          colors: [[Color.Transparent, 0], [this.coverFadeColor(), 1]]
+          colors: [[Color.Transparent, 0], [this.pageTint, 1]]
         })
         .position({ x: 0, y: this.coverHeightVp() * (1 - FEED_COVER_BOTTOM_FADE) })
         .hitTestBehavior(HitTestMode.None)
@@ -3229,8 +3232,10 @@ export struct NowPlayingFeedPage {
   @Builder
   private FeedCoverCard(row: RecommendPrivateSongUi, index: number) {
     Image(row.coverUrl.length > 0 ? row.coverUrl : $r('app.media.ic_avatar1'))
-      .width('100%')
-      .aspectRatio(1)
+      // 甲方 2026-10-24「横屏下一堆错位」：原来是 width(100%) + aspectRatio(1)，
+      //   半宽栏里正方形会高过可用高度 ⇒ 上下被裁。改成按可用高度/宽度取小的固定边长。
+      .width(this.wideCoverSideVp())
+      .height(this.wideCoverSideVp())
       .objectFit(ImageFit.Cover)
       .alt($r('app.media.ic_avatar1'))
       .draggable(false)
@@ -3251,6 +3256,20 @@ export struct NowPlayingFeedPage {
    */
   private coverFadeColor(): ResourceColor {
     return this.tintReady ? this.pageTint : Color.Transparent;
+  }
+
+  /**
+   * 宽屏封面卡的边长（vp）：取可用高度与半宽中较小者，夹在 120–420。
+   * 可用高度已扣掉顶部让位（状态栏 + 标题栏）与底部让位（胶囊底栏 + 间距）。
+   */
+  private wideCoverSideVp(): number {
+    const ui: UIContext = this.getUIContext();
+    const hVp: number = ui.px2vp(this.windowInfo.windowSize.height);
+    const wVp: number = ui.px2vp(this.windowInfo.windowSize.width);
+    const availH: number = hVp - this.topStackOffsetVp() - this.cardChromeBottomVp() - 32;
+    const availW: number = wVp / 2 - FEED_SIDE_PADDING_VP * 3;
+    const side: number = Math.min(availH, availW);
+    return Math.max(120, Math.min(420, Math.floor(side)));
   }
 
   private isWideFeedLayout(): boolean {
