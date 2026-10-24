@@ -3254,6 +3254,22 @@ export struct NowPlayingFeedPage {
    *   拿它去压封面边缘会把整张图糊成一层灰。⇒ 只有真实取色到位（`tintReady`）才用 `pageTint`，
    *   否则两端透明，让封面保持原样；颜色回来时是**即时切换**，不会有过渡抖动。
    */
+  /**
+   * @returns 页底渐变的下端颜色：由 `pageTint` 压暗 ~12%（歌手页那套"同色压暗"的渐变手感）。
+   *   `pageTint` 是 `rgb(r, g, b)` 字符串，这里按通道算，不引入任何写死 hex。
+   */
+  private pageTintDeep(): string {
+    const m: RegExpMatchArray | null = this.pageTint.match(new RegExp('rgb\\((\\d+),\\s*(\\d+),\\s*(\\d+)\\)'));
+    if (m === null || m.length < 4) {
+      return this.pageTint;
+    }
+    const scale: number = 0.88;
+    const r: number = Math.max(0, Math.round(Number(m[1]) * scale));
+    const g: number = Math.max(0, Math.round(Number(m[2]) * scale));
+    const b: number = Math.max(0, Math.round(Number(m[3]) * scale));
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+
   private coverFadeColor(): ResourceColor {
     return this.tintReady ? this.pageTint : Color.Transparent;
   }
@@ -3290,10 +3306,17 @@ export struct NowPlayingFeedPage {
         // ── 层 1：**取色背景**（用户 ②：背景按封面动态取色）────────────────────
         // `pageTint` = 当前这一屏封面的主色经 `ColorConversion.dealColor` 压暗
         // （见 {@link extractCardColor}，与歌手页 / 专辑页 / 播放页同一套口径）；
-        // 取色完成前是 {@link FEED_BASE_NEUTRAL}（由**已有 token** 算出来的中性深色兜底）。
+        // ★ 甲方 2026-10-24：「歌手页的那个渐变就是做的非常非常好」——
+        //   这里不再铺**一整块平色**，改成照歌手页那套的**竖向渐变**：
+        //   上端 = 封面色本身，下端 = 同色压 12%（`pageTintDeep()`）⇒ 封面与页面是连续过渡。
         Column()
           .width(StyleConstants.FULL_WIDTH)
           .height(StyleConstants.FULL_HEIGHT)
+          .linearGradient({
+            direction: GradientDirection.Bottom,
+            colors: [[this.pageTint, 0], [this.pageTintDeep(), 1]]
+          })
+          .hitTestBehavior(HitTestMode.None)
           .backgroundColor(this.pageTint)
           .hitTestBehavior(HitTestMode.None)
         // ── 层 2：顶部压深（深底才有）────────────────────────────────────────
