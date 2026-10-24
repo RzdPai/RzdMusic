@@ -355,6 +355,23 @@ export struct PlaylistDetailPage {
   }
 
   /**
+   * @returns 宽屏（平板 / 阔屏 / 横屏）走「**左侧歌单卡 + 右侧列表**」。
+   *
+   * 甲方 2026-10-24：「歌单页也使用这种样式，但是因为通常封面是方形的，
+   * 就用一张**矩形卡片**上面一张方形的封面，背景是封面模糊」。
+   * 判据与歌手页同口径（宽度 ≥ 600vp = LG/XL）。
+   */
+  private isWidePlaylistLayout(): boolean {
+    const w: WidthBreakpoint = this.breakpointEnv.widthBreakpoint;
+    return w === WidthBreakpoint.WIDTH_LG || w === WidthBreakpoint.WIDTH_XL;
+  }
+
+  /** 左侧歌单卡宽度（vp）：XL 420 / LG 360（与歌手页同口径）。 */
+  private playlistCardWidthVp(): number {
+    return this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_XL ? 420 : 360;
+  }
+
+  /**
    * Whether the PC immersive bottom bar should participate in normal column flow.
    * @returns True when immersive decoration is active.
    */
@@ -700,6 +717,81 @@ export struct PlaylistDetailPage {
    * Hero 作为有界 List 的首项随歌曲滚动；页面不再包外层 Scroll。
    * 同一 pageScroller 绑定 HDS 标题效果，组头负责真实吸顶。
    */
+  /**
+   * 宽屏左侧那张歌单卡（甲方 2026-10-24 指定形态）：
+   * **矩形卡片**，背景 = **封面模糊**，上面压一张**方形封面**，下面标题 / 副标题 / 播放全部圆钮。
+   *
+   * 为什么背景不用纯色：封面通常是方的，卡片是竖的，模糊铺底能补满比例又不出戏；
+   * 两处用的是**同一个封面地址**，图片缓存只有一份。
+   */
+  @Builder
+  private PlaylistWideCard() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      if (this.heroCoverUrl().length > 0) {
+        Image(this.heroCoverUrl())
+          .width('100%')
+          .height('100%')
+          .objectFit(ImageFit.Cover)
+          .blur(48)
+          // 模糊会把边缘糊出发白的空边，放大一点点盖住
+          .scale({ x: 1.2, y: 1.2 })
+      }
+      // 压暗一层：白字压在模糊封面上才稳
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor('#66000000')
+
+      Column({ space: 14 }) {
+        Image(this.heroCoverUrl().length > 0 ? this.heroCoverUrl() : $r('app.media.ic_avatar1'))
+          .width('100%')
+          .aspectRatio(1)
+          .objectFit(ImageFit.Cover)
+          .borderRadius(18)
+          .shadow({ radius: 24, color: '#4D000000', offsetX: 0, offsetY: 8 })
+
+        Text(this.heroTitle())
+          .fontSize(24)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.heroFgPrimary())
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+
+        Text(this.heroSubtitle())
+          .fontSize($r('sys.float.Caption_L'))
+          .fontColor(this.heroFgSecondary())
+          .maxLines(1)
+          .width('100%')
+
+        Row() {
+          SymbolGlyph($r('sys.symbol.play_fill'))
+            .fontSize(26)
+            .fontWeight(FontWeight.Regular)
+            .height(26)
+            .fontColor([this.heroFgPrimary()])
+        }
+        .width(60)
+        .height(60)
+        .borderRadius(30)
+        .backgroundColor(this.heroButtonTint())
+        .backgroundBlurStyle(this.heroButtonBlur())
+        .justifyContent(FlexAlign.Center)
+        .onClick((): void => {
+          this.playAllFromHero();
+        })
+      }
+      .width('100%')
+      .padding(16)
+      .alignItems(HorizontalAlign.Start)
+    }
+    .width(this.playlistCardWidthVp())
+    .height('100%')
+    .borderRadius(24)
+    .clip(true)
+    .backgroundColor(this.backdropColor)
+  }
+
   @Builder
   private PlaylistHero() {
       PlaylistDetailHeroSection({
@@ -720,6 +812,44 @@ export struct PlaylistDetailPage {
 
   @Builder
   private PlaylistScrollContentRoot() {
+    if (this.isWidePlaylistLayout()) {
+      // ── 宽屏：左歌单卡 + 右列表（Hero 不再作为列表首项，改由左卡承担）
+      Row({ space: 24 }) {
+        this.PlaylistWideCard()
+        PlaylistDetailSongListSection({
+          // 宽屏下 Hero 已经在左卡里了 ⇒ 列表首项给空实现
+          heroBuilder: (): void => {},
+          pageScroller: this.pageScrollScroller,
+          onContentDidScroll: (): void => { this.updateImmersiveScroll(); },
+          bottomPaddingVp: this.batchBarLiftVp(),
+          revealOffsetVp: 0,
+          listVm: this.listVm,
+          playlistId: this.sectionType === 'playlist' ? this.playlistId : '',
+          searchKeyword: this.searchKeyword,
+          externalSortMode: this.externalSortMode,
+          customSortCommand: this.customSortCommand,
+          dedupeCommand: this.dedupeCommand,
+          batchExitCommand: this.batchExitCommand,
+          allowBatchDelete: this.sectionType === 'playlist' && this.playlistId.length > 0,
+          backdropColor: this.backdropColor,
+          fgColor: this.heroFgPrimary(),
+          fgSecondaryColor: this.heroFgSecondary(),
+          loading: this.listVm.loadingOnline,
+          batch: this.batchSelection,
+          onBatchModeChange: (active: boolean): void => {
+            this.batchMode = active;
+          }
+        })
+          .layoutWeight(1)
+          .height('100%')
+
+      }
+      .width(StyleConstants.FULL_WIDTH)
+      .height('100%')
+      .layoutWeight(1)
+      .alignItems(VerticalAlign.Top)
+      .padding({ left: 24, right: 24, top: this.titleTopInset(), bottom: 16 })
+    } else {
           PlaylistDetailSongListSection({
             // A direct local @Builder reference uses the child's this at the call site.
             // Keep Hero data/methods owned by PlaylistDetailPage (both layout branches).
@@ -758,6 +888,7 @@ export struct PlaylistDetailPage {
           //   （页根 `ignoreLayoutSafeArea` 带 TOP）后，HDS 标题栏落在 38..94，
           //   所以视口上边界必须落在 94，首屏才正好是"标题栏下沿"。
           .margin({ top: this.titleTopInset() })
+    }
   }
 
   /**
@@ -1355,7 +1486,7 @@ export struct PlaylistDetailPage {
         // 页面上**唯一**的照片层（Hero 不再画图，见 PlaylistDetailHeroSection）：
         // 同时也是封面飞行的落点锚点，所以要把转场 token 传下去。
         PlaylistImmersiveBackdrop({
-          photo: this.heroCover(),
+          photo: this.isWidePlaylistLayout() ? '' : this.heroCover(),
           color: this.backdropColor,
           topAvoidVp: this.windowInfo.statusBarTopVp,
           scrollVp: this.detailScrollVp,

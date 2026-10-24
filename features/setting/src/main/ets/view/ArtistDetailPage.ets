@@ -19,7 +19,7 @@ import { image } from '@kit.ImageKit';
 import { effectKit } from '@kit.ArkGraphics2D';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { guardPlayerBack } from 'musicbasic';
-import { AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, SongTitleMarquee, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
+import { AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, SongTitleMarquee, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, isWidthBreakpointLgOrXl } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType } from '@kit.UIDesignKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import {
@@ -29,6 +29,7 @@ import {
 } from 'player';
 import { FavoriteEntry } from 'musicbasic';
 import { SongMoreMenu } from 'playlist';
+import { MotionCoverLayer } from 'musicbasic';
 import { DetailImmersiveBackdrop } from './DetailImmersiveBackdrop';
 import { WindowInfo, getWindowInfoState } from 'musicbasic';
 import { ArtistDetailDataSource } from './ArtistDetailDataSource';
@@ -1060,6 +1061,22 @@ export struct ArtistDetailPage {
     })
   }
 
+  /**
+   * @returns 宽屏（平板 / 阔屏 / 横屏）走「**左侧歌手卡 + 右侧列表**」。
+   *
+   * 甲方 2026-10-24：「回响页、现在就听页…歌手页…都适配一下其它比例（平板、阔屏、横屏等）。
+   * 像歌手页左侧显示一张歌手卡片，右侧是列表」——本页就是那个**参考实现**。
+   * 判据用 `isWidthBreakpointLgOrXl`（宽度 ≥ 600vp），手机竖屏/横屏仍是单列。
+   */
+  private isWideLayout(): boolean {
+    return isWidthBreakpointLgOrXl(this.breakpointEnv.widthBreakpoint);
+  }
+
+  /** 左侧歌手卡宽度（vp）：XL 420 / LG 360。 */
+  private heroCardWidthVp(): number {
+    return this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_XL ? 420 : 360;
+  }
+
   private openAlbum(item: AlbumInfo): void {
     const param = new AlbumRouteParam();
     param.source = this.source;
@@ -1372,110 +1389,224 @@ export struct ArtistDetailPage {
     return n > 0 ? String(n) : '';
   }
 
-  build() {
-    HdsNavDestination() {
-      Stack({ alignContent: Alignment.TopStart }) {
-        DetailImmersiveBackdrop({
-          photo: this.artistPicUrlText,
-          color: this.avgColor,
-          topAvoidVp: this.windowInfo.statusBarTopVp,
-          // ★ 页内可用高度（vp）：照片层必须拿到**显式数值**才画得出来（见该组件类注释）。
-          pageHeightVp: this.pageContentHeightVp(),
-          scrollVp: this.detailScrollVp,
-          page: 'artist',
-          // 动态封面（其它设置里可关）：按歌手名去 Apple Music 解析 motion artwork
-          motionKind: 'artist',
-          motionName: this.artistNameText,
-          // 首帧一到就按它重新取色（否则屏上是 Apple 那张图、底色还是平台那张图的颜色）
-          onMotionPoster: (posterUrl: string): void => {
+  /**
+   * 列表主体（歌曲 / 专辑两套 `LazyForEach` + 上拉加载更多）。
+   *
+   * 抽成独立 `@Builder` 是为了**宽窄两套布局共用同一份列表**：
+   * 窄屏放进 `ListItemGroup`（吸顶页签），宽屏放进右侧那一列（页签在列表外）。
+   */
+  @Builder
+  private ArtistListBody() {
+    if (this.activeTab === 0 && this.loading && this.songs.length === 0) {
+      ListItem() {
+        Column() {
+          LoadingProgress()
+            .width(32)
+            .height(32)
+            .color(this.fgPrimary())
+        }
+        .width('100%')
+        .padding({ top: 60, bottom: 60 })
+        .justifyContent(FlexAlign.Center)
+      }
+    } else if (this.activeTab === 0 && this.errorMsg.length > 0 && this.songs.length === 0) {
+      ListItem() {
+        Column({ space: 8 }) {
+          Text(this.errorMsg)
+            .fontSize(13)
+            .fontColor(this.fgSecondary())
+            .textAlign(TextAlign.Center)
+            .padding({ left: 24, right: 24 })
+        }
+        .width('100%')
+        .padding({ top: 60, bottom: 60 })
+      }
+    } else {
+      if (this.activeTab === 0) {
+        LazyForEach(this.songData, (item: SongInfo, index: number) => {
+          ListItem() {
+            this.SongRowView(item, index)
+          }
+        }, (item: SongInfo) => this.source + ':' + item.id)
+        if (this.songsHasMore) {
+          ListItem() {
+            Row() {
+              Text(this.loadingMore ? '加载中…' : '上拉加载更多')
+                .fontSize(12)
+                .fontColor(this.fgSecondary())
+                .padding({ top: 12, bottom: 12 })
+                .onClick(() => {
+                  this.loadMore();
+                })
+            }
+            .width('100%')
+            .justifyContent(FlexAlign.Center)
+          }
+        }
+      } else {
+        LazyForEach(this.albumData, (item: AlbumInfo) => {
+          ListItem() {
+            this.AlbumRowView(item)
+          }
+        }, (item: AlbumInfo) => this.source + ':' + item.id + ':' + item.mid)
+        if (this.albumsHasMore) {
+          ListItem() {
+            Row() {
+              Text('上拉加载更多')
+                .fontSize(12)
+                .fontColor(this.fgSecondary())
+                .padding({ top: 12, bottom: 12 })
+                .onClick(() => {
+                  this.loadMore();
+                })
+            }
+            .width('100%')
+            .justifyContent(FlexAlign.Center)
+          }
+        }
+      }
+    }
+  }
+
+  /** 窄屏（手机竖屏/横屏）：原来的单列形态 —— 列表第一项就是歌手大图。 */
+  @Builder
+  private NarrowBody() {
+    List({ scroller: this.scroller }) {
+      ListItem() {
+        this.ArtistHero()
+      }
+      ListItemGroup({ header: this.ArtistStickyHeader() }) {
+        this.ArtistListBody()
+      }
+    }
+    .width('100%')
+    // MINI 标题栏是**浮在内容之上的窄条**（`titleMode(MINI)`）⇒ 视口要给它让位：
+    // `titleTopInset()` = 状态栏 + 56 = 94（盒子从屏幕 y=0 起排，HDS 标题栏落在 38..94）。
+    .height('calc(100% - ' + this.titleTopInset() + 'vp)')
+    .margin({ top: this.titleTopInset() })
+    .contentEndOffset(96)
+    .sticky(StickyStyle.Header)
+    .cachedCount(4)
+    .scrollBar(BarState.Off)
+    .edgeEffect(EdgeEffect.Spring)
+    .onReachEnd((): void => {
+      this.loadMore();
+    })
+    .onDidScroll((): void => {
+      this.updateImmersiveScroll();
+    })
+  }
+
+  /**
+   * 宽屏（平板 / 阔屏 / 横屏）：**左侧歌手卡 + 右侧列表**（甲方 2026-10-24 指定的参考形态）。
+   *
+   * 左卡固定宽（LG 360 / XL 420），右列吃剩下的宽度；页签从"吸顶"变成"列内固定头"，
+   * 因为宽屏下右列独立滚动，吸顶已经没有意义。
+   */
+  @Builder
+  private WideBody() {
+    Row({ space: 24 }) {
+      this.ArtistWideCard()
+
+      Column() {
+        this.ArtistStickyHeader()
+        List({ scroller: this.scroller }) {
+          this.ArtistListBody()
+        }
+        .width('100%')
+        .layoutWeight(1)
+        .contentEndOffset(96)
+        .cachedCount(6)
+        .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring)
+        .onReachEnd((): void => {
+          this.loadMore();
+        })
+        .onDidScroll((): void => {
+          this.updateImmersiveScroll();
+        })
+      }
+      .layoutWeight(1)
+      .height('100%')
+      .padding({ bottom: 16 })
+    }
+    .width('100%')
+    .height('100%')
+    .alignItems(VerticalAlign.Top)
+    .padding({ left: 24, right: 24, top: this.titleTopInset(), bottom: 16 })
+  }
+
+  /** 宽屏左侧那张歌手卡：方形封面 + 底部渐隐 + 名字/三颗圆钮（复用 `ArtistHero` 的前景层）。 */
+  @Builder
+  private ArtistWideCard() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      if (this.artistPicUrlText.length > 0 && !this.imageFailed) {
+        Image(this.artistPicUrlText)
+          .width('100%')
+          .height('100%')
+          .objectFit(ImageFit.Cover)
+      }
+      // 动态封面：与窄屏同一套（静图 → 首帧 → 视频），开关在「其它设置 → 动态封面」。
+      if (this.artistNameText.length > 0) {
+        MotionCoverLayer({
+          kind: 'artist',
+          name: this.artistNameText,
+          fallbackPoster: this.artistPicUrlText,
+          onPosterReady: (posterUrl: string): void => {
             this.motionColorApplied = true;
             void this.loadBackdropColorFrom(posterUrl);
           }
         })
-      List({ scroller: this.scroller }) {
-        ListItem() { this.ArtistHero() }
-        ListItemGroup({ header: this.ArtistStickyHeader() }) {
-            if (this.activeTab === 0 && this.loading && this.songs.length === 0) {
-              ListItem() {
-              Column() {
-                LoadingProgress()
-                  .width(32)
-                  .height(32)
-                  .color(this.fgPrimary())
-              }
-              .width('100%')
-              .padding({ top: 60, bottom: 60 })
-              .justifyContent(FlexAlign.Center)
-              }
-            } else if (this.activeTab === 0 && this.errorMsg.length > 0 && this.songs.length === 0) {
-              ListItem() {
-              Column({ space: 8 }) {
-                Text(this.errorMsg)
-                  .fontSize(13)
-                  .fontColor(this.fgSecondary())
-                  .textAlign(TextAlign.Center)
-                  .padding({ left: 24, right: 24 })
-              }
-              .width('100%')
-              .padding({ top: 60, bottom: 60 })
-              }
-            } else {
-              if (this.activeTab === 0) {
-                LazyForEach(this.songData, (item: SongInfo, index: number) => {
-                  ListItem() { this.SongRowView(item, index) }
-                }, (item: SongInfo) => this.source + ':' + item.id)
-                if (this.songsHasMore) {
-                  ListItem() {
-                  Row() {
-                    Text(this.loadingMore ? '加载中…' : '上拉加载更多')
-                      .fontSize(12)
-                      .fontColor(this.fgSecondary())
-                      .padding({ top: 12, bottom: 12 })
-                      .onClick(() => {
-                        this.loadMore();
-                      })
-                  }
-                  .width('100%')
-                  .justifyContent(FlexAlign.Center)
-                  }
-                }
-              } else {
-                LazyForEach(this.albumData, (item: AlbumInfo) => {
-                  ListItem() { this.AlbumRowView(item) }
-                }, (item: AlbumInfo) => this.source + ':' + item.id + ':' + item.mid)
-                if (this.albumsHasMore) {
-                  ListItem() {
-                  Row() {
-                    Text('上拉加载更多')
-                      .fontSize(12)
-                      .fontColor(this.fgSecondary())
-                      .padding({ top: 12, bottom: 12 })
-                      .onClick(() => {
-                        this.loadMore();
-                      })
-                  }
-                  .width('100%')
-                  .justifyContent(FlexAlign.Center)
-                  }
-                }
-              }
-            }
-        }
+          .width('100%')
+          .height('100%')
       }
-      .width('100%')
-      // MINI 标题栏是**浮在内容之上的窄条**（`titleMode(MINI)`）⇒ 视口要给它让位。
-      // ★ 2026-10-11：值从 56 改成 `titleTopInset()` = 「状态栏 + 56」= 94（盒子从屏幕 y=0 起排、
-      //   HDS 标题栏落在 38..94 之后，视口上边界必须落在 94 才等于是"标题栏下沿"）；
-      //   高度跟着减同一个量，视口底边不会因此跑出屏幕。
-      .height('calc(100% - ' + this.titleTopInset() + 'vp)')
-      .margin({ top: this.titleTopInset() })
-      .contentEndOffset(96)
-      .sticky(StickyStyle.Header)
-      .cachedCount(4)
-      .scrollBar(BarState.Off)
-      .edgeEffect(EdgeEffect.Spring)
-      .onReachEnd((): void => { this.loadMore(); })
-      .onDidScroll((): void => { this.updateImmersiveScroll(); })
+      // 底部渐隐：名字与圆钮压在图上也看得清
+      Column()
+        .width('100%')
+        .height(200)
+        .linearGradient({
+          direction: GradientDirection.Bottom,
+          colors: [[Color.Transparent, 0], ['#B3000000', 1]]
+        })
+      this.ArtistHero()
+    }
+    .width(this.heroCardWidthVp())
+    // 方形封面 + 名字/按钮那一条（`ArtistHero` 自身 320 高，底对齐）
+    .height(this.heroCardWidthVp() + 120)
+    .borderRadius(24)
+    .clip(true)
+    .backgroundColor(this.avgColor)
+  }
+
+  build() {
+    HdsNavDestination() {
+      Stack({ alignContent: Alignment.TopStart }) {
+        // 宽屏时照片不再铺满页头（左卡片自己带图），背景只留一层取色渐变，
+        // 否则「整屏一张大图 + 右侧列表」会互相打架（甲方要的是左侧一张卡）。
+        if (!this.isWideLayout()) {
+          DetailImmersiveBackdrop({
+            photo: this.artistPicUrlText,
+            color: this.avgColor,
+            topAvoidVp: this.windowInfo.statusBarTopVp,
+            // ★ 页内可用高度（vp）：照片层必须拿到**显式数值**才画得出来（见该组件类注释）。
+            pageHeightVp: this.pageContentHeightVp(),
+            scrollVp: this.detailScrollVp,
+            page: 'artist',
+            // 动态封面（其它设置里可关）：按歌手名去 Apple Music 解析 motion artwork
+            motionKind: 'artist',
+            motionName: this.artistNameText,
+            // 首帧一到就按它重新取色（否则屏上是 Apple 那张图、底色还是平台那张图的颜色）
+            onMotionPoster: (posterUrl: string): void => {
+              this.motionColorApplied = true;
+              void this.loadBackdropColorFrom(posterUrl);
+            }
+          })
+        }
+        if (this.isWideLayout()) {
+          this.WideBody()
+        } else {
+          this.NarrowBody()
+        }
       }
       .width(LayoutPolicy.matchParent)
       .height(LayoutPolicy.matchParent)

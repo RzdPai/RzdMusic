@@ -590,16 +590,26 @@ export struct OnlineSearchPage {
     this.cachedTitleBar = undefined;
   }
 
+  /** 进页时间戳（性能取证用，见 `aboutToAppear` / 内容首帧日志）。 */
+  private static enterAtMs: number = 0;
+
   aboutToAppear(): void {
+    OnlineSearchPage.enterAtMs = Date.now();
     morphLog('target aboutToAppear');
     this.onShowChange(true);
     this.refreshContentPaddingTop();
-    this.searchHistory = this.store.getSearchHistory();
-    this.restoreSearchSource();
-    // 首帧之后再碰窗口 IPC / 网络（它们压在转场首帧上就是"进页面卡一下"）。
+    // ★ 2026-10-24（甲方：「切换到搜索页会有点卡」）：
+    //   `getSearchHistory()` / `getSearchSource()` 都是 **preferences（跨进程 IPC）同步读**，
+    //   原来直接压在 `aboutToAppear` 里 = 正好卡在长镜头转场的第一帧上。
+    //   ⇒ 和历史/热搜一起，统一挪到首帧之后（setTimeout 0）。
     this.preapplyStatusBarColor();
     setTimeout((): void => {
+      this.searchHistory = this.store.getSearchHistory();
+      this.restoreSearchSource();
       void this.loadHotWords();
+      hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
+        'RzdSearchPerf deferred-init done after %{public}dms', OnlineSearchPage.enterAtMs > 0 ?
+          Date.now() - OnlineSearchPage.enterAtMs : -1);
     }, 0);
     if (this.routeParam !== '' && typeof this.routeParam === 'string' && (this.routeParam as string).length > 0) {
       this.query = this.routeParam as string;
@@ -1625,7 +1635,9 @@ export struct OnlineSearchPage {
       }
       .width(40)
       .height(40)
-      .attributeModifier(new SearchGlassModifier())
+      // ★ 2026-10-24（甲方：「返回按钮、搜索框和切换平台这三个尽量都加上沉浸光感」）：
+      //   材质档位跟着「其它设置 → 光感强度」走，与标题栏 `buildTitleMaterial` 同一张表。
+      .attributeModifier(new SearchGlassModifier(this.ambientState.level))
       .accessibilityText('返回')
       .onClick((): void => {
         this.closeSearch();
@@ -1641,7 +1653,8 @@ export struct OnlineSearchPage {
       }
       .height(40)
       .padding({ left: 12, right: 12 })
-      .attributeModifier(new SearchGlassModifier())
+      // 切换平台（音源）那颗：同款沉浸光感材质
+      .attributeModifier(new SearchGlassModifier(this.ambientState.level))
       .accessibilityText('选择搜索音源，当前' + (this.searchSource === 'all' ? '聚合' : this.selectedSourceText))
       .onClick((): void => {
         this.showSources = true;
@@ -1846,8 +1859,15 @@ export struct OnlineSearchPage {
       .id('online_search_input')
       .height(40)
       // 背景/圆角挂在 Search 自己身上（与首页那端完全同一套）——这样形变时"整个框"都在动。
-      .backgroundColor($r('sys.color.comp_background_tertiary'))
+      // ★ 2026-10-24（甲方：「那个搜索框如果不行的话，就改一下背板，现在半透明的不是很好看」）：
+      //   `Search` **吃不到** HDS 的 `systemMaterialEffect`（只挂在 HDS 组件上），通用属性
+      //   `.systemMaterial()` 又要 API 26（本机 SDK 24 没有）；而且这棵节点正是**做形变的那一个**，
+      //   在它身上挂实时模糊 = 长镜头全程重算模糊 ⇒ 正是甲方说的"切到搜索页有点卡"。
+      //   ⇒ 改用**实底卡片背板**：`card_background`（浅 #FFFFFF / 深 #1C1D1F）+ 0.5vp 描边。
+      //   ⚠️ 首页那端（`HomeSearchRow`）必须保持**同一套**背板，否则形变中途会看到颜色跳变。
+      .backgroundColor($r('app.color.card_background'))
       .borderRadius(20)
+      .border({ width: 0.5, color: $r('sys.color.comp_divider') })
       .clip(true)
       // 占位色与首页那端**同一套**：两端不同色就会在形变瞬间看到"白字突然变灰"。
       // （官方示例用 sys.color.mask_secondary；我们深色主题下它太淡、看着像"文字消失"，
@@ -2409,6 +2429,14 @@ export struct OnlineSearchPage {
             }
             return { offsetRemain: offset };
           })
+          // 性能取证：进页 → 内容首帧 的耗时（无设备时的唯一判据，见 `aboutToAppear`）。
+          .onAppear((): void => {
+            const enterAt: number = OnlineSearchPage.enterAtMs;
+            hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
+              'RzdSearchPerf content-onAppear after %{public}dms',
+              enterAt > 0 ? Date.now() - enterAt : -1);
+            appendPlayLog(`[RzdSearchPerf] content-onAppear ${enterAt > 0 ? Date.now() - enterAt : -1}ms`);
+          })
 
           if (this.searching) {
             Column({ space: 8 }) {
@@ -2576,6 +2604,18 @@ export struct OnlineSearchPage {
         // 浮层自己让状态栏：搜索行仍是 56 高（玻璃胶囊 40），位置就是状态栏正下方。
         .padding({ top: WindowUtil.getInstance().resolveStatusBarTopVp() })
         .backgroundColor(Color.Transparent)
+        // ★★★ 2026-10-24（甲方：「搜索页的联想那个框会被上面那行（综合、歌单、歌曲、歌手、专辑）挡住」）：
+        //   联想面板的 `top` 取的是 `contentPaddingTop = max(searchRowBottom, typeBarBottom) - boxTop`，
+        //   而 `typeBarBottomVp` **从来没有被写过**（恒 0）⇒ inset 只等于搜索行底边（94vp），
+        //   面板顶部那 44vp（类型栏高度）正好压在胶囊行下面 ⇒ 看起来"被挡住"。
+        //   ⇒ 在**整个浮层**（搜索行 + 类型栏）上量一次底边，写回 `typeBarBottomVp`。
+        .onAreaChange((_old: Area, area: Area): void => {
+          const bottom: number = Number(area.globalPosition.y) + Number(area.height);
+          if (Math.abs(bottom - this.typeBarBottomVp) > 0.5) {
+            this.typeBarBottomVp = bottom;
+            this.refreshContentPaddingTop();
+          }
+        })
       }
       .width('100%')
       .height('100%')

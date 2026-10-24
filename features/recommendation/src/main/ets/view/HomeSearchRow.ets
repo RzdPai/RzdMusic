@@ -28,8 +28,12 @@ export struct HomeSearchRow {
         //   背景/圆角/高度全部落在 `Search` 自己身上，两端同一套。
         Search({ placeholder: '艺人、歌曲或专辑' })
           .height(SEARCH_FIELD_H)
-          .backgroundColor($r('sys.color.comp_background_tertiary'))
+          // ★ 2026-10-24（甲方：「搜索框现在半透明的不是很好看」）：改**实底卡片背板**，
+          //   与搜索页那端（`OnlineSearchPage.SearchInputBar`）**逐字同一套**：
+          //   `card_background` + 0.5vp 描边。两端不同色会在长镜头中途看出颜色跳变。
+          .backgroundColor($r('app.color.card_background'))
           .borderRadius(SEARCH_FIELD_H / 2)
+          .border({ width: 0.5, color: $r('sys.color.comp_divider') })
           .clip(true)
           // 两端占位色必须同一个 token：不同色时形变中途会看到"白字突然变灰"。
           .placeholderColor($r('sys.color.font_secondary'))
