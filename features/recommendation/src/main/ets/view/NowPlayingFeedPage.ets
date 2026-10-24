@@ -632,16 +632,27 @@ function feedTintLuminanceOf(r: number, g: number, b: number): number {
  * @returns {@link FeedTintResult}（底色字符串 + 感知亮度）。
  */
 function feedTintResultOf(red: number, green: number, blue: number): FeedTintResult {
-  const tuned: number[] = ColorConversion.dealColor(red, green, blue);
-  const r: number = Math.max(0, Math.min(255, tuned[0]));
-  const g: number = Math.max(0, Math.min(255, tuned[1]));
-  const b: number = Math.max(0, Math.min(255, tuned[2]));
+  // ★ 2026-10-24（甲方：「手机上先改改取色，不要压暗了，取到啥色就是啥色」）：
+  //   这里**不再过** `ColorConversion.dealColor` —— 那一步会把高饱和色的 HSB 亮度锁到 ≤0.3
+  //   （= 把封面原本的颜色压暗），甲方要的是"取到什么就是什么"。
+  //   ⚠️ 亮度判据仍然用**同一份**原始 RGB 算（`pageTintIsLight` 与底色同源那条不变），
+  //      所以取到浅色封面时会自动切成深色墨，字不会看不见。
+  const r: number = Math.max(0, Math.min(255, Math.round(red)));
+  const g: number = Math.max(0, Math.min(255, Math.round(green)));
+  const b: number = Math.max(0, Math.min(255, Math.round(blue)));
   return new FeedTintResult(`rgb(${r}, ${g}, ${b})`, feedTintLuminanceOf(r, g, b));
 }
 
 /**
  * 数据来源（决定卡片脚注写什么、以及"没有通道"时空态说什么）。
  */
+/** 「现在就听」的一个推荐模式（左上角菜单的一项）。 */
+class FeedModeOption {
+  /** 0 = 常规 / 1 = 熟悉 / 2 = 探索。 */
+  value: number = 0;
+  label: string = '';
+}
+
 enum FeedOrigin {
   /** 还没加载 / 正在加载。 */
   NONE = 0,
@@ -756,6 +767,10 @@ export struct NowPlayingFeedPage {
   @Local homeSourceState: HomeSourceState =
     AppStorageV2.connect(HomeSourceState, AppStorageKeys.HOME_SOURCE_STATE, () => new HomeSourceState())!;
   /** 全局播控唯一真源：点歌只写它（经 `OnlinePlayUtil.playList`）。 */
+  /** 推荐模式：0 = 常规 / 1 = 熟悉 / 2 = 探索（落库见 `MusicStoreService.getFeedMode`）。 */
+  @Local feedMode: number = 0;
+  /** 左上角模式菜单是否展开（菜单绑在 `FeedModeMenuAnchor()` 上）。 */
+  @Local showFeedModeMenu: boolean = false;
   @Local appState: MusicAppState =
     AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
   /**
@@ -991,6 +1006,8 @@ export struct NowPlayingFeedPage {
     //   ⇒ 每帧 2~3 次 JSON 解析，白白卡滑动。
     this.favoriteTotal = this.store.getFavorites().length;
     this.feedAlive = true;
+    // 推荐模式：上次选的（常规 / 熟悉 / 探索），左上角菜单改它
+    this.feedMode = this.store.getFeedMode();
     // 背景取色的兜底：进页面先按**当前这一屏**的封面取一次色
     // （`applyRows` 之后下标归 0，那次也会触发；这里覆盖"页面被复用、下标没变"的情况）。
     this.refreshCardColor();
@@ -1531,27 +1548,77 @@ export struct NowPlayingFeedPage {
     return rows;
   }
 
+  private onFeedMenu(): void {
+    // ★ 2026-10-24（甲方：「现在就听左上角那个菜单，不要站位了，做成选择模式」）：
+    //   以前这里只打日志 + toast 占位。现在打开「常规 / 熟悉 / 探索」选择菜单，
+    //   菜单绑在 `FeedModeMenuAnchor()` 这个 1×1 锚点上（HDS 顶栏图标槽位不能挂 bindMenu）。
+    Logger.info(RZD_TAG, `feed mode menu open current=${this.feedMode}`);
+    this.showFeedModeMenu = !this.showFeedModeMenu;
+  }
+
+  /** 切换推荐模式：落库 + 提示（推荐器会按新模式取数）。 */
+  private applyFeedMode(mode: number): void {
+    this.showFeedModeMenu = false;
+    if (this.feedMode === mode) {
+      return;
+    }
+    this.feedMode = mode;
+    this.store.setFeedMode(mode);
+    Logger.info(RZD_TAG, `feed mode changed -> ${mode}`);
+    const label: string = mode === 1 ? '熟悉模式' : (mode === 2 ? '探索模式' : '常规模式');
+    this.toast(label);
+  }
+
+  /** 左上角模式菜单的内容（当前模式打勾）。 */
+  @Builder
+  private FeedModeMenu() {
+    Menu() {
+      ForEach(this.feedModeOptions(), (opt: FeedModeOption) => {
+        MenuItem({ content: opt.label, labelInfo: this.feedMode === opt.value ? '✓' : '' })
+          .onClick((): void => {
+            this.applyFeedMode(opt.value);
+          })
+      }, (opt: FeedModeOption) => 'feed_mode_' + opt.value)
+    }
+  }
+
+  /** 三个模式（顺序固定：常规 / 熟悉 / 探索）。 */
+  private feedModeOptions(): FeedModeOption[] {
+    const list: FeedModeOption[] = [];
+    const regular = new FeedModeOption();
+    regular.value = 0;
+    regular.label = '常规模式';
+    list.push(regular);
+    const familiar = new FeedModeOption();
+    familiar.value = 1;
+    familiar.label = '熟悉模式';
+    list.push(familiar);
+    const explore = new FeedModeOption();
+    explore.value = 2;
+    explore.label = '探索模式';
+    list.push(explore);
+    return list;
+  }
+
   /**
-   * ★★ 把"这一轮真正插进 feed 的新行"**追加到现有播放队列尾部**（队列与 feed 同步变长）。
-   *
-   * ## 为什么非做不可
-   *   `MediaService.playNext()` 里读的是**实时** `getQueueLength()`
-   *   （`MediaService.ets:1988`：「Loads the next queue index in linear order (**wraps to 0 at end**)」）。
-   *   队列不跟着变长的话：feed 刷新了、屏幕上多出新歌了，但**播完最后一首仍然绕回第 0 首**
-   *   —— 用户听到的还是旧的那一批（这正是用户报的"还是那一个列表循环"的另一半）。
-   *   追加之后，`playNext()` 的下一个下标自然落在新拉进来的那几首上。
-   *
-   * ## 两条不变量
-   *   ① **只在"全局队列 == 屏幕上这一份 feed"时才追加**：判据 `queueWasFeed` 必须在
-   *      {@link appendRows} **之前**取（append 之后队列长度就与 feed 对不上了，
-   *      {@link queueMatchesFeed} 会永远返回 false）；
-   *   ② **只追加本轮新增的行**：直接吃 `appendRows()` 的返回值
-   *      （`filterFresh` 已经把这些行从"已见过的"里筛掉了 —— 见 {@link loadMore}）。
-   *
-   * ⚠️ 队列没匹配上（用户在别处换过队列，例如从歌单/搜索结果起播）⇒ **一律不动队列**，
-   *   只让 feed 变长：滑到新歌时 {@link playAt} 自己会重建队列（那是它第三条分支）。
-   * @param fresh 本轮真正插进 feed 的新行。
+   * 模式菜单的**锚点**：1×1 透明节点，压在页面左上角（顶栏图标下方）。
+   * HDS 顶栏图标槽位只能给 `action`，不能挂 `bindMenu`，所以菜单绑在这里。
    */
+  @Builder
+  private FeedModeMenuAnchor() {
+    Stack()
+      .width(1)
+      .height(1)
+      .backgroundColor(Color.Transparent)
+      // 签名是 `bindMenu(isShow, content, options?)`：content 直接给 builder（不是 `{builder}`），
+      // isShow 用 `!!`（V2 两向绑定，见全局记忆里 `$$` vs `!!` 那条）。
+      .bindMenu(!!this.showFeedModeMenu, this.FeedModeMenu(), {
+        placement: Placement.BottomLeft,
+        onDisappear: (): void => {
+          this.showFeedModeMenu = false;
+        }
+      })
+  }
   private syncQueueWithNewRows(fresh: RecommendPrivateSongUi[]): void {
     if (!this.queueWasFeed) {
       Logger.info(RZD_TAG, `refetch queue untouched (queue != feed) new=${fresh.length}`);
@@ -2126,20 +2193,6 @@ export struct NowPlayingFeedPage {
     this.playAt(this.currentIndex);
   }
 
-  /**
-   * 顶栏左侧「三条横线」：**不打开播放页**（用户 2026-10-15 明确「这个页面是不会打开播放器的」）。
-   *
-   * ⚠️ 这里**故意没有可执行的菜单**：本页能做的事（收藏 / 不感兴趣 / 更多 / 播放暂停）都已经
-   *   画在卡片自己的动作行上，再抄一份菜单就是"同一件事两个入口"；而"打开完整播放器"这条路
-   *   **被用户明确否掉**了（上一版那颗汉堡就是它，本轮整体移除）。
-   *   所以保留成"点一下给一句提示"：**不静默、也不跳转**。
-   *   真要给它加行为，正确做法是在这里 `bindMenu`（HDS 顶栏的图标槽位不吃自定义菜单）——
-   *   见任务报告里的"未完成/存疑"。
-   */
-  private onFeedMenu(): void {
-    Logger.info(RZD_TAG, `menu tapped index=${this.currentIndex} (no menu: page never opens the player)`);
-    this.toast('本页的操作都在卡片上：收藏 / 不感兴趣 / 更多');
-  }
 
   /**
    * 顶栏右侧「分享」：接的正是工程**现成**的那一条分享链路。
@@ -2985,6 +3038,13 @@ export struct NowPlayingFeedPage {
     // ignoreLayoutSafeArea(TOP, BOTTOM)（页盒从 y=0 起排 ⇒ 背景层可以一直铺到状态栏后面）。
     HdsNavDestination() {
       Stack({ alignContent: Alignment.TopStart }) {
+        // 左上角「常规 / 熟悉 / 探索」菜单的锚点（1×1 透明，压在页面左上角；见 `FeedModeMenuAnchor`）
+        Column() {
+          this.FeedModeMenuAnchor()
+        }
+        .width(1)
+        .height(1)
+        .position({ x: 0, y: 0 })
         // ── 层 1：**取色背景**（用户 ②：背景按封面动态取色）────────────────────
         // `pageTint` = 当前这一屏封面的主色经 `ColorConversion.dealColor` 压暗
         // （见 {@link extractCardColor}，与歌手页 / 专辑页 / 播放页同一套口径）；

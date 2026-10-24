@@ -45,6 +45,17 @@ const KEY_BLUETOOTH_LYRIC: string = 'bluetooth_lyric';
  * 消费方：`MotionCoverLayer`（`common/musicbasic/view`）+ `MotionCoverState`（共享状态）。
  */
 const KEY_MOTION_COVER: string = 'motion_cover_enabled';
+
+/**
+ * 「现在就听」的模式：0 = 常规 / 1 = 熟悉 / 2 = 探索。
+ *
+ * ★ 2026-10-24（甲方：「现在就听左上角那个菜单，不要站位了，做成选择模式（常规模式、熟悉模式、探索模式）」）：
+ *   模式决定自建推荐算法里「已听过的歌 / 新歌」的取用比例（见 `features/recommendation` 的推荐器）：
+ *   - 常规：分类随机（现状）；
+ *   - 熟悉：偏向用户**听过/收藏过**的歌所在分类；
+ *   - 探索：偏向**没出现过**的分类，减少重复。
+ */
+const KEY_FEED_MODE: string = 'feed_mode';
 /** 华为账号登录资料（JSON，形状由 features/player 的 HuaweiAccountService 定义，这里只当字符串存）。 */
 const KEY_HUAWEI_ACCOUNT: string = 'huawei_account';
 /** 华为云盘访问令牌（JSON：accessToken / refreshToken / expiresAt）。 */
@@ -1765,6 +1776,26 @@ export class MusicStoreService {
    * 语义：开关只管"要不要去解析并播放 Apple Music 的 motion artwork"。
    * 关掉后三页立刻退回静图，`MotionCoverLayer` 连请求都不发（见那里的 `reload()`）。
    */
+  /**
+   * @returns 「现在就听」的选择模式：0 = 常规 / 1 = 熟悉 / 2 = 探索（默认常规）。
+   */
+  public getFeedMode(): number {
+    const store = this.getStore();
+    if (store === undefined) {
+      return 0;
+    }
+    return store.getSync(KEY_FEED_MODE, 0) as number;
+  }
+
+  /** Persists the 「现在就听」 mode. */
+  public setFeedMode(mode: number): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_FEED_MODE, mode);
+  }
+
   public getMotionCoverEnabled(): boolean {
     const store = this.getStore();
     if (store === undefined) {
