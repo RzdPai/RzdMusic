@@ -1595,7 +1595,7 @@ export struct MinePage {
             // 下方：设置 + 帮助和反馈 —— **一张卡、两行、通栏单列**
             // （甲方 2026-10-24：「现在下面两个还是单列，但是两个元素分开了」⇒ 合成一张卡）
             ListItem() {
-              this.LinksCard()
+              this.LinksRowCard()
             }
           } else {
             ListItem() {
@@ -1608,7 +1608,7 @@ export struct MinePage {
               this.PlaylistCard()
             }
             ListItem() {
-              this.LinksRowCard()
+              this.LinksCard()
             }
           }
 
