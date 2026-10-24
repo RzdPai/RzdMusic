@@ -494,7 +494,7 @@ const FEED_BASE_NEUTRAL: string = ((): string => {
   // ★ 2026-10-24（甲方：「那个过渡还是发黑」）：兜底色不再用 `dealColor(1C1C1E)`
   //   （那是被压暗过的深灰，浅色封面上看着就是一条发黑的底）。改成中性中灰：
   //   不管下一张封面是深是浅，都不会突兀地压暗。
-  return 'rgb(96, 96, 102)';
+  return 'rgb(242, 242, 244)';
 })();
 
 /**
@@ -896,7 +896,9 @@ export struct NowPlayingFeedPage {
    * ★ 初始值 `false`（深色档）与兜底底色 {@link FEED_BASE_NEUTRAL} **一致**：
    *   兜底底是 `FEED_DARK_SURFACE_ARGB` 的 RGB `1C1C1E`，感知亮度 ≈ 28 < 140 ⇒ 就是深底。
    */
-  @Local pageTintIsLight: boolean = false;
+  @Local pageTintIsLight: boolean = true;
+  /** 是否已拿到真实取色（没拿到时封面不做任何压暗）。 */
+  @Local tintReady: boolean = false;
   /** 已经取过色的封面地址（去重：同一张封面不要反复下载+解码）。 */
   private lastTintUrl: string = '';
   /** 取色代次：快速滑动 + 异步解码，靠它把过期的那一次结果丢掉（与播放页 `imageColorJobSeq` 同款）。 */
@@ -2670,7 +2672,7 @@ export struct NowPlayingFeedPage {
         .height(this.coverHeightVp() * FEED_COVER_TOP_FADE)
         .linearGradient({
           direction: GradientDirection.Bottom,
-          colors: [[this.pageTint, 0], [Color.Transparent, 1]]
+          colors: [[this.coverFadeColor(), 0], [Color.Transparent, 1]]
         })
         .hitTestBehavior(HitTestMode.None)
       // 下渐变：从封面下沿往上 FEED_COVER_BOTTOM_FADE 开始化开，下沿那一行 = 页底色
@@ -2679,7 +2681,7 @@ export struct NowPlayingFeedPage {
         .height(this.coverHeightVp() * FEED_COVER_BOTTOM_FADE)
         .linearGradient({
           direction: GradientDirection.Bottom,
-          colors: [[Color.Transparent, 0], [this.pageTint, 1]]
+          colors: [[Color.Transparent, 0], [this.coverFadeColor(), 1]]
         })
         .position({ x: 0, y: this.coverHeightVp() * (1 - FEED_COVER_BOTTOM_FADE) })
         .hitTestBehavior(HitTestMode.None)
@@ -3158,6 +3160,17 @@ export struct NowPlayingFeedPage {
   }
 
   /** @returns 宽屏（平板 / 阔屏 / 手机横屏）→ 左封面 + 右歌词的双栏版式。 */
+  /**
+   * 封面上下渐变要"化进页底色"的那个颜色。
+   *
+   * ★ 2026-10-24（甲方截图："现在还是暗"）：取色没回来前 `pageTint` 是兜底色，
+   *   拿它去压封面边缘会把整张图糊成一层灰。⇒ 只有真实取色到位（`tintReady`）才用 `pageTint`，
+   *   否则两端透明，让封面保持原样；颜色回来时是**即时切换**，不会有过渡抖动。
+   */
+  private coverFadeColor(): ResourceColor {
+    return this.tintReady ? this.pageTint : Color.Transparent;
+  }
+
   private isWideFeedLayout(): boolean {
     return shouldUseSplitDetailLayout(this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint);
   }
@@ -3353,6 +3366,7 @@ export struct NowPlayingFeedPage {
                       //   中间那 400ms 正是上一首的深色 → 这一首的浅色，白歌看着像"先黑一下"。
                       //   ⇒ 改为**即时切换**（不插值）：颜色一到就是它。
                       this.pageTint = result.tint;
+                      this.tintReady = true;
                       this.pageTintIsLight = light;
                       // 日志必须在 animateTo 之外（与上面同一条纪律）
                       Logger.info(RZD_TAG,
