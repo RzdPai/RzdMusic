@@ -201,6 +201,7 @@ import {
   SongItem,
   StyleConstants,
   TabSwitchState,
+  shouldUseSplitDetailLayout,
   WindowInfo,
   getWindowInfoState
 } from 'musicbasic';
@@ -3060,51 +3061,106 @@ export struct NowPlayingFeedPage {
    */
   @Builder
   private FeedCard(row: RecommendPrivateSongUi, index: number) {
+    if (this.isWideFeedLayout()) {
+      // ── 宽屏（平板 / 阔屏 / 手机横屏）：**左封面 + 右信息/歌词**（把播放页的双栏版式搬过来）。
+      // 甲方 2026-10-24：「横屏适配直接把播放器改改搬过来就行了，右侧也是歌词」。
+      Row({ space: 24 }) {
+        Column() {
+          this.FeedCoverCard(row, index)
+        }
+        .layoutWeight(1)
+        .justifyContent(FlexAlign.Center)
+
+        Column({ space: 14 }) {
+          this.FeedLyric(row)
+          this.FeedInfoColumn(row, index)
+          this.FeedProgress(row)
+        }
+        .layoutWeight(1)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Start)
+      }
+      .width(StyleConstants.FULL_WIDTH)
+      .height(StyleConstants.FULL_HEIGHT)
+      .padding({
+        left: FEED_SIDE_PADDING_VP * 2,
+        right: FEED_SIDE_PADDING_VP * 2,
+        top: this.topStackOffsetVp(),
+        bottom: this.cardChromeBottomVp()
+      })
+      .alignItems(VerticalAlign.Center)
+    } else {
+
     Column({ space: 0 }) {
       Column({ space: 14 }) {
-        // ② 封面区（满屏贴边、不圆角、上下都化进页底色）
+        // ① 封面区（满屏贴边、不圆角、上下都化进页底色）
         this.FeedCover(row, index)
-        // ③ 小歌词（当前行 + 下一行，在**歌名上方**，与歌名同一左内边距）
-        this.FeedLyric(row)
-        // ④ 歌名（左对齐、粗体）+ 歌手 / 平台胶囊
-        Column({ space: 6 }) {
-          Text(row.title)
-            .fontSize(24)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(this.inkPrimary())
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width(StyleConstants.FULL_WIDTH)
-            .textAlign(TextAlign.Start)
-          this.FeedArtist(row)
-        }
-        .width(StyleConstants.FULL_WIDTH)
-        .alignItems(HorizontalAlign.Start)
-        // 左右边距挂在这一块上（歌名 + 歌手行都在里面），封面不受影响
-        .padding({ left: FEED_SIDE_PADDING_VP, right: FEED_SIDE_PADDING_VP })
-        // ⑤ 音质标签行
-        this.FeedQualityRow(row)
-        // ⑥ 动作行（最右是播放页同款的主播放/暂停键）
-        this.FeedActions(row, index)
+        // ② 小歌词 + ③ 歌名/歌手 + ④ 音质 + ⑤ 动作
+        this.FeedInfoColumn(row, index)
       }
       .width(StyleConstants.FULL_WIDTH)
       .layoutWeight(1)
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
 
-      // ⑦ 细进度条 + 两端时间 —— 它下面那一档就是 `cardChromeBottomVp()`（底栏 + 间距），
-      //    所以进度条**整体明显在底栏之上**（用户 ① 的要求）。
+      // ⑥ 细进度条 + 两端时间
       this.FeedProgress(row)
     }
     .width(StyleConstants.FULL_WIDTH)
     .height(StyleConstants.FULL_HEIGHT)
-    // ★ 顶部让位（沉浸页：页盒从 y=0 起排，让位在卡片自己身上做）
-    // ★ 底部给壳层浮动底栏让位 + 留出可见间距（见文件头与常量注释）
-    // ⚠️ 左右**没有** padding（封面要满屏贴边）；`bottomReserveVp` 的语义不变 —— 只给壳层那条
-    //    胶囊底栏让位，**不要**再往里加"迷你播放条"的量（那半条归壳层）。
     .padding({ top: this.topStackOffsetVp(), bottom: this.cardChromeBottomVp() })
+    }
   }
 
+  /** 一屏的信息块（歌词 + 歌名/歌手 + 音质 + 动作）：宽窄两套版式共用。 */
+  @Builder
+  private FeedInfoColumn(row: RecommendPrivateSongUi, index: number) {
+    Column({ space: 14 }) {
+      this.FeedLyric(row)
+      Column({ space: 6 }) {
+        Text(row.title)
+          .fontSize(24)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.inkPrimary())
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width(StyleConstants.FULL_WIDTH)
+          .textAlign(TextAlign.Start)
+        this.FeedArtist(row)
+      }
+      .width(StyleConstants.FULL_WIDTH)
+      .alignItems(HorizontalAlign.Start)
+      .padding({ left: FEED_SIDE_PADDING_VP, right: FEED_SIDE_PADDING_VP })
+      this.FeedQualityRow(row)
+      this.FeedActions(row, index)
+    }
+    .width(StyleConstants.FULL_WIDTH)
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  /**
+   * 宽屏左侧那张**方卡封面**（不是满屏贴边那张）：圆角 + 投影 + 点击播这一首。
+   * 满屏版（`FeedCover`）在左栏里会溢出，所以宽屏单独一份。
+   */
+  @Builder
+  private FeedCoverCard(row: RecommendPrivateSongUi, index: number) {
+    Image(row.coverUrl.length > 0 ? row.coverUrl : $r('app.media.ic_avatar1'))
+      .width('100%')
+      .aspectRatio(1)
+      .objectFit(ImageFit.Cover)
+      .alt($r('app.media.ic_avatar1'))
+      .draggable(false)
+      .borderRadius(24)
+      .shadow({ radius: 32, color: '#4D000000', offsetX: 0, offsetY: 12 })
+      .onClick((): void => {
+        this.playAt(index);
+      })
+  }
+
+  /** @returns 宽屏（平板 / 阔屏 / 手机横屏）→ 左封面 + 右歌词的双栏版式。 */
+  private isWideFeedLayout(): boolean {
+    return shouldUseSplitDetailLayout(this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint);
+  }
   build() {
     // 页根与 `RecommendPage` / `EchoReviewPage` 同款：HdsNavDestination + MINI 标题栏 +
     // ignoreLayoutSafeArea(TOP, BOTTOM)（页盒从 y=0 起排 ⇒ 背景层可以一直铺到状态栏后面）。
