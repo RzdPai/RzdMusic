@@ -1814,8 +1814,20 @@ export class PlayerExpandState {
    * 鈿狅笍 `x` 浠嶇劧鏄?姘村钩灞呬腑"锛堟棤鐣?`floatingCover` 鏄?`Column(center)`锛夆噿 鏈敼琛屼负銆?
    */
   public playerCoverGeomRect(): LyricMorphRect {
-    const w: number = this.windowWidthVp;
-    const h: number = this.windowHeightVp;
+    return this.coverGeomFor(this.windowWidthVp, this.windowHeightVp);
+  }
+
+  /**
+   * 同一套 `fitPlayerOverlay` 纯几何，但窗口尺寸**由调用方给**。
+   *
+   * 为什么要拆出来：转屏那一下有两个 `onAreaChange`（壳层的 `reportWindow` 与本页根节点），
+   * 它们的先后顺序不保证。若重算几何时只能读 `windowWidthVp/HeightVp`，
+   * 就可能用**旧朝向**的窗口算出"新端点"，等于没修。
+   * ⇒ 提供"显式窗口尺寸"这一入口，调用方用它手上已经变了的那一份（`windowInfo.windowSize`）。
+   * @param w 窗口宽（vp）
+   * @param h 窗口高（vp）
+   */
+  private coverGeomFor(w: number, h: number): LyricMorphRect {
     if (w <= 0 || h <= 0) {
       return { x: 0, y: 0, size: 0, height: 0, radius: 0 };
     }
@@ -1870,6 +1882,85 @@ export class PlayerExpandState {
    */
   private fallbackBigRect(): LyricMorphRect {
     return this.playerCoverGeomRect();
+  }
+
+  /**
+   * 换窗口/换布局后，按**新窗口的纯几何**重建「播放页封面端点」——上游 `PlayerPage.refitOverlay()`
+   * （`wujie126.pa:210208-210360`）在本仓的等价物。
+   *
+   * ## 为什么必须是"纯几何重算"，而不是"再量一次节点"（这是 2026-10-23 那几轮没修好的根因）
+   *
+   * 竖屏那一支（`PlaybackPage` 的 Swiper + `LyricFloatLayer`）里，屏上那张封面**本身就是端点画出来的**：
+   * `.width(lyricMorph(t).size)` / `.position(lyricMorph(t).x…)`。它又带 `onAreaChange` 往
+   * `reportBig()` 上报 ⇒ "端点 → 位置 → 上报 → 端点"是个**闭环**：只要端点还带着转屏前的横屏数值，
+   * 画出来的矩形也是那个旧数值，再量一次量到的当然还是它 ⇒ 永远不收敛。
+   * 真机日志就是这个形状（`RzdCoverRect`/`RzdProbe`）：
+   * ```
+   *   coverReport pos=-88.4 bigX=141.4 win=823x363     （横屏）
+   *   coverReport pos=141.5 bigX=-88.4 win=363x823     （转竖屏后，两份数正好互换）
+   * ```
+   *
+   * ## 另一条必须在源码里记住的事实
+   * `endCover*` 只在 `morphInitParams()`（形变**起手**那一刻）冻结一次，转屏**不会**重跑它；
+   * 而 `lyricMorph()` 走的是 `bigEndpointRect()` → `endCoverSize > 0 && snapStartW > 0` 时
+   * **优先用 `endCover*`**。⇒ 只更新 `big*`/`bigNode*` 的写法对"屏上那张封面"完全无效
+   * （那正是上一轮 `measureEndAnchor()` 打满日志却依旧错位的原因）。
+   *
+   * ## 为什么这不会改坏"正常竖屏打开"的样子
+   * 正常路径里，端点的**首次填值**本来就来自同一套纯几何
+   * （`prepareMorphEntry` 先 `invalidateEndAnchor()` + `bigSize = 0` ⇒ `bigEndpointRect()` 落到
+   *  `fallbackBigRect()` = `playerCoverGeomRect()`），之后再被实测逐步确认。
+   * 所以这里只是把"同一套纯几何"用新窗口再算一遍，与正常路径同源、逐值同理。
+   *
+   * ⚠️ 横屏/平板那一支**不要**用它：那里的封面是 `flatPane` / `MusicPlayInfoBlock` 的**流式布局**，
+   *    端点必须来自实测（`measureEndAnchor()`）。见 `PlaybackPage.refreshBgMeshOnResize()` 的两支分流。
+   *
+   * 排查关键字：`RzdRotate cover-reseat`（`cover=(x,y,edge)` 与 `win=` 一起打）。
+   *
+   * @param widthVp 新窗口宽（vp）
+   * @param heightVp 新窗口高（vp）
+   * @returns 新的封面矩形；`size <= 0` = 窗口尺寸不可用（什么都没写）
+   */
+  public reseatBigEndpointForWindow(widthVp: number, heightVp: number): LyricMorphRect {
+    const empty: LyricMorphRect = { x: 0, y: 0, size: 0, height: 0, radius: 0 };
+    if (widthVp <= 0 || heightVp <= 0) {
+      return empty;
+    }
+    // 几何基准 = 调用方手上的新窗口（与 `reportWindow()` 写的是同一组值，只是不依赖回调先后）。
+    if (Math.abs(this.windowWidthVp - widthVp) > 0.5) {
+      this.windowWidthVp = widthVp;
+    }
+    if (Math.abs(this.windowHeightVp - heightVp) > 0.5) {
+      this.windowHeightVp = heightVp;
+    }
+    const g: LyricMorphRect = this.playerCoverGeomRect();
+    if (g.size <= 0) {
+      return empty;
+    }
+    // ① 上报口径（`reportBig` 那一套）：`lyricGeometryReady()` / `lyricCoverSizeOf()` 用它。
+    this.bigX = g.x;
+    this.bigY = g.y;
+    this.bigSize = g.size;
+    this.bigRadius = g.radius;
+    this.bigCoverRadius = g.radius;
+    // ② 实测口径（`measureEndAnchor` 那一套）：布局矩形 + 视觉缩放分开存。
+    //    这里不去动 `bigNodeScaleX/Y`（那是"封面上的播放弹跳缩放"，与窗口无关）。
+    this.bigNodeX = g.x;
+    this.bigNodeY = g.y;
+    this.bigNodeW = g.size;
+    this.bigNodeH = g.height;
+    this.bigNodeKnown = true;
+    // ③ **真正决定屏上那张封面位置/尺寸的**两项（见上面第二段）。
+    this.endCoverX = g.x;
+    this.endCoverY = g.y;
+    this.endCoverSize = g.size;
+    this.endCoverH = g.height;
+    Logger.info(PlayerExpandState.logTag,
+      `RzdRotate cover-reseat win=${widthVp.toFixed(0)}x${heightVp.toFixed(0)} ` +
+        `cover=(${g.x.toFixed(1)},${g.y.toFixed(1)},${g.size.toFixed(1)}) ` +
+        `padTop=${this.topInsetVp().toFixed(1)} s=${this.bigNodeScaleX.toFixed(3)} ` +
+        `lyric=${this.lyricCoverSizeOf().toFixed(1)}`);
+    return g;
   }
 
   // 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ 浜屄疯ˉ锛圓2锛夛細姝岃瘝椤甸《閮ㄧ殑銆屽皝闈?+ 姝屽悕銆嶆诞灞?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
@@ -2920,11 +3011,15 @@ export class PlayerExpandState {
   @Trace public asideWinW: number = 0;
   @Trace public asideWinH: number = 0;
   /** 缁灏侀潰鐨?*缁堢偣**锛坴p锛屽涓诲潗鏍囷級锛氭挱鏀鹃〉灏侀潰鑺傜偣閲忓埌鐨勭煩褰紝閲忎笉鍒板氨閫€鍥?`big*`銆?*/
-  private endCoverX: number = 0;
-  private endCoverY: number = 0;
-  private endCoverSize: number = 0;
+  // ★ 2026-10-24：这四个端点字段改成 `@Trace`。
+  //   原因：转屏后**纯几何重建端点**（`reseatBigEndpointForWindow`）时，读它们的只有
+  //   `lyricMorph()` / `metaTopGeomY()` 这条**纯函数链**，链上不再有任何 `@Trace` 属性 ⇒
+  //   不标 `@Trace` 的话写进去也不会触发重绘（封面停在旧矩形上，看起来就像"没生效"）。
+  @Trace private endCoverX: number = 0;
+  @Trace private endCoverY: number = 0;
+  @Trace private endCoverSize: number = 0;
   /** 缁灏侀潰缁堢偣鐨?*楂樺害**锛坴p锛夛細涓?`endCoverSize` 涓€璧锋瀯鎴愯惤鐐圭煩褰紝闈炴鏂瑰舰鏃朵笉鑳藉啀褰撴柟鐨勩€?*/
-  private endCoverH: number = 0;
+  @Trace private endCoverH: number = 0;
 
   /**
    * 鈽呪槄鈽?2026-10-16 鏂板锛氱粰**鐜板満鑷瘉寰芥爣**锛坄PlaybackPage.DiagBadge()`锛夌敤鐨勫彧璇昏鏁般€?

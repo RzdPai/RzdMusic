@@ -407,10 +407,11 @@ export struct PlaybackPage {
     // 2026-10-23（真机实证的**自锁闭环**）：封面位置由 bigX 算，而它又把自己的位置写回 bigX。
     //   转屏后它带着横屏的旧位置画一次（pos=141.5 / bigX=-88.4 互踢），一旦画稳就不再触发
     //   onAreaChange ⇒ bigX 永远停在 141.5，我算好的居中值 95.3 被覆盖后再也回不来。
-    //   ⇒ 换窗口后的冷静期内**拒收**这个上报，并用冷静期结束前反复重设居中锚点。
-    if (Date.now() < this.anchorFixUntil) {
-      return;
-    }
+    //   ⇒ 修法落在**源头**：换窗口时由 `refreshBgMeshOnResize()` 调
+    //      `PlayerExpandState.reseatBigEndpointForWindow()`（用新窗口重算纯几何端点）。
+    //      原来那套"冷静期拒收上报 + 80/240/480ms 反复重设 bigX + 32ms 重挂浮层"已删除：
+    //      它改的是 `bigX`，而屏上那张封面读的是 `endCover*`（`lyricMorph(0)` 优先走它）
+    //      ⇒ 逻辑上不可能生效，只会让首次正常上报也迟到。
     if (this.lyricMorphT > 0.001) {
       return;
     }
@@ -1356,10 +1357,6 @@ export struct PlaybackPage {
   private closePath: string = 'live';
   /** 本次关闭是哪个入口触发的（	opbar = 顶栏收起按钮，systemBack = 系统返回/下拉）。只给日志用。 */
   private closeEntrySource: string = 'systemBack';
-  /** 换窗口后的"锚点冷静期"截止时间：期间忽略封面自己上报的旧位置（见 reportPlayerCoverFromOverlay）。 */
-  private anchorFixUntil: number = 0;
-  /** 转屏后重挂绝对定位封面层（打断 bigX 自锁闭环，见 refreshBgMeshOnResize）。 */
-  @Local coverLayerMounted: boolean = true;
 
   public static cancelPendingCloseForOpen(): void {
     const cancel: (() => void) | undefined = PlaybackPage.cancelCloseOwner;
@@ -6574,6 +6571,57 @@ export struct PlaybackPage {
     appendPlayLog(`[RzdBgPhase] big-size-resync ${reason} big=${size.toFixed(1)}`);
   }
 
+  /**
+   * @returns 当前这一屏是不是「Swiper + `LyricFloatLayer` 浮层封面」那一支。
+   *
+   * 判据**必须**与渲染那处逐字一致（`buildControlStack()` 里
+   * `if (this.usesPhoneSwiperLayout() && !this.usePanelLayout()) { this.LyricFloatLayer() }`）：
+   * 这一支决定了"屏上那张封面是谁画的"，也就决定了换窗口时端点该用**纯几何**还是**实测**。
+   * 口径一旦分叉，就会拿错分支去修，越修越偏（上一轮）。
+   */
+  private usesFloatingCoverLayout(): boolean {
+    return this.usesPhoneSwiperLayout() && !this.usePanelLayout();
+  }
+
+  /**
+   * 竖屏浮层那一支的封面端点 = **新窗口的纯几何**（详见 `PlayerExpandState.reseatBigEndpointForWindow`）。
+   *
+   * ① 为什么不能用"再量一次节点"：那一支里封面位置/尺寸就是端点算出来的，量节点 = 量自己 ⇒ 自锁；
+   * ② 为什么延迟还要再算一次：`topInsetVp()` 的输入是**让位量测**（`statusBarTopVp` / `pageBoxTopVp`），
+   *    由壳层与路由壳的 `onAreaChange` 后到一步；纯函数重算是幂等的，晚算一次只会更准。
+   * @param reason 日志用（`rotate` / `rotate+200`）
+   */
+  private reseatFloatingCover(reason: string): void {
+    if (!this.isAlive || this.isClosing) {
+      return;
+    }
+    const size = this.windowInfo.windowSize;
+    if (size.width <= 0 || size.height <= 0) {
+      return;
+    }
+    const ui = this.getUIContext();
+    const vpW: number = ui.px2vp(size.width);
+    const vpH: number = ui.px2vp(size.height);
+    const rect: LyricMorphRect = this.expandState.reseatBigEndpointForWindow(vpW, vpH);
+    appendPlayLog(`RzdRotate cover-reseat ${reason} ok=${rect.size > 0 ? 1 : 0} ` +
+      `cover=(${rect.x.toFixed(1)},${rect.y.toFixed(1)},${rect.size.toFixed(1)}) ` +
+      `win=${vpW.toFixed(0)}x${vpH.toFixed(0)}`);
+  }
+
+  /**
+   * 窗口尺寸真的变了（转屏 / 折叠展开 / 分屏 / PC 窗口拖拽）⇒ 走与"根节点尺寸变了"同一条刷新链。
+   *
+   * ⚠️ 为什么光靠根节点的 `onAreaChange` 不够（这正是"横屏打开→切竖屏错位"修不动的一半原因）：
+   *   两个回调**没有先后保证** —— 根节点那一拍可能早于 `windowInfo.windowSize` 更新，
+   *   那时 `refreshBgMeshOnResize()` 读到的还是旧 px ⇒ 判定"窗口没变"直接早退；
+   *   等 `windowInfo` 更新完，根节点矩形已经不变了 ⇒ `onAreaChange` **不再触发** ⇒ 一次都不修。
+   * ⇒ 直接用窗口尺寸本身当触发源（它本来也是 `refreshBgMeshOnResize()` 判"真转屏"的判据）。
+   */
+  @Monitor('windowInfo.windowSize')
+  private onWindowSizeChanged(): void {
+    this.refreshBgMeshOnResize();
+  }
+
   private refreshBgMeshOnResize(): void {
     if (this.isClosing) {
       return;
@@ -6590,6 +6638,14 @@ export struct PlaybackPage {
       this.lastMeshWindowPxH = h;
       return;
     }
+    if (w === this.lastMeshWindowPxW && h === this.lastMeshWindowPxH) {
+      return;
+    }
+    this.lastMeshWindowPxW = w;
+    this.lastMeshWindowPxH = h;
+    // ① 封面端点按新窗口重建 —— **必须先做、且不能被下面的背景分支提前 return 掉**
+    //   （背景有没有缓存与"封面在哪儿"是两件不相干的事）。
+    this.refitCoverOnWindowChange(w, h);
     // ★★★ 2026-10-22（甲方：「播放器内横竖切换，有可能会背景消失」）：
     //   无界 `refreshBgCache()`（`wujie.pa:210498-210542`）在窗口变化时做的是
     //   **`bgCache.clear()` + 对 `pgPrev/pgCur/pgNext` 三页逐个重新出图**，
@@ -6599,11 +6655,6 @@ export struct PlaybackPage {
     //   ⇒ 照无界：缓存没了就**重跑一遍取图取色**；缓存还在才只 bump 令牌。
     //   排查关键字：`refresh-on-resize rebuild`（重建）/ `refresh-on-resize ver=`（只 bump）。
     if (this.meshSrc === undefined) {
-      if (w === this.lastMeshWindowPxW && h === this.lastMeshWindowPxH) {
-        return;
-      }
-      this.lastMeshWindowPxW = w;
-      this.lastMeshWindowPxH = h;
       // ① 先吃静态缓存（＝无界 `svc.bgCache`，转屏后同一首一定有）；② 没有才重跑取图取色。
       if (this.adoptSharedMesh()) {
         appendPlayLog(`[RzdBgPhase] refresh-on-resize shared-cache win=${w}x${h}`);
@@ -6614,130 +6665,67 @@ export struct PlaybackPage {
       this.getImageColor();
       return;
     }
-    if (w === this.lastMeshWindowPxW && h === this.lastMeshWindowPxH) {
-      return;
-    }
-    this.lastMeshWindowPxW = w;
-    this.lastMeshWindowPxH = h;
-    // ★★★ 2026-10-22（甲方：「横屏打开→切竖屏封面错位」「横屏展开时是大背景，结束突然变小」）：
-    //   照无界 `refitOverlay()`（`:210208-210360`）的做法——**换了窗口就把封面的端点作废、下次重新量**，
-    //   但**不动相位/进度**（上一轮我把 `morphReset()` 放这里，把打开动画一起清了，别再犯）。
-    //   作废 `bigSize` ⇒ 下一次 `prepareMorphEntry()` 必须重新从节点 onAreaChange 拿封面矩形，
-    //   克隆封面与页面那张才不会各用一个尺寸。
-    //   排查关键字：`window-anchor-invalidate`。
-    if (this.expandState.bigSize > 0) {
-      this.expandState.bigSize = 0;
-      appendPlayLog(`[RzdBgPhase] window-anchor-invalidate bigSize=0 win=${w}x${h}`);
-    }
-    // ★★★ 2026-10-22（甲方：「竖屏打开有背景 → 切横屏没背景」「横屏切竖屏还是错位」）：
-    //   两个毛病同一个机制：**窗口一变，封面端点在窗口坐标里就全部作废了**，而本仓
-    //   只做了"作废"（上面那句），没做上游 `refitOverlay()`（`:210208-210360`）的**重量**。
-    //   作废后：① `morphGeomReadyNow()` 变假 ⇒ 背景透明度那条链判"不可画" ⇒ 背景没了；
-    //          ② `bigNodeX/Y`（窗口坐标）还是旧朝向的值 ⇒ 任何用到端点/克隆封面的地方**错位**。
-    //   ⇒ 这里补两件事（只在真转屏这一支、且**不碰动效相位**的前提下）：
-    //     · 会话已经落位（没有手指、没有形变在跑）⇒ `morphReset()` 清掉上一轮的会话残留
-    //       （它同时把 `pullMode` 归假 ⇒ 背景走 `contentOpacity`，静止态恒为 1）；
-    //     · 立刻按新窗口重量一次封面端点（= refitOverlay 的等价物）。
-    //   ⚠️ 形变进行中**不许**清（上一轮放在这里的 `morphReset()` 把打开动画一起清了，别再犯）。
+    this.meshSrcVersion = this.meshSrcVersion + 1;
+    appendPlayLog(`[RzdBgPhase] refresh-on-resize ver=${this.meshSrcVersion} win=${w}x${h}`);
+  }
+
+  /**
+   * 换窗口后重建「播放页封面端点」——**两支口径必须分开**（上一轮就是在一条链上打补丁，越修越偏）。
+   *
+   * ① 竖屏那一支（`usesPhoneSwiperLayout() && !usePanelLayout()`，见 `buildControlStack()`）：
+   *    屏上那张封面/歌名**本身就是端点画出来的**（`.width/.position(lyricMorph(0))`），
+   *    它又 `onAreaChange → reportBig` 把位置上报回去 ⇒ "端点→位置→上报→端点"闭环。
+   *    ⇒ 换窗口时**只能重算纯几何**（`fitPlayerOverlay` 那套 = `playerCoverGeomRect()`）：
+   *      去"量节点"量到的永远是它上一帧自己画出来的旧矩形，于是永远停在横屏值。
+   *    上游同构物：`PlayerPage.refitOverlay()`（`:210208-210360`）换窗口只重算 edge/metaY，不回读节点。
+   * ② 横屏左栏 / 平板分栏那一支（`flatPane` / `MusicPlayInfoBlock` 的封面是**流式布局**）：
+   *    端点的权威来源就是实测 ⇒ 重新量（这一支原来是对的，逻辑不动）。
+   *
+   * 排查关键字：`RzdRotate cover-reseat`（纯几何结果）、`RzdBgPhase window-anchor-remeasure`（实测）。
+   * @param w 新窗口宽（px）
+   * @param h 新窗口高（px）
+   */
+  private refitCoverOnWindowChange(w: number, h: number): void {
     const atRest: boolean = !this.expandState.pullDragging && !this.expandIntroRunning &&
       !this.expandState.morphSessionDriving() && this.expandState.morphStage !== MorphStage.ENTERING &&
       this.expandState.morphStage !== MorphStage.LANDING && this.expandState.morphStage !== MorphStage.LEAVING;
     if (atRest) {
       this.expandState.morphReset();
-      // 2026-10-23（甲方：整块"封面+歌名+歌手"一起偏，顶栏/进度条不偏）：
-      //   顶栏/进度条是**流式布局**，不受 transform 影响；封面/歌名/歌手是**窗口坐标绝对定位**
-      //   （`coverLocalRect()` 用 morphScale/morphTx/morphTy 反解、`LyricFloatLayer` 同一套）。
-      //   ⇒ 转屏后把这套变换连同锚点全部清零（`morphReset()` 已做大部分，这里再显式兜一次），
-      //     并把当时的数值打出来，下一次日志即可确认是谁残留。
+      // 顶栏/进度条是**流式布局**（不受 transform 影响），封面/歌名/歌手是**窗口坐标绝对定位**
+      // ⇒ 静止态换窗口先把这套变换清零（`morphReset()` 已做大部分，这里显式兜一次）。
       this.expandState.morphScale = 1;
       this.expandState.morphTx = 0;
       this.expandState.morphTy = 0;
-      // 2026-10-23（最后一条：横屏开→切竖屏错位）：
-      //   日志实证：转屏后 `endAnchor node=172.3x172.3` **不再更新**（竖屏封面没重新上报），
-      //   而封面是**窗口坐标绝对定位**（`.position({x: coverLocalRect().x})`，s=1/tx=0 时
-      //   局部坐标 == 窗口坐标 == bigX），所以 bigX/bigY 一旦停留在横屏值，整块就横移。
-      //   ⇒ 换窗口时按新窗口**把锚点重新算成"水平居中"**（封面在当前布局里就是居中的），
-      //     并把结果打出来；下一次 onAreaChange 一上报就会覆盖它。
-      const winW: number = this.expandState.windowWidthVp;
-      // 冷静期 + 反复重设：封面会把旧位置写回 bigX（自锁闭环），所以要多钉几次。
-      this.anchorFixUntil = Date.now() + 900;
-      // 2026-10-23: 强制重挂那一层绝对定位封面（if 由假变真 = 节点重建），
-      //   让它按**新布局**重新上报一次位置/尺寸，彻底打断 bigX 自锁闭环。
-      this.coverLayerMounted = false;
-      setTimeout((): void => {
-        if (!this.isAlive || this.isClosing) {
-          return;
-        }
-        this.coverLayerMounted = true;
-      }, 32);
-      const winH: number = this.expandState.windowHeightVp;
-      const coverW: number = this.expandState.bigSize > 0 ? this.expandState.bigSize : 172;
-      if (winW > 0 && winH > 0) {
-        this.expandState.bigX = Math.round((winW - coverW) / 2 * 10) / 10;
-        const centeredX: number = this.expandState.bigX;
-        for (const delayMs of [80, 240, 480]) {
-          setTimeout((): void => {
-            if (!this.isAlive || this.isClosing) {
-              return;
-            }
-            this.expandState.bigX = centeredX;
-          }, delayMs);
-        }
-      }
-      appendPlayLog(`[RzdBgPhase] window-rest-session-reset win=${w}x${h}`);
-    }
-    try {
-      const ok: boolean = this.expandState.measureEndAnchor(this.getUIContext());
-      // 2026-10-23（抄无界 `refitOverlay` :210208-210360）：换窗口时**整份几何重量**，
-      //   不只是封面端点。本仓原来只调 `measureEndAnchor()`，盒子/内容盒仍可能是旧朝向的值，
-      //   于是按这些量反解出来的窗口坐标整体偏掉。
-      this.expandState.measureGeometry(this.getUIContext(), true);
-      // 2026-10-23（方案A + 延迟重量）：转屏那一拍量到的还是**旧布局**，所以量完等于没量。
-      //   ① 把横屏期算出来的量先归零（新布局会重算它们）；
-      //   ② 等新布局落定（+150ms）再整份重量一次。
-      this.flatCoverBoxWVp = 0;
-      this.flatCoverBoxHVp = 0;
+      // 横屏左栏的"封面面/控制面"换面状态按新布局归位；`flatCoverBox*` **不**再清零
+      // （清零会让横屏首帧退回"按窗口推算"的兜底尺寸，是上一轮"先一个大封面再缩回来"的成因之一）。
       this.flatT = 0;
       this.flatCtlSwapped = false;
       this.flatSwapping = false;
       this.collapseProgress = 0;
-      setTimeout((): void => {
-        if (!this.isAlive || this.isClosing) {
-          return;
-        }
-        this.expandState.measureEndAnchor(this.getUIContext());
-        this.expandState.measureGeometry(this.getUIContext(), true);
-      }, 150);
+      appendPlayLog(`[RzdBgPhase] window-rest-session-reset win=${w}x${h}`);
+    }
+    if (this.usesFloatingCoverLayout()) {
+      // ① 纯几何重建端点。等让位量测（`statusBarTopVp` / `pageBoxTopVp`）落定后再算一次 ——
+      //    纯函数重算是幂等的，晚算只会更准（不会像"再量节点"那样把旧矩形钉死）。
+      if (atRest) {
+        this.reseatFloatingCover('rotate');
+        setTimeout((): void => {
+          this.reseatFloatingCover('rotate+200');
+        }, 200);
+      }
+      return;
+    }
+    // ② 流式布局那一支：端点靠实测。
+    try {
+      const ok: boolean = this.expandState.measureEndAnchor(this.getUIContext());
+      // 换窗口时**整份几何重量**（盒子/内容盒也可能是旧朝向的值）。
+      this.expandState.measureGeometry(this.getUIContext(), true);
+      this.syncBigSizeFromNode('resize');
       appendPlayLog(`[RzdBgPhase] window-anchor-remeasure ok=${ok ? 1 : 0} win=${w}x${h} ` +
         `big=${this.expandState.bigSize.toFixed(1)}`);
-      // ★★★ 2026-10-23（甲方：「横屏打开播放器，切到竖屏会错位」；竖屏开再转就没事）：
-      //   日志坐实了这条链断在哪：
-      //   `window-anchor-remeasure ok=1 win=1224x2776 big=0.0`
-      //   ⇒ `measureEndAnchor()` 只写 `bigNodeW/Known`，**不写 `bigSize`**；
-      //     而 `bigSize` 的唯一来源是封面的 `onAreaChange`（转屏后不一定再触发）。
-      //   `bigSize = 0` 时凡是读它算尺寸的地方（克隆封面、歌词页浮层、形变终点兜底）
-      //   都退回"整栏/整窗"那一档 ⇒ 观感就是"错位"。
-      //   ⇒ 量到就同步写回（与 `PlayerExpandState` 里 resync 那条同一口径），
-      //     并**再延迟补量一次**：转屏那一拍量到的可能还是旧布局。
-      this.syncBigSizeFromNode('resize');
-      setTimeout((): void => {
-        if (!this.isAlive || this.isClosing) {
-          return;
-        }
-        try {
-          if (this.expandState.measureEndAnchor(this.getUIContext())) {
-            this.syncBigSizeFromNode('resize+48');
-          }
-        } catch (error) {
-          appendPlayLog(`[RzdBgPhase] window-anchor-remeasure-deferred failed error=${error}`);
-        }
-      }, 48);
     } catch (error) {
       appendPlayLog(`[RzdBgPhase] window-anchor-remeasure failed error=${error}`);
     }
-      // 2026-10-23: 转屏一次性探针（甲方一次测试就能定位"横屏打开→切竖屏错位"）。
-    this.meshSrcVersion = this.meshSrcVersion + 1;
-    appendPlayLog(`[RzdBgPhase] refresh-on-resize ver=${this.meshSrcVersion} win=${w}x${h}`);
   }
 
   /**
@@ -8406,10 +8394,11 @@ export struct PlaybackPage {
           //   ⇒ 浮层只跑在"不是 panel"的那一档（= 无界 `playerPane` 独占的情况）。
           //   排查关键字：`usesPhoneSwiperLayout` + `usePanelLayout` 的 `[RzdBranch]` 日志。
           if (this.usesPhoneSwiperLayout() && !this.usePanelLayout()) {
-            // 2026-10-23: 这一层同样按窗口坐标绝对定位（歌名/歌手/小封面），转屏后跟着重挂一次。
-            if (this.coverLayerMounted) {
-              this.LyricFloatLayer()
-            }
+            // 这一层按**窗口坐标绝对定位**（封面/歌名/歌手/小歌词）⇒ 转屏时必须按新窗口重建端点，
+            // 见 `refreshBgMeshOnResize()` → `reseatFloatingCover()`。
+            // （原来这里还套了一层 `coverLayerMounted` 的"重挂"，已删除：节点重建带不来正确坐标，
+            //   端点是 `endCover*`、只能靠纯几何重算。）
+            this.LyricFloatLayer()
           }
         }
         .width(StyleConstants.FULL_WIDTH)
@@ -8858,9 +8847,9 @@ export struct PlaybackPage {
       // 闂?闂佺粯绮嶅妯猴耿椤忓牊鍋傜憸搴ㄥ箚婢跺备鍋撻悷鏉挎灕缂?*闁诲繐绻愰幖顐︻敋?婵炶揪绲界粔鍫曟偪?闂侀潻绠戝Λ婊堬綖濡や胶鈻旈柍褜鍓欓銉р偓锝庝簻缁插潡鏌?`lyricFloatRect()`闂? `lyricMorph(t)`闂?*闂?
       //   婵炴垶鎸哥粔鎾疮閳ь剙鈽?`scale`闂侀潧妫斿鎺旂箔婢舵劕绀冪€广儱鎳庨～?`translate`闂侀潧妫旂换鏉?= 0`闂佹寧绋戦悧鍡涙儍濠靛顥堥柕蹇嬪€戦埀顒€顦靛Λ鍐ㄢ枎閹伴潧澹橀梺鎸庣☉椤︽澘顪?`lyricMorph(0)`
       //   闁诲繐绻楁ご绋课?`playerCoverGeomRect()` 闂備緡鍙忕徊鑲╃博鐎涙顩?*闂佸搫鍟版慨鐑藉疾椤愶附鍎嶉柛鏇ㄥ幘閺嗩剛鈧鍠栫换鎺斿垝閵娾晛鍑?* 闂?闂佽В鍋撻柟瀛樺笧缁夋挳鏌ｉ姀锝勫惈闁伙綀顕ч锝堢疀鎼达綆浼囧┑鐐叉閳ь剙纾弳鐗堟叏濠靛洨婀介柍?
-    // 2026-10-23: remount this absolutely-positioned cover after a rotation to break the
-    // bigX -> .position -> onAreaChange -> bigX feedback loop (see refreshBgMeshOnResize).
-    if (this.coverLayerMounted) {
+    // 2026-10-24: 这一层是**窗口坐标绝对定位**（`.position/.width` 都取 `lyricMorph(t)`），
+    //   转屏后由 `refreshBgMeshOnResize()` → `reseatFloatingCover()` 按新窗口重算端点（纯几何）。
+    //   不要再套"重挂节点刷一次 onAreaChange"那一手：端点没变时它只会把旧矩形再报一遍。
       Column() {
         Image(this.currentCoverSource())
           // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-16闂佹寧绋戦悧蹇涘极閵堝绠ｇ€瑰嫭澹嗛弳浼存偣鐎ｎ亜鏆旈柍?*閻熸粍濯介褏鑺遍幎鑺ュ亗鐟滃酣骞嗘径鎰Е?*闂? 婵烇絽娴傞崰鏇犳偖闁秴绾ч柍銉ョ－閺夎姤绻涢弶鎴劀缂佽鲸宀搁弫?
@@ -8909,7 +8898,6 @@ export struct PlaybackPage {
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
       .hitTestBehavior(HitTestMode.None)
-    }
 
         // 闂佸疇妫勯幊澶娢?2026-10-15闂佹寧绋戦悧蹇涘矗鎼淬劌绠规い鎺嶇劍閿熴儵鏌ｉ敐鍛効缂佽鲸宀搁弫?*婵炴垶鎸撮崑鎾翠繆椤栵絼娴锋い?*闂佹寧绋戞總鏃傜箔婢舵劕绀冪€广儱妫欑瑧闁诲繒鍋涢幊宥夋嚈閹寸姷鍗氶柡宥冨妼缁楁捇鏌?
         //   闁诲簼绲婚～澶愭偉?`PlayerPage闁诲海鎳撻張顒勫汲椤ゆ杯闁诲氦顫夊銊┾€?md` 闁?.1 `floatingMeta` + 闁?.2 `metaRow`闂?
