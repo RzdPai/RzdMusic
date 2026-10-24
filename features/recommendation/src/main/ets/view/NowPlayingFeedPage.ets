@@ -2269,8 +2269,17 @@ export struct NowPlayingFeedPage {
     if (cur !== undefined) {
       const index: number = this.feedIndexOf(cur.source, cur.songId);
       if (index >= 0) {
-        // 在播的就是本页的歌 ⇒ **绝不起播**（从别的页签切回来、歌没变不重播）
-        Logger.info(RZD_TAG, `activate skip (already playing this feed) index=${index}`);
+        // ★ 2026-10-24（甲方：「在正常播放器播了一首歌，再切到现在就听，始终是那首歌」）：
+        //   原来只要"正在播的那首恰好在 feed 里"就直接早退 ⇒ 用户在**别的页面**起的播，
+        //   本页永远不接管、一直是那一首。判据必须再加一条：**队列得是本页自己的栈**。
+        if (this.feedPlayback.active && this.feedPlayback.index === index) {
+          Logger.info(RZD_TAG, `activate skip (feed owns this queue) index=${index}`);
+          return;
+        }
+        // 队列不是本页的（或下标对不上）⇒ 本页**接管**，并停在正在听的那一首上
+        Logger.info(RZD_TAG, `activate take over index=${index} from other queue`);
+        this.currentIndex = index;
+        this.playAt(index);
         return;
       }
     }
