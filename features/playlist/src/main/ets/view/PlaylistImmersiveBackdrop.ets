@@ -42,6 +42,13 @@ export struct PlaylistImmersiveBackdrop {
    * 图一换成 Apple 的首帧就必须重算，否则会出现"图是绿的、底色是棕的"）。
    */
   @Event onMotionPoster: (posterUrl: string) => void = (posterUrl: string): void => {};
+  /**
+   * 是否由本层承担「封面飞行」的**落点锚点**（`PLAYLIST_HERO_COVER_ID`）。
+   *
+   * 宽屏（左卡 + 右列表）时落点在**左卡里那张方形封面**上（见 `PlaylistWideCard`），
+   * 本层不是落点 ⇒ 传 false，避免同一个 id 出现两次（`getFrameNodeById` 只认第一个）。
+   */
+  @Param exposeAnchor: boolean = true;
   @Local failed: boolean = false;
   @Local transitionState: PlaylistTransitionState = getPlaylistTransitionState();
 
@@ -101,7 +108,8 @@ export struct PlaylistImmersiveBackdrop {
         .width('100%')
         .height(this.frameHeightVp())
         .opacity(this.coveredByTransition() ? 0 : 1)
-        .id(PLAYLIST_HERO_COVER_ID)
+        // 宽屏时本层不是落点（落点在左卡的方形封面上）⇒ 换一个静默 id，别抢同一个 id
+        .id(this.exposeAnchor ? PLAYLIST_HERO_COVER_ID : 'rzd_playlist_backdrop_silent')
         .onAreaChange((_old: Area, area: Area): void => {
           hilog.info(0, 'RzdPlaylistImmersive',
             'backdrop anchor top=%{public}s height=%{public}s scrollVp=%{public}f',

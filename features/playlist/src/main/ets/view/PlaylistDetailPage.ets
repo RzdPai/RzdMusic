@@ -17,7 +17,7 @@ import { AppStorageV2, ComponentContent, LengthMetrics, uiObserver } from '@kit.
 import { BusinessError } from '@kit.BasicServicesKit';
 import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
-import { guardPlayerBack, shouldUseSplitDetailLayout, splitDetailCardWidthVp } from 'musicbasic';
+import { guardPlayerBack, PLAYLIST_HERO_COVER_ID, shouldUseSplitDetailLayout, splitDetailCardWidthVp } from 'musicbasic';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { http } from '@kit.NetworkKit';
 import { image } from '@kit.ImageKit';
@@ -370,6 +370,11 @@ export struct PlaylistDetailPage {
     const available: number = this.getUIContext().px2vp(this.windowInfo.windowSize.height) -
       this.titleTopInset() - 32;
     return splitDetailCardWidthVp(this.breakpointEnv.widthBreakpoint, available);
+  }
+
+  /** @returns 右侧列表列数：XL 3 列，其余分栏情形 2 列（与歌手页同口径）。 */
+  private widePlaylistLanes(): number {
+    return this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_XL ? 3 : 2;
   }
 
   /**
@@ -744,12 +749,28 @@ export struct PlaylistDetailPage {
         .backgroundColor('#66000000')
 
       Column({ space: 14 }) {
-        Image(this.heroCoverUrl().length > 0 ? this.heroCoverUrl() : $r('app.media.ic_avatar1'))
-          .width('100%')
-          .aspectRatio(1)
-          .objectFit(ImageFit.Cover)
-          .borderRadius(18)
-          .shadow({ radius: 24, color: '#4D000000', offsetX: 0, offsetY: 8 })
+        // ★ 2026-10-24（甲方：「打开歌单页那个封面飞入，动画是不是得改一下」）：
+        //   宽屏落点从"整屏照片层"搬到**这张方形封面**上 ⇒ 这里挂锚点 id 并在这里起飞行，
+        //   飞行终点/返回起点都与左卡里这张方图完全重合（不再飞到页顶那条渐变上）。
+        Stack({ alignContent: Alignment.TopStart }) {
+          Image(this.heroCoverUrl().length > 0 ? this.heroCoverUrl() : $r('app.media.ic_avatar1'))
+            .width('100%')
+            .height('100%')
+            .objectFit(ImageFit.Cover)
+        }
+        .width('100%')
+        .aspectRatio(1)
+        .borderRadius(18)
+        .clip(true)
+        .shadow({ radius: 24, color: '#4D000000', offsetX: 0, offsetY: 8 })
+        .id(PLAYLIST_HERO_COVER_ID)
+        .onAreaChange((_old: Area, area: Area): void => {
+          hilog.info(PLAYLIST_LOG_DOMAIN, PLAYLIST_LOG_TAG,
+            'wide card anchor top=%{public}s h=%{public}s',
+            String(area.globalPosition.y), String(area.height));
+          // 落点可量测后再起飞行（未 claim / 封面不匹配时方法内部直接返回）
+          this.transitionState.start(this.getUIContext(), this.heroCoverUrl(), this.transitionToken);
+        })
 
         Text(this.heroTitle())
           .fontSize(24)
@@ -820,6 +841,8 @@ export struct PlaylistDetailPage {
         PlaylistDetailSongListSection({
           // 宽屏下 Hero 已经在左卡里了 ⇒ 列表首项给空实现
           heroBuilder: (): void => {},
+          // 右侧多列（手机横屏/平板 2 列，XL 3 列）
+          lanesCount: this.widePlaylistLanes(),
           pageScroller: this.pageScrollScroller,
           onContentDidScroll: (): void => { this.updateImmersiveScroll(); },
           bottomPaddingVp: this.batchBarLiftVp(),
@@ -1492,6 +1515,8 @@ export struct PlaylistDetailPage {
           topAvoidVp: this.windowInfo.statusBarTopVp,
           scrollVp: this.detailScrollVp,
           transitionToken: this.transitionToken,
+          // 宽屏下落点在左卡里那张方形封面（见 `PlaylistWideCard`），本层不抢锚点 id
+          exposeAnchor: !this.isWidePlaylistLayout(),
           // 动态封面（其它设置里可关）：按歌单名去 Apple Music 解析 motion artwork
           motionName: this.motionQueryName(),
           // 首帧一到就按它重新取色（否则屏上是 Apple 那张图、底色还是平台那张图的颜色）

@@ -1520,6 +1520,8 @@ export struct ArtistDetailPage {
         }
         .width('100%')
         .layoutWeight(1)
+        // 宽屏两/三列（手机横屏 2 列；XL 3 列）——与左侧竖卡配合，右侧不再"一页一条"
+        .lanes(this.wideListLanes(), 16)
         .contentEndOffset(96)
         .cachedCount(6)
         .scrollBar(BarState.Off)
@@ -1676,6 +1678,17 @@ export struct ArtistDetailPage {
     .borderRadius(24)
     .clip(true)
     .backgroundColor(this.avgColor)
+  }
+
+  /**
+   * @returns 宽屏右侧列表的**列数**（甲方 2026-10-24：「歌单页歌手页右侧不应该改多列吗
+   * （至少我在手机上横屏看还是一页，但是感觉这个情况下两列合理一些）」）。
+   *
+   * 手机横屏（MD 宽 + SM 高）与 LG 都是 **2 列**，XL 才给 3 列 —— 行高 72vp、内容很短，
+   * 两列在 780vp 宽下每列仍有 ~370vp，读起来不挤。
+   */
+  private wideListLanes(): number {
+    return this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_XL ? 3 : 2;
   }
 
   build() {

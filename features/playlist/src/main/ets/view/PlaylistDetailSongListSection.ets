@@ -117,6 +117,15 @@ export struct PlaylistDetailSongListSection {
   @Param revealOffsetVp: number = 0;
   /** Report the already-bound List scroll; never bind the page Scroller to a second container. */
   @Event onContentDidScroll: () => void = (): void => {};
+  /**
+   * 列表**列数**（1 = 单列，`>=2` = 多列 lanes）。
+   *
+   * 甲方 2026-10-24：「歌单页歌手页右侧不应该改多列吗（至少我在手机上横屏看还是一页，
+   * 但是感觉这个情况下两列合理一些）」⇒ 宽屏（左卡版式）时由宿主传 2/3。
+   * ⚠️ 多列时**不再用** `ListItemGroup`（吸顶多列没有意义，且 group 在 lanes 下的行为不确定），
+   *    播放全部行改成普通 ListItem。
+   */
+  @Param lanesCount: number = 1;
   @BuilderParam heroBuilder: () => void = this.EmptyHero;
   private displayDataSource: PlaylistSongUiDataSource = new PlaylistSongUiDataSource([]);
   private dataGeneration: number = 0;
@@ -657,115 +666,151 @@ export struct PlaylistDetailSongListSection {
     .backgroundColor(this.backdropColor)
   }
 
-  build() {
-    List({ scroller: this.pageScroller }) {
+  /**
+   * 歌曲区（加载态 / 空态 / 自定义排序 Repeat / 普通 LazyForEach / 底部留白）——
+   * **宽窄两支共用**：窄屏放进 `ListItemGroup`（吸顶播放全部行），宽屏放进普通 List（多列 lanes）。
+   */
+  @Builder
+  private SongCells() {
+    if (this.loading) {
       ListItem() {
-        this.heroBuilder()
+      Column({ space: 12 }) {
+        LoadingProgress()
+          .width(28)
+          .height(28)
+          .color($r('app.color.primary40'))
+        Text('正在加载歌曲…')
+          .fontSize($r('sys.float.Body_S'))
+          .fontColor(this.surfaceInkSecondary())
       }
-      ListItemGroup({ header: this.StickyPlayAllHeader() }) {
-      // 加载态排在最前面：在线榜单/歌单的歌曲是异步拉的，之前这里直接把空态画出来，
-      // 结果是「先闪一下居中的占位图标，再突然整列出现」。现在先给骨架 + 转圈，
-      // 数据到了再换成真正的列表，视觉上不会跳。
-      if (this.loading) {
-        ListItem() {
-        Column({ space: 12 }) {
-          LoadingProgress()
-            .width(28)
-            .height(28)
-            .color($r('app.color.primary40'))
-          Text('正在加载歌曲…')
-            .fontSize($r('sys.float.Body_S'))
-            .fontColor(this.surfaceInkSecondary())
-        }
-        .width(StyleConstants.FULL_WIDTH)
-        .padding({ top: 48, bottom: 48 })
-        .justifyContent(FlexAlign.Center)
-        }
+      .width(StyleConstants.FULL_WIDTH)
+      .padding({ top: 48, bottom: 48 })
+      .justifyContent(FlexAlign.Center)
+      }
 
-        // 骨架行：只画几条占位，让「马上要出现一列歌」这件事有预期
-        ForEach(SKELETON_ROW_KEYS, (key: string) => {
-          ListItem() {
-          Row({ space: 12 }) {
-            Column()
-              .width(44)
-              .height(44)
-              .borderRadius(8)
-              .backgroundColor($r('sys.color.background_tertiary'))
-            Column({ space: 8 }) {
-              Column()
-                .width('62%')
-                .height(13)
-                .borderRadius(4)
-                .backgroundColor($r('sys.color.background_tertiary'))
-              Column()
-                .width('38%')
-                .height(11)
-                .borderRadius(4)
-                .backgroundColor($r('sys.color.background_tertiary'))
-            }
-            .layoutWeight(1)
-            .alignItems(HorizontalAlign.Start)
-          }
-          .width(StyleConstants.FULL_WIDTH)
-          .height(64)
-          .padding({ left: 16, right: 16 })
-          .alignItems(VerticalAlign.Center)
-          }
-        }, (key: string) => key)
-      } else if (this.displaySongs.length === 0) {
+      // 骨架行：只画几条占位，让「马上要出现一列歌」这件事有预期
+      ForEach(SKELETON_ROW_KEYS, (key: string) => {
         ListItem() {
-        Column() {
-          Text('未找到歌曲')
-            .fontSize($r('sys.float.Body_S'))
-            .fontColor(this.surfaceInkSecondary())
+        Row({ space: 12 }) {
+          Column()
+            .width(44)
+            .height(44)
+            .borderRadius(8)
+            .backgroundColor($r('sys.color.background_tertiary'))
+          Column({ space: 8 }) {
+            Column()
+              .width('62%')
+              .height(13)
+              .borderRadius(4)
+              .backgroundColor($r('sys.color.background_tertiary'))
+            Column()
+              .width('38%')
+              .height(11)
+              .borderRadius(4)
+              .backgroundColor($r('sys.color.background_tertiary'))
+          }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
         }
         .width(StyleConstants.FULL_WIDTH)
-        .height(120)
-        .justifyContent(FlexAlign.Center)
+        .height(64)
+        .padding({ left: 16, right: 16 })
+        .alignItems(VerticalAlign.Center)
         }
-      } else if (this.customSortMode) {
-          // Keep the original drag callback only in explicit custom-sort mode.
-          // Nested group drag delivery remains device-unverified.
-          Repeat<PlaylistSongUi>(this.displaySongs)
-            .each((obj: RepeatItem<PlaylistSongUi>) => {
-              ListItem() {
-                // ★ 用 `obj.index`，**不要**再写 `this.displaySongs.indexOf(obj.item)`：
-                //   后者是 O(n) 的线性查找，而 `displaySongs` 是 @Local 观测数组，
-                //   每次元素读取都要走一遍代理陷阱 —— 几百行时整体是 O(n²) 的代理访问，
-                //   这是「打开几百首歌的歌单要等一会」的主要来源。
-                this.PlaylistSongRow(obj.item, obj.index)
-              }
-            })
-            .key((item: PlaylistSongUi) => this.songKeyOf(item))
-            .onMove((from: number, to: number): void => {
-              this.moveSong(from, to);
-            })
-      } else {
-        LazyForEach(this.displayDataSource, (item: PlaylistSongUi, index: number) => {
-          ListItem() {
-            this.PlaylistSongRow(item, index)
-          }
-        }, (item: PlaylistSongUi): string => this.songKeyOf(item))
-      }
+      }, (key: string) => key)
+    } else if (this.displaySongs.length === 0) {
       ListItem() {
-        Column().width(StyleConstants.FULL_WIDTH).height(this.bottomPaddingVp)
+      Column() {
+        Text('未找到歌曲')
+          .fontSize($r('sys.float.Body_S'))
+          .fontColor(this.surfaceInkSecondary())
       }
+      .width(StyleConstants.FULL_WIDTH)
+      .height(120)
+      .justifyContent(FlexAlign.Center)
       }
-      .translate({ y: this.revealOffsetVp })
+    } else if (this.customSortMode) {
+        // Keep the original drag callback only in explicit custom-sort mode.
+        // Nested group drag delivery remains device-unverified.
+        Repeat<PlaylistSongUi>(this.displaySongs)
+          .each((obj: RepeatItem<PlaylistSongUi>) => {
+            ListItem() {
+              // ★ 用 `obj.index`，**不要**再写 `this.displaySongs.indexOf(obj.item)`：
+              //   后者是 O(n) 的线性查找，而 `displaySongs` 是 @Local 观测数组，
+              //   每次元素读取都要走一遍代理陷阱 —— 几百行时整体是 O(n²) 的代理访问，
+              //   这是「打开几百首歌的歌单要等一会」的主要来源。
+              this.PlaylistSongRow(obj.item, obj.index)
+            }
+          })
+          .key((item: PlaylistSongUi) => this.songKeyOf(item))
+          .onMove((from: number, to: number): void => {
+            this.moveSong(from, to);
+          })
+    } else {
+      LazyForEach(this.displayDataSource, (item: PlaylistSongUi, index: number) => {
+        ListItem() {
+          this.PlaylistSongRow(item, index)
+        }
+      }, (item: PlaylistSongUi): string => this.songKeyOf(item))
     }
-    .width(StyleConstants.FULL_WIDTH)
-    .height(StyleConstants.FULL_HEIGHT)
-    .sticky(StickyStyle.Header)
-    .onDidScroll((): void => { this.onContentDidScroll(); })
-    .cachedCount(4)
-    .scrollBar(BarState.On)
-    .edgeEffect(EdgeEffect.Spring)
-    .onAppear((): void => {
-      this.logCrashStage('list-build-mounted');
-    })
-    .onAreaChange((_old: Area, area: Area): void => {
-      hilog.info(0, 'RzdPlaylistSticky', 'viewport width=%{public}s height=%{public}s bottom=%{public}d',
-        String(area.width), String(area.height), this.bottomPaddingVp);
-    })
+    ListItem() {
+      Column().width(StyleConstants.FULL_WIDTH).height(this.bottomPaddingVp)
+    }
+  }
+
+  build() {
+    if (this.lanesCount > 1) {
+      // ── 宽屏（左卡 + 右列表）：**多列**。
+      //    ⚠️ 「播放全部」行**不能**放进多列 List：lanes 下每个 ListItem 只占一列 ⇒ 会被挤成半宽。
+      //    ⇒ 放在 List **外面**（固定头，不随列表滚），列里只剩 Hero（宽屏为空）与歌曲。
+      Column() {
+        this.StickyPlayAllHeader()
+        List({ scroller: this.pageScroller }) {
+          ListItem() {
+            this.heroBuilder()
+          }
+          this.SongCells()
+        }
+        .width(StyleConstants.FULL_WIDTH)
+        .layoutWeight(1)
+        .lanes(this.lanesCount, 16)
+        .onDidScroll((): void => { this.onContentDidScroll(); })
+        .cachedCount(8)
+        .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring)
+        .onAppear((): void => {
+          this.logCrashStage('list-build-mounted');
+        })
+      }
+      .width(StyleConstants.FULL_WIDTH)
+      .height(StyleConstants.FULL_HEIGHT)
+    } else {
+      List({ scroller: this.pageScroller }) {
+        ListItem() {
+          this.heroBuilder()
+        }
+        ListItemGroup({ header: this.StickyPlayAllHeader() }) {
+        // 加载态排在最前面：在线榜单/歌单的歌曲是异步拉的，之前这里直接把空态画出来，
+        // 结果是「先闪一下居中的占位图标，再突然整列出现」。现在先给骨架 + 转圈，
+        // 数据到了再换成真正的列表，视觉上不会跳。
+          this.SongCells()
+        }
+        .translate({ y: this.revealOffsetVp })
+      }
+      .width(StyleConstants.FULL_WIDTH)
+      .height(StyleConstants.FULL_HEIGHT)
+      .sticky(StickyStyle.Header)
+      .onDidScroll((): void => { this.onContentDidScroll(); })
+      .cachedCount(4)
+      .scrollBar(BarState.On)
+      .edgeEffect(EdgeEffect.Spring)
+      .onAppear((): void => {
+        this.logCrashStage('list-build-mounted');
+      })
+      .onAreaChange((_old: Area, area: Area): void => {
+        hilog.info(0, 'RzdPlaylistSticky', 'viewport width=%{public}s height=%{public}s bottom=%{public}d',
+          String(area.width), String(area.height), this.bottomPaddingVp);
+      })
+    }
   }
 }
