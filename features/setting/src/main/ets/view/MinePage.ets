@@ -274,6 +274,12 @@ export struct MinePage {
    * 歌单卡当前显示哪一段：`0` = 自建歌单，`1` = 收藏歌单（照搬参考 `playlistTab`）。
    */
   @Local playlistTab: number = 0;
+
+  /**
+   * 宽屏「左上登录卡 / 右上功能卡」的等高口径：功能卡的**实测高度**（vp）。
+   * 登录卡自身内高写死 80，靠外层容器按这个值撑高，两张卡才等高（甲方 2026-10-24）。
+   */
+  @Local topCardHeightVp: number = 0;
   /** 收藏的在线歌单（`store.favoritePlaylistVersion` 变一次就读一次）。 */
   @Local collectedPlaylists: FavoriteEntry[] = [];
   /** 歌单行的懒加载数据源（`@Local` 保证 `LazyForEach` 拿到同一个实例）。 */
@@ -775,142 +781,11 @@ export struct MinePage {
    *   整页能力（新建 / 排序 / 导入 / 导出 / 改封面 / 删除）都在 `MinePlaylistPage` 里。
    */
   /**
-   * @returns 巨型卡片网格的列数。
-   *
-   * 甲方 2026-10-24：「歌单这块直接用巨型的卡片（注意列数，不分左右）」。
-   * 歌单卡现在是**通栏**，所以列数按**实测网格宽度**算（每张卡至少 ~190vp），
-   * 夹在 2~5 之间：手机横屏通栏 ≈740 → 3 列；平板 ≈1000 → 5 列封顶。
+   * ★ 2026-10-24（甲方：「歌单卡片改回最初的一横条一横条的」）：
+   *   巨型卡片网格（`Flex(wrap)` + `PlaylistGiantCard` / `CollectedGiantCard`）已**整段删除**，
+   *   宽窄两支都回到 `PlaylistRow` / `CollectedRow` 的行式列表。
+   *   不要再往这里加网格版 —— 甲方要的是「一横条一横条」，卡片通栏后行式最省空间。
    */
-  private mineGridColumns(): number {
-    const w: number = this.playlistGridWidth;
-    if (w <= 0) {
-      return this.isWide() ? 3 : 2;
-    }
-    return Math.max(2, Math.min(5, Math.floor(w / 190)));
-  }
-
-  /** 巨型卡片宽度（vp）：按网格容器**实测宽度**算，含列间距；还没量到时返回 0。 */
-  private giantCardWidthVp(): number {
-    const n: number = this.mineGridColumns();
-    const gap: number = 12;
-    if (this.playlistGridWidth <= 0) {
-      return 0;
-    }
-    return Math.floor((this.playlistGridWidth - gap * (n - 1)) / n);
-  }
-
-  /** 宽屏歌单卡里的**巨型歌单卡**（方形封面 + 名字 + 曲目数，长按仍是原来那套行菜单）。 */
-  @Builder
-  private PlaylistGiantCard(item: PlaylistDto) {
-    Column({ space: 8 }) {
-      Stack() {
-        if (item.cover.length > 0) {
-          LocalCoverImage({
-            src: item.cover,
-            imageWidth: Math.max(60, this.giantCardWidthVp()),
-            imageHeight: Math.max(60, this.giantCardWidthVp()),
-            radius: R_CARD / 2,
-            fit: ImageFit.Cover
-          })
-        } else if (item.songs.length > 0 && item.songs[0].img.length > 0) {
-          Image(item.songs[0].img)
-            .width('100%')
-            .height('100%')
-            .objectFit(ImageFit.Cover)
-            .alt($r('sys.symbol.music_note_list'))
-        } else {
-          Row() {
-            SymbolGlyph($r('sys.symbol.music_note_list'))
-              .fontSize(28)
-              .fontColor([$r('sys.color.font_tertiary')])
-          }
-          .width('100%')
-          .height('100%')
-          .backgroundColor($r('sys.color.background_tertiary'))
-          .justifyContent(FlexAlign.Center)
-        }
-      }
-      .width('100%')
-      .aspectRatio(1)
-      .borderRadius(R_CARD / 2)
-      .clip(true)
-
-      Text(item.name)
-        .fontSize(F_ITEM)
-        .fontColor($r('sys.color.font_primary'))
-        .maxLines(2)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .width('100%')
-        .textAlign(TextAlign.Start)
-      Text(String(item.songs.length) + ' 首')
-        .fontSize(F_SUB)
-        .fontColor($r('sys.color.font_tertiary'))
-        .maxLines(1)
-        .width('100%')
-        .textAlign(TextAlign.Start)
-    }
-    .width(this.giantCardWidthVp())
-    .alignItems(HorizontalAlign.Start)
-    .onClick(() => {
-      this.openPlaylistDetail(item);
-    })
-    .bindContextMenu(this.PlaylistRowMenu(item), ResponseType.LongPress)
-  }
-
-  /** 宽屏歌单卡里的**巨型收藏歌单卡**（收藏走平台音乐，与行版同一出入口）。 */
-  @Builder
-  private CollectedGiantCard(entry: FavoriteEntry) {
-    Column({ space: 8 }) {
-      Stack() {
-        if (entry.img.length > 0) {
-          Image(entry.img)
-            .width('100%')
-            .height('100%')
-            .objectFit(ImageFit.Cover)
-            .alt($r('sys.symbol.music_note_list'))
-        } else {
-          Row() {
-            SymbolGlyph($r('sys.symbol.star_square_stack_fill'))
-              .fontSize(28)
-              .fontColor([$r('sys.color.font_tertiary')])
-          }
-          .width('100%')
-          .height('100%')
-          .backgroundColor($r('sys.color.background_tertiary'))
-          .justifyContent(FlexAlign.Center)
-        }
-      }
-      .width('100%')
-      .aspectRatio(1)
-      .borderRadius(R_CARD / 2)
-      .clip(true)
-
-      Text(entry.name)
-        .fontSize(F_ITEM)
-        .fontColor($r('sys.color.font_primary'))
-        .maxLines(2)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .width('100%')
-        .textAlign(TextAlign.Start)
-      Text(this.collectedMeta(entry))
-        .fontSize(F_SUB)
-        .fontColor($r('sys.color.font_tertiary'))
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .width('100%')
-        .textAlign(TextAlign.Start)
-    }
-    .width(this.giantCardWidthVp())
-    .alignItems(HorizontalAlign.Start)
-    .onClick(() => {
-      this.openPlatformMusic();
-    })
-    .bindContextMenu(this.CollectedRowMenu(entry), ResponseType.LongPress)
-  }
-
-  /** 宽屏巨型卡片网格的容器实测宽度（vp）：卡片宽度由它反推，见 `giantCardWidthVp()`。 */
-  @Local playlistGridWidth: number = 0;
-
   @Builder
   private PlaylistCard() {
     Column() {
@@ -988,38 +863,6 @@ export struct MinePage {
             .width('100%')
             .padding({ left: 14, right: 14, top: 4, bottom: 18 })
             .textAlign(TextAlign.Start)
-        } else if (this.isWide()) {
-          // ★ 宽屏：**巨型卡片**网格（甲方 2026-10-24：「歌单这块直接用巨型的卡片（注意列数，不分左右）」）。
-          //   Flex 自动换行 ⇒ 卡片高度自适应、不会像 Grid 那样需要固定高度。列数见 `mineGridColumns()`。
-          Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
-            LazyForEach(this.playlistSource, (item: PlaylistDto) => {
-              Column() {
-                this.PlaylistGiantCard(item)
-              }
-              .margin({ right: 12, bottom: 14 })
-            }, (item: PlaylistDto, index: number) => this.playlistSource.keyOf(index))
-          }
-          .width('100%')
-          .padding({ left: 14, right: 2, bottom: 4 })
-          .onAreaChange((_old: Area, area: Area): void => {
-            const w: number = Number(area.width);
-            if (Math.abs(w - this.playlistGridWidth) > 1) {
-              this.playlistGridWidth = w;
-            }
-          })
-
-          if (this.playlists.length > PLAYLIST_PREVIEW_MAX) {
-            Text(`查看全部 ${this.playlists.length} 张歌单`)
-              .fontSize(F_SUB)
-              .fontColor(this.themeState.color)
-              .width('100%')
-              .height(44)
-              .padding({ left: 14, right: 14 })
-              .textAlign(TextAlign.Start)
-              .onClick(() => {
-                this.openAllPlaylists();
-              })
-          }
         } else {
           // ★ 歌单行：LazyForEach + 稳定 key（数据源见 MinePlaylistSource）
           LazyForEach(this.playlistSource, (item: PlaylistDto, index: number) => {
@@ -1049,24 +892,6 @@ export struct MinePage {
             .width('100%')
             .padding({ left: 14, right: 14, top: 4, bottom: 18 })
             .textAlign(TextAlign.Start)
-        } else if (this.isWide()) {
-          Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
-            ForEach(this.collectedPlaylists.slice(0, PLAYLIST_PREVIEW_MAX),
-              (entry: FavoriteEntry) => {
-                Column() {
-                  this.CollectedGiantCard(entry)
-                }
-                .margin({ right: 12, bottom: 14 })
-              }, (entry: FavoriteEntry) => 'mine_collected_' + entry.source + '_' + entry.id)
-          }
-          .width('100%')
-          .padding({ left: 14, right: 2, bottom: 4 })
-          .onAreaChange((_old: Area, area: Area): void => {
-            const w: number = Number(area.width);
-            if (Math.abs(w - this.playlistGridWidth) > 1) {
-              this.playlistGridWidth = w;
-            }
-          })
         } else {
           ForEach(this.collectedPlaylists.slice(0, PLAYLIST_PREVIEW_MAX),
             (entry: FavoriteEntry, index: number) => {
@@ -1507,7 +1332,7 @@ export struct MinePage {
 
           /**
            * 宽屏（甲方 2026-10-24 定版）：
-           *   **左上登录卡 + 右上功能卡 → 中间歌单卡（通栏，卡内巨型卡片网格）→ 下方设置/帮助反馈**。
+           *   **左上登录卡 + 右上功能卡 → 中间歌单卡（通栏，行式列表）→ 下方设置/帮助反馈（通栏单列）**。
            *   窄屏：一列四段，顺序不变（登录 → 功能 → 歌单 → 设置）。
            *
            * ⚠️ 这里**只能有一份**：上一版「登录/功能」既在外层放了一次、又在宽屏左列里放了一次，
@@ -1515,29 +1340,52 @@ export struct MinePage {
            */
           if (this.isWide()) {
             ListItem() {
+              // 甲方 2026-10-24：「登录卡片改成和功能卡片等高」。
+              // 登录卡自身内高写死 80（`LoginMusicCard.ACCOUNT_CARD_HEIGHT`），而功能卡是"图标 44 + 两行字 + 内边距"自然高。
+              // ⇒ 用一个**同色同圆角的容器**把登录卡撑到功能卡的实测高度（`topCardHeightVp` 由功能卡那格量回来），
+              //   两卡底色都是 `card_background`，视觉上就是一张等高卡。
               Row({ space: 14 }) {
                 Column() {
                   LoginMusicCard()
                 }
                 .layoutWeight(1)
+                .height(this.topCardHeightVp > 0 ? this.topCardHeightVp : 120)
+                .justifyContent(FlexAlign.Center)
+                .borderRadius(R_CARD)
+                .backgroundColor($r('app.color.card_background'))
+                .clip(true)
 
                 Column() {
                   this.QuickCard()
                 }
                 .layoutWeight(1)
+                .onAreaChange((_old: Area, area: Area): void => {
+                  const h: number = Number(area.height);
+                  if (Math.abs(h - this.topCardHeightVp) > 0.5) {
+                    this.topCardHeightVp = h;
+                  }
+                })
               }
               .width('100%')
               .alignItems(VerticalAlign.Top)
             }
 
-            // 中间：歌单卡（**通栏**，不分左右；卡内是巨型卡片网格）
+            // 中间：歌单卡（**通栏**，卡内是行式列表，一横条一横条）
             ListItem() {
               this.PlaylistCard()
             }
 
-            // 下方：设置 + 帮助和反馈
+            // 下方：设置 + 帮助和反馈 —— **通栏单列**（甲方：「还是被分成了两列，改成单列」）
             ListItem() {
-              this.LinksCard()
+              Column() {
+                this.LinksCard()
+              }
+              .width('100%')
+              .onAreaChange((_old: Area, area: Area): void => {
+                // 真机取证：两条链接卡到底有多宽（单列应≈整页宽，两列会≈一半）
+                hilog.info(DOMAIN, TAG, 'mine links card w=%{public}f h=%{public}f wide=1',
+                  Number(area.width), Number(area.height));
+              })
             }
           } else {
             ListItem() {
