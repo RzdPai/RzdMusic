@@ -2834,10 +2834,6 @@ export struct NowPlayingFeedPage {
             .onClick((): void => {
               this.toggleFavorite(row);
             })
-          Text(String(this.favoriteCount()))
-            .fontSize(12)
-            .fontColor(this.inkSecondary())
-            .maxLines(1)
         }
         .alignItems(VerticalAlign.Center)
 
@@ -3068,21 +3064,12 @@ export struct NowPlayingFeedPage {
         //   给 `0xFF1C1C1E`）⇒ 一边把背景压深、一边画深色图标，只会得到"一条多余的深色横带"。
         // ★ 这里写 `opacity(this.pageTintIsLight ? 0 : 1)` 而**不是** `if (...) {…}`：
         //   它挂在 `animateTo(400ms)` 的补间上，换歌时**跟着底色一起淡出/淡入** ——
-        //   否则深底 → 浅底的那一瞬间这一层会"啪"地消失，而底色还要 400ms 才渐变完
-        //   （中间那几帧是"白图标压着还没变亮的底"，正好是最需要这一层托着的时刻）。
-        //   浅底时 opacity = 0 ⇒ 既不多一条深色横带，也没有那一层。
-        Column()
-          .width(StyleConstants.FULL_WIDTH)
-          .height(this.topScrimHeightVp())
-          .linearGradient({
-            direction: GradientDirection.Bottom,
-            colors: [
-              [FEED_SCRIM_TOP, 0],
-              [Color.Transparent, 1]
-            ]
-          })
-          .opacity(this.pageTintIsLight ? 0 : 1)
-          .hitTestBehavior(HitTestMode.None)
+        // ── 层 2：**已删除**（甲方 2026-10-24：「不止背景，还有那层过渡…这个也不要压暗」）──────
+        // 这里原来是「顶部压深」：`FEED_SCRIM_TOP`（1C1C1E 的 35%）从 α=0.35 渐隐到 0。
+        // 甲方在**白色/浅色封面**下看到顶部一条发黑的过渡，很突兀 ⇒ 整层删掉，页面上不再有压深。
+        // 顶栏图标/文字的可读性仍由 `inkPrimary()/inkSecondary()` 负责（按底色亮度自动切深/浅墨），
+        // 加上 HDS 标题栏自己的 `systemMaterialEffect`，不需要这层黑纱托底。
+        // ⚠️ 不要再加回来：要"深度感"就用取色本身，不许再往画面上叠暗色。
 
         // ── 层 3：内容 ────────────────────────────────────────────────
         // ⚠️ 改动前这里还有两层，**都已删掉**（用户 ② 明确"背景不该是模糊的"）：
