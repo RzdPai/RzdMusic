@@ -86,7 +86,7 @@
 import { AppStorageV2, uiObserver } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { common } from '@kit.AbilityKit';
-import { guardPlayerBack } from 'musicbasic';
+import { guardPlayerBack, shouldUseSplitDetailLayout } from 'musicbasic';
 import {
   AmbientState, AppRuntimeStorage, AppStorageKeys, BarScrollHelper, BreakpointType, FavoriteEntry,
   LocalCoverImage, MusicAppState, MusicStoreService, PlaylistDto, RouterUrlConstants, ThemeState,
@@ -677,10 +677,15 @@ export struct MinePage {
     return getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP;
   }
 
-  /** 宽屏（平板 / 折叠展开 / PC 浮窗）：歌单卡与入口卡并排（照搬参考那段排法）。 */
+  /**
+   * 宽屏（平板 / 折叠展开 / PC 浮窗 / **手机横屏**）。
+   *
+   * ★ 2026-10-24（甲方：「现在我的页都是单列（至少我在我的手机上横屏看是这样）」）：
+   *   原来只认 LG/XL，而**手机横屏是「MD 宽 + SM 高」** ⇒ 永远走单列。
+   *   现在与详情页同一口径（`shouldUseSplitDetailLayout`）。
+   */
   private isWide(): boolean {
-    return this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_LG ||
-      this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_XL;
+    return shouldUseSplitDetailLayout(this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint);
   }
 
   /** 底部预留：HDS 浮动页签栏(56) + 页签栏间距(16) + 呼吸空间(16)。 */
@@ -770,14 +775,18 @@ export struct MinePage {
    *   整页能力（新建 / 排序 / 导入 / 导出 / 改封面 / 删除）都在 `MinePlaylistPage` 里。
    */
   /**
-   * @returns 巨型卡片网格的列数（只有宽屏用）。
+   * @returns 巨型卡片网格的列数。
    *
    * 甲方 2026-10-24：「歌单这块直接用巨型的卡片（注意列数，不分左右）」。
-   * 歌单区拿到的是页面宽的 2/3 ⇒ 手机横屏（约 780 的 2/3 ≈ 500vp）只放 **2 列**，
-   * XL（≥1440）才 3 列，再多就挤了。
+   * 歌单卡现在是**通栏**，所以列数按**实测网格宽度**算（每张卡至少 ~190vp），
+   * 夹在 2~5 之间：手机横屏通栏 ≈740 → 3 列；平板 ≈1000 → 5 列封顶。
    */
   private mineGridColumns(): number {
-    return this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_XL ? 3 : 2;
+    const w: number = this.playlistGridWidth;
+    if (w <= 0) {
+      return this.isWide() ? 3 : 2;
+    }
+    return Math.max(2, Math.min(5, Math.floor(w / 190)));
   }
 
   /** 巨型卡片宽度（vp）：按网格容器**实测宽度**算，含列间距；还没量到时返回 0。 */
@@ -1496,43 +1505,39 @@ export struct MinePage {
               .width('100%')
           }
 
-          // ① 账号卡（我们原本大设置页顶上那张「登录音乐」）—— 宽屏时它搬到左列里（见下面 ③④）
-          if (!this.isWide()) {
-            ListItem() {
-              LoginMusicCard()
-            }
-
-            // ② 快捷入口卡
-            ListItem() {
-              this.QuickCard()
-            }
-          }
-
           /**
-           * ③④ 宽屏（甲方 2026-10-24：「我的页也是左右，但是歌单这块直接用巨型的卡片
-           *      （注意列数，不分左右）」）：
-           *   左列 = 账号卡 + 快捷入口 + 入口卡；右列（更宽）= 歌单卡，**卡内是巨型卡片网格**。
-           *      歌单区本身不再分左右，就是一整块网格（列数见 `mineGridColumns()`）。
-           *   窄屏：一上一下（顺序不变：账号卡 → 快捷入口 → 歌单卡 → 入口卡）。
+           * 宽屏（甲方 2026-10-24 定版）：
+           *   **左上登录卡 + 右上功能卡 → 中间歌单卡（通栏，卡内巨型卡片网格）→ 下方设置/帮助反馈**。
+           *   窄屏：一列四段，顺序不变（登录 → 功能 → 歌单 → 设置）。
+           *
+           * ⚠️ 这里**只能有一份**：上一版「登录/功能」既在外层放了一次、又在宽屏左列里放了一次，
+           *   于是手机上看到"两个登录、两个功能卡"（甲方截图报的就是这条）。
            */
           if (this.isWide()) {
             ListItem() {
               Row({ space: 14 }) {
-                Column({ space: 14 }) {
+                Column() {
                   LoginMusicCard()
-                  this.QuickCard()
-                  this.LinksCard()
                 }
                 .layoutWeight(1)
 
                 Column() {
-                  this.PlaylistCard()
+                  this.QuickCard()
                 }
-                .layoutWeight(2)
+                .layoutWeight(1)
               }
               .width('100%')
-              // 顶对齐：两列高度差得远（歌单卡是网格），居中的话左列会飘在半空
               .alignItems(VerticalAlign.Top)
+            }
+
+            // 中间：歌单卡（**通栏**，不分左右；卡内是巨型卡片网格）
+            ListItem() {
+              this.PlaylistCard()
+            }
+
+            // 下方：设置 + 帮助和反馈
+            ListItem() {
+              this.LinksCard()
             }
           } else {
             ListItem() {
