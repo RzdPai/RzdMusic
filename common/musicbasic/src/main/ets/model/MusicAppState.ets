@@ -27,6 +27,14 @@ export class  MusicAppState {
   @Trace public playQueue: SongItem[] = [];
   /** Current queue: song ids only; rows resolved on demand via {@link MusicDbApi}. */
   @Trace public playQueueIds: number[] = [];
+  /**
+   * 当前播放队列的**来源**：'' = 普通队列（歌单/搜索/收藏…），'feed' = 「现在就听」。
+   *
+   * ★ 2026-10-24（甲方：「其它界面点击播放条时，如果是现在就听的就跳转现在就听页面」）：
+   *   壳层的迷你播放条点击据此分流：`'feed'` → 切到「现在就听」Tab，其余 → 打开播放页。
+   */
+  @Trace public queueOrigin: string = '';
+
   /** Index in {@link playQueueIds} for the current track. */
   @Trace public selectIndex: number = 0;
   /** Whether audio is currently playing. */

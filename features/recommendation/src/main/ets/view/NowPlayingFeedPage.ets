@@ -1949,6 +1949,9 @@ export struct NowPlayingFeedPage {
     }
     // 组队列（官方入口）——整份队列 + 下标；★ 第 5 参 `false` = **不打开播放器**（见 §2）
     Logger.info(RZD_TAG, `play index=${target} songs=${songs.length} (playList openPlayer=false)`);
+    // ★ 2026-10-24（⑧）：这条队列归「现在就听」所有 ⇒ 打上来源标记。
+    //   壳层迷你条点击据此分流：`'feed'` 切到本页 Tab，其余照旧打开播放页。
+    this.appState.queueOrigin = 'feed';
     void OnlinePlayUtil.playList(this.appState, songs, target, this.getUIContext(), false);
   }
 

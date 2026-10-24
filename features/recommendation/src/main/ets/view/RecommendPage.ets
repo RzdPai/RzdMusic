@@ -28,6 +28,7 @@ import {
   ImmersiveType,
   Logger,
   MusicAppState,
+  TabSwitchState,
   MusicStoreService,
   registerHomeSourceRefresh,
   RouterUrlConstants,
@@ -95,6 +96,9 @@ export struct RecommendPage {
   @Local accountChangedState: AccountChangedState =
     AppStorageV2.connect(AccountChangedState, PlayerConstants.ACCOUNT_CHANGED_STATE, () => new AccountChangedState())!;
   /** 全局播控状态：滚动联动底栏时需要写 hdsBarLayoutMode / miniBarExpanded。 */
+  /** Tab 状态（与壳层同一个 `AppStorageV2` 通道）：首页「现在就听」入口靠它切 Tab。 */
+  @Local tabState: TabSwitchState =
+    AppStorageV2.connect(TabSwitchState, AppStorageKeys.TAB_SWITCH_STATE, () => new TabSwitchState())!;
   @Local appState: MusicAppState =
     AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
   @Consumer('pageIndexInfos') pageIndexInfos: NavPathStack = new NavPathStack();
@@ -850,7 +854,13 @@ export struct RecommendPage {
                     })
                   }
 
-                  HeroBannerSection({ recommendViewModel: this.recommendViewModel })
+                  HeroBannerSection({
+              recommendViewModel: this.recommendViewModel,
+              // ② 首页「现在就听」入口 → 切到「现在就听」Tab（不 push 新页）
+              onOpenFeedNow: (): void => {
+                this.tabState.tabIndex = 1;
+              }
+            })
 
                   // ★ 四个分类 Tab 那一行：外面包一层**只负责量它**的容器（顶边 / 高度）。
                   //   吸顶生效时**流内这一份走 `Visibility.Hidden`**（保留占位、不参与绘制）——

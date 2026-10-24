@@ -56,6 +56,11 @@ export struct HeroBannerSection {
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
   /** VM providing hero banner card data for the carousel. */
   @Param recommendViewModel: RecommendViewModel = new RecommendViewModel();
+  /**
+   * 点「现在就听」卡时**切到「现在就听」Tab**（甲方 2026-10-24 第 ② 条：首页入口与 Tab 打通）。
+   * 由 `RecommendPage` 传进来（它持有 `tabState`），本组件不直接碰全局 Tab 状态。
+   */
+  @Event onOpenFeedNow: () => void = () => {};
   /** Title bar insets, immersive decor, and related window metrics. */
   @Local windowInfo: WindowInfo = getWindowInfoState();
   /** Nav stack for routing to toplist detail. */
@@ -290,6 +295,11 @@ export struct HeroBannerSection {
       return;
     }
     if (item.feature === 'listenNow') {
+      // ★ 2026-10-24（②）：「现在就听」卡不再"就地播这首"，而是**切到那个 Tab**（入口与 Tab 打通）。
+      this.onOpenFeedNow();
+      return;
+    }
+    if (item.feature === '__listenNowLegacy') {
       // 「现在就听」：**永远播这张卡上显示的那首歌**（不是当前在播的歌）。
       // 之前这里写的是"有在播就打开播放页"，于是点卡片打开的是当前播放，
       // 与卡片上的封面/歌名对不上 —— 用户明确反馈过。

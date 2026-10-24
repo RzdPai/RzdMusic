@@ -609,11 +609,29 @@ struct Index {
   }
 
   /** Dispatches playback shell intent when {@link PlaybackIntentState.requestVersion} changes. */
+  /**
+   * 任意页把 `tabState.tabIndex` 改掉（首页「现在就听」卡、⑧ 的播放条跳转）时，真正切 Tab。
+   *
+   * ★ 2026-10-24（② + ⑧）：入口统一走"改共享状态"这条路，谁都不许自己 push 路由。
+   */
+  @Monitor('tabState.tabIndex')
+  onTabIndexChanged(): void {
+    const index: number = this.tabState.tabIndex;
+    Logger.info(RzdShellLogTag, `tab index -> ${index} (apply)`);
+    this.tabsController.changeIndex(index);
+  }
+
   @Monitor('intentState.requestVersion')
   onPlaybackIntentChanged() {
     dispatchShellPlaybackIntent(this.appState, this.intentState, () => {
       // 鐩存帴鎸傝捣鎾斁椤靛嵆鍙細灞曞紑鍔ㄧ敾鐢辨挱鏀鹃〉鑷繁鎾紙瑙?playExpandIntro / morphScaleValue锛夈€?
-      this.appState.isShowPlay = true;
+      if (this.appState.queueOrigin === 'feed') {
+        // ⑧：当前队列归「现在就听」所有 ⇒ 切到那个 Tab，不打开播放页
+        Logger.info(RzdShellLogTag, 'open player redirected to feed tab (queueOrigin=feed)');
+        this.tabState.tabIndex = 1;
+      } else {
+        this.appState.isShowPlay = true;
+      }
     });
   }
 
@@ -1166,7 +1184,13 @@ struct Index {
     //   浼氳鍔ㄧ敾璧风偣鏁翠綋鍋忥紙鐢ㄦ埛瀹炴祴鐨?浠庡皝闈㈠亸宸︿笅瑙掑紑濮?锛夈€?
     const morphOk: boolean = this.expandState.pullOpenBegin(this.getUIContext(), this.navDepth > 0);
     if (!this.appState.isShowPlay) {
-      this.appState.isShowPlay = true;
+      if (this.appState.queueOrigin === 'feed') {
+        // ⑧：当前队列归「现在就听」所有 ⇒ 切到那个 Tab，不打开播放页
+        Logger.info(RzdShellLogTag, 'open player redirected to feed tab (queueOrigin=feed)');
+        this.tabState.tabIndex = 1;
+      } else {
+        this.appState.isShowPlay = true;
+      }
     }
     if (!morphOk) {
       // 鍑犱綍娌￠噺榻愶紙杩蜂綘鏉℃病鎸傝浇 / 瀹夸富娌″昂瀵革級锛氱洿鎺ラ摵婊★紝鍒‖鍋氬舰鍙?
