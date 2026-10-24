@@ -249,6 +249,9 @@ export class AppStorageKeys {
   public static readonly APP_RUNTIME: string = 'musichome_AppRuntimeStorage';
   /** {@link TabSwitchState} (bottom tab / playlist section switching). */
   public static readonly TAB_SWITCH_STATE: string = 'musichome_TabSwitchState';
+
+  /** 「现在就听」自己的播放栈（与 MusicAppState 解耦，见 FeedPlaybackState）。 */
+  public static readonly FEED_PLAYBACK_STATE: string = 'musichome_FeedPlaybackState';
   /** {@link AmbientState} (bottom-bar immersive material level). */
   public static readonly AMBIENT_STATE: string = 'musichome_AmbientState';
 /** {@link ThemeState} (app accent color). */

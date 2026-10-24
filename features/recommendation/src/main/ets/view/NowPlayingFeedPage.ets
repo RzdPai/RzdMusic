@@ -191,6 +191,8 @@ import {
   AppStorageKeys,
   buildTitleMaterial,
   ColorConversion,
+  FeedPlaybackState,
+  FeedQueueEntry,
   HomeSourceState,
   Logger,
   MusicAppState,
@@ -776,6 +778,13 @@ export struct NowPlayingFeedPage {
   /** 全局播控唯一真源：点歌只写它（经 `OnlinePlayUtil.playList`）。 */
   /** 推荐模式：0 = 常规 / 1 = 熟悉 / 2 = 探索（落库见 `MusicStoreService.getFeedMode`）。 */
   @Local feedMode: number = 0;
+  /**
+   * 「现在就听」**自己的播放栈**（① 与播放页解耦）：
+   * 队列身份 / 当前下标由它拥有；`MusicAppState` 只做镜像（迷你条、播放页照旧能读）。
+   */
+  @Local feedPlayback: FeedPlaybackState =
+    AppStorageV2.connect(FeedPlaybackState, AppStorageKeys.FEED_PLAYBACK_STATE,
+      () => new FeedPlaybackState())!;
   /** 左上角模式菜单是否展开（菜单绑在 `FeedModeMenuAnchor()` 上）。 */
   @Local showFeedModeMenu: boolean = false;
 
@@ -1476,7 +1485,7 @@ export struct NowPlayingFeedPage {
     // ★★ 队列是否"就是屏幕上这一份"——**必须在 appendRows 之前取**：
     //    append 之后 feed 先变长、队列还是旧的，`queueMatchesFeed`（比总长度）会直接返回 false
     //    ⇒ 队列就再也同步不上了（`syncQueueWithNewRows` 会永远走"不动队列"那一支）。
-    this.queueWasFeed = this.queueMatchesFeed(this.appState.playQueue);
+    this.queueWasFeed = this.queueMatchesFeed(this.feedPlayback.queue);
     try {
       let rows: RecommendPrivateSongUi[] | undefined;
       if (this.feedOrigin === FeedOrigin.BOARD && this.feedPage < FEED_MAX_PAGES) {
@@ -1977,7 +1986,7 @@ export struct NowPlayingFeedPage {
     }
     const target: number = index < 0 || index >= songs.length ? 0 : index;
     const row: RecommendPrivateSongUi = this.feedSource.getData(target);
-    const queue: SongItem[] = this.appState.playQueue;
+    const queue: FeedQueueEntry[] = this.feedPlayback.queue;
     if (this.isCurrentSong(row)) {
       // 已经在播这一首（含"点封面/点播放键"重复点同一屏）：不动队列、不重置进度
       Logger.info(RZD_TAG, `play skip (already current) index=${target} ${row.source}_${row.songId}`);
@@ -2006,6 +2015,17 @@ export struct NowPlayingFeedPage {
     }
     this.appState.queueOrigin = 'feed';
     void OnlinePlayUtil.playList(this.appState, songs, target, this.getUIContext(), false);
+    // ① 写回**自家栈**：下一次 `playAt` 的身份判据只看它（不再从 appState.playQueue 反推）
+    const entries: FeedQueueEntry[] = [];
+    for (let i: number = 0; i < this.feedSource.totalCount(); i++) {
+      const r: RecommendPrivateSongUi = this.feedSource.getData(i);
+      const entry = new FeedQueueEntry();
+      entry.source = r.source;
+      entry.songId = r.songId;
+      entries.push(entry);
+    }
+    this.feedPlayback.resetTo(entries, target);
+    Logger.info(RZD_TAG, `feed stack queue=${entries.length} index=${target} v=${this.feedPlayback.version}`);
   }
 
   /**
@@ -2016,7 +2036,7 @@ export struct NowPlayingFeedPage {
    * @param queue 全局播放队列。
    * @returns true = 同一批歌、顺序也一致。
    */
-  private queueMatchesFeed(queue: SongItem[]): boolean {
+  private queueMatchesFeed(queue: FeedQueueEntry[]): boolean {
     const total: number = this.feedSource.totalCount();
     if (queue.length !== total) {
       return false;

@@ -175,3 +175,5 @@ export { MotionCoverState } from './src/main/ets/model/MotionCoverState';
 export { MotionCover, MotionCoverKind } from './src/main/ets/model/MotionCover';
 export { MotionCoverService } from './src/main/ets/services/MotionCoverService';
 export { MotionCoverLayer } from './src/main/ets/view/MotionCoverLayer';
+
+export { FeedPlaybackState, FeedQueueEntry } from './src/main/ets/model/FeedPlaybackState';
