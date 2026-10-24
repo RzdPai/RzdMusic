@@ -94,14 +94,15 @@ export struct ArtistDetailPage {
     AppStorageV2.connect(AmbientState, AppStorageKeys.AMBIENT_STATE, () => new AmbientState())!;
   @Local songs: SongInfo[] = [];
   @Local albums: AlbumInfo[] = [];
-  @Local activeTab: number = 1;
+  @Local activeTab: number = 0;
   /**
    * 吸顶行三页签的选中项：`0=最热 / 1=最新 / 2=专辑`（顺序照甲方 2026-10-24 的指定）。
    *
-   * 缺省仍是「专辑」= 2（与 `activeTab = 1` + `aboutToAppear` 里的 `loadAlbums(1)` 一致）；
-   * 改顺序时这一对默认值必须一起改，否则首屏会「标签说专辑、内容却是歌曲列表」。
+   * 缺省 = **最热**（0，甲方 2026-10-24 指定）；它与 `activeTab = 0`（歌曲）、
+   * `songSort = 0`（最热）、`init()` 里的 `loadSongs(1, true)` 是**同一套默认值**，
+   * 改顺序/改缺省时四者必须一起改，否则首屏会「标签说最热、内容却是专辑列表」。
    */
-  @Local segmentIndex: number = 2;
+  @Local segmentIndex: number = 0;
   @Local loading: boolean = false;
   @Local loadingMore: boolean = false;
   @Local songsHasMore: boolean = true;
@@ -227,7 +228,9 @@ export struct ArtistDetailPage {
     if (this.artistPicUrlText.length > 0) {
       void this.loadBackdropColor();
     }
-    await this.loadAlbums(1);
+    // 缺省页签 = 最热（`activeTab = 0` / `segmentIndex = 0` / `songSort = 0` 三者一致）；
+    // 专辑列表等切到「专辑」页签时再拉（`onSegmentSelect(2)` 里已经处理）。
+    await this.loadSongs(1, true);
     void this.loadArtistDesc();
   }
 
@@ -291,19 +294,49 @@ export struct ArtistDetailPage {
   }
 
   /**
-   * 下载歌手图片，取两个颜色：
-   *  * `avgColor`：全图主色经 `ColorConversion.dealColor` 压暗 —— 页面渐变底、文字、标题栏底色都用它（行为不变）；
-   *  * `photoRawAvgColor` + `photoTopColor`：**原始**（不压暗）平均色，只给状态栏判据用（见 {@link statusBarOriginalColor}）。
+   * 取色代次：**动态封面的首帧**比平台静态图晚到，晚到的取色响应绝不能盖掉新的
+   * （否则屏上是绿图、底色是棕的 —— 甲方 2026-10-24 报的那条）。
+   */
+  private colorSeq: number = 0;
+  /**
+   * 已经按**动态封面首帧**取过色了 ⇒ 之后凡是"按平台静态图取色"的调用一律作废。
+   *
+   * 否则会出现"先绿一下又跳回棕色"：屏上明明是 Apple 那张图，底色却按平台那张图算。
+   * 清空条件只有一个：页面换了歌手（= 新实例）。
+   */
+  private motionColorApplied: boolean = false;
+
+  /**
+   * 用**平台静态歌手图**取色（首次进入时的默认取色）。
    */
   private async loadBackdropColor(): Promise<void> {
+    if (this.motionColorApplied) {
+      return;
+    }
+    await this.loadBackdropColorFrom(this.artistPicUrlText);
+  }
+
+  /**
+   * 用指定照片地址取两个颜色：
+   *  * `avgColor`：全图主色经 `ColorConversion.dealColor` 压暗 —— 页面渐变底、文字、标题栏底色都用它；
+   *  * `photoRawAvgColor` + `photoTopColor`：**原始**（不压暗）平均色，只给状态栏判据用。
+   *
+   * @param url 取色用的照片地址：平台的静态歌手图，或**动态封面的首帧**（`previewFrame`）。
+   *            动态封面一上场屏上的图就换成 Apple 那张 ⇒ 必须按它重算，否则底色和画面对不上。
+   */
+  private async loadBackdropColorFrom(url: string): Promise<void> {
+    if (url.length === 0) {
+      return;
+    }
+    const seq: number = ++this.colorSeq;
     const req: http.HttpRequest = http.createHttp();
     try {
-      const resp: http.HttpResponse = await req.request(this.artistPicUrlText, {
+      const resp: http.HttpResponse = await req.request(url, {
         method: http.RequestMethod.GET,
         expectDataType: http.HttpDataType.ARRAY_BUFFER,
         readTimeout: 15000
       });
-      if (resp.responseCode !== 200 || resp.result === undefined) {
+      if (resp.responseCode !== 200 || resp.result === undefined || seq !== this.colorSeq) {
         return;
       }
       const src: image.ImageSource = image.createImageSource(resp.result as ArrayBuffer);
@@ -314,7 +347,7 @@ export struct ArtistDetailPage {
             effectKit.createColorPicker(pixelMap,
               (error: Error | undefined, colorPicker: effectKit.ColorPicker | undefined) => {
                 try {
-                  if (error === undefined && colorPicker !== undefined) {
+                  if (error === undefined && colorPicker !== undefined && seq === this.colorSeq) {
                     const color = colorPicker.getLargestProportionColor();
                     const arr: number[] = ColorConversion.dealColor(color.red, color.green, color.blue);
                     const r: number = Math.max(0, Math.min(255, arr[0]));
@@ -331,7 +364,7 @@ export struct ArtistDetailPage {
                 }
               });
           });
-          this.logStatusBarDecision('avg-sample');
+          this.logStatusBarDecision(seq === this.colorSeq ? 'avg-sample' : 'avg-sample-stale');
         } finally {
           try {
             pixelMap.release();
@@ -339,7 +372,7 @@ export struct ArtistDetailPage {
             // ignore
           }
         }
-        await this.loadStatusBarStripColor(src);
+        await this.loadStatusBarStripColor(src, seq);
       } finally {
         src.release();
       }
@@ -362,8 +395,9 @@ export struct ArtistDetailPage {
    *   画框 = 宽 × (Hero 320 + 标题栏行 56 + 状态栏避让)vp，状态栏那一条 = 画框顶部 bandVp。
    * 取不到（解码不支持区域 / 尺寸还没量到）就返回，判据退回 `photoRawAvgColor` → `avgColor`。
    * @param src 已经创建好的图片源（本方法内只做一次小区域解码）。
+   * @param seq 取色代次（与 `loadBackdropColorFrom` 同一个）：过期响应不许写 `photoTopColor`。
    */
-  private async loadStatusBarStripColor(src: image.ImageSource): Promise<void> {
+  private async loadStatusBarStripColor(src: image.ImageSource, seq: number): Promise<void> {
     try {
       const info: image.ImageInfo = await src.getImageInfo();
       const region: image.Region | undefined = this.statusBarStripRegion(info.size.width, info.size.height);
@@ -389,7 +423,7 @@ export struct ArtistDetailPage {
           effectKit.createColorPicker(strip,
             (error: Error | undefined, colorPicker: effectKit.ColorPicker | undefined) => {
               try {
-                if (error === undefined && colorPicker !== undefined) {
+                if (error === undefined && colorPicker !== undefined && seq === this.colorSeq) {
                   const raw: effectKit.Color = colorPicker.getAverageColor();
                   this.photoTopColor = toRgbString(raw.red, raw.green, raw.blue);
                 }
@@ -405,7 +439,7 @@ export struct ArtistDetailPage {
           // ignore
         }
       }
-      this.logStatusBarDecision('strip-sample');
+      this.logStatusBarDecision(seq === this.colorSeq ? 'strip-sample' : 'strip-sample-stale');
     } catch (_err) {
       // 区域解码失败：判据退回整图原始平均色（loadBackdropColor 里已经取到）
       hilog.warn(0x0000, 'RzdArtistStatusBar', 'strip sample failed, fallback to whole-image average');
@@ -1157,7 +1191,8 @@ export struct ArtistDetailPage {
 
             Row({ space: 14 }) {
               Row() {
-                SymbolGlyph($r('sys.symbol.person_crop_circle_fill_1'))
+                // 歌手信息（简介弹窗）：甲方 2026-10-24 指定用 info_circle_fill
+                SymbolGlyph($r('sys.symbol.info_circle_fill'))
                   .fontSize(18)
                   .fontWeight(FontWeight.Regular)
                   .height(18)
@@ -1261,14 +1296,14 @@ export struct ArtistDetailPage {
   @Builder
   private ArtistSectionTabs() {
     Row() {
-      this.SectionTab('最热', 0, '')
-      this.SectionTab('最新', 1, '')
+      this.SectionTab('最热', 0, this.songTabCount())
+      this.SectionTab('最新', 1, this.songTabCount())
       this.SectionTab('专辑', 2, this.albumTabCount())
     }
     .width('100%')
-    // 宽屏（平板/折叠展开）别把三个词摊到两头去：最宽 420 后居中
-    .constraintSize({ maxWidth: 420 })
-    .padding({ left: 8, right: 8, top: 6, bottom: 2 })
+    // 宽屏（平板/折叠展开）别把三个词摊到两头去：最宽 460 后居中
+    .constraintSize({ maxWidth: 460 })
+    .padding({ left: 8, right: 8, top: 8, bottom: 4 })
   }
 
   /** 一个页签：文字（+数量）+ 选中时的主题色短横线。 */
@@ -1277,13 +1312,14 @@ export struct ArtistDetailPage {
     Column({ space: 5 }) {
       Row({ space: 6 }) {
         Text(label)
-          .fontSize(this.segmentIndex === index ? 19 : 17)
+          .fontSize(this.segmentIndex === index ? 24 : 22)
           .fontWeight(this.segmentIndex === index ? FontWeight.Bold : FontWeight.Medium)
           .fontColor(this.segmentIndex === index ? this.fgPrimary() : this.fgSecondary())
           .maxLines(1)
         if (count.length > 0) {
+          // 数字比汉字小一号（截图里也是这个关系）：位数据多时（1708 这种）在窄屏上才放得下
           Text(count)
-            .fontSize(this.segmentIndex === index ? 19 : 17)
+            .fontSize(this.segmentIndex === index ? 20 : 18)
             .fontWeight(this.segmentIndex === index ? FontWeight.Bold : FontWeight.Medium)
             .fontColor(this.segmentIndex === index ? this.fgPrimary() : this.fgSecondary())
             .maxLines(1)
@@ -1291,7 +1327,7 @@ export struct ArtistDetailPage {
       }
       // 短横线：选中 = 主题色；未选中 = 同高空位（切换时整行高度不跳）
       Column()
-        .width(this.segmentIndex === index ? 24 : 0)
+        .width(this.segmentIndex === index ? 28 : 0)
         .height(3)
         .borderRadius(1.5)
         .backgroundColor(this.segmentIndex === index ? this.themeState.color : Color.Transparent)
@@ -1301,6 +1337,15 @@ export struct ArtistDetailPage {
     .onClick((): void => {
       this.onSegmentSelect(index);
     })
+  }
+
+  /**
+   * 「最热 / 最新」后面的数字：这两个是**同一批歌的两种排序**，条数就是同一个歌手歌曲总数。
+   * 优先用路由带来的 `songNum`（列表还没加载时也有数），没有就用已加载条数。
+   */
+  private songTabCount(): string {
+    const n: number = this.songNum > 0 ? this.songNum : this.songs.length;
+    return n > 0 ? String(n) : '';
   }
 
   /** 「专辑」标签后的数字：优先用路由带来的专辑数，没有就用已加载的条数。 */
@@ -1322,7 +1367,12 @@ export struct ArtistDetailPage {
           page: 'artist',
           // 动态封面（其它设置里可关）：按歌手名去 Apple Music 解析 motion artwork
           motionKind: 'artist',
-          motionName: this.artistNameText
+          motionName: this.artistNameText,
+          // 首帧一到就按它重新取色（否则屏上是 Apple 那张图、底色还是平台那张图的颜色）
+          onMotionPoster: (posterUrl: string): void => {
+            this.motionColorApplied = true;
+            void this.loadBackdropColorFrom(posterUrl);
+          }
         })
       List({ scroller: this.scroller }) {
         ListItem() { this.ArtistHero() }

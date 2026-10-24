@@ -47,6 +47,14 @@ export struct DetailImmersiveBackdrop {
   @Param motionName: string = '';
   /** 动态封面：歌手名（专辑页用来挑对同名专辑；歌手页留空）。 */
   @Param motionArtist: string = '';
+  /**
+   * 动态封面首帧解码完成 ⇒ 把海报地址交回宿主页**重新取色**。
+   *
+   * 为什么要这一步：页面底色（`avgColor` + 渐变遮罩 + 状态栏判据）原来是用**平台那张静态照片**
+   * 算的；动态封面一上场，屏上的图换成 Apple 的（例：艺人图偏绿，平台图是棕色衣服），
+   * 不重算就会出现"图是绿的、底色是棕的"。
+   */
+  @Event onMotionPoster: (posterUrl: string) => void = (posterUrl: string): void => {};
   @Local failed: boolean = false;
 
   @Monitor('photo')
@@ -76,13 +84,16 @@ export struct DetailImmersiveBackdrop {
                 this.page);
             })
         }
-        // 动态封面：盖在静图**之上**、遮罩**之下**；只在视频真的起播后淡入（失败自动退回静图）。
+        // 动态封面：盖在静图**之上**、遮罩**之下**；先上首帧、再上视频（都不做淡入）。
         if (this.motionName.length > 0) {
           MotionCoverLayer({
             kind: this.motionKind,
             name: this.motionName,
             artist: this.motionArtist,
-            fallbackPoster: this.photo
+            fallbackPoster: this.photo,
+            onPosterReady: (posterUrl: string): void => {
+              this.onMotionPoster(posterUrl);
+            }
           })
             .width('100%')
             .height(this.frameHeightVp())

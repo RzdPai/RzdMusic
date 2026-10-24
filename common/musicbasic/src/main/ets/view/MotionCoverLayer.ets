@@ -22,23 +22,30 @@ import { MotionCoverState } from '../model/MotionCoverState';
 import { MotionCoverService } from '../services/MotionCoverService';
 
 /**
- * 首帧（Apple `previewFrame`）先单独展示多久，之后才让视频层上场。
- * 320ms 是首帧自己的淡入时长，再留 100ms 让它"停一下" ⇒ 观感是"先静帧、再起播"。
+ * 首帧（Apple `previewFrame`）的**最长等待**：等它解码完就立刻放行视频；
+ * 万一 `onComplete` 一直不来（图挂了 / 尺寸为 0），到这个时限也放行，不让页面停在静图。
  */
-const MOTION_POSTER_PREROLL_MS: number = 420;
+const MOTION_POSTER_WAIT_MS: number = 600;
 
 /**
- * **动态封面**那一层：盖在页面原有的大封面（静图）**之上**，只在视频真的起播后淡入。
+ * **动态封面**那一层：盖在页面原有的大封面（静图）**之上**。
  *
- * 为什么这么设计（而不是"用动态封面替换静图"）：
- * 1. 解析要联网、还要抓两次 HTML（~1.5MB）⇒ 首帧一定先有静图，视频晚到；
- *    ⇒ 静图由宿主继续画，本层只负责"视频来了就盖上去"，**任何一步失败都退回静图**，不会白屏；
- * 2. `Video` 起播前是黑底 ⇒ 本层默认 `opacity(0)`，`onStart` 之后才淡入（260ms）。
+ * 次序与"有没有过渡"（甲方 2026-10-24 两轮反馈定稿）：
+ * ```
+ *   页面静图 ──(首帧解码完，直接换)──▶ Apple 首帧 previewFrame ──(视频起播，直接接上)──▶ 视频循环
+ * ```
+ * **两段都不做淡入**：首帧与视频第一帧是同一张图，中间再叠淡变反而像"画面在动"；
+ * 甲方原话：「因为是首帧，播放前不需要淡入吧」。
+ *
+ * 为什么还要分两层（而不是直接挂 `Video`）：
+ * 1. 解析要联网（两次 HTML，~1.5MB），首帧比视频先到，页面不能等；
+ * 2. `Video` 在预览帧/第一帧就绪前是**黑底** ⇒ 直接在静图上叠 `Video` 会先闪一下黑；
+ *    ⇒ 先让 `Image(previewFrame)` 站住，再让视频层上场。
  *
  * 硬规矩（对应 ArkUI `Video` 官方文档）：
  * - `.muted(true)` **必须**在起播前生效，否则会抢音频焦点（音乐 App 里这是致命的：
  *   动态封面一出声就把正在播的歌顶掉了）；
- * - 用 `previewUri` 给首帧（Apple 的 `previewFrame` 与第一帧对齐，淡入无跳变）；
+ * - 用 `previewUri` 给首帧（Apple 的 `previewFrame` 与第一帧对齐）；
  * - `onVisibleAreaChange` 里离屏 `pause()`、回屏 `start()`（多实例会抢解码器）；
  * - `HitTestMode.None`：这层只做装饰，不吃触摸（页面上的按钮在它下面/上面都照常点）。
  *
@@ -54,11 +61,18 @@ export struct MotionCoverLayer {
   @Param artist: string = '';
   /** 静图封面地址：Apple 海报缺失时拿它当 `previewUri`（首帧不黑屏）。 */
   @Param fallbackPoster: string = '';
+  /**
+   * 首帧（`previewFrame`）真正解码完成时回调一次，参数是海报地址。
+   *
+   * 宿主页用它**按动态封面重新取色**：页面原有的取色是用平台那张静态照片算的
+   * （例：Apple 的艺人图偏绿、平台图偏棕色衣服 ⇒ 页面底色是棕的，和屏幕上的图对不上）。
+   */
+  @Event onPosterReady: (posterUrl: string) => void = (posterUrl: string): void => {};
   /** 其它设置里的「动态封面」总开关：关掉时整层不渲染，零请求、零解码。 */
   @Local state: MotionCoverState =
     AppStorageV2.connect(MotionCoverState, AppStorageKeys.MOTION_COVER_STATE, () => new MotionCoverState())!;
   @Local cover: MotionCover | undefined = undefined;
-  /** 首帧海报**已经解码完**（此后才淡入，避免半张图闪一下）。 */
+  /** 首帧海报**已经解码完**（此后才允许视频层上场）。 */
   @Local posterReady: boolean = false;
   /** 首帧海报加载失败（失败就不再画那一层，退回页面静图）。 */
   @Local posterFailed: boolean = false;
@@ -77,6 +91,8 @@ export struct MotionCoverLayer {
   private queryKey: string = '';
   /** 首帧 preroll 定时器（-1 = 没在跑）。 */
   private rollTimer: number = -1;
+  /** `onPosterReady` 每张海报只报一次（避免布局抖动重复触发宿主取色）。 */
+  private posterNotified: boolean = false;
   private alive: boolean = true;
 
   aboutToAppear(): void {
@@ -106,6 +122,7 @@ export struct MotionCoverLayer {
     this.prepared = false;
     this.posterReady = false;
     this.posterFailed = false;
+    this.posterNotified = false;
     this.videoAllowed = false;
     this.clearRollTimer();
     if (!this.state.enabled || !this.queryable(this.name)) {
@@ -132,14 +149,15 @@ export struct MotionCoverLayer {
   }
 
   /**
-   * 让视频层**晚一步**上场：先把 Apple 的首帧（`previewFrame`）淡进来，停一下再挂 `Video`。
+   * 等首帧（`previewFrame`）先上场，再让 `Video` 挂载起播。
    *
-   * 这就是甲方报的「开始播放时画面突然变化一下」的修法：原来视频层一挂上就起播，
-   * 屏上从"页面静图"直接跳到"视频第一帧"；现在改成
-   * `静图 →（320ms 淡变）首帧 →（240ms 淡变）视频`，后一段是同图换源，视觉上不跳。
+   * 为什么还要等：`Video` 在预览帧/第一帧就绪之前是黑底 ⇒ 直接在"页面静图"上叠一个
+   * `Video`，用户会先看到一下黑。所以先让**首帧**（与视频第一帧同一张图）站住，
+   * 视频层再上场；两者之间**不加任何过渡**（甲方 2026-10-24：「因为是首帧，播放前不需要淡入」）。
    *
    * 三种情况直接放行，不让首帧挡住视频：
-   * ① 这个实体没有首帧（`posterUrl` 为空）；② 首帧加载失败；③ 超过 preroll 时长还没解码完。
+   * ① 这个实体没有首帧（`posterUrl` 为空）；② 首帧加载失败（`onError` 里放行）；
+   * ③ 超过 {@link MOTION_POSTER_WAIT_MS} 还没解码完。
    */
   private armVideoAfterPoster(): void {
     this.videoAllowed = false;
@@ -151,7 +169,13 @@ export struct MotionCoverLayer {
     this.rollTimer = setTimeout((): void => {
       this.rollTimer = -1;
       this.videoAllowed = true;
-    }, MOTION_POSTER_PREROLL_MS);
+    }, MOTION_POSTER_WAIT_MS);
+  }
+
+  /** @returns 当前首帧地址（`onPosterReady` 的入参；没有就空串）。 */
+  private coverPosterUrl(): string {
+    const cover: MotionCover | undefined = this.cover;
+    return cover !== undefined ? cover.posterUrl : '';
   }
 
   private clearRollTimer(): void {
@@ -206,11 +230,10 @@ export struct MotionCoverLayer {
 
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
-      // ★ 2026-10-24 甲方：「现在开始播放的时候，画面突然变化一下，不是很沉浸；
-      //   请求返回里面是有第一帧画面的」⇒ 把 Apple 的 `previewFrame`（= 视频第一帧）
-      //   **在解析完成时就淡入**，而不是等视频起播才一起冒出来：
-      //   观感是「静图 →（320ms 淡变）首帧 →（240ms 淡变）视频」，
-      //   后一段是同图换源（首帧与视频第一帧对齐）⇒ 起播那一下视觉上不跳。
+      // 首帧（Apple 的 `previewFrame`，= 视频第一帧）自己一层，**不淡入、不淡出**：
+      // 解码完直接出现（`Image` 没解码完时什么都不画，底下的页面静图照旧可见）。
+      // ★ 2026-10-24 甲方澄清：「因为是首帧，播放前不需要淡入吧」⇒ 这一层与视频之间
+      //   不叠任何过渡：首帧出来 → 视频起播 → 视频层直接接上（同图换源，肉眼无变化）。
       if (this.state.enabled && !this.posterFailed && this.cover !== undefined &&
         this.cover.posterUrl.length > 0) {
         Image(this.cover.posterUrl)
@@ -219,17 +242,14 @@ export struct MotionCoverLayer {
           .objectFit(ImageFit.Cover)
           .draggable(false)
           .interpolation(ImageInterpolation.Medium)
-          .opacity(this.posterReady ? 1 : 0)
-          .animation({ duration: 320, curve: Curve.EaseOut })
           .onComplete((): void => {
             this.posterReady = true;
-            if (!this.videoAllowed) {
-              // 首帧已经出来了 ⇒ 不必等满 preroll，再给 120ms 让它"停住"就放视频上场
-              this.clearRollTimer();
-              this.rollTimer = setTimeout((): void => {
-                this.rollTimer = -1;
-                this.videoAllowed = true;
-              }, 120);
+            // 首帧已经出来了 ⇒ 立刻放行视频（不再等 preroll，也不需要淡入）
+            this.clearRollTimer();
+            this.videoAllowed = true;
+            if (!this.posterNotified) {
+              this.posterNotified = true;
+              this.onPosterReady(this.coverPosterUrl());
             }
           })
           .onError((): void => {
@@ -255,9 +275,8 @@ export struct MotionCoverLayer {
           .loop(true)
           .autoPlay(true)
           .hitTestBehavior(HitTestMode.None)
-          // 首帧海报已经在下面了 ⇒ 视频这一层等真的起播再淡入（同图换源，不跳）
+          // 首帧已经铺在下面了 ⇒ 视频**起播那一刻直接接上**（不加过渡，避免"播放前淡入"）
           .opacity(this.started ? 1 : 0)
-          .animation({ duration: 240, curve: Curve.EaseOut })
           .onPrepared((): void => {
             this.prepared = true;
             if (this.onScreen) {

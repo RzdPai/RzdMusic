@@ -258,22 +258,45 @@ export struct AlbumDetailPage {
   }
 
   /**
-   * 下载专辑封面，取两个颜色：
-   *  * `avgColor`：全图主色经 `ColorConversion.dealColor` 压暗 —— 页面渐变底、文字、标题栏底色都用它（行为不变）；
-   *  * `photoRawAvgColor` + `photoTopColor`：**原始**（不压暗）平均色，只给状态栏判据用（见 {@link statusBarOriginalColor}）。
+   * 取色代次：**动态封面的首帧**比平台静态封面晚到，晚到的取色响应绝不能盖掉新的
+   * （否则屏上是绿图、底色是棕的 —— 与歌手页同款问题）。
+   */
+  private colorSeq: number = 0;
+  /**
+   * 已经按**动态封面首帧**取过色了 ⇒ 之后凡是"按平台静态封面取色"的调用一律作废
+   * （否则会出现"先绿一下又跳回棕色"：屏上明明是 Apple 那张图，底色却按平台那张图算）。
+   */
+  private motionColorApplied: boolean = false;
+
+  /**
+   * 用**平台静态专辑封面**取色（首次进入时的默认取色）。
    */
   private async loadBackdropColor(): Promise<void> {
-    if (this.infoPicUrl.length === 0) {
+    if (this.motionColorApplied) {
       return;
     }
+    await this.loadBackdropColorFrom(this.infoPicUrl);
+  }
+
+  /**
+   * 用指定照片地址取两个颜色：
+   *  * `avgColor`：全图主色经 `ColorConversion.dealColor` 压暗 —— 页面渐变底、文字、标题栏底色都用它；
+   *  * `photoRawAvgColor` + `photoTopColor`：**原始**（不压暗）平均色，只给状态栏判据用。
+   * @param url 平台静态封面，或**动态封面的首帧**（`previewFrame`）
+   */
+  private async loadBackdropColorFrom(url: string): Promise<void> {
+    if (url.length === 0) {
+      return;
+    }
+    const seq: number = ++this.colorSeq;
     const req: http.HttpRequest = http.createHttp();
     try {
-      const resp: http.HttpResponse = await req.request(this.infoPicUrl, {
+      const resp: http.HttpResponse = await req.request(url, {
         method: http.RequestMethod.GET,
         expectDataType: http.HttpDataType.ARRAY_BUFFER,
         readTimeout: 15000
       });
-      if (resp.responseCode !== 200 || resp.result === undefined) {
+      if (resp.responseCode !== 200 || resp.result === undefined || seq !== this.colorSeq) {
         return;
       }
       const src: image.ImageSource = image.createImageSource(resp.result as ArrayBuffer);
@@ -284,7 +307,7 @@ export struct AlbumDetailPage {
             effectKit.createColorPicker(pixelMap,
               (error: Error | undefined, colorPicker: effectKit.ColorPicker | undefined) => {
                 try {
-                  if (error === undefined && colorPicker !== undefined) {
+                  if (error === undefined && colorPicker !== undefined && seq === this.colorSeq) {
                     const color = colorPicker.getLargestProportionColor();
                     const arr: number[] = ColorConversion.dealColor(color.red, color.green, color.blue);
                     const r: number = Math.max(0, Math.min(255, arr[0]));
@@ -301,7 +324,7 @@ export struct AlbumDetailPage {
                 }
               });
           });
-          this.logStatusBarDecision('avg-sample');
+          this.logStatusBarDecision(seq === this.colorSeq ? 'avg-sample' : 'avg-sample-stale');
         } finally {
           try {
             pixelMap.release();
@@ -309,7 +332,7 @@ export struct AlbumDetailPage {
             // ignore
           }
         }
-        await this.loadStatusBarStripColor(src);
+        await this.loadStatusBarStripColor(src, seq);
       } finally {
         src.release();
       }
@@ -328,8 +351,9 @@ export struct AlbumDetailPage {
    * **那一条**的亮度；全图主色表达的是"占比最大的颜色"，跟顶部那一条可以完全不搭。
    * 取不到（解码不支持区域 / 尺寸还没量到）就返回，判据退回 `photoRawAvgColor` → `avgColor`。
    * @param src 已经创建好的图片源（本方法内只做一次小区域解码）。
+   * @param seq 取色代次（与 `loadBackdropColorFrom` 同一个）：过期响应不许写 `photoTopColor`。
    */
-  private async loadStatusBarStripColor(src: image.ImageSource): Promise<void> {
+  private async loadStatusBarStripColor(src: image.ImageSource, seq: number): Promise<void> {
     try {
       const info: image.ImageInfo = await src.getImageInfo();
       const region: image.Region | undefined = this.statusBarStripRegion(info.size.width, info.size.height);
@@ -355,7 +379,7 @@ export struct AlbumDetailPage {
           effectKit.createColorPicker(strip,
             (error: Error | undefined, colorPicker: effectKit.ColorPicker | undefined) => {
               try {
-                if (error === undefined && colorPicker !== undefined) {
+                if (error === undefined && colorPicker !== undefined && seq === this.colorSeq) {
                   const raw: effectKit.Color = colorPicker.getAverageColor();
                   this.photoTopColor = toRgbString(raw.red, raw.green, raw.blue);
                 }
@@ -803,7 +827,12 @@ export struct AlbumDetailPage {
           // 动态封面（其它设置里可关）：按「专辑名 + 歌手名」去 Apple Music 解析 motion artwork
           motionKind: 'album',
           motionName: this.infoName,
-          motionArtist: this.infoArtist
+          motionArtist: this.infoArtist,
+          // 首帧一到就按它重新取色（否则屏上是 Apple 那张图、底色还是平台那张图的颜色）
+          onMotionPoster: (posterUrl: string): void => {
+            this.motionColorApplied = true;
+            void this.loadBackdropColorFrom(posterUrl);
+          }
         })
         List({ scroller: this.scroller }) {
           ListItem() {

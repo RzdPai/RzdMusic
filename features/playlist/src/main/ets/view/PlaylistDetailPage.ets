@@ -318,6 +318,16 @@ export struct PlaylistDetailPage {
   @Local coverVersion: number = 0;
   /** 已取色的封面地址，避免同一张图重复取色。 */
   private colorizedCoverUrl: string = '';
+  /**
+   * **当前应该生效**的取色图源（歌单封面 / 动态封面的首帧）。
+   * 异步取色回来时用它判断"这次结果是不是还要用"，过期结果直接丢弃。
+   */
+  private colorTargetUrl: string = '';
+  /**
+   * 已经按**动态封面首帧**取过色 ⇒ 之后"按歌单封面取色"的调用一律作废
+   * （否则会出现"先绿一下又跳回棕色"：屏上明明是 Apple 那张图，底色却按平台那张图算）。
+   */
+  private motionColorApplied: boolean = false;
   /** 标题栏「四个点」菜单图标 componentId（openMenu 锚点）。 */
   private readonly moreMenuTargetId: string = 'playlist_more_menu_icon';
   /** 缓存菜单内容节点，避免每次点击重复创建。 */
@@ -529,11 +539,29 @@ export struct PlaylistDetailPage {
    * 使 Hero 下缘的渐变与页面底色无缝衔接。
    */
   private async loadBackdropColor(): Promise<void> {
+    if (this.motionColorApplied) {
+      return;
+    }
     const cover: string = this.heroCoverUrl();
-    if (cover.length === 0 || !/^https?:/.test(cover) || cover === this.colorizedCoverUrl) {
+    if (cover.length === 0 || cover === this.colorizedCoverUrl) {
+      return;
+    }
+    await this.loadBackdropColorFrom(cover);
+  }
+
+  /**
+   * 用指定照片地址取主色（**同一套流程**，只是图源可换）。
+   *
+   * @param cover 歌单封面，或**动态封面的首帧**（Apple 的 `previewFrame`）。
+   *   动态封面一上场屏上的图就换成 Apple 那张 ⇒ 底色必须按它重算，
+   *   否则会出现和歌手页一样的毛病：「图是绿的，底色是棕的」（甲方 2026-10-24）。
+   */
+  private async loadBackdropColorFrom(cover: string): Promise<void> {
+    if (cover.length === 0 || !/^https?:/.test(cover)) {
       return;
     }
     this.colorizedCoverUrl = cover;
+    this.colorTargetUrl = cover;
     const req: http.HttpRequest = http.createHttp();
     try {
       const resp: http.HttpResponse = await req.request(cover, {
@@ -553,7 +581,7 @@ export struct PlaylistDetailPage {
               (error: Error | undefined, colorPicker: effectKit.ColorPicker | undefined) => {
                 try {
                   if (error === undefined && colorPicker !== undefined) {
-                    if (cover !== this.heroCoverUrl()) {
+                    if (cover !== this.colorTargetUrl) {
                       return;
                     }
                     const color = colorPicker.getLargestProportionColor();
@@ -1333,7 +1361,12 @@ export struct PlaylistDetailPage {
           scrollVp: this.detailScrollVp,
           transitionToken: this.transitionToken,
           // 动态封面（其它设置里可关）：按歌单名去 Apple Music 解析 motion artwork
-          motionName: this.motionQueryName()
+          motionName: this.motionQueryName(),
+          // 首帧一到就按它重新取色（否则屏上是 Apple 那张图、底色还是平台那张图的颜色）
+          onMotionPoster: (posterUrl: string): void => {
+            this.motionColorApplied = true;
+            void this.loadBackdropColorFrom(posterUrl);
+          }
         })
         this.PlaylistNavDestinationSlot()
       }

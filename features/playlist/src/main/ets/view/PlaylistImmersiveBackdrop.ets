@@ -37,6 +37,11 @@ export struct PlaylistImmersiveBackdrop {
    * 关掉「其它设置 → 动态封面」时它零请求、零解码（内部门控）。
    */
   @Param motionName: string = '';
+  /**
+   * 动态封面首帧解码完成 ⇒ 把海报地址交回宿主页**重新取色**（页面底色/遮罩原来按静态封面算的，
+   * 图一换成 Apple 的首帧就必须重算，否则会出现"图是绿的、底色是棕的"）。
+   */
+  @Event onMotionPoster: (posterUrl: string) => void = (posterUrl: string): void => {};
   @Local failed: boolean = false;
   @Local transitionState: PlaylistTransitionState = getPlaylistTransitionState();
 
@@ -79,12 +84,15 @@ export struct PlaylistImmersiveBackdrop {
               onFailed: (): void => { this.onPhotoFailed(); }
             })
           }
-          // 动态封面：盖在静图之上、遮罩之下；只在视频起播后淡入，失败自动退回静图。
+          // 动态封面：盖在静图之上、遮罩之下；先上首帧、再上视频（都不做淡入）。
           if (this.motionName.length > 0) {
             MotionCoverLayer({
               kind: 'playlist',
               name: this.motionName,
-              fallbackPoster: this.photo
+              fallbackPoster: this.photo,
+              onPosterReady: (posterUrl: string): void => {
+                this.onMotionPoster(posterUrl);
+              }
             })
               .width('100%')
               .height(this.frameHeightVp())
