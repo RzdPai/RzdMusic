@@ -267,6 +267,18 @@ export struct MinePage {
   /** 「平台音乐」那一格的条数 = 已登录的平台账号数（单位「个」，见 `countOf`）。 */
   @Local platformAccountCount: number = 0;
   /** 「歌单导入」面板（`NetworkImportSheet`，与全部歌单页同一个组件）。 */
+  /**
+   * 半模态「种类」：'' = 关闭；'edit' = 新建/重命名歌单；'import' = 网络导入歌单。
+   *
+   * ★★ 2026-10-24（甲方：「还是不能新建歌单」）：
+   *   **一个组件上只能挂一个 `bindSheet`**（属性是单槽位，后来者覆盖前者）。
+   *   本页原来在同一个根 Stack 上挂了两个（编辑 + 导入）⇒ 前一个永远不生效
+   *   ⇒ "点新建歌单没反应/只闪一下"。
+   *   ⇒ 现在只留**一个** `bindSheet`，用这个字段切换内容与标题。
+   */
+  @Local sheetKind: string = '';
+
+  /** 统一的半模态开关（原来的 `importSheetOpen` 已并入这里）。 */
   @Local importSheetOpen: boolean = false;
   /** 歌单卡的数据（`store.playlistVersion` 变一次就读一次）。 */
   @Local playlists: PlaylistDto[] = [];
@@ -586,6 +598,9 @@ export struct MinePage {
 
   /** 打开「新建歌单」小面板。 */
   private openCreatePlaylist(): void {
+    // 取证：点击是否真的进来了（grep RzdMine）。若真机没有这行，说明手势被上层吃掉了。
+    hilog.info(DOMAIN, TAG, 'mine create playlist tap');
+    this.sheetKind = 'edit';
     this.editingId = '';
     this.editName = '';
     this.editOpen = true;
@@ -593,6 +608,7 @@ export struct MinePage {
 
   /** 打开「重命名歌单」小面板。 */
   private openRenamePlaylist(item: PlaylistDto): void {
+    this.sheetKind = 'edit';
     this.editingId = item.id;
     this.editName = item.name;
     this.editOpen = true;
@@ -622,16 +638,37 @@ export struct MinePage {
    * 导入落库仍走 `MusicStoreService.importPlaylist()`，没有第二份实现。
    */
   private openImportPlaylist(): void {
+    this.sheetKind = 'import';
     this.importSheetOpen = true;
+    this.editOpen = true;
   }
 
   /** 进「全部歌单」整页（= 原来那个「歌单」页签的整页能力）。 */
-  /** @returns 宽屏两列时单行宽度（vp）：(容器宽 − 12) / 2；还没量到就返回 0（调用方退回 50%）。 */
+  /**
+   * @returns 宽屏歌单行的**列数**：按容器实测宽度自适应
+   * （甲方 2026-10-24：「歌单里面列数不应该自适应吗，有点设备三列、四列甚至五列」）。
+   *
+   * 单行（46 封面 + 歌名 + 曲目数 + 右箭头）最小 ~300vp 才不挤，所以
+   * `列数 = clamp(floor((容器宽 + 间距) / (300 + 间距)), 2, 5)`：
+   * 780 → 2 列、1000 → 3 列、1300 → 4 列、1640 → 5 列（封顶 5）。
+   */
+  private playlistColumns(): number {
+    const gap: number = 12;
+    if (this.playlistRowWidth <= 0) {
+      return 2;
+    }
+    const byWidth: number = Math.floor((this.playlistRowWidth + gap) / (300 + gap));
+    return Math.max(2, Math.min(5, byWidth));
+  }
+
+  /** @returns 宽屏时单行宽度（vp）：(容器宽 − 间距 ×(列数−1)) / 列数；还没量到返回 0。 */
   private playlistRowWidthVp(): number {
+    const cols: number = this.playlistColumns();
+    const gap: number = 12;
     if (this.playlistRowWidth <= 0) {
       return 0;
     }
-    return Math.floor((this.playlistRowWidth - 12) / 2);
+    return Math.floor((this.playlistRowWidth - gap * (cols - 1)) / cols);
   }
 
   private openAllPlaylists(): void {
@@ -1214,7 +1251,6 @@ export struct MinePage {
     }
   }
 
-  @Builder
   /**
    * 宽屏底部**单条**链接卡（一行 = 一张通栏卡）。
    *
@@ -1383,7 +1419,19 @@ export struct MinePage {
     })
   }
 
-  /** 「新建 / 重命名歌单」小面板的内容（照搬参考 `editSheet()` 的形状）。 */
+  /**
+   * 半模态**唯一入口**：按 `sheetKind` 分发到「新建/重命名歌单」或「网络导入歌单」。
+   * （一个节点只能挂一个 `bindSheet`，见页面尾部的长注释。）
+   */
+  @Builder
+  private MineInputSheet() {
+    if (this.sheetKind === 'import') {
+      this.ImportPlaylistSheet()
+    } else {
+      this.EditPlaylistSheet()
+    }
+  }
+
   @Builder
   private EditPlaylistSheet() {
     Column({ space: 12 }) {
@@ -1485,14 +1533,10 @@ export struct MinePage {
               this.PlaylistCard()
             }
 
-            // 下方：设置 / 帮助和反馈 —— **一行一张通栏卡**（甲方：「还是被分成了两列，改成单列」）。
-            // 结构上就不可能是双栏：每个 ListItem 只放一条链接，宽度 100%。
+            // 下方：设置 + 帮助和反馈 —— **一张卡、两行、通栏单列**
+            // （甲方 2026-10-24：「现在下面两个还是单列，但是两个元素分开了」⇒ 合成一张卡）
             ListItem() {
-              this.SingleLinkCard('settings')
-            }
-
-            ListItem() {
-              this.SingleLinkCard('about')
+              this.LinksCard()
             }
           } else {
             ListItem() {
@@ -1541,36 +1585,25 @@ export struct MinePage {
           right: this.contentPaddingSide()
         })
 
-        // ⑤ 顶栏渐隐：卡片从透明标题栏底下穿过时靠近顶部淡出（照搬参考的 TopFade）
-        MineTopFade({ fadeHeight: this.titleTopInset() + 10 })
       }
       .width('100%')
       .height('100%')
-      // ★★ 2026-10-24（甲方：「新建歌单点击屏幕只会闪一下」）：
-      //   这页是 `@ComponentV2` + `@Local`，而 `$$` 是**V1 的两向绑定语法**；
-      //   V2 要用 `!!`（API 18+，官方《半模态转场》：「从 API version 18 开始，该参数支持 !! 双向绑定变量」）。
-      //   用 `$$` 时首帧回写把 `editOpen` 立刻写回 false ⇒ 半模态**刚起就关**，屏上就是"闪一下"。
-      .bindSheet(!!this.editOpen, this.EditPlaylistSheet(), {
+      // ★★★ 2026-10-24（甲方：「还是不能新建歌单」）：
+      //   **一个组件上只能挂一个 `bindSheet`**（属性是单槽位，后写的覆盖先写的）。
+      //   本页原来在同一个根 Stack 上挂了两个（编辑歌单 + 网络导入）⇒ 第一个永远不生效，
+      //   于是"点新建歌单只闪一下 / 没反应"。
+      //   ⇒ 只留这一个 `bindSheet`，内容与标题按 `sheetKind` 切换（见 `MineInputSheet()`）。
+      .bindSheet(!!this.editOpen, this.MineInputSheet(), {
         preferType: SheetType.BOTTOM,
         detents: [SheetSize.MEDIUM],
         detentSelection: SheetSize.MEDIUM,
         dragBar: true,
         showClose: false,
-        title: { title: this.editingId.length === 0 ? '新建歌单' : '重命名歌单' },
+        title: {
+          title: this.sheetKind === 'import' ? '网络导入歌单'
+            : (this.editingId.length === 0 ? '新建歌单' : '重命名歌单')
+        },
         backgroundColor: $r('app.color.background_secondary')
-      })
-      // 「歌单导入」= 就地弹**从网络导入**那张表单（与「全部歌单」页同一个组件，见 openImportPlaylist）
-      .bindSheet(!!this.importSheetOpen, this.ImportPlaylistSheet(), {
-        preferType: SheetType.BOTTOM,
-        detents: [SheetSize.MEDIUM],
-        detentSelection: SheetSize.MEDIUM,
-        dragBar: true,
-        showClose: false,
-        title: { title: '网络导入歌单' },
-        backgroundColor: $r('sys.color.background_secondary'),
-        onDisappear: (): void => {
-          this.importSheetOpen = false;
-        }
       })
     }
     .onBackPressed((): boolean => guardPlayerBack('MinePage'))
