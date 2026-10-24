@@ -1301,6 +1301,65 @@ export struct MinePage {
     .clip(true)
   }
 
+  /**
+   * 宽屏底部的链接卡：**一行两列**（左「设置」右「帮助和反馈」）。
+   * 甲方 2026-10-24：「不是，说错了，就是要让设置和反馈变成单行双列」。
+   */
+  @Builder
+  private LinksRowCard() {
+    Row() {
+      this.LinkCell('settings')
+      Divider()
+        .vertical(true)
+        .height(LINK_ROW_HEIGHT - 20)
+        .strokeWidth(0.6)
+        .color($r('app.color.comp_divider'))
+      this.LinkCell('about')
+    }
+    .width('100%')
+    .height(LINK_ROW_HEIGHT)
+    .borderRadius(R_CARD)
+    .backgroundColor($r('app.color.card_background'))
+    .clip(true)
+  }
+
+  /** 一行两列里的**一格**（图标 + 名字 + 右箭头，均分宽度）。 */
+  @Builder
+  private LinkCell(action: string) {
+    ForEach(this.linkRows(), (row: MineLinkRow) => {
+      if (row.action === action) {
+        Row({ space: 12 }) {
+          SymbolGlyph(row.symbol)
+            .fontSize(22)
+            .fontColor([$r('sys.color.font_primary')])
+          Text(row.label)
+            .fontSize(F_ITEM)
+            .fontColor($r('sys.color.font_primary'))
+            .layoutWeight(1)
+            .textAlign(TextAlign.Start)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          SymbolGlyph($r('sys.symbol.chevron_right'))
+            .fontSize(18)
+            .height(18)
+            .fontColor([$r('sys.color.icon_tertiary')])
+        }
+        .layoutWeight(1)
+        .height('100%')
+        .padding({ left: 14, right: 14 })
+        .stateStyles({
+          normal: { .backgroundColor(Color.Transparent) },
+          pressed: { .backgroundColor($r('sys.color.background_secondary')) }
+        })
+        .onClick(() => {
+          this.onLinkTap(row.action);
+        })
+        .accessibilityText(row.label)
+        .accessibilityLevel('yes')
+      }
+    }, (row: MineLinkRow) => 'link_cell_' + row.action)
+  }
+
   /** ④ 入口卡（窄屏用）：设置 / 帮助和反馈，一张卡两行。 */
   @Builder
   private LinksCard() {
@@ -1549,7 +1608,7 @@ export struct MinePage {
               this.PlaylistCard()
             }
             ListItem() {
-              this.LinksCard()
+              this.LinksRowCard()
             }
           }
 
