@@ -280,6 +280,9 @@ export struct MinePage {
    * 登录卡自身内高写死 80，靠外层容器按这个值撑高，两张卡才等高（甲方 2026-10-24）。
    */
   @Local topCardHeightVp: number = 0;
+
+  /** 宽屏两列行列表的容器实测宽度（vp）：行宽由它反推，见 `playlistRowWidthVp()`。 */
+  @Local playlistRowWidth: number = 0;
   /** 收藏的在线歌单（`store.favoritePlaylistVersion` 变一次就读一次）。 */
   @Local collectedPlaylists: FavoriteEntry[] = [];
   /** 歌单行的懒加载数据源（`@Local` 保证 `LazyForEach` 拿到同一个实例）。 */
@@ -623,6 +626,14 @@ export struct MinePage {
   }
 
   /** 进「全部歌单」整页（= 原来那个「歌单」页签的整页能力）。 */
+  /** @returns 宽屏两列时单行宽度（vp）：(容器宽 − 12) / 2；还没量到就返回 0（调用方退回 50%）。 */
+  private playlistRowWidthVp(): number {
+    if (this.playlistRowWidth <= 0) {
+      return 0;
+    }
+    return Math.floor((this.playlistRowWidth - 12) / 2);
+  }
+
   private openAllPlaylists(): void {
     this.pushOnShellStack(RouterUrlConstants.MINE_PLAYLIST, new Object());
   }
@@ -863,6 +874,37 @@ export struct MinePage {
             .width('100%')
             .padding({ left: 14, right: 14, top: 4, bottom: 18 })
             .textAlign(TextAlign.Start)
+        } else if (this.isWide()) {
+          // 宽屏**两列行**（甲方 2026-10-24：「歌单那里怎么还是单列啊。这里应该多列才对」）：
+          // 行样式不变（还是一横条），只是把行铺成两列；行宽按容器实测宽度算（见 `playlistRowWidthVp`）。
+          Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
+            LazyForEach(this.playlistSource, (item: PlaylistDto) => {
+              Column() {
+                this.PlaylistRow(item, false)
+              }
+              .width(this.playlistRowWidthVp() > 0 ? this.playlistRowWidthVp() : '50%')
+            }, (item: PlaylistDto, index: number) => this.playlistSource.keyOf(index))
+          }
+          .width('100%')
+          .onAreaChange((_old: Area, area: Area): void => {
+            const w: number = Number(area.width);
+            if (Math.abs(w - this.playlistRowWidth) > 1) {
+              this.playlistRowWidth = w;
+            }
+          })
+
+          if (this.playlists.length > PLAYLIST_PREVIEW_MAX) {
+            Text(`查看全部 ${this.playlists.length} 张歌单`)
+              .fontSize(F_SUB)
+              .fontColor(this.themeState.color)
+              .width('100%')
+              .height(44)
+              .padding({ left: 14, right: 14 })
+              .textAlign(TextAlign.Start)
+              .onClick(() => {
+                this.openAllPlaylists();
+              })
+          }
         } else {
           // ★ 歌单行：LazyForEach + 稳定 key（数据源见 MinePlaylistSource）
           LazyForEach(this.playlistSource, (item: PlaylistDto, index: number) => {
@@ -892,6 +934,23 @@ export struct MinePage {
             .width('100%')
             .padding({ left: 14, right: 14, top: 4, bottom: 18 })
             .textAlign(TextAlign.Start)
+        } else if (this.isWide()) {
+          Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
+            ForEach(this.collectedPlaylists.slice(0, PLAYLIST_PREVIEW_MAX),
+              (entry: FavoriteEntry) => {
+                Column() {
+                  this.CollectedRow(entry, false)
+                }
+                .width(this.playlistRowWidthVp() > 0 ? this.playlistRowWidthVp() : '50%')
+              }, (entry: FavoriteEntry) => 'mine_collected_' + entry.source + '_' + entry.id)
+          }
+          .width('100%')
+          .onAreaChange((_old: Area, area: Area): void => {
+            const w: number = Number(area.width);
+            if (Math.abs(w - this.playlistRowWidth) > 1) {
+              this.playlistRowWidth = w;
+            }
+          })
         } else {
           ForEach(this.collectedPlaylists.slice(0, PLAYLIST_PREVIEW_MAX),
             (entry: FavoriteEntry, index: number) => {
@@ -1155,7 +1214,58 @@ export struct MinePage {
     }
   }
 
-  /** ④ 入口卡：设置 / 帮助和反馈 / 平台音乐（照搬参考 `linksCard()`：行高 58、图标 22、右箭头、左缩进 50）。 */
+  @Builder
+  /**
+   * 宽屏底部**单条**链接卡（一行 = 一张通栏卡）。
+   *
+   * 甲方 2026-10-24：「下方设置和帮助还是被分成了两列，改成单列」——
+   * 与其继续在一张卡里排两行（容易被他看成两列），宽屏干脆**一行一张通栏卡**，
+   * 结构上就不可能是双栏。窄屏仍用 `LinksCard()`（一张卡两行）。
+   * @param action 'settings' | 'about'
+   */
+  @Builder
+  private SingleLinkCard(action: string) {
+    Column() {
+      ForEach(this.linkRows(), (row: MineLinkRow) => {
+        if (row.action === action) {
+          Row({ space: 14 }) {
+            SymbolGlyph(row.symbol)
+              .fontSize(22)
+              .fontColor([$r('sys.color.font_primary')])
+            Text(row.label)
+              .fontSize(F_ITEM)
+              .fontColor($r('sys.color.font_primary'))
+              .layoutWeight(1)
+              .textAlign(TextAlign.Start)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+            SymbolGlyph($r('sys.symbol.chevron_right'))
+              .fontSize(18)
+              .height(18)
+              .fontColor([$r('sys.color.icon_tertiary')])
+          }
+          .width('100%')
+          .height(LINK_ROW_HEIGHT)
+          .padding({ left: 14, right: 14 })
+          .stateStyles({
+            normal: { .backgroundColor(Color.Transparent) },
+            pressed: { .backgroundColor($r('sys.color.background_secondary')) }
+          })
+          .onClick(() => {
+            this.onLinkTap(row.action);
+          })
+          .accessibilityText(row.label)
+          .accessibilityLevel('yes')
+        }
+      }, (row: MineLinkRow) => 'single_link_' + row.action)
+    }
+    .width('100%')
+    .borderRadius(R_CARD)
+    .backgroundColor($r('app.color.card_background'))
+    .clip(true)
+  }
+
+  /** ④ 入口卡（窄屏用）：设置 / 帮助和反馈，一张卡两行。 */
   @Builder
   private LinksCard() {
     Column() {
@@ -1375,17 +1485,14 @@ export struct MinePage {
               this.PlaylistCard()
             }
 
-            // 下方：设置 + 帮助和反馈 —— **通栏单列**（甲方：「还是被分成了两列，改成单列」）
+            // 下方：设置 / 帮助和反馈 —— **一行一张通栏卡**（甲方：「还是被分成了两列，改成单列」）。
+            // 结构上就不可能是双栏：每个 ListItem 只放一条链接，宽度 100%。
             ListItem() {
-              Column() {
-                this.LinksCard()
-              }
-              .width('100%')
-              .onAreaChange((_old: Area, area: Area): void => {
-                // 真机取证：两条链接卡到底有多宽（单列应≈整页宽，两列会≈一半）
-                hilog.info(DOMAIN, TAG, 'mine links card w=%{public}f h=%{public}f wide=1',
-                  Number(area.width), Number(area.height));
-              })
+              this.SingleLinkCard('settings')
+            }
+
+            ListItem() {
+              this.SingleLinkCard('about')
             }
           } else {
             ListItem() {
@@ -1439,7 +1546,11 @@ export struct MinePage {
       }
       .width('100%')
       .height('100%')
-      .bindSheet($$this.editOpen, this.EditPlaylistSheet(), {
+      // ★★ 2026-10-24（甲方：「新建歌单点击屏幕只会闪一下」）：
+      //   这页是 `@ComponentV2` + `@Local`，而 `$$` 是**V1 的两向绑定语法**；
+      //   V2 要用 `!!`（API 18+，官方《半模态转场》：「从 API version 18 开始，该参数支持 !! 双向绑定变量」）。
+      //   用 `$$` 时首帧回写把 `editOpen` 立刻写回 false ⇒ 半模态**刚起就关**，屏上就是"闪一下"。
+      .bindSheet(!!this.editOpen, this.EditPlaylistSheet(), {
         preferType: SheetType.BOTTOM,
         detents: [SheetSize.MEDIUM],
         detentSelection: SheetSize.MEDIUM,
@@ -1449,7 +1560,7 @@ export struct MinePage {
         backgroundColor: $r('app.color.background_secondary')
       })
       // 「歌单导入」= 就地弹**从网络导入**那张表单（与「全部歌单」页同一个组件，见 openImportPlaylist）
-      .bindSheet($$this.importSheetOpen, this.ImportPlaylistSheet(), {
+      .bindSheet(!!this.importSheetOpen, this.ImportPlaylistSheet(), {
         preferType: SheetType.BOTTOM,
         detents: [SheetSize.MEDIUM],
         detentSelection: SheetSize.MEDIUM,

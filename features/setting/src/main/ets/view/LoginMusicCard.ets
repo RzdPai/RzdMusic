@@ -193,7 +193,7 @@ export struct LoginMusicCard {
     //   `app.color.comp_background_list_card`，在本页里看起来"颜色和圆角都跟下面不一样"（用户反馈）。
     .borderRadius(ACCOUNT_CARD_RADIUS)
     .backgroundColor($r('app.color.card_background'))
-    .bindSheet($$this.sheetOpen, this.AccountSheetContent(), {
+    .bindSheet(!!this.sheetOpen, this.AccountSheetContent(), {
       height: ACCOUNT_SHEET_HEIGHT,
       dragBar: true,
       showClose: false,
