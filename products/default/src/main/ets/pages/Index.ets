@@ -3026,17 +3026,55 @@ struct Index {
    * （那个 Navigation 挂在首页 TabContent 里），永远盖不住外层 `HdsTabs` 底栏；
    * 改推根栈后，NavDestination 会整屏覆盖 Tabs 内容（含底栏）。
    */
+  /** 搜索页转场的缩放（1 = 整页；0.92 = "从搜索框长出来"那一帧）。 */
+  @Local searchMorphScale: number = 1;
+  /** 搜索页转场的透明度（0 → 1 淡入）。 */
+  @Local searchMorphOpacity: number = 1;
+
   @Builder
   private RootRouteMap(name: string, param: Object) {
     if (name === SEARCH_ROUTE_NAME) {
-      OnlineSearchPage({
-        routeParam: param,
-        onShowChange: (open: boolean): void => {
-          if (open) {
-            this.appState.miniBarExpanded = true;
-            Logger.info(RzdShellLogTag, 'search page shown (root stack)');
-          }
+      NavDestination() {
+        Column() {
+          OnlineSearchPage({
+            routeParam: param,
+            onShowChange: (open: boolean): void => {
+              if (open) {
+                this.appState.miniBarExpanded = true;
+                Logger.info(RzdShellLogTag, 'search page shown (root stack)');
+              }
+            }
+          })
         }
+        .width(StyleConstants.FULL_WIDTH)
+        .height(StyleConstants.FULL_HEIGHT)
+        .scale({ x: this.searchMorphScale, y: this.searchMorphScale })
+        .opacity(this.searchMorphOpacity)
+      }
+      .hideTitleBar(true)
+      // ★ 2026-10-25（甲方：「变成普通推页了」）：搜索页挪到根栈后，源端（首页搜索框，在内层 homeStack）
+      //   与目标端不在同一个 Navigation 里，`geometryTransition` 配不上 ⇒ 这里用**缩放 + 淡入**复刻
+      //   一镜到底的观感（进入从 0.92 放大到 1、退出反向），转场时长与原来的形变接近。
+      .customTransition((operation: NavigationOperation,
+        isEnter: boolean): Array<NavDestinationTransition> | undefined => {
+        const enter: boolean = isEnter && operation === NavigationOperation.PUSH;
+        // 进入前先把"小且透明"这一帧压好（退出则从整页开始）
+        this.searchMorphScale = enter ? 0.92 : 1;
+        this.searchMorphOpacity = enter ? 0 : 1;
+        return [{
+          duration: 300,
+          curve: Curve.Friction,
+          event: (): void => {
+            this.getUIContext().animateTo({ duration: 300, curve: Curve.Friction }, (): void => {
+              this.searchMorphScale = enter ? 1 : 0.96;
+              this.searchMorphOpacity = enter ? 1 : 0;
+            });
+          },
+          onTransitionEnd: (): void => {
+            this.searchMorphScale = 1;
+            this.searchMorphOpacity = 1;
+          }
+        }];
       })
     }
   }
