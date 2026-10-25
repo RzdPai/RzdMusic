@@ -437,8 +437,9 @@ struct Index {
    * 搜索页是否在最上面（内层栈被推到第二条）。
    * 用来把外层 `HdsTabs` 的浮动底栏收掉 —— 上游无界在搜索页里是没有底栏/迷你条的。
    */
+  /** 搜索页（homeStack 上的 NavDestination）是否在栈顶：只用来把 HdsTabs 底栏压成 0（真正二级页观感）。 */
+  @Local searchPageOnTop: boolean = false;
   /**
-   * 褰㈠彉鍏嬮殕灞傜敤鐨勬挱鏀惧櫒 VM銆?
    *
    * 鍏嬮殕灞傝鐢昏糠浣犳潯鍙充晶閭ｄ竴鍧楃殑**鍓湰**锛堟瓕鍚?姝屾墜 + 鎾斁鎸夐挳锛夛紝瀹冭璇诲綋鍓嶆洸鐩笌鎾帶鐘舵€侊紱
    * 涓庣湡瀹炶糠浣犳潯鍚勮嚜鎸佹湁涓€涓?VM 瀹炰緥鏄畨鍏ㄧ殑锛圴M 鍙槸 `MusicAppState`/`MediaService` 鐨勯棬闈紝
@@ -2737,6 +2738,7 @@ struct Index {
   private openHomeSearch(): void {
     // 搜索页是**真正的二级页面**（homeStack 上的 NavDestination），一镜到底由 geometryTransition 承载，
     // 这里不再动画底栏高度、也不再置"搜索态"状态位。
+    this.searchPageOnTop = true;
     this.homeStack.pushPath({ name: SEARCH_ROUTE_NAME }, false);
   }
 
@@ -2746,6 +2748,7 @@ struct Index {
     }
     Logger.info(RzdShellLogTag, 'home search pop');
     appendPlayLog('[RzdSearchMorph] shell pop');
+    this.searchPageOnTop = false;
     this.homeStack.pop(false);
   }
 
@@ -2791,10 +2794,14 @@ struct Index {
         // 搜索页现在是**真正的二级页面**（压在 homeStack 上、盖满整屏），底栏不再由壳层推：
         // `barHeight` 恒为 56，进搜索页时自然被 NavDestination 盖住。迷你条只在进页时强制展开一次。
         onShowChange: (open: boolean): void => {
+          // 返回键 / 手势 / 页内返回都会走到这里 ⇒ 底栏高度的标志统一由它维护
+          this.searchPageOnTop = open;
           if (open) {
             this.appState.miniBarExpanded = true;
             Logger.info(RzdShellLogTag, `home search page shown`);
             appendPlayLog(`[RzdSearchMorph] bar searching`);
+          } else {
+            Logger.info(RzdShellLogTag, `home search page hidden`);
           }
         }
       })
@@ -3039,7 +3046,7 @@ struct Index {
             this.HomeTabsPages()
           }
           .barMode(BarMode.Fixed)
-        .barHeight(56)
+        .barHeight(this.searchPageOnTop ? 0 : 56)
           .zIndex(1)
           .barOverlap(true)
           .barPosition(BarPosition.End)
@@ -3218,7 +3225,7 @@ struct Index {
             this.HomeTabsPages()
           }
           .barMode(BarMode.Fixed)
-        .barHeight(56)
+        .barHeight(this.searchPageOnTop ? 0 : 56)
           .zIndex(1)
           .barOverlap(true)
           .barPosition(BarPosition.End)
