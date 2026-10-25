@@ -2997,6 +2997,7 @@ struct Index {
           if (open) {
             this.appState.miniBarExpanded = true;
             Logger.info(RzdShellLogTag, 'search cover shown');
+            MusicStoreService.getInstance().appendRuntimeDiagnostic('RzdSearchCover shown');
             return;
           }
           if (this.isSearchPageShow) {
@@ -3004,13 +3005,16 @@ struct Index {
             setTimeout((): void => {
               this.isSearchPageShow = false;
               Logger.info(RzdShellLogTag, 'search cover hidden');
+              MusicStoreService.getInstance().appendRuntimeDiagnostic('RzdSearchCover hidden (unmount)');
             }, 360);
           }
         }
       })
 
-      // ⚠️ 暂停：把壳层二级页播放条放进弹层后"退出必闪退"（无论是否搜索过）。
-      //   该组件是 HdsTabs/MiniBarMaterialCapsule 体系，在本弹层里卸载会崩 ⇒ 先移除，后续改用轻量替身再上。
+      // 甲方定论：闪退不是播放条引起的（此前"一半不崩"）⇒ 加回来
+      if (this.appState.playQueue.length > 0) {
+        this.floatingMiniBar()
+      }
     }
     .width(StyleConstants.FULL_WIDTH)
     .height(StyleConstants.FULL_HEIGHT)

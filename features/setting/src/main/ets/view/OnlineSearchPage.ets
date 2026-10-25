@@ -1558,6 +1558,16 @@ export struct OnlineSearchPage {
    * 关掉系统转场 + 用同一个弹簧包住 `pop(false)`，两端的 `geometryTransition`
    * 才会把搜索框原路收回首页（官方示例 `SearchLongTakeTransitionPageTwo.ets:86-92`）。
    */
+  /** 持久诊断（重启保留）：闪退后仍能在「关于 → 运行时日志」里看到这一步。 */
+  private persistMorph(step: string): void {
+    try {
+      this.store.appendRuntimeDiagnostic(`RzdSearchMorph ${step} searching=${this.searching} ` +
+        `submitted=${this.submittedKeyword} alpha=${this.contentEnterAlpha}`);
+    } catch (err) {
+      hilog.warn(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'persist failed');
+    }
+  }
+
   private closeSearch(): void {
     if (guardPlayerBack('OnlineSearchPage')) {
       morphLog('close blocked by player');
@@ -1581,12 +1591,14 @@ export struct OnlineSearchPage {
       morphLog(`clearFocus failed: ${(err as Error).message ?? ''}`);
     }
     morphLog('close request');
+    this.persistMorph('close request');
     // 退出动画：内容层淡出（与进入的淡入对称），淡完再通知壳层卸载
     morphLog('close fade out start');
     this.getUIContext().animateTo({ duration: 200, curve: Curve.Friction }, (): void => {
       this.contentEnterAlpha = 0;
     });
     morphLog('close fade out scheduled');
+    this.persistMorph('close fade scheduled');
     this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, (): void => {
       this.searchClosing = false;
       // ★ 必须弹**本页所在的那个栈**（官方示例用 `NavDestinationContext.pathStack`）。
@@ -1609,6 +1621,7 @@ export struct OnlineSearchPage {
     // 淡出 200ms 走完再交给壳层卸载（壳层自己再延迟 360ms），保证退出可见、且不在动画中卸载
     setTimeout((): void => {
       morphLog('notify shell close');
+      this.persistMorph('notify shell close');
       this.onShowChange(false);
     }, 260);
   }
