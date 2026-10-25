@@ -3448,7 +3448,9 @@ export struct NowPlayingFeedPage {
             .alignItems(HorizontalAlign.Start)
           }
           .layoutWeight(1)
-          .justifyContent(FlexAlign.Start)
+          // 左栏占满整块高度、内容靠**底**（甲方：那堆组件必须在左下，不能跑到左上）
+          .height(StyleConstants.FULL_HEIGHT)
+          .justifyContent(FlexAlign.End)
           .alignItems(HorizontalAlign.Start)
 
           // 右栏：歌词铺满整块高度

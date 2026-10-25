@@ -56,10 +56,11 @@ export struct FeedBlurBackdrop {
       `var s=document.querySelector('.stage');` +
       `if(s){` +
       `var k=Math.max(window.innerWidth,window.innerHeight)/Math.min(window.innerWidth,window.innerHeight);` +
-      `s.style.position='fixed';s.style.left='50%';s.style.top='50%';` +
+      // 裁剪锚点 = **上方**（甲方：从上方裁剪）：top 对齐、水平居中，超出部分裁在下方
+      `s.style.position='fixed';s.style.left='50%';s.style.top='0';` +
       `s.style.width='100vmin';s.style.height='100vmin';` +
-      `s.style.transformOrigin='center center';` +
-      `s.style.transform='translate(-50%,-50%) scale('+k+')';}` +
+      `s.style.transformOrigin='top center';` +
+      `s.style.transform='translateX(-50%) scale('+k+')';}` +
       `return 'ok';` +
       `})();`;
     this.controller.runJavaScript(script).then((ret: string): void => {
