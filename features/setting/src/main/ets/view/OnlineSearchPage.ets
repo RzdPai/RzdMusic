@@ -1563,9 +1563,22 @@ export struct OnlineSearchPage {
       return;
     }
     this.searchClosing = true;
-    this.hideSuggest();
-    this.getUIContext().getFocusController().clearFocus();
+    // 副作用全部兜住：搜过内容后退出会崩，最可能就是这几步在"列表/焦点/联想面板"已经处于收尾态时抛异常
+    try {
+      this.hideSuggest();
+    } catch (err) {
+      morphLog(`hideSuggest failed: ${(err as Error).message ?? ''}`);
+    }
+    try {
+      this.getUIContext().getFocusController().clearFocus();
+    } catch (err) {
+      morphLog(`clearFocus failed: ${(err as Error).message ?? ''}`);
+    }
     morphLog('close request');
+    // 退出动画：内容层淡出（与进入的淡入对称），淡完再通知壳层卸载
+    this.getUIContext().animateTo({ duration: 200, curve: Curve.Friction }, (): void => {
+      this.contentEnterAlpha = 0;
+    });
     this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, (): void => {
       this.searchClosing = false;
       // ★ 必须弹**本页所在的那个栈**（官方示例用 `NavDestinationContext.pathStack`）。
@@ -1585,10 +1598,11 @@ export struct OnlineSearchPage {
     // 弹簧的 onFinish 实测要到 1s 才来，所以这里用固定 320ms（转场时长量级）先恢复，
     // 450ms 再补一次幂等兜底。
     // 只发一次关闭信号：弹层模式下壳层会延迟一帧卸载，重复回调会在卸载后改状态 ⇒ 闪退
+    // 淡出 200ms 走完再交给壳层卸载（壳层自己再延迟 360ms），保证退出可见、且不在动画中卸载
     setTimeout((): void => {
       morphLog('notify shell close');
       this.onShowChange(false);
-    }, 320);
+    }, 260);
   }
 
   /** 内容首行要让开的浮层高度：状态栏 + 搜索行 56 + 类型栏 44。 */
