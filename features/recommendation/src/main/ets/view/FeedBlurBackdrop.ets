@@ -20,7 +20,7 @@ const TAG: string = 'RzdFeedBlur';
 
 /**
  * 横屏（及需要时）用的**封面高斯模糊背景**：直接渲染甲方调好的
- * `resources/rawfile/cover_blur_background.html`，只把 `--cover` 换成当前封面。
+ * `resources/rawfile/cbg.html`，只把 `--cover` 换成当前封面。
  *
  * ★ 为什么用 Web 而不是 ArkUI 复刻（甲方 2026-10-25：「不是让你用 ArkUI 重写，是直接渲染这个 html」）：
  *   那份 HTML 里是"封面 cover 裁剪 + 多层不同模糊半径 + 镜像边缘 tile + mask 羽化"的组合，
@@ -55,7 +55,7 @@ export struct FeedBlurBackdrop {
   }
 
   build() {
-    Web({ src: $rawfile('cover_blur_background.html'), controller: this.controller })
+    Web({ src: $rawfile('cbg.html'), controller: this.controller })
       .javaScriptAccess(true)
       .domStorageAccess(false)
       .fileAccess(false)
