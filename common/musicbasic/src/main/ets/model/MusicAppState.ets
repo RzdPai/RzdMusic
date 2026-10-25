@@ -39,15 +39,6 @@ export class  MusicAppState {
    * 用于「二级页面里点播放条 → 跳到现在就听」这种需要**跨页**退栈的场景。
    */
   @Trace public popToRootVersion: number = 0;
-  /**
-   * 首页搜索框在窗口里的矩形（vp）。进搜索页时用它做"搜索框大小 + 位置"的起手帧：
-   * `HomeSearchRow.onAreaChange` 写入，`OnlineSearchPage` 首帧读取。
-   */
-  @Trace public searchRectX: number = 0;
-  @Trace public searchRectY: number = 0;
-  @Trace public searchRectW: number = 0;
-  @Trace public searchRectH: number = 0;
-
   /** 请求壳层把导航栈弹回根页。 */
   public requestPopToRoot(): void {
     this.popToRootVersion++;

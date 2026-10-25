@@ -214,15 +214,7 @@ export struct OnlineSearchPage {
    * 搜索页可能被推到壳层共享栈，也可能被推到首页 Tab 的内层栈，关闭时必须弹对应那个。
    */
   private ownStack: NavPathStack | undefined = undefined;
-  @Local query: string = '';
-  /** 起手帧的位移（vp）。 */
-  @Local morphTx: number = 0;
-  @Local morphTy: number = 0;
-  /** 起手帧的缩放（源框宽 / 目标框宽）。 */
-  @Local morphScale: number = 1;
-  /** 起手动画只播一次。 */
-  private morphPlayed: boolean = false;
-  /** 输入中的联想候选（洛雪式：输入后下方弹出推荐） */
+  @Local query: string = '';  /** 输入中的联想候选（洛雪式：输入后下方弹出推荐） */
   @Local suggestWords: string[] = [];
   @Local showSuggest: boolean = false;
   private suggestTimerId: number = -1;
@@ -599,71 +591,6 @@ export struct OnlineSearchPage {
 
   /** 进页时间戳（性能取证用，见 `aboutToAppear` / 内容首帧日志）。 */
   private static enterAtMs: number = 0;
-
-  /**
-   * 播一次"从首页搜索框长到这个位置"的起手动画（只播一次）。
-   * @param x 本页搜索框窗口坐标 x（vp）
-   * @param y 本页搜索框窗口坐标 y（vp）
-   * @param w 本页搜索框宽度（vp）
-   * @param h 本页搜索框高度（vp）
-   */
-  private playSearchMorph(x: number, y: number, w: number, h: number): void {
-    if (this.morphPlayed) {
-      return;
-    }
-    const sx: number = this.appState.searchRectX;
-    const sy: number = this.appState.searchRectY;
-    const sw: number = this.appState.searchRectW;
-    if (!(sw > 0) || !(w > 0)) {
-      this.morphPlayed = true;
-      return;
-    }
-    this.morphPlayed = true;
-    this.morphTx = sx - x;
-    this.morphTy = sy - y;
-    this.morphScale = sw / w;
-    hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
-      'RzdSearchMorph start tx=%{public}f ty=%{public}f scale=%{public}f src=%{public}f,%{public}f,%{public}f',
-      this.morphTx, this.morphTy, this.morphScale, sx, sy, sw);
-    // ★ 下一帧再动画：同一帧里"赋值 + animateTo"看不出动画（首帧已经是终点）
-    setTimeout((): void => {
-      this.getUIContext().animateTo({ duration: 320, curve: Curve.Friction }, (): void => {
-        this.morphTx = 0;
-        this.morphTy = 0;
-        this.morphScale = 1;
-      });
-    }, 32);
-    hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph end');
-  }
-  aboutToAppear(): void {
-    OnlineSearchPage.enterAtMs = Date.now();
-    morphLog('target aboutToAppear');
-    this.onShowChange(true);
-    this.refreshContentPaddingTop();
-    // ★ 2026-10-24（甲方：「切换到搜索页会有点卡」）：
-    //   `getSearchHistory()` / `getSearchSource()` 都是 **preferences（跨进程 IPC）同步读**，
-    //   原来直接压在 `aboutToAppear` 里 = 正好卡在长镜头转场的第一帧上。
-    //   ⇒ 和历史/热搜一起，统一挪到首帧之后（setTimeout 0）。
-    this.preapplyStatusBarColor();
-    setTimeout((): void => {
-      this.searchHistory = this.store.getSearchHistory();
-      this.restoreSearchSource();
-      void this.loadHotWords();
-      hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
-        'RzdSearchPerf deferred-init done after %{public}dms', OnlineSearchPage.enterAtMs > 0 ?
-          Date.now() - OnlineSearchPage.enterAtMs : -1);
-    }, 0);
-    if (this.routeParam !== '' && typeof this.routeParam === 'string' && (this.routeParam as string).length > 0) {
-      this.query = this.routeParam as string;
-      void this.doSearch();
-    } else {
-      const initial: string = (this.routeParam as SearchRouteParam | undefined)?.query ?? '';
-      if (initial.length > 0) {
-        this.query = initial;
-        void this.doSearch();
-      }
-    }
-  }
 
   /** Restores the persisted source selection; defaults to all sources. */
   private restoreSearchSource(): void {
@@ -1924,18 +1851,7 @@ export struct OnlineSearchPage {
         style: CancelButtonStyle.INPUT,
         icon: { size: 17, color: $r('sys.color.font_secondary') }
       })
-      .layoutWeight(1)
-      // ★★ 2026-10-25（甲方：「我要的主要是搜索框大小+位置变化」）：
-      //   跨 Navigation 的 `geometryTransition` 配不上（源端在根 Navigation 内容里、目标端是根栈 destination），
-      //   所以改成**把源框矩形带过来自己演**：首页 `HomeSearchRow` 写 `appState.searchRect*`，
-      //   这里首帧按"源框位置 + 宽度比"摆好，再 animateTo 走回自身位置（只播一次）。
-      .translate({ x: this.morphTx, y: this.morphTy })
-      .scale({ x: this.morphScale, y: this.morphScale, centerX: '0%', centerY: '0%' })
-      .onAreaChange((_oldArea: Area, area: Area): void => {
-        this.playSearchMorph(Number(area.globalPosition.x), Number(area.globalPosition.y),
-          Number(area.width), Number(area.height));
-      })
-      .defaultFocus(true)
+      .layoutWeight(1)      .defaultFocus(true)
       .focusOnTouch(true)
       .responseRegion({ x: 0, y: -4, width: '100%', height: 40 })
       .onFocus((): void => {

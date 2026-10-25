@@ -1,5 +1,4 @@
-import { AppStorageV2 } from '@kit.ArkUI';
-import { appendPlayLog, AppStorageKeys, Logger, MusicAppState, SearchGlassModifier } from 'musicbasic';
+import { appendPlayLog, Logger, SearchGlassModifier } from 'musicbasic';
 
 /** 一镜到底诊断：同时写 HiLog 与**应用内运行日志**（设置→运行日志，无设备时只能靠它取证）。 */
 function morphLog(message: string): void {
@@ -15,10 +14,6 @@ const SEARCH_GEO_ID: string = 'wanting_search_field';
 
 @ComponentV2
 export struct HomeSearchRow {
-  /** 共享状态：把搜索框矩形写给搜索页做起手帧。 */
-  @Local appState: MusicAppState =
-    AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
-
   @Param gutter: number = 16;
   @Event onOpenSearch: () => void = () => {};
   @Event onOpenRecognize: () => void = () => {};
@@ -68,12 +63,6 @@ export struct HomeSearchRow {
           .onAreaChange((_oldArea: Area, area: Area): void => {
             morphLog(`source rect x=${area.globalPosition.x} y=${area.globalPosition.y} ` +
               `w=${area.width} h=${area.height}`);
-            // ★ 2026-10-25（甲方：「我要的主要是搜索框大小+位置变化」）：把源框矩形写进共享状态，
-            //   搜索页首帧用它做起手帧（跨 Navigation 的 geometryTransition 配不上 ⇒ 改成带矩形过去自己演）。
-            this.appState.searchRectX = Number(area.globalPosition.x);
-            this.appState.searchRectY = Number(area.globalPosition.y);
-            this.appState.searchRectW = Number(area.width);
-            this.appState.searchRectH = Number(area.height);
           })
           .onTouch((event: TouchEvent): void => {
             if (event.type === TouchType.Up) {
