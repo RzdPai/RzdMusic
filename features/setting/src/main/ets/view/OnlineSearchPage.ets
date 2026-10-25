@@ -824,6 +824,17 @@ export struct OnlineSearchPage {
     }
   }
 
+  /**
+   * 进页初始化：**热搜与历史必须在这里读一次**。
+   * 之前 `loadHotWords()` 没有任何调用点、`searchHistory` 只挂在 `@Monitor('store.searchHistoryVersion')` 上
+   * ⇒ 刚进页面两者都是空的（"什么都没有"的真因），搜索一次后 store 变化才补上。
+   */
+  aboutToAppear(): void {
+    this.searchHistory = this.store.getSearchHistory();
+    void this.loadHotWords();
+    this.persistMorph('page appear');
+  }
+
   aboutToDisappear(): void {
     this.searchDisposed = true;
     this.searchRequestQueued = false;
@@ -1593,12 +1604,9 @@ export struct OnlineSearchPage {
     morphLog('close request');
     this.persistMorph('close request');
     // 退出动画：内容层淡出（与进入的淡入对称），淡完再通知壳层卸载
-    morphLog('close fade out start');
-    this.getUIContext().animateTo({ duration: 200, curve: Curve.Friction }, (): void => {
-      this.contentEnterAlpha = 0;
-    });
-    morphLog('close fade out scheduled');
-    this.persistMorph('close fade scheduled');
+    // ★ 持久日志证据：最后一条是 `close request`，`close fade scheduled` 从未出现 ⇒ 崩在这一步的 animateTo。
+    //   退出动画暂时去掉（安全优先），改为直接通知壳层；内容层保持 alpha=1，卸载时不透明也不会闪。
+    this.persistMorph('close skip fade (crash)');
     this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, (): void => {
       this.searchClosing = false;
       // ★ 必须弹**本页所在的那个栈**（官方示例用 `NavDestinationContext.pathStack`）。
