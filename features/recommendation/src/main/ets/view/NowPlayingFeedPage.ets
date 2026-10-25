@@ -2796,16 +2796,15 @@ export struct NowPlayingFeedPage {
         .alt($r('app.media.ic_avatar1'))
         .draggable(false)
 
-      // ★ 2026-10-25（甲方：「我要的就是上半部分有过渡，但不黑」）：
-      //   顶部这条**不提用页底色本身**（页底色比浅色封面略深 ⇒ 就是黑带的来源），
-      //   而是用"**同色提亮 12%**"(`feedTintLighten`)：上沿比页底更亮一点点，
-      //   淡出到透明 ⇒ 有过渡、但永远不会把封面压暗。
+      // ★ 2026-10-25（甲方：「上面的你就不能按照下面的改吗，一个过渡而已」）：
+      //   顶部 = **底部那条的镜像**：同高（封面高 × `FEED_COVER_TOP_FADE`）、同色、方向相反。
+      //   底部：`[透明, 0] → [pageTint, 1]`（y = 70%）；顶部：`[pageTint, 0] → [透明, 1]`（y = 0）。
       Column()
         .width(StyleConstants.FULL_WIDTH)
-        .height(this.coverHeightVp() * 0.22)
+        .height(this.coverHeightVp() * FEED_COVER_TOP_FADE)
         .linearGradient({
           direction: GradientDirection.Bottom,
-          colors: [[feedTintLighten(this.pageTint, 1.12), 0], [Color.Transparent, 1]]
+          colors: [[this.pageTint, 0], [Color.Transparent, 1]]
         })
         .position({ x: 0, y: 0 })
         .hitTestBehavior(HitTestMode.None)
