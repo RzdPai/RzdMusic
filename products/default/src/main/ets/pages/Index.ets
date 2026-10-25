@@ -429,6 +429,8 @@ struct Index {
    * 鈿狅笍 涓嶈鍐嶆嬁瀹冨幓鏀瑰簳閮ㄥ鑸殑 `barHeight` / `barFloatingStyle`锛堣瘯杩囷紝搴曟爮鐩存帴鍧忔帀锛夈€?
    */
   @Local navDepth: number = 0;
+  /** 搜索页是否显示（bindContentCover 承载，框不动）。 */
+  @Local isSearchPageShow: boolean = false;
   /**
    * 首页 Tab 自己的内层导航栈（只放两条路由：首页 / 搜索页）。
    * 见 `HomeRouteNames.ets` 里那段"为什么必须这样"的说明。
@@ -2737,7 +2739,11 @@ struct Index {
     //   ③ 在最上层放一张快照克隆，从源框矩形 animateTo 到目标框矩形；④ 结束移除。
     // 搜索页是**真正的二级页面**（homeStack 上的 NavDestination），一镜到底由 geometryTransition 承载，
     // 这里不再动画底栏高度、也不再置"搜索态"状态位。
-    this.pageIndexInfos.pushPath({ name: SEARCH_ROUTE_NAME }, false);
+    // 照抄文章：只翻一个布尔，页面由 bindContentCover 承载（ModalTransition.NONE ⇒ 框不动）
+    this.getUIContext().animateTo({ duration: 100, curve: curves.interpolatingSpring(0, 1, 324, 38) },
+      (): void => {
+        this.isSearchPageShow = true;
+      });
   }
 
   private closeHomeSearch(): void {
@@ -2747,7 +2753,7 @@ struct Index {
     }
     Logger.info(RzdShellLogTag, 'home search pop');
     appendPlayLog('[RzdSearchMorph] shell pop');
-    this.pageIndexInfos.pop(false);
+    this.isSearchPageShow = false;
   }
 
   /**
@@ -2981,6 +2987,14 @@ struct Index {
    * （那个 Navigation 挂在首页 TabContent 里），永远盖不住外层 `HdsTabs` 底栏；
    * 改推根栈后，NavDestination 会整屏覆盖 Tabs 内容（含底栏）。
    */
+  /** 搜索页（bindContentCover 的内容）。 */
+  @Builder
+  private SearchCover() {
+    OnlineSearchPage({
+      routeParam: ''
+    })
+  }
+
   @Builder
   private RootRouteMap(name: string, param: Object) {
     if (name === SEARCH_ROUTE_NAME) {
@@ -3362,6 +3376,10 @@ struct Index {
       this.expandState.reportWindow(this.viewportWidthVp, this.viewportHeightVp,
         this.windowInfo.statusBarTopVp, this.windowInfo.navigationBarBottomVp);
       this.expandState.updateChromeTier(this.viewportWidthVp);
+    })
+    // 照抄文章：搜索页由全屏模态承载，ModalTransition.NONE ⇒ 无系统动画，几何交由 geometryTransition
+    .bindContentCover(this.isSearchPageShow, this.SearchCover(), {
+      modalTransition: ModalTransition.NONE
     })
   }
 
