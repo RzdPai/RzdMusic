@@ -625,11 +625,14 @@ export struct OnlineSearchPage {
     hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
       'RzdSearchMorph start tx=%{public}f ty=%{public}f scale=%{public}f src=%{public}f,%{public}f,%{public}f',
       this.morphTx, this.morphTy, this.morphScale, sx, sy, sw);
-    this.getUIContext().animateTo({ duration: 320, curve: Curve.Friction }, (): void => {
-      this.morphTx = 0;
-      this.morphTy = 0;
-      this.morphScale = 1;
-    });
+    // ★ 下一帧再动画：同一帧里"赋值 + animateTo"看不出动画（首帧已经是终点）
+    setTimeout((): void => {
+      this.getUIContext().animateTo({ duration: 320, curve: Curve.Friction }, (): void => {
+        this.morphTx = 0;
+        this.morphTy = 0;
+        this.morphScale = 1;
+      });
+    }, 32);
     hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph end');
   }
   aboutToAppear(): void {
@@ -1922,8 +1925,6 @@ export struct OnlineSearchPage {
         icon: { size: 17, color: $r('sys.color.font_secondary') }
       })
       .layoutWeight(1)
-      .geometryTransition('wanting_search_field')
-      .transition(TransitionEffect.opacity(0.99))
       // ★★ 2026-10-25（甲方：「我要的主要是搜索框大小+位置变化」）：
       //   跨 Navigation 的 `geometryTransition` 配不上（源端在根 Navigation 内容里、目标端是根栈 destination），
       //   所以改成**把源框矩形带过来自己演**：首页 `HomeSearchRow` 写 `appState.searchRect*`，

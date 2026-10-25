@@ -67,7 +67,7 @@ import {
   PlaylistTransitionOverlay
 } from 'playlist';
 import { MinePage, OnlineSearchPage } from 'setting';
-import { HOME_ROUTE_NAME, SEARCH_ROUTE_NAME } from './HomeRouteNames';
+import { SEARCH_ROUTE_NAME } from './HomeRouteNames';
 // 鏂版ā鍧楋細鏈湴闊充箰锛堝鍏ヨ澶囬煶棰戝埌娌欑锛変笌娲涢洩鍚屾瀹㈡埛绔€?
 // 鈿狅笍 hvigor 瀵?HAR 鏄?*鎸夊紩鐢ㄧ紪璇?*鐨勶細娌℃湁浠讳綍浠ｇ爜 import 瀹冧滑鏃讹紝
 //    鍗充娇宸茬櫥璁拌繘 build-profile.json5锛岃繖涓や釜妯″潡涔?*涓嶄細琚紪璇?*锛堟瀯寤虹収鏍风豢锛夈€?
@@ -432,12 +432,10 @@ struct Index {
    * 首页 Tab 自己的内层导航栈（只放两条路由：首页 / 搜索页）。
    * 见 `HomeRouteNames.ets` 里那段"为什么必须这样"的说明。
    */
-  private homeStack: NavPathStack = new NavPathStack();
   /**
    * 搜索页是否在最上面（内层栈被推到第二条）。
    * 用来把外层 `HdsTabs` 的浮动底栏收掉 —— 上游无界在搜索页里是没有底栏/迷你条的。
    */
-  /** 搜索页（homeStack 上的 NavDestination）是否在栈顶：只用来把 HdsTabs 底栏压成 0（真正二级页观感）。 */
   @Local searchPageOnTop: boolean = false;
   /**
    *
@@ -624,9 +622,6 @@ struct Index {
     Logger.info(RzdShellLogTag, `pop to root requested depth=${names.length}`);
     if (names.length > 0) {
       this.pageIndexInfos.clear();
-    }
-    if (this.homeStack.size() > 0) {
-      this.homeStack.clear();
     }
   }
 
@@ -2751,45 +2746,6 @@ struct Index {
     this.pageIndexInfos.pop(false);
   }
 
-  /** 首次显示时把首页本身也推进内层栈（这样"源页"才是真正的路由页）。 */
-  private ensureHomeRoute(): void {
-    if (this.homeStack.size() > 0) {
-      return;
-    }
-    this.homeStack.pushPath({ name: HOME_ROUTE_NAME }, false);
-    Logger.info(RzdShellLogTag, `home route pushed size=${this.homeStack.size()}`);
-  }
-
-  /**
-   * 首页 Tab 的内层路由表。
-   *
-   * ⚠️ 这两支必须是**同一个 Navigation 的两个 NavDestination**：
-   *    源端（首页的 `Search`，带 `{follow:true}`）与目标端（搜索页的 `Search`，带
-   *    `transition(opacity 0.99)`）才会被框架配成一对，形变才会发生。
-   */
-  @Builder
-  private HomeRouteMap(name: string, param: Object) {
-    if (name === HOME_ROUTE_NAME) {
-      // 2026-10-23（甲方 A 型：「按返回后仍停在应用里、首页内容一片空白、底栏还在」）：
-      //   返回被 Navigation 吃掉并 pop 掉**最后一条首页路由** ⇒ 内容区空、Tab 条还在。
-      //   ⇒ 用 `NavDestination` 包起来并在首页这一层**显式消费返回**，内容就再也不会被弹空。
-      NavDestination() {
-        RecommendPage({
-          shellProvidesFloatingMiniBar: deviceInfo.distributionOSApiVersion >= 60100,
-          floatingBarExtraBottomReserveVp: this.twoRowExtraBottomVp(),
-          scrollTopCommand: this.tabScrollTopCommands[0],
-          onOpenSearch: (): void => {
-            this.openHomeSearch();
-          }
-        })
-      }
-      .hideTitleBar(true)
-      .onBackPressed((): boolean => {
-        return true;
-      })
-    }
-  }
-
   /**
    * 关闭播放页后的"补一帧"。
    *
@@ -3408,8 +3364,8 @@ struct Index {
    * @returns true = 宸叉秷璐癸紝涓嶅啀璧伴粯璁よ繑鍥為€昏緫
    */
   onBackPress(): boolean {
-    // 内层栈（首页/搜索页）还有可弹的路由时先弹它，别直接退出应用。
-    if (this.homeStack.size() > 1) {
+    // 根栈还有可弹的页面（例如搜索页）时先弹它，别直接退出应用。
+    if (this.pageIndexInfos.size() > 0) {
       this.closeHomeSearch();
       return true;
     }
