@@ -3256,8 +3256,9 @@ export struct NowPlayingFeedPage {
     .height(StyleConstants.FULL_HEIGHT)
     // 每张卡自带底色（滑动时两张卡各带各色一起走，不会"切完才变色"）
     .backgroundColor(this.cardFadeColor(row))
-    .height(StyleConstants.FULL_HEIGHT)
-    .padding({ top: this.topStackOffsetVp(), bottom: this.cardChromeBottomVp() })
+    // 甲方 2026-10-25（收尾）：「进度条和播放暂停按钮往上提一下，要不然容易误触」
+    //   ⇒ 底部让位在原有基础上再 +20vp（进度条、动作行、播放键一起上移）。
+    .padding({ top: this.topStackOffsetVp(), bottom: this.cardChromeBottomVp() + 20 })
     }
   }
 
@@ -3280,7 +3281,7 @@ export struct NowPlayingFeedPage {
       .width(StyleConstants.FULL_WIDTH)
       .alignItems(HorizontalAlign.Start)
       .padding({ left: FEED_SIDE_PADDING_VP, right: FEED_SIDE_PADDING_VP })
-      this.FeedQualityRow(row)
+      // 甲方 2026-10-25（收尾）：「把那行音质去掉」——不再显示 atmos/FLAC 之类的音质标签
       this.FeedActions(row, index)
     }
     .width(StyleConstants.FULL_WIDTH)
