@@ -21,24 +21,21 @@ const TAG: string = 'RzdFeedBlur';
 /**
  * 横屏背景：直接渲染 `resources/rawfile/cbg.html`。
  *
- * ★ 那份 HTML 的结构（甲方调好的效果，别改）：
- *   `.stage > .bg(含 4 个镜像 .tile) + .hero.l2/.l1/.l0`，各自 `background-image: var(--cover)`。
- * ★ 它里面**塞了一张测试用的默认照片**（甲方自己说的），必须换成当前歌曲封面：
- *   这里在页面加载完后做两件事 ——
- *   ① 把 `--cover` 与所有 `.bg / .tile / .hero` 的 `background-image` 直接改成当前封面
- *      （逐元素改，避免某些内核版本对 CSS 变量继承的差异）；
- *   ② 方形舞台做**居中 cover 裁剪**（`scale = max(vw,vh)/min(vw,vh)`），任意比例都铺满不变形。
+ * ★ 甲方口径（2026-10-25）：
+ *   1. HTML 里原本那张**测试照片已经删掉**（`--cover` 现在是 `none`），结构/层叠全部保留；
+ *   2. App 只做一件事 —— **传入封面**（设一次 `--cover`），不要逐元素改 `background-image`；
+ *   3. 方形舞台做**居中 cover 裁剪**：`scale = max(vw,vh)/min(vw,vh)`，任意比例铺满不变形。
  */
 @ComponentV2
 export struct FeedBlurBackdrop {
-  /** 当前这一屏的封面（空串 = 保留 HTML 里的默认图，仅用于调试）。 */
+  /** 当前这一屏的封面地址。 */
   @Param coverUrl: string = '';
   private controller: webview.WebviewController = new webview.WebviewController();
-  /** 上次注入过的封面（避免重复注入）。 */
+  /** 上次已注入的封面（避免重复注入）。 */
   private applied: string = '';
 
-  /** 注入封面 + 方形居中裁剪。 */
-  private applyBackdrop(): void {
+  /** 传入封面 + 方形居中裁剪。 */
+  private applyCover(): void {
     if (this.coverUrl.length === 0) {
       return;
     }
@@ -46,10 +43,7 @@ export struct FeedBlurBackdrop {
     this.applied = url;
     const script: string =
       `(function(){` +
-      `var u=${JSON.stringify('url("' + url + '")')};` +
-      `document.documentElement.style.setProperty('--cover',u);` +
-      `var els=document.querySelectorAll('.bg,.tile,.hero');` +
-      `for(var i=0;i<els.length;i++){els[i].style.backgroundImage=u;}` +
+      `document.documentElement.style.setProperty('--cover',${JSON.stringify('url("' + url + '")')});` +
       `var d=document.documentElement,b=document.body;` +
       `d.style.overflow='hidden';b.style.overflow='hidden';b.style.margin='0';` +
       `var s=document.querySelector('.stage');` +
@@ -59,12 +53,12 @@ export struct FeedBlurBackdrop {
       `s.style.width='100vmin';s.style.height='100vmin';` +
       `s.style.transformOrigin='center center';` +
       `s.style.transform='translate(-50%,-50%) scale('+k+')';}` +
-      `return 'els='+els.length;` +
+      `return 'ok';` +
       `})();`;
     this.controller.runJavaScript(script).then((ret: string): void => {
-      Logger.info(TAG, `backdrop applied ${ret} urlLen=${url.length}`);
+      Logger.info(TAG, `cover injected ret=${ret} urlLen=${url.length}`);
     }).catch((err: Error): void => {
-      Logger.warn(TAG, `backdrop inject failed: ${err.message ?? ''}`);
+      Logger.warn(TAG, `cover inject failed: ${err.message ?? ''}`);
     });
   }
 
@@ -72,7 +66,7 @@ export struct FeedBlurBackdrop {
   onCoverChanged(): void {
     if (this.coverUrl !== this.applied) {
       this.applied = '';
-      this.applyBackdrop();
+      this.applyCover();
     }
   }
 
@@ -90,9 +84,9 @@ export struct FeedBlurBackdrop {
       // 纯背景：不吃触摸，滑动与点击都交给上层
       .hitTestBehavior(HitTestMode.None)
       .onPageEnd((): void => {
-        Logger.info(TAG, 'page end, inject cover + crop');
+        Logger.info(TAG, 'page end, inject cover');
         this.applied = '';
-        this.applyBackdrop();
+        this.applyCover();
       })
   }
 }

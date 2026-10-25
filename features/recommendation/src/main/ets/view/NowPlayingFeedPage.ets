@@ -3437,15 +3437,8 @@ export struct NowPlayingFeedPage {
         Row({ space: 24 }) {
           // 左栏：封面贴左上 → 歌名/歌手 → 收藏+菜单 → 进度条
           Column({ space: 10 }) {
-            Image(row.coverUrl.length > 0 ? row.coverUrl : $r('app.media.ic_avatar1'))
-              .width(StyleConstants.FULL_WIDTH)
-              .height('58%')
-              .objectFit(ImageFit.Cover)
-              .draggable(false)
-              .onClick((): void => {
-                this.playAt(index);
-              })
-
+            // ★ 甲方：「我不是让你把你那个封面删了吗，这个背景自带封面」
+            //   ⇒ 横屏不再单独画封面；背景 HTML 已经带封面，信息块直接开始。
             Column({ space: 10 }) {
               this.FeedInfoRow(row, index)
               this.FeedProgress(row)
