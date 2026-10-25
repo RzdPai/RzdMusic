@@ -3006,7 +3006,10 @@ struct Index {
   /** Root UI: {@link HdsNavigation} with tabs and optional playback cover. */
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
-      HdsNavigation(this.pageIndexInfos) {
+      // ★ 2026-10-25（甲方：「迁移吧」）：根导航从 HDS 的 `HdsNavigation` 换成**原生 `Navigation`** ——
+      //   `HdsNavigation` 会接管转场，`customNavContentTransition` 拿不到控制权（一镜到底库因此不生效）。
+      //   原生 `Navigation` 的 `customNavContentTransition` 是框架直调，ezcustomtransition 才能提供转场。
+      Navigation(this.pageIndexInfos) {
         if (deviceInfo.distributionOSApiVersion >= 60100) {
           HdsTabs({ barPosition: BarPosition.End, controller: this.tabsController }) {
             this.HomeTabsPages()
