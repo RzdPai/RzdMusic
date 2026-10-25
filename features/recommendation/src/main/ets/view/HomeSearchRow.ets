@@ -1,3 +1,4 @@
+import { curves } from '@kit.ArkUI';
 import { appendPlayLog, Logger, SearchGlassModifier } from 'musicbasic';
 
 /** 一镜到底诊断：同时写 HiLog 与**应用内运行日志**（设置→运行日志，无设备时只能靠它取证）。 */
@@ -10,7 +11,7 @@ const SEARCH_FIELD_H: number = 40;
 // wujie126.pa 113552–113587 (Tokens export slot 0x10).
 const FIELD_GAP: number = 16;
 const RECOGNIZE_GAP: number = 10;
-const SEARCH_GEO_ID: string = 'wanting_search_field';
+const SEARCH_GEO_ID: string = 'search_field';
 
 @ComponentV2
 export struct HomeSearchRow {
@@ -53,6 +54,11 @@ export struct HomeSearchRow {
           .focusOnTouch(false)
           .defaultFocus(false)
           .geometryTransition(SEARCH_GEO_ID, { follow: true })
+          // 照抄腾讯云那篇：文字/内容 200ms 三阶贝塞尔淡入淡出（框本身不动）
+          .transition(TransitionEffect.OPACITY.animation({
+            duration: 200,
+            curve: curves.cubicBezierCurve(0.33, 0, 0.67, 1)
+          }))
           // 诊断用：源节点在 push/pop 时是"保留"还是"重建"——退出没动画的关键判据。
           .onAppear((): void => {
             morphLog('source appear');

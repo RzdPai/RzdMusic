@@ -1855,6 +1855,12 @@ export struct OnlineSearchPage {
       })
       .layoutWeight(1)      .defaultFocus(true)
       .focusOnTouch(true)
+      // 与首页搜索框同一个 geometryTransition id + 同样的 200ms 三阶贝塞尔（照抄腾讯云那篇）
+      .geometryTransition('search_field')
+      .transition(TransitionEffect.OPACITY.animation({
+        duration: 200,
+        curve: curves.cubicBezierCurve(0.33, 0, 0.67, 1)
+      }))
       .responseRegion({ x: 0, y: -4, width: '100%', height: 40 })
       .onFocus((): void => {
         hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph target focus');
