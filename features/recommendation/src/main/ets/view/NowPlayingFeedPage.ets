@@ -1,4 +1,34 @@
 /*
+}
+  }
+  private FeedCover(row: RecommendPrivateSongUi, index: number) {
+    Stack({ alignContent: Alignment.TopStart }) {
+      // ★ 甲方 2026-10-24：「就是封面图本身做成渐变，官方的示例不也是这样的吗」
+      //   ⇒ 渐变直接挂在**封面 Image 自己**身上（官方《颜色渐变》：linearGradient 是组件属性，
+      //     绘制在该组件的内容层），**不再另开一层遮罩 Column**。
+      //   四挡（stop 递增）：顶部融进页头色 → 中段完全露出图 → 底部融进页底色。
+      Image(row.coverUrl.length > 0 ? row.coverUrl : $r('app.media.ic_avatar1'))
+        .width(StyleConstants.FULL_WIDTH)
+        .height(this.coverHeightVp())
+        .objectFit(ImageFit.Cover)
+        .alt($r('app.media.ic_avatar1'))
+        .draggable(false)
+        .linearGradient({
+          direction: GradientDirection.Bottom,
+          colors: [
+            [feedTintShade(this.pageTint, 1.0), 0],
+            [Color.Transparent, 0.26],
+            [Color.Transparent, 0.74],
+            [feedTintShade(this.pageTint, 0.96), 1]
+          ]
+        })
+    }
+    .width(StyleConstants.FULL_WIDTH)
+    .height(this.coverHeightVp())
+    .onClick((): void => {
+      this.playAt(index);
+    })
+  }
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
