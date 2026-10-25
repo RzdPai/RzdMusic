@@ -936,6 +936,13 @@ export struct NowPlayingFeedPage {
   @Local tintReady: boolean = false;
   /** 已经取过色的封面地址（去重：同一张封面不要反复下载+解码）。 */
   private lastTintUrl: string = '';
+  /**
+   * 封面 URL → 取色结果（会话缓存）。
+   * ★ 2026-10-25（甲方：「切换中间就开始变了…像两个整体在切换」）：
+   *   每张卡**自带自己的底色**，滑动时两张卡各带各的颜色一起走；
+   *   所以相邻卡的取色要**提前**做完（见 `prefetchNeighborTint`），滑过去时颜色已经在了。
+   */
+  private tintCache: Map<string, FeedTintResult> = new Map<string, FeedTintResult>();
   /** 取色代次：快速滑动 + 异步解码，靠它把过期的那一次结果丢掉（与播放页 `imageColorJobSeq` 同款）。 */
   private cardColorJobSeq: number = 0;
   /** 组件是否还挂着（异步回来时页面可能已经销毁）。 */
@@ -3221,7 +3228,9 @@ export struct NowPlayingFeedPage {
       // ⑥ 细进度条 + 两端时间
       this.FeedProgress(row)
     }
-    .width(StyleConstants.FULL_WIDTH)
+    .height(StyleConstants.FULL_HEIGHT)
+    // 每张卡自带底色（滑动时两张卡各带各色一起走，不会"切完才变色"）
+    .backgroundColor(this.tintColorFor(row))
     .height(StyleConstants.FULL_HEIGHT)
     .padding({ top: this.topStackOffsetVp(), bottom: this.cardChromeBottomVp() })
     }
@@ -3447,6 +3456,35 @@ export struct NowPlayingFeedPage {
    * 去重判据是**封面地址**而不是下标：翻页追加 / 删行之后同一个下标可能是另一首歌，
    * 而同一张封面无论在哪个下标都只需要取一次。
    */
+  /**
+   * @returns 某一屏**自己的**底色：命中缓存就用它，否则退回当前屏的 `pageTint`。
+   * 每张卡自带底色 ⇒ 滑动过程中两张卡各带各的颜色一起走（甲方："两个整体在切换"）。
+   */
+  private tintColorFor(row: RecommendPrivateSongUi): string {
+    if (row.coverUrl.length === 0) {
+      return this.pageTint;
+    }
+    const cached: FeedTintResult | undefined = this.tintCache.get(row.coverUrl);
+    return cached !== undefined ? cached.tint : this.pageTint;
+  }
+
+  /** 预取相邻两屏的取色（只进缓存、不动当前屏），让滑动一开始颜色就位。 */
+  private prefetchNeighborTint(): void {
+    const total: number = this.feedSource.totalCount();
+    const offsets: number[] = [1, -1];
+    for (let i: number = 0; i < offsets.length; i++) {
+      const idx: number = this.currentIndex + offsets[i];
+      if (idx < 0 || idx >= total) {
+        continue;
+      }
+      const row: RecommendPrivateSongUi = this.feedSource.getData(idx);
+      if (row.coverUrl.length === 0 || this.tintCache.has(row.coverUrl)) {
+        continue;
+      }
+      void this.extractCardColor(row.coverUrl, false);
+    }
+  }
+
   private refreshCardColor(): void {
     const url: string = this.currentCoverUrl();
     if (url.length === 0 || url === this.lastTintUrl) {
@@ -3478,7 +3516,11 @@ export struct NowPlayingFeedPage {
    *   （与播放页 `imageColorJobSeq` 同一套做法）；失败**不改颜色**，保留上一个色/兜底色。
    * @param url 封面地址。
    */
-  private async extractCardColor(url: string): Promise<void> {
+  /**
+   * @param url 封面地址
+   * @param apply 是否把结果写进**当前屏**的 `pageTint`（相邻卡预取时传 false，只进缓存）
+   */
+  private async extractCardColor(url: string, apply: boolean = true): Promise<void> {
     const jobSeq: number = ++this.cardColorJobSeq;
     const req: http.HttpRequest = http.createHttp();
     try {
@@ -3518,8 +3560,10 @@ export struct NowPlayingFeedPage {
           Logger.info(RZD_TAG,
             `tint pick main=${color.red},${color.green},${color.blue} url=${url}`);
           const result: FeedTintResult = feedTintResultOf(color.red, color.green, color.blue);
+          // 每张卡的底色都进缓存（滑动时相邻卡各自取用）
+          this.tintCache.set(url, result);
           const light: boolean = result.luminance > FEED_INK_LIGHT_THRESHOLD;
-          if (this.feedAlive && jobSeq === this.cardColorJobSeq) {
+          if (apply && this.feedAlive && jobSeq === this.cardColorJobSeq) {
             // 即时切换（不插值）：颜色一到就是它（甲方 2026-10-24「过渡还是发黑」）
             this.pageTint = result.tint;
             this.tintReady = true;
