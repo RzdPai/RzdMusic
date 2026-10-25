@@ -2830,6 +2830,37 @@ export struct NowPlayingFeedPage {
    * @param row 这一屏的歌。
    * @param index 这一屏的下标。
    */
+  /**
+   * 竖屏封面（**顶到屏幕最上**）：高度比 `FeedCover` 高出一个 `topStackOffsetVp()`，
+   * 这样图片能铺到状态栏后面，与横屏"封面贴左上"统一。
+   * 底部仍是一条 `[透明,0] → [页底色,1]`（整块高度），页底纯色。
+   */
+  @Builder
+  private FeedCoverTop(row: RecommendPrivateSongUi, index: number) {
+    Stack({ alignContent: Alignment.TopStart }) {
+      Image(row.coverUrl.length > 0 ? row.coverUrl : $r('app.media.ic_avatar1'))
+        .width(StyleConstants.FULL_WIDTH)
+        .height(this.coverHeightVp() + this.topStackOffsetVp())
+        .objectFit(ImageFit.Cover)
+        .alt($r('app.media.ic_avatar1'))
+        .draggable(false)
+
+      Column()
+        .width(StyleConstants.FULL_WIDTH)
+        .height(this.coverHeightVp() + this.topStackOffsetVp())
+        .linearGradient({
+          direction: GradientDirection.Bottom,
+          colors: [[Color.Transparent, 0], [this.cardFadeColor(row), 1]]
+        })
+        .hitTestBehavior(HitTestMode.None)
+    }
+    .width(StyleConstants.FULL_WIDTH)
+    .height(this.coverHeightVp() + this.topStackOffsetVp())
+    .onClick((): void => {
+      this.playAt(index);
+    })
+  }
+
   @Builder
   private FeedCover(row: RecommendPrivateSongUi, index: number) {
     Stack({ alignContent: Alignment.TopStart }) {
@@ -3192,6 +3223,30 @@ export struct NowPlayingFeedPage {
     return song === undefined ? '' : song.lyricText;
   }
 
+  /**
+   * 歌词区（横竖屏共用一套）：播放页的渲染核心 AmllLyricView，逐字高亮 + 滚动 + 回弹。
+   */
+  @Builder
+  private FeedLyricsArea(row: RecommendPrivateSongUi) {
+    AmllLyricView({
+      lyricLines: this.cachedLyricLines(),
+      currentTime: this.appState.progress,
+      isPlay: this.appState.isPlay,
+      onSeekTime: (ms: number): void => {
+        MediaService.getInstance().seek(ms);
+      },
+      fontSize: FEED_WIDE_LYRIC_FONT_FP,
+      fontWeight: 'Medium',
+      textColor: this.feedLyricInk(),
+      glowColor: this.feedLyricInk(),
+      enableBlur: false,
+      enableScale: false,
+      enableSpring: true
+    })
+      .width(StyleConstants.FULL_WIDTH)
+      .height(StyleConstants.FULL_HEIGHT)
+  }
+
   @Builder
   private FeedProgress(row: RecommendPrivateSongUi) {
     Row({ space: 8 }) {
@@ -3403,23 +3458,7 @@ export struct NowPlayingFeedPage {
 
           // 右栏：歌词铺满整块高度
           Column() {
-            AmllLyricView({
-              lyricLines: this.cachedLyricLines(),
-              currentTime: this.appState.progress,
-              isPlay: this.appState.isPlay,
-              onSeekTime: (ms: number): void => {
-                MediaService.getInstance().seek(ms);
-              },
-              fontSize: FEED_WIDE_LYRIC_FONT_FP,
-              fontWeight: 'Medium',
-              textColor: this.feedLyricInk(),
-              glowColor: this.feedLyricInk(),
-              enableBlur: false,
-              enableScale: false,
-              enableSpring: true
-            })
-              .width(StyleConstants.FULL_WIDTH)
-              .height(StyleConstants.FULL_HEIGHT)
+            this.FeedLyricsArea(row)
           }
           .layoutWeight(1)
           .height(StyleConstants.FULL_HEIGHT)
@@ -3435,24 +3474,33 @@ export struct NowPlayingFeedPage {
       .height(StyleConstants.FULL_HEIGHT)
       .clip(true)
     } else {
-      // ══ 竖屏（手机）：整屏封面 + 两行小歌词 + 信息 + 进度 ══
+      // ══ 竖屏（手机）：与横屏同一套样式 ══
+      //   · 封面**顶到最上**（不再让出状态栏那一块，和横屏统一）；
+      //   · 封面下方直接是多行歌词（与横屏同一个 `AmllLyricView`）⇒ 中间空间全给歌词；
+      //   · 再往下：歌名/歌手 + 动作行（同一行，与横屏一致）→ 进度条。
       Column({ space: 0 }) {
-        Column({ space: 14 }) {
-          this.FeedCover(row, index)
-          this.FeedInfoColumn(row, index)
+        this.FeedCoverTop(row, index)
+
+        Column() {
+          this.FeedLyricsArea(row)
         }
         .width(StyleConstants.FULL_WIDTH)
         .layoutWeight(1)
-        .justifyContent(FlexAlign.Center)
-        .alignItems(HorizontalAlign.Center)
+        .clip(true)
 
-        this.FeedProgress(row)
+        Column({ space: 10 }) {
+          this.FeedInfoRow(row, index)
+          this.FeedProgress(row)
+        }
+        .width(StyleConstants.FULL_WIDTH)
+        .padding({ left: 16, right: 16, top: 8 })
+        .alignItems(HorizontalAlign.Start)
       }
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
       .backgroundColor(this.cardFadeColor(row))
       .clip(true)
-      .padding({ top: this.topStackOffsetVp(), bottom: this.cardChromeBottomVp() + 56 })
+      .padding({ top: 0, bottom: this.cardChromeBottomVp() + 56 })
     }
   }
 
