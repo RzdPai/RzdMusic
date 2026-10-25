@@ -943,6 +943,12 @@ export struct NowPlayingFeedPage {
    *   所以相邻卡的取色要**提前**做完（见 `prefetchNeighborTint`），滑过去时颜色已经在了。
    */
   private tintCache: Map<string, FeedTintResult> = new Map<string, FeedTintResult>();
+  /**
+   * 缓存版本号：`tintCache` 是**普通 Map**，写进去不会触发任何重绘
+   * ⇒ 预取回来的相邻卡颜色要等别的原因重绘才生效（表现就是"翻到那一页才突然变色"）。
+   * 每写一次缓存就把它 +1，让读它的 builder 重跑一次。
+   */
+  @Local tintVersion: number = 0;
   /** 取色代次：快速滑动 + 异步解码，靠它把过期的那一次结果丢掉（与播放页 `imageColorJobSeq` 同款）。 */
   private cardColorJobSeq: number = 0;
   /** 组件是否还挂着（异步回来时页面可能已经销毁）。 */
@@ -3562,6 +3568,7 @@ export struct NowPlayingFeedPage {
           const result: FeedTintResult = feedTintResultOf(color.red, color.green, color.blue);
           // 每张卡的底色都进缓存（滑动时相邻卡各自取用）
           this.tintCache.set(url, result);
+          this.tintVersion++;
           const light: boolean = result.luminance > FEED_INK_LIGHT_THRESHOLD;
           if (apply && this.feedAlive && jobSeq === this.cardColorJobSeq) {
             // 即时切换（不插值）：颜色一到就是它（甲方 2026-10-24「过渡还是发黑」）
