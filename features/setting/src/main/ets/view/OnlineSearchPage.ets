@@ -216,7 +216,12 @@ export struct OnlineSearchPage {
   private ownStack: NavPathStack | undefined = undefined;
   @Local query: string = '';
   /** 内容层进入时的透明度（搜索行不动，只让内容淡入）。 */
-  @Local contentEnterAlpha: number = 0;  /** 输入中的联想候选（洛雪式：输入后下方弹出推荐） */
+  /**
+   * 内容层透明度。★ 默认必须是 1：弹层（bindContentCover）里没有 NavDestination 的首帧回调，
+   * 若默认 0 且 onAppear 未触发，整页就是"什么都没显示"（历史/热搜看不到的真因）。
+   * 退出时仍由 closeSearch() 动画到 0 再卸载。
+   */
+  @Local contentEnterAlpha: number = 1;  /** 输入中的联想候选（洛雪式：输入后下方弹出推荐） */
   @Local suggestWords: string[] = [];
   @Local showSuggest: boolean = false;
   private suggestTimerId: number = -1;
@@ -1563,6 +1568,7 @@ export struct OnlineSearchPage {
       return;
     }
     this.searchClosing = true;
+    morphLog(`close start searching=${this.searching} submitted=${this.submittedKeyword} alpha=${this.contentEnterAlpha}`);
     // 副作用全部兜住：搜过内容后退出会崩，最可能就是这几步在"列表/焦点/联想面板"已经处于收尾态时抛异常
     try {
       this.hideSuggest();
@@ -1576,9 +1582,11 @@ export struct OnlineSearchPage {
     }
     morphLog('close request');
     // 退出动画：内容层淡出（与进入的淡入对称），淡完再通知壳层卸载
+    morphLog('close fade out start');
     this.getUIContext().animateTo({ duration: 200, curve: Curve.Friction }, (): void => {
       this.contentEnterAlpha = 0;
     });
+    morphLog('close fade out scheduled');
     this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, (): void => {
       this.searchClosing = false;
       // ★ 必须弹**本页所在的那个栈**（官方示例用 `NavDestinationContext.pathStack`）。

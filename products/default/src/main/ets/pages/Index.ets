@@ -3009,9 +3009,8 @@ struct Index {
         }
       })
 
-      if (this.appState.playQueue.length > 0) {
-        this.floatingMiniBar()
-      }
+      // ⚠️ 暂停：把壳层二级页播放条放进弹层后"退出必闪退"（无论是否搜索过）。
+      //   该组件是 HdsTabs/MiniBarMaterialCapsule 体系，在本弹层里卸载会崩 ⇒ 先移除，后续改用轻量替身再上。
     }
     .width(StyleConstants.FULL_WIDTH)
     .height(StyleConstants.FULL_HEIGHT)
