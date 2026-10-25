@@ -43,6 +43,13 @@ export class RecommendPrivateSongUi {
    * 榜单/每日推荐等非算法通道留空，播放时不会回写权重。
    */
   @Trace public categoryId: string = '';
+  /**
+   * 这一屏封面取到的主色（`#RRGGBB` 或 `rgb(...)`，空串 = 还没取到）。
+   * ★ 卡片自带底色就靠它：滑动时进来的那张用自己的颜色，不依赖全局 `pageTint`。
+   */
+  @Trace public tintColor: string = '';
+  /** 该底色是不是浅色（决定这一屏的墨色深浅）。 */
+  @Trace public tintIsLight: boolean = false;
   /** Online cover image url; empty when unavailable. */
   @Trace public coverUrl: string = '';
 }

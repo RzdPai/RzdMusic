@@ -1366,7 +1366,7 @@ export struct NowPlayingFeedPage {
     //    第 0 屏的音质**主动查一次**（见文件头 §四 的同一处坑）。
     if (fresh.length > 0) {
       // ★ 先把后面几张的颜色预取掉：没有缓存就必然"切完才变色"（甲方实测结论）
-      this.prefetchRange(0, 6);
+      this.prefetchRange(0, Math.min(12, this.feedSource.totalCount()));
       this.requestQualityAround(0);
       // 首批就少到"已经落进预取区"（例如每日推荐只有两三首）：立刻补一页/开循环，
       // 否则要等用户先滑一下才会触发。
@@ -3518,6 +3518,26 @@ export struct NowPlayingFeedPage {
    * @param from 起始下标
    * @param count 往后取几张
    */
+  /**
+   * 把取到的底色**写回行模型**（`RecommendPrivateSongUi.tintColor`）。
+   *
+   * ★ 2026-10-25（甲方：「封面都是有的，你先仔细想想逻辑」）：卡片渲染时**不该**再去查全局色,
+   *   而是读"这一行自己的颜色"。写回行模型后，即使这张卡在屏幕外，数据一变它也会带着正确的色重建；
+   *   滑动过程中进来的那张永远用自己的色，不存在"先用当前色、动画结束再变"。
+   * @param url 封面地址
+   * @param result 取色结果
+   */
+  private writeTintToRow(url: string, result: FeedTintResult): void {
+    const total: number = this.feedSource.totalCount();
+    for (let i: number = 0; i < total; i++) {
+      const row: RecommendPrivateSongUi = this.feedSource.getData(i);
+      if (row.coverUrl === url && row.tintColor !== result.tint) {
+        row.tintColor = result.tint;
+        row.tintIsLight = result.luminance > FEED_INK_LIGHT_THRESHOLD;
+      }
+    }
+  }
+
   private prefetchRange(from: number, count: number): void {
     const total: number = this.feedSource.totalCount();
     for (let i: number = 0; i < count; i++) {
@@ -3626,6 +3646,7 @@ export struct NowPlayingFeedPage {
           const result: FeedTintResult = feedTintResultOf(color.red, color.green, color.blue);
           // 每张卡的底色都进缓存（滑动时相邻卡各自取用）
           this.tintCache.set(url, result);
+          this.writeTintToRow(url, result);
           this.tintVersion++;
           const light: boolean = result.luminance > FEED_INK_LIGHT_THRESHOLD;
           if (apply && this.feedAlive && jobSeq === this.cardColorJobSeq) {
