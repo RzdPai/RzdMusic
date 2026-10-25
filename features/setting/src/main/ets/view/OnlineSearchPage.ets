@@ -228,6 +228,7 @@ export struct OnlineSearchPage {
   private suppressSuggestOnce: boolean = false;
   private suggestSeq: number = 0;
   @Local searching: boolean = false;
+  @Local submittedKeyword: string = '';
   /** 是否**真的发起过**一次搜索（空态提示只在搜过之后才显示，入场态不该出现）。 */
   @Local searchedOnce: boolean = false;
   @Local songs: LXSearchSong[] = [];
@@ -841,6 +842,7 @@ export struct OnlineSearchPage {
       return;
     }
     this.searching = true;
+    this.submittedKeyword = this.query.trim();
     this.searchedOnce = true;
     this.errorMsg = '';
     // ★ 用户 2026-10-20：综合页要**一次**同时拿到歌曲/歌手/专辑（三份并发），
@@ -2133,7 +2135,7 @@ export struct OnlineSearchPage {
 
         Stack({ alignContent: Alignment.Center }) {
           List({ scroller: this.listScroller }) {
-            if (!this.searching && this.resultEmpty()) {
+            if (!this.searching && this.submittedKeyword.length === 0) {
               ListItem() {
               if (this.hotWords.length > 0) {
                 Column({ space: 12 }) {
