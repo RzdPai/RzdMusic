@@ -30,6 +30,3 @@
 export const HOME_ROUTE_NAME: string = 'RzdHomeRoute';
 
 export const SEARCH_ROUTE_NAME: string = 'RzdHomeSearchRoute';
-
-/** 根栈「首页（四个 Tab）」destination 的路由名。 */
-export const ROOT_TABS_ROUTE_NAME: string = 'RzdRootTabs';
