@@ -2774,16 +2774,17 @@ export struct NowPlayingFeedPage {
         .alt($r('app.media.ic_avatar1'))
         .draggable(false)
 
-      // ★★ 照抄歌手页 `DetailImmersiveBackdrop` 的那一条（甲方：那几个页面的过渡非常自然）：
-      //   **整块照片高度**上一条 `[Transparent, 0] → [pageTint, 1]`，照片下半截自己化进页底色；
-      //   页底再是**纯色** `pageTint` ⇒ 照片与页面是同一块颜色的连续过渡，中间没有第二条渐变带。
+      // ★ 2026-10-25（甲方：「上面就变得很黑（但是本身上下是一致的）」）：
+      //   渐变**只压封面底部 30%**，上半张一点不压 ⇒ 顶部不可能再出现"黑带"；
+      //   底部这一条把图接到页底色（页底是纯色 `pageTint`），接缝依旧无缝。
       Column()
         .width(StyleConstants.FULL_WIDTH)
-        .height(this.coverHeightVp())
+        .height(this.coverHeightVp() * FEED_COVER_TOP_FADE)
         .linearGradient({
           direction: GradientDirection.Bottom,
           colors: [[Color.Transparent, 0], [this.pageTint, 1]]
         })
+        .position({ x: 0, y: this.coverHeightVp() * (1 - FEED_COVER_TOP_FADE) })
         .hitTestBehavior(HitTestMode.None)
 
     }
