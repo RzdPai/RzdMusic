@@ -348,9 +348,16 @@ const FEED_COVER_RADIUS_VP: number = 24;
  *   拉长到 30% 之后才是"图片慢慢化进背景"。
  */
 const FEED_COVER_TOP_FADE: number = 0.30;/** 横屏背景高斯模糊半径（甲方：「模糊半径调特别大」）。 */
-const FEED_WIDE_BG_BLUR: number = 120;
+/** 横屏模糊背景：模糊半径（甲方 HTML 用 vmin 级大半径，这里按 vp 取 64）。 */
+const FEED_WIDE_BG_BLUR: number = 64;
+/** 模糊背景放大倍数（补掉模糊在边缘收边，取 HTML 的 transform:scale(1.16)）。 */
+const FEED_WIDE_BG_SCALE: number = 1.16;
+/** 模糊背景饱和度（HTML saturate(1.22)）。 */
+const FEED_WIDE_BG_SATURATE: number = 1.22;
+/** 模糊背景亮度（HTML brightness(1.02)）。 */
+const FEED_WIDE_BG_BRIGHTNESS: number = 1.02;
 /** 横屏背景上那层同色压暗的透明度（保证文字可读）。 */
-const FEED_WIDE_BG_TINT_OPACITY: number = 0.35;
+const FEED_WIDE_BG_TINT_OPACITY: number = 0.18;
 /** 封面与背景之间的过渡条高度（vp）。 */
 const FEED_COVER_BLEND_VP: number = 48;
 /** 竖屏封面上下过渡各自占封面的比例（中间保持原图）。 */
@@ -3419,17 +3426,25 @@ export struct NowPlayingFeedPage {
       //   左侧封面**贴左上角**（顶部零留白、满铺无圆角）；
       //   右栏歌词**填满**整块高度（不留上下大空）。
       Stack({ alignContent: Alignment.TopStart }) {
+        // ★★ 2026-10-25（甲方给的 cover-blur-background.html，效果他已调好）：
+        //   背景 = 封面 **cover 自动裁剪**铺满 + `blur(64)` + `saturate(1.22)` + `brightness(1.02)`，
+        //   再 `scale(1.16)` 补掉模糊在边缘的收边（就是 HTML 里的 `transform:scale(1.16)`）。
+        Image(row.coverUrl.length > 0 ? row.coverUrl : $r('app.media.ic_avatar1'))
+          .width(StyleConstants.FULL_WIDTH)
+          .height(StyleConstants.FULL_HEIGHT)
+          .objectFit(ImageFit.Cover)
+          .blur(FEED_WIDE_BG_BLUR)
+          .saturate(FEED_WIDE_BG_SATURATE)
+          .brightness(FEED_WIDE_BG_BRIGHTNESS)
+          .scale({ x: FEED_WIDE_BG_SCALE, y: FEED_WIDE_BG_SCALE })
+          .draggable(false)
+          .hitTestBehavior(HitTestMode.None)
+        // 淡淡一层同色压暗：保证文字始终可读（对应 HTML 里的渐变遮罩）
         Column()
           .width(StyleConstants.FULL_WIDTH)
           .height(StyleConstants.FULL_HEIGHT)
-          .linearGradient({
-            direction: GradientDirection.Bottom,
-            colors: [
-              [feedTintShade(this.cardFadeColor(row) as string, 1.06), 0],
-              [this.cardFadeColor(row), 0.45],
-              [feedTintShade(this.cardFadeColor(row) as string, 0.88), 1]
-            ]
-          })
+          .backgroundColor(this.cardFadeColor(row))
+          .opacity(FEED_WIDE_BG_TINT_OPACITY)
           .hitTestBehavior(HitTestMode.None)
 
         Row({ space: 24 }) {
@@ -3588,16 +3603,6 @@ export struct NowPlayingFeedPage {
       })
   }
 
-  /** @returns 宽屏（平板 / 阔屏 / 手机横屏）→ 左封面 + 右歌词的双栏版式。 */
-  /**
-   * 封面上下渐变要"化进页底色"的那个颜色。
-   *
-   * ★ 2026-10-24（甲方截图："现在还是暗"）：取色没回来前 `pageTint` 是兜底色，
-   *   拿它去压封面边缘会把整张图糊成一层灰。⇒ 只有真实取色到位（`tintReady`）才用 `pageTint`，
-   *   否则两端透明，让封面保持原样；颜色回来时是**即时切换**，不会有过渡抖动。
-   */
-  /**
-   * @param scale 亮度系数（1 = 原色；0.94 / 0.86 = 逐段压暗）。（官方 linearGradient：stops 递增）
   /**
    * @returns 封面上沿高度占整页高度的比例（0.2–0.8）。
    * 页底渐变按它对齐色标，保证"封面以下那一段"能看出明显的明暗过渡（甲方：顶部也要有渐变）。
