@@ -3081,44 +3081,30 @@ export struct NowPlayingFeedPage {
         .fontSize(12)
         .fontColor(this.inkSoft())
 
-      // ★ 2026-10-24（甲方：「现在就听页进度条加上播放页同款滑动时变粗」）：
-      //   视觉仍是原来那条细轨，但**上面盖一层全透明 Slider** 吃手势：
-      //   - 拖动中 `feedScrubbing = true` ⇒ 轨高与填充**加粗**（`FEED_PROGRESS_THICK_VP`）；
-      //   - 只有 End / Click 才真正 `MediaService.seek()`，拖动过程只更新本地值（不抖流）。
-      //   ⚠️ Slider 自带的三条色全部透明：颜色一律由本页 `inkTrackPlayed()/inkTrack()` 决定，
-      //      否则浅底/深底两套墨色就管不住了。
-      Stack({ alignContent: Alignment.Start }) {
-        Row() {
-          Column()
-            .width(this.scrubbedPercentOf(row))
-            .height(this.feedScrubbing ? FEED_PROGRESS_THICK_VP : FEED_PROGRESS_TRACK_VP)
-            .borderRadius((this.feedScrubbing ? FEED_PROGRESS_THICK_VP : FEED_PROGRESS_TRACK_VP) / 2)
-            .backgroundColor(this.inkTrackPlayed())
-        }
-        .width('100%')
-        .height(this.feedScrubbing ? FEED_PROGRESS_THICK_VP : FEED_PROGRESS_TRACK_VP)
-        .borderRadius((this.feedScrubbing ? FEED_PROGRESS_THICK_VP : FEED_PROGRESS_TRACK_VP) / 2)
-        .backgroundColor(this.inkTrack())
-        .alignItems(VerticalAlign.Center)
-        .hitTestBehavior(HitTestMode.None)
-
-        Slider({
-          value: this.scrubSliderValue(row),
-          max: this.scrubSliderMax(),
-          style: SliderStyle.OutSet
+      // ★★ 2026-10-25（甲方：「进度条经常拉不动」「小圆球明明删了阴影还在」「跟播放页那个统一下」）：
+      //   原来那套是"自绘细轨 + 上面盖一层全透明 Slider"——透明 Slider 的 **block 阴影擦不掉**
+      //   （就是那个圆球影子），而且被自绘层压着手感也差。
+      //   ⇒ 改成和播放页一致：**直接用 Slider 画轨道与圆点**，颜色走本页墨色；
+      //     平时圆点为 0（看不到球），拖动时才显示并加粗轨道。
+      Slider({
+        value: this.scrubSliderValue(row),
+        max: this.scrubSliderMax(),
+        style: SliderStyle.OutSet
+      })
+        .layoutWeight(1)
+        .trackThickness(this.feedScrubbing ? FEED_PROGRESS_THICK_VP : FEED_PROGRESS_TRACK_VP)
+        .trackColor(this.inkTrack())
+        .selectedColor(this.inkTrackPlayed())
+        .blockColor(this.inkTrackPlayed())
+        .blockBorderWidth(0)
+        .blockSize({
+          width: this.feedScrubbing ? 14 : 0,
+          height: this.feedScrubbing ? 14 : 0
         })
-          .width('100%')
-          .trackThickness(FEED_PROGRESS_THICK_VP + 16)
-          .trackColor(Color.Transparent)
-          .selectedColor(Color.Transparent)
-          .blockColor(Color.Transparent)
-          .enabled(this.isCurrentSong(row))
-          .onChange((value: number, mode: SliderChangeMode): void => {
-            this.onFeedScrub(value, mode);
-          })
-      }
-      .layoutWeight(1)
-      .height(FEED_PROGRESS_ROW_VP)
+        .enabled(this.isCurrentSong(row))
+        .onChange((value: number, mode: SliderChangeMode): void => {
+          this.onFeedScrub(value, mode);
+        })
 
       Text(this.durationOf(row))
         .fontSize(12)
