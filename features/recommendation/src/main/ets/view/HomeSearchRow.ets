@@ -33,6 +33,8 @@ export struct HomeSearchRow {
         //   背景/圆角/高度全部落在 `Search` 自己身上，两端同一套。
         Search({ placeholder: '艺人、歌曲或专辑' })
           .height(SEARCH_FIELD_H)
+          // 一镜到底：快照靠这个 id 定位起点
+          .id('home_search_field')
           // ★ 2026-10-24（甲方：「搜索框现在半透明的不是很好看」）：改**实底卡片背板**，
           //   与搜索页那端（`OnlineSearchPage.SearchInputBar`）**逐字同一套**：
           //   `card_background` + 0.5vp 描边。两端不同色会在长镜头中途看出颜色跳变。

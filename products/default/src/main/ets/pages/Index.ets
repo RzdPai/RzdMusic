@@ -67,6 +67,7 @@ import {
   PlaylistTransitionOverlay
 } from 'playlist';
 import { MinePage, OnlineSearchPage } from 'setting';
+import { ezCustomTransition, LongTakeTransitionParam } from '@hmanimations/ezcustomtransition';
 import { SEARCH_ROUTE_NAME } from './HomeRouteNames';
 // 鏂版ā鍧楋細鏈湴闊充箰锛堝鍏ヨ澶囬煶棰戝埌娌欑锛変笌娲涢洩鍚屾瀹㈡埛绔€?
 // 鈿狅笍 hvigor 瀵?HAR 鏄?*鎸夊紩鐢ㄧ紪璇?*鐨勶細娌℃湁浠讳綍浠ｇ爜 import 瀹冧滑鏃讹紝
@@ -2731,6 +2732,17 @@ struct Index {
    * —— **必须** `animated = false` 关掉系统推页动画，否则两套动画叠加，形变会被压掉。
    */
   private openHomeSearch(): void {
+    // ★ 一镜到底（@hmanimations/ezcustomtransition）：点搜索框这一下先给源节点拍快照，
+    //   参数随路由传给搜索页；搜索页用 `LongTakeTransitionDelegate` 从这张快照展开。
+    const longTake: LongTakeTransitionParam | undefined =
+      ezCustomTransition.generateLongTakeParam(this.getUIContext(), 'home_search_field', 20);
+    Logger.info(RzdShellLogTag, `home search push longTake=${longTake !== undefined}`);
+    if (longTake !== undefined) {
+      const param: Record<string, Object> = {};
+      param['longTakeTransitionParam'] = longTake;
+      this.pageIndexInfos.pushPath({ name: SEARCH_ROUTE_NAME, param: param }, false);
+      return;
+    }
     // 搜索页是**真正的二级页面**（homeStack 上的 NavDestination），一镜到底由 geometryTransition 承载，
     // 这里不再动画底栏高度、也不再置"搜索态"状态位。
     this.pageIndexInfos.pushPath({ name: SEARCH_ROUTE_NAME }, false);
@@ -3204,6 +3216,12 @@ struct Index {
       .navDestination(this.RootRouteMap)
       .customNavContentTransition((from: NavContentInfo, _to: NavContentInfo,
         operation: NavigationOperation): NavigationAnimatedTransition | undefined => {
+        // 搜索页的一镜到底交给 ezCustomTransition；其它路由维持原来的榜单返回转场。
+        const handled: NavigationAnimatedTransition | undefined =
+          ezCustomTransition.customNavContentTransition(from, _to, operation);
+        if (handled !== undefined) {
+          return handled;
+        }
         return getPlaylistTransitionState().navigationReturn(this.getUIContext(), from, operation);
       })
       .backgroundColor($r('app.color.home_page_background'))

@@ -15,6 +15,7 @@
 
 import { AbilityConstant, Callee, common, Configuration, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
+import { ezCustomTransition } from '@hmanimations/ezcustomtransition';
 import { fileIo as fs } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { BusinessError } from '@kit.BasicServicesKit';
