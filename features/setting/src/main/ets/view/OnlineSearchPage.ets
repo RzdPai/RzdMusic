@@ -1579,61 +1579,24 @@ export struct OnlineSearchPage {
     }
   }
 
+  /**
+   * ★ 最小关闭路径（2026-10-26）：持久日志证明崩溃发生在 close 之后 200ms 内、
+   *   `hideSuggest/clearFocus/animateTo/persistMorph` 这些步骤之间，逐条排除代价太高。
+   *   这里只做一件事：把关闭信号交给壳层，其余（收焦点、藏联想、清历史）都不做。
+   */
   private closeSearch(): void {
     if (guardPlayerBack('OnlineSearchPage')) {
       morphLog('close blocked by player');
       return;
     }
     if (this.searchClosing) {
-      morphLog('close already running');
       return;
     }
     this.searchClosing = true;
-    morphLog(`close start searching=${this.searching} submitted=${this.submittedKeyword} alpha=${this.contentEnterAlpha}`);
-    // 副作用全部兜住：搜过内容后退出会崩，最可能就是这几步在"列表/焦点/联想面板"已经处于收尾态时抛异常
-    try {
-      this.hideSuggest();
-    } catch (err) {
-      morphLog(`hideSuggest failed: ${(err as Error).message ?? ''}`);
-    }
-    try {
-      this.getUIContext().getFocusController().clearFocus();
-    } catch (err) {
-      morphLog(`clearFocus failed: ${(err as Error).message ?? ''}`);
-    }
-    morphLog('close request');
-    this.persistMorph('close request');
-    // 退出动画：内容层淡出（与进入的淡入对称），淡完再通知壳层卸载
-    // ★ 持久日志证据：最后一条是 `close request`，`close fade scheduled` 从未出现 ⇒ 崩在这一步的 animateTo。
-    //   退出动画暂时去掉（安全优先），改为直接通知壳层；内容层保持 alpha=1，卸载时不透明也不会闪。
-    this.persistMorph('close skip fade (crash)');
-    this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, (): void => {
-      this.searchClosing = false;
-      // ★ 必须弹**本页所在的那个栈**（官方示例用 `NavDestinationContext.pathStack`）。
-      //   本页可能被推到壳层共享栈，也可能被推到首页 Tab 的内层栈。
-      // 现在搜索页由壳层 `bindContentCover` 承载（不是 NavDestination）⇒ 没有栈可 pop，
-      // 改成回调壳层关闭弹层（`onShowChange(false)` 由 Index 收口）。
-      // 弹层模式（无 NavDestination 上下文）只回调壳层关闭，**绝不 pop**——那会弹掉壳层自己的页面栈
-      if (this.ownStack === undefined) {
-        morphLog('cover mode: notify shell only');
-        this.onShowChange(false);
-        return;
-      }
-      morphLog(`pop inside-animate own=true size=${this.ownStack.size()}`);
-      this.ownStack.pop(false);
-    });
-    // 底栏恢复：**等转场结束再恢复**（在转场帧里改壳层状态会把两端拆到不同帧）。
-    // 弹簧的 onFinish 实测要到 1s 才来，所以这里用固定 320ms（转场时长量级）先恢复，
-    // 450ms 再补一次幂等兜底。
-    // 只发一次关闭信号：弹层模式下壳层会延迟一帧卸载，重复回调会在卸载后改状态 ⇒ 闪退
-    // 淡出 200ms 走完再交给壳层卸载（壳层自己再延迟 360ms），保证退出可见、且不在动画中卸载
-    setTimeout((): void => {
-      morphLog('notify shell close');
-      this.persistMorph('notify shell close');
-      this.onShowChange(false);
-    }, 260);
+    this.getUIContext().getFocusController().clearFocus();
+    morphLog('close minimal');
+    this.onShowChange(false);
   }
-
   /** 内容首行要让开的浮层高度：状态栏 + 搜索行 56 + 类型栏 44。 */
   private searchContentTopInsetVp(): number {
     return WindowUtil.getInstance().resolveStatusBarTopVp() + 56 + 44;
