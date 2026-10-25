@@ -68,7 +68,6 @@ import {
   PlaylistTransitionOverlay
 } from 'playlist';
 import { MinePage, OnlineSearchPage } from 'setting';
-import { SEARCH_ROUTE_NAME } from './HomeRouteNames';
 // 鏂版ā鍧楋細鏈湴闊充箰锛堝鍏ヨ澶囬煶棰戝埌娌欑锛変笌娲涢洩鍚屾瀹㈡埛绔€?
 // 鈿狅笍 hvigor 瀵?HAR 鏄?*鎸夊紩鐢ㄧ紪璇?*鐨勶細娌℃湁浠讳綍浠ｇ爜 import 瀹冧滑鏃讹紝
 //    鍗充娇宸茬櫥璁拌繘 build-profile.json5锛岃繖涓や釜妯″潡涔?*涓嶄細琚紪璇?*锛堟瀯寤虹収鏍风豢锛夈€?
@@ -2747,12 +2746,11 @@ struct Index {
   }
 
   private closeHomeSearch(): void {
-    const names: string[] = this.pageIndexInfos.getAllPathName();
-    if (names.length === 0 || names[names.length - 1] !== SEARCH_ROUTE_NAME) {
+    // 搜索页不再走路由（bindContentCover 承载）⇒ 直接收起弹层，不再判栈顶
+    if (!this.isSearchPageShow) {
       return;
     }
-    Logger.info(RzdShellLogTag, 'home search pop');
-    appendPlayLog('[RzdSearchMorph] shell pop');
+    Logger.info(RzdShellLogTag, 'home search cover close');
     this.isSearchPageShow = false;
   }
 
@@ -2991,26 +2989,22 @@ struct Index {
   @Builder
   private SearchCover() {
     OnlineSearchPage({
-      routeParam: ''
+      routeParam: '',
+      // 搜索页自己请求关闭（取消按钮 / 返回键）时，由壳层收起弹层
+      onShowChange: (open: boolean): void => {
+        if (open) {
+          this.appState.miniBarExpanded = true;
+          Logger.info(RzdShellLogTag, 'search cover shown');
+          return;
+        }
+        if (this.isSearchPageShow) {
+          this.isSearchPageShow = false;
+          Logger.info(RzdShellLogTag, 'search cover hidden');
+        }
+      }
     })
   }
 
-  @Builder
-  private RootRouteMap(name: string, param: Object) {
-    if (name === SEARCH_ROUTE_NAME) {
-      // 甲方口径：**搜索框本身不动**，所以这里不加任何整页 opacity/translate；
-      // 只在内容层做淡入（见 OnlineSearchPage 的 contentEnterAlpha）。
-      OnlineSearchPage({
-        routeParam: param,
-        onShowChange: (open: boolean): void => {
-          if (open) {
-            this.appState.miniBarExpanded = true;
-            Logger.info(RzdShellLogTag, 'search page shown (root stack)');
-          }
-        }
-      })
-    }
-  }
   /** Root UI: {@link HdsNavigation} with tabs and optional playback cover. */
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
@@ -3224,8 +3218,7 @@ struct Index {
       }
       .mode(NavigationMode.Stack)
       // 搜索页推到根栈 ⇒ 盖住整屏（含 HdsTabs 底栏）
-      .navDestination(this.RootRouteMap)
-      .customNavContentTransition((from: NavContentInfo, _to: NavContentInfo,
+            .customNavContentTransition((from: NavContentInfo, _to: NavContentInfo,
         operation: NavigationOperation): NavigationAnimatedTransition | undefined => {
         return getPlaylistTransitionState().navigationReturn(this.getUIContext(), from, operation);
       })
