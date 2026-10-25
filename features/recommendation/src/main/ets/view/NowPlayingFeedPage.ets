@@ -1213,7 +1213,7 @@ export struct NowPlayingFeedPage {
       await this.loadSelfBuiltRecommend(src, this.feedRecommendWant());
     if (recRows.length > 0) {
       Logger.info(RZD_TAG, `load self-built rec songs=${recRows.length} mode=${this.feedMode}`);
-      this.applyRows(recRows, FeedOrigin.BOARD);
+      await this.applyRows(recRows, FeedOrigin.BOARD);
       return;
     }
     if (boardId.length === 0) {
@@ -1230,7 +1230,7 @@ export struct NowPlayingFeedPage {
         rows.push(this.toRow(res.list[i], i));
       }
       Logger.info(RZD_TAG, `load board=${boardId} page=1 limit=${limit} raw=${res.list.length} songs=${rows.length}`);
-      this.applyRows(rows, FeedOrigin.BOARD);
+      await this.applyRows(rows, FeedOrigin.BOARD);
     } catch (err) {
       const e = err as BusinessError;
       Logger.error(RZD_TAG, `load failed board=${boardId} code=${e.code} msg=${e.message}`);
@@ -1272,7 +1272,7 @@ export struct NowPlayingFeedPage {
       //   （理由见 {@link feedAccountId} 的注释）。
       this.feedAccountId = acc.id;
       Logger.info(RZD_TAG, `load daily platform=${src} ids=${ids.length} songs=${rows.length}`);
-      this.applyRows(rows, FeedOrigin.DAILY);
+      await this.applyRows(rows, FeedOrigin.DAILY);
     } catch (err) {
       const e = err as BusinessError;
       Logger.error(RZD_TAG, `load daily failed platform=${src} code=${e.code} msg=${e.message}`);
@@ -1348,7 +1348,17 @@ export struct NowPlayingFeedPage {
    * @param rows 原始行（可能含重复与空 songId）。
    * @param origin 这条通道。
    */
-  private applyRows(rows: RecommendPrivateSongUi[], origin: FeedOrigin): void {
+  /**
+   * 装载首屏。
+   *
+   * ★★ 2026-10-25（甲方给了明确逻辑）：「首次就正常渲染，然后我预先准备好上面和下面各两页，
+   *    滑到下一页时再继续，同样只关注当前页的上下各两页」。
+   *    ⇒ 这里改成 **async**：先把 `[0, +1, -1, +2, -2]` 这五张的颜色**取完**再放开 `feedLoading`，
+   *      所以第一屏出现时它的颜色一定已经在手上（不会先看到兜底色）。
+   * @param rows 首屏数据
+   * @param origin 来源（榜单 / 每日推荐）
+   */
+  private async applyRows(rows: RecommendPrivateSongUi[], origin: FeedOrigin): Promise<void> {
     this.feedSeen = [];
     const fresh: RecommendPrivateSongUi[] = this.filterFresh(rows);
     this.feedSource = new FeedDataSource(fresh);
@@ -2201,6 +2211,8 @@ export struct NowPlayingFeedPage {
    *   （按"这首歌是不是已在播"去重，所以这里无脑调一次是安全的，不会重复起播）。
    */
   private onFeedChanged(index: number): void {
+    // 翻页落定后把取色窗口滚到新的当前页（当前 ±2）
+    void this.prepareWindow(index, 2);
     this.currentIndex = index;
     const total: number = this.feedSource.totalCount();
     Logger.info(RZD_TAG,
@@ -3419,8 +3431,10 @@ export struct NowPlayingFeedPage {
             .layoutWeight(1)
             // ★★★ 2026-10-25（甲方：「效果还是不对」）：`onChange` 是**滑完**才回调 ⇒ 只能切完再变色。
             .onAnimationStart((index: number, targetIndex: number): void => {
+              // 动画一开始：整页色切到目标页（命中窗口缓存 ⇒ 无跳变）
               this.applyTintForIndex(targetIndex);
-              this.ensureVisibleTint();
+              // 同时把窗口滚到新的当前页（当前 ±2），供下一次滑动使用
+              void this.prepareWindow(targetIndex, 2);
             })
             .onChange((index: number): void => {
               this.onFeedChanged(index);
@@ -3601,6 +3615,35 @@ export struct NowPlayingFeedPage {
       }
       const row: RecommendPrivateSongUi = this.feedSource.getData(idx);
       this.enqueueTint(row.coverUrl, true);
+    }
+  }
+
+  /**
+   * **准备一屏的取色窗口**：`center`、`±1`、`±2` 五张，按"离当前的距离"顺序、**串行**取色。
+   * 甲方要的就是这个：首屏正常，然后预先准备好上下各两页，翻页后再滚动维护这个窗口。
+   * @param center 当前屏下标
+   * @param radius 半径（2 = 上下各两张）
+   */
+  private async prepareWindow(center: number, radius: number): Promise<void> {
+    const total: number = this.feedSource.totalCount();
+    for (let step: number = 0; step <= radius; step++) {
+      const candidates: number[] = step === 0 ? [center] : [center + step, center - step];
+      for (let i: number = 0; i < candidates.length; i++) {
+        const idx: number = candidates[i];
+        if (idx < 0 || idx >= total) {
+          continue;
+        }
+        const row: RecommendPrivateSongUi = this.feedSource.getData(idx);
+        const url: string = row.coverUrl;
+        if (url.length === 0) {
+          continue;
+        }
+        if (this.tintCache.has(url) || row.tintColor.length > 0) {
+          continue;
+        }
+        this.tintQueued.delete(url);
+        await this.extractCardColor(url, idx === center);
+      }
     }
   }
 
