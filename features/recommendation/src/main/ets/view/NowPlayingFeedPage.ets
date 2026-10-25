@@ -3499,7 +3499,12 @@ export struct NowPlayingFeedPage {
               (error: Error | undefined, colorPicker: effectKit.ColorPicker | undefined) => {
                 try {
                   if (error === undefined && colorPicker !== undefined) {
-                    const color: effectKit.Color = colorPicker.getLargestProportionColor();
+                    // ★ 2026-10-25（甲方：「浅色的图还是发黑。你先仔细看看官方文档」）：
+                    //   官方《使用模糊效果 · 方式2》给的取色姿势是 **`getAverageColor()`**（平均色），
+                    //   而 `getLargestProportionColor()`（占比最大的那一种色）在"白底 + 局部深色图形"的封面上
+                    //   会取到那块深色（例如这张的远山/墨迹）⇒ 整页跟着发黑。
+                    //   ⇒ 换成平均色：浅色封面得到浅色底，深色封面照样得到深色底。
+                    const color: effectKit.Color = colorPicker.getAverageColor();
                     const result: FeedTintResult = feedTintResultOf(color.red, color.green, color.blue);
                     const light: boolean = result.luminance > FEED_INK_LIGHT_THRESHOLD;
                     if (this.feedAlive && jobSeq === this.cardColorJobSeq) {
