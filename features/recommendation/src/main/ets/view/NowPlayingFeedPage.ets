@@ -232,7 +232,8 @@ import {
   showSystemShare
 } from 'player';
 import type { LXSearchSong, LXSearchResult } from 'player';
-import { LyricsComponent } from 'player/src/main/ets/view/LyricsComponent';
+import { amllParseLyricCached } from 'player/src/main/ets/amll/parse/AmllAutoDetect';
+import type { AmllLyricLine } from 'player/src/main/ets/amll/model/AmllTypes';
 import { SongMoreMenu } from 'playlist';
 import { RecommendPrivateSongUi } from '../model/RecommendUiModels';
 import { FeedRecommendEngine, FeedRecommendPick } from '../util/FeedRecommendEngine';
@@ -634,6 +635,22 @@ class FeedTintResult {
  * @param scale 亮度系数（1 = 原色）
  * @returns 压暗后的 `rgb(...)`；解析失败时原样返回
  */
+/** 多行歌词窗口里的一行（横屏右栏渲染用）。 */
+/** 把一行 AMLL 歌词的 `words` 拼成纯文本（行内只有一个 word 时就是整行）。 */
+function feedLineTextOf(line: AmllLyricLine): string {
+  let out: string = '';
+  for (let i: number = 0; i < line.words.length; i++) {
+    out += line.words[i].word;
+  }
+  return out;
+}
+
+class FeedLyricWindowLine {
+  index: number = 0;
+  text: string = '';
+  current: boolean = false;
+}
+
 function feedTintShade(tint: string, scale: number): string {
   const m: RegExpMatchArray | null = tint.match(new RegExp('rgb\\((\\d+),\\s*(\\d+),\\s*(\\d+)\\)'));
   if (m === null) {
@@ -3075,6 +3092,70 @@ export struct NowPlayingFeedPage {
    *   **只往上抬、不往下长**，所以不会被底栏压住。
    * @param row 这一屏的歌。
    */
+  /**
+   * 多行歌词（横屏右栏）：用**播放页同一个解析器** `amllParseLyricCached` 把当前曲 LRC 解成
+   * [时间, 文本]，取"当前行 ±3"共 7 行，当前行加粗高亮。
+   * 为什么不用播放页的 LyricsComponent：它是整页级组件（自带高度/滚动容器假设），
+   * 放进卡片右栏会塌成 0 高 ⇒ 甲方实测"看不到歌词"。
+   */
+  @Builder
+  private FeedMultiLyrics(row: RecommendPrivateSongUi) {
+    Column({ space: 10 }) {
+      ForEach(this.lyricWindow(row), (line: FeedLyricWindowLine) => {
+        Text(line.text.length > 0 ? line.text : ' ')
+          .fontSize(line.current ? 22 : 17)
+          .fontWeight(line.current ? FontWeight.Bold : FontWeight.Normal)
+          .fontColor(line.current ? this.inkPrimary() : this.inkSoft())
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width(StyleConstants.FULL_WIDTH)
+          .textAlign(TextAlign.Start)
+      }, (line: FeedLyricWindowLine): string => `lw-${line.index}-${line.text}`)
+    }
+    .width(StyleConstants.FULL_WIDTH)
+    .height(StyleConstants.FULL_HEIGHT)
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  /** 取"当前行 ±3"的 7 行窗口（当前曲才高亮；其它屏用这一行自己的歌词）。 */
+  private lyricWindow(row: RecommendPrivateSongUi): FeedLyricWindowLine[] {
+    const lines: FeedLyricWindowLine[] = [];
+    const text: string = this.isCurrentSong(row) ? this.currentLyricText() : '';
+    const parsed: AmllLyricLine[] = text.length > 0 ? amllParseLyricCached(text) : [];
+    if (parsed.length === 0) {
+      const empty: FeedLyricWindowLine = new FeedLyricWindowLine();
+      empty.text = '暂无歌词';
+      lines.push(empty);
+      return lines;
+    }
+    const now: number = this.appState.progress;
+    let cur: number = 0;
+    for (let i: number = 0; i < parsed.length; i++) {
+      if (parsed[i].startTime <= now) {
+        cur = i;
+      } else {
+        break;
+      }
+    }
+    const from: number = Math.max(0, cur - 3);
+    const to: number = Math.min(parsed.length - 1, cur + 3);
+    for (let i: number = from; i <= to; i++) {
+      const item: FeedLyricWindowLine = new FeedLyricWindowLine();
+      item.index = i;
+      item.text = feedLineTextOf(parsed[i]);
+      item.current = i === cur;
+      lines.push(item);
+    }
+    return lines;
+  }
+
+  /** 当前曲的歌词原文（队列里那一首的 `lyricText`）。 */
+  private currentLyricText(): string {
+    const song: SongItem | undefined = this.appState.getCurrentSongItem();
+    return song === undefined ? '' : song.lyricText;
+  }
+
   @Builder
   private FeedProgress(row: RecommendPrivateSongUi) {
     Row({ space: 8 }) {
@@ -3093,15 +3174,15 @@ export struct NowPlayingFeedPage {
         style: SliderStyle.OutSet
       })
         .layoutWeight(1)
+        // 2026-10-25（甲方：进度条拖不动 / 播放页没有小白球）：显式高度 + 放大触摸区 + 去掉圆点
+        .height(40)
+        .responseRegion({ x: 0, y: -12, width: "100%", height: 56 })
         .trackThickness(this.feedScrubbing ? FEED_PROGRESS_THICK_VP : FEED_PROGRESS_TRACK_VP)
         .trackColor(this.inkTrack())
         .selectedColor(this.inkTrackPlayed())
         .blockColor(this.inkTrackPlayed())
         .blockBorderWidth(0)
-        .blockSize({
-          width: this.feedScrubbing ? 14 : 0,
-          height: this.feedScrubbing ? 14 : 0
-        })
+        .blockSize({ width: 0, height: 0 })
         .enabled(this.isCurrentSong(row))
         .onChange((value: number, mode: SliderChangeMode): void => {
           this.onFeedScrub(value, mode);
@@ -3205,19 +3286,15 @@ export struct NowPlayingFeedPage {
         .justifyContent(FlexAlign.Center)
 
         Column({ space: 10 }) {
-          // ★ 2026-10-25（甲方死命令：「多行歌词，你快点搞」）：右侧歌词 = **播放页同款**
-          //   `LyricsComponent`（多行滚动 + 逐字高亮都在里面），不再用只显示两行的 mini 版本。
-          LyricsComponent({
-            isShowControl: false,
-            isTablet: true,
-            hideLyricsMetaHeader: true,
-            panelBottomBar: false,
-            onSeekTime: (ms: number): void => {
-              MediaService.getInstance().seek(ms);
-            }
-          })
-            .width(StyleConstants.FULL_WIDTH)
-            .layoutWeight(1)
+          // ★★ 2026-10-25（甲方：「看不到歌词了」）：LyricsComponent 是整页级组件
+          //   （自带高度/滚动容器假设），塞进卡片右栏会塌成 0 高 ⇒ 看不到。
+          //   改成用播放页同一个解析器 amllParseLyricCached 自渲染多行歌词（当前行高亮）。
+          // ⚠️ `@Builder` 调用不能直接链式加属性（返回 void）⇒ 包一层容器
+          Column() {
+            this.FeedMultiLyrics(row)
+          }
+          .width(StyleConstants.FULL_WIDTH)
+          .layoutWeight(1)
 
           this.FeedInfoCore(row, index)
           this.FeedProgress(row)
