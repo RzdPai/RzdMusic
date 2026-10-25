@@ -3180,7 +3180,7 @@ export struct NowPlayingFeedPage {
         .trackThickness(this.feedScrubbing ? FEED_PROGRESS_THICK_VP : FEED_PROGRESS_TRACK_VP)
         .trackColor(this.inkTrack())
         .selectedColor(this.inkTrackPlayed())
-        .blockColor(this.inkTrackPlayed())
+        .blockColor(Color.Transparent)
         .blockBorderWidth(0)
         .blockSize({ width: 0, height: 0 })
         .enabled(this.isCurrentSong(row))
@@ -3277,36 +3277,29 @@ export struct NowPlayingFeedPage {
   @Builder
   private FeedCard(row: RecommendPrivateSongUi, index: number) {
     if (this.isWideFeedLayout()) {
-      // ══ 宽屏（平板 / 阔屏 / 手机横屏）：左封面 + 右侧（多行歌词 / 信息 / 进度）══
-      Row({ space: 24 }) {
-        Column() {
+      // ══ 宽屏（平板 / 阔屏 / 手机横屏）：**完全照播放页** ══
+      //   左栏：封面 + 歌名/歌手 + 动作行（同一行）+ 进度；
+      //   右栏：一整块歌词区（多行、当前行高亮）。甲方：「右侧一大块都显示歌词，那些东西都放左侧」。
+      Row({ space: 28 }) {
+        Column({ space: 16 }) {
           this.FeedCoverCard(row, index)
-        }
-        .layoutWeight(1)
-        .justifyContent(FlexAlign.Center)
-
-        Column({ space: 10 }) {
-          // ★★ 2026-10-25（甲方：「看不到歌词了」）：LyricsComponent 是整页级组件
-          //   （自带高度/滚动容器假设），塞进卡片右栏会塌成 0 高 ⇒ 看不到。
-          //   改成用播放页同一个解析器 amllParseLyricCached 自渲染多行歌词（当前行高亮）。
-          // ⚠️ `@Builder` 调用不能直接链式加属性（返回 void）⇒ 包一层容器
-          Column() {
-            this.FeedMultiLyrics(row)
-          }
-          .width(StyleConstants.FULL_WIDTH)
-          .layoutWeight(1)
-
-          this.FeedInfoCore(row, index)
+          this.FeedInfoRow(row, index)
           this.FeedProgress(row)
         }
         .layoutWeight(1)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Start)
+
+        Column() {
+          this.FeedMultiLyrics(row)
+        }
+        .layoutWeight(1)
+        .justifyContent(FlexAlign.Center)
         .alignItems(HorizontalAlign.Start)
       }
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
-      // 每张卡自带底色（滑动时两张卡各带各色一起走）
       .backgroundColor(this.cardFadeColor(row))
-      // 裁到自身边界：横屏时相邻卡的进度条不会从上下漏出来
       .clip(true)
       .padding({
         left: FEED_SIDE_PADDING_VP * 2,
@@ -3333,14 +3326,12 @@ export struct NowPlayingFeedPage {
       .height(StyleConstants.FULL_HEIGHT)
       .backgroundColor(this.cardFadeColor(row))
       .clip(true)
-      .padding({ top: this.topStackOffsetVp(), bottom: this.cardChromeBottomVp() + 20 })
+      // 竖屏底部留足：进度条不被胶囊底栏压住，也就能拖得动
+      .padding({ top: this.topStackOffsetVp(), bottom: this.cardChromeBottomVp() + 56 })
     }
   }
 
-  /**
-   * 竖屏的信息块：两行小歌词（播放页 mini 版）+ 信息本体。
-   * 横屏不用它 —— 横屏是「多行 `LyricsComponent` + `FeedInfoCore`」。
-   */
+  /** 竖屏信息块：两行小歌词 + 信息本体。 */
   @Builder
   private FeedInfoColumn(row: RecommendPrivateSongUi, index: number) {
     Column({ space: 14 }) {
@@ -3351,7 +3342,34 @@ export struct NowPlayingFeedPage {
     .alignItems(HorizontalAlign.Start)
   }
 
-  /** 信息块本体（**不含歌词**）：歌名/歌手 + 动作行。 */
+  /**
+   * 宽屏信息行：**歌名/歌手在左，动作行（收藏 / 不感兴趣 / 更多）在同一行的右侧**
+   * —— 照播放页的排法（甲方：「和歌曲名歌手名同行」）。
+   */
+  @Builder
+  private FeedInfoRow(row: RecommendPrivateSongUi, index: number) {
+    Row({ space: 16 }) {
+      Column({ space: 6 }) {
+        Text(row.title)
+          .fontSize(26)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.inkPrimary())
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width(StyleConstants.FULL_WIDTH)
+          .textAlign(TextAlign.Start)
+        this.FeedArtist(row)
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+
+      this.FeedActions(row, index)
+    }
+    .width(StyleConstants.FULL_WIDTH)
+    .alignItems(VerticalAlign.Center)
+  }
+
+  /** 信息块本体（**不含歌词**）：歌名/歌手 + 动作行（竖屏用）。 */
   @Builder
   private FeedInfoCore(row: RecommendPrivateSongUi, index: number) {
     Column({ space: 14 }) {
@@ -3370,7 +3388,6 @@ export struct NowPlayingFeedPage {
       .alignItems(HorizontalAlign.Start)
       .padding({ left: FEED_SIDE_PADDING_VP, right: FEED_SIDE_PADDING_VP })
 
-      // 甲方 2026-10-25：音质标签已去掉，这里只有动作行
       this.FeedActions(row, index)
     }
     .width(StyleConstants.FULL_WIDTH)
