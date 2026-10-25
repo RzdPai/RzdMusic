@@ -19,39 +19,40 @@ import { Logger } from 'musicbasic';
 const TAG: string = 'RzdFeedBlur';
 
 /**
- * 横屏（及需要时）用的**封面高斯模糊背景**：直接渲染甲方调好的
- * `resources/rawfile/cbg.html`，只把 `--cover` 换成当前封面。
+ * 背景渲染器：直接把 `resources/rawfile/cbg.html` 渲染出来。
  *
- * ★ 为什么用 Web 而不是 ArkUI 复刻（甲方 2026-10-25：「不是让你用 ArkUI 重写，是直接渲染这个 html」）：
- *   那份 HTML 里是"封面 cover 裁剪 + 多层不同模糊半径 + 镜像边缘 tile + mask 羽化"的组合，
- *   ArkUI 属性画不出同样效果；直接把 HTML 渲染出来最省事、也最贴近他调好的成品。
- * ★ 只对**当前可见的两张卡**各挂一个实例（Swiper 的 cachedCount = 1），不做常驻。
+ * ★ 甲方 2026-10-25 的明确口径：
+ *   1. 那份 HTML **自带封面**（内部已经渲染好），我们**不要**再传 `--cover`、也不要再画一次封面；
+ *   2. 它的舞台是**正方形**（甲方刻意这么设计：方形源裁成任意比例都不会形变）；
+ *      ⇒ 这里只需在页面加载完后注入一段 CSS 做**居中 cover 裁剪**：
+ *      `--s = max(vw, vh) / min(vw, vh)`，`.stage { transform: translate(-50%,-50%) scale(--s) }`，
+ *      于是 16:9 / 4:3 / 平板阔屏都能铺满且不变形。
  */
 @ComponentV2
 export struct FeedBlurBackdrop {
-  /** 这一屏的封面地址（空串 = 不加载，回落到底色）。 */
-  @Param coverUrl: string = '';
-  /** 控制器必须每个实例独立，不能共享。 */
   private controller: webview.WebviewController = new webview.WebviewController();
-  private lastApplied: string = '';
 
-  /** 页面加载完成（以及封面变了）时把 `--cover` 注入进去。 */
-  private applyCover(): void {
-    if (this.coverUrl.length === 0 || this.coverUrl === this.lastApplied) {
-      return;
-    }
-    this.lastApplied = this.coverUrl;
-    const script: string = `document.documentElement.style.setProperty('--cover','url("${this.coverUrl}")');`;
-    this.controller.runJavaScript(script).then((): void => {
-      Logger.info(TAG, `cover applied len=${this.coverUrl.length}`);
+  /** 覆盖满整块背景：居中 + scale 到短边铺满（等价 CSS 的 `object-fit: cover`）。 */
+  private applyCoverCrop(): void {
+    const script: string =
+      `(function(){` +
+      `var d=document.documentElement,b=document.body;` +
+      `d.style.overflow='hidden';b.style.overflow='hidden';b.style.margin='0';` +
+      `var s=document.querySelector('.stage')||b.firstElementChild;` +
+      `if(!s){return 'no-stage';}` +
+      `var k=Math.max(window.innerWidth,window.innerHeight)/Math.min(window.innerWidth,window.innerHeight);` +
+      `s.style.position='fixed';` +
+      `s.style.left='50%';s.style.top='50%';` +
+      `s.style.width='100vmin';s.style.height='100vmin';` +
+      `s.style.transformOrigin='center center';` +
+      `s.style.transform='translate(-50%,-50%) scale('+k+')';` +
+      `return 'scale='+k.toFixed(3);` +
+      `})();`;
+    this.controller.runJavaScript(script).then((ret: string): void => {
+      Logger.info(TAG, `cover crop applied ${ret}`);
     }).catch((err: Error): void => {
-      Logger.warn(TAG, `cover inject failed: ${err.message ?? ''}`);
+      Logger.warn(TAG, `cover crop failed: ${err.message ?? ''}`);
     });
-  }
-
-  @Monitor('coverUrl')
-  onCoverChanged(): void {
-    this.applyCover();
   }
 
   build() {
@@ -68,9 +69,8 @@ export struct FeedBlurBackdrop {
       // 纯背景：不吃触摸，滑动与点击都交给上层
       .hitTestBehavior(HitTestMode.None)
       .onPageEnd((): void => {
-        Logger.info(TAG, `page end, inject cover len=${this.coverUrl.length}`);
-        this.lastApplied = '';
-        this.applyCover();
+        Logger.info(TAG, 'page end, apply cover crop');
+        this.applyCoverCrop();
       })
   }
 }
