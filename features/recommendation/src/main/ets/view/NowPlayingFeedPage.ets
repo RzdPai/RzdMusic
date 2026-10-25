@@ -3413,6 +3413,10 @@ export struct NowPlayingFeedPage {
             .nestedScroll(SwiperNestedScrollMode.SELF_ONLY)
             .width(StyleConstants.FULL_WIDTH)
             .layoutWeight(1)
+            // ★★★ 2026-10-25（甲方：「效果还是不对」）：`onChange` 是**滑完**才回调 ⇒ 只能切完再变色。
+            .onAnimationStart((index: number, targetIndex: number): void => {
+              this.applyTintForIndex(targetIndex);
+            })
             .onChange((index: number): void => {
               this.onFeedChanged(index);
             })
@@ -3475,6 +3479,36 @@ export struct NowPlayingFeedPage {
   }
 
   /** 预取相邻两屏的取色（只进缓存、不动当前屏），让滑动一开始颜色就位。 */
+  /**
+   * 把**指定下标的底色**立刻应用到整页（翻页动画一开始就调用）。
+   * 命中缓存则直接切（两张卡各自也带自己的底色，观感=两个整体在换）；没命中先补一次取色。
+   * @param index 目标屏下标
+   */
+  private applyTintForIndex(index: number): void {
+    const total: number = this.feedSource.totalCount();
+    if (index < 0 || index >= total) {
+      return;
+    }
+    const row: RecommendPrivateSongUi = this.feedSource.getData(index);
+    if (row.coverUrl.length === 0) {
+      return;
+    }
+    const hit: FeedTintResult | undefined = this.tintCache.get(row.coverUrl);
+    if (hit === undefined) {
+      void this.extractCardColor(row.coverUrl, false);
+      return;
+    }
+    const cachedTint: string = hit.tint;
+    const cachedLum: number = hit.luminance;
+    if (this.pageTint === cachedTint) {
+      return;
+    }
+    this.pageTint = cachedTint;
+    this.tintReady = true;
+    this.pageTintIsLight = cachedLum > FEED_INK_LIGHT_THRESHOLD;
+    Logger.info(RZD_TAG, `tint apply index=${index} tint=${cachedTint}`);
+  }
+
   private prefetchNeighborTint(): void {
     const total: number = this.feedSource.totalCount();
     const offsets: number[] = [1, -1];
