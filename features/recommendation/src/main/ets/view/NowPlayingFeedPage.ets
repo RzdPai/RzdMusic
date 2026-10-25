@@ -3508,42 +3508,38 @@ export struct NowPlayingFeedPage {
       try {
         const pixelMap: image.PixelMap = await src.createPixelMap();
         try {
-          await new Promise<void>((resolve: () => void) => {
-            effectKit.createColorPicker(pixelMap,
-              (error: Error | undefined, colorPicker: effectKit.ColorPicker | undefined) => {
-                try {
-                  if (error === undefined && colorPicker !== undefined) {
-                    // ★ 2026-10-25（甲方：「浅色的图还是发黑。你先仔细看看官方文档」）：
-                    //   官方《使用模糊效果 · 方式2》给的取色姿势是 **`getAverageColor()`**（平均色），
-                    //   而 `getLargestProportionColor()`（占比最大的那一种色）在"白底 + 局部深色图形"的封面上
-                    //   会取到那块深色（例如这张的远山/墨迹）⇒ 整页跟着发黑。
-                    //   ⇒ 换成平均色：浅色封面得到浅色底，深色封面照样得到深色底。
-                    const color: effectKit.Color = colorPicker.getAverageColor();
-                    const result: FeedTintResult = feedTintResultOf(color.red, color.green, color.blue);
-                    const light: boolean = result.luminance > FEED_INK_LIGHT_THRESHOLD;
-                    if (this.feedAlive && jobSeq === this.cardColorJobSeq) {
-                      // ⚠️ 只把"写状态"这一小段包进 animateTo（400ms / EaseInOut）：
-                      //   换歌时底色从上一首的色**渐变**到这一首的色，而不是硬切（用户第 2 条）。
-                      //   异步 / 网络 / 解码 / 日志**都不在**这个闭包里 —— 包进去会被补间吃掉时间。
-                      //   墨色两个状态位必须**写在一起**：只动其中一个会出现"底色已经渐变到浅色、
-                      //   墨色还是白"的中间帧。
-                      // ★ 2026-10-24（甲方：「那个过渡还是发黑，并且现在过渡的很不自然」）：
-                      //   原来包 `animateTo(400ms, EaseInOut)` ⇒ 换歌时底色要"渐变"过去，
-                      //   中间那 400ms 正是上一首的深色 → 这一首的浅色，白歌看着像"先黑一下"。
-                      //   ⇒ 改为**即时切换**（不插值）：颜色一到就是它。
-                      this.pageTint = result.tint;
-                      this.tintReady = true;
-                      this.pageTintIsLight = light;
-                      // 日志必须在 animateTo 之外（与上面同一条纪律）
-                      Logger.info(RZD_TAG,
-                        `tint ink light=${light} lum=${result.luminance} tint=${result.tint} url=${url}`);
-                    }
-                  }
-                } finally {
-                  resolve();
-                }
-              });
-          });
+          // ★ 2026-10-25（甲方：「不要直接取平均色，官方不给了好几种取色方式吗」）：
+          //   官方 `effectKit.ColorPicker` 一共给了 5 种取色方式：
+          //   `getMainColor()`（主色，图像缩到 1px 的加权结果）/ `getLargestProportionColor()`（占比最多）/
+          //   `getTopProportionColors(n)` / `getHighestSaturationColor()`（最艳）/ `getAverageColor()`（平均）。
+          //   ⇒ 这里改用**主色 + 最艳色**两个官方结果做决策，不再用"平均色"：
+          //     底色取**主色**（官方对"整图代表色"的定义，白底+深色图形时不会取到那块深色）；
+          //     若主色偏灰（黑白灰判定为真）而图里有明显彩色，则用**最艳色**做强调（下一轮用于强调元素）。
+          const picker: effectKit.ColorPicker = await effectKit.createColorPicker(pixelMap);
+          const mainColor: effectKit.Color = await picker.getMainColor();
+          const vivid: effectKit.Color = picker.getHighestSaturationColor();
+          const mainArgb: number = (0xFF << 24) | (mainColor.red << 16) | (mainColor.green << 8) | mainColor.blue;
+          const mainIsGray: boolean = picker.isBlackOrWhiteOrGrayColor(mainArgb);
+          let color: effectKit.Color = mainColor;
+          if (mainIsGray && vivid !== null) {
+            // 主色是黑白灰时，"最艳色"更能代表这张图的调性（也避免整页一片灰）
+            const vividArgb: number = (0xFF << 24) | (vivid.red << 16) | (vivid.green << 8) | vivid.blue;
+            const vividIsGray: boolean = picker.isBlackOrWhiteOrGrayColor(vividArgb);
+            if (!vividIsGray) {
+              color = vivid;
+            }
+          }
+          Logger.info(RZD_TAG,
+            `tint pick main=${mainColor.red},${mainColor.green},${mainColor.blue} gray=${mainIsGray} url=${url}`);
+          const result: FeedTintResult = feedTintResultOf(color.red, color.green, color.blue);
+          const light: boolean = result.luminance > FEED_INK_LIGHT_THRESHOLD;
+          if (this.feedAlive && jobSeq === this.cardColorJobSeq) {
+            // 即时切换（不插值）：颜色一到就是它（甲方 2026-10-24「过渡还是发黑」）
+            this.pageTint = result.tint;
+            this.tintReady = true;
+            this.pageTintIsLight = light;
+            Logger.info(RZD_TAG, `tint ink light=${light} lum=${result.luminance} tint=${result.tint} url=${url}`);
+          }
         } finally {
           try {
             pixelMap.release();
