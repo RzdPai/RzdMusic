@@ -15,6 +15,7 @@
 
 import { AppStorageV2, curves, uiObserver } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { LongTakeSession, LongTakeTransitionDelegate, LongTakeTransitionParam } from '@hmanimations/ezcustomtransition';
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import { guardPlayerBack, SearchGlassModifier } from 'musicbasic';
 import { AlbumRouteParam, ArtistRouteParam, BreakpointType, ThemeState, WindowUtil } from 'musicbasic';
@@ -215,6 +216,8 @@ export struct OnlineSearchPage {
    */
   private ownStack: NavPathStack | undefined = undefined;
   @Local query: string = '';
+  @Local longTakeParam: LongTakeTransitionParam | undefined = undefined;
+  @Local longTakeSession: LongTakeSession = new LongTakeSession();
   /** 起手帧的位移（vp）。 */
   @Local morphTx: number = 0;
   @Local morphTy: number = 0;
@@ -2621,24 +2624,9 @@ export struct OnlineSearchPage {
       })
   }
 
-  build() {
-    this.routedContent()
-  }
-
+  /** search destination content (skill Step6: shared by both branches). */
   @Builder
-  private routedContent() {
-    // ★★ 2026-10-20（甲方口径：不用 HDS 的实色背板，顶栏保持透明）：
-    //   目标页改成**普通 `NavDestination`**，与官方示例一致
-    //   （`transitions-collection/SearchLongTakeTransitionPageTwo.ets` 就是普通 NavDestination
-    //     + `.hideTitleBar(true)` + 搜索行画在页面内容里）。
-    //   之前的 `HdsNavDestination` 会在 pop 时跑自己的页面转场（真机日志里源节点被甩到 x=-一屏宽），
-    //   把 `geometryTransition` 的一镜到底挤掉 —— 这就是"进有动画、退没有"的根。
-    //   搜索行的**位置与外观不变**：状态栏下方 0~56，玻璃胶囊 40、间距 10、右侧音源胶囊；
-    //   区别只是它不再由 HDS 标题栏承载，页面顶部也没有任何实色背板。
-    NavDestination() {
-      // 内容铺满整页（含状态栏区域），搜索行/类型栏**浮**在上面：
-      // 甲方 2026-10-20：「内容还是没延伸进状态栏」——列表要能滚到状态栏底下，
-      // 所以不能再用"状态栏占位 → 行 → 类型栏 → 内容"的竖排，改成 Stack 覆盖。
+  private searchPageContent() {
       Stack({ alignContent: Alignment.TopStart }) {
         Column() {
           this.searchContent()
@@ -2667,9 +2655,37 @@ export struct OnlineSearchPage {
           }
         })
       }
-      .width('100%')
-      .height('100%')
-      .backgroundColor($r('app.color.background_secondary'))
+  }
+
+  build() {
+    this.routedContent()
+  }
+
+  @Builder
+  private routedContent() {
+    // ★★ 2026-10-20（甲方口径：不用 HDS 的实色背板，顶栏保持透明）：
+    //   目标页改成**普通 `NavDestination`**，与官方示例一致
+    //   （`transitions-collection/SearchLongTakeTransitionPageTwo.ets` 就是普通 NavDestination
+    //     + `.hideTitleBar(true)` + 搜索行画在页面内容里）。
+    //   之前的 `HdsNavDestination` 会在 pop 时跑自己的页面转场（真机日志里源节点被甩到 x=-一屏宽），
+    //   把 `geometryTransition` 的一镜到底挤掉 —— 这就是"进有动画、退没有"的根。
+    //   搜索行的**位置与外观不变**：状态栏下方 0~56，玻璃胶囊 40、间距 10、右侧音源胶囊；
+    //   区别只是它不再由 HDS 标题栏承载，页面顶部也没有任何实色背板。
+    NavDestination() {
+      // 内容铺满整页（含状态栏区域），搜索行/类型栏**浮**在上面：
+      // 甲方 2026-10-20：「内容还是没延伸进状态栏」——列表要能滚到状态栏底下，
+      // 所以不能再用"状态栏占位 → 行 → 类型栏 → 内容"的竖排，改成 Stack 覆盖。
+      // skill Step6：有 long-take 参数时用 delegate 包住内容
+      if (this.longTakeParam !== undefined) {
+        LongTakeTransitionDelegate({
+          longTakeSession: this.longTakeSession,
+          contentBuilder: (): void => {
+            this.searchPageContent()
+          }
+        })
+      } else {
+        this.searchPageContent()
+      }
     }
     .onBackPressed((): boolean => {
       this.closeSearch();
@@ -2678,9 +2694,23 @@ export struct OnlineSearchPage {
     // 官方示例：从 `NavDestinationContext` 拿本页所在的栈（`PageOne.ets:61-64`）。
     .onReady((context: NavDestinationContext): void => {
       this.ownStack = context.pathStack;
+      // skill Step6：解析上一页传来的 long-take 参数并初始化 session
+      const rawParam: Record<string, Object> | undefined = context.pathInfo?.param as Record<string, Object> | undefined;
+      const lt: LongTakeTransitionParam | undefined =
+        rawParam === undefined ? undefined : rawParam['longTakeTransitionParam'] as LongTakeTransitionParam | undefined;
+      this.longTakeParam = lt;
+      if (lt !== undefined) {
+        this.longTakeSession.init(context, lt, { pop: (): void => { context.pathStack.pop(); } });
+        hilog.info(0x0001, 'RzdSearchMorph', 'longTake session init');
+      }
     })
     // 搜索行已画在页面内容里（见上面那个 Column），这里彻底关掉标题栏：
     // 没有 HDS 的实色背板，也不会在 pop 时被标题栏子树拆解拖累转场。
+    // skill Step6：一镜到底期间背景由 session 管；尺寸变化要回写 session
+    .backgroundColor(this.longTakeParam !== undefined ? this.longTakeSession.navDestinationBgColor : $r('app.color.background_secondary'))
+    .onSizeChange((_oldArea: SizeOptions, nextArea: SizeOptions): void => {
+      this.longTakeSession.setNewSize(nextArea);
+    })
     .hideTitleBar(true)
     .hideBackButton(true)
     .backgroundColor($r('app.color.background_secondary'))
