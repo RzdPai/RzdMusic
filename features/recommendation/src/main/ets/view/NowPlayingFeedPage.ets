@@ -648,6 +648,28 @@ function feedTintShade(tint: string, scale: number): string {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
+/**
+ * 把 `rgb(r, g, b)` 按比例**提亮**（用于封面顶部过渡：绝不能压暗）。
+ * 官方《颜色渐变》要求 stop 递增；这里只生成颜色，不涉及 stop。
+ * @param tint 形如 `rgb(24, 30, 40)` 的颜色串
+ * @param scale 亮度系数（>1 = 提亮，内部按 255 封顶）
+ * @returns 提亮后的 `rgb(...)`；解析失败时原样返回
+ */
+function feedTintLighten(tint: string, scale: number): string {
+  const m: RegExpMatchArray | null = tint.match(new RegExp('rgb\\((\\d+),\\s*(\\d+),\\s*(\\d+)\\)'));
+  if (m === null) {
+    return tint;
+  }
+  const parts: string[] = m as string[];
+  if (parts.length < 4) {
+    return tint;
+  }
+  const r: number = Math.min(255, Math.round(Number(parts[1]) * scale));
+  const g: number = Math.min(255, Math.round(Number(parts[2]) * scale));
+  const b: number = Math.min(255, Math.round(Number(parts[3]) * scale));
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
 function feedTintLuminanceOf(r: number, g: number, b: number): number {
   const toHex: (v: number) => string =
     (v: number): string => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
@@ -2773,6 +2795,20 @@ export struct NowPlayingFeedPage {
         .objectFit(ImageFit.Cover)
         .alt($r('app.media.ic_avatar1'))
         .draggable(false)
+
+      // ★ 2026-10-25（甲方：「我要的就是上半部分有过渡，但不黑」）：
+      //   顶部这条**不提用页底色本身**（页底色比浅色封面略深 ⇒ 就是黑带的来源），
+      //   而是用"**同色提亮 12%**"(`feedTintLighten`)：上沿比页底更亮一点点，
+      //   淡出到透明 ⇒ 有过渡、但永远不会把封面压暗。
+      Column()
+        .width(StyleConstants.FULL_WIDTH)
+        .height(this.coverHeightVp() * 0.22)
+        .linearGradient({
+          direction: GradientDirection.Bottom,
+          colors: [[feedTintLighten(this.pageTint, 1.12), 0], [Color.Transparent, 1]]
+        })
+        .position({ x: 0, y: 0 })
+        .hitTestBehavior(HitTestMode.None)
 
       // ★ 2026-10-25（甲方：「上面就变得很黑（但是本身上下是一致的）」）：
       //   渐变**只压封面底部 30%**，上半张一点不压 ⇒ 顶部不可能再出现"黑带"；
