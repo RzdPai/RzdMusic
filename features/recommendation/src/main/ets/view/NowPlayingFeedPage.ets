@@ -346,7 +346,12 @@ const FEED_COVER_RADIUS_VP: number = 24;
  *   20% 那一段太短，顶边那行页底色与封面原图之间像"贴了一条色带"；
  *   拉长到 30% 之后才是"图片慢慢化进背景"。
  */
-const FEED_COVER_TOP_FADE: number = 0.30;
+const FEED_COVER_TOP_FADE: number = 0.30;/** 横屏背景高斯模糊半径（甲方：「模糊半径调特别大」）。 */
+const FEED_WIDE_BG_BLUR: number = 120;
+/** 横屏背景上那层同色压暗的透明度（保证文字可读）。 */
+const FEED_WIDE_BG_TINT_OPACITY: number = 0.35;
+/** 封面与背景之间的过渡条高度（vp）。 */
+const FEED_COVER_BLEND_VP: number = 48;
 
 /**
  * 封面**下**边那条渐变带宽（占**封面高**的比例，从封面下沿**往上**算）。
@@ -833,6 +838,8 @@ export struct NowPlayingFeedPage {
 
   /** 进度条是否正在拖动（拖动时轨高/填充加粗，松手复位）。 */
   @Local feedScrubbing: boolean = false;
+  /** 进度条轨道宽度（vp）：onAreaChange 拿到，用来把手指位置换算成百分比。 */
+  @Local progressBarWidthVp: number = 0;
   /** 拖动中的目标位置（ms）：只在松手时 seek，避免一路 seek 抖乱播放器。 */
   @Local scrubValue: number = 0;
   @Local appState: MusicAppState =
@@ -3003,7 +3010,12 @@ export struct NowPlayingFeedPage {
    * @param index 这一屏的下标。
    */
   @Builder
-  private FeedActions(row: RecommendPrivateSongUi, index: number) {
+  /**
+   * @param row 这一屏的歌
+   * @param index 下标
+   * @param showDislike 是否显示"不感兴趣"（横屏按甲方要求**不显示**）
+   */
+  private FeedActions(row: RecommendPrivateSongUi, index: number, showDislike: boolean = true) {
     Row() {
       Row({ space: 18 }) {
         Row({ space: 4 }) {
@@ -3163,30 +3175,49 @@ export struct NowPlayingFeedPage {
         .fontSize(12)
         .fontColor(this.inkSoft())
 
-      // ★★ 2026-10-25（甲方：「进度条经常拉不动」「小圆球明明删了阴影还在」「跟播放页那个统一下」）：
-      //   原来那套是"自绘细轨 + 上面盖一层全透明 Slider"——透明 Slider 的 **block 阴影擦不掉**
-      //   （就是那个圆球影子），而且被自绘层压着手感也差。
-      //   ⇒ 改成和播放页一致：**直接用 Slider 画轨道与圆点**，颜色走本页墨色；
-      //     平时圆点为 0（看不到球），拖动时才显示并加粗轨道。
-      Slider({
-        value: this.scrubSliderValue(row),
-        max: this.scrubSliderMax(),
-        style: SliderStyle.OutSet
+      // ★★ 2026-10-25（甲方：「小白点没了但阴影还在」）：Slider 的 block 阴影去不干净，
+      //   ⇒ **彻底不用 Slider**：自绘轨道 + `PanGesture`/`TapGesture` 自己算百分比。
+      //   轨道旁 24vp 高都是命中区，竖屏/横屏都能拖。
+      Stack({ alignContent: Alignment.Start }) {
+        Row()
+          .width(StyleConstants.FULL_WIDTH)
+          .height(FEED_PROGRESS_THICK_VP)
+          .borderRadius(FEED_PROGRESS_THICK_VP / 2)
+          .backgroundColor(this.inkTrack())
+        Row()
+          .width(this.scrubbedPercentOf(row))
+          .height(FEED_PROGRESS_THICK_VP)
+          .borderRadius(FEED_PROGRESS_THICK_VP / 2)
+          .backgroundColor(this.inkTrackPlayed())
+      }
+      .layoutWeight(1)
+      .height(FEED_PROGRESS_THICK_VP)
+      .onAreaChange((_old: Area, area: Area): void => {
+        this.progressBarWidthVp = Number(area.width);
       })
-        .layoutWeight(1)
-        // 2026-10-25（甲方：进度条拖不动 / 播放页没有小白球）：显式高度 + 放大触摸区 + 去掉圆点
-        .height(40)
-        .responseRegion({ x: 0, y: -12, width: "100%", height: 56 })
-        .trackThickness(this.feedScrubbing ? FEED_PROGRESS_THICK_VP : FEED_PROGRESS_TRACK_VP)
-        .trackColor(this.inkTrack())
-        .selectedColor(this.inkTrackPlayed())
-        .blockColor(Color.Transparent)
-        .blockBorderWidth(0)
-        .blockSize({ width: 0, height: 0 })
-        .enabled(this.isCurrentSong(row))
-        .onChange((value: number, mode: SliderChangeMode): void => {
-          this.onFeedScrub(value, mode);
-        })
+      .gesture(
+        GestureGroup(GestureMode.Parallel,
+          PanGesture()
+            .onActionStart((event: GestureEvent): void => {
+              this.feedScrubbing = true;
+              this.seekByLocalX(event.fingerList[0].localX);
+            })
+            .onActionUpdate((event: GestureEvent): void => {
+              this.seekByLocalX(event.fingerList[0].localX);
+            })
+            .onActionEnd((): void => {
+              this.commitFeedSeek();
+            })
+            .onActionCancel((): void => {
+              this.commitFeedSeek();
+            }),
+          TapGesture()
+            .onAction((event: GestureEvent): void => {
+              this.seekByLocalX(event.fingerList[0].localX);
+              this.commitFeedSeek();
+            })
+        )
+      )
 
       Text(this.durationOf(row))
         .fontSize(12)
@@ -3196,6 +3227,32 @@ export struct NowPlayingFeedPage {
     .height(FEED_PROGRESS_ROW_VP)
     .alignItems(VerticalAlign.Center)
     .padding({ left: FEED_SIDE_PADDING_VP, right: FEED_SIDE_PADDING_VP })
+  }
+
+  /** 手指落到进度条上 ⇒ 按比例换算成 ms，写进本地值（拖动中只更新显示）。 */
+  /** 当前能不能 seek（只有正在播这一首、且时长已知）。 */
+  private feedSeekable(): boolean {
+    return this.appState.progressMax > 0;
+  }
+
+  private seekByLocalX(localX: number): void {
+    const width: number = this.progressBarWidthVp;
+    if (!(width > 0) || !this.feedSeekable()) {
+      return;
+    }
+    const ratio: number = Math.max(0, Math.min(1, localX / width));
+    this.scrubValue = ratio * this.scrubSliderMax();
+  }
+
+  /** 松手才真正 seek（避免拖动中疯狂下发）。 */
+  private commitFeedSeek(): void {
+    this.feedScrubbing = false;
+    if (!this.feedSeekable()) {
+      return;
+    }
+    const ms: number = Math.max(0, Math.round(this.scrubValue));
+    Logger.info(RZD_TAG, `feed scrub seek ms=${ms}`);
+    MediaService.getInstance().seek(ms);
   }
 
   /** 拖动中的百分比（拖动时用本地值；否则用真实播放进度）。 */
@@ -3277,37 +3334,68 @@ export struct NowPlayingFeedPage {
   @Builder
   private FeedCard(row: RecommendPrivateSongUi, index: number) {
     if (this.isWideFeedLayout()) {
-      // ══ 宽屏（平板 / 阔屏 / 手机横屏）：**完全照播放页** ══
-      //   左栏：封面 + 歌名/歌手 + 动作行（同一行）+ 进度；
-      //   右栏：一整块歌词区（多行、当前行高亮）。甲方：「右侧一大块都显示歌词，那些东西都放左侧」。
-      Row({ space: 28 }) {
-        Column({ space: 16 }) {
-          this.FeedCoverCard(row, index)
-          this.FeedInfoRow(row, index)
-          this.FeedProgress(row)
-        }
-        .layoutWeight(1)
-        .justifyContent(FlexAlign.Center)
-        .alignItems(HorizontalAlign.Start)
+      // ══ 横屏（照甲方第 4 条） ══
+      //   背景 = **封面的高斯模糊**（半径开大）；封面铺在**左上角**；
+      //   封面下方依次：歌名 / 歌手 / 收藏 + 菜单（**没有不感兴趣**）/ 进度条；
+      //   右侧整块是歌词区。
+      Stack({ alignContent: Alignment.TopStart }) {
+        // 背景：封面大半径高斯模糊
+        Image(row.coverUrl.length > 0 ? row.coverUrl : $r('app.media.ic_avatar1'))
+          .width(StyleConstants.FULL_WIDTH)
+          .height(StyleConstants.FULL_HEIGHT)
+          .objectFit(ImageFit.Cover)
+          .blur(FEED_WIDE_BG_BLUR)
+          .draggable(false)
+          .hitTestBehavior(HitTestMode.None)
+        // 压一层同色，保证文字可读
+        Column()
+          .width(StyleConstants.FULL_WIDTH)
+          .height(StyleConstants.FULL_HEIGHT)
+          .backgroundColor(this.cardFadeColor(row))
+          .opacity(FEED_WIDE_BG_TINT_OPACITY)
+          .hitTestBehavior(HitTestMode.None)
 
-        Column() {
-          this.FeedMultiLyrics(row)
+        Row({ space: 32 }) {
+          // 左栏：左上角封面 → 歌名/歌手 → 收藏+菜单 → 进度条
+          Column({ space: 14 }) {
+            this.FeedCoverCard(row, index)
+            // 封面到背景的过渡
+            Column()
+              .width(StyleConstants.FULL_WIDTH)
+              .height(FEED_COVER_BLEND_VP)
+              .linearGradient({
+                direction: GradientDirection.Bottom,
+                colors: [[Color.Transparent, 0], [this.cardFadeColor(row), 1]]
+              })
+              .hitTestBehavior(HitTestMode.None)
+            this.FeedInfoRow(row, index)
+            this.FeedProgress(row)
+          }
+          .layoutWeight(1)
+          .justifyContent(FlexAlign.Start)
+          .alignItems(HorizontalAlign.Start)
+
+          // 右栏：整块歌词
+          Column() {
+            this.FeedMultiLyrics(row)
+          }
+          .layoutWeight(1)
+          .justifyContent(FlexAlign.Center)
+          .alignItems(HorizontalAlign.Start)
         }
-        .layoutWeight(1)
-        .justifyContent(FlexAlign.Center)
-        .alignItems(HorizontalAlign.Start)
+        .width(StyleConstants.FULL_WIDTH)
+        .height(StyleConstants.FULL_HEIGHT)
+        .padding({
+          left: FEED_SIDE_PADDING_VP * 2,
+          right: FEED_SIDE_PADDING_VP * 2,
+          top: this.topStackOffsetVp(),
+          bottom: this.wideBottomReserveVp()
+        })
+        .alignItems(VerticalAlign.Center)
       }
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
-      .backgroundColor(this.cardFadeColor(row))
       .clip(true)
-      .padding({
-        left: FEED_SIDE_PADDING_VP * 2,
-        right: FEED_SIDE_PADDING_VP * 2,
-        top: this.topStackOffsetVp(),
-        bottom: this.wideBottomReserveVp()
-      })
-      .alignItems(VerticalAlign.Center)
     } else {
       // ══ 竖屏（手机）：整屏封面 + 两行小歌词 + 信息 + 进度 ══
       Column({ space: 0 }) {
