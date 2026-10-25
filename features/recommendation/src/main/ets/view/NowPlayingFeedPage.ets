@@ -353,6 +353,8 @@ const FEED_WIDE_BG_BLUR: number = 120;
 const FEED_WIDE_BG_TINT_OPACITY: number = 0.35;
 /** 封面与背景之间的过渡条高度（vp）。 */
 const FEED_COVER_BLEND_VP: number = 48;
+/** 竖屏封面上下过渡各自占封面的比例（中间保持原图）。 */
+const FEED_COVER_BAND_RATIO: number = 0.22;
 /** 横屏歌词字号（fp）：比播放页小一号，矮屏也能看到 7~9 行。 */
 const FEED_WIDE_LYRIC_FONT_FP: number = 20;
 
@@ -2834,29 +2836,28 @@ export struct NowPlayingFeedPage {
         .alt($r('app.media.ic_avatar1'))
         .draggable(false)
 
-      // ★★ 照抄歌手页 `DetailImmersiveBackdrop` 的那一条（甲方：那几个页面的过渡非常自然）：
-      //   **整块照片高度**上一条 `[Transparent, 0] → [pageTint, 1]`，照片下半截自己化进页底色；
-      //   页底再是**纯色** `pageTint` ⇒ 照片与页面是同一块颜色的连续过渡，中间没有第二条渐变带。
+      // ★★ 2026-10-25（甲方：「过渡给整个图片铺满了…失去了图片原本的颜色」）：
+      //   原来上下两条渐变都按**整块封面高度**铺，等于整张图都被页底色染了一遍。
+      //   ⇒ 两条都收成**只压上下各 22%**（`FEED_COVER_BAND_RATIO`），中间 56% 保持原图颜色。
+      //   上条：页底色 → 透明（顶部融进页头）；下条：透明 → 页底色（底部融进页底）。
       Column()
         .width(StyleConstants.FULL_WIDTH)
-        .height(this.coverHeightVp())
-        .linearGradient({
-          direction: GradientDirection.Bottom,
-          colors: [[Color.Transparent, 0], [this.cardFadeColor(row), 1]]
-        })
-        .hitTestBehavior(HitTestMode.None)
-
-      // ★ 2026-10-25（甲方：「直接把下面的过渡翻过来…照抄过来，上方和下方也用一个颜色」）：
-      //   这是**底部那条的镜像**，尺寸与颜色完全照抄：高度同为整块照片高度、颜色同为 `pageTint`，
-      //   只是方向反过来（页底色在上、向下淡出到透明）。上下同色 ⇒ 不会出现色差/发黑。
-      Column()
-        .width(StyleConstants.FULL_WIDTH)
-        .height(this.coverHeightVp())
+        .height(this.coverHeightVp() * FEED_COVER_BAND_RATIO)
         .linearGradient({
           direction: GradientDirection.Bottom,
           colors: [[this.cardFadeColor(row), 0], [Color.Transparent, 1]]
         })
         .position({ x: 0, y: 0 })
+        .hitTestBehavior(HitTestMode.None)
+
+      Column()
+        .width(StyleConstants.FULL_WIDTH)
+        .height(this.coverHeightVp() * FEED_COVER_BAND_RATIO)
+        .linearGradient({
+          direction: GradientDirection.Bottom,
+          colors: [[Color.Transparent, 0], [this.cardFadeColor(row), 1]]
+        })
+        .position({ x: 0, y: this.coverHeightVp() * (1 - FEED_COVER_BAND_RATIO) })
         .hitTestBehavior(HitTestMode.None)
     }
     .width(StyleConstants.FULL_WIDTH)
@@ -3348,33 +3349,31 @@ export struct NowPlayingFeedPage {
   @Builder
   private FeedCard(row: RecommendPrivateSongUi, index: number) {
     if (this.isWideFeedLayout()) {
-      // ══ 横屏（甲方第 2/1 条）══
-      //   · 封面**满铺**在左上角：不圆角、不投影，跟竖屏一样只是位置在左；
-      //   · 封面下方依次：歌名 / 歌手 / 收藏+菜单（无不感兴趣）/ 进度条；
-      //   · 底部只留一点点空（不再把内容往上顶）；
-      //   · 右栏 = 播放页同款歌词组件（明确高度，避免塌成 0）。
+      // ══ 横屏 ══
+      //   背景 = 由封面主色生成的**多段竖向渐变**（不是纯色：上略亮 → 主色 → 下略暗），
+      //          这就是 QQ 音乐那种"不是纯色但衔接特别自然"的观感；
+      //   左侧封面**贴左上角**（顶部零留白、满铺无圆角）；
+      //   右栏歌词**填满**整块高度（不留上下大空）。
       Stack({ alignContent: Alignment.TopStart }) {
-        // 背景：封面的高斯模糊
-        Image(row.coverUrl.length > 0 ? row.coverUrl : $r('app.media.ic_avatar1'))
-          .width(StyleConstants.FULL_WIDTH)
-          .height(StyleConstants.FULL_HEIGHT)
-          .objectFit(ImageFit.Cover)
-          .blur(FEED_WIDE_BG_BLUR)
-          .draggable(false)
-          .hitTestBehavior(HitTestMode.None)
         Column()
           .width(StyleConstants.FULL_WIDTH)
           .height(StyleConstants.FULL_HEIGHT)
-          .backgroundColor(this.cardFadeColor(row))
-          .opacity(FEED_WIDE_BG_TINT_OPACITY)
+          .linearGradient({
+            direction: GradientDirection.Bottom,
+            colors: [
+              [feedTintShade(this.cardFadeColor(row) as string, 1.06), 0],
+              [this.cardFadeColor(row), 0.45],
+              [feedTintShade(this.cardFadeColor(row) as string, 0.88), 1]
+            ]
+          })
           .hitTestBehavior(HitTestMode.None)
 
         Row({ space: 24 }) {
-          // 左栏：满铺封面 → 信息 → 进度（全部在流里，不会被挤到屏幕外）
+          // 左栏：封面贴左上 → 歌名/歌手 → 收藏+菜单 → 进度条
           Column({ space: 10 }) {
             Image(row.coverUrl.length > 0 ? row.coverUrl : $r('app.media.ic_avatar1'))
               .width(StyleConstants.FULL_WIDTH)
-              .height('52%')
+              .height('58%')
               .objectFit(ImageFit.Cover)
               .draggable(false)
               .onClick((): void => {
@@ -3393,11 +3392,8 @@ export struct NowPlayingFeedPage {
           .justifyContent(FlexAlign.Start)
           .alignItems(HorizontalAlign.Start)
 
-          // 右栏：播放页同款歌词（给明确高度，父容器有界）
+          // 右栏：歌词铺满整块高度
           Column() {
-            // ★ 2026-10-25（甲方：「歌词就显示三行是不是太少了」）：`LyricsComponent` 字号固定，
-            //   横屏屏矮只放得下 3 行；这里直接用它的渲染核心 `AmllLyricView`，字号 20fp
-            //   ⇒ 同高度能看 7~9 行，逐字高亮/滚动仍是播放页那套。
             AmllLyricView({
               lyricLines: this.currentLyricLines(),
               currentTime: this.appState.progress,
@@ -3418,16 +3414,13 @@ export struct NowPlayingFeedPage {
           }
           .layoutWeight(1)
           .height(StyleConstants.FULL_HEIGHT)
+          .clip(true)
           .alignItems(HorizontalAlign.Start)
         }
         .width(StyleConstants.FULL_WIDTH)
         .height(StyleConstants.FULL_HEIGHT)
-        .padding({
-          right: FEED_SIDE_PADDING_VP * 2,
-          top: this.topStackOffsetVp(),
-          bottom: this.wideBottomReserveVp()
-        })
-        .alignItems(VerticalAlign.Center)
+        .padding({ right: FEED_SIDE_PADDING_VP * 2, top: 0, bottom: this.wideBottomReserveVp() })
+        .alignItems(VerticalAlign.Top)
       }
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
