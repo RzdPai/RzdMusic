@@ -67,7 +67,7 @@ import {
   PlaylistTransitionOverlay
 } from 'playlist';
 import { MinePage, OnlineSearchPage } from 'setting';
-import { HOME_ROUTE_NAME, SEARCH_ROUTE_NAME } from './HomeRouteNames';
+import { HOME_ROUTE_NAME, ROOT_TABS_ROUTE_NAME, SEARCH_ROUTE_NAME } from './HomeRouteNames';
 // 鏂版ā鍧楋細鏈湴闊充箰锛堝鍏ヨ澶囬煶棰戝埌娌欑锛変笌娲涢洩鍚屾瀹㈡埛绔€?
 // 鈿狅笍 hvigor 瀵?HAR 鏄?*鎸夊紩鐢ㄧ紪璇?*鐨勶細娌℃湁浠讳綍浠ｇ爜 import 瀹冧滑鏃讹紝
 //    鍗充娇宸茬櫥璁拌繘 build-profile.json5锛岃繖涓や釜妯″潡涔?*涓嶄細琚紪璇?*锛堟瀯寤虹収鏍风豢锛夈€?
@@ -492,6 +492,16 @@ struct Index {
   private shellOwnsOverlayTween: boolean = false;
 
   /** Initializes play queue ids from local DB for the session. */
+  /** 根栈必须始终有「首页」这一条 destination，否则屏幕是空的。 */
+  private ensureRootTabsRoute(): void {
+    const names: string[] = this.pageIndexInfos.getAllPathName();
+    if (names.length > 0) {
+      return;
+    }
+    this.pageIndexInfos.pushPath({ name: ROOT_TABS_ROUTE_NAME }, false);
+    Logger.info(RzdShellLogTag, 'root tabs route pushed');
+  }
+
   aboutToAppear() {
     // 2026-10-23：把"首页返回收尾"注册给 Ability 层（页面级 onBackPress 收不到首页返回）。
     HomeBackBridge.register((): void => {
@@ -3026,62 +3036,17 @@ struct Index {
    * （那个 Navigation 挂在首页 TabContent 里），永远盖不住外层 `HdsTabs` 底栏；
    * 改推根栈后，NavDestination 会整屏覆盖 Tabs 内容（含底栏）。
    */
-  /** 搜索页转场的缩放（1 = 整页；0.92 = "从搜索框长出来"那一帧）。 */
-  @Local searchMorphScale: number = 1;
-  /** 搜索页转场的透明度（0 → 1 淡入）。 */
-  @Local searchMorphOpacity: number = 1;
-
+  /**
+   * 根栈「首页」destination 的内容：整块 `HdsTabs`（四个 Tab）。
+   *
+   * ★ 2026-10-25（甲方：「我要的是搜索框本身的一镜到底」）：
+   *   一镜到底要求源端（首页搜索框）与目标端（搜索页）在**同一个 Navigation** 里。
+   *   之前首页内容是 `HdsNavigation` 的 children、搜索页推在根栈 ⇒ 两端不同 Navigation，
+   *   `geometryTransition` 配不上。现在把首页整体变成一个根栈 destination，
+   *   搜索页再推上来就和它在同一个栈里，搜索框的共享元素形变恢复。
+   */
   @Builder
-  private RootRouteMap(name: string, param: Object) {
-    if (name === SEARCH_ROUTE_NAME) {
-      NavDestination() {
-        Column() {
-          OnlineSearchPage({
-            routeParam: param,
-            onShowChange: (open: boolean): void => {
-              if (open) {
-                this.appState.miniBarExpanded = true;
-                Logger.info(RzdShellLogTag, 'search page shown (root stack)');
-              }
-            }
-          })
-        }
-        .width(StyleConstants.FULL_WIDTH)
-        .height(StyleConstants.FULL_HEIGHT)
-        .scale({ x: this.searchMorphScale, y: this.searchMorphScale })
-        .opacity(this.searchMorphOpacity)
-      }
-      .hideTitleBar(true)
-      // ★ 2026-10-25（甲方：「变成普通推页了」）：搜索页挪到根栈后，源端（首页搜索框，在内层 homeStack）
-      //   与目标端不在同一个 Navigation 里，`geometryTransition` 配不上 ⇒ 这里用**缩放 + 淡入**复刻
-      //   一镜到底的观感（进入从 0.92 放大到 1、退出反向），转场时长与原来的形变接近。
-      .customTransition((operation: NavigationOperation,
-        isEnter: boolean): Array<NavDestinationTransition> | undefined => {
-        const enter: boolean = isEnter && operation === NavigationOperation.PUSH;
-        // 进入前先把"小且透明"这一帧压好（退出则从整页开始）
-        this.searchMorphScale = enter ? 0.92 : 1;
-        this.searchMorphOpacity = enter ? 0 : 1;
-        return [{
-          duration: 300,
-          curve: Curve.Friction,
-          event: (): void => {
-            this.getUIContext().animateTo({ duration: 300, curve: Curve.Friction }, (): void => {
-              this.searchMorphScale = enter ? 1 : 0.96;
-              this.searchMorphOpacity = enter ? 1 : 0;
-            });
-          },
-          onTransitionEnd: (): void => {
-            this.searchMorphScale = 1;
-            this.searchMorphOpacity = 1;
-          }
-        }];
-      })
-    }
-  }
-  /** Root UI: {@link HdsNavigation} with tabs and optional playback cover. */
-  build() {
-    Stack({ alignContent: Alignment.TopStart }) {
-      HdsNavigation(this.pageIndexInfos) {
+  private RootTabsHost() {
         if (deviceInfo.distributionOSApiVersion >= 60100) {
           HdsTabs({ barPosition: BarPosition.End, controller: this.tabsController }) {
             this.HomeTabsPages()
@@ -3285,8 +3250,51 @@ struct Index {
           .height(StyleConstants.FULL_HEIGHT)
           .width(StyleConstants.FULL_WIDTH)
         }
+  }
+
+  @Builder
+  private RootRouteMap(name: string, param: Object) {
+    if (name === ROOT_TABS_ROUTE_NAME) {
+      NavDestination() {
+        this.RootTabsHost()
       }
-      .mode(NavigationMode.Stack)
+      .hideTitleBar(true)
+      .onBackPressed((): boolean => {
+        return true;
+      })
+    } else if (name === SEARCH_ROUTE_NAME) {
+      NavDestination() {
+        Column() {
+          OnlineSearchPage({
+            routeParam: param,
+            onShowChange: (open: boolean): void => {
+              if (open) {
+                this.appState.miniBarExpanded = true;
+                Logger.info(RzdShellLogTag, 'search page shown (root stack)');
+              }
+            }
+          })
+        }
+        .width(StyleConstants.FULL_WIDTH)
+        .height(StyleConstants.FULL_HEIGHT)
+      }
+      .hideTitleBar(true)
+      // ★ 2026-10-25（甲方：「变成普通推页了」）：搜索页挪到根栈后，源端（首页搜索框，在内层 homeStack）
+      //   与目标端不在同一个 Navigation 里，`geometryTransition` 配不上 ⇒ 这里用**缩放 + 淡入**复刻
+      //   一镜到底的观感（进入从 0.92 放大到 1、退出反向），转场时长与原来的形变接近。
+
+    }
+  }
+  /** Root UI: {@link HdsNavigation} with tabs and optional playback cover. */
+  build() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      HdsNavigation(this.pageIndexInfos) {
+        Stack() {
+        }
+        .width(StyleConstants.FULL_WIDTH)
+        .height(StyleConstants.FULL_HEIGHT)
+      }
+      .navDestination(this.RootRouteMap)      .mode(NavigationMode.Stack)
       // 搜索页推到根栈 ⇒ 盖住整屏（含 HdsTabs 底栏）
       .navDestination(this.RootRouteMap)
       .customNavContentTransition((from: NavContentInfo, _to: NavContentInfo,
