@@ -214,7 +214,9 @@ export struct OnlineSearchPage {
    * 搜索页可能被推到壳层共享栈，也可能被推到首页 Tab 的内层栈，关闭时必须弹对应那个。
    */
   private ownStack: NavPathStack | undefined = undefined;
-  @Local query: string = '';  /** 输入中的联想候选（洛雪式：输入后下方弹出推荐） */
+  @Local query: string = '';
+  /** 内容层进入时的透明度（搜索行不动，只让内容淡入）。 */
+  @Local contentEnterAlpha: number = 0;  /** 输入中的联想候选（洛雪式：输入后下方弹出推荐） */
   @Local suggestWords: string[] = [];
   @Local showSuggest: boolean = false;
   private suggestTimerId: number = -1;
@@ -2561,6 +2563,13 @@ export struct OnlineSearchPage {
         }
         .width('100%')
         .height('100%')
+        // 甲方：「无界是搜索框不动，但是文字动的」⇒ 只让内容层淡入，搜索行保持原位不动
+        .opacity(this.contentEnterAlpha)
+        .onAppear((): void => {
+          this.getUIContext().animateTo({ duration: 220, curve: Curve.Friction }, (): void => {
+            this.contentEnterAlpha = 1;
+          });
+        })
 
         Column() {
           this.searchRow()

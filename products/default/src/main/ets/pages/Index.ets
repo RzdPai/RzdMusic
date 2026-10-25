@@ -2981,34 +2981,19 @@ struct Index {
    * （那个 Navigation 挂在首页 TabContent 里），永远盖不住外层 `HdsTabs` 底栏；
    * 改推根栈后，NavDestination 会整屏覆盖 Tabs 内容（含底栏）。
    */
-  /** 搜索页页面级过渡：透明度 0→1 + 12vp 上移（无界"整页淡入"的等价实现，不做框体形变）。 */
-  @Local searchPageAlpha: number = 0;
-  @Local searchPageShift: number = 12;
-
   @Builder
   private RootRouteMap(name: string, param: Object) {
     if (name === SEARCH_ROUTE_NAME) {
-      Column() {
-        OnlineSearchPage({
-          routeParam: param,
-          onShowChange: (open: boolean): void => {
-            if (open) {
-              this.appState.miniBarExpanded = true;
-              Logger.info(RzdShellLogTag, 'search page shown (root stack)');
-            }
+      // 甲方口径：**搜索框本身不动**，所以这里不加任何整页 opacity/translate；
+      // 只在内容层做淡入（见 OnlineSearchPage 的 contentEnterAlpha）。
+      OnlineSearchPage({
+        routeParam: param,
+        onShowChange: (open: boolean): void => {
+          if (open) {
+            this.appState.miniBarExpanded = true;
+            Logger.info(RzdShellLogTag, 'search page shown (root stack)');
           }
-        })
-      }
-      .width(StyleConstants.FULL_WIDTH)
-      .height(StyleConstants.FULL_HEIGHT)
-      .opacity(this.searchPageAlpha)
-      .translate({ y: this.searchPageShift })
-      .onAppear((): void => {
-        // 首帧先压成"透明 + 下移"，下一帧再动画到原位 ⇒ 进入是本页自己的淡入，不是系统推页
-        this.getUIContext().animateTo({ duration: 220, curve: Curve.Friction }, (): void => {
-          this.searchPageAlpha = 1;
-          this.searchPageShift = 0;
-        });
+        }
       })
     }
   }
