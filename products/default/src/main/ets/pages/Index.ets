@@ -13,7 +13,8 @@
  * limitations under the License.
  */
 
-import { AppStorageV2, curves, uiObserver } from '@kit.ArkUI';
+import { AppStorageV2, componentUtils, curves, UIContext, uiObserver } from '@kit.ArkUI';
+import { image } from '@kit.ImageKit';
 import { HdsNavigation, HdsTabsController, HdsTabsBarChangeMode, SystemMaterialParams, hdsMaterial } from '@kit.UIDesignKit';
 import {
   AmbientState,
@@ -67,7 +68,6 @@ import {
   PlaylistTransitionOverlay
 } from 'playlist';
 import { MinePage, OnlineSearchPage } from 'setting';
-import { ezCustomTransition, LongTakeTransitionParam } from '@hmanimations/ezcustomtransition';
 import { SEARCH_ROUTE_NAME } from './HomeRouteNames';
 // 鏂版ā鍧楋細鏈湴闊充箰锛堝鍏ヨ澶囬煶棰戝埌娌欑锛変笌娲涢洩鍚屾瀹㈡埛绔€?
 // 鈿狅笍 hvigor 瀵?HAR 鏄?*鎸夊紩鐢ㄧ紪璇?*鐨勶細娌℃湁浠讳綍浠ｇ爜 import 瀹冧滑鏃讹紝
@@ -429,6 +429,13 @@ struct Index {
    * 鈿狅笍 涓嶈鍐嶆嬁瀹冨幓鏀瑰簳閮ㄥ鑸殑 `barHeight` / `barFloatingStyle`锛堣瘯杩囷紝搴曟爮鐩存帴鍧忔帀锛夈€?
    */
   @Local navDepth: number = 0;
+  /** 搜索框一镜到底：源框快照（PixelMap）与克隆层的当前矩形（vp）。 */
+  @Local morphPixel: image.PixelMap | undefined = undefined;
+  @Local morphActive: boolean = false;
+  @Local morphX: number = 0;
+  @Local morphY: number = 0;
+  @Local morphW: number = 0;
+  @Local morphH: number = 0;
   /**
    * 首页 Tab 自己的内层导航栈（只放两条路由：首页 / 搜索页）。
    * 见 `HomeRouteNames.ets` 里那段"为什么必须这样"的说明。
@@ -2732,20 +2739,79 @@ struct Index {
    * —— **必须** `animated = false` 关掉系统推页动画，否则两套动画叠加，形变会被压掉。
    */
   private openHomeSearch(): void {
-    // ★ 一镜到底（@hmanimations/ezcustomtransition）：点搜索框这一下先给源节点拍快照，
-    //   参数随路由传给搜索页；搜索页用 `LongTakeTransitionDelegate` 从这张快照展开。
-    const longTake: LongTakeTransitionParam | undefined =
-      ezCustomTransition.generateLongTakeParam(this.getUIContext(), 'home_search_field', 20);
-    Logger.info(RzdShellLogTag, `home search push longTake=${longTake !== undefined}`);
-    if (longTake !== undefined) {
-      const param: Record<string, Object> = {};
-      param['longTakeTransitionParam'] = longTake;
-      this.pageIndexInfos.pushPath({ name: SEARCH_ROUTE_NAME, param: param }, false);
-      return;
-    }
+    // ★ 自己实现的"搜索框一镜到底"（不依赖 geometryTransition / 三方库）：
+    //   ① 给首页搜索框拍一张快照；② 立刻推搜索页（animated=false，二级页整屏）；
+    //   ③ 在最上层放一张快照克隆，从源框矩形 animateTo 到目标框矩形；④ 结束移除。
+    this.startSearchMorph();
     // 搜索页是**真正的二级页面**（homeStack 上的 NavDestination），一镜到底由 geometryTransition 承载，
     // 这里不再动画底栏高度、也不再置"搜索态"状态位。
     this.pageIndexInfos.pushPath({ name: SEARCH_ROUTE_NAME }, false);
+  }
+
+  /** 源框 id（`HomeSearchRow` 里的 `Search` 节点）。 */
+  private static readonly SEARCH_FIELD_ID: string = 'home_search_field';
+  /** 克隆层动画时长（ms）。 */
+  private static readonly MORPH_MS: number = 320;
+
+  /** 首页搜索框 → 搜索页：拍快照、推页、播克隆层。 */
+  private startSearchMorph(): void {
+    const ui: UIContext = this.getUIContext();
+    try {
+      this.morphPixel = ui.getComponentSnapshot().getSync(Index.SEARCH_FIELD_ID);
+    } catch (err) {
+      this.morphPixel = undefined;
+      Logger.warn(RzdShellLogTag, `search morph snapshot failed: ${(err as Error).message ?? ''}`);
+    }
+    // 目标框矩形：与搜索页里的 Search 对齐（左右 16、状态栏下方 8、高 40）
+    const screenW: number = ui.px2vp(this.windowInfo.windowSize.width);
+      const statusTop: number = WindowUtil.getInstance().resolveStatusBarTopVp();
+    const dstX: number = 16;
+    const dstY: number = statusTop + 8;
+    const dstW: number = screenW - 32;
+    const dstH: number = 40;
+    // 源框矩形（拿不到就用目标矩形，退化为纯推页）
+    let srcX: number = dstX;
+    let srcY: number = dstY;
+    let srcW: number = dstW;
+    let srcH: number = dstH;
+    try {
+      const info: componentUtils.ComponentInfo = ui.getComponentUtils().getRectangleById(Index.SEARCH_FIELD_ID);
+      srcX = ui.px2vp(info.windowOffset.x);
+      srcY = ui.px2vp(info.windowOffset.y);
+      srcW = ui.px2vp(info.size.width);
+      srcH = ui.px2vp(info.size.height);
+    } catch (err) {
+      Logger.warn(RzdShellLogTag, `search morph rect failed: ${(err as Error).message ?? ''}`);
+    }
+    this.morphX = srcX;
+    this.morphY = srcY;
+    this.morphW = srcW;
+    this.morphH = srcH;
+    this.morphActive = this.morphPixel !== undefined;
+    // 先推页（无系统动画），克隆层在下一帧开始变形
+    this.pageIndexInfos.pushPath({ name: SEARCH_ROUTE_NAME }, false);
+    Logger.info(RzdShellLogTag,
+      `search morph start src=${srcX},${srcY},${srcW},${srcH} dst=${dstX},${dstY},${dstW},${dstH} clone=${this.morphActive}`);
+    setTimeout((): void => {
+      ui.animateTo({
+        duration: Index.MORPH_MS,
+        curve: curves.interpolatingSpring(0, 1, 324, 38),
+        onFinish: (): void => {
+          this.finishSearchMorph();
+        }
+      }, (): void => {
+        this.morphX = dstX;
+        this.morphY = dstY;
+        this.morphW = dstW;
+        this.morphH = dstH;
+      });
+    }, 16);
+  }
+
+  private finishSearchMorph(): void {
+    this.morphActive = false;
+    this.morphPixel = undefined;
+    Logger.info(RzdShellLogTag, 'search morph end');
   }
 
   private closeHomeSearch(): void {
@@ -3219,12 +3285,6 @@ struct Index {
       .navDestination(this.RootRouteMap)
       .customNavContentTransition((from: NavContentInfo, _to: NavContentInfo,
         operation: NavigationOperation): NavigationAnimatedTransition | undefined => {
-        // 搜索页的一镜到底交给 ezCustomTransition；其它路由维持原来的榜单返回转场。
-        const handled: NavigationAnimatedTransition | undefined =
-          ezCustomTransition.customNavContentTransition(from, _to, operation);
-        if (handled !== undefined) {
-          return handled;
-        }
         return getPlaylistTransitionState().navigationReturn(this.getUIContext(), from, operation);
       })
       .backgroundColor($r('app.color.home_page_background'))
@@ -3261,6 +3321,19 @@ struct Index {
       //
       // 鈿狅笍 `PLAYER_ROUTE_MODE = true` 鏃惰繖涓€娈?*涓嶆覆鏌?*锛氭挱鏀鹃〉鐢?NavDestination 璐熻矗
       //    锛堣 pushPlayerRoute锛夈€備袱鏉¤矾閮戒繚鐣欙紝鍥為€€鍙渶鏀逛笂闈㈤偅涓父閲忋€?
+      // ★ 搜索框一镜到底的克隆层：一张源框快照，从首页位置/大小 animateTo 到搜索页位置/大小。
+      //   放在最上层（zIndex 95），不吃触摸；动画结束由 finishSearchMorph() 移除。
+      if (this.morphActive && this.morphPixel !== undefined) {
+        Image(this.morphPixel)
+          .width(this.morphW)
+          .height(this.morphH)
+          .position({ x: this.morphX, y: this.morphY })
+          .borderRadius(this.morphH / 2)
+          .objectFit(ImageFit.Fill)
+          .zIndex(95)
+          .hitTestBehavior(HitTestMode.None)
+      }
+
       PlaylistTransitionOverlay()
         .zIndex(90)
         .hitTestBehavior(HitTestMode.Transparent)
