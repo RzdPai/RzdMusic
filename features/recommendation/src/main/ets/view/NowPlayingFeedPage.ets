@@ -845,6 +845,10 @@ export struct NowPlayingFeedPage {
   @Local feedScrubbing: boolean = false;
   /** 进度条轨道宽度（vp）：onAreaChange 拿到，用来把手指位置换算成百分比。 */
   @Local progressBarWidthVp: number = 0;
+  /** 歌词行缓存（按 source_songId 失效）。 */
+  @Local lyricLinesCache: AmllLyricLine[] = [];
+  /** 歌词缓存对应的歌（source_songId）。 */
+  private lyricLinesKey: string = '';
   /** 拖动中的目标位置（ms）：只在松手时 seek，避免一路 seek 抖乱播放器。 */
   @Local scrubValue: number = 0;
   @Local appState: MusicAppState =
@@ -2836,28 +2840,16 @@ export struct NowPlayingFeedPage {
         .alt($r('app.media.ic_avatar1'))
         .draggable(false)
 
-      // ★★ 2026-10-25（甲方：「过渡给整个图片铺满了…失去了图片原本的颜色」）：
-      //   原来上下两条渐变都按**整块封面高度**铺，等于整张图都被页底色染了一遍。
-      //   ⇒ 两条都收成**只压上下各 22%**（`FEED_COVER_BAND_RATIO`），中间 56% 保持原图颜色。
-      //   上条：页底色 → 透明（顶部融进页头）；下条：透明 → 页底色（底部融进页底）。
+      // ★ 2026-10-25（甲方：「竖屏那个过渡会退吧，现在更难看了」）：回退到甲方认可的版本 ——
+      //   **整块封面高度**上一条 `[透明, 0] → [页底色, 1]`（照片自己往下化进页底），页底纯色。
+      //   别再加"上下各 22%"那种分段：分段反而在图上留下两道折痕。
       Column()
         .width(StyleConstants.FULL_WIDTH)
-        .height(this.coverHeightVp() * FEED_COVER_BAND_RATIO)
-        .linearGradient({
-          direction: GradientDirection.Bottom,
-          colors: [[this.cardFadeColor(row), 0], [Color.Transparent, 1]]
-        })
-        .position({ x: 0, y: 0 })
-        .hitTestBehavior(HitTestMode.None)
-
-      Column()
-        .width(StyleConstants.FULL_WIDTH)
-        .height(this.coverHeightVp() * FEED_COVER_BAND_RATIO)
+        .height(this.coverHeightVp())
         .linearGradient({
           direction: GradientDirection.Bottom,
           colors: [[Color.Transparent, 0], [this.cardFadeColor(row), 1]]
         })
-        .position({ x: 0, y: this.coverHeightVp() * (1 - FEED_COVER_BAND_RATIO) })
         .hitTestBehavior(HitTestMode.None)
     }
     .width(StyleConstants.FULL_WIDTH)
@@ -3168,6 +3160,23 @@ export struct NowPlayingFeedPage {
 
   /** 当前曲的歌词原文（队列里那一首的 `lyricText`）。 */
   /** 当前曲的歌词行（解析走播放页同一个缓存解析器）。 */
+  /**
+   * 当前曲歌词行（**带缓存**）。
+   * ★ 2026-10-25（甲方：「横屏歌词一闪一闪的」）：原来每次 build 都 `amllParseLyricCached()`，
+   *   即使内部有缓存也会返回**新数组引用**，`AmllLyricView` 的 `@Param lyricLines` 按引用比对
+   *   ⇒ 每帧都当成"歌词变了"重建，肉眼就是闪。这里按 `source_songId` 缓存同一份引用。
+   */
+  private cachedLyricLines(): AmllLyricLine[] {
+    const song: SongItem | undefined = this.appState.getCurrentSongItem();
+    const key: string = song === undefined ? '' : `${song.source}_${song.songId}`;
+    if (key !== this.lyricLinesKey) {
+      this.lyricLinesKey = key;
+      this.lyricLinesCache = song === undefined || song.lyricText.length === 0 ?
+        [] : amllParseLyricCached(song.lyricText);
+    }
+    return this.lyricLinesCache;
+  }
+
   private currentLyricLines(): AmllLyricLine[] {
     const text: string = this.currentLyricText();
     return text.length > 0 ? amllParseLyricCached(text) : [];
@@ -3395,7 +3404,7 @@ export struct NowPlayingFeedPage {
           // 右栏：歌词铺满整块高度
           Column() {
             AmllLyricView({
-              lyricLines: this.currentLyricLines(),
+              lyricLines: this.cachedLyricLines(),
               currentTime: this.appState.progress,
               isPlay: this.appState.isPlay,
               onSeekTime: (ms: number): void => {
