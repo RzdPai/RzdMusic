@@ -1365,6 +1365,8 @@ export struct NowPlayingFeedPage {
     // ⚠️ `Swiper.onChange` 在**切换到位**时才回调，而"首帧是否回调"没有保证 ⇒
     //    第 0 屏的音质**主动查一次**（见文件头 §四 的同一处坑）。
     if (fresh.length > 0) {
+      // ★ 先把后面几张的颜色预取掉：没有缓存就必然"切完才变色"（甲方实测结论）
+      this.prefetchRange(0, 6);
       this.requestQualityAround(0);
       // 首批就少到"已经落进预取区"（例如每日推荐只有两三首）：立刻补一页/开循环，
       // 否则要等用户先滑一下才会触发。
@@ -2795,7 +2797,7 @@ export struct NowPlayingFeedPage {
         .height(this.coverHeightVp())
         .linearGradient({
           direction: GradientDirection.Bottom,
-          colors: [[Color.Transparent, 0], [this.pageTint, 1]]
+          colors: [[Color.Transparent, 0], [this.tintColorFor(row), 1]]
         })
         .hitTestBehavior(HitTestMode.None)
 
@@ -2807,7 +2809,7 @@ export struct NowPlayingFeedPage {
         .height(this.coverHeightVp())
         .linearGradient({
           direction: GradientDirection.Bottom,
-          colors: [[this.pageTint, 0], [Color.Transparent, 1]]
+          colors: [[this.tintColorFor(row), 0], [Color.Transparent, 1]]
         })
         .position({ x: 0, y: 0 })
         .hitTestBehavior(HitTestMode.None)
@@ -3507,6 +3509,28 @@ export struct NowPlayingFeedPage {
     this.tintReady = true;
     this.pageTintIsLight = cachedLum > FEED_INK_LIGHT_THRESHOLD;
     Logger.info(RZD_TAG, `tint apply index=${index} tint=${cachedTint}`);
+  }
+
+  /**
+   * 预先取一批相邻屏的颜色（从 `from` 开始连续 `count` 张）。
+   * ★ 2026-10-25（甲方实测：来回划正常、新卡要等动画结束）——**缓存里没有就必然"切完才变"**，
+   *   所以数据一到位就把后面几张的颜色提前算好（每张只发一次请求，命中缓存跳过）。
+   * @param from 起始下标
+   * @param count 往后取几张
+   */
+  private prefetchRange(from: number, count: number): void {
+    const total: number = this.feedSource.totalCount();
+    for (let i: number = 0; i < count; i++) {
+      const idx: number = from + i;
+      if (idx < 0 || idx >= total) {
+        break;
+      }
+      const row: RecommendPrivateSongUi = this.feedSource.getData(idx);
+      if (row.coverUrl.length === 0 || this.tintCache.has(row.coverUrl)) {
+        continue;
+      }
+      void this.extractCardColor(row.coverUrl, false);
+    }
   }
 
   private prefetchNeighborTint(): void {
