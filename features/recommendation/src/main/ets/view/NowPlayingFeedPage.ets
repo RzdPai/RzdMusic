@@ -349,20 +349,6 @@ const FEED_COVER_RADIUS_VP: number = 24;
  *   拉长到 30% 之后才是"图片慢慢化进背景"。
  */
 const FEED_COVER_TOP_FADE: number = 0.30;/** 横屏背景高斯模糊半径（甲方：「模糊半径调特别大」）。 */
-/** 横屏模糊背景：模糊半径（甲方 HTML 用 vmin 级大半径，这里按 vp 取 64）。 */
-const FEED_WIDE_BG_BLUR: number = 64;
-/** 模糊背景放大倍数（补掉模糊在边缘收边，取 HTML 的 transform:scale(1.16)）。 */
-const FEED_WIDE_BG_SCALE: number = 1.16;
-/** 模糊背景饱和度（HTML saturate(1.22)）。 */
-const FEED_WIDE_BG_SATURATE: number = 1.22;
-/** 模糊背景亮度（HTML brightness(1.02)）。 */
-const FEED_WIDE_BG_BRIGHTNESS: number = 1.02;
-/** 横屏背景上那层同色压暗的透明度（保证文字可读）。 */
-const FEED_WIDE_BG_TINT_OPACITY: number = 0.18;
-/** 封面与背景之间的过渡条高度（vp）。 */
-const FEED_COVER_BLEND_VP: number = 48;
-/** 竖屏封面上下过渡各自占封面的比例（中间保持原图）。 */
-const FEED_COVER_BAND_RATIO: number = 0.22;
 /** 横屏歌词字号（fp）：比播放页小一号，矮屏也能看到 7~9 行。 */
 const FEED_WIDE_LYRIC_FONT_FP: number = 20;
 
@@ -503,11 +489,6 @@ const FEED_TRANSPARENT: Resource = $r('app.color.info_scrim_top');
  */
 const FEED_DARK_SURFACE_ARGB: number = 0xE61C1C1E;
 
-/**
- * 读不到资源时的最后兜底色 —— 与播放页 `PlaybackPage.defaultImageBgColor`
- * （`rgba(32, 32, 32, 1)`）**逐字同值**，两个页面的兜底观感一致。
- */
-const FEED_NEUTRAL_HEX: number = 0x202020;
 
 /**
  * 整页底色：取色完成前的中性兜底（见上方注释）。
@@ -561,29 +542,7 @@ const FEED_SCRIM_TOP: string = ((): string => {
  */
 const FEED_INK_LIGHT_THRESHOLD: number = 140;
 
-/**
- * 换歌时"底色 + 墨色"渐变的时长（ms）—— 用户 2026-10-15 第 2 条"这个过渡不太自然"。
- *
- * ★ 400ms / `Curve.EaseInOut`（曲线与工程里其它"背景类"补间同一档，如壳层那几处
- *   `animateTo({ duration: …, curve: Curve.EaseInOut })`）。
- * ★ 只包 {@link extractCardColor} 里"写 `pageTint` / `pageTintIsLight`"那一小段：
- *   **异步 / 网络 / 解码 / 日志都不进闭包**（包进去会被补间吃掉时间，且日志会被延迟到下一帧）。
- * ★ 为什么底色要渐变：改动前是**硬切** —— 快速上下滑时底色会在两屏之间"啪"地跳一下。
- * ⚠️ 时长只有上机才能调手感；这里先给 400（与"一屏吸附 280ms"同量级但不抢戏）。
- */
-const FEED_TINT_ANIM_MS: number = 400;
 
-/**
- * ⑦ 进度条的**条厚**（vp）—— 用户 2026-10-15 第 4 条"进度条改粗一些"：**3 → 6**。
- *
- * ★ 为什么是 6：改动前 3vp 是按"参考图上的细线"量的，但真机上 3vp 在**取色底**上几乎看不见
- *   （用户看到的原话就是"细"）⇒ 翻倍到 6vp。两端时间字号（12fp）**不动**，所以这一行加高 4vp。
- * ★ 圆角跟着条厚走：`borderRadius = 本值 / 2`（3vp），不再写死原来的 2 —— 半圆端头，
- *   条厚一改圆角自动跟上（写死就会出现"6vp 的条配 2vp 圆角"那种方头）。
- * ★ **没有滑块**：这条是进度指示，不是可拖的 `Slider`（真要加滑块得另找播放页那套接口，
- *   不在本次范围内）⇒ 不存在"滑块会不会超过 12vp"这一项。
- */
-const FEED_PROGRESS_TRACK_VP: number = 6;
   /** 拖动进度条时的加粗轨高（vp）：细轨的 ~2 倍，手感对齐播放页 trackThickness(14)。 */
 const FEED_PROGRESS_THICK_VP: number = 8;
 
@@ -2998,33 +2957,6 @@ export struct NowPlayingFeedPage {
   }
 
   /**
-   * ⑤ 音质标签行（左对齐、描边胶囊）：**查到几枚画几枚**，一枚都没有就整块不显示。
-   * ⚠️ 参考图那三枚（`AUDIO Vivid` / `超高清音频` / `空间音频`）是厂商品牌标签，
-   *   本工程接口只给得出编码档位（128k / 320k / FLAC / Hi-Res）⇒ 画真实档位，不冒充品牌名。
-   * ★ 左右内边距 = {@link FEED_SIDE_PADDING_VP}（与歌词/歌名/动作/进度同一列）。
-   * @param row 这一屏的歌。
-   */
-  @Builder
-  private FeedQualityRow(row: RecommendPrivateSongUi) {
-    Row({ space: 8 }) {
-      ForEach(this.qualityPills(row), (label: string) => {
-        Text(label)
-          .fontSize(10)
-          .fontColor(this.inkSoft())
-          .padding({ left: 8, right: 8, top: 2, bottom: 2 })
-          .borderRadius(9)
-          .borderWidth(1)
-          .borderColor(this.inkSoft())
-          .backgroundColor(this.inkPillBg())
-      }, (label: string): string => 'qp-' + this.songKey(row) + '-' + label)
-    }
-    .width(StyleConstants.FULL_WIDTH)
-    .height(22)
-    .alignItems(VerticalAlign.Center)
-    .padding({ left: FEED_SIDE_PADDING_VP, right: FEED_SIDE_PADDING_VP })
-  }
-
-  /**
    * ⑥ 动作行：**左** = 红心（+ 收藏数）/ 不感兴趣 / 更多；**最右** = 大号白色圆形播放键。
    *
    * · 红心走本页已接好的 {@link toggleFavorite}（`MusicStoreService` 那一条）；
@@ -3114,57 +3046,6 @@ export struct NowPlayingFeedPage {
     .padding({ left: FEED_SIDE_PADDING_VP, right: FEED_SIDE_PADDING_VP })
   }
 
-  /**
-   * 本机收藏总数（红心旁边那个数字；真实数据，不是全网热度）。
-   * ⚠️ 只读缓存字段 —— 缓存怎么维护见 `favoriteTotal` 与 {@link onFavoriteChanged}。
-   */
-  private favoriteCount(): number {
-    return this.favoriteTotal;
-  }
-
-  /**
-   * ⑦ 进度条 + 两端时间（**一行**：左当前时间 / 中间条 / 右总时长）。
-   *
-   * · 正在播的那一屏：左端 = `MusicAppState.currentTime`，右端 = `totalTime`，
-   *   已播比例 = `progress / progressMax`（**同一个真源**给播放页用的那两个值）；
-   * · 其它屏：左端 `00:00`，右端 = 这首歌源数据自带的 `interval`（取不到就 `--:--`），
-   *   已播比例为 0 —— 不是"进度丢了"，而是"这首没在播"。
-   * ★ 字号 12fp（参考图两端时间 ≈ 12fp 量级，**本轮不动**）、条厚 {@link FEED_PROGRESS_TRACK_VP}（**3 → 6vp**，
-   *   用户 2026-10-15 第 4 条）、圆角 = 条厚 / 2（半圆端头，跟着条厚走）；
-   *   左右内边距 = {@link FEED_SIDE_PADDING_VP}（与上面各行同一列，参考图量得 ≈ 19.3vp）。
-   * ★ **墨色跟着底色走**：两端时间 = 弱墨 {@link inkSoft}、已播 = {@link inkTrackPlayed}、
-   *   未播槽 = {@link inkTrack}（浅底时那一格是 20% 的深色，不再用白色系的 `slider_track`）。
-   * ★ 它下面紧接的就是 {@link cardChromeBottomVp}（底栏让位 + {@link FEED_BOTTOM_GAP_VP} 间距）
-   *   ⇒ 视觉上正好贴在壳层那条胶囊底栏的上方；行高加到 {@link FEED_PROGRESS_ROW_VP} 之后
-   *   **只往上抬、不往下长**，所以不会被底栏压住。
-   * @param row 这一屏的歌。
-   */
-  /**
-   * 多行歌词（横屏右栏）：用**播放页同一个解析器** `amllParseLyricCached` 把当前曲 LRC 解成
-   * [时间, 文本]，取"当前行 ±3"共 7 行，当前行加粗高亮。
-   * 为什么不用播放页的 LyricsComponent：它是整页级组件（自带高度/滚动容器假设），
-   * 放进卡片右栏会塌成 0 高 ⇒ 甲方实测"看不到歌词"。
-   */
-  @Builder
-  private FeedMultiLyrics(row: RecommendPrivateSongUi) {
-    Column({ space: 10 }) {
-      ForEach(this.lyricWindow(row), (line: FeedLyricWindowLine) => {
-        Text(line.text.length > 0 ? line.text : ' ')
-          .fontSize(line.current ? 22 : 17)
-          .fontWeight(line.current ? FontWeight.Bold : FontWeight.Normal)
-          .fontColor(line.current ? this.inkPrimary() : this.inkSoft())
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .width(StyleConstants.FULL_WIDTH)
-          .textAlign(TextAlign.Start)
-      }, (line: FeedLyricWindowLine): string => `lw-${line.index}-${line.text}`)
-    }
-    .width(StyleConstants.FULL_WIDTH)
-    .height(StyleConstants.FULL_HEIGHT)
-    .justifyContent(FlexAlign.Center)
-    .alignItems(HorizontalAlign.Start)
-  }
-
   /** 取"当前行 ±3"的 7 行窗口（当前曲才高亮；其它屏用这一行自己的歌词）。 */
   private lyricWindow(row: RecommendPrivateSongUi): FeedLyricWindowLine[] {
     const lines: FeedLyricWindowLine[] = [];
@@ -3217,11 +3098,6 @@ export struct NowPlayingFeedPage {
         [] : amllParseLyricCached(song.lyricText);
     }
     return this.lyricLinesCache;
-  }
-
-  private currentLyricLines(): AmllLyricLine[] {
-    const text: string = this.currentLyricText();
-    return text.length > 0 ? amllParseLyricCached(text) : [];
   }
 
   /** 歌词正文色（`AmllLyricView` 要 string）。 */
@@ -3361,26 +3237,6 @@ export struct NowPlayingFeedPage {
     return max > 0 ? max : 1;
   }
 
-  private scrubSliderValue(row: RecommendPrivateSongUi): number {
-    if (!this.isCurrentSong(row)) {
-      return 0;
-    }
-    return this.feedScrubbing ? this.scrubValue : this.appState.progress;
-  }
-
-  /** 进度条拖动：Begin/Moving 只更新本地值并加粗；End/Click 才真正 seek。 */
-  private onFeedScrub(value: number, mode: SliderChangeMode): void {
-    this.scrubValue = value;
-    if (mode === SliderChangeMode.Begin || mode === SliderChangeMode.Moving) {
-      this.feedScrubbing = true;
-      return;
-    }
-    this.feedScrubbing = false;
-    const ms: number = Math.max(0, Math.round(value));
-    Logger.info(RZD_TAG, `feed scrub seek ms=${ms}`);
-    MediaService.getInstance().seek(ms);
-  }
-
   /** 这一屏右端的"总时长"文案。 */
   private durationOf(row: RecommendPrivateSongUi): string {
     if (this.isCurrentSong(row) && this.appState.totalTime.length > 0) {
@@ -3504,17 +3360,6 @@ export struct NowPlayingFeedPage {
     }
   }
 
-  /** 竖屏信息块：两行小歌词 + 信息本体。 */
-  @Builder
-  private FeedInfoColumn(row: RecommendPrivateSongUi, index: number) {
-    Column({ space: 14 }) {
-      this.FeedLyric(row)
-      this.FeedInfoCore(row, index)
-    }
-    .width(StyleConstants.FULL_WIDTH)
-    .alignItems(HorizontalAlign.Start)
-  }
-
   /**
    * 宽屏信息行：**歌名/歌手在左，动作行（收藏 / 不感兴趣 / 更多）在同一行的右侧**
    * —— 照播放页的排法（甲方：「和歌曲名歌手名同行」）。
@@ -3565,45 +3410,6 @@ export struct NowPlayingFeedPage {
     }
     .width(StyleConstants.FULL_WIDTH)
     .alignItems(HorizontalAlign.Start)
-  }
-
-  /**
-   * 宽屏左侧那张**方卡封面**（不是满屏贴边那张）：圆角 + 投影 + 点击播这一首。
-   * 满屏版（`FeedCover`）在左栏里会溢出，所以宽屏单独一份。
-   */
-  @Builder
-  private FeedCoverCard(row: RecommendPrivateSongUi, index: number) {
-    Image(row.coverUrl.length > 0 ? row.coverUrl : $r('app.media.ic_avatar1'))
-      // 甲方 2026-10-24「横屏下一堆错位」：原来是 width(100%) + aspectRatio(1)，
-      //   半宽栏里正方形会高过可用高度 ⇒ 上下被裁。改成按可用高度/宽度取小的固定边长。
-      .width(this.wideCoverSideVp())
-      .height(this.wideCoverSideVp())
-      .objectFit(ImageFit.Cover)
-      .alt($r('app.media.ic_avatar1'))
-      .draggable(false)
-      .borderRadius(24)
-      .shadow({ radius: 32, color: '#4D000000', offsetX: 0, offsetY: 12 })
-      .onClick((): void => {
-        this.playAt(index);
-      })
-  }
-
-  /**
-   * @returns 封面上沿高度占整页高度的比例（0.2–0.8）。
-   * 页底渐变按它对齐色标，保证"封面以下那一段"能看出明显的明暗过渡（甲方：顶部也要有渐变）。
-   */
-  private coverRatioOfPage(): number {
-    const ui: UIContext = this.getUIContext();
-    const pageH: number = ui.px2vp(this.windowInfo.windowSize.height);
-    if (!(pageH > 0)) {
-      return 0.45;
-    }
-    const ratio: number = this.coverHeightVp() / pageH;
-    return Math.max(0.2, Math.min(0.8, ratio));
-  }
-
-  private coverFadeColor(): ResourceColor {
-    return this.tintReady ? this.pageTint : Color.Transparent;
   }
 
   /**
@@ -3887,20 +3693,6 @@ export struct NowPlayingFeedPage {
     }
   }
 
-  /** 把"当前屏 + 相邻两屏"的取色插到队首（只有这几张是马上会被看见的）。 */
-  private ensureVisibleTint(): void {
-    const total: number = this.feedSource.totalCount();
-    const offsets: number[] = [0, 1, -1];
-    for (let i: number = 0; i < offsets.length; i++) {
-      const idx: number = this.currentIndex + offsets[i];
-      if (idx < 0 || idx >= total) {
-        continue;
-      }
-      const row: RecommendPrivateSongUi = this.feedSource.getData(idx);
-      this.enqueueTint(row.coverUrl, true);
-    }
-  }
-
   /**
    * **准备一屏的取色窗口**：`center`、`±1`、`±2` 五张，按"离当前的距离"顺序、**串行**取色。
    * 甲方要的就是这个：首屏正常，然后预先准备好上下各两页，翻页后再滚动维护这个窗口。
@@ -3927,21 +3719,6 @@ export struct NowPlayingFeedPage {
         this.tintQueued.delete(url);
         await this.extractCardColor(url, idx === center);
       }
-    }
-  }
-
-  private prefetchRange(from: number, count: number): void {
-    const total: number = this.feedSource.totalCount();
-    for (let i: number = 0; i < count; i++) {
-      const idx: number = from + i;
-      if (idx < 0 || idx >= total) {
-        break;
-      }
-      const row: RecommendPrivateSongUi = this.feedSource.getData(idx);
-      if (row.coverUrl.length === 0 || this.tintCache.has(row.coverUrl)) {
-        continue;
-      }
-      this.enqueueTint(row.coverUrl, false);
     }
   }
 
