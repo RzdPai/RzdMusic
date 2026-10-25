@@ -3420,6 +3420,7 @@ export struct NowPlayingFeedPage {
             // ★★★ 2026-10-25（甲方：「效果还是不对」）：`onChange` 是**滑完**才回调 ⇒ 只能切完再变色。
             .onAnimationStart((index: number, targetIndex: number): void => {
               this.applyTintForIndex(targetIndex);
+              this.ensureVisibleTint();
             })
             .onChange((index: number): void => {
               this.onFeedChanged(index);
@@ -3502,7 +3503,7 @@ export struct NowPlayingFeedPage {
     }
     const hit: FeedTintResult | undefined = this.tintCache.get(row.coverUrl);
     if (hit === undefined) {
-      void this.extractCardColor(row.coverUrl, false);
+      this.enqueueTint(row.coverUrl, false);
       return;
     }
     const cachedTint: string = hit.tint;
@@ -3543,6 +3544,66 @@ export struct NowPlayingFeedPage {
     }
   }
 
+  // ── 取色队列：串行执行，可见的几张插队 ───────────────────────────────
+  /** 待取色的封面（FIFO；`front=true` 时插到队首）。 */
+  private pendingTints: string[] = [];
+  /** 已经排过队的 URL（避免重复入队）。 */
+  private tintQueued: Set<string> = new Set<string>();
+  /** 队列是否在跑（保证同一时刻只有一条在飞）。 */
+  private tintWorkerBusy: boolean = false;
+
+  /**
+   * 把一张封面的取色排进队列。
+   * @param url 封面地址
+   * @param front true = 插队（当前屏与相邻屏优先）
+   */
+  private enqueueTint(url: string, front: boolean): void {
+    if (url.length === 0 || this.tintCache.has(url) || this.tintQueued.has(url)) {
+      return;
+    }
+    this.tintQueued.add(url);
+    if (front) {
+      this.pendingTints.unshift(url);
+    } else {
+      this.pendingTints.push(url);
+    }
+    void this.drainTintQueue();
+  }
+
+  /** 串行消费取色队列：一张取完再取下一张（并发太高会被 CDN 限速甚至失败）。 */
+  private async drainTintQueue(): Promise<void> {
+    if (this.tintWorkerBusy) {
+      return;
+    }
+    this.tintWorkerBusy = true;
+    try {
+      while (this.pendingTints.length > 0) {
+        const url: string = this.pendingTints.shift() as string;
+        this.tintQueued.delete(url);
+        if (this.tintCache.has(url)) {
+          continue;
+        }
+        await this.extractCardColor(url, false);
+      }
+    } finally {
+      this.tintWorkerBusy = false;
+    }
+  }
+
+  /** 把"当前屏 + 相邻两屏"的取色插到队首（只有这几张是马上会被看见的）。 */
+  private ensureVisibleTint(): void {
+    const total: number = this.feedSource.totalCount();
+    const offsets: number[] = [0, 1, -1];
+    for (let i: number = 0; i < offsets.length; i++) {
+      const idx: number = this.currentIndex + offsets[i];
+      if (idx < 0 || idx >= total) {
+        continue;
+      }
+      const row: RecommendPrivateSongUi = this.feedSource.getData(idx);
+      this.enqueueTint(row.coverUrl, true);
+    }
+  }
+
   private prefetchRange(from: number, count: number): void {
     const total: number = this.feedSource.totalCount();
     for (let i: number = 0; i < count; i++) {
@@ -3554,7 +3615,7 @@ export struct NowPlayingFeedPage {
       if (row.coverUrl.length === 0 || this.tintCache.has(row.coverUrl)) {
         continue;
       }
-      void this.extractCardColor(row.coverUrl, false);
+      this.enqueueTint(row.coverUrl, false);
     }
   }
 
@@ -3576,7 +3637,7 @@ export struct NowPlayingFeedPage {
       if (row.coverUrl.length === 0 || this.tintCache.has(row.coverUrl)) {
         continue;
       }
-      void this.extractCardColor(row.coverUrl, false);
+      this.enqueueTint(row.coverUrl, false);
     }
   }
 
