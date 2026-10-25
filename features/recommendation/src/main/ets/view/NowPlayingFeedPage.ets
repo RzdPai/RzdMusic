@@ -237,6 +237,7 @@ import { amllParseLyricCached } from 'player/src/main/ets/amll/parse/AmllAutoDet
 import type { AmllLyricLine } from 'player/src/main/ets/amll/model/AmllTypes';
 import { SongMoreMenu } from 'playlist';
 import { RecommendPrivateSongUi } from '../model/RecommendUiModels';
+import { FeedBlurBackdrop } from './FeedBlurBackdrop';
 import { FeedRecommendEngine, FeedRecommendPick } from '../util/FeedRecommendEngine';
 import { pickFeatureBoardId } from '../util/RecommendDataUtil';
 
@@ -3426,26 +3427,12 @@ export struct NowPlayingFeedPage {
       //   左侧封面**贴左上角**（顶部零留白、满铺无圆角）；
       //   右栏歌词**填满**整块高度（不留上下大空）。
       Stack({ alignContent: Alignment.TopStart }) {
-        // ★★ 2026-10-25（甲方给的 cover-blur-background.html，效果他已调好）：
-        //   背景 = 封面 **cover 自动裁剪**铺满 + `blur(64)` + `saturate(1.22)` + `brightness(1.02)`，
-        //   再 `scale(1.16)` 补掉模糊在边缘的收边（就是 HTML 里的 `transform:scale(1.16)`）。
-        Image(row.coverUrl.length > 0 ? row.coverUrl : $r('app.media.ic_avatar1'))
+        // ★★ 2026-10-25（甲方：「不是让你用 ArkUI 重写，是直接渲染这个 html」）：
+        //   背景直接渲染 `rawfile/cover_blur_background.html`（`FeedBlurBackdrop`），
+        //   只把 `--cover` 换成当前封面 —— 那份 HTML 的多层模糊+镜像羽化，ArkUI 属性复刻不出来。
+        FeedBlurBackdrop({ coverUrl: row.coverUrl })
           .width(StyleConstants.FULL_WIDTH)
           .height(StyleConstants.FULL_HEIGHT)
-          .objectFit(ImageFit.Cover)
-          .blur(FEED_WIDE_BG_BLUR)
-          .saturate(FEED_WIDE_BG_SATURATE)
-          .brightness(FEED_WIDE_BG_BRIGHTNESS)
-          .scale({ x: FEED_WIDE_BG_SCALE, y: FEED_WIDE_BG_SCALE })
-          .draggable(false)
-          .hitTestBehavior(HitTestMode.None)
-        // 淡淡一层同色压暗：保证文字始终可读（对应 HTML 里的渐变遮罩）
-        Column()
-          .width(StyleConstants.FULL_WIDTH)
-          .height(StyleConstants.FULL_HEIGHT)
-          .backgroundColor(this.cardFadeColor(row))
-          .opacity(FEED_WIDE_BG_TINT_OPACITY)
-          .hitTestBehavior(HitTestMode.None)
 
         Row({ space: 24 }) {
           // 左栏：封面贴左上 → 歌名/歌手 → 收藏+菜单 → 进度条
