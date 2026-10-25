@@ -14,9 +14,13 @@
  */
 
 import { AppStorageV2, UIContext } from '@kit.ArkUI';
-import { AppStorageKeys, RouterUrlConstants, ToplistRouteParam } from 'musicbasic';
+import { AppStorageKeys, Logger, RouterUrlConstants, TabSwitchState, ToplistRouteParam } from 'musicbasic';
+
 import { MusicAppState, PlayerTrackUi } from '../model/PlayerModels';
 import { PlayerDataUtil } from '../util/PlayerDataUtil';
+
+/** 壳层「现在就听」页签的下标（`products/default` 的 HdsTabs：推荐 0 / 现在就听 1）。 */
+const FEED_TAB_INDEX: number = 1;
 
 /** Observable fa莽ade for inline / mini player UI: track text, cover, and transport actions. */
 @ObservedV2
@@ -54,8 +58,29 @@ export class PlayerViewModel {
     return track !== undefined ? track.coverUrl : '';
   }
 
+  /**
+   * 「现在就听」的队列**不打开普通播放器**（甲方 2026-10-25：
+   * 「我就是防止他冲突才做的…点击其他页面的播放条，直接跳转到现在就听页面」）。
+   * 命中 `queueOrigin === 'feed'` 就把壳层页签切到「现在就听」，并且**不**置 `isShowPlay`。
+   * @returns true = 已改道去 feed 页（调用方不要再开播放页）
+   */
+  private redirectFeedToTab(): boolean {
+    if (this.appState.queueOrigin !== 'feed') {
+      return false;
+    }
+    const tabState: TabSwitchState = AppStorageV2.connect(TabSwitchState,
+      AppStorageKeys.TAB_SWITCH_STATE, () => new TabSwitchState())!;
+    this.appState.isShowPlay = false;
+    tabState.tabIndex = FEED_TAB_INDEX;
+    Logger.info('RzdPlayerVM', `player open redirected to feed tab idx=${FEED_TAB_INDEX}`);
+    return true;
+  }
+
   /** Opens full-screen playback immediately (no animation). */
   public openFullScreen(): void {
+    if (this.redirectFeedToTab()) {
+      return;
+    }
     this.appState.isShowPlay = true;
   }
 
@@ -69,6 +94,9 @@ export class PlayerViewModel {
    *    起点状态在 `aboutToAppear` 就压好了），壳层只负责挂载。
    */
   public openFullScreenWithSharedElementTransition(_uiContext: UIContext): void {
+    if (this.redirectFeedToTab()) {
+      return;
+    }
     this.appState.isShowPlay = true;
   }
 
