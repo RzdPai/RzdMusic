@@ -917,7 +917,7 @@ export class RecommendViewModel {
                   resolve([]);
                   return;
                 }
-                const c = picker.getLargestProportionColor();
+                const c = picker.getMainColorSync();
                 resolve([c.red, c.green, c.blue]);
               });
           });

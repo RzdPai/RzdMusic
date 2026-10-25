@@ -607,7 +607,7 @@ export struct PlaylistDetailPage {
                     if (cover !== this.colorTargetUrl) {
                       return;
                     }
-                    const color = colorPicker.getLargestProportionColor();
+                    const color = colorPicker.getMainColorSync();
                     // 与歌手页（ArtistDetailPage）**完全同款**：直接用 dealColor 的暗淡色当页面底色。
                     // 之前这里换成过 coverBackdrop（亮封面出浅底），结果就是用户看到的
                     // 「日间模式背景动态取色成深色、文字也深」这类矛盾 —— 歌手页看起来没问题，

@@ -358,7 +358,7 @@ export struct ArtistDetailPage {
               (error: Error | undefined, colorPicker: effectKit.ColorPicker | undefined) => {
                 try {
                   if (error === undefined && colorPicker !== undefined && seq === this.colorSeq) {
-                    const color = colorPicker.getLargestProportionColor();
+                    const color = colorPicker.getMainColorSync();
                     const arr: number[] = ColorConversion.dealColor(color.red, color.green, color.blue);
                     const r: number = Math.max(0, Math.min(255, arr[0]));
                     const g: number = Math.max(0, Math.min(255, arr[1]));

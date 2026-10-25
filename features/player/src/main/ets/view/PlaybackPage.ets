@@ -7152,7 +7152,7 @@ export struct PlaybackPage {
               this.state.imageColor = PlaybackPage.defaultImageBgColor;
               return;
             }
-            const color = colorPicker.getLargestProportionColor();
+            const color = colorPicker.getMainColorSync();
             const colorArr = ColorConversion.dealColor(color.red, color.green, color.blue);
             const r = clampRgbByte(colorArr[0]);
             const g = clampRgbByte(colorArr[1]);

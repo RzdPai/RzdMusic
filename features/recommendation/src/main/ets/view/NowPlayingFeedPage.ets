@@ -3512,25 +3512,10 @@ export struct NowPlayingFeedPage {
           //   官方 `effectKit.ColorPicker` 一共给了 5 种取色方式：
           //   `getMainColor()`（主色，图像缩到 1px 的加权结果）/ `getLargestProportionColor()`（占比最多）/
           //   `getTopProportionColors(n)` / `getHighestSaturationColor()`（最艳）/ `getAverageColor()`（平均）。
-          //   ⇒ 这里改用**主色 + 最艳色**两个官方结果做决策，不再用"平均色"：
-          //     底色取**主色**（官方对"整图代表色"的定义，白底+深色图形时不会取到那块深色）；
-          //     若主色偏灰（黑白灰判定为真）而图里有明显彩色，则用**最艳色**做强调（下一轮用于强调元素）。
           const picker: effectKit.ColorPicker = await effectKit.createColorPicker(pixelMap);
-          const mainColor: effectKit.Color = await picker.getMainColor();
-          const vivid: effectKit.Color = picker.getHighestSaturationColor();
-          const mainArgb: number = (0xFF << 24) | (mainColor.red << 16) | (mainColor.green << 8) | mainColor.blue;
-          const mainIsGray: boolean = picker.isBlackOrWhiteOrGrayColor(mainArgb);
-          let color: effectKit.Color = mainColor;
-          if (mainIsGray && vivid !== null) {
-            // 主色是黑白灰时，"最艳色"更能代表这张图的调性（也避免整页一片灰）
-            const vividArgb: number = (0xFF << 24) | (vivid.red << 16) | (vivid.green << 8) | vivid.blue;
-            const vividIsGray: boolean = picker.isBlackOrWhiteOrGrayColor(vividArgb);
-            if (!vividIsGray) {
-              color = vivid;
-            }
-          }
+          const color: effectKit.Color = await picker.getMainColor();
           Logger.info(RZD_TAG,
-            `tint pick main=${mainColor.red},${mainColor.green},${mainColor.blue} gray=${mainIsGray} url=${url}`);
+            `tint pick main=${color.red},${color.green},${color.blue} url=${url}`);
           const result: FeedTintResult = feedTintResultOf(color.red, color.green, color.blue);
           const light: boolean = result.luminance > FEED_INK_LIGHT_THRESHOLD;
           if (this.feedAlive && jobSeq === this.cardColorJobSeq) {
