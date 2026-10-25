@@ -3003,18 +3003,19 @@ struct Index {
           if (this.isSearchPageShow) {
             // 延迟一帧再卸载弹层：页内关闭动画（弹簧 ~320ms）收尾前卸载会崩
             setTimeout((): void => {
+              // 先落日志再卸载：若日志停在这条，说明崩溃就发生在"销毁 bindContentCover 内容"这一步
+              MusicStoreService.getInstance().appendRuntimeDiagnostic('RzdSearchCover dismiss begin');
               this.isSearchPageShow = false;
+              MusicStoreService.getInstance().appendRuntimeDiagnostic('RzdSearchCover dismiss done');
               Logger.info(RzdShellLogTag, 'search cover hidden');
-              MusicStoreService.getInstance().appendRuntimeDiagnostic('RzdSearchCover hidden (unmount)');
             }, 360);
           }
         }
       })
 
-      // 甲方定论：闪退不是播放条引起的（此前"一半不崩"）⇒ 加回来
-      if (this.appState.playQueue.length > 0) {
-        this.floatingMiniBar()
-      }
+      // ⚠️ 再摘一次：持久日志显示 `close request` 之后、`RzdSearchCover hidden` 之前必崩，
+      //   而 `floatingMiniBar()` 是 HdsTabs/MiniBarMaterialCapsule 体系（依赖壳层子树），
+      //   放进弹层后随弹层销毁会崩。先确保"能正常退出"，播放条改用轻量替身另做。
     }
     .width(StyleConstants.FULL_WIDTH)
     .height(StyleConstants.FULL_HEIGHT)
