@@ -943,6 +943,8 @@ export struct NowPlayingFeedPage {
    *   所以相邻卡的取色要**提前**做完（见 `prefetchNeighborTint`），滑过去时颜色已经在了。
    */
   private tintCache: Map<string, FeedTintResult> = new Map<string, FeedTintResult>();
+  /** 已经重试过的封面 URL（避免失败时无限重试）。 */
+  private tintRetried: Set<string> = new Set<string>();
   /**
    * 缓存版本号：`tintCache` 是**普通 Map**，写进去不会触发任何重绘
    * ⇒ 预取回来的相邻卡颜色要等别的原因重绘才生效（表现就是"翻到那一页才突然变色"）。
@@ -2797,7 +2799,7 @@ export struct NowPlayingFeedPage {
         .height(this.coverHeightVp())
         .linearGradient({
           direction: GradientDirection.Bottom,
-          colors: [[Color.Transparent, 0], [this.tintColorFor(row), 1]]
+          colors: [[Color.Transparent, 0], [this.cardFadeColor(row), 1]]
         })
         .hitTestBehavior(HitTestMode.None)
 
@@ -2809,7 +2811,7 @@ export struct NowPlayingFeedPage {
         .height(this.coverHeightVp())
         .linearGradient({
           direction: GradientDirection.Bottom,
-          colors: [[this.tintColorFor(row), 0], [Color.Transparent, 1]]
+          colors: [[this.cardFadeColor(row), 0], [Color.Transparent, 1]]
         })
         .position({ x: 0, y: 0 })
         .hitTestBehavior(HitTestMode.None)
@@ -3238,7 +3240,7 @@ export struct NowPlayingFeedPage {
     }
     .height(StyleConstants.FULL_HEIGHT)
     // 每张卡自带底色（滑动时两张卡各带各色一起走，不会"切完才变色"）
-    .backgroundColor(this.tintColorFor(row))
+    .backgroundColor(this.cardFadeColor(row))
     .height(StyleConstants.FULL_HEIGHT)
     .padding({ top: this.topStackOffsetVp(), bottom: this.cardChromeBottomVp() })
     }
@@ -3473,6 +3475,9 @@ export struct NowPlayingFeedPage {
    * 每张卡自带底色 ⇒ 滑动过程中两张卡各带各的颜色一起走（甲方："两个整体在切换"）。
    */
   private tintColorFor(row: RecommendPrivateSongUi): string {
+    // 甲方 2026-10-25（"只看得到上下两张，提前把这两张渲染好"）：
+    // 卡片**只认自己这一行的颜色**；还没取到就返回空串，由调用方决定"不出渐变/不出底色"，
+    // 绝不再退回全局 `pageTint` —— 那正是"滑动中先看到上一张颜色"的根源。
     if (row.coverUrl.length === 0) {
       return this.pageTint;
     }
@@ -3551,6 +3556,12 @@ export struct NowPlayingFeedPage {
       }
       void this.extractCardColor(row.coverUrl, false);
     }
+  }
+
+  /** 卡片渐变的落色：本行色优先，没有就透明（宁可无过渡，也不要拿别人的颜色串上去）。 */
+  private cardFadeColor(row: RecommendPrivateSongUi): ResourceColor {
+    const tint: string = this.tintColorFor(row);
+    return tint.length > 0 ? tint : Color.Transparent;
   }
 
   private prefetchNeighborTint(): void {
@@ -3670,6 +3681,13 @@ export struct NowPlayingFeedPage {
       const e = err as BusinessError;
       // 取色失败不影响播放 —— 保留上一个色（或兜底色）
       Logger.warn(RZD_TAG, `tint failed code=${e.code} msg=${e.message} url=${url}`);
+      // 单次失败会让那一屏永远没有自己的颜色（滑几次就露出来）⇒ 失败后重试一次
+      if (!this.tintRetried.has(url)) {
+        this.tintRetried.add(url);
+        setTimeout((): void => {
+          void this.extractCardColor(url, false);
+        }, 800);
+      }
     } finally {
       req.destroy();
     }
