@@ -1367,7 +1367,6 @@ export struct NowPlayingFeedPage {
     this.feedOrigin = origin;
     this.feedHint = origin === FeedOrigin.BOARD ?
       `来自 ${this.sourceLabel()} · 榜单` : `来自 ${this.sourceLabel()} · 每日推荐`;
-    this.feedLoading = false;
     this.currentIndex = 0;
     this.qualityLabels = new Map<string, string>();
     this.qualityRequested = [];
@@ -1377,8 +1376,12 @@ export struct NowPlayingFeedPage {
     // ⚠️ `Swiper.onChange` 在**切换到位**时才回调，而"首帧是否回调"没有保证 ⇒
     //    第 0 屏的音质**主动查一次**（见文件头 §四 的同一处坑）。
     if (fresh.length > 0) {
-      // ★ 先把后面几张的颜色预取掉：没有缓存就必然"切完才变色"（甲方实测结论）
-      this.prefetchRange(0, Math.min(12, this.feedSource.totalCount()));
+      // ★★ 2026-10-25（甲方：「进入页面的第 1 张是灰色的，稍微动一下才变正常」）：
+      //   根因是 `feedLoading = false` 在**取色之前**就放行了 ⇒ 首屏用兜底色画了一帧。
+      //   现在：先把 [0, ±1, ±2] 的颜色串行取完，再放行首屏 + 把当前色套到整页。
+      await this.prepareWindow(0, 2);
+      this.refreshCardColor();
+      this.feedLoading = false;
       this.requestQualityAround(0);
       // 首批就少到"已经落进预取区"（例如每日推荐只有两三首）：立刻补一页/开循环，
       // 否则要等用户先滑一下才会触发。
