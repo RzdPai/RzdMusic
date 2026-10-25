@@ -648,28 +648,6 @@ function feedTintShade(tint: string, scale: number): string {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-/**
- * 把 `rgb(r, g, b)` 按比例**提亮**（用于封面顶部过渡：绝不能压暗）。
- * 官方《颜色渐变》要求 stop 递增；这里只生成颜色，不涉及 stop。
- * @param tint 形如 `rgb(24, 30, 40)` 的颜色串
- * @param scale 亮度系数（>1 = 提亮，内部按 255 封顶）
- * @returns 提亮后的 `rgb(...)`；解析失败时原样返回
- */
-function feedTintLighten(tint: string, scale: number): string {
-  const m: RegExpMatchArray | null = tint.match(new RegExp('rgb\\((\\d+),\\s*(\\d+),\\s*(\\d+)\\)'));
-  if (m === null) {
-    return tint;
-  }
-  const parts: string[] = m as string[];
-  if (parts.length < 4) {
-    return tint;
-  }
-  const r: number = Math.min(255, Math.round(Number(parts[1]) * scale));
-  const g: number = Math.min(255, Math.round(Number(parts[2]) * scale));
-  const b: number = Math.min(255, Math.round(Number(parts[3]) * scale));
-  return `rgb(${r}, ${g}, ${b})`;
-}
-
 function feedTintLuminanceOf(r: number, g: number, b: number): number {
   const toHex: (v: number) => string =
     (v: number): string => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
@@ -2796,32 +2774,17 @@ export struct NowPlayingFeedPage {
         .alt($r('app.media.ic_avatar1'))
         .draggable(false)
 
-      // ★ 2026-10-25（甲方：「上面的你就不能按照下面的改吗，一个过渡而已」）：
-      //   顶部 = **底部那条的镜像**：同高（封面高 × `FEED_COVER_TOP_FADE`）、同色、方向相反。
-      //   底部：`[透明, 0] → [pageTint, 1]`（y = 70%）；顶部：`[pageTint, 0] → [透明, 1]`（y = 0）。
+      // ★★ 照抄歌手页 `DetailImmersiveBackdrop` 的那一条（甲方：那几个页面的过渡非常自然）：
+      //   **整块照片高度**上一条 `[Transparent, 0] → [pageTint, 1]`，照片下半截自己化进页底色；
+      //   页底再是**纯色** `pageTint` ⇒ 照片与页面是同一块颜色的连续过渡，中间没有第二条渐变带。
       Column()
         .width(StyleConstants.FULL_WIDTH)
-        .height(this.coverHeightVp() * FEED_COVER_TOP_FADE)
-        .linearGradient({
-          direction: GradientDirection.Bottom,
-          colors: [[this.pageTint, 0], [Color.Transparent, 1]]
-        })
-        .position({ x: 0, y: 0 })
-        .hitTestBehavior(HitTestMode.None)
-
-      // ★ 2026-10-25（甲方：「上面就变得很黑（但是本身上下是一致的）」）：
-      //   渐变**只压封面底部 30%**，上半张一点不压 ⇒ 顶部不可能再出现"黑带"；
-      //   底部这一条把图接到页底色（页底是纯色 `pageTint`），接缝依旧无缝。
-      Column()
-        .width(StyleConstants.FULL_WIDTH)
-        .height(this.coverHeightVp() * FEED_COVER_TOP_FADE)
+        .height(this.coverHeightVp())
         .linearGradient({
           direction: GradientDirection.Bottom,
           colors: [[Color.Transparent, 0], [this.pageTint, 1]]
         })
-        .position({ x: 0, y: this.coverHeightVp() * (1 - FEED_COVER_TOP_FADE) })
         .hitTestBehavior(HitTestMode.None)
-
     }
     .width(StyleConstants.FULL_WIDTH)
     .height(this.coverHeightVp())
