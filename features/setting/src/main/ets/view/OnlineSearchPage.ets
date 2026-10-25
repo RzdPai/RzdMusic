@@ -1576,14 +1576,11 @@ export struct OnlineSearchPage {
     // 底栏恢复：**等转场结束再恢复**（在转场帧里改壳层状态会把两端拆到不同帧）。
     // 弹簧的 onFinish 实测要到 1s 才来，所以这里用固定 320ms（转场时长量级）先恢复，
     // 450ms 再补一次幂等兜底。
+    // 只发一次关闭信号：弹层模式下壳层会延迟一帧卸载，重复回调会在卸载后改状态 ⇒ 闪退
     setTimeout((): void => {
-      morphLog('bar restore 320ms');
+      morphLog('notify shell close');
       this.onShowChange(false);
     }, 320);
-    setTimeout((): void => {
-      morphLog('bar restore 450ms fallback');
-      this.onShowChange(false);
-    }, 450);
   }
 
   /** 内容首行要让开的浮层高度：状态栏 + 搜索行 56 + 类型栏 44。 */

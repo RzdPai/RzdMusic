@@ -2998,8 +2998,11 @@ struct Index {
           return;
         }
         if (this.isSearchPageShow) {
-          this.isSearchPageShow = false;
-          Logger.info(RzdShellLogTag, 'search cover hidden');
+          // 延迟一帧再卸载弹层：页内关闭动画（弹簧 ~320ms）还没收尾就卸载会崩
+          setTimeout((): void => {
+            this.isSearchPageShow = false;
+            Logger.info(RzdShellLogTag, 'search cover hidden');
+          }, 360);
         }
       }
     })
