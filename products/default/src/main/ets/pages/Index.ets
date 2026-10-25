@@ -2942,24 +2942,19 @@ struct Index {
       //   Search 带 transition(opacity 0.99)）；两端同 id 才配得上，转场才发生。
       //   首页原来直接挂在 `HdsNavigation` 的导航栏内容区里，push 时它不会消失 ⇒ 永远配不成一对。
       //   所以这里加一层内层 Navigation：首页自己也是它的路由页。
-      Navigation(this.homeStack) {
-        Stack() {
+      // ★★ 2026-10-25（甲方：「就要跨的，搜索页必须二级」）：
+      //   删掉这层多余的内层 `Navigation`，首页 `RecommendPage` 直接作为根 `HdsNavigation` 的**内容**。
+      //   于是源端（首页搜索框，在根 Navigation 内容里）与目标端（搜索页，根栈 NavDestination）
+      //   属于**同一个 Navigation** ⇒ `geometryTransition` 恢复配对（官方 SearchLongTake 示例就是这个结构）；
+      //   搜索页推根栈后整屏覆盖 Tabs（含底栏）⇒ 真正的二级页。
+      RecommendPage({
+        shellProvidesFloatingMiniBar: deviceInfo.distributionOSApiVersion >= 60100,
+        floatingBarExtraBottomReserveVp: this.twoRowExtraBottomVp(),
+        scrollTopCommand: this.tabScrollTopCommands[0],
+        onOpenSearch: (): void => {
+          this.openHomeSearch();
         }
-        .width(StyleConstants.FULL_WIDTH)
-        .height(StyleConstants.FULL_HEIGHT)
-      }
-      .navDestination(this.HomeRouteMap)
-      .hideTitleBar(true)
-      .hideToolBar(true)
-      .mode(NavigationMode.Stack)
-      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
-      .backgroundColor($r('app.color.background_secondary'))
-      .width(StyleConstants.FULL_WIDTH)
-      .height(StyleConstants.FULL_HEIGHT)
-      .onAppear((): void => {
-        this.ensureHomeRoute();
       })
-      .expandSafeArea([SafeAreaType.SYSTEM, SafeAreaType.CUTOUT], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
     }
     .tabBar(this.TabBarItem(0, $r('app.string.tab_home'), $r('sys.symbol.house_fill')))
 
