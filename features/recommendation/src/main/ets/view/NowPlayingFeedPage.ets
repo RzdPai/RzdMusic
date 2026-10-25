@@ -232,6 +232,7 @@ import {
   showSystemShare
 } from 'player';
 import type { LXSearchSong, LXSearchResult } from 'player';
+import { LyricsComponent } from 'player/src/main/ets/view/LyricsComponent';
 import { amllParseLyricCached } from 'player/src/main/ets/amll/parse/AmllAutoDetect';
 import type { AmllLyricLine } from 'player/src/main/ets/amll/model/AmllTypes';
 import { SongMoreMenu } from 'playlist';
@@ -3334,12 +3335,13 @@ export struct NowPlayingFeedPage {
   @Builder
   private FeedCard(row: RecommendPrivateSongUi, index: number) {
     if (this.isWideFeedLayout()) {
-      // ══ 横屏（照甲方第 4 条） ══
-      //   背景 = **封面的高斯模糊**（半径开大）；封面铺在**左上角**；
-      //   封面下方依次：歌名 / 歌手 / 收藏 + 菜单（**没有不感兴趣**）/ 进度条；
-      //   右侧整块是歌词区。
+      // ══ 横屏（甲方第 2/1 条）══
+      //   · 封面**满铺**在左上角：不圆角、不投影，跟竖屏一样只是位置在左；
+      //   · 封面下方依次：歌名 / 歌手 / 收藏+菜单（无不感兴趣）/ 进度条；
+      //   · 底部只留一点点空（不再把内容往上顶）；
+      //   · 右栏 = 播放页同款歌词组件（明确高度，避免塌成 0）。
       Stack({ alignContent: Alignment.TopStart }) {
-        // 背景：封面大半径高斯模糊
+        // 背景：封面的高斯模糊
         Image(row.coverUrl.length > 0 ? row.coverUrl : $r('app.media.ic_avatar1'))
           .width(StyleConstants.FULL_WIDTH)
           .height(StyleConstants.FULL_HEIGHT)
@@ -3347,7 +3349,6 @@ export struct NowPlayingFeedPage {
           .blur(FEED_WIDE_BG_BLUR)
           .draggable(false)
           .hitTestBehavior(HitTestMode.None)
-        // 压一层同色，保证文字可读
         Column()
           .width(StyleConstants.FULL_WIDTH)
           .height(StyleConstants.FULL_HEIGHT)
@@ -3355,38 +3356,51 @@ export struct NowPlayingFeedPage {
           .opacity(FEED_WIDE_BG_TINT_OPACITY)
           .hitTestBehavior(HitTestMode.None)
 
-        Row({ space: 32 }) {
-          // 左栏：左上角封面 → 歌名/歌手 → 收藏+菜单 → 进度条
-          Column({ space: 14 }) {
-            this.FeedCoverCard(row, index)
-            // 封面到背景的过渡
-            Column()
+        Row({ space: 24 }) {
+          // 左栏：满铺封面 → 信息 → 进度（全部在流里，不会被挤到屏幕外）
+          Column({ space: 10 }) {
+            Image(row.coverUrl.length > 0 ? row.coverUrl : $r('app.media.ic_avatar1'))
               .width(StyleConstants.FULL_WIDTH)
-              .height(FEED_COVER_BLEND_VP)
-              .linearGradient({
-                direction: GradientDirection.Bottom,
-                colors: [[Color.Transparent, 0], [this.cardFadeColor(row), 1]]
+              .height('52%')
+              .objectFit(ImageFit.Cover)
+              .draggable(false)
+              .onClick((): void => {
+                this.playAt(index);
               })
-              .hitTestBehavior(HitTestMode.None)
-            this.FeedInfoRow(row, index)
-            this.FeedProgress(row)
+
+            Column({ space: 10 }) {
+              this.FeedInfoRow(row, index)
+              this.FeedProgress(row)
+            }
+            .width(StyleConstants.FULL_WIDTH)
+            .padding({ left: 16, right: 16, top: 4 })
+            .alignItems(HorizontalAlign.Start)
           }
           .layoutWeight(1)
           .justifyContent(FlexAlign.Start)
           .alignItems(HorizontalAlign.Start)
 
-          // 右栏：整块歌词
+          // 右栏：播放页同款歌词（给明确高度，父容器有界）
           Column() {
-            this.FeedMultiLyrics(row)
+            LyricsComponent({
+              isShowControl: false,
+              isTablet: true,
+              hideLyricsMetaHeader: true,
+              panelBottomBar: false,
+              onSeekTime: (ms: number): void => {
+                MediaService.getInstance().seek(ms);
+              }
+            })
+              .width(StyleConstants.FULL_WIDTH)
+              .height(StyleConstants.FULL_HEIGHT)
           }
           .layoutWeight(1)
-          .justifyContent(FlexAlign.Center)
+          .height(StyleConstants.FULL_HEIGHT)
           .alignItems(HorizontalAlign.Start)
         }
         .width(StyleConstants.FULL_WIDTH)
         .height(StyleConstants.FULL_HEIGHT)
         .padding({
-          left: FEED_SIDE_PADDING_VP * 2,
           right: FEED_SIDE_PADDING_VP * 2,
           top: this.topStackOffsetVp(),
           bottom: this.wideBottomReserveVp()
@@ -3414,7 +3428,6 @@ export struct NowPlayingFeedPage {
       .height(StyleConstants.FULL_HEIGHT)
       .backgroundColor(this.cardFadeColor(row))
       .clip(true)
-      // 竖屏底部留足：进度条不被胶囊底栏压住，也就能拖得动
       .padding({ top: this.topStackOffsetVp(), bottom: this.cardChromeBottomVp() + 56 })
     }
   }
@@ -3541,7 +3554,8 @@ export struct NowPlayingFeedPage {
    *   这里直接取 max(底栏让位 + 56, 132)，保证进度条整条露在底栏之上。
    */
   private wideBottomReserveVp(): number {
-    return Math.max(this.cardChromeBottomVp() + 56, 132);
+    // 甲方：「我当时只是让你加一点」⇒ 只留一点点，内容不再被往上顶
+    return this.cardChromeBottomVp() + 8;
   }
 
   private wideCoverSideVp(): number {
