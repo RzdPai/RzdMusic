@@ -2988,24 +2988,33 @@ struct Index {
   /** 搜索页（bindContentCover 的内容）。 */
   @Builder
   private SearchCover() {
-    OnlineSearchPage({
-      routeParam: '',
-      // 搜索页自己请求关闭（取消按钮 / 返回键）时，由壳层收起弹层
-      onShowChange: (open: boolean): void => {
-        if (open) {
-          this.appState.miniBarExpanded = true;
-          Logger.info(RzdShellLogTag, 'search cover shown');
-          return;
+    // 搜索页 + 二级页专属播放条（复用壳层 floatingMiniBar：MiniBarMaterialCapsule + 自带背板，
+    // 数据源仍是 MusicAppState，与首页那条互不影响）。
+    Stack({ alignContent: Alignment.BottomEnd }) {
+      OnlineSearchPage({
+        routeParam: '',
+        onShowChange: (open: boolean): void => {
+          if (open) {
+            this.appState.miniBarExpanded = true;
+            Logger.info(RzdShellLogTag, 'search cover shown');
+            return;
+          }
+          if (this.isSearchPageShow) {
+            // 延迟一帧再卸载弹层：页内关闭动画（弹簧 ~320ms）收尾前卸载会崩
+            setTimeout((): void => {
+              this.isSearchPageShow = false;
+              Logger.info(RzdShellLogTag, 'search cover hidden');
+            }, 360);
+          }
         }
-        if (this.isSearchPageShow) {
-          // 延迟一帧再卸载弹层：页内关闭动画（弹簧 ~320ms）还没收尾就卸载会崩
-          setTimeout((): void => {
-            this.isSearchPageShow = false;
-            Logger.info(RzdShellLogTag, 'search cover hidden');
-          }, 360);
-        }
+      })
+
+      if (this.appState.playQueue.length > 0) {
+        this.floatingMiniBar()
       }
-    })
+    }
+    .width(StyleConstants.FULL_WIDTH)
+    .height(StyleConstants.FULL_HEIGHT)
   }
 
   /** Root UI: {@link HdsNavigation} with tabs and optional playback cover. */
