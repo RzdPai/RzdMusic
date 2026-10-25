@@ -3013,9 +3013,11 @@ struct Index {
         }
       })
 
-      // ⚠️ 再摘一次：持久日志显示 `close request` 之后、`RzdSearchCover hidden` 之前必崩，
-      //   而 `floatingMiniBar()` 是 HdsTabs/MiniBarMaterialCapsule 体系（依赖壳层子树），
-      //   放进弹层后随弹层销毁会崩。先确保"能正常退出"，播放条改用轻量替身另做。
+
+      // 二级页播放条（甲方要求保留）
+      if (this.shouldShowFloatingMiniBar()) {
+        this.floatingMiniBar()
+      }
     }
     .width(StyleConstants.FULL_WIDTH)
     .height(StyleConstants.FULL_HEIGHT)
@@ -3388,7 +3390,8 @@ struct Index {
     })
     // 照抄文章：搜索页由全屏模态承载，ModalTransition.NONE ⇒ 无系统动画，几何交由 geometryTransition
     .bindContentCover(this.isSearchPageShow, this.SearchCover(), {
-      modalTransition: ModalTransition.NONE
+      // ALPHA：弹层自带淡入淡出 ⇒ 退出也有动画，不用在页面里 animateTo（避免再次踩到崩溃点）
+      modalTransition: ModalTransition.ALPHA
     })
   }
 
