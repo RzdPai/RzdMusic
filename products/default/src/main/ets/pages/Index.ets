@@ -614,6 +614,22 @@ struct Index {
    *
    * ★ 2026-10-24（② + ⑧）：入口统一走"改共享状态"这条路，谁都不许自己 push 路由。
    */
+  /**
+   * 任意页请求「弹回根页」（`appState.requestPopToRoot()`，例如二级页面点播放条要跳「现在就听」）：
+   * 把首页/详情两套导航栈都清空，页签切换才能真的看到。
+   */
+  @Monitor('appState.popToRootVersion')
+  onPopToRootRequested(): void {
+    const names: string[] = this.pageIndexInfos.getAllPathName();
+    Logger.info(RzdShellLogTag, `pop to root requested depth=${names.length}`);
+    if (names.length > 0) {
+      this.pageIndexInfos.clear();
+    }
+    if (this.homeStack.size() > 0) {
+      this.homeStack.clear();
+    }
+  }
+
   @Monitor('tabState.tabIndex')
   onTabIndexChanged(): void {
     const index: number = this.tabState.tabIndex;

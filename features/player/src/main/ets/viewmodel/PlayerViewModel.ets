@@ -71,6 +71,8 @@ export class PlayerViewModel {
     const tabState: TabSwitchState = AppStorageV2.connect(TabSwitchState,
       AppStorageKeys.TAB_SWITCH_STATE, () => new TabSwitchState())!;
     this.appState.isShowPlay = false;
+    // 二级页面（歌单/专辑/歌手详情等）里点播放条：先把导航栈弹回根，否则页签切了也还停在详情页
+    this.appState.requestPopToRoot();
     tabState.tabIndex = FEED_TAB_INDEX;
     Logger.info('RzdPlayerVM', `player open redirected to feed tab idx=${FEED_TAB_INDEX}`);
     return true;

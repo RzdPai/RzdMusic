@@ -34,6 +34,16 @@ export class  MusicAppState {
    *   壳层的迷你播放条点击据此分流：`'feed'` → 切到「现在就听」Tab，其余 → 打开播放页。
    */
   @Trace public queueOrigin: string = '';
+  /**
+   * 「弹回根页」请求版本号：任意页 +1 后，壳层（`Index.ets`）会把导航栈清回根，
+   * 用于「二级页面里点播放条 → 跳到现在就听」这种需要**跨页**退栈的场景。
+   */
+  @Trace public popToRootVersion: number = 0;
+
+  /** 请求壳层把导航栈弹回根页。 */
+  public requestPopToRoot(): void {
+    this.popToRootVersion++;
+  }
 
   /** Index in {@link playQueueIds} for the current track. */
   @Trace public selectIndex: number = 0;
