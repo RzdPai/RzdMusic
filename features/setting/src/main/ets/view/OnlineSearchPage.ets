@@ -2404,7 +2404,8 @@ export struct OnlineSearchPage {
           //   这一页原来**一点底部留白都没有** ⇒ 滚到底最后一行会被壳层那条悬浮播放条压住。
           //   值与其他二级页同口径：56(播放条) + 16 + 16 = 88。
           //   ⚠️ 别写在外层容器的 `padding({bottom})` 上 —— 那是固定在屏幕底部的死带（用户点过的老毛病）。
-          .contentEndOffset(88)
+          // 88 = 原有底部留白；再 +64 给「二级页播放条」（56 高 + 8 间距），避免最后一项被压住
+    .contentEndOffset(152)
           .onScrollFrameBegin((offset: number): OnScrollFrameBeginHandlerResult => {
             // 列表滑动时自动收起联想（签名与 MinePage 一致）
             if (this.showSuggest && Math.abs(offset) > 1) {
