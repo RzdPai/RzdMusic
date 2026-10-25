@@ -2785,6 +2785,19 @@ export struct NowPlayingFeedPage {
           colors: [[Color.Transparent, 0], [this.pageTint, 1]]
         })
         .hitTestBehavior(HitTestMode.None)
+
+      // ★ 2026-10-25（甲方：「直接把下面的过渡翻过来…照抄过来，上方和下方也用一个颜色」）：
+      //   这是**底部那条的镜像**，尺寸与颜色完全照抄：高度同为整块照片高度、颜色同为 `pageTint`，
+      //   只是方向反过来（页底色在上、向下淡出到透明）。上下同色 ⇒ 不会出现色差/发黑。
+      Column()
+        .width(StyleConstants.FULL_WIDTH)
+        .height(this.coverHeightVp())
+        .linearGradient({
+          direction: GradientDirection.Bottom,
+          colors: [[this.pageTint, 0], [Color.Transparent, 1]]
+        })
+        .position({ x: 0, y: 0 })
+        .hitTestBehavior(HitTestMode.None)
     }
     .width(StyleConstants.FULL_WIDTH)
     .height(this.coverHeightVp())
