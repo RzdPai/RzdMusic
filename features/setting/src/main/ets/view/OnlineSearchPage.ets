@@ -1563,6 +1563,12 @@ export struct OnlineSearchPage {
       this.searchClosing = false;
       // ★ 必须弹**本页所在的那个栈**（官方示例用 `NavDestinationContext.pathStack`）。
       //   本页可能被推到壳层共享栈，也可能被推到首页 Tab 的内层栈。
+      // 现在搜索页由壳层 `bindContentCover` 承载（不是 NavDestination）⇒ 没有栈可 pop，
+      // 改成回调壳层关闭弹层（`onShowChange(false)` 由 Index 收口）。
+      if (this.ownStack === undefined && this.pageStack.size() === 0) {
+        this.onShowChange(false);
+        return;
+      }
       const stack: NavPathStack = this.ownStack ?? this.pageStack;
       morphLog(`pop inside-animate own=${this.ownStack !== undefined} size=${stack.size()}`);
       stack.pop(false);
