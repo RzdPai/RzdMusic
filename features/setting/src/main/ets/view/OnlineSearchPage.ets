@@ -290,7 +290,12 @@ export struct OnlineSearchPage {
   /** Scroller of the result list, bound to the HDS title bar for the search-row hide. */
   private listScroller: Scroller = new Scroller();
   /** Result inset: measured title builders' bottom minus the actual content top. */
-  @Local contentPaddingTop: number = 0;
+  /**
+   * 内容首行的顶部让位（vp）。
+   * ★ 弹层（bindContentCover）承载时首帧拿不到量测值，若从 0 起 ⇒ 历史/热搜会先顶到搜索行下面再跳一下。
+   *   这里给"状态栏 + 搜索行 56"的初值，量测到位后由 refreshContentPaddingTop() 校正。
+   */
+  @Local contentPaddingTop: number = WindowUtil.getInstance().resolveStatusBarTopVp() + 56;
   /** Window-space bottom edges measured from the actual HDS builders. */
   @Local searchRowBottomVp: number = 0;
   @Local titleWidthVp: number = 0;
@@ -1565,13 +1570,14 @@ export struct OnlineSearchPage {
       //   本页可能被推到壳层共享栈，也可能被推到首页 Tab 的内层栈。
       // 现在搜索页由壳层 `bindContentCover` 承载（不是 NavDestination）⇒ 没有栈可 pop，
       // 改成回调壳层关闭弹层（`onShowChange(false)` 由 Index 收口）。
-      if (this.ownStack === undefined && this.pageStack.size() === 0) {
+      // 弹层模式（无 NavDestination 上下文）只回调壳层关闭，**绝不 pop**——那会弹掉壳层自己的页面栈
+      if (this.ownStack === undefined) {
+        morphLog('cover mode: notify shell only');
         this.onShowChange(false);
         return;
       }
-      const stack: NavPathStack = this.ownStack ?? this.pageStack;
-      morphLog(`pop inside-animate own=${this.ownStack !== undefined} size=${stack.size()}`);
-      stack.pop(false);
+      morphLog(`pop inside-animate own=true size=${this.ownStack.size()}`);
+      this.ownStack.pop(false);
     });
     // 底栏恢复：**等转场结束再恢复**（在转场帧里改壳层状态会把两端拆到不同帧）。
     // 弹簧的 onFinish 实测要到 1s 才来，所以这里用固定 320ms（转场时长量级）先恢复，
