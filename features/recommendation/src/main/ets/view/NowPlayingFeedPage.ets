@@ -2770,24 +2770,19 @@ export struct NowPlayingFeedPage {
       Image(row.coverUrl.length > 0 ? row.coverUrl : $r('app.media.ic_avatar1'))
         .width(StyleConstants.FULL_WIDTH)
         .height(this.coverHeightVp())
-      .objectFit(ImageFit.Cover)
-      .alt($r('app.media.ic_avatar1'))
-      .draggable(false)
+        .objectFit(ImageFit.Cover)
+        .alt($r('app.media.ic_avatar1'))
+        .draggable(false)
 
-      // ★ 渐变必须画在**封面之上的一层**：`Image` 不吃 `linearGradient`（图片是内容层，会把渐变盖住），
-      //   挂在 Image 上真机就是"完全没有渐变"（甲方 2026-10-25 实测）。这一层与封面同尺寸，
-      //   视觉等价于"封面图本身是渐变"：顶部融进页头色 → 中段露出原图 → 底部融进页底色，四挡 stop 递增。
+      // ★★ 照抄歌手页 `DetailImmersiveBackdrop` 的那一条（甲方：那几个页面的过渡非常自然）：
+      //   **整块照片高度**上一条 `[Transparent, 0] → [pageTint, 1]`，照片下半截自己化进页底色；
+      //   页底再是**纯色** `pageTint` ⇒ 照片与页面是同一块颜色的连续过渡，中间没有第二条渐变带。
       Column()
         .width(StyleConstants.FULL_WIDTH)
         .height(this.coverHeightVp())
         .linearGradient({
           direction: GradientDirection.Bottom,
-          colors: [
-            [feedTintShade(this.pageTint, 1.0), 0],
-            [Color.Transparent, 0.26],
-            [Color.Transparent, 0.74],
-            [feedTintShade(this.pageTint, 0.96), 1]
-          ]
+          colors: [[Color.Transparent, 0], [this.pageTint, 1]]
         })
         .hitTestBehavior(HitTestMode.None)
     }
@@ -3332,15 +3327,8 @@ export struct NowPlayingFeedPage {
         Column()
           .width(StyleConstants.FULL_WIDTH)
           .height(StyleConstants.FULL_HEIGHT)
-          .linearGradient({
-            direction: GradientDirection.Bottom,
-            colors: [
-              [feedTintShade(this.pageTint, 1.0), 0],
-              // 色标对齐"看得见的那一段"：封面下沿 = coverRatioOfPage()，再明显压暗到底
-              [feedTintShade(this.pageTint, 0.96), this.coverRatioOfPage()],
-              [feedTintShade(this.pageTint, 0.72), 1]
-            ]
-          })
+          // 页底 = **纯色**（与歌手页同一套：照片那条渐变已经负责过渡，这里不再叠第二条渐变）
+          .backgroundColor(this.pageTint)
           .hitTestBehavior(HitTestMode.None)
         // ── 层 2：顶部压深（深底才有）────────────────────────────────────────
         // · 只压最上面一段（α 从 0.35 渐隐到 0），**高度 = 封面顶边**（{@link topScrimHeightVp}）：
