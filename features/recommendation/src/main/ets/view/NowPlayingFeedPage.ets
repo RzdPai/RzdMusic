@@ -232,6 +232,7 @@ import {
   showSystemShare
 } from 'player';
 import type { LXSearchSong, LXSearchResult } from 'player';
+import { LyricsComponent } from 'player/src/main/ets/view/LyricsComponent';
 import { SongMoreMenu } from 'playlist';
 import { RecommendPrivateSongUi } from '../model/RecommendUiModels';
 import { FeedRecommendEngine, FeedRecommendPick } from '../util/FeedRecommendEngine';
@@ -3195,8 +3196,7 @@ export struct NowPlayingFeedPage {
   @Builder
   private FeedCard(row: RecommendPrivateSongUi, index: number) {
     if (this.isWideFeedLayout()) {
-      // ── 宽屏（平板 / 阔屏 / 手机横屏）：**左封面 + 右信息/歌词**（把播放页的双栏版式搬过来）。
-      // 甲方 2026-10-24：「横屏适配直接把播放器改改搬过来就行了，右侧也是歌词」。
+      // ══ 宽屏（平板 / 阔屏 / 手机横屏）：左封面 + 右侧（多行歌词 / 信息 / 进度）══
       Row({ space: 24 }) {
         Column() {
           this.FeedCoverCard(row, index)
@@ -3204,55 +3204,80 @@ export struct NowPlayingFeedPage {
         .layoutWeight(1)
         .justifyContent(FlexAlign.Center)
 
-        Column({ space: 14 }) {
-          this.FeedLyric(row)
-          this.FeedInfoColumn(row, index)
+        Column({ space: 10 }) {
+          // ★ 2026-10-25（甲方死命令：「多行歌词，你快点搞」）：右侧歌词 = **播放页同款**
+          //   `LyricsComponent`（多行滚动 + 逐字高亮都在里面），不再用只显示两行的 mini 版本。
+          LyricsComponent({
+            isShowControl: false,
+            isTablet: true,
+            hideLyricsMetaHeader: true,
+            panelBottomBar: false,
+            onSeekTime: (ms: number): void => {
+              MediaService.getInstance().seek(ms);
+            }
+          })
+            .width(StyleConstants.FULL_WIDTH)
+            .layoutWeight(1)
+
+          this.FeedInfoCore(row, index)
           this.FeedProgress(row)
         }
         .layoutWeight(1)
-        .justifyContent(FlexAlign.Center)
         .alignItems(HorizontalAlign.Start)
       }
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
+      // 每张卡自带底色（滑动时两张卡各带各色一起走）
+      .backgroundColor(this.cardFadeColor(row))
+      // 裁到自身边界：横屏时相邻卡的进度条不会从上下漏出来
+      .clip(true)
       .padding({
         left: FEED_SIDE_PADDING_VP * 2,
         right: FEED_SIDE_PADDING_VP * 2,
         top: this.topStackOffsetVp(),
-        bottom: this.cardChromeBottomVp()
+        bottom: this.wideBottomReserveVp()
       })
       .alignItems(VerticalAlign.Center)
     } else {
+      // ══ 竖屏（手机）：整屏封面 + 两行小歌词 + 信息 + 进度 ══
+      Column({ space: 0 }) {
+        Column({ space: 14 }) {
+          this.FeedCover(row, index)
+          this.FeedInfoColumn(row, index)
+        }
+        .width(StyleConstants.FULL_WIDTH)
+        .layoutWeight(1)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
 
-    Column({ space: 0 }) {
-      Column({ space: 14 }) {
-        // ① 封面区（满屏贴边、不圆角、上下都化进页底色）
-        this.FeedCover(row, index)
-        // ② 小歌词 + ③ 歌名/歌手 + ④ 音质 + ⑤ 动作
-        this.FeedInfoColumn(row, index)
+        this.FeedProgress(row)
       }
       .width(StyleConstants.FULL_WIDTH)
-      .layoutWeight(1)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
-
-      // ⑥ 细进度条 + 两端时间
-      this.FeedProgress(row)
-    }
-    .height(StyleConstants.FULL_HEIGHT)
-    // 每张卡自带底色（滑动时两张卡各带各色一起走，不会"切完才变色"）
-    .backgroundColor(this.cardFadeColor(row))
-    // 甲方 2026-10-25（收尾）：「进度条和播放暂停按钮往上提一下，要不然容易误触」
-    //   ⇒ 底部让位在原有基础上再 +20vp（进度条、动作行、播放键一起上移）。
-    .padding({ top: this.topStackOffsetVp(), bottom: this.cardChromeBottomVp() + 20 })
+      .height(StyleConstants.FULL_HEIGHT)
+      .backgroundColor(this.cardFadeColor(row))
+      .clip(true)
+      .padding({ top: this.topStackOffsetVp(), bottom: this.cardChromeBottomVp() + 20 })
     }
   }
 
-  /** 一屏的信息块（歌词 + 歌名/歌手 + 音质 + 动作）：宽窄两套版式共用。 */
+  /**
+   * 竖屏的信息块：两行小歌词（播放页 mini 版）+ 信息本体。
+   * 横屏不用它 —— 横屏是「多行 `LyricsComponent` + `FeedInfoCore`」。
+   */
   @Builder
   private FeedInfoColumn(row: RecommendPrivateSongUi, index: number) {
     Column({ space: 14 }) {
       this.FeedLyric(row)
+      this.FeedInfoCore(row, index)
+    }
+    .width(StyleConstants.FULL_WIDTH)
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  /** 信息块本体（**不含歌词**）：歌名/歌手 + 动作行。 */
+  @Builder
+  private FeedInfoCore(row: RecommendPrivateSongUi, index: number) {
+    Column({ space: 14 }) {
       Column({ space: 6 }) {
         Text(row.title)
           .fontSize(24)
@@ -3267,7 +3292,8 @@ export struct NowPlayingFeedPage {
       .width(StyleConstants.FULL_WIDTH)
       .alignItems(HorizontalAlign.Start)
       .padding({ left: FEED_SIDE_PADDING_VP, right: FEED_SIDE_PADDING_VP })
-      // 甲方 2026-10-25（收尾）：「把那行音质去掉」——不再显示 atmos/FLAC 之类的音质标签
+
+      // 甲方 2026-10-25：音质标签已去掉，这里只有动作行
       this.FeedActions(row, index)
     }
     .width(StyleConstants.FULL_WIDTH)
@@ -3327,6 +3353,15 @@ export struct NowPlayingFeedPage {
    * 宽屏封面卡的边长（vp）：取可用高度与半宽中较小者，夹在 120–420。
    * 可用高度已扣掉顶部让位（状态栏 + 标题栏）与底部让位（胶囊底栏 + 间距）。
    */
+  /**
+   * 宽屏底部让位（vp）：把 `cardChromeBottomVp()` 与胶囊底栏的实际占位一起算足。
+   * ★ 2026-10-25（甲方：「还是会跑到下面」）：+40 仍然不够 —— 胶囊底栏在横屏约占 110vp，
+   *   这里直接取 max(底栏让位 + 56, 132)，保证进度条整条露在底栏之上。
+   */
+  private wideBottomReserveVp(): number {
+    return Math.max(this.cardChromeBottomVp() + 56, 132);
+  }
+
   private wideCoverSideVp(): number {
     const ui: UIContext = this.getUIContext();
     const hVp: number = ui.px2vp(this.windowInfo.windowSize.height);
