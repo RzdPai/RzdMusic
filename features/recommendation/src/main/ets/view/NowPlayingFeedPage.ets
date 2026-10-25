@@ -3430,7 +3430,7 @@ export struct NowPlayingFeedPage {
         // ★★ 2026-10-25（甲方：「不是让你用 ArkUI 重写，是直接渲染这个 html」）：
         //   背景直接渲染 `rawfile/cover_blur_background.html`（`FeedBlurBackdrop`），
         //   只把 `--cover` 换成当前封面 —— 那份 HTML 的多层模糊+镜像羽化，ArkUI 属性复刻不出来。
-        FeedBlurBackdrop({ coverUrl: row.coverUrl })
+        FeedBlurBackdrop({ coverUrl: row.coverUrl, solidColor: this.tintColorFor(row) })
           .width(StyleConstants.FULL_WIDTH)
           .height(StyleConstants.FULL_HEIGHT)
 

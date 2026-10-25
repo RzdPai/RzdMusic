@@ -30,6 +30,11 @@ const TAG: string = 'RzdFeedBlur';
 export struct FeedBlurBackdrop {
   /** 当前这一屏的封面地址。 */
   @Param coverUrl: string = '';
+  /**
+   * 封面主色（`rgb(r, g, b)`）：HTML 里 `--solid` 是**那张测试图**的取色（默认 `#a0377b` 洋红），
+   * 用在 `.bg .br` 等处 ⇒ 不传就会永远露一块紫色。这里用当前屏自己的主色覆盖它。
+   */
+  @Param solidColor: string = '';
   private controller: webview.WebviewController = new webview.WebviewController();
   /** 上次已注入的封面（避免重复注入）。 */
   private applied: string = '';
@@ -40,10 +45,12 @@ export struct FeedBlurBackdrop {
       return;
     }
     const url: string = this.coverUrl;
-    this.applied = url;
+    this.applied = url + '|' + this.solidColor;
+    const solid: string = this.solidColor.length > 0 ? this.solidColor : '#00000000';
     const script: string =
       `(function(){` +
       `document.documentElement.style.setProperty('--cover',${JSON.stringify('url("' + url + '")')});` +
+      `document.documentElement.style.setProperty('--solid',${JSON.stringify(solid)});` +
       `var d=document.documentElement,b=document.body;` +
       `d.style.overflow='hidden';b.style.overflow='hidden';b.style.margin='0';` +
       `var s=document.querySelector('.stage');` +
@@ -62,9 +69,9 @@ export struct FeedBlurBackdrop {
     });
   }
 
-  @Monitor('coverUrl')
+  @Monitor('coverUrl', 'solidColor')
   onCoverChanged(): void {
-    if (this.coverUrl !== this.applied) {
+    if ((this.coverUrl + '|' + this.solidColor) !== this.applied) {
       this.applied = '';
       this.applyCover();
     }
