@@ -3207,7 +3207,10 @@ export struct NowPlayingFeedPage {
    */
   private cachedLyricLines(): AmllLyricLine[] {
     const song: SongItem | undefined = this.appState.getCurrentSongItem();
-    const key: string = song === undefined ? '' : `${song.source}_${song.songId}`;
+    // ★ 2026-10-25（甲方：「第一首歌没有歌词，滑走再滑回来就正常了」）：
+    //   首屏时歌词还没下载完 ⇒ 用 `source_songId` 当 key 会把"空歌词"缓存住，
+    //   之后歌词到位 key 不变 ⇒ 永远不重新解析。把 `lyricText.length` 也编进 key。
+    const key: string = song === undefined ? '' : `${song.source}_${song.songId}_${song.lyricText.length}`;
     if (key !== this.lyricLinesKey) {
       this.lyricLinesKey = key;
       this.lyricLinesCache = song === undefined || song.lyricText.length === 0 ?
