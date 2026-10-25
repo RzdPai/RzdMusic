@@ -232,7 +232,7 @@ import {
   showSystemShare
 } from 'player';
 import type { LXSearchSong, LXSearchResult } from 'player';
-import { LyricsComponent } from 'player/src/main/ets/view/LyricsComponent';
+import { AmllLyricView } from 'player/src/main/ets/amll/render/AmllLyricView';
 import { amllParseLyricCached } from 'player/src/main/ets/amll/parse/AmllAutoDetect';
 import type { AmllLyricLine } from 'player/src/main/ets/amll/model/AmllTypes';
 import { SongMoreMenu } from 'playlist';
@@ -353,6 +353,8 @@ const FEED_WIDE_BG_BLUR: number = 120;
 const FEED_WIDE_BG_TINT_OPACITY: number = 0.35;
 /** 封面与背景之间的过渡条高度（vp）。 */
 const FEED_COVER_BLEND_VP: number = 48;
+/** 横屏歌词字号（fp）：比播放页小一号，矮屏也能看到 7~9 行。 */
+const FEED_WIDE_LYRIC_FONT_FP: number = 20;
 
 /**
  * 封面**下**边那条渐变带宽（占**封面高**的比例，从封面下沿**往上**算）。
@@ -3164,6 +3166,17 @@ export struct NowPlayingFeedPage {
   }
 
   /** 当前曲的歌词原文（队列里那一首的 `lyricText`）。 */
+  /** 当前曲的歌词行（解析走播放页同一个缓存解析器）。 */
+  private currentLyricLines(): AmllLyricLine[] {
+    const text: string = this.currentLyricText();
+    return text.length > 0 ? amllParseLyricCached(text) : [];
+  }
+
+  /** 歌词正文色（`AmllLyricView` 要 string）。 */
+  private feedLyricInk(): string {
+    return this.pageTintIsLight ? '#1C1C1E' : '#FFFFFF';
+  }
+
   private currentLyricText(): string {
     const song: SongItem | undefined = this.appState.getCurrentSongItem();
     return song === undefined ? '' : song.lyricText;
@@ -3382,14 +3395,23 @@ export struct NowPlayingFeedPage {
 
           // 右栏：播放页同款歌词（给明确高度，父容器有界）
           Column() {
-            LyricsComponent({
-              isShowControl: false,
-              isTablet: true,
-              hideLyricsMetaHeader: true,
-              panelBottomBar: false,
+            // ★ 2026-10-25（甲方：「歌词就显示三行是不是太少了」）：`LyricsComponent` 字号固定，
+            //   横屏屏矮只放得下 3 行；这里直接用它的渲染核心 `AmllLyricView`，字号 20fp
+            //   ⇒ 同高度能看 7~9 行，逐字高亮/滚动仍是播放页那套。
+            AmllLyricView({
+              lyricLines: this.currentLyricLines(),
+              currentTime: this.appState.progress,
+              isPlay: this.appState.isPlay,
               onSeekTime: (ms: number): void => {
                 MediaService.getInstance().seek(ms);
-              }
+              },
+              fontSize: FEED_WIDE_LYRIC_FONT_FP,
+              fontWeight: 'Medium',
+              textColor: this.feedLyricInk(),
+              glowColor: this.feedLyricInk(),
+              enableBlur: false,
+              enableScale: false,
+              enableSpring: true
             })
               .width(StyleConstants.FULL_WIDTH)
               .height(StyleConstants.FULL_HEIGHT)
