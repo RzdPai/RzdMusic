@@ -2786,17 +2786,6 @@ export struct NowPlayingFeedPage {
         })
         .hitTestBehavior(HitTestMode.None)
 
-      // ★ 甲方 2026-10-25：「上端也要过渡」—— 顶部再加一条**反向**渐变（页底色 → 透明），
-      //   让封面上沿化进标题栏那条底色里；高度取封面高度的 35%，与底部那条对称但不重叠。
-      Column()
-        .width(StyleConstants.FULL_WIDTH)
-        .height(this.coverHeightVp() * FEED_COVER_TOP_FADE)
-        .linearGradient({
-          direction: GradientDirection.Bottom,
-          colors: [[this.pageTint, 0], [Color.Transparent, 1]]
-        })
-        .position({ x: 0, y: 0 })
-        .hitTestBehavior(HitTestMode.None)
     }
     .width(StyleConstants.FULL_WIDTH)
     .height(this.coverHeightVp())
