@@ -3481,11 +3481,25 @@ export struct NowPlayingFeedPage {
     const jobSeq: number = ++this.cardColorJobSeq;
     const req: http.HttpRequest = http.createHttp();
     try {
+      // ★ 2026-10-25（甲方：「还是一样的情况…把取色逻辑就改掉」）：
+      //   取色一直"取不到"的最可能原因 = 封面**拉不下来**（平台 CDN 对无 UA/Referer 的请求常 403），
+      //   而失败路径只打一条 warn 就退回兜底色 ⇒ 屏上永远是那个中性灰。
+      //   ⇒ 补齐 UA + Referer（按音源域名），并把状态码/字节数打出来，一眼能定位。
+      const isQq: boolean = url.indexOf('qq.com') >= 0 || url.indexOf('qpic.cn') >= 0;
+      const headers: Record<string, string> = {
+        'User-Agent': 'Mozilla/5.0 (Linux; HarmonyOS) AppleWebKit/537.36 (KHTML, like Gecko) Mobile Safari/537.36',
+        'Accept': 'image/avif,image/webp,image/png,image/jpeg,*/*',
+        'Referer': isQq ? 'https://y.qq.com/' : 'https://music.163.com/'
+      };
       const resp: http.HttpResponse = await req.request(url, {
         method: http.RequestMethod.GET,
         expectDataType: http.HttpDataType.ARRAY_BUFFER,
-        readTimeout: 15000
+        usingCache: true,
+        readTimeout: 15000,
+        header: headers
       });
+      const bytes: number = resp.result === undefined ? 0 : (resp.result as ArrayBuffer).byteLength;
+      Logger.info(RZD_TAG, `tint http=${resp.responseCode} bytes=${bytes} url=${url}`);
       if (resp.responseCode !== 200 || resp.result === undefined) {
         Logger.warn(RZD_TAG, `tint skip http=${resp.responseCode} url=${url}`);
         return;
