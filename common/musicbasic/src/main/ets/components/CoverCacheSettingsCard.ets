@@ -85,10 +85,6 @@ export struct CoverCacheSettingsCard {
           .onClick((): void => { void this.confirmClear(); })
       }
       .width('100%')
-      Text('仅缓存网络封面，最多 100 MB，7 天过期。')
-        .fontSize($r('sys.float.Caption_M'))
-        .fontColor($r('sys.color.font_tertiary'))
-        .width('100%')
     }
     .width('100%')
     .padding(16)
