@@ -162,9 +162,9 @@ export async function probeQuality(source: string, songId: string, quality: stri
   }
   const header: http.HttpRequest = http.createHttp();
   try {
+    // ★ 不能带 Range：带了 content-length 就只有 2 字节，算出来的时长必然"偏差过大"（之前的 100% 失败根因）
     const resp: http.HttpResponse = await header.request(url, {
       method: http.RequestMethod.GET,
-      header: { 'Range': 'bytes=0-1' },
       connectTimeout: PROBE_TIMEOUT_MS,
       readTimeout: PROBE_TIMEOUT_MS
     });
@@ -179,16 +179,13 @@ export async function probeQuality(source: string, songId: string, quality: stri
     }
     const expectSeconds: number = parseIntervalSeconds(interval);
     const bytes: number = Number(lenRaw);
-    if (expectSeconds > 0 && !Number.isNaN(bytes) && bytes > 0) {
-      // 最保守码率（320kbps）估算最短应有长度，明显短于歌曲时长即判为错误提示
-      const minSeconds: number = bytes / (320 * 1024 / 8);
-      result.seconds = Math.round(minSeconds);
-      if (minSeconds < expectSeconds * (1 - DURATION_TOLERANCE)) {
-        result.detail = '时长偏差过大（' + result.seconds + 's vs ' + expectSeconds + 's）';
-        appendPlayLog('[RzdQualityProbe] ' + source + '/' + quality + ' 失败：' + result.detail);
-        sessionCache.set(key, result);
-        return result;
-      }
+    result.seconds = bytes > 0 ? Math.round(bytes / (320 * 1024 / 8)) : -1;
+    // 只做"体量合理"的软校验：真实音频至少几百 KB；错误提示页通常只有几 KB
+    if (!Number.isNaN(bytes) && bytes > 0 && bytes < 100 * 1024) {
+      result.detail = '体积过小（' + bytes + 'B，疑似错误提示）';
+      appendPlayLog('[RzdQualityProbe] ' + source + '/' + quality + ' 失败：' + result.detail);
+      sessionCache.set(key, result);
+      return result;
     }
     result.ok = true;
     result.detail = '已验证';

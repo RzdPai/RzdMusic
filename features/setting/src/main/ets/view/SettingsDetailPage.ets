@@ -38,7 +38,7 @@ import { CustomColorSheetContent } from './CustomColorSheetContent';
 import { CapsuleSegmentedSelector } from './CapsuleSegmentedSelector';
 import { LxSourceDeclaredBlock } from './LxSourceTags';
 import { SourceManagerList } from './SourceManagerList';
-import { checkSourceUpdateRemote, SourceUpdateInfo } from '../util/SourceUpdate';
+import { readOfficialUpdateAlert, SourceUpdateInfo } from '../util/SourceUpdate';
 import { LengthMetrics } from '@kit.ArkUI';
 const LX_ONLINE_IMPORT_MAX_BYTES: number = 9 * 1024 * 1024;
 const LX_ONLINE_IMPORT_TIMEOUT: number = 15000;
@@ -538,8 +538,9 @@ export struct SettingsDetailPage {
 
   /** 版本比对：脚本自带 version 与已保存版本一致即视为最新（真正的远端比对在 A4 之后接）。 */
   private async checkSourceUpdateRemote(api: LXUserApiInfo): Promise<void> {
-    this.getUIContext().getPromptAction().showToast({ message: '检查中…', duration: 1200 });
-    const info: SourceUpdateInfo = await checkSourceUpdateRemote(api.id);
+    // ① 只走官方：读引擎上报的 updateAlert，不再自研请求
+    const info: SourceUpdateInfo = readOfficialUpdateAlert();
+    console.info('[RzdSourceUpdate] check ' + api.name + ' hasUpdate=' + info.hasUpdate);
     if (info.hasUpdate) {
       this.getUIContext().getPromptAction().showDialog({
         title: '发现新版本',
