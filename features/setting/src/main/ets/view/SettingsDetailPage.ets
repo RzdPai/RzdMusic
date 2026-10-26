@@ -1197,7 +1197,7 @@ export struct SettingsDetailPage {
       return '当前设备/系统不支持桌面歌词，这个开关不会有实际效果（播控中心里的歌词不受影响）。';
     }
     if (!this.desktopLyric) {
-      return '关闭后不显示系统悬浮歌词；歌词仍会提供给播控中心 / 锁屏。';
+      return '';
     }
     return '播放中且有歌词时，系统会在桌面显示悬浮歌词；暂停不收起，停播、换到没有歌词的歌或关掉开关时收起。';
   }
@@ -1223,7 +1223,7 @@ export struct SettingsDetailPage {
                 state.enabled = isOn;
               }
             })
-          Text('歌手、专辑、歌单页的封面在联网时播放 Apple Music 的动态封面（静音循环，失败自动退回静态封面）。')
+          Text('')
             .fontSize($r('sys.float.Caption_M'))
             .fontColor($r('sys.color.font_tertiary'))
             .width('100%')
@@ -1325,7 +1325,7 @@ export struct SettingsDetailPage {
               MusicStoreService.getInstance().setBluetoothLyric(isOn);
               MediaService.getInstance().refreshBluetoothLyric();
             })
-          Text('向蓝牙车机/音箱推送当前歌词句（API 17+）。部分设备开启后可能略有卡顿，默认关闭。')
+          Text('')
             .fontSize($r('sys.float.Caption_M'))
             .fontColor($r('sys.color.font_tertiary'))
             .width('100%')
