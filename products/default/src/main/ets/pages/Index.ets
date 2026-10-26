@@ -2811,6 +2811,8 @@ struct Index {
         onShowChange: (open: boolean): void => {
           // 搜索页已有自己的迷你播放条（方式 C）⇒ 首页这套"压底栏 / 强制展开迷你条"的逻辑已删除
           Logger.info(RzdShellLogTag, `home search page shown=${open}`);
+          // 底栏显隐跟随搜索页真实可见性（推/弹、返回键、手势都走这里）
+          this.searchTabBarHidden = open;
           appendPlayLog(`[RzdSearchMorph] bar searching=${open}`);
         }
       })
@@ -2835,6 +2837,9 @@ struct Index {
   }
 
   private shouldShowFloatingMiniBar(): boolean {
+    if (this.searchTabBarHidden) {
+      return false;
+    }
     // ★ 用户 2026-10-19：列表页多选时底部要放操作条，播放条临时隐藏（否则两条会叠）
     if (this.appState.selectionActive) {
       return false;
