@@ -408,6 +408,9 @@ export struct SettingsDetailPage {
         }
       }
     }
+    // ③ 探完刷新一次列表（换数组引用）⇒ 平台 ToolTip 立刻能读到「已验证 / 未通过」
+    this.lxApiList = lxSourceManager.getApiList().slice();
+    console.info('[RzdQualityProbe] probe round finished, list refreshed');
   }
 
   private lxPlatformsOf(api: LXUserApiInfo): LXSourcePlatformInfo[] {
