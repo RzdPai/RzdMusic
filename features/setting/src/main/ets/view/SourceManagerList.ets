@@ -45,6 +45,7 @@ export struct SourceManagerList {
   @Event onSelect: (apiId: string) => void = (apiId: string): void => {};
   @Event onDelete: (apiId: string) => void = (apiId: string): void => {};
   @Event onCheckUpdate: (api: LXUserApiInfo) => void = (api: LXUserApiInfo): void => {};
+  @Event onProbe: () => void = (): void => {};
   @Event onMove: (dragId: string, targetId: string) => void = (dragId: string, targetId: string): void => {};
 
   /** 正在被拖动的音源 id。 */
@@ -62,6 +63,9 @@ export struct SourceManagerList {
   @Builder
   private actions(api: LXUserApiInfo) {
     Row({ space: 8 }) {
+      SwipeIcon($r('sys.symbol.waveform'), '#43A047', (): void => {
+        this.onProbe();
+      })
       SwipeIcon($r('sys.symbol.arrow_clockwise'), '#1E88E5', (): void => {
         this.onCheckUpdate(api);
       })

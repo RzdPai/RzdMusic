@@ -255,7 +255,6 @@ export struct SettingsDetailPage {
 
   private refresh(): void {
     this.lxApiList = lxSourceManager.getApiList();
-    void this.runQualityProbe();
     this.sourceOrderIds = MusicStoreService.getInstance().getSourceScriptOrder();
     if (this.sourceOrderIds.length === 0) {
       const ids: string[] = [];
@@ -1790,6 +1789,9 @@ export struct SettingsDetailPage {
             },
             onCheckUpdate: (api: LXUserApiInfo): void => {
               void this.checkSourceUpdateRemote(api);
+            },
+            onProbe: (): void => {
+              void this.runQualityProbe();
             },
             onMove: (dragId: string, targetId: string): void => {
               this.moveSourceTo(dragId, targetId);
