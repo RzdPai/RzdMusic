@@ -395,15 +395,11 @@ export struct SettingsDetailPage {
         if (src === undefined || src.qualitys.length === 0) {
           continue;
         }
-        // 只测「ToolTip 上显示的那一档」+ 默认档，保证缓存 key 与 UI 查询一致
+        // ② 只测该平台声明的**最高音质**（与 ToolTip 显示同一个 key）
         const qualities: string[] = [];
         if (info.bestQuality.length > 0) {
           qualities.push(info.bestQuality);
-        }
-        if (src.type.length > 0 && src.type !== info.bestQuality) {
-          qualities.push(src.type);
-        }
-        if (qualities.length === 0 && src.qualitys.length > 0) {
+        } else if (src.qualitys.length > 0) {
           qualities.push(src.qualitys[src.qualitys.length - 1]);
         }
         for (let q: number = 0; q < qualities.length; q++) {
