@@ -8,7 +8,7 @@ import { MusicStoreService, appendPlayLog } from 'musicbasic';
 import { getLXMusicUrl } from '../source/LXPlayHelper';
 import { lxEngineIsReady } from '../source/LXSourceEngine';
 import { lxGetLyricFull, lxGetPicFallback, LyricFullResult } from '../source/LXMusicSDK';
-import { getQualityChain } from './SourceFallbackUtil';
+import { getQualityChain, resolveMusicUrlWithFallback, UrlResolveOutcome } from './SourceFallbackUtil';
 import { AmllLyricLine } from '../amll/model/AmllTypes';
 import { amllParseLyricText } from '../amll/parse/AmllAutoDetect';
 import { amllStringifyLrc } from '../amll/parse/AmllLyricFormatParsers';
@@ -579,11 +579,22 @@ export class DownloadService {
     }
     try {
       // 1) 解析下载地址：按所选音质起、逐档向下兜底
+      // ★ B3：下载和播放共用同一条回退链（resolveMusicUrlWithFallback 内部就是 buildCandidateChain）
+      const dlOutcome: UrlResolveOutcome = await resolveMusicUrlWithFallback(
+        task.source, task.songId, task.name, task.singer, '', null);
+      console.info('[RzdFallback] download via chain ok=' + (dlOutcome.url.length > 0) +
+        ' quality=' + dlOutcome.quality + ' script=' + dlOutcome.scriptName);
+      let url: string = dlOutcome.url;
+      if (url.length > 0) {
+        // 命中统一回退链：音质/平台/脚本都由链决定，下面沿用原有下载流程
+        task.quality = dlOutcome.quality;
+        console.info('[RzdFallback] download hit via chain quality=' + dlOutcome.quality +
+          ' platform=' + dlOutcome.source + ' script=' + dlOutcome.scriptName);
+      }
       const chain: string[] = getQualityChain(task.requestedQuality, task.source);
       console.info('[RzdQualityPolicy] download resolve id=' + task.id +
         ' snapshot=' + task.requestedQuality + ' chain=' + chain.join(','));
-      let url: string = '';
-      for (let i: number = 0; i < chain.length; i++) {
+      for (let i: number = 0; i < chain.length && url.length === 0; i++) {
         try {
           const u: string = await getLXMusicUrl(task.source, task.songId, chain[i], task.name, task.singer);
           if (u.length > 0) {
