@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -161,6 +161,8 @@ export struct SettingPage {
   @Local showMiniLyric: boolean = false;
   /** Whether playback shares audio focus with other apps. */
   @Local audioMix: boolean = false;
+  /** 启动应用自动开始播放（默认关）。 */
+  @Local autoPlayOnLaunch: boolean = false;
   @Local crossScriptFallback: boolean = true;
   /** Whether the lyrics page applies blur to non-active lines. */
   @Local lyricBlurEnabled: boolean = true;
@@ -237,6 +239,7 @@ export struct SettingPage {
     this.showMiniLyric = MusicStoreService.getInstance().getShowMiniLyric();
     this.crossScriptFallback = MusicStoreService.getInstance().getCrossScriptFallback();
     this.audioMix = MusicStoreService.getInstance().getAudioMix();
+    this.autoPlayOnLaunch = MusicStoreService.getInstance().getAutoPlayOnLaunch();
     this.lyricBlurEnabled = MusicStoreService.getInstance().getLyricBlurEnabled();
     this.saveToDownloadDir = MusicStoreService.getInstance().getDownloadSaveMode() === 'download';
     this.downloadNameFormat = MusicStoreService.getInstance().getDownloadNameFormat();
@@ -886,6 +889,14 @@ export struct SettingPage {
               this.audioMix = isOn;
               MusicStoreService.getInstance().setAudioMix(isOn);
               MediaService.getInstance().applyAudioSession(isOn);
+            })
+
+          this.SubTitle('启动应用自动开始播放')
+          this.CapsuleSelector(this.onOffOptions, this.autoPlayOnLaunch ? 0 : 1,
+            (index: number) => {
+              const autoPlay: boolean = index === 0;
+              this.autoPlayOnLaunch = autoPlay;
+              MusicStoreService.getInstance().setAutoPlayOnLaunch(autoPlay);
             })
 
           this.SubTitle('播放失败自动跨音源脚本')
