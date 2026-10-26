@@ -428,6 +428,8 @@ struct Index {
    * 鈿狅笍 涓嶈鍐嶆嬁瀹冨幓鏀瑰簳閮ㄥ鑸殑 `barHeight` / `barFloatingStyle`锛堣瘯杩囷紝搴曟爮鐩存帴鍧忔帀锛夈€?
    */
   @Local navDepth: number = 0;
+  /** 搜索页打开时隐藏底栏（Tab 栏 + 首页迷你条都挂在 HdsTabs.barFloatingStyle 上，压 0 高即可一起隐藏）。 */
+  @Local searchTabBarHidden: boolean = false;
   /**
    * 首页 Tab 自己的内层导航栈（只放两条路由：首页 / 搜索页）。
    * 见 `HomeRouteNames.ets` 里那段"为什么必须这样"的说明。
@@ -2741,11 +2743,14 @@ struct Index {
     Logger.info(RzdShellLogTag, `home search push from=${this.homeStack.getAllPathName()}`);
     appendPlayLog(`[RzdSearchMorph] shell push from=${this.homeStack.size()}`);
     this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, (): void => {
+    // 搜索页打开：底栏（Tab 栏 + 首页迷你条）一起隐藏，只留搜索页自己的播放条
+    this.searchTabBarHidden = true;
       this.homeStack.pushPath({ name: SEARCH_ROUTE_NAME }, false);
     });
   }
 
   private closeHomeSearch(): void {
+    this.searchTabBarHidden = false;
     if (this.homeStack.size() <= 1) {
       return;
     }
@@ -3050,7 +3055,7 @@ struct Index {
             this.HomeTabsPages()
           }
           .barMode(BarMode.Fixed)
-          .barHeight(56)
+          .barHeight(this.searchTabBarHidden ? 0 : 56)
           .zIndex(1)
           .barOverlap(true)
           .barPosition(BarPosition.End)
@@ -3230,7 +3235,7 @@ struct Index {
             this.HomeTabsPages()
           }
           .barMode(BarMode.Fixed)
-          .barHeight(56)
+          .barHeight(this.searchTabBarHidden ? 0 : 56)
           .zIndex(1)
           .barOverlap(true)
           .barPosition(BarPosition.End)
