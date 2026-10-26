@@ -1210,7 +1210,7 @@ export struct SettingsDetailPage {
     if (!this.desktopLyric) {
       return '';
     }
-    return '播放中且有歌词时，系统会在桌面显示悬浮歌词；暂停不收起，停播、换到没有歌词的歌或关掉开关时收起。';
+    return '';
   }
 
   /** 其它设置弹窗：添加位置 / 首页来源+登录推荐 / 同步设置入口，拆为三张卡片。 */
