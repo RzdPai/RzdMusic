@@ -1223,11 +1223,6 @@ export struct SettingsDetailPage {
                 state.enabled = isOn;
               }
             })
-          Text('')
-            .fontSize($r('sys.float.Caption_M'))
-            .fontColor($r('sys.color.font_tertiary'))
-            .width('100%')
-            .padding({ top: 6 })
         }
         .width('100%')
         .padding({ left: 16, right: 16, top: 4, bottom: 8 })
