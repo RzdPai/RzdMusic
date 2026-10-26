@@ -3,6 +3,7 @@ import { getLXMusicUrl } from '../source/LXPlayHelper';
 import { lxSearch, LXSearchSong } from '../source/LXMusicSDK';
 import { LXUserApiInfo, LXUserApiSourceInfo } from '../source/Interface';
 import { lxSourceManager } from '../source/LXSourceManager';
+import { markProbeOk } from './LxQualityProbe';
 
 export const QUALITY_CHAIN: string[] =
   ['master', 'atmos_plus', 'atmos', 'hires', 'flac24bit', 'flac', '320k', '128k'];
@@ -654,6 +655,8 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
     if (r !== null) {
       r.switchedScriptName = c.scriptName;
       appendPlayLog('[回退链] 命中 ' + c.scriptName + '/' + c.platform + '/' + r.quality);
+      // A4：解析成功即证明该 (平台, 音质) 能返回真实音频，写进本次会话的探测缓存
+      markProbeOk(c.platform, r.quality);
       return r;
     }
   }

@@ -126,6 +126,23 @@ export async function probeQuality(source: string, songId: string, quality: stri
   }
 }
 
+/** 播放/下载解析成功后回写"这个音质是真实音频"（供 ToolTip 显示）。 */
+export function markProbeOk(source: string, quality: string): void {
+  const r: ProbeResult = new ProbeResult();
+  r.ok = true;
+  r.detail = '已验证';
+  sessionCache.set(cacheKey(source, quality), r);
+  appendPlayLog('[RzdQualityProbe] ' + source + '/' + quality + ' 由播放链路标记为已验证');
+}
+
+/** 播放/下载解析失败后回写"这个音质不可用"。 */
+export function markProbeFail(source: string, quality: string, detail: string): void {
+  const r: ProbeResult = new ProbeResult();
+  r.ok = false;
+  r.detail = detail;
+  sessionCache.set(cacheKey(source, quality), r);
+}
+
 export function cachedProbe(source: string, quality: string): ProbeResult | undefined {
   return sessionCache.get(cacheKey(source, quality));
 }
