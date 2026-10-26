@@ -479,21 +479,6 @@ export struct SettingsDetailPage {
     this.startEnginePolling();
   }
 
-  /** A2：音源长按菜单 —— 检查更新 / 删除。 */
-  @Builder
-  private SourceMenu(api: LXUserApiInfo) {
-    Menu() {
-      MenuItem({ content: '检查更新' })
-        .onClick(() => {
-          this.checkSourceUpdate(api);
-        })
-      MenuItem({ content: '删除音源' })
-        .onClick(() => {
-          this.deleteLXSource(api.id);
-        })
-    }
-  }
-
   /** 版本比对：脚本自带 version 与已保存版本一致即视为最新（真正的远端比对在 A4 之后接）。 */
   private checkSourceUpdate(api: LXUserApiInfo): void {
     const current: string = api.version.length > 0 ? api.version : '未知';
