@@ -89,10 +89,12 @@ export class EchoStats {
   loopKingName: string = '';
   loopKingSinger: string = '';
   loopKingCount: number = 0;
+  loopKingImg: string = '';
   /** 深夜之歌：0–5 点播放次数最多的歌。 */
   nightName: string = '';
   nightSinger: string = '';
   nightCount: number = 0;
+  nightImg: string = '';
   /** 新收藏：本月新增收藏（最多 6 首）。 */
   newFavorites: EchoFavorite[] = [];
 }
@@ -460,6 +462,7 @@ export struct EchoReviewPage {
         out.loopKingCount = runLen;
         out.loopKingName = r.name;
         out.loopKingSinger = r.singer;
+        out.loopKingImg = r.img;
       }
       // 深夜之歌：0–5 点
       const hh: number = d.getHours();
@@ -470,6 +473,7 @@ export struct EchoReviewPage {
           out.nightCount = prev + 1;
           out.nightName = r.name;
           out.nightSinger = r.singer;
+          out.nightImg = r.img;
         }
       }
       const dayIndex: number = d.getDate() - 1;
@@ -1917,31 +1921,27 @@ export struct EchoReviewPage {
     if (this.stats.loopKingCount >= 2) {
       Column({ space: 8 }) {
         this.SectionTitle('单曲循环之王')
-        Column({ space: 6 }) {
-          Text(this.stats.loopKingName)
-            .fontSize(16)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.echo_text_primary'))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%')
-          Text(this.stats.loopKingSinger)
-            .fontSize(13)
-            .fontColor($r('app.color.echo_text_secondary'))
-            .maxLines(1)
-            .width('100%')
-          Text('连着放了 ' + this.stats.loopKingCount + ' 遍')
-            .fontSize(12)
-            .fontColor($r('app.color.echo_text_tertiary'))
-            .width('100%')
+        Row({ space: 12 }) {
+          Image(this.stats.loopKingImg)
+            .width(64).height(64).borderRadius(8).objectFit(ImageFit.Cover)
+          Column({ space: 4 }) {
+            Text(this.stats.loopKingName)
+              .fontSize(18).fontWeight(FontWeight.Bold)
+              .fontColor($r('app.color.echo_text_primary'))
+              .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
+            Text(this.stats.loopKingSinger)
+              .fontSize(13).fontColor($r('app.color.echo_text_secondary'))
+              .maxLines(1).width('100%')
+            Text('连着放了 ' + this.stats.loopKingCount + ' 遍')
+              .fontSize(12).fontColor($r('app.color.echo_text_tertiary'))
+              .width('100%')
+          }
+          .layoutWeight(1).alignItems(HorizontalAlign.Start)
         }
-        .width('100%')
-        .padding(14)
-        .borderRadius(16)
+        .width('100%').padding(16).borderRadius(16)
         .backgroundColor($r('app.color.echo_card_background'))
       }
-      .width('100%')
-      .alignItems(HorizontalAlign.Start)
+      .width('100%').alignItems(HorizontalAlign.Start)
     }
   }
 
@@ -1951,31 +1951,27 @@ export struct EchoReviewPage {
     if (this.stats.nightCount > 0) {
       Column({ space: 8 }) {
         this.SectionTitle('深夜之歌')
-        Column({ space: 6 }) {
-          Text(this.stats.nightName)
-            .fontSize(16)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.echo_text_primary'))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%')
-          Text(this.stats.nightSinger)
-            .fontSize(13)
-            .fontColor($r('app.color.echo_text_secondary'))
-            .maxLines(1)
-            .width('100%')
-          Text('深夜听了 ' + this.stats.nightCount + ' 次')
-            .fontSize(12)
-            .fontColor($r('app.color.echo_text_tertiary'))
-            .width('100%')
+        Row({ space: 12 }) {
+          Image(this.stats.nightImg)
+            .width(64).height(64).borderRadius(8).objectFit(ImageFit.Cover)
+          Column({ space: 4 }) {
+            Text(this.stats.nightName)
+              .fontSize(18).fontWeight(FontWeight.Bold)
+              .fontColor($r('app.color.echo_text_primary'))
+              .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
+            Text(this.stats.nightSinger)
+              .fontSize(13).fontColor($r('app.color.echo_text_secondary'))
+              .maxLines(1).width('100%')
+            Text('深夜听了 ' + this.stats.nightCount + ' 次')
+              .fontSize(12).fontColor($r('app.color.echo_text_tertiary'))
+              .width('100%')
+          }
+          .layoutWeight(1).alignItems(HorizontalAlign.Start)
         }
-        .width('100%')
-        .padding(14)
-        .borderRadius(16)
+        .width('100%').padding(16).borderRadius(16)
         .backgroundColor($r('app.color.echo_card_background'))
       }
-      .width('100%')
-      .alignItems(HorizontalAlign.Start)
+      .width('100%').alignItems(HorizontalAlign.Start)
     }
   }
 
