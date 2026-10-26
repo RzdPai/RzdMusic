@@ -37,6 +37,7 @@ import { CapsuleSegmentedSelector } from './CapsuleSegmentedSelector';
 import { OptionChoiceSheet } from './OptionChoiceSheet';
 import { DownloadManagerSection } from './DownloadManagerSection';
 import { LxSourceDeclaredBlock } from './LxSourceTags';
+import { SourceManagerList } from './SourceManagerList';
 import { importSourceFiles } from '../util/SourceFileImport';
 const LX_ONLINE_IMPORT_MAX_BYTES: number = 9 * 1024 * 1024;
 const LX_ONLINE_IMPORT_TIMEOUT: number = 15000;
@@ -406,6 +407,16 @@ export struct SettingPage {
     this.activeSource = next;
     this.engineReady = false;
     this.startEnginePolling();
+  }
+
+  /** 检查更新：版本比对（远端比对留待后续）。 */
+  private checkSourceUpdate(api: LXUserApiInfo): void {
+    const current: string = api.version.length > 0 ? api.version : '未知';
+    this.getUIContext().getPromptAction().showToast({
+      message: '当前版本 ' + current + '（最新）',
+      duration: 2000
+    });
+    console.info('[RzdSourceUpdate] ' + api.name + ' version=' + current);
   }
 
   private deleteLXSource(apiId: string): void {
@@ -1428,80 +1439,29 @@ export struct SettingPage {
             .fontColor($r('sys.color.font_tertiary'))
             .width('100%')
 
-          ForEach(this.orderedApiListForUi(), (api: LXUserApiInfo) => {
-            Row({ space: 6 }) {
-              // 参与依次调用
-              Checkbox()
-                .select(this.isSourceInOrder(api.id))
-                .selectedColor(this.themeState.color)
-                .width(20)
-                .height(20)
-                .onChange((checked: boolean) => {
-                  const on: boolean = this.isSourceInOrder(api.id);
-                  if (checked !== on) {
-                    this.toggleSourceInOrder(api.id);
-                  }
-                })
-
-              Column({ space: 2 }) {
-                Text(api.name)
-                  .fontSize($r('sys.float.Body_L'))
-                  .fontColor($r('sys.color.font_primary'))
-                  .maxLines(1)
-                  .textOverflow({ overflow: TextOverflow.Ellipsis })
-                Row({ space: 4 }) {
-                  if (this.isSourceInOrder(api.id)) {
-                    Text(this.sourceOrderIds.indexOf(api.id) === 0 ? '默认源' :
-                      ('备选 ' + (this.sourceOrderIds.indexOf(api.id) + 1)))
-                      .fontSize($r('sys.float.Caption_S'))
-                      .fontColor(this.themeState.color)
-                  }
-                  if ((api.author ?? '').length > 0 || (api.version ?? '').length > 0) {
-                    Text(((api.author ?? '').length > 0 ? api.author : '') +
-                      ((api.version ?? '').length > 0 ? ' v' + api.version : ''))
-                      .fontSize($r('sys.float.Caption_S'))
-                      .fontColor($r('sys.color.font_tertiary'))
-                      .maxLines(1)
-                  }
-                }
-                // ★「支持的平台」标签：与 SettingsDetailPage 的音源管理同一份渲染实现
-                LxSourceDeclaredBlock({
-                  items: this.lxPlatformsOf(api),
-                  accentColor: this.themeState.color,
-                  active: this.activeSource === api.id
-                })
-              }
-              .alignItems(HorizontalAlign.Start)
-              .layoutWeight(1)
-              .onClick(() => {
-                this.selectLXSource(api.id);
-              })
-
-              if (this.activeSource === api.id && this.engineReady) {
-                Text($r('app.string.setting_lx_ready'))
-                  .fontSize($r('sys.float.Caption_M'))
-                  .fontColor(this.themeState.color)
-              }
-
-              SymbolGlyph($r('sys.symbol.trash'))
-                .fontSize(20)
-                .fontColor([$r('sys.color.font_tertiary')])
-                .onClick(() => {
-                  this.deleteLXSource(api.id);
-                })
+          // 统一实现：单列勾选 + 整卡拖动 + 左滑（检查更新 / 删除）
+          SourceManagerList({
+            apis: this.orderedApiListForUi(),
+            orderIds: this.sourceOrderIds,
+            activeId: this.activeSource,
+            accentColor: this.themeState.color,
+            draggableEnabled: this.engineReady,
+            onToggle: (apiId: string): void => {
+              this.toggleSourceInOrder(apiId);
+            },
+            onSelect: (apiId: string): void => {
+              this.selectLXSource(apiId);
+            },
+            onDelete: (apiId: string): void => {
+              this.deleteLXSource(apiId);
+            },
+            onCheckUpdate: (api: LXUserApiInfo): void => {
+              this.checkSourceUpdate(api);
+            },
+            onMove: (dragId: string, targetId: string): void => {
+              this.moveSourceTo(dragId, targetId);
             }
-            .width('100%')
-            .padding(10)
-            .borderRadius($r('sys.float.corner_radius_level6'))
-            .backgroundColor($r('app.color.card_background'))
-            .draggable(this.isSourceInOrder(api.id))
-            .onDragStart(() => {
-              this.dragSourceId = api.id;
-            })
-            .onDrop(() => {
-              this.moveSourceTo(this.dragSourceId, api.id);
-            })
-          }, (api: LXUserApiInfo) => api.id)
+          })
 
           Row({ space: 10 }) {
             Button($r('app.string.setting_lx_import_file'))
