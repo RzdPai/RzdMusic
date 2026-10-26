@@ -3114,10 +3114,6 @@ struct Index {
                 if (this.searchTabBarHidden) {
                   return;
                 }
-                // 搜索页有自己的播放条（方式 C）⇒ 搜索页打开时不画底部这条，避免两条并存
-                if (this.searchTabBarHidden) {
-                  return;
-                }
                 // ★★★ 2026-10-21（第八轮，甲方结论）：**一级页的播放条就住在这个槽里** ——
                 //   与上游 `MainPage` 同构（`wujie.pa:157082-157228`：`__Common__().visibility().gesture(...)`
                 //   直接包 `MiniPlayer`，没有胶囊容器、没有 slack）。
