@@ -142,6 +142,151 @@ function declaredQualitys(source: string): string[] | null {
   }
 }
 
+/** 回退链上的一条候选：用哪个音源脚本、在哪个平台、用哪个音质。 */
+export class FallbackCandidate {
+  /** 音源脚本 id。 */
+  scriptId: string = '';
+  /** 音源脚本名（日志/提示用）。 */
+  scriptName: string = '';
+  /** 平台 id（`kw` / `tx` / …）。 */
+  platform: string = '';
+  /** 音质（`320k` / `flac` / …）。 */
+  quality: string = '';
+  /** 是否换过平台（相对入参平台）。 */
+  platformSwitched: boolean = false;
+}
+
+/** 音质档位权重：越大越高。未识别的排最后。 */
+function qualityWeight(quality: string): number {
+  const order: string[] = ['128k', '192k', '320k', 'flac', 'flac24bit', 'hires', 'atmos', 'master'];
+  const i: number = order.indexOf(quality);
+  return i < 0 ? -1 : i;
+}
+
+/** 某个脚本在某个平台声明的"最高可用音质"：优先取 ≤ 偏好档的最高，否则取该平台最高。 */
+function bestQualityFor(declared: string[], preferred: string): string {
+  if (declared.length === 0) {
+    return '';
+  }
+  let best: string = '';
+  let bestWeight: number = -1;
+  let atOrBelow: string = '';
+  let atOrBelowWeight: number = -1;
+  const prefWeight: number = qualityWeight(preferred);
+  for (let i: number = 0; i < declared.length; i++) {
+    const w: number = qualityWeight(declared[i]);
+    if (w > bestWeight) {
+      bestWeight = w;
+      best = declared[i];
+    }
+    if (w >= 0 && (prefWeight < 0 || w <= prefWeight) && w > atOrBelowWeight) {
+      atOrBelowWeight = w;
+      atOrBelow = declared[i];
+    }
+  }
+  return atOrBelow.length > 0 ? atOrBelow : best;
+}
+
+/**
+ * ★ B2 唯一回退链：按"勾选顺序 → 同平台其它源 → 换平台"产出有序候选。
+ *
+ * 规则（与甲方口径一致）：
+ * 1. 第一个启用的音源 + 当前平台，取"该源在此平台支持的最高音质（不超过偏好档）"；
+ * 2. 该源不支持当前平台 ⇒ 依次尝试其余启用源在当前平台的最高音质；
+ * 3. 没有任何源支持当前平台 ⇒ 换平台：其余源支持的平台按"最高音质"降序，逐个排进候选；
+ * 4. 播放与下载都只调这一个函数（下载侧不得另写一份）。
+ */
+export function buildCandidateChain(preferredQuality: string, platform: string): FallbackCandidate[] {
+  const out: FallbackCandidate[] = [];
+  const apis: LXUserApiInfo[] = lxSourceManager.getApiList();
+  if (apis.length === 0) {
+    return out;
+  }
+  const declaredOf = (api: LXUserApiInfo, p: string): string[] => {
+    const info: LXUserApiSourceInfo | undefined = api.sources[p];
+    if (info === undefined) {
+      return [];
+    }
+    const list: string[] = [];
+    for (let i: number = 0; i < info.qualitys.length; i++) {
+      const q: string = info.qualitys[i];
+      if (q.length > 0) {
+        list.push(q);
+      }
+    }
+    return list;
+  };
+  // ① + ② 同平台：按脚本顺序，各自取最高可用音质
+  for (let i: number = 0; i < apis.length; i++) {
+    const q: string = bestQualityFor(declaredOf(apis[i], platform), preferredQuality);
+    if (q.length > 0) {
+      const cand: FallbackCandidate = new FallbackCandidate();
+      cand.scriptId = apis[i].id;
+      cand.scriptName = apis[i].name;
+      cand.platform = platform;
+      cand.quality = q;
+      cand.platformSwitched = false;
+      out.push(cand);
+    }
+  }
+  // ③ 换平台：先按**平台**聚合出该平台能达到的最高音质，平台之间按这个音质降序；
+  //    同一平台内部再按脚本勾选顺序排（甲方口径：哪个平台音质支持最高哪个优先）。
+  const platformBest: string[] = [];
+  const platformList: string[] = [];
+  for (let i: number = 0; i < apis.length; i++) {
+    const platforms: string[] = Object.keys(apis[i].sources);
+    for (let j: number = 0; j < platforms.length; j++) {
+      const p: string = platforms[j];
+      if (p === platform) {
+        continue;
+      }
+      const q: string = bestQualityFor(declaredOf(apis[i], p), preferredQuality);
+      if (q.length === 0) {
+        continue;
+      }
+      const idx: number = platformList.indexOf(p);
+      if (idx < 0) {
+        platformList.push(p);
+        platformBest.push(q);
+      } else if (qualityWeight(q) > qualityWeight(platformBest[idx])) {
+        platformBest[idx] = q;
+      }
+    }
+  }
+  const order: number[] = [];
+  for (let i: number = 0; i < platformList.length; i++) {
+    order.push(i);
+  }
+  order.sort((a: number, b: number): number =>
+    qualityWeight(platformBest[b]) - qualityWeight(platformBest[a]));
+  const others: FallbackCandidate[] = [];
+  for (let k: number = 0; k < order.length; k++) {
+    const p: string = platformList[order[k]];
+    for (let i: number = 0; i < apis.length; i++) {
+      const q: string = bestQualityFor(declaredOf(apis[i], p), preferredQuality);
+      if (q.length === 0) {
+        continue;
+      }
+      const cand: FallbackCandidate = new FallbackCandidate();
+      cand.scriptId = apis[i].id;
+      cand.scriptName = apis[i].name;
+      cand.platform = p;
+      cand.quality = q;
+      cand.platformSwitched = true;
+      others.push(cand);
+    }
+  }
+  for (let i: number = 0; i < others.length; i++) {
+    out.push(others[i]);
+  }
+  const head: string[] = [];
+  for (let i: number = 0; i < Math.min(out.length, 6); i++) {
+    head.push((out[i].platformSwitched ? '换平台:' : '') + out[i].scriptName + '/' + out[i].platform + '/' + out[i].quality);
+  }
+  appendPlayLog('[回退链] 起点=' + platform + ' 偏好=' + preferredQuality + ' 候选=' + out.length + ' → ' + head.join(' | '));
+  return out;
+}
+
 export function getQualityChain(preferred: string, source: string): string[] {
   const ladder: string[] = [];
   const start: number = STANDARD_LADDER.indexOf(preferred);
