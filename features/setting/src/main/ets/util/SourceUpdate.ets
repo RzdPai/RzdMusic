@@ -25,10 +25,35 @@ export class SourceUpdateInfo {
   error: string = '';
 }
 
+/** 从脚本文本里取一个常量：兼容 const/let/var、单双引号、反引号与多余空格。 */
 function pick(text: string, key: string): string {
-  const re: RegExp = new RegExp(key + '\\s*=\\s*["\']([^"\']+)["\']');
+  const re: RegExp = new RegExp('(?:const|let|var)?\\s*' + key + '\\s*=\\s*["\'`]([^"\'`]+)["\'`]');
   const m: RegExpMatchArray | null = text.match(re);
   return m === null ? '' : m[1];
+}
+
+/** 取 API 根地址：不同脚本可能叫 API_URL / API_URI / BASE_URL / API。 */
+function pickApiUrl(text: string): string {
+  const keys: string[] = ['API_URL', 'API_URI', 'BASE_URL', 'API_HOST', 'API'];
+  for (let i: number = 0; i < keys.length; i++) {
+    const v: string = pick(text, keys[i]);
+    if (v.length > 0 && (v.startsWith('http://') || v.startsWith('https://'))) {
+      return v;
+    }
+  }
+  return '';
+}
+
+/** 取 MD5：不同脚本可能叫 SCRIPT_MD5 / MD5 / SCRIPT_HASH。 */
+function pickMd5(text: string): string {
+  const keys: string[] = ['SCRIPT_MD5', 'MD5', 'SCRIPT_HASH', 'HASH'];
+  for (let i: number = 0; i < keys.length; i++) {
+    const v: string = pick(text, keys[i]);
+    if (v.length >= 8) {
+      return v;
+    }
+  }
+  return '';
 }
 
 /**
@@ -44,9 +69,9 @@ export async function checkSourceUpdateRemote(apiId: string): Promise<SourceUpda
     out.error = '读取脚本失败';
     return out;
   }
-  const apiUrl: string = pick(script, 'API_URL');
+  const apiUrl: string = pickApiUrl(script);
   const apiKey: string = pick(script, 'API_KEY');
-  const md5: string = pick(script, 'SCRIPT_MD5');
+  const md5: string = pickMd5(script);
   if (apiUrl.length === 0 || md5.length === 0) {
     out.error = '该脚本未声明更新接口';
     console.info('[RzdSourceUpdate] ' + apiId + ' no API_URL/SCRIPT_MD5');
