@@ -158,6 +158,13 @@ export class FallbackCandidate {
 }
 
 /** 音质档位权重：越大越高。未识别的排最后。 */
+/** ⑥「声明支持但实际不可用」的 (脚本, 平台) 会话级黑名单。 */
+const blockedPairs: Set<string> = new Set();
+
+function pairKey(scriptId: string, platform: string): string {
+  return scriptId + '|' + platform;
+}
+
 function qualityWeight(quality: string): number {
   const order: string[] = ['128k', '192k', '320k', 'flac', 'flac24bit', 'hires', 'atmos', 'master'];
   const i: number = order.indexOf(quality);
@@ -236,6 +243,9 @@ export function buildCandidateChain(preferredQuality: string, platform: string):
   };
   // ① + ② 同平台：按脚本顺序，各自取最高可用音质
   for (let i: number = 0; i < apis.length; i++) {
+    if (blockedPairs.has(pairKey(apis[i].id, platform))) {
+      continue;
+    }
     const q: string = bestQualityFor(declaredOf(apis[i], platform), preferredQuality);
     if (q.length > 0) {
       const cand: FallbackCandidate = new FallbackCandidate();
@@ -692,6 +702,9 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
       markProbeOk(c.platform, r.quality);
       return r;
     }
+    // ⑥ 该 (脚本, 平台) 这一轮解析失败 ⇒ 会话内拉黑，后续不再浪费时间
+    blockedPairs.add(pairKey(c.scriptId, c.platform));
+    appendPlayLog('[回退链] 拉黑 ' + c.scriptName + '/' + c.platform);
   }
   // A4：全部候选都失败 ⇒ 把首选候选标记为"未通过"，ToolTip 立刻能反映出来
   if (cands.length > 0) {
