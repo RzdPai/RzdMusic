@@ -1587,6 +1587,12 @@ export struct OnlineSearchPage {
     return Math.max(0, this.searchMiniBarWinWVp() - SEARCH_MINI_BAR_SIDE_MARGIN * 2);
   }
 
+  /** 键盘弹出时把播放条抬到键盘上方（WindowUtil 的 avoidKeyboard 是 @Trace，会驱动重排）。 */
+  private searchMiniBarKeyboardLiftVp(): number {
+    const kb: number = WindowUtil.getInstance().resolveKeyboardBottomVp();
+    return kb > SEARCH_MINI_BAR_BOTTOM_MARGIN ? kb - SEARCH_MINI_BAR_BOTTOM_MARGIN : 0;
+  }
+
   private searchMiniBarWinWVp(): number {
     try {
       return this.getUIContext().px2vp(display.getDefaultDisplaySync().width);
@@ -2665,6 +2671,8 @@ export struct OnlineSearchPage {
         .height('100%')
         .justifyContent(FlexAlign.End)
         .padding({ bottom: SEARCH_MINI_BAR_BOTTOM_MARGIN })
+        // 键盘避让：键盘弹出时整条上抬，避免被输入法盖住
+        .translate({ y: -this.searchMiniBarKeyboardLiftVp() })
         .hitTestBehavior(HitTestMode.Transparent)
       }
       .width('100%')
