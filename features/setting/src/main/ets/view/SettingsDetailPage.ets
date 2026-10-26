@@ -1285,7 +1285,7 @@ export struct SettingsDetailPage {
                 }
               })
           } else {
-            Text('当前平台（' + this.homeSourceLabel() + '）不支持"用登录状态获取推荐"，切回 QQ / 酷狗 / 网易 可开启')
+            Text('通过登录状态获取推荐暂时仅支持QQ、酷狗、网易')
               .fontSize($r('sys.float.Caption_M'))
               .fontColor($r('sys.color.font_tertiary'))
               .width('100%')
