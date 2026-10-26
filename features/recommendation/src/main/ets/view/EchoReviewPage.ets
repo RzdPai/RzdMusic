@@ -1906,6 +1906,9 @@ export struct EchoReviewPage {
           }, (fav: EchoFavorite, index: number) => 'fav_' + index + '_' + fav.name)
         }
         .width('100%')
+        .padding(16)
+        .borderRadius(16)
+        .backgroundColor($r('app.color.echo_card_background'))
       }
       .width('100%')
       .alignItems(HorizontalAlign.Start)
