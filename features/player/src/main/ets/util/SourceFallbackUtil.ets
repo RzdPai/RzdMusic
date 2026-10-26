@@ -629,71 +629,37 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
   options?: FallbackOptions): Promise<UrlResolveOutcome> {
   const opts: FallbackOptions = options ?? new FallbackOptions();
   const preferred: string = await PlaybackPreferenceService.resolveDefaultQuality();
-  const currentId: string = activeSourceId();
-  const chain: string[] = getQualityChain(preferred, source);
-  appendPlayLog('[播放] 音质链(' + sourceDisplayName(source) + '): ' + chain.join(' > '));
-  const noticeBase: string = chain.length > 0 ? chain[0] : preferred;
-  const outcome: UrlResolveOutcome | null = await tryQualities(source, songId, name, singer,
-    chain, noticeBase, true, onNotice, opts);
-  if (outcome !== null) {
-    return outcome;
-  }
-  // —— 跨平台：原平台（如网易）全部音质失败后，按歌名到 QQ/酷我/酷狗/咪咕 等搜索 ——
-  if (opts.allowPlatformSwitch) {
-    appendPlayLog('[换平台] 原平台 ' + sourceDisplayName(source) + ' 失败，开始跨平台搜索');
-    const cross: UrlResolveOutcome | null = await tryOtherPlatforms(source, name, singer,
-      preferred, onNotice, opts);
-    if (cross !== null) {
-      return cross;
-    }
-  } else {
-    appendPlayLog('[换平台] 已关闭跨平台搜索');
-  }
-
-  if (!opts.allowScriptSwitch) {
-    appendPlayLog('[换音源] 已关闭自动换音源脚本');
-    return new UrlResolveOutcome();
-  }
-  if (currentId.length === 0) {
-    appendPlayLog('[换音源] 当前无可用音源脚本');
-    return new UrlResolveOutcome();
-  }
-  appendPlayLog('[换音源] 跨平台仍失败，尝试更换音源脚本（仍用原平台 id）');
-  const candidates: LXUserApiInfo[] = pickScriptCandidates(source, currentId);
-  for (let i: number = 0; i < candidates.length; i++) {
-    const info: LXUserApiInfo = candidates[i];
-    const loaded: boolean = await switchToScript(info.id);
-    if (!loaded) {
-      scriptCooldown.set(info.id, Date.now() + SCRIPT_FAIL_COOLDOWN_MS);
-      continue;
-    }
-    const altChain: string[] = getQualityChain(preferred, source);
-    appendPlayLog('[换音源] 音质链(' + info.name + '): ' + altChain.join(' > '));
-    const altBase: string = altChain.length > 0 ? altChain[0] : preferred;
-    const altOpts: FallbackOptions = new FallbackOptions();
-    const altOutcome: UrlResolveOutcome | null = await tryQualities(source, songId, name, singer,
-      altChain, altBase, false, null, altOpts);
-    if (altOutcome !== null) {
-      altOutcome.switchedScriptName = info.name;
-      appendPlayLog('[换音源] 成功 ' + source + ' via ' + info.name + ' (' + altOutcome.quality + ')');
-      if (onNotice !== null) {
-        onNotice('当前音源不可用，已切换音源：' + info.name);
+  const originId: string = activeSourceId();
+  // ★ B2/B3 唯一回退链：顺序完全由 buildCandidateChain() 决定（同平台源优先 → 换平台按音质）
+  const cands: FallbackCandidate[] = buildCandidateChain(preferred, source);
+  for (let i: number = 0; i < cands.length; i++) {
+    const c: FallbackCandidate = cands[i];
+    if (c.scriptId !== activeSourceId()) {
+      if (scriptCooldown.get(c.scriptId) !== undefined && (scriptCooldown.get(c.scriptId) ?? 0) > Date.now()) {
+        appendPlayLog('[换音源] ' + c.scriptName + ' 冷却中，跳过');
+        continue;
       }
-      return altOutcome;
-    }
-    // 换脚本后再做一轮跨平台
-    if (opts.allowPlatformSwitch) {
-      const cross2: UrlResolveOutcome | null = await tryOtherPlatforms(source, name, singer,
-        preferred, onNotice, altOpts);
-      if (cross2 !== null) {
-        cross2.switchedScriptName = info.name;
-        return cross2;
+      const loaded: boolean = await switchToScript(c.scriptId);
+      if (!loaded) {
+        scriptCooldown.set(c.scriptId, Date.now() + SCRIPT_FAIL_COOLDOWN_MS);
+        continue;
       }
     }
-    appendPlayLog('[换音源] 音源 ' + info.name + ' 解析失败');
-    scriptCooldown.set(info.id, Date.now() + SCRIPT_FAIL_COOLDOWN_MS);
+    const chain: string[] = getQualityChain(c.quality, c.platform);
+    appendPlayLog('[回退链] 试 #' + i + ' ' + c.scriptName + '/' + c.platform + '/' + c.quality +
+      ' 链路=' + chain.join(' > '));
+    const r: UrlResolveOutcome | null = c.platformSwitched
+      ? await tryPlatformSearch(c.platform, name, singer, c.quality, onNotice, opts)
+      : await tryQualities(c.platform, songId, name, singer, chain, c.quality, true, onNotice, opts);
+    if (r !== null) {
+      r.switchedScriptName = c.scriptName;
+      appendPlayLog('[回退链] 命中 ' + c.scriptName + '/' + c.platform + '/' + r.quality);
+      return r;
+    }
   }
-  appendPlayLog('[换音源] 全部音源脚本与平台均失败，恢复原音源');
-  AppStorage.setOrCreate('lxActiveSource', currentId);
+  appendPlayLog('[回退链] 全部候选失败，恢复原音源');
+  if (originId.length > 0) {
+    AppStorage.setOrCreate('lxActiveSource', originId);
+  }
   return new UrlResolveOutcome();
 }
