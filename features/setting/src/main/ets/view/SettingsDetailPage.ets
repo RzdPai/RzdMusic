@@ -1704,6 +1704,15 @@ export struct SettingsDetailPage {
                 }
                 // ★「支持的平台」标签：来源是脚本 init 上报并已持久化的 sources，
                 //   没检测到就给中性提示（详见 LxSourceTags.ets 的文件头）。
+                // A3：源说明（脚本自带的 description），空则整行不显示
+                if (api.description.length > 0) {
+                  Text(api.description)
+                    .fontSize($r('sys.float.Caption_S'))
+                    .fontColor($r('sys.color.font_tertiary'))
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                    .width('100%')
+                }
                 LxSourceDeclaredBlock({
                   items: this.lxPlatformsOf(api),
                   accentColor: this.themeState.color,
