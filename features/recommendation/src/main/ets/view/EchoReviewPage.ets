@@ -1816,7 +1816,8 @@ export struct EchoReviewPage {
   }
 
   /** 柱高：按当前最大桶归一（全是 0 时给 2vp 的底座）。 */
-  private barHeightVp(count: number): number {
+  /** 纵轴上限：把当前最大值"向上取整到 nice 值"（4/5/7/10/12/15/20…），保证柱子不截断。 */
+  private hourAxisMax(): number {
     let max: number = 0;
     for (let i: number = 0; i < this.stats.hourBuckets.length; i++) {
       if (this.stats.hourBuckets[i] > max) {
@@ -1824,9 +1825,24 @@ export struct EchoReviewPage {
       }
     }
     if (max <= 0) {
+      return 0;
+    }
+    const steps: number[] = [4, 5, 7, 10, 12, 15, 20, 25, 30, 40, 50, 70, 100];
+    for (let i: number = 0; i < steps.length; i++) {
+      if (max <= steps[i]) {
+        return steps[i];
+      }
+    }
+    return Math.ceil(max / 50) * 50;
+  }
+
+  /** 柱高：按"自适应上限"归一；上限随数据升高，永不截断（全 0 时给 2vp 底座）。 */
+  private barHeightVp(count: number): number {
+    const axisMax: number = this.hourAxisMax();
+    if (axisMax <= 0) {
       return 2;
     }
-    return Math.max(2, Math.round(count * 86 / max));
+    return Math.max(2, Math.round(count * 86 / axisMax));
   }
 
   /** 峰值小时（用于给柱子高亮）。 */
