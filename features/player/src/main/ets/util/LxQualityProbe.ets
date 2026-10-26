@@ -38,6 +38,42 @@ export function parseIntervalSeconds(interval: string): number {
   return seconds;
 }
 
+/** 预置样曲：每个平台一首稳定的曲目，用于"没有正在播放的歌"时也能探测音质。 */
+export class ProbeSample {
+  songId: string = '';
+  name: string = '';
+  singer: string = '';
+  interval: string = '';
+}
+
+/** 目前只登记已确认可用的平台样曲；没有登记的平台不做主动探测（保持"未测"）。 */
+const SAMPLES: Map<string, ProbeSample> = new Map();
+
+function registerSamples(): void {
+  const kw: ProbeSample = new ProbeSample();
+  kw.songId = '228908';
+  kw.name = '七里香';
+  kw.singer = '周杰伦';
+  kw.interval = '04:59';
+  SAMPLES.set('kw', kw);
+}
+
+registerSamples();
+
+/** 取某平台的样曲（没有则 undefined）。 */
+export function sampleOf(source: string): ProbeSample | undefined {
+  return SAMPLES.get(source);
+}
+
+/** 用预置样曲探测某平台某音质；无样曲直接返回 undefined。 */
+export async function probeBySample(source: string, quality: string): Promise<ProbeResult | undefined> {
+  const s: ProbeSample | undefined = SAMPLES.get(source);
+  if (s === undefined) {
+    return undefined;
+  }
+  return probeQuality(source, s.songId, quality, s.name, s.singer, s.interval);
+}
+
 const sessionCache: Map<string, ProbeResult> = new Map();
 
 function cacheKey(source: string, quality: string): string {

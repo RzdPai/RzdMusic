@@ -26,6 +26,8 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatformsOf, lxSourceManager, MediaService } from 'player';
 import type { LXApiImportResult } from 'player';
+import { probeBySample } from 'player';
+import type { LXUserApiSourceInfo } from 'player';
 import { SyncSettingsPanel } from 'sync';
 import { AccountManageSheet } from '../account/AccountManageSheet';
 import { PlatformMusicPage } from '../account/PlatformMusicPage';
@@ -252,6 +254,7 @@ export struct SettingsDetailPage {
 
   private refresh(): void {
     this.lxApiList = lxSourceManager.getApiList();
+    void this.runQualityProbe();
     this.sourceOrderIds = MusicStoreService.getInstance().getSourceScriptOrder();
     if (this.sourceOrderIds.length === 0) {
       const ids: string[] = [];
@@ -372,6 +375,40 @@ export struct SettingsDetailPage {
    * 引擎就绪后 `refresh()` 会重读列表，所以「选中一次该音源」之后标签就出现了。
    * 没声明过就是空数组 ⇒ 界面给中性提示，**不猜**。
    */
+  /**
+   * A4：用**预置样曲**对已勾选源的每个平台跑一遍音质探测（只测该平台最高与次高两档）。
+   * 结果进会话缓存，平台 ToolTip 会显示「已验证 / 未通过 / 未测」。
+   */
+  private async runQualityProbe(): Promise<void> {
+    const ordered: LXUserApiInfo[] = this.orderedApiListForUi();
+    for (let i: number = 0; i < ordered.length && i < 3; i++) {
+      const api: LXUserApiInfo = ordered[i];
+      if (!this.isSourceInOrder(api.id)) {
+        continue;
+      }
+      const platforms: LXSourcePlatformInfo[] = this.lxPlatformsOf(api);
+      for (let p: number = 0; p < platforms.length; p++) {
+        const info: LXSourcePlatformInfo = platforms[p];
+        const src: LXUserApiSourceInfo | undefined = api.sources[info.source];
+        if (src === undefined || src.qualitys.length === 0) {
+          continue;
+        }
+        const qualities: string[] = src.qualitys.slice(-2);
+        for (let q: number = 0; q < qualities.length; q++) {
+          try {
+            const r = await probeBySample(info.source, qualities[q]);
+            if (r !== undefined) {
+              console.info('[RzdQualityProbe] ' + api.name + ' ' + info.source + '/' + qualities[q] +
+                ' → ' + (r.ok ? '已验证' : ('未通过:' + r.detail)));
+            }
+          } catch (err) {
+            console.info('[RzdQualityProbe] probe threw for ' + info.source);
+          }
+        }
+      }
+    }
+  }
+
   private lxPlatformsOf(api: LXUserApiInfo): LXSourcePlatformInfo[] {
     return lxDeclaredPlatformsOf(api);
   }
