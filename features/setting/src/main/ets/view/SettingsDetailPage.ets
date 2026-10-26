@@ -93,6 +93,8 @@ export struct SettingsDetailPage {
    */
   @Local lockScreenPlay: boolean = true;
   @Local audioMix: boolean = false;
+  /** 启动应用自动开始播放（默认关）。 */
+  @Local autoPlayOnLaunch: boolean = false;
   @Local lyricBlurEnabled: boolean = true;
   @Local lyricFontSize: number = 28;
   @Local lyricFps: number = 60;
@@ -273,6 +275,7 @@ export struct SettingsDetailPage {
     // 锁屏继续播放：缺省（没有这条记录）= 开
     this.lockScreenPlay = MusicStoreService.getInstance().getLockScreenPlay();
     this.audioMix = MusicStoreService.getInstance().getAudioMix();
+    this.autoPlayOnLaunch = MusicStoreService.getInstance().getAutoPlayOnLaunch();
     this.lyricBlurEnabled = MusicStoreService.getInstance().getLyricBlurEnabled();
     this.saveToDownloadDir = MusicStoreService.getInstance().getDownloadSaveMode() === 'download';
     this.downloadNameFormat = MusicStoreService.getInstance().getDownloadNameFormat();
@@ -920,6 +923,14 @@ export struct SettingsDetailPage {
               this.audioMix = isOn;
               MusicStoreService.getInstance().setAudioMix(isOn);
               MediaService.getInstance().applyAudioSession(isOn);
+            })
+
+          this.SubTitle('启动应用自动开始播放')
+          this.CapsuleSelector(this.onOffOptions, this.autoPlayOnLaunch ? 0 : 1,
+            (index: number) => {
+              const autoPlay: boolean = index === 0;
+              this.autoPlayOnLaunch = autoPlay;
+              MusicStoreService.getInstance().setAutoPlayOnLaunch(autoPlay);
             })
         }
         .width('100%')
