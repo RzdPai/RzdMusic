@@ -115,7 +115,7 @@ export struct SourceManagerList {
 
               if (api.description.length > 0) {
                 Text(api.description)
-                  .fontSize($r('sys.float.Caption_S'))
+                  .fontSize($r('sys.float.Body_S'))
                   .fontColor($r('sys.color.font_tertiary'))
                   .maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })

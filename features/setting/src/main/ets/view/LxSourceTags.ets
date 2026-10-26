@@ -132,14 +132,7 @@ export struct LxSourceDeclaredTags {
       }
       .width('100%')
 
-      if (this.qualityActionText().length > 0) {
-        Text(this.qualityActionText())
-          .fontSize(CHIP_FONT_SIZE)
-          .fontColor($r('sys.color.font_tertiary'))
-          .width('100%')
-          .maxLines(2)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-      }
+
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
