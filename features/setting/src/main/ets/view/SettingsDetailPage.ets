@@ -62,6 +62,8 @@ export struct SettingsDetailPage {
     AppStorageV2.connect(ThemeState, AppStorageKeys.THEME_STATE, () => new ThemeState())!;
   @Local lxApiList: LXUserApiInfo[] = [];
   @Local sourceOrderIds: string[] = [];
+  /** 长按拖动排序：当前被拖动的音源 id。 */
+  @Local dragSourceId: string = '';
   @Local activeSource: string = '';
   @Local engineReady: boolean = false;
   @Local engineSources: string = '{}';
@@ -1541,6 +1543,28 @@ export struct SettingsDetailPage {
     MusicStoreService.getInstance().setSourceScriptOrder(this.sourceOrderIds);
   }
 
+  /** 长按拖动排序：把 dragId 移到 targetId 的位置（用于 `onDrop`）。 */
+  private moveSourceTo(dragId: string, targetId: string): void {
+    if (dragId.length === 0 || dragId === targetId) {
+      return;
+    }
+    const from: number = this.sourceOrderIds.indexOf(dragId);
+    const to: number = this.sourceOrderIds.indexOf(targetId);
+    if (from < 0 || to < 0) {
+      return;
+    }
+    const next: string[] = [];
+    for (let i: number = 0; i < this.sourceOrderIds.length; i++) {
+      next.push(this.sourceOrderIds[i]);
+    }
+    next.splice(from, 1);
+    next.splice(to, 0, dragId);
+    this.sourceOrderIds = next;
+    this.persistSourceOrder();
+    this.dragSourceId = '';
+    console.info('[RzdSourceOrder] move ' + dragId + ' -> ' + targetId + ' = ' + next.join(' > '));
+  }
+
   private toggleSourceInOrder(apiId: string): void {
     const idx: number = this.sourceOrderIds.indexOf(apiId);
     if (idx >= 0) {
@@ -1688,6 +1712,14 @@ export struct SettingsDetailPage {
               }
               .alignItems(HorizontalAlign.Start)
               .layoutWeight(1)
+              // 长按拖动排序（第一个勾选即默认源，拖动即改优先级）
+              .draggable(this.isSourceInOrder(api.id))
+              .onDragStart(() => {
+                this.dragSourceId = api.id;
+              })
+              .onDrop(() => {
+                this.moveSourceTo(this.dragSourceId, api.id);
+              })
               .onClick(() => {
                 this.selectLXSource(api.id);
               })
