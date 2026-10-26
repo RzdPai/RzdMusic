@@ -1150,7 +1150,10 @@ export class MediaService {
       const restoreIndex: number = this.getValidSelectIndex();
       appState.selectIndex = restoreIndex;
       this.musicIndex = restoreIndex;
-      void this.loadAsset(restoreIndex, true);
+      // 启动恢复：默认只 prepare；设置里开了「启动应用自动开始播放」才真正起播
+    const autoPlayOnLaunch: boolean = MusicStoreService.getInstance().getAutoPlayOnLaunch();
+    this.appendPlayLog('[播放] 启动恢复 autoPlay=' + autoPlayOnLaunch);
+    void this.loadAsset(restoreIndex, !autoPlayOnLaunch);
       this.appendPlayLog('[播放] 恢复播放列表 ' + snapshot.online.length + ' 首');
     } catch (e) {
       Logger.warn(TAG, 'restoreLastQueue failed: ' + JSON.stringify(e).substring(0, 100));

@@ -79,6 +79,8 @@ const KEY_SHOW_LYRIC_ROMA: string = 'show_lyric_roma';
 const KEY_LYRIC_S2T: string = 'lyric_s2t';
 const KEY_PLAY_QUALITY: string = 'play_quality';
 const KEY_AUDIO_MIX: string = 'audio_mix';
+/** 启动应用自动开始播放（默认关）。 */
+const KEY_AUTOPLAY_ON_LAUNCH: string = 'autoplay_on_launch';
 const KEY_DOWNLOAD_SAVE_MODE: string = 'download_save_mode';
 const KEY_DOWNLOAD_QUALITY_MODE: string = 'download_quality_mode';
 const KEY_DOWNLOAD_MANUAL_QUALITY: string = 'download_manual_quality';
@@ -1628,6 +1630,23 @@ export class MusicStoreService {
   }
 
   /** @returns Whether playback mixes with other apps (shared audio focus). */
+  /** 启动应用是否自动开始播放（默认关）。 */
+  public getAutoPlayOnLaunch(): boolean {
+    const store = this.getStore();
+    if (store === undefined) {
+      return false;
+    }
+    return store.getSync(KEY_AUTOPLAY_ON_LAUNCH, false) as boolean;
+  }
+
+  public setAutoPlayOnLaunch(enabled: boolean): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_AUTOPLAY_ON_LAUNCH, enabled);
+  }
+
   public getAudioMix(): boolean {
     const store = this.getStore();
     if (store === undefined) {
