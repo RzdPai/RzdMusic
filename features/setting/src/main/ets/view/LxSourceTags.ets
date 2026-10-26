@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 「音源管理」条目上的小标签（平台 / 音质 / 动作）。
  *
  * 为什么单独一个文件：**两处**音源管理界面（`SettingsDetailPage` 的二级页、
@@ -71,6 +71,24 @@ export struct LxSourceDeclaredTags {
     return parts.join('；');
   }
 
+  /** 平台 ToolTip 是否展开。 */
+  @Local showPlatformTips: boolean = false;
+
+  /** A3：每个平台一行「平台 · 最高音质」。 */
+  @Builder
+  private PlatformTips() {
+    Column({ space: 4 }) {
+      ForEach(this.items, (item: LXSourcePlatformInfo) => {
+        Text(item.label + (item.bestQuality.length > 0 ? '：最高 ' + item.bestQuality : '：音质未声明'))
+          .fontSize(CHIP_FONT_SIZE)
+          .fontColor($r('sys.color.font_primary'))
+          .maxLines(1)
+      }, (item: LXSourcePlatformInfo) => 'tip_' + item.source)
+    }
+    .padding(8)
+    .alignItems(HorizontalAlign.Start)
+  }
+
   build() {
     Column({ space: 4 }) {
       Row() {
@@ -83,6 +101,22 @@ export struct LxSourceDeclaredTags {
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
+          // ★ A3：点平台标签弹出 ToolTip，逐平台显示它支持的最高音质
+          .bindPopup(this.showPlatformTips, {
+            builder: (): void => {
+              this.PlatformTips()
+            },
+            placement: Placement.Bottom,
+            enableArrow: true,
+            onStateChange: (e) => {
+              if (!e.isVisible) {
+                this.showPlatformTips = false;
+              }
+            }
+          })
+          .onClick(() => {
+            this.showPlatformTips = !this.showPlatformTips;
+          })
       }
       .width('100%')
 
@@ -113,6 +147,7 @@ export struct LxSourceDeclaredBlock {
   @Param accentColor: ResourceColor = '#E60012';
   /** 已选中的那条音源。 */
   @Param active: boolean = false;
+
 
   build() {
     Column() {
