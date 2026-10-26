@@ -1353,38 +1353,6 @@ export struct SettingPage {
     this.persistSourceOrder();
   }
 
-  /** 上移音源在依次调用列表中的位置。 */
-  private moveSourceOrderUp(apiId: string): void {
-    const idx: number = this.sourceOrderIds.indexOf(apiId);
-    if (idx <= 0) {
-      return;
-    }
-    const next: string[] = [];
-    for (let i: number = 0; i < this.sourceOrderIds.length; i++) {
-      next.push(this.sourceOrderIds[i]);
-    }
-    const tmp: string = next[idx - 1];
-    next[idx - 1] = next[idx];
-    next[idx] = tmp;
-    this.sourceOrderIds = next;
-    this.persistSourceOrder();
-  }
-
-  private moveSourceOrderDown(apiId: string): void {
-    const idx: number = this.sourceOrderIds.indexOf(apiId);
-    if (idx < 0 || idx >= this.sourceOrderIds.length - 1) {
-      return;
-    }
-    const next: string[] = [];
-    for (let i: number = 0; i < this.sourceOrderIds.length; i++) {
-      next.push(this.sourceOrderIds[i]);
-    }
-    const tmp: string = next[idx + 1];
-    next[idx + 1] = next[idx];
-    next[idx] = tmp;
-    this.sourceOrderIds = next;
-    this.persistSourceOrder();
-  }
 
   /** 按用户排序展示的音源列表：已勾选在前且按顺序，未勾选在后。 */
   private orderedApiListForUi(): LXUserApiInfo[] {
@@ -1499,21 +1467,6 @@ export struct SettingPage {
                 Text($r('app.string.setting_lx_ready'))
                   .fontSize($r('sys.float.Caption_M'))
                   .fontColor(this.themeState.color)
-              }
-
-              if (this.isSourceInOrder(api.id)) {
-                SymbolGlyph($r('sys.symbol.chevron_up'))
-                  .fontSize(18)
-                  .fontColor([$r('sys.color.font_tertiary')])
-                  .onClick(() => {
-                    this.moveSourceOrderUp(api.id);
-                  })
-                SymbolGlyph($r('sys.symbol.chevron_down'))
-                  .fontSize(18)
-                  .fontColor([$r('sys.color.font_tertiary')])
-                  .onClick(() => {
-                    this.moveSourceOrderDown(api.id);
-                  })
               }
 
               SymbolGlyph($r('sys.symbol.trash'))
