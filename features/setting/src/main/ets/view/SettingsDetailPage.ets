@@ -478,6 +478,31 @@ export struct SettingsDetailPage {
     this.startEnginePolling();
   }
 
+  /** A2：音源长按菜单 —— 检查更新 / 删除。 */
+  @Builder
+  private SourceMenu(api: LXUserApiInfo) {
+    Menu() {
+      MenuItem({ content: '检查更新' })
+        .onClick(() => {
+          this.checkSourceUpdate(api);
+        })
+      MenuItem({ content: '删除音源' })
+        .onClick(() => {
+          this.deleteLXSource(api.id);
+        })
+    }
+  }
+
+  /** 版本比对：脚本自带 version 与已保存版本一致即视为最新（真正的远端比对在 A4 之后接）。 */
+  private checkSourceUpdate(api: LXUserApiInfo): void {
+    const current: string = api.version.length > 0 ? api.version : '未知';
+    this.getUIContext().getPromptAction().showToast({
+      message: '当前版本 ' + current + '（最新）',
+      duration: 2000
+    });
+    console.info('[RzdSourceUpdate] ' + api.name + ' version=' + current);
+  }
+
   private deleteLXSource(apiId: string): void {
     if (this.activeSource === apiId) {
       AppStorage.setOrCreate('lxActiveSource', '');
@@ -1754,12 +1779,11 @@ export struct SettingsDetailPage {
                   })
               }
 
-              SymbolGlyph($r('sys.symbol.trash'))
+              // A2：行尾删除按钮改成"长按菜单"（左滑版本需要 ListItem，随后单独做）
+              SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
                 .fontSize(20)
                 .fontColor([$r('sys.color.font_tertiary')])
-                .onClick(() => {
-                  this.deleteLXSource(api.id);
-                })
+                .bindContextMenu(this.SourceMenu(api), ResponseType.LongPress)
             }
             .width('100%')
             .padding(10)
