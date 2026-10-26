@@ -1332,6 +1332,31 @@ export struct SettingPage {
   }
 
   /** 勾选/取消参与依次调用的音源。 */
+  /** 长按拖动排序：当前被拖动的音源 id。 */
+  @Local dragSourceId: string = '';
+
+  /** 长按拖动排序：把 dragId 移到 targetId 的位置。 */
+  private moveSourceTo(dragId: string, targetId: string): void {
+    if (dragId.length === 0 || dragId === targetId) {
+      return;
+    }
+    const from: number = this.sourceOrderIds.indexOf(dragId);
+    const to: number = this.sourceOrderIds.indexOf(targetId);
+    if (from < 0 || to < 0) {
+      return;
+    }
+    const next: string[] = [];
+    for (let i: number = 0; i < this.sourceOrderIds.length; i++) {
+      next.push(this.sourceOrderIds[i]);
+    }
+    next.splice(from, 1);
+    next.splice(to, 0, dragId);
+    this.sourceOrderIds = next;
+    this.persistSourceOrder();
+    this.dragSourceId = '';
+    console.info('[RzdSourceOrder] move ' + dragId + ' -> ' + targetId + ' = ' + next.join(' > '));
+  }
+
   private toggleSourceInOrder(apiId: string): void {
     const idx: number = this.sourceOrderIds.indexOf(apiId);
     if (idx >= 0) {
@@ -1398,7 +1423,7 @@ export struct SettingPage {
 
       Scroll() {
         Column({ space: 8 }) {
-          Text('勾选参与依次调用，上下键调整优先级；圆点为当前默认音源')
+          Text('勾选参与依次调用；第一个勾选的是默认音源，长按卡片可拖动排序')
             .fontSize($r('sys.float.Caption_M'))
             .fontColor($r('sys.color.font_tertiary'))
             .width('100%')
@@ -1418,18 +1443,6 @@ export struct SettingPage {
                   }
                 })
 
-              Radio({ value: api.id, group: 'lxSource', indicatorType: RadioIndicatorType.TICK })
-                .width(20)
-                .height(20)
-                .checked(this.activeSource === api.id)
-                .radioStyle({
-                  checkedBackgroundColor: this.themeState.color,
-                  indicatorColor: $r('sys.color.font_on_primary')
-                })
-                .onClick(() => {
-                  this.selectLXSource(api.id);
-                })
-
               Column({ space: 2 }) {
                 Text(api.name)
                   .fontSize($r('sys.float.Body_L'))
@@ -1438,7 +1451,8 @@ export struct SettingPage {
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
                 Row({ space: 4 }) {
                   if (this.isSourceInOrder(api.id)) {
-                    Text('顺序 ' + (this.sourceOrderIds.indexOf(api.id) + 1))
+                    Text(this.sourceOrderIds.indexOf(api.id) === 0 ? '默认源' :
+                      ('备选 ' + (this.sourceOrderIds.indexOf(api.id) + 1)))
                       .fontSize($r('sys.float.Caption_S'))
                       .fontColor(this.themeState.color)
                   }
@@ -1480,6 +1494,13 @@ export struct SettingPage {
             .padding(10)
             .borderRadius($r('sys.float.corner_radius_level6'))
             .backgroundColor($r('app.color.card_background'))
+            .draggable(this.isSourceInOrder(api.id))
+            .onDragStart(() => {
+              this.dragSourceId = api.id;
+            })
+            .onDrop(() => {
+              this.moveSourceTo(this.dragSourceId, api.id);
+            })
           }, (api: LXUserApiInfo) => api.id)
 
           Row({ space: 10 }) {
