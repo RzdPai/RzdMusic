@@ -13,13 +13,14 @@
  * limitations under the License.
  */
 
-import { AppStorageV2, curves, uiObserver } from '@kit.ArkUI';
+import { AppStorageV2, curves, display, uiObserver } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import { guardPlayerBack, SearchGlassModifier } from 'musicbasic';
 import { AlbumRouteParam, ArtistRouteParam, BreakpointType, ThemeState, WindowUtil } from 'musicbasic';
 import { BlurStrategy, BottomBuilderShowType, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, HideMode, ScrollEffectType } from '@kit.UIDesignKit';
 import { AppStorageKeys, AmbientState, FavoriteEntry, MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord, QualityInfo, RouterUrlConstants, SongItem, SongTitleMarquee, ToplistRouteParam, appendPlayLog, barBlurOptions, buildTitleMaterial } from 'musicbasic';
+import { HomeMiniBarPlayer, MiniBarMaterialCapsule } from 'playlist';
 import { AlbumInfo, LXQualityOption, LXSearchSong, LXSearchResult, SingerInfo, lxGetPicFallback, lxGetQualityOptions, lxSearch, lxTxHotSearch, lxSearchSuggest, searchAlbums, searchSingers, sourceToCode, DownloadTask, DownloadUtil, OnlinePlayUtil, PlaylistSearchApi } from 'player';
 import type { SearchPlaylistInfo, SearchPlaylistSong } from 'player';
 import { sourceName } from 'player';
@@ -29,6 +30,11 @@ import { SourceChip } from './SourceChip';
 /** 日志域与标签（真机排查：`hdc shell hilog | findstr RzdSearchPage`）。 */
 const SEARCH_LOG_DOMAIN: number = 0x0000;
 const SEARCH_LOG_TAG: string = 'RzdSearchPage';
+
+/** 搜索页底部迷你播放条（与其它二级页同一套 56vp 胶囊）。 */
+const SEARCH_MINI_BAR_H: number = 56;
+const SEARCH_MINI_BAR_BOTTOM_MARGIN: number = 12;
+const SEARCH_MINI_BAR_SIDE_MARGIN: number = 16;
 
 /**
  * 一镜到底诊断。
@@ -1575,6 +1581,39 @@ export struct OnlineSearchPage {
    * 关掉系统转场 + 用同一个弹簧包住 `pop(false)`，两端的 `geometryTransition`
    * 才会把搜索框原路收回首页（官方示例 `SearchLongTakeTransitionPageTwo.ets:86-92`）。
    */
+  /** 搜索页自己的迷你播放条：与其它二级页同一套（MiniBarMaterialCapsule + HDS systemMaterialEffect）。 */
+  /** 胶囊宽度：屏宽 - 两侧 margin（与二级页那条同一算法口径）。 */
+  private searchMiniBarWidthVp(): number {
+    return Math.max(0, this.searchMiniBarWinWVp() - SEARCH_MINI_BAR_SIDE_MARGIN * 2);
+  }
+
+  private searchMiniBarWinWVp(): number {
+    try {
+      return this.getUIContext().px2vp(display.getDefaultDisplaySync().width);
+    } catch (err) {
+      return 360;
+    }
+  }
+
+  @Builder
+  private searchMiniBar() {
+    MiniBarMaterialCapsule({
+      barWidth: this.searchMiniBarWidthVp(),
+      barHeight: SEARCH_MINI_BAR_H,
+      bottomMargin: SEARCH_MINI_BAR_BOTTOM_MARGIN,
+      material: buildTitleMaterial(this.ambientState.level),
+      fitWinWVp: this.searchMiniBarWinWVp(),
+      fitSideMarginVp: SEARCH_MINI_BAR_SIDE_MARGIN
+    }) {
+      HomeMiniBarPlayer({
+        showPreviousTrack: false,
+        followAppMiniBarExpanded: false,
+        showSelfDrawnBackplate: false,
+        contentHeightVp: SEARCH_MINI_BAR_H
+      })
+    }
+  }
+
   private closeSearch(): void {
     if (guardPlayerBack('OnlineSearchPage')) {
       morphLog('close blocked by player');
@@ -2421,7 +2460,8 @@ export struct OnlineSearchPage {
           //   这一页原来**一点底部留白都没有** ⇒ 滚到底最后一行会被壳层那条悬浮播放条压住。
           //   值与其他二级页同口径：56(播放条) + 16 + 16 = 88。
           //   ⚠️ 别写在外层容器的 `padding({bottom})` 上 —— 那是固定在屏幕底部的死带（用户点过的老毛病）。
-          .contentEndOffset(88)
+              // 88 原有留白 + 64 = 搜索页迷你播放条（56 + 间距 8），避免最后一行被压住
+    .contentEndOffset(152)
           .onScrollFrameBegin((offset: number): OnScrollFrameBeginHandlerResult => {
             // 列表滑动时自动收起联想（签名与 MinePage 一致）
             if (this.showSuggest && Math.abs(offset) > 1) {
@@ -2616,6 +2656,16 @@ export struct OnlineSearchPage {
             this.refreshContentPaddingTop();
           }
         })
+
+        // 方式 C：搜索页自己的迷你播放条（与其它二级页同一套 56vp 胶囊 + HDS 材质）
+        Column() {
+          this.searchMiniBar()
+        }
+        .width('100%')
+        .height('100%')
+        .justifyContent(FlexAlign.End)
+        .padding({ bottom: SEARCH_MINI_BAR_BOTTOM_MARGIN })
+        .hitTestBehavior(HitTestMode.Transparent)
       }
       .width('100%')
       .height('100%')
