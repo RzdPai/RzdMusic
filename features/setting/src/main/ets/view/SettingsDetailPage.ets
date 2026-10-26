@@ -1315,14 +1315,7 @@ export struct SettingsDetailPage {
             .fontColor($r('sys.color.font_tertiary'))
             .width('100%')
             .padding({ top: 6 })
-        }
-        .width('100%')
-        .padding({ left: 16, right: 16, top: 4, bottom: 8 })
-        .borderRadius($r('sys.float.corner_radius_level12'))
-        .backgroundColor($r('app.color.card_background'))
-
         // 车载蓝牙歌词（移植自 lxmusic-harmony）：AVMetadata.singleLyricText 推当前句
-        Column() {
           this.SubTitle('车载蓝牙歌词')
           this.CapsuleSelector(this.onOffOptions, this.bluetoothLyric ? 0 : 1,
             (index: number) => {
