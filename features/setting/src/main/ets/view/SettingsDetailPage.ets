@@ -38,6 +38,7 @@ import { CustomColorSheetContent } from './CustomColorSheetContent';
 import { CapsuleSegmentedSelector } from './CapsuleSegmentedSelector';
 import { LxSourceDeclaredBlock } from './LxSourceTags';
 import { SourceManagerList } from './SourceManagerList';
+import { checkSourceUpdateRemote, SourceUpdateInfo } from '../util/SourceUpdate';
 import { LengthMetrics } from '@kit.ArkUI';
 const LX_ONLINE_IMPORT_MAX_BYTES: number = 9 * 1024 * 1024;
 const LX_ONLINE_IMPORT_TIMEOUT: number = 15000;
@@ -517,6 +518,31 @@ export struct SettingsDetailPage {
   }
 
   /** 版本比对：脚本自带 version 与已保存版本一致即视为最新（真正的远端比对在 A4 之后接）。 */
+  private async checkSourceUpdateRemote(api: LXUserApiInfo): Promise<void> {
+    this.getUIContext().getPromptAction().showToast({ message: '检查中…', duration: 1200 });
+    const info: SourceUpdateInfo = await checkSourceUpdateRemote(api.id);
+    if (info.hasUpdate) {
+      this.getUIContext().getPromptAction().showDialog({
+        title: '发现新版本',
+        message: (info.message.length > 0 ? info.message : '有新版本可用') +
+          (info.updateUrl.length > 0 ? ('\n' + info.updateUrl) : ''),
+        buttons: [
+          { text: '取消', color: '#666666' },
+          { text: '前往更新', color: this.themeState.color }
+        ]
+      }).then((result) => {
+        if (result.index === 1 && info.updateUrl.length > 0) {
+          void this.importLXSourceFromUrl(info.updateUrl);
+        }
+      });
+      return;
+    }
+    this.getUIContext().getPromptAction().showToast({
+      message: info.error.length > 0 ? info.error : '已是最新版本',
+      duration: 2000
+    });
+  }
+
   private checkSourceUpdate(api: LXUserApiInfo): void {
     const current: string = api.version.length > 0 ? api.version : '未知';
     this.getUIContext().getPromptAction().showToast({
@@ -599,6 +625,35 @@ export struct SettingsDetailPage {
     } finally {
       httpRequest.destroy();
       this.importing = false;
+    }
+  }
+
+  /** 检查更新命中后用它的 updateUrl 直接替换该音源。 */
+  private async importLXSourceFromUrl(url: string): Promise<void> {
+    if (url.length === 0 || !/^https?:\/\//.test(url)) {
+      this.toast('更新链接无效');
+      return;
+    }
+    const httpRequest = http.createHttp();
+    try {
+      const resp: http.HttpResponse = await httpRequest.request(url, {
+        method: http.RequestMethod.GET,
+        connectTimeout: LX_ONLINE_IMPORT_TIMEOUT,
+        readTimeout: LX_ONLINE_IMPORT_TIMEOUT,
+        expectDataType: http.HttpDataType.STRING
+      });
+      if (resp.responseCode !== 200 || typeof resp.result !== 'string') {
+        this.toast('新版本下载失败');
+        return;
+      }
+      const imported: LXApiImportResult = lxSourceManager.importApi(resp.result as string);
+      this.refresh();
+      this.toast(imported.ok ? '已更新：' + imported.message : '更新失败：' + imported.message);
+      console.info('[RzdSourceUpdate] import from ' + url + ' ok=' + imported.ok);
+    } catch (err) {
+      this.toast('更新失败，请检查网络');
+    } finally {
+      httpRequest.destroy();
     }
   }
 
@@ -1731,7 +1786,7 @@ export struct SettingsDetailPage {
               this.deleteLXSource(apiId);
             },
             onCheckUpdate: (api: LXUserApiInfo): void => {
-              this.checkSourceUpdate(api);
+              void this.checkSourceUpdateRemote(api);
             },
             onMove: (dragId: string, targetId: string): void => {
               this.moveSourceTo(dragId, targetId);
