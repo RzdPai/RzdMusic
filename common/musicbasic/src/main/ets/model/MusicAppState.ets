@@ -39,6 +39,7 @@ export class  MusicAppState {
    * 用于「二级页面里点播放条 → 跳到现在就听」这种需要**跨页**退栈的场景。
    */
   @Trace public popToRootVersion: number = 0;
+
   /** 请求壳层把导航栈弹回根页。 */
   public requestPopToRoot(): void {
     this.popToRootVersion++;

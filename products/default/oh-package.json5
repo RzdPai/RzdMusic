@@ -14,6 +14,6 @@
     "setting": "file:../../features/setting",
     "localmusic": "file:../../features/localmusic",
     "sync": "file:../../features/sync",
-    "comment": "file:../../features/comment",
+    "comment": "file:../../features/comment"
   }
 }

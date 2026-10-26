@@ -13,8 +13,7 @@
  * limitations under the License.
  */
 
-import { AppStorageV2, componentUtils, curves, UIContext, uiObserver } from '@kit.ArkUI';
-import { image } from '@kit.ImageKit';
+import { AppStorageV2, curves, uiObserver } from '@kit.ArkUI';
 import { HdsNavigation, HdsTabsController, HdsTabsBarChangeMode, SystemMaterialParams, hdsMaterial } from '@kit.UIDesignKit';
 import {
   AmbientState,
@@ -68,6 +67,7 @@ import {
   PlaylistTransitionOverlay
 } from 'playlist';
 import { MinePage, OnlineSearchPage } from 'setting';
+import { HOME_ROUTE_NAME, SEARCH_ROUTE_NAME } from './HomeRouteNames';
 // 鏂版ā鍧楋細鏈湴闊充箰锛堝鍏ヨ澶囬煶棰戝埌娌欑锛変笌娲涢洩鍚屾瀹㈡埛绔€?
 // 鈿狅笍 hvigor 瀵?HAR 鏄?*鎸夊紩鐢ㄧ紪璇?*鐨勶細娌℃湁浠讳綍浠ｇ爜 import 瀹冧滑鏃讹紝
 //    鍗充娇宸茬櫥璁拌繘 build-profile.json5锛岃繖涓や釜妯″潡涔?*涓嶄細琚紪璇?*锛堟瀯寤虹収鏍风豢锛夈€?
@@ -428,18 +428,18 @@ struct Index {
    * 鈿狅笍 涓嶈鍐嶆嬁瀹冨幓鏀瑰簳閮ㄥ鑸殑 `barHeight` / `barFloatingStyle`锛堣瘯杩囷紝搴曟爮鐩存帴鍧忔帀锛夈€?
    */
   @Local navDepth: number = 0;
-  /** 搜索页是否显示（bindContentCover 承载，框不动）。 */
-  @Local isSearchPageShow: boolean = false;
   /**
    * 首页 Tab 自己的内层导航栈（只放两条路由：首页 / 搜索页）。
    * 见 `HomeRouteNames.ets` 里那段"为什么必须这样"的说明。
    */
+  private homeStack: NavPathStack = new NavPathStack();
   /**
    * 搜索页是否在最上面（内层栈被推到第二条）。
    * 用来把外层 `HdsTabs` 的浮动底栏收掉 —— 上游无界在搜索页里是没有底栏/迷你条的。
    */
-  @Local searchPageOnTop: boolean = false;
+  @Local homeSearchOpen: boolean = false;
   /**
+   * 褰㈠彉鍏嬮殕灞傜敤鐨勬挱鏀惧櫒 VM銆?
    *
    * 鍏嬮殕灞傝鐢昏糠浣犳潯鍙充晶閭ｄ竴鍧楃殑**鍓湰**锛堟瓕鍚?姝屾墜 + 鎾斁鎸夐挳锛夛紝瀹冭璇诲綋鍓嶆洸鐩笌鎾帶鐘舵€侊紱
    * 涓庣湡瀹炶糠浣犳潯鍚勮嚜鎸佹湁涓€涓?VM 瀹炰緥鏄畨鍏ㄧ殑锛圴M 鍙槸 `MusicAppState`/`MediaService` 鐨勯棬闈紝
@@ -624,6 +624,9 @@ struct Index {
     Logger.info(RzdShellLogTag, `pop to root requested depth=${names.length}`);
     if (names.length > 0) {
       this.pageIndexInfos.clear();
+    }
+    if (this.homeStack.size() > 0) {
+      this.homeStack.clear();
     }
   }
 
@@ -2733,25 +2736,98 @@ struct Index {
    * —— **必须** `animated = false` 关掉系统推页动画，否则两套动画叠加，形变会被压掉。
    */
   private openHomeSearch(): void {
-    // ★ 自己实现的"搜索框一镜到底"（不依赖 geometryTransition / 三方库）：
-    //   ① 给首页搜索框拍一张快照；② 立刻推搜索页（animated=false，二级页整屏）；
-    //   ③ 在最上层放一张快照克隆，从源框矩形 animateTo 到目标框矩形；④ 结束移除。
-    // 搜索页是**真正的二级页面**（homeStack 上的 NavDestination），一镜到底由 geometryTransition 承载，
-    // 这里不再动画底栏高度、也不再置"搜索态"状态位。
-    // 照抄文章：只翻一个布尔，页面由 bindContentCover 承载（ModalTransition.NONE ⇒ 框不动）
-    this.getUIContext().animateTo({ duration: 100, curve: curves.interpolatingSpring(0, 1, 324, 38) },
-      (): void => {
-        this.isSearchPageShow = true;
-      });
+    if (this.homeStack.size() === 0) {
+      this.ensureHomeRoute();
+    }
+    Logger.info(RzdShellLogTag, `home search push from=${this.homeStack.getAllPathName()}`);
+    appendPlayLog(`[RzdSearchMorph] shell push from=${this.homeStack.size()}`);
+    this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, (): void => {
+      this.homeSearchOpen = true;
+      this.homeStack.pushPath({ name: SEARCH_ROUTE_NAME }, false);
+    });
   }
 
   private closeHomeSearch(): void {
-    // 搜索页不再走路由（bindContentCover 承载）⇒ 直接收起弹层，不再判栈顶
-    if (!this.isSearchPageShow) {
+    if (this.homeStack.size() <= 1) {
       return;
     }
-    Logger.info(RzdShellLogTag, 'home search cover close');
-    this.isSearchPageShow = false;
+    Logger.info(RzdShellLogTag, 'home search pop');
+    appendPlayLog('[RzdSearchMorph] shell pop');
+    this.getUIContext().animateTo({
+      curve: curves.interpolatingSpring(0, 1, 342, 38),
+      // 底栏恢复同样放到动画结束之后：转场帧里改壳层状态会把两端拆到不同帧（退出就没有一镜到底）。
+      onFinish: (): void => {
+        this.homeSearchOpen = false;
+        appendPlayLog('[RzdSearchMorph] shell bar restore');
+      }
+    }, (): void => {
+      this.homeStack.pop(false);
+    });
+  }
+
+  /** 首次显示时把首页本身也推进内层栈（这样"源页"才是真正的路由页）。 */
+  private ensureHomeRoute(): void {
+    if (this.homeStack.size() > 0) {
+      return;
+    }
+    this.homeStack.pushPath({ name: HOME_ROUTE_NAME }, false);
+    Logger.info(RzdShellLogTag, `home route pushed size=${this.homeStack.size()}`);
+  }
+
+  /**
+   * 首页 Tab 的内层路由表。
+   *
+   * ⚠️ 这两支必须是**同一个 Navigation 的两个 NavDestination**：
+   *    源端（首页的 `Search`，带 `{follow:true}`）与目标端（搜索页的 `Search`，带
+   *    `transition(opacity 0.99)`）才会被框架配成一对，形变才会发生。
+   */
+  @Builder
+  private HomeRouteMap(name: string, param: Object) {
+    if (name === HOME_ROUTE_NAME) {
+      // 2026-10-23（甲方 A 型：「按返回后仍停在应用里、首页内容一片空白、底栏还在」）：
+      //   返回被 Navigation 吃掉并 pop 掉**最后一条首页路由** ⇒ 内容区空、Tab 条还在。
+      //   ⇒ 用 `NavDestination` 包起来并在首页这一层**显式消费返回**，内容就再也不会被弹空。
+      NavDestination() {
+        RecommendPage({
+          shellProvidesFloatingMiniBar: deviceInfo.distributionOSApiVersion >= 60100,
+          floatingBarExtraBottomReserveVp: this.twoRowExtraBottomVp(),
+          scrollTopCommand: this.tabScrollTopCommands[0],
+          onOpenSearch: (): void => {
+            this.openHomeSearch();
+          }
+        })
+      }
+      .hideTitleBar(true)
+      .onBackPressed((): boolean => {
+        return true;
+      })
+    } else if (name === SEARCH_ROUTE_NAME) {
+      OnlineSearchPage({
+        routeParam: param,
+        // 底栏（Tab 栏 + 迷你条）显隐由搜索页**自己的生命周期**驱动：
+        // 首页本身也是内层栈的路由页，所以不能用 navBar 可见性去推"是否在搜索页"
+        // （那会让 homeSearchOpen 永远是 true，Tab 栏被压成 0 高度）。
+        onShowChange: (open: boolean): void => {
+          if (open !== this.homeSearchOpen) {
+            this.homeSearchOpen = open;
+            // ★ 2026-10-24（甲方：「搜索页底下的播放条能不能改一下…其他二级页面都是那种粗的播放条，
+            //   唯独搜索是这样」）：
+            //   搜索页会把 HdsTabs 整条底栏压成 0 高（见下面 `barHeight(this.homeSearchOpen ? 0 : 56)`），
+            //   屏上那条是壳层的**浮动**迷你条；它的内容高度由 `appState.miniBarExpanded` 决定
+            //   （展开 = 56「粗条」/ 收起 = 40「细条」，见 `homeMiniBarSlotHVp()`）。
+            //   而搜索页自己**不驱动**滚动展开（不调 `BarScrollHelper.notifyScrollDelta`），
+            //   于是会沿用进页前那一刻的状态 ⇒ 常看到细条。
+            //   ⇒ 进搜索页时强制展开一次（不改首页那套 HDS miniBar，避免踩壳层那堆坑）；
+            //     离开后仍由滚动驱动恢复。
+            if (open) {
+              this.appState.miniBarExpanded = true;
+            }
+            Logger.info(RzdShellLogTag, `home search page shown=${open}`);
+            appendPlayLog(`[RzdSearchMorph] bar searching=${open}`);
+          }
+        }
+      })
+    }
   }
 
   /**
@@ -2906,19 +2982,24 @@ struct Index {
       //   Search 带 transition(opacity 0.99)）；两端同 id 才配得上，转场才发生。
       //   首页原来直接挂在 `HdsNavigation` 的导航栏内容区里，push 时它不会消失 ⇒ 永远配不成一对。
       //   所以这里加一层内层 Navigation：首页自己也是它的路由页。
-      // ★★ 2026-10-25（甲方：「就要跨的，搜索页必须二级」）：
-      //   删掉这层多余的内层 `Navigation`，首页 `RecommendPage` 直接作为根 `HdsNavigation` 的**内容**。
-      //   于是源端（首页搜索框，在根 Navigation 内容里）与目标端（搜索页，根栈 NavDestination）
-      //   属于**同一个 Navigation** ⇒ `geometryTransition` 恢复配对（官方 SearchLongTake 示例就是这个结构）；
-      //   搜索页推根栈后整屏覆盖 Tabs（含底栏）⇒ 真正的二级页。
-      RecommendPage({
-        shellProvidesFloatingMiniBar: deviceInfo.distributionOSApiVersion >= 60100,
-        floatingBarExtraBottomReserveVp: this.twoRowExtraBottomVp(),
-        scrollTopCommand: this.tabScrollTopCommands[0],
-        onOpenSearch: (): void => {
-          this.openHomeSearch();
+      Navigation(this.homeStack) {
+        Stack() {
         }
+        .width(StyleConstants.FULL_WIDTH)
+        .height(StyleConstants.FULL_HEIGHT)
+      }
+      .navDestination(this.HomeRouteMap)
+      .hideTitleBar(true)
+      .hideToolBar(true)
+      .mode(NavigationMode.Stack)
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+      .backgroundColor($r('app.color.background_secondary'))
+      .width(StyleConstants.FULL_WIDTH)
+      .height(StyleConstants.FULL_HEIGHT)
+      .onAppear((): void => {
+        this.ensureHomeRoute();
       })
+      .expandSafeArea([SafeAreaType.SYSTEM, SafeAreaType.CUTOUT], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
     }
     .tabBar(this.TabBarItem(0, $r('app.string.tab_home'), $r('sys.symbol.house_fill')))
 
@@ -2978,46 +3059,16 @@ struct Index {
     .tabBar(this.TabBarItem(3, $r('app.string.tab_cafe_listen'), $r('sys.symbol.person_crop_circle_fill_1')))
   }
 
-  /**
-   * 根栈（`pageIndexInfos`）的路由表：只放"必须盖住整屏（含底栏）"的页面。
-   *
-   * 2026-10-25（甲方：「结构限制你就改结构」）：搜索页原来推在内层 `homeStack`
-   * （那个 Navigation 挂在首页 TabContent 里），永远盖不住外层 `HdsTabs` 底栏；
-   * 改推根栈后，NavDestination 会整屏覆盖 Tabs 内容（含底栏）。
-   */
-  /** 搜索页（bindContentCover 的内容）。 */
-  @Builder
-  private SearchCover() {
-    OnlineSearchPage({
-      routeParam: '',
-      // 搜索页自己请求关闭（取消按钮 / 返回键）时，由壳层收起弹层
-      onShowChange: (open: boolean): void => {
-        if (open) {
-          this.appState.miniBarExpanded = true;
-          Logger.info(RzdShellLogTag, 'search cover shown');
-          return;
-        }
-        if (this.isSearchPageShow) {
-          this.isSearchPageShow = false;
-          Logger.info(RzdShellLogTag, 'search cover hidden');
-        }
-      }
-    })
-  }
-
   /** Root UI: {@link HdsNavigation} with tabs and optional playback cover. */
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
-      // ★ 2026-10-25（甲方：「迁移吧」）：根导航从 HDS 的 `HdsNavigation` 换成**原生 `Navigation`** ——
-      //   2026-10-25：根导航从 HDS 的 `HdsNavigation` 换成**原生 `Navigation`** ——
-      //   原生 `Navigation` 的 `customNavContentTransition` 由框架直调（HdsNavigation 会接管转场）。
-      Navigation(this.pageIndexInfos) {
+      HdsNavigation(this.pageIndexInfos) {
         if (deviceInfo.distributionOSApiVersion >= 60100) {
           HdsTabs({ barPosition: BarPosition.End, controller: this.tabsController }) {
             this.HomeTabsPages()
           }
           .barMode(BarMode.Fixed)
-        .barHeight(56)
+          .barHeight(this.homeSearchOpen ? 0 : 56)
           .zIndex(1)
           .barOverlap(true)
           .barPosition(BarPosition.End)
@@ -3196,7 +3247,7 @@ struct Index {
             this.HomeTabsPages()
           }
           .barMode(BarMode.Fixed)
-        .barHeight(56)
+          .barHeight(this.homeSearchOpen ? 0 : 56)
           .zIndex(1)
           .barOverlap(true)
           .barPosition(BarPosition.End)
@@ -3217,8 +3268,7 @@ struct Index {
         }
       }
       .mode(NavigationMode.Stack)
-      // 搜索页推到根栈 ⇒ 盖住整屏（含 HdsTabs 底栏）
-            .customNavContentTransition((from: NavContentInfo, _to: NavContentInfo,
+      .customNavContentTransition((from: NavContentInfo, _to: NavContentInfo,
         operation: NavigationOperation): NavigationAnimatedTransition | undefined => {
         return getPlaylistTransitionState().navigationReturn(this.getUIContext(), from, operation);
       })
@@ -3370,10 +3420,6 @@ struct Index {
         this.windowInfo.statusBarTopVp, this.windowInfo.navigationBarBottomVp);
       this.expandState.updateChromeTier(this.viewportWidthVp);
     })
-    // 照抄文章：搜索页由全屏模态承载，ModalTransition.NONE ⇒ 无系统动画，几何交由 geometryTransition
-    .bindContentCover(this.isSearchPageShow, this.SearchCover(), {
-      modalTransition: ModalTransition.NONE
-    })
   }
 
   /**
@@ -3384,8 +3430,8 @@ struct Index {
    * @returns true = 宸叉秷璐癸紝涓嶅啀璧伴粯璁よ繑鍥為€昏緫
    */
   onBackPress(): boolean {
-    // 根栈还有可弹的页面（例如搜索页）时先弹它，别直接退出应用。
-    if (this.pageIndexInfos.size() > 0) {
+    // 内层栈（首页/搜索页）还有可弹的路由时先弹它，别直接退出应用。
+    if (this.homeStack.size() > 1) {
       this.closeHomeSearch();
       return true;
     }

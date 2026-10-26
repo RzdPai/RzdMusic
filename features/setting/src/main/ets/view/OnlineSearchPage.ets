@@ -215,8 +215,7 @@ export struct OnlineSearchPage {
    */
   private ownStack: NavPathStack | undefined = undefined;
   @Local query: string = '';
-  /** 内容层进入时的透明度（搜索行不动，只让内容淡入）。 */
-  @Local contentEnterAlpha: number = 0;  /** 输入中的联想候选（洛雪式：输入后下方弹出推荐） */
+  /** 输入中的联想候选（洛雪式：输入后下方弹出推荐） */
   @Local suggestWords: string[] = [];
   @Local showSuggest: boolean = false;
   private suggestTimerId: number = -1;
@@ -593,6 +592,36 @@ export struct OnlineSearchPage {
 
   /** 进页时间戳（性能取证用，见 `aboutToAppear` / 内容首帧日志）。 */
   private static enterAtMs: number = 0;
+
+  aboutToAppear(): void {
+    OnlineSearchPage.enterAtMs = Date.now();
+    morphLog('target aboutToAppear');
+    this.onShowChange(true);
+    this.refreshContentPaddingTop();
+    // ★ 2026-10-24（甲方：「切换到搜索页会有点卡」）：
+    //   `getSearchHistory()` / `getSearchSource()` 都是 **preferences（跨进程 IPC）同步读**，
+    //   原来直接压在 `aboutToAppear` 里 = 正好卡在长镜头转场的第一帧上。
+    //   ⇒ 和历史/热搜一起，统一挪到首帧之后（setTimeout 0）。
+    this.preapplyStatusBarColor();
+    setTimeout((): void => {
+      this.searchHistory = this.store.getSearchHistory();
+      this.restoreSearchSource();
+      void this.loadHotWords();
+      hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
+        'RzdSearchPerf deferred-init done after %{public}dms', OnlineSearchPage.enterAtMs > 0 ?
+          Date.now() - OnlineSearchPage.enterAtMs : -1);
+    }, 0);
+    if (this.routeParam !== '' && typeof this.routeParam === 'string' && (this.routeParam as string).length > 0) {
+      this.query = this.routeParam as string;
+      void this.doSearch();
+    } else {
+      const initial: string = (this.routeParam as SearchRouteParam | undefined)?.query ?? '';
+      if (initial.length > 0) {
+        this.query = initial;
+        void this.doSearch();
+      }
+    }
+  }
 
   /** Restores the persisted source selection; defaults to all sources. */
   private restoreSearchSource(): void {
@@ -1563,12 +1592,6 @@ export struct OnlineSearchPage {
       this.searchClosing = false;
       // ★ 必须弹**本页所在的那个栈**（官方示例用 `NavDestinationContext.pathStack`）。
       //   本页可能被推到壳层共享栈，也可能被推到首页 Tab 的内层栈。
-      // 现在搜索页由壳层 `bindContentCover` 承载（不是 NavDestination）⇒ 没有栈可 pop，
-      // 改成回调壳层关闭弹层（`onShowChange(false)` 由 Index 收口）。
-      if (this.ownStack === undefined && this.pageStack.size() === 0) {
-        this.onShowChange(false);
-        return;
-      }
       const stack: NavPathStack = this.ownStack ?? this.pageStack;
       morphLog(`pop inside-animate own=${this.ownStack !== undefined} size=${stack.size()}`);
       stack.pop(false);
@@ -1859,14 +1882,11 @@ export struct OnlineSearchPage {
         style: CancelButtonStyle.INPUT,
         icon: { size: 17, color: $r('sys.color.font_secondary') }
       })
-      .layoutWeight(1)      .defaultFocus(true)
+      .layoutWeight(1)
+      .geometryTransition('wanting_search_field')
+      .transition(TransitionEffect.opacity(0.99))
+      .defaultFocus(true)
       .focusOnTouch(true)
-      // 与首页搜索框同一个 geometryTransition id + 同样的 200ms 三阶贝塞尔（照抄腾讯云那篇）
-      .geometryTransition('search_field')
-      .transition(TransitionEffect.OPACITY.animation({
-        duration: 200,
-        curve: curves.cubicBezierCurve(0.33, 0, 0.67, 1)
-      }))
       .responseRegion({ x: 0, y: -4, width: '100%', height: 40 })
       .onFocus((): void => {
         hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph target focus');
@@ -2575,13 +2595,6 @@ export struct OnlineSearchPage {
         }
         .width('100%')
         .height('100%')
-        // 甲方：「无界是搜索框不动，但是文字动的」⇒ 只让内容层淡入，搜索行保持原位不动
-        .opacity(this.contentEnterAlpha)
-        .onAppear((): void => {
-          this.getUIContext().animateTo({ duration: 220, curve: Curve.Friction }, (): void => {
-            this.contentEnterAlpha = 1;
-          });
-        })
 
         Column() {
           this.searchRow()

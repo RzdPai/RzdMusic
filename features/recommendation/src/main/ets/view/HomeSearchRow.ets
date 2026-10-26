@@ -1,4 +1,3 @@
-import { curves } from '@kit.ArkUI';
 import { appendPlayLog, Logger, SearchGlassModifier } from 'musicbasic';
 
 /** 一镜到底诊断：同时写 HiLog 与**应用内运行日志**（设置→运行日志，无设备时只能靠它取证）。 */
@@ -11,7 +10,7 @@ const SEARCH_FIELD_H: number = 40;
 // wujie126.pa 113552–113587 (Tokens export slot 0x10).
 const FIELD_GAP: number = 16;
 const RECOGNIZE_GAP: number = 10;
-const SEARCH_GEO_ID: string = 'search_field';
+const SEARCH_GEO_ID: string = 'wanting_search_field';
 
 @ComponentV2
 export struct HomeSearchRow {
@@ -29,8 +28,6 @@ export struct HomeSearchRow {
         //   背景/圆角/高度全部落在 `Search` 自己身上，两端同一套。
         Search({ placeholder: '艺人、歌曲或专辑' })
           .height(SEARCH_FIELD_H)
-          // 一镜到底：快照靠这个 id 定位起点
-          .id('home_search_field')
           // ★ 2026-10-24（甲方：「搜索框现在半透明的不是很好看」）：改**实底卡片背板**，
           //   与搜索页那端（`OnlineSearchPage.SearchInputBar`）**逐字同一套**：
           //   `card_background` + 0.5vp 描边。两端不同色会在长镜头中途看出颜色跳变。
@@ -54,11 +51,6 @@ export struct HomeSearchRow {
           .focusOnTouch(false)
           .defaultFocus(false)
           .geometryTransition(SEARCH_GEO_ID, { follow: true })
-          // 照抄腾讯云那篇：文字/内容 200ms 三阶贝塞尔淡入淡出（框本身不动）
-          .transition(TransitionEffect.OPACITY.animation({
-            duration: 200,
-            curve: curves.cubicBezierCurve(0.33, 0, 0.67, 1)
-          }))
           // 诊断用：源节点在 push/pop 时是"保留"还是"重建"——退出没动画的关键判据。
           .onAppear((): void => {
             morphLog('source appear');
