@@ -7,6 +7,7 @@
 
 import { http } from '@kit.NetworkKit';
 import { getLXMusicUrl } from '../source/LXPlayHelper';
+import { lxSearch, LXSearchResult, LXSearchSong } from '../source/LXMusicSDK';
 import { appendPlayLog } from 'musicbasic';
 
 const DURATION_TOLERANCE: number = 0.15;
@@ -60,14 +61,56 @@ function registerSamples(): void {
 
 registerSamples();
 
-/** 取某平台的样曲（没有则 undefined）。 */
-export function sampleOf(source: string): ProbeSample | undefined {
-  return SAMPLES.get(source);
+/** 会话内解析出的样曲（每平台一次）。 */
+const resolvedSamples: Map<string, ProbeSample> = new Map();
+
+/** 搜索用的关键词：随便一首稳定热门即可，这里用歌手名。 */
+const SAMPLE_QUERY: string = '周杰伦';
+
+/**
+ * 取某平台的样曲：优先用仓库已有的平台搜索接口现找一首（`lxSearch`），
+ * 找不到再退回内置的 kw 样曲。结果缓存在本次会话。
+ */
+export async function resolveSample(source: string): Promise<ProbeSample | undefined> {
+  const cached: ProbeSample | undefined = resolvedSamples.get(source);
+  if (cached !== undefined) {
+    return cached;
+  }
+  try {
+    const res: LXSearchResult = await lxSearch(source, SAMPLE_QUERY, 1, 5);
+    for (let i: number = 0; i < res.list.length; i++) {
+      const song: LXSearchSong = res.list[i];
+      if (song.songId.length === 0 || song.interval.length === 0) {
+        continue;
+      }
+      const s: ProbeSample = new ProbeSample();
+      s.songId = song.songId;
+      s.name = song.name;
+      s.singer = song.singer;
+      s.interval = song.interval;
+      resolvedSamples.set(source, s);
+      appendPlayLog('[RzdQualityProbe] 样曲 ' + source + ' → ' + s.name + '/' + s.singer + ' (' + s.interval + ')');
+      return s;
+    }
+    appendPlayLog('[RzdQualityProbe] 样曲解析失败（无可用结果）' + source);
+  } catch (err) {
+    appendPlayLog('[RzdQualityProbe] 样曲解析异常 ' + source);
+  }
+  const fallback: ProbeSample | undefined = SAMPLES.get(source);
+  if (fallback !== undefined) {
+    resolvedSamples.set(source, fallback);
+  }
+  return fallback;
 }
 
-/** 用预置样曲探测某平台某音质；无样曲直接返回 undefined。 */
+/** 取某平台的样曲（内置表，同步；不确定是否有则用 resolveSample）。 */
+export function sampleOf(source: string): ProbeSample | undefined {
+  return resolvedSamples.get(source) ?? SAMPLES.get(source);
+}
+
+/** 用样曲探测某平台某音质；解析不出样曲就返回 undefined。 */
 export async function probeBySample(source: string, quality: string): Promise<ProbeResult | undefined> {
-  const s: ProbeSample | undefined = SAMPLES.get(source);
+  const s: ProbeSample | undefined = await resolveSample(source);
   if (s === undefined) {
     return undefined;
   }
