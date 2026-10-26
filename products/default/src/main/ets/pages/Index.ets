@@ -437,7 +437,6 @@ struct Index {
    * 搜索页是否在最上面（内层栈被推到第二条）。
    * 用来把外层 `HdsTabs` 的浮动底栏收掉 —— 上游无界在搜索页里是没有底栏/迷你条的。
    */
-  @Local homeSearchOpen: boolean = false;
   /**
    * 褰㈠彉鍏嬮殕灞傜敤鐨勬挱鏀惧櫒 VM銆?
    *
@@ -2742,7 +2741,6 @@ struct Index {
     Logger.info(RzdShellLogTag, `home search push from=${this.homeStack.getAllPathName()}`);
     appendPlayLog(`[RzdSearchMorph] shell push from=${this.homeStack.size()}`);
     this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, (): void => {
-      this.homeSearchOpen = true;
       this.homeStack.pushPath({ name: SEARCH_ROUTE_NAME }, false);
     });
   }
@@ -2757,7 +2755,6 @@ struct Index {
       curve: curves.interpolatingSpring(0, 1, 342, 38),
       // 底栏恢复同样放到动画结束之后：转场帧里改壳层状态会把两端拆到不同帧（退出就没有一镜到底）。
       onFinish: (): void => {
-        this.homeSearchOpen = false;
         appendPlayLog('[RzdSearchMorph] shell bar restore');
       }
     }, (): void => {
@@ -2806,25 +2803,10 @@ struct Index {
         routeParam: param,
         // 底栏（Tab 栏 + 迷你条）显隐由搜索页**自己的生命周期**驱动：
         // 首页本身也是内层栈的路由页，所以不能用 navBar 可见性去推"是否在搜索页"
-        // （那会让 homeSearchOpen 永远是 true，Tab 栏被压成 0 高度）。
         onShowChange: (open: boolean): void => {
-          if (open !== this.homeSearchOpen) {
-            this.homeSearchOpen = open;
-            // ★ 2026-10-24（甲方：「搜索页底下的播放条能不能改一下…其他二级页面都是那种粗的播放条，
-            //   唯独搜索是这样」）：
-            //   搜索页会把 HdsTabs 整条底栏压成 0 高（见下面 `barHeight(this.homeSearchOpen ? 0 : 56)`），
-            //   屏上那条是壳层的**浮动**迷你条；它的内容高度由 `appState.miniBarExpanded` 决定
-            //   （展开 = 56「粗条」/ 收起 = 40「细条」，见 `homeMiniBarSlotHVp()`）。
-            //   而搜索页自己**不驱动**滚动展开（不调 `BarScrollHelper.notifyScrollDelta`），
-            //   于是会沿用进页前那一刻的状态 ⇒ 常看到细条。
-            //   ⇒ 进搜索页时强制展开一次（不改首页那套 HDS miniBar，避免踩壳层那堆坑）；
-            //     离开后仍由滚动驱动恢复。
-            if (open) {
-              this.appState.miniBarExpanded = true;
-            }
-            Logger.info(RzdShellLogTag, `home search page shown=${open}`);
-            appendPlayLog(`[RzdSearchMorph] bar searching=${open}`);
-          }
+          // 搜索页已有自己的迷你播放条（方式 C）⇒ 首页这套"压底栏 / 强制展开迷你条"的逻辑已删除
+          Logger.info(RzdShellLogTag, `home search page shown=${open}`);
+          appendPlayLog(`[RzdSearchMorph] bar searching=${open}`);
         }
       })
     }
@@ -3068,7 +3050,7 @@ struct Index {
             this.HomeTabsPages()
           }
           .barMode(BarMode.Fixed)
-          .barHeight(this.homeSearchOpen ? 0 : 56)
+          .barHeight(56)
           .zIndex(1)
           .barOverlap(true)
           .barPosition(BarPosition.End)
@@ -3248,7 +3230,7 @@ struct Index {
             this.HomeTabsPages()
           }
           .barMode(BarMode.Fixed)
-          .barHeight(this.homeSearchOpen ? 0 : 56)
+          .barHeight(56)
           .zIndex(1)
           .barOverlap(true)
           .barPosition(BarPosition.End)
