@@ -11,7 +11,15 @@
  */
 
 import { http } from '@kit.NetworkKit';
+import { AppStorageV2 } from '@kit.ArkUI';
 import { lxSourceManager } from 'player';
+
+/** 引擎上报的 updateAlert（AppStorage 里的镜像）。 */
+@ObservedV2
+export class UpdateAlertState {
+  @Trace updateUrl: string = '';
+  @Trace log: string = '';
+}
 
 /** 一次检查的结果。 */
 export class SourceUpdateInfo {
@@ -62,6 +70,17 @@ function pickMd5(text: string): string {
  */
 export async function checkSourceUpdateRemote(apiId: string): Promise<SourceUpdateInfo> {
   const out: SourceUpdateInfo = new SourceUpdateInfo();
+  // ★ 官方路径优先：脚本自己（UPDATE_ENABLE=true 时）会发 updateAlert，
+  //   引擎已把它写进 AppStorage（见 LXSourceEngine.ets:578-588），这里先读一次。
+  const engineUrl: string = String(AppStorageV2.connect(UpdateAlertState, 'rzd_update_alert', () => new UpdateAlertState())?.updateUrl ?? '');
+  const engineLog: string = String(AppStorageV2.connect(UpdateAlertState, 'rzd_update_alert', () => new UpdateAlertState())?.log ?? '');
+  if (engineUrl.length > 0) {
+    out.hasUpdate = true;
+    out.updateUrl = engineUrl;
+    out.message = engineLog;
+    console.info('[RzdSourceUpdate] ' + apiId + ' from engine alert url=' + engineUrl);
+    return out;
+  }
   let script: string = '';
   try {
     script = await lxSourceManager.getScript(apiId);

@@ -380,6 +380,8 @@ export struct SettingsDetailPage {
    * 结果进会话缓存，平台 ToolTip 会显示「已验证 / 未通过 / 未测」。
    */
   private async runQualityProbe(): Promise<void> {
+    let passed: number = 0;
+    let total: number = 0;
     const ordered: LXUserApiInfo[] = this.orderedApiListForUi();
     for (let i: number = 0; i < ordered.length && i < 3; i++) {
       const api: LXUserApiInfo = ordered[i];
@@ -393,10 +395,24 @@ export struct SettingsDetailPage {
         if (src === undefined || src.qualitys.length === 0) {
           continue;
         }
-        const qualities: string[] = src.qualitys.slice(-2);
+        // 只测「ToolTip 上显示的那一档」+ 默认档，保证缓存 key 与 UI 查询一致
+        const qualities: string[] = [];
+        if (info.bestQuality.length > 0) {
+          qualities.push(info.bestQuality);
+        }
+        if (src.type.length > 0 && src.type !== info.bestQuality) {
+          qualities.push(src.type);
+        }
+        if (qualities.length === 0 && src.qualitys.length > 0) {
+          qualities.push(src.qualitys[src.qualitys.length - 1]);
+        }
         for (let q: number = 0; q < qualities.length; q++) {
           try {
+            total++;
             const r = await probeBySample(info.source, qualities[q]);
+            if (r !== undefined && r.ok) {
+              passed++;
+            }
             if (r !== undefined) {
               console.info('[RzdQualityProbe] ' + api.name + ' ' + info.source + '/' + qualities[q] +
                 ' → ' + (r.ok ? '已验证' : ('未通过:' + r.detail)));
@@ -410,6 +426,7 @@ export struct SettingsDetailPage {
     // ③ 探完刷新一次列表（换数组引用）⇒ 平台 ToolTip 立刻能读到「已验证 / 未通过」
     this.lxApiList = lxSourceManager.getApiList().slice();
     console.info('[RzdQualityProbe] probe round finished, list refreshed');
+    this.toast('测试完成：' + passed + '/' + total + ' 通过');
   }
 
   private lxPlatformsOf(api: LXUserApiInfo): LXSourcePlatformInfo[] {
