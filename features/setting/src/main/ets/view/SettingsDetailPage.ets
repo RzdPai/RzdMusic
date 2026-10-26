@@ -1789,6 +1789,14 @@ export struct SettingsDetailPage {
             .padding(10)
             .borderRadius($r('sys.float.corner_radius_level6'))
             .backgroundColor($r('app.color.card_background'))
+            // 整张卡片可拖：修「只能拖卡片上方内容」
+            .draggable(this.isSourceInOrder(api.id))
+            .onDragStart(() => {
+              this.dragSourceId = api.id;
+            })
+            .onDrop(() => {
+              this.moveSourceTo(this.dragSourceId, api.id);
+            })
           }, (api: LXUserApiInfo) => api.id + '|' + (this.isSourceInOrder(api.id) ? '1' : '0') + '|' + this.sourceOrderIds.indexOf(api.id))
 
           Row({ space: 10 }) {

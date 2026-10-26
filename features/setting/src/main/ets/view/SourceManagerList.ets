@@ -55,7 +55,7 @@ export struct SourceManagerList {
   }
 
   private platformsOf(api: LXUserApiInfo): LXSourcePlatformInfo[] {
-    return lxDeclaredPlatformsOf(api.sources);
+    return lxDeclaredPlatformsOf(api);
   }
 
   /** 左滑菜单：检查更新（左）+ 删除（右）。 */
