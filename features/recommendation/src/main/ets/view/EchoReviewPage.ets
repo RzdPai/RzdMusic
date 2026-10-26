@@ -1885,29 +1885,26 @@ export struct EchoReviewPage {
     if (this.stats.newFavorites.length > 0) {
       Column({ space: 8 }) {
         this.SectionTitle('新收藏')
-        Scroll() {
-          Row({ space: 10 }) {
-            ForEach(this.stats.newFavorites, (fav: EchoFavorite) => {
-              Column({ space: 6 }) {
-                Image(fav.img.length > 0 ? fav.img : '')
-                  .width(84)
-                  .height(84)
-                  .borderRadius(12)
-                  .objectFit(ImageFit.Cover)
-                Text(fav.name)
-                  .fontSize(12)
-                  .fontColor($r('app.color.echo_text_primary'))
-                  .maxLines(1)
-                  .textOverflow({ overflow: TextOverflow.Ellipsis })
-                  .width(84)
-              }
-              .width(84)
-            }, (fav: EchoFavorite) => fav.name + '|' + fav.singer)
-          }
-          .padding({ right: 4 })
+        Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
+          ForEach(this.stats.newFavorites, (fav: EchoFavorite) => {
+            Column({ space: 6 }) {
+              Image(fav.img.length > 0 ? fav.img : '')
+                .width('100%')
+                .aspectRatio(1)
+                .borderRadius(12)
+                .objectFit(ImageFit.Cover)
+              Text(fav.name)
+                .fontSize(12)
+                .fontColor($r('app.color.echo_text_primary'))
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .width('100%')
+            }
+            .width('31%')
+            .margin({ right: '2%', bottom: 12 })
+            .alignItems(HorizontalAlign.Start)
+          }, (fav: EchoFavorite, index: number) => 'fav_' + index + '_' + fav.name)
         }
-        .scrollable(ScrollDirection.Horizontal)
-        .scrollBar(BarState.Off)
         .width('100%')
       }
       .width('100%')
