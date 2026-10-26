@@ -93,6 +93,15 @@ export class EchoStats {
   nightName: string = '';
   nightSinger: string = '';
   nightCount: number = 0;
+  /** 新收藏：本月新增收藏（最多 6 首）。 */
+  newFavorites: EchoFavorite[] = [];
+}
+
+/** 新收藏卡片的载体（歌名 / 歌手 / 封面）。 */
+export class EchoFavorite {
+  name: string = '';
+  singer: string = '';
+  img: string = '';
 }
 
 class EchoTopSong {
@@ -306,6 +315,7 @@ export struct EchoReviewPage {
     // 年/月下拉的可选项（历史里出现过的月份）
     this.monthOptions = EchoReviewPage.buildMonthOptions(all, range, this.monthOffset);
     const stats: EchoStats = EchoReviewPage.buildStats(all, range, prev);
+    stats.newFavorites = EchoReviewPage.collectNewFavorites(store, range);
     this.stats = stats;
   }
 
@@ -314,6 +324,23 @@ export struct EchoReviewPage {
   }
 
   /** 上个月对比文案（官方那句「是上个月的 X 倍」）。 */
+  /** 本月新增收藏（`PlayedSongRecord.time` 即收藏时间），最多 6 首。 */
+  private static collectNewFavorites(store: MusicStoreService, range: MonthRange): EchoFavorite[] {
+    const result: EchoFavorite[] = [];
+    const favs: PlayedSongRecord[] = store.getFavorites();
+    for (let i: number = 0; i < favs.length && result.length < 6; i++) {
+      const fav: PlayedSongRecord = favs[i];
+      if (fav.time >= range.start) {
+        const item: EchoFavorite = new EchoFavorite();
+        item.name = fav.name;
+        item.singer = fav.singer;
+        item.img = fav.img;
+        result.push(item);
+      }
+    }
+    return result;
+  }
+
   private ratioText(): string {
     const prev: number = this.stats.prevMinutes;
     if (prev <= 0) {
@@ -943,6 +970,7 @@ export struct EchoReviewPage {
       this.NewDiscoverySection()
       this.LoopKingSection()
       this.NightSongSection()
+      this.NewFavoritesSection()
     }
     .layoutWeight(1)
     .alignItems(HorizontalAlign.Start)
@@ -993,6 +1021,7 @@ export struct EchoReviewPage {
               this.NewDiscoverySection()
               this.LoopKingSection()
               this.NightSongSection()
+              this.NewFavoritesSection()
             }
             .width('100%')
           }
@@ -1844,6 +1873,42 @@ export struct EchoReviewPage {
     .onVisibleAreaChange([0.0, 1.0], (isVisible: boolean, ratio: number) => {
       this.noteSection(6, ratio);
     })
+  }
+
+  /** 有趣的发现 · 新收藏（本月新增，最多 6 首）。 */
+  @Builder
+  private NewFavoritesSection() {
+    if (this.stats.newFavorites.length > 0) {
+      Column({ space: 8 }) {
+        this.SectionTitle('新收藏')
+        Scroll() {
+          Row({ space: 10 }) {
+            ForEach(this.stats.newFavorites, (fav: EchoFavorite) => {
+              Column({ space: 6 }) {
+                Image(fav.img.length > 0 ? fav.img : '')
+                  .width(84)
+                  .height(84)
+                  .borderRadius(12)
+                  .objectFit(ImageFit.Cover)
+                Text(fav.name)
+                  .fontSize(12)
+                  .fontColor($r('app.color.echo_text_primary'))
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .width(84)
+              }
+              .width(84)
+            }, (fav: EchoFavorite) => fav.name + '|' + fav.singer)
+          }
+          .padding({ right: 4 })
+        }
+        .scrollable(ScrollDirection.Horizontal)
+        .scrollBar(BarState.Off)
+        .width('100%')
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+    }
   }
 
   /** 有趣的发现 · 单曲循环之王。 */
