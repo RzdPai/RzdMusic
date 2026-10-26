@@ -3110,6 +3110,10 @@ struct Index {
               //  ⚠️ 槽高由这块 0 高度的 Column 决定（HDS 按内容量高度）⇒ 只剩页签一排，
               //    与「现在就在听」那一页**逐字同一个写法**（那条路径真机已验过）。
               miniBarBuilder: (): void => {
+                // 搜索页有自己的播放条（方式 C）⇒ 搜索页打开时不画底部这条
+                if (this.searchTabBarHidden) {
+                  return;
+                }
                 // 搜索页有自己的播放条（方式 C）⇒ 搜索页打开时不画底部这条，避免两条并存
                 if (this.searchTabBarHidden) {
                   return;
