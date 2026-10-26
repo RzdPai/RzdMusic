@@ -553,10 +553,8 @@ export struct SettingsDetailPage {
       });
       return;
     }
-    this.getUIContext().getPromptAction().showToast({
-      message: info.error.length > 0 ? info.error : '已是最新版本',
-      duration: 2000
-    });
+    // ① 没有更新就**静默**（只在日志里留痕）
+    console.info('[RzdSourceUpdate] ' + api.name + ' no update: ' + info.error);
   }
 
   private checkSourceUpdate(api: LXUserApiInfo): void {

@@ -160,6 +160,7 @@ export async function probeQuality(source: string, songId: string, quality: stri
     appendPlayLog('[RzdQualityProbe] ' + source + '/' + quality + ' 无地址');
     return result;
   }
+  appendPlayLog('[RzdQualityProbe] start ' + source + '/' + quality + ' url=' + url.substring(0, Math.min(60, url.length)));
   const header: http.HttpRequest = http.createHttp();
   try {
     // ★ 不能带 Range：带了 content-length 就只有 2 字节，算出来的时长必然"偏差过大"（之前的 100% 失败根因）
@@ -170,6 +171,7 @@ export async function probeQuality(source: string, songId: string, quality: stri
     });
     const ct: string = String(resp.header['content-type'] ?? '');
     const lenRaw: string = String(resp.header['content-length'] ?? '');
+    appendPlayLog('[RzdQualityProbe] resp code=' + resp.responseCode + ' type=' + ct + ' len=' + lenRaw);
     result.contentType = ct;
     if (!isAudioType(ct)) {
       result.detail = '非音频类型 ' + ct;
@@ -189,6 +191,7 @@ export async function probeQuality(source: string, songId: string, quality: stri
     }
     result.ok = true;
     result.detail = '已验证';
+    appendPlayLog('[RzdQualityProbe] PASS ' + source + '/' + quality);
     appendPlayLog('[RzdQualityProbe] ' + source + '/' + quality + ' 通过 type=' + ct);
     sessionCache.set(key, result);
     return result;
