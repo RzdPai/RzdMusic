@@ -199,8 +199,25 @@ function bestQualityFor(declared: string[], preferred: string): string {
  */
 export function buildCandidateChain(preferredQuality: string, platform: string): FallbackCandidate[] {
   const out: FallbackCandidate[] = [];
-  const apis: LXUserApiInfo[] = lxSourceManager.getApiList();
+  const all: LXUserApiInfo[] = lxSourceManager.getApiList();
+  if (all.length === 0) {
+    return out;
+  }
+  // ① 只用**已勾选**的音源，且按用户勾选顺序（第一个=默认源）
+  const orderIds: string[] = MusicStoreService.getInstance().getSourceScriptOrder();
+  const apis: LXUserApiInfo[] = [];
+  if (orderIds.length > 0) {
+    for (let i: number = 0; i < orderIds.length; i++) {
+      for (let j: number = 0; j < all.length; j++) {
+        if (all[j].id === orderIds[i]) {
+          apis.push(all[j]);
+          break;
+        }
+      }
+    }
+  }
   if (apis.length === 0) {
+    appendPlayLog('[回退链] 没有勾选任何音源，直接返回');
     return out;
   }
   const declaredOf = (api: LXUserApiInfo, p: string): string[] => {
@@ -277,8 +294,24 @@ export function buildCandidateChain(preferredQuality: string, platform: string):
       others.push(cand);
     }
   }
-  for (let i: number = 0; i < others.length; i++) {
-    out.push(others[i]);
+  // ③ 咪咕几乎没源支持 ⇒ 先把"换平台"排前面，同平台换源排后面
+  if (platform === 'mg' && others.length > 0) {
+    const merged: FallbackCandidate[] = [];
+    for (let i: number = 0; i < others.length; i++) {
+      merged.push(others[i]);
+    }
+    for (let i: number = 0; i < out.length; i++) {
+      merged.push(out[i]);
+    }
+    out.length = 0;
+    for (let i: number = 0; i < merged.length; i++) {
+      out.push(merged[i]);
+    }
+    appendPlayLog('[回退链] 起点是咪咕 ⇒ 优先换平台');
+  } else {
+    for (let i: number = 0; i < others.length; i++) {
+      out.push(others[i]);
+    }
   }
   const head: string[] = [];
   for (let i: number = 0; i < Math.min(out.length, 6); i++) {
