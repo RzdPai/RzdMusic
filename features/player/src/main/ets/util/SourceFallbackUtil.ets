@@ -3,7 +3,7 @@ import { getLXMusicUrl } from '../source/LXPlayHelper';
 import { lxSearch, LXSearchSong } from '../source/LXMusicSDK';
 import { LXUserApiInfo, LXUserApiSourceInfo } from '../source/Interface';
 import { lxSourceManager } from '../source/LXSourceManager';
-import { markProbeOk } from './LxQualityProbe';
+import { markProbeFail, markProbeOk } from './LxQualityProbe';
 
 export const QUALITY_CHAIN: string[] =
   ['master', 'atmos_plus', 'atmos', 'hires', 'flac24bit', 'flac', '320k', '128k'];
@@ -659,6 +659,10 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
       markProbeOk(c.platform, r.quality);
       return r;
     }
+  }
+  // A4：全部候选都失败 ⇒ 把首选候选标记为"未通过"，ToolTip 立刻能反映出来
+  if (cands.length > 0) {
+    markProbeFail(cands[0].platform, cands[0].quality, '全部候选失败');
   }
   appendPlayLog('[回退链] 全部候选失败，恢复原音源');
   if (originId.length > 0) {
