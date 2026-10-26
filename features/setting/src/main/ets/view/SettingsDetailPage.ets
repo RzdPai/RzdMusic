@@ -1656,18 +1656,6 @@ export struct SettingsDetailPage {
                   }
                 })
 
-              Radio({ value: api.id, group: 'lxSourceDetail', indicatorType: RadioIndicatorType.TICK })
-                .width(20)
-                .height(20)
-                .checked(this.activeSource === api.id)
-                .radioStyle({
-                  checkedBackgroundColor: this.themeState.color,
-                  indicatorColor: $r('sys.color.font_on_primary')
-                })
-                .onClick(() => {
-                  this.selectLXSource(api.id);
-                })
-
               Column({ space: 2 }) {
                 Text(api.name)
                   .fontSize($r('sys.float.Body_L'))
@@ -1676,7 +1664,9 @@ export struct SettingsDetailPage {
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
                 Row({ space: 4 }) {
                   if (this.isSourceInOrder(api.id)) {
-                    Text('顺序 ' + (this.sourceOrderIds.indexOf(api.id) + 1))
+                    // 单列勾选：第一个勾选的音源就是默认音源（不再有独立单选列）
+                    Text(this.sourceOrderIds.indexOf(api.id) === 0 ? '默认源' :
+                      ('备选 ' + (this.sourceOrderIds.indexOf(api.id) + 1)))
                       .fontSize($r('sys.float.Caption_S'))
                       .fontColor(this.themeState.color)
                   }
