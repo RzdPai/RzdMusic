@@ -47,8 +47,8 @@ export struct SourceManagerList {
   @Event onCheckUpdate: (api: LXUserApiInfo) => void = (api: LXUserApiInfo): void => {};
   @Event onMove: (dragId: string, targetId: string) => void = (dragId: string, targetId: string): void => {};
 
-  /** 正在拖动的行下标（List 级拖拽）。 */
-  @Local dragIdx: number = -1;
+  /** 正在被拖动的音源 id。 */
+  @Local dragId: string = '';
 
   private inOrder(apiId: string): boolean {
     return this.orderIds.indexOf(apiId) >= 0;
@@ -138,7 +138,14 @@ export struct SourceManagerList {
           .padding(10)
           .borderRadius($r('sys.float.corner_radius_level6'))
           .backgroundColor($r('app.color.card_background'))
-          // 拖动由 List 级 onItemDragStart/onItemDrop 负责（不复制卡片预览）
+          // 整卡可拖（长按卡片任意位置）
+          .draggable(this.draggableEnabled && this.inOrder(api.id))
+          .onDragStart(() => {
+            this.dragId = api.id;
+          })
+          .onDrop(() => {
+            this.onMove(this.dragId, api.id);
+          })
         }
         .swipeAction({
           end: {
@@ -152,17 +159,6 @@ export struct SourceManagerList {
     }
     .width('100%')
     .scrollBar(BarState.Off)
-    // List 级拖拽排序：返回空 builder ⇒ 拖动时不复制一张卡片跟手
-    .onItemDragStart((_event: ItemDragInfo, itemIndex: number) => {
-      this.dragIdx = itemIndex;
-      return (): void => {};
-    })
-    .onItemDrop((_event: ItemDragInfo, itemIndex: number, insertIndex: number, isSuccess: boolean) => {
-      if (!isSuccess || this.dragIdx < 0 || this.dragIdx >= this.apis.length ||
-        insertIndex < 0 || insertIndex >= this.apis.length) {
-        return;
-      }
-      this.onMove(this.apis[this.dragIdx].id, this.apis[insertIndex].id);
-    })
+    // 拖动：行级 draggable（List 级空 builder 会导致拖不动）
   }
 }
