@@ -3073,7 +3073,8 @@ struct Index {
           .barOverlap(true)
           .barPosition(BarPosition.End)
           .vertical(false)
-          .scrollable(true)
+          // ★ 首页（tabIndex 0）关掉左右滑动切页，其它 Tab 保留
+          .scrollable(this.tabState.tabIndex !== 0)
           .barFloatingStyle({
             // 鈿狅笍 涓嶈浼?barWidth銆?
             // musicfreeOH 鐨勬诞鍔ㄥ簳鏍忓彧鏈?barBottomMargin / systemMaterialEffect /
@@ -3252,7 +3253,8 @@ struct Index {
           .barOverlap(true)
           .barPosition(BarPosition.End)
           .vertical(false)
-          .scrollable(true)
+          // ★ 首页（tabIndex 0）关掉左右滑动切页，其它 Tab 保留
+          .scrollable(this.tabState.tabIndex !== 0)
           .padding({ bottom: WindowUtil.getInstance().getStartupNavigationBarBottomVp() })
           .onChange((index: number) => {
             if (index !== this.tabState.tabIndex) {
