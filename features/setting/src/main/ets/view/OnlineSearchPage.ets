@@ -216,12 +216,7 @@ export struct OnlineSearchPage {
   private ownStack: NavPathStack | undefined = undefined;
   @Local query: string = '';
   /** 内容层进入时的透明度（搜索行不动，只让内容淡入）。 */
-  /**
-   * 内容层透明度。★ 默认必须是 1：弹层（bindContentCover）里没有 NavDestination 的首帧回调，
-   * 若默认 0 且 onAppear 未触发，整页就是"什么都没显示"（历史/热搜看不到的真因）。
-   * 退出时仍由 closeSearch() 动画到 0 再卸载。
-   */
-  @Local contentEnterAlpha: number = 1;  /** 输入中的联想候选（洛雪式：输入后下方弹出推荐） */
+  @Local contentEnterAlpha: number = 0;  /** 输入中的联想候选（洛雪式：输入后下方弹出推荐） */
   @Local suggestWords: string[] = [];
   @Local showSuggest: boolean = false;
   private suggestTimerId: number = -1;
@@ -233,7 +228,6 @@ export struct OnlineSearchPage {
   private suppressSuggestOnce: boolean = false;
   private suggestSeq: number = 0;
   @Local searching: boolean = false;
-  @Local submittedKeyword: string = '';
   /** 是否**真的发起过**一次搜索（空态提示只在搜过之后才显示，入场态不该出现）。 */
   @Local searchedOnce: boolean = false;
   @Local songs: LXSearchSong[] = [];
@@ -296,12 +290,7 @@ export struct OnlineSearchPage {
   /** Scroller of the result list, bound to the HDS title bar for the search-row hide. */
   private listScroller: Scroller = new Scroller();
   /** Result inset: measured title builders' bottom minus the actual content top. */
-  /**
-   * 内容首行的顶部让位（vp）。
-   * ★ 弹层（bindContentCover）承载时首帧拿不到量测值，若从 0 起 ⇒ 历史/热搜会先顶到搜索行下面再跳一下。
-   *   这里给"状态栏 + 搜索行 56"的初值，量测到位后由 refreshContentPaddingTop() 校正。
-   */
-  @Local contentPaddingTop: number = WindowUtil.getInstance().resolveStatusBarTopVp() + 56;
+  @Local contentPaddingTop: number = 0;
   /** Window-space bottom edges measured from the actual HDS builders. */
   @Local searchRowBottomVp: number = 0;
   @Local titleWidthVp: number = 0;
@@ -824,17 +813,6 @@ export struct OnlineSearchPage {
     }
   }
 
-  /**
-   * 进页初始化：**热搜与历史必须在这里读一次**。
-   * 之前 `loadHotWords()` 没有任何调用点、`searchHistory` 只挂在 `@Monitor('store.searchHistoryVersion')` 上
-   * ⇒ 刚进页面两者都是空的（"什么都没有"的真因），搜索一次后 store 变化才补上。
-   */
-  aboutToAppear(): void {
-    this.searchHistory = this.store.getSearchHistory();
-    void this.loadHotWords();
-    this.persistMorph('page appear');
-  }
-
   aboutToDisappear(): void {
     this.searchDisposed = true;
     this.searchRequestQueued = false;
@@ -858,7 +836,6 @@ export struct OnlineSearchPage {
       return;
     }
     this.searching = true;
-    this.submittedKeyword = this.query.trim();
     this.searchedOnce = true;
     this.errorMsg = '';
     // ★ 用户 2026-10-20：综合页要**一次**同时拿到歌曲/歌手/专辑（三份并发），
@@ -1569,34 +1546,46 @@ export struct OnlineSearchPage {
    * 关掉系统转场 + 用同一个弹簧包住 `pop(false)`，两端的 `geometryTransition`
    * 才会把搜索框原路收回首页（官方示例 `SearchLongTakeTransitionPageTwo.ets:86-92`）。
    */
-  /** 持久诊断（重启保留）：闪退后仍能在「关于 → 运行时日志」里看到这一步。 */
-  private persistMorph(step: string): void {
-    try {
-      this.store.appendRuntimeDiagnostic(`RzdSearchMorph ${step} searching=${this.searching} ` +
-        `submitted=${this.submittedKeyword} alpha=${this.contentEnterAlpha}`);
-    } catch (err) {
-      hilog.warn(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'persist failed');
-    }
-  }
-
-  /**
-   * ★ 最小关闭路径（2026-10-26）：持久日志证明崩溃发生在 close 之后 200ms 内、
-   *   `hideSuggest/clearFocus/animateTo/persistMorph` 这些步骤之间，逐条排除代价太高。
-   *   这里只做一件事：把关闭信号交给壳层，其余（收焦点、藏联想、清历史）都不做。
-   */
   private closeSearch(): void {
     if (guardPlayerBack('OnlineSearchPage')) {
       morphLog('close blocked by player');
       return;
     }
     if (this.searchClosing) {
+      morphLog('close already running');
       return;
     }
     this.searchClosing = true;
+    this.hideSuggest();
     this.getUIContext().getFocusController().clearFocus();
-    morphLog('close minimal');
-    this.onShowChange(false);
+    morphLog('close request');
+    this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, (): void => {
+      this.searchClosing = false;
+      // ★ 必须弹**本页所在的那个栈**（官方示例用 `NavDestinationContext.pathStack`）。
+      //   本页可能被推到壳层共享栈，也可能被推到首页 Tab 的内层栈。
+      // 现在搜索页由壳层 `bindContentCover` 承载（不是 NavDestination）⇒ 没有栈可 pop，
+      // 改成回调壳层关闭弹层（`onShowChange(false)` 由 Index 收口）。
+      if (this.ownStack === undefined && this.pageStack.size() === 0) {
+        this.onShowChange(false);
+        return;
+      }
+      const stack: NavPathStack = this.ownStack ?? this.pageStack;
+      morphLog(`pop inside-animate own=${this.ownStack !== undefined} size=${stack.size()}`);
+      stack.pop(false);
+    });
+    // 底栏恢复：**等转场结束再恢复**（在转场帧里改壳层状态会把两端拆到不同帧）。
+    // 弹簧的 onFinish 实测要到 1s 才来，所以这里用固定 320ms（转场时长量级）先恢复，
+    // 450ms 再补一次幂等兜底。
+    setTimeout((): void => {
+      morphLog('bar restore 320ms');
+      this.onShowChange(false);
+    }, 320);
+    setTimeout((): void => {
+      morphLog('bar restore 450ms fallback');
+      this.onShowChange(false);
+    }, 450);
   }
+
   /** 内容首行要让开的浮层高度：状态栏 + 搜索行 56 + 类型栏 44。 */
   private searchContentTopInsetVp(): number {
     return WindowUtil.getInstance().resolveStatusBarTopVp() + 56 + 44;
@@ -2141,7 +2130,7 @@ export struct OnlineSearchPage {
 
         Stack({ alignContent: Alignment.Center }) {
           List({ scroller: this.listScroller }) {
-            if (!this.searching && this.submittedKeyword.length === 0) {
+            if (!this.searching && this.resultEmpty()) {
               ListItem() {
               if (this.hotWords.length > 0) {
                 Column({ space: 12 }) {
@@ -2412,8 +2401,7 @@ export struct OnlineSearchPage {
           //   这一页原来**一点底部留白都没有** ⇒ 滚到底最后一行会被壳层那条悬浮播放条压住。
           //   值与其他二级页同口径：56(播放条) + 16 + 16 = 88。
           //   ⚠️ 别写在外层容器的 `padding({bottom})` 上 —— 那是固定在屏幕底部的死带（用户点过的老毛病）。
-          // 88 = 原有底部留白；再 +64 给「二级页播放条」（56 高 + 8 间距），避免最后一项被压住
-    .contentEndOffset(152)
+          .contentEndOffset(88)
           .onScrollFrameBegin((offset: number): OnScrollFrameBeginHandlerResult => {
             // 列表滑动时自动收起联想（签名与 MinePage 一致）
             if (this.showSuggest && Math.abs(offset) > 1) {

@@ -430,11 +430,6 @@ struct Index {
   @Local navDepth: number = 0;
   /** 搜索页是否显示（bindContentCover 承载，框不动）。 */
   @Local isSearchPageShow: boolean = false;
-  /** 搜索弹层退出淡出（壳层控制，避免在页面里 animateTo）。 */
-  /** 退出反向播放：把弹层整体缩回首页搜索框（与进入的形变对称）。 */
-  @Local coverExitScale: number = 1;
-  @Local coverExitTx: number = 0;
-  @Local coverExitTy: number = 0;
   /**
    * 首页 Tab 自己的内层导航栈（只放两条路由：首页 / 搜索页）。
    * 见 `HomeRouteNames.ets` 里那段"为什么必须这样"的说明。
@@ -2991,73 +2986,23 @@ struct Index {
    * 改推根栈后，NavDestination 会整屏覆盖 Tabs 内容（含底栏）。
    */
   /** 搜索页（bindContentCover 的内容）。 */
-  /** 首页搜索框在窗口里的矩形；拿不到返回 undefined（退化为不缩放）。 */
-  private searchFieldRect(): componentUtils.ComponentInfo | undefined {
-    try {
-      return this.getUIContext().getComponentUtils().getRectangleById('home_search_field');
-    } catch (err) {
-      Logger.warn(RzdShellLogTag, `searchFieldRect failed: ${(err as Error).message ?? ''}`);
-      return undefined;
-    }
-  }
-
   @Builder
   private SearchCover() {
-    // 搜索页 + 二级页专属播放条（复用壳层 floatingMiniBar：MiniBarMaterialCapsule + 自带背板，
-    // 数据源仍是 MusicAppState，与首页那条互不影响）。
-    Stack({ alignContent: Alignment.BottomEnd }) {
-      OnlineSearchPage({
-        routeParam: '',
-        onShowChange: (open: boolean): void => {
-          if (open) {
-            this.appState.miniBarExpanded = true;
-            Logger.info(RzdShellLogTag, 'search cover shown');
-            MusicStoreService.getInstance().appendRuntimeDiagnostic('RzdSearchCover shown');
-            return;
-          }
-          if (this.isSearchPageShow) {
-            // 延迟一帧再卸载弹层：页内关闭动画（弹簧 ~320ms）收尾前卸载会崩
-            // 反向一镜到底：把整层缩回首页搜索框的位置与大小，再卸载（不再用淡出）
-            const fieldRect: componentUtils.ComponentInfo | undefined =
-              this.searchFieldRect();
-            const screenW: number = this.getUIContext().px2vp(this.windowInfo.windowSize.width);
-            const screenH: number = this.getUIContext().px2vp(this.windowInfo.windowSize.height);
-            const targetScale: number = fieldRect === undefined ? 1 :
-              Math.max(0.12, this.getUIContext().px2vp(fieldRect.size.width) / Math.max(1, screenW));
-            const targetTx: number = fieldRect === undefined ? 0 :
-              this.getUIContext().px2vp(fieldRect.windowOffset.x) + this.getUIContext().px2vp(fieldRect.size.width) / 2 - screenW / 2;
-            const targetTy: number = fieldRect === undefined ? 0 :
-              this.getUIContext().px2vp(fieldRect.windowOffset.y) + this.getUIContext().px2vp(fieldRect.size.height) / 2 - screenH / 2;
-            this.getUIContext().animateTo({ duration: 220, curve: Curve.Friction }, (): void => {
-              this.coverExitScale = targetScale;
-              this.coverExitTx = targetTx;
-              this.coverExitTy = targetTy;
-            });
-            setTimeout((): void => {
-              this.coverExitScale = 1;
-              this.coverExitTx = 0;
-              this.coverExitTy = 0;
-              // 先落日志再卸载：若日志停在这条，说明崩溃就发生在"销毁 bindContentCover 内容"这一步
-              MusicStoreService.getInstance().appendRuntimeDiagnostic('RzdSearchCover dismiss begin');
-              this.isSearchPageShow = false;
-              MusicStoreService.getInstance().appendRuntimeDiagnostic('RzdSearchCover dismiss done');
-              Logger.info(RzdShellLogTag, 'search cover hidden');
-            }, 360);
-          }
+    OnlineSearchPage({
+      routeParam: '',
+      // 搜索页自己请求关闭（取消按钮 / 返回键）时，由壳层收起弹层
+      onShowChange: (open: boolean): void => {
+        if (open) {
+          this.appState.miniBarExpanded = true;
+          Logger.info(RzdShellLogTag, 'search cover shown');
+          return;
         }
-      })
-
-
-      // 二级页播放条（甲方要求保留）
-      if (this.shouldShowFloatingMiniBar()) {
-        this.floatingMiniBar()
+        if (this.isSearchPageShow) {
+          this.isSearchPageShow = false;
+          Logger.info(RzdShellLogTag, 'search cover hidden');
+        }
       }
-    }
-    .width(StyleConstants.FULL_WIDTH)
-    .height(StyleConstants.FULL_HEIGHT)
-    // 退出反向形变：整体缩回首页搜索框（壳层 animateTo 驱动，与进入对称）
-    .scale({ x: this.coverExitScale, y: this.coverExitScale, centerX: '50%', centerY: '50%' })
-    .translate({ x: this.coverExitTx, y: this.coverExitTy })
+    })
   }
 
   /** Root UI: {@link HdsNavigation} with tabs and optional playback cover. */
@@ -3373,9 +3318,7 @@ struct Index {
 
       // 鍏ㄥ眬鎮诞杩蜂綘鎾斁鏉★細鍙湪浜岀骇椤甸潰娓叉煋锛堥椤甸偅浠藉湪 HDS 娴姩搴曟爮閲岋級銆?
       // 鏉′欢娓叉煋鑰屼笉鏄父椹?+ visibility 鈥斺€?甯搁┗鐨勬暣灞忛€忔槑鑺傜偣浼氬悆鎺夊簳鏍忔墜鍔裤€?
-      // ★ 弹层里 navDepth 恒为 0，`shouldShowFloatingMiniBar()` 永远返回 false（播放条不出现的原因）。
-      //   搜索页里直接按"有播放队列"判断。
-      if (this.appState.playQueue.length > 0 && !this.appState.selectionActive) {
+      if (this.shouldShowFloatingMiniBar()) {
         this.floatingMiniBar()
       }
 
@@ -3429,7 +3372,6 @@ struct Index {
     })
     // 照抄文章：搜索页由全屏模态承载，ModalTransition.NONE ⇒ 无系统动画，几何交由 geometryTransition
     .bindContentCover(this.isSearchPageShow, this.SearchCover(), {
-      // ALPHA：弹层自带淡入淡出 ⇒ 退出也有动画，不用在页面里 animateTo（避免再次踩到崩溃点）
       modalTransition: ModalTransition.NONE
     })
   }
