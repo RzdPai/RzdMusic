@@ -724,12 +724,21 @@ struct Index {
   private handleShellBack(): boolean {
     const homeDepth: number = this.homeStack.size();
     const rootDepth: number = this.pageIndexInfos.size();
-    appendPlayLog(`[RzdShellBack] tab=${this.tabState.tabIndex} home=${homeDepth} root=${rootDepth}`);
-    if (homeDepth > 0) {
+    appendPlayLog(`[RzdShellBack] tab=${this.tabState.tabIndex} home=${homeDepth} root=${rootDepth} ` +
+      `showPlay=${this.appState.isShowPlay}`);
+    // ① 全屏播放页开着 → 先收播放页（不是退应用）
+    if (this.appState.isShowPlay) {
+      this.expandState.requestCollapse();
+      appendPlayLog('[RzdShellBack] collapse player');
+      return true;
+    }
+    // ② 首页内层栈有页（搜索页等）→ 弹它
+    if (homeDepth > 1) {
       this.homeStack.pop(false);
       appendPlayLog('[RzdShellBack] popped homeStack');
       return true;
     }
+    // ③ 根栈有页（歌单/专辑/设置等二级页）→ 弹它
     if (rootDepth > 0) {
       this.pageIndexInfos.pop(false);
       appendPlayLog('[RzdShellBack] popped root stack');
@@ -738,6 +747,21 @@ struct Index {
     // 没有任何页面可弹 ⇒ 主动退到后台。
     // 不能再 `return false` 交回系统：系统会去 pop 壳层根 Navigation（NavBar 被移除），
     // 退出瞬间整屏变黑——这正是"返回退出时黑一下"的来源。
+    // 退出前清理：残留的全屏浮层（克隆重叠/快照收缩层）会让"退出那一下"看起来整屏黑
+    appendPlayLog(`RzdHomeBack stage=${this.expandState.morphStage} ` +
+      `br=${this.expandState.morphOverlayBridging() ? 1 : 0} ` +
+      `drv=${this.expandState.morphSessionDriving() ? 1 : 0} ` +
+      `hs=${this.expandState.hdsBarSuppressed ? 1 : 0} shrink=${this.shrinkState.visible ? 1 : 0}`);
+    if (this.playerRouteAlive) {
+      this.playerRouteAlive = false;
+    }
+    if (this.expandState.morphOverlayBridging() || this.expandState.morphSessionDriving() ||
+      this.expandState.hdsBarSuppressed) {
+      this.expandState.morphReset();
+    }
+    if (this.shrinkState.visible) {
+      this.shrinkState.reset();
+    }
     try {
       const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
       if (ctx !== undefined) {
@@ -3509,49 +3533,13 @@ struct Index {
    * @returns true = 宸叉秷璐癸紝涓嶅啀璧伴粯璁よ繑鍥為€昏緫
    */
   onBackPress(): boolean {
-    // 内层栈（首页/搜索页）还有可弹的路由时先弹它，别直接退出应用。
-    if (this.homeStack.size() > 1) {
-      this.closeHomeSearch();
-      return true;
-    }
-    if (!this.appState.isShowPlay) {
-      // ★★★ 2026-10-22（甲方：「在首页时使用系统返回，首页就会变成一片空白」）：
-      //   首页按返回 = 把控制权交回系统（退到桌面）。这一刻必须**确认屏上没有残留的全屏浮层**：
-      //   本页最上面那两层（克隆封面 / 快照收缩层）都是 `Stack` 里的整屏节点，
-      //   任何一个还挂着 opacity>0 就会把首页整块盖住 —— 观感正是"一片空白"。
-      //   所以先把不该留的都收干净，再交还给系统；同时留一行日志好定位是谁没退场。
-      appendPlayLog(`RzdHomeBack stage=${this.expandState.morphStage} ` +
-        `br=${this.expandState.morphOverlayBridging() ? 1 : 0} ` +
-        `drv=${this.expandState.morphSessionDriving() ? 1 : 0} ` +
-        `hs=${this.expandState.hdsBarSuppressed ? 1 : 0} alive=${this.playerRouteAlive ? 1 : 0} ` +
-        `shrink=${this.shrinkState.visible ? 1 : 0} route=${this.playerRouteIndex()}`);
-      if (this.playerRouteAlive) {
-        this.playerRouteAlive = false;
-      }
-      if (this.expandState.morphOverlayBridging() || this.expandState.morphSessionDriving() ||
-        this.expandState.hdsBarSuppressed) {
-        this.expandState.morphReset();
-      }
-      if (this.shrinkState.visible) {
-        this.shrinkState.reset();
-      }
-      return false;
-    }
-    // 鐪熸鐨勬敹璧峰姩鐢荤敱鎾斁椤垫挱锛堝畠鐩戝惉 collapseVersion锛夛紝鎾畬鑷繁鎶?isShowPlay 缃?false
-    this.expandState.requestCollapse();
-    return true;
+    // ★ 屎山清理（2026-10-27）：这里以前是第二套"首页返回"逻辑（自己弹搜索页 / 自己决定交回系统），
+    //   与 Ability 层 `HomeBackBridge.handleBack()` 的壳层处理**重复且冲突**：
+    //   两处都判一次，导致"返回自动回首页 / 退出变黑"。
+    //   现在只保留唯一实现 `handleShellBack()`，这里仅做转调（保留兜底：万一页面级返回被调用）。
+    appendPlayLog('RzdHomeBackEnter src=Index (delegate)');
+    return this.handleShellBack();
   }
-
-  /**
-   * 鍚屾瀵艰埅鏍堟繁搴︺€?
-   *
-   * 鏀惧湪 `onNavBarStateChange` 鐨勪笅涓€甯э細璇ュ洖璋冭Е鍙戞椂鏍堝彲鑳借繕娌″畬鎴愭帹鍏ワ紝
-   * 绔嬪埢璇?`size()` 浼氭嬁鍒版棫鍊硷紝瀵艰嚧杩蜂綘鏉′笉鍑虹幇 / 涓嶆秷澶便€?
-   *
-   * 鈿狅笍 **涓嶈鍖?animateTo**锛歚animateTo` 浼氭妸"鑺傜偣鍒氳鍒涘缓"杩欎欢浜嬩篃涓€璧疯ˉ闂?鈥斺€?
-   * 澹冲眰鎮诞杩蜂綘鏉℃槸鏉′欢娓叉煋鍑烘潵鐨勬柊鑺傜偣锛屽寘杩涘姩鐢诲氨鎴愪簡娣″叆锛岀敤鎴锋槑纭笉瑕併€?
-   * 杩蜂綘鏉＄殑鏄鹃殣蹇呴』涓€甯у唴鐩存帴鍒囨崲锛涢渶瑕佸姩鏁堢殑鍙湁 `miniBarExpanded` 鐨勬敹璧枫€?
-   */
   private syncNavDepth(): void {
     setTimeout((): void => {
       // 鈽?`navDepth` 鐨勫彛寰勬槸"**浜岀骇椤甸潰**娣卞害"锛?*涓嶅惈鎾斁椤?*锛?
