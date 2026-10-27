@@ -48,7 +48,10 @@
 
 import { AppStorageV2, uiObserver } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { guardPlayerBack, PlaybackIntentState, SongItem } from 'musicbasic';
+import {
+  immersiveMedium,
+   guardPlayerBack, PlaybackIntentState, SongItem
+} from 'musicbasic';
 import {
   AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, barBlurOptions,
   buildBarBlurStyle, FavoriteEntry, LocateFloatButton,
@@ -744,7 +747,7 @@ export struct RecordListPage {
     .height(66)
     .padding({ left: 6, right: 6 })
     .borderRadius(33)
-    .backgroundBlurStyle(buildBarBlurStyle(this.ambientState.level), barBlurOptions())
+    .systemMaterial(immersiveMedium())
     .border({ width: 0.5, color: $r('sys.color.comp_divider') })
     .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 8 })
   }
@@ -1142,7 +1145,7 @@ export struct RecordListPage {
           }
         }
         .width('100%')
-        .backgroundBlurStyle(buildBarBlurStyle(this.ambientState.level), barBlurOptions())
+        .systemMaterial(immersiveMedium())
 
         Stack({ alignContent: Alignment.TopStart }) {
           List({ space: 0, scroller: this.pageScroller }) {

@@ -17,6 +17,7 @@ import { motion } from '@kit.MultimodalAwarenessKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { appBarBlurStyle, barBlurOptions } from '../util/BarMaterial';
+import { immersiveMedium } from '../util/ImmersiveMaterialV26';
 
 const DOMAIN: number = 0x0001;
 const TAG: string = 'RzdLocateGrip';
@@ -154,7 +155,7 @@ export struct LocateFloatButton {
     .height(40)
     .borderRadius(20)
     // ★ 不要蓝色底：材质背板（浅色下是半透明白、深色下是半透明黑，并跟随背后画面）
-      .backgroundBlurStyle(appBarBlurStyle(), barBlurOptions())
+      .systemMaterial(immersiveMedium())
     .border({ width: 0.5, color: $r('sys.color.comp_divider') })
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)

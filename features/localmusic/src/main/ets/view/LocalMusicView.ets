@@ -26,6 +26,8 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { uiObserver } from '@kit.ArkUI';
 import { HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions } from '@kit.UIDesignKit';
 import {
+  immersiveMedium,
+  
   buildBarBlurStyle,
    guardPlayerBack
 } from 'musicbasic';
@@ -890,7 +892,7 @@ export struct LocalMusicPage {
     .height(66)
     .padding({ left: 6, right: 6 })
     .borderRadius(33)
-    .backgroundBlurStyle(buildBarBlurStyle(this.ambientState.level), barBlurOptions())
+    .systemMaterial(immersiveMedium())
     .border({ width: 0.5, color: $r('sys.color.comp_divider') })
     .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 8 })
   }
