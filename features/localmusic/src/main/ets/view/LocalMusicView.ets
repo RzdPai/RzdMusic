@@ -243,6 +243,9 @@ export struct LocalMusicPage {
         })
     }
     .font({ size: 16 })
+    // ① 沉浸光感（菜单材质 + 统一圆角）
+    .backgroundBlurStyle(BlurStyle.COMPONENT_THICK)
+    .borderRadius(20)
   }
 
   /** 选文件：AudioViewPicker（音频专用、可多选、零权限） */

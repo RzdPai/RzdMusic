@@ -156,6 +156,9 @@ function playlistMoreMenuComponent() {
       })
   }
   .width(200)
+  // ① 沉浸光感（菜单材质 + 统一圆角）
+  .backgroundBlurStyle(BlurStyle.COMPONENT_THICK)
+  .borderRadius(20)
 }
 
 @ComponentV2
