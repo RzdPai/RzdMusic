@@ -764,20 +764,7 @@ export struct RecordListPage {
     this.exitSelectionMode();
   }
 
-  /** 把选中的歌从收藏里移除（只对收藏模式有意义）。 */
-  private unfavoriteSelected(): void {
-    let removed: number = 0;
-    for (let i: number = 0; i < this.records.length; i++) {
-      if (this.isSelected(this.records[i])) {
-        this.store.removeFavorite(this.records[i].source, this.records[i].songId);
-        removed++;
-      }
-    }
-    this.getUIContext().getPromptAction().showToast({ message: '已取消收藏 ' + removed + ' 首', duration: 1800 });
-    this.exitSelectionMode();
-  }
-
-  /** 「添加至歌单」选择面板：列出本地歌单。 */
+    /** 「添加至歌单」选择面板：列出本地歌单。 */
   @Builder
   private AddToPlaylistSheet() {
     Column({ space: 8 }) {

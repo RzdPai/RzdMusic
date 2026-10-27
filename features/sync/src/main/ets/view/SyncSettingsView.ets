@@ -570,10 +570,6 @@ export struct SyncSettingsPanel {
     Stack({ alignContent: Alignment.Bottom }) {
       Scroll() {
         Column({ space: 12 }) {
-          HdsListItemCard({
-            textItem: { primaryText: { text: '洛雪配置' } },
-            cardBackgroundColor: $r('app.color.sync_card_background')
-          })
           this.infoCard()
           WebDavBackupCard()
 
