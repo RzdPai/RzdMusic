@@ -622,12 +622,21 @@ struct Index {
   @Monitor('appState.popToRootVersion')
   onPopToRootRequested(): void {
     const names: string[] = this.pageIndexInfos.getAllPathName();
-    Logger.info(RzdShellLogTag, `pop to root requested depth=${names.length}`);
+    const homeNames: string[] = this.homeStack.getAllPathName();
+    Logger.info(RzdShellLogTag,
+      `pop to root requested depth=${names.length} homeDepth=${homeNames.length} ` +
+        `searchTabBarHidden=${this.searchTabBarHidden}`);
     if (names.length > 0) {
       this.pageIndexInfos.clear();
     }
     if (this.homeStack.size() > 0) {
       this.homeStack.clear();
+    }
+    // ★ 搜索页被**程序化**弹出时不会走它的 onShowChange(false)，底栏标志会一直停在隐藏态
+    //   ⇒ 从搜索页点播放条跳到「现在就听」会出现"没有 Tab 栏"。这里统一复位。
+    if (this.searchTabBarHidden) {
+      this.searchTabBarHidden = false;
+      Logger.info(RzdShellLogTag, 'pop to root: reset searchTabBarHidden=false');
     }
   }
 
