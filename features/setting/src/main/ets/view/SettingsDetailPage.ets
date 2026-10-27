@@ -395,12 +395,12 @@ export struct SettingsDetailPage {
         if (src === undefined || src.qualitys.length === 0) {
           continue;
         }
-        // ② 测"播放实际会用到的那一档"：≤ 用户默认音质里的最高档（与回退链同口径）
-        const preferred: string = await PlaybackPreferenceService.resolveDefaultQuality();
-        const picked: string = pickPlaybackQuality(src.qualitys, preferred);
+        // ② 测试音质**不跟随用户设置**：把该平台声明的档位逐级全部测一遍
         const qualities: string[] = [];
-        if (picked.length > 0) {
-          qualities.push(picked);
+        for (let qi: number = 0; qi < src.qualitys.length; qi++) {
+          if (src.qualitys[qi].length > 0) {
+            qualities.push(src.qualitys[qi]);
+          }
         }
         for (let q: number = 0; q < qualities.length; q++) {
           try {

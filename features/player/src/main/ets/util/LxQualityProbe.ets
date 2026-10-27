@@ -284,18 +284,26 @@ export function markProbeFail(source: string, quality: string, detail: string): 
  * @returns 形如 `已验证（320k）` / `未通过（320k）` / `未测`
  */
 export function probeSummary(source: string): string {
-  let found: string = '';
+  const okTiers: string[] = [];
+  let tested: number = 0;
   sessionCache.forEach((v: ProbeResult, k: string): void => {
     if (k.startsWith(source + '|')) {
-      const q: string = k.substring(source.length + 1);
+      tested++;
       if (v.ok) {
-        found = '已验证（' + q + '）';
-      } else if (found.length === 0) {
-        found = '未通过（' + q + '）';
+        okTiers.push(k.substring(source.length + 1));
       }
     }
   });
-  return found.length > 0 ? found : '未测';
+  if (tested === 0) {
+    return '未测';
+  }
+  if (okTiers.length === 0) {
+    return '全部不可用（测 ' + tested + ' 档）';
+  }
+  // 按档位从高到低排，最多列 3 个，避免 ToolTip 太长
+  okTiers.sort((a: string, b: string): number => qualityRank(b) - qualityRank(a));
+  const shown: string[] = okTiers.length > 3 ? okTiers.slice(0, 3) : okTiers;
+  return '可用 ' + okTiers.length + '/' + tested + '：' + shown.join('·');
 }
 
 export function cachedProbe(source: string, quality: string): ProbeResult | undefined {

@@ -1147,6 +1147,20 @@ export class MediaService {
       appState.playQueueIds = snapshot.localIds;
       appState.selectIndex = snapshot.index;
       this.musicIndex = snapshot.index;
+      // ★ 恢复出来的直链可能已过期（真机日志：kuwo 410 IO Resource Not Found），
+      //   启动恢复时把在线歌曲的 http 直链清空，让播放链路重新取址（走统一回退链）。
+      let staleCleared: number = 0;
+      for (let qi: number = 0; qi < items.length; qi++) {
+        const it = items[qi];
+        const u: string = it.url;
+        if (u.startsWith('http://') || u.startsWith('https://')) {
+          it.url = '';
+          staleCleared++;
+        }
+      }
+      if (staleCleared > 0) {
+        this.appendPlayLog('[播放] 启动恢复清理过期直链 ' + staleCleared + ' 条');
+      }
       const restoreIndex: number = this.getValidSelectIndex();
       appState.selectIndex = restoreIndex;
       this.musicIndex = restoreIndex;
