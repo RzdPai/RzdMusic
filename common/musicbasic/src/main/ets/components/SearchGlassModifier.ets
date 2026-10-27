@@ -1,4 +1,5 @@
 import { barBlurOptions, barMaterial } from '../util/BarMaterial';
+import { immersiveMedium } from '../util/ImmersiveMaterialV26';
 
 /**
  * 搜索胶囊（返回键 / 音源切换 / 识别歌曲）的**沉浸光感**背板。
@@ -26,8 +27,16 @@ export class SearchGlassModifier implements AttributeModifier<StackAttribute> {
   }
 
   applyNormalAttribute(instance: StackAttribute): void {
-    instance.height(40)
-      .backgroundBlurStyle(barMaterial(this.level), barBlurOptions())
+    // ★ 2026-10-29（API 26 升级）：改用新系统的通用沉浸材质 `.systemMaterial()`（中等厚度）。
+    //   `systemMaterial` 会接管 background/border/shadow，所以不再叠 backgroundBlurStyle/backgroundColor/borderRadius。
+    const material: SystemUiMaterial | undefined = immersiveMedium();
+    instance.height(40);
+    if (material !== undefined) {
+      instance.systemMaterial(material);
+      return;
+    }
+    // 设备不支持沉浸材质时退回旧的自绘材质（同档位表）
+    instance.backgroundBlurStyle(barMaterial(this.level), barBlurOptions())
       .backgroundColor(Color.Transparent)
       .borderRadius(20);
   }
