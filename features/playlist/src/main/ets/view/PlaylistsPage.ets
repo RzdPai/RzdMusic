@@ -183,7 +183,12 @@ export struct PlaylistsPage {
     if (this.addMenuNode === null) {
       this.addMenuNode = new ComponentContent(this.getUIContext(), wrapBuilder(playlistsAddMenuComponent));
     }
-    this.getUIContext().getPromptAction().openMenu(this.addMenuNode, { id: this.addMenuTargetId })
+    this.getUIContext().getPromptAction().openMenu(this.addMenuNode, { id: this.addMenuTargetId }, {
+      // 材质挂在**菜单窗口选项**上（照 RzdVideo 换源菜单）：档位跟随设置 + AVERAGE=光感
+      placement: Placement.BottomRight,
+      backgroundBlurStyle: appBarBlurStyle(),
+      backgroundBlurStyleOptions: { adaptiveColor: AdaptiveColor.AVERAGE }
+    })
       .catch((err: BusinessError): void => {
         console.error('openMenu add failed: ' + err.code + ' ' + err.message);
       });
