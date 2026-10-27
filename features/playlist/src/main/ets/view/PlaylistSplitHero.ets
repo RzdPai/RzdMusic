@@ -14,7 +14,7 @@
  */
 
 
-import { StyleConstants } from 'musicbasic';
+import {appBarBlurStyle,  StyleConstants} from 'musicbasic';
 import { MusicListPlaybackViewModel } from '../viewmodel/MusicListPlaybackViewModel';
 
 /**
@@ -120,7 +120,7 @@ export struct PlaylistSplitHero {
           .padding({ left: 12, right: 12 })
           .backgroundColor($r('sys.color.font_on_tertiary'))
           .borderRadius(27)
-          .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
+          .backgroundBlurStyle(appBarBlurStyle())
           .borderWidth(1)
           .borderColor('#26ffffff')
 
@@ -137,7 +137,7 @@ export struct PlaylistSplitHero {
           .borderRadius(30)
           .borderWidth(1)
           .borderColor('#26ffffff')
-          .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
+          .backgroundBlurStyle(appBarBlurStyle())
           .justifyContent(FlexAlign.Center)
         }
         .margin({ top: 65 })

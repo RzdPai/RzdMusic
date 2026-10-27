@@ -14,7 +14,7 @@
  */
 
 import { uiObserver } from '@kit.ArkUI';
-import {
+import {appBarBlurStyle, 
   areaLengthToVp,
   BreakpointType,
   getPlaylistTransitionState,
@@ -24,8 +24,7 @@ import {
   Logger,
   RouterUrlConstants,
   StyleConstants,
-  WindowInfo
-} from 'musicbasic';
+  WindowInfo} from 'musicbasic';
 import { CoverWing } from './CoverWing';
 import { ToplistRouteParam } from 'playlist';
 import { RecommendHeroCardUi, RecommendPrivateSongUi } from '../model/RecommendUiModels';
@@ -892,7 +891,7 @@ owPlayingCoverUrl），**不是**实时读在播歌曲 ——
         }
         .justifyContent(FlexAlign.SpaceBetween)
         .backgroundColor($r('app.color.banner_overlay_background'))
-        .backgroundBlurStyle(BlurStyle.BACKGROUND_ULTRA_THICK)
+        .backgroundBlurStyle(appBarBlurStyle())
         .padding(12)
       }
       .height('100%')

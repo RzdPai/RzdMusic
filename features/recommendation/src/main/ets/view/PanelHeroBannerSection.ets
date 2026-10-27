@@ -14,7 +14,7 @@
  */
 
 
-import { MusicDbApi, RouterUrlConstants, StyleConstants } from 'musicbasic';
+import {appBarBlurStyle,  MusicDbApi, RouterUrlConstants, StyleConstants} from 'musicbasic';
 import { RecommendHeroCardUi } from '../model/RecommendUiModels';
 import { RecommendViewModel } from '../viewmodel/RecommendViewModel';
 
@@ -114,7 +114,7 @@ export struct PanelHeroBannerSection {
         }
         .justifyContent(FlexAlign.SpaceBetween)
         .backgroundColor($r('app.color.banner_overlay_background'))
-        .backgroundBlurStyle(BlurStyle.BACKGROUND_ULTRA_THICK)
+        .backgroundBlurStyle(appBarBlurStyle())
         .padding(12)
       }
       .height('100%')
