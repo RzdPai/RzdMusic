@@ -16,7 +16,10 @@
 import { AppStorageV2, curves, display, uiObserver } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
-import {appBarBlurStyle,  guardPlayerBack, SearchGlassModifier} from 'musicbasic';
+import {
+  immersiveMedium,
+  appBarBlurStyle,  guardPlayerBack, SearchGlassModifier
+} from 'musicbasic';
 import { AlbumRouteParam, ArtistRouteParam, BreakpointType, ThemeState, WindowUtil } from 'musicbasic';
 import { BlurStrategy, BottomBuilderShowType, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, HideMode, ScrollEffectType } from '@kit.UIDesignKit';
 import { AppStorageKeys, AmbientState, FavoriteEntry, MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord, QualityInfo, RouterUrlConstants, SongItem, SongTitleMarquee, ToplistRouteParam, appendPlayLog, barBlurOptions, buildTitleMaterial } from 'musicbasic';
@@ -2538,10 +2541,10 @@ export struct OnlineSearchPage {
               .constraintSize({ maxHeight: 480 })
               .scrollBar(BarState.Off)
               // 与迷你播放条/搜索框同款磨砂：#30 透明度灰底 + 材质模糊
-              .backgroundColor(this.isDarkTheme() ? '#33202224' : '#30F1F3F5')
-              .backgroundBlurStyle(this.searchControlBlur())
-              .borderRadius(20)
-              .shadow({ radius: 12, color: '#22000000', offsetX: 0, offsetY: 3 })
+              // ★ API 26：改用系统沉浸材质（中等厚度）；背景/描边/阴影由材质接管
+              .systemMaterial(immersiveMedium())
+              .clip(true)
+              .clip(true)
               .clip(true)
               .hitTestBehavior(HitTestMode.Default)
             }
