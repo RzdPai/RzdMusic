@@ -1407,8 +1407,8 @@ export class MediaService {
         const status: number = info.status;
         if (this.lastHiCarStatus === smartMobilityCommon.SmartMobilityStatus.RUNNING &&
           status === smartMobilityCommon.SmartMobilityStatus.IDLE) {
-          this.appendPlayLog('[播放] HiCar 断开，自动暂停');
-          this.pause();
+            // HiCar 断开 ⇒ 走统一暂停策略（临时失去外部输出，不自动恢复）
+            this.pauseBy('hicar', false);
         }
         this.lastHiCarStatus = status;
       });
