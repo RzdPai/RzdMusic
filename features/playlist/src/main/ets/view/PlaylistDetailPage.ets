@@ -17,7 +17,10 @@ import { AppStorageV2, ComponentContent, LengthMetrics, uiObserver } from '@kit.
 import { BusinessError } from '@kit.BasicServicesKit';
 import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
-import { guardPlayerBack, PLAYLIST_HERO_COVER_ID, shouldUseSplitDetailLayout, splitDetailCardWidthVp } from 'musicbasic';
+import {
+  appBarBlurStyle,
+   guardPlayerBack, PLAYLIST_HERO_COVER_ID, shouldUseSplitDetailLayout, splitDetailCardWidthVp
+} from 'musicbasic';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { http } from '@kit.NetworkKit';
 import { image } from '@kit.ImageKit';
@@ -1038,7 +1041,10 @@ export struct PlaylistDetailPage {
     if (this.moreMenuNode === null) {
       this.moreMenuNode = new ComponentContent(this.getUIContext(), wrapBuilder(playlistMoreMenuComponent));
     }
-    this.getUIContext().getPromptAction().openMenu(this.moreMenuNode, { id: this.moreMenuTargetId })
+    this.getUIContext().getPromptAction().openMenu(this.moreMenuNode, { id: this.moreMenuTargetId }, {
+      // 菜单背板材质只给档位（跟随设置里的光感等级）；不指定 adaptiveColor = 系统预设蒙版色
+      backgroundBlurStyle: appBarBlurStyle()
+    })
       .catch((err: BusinessError): void => {
         hilog.error(PLAYLIST_LOG_DOMAIN, PLAYLIST_LOG_TAG, 'openMenu more failed: %{public}d %{public}s',
           err.code, err.message);
