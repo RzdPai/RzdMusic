@@ -152,6 +152,15 @@ export class MediaService {
   /** True while playback was paused by a temporary audio interruption and should auto-resume. */
   private pausedByInterrupt: boolean = false;
   /**
+   * 暂停原因的唯一真源（grep `RzdPausePolicy`）。
+   * none / user / focus / headphone / hicar / voice / retry / error
+   */
+  private pauseReason: string = 'none';
+  /** 这次暂停是否应在条件满足后自动恢复（临时原因才置 true）。 */
+  private resumeWhenReady: boolean = false;
+  /** 是否在后台（锁屏场景）：耳机拔出暂停只在**前台**生效，避免历史坑"锁屏拔耳机→自己 pause→锁屏放不了"。 */
+  private appInBackground: boolean = false;
+  /**
    * 锁屏/后台取证（2026-10-20 夜，用户报「锁屏播放不工作，开关开关都一样」）。
    *
    * ★ 这一组只**取证**，不改变任何播放行为：
@@ -568,6 +577,15 @@ export class MediaService {
         if (!lostOutput) {
           return;
         }
+        // ★ 2026-10-28：恢复"断开耳机自动暂停"（用户要求），但**只在前后台判定为前台时**执行。
+        //   历史坑：锁屏/后台时系统重排音频路由也会发 DISCONNECT，旧实现直接 pause ⇒ 锁屏放不了。
+        //   现在后台只记日志不暂停；前台才 pause，且不自动恢复（用户重新戴上要自己点播放）。
+        if (this.appInBackground) {
+          appendPlayLog('[RzdPausePolicy] headphone-disconnect ignored bg=1 (avoid lock-screen stall)');
+          return;
+        }
+        this.pauseBy('headphone', false);
+        return;
         // ★★★ 2026-10-22（甲方：「锁屏不能播放」；真机日志 `未命名1_1792679196597.txt` 直接给出证据）：
         // ```
         //   22:19:58  [RzdLockScreenB] bg-enter playing=1 … background-mode=ok   ← 后台任务成功
@@ -598,6 +616,36 @@ export class MediaService {
       manager.off('deviceChange', callback);
     } catch (_err) {
     }
+  }
+
+  /** 统一日志：每次暂停/恢复都写一行，便于抓现场。 */
+  private logPausePolicy(action: string, reason: string, autoResume: boolean, extra: string = ''): void {
+    appendPlayLog('[RzdPausePolicy] ' + action + ' reason=' + reason +
+      ' autoResume=' + (autoResume ? '1' : '0') + ' bg=' + (this.appInBackground ? '1' : '0') +
+      ' state=' + this.state + (extra.length > 0 ? (' ' + extra) : ''));
+  }
+
+  /** 按原因暂停：临时原因（focus/voice/retry）标记为"可自动恢复"。 */
+  public pauseBy(reason: string, autoResume: boolean): void {
+    this.pauseReason = reason;
+    this.resumeWhenReady = autoResume;
+    this.pauseOrigin = reason;
+    this.logPausePolicy('pause', reason, autoResume);
+    this.pause();
+  }
+
+  /** 条件满足时按原因恢复：只有"因临时原因暂停 + 允许自动恢复"才真正起播。 */
+  public resumeIfAutoPaused(reason: string): void {
+    const allowed: boolean = this.resumeWhenReady && this.pauseReason !== 'user' &&
+      this.pauseReason !== 'none';
+    this.logPausePolicy('resume-request', reason, allowed, 'pausedBy=' + this.pauseReason);
+    if (!allowed) {
+      return;
+    }
+    this.resumeWhenReady = false;
+    this.pauseReason = 'none';
+    this.pauseOrigin = '';
+    this.play();
   }
 
   private isPlayPaused(): boolean {
@@ -807,6 +855,7 @@ export class MediaService {
     const enabled: boolean = MusicStoreService.getInstance().getLockScreenPlay();
     this.lockScreenDiagnostic(`onBackground(playing=${playing}) lockscreen enabled=${enabled}`);
     // ★ 取证起点：进后台的墙钟 + 播放位置（回前台用 onApplicationForeground 结算差值）
+    this.appInBackground = true;
     this.bgEnterWall = Date.now();
     this.bgEnterPosition = this.getCurrentTime();
     const playerState: string = this.avPlayer !== undefined ? this.avPlayer.state : 'none';
@@ -840,6 +889,7 @@ export class MediaService {
       this.lockScreenDiagnostic(`bg-leave(${stalled ? 'stall' : 'keep'}) wall=${wall} pos-delta=${advance} ` +
         `playing=${playing ? 1 : 0} state=${playerState} lockscreen enabled=${enabled} ` + BackgroundUtil.snapshot());
     }
+    this.appInBackground = false;
     this.bgEnterWall = 0;
     this.bgEnterPosition = 0;
     if (enabled && playing) {
@@ -1314,6 +1364,10 @@ export class MediaService {
               }
             }
             this.pausedByInterrupt = true;
+            // 临时失焦（含输入法语音输入）⇒ 走统一策略，焦点归还时自动恢复
+            this.pauseReason = 'focus';
+            this.resumeWhenReady = true;
+            this.logPausePolicy('paused', 'focus', true);
             this.updateIsPlay(false);
             this.appendPlayLog('[播放] 音频被打断（暂时失焦），等待恢复');
             break;
