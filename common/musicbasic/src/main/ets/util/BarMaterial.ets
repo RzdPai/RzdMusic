@@ -12,6 +12,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import { AppStorageV2 } from '@kit.ArkUI';
+import { AmbientState } from '../model/AmbientState';
+import { AppStorageKeys } from '../constants/Constants';
+
 
 /**
  * 自绘「底部操作条 / 悬浮胶囊 / 搜索框」的**沉浸光感材质**。
@@ -43,6 +47,15 @@
  * @param level 光感强度（0 = 跟随系统 / 1 = 弱 / 2 = 均衡 / 3 = 强）
  * @returns `BlurStyle`（ArkUI 全局枚举，不需要 import）
  */
+/**
+ * 按**软件设置里的光感等级**直接取档位（给独立 `@Builder` 函数用：那里没有 `this`）。
+ * 与标题栏 `buildTitleMaterial(level)` 共用同一张档位表，保证一屏内浮层材质同档。
+ */
+export function appBarBlurStyle(): BlurStyle {
+  const st: AmbientState | undefined =
+    AppStorageV2.connect(AmbientState, AppStorageKeys.AMBIENT_STATE, () => new AmbientState());
+  return buildBarBlurStyle(st !== undefined ? st.level : 0);
+}
 export function buildBarBlurStyle(level: number): BlurStyle {
   switch (level) {
     case 1:

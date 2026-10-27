@@ -166,7 +166,8 @@ export { LocateFloatButton } from './src/main/ets/view/LocateFloatButton';
 export {
   buildBarBlurStyle,
   barBlurOptions,
-  barMaterial
+  barMaterial,
+  appBarBlurStyle
 } from './src/main/ets/util/BarMaterial';
 // 动态封面（Apple Music motion artwork；规格 docs/apple-motion-cover.md）：
 //   MotionCoverState = 其它设置里的总开关（默认开）；MotionCoverService = SSR 解析 + 缓存；
