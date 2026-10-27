@@ -641,12 +641,18 @@ struct Index {
     try {
       // 用 popToIndex(0, false) 代替 clear()：clear 在过渡动画进行中被调用后，
       // 系统再 pop 就会打到已失效的栈上（真机表现为"返回必闪退"）。
-      if (names.length > 0) {
-        this.pageIndexInfos.popToIndex(0, false);
+      // 根栈：整栈弹空
+      while (this.pageIndexInfos.size() > 0) {
+        this.pageIndexInfos.pop(false);
       }
-      if (this.homeStack.size() > 0) {
-        this.homeStack.popToIndex(0, false);
+      // 首页内层栈：**保留栈底**（首页本体就是它），只弹掉压在上面的页面。
+      // 之前 popToIndex(0)/clear() 会把栈底也清掉 ⇒ 首页渲染成空白/黑。
+      let guard: number = 0;
+      while (this.homeStack.size() > 1 && guard < 8) {
+        this.homeStack.pop(false);
+        guard++;
       }
+      appendPlayLog(`[RzdShellBack] popToRoot done root=${this.pageIndexInfos.size()} home=${this.homeStack.size()}`);
     } catch (err) {
       Logger.info(RzdShellLogTag, 'pop to root popToIndex threw');
     }
@@ -729,11 +735,7 @@ struct Index {
       appendPlayLog('[RzdShellBack] popped root stack');
       return true;
     }
-    if (this.tabState.tabIndex !== 0) {
-      this.tabState.tabIndex = 0;
-      appendPlayLog('[RzdShellBack] switched to home tab');
-      return true;
-    }
+    // 没有任何页面可弹 ⇒ 交回系统（退回后台/退出），不再自作主张切页签
     appendPlayLog('[RzdShellBack] nothing to pop -> hand back to system');
     return false;
   }
