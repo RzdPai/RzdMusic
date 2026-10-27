@@ -143,14 +143,7 @@ export struct SourceManagerList {
           .padding(10)
           .borderRadius($r('sys.float.corner_radius_level6'))
           .backgroundColor($r('app.color.card_background'))
-          // 整卡可拖（长按卡片任意位置即可拖动排序）
-          .draggable(this.draggableEnabled && this.inOrder(api.id))
-          .onDragStart(() => {
-            this.dragId = api.id;
-          })
-          .onDrop(() => {
-            this.onMove(this.dragId, api.id);
-          })
+          // 拖动排序由 List.onMove 负责（API 26 SDK 可用；不会再复制一张卡片跟手）
         }
         .swipeAction({
           end: {
@@ -164,6 +157,17 @@ export struct SourceManagerList {
     }
     .width('100%')
     .scrollBar(BarState.Off)
+    // ★ 2026-10-29（API 26 SDK）：List 的官方拖拽排序 = `editMode` + `onItemMove`。
+    //   `onMove` 只存在于 DynamicNode（Repeat）上，普通 List + ForEach 用这对。
+    //   离手回调 (from, to)，我们只重排数据；不会再出现"复制一张卡片跟手"。
+    .editMode(this.draggableEnabled)
+    .onItemMove((from: number, to: number): boolean => {
+      if (from === to || from < 0 || to < 0 || from >= this.apis.length || to >= this.apis.length) {
+        return false;
+      }
+      this.onMove(this.apis[from].id, this.apis[to].id);
+      return true;
+    })
     // 拖动：行级 draggable（本 SDK 的 List 无 onMove，List 级拖拽实测不可用）
 
   }
