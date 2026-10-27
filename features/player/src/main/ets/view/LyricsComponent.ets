@@ -66,6 +66,9 @@ function isTitleLine(text: string): boolean {
   return TITLE_LINE_RE.test(text);
 }
 
+/** 播放页歌词「当前行」上移量（vp）：0 = 正中，越大越靠上。 */
+const LYRIC_FOCUS_LIFT_VP: number = 32;
+
 @ComponentV2
 export struct LyricsComponent {
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
@@ -631,8 +634,10 @@ export struct LyricsComponent {
             showSubLyric: this.showSubLyricState.enabled,
             enableSpring: true,
             wordFadeWidth: 0.5,
-            contentStartOffset: this.lyricCenterOffset(),
-            contentEndOffset: this.lyricCenterOffset(),
+            // 当前行**偏上**（用户 2026-10-28）：上留白少一点、下留白多一点，
+            // 焦点行整体上移 LYRIC_FOCUS_LIFT_VP；两值之和仍等于"居中"时的 2×offset，滚动范围不变。
+            contentStartOffset: Math.max(0, this.lyricCenterOffset() - LYRIC_FOCUS_LIFT_VP),
+            contentEndOffset: this.lyricCenterOffset() + LYRIC_FOCUS_LIFT_VP,
             onSeekTime: (ms: number): void => {
               this.state.progress = ms;
               this.onSeekTime(ms);
