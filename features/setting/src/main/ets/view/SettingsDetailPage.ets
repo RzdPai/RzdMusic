@@ -26,7 +26,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatformsOf, lxSourceManager, MediaService } from 'player';
 import type { LXApiImportResult } from 'player';
-import { pickPlaybackQuality, probeBySample, qualityRank } from 'player';
+import { pickPlaybackQuality, probeBySample, qualityRank, QUALITY_CHAIN } from 'player';
 import type { LXUserApiSourceInfo } from 'player';
 import { SyncSettingsPanel } from 'sync';
 import { AccountManageSheet } from '../account/AccountManageSheet';
@@ -40,6 +40,9 @@ import { LxSourceDeclaredBlock } from './LxSourceTags';
 import { SourceManagerList } from './SourceManagerList';
 import { readOfficialUpdateAlert, SourceUpdateInfo } from '../util/SourceUpdate';
 import { LengthMetrics } from '@kit.ArkUI';
+
+/** 单次「测试音源」对每个平台最多试几档（从最高往下，命中即停）。 */
+const PROBE_MAX_TIERS: number = 5;
 const LX_ONLINE_IMPORT_MAX_BYTES: number = 9 * 1024 * 1024;
 const LX_ONLINE_IMPORT_TIMEOUT: number = 15000;
 
@@ -396,14 +399,16 @@ export struct SettingsDetailPage {
           continue;
         }
         // ② 从**标注的最高音质**开始逐级往下测，命中一档就停（这就是"实际可用最高音质"）
+        // ★ 用户 2026-10-28：测试**从全局最高音质开始**往下测，不再以脚本声明为准
+        //   （拓展音质不是原版洛雪定义，声明值常偏低，按声明测会把本来能播的高档位漏掉）。
+        //   顺序：QUALITY_CHAIN 原序（master → atmos_plus → atmos → hires → flac24bit → flac → 320k → 128k），
+        //   命中一档即停；最多试 PROBE_MAX_TIERS 档，避免一次点按发太多请求。
         const qualities: string[] = [];
-        for (let qi: number = 0; qi < src.qualitys.length; qi++) {
-          if (src.qualitys[qi].length > 0) {
-            qualities.push(src.qualitys[qi]);
+        for (let qi: number = 0; qi < QUALITY_CHAIN.length && qualities.length < PROBE_MAX_TIERS; qi++) {
+          if (QUALITY_CHAIN[qi].length > 0) {
+            qualities.push(QUALITY_CHAIN[qi]);
           }
         }
-        qualities.sort((a: string, b: string): number => qualityRank(a) - qualityRank(b));
-        qualities.reverse();
         for (let q: number = 0; q < qualities.length; q++) {
           try {
             total++;
