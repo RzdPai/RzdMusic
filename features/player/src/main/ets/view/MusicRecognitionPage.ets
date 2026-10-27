@@ -4,7 +4,7 @@ import { webview } from '@kit.ArkWeb';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
-import { guardPlayerBack } from 'musicbasic';
+import {appBarBlurStyle,  guardPlayerBack} from 'musicbasic';
 import { AppStorageKeys, AmbientState, MusicAppState, MusicStoreService, SongTitleMarquee, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { RecognitionResult, RecognitionStatus, EngineReport, EngineResultGroup } from '../recognize/RecognitionTypes';
 import { MicCancelledError, MicPermissionError, MicRecorder } from '../recognize/MicRecorder';
@@ -397,7 +397,7 @@ export struct MusicRecognitionPage {
               this.getUIContext().getPromptAction().showToast({ message: '已复制', duration: 1500 });
             }
           }
-        ])
+        ], { backgroundBlurStyle: appBarBlurStyle() })
     }
     .width('100%')
     .padding({ top: 10, bottom: 10 })

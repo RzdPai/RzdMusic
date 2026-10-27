@@ -16,7 +16,7 @@
 import { AppStorageV2, curves, display, uiObserver } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
-import { guardPlayerBack, SearchGlassModifier } from 'musicbasic';
+import {appBarBlurStyle,  guardPlayerBack, SearchGlassModifier} from 'musicbasic';
 import { AlbumRouteParam, ArtistRouteParam, BreakpointType, ThemeState, WindowUtil } from 'musicbasic';
 import { BlurStrategy, BottomBuilderShowType, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, HideMode, ScrollEffectType } from '@kit.UIDesignKit';
 import { AppStorageKeys, AmbientState, FavoriteEntry, MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord, QualityInfo, RouterUrlConstants, SongItem, SongTitleMarquee, ToplistRouteParam, appendPlayLog, barBlurOptions, buildTitleMaterial } from 'musicbasic';
@@ -1403,7 +1403,7 @@ export struct OnlineSearchPage {
               void this.addPlaylistToQueue(p);
             }
           }
-        ])
+        ], { backgroundBlurStyle: appBarBlurStyle() })
       SymbolGlyph($r('sys.symbol.chevron_right'))
         .fontSize(18)
         .fontColor([$r('sys.color.font_tertiary')])
