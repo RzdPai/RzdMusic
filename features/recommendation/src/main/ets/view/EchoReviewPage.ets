@@ -963,6 +963,9 @@ export struct EchoReviewPage {
       this.MonthPicker()
       this.TopSongsSection()
       this.AudienceSection()
+      // ★ 用户 2026-10-28：左列太短、右列太长 ⇒ 把这两块（各 64 封面 + 3 行，体量适中）挪到左边
+      this.LoopKingSection()
+      this.NightSongSection()
     }
     // 甲方 2026-10-24：「回响页左右改成平分，不要一边大一边小」⇒ 两列等宽（1:1）
     .layoutWeight(1)
@@ -977,8 +980,6 @@ export struct EchoReviewPage {
       this.TopAlbumsSection()
       this.CompletionSection()
       this.NewDiscoverySection()
-      this.LoopKingSection()
-      this.NightSongSection()
       this.NewFavoritesSection()
     }
     .layoutWeight(1)
@@ -1026,10 +1027,10 @@ export struct EchoReviewPage {
               this.TopArtistSection()
               this.TopAlbumsSection()
               this.AudienceSection()
-              this.CompletionSection()
-              this.NewDiscoverySection()
               this.LoopKingSection()
               this.NightSongSection()
+              this.CompletionSection()
+              this.NewDiscoverySection()
               this.NewFavoritesSection()
             }
             .width('100%')
