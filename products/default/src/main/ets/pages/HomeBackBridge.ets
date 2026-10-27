@@ -12,9 +12,17 @@
  */
 export type HomeBackCleanup = () => void;
 
+/**
+ * 返回键处理器：由壳层注册，Ability 的 `onBackPressed()` 直接调用。
+ * @returns true = 壳层已经处理（吃掉这次返回）；false = 交回系统（退出应用）
+ */
+export type HomeBackHandler = () => boolean;
+
 export class HomeBackBridge {
   /** 页面层注册的收尾函数（未注册时为 undefined）。 */
   private static cleanup: HomeBackCleanup | undefined = undefined;
+  /** 壳层注册的返回键处理器（负责弹栈/切页）。 */
+  private static handler: HomeBackHandler | undefined = undefined;
   /** 已调用次数，只给日志用。 */
   public static calls: number = 0;
 
@@ -29,6 +37,29 @@ export class HomeBackBridge {
   /** 页面卸载时注销，避免持有已销毁页面的 `this`。 */
   public static unregister(): void {
     HomeBackBridge.cleanup = undefined;
+    HomeBackBridge.handler = undefined;
+  }
+
+  /** 注册返回键处理器（壳层 aboutToAppear 调用）。 */
+  public static registerBackHandler(fn: HomeBackHandler): void {
+    HomeBackBridge.handler = fn;
+  }
+
+  /**
+   * 处理一次返回：先让页面做收尾，再问壳层要不要吃掉这次返回。
+   * @returns true = 已处理（不要交回系统）
+   */
+  public static handleBack(): boolean {
+    HomeBackBridge.runCleanup();
+    const fn: HomeBackHandler | undefined = HomeBackBridge.handler;
+    if (fn === undefined) {
+      return false;
+    }
+    try {
+      return fn();
+    } catch (err) {
+      return false;
+    }
   }
 
   /**

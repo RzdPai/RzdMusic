@@ -500,6 +500,7 @@ struct Index {
     HomeBackBridge.register((): void => {
       this.onHomeBackSignal();
     });
+    HomeBackBridge.registerBackHandler(() => this.handleShellBack());
     const bs = this.windowInfo.windowSize;
     // ★★★ 2026-10-18（照搬上游两段式：判意图 → controller 落地）：滚动侧只表达意图，
     //   样式切换与动画都交给 HDS（SDK `@hms.hds.hdsBaseComponent.d.ets:5729`「default animation」）。
@@ -709,6 +710,34 @@ struct Index {
    *   关键：这一步必须在返回生效前后都能跑，且只做"收"，不碰任何动画。
    */
   @Monitor('homeBackAt')
+  /**
+   * 统一的返回处理（由 `HomeBackBridge` 从 Ability 层调用）。
+   * 顺序：首页内层栈 → 根栈 → 非首页页签 → 交回系统退出。
+   * @returns true = 已处理（不交回系统；避免系统去 pop 壳层本身导致首页空白/闪退）
+   */
+  private handleShellBack(): boolean {
+    const homeDepth: number = this.homeStack.size();
+    const rootDepth: number = this.pageIndexInfos.size();
+    appendPlayLog(`[RzdShellBack] tab=${this.tabState.tabIndex} home=${homeDepth} root=${rootDepth}`);
+    if (homeDepth > 0) {
+      this.homeStack.pop(false);
+      appendPlayLog('[RzdShellBack] popped homeStack');
+      return true;
+    }
+    if (rootDepth > 0) {
+      this.pageIndexInfos.pop(false);
+      appendPlayLog('[RzdShellBack] popped root stack');
+      return true;
+    }
+    if (this.tabState.tabIndex !== 0) {
+      this.tabState.tabIndex = 0;
+      appendPlayLog('[RzdShellBack] switched to home tab');
+      return true;
+    }
+    appendPlayLog('[RzdShellBack] nothing to pop -> hand back to system');
+    return false;
+  }
+
   onHomeBackSignal(): void {
     if (this.playerRouteAlive) {
       this.playerRouteAlive = false;

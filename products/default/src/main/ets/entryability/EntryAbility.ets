@@ -383,7 +383,12 @@ export default class EntryAbility extends UIAbility {
     try {
       MusicStoreService.getInstance().appendRuntimeDiagnostic('RzdHomeBackEnter src=EntryAbility');
       // 通知页面层做收尾（Ability 里拿不到 AppStorageV2，用 AppStorage 打信号，Index 监听）。
-      const cleaned: boolean = HomeBackBridge.runCleanup();
+      // 先让壳层处理（弹页面 / 切回首页）；壳层说"没得弹"才交回系统退出
+      const consumed: boolean = HomeBackBridge.handleBack();
+      if (consumed) {
+        return true;
+      }
+      const cleaned: boolean = true;
       MusicStoreService.getInstance().appendRuntimeDiagnostic(`RzdHomeBackEnter cleaned=${cleaned ? 1 : 0} calls=${HomeBackBridge.calls}`);
     } catch (err) {
     }
