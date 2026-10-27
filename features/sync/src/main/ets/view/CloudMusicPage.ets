@@ -41,6 +41,8 @@ import {
   TitleSize
 } from '@kit.UIDesignKit';
 import {
+  buildBarBlurStyle,
+  
   AmbientState,
   AppStorageKeys,
   MusicAppState,
@@ -692,7 +694,9 @@ export struct CloudMusicPage {
           .fontSize(20)
           .fontColor([$r('sys.color.icon_tertiary')])
           .padding({ left: 6, right: 2, top: 8, bottom: 8 })
-          .bindMenu(this.rowMenu(row))
+          .bindMenu(this.rowMenu(row), {
+      backgroundBlurStyle: buildBarBlurStyle(this.ambientState.level)
+    })
           .accessibilityText(`${row.song.name} 的更多操作`)
           .accessibilityLevel('yes')
       }

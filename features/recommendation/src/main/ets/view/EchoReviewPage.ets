@@ -50,7 +50,12 @@
  *   一律未动（`dayColor()` 的返回类型 `string` → `ResourceColor` 是颜色切换的必要改动，算法未改）。
  */
 
-import { AlbumRouteParam, AppStorageKeys, ArtistRouteParam, BarScrollHelper, MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord, RouterUrlConstants, shouldUseSplitDetailLayout } from 'musicbasic';
+import {
+  appBarBlurStyle,
+  
+  buildBarBlurStyle,
+   AlbumRouteParam, AppStorageKeys, ArtistRouteParam, BarScrollHelper, MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord, RouterUrlConstants, shouldUseSplitDetailLayout
+} from 'musicbasic';
 import { OnlinePlayUtil } from 'player';
 import { AppStorageV2, matrix4, uiObserver } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
@@ -1129,7 +1134,9 @@ export struct EchoReviewPage {
       .padding({ left: 12, right: 12 })
       .borderRadius(15)
       .backgroundColor($r('app.color.echo_chip_background'))
-      .bindMenu(this.yearMenuItems())
+      .bindMenu(this.yearMenuItems(), {
+      backgroundBlurStyle: appBarBlurStyle()
+    })
 
       Row({ space: 8 }) {
         SymbolGlyph($r('sys.symbol.chevron_left'))
@@ -1152,7 +1159,9 @@ export struct EchoReviewPage {
       .padding({ left: 12, right: 12 })
       .borderRadius(15)
       .backgroundColor($r('app.color.echo_chip_background'))
-      .bindMenu(this.monthMenuItems())
+      .bindMenu(this.monthMenuItems(), {
+      backgroundBlurStyle: appBarBlurStyle()
+    })
     }
     .width('100%')
   }

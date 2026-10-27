@@ -15,6 +15,7 @@
  */
 
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { appBarBlurStyle } from 'musicbasic';
 import {
   COMMENT_PAGE_SIZE,
   CommentKind,
@@ -1110,7 +1111,9 @@ struct CommentRow {
           .onClick(() => {
             this.openImage(index);
           })
-          .bindContextMenu(this.ImageMenu(url, index), ResponseType.LongPress)
+          .bindContextMenu(this.ImageMenu(url, index), ResponseType.LongPress, {
+      backgroundBlurStyle: appBarBlurStyle()
+    })
           .accessibilityText('查看大图')
           .accessibilityLevel('yes')
         }, (url: string) => 'img-' + this.comment.id + '-' + url)
