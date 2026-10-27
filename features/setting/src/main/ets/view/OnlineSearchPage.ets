@@ -582,13 +582,13 @@ export struct OnlineSearchPage {
   private searchControlBlur(): BlurStyle {
     switch (this.ambientState.level) {
       case 1:
-        return BlurStyle.Thin;
+        return BlurStyle.COMPONENT_ULTRA_THIN;
       case 2:
-        return BlurStyle.Regular;
+        return BlurStyle.COMPONENT_THIN;
       case 3:
-        return BlurStyle.Thick;
+        return BlurStyle.COMPONENT_REGULAR;
       default:
-        return BlurStyle.Thin;
+        return BlurStyle.COMPONENT_ULTRA_THIN;
     }
   }
 

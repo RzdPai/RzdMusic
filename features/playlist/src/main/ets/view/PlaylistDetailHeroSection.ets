@@ -59,7 +59,7 @@ export struct PlaylistDetailHeroSection {
   /** 圆形播放按钮底色。 */
   @Param buttonTint: ResourceColor = '#33FFFFFF';
   /** 圆形播放按钮毛玻璃强度。 */
-  @Param buttonBlur: BlurStyle = BlurStyle.Regular;
+  @Param buttonBlur: BlurStyle = BlurStyle.COMPONENT_THIN;
 
   /**
    * 封面高度（vp）。

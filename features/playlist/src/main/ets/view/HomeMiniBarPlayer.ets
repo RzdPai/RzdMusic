@@ -221,11 +221,11 @@ export struct HomeMiniBarPlayer {
     const material: SystemMaterialParams = buildTitleMaterial(this.ambientState.level);
     switch (material.materialLevel) {
       case hdsMaterial.MaterialLevel.SMOOTH:
-        return BlurStyle.Thin;
+        return BlurStyle.COMPONENT_ULTRA_THIN;
       case hdsMaterial.MaterialLevel.GENTLE:
-        return BlurStyle.Regular;
+        return BlurStyle.COMPONENT_THIN;
       case hdsMaterial.MaterialLevel.EXQUISITE:
-        return BlurStyle.Thick;
+        return BlurStyle.COMPONENT_REGULAR;
       default:
         // ADAPTIVE = 跟随系统 ⇒ 用组件的最厚一档（系统会按自身策略收敛）。
         return BlurStyle.COMPONENT_ULTRA_THICK;
