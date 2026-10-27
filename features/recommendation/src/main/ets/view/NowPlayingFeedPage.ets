@@ -3332,7 +3332,12 @@ export struct NowPlayingFeedPage {
         }
         .width(StyleConstants.FULL_WIDTH)
         .height(StyleConstants.FULL_HEIGHT)
-        .padding({ right: FEED_SIDE_PADDING_VP * 2, top: 0, bottom: this.wideBottomReserveVp() })
+        // 用户确认：现在就听横屏"上下各占一半"是对的，保留（第一次我误回退了）
+        .padding({
+          right: FEED_SIDE_PADDING_VP * 2,
+          top: this.wideBottomReserveVp() / 2,
+          bottom: this.wideBottomReserveVp() / 2
+        })
         .alignItems(VerticalAlign.Top)
       }
       .width(StyleConstants.FULL_WIDTH)
