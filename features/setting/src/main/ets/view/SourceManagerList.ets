@@ -129,7 +129,8 @@ export struct SourceManagerList {
               LxSourceDeclaredBlock({
                 items: this.platformsOf(api),
                 accentColor: this.accentColor,
-                active: this.activeId === api.id
+                active: this.activeId === api.id,
+                apiId: api.id
               })
             }
             .alignItems(HorizontalAlign.Start)

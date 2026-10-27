@@ -30,6 +30,9 @@ function lxMissingDeclaredText(active: boolean): string {
  */
 @ComponentV2
 export struct LxSourceDeclaredTags {
+  /** 所属音源脚本 id（探测状态按脚本隔离）。 */
+  @Param apiId: string = '';
+
   /** 该脚本声明的平台摘要；空数组 = 还没检测到。 */
   @Param items: LXSourcePlatformInfo[] = [];
   /** 强调色（主题色），用于平台标签的底。 */
@@ -79,7 +82,7 @@ export struct LxSourceDeclaredTags {
     if (item.bestQuality.length === 0) {
       return '';
     }
-    return ' · ' + probeSummary(item.source);
+    return ' · ' + probeSummary(item.source, this.apiId);
   }
 
   /** A3：每个平台一行「平台 · 最高音质」。 */
@@ -142,6 +145,9 @@ export struct LxSourceDeclaredTags {
  */
 @ComponentV2
 export struct LxSourceDeclaredBlock {
+  /** 所属音源脚本 id（探测状态按脚本隔离）。 */
+  @Param apiId: string = '';
+
   /** 该脚本声明的平台摘要；空数组 = 还没检测到。 */
   @Param items: LXSourcePlatformInfo[] = [];
   /** 强调色（主题色）。 */
@@ -161,7 +167,8 @@ export struct LxSourceDeclaredBlock {
       } else {
         LxSourceDeclaredTags({
           items: this.items,
-          accentColor: this.accentColor
+          accentColor: this.accentColor,
+          apiId: this.apiId
         })
       }
     }

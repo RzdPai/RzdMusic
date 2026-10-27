@@ -108,12 +108,12 @@ export function sampleOf(source: string): ProbeSample | undefined {
 }
 
 /** 用样曲探测某平台某音质；解析不出样曲就返回 undefined。 */
-export async function probeBySample(source: string, quality: string): Promise<ProbeResult | undefined> {
+export async function probeBySample(source: string, quality: string, scriptId: string = ''): Promise<ProbeResult | undefined> {
   const s: ProbeSample | undefined = await resolveSample(source);
   if (s === undefined) {
     return undefined;
   }
-  return probeQuality(source, s.songId, quality, s.name, s.singer, s.interval);
+  return probeQuality(source, s.songId, quality, s.name, s.singer, s.interval, scriptId);
 }
 
 /**
@@ -175,8 +175,10 @@ export function pickPlaybackQuality(declared: string[], preferred: string): stri
 }
 const sessionCache: Map<string, ProbeResult> = new Map();
 
-function cacheKey(source: string, quality: string): string {
-  return source + '|' + quality;
+function cacheKey(source: string, quality: string, scriptId: string = ''): string {
+  // ★ 必须带上 scriptId：同一个平台(kw)在不同音源脚本下可用档位完全不同，
+  //   只用平台做 key 会导致"测完 A 源，B 源的弹窗也显示 A 的结果"。
+  return scriptId + '|' + source + '|' + quality;
 }
 
 function isAudioType(contentType: string): boolean {
@@ -194,8 +196,8 @@ function isAudioType(contentType: string): boolean {
  * @param interval 歌曲时长（`mm:ss`）
  */
 export async function probeQuality(source: string, songId: string, quality: string,
-  name: string, singer: string, interval: string): Promise<ProbeResult> {
-  const key: string = cacheKey(source, quality);
+  name: string, singer: string, interval: string, scriptId: string = ''): Promise<ProbeResult> {
+  const key: string = cacheKey(source, quality, scriptId);
   const cached: ProbeResult | undefined = sessionCache.get(key);
   if (cached !== undefined) {
     return cached;
@@ -262,20 +264,20 @@ export async function probeQuality(source: string, songId: string, quality: stri
 }
 
 /** 播放/下载解析成功后回写"这个音质是真实音频"（供 ToolTip 显示）。 */
-export function markProbeOk(source: string, quality: string): void {
+export function markProbeOk(source: string, quality: string, scriptId: string = ''): void {
   const r: ProbeResult = new ProbeResult();
   r.ok = true;
   r.detail = '已验证';
-  sessionCache.set(cacheKey(source, quality), r);
+  sessionCache.set(cacheKey(source, quality, scriptId), r);
   appendPlayLog('[RzdQualityProbe] ' + source + '/' + quality + ' 由播放链路标记为已验证');
 }
 
 /** 播放/下载解析失败后回写"这个音质不可用"。 */
-export function markProbeFail(source: string, quality: string, detail: string): void {
+export function markProbeFail(source: string, quality: string, detail: string, scriptId: string = ''): void {
   const r: ProbeResult = new ProbeResult();
   r.ok = false;
   r.detail = detail;
-  sessionCache.set(cacheKey(source, quality), r);
+  sessionCache.set(cacheKey(source, quality, scriptId), r);
 }
 
 /**
@@ -283,14 +285,15 @@ export function markProbeFail(source: string, quality: string, detail: string): 
  * 所以这里按平台汇总一次，避免又出现"测了却显示未测"）。
  * @returns 形如 `已验证（320k）` / `未通过（320k）` / `未测`
  */
-export function probeSummary(source: string): string {
+export function probeSummary(source: string, scriptId: string = ''): string {
   const okTiers: string[] = [];
   let tested: number = 0;
   sessionCache.forEach((v: ProbeResult, k: string): void => {
-    if (k.startsWith(source + '|')) {
+    const prefix: string = scriptId + '|' + source + '|';
+    if (k.startsWith(prefix)) {
       tested++;
       if (v.ok) {
-        okTiers.push(k.substring(source.length + 1));
+        okTiers.push(k.substring(prefix.length));
       }
     }
   });

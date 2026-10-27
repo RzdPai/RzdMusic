@@ -407,7 +407,7 @@ export struct SettingsDetailPage {
         for (let q: number = 0; q < qualities.length; q++) {
           try {
             total++;
-            const r = await probeBySample(info.source, qualities[q]);
+            const r = await probeBySample(info.source, qualities[q], api.id);
             if (r !== undefined && r.ok) {
               passed++;
               // 命中最高可用档即停，避免继续往下测
