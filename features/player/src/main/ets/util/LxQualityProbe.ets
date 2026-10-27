@@ -50,13 +50,24 @@ export class ProbeSample {
 /** 目前只登记已确认可用的平台样曲；没有登记的平台不做主动探测（保持"未测"）。 */
 const SAMPLES: Map<string, ProbeSample> = new Map();
 
+/**
+ * 预置样曲（**不再现场搜索**）：每个平台一首稳定曲目，songId 取自真机日志验证过的搜索结果。
+ * 需要换曲时只改这里。
+ */
 function registerSamples(): void {
-  const kw: ProbeSample = new ProbeSample();
-  kw.songId = '228908';
-  kw.name = '七里香';
-  kw.singer = '周杰伦';
-  kw.interval = '04:59';
-  SAMPLES.set('kw', kw);
+  const add = (src: string, id: string, name: string, singer: string, interval: string): void => {
+    const s: ProbeSample = new ProbeSample();
+    s.songId = id;
+    s.name = name;
+    s.singer = singer;
+    s.interval = interval;
+    SAMPLES.set(src, s);
+  };
+  add('kw', '228908', '晴天', '周杰伦', '4:29');
+  add('kg', 'B3A52A7A958BF0AED0EBFBA2E9A818B7', '晴天', '周杰伦', '4:29');
+  add('tx', '0039MnYb0qxYhV', '晴天', '周杰伦', '4:29');
+  add('wy', '509781655', '想你就写信 (Live)', '周杰伦、李硕、张鑫', '3:58');
+  add('mg', '60054704965', '圣诞星（feat. 杨瑞代）', '', '3:02');
 }
 
 registerSamples();
@@ -76,26 +87,14 @@ export async function resolveSample(source: string): Promise<ProbeSample | undef
   if (cached !== undefined) {
     return cached;
   }
-  try {
-    const res: LXSearchResult = await lxSearch(source, SAMPLE_QUERY, 1, 5);
-    for (let i: number = 0; i < res.list.length; i++) {
-      const song: LXSearchSong = res.list[i];
-      if (song.songId.length === 0 || song.interval.length === 0) {
-        continue;
-      }
-      const s: ProbeSample = new ProbeSample();
-      s.songId = song.songId;
-      s.name = song.name;
-      s.singer = song.singer;
-      s.interval = song.interval;
-      resolvedSamples.set(source, s);
-      appendPlayLog('[RzdQualityProbe] 样曲 ' + source + ' → ' + s.name + '/' + s.singer + ' (' + s.interval + ')');
-      return s;
-    }
-    appendPlayLog('[RzdQualityProbe] 样曲解析失败（无可用结果）' + source);
-  } catch (err) {
-    appendPlayLog('[RzdQualityProbe] 样曲解析异常 ' + source);
+  // 预置样曲优先，不再现场搜索（省一次网络往返，也不依赖引擎状态）
+  const preset: ProbeSample | undefined = SAMPLES.get(source);
+  if (preset !== undefined) {
+    resolvedSamples.set(source, preset);
+    appendPlayLog('[RzdQualityProbe] 样曲(预置) ' + source + ' → ' + preset.name + ' (' + preset.interval + ')');
+    return preset;
   }
+  appendPlayLog('[RzdQualityProbe] 该平台没有预置样曲 ' + source);
   const fallback: ProbeSample | undefined = SAMPLES.get(source);
   if (fallback !== undefined) {
     resolvedSamples.set(source, fallback);
