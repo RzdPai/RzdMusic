@@ -253,6 +253,8 @@ export struct OnlineSearchPage {
     new SourceCheck('咪咕', 'mg', true)
   ];
   /** Index of the selected source in {@link sourceSelectOptions}; 0 means all sources. */
+  /** ③ 关注状态变更计数器（驱动重绘）。 */
+  @Local followTick: number = 0;
   @Local selectedSourceIndex: number = 0;
   @Local searchSource: string = 'all';
   @Local showSources: boolean = false;
@@ -1429,7 +1431,12 @@ export struct OnlineSearchPage {
 
   /** 是否已关注（关注 = 收藏歌手，与「我的 → 关注」页共用同一份数据）。 */
   private isFollowingSinger(s: SingerInfo): boolean {
-    return this.store.isFavoriteArtist(String(this.singerSource(s)), this.singerRawId(s));
+    // ③ 关注状态存在 MusicStoreService（非 V2 可观察对象）里，改完界面不会自己刷新。
+    //   这里读一下 @Local 计数器，让关注/取关后的重绘能立刻发生。
+    if (this.followTick >= 0) {
+      return this.store.isFavoriteArtist(String(this.singerSource(s)), this.singerRawId(s));
+    }
+    return false;
   }
 
   /** 关注 / 取消关注。 */
@@ -1438,6 +1445,7 @@ export struct OnlineSearchPage {
     const rawId: string = this.singerRawId(s);
     if (this.store.isFavoriteArtist(source, rawId)) {
       this.store.removeFavoriteArtist(source, rawId);
+      this.followTick++;
       this.toast('已取消关注');
       hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'unfollow singer=%{public}s', s.name);
       return;
@@ -1451,6 +1459,7 @@ export struct OnlineSearchPage {
     entry.count = s.songNum;
     entry.time = Date.now();
     this.store.addFavoriteArtist(entry);
+    this.followTick++;
     this.toast('已关注');
     hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'follow singer=%{public}s', s.name);
   }
