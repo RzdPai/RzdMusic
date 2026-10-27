@@ -1368,11 +1368,25 @@ export struct PlaybackPage {
     }
   }
 
+  /** 关闭链每行都带的状态向量（封面残留排查用，任何触发路径都会被记录）。 */
+  private coverTrace(): string {
+    const scaleText: string = this.coverHiddenScale.toFixed(3);
+    const owned: number = this.expandState.snapshotShrinkOwnedFlag() ? 1 : 0;
+    const flight: number = this.snapshotFlight ? 1 : 0;
+    const pix: number = this.morphShrinkState().pixmap !== undefined ? 1 : 0;
+    const hidden: number = this.coverPublishHidden ? 1 : 0;
+    const real: number = this.expandState.realCoverVisible() ? 1 : 0;
+    return '| st scale=' + scaleText + ' snapOwned=' + owned + ' snapFlight=' + flight +
+      ' pix=' + pix + ' coverHidden=' + hidden + ' real=' + real;
+  }
   private closeDiagnostic(event: string, path: string = this.closePath): void {
+    // ★ 2026-10-28：每条关闭链日志都附带状态向量（不是只给"乱点"用；刁钻触发路径同样能留痕）。
+    //   判据：任一事件里出现 snapOwned=1 且 pix=0，或关闭收尾后 real=0 而屏上仍有封面 ⇒ 残留。
+    //   grep 关键字：`RzdCloseChain`（带 `| st` 后缀）
     MusicStoreService.getInstance().appendRuntimeDiagnostic(
-      `RzdCloseChain path=${path} instance=${this.closeInstance} close=${this.closeToken} ${event}`);
-    // ★ 乱点复现专用（2026-10-28）：关闭链起始事件在 1.5s 内出现 ≥3 次 = 连点了。
-    //   测试同学"乱点一通"就是这个特征；命中就打一条 RzdCoverLeak，便于事后定位。
+      `RzdCloseChain path=${path} instance=${this.closeInstance} close=${this.closeToken} ${event} ${this.coverTrace()}`);
+    // ★ 连点突发统计（2026-10-28）：仅作旁证 —— 触发方式可能很刁钻，连点只是其中一种表现。
+    //   命中会打一条 RzdCoverLeak burst，配合同一时段的状态向量一起看。
     //   grep 关键字：`RzdCoverLeak storm`
     if (event.indexOf('close=0') >= 0 || event === 'snapshot-request') {
       const now: number = Date.now();
@@ -1382,7 +1396,7 @@ export struct PlaybackPage {
       }
       if (this.closeStormAt.length >= 3) {
         MusicStoreService.getInstance().appendRuntimeDiagnostic(
-          `RzdCoverLeak storm closes=${this.closeStormAt.length} in1500ms path=${path} ` +
+          `RzdCoverLeak burst closes=${this.closeStormAt.length} in1500ms path=${path} ` +
             `instance=${this.closeInstance} token=${this.closeToken} coverHidden=${this.coverPublishHidden ? 1 : 0} ` +
             `snapOwned=${this.expandState.snapshotShrinkOwnedFlag() ? 1 : 0} ` +
             `pix=${this.morphShrinkState().pixmap !== undefined ? 1 : 0}`);
