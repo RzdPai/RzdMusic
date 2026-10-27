@@ -184,10 +184,10 @@ export struct PlaylistsPage {
       this.addMenuNode = new ComponentContent(this.getUIContext(), wrapBuilder(playlistsAddMenuComponent));
     }
     this.getUIContext().getPromptAction().openMenu(this.addMenuNode, { id: this.addMenuTargetId }, {
-      // 材质挂在**菜单窗口选项**上（照 RzdVideo 换源菜单）：档位跟随设置 + AVERAGE=光感
+      // 材质只给**档位**（跟随设置里的光感等级）；不额外指定 adaptiveColor，
+      // 让系统按档位自己出材质，避免"取背后平均色"那种发灰的观感
       placement: Placement.BottomRight,
-      backgroundBlurStyle: appBarBlurStyle(),
-      backgroundBlurStyleOptions: { adaptiveColor: AdaptiveColor.AVERAGE }
+      backgroundBlurStyle: appBarBlurStyle()
     })
       .catch((err: BusinessError): void => {
         console.error('openMenu add failed: ' + err.code + ' ' + err.message);
