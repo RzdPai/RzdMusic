@@ -85,6 +85,7 @@ const KEY_DOWNLOAD_SAVE_MODE: string = 'download_save_mode';
 const KEY_DOWNLOAD_QUALITY_MODE: string = 'download_quality_mode';
 const KEY_DOWNLOAD_MANUAL_QUALITY: string = 'download_manual_quality';
 const KEY_DOWNLOAD_NAME_FORMAT: string = 'download_name_format';
+const KEY_DOWNLOAD_DIR_URI: string = 'download_dir_uri';
 const KEY_LYRIC_FPS: string = 'lyric_fps';
 const KEY_LYRIC_CENTER: string = 'lyric_center';
 const KEY_LYRIC_BLUR: string = 'lyric_blur';
@@ -854,6 +855,24 @@ export class MusicStoreService {
   }
 
   /** Whether downloaded file names include the quality tag. */
+  /** 自定义下载目录（用户通过目录选择器选的 uri；空 = 用系统下载目录）。 */
+  public getDownloadDirUri(): string {
+    const store: preferences.Preferences | undefined = this.getStore();
+    if (store === undefined) {
+      return '';
+    }
+    return store.getSync(KEY_DOWNLOAD_DIR_URI, '') as string;
+  }
+
+  public setDownloadDirUri(uri: string): void {
+    const store: preferences.Preferences | undefined = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_DOWNLOAD_DIR_URI, uri);
+    store.flush();
+  }
+
   public getDownloadQualityTag(): boolean {
     const store = this.getStore();
     if (store === undefined) {

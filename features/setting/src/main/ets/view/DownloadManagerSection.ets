@@ -1,6 +1,9 @@
 import { AppStorageV2 } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { AppStorageKeys, MusicAppState, PlayedSongRecord, SongTitleMarquee, ThemeState } from 'musicbasic';
+import {
+  MusicStoreService,
+   AppStorageKeys, MusicAppState, PlayedSongRecord, SongTitleMarquee, ThemeState
+} from 'musicbasic';
 import { DownloadService, DownloadStatus, DownloadTask, OnlinePlayUtil } from 'player';
 
 /**
@@ -161,8 +164,65 @@ export struct DownloadManagerSection {
     void OnlinePlayUtil.playRecord(this.appState, record, this.getUIContext());
   }
 
+  /** 目录变化计数（驱动"恢复默认"按钮显隐重绘）。 */
+  @Local dirTick: number = 0;
+
+  private dirLabel(): string {
+    const uri: string = MusicStoreService.getInstance().getDownloadDirUri();
+    if (uri.length === 0 || this.dirTick < 0) {
+      return '系统下载目录';
+    }
+    const cut: number = uri.lastIndexOf('/');
+    return cut > 0 ? decodeURIComponent(uri.substring(cut + 1)) : uri;
+  }
+
+  private async pickDir(): Promise<void> {
+    const uri: string = await DownloadService.getInstance().pickCustomDownloadDir();
+    this.dirTick++;
+    if (uri.length === 0) {
+      this.getUIContext().getPromptAction().showToast({ message: '未选择目录', duration: 1500 });
+    }
+  }
   build() {
     Column({ space: 10 }) {
+      // ★ API 26：自定义下载目录（系统目录选择器 FOLDER 模式）
+      Row({ space: 8 }) {
+        Column({ space: 2 }) {
+          Text('下载目录')
+            .fontSize(15)
+            .fontColor($r('sys.color.font_primary'))
+          Text(this.dirLabel())
+            .fontSize(12)
+            .fontColor($r('sys.color.font_tertiary'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+
+        Text('选择目录')
+          .fontSize(13)
+          .fontColor(this.themeState.color)
+          .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+          .onClick((): void => {
+            void this.pickDir();
+          })
+        if (MusicStoreService.getInstance().getDownloadDirUri().length > 0) {
+          Text('恢复默认')
+            .fontSize(13)
+            .fontColor($r('sys.color.font_tertiary'))
+            .padding({ left: 4, right: 4, top: 4, bottom: 4 })
+            .onClick((): void => {
+              DownloadService.getInstance().clearCustomDownloadDir();
+              this.dirTick++;
+            })
+        }
+      }
+      .width('100%')
+      .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+      .borderRadius(12)
+      .backgroundColor($r('app.color.card_background'))
+
       Row() {
         Text('下载任务')
           .fontSize(16)

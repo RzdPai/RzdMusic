@@ -1087,6 +1087,13 @@ export class DownloadService {
     if (this.downloadDirUri.length > 0) {
       return;
     }
+    // ★ API 26：优先用用户在设置里选的自定义目录
+    const custom: string = MusicStoreService.getInstance().getDownloadDirUri();
+    if (custom.length > 0) {
+      this.downloadDirUri = custom;
+      appendPlayLog('[下载] 使用自定义目录 uri=' + this.downloadDirUri);
+      return;
+    }
     const context: common.Context | undefined =
       this.uiContext !== undefined ? this.uiContext.getHostContext() : undefined;
     if (context === undefined) {
@@ -1100,6 +1107,43 @@ export class DownloadService {
       this.downloadDirUri = result[0];
       appendPlayLog('[下载] 目录 uri=' + this.downloadDirUri);
     }
+  }
+
+  /**
+   * 打开"目录选择器"让用户选自定义下载目录（API 26 的 FOLDER 模式），并把 uri 持久化。
+   * @returns 选中的 uri（取消则返回空串）
+   */
+  public async pickCustomDownloadDir(): Promise<string> {
+    const context: common.Context | undefined =
+      this.uiContext !== undefined ? this.uiContext.getHostContext() : undefined;
+    if (context === undefined) {
+      return '';
+    }
+    try {
+      const opt: picker.DocumentSelectOptions = new picker.DocumentSelectOptions();
+      opt.selectMode = picker.DocumentSelectMode.FOLDER;
+      const documentViewPicker: picker.DocumentViewPicker = new picker.DocumentViewPicker(context);
+      const result: string[] = await documentViewPicker.select(opt);
+      if (result.length === 0) {
+        appendPlayLog('[下载] 自定义目录：用户取消');
+        return '';
+      }
+      const uri: string = result[0];
+      MusicStoreService.getInstance().setDownloadDirUri(uri);
+      this.downloadDirUri = uri;
+      appendPlayLog('[下载] 自定义目录已设置 uri=' + uri);
+      return uri;
+    } catch (error) {
+      appendPlayLog('[下载] 选择目录失败: ' + JSON.stringify(error).substring(0, 100));
+      return '';
+    }
+  }
+
+  /** 清空自定义目录（回到系统下载目录）。 */
+  public clearCustomDownloadDir(): void {
+    MusicStoreService.getInstance().setDownloadDirUri('');
+    this.downloadDirUri = '';
+    appendPlayLog('[下载] 已恢复系统下载目录');
   }
 
   /** 下载封面图片并解码为 PixelMap。 */
