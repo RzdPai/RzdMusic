@@ -26,7 +26,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatformsOf, lxSourceManager, MediaService } from 'player';
 import type { LXApiImportResult } from 'player';
-import { pickPlaybackQuality, probeBySample } from 'player';
+import { pickPlaybackQuality, probeBySample, qualityRank } from 'player';
 import type { LXUserApiSourceInfo } from 'player';
 import { SyncSettingsPanel } from 'sync';
 import { AccountManageSheet } from '../account/AccountManageSheet';
@@ -395,19 +395,23 @@ export struct SettingsDetailPage {
         if (src === undefined || src.qualitys.length === 0) {
           continue;
         }
-        // ② 测试音质**不跟随用户设置**：把该平台声明的档位逐级全部测一遍
+        // ② 从**标注的最高音质**开始逐级往下测，命中一档就停（这就是"实际可用最高音质"）
         const qualities: string[] = [];
         for (let qi: number = 0; qi < src.qualitys.length; qi++) {
           if (src.qualitys[qi].length > 0) {
             qualities.push(src.qualitys[qi]);
           }
         }
+        qualities.sort((a: string, b: string): number => qualityRank(a) - qualityRank(b));
+        qualities.reverse();
         for (let q: number = 0; q < qualities.length; q++) {
           try {
             total++;
             const r = await probeBySample(info.source, qualities[q]);
             if (r !== undefined && r.ok) {
               passed++;
+              // 命中最高可用档即停，避免继续往下测
+              break;
             }
             if (r !== undefined) {
               console.info('[RzdQualityProbe] ' + api.name + ' ' + info.source + '/' + qualities[q] +

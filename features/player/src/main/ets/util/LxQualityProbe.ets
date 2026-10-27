@@ -121,7 +121,7 @@ export async function probeBySample(source: string, quality: string): Promise<Pr
  * 归一化后比较：去空格/连字符/下划线并转小写，兼容 `Hi-Res`/`hires`、`24Bit`/`flac24bit`、
  * `母带`/`master`/`atmos` 等不同脚本的写法（大小写与分隔符不一致不会再把档位判成未知）。
  */
-function qualityRank(q: string): number {
+export function qualityRank(q: string): number {
   const norm: string = q.toLowerCase().replace(/[\s_\-]/g, '');
   if (norm === '128k') { return 10; }
   if (norm === '192k') { return 20; }
@@ -298,12 +298,11 @@ export function probeSummary(source: string): string {
     return '未测';
   }
   if (okTiers.length === 0) {
-    return '全部不可用（测 ' + tested + ' 档）';
+    return '全部不可用';
   }
-  // 按档位从高到低排，最多列 3 个，避免 ToolTip 太长
+  // 只报**最高可用档**
   okTiers.sort((a: string, b: string): number => qualityRank(b) - qualityRank(a));
-  const shown: string[] = okTiers.length > 3 ? okTiers.slice(0, 3) : okTiers;
-  return '可用 ' + okTiers.length + '/' + tested + '：' + shown.join('·');
+  return '可用 ' + okTiers[0];
 }
 
 export function cachedProbe(source: string, quality: string): ProbeResult | undefined {
