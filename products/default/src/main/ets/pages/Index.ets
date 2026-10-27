@@ -642,8 +642,6 @@ struct Index {
 
   @Monitor('tabState.tabIndex')
   onTabIndexChanged(): void {
-    // Ability 侧要用它判断"返回键该吃掉还是交回系统"（Ability 里读不到 AppStorageV2）
-    HomeBackBridge.activeTab = this.tabState.tabIndex;
     const index: number = this.tabState.tabIndex;
     const rootDepth: number = this.pageIndexInfos.size();
     const homeDepth: number = this.homeStack.size();
@@ -653,16 +651,6 @@ struct Index {
     appendPlayLog(`[RzdTabSwitch] -> ${index} root=${rootDepth} home=${homeDepth} ` +
       `barHidden=${this.searchTabBarHidden} showPlay=${this.appState.isShowPlay} ` +
       `queue=${this.appState.playQueue.length} sel=${this.appState.selectIndex}`);
-    // ★ 离开首页 Tab 前，先把首页内层栈（搜索页）在**可见状态下**拆掉。
-    //   否则：切到「现在就听」后按返回 → 壳层去 pop 一个已经不可见的搜索页 ⇒ 必闪退。
-    if (index !== 0 && this.homeStack.size() > 0) {
-      appendPlayLog(`[RzdTabSwitch] clear homeStack before switch, depth=${this.homeStack.size()}`);
-      this.homeStack.clear();
-      if (this.searchTabBarHidden) {
-        this.searchTabBarHidden = false;
-        appendPlayLog('[RzdTabSwitch] reset searchTabBarHidden before switch');
-      }
-    }
     this.tabsController.changeIndex(index);
     // 切完再打一次，确认 HdsTabs 真的换了页（排查"首页空白"是切页还是渲染的问题）
     setTimeout((): void => {
@@ -704,13 +692,6 @@ struct Index {
    */
   @Monitor('homeBackAt')
   onHomeBackSignal(): void {
-    // ★ 非首页按返回：切回首页并吞掉这次返回（否则会直接退桌面 / 触发下层 pop 而闪退）
-    if (this.tabState.tabIndex !== 0) {
-      appendPlayLog('[RzdHomeBack] tab ' + this.tabState.tabIndex + ' -> 0 (consume back)');
-      this.tabState.tabIndex = 0;
-      HomeBackBridge.activeTab = 0;
-      return;
-    }
     if (this.playerRouteAlive) {
       this.playerRouteAlive = false;
     }

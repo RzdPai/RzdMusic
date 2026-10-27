@@ -15,14 +15,6 @@ export type HomeBackCleanup = () => void;
 export class HomeBackBridge {
   /** 页面层注册的收尾函数（未注册时为 undefined）。 */
   private static cleanup: HomeBackCleanup | undefined = undefined;
-  /** 当前激活的页签下标（壳层每次切页写入；0 = 首页）。 */
-  public static activeTab: number = 0;
-
-  /** 非首页时，返回键应当被消费（切回首页），不要退到桌面/触发下层 pop。 */
-  public static shouldConsumeBack(): boolean {
-    return HomeBackBridge.activeTab !== 0;
-  }
-
   /** 已调用次数，只给日志用。 */
   public static calls: number = 0;
 
