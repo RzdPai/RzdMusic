@@ -1371,6 +1371,24 @@ export struct PlaybackPage {
   private closeDiagnostic(event: string, path: string = this.closePath): void {
     MusicStoreService.getInstance().appendRuntimeDiagnostic(
       `RzdCloseChain path=${path} instance=${this.closeInstance} close=${this.closeToken} ${event}`);
+    // ★ 乱点复现专用（2026-10-28）：关闭链起始事件在 1.5s 内出现 ≥3 次 = 连点了。
+    //   测试同学"乱点一通"就是这个特征；命中就打一条 RzdCoverLeak，便于事后定位。
+    //   grep 关键字：`RzdCoverLeak storm`
+    if (event.indexOf('close=0') >= 0 || event === 'snapshot-request') {
+      const now: number = Date.now();
+      this.closeStormAt.push(now);
+      while (this.closeStormAt.length > 0 && now - this.closeStormAt[0] > 1500) {
+        this.closeStormAt.shift();
+      }
+      if (this.closeStormAt.length >= 3) {
+        MusicStoreService.getInstance().appendRuntimeDiagnostic(
+          `RzdCoverLeak storm closes=${this.closeStormAt.length} in1500ms path=${path} ` +
+            `instance=${this.closeInstance} token=${this.closeToken} coverHidden=${this.coverPublishHidden ? 1 : 0} ` +
+            `snapOwned=${this.expandState.snapshotShrinkOwnedFlag() ? 1 : 0} ` +
+            `pix=${this.morphShrinkState().pixmap !== undefined ? 1 : 0}`);
+        this.closeStormAt.length = 0;
+      }
+    }
   }
 
   private ownsClose(token: number, event: string): boolean {
@@ -1518,6 +1536,13 @@ export struct PlaybackPage {
       this.releasePixelMapQuiet(pixmap);
     }
     this.expandState.endSnapshotShrink();
+    // ★ 残留判据：快照层仍归快照所有、但图已经没了 ⇒ 屏上就是"播放页封面位置的一块残留"。
+    //   grep 关键字：`RzdCoverLeak owner-without-pix`
+    if (this.expandState.snapshotShrinkOwnedFlag() && this.morphShrinkState().pixmap === undefined) {
+      MusicStoreService.getInstance().appendRuntimeDiagnostic(
+        `RzdCoverLeak owner-without-pix path=${path} instance=${this.closeInstance} token=${this.closeToken} ` +
+          `snapFlight=${this.snapshotFlight ? 1 : 0} coverHidden=${this.coverPublishHidden ? 1 : 0}`);
+    }
     // ★ 封面残留排查（2026-10-28）：关闭链跑完后，把"快照层是否还占着"打全。
     //   判据：snapOwned=1 但 pix=0 ⇒ 快照层还挂着却已没有图（观感就是一张残留封面）。
     //   grep 关键字：`RzdCloseSnap`
@@ -3635,6 +3660,8 @@ export struct PlaybackPage {
   private closeAfterOpen: boolean = false;
   /** "快照已进手"（快照回调里置真）⇒ 真封面让位，避免"快照一颗 + 真封面一颗"。 */
   @Local snapshotFlight: boolean = false;
+  /** 关闭链时间戳窗口（只做乱点风暴诊断，不参与逻辑）。 */
+  private closeStormAt: number[] = [];
   /** "展开中收到关闭"排的那个闹钟句柄（-1 = 没排；见 `onCollapseRequested`）。 */
   private closeAfterOpenTimer: number = -1;
 
