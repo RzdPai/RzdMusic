@@ -735,7 +735,19 @@ struct Index {
       appendPlayLog('[RzdShellBack] popped root stack');
       return true;
     }
-    // 没有任何页面可弹 ⇒ 交回系统（退回后台/退出），不再自作主张切页签
+    // 没有任何页面可弹 ⇒ 主动退到后台。
+    // 不能再 `return false` 交回系统：系统会去 pop 壳层根 Navigation（NavBar 被移除），
+    // 退出瞬间整屏变黑——这正是"返回退出时黑一下"的来源。
+    try {
+      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      if (ctx !== undefined) {
+        appendPlayLog('[RzdShellBack] nothing to pop -> moveAbilityToBackground');
+        ctx.moveAbilityToBackground();
+        return true;
+      }
+    } catch (err) {
+      appendPlayLog('[RzdShellBack] moveAbilityToBackground threw');
+    }
     appendPlayLog('[RzdShellBack] nothing to pop -> hand back to system');
     return false;
   }
