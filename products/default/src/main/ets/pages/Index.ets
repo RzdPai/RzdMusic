@@ -430,6 +430,8 @@ struct Index {
   @Local navDepth: number = 0;
   /** 搜索页打开时隐藏底栏（Tab 栏 + 首页迷你条都挂在 HdsTabs.barFloatingStyle 上，压 0 高即可一起隐藏）。 */
   @Local searchTabBarHidden: boolean = false;
+  /** 清栈重入保护（clear/pop 期间再被请求会崩）。 */
+  @Local poppingToRoot: boolean = false;
   /**
    * 首页 Tab 自己的内层导航栈（只放两条路由：首页 / 搜索页）。
    * 见 `HomeRouteNames.ets` 里那段"为什么必须这样"的说明。
@@ -626,12 +628,28 @@ struct Index {
     Logger.info(RzdShellLogTag,
       `pop to root requested depth=${names.length} homeDepth=${homeNames.length} ` +
         `searchTabBarHidden=${this.searchTabBarHidden}`);
-    if (names.length > 0) {
-      this.pageIndexInfos.clear();
+    // 重入保护：清栈过程中又被请求时直接忽略（clear 与动画/二次 pop 叠加是闪退来源之一）
+    if (this.poppingToRoot) {
+      Logger.info(RzdShellLogTag, 'pop to root skipped (re-entrant)');
+      return;
     }
-    if (this.homeStack.size() > 0) {
-      this.homeStack.clear();
+    if (names.length === 0 && this.homeStack.size() === 0) {
+      return;
     }
+    this.poppingToRoot = true;
+    try {
+      // 用 popToIndex(0, false) 代替 clear()：clear 在过渡动画进行中被调用后，
+      // 系统再 pop 就会打到已失效的栈上（真机表现为"返回必闪退"）。
+      if (names.length > 0) {
+        this.pageIndexInfos.popToIndex(0, false);
+      }
+      if (this.homeStack.size() > 0) {
+        this.homeStack.popToIndex(0, false);
+      }
+    } catch (err) {
+      Logger.info(RzdShellLogTag, 'pop to root popToIndex threw');
+    }
+    this.poppingToRoot = false;
     // ★ 搜索页被**程序化**弹出时不会走它的 onShowChange(false)，底栏标志会一直停在隐藏态
     //   ⇒ 从搜索页点播放条跳到「现在就听」会出现"没有 Tab 栏"。这里统一复位。
     if (this.searchTabBarHidden) {
