@@ -14,7 +14,17 @@
  */
 
 import { AppStorageV2 } from '@kit.ArkUI';
-import { AmbientState, AppStorageKeys, MusicAppState, MusicStoreService, PlayedSongRecord, PlaylistDto, SongItem, ThemeState } from 'musicbasic';
+import {
+  AmbientState,
+  AppStorageKeys,
+  buildBarBlurStyle,
+  MusicAppState,
+  MusicStoreService,
+  PlayedSongRecord,
+  PlaylistDto,
+  SongItem,
+  ThemeState
+} from 'musicbasic';
 import { DownloadUtil, LXQualityOption, LXSearchSong, OnlinePlayUtil, lxGetQualityOptions } from 'player';
 // 「切换平台」复用 localmusic 的歌曲匹配引擎（内部走 player 的 lxSearch）
 import { LyricCandidate, MATCH_PLATFORMS, MatchSongInfo, parseIntervalMs, platformLabel, scoreCandidate,
@@ -95,16 +105,8 @@ export struct SongMoreMenu {
 
   /** Frosted glass strength of the popup, following the ambient light level. */
   private menuBlur(): BlurStyle {
-    switch (this.ambientState.level) {
-      case 1:
-        return BlurStyle.Thin;
-      case 2:
-        return BlurStyle.Regular;
-      case 3:
-        return BlurStyle.Thick;
-      default:
-        return BlurStyle.Regular;
-    }
+    // 与全局同一张档位表（原来的 BlurStyle.Thin/Regular/Thick 是旧式固定蒙版，暗色下发灰）
+    return buildBarBlurStyle(this.ambientState.level);
   }
 
   /** Plays the song via the LX engine. */
