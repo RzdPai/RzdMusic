@@ -116,12 +116,21 @@ export async function probeBySample(source: string, quality: string): Promise<Pr
   return probeQuality(source, s.songId, quality, s.name, s.singer, s.interval);
 }
 
-/** 音质档位权重（越大越高），与回退链一致。 */
+/**
+ * 音质档位权重（越大越高）。
+ * 归一化后比较：去空格/连字符/下划线并转小写，兼容 `Hi-Res`/`hires`、`24Bit`/`flac24bit`、
+ * `母带`/`master`/`atmos` 等不同脚本的写法（大小写与分隔符不一致不会再把档位判成未知）。
+ */
 function qualityRank(q: string): number {
-  const order: string[] = ['128K', '128k', '192K', '192k', '320K', '320k',
-    'flac', 'FLAC', '24Bit', '24bit', 'Hi-Res', 'hires', '母带', 'atmos', 'master'];
-  const i: number = order.indexOf(q);
-  return i < 0 ? -1 : i;
+  const norm: string = q.toLowerCase().replace(/[\s_\-]/g, '');
+  if (norm === '128k') { return 10; }
+  if (norm === '192k') { return 20; }
+  if (norm === '320k') { return 30; }
+  if (norm === 'flac' || norm === 'flac16bit' || norm === 'lossless') { return 40; }
+  if (norm === 'flac24bit' || norm === '24bit' || norm === 'hires' || norm === 'hi-res') { return 50; }
+  if (norm === 'atmos' || norm === 'atmosplus') { return 60; }
+  if (norm === 'master' || norm === '母带') { return 70; }
+  return -1;
 }
 
 /**
@@ -148,7 +157,21 @@ export function pickPlaybackQuality(declared: string[], preferred: string): stri
       lowest = declared[i];
     }
   }
-  return best.length > 0 ? best : lowest;
+  if (best.length > 0) {
+    return best;
+  }
+  // 默认音质档位无法识别（rank<0）或全都高于默认档 ⇒ 取该平台**声明最高**那一档，
+  // 别再退到最低档（否则会出现"能播母带却测 320k"）
+  let highest: string = '';
+  let highestRank: number = -1;
+  for (let i: number = 0; i < declared.length; i++) {
+    const r: number = qualityRank(declared[i]);
+    if (r > highestRank) {
+      highestRank = r;
+      highest = declared[i];
+    }
+  }
+  return highest.length > 0 ? highest : lowest;
 }
 const sessionCache: Map<string, ProbeResult> = new Map();
 
