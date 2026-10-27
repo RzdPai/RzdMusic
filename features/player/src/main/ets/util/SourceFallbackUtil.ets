@@ -242,11 +242,20 @@ export function buildCandidateChain(preferredQuality: string, platform: string):
     return list;
   };
   // ① + ② 同平台：按脚本顺序，各自取最高可用音质
+  // ★ 用户 2026-10-28：**起播先用用户选择的音质**。
+  //   源里的「拓展音质」（master/atmos/hires…）不是原版洛雪的编码定义，脚本声明的档位常偏低，
+  //   声明式取档会把本来能播的档位直接跳过。所以第一个候选一律从"用户音质"起步，
+  //   由 getQualityChain 负责逐档降级；后续候选（换源/换平台）才按声明取档。
+  let firstCandidate: boolean = true;
   for (let i: number = 0; i < apis.length; i++) {
     if (blockedPairs.has(pairKey(apis[i].id, platform))) {
       continue;
     }
-    const q: string = bestQualityFor(declaredOf(apis[i], platform), preferredQuality);
+    const declaredQ: string = bestQualityFor(declaredOf(apis[i], platform), preferredQuality);
+    const q: string = (firstCandidate && preferredQuality.length > 0) ? preferredQuality : declaredQ;
+    if (q.length > 0) {
+      firstCandidate = false;
+    }
     if (q.length > 0) {
       const cand: FallbackCandidate = new FallbackCandidate();
       cand.scriptId = apis[i].id;
