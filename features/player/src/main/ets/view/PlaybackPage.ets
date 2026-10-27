@@ -1518,6 +1518,18 @@ export struct PlaybackPage {
       this.releasePixelMapQuiet(pixmap);
     }
     this.expandState.endSnapshotShrink();
+    // ★ 封面残留排查（2026-10-28）：关闭链跑完后，把"快照层是否还占着"打全。
+    //   判据：snapOwned=1 但 pix=0 ⇒ 快照层还挂着却已没有图（观感就是一张残留封面）。
+    //   grep 关键字：`RzdCloseSnap`
+    try {
+      MusicStoreService.getInstance().appendRuntimeDiagnostic(
+        `RzdCloseSnap post-cleanup path=${path} snapFlight=${this.snapshotFlight ? 1 : 0} ` +
+          `snapOwned=${this.expandState.snapshotShrinkOwnedFlag() ? 1 : 0} ` +
+          `pix=${this.morphShrinkState().pixmap !== undefined ? 1 : 0} ` +
+          `coverHidden=${this.coverPublishHidden ? 1 : 0}`);
+    } catch (error) {
+      this.closeDiagnostic(`snap-post-cleanup-log-failed error=${error}`, path);
+    }
     this.clearCloseGuard();
     ++this.closeGen;
     PlaybackPage.closeOwner = 0;
