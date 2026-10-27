@@ -777,9 +777,8 @@ class FeedDataSource implements IDataSource {
 /**
  * 底栏页签「现在就听」。
  */
-/** 横屏歌词上下留白（差值的一半 = 焦点上移量）。 */
-const FEED_LYRIC_START_OFFSET: number = 64;
-const FEED_LYRIC_END_OFFSET: number = 128;
+/** 横屏歌词「当前行」相对位置（0.5=正中，越小越靠上）。 */
+const FEED_LYRIC_FOCUS_POSITION: number = 0.30;
 
 @ComponentV2
 export struct NowPlayingFeedPage {
@@ -3137,9 +3136,8 @@ export struct NowPlayingFeedPage {
       enableBlur: false,
       enableScale: false,
       enableSpring: true,
-      // 用户 2026-10-28：当前行**偏上**（与播放页同一口径：下留白比上留白多 2×32vp ⇒ 焦点上移 32vp）
-      contentStartOffset: FEED_LYRIC_START_OFFSET,
-      contentEndOffset: FEED_LYRIC_END_OFFSET
+      // 用户 2026-10-28：当前行**偏上**，与播放页同一口径（alignPosition，0.5=正中）
+      alignPosition: FEED_LYRIC_FOCUS_POSITION
     })
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
@@ -3334,13 +3332,7 @@ export struct NowPlayingFeedPage {
         }
         .width(StyleConstants.FULL_WIDTH)
         .height(StyleConstants.FULL_HEIGHT)
-        // 用户 2026-10-28：横屏歌词区原来 top=0、bottom=底部预留 ⇒ 上顶屏幕、下方空一截。
-        // 改成上下各占一半，视觉上下留白一致（底部预留总量不变，避免挡住底栏/迷你条）。
-        .padding({
-          right: FEED_SIDE_PADDING_VP * 2,
-          top: this.wideBottomReserveVp() / 2,
-          bottom: this.wideBottomReserveVp() / 2
-        })
+        .padding({ right: FEED_SIDE_PADDING_VP * 2, top: 0, bottom: this.wideBottomReserveVp() })
         .alignItems(VerticalAlign.Top)
       }
       .width(StyleConstants.FULL_WIDTH)

@@ -67,11 +67,7 @@ function isTitleLine(text: string): boolean {
 }
 
 /** 播放页歌词「当前行」在视口里的相对位置：0.5=正中，越小越靠上。 */
-/** 横屏时歌词区至少排这么多行（决定横屏字号上限）。 */
-const LYRIC_MIN_LINES_WIDE: number = 6;
-/** 行间距（字号 + 该值 = 行高）。 */
-const LYRIC_LINE_GAP: number = 12;
-const LYRIC_FOCUS_POSITION: number = 0.38;
+const LYRIC_FOCUS_POSITION: number = 0.30;
 
 @ComponentV2
 export struct LyricsComponent {
@@ -127,23 +123,7 @@ export struct LyricsComponent {
 
   /** 当前生效的歌词高亮行字号：竖屏/横屏取设置值，面板迷你布局取 0.85 倍。 */
   private activeFontSize(): number {
-    const base: number = this.panelBottomBar ? Math.round(this.lyricFontSizeState.size * 0.85) :
-      this.lyricFontSizeState.size;
-    // ★ 用户 2026-10-28：横屏高度小，按用户字号只能显示 3 行 ⇒ 太憋。
-    //   横屏时把字号压到"至少能排 6 行"的水平（不改用户设置，只影响横屏渲染）。
-    if (this.isWideLandscape()) {
-      const fitByLines: number = Math.floor(this.lyricViewHeight / LYRIC_MIN_LINES_WIDE) - LYRIC_LINE_GAP;
-      if (fitByLines > 0 && fitByLines < base) {
-        return fitByLines;
-      }
-    }
-    return base;
-  }
-
-  /** 是否横屏：宽断点 ≥ md 视为宽屏（竖屏手机恒为 sm/xs）。 */
-  private isWideLandscape(): boolean {
-    const wb: string = String(this.breakpointEnv.widthBreakpoint);
-    return wb !== 'sm' && wb !== 'xs' && this.lyricViewHeight > 0;
+    return this.panelBottomBar ? Math.round(this.lyricFontSizeState.size * 0.85) : this.lyricFontSizeState.size;
   }
 
   /** 当前生效的歌词行高：字号 + 12。 */
