@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-import { guardPlayerBack } from 'musicbasic';
+import { guardPlayerBack, PlaybackPreferenceService } from 'musicbasic';
 import { AppStorageV2, CapsuleSegmentButtonV2, ColorMetrics, SegmentButtonV2Items, uiObserver } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { common, ConfigurationConstant, Want } from '@kit.AbilityKit';
@@ -26,7 +26,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatformsOf, lxSourceManager, MediaService } from 'player';
 import type { LXApiImportResult } from 'player';
-import { probeBySample } from 'player';
+import { pickPlaybackQuality, probeBySample } from 'player';
 import type { LXUserApiSourceInfo } from 'player';
 import { SyncSettingsPanel } from 'sync';
 import { AccountManageSheet } from '../account/AccountManageSheet';
@@ -395,12 +395,12 @@ export struct SettingsDetailPage {
         if (src === undefined || src.qualitys.length === 0) {
           continue;
         }
-        // ② 只测该平台声明的**最高音质**（与 ToolTip 显示同一个 key）
+        // ② 测"播放实际会用到的那一档"：≤ 用户默认音质里的最高档（与回退链同口径）
+        const preferred: string = await PlaybackPreferenceService.resolveDefaultQuality();
+        const picked: string = pickPlaybackQuality(src.qualitys, preferred);
         const qualities: string[] = [];
-        if (info.bestQuality.length > 0) {
-          qualities.push(info.bestQuality);
-        } else if (src.qualitys.length > 0) {
-          qualities.push(src.qualitys[src.qualitys.length - 1]);
+        if (picked.length > 0) {
+          qualities.push(picked);
         }
         for (let q: number = 0; q < qualities.length; q++) {
           try {

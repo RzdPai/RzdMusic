@@ -116,6 +116,40 @@ export async function probeBySample(source: string, quality: string): Promise<Pr
   return probeQuality(source, s.songId, quality, s.name, s.singer, s.interval);
 }
 
+/** 音质档位权重（越大越高），与回退链一致。 */
+function qualityRank(q: string): number {
+  const order: string[] = ['128K', '128k', '192K', '192k', '320K', '320k',
+    'flac', 'FLAC', '24Bit', '24bit', 'Hi-Res', 'hires', '母带', 'atmos', 'master'];
+  const i: number = order.indexOf(q);
+  return i < 0 ? -1 : i;
+}
+
+/**
+ * 挑出"播放实际会用到的那一档"：优先取 ≤ 默认音质里的最高档，取不到就用该平台最低档。
+ * 与 `SourceFallbackUtil.bestQualityFor` 同一口径，保证"测什么 = 播什么"。
+ */
+export function pickPlaybackQuality(declared: string[], preferred: string): string {
+  if (declared.length === 0) {
+    return '';
+  }
+  const prefRank: number = qualityRank(preferred);
+  let best: string = '';
+  let bestRank: number = -1;
+  let lowest: string = '';
+  let lowestRank: number = 10000;
+  for (let i: number = 0; i < declared.length; i++) {
+    const r: number = qualityRank(declared[i]);
+    if (r >= 0 && r <= prefRank && r > bestRank) {
+      bestRank = r;
+      best = declared[i];
+    }
+    if (r >= 0 && r < lowestRank) {
+      lowestRank = r;
+      lowest = declared[i];
+    }
+  }
+  return best.length > 0 ? best : lowest;
+}
 const sessionCache: Map<string, ProbeResult> = new Map();
 
 function cacheKey(source: string, quality: string): string {
