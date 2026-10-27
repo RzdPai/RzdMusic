@@ -255,6 +255,26 @@ export function markProbeFail(source: string, quality: string, detail: string): 
   sessionCache.set(cacheKey(source, quality), r);
 }
 
+/**
+ * 某平台**任意音质**的探测状态（探测测的是"播放会用到的档位"，未必等于 ToolTip 标的最高档，
+ * 所以这里按平台汇总一次，避免又出现"测了却显示未测"）。
+ * @returns 形如 `已验证（320k）` / `未通过（320k）` / `未测`
+ */
+export function probeSummary(source: string): string {
+  let found: string = '';
+  sessionCache.forEach((v: ProbeResult, k: string): void => {
+    if (k.startsWith(source + '|')) {
+      const q: string = k.substring(source.length + 1);
+      if (v.ok) {
+        found = '已验证（' + q + '）';
+      } else if (found.length === 0) {
+        found = '未通过（' + q + '）';
+      }
+    }
+  });
+  return found.length > 0 ? found : '未测';
+}
+
 export function cachedProbe(source: string, quality: string): ProbeResult | undefined {
   return sessionCache.get(cacheKey(source, quality));
 }

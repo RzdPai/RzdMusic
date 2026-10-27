@@ -11,7 +11,7 @@
  * ⚠️ 只用 V2 装饰器（@ComponentV2 / @Param）。
  */
 
-import { cachedProbe, LXSourcePlatformInfo, ProbeResult } from 'player';
+import { LXSourcePlatformInfo, probeSummary } from 'player';
 
 /** 小标签的字号（fp）。 */
 const CHIP_FONT_SIZE: number = 11;
@@ -74,16 +74,12 @@ export struct LxSourceDeclaredTags {
   /** 平台 ToolTip 是否展开。 */
   @Local showPlatformTips: boolean = false;
 
-  /** A4：会话内探测状态 → 「已验证 / 未通过 / 未测」。 */
+  /** A4：按平台汇总探测状态（探测的是"播放会用到的档位"）。 */
   private probeTag(item: LXSourcePlatformInfo): string {
     if (item.bestQuality.length === 0) {
       return '';
     }
-    const r: ProbeResult | undefined = cachedProbe(item.source, item.bestQuality);
-    if (r === undefined) {
-      return ' · 未测';
-    }
-    return r.ok ? ' · 已验证' : ' · 未通过';
+    return ' · ' + probeSummary(item.source);
   }
 
   /** A3：每个平台一行「平台 · 最高音质」。 */
@@ -91,7 +87,7 @@ export struct LxSourceDeclaredTags {
   private PlatformTips() {
     Column({ space: 4 }) {
       ForEach(this.items, (item: LXSourcePlatformInfo) => {
-        Text(item.label + (item.bestQuality.length > 0 ? '：最高 ' + item.bestQuality : '：音质未声明') + this.probeTag(item))
+        Text(item.label + (item.bestQuality.length > 0 ? '：标注 ' + item.bestQuality : '：音质未声明') + this.probeTag(item))
           .fontSize(CHIP_FONT_SIZE)
           .fontColor($r('sys.color.font_primary'))
           .maxLines(1)
