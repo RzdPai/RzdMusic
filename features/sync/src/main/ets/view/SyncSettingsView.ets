@@ -569,7 +569,7 @@ export struct SyncSettingsPanel {
   build() {
     Stack({ alignContent: Alignment.Bottom }) {
       Scroll() {
-        Column({ space: 14 }) {
+        Column({ space: 12 }) {
           HdsListItemCard({
             textItem: { primaryText: { text: '洛雪配置' } },
             cardBackgroundColor: $r('app.color.sync_card_background')
@@ -598,7 +598,7 @@ export struct SyncSettingsPanel {
             .textAlign(TextAlign.Start)
         }
         .width('100%')
-        .padding({ left: 20, right: 20, top: this.topOffset + 12 })
+        .padding({ left: 16, right: 16, top: this.topOffset + 16 })
       }
       .width('100%')
       .height('100%')
