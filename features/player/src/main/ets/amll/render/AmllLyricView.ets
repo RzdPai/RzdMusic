@@ -96,6 +96,9 @@ export struct AmllLyricView {
   /** 文字动画渐变宽度（主文字字体大小倍数） */
   @Param wordFadeWidth: number = 0.5;
   /** 内容起始偏移（上方留白） */
+  /** 当前行在视口里的相对位置（0=顶, 0.5=正中，越小越靠上）。 */
+  @Param alignPosition: number = 0.5;
+
   @Param contentStartOffset: number = 40;
   /** 内容结束偏移（下方留白） */
   @Param contentEndOffset: number = 200;
@@ -198,7 +201,8 @@ export struct AmllLyricView {
       enableSpring: this.enableSpring,
       wordFadeWidth: this.wordFadeWidth,
       alignAnchor: AmllLayoutAlignAnchor.Center,
-      alignPosition: 0.5
+      // 焦点行位置由 alignPosition 决定（原来写死 0.5 = 正中）
+      alignPosition: this.alignPosition
     });
     this.localTime = this.currentTime;
     this.lastExternalTime = this.currentTime;

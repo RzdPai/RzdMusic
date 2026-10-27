@@ -66,8 +66,8 @@ function isTitleLine(text: string): boolean {
   return TITLE_LINE_RE.test(text);
 }
 
-/** 播放页歌词「当前行」上移量（vp）：0 = 正中，越大越靠上。 */
-const LYRIC_FOCUS_LIFT_VP: number = 32;
+/** 播放页歌词「当前行」在视口里的相对位置：0.5=正中，越小越靠上。 */
+const LYRIC_FOCUS_POSITION: number = 0.38;
 
 @ComponentV2
 export struct LyricsComponent {
@@ -634,10 +634,11 @@ export struct LyricsComponent {
             showSubLyric: this.showSubLyricState.enabled,
             enableSpring: true,
             wordFadeWidth: 0.5,
-            // 当前行**偏上**（用户 2026-10-28）：上留白少一点、下留白多一点，
-            // 焦点行整体上移 LYRIC_FOCUS_LIFT_VP；两值之和仍等于"居中"时的 2×offset，滚动范围不变。
-            contentStartOffset: Math.max(0, this.lyricCenterOffset() - LYRIC_FOCUS_LIFT_VP),
-            contentEndOffset: this.lyricCenterOffset() + LYRIC_FOCUS_LIFT_VP,
+            // 当前行**偏上**（用户 2026-10-28）：焦点位置交给引擎的 alignPosition
+            // （之前用的 contentStart/EndOffset 在 AmllLyricView 里并未生效）
+            alignPosition: LYRIC_FOCUS_POSITION,
+            contentStartOffset: this.lyricCenterOffset(),
+            contentEndOffset: this.lyricCenterOffset(),
             onSeekTime: (ms: number): void => {
               this.state.progress = ms;
               this.onSeekTime(ms);
