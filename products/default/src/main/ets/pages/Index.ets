@@ -762,17 +762,10 @@ struct Index {
     if (this.shrinkState.visible) {
       this.shrinkState.reset();
     }
-    try {
-      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
-      if (ctx !== undefined) {
-        appendPlayLog('[RzdShellBack] nothing to pop -> moveAbilityToBackground');
-        ctx.moveAbilityToBackground();
-        return true;
-      }
-    } catch (err) {
-      appendPlayLog('[RzdShellBack] moveAbilityToBackground threw');
-    }
-    appendPlayLog('[RzdShellBack] nothing to pop -> hand back to system');
+    // 浮层已清干净 ⇒ 把返回交回系统（系统退出/退后台），这才是"回到桌面"的正规路径。
+    // 之前这里调 moveAbilityToBackground() 反而把返回吃掉了：shell 返回 true 后系统不再处理，
+    // 而单个 ability 的 moveAbilityToBackground 在手机上不一定会切到桌面，表现就是"按了没反应"。
+    appendPlayLog('[RzdShellBack] nothing to pop -> hand back to system (exit)');
     return false;
   }
 
