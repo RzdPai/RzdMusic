@@ -730,16 +730,7 @@ export struct RecordListPage {
           this.addSheetOpen = true;
         }
       })
-      if (!this.isHistory()) {
-        SelectionActionCell({
-          icon: $r('sys.symbol.heart_fill'),
-          label: '取消收藏',
-          tint: $r('sys.color.font_primary'),
-          onTap: (): void => {
-            this.unfavoriteSelected();
-          }
-        })
-      }
+
       SelectionActionCell({
         icon: $r('sys.symbol.xmark'),
         label: '取消',

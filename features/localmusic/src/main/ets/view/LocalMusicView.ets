@@ -484,7 +484,20 @@ export struct LocalMusicPage {
         }
       });
     }
-    if (!this.selectionMode && !this.matchingAll) {
+    // ② 多选态：把「全选/取消全选」放到标题栏右侧（与历史/收藏页一致，底部胶囊只留操作）
+    if (this.selectionMode) {
+      out.push({
+        content: {
+          label: this.selectedCount() === this.items.length && this.items.length > 0 ? '取消全选' : '全选',
+          icon: $r('sys.symbol.checkmark_circle'),
+          isEnabled: true,
+          action: (): void => {
+            this.toggleSelectAll();
+          }
+        }
+      });
+      return out;
+    }    if (!this.selectionMode && !this.matchingAll) {
       // ★ 用户 2026-10-20：「下载管理页面是放到标题栏的按钮跳转」⇒ 这里加一颗入口，
       //   跳到设置详情页的「下载管理」那一档（`SettingsDetailRouteParam.index = 10`，
       //   与「我的」页原来那一格是同一个页面、同一份实现，没有第二套代码）。
@@ -869,15 +882,7 @@ export struct LocalMusicPage {
   @Builder
   private SelectionBar() {
     Row({ space: 4 }) {
-      SelectionActionCell({
-        icon: $r('sys.symbol.checkmark_circle'),
-        label: this.selectedCount() === this.items.length && this.items.length > 0 ? '取消全选' : '全选',
-        tint: $r('sys.color.font_primary'),
-        onTap: (): void => {
-          this.toggleSelectAll();
-        }
-      })
-      SelectionActionCell({
+     SelectionActionCell({
         icon: $r('sys.symbol.trash'),
         label: this.selectedCount() > 0 ? `删除(${this.selectedCount()})` : '删除',
         tint: this.themeState.color,
