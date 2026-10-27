@@ -643,8 +643,19 @@ struct Index {
   @Monitor('tabState.tabIndex')
   onTabIndexChanged(): void {
     const index: number = this.tabState.tabIndex;
-    Logger.info(RzdShellLogTag, `tab index -> ${index} (apply)`);
+    const rootDepth: number = this.pageIndexInfos.size();
+    const homeDepth: number = this.homeStack.size();
+    Logger.info(RzdShellLogTag,
+      `tab index -> ${index} (apply) rootDepth=${rootDepth} homeDepth=${homeDepth} ` +
+        `searchTabBarHidden=${this.searchTabBarHidden} showPlay=${this.appState.isShowPlay}`);
+    appendPlayLog(`[RzdTabSwitch] -> ${index} root=${rootDepth} home=${homeDepth} ` +
+      `barHidden=${this.searchTabBarHidden} showPlay=${this.appState.isShowPlay} ` +
+      `queue=${this.appState.playQueue.length} sel=${this.appState.selectIndex}`);
     this.tabsController.changeIndex(index);
+    // 切完再打一次，确认 HdsTabs 真的换了页（排查"首页空白"是切页还是渲染的问题）
+    setTimeout((): void => {
+      appendPlayLog(`[RzdTabSwitch] applied idx=${index} (next frame)`);
+    }, 32);
   }
 
   @Monitor('intentState.requestVersion')
