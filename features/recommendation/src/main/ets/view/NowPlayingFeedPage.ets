@@ -1703,9 +1703,6 @@ export struct NowPlayingFeedPage {
           })
       }, (opt: FeedModeOption) => 'feed_mode_' + opt.value)
     }
-    // ① 沉浸光感（菜单材质 + 统一圆角）
-    .backgroundBlurStyle(BlurStyle.COMPONENT_THICK)
-    .borderRadius(20)
   }
 
   /** 三个模式（顺序固定：常规 / 熟悉 / 探索）。 */

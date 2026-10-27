@@ -1075,7 +1075,7 @@ export struct MinePage {
       .onClick(() => {
         this.openPlatformMusic();
       })
-      .bindContextMenu(this.CollectedRowMenu(entry), ResponseType.LongPress, { backgroundBlurStyle: BlurStyle.COMPONENT_THICK })
+      .bindContextMenu(this.CollectedRowMenu(entry), ResponseType.LongPress)
     }
     .width('100%')
   }
@@ -1227,7 +1227,7 @@ export struct MinePage {
       .onClick(() => {
         this.openPlaylistDetail(item);
       })
-      .bindContextMenu(this.PlaylistRowMenu(item), ResponseType.LongPress, { backgroundBlurStyle: BlurStyle.COMPONENT_THICK })
+      .bindContextMenu(this.PlaylistRowMenu(item), ResponseType.LongPress)
     }
     .width('100%')
   }

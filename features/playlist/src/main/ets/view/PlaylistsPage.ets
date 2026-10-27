@@ -98,8 +98,6 @@ function playlistsAddMenuComponent() {
   }
   .width(220)
   // ① 沉浸光感：菜单本身吃系统材质 + 统一圆角（与选择栏同一观感层级）
-  .backgroundBlurStyle(BlurStyle.COMPONENT_THICK)
-  .borderRadius(20)
 }
 
 @ComponentV2
