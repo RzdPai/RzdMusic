@@ -271,6 +271,10 @@ export class MediaService {
     this.isPrepared = false;
     this.updateIsPlay(false);
     this.errorRecoveryPending = true;
+    // 这次"暂停"是链路自己造成的（降质/换源），重试成功后要能自动续播
+    this.pauseReason = 'retry';
+    this.resumeWhenReady = true;
+    this.logPausePolicy('hang-for-retry', 'retry', true, 'quality=' + failedQualityNow);
     appendPlayLog('[播放] 错误恢复已挂起 failedUrl=' + failedUrlNow.substring(0, 60) +
       ' failedQuality=' + failedQualityNow + ' 排队歌曲url已清空=' + (failing !== undefined));
     this.avPlayer?.reset();
@@ -342,7 +346,14 @@ export class MediaService {
     //   - 用户点播/切歌（autoPlay=true）后音质无源或地址失败 → 降级/换源后必须自动播放
     //   - 启动恢复（loadOnly）→ 仍不自动播放
     // 以前用 isPlay 判断：报错时 isPlay 已被置 false，导致降级后永远不自动播。
-    const wanted: boolean = this.lastLoadWantedPlay;
+    let wanted: boolean = this.lastLoadWantedPlay;
+    // 若这次暂停是"自动重试"造成的（不是用户按停），重试成功后就该继续播
+    if (!wanted && this.pauseReason === 'retry' && this.resumeWhenReady) {
+      wanted = true;
+      this.logPausePolicy('retry-resume', 'retry', true);
+    }
+    this.pauseReason = 'none';
+    this.resumeWhenReady = false;
     void this.loadAsset(this.musicIndex, !wanted);
     this.overridePlayIntent(wanted);
     this.appendPlayLog('[播放] 降级/换源重试 起播意图=' + wanted);
