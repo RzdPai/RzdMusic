@@ -86,7 +86,10 @@
 import { AppStorageV2, uiObserver } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { common } from '@kit.AbilityKit';
-import { guardPlayerBack, shouldUseSplitDetailLayout } from 'musicbasic';
+import {
+  buildBarBlurStyle,
+   guardPlayerBack, shouldUseSplitDetailLayout
+} from 'musicbasic';
 import {
   AmbientState, AppRuntimeStorage, AppStorageKeys, BarScrollHelper, BreakpointType, FavoriteEntry,
   LocalCoverImage, MusicAppState, MusicStoreService, PlaylistDto, RouterUrlConstants, ThemeState,
@@ -1075,7 +1078,9 @@ export struct MinePage {
       .onClick(() => {
         this.openPlatformMusic();
       })
-      .bindContextMenu(this.CollectedRowMenu(entry), ResponseType.LongPress)
+      .bindContextMenu(this.CollectedRowMenu(entry), ResponseType.LongPress, {
+      backgroundBlurStyle: buildBarBlurStyle(this.ambientState.level)
+    })
     }
     .width('100%')
   }
@@ -1227,7 +1232,9 @@ export struct MinePage {
       .onClick(() => {
         this.openPlaylistDetail(item);
       })
-      .bindContextMenu(this.PlaylistRowMenu(item), ResponseType.LongPress)
+      .bindContextMenu(this.PlaylistRowMenu(item), ResponseType.LongPress, {
+      backgroundBlurStyle: buildBarBlurStyle(this.ambientState.level)
+    })
     }
     .width('100%')
   }

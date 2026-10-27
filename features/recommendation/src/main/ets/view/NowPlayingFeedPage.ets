@@ -187,6 +187,8 @@ import { effectKit } from '@kit.ArkGraphics2D';
 import { image } from '@kit.ImageKit';
 import { http } from '@kit.NetworkKit';
 import {
+  buildBarBlurStyle,
+  
   AmbientState,
   AppStorageKeys,
   buildTitleMaterial,
@@ -1737,6 +1739,8 @@ export struct NowPlayingFeedPage {
       // isShow 用 `!!`（V2 两向绑定，见全局记忆里 `$$` vs `!!` 那条）。
       .bindMenu(!!this.showFeedModeMenu, this.FeedModeMenu(), {
         placement: Placement.BottomLeft,
+        // 菜单背板材质：只给档位（跟随设置里的光感等级），不写 adaptiveColor
+        backgroundBlurStyle: buildBarBlurStyle(this.ambientState.level),
         onDisappear: (): void => {
           this.showFeedModeMenu = false;
         }

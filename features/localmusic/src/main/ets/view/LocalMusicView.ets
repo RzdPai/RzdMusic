@@ -25,12 +25,14 @@ import { common } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { uiObserver } from '@kit.ArkUI';
 import { HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions } from '@kit.UIDesignKit';
-import { guardPlayerBack } from 'musicbasic';
+import {
+  buildBarBlurStyle,
+   guardPlayerBack
+} from 'musicbasic';
 import {
   AmbientState,
   AppStorageKeys,
   barBlurOptions,
-  buildBarBlurStyle,
   MusicAppState,
   PlayedSongRecord,
   RouterUrlConstants,
@@ -229,21 +231,6 @@ export struct LocalMusicPage {
   }
 
   // ------------------------------------------------------------ 导入
-
-  @Builder
-  private importMenu() {
-    Menu() {
-      MenuItem({ content: '选择音乐文件' })
-        .onClick(() => {
-          void this.pickFiles();
-        })
-      MenuItem({ content: '选择音乐文件夹' })
-        .onClick(() => {
-          void this.pickFolder();
-        })
-    }
-    .font({ size: 16 })
-  }
 
   /** 选文件：AudioViewPicker（音频专用、可多选、零权限） */
   private async pickFiles(): Promise<void> {
