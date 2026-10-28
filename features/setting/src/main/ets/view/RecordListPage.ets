@@ -1155,7 +1155,8 @@ export struct RecordListPage {
   /** 关注页顶部卡片：近期演唱会（歌手 + 时间 + 场馆）。 */
   @Builder
   private UpcomingConcertsCard() {
-    Column({ space: 10 }) {
+    Button() {
+      Column({ space: 10 }) {
       Row({ space: 6 }) {
         SymbolGlyph($r('sys.symbol.auditorium'))
           .fontSize(15)
@@ -1192,12 +1193,15 @@ export struct RecordListPage {
         .padding({ top: 6, bottom: 6 })
       }, (show: UpcomingShow) => show.item.id)
     }
+    .alignItems(HorizontalAlign.Start)
+    }
+    .type(ButtonType.Normal)
+    .systemMaterial(immersiveMedium())
+    .backgroundColor('#33FFFFFF')
     .width('100%')
     .padding(14)
     .margin({ left: 12, right: 12, top: 10, bottom: 6 })
     .borderRadius(16)
-    .backgroundBlurStyle(buildBarBlurStyle(this.ambientState.level), barBlurOptions())
-    .alignItems(HorizontalAlign.Start)
   }
 
   private async loadUpcomingShows(): Promise<void> {
