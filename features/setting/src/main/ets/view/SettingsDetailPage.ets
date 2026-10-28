@@ -13,6 +13,7 @@
  * limitations under the License.
  */
 
+import { bundleManager } from '@kit.AbilityKit';
 import { DrawableDescriptor, LayeredDrawableDescriptor } from '@kit.ArkUI';
 import { guardPlayerBack, PlaybackPreferenceService } from 'musicbasic';
 import { AppStorageV2, CapsuleSegmentButtonV2, ColorMetrics, SegmentButtonV2Items, uiObserver } from '@kit.ArkUI';
@@ -756,6 +757,20 @@ export struct SettingsDetailPage {
     this.iconVariant = v.value;
     MusicStoreService.getInstance().setAppIconVariant(v.value);
     this.buildLayeredIcon(v);
+    // ★ API 26：真正切换**桌面图标** —— bundleManager.setAlternateIcon(name)；
+    //   name 必须命中 app.json5 的 alternateIcons[].name；传空串 = 恢复默认图标。
+    //   日志关键字：`RzdAltIcon`
+    try {
+      bundleManager.setAlternateIcon(v.value === 'default' ? '' : v.value)
+        .then((): void => {
+          console.info('[RzdAltIcon] set ok name=' + v.value);
+        })
+        .catch((err: BusinessError): void => {
+          console.info('[RzdAltIcon] set failed name=' + v.value + ' code=' + err.code + ' msg=' + err.message);
+        });
+    } catch (error) {
+      console.info('[RzdAltIcon] set threw: ' + JSON.stringify(error).substring(0, 80));
+    }
     this.getUIContext().getPromptAction().showToast({
       message: '已应用图标：' + v.label,
       duration: 1500

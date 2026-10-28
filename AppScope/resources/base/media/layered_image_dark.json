@@ -1,0 +1,6 @@
+{
+  "layered-image": {
+    "background": "$media:background_dark",
+    "foreground": "$media:foreground_dark"
+  }
+}
