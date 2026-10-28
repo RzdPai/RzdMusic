@@ -338,8 +338,7 @@ export struct ArtistDetailPage {
     .width('100%')
     .height('100%')
     .padding({ left: 16, right: 16, top: 8, bottom: 16 })
-    .backgroundColor('#E6000000')
-    .backgroundBlurStyle(BlurStyle.COMPONENT_THICK)
+    .backgroundBlurStyle(BlurStyle.COMPONENT_THIN)
   }
 
   @Builder
@@ -1346,9 +1345,10 @@ export struct ArtistDetailPage {
               .bindSheet($$this.concertSheet, this.ConcertSheet(), {
                 height: SheetSize.MEDIUM,
                 showClose: true,
-                // ★ 普通模糊（不走 systemMaterial：设备关掉"光感"时材质会渲染成透明）
-                blurStyle: BlurStyle.COMPONENT_THICK,
-                maskColor: '#66000000'
+                // ★ 普通薄模糊（不走 systemMaterial：设备关掉"光感"时材质会渲染成透明），无底色
+                blurStyle: BlurStyle.COMPONENT_THIN,
+                backgroundColor: Color.Transparent,
+                maskColor: '#33000000'
               })
             }
             Text(this.artistNameText.length > 0 ? this.artistNameText : '歌手')
