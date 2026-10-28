@@ -1,6 +1,0 @@
-{
-  "layered-image": {
-    "background": "$media:background_note_big",
-    "foreground": "$media:foreground_note_big"
-  }
-}
