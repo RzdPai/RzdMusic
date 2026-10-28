@@ -70,13 +70,18 @@ export struct HomeSearchRow {
             }
           })
 
-        Stack() {
+        // ★ 识别歌曲这颗也换成 Button 宿主（A 档，页面 body 里也能渲染材质）
+        Button() {
           SymbolGlyph($r('sys.symbol.identify_song'))
             .fontSize('24fp')
             .fontColor([$r('sys.color.font_primary')])
         }
+        .type(ButtonType.Normal)
         .width(SEARCH_FIELD_H)
-        .attributeModifier(new SearchGlassModifier())
+        .height(SEARCH_FIELD_H)
+        .borderRadius(SEARCH_FIELD_H / 2)
+        .systemMaterial(immersiveMedium())
+        .backgroundColor('#33FFFFFF')
         .onClick((): void => {
           this.onOpenRecognize();
         })
