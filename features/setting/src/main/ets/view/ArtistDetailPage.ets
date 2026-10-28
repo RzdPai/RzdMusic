@@ -1343,130 +1343,133 @@ export struct ArtistDetailPage {
 
   @Builder
   private ArtistHero() {
-        Stack({ alignContent: Alignment.Bottom }) {
-
-          Column() {
-            // ★ 即将举办的演唱会（Apple Music 私有接口；拿不到就不显示这一颗）
-            if (this.concerts.length > 0) {
-              Row({ space: 6 }) {
-                SymbolGlyph($r('sys.symbol.auditorium'))
-                  .fontSize(13)
-                  .fontColor([this.fgPrimary()])
-                Text('即将举办的演唱会')
-                  .fontSize(12)
-                  .fontColor(this.fgPrimary())
-              }
-              .height(28)
-              .padding({ left: 12, right: 12 })
-              .borderRadius(14)
-              // ★ 按《新 API26 沉浸光感经验汇总》§1.1：页面 body 里的自绘浮层属 out of scope，
-              //   systemMaterial 在这里不渲染（真机表现为"失效"）⇒ 只能用真模糊。
-              .backgroundColor(this.fgTint())
-              .backgroundBlurStyle(this.buttonBlur())
-              .margin({ bottom: 10 })
-              .onClick(() => {
-                this.concertSheet = true;
-              })
-              .bindSheet($$this.concertSheet, this.ConcertSheet(), {
-                height: SheetSize.MEDIUM,
-                showClose: true,
-                // ★ 普通薄模糊（不走 systemMaterial：设备关掉"光感"时材质会渲染成透明），无底色
-                blurStyle: BlurStyle.COMPONENT_THIN,
-                backgroundColor: Color.Transparent,
-                maskColor: '#33000000'
-              })
+    Stack({ alignContent: Alignment.Bottom }) {
+      Column() {
+        // 即将举办的演唱会（Apple Music 私有接口；拿不到就不显示这一颗）
+        if (this.concerts.length > 0) {
+          // ★ 材质必须挂在 Button 上：按《新 API26 沉浸光感经验汇总》§1.1 / §1.3，
+          //   「按钮与选择类」是 A 档宿主，页面内任意区域都能渲染 systemMaterial；
+          //   自绘 Row / Stack 属 out of scope（编译能过、真机不渲染 ⇒ 表现为"失效"）。
+          //   前提：backgroundColor 必须半透明，否则会把材质整块遮住。
+          Button() {
+            Row({ space: 6 }) {
+              SymbolGlyph($r('sys.symbol.auditorium'))
+                .fontSize(13)
+                .fontColor([this.fgPrimary()])
+              Text('即将举办的演唱会')
+                .fontSize(12)
+                .fontColor(this.fgPrimary())
             }
-            Text(this.artistNameText.length > 0 ? this.artistNameText : '歌手')
-              .fontSize(28)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(this.fgPrimary())
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .width('100%')
-              .textAlign(TextAlign.Center)
-              .padding({ left: 20, right: 20 })
-
-            Row({ space: 14 }) {
-              Row() {
-                // 歌手信息（简介弹窗）：甲方 2026-10-24 指定用 info_circle_fill
-                SymbolGlyph($r('sys.symbol.info_circle_fill'))
-                  .fontSize(18)
-                  .fontWeight(FontWeight.Regular)
-                  .height(18)
-                  .fontColor([this.fgPrimary()])
-              }
-              .width(40)
-              .height(40)
-              .borderRadius(20)
-              .backgroundColor(this.fgTint())
-              .backgroundBlurStyle(this.buttonBlur())
-              .alignItems(VerticalAlign.Center)
-              .justifyContent(FlexAlign.Center)
-              .onClick(() => {
-                this.showAboutPopup = !this.showAboutPopup;
-              })
-              .bindPopup($$this.showAboutPopup, {
-                builder: this.AboutPopup,
-                placement: Placement.Top,
-                enableArrow: true,
-                backgroundBlurStyle: this.buttonBlur(),
-                onStateChange: (event: PopupStateChangeParam): void => {
-                  if (!event.isVisible) {
-                    this.showAboutPopup = false;
-                  }
-                }
-              })
-
-              if (this.activeTab === 0) {
-              Row() {
-                SymbolGlyph($r('sys.symbol.play_fill'))
-                  .fontSize(26)
-                  .fontWeight(FontWeight.Regular)
-                  .height(26)
-                  // 实心白圆 + 深色三角（用户 2026-10-24：「中间那个播放全部按钮改成白色」）
-                  .fontColor([this.playAllGlyphColor()])
-              }
-              .width(60)
-              .height(60)
-              .borderRadius(30)
-              .backgroundColor(this.playAllButtonColor())
-              .alignItems(VerticalAlign.Center)
-              .justifyContent(FlexAlign.Center)
-              .enabled(!this.loading && this.songs.length > 0)
-              .opacity(this.loading || this.songs.length === 0 ? 0.5 : 1)
-              .onClick(() => {
-                this.playAll();
-              })
-              }
-
-              Row() {
-                SymbolGlyph(this.isFavoriteArtist ? $r('sys.symbol.heart_fill') : $r('sys.symbol.heart'))
-                  .fontSize(18)
-                  .fontWeight(FontWeight.Regular)
-                  .height(18)
-                  .fontColor([this.fgPrimary()])
-              }
-              .width(40)
-              .height(40)
-              .borderRadius(20)
-              .backgroundColor(this.fgTint())
-              .backgroundBlurStyle(this.buttonBlur())
-              .alignItems(VerticalAlign.Center)
-              .justifyContent(FlexAlign.Center)
-              .onClick(() => {
-                this.toggleFavoriteArtist();
-              })
-            }
-            .justifyContent(FlexAlign.Center)
-            .padding({ top: 12 })
           }
-          .width('100%')
-          .padding({ left: 16, right: 16, bottom: 16 })
+          .type(ButtonType.Normal)
+          .height(28)
+          .padding({ left: 12, right: 12 })
+          .borderRadius(14)
+          .systemMaterial(immersiveMedium())
+          .backgroundColor(this.fgTint())
+          .margin({ bottom: 10 })
+          .onClick(() => {
+            this.concertSheet = true;
+          })
+          .bindSheet($$this.concertSheet, this.ConcertSheet(), {
+            height: SheetSize.MEDIUM,
+            showClose: true,
+            // 弹层本身走真模糊（无底色），避免关掉"光感"的设备上整层透明
+            blurStyle: BlurStyle.COMPONENT_THIN,
+            backgroundColor: Color.Transparent,
+            maskColor: '#33000000'
+          })
         }
-        .width('100%')
-        .height(320)
 
+        Text(this.artistNameText.length > 0 ? this.artistNameText : '歌手')
+          .fontSize(28)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.fgPrimary())
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+          .textAlign(TextAlign.Center)
+          .padding({ left: 20, right: 20 })
+
+        Row({ space: 14 }) {
+          // 歌手信息（简介弹窗）：info_circle_fill（甲方 2026-10-24 指定）
+          Button() {
+            SymbolGlyph($r('sys.symbol.info_circle_fill'))
+              .fontSize(18)
+              .fontWeight(FontWeight.Regular)
+              .height(18)
+              .fontColor([this.fgPrimary()])
+          }
+          .type(ButtonType.Normal)
+          .width(40)
+          .height(40)
+          .borderRadius(20)
+          .systemMaterial(immersiveMedium())
+          .backgroundColor(this.fgTint())
+          .onClick(() => {
+            this.showAboutPopup = !this.showAboutPopup;
+          })
+          .bindPopup($$this.showAboutPopup, {
+            builder: this.AboutPopup,
+            placement: Placement.Top,
+            enableArrow: true,
+            backgroundBlurStyle: this.buttonBlur(),
+            onStateChange: (event: PopupStateChangeParam): void => {
+              if (!event.isVisible) {
+                this.showAboutPopup = false;
+              }
+            }
+          })
+
+          if (this.activeTab === 0) {
+            // 播放全部：固定白色实心（甲方 2026-10-24），**不挂材质**
+            Button() {
+              SymbolGlyph($r('sys.symbol.play_fill'))
+                .fontSize(26)
+                .fontWeight(FontWeight.Regular)
+                .height(26)
+                .fontColor([this.playAllGlyphColor()])
+            }
+            .type(ButtonType.Normal)
+            .width(60)
+            .height(60)
+            .borderRadius(30)
+            .backgroundColor(this.playAllButtonColor())
+            .enabled(!this.loading && this.songs.length > 0)
+            .opacity(this.loading || this.songs.length === 0 ? 0.5 : 1)
+            .onClick(() => {
+              this.playAll();
+            })
+          }
+
+          // 关注 / 取消关注
+          Button() {
+            SymbolGlyph(this.isFavoriteArtist ? $r('sys.symbol.heart_fill') : $r('sys.symbol.heart'))
+              .fontSize(18)
+              .fontWeight(FontWeight.Regular)
+              .height(18)
+              .fontColor([this.fgPrimary()])
+          }
+          .type(ButtonType.Normal)
+          .width(40)
+          .height(40)
+          .borderRadius(20)
+          .systemMaterial(immersiveMedium())
+          .backgroundColor(this.fgTint())
+          .onClick(() => {
+            this.toggleFavoriteArtist();
+          })
+        }
+        .justifyContent(FlexAlign.Center)
+        .padding({ top: 12 })
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, bottom: 16 })
+    }
+    .width('100%')
+    .height(320)
   }
+
 
   @Builder
   private ArtistStickyHeader() {

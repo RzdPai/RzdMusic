@@ -145,20 +145,20 @@ export struct LocateFloatButton {
   /** 圆按钮本体：材质背板 + 主题色图标 + 点光 + 换侧侧滑动画。 */
   @Builder
   private Ball(edge: TransitionEdge) {
-    Column() {
+    Button() {
       Image(this.icon)
         .width(22)
         .height(22)
         .fillColor(this.tint)
     }
+    .type(ButtonType.Normal)
     .width(40)
     .height(40)
     .borderRadius(20)
     // ★ 不要蓝色底：材质背板（浅色下是半透明白、深色下是半透明黑，并跟随背后画面）
-      .backgroundBlurStyle(appBarBlurStyle(), barBlurOptions())
-    .border({ width: 0.5, color: $r('sys.color.comp_divider') })
-    .justifyContent(FlexAlign.Center)
-    .alignItems(HorizontalAlign.Center)
+    // ★ 材质挂 Button（A 档宿主）；backgroundColor 必须半透明才透得出材质
+    .systemMaterial(immersiveMedium())
+    .backgroundColor(this.rightSide ? '#33FFFFFF' : '#33FFFFFF')
     .shadow({ radius: 14, color: 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 4 })
     .enabled(this.clickable)
     .opacity(this.clickable ? 1 : 0.45)
