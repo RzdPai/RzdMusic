@@ -293,6 +293,11 @@ export struct HeroBannerSection {
       this.openHeroSongList(item);
       return;
     }
+    if (item.feature === 'heartMode') {
+      // ★ 心动模式：往当前播放队列追加 100 首首页推荐（不影响正在播的歌）
+      void this.recommendViewModel.appendRecommendedSongs(100, this.getUIContext());
+      return;
+    }
     if (item.feature === 'listenNow') {
       // ★ 2026-10-24（②）：「现在就听」卡不再"就地播这首"，而是**切到那个 Tab**（入口与 Tab 打通）。
       this.onOpenFeedNow();

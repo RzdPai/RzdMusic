@@ -235,6 +235,25 @@ export class OnlinePlayUtil {
    *    照旧成立 —— 差别只在于"读到 true"与"读到 true 并吃掉一层隐式动画"。）
    * @returns True when the queue was built and playback started.
    */
+  /**
+   * 把一批歌**追加**到当前播放队列末尾（不动当前播放项）。
+   * 用于首页「心动模式」：点一下往队列里再补 100 首推荐。
+   * @returns 实际追加成功的首数
+   */
+  public static appendToList(appState: MusicAppState, songs: LXSearchSong[]): number {
+    if (songs.length === 0) {
+      return 0;
+    }
+    const items: SongItem[] = [];
+    for (let i: number = 0; i < songs.length; i++) {
+      items.push(OnlinePlayUtil.buildSongItem(songs[i]));
+    }
+    const before: number = appState.playQueue.length;
+    appState.playQueue = appState.playQueue.concat(items);
+    OnlinePlayUtil.appendPlayLog('[播放] appendToList 追加=' + items.length + ' 队列=' +
+      appState.playQueue.length);
+    return appState.playQueue.length - before;
+  }
   public static async playList(appState: MusicAppState, songs: LXSearchSong[], startIndex: number,
     uiContext: UIContext | undefined, openPlayer: boolean = true): Promise<boolean> {
     if (!lxEngineIsReady) {

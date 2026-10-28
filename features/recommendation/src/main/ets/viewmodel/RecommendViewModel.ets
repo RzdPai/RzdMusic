@@ -954,6 +954,78 @@ export class RecommendViewModel {
    * @param item Online song row.
    * @param uiContext Used for toast prompts.
    */
+  /** 推荐行 → LX 引擎歌曲行（播放用）。 */
+  private toSearchSong(item: RecommendPrivateSongUi): LXSearchSong {
+    return {
+      songId: item.songId,
+      name: typeof item.title === 'string' ? item.title : '',
+      singer: typeof item.singer === 'string' ? item.singer : '',
+      albumName: '',
+      albumId: '',
+      source: item.source,
+      interval: '',
+      img: item.coverUrl,
+      types: []
+    };
+  }
+
+  /**
+   * 首页「心动模式」：往当前播放队列末尾**追加** `count` 首首页推荐歌。
+   * 复用首页推荐数据源（与首页列表同一套实现），不影响当前正在播的歌。
+   */
+  public async appendRecommendedSongs(count: number,
+    uiContext: UIContext | undefined): Promise<void> {
+    try {
+      const rows: RecommendPrivateSongUi[] =
+        await RecommendDataUtil.loadPrivateSongListAsync(count, this.homeSourceState.source);
+      const songs: LXSearchSong[] = [];
+      for (let i: number = 0; i < rows.length; i++) {
+        if (rows[i].songId.length > 0) {
+          songs.push(this.toSearchSong(rows[i]));
+        }
+      }
+      const added: number = OnlinePlayUtil.appendToList(this.appState, songs);
+      console.info('[心动模式] 追加推荐 count=' + added);
+      if (uiContext !== undefined) {
+        uiContext.getPromptAction().showToast({
+          message: added > 0 ? ('已添加 ' + added + ' 首推荐到播放列表') : '暂无可用推荐',
+          duration: 1800
+        });
+      }
+    } catch (error) {
+      console.info('[心动模式] 追加失败: ' + JSON.stringify(error).substring(0, 80));
+    }
+  }
+
+  /**
+   * 首页「精选推荐」：点某一行时**播放整个精选推荐列表**（从该行开始），
+   * 而不是只播这一首。
+   */
+  public async playFeaturedListAt(index: number, uiContext: UIContext | undefined): Promise<void> {
+    const rows: RecommendPrivateSongUi[] = this.privateSongDisplayList;
+    if (rows.length === 0) {
+      return;
+    }
+    const songs: LXSearchSong[] = [];
+    const mapping: number[] = [];
+    for (let i: number = 0; i < rows.length; i++) {
+      if (rows[i].songId.length > 0) {
+        songs.push(this.toSearchSong(rows[i]));
+        mapping.push(i);
+      }
+    }
+    if (songs.length === 0) {
+      return;
+    }
+    let start: number = 0;
+    for (let k: number = 0; k < mapping.length; k++) {
+      if (mapping[k] === index) {
+        start = k;
+        break;
+      }
+    }
+    await OnlinePlayUtil.playList(this.appState, songs, start, uiContext);
+  }
   public async requestPlayOnlineSong(item: RecommendPrivateSongUi,
     uiContext: UIContext | undefined): Promise<void> {
     const song: LXSearchSong = {

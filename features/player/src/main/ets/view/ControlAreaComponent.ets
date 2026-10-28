@@ -1,4 +1,5 @@
 import { qualityDisplayName } from '../util/SourceFallbackUtil';
+import { searchSingers, SearchPageResult, SingerInfo } from '../geuz/index';
 /*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -637,16 +638,48 @@ export struct ControlAreaComponent {
   }
 
   /** Opens the artist detail page with the current singer name and song source. */
-  private searchCurrentSinger(): void {
+  /**
+   * 打开当前歌曲的歌手页。
+   * ★ 之前只传 `name`，歌手页只能显示一个名字（没有 id/mid 就拉不到歌）。
+   *   现在先**按当前歌曲所在平台**用歌手名搜一次拿 id/mid/头像，成功再带上；
+   *   搜不到才退回"只带名字"（歌手页自身还有按名字自愈的一次兜底）。
+   *   日志关键字：`RzdArtistNav`
+   */
+  private async searchCurrentSinger(): Promise<void> {
     const singer: string = this.currentSinger();
-    if (singer.length > 0 && singer !== '未知歌手') {
-      const song = this.currentSong();
-      const param = new ArtistRouteParam();
-      param.source = sourceToCode(song !== undefined && typeof song.source === 'string' ? song.source : '');
-      param.name = singer;
-      this.playerViewModel.appState.isShowPlay = false;
-      this.pageIndexInfos.pushPathByName(RouterUrlConstants.ARTIST_DETAIL, param);
+    if (singer.length === 0 || singer === '未知歌手') {
+      return;
     }
+    const song = this.currentSong();
+    const sourceCode: number =
+      sourceToCode(song !== undefined && typeof song.source === 'string' ? song.source : '');
+    const param = new ArtistRouteParam();
+    param.source = sourceCode;
+    param.name = singer;
+    try {
+      const result: SearchPageResult<SingerInfo> = await searchSingers(sourceCode, singer, 1);
+      if (result.list.length > 0) {
+        const hit: SingerInfo = result.list[0];
+        if (hit.id.length > 0) {
+          param.id = hit.id;
+          param.mid = hit.id;
+        }
+        if (hit.picUrl.length > 0) {
+          param.picUrl = hit.picUrl;
+        }
+        if (hit.name.length > 0) {
+          param.name = hit.name;
+        }
+        appendPlayLog('[RzdArtistNav] resolved singer=' + param.name + ' id=' + param.id +
+          ' src=' + sourceCode);
+      } else {
+        appendPlayLog('[RzdArtistNav] not found, fallback by name=' + singer + ' src=' + sourceCode);
+      }
+    } catch (error) {
+      appendPlayLog('[RzdArtistNav] search failed: ' + JSON.stringify(error).substring(0, 80));
+    }
+    this.playerViewModel.appState.isShowPlay = false;
+    this.pageIndexInfos.pushPathByName(RouterUrlConstants.ARTIST_DETAIL, param);
   }
 
   /** Opens the online search page with the current album name. */
@@ -1154,7 +1187,7 @@ export struct ControlAreaComponent {
 
         this.MenuRow(this.currentSinger(), $r('sys.symbol.person_crop_circle_fill_1'), (): void => {
           this.closeMenuSheet();
-          this.searchCurrentSinger();
+          void this.searchCurrentSinger();
         })
         this.MenuRow(this.currentAlbum(), $r('sys.symbol.music_note_list'), (): void => {
           this.closeMenuSheet();

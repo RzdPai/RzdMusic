@@ -429,7 +429,9 @@ export struct CategoryContentSection {
       .padding({ top: 10, bottom: 10 })
       .onClick(() => {
         if (item.source.length > 0) {
-          void this.recommendViewModel.requestPlayOnlineSong(item, this.getUIContext());
+          // ★ 点精选推荐里的某一行 = 播放整个精选推荐列表（从这一行开始）
+              void this.recommendViewModel.playFeaturedListAt(
+                this.recommendViewModel.privateSongDisplayList.indexOf(item), this.getUIContext());
         }
       })
 
