@@ -24,7 +24,10 @@ import { pasteboard } from '@kit.BasicServicesKit';
 import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, BreakpointType, HomeSourceState, LyricBlurState, LyricCenterState, LyricFontSizeState, LyricFpsState, MotionCoverState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
-import { LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatformsOf, lxSourceManager, MediaService } from 'player';
+import {
+  DownloadService,
+   LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatformsOf, lxSourceManager, MediaService
+} from 'player';
 import type { LXApiImportResult } from 'player';
 import { pickPlaybackQuality, probeBySample, qualityRank, QUALITY_CHAIN } from 'player';
 import type { LXUserApiSourceInfo } from 'player';
@@ -157,7 +160,7 @@ export struct SettingsDetailPage {
   private readonly homeSourceOptions: string[] = ['QQ', '酷狗', '网易', '酷我', '咪咕'];
   private readonly homeSourceValues: string[] = ['qq', 'kg', 'wy', 'kw', 'mg'];
   private readonly onOffOptions: string[] = ['开', '关'];
-  private readonly saveLocationOptions: string[] = ['手动选择', 'Download目录'];
+  private readonly saveLocationOptions: string[] = ['手动选择', 'Download目录', '自定义目录'];
   private readonly colorModeOptions: string[] = ['日间', '夜间', '跟随系统'];
   private pageScroller: Scroller = new Scroller();
 
@@ -696,6 +699,33 @@ export struct SettingsDetailPage {
     }
   }
 
+  /** 保存位置选中项：0 手动选择 / 1 Download 目录 / 2 自定义目录（已授权即选中）。 */
+  private saveLocationIndex(): number {
+    if (MusicStoreService.getInstance().getDownloadDirUri().length > 0) {
+      return 2;
+    }
+    return this.saveToDownloadDir ? 1 : 0;
+  }
+
+  /** 点了「自定义目录」：弹一次目录选择器，授权后所有下载都用它。 */
+  private async pickCustomDir(): Promise<void> {
+    const uri: string = await DownloadService.getInstance().pickCustomDownloadDir();
+    if (uri.length === 0) {
+      this.getUIContext().getPromptAction().showToast({ message: '未选择目录', duration: 1500 });
+      return;
+    }
+    this.saveToDownloadDir = false;
+    MusicStoreService.getInstance().setDownloadSaveMode('download');
+    this.getUIContext().getPromptAction().showToast({ message: '已授权下载目录，之后下载都存这里', duration: 2000 });
+  }
+
+  private selectSaveLocationIndex(index: number): void {
+    if (index === 2) {
+      void this.pickCustomDir();
+      return;
+    }
+    this.selectSaveLocation(index === 1);
+  }
   private selectSaveLocation(download: boolean): void {
     this.saveToDownloadDir = download;
     // ★ 2026-10-20：开关关掉 = 存**应用私有目录**（默认，下载完直接出现在本地音乐里），sk 不再用
@@ -1241,9 +1271,9 @@ export struct SettingsDetailPage {
 
           this.SubTitle($r('app.string.setting_sub_save_location'))
           this.CapsuleSelector(this.saveLocationOptions,
-            this.saveToDownloadDir ? 1 : 0,
+            this.saveLocationIndex(),
             (index: number) => {
-              this.selectSaveLocation(index === 1);
+              this.selectSaveLocationIndex(index);
             })
         }
         .width('100%')
