@@ -1,25 +1,33 @@
 /**
  * 即将举办的演唱会（Apple Music 私有接口）。
  *
- * 链路（详见《即将举办的演唱会.md》）：
- *   1. 从网页播放器页面抓一个 Bearer token（`iss: AMPWebPlay` 就够）；
- *   2. `search?types=artists` 用歌手名换 Apple artistId；
- *   3. `artists/{id}?views=all-upcoming-concerts` 拿场次 id；
- *   4. `concerts/{id}?include=venues,artists,playlists` 拿场馆/时间。
+ * ★ token 是**自动获取**的，不需要用户粘贴：
+ *   HTML（`music.apple.com/{cc}/browse`）里没有 token，但页面引用了
+ *   `/assets/index~xxxxxxxx.js`（约 3.3MB），那个 bundle 里内联着一枚
+ *   `eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiIsImtpZCI6IldlYlBsYXlLaWQifQ…`
+ *   （payload `{"iss":"AMPWebPlay", …}`，有效期约 70 天）。
+ *   抓取成本：冷启动约 5.4MB / 2~4 秒，抓到后写偏好，7 天内不再抓。
  *
- * 关键约束：
- *   - 必须带 `Origin: https://music.apple.com`，否则 401；
- *   - 视图名必须是 `all-upcoming-concerts`（带连字符，ArkTS 不能点访问，统一走 Record 读）；
- *   - `cn` 区没有这个视图 → 用 `hk`；拿不到就返回空数组，UI 据此隐藏入口（优雅降级）。
+ * ★ 两条路对 `Origin` 的要求**相反**（踩过坑）：
+ *   - 抓 `music.apple.com` 页面 / JS：**绝对不能带 Origin**（带了 403）
+ *   - 调 `amp-api.music.apple.com`：**必须带** `Origin: https://music.apple.com`（不带 401）
+ *
+ * ★ 其它硬约束：
+ *   - 视图名必须是 `all-upcoming-concerts`（带连字符，ArkTS 不能点访问 → 走 Record）；
+ *   - `cn` 区不是"空数组"，而是**根本没有 `views` 字段** → 判 `view === undefined`；
+ *   - storefront 自动回退：`hk` → `us` → `gb`，哪个先拿到数据用哪个；
+ *   - 列表是精简对象（只有 id + 时间），场馆必须再查 `?include=venues,artists,playlists`；
+ *   - `name` 常为 null → UI 层用「艺人 · 场馆」兜底。
  *
  * 日志关键字：`RzdConcert`
  */
 import { http } from '@kit.NetworkKit';
+import { MusicStoreService } from 'musicbasic';
 
 /** 单场演唱会。 */
 export interface ConcertItem {
   id: string;
-  /** 演出标题；接口常给 null，这里已用「歌手 · 场馆」兜底 */
+  /** 演出标题；接口常给 null，这里已用「艺人 · 场馆」兜底 */
   title: string;
   /** ISO 8601 UTC 起始时间 */
   startISO: string;
@@ -31,14 +39,20 @@ export interface ConcertItem {
   whenText: string;
   /** Apple Music 页面（票务信息缺失时的落点） */
   url: string;
+  /** 这条数据来自哪个 storefront（hk/us/gb） */
+  storefront: string;
 }
 
 const HOST: string = 'https://amp-api.music.apple.com';
 const WEB_HOST: string = 'https://music.apple.com';
-const STOREFRONT: string = 'hk';
 const VIEW_KEY: string = 'all-upcoming-concerts';
+const STOREFRONTS: string[] = ['hk', 'us', 'gb'];
+/** token 复用窗口：6 天（官方有效期约 70 天，保守起见 6 天重抓一次） */
+const TOKEN_TTL_MS: number = 6 * 24 * 60 * 60 * 1000;
 const UA: string = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+const JWT_PATTERN: RegExp = /eyJ[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{20,}/;
+const JS_PATTERN: RegExp = /\/assets\/[A-Za-z0-9_~.\-]+\.js/;
 
 /** 通用 JSON 读取：ArkTS 禁止 obj['key']，统一走 Record。 */
 function readKey(source: Object | undefined, key: string): Object | undefined {
@@ -59,11 +73,13 @@ function readArray(source: Object | undefined, key: string): Object[] {
   return Array.isArray(v) ? (v as Object[]) : [];
 }
 
-/** 该歌手即将举办的演唱会列表；失败一律返回空数组。 */
+/** 该歌手即将举办的演唱会列表；失败一律返回空数组（UI 据此隐藏入口）。 */
 export class ConcertService {
   private static instance: ConcertService | undefined = undefined;
   private token: string = '';
   private cache: Map<string, ConcertItem[]> = new Map<string, ConcertItem[]>();
+  /** 解析得到的 storefront（拿到数据后固定，减少后续请求） */
+  private hitStorefront: string = '';
 
   public static getInstance(): ConcertService {
     if (ConcertService.instance === undefined) {
@@ -75,6 +91,15 @@ export class ConcertService {
   /** 已缓存的结果（undefined = 还没查过）。 */
   public peek(artistName: string): ConcertItem[] | undefined {
     return this.cache.get(artistName);
+  }
+
+  /** 手动覆盖 token（自动抓取失败时的兜底）。 */
+  public setTokenOverride(token: string): void {
+    this.token = token.trim();
+    if (this.token.length > 0) {
+      MusicStoreService.getInstance().setConcertToken(this.token);
+      console.info('[RzdConcert] token override len=' + this.token.length);
+    }
   }
 
   public async upcoming(artistName: string): Promise<ConcertItem[]> {
@@ -90,18 +115,25 @@ export class ConcertService {
     try {
       await this.ensureToken();
       if (this.token.length === 0) {
-        console.info('[RzdConcert] no token, skip');
+        console.info('[RzdConcert] no token, skip: ' + name);
         this.cache.set(artistName, []);
         return [];
       }
-      const artistId: string = await this.findArtistId(name);
-      if (artistId.length === 0) {
-        console.info('[RzdConcert] artist not found: ' + name);
-        this.cache.set(artistName, []);
-        return [];
+      // 先用已知命中的 storefront，再按 hk → us → gb 依次尝试
+      const order: string[] = this.storefrontOrder();
+      for (let i: number = 0; i < order.length; i++) {
+        const storefront: string = order[i];
+        out = await this.queryStorefront(name, storefront);
+        if (out.length > 0) {
+          this.hitStorefront = storefront;
+          console.info('[RzdConcert] hit storefront=' + storefront + ' artist=' + name +
+            ' count=' + out.length);
+          break;
+        }
       }
-      out = await this.listConcerts(artistId, name);
-      console.info('[RzdConcert] artist=' + name + ' id=' + artistId + ' count=' + out.length);
+      if (out.length === 0) {
+        console.info('[RzdConcert] no concerts artist=' + name);
+      }
     } catch (error) {
       console.info('[RzdConcert] failed: ' + JSON.stringify(error).substring(0, 120));
       out = [];
@@ -110,46 +142,100 @@ export class ConcertService {
     return out;
   }
 
-  /** 从网页播放器页面抓 Bearer token（JWT）。 */
+  private storefrontOrder(): string[] {
+    const order: string[] = [];
+    if (this.hitStorefront.length > 0) {
+      order.push(this.hitStorefront);
+    }
+    for (let i: number = 0; i < STOREFRONTS.length; i++) {
+      if (STOREFRONTS[i] !== this.hitStorefront) {
+        order.push(STOREFRONTS[i]);
+      }
+    }
+    return order;
+  }
+
+  private async queryStorefront(artistName: string, storefront: string): Promise<ConcertItem[]> {
+    const artistId: string = await this.findArtistId(artistName, storefront);
+    if (artistId.length === 0) {
+      return [];
+    }
+    return await this.listConcerts(artistId, artistName, storefront);
+  }
+
+  /**
+   * 取 token：先读偏好（6 天内有效），否则抓 HTML → JS bundle → JWT。
+   * 抓取失败不影响调用方（返回后 token 为空则整块隐藏）。
+   */
   private async ensureToken(): Promise<void> {
     if (this.token.length > 0) {
       return;
     }
-    const html: string = await this.getText(WEB_HOST + '/' + STOREFRONT + '/browse', '');
+    const store: MusicStoreService = MusicStoreService.getInstance();
+    const saved: string = store.getConcertToken();
+    const savedAt: number = store.getConcertTokenAt();
+    if (saved.length > 0 && Date.now() - savedAt < TOKEN_TTL_MS) {
+      this.token = saved;
+      console.info('[RzdConcert] token from prefs len=' + saved.length);
+      return;
+    }
+    // ① 抓 HTML（不带 Origin！）
+    const html: string = await this.getText(WEB_HOST + '/hk/browse', '', false);
     if (html.length === 0) {
       return;
     }
-    const match: RegExpMatchArray | null =
-      html.match(/eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}/);
-    if (match !== null && match.length > 0) {
-      this.token = match[0];
-      console.info('[RzdConcert] token len=' + this.token.length);
-    } else {
-      console.info('[RzdConcert] token not found');
+    const jsHits: RegExpMatchArray | null = html.match(JS_PATTERN);
+    if (jsHits === null || jsHits.length === 0) {
+      console.info('[RzdConcert] js bundle not found in html');
+      return;
     }
+    const jsPath: string = jsHits[0];
+    // ② HTML 里可能已经内联了 token（少数页面会），先试一次
+    const inline: RegExpMatchArray | null = html.match(JWT_PATTERN);
+    if (inline !== null && inline.length > 0) {
+      this.adoptToken(inline[0], 'html');
+      return;
+    }
+    // ③ 抓 JS bundle（同样不带 Origin）
+    const js: string = await this.getText(WEB_HOST + jsPath, '', false);
+    if (js.length === 0) {
+      return;
+    }
+    const hit: RegExpMatchArray | null = js.match(JWT_PATTERN);
+    if (hit !== null && hit.length > 0) {
+      this.adoptToken(hit[0], jsPath);
+      return;
+    }
+    console.info('[RzdConcert] token not found in ' + jsPath + ' (' + js.length + ' bytes)');
   }
 
-  private async findArtistId(artistName: string): Promise<string> {
-    const path: string = '/v1/catalog/' + STOREFRONT + '/search?term=' +
+  private adoptToken(token: string, source: string): void {
+    this.token = token;
+    MusicStoreService.getInstance().setConcertToken(token);
+    console.info('[RzdConcert] token acquired from ' + source + ' len=' + token.length);
+  }
+
+  private async findArtistId(artistName: string, storefront: string): Promise<string> {
+    const path: string = '/v1/catalog/' + storefront + '/search?term=' +
       encodeURIComponent(artistName) + '&types=artists&limit=1';
-    const text: string = await this.getText(HOST + path, this.token);
+    // amp-api：必须带 Origin
+    const text: string = await this.getText(HOST + path, this.token, true);
     if (text.length === 0) {
       return '';
     }
     const root: Object = JSON.parse(text) as Object;
-    const results: Object | undefined = readKey(root, 'results');
-    const artists: Object | undefined = readKey(results, 'artists');
-    const data: Object[] = readArray(artists, 'data');
+    const data: Object[] = readArray(readKey(readKey(root, 'results'), 'artists'), 'data');
     if (data.length === 0) {
       return '';
     }
     return readString(data[0], 'id');
   }
 
-  private async listConcerts(artistId: string, artistName: string): Promise<ConcertItem[]> {
-    const path: string = '/v1/catalog/' + STOREFRONT + '/artists/' + artistId +
+  private async listConcerts(artistId: string, artistName: string,
+    storefront: string): Promise<ConcertItem[]> {
+    const path: string = '/v1/catalog/' + storefront + '/artists/' + artistId +
       '?views=' + VIEW_KEY + '&limit[artists:' + VIEW_KEY + ']=10';
-    const text: string = await this.getText(HOST + path, this.token);
+    const text: string = await this.getText(HOST + path, this.token, true);
     if (text.length === 0) {
       return [];
     }
@@ -161,7 +247,7 @@ export class ConcertService {
     const views: Object | undefined = readKey(data[0], 'views');
     const view: Object | undefined = readKey(views, VIEW_KEY);
     if (view === undefined) {
-      // cn 区就是这里为空：根本没有该视图
+      // cn 区就是这里 undefined：没有该视图（不是空数组）
       return [];
     }
     const items: Object[] = readArray(view, 'data');
@@ -171,7 +257,8 @@ export class ConcertService {
       if (concertId.length === 0) {
         continue;
       }
-      const detail: ConcertItem | undefined = await this.concertDetail(concertId, artistName);
+      const detail: ConcertItem | undefined =
+        await this.concertDetail(concertId, artistName, storefront);
       if (detail !== undefined) {
         out.push(detail);
       }
@@ -180,10 +267,11 @@ export class ConcertService {
     return out;
   }
 
-  private async concertDetail(concertId: string, artistName: string): Promise<ConcertItem | undefined> {
-    const path: string = '/v1/catalog/' + STOREFRONT + '/concerts/' + concertId +
+  private async concertDetail(concertId: string, artistName: string,
+    storefront: string): Promise<ConcertItem | undefined> {
+    const path: string = '/v1/catalog/' + storefront + '/concerts/' + concertId +
       '?include=venues,artists,playlists';
-    const text: string = await this.getText(HOST + path, this.token);
+    const text: string = await this.getText(HOST + path, this.token, true);
     if (text.length === 0) {
       return undefined;
     }
@@ -195,15 +283,13 @@ export class ConcertService {
     const concert: Object = data[0];
     const attrs: Object | undefined = readKey(concert, 'attributes');
     const rels: Object | undefined = readKey(concert, 'relationships');
-    const venues: Object | undefined = readKey(rels, 'venues');
-    const venueList: Object[] = readArray(venues, 'data');
+    const venueList: Object[] = readArray(readKey(rels, 'venues'), 'data');
     let venueName: string = '';
     let city: string = '';
     if (venueList.length > 0) {
       const va: Object | undefined = readKey(venueList[0], 'attributes');
       venueName = readString(va, 'name');
-      const addr: Object | undefined = readKey(va, 'structuredAddress');
-      city = readString(addr, 'city');
+      city = readString(readKey(va, 'structuredAddress'), 'city');
     }
     const startISO: string = readString(attrs, 'startISODateTime');
     const timezone: string = readString(attrs, 'timezone');
@@ -219,29 +305,38 @@ export class ConcertService {
       venueName: venueName,
       city: city,
       whenText: formatWhen(startISO, timezone),
-      url: readString(attrs, 'url')
+      url: readString(attrs, 'url'),
+      storefront: storefront
     };
   }
 
-  private async getText(url: string, token: string): Promise<string> {
+  /**
+   * 统一的 GET。
+   * @param withOrigin true = 调 amp-api（必须带 Origin）；false = 抓网页/JS（绝不能带）
+   */
+  private async getText(url: string, token: string, withOrigin: boolean): Promise<string> {
     const req: http.HttpRequest = http.createHttp();
     try {
       const header: Record<string, string> = {
         'User-Agent': UA,
-        'Origin': WEB_HOST
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
       };
-      if (token.length > 0) {
-        header['Authorization'] = 'Bearer ' + token;
+      if (withOrigin) {
+        header['Origin'] = WEB_HOST;
+        if (token.length > 0) {
+          header['Authorization'] = 'Bearer ' + token;
+        }
       }
       const res: http.HttpResponse = await req.request(url, {
         method: http.RequestMethod.GET,
         header: header,
         expectDataType: http.HttpDataType.STRING,
-        connectTimeout: 10000,
-        readTimeout: 20000
+        connectTimeout: 15000,
+        readTimeout: 30000
       });
       if (res.responseCode !== 200) {
-        console.info('[RzdConcert] http=' + res.responseCode + ' ' + url.substring(0, 70));
+        console.info('[RzdConcert] http=' + res.responseCode + ' origin=' + withOrigin +
+          ' ' + url.substring(0, 70));
         return '';
       }
       return typeof res.result === 'string' ? (res.result as string) : '';

@@ -87,6 +87,8 @@ const KEY_DOWNLOAD_MANUAL_QUALITY: string = 'download_manual_quality';
 const KEY_DOWNLOAD_NAME_FORMAT: string = 'download_name_format';
 const KEY_DOWNLOAD_DIR_URI: string = 'download_dir_uri';
 const KEY_APP_ICON_VARIANT: string = 'app_icon_variant';
+const KEY_CONCERT_TOKEN: string = 'concert_token';
+const KEY_CONCERT_TOKEN_AT: string = 'concert_token_at';
 const KEY_LYRIC_FPS: string = 'lyric_fps';
 const KEY_LYRIC_CENTER: string = 'lyric_center';
 const KEY_LYRIC_BLUR: string = 'lyric_blur';
@@ -858,6 +860,33 @@ export class MusicStoreService {
   /** Whether downloaded file names include the quality tag. */
   /** 自定义下载目录（用户通过目录选择器选的 uri；空 = 用系统下载目录）。 */
   /** 自定义软件图标变体（default/blue/green/purple/orange/dark）。 */
+  /** Apple Music amp-api 的 Bearer token（自动抓取后缓存，约 70 天有效）。 */
+  public getConcertToken(): string {
+    const store: preferences.Preferences | undefined = this.getStore();
+    if (store === undefined) {
+      return '';
+    }
+    return store.getSync(KEY_CONCERT_TOKEN, '') as string;
+  }
+
+  public setConcertToken(token: string): void {
+    const store: preferences.Preferences | undefined = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_CONCERT_TOKEN, token);
+    store.putSync(KEY_CONCERT_TOKEN_AT, Date.now());
+    store.flush();
+  }
+
+  /** token 写入时间（毫秒）。 */
+  public getConcertTokenAt(): number {
+    const store: preferences.Preferences | undefined = this.getStore();
+    if (store === undefined) {
+      return 0;
+    }
+    return store.getSync(KEY_CONCERT_TOKEN_AT, 0) as number;
+  }
   public getAppIconVariant(): string {
     const store: preferences.Preferences | undefined = this.getStore();
     if (store === undefined) {
