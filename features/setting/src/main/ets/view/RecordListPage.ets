@@ -1167,17 +1167,20 @@ export struct RecordListPage {
       ForEach(this.upcomingShows, (show: UpcomingShow) => {
         Row({ space: 10 }) {
           Column({ space: 3 }) {
-            Text(show.artistName)
+            Text(show.artistName + (show.item.venueName.length > 0 ? (' · ' + show.item.venueName) : ''))
               .fontSize(14)
               .fontWeight(FontWeight.Medium)
               .fontColor($r('sys.color.font_primary'))
               .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              // 超长跑马灯
+              .textOverflow({ overflow: TextOverflow.MARQUEE })
+              .marqueeOptions({ start: true, step: 6 })
             Text(show.item.whenText + (show.item.city.length > 0 ? (' · ' + show.item.city) : ''))
               .fontSize(12)
               .fontColor($r('sys.color.font_secondary'))
               .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .textOverflow({ overflow: TextOverflow.MARQUEE })
+              .marqueeOptions({ start: true, step: 6 })
           }
           .alignItems(HorizontalAlign.Start)
           .layoutWeight(1)

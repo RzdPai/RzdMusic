@@ -299,7 +299,9 @@ export struct ArtistDetailPage {
                 .fontWeight(FontWeight.Medium)
                 .fontColor(this.fgPrimary())
                 .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                // 超长跑马灯（TextOverflow.MARQUEE + marqueeOptions 才生效）
+                .textOverflow({ overflow: TextOverflow.MARQUEE })
+                .marqueeOptions({ start: true, step: 6 })
                 .width('100%')
               Row({ space: 6 }) {
                 Text(c.whenText)
@@ -313,7 +315,8 @@ export struct ArtistDetailPage {
                     .fontSize(12)
                     .fontColor('#CCFFFFFF')
                     .maxLines(1)
-                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                    .textOverflow({ overflow: TextOverflow.MARQUEE })
+                    .marqueeOptions({ start: true, step: 6 })
                     .layoutWeight(1)
                 }
               }
@@ -322,13 +325,9 @@ export struct ArtistDetailPage {
             .width('100%')
             .padding({ left: 14, right: 14, top: 12, bottom: 12 })
             .borderRadius(14)
-            .systemMaterial(immersiveMedium())
+            // 弹层里不用光感（光感会降低可读性），用半透明底色
+            .backgroundColor('#1AFFFFFF')
             .alignItems(HorizontalAlign.Start)
-            .onClick(() => {
-              if (c.url.length > 0) {
-                void this.openConcertUrl(c.url);
-              }
-            })
           }
         }, (c: ConcertItem) => c.id)
       }
@@ -341,24 +340,6 @@ export struct ArtistDetailPage {
     .padding({ left: 16, right: 16, top: 8, bottom: 16 })
   }
 
-  /** 打开 Apple Music 演出页（票务信息缺失时唯一落点）。 */
-  private async openConcertUrl(url: string): Promise<void> {
-    try {
-      const ctx = this.getUIContext().getHostContext();
-      if (ctx === undefined) {
-        return;
-      }
-      const uiCtx: common.UIAbilityContext = ctx as common.UIAbilityContext;
-      await uiCtx.startAbility({
-        action: 'ohos.want.action.viewData',
-        entities: ['entity.system.browsable'],
-        uri: url
-      });
-      console.info('[RzdConcert] open url ok');
-    } catch (error) {
-      console.info('[RzdConcert] open url failed: ' + JSON.stringify(error).substring(0, 80));
-    }
-  }
   @Builder
   private AboutPopup() {
     Column() {
