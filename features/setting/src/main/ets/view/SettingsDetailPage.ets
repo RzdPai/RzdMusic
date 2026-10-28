@@ -102,7 +102,10 @@ export struct SettingsDetailPage {
     { value: 'green', label: '绿', foreground: $r('app.media.foreground_green'), background: '#12A150' },
     { value: 'purple', label: '紫', foreground: $r('app.media.foreground_purple'), background: '#7A3FF2' },
     { value: 'orange', label: '橙', foreground: $r('app.media.foreground_orange'), background: '#F2670A' },
-    { value: 'dark', label: '深色', foreground: $r('app.media.foreground_dark'), background: '#1C1D1F' }
+    { value: 'dark', label: '深色', foreground: $r('app.media.foreground_dark'), background: '#1C1D1F' },
+    { value: 'art1', label: '墨韵', foreground: $r('app.media.background_art1'), background: '#F5F3F0' },
+    { value: 'art2', label: '竹影', foreground: $r('app.media.background_art2'), background: '#F5F3F0' },
+    { value: 'art3', label: '云笺', foreground: $r('app.media.background_art3'), background: '#F5F3F0' }
   ];
   @Local saveToDownloadDir: boolean = false;
   @Local downloadNameFormat: string = 'title';
