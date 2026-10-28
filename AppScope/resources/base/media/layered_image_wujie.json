@@ -1,0 +1,6 @@
+{
+  "layered-image": {
+    "background": "$media:background_wujie",
+    "foreground": "$media:foreground_wujie"
+  }
+}
