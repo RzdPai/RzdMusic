@@ -50,6 +50,8 @@ export struct SourceManagerList {
 
   /** 正在被拖动的音源 id。 */
   @Local dragId: string = '';
+  /** 拖拽中的行下标（onItemDragStart/onItemDrop 用）。 */
+  @Local dragIdx: number = -1;
 
   private inOrder(apiId: string): boolean {
     return this.orderIds.indexOf(apiId) >= 0;
@@ -157,16 +159,32 @@ export struct SourceManagerList {
     }
     .width('100%')
     .scrollBar(BarState.Off)
-    // ★ 2026-10-29（API 26 SDK）：List 的官方拖拽排序 = `editMode` + `onItemMove`。
-    //   `onMove` 只存在于 DynamicNode（Repeat）上，普通 List + ForEach 用这对。
-    //   离手回调 (from, to)，我们只重排数据；不会再出现"复制一张卡片跟手"。
-    .editMode(this.draggableEnabled)
-    .onItemMove((from: number, to: number): boolean => {
-      if (from === to || from < 0 || to < 0 || from >= this.apis.length || to >= this.apis.length) {
-        return false;
+    // ★ 2026-10-29 二次修正：`editMode` 是"滑动多选"的开关，会和 swipeAction/长按抢手势，
+    //   所以去掉它。List + ForEach 的拖拽排序用 onItemDragStart + onItemDrop：
+    //   预览只给一个"小胶囊"（不是整张卡片），既能看到跟手，又不至于像复制了一张卡。
+    .onItemDragStart((_event: ItemDragInfo, itemIndex: number) => {
+      if (!this.draggableEnabled || itemIndex < 0 || itemIndex >= this.apis.length) {
+        return (): void => {};
       }
-      this.onMove(this.apis[from].id, this.apis[to].id);
-      return true;
+      this.dragIdx = itemIndex;
+      const api: LXUserApiInfo = this.apis[itemIndex];
+      const name: string = api.name;
+      return (): void => {
+        Text(name)
+          .fontSize(14)
+          .fontColor($r('sys.color.font_primary'))
+          .constraintSize({ maxWidth: 180 })
+          .padding({ left: 14, right: 14, top: 8, bottom: 8 })
+          .borderRadius(18)
+          .backgroundColor($r('app.color.card_background'))
+      };
+    })
+    .onItemDrop((_event: ItemDragInfo, _itemIndex: number, insertIndex: number, isSuccess: boolean): void => {
+      if (!isSuccess || this.dragIdx < 0 || this.dragIdx >= this.apis.length ||
+        insertIndex < 0 || insertIndex >= this.apis.length) {
+        return;
+      }
+      this.onMove(this.apis[this.dragIdx].id, this.apis[insertIndex].id);
     })
     // 拖动：行级 draggable（本 SDK 的 List 无 onMove，List 级拖拽实测不可用）
 
