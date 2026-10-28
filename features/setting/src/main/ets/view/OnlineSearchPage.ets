@@ -1685,16 +1685,20 @@ export struct OnlineSearchPage {
   @Builder
   private searchRow() {
     Row({ space: 10 }) {
-      Stack() {
+      Button() {
         SymbolGlyph($r('sys.symbol.chevron_left'))
           .fontSize(20)
           .fontColor([$r('sys.color.font_primary')])
       }
+      .type(ButtonType.Normal)
       .width(40)
       .height(40)
+      .borderRadius(20)
+      // ★ 材质挂在 Button（A 档宿主）；这条标题栏槽位本身也是 B 档白名单
+      .systemMaterial(immersiveMedium())
+      .backgroundColor('#33FFFFFF')
       // ★ 2026-10-24（甲方：「返回按钮、搜索框和切换平台这三个尽量都加上沉浸光感」）：
       //   材质档位跟着「其它设置 → 光感强度」走，与标题栏 `buildTitleMaterial` 同一张表。
-      .attributeModifier(new SearchGlassModifier(this.ambientState.level))
       .accessibilityText('返回')
       .onClick((): void => {
         this.closeSearch();
@@ -1705,13 +1709,16 @@ export struct OnlineSearchPage {
       //   （官方示例 `PageTwo.ets:47-57` 就是把 backgroundColor 挂在 Search 上）。
       this.SearchInputBar()
 
-      Stack() {
+      Button() {
         SourceChip({ source: this.searchSource })
       }
+      .type(ButtonType.Normal)
       .height(40)
       .padding({ left: 12, right: 12 })
+      .borderRadius(20)
+      .systemMaterial(immersiveMedium())
+      .backgroundColor('#33FFFFFF')
       // 切换平台（音源）那颗：同款沉浸光感材质
-      .attributeModifier(new SearchGlassModifier(this.ambientState.level))
       .accessibilityText('选择搜索音源，当前' + (this.searchSource === 'all' ? '聚合' : this.selectedSourceText))
       .onClick((): void => {
         this.showSources = true;
@@ -1922,7 +1929,8 @@ export struct OnlineSearchPage {
       //   在它身上挂实时模糊 = 长镜头全程重算模糊 ⇒ 正是甲方说的"切到搜索页有点卡"。
       //   ⇒ 改用**实底卡片背板**：`card_background`（浅 #FFFFFF / 深 #1C1D1F）+ 0.5vp 描边。
       //   ⚠️ 首页那端（`HomeSearchRow`）必须保持**同一套**背板，否则形变中途会看到颜色跳变。
-      .backgroundColor($r('app.color.card_background'))
+      .systemMaterial(immersiveMedium())
+        .backgroundColor('#33FFFFFF')
       .borderRadius(20)
       .border({ width: 0.5, color: $r('sys.color.comp_divider') })
       .clip(true)
@@ -2237,7 +2245,8 @@ export struct OnlineSearchPage {
                         // ★ 2026-10-20（用户：「刚进搜索页非常卡」）：词条**不再挂模糊**
                         //   ——每屏 20 来个胶囊各挂一层 blur，进页面就是一卡。改纯色卡片底，
                         //   与我的页卡片同色（深色下也看得见）。
-                        .backgroundColor($r('app.color.card_background'))
+                        .systemMaterial(immersiveMedium())
+        .backgroundColor('#33FFFFFF')
                         .margin({ right: 8, bottom: 8 })
                         .onClick(() => {
                           this.applyKeyword(keyword);
@@ -2285,7 +2294,8 @@ export struct OnlineSearchPage {
                         .padding({ left: 14, right: 14, top: 8, bottom: 8 })
                         .borderRadius(18)
                         // 与热搜同一处理：纯色卡片底、不挂模糊（卡顿根因之一）
-                        .backgroundColor($r('app.color.card_background'))
+                        .systemMaterial(immersiveMedium())
+        .backgroundColor('#33FFFFFF')
                         .margin({ right: 8, bottom: 8 })
                         .onClick(() => {
                           this.applyKeyword(keyword);

@@ -1,13 +1,13 @@
-import { appendPlayLog, Logger, SearchGlassModifier } from 'musicbasic';
+import { appendPlayLog, Logger, SearchGlassModifier, immersiveMedium } from 'musicbasic';
 
-/** 一镜到底诊断：同时写 HiLog 与**应用内运行日志**（设置→运行日志，无设备时只能靠它取证）。 */
+/** 涓€闀滃埌搴曡瘖鏂細鍚屾椂鍐?HiLog 涓?*搴旂敤鍐呰繍琛屾棩蹇?*锛堣缃啋杩愯鏃ュ織锛屾棤璁惧鏃跺彧鑳介潬瀹冨彇璇侊級銆?*/
 function morphLog(message: string): void {
   appendPlayLog('[RzdSearchMorph] ' + message);
   Logger.info('RzdSearchMorph', message);
 }
 
 const SEARCH_FIELD_H: number = 40;
-// wujie126.pa 113552–113587 (Tokens export slot 0x10).
+// wujie126.pa 113552鈥?13587 (Tokens export slot 0x10).
 const FIELD_GAP: number = 16;
 const RECOGNIZE_GAP: number = 10;
 const SEARCH_GEO_ID: string = 'wanting_search_field';
@@ -21,21 +21,22 @@ export struct HomeSearchRow {
   build() {
     Column() {
       Row({ space: RECOGNIZE_GAP }) {
-        // ★★ 2026-10-20：**不要**把搜索框包在"玻璃 Stack"里。
-        //   一镜到底做形变的是挂 `geometryTransition` 的那个节点；玻璃如果挂在外面那层 Stack 上，
-        //   飞起来就只有框里的文字、框本身不动（甲方原话："只有搜索框里的文字有动画"）。
-        //   官方示例就是把背景直接挂在 `Search` 上（`.backgroundColor('#0D000000')`），这里照抄：
-        //   背景/圆角/高度全部落在 `Search` 自己身上，两端同一套。
-        Search({ placeholder: '艺人、歌曲或专辑' })
+        // 鈽呪槄 2026-10-20锛?*涓嶈**鎶婃悳绱㈡鍖呭湪"鐜荤拑 Stack"閲屻€?
+        //   涓€闀滃埌搴曞仛褰㈠彉鐨勬槸鎸?`geometryTransition` 鐨勯偅涓妭鐐癸紱鐜荤拑濡傛灉鎸傚湪澶栭潰閭ｅ眰 Stack 涓婏紝
+        //   椋炶捣鏉ュ氨鍙湁妗嗛噷鐨勬枃瀛椼€佹鏈韩涓嶅姩锛堢敳鏂瑰師璇濓細"鍙湁鎼滅储妗嗛噷鐨勬枃瀛楁湁鍔ㄧ敾"锛夈€?
+        //   瀹樻柟绀轰緥灏辨槸鎶婅儗鏅洿鎺ユ寕鍦?`Search` 涓婏紙`.backgroundColor('#0D000000')`锛夛紝杩欓噷鐓ф妱锛?
+        //   鑳屾櫙/鍦嗚/楂樺害鍏ㄩ儴钀藉湪 `Search` 鑷繁韬笂锛屼袱绔悓涓€濂椼€?
+        Search({ placeholder: '鑹轰汉銆佹瓕鏇叉垨涓撹緫' })
           .height(SEARCH_FIELD_H)
-          // ★ 2026-10-24（甲方：「搜索框现在半透明的不是很好看」）：改**实底卡片背板**，
-          //   与搜索页那端（`OnlineSearchPage.SearchInputBar`）**逐字同一套**：
-          //   `card_background` + 0.5vp 描边。两端不同色会在长镜头中途看出颜色跳变。
-          .backgroundColor($r('app.color.card_background'))
+          // 鈽?2026-10-24锛堢敳鏂癸細銆屾悳绱㈡鐜板湪鍗婇€忔槑鐨勪笉鏄緢濂界湅銆嶏級锛氭敼**瀹炲簳鍗＄墖鑳屾澘**锛?
+          //   涓庢悳绱㈤〉閭ｇ锛坄OnlineSearchPage.SearchInputBar`锛?*閫愬瓧鍚屼竴濂?*锛?
+          //   `card_background` + 0.5vp 鎻忚竟銆備袱绔笉鍚岃壊浼氬湪闀块暅澶翠腑閫旂湅鍑洪鑹茶烦鍙樸€?
+          .systemMaterial(immersiveMedium())
+          .backgroundColor('#33FFFFFF')
           .borderRadius(SEARCH_FIELD_H / 2)
           .border({ width: 0.5, color: $r('sys.color.comp_divider') })
           .clip(true)
-          // 两端占位色必须同一个 token：不同色时形变中途会看到"白字突然变灰"。
+          // 涓ょ鍗犱綅鑹插繀椤诲悓涓€涓?token锛氫笉鍚岃壊鏃跺舰鍙樹腑閫斾細鐪嬪埌"鐧藉瓧绐佺劧鍙樼伆"銆?
           .placeholderColor($r('sys.color.font_secondary'))
           .placeholderFont({ size: 16 })
           .textFont({ size: 16 })
@@ -51,7 +52,7 @@ export struct HomeSearchRow {
           .focusOnTouch(false)
           .defaultFocus(false)
           .geometryTransition(SEARCH_GEO_ID, { follow: true })
-          // 诊断用：源节点在 push/pop 时是"保留"还是"重建"——退出没动画的关键判据。
+          // 璇婃柇鐢細婧愯妭鐐瑰湪 push/pop 鏃舵槸"淇濈暀"杩樻槸"閲嶅缓"鈥斺€旈€€鍑烘病鍔ㄧ敾鐨勫叧閿垽鎹€?
           .onAppear((): void => {
             morphLog('source appear');
           })
