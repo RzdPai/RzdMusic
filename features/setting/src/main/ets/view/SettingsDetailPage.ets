@@ -63,6 +63,14 @@ export class SettingsDetailRouteParam {
   index: number = 4;
 }
 
+/** 软件图标变体（设置页横向卡片用）。 */
+interface IconVariant {
+  value: string;
+  label: string;
+  foreground: Resource;
+  background: ResourceColor;
+}
+
 @ComponentV2
 export struct SettingsDetailPage {
   @Param sheetIndex: number = 4;
@@ -85,6 +93,17 @@ export struct SettingsDetailPage {
   @Local ambientLevel: number = 0;
   @Local customColor: string = '';
   @Local colorMode: number = 2;
+  /** 当前选中的软件图标变体（素材见 AppScope/resources/base/media/foreground_*.png）。 */
+  @Local iconVariant: string = 'default';
+  /** 图标变体清单。 */
+  private readonly iconVariants: IconVariant[] = [
+    { value: 'default', label: '默认', foreground: $r('app.media.foreground'), background: '#E60012' },
+    { value: 'blue', label: '蓝', foreground: $r('app.media.foreground_blue'), background: '#1E6FFF' },
+    { value: 'green', label: '绿', foreground: $r('app.media.foreground_green'), background: '#12A150' },
+    { value: 'purple', label: '紫', foreground: $r('app.media.foreground_purple'), background: '#7A3FF2' },
+    { value: 'orange', label: '橙', foreground: $r('app.media.foreground_orange'), background: '#F2670A' },
+    { value: 'dark', label: '深色', foreground: $r('app.media.foreground_dark'), background: '#1C1D1F' }
+  ];
   @Local saveToDownloadDir: boolean = false;
   @Local downloadNameFormat: string = 'title';
   @Local playlistAddPosition: string = 'bottom';
@@ -309,6 +328,8 @@ export struct SettingsDetailPage {
     this.playLog = (AppStorage.get<string>('lxPlayLog') ?? '') +
       (persistentLog.length > 0 ? '\n──── 持久诊断（重启保留）────\n' + persistentLog : '');
     this.colorMode = MusicStoreService.getInstance().getColorMode();
+    this.iconVariant = MusicStoreService.getInstance().getAppIconVariant();
+    this.iconVariant = MusicStoreService.getInstance().getAppIconVariant();
   }
 
   private copyPlayLog(): void {
@@ -1314,6 +1335,47 @@ export struct SettingsDetailPage {
         Column() {
           this.SubTitle($r('app.string.setting_sub_theme_color'))
           this.ColorDotRow()
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 4, bottom: 8 })
+        .borderRadius($r('sys.float.corner_radius_level12'))
+        .backgroundColor($r('app.color.card_background'))
+        // ★ 自定义软件图标：横向卡片，左右滑动选图标（与上面的颜色卡同款）
+        Column() {
+          this.SubTitle('应用图标')
+          Scroll() {
+            Row({ space: 14 }) {
+              ForEach(this.iconVariants, (v: IconVariant) => {
+                Column({ space: 6 }) {
+                  Image(v.foreground)
+                    .width(56)
+                    .height(56)
+                    .borderRadius(14)
+                    .backgroundColor(v.background)
+                    .border({
+                      width: this.iconVariant === v.value ? 2 : 0,
+                      color: this.themeState.color,
+                      radius: 16
+                    })
+                  Text(v.label)
+                    .fontSize(11)
+                    .fontColor(this.iconVariant === v.value ? this.themeState.color : $r('sys.color.font_tertiary'))
+                }
+                .onClick((): void => {
+                  this.iconVariant = v.value;
+                  MusicStoreService.getInstance().setAppIconVariant(v.value);
+                  this.getUIContext().getPromptAction().showToast({
+                    message: '已选择图标：' + v.label + '（重启后生效）',
+                    duration: 1800
+                  });
+                })
+              }, (v: IconVariant) => v.value)
+            }
+            .padding({ left: 2, right: 2 })
+          }
+          .scrollable(ScrollDirection.Horizontal)
+          .scrollBar(BarState.Off)
+          .width('100%')
         }
         .width('100%')
         .padding({ left: 16, right: 16, top: 4, bottom: 8 })
