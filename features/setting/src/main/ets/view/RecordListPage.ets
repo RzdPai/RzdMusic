@@ -588,6 +588,9 @@ export struct RecordListPage {
     const param: ArtistRouteParam = new ArtistRouteParam();
     param.source = code;
     param.id = entry.id;
+    // ★ 收藏时存下来的可能是 mid（部分音源 `effectiveArtistId` 为空时会回退到 mid），
+    //   这里两个字段都带上，歌手页才能正确解析（此前只带 id ⇒ 从关注页进来 0 首歌/0 张专辑）。
+    param.mid = entry.id;
     param.name = entry.name;
     param.picUrl = entry.img;
     this.pageIndexInfos.pushPathByName(RouterUrlConstants.ARTIST_DETAIL, param);

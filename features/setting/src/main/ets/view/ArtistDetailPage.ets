@@ -248,6 +248,13 @@ export struct ArtistDetailPage {
     // 缺省页签 = 最热（`activeTab = 0` / `segmentIndex = 0` / `songSort = 0` 三者一致）；
     // 专辑列表等切到「专辑」页签时再拉（`onSegmentSelect(2)` 里已经处理）。
     await this.loadSongs(1, true);
+    // ★ 自愈：外部传进来的 id/mid 可能失效（例如从关注页进来的旧收藏），
+    //   首屏一首都没有且已知歌手名时，按名字重新解析一次再重载。
+    if (this.songs.length === 0 && this.artistNameText.length > 0) {
+      hilog.info(0x0000, 'RzdArtistDetail', 'empty songs, retry by name: %{public}s', this.artistNameText);
+      await this.resolveSingerBySearch();
+      await this.loadSongs(1, true);
+    }
     void this.loadArtistDesc();
   }
 
