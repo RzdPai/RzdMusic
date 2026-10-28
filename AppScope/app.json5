@@ -14,6 +14,9 @@
       { "name": "purple", "icon": "$media:layered_image_purple" },
       { "name": "orange", "icon": "$media:layered_image_orange" },
       { "name": "red", "icon": "$media:layered_image_red" },
+      { "name": "art1", "icon": "$media:layered_image_art1" },
+      { "name": "art2", "icon": "$media:layered_image_art2" },
+      { "name": "art3", "icon": "$media:layered_image_art3" },
       { "name": "wujie", "icon": "$media:layered_image_wujie" }
     ]
   }

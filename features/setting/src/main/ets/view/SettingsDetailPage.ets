@@ -114,6 +114,9 @@ export struct SettingsDetailPage {
     { value: 'purple', label: '紫', foreground: $r('app.media.foreground_purple'), background: '#FFFFFF', fgRes: $r('app.media.foreground_purple'), bgRes: $r('app.media.background_purple') },
     { value: 'orange', label: '橙', foreground: $r('app.media.foreground_orange'), background: '#FFFFFF', fgRes: $r('app.media.foreground_orange'), bgRes: $r('app.media.background_orange') },
     { value: 'red', label: '红', foreground: $r('app.media.foreground_red'), background: '#FFFFFF', fgRes: $r('app.media.foreground_red'), bgRes: $r('app.media.background_red') },
+    { value: 'art1', label: '墨韵', foreground: $r('app.media.foreground_art1'), background: '#FFFFFF', fgRes: $r('app.media.foreground_art1'), bgRes: $r('app.media.background_art1') },
+    { value: 'art2', label: '竹影', foreground: $r('app.media.foreground_art2'), background: '#FFFFFF', fgRes: $r('app.media.foreground_art2'), bgRes: $r('app.media.background_art2') },
+    { value: 'art3', label: '云笺', foreground: $r('app.media.foreground_art3'), background: '#FFFFFF', fgRes: $r('app.media.foreground_art3'), bgRes: $r('app.media.background_art3') },
     { value: 'wujie', label: '无界', foreground: $r('app.media.foreground_wujie'), background: '#FFFFFF', fgRes: $r('app.media.foreground_wujie'), bgRes: $r('app.media.background_wujie') }
   ];
   @Local saveToDownloadDir: boolean = false;
