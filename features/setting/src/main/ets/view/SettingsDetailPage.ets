@@ -13,6 +13,8 @@
  * limitations under the License.
  */
 
+import { bundleManager } from '@kit.AbilityKit';
+import { DrawableDescriptor, LayeredDrawableDescriptor } from '@kit.ArkUI';
 import { guardPlayerBack, PlaybackPreferenceService } from 'musicbasic';
 import { AppStorageV2, CapsuleSegmentButtonV2, ColorMetrics, SegmentButtonV2Items, uiObserver } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit';
@@ -24,7 +26,10 @@ import { pasteboard } from '@kit.BasicServicesKit';
 import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, BreakpointType, HomeSourceState, LyricBlurState, LyricCenterState, LyricFontSizeState, LyricFpsState, MotionCoverState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
-import { LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatformsOf, lxSourceManager, MediaService } from 'player';
+import {
+  DownloadService,
+   LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatformsOf, lxSourceManager, MediaService
+} from 'player';
 import type { LXApiImportResult } from 'player';
 import { pickPlaybackQuality, probeBySample, qualityRank, QUALITY_CHAIN } from 'player';
 import type { LXUserApiSourceInfo } from 'player';
@@ -60,6 +65,20 @@ export class SettingsDetailRouteParam {
   index: number = 4;
 }
 
+/** 软件图标变体（设置页横向卡片用）。 */
+interface IconVariant {
+  value: string;
+  label: string;
+  /** 预览用前景（艺术图标直接用整图） */
+  foreground: Resource;
+  /** 预览底色 */
+  background: ResourceColor;
+  /** 分层图标的前景资源 */
+  fgRes: Resource;
+  /** 分层图标的背景资源 */
+  bgRes: Resource;
+}
+
 @ComponentV2
 export struct SettingsDetailPage {
   @Param sheetIndex: number = 4;
@@ -82,6 +101,21 @@ export struct SettingsDetailPage {
   @Local ambientLevel: number = 0;
   @Local customColor: string = '';
   @Local colorMode: number = 2;
+  /** 当前选中的软件图标变体（素材见 AppScope/resources/base/media/foreground_*.png）。 */
+  @Local iconVariant: string = 'default';
+  /** 当前即时合成的分层图标（LayeredDrawableDescriptor，无需重启）。 */
+  @Local appliedIcon: LayeredDrawableDescriptor | undefined = undefined;
+  /** 图标变体清单。 */
+  private readonly iconVariants: IconVariant[] = [
+    { value: 'default', label: '原版', foreground: $r('app.media.foreground'), background: '#FFFFFF', fgRes: $r('app.media.foreground'), bgRes: $r('app.media.background') },
+    { value: 'big', label: '放大', foreground: $r('app.media.background_note_big'), background: '#FFFFFF', fgRes: $r('app.media.foreground_note_big'), bgRes: $r('app.media.background_note_big') },
+    { value: 'blue', label: '蓝', foreground: $r('app.media.background_note_blue'), background: '#FFFFFF', fgRes: $r('app.media.foreground_note_blue'), bgRes: $r('app.media.background_note_blue') },
+    { value: 'green', label: '绿', foreground: $r('app.media.background_note_green'), background: '#FFFFFF', fgRes: $r('app.media.foreground_note_green'), bgRes: $r('app.media.background_note_green') },
+    { value: 'purple', label: '紫', foreground: $r('app.media.background_note_purple'), background: '#FFFFFF', fgRes: $r('app.media.foreground_note_purple'), bgRes: $r('app.media.background_note_purple') },
+    { value: 'orange', label: '橙', foreground: $r('app.media.background_note_orange'), background: '#FFFFFF', fgRes: $r('app.media.foreground_note_orange'), bgRes: $r('app.media.background_note_orange') },
+    { value: 'red', label: '红', foreground: $r('app.media.background_note_red'), background: '#FFFFFF', fgRes: $r('app.media.foreground_note_red'), bgRes: $r('app.media.background_note_red') },
+    { value: 'wujie', label: '无界', foreground: $r('app.media.background_wujie'), background: '#FFFFFF', fgRes: $r('app.media.foreground_wujie'), bgRes: $r('app.media.background_wujie') }
+  ];
   @Local saveToDownloadDir: boolean = false;
   @Local downloadNameFormat: string = 'title';
   @Local playlistAddPosition: string = 'bottom';
@@ -157,7 +191,7 @@ export struct SettingsDetailPage {
   private readonly homeSourceOptions: string[] = ['QQ', '酷狗', '网易', '酷我', '咪咕'];
   private readonly homeSourceValues: string[] = ['qq', 'kg', 'wy', 'kw', 'mg'];
   private readonly onOffOptions: string[] = ['开', '关'];
-  private readonly saveLocationOptions: string[] = ['手动选择', 'Download目录'];
+  private readonly saveLocationOptions: string[] = ['手动选择', 'Download目录', '自定义目录'];
   private readonly colorModeOptions: string[] = ['日间', '夜间', '跟随系统'];
   private pageScroller: Scroller = new Scroller();
 
@@ -306,6 +340,20 @@ export struct SettingsDetailPage {
     this.playLog = (AppStorage.get<string>('lxPlayLog') ?? '') +
       (persistentLog.length > 0 ? '\n──── 持久诊断（重启保留）────\n' + persistentLog : '');
     this.colorMode = MusicStoreService.getInstance().getColorMode();
+    this.iconVariant = MusicStoreService.getInstance().getAppIconVariant();
+    for (let i: number = 0; i < this.iconVariants.length; i++) {
+      if (this.iconVariants[i].value === this.iconVariant) {
+        this.buildLayeredIcon(this.iconVariants[i]);
+        break;
+      }
+    }
+    this.iconVariant = MusicStoreService.getInstance().getAppIconVariant();
+    for (let i: number = 0; i < this.iconVariants.length; i++) {
+      if (this.iconVariants[i].value === this.iconVariant) {
+        this.buildLayeredIcon(this.iconVariants[i]);
+        break;
+      }
+    }
   }
 
   private copyPlayLog(): void {
@@ -696,6 +744,83 @@ export struct SettingsDetailPage {
     }
   }
 
+  /** 保存位置选中项：0 手动选择 / 1 Download 目录 / 2 自定义目录（已授权即选中）。 */
+  /**
+   * 选图标：用 `LayeredDrawableDescriptor` 现场合成（前景+背景），**立即生效、无需重启**。
+   * 参照官方《分层图标》+ `js-apis-arkui-drawabledescriptor`：
+   *   `new LayeredDrawableDescriptor(foreground, background)` → 直接给 `Image()` 用。
+   * 说明：桌面图标由包内 `AppScope/resources/base/media/app_layered_image.json` 决定，
+   *   改它需要重新打包；应用内展示（这里）是运行时生效的。
+   */
+  private pickIconVariant(v: IconVariant): void {
+    this.iconVariant = v.value;
+    MusicStoreService.getInstance().setAppIconVariant(v.value);
+    this.buildLayeredIcon(v);
+    // ★ API 26：真正切换**桌面图标** —— bundleManager.setAlternateIcon(name)；
+    //   name 必须命中 app.json5 的 alternateIcons[].name；传空串 = 恢复默认图标。
+    //   日志关键字：`RzdAltIcon`
+    try {
+      bundleManager.setAlternateIcon(v.value === 'default' ? '' : v.value)
+        .then((): void => {
+          console.info('[RzdAltIcon] set ok name=' + v.value);
+        })
+        .catch((err: BusinessError): void => {
+          console.info('[RzdAltIcon] set failed name=' + v.value + ' code=' + err.code + ' msg=' + err.message);
+        });
+    } catch (error) {
+      console.info('[RzdAltIcon] set threw: ' + JSON.stringify(error).substring(0, 80));
+    }
+    this.getUIContext().getPromptAction().showToast({
+      message: '已应用图标：' + v.label,
+      duration: 1500
+    });
+  }
+
+  /** 用资源 id 取 DrawableDescriptor 并合成分层图标。 */
+  private buildLayeredIcon(v: IconVariant): void {
+    try {
+      const ctx = this.getUIContext().getHostContext();
+      const res = ctx?.resourceManager;
+      if (res === undefined) {
+        return;
+      }
+      const fg = res.getDrawableDescriptor(v.foreground.id) as DrawableDescriptor;
+      const bg = res.getDrawableDescriptor(v.bgRes.id) as DrawableDescriptor;
+      if (fg === undefined || bg === undefined) {
+        return;
+      }
+      this.appliedIcon = new LayeredDrawableDescriptor(fg, bg);
+    } catch (error) {
+      console.info('[RzdIcon] layered descriptor failed: ' + JSON.stringify(error).substring(0, 80));
+    }
+  }
+
+  private saveLocationIndex(): number {
+    if (MusicStoreService.getInstance().getDownloadDirUri().length > 0) {
+      return 2;
+    }
+    return this.saveToDownloadDir ? 1 : 0;
+  }
+
+  /** 点了「自定义目录」：弹一次目录选择器，授权后所有下载都用它。 */
+  private async pickCustomDir(): Promise<void> {
+    const uri: string = await DownloadService.getInstance().pickCustomDownloadDir();
+    if (uri.length === 0) {
+      this.getUIContext().getPromptAction().showToast({ message: '未选择目录', duration: 1500 });
+      return;
+    }
+    this.saveToDownloadDir = false;
+    MusicStoreService.getInstance().setDownloadSaveMode('download');
+    this.getUIContext().getPromptAction().showToast({ message: '已授权下载目录，之后下载都存这里', duration: 2000 });
+  }
+
+  private selectSaveLocationIndex(index: number): void {
+    if (index === 2) {
+      void this.pickCustomDir();
+      return;
+    }
+    this.selectSaveLocation(index === 1);
+  }
   private selectSaveLocation(download: boolean): void {
     this.saveToDownloadDir = download;
     // ★ 2026-10-20：开关关掉 = 存**应用私有目录**（默认，下载完直接出现在本地音乐里），sk 不再用
@@ -1241,9 +1366,9 @@ export struct SettingsDetailPage {
 
           this.SubTitle($r('app.string.setting_sub_save_location'))
           this.CapsuleSelector(this.saveLocationOptions,
-            this.saveToDownloadDir ? 1 : 0,
+            this.saveLocationIndex(),
             (index: number) => {
-              this.selectSaveLocation(index === 1);
+              this.selectSaveLocationIndex(index);
             })
         }
         .width('100%')
@@ -1284,6 +1409,43 @@ export struct SettingsDetailPage {
         Column() {
           this.SubTitle($r('app.string.setting_sub_theme_color'))
           this.ColorDotRow()
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 4, bottom: 8 })
+        .borderRadius($r('sys.float.corner_radius_level12'))
+        .backgroundColor($r('app.color.card_background'))
+        // ★ 自定义软件图标：横向卡片，左右滑动选图标（与上面的颜色卡同款）
+        Column() {
+          this.SubTitle('应用图标')
+
+          Scroll() {
+            Row({ space: 14 }) {
+              ForEach(this.iconVariants, (v: IconVariant) => {
+                Column({ space: 6 }) {
+                  Image(v.foreground)
+                    .width(56)
+                    .height(56)
+                    .borderRadius(14)
+                    .backgroundColor(v.background)
+                    .border({
+                      width: this.iconVariant === v.value ? 2 : 0,
+                      color: this.themeState.color,
+                      radius: 16
+                    })
+                  Text(v.label)
+                    .fontSize(11)
+                    .fontColor(this.iconVariant === v.value ? this.themeState.color : $r('sys.color.font_tertiary'))
+                }
+                .onClick((): void => {
+                  this.pickIconVariant(v);
+                })
+              }, (v: IconVariant) => v.value)
+            }
+            .padding({ left: 2, right: 2 })
+          }
+          .scrollable(ScrollDirection.Horizontal)
+          .scrollBar(BarState.Off)
+          .width('100%')
         }
         .width('100%')
         .padding({ left: 16, right: 16, top: 4, bottom: 8 })
