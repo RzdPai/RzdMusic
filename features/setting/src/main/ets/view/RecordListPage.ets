@@ -47,6 +47,7 @@
  */
 
 import { AppStorageV2, uiObserver } from '@kit.ArkUI';
+import { ConcertItem, ConcertService } from '../concert/ConcertService';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import {
   immersiveMedium,
@@ -77,6 +78,14 @@ export const RECORD_MODE_FAVORITES: string = 'favorites';
  * 复用本页而不是新开一个路由页：歌手行、空状态、点击进歌手详情全都是本页已有的
  * `FavoriteEntryRow`，新开一页只会把这套代码抄第二遍。
  */
+/** 关注页「近期演唱会」的一行：歌手 + 场次。 */
+export interface UpcomingShow {
+  artistName: string;
+  artistId: string;
+  source: string;
+  item: ConcertItem;
+}
+
 export const RECORD_MODE_FOLLOWING: string = 'following';
 
 /**
@@ -209,6 +218,8 @@ export struct RecordListPage {
    * 见 {@link forceReloadRecords}。
    */
   @Local recordsVersion: number = 0;
+  /** 关注页顶部「近期演唱会」：{ 歌手名, 场次 }，拿不到就是空数组（卡片不显示） */
+  @Local upcomingShows: UpcomingShow[] = [];
   /**
    * 页根（`HdsNavDestination`）在**窗口坐标**里的顶边 y（vp），由 `onAreaChange` 实测。
    *
@@ -245,6 +256,9 @@ export struct RecordListPage {
   @Monitor('store.historyVersion', 'store.favoriteVersion')
   refreshRecords(): void {
     this.followingArtists = this.store.getFavoriteArtists();
+    if (this.isFollowing()) {
+      void this.loadUpcomingShows();
+    }
     if (this.isFollowing()) {
       this.records = [];
       this.favoriteAlbums = [];
@@ -1127,6 +1141,78 @@ export struct RecordListPage {
     return this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_XL ? 3 : 2;
   }
 
+  /**
+   * 关注页顶部「近期演唱会」：取前 6 位关注歌手的最近场次（每位最多 2 场，总数 ≤ 6）。
+   * 任何一位拿不到都不影响其它位；全空则整块卡片不显示。
+   * 日志：`RzdConcert`
+   */
+  /** 关注页顶部卡片：近期演唱会（歌手 + 时间 + 场馆）。 */
+  @Builder
+  private UpcomingConcertsCard() {
+    Column({ space: 10 }) {
+      Row({ space: 6 }) {
+        SymbolGlyph($r('sys.symbol.auditorium'))
+          .fontSize(15)
+          .fontColor([$r('sys.color.font_primary')])
+        Text('近期演唱会')
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('sys.color.font_primary'))
+      }
+      .width('100%')
+
+      ForEach(this.upcomingShows, (show: UpcomingShow) => {
+        Row({ space: 10 }) {
+          Column({ space: 3 }) {
+            Text(show.artistName)
+              .fontSize(14)
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('sys.color.font_primary'))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+            Text(show.item.whenText + (show.item.city.length > 0 ? (' · ' + show.item.city) : ''))
+              .fontSize(12)
+              .fontColor($r('sys.color.font_secondary'))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1)
+        }
+        .width('100%')
+        .padding({ top: 6, bottom: 6 })
+      }, (show: UpcomingShow) => show.item.id)
+    }
+    .width('100%')
+    .padding(14)
+    .margin({ left: 12, right: 12, top: 10, bottom: 6 })
+    .borderRadius(16)
+    .systemMaterial(immersiveMedium())
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  private async loadUpcomingShows(): Promise<void> {
+    const out: UpcomingShow[] = [];
+    const limit: number = Math.min(this.followingArtists.length, 6);
+    for (let i: number = 0; i < limit; i++) {
+      const entry: FavoriteEntry = this.followingArtists[i];
+      if (entry.name.length === 0) {
+        continue;
+      }
+      const list: ConcertItem[] = await ConcertService.getInstance().upcoming(entry.name);
+      const take: number = Math.min(list.length, 2);
+      for (let k: number = 0; k < take; k++) {
+        out.push({ artistName: entry.name, artistId: entry.id, source: entry.source, item: list[k] });
+      }
+      if (out.length >= 6) {
+        break;
+      }
+    }
+    out.sort((a: UpcomingShow, b: UpcomingShow): number => a.item.startISO.localeCompare(b.item.startISO));
+    this.upcomingShows = out;
+    console.info('[RzdConcert] following card count=' + out.length);
+  }
+
   build() {
     HdsNavDestination() {
       Column() {
@@ -1152,6 +1238,12 @@ export struct RecordListPage {
 
           // ★ 关注模式（用户 2026-10-20）：只列关注的歌手，点进歌手详情
           if (this.isFollowing()) {
+            // ★ 顶部「近期演唱会」卡片（拿不到就整块不显示）
+            if (this.upcomingShows.length > 0) {
+              ListItem() {
+                this.UpcomingConcertsCard()
+              }
+            }
             ForEach(this.followingArtists, (entry: FavoriteEntry) => {
               ListItem() {
                 this.FavoriteEntryRow(entry, false)

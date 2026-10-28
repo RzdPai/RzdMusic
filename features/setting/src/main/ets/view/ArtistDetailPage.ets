@@ -18,7 +18,9 @@ import { http } from '@kit.NetworkKit';
 import { image } from '@kit.ImageKit';
 import { effectKit } from '@kit.ArkGraphics2D';
 import { BusinessError } from '@kit.BasicServicesKit';
-import { guardPlayerBack } from 'musicbasic';
+import { common } from '@kit.AbilityKit';
+import { guardPlayerBack, immersiveMedium } from 'musicbasic';
+import { ConcertItem, ConcertService } from '../concert/ConcertService';
 import { AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, SongTitleMarquee, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, shouldUseSplitDetailLayout, splitDetailCardWidthVp } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType } from '@kit.UIDesignKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
@@ -121,6 +123,10 @@ export struct ArtistDetailPage {
   @Local albumPage: number = 1;
   @Local songSort: number = 0;
   @Local artistNameText: string = '';
+  /** 即将举办的演唱会（拿不到就是空数组，UI 侧据此隐藏入口） */
+  @Local concerts: ConcertItem[] = [];
+  /** 演唱会半模态弹层是否展开 */
+  @Local concertSheet: boolean = false;
   @Local artistPicUrlText: string = '';
   @Local effectiveArtistId: string = '';
   @Local effectiveArtistMid: string = '';
@@ -225,6 +231,7 @@ export struct ArtistDetailPage {
     hilog.info(0x0000, 'RzdArtistDetail', 'aboutToAppear: name=%{public}s source=%{public}d id=%{public}s',
       this.artistName, this.source, this.artistId);
     this.artistNameText = this.artistName;
+    void this.loadConcerts();
     this.artistPicUrlText = this.artistPicUrl;
     this.effectiveArtistId = this.artistId;
     this.effectiveArtistMid = this.artistMid;
@@ -256,6 +263,96 @@ export struct ArtistDetailPage {
   }
 
   @Builder
+  private ConcertSheet() {
+    Column({ space: 12 }) {
+      Row({ space: 8 }) {
+        SymbolGlyph($r('sys.symbol.auditorium'))
+          .fontSize(18)
+          .fontColor([this.fgPrimary()])
+        Text('即将举办的演唱会')
+          .fontSize(17)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.fgPrimary())
+      }
+      .width('100%')
+      .padding({ left: 4 })
+
+      Text(this.artistNameText.length > 0 ? this.artistNameText : '歌手')
+        .fontSize(13)
+        .fontColor('#99FFFFFF')
+        .width('100%')
+        .padding({ left: 4 })
+
+      List({ space: 10 }) {
+        ForEach(this.concerts, (c: ConcertItem) => {
+          ListItem() {
+            Column({ space: 4 }) {
+              Text(c.title)
+                .fontSize(15)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(this.fgPrimary())
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .width('100%')
+              Row({ space: 6 }) {
+                Text(c.whenText)
+                  .fontSize(12)
+                  .fontColor('#CCFFFFFF')
+                if (c.venueName.length > 0) {
+                  Text('·')
+                    .fontSize(12)
+                    .fontColor('#66FFFFFF')
+                  Text(c.venueName + (c.city.length > 0 ? (' · ' + c.city) : ''))
+                    .fontSize(12)
+                    .fontColor('#CCFFFFFF')
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                    .layoutWeight(1)
+                }
+              }
+              .width('100%')
+            }
+            .width('100%')
+            .padding({ left: 14, right: 14, top: 12, bottom: 12 })
+            .borderRadius(14)
+            .systemMaterial(immersiveMedium())
+            .alignItems(HorizontalAlign.Start)
+            .onClick(() => {
+              if (c.url.length > 0) {
+                void this.openConcertUrl(c.url);
+              }
+            })
+          }
+        }, (c: ConcertItem) => c.id)
+      }
+      .width('100%')
+      .layoutWeight(1)
+      .scrollBar(BarState.Off)
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ left: 16, right: 16, top: 8, bottom: 16 })
+  }
+
+  /** 打开 Apple Music 演出页（票务信息缺失时唯一落点）。 */
+  private async openConcertUrl(url: string): Promise<void> {
+    try {
+      const ctx = this.getUIContext().getHostContext();
+      if (ctx === undefined) {
+        return;
+      }
+      const uiCtx: common.UIAbilityContext = ctx as common.UIAbilityContext;
+      await uiCtx.startAbility({
+        action: 'ohos.want.action.viewData',
+        entities: ['entity.system.browsable'],
+        uri: url
+      });
+      console.info('[RzdConcert] open url ok');
+    } catch (error) {
+      console.info('[RzdConcert] open url failed: ' + JSON.stringify(error).substring(0, 80));
+    }
+  }
+  @Builder
   private AboutPopup() {
     Column() {
       Text(this.artistNameText.length > 0 ? this.artistNameText : '歌手')
@@ -284,6 +381,26 @@ export struct ArtistDetailPage {
     }
     .padding(16)
     .width(300)
+  }
+
+  /**
+   * 拉取该歌手的「即将举办的演唱会」（Apple Music 私有接口）。
+   * 拿不到就保持空数组 → Hero 里那颗胶囊不显示（优雅降级）。
+   * 日志：`RzdConcert`
+   */
+  private async loadConcerts(): Promise<void> {
+    const name: string = this.artistNameText.length > 0 ? this.artistNameText : this.artistName;
+    if (name.trim().length === 0) {
+      return;
+    }
+    const cached: ConcertItem[] | undefined = ConcertService.getInstance().peek(name);
+    if (cached !== undefined) {
+      this.concerts = cached;
+      return;
+    }
+    const list: ConcertItem[] = await ConcertService.getInstance().upcoming(name);
+    this.concerts = list;
+    console.info('[RzdConcert] hero capsule visible=' + (list.length > 0) + ' count=' + list.length);
   }
 
   private async resolveSingerBySearch(): Promise<void> {
@@ -1217,6 +1334,31 @@ export struct ArtistDetailPage {
         Stack({ alignContent: Alignment.Bottom }) {
 
           Column() {
+            // ★ 即将举办的演唱会（Apple Music 私有接口；拿不到就不显示这一颗）
+            if (this.concerts.length > 0) {
+              Row({ space: 6 }) {
+                SymbolGlyph($r('sys.symbol.auditorium'))
+                  .fontSize(13)
+                  .fontColor([this.fgPrimary()])
+                Text('即将举办的演唱会')
+                  .fontSize(12)
+                  .fontColor(this.fgPrimary())
+              }
+              .height(28)
+              .padding({ left: 12, right: 12 })
+              .borderRadius(14)
+              // API 26 沉浸光感（中等厚度）：接管底色/描边/阴影
+              .systemMaterial(immersiveMedium())
+              .margin({ bottom: 10 })
+              .onClick(() => {
+                this.concertSheet = true;
+              })
+              .bindSheet($$this.concertSheet, this.ConcertSheet(), {
+                height: SheetSize.MEDIUM,
+                backgroundColor: Color.Transparent,
+                showClose: true
+              })
+            }
             Text(this.artistNameText.length > 0 ? this.artistNameText : '歌手')
               .fontSize(28)
               .fontWeight(FontWeight.Bold)
@@ -1239,8 +1381,7 @@ export struct ArtistDetailPage {
               .width(40)
               .height(40)
               .borderRadius(20)
-              .backgroundColor(this.fgTint())
-              .backgroundBlurStyle(this.buttonBlur())
+              .systemMaterial(immersiveMedium())
               .alignItems(VerticalAlign.Center)
               .justifyContent(FlexAlign.Center)
               .onClick(() => {
@@ -1290,8 +1431,7 @@ export struct ArtistDetailPage {
               .width(40)
               .height(40)
               .borderRadius(20)
-              .backgroundColor(this.fgTint())
-              .backgroundBlurStyle(this.buttonBlur())
+              .systemMaterial(immersiveMedium())
               .alignItems(VerticalAlign.Center)
               .justifyContent(FlexAlign.Center)
               .onClick(() => {
