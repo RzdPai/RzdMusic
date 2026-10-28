@@ -331,6 +331,20 @@ export struct CategoryContentSection {
    * @param column 列下标。
    * @returns 该列的歌曲（最多 `FEATURED_ROWS` 首）。
    */
+  /**
+   * 该行在「精选推荐」整表里的下标（按 songId + source 匹配，比 indexOf 稳）：
+   * 点击时要用它作为 `playFeaturedListAt` 的起始位置。
+   */
+  private featuredIndexOf(item: RecommendPrivateSongUi): number {
+    const list: RecommendPrivateSongUi[] = this.recommendViewModel.privateSongDisplayList;
+    for (let i: number = 0; i < list.length; i++) {
+      if (list[i].songId === item.songId && list[i].source === item.source) {
+        return i;
+      }
+    }
+    return 0;
+  }
+
   private featuredColumnItems(column: number): RecommendPrivateSongUi[] {
     const source: RecommendPrivateSongUi[] = this.recommendViewModel.privateSongDisplayList;
     const rows: number = CategoryContentSection.FEATURED_ROWS;
@@ -430,8 +444,8 @@ export struct CategoryContentSection {
       .onClick(() => {
         if (item.source.length > 0) {
           // ★ 点精选推荐里的某一行 = 播放整个精选推荐列表（从这一行开始）
-              void this.recommendViewModel.playFeaturedListAt(
-                this.recommendViewModel.privateSongDisplayList.indexOf(item), this.getUIContext());
+          void this.recommendViewModel.playFeaturedListAt(
+            this.featuredIndexOf(item), this.getUIContext());
         }
       })
 
