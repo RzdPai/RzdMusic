@@ -8,12 +8,12 @@
     "label": "$string:app_name",
     "cloudFileSyncEnabled": true,
     "alternateIcons": [
-      { "name": "big", "icon": "$media:layered_image_big" },
-      { "name": "blue", "icon": "$media:layered_image_blue" },
-      { "name": "green", "icon": "$media:layered_image_green" },
-      { "name": "purple", "icon": "$media:layered_image_purple" },
-      { "name": "orange", "icon": "$media:layered_image_orange" },
-      { "name": "red", "icon": "$media:layered_image_red" },
+      { "name": "big", "icon": "$media:layered_image_note_big" },
+      { "name": "blue", "icon": "$media:layered_image_note_blue" },
+      { "name": "green", "icon": "$media:layered_image_note_green" },
+      { "name": "purple", "icon": "$media:layered_image_note_purple" },
+      { "name": "orange", "icon": "$media:layered_image_note_orange" },
+      { "name": "red", "icon": "$media:layered_image_note_red" },
       { "name": "wujie", "icon": "$media:layered_image_wujie" }
     ]
   }

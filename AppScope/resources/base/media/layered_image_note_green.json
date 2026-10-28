@@ -1,0 +1,6 @@
+{
+  "layered-image": {
+    "background": "$media:background_note_green",
+    "foreground": "$media:foreground_note_green"
+  }
+}
