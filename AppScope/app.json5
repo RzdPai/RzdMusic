@@ -8,16 +8,16 @@
     "label": "$string:app_name",
     "cloudFileSyncEnabled": true,
     "alternateIcons": [
-      { "name": "big", "icon": "$media:icon_alt_big" },
-      { "name": "blue", "icon": "$media:icon_alt_blue" },
-      { "name": "green", "icon": "$media:icon_alt_green" },
-      { "name": "purple", "icon": "$media:icon_alt_purple" },
-      { "name": "orange", "icon": "$media:icon_alt_orange" },
-      { "name": "red", "icon": "$media:icon_alt_red" },
-      { "name": "art1", "icon": "$media:icon_alt_art1" },
-      { "name": "art2", "icon": "$media:icon_alt_art2" },
-      { "name": "art3", "icon": "$media:icon_alt_art3" },
-      { "name": "wujie", "icon": "$media:icon_alt_wujie" }
+      { "name": "big", "icon": "$media:layered_image_big" },
+      { "name": "blue", "icon": "$media:layered_image_blue" },
+      { "name": "green", "icon": "$media:layered_image_green" },
+      { "name": "purple", "icon": "$media:layered_image_purple" },
+      { "name": "orange", "icon": "$media:layered_image_orange" },
+      { "name": "red", "icon": "$media:layered_image_red" },
+      { "name": "art1", "icon": "$media:layered_image_art1" },
+      { "name": "art2", "icon": "$media:layered_image_art2" },
+      { "name": "art3", "icon": "$media:layered_image_art3" },
+      { "name": "wujie", "icon": "$media:layered_image_wujie" }
     ]
   }
 }
