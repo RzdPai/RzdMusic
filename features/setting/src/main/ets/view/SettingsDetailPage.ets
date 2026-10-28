@@ -108,13 +108,13 @@ export struct SettingsDetailPage {
   /** 图标变体清单。 */
   private readonly iconVariants: IconVariant[] = [
     { value: 'default', label: '原版', foreground: $r('app.media.foreground'), background: '#FFFFFF', fgRes: $r('app.media.foreground'), bgRes: $r('app.media.background') },
-    { value: 'big', label: '放大', foreground: $r('app.media.background_note_big'), background: '#FFFFFF', fgRes: $r('app.media.foreground_note_big'), bgRes: $r('app.media.background_note_big') },
-    { value: 'blue', label: '蓝', foreground: $r('app.media.background_note_blue'), background: '#FFFFFF', fgRes: $r('app.media.foreground_note_blue'), bgRes: $r('app.media.background_note_blue') },
-    { value: 'green', label: '绿', foreground: $r('app.media.background_note_green'), background: '#FFFFFF', fgRes: $r('app.media.foreground_note_green'), bgRes: $r('app.media.background_note_green') },
-    { value: 'purple', label: '紫', foreground: $r('app.media.background_note_purple'), background: '#FFFFFF', fgRes: $r('app.media.foreground_note_purple'), bgRes: $r('app.media.background_note_purple') },
-    { value: 'orange', label: '橙', foreground: $r('app.media.background_note_orange'), background: '#FFFFFF', fgRes: $r('app.media.foreground_note_orange'), bgRes: $r('app.media.background_note_orange') },
-    { value: 'red', label: '红', foreground: $r('app.media.background_note_red'), background: '#FFFFFF', fgRes: $r('app.media.foreground_note_red'), bgRes: $r('app.media.background_note_red') },
-    { value: 'wujie', label: '无界', foreground: $r('app.media.background_wujie'), background: '#FFFFFF', fgRes: $r('app.media.foreground_wujie'), bgRes: $r('app.media.background_wujie') }
+    { value: 'big', label: '放大', foreground: $r('app.media.foreground_big'), background: '#FFFFFF', fgRes: $r('app.media.foreground_big'), bgRes: $r('app.media.background_big') },
+    { value: 'blue', label: '蓝', foreground: $r('app.media.foreground_blue'), background: '#FFFFFF', fgRes: $r('app.media.foreground_blue'), bgRes: $r('app.media.background_blue') },
+    { value: 'green', label: '绿', foreground: $r('app.media.foreground_green'), background: '#FFFFFF', fgRes: $r('app.media.foreground_green'), bgRes: $r('app.media.background_green') },
+    { value: 'purple', label: '紫', foreground: $r('app.media.foreground_purple'), background: '#FFFFFF', fgRes: $r('app.media.foreground_purple'), bgRes: $r('app.media.background_purple') },
+    { value: 'orange', label: '橙', foreground: $r('app.media.foreground_orange'), background: '#FFFFFF', fgRes: $r('app.media.foreground_orange'), bgRes: $r('app.media.background_orange') },
+    { value: 'red', label: '红', foreground: $r('app.media.foreground_red'), background: '#FFFFFF', fgRes: $r('app.media.foreground_red'), bgRes: $r('app.media.background_red') },
+    { value: 'wujie', label: '无界', foreground: $r('app.media.foreground_wujie'), background: '#FFFFFF', fgRes: $r('app.media.foreground_wujie'), bgRes: $r('app.media.background_wujie') }
   ];
   @Local saveToDownloadDir: boolean = false;
   @Local downloadNameFormat: string = 'title';
