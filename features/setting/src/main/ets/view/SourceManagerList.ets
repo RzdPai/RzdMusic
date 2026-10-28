@@ -145,7 +145,13 @@ export struct SourceManagerList {
           .padding(10)
           .borderRadius($r('sys.float.corner_radius_level6'))
           .backgroundColor($r('app.color.card_background'))
-          // 拖动排序由 List.onMove 负责（API 26 SDK 可用；不会再复制一张卡片跟手）
+          .draggable(this.draggableEnabled && this.inOrder(api.id))
+          .onDragStart(() => {
+            this.dragId = api.id;
+          })
+          .onDrop(() => {
+            this.onMove(this.dragId, api.id);
+          })
         }
         .swipeAction({
           end: {
@@ -159,26 +165,6 @@ export struct SourceManagerList {
     }
     .width('100%')
     .scrollBar(BarState.Off)
-    // ★ 2026-10-29 二次修正：`editMode` 是"滑动多选"的开关，会和 swipeAction/长按抢手势，
-    //   所以去掉它。List + ForEach 的拖拽排序用 onItemDragStart + onItemDrop：
-    //   预览只给一个"小胶囊"（不是整张卡片），既能看到跟手，又不至于像复制了一张卡。
-    .onItemDragStart((_event: ItemDragInfo, itemIndex: number) => {
-      if (!this.draggableEnabled || itemIndex < 0 || itemIndex >= this.apis.length) {
-        return (): void => {};
-      }
-      this.dragIdx = itemIndex;
-      const api: LXUserApiInfo = this.apis[itemIndex];
-      const name: string = api.name;
-      return (): void => {
-        Text(name)
-          .fontSize(14)
-          .fontColor($r('sys.color.font_primary'))
-          .constraintSize({ maxWidth: 180 })
-          .padding({ left: 14, right: 14, top: 8, bottom: 8 })
-          .borderRadius(18)
-          .backgroundColor($r('app.color.card_background'))
-      };
-    })
     .onItemDrop((_event: ItemDragInfo, _itemIndex: number, insertIndex: number, isSuccess: boolean): void => {
       if (!isSuccess || this.dragIdx < 0 || this.dragIdx >= this.apis.length ||
         insertIndex < 0 || insertIndex >= this.apis.length) {

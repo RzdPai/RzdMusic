@@ -1418,20 +1418,8 @@ export struct SettingsDetailPage {
         .backgroundColor($r('app.color.card_background'))
         // ★ 自定义软件图标：横向卡片，左右滑动选图标（与上面的颜色卡同款）
         Column() {
-          Row({ space: 10 }) {
-            this.SubTitle('应用图标')
-            Blank()
-            if (this.appliedIcon !== undefined) {
-              Text('当前')
-                .fontSize(11)
-                .fontColor($r('sys.color.font_tertiary'))
-              Image(this.appliedIcon)
-                .width(28)
-                .height(28)
-                .borderRadius(8)
-            }
-          }
-          .width('100%')
+          this.SubTitle('应用图标')
+
           Scroll() {
             Row({ space: 14 }) {
               ForEach(this.iconVariants, (v: IconVariant) => {
