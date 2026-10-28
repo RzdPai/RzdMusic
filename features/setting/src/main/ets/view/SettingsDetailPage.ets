@@ -13,6 +13,7 @@
  * limitations under the License.
  */
 
+import { DrawableDescriptor, LayeredDrawableDescriptor } from '@kit.ArkUI';
 import { guardPlayerBack, PlaybackPreferenceService } from 'musicbasic';
 import { AppStorageV2, CapsuleSegmentButtonV2, ColorMetrics, SegmentButtonV2Items, uiObserver } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit';
@@ -67,8 +68,14 @@ export class SettingsDetailRouteParam {
 interface IconVariant {
   value: string;
   label: string;
+  /** 预览用前景（艺术图标直接用整图） */
   foreground: Resource;
+  /** 预览底色 */
   background: ResourceColor;
+  /** 分层图标的前景资源 */
+  fgRes: Resource;
+  /** 分层图标的背景资源 */
+  bgRes: Resource;
 }
 
 @ComponentV2
@@ -95,17 +102,19 @@ export struct SettingsDetailPage {
   @Local colorMode: number = 2;
   /** 当前选中的软件图标变体（素材见 AppScope/resources/base/media/foreground_*.png）。 */
   @Local iconVariant: string = 'default';
+  /** 当前即时合成的分层图标（LayeredDrawableDescriptor，无需重启）。 */
+  @Local appliedIcon: LayeredDrawableDescriptor | undefined = undefined;
   /** 图标变体清单。 */
   private readonly iconVariants: IconVariant[] = [
-    { value: 'default', label: '默认', foreground: $r('app.media.foreground'), background: '#E60012' },
-    { value: 'blue', label: '蓝', foreground: $r('app.media.foreground_blue'), background: '#1E6FFF' },
-    { value: 'green', label: '绿', foreground: $r('app.media.foreground_green'), background: '#12A150' },
-    { value: 'purple', label: '紫', foreground: $r('app.media.foreground_purple'), background: '#7A3FF2' },
-    { value: 'orange', label: '橙', foreground: $r('app.media.foreground_orange'), background: '#F2670A' },
-    { value: 'dark', label: '深色', foreground: $r('app.media.foreground_dark'), background: '#1C1D1F' },
-    { value: 'art1', label: '墨韵', foreground: $r('app.media.background_art1'), background: '#F5F3F0' },
-    { value: 'art2', label: '竹影', foreground: $r('app.media.background_art2'), background: '#F5F3F0' },
-    { value: 'art3', label: '云笺', foreground: $r('app.media.background_art3'), background: '#F5F3F0' }
+    { value: 'default', label: '默认', foreground: $r('app.media.foreground'), background: '#E60012', fgRes: $r('app.media.foreground'), bgRes: $r('app.media.background') },
+    { value: 'blue', label: '蓝', foreground: $r('app.media.foreground_blue'), background: '#1E6FFF', fgRes: $r('app.media.foreground_blue'), bgRes: $r('app.media.background_blue') },
+    { value: 'green', label: '绿', foreground: $r('app.media.foreground_green'), background: '#12A150', fgRes: $r('app.media.foreground_green'), bgRes: $r('app.media.background_green') },
+    { value: 'purple', label: '紫', foreground: $r('app.media.foreground_purple'), background: '#7A3FF2', fgRes: $r('app.media.foreground_purple'), bgRes: $r('app.media.background_purple') },
+    { value: 'orange', label: '橙', foreground: $r('app.media.foreground_orange'), background: '#F2670A', fgRes: $r('app.media.foreground_orange'), bgRes: $r('app.media.background_orange') },
+    { value: 'dark', label: '深色', foreground: $r('app.media.foreground_dark'), background: '#1C1D1F', fgRes: $r('app.media.foreground_dark'), bgRes: $r('app.media.background_dark') },
+    { value: 'art1', label: '墨韵', foreground: $r('app.media.background_art1'), background: '#F5F3F0', fgRes: $r('app.media.foreground_art1'), bgRes: $r('app.media.background_art1') },
+    { value: 'art2', label: '竹影', foreground: $r('app.media.background_art2'), background: '#F5F3F0', fgRes: $r('app.media.foreground_art2'), bgRes: $r('app.media.background_art2') },
+    { value: 'art3', label: '云笺', foreground: $r('app.media.background_art3'), background: '#F5F3F0', fgRes: $r('app.media.foreground_art3'), bgRes: $r('app.media.background_art3') }
   ];
   @Local saveToDownloadDir: boolean = false;
   @Local downloadNameFormat: string = 'title';
@@ -332,7 +341,19 @@ export struct SettingsDetailPage {
       (persistentLog.length > 0 ? '\n──── 持久诊断（重启保留）────\n' + persistentLog : '');
     this.colorMode = MusicStoreService.getInstance().getColorMode();
     this.iconVariant = MusicStoreService.getInstance().getAppIconVariant();
+    for (let i: number = 0; i < this.iconVariants.length; i++) {
+      if (this.iconVariants[i].value === this.iconVariant) {
+        this.buildLayeredIcon(this.iconVariants[i]);
+        break;
+      }
+    }
     this.iconVariant = MusicStoreService.getInstance().getAppIconVariant();
+    for (let i: number = 0; i < this.iconVariants.length; i++) {
+      if (this.iconVariants[i].value === this.iconVariant) {
+        this.buildLayeredIcon(this.iconVariants[i]);
+        break;
+      }
+    }
   }
 
   private copyPlayLog(): void {
@@ -724,6 +745,42 @@ export struct SettingsDetailPage {
   }
 
   /** 保存位置选中项：0 手动选择 / 1 Download 目录 / 2 自定义目录（已授权即选中）。 */
+  /**
+   * 选图标：用 `LayeredDrawableDescriptor` 现场合成（前景+背景），**立即生效、无需重启**。
+   * 参照官方《分层图标》+ `js-apis-arkui-drawabledescriptor`：
+   *   `new LayeredDrawableDescriptor(foreground, background)` → 直接给 `Image()` 用。
+   * 说明：桌面图标由包内 `AppScope/resources/base/media/app_layered_image.json` 决定，
+   *   改它需要重新打包；应用内展示（这里）是运行时生效的。
+   */
+  private pickIconVariant(v: IconVariant): void {
+    this.iconVariant = v.value;
+    MusicStoreService.getInstance().setAppIconVariant(v.value);
+    this.buildLayeredIcon(v);
+    this.getUIContext().getPromptAction().showToast({
+      message: '已应用图标：' + v.label,
+      duration: 1500
+    });
+  }
+
+  /** 用资源 id 取 DrawableDescriptor 并合成分层图标。 */
+  private buildLayeredIcon(v: IconVariant): void {
+    try {
+      const ctx = this.getUIContext().getHostContext();
+      const res = ctx?.resourceManager;
+      if (res === undefined) {
+        return;
+      }
+      const fg = res.getDrawableDescriptor(v.foreground.id) as DrawableDescriptor;
+      const bg = res.getDrawableDescriptor(v.bgRes.id) as DrawableDescriptor;
+      if (fg === undefined || bg === undefined) {
+        return;
+      }
+      this.appliedIcon = new LayeredDrawableDescriptor(fg, bg);
+    } catch (error) {
+      console.info('[RzdIcon] layered descriptor failed: ' + JSON.stringify(error).substring(0, 80));
+    }
+  }
+
   private saveLocationIndex(): number {
     if (MusicStoreService.getInstance().getDownloadDirUri().length > 0) {
       return 2;
@@ -1345,7 +1402,20 @@ export struct SettingsDetailPage {
         .backgroundColor($r('app.color.card_background'))
         // ★ 自定义软件图标：横向卡片，左右滑动选图标（与上面的颜色卡同款）
         Column() {
-          this.SubTitle('应用图标')
+          Row({ space: 10 }) {
+            this.SubTitle('应用图标')
+            Blank()
+            if (this.appliedIcon !== undefined) {
+              Text('当前')
+                .fontSize(11)
+                .fontColor($r('sys.color.font_tertiary'))
+              Image(this.appliedIcon)
+                .width(28)
+                .height(28)
+                .borderRadius(8)
+            }
+          }
+          .width('100%')
           Scroll() {
             Row({ space: 14 }) {
               ForEach(this.iconVariants, (v: IconVariant) => {
@@ -1365,12 +1435,7 @@ export struct SettingsDetailPage {
                     .fontColor(this.iconVariant === v.value ? this.themeState.color : $r('sys.color.font_tertiary'))
                 }
                 .onClick((): void => {
-                  this.iconVariant = v.value;
-                  MusicStoreService.getInstance().setAppIconVariant(v.value);
-                  this.getUIContext().getPromptAction().showToast({
-                    message: '已选择图标：' + v.label + '（重启后生效）',
-                    duration: 1800
-                  });
+                  this.pickIconVariant(v);
                 })
               }, (v: IconVariant) => v.value)
             }
