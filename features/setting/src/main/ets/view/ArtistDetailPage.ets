@@ -225,9 +225,8 @@ export struct ArtistDetailPage {
     //   转场开始时生效」⇒ 声明式的 `.systemBarStyle` 就是唯一真源，转场开始那一刻框架就该换色。
     //   这里只打一条进页判据（触发点 = entry），真机 grep RzdArtistStatusBar 就能对上。
     this.logStatusBarDecision('entry');
-    const favSource: string = codeToSource(this.source);
-    const favId: string = this.effectiveArtistId.length > 0 ? this.effectiveArtistId : this.effectiveArtistMid;
-    this.isFavoriteArtist = favId.length > 0 && this.store.isFavoriteArtist(favSource, favId);
+    // ★ 关注状态的判定必须放在 `effectiveArtistId/mid` 赋值**之后**（见下方 refreshFavoriteState），
+    //   否则这里读到的是空串 ⇒ 已关注的歌手进页仍显示"未关注"。
     hilog.info(0x0000, 'RzdArtistDetail', 'aboutToAppear: name=%{public}s source=%{public}d id=%{public}s',
       this.artistName, this.source, this.artistId);
     this.artistNameText = this.artistName;
@@ -235,7 +234,30 @@ export struct ArtistDetailPage {
     this.artistPicUrlText = this.artistPicUrl;
     this.effectiveArtistId = this.artistId;
     this.effectiveArtistMid = this.artistMid;
+    this.refreshFavoriteState();
     void this.init();
+  }
+
+  /**
+   * 重新判定「是否已关注」。
+   * ★ 双键匹配（id / mid 都可能被存进收藏，见 `toggleFavoriteArtist`），
+   *   并在 `resolveSingerBySearch` 拿到新 id 后再调一次。
+   *   日志：`RzdArtistFav`
+   */
+  private refreshFavoriteState(): void {
+    const favSource: string = codeToSource(this.source);
+    const id: string = this.effectiveArtistId;
+    const mid: string = this.effectiveArtistMid;
+    let followed: boolean = false;
+    if (id.length > 0) {
+      followed = this.store.isFavoriteArtist(favSource, id);
+    }
+    if (!followed && mid.length > 0) {
+      followed = this.store.isFavoriteArtist(favSource, mid);
+    }
+    this.isFavoriteArtist = followed;
+    hilog.info(0x0000, 'RzdArtistFav', 'refresh src=%{public}s id=%{public}s mid=%{public}s fav=%{public}s',
+      favSource, id, mid, followed ? 'true' : 'false');
   }
 
   private async init(): Promise<void> {
@@ -399,6 +421,7 @@ export struct ArtistDetailPage {
         const first: SingerInfo = result.list[0];
         this.effectiveArtistId = first.id;
         this.effectiveArtistMid = '';
+        this.refreshFavoriteState();
         this.artistPicUrlText = first.picUrl.length > 0 ? first.picUrl : this.artistPicUrlText;
         if (this.artistPicUrlText.length > 0) {
           void this.loadBackdropColor();
@@ -1336,8 +1359,10 @@ export struct ArtistDetailPage {
               .height(28)
               .padding({ left: 12, right: 12 })
               .borderRadius(14)
-              // API 26 沉浸光感（中等厚度）：接管底色/描边/阴影
-              .systemMaterial(immersiveMedium())
+              // ★ 按《新 API26 沉浸光感经验汇总》§1.1：页面 body 里的自绘浮层属 out of scope，
+              //   systemMaterial 在这里不渲染（真机表现为"失效"）⇒ 只能用真模糊。
+              .backgroundColor(this.fgTint())
+              .backgroundBlurStyle(this.buttonBlur())
               .margin({ bottom: 10 })
               .onClick(() => {
                 this.concertSheet = true;
@@ -1373,7 +1398,8 @@ export struct ArtistDetailPage {
               .width(40)
               .height(40)
               .borderRadius(20)
-              .systemMaterial(immersiveMedium())
+              .backgroundColor(this.fgTint())
+              .backgroundBlurStyle(this.buttonBlur())
               .alignItems(VerticalAlign.Center)
               .justifyContent(FlexAlign.Center)
               .onClick(() => {
@@ -1423,7 +1449,8 @@ export struct ArtistDetailPage {
               .width(40)
               .height(40)
               .borderRadius(20)
-              .systemMaterial(immersiveMedium())
+              .backgroundColor(this.fgTint())
+              .backgroundBlurStyle(this.buttonBlur())
               .alignItems(VerticalAlign.Center)
               .justifyContent(FlexAlign.Center)
               .onClick(() => {

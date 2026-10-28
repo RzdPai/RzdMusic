@@ -764,7 +764,7 @@ export struct RecordListPage {
     .height(66)
     .padding({ left: 6, right: 6 })
     .borderRadius(33)
-    .systemMaterial(immersiveMedium())
+    .backgroundBlurStyle(buildBarBlurStyle(this.ambientState.level), barBlurOptions())
     .border({ width: 0.5, color: $r('sys.color.comp_divider') })
     .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 8 })
   }
@@ -1193,7 +1193,7 @@ export struct RecordListPage {
     .padding(14)
     .margin({ left: 12, right: 12, top: 10, bottom: 6 })
     .borderRadius(16)
-    .systemMaterial(immersiveMedium())
+    .backgroundBlurStyle(buildBarBlurStyle(this.ambientState.level), barBlurOptions())
     .alignItems(HorizontalAlign.Start)
   }
 
@@ -1237,7 +1237,7 @@ export struct RecordListPage {
           }
         }
         .width('100%')
-        .systemMaterial(immersiveMedium())
+        .backgroundBlurStyle(buildBarBlurStyle(this.ambientState.level), barBlurOptions())
 
         Stack({ alignContent: Alignment.TopStart }) {
           List({ space: 0, scroller: this.pageScroller }) {

@@ -155,7 +155,7 @@ export struct LocateFloatButton {
     .height(40)
     .borderRadius(20)
     // ★ 不要蓝色底：材质背板（浅色下是半透明白、深色下是半透明黑，并跟随背后画面）
-      .systemMaterial(immersiveMedium())
+      .backgroundBlurStyle(appBarBlurStyle(), barBlurOptions())
     .border({ width: 0.5, color: $r('sys.color.comp_divider') })
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)

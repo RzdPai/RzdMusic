@@ -2542,7 +2542,7 @@ export struct OnlineSearchPage {
               .scrollBar(BarState.Off)
               // 与迷你播放条/搜索框同款磨砂：#30 透明度灰底 + 材质模糊
               // ★ API 26：改用系统沉浸材质（中等厚度）；背景/描边/阴影由材质接管
-              .systemMaterial(immersiveMedium())
+              .backgroundBlurStyle(this.searchControlBlur())
               .clip(true)
               .clip(true)
               .clip(true)
