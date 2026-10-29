@@ -789,6 +789,11 @@ export struct OnlineSearchPage {
     return '#6B6B6B';
   }
 
+  /** 菜单条目文字（聚合用中文，其余走平台名）。 */
+  private sourceMenuLabel(source: string): string {
+    return this.sourceLabel(source);
+  }
+
   private sourceLabel(source: string): string {
     switch (source) {
       case 'kw': return '酷我';
@@ -2011,25 +2016,23 @@ export struct OnlineSearchPage {
   /** Fixed source menu order; semantic source indices remain 0=all, 1..5=kw..mg. */
   @Builder
   private SourceMenuBuilder() {
-    Column({ space: 2 }) {
+    // ★ 2026-10-29（用户：切换平台菜单要官方规范 + 沉浸光感）：
+    //   改用系统 `Menu`/`MenuItem`（菜单本身就走系统光感材质，不再自绘面板），
+    //   选中项用 `selected` 勾选态表示，点击仍然走 applySourceSelection(按 id 反查下标)。
+    Menu() {
       ForEach(this.sourceMenuIds, (source: string, idx: number) => {
-        Row() {
-          SourceChip({ source: source, label: source === 'all' ? '聚合搜索' : '' })
-        }
-        .width(128)
-        .height(40)
-        .padding({ left: 12, right: 12 })
-        .borderRadius(10)
-        .backgroundColor(this.searchSource === source ? $r('sys.color.comp_background_tertiary') :
-          Color.Transparent)
+        MenuItem({
+          content: source === 'all' ? '聚合搜索' : this.sourceMenuLabel(source),
+          // ★ 选中态用带勾的 symbol（系统菜单自身的材质会提供沉浸光感）
+          endIcon: this.searchSource === source ? $r('sys.symbol.checkmark') : undefined
+        })
         .onClick((): void => {
           // ★ 按 id 反查语义下标（0=全部，1..N=对应 @Local sources 顺序），
           //   不再用菜单位置算术——多插一个平台就会把「聚合」算到越界并闪退。
           this.applySourceSelection(this.sourceSemanticIndex(source));
         })
-      }, (source: string) => source)
+        }, (source: string) => source)
     }
-    .padding(6)
   }
 
   /** 切换模式时同步处理歌手/专辑自动选源。复用原 ModeSwitchBuilder 行为。 */
