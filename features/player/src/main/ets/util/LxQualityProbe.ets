@@ -107,9 +107,39 @@ export function sampleOf(source: string): ProbeSample | undefined {
   return resolvedSamples.get(source) ?? SAMPLES.get(source);
 }
 
+/**
+ * 「用户当前在播/刚选的那首」——按平台记录，探测时优先用它。
+ * ★ 2026-10-29：之前探测永远用内置样曲（列表第 1 首），用户选别的歌去测还是测第 1 首。
+ */
+const probeTargets: Map<string, ProbeSample> = new Map();
+
+/** 记录某个平台"当前要测的那首歌"（由播放链路在起播时调用）。 */
+export function setProbeTarget(source: string, songId: string, name: string,
+  singer: string, interval: string): void {
+  if (source.length === 0 || songId.length === 0) {
+    return;
+  }
+  const s: ProbeSample = new ProbeSample();
+  s.songId = songId;
+  s.name = name;
+  s.singer = singer;
+  s.interval = interval;
+  probeTargets.set(source, s);
+}
+
+/** 清掉某平台的探测目标（回到内置样曲）。 */
+export function clearProbeTarget(source: string): void {
+  probeTargets.delete(source);
+}
+
 /** 用样曲探测某平台某音质；解析不出样曲就返回 undefined。 */
-export async function probeBySample(source: string, quality: string, scriptId: string = ''): Promise<ProbeResult | undefined> {
-  const s: ProbeSample | undefined = await resolveSample(source);
+export async function probeBySample(source: string, quality: string, scriptId: string = '',
+  override?: ProbeSample): Promise<ProbeResult | undefined> {
+  // 优先级：显式 override > 用户在播的那首 > 内置样曲表
+  const target: ProbeSample | undefined = override !== undefined
+    ? override
+    : probeTargets.get(source);
+  const s: ProbeSample | undefined = target !== undefined ? target : await resolveSample(source);
   if (s === undefined) {
     return undefined;
   }
