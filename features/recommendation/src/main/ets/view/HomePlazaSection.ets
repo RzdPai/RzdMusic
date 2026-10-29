@@ -71,8 +71,8 @@ export struct HomePlazaSection {
   private SourceBar() {
     Scroll() {
       Row({ space: 8 }) {
-        // 首尾各留 2vp，胶囊圆角不被 Scroll 边界裁切
-        Blank().width(2)
+        // 首尾留白放在内容行里（Scroll 自身不加 padding），胶囊圆角不被裁切
+        Blank().width(4)
         ForEach(MusicDataService.sourceList, (item: string, index?: number) => {
           this.SourceChip(MusicDataService.sourceName(item), index ?? 0)
         }, (item: string) => `plaza-src-${item}`)
@@ -85,6 +85,9 @@ export struct HomePlazaSection {
     //   这里**不能再加一层 padding**（双层留白会让首尾胶囊看起来被裁掉）。
     //   只在内容行两端补 2vp，保证首个/末个胶囊的圆角完整可见。
     .edgeEffect(EdgeEffect.Spring)
+    // ★ 2026-10-29（用户：胶囊仍被裁；照 RzdVideo 那条 Scroll）：自身不加 padding，
+    //   改为**不裁切边界**；首尾留白交给内容行的 Blank，胶囊圆角完整可见。
+    .clip(false)
   }
 
   @Builder
