@@ -238,3 +238,113 @@ export async function qsSearchTracks(query: string, page: number, limit: number)
     ' more=' + hasMore(body));
   return { list: list, total: 0, limit: limit, source: 'qs' };
 }
+
+// ────────────────────────────────────────────────────────────────
+// 汽水榜单：三张榜整块塞在发现页的 `discover_top_song_list` 里（各 50 首，每周四更新）。
+// 发现页响应约 1.6MB，60 秒内复用同一份，避免为三张榜连拉三次。
+// ────────────────────────────────────────────────────────────────
+const QS_LUNA: string = 'https://beta-luna.douyin.com';
+/** 我们的榜单短标识 → 汽水发现页里的块标题 */
+const QS_BOARD_TITLES: Record<string, string> = {
+  'hot': '热歌榜',
+  'new': '新歌榜',
+  'west': '欧美榜'
+};
+let qsDiscoverCacheAt: number = 0;
+let qsDiscoverCache: Record<string, Object> = {};
+
+async function qsPostJson(path: string, payloadJson: string): Promise<Record<string, Object>> {
+  const req: http.HttpRequest = http.createHttp();
+  try {
+    const resp: http.HttpResponse = await req.request(QS_LUNA + path + '?' + qsDeviceQuery(), {
+      method: http.RequestMethod.POST,
+      header: QS_HEADERS,
+      extraData: payloadJson,
+      expectDataType: http.HttpDataType.STRING,
+      connectTimeout: 12000,
+      readTimeout: 25000
+    });
+    if (resp.responseCode !== 200) {
+      console.info('[RzdSoda] POST http=' + resp.responseCode + ' ' + path);
+      return {};
+    }
+    const text: string = typeof resp.result === 'string' ? (resp.result as string) : '';
+    return text.length > 0 ? (JSON.parse(text) as Record<string, Object>) : {};
+  } catch (error) {
+    console.info('[RzdSoda] POST error: ' + JSON.stringify(error).substring(0, 100));
+    return {};
+  } finally {
+    req.destroy();
+  }
+}
+
+/** 发现页所有榜单块（`discover_top_song_list` 的 inner_block）。 */
+function qsChartBlocks(body: Record<string, Object>): Object[] {
+  const out: Object[] = [];
+  const blocks: Object[] = asArray(body['blocks']);
+  for (let i: number = 0; i < blocks.length; i++) {
+    const block: Record<string, Object> = asRecord(blocks[i]);
+    if (asString(block['type']) !== 'discover_top_song_list') {
+      continue;
+    }
+    const inner: Object[] = asArray(block['inner_block']);
+    for (let k: number = 0; k < inner.length; k++) {
+      out.push(inner[k]);
+    }
+  }
+  return out;
+}
+
+async function qsDiscoverBody(): Promise<Record<string, Object>> {
+  const now: number = Date.now();
+  if (qsDiscoverCacheAt > 0 && now - qsDiscoverCacheAt < 60000 &&
+    Object.keys(qsDiscoverCache).length > 0) {
+    return qsDiscoverCache;
+  }
+  let body: Record<string, Object> = await qsPostJson('/luna/discover', '{"first_request":true}');
+  if (qsChartBlocks(body).length === 0) {
+    // 发现页偶发空响应（限流）：再问一次，别让榜单页直接报错
+    body = await qsPostJson('/luna/discover', '{}');
+  }
+  if (Object.keys(body).length > 0) {
+    qsDiscoverCache = body;
+    qsDiscoverCacheAt = now;
+  }
+  return body;
+}
+
+/** 汽水某张榜的歌曲（`ranked_track`）；没有下一页（page > 1 返回空）。 */
+export async function qsBoardSongs(bangid: string, page: number,
+  limit: number): Promise<LXSearchSong[]> {
+  if (page > 1) {
+    return [];
+  }
+  const body: Record<string, Object> = await qsDiscoverBody();
+  const charts: Object[] = qsChartBlocks(body);
+  const wanted: string = QS_BOARD_TITLES[bangid] !== undefined ? QS_BOARD_TITLES[bangid] : bangid;
+  let chart: Record<string, Object> = {};
+  for (let i: number = 0; i < charts.length; i++) {
+    const one: Record<string, Object> = asRecord(charts[i]);
+    if (asString(one['title']) === wanted) {
+      chart = one;
+      break;
+    }
+  }
+  if (Object.keys(chart).length === 0) {
+    console.info('[RzdSoda] board not found: ' + wanted + ' charts=' + charts.length);
+    return [];
+  }
+  const songs: LXSearchSong[] = [];
+  const resources: Object[] = asArray(chart['resources']);
+  for (let i: number = 0; i < resources.length; i++) {
+    const ranked: Record<string, Object> =
+      asRecord(asRecord(asRecord(resources[i])['entity'])['ranked_track']);
+    const song: LXSearchSong | undefined = qsTrackToSong(asRecord(ranked['track']));
+    if (song !== undefined) {
+      songs.push(song);
+    }
+  }
+  const out: LXSearchSong[] = limit > 0 && songs.length > limit ? songs.slice(0, limit) : songs;
+  console.info('[RzdSoda] board=' + wanted + ' got=' + out.length);
+  return out;
+}
