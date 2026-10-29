@@ -79,6 +79,10 @@ export struct HomePlazaSection {
     .scrollable(ScrollDirection.Horizontal)
     .scrollBar(BarState.Off)
     .width(StyleConstants.FULL_WIDTH)
+    // ★ 2026-10-29（用户：Tab 贴到屏幕两边像被截断）：给平台条补与页面一致的左右留白
+    .padding({ left: this.homeScrollGutterH(), right: this.homeScrollGutterH() })
+    // 滚动内容两端再多留一点，首尾胶囊不会顶到留白边缘
+    .edgeEffect(EdgeEffect.Spring)
   }
 
   @Builder
