@@ -665,6 +665,16 @@ export struct LXSourceEngine {
       .onConsole((event: OnConsoleEvent): boolean => {
         // 桥里的 console.error（含 sendToNative 桥缺失、JS 异常）第一次变得可见
         const msg: ConsoleMessage = event.message;
+      // ★ 2026-10-29：脚本只打日志「更新提示: … url=…」，抓到就写进官方 alert（检查更新才读得到）
+      try {
+        const jsText: string = msg.getMessage();
+        if (jsText.indexOf('更新提示') >= 0) {
+          const u: RegExpMatchArray | null = jsText.match(/url=(\S+)/);
+          AppStorage.setOrCreate('rzd_update_alert_url', u !== null && u.length > 1 ? u[1] : '');
+          AppStorage.setOrCreate('rzd_update_alert_log', jsText.substring(0, Math.min(jsText.length, 160)));
+        }
+      } catch (e) {
+      }
         const level: MessageLevel = msg.getMessageLevel();
         if (level === MessageLevel.Error || level === MessageLevel.Warn) {
           LXSourceEngine.appendLog('[js] ' + msg.getMessage().substring(0, 200));

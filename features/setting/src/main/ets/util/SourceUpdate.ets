@@ -34,15 +34,31 @@ export function readOfficialUpdateAlert(): SourceUpdateInfo {
   const out: SourceUpdateInfo = new SourceUpdateInfo();
   const state: UpdateAlertState | undefined =
     AppStorageV2.connect(UpdateAlertState, 'rzd_update_alert', () => new UpdateAlertState());
-  const url: string = state === undefined ? '' : state.updateUrl;
+  // ★ 优先读引擎抓到的脚本日志（AppStorage 两个键），再退回 UpdateAlertState
+  const liveUrl: string = AppStorage.get<string>('rzd_update_alert_url') ?? '';
+  const liveLog: string = AppStorage.get<string>('rzd_update_alert_log') ?? '';
+  const url: string = liveUrl.length > 0 ? liveUrl : (state === undefined ? '' : state.updateUrl);
   if (url.length > 0) {
     out.hasUpdate = true;
     out.updateUrl = url;
-    out.message = state === undefined ? '' : state.log;
+    out.message = liveLog.length > 0 ? liveLog : (state === undefined ? '' : state.log);
     console.info('[RzdSourceUpdate] official alert url=' + url);
     return out;
   }
   out.error = '该音源未上报更新（脚本 UPDATE_ENABLE 未开启或已是最新）';
   console.info('[RzdSourceUpdate] no official alert');
   return out;
+}
+/**
+ * ★ 2026-10-29：脚本只打日志「更新提示: … url=…」、从不上报 updateAlert。
+ *  引擎抓到这类日志时用它写进官方 alert，「检查更新」才读得到。
+ */
+export function recordOfficialUpdateAlert(log: string, url: string): void {
+  const st: UpdateAlertState | undefined =
+    AppStorageV2.connect(UpdateAlertState, 'rzd_update_alert', () => new UpdateAlertState());
+  if (st !== undefined) {
+    st.updateUrl = url;
+    st.log = log;
+  }
+  console.info('[RzdSourceUpdate] captured url=' + url);
 }
