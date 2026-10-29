@@ -591,6 +591,12 @@ export async function lxGetQualityOptions(song: LXSearchSong): Promise<LXQuality
       via = mg.length > 0 ? 'mg-api' : 'types';
       break;
     }
+    case 'qs': {
+      // 汽水没有独立音质接口：直接吃搜索/榜单带回来的 types（lossless→flac 等）
+      list = typesToOptions(song.types);
+      via = 'types';
+      break;
+    }
     case 'kw': {
       // 歌单里的 kw 歌曲 types 通常是空的（N_MINFO 只在搜索结果里），
       // 所以这里必须走「重查搜索」这条路，否则必然报「暂无可用音质」

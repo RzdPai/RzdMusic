@@ -791,6 +791,9 @@ export struct EchoReviewPage {
     if (source === 'kw') {
       return 4;
     }
+    if (source === 'qs') {
+      return 5;
+    }
     return 2;
   }
 

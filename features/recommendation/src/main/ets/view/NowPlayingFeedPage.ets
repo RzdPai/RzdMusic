@@ -1135,6 +1135,8 @@ export struct NowPlayingFeedPage {
         return '酷我音乐';
       case 'mg':
         return '咪咕音乐';
+      case 'qs':
+        return '汽水音乐';
       default:
         return this.svcSource();
     }
@@ -2958,6 +2960,8 @@ export struct NowPlayingFeedPage {
         return '酷我';
       case 'mg':
         return '咪咕';
+      case 'qs':
+        return '汽水';
       default:
         return '';
     }
