@@ -1,6 +1,7 @@
 import { LXSourceRequestData, LXMusicUrlResult, LXLyricResult, LXPicResult, LXSource, toLXSource } from './Interface';
 import { lxEngineSendRequest, lxEngineRegisterPromise, lxEngineIsReady } from './LXSourceEngine';
 import { lxSearch, lxLeaderboard } from './LXMusicSDK';
+import { qsBoardSongs, qsPlaylistDetail } from '../geuz/QsApi';
 import { appendError } from 'musicbasic';
 
 interface MusicInfoBrief {
@@ -231,6 +232,26 @@ export async function fetchBoardSongs(source: string, boardId: string): Promise<
     return [];
   }
   try {
+    // ★ 汽水（qs）：没有脚本榜单接口，榜/歌单都走内置 Luna（见 geuz/QsApi）。
+    //   boardId 形如 `qs_hot` / `qs_new` / `qs_west`（榜单卡）或纯歌单 id（歌单详情）。
+    if (source === 'qs') {
+      const isBoard: boolean = boardId.startsWith('qs_');
+      const songs = isBoard
+        ? await qsBoardSongs(boardId.substring(3), 1, 500)
+        : await qsPlaylistDetail(boardId, 1, 500);
+      const sodaOut: BoardSongEntry[] = [];
+      for (let i: number = 0; i < songs.length; i++) {
+        if (songs[i].songId.length === 0) {
+          continue;
+        }
+        sodaOut.push({
+          title: songs[i].name, singer: songs[i].singer, source: 'qs',
+          songId: songs[i].songId, coverUrl: songs[i].img
+        });
+      }
+      logError('[榜单] qs/' + boardId + ' 取到 ' + sodaOut.length + ' 首');
+      return sodaOut;
+    }
     const result = await lxLeaderboard(source + '_' + boardId, 1, 500);
     const out: BoardSongEntry[] = [];
     for (let i: number = 0; i < result.list.length; i++) {
