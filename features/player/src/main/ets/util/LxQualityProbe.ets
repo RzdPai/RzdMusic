@@ -221,23 +221,61 @@ export async function probeQuality(source: string, songId: string, quality: stri
   appendPlayLog('[RzdQualityProbe] start ' + source + '/' + quality + ' url=' + url.substring(0, Math.min(60, url.length)));
   const header: http.HttpRequest = http.createHttp();
   try {
-    // ★ 不能带 Range：带了 content-length 就只有 2 字节，算出来的时长必然"偏差过大"（之前的 100% 失败根因）
-    const resp: http.HttpResponse = await header.request(url, {
-      method: http.RequestMethod.GET,
-      connectTimeout: PROBE_TIMEOUT_MS,
-      readTimeout: PROBE_TIMEOUT_MS
-    });
-    const ct: string = String(resp.header['content-type'] ?? '');
-    const lenRaw: string = String(resp.header['content-length'] ?? '');
-    appendPlayLog('[RzdQualityProbe] resp code=' + resp.responseCode + ' type=' + ct + ' len=' + lenRaw);
+    // ★★ 2026-10-29：探测**不能整包下载**（之前是 GET 全量，等于把整首歌拉下来 ⇒ 慢到离谱）。
+    //   先用 HEAD 只取响应头（content-type / content-length）；服务器不支持 HEAD 时
+    //   退成 `Range: bytes=0-1023` 的 GET，用 `content-range` 的 total 拿总体积。
+    let ct: string = '';
+    let lenRaw: string = '';
+    let code: number = 0;
+    try {
+      const head: http.HttpResponse = await header.request(url, {
+        method: http.RequestMethod.HEAD,
+        connectTimeout: PROBE_TIMEOUT_MS,
+        readTimeout: PROBE_TIMEOUT_MS
+      });
+      code = head.responseCode;
+      ct = String(head.header['content-type'] ?? '');
+      lenRaw = String(head.header['content-length'] ?? '');
+      appendPlayLog('[RzdQualityProbe] HEAD code=' + code + ' type=' + ct + ' len=' + lenRaw);
+    } catch (_headErr) {
+      code = 0;
+    }
+    if (code !== 200 || lenRaw.length === 0) {
+      // HEAD 不可用 → 只取前 1KB，从 content-range 里读总长度
+      const probeReq: http.HttpRequest = http.createHttp();
+      try {
+        const resp: http.HttpResponse = await probeReq.request(url, {
+          method: http.RequestMethod.GET,
+          header: { 'Range': 'bytes=0-1023' },
+          connectTimeout: PROBE_TIMEOUT_MS,
+          readTimeout: PROBE_TIMEOUT_MS
+        });
+        code = resp.responseCode;
+        ct = String(resp.header['content-type'] ?? '');
+        const range: string = String(resp.header['content-range'] ?? '');
+        if (range.indexOf('/') > 0) {
+          lenRaw = range.substring(range.indexOf('/') + 1).trim();
+        } else {
+          lenRaw = String(resp.header['content-length'] ?? '');
+        }
+        appendPlayLog('[RzdQualityProbe] RANGE code=' + code + ' type=' + ct +
+          ' range=' + range + ' total=' + lenRaw);
+      } finally {
+        probeReq.destroy();
+      }
+    }
     result.contentType = ct;
+    if (code !== 200 && code !== 206) {
+      result.detail = 'HTTP ' + code;
+      sessionCache.set(key, result);
+      return result;
+    }
     if (!isAudioType(ct)) {
       result.detail = '非音频类型 ' + ct;
       appendPlayLog('[RzdQualityProbe] ' + source + '/' + quality + ' 失败：' + result.detail);
       sessionCache.set(key, result);
       return result;
     }
-    const expectSeconds: number = parseIntervalSeconds(interval);
     const bytes: number = Number(lenRaw);
     result.seconds = bytes > 0 ? Math.round(bytes / (320 * 1024 / 8)) : -1;
     // 只做"体量合理"的软校验：真实音频至少几百 KB；错误提示页通常只有几 KB
@@ -249,8 +287,7 @@ export async function probeQuality(source: string, songId: string, quality: stri
     }
     result.ok = true;
     result.detail = '已验证';
-    appendPlayLog('[RzdQualityProbe] PASS ' + source + '/' + quality);
-    appendPlayLog('[RzdQualityProbe] ' + source + '/' + quality + ' 通过 type=' + ct);
+    appendPlayLog('[RzdQualityProbe] PASS ' + source + '/' + quality + ' bytes=' + bytes);
     sessionCache.set(key, result);
     return result;
   } catch (err) {

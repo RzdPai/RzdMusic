@@ -433,13 +433,21 @@ export struct SettingsDetailPage {
    * A4：用**预置样曲**对已勾选源的每个平台跑一遍音质探测（只测该平台最高与次高两档）。
    * 结果进会话缓存，平台 ToolTip 会显示「已验证 / 未通过 / 未测」。
    */
-  private async runQualityProbe(): Promise<void> {
+  /**
+   * 测试音质。
+   * ★ 用户 2026-10-29：只测"点了测试的那个音源"，不再遍历全部。
+   * @param onlyApiId 传了 apiId 就只测这一个源；不传则保持旧行为（全部已启用源）。
+   */
+  private async runQualityProbe(onlyApiId?: string): Promise<void> {
     let passed: number = 0;
     let total: number = 0;
     const ordered: LXUserApiInfo[] = this.orderedApiListForUi();
         // ★ 2026-10-29（用户：测试音质要测"我选的那些音源"）：不再只看前 3 个，
     //   遍历所有已启用音源（顺序仍按用户排序）。
     for (let i: number = 0; i < ordered.length; i++) {
+      if (onlyApiId !== undefined && onlyApiId.length > 0 && ordered[i].id !== onlyApiId) {
+        continue;
+      }
       const api: LXUserApiInfo = ordered[i];
       if (!this.isSourceInOrder(api.id)) {
         continue;
@@ -1978,8 +1986,8 @@ export struct SettingsDetailPage {
             onCheckUpdate: (api: LXUserApiInfo): void => {
               void this.checkSourceUpdateRemote(api);
             },
-            onProbe: (): void => {
-              void this.runQualityProbe();
+            onProbe: (apiId: string): void => {
+              void this.runQualityProbe(apiId);
             },
             onMove: (dragId: string, targetId: string): void => {
               this.moveSourceTo(dragId, targetId);

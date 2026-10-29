@@ -45,7 +45,7 @@ export struct SourceManagerList {
   @Event onSelect: (apiId: string) => void = (apiId: string): void => {};
   @Event onDelete: (apiId: string) => void = (apiId: string): void => {};
   @Event onCheckUpdate: (api: LXUserApiInfo) => void = (api: LXUserApiInfo): void => {};
-  @Event onProbe: () => void = (): void => {};
+  @Event onProbe: (apiId: string) => void = (apiId: string): void => {};
   @Event onMove: (dragId: string, targetId: string) => void = (dragId: string, targetId: string): void => {};
 
   /** 正在被拖动的音源 id。 */
@@ -66,7 +66,7 @@ export struct SourceManagerList {
   private actions(api: LXUserApiInfo) {
     Row({ space: 8 }) {
       SwipeIcon($r('sys.symbol.waveform'), '#43A047', (): void => {
-        this.onProbe();
+        this.onProbe(api.id);
       })
       SwipeIcon($r('sys.symbol.arrow_clockwise'), '#1E88E5', (): void => {
         this.onCheckUpdate(api);
@@ -145,13 +145,6 @@ export struct SourceManagerList {
           .padding(10)
           .borderRadius($r('sys.float.corner_radius_level6'))
           .backgroundColor($r('app.color.card_background'))
-          .draggable(this.draggableEnabled && this.inOrder(api.id))
-          .onDragStart(() => {
-            this.dragId = api.id;
-          })
-          .onDrop(() => {
-            this.onMove(this.dragId, api.id);
-          })
         }
         .swipeAction({
           end: {
@@ -161,18 +154,38 @@ export struct SourceManagerList {
           },
           edgeEffect: SwipeEdgeEffect.Spring
         })
+        // ★ 参考 OpenAuthenticator（mroble/Authenticator `Index.ets` 首页令牌列表）：
+        //   拖拽预览不缩放、保持圆角、无数量角标，并开触感 + 拖到边缘自动滚动。
+        .dragPreviewOptions({
+          mode: [DragPreviewMode.DISABLE_SCALE, DragPreviewMode.ENABLE_DEFAULT_RADIUS],
+          numberBadge: false,
+          sizeChangeEffect: DraggingSizeChangeEffect.DEFAULT
+        }, {
+          enableHapticFeedback: true,
+          enableEdgeAutoScroll: true
+        })
       }, (api: LXUserApiInfo) => api.id)
+        // ★ 关键：`onMove` 挂在 **ForEach** 上（不是 List，也不是行级 draggable）——
+        //   这是 ArkUI 官方的拖拽排序写法，OpenAuthenticator 首页令牌列表就是这么写的。
+        .onMove((from: number, to: number) => {
+          if (!this.draggableEnabled || from === to || from < 0 || to < 0 ||
+            from >= this.apis.length || to >= this.apis.length) {
+            return;
+          }
+          this.onMove(this.apis[from].id, this.apis[to].id);
+        }, {
+          onLongPress: (index: number): void => {
+            this.dragIdx = index;
+          },
+          onDragStart: (index: number): void => {
+            this.dragIdx = index;
+          },
+          onDrop: (index: number): void => {
+            this.dragIdx = index;
+          }
+        })
     }
     .width('100%')
     .scrollBar(BarState.Off)
-    .onItemDrop((_event: ItemDragInfo, _itemIndex: number, insertIndex: number, isSuccess: boolean): void => {
-      if (!isSuccess || this.dragIdx < 0 || this.dragIdx >= this.apis.length ||
-        insertIndex < 0 || insertIndex >= this.apis.length) {
-        return;
-      }
-      this.onMove(this.apis[this.dragIdx].id, this.apis[insertIndex].id);
-    })
-    // 拖动：行级 draggable（本 SDK 的 List 无 onMove，List 级拖拽实测不可用）
-
   }
 }
