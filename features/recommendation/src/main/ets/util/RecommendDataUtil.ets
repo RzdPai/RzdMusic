@@ -213,7 +213,9 @@ export class RecommendDataUtil {
       for (let i: number = 0; i < topids.length && merged.length < targetCount; i++) {
         let result: LXSearchSong[] = [];
         try {
-          const res = await lxTxToplist(topids[i], 30);
+          // ★ 之前写死 30 ⇒ 心动模式要 100 首也只能拿到 30 首（用户反馈）。
+          //   lxTxToplist 本身支持大 songNum（内部再分页），这里按目标数要。
+          const res = await lxTxToplist(topids[i], Math.max(30, targetCount));
           result = res.list;
         } catch (_err) {
           result = [];
@@ -232,16 +234,22 @@ export class RecommendDataUtil {
     } else {
       boards.push('mg_1', 'mg_2', 'mg_3');
     }
+    // ★ 榜单接口支持分页：每榜最多翻 5 页 × 20 首，凑够 targetCount 就停
     for (let i: number = 0; i < boards.length && merged.length < targetCount; i++) {
-      let result: LXSearchSong[] = [];
-      try {
-        const res = await lxLeaderboard(boards[i], 1, 20);
-        result = res.list;
-      } catch (_err) {
-        result = [];
-      }
-      for (let j: number = 0; j < result.length && merged.length < targetCount; j++) {
-        merged.push(RecommendDataUtil.mapSearchSongToPrivateUi(result[j], j, seen));
+      for (let page: number = 1; page <= 5 && merged.length < targetCount; page++) {
+        let result: LXSearchSong[] = [];
+        try {
+          const res = await lxLeaderboard(boards[i], page, 20);
+          result = res.list;
+        } catch (_err) {
+          result = [];
+        }
+        if (result.length === 0) {
+          break;
+        }
+        for (let j: number = 0; j < result.length && merged.length < targetCount; j++) {
+          merged.push(RecommendDataUtil.mapSearchSongToPrivateUi(result[j], j, seen));
+        }
       }
     }
     return merged;

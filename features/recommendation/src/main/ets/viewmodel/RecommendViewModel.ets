@@ -20,7 +20,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { image } from '@kit.ImageKit';
 import { effectKit } from '@kit.ArkGraphics2D';
 import { AppStorageKeys, HomeSourceState, Logger, MusicAppState, MusicStoreService, PlaybackIntentState, getAppRuntime } from 'musicbasic';
-import { AccountService, ColorConversion, LXSearchSong, OnlinePlayUtil } from 'player';
+import { AccountService, ColorConversion, LXSearchSong, MediaService, OnlinePlayUtil } from 'player';
 import { RecommendSongUiDataSource } from '../model/RecommendSongUiDataSource';import {
   RecommendBoardUi,
   RecommendCardUi,
@@ -986,6 +986,22 @@ export class RecommendViewModel {
       }
       const added: number = OnlinePlayUtil.appendToList(this.appState, songs);
       console.info('[心动模式] 追加推荐 count=' + added);
+      // ★ 追加后要**自动开始播放**（用户反馈：只进列表不出声）。
+      //   队列原本是空的时候，从新追加的第一首开始播；已有歌在播就不打断它。
+      if (added > 0) {
+        const queueLen: number = this.appState.playQueue.length;
+        const firstNewIndex: number = queueLen - added;
+        const nothingPlaying: boolean = queueLen === added ||
+          this.appState.selectIndex < 0 || this.appState.selectIndex >= queueLen;
+        if (nothingPlaying) {
+          this.appState.selectIndex = firstNewIndex;
+          this.appState.currentQuality = '';
+          this.appState.isResolving = true;
+          MediaService.getInstance().loadAsset(firstNewIndex);
+          MediaService.getInstance().play();
+          console.info('[心动模式] 自动播放 index=' + firstNewIndex);
+        }
+      }
       if (uiContext !== undefined) {
         uiContext.getPromptAction().showToast({
           message: added > 0 ? ('已添加 ' + added + ' 首推荐到播放列表') : '暂无可用推荐',
