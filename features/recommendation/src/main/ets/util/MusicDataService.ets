@@ -1393,6 +1393,11 @@ export class MusicDataService {
    * @returns true = 广场可跟随该平台。
    */
   static plazaSupported(source: string): boolean {
+    // ★ 汽水（qs）没有「分类 → 歌单」结构（只有推荐流），别让推荐引擎按分类去猜，
+    //   否则 categories('qs') 会落到别的平台兜底 —— 首页推荐改走指定榜（qs_hot）。
+    if (source === 'qs') {
+      return false;
+    }
     return source !== 'tx';
   }
 
