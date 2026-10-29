@@ -896,7 +896,6 @@ export struct LocalMusicPage {
     .systemMaterial(immersiveMedium())
     .backgroundColor('#33FFFFFF')
     .borderRadius(33)
-    .backgroundBlurStyle(buildBarBlurStyle(this.ambientState.level), barBlurOptions())
     .border({ width: 0.5, color: $r('sys.color.comp_divider') })
     .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 8 })
   }
