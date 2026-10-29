@@ -35,7 +35,7 @@ import { BackgroundUtil } from '../util/BackgroundUtil';
 import { MediaTools } from '../util/MediaTools';
 import { lxGetLyricFull, lxGetPicFallback, lxGetTTMLLyric,
   LyricFullResult } from '../source/LXMusicSDK';
-import { lxEngineIsReady } from '../source/LXSourceEngine';
+import { lxEngineIsReady, waitForLxEngineReady } from '../source/LXSourceEngine';
 import { FallbackOptions, QUALITY_TIER_COOLDOWN_MS, QUALITY_TIER_FAIL_THRESHOLD, UrlResolveOutcome, qualityTierKey, resolveMusicUrlWithFallback, sourceDisplayName } from '../util/SourceFallbackUtil';
 import { SwitchBannerState } from '../model/SwitchBannerState';
 import { amllGetCachedLyric, amllParseLyricCached } from '../amll/parse/AmllAutoDetect';
@@ -1038,7 +1038,9 @@ export class MediaService {
    * @returns True when the url was resolved.
    */
   private async resolveOnlineUrl(songItem: SongItem): Promise<boolean> {
-    if (!lxEngineIsReady) {
+    // ★ 启动瞬间引擎可能还没 ready：先等 3s，避免误弹「音源未就绪」
+    const engineReady: boolean = await waitForLxEngineReady(3000);
+    if (!engineReady) {
       this.toast('音源未就绪，请在设置中导入并选中源');
       return false;
     }

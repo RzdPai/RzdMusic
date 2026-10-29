@@ -705,7 +705,11 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
       ? await tryPlatformSearch(c.platform, name, singer, c.quality, onNotice, opts)
       : await tryQualities(c.platform, songId, name, singer, chain, c.quality, true, onNotice, opts);
     if (r !== null) {
-      r.switchedScriptName = c.scriptName;
+      // ★ 只有在**真正换了脚本**时才标记 switchedScriptName：
+      //   命中用户自己设置的默认音源时不该弹「已切换音源：<默认源>」。
+      if (c.scriptId !== originId) {
+        r.switchedScriptName = c.scriptName;
+      }
       appendPlayLog('[回退链] 命中 ' + c.scriptName + '/' + c.platform + '/' + r.quality);
       // A4：解析成功即证明该 (平台, 音质) 能返回真实音频，写进本次会话的探测缓存
       markProbeOk(c.platform, r.quality);

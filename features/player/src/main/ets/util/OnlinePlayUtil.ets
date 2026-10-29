@@ -19,7 +19,7 @@ import { UIContext } from '@kit.ArkUI';
 //    常量本体仍留在 `musicbasic`（PC 壳层 `products/pc/.../Index.ets` 还在用，那一条待主线收）。
 import { MusicAppState, MusicStoreService, PlayedSongRecord, QualityInfo, SongItem, appendPlayLog } from 'musicbasic';
 import { LXSearchSong, LXQualityType, lxGetLyricFull, lxSearch, WyLyricResult } from '../source/LXMusicSDK';
-import { lxEngineIsReady } from '../source/LXSourceEngine';
+import { lxEngineIsReady, waitForLxEngineReady } from '../source/LXSourceEngine';
 import { LXSource } from '../source/Interface';
 import { MediaService } from '../model/MediaService';
 
@@ -117,7 +117,9 @@ export class OnlinePlayUtil {
    */
   public static async playSearchSong(appState: MusicAppState, song: LXSearchSong,
     uiContext: UIContext | undefined): Promise<boolean> {
-    if (!lxEngineIsReady) {
+    // ★ 启动瞬间引擎可能还没 ready：先等最多 3s，避免每次开应用都误弹「音源未就绪」
+    const engineReady: boolean = await waitForLxEngineReady(3000);
+    if (!engineReady) {
       OnlinePlayUtil.toast(uiContext, '音源未就绪，请在设置中导入并选中源');
       return false;
     }
@@ -162,8 +164,11 @@ export class OnlinePlayUtil {
     uiContext: UIContext | undefined): Promise<boolean> {
     const needResolve: boolean = record.url.length === 0;
     if (needResolve && !lxEngineIsReady) {
-      OnlinePlayUtil.toast(uiContext, '音源未就绪，请在设置中导入并选中源');
-      return false;
+      const ok: boolean = await waitForLxEngineReady(3000);
+      if (!ok) {
+        OnlinePlayUtil.toast(uiContext, '音源未就绪，请在设置中导入并选中源');
+        return false;
+      }
     }
     // kw 老记录可能带 MUSIC_ 前缀，去掉才能正确解析
     if (record.source === 'kw' && record.songId.startsWith('MUSIC_')) {
@@ -256,7 +261,9 @@ export class OnlinePlayUtil {
   }
   public static async playList(appState: MusicAppState, songs: LXSearchSong[], startIndex: number,
     uiContext: UIContext | undefined, openPlayer: boolean = true): Promise<boolean> {
-    if (!lxEngineIsReady) {
+    // ★ 启动瞬间引擎可能还没 ready：先等最多 3s，避免每次开应用都误弹「音源未就绪」
+    const engineReady: boolean = await waitForLxEngineReady(3000);
+    if (!engineReady) {
       OnlinePlayUtil.toast(uiContext, '音源未就绪，请在设置中导入并选中源');
       return false;
     }

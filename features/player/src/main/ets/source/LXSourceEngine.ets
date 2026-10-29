@@ -10,6 +10,28 @@ export let lxEngineRegisterPromise: ((key: string,
   resolve: (result: object) => void, reject: (reason: Error) => void) => void) | null = null;
 export let lxEngineIsReady: boolean = false;
 
+/**
+ * 等待音源引擎就绪（最多 `timeoutMs`）。
+ * ★ 用于消掉"刚启动就播 → 引擎还没 ready → 误弹『音源未就绪』"：先等一下，超时才提示。
+ */
+export async function waitForLxEngineReady(timeoutMs: number = 3000): Promise<boolean> {
+  if (lxEngineIsReady) {
+    return true;
+  }
+  const step: number = 100;
+  let waited: number = 0;
+  while (waited < timeoutMs) {
+    await new Promise<void>((resolve: () => void): void => {
+      setTimeout((): void => resolve(), step);
+    });
+    if (lxEngineIsReady) {
+      return true;
+    }
+    waited += step;
+  }
+  return lxEngineIsReady;
+}
+
 /** 初始化看门狗的最小/最大预算（ms）：脚本越大（联网校验 + eval）需要越久。 */
 const READY_WATCHDOG_MIN_MS: number = 8000;
 const READY_WATCHDOG_MAX_MS: number = 30000;
