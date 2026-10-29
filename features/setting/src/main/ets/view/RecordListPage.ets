@@ -1032,18 +1032,8 @@ export struct RecordListPage {
         }
       });
     }
-    if (!this.isHistory() && this.records.length > 0 && !this.selectionMode) {
-      menus.push({
-        content: {
-          label: '播放全部',
-          icon: $r('sys.symbol.play_fill'),
-          isEnabled: true,
-          action: (): void => {
-            this.playAllFavorites();
-          }
-        }
-      });
-    }
+    // ★ 2026-10-29（用户）：收藏页列表里已经有「播放全部 N」横条了，
+    //   标题栏再放一个「播放全部」是重复，这里删掉（保留横条那一处入口）。
     if (this.records.length > 0 && !this.selectionMode) {
       menus.push({
         content: {
