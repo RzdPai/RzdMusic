@@ -891,13 +891,12 @@ export struct LocalMusicPage {
       })
       }
     }
-    .type(ButtonType.Normal)
+    // ★ 药丸形状由 Button 类型给出（systemMaterial 会接管 borderRadius）
+    .type(ButtonType.Capsule)
     .width('100%')
     .height(66)
-    .clip(true)
-    // 药丸玻璃走 API23 材质背板（26 的 systemMaterial 会把形状接管成矩形 ⇒ 变方）
-    .backgroundBlurStyle(buildBarBlurStyle(this.ambientState.level), barBlurOptions())
-    .borderRadius(33)
+    .systemMaterial(immersiveMedium())
+    .backgroundColor('#33FFFFFF')
     .border({ width: 0.5, color: $r('sys.color.comp_divider') })
     .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 8 })
   }

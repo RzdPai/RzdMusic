@@ -763,14 +763,13 @@ export struct RecordListPage {
       })
       }
     }
-    .type(ButtonType.Normal)
+    // ★ 形状用 `ButtonType.Capsule`（原生药丸），材质挂同一个节点：
+    //   `systemMaterial` 会接管 borderRadius，所以药丸形状必须由 Button 类型给出，而不是 borderRadius。
+    .type(ButtonType.Capsule)
     .width('100%')
     .height(66)
-    .clip(true)
-    // 胶囊要的是「药丸玻璃」：用 API23 的材质背板（与旧版一致，圆角不受材质接管影响）。
-    // 26 的 systemMaterial 会把形状接管成矩形，实测胶囊会变方 —— 这里不用它。
-    .backgroundBlurStyle(buildBarBlurStyle(this.ambientState.level), barBlurOptions())
-    .borderRadius(33)
+    .systemMaterial(immersiveMedium())
+    .backgroundColor('#33FFFFFF')
     .border({ width: 0.5, color: $r('sys.color.comp_divider') })
     .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 8 })
   }
