@@ -25,6 +25,10 @@ const LX_SOURCE_NAMES: Record<string, string> = {
   'tx': 'QQ',
   'wy': '网易云',
   'qs': '汽水',
+  'soda': '汽水',
+  'qishui': '汽水',
+  'xm': '喜马拉雅',
+  'bd': '百度',
   'mg': '咪咕',
   'local': ''
 };
