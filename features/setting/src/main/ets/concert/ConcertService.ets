@@ -138,10 +138,7 @@ export class ConcertService {
       console.info('[RzdConcert] failed: ' + JSON.stringify(error).substring(0, 120));
       out = [];
     }
-    // ★ 只缓存**有数据**的结果：空结果可能是 token 过期/网络抖动造成的，缓存会让该歌手永久显示"没有场次"
-    if (out.length > 0) {
-      this.cache.set(artistName, out);
-    }
+    this.cache.set(artistName, out);
     return out;
   }
 

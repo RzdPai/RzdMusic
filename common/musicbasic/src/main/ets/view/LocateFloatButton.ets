@@ -156,7 +156,9 @@ export struct LocateFloatButton {
     .height(40)
     .borderRadius(20)
     // ★ 不要蓝色底：材质背板（浅色下是半透明白、深色下是半透明黑，并跟随背后画面）
-    .backgroundBlurStyle(appBarBlurStyle(), barBlurOptions())
+    // ★ 材质挂 Button（A 档宿主）；backgroundColor 必须半透明才透得出材质
+    .systemMaterial(immersiveMedium())
+    .backgroundColor(this.rightSide ? '#33FFFFFF' : '#33FFFFFF')
     .shadow({ radius: 14, color: 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 4 })
     .enabled(this.clickable)
     .opacity(this.clickable ? 1 : 0.45)
