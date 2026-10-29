@@ -1,7 +1,7 @@
 import { http } from '@kit.NetworkKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BusinessError } from '@kit.BasicServicesKit';
-import { lxTxToplistInfo, TxToplistInfo } from 'player';
+import { lxTxToplistInfo, TxToplistInfo, qsBoardSongs, LXSearchSong } from 'player';
 import { BoardSongParam, ToplistRouteParam } from 'musicbasic';
 import { cryptoFramework } from '@kit.CryptoArchitectureKit';
 import { buffer, util } from '@kit.ArkTS';
@@ -1839,6 +1839,24 @@ export class MusicDataService {
   }
 
   static async tracks(source: string, boardId: string): Promise<TrackData[]> {
+    // ★ 汽水：榜单整块来自内置 Luna 接口（见 player/geuz/QsApi.qsBoardSongs），不走上/下游的 http 解析
+    if (source === 'qs') {
+      const bangid: string = boardId.startsWith('qs_') ? boardId.substring(3) : boardId;
+      const songs: LXSearchSong[] = await qsBoardSongs(bangid, 1, 100);
+      const tracks: TrackData[] = [];
+      for (let i: number = 0; i < songs.length; i++) {
+        tracks.push({
+          songId: songs[i].songId,
+          name: songs[i].name,
+          artist: songs[i].singer,
+          album: songs[i].albumName,
+          image: songs[i].img,
+          duration: songs[i].interval,
+          source: 'qs'
+        });
+      }
+      return tracks;
+    }
     let root: JsonObject;
     if (source === 'kg') {
       root = await requestJson(`http://mobilecdnbj.kugou.com/api/v3/rank/song?version=9108&ranktype=1&plat=0&pagesize=100&area_code=1&page=1&rankid=${boardId}&with_res_tag=0&show_portrait_mv=1`);

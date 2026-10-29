@@ -177,6 +177,7 @@ export struct PlaylistHomePage {
       case 'tx': return '#31C27C';
       case 'wy': return '#C62F2F';
       case 'mg': return '#FF4081';
+      case 'qs': return '#00C2A8';
     }
     return '#6B6B6B';
   }
@@ -188,6 +189,7 @@ export struct PlaylistHomePage {
       case 'tx': return 'QQ';
       case 'wy': return '网易云';
       case 'mg': return '咪咕';
+      case 'qs': return '汽水';
     }
     return source;
   }
