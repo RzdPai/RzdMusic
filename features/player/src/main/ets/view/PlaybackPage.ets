@@ -9032,19 +9032,11 @@ export struct PlaybackPage {
               .textOverflow({ overflow: TextOverflow.Ellipsis })
               .textAlign(TextAlign.Start)
               .width(StyleConstants.FULL_WIDTH)
-              // ★ 点标题/歌手 → 弹出「平台 · 音质」提示（用户 2026-10-29）
+              // ★ 点标题/歌手 → 弹「平台 · 音质」提示。
+              //   ⚠️ bindPopup 只挂**一处**（歌名行外层 Column，见下面 9090 行的 .bindPopup）：
+              //      两个 Text 各挂一次会出现两个气泡（用户 2026-10-29 反馈）。
               .onClick((): void => {
                 this.metaTipOpen = !this.metaTipOpen;
-              })
-              .bindPopup($$this.metaTipOpen, {
-                builder: this.MetaInfoTip,
-                placement: Placement.Top,
-                enableArrow: true,
-                onStateChange: (event: PopupStateChangeParam): void => {
-                  if (!event.isVisible) {
-                    this.metaTipOpen = false;
-                  }
-                }
               })
             Text(this.state.getCurrentSongItem()?.singer ?? '', { controller: this.singerController })
               .id(PLAYER_META_SINGER_ID)
@@ -9059,19 +9051,9 @@ export struct PlaybackPage {
               .textAlign(TextAlign.Start)
               .width(StyleConstants.FULL_WIDTH)
               .margin({ top: 2 })
-              // ★ 歌手行同样可点，提示当前平台与音质
+              // ★ 歌手行同样可点，提示当前平台与音质（弹层统一挂在下面的歌名行容器上）
               .onClick((): void => {
                 this.metaTipOpen = !this.metaTipOpen;
-              })
-              .bindPopup($$this.metaTipOpen, {
-                builder: this.MetaInfoTip,
-                placement: Placement.Top,
-                enableArrow: true,
-                onStateChange: (event: PopupStateChangeParam): void => {
-                  if (!event.isVisible) {
-                    this.metaTipOpen = false;
-                  }
-                }
               })
             // ★★★ 2026-10-18（第五轮）：小歌词搬回"歌名行之下"，而且**只属于封面页**（见下）。
             //   位置 = 本 Column 的**第 3 个子节点**（主轴自然排在歌手文字之后）⇒
@@ -9090,6 +9072,18 @@ export struct PlaybackPage {
           .height(PlaybackPage.LYRIC_META_ROW_H_VP)
           .layoutWeight(1)
           .alignItems(HorizontalAlign.Start)
+          // ★ 唯一一处 bindPopup：气泡锚在"歌名+歌手"这一整行上，
+          //   点标题或点歌手都只弹这一个（两处各挂一次会出现两个气泡）。
+          .bindPopup($$this.metaTipOpen, {
+            builder: this.MetaInfoTip,
+            placement: Placement.Top,
+            enableArrow: true,
+            onStateChange: (event: PopupStateChangeParam): void => {
+              if (!event.isVisible) {
+                this.metaTipOpen = false;
+              }
+            }
+          })
 
           // 闂?闂佸搫鍟版慨鐑藉疾?`metaRow` 闂佸憡鐟ラ崢鏍疾閸洘鐒介柨婵嗗閳峰牆鈽夐幙鍐х盎婵炲瓨锕㈠浠嬪炊妞嬪海顦ーPlayerPage闁诲海鎳撻張顒勫汲椤ゆ杯闁诲氦顫夊銊┾€?md` 闁?.2闂佹寧绋戦¨鈧紒?
           //   `SymbolGlyph 闂佽　鍋撻柟顖滃椤ユ叢 + `SymbolGlyph 闂佸搫娲﹀娆撍囩缓娑㈡煏?
