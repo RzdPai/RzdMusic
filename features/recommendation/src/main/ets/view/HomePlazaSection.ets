@@ -71,6 +71,8 @@ export struct HomePlazaSection {
   private SourceBar() {
     Scroll() {
       Row({ space: 8 }) {
+        // 首尾各留 2vp，胶囊圆角不被 Scroll 边界裁切
+        Blank().width(2)
         ForEach(MusicDataService.sourceList, (item: string, index?: number) => {
           this.SourceChip(MusicDataService.sourceName(item), index ?? 0)
         }, (item: string) => `plaza-src-${item}`)
@@ -79,9 +81,9 @@ export struct HomePlazaSection {
     .scrollable(ScrollDirection.Horizontal)
     .scrollBar(BarState.Off)
     .width(StyleConstants.FULL_WIDTH)
-    // ★ 2026-10-29（用户：Tab 贴到屏幕两边像被截断）：给平台条补与页面一致的左右留白
-    .padding({ left: this.homeScrollGutterH(), right: this.homeScrollGutterH() })
-    // 滚动内容两端再多留一点，首尾胶囊不会顶到留白边缘
+    // ★ 2026-10-29（用户：Tab 仍贴边）：外层 Column 已经有 homeScrollGutterH()，
+    //   这里**不能再加一层 padding**（双层留白会让首尾胶囊看起来被裁掉）。
+    //   只在内容行两端补 2vp，保证首个/末个胶囊的圆角完整可见。
     .edgeEffect(EdgeEffect.Spring)
   }
 
