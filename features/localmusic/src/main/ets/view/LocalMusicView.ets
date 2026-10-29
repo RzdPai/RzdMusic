@@ -871,7 +871,6 @@ export struct LocalMusicPage {
    */
   @Builder
   private SelectionBar() {
-    Button() {
       Row() {
      SelectionActionCell({
         icon: $r('sys.symbol.trash'),
@@ -890,13 +889,11 @@ export struct LocalMusicPage {
         }
       })
       }
-    }
-    // ★ 药丸形状由 Button 类型给出（systemMaterial 会接管 borderRadius）
-    .type(ButtonType.Capsule)
+    // ★ 恢复最初那版（Row + borderRadius + systemMaterial，药丸玻璃）
     .width('100%')
     .height(66)
+    .borderRadius(33)
     .systemMaterial(immersiveMedium())
-    .backgroundColor('#33FFFFFF')
     .border({ width: 0.5, color: $r('sys.color.comp_divider') })
     .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 8 })
   }

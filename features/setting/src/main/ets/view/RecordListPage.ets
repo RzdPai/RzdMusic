@@ -734,7 +734,6 @@ export struct RecordListPage {
    */
   @Builder
   private SelectionActionBar() {
-    Button() {
       Row() {
       SelectionActionCell({
         icon: $r('sys.symbol.trash'),
@@ -762,14 +761,12 @@ export struct RecordListPage {
         }
       })
       }
-    }
-    // ★ 形状用 `ButtonType.Capsule`（原生药丸），材质挂同一个节点：
-    //   `systemMaterial` 会接管 borderRadius，所以药丸形状必须由 Button 类型给出，而不是 borderRadius。
-    .type(ButtonType.Capsule)
+    // ★ 恢复最初那版（用户确认当时正常）：Row + borderRadius(33) + systemMaterial。
+    //   不要再包 Button、也不要叠 backgroundColor/backgroundBlurStyle —— 都会让药丸变方或变色。
     .width('100%')
     .height(66)
+    .borderRadius(33)
     .systemMaterial(immersiveMedium())
-    .backgroundColor('#33FFFFFF')
     .border({ width: 0.5, color: $r('sys.color.comp_divider') })
     .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 8 })
   }
@@ -1246,9 +1243,12 @@ export struct RecordListPage {
         //   头里第一段是让开"状态栏 + 标题栏"的空高（`titleTopInset()`）。
         //   ★ 底色用**材质背板**（不是死底色）：`adaptiveColor = AVERAGE` ⇒ 取列表滚过去时的
         //     背后画面色，这才有光感（与标题栏 `buildTitleMaterial` 同一档）。
+        // ★ 关注页：头部整块不占位（高度 0），让列表**滚到标题栏下面**，
+        //   这样标题栏的 `GRADUAL_BLUR` 才有内容可糊（对齐平台音乐页的渐变模糊）。
+        //   历史/收藏页保持不变（那里有「播放全部」横条，黑板才是对的）。
         Column() {
           Column()
-            .height(this.titleTopInset())
+            .height(this.isFollowing() ? 0 : this.titleTopInset())
             .width('100%')
           if (!this.selectionMode && !this.isFollowing()) {
             this.CategoryTabs()
@@ -1256,7 +1256,9 @@ export struct RecordListPage {
           }
         }
         .width('100%')
-        .backgroundBlurStyle(buildBarBlurStyle(this.ambientState.level), barBlurOptions())
+        .backgroundBlurStyle(
+          this.isFollowing() ? BlurStyle.NONE : buildBarBlurStyle(this.ambientState.level),
+          barBlurOptions())
 
         Stack({ alignContent: Alignment.TopStart }) {
           List({ space: 0, scroller: this.pageScroller }) {
