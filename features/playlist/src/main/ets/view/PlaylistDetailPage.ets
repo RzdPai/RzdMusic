@@ -633,7 +633,11 @@ export struct PlaylistDetailPage {
                     //   ⚠️ 判据必须和它压着的那块底**同源**：本页正文的底就是 `backdropColor`，
                     //      不是原始照片（照片只在上方照片层，另有 `statusBar*` 那套单独判）。
                     //      歌手页这条口径已经上机验证过（用户：「像歌手页就是正常的」），照抄它。
-                    this.lightBackdrop = false;
+                    // ★ 2026-10-29（用户：夜间/浅色封面上白字看不清）：
+                    //   不再恒为 false —— 用**实际铺上去的那个颜色**算相对亮度再决定前景色。
+                    //   只切文字/图标颜色，不加任何遮罩层（用户明确要求）。
+                    const lum: number = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+                    this.lightBackdrop = lum > 0.62;
                     hilog.info(PLAYLIST_LOG_DOMAIN, PLAYLIST_LOG_TAG,
                       'hero backdrop color %{public}s light=%{public}d', this.avgColor, this.lightBackdrop);
                   }
