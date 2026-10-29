@@ -1,6 +1,6 @@
 import { SearchPlaylistInfo, SearchPlaylistSong, fmtDuration } from './PlaylistSearchTypes';
 import { PlaylistSearchHttp, numOf, strOf, toHttps, fixSingleQuoteJson } from './PlaylistSearchHttp';
-import { QsPlaylistHit, qsSearchPlaylists } from '../geuz/QsApi';
+import { QsPlaylistHit, qsPlaylistDetail, qsSearchPlaylists } from '../geuz/QsApi';
 
 const WY_SEARCH_LIMIT: number = 30;
 const TX_PLAYLIST_PAGE_SIZE: number = 20;
@@ -88,6 +88,9 @@ export class PlaylistSearchApi {
     }
     if (source === 'mg') {
       return PlaylistSearchApi.mgPlaylistDetail(id);
+    }
+    if (source === 'qs') {
+      return PlaylistSearchApi.qsPlaylistDetailImpl(id);
     }
     const empty: SearchPlaylistSong[] = [];
     return empty;
@@ -571,6 +574,21 @@ export class PlaylistSearchApi {
       console.info('[RzdSoda] playlist search failed: ' + JSON.stringify(err).substring(0, 80));
     }
     return list;
+  }
+  /** 汽水歌单详情：走内置 Luna（GET /luna/playlist/detail，条目在 track_wrapper.track）。 */
+  private static async qsPlaylistDetailImpl(id: string): Promise<SearchPlaylistSong[]> {
+    const out: SearchPlaylistSong[] = [];
+    try {
+      const songs = await qsPlaylistDetail(id, 1, 500);
+      for (let i: number = 0; i < songs.length; i++) {
+        out.push(SearchPlaylistSong.of(songs[i].songId, songs[i].name, songs[i].singer,
+          songs[i].albumName, songs[i].interval, 'qs', songs[i].img));
+      }
+      console.info('[RzdSoda] playlist page id=' + id + ' got=' + out.length);
+    } catch (err) {
+      console.info('[RzdSoda] playlist page failed id=' + id);
+    }
+    return out;
   }
   private static async kgSearchPlaylists(keyword: string, page: number): Promise<SearchPlaylistInfo[]> {
     const url: string =
