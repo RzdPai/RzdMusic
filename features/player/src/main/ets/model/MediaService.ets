@@ -1172,7 +1172,15 @@ export class MediaService {
       appState.playQueueIds = [];
       appState.playQueue = [item];
       appState.selectIndex = 0;
-      void this.loadAsset(0, true);
+      // ★ 用户 2026-10-29：「启动时就不进行准备」——开机不要预先解析/加载，
+      //   否则回退链会在后台跑起来，用户没点播放也会自动出声。
+      //   只在「启动应用自动播放」打开时才真的 loadAsset。
+      const autoPlayOnLaunch: boolean = MusicStoreService.getInstance().getAutoPlayOnLaunch();
+      if (autoPlayOnLaunch) {
+        void this.loadAsset(0, false);
+      } else {
+        this.appendPlayLog('[播放] 恢复上次歌曲（仅恢复信息，不预加载）: ' + this.resolveSongText(item.title));
+      }
       this.appendPlayLog('[播放] 恢复上次歌曲: ' + this.resolveSongText(item.title));
     } catch (e) {
       Logger.warn(TAG, 'restoreLastSong failed: ' + JSON.stringify(e).substring(0, 100));
@@ -1230,7 +1238,13 @@ export class MediaService {
       // 启动恢复：默认只 prepare；设置里开了「启动应用自动开始播放」才真正起播
     const autoPlayOnLaunch: boolean = MusicStoreService.getInstance().getAutoPlayOnLaunch();
     this.appendPlayLog('[播放] 启动恢复 autoPlay=' + autoPlayOnLaunch);
-    void this.loadAsset(restoreIndex, !autoPlayOnLaunch);
+    // ★ 用户 2026-10-29：「启动时就不进行准备」——
+    //   之前即使没开「启动自动播放」也会 `loadAsset(index, loadOnly=true)`，
+    //   解析过程会跑回退链，结果用户没点播放却自动出声。
+    //   现在：只有开了启动自动播放才 loadAsset；否则只恢复队列/索引/元信息。
+    if (autoPlayOnLaunch) {
+      void this.loadAsset(restoreIndex, false);
+    }
       this.appendPlayLog('[播放] 恢复播放列表 ' + snapshot.online.length + ' 首');
     } catch (e) {
       Logger.warn(TAG, 'restoreLastQueue failed: ' + JSON.stringify(e).substring(0, 100));

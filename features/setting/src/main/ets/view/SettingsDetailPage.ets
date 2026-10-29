@@ -437,7 +437,9 @@ export struct SettingsDetailPage {
     let passed: number = 0;
     let total: number = 0;
     const ordered: LXUserApiInfo[] = this.orderedApiListForUi();
-    for (let i: number = 0; i < ordered.length && i < 3; i++) {
+        // ★ 2026-10-29（用户：测试音质要测"我选的那些音源"）：不再只看前 3 个，
+    //   遍历所有已启用音源（顺序仍按用户排序）。
+    for (let i: number = 0; i < ordered.length; i++) {
       const api: LXUserApiInfo = ordered[i];
       if (!this.isSourceInOrder(api.id)) {
         continue;

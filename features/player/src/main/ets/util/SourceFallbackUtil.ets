@@ -682,9 +682,15 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
   options?: FallbackOptions): Promise<UrlResolveOutcome> {
   const opts: FallbackOptions = options ?? new FallbackOptions();
   const preferred: string = await PlaybackPreferenceService.resolveDefaultQuality();
-  const originId: string = activeSourceId();
+  const activeAtStart: string = activeSourceId();
   // ★ B2/B3 唯一回退链：顺序完全由 buildCandidateChain() 决定（同平台源优先 → 换平台按音质）
   const cands: FallbackCandidate[] = buildCandidateChain(preferred, source);
+  // ★ 本次播放"预期使用的脚本"：引擎已加载脚本时就是它；冷启动（未加载任何脚本）时
+  //   取回退链第一个候选（= 用户设置的默认音源脚本）。
+  //   只有命中脚本**不等于**它，才算真的"切换了音源"，否则不该弹「已切换音源：xxx」。
+  const intendedScriptId: string = activeAtStart.length > 0
+    ? activeAtStart
+    : (cands.length > 0 ? cands[0].scriptId : '');
   for (let i: number = 0; i < cands.length; i++) {
     const c: FallbackCandidate = cands[i];
     if (c.scriptId !== activeSourceId()) {
@@ -705,9 +711,8 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
       ? await tryPlatformSearch(c.platform, name, singer, c.quality, onNotice, opts)
       : await tryQualities(c.platform, songId, name, singer, chain, c.quality, true, onNotice, opts);
     if (r !== null) {
-      // ★ 只有在**真正换了脚本**时才标记 switchedScriptName：
-      //   命中用户自己设置的默认音源时不该弹「已切换音源：<默认源>」。
-      if (c.scriptId !== originId) {
+      // ★ 只有命中脚本**不是**本次预期脚本时，才算真的换了音源（见 intendedScriptId 注释）。
+      if (c.scriptId !== intendedScriptId) {
         r.switchedScriptName = c.scriptName;
       }
       appendPlayLog('[回退链] 命中 ' + c.scriptName + '/' + c.platform + '/' + r.quality);
@@ -724,8 +729,8 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
     markProbeFail(cands[0].platform, cands[0].quality, '全部候选失败');
   }
   appendPlayLog('[回退链] 全部候选失败，恢复原音源');
-  if (originId.length > 0) {
-    AppStorage.setOrCreate('lxActiveSource', originId);
+  if (activeAtStart.length > 0) {
+    AppStorage.setOrCreate('lxActiveSource', activeAtStart);
   }
   return new UrlResolveOutcome();
 }
