@@ -8,6 +8,7 @@
 import { http } from '@kit.NetworkKit';
 import { getLXMusicUrl } from '../source/LXPlayHelper';
 import { lxSearch, LXSearchResult, LXSearchSong } from '../source/LXMusicSDK';
+import { qsSearchTracks } from '../geuz/QsApi';
 import { appendPlayLog } from 'musicbasic';
 
 const DURATION_TOLERANCE: number = 0.15;
@@ -93,6 +94,25 @@ export async function resolveSample(source: string): Promise<ProbeSample | undef
     resolvedSamples.set(source, preset);
     appendPlayLog('[RzdQualityProbe] 样曲(预置) ' + source + ' → ' + preset.name + ' (' + preset.interval + ')');
     return preset;
+  }
+  // ★ 汽水（qs）没有脚本、也没有预置样曲表：用一次内置搜索惰性解析（进程内缓存）
+  if (source === 'qs') {
+    try {
+      const result = await qsSearchTracks('周杰伦', 1, 1);
+      if (result.list.length > 0) {
+        const first = result.list[0];
+        const soda: ProbeSample = new ProbeSample();
+        soda.songId = first.songId;
+        soda.name = first.name;
+        soda.singer = first.singer;
+        soda.interval = first.interval;
+        resolvedSamples.set(source, soda);
+        appendPlayLog('[RzdQualityProbe] 样曲(汽水搜索) → ' + soda.name);
+        return soda;
+      }
+    } catch (err) {
+      appendPlayLog('[RzdQualityProbe] 汽水样曲解析失败');
+    }
   }
   appendPlayLog('[RzdQualityProbe] 该平台没有预置样曲 ' + source);
   const fallback: ProbeSample | undefined = SAMPLES.get(source);
