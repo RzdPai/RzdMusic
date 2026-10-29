@@ -7,7 +7,7 @@
  * 改一处另一处不变（用户报"改了没效果"）。这里统一成一份，两处都调它。
  */
 
-import { LXSourcePlatformInfo, LXUserApiInfo, lxDeclaredPlatformsOf } from 'player';
+import { LXSourcePlatformInfo, LXUserApiInfo, LXUserApiSourceInfo, lxDeclaredPlatforms, lxDeclaredPlatformsOf } from 'player';
 import { LxSourceDeclaredBlock } from './LxSourceTags';
 
 /** 左滑里的圆钮（只有图标）。 */
@@ -58,7 +58,24 @@ export struct SourceManagerList {
   }
 
   private platformsOf(api: LXUserApiInfo): LXSourcePlatformInfo[] {
-    return lxDeclaredPlatformsOf(api);
+    const declared: LXSourcePlatformInfo[] = lxDeclaredPlatformsOf(api);
+    if (declared.length > 0) {
+      return declared;
+    }
+    // ★ 2026-10-29（用户：支持汽水的脚本仍显示「未检测」）：
+    //   持久化里这条音源还没带上 sources 时，若它正是当前引擎脚本，
+    //   直接用引擎 init 上报并缓存在 AppStorage 的 sources 解析 —— 引擎已就绪就一定显示得出平台。
+    if (api.id === this.activeId) {
+      const json: string = AppStorage.get<string>('lxEngineSources') ?? '';
+      if (json.length > 2) {
+        try {
+          return lxDeclaredPlatforms(JSON.parse(json) as Record<string, LXUserApiSourceInfo>);
+        } catch (err) {
+          console.info('[RzdSource] live sources parse failed');
+        }
+      }
+    }
+    return declared;
   }
 
   /** 左滑菜单：检查更新（左）+ 删除（右）。 */
