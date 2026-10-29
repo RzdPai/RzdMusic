@@ -1315,7 +1315,9 @@ export struct RecordListPage {
             }
           }
 
-          if (this.category === 'song' && !this.isHistory() && !this.isFollowing() && this.records.length > 0 &&
+          // ★ 2026-10-29（用户：收藏页已经分类了，「歌曲 17」这行分组标题删掉）：
+          //   收藏模式的歌曲列表不再插分组标题；历史页保持原样（那边没有分类，需要这个标题）。
+          if (this.isHistory() && this.category === 'song' && this.records.length > 0 &&
             !this.isWideRecordLayout()) {
             ListItem() {
               this.FavoriteGroupHeader('歌曲', this.records.length)
