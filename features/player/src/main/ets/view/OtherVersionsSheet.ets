@@ -66,7 +66,7 @@ export struct OtherVersionsSheet {
   private queueItemsSnapshot: SongItem[] = [];
   private idsValueSnapshot: string = '';
   private intentVersion: number = 0;
-  private readonly sources: string[] = ['kw', 'kg', 'tx', 'wy', 'mg'];
+  private readonly sources: string[] = ['kw', 'kg', 'tx', 'wy', 'mg', 'qs'];
   private readonly sourceNames: string[] = ['酷我', '酷狗', 'QQ', '网易', '咪咕'];
 
   private intent(): PlaybackIntentState {
