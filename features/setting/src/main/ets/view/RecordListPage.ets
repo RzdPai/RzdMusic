@@ -1351,6 +1351,10 @@ export struct RecordListPage {
         }
         .width('100%')
         .height('100%')
+        // ★ 关注页：列表自带**顶部预留**（contentStartOffset），而不是在列表外面加占位 Column。
+        //   这样静止时首行不会被标题栏压住；一旦上滑，内容就滚到标题栏底下，
+        //   HDS 标题栏自带的渐变模糊（GRADUAL_BLUR）才会显形 —— 与「平台音乐」页同一机制。
+        .contentStartOffset(this.isFollowing() ? this.titleTopInset() : 0)
         // 宽屏多列（历史/收藏都是短行 ⇒ 两列才不浪费横向空间）；窄屏仍是单列
         .lanes(this.isWideRecordLayout() ? this.wideRecordLanes() : 1, 16)
         .scrollBar(BarState.Off)
