@@ -2598,7 +2598,7 @@ export class MusicStoreService {
    */
   public dedupePlaylistSongs(playlistId: string): number {
     const list: PlaylistDto[] = this.getPlaylists();
-    const priorityOrder: string[] = ['mg', 'kw', 'kg', 'wy', 'tx'];
+    const priorityOrder: string[] = ['mg', 'kw', 'kg', 'wy', 'tx', 'qs'];
     for (let i: number = 0; i < list.length; i++) {
       if (list[i].id !== playlistId) {
         continue;

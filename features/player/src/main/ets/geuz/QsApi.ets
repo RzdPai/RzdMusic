@@ -348,3 +348,45 @@ export async function qsBoardSongs(bangid: string, page: number,
   console.info('[RzdSoda] board=' + wanted + ' got=' + out.length);
   return out;
 }
+// ────────────────────────────────────────────────────────────────
+// 汽水歌单详情：POST /luna/playlist/detail（游标 + session_id 翻页）
+// ────────────────────────────────────────────────────────────────
+let qsDetailKey: string = '';
+let qsDetailCursor: string = '';
+let qsDetailSession: string = '';
+
+/** 汽水歌单详情的一页。 */
+export async function qsPlaylistDetail(id: string, page: number, limit: number): Promise<LXSearchSong[]> {
+  if (id.length === 0) {
+    return [];
+  }
+  if (page <= 1 || id !== qsDetailKey) {
+    qsDetailKey = id;
+    qsDetailCursor = '';
+    qsDetailSession = '';
+  }
+  let payload: string = '{"playlist_id":"' + id + '","count":50';
+  if (qsDetailCursor.length > 0) {
+    payload += ',"cursor":"' + qsDetailCursor + '"';
+  }
+  if (qsDetailSession.length > 0) {
+    payload += ',"session_id":"' + qsDetailSession + '"';
+  }
+  payload += '}';
+  const body: Record<string, Object> = await qsPostJson('/luna/playlist/detail', payload);
+  qsDetailCursor = asString(body['next_cursor']);
+  qsDetailSession = asString(body['session_id']);
+  const songs: LXSearchSong[] = [];
+  const resources: Object[] = asArray(body['media_resources']);
+  for (let i: number = 0; i < resources.length; i++) {
+    const entity: Record<string, Object> = asRecord(asRecord(resources[i])['entity']);
+    const song: LXSearchSong | undefined = qsTrackToSong(asRecord(entity['track']));
+    if (song !== undefined) {
+      songs.push(song);
+    }
+  }
+  const out: LXSearchSong[] = limit > 0 && songs.length > limit ? songs.slice(0, limit) : songs;
+  console.info('[RzdSoda] playlist detail id=' + id + ' page=' + page + ' got=' + out.length +
+    ' next=' + (qsDetailCursor.length > 0 ? 'yes' : 'no'));
+  return out;
+}

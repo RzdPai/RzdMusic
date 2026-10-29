@@ -181,7 +181,7 @@ export class DataBackupService {
     this.validateString(song, 'source', 32, true);
     // Local songs are legitimate playlist entries; older optional fields may be absent.
     const source: string = song['source'] as string;
-    if (!['', 'kw', 'kg', 'tx', 'wy', 'mg', 'local'].includes(source)) {
+    if (!['', 'kw', 'kg', 'tx', 'wy', 'mg', 'qs', 'local'].includes(source)) {
       throw new Error('备份歌曲来源无效');
     }
     for (const key of ['singer', 'albumName', 'albumId', 'playScript']) {

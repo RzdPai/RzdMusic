@@ -43,7 +43,7 @@ const KG_DETAIL_MAX_PAGES: number = 10;
 export class PlaylistSearchApi {
   static supportsPlaylists(source: string): boolean {
     return source === 'all' || source === 'wy' || source === 'tx' || source === 'kw' ||
-      source === 'kg' || source === 'mg';
+      source === 'kg' || source === 'mg' || source === 'qs';
   }
 
   static async searchPlaylists(source: string, keyword: string, page: number): Promise<SearchPlaylistInfo[]> {
