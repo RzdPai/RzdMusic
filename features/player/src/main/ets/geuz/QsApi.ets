@@ -390,3 +390,56 @@ export async function qsPlaylistDetail(id: string, page: number, limit: number):
     ' next=' + (qsDetailCursor.length > 0 ? 'yes' : 'no'));
   return out;
 }
+// ────────────────────────────────────────────────────────────────
+// 汽水歌单搜索：POST /luna/search/playlist（与单曲搜索同主机、同设备参数）
+// ────────────────────────────────────────────────────────────────
+/** 汽水歌单搜索结果（与我们的 SearchPlaylistInfo 字段对齐，避免上层再依赖 JsonObject）。 */
+export interface QsPlaylistHit {
+  id: string;
+  title: string;
+  author: string;
+  cover: string;
+  trackCount: number;
+}
+
+export async function qsSearchPlaylists(keyword: string, page: number,
+  limit: number): Promise<QsPlaylistHit[]> {
+  const cursor: number = Math.max(0, page - 1) * QS_PAGE_SIZE;
+  const payload: string = '{"q":' + JSON.stringify(keyword) + ',"cursor":"' + cursor +
+    '","count":"' + QS_PAGE_SIZE + '","search_method":"input"}';
+  const body: Record<string, Object> = await qsPostJson('/luna/search/playlist', payload);
+  const items: QsPlaylistHit[] = [];
+  const groups: Object[] = asArray(body['result_groups']);
+  for (let g: number = 0; g < groups.length; g++) {
+    const group: Record<string, Object> = asRecord(groups[g]);
+    const rows: Object[] = asArray(group['data']);
+    for (let r: number = 0; r < rows.length; r++) {
+      const entity: Record<string, Object> = asRecord(asRecord(rows[r])['entity']);
+      const pl: Record<string, Object> = asRecord(entity['playlist']);
+      const id: string = asString(pl['id']);
+      if (id.length === 0) {
+        continue;
+      }
+      const owner: Record<string, Object> = asRecord(pl['owner']);
+      let author: string = asString(owner['nickname']);
+      if (author.length === 0) {
+        author = asString(owner['name']);
+      }
+      items.push({
+        id: id,
+        title: asString(pl['title']),
+        author: author,
+        cover: qsCoverOf(asRecord(pl['url_cover'])),
+        trackCount: asNumber(pl['count_tracks'])
+      });
+      if (items.length >= limit) {
+        break;
+      }
+    }
+    if (items.length >= limit) {
+      break;
+    }
+  }
+  console.info('[RzdSoda] playlist search q=' + keyword + ' page=' + page + ' got=' + items.length);
+  return items;
+}

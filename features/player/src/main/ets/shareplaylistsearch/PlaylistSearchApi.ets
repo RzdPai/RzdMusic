@@ -1,5 +1,6 @@
 import { SearchPlaylistInfo, SearchPlaylistSong, fmtDuration } from './PlaylistSearchTypes';
 import { PlaylistSearchHttp, numOf, strOf, toHttps, fixSingleQuoteJson } from './PlaylistSearchHttp';
+import { QsPlaylistHit, qsSearchPlaylists } from '../geuz/QsApi';
 
 const WY_SEARCH_LIMIT: number = 30;
 const TX_PLAYLIST_PAGE_SIZE: number = 20;
@@ -64,6 +65,9 @@ export class PlaylistSearchApi {
     }
     if (source === 'mg') {
       return PlaylistSearchApi.mgSearchPlaylists(keyword, page);
+    }
+    if (source === 'qs') {
+      return PlaylistSearchApi.qsSearchPlaylistsImpl(keyword, page);
     }
     const empty: SearchPlaylistInfo[] = [];
     return empty;
@@ -554,6 +558,20 @@ export class PlaylistSearchApi {
     return list;
   }
 
+  /** 汽水歌单搜索（内置 Luna 接口，见 geuz/QsApi.qsSearchPlaylists）。 */
+  private static async qsSearchPlaylistsImpl(keyword: string, page: number): Promise<SearchPlaylistInfo[]> {
+    const list: SearchPlaylistInfo[] = [];
+    try {
+      const hits: QsPlaylistHit[] = await qsSearchPlaylists(keyword, page, 20);
+      for (let i: number = 0; i < hits.length; i++) {
+        list.push(SearchPlaylistInfo.of(hits[i].id, hits[i].title, 0, hits[i].trackCount,
+          hits[i].cover, hits[i].author, 'qs'));
+      }
+    } catch (err) {
+      console.info('[RzdSoda] playlist search failed: ' + JSON.stringify(err).substring(0, 80));
+    }
+    return list;
+  }
   private static async kgSearchPlaylists(keyword: string, page: number): Promise<SearchPlaylistInfo[]> {
     const url: string =
       `https://msearchretry.kugou.com/api/v3/search/special?keyword=${encodeURIComponent(keyword)}` +
