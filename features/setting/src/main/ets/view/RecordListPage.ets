@@ -1200,7 +1200,6 @@ export struct RecordListPage {
     .backgroundColor('#33FFFFFF')
     .width('100%')
     .padding(14)
-    .margin({ left: 12, right: 12, top: 10, bottom: 6 })
     .borderRadius(16)
   }
 
@@ -1254,7 +1253,12 @@ export struct RecordListPage {
             // ★ 顶部「近期演唱会」卡片（拿不到就整块不显示）
             if (this.upcomingShows.length > 0) {
               ListItem() {
-                this.UpcomingConcertsCard()
+                // 左右留白放在这里（不能给卡片本体加 margin：Button 宽度已是 100%，会溢出到屏幕外）
+                Column() {
+                  this.UpcomingConcertsCard()
+                }
+                .width('100%')
+                .padding({ left: 12, right: 12, top: 10, bottom: 6 })
               }
             }
             ForEach(this.followingArtists, (entry: FavoriteEntry) => {
