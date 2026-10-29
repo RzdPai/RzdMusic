@@ -64,7 +64,7 @@ import {
 } from 'musicbasic';
 import {
   BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions,
-  HdsNavigationTitleBarOptions, TitleSize
+  HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize
 } from '@kit.UIDesignKit';
 import { OnlinePlayUtil, sourceDisplayName, sourceToCode } from 'player';
 import { SongMoreMenu } from 'playlist';
@@ -1070,7 +1070,9 @@ export struct RecordListPage {
         systemMaterialEffect: this.isFollowing() ? buildTitleMaterial(this.ambientState.level) : undefined,
         blurStrategy: this.isFollowing() ? BlurStrategy.ENABLE : BlurStrategy.DISABLE,
         scrollEffectOpts: this.isFollowing() ? {
-          scrollEffectType: ScrollEffectType.GRADUAL_BLUR
+          // ★ 与设置页 / 搜索页一致：HDS 自带「沉浸渐变模糊」（枚举来自 @kit.UIDesignKit，
+          //   不是 ArkUI navigation 里那个 GRADUAL_BLUR）。
+          scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR
         } : undefined,
         originalStyle: {
           backgroundStyle: {
