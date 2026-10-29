@@ -63,7 +63,7 @@ import {
 } from 'musicbasic';
 import {
   BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions,
-  BottomBuilderShowType, HdsNavigationTitleBarOptions, TitleSize
+  HdsNavigationTitleBarOptions, TitleSize
 } from '@kit.UIDesignKit';
 import { OnlinePlayUtil, sourceDisplayName, sourceToCode } from 'player';
 import { SongMoreMenu } from 'playlist';
@@ -1126,45 +1126,12 @@ export struct RecordListPage {
         },
         menu: {
           value: menus
-        },
-        // ★ 按《新 API26 沉浸光感经验汇总》§1.5：把页面头部「分类 Tab + 播放全部」
-        //   搬进 Navigation 标题栏槽位（B 档白名单），槽内挂材质才真正渲染。
-        bottomBuilder: {
-          builder: (): void => {
-            this.PageHeaderBar()
-          },
-          height: this.headerBarHeightVp(),
-          showType: BottomBuilderShowType.DIRECTLY_SHOW
         }
       }
     };
     return bar;
   }
 
-  /** 头部槽位总高：分类 Tab 46 + 播放全部 48。 */
-  private headerBarHeightVp(): number {
-    return this.showHeaderTabs() ? 94 : 0;
-  }
-
-  /** 头部 Tab / 播放全部是否显示（多选或关注模式下不显示）。 */
-  private showHeaderTabs(): boolean {
-    return !this.selectionMode && !this.isFollowing();
-  }
-
-  /**
-   * 标题栏槽位里的页面头部：分类 Tab + 播放全部。
-   * 宿主是 Navigation 标题栏（B 档白名单）⇒ 这里挂 systemMaterial 能真正渲染。
-   */
-  @Builder
-  private PageHeaderBar() {
-    Column() {
-      this.CategoryTabs()
-      this.PlayAllRow()
-    }
-    .width('100%')
-    .systemMaterial(immersiveMedium())
-    .backgroundColor('#33FFFFFF')
-  }
   /**
    * @returns 宽屏（平板 / 阔屏 / **手机横屏**）用多列列表（历史、收藏两页共用本页）。
    *
@@ -1267,11 +1234,17 @@ export struct RecordListPage {
         //   头里第一段是让开"状态栏 + 标题栏"的空高（`titleTopInset()`）。
         //   ★ 底色用**材质背板**（不是死底色）：`adaptiveColor = AVERAGE` ⇒ 取列表滚过去时的
         //     背后画面色，这才有光感（与标题栏 `buildTitleMaterial` 同一档）。
-        // ★ 头部已搬进标题栏槽位（见 getTitleBar().bottomBuilder / PageHeaderBar），
-        //   这里只留等高占位，保持列表起始位置不变（HDS 顶栏是覆盖式布局）。
-        Column()
-          .height(this.titleTopInset() + this.headerBarHeightVp())
-          .width('100%')
+        Column() {
+          Column()
+            .height(this.titleTopInset())
+            .width('100%')
+          if (!this.selectionMode && !this.isFollowing()) {
+            this.CategoryTabs()
+            this.PlayAllRow()
+          }
+        }
+        .width('100%')
+        .backgroundBlurStyle(buildBarBlurStyle(this.ambientState.level), barBlurOptions())
 
         Stack({ alignContent: Alignment.TopStart }) {
           List({ space: 0, scroller: this.pageScroller }) {
