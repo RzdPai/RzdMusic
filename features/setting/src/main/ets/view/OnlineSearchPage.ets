@@ -1745,7 +1745,7 @@ export struct OnlineSearchPage {
       })
       // 上游 SearchPageNew 597928 就是 `bindMenu(showSources, elements, {onDisappear})`，没有 `$$`。
       // `$$` 只对少数内置两向绑定参数保证生效，这里跟上游保持一致，避免运行时行为不确定。
-      .bindMenu(this.showSources, this.SourceMenuBuilder(), {
+      .bindMenu(this.sourceMenuElements(), {
         onDisappear: (): void => {
           this.showSources = false;
         }
@@ -2014,6 +2014,23 @@ export struct OnlineSearchPage {
   }
 
   /** Fixed source menu order; semantic source indices remain 0=all, 1..5=kw..mg. */
+  /** 平台切换菜单（MenuElement[]）：系统按歌曲菜单同款渲染深色面板 + 分隔线。 */
+  private sourceMenuElements(): MenuElement[] {
+    const items: MenuElement[] = [];
+    for (let i: number = 0; i < this.sourceMenuIds.length; i++) {
+      const source: string = this.sourceMenuIds[i];
+      const label: string = source === 'all' ? '聚合搜索' : this.sourceMenuLabel(source);
+      const checked: boolean = this.searchSource === source;
+      items.push({
+        value: checked ? ('✓ ' + label) : label,
+        action: (): void => {
+          this.applySourceSelection(this.sourceSemanticIndex(source));
+        }
+      });
+    }
+    return items;
+  }
+
   @Builder
   private SourceMenuBuilder() {
     // ★ 2026-10-29（用户纠正：参照「普通歌曲菜单」那套，不是半模态 sheet）：
