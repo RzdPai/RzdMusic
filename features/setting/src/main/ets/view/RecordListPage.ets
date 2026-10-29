@@ -1315,14 +1315,8 @@ export struct RecordListPage {
             }
           }
 
-          // ★ 2026-10-29（用户：收藏页已经分类了，「歌曲 17」这行分组标题删掉）：
-          //   收藏模式的歌曲列表不再插分组标题；历史页保持原样（那边没有分类，需要这个标题）。
-          if (this.isHistory() && this.category === 'song' && this.records.length > 0 &&
-            !this.isWideRecordLayout()) {
-            ListItem() {
-              this.FavoriteGroupHeader('歌曲', this.records.length)
-            }
-          }
+          // ★ 2026-10-29（用户：收藏页「歌曲 17」删掉 → 随后又说历史页的也删掉）：
+          //   两个模式的歌曲列表都不再插这行分组标题（`FavoriteGroupHeader` 保留定义，当前无人调用）。
 
           // ★ 多选操作条已移到**底部**（见 build 里的 SelectionActionBar），列表内不再插入
 
