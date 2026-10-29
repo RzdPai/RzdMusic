@@ -17,6 +17,7 @@ const SOURCE_NAMES: Record<string, string> = {
   'kg': '酷狗',
   'tx': 'QQ',
   'wy': '网易云',
+  'qs': '汽水',
   'mg': '咪咕'
 };
 

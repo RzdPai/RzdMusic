@@ -90,7 +90,7 @@ export class PlaylistSearchApi {
   }
 
   private static async searchAllPlaylists(keyword: string, page: number): Promise<SearchPlaylistInfo[]> {
-    const sources: string[] = ['wy', 'tx', 'kw', 'kg', 'mg'];
+    const sources: string[] = ['wy', 'tx', 'kw', 'kg', 'mg', 'qs'];
     const merged: SearchPlaylistInfo[] = [];
     const tasks: Promise<void>[] = [];
     for (let i = 0; i < sources.length; i++) {

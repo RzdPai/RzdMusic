@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 音源脚本「声明了什么」的只读摘要。
  *
  * 数据来源（唯一真源，不另造一份）：
@@ -17,13 +17,14 @@
 import { LXUserApiInfo, LXUserApiSourceInfo } from '../source/Interface';
 
 /** 平台 id 的顺序：与 LX 生态一致（酷我 / 酷狗 / QQ / 网易云 / 咪咕）。 */
-const LX_PLATFORM_ORDER: string[] = ['kw', 'kg', 'tx', 'wy', 'mg'];
+const LX_PLATFORM_ORDER: string[] = ['kw', 'kg', 'tx', 'wy', 'mg', 'qs'];
 /** 平台 id → 中文名；取不到时原样回平台 id（**不要**兜成「酷我」那样会误导）。 */
 const LX_SOURCE_NAMES: Record<string, string> = {
   'kw': '酷我',
   'kg': '酷狗',
   'tx': 'QQ',
   'wy': '网易云',
+  'qs': '汽水',
   'mg': '咪咕',
   'local': ''
 };

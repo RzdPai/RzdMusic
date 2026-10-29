@@ -1,9 +1,9 @@
-export type OnlineSource = 'kw' | 'kg' | 'tx' | 'wy' | 'mg'
+export type OnlineSource = 'kw' | 'kg' | 'tx' | 'wy' | 'mg' | 'qs'
 export type LXSource = OnlineSource | 'local'
 export type LXQuality = '128k' | '320k' | 'flac' | 'flac24bit' | '192k' | 'ape' | 'wav'
   | 'hires' | 'atmos' | 'atmos_plus' | 'master'
 
-const VALID_LX_SOURCES: string[] = ['kw', 'kg', 'tx', 'wy', 'mg', 'local'];
+const VALID_LX_SOURCES: string[] = ['kw', 'kg', 'tx', 'wy', 'mg', 'qs', 'local'];
 
 export function isLXSource(value: string): boolean {
   return VALID_LX_SOURCES.indexOf(value) >= 0;

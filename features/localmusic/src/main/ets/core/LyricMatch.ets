@@ -58,7 +58,8 @@ const PLATFORM_LABELS: Record<string, string> = {
   'kg': '酷狗',
   'tx': 'QQ',
   'mg': '咪咕',
-  'wy': '网易'
+  'wy': '网易',
+  'qs': '汽水'
 };
 
 /** 平台的中文名（认不出来的就原样显示） */

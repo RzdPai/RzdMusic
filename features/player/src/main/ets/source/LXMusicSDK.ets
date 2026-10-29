@@ -1,4 +1,5 @@
 import axios, { AxiosResponse } from '@ohos/axios';
+import { qsSearchTracks } from '../geuz/QsApi';
 import CryptoJS from '@ohos/crypto-js';
 import { zlib } from '@kit.BasicServicesKit';
 import { http } from '@kit.NetworkKit';
@@ -148,6 +149,8 @@ export async function lxSearch(source: string, query: string, page: number,
       case 'tx': return await txSearch(query, page, limit);
       case 'wy': return await wySearch(query, page, limit);
       case 'mg': return await mgSearch(query, page, limit);
+      // ★ 汽水（内置实现，见 geuz/QsApi.ets）
+      case 'qs': return await qsSearchTracks(query, page, limit);
     }
   } catch (error) {
     if (throwOnError) {

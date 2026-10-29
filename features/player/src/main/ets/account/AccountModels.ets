@@ -72,6 +72,7 @@ export class PlaylistMutationTrack {
 
 export const SOURCE_NAMES: Map<string, string> = new Map([
   ['wy', '网易云音乐'],
+  ['qs', '汽水音乐'],
   ['tx', 'QQ音乐'],
   ['kg', '酷狗音乐'],
 ]);
