@@ -376,6 +376,12 @@ export struct HomePlazaSection {
         .borderRadius(20)
         .backgroundColor($r('app.color.background_secondary'))
         .margin({ top: 12 })
+        // ★ 2026-10-29（用户：滑到底自动加载，不用手点）：
+        //   这个「加载更多」行只在 hasNext && 未在加载时渲染，
+        //   它一进入可见区域就说明用户滑到底了 ⇒ 直接触发下一页。
+        .onAppear(() => {
+          this.recommendViewModel.loadMorePlazaPlaylists();
+        })
         .onClick(() => {
           this.recommendViewModel.loadMorePlazaPlaylists();
         })
