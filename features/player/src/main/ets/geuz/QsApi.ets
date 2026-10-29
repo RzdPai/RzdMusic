@@ -381,7 +381,11 @@ export async function qsPlaylistDetail(id: string, page: number, limit: number):
   const resources: Object[] = asArray(body['media_resources']);
   for (let i: number = 0; i < resources.length; i++) {
     const entity: Record<string, Object> = asRecord(asRecord(resources[i])['entity']);
-    const song: LXSearchSong | undefined = qsTrackToSong(asRecord(entity['track']));
+    // ★ 歌单明细的实体是 	rack_wrapper.track（搜索/榜单才是 entity.track），实测 2026-10-29
+    const wrapper: Record<string, Object> = asRecord(entity['track_wrapper']);
+    const rawTrack: Record<string, Object> =
+      Object.keys(wrapper).length > 0 ? asRecord(wrapper['track']) : asRecord(entity['track']);
+    const song: LXSearchSong | undefined = qsTrackToSong(rawTrack);
     if (song !== undefined) {
       songs.push(song);
     }
@@ -450,9 +454,11 @@ export async function qsSearchPlaylists(keyword: string, page: number,
 // 汽水推荐歌单（歌单广场）：POST /luna/discover/mix，count=30 一次给全；
 // 顶层没有可用的 next_cursor / session_id（实测为空），所以只有第一页。
 // ────────────────────────────────────────────────────────────────
+let qsPlazaSeen: string[] = [];
+
 export async function qsDiscoverPlaylists(page: number, limit: number): Promise<QsPlaylistHit[]> {
-  if (page > 1) {
-    return [];
+  if (page <= 1) {
+    qsPlazaSeen = [];
   }
   const body: Record<string, Object> = await qsPostJson('/luna/discover/mix', '{"count":30}');
   const out: QsPlaylistHit[] = [];
