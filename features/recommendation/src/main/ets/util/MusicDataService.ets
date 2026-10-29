@@ -1,4 +1,4 @@
-﻿import { http } from '@kit.NetworkKit';
+import { http } from '@kit.NetworkKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { lxTxToplistInfo, TxToplistInfo } from 'player';
@@ -1666,6 +1666,15 @@ export class MusicDataService {
    */
   static async boardsWithCovers(source: string): Promise<BoardData[]> {
     // 全平台优先走实时接口，不截断数量；失败再回退写死表
+    if (source === 'qs') {
+      // ★ 汽水：只有三张固定榜（发现页 discover_top_song_list），没有可枚举的榜单接口
+      const sodaBoards: BoardData[] = [
+        { id: 'qs_hot', name: '热歌榜', source: 'qs', cover: '' },
+        { id: 'qs_new', name: '新歌榜', source: 'qs', cover: '' },
+        { id: 'qs_west', name: '欧美榜', source: 'qs', cover: '' }
+      ];
+      return sodaBoards;
+    }
     if (source === 'kw') {
       try {
         const live: KwBangEntry[] = await kwBangs();

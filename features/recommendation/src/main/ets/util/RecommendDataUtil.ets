@@ -24,7 +24,10 @@ import {
   TabApiDto,
   getAppRuntime
 } from 'musicbasic';
-import { AccountService, getLeaderboardEntries, lxGetPicFallback, lxKgSingerList, lxTxSingerList, lxWySingerList, lxKwSingerList, lxMgSingerList, lxLeaderboard, lxTxToplist, lxTxToplistInfo, lxTxToplistList, LXLeaderboardEntry, LXSearchSong, PlatformAccount, PlatformTrackInfo, TxSinger } from 'player';
+import {
+  qsBoardSongs,
+   AccountService, getLeaderboardEntries, lxGetPicFallback, lxKgSingerList, lxTxSingerList, lxWySingerList, lxKwSingerList, lxMgSingerList, lxLeaderboard, lxTxToplist, lxTxToplistInfo, lxTxToplistList, LXLeaderboardEntry, LXSearchSong, PlatformAccount, PlatformTrackInfo, TxSinger
+} from 'player';
 import { BoardData, MusicDataService, pickDedicatedBoardId, pickDedicatedBoardName, TrackData } from './MusicDataService';
 import { FeedRecommendEngine, FeedRecommendPick } from './FeedRecommendEngine';
 import { MusicStoreService } from 'musicbasic';
@@ -225,6 +228,16 @@ export class RecommendDataUtil {
         }
       }
       return merged;
+    }
+    if (source === 'qs') {
+      // ★ 汽水：首页推荐取「热歌榜」（内置 Luna 榜单，见 player/geuz/QsApi.qsBoardSongs）
+      const rows: RecommendPrivateSongUi[] = [];
+      const sodaSongs: LXSearchSong[] = await qsBoardSongs('hot', 1, Math.max(targetCount, 20));
+      const seenIds: string[] = [];
+      for (let i: number = 0; i < sodaSongs.length && rows.length < targetCount; i++) {
+        rows.push(RecommendDataUtil.mapSearchSongToPrivateUi(sodaSongs[i], i, seenIds));
+      }
+      return rows;
     }
     const boards: string[] = [];
     if (source === 'kg') {

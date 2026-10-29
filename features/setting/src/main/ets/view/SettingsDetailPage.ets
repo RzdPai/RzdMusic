@@ -191,8 +191,8 @@ export struct SettingsDetailPage {
    *   这两个平台的歌单广场接口可用，自建推荐在它们上面也能取到"分类 → 歌单 → 歌"。
    *   ⚠️ 值域与 `RecommendDataUtil.mapHomeSource()` 一致：qq 是 tx 的别名，其余直接用 source id。
    */
-  private readonly homeSourceOptions: string[] = ['QQ', '酷狗', '网易', '酷我', '咪咕'];
-  private readonly homeSourceValues: string[] = ['qq', 'kg', 'wy', 'kw', 'mg'];
+  private readonly homeSourceOptions: string[] = ['QQ', '酷狗', '网易', '酷我', '咪咕', '汽水'];
+  private readonly homeSourceValues: string[] = ['qq', 'kg', 'wy', 'kw', 'mg', 'qs'];
   private readonly onOffOptions: string[] = ['开', '关'];
   private readonly saveLocationOptions: string[] = ['手动选择', 'Download目录', '自定义目录'];
   private readonly colorModeOptions: string[] = ['日间', '夜间', '跟随系统'];
