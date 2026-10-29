@@ -66,6 +66,7 @@ import { MusicAppState } from '../model/PlayerModels';
 import { SwitchBannerState } from '../model/SwitchBannerState';
 import { MediaService } from '../model/MediaService';
 import { ColorConversion } from '../util/ColorConversion';
+import { qualityDisplayName, sourceDisplayName } from '../util/SourceFallbackUtil';
 import { PlayerConstants } from '../constant/PlayerConstants';
 import { ControlAreaComponent } from './ControlAreaComponent';
 import { LyricsComponent } from './LyricsComponent';
@@ -206,6 +207,8 @@ export struct PlaybackPage {
   @Local playbackSwiperIndex: number = 0;
   /** 濠殿喗绻傞張顒€煤閹间焦鍤曟繝濠傚暙缁€瀣煥濞戞澧﹂柛瀣噺缁嬪鍩€椤掆偓铻ｆい蹇撴祩閺€浠嬫煟閵娿儱顏ラ柍褜鍓欓張顒€煤閹稿骸绶炴慨妯稿劗閸嬫挸顓艰箛鏇狀槴闂佸搫瀚烽崹浼村箚娴ｈ桨娌柡鍥╁仧绾惧鏌ㄥ☉娆戭敚heet 闂?`ControlAreaComponent` 闂佹眹鍨洪惇褰掑焵?*/
   @Local playMenuOpen: boolean = false;
+  /** 标题/歌手点击后弹出的"平台 · 音质"提示是否展开。 */
+  @Local metaTipOpen: boolean = false;
   /**
    * 共享播放意图（`AppStorageV2`）：本页只负责 bump 评论入口的序号，
    * 真正挂评论面板的是 `ControlAreaComponent`（它 `@Monitor('intent.commentRequestSeq')`）。
@@ -7634,6 +7637,26 @@ export struct PlaybackPage {
   }
 
   /** Root: 闂佽桨鐒﹂幐鎶藉Υ婢跺瞼纾介柍鍝勫€归弶?+ 缂備焦姊归悧婊兠虹捄銊﹀晳濞达絿顭堥ˉ鍛磼閹邦収娈旂憸鐗堢洴閺佸秹宕煎┑鍡氼唹闁荤喐鐟ュΛ娑㈡偂閳哄嫨浜归柕蹇嬪€曞▍鈩冩叏濠垫挾鍒伴柕鍫滅矙瀵即顢涘☉娆愵啋婵＄偑鍊楅。顔炬? 濠碘剝銇滈崕鑼暜鐎甸晲鐒婂〒姘ｅ亾婵為棿鍗虫俊?*/
+  /** 「平台 · 音质」提示：点播放页标题/歌手时弹出。 */
+  @Builder
+  private MetaInfoTip() {
+    Column({ space: 4 }) {
+      Text('平台：' + sourceDisplayName(this.state.getCurrentSongItem()?.source ?? ''))
+        .fontSize(13)
+        .fontColor($r('sys.color.font_primary'))
+      Text('音质：' + qualityDisplayName(this.state.getCurrentSongItem()?.quality ?? ''))
+        .fontSize(13)
+        .fontColor($r('sys.color.font_secondary'))
+      if ((this.state.getCurrentSongItem()?.playScript ?? '').length > 0) {
+        Text('音源：' + (this.state.getCurrentSongItem()?.playScript ?? ''))
+          .fontSize(12)
+          .fontColor($r('sys.color.font_tertiary'))
+          .maxLines(1)
+      }
+    }
+    .alignItems(HorizontalAlign.Start)
+    .padding(12)
+  }
   build() {
     // 闂?缂備焦顨忛崗娑氳姳閺屻儲鍋嬮柛顐墰缁?*闂佽桨鐒﹂幐鎶藉Υ婢跺瞼纾介柍鍝勫€归弶?+ 缂備焦姊归悧婊兠虹捄銊﹀晳濞达絿顭堥ˉ鍛磼閹邦収娈旂憸?*闂?
     //   闂佸憡鐟崹鐢革綖鐎ｎ喗鍎楅柍杞版祰閸╁苯霉?*闁哄鏅炲〒鍦礊濮椻偓瀵爼鏁撻悩韫凹闂佸搫顥￠妶鍛腐闂?*闂傚倵鍋撻柛顭戝枛閻撳倿鏌℃担瑙勭稇闁活偄妫濋弫?闂佽桨鑳剁换婵嬫煂濠婂牆绠绘い鎾跺枑閺夊綊鏌℃径鍡忓亾閾忣偒鍋ㄦ繛鏉戝悑閹倿骞楅棃娑卞殨闁?闂佹寧绋戦¨鈧紒?
@@ -9009,6 +9032,20 @@ export struct PlaybackPage {
               .textOverflow({ overflow: TextOverflow.Ellipsis })
               .textAlign(TextAlign.Start)
               .width(StyleConstants.FULL_WIDTH)
+              // ★ 点标题/歌手 → 弹出「平台 · 音质」提示（用户 2026-10-29）
+              .onClick((): void => {
+                this.metaTipOpen = !this.metaTipOpen;
+              })
+              .bindPopup($$this.metaTipOpen, {
+                builder: this.MetaInfoTip,
+                placement: Placement.Top,
+                enableArrow: true,
+                onStateChange: (event: PopupStateChangeParam): void => {
+                  if (!event.isVisible) {
+                    this.metaTipOpen = false;
+                  }
+                }
+              })
             Text(this.state.getCurrentSongItem()?.singer ?? '', { controller: this.singerController })
               .id(PLAYER_META_SINGER_ID)
               .onAreaChange((): void => {
@@ -9022,6 +9059,20 @@ export struct PlaybackPage {
               .textAlign(TextAlign.Start)
               .width(StyleConstants.FULL_WIDTH)
               .margin({ top: 2 })
+              // ★ 歌手行同样可点，提示当前平台与音质
+              .onClick((): void => {
+                this.metaTipOpen = !this.metaTipOpen;
+              })
+              .bindPopup($$this.metaTipOpen, {
+                builder: this.MetaInfoTip,
+                placement: Placement.Top,
+                enableArrow: true,
+                onStateChange: (event: PopupStateChangeParam): void => {
+                  if (!event.isVisible) {
+                    this.metaTipOpen = false;
+                  }
+                }
+              })
             // ★★★ 2026-10-18（第五轮）：小歌词搬回"歌名行之下"，而且**只属于封面页**（见下）。
             //   位置 = 本 Column 的**第 3 个子节点**（主轴自然排在歌手文字之后）⇒
             //     小歌词顶边 ≡ 歌手文字底边 = 歌名行盒顶边 + title.h + 2 + singer.h
