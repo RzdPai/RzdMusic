@@ -1193,8 +1193,7 @@ export struct RecordListPage {
     .alignItems(HorizontalAlign.Start)
     }
     .type(ButtonType.Normal)
-    .systemMaterial(immersiveMedium())
-    .backgroundColor('#33FFFFFF')
+    .backgroundBlurStyle(buildBarBlurStyle(this.ambientState.level), barBlurOptions())
     .width('100%')
     .padding(14)
     .borderRadius(16)
@@ -1202,12 +1201,17 @@ export struct RecordListPage {
 
   private async loadUpcomingShows(): Promise<void> {
     const out: UpcomingShow[] = [];
-    const limit: number = Math.min(this.followingArtists.length, 6);
-    for (let i: number = 0; i < limit; i++) {
+    // ★ 之前只看**前 6 位**关注歌手：后关注的会把有场次的歌手挤出窗口，于是整张卡消失。
+    //   现在遍历全部关注（上限 20 位），按歌手名去重，凑满 6 场就停。
+    const seen: Record<string, boolean> = {};
+    const total: number = Math.min(this.followingArtists.length, 20);
+    for (let i: number = 0; i < total; i++) {
       const entry: FavoriteEntry = this.followingArtists[i];
-      if (entry.name.length === 0) {
+      const key: string = entry.name.trim();
+      if (key.length === 0 || seen[key] === true) {
         continue;
       }
+      seen[key] = true;
       const list: ConcertItem[] = await ConcertService.getInstance().upcoming(entry.name);
       const take: number = Math.min(list.length, 2);
       for (let k: number = 0; k < take; k++) {
