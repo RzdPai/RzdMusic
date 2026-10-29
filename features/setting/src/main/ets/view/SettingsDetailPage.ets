@@ -28,7 +28,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import {
   DownloadService,
-   LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatformsOf, lxSourceManager, MediaService
+   LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatforms, lxDeclaredPlatformsOf, lxSourceManager, MediaService
 } from 'player';
 import type { LXApiImportResult } from 'player';
 import { pickPlaybackQuality, probeBySample, qualityRank, QUALITY_CHAIN } from 'player';
@@ -498,7 +498,28 @@ export struct SettingsDetailPage {
   }
 
   private lxPlatformsOf(api: LXUserApiInfo): LXSourcePlatformInfo[] {
-    return lxDeclaredPlatformsOf(api);
+    const declared: LXSourcePlatformInfo[] = lxDeclaredPlatformsOf(api);
+    // ★ 2026-10-30：音源管理二级页原来只用持久化快照（可能少平台，例如 5 个而引擎上报 6 个）。
+    //   当前引擎脚本改为「引擎实时 sources 优先」，与 SourceManagerList 同一套口径。
+    if (api.id === this.activeSource) {
+      const json: string = AppStorage.get<string>('lxEngineSources') ?? '';
+      if (json.length > 2) {
+        try {
+          const live: LXSourcePlatformInfo[] =
+            lxDeclaredPlatforms(JSON.parse(json) as Record<string, LXUserApiSourceInfo>);
+          console.info('[RzdSource] page persisted=' + declared.length + ' engine=' + live.length +
+            ' labels=' + live.map((it: LXSourcePlatformInfo) => it.source).join(','));
+          if (live.length > declared.length) {
+            return live;
+          }
+        } catch (err) {
+          console.info('[RzdSource] page live parse failed');
+        }
+      }
+    }
+    console.info('[RzdSource] page persisted=' + declared.length + ' labels=' +
+      declared.map((it: LXSourcePlatformInfo) => it.source).join(','));
+    return declared;
   }
 
   private nameFormatLabel(): string {
