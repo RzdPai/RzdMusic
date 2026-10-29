@@ -371,6 +371,12 @@ export struct LXSourceEngine {
 
   /** Appends a line to the shared lx play log (visible in the settings page). */
   private static appendLog(msg: string): void {
+    // ★ 2026-10-30：脚本「更新提示: … url=…」可能不走 console，这里在所有日志的收口统一抓一次
+    if (msg.indexOf('更新提示') >= 0) {
+      const u: RegExpMatchArray | null = msg.match(/url=(\S+)/);
+      AppStorage.setOrCreate('rzd_update_alert_url', u !== null && u.length > 1 ? u[1] : '');
+      AppStorage.setOrCreate('rzd_update_alert_log', msg.substring(0, 160));
+    }
     appendPlayLog(msg);
   }
 
