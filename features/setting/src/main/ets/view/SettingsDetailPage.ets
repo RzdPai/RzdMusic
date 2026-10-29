@@ -1070,6 +1070,8 @@ export struct SettingsDetailPage {
     .scrollable(ScrollDirection.Horizontal)
     .clipContent(ContentClipMode.SAFE_AREA)
     .scrollBar(BarState.Off)
+      // ★ 2026-10-29（用户）：二级设置页滚动要有回弹
+      .edgeEffect(EdgeEffect.Spring)
     .width('100%')
     .margin({ top: 8 })
     .nestedScroll({
@@ -1319,6 +1321,8 @@ export struct SettingsDetailPage {
     .align(Alignment.Top)
     .clipContent(ContentClipMode.SAFE_AREA)
     .scrollBar(BarState.Off)
+      // ★ 2026-10-29（用户）：二级设置页滚动要有回弹
+      .edgeEffect(EdgeEffect.Spring)
   }
 
   /** 下载设置弹窗：命名格式 / 质量标签 / 保存位置。 */
@@ -1400,6 +1404,8 @@ export struct SettingsDetailPage {
     .align(Alignment.Top)
     .clipContent(ContentClipMode.SAFE_AREA)
     .scrollBar(BarState.Off)
+      // ★ 2026-10-29（用户）：二级设置页滚动要有回弹
+      .edgeEffect(EdgeEffect.Spring)
   }
 
   /** 下载管理页：任务队列与进度。 */
@@ -1460,6 +1466,8 @@ export struct SettingsDetailPage {
           }
           .scrollable(ScrollDirection.Horizontal)
           .scrollBar(BarState.Off)
+      // ★ 2026-10-29（用户）：二级设置页滚动要有回弹
+      .edgeEffect(EdgeEffect.Spring)
           .width('100%')
         }
         .width('100%')
@@ -1500,6 +1508,8 @@ export struct SettingsDetailPage {
     .align(Alignment.Top)
     .clipContent(ContentClipMode.SAFE_AREA)
     .scrollBar(BarState.Off)
+      // ★ 2026-10-29（用户）：二级设置页滚动要有回弹
+      .edgeEffect(EdgeEffect.Spring)
   }
 
   /**
@@ -1679,6 +1689,8 @@ export struct SettingsDetailPage {
     .align(Alignment.Top)
     .clipContent(ContentClipMode.SAFE_AREA)
     .scrollBar(BarState.Off)
+      // ★ 2026-10-29（用户）：二级设置页滚动要有回弹
+      .edgeEffect(EdgeEffect.Spring)
   }
 
   /**
@@ -1835,6 +1847,8 @@ export struct SettingsDetailPage {
     .align(Alignment.Top)
     .clipContent(ContentClipMode.SAFE_AREA)
     .scrollBar(BarState.Off)
+      // ★ 2026-10-29（用户）：二级设置页滚动要有回弹
+      .edgeEffect(EdgeEffect.Spring)
   }
 
 
@@ -2024,6 +2038,8 @@ export struct SettingsDetailPage {
       .layoutWeight(1)
       .clipContent(ContentClipMode.SAFE_AREA)
       .scrollBar(BarState.Off)
+      // ★ 2026-10-29（用户）：二级设置页滚动要有回弹
+      .edgeEffect(EdgeEffect.Spring)
       .align(Alignment.Top)
       // ★ 底部那段"给悬浮播放条让位"的留白**必须留在列表里**（`contentEndOffset` = 内容末端到显示区
       //   边界的距离，官方 @since 22，List/Scroll 通用）—— 它随内容一起滚走。
