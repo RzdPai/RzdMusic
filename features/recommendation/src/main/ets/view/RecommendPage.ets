@@ -942,6 +942,16 @@ export struct RecommendPage {
               .onScrollStop((): void => {
                 this.logHomeScrollOffset('scroll-stop');
               })
+              // ★ 2026-10-29（用户：广场滑到底还要手点；照 RzdVideo HomePage 的写法）：
+              //   触底加载挂在**外层 Scroll** 上，而不是内容里的 footer。
+              //   `hasNext === false` / 正在加载时直接 return（RzdVideo 里叫"钉死"，避免反复打空请求）。
+              .onReachEnd((): void => {
+                if (!this.recommendViewModel.plazaHasNext || this.recommendViewModel.plazaLoadingMore ||
+                  this.recommendViewModel.plazaLoading) {
+                  return;
+                }
+                this.recommendViewModel.loadMorePlazaPlaylists();
+              })
             }
             .width(StyleConstants.FULL_WIDTH)
             .height(StyleConstants.FULL_HEIGHT)
