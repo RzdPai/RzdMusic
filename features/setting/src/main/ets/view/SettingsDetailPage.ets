@@ -593,6 +593,9 @@ export struct SettingsDetailPage {
   }
 
   private selectLXSource(apiId: string): void {
+    // ★ 2026-10-29（用户：选中汽水音源后平台仍显示「未检测」）：选择后重新读一次音源列表，
+    //   让它带上引擎 init 回写的 sources（getApiList 有缓存，不重读就一直是旧快照）。
+    this.lxApiList = lxSourceManager.getApiList().slice();
     // ★ 用户 2026-10-11「音源勾选是不是有点问题」：圆点是「当前默认音源」而不是开关 ——
     //   原来点当前默认那一行会把它清成空字符串（`? ' : apiId`）⇒ 一圈圆点全是空心，看着像没选中。
     //   现在点击恒为「设为默认」，不再有「点一下取消默认」这种状态。
