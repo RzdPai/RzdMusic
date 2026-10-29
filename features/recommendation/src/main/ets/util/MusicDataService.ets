@@ -801,10 +801,16 @@ function sourceDisplayName(source: string): string {
   if (source === 'wy') {
     return '网易';
   }
+  if (source === 'qs') {
+    return '汽水';
+  }
   return '咪咕';
 }
 
 function boardIdList(source: string): string[] {
+  if (source === 'qs') {
+    return ['qs_hot', 'qs_new', 'qs_west'];
+  }
   if (source === 'kw') {
     return ['93', '17', '16', '158', '292', '284', '290', '286', '279', '281', '255', '280', '282', '283', '278', '264', '242', '187', '204', '186', '185', '26', '104', '182', '22', '184', '183', '145', '153', '64', '176', '106', '12', '49', '180', '13', '164', '246', '265', '14', '8', '15', '151'];
   }

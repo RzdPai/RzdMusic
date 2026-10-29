@@ -365,15 +365,16 @@ export async function qsPlaylistDetail(id: string, page: number, limit: number):
     qsDetailCursor = '';
     qsDetailSession = '';
   }
-  let payload: string = '{"playlist_id":"' + id + '","count":50';
+  // ★ 实测：歌单详情也只认 **GET**（POST 回 ERR_RESOURCE_NOT_FOUND 1000005）
+  let url: string = QS_LUNA + '/luna/playlist/detail?' + qsDeviceQuery() +
+    '&playlist_id=' + encodeURIComponent(id) + '&count=50';
   if (qsDetailCursor.length > 0) {
-    payload += ',"cursor":"' + qsDetailCursor + '"';
+    url += '&cursor=' + encodeURIComponent(qsDetailCursor);
   }
   if (qsDetailSession.length > 0) {
-    payload += ',"session_id":"' + qsDetailSession + '"';
+    url += '&session_id=' + encodeURIComponent(qsDetailSession);
   }
-  payload += '}';
-  const body: Record<string, Object> = await qsPostJson('/luna/playlist/detail', payload);
+  const body: Record<string, Object> = await qsGetJson(url);
   qsDetailCursor = asString(body['next_cursor']);
   qsDetailSession = asString(body['session_id']);
   const songs: LXSearchSong[] = [];
@@ -405,9 +406,11 @@ export interface QsPlaylistHit {
 export async function qsSearchPlaylists(keyword: string, page: number,
   limit: number): Promise<QsPlaylistHit[]> {
   const cursor: number = Math.max(0, page - 1) * QS_PAGE_SIZE;
-  const payload: string = '{"q":' + JSON.stringify(keyword) + ',"cursor":"' + cursor +
-    '","count":"' + QS_PAGE_SIZE + '","search_method":"input"}';
-  const body: Record<string, Object> = await qsPostJson('/luna/search/playlist', payload);
+  // ★ 实测：歌单搜索只认 **GET**（POST 回 `{status_info, extra:{}}`，无 result_groups）
+  const url: string = QS_LUNA + '/luna/search/playlist?' + qsDeviceQuery() +
+    '&q=' + encodeURIComponent(keyword) + '&cursor=' + cursor +
+    '&count=' + QS_PAGE_SIZE + '&search_method=input';
+  const body: Record<string, Object> = await qsGetJson(url);
   const items: QsPlaylistHit[] = [];
   const groups: Object[] = asArray(body['result_groups']);
   for (let g: number = 0; g < groups.length; g++) {
