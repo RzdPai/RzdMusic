@@ -1537,7 +1537,7 @@ export class MusicDataService {
         page: Math.max(1, page),
         limit: sodaList.length,
         total: sodaList.length,
-        hasNext: false
+        hasNext: sodaList.length > 0
       };
       return sodaPage;
     }

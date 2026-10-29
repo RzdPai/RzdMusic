@@ -457,41 +457,49 @@ export async function qsSearchPlaylists(keyword: string, page: number,
 let qsPlazaSeen: string[] = [];
 
 export async function qsDiscoverPlaylists(page: number, limit: number): Promise<QsPlaylistHit[]> {
+  // ★ 汽水广场「无限刷」：/luna/discover/mix 每次固定回 10 张、内容随机、无 cursor。
+  //   做法：一次调用里连拉最多 3 批，跨页去重（qsPlazaSeen），取够 limit 即停；
+  //   连拉 3 批都没有新内容 ⇒ 返回空数组，让页面自然停止上拉。
+  //   ⚠ 这套只属于 qs，其它平台仍走各自的 hasNext 分页。
   if (page <= 1) {
     qsPlazaSeen = [];
   }
-  const body: Record<string, Object> = await qsPostJson('/luna/discover/mix', '{"count":30}');
   const out: QsPlaylistHit[] = [];
-  const seen: string[] = [];
-  const blocks: Object[] = asArray(body['inner_block']);
-  for (let b: number = 0; b < blocks.length; b++) {
-    const resources: Object[] = asArray(asRecord(blocks[b])['resources']);
-    for (let r: number = 0; r < resources.length; r++) {
-      const entity: Record<string, Object> = asRecord(asRecord(resources[r])['entity']);
-      const pl: Record<string, Object> = asRecord(entity['playlist']);
-      const id: string = asString(pl['id']);
-      if (id.length === 0 || seen.indexOf(id) >= 0) {
-        continue;
-      }
-      seen.push(id);
-      const owner: Record<string, Object> = asRecord(pl['owner']);
-      let author: string = asString(owner['nickname']);
-      if (author.length === 0) {
-        author = asString(owner['name']);
-      }
-      out.push({
-        id: id,
-        title: asString(pl['title']),
-        author: author,
-        cover: qsCoverOf(asRecord(pl['url_cover'])),
-        trackCount: asNumber(pl['count_tracks'])
-      });
-      if (limit > 0 && out.length >= limit) {
-        console.info('[RzdSoda] discover playlists got=' + out.length);
-        return out;
+  const batches: number = 3;
+  for (let b: number = 0; b < batches && out.length < limit; b++) {
+    const body: Record<string, Object> = await qsPostJson('/luna/discover/mix', '{"count":30}');
+    const blocks: Object[] = asArray(body['inner_block']);
+    let fresh: number = 0;
+    for (let i: number = 0; i < blocks.length && out.length < limit; i++) {
+      const resources: Object[] = asArray(asRecord(blocks[i])['resources']);
+      for (let r: number = 0; r < resources.length && out.length < limit; r++) {
+        const entity: Record<string, Object> = asRecord(asRecord(resources[r])['entity']);
+        const pl: Record<string, Object> = asRecord(entity['playlist']);
+        const id: string = asString(pl['id']);
+        if (id.length === 0 || qsPlazaSeen.indexOf(id) >= 0) {
+          continue;
+        }
+        qsPlazaSeen.push(id);
+        fresh++;
+        const owner: Record<string, Object> = asRecord(pl['owner']);
+        let author: string = asString(owner['nickname']);
+        if (author.length === 0) {
+          author = asString(owner['name']);
+        }
+        out.push({
+          id: id,
+          title: asString(pl['title']),
+          author: author,
+          cover: qsCoverOf(asRecord(pl['url_cover'])),
+          trackCount: asNumber(pl['count_tracks'])
+        });
       }
     }
+    if (fresh === 0) {
+      break;
+    }
   }
-  console.info('[RzdSoda] discover playlists got=' + out.length);
+  console.info('[RzdSoda] discover playlists page=' + page + ' got=' + out.length +
+    ' seenTotal=' + qsPlazaSeen.length);
   return out;
 }
