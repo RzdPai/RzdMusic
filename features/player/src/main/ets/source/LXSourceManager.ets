@@ -126,8 +126,14 @@ class LXSourceManager {
    * @param sources 脚本上报的 sources（平台 -> 支持的动作/音质）。
    */
   saveApiSources(apiId: string, sources: Record<string, LXUserApiSourceInfo>): void {
-    if (apiId.length === 0 || this.filesDir.length === 0) {
+    if (apiId.length === 0) {
       return;
+    }
+    // ★ 2026-10-29：以前 `filesDir` 还没设好就直接 return，导致 init 上报的 sources 被**静默丢弃**
+    //   （引擎很快就绪、filesDir 稍后才注入的时序）。现在无论如何先更新内存列表，
+    //   落盘由 saveApiListToFile() 自己判断 filesDir 是否可用。
+    if (this.filesDir.length === 0) {
+      hilog.warn(DOMAIN, TAG, "saveApiSources: filesDir 未就绪，仅更新内存（落盘跳过）");
     }
     const list: LXUserApiInfo[] = this.getApiList();
     for (let i: number = 0; i < list.length; i++) {
