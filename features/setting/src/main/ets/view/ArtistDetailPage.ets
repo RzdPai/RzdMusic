@@ -248,8 +248,10 @@ export struct ArtistDetailPage {
     const favSource: string = codeToSource(this.source);
     const id: string = this.effectiveArtistId;
     const mid: string = this.effectiveArtistMid;
-    let followed: boolean = false;
-    if (id.length > 0) {
+    // 优先按歌手名判定（收藏=关注，同一歌手跨平台只算一次）；名字为空才退回按 id 判定
+    const displayName: string = this.artistNameText.length > 0 ? this.artistNameText : this.artistName;
+    let followed: boolean = this.store.isFollowingArtistByName(displayName);
+    if (!followed && id.length > 0) {
       followed = this.store.isFavoriteArtist(favSource, id);
     }
     if (!followed && mid.length > 0) {
@@ -1013,10 +1015,11 @@ export struct ArtistDetailPage {
       this.getUIContext().getPromptAction().showToast({ message: '歌手信息不完整，无法收藏', duration: 2000 });
       return;
     }
-    if (this.store.isFavoriteArtist(sourceId, id)) {
-      this.store.removeFavoriteArtist(sourceId, id);
+    const followName: string = this.artistNameText.length > 0 ? this.artistNameText : this.artistName;
+    if (this.store.isFollowingArtistByName(followName)) {
+      this.store.unfollowArtistByName(followName);
       this.isFavoriteArtist = false;
-      this.getUIContext().getPromptAction().showToast({ message: '已取消收藏', duration: 1800 });
+      this.getUIContext().getPromptAction().showToast({ message: '已取消关注', duration: 1800 });
       return;
     }
     const entry: FavoriteEntry = new FavoriteEntry();
@@ -1027,9 +1030,9 @@ export struct ArtistDetailPage {
     entry.img = this.artistPicUrl;
     entry.count = this.songs.length;
     entry.time = Date.now();
-    this.store.addFavoriteArtist(entry);
+    this.store.followArtistByName(entry);
     this.isFavoriteArtist = true;
-    this.getUIContext().getPromptAction().showToast({ message: '已收藏歌手', duration: 1800 });
+    this.getUIContext().getPromptAction().showToast({ message: '已关注歌手', duration: 1800 });
   }
 
   /** 拉取歌手全部歌曲（分页累加，最多 600 首）。 */

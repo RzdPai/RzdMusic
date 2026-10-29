@@ -1977,6 +1977,52 @@ export class MusicStoreService {
   }
 
   /** @returns Whether the artist is in favorites. */
+  /**
+   * ★ 收藏 / 关注合并为一套数据（2026-10-29 用户要求）：
+   *   歌手页那颗按钮统一叫「关注」，但**数据就是 favoriteArtists**（跨平台同一位歌手只算一次），
+   *   关注页展示的也是同一份列表 —— 不再有"收藏一套、关注另一套"的分裂。
+   *   匹配口径 = 歌手名（trim 后比较）：所以从 A 平台收藏过的歌手，在 B 平台打开也显示已关注。
+   */
+  public isFollowingArtistByName(name: string): boolean {
+    const target: string = name.trim();
+    if (target.length === 0) {
+      return false;
+    }
+    const list: FavoriteEntry[] = this.getFavoriteArtists();
+    for (let i: number = 0; i < list.length; i++) {
+      if (list[i].name.trim() === target) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** 关注（= 收藏歌手）：按名字去重，已存在就不重复加。 */
+  public followArtistByName(entry: FavoriteEntry): void {
+    const target: string = entry.name.trim();
+    if (target.length === 0) {
+      return;
+    }
+    if (this.isFollowingArtistByName(target)) {
+      return;
+    }
+    this.addFavoriteArtist(entry);
+  }
+
+  /** 取消关注：把同名歌手的所有条目一并移除（顺便清掉历史遗留的多平台重复项）。 */
+  public unfollowArtistByName(name: string): void {
+    const target: string = name.trim();
+    if (target.length === 0) {
+      return;
+    }
+    const list: FavoriteEntry[] = this.getFavoriteArtists();
+    for (let i: number = 0; i < list.length; i++) {
+      if (list[i].name.trim() === target) {
+        this.removeFavoriteArtist(list[i].source, list[i].id);
+      }
+    }
+  }
+
   public isFavoriteArtist(source: string, id: string): boolean {
     const list: FavoriteEntry[] = this.getFavoriteArtists();
     for (let i: number = 0; i < list.length; i++) {
