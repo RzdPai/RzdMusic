@@ -1068,20 +1068,19 @@ export struct RecordListPage {
       //   去掉 `scrollEffectOpts: IMMERSIVE_GRADIENT_BLUR`（那玩意是滚动渐变的模糊托底），
       //   也去掉 `systemMaterialEffect`，背景直接给**页面底色**（深浅色自动适配 = 深色下就是一块黑板）。
       style: {
-        // ★ 2026-10-29（用户：「光感这块…只有标题栏改成 23」→ 实际要的是**标题栏有光感**）：
-        //   与「设置页 / 平台音乐页」同一套（HDS `systemMaterialEffect = buildTitleMaterial(level)`），
-        //   档位跟随「设置 → 沉浸光感强度」。
-        systemMaterialEffect: buildTitleMaterial(this.ambientState.level),
-        // ★ 与设置页 / 平台音乐页逐项对齐：开模糊 + 透明底。
-        //   之前这里是 `BlurStrategy.DISABLE` + 不透明 `background_secondary`（黑板），
-        //   不透明底会盖住材质 ⇒ 标题栏看不到光感（用户 2026-10-29 反馈「黑色背板不好看」）。
-        blurStrategy: BlurStrategy.ENABLE,
-        scrollEffectOpts: {
+        // ★ 用户 2026-10-29 澄清：**只有「关注」页**要模糊/光感标题栏；
+        //   历史 / 收藏 页因为头部还压着「播放全部」横条，黑色背板才是对的（保持原样）。
+        //   关注页对齐「设置页 / 平台音乐页」：开模糊 + 渐变模糊 + 透明底 + 标题栏材质。
+        systemMaterialEffect: this.isFollowing() ? buildTitleMaterial(this.ambientState.level) : undefined,
+        blurStrategy: this.isFollowing() ? BlurStrategy.ENABLE : BlurStrategy.DISABLE,
+        scrollEffectOpts: this.isFollowing() ? {
           scrollEffectType: ScrollEffectType.GRADUAL_BLUR
-        },
+        } : undefined,
         originalStyle: {
           backgroundStyle: {
-            backgroundColor: Color.Transparent
+            backgroundColor: this.isFollowing()
+              ? Color.Transparent
+              : $r('app.color.background_secondary')
           },
           contentStyle: {
             titleStyle: {
@@ -1098,6 +1097,11 @@ export struct RecordListPage {
           }
         },
         scrollEffectStyle: {
+          backgroundStyle: {
+            backgroundColor: this.isFollowing()
+              ? Color.Transparent
+              : $r('app.color.background_secondary')
+          },
           contentStyle: {
             titleStyle: {
               mainTitleColor: $r('sys.color.font_primary')
