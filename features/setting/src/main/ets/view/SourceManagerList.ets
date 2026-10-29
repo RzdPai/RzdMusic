@@ -59,17 +59,19 @@ export struct SourceManagerList {
 
   private platformsOf(api: LXUserApiInfo): LXSourcePlatformInfo[] {
     const declared: LXSourcePlatformInfo[] = lxDeclaredPlatformsOf(api);
-    if (declared.length > 0) {
-      return declared;
-    }
-    // ★ 2026-10-29（用户：支持汽水的脚本仍显示「未检测」）：
-    //   持久化里这条音源还没带上 sources 时，若它正是当前引擎脚本，
-    //   直接用引擎 init 上报并缓存在 AppStorage 的 sources 解析 —— 引擎已就绪就一定显示得出平台。
+    // ★ 2026-10-29：持久化记录可能是旧快照（少平台，例如 5 个而引擎上报 6 个 ——
+    //   日志实测 `引擎 就绪 ✓ sources=6`）。当前引擎脚本一律以「引擎实时 sources」为准，
+    //   只要它比持久化的更全就用它。
     if (api.id === this.activeId) {
       const json: string = AppStorage.get<string>('lxEngineSources') ?? '';
       if (json.length > 2) {
         try {
-          return lxDeclaredPlatforms(JSON.parse(json) as Record<string, LXUserApiSourceInfo>);
+          const live: LXSourcePlatformInfo[] =
+            lxDeclaredPlatforms(JSON.parse(json) as Record<string, LXUserApiSourceInfo>);
+          console.info('[RzdSource] persisted=' + declared.length + ' engine=' + live.length);
+          if (live.length > declared.length) {
+            return live;
+          }
         } catch (err) {
           console.info('[RzdSource] live sources parse failed');
         }
