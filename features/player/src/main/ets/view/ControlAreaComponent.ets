@@ -582,7 +582,7 @@ export struct ControlAreaComponent {
       return src === 'local' ? '本地' : '';
     }
     const map: Record<string, string> = {
-      'tx': 'QQ', 'wy': '网易', 'kg': '酷狗', 'kw': '酷我', 'mg': '咪咕'
+      'tx': 'QQ', 'wy': '网易', 'kg': '酷狗', 'kw': '酷我', 'mg': '咪咕', 'qs': '汽水'
     };
     const name: string | undefined = map[src];
     return name !== undefined ? name : src;

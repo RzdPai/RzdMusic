@@ -3,7 +3,8 @@ export enum SharePlaylistSource {
   Tx = 'tx',
   Kw = 'kw',
   Kg = 'kg',
-  Mg = 'mg'
+  Mg = 'mg',
+  Qs = 'qs'
 }
 
 export interface SharePlaylistSong {
