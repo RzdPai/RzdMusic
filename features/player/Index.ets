@@ -66,7 +66,7 @@ export { lxDeclaredPlatforms, lxDeclaredPlatformsOf, lxSourceLabel, lxQualityLab
 export type { LXSourcePlatformInfo } from './src/main/ets/util/SourceDeclaredInfo';
 export { sourceDisplayName, qualityDisplayName, QUALITY_CHAIN } from './src/main/ets/util/SourceFallbackUtil';
 // A4：音质真实探测（会话缓存 + 播放链路回写）
-export { cachedProbe, probeSummary, probeQuality, probeBySample, sampleOf, setProbeTarget, clearProbeTarget, pickPlaybackQuality, qualityRank, markProbeOk, markProbeFail, parseIntervalSeconds } from './src/main/ets/util/LxQualityProbe';
+export { cachedProbe, probeSummary, probeQuality, probeBySample, sampleOf, pickPlaybackQuality, qualityRank, markProbeOk, markProbeFail, parseIntervalSeconds } from './src/main/ets/util/LxQualityProbe';
 export type { ProbeSample } from './src/main/ets/util/LxQualityProbe';
 export type { ProbeResult } from './src/main/ets/util/LxQualityProbe';
 export { lxSearch, lxLeaderboard, getLeaderboardEntries, lxGetPicFallback, lxGetLyricFallback,

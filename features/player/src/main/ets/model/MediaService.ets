@@ -36,7 +36,6 @@ import { MediaTools } from '../util/MediaTools';
 import { lxGetLyricFull, lxGetPicFallback, lxGetTTMLLyric,
   LyricFullResult } from '../source/LXMusicSDK';
 import { lxEngineIsReady, waitForLxEngineReady } from '../source/LXSourceEngine';
-import { setProbeTarget } from '../util/LxQualityProbe';
 import { FallbackOptions, QUALITY_TIER_COOLDOWN_MS, QUALITY_TIER_FAIL_THRESHOLD, UrlResolveOutcome, qualityTierKey, resolveMusicUrlWithFallback, sourceDisplayName } from '../util/SourceFallbackUtil';
 import { SwitchBannerState } from '../model/SwitchBannerState';
 import { amllGetCachedLyric, amllParseLyricCached } from '../amll/parse/AmllAutoDetect';
@@ -1047,8 +1046,6 @@ export class MediaService {
     }
     const name: string = typeof songItem.title === 'string' ? songItem.title : '';
     const singer: string = typeof songItem.singer === 'string' ? songItem.singer : '';
-    // ★ 记住"用户当前在播的这首"，音源测试优先测它（而不是永远测内置样曲第一首）
-    setProbeTarget(songItem.source, songItem.songId, name, singer, songItem.interval ?? '');
     appendPlayLog('[播放] resolveOnlineUrl 开始 source=' + songItem.source +
       ' id=' + songItem.songId + ' 排除音质=' + this.failedQuality +
       ' 排除失败url=' + (this.failedUrl.length > 0 ? '是' : '否'));
