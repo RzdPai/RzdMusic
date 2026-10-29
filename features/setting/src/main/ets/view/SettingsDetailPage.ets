@@ -611,7 +611,10 @@ export struct SettingsDetailPage {
   private async checkSourceUpdateRemote(api: LXUserApiInfo): Promise<void> {
     // ① 只走官方：读引擎上报的 updateAlert，不再自研请求
     const info: SourceUpdateInfo = readOfficialUpdateAlert();
-    console.info('[RzdSourceUpdate] check ' + api.name + ' hasUpdate=' + info.hasUpdate);
+    // ★ 2026-10-29（用户：引擎日志有"更新提示"，点检查更新没反应）：把卡片与 alert 一次打全
+    console.info('[RzdSourceUpdate] card=' + api.name + ' ver=' + api.version +
+      ' hasUpdate=' + info.hasUpdate + ' msg=' + info.message +
+      ' url=' + info.updateUrl + ' err=' + info.error);
     if (info.hasUpdate) {
       this.getUIContext().getPromptAction().showDialog({
         title: '发现新版本',
