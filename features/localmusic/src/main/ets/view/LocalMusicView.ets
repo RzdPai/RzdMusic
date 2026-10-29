@@ -32,6 +32,7 @@ import {
    guardPlayerBack
 } from 'musicbasic';
 import {
+  buildTitleMaterial,
   AmbientState,
   AppStorageKeys,
   barBlurOptions,
@@ -1117,6 +1118,11 @@ export struct LocalMusicPage {
     .hideTitleBar(false)
     // ★ 用户 2026-10-12：「现在本地音乐页面有两个标题。你把下面那个去掉，然后那个匹配、选择、导入像歌单页一样放进菜单。」
     .titleBar({
+      // ★ 与「设置页 / 平台音乐页」同一套：标题栏光感来自 HDS `systemMaterialEffect`，
+      //   档位跟随「设置 → 沉浸光感强度」（buildTitleMaterial）。
+      style: {
+        systemMaterialEffect: buildTitleMaterial(this.ambientState.level)
+      },
       content: {
         title: { mainTitle: '本地音乐' },
         menu: { value: this.titleMenus() }

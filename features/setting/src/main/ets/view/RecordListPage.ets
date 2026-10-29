@@ -51,6 +51,7 @@ import { ConcertItem, ConcertService } from '../concert/ConcertService';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import {
   immersiveMedium,
+  buildTitleMaterial,
    guardPlayerBack, PlaybackIntentState, SongItem
 } from 'musicbasic';
 import {
@@ -1065,6 +1066,10 @@ export struct RecordListPage {
       //   去掉 `scrollEffectOpts: IMMERSIVE_GRADIENT_BLUR`（那玩意是滚动渐变的模糊托底），
       //   也去掉 `systemMaterialEffect`，背景直接给**页面底色**（深浅色自动适配 = 深色下就是一块黑板）。
       style: {
+        // ★ 2026-10-29（用户：「光感这块…只有标题栏改成 23」→ 实际要的是**标题栏有光感**）：
+        //   与「设置页 / 平台音乐页」同一套（HDS `systemMaterialEffect = buildTitleMaterial(level)`），
+        //   档位跟随「设置 → 沉浸光感强度」。
+        systemMaterialEffect: buildTitleMaterial(this.ambientState.level),
         blurStrategy: BlurStrategy.DISABLE,
         originalStyle: {
           backgroundStyle: {
