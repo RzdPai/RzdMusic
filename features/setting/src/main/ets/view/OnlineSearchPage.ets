@@ -261,7 +261,7 @@ export struct OnlineSearchPage {
   @Local selectedSourceIndex: number = 0;
   @Local searchSource: string = 'all';
   @Local showSources: boolean = false;
-  private readonly sourceMenuIds: string[] = ['kw', 'kg', 'tx', 'wy', 'mg', 'all'];
+  private readonly sourceMenuIds: string[] = ['kw', 'kg', 'tx', 'wy', 'mg', 'qs', 'all'];
   /** Display text of the selected source on the dropdown button. */
   @Local selectedSourceText: string = '全部';
   private readonly sourceSelectOptions: SelectOption[] = [
@@ -270,7 +270,8 @@ export struct OnlineSearchPage {
     { value: '酷狗' },
     { value: 'QQ' },
     { value: '网易' },
-    { value: '咪咕' }
+    { value: '咪咕' },
+    { value: '汽水' }
   ];
   /** 搜索类别选项（歌曲/歌单/歌手/专辑）。 */
   private readonly modeSelectOptions: SelectOption[] = [
@@ -782,6 +783,7 @@ export struct OnlineSearchPage {
       case 'tx': return 'QQ';
       case 'wy': return '网易';
       case 'mg': return '咪咕';
+      case 'qs': return '汽水';
     }
     return source;
   }
