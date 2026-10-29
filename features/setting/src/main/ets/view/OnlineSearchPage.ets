@@ -253,7 +253,8 @@ export struct OnlineSearchPage {
     new SourceCheck('酷狗', 'kg', true),
     new SourceCheck('QQ', 'tx', true),
     new SourceCheck('网易', 'wy', true),
-    new SourceCheck('咪咕', 'mg', true)
+    new SourceCheck('咪咕', 'mg', true),
+    new SourceCheck('汽水', 'qs', true)
   ];
   /** Index of the selected source in {@link sourceSelectOptions}; 0 means all sources. */
   /** ③ 关注状态变更计数器（驱动重绘）。 */
@@ -353,6 +354,18 @@ export struct OnlineSearchPage {
   }
 
   /** 应用音源选择（semanticIndex: 0=全部，1..5=对应音源）并按需重搜。 */
+  /** 平台 id → 语义下标：'all' = 0，其余按 @Local sources 顺序 +1；查不到回 0（宁可选全部，也不要越界闪退）。 */
+  private sourceSemanticIndex(source: string): number {
+    if (source === 'all') {
+      return 0;
+    }
+    for (let i: number = 0; i < this.sources.length; i++) {
+      if (this.sources[i].id === source) {
+        return i + 1;
+      }
+    }
+    return 0;
+  }
   private applySourceSelection(semanticIndex: number): void {
     this.selectedSourceIndex = semanticIndex;
     this.selectedSourceText = semanticIndex === 0 ? '全部' :
@@ -2010,7 +2023,9 @@ export struct OnlineSearchPage {
         .backgroundColor(this.searchSource === source ? $r('sys.color.comp_background_tertiary') :
           Color.Transparent)
         .onClick((): void => {
-          this.applySourceSelection(source === 'all' ? 0 : idx + 1);
+          // ★ 按 id 反查语义下标（0=全部，1..N=对应 @Local sources 顺序），
+          //   不再用菜单位置算术——多插一个平台就会把「聚合」算到越界并闪退。
+          this.applySourceSelection(this.sourceSemanticIndex(source));
         })
       }, (source: string) => source)
     }

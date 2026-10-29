@@ -19,6 +19,8 @@ export struct SourceChip {
         return '网易';
       case 'mg':
         return '咪咕';
+      case 'qs':
+        return '汽水';
       default:
         return '聚合';
     }

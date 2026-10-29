@@ -14,7 +14,7 @@
  */
 
 export { Player } from './src/main/ets/view/Player';
-export { qsBoardSongs, qsPlaylistDetail, qsSearchTracks, qsDeviceQuery } from './src/main/ets/geuz/QsApi';
+export { qsBoardSongs, qsDiscoverPlaylists, qsPlaylistDetail, qsSearchPlaylists, qsSearchTracks, qsDeviceQuery, QsPlaylistHit } from './src/main/ets/geuz/QsApi';
 export { QueuePlaylistSheet } from './src/main/ets/view/QueuePlaylistSheet';
 export { PlayerConstants } from './src/main/ets/constant/PlayerConstants';
 export { AccountChangedState } from './src/main/ets/account/AccountChangedState';

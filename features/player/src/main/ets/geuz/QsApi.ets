@@ -443,3 +443,46 @@ export async function qsSearchPlaylists(keyword: string, page: number,
   console.info('[RzdSoda] playlist search q=' + keyword + ' page=' + page + ' got=' + items.length);
   return items;
 }
+// ────────────────────────────────────────────────────────────────
+// 汽水推荐歌单（歌单广场）：POST /luna/discover/mix，count=30 一次给全；
+// 顶层没有可用的 next_cursor / session_id（实测为空），所以只有第一页。
+// ────────────────────────────────────────────────────────────────
+export async function qsDiscoverPlaylists(page: number, limit: number): Promise<QsPlaylistHit[]> {
+  if (page > 1) {
+    return [];
+  }
+  const body: Record<string, Object> = await qsPostJson('/luna/discover/mix', '{"count":30}');
+  const out: QsPlaylistHit[] = [];
+  const seen: string[] = [];
+  const blocks: Object[] = asArray(body['inner_block']);
+  for (let b: number = 0; b < blocks.length; b++) {
+    const resources: Object[] = asArray(asRecord(blocks[b])['resources']);
+    for (let r: number = 0; r < resources.length; r++) {
+      const entity: Record<string, Object> = asRecord(asRecord(resources[r])['entity']);
+      const pl: Record<string, Object> = asRecord(entity['playlist']);
+      const id: string = asString(pl['id']);
+      if (id.length === 0 || seen.indexOf(id) >= 0) {
+        continue;
+      }
+      seen.push(id);
+      const owner: Record<string, Object> = asRecord(pl['owner']);
+      let author: string = asString(owner['nickname']);
+      if (author.length === 0) {
+        author = asString(owner['name']);
+      }
+      out.push({
+        id: id,
+        title: asString(pl['title']),
+        author: author,
+        cover: qsCoverOf(asRecord(pl['url_cover'])),
+        trackCount: asNumber(pl['count_tracks'])
+      });
+      if (limit > 0 && out.length >= limit) {
+        console.info('[RzdSoda] discover playlists got=' + out.length);
+        return out;
+      }
+    }
+  }
+  console.info('[RzdSoda] discover playlists got=' + out.length);
+  return out;
+}

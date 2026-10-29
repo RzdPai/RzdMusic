@@ -1,7 +1,7 @@
 import { http } from '@kit.NetworkKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BusinessError } from '@kit.BasicServicesKit';
-import { lxTxToplistInfo, TxToplistInfo, qsBoardSongs, LXSearchSong } from 'player';
+import { lxTxToplistInfo, TxToplistInfo, qsBoardSongs, qsDiscoverPlaylists, QsPlaylistHit, LXSearchSong } from 'player';
 import { BoardSongParam, ToplistRouteParam } from 'musicbasic';
 import { cryptoFramework } from '@kit.CryptoArchitectureKit';
 import { buffer, util } from '@kit.ArkTS';
@@ -786,7 +786,7 @@ async function fetchMgRanks(): Promise<MgRankEntry[]> {
 }
 
 
-const SOURCES: string[] = ['kw', 'kg', 'tx', 'wy', 'mg'];
+const SOURCES: string[] = ['kw', 'kg', 'tx', 'wy', 'mg', 'qs'];
 
 function sourceDisplayName(source: string): string {
   if (source === 'kw') {
@@ -1509,6 +1509,32 @@ export class MusicDataService {
   }
 
   static async playlists(source: string, sortId?: string, categoryId?: string, page: number = 1): Promise<PlaylistPage> {
+    // ★ 汽水：广场推荐歌单走内置 Luna（/luna/discover/mix，一次 30 张、只有第一页）
+    if (source === 'qs') {
+      const hits: QsPlaylistHit[] = await qsDiscoverPlaylists(page, 30);
+      const sodaList: PlaylistData[] = [];
+      for (let i: number = 0; i < hits.length; i++) {
+        sodaList.push({
+          id: hits[i].id,
+          name: hits[i].title,
+          author: hits[i].author,
+          image: hits[i].cover,
+          count: hits[i].trackCount > 0 ? String(hits[i].trackCount) : '',
+          time: '',
+          listenCount: '',
+          category: '',
+          source: 'qs'
+        });
+      }
+      const sodaPage: PlaylistPage = {
+        list: sodaList,
+        page: Math.max(1, page),
+        limit: sodaList.length,
+        total: sodaList.length,
+        hasNext: false
+      };
+      return sodaPage;
+    }
     let url = '';
     const selectedSort = sortId ?? (MusicDataService.sortOptions(source).length > 0
       ? MusicDataService.sortOptions(source)[0].id
