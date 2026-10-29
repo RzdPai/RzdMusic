@@ -181,6 +181,8 @@ export class MediaService {
   /** Playback URL that failed last; the fallback must never hand it back. */
   private failedUrl: string = '';
   /** Quality id that failed last; skipped when rebuilding the retry chain. */
+  /** 本次启动是否已完成过一次在线解析（首次不弹换源提示）。 */
+  private firstResolveDone: boolean = false;
   private failedQuality: string = '';
   /**
    * True while a playback error is waiting for its deferred (500ms) fallback
@@ -1089,7 +1091,12 @@ export class MediaService {
       ' script=' + outcome.scriptName + ' 换源=' + outcome.switched +
       (outcome.switchedScriptName.length > 0 ? ' 换脚本=' + outcome.switchedScriptName : ''));
     // 触发播放详情页醒目 Banner：跨脚本换源时展示新音源名，3 秒后由 PlaybackPage 自动清除。
-    if (outcome.switchedScriptName.length > 0) {
+    // ★ 2026-10-29：**本次启动的第一次解析一律不弹** —— 冷启动时脚本/引擎状态还在就绪过程中，
+    //   真实来源与"用户设置的默认音源"必然对不上，弹出来只会让用户以为是异常换源。
+    if (!this.firstResolveDone) {
+      this.firstResolveDone = true;
+      appendPlayLog('[播放] 首播不提示换源（本次启动首次解析）');
+    } else if (outcome.switchedScriptName.length > 0) {
       const banner: SwitchBannerState = SwitchBannerState.connect();
       banner.text = '已切换音源：' + outcome.switchedScriptName;
       banner.ts = Date.now();

@@ -449,7 +449,9 @@ export struct SettingsDetailPage {
         continue;
       }
       const api: LXUserApiInfo = ordered[i];
-      if (!this.isSourceInOrder(api.id)) {
+      // ★ 点对某个源点「测试」时，即使它没勾选也要测（用户 2026-10-29）
+      const testingThisOne: boolean = onlyApiId !== undefined && onlyApiId.length > 0;
+      if (!testingThisOne && !this.isSourceInOrder(api.id)) {
         continue;
       }
       const platforms: LXSourcePlatformInfo[] = this.lxPlatformsOf(api);
