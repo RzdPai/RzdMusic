@@ -20,7 +20,8 @@ const CHIP_RADIUS: number = 6;
 
 /** 没检测到声明时的中性提示（**不猜平台**）。 */
 function lxMissingDeclaredText(active: boolean): string {
-  return active ? '未检测到平台声明（已选中，正在向脚本确认…）' : '未检测（选中一次该音源后显示）';
+  // ★ 2026-10-29（用户）：括号文案去掉，只留「未检测」
+  return '未检测';
 }
 
 /**
