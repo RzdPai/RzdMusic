@@ -894,8 +894,9 @@ export struct LocalMusicPage {
     .type(ButtonType.Normal)
     .width('100%')
     .height(66)
-    .systemMaterial(immersiveMedium())
-    .backgroundColor('#33FFFFFF')
+    .clip(true)
+    // 药丸玻璃走 API23 材质背板（26 的 systemMaterial 会把形状接管成矩形 ⇒ 变方）
+    .backgroundBlurStyle(buildBarBlurStyle(this.ambientState.level), barBlurOptions())
     .borderRadius(33)
     .border({ width: 0.5, color: $r('sys.color.comp_divider') })
     .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 8 })

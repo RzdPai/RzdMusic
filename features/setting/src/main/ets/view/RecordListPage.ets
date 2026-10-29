@@ -766,8 +766,10 @@ export struct RecordListPage {
     .type(ButtonType.Normal)
     .width('100%')
     .height(66)
-    .systemMaterial(immersiveMedium())
-    .backgroundColor('#33FFFFFF')
+    .clip(true)
+    // 胶囊要的是「药丸玻璃」：用 API23 的材质背板（与旧版一致，圆角不受材质接管影响）。
+    // 26 的 systemMaterial 会把形状接管成矩形，实测胶囊会变方 —— 这里不用它。
+    .backgroundBlurStyle(buildBarBlurStyle(this.ambientState.level), barBlurOptions())
     .borderRadius(33)
     .border({ width: 0.5, color: $r('sys.color.comp_divider') })
     .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 8 })
@@ -1070,10 +1072,16 @@ export struct RecordListPage {
         //   与「设置页 / 平台音乐页」同一套（HDS `systemMaterialEffect = buildTitleMaterial(level)`），
         //   档位跟随「设置 → 沉浸光感强度」。
         systemMaterialEffect: buildTitleMaterial(this.ambientState.level),
-        blurStrategy: BlurStrategy.DISABLE,
+        // ★ 与设置页 / 平台音乐页逐项对齐：开模糊 + 透明底。
+        //   之前这里是 `BlurStrategy.DISABLE` + 不透明 `background_secondary`（黑板），
+        //   不透明底会盖住材质 ⇒ 标题栏看不到光感（用户 2026-10-29 反馈「黑色背板不好看」）。
+        blurStrategy: BlurStrategy.ENABLE,
+        scrollEffectOpts: {
+          scrollEffectType: ScrollEffectType.GRADUAL_BLUR
+        },
         originalStyle: {
           backgroundStyle: {
-            backgroundColor: $r('app.color.background_secondary')
+            backgroundColor: Color.Transparent
           },
           contentStyle: {
             titleStyle: {
@@ -1090,9 +1098,6 @@ export struct RecordListPage {
           }
         },
         scrollEffectStyle: {
-          backgroundStyle: {
-            backgroundColor: $r('app.color.background_secondary')
-          },
           contentStyle: {
             titleStyle: {
               mainTitleColor: $r('sys.color.font_primary')
