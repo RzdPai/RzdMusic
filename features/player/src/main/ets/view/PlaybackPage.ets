@@ -2010,16 +2010,23 @@ export struct PlaybackPage {
       //   `rect=` 是**浮层封面的最终矩形**（x,y,size,height）：t=1 时它必须是 48.7 的小方块，
       //   `rv=` 是 `realCoverVisible()`（真封面是否该显示）—— 这两个数一起看就能判定
       //   "是浮层没缩小" 还是 "真封面没让位（两张封面同时在）"。
-      const rect: LyricMorphRect = this.coverLocalRect();
-      appendPlayLog(`[歌词页] t=${this.lyricMorphT.toFixed(3)} ${this.expandState.lyricDiagLine()} ` +
-        `rect=${rect.x.toFixed(0)},${rect.y.toFixed(0)},${rect.size.toFixed(1)},${rect.height.toFixed(1)} ` +
-        `rv=${this.expandState.realCoverVisible() ? 1 : 0} ` +
-        `br=${this.expandState.morphOverlayBridging() ? 1 : 0} ` +
-        `ms=${this.expandState.morphSessionDriving() ? 1 : 0} ` +
-        `hs=${this.expandState.hdsBarSuppressed ? 1 : 0} ` +
-        `pp=${this.expandState.playerPaints() ? 1 : 0} ` +
+      // ★ 2026-10-31（用户反馈日志刷屏）：形变量测日志改为「只在关键变化时打印」，
+      //   否则每帧一条，一晚上几十万行，真机排障反而更难。
+      const lyricLogKey: string = this.lyricMorphT.toFixed(2) + '/' + this.expandState.realCoverVisible().toString();
+      const lyricLogChanged: boolean = lyricLogKey !== this.lastLyricLogKey;
+      if (lyricLogChanged) {
+        this.lastLyricLogKey = lyricLogKey;
+        const rect: LyricMorphRect = this.coverLocalRect();
+        appendPlayLog(`[歌词页] t=${this.lyricMorphT.toFixed(3)} ${this.expandState.lyricDiagLine()} ` +
+          `rect=${rect.x.toFixed(0)},${rect.y.toFixed(0)},${rect.size.toFixed(1)},${rect.height.toFixed(1)} ` +
+          `rv=${this.expandState.realCoverVisible() ? 1 : 0} ` +
+          `br=${this.expandState.morphOverlayBridging() ? 1 : 0} ` +
+          `ms=${this.expandState.morphSessionDriving() ? 1 : 0} ` +
+          `hs=${this.expandState.hdsBarSuppressed ? 1 : 0} ` +
+          `pp=${this.expandState.playerPaints() ? 1 : 0} ` +
         `op=${this.expandState.morphOverlayProgress().toFixed(2)}`);
     }
+      }
     // 闁荤姳鐒︽刊鑺ュ緞?濠电姴锕ラ懝鐐叏閳哄倻顩风€广儱鎳忛煬顒勫级閳哄倻顬兼い?闂佹寧绋戦悧鎰帮綖?`lastScrollAtMs` 闂佹眹鍔岀€氼參寮悙鐑樼厒濠电姴绻掔粣妤呮煢閳ь剟鎸婃径灞炬瘞闂婎偄娲ら幊姗€濡磋箛鏇熷闁宠　鍋撶紓宥呮噽缁辨帒鈻庨幘顖氫壕闁归偊鍓氭慨搴ㄥ级閳哄倻鈽夐悗瑙勫▕閺?
     // ★★★ 2026-10-17（③ 照搬无界：`PlayerPage.onContentDidScroll` = `wujie.pa:190026-190075`）
     //   上游这个**逐帧**回调里只写 `swiperProgress`（= p），外加一句
@@ -2431,6 +2438,8 @@ export struct PlaybackPage {
    *   闂佸疇娉曟刊瀵哥箔?闁哄鏅滈悷銈夋煂濠婂牆绫嶉柛顐ｆ礃閿涚喓绱?*闂佸憡鐟禍婊冿耿?婵炴垶鎸堕崐妤咃綖閹烘挶浠氶柛妤冨仜琚熼梺鍝勫€婚幊鎾舵閿熺姷宓侀悹楦挎閹?闂佸搫鍟抽崺鏍ㄦ櫠閻樿瀚夊璺侯儏婢瑰牆鈽?*闂佹寧绋戦懟顖炴偩閻樺磭鈻旂€广儱妫欑瑧闂佸憡鏌ｉ崝搴ㄥ极妤ｅ啫绫嶉柛顐ｆ礃濮ｆ劙鏌曢崱鏇燁樂缂佲€冲暞缁嬪顓奸崱妯烇箓鏌ゆ總澶夌敖缂侀硸浜畷锝夊磼濞戞瑦顔?闂佺偨鍎查弻锟犲焵?
    *      闁诲海鎳撻崯顖毼?闂佸憡甯囬崐鏇㈡偩閹岀叆婵﹩鍓欒闂佸搫瀚烽崹浼村箚娴ｅ湱顩风€广儱鎳忛煬顒勫级閳哄倻顬兼い?闂佹眹鍔岀€氫即宕虫导鏉戝唨濡炲娴峰畷鍫曟煥濞戞澧旂紒?`PULL_ANCHOR_RETRY_MS = 32` 闂佸憡鑹炬總鏃傜博閹绢喖绠戠憸鎴濐啅濠靛鏅璺虹墐閸?
    */
+  /** 歌词页形变量测日志的去重 key（避免每帧打印）。 */
+  private lastLyricLogKey: string = '';
   private lastScrollAtMs: number = 0;
 
   /**
