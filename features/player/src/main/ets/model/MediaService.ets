@@ -240,6 +240,12 @@ export class MediaService {
   };
   /** AVPlayer error: logs and resets the player. */
   private errorCall: (err: BusinessError) => void = (err: BusinessError) => {
+    // ★ 5400102 = "Operate Not Permit"（对不支持的当前状态做控制操作，例如对 idle 的播放器 setSpeed）。
+    //   这类是控制错误，不代表媒体坏了；以前被当成播放失败 → 记录档位失败 → 直接跳歌。
+    if (err.code === 5400102) {
+      this.appendPlayLog('[播放] AVPlayer 控制类错误 5400102（忽略，不触发换源/跳歌）');
+      return;
+    }
     Logger.error(TAG, `Invoke avPlayer failed, code is ${err.code}, message is ${err.message}`);
     this.lockScreenDiagnostic(`avplayer(err=${err.code}) msg=${err.message}`);
     appendPlayLog('[播放] AVPlayer 报错 code=' + err.code + ' msg=' + err.message);
@@ -925,26 +931,33 @@ export class MediaService {
    * @param rate 目标倍速；不传则取共享状态里当前值
    */
   public applyPlaybackRate(rate?: number): void {
-    if (this.ijkActive) {
-      this.applyIjkRate();
-    }
     const state = this.getAppState();
     const target: number = rate ?? state.playbackRate;
     if (rate !== undefined) {
       state.playbackRate = target;
     }
+    // 内核（mpv）在播时只改内核，绝不动 AVPlayer：
+    // 之前对 idle 的 AVPlayer 调 setSpeed 会触发 5400102，被错误恢复当成播放失败 → 直接跳歌。
+    if (this.ijkActive) {
+      this.applyIjkRate();
+      return;
+    }
     const player: media.AVPlayer | undefined = this.avPlayer;
     if (player === undefined) {
       return;
     }
-    // ⚠️ 本 SDK 的 `AVPlayer.setSpeed()` 返回 **void**（不是 Promise）⇒ 不能 `.then`，
-    //   用 try/catch 兜住即可（倍速设置失败不影响播放）。
+    // AVPlayer 只支持 prepared / playing / paused / completed 这几种状态设置倍速
+    const st: string = player.state;
+    if (st !== 'prepared' && st !== 'playing' && st !== 'paused' && st !== 'completed') {
+      this.appendPlayLog('[RzdSpeed] AVPlayer state=' + st + '，暂不设置倍速（等就绪后 applyPlaybackRate 会再调）');
+      return;
+    }
     try {
       player.setSpeed(target);
-      Logger.info(TAG, `[RzdSpeed] AVPlayer setSpeed ${target} ok`);
+      this.appendPlayLog('[RzdSpeed] AVPlayer setSpeed ' + target + ' ok');
     } catch (err) {
       const e = err as BusinessError;
-      Logger.error(TAG, `[RzdSpeed] AVPlayer setSpeed failed: ${e.code} ${e.message}`);
+      this.appendPlayLog('[RzdSpeed] AVPlayer setSpeed 失败 code=' + e.code);
     }
   }
 
