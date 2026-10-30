@@ -1164,7 +1164,7 @@ export struct ControlAreaComponent {
           }
           .width('100%')
           .height(44)
-          .padding({ left: 4 })
+          .padding({ left: 4, right: 4 })
           .onClick((): void => {
             this.backToMenuRoot();
           })
@@ -1182,7 +1182,7 @@ export struct ControlAreaComponent {
           }
           .width('100%')
           .height(44)
-          .padding({ left: 4 })
+          .padding({ left: 4, right: 4 })
           .onClick((): void => {
             this.showMenuQuality = false;
           })
@@ -1566,7 +1566,7 @@ export struct ControlAreaComponent {
     .width('100%')
     .height(52)
     .padding({ left: 16, right: 16 })
-    .borderRadius(10)
+      .borderRadius($r('sys.float.corner_radius_level12'))
     .backgroundColor($r('app.color.background_secondary'))
     .onClick(() => {
       action();
