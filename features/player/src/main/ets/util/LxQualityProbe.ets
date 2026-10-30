@@ -89,6 +89,25 @@ export async function resolveSample(source: string): Promise<ProbeSample | undef
     return cached;
   }
   // 预置样曲优先，不再现场搜索（省一次网络往返，也不依赖引擎状态）
+  // ★ 2026-10-30（用户：酷狗/QQ/咪咕/汽水"测试全部不可用，但实际能播"）：
+  //   内置样曲表的 songId 是旧数据，多数已失效 ⇒ 探测取址必失败。
+  //   改为**现场搜索一首热歌**当样曲（进程内缓存），搜不到才退回内置表。
+  try {
+    const searched: LXSearchResult = await lxSearch(source, SAMPLE_QUERY, 1, 1);
+    if (searched.list.length > 0 && searched.list[0].songId.length > 0) {
+      const hit: LXSearchSong = searched.list[0];
+      const live: ProbeSample = new ProbeSample();
+      live.songId = hit.songId;
+      live.name = hit.name;
+      live.singer = hit.singer;
+      live.interval = hit.interval;
+      resolvedSamples.set(source, live);
+      appendPlayLog('[RzdQualityProbe] 样曲(现场搜索) ' + source + ' → ' + live.name);
+      return live;
+    }
+  } catch (err) {
+    appendPlayLog('[RzdQualityProbe] 现场搜索样曲失败 ' + source);
+  }
   const preset: ProbeSample | undefined = SAMPLES.get(source);
   if (preset !== undefined) {
     resolvedSamples.set(source, preset);
@@ -290,7 +309,14 @@ export async function probeQuality(source: string, songId: string, quality: stri
       sessionCache.set(key, result);
       return result;
     }
-    if (!isAudioType(ct)) {
+    // ★ 2026-10-30（用户：酷狗/QQ/咪咕/汽水都报"不可用"但实际能正常播放）：
+    //   这些 CDN 的 HEAD 常返回 `application/octet-stream` 或空 content-type，
+    //   旧判定把它们一律当"非音频类型"误杀。放宽为：音频类型 || octet-stream || binary || 空 ||
+    //   URL 扩展名像音频，任一成立即视为音频。
+    const looksAudioCt: boolean = isAudioType(ct) || ct.length === 0 ||
+      ct.indexOf('octet-stream') >= 0 || ct.indexOf('binary') >= 0;
+    const looksAudioUrl: boolean = /\.(mp3|m4a|flac|mgg|mflac|ape|wav|aac|ogg|opus)(\?|$)/i.test(url);
+    if (!looksAudioCt && !looksAudioUrl) {
       result.detail = '非音频类型 ' + ct;
       appendPlayLog('[RzdQualityProbe] ' + source + '/' + quality + ' 失败：' + result.detail);
       sessionCache.set(key, result);
@@ -299,7 +325,7 @@ export async function probeQuality(source: string, songId: string, quality: stri
     const bytes: number = Number(lenRaw);
     result.seconds = bytes > 0 ? Math.round(bytes / (320 * 1024 / 8)) : -1;
     // 只做"体量合理"的软校验：真实音频至少几百 KB；错误提示页通常只有几 KB
-    if (!Number.isNaN(bytes) && bytes > 0 && bytes < 100 * 1024) {
+    if (!Number.isNaN(bytes) && bytes > 0 && bytes < 32 * 1024) {
       result.detail = '体积过小（' + bytes + 'B，疑似错误提示）';
       appendPlayLog('[RzdQualityProbe] ' + source + '/' + quality + ' 失败：' + result.detail);
       sessionCache.set(key, result);
