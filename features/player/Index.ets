@@ -118,3 +118,5 @@ export { prewarmCurrentSongMesh, meshWarmKeyOf } from './src/main/ets/util/MeshW
 // ★★ 2026-10-15：**网格形变背景的组件层**（`NodeContainer` + 自定义 `RenderNode.draw`
 //   + `drawPixelMapMesh` + `displaySync` 20fps + 径向暗角），照搬无界 `MeshCoverBg`。
 export { MeshCoverBg } from './src/main/ets/view/MeshCoverBg';
+
+export { PlaybackTuningPanel } from './src/main/ets/view/PlaybackTuningPanel';
