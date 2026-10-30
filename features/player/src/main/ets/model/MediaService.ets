@@ -30,6 +30,7 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { resourceManager } from '@kit.LocalizationKit';
 import { fileIo as fs } from '@kit.CoreFileKit';
 import { AppStorageKeys, getAppRuntime, Logger, MusicAppState, MusicCardBridge, MusicStoreService, PlayedSongRecord, SongItem, StringResourceUtil, appendPlayLog } from 'musicbasic';
+import { IjkAudioEngine } from '../engine/IjkAudioEngine';
 import SongItemBuilder from '../util/SongItemBuilder';
 import { AudioPlayerState, MusicPlayMode } from './MusicData';
 import { BackgroundUtil } from '../util/BackgroundUtil';
@@ -472,6 +473,11 @@ export class MediaService {
       return;
     }
     this.songItem = await this.songItemBuilder.build(idleSong);
+      // ★ 汽水（分片 mp4）：不经 AVPlayer，直接交给 FFmpeg(ijk) 音频引擎
+      if (this.ijkUrl.length > 0) {
+        this.startIjkPlayback(this.ijkUrl);
+        return;
+      }
       // ★ 统一“装载前先回 idle”：fdSrc 与 url 混用会让 AVPlayer「有时长/有进度但没声音」，
       //   reset() 会异步回到 idle 再重新进本函数，从而保证每次都从干净状态装载。
       if (this.avPlayer.state !== 'idle') {
@@ -912,6 +918,9 @@ export class MediaService {
    * @param rate 目标倍速；不传则取共享状态里当前值
    */
   public applyPlaybackRate(rate?: number): void {
+    if (this.ijkActive) {
+      this.applyIjkRate();
+    }
     const state = this.getAppState();
     const target: number = rate ?? state.playbackRate;
     if (rate !== undefined) {
@@ -1138,6 +1147,132 @@ export class MediaService {
     }
   }
 
+  // ===== 汽水专用：FFmpeg(ijk) 纯音频引擎 =====
+
+  /** 当前 ijk 引擎实例（仅在汽水分片流时存在）。 */
+  private ijkEngine: IjkAudioEngine | undefined = undefined;
+  /** 待用 ijk 播放的地址；空串表示走 AVPlayer。 */
+  private ijkUrl: string = '';
+  /** 进度轮询定时器句柄（-1 表示未启动）。 */
+  private ijkPollTimer: number = -1;
+  /** 当前是否由 ijk 引擎出声（play/pause/seek 分支据此路由）。 */
+  private ijkActive: boolean = false;
+
+  /**
+   * 释放 ijk 引擎与轮询。
+   * 每次换歌 / 回退 AVPlayer 前都要调用，避免两套引擎同时出声。
+   */
+  private releaseIjk(): void {
+    this.stopIjkPolling();
+    if (this.ijkEngine !== undefined) {
+      this.ijkEngine.release();
+      this.ijkEngine = undefined;
+    }
+    this.ijkActive = false;
+    this.ijkUrl = '';
+  }
+
+  /** 停止进度轮询。 */
+  private stopIjkPolling(): void {
+    if (this.ijkPollTimer >= 0) {
+      clearInterval(this.ijkPollTimer);
+      this.ijkPollTimer = -1;
+    }
+  }
+
+  /** 启动进度轮询：把 ijk 的位置/时长写进 MusicAppState（UI 唯一真源）。 */
+  private startIjkPolling(): void {
+    this.stopIjkPolling();
+    this.ijkPollTimer = setInterval((): void => {
+      if (!this.ijkActive || this.ijkEngine === undefined) {
+        return;
+      }
+      const engine: IjkAudioEngine = this.ijkEngine;
+      const pos: number = engine.position();
+      const dur: number = engine.duration();
+      const st = this.getAppState();
+      st.progress = pos;
+      st.currentTime = MediaTools.msToCountdownTime(pos);
+      if (dur > 0 && st.progressMax !== dur) {
+        st.progressMax = dur;
+        st.totalTime = MediaTools.msToCountdownTime(dur);
+      }
+    }, 500);
+  }
+
+  /**
+   * 用 ijk 引擎播放一条流（汽水分片 mp4）。
+   * @param url 已剥壳的直链。
+   */
+  private startIjkPlayback(url: string): void {
+    this.releaseIjk();
+    const engine: IjkAudioEngine = new IjkAudioEngine();
+    this.ijkEngine = engine;
+    this.ijkActive = true;
+    const playedGen: number = this.consumePlayIntent();
+    appendPlayLog('[播放] 汽水 → FFmpeg(ijk) 音频引擎 gen=' + playedGen);
+    engine.create({
+      onPrepared: (): void => {
+        if (this.ijkEngine !== engine) {
+          return;
+        }
+        const dur: number = engine.duration();
+        const st = this.getAppState();
+        if (dur > 0) {
+          st.progressMax = dur;
+          st.totalTime = MediaTools.msToCountdownTime(dur);
+        }
+        st.isResolving = false;
+        this.state = AudioPlayerState.PLAY;
+        this.isPrepared = true;
+        if (playedGen >= 0) {
+          engine.start();
+          engine.setVolume(1);
+          this.applyIjkRate();
+          this.updateIsPlay(true);
+          this.ensureBackgroundAudioTask();
+          this.startIjkPolling();
+          this.appendPlayLog('[播放] ijk 起播 dur=' + dur);
+        } else {
+          this.appendPlayLog('[播放] ijk 仅装载（无起播意图）');
+        }
+      },
+      onDuration: (durationMs: number): void => {
+        const st = this.getAppState();
+        st.progressMax = durationMs;
+        st.totalTime = MediaTools.msToCountdownTime(durationMs);
+      },
+      onCompleted: (): void => {
+        if (this.ijkEngine !== engine) {
+          return;
+        }
+        appendPlayLog('[播放] ijk 播放完成 → 下一首');
+        this.stopIjkPolling();
+        this.releaseIjk();
+        this.playNextAuto(false);
+      },
+      onError: (code: number, message: string): void => {
+        if (this.ijkEngine !== engine) {
+          return;
+        }
+        appendPlayLog('[播放] ijk 播放失败 code=' + code + ' msg=' + message + ' → 回退 AVPlayer');
+        this.releaseIjk();
+        // 回退：AVPlayer 仍持有 songItem.url（可能卡 0 进度，但至少不静默失败）
+        this.loadCurrentIntoPlayer();
+      }
+    });
+    engine.load(url);
+  }
+
+  /** 把当前倍速应用到 ijk（AVPlayer 与 ijk 各自生效）。 */
+  private applyIjkRate(): void {
+    if (this.ijkEngine === undefined) {
+      return;
+    }
+    const rate: number = this.getAppState().playbackRate;
+    this.ijkEngine.setSpeed(rate);
+  }
+
   private async resolveOnlineUrl(songItem: SongItem): Promise<boolean> {
     // ★ 启动瞬间引擎可能还没 ready：先等 3s，避免误弹「音源未就绪」
     const engineReady: boolean = await waitForLxEngineReady(3000);
@@ -1190,12 +1325,13 @@ export class MediaService {
     // ★ 2026-10-30（汽水：有总时长但进度恒 0）：脚本给的是 douyinvod 的**分片 mp4**
     //   （`mime_type=audio_mp4`，给浏览器 MSE 用）。AVPlayer 边下边播解不出分片索引 ⇒ 卡 0。
     //   这类流先整段落盘，再走 fdSrc 播本地完整文件（只对汽水生效，其它平台不受影响）。
+    // ★ 2026-10-30：汽水给的是 douyinvod 分片 mp4（`audio_mp4`，MSE 用途），
+    //   AVPlayer 能拿到总时长但解不出分片索引 ⇒ 进度恒 0。改走 FFmpeg(ijk) 音频引擎。
     if (songItem.source === 'qs' || outcome.url.indexOf('audio_mp4') >= 0) {
-      const local: string = await this.cacheStreamToLocal(outcome.url);
-      if (local.length > 0) {
-        this.pendingLocalPath = local;
-        this.appendPlayLog('[播放] 汽水分片流已落盘，改用本地播放');
-      }
+      this.ijkUrl = outcome.url;
+      this.appendPlayLog('[播放] 分片流 → 交给 FFmpeg(ijk) 音频引擎');
+    } else {
+      this.ijkUrl = '';
     }
     songItem.url = this.unwrapRedirectUrl(outcome.url);
     // 记录实际使用的音质（可能因自动降级低于偏好设置）
@@ -2320,6 +2456,14 @@ export class MediaService {
    * @param ms Target position in ms, clamped to [0, duration].
    */
   public seek(ms: number): boolean {
+    if (this.ijkActive && this.ijkEngine !== undefined) {
+      this.ijkEngine.seekTo(ms);
+      const st = this.getAppState();
+      st.progress = ms;
+      st.currentTime = MediaTools.msToCountdownTime(ms);
+      this.appendPlayLog('[播放] ijk seek=' + ms);
+      return true;
+    }
     if (this.isPrepared && this.state != AudioPlayerState.ERROR && this.avPlayer) {
       // SeekMode.SEEK_CLOSEST(2)：帧级精确 seek，跳转到距目标最近的帧（不限于关键帧），
       // 保证点击歌词/进度条拖拽准确落在目标时间，不会落到目标前最近的关键帧
@@ -2349,6 +2493,9 @@ export class MediaService {
 
   /** Current playback position in ms from AVPlayer, or 0 if not prepared. */
   private getCurrentTime() {
+    if (this.ijkActive && this.ijkEngine !== undefined) {
+      return this.ijkEngine.position();
+    }
     if (this.isPrepared && this.avPlayer) {
       return this.avPlayer.currentTime;
     }
@@ -2357,6 +2504,9 @@ export class MediaService {
 
   /** Total duration in ms from AVPlayer, or 0 if not prepared. */
   private getDuration() {
+    if (this.ijkActive && this.ijkEngine !== undefined) {
+      return this.ijkEngine.duration();
+    }
     if (this.isPrepared && this.avPlayer) {
       return this.avPlayer.duration;
     }
@@ -2383,6 +2533,15 @@ export class MediaService {
    * Starts or resumes playback; triggers prepare if the player is not prepared yet.
    */
   public async play() {
+    // ★ 汽水走 ijk 引擎时，play/pause/seek 全部路由过去（AVPlayer 此时保持 idle）
+    if (this.ijkActive && this.ijkEngine !== undefined) {
+      this.ijkEngine.start();
+      this.applyIjkRate();
+      this.updateIsPlay(true);
+      this.startIjkPolling();
+      this.appendPlayLog('[播放] ijk play()');
+      return;
+    }
     Logger.info(TAG, 'AVPlayer play() isPrepared:' + this.isPrepared + ', state:' + this.state);
     this.ensureBackgroundAudioTask();
     if (!this.isPrepared) {
@@ -2405,6 +2564,13 @@ export class MediaService {
    * Pauses playback when currently in PLAY state.
    */
   public pause() {
+    if (this.ijkActive && this.ijkEngine !== undefined) {
+      this.ijkEngine.pause();
+      this.updateIsPlay(false);
+      this.stopIjkPolling();
+      this.appendPlayLog('[播放] ijk pause()');
+      return;
+    }
     Logger.info(TAG, 'AVPlayer pause() isPrepared:' + this.isPrepared + ', state:' + this.state);
     // 记录暂停来源：调用方（avsession / 各处 UI）已置位则保留，否则记 'app'。
     if (this.pauseOrigin.length === 0) {

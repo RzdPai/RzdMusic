@@ -187,6 +187,19 @@ export class IjkAudioEngine {
     }
   }
 
+  /** 变速（1.0 = 原速）。 */
+  setSpeed(rate: number): void {
+    if (this.player === undefined) {
+      return;
+    }
+    try {
+      this.player.setSpeed(Math.max(0.25, Math.min(4, rate)).toString());
+      appendPlayLog(this.tag + ' speed=' + rate);
+    } catch (err) {
+      const e: BusinessError = err as BusinessError;
+      appendPlayLog(this.tag + ' setSpeed 失败 code=' + e.code);
+    }
+  }
   /** 释放（可重复调用）。 */
   release(): void {
     if (this.player === undefined || this.released) {
