@@ -1785,7 +1785,7 @@ export struct SettingPage {
     const playback = new SettingsEntry();
     playback.icon = $r('app.media.ic_voice');
     playback.title = $r('app.string.setting_group_playback');
-    playback.subtitle = '';
+    playback.subtitle = MediaService.getInstance().kernelSummary();
     playback.id = 4;
     playback.searchText = '播放设置 播放 音质 歌词 声音';
     playback.onClick = (): void => {

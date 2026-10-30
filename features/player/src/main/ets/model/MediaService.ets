@@ -1436,6 +1436,15 @@ export class MediaService {
     this.releaseIjk();
     void this.loadAsset(index);
   }
+  /**
+   * @returns 内核摘要（设置页「播放设置」副标题用），例如 `自动 · FFmpeg（ijk）`。
+   */
+  public kernelSummary(): string {
+    const mode: string = MusicStoreService.getInstance().getEngineMode();
+    const modeText: string = mode === 'av' ? '系统' : (mode === 'ffmpeg' ? 'FFmpeg' : (mode === 'mpv' ? 'mpv' : '自动'));
+    const active: string = this.ijkActive ? kernelName(this.ijkEngine !== undefined ? this.ijkEngine.kind() : PlaybackKernelKind.FFMPEG) : 'AVPlayer';
+    return modeText + ' · ' + active;
+  }
   /** 恢复 FFmpeg 内核（清掉降级标记）。 */
   public resetIjkHealth(): void {
     const store = MusicStoreService.getInstance();
@@ -1590,6 +1599,9 @@ export class MediaService {
 
   /** Creates service, builds SongItemBuilder, and starts async AVPlayer creation. */
   public constructor() {
+    // ★ 内核自检：真机日志一眼确认 mpv/FFmpeg 是否可用（mpv 需 libmpv.so）
+    this.appendPlayLog('[RzdKernel] 自检 mpv=' + (isMpvAvailable() ? '可用' : '不可用') +
+      ' ffmpeg=可用 engine_mode=' + MusicStoreService.getInstance().getEngineMode());
     this.songItemBuilder = new SongItemBuilder();
     this.restorePlayMode();
     this.initAudioPlayer();
