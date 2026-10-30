@@ -13,6 +13,7 @@
  * limitations under the License.
  */
 
+import { appendPlayLog } from 'musicbasic';
 import { bundleManager } from '@kit.AbilityKit';
 import { DrawableDescriptor, LayeredDrawableDescriptor } from '@kit.ArkUI';
 import { guardPlayerBack, PlaybackPreferenceService } from 'musicbasic';
@@ -504,22 +505,22 @@ export struct SettingsDetailPage {
     if (api.id === (AppStorage.get<string>('lxEngineScriptId') ?? '')) {
       const json: string = AppStorage.get<string>('lxEngineSources') ?? '';
       // ★ 2026-10-30：把引擎上报的**原始 key**打出来（判断第 6 个平台到底叫什么）
-      console.info('[RzdSource] raw=' + json.substring(0, Math.min(json.length, 220)));
+      appendPlayLog('[RzdSource] raw=' + json.substring(0, Math.min(json.length, 220)));
       if (json.length > 2) {
         try {
           const live: LXSourcePlatformInfo[] =
             lxDeclaredPlatforms(JSON.parse(json) as Record<string, LXUserApiSourceInfo>);
-          console.info('[RzdSource] page persisted=' + declared.length + ' engine=' + live.length +
+          appendPlayLog('[RzdSource] page persisted=' + declared.length + ' engine=' + live.length +
             ' labels=' + live.map((it: LXSourcePlatformInfo) => it.source).join(','));
           if (live.length > declared.length) {
             return live;
           }
         } catch (err) {
-          console.info('[RzdSource] page live parse failed');
+          appendPlayLog('[RzdSource] page live parse failed');
         }
       }
     }
-    console.info('[RzdSource] page persisted=' + declared.length + ' labels=' +
+    appendPlayLog('[RzdSource] page persisted=' + declared.length + ' labels=' +
       declared.map((it: LXSourcePlatformInfo) => it.source).join(','));
     return declared;
   }
@@ -635,7 +636,7 @@ export struct SettingsDetailPage {
     // ① 只走官方：读引擎上报的 updateAlert，不再自研请求
     const info: SourceUpdateInfo = readOfficialUpdateAlert();
     // ★ 2026-10-29（用户：引擎日志有"更新提示"，点检查更新没反应）：把卡片与 alert 一次打全
-    console.info('[RzdSourceUpdate] card=' + api.name + ' ver=' + api.version +
+    appendPlayLog('[RzdSourceUpdate] card=' + api.name + ' ver=' + api.version +
       ' hasUpdate=' + info.hasUpdate + ' msg=' + info.message +
       ' url=' + info.updateUrl + ' err=' + info.error);
     if (info.hasUpdate) {
@@ -655,7 +656,7 @@ export struct SettingsDetailPage {
       return;
     }
     // ① 没有更新就**静默**（只在日志里留痕）
-    console.info('[RzdSourceUpdate] ' + api.name + ' no update: ' + info.error);
+    appendPlayLog('[RzdSourceUpdate] ' + api.name + ' no update: ' + info.error);
   }
 
   private checkSourceUpdate(api: LXUserApiInfo): void {
@@ -664,7 +665,7 @@ export struct SettingsDetailPage {
       message: '当前版本 ' + current + '（最新）',
       duration: 2000
     });
-    console.info('[RzdSourceUpdate] ' + api.name + ' version=' + current);
+    appendPlayLog('[RzdSourceUpdate] ' + api.name + ' version=' + current);
   }
 
   private deleteLXSource(apiId: string): void {
@@ -764,7 +765,7 @@ export struct SettingsDetailPage {
       const imported: LXApiImportResult = lxSourceManager.importApi(resp.result as string);
       this.refresh();
       this.toast(imported.ok ? '已更新：' + imported.message : '更新失败：' + imported.message);
-      console.info('[RzdSourceUpdate] import from ' + url + ' ok=' + imported.ok);
+      appendPlayLog('[RzdSourceUpdate] import from ' + url + ' ok=' + imported.ok);
     } catch (err) {
       this.toast('更新失败，请检查网络');
     } finally {
@@ -1908,7 +1909,7 @@ export struct SettingsDetailPage {
     this.sourceOrderIds = next;
     this.persistSourceOrder();
     this.dragSourceId = '';
-    console.info('[RzdSourceOrder] move ' + dragId + ' -> ' + targetId + ' = ' + next.join(' > '));
+    appendPlayLog('[RzdSourceOrder] move ' + dragId + ' -> ' + targetId + ' = ' + next.join(' > '));
   }
 
   private toggleSourceInOrder(apiId: string): void {

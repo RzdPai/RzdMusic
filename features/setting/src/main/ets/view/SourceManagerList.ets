@@ -7,6 +7,7 @@
  * 改一处另一处不变（用户报"改了没效果"）。这里统一成一份，两处都调它。
  */
 
+import { appendPlayLog } from 'musicbasic';
 import { LXSourcePlatformInfo, LXUserApiInfo, LXUserApiSourceInfo, lxDeclaredPlatforms, lxDeclaredPlatformsOf } from 'player';
 import { LxSourceDeclaredBlock } from './LxSourceTags';
 
@@ -59,7 +60,7 @@ export struct SourceManagerList {
 
   private platformsOf(api: LXUserApiInfo): LXSourcePlatformInfo[] {
     const declared: LXSourcePlatformInfo[] = lxDeclaredPlatformsOf(api);
-    console.info('[RzdSource] card=' + api.id + ' name=' + api.name + ' active=' +
+    appendPlayLog('[RzdSource] card=' + api.id + ' name=' + api.name + ' active=' +
       (api.id === this.activeId ? 1 : 0) + ' persisted=' + declared.length +
       ' labels=' + declared.map((it: LXSourcePlatformInfo) => it.source).join(','));
     // ★ 2026-10-29：持久化记录可能是旧快照（少平台，例如 5 个而引擎上报 6 个 ——
@@ -68,17 +69,17 @@ export struct SourceManagerList {
     if (api.id === (AppStorage.get<string>('lxEngineScriptId') ?? '')) {
       const json: string = AppStorage.get<string>('lxEngineSources') ?? '';
       // ★ 2026-10-30：把引擎上报的**原始 key**打出来（判断第 6 个平台到底叫什么）
-      console.info('[RzdSource] raw=' + json.substring(0, Math.min(json.length, 220)));
+      appendPlayLog('[RzdSource] raw=' + json.substring(0, Math.min(json.length, 220)));
       if (json.length > 2) {
         try {
           const live: LXSourcePlatformInfo[] =
             lxDeclaredPlatforms(JSON.parse(json) as Record<string, LXUserApiSourceInfo>);
-          console.info('[RzdSource] persisted=' + declared.length + ' engine=' + live.length);
+          appendPlayLog('[RzdSource] persisted=' + declared.length + ' engine=' + live.length);
           if (live.length > declared.length) {
             return live;
           }
         } catch (err) {
-          console.info('[RzdSource] live sources parse failed');
+          appendPlayLog('[RzdSource] live sources parse failed');
         }
       }
     }
