@@ -1152,6 +1152,22 @@ export struct ControlAreaComponent {
       } else if (this.showMenuSpeed) {
         this.SpeedRows()
         } else if (this.showMenuTuning) {
+          // ★ 子页「返回」：回到歌曲菜单主列表（不关弹层）；底部按钮此时也会显示「返回」
+          Row({ space: 8 }) {
+            SymbolGlyph($r('sys.symbol.chevron_left'))
+              .fontSize(18)
+              .fontColor([$r('app.color.font_primary')])
+            Text('返回')
+              .fontSize(16)
+              .fontColor($r('app.color.font_primary'))
+            Blank()
+          }
+          .width('100%')
+          .height(44)
+          .padding({ left: 4 })
+          .onClick((): void => {
+            this.backToMenuRoot();
+          })
           this.TuningRows()
       } else if (this.showMenuQuality) {
           // ★ 子页「返回」：只回到歌曲菜单主列表（不是关掉整个弹层）
