@@ -22,7 +22,8 @@ const SOURCE_NAMES: Record<string, string> = {
 };
 
 /** 跨平台搜索顺序（排除原平台后按此优先）。 */
-const PLATFORM_FALLBACK_ORDER: string[] = ['tx', 'kw', 'kg', 'mg', 'wy'];
+// 汽水（qs）也参与跨平台搜索（2026-10-30）
+const PLATFORM_FALLBACK_ORDER: string[] = ['tx', 'kw', 'kg', 'mg', 'wy', 'qs'];
 
 const SCRIPT_SWITCH_TIMEOUT_MS: number = 8000;
 const SCRIPT_READY_POLL_MS: number = 150;

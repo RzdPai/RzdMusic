@@ -89,26 +89,8 @@ export async function resolveSample(source: string): Promise<ProbeSample | undef
     return cached;
   }
   // 预置样曲优先，不再现场搜索（省一次网络往返，也不依赖引擎状态）
-  // ★ 2026-10-30（用户：酷狗/QQ/咪咕/汽水"测试全部不可用，但实际能播"）：
-  //   内置样曲表的 songId 是旧数据，多数已失效 ⇒ 探测取址必失败。
-  //   改为**现场搜索一首热歌**当样曲（进程内缓存），搜不到才退回内置表。
-  try {
-    const searched: LXSearchResult = await lxSearch(source, SAMPLE_QUERY, 1, 1);
-    if (searched.list.length > 0 && searched.list[0].songId.length > 0) {
-      const hit: LXSearchSong = searched.list[0];
-      const live: ProbeSample = new ProbeSample();
-      live.songId = hit.songId;
-      live.name = hit.name;
-      live.singer = hit.singer;
-      live.interval = hit.interval;
-      resolvedSamples.set(source, live);
-      appendPlayLog('[RzdQualityProbe] 样曲(现场搜索) ' + source + ' → ' + live.name);
-      return live;
-    }
-  } catch (err) {
-    appendPlayLog('[RzdQualityProbe] 现场搜索样曲失败 ' + source);
-  }
-  const preset: ProbeSample | undefined = SAMPLES.get(source);
+    // ★ 2026-10-30（用户：现场搜索太慢，撤回）：探测样曲改回内置表
+    const preset: ProbeSample | undefined = SAMPLES.get(source);
   if (preset !== undefined) {
     resolvedSamples.set(source, preset);
     appendPlayLog('[RzdQualityProbe] 样曲(预置) ' + source + ' → ' + preset.name + ' (' + preset.interval + ')');
@@ -305,6 +287,15 @@ export async function probeQuality(source: string, songId: string, quality: stri
     }
     result.contentType = ct;
     if (code !== 200 && code !== 206) {
+      // ★ 2026-10-30：酷我/酷狗/咪咕等 CDN 会直接 403 掉 HEAD/Range，
+      //   但地址本身可用（播放链路能播）。这里判为「取址成功」而不是不可用。
+      if (code === 403 || code === 405 || code === 416) {
+        result.ok = true;
+        result.detail = '取址成功（服务器拒绝探测请求 ' + code + '）';
+        appendPlayLog('[RzdQualityProbe] ' + source + '/' + quality + ' 取址成功（探测被拒 ' + code + '）');
+        sessionCache.set(key, result);
+        return result;
+      }
       result.detail = 'HTTP ' + code;
       sessionCache.set(key, result);
       return result;
