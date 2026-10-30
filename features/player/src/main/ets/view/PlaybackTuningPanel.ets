@@ -49,6 +49,18 @@ class EngineModeOption {
 }
 
 /** 音效开关项（label + key）。 */
+/** 自定义 EQ 预设（名称 + 5 段增益）。 */
+class CustomEqPreset {
+  name: string = '';
+  gains: number[] = [0, 0, 0, 0, 0];
+
+  constructor(name: string, gains: number[]) {
+    this.name = name;
+    this.gains = gains.slice();
+  }
+}
+
+
 class EffectToggle {
   label: string = '';
   key: string = '';
@@ -89,6 +101,8 @@ export struct PlaybackTuningPanel {
   @Local reverbOn: boolean = false;
   @Local limiterOn: boolean = false;
   @Local haasOn: boolean = false;
+  /** 自定义 EQ 预设（持久化在 eq_custom_presets）。 */
+  @Local customPresets: CustomEqPreset[] = [];
   /** 滑杆去抖定时器（拖 EQ/升降调时不逐格下发）。 */
   private tuningTimer: number = -1;
 
@@ -127,6 +141,7 @@ export struct PlaybackTuningPanel {
     this.reverbOn = fx.reverb;
     this.limiterOn = fx.limiter;
     this.haasOn = fx.haas;
+    this.customPresets = this.parseCustomPresets(this.store.getEqPresets());
   }
 
   /** 当前增益对应的预设名（没有匹配则空串）。 */
@@ -273,6 +288,62 @@ export struct PlaybackTuningPanel {
     appendPlayLog('[RzdAf] clear');
     this.commitEffects();
   }
+
+  /** 解析自定义预设 JSON（容错）。 */
+  private parseCustomPresets(raw: string): CustomEqPreset[] {
+    const out: CustomEqPreset[] = [];
+    if (raw.length === 0) {
+      return out;
+    }
+    try {
+      const arr: CustomEqPreset[] = JSON.parse(raw) as CustomEqPreset[];
+      for (let i: number = 0; i < arr.length; i++) {
+        const item: CustomEqPreset = arr[i];
+        if (item !== undefined && item.name !== undefined && Array.isArray(item.gains) && item.gains.length === 5) {
+          out.push(new CustomEqPreset(item.name, item.gains));
+        }
+      }
+    } catch (err) {
+    }
+    return out;
+  }
+
+  /** 把当前 5 段增益存成自定义预设（最多 6 个，重名自动加序号）。 */
+  private saveCurrentAsPreset(): void {
+    const list: CustomEqPreset[] = this.customPresets.slice();
+    let seq: number = list.length + 1;
+    let name: string = '自定义' + seq;
+    while (list.some((p: CustomEqPreset): boolean => p.name === name)) {
+      seq = seq + 1;
+      name = '自定义' + seq;
+    }
+    list.push(new CustomEqPreset(name, this.eqGains));
+    while (list.length > 6) {
+      list.shift();
+    }
+    this.customPresets = list;
+    this.store.setEqPresets(JSON.stringify(list));
+    appendPlayLog('[RzdAf] 保存 EQ 预设 ' + name);
+  }
+
+  /** 应用某个自定义预设。 */
+  private applyCustomPreset(preset: CustomEqPreset): void {
+    this.eqGains = preset.gains.slice();
+    this.presetName = preset.name;
+    this.store.setEqGains(this.eqGains);
+    this.scheduleTuning();
+    appendPlayLog('[RzdAf] 应用自定义预设 ' + preset.name);
+  }
+
+  /** 长按删除某个自定义预设。 */
+  private removeCustomPreset(preset: CustomEqPreset): void {
+    const list: CustomEqPreset[] =
+      this.customPresets.filter((p: CustomEqPreset): boolean => p.name !== preset.name);
+    this.customPresets = list;
+    this.store.setEqPresets(JSON.stringify(list));
+    appendPlayLog('[RzdAf] 删除 EQ 预设 ' + preset.name);
+  }
+
 
   /** 去抖：200ms 内多次改动只下发最后一次。 */
   private scheduleTuning(): void {
@@ -441,6 +512,47 @@ export struct PlaybackTuningPanel {
       .scrollBar(BarState.Off)
       .width('100%')
       .margin({ bottom: 10 })
+
+      // 自定义预设（长按删除）
+      if (this.customPresets.length > 0) {
+        Row({ space: 8 }) {
+          ForEach(this.customPresets, (item: CustomEqPreset) => {
+            Button() {
+              Text(item.name)
+                .fontSize(13)
+                .fontColor(this.presetName === item.name ?
+                  $r('app.color.page_background') : $r('app.color.font_primary'))
+            }
+            .type(ButtonType.Capsule)
+            .height(28)
+            .padding({ left: 12, right: 12 })
+            .backgroundColor(this.presetName === item.name ?
+              this.themeStateColor() : $r('app.color.background_secondary'))
+            .onClick((): void => {
+              this.applyCustomPreset(item);
+            })
+            .gesture(LongPressGesture().onAction((): void => {
+              this.removeCustomPreset(item);
+            }))
+          }, (item: CustomEqPreset) => 'eq-custom-' + item.name)
+        }
+        .width('100%')
+        .margin({ bottom: 8 })
+      }
+
+      Button() {
+        Text('＋ 保存当前 EQ')
+          .fontSize(13)
+          .fontColor($r('app.color.font_primary'))
+      }
+      .type(ButtonType.Capsule)
+      .height(28)
+      .padding({ left: 12, right: 12 })
+      .backgroundColor($r('app.color.background_secondary'))
+      .margin({ bottom: 10 })
+      .onClick((): void => {
+        this.saveCurrentAsPreset();
+      })
 
       // 5 段竖向滑杆
       Row() {
