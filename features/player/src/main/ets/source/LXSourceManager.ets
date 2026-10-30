@@ -316,6 +316,32 @@ class LXSourceManager {
       const e: Error = err as Error;
       return { ok: false, message: e.message ?? '脚本格式不正确', info: null };
     }
+    // ★ 2026-10-30（用户：重复导入/更新会多出第二条音源）：
+    //   按 @name 去重 —— 同版本直接跳过；不同版本**原地替换**（保留原 id 与选中状态）。
+    {
+      const existing: LXUserApiInfo[] = this.getApiList();
+      for (let i: number = 0; i < existing.length; i++) {
+        if (existing[i].name.trim() !== parsed.name.trim()) {
+          continue;
+        }
+        if (existing[i].version.trim() === parsed.version.trim()) {
+          hilog.info(DOMAIN, TAG, 'import skipped (same version) id=%{public}s name=%{public}s',
+            existing[i].id, parsed.name);
+          return { ok: true, message: parsed.name + ' 已存在（v' + parsed.version + '），未重复导入',
+            info: existing[i] };
+        }
+        this.saveScript(existing[i].id, scriptRaw);
+        existing[i].version = parsed.version;
+        existing[i].author = parsed.author;
+        existing[i].description = parsed.description;
+        existing[i].homepage = parsed.homepage;
+        this.apiList = existing;
+        this.saveApiListToFile();
+        hilog.info(DOMAIN, TAG, 'import replaced id=%{public}s name=%{public}s ver=%{public}s',
+          existing[i].id, parsed.name, parsed.version);
+        return { ok: true, message: parsed.name + ' 已更新到 v' + parsed.version, info: existing[i] };
+      }
+    }
     let apiId: string = 'user_api_' + Math.random().toString().substring(2, 5) + '_' + Date.now().toString();
     let apiInfo: LXUserApiInfo = {
       id: apiId,
@@ -355,7 +381,21 @@ class LXSourceManager {
     let header: string = result[0];
     let infoResult: ApiScriptInfo = this.matchInfo(header);
     if (infoResult.name.length === 0) {
-      infoResult.name = 'user_api_' + new Date().toLocaleString();
+      // ★ 2026-10-30：不再用「user_api_<时间>」兜底（会产出脏条目）。
+      //   依次尝试 `// @name`、`@name`（任意位置），再不行判定为"不是音源脚本"。
+      const lineName: RegExpExecArray | null = /\/\/\s*@name\s+(.+)/.exec(script);
+      if (lineName !== null && lineName[1].trim().length > 0) {
+        infoResult.name = lineName[1].trim().substring(0, 24);
+      }
+    }
+    const looksLikeSource: boolean =
+      script.indexOf('lx.send') >= 0 || script.indexOf('EVENT_NAMES') >= 0 ||
+      script.indexOf('musicUrl') >= 0 || script.indexOf("@name") >= 0;
+    if (!looksLikeSource) {
+      throw new Error('不是洛雪音源脚本（内容不像 JS 脚本）');
+    }
+    if (infoResult.name.length === 0) {
+      infoResult.name = '未命名音源';
     }
     return infoResult;
   }

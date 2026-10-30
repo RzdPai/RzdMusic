@@ -713,7 +713,18 @@ export struct SettingsDetailPage {
         readTimeout: LX_ONLINE_IMPORT_TIMEOUT,
         expectDataType: http.HttpDataType.STRING
       });
-      if (resp.responseCode !== 200 || typeof resp.result !== 'string') {
+      // ★ 2026-10-30（用户：「立即更新」后多出一条 user_api_<日期> 脏音源）：
+      //   更新链接可能是网页（如 kdocs），绝不能当脚本入库 —— 先按内容特征拦掉。
+      const bodyText: string = typeof resp.result === 'string' ? (resp.result as string) : '';
+      const looksHtml: boolean = /^\s*<(!doctype|html)/i.test(bodyText) || bodyText.indexOf('<body') >= 0;
+      const looksJs: boolean = bodyText.indexOf('lx.send') >= 0 || bodyText.indexOf('EVENT_NAMES') >= 0 ||
+        bodyText.indexOf('musicUrl') >= 0;
+      if (looksHtml || !looksJs) {
+        appendPlayLog('[RzdImport] update url is not a script (html=' + (looksHtml ? 1 : 0) +
+          ' len=' + bodyText.length + ')');
+        this.toast('更新链接返回的是网页，不是音源脚本，请手动下载后导入');
+        return;
+      }      if (resp.responseCode !== 200 || typeof resp.result !== 'string') {
         this.toast('拉取失败，请检查链接');
         return;
       }
