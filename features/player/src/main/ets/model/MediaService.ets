@@ -83,6 +83,8 @@ export class MediaService {
   private get abilityContext(): common.UIAbilityContext | undefined {
     return getAppRuntime().context;
   }
+  /** ★ 汽水(fMP4) 先落盘再播的本地缓存路径；空串表示不走这条分支。 */
+  private cachedLocalPath: string = '';
   /** Underlying Harmony AVPlayer; undefined until createAVPlayer succeeds. */
   public avPlayer?: media.AVPlayer;
   /** Active AV session for lock screen / headset / system media controls. */
@@ -423,6 +425,18 @@ export class MediaService {
       return;
     }
     this.songItem = await this.songItemBuilder.build(idleSong);
+    // ★ 汽水分片流：已整段落盘 → 直接用 fdSrc 播本地文件
+    if (this.cachedLocalPath.length > 0 && this.avPlayer) {
+      try {
+        const info: fs.Stat = fs.statSync(this.cachedLocalPath);
+        const file = fs.openSync(this.cachedLocalPath, fs.OpenMode.READ_ONLY);
+        this.avPlayer.fdSrc = { fd: file.fd, offset: 0, length: info.size };
+        appendPlayLog('[播放] 装载本地缓存曲目（汽水）size=' + info.size);
+        return;
+      } catch (err) {
+        appendPlayLog('[播放] 本地缓存装载失败，退回网络播放');
+      }
+    }
     const httpUrl: string = this.songItemBuilder.getHttpUrl();
     if (httpUrl.length > 0) {
       this.avPlayer.url = httpUrl;
@@ -1081,6 +1095,61 @@ export class MediaService {
     }
   }
 
+  /**
+   * 把一条音频流整段下载到 cacheDir（仅用于分片 mp4 这类原生播放器处理不好的流）。
+   * @param url 直链。
+   * @returns 本地文件路径；失败返回空串。
+   */
+  private async cacheStreamToLocal(url: string): Promise<string> {
+    const ctx: common.UIAbilityContext | undefined = this.abilityContext;
+    if (ctx === undefined) {
+      return '';
+    }
+    const dir: string = ctx.cacheDir + '/soda_stream';
+    try {
+      if (!fs.accessSync(dir)) {
+        fs.mkdirSync(dir);
+      }
+      const old: string[] = fs.listFileSync(dir);
+      for (let i: number = 0; i < old.length; i++) {
+        try {
+          fs.unlinkSync(dir + '/' + old[i]);
+        } catch (err) {
+        }
+      }
+    } catch (err) {
+    }
+    const path: string = dir + '/stream_' + Date.now().toString() + '.m4a';
+    const req: http.HttpRequest = http.createHttp();
+    try {
+      const resp: http.HttpResponse = await req.request(url, {
+        method: http.RequestMethod.GET,
+        expectDataType: http.HttpDataType.ARRAY_BUFFER,
+        connectTimeout: 15000,
+        readTimeout: 120000
+      });
+      if (resp.responseCode !== 200 || resp.result === undefined) {
+        appendPlayLog('[播放] 分片流下载失败 code=' + resp.responseCode);
+        return '';
+      }
+      const buf: ArrayBuffer = resp.result as ArrayBuffer;
+      if (buf.byteLength < 32 * 1024) {
+        appendPlayLog('[播放] 分片流过小，放弃落盘 ' + buf.byteLength);
+        return '';
+      }
+      const file = fs.openSync(path, fs.OpenMode.CREATE | fs.OpenMode.READ_WRITE);
+      fs.writeSync(file.fd, buf);
+      fs.closeSync(file);
+      appendPlayLog('[播放] 分片流已落盘 ' + Math.round(buf.byteLength / 1024) + 'KB');
+      return path;
+    } catch (err) {
+      appendPlayLog('[播放] 分片流下载异常');
+      return '';
+    } finally {
+      req.destroy();
+    }
+  }
+
   private async resolveOnlineUrl(songItem: SongItem): Promise<boolean> {
     // ★ 启动瞬间引擎可能还没 ready：先等 3s，避免误弹「音源未就绪」
     const engineReady: boolean = await waitForLxEngineReady(3000);
@@ -1130,7 +1199,18 @@ export class MediaService {
     //   （如 `…/lx/api/redirect.php?u=<base64(http://ip:port/stream-…)>`）。
     //   AVPlayer 对这种 302→http 的链路会报 5400103（IO error），
     //   这里把 base64 还原成直链再交给播放器。
-    songItem.url = this.unwrapRedirectUrl(outcome.url);
+    let finalUrl: string = this.unwrapRedirectUrl(outcome.url);
+    // ★ 2026-10-30（汽水：能起播但进度一直是 0）：douyinvod 给的是给浏览器 MSE 用的
+    //   分片 mp4（mime_type=audio_mp4），原生 AVPlayer 边界情况解不出时长/索引 ⇒ 卡在 0。
+    //   这类流先整段落盘到 cacheDir，再用 fdSrc 播（本地文件有完整 moov，能正常 seek/计时）。
+    if (finalUrl.indexOf('douyinvod') >= 0 || finalUrl.indexOf('audio_mp4') >= 0) {
+      const local: string = await this.cacheStreamToLocal(finalUrl);
+      if (local.length > 0) {
+        this.cachedLocalPath = local;
+        appendPlayLog('[播放] 汽水分片流已落盘，改用本地播放 path=' + local);
+      }
+    }
+    songItem.url = finalUrl;
     // 记录实际使用的音质（可能因自动降级低于偏好设置）
     this.getAppState().currentQuality = outcome.quality;
     appendPlayLog('[播放] resolveOnlineUrl 成功 quality=' + outcome.quality +
