@@ -3,10 +3,17 @@
  *
  * 音源更新：**只走官方通道**。
  *
- * 洛雪脚本自己在 `UPDATE_ENABLE` 为真时会调用它的 checkUpdate，并通过
+ * 洛雪脚本在 `UPDATE_ENABLE` 为真时会调用它的 checkUpdate，并通过
  * `lx.EVENT_NAMES.updateAlert` 上报 `{ log, updateUrl }`；我们的引擎已经接住并写入
- * AppStorage（见 `LXSourceEngine.ets:578-588`：`lxUpdateAlertUrl` / `lxUpdateAlertLog`）。
- * 所以这里**不做任何自研请求**，只读引擎上报的结果。
+ * AppStorage（见 `LXSourceEngine.ets` 的 `case 'updateAlert'`：
+ * `lxUpdateAlertUrl` / `lxUpdateAlertLog` / `lxUpdateAlertVersion`）。
+ *
+ * ★ 2026-10-30 清理：之前我额外加过一套 `rzd_update_alert_*` 键与 `appendLog` 抓取，
+ *   既是重复通道、键名又写错（官方键是 `lxUpdateAlert*`），于是「检查更新」一直是 false。
+ *   现在收敛到这一处，按三条优先级读：
+ *     ① 官方 alert（引擎写 AppStorage）
+ *     ② 播放日志缓冲里的「更新提示: … url=…」（有些脚本只打日志、不上报 alert）
+ *     ③ AppStorageV2 的 UpdateAlertState 镜像（历史兼容）
  */
 
 import { AppStorageV2 } from '@kit.ArkUI';
@@ -27,52 +34,46 @@ export class SourceUpdateInfo {
 }
 
 /**
- * 读取官方 updateAlert（不发起任何网络请求）。
- * 没有上报时返回 `hasUpdate=false` 并给出提示文案。
+ * 读取官方 updateAlert（不发生任何网络请求）。
+ * @returns 有更新时 `hasUpdate=true` 并带 url/log；否则 `error` 给出说明。
  */
 export function readOfficialUpdateAlert(): SourceUpdateInfo {
   const out: SourceUpdateInfo = new SourceUpdateInfo();
   const state: UpdateAlertState | undefined =
     AppStorageV2.connect(UpdateAlertState, 'rzd_update_alert', () => new UpdateAlertState());
-  // ★ 优先读引擎抓到的脚本日志（AppStorage 两个键），再退回 UpdateAlertState
-  let liveUrl: string = AppStorage.get<string>('rzd_update_alert_url') ?? '';
-  let liveLog: string = AppStorage.get<string>('rzd_update_alert_log') ?? '';
-  // ★ 2026-10-30：兜底——引擎的「更新提示」一定进了播放日志缓冲（用户日志页能看到），
-  //   这里直接从那批文本里再抓一次，保证「检查更新」不依赖 AppStorage 写入时序。
-  if (liveUrl.length === 0) {
+
+  // ① 官方通道：引擎接住脚本的 updateAlert 事件后写下的键
+  let url: string = AppStorage.get<string>('lxUpdateAlertUrl') ?? '';
+  let log: string = AppStorage.get<string>('lxUpdateAlertLog') ?? '';
+
+  // ② 日志兜底：脚本只打「更新提示: … url=…」时，从播放日志缓冲里抓
+  if (url.length === 0) {
     const buf: string = AppStorage.get<string>('lxPlayLog') ?? '';
     const idx: number = buf.lastIndexOf('更新提示');
     if (idx >= 0) {
       const line: string = buf.substring(idx, Math.min(buf.length, idx + 200));
       const m: RegExpMatchArray | null = line.match(/url=(\S+)/);
       if (m !== null && m.length > 1) {
-        liveUrl = m[1];
+        url = m[1];
       }
-      liveLog = line.split('\n')[0].substring(0, 120);
+      log = line.split('\n')[0].substring(0, 120);
     }
   }
-  const url: string = liveUrl.length > 0 ? liveUrl : (state === undefined ? '' : state.updateUrl);
+
+  // ③ 历史镜像兜底
+  if (url.length === 0 && state !== undefined && state.updateUrl.length > 0) {
+    url = state.updateUrl;
+    log = state.log;
+  }
+
   if (url.length > 0) {
     out.hasUpdate = true;
     out.updateUrl = url;
-    out.message = liveLog.length > 0 ? liveLog : (state === undefined ? '' : state.log);
-    console.info('[RzdSourceUpdate] official alert url=' + url);
+    out.message = log;
+    console.info('[RzdSourceUpdate] alert url=' + url);
     return out;
   }
   out.error = '该音源未上报更新（脚本 UPDATE_ENABLE 未开启或已是最新）';
-  console.info('[RzdSourceUpdate] no official alert');
+  console.info('[RzdSourceUpdate] no alert');
   return out;
-}
-/**
- * ★ 2026-10-29：脚本只打日志「更新提示: … url=…」、从不上报 updateAlert。
- *  引擎抓到这类日志时用它写进官方 alert，「检查更新」才读得到。
- */
-export function recordOfficialUpdateAlert(log: string, url: string): void {
-  const st: UpdateAlertState | undefined =
-    AppStorageV2.connect(UpdateAlertState, 'rzd_update_alert', () => new UpdateAlertState());
-  if (st !== undefined) {
-    st.updateUrl = url;
-    st.log = log;
-  }
-  console.info('[RzdSourceUpdate] captured url=' + url);
 }

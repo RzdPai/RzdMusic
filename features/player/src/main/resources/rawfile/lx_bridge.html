@@ -47,13 +47,16 @@
   var eventNames = Object.values(EVENT_NAMES);
   var events = { request: null };
 
-  var allSources = ['kw', 'kg', 'tx', 'wy', 'mg', 'local'];
+  // ★ 2026-10-30：加上汽水（qs）。此前白名单缺它，脚本上报的 qs 被静默丢掉 —— 界面只显示 5 个平台。
+  var allSources = ['kw', 'kg', 'tx', 'wy', 'mg', 'qs', 'local'];
   var supportQualitys = {
     kw: ['128k', '320k', 'flac', 'flac24bit', 'hires', 'atmos', 'atmos_plus', 'master'],
     kg: ['128k', '320k', 'flac', 'flac24bit', 'hires', 'atmos', 'master'],
     tx: ['128k', '320k', 'flac', 'flac24bit', 'hires', 'atmos', 'atmos_plus', 'master'],
     wy: ['128k', '320k', 'flac', 'flac24bit', 'hires', 'atmos', 'master'],
     mg: ['128k', '320k', 'flac', 'flac24bit', 'hires'],
+    // 汽水：lossless/hi_res/higher/highest/medium 映射后还有 spatial
+    qs: ['128k', '320k', 'flac', 'hires', 'spatial'],
     local: []
   };
   var supportActions = {
@@ -63,6 +66,7 @@
     wy: ['musicUrl', 'lyric', 'pic'],
     mg: ['musicUrl', 'lyric', 'pic'],
     xm: ['musicUrl', 'lyric', 'pic'],
+    qs: ['musicUrl', 'lyric', 'pic'],
     local: ['musicUrl', 'lyric', 'pic']
   };
 
@@ -196,6 +200,25 @@
           actions: actions.filter(function(a) { return userSource.actions.indexOf(a) !== -1; }),
           qualitys: qualitys.filter(function(q) { return userSource.qualitys.indexOf(q) !== -1; })
         };
+      }
+      // ★ 2026-10-30：白名单之外的平台（脚本新增的平台）原样透传，
+      //   避免"脚本支持但界面看不到"。只做最基本的字段清洗。
+      var known = {};
+      for (var k = 0; k < allSources.length; k++) known[allSources[k]] = true;
+      if (info.sources) {
+        var extraKeys = Object.keys(info.sources);
+        for (var e = 0; e < extraKeys.length; e++) {
+          var ek = extraKeys[e];
+          if (known[ek] || !info.sources[ek]) continue;
+          var es = info.sources[ek];
+          if (!es || es.type !== 'music') continue;
+          sourceInfo.sources[ek] = {
+            type: 'music',
+            actions: (es.actions || []).slice(0, 8),
+            qualitys: (es.qualitys || []).slice(0, 12),
+            name: (typeof es.name === 'string' ? es.name.substring(0, 32) : '')
+          };
+        }
       }
     } catch(error) {
       sendToNative({ event: 'init', data: { gen: initGen, status: false, message: error.message } });

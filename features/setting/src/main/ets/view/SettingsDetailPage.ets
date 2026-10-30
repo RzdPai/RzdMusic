@@ -649,13 +649,34 @@ export struct SettingsDetailPage {
         ]
       }).then((result) => {
         if (result.index === 1 && info.updateUrl.length > 0) {
-          void this.importLXSourceFromUrl(info.updateUrl);
+          // ★ 2026-10-30（用户）：更新链接是网页（kdocs），不下载、直接跳浏览器
+          this.openInBrowser(info.updateUrl, '音源更新');
         }
       });
       return;
     }
     // ① 没有更新就**静默**（只在日志里留痕）
     appendPlayLog('[RzdSourceUpdate] ' + api.name + ' no update: ' + info.error);
+  }
+
+  /** 用系统浏览器打开外部链接（更新页/主页这类非脚本链接走这里，避免把网页当脚本导入）。 */
+  private openInBrowser(url: string, label: string): void {
+    if (url.length === 0 || !/^https?:\/\//.test(url)) {
+      this.toast('链接无效');
+      return;
+    }
+    try {
+      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      const want: Want = {
+        action: 'ohos.want.action.viewData',
+        entities: ['entity.system.browsable'],
+        uri: url
+      };
+      ctx.startAbility(want);
+      appendPlayLog('[RzdUpdate] open browser url=' + url.substring(0, 80));
+    } catch (err) {
+      this.toast('无法打开浏览器：' + ((err as Error).message ?? ''));
+    }
   }
 
   private checkSourceUpdate(api: LXUserApiInfo): void {
@@ -713,18 +734,9 @@ export struct SettingsDetailPage {
         readTimeout: LX_ONLINE_IMPORT_TIMEOUT,
         expectDataType: http.HttpDataType.STRING
       });
-      // ★ 2026-10-30（用户：「立即更新」后多出一条 user_api_<日期> 脏音源）：
-      //   更新链接可能是网页（如 kdocs），绝不能当脚本入库 —— 先按内容特征拦掉。
-      const bodyText: string = typeof resp.result === 'string' ? (resp.result as string) : '';
-      const looksHtml: boolean = /^\s*<(!doctype|html)/i.test(bodyText) || bodyText.indexOf('<body') >= 0;
-      const looksJs: boolean = bodyText.indexOf('lx.send') >= 0 || bodyText.indexOf('EVENT_NAMES') >= 0 ||
-        bodyText.indexOf('musicUrl') >= 0;
-      if (looksHtml || !looksJs) {
-        appendPlayLog('[RzdImport] update url is not a script (html=' + (looksHtml ? 1 : 0) +
-          ' len=' + bodyText.length + ')');
-        this.toast('更新链接返回的是网页，不是音源脚本，请手动下载后导入');
-        return;
-      }      if (resp.responseCode !== 200 || typeof resp.result !== 'string') {
+      // ★ 2026-10-30（按用户要求回退内容校验）：这里恢复原行为，不再因"像网页"而拦截。
+      //   「立即更新」已改为跳浏览器，「下载并导入」这条路只服务真正的脚本链接。
+      if (resp.responseCode !== 200 || typeof resp.result !== 'string') {
         this.toast('拉取失败，请检查链接');
         return;
       }
