@@ -35,6 +35,17 @@ class EqPreset {
   }
 }
 
+/** 内核选项。 */
+class EngineModeOption {
+  label: string = '';
+  value: string = '';
+
+  constructor(label: string, value: string) {
+    this.label = label;
+    this.value = value;
+  }
+}
+
 const EQ_PRESETS: EqPreset[] = [
   new EqPreset('关闭', [0, 0, 0, 0, 0]),
   new EqPreset('流行', [2, 1, -1, 1, 2]),
@@ -55,6 +66,15 @@ export struct PlaybackTuningPanel {
   @Local presetName: string = '关闭';
   /** 仅用于强制刷新「播放内核」文案（恢复 FFmpeg 后立即变）。 */
   @Local engineTick: number = 0;
+  /** 播放内核选择：auto / av / ffmpeg。 */
+  @Local engineMode: string = 'auto';
+
+  /** 内核选项表：自动 / 系统播放器 / FFmpeg。 */
+  private static readonly ENGINE_MODES: EngineModeOption[] = [
+    new EngineModeOption('自动', 'auto'),
+    new EngineModeOption('系统播放器', 'av'),
+    new EngineModeOption('FFmpeg', 'ffmpeg')
+  ];
 
   private store: MusicStoreService = MusicStoreService.getInstance();
   /** 与播放器共享的全局状态（只读倍速用于高亮）。 */
@@ -66,6 +86,7 @@ export struct PlaybackTuningPanel {
     this.pitch = this.store.getTuningPitch();
     this.eqGains = this.store.getEqGains();
     this.presetName = this.matchPresetName(this.eqGains);
+    this.engineMode = this.store.getEngineMode();
   }
 
   /** 当前增益对应的预设名（没有匹配则空串）。 */
@@ -321,6 +342,41 @@ export struct PlaybackTuningPanel {
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)
+
+      // 播放内核选择（方便真机对比两条链路）
+      Row() {
+        Text('播放内核')
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.font_primary'))
+          .layoutWeight(1)
+      }
+      .width('100%')
+      .margin({ top: 12, bottom: 6 })
+
+      Row({ space: 8 }) {
+        ForEach(PlaybackTuningPanel.ENGINE_MODES, (item: EngineModeOption) => {
+          Button() {
+            Text(item.label)
+              .fontSize(13)
+              .fontColor(this.engineMode === item.value ?
+                $r('app.color.page_background') : $r('app.color.font_primary'))
+          }
+          .type(ButtonType.Capsule)
+          .height(30)
+          .padding({ left: 14, right: 14 })
+          .backgroundColor(this.engineMode === item.value ?
+            this.themeStateColor() : $r('app.color.background_secondary'))
+          .onClick((): void => {
+            this.engineMode = item.value;
+            this.store.setEngineMode(item.value);
+            this.engineTick = this.engineTick + 1;
+            appendPlayLog('[RzdTuning] engineMode=' + item.value);
+          })
+        }, (item: EngineModeOption) => 'engine-mode-' + item.value)
+      }
+      .width('100%')
+      .margin({ bottom: 4 })
 
       // 播放内核状态（连续失败会自动降级到系统播放器，这里可一键恢复）
       Row() {

@@ -87,6 +87,8 @@ const KEY_TUNING_EQ: string = 'tuning_eq_gains';
 const KEY_IJK_FAIL_STREAK: string = 'ijk_fail_streak';
 /** 汽水是否已临时禁用 FFmpeg 内核（连续失败后自动回退 AVPlayer）。 */
 const KEY_IJK_DISABLED: string = 'ijk_disabled';
+/** 播放内核选择：auto=自动 / av=强制系统播放器 / ffmpeg=强制 FFmpeg。 */
+const KEY_ENGINE_MODE: string = 'engine_mode';
 const KEY_DOWNLOAD_SAVE_MODE: string = 'download_save_mode';
 const KEY_DOWNLOAD_QUALITY_MODE: string = 'download_quality_mode';
 const KEY_DOWNLOAD_MANUAL_QUALITY: string = 'download_manual_quality';
@@ -1758,6 +1760,23 @@ export class MusicStoreService {
       return fallback;
     }
 
+    /** @returns 播放内核选择（auto / av / ffmpeg）。 */
+    public getEngineMode(): string {
+      const store = this.getStore();
+      if (store === undefined) {
+        return 'auto';
+      }
+      const mode: string = store.getSync(KEY_ENGINE_MODE, 'auto') as string;
+      return mode.length > 0 ? mode : 'auto';
+    }
+
+    public setEngineMode(mode: string): void {
+      const store = this.getStore();
+      if (store === undefined) {
+        return;
+      }
+      store.putSync(KEY_ENGINE_MODE, mode);
+    }
     /** @returns 汽水 FFmpeg 内核的连续失败次数。 */
     public getIjkFailStreak(): number {
       const store = this.getStore();

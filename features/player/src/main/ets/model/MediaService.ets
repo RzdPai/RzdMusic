@@ -1338,7 +1338,16 @@ export class MediaService {
    * 用户可在「播放设置」里点「恢复 FFmpeg」清除该标记。
    */
   private shouldUseIjk(): boolean {
-    return !MusicStoreService.getInstance().isIjkDisabled();
+    const store = MusicStoreService.getInstance();
+    const mode: string = store.getEngineMode();
+    if (mode === 'av') {
+      return false;
+    }
+    if (mode === 'ffmpeg') {
+      // 用户强制 FFmpeg：忽略自动降级标记（他明确要看这条链路）
+      return true;
+    }
+    return !store.isIjkDisabled();
   }
 
   /** ijk 播放成功后清零失败计数。 */
@@ -1364,6 +1373,13 @@ export class MediaService {
 
   /** @returns 当前生效的播放内核名（设置页展示用）。 */
   public engineName(): string {
+    const mode: string = MusicStoreService.getInstance().getEngineMode();
+    if (mode === 'av') {
+      return '系统播放器（AVPlayer）· 已锁定';
+    }
+    if (mode === 'ffmpeg') {
+      return 'FFmpeg（ijk）· 已锁定';
+    }
     if (!this.shouldUseIjk()) {
       return '系统播放器（AVPlayer）· 汽水已降级';
     }
