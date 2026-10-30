@@ -83,6 +83,10 @@ export class MediaService {
   private get abilityContext(): common.UIAbilityContext | undefined {
     return getAppRuntime().context;
   }
+  /** ★ 汽水(fMP4) 已落盘待播的本地文件路径；空串表示没有。 */
+  private pendingLocalPath: string = '';
+  /** ★ 当前装载的是本地 fd 还是网络 url（切换源类型前必须 reset，否则会静音/无进度）。 */
+  private usingLocalFd: boolean = false;
   /** Underlying Harmony AVPlayer; undefined until createAVPlayer succeeds. */
   public avPlayer?: media.AVPlayer;
   /** Active AV session for lock screen / headset / system media controls. */
@@ -417,12 +421,82 @@ export class MediaService {
    * state transition, so the 'idle' callback never fires and the track would
    * never load — the silent "stuck playback / play button dead" bug.
    */
+  /**
+   * 把音频流整段下载到 cacheDir（只用于分片 mp4 这类原生边下边播处理不了的流）。
+   * @param url 直链。
+   * @returns 本地路径；失败返回空串。
+   */
+  private async cacheStreamToLocal(url: string): Promise<string> {
+    const ctx: common.UIAbilityContext | undefined = this.abilityContext;
+    if (ctx === undefined) {
+      return '';
+    }
+    const dir: string = ctx.cacheDir + '/soda_stream';
+    try {
+      if (!fs.accessSync(dir)) {
+        fs.mkdirSync(dir);
+      }
+    } catch (err) {
+    }
+    const path: string = dir + '/stream_' + Date.now().toString() + '.m4a';
+    const req: http.HttpRequest = http.createHttp();
+    try {
+      const resp: http.HttpResponse = await req.request(url, {
+        method: http.RequestMethod.GET,
+        expectDataType: http.HttpDataType.ARRAY_BUFFER,
+        connectTimeout: 15000,
+        readTimeout: 120000
+      });
+      if (resp.responseCode !== 200 || resp.result === undefined) {
+        this.appendPlayLog('[播放] 分片流下载失败 code=' + resp.responseCode);
+        return '';
+      }
+      const buf: ArrayBuffer = resp.result as ArrayBuffer;
+      if (buf.byteLength < 32 * 1024) {
+        return '';
+      }
+      const file = fs.openSync(path, fs.OpenMode.CREATE | fs.OpenMode.READ_WRITE);
+      fs.writeSync(file.fd, buf);
+      fs.closeSync(file);
+      this.appendPlayLog('[播放] 分片流已落盘 ' + Math.round(buf.byteLength / 1024) + 'KB');
+      return path;
+    } catch (err) {
+      this.appendPlayLog('[播放] 分片流下载异常');
+      return '';
+    } finally {
+      req.destroy();
+    }
+  }
+
   private async loadCurrentIntoPlayer(): Promise<void> {
     const idleSong: SongItem | undefined = this.getSongItemAtQueueIndex(this.musicIndex);
     if (!idleSong || !this.avPlayer) {
       return;
     }
     this.songItem = await this.songItemBuilder.build(idleSong);
+      // ★ 汽水已落盘：优先 fdSrc；与网络 url 互切前先 reset，避免「有时长但进度不走」
+      if (this.pendingLocalPath.length > 0) {
+        if (this.usingLocalFd === false && this.avPlayer.state !== 'idle') {
+          this.avPlayer.reset();
+          return;
+        }
+        try {
+          const info: fs.Stat = fs.statSync(this.pendingLocalPath);
+          const file = fs.openSync(this.pendingLocalPath, fs.OpenMode.READ_ONLY);
+          this.avPlayer.fdSrc = { fd: file.fd, offset: 0, length: info.size };
+          this.usingLocalFd = true;
+          this.pendingLocalPath = '';
+          this.appendPlayLog('[播放] 装载本地缓存曲目（汽水）size=' + info.size);
+          return;
+        } catch (err) {
+          this.appendPlayLog('[播放] 本地缓存装载失败，退回网络播放');
+          this.pendingLocalPath = '';
+        }
+      }
+      if (this.usingLocalFd === true && this.avPlayer.state !== 'idle') {
+        this.avPlayer.reset();
+        return;
+      }
     const httpUrl: string = this.songItemBuilder.getHttpUrl();
     if (httpUrl.length > 0) {
       this.avPlayer.url = httpUrl;
@@ -1095,13 +1169,7 @@ export class MediaService {
       ' 排除失败url=' + (this.failedUrl.length > 0 ? '是' : '否'));
     // 失败重解析时排除刚刚失败的同一条地址与同一档音质，避免重复拿到死链
     const opts: FallbackOptions = new FallbackOptions();
-    // ★ 2026-10-30（汽水：prepared 但一直 0 进度）：脚本给的是 douyinvod 的
-    //   分片 mp4（mime_type=audio_mp4，给浏览器 MSE 用的），ArkUI AVPlayer 解不出索引 ⇒ 卡 0。
-    //   原生无法重封装，所以汽水曲目改为「按歌名/歌手到其它平台取流」，照样能播。
-    if (songItem.source === 'qs') {
-      opts.skipPlatform = 'qs';
-      appendPlayLog('[播放] 汽水分片流原生不可播 → 改由其它平台取流：' + name + ' / ' + singer);
-    }
+
     opts.excludeUrl = this.failedUrl;
     opts.excludeQuality = this.failedQuality;
     // 与「播放失败自动跨音源脚本」同一开关：同时控制跨平台搜索
@@ -1137,7 +1205,19 @@ export class MediaService {
     //   （如 `…/lx/api/redirect.php?u=<base64(http://ip:port/stream-…)>`）。
     //   AVPlayer 对这种 302→http 的链路会报 5400103（IO error），
     //   这里把 base64 还原成直链再交给播放器。
-    songItem.url = this.unwrapRedirectUrl(outcome.url);
+    const unwrapped: string = this.unwrapRedirectUrl(outcome.url);
+    // ★ 2026-10-30（汽水：**时长有、进度不走**）：脚本给的是 douyinvod 的分片 mp4
+    //   （`mime_type=audio_mp4`，给浏览器 MSE 用）。AVPlayer 能 prepared 拿到总时长，
+    //   但边下边播解不出分片索引 ⇒ 进度恒 0。落盘成完整文件后 fdSrc 播放即可正常走秒。
+    if (songItem.source === 'qs' || unwrapped.indexOf('douyinvod') >= 0 ||
+      unwrapped.indexOf('audio_mp4') >= 0) {
+      const local: string = await this.cacheStreamToLocal(unwrapped);
+      if (local.length > 0) {
+        this.pendingLocalPath = local;
+        appendPlayLog('[播放] 汽水分片流已落盘 → 用本地文件播放');
+      }
+    }
+    songItem.url = unwrapped;
     // 记录实际使用的音质（可能因自动降级低于偏好设置）
     this.getAppState().currentQuality = outcome.quality;
     appendPlayLog('[播放] resolveOnlineUrl 成功 quality=' + outcome.quality +
@@ -2138,7 +2218,8 @@ export class MediaService {
       let httpUrl = this.songItemBuilder.getHttpUrl();
       if (this.avPlayer) {
         if (httpUrl.length > 0) {
-          this.avPlayer.url = httpUrl;
+          this.usingLocalFd = false;
+        this.avPlayer.url = httpUrl;
           Logger.info(TAG, 'loadAsset avPlayer.url:' + this.avPlayer.url);
         } else {
           let url = this.songItemBuilder.getRealUrl();
