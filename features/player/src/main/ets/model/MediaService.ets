@@ -1225,6 +1225,13 @@ export class MediaService {
         st.isResolving = false;
         this.state = AudioPlayerState.PLAY;
         this.isPrepared = true;
+        // 播放设置：EQ / 升降调（实验性；非默认值才下发）
+        const store = MusicStoreService.getInstance();
+        const eq: number[] = store.getEqGains();
+        const pitch: number = store.getTuningPitch();
+        if (pitch !== 0 || eq[0] !== 0 || eq[1] !== 0 || eq[2] !== 0 || eq[3] !== 0 || eq[4] !== 0) {
+          engine.applyTuning(eq, pitch);
+        }
         if (playedGen >= 0) {
           engine.start();
           engine.setVolume(1);

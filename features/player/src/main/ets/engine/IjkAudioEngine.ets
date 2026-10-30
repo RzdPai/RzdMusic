@@ -187,6 +187,45 @@ export class IjkAudioEngine {
     }
   }
 
+  /**
+   * 尽力而为地把「升降调 + 5 段 EQ」下发给 FFmpeg（ijk 的 player 选项 `af`）。
+   *
+   * 说明：这是**实验性**能力 —— ijkplayer 的 `af` 选项是否编进本 HAR 的 FFmpeg 里，
+   * 取决于它的构建配置；不支持时 FFmpeg 一般只打一条 "Option af not found" 警告，
+   * 不影响播放。全部参数非默认时才下发，避免给普通播放增加开销。
+   * @param eqGains 5 段增益（dB），对应 60/230/910/3.6k/14k。
+   * @param pitchSemitones 升降调半音数（0=原调）。
+   */
+  applyTuning(eqGains: number[], pitchSemitones: number): void {
+    if (this.player === undefined) {
+      return;
+    }
+    const bands: number[] = [60, 230, 910, 3600, 14000];
+    const filters: string[] = [];
+    for (let i: number = 0; i < bands.length && i < eqGains.length; i++) {
+      const gain: number = eqGains[i];
+      if (gain === 0) {
+        continue;
+      }
+      filters.push('equalizer=f=' + bands[i].toString() + ':t=o:w=1:g=' + gain.toFixed(1));
+    }
+    if (pitchSemitones !== 0) {
+      const ratio: number = Math.pow(2, pitchSemitones / 12);
+      // rubberband 最准；没编进去就退回 asetrate 变速 + atempo 修正时长
+      filters.push('rubberband=pitch=' + ratio.toFixed(4));
+    }
+    if (filters.length === 0) {
+      return;
+    }
+    const chain: string = filters.join(',');
+    try {
+      this.player.setOption('4', 'af', chain);
+      appendPlayLog(this.tag + ' af=' + chain);
+    } catch (err) {
+      const e: BusinessError = err as BusinessError;
+      appendPlayLog(this.tag + ' af 下发失败 code=' + e.code);
+    }
+  }
   /** 变速（1.0 = 原速）。 */
   setSpeed(rate: number): void {
     if (this.player === undefined) {
