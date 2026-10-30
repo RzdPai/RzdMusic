@@ -11,7 +11,8 @@
     "@ohos/axios": "^2.2.6",
     "@ohos/crypto-js": "^2.0.5",
     "@jackiehou/lyric-view": "^1.0.9",
-    "@dabing/taglib_harmony": "^1.0.1"
+    "@dabing/taglib_harmony": "^1.0.1",
+    "@ohos/ijkplayer": "2.0.13"
   },
   "devDependencies": {},
   "dynamicDependencies": {}
