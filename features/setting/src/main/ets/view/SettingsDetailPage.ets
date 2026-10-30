@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-import { appendPlayLog } from 'musicbasic';
+import { appendPlayLog , setScreenOrientation } from 'musicbasic';
 import { bundleManager } from '@kit.AbilityKit';
 import { DrawableDescriptor, LayeredDrawableDescriptor } from '@kit.ArkUI';
 import { guardPlayerBack, PlaybackPreferenceService } from 'musicbasic';
@@ -140,6 +140,8 @@ export struct SettingsDetailPage {
    */
   @Local lockScreenPlay: boolean = true;
   @Local audioMix: boolean = false;
+  /** 屏幕方向：auto / portrait / landscape。 */
+  @Local screenOrientation: string = 'auto';
   /** 启动应用自动开始播放（默认关）。 */
   @Local autoPlayOnLaunch: boolean = false;
   @Local lyricBlurEnabled: boolean = true;
@@ -322,6 +324,7 @@ export struct SettingsDetailPage {
     // 锁屏继续播放：缺省（没有这条记录）= 开
     this.lockScreenPlay = MusicStoreService.getInstance().getLockScreenPlay();
     this.audioMix = MusicStoreService.getInstance().getAudioMix();
+    this.screenOrientation = MusicStoreService.getInstance().getScreenOrientation();
     this.autoPlayOnLaunch = MusicStoreService.getInstance().getAutoPlayOnLaunch();
     this.lyricBlurEnabled = MusicStoreService.getInstance().getLyricBlurEnabled();
     this.saveToDownloadDir = MusicStoreService.getInstance().getDownloadSaveMode() === 'download';
@@ -1253,6 +1256,16 @@ export struct SettingsDetailPage {
               const autoPlay: boolean = index === 0;
               this.autoPlayOnLaunch = autoPlay;
               MusicStoreService.getInstance().setAutoPlayOnLaunch(autoPlay);
+            })
+
+          this.SubTitle('屏幕方向')
+          this.CapsuleSelector(['自动', '竖屏', '横屏'],
+            this.screenOrientation === 'portrait' ? 1 : (this.screenOrientation === 'landscape' ? 2 : 0),
+            (index: number) => {
+              const mode: string = index === 1 ? 'portrait' : (index === 2 ? 'landscape' : 'auto');
+              this.screenOrientation = mode;
+              const ctx = getContext(this) as common.UIAbilityContext;
+              void setScreenOrientation(ctx, mode);
             })
         }
         .width('100%')

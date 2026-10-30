@@ -91,6 +91,8 @@ const KEY_IJK_DISABLED: string = 'ijk_disabled';
 const KEY_ENGINE_MODE: string = 'engine_mode';
 /** 音效开关（JSON：低音/立体声/人声消除/夜间/混响）。 */
 const KEY_AUDIO_EFFECTS: string = 'audio_effects';
+/** 屏幕方向：auto=跟随系统/陀螺仪，portrait=锁定竖屏，landscape=锁定横屏。 */
+const KEY_SCREEN_ORIENTATION: string = 'screen_orientation';
 const KEY_DOWNLOAD_SAVE_MODE: string = 'download_save_mode';
 const KEY_DOWNLOAD_QUALITY_MODE: string = 'download_quality_mode';
 const KEY_DOWNLOAD_MANUAL_QUALITY: string = 'download_manual_quality';
@@ -1762,6 +1764,23 @@ export class MusicStoreService {
       return fallback;
     }
 
+    /** @returns 屏幕方向（auto / portrait / landscape）。 */
+    public getScreenOrientation(): string {
+      const store = this.getStore();
+      if (store === undefined) {
+        return 'auto';
+      }
+      const mode: string = store.getSync(KEY_SCREEN_ORIENTATION, 'auto') as string;
+      return mode.length > 0 ? mode : 'auto';
+    }
+
+    public setScreenOrientation(mode: string): void {
+      const store = this.getStore();
+      if (store === undefined) {
+        return;
+      }
+      store.putSync(KEY_SCREEN_ORIENTATION, mode);
+    }
     /** @returns 音效开关 JSON（由 player 的 AudioEffects 解析）。 */
     public getAudioEffects(): string {
       const store = this.getStore();

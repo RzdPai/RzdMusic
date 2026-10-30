@@ -179,3 +179,5 @@ export { MotionCoverService } from './src/main/ets/services/MotionCoverService';
 export { MotionCoverLayer } from './src/main/ets/view/MotionCoverLayer';
 
 export { FeedPlaybackState, FeedQueueEntry } from './src/main/ets/model/FeedPlaybackState';
+
+export { applyScreenOrientation, setScreenOrientation, orientationLabel, ORIENTATION_AUTO, ORIENTATION_PORTRAIT, ORIENTATION_LANDSCAPE } from './src/main/ets/util/ScreenOrientationUtil';
