@@ -15,33 +15,22 @@
 import { IjkMediaPlayer, InterruptEvent, InterruptForceType, InterruptHintType } from '@ohos/ijkplayer';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { appendPlayLog } from 'musicbasic';
+import {
+  AudioKernel,
+  AudioKernelCallbacks,
+  AudioInterruptKind,
+  PlaybackKernelKind
+} from './AudioKernel';
 
-/** 音频焦点中断的三种结果（由 ijk 的 audioInterrupt 归一化而来）。 */
-export enum AudioInterruptKind {
-  PAUSE = 0,
-  RESUME = 1,
-  STOP = 2
-}
 
-/** 一次播放的回调集合（全部由 MediaService 提供，保持单一状态源）。 */
-export interface IjkAudioCallbacks {
-  /** 时长就绪（毫秒）。 */
-  onDuration?: (durationMs: number) => void;
-  /** 首帧/首包就绪，可以真正 start 了。 */
-  onPrepared?: () => void;
-  /** 播放完成（自然结束）。 */
-  onCompleted?: () => void;
-  /** 出错：调用方通常回退到 AVPlayer 或跨源重试。 */
-  onError?: (code: number, message: string) => void;
-}
 
 /**
  * 纯音频 IJK 引擎封装。
  * 用法：`create()` → `load(url)` → `start()` → `seekTo(ms)` … → `release()`。
  */
-export class IjkAudioEngine {
+export class IjkAudioEngine implements AudioKernel {
   private player: IjkMediaPlayer | undefined = undefined;
-  private callbacks: IjkAudioCallbacks = {};
+  private callbacks: AudioKernelCallbacks = {};
   private readonly tag: string = '[RzdIjk]';
   private prepared: boolean = false;
   private released: boolean = false;
@@ -55,7 +44,7 @@ export class IjkAudioEngine {
    * 创建引擎实例。
    * @param callbacks 进度/完成/错误回调。
    */
-  create(callbacks: IjkAudioCallbacks): void {
+  create(callbacks: AudioKernelCallbacks): void {
     this.callbacks = callbacks;
     const id: string = IjkAudioEngine.nextId();
     const player: IjkMediaPlayer = new IjkMediaPlayer(id);
@@ -95,6 +84,15 @@ export class IjkAudioEngine {
     appendPlayLog(this.tag + ' create id=' + id);
   }
 
+  /** @returns 内核种类。 */
+  kind(): PlaybackKernelKind {
+    return PlaybackKernelKind.FFMPEG;
+  }
+
+  /** AudioKernel 接口名（等价于 load）。 */
+  prepare(url: string): void {
+    this.load(url);
+  }
   /** 装载地址（http/https/file）。 */
   load(url: string): void {
     if (this.player === undefined) {
