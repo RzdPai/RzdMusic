@@ -28,6 +28,8 @@ import {
 const EQ_BANDS: number[] = [60, 230, 910, 3600, 14000];
 
 export class MpvAudioEngine implements AudioKernel {
+  /** 探测结果缓存：避免每次判断都 mpv_create 一遍（真机日志里重复打印过）。 */
+  private static probed: boolean | undefined = undefined;
   private callbacks: AudioKernelCallbacks = {};
   private readonly tag: string = '[RzdMpv]';
   private created: boolean = false;
@@ -40,11 +42,16 @@ export class MpvAudioEngine implements AudioKernel {
    * @returns 内核是否可用（真正探测：建一次 mpv 实例）。
    */
   static isAvailable(): boolean {
+    if (MpvAudioEngine.probed !== undefined) {
+      return MpvAudioEngine.probed;
+    }
     try {
       const ok: boolean = mpvNative.isAvailable();
+      MpvAudioEngine.probed = ok;
       appendPlayLog('[RzdKernel] mpv 探测=' + ok);
       return ok;
     } catch (err) {
+      MpvAudioEngine.probed = false;
       appendPlayLog('[RzdKernel] mpv 探测失败（未打包 libmpvnative/libmpv）');
       return false;
     }

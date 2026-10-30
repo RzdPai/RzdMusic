@@ -1534,11 +1534,11 @@ export class MediaService {
     }
     if (this.shouldUseIjk() && (songItem.source === 'qs' || outcome.url.indexOf('audio_mp4') >= 0)) {
       this.ijkUrl = outcome.url;
-      this.appendPlayLog('[播放] 分片流 → 交给 FFmpeg(ijk) 音频引擎');
+      this.appendPlayLog('[播放] 分片流 → 交给内核 ' + kernelName(preferredKernel()));
     } else if (tuningOn && this.shouldUseIjk()) {
       // ★ 播放设置有非默认的音效/升降调：普通曲目也走 FFmpeg，否则 EQ 无处可生效
       this.ijkUrl = outcome.url;
-      this.appendPlayLog('[播放] 音效已开启 → 普通曲目也走 FFmpeg(ijk)');
+      this.appendPlayLog('[播放] 音效已开启 → 普通曲目也走内核 ' + kernelName(preferredKernel()));
     } else {
       this.ijkUrl = '';
     }
@@ -2544,6 +2544,11 @@ export class MediaService {
     }
     if (this.isFirst) {
       this.isFirst = false;
+        // ★ 汽水/音效曲目：首次加载也必须交给内核，不能走 AVPlayer（真机日志证实这里抢跑）
+        if (this.ijkUrl.length > 0) {
+          this.startIjkPlayback(this.ijkUrl);
+          return;
+        }
       this.appendPlayLog('[播放] 首次加载 url=' + queueSong.url);
       this.songItem = await this.songItemBuilder.build(queueSong);
       let httpUrl = this.songItemBuilder.getHttpUrl();
