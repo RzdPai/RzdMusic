@@ -36,6 +36,8 @@ export class FallbackOptions {
   allowScriptSwitch: boolean = true;
   /** 原平台全部失败后，按歌名+歌手到其它平台搜索重试（默认开）。 */
   allowPlatformSwitch: boolean = true;
+  /** ★ 2026-10-30：跳过的平台（汽水分片 mp4 原生播不了 → 换平台取流）。 */
+  skipPlatform: string = '';
 }
 
 export class UrlResolveOutcome {
@@ -686,7 +688,11 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
   const preferred: string = await PlaybackPreferenceService.resolveDefaultQuality();
   const activeAtStart: string = activeSourceId();
   // ★ B2/B3 唯一回退链：顺序完全由 buildCandidateChain() 决定（同平台源优先 → 换平台按音质）
-  const cands: FallbackCandidate[] = buildCandidateChain(preferred, source);
+  const builtCands: FallbackCandidate[] = buildCandidateChain(preferred, source);
+  // ★ 跳过指定平台（见 FallbackOptions.skipPlatform）
+  const cands: FallbackCandidate[] = opts.skipPlatform.length > 0
+    ? builtCands.filter((c: FallbackCandidate) => c.platform !== opts.skipPlatform)
+    : builtCands;
   // ★ 本次播放"预期使用的脚本"：引擎已加载脚本时就是它；冷启动（未加载任何脚本）时
   //   取回退链第一个候选（= 用户设置的默认音源脚本）。
   //   只有命中脚本**不等于**它，才算真的"切换了音源"，否则不该弹「已切换音源：xxx」。

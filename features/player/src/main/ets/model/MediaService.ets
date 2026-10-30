@@ -1095,6 +1095,13 @@ export class MediaService {
       ' 排除失败url=' + (this.failedUrl.length > 0 ? '是' : '否'));
     // 失败重解析时排除刚刚失败的同一条地址与同一档音质，避免重复拿到死链
     const opts: FallbackOptions = new FallbackOptions();
+    // ★ 2026-10-30（汽水：prepared 但一直 0 进度）：脚本给的是 douyinvod 的
+    //   分片 mp4（mime_type=audio_mp4，给浏览器 MSE 用的），ArkUI AVPlayer 解不出索引 ⇒ 卡 0。
+    //   原生无法重封装，所以汽水曲目改为「按歌名/歌手到其它平台取流」，照样能播。
+    if (songItem.source === 'qs') {
+      opts.skipPlatform = 'qs';
+      appendPlayLog('[播放] 汽水分片流原生不可播 → 改由其它平台取流：' + name + ' / ' + singer);
+    }
     opts.excludeUrl = this.failedUrl;
     opts.excludeQuality = this.failedQuality;
     // 与「播放失败自动跨音源脚本」同一开关：同时控制跨平台搜索
