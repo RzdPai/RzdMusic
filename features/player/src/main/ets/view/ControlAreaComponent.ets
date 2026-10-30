@@ -23,6 +23,7 @@ import { MusicPlayMode } from '../model/MusicData';
 import { PlayerDataUtil } from '../util/PlayerDataUtil';
 import { PlayerViewModel } from '../viewmodel/PlayerViewModel';
 import { MediaService } from '../model/MediaService';
+import { PlaybackTuningPanel } from './PlaybackTuningPanel';
 import { DownloadUtil } from '../util/DownloadUtil';
 import { LXSearchSong } from '../source/LXMusicSDK';
 import { LXQualityOption, lxGetQualityOptions } from '../source/LXQualityApi';
@@ -1317,141 +1318,7 @@ export struct ControlAreaComponent {
    */
   @Builder
   private TuningRows() {
-    Text('播放设置')
-      .fontSize(18)
-      .fontWeight(FontWeight.Bold)
-      .fontColor($r('app.color.font_primary'))
-      .margin({ top: 8 })
-    Text('倍速、音调与均衡器调节')
-      .fontSize(13)
-      .fontColor($r('app.color.font_tertiary'))
-      .margin({ top: 2, bottom: 14 })
-
-    Row() {
-      Text('播放倍速')
-        .fontSize(16)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.font_primary'))
-        .layoutWeight(1)
-      Text(ControlAreaComponent.rateText(this.playerViewModel.appState.playbackRate))
-        .fontSize(15)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.themeState.color)
-    }
-    .width('100%')
-    .margin({ bottom: 8 })
-
-    Flex({ wrap: FlexWrap.Wrap }) {
-      ForEach(ControlAreaComponent.SPEED_OPTIONS, (rate: number) => {
-        Button() {
-          Text(ControlAreaComponent.rateText(rate))
-            .fontSize(14)
-            .fontColor(this.playerViewModel.appState.playbackRate === rate ?
-              $r('app.color.page_background') : $r('app.color.font_primary'))
-        }
-        .type(ButtonType.Capsule)
-        .height(34)
-        .padding({ left: 16, right: 16 })
-        .margin({ right: 8, bottom: 8 })
-        .backgroundColor(this.playerViewModel.appState.playbackRate === rate ?
-          this.themeState.color : $r('app.color.background_secondary'))
-        .onClick((): void => {
-          this.applySpeedRate(rate);
-        })
-      }, (rate: number) => 'tune-speed-' + rate)
-    }
-    .width('100%')
-    .margin({ bottom: 6 })
-
-    Row() {
-      Text('升降调')
-        .fontSize(16)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.font_primary'))
-        .layoutWeight(1)
-      Text(this.pitchText())
-        .fontSize(15)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.themeState.color)
-        .onClick((): void => {
-          this.applyPitch(0);
-        })
-    }
-    .width('100%')
-    .margin({ top: 10 })
-
-    Slider({
-      value: this.tuningPitch,
-      min: -12,
-      max: 12,
-      step: 1,
-      style: SliderStyle.OutSet
-    })
-      .width('100%')
-      .blockColor(this.themeState.color)
-      .selectedColor(this.themeState.color)
-      .trackColor($r('app.color.background_secondary'))
-      .onChange((value: number): void => {
-        this.applyPitch(Math.round(value));
-      })
-
-    Row() {
-      Text('均衡器（EQ）')
-        .fontSize(16)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.font_primary'))
-        .layoutWeight(1)
-      Text('重置')
-        .fontSize(14)
-        .fontColor(this.themeState.color)
-        .onClick((): void => {
-          this.resetEq();
-        })
-    }
-    .width('100%')
-    .margin({ top: 14, bottom: 10 })
-
-    Row() {
-      ForEach(ControlAreaComponent.EQ_BANDS, (hz: number, index: number) => {
-        Column() {
-          Text(this.eqGains[index].toFixed(0))
-            .fontSize(11)
-            .fontColor($r('app.color.font_tertiary'))
-            .margin({ bottom: 4 })
-          Slider({
-            value: this.eqGains[index],
-            min: -12,
-            max: 12,
-            step: 1,
-            style: SliderStyle.OutSet,
-            direction: Axis.Vertical
-          })
-            .layoutWeight(1)
-            .blockColor(this.themeState.color)
-            .selectedColor(this.themeState.color)
-            .trackColor($r('app.color.background_secondary'))
-            .onChange((value: number): void => {
-              this.applyEqBand(index, Math.round(value));
-            })
-          Text(ControlAreaComponent.eqBandText(hz))
-            .fontSize(10)
-            .fontColor($r('app.color.font_tertiary'))
-            .margin({ top: 6 })
-        }
-        .layoutWeight(1)
-        .height(150)
-        .alignItems(HorizontalAlign.Center)
-      }, (hz: number) => 'eq-band-' + hz)
-    }
-    .width('100%')
-    .alignItems(VerticalAlign.Center)
-
-    if (this.tuningPitch !== 0 || this.hasNonZeroEq()) {
-      Text('升降调与均衡器将在切换 mpv 内核后生效（当前内核仅支持倍速）')
-        .fontSize(11)
-        .fontColor($r('app.color.font_tertiary'))
-        .margin({ top: 10 })
-    }
+    PlaybackTuningPanel()
   }
 
   /** EQ 是否存在非零增益。 */
