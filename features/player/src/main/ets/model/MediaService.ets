@@ -474,6 +474,10 @@ export class MediaService {
     }
     this.songItem = await this.songItemBuilder.build(idleSong);
       // ★ 汽水（分片 mp4）：不经 AVPlayer，直接交给 FFmpeg(ijk) 音频引擎
+      if (this.ijkUrl.length === 0 && this.ijkActive) {
+        this.appendPlayLog('[播放] 切回 AVPlayer，释放 ijk 引擎');
+        this.releaseIjk();
+      }
       if (this.ijkUrl.length > 0) {
         this.startIjkPlayback(this.ijkUrl);
         return;
@@ -1272,6 +1276,20 @@ export class MediaService {
   }
 
   /** 把当前倍速应用到 ijk（AVPlayer 与 ijk 各自生效）。 */
+  /** @returns 播放设置里是否有非默认的升降调 / EQ（有则普通曲目也走 FFmpeg）。 */
+  private isTuningActive(): boolean {
+    const store = MusicStoreService.getInstance();
+    if (store.getTuningPitch() !== 0) {
+      return true;
+    }
+    const gains: number[] = store.getEqGains();
+    for (let i: number = 0; i < gains.length; i++) {
+      if (gains[i] !== 0) {
+        return true;
+      }
+    }
+    return false;
+  }
   private applyIjkRate(): void {
     if (this.ijkEngine === undefined) {
       return;
@@ -1334,9 +1352,14 @@ export class MediaService {
     //   这类流先整段落盘，再走 fdSrc 播本地完整文件（只对汽水生效，其它平台不受影响）。
     // ★ 2026-10-30：汽水给的是 douyinvod 分片 mp4（`audio_mp4`，MSE 用途），
     //   AVPlayer 能拿到总时长但解不出分片索引 ⇒ 进度恒 0。改走 FFmpeg(ijk) 音频引擎。
+    const tuningOn: boolean = this.isTuningActive();
     if (songItem.source === 'qs' || outcome.url.indexOf('audio_mp4') >= 0) {
       this.ijkUrl = outcome.url;
       this.appendPlayLog('[播放] 分片流 → 交给 FFmpeg(ijk) 音频引擎');
+    } else if (tuningOn) {
+      // ★ 播放设置有非默认的音效/升降调：普通曲目也走 FFmpeg，否则 EQ 无处可生效
+      this.ijkUrl = outcome.url;
+      this.appendPlayLog('[播放] 音效已开启 → 普通曲目也走 FFmpeg(ijk)');
     } else {
       this.ijkUrl = '';
     }
@@ -2272,6 +2295,9 @@ export class MediaService {
     // ★ 起播意图必须在**函数最前面**声明：下面 resolveOnlineUrl 是异步的，期间可能
     //   有别的 loadAsset 插进来。放在异步之后声明会让「谁最后跑完谁说了算」，
     //   启动恢复就会偶发地自动播放。
+    // ★ 换歌：清掉上一首的「汽水 ijk 地址」并释放引擎，避免 ijk 与 AVPlayer 同时出声、
+    //   或把上一首的汽水地址套到新歌上（本地歌根本不会走 resolveOnlineUrl）。
+    this.releaseIjk();
     this.beginLoadRequest(loadOnly !== true);
     // 换歌：清掉上一首蓝牙歌词句，避免车机残留
     this.btLyricText = '';
