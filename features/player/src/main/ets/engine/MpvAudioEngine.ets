@@ -37,6 +37,8 @@ export class MpvAudioEngine implements AudioKernel {
   private reportedPrepared: boolean = false;
   private readyTimer: number = -1;
   private released: boolean = false;
+  /** 上一次下发的 af 链：相同则跳过。 */
+  private lastAf: string = '';
 
   /**
    * @returns 内核是否可用（真正探测：建一次 mpv 实例）。
@@ -174,6 +176,10 @@ export class MpvAudioEngine implements AudioKernel {
       filters.push('rubberband=pitch=' + ratio.toFixed(4));
     }
     const chain: string = filters.join(',');
+    if (chain === this.lastAf) {
+      return;
+    }
+    this.lastAf = chain;
     this.write('af', chain);
     appendPlayLog(this.tag + ' af=' + chain);
   }

@@ -1163,6 +1163,8 @@ export class MediaService {
   private ijkPollTimer: number = -1;
   /** ijk 静默失败看门狗：prepare 后 N 秒既没 onPrepared 也没 onError 就降级。 */
   private ijkWatchdog: number = -1;
+  /** 上一次下发的 af 链（相同则不重复下发，避免拖滑杆刷爆日志）。 */
+  private lastAfChain: string = '';
   /** 当前是否由 ijk 引擎出声（play/pause/seek 分支据此路由）。 */
   private ijkActive: boolean = false;
 
@@ -1344,12 +1346,33 @@ export class MediaService {
     const store = MusicStoreService.getInstance();
     const eq: number[] = store.getEqGains();
     const pitch: number = store.getTuningPitch();
+    const chain: string = MediaService.afChainOf(eq, pitch);
+    if (chain === this.lastAfChain) {
+      return;   // 参数没变（拖滑杆会连续回调）：不重复下发
+    }
+    this.lastAfChain = chain;
     if (this.ijkActive && this.ijkEngine !== undefined) {
       this.ijkEngine.applyTuning(eq, pitch);
-      this.appendPlayLog('[RzdTuning] 已热更新到 FFmpeg af 链');
+      this.appendPlayLog('[RzdTuning] 已下发到 ' + kernelName(this.ijkEngine.kind()) + ' 内核');
       return;
     }
-    this.appendPlayLog('[RzdTuning] 当前走 AVPlayer，设置将在下一首（走 FFmpeg）生效');
+    this.appendPlayLog('[RzdTuning] 当前走 AVPlayer，设置将在切到内核播放时生效');
+  }
+
+  /** 组出 af 链（与内核实现保持一致，用于"是否变化"判断）。 */
+  private static afChainOf(eqGains: number[], pitchSemitones: number): string {
+    const bands: number[] = [60, 230, 910, 3600, 14000];
+    const out: string[] = [];
+    for (let i: number = 0; i < bands.length && i < eqGains.length; i++) {
+      if (eqGains[i] === 0) {
+        continue;
+      }
+      out.push('equalizer=f=' + bands[i].toString() + ':t=o:w=1:g=' + eqGains[i].toFixed(1));
+    }
+    if (pitchSemitones !== 0) {
+      out.push('rubberband=pitch=' + Math.pow(2, pitchSemitones / 12).toFixed(4));
+    }
+    return out.join(',');
   }
   /**
    * @returns 是否允许使用 FFmpeg(ijk) 内核。

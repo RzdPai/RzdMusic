@@ -34,6 +34,8 @@ export class IjkAudioEngine implements AudioKernel {
   private readonly tag: string = '[RzdIjk]';
   private prepared: boolean = false;
   private released: boolean = false;
+  /** 上一次下发的 af 链：相同则跳过。 */
+  private lastAf: string = '';
 
   /** @returns 单例 id（IJK 的 native 句柄以字符串 id 区分）。 */
   private static nextId(): string {
@@ -251,6 +253,10 @@ export class IjkAudioEngine implements AudioKernel {
       return;
     }
     const chain: string = filters.join(',');
+    if (chain === this.lastAf) {
+      return;
+    }
+    this.lastAf = chain;
     try {
       this.player.setOption('4', 'af', chain);
       appendPlayLog(this.tag + ' af=' + chain);

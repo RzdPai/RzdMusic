@@ -69,6 +69,8 @@ export struct PlaybackTuningPanel {
   @Local engineTick: number = 0;
   /** 播放内核选择：auto / av / ffmpeg。 */
   @Local engineMode: string = 'auto';
+  /** 滑杆去抖定时器（拖 EQ/升降调时不逐格下发）。 */
+  private tuningTimer: number = -1;
 
   /** 内核选项表：自动 / 系统播放器 / FFmpeg。 */
   private static readonly ENGINE_MODES: EngineModeOption[] = [
@@ -134,7 +136,7 @@ export struct PlaybackTuningPanel {
   private applyPitch(semitones: number): void {
     this.pitch = semitones;
     this.store.setTuningPitch(semitones);
-    MediaService.getInstance().refreshTuning();
+    this.scheduleTuning();
     appendPlayLog('[RzdTuning] pitch=' + semitones);
   }
 
@@ -145,8 +147,19 @@ export struct PlaybackTuningPanel {
     this.eqGains = next;
     this.presetName = this.matchPresetName(next);
     this.store.setEqGains(next);
-    MediaService.getInstance().refreshTuning();
+    this.scheduleTuning();
     appendPlayLog('[RzdTuning] eq[' + index + ']=' + gain);
+  }
+
+  /** 去抖：200ms 内多次改动只下发最后一次。 */
+  private scheduleTuning(): void {
+    if (this.tuningTimer >= 0) {
+      clearTimeout(this.tuningTimer);
+    }
+    this.tuningTimer = setTimeout((): void => {
+      this.tuningTimer = -1;
+      MediaService.getInstance().refreshTuning();
+    }, 200);
   }
 
   /** 应用预设。 */
