@@ -1264,6 +1264,7 @@ export class MediaService {
         this.isPrepared = true;
         this.clearIjkWatchdog();
         this.markIjkOk();
+        this.appendPlayLog('[RzdIjk] 流信息 ' + engine.describeStream());
         // ★ ijk 路径也要写 AVSession 元数据，否则锁屏/车机看不到歌名封面
         void this.setAVMetadata();
         // 播放设置：EQ / 升降调（实验性；非默认值才下发）

@@ -258,6 +258,24 @@ export class IjkAudioEngine {
     appendPlayLog(this.tag + ' release');
   }
 
+  /**
+   * @returns 一句可读的流信息（音频解码器 + 媒体元数据），用于排查
+   * 「ijk 到底拿到没拿到音频轨」：如果 audioDecoder 为空，说明根本没解出音频流。
+   */
+  describeStream(): string {
+    if (this.player === undefined) {
+      return 'no-player';
+    }
+    try {
+      const info: object = this.player.getMediaInfo();
+      const audio: string = (info as Record<string, string>)['audioDecoder'] ?? '';
+      const meta: string = (info as Record<string, string>)['meta'] ?? '';
+      return 'audioDecoder=' + (audio.length > 0 ? audio : '(空)') +
+        ' meta=' + meta.substring(0, Math.min(meta.length, 120));
+    } catch (err) {
+      return 'describe-failed';
+    }
+  }
   /** @returns 是否已就绪。 */
   isPrepared(): boolean {
     return this.prepared;
