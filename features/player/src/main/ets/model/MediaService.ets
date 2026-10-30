@@ -1169,6 +1169,18 @@ export class MediaService {
       ' 排除失败url=' + (this.failedUrl.length > 0 ? '是' : '否'));
     // 失败重解析时排除刚刚失败的同一条地址与同一档音质，避免重复拿到死链
     const opts: FallbackOptions = new FallbackOptions();
+    // ★ 2026-10-30（用户：汽水「一直从其它平台播放」）：真因是**档位冷却残留** ——
+    //   之前 qs 走不通时，`qs/320k`、`qs/128k` 被记成失败并冷却 12 小时，
+    //   之后每次播放都直接跳过 qs 档位，回退链才落到酷我/QQ 等平台。
+    //   现在我们已把汽水改成「落盘 + fdSrc」可播，这里在解析前清掉 qs 的历史失败记录。
+    if (songItem.source === 'qs') {
+      const scriptId: string = AppStorage.get<string>('lxActiveSource') ?? '';
+      const tiers: string[] = ['master', 'atmos_plus', 'atmos', 'hires', 'flac24bit', 'flac', '320k', '128k', 'spatial'];
+      for (let i: number = 0; i < tiers.length; i++) {
+        MusicStoreService.getInstance().recordSuccess(qualityTierKey(tiers[i], 'qs', scriptId));
+      }
+      appendPlayLog('[播放] 已清除汽水档位冷却，重新尝试 qs 本身取流');
+    }
 
     opts.excludeUrl = this.failedUrl;
     opts.excludeQuality = this.failedQuality;
