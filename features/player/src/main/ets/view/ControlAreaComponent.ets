@@ -523,6 +523,20 @@ export struct ControlAreaComponent {
     this.addToPlaylist(p);
   }
 
+  /** @returns 当前是否在歌曲菜单的某个子页（音质/播放设置/加歌单…）。 */
+  private menuSubPageOpen(): boolean {
+    return this.showMenuQuality || this.showMenuSpeed || this.showMenuTuning ||
+      this.showMenuPlaylist;
+  }
+
+  /** 子页 → 回到歌曲菜单主列表（不关弹层）。 */
+  private backToMenuRoot(): void {
+    this.showMenuQuality = false;
+    this.showMenuSpeed = false;
+    this.showMenuTuning = false;
+    this.showMenuPlaylist = false;
+  }
+
   private closeMenuSheet(): void {
     this.showMenuPlaylist = false;
     this.requestMenuSheet(false);
@@ -1267,7 +1281,7 @@ export struct ControlAreaComponent {
 
       // 评论子页自带标题栏与关闭，不再叠一个「取消」，否则底部被吃掉一大块
       if (!this.showMenuComment) {
-        Button('取消')
+        Button(this.menuSubPageOpen() ? '返回' : '取消')
           .width('100%')
           .height(44)
           .fontSize(15)
@@ -1277,6 +1291,7 @@ export struct ControlAreaComponent {
           .margin({ top: 8 })
           .onClick(() => {
             this.closeMenuSheet();
+            this.backToMenuRoot();
           })
       }
     }
