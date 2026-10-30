@@ -53,6 +53,8 @@ export struct PlaybackTuningPanel {
   @Local pitch: number = 0;
   @Local eqGains: number[] = [0, 0, 0, 0, 0];
   @Local presetName: string = '关闭';
+  /** 仅用于强制刷新「播放内核」文案（恢复 FFmpeg 后立即变）。 */
+  @Local engineTick: number = 0;
 
   private store: MusicStoreService = MusicStoreService.getInstance();
   /** 与播放器共享的全局状态（只读倍速用于高亮）。 */
@@ -320,11 +322,33 @@ export struct PlaybackTuningPanel {
       .width('100%')
       .alignItems(VerticalAlign.Center)
 
+      // 播放内核状态（连续失败会自动降级到系统播放器，这里可一键恢复）
+      Row() {
+        Text('播放内核：' + MediaService.getInstance().engineName())
+          .fontSize(11)
+          .fontColor($r('app.color.font_tertiary'))
+          .layoutWeight(1)
+        if (!MusicStoreService.getInstance().isIjkDisabled()) {
+          Text('')
+            .fontSize(11)
+        } else {
+          Text('恢复 FFmpeg')
+            .fontSize(11)
+            .fontColor(this.themeStateColor())
+            .onClick((): void => {
+              MediaService.getInstance().resetIjkHealth();
+              this.engineTick = this.engineTick + 1;
+            })
+        }
+      }
+      .width('100%')
+      .margin({ top: 10 })
+
       Text('倍速立即生效；升降调与均衡器经 FFmpeg 内核（汽水/已开启音效的曲目）生效')
         .fontSize(11)
         .fontColor($r('app.color.font_tertiary'))
         .width('100%')
-        .margin({ top: 10 })
+        .margin({ top: 4 })
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)

@@ -83,6 +83,10 @@ const KEY_AUDIO_MIX: string = 'audio_mix';
 const KEY_AUTOPLAY_ON_LAUNCH: string = 'autoplay_on_launch';
 const KEY_TUNING_PITCH: string = 'tuning_pitch';
 const KEY_TUNING_EQ: string = 'tuning_eq_gains';
+/** 汽水（FFmpeg 内核）连续失败次数。 */
+const KEY_IJK_FAIL_STREAK: string = 'ijk_fail_streak';
+/** 汽水是否已临时禁用 FFmpeg 内核（连续失败后自动回退 AVPlayer）。 */
+const KEY_IJK_DISABLED: string = 'ijk_disabled';
 const KEY_DOWNLOAD_SAVE_MODE: string = 'download_save_mode';
 const KEY_DOWNLOAD_QUALITY_MODE: string = 'download_quality_mode';
 const KEY_DOWNLOAD_MANUAL_QUALITY: string = 'download_manual_quality';
@@ -1754,6 +1758,42 @@ export class MusicStoreService {
       return fallback;
     }
 
+    /** @returns 汽水 FFmpeg 内核的连续失败次数。 */
+    public getIjkFailStreak(): number {
+      const store = this.getStore();
+      if (store === undefined) {
+        return 0;
+      }
+      return store.getSync(KEY_IJK_FAIL_STREAK, 0) as number;
+    }
+
+    public setIjkFailStreak(streak: number): void {
+      const store = this.getStore();
+      if (store === undefined) {
+        return;
+      }
+      store.putSync(KEY_IJK_FAIL_STREAK, streak);
+    }
+
+    /** @returns 是否已临时禁用 FFmpeg 内核（连续失败自动降级）。 */
+    public isIjkDisabled(): boolean {
+      const store = this.getStore();
+      if (store === undefined) {
+        return false;
+      }
+      return store.getSync(KEY_IJK_DISABLED, false) as boolean;
+    }
+
+    public setIjkDisabled(disabled: boolean): void {
+      const store = this.getStore();
+      if (store === undefined) {
+        return;
+      }
+      store.putSync(KEY_IJK_DISABLED, disabled);
+      if (disabled) {
+        store.putSync(KEY_IJK_FAIL_STREAK, 0);
+      }
+    }
     public setEqGains(gains: number[]): void {
       const store = this.getStore();
       if (store === undefined) {

@@ -1236,6 +1236,7 @@ export class MediaService {
         st.isResolving = false;
         this.state = AudioPlayerState.PLAY;
         this.isPrepared = true;
+        this.markIjkOk();
         // ★ ijk 路径也要写 AVSession 元数据，否则锁屏/车机看不到歌名封面
         void this.setAVMetadata();
         // 播放设置：EQ / 升降调（实验性；非默认值才下发）
@@ -1276,6 +1277,7 @@ export class MediaService {
           return;
         }
         appendPlayLog('[播放] ijk 播放失败 code=' + code + ' msg=' + message + ' → 回退 AVPlayer');
+        this.markIjkFail();
         this.releaseIjk();
         // 回退：AVPlayer 仍持有 songItem.url（可能卡 0 进度，但至少不静默失败）
         this.loadCurrentIntoPlayer();
@@ -1300,6 +1302,57 @@ export class MediaService {
       return;
     }
     this.appendPlayLog('[RzdTuning] 当前走 AVPlayer，设置将在下一首（走 FFmpeg）生效');
+  }
+  /**
+   * @returns 是否允许使用 FFmpeg(ijk) 内核。
+   * 连续 2 次播放失败会写 `ijk_disabled`（持久化），之后汽水先走系统播放器；
+   * 用户可在「播放设置」里点「恢复 FFmpeg」清除该标记。
+   */
+  private shouldUseIjk(): boolean {
+    return !MusicStoreService.getInstance().isIjkDisabled();
+  }
+
+  /** ijk 播放成功后清零失败计数。 */
+  private markIjkOk(): void {
+    const store = MusicStoreService.getInstance();
+    if (store.getIjkFailStreak() !== 0) {
+      store.setIjkFailStreak(0);
+      this.appendPlayLog('[RzdIjk] 失败计数已清零');
+    }
+  }
+
+  /** ijk 播放失败累计；达到 2 次自动降级到系统播放器。 */
+  private markIjkFail(): void {
+    const store = MusicStoreService.getInstance();
+    const streak: number = store.getIjkFailStreak() + 1;
+    store.setIjkFailStreak(streak);
+    if (streak >= 2) {
+      store.setIjkDisabled(true);
+      this.appendPlayLog('[RzdIjk] 连续失败 ' + streak + ' 次 → 已降级到系统播放器（可在播放设置里恢复）');
+      this.toast('汽水音频引擎多次失败，已临时切换系统播放器');
+    }
+  }
+
+  /** @returns 当前生效的播放内核名（设置页展示用）。 */
+  public engineName(): string {
+    if (!this.shouldUseIjk()) {
+      return '系统播放器（AVPlayer）· 汽水已降级';
+    }
+    if (this.ijkActive) {
+      return 'FFmpeg（ijk）· 正在使用';
+    }
+    if (this.isTuningActive()) {
+      return 'FFmpeg（ijk）· 音效开启时使用';
+    }
+    return '系统播放器（AVPlayer）';
+  }
+
+  /** 恢复 FFmpeg 内核（清掉降级标记）。 */
+  public resetIjkHealth(): void {
+    const store = MusicStoreService.getInstance();
+    store.setIjkDisabled(false);
+    store.setIjkFailStreak(0);
+    this.appendPlayLog('[RzdIjk] 已恢复 FFmpeg 内核');
   }
   /** @returns 播放设置里是否有非默认的升降调 / EQ（有则普通曲目也走 FFmpeg）。 */
   private isTuningActive(): boolean {
@@ -1378,10 +1431,13 @@ export class MediaService {
     // ★ 2026-10-30：汽水给的是 douyinvod 分片 mp4（`audio_mp4`，MSE 用途），
     //   AVPlayer 能拿到总时长但解不出分片索引 ⇒ 进度恒 0。改走 FFmpeg(ijk) 音频引擎。
     const tuningOn: boolean = this.isTuningActive();
-    if (songItem.source === 'qs' || outcome.url.indexOf('audio_mp4') >= 0) {
+    if (!this.shouldUseIjk() && (songItem.source === 'qs' || outcome.url.indexOf('audio_mp4') >= 0)) {
+      this.appendPlayLog('[播放] FFmpeg 内核已被临时禁用 → 汽水先走系统播放器（可在播放设置里恢复）');
+    }
+    if (this.shouldUseIjk() && (songItem.source === 'qs' || outcome.url.indexOf('audio_mp4') >= 0)) {
       this.ijkUrl = outcome.url;
       this.appendPlayLog('[播放] 分片流 → 交给 FFmpeg(ijk) 音频引擎');
-    } else if (tuningOn) {
+    } else if (tuningOn && this.shouldUseIjk()) {
       // ★ 播放设置有非默认的音效/升降调：普通曲目也走 FFmpeg，否则 EQ 无处可生效
       this.ijkUrl = outcome.url;
       this.appendPlayLog('[播放] 音效已开启 → 普通曲目也走 FFmpeg(ijk)');
