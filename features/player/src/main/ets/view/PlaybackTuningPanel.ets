@@ -87,6 +87,8 @@ export struct PlaybackTuningPanel {
   @Local vocalRemoveOn: boolean = false;
   @Local nightModeOn: boolean = false;
   @Local reverbOn: boolean = false;
+  @Local limiterOn: boolean = false;
+  @Local haasOn: boolean = false;
   /** 滑杆去抖定时器（拖 EQ/升降调时不逐格下发）。 */
   private tuningTimer: number = -1;
 
@@ -100,7 +102,9 @@ export struct PlaybackTuningPanel {
     new EffectToggle('立体声增强', 'stereo'),
     new EffectToggle('人声消除', 'vocal'),
     new EffectToggle('夜间模式', 'night'),
-    new EffectToggle('混响', 'reverb')
+    new EffectToggle('混响', 'reverb'),
+    new EffectToggle('动态限幅', 'limiter'),
+    new EffectToggle('声场展宽', 'haas')
   ];
 
 
@@ -121,6 +125,8 @@ export struct PlaybackTuningPanel {
     this.vocalRemoveOn = fx.vocalRemove;
     this.nightModeOn = fx.nightMode;
     this.reverbOn = fx.reverb;
+    this.limiterOn = fx.limiter;
+    this.haasOn = fx.haas;
   }
 
   /** 当前增益对应的预设名（没有匹配则空串）。 */
@@ -192,6 +198,10 @@ export struct PlaybackTuningPanel {
         return this.nightModeOn;
       case 'reverb':
         return this.reverbOn;
+      case 'limiter':
+        return this.limiterOn;
+      case 'haas':
+        return this.haasOn;
       default:
         return false;
     }
@@ -205,6 +215,8 @@ export struct PlaybackTuningPanel {
     fx.vocalRemove = this.vocalRemoveOn;
     fx.nightMode = this.nightModeOn;
     fx.reverb = this.reverbOn;
+    fx.limiter = this.limiterOn;
+    fx.haas = this.haasOn;
     return fx;
   }
 
@@ -236,6 +248,12 @@ export struct PlaybackTuningPanel {
       case 'reverb':
         this.reverbOn = !this.reverbOn;
         break;
+      case 'limiter':
+        this.limiterOn = !this.limiterOn;
+        break;
+      case 'haas':
+        this.haasOn = !this.haasOn;
+        break;
       default:
         break;
     }
@@ -250,6 +268,8 @@ export struct PlaybackTuningPanel {
     this.vocalRemoveOn = false;
     this.nightModeOn = false;
     this.reverbOn = false;
+    this.limiterOn = false;
+    this.haasOn = false;
     appendPlayLog('[RzdAf] clear');
     this.commitEffects();
   }

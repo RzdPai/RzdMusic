@@ -460,6 +460,21 @@ export struct MusicPlayInfoBlock {
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         // 同上：行门挪到具体 Text 上
         .opacity(this.expandState.targetMetaOpacity())
+
+      // ★ 起播/解析期间的可见反馈：否则用户以为卡住了
+      if (this.state.isResolving) {
+        Row({ space: 6 }) {
+          LoadingProgress()
+            .width(12)
+            .height(12)
+            .color($r('app.color.player_text_primary'))
+          Text('缓冲中…')
+            .fontSize(12)
+            .fontColor($r('app.color.player_text_primary'))
+            .opacity(0.7)
+        }
+        .margin({ top: 4 })
+      }
     }
     .margin({ top: $r('app.float.music_info_margin_top') })
     // ⚠️ 2026-10-15：**这里不再挂整行的透明门**（原来 `.opacity(targetMetaOpacity())` 在这一层）——

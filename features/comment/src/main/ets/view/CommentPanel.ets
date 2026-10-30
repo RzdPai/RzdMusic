@@ -708,11 +708,11 @@ export struct CommentPanel {
       })
       .layoutWeight(1)
       .width('100%')
-      .backgroundColor(Color.Black)
+      .backgroundColor($r('app.color.panel_surface'))
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(Color.Black)
+    .backgroundColor($r('app.color.panel_surface'))
   }
 
   @Builder

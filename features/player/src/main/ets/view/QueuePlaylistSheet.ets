@@ -244,7 +244,7 @@ export struct QueuePlaylistSheet {
         showClose: true,
         scrollSizeMode: ScrollSizeMode.FOLLOW_DETENT,
         title: this.SheetTitle(),
-        backgroundColor: $r('app.color.background_secondary'),
+        backgroundColor: $r('app.color.panel_surface'),
         onDisappear: (): void => {
           this.onDismiss();
         }

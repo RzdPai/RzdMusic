@@ -31,11 +31,15 @@ export class AudioEffects {
   nightMode: boolean = false;
   /** 混响。 */
   reverb: boolean = false;
+  /** 动态限幅（防止 EQ 拉满削波）。 */
+  limiter: boolean = false;
+  /** 立体声展宽（haas 效应）。 */
+  haas: boolean = false;
 
   /** @returns 是否有任何音效开启。 */
   anyOn(): boolean {
     return this.bassDb !== 0 || this.stereoWiden !== 1.0 || this.vocalRemove ||
-      this.nightMode || this.reverb;
+      this.nightMode || this.reverb || this.limiter || this.haas;
   }
 }
 
@@ -72,8 +76,14 @@ export function buildAfChain(eqGains: number[], pitchSemitones: number, effects:
   if (effects.nightMode) {
     out.push('dynaudnorm=f=200:g=15');
   }
+  if (effects.haas) {
+    out.push('haas');
+  }
   if (effects.reverb) {
     out.push('aecho=0.8:0.88:60:0.4');
+  }
+  if (effects.limiter) {
+    out.push('alimiter=limit=0.95');
   }
   return out.join(',');
 }
@@ -85,7 +95,9 @@ export function effectsToJson(effects: AudioEffects): string {
     stereoWiden: effects.stereoWiden,
     vocalRemove: effects.vocalRemove,
     nightMode: effects.nightMode,
-    reverb: effects.reverb
+    reverb: effects.reverb,
+    limiter: effects.limiter,
+    haas: effects.haas
   });
 }
 
@@ -111,6 +123,8 @@ export function effectsFromJson(raw: string): AudioEffects {
     out.vocalRemove = obj['vocalRemove'] === true;
     out.nightMode = obj['nightMode'] === true;
     out.reverb = obj['reverb'] === true;
+    out.limiter = obj['limiter'] === true;
+    out.haas = obj['haas'] === true;
   } catch (err) {
   }
   return out;
