@@ -1159,6 +1159,8 @@ export class MediaService {
   private ijkUrl: string = '';
   /** 进度轮询定时器句柄（-1 表示未启动）。 */
   private ijkPollTimer: number = -1;
+  /** ijk 静默失败看门狗：prepare 后 N 秒既没 onPrepared 也没 onError 就降级。 */
+  private ijkWatchdog: number = -1;
   /** 当前是否由 ijk 引擎出声（play/pause/seek 分支据此路由）。 */
   private ijkActive: boolean = false;
 
@@ -1167,6 +1169,7 @@ export class MediaService {
    * 每次换歌 / 回退 AVPlayer 前都要调用，避免两套引擎同时出声。
    */
   private releaseIjk(): void {
+    this.clearIjkWatchdog();
     this.stopIjkPolling();
     if (this.ijkEngine !== undefined) {
       this.ijkEngine.release();
@@ -1181,6 +1184,29 @@ export class MediaService {
     if (this.ijkPollTimer >= 0) {
       clearInterval(this.ijkPollTimer);
       this.ijkPollTimer = -1;
+    }
+  }
+
+  /** 启动 ijk 看门狗：12 秒内没 prepared / error 就当作静默失败并降级。 */
+  private armIjkWatchdog(engine: IjkAudioEngine): void {
+    this.clearIjkWatchdog();
+    this.ijkWatchdog = setInterval((): void => {
+      this.clearIjkWatchdog();
+      if (this.ijkEngine !== engine || engine.isPrepared()) {
+        return;
+      }
+      this.appendPlayLog('[RzdIjk] 12s 未就绪（静默失败）→ 降级系统播放器');
+      this.markIjkFail();
+      this.releaseIjk();
+      this.loadCurrentIntoPlayer();
+    }, 12000);
+  }
+
+  /** 停止看门狗。 */
+  private clearIjkWatchdog(): void {
+    if (this.ijkWatchdog >= 0) {
+      clearInterval(this.ijkWatchdog);
+      this.ijkWatchdog = -1;
     }
   }
 
@@ -1236,6 +1262,7 @@ export class MediaService {
         st.isResolving = false;
         this.state = AudioPlayerState.PLAY;
         this.isPrepared = true;
+        this.clearIjkWatchdog();
         this.markIjkOk();
         // ★ ijk 路径也要写 AVSession 元数据，否则锁屏/车机看不到歌名封面
         void this.setAVMetadata();
@@ -1283,6 +1310,7 @@ export class MediaService {
         this.loadCurrentIntoPlayer();
       }
     });
+    this.armIjkWatchdog(engine);
     engine.load(url);
   }
 
