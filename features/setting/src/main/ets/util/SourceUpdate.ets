@@ -35,8 +35,22 @@ export function readOfficialUpdateAlert(): SourceUpdateInfo {
   const state: UpdateAlertState | undefined =
     AppStorageV2.connect(UpdateAlertState, 'rzd_update_alert', () => new UpdateAlertState());
   // ★ 优先读引擎抓到的脚本日志（AppStorage 两个键），再退回 UpdateAlertState
-  const liveUrl: string = AppStorage.get<string>('rzd_update_alert_url') ?? '';
-  const liveLog: string = AppStorage.get<string>('rzd_update_alert_log') ?? '';
+  let liveUrl: string = AppStorage.get<string>('rzd_update_alert_url') ?? '';
+  let liveLog: string = AppStorage.get<string>('rzd_update_alert_log') ?? '';
+  // ★ 2026-10-30：兜底——引擎的「更新提示」一定进了播放日志缓冲（用户日志页能看到），
+  //   这里直接从那批文本里再抓一次，保证「检查更新」不依赖 AppStorage 写入时序。
+  if (liveUrl.length === 0) {
+    const buf: string = AppStorage.get<string>('lxPlayLog') ?? '';
+    const idx: number = buf.lastIndexOf('更新提示');
+    if (idx >= 0) {
+      const line: string = buf.substring(idx, Math.min(buf.length, idx + 200));
+      const m: RegExpMatchArray | null = line.match(/url=(\S+)/);
+      if (m !== null && m.length > 1) {
+        liveUrl = m[1];
+      }
+      liveLog = line.split('\n')[0].substring(0, 120);
+    }
+  }
   const url: string = liveUrl.length > 0 ? liveUrl : (state === undefined ? '' : state.updateUrl);
   if (url.length > 0) {
     out.hasUpdate = true;
