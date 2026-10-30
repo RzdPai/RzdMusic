@@ -12,9 +12,16 @@
  * 真正的状态机仍由 MediaService 持有，避免出现第二套播放状态。
  */
 
-import { IjkMediaPlayer } from '@ohos/ijkplayer';
+import { IjkMediaPlayer, InterruptEvent, InterruptForceType, InterruptHintType } from '@ohos/ijkplayer';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { appendPlayLog } from 'musicbasic';
+
+/** 音频焦点中断的三种结果（由 ijk 的 audioInterrupt 归一化而来）。 */
+export enum AudioInterruptKind {
+  PAUSE = 0,
+  RESUME = 1,
+  STOP = 2
+}
 
 /** 一次播放的回调集合（全部由 MediaService 提供，保持单一状态源）。 */
 export interface IjkAudioCallbacks {
@@ -99,6 +106,34 @@ export class IjkAudioEngine {
     this.player.prepareAsync();
   }
 
+  /**
+   * 订阅系统音频焦点中断（来电/语音输入/其它 App 抢占）。
+   * @param handler PAUSE=被抢占需暂停；RESUME=可以恢复；STOP=永久失去焦点。
+   */
+  onInterrupt(handler: (kind: AudioInterruptKind) => void): void {
+    if (this.player === undefined) {
+      return;
+    }
+    try {
+      this.player.on('audioInterrupt', (event: InterruptEvent): void => {
+        const forced: boolean = event.forceType === InterruptForceType.INTERRUPT_FORCE;
+        const hint: InterruptHintType = event.hintType ?? InterruptHintType.INTERRUPT_HINT_NONE;
+        appendPlayLog(this.tag + ' audioInterrupt force=' + forced + ' hint=' + hint);
+        if (hint === InterruptHintType.INTERRUPT_HINT_PAUSE) {
+          this.pause();
+          handler(AudioInterruptKind.PAUSE);
+        } else if (hint === InterruptHintType.INTERRUPT_HINT_STOP) {
+          this.pause();
+          handler(AudioInterruptKind.STOP);
+        } else if (hint === InterruptHintType.INTERRUPT_HINT_RESUME) {
+          handler(AudioInterruptKind.RESUME);
+        }
+      });
+    } catch (err) {
+      const e: BusinessError = err as BusinessError;
+      appendPlayLog(this.tag + ' 订阅 audioInterrupt 失败 code=' + e.code);
+    }
+  }
   /** 开始/恢复播放。 */
   start(): void {
     if (this.player === undefined) {

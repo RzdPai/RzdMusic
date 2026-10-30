@@ -30,7 +30,7 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { resourceManager } from '@kit.LocalizationKit';
 import { fileIo as fs } from '@kit.CoreFileKit';
 import { AppStorageKeys, getAppRuntime, Logger, MusicAppState, MusicCardBridge, MusicStoreService, PlayedSongRecord, SongItem, StringResourceUtil, appendPlayLog } from 'musicbasic';
-import { IjkAudioEngine } from '../engine/IjkAudioEngine';
+import { AudioInterruptKind, IjkAudioEngine } from '../engine/IjkAudioEngine';
 import SongItemBuilder from '../util/SongItemBuilder';
 import { AudioPlayerState, MusicPlayMode } from './MusicData';
 import { BackgroundUtil } from '../util/BackgroundUtil';
@@ -1309,6 +1309,23 @@ export class MediaService {
         this.releaseIjk();
         // 回退：AVPlayer 仍持有 songItem.url（可能卡 0 进度，但至少不静默失败）
         this.loadCurrentIntoPlayer();
+      }
+    });
+    // ★ 音频焦点：ijk 自己也会收到系统中断，这里统一转成与 AVPlayer 一致的暂停/恢复策略
+    engine.onInterrupt((kind: AudioInterruptKind): void => {
+      if (kind === AudioInterruptKind.PAUSE) {
+        this.pauseReason = 'focus';
+        this.resumeWhenReady = true;
+        this.pausedByInterrupt = true;
+        this.updateIsPlay(false);
+        this.appendPlayLog('[播放] ijk 失去音频焦点，等待恢复');
+      } else if (kind === AudioInterruptKind.STOP) {
+        this.pauseReason = 'focus';
+        this.resumeWhenReady = false;
+        this.updateIsPlay(false);
+        this.appendPlayLog('[播放] ijk 永久失去音频焦点');
+      } else {
+        this.resumeIfAutoPaused('focus');
       }
     });
     this.armIjkWatchdog(engine);
