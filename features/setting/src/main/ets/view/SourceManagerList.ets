@@ -60,9 +60,7 @@ export struct SourceManagerList {
 
   private platformsOf(api: LXUserApiInfo): LXSourcePlatformInfo[] {
     const declared: LXSourcePlatformInfo[] = lxDeclaredPlatformsOf(api);
-    appendPlayLog('[RzdSource] card=' + api.id + ' name=' + api.name + ' active=' +
-      (api.id === this.activeId ? 1 : 0) + ' persisted=' + declared.length +
-      ' labels=' + declared.map((it: LXSourcePlatformInfo) => it.source).join(','));
+    
     // ★ 2026-10-29：持久化记录可能是旧快照（少平台，例如 5 个而引擎上报 6 个 ——
     //   日志实测 `引擎 就绪 ✓ sources=6`）。当前引擎脚本一律以「引擎实时 sources」为准，
     //   只要它比持久化的更全就用它。

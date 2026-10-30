@@ -520,8 +520,7 @@ export struct SettingsDetailPage {
         }
       }
     }
-    appendPlayLog('[RzdSource] page persisted=' + declared.length + ' labels=' +
-      declared.map((it: LXSourcePlatformInfo) => it.source).join(','));
+    
     return declared;
   }
 
