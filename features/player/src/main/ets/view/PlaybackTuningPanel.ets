@@ -374,6 +374,7 @@ export struct PlaybackTuningPanel {
             this.store.setEngineMode(item.value);
             this.engineTick = this.engineTick + 1;
             appendPlayLog('[RzdTuning] engineMode=' + item.value);
+            MediaService.getInstance().reloadForKernelChange();
             if (item.value === 'mpv' && !isMpvAvailable()) {
               appendPlayLog('[RzdKernel] mpv 未打包（缺 libmpv.so）→ 实际仍用 FFmpeg');
             }

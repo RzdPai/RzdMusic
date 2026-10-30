@@ -1421,6 +1421,21 @@ export class MediaService {
     return '系统播放器（AVPlayer）';
   }
 
+  /**
+   * 切换播放内核后调用：立刻按新内核重载当前曲目（免用户手动切歌）。
+   * 只在正在播放/暂停时动作；否则下一首自然生效。
+   */
+  public reloadForKernelChange(): void {
+    const playing: boolean = this.state === AudioPlayerState.PLAY ||
+      this.state === AudioPlayerState.PAUSE || this.state === AudioPlayerState.COMPLETED;
+    this.appendPlayLog('[RzdKernel] 内核切换 → 重载当前曲目 playing=' + playing);
+    if (!playing) {
+      return;
+    }
+    const index: number = this.musicIndex;
+    this.releaseIjk();
+    void this.loadAsset(index);
+  }
   /** 恢复 FFmpeg 内核（清掉降级标记）。 */
   public resetIjkHealth(): void {
     const store = MusicStoreService.getInstance();
