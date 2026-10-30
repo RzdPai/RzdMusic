@@ -16,6 +16,7 @@
 import { AppStorageKeys, MusicAppState, MusicStoreService } from 'musicbasic';
 import { AppStorageV2 } from '@kit.ArkUI';
 import { MediaService } from '../model/MediaService';
+import { isMpvAvailable } from '../engine/KernelFactory';
 import { appendPlayLog } from 'musicbasic';
 
 /** 倍速档位（与播放页菜单保持一致）。 */
@@ -73,7 +74,8 @@ export struct PlaybackTuningPanel {
   private static readonly ENGINE_MODES: EngineModeOption[] = [
     new EngineModeOption('自动', 'auto'),
     new EngineModeOption('系统播放器', 'av'),
-    new EngineModeOption('FFmpeg', 'ffmpeg')
+    new EngineModeOption('FFmpeg', 'ffmpeg'),
+    new EngineModeOption('mpv', 'mpv')
   ];
 
   private store: MusicStoreService = MusicStoreService.getInstance();
@@ -372,6 +374,9 @@ export struct PlaybackTuningPanel {
             this.store.setEngineMode(item.value);
             this.engineTick = this.engineTick + 1;
             appendPlayLog('[RzdTuning] engineMode=' + item.value);
+            if (item.value === 'mpv' && !isMpvAvailable()) {
+              appendPlayLog('[RzdKernel] mpv 未打包（缺 libmpv.so）→ 实际仍用 FFmpeg');
+            }
           })
         }, (item: EngineModeOption) => 'engine-mode-' + item.value)
       }

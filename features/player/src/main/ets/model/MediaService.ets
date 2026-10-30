@@ -30,8 +30,9 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { resourceManager } from '@kit.LocalizationKit';
 import { fileIo as fs } from '@kit.CoreFileKit';
 import { AppStorageKeys, getAppRuntime, Logger, MusicAppState, MusicCardBridge, MusicStoreService, PlayedSongRecord, SongItem, StringResourceUtil, appendPlayLog } from 'musicbasic';
-import { IjkAudioEngine } from '../engine/IjkAudioEngine';
-import { AudioInterruptKind, PlaybackKernelKind, logKernelSwitch } from '../engine/AudioKernel';
+import { AudioKernel } from '../engine/AudioKernel';
+import { createKernel, isMpvAvailable, preferredKernel } from '../engine/KernelFactory';
+import { AudioInterruptKind, kernelName, PlaybackKernelKind, logKernelSwitch } from '../engine/AudioKernel';
 import SongItemBuilder from '../util/SongItemBuilder';
 import { AudioPlayerState, MusicPlayMode } from './MusicData';
 import { BackgroundUtil } from '../util/BackgroundUtil';
@@ -1155,7 +1156,7 @@ export class MediaService {
   // ===== 汽水专用：FFmpeg(ijk) 纯音频引擎 =====
 
   /** 当前 ijk 引擎实例（仅在汽水分片流时存在）。 */
-  private ijkEngine: IjkAudioEngine | undefined = undefined;
+  private ijkEngine: AudioKernel | undefined = undefined;
   /** 待用 ijk 播放的地址；空串表示走 AVPlayer。 */
   private ijkUrl: string = '';
   /** 进度轮询定时器句柄（-1 表示未启动）。 */
@@ -1189,7 +1190,7 @@ export class MediaService {
   }
 
   /** 启动 ijk 看门狗：12 秒内没 prepared / error 就当作静默失败并降级。 */
-  private armIjkWatchdog(engine: IjkAudioEngine): void {
+  private armIjkWatchdog(engine: AudioKernel): void {
     this.clearIjkWatchdog();
     this.ijkWatchdog = setInterval((): void => {
       this.clearIjkWatchdog();
@@ -1218,7 +1219,7 @@ export class MediaService {
       if (!this.ijkActive || this.ijkEngine === undefined) {
         return;
       }
-      const engine: IjkAudioEngine = this.ijkEngine;
+      const engine: AudioKernel = this.ijkEngine;
       const pos: number = engine.position();
       const dur: number = engine.duration();
       const st = this.getAppState();
@@ -1244,11 +1245,11 @@ export class MediaService {
    */
   private startIjkPlayback(url: string): void {
     this.releaseIjk();
-    const engine: IjkAudioEngine = new IjkAudioEngine();
+    const engine: AudioKernel = createKernel(preferredKernel());
     this.ijkEngine = engine;
     this.ijkActive = true;
     const playedGen: number = this.consumePlayIntent();
-    appendPlayLog('[播放] 汽水 → FFmpeg(ijk) 音频引擎 gen=' + playedGen);
+    appendPlayLog('[播放] 汽水 → ' + kernelName(engine.kind()) + ' 引擎 gen=' + playedGen);
     engine.create({
       onPrepared: (): void => {
         if (this.ijkEngine !== engine) {
@@ -1330,7 +1331,7 @@ export class MediaService {
       }
     });
     this.armIjkWatchdog(engine);
-    engine.load(url);
+    engine.prepare(url);
   }
 
   /** 把当前倍速应用到 ijk（AVPlayer 与 ijk 各自生效）。 */
@@ -1365,6 +1366,13 @@ export class MediaService {
       // 用户强制 FFmpeg：忽略自动降级标记（他明确要看这条链路）
       return true;
     }
+    if (mode === 'mpv') {
+      // 选 mpv 但包里没有 libmpv.so 时退回 FFmpeg（日志里能看出来）
+      if (!isMpvAvailable()) {
+        this.appendPlayLog('[RzdKernel] engine_mode=mpv 但 mpv 不可用（缺 libmpv.so）→ 暂用 FFmpeg');
+      }
+      return true;
+    }
     return !store.isIjkDisabled();
   }
 
@@ -1397,6 +1405,9 @@ export class MediaService {
     }
     if (mode === 'ffmpeg') {
       return 'FFmpeg（ijk）· 已锁定';
+    }
+    if (mode === 'mpv') {
+      return isMpvAvailable() ? 'mpv · 已锁定' : 'mpv（未打包）→ 暂用 FFmpeg';
     }
     if (!this.shouldUseIjk()) {
       return '系统播放器（AVPlayer）· 汽水已降级';
