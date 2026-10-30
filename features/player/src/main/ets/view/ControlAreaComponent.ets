@@ -1469,6 +1469,7 @@ export struct ControlAreaComponent {
     this.tuningPitch = semitones;
     this.store.setTuningPitch(semitones);
     appendPlayLog('[RzdTuning] pitch=' + semitones);
+    MediaService.getInstance().refreshTuning();
   }
 
   /** 保存某段 EQ 增益。 */
@@ -1478,6 +1479,7 @@ export struct ControlAreaComponent {
     this.eqGains = next;
     this.store.setEqGains(next);
     appendPlayLog('[RzdTuning] eq[' + index + ']=' + gain);
+    MediaService.getInstance().refreshTuning();
   }
 
   /** 重置 EQ 与升降调。 */
@@ -1487,6 +1489,7 @@ export struct ControlAreaComponent {
     this.tuningPitch = 0;
     this.store.setTuningPitch(0);
     appendPlayLog('[RzdTuning] reset');
+    MediaService.getInstance().refreshTuning();
   }
 
 

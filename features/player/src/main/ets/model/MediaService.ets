@@ -1201,6 +1201,13 @@ export class MediaService {
         st.progressMax = dur;
         st.totalTime = MediaTools.msToCountdownTime(dur);
       }
+      // 每 5 秒把位置同步给 AVSession（锁屏/车机进度条），避免只有 0 秒
+      if (this.ijkActive && Math.floor(pos / 5000) !== Math.floor((pos - 500) / 5000)) {
+        this.setPlayState({
+          state: avSession.PlaybackState.PLAYBACK_STATE_PLAY,
+          position: { elapsedTime: pos, updateTime: new Date().getTime() }
+        });
+      }
     }, 500);
   }
 
@@ -1229,6 +1236,8 @@ export class MediaService {
         st.isResolving = false;
         this.state = AudioPlayerState.PLAY;
         this.isPrepared = true;
+        // ★ ijk 路径也要写 AVSession 元数据，否则锁屏/车机看不到歌名封面
+        void this.setAVMetadata();
         // 播放设置：EQ / 升降调（实验性；非默认值才下发）
         const store = MusicStoreService.getInstance();
         const eq: number[] = store.getEqGains();
@@ -1276,6 +1285,22 @@ export class MediaService {
   }
 
   /** 把当前倍速应用到 ijk（AVPlayer 与 ijk 各自生效）。 */
+  /**
+   * 播放中修改「播放设置」（EQ / 升降调）后调用：立刻把新参数下发给当前引擎。
+   * - ijk 正在出声：重新 `applyTuning`（FFmpeg `af` 链）；
+   * - AVPlayer 正在出声：无法热更新，只提示下次走 FFmpeg 生效（由 `isTuningActive` 决定路由）。
+   */
+  public refreshTuning(): void {
+    const store = MusicStoreService.getInstance();
+    const eq: number[] = store.getEqGains();
+    const pitch: number = store.getTuningPitch();
+    if (this.ijkActive && this.ijkEngine !== undefined) {
+      this.ijkEngine.applyTuning(eq, pitch);
+      this.appendPlayLog('[RzdTuning] 已热更新到 FFmpeg af 链');
+      return;
+    }
+    this.appendPlayLog('[RzdTuning] 当前走 AVPlayer，设置将在下一首（走 FFmpeg）生效');
+  }
   /** @returns 播放设置里是否有非默认的升降调 / EQ（有则普通曲目也走 FFmpeg）。 */
   private isTuningActive(): boolean {
     const store = MusicStoreService.getInstance();
