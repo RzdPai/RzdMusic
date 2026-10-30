@@ -1140,6 +1140,22 @@ export struct ControlAreaComponent {
         } else if (this.showMenuTuning) {
           this.TuningRows()
       } else if (this.showMenuQuality) {
+          // ★ 子页「返回」：只回到歌曲菜单主列表（不是关掉整个弹层）
+          Row({ space: 8 }) {
+            SymbolGlyph($r('sys.symbol.chevron_left'))
+              .fontSize(18)
+              .fontColor([$r('app.color.font_primary')])
+            Text('返回')
+              .fontSize(16)
+              .fontColor($r('app.color.font_primary'))
+            Blank()
+          }
+          .width('100%')
+          .height(44)
+          .padding({ left: 4 })
+          .onClick((): void => {
+            this.showMenuQuality = false;
+          })
         Text(this.menuQualityMode === 'download' ? '选择下载音质' : '切换音质')
           .fontSize(18)
           .fontWeight(FontWeight.Bold)
@@ -1168,7 +1184,7 @@ export struct ControlAreaComponent {
           .height(48)
           .padding({ left: 16, right: 16 })
           .borderRadius(10)
-          .backgroundColor($r('app.color.background_secondary'))
+          .backgroundColor($r('app.color.panel_surface'))
           .onClick(() => {
             if (this.menuQualityMode === 'download') {
               this.downloadPickedQuality(q);
@@ -1212,7 +1228,7 @@ export struct ControlAreaComponent {
         this.MenuRow('添加到歌单', $r('sys.symbol.plus'), (): void => {
           this.openPlaylistPicker();
         })
-        this.MenuRow($r('app.string.player_menu_quality'), $r('sys.symbol.gearshape_fill'),
+        this.MenuRow($r('app.string.player_menu_quality'), $r('sys.symbol.waveform_circle'),
           (): void => {
             this.openSheetFor('quality');
           })
@@ -1220,7 +1236,7 @@ export struct ControlAreaComponent {
         //   ⇒ 与「切换音质」同一层级的入口，右侧直接显示当前档位（不用点进去才知道）。
         //   子页见本文件的 `SpeedRows()`；应用走 `MediaService.applyPlaybackRate`
         //   （`AVPlayer.setSpeed` 在本 SDK 返回 void、没有 then，见 MediaService 里的注释）。
-        this.MenuRow(this.tuningMenuLabel(), $r('sys.symbol.gearshape_fill'),
+        this.MenuRow(this.tuningMenuLabel(), $r('sys.symbol.huawei_sound'),
           (): void => {
             this.openSheetFor('tuning');
           })
@@ -1256,7 +1272,7 @@ export struct ControlAreaComponent {
           .height(44)
           .fontSize(15)
           .borderRadius(10)
-          .backgroundColor($r('app.color.background_secondary'))
+          .backgroundColor($r('app.color.panel_surface'))
           .fontColor($r('app.color.font_tertiary'))
           .margin({ top: 8 })
           .onClick(() => {
@@ -1269,7 +1285,7 @@ export struct ControlAreaComponent {
     // （用户反馈的「屏幕左右以及下方的黑边」就是这层内边距）。菜单本身仍然留白。
     .padding(this.showMenuComment ?
       { left: 0, right: 0, bottom: 0 } : { left: 16, right: 16, bottom: 24 })
-    .backgroundColor($r('app.color.background_secondary'))
+    .backgroundColor($r('app.color.panel_surface'))
   }
 
   /** 倍速档位（用户 2026-10-19：播放页歌曲菜单里要有倍速）。 */

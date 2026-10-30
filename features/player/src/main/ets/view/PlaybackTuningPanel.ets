@@ -92,9 +92,6 @@ export struct PlaybackTuningPanel {
 
   /** 内核选项表：自动 / 系统播放器 / FFmpeg。 */
   private static readonly ENGINE_MODES: EngineModeOption[] = [
-    new EngineModeOption('自动', 'auto'),
-    new EngineModeOption('系统播放器', 'av'),
-    new EngineModeOption('FFmpeg', 'ffmpeg'),
     new EngineModeOption('mpv', 'mpv')
   ];
 
@@ -608,6 +605,7 @@ export struct PlaybackTuningPanel {
         .margin({ top: 4 })
     }
     .width('100%')
+    .padding({ top: 12 })
     .alignItems(HorizontalAlign.Start)
   }
 

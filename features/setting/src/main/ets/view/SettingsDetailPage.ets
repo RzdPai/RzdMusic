@@ -1230,14 +1230,6 @@ export struct SettingsDetailPage {
     Scroll(this.pageScroller) {
       Column({ space: 12 }) {
         Blank().height(this.panelTopInset())
-        // ★ 播放设置（倍速 / 升降调 / 5 段 EQ）——与播放页菜单共用同一个组件
-        Column() {
-          PlaybackTuningPanel()
-        }
-        .width('100%')
-        .padding({ left: 16, right: 16, top: 12, bottom: 8 })
-        .borderRadius($r('sys.float.corner_radius_level12'))
-        .backgroundColor($r('app.color.card_background'))
         Column() {
           this.NetworkQualitySettings(true, 'Wi-Fi / 以太网默认播放/下载音质')
           this.NetworkQualitySettings(false, '蜂窝默认播放/下载音质')

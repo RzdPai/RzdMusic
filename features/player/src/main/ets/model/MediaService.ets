@@ -1384,23 +1384,9 @@ export class MediaService {
    * 用户可在「播放设置」里点「恢复 FFmpeg」清除该标记。
    */
   private shouldUseIjk(): boolean {
-    const store = MusicStoreService.getInstance();
-    const mode: string = store.getEngineMode();
-    if (mode === 'av') {
-      return false;
-    }
-    if (mode === 'ffmpeg') {
-      // 用户强制 FFmpeg：忽略自动降级标记（他明确要看这条链路）
-      return true;
-    }
-    if (mode === 'mpv') {
-      // 选 mpv 但包里没有 libmpv.so 时退回 FFmpeg（日志里能看出来）
-      if (!isMpvAvailable()) {
-        this.appendPlayLog('[RzdKernel] engine_mode=mpv 但 mpv 不可用（缺 libmpv.so）→ 暂用 FFmpeg');
-      }
-      return true;
-    }
-    return !store.isIjkDisabled();
+    // ★ 2026-10-31（用户拍板）：播放内核统一走 mpv，不再提供「系统播放器 / FFmpeg」选项。
+    //   只有当 mpv 连续失败被自动降级（ijk_disabled）时才回落 AVPlayer。
+    return !MusicStoreService.getInstance().isIjkDisabled();
   }
 
   /** ijk 播放成功后清零失败计数。 */
@@ -1426,26 +1412,13 @@ export class MediaService {
 
   /** @returns 当前生效的播放内核名（设置页展示用）。 */
   public engineName(): string {
-    const mode: string = MusicStoreService.getInstance().getEngineMode();
-    if (mode === 'av') {
-      return '系统播放器（AVPlayer）· 已锁定';
-    }
-    if (mode === 'ffmpeg') {
-      return 'FFmpeg（ijk）· 已锁定';
-    }
-    if (mode === 'mpv') {
-      return isMpvAvailable() ? 'mpv · 已锁定' : 'mpv（未打包）→ 暂用 FFmpeg';
-    }
-    if (!this.shouldUseIjk()) {
-      return '系统播放器（AVPlayer）· 汽水已降级';
+    if (MusicStoreService.getInstance().isIjkDisabled()) {
+      return 'mpv（已降级到系统播放器）';
     }
     if (this.ijkActive) {
-      return 'FFmpeg（ijk）· 正在使用';
+      return 'mpv · 正在使用';
     }
-    if (this.isTuningActive()) {
-      return 'FFmpeg（ijk）· 音效开启时使用';
-    }
-    return '系统播放器（AVPlayer）';
+    return 'mpv';
   }
 
   /**
