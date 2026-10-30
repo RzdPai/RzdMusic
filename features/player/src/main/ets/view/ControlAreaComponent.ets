@@ -270,6 +270,12 @@ export struct ControlAreaComponent {
    * `bindSheet`），靠这个标志切换；进任何子页前都要先过 `resetMenuSubPages()`。
    */
   @Local showMenuSpeed: boolean = false;
+  /** ★ 播放设置面板（倍速 + 升降调 + 5 段 EQ）。 */
+  @Local showMenuTuning: boolean = false;
+  /** 升降调半音数（0=原调）。 */
+  @Local tuningPitch: number = 0;
+  /** 5 段 EQ 增益（dB）：60 / 230 / 910 / 3.6k / 14k。 */
+  @Local eqGains: number[] = [0, 0, 0, 0, 0];
   /** Quality sub-list mode: 'download' picks a quality to download, 'switch' sets playback quality. */
   @Local menuQualityMode: string = 'switch';
   @Local currentNetworkWifi: boolean = false;
@@ -393,6 +399,10 @@ export struct ControlAreaComponent {
       this.showMenuComment = true;
     } else if (page === 'speed') {
       this.showMenuSpeed = true;
+    } else if (page === 'tuning') {
+      this.tuningPitch = this.store.getTuningPitch();
+      this.eqGains = this.store.getEqGains();
+      this.showMenuTuning = true;
     }
     if (this.menuSheetOpen()) {
       return;   // 已经开着：只切子页
@@ -1126,6 +1136,8 @@ export struct ControlAreaComponent {
         this.PlaylistPickerRows()
       } else if (this.showMenuSpeed) {
         this.SpeedRows()
+        } else if (this.showMenuTuning) {
+          this.TuningRows()
       } else if (this.showMenuQuality) {
         Text(this.menuQualityMode === 'download' ? '选择下载音质' : '切换音质')
           .fontSize(18)
@@ -1207,9 +1219,9 @@ export struct ControlAreaComponent {
         //   ⇒ 与「切换音质」同一层级的入口，右侧直接显示当前档位（不用点进去才知道）。
         //   子页见本文件的 `SpeedRows()`；应用走 `MediaService.applyPlaybackRate`
         //   （`AVPlayer.setSpeed` 在本 SDK 返回 void、没有 then，见 MediaService 里的注释）。
-        this.MenuRow(this.speedMenuLabel(), $r('sys.symbol.rhythm'),
+        this.MenuRow(this.tuningMenuLabel(), $r('sys.symbol.gearshape_fill'),
           (): void => {
-            this.openSheetFor('speed');
+            this.openSheetFor('tuning');
           })
         // ★★★ 2026-10-18（用户：「播放页歌曲菜单里加个投播」）：
         //   投播**没有第二套实现** —— 底部那排那颗就是 `AVCastPicker`（`@kit.AVSessionKit`，
@@ -1271,6 +1283,212 @@ export struct ControlAreaComponent {
   private static rateText(rate: number): string {
     return rate.toFixed(2).replace(/0$/, '') + 'x';
   }
+
+  /** 菜单行文案：「播放设置 · 1.0x」。 */
+  private tuningMenuLabel(): string {
+    return '播放设置 · ' + ControlAreaComponent.rateText(this.playerViewModel.appState.playbackRate);
+  }
+
+  /** EQ 频段（Hz）。 */
+  private static readonly EQ_BANDS: number[] = [60, 230, 910, 3600, 14000];
+
+  /** EQ 频段显示文案：60 → 60Hz，3600 → 3.6kHz。 */
+  private static eqBandText(hz: number): string {
+    if (hz >= 1000) {
+      const k: number = hz / 1000;
+      return (k === Math.floor(k) ? k.toFixed(0) : k.toFixed(1)) + 'kHz';
+    }
+    return hz.toFixed(0) + 'Hz';
+  }
+
+  /** 升降调文案：0 → 原调；+n / -n。 */
+  private pitchText(): string {
+    if (this.tuningPitch === 0) {
+      return '原调';
+    }
+    return (this.tuningPitch > 0 ? '+' : '') + this.tuningPitch.toString();
+  }
+
+  /**
+   * 「播放设置」子页：播放倍速 + 升降调 + 5 段均衡器。
+   * 全部使用官方组件（Button 胶囊 / Slider，竖向 Slider 用 Axis.Vertical）。
+   * 倍速立即生效（MediaService.applyPlaybackRate）；升降调与 EQ 先持久化，
+   * 等 libmpv 内核接入后由 mpv 的 af/AudioSuite 属性真正应用。
+   */
+  @Builder
+  private TuningRows() {
+    Text('播放设置')
+      .fontSize(18)
+      .fontWeight(FontWeight.Bold)
+      .fontColor($r('app.color.font_primary'))
+      .margin({ top: 8 })
+    Text('倍速、音调与均衡器调节')
+      .fontSize(13)
+      .fontColor($r('app.color.font_tertiary'))
+      .margin({ top: 2, bottom: 14 })
+
+    Row() {
+      Text('播放倍速')
+        .fontSize(16)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.font_primary'))
+        .layoutWeight(1)
+      Text(ControlAreaComponent.rateText(this.playerViewModel.appState.playbackRate))
+        .fontSize(15)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.themeState.color)
+    }
+    .width('100%')
+    .margin({ bottom: 8 })
+
+    Flex({ wrap: FlexWrap.Wrap }) {
+      ForEach(ControlAreaComponent.SPEED_OPTIONS, (rate: number) => {
+        Button() {
+          Text(ControlAreaComponent.rateText(rate))
+            .fontSize(14)
+            .fontColor(this.playerViewModel.appState.playbackRate === rate ?
+              $r('app.color.page_background') : $r('app.color.font_primary'))
+        }
+        .type(ButtonType.Capsule)
+        .height(34)
+        .padding({ left: 16, right: 16 })
+        .margin({ right: 8, bottom: 8 })
+        .backgroundColor(this.playerViewModel.appState.playbackRate === rate ?
+          this.themeState.color : $r('app.color.background_secondary'))
+        .onClick((): void => {
+          this.applySpeedRate(rate);
+        })
+      }, (rate: number) => 'tune-speed-' + rate)
+    }
+    .width('100%')
+    .margin({ bottom: 6 })
+
+    Row() {
+      Text('升降调')
+        .fontSize(16)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.font_primary'))
+        .layoutWeight(1)
+      Text(this.pitchText())
+        .fontSize(15)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.themeState.color)
+        .onClick((): void => {
+          this.applyPitch(0);
+        })
+    }
+    .width('100%')
+    .margin({ top: 10 })
+
+    Slider({
+      value: this.tuningPitch,
+      min: -12,
+      max: 12,
+      step: 1,
+      style: SliderStyle.OutSet
+    })
+      .width('100%')
+      .blockColor(this.themeState.color)
+      .selectedColor(this.themeState.color)
+      .trackColor($r('app.color.background_secondary'))
+      .onChange((value: number): void => {
+        this.applyPitch(Math.round(value));
+      })
+
+    Row() {
+      Text('均衡器（EQ）')
+        .fontSize(16)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.font_primary'))
+        .layoutWeight(1)
+      Text('重置')
+        .fontSize(14)
+        .fontColor(this.themeState.color)
+        .onClick((): void => {
+          this.resetEq();
+        })
+    }
+    .width('100%')
+    .margin({ top: 14, bottom: 10 })
+
+    Row() {
+      ForEach(ControlAreaComponent.EQ_BANDS, (hz: number, index: number) => {
+        Column() {
+          Text(this.eqGains[index].toFixed(0))
+            .fontSize(11)
+            .fontColor($r('app.color.font_tertiary'))
+            .margin({ bottom: 4 })
+          Slider({
+            value: this.eqGains[index],
+            min: -12,
+            max: 12,
+            step: 1,
+            style: SliderStyle.OutSet,
+            direction: Axis.Vertical
+          })
+            .layoutWeight(1)
+            .blockColor(this.themeState.color)
+            .selectedColor(this.themeState.color)
+            .trackColor($r('app.color.background_secondary'))
+            .onChange((value: number): void => {
+              this.applyEqBand(index, Math.round(value));
+            })
+          Text(ControlAreaComponent.eqBandText(hz))
+            .fontSize(10)
+            .fontColor($r('app.color.font_tertiary'))
+            .margin({ top: 6 })
+        }
+        .layoutWeight(1)
+        .height(150)
+        .alignItems(HorizontalAlign.Center)
+      }, (hz: number) => 'eq-band-' + hz)
+    }
+    .width('100%')
+    .alignItems(VerticalAlign.Center)
+
+    if (this.tuningPitch !== 0 || this.hasNonZeroEq()) {
+      Text('升降调与均衡器将在切换 mpv 内核后生效（当前内核仅支持倍速）')
+        .fontSize(11)
+        .fontColor($r('app.color.font_tertiary'))
+        .margin({ top: 10 })
+    }
+  }
+
+  /** EQ 是否存在非零增益。 */
+  private hasNonZeroEq(): boolean {
+    for (let i: number = 0; i < this.eqGains.length; i++) {
+      if (this.eqGains[i] !== 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** 保存升降调（-12~+12 半音）。 */
+  private applyPitch(semitones: number): void {
+    this.tuningPitch = semitones;
+    this.store.setTuningPitch(semitones);
+    appendPlayLog('[RzdTuning] pitch=' + semitones);
+  }
+
+  /** 保存某段 EQ 增益。 */
+  private applyEqBand(index: number, gain: number): void {
+    const next: number[] = this.eqGains.slice();
+    next[index] = gain;
+    this.eqGains = next;
+    this.store.setEqGains(next);
+    appendPlayLog('[RzdTuning] eq[' + index + ']=' + gain);
+  }
+
+  /** 重置 EQ 与升降调。 */
+  private resetEq(): void {
+    this.eqGains = [0, 0, 0, 0, 0];
+    this.store.setEqGains(this.eqGains);
+    this.tuningPitch = 0;
+    this.store.setTuningPitch(0);
+    appendPlayLog('[RzdTuning] reset');
+  }
+
 
   /**
    * 「倍速」子页（与「切换音质」同一套行样式）。

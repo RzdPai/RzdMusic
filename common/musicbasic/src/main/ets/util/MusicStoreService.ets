@@ -81,6 +81,8 @@ const KEY_PLAY_QUALITY: string = 'play_quality';
 const KEY_AUDIO_MIX: string = 'audio_mix';
 /** 启动应用自动开始播放（默认关）。 */
 const KEY_AUTOPLAY_ON_LAUNCH: string = 'autoplay_on_launch';
+const KEY_TUNING_PITCH: string = 'tuning_pitch';
+const KEY_TUNING_EQ: string = 'tuning_eq_gains';
 const KEY_DOWNLOAD_SAVE_MODE: string = 'download_save_mode';
 const KEY_DOWNLOAD_QUALITY_MODE: string = 'download_quality_mode';
 const KEY_DOWNLOAD_MANUAL_QUALITY: string = 'download_manual_quality';
@@ -1712,6 +1714,53 @@ export class MusicStoreService {
     }
     store.putSync(KEY_AUTOPLAY_ON_LAUNCH, enabled);
   }
+
+
+    /** ★ 播放设置：升降调半音数（-12~+12，0=原调）。 */
+    public getTuningPitch(): number {
+      const store = this.getStore();
+      if (store === undefined) {
+        return 0;
+      }
+      return store.getSync(KEY_TUNING_PITCH, 0) as number;
+    }
+
+    public setTuningPitch(semitones: number): void {
+      const store = this.getStore();
+      if (store === undefined) {
+        return;
+      }
+      store.putSync(KEY_TUNING_PITCH, semitones);
+    }
+
+    /** ★ 播放设置：5 段均衡器增益（dB，-12~+12），默认全 0。 */
+    public getEqGains(): number[] {
+      const store = this.getStore();
+      const fallback: number[] = [0, 0, 0, 0, 0];
+      if (store === undefined) {
+        return fallback;
+      }
+      const raw: string = store.getSync(KEY_TUNING_EQ, '') as string;
+      if (raw.length === 0) {
+        return fallback;
+      }
+      try {
+        const parsed: number[] = JSON.parse(raw) as number[];
+        if (Array.isArray(parsed) && parsed.length === 5) {
+          return parsed;
+        }
+      } catch (err) {
+      }
+      return fallback;
+    }
+
+    public setEqGains(gains: number[]): void {
+      const store = this.getStore();
+      if (store === undefined) {
+        return;
+      }
+      store.putSync(KEY_TUNING_EQ, JSON.stringify(gains));
+    }
 
   public getAudioMix(): boolean {
     const store = this.getStore();
