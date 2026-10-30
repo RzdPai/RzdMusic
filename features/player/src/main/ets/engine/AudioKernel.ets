@@ -15,6 +15,7 @@
  */
 
 import { appendPlayLog } from 'musicbasic';
+import { AudioEffects } from './AudioEffects';
 
 /** 内核种类。 */
 export enum PlaybackKernelKind {
@@ -72,7 +73,7 @@ export interface AudioKernel {
   /** 变速。 */
   setSpeed(rate: number): void;
   /** 音效：5 段 EQ（dB）+ 升降调（半音）。 */
-  applyTuning(eqGains: number[], pitchSemitones: number): void;
+  applyTuning(eqGains: number[], pitchSemitones: number, effects: AudioEffects): void;
   /** 订阅音频焦点中断。 */
   onInterrupt(handler: (kind: AudioInterruptKind) => void): void;
   /** 是否已就绪。 */

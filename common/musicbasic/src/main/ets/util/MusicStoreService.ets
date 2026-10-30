@@ -89,6 +89,8 @@ const KEY_IJK_FAIL_STREAK: string = 'ijk_fail_streak';
 const KEY_IJK_DISABLED: string = 'ijk_disabled';
 /** 播放内核选择：auto=自动 / av=强制系统播放器 / ffmpeg=强制 FFmpeg。 */
 const KEY_ENGINE_MODE: string = 'engine_mode';
+/** 音效开关（JSON：低音/立体声/人声消除/夜间/混响）。 */
+const KEY_AUDIO_EFFECTS: string = 'audio_effects';
 const KEY_DOWNLOAD_SAVE_MODE: string = 'download_save_mode';
 const KEY_DOWNLOAD_QUALITY_MODE: string = 'download_quality_mode';
 const KEY_DOWNLOAD_MANUAL_QUALITY: string = 'download_manual_quality';
@@ -1760,6 +1762,22 @@ export class MusicStoreService {
       return fallback;
     }
 
+    /** @returns 音效开关 JSON（由 player 的 AudioEffects 解析）。 */
+    public getAudioEffects(): string {
+      const store = this.getStore();
+      if (store === undefined) {
+        return '';
+      }
+      return store.getSync(KEY_AUDIO_EFFECTS, '') as string;
+    }
+
+    public setAudioEffects(json: string): void {
+      const store = this.getStore();
+      if (store === undefined) {
+        return;
+      }
+      store.putSync(KEY_AUDIO_EFFECTS, json);
+    }
     /** @returns 播放内核选择（auto / av / ffmpeg）。 */
     public getEngineMode(): string {
       const store = this.getStore();

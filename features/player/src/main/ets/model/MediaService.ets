@@ -33,6 +33,7 @@ import { AppStorageKeys, getAppRuntime, Logger, MusicAppState, MusicCardBridge, 
 import { AudioKernel } from '../engine/AudioKernel';
 import { createKernel, isMpvAvailable, preferredKernel } from '../engine/KernelFactory';
 import { AudioInterruptKind, kernelName, PlaybackKernelKind, logKernelSwitch } from '../engine/AudioKernel';
+import { AudioEffects, buildAfChain, effectsFromJson } from '../engine/AudioEffects';
 import SongItemBuilder from '../util/SongItemBuilder';
 import { AudioPlayerState, MusicPlayMode } from './MusicData';
 import { BackgroundUtil } from '../util/BackgroundUtil';
@@ -1276,7 +1277,7 @@ export class MediaService {
         const eq: number[] = store.getEqGains();
         const pitch: number = store.getTuningPitch();
         if (pitch !== 0 || eq[0] !== 0 || eq[1] !== 0 || eq[2] !== 0 || eq[3] !== 0 || eq[4] !== 0) {
-          engine.applyTuning(eq, pitch);
+          engine.applyTuning(eq, pitch, effectsFromJson(store.getAudioEffects()));
         }
         if (playedGen >= 0) {
           engine.start();
@@ -1346,33 +1347,23 @@ export class MediaService {
     const store = MusicStoreService.getInstance();
     const eq: number[] = store.getEqGains();
     const pitch: number = store.getTuningPitch();
-    const chain: string = MediaService.afChainOf(eq, pitch);
+    const effects: AudioEffects = effectsFromJson(store.getAudioEffects());
+    const chain: string = MediaService.afChainOf(eq, pitch, effects);
     if (chain === this.lastAfChain) {
       return;   // 参数没变（拖滑杆会连续回调）：不重复下发
     }
     this.lastAfChain = chain;
     if (this.ijkActive && this.ijkEngine !== undefined) {
-      this.ijkEngine.applyTuning(eq, pitch);
+      this.ijkEngine.applyTuning(eq, pitch, effects);
       this.appendPlayLog('[RzdTuning] 已下发到 ' + kernelName(this.ijkEngine.kind()) + ' 内核');
       return;
     }
     this.appendPlayLog('[RzdTuning] 当前走 AVPlayer，设置将在切到内核播放时生效');
   }
 
-  /** 组出 af 链（与内核实现保持一致，用于"是否变化"判断）。 */
-  private static afChainOf(eqGains: number[], pitchSemitones: number): string {
-    const bands: number[] = [60, 230, 910, 3600, 14000];
-    const out: string[] = [];
-    for (let i: number = 0; i < bands.length && i < eqGains.length; i++) {
-      if (eqGains[i] === 0) {
-        continue;
-      }
-      out.push('equalizer=f=' + bands[i].toString() + ':t=o:w=1:g=' + eqGains[i].toFixed(1));
-    }
-    if (pitchSemitones !== 0) {
-      out.push('rubberband=pitch=' + Math.pow(2, pitchSemitones / 12).toFixed(4));
-    }
-    return out.join(',');
+  /** 组出 af 链（与内核共用 engine/AudioEffects 的实现，保证"是否变化"判断准确）。 */
+  private static afChainOf(eqGains: number[], pitchSemitones: number, effects: AudioEffects): string {
+    return buildAfChain(eqGains, pitchSemitones, effects);
   }
   /**
    * @returns 是否允许使用 FFmpeg(ijk) 内核。
@@ -1479,6 +1470,9 @@ export class MediaService {
   private isTuningActive(): boolean {
     const store = MusicStoreService.getInstance();
     if (store.getTuningPitch() !== 0) {
+      return true;
+    }
+    if (effectsFromJson(store.getAudioEffects()).anyOn()) {
       return true;
     }
     const gains: number[] = store.getEqGains();

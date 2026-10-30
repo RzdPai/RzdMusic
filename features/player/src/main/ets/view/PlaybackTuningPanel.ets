@@ -16,6 +16,7 @@
 import { AppStorageKeys, MusicAppState, MusicStoreService } from 'musicbasic';
 import { AppStorageV2 } from '@kit.ArkUI';
 import { MediaService } from '../model/MediaService';
+import { AudioEffects, effectsFromJson, effectsToJson } from '../engine/AudioEffects';
 import { isMpvAvailable } from '../engine/KernelFactory';
 import { appendPlayLog } from 'musicbasic';
 
@@ -47,6 +48,17 @@ class EngineModeOption {
   }
 }
 
+/** 音效开关项（label + key）。 */
+class EffectToggle {
+  label: string = '';
+  key: string = '';
+
+  constructor(label: string, key: string) {
+    this.label = label;
+    this.key = key;
+  }
+}
+
 const EQ_PRESETS: EqPreset[] = [
   new EqPreset('关闭', [0, 0, 0, 0, 0]),
   new EqPreset('流行', [2, 1, -1, 1, 2]),
@@ -69,6 +81,12 @@ export struct PlaybackTuningPanel {
   @Local engineTick: number = 0;
   /** 播放内核选择：auto / av / ffmpeg。 */
   @Local engineMode: string = 'auto';
+  /** 低音增强（dB，0=关）。 */
+  @Local bassDb: number = 0;
+  @Local stereoWidenOn: boolean = false;
+  @Local vocalRemoveOn: boolean = false;
+  @Local nightModeOn: boolean = false;
+  @Local reverbOn: boolean = false;
   /** 滑杆去抖定时器（拖 EQ/升降调时不逐格下发）。 */
   private tuningTimer: number = -1;
 
@@ -79,6 +97,15 @@ export struct PlaybackTuningPanel {
     new EngineModeOption('FFmpeg', 'ffmpeg'),
     new EngineModeOption('mpv', 'mpv')
   ];
+
+  /** 音效开关项。 */
+  private static readonly EFFECT_TOGGLES: EffectToggle[] = [
+    new EffectToggle('立体声增强', 'stereo'),
+    new EffectToggle('人声消除', 'vocal'),
+    new EffectToggle('夜间模式', 'night'),
+    new EffectToggle('混响', 'reverb')
+  ];
+
 
   private store: MusicStoreService = MusicStoreService.getInstance();
   /** 与播放器共享的全局状态（只读倍速用于高亮）。 */
@@ -91,6 +118,12 @@ export struct PlaybackTuningPanel {
     this.eqGains = this.store.getEqGains();
     this.presetName = this.matchPresetName(this.eqGains);
     this.engineMode = this.store.getEngineMode();
+    const fx: AudioEffects = effectsFromJson(this.store.getAudioEffects());
+    this.bassDb = fx.bassDb;
+    this.stereoWidenOn = fx.stereoWiden !== 1.0;
+    this.vocalRemoveOn = fx.vocalRemove;
+    this.nightModeOn = fx.nightMode;
+    this.reverbOn = fx.reverb;
   }
 
   /** 当前增益对应的预设名（没有匹配则空串）。 */
@@ -149,6 +182,79 @@ export struct PlaybackTuningPanel {
     this.store.setEqGains(next);
     this.scheduleTuning();
     appendPlayLog('[RzdTuning] eq[' + index + ']=' + gain);
+  }
+
+  /** @returns 指定音效开关是否开启。 */
+  private isEffectOn(key: string): boolean {
+    switch (key) {
+      case 'stereo':
+        return this.stereoWidenOn;
+      case 'vocal':
+        return this.vocalRemoveOn;
+      case 'night':
+        return this.nightModeOn;
+      case 'reverb':
+        return this.reverbOn;
+      default:
+        return false;
+    }
+  }
+
+  /** 当前音效集合（用于下发与持久化）。 */
+  private currentEffects(): AudioEffects {
+    const fx: AudioEffects = new AudioEffects();
+    fx.bassDb = this.bassDb;
+    fx.stereoWiden = this.stereoWidenOn ? 1.6 : 1.0;
+    fx.vocalRemove = this.vocalRemoveOn;
+    fx.nightMode = this.nightModeOn;
+    fx.reverb = this.reverbOn;
+    return fx;
+  }
+
+  /** 持久化 + 去抖下发。 */
+  private commitEffects(): void {
+    this.store.setAudioEffects(effectsToJson(this.currentEffects()));
+    this.scheduleTuning();
+  }
+
+  /** 低音增强。 */
+  private applyBass(db: number): void {
+    this.bassDb = db;
+    appendPlayLog('[RzdAf] bass=' + db);
+    this.commitEffects();
+  }
+
+  /** 切换某个音效开关。 */
+  private toggleEffect(key: string): void {
+    switch (key) {
+      case 'stereo':
+        this.stereoWidenOn = !this.stereoWidenOn;
+        break;
+      case 'vocal':
+        this.vocalRemoveOn = !this.vocalRemoveOn;
+        break;
+      case 'night':
+        this.nightModeOn = !this.nightModeOn;
+        break;
+      case 'reverb':
+        this.reverbOn = !this.reverbOn;
+        break;
+      default:
+        break;
+    }
+    appendPlayLog('[RzdAf] toggle ' + key);
+    this.commitEffects();
+  }
+
+  /** 全部关闭音效。 */
+  private clearEffects(): void {
+    this.bassDb = 0;
+    this.stereoWidenOn = false;
+    this.vocalRemoveOn = false;
+    this.nightModeOn = false;
+    this.reverbOn = false;
+    appendPlayLog('[RzdAf] clear');
+    this.commitEffects();
   }
 
   /** 去抖：200ms 内多次改动只下发最后一次。 */
@@ -357,6 +463,82 @@ export struct PlaybackTuningPanel {
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)
+
+      // ===== 音效 =====
+      Row() {
+        Text('音效')
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.font_primary'))
+          .layoutWeight(1)
+        Text('全部关闭')
+          .fontSize(12)
+          .fontColor($r('app.color.font_tertiary'))
+          .onClick((): void => {
+            this.clearEffects();
+          })
+      }
+      .width('100%')
+      .margin({ top: 16, bottom: 8 })
+
+      // 低音增强
+      Row() {
+        Text('低音增强')
+          .fontSize(14)
+          .fontColor($r('app.color.font_primary'))
+          .layoutWeight(1)
+        Text(this.bassDb === 0 ? '关' : '+' + this.bassDb.toFixed(0) + 'dB')
+          .fontSize(13)
+          .fontColor(this.themeStateColor())
+      }
+      .width('100%')
+
+      Slider({
+        value: this.bassDb,
+        min: 0,
+        max: 12,
+        step: 1,
+        style: SliderStyle.OutSet
+      })
+        .width('100%')
+        .blockColor(this.themeStateColor())
+        .selectedColor(this.themeStateColor())
+        .trackColor($r('app.color.background_secondary'))
+        .onChange((value: number): void => {
+          const db: number = Math.round(value);
+          if (db !== this.bassDb) {
+            this.applyBass(db);
+          }
+        })
+
+      // 其它音效开关（胶囊）
+      Flex({ wrap: FlexWrap.Wrap }) {
+        ForEach(PlaybackTuningPanel.EFFECT_TOGGLES, (item: EffectToggle) => {
+          Button() {
+            Text(item.label)
+              .fontSize(13)
+              .fontColor(this.isEffectOn(item.key) ?
+                $r('app.color.page_background') : $r('app.color.font_primary'))
+          }
+          .type(ButtonType.Capsule)
+          .height(30)
+          .padding({ left: 14, right: 14 })
+          .margin({ right: 8, top: 8 })
+          .backgroundColor(this.isEffectOn(item.key) ?
+            this.themeStateColor() : $r('app.color.background_secondary'))
+          .onClick((): void => {
+            this.toggleEffect(item.key);
+          })
+        }, (item: EffectToggle) => 'effect-' + item.key)
+      }
+      .width('100%')
+      .margin({ top: 6 })
+
+      Text('音效经 ffmpeg 滤镜链生效（低音 bass / 立体声 extrastereo / 人声消除 pan / 夜间 dynaudnorm / 混响 aecho）')
+        .fontSize(11)
+        .fontColor($r('app.color.font_tertiary'))
+        .width('100%')
+        .margin({ top: 8 })
 
       // 播放内核选择（方便真机对比两条链路）
       Row() {

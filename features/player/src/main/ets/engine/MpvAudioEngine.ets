@@ -23,6 +23,7 @@ import {
   AudioInterruptKind,
   PlaybackKernelKind
 } from './AudioKernel';
+import { AudioEffects, buildAfChain } from './AudioEffects';
 
 /** EQ 频段（Hz），与播放设置面板一致。 */
 const EQ_BANDS: number[] = [60, 230, 910, 3600, 14000];
@@ -163,19 +164,9 @@ export class MpvAudioEngine implements AudioKernel {
     this.write('speed', Math.max(0.25, Math.min(4, rate)).toFixed(3));
   }
 
-  applyTuning(eqGains: number[], pitchSemitones: number): void {
-    const filters: string[] = [];
-    for (let i: number = 0; i < EQ_BANDS.length && i < eqGains.length; i++) {
-      if (eqGains[i] === 0) {
-        continue;
-      }
-      filters.push('equalizer=f=' + EQ_BANDS[i].toString() + ':t=o:w=1:g=' + eqGains[i].toFixed(1));
-    }
-    if (pitchSemitones !== 0) {
-      const ratio: number = Math.pow(2, pitchSemitones / 12);
-      filters.push('rubberband=pitch=' + ratio.toFixed(4));
-    }
-    const chain: string = filters.join(',');
+  applyTuning(eqGains: number[], pitchSemitones: number, effects: AudioEffects): void {
+    // 与 MediaService.refreshTuning 共用同一个 builder，保证字符串完全一致（去重才可靠）
+    const chain: string = buildAfChain(eqGains, pitchSemitones, effects);
     if (chain === this.lastAf) {
       return;
     }
