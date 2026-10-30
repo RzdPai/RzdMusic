@@ -17,6 +17,7 @@
  * Moved from common/mediacommon/src/main/ets/utils/MediaService.ets
  */
 
+import { util } from '@kit.ArkTS';
 import { AppStorageV2 } from '@kit.ArkUI';
 import { media } from '@kit.MediaKit';
 import { audio } from '@kit.AudioKit';
@@ -1039,6 +1040,35 @@ export class MediaService {
    * @param songItem Queue item with non-empty source and empty url.
    * @returns True when the url was resolved.
    */
+  /**
+   * 把「跳转壳」还原成真实音频直链。
+   * 目前见过一种：`https://host/lx/api/redirect.php?u=<base64 的真实 http 地址>`。
+   * @param url 脚本返回的原始地址。
+   * @returns 直链；不是跳转壳就原样返回。
+   */
+  private unwrapRedirectUrl(url: string): string {
+    try {
+      if (url.indexOf('redirect.php') < 0) {
+        return url;
+      }
+      const m: RegExpMatchArray | null = url.match(/[?&]u=([A-Za-z0-9+/=%]+)/);
+      if (m === null || m.length < 2) {
+        return url;
+      }
+      const raw: string = decodeURIComponent(m[1]);
+      const bytes: Uint8Array = new util.Base64Helper().decodeSync(raw);
+      const text: string = util.TextDecoder.create('utf-8').decodeToString(bytes);
+      if (text.startsWith('http://') || text.startsWith('https://')) {
+        appendPlayLog('[播放] 跳转壳还原直链 ' + text.substring(0, 90));
+        return text;
+      }
+      return url;
+    } catch (err) {
+      appendPlayLog('[播放] 跳转壳还原失败，继续用原地址');
+      return url;
+    }
+  }
+
   private async resolveOnlineUrl(songItem: SongItem): Promise<boolean> {
     // ★ 启动瞬间引擎可能还没 ready：先等 3s，避免误弹「音源未就绪」
     const engineReady: boolean = await waitForLxEngineReady(3000);
@@ -1084,7 +1114,11 @@ export class MediaService {
         songItem.cover = outcome.img;
       }
     }
-    songItem.url = outcome.url;
+    // ★ 2026-10-30：部分脚本把真实地址套在自家跳转里
+    //   （如 `…/lx/api/redirect.php?u=<base64(http://ip:port/stream-…)>`）。
+    //   AVPlayer 对这种 302→http 的链路会报 5400103（IO error），
+    //   这里把 base64 还原成直链再交给播放器。
+    songItem.url = this.unwrapRedirectUrl(outcome.url);
     // 记录实际使用的音质（可能因自动降级低于偏好设置）
     this.getAppState().currentQuality = outcome.quality;
     appendPlayLog('[播放] resolveOnlineUrl 成功 quality=' + outcome.quality +
