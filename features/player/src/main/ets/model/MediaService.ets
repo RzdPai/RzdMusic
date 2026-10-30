@@ -1057,7 +1057,19 @@ export class MediaService {
       }
       const raw: string = decodeURIComponent(m[1]);
       const bytes: Uint8Array = new util.Base64Helper().decodeSync(raw);
-      const text: string = util.TextDecoder.create('utf-8').decodeToString(bytes);
+      let text: string = util.TextDecoder.create('utf-8').decodeToString(bytes);
+      // ★ 2026-10-30 实测（curl）：
+      //   外层 `http://113.207.105.205:46000/stream?url=…` 根本连不上（code=000，移动内网代理），
+      //   而它 `url=` 里包的 douyinvod 直链 HEAD 200 / Range 206 `audio/mp4`、可正常播。
+      //   所以再剥一层：`/stream?url=<encoded https>` → 取内层直链。
+      const inner: RegExpMatchArray | null = text.match(/[?&]url=([^&]+)/);
+      if (text.indexOf('/stream?') >= 0 && inner !== null && inner.length > 1) {
+        const decoded: string = decodeURIComponent(inner[1]);
+        if (decoded.startsWith('http://') || decoded.startsWith('https://')) {
+          appendPlayLog('[播放] 剥离内网代理层 → ' + decoded);
+          text = decoded;
+        }
+      }
       if (text.startsWith('http://') || text.startsWith('https://')) {
         appendPlayLog('[播放] 跳转壳还原直链 ' + text);   // 打全，便于直接复制到浏览器验证
         return text;
