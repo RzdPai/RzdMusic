@@ -1059,7 +1059,7 @@ export class MediaService {
       const bytes: Uint8Array = new util.Base64Helper().decodeSync(raw);
       const text: string = util.TextDecoder.create('utf-8').decodeToString(bytes);
       if (text.startsWith('http://') || text.startsWith('https://')) {
-        appendPlayLog('[播放] 跳转壳还原直链 ' + text);   // 打全，便于直接复制到浏览器验证
+        appendPlayLog('[播放] 跳转壳还原直链 ' + text.substring(0, 90));
         return text;
       }
       return url;
