@@ -84,6 +84,8 @@ export class MediaService {
     return getAppRuntime().context;
   }
   /** Underlying Harmony AVPlayer; undefined until createAVPlayer succeeds. */
+  /** ★ 汽水分片流已落盘的本地路径（空串=没有）。 */
+  private pendingLocalPath: string = '';
   public avPlayer?: media.AVPlayer;
   /** Active AV session for lock screen / headset / system media controls. */
   private session?: avSession.AVSession;
@@ -417,12 +419,79 @@ export class MediaService {
    * state transition, so the 'idle' callback never fires and the track would
    * never load — the silent "stuck playback / play button dead" bug.
    */
+  /**
+   * 把音频流整段下载到 cacheDir（仅用于分片 mp4 这类原生边下边播处理不好的流）。
+   * @param url 直链。
+   * @returns 本地路径；失败返回空串。
+   */
+  private async cacheStreamToLocal(url: string): Promise<string> {
+    const ctx: common.UIAbilityContext | undefined = this.abilityContext;
+    if (ctx === undefined) {
+      return '';
+    }
+    const dir: string = ctx.cacheDir + '/soda_stream';
+    try {
+      if (!fs.accessSync(dir)) {
+        fs.mkdirSync(dir);
+      }
+    } catch (err) {
+    }
+    const path: string = dir + '/stream_' + Date.now().toString() + '.m4a';
+    const req: http.HttpRequest = http.createHttp();
+    try {
+      const resp: http.HttpResponse = await req.request(url, {
+        method: http.RequestMethod.GET,
+        expectDataType: http.HttpDataType.ARRAY_BUFFER,
+        connectTimeout: 15000,
+        readTimeout: 120000
+      });
+      if (resp.responseCode !== 200 || resp.result === undefined) {
+        this.appendPlayLog('[播放] 分片流下载失败 code=' + resp.responseCode);
+        return '';
+      }
+      const buf: ArrayBuffer = resp.result as ArrayBuffer;
+      if (buf.byteLength < 32 * 1024) {
+        return '';
+      }
+      const file = fs.openSync(path, fs.OpenMode.CREATE | fs.OpenMode.READ_WRITE);
+      fs.writeSync(file.fd, buf);
+      fs.closeSync(file);
+      this.appendPlayLog('[播放] 分片流已落盘 ' + Math.round(buf.byteLength / 1024) + 'KB');
+      return path;
+    } catch (err) {
+      this.appendPlayLog('[播放] 分片流下载异常');
+      return '';
+    } finally {
+      req.destroy();
+    }
+  }
+
   private async loadCurrentIntoPlayer(): Promise<void> {
     const idleSong: SongItem | undefined = this.getSongItemAtQueueIndex(this.musicIndex);
     if (!idleSong || !this.avPlayer) {
       return;
     }
     this.songItem = await this.songItemBuilder.build(idleSong);
+      // ★ 统一“装载前先回 idle”：fdSrc 与 url 混用会让 AVPlayer「有时长/有进度但没声音」，
+      //   reset() 会异步回到 idle 再重新进本函数，从而保证每次都从干净状态装载。
+      if (this.avPlayer.state !== 'idle') {
+        this.appendPlayLog('[播放] 装载前 reset（当前状态 ' + this.avPlayer.state + '）');
+        this.avPlayer.reset();
+        return;
+      }
+      if (this.pendingLocalPath.length > 0) {
+        try {
+          const info: fs.Stat = fs.statSync(this.pendingLocalPath);
+          const file = fs.openSync(this.pendingLocalPath, fs.OpenMode.READ_ONLY);
+          this.avPlayer.fdSrc = { fd: file.fd, offset: 0, length: info.size };
+          this.appendPlayLog('[播放] 装载本地缓存曲目（汽水）size=' + info.size);
+          this.pendingLocalPath = '';
+          return;
+        } catch (err) {
+          this.appendPlayLog('[播放] 本地缓存装载失败，退回网络播放');
+          this.pendingLocalPath = '';
+        }
+      }
     const httpUrl: string = this.songItemBuilder.getHttpUrl();
     if (httpUrl.length > 0) {
       this.avPlayer.url = httpUrl;
@@ -1118,6 +1187,16 @@ export class MediaService {
     //   （如 `…/lx/api/redirect.php?u=<base64(http://ip:port/stream-…)>`）。
     //   AVPlayer 对这种 302→http 的链路会报 5400103（IO error），
     //   这里把 base64 还原成直链再交给播放器。
+    // ★ 2026-10-30（汽水：有总时长但进度恒 0）：脚本给的是 douyinvod 的**分片 mp4**
+    //   （`mime_type=audio_mp4`，给浏览器 MSE 用）。AVPlayer 边下边播解不出分片索引 ⇒ 卡 0。
+    //   这类流先整段落盘，再走 fdSrc 播本地完整文件（只对汽水生效，其它平台不受影响）。
+    if (songItem.source === 'qs' || outcome.url.indexOf('audio_mp4') >= 0) {
+      const local: string = await this.cacheStreamToLocal(outcome.url);
+      if (local.length > 0) {
+        this.pendingLocalPath = local;
+        this.appendPlayLog('[播放] 汽水分片流已落盘，改用本地播放');
+      }
+    }
     songItem.url = this.unwrapRedirectUrl(outcome.url);
     // 记录实际使用的音质（可能因自动降级低于偏好设置）
     this.getAppState().currentQuality = outcome.quality;
