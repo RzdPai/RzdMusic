@@ -1442,18 +1442,6 @@
 			"value" : "_OHOS_BASE_MARKER_BEGIN_ --rtlib=compiler-rt -fuse-ld=lld -Wl,--build-id=sha1 -Wl,--warn-shared-textrel -Wl,--fatal-warnings -lunwind -Wl,--no-undefined -Qunused-arguments -Wl,-z,noexecstack _OHOS_BASE_MARKER_END_ "
 		},
 		{
-			"name" : "ijkplayer_DIR",
-			"properties" : 
-			[
-				{
-					"name" : "HELPSTRING",
-					"value" : "The directory containing a CMake configuration file for ijkplayer."
-				}
-			],
-			"type" : "PATH",
-			"value" : "C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/hvigor/arm64-v8a/lib/aarch64-linux-ohos/cmake/ijkplayer"
-		},
-		{
 			"name" : "libmpvnative_BINARY_DIR",
 			"properties" : 
 			[

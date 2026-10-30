@@ -1465,7 +1465,7 @@ export class MediaService {
   public kernelSummary(): string {
     const mode: string = MusicStoreService.getInstance().getEngineMode();
     const modeText: string = mode === 'av' ? '系统' : (mode === 'ffmpeg' ? 'FFmpeg' : (mode === 'mpv' ? 'mpv' : '自动'));
-    const active: string = this.ijkActive ? kernelName(this.ijkEngine !== undefined ? this.ijkEngine.kind() : PlaybackKernelKind.FFMPEG) : 'AVPlayer';
+    const active: string = this.ijkActive ? kernelName(this.ijkEngine !== undefined ? this.ijkEngine.kind() : PlaybackKernelKind.MPV) : 'AVPlayer';
     return modeText + ' · ' + active;
   }
   /** 恢复 FFmpeg 内核（清掉降级标记）。 */

@@ -256,9 +256,6 @@ PACKAGE_FIND_FILE:UNINITIALIZED=C:\Users\Administrator\Desktop\RzdProject\RzdMus
 //Unix system
 UNIX:BOOL=TRUE
 
-//The directory containing a CMake configuration file for ijkplayer.
-ijkplayer_DIR:PATH=C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/hvigor/arm64-v8a/lib/aarch64-linux-ohos/cmake/ijkplayer
-
 //Value Computed by CMake
 libmpvnative_BINARY_DIR:STATIC=C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a
 

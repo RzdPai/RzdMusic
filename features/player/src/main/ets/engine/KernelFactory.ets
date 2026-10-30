@@ -3,42 +3,35 @@
  *
  * 内核工厂：把「用哪个第三方内核」收敛到一处。
  *
- * 现在的规则：
- * - 有 mpv（`MpvAudioEngine.isAvailable()` 为真，即 `libmpv.so` + `libmpvnative` 已打进包）→ 用 mpv；
- * - 否则用 FFmpeg（`@ohos/ijkplayer` 的纯音频通道）。
+ * 现状（2026-10-31）：第三方内核只有 **mpv**（`libmpv.so` + `libmpvnative` 已打进包）。
+ * AVPlayer 是系统内置、不经过本工厂。
  *
- * 等到 mpv 可用时，**这里改都不用改**（`preferredKernel()` 会自动选 mpv），
- * `MediaService` 与 UI 也无需改动。
+ * 历史：早期用 `@ohos/ijkplayer`（FFmpeg audio-only）作为过渡内核，mpv 跑通后已整体移除。
+ * 若某天 mpv 不可用（例如换机型漏打包 so），`MpvAudioEngine` 会在 create 时回调 onError，
+ * MediaService 的自愈逻辑会回落到 AVPlayer。
  */
 
 import { AudioKernel, PlaybackKernelKind } from './AudioKernel';
-import { IjkAudioEngine } from './IjkAudioEngine';
 import { MpvAudioEngine } from './MpvAudioEngine';
 
 /**
- * @returns 当前进程内优先使用的第三方内核。
- * AVPlayer 不在这里（它是系统内置、不走工厂）。
+ * @returns 当前进程内优先使用的第三方内核（现在恒为 mpv）。
  */
 export function preferredKernel(): PlaybackKernelKind {
-  if (MpvAudioEngine.isAvailable()) {
-    return PlaybackKernelKind.MPV;
-  }
-  return PlaybackKernelKind.FFMPEG;
+  return PlaybackKernelKind.MPV;
 }
 
 /**
  * 按种类创建内核实例。
- * @param kind 内核种类；`AVPLAYER` 属于错误用法（返回 FFmpeg 兜底）。
+ * @param kind 内核种类；`AVPLAYER` 属于错误用法（统一回落 mpv 实例）。
  */
 export function createKernel(kind: PlaybackKernelKind): AudioKernel {
   switch (kind) {
     case PlaybackKernelKind.MPV:
       return new MpvAudioEngine();
-    case PlaybackKernelKind.FFMPEG:
-      return new IjkAudioEngine();
     default:
-      // AVPlayer 由 MediaService 自己管理，工厂里给一个 FFmpeg 兜底避免返回 undefined
-      return new IjkAudioEngine();
+      // AVPlayer 由 MediaService 自己管理；这里统一返回 mpv
+      return new MpvAudioEngine();
   }
 }
 

@@ -21,7 +21,6 @@ export enum PlaybackKernelKind {
   /** 系统 AVPlayer（默认，万能但不支持分片 mp4 边下边播/音效）。 */
   AVPLAYER = 0,
   /** FFmpeg（通过 @ohos/ijkplayer 的纯音频通道）。 */
-  FFMPEG = 1,
   /** libmpv（待接入）。 */
   MPV = 2
 }
@@ -87,8 +86,6 @@ export interface AudioKernel {
 /** 内核种类 → 文案。 */
 export function kernelName(kind: PlaybackKernelKind): string {
   switch (kind) {
-    case PlaybackKernelKind.FFMPEG:
-      return 'FFmpeg（ijk）';
     case PlaybackKernelKind.MPV:
       return 'mpv';
     default:
