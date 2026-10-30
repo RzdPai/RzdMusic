@@ -88,11 +88,14 @@ export struct HomePlazaSection {
     // ★ 2026-10-29（用户：胶囊仍被裁；照 RzdVideo 那条 Scroll）：自身不加 padding，
     //   改为**不裁切边界**；首尾留白交给内容行的 Blank，胶囊圆角完整可见。
     .clip(false)
+    // ★ 2026-10-31（用户：歌单广场那行 Tab 离左侧太远）：内容窄于视口时 Scroll 默认居中，
+    //   显式靠左对齐，让胶囊与「歌单广场」标题左边缘对齐。
+    .align(Alignment.Start)
   }
 
   @Builder
   private FilterBar() {
-    Flex({ wrap: FlexWrap.Wrap }) {
+    Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
       Row({ space: 4 }) {
         Text(this.recommendViewModel.plazaCategoryName.length > 0 ?
           this.recommendViewModel.plazaCategoryName : $r('app.string.home_plaza_default'))
@@ -294,7 +297,7 @@ export struct HomePlazaSection {
                 .fontColor($r('sys.color.font_secondary'))
                 .alignSelf(ItemAlign.Start)
                 .margin({ top: 12, bottom: 8 })
-              Flex({ wrap: FlexWrap.Wrap }) {
+              Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
                 ForEach(group.items, (item: CategoryOption) => {
                   Text(item.name)
                     .fontSize(14)
