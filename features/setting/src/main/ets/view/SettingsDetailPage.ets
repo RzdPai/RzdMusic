@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-import { appendPlayLog , setScreenOrientation , UsbAudioService, UsbAudioState } from 'musicbasic';
+import { appendPlayLog , setScreenOrientation , UsbAudioService, UsbAudioState , TabBarConfigModel } from 'musicbasic';
 import { bundleManager } from '@kit.AbilityKit';
 import { DrawableDescriptor, LayeredDrawableDescriptor } from '@kit.ArkUI';
 import { guardPlayerBack, PlaybackPreferenceService } from 'musicbasic';
@@ -229,6 +229,22 @@ export struct SettingsDetailPage {
     appendPlayLog('[RzdTabConfig] 保存 ' + json);
   }
 
+  /** 当前底栏顺序预览（首页/我的固定，中间两项按配置）。 */
+  private tabOrderPreview(): string {
+    const cfg: TabBarConfigModel = TabBarConfigModel.parse(
+      MusicStoreService.getInstance().getTabBarConfig());
+    const names: string[] = ['首页'];
+    if (cfg.now && cfg.echo) {
+      names.push(cfg.nowFirst ? '现在就听' : '回响');
+      names.push(cfg.nowFirst ? '回响' : '现在就听');
+    } else if (cfg.now) {
+      names.push('现在就听');
+    } else {
+      names.push('回响');
+    }
+    names.push('我的');
+    return '当前顺序：' + names.join(' → ');
+  }
   /** 主题设置最下面的「自定义 Tab 栏」（只允许调整「现在就听」「回响」）。 */
   @Builder
   private TabBarCustomSection() {
@@ -271,6 +287,11 @@ export struct SettingsDetailPage {
           this.tabNowFirst = index === 0;
           this.saveTabBarConfig();
         })
+      Text(this.tabOrderPreview())
+        .fontSize(12)
+        .fontColor($r('app.color.font_tertiary'))
+        .width('100%')
+        .margin({ top: 8 })
     }
     .width('100%')
     .padding({ left: 16, right: 16, top: 4, bottom: 8 })
