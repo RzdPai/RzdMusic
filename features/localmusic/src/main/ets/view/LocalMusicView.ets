@@ -887,9 +887,10 @@ export struct LocalMusicPage {
       .tabBar(this.SelectionBarSlot())
     }
     .barHeight(66)
+    .barWidth(300)
     .barBackgroundColor(Color.Transparent)
     .barBackgroundBlurStyle(BlurStyle.NONE)
-    .width(360)
+    .width(300)
     .height(66)
     .align(Alignment.Center)
   }
