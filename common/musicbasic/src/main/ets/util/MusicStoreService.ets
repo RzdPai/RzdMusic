@@ -95,6 +95,8 @@ const KEY_AUDIO_EFFECTS: string = 'audio_effects';
 const KEY_SCREEN_ORIENTATION: string = 'screen_orientation';
 /** 自定义 EQ 预设（JSON 数组：[{name, gains[5]}]）。 */
 const KEY_EQ_PRESETS: string = 'eq_custom_presets';
+/** USB 独占输出（需要外接 USB DAC）。 */
+const KEY_USB_EXCLUSIVE: string = 'usb_exclusive';
 const KEY_DOWNLOAD_SAVE_MODE: string = 'download_save_mode';
 const KEY_DOWNLOAD_QUALITY_MODE: string = 'download_quality_mode';
 const KEY_DOWNLOAD_MANUAL_QUALITY: string = 'download_manual_quality';
@@ -1766,6 +1768,22 @@ export class MusicStoreService {
       return fallback;
     }
 
+    /** @returns 是否启用 USB 独占输出（默认关）。 */
+    public getUsbExclusive(): boolean {
+      const store = this.getStore();
+      if (store === undefined) {
+        return false;
+      }
+      return store.getSync(KEY_USB_EXCLUSIVE, false) as boolean;
+    }
+
+    public setUsbExclusive(enabled: boolean): void {
+      const store = this.getStore();
+      if (store === undefined) {
+        return;
+      }
+      store.putSync(KEY_USB_EXCLUSIVE, enabled);
+    }
     /** @returns 自定义 EQ 预设 JSON（由 player 的 AudioEffects 解析）。 */
     public getEqPresets(): string {
       const store = this.getStore();

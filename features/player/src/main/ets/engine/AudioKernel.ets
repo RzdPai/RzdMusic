@@ -82,6 +82,8 @@ export interface AudioKernel {
   describeStream(): string;
   /** 释放（可重复调用）。 */
   release(): void;
+  /** 音频输出后端：true=USB 独占（需外接 DAC），false=系统输出。 */
+  applyUsbOutput?(enabled: boolean): void;
 }
 
 /** 内核种类 → 文案。 */

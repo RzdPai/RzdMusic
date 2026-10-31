@@ -141,6 +141,8 @@ export struct SettingsDetailPage {
   @Local lockScreenPlay: boolean = true;
   @Local audioMix: boolean = false;
   /** 屏幕方向：auto / portrait / landscape。 */
+  /** USB 独占输出（需外接 USB DAC）。 */
+  @Local usbExclusive: boolean = false;
   @Local screenOrientation: string = 'auto';
   /** 启动应用自动开始播放（默认关）。 */
   @Local autoPlayOnLaunch: boolean = false;
@@ -325,6 +327,7 @@ export struct SettingsDetailPage {
     this.lockScreenPlay = MusicStoreService.getInstance().getLockScreenPlay();
     this.audioMix = MusicStoreService.getInstance().getAudioMix();
     this.screenOrientation = MusicStoreService.getInstance().getScreenOrientation();
+    this.usbExclusive = MusicStoreService.getInstance().getUsbExclusive();
     this.autoPlayOnLaunch = MusicStoreService.getInstance().getAutoPlayOnLaunch();
     this.lyricBlurEnabled = MusicStoreService.getInstance().getLyricBlurEnabled();
     this.saveToDownloadDir = MusicStoreService.getInstance().getDownloadSaveMode() === 'download';
@@ -1257,6 +1260,21 @@ export struct SettingsDetailPage {
               this.autoPlayOnLaunch = autoPlay;
               MusicStoreService.getInstance().setAutoPlayOnLaunch(autoPlay);
             })
+
+          this.SubTitle('USB 独占输出')
+          this.CapsuleSelector(this.onOffOptions, this.usbExclusive ? 0 : 1,
+            (index: number) => {
+              const enabled: boolean = index === 0;
+              this.usbExclusive = enabled;
+              void MediaService.getInstance().applyUsbExclusive(enabled);
+            })
+          if (this.usbExclusive) {
+            Text('需要外接 USB DAC（UAC1/UAC2）；设备断开时会自动回退普通输出')
+              .fontSize(11)
+              .fontColor($r('app.color.font_tertiary'))
+              .width('100%')
+              .margin({ top: 4 })
+          }
         }
         .width('100%')
         .padding({ left: 16, right: 16, top: 4, bottom: 8 })

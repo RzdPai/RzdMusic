@@ -72,7 +72,6 @@ export struct HomePlazaSection {
     Scroll() {
       Row({ space: 8 }) {
         // 首尾留白放在内容行里（Scroll 自身不加 padding），胶囊圆角不被裁切
-        Blank().width(4)
         ForEach(MusicDataService.sourceList, (item: string, index?: number) => {
           this.SourceChip(MusicDataService.sourceName(item), index ?? 0)
         }, (item: string) => `plaza-src-${item}`)
@@ -91,6 +90,7 @@ export struct HomePlazaSection {
     // ★ 2026-10-31（用户：歌单广场那行 Tab 离左侧太远）：内容窄于视口时 Scroll 默认居中，
     //   显式靠左对齐，让胶囊与「歌单广场」标题左边缘对齐。
     .align(Alignment.Start)
+    .padding({ left: 0, right: 0 })
   }
 
   @Builder

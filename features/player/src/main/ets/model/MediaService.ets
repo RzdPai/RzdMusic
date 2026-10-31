@@ -1448,6 +1448,23 @@ export class MediaService {
     const active: string = this.ijkActive ? kernelName(this.ijkEngine !== undefined ? this.ijkEngine.kind() : PlaybackKernelKind.MPV) : 'AVPlayer';
     return modeText + ' · ' + active;
   }
+  /**
+   * 应用 USB 独占设置（用户 2026-10-31 需求）。
+   * @param enabled true=尝试 `ao=usb-exclusive`（需外接 USB DAC）；false=回到普通输出。
+   * 说明：真正独占还需要 USBManager 授权的 fd（`usb-exclusive-fd`），当前版本先下发 ao 并记录日志，
+   * 没有 DAC 时 mpv 会自动回退普通输出，不会静默失声。
+   */
+  public async applyUsbExclusive(enabled: boolean): Promise<void> {
+    MusicStoreService.getInstance().setUsbExclusive(enabled);
+    if (this.ijkEngine === undefined || !this.ijkActive) {
+      this.appendPlayLog('[RzdUsb] 设置已保存=' + enabled + '（下次起播生效）');
+      return;
+    }
+    this.appendPlayLog('[RzdUsb] 尝试切换 ao usb-exclusive=' + enabled);
+    if (this.ijkEngine.applyUsbOutput !== undefined) {
+      this.ijkEngine.applyUsbOutput(enabled);
+    }
+  }
   /** 恢复 FFmpeg 内核（清掉降级标记）。 */
   public resetIjkHealth(): void {
     const store = MusicStoreService.getInstance();

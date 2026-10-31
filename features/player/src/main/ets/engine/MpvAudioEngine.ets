@@ -189,6 +189,15 @@ export class MpvAudioEngine implements AudioKernel {
       ' ao=' + this.read('current-ao');
   }
 
+  /**
+   * 切换音频输出后端。
+   * @param enabled true → `ao=usb-exclusive`（需外接 USB DAC 与 USBManager 授权 fd）；false → 回到 `ohaudio`。
+   */
+  applyUsbOutput(enabled: boolean): void {
+    const ao: string = enabled ? 'usb-exclusive' : 'ohaudio';
+    this.write('ao', ao);
+    appendPlayLog(this.tag + ' ao=' + ao);
+  }
   release(): void {
     this.released = true;
     this.stopReadyTimer();
