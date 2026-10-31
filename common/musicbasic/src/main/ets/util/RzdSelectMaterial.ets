@@ -30,7 +30,10 @@ export class RzdSelectMenuMaterial implements AttributeModifier<SelectAttribute>
     // 选项：透明底、去分隔线、选中用主色浅底（与系统下拉菜单一致）
     instance.optionBgColor(Color.Transparent);
     instance.divider(null);
-    instance.selectedOptionBgColor($r('sys.color.comp_background_emphasize'));
+    // 选中项：用应用主题色（浅底 + 强调色文字），不用系统蓝
+    instance.selectedOptionBgColor($r('app.color.menu_selected_surface'));
+    instance.selectedOptionFontColor($r('app.color.icon_primary'));
+    instance.optionFontColor($r('app.color.font_primary'));
     // 菜单底板：半透明面板色；均衡档用厚模糊，弱档关掉（贴系统观感）
     instance.menuBackgroundColor($r('app.color.menu_surface'));
     instance.menuBackgroundBlurStyle(BlurStyle.COMPONENT_THICK);

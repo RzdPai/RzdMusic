@@ -1185,34 +1185,19 @@ export struct EchoReviewPage {
           this.jumpToYear(this.yearSelectYears()[index]);
         })
 
-      Row({ space: 8 }) {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(12)
-          .fontColor([$r('app.color.echo_text_chip')])
-          .onClick(() => {
-            this.shiftMonth(-1);
-          })
-        Select(this.monthSelectOptions())
-          .selected(this.monthSelectIndex())
-          .value(this.monthLabel)
-          .font({ size: 13 })
-          .fontColor($r('app.color.echo_text_chip'))
-          .backgroundColor(Color.Transparent)
-          .attributeModifier(new RzdSelectMenuMaterial())
-          .onSelect((index: number) => {
-            this.jumpToMonth(this.monthOptions[index].offset);
-          })
-        SymbolGlyph($r('sys.symbol.chevron_right'))
-          .fontSize(12)
-          .fontColor([$r('app.color.echo_text_chip')])
-          .onClick(() => {
-            this.shiftMonth(1);
-          })
-      }
-      .height(30)
-      .padding({ left: 12, right: 12 })
-      .borderRadius(15)
-      .backgroundColor($r('app.color.echo_chip_background'))
+      // ★ 2026-10-31（用户：年和月样式统一、箭头去掉）：月与年完全同款胶囊 Select。
+      Select(this.monthSelectOptions())
+        .selected(this.monthSelectIndex())
+        .value(this.monthLabel)
+        .height(30)
+        .font({ size: 13 })
+        .fontColor($r('app.color.echo_text_chip'))
+        .backgroundColor($r('app.color.echo_chip_background'))
+        .borderRadius(15)
+        .attributeModifier(new RzdSelectMenuMaterial())
+        .onSelect((index: number) => {
+          this.jumpToMonth(this.monthOptions[index].offset);
+        })
     }
     .width('100%')
   }
