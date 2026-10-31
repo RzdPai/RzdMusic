@@ -683,6 +683,17 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
   onNotice: ((msg: string) => void) | null,
   options?: FallbackOptions): Promise<UrlResolveOutcome> {
   const opts: FallbackOptions = options ?? new FallbackOptions();
+  // ★ 2026-11-01（全新安装导入音源后"瞬间"报"获取播放地址失败"）：
+  //   根因是脚本引擎（WebView）当时还没 ready，链上每个候选都在 tryQualities 里毫秒级失败 ⇒ 整条链瞬间走完。
+  //   解析前先主动等引擎就绪（最多 4s）；超时返回空结果并留下可诊断日志。
+  const bootDeadline: number = Date.now() + 4000;
+  while (!engineReady() && Date.now() < bootDeadline) {
+    await sleep(120);
+  }
+  if (!engineReady()) {
+    appendPlayLog('[换源] 引擎未就绪（4s 超时），本次解析放弃；请确认音源脚本已加载');
+    return new UrlResolveOutcome();
+  }
   const preferred: string = await PlaybackPreferenceService.resolveDefaultQuality();
   const activeAtStart: string = activeSourceId();
   // ★ B2/B3 唯一回退链：顺序完全由 buildCandidateChain() 决定（同平台源优先 → 换平台按音质）
