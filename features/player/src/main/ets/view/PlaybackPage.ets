@@ -168,6 +168,33 @@ export struct PlaybackPage {
    * 以及"可用高度"（窗口高 − 标题/文字/控制预留）。
    * ⇒ 阔屏手机在**单列**下封面被同时按宽度和高度约束，不会再压住歌名/歌词/控制区。
    */
+  /**
+   * 宽屏左右内边距（照无界 `Breakpoint.playerWidePadOf(widthBp)`）：bp≥4 → 72，≥3 → 48，否则 24。
+   */
+  private playerWidePad(): number {
+    const bp: number = this.breakpointEnv.widthBreakpoint;
+    if (bp === WidthBreakpoint.WIDTH_XL) {
+      return 72;
+    }
+    if (bp === WidthBreakpoint.WIDTH_LG) {
+      return 48;
+    }
+    return 24;
+  }
+
+  /**
+   * 宽屏两栏间距（照无界 `Breakpoint.playerWideGutterOf(widthBp)`）：bp≥4 → 56，≥3 → 40，否则 24。
+   */
+  private playerWideGutter(): number {
+    const bp: number = this.breakpointEnv.widthBreakpoint;
+    if (bp === WidthBreakpoint.WIDTH_XL) {
+      return 56;
+    }
+    if (bp === WidthBreakpoint.WIDTH_LG) {
+      return 40;
+    }
+    return 24;
+  }
   private coverSideVp(): number {
     const byWidth: number = this.singleColMaxVp() * this.sizeScale();
     const availH: number = Math.max(180, this.expandState.windowHeightVp - (56 + 210));
@@ -5496,7 +5523,7 @@ export struct PlaybackPage {
             Column() {
               GridRow({
                 columns: { md: BreakpointConstants.COLUMN_MD, lg: BreakpointConstants.COLUMN_LG, xl: BreakpointConstants.COLUMN_LG },
-                gutter: 48
+                gutter: this.playerWideGutter()
               }) {
                 GridCol({
                   span: { md: 4, lg: 5, xl: 4 }
@@ -5521,8 +5548,8 @@ export struct PlaybackPage {
                   bottom: 20
                 })
                 .padding({
-                  left: this.isWidePlayerLayout() ? 48 : 0,
-                  right: this.isWidePlayerLayout() ? 48 : 0
+                  left: this.isWidePlayerLayout() ? this.playerWidePad() : 0,
+                  right: this.isWidePlayerLayout() ? this.playerWidePad() : 0
                 })
 
                 GridCol({
