@@ -112,7 +112,7 @@ export struct MiniBarPlayer {
    * Composes cover, aside controls, padding, and upward pan-to-full-screen gesture.
    */
   build() {
-    Row({ space: 8 }) {
+    Row({ space: 12 }) {
       MiniBarAlbumCover({
         playerViewModel: this.playerViewModel,
         followAppMiniBarExpanded: this.followAppMiniBarExpanded

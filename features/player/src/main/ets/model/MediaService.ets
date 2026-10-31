@@ -1309,6 +1309,7 @@ export class MediaService {
           this.updateIsPlay(true);
           this.ensureBackgroundAudioTask();
           this.startIjkPolling();
+          this.getAppState().isResolving = false;
           this.appendPlayLog('[播放] ijk 起播 dur=' + dur);
         } else {
           this.appendPlayLog('[播放] ijk 仅装载（无起播意图）');
@@ -2594,6 +2595,9 @@ export class MediaService {
     this.lastLoadWantedPlay = autoPlay;
     this.playIntentConsumedGen = this.loadGen - 1;
     this.appendPlayLog('[播放] 装载请求 gen=' + this.loadGen + ' 起播意图=' + autoPlay);
+    // ★ 2026-10-31：汽水/mpv 与队列起播都走这里；以前只有 OnlinePlayUtil 那条路径置 isResolving，
+    //   所以「缓冲中…」在界面上永远不出现。统一在"装载请求"处置真，prepared/失败时置假。
+    this.getAppState().isResolving = true;
     return this.loadGen;
   }
 
