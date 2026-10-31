@@ -97,6 +97,8 @@ const KEY_SCREEN_ORIENTATION: string = 'screen_orientation';
 const KEY_EQ_PRESETS: string = 'eq_custom_presets';
 /** USB 独占输出（需要外接 USB DAC）。 */
 const KEY_USB_EXCLUSIVE: string = 'usb_exclusive';
+/** Tab 栏自定义（只允许「现在就听」/「回响」）：JSON "{now:bool,echo:bool,nowFirst:bool}"。 */
+const KEY_TAB_BAR_CONFIG: string = 'tab_bar_config';
 const KEY_DOWNLOAD_SAVE_MODE: string = 'download_save_mode';
 const KEY_DOWNLOAD_QUALITY_MODE: string = 'download_quality_mode';
 const KEY_DOWNLOAD_MANUAL_QUALITY: string = 'download_manual_quality';
@@ -1768,6 +1770,22 @@ export class MusicStoreService {
       return fallback;
     }
 
+    /** @returns Tab 栏配置 JSON（空串=默认：两个都显示、现在就听在前）。 */
+    public getTabBarConfig(): string {
+      const store = this.getStore();
+      if (store === undefined) {
+        return '';
+      }
+      return store.getSync(KEY_TAB_BAR_CONFIG, '') as string;
+    }
+
+    public setTabBarConfig(json: string): void {
+      const store = this.getStore();
+      if (store === undefined) {
+        return;
+      }
+      store.putSync(KEY_TAB_BAR_CONFIG, json);
+    }
     /** @returns 是否启用 USB 独占输出（默认关）。 */
     public getUsbExclusive(): boolean {
       const store = this.getStore();
