@@ -694,6 +694,17 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
     appendPlayLog('[换源] 引擎未就绪（4s 超时），本次解析放弃；请确认音源脚本已加载');
     return new UrlResolveOutcome();
   }
+  // ★ 2026-11-01（全新安装"瞬间"失败的第二道保险）：导入过音源但**没有任何脚本被选中**时，
+  //   activeSourceId() 为空 ⇒ 回退链拿不到脚本 ⇒ 每个候选毫秒级失败。这里自动选用列表里第一个脚本。
+  if (activeSourceId().length === 0) {
+    const apisFirst: LXUserApiInfo[] = lxSourceManager.getApiList();
+    if (apisFirst.length > 0) {
+      const firstScriptId: string = apisFirst[0].id;
+      appendPlayLog('[换源] 未选中音源，自动选用第一个脚本 id=' + firstScriptId);
+      AppStorage.setOrCreate('lxActiveSource', firstScriptId);
+      await switchToScript(firstScriptId);
+    }
+  }
   const preferred: string = await PlaybackPreferenceService.resolveDefaultQuality();
   const activeAtStart: string = activeSourceId();
   // ★ B2/B3 唯一回退链：顺序完全由 buildCandidateChain() 决定（同平台源优先 → 换平台按音质）
