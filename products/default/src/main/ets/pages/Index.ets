@@ -2125,6 +2125,16 @@ struct Index {
   @Local tabCfgJson: string = '';
 
   /** @returns 解析后的 Tab 栏配置（坏数据回默认）。 */
+  /**
+   * 当前是否停在「现在就听」这一页。
+   * ★ 2026-10-31：以前直接比 `tabState.tabIndex === NOW_PLAYING_TAB_INDEX(=1)`，
+   *   但自定义 Tab 栏之后位次会变（隐藏「现在就听」时，渲染位次 1 变成「回响」）⇒ 播放条会被错误隐藏在第 2 页。
+   *   这里改成用 `tabLogicalOf(NOW_PLAYING_TAB_INDEX)` 求当前渲染位次；被隐藏时返回 false（永不隐藏）。
+   */
+  private isNowPlayingTabActive(): boolean {
+    const logical: number = this.tabLogicalOf(NOW_PLAYING_TAB_INDEX);
+    return logical >= 0 && this.tabState.tabIndex === logical;
+  }
   private tabCfg(): TabBarConfigModel {
     return TabBarConfigModel.parse(this.tabCfgJson);
   }
@@ -2328,7 +2338,7 @@ struct Index {
    * @returns 杩蜂綘鏉℃牱寮忋€?
    */
   private miniBarStyleForHds(): HdsBarStyle {
-    if (this.tabState.tabIndex === NOW_PLAYING_TAB_INDEX) {
+    if (this.isNowPlayingTabActive()) {
       return HdsBarStyle.COLLAPSE;
     }
     return this.appState.miniBarExpanded ? HdsBarStyle.EXPAND : HdsBarStyle.COLLAPSE;
@@ -2391,7 +2401,7 @@ struct Index {
     if (this.navDepth > 0) {
       return false;
     }
-    return this.tabState.tabIndex !== NOW_PLAYING_TAB_INDEX;
+    return !this.isNowPlayingTabActive();
   }
 
   /**
@@ -2430,7 +2440,7 @@ struct Index {
     //     `openPlayer=false` / `PlaybackIntentState.openPlayerUi=false`锛夛紝
     //     鑰岃兘寮€鍒版挱鏀鹃〉鐨勫叆鍙ｏ紙搴曟爮杩蜂綘鏉＄偣鍑汇€佺郴缁熷獟浣撴帶鍒讹級鍦ㄦ湰椤典篃涓嶅瓨鍦?涓嶅舰鍙樸€?
     if (this.navDepth <= 0) {
-      if (this.tabState.tabIndex === NOW_PLAYING_TAB_INDEX || this.navDepth > 0) {
+      if (this.isNowPlayingTabActive() || this.navDepth > 0) {
         // 鈽呪槄鈽呪槄 2026-10-17锛?*淇敤鎴峰疄娴嬨€屼簩绾ч〉闈細鍑虹幇涓や釜鎾斁鏉°€?*锛?
         //   鍘熸潵杩欓噷鍙垽 `tabIndex === 姝ｅ湪鎾斁`锛?*娌″垽 `navDepth`** 鈥斺€?浜岀骇椤靛湪鏍堜笂鏃讹紝
         //   浜岀骇椤佃嚜宸遍偅鏉″畼鏂规诞鍔ㄦ爮锛坄floatingMiniBar`锛夊凡缁忓湪鐢伙紝棣栭〉杩欐潯鍙堟病鍗歌浇
