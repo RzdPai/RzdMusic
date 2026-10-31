@@ -157,6 +157,33 @@ export struct PlaybackPage {
    *   封面尺寸本身来自覆盖层量测，宽屏下会按列宽撑满，把下方歌名/歌词/控制区顶出去 ⇒ 这里给一个按窗口高度算的上限，
    *   MusicPlayInfoBlock 内部的封面会在此上限内自适应缩小，下方内容位置固定。
    */
+  /**
+   * 单列内容最大宽度（照无界 `Breakpoint.singleColWidthOf`）。
+   * 无界实现（1.2.8 还原）：`w = min(子宽, 父宽); if (w > 560) w = 560; if (w > 父宽) w = 父宽; return w;`
+   * ⇒ 内容列**上限 560vp**，这就是阔屏手机不再被封面撑爆的关键。
+   */
+  private singleColMaxVp(): number {
+    const w: number = this.expandState.windowWidthVp;
+    const avail: number = w > 0 ? w - 48 : 360;
+    return Math.max(240, Math.min(avail, 560));
+  }
+
+  /**
+   * 尺寸缩放（照无界 `Breakpoint.sizeScaleOf(widthBp)`）：bp≥4 → 1.32，≥3 → 1.24，≥2 → 1.12，否则 1。
+   */
+  private sizeScale(): number {
+    const bp: number = this.breakpointEnv.widthBreakpoint;
+    if (bp === WidthBreakpoint.WIDTH_XL) {
+      return 1.32;
+    }
+    if (bp === WidthBreakpoint.WIDTH_LG) {
+      return 1.24;
+    }
+    if (bp === WidthBreakpoint.WIDTH_MD) {
+      return 1.12;
+    }
+    return 1;
+  }
   private wideCoverMaxVp(): number {
     // ★ 2026-10-31（阔屏新机 1:1.414 会命中 lg 断点）：不再按"窗口高 × 百分比"，
     //   改为按**可用高度**算：窗口高 − 标题区(56) − 文字/控制/进度预留(≈210)，
@@ -5475,7 +5502,7 @@ export struct PlaybackPage {
                     showControlArea: false
                   })
                 // ★ 宽屏封面高度上限（固定位置 + 封面自适应，避免压住下方内容）
-                .constraintSize({ maxHeight: this.wideCoverMaxVp(), maxWidth: this.wideCoverMaxVp() })
+                .constraintSize({ maxHeight: this.singleColMaxVp(), maxWidth: this.singleColMaxVp() })
                 .onAreaChange((_o: Area, n: Area): void => {
                 })
                 }
