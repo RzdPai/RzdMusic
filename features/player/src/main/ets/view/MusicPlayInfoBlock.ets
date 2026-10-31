@@ -564,7 +564,10 @@ export struct MusicPlayInfoBlock {
               ControlAreaComponent({ showBottomOtherRow: false })
             }
           }
-          .height(276)
+          // ★ 2026-11-01（对比报告 §5）：原来写死 `.height(276)` 且 `justifyContent(End)`、无 clip，
+          //   内容超过 276 就向上溢出压住歌名 ⇒ 改成自适应高度（内容撑开）+ 裁剪兜底。
+          .constraintSize({ maxHeight: '62%' })
+          .clip(true)
           .justifyContent(FlexAlign.End)
         }
         .height(StyleConstants.FULL_HEIGHT)
