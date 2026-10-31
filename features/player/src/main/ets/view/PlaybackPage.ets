@@ -829,7 +829,9 @@ export struct PlaybackPage {
    */
   /** 小歌词预览行数：短高/小窗只留 1 行，避免和第 ② 块一起抢竖向空间（2026-10-31）。 */
   private miniLyricLines(): number {
-    return this.isShortHeightWindow() ? 1 : this.miniLyricLines();
+    // ★ 修 bug：这里原本被我误替换成 `this.miniLyricLines()`（自递归，非短高时栈溢出）；
+    // 同时按 §230 的算术：363x593 下 进度24+meta60+歌词1行44+控制72=200 > 可用183.4 ⇒ 短高直接不画小歌词。
+    return this.isShortHeightWindow() ? 0 : PlaybackPage.MINI_LYRIC_LINES;
   }
 
   private static readonly MINI_LYRIC_LINES: number = 2;
