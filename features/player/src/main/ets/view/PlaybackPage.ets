@@ -827,6 +827,11 @@ export struct PlaybackPage {
    * ★ 2026-10-18（第五轮）：这两个量现在**只用来解释 `MINI_LYRIC_BLOCK_H_VP = 57` 是怎么来的**，
    *   不参与定位（定位已改为"歌名行流式兄弟"，见 `LyricFloatLayer()`）。
    */
+  /** 小歌词预览行数：短高/小窗只留 1 行，避免和第 ② 块一起抢竖向空间（2026-10-31）。 */
+  private miniLyricLines(): number {
+    return this.isShortHeightWindow() ? 1 : this.miniLyricLines();
+  }
+
   private static readonly MINI_LYRIC_LINES: number = 2;
   /** 小歌词单行占位高（vp，= 字号 18/17fp 按 1.4 倍行高取整）。 */
   private static readonly MINI_LYRIC_LINE_H_VP: number = 26;
