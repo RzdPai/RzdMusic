@@ -683,7 +683,7 @@ struct Index {
     appendPlayLog(`[RzdTabSwitch] -> ${index} root=${rootDepth} home=${homeDepth} ` +
       `barHidden=${this.searchTabBarHidden} showPlay=${this.appState.isShowPlay} ` +
       `queue=${this.appState.playQueue.length} sel=${this.appState.selectIndex}`);
-    this.tabsController.changeIndex(this.tabPhysicalOf(index));
+    this.tabsController.changeIndex(index);
     // 切完再打一次，确认 HdsTabs 真的换了页（排查"首页空白"是切页还是渲染的问题）
     setTimeout((): void => {
       appendPlayLog(`[RzdTabSwitch] applied idx=${index} (next frame)`);
@@ -3364,9 +3364,9 @@ struct Index {
           })
           .onChange((index: number) => {
             if (index !== this.tabState.tabIndex) {
-              this.tabState.tabIndex = this.tabLogicalOf(index);
+              this.tabState.tabIndex = index;
               // 鍒囧埌鏂伴〉绛撅細閫変腑鎬佸脊涓€涓嬶紙鐐瑰嚮涓庢粦鍔ㄥ垏鎹㈤兘浼氳蛋杩欓噷锛?
-              this.playTabBounce(this.tabState.tabIndex);
+              this.playTabBounce(index);
               // 鈽?杩蜂綘鏉℃樉闅愯瘖鏂紙`hdc shell hilog | grep RzdMiniBarHide`锛夛細
               //   鍒囧埌銆岀幇鍦ㄥ氨鍚€嶅簲鎵撳嚭 `hidden=true barLayout=HORIZONTAL style=COLLAPSE`锛?
               //   鍒囧洖鏉ュ簲鎵撳嚭 `hidden=false`銆傚彧鑳界湅鏃ュ織锛屾棤璁惧楠岃瘉銆?
@@ -3397,8 +3397,8 @@ struct Index {
           .padding({ bottom: WindowUtil.getInstance().getStartupNavigationBarBottomVp() })
           .onChange((index: number) => {
             if (index !== this.tabState.tabIndex) {
-              this.tabState.tabIndex = this.tabLogicalOf(index);
-              this.playTabBounce(this.tabState.tabIndex);
+              this.tabState.tabIndex = index;
+              this.playTabBounce(index);
             }
           })
           .onTabBarClick((index: number): void => {

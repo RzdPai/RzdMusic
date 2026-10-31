@@ -265,12 +265,13 @@ export struct SettingsDetailPage {
           this.tabShowNow = index === 0;
           this.saveTabBarConfig();
         })
-      this.SubTitle('两个页签的顺序')
-      this.CapsuleSelector(['现在就听在前', '回响在前'], this.tabNowFirst ? 0 : 1,
-        (index: number) => {
-          this.tabNowFirst = index === 0;
-          this.saveTabBarConfig();
-        })
+      // ⏸ 2026-10-31（用户：暂时不需要换序）：先注释，等后面再做（方案见记忆 §191）
+      // this.SubTitle('两个页签的顺序')
+      // this.CapsuleSelector(['现在就听在前', '回响在前'], this.tabNowFirst ? 0 : 1,
+      //   (index: number) => {
+      //     this.tabNowFirst = index === 0;
+      //     this.saveTabBarConfig();
+      //   })
     }
     .width('100%')
     .padding({ left: 16, right: 16, top: 4, bottom: 8 })
