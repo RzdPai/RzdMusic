@@ -22,6 +22,7 @@
  */
 
 import { deviceInfo } from '@kit.BasicServicesKit';
+import { immersiveMedium } from './ImmersiveMaterialV26';
 
 /** Select 下拉菜单的光感材质（通过 attributeModifier 挂载）。 */
 export class RzdSelectMenuMaterial implements AttributeModifier<SelectAttribute> {
@@ -33,6 +34,8 @@ export class RzdSelectMenuMaterial implements AttributeModifier<SelectAttribute>
     // 菜单底板：半透明面板色；均衡档用厚模糊，弱档关掉（贴系统观感）
     instance.menuBackgroundColor($r('app.color.menu_surface'));
     instance.menuBackgroundBlurStyle(BlurStyle.COMPONENT_THICK);
+    // ★ 光感优先：Select 的下拉菜单支持系统沉浸材质（bindMenu 的 options 不支持）
+    instance.menuSystemMaterial(immersiveMedium());
     // API 20+ 才支持菜单描边（本工程 compileSdk 已满足；低版本 SDK 会在运行时忽略）
     if (deviceInfo.sdkApiVersion >= 20) {
       instance.menuOutline({ width: 0.5, color: $r('app.color.menu_surface_border') });

@@ -19,7 +19,7 @@ import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import {
   immersiveMedium,
   appBarBlurStyle,  guardPlayerBack, SearchGlassModifier
-} from 'musicbasic';
+, RzdSelectMenuMaterial } from 'musicbasic';
 import { AlbumRouteParam, ArtistRouteParam, BreakpointType, ThemeState, WindowUtil } from 'musicbasic';
 import { BlurStrategy, BottomBuilderShowType, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, HideMode, ScrollEffectType } from '@kit.UIDesignKit';
 import { AppStorageKeys, AmbientState, FavoriteEntry, MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord, QualityInfo, RouterUrlConstants, SongItem, SongTitleMarquee, ToplistRouteParam, appendPlayLog, barBlurOptions, buildTitleMaterial } from 'musicbasic';
@@ -1732,27 +1732,22 @@ export struct OnlineSearchPage {
       //   （官方示例 `PageTwo.ets:47-57` 就是把 backgroundColor 挂在 Search 上）。
       this.SearchInputBar()
 
-      Button() {
-        SourceChip({ source: this.searchSource })
-      }
-      .type(ButtonType.Normal)
-      .height(40)
-      .padding({ left: 12, right: 12 })
-      .borderRadius(20)
-      .systemMaterial(immersiveMedium())
-      .backgroundColor('#33FFFFFF')
-      // 切换平台（音源）那颗：同款沉浸光感材质
-      .accessibilityText('选择搜索音源，当前' + (this.searchSource === 'all' ? '聚合' : this.selectedSourceText))
-      .onClick((): void => {
-        this.showSources = true;
-      })
-      // 上游 SearchPageNew 597928 就是 `bindMenu(showSources, elements, {onDisappear})`，没有 `$$`。
-      // `$$` 只对少数内置两向绑定参数保证生效，这里跟上游保持一致，避免运行时行为不确定。
-      .bindMenu(this.sourceMenuElements(), {
-        onDisappear: (): void => {
-          this.showSources = false;
-        }
-      })
+      // ★ 2026-10-31（用户：光感优先 + 不要对勾、要颜色高亮）：切换平台改用官方 Select
+      //   参照 qingye-reader：Select 的选项用 selectedOptionBgColor 高亮（不是 ✓），
+      //   菜单材质走 RzdSelectMenuMaterial（menuBackgroundColor/BlurStyle/menuOutline/menuSystemMaterial）。
+      Select(this.sourceOptionsForMode())
+        .selected(this.displaySourceIndex())
+        .value(this.searchSource === 'all' ? '聚合' : this.selectedSourceText)
+        .height(40)
+        .font({ size: 13 })
+        .fontColor($r('app.color.font_primary'))
+        .backgroundColor('#33FFFFFF')
+        .borderRadius(20)
+        .attributeModifier(new RzdSelectMenuMaterial())
+        .onSelect((index: number) => {
+          const offset: number = (this.searchMode === 2 || this.searchMode === 3) ? 1 : 0;
+          this.applySourceSelection(index + offset);
+        })
     }
     .width('100%')
     .height(56)
