@@ -246,59 +246,62 @@ export struct SettingsDetailPage {
     return '当前顺序：' + names.join(' → ');
   }
   /** 主题设置最下面的「自定义 Tab 栏」（只允许调整「现在就听」「回响」）。 */
+  /** 主题设置最下面的「自定义 Tab 栏」：只保留标题、两行开关、顺序三块。 */
   @Builder
   private TabBarCustomSection() {
-    Column() {
+    Column({ space: 10 }) {
       this.SubTitle('自定义 Tab 栏')
-      Text('首页与「我的」固定显示；这里只调整「现在就听」「回响」')
-        .fontSize(12)
-        .fontColor($r('app.color.font_tertiary'))
-        .width('100%')
-        .margin({ bottom: 6 })
-      this.CapsuleSelector(this.onOffOptions, this.tabShowNow ? 0 : 1,
-        (index: number) => {
-          this.tabShowNow = index === 0;
-          if (!this.tabShowNow && !this.tabShowEcho) {
-            this.tabShowEcho = true;
-          }
-          this.saveTabBarConfig();
-        })
-      Text('现在就听')
-        .fontSize(12)
-        .fontColor($r('app.color.font_tertiary'))
-        .width('100%')
-        .margin({ top: 2, bottom: 10 })
-      this.CapsuleSelector(this.onOffOptions, this.tabShowEcho ? 0 : 1,
-        (index: number) => {
-          this.tabShowEcho = index === 0;
-          if (!this.tabShowNow && !this.tabShowEcho) {
-            this.tabShowNow = true;
-          }
-          this.saveTabBarConfig();
-        })
-      Text('回响')
-        .fontSize(12)
-        .fontColor($r('app.color.font_tertiary'))
-        .width('100%')
-        .margin({ top: 2, bottom: 10 })
-      this.SubTitle('两个页签的顺序')
+      Row() {
+        Text('回响')
+          .fontSize(14)
+          .fontColor($r('app.color.font_primary'))
+          .layoutWeight(1)
+        this.CapsuleSelector(this.onOffOptions, this.tabShowEcho ? 0 : 1,
+          (index: number) => {
+            this.tabShowEcho = index === 0;
+            if (!this.tabShowNow && !this.tabShowEcho) {
+              this.tabShowNow = true;
+            }
+            this.saveTabBarConfig();
+          })
+      }
+      .width('100%')
+      Row() {
+        Text('现在就听')
+          .fontSize(14)
+          .fontColor($r('app.color.font_primary'))
+          .layoutWeight(1)
+        this.CapsuleSelector(this.onOffOptions, this.tabShowNow ? 0 : 1,
+          (index: number) => {
+            this.tabShowNow = index === 0;
+            if (!this.tabShowNow && !this.tabShowEcho) {
+              this.tabShowEcho = true;
+            }
+            this.saveTabBarConfig();
+          })
+      }
+      .width('100%')
+      Row() {
+        Text('两个页签的顺序')
+          .fontSize(14)
+          .fontColor($r('app.color.font_primary'))
+          .layoutWeight(1)
+      }
+      .width('100%')
       this.CapsuleSelector(['现在就听在前', '回响在前'], this.tabNowFirst ? 0 : 1,
         (index: number) => {
           this.tabNowFirst = index === 0;
           this.saveTabBarConfig();
         })
-      Text(this.tabOrderPreview())
-        .fontSize(12)
-        .fontColor($r('app.color.font_tertiary'))
-        .width('100%')
-        .margin({ top: 8 })
     }
     .width('100%')
-    .padding({ left: 16, right: 16, top: 4, bottom: 8 })
+    .alignItems(HorizontalAlign.Start)
+    .padding({ left: 16, right: 16, top: 8, bottom: 10 })
     .borderRadius($r('sys.float.corner_radius_level12'))
     .backgroundColor($r('app.color.card_background'))
-    .margin({ top: 12 })
   }
+
+
 
 
   private usbStatusText(): string {
@@ -1382,42 +1385,42 @@ export struct SettingsDetailPage {
             })
 
           this.SubTitle('USB 独占输出')
+          // ★ 开关始终可见（关掉时只收起下面的状态与按钮，避免整个选项消失）
+          if (UsbAudioService.getInstance().state.present) {
+            this.CapsuleSelector(this.onOffOptions, this.usbExclusive ? 0 : 1,
+              (index: number) => {
+                const enabled: boolean = index === 0;
+                this.usbExclusive = enabled;
+                void MediaService.getInstance().applyUsbExclusive(enabled);
+              })
+          } else {
+            Row({ space: 10 }) {
+              Button('重新扫描')
+                .height(34)
+                .fontSize(13)
+                .backgroundColor($r('app.color.card_background'))
+                .fontColor($r('app.color.font_primary'))
+                .onClick((): void => {
+                  void UsbAudioService.getInstance().refresh();
+                })
+              Button('USB 诊断')
+                .height(34)
+                .fontSize(13)
+                .backgroundColor($r('app.color.card_background'))
+                .fontColor($r('app.color.font_primary'))
+                .onClick((): void => {
+                  void MediaService.getInstance().diagnoseUsb();
+                })
+            }
+            .margin({ top: 6 })
+          }
           if (this.usbExclusive) {
             Text(this.usbStatusText())
               .fontSize(12)
               .fontColor($r('app.color.font_tertiary'))
               .width('100%')
-              .margin({ bottom: 6 })
-              // ★ 有设备才给开关；没有设备时给「重新扫描」，避免"开了也没声"
-              if (UsbAudioService.getInstance().state.present) {
-                this.CapsuleSelector(this.onOffOptions, this.usbExclusive ? 0 : 1,
-                  (index: number) => {
-                    const enabled: boolean = index === 0;
-                    this.usbExclusive = enabled;
-                    void MediaService.getInstance().applyUsbExclusive(enabled);
-                  })
-              } else {
-                Row({ space: 10 }) {
-                  Button('重新扫描')
-                    .height(34)
-                    .fontSize(13)
-                    .backgroundColor($r('app.color.card_background'))
-                    .fontColor($r('app.color.font_primary'))
-                    .onClick((): void => {
-                      void UsbAudioService.getInstance().refresh();
-                    })
-                  Button('USB 诊断')
-                    .height(34)
-                    .fontSize(13)
-                    .backgroundColor($r('app.color.card_background'))
-                    .fontColor($r('app.color.font_primary'))
-                    .onClick((): void => {
-                      void MediaService.getInstance().diagnoseUsb();
-                    })
-                }
-                .margin({ top: 6 })
+              .margin({ top: 6 })
           }
-            }
         }
         .width('100%')
         .padding({ left: 16, right: 16, top: 4, bottom: 8 })
