@@ -1426,7 +1426,10 @@ export struct OnlineSearchPage {
               void this.addPlaylistToQueue(p);
             }
           }
-        ], { backgroundBlurStyle: appBarBlurStyle() })
+        ], {
+          backgroundBlurStyle: appBarBlurStyle(),
+          backgroundColor: $r('app.color.menu_surface'),
+        })
       SymbolGlyph($r('sys.symbol.chevron_right'))
         .fontSize(18)
         .fontColor([$r('sys.color.font_tertiary')])
