@@ -24,6 +24,7 @@ import { pasteboard } from '@kit.BasicServicesKit';
 import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, BarScrollHelper, RouterUrlConstants, BreakpointType, HomeSourceState, LocalCoverImage, LyricBlurState, LyricFontSizeState, MusicAppState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, WindowInfo, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, getWindowInfoState } from 'musicbasic';
 import { BlurStrategy, HdsNavigation, HdsNavigationTitleMode, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { NetworkImportSheet } from 'playlist';
 import { LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatformsOf, lxSourceManager, MediaService } from 'player';
 import type { LXApiImportResult } from 'player';
 import { HuaweiAccountService, HuaweiAccountState } from 'player';
@@ -519,47 +520,23 @@ export struct SettingPage {
   }
 
   @Builder
+  /**
+   * 在线导入（音源）：★ 2026-10-31（用户：和「在线导入歌单」用同一个半模态）——
+   * 直接复用歌单那边的共用组件 `NetworkImportSheet`，不再自己写一个只有 URL 输入框的简易表单。
+   * 平板上也走同一个组件（它自带 `bindSheet` 宿主，分栏形态下同样可用）。
+   */
+  @Builder
   private OnlineImportSheet() {
-    Column({ space: 16 }) {
-      Text($r('app.string.setting_online_import_title'))
-        .fontSize($r('sys.float.Subtitle_L'))
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('sys.color.font_primary'))
-        .width('100%')
-        .textAlign(TextAlign.Center)
-
-      TextInput({ text: this.onlineUrl, placeholder: $r('app.string.setting_online_import_placeholder') })
-        .width('100%')
-        .height(44)
-        .borderRadius($r('sys.float.corner_radius_level6'))
-        .padding({ left: 12, right: 12 })
-        .onChange((value: string) => {
-          this.onlineUrl = value;
-        })
-
-      Row({ space: 12 }) {
-        Button($r('app.string.setting_online_import_cancel'))
-          .layoutWeight(1)
-          .height(44)
-          .fontSize($r('sys.float.Body_L'))
-          .backgroundColor($r('app.color.background_secondary'))
-          .onClick(() => {
-            this.closeSettingSheet();
-          })
-        Button(this.importing ? $r('app.string.setting_online_import_loading') : $r('app.string.setting_online_import_confirm'))
-          .layoutWeight(1)
-          .height(44)
-          .fontSize($r('sys.float.Body_L'))
-          .backgroundColor(this.themeState.color)
-          .enabled(!this.importing)
-          .onClick(() => {
-            void this.importOnline();
-          })
+    NetworkImportSheet({
+      onClose: (): void => {
+        this.closeSettingSheet();
+      },
+      onImported: (_name: string, _count: number): void => {
+        this.closeSettingSheet();
       }
-      .width('100%')
-    }
-    .padding({ left: 20, right: 20, top: 24, bottom: 160 })
+    })
   }
+
 
   /** 平台账号管理弹窗：账号管理。 */
   @Builder
