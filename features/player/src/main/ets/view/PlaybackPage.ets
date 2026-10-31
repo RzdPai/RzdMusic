@@ -6514,7 +6514,11 @@ export struct PlaybackPage {
       }
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
-      .visibility(!this.flatCtlSwapped || this.flatSwapping ? Visibility.Visible : Visibility.None)
+      // ★ 2026-10-31（阔屏单列重叠根因）：两面**互斥显示**。原来带 `|| this.flatSwapping`，
+      //   一旦 flatSwapping 卡在 true，A/B 两面会同时渲染 ⇒ 控制键压在歌词上、"00:00" 出现两次。
+      //   交叉淡入改由 opacity(flatT) 完成，行为与无界一致。
+      .visibility(!this.flatCtlSwapped ? Visibility.Visible : Visibility.Hidden)
+      .opacity(1 - this.flatT)
       .zIndex(this.flatCtlSwapped ? 0 : 1)
 
       // ───── F 面（`:232364`）：visibility = (flatCtl || flatSwapping) ? Visible : Hidden；
@@ -6536,7 +6540,8 @@ export struct PlaybackPage {
       }
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
-      .visibility(this.flatCtlSwapped || this.flatSwapping ? Visibility.Visible : Visibility.Hidden)
+      .visibility(this.flatCtlSwapped ? Visibility.Visible : Visibility.Hidden)
+      .opacity(this.flatT)
       .zIndex(this.flatCtlSwapped ? 1 : 0)
       .translate({ y: -PlaybackPage.FLAT_SWAP_D_VP * (1 - this.flatT) })
       .opacity(this.flatT)
