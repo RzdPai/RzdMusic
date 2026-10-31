@@ -14,7 +14,7 @@
  */
 
 import { AppStorageV2 } from '@kit.ArkUI';
-import { AppStorageKeys, MusicStoreService, PlayedSongRecord, ThemeState } from 'musicbasic';
+import { AppStorageKeys, MusicStoreService, PlayedSongRecord, ThemeState , RzdSelectMenuMaterial } from 'musicbasic';
 import { SharePlaylistService, SharePlaylistSource } from 'player';
 
 /** 来源下拉的可选值（做成模块级常量：宿主页面若还要用，直接引用同一份）。 */
@@ -113,6 +113,8 @@ export struct NetworkImportSheet {
           .onSelect((index: number) => {
             this.onlineSource = ONLINE_SOURCE_VALUES[index];
           })
+          // ★ 光感材质（照 qingye-reader：Select 的 menu* 属性，不自绘）
+          .attributeModifier(new RzdSelectMenuMaterial())
       }
       .width('100%')
 
