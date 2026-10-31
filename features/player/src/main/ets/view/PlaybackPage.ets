@@ -6444,6 +6444,12 @@ export struct PlaybackPage {
           if (w > 0 && Math.abs(w - this.flatCoverBoxWVp) > 0.5) {
             this.flatCoverBoxWVp = w;
           }
+          // ★ 2026-11-01 诊断（grep `[RzdFlatRects]`）：封面盒子/边长/窗口一次打齐
+          appendPlayLog('[RzdFlatRects] cover box=' + w.toFixed(1) + 'x' + h.toFixed(1) +
+            ' edge=' + this.flatCoverEdgeVp().toFixed(1) +
+            ' size=' + this.flatCoverSizeVp().toFixed(1) +
+            ' win=' + this.expandState.windowWidthVp.toFixed(0) + 'x' + this.expandState.windowHeightVp.toFixed(0) +
+            ' swapped=' + (this.flatCtlSwapped ? 1 : 0) + ' flatT=' + this.flatT.toFixed(2));
           if (h > 0 && Math.abs(h - this.flatCoverBoxHVp) > 0.5) {
             this.flatCoverBoxHVp = h;
           }
