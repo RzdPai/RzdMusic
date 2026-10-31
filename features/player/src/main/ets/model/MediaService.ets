@@ -1295,9 +1295,11 @@ export class MediaService {
         // ★ 换歌会重建内核实例：如果 USB 独占处于开启且设备仍在，重新把 fd 交给新实例
         if (MusicStoreService.getInstance().getUsbExclusive() && UsbAudioService.getInstance().state.connected) {
           const usbFd: number = UsbAudioService.getInstance().currentFd();
-          if (usbFd > 0 && engine.setUsbFd !== undefined) {
-            engine.setUsbFd(usbFd);
-            this.appendPlayLog('[RzdUsb] 换歌后重新应用独占 fd=' + usbFd);
+          if (usbFd > 0 && engine.setUsbMode !== undefined) {
+            const lastBackend: string = AppStorage.get<string>('rzd_usb_backend') ?? 'usb-exclusive';
+            const mode: string = lastBackend.indexOf('usb') >= 0 ? 'usb' : 'ohaudio';
+            engine.setUsbMode(mode);
+            this.appendPlayLog('[RzdUsb] 换歌后重新应用独占 backend=' + mode + ' fd=' + usbFd);
           }
         }
         if (playedGen >= 0) {
@@ -1472,8 +1474,8 @@ export class MediaService {
     const usb: UsbAudioService = UsbAudioService.getInstance();
     if (!enabled) {
       usb.disconnect();
-      if (this.ijkEngine !== undefined && this.ijkActive && this.ijkEngine.setUsbFd !== undefined) {
-        this.ijkEngine.setUsbFd(-1);
+      if (this.ijkEngine !== undefined && this.ijkActive && this.ijkEngine.setUsbMode !== undefined) {
+        this.ijkEngine.setUsbMode('off');
       }
       this.appendPlayLog('[RzdUsb] 已关闭独占，回落普通输出');
       return;
@@ -1486,33 +1488,57 @@ export class MediaService {
       return;
     }
     const engine = this.ijkEngine;
-    if (engine !== undefined && this.ijkActive && engine.setUsbFd !== undefined) {
-      engine.setUsbFd(fd);
-      // ★ 800ms 后核对"实际生效的后端"：只要不是 usb-exclusive 就当作失败，回落并提示，不假装成功
-      setTimeout((): void => {
-        if (engine.currentAo === undefined) {
-          return;
-        }
-        const ao: string = engine.currentAo();
-        this.appendPlayLog('[RzdUsb] 校验 current-ao=' + ao);
-        if (ao.indexOf('usb') >= 0 && engine.audioOutParams !== undefined) {
+    if (engine === undefined || !this.ijkActive || engine.setUsbMode === undefined) {
+      this.appendPlayLog('[RzdUsb] 已就绪 fd=' + fd + '（下次起播生效）');
+      return;
+    }
+    // 打印这个构建里可用的 ao 驱动，便于判断能不能真的独占
+    if (engine.listAoDrivers !== undefined) {
+      this.appendPlayLog('[RzdUsb] 可用 ao 驱动=' + engine.listAoDrivers());
+    }
+    this.tryUsbMode(engine, 'usb', fd, 0);
+  }
+
+  /**
+   * 依次尝试独占后端，并用 `current-ao` 实测决定是否成功（不假设）。
+   * 顺序：ao=usb-exclusive → ao=ohaudio + audio-exclusive=yes → 失败回落。
+   * @param engine 当前内核。
+   * @param mode `usb` / `ohaudio`。
+   * @param fd 设备 fd（保留给内核记录）。
+   * @param attempt 第几次尝试（0/1）。
+   */
+  private tryUsbMode(engine: AudioKernel, mode: string, fd: number, attempt: number): void {
+    if (engine.setUsbMode !== undefined) {
+      engine.setUsbMode(mode);
+    }
+    setTimeout((): void => {
+      const ao: string = engine.currentAo !== undefined ? engine.currentAo() : '';
+      this.appendPlayLog('[RzdUsb] 模式 ' + mode + ' 校验 current-ao=' + ao);
+      const ok: boolean = mode === 'usb' ? ao.indexOf('usb') >= 0 : ao.indexOf('ohaudio') >= 0;
+      if (ok) {
+        AppStorage.setOrCreate('rzd_usb_backend', mode === 'usb' ? 'usb-exclusive' : 'ohaudio + exclusive');
+        if (engine.audioOutParams !== undefined) {
           const params: string = engine.audioOutParams();
           AppStorage.setOrCreate('rzd_usb_out_params', params);
           this.appendPlayLog('[RzdUsb] 实际输出参数 ' + params);
         }
-        if (ao.indexOf('usb') < 0) {
-          this.appendPlayLog('[RzdUsb] 独占未生效（current-ao=' + ao + '）→ 回落普通输出');
-          this.toast('该设备未能进入 USB 独占（已回落普通输出）');
-          MusicStoreService.getInstance().setUsbExclusive(false);
-          UsbAudioService.getInstance().disconnect();
-          if (engine.setUsbFd !== undefined) {
-            engine.setUsbFd(-1);
-          }
-        }
-      }, 800);
-    } else {
-      this.appendPlayLog('[RzdUsb] 已就绪 fd=' + fd + '（下次起播生效）');
-    }
+        this.appendPlayLog('[RzdUsb] 独占生效 backend=' + mode + ' fd=' + fd);
+        this.toast(mode === 'usb' ? 'USB 独占已生效' : 'USB 独占已生效（OHAudio 独占模式）');
+        return;
+      }
+      if (attempt === 0) {
+        this.appendPlayLog('[RzdUsb] usb-exclusive 不可用 → 尝试 ohaudio 独占');
+        this.tryUsbMode(engine, 'ohaudio', fd, 1);
+        return;
+      }
+      this.appendPlayLog('[RzdUsb] 该设备/ROM 不支持 USB 独占 → 回落普通输出');
+      this.toast('该设备不支持 USB 独占（已回落普通输出）');
+      MusicStoreService.getInstance().setUsbExclusive(false);
+      UsbAudioService.getInstance().disconnect();
+      if (engine.setUsbMode !== undefined) {
+        engine.setUsbMode('off');
+      }
+    }, 800);
   }
 
   /**

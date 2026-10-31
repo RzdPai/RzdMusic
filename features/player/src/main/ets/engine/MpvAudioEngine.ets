@@ -221,6 +221,35 @@ export class MpvAudioEngine implements AudioKernel {
     }
     return parts.join(' · ');
   }
+  /**
+   * @returns mpv 当前可用的音频输出驱动列表（属性 `audio-out-drivers`）。
+   * 用来判断这个 libmpv 构建到底有没有 `usb-exclusive` 这个 ao 驱动，避免瞎猜。
+   */
+  listAoDrivers(): string {
+    return this.read('audio-out-drivers');
+  }
+
+  /**
+   * 设置独占后端。
+   * @param mode `usb`（ao=usb-exclusive，自定义构建）/ `ohaudio`（ao=ohaudio + audio-exclusive=yes）/ `off`。
+   * 说明：不同构建对独占的支持不同，所以在二进制里能确认存在的两条路径都实现，
+   * 由上层依次尝试并用 `current-ao` 实测决定最终用哪条。
+   */
+  setUsbMode(mode: string): void {
+    if (mode === 'usb') {
+      this.write('audio-exclusive', 'no');
+      this.write('ao', 'usb-exclusive');
+      appendPlayLog('[RzdUsb] 尝试 ao=usb-exclusive');
+    } else if (mode === 'ohaudio') {
+      this.write('audio-exclusive', 'yes');
+      this.write('ao', 'ohaudio');
+      appendPlayLog('[RzdUsb] 尝试 ao=ohaudio + audio-exclusive=yes');
+    } else {
+      this.write('audio-exclusive', 'no');
+      this.write('ao', 'ohaudio');
+      appendPlayLog('[RzdUsb] 已回落 ao=ohaudio');
+    }
+  }
   currentAo(): string {
     const ao: string = this.read('current-ao');
     return ao.length > 0 ? ao : this.read('ao');
