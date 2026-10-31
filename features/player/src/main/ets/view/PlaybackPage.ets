@@ -6514,6 +6514,8 @@ export struct PlaybackPage {
       }
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
+      // ★ 2026-10-31：照无界 flatPane —— 块之间 flex 等距分配，避免"封面吃满高度后 meta/控制挤上去"
+      .justifyContent(FlexAlign.SpaceEvenly)
       // ★ 2026-10-31（阔屏单列重叠根因）：两面**互斥显示**。原来带 `|| this.flatSwapping`，
       //   一旦 flatSwapping 卡在 true，A/B 两面会同时渲染 ⇒ 控制键压在歌词上、"00:00" 出现两次。
       //   交叉淡入改由 opacity(flatT) 完成，行为与无界一致。
