@@ -964,13 +964,9 @@ export struct ControlAreaComponent {
         .width(StyleConstants.FULL_WIDTH)
         .justifyContent(FlexAlign.SpaceBetween)
       }
-      .margin({
-        top: this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_SM &&
-          this.breakpointEnv.heightBreakpoint === HeightBreakpoint.HEIGHT_MD ? 0 : $r('app.float.slider_margin_top'),
-        bottom: isWidthBreakpointLgOrXl(this.breakpointEnv.widthBreakpoint) ?
-          $r('app.float.slider_margin_bottom_lg') : this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_SM &&
-            this.breakpointEnv.heightBreakpoint === HeightBreakpoint.HEIGHT_MD ? 8 : $r('app.float.slider_margin_bottom')
-      })
+      // ★ 2026-11-01（深挖报告 P1-1）：时间/进度这块上下留白从资源里的 24/16 收到 8/8，
+      //   单列可省约 24vp（控制区 176 → ~152）；Slider 本体与热区不动。
+      .margin({ top: 8, bottom: 8 })
       // ★★ 2026-10-15：进度条与下面那堆按钮是**一组**（用户定调"一起飞入"），
       //   整片控制区的位移由宿主（`PlaybackPage`）挂在外层，这里**不再**做内部错峰。
 

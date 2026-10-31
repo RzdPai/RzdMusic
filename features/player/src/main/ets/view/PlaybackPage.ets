@@ -832,10 +832,9 @@ export struct PlaybackPage {
    */
   /** 小歌词预览行数：短高/小窗只留 1 行，避免和第 ② 块一起抢竖向空间（2026-10-31）。 */
   private miniLyricLines(): number {
-    // ★ 2026-11-01（用户对比无界截图）：这一版单列**不再画小歌词预览行**。
-    //   无界的同形态布局里根本没有这一行（封面 → 歌名/歌手/来源 → 进度 → 控制），
-    //   我们这行是绝对定位叠在 meta 上，正是"雨爱(Live) 马嘉祺、丁程鑫"重复出现并压住控制行的来源。
-    return 0;
+    // ★ 2026-11-01：恢复小歌词预览行（用户要求）。短高 1 行、常规 2 行；
+    //   注意这里必须引用常量本身，绝不能写 this.miniLyricLines()（自递归，见记忆 §231）。
+    return this.isShortHeightWindow() ? 1 : PlaybackPage.MINI_LYRIC_LINES;
   }
 
   private static readonly MINI_LYRIC_LINES: number = 2;
@@ -9220,7 +9219,7 @@ export struct PlaybackPage {
             //   两个等式都不经过实测、不经过 `estBoxHVp()`/`metaOffsetY()` ⇒ 完整推导见
             //   `MiniLyricLinesBlock()` 的 JSDoc。
         // ★ 2026-11-01（对比无界）：无界单列没有这行小歌词预览，它就是截图里重复的"雨爱（Live） 马嘉祺、丁程鑫"
-        // this.MiniLyricLinesBlock()
+        this.MiniLyricLinesBlock()
           }
           // ★ 定高容器（客户口径「让居中盒按容器高居中」）：文字列高度钉死 = 歌名行高 34。
           //   ① 小歌词是**溢出**的兄弟（34 的盒装不下 34+57），不参与这个 34 ⇒ 子节点个数/高度变化
@@ -9374,7 +9373,7 @@ export struct PlaybackPage {
         .width(StyleConstants.FULL_WIDTH)
         // ⛔ 上一轮这里写的是"高度钉死 57 + 用 offset 补回 h/2"——**这套补偿本轮已删**（见下面 `offset`）。
         //    下面这个 57 只是残页自身的尺寸，它整块是 `Visibility.None`，对布局零影响。
-        .height(PlaybackPage.MINI_LYRIC_BLOCK_H_VP)
+        .height(this.isShortHeightWindow() ? 28 : PlaybackPage.MINI_LYRIC_BLOCK_H_VP)
         .justifyContent(FlexAlign.Start)
         // ⛔⛔ 2026-10-18（第五轮）：**这一整块是旧实现的残页：代码保留，但永不参与布局、永不绘制。**
         //   为什么留而不删：本块中间那些中文注释是**双重编码乱码**，`edit` 的 `old_string` 逐字匹配不上

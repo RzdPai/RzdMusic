@@ -1594,6 +1594,12 @@ export class PlayerExpandState {
    */
   /** `fitPlayerOverlay` 鐨?`META_GAP_BELOW_COVER`锛堝瓧鑺傜爜榛樿鍊?50锛夈€?*/
   private static readonly COVER_FIT_META_GAP_VP: number = 50;
+  /**
+   * 单列（手机 Swiper 支）里封面→meta 的间距。
+   * ★ 2026-11-01（深挖报告 P1-2）：`COVER_FIT_META_GAP_VP(50)` 是上游**宽屏浮层** `fitPlayerOverlay` 的默认值，
+   *   在单列里纯属浪费（`metaTopGeomY` 只有两处调用点）⇒ 单列取 12，省 38vp。
+   */
+  private static readonly LYRIC_META_GAP_BELOW_COVER_VP: number = 12;
   /** `fitPlayerOverlay` 閲岄偅涓?纭紪鐮?+8"锛堜笂鐣屽す绱х敤锛夈€?*/
   private static readonly COVER_FIT_BOUND_INSET_VP: number = 8;
   /**
@@ -1730,7 +1736,7 @@ export class PlayerExpandState {
     if (fromRect.size <= 0) {
       return 0;
     }
-    const gap: number = PlayerExpandState.COVER_FIT_META_GAP_VP;      // 50锛堟棤鐣岄粯璁わ級
+    const gap: number = PlayerExpandState.LYRIC_META_GAP_BELOW_COVER_VP;   // 单列 12（P1-2）      // 50锛堟棤鐣岄粯璁わ級
     const halfRow: number = rowH > 0 ? rowH / 2 : 0;
     // 鈶?t = 0 閭ｄ竴绔細灏侀潰搴曡竟 + gap锛? `fitPlayerOverlay` 鐨?metaY 鈭?metaH/2锛?
     const fromTop: number = fromRect.y + fromRect.height + gap;
