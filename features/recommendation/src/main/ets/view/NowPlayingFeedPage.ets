@@ -208,7 +208,7 @@ import {
   shouldUseSplitDetailLayout,
   WindowInfo,
   getWindowInfoState
-, MENU_PAD_TOP, MENU_PAD_BOTTOM, MENU_BORDER_WIDTH } from 'musicbasic';
+, MENU_PAD_TOP, MENU_PAD_BOTTOM, MENU_BORDER_WIDTH , immersiveMedium } from 'musicbasic';
 import {
   BlurStrategy,
   HdsNavDestination,
@@ -1678,6 +1678,10 @@ export struct NowPlayingFeedPage {
     return rows;
   }
 
+  /** 菜单命中区边长（顶栏图标热区，保持观感不变；仅作为 popup 的锚点）。 */
+  private feedModeMenuHitVp(): number {
+    return 40;
+  }
   private onFeedMenu(): void {
     // ★ 2026-10-24（甲方：「现在就听左上角那个菜单，不要站位了，做成选择模式」）：
     //   以前这里只打日志 + toast 占位。现在打开「常规 / 熟悉 / 探索」选择菜单，
@@ -1736,19 +1740,29 @@ export struct NowPlayingFeedPage {
    */
   @Builder
   private FeedModeMenuAnchor() {
-    Stack()
-      .width(1)
-      .height(1)
+    // ★ 2026-10-31（用户：可以自绘按钮，只是不许自绘菜单；光感优先）：
+      //   这里改成"自绘透明按钮 + bindPopup"，菜单内容仍是平台 MenuItem（不画行），
+      //   但 popup 的 PopupCommonOptions 支持 systemMaterial ⇒ 才有真光感（bindMenu 没有）。
+      Button() {
+        Row()
+          .width(this.feedModeMenuHitVp())
+          .height(this.feedModeMenuHitVp())
+          .backgroundColor(Color.Transparent)
+      }
       .backgroundColor(Color.Transparent)
-      // 签名是 `bindMenu(isShow, content, options?)`：content 直接给 builder（不是 `{builder}`），
-      // isShow 用 `!!`（V2 两向绑定，见全局记忆里 `$$` vs `!!` 那条）。
-      .bindMenu(!!this.showFeedModeMenu, this.FeedModeMenu(), {
+      .padding(0)
+      .bindPopup(this.showFeedModeMenu, {
+        builder: (): void => {
+          this.FeedModeMenu();
+        },
         placement: Placement.BottomLeft,
-        // 菜单背板材质：只给档位（跟随设置里的光感等级），不写 adaptiveColor
-        backgroundBlurStyle: buildBarBlurStyle(this.ambientState.level),
-        backgroundColor: $r('app.color.menu_surface'),
-        onDisappear: (): void => {
-          this.showFeedModeMenu = false;
+        enableArrow: false,
+        radius: 16,
+        systemMaterial: immersiveMedium(),
+        onStateChange: (event): void => {
+          if (!event.isVisible) {
+            this.showFeedModeMenu = false;
+          }
         }
       })
   }
