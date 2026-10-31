@@ -55,7 +55,7 @@ import {
   
   buildBarBlurStyle,
    AlbumRouteParam, AppStorageKeys, ArtistRouteParam, BarScrollHelper, MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord, RouterUrlConstants, shouldUseSplitDetailLayout
-} from 'musicbasic';
+, RzdSelectMenuMaterial } from 'musicbasic';
 import { OnlinePlayUtil } from 'player';
 import { AppStorageV2, matrix4, uiObserver } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
@@ -684,6 +684,34 @@ export struct EchoReviewPage {
   }
 
   /** 年胶囊的菜单项：历史里出现过的年份（点哪个年就跳到那年里"最接近当前月"的那一项）。 */
+  /** @returns 年下拉选项（Select）。 */
+  private yearSelectOptions(): SelectOption[] {
+    const years: number[] = this.yearSelectYears();
+    const out: SelectOption[] = [];
+    for (let i: number = 0; i < years.length; i++) {
+      out.push({ value: years[i] + ' 年' });
+    }
+    return out;
+  }
+
+  /** @returns 去重年份。 */
+  private yearSelectYears(): number[] {
+    const years: number[] = [];
+    for (let i: number = 0; i < this.monthOptions.length; i++) {
+      const y: number = this.monthOptions[i].year;
+      if (years.indexOf(y) < 0) {
+        years.push(y);
+      }
+    }
+    return years;
+  }
+
+  /** @returns 当前年下标。 */
+  private yearSelectIndex(): number {
+    const years: number[] = this.yearSelectYears();
+    const idx: number = years.indexOf(Number.parseInt(this.yearLabel));
+    return idx >= 0 ? idx : 0;
+  }
   private yearMenuItems(): MenuElement[] {
     const years: number[] = [];
     for (let i: number = 0; i < this.monthOptions.length; i++) {
@@ -735,6 +763,24 @@ export struct EchoReviewPage {
   }
 
   /** 月胶囊的菜单项：当前这一年里有记录的月份（降序）。 */
+  /** @returns 月下拉选项（Select）。 */
+  private monthSelectOptions(): SelectOption[] {
+    const out: SelectOption[] = [];
+    for (let i: number = 0; i < this.monthOptions.length; i++) {
+      out.push({ value: this.monthOptions[i].label });
+    }
+    return out;
+  }
+
+  /** @returns 当前月下标。 */
+  private monthSelectIndex(): number {
+    for (let i: number = 0; i < this.monthOptions.length; i++) {
+      if (this.monthOptions[i].label === this.monthLabel) {
+        return i;
+      }
+    }
+    return 0;
+  }
   private monthMenuItems(): MenuElement[] {
     const year: number = new Date().getFullYear();
     const items: MenuElement[] = [];
@@ -1126,22 +1172,18 @@ export struct EchoReviewPage {
   @Builder
   private MonthPicker() {
     Row({ space: 8 }) {
-      Row({ space: 4 }) {
-        Text(this.yearLabel)
-          .fontSize(13)
-          .fontColor($r('app.color.echo_text_chip'))
-        SymbolGlyph($r('sys.symbol.chevron_down'))
-          .fontSize(11)
-          .fontColor([$r('app.color.echo_text_tertiary')])
-      }
-      .height(30)
-      .padding({ left: 12, right: 12 })
-      .borderRadius(15)
-      .backgroundColor($r('app.color.echo_chip_background'))
-      .bindMenu(this.yearMenuItems(), {
-      backgroundBlurStyle: appBarBlurStyle(),
-      backgroundColor: $r('app.color.menu_surface'),
-    })
+      Select(this.yearSelectOptions())
+        .selected(this.yearSelectIndex())
+        .value(this.yearLabel)
+        .height(30)
+        .font({ size: 13 })
+        .fontColor($r('app.color.echo_text_chip'))
+        .backgroundColor($r('app.color.echo_chip_background'))
+        .borderRadius(15)
+        .attributeModifier(new RzdSelectMenuMaterial())
+        .onSelect((index: number) => {
+          this.jumpToYear(this.yearSelectYears()[index]);
+        })
 
       Row({ space: 8 }) {
         SymbolGlyph($r('sys.symbol.chevron_left'))
@@ -1150,9 +1192,16 @@ export struct EchoReviewPage {
           .onClick(() => {
             this.shiftMonth(-1);
           })
-        Text(this.monthLabel)
-          .fontSize(13)
+        Select(this.monthSelectOptions())
+          .selected(this.monthSelectIndex())
+          .value(this.monthLabel)
+          .font({ size: 13 })
           .fontColor($r('app.color.echo_text_chip'))
+          .backgroundColor(Color.Transparent)
+          .attributeModifier(new RzdSelectMenuMaterial())
+          .onSelect((index: number) => {
+            this.jumpToMonth(this.monthOptions[index].offset);
+          })
         SymbolGlyph($r('sys.symbol.chevron_right'))
           .fontSize(12)
           .fontColor([$r('app.color.echo_text_chip')])
@@ -1164,10 +1213,6 @@ export struct EchoReviewPage {
       .padding({ left: 12, right: 12 })
       .borderRadius(15)
       .backgroundColor($r('app.color.echo_chip_background'))
-      .bindMenu(this.monthMenuItems(), {
-      backgroundBlurStyle: appBarBlurStyle(),
-      backgroundColor: $r('app.color.menu_surface'),
-    })
     }
     .width('100%')
   }
