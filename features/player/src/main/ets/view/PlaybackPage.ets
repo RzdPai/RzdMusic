@@ -151,6 +151,16 @@ export struct PlaybackPage {
    * 闁诲氦顫夎摫闁哄瞼鍠栭獮瀣箛椤掑娈搁梺鍝勭墕閹碱偊宕哄Δ鍛櫖闁秆冨殬ndex.ets` 閻庤鐡曠亸娆戝垝閿熺姴鍙?`@Provider`闂佹寧绋戦¨鈧紒杈ㄧ箞楠炴帡濡烽妶鍥朵紘濠电偛妫岄埀顒€鍟跨粊顕€鏌涘▎妯虹仜闁?
    */
   @Consumer('pageIndexInfos') pageIndexInfos: NavPathStack = new NavPathStack();
+  /**
+   * 宽屏（lg/xl）左列封面的最大高度。
+   * ★ 2026-10-31（用户：宽屏下面会重叠，固定位置后自动调整封面大小）：
+   *   封面尺寸本身来自覆盖层量测，宽屏下会按列宽撑满，把下方歌名/歌词/控制区顶出去 ⇒ 这里给一个按窗口高度算的上限，
+   *   MusicPlayInfoBlock 内部的封面会在此上限内自适应缩小，下方内容位置固定。
+   */
+  private wideCoverMaxVp(): number {
+    // 用户要求宽屏封面再小一些：取窗口高度的 30%（下限 150vp），下方文字/控制区位置固定
+    return Math.max(150, this.expandState.windowHeightVp * 0.30);
+  }
   /** Window width/height breakpoint for responsive layout branches. */
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
   /** Global music UI and queue state. */
@@ -5441,6 +5451,8 @@ export struct PlaybackPage {
                     // 鎺у埗鍖猴紙Slider + 5 棰椾紶杈撻敭 + 4 棰楀浘鏍囪锛夛紝涓庡簳閮ㄥ叡浜偅涓€浠介噸鍙犮€傜敤鎴锋姤鐨?绗簩涓帶鍒跺尯"灏辨槸瀹冦€?
                     showControlArea: false
                   })
+                // ★ 宽屏封面高度上限（固定位置 + 封面自适应，避免压住下方内容）
+                .constraintSize({ maxHeight: this.wideCoverMaxVp() })
                 .onAreaChange((_o: Area, n: Area): void => {
                 })
                 }
