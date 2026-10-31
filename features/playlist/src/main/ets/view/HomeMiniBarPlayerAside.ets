@@ -229,6 +229,8 @@ export struct HomeMiniBarPlayerAside {
           }
           .width('100%')
           .alignItems(HorizontalAlign.Start)
+          // ★ 2026-10-31（用户：歌名与封面挨太紧）：meta 文本左留 6vp
+          .padding({ left: 6 })
         }
         // ★ 全场**唯一**吃权重的一段：空间不足时先挤歌名（鸿蒙的异型屏/折叠屏/宽屏下
         //   条宽差别很大，不能靠写死宽度），按钮簇必须留在条内。
