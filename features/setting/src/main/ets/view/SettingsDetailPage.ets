@@ -257,18 +257,12 @@ export struct SettingsDetailPage {
       this.CapsuleSelector(this.onOffOptions, this.tabShowEcho ? 0 : 1,
         (index: number) => {
           this.tabShowEcho = index === 0;
-          if (!this.tabShowNow && !this.tabShowEcho) {
-            this.tabShowNow = true;
-          }
           this.saveTabBarConfig();
         })
       this.SubTitle('现在就听')
       this.CapsuleSelector(this.onOffOptions, this.tabShowNow ? 0 : 1,
         (index: number) => {
           this.tabShowNow = index === 0;
-          if (!this.tabShowNow && !this.tabShowEcho) {
-            this.tabShowEcho = true;
-          }
           this.saveTabBarConfig();
         })
       this.SubTitle('两个页签的顺序')

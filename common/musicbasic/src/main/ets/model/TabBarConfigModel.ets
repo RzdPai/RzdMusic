@@ -43,10 +43,7 @@ export class TabBarConfigModel {
       out.nowFirst = obj.nowFirst !== false;
     } catch (err) {
     }
-    // 至少保留一个（两个都关会让底栏只剩 2 个，下标全乱）
-    if (!out.now && !out.echo) {
-      out.now = true;
-    }
+    // 允许两个都关（底栏剩「推荐」「我的」两项；下标映射已支持，见 Index.ets 的 tabLogicalOf）
     return out;
   }
 
