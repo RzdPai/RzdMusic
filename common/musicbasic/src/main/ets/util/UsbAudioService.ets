@@ -40,6 +40,8 @@ export class UsbAudioState {
   @Trace fd: number = -1;
   /** 给用户看的一句话状态。 */
   @Trace statusText: string = '未检测到 USB 音频设备';
+  /** 设备能力摘要（UAC 版本 / 音频流接口数量）。 */
+  @Trace capabilityText: string = '';
 }
 
 /** USB 音频设备管理（单例）。 */
@@ -51,6 +53,9 @@ export class UsbAudioService {
   private readonly tag: string = '[RzdUsb]';
   /** 供 UI 绑定的状态。 */
   readonly state: UsbAudioState = new UsbAudioState();
+
+  /** 设备掉线回调（由 MediaService 注入）。 */
+  onLost: (() => void) | undefined = undefined;
 
   /** @returns 单例。 */
   static getInstance(): UsbAudioService {
@@ -114,6 +119,12 @@ export class UsbAudioService {
         }
       }
       if (audio === undefined) {
+        // 设备消失：如果之前连着，通知外部回落
+        const wasConnected: boolean = this.state.connected;
+        this.disconnect();
+        if (wasConnected) {
+          this.onLost?.();
+        }
         this.device = undefined;
         this.state.present = false;
         this.state.deviceName = '';
@@ -128,6 +139,7 @@ export class UsbAudioService {
       this.state.productName = audio.productName !== undefined && audio.productName.length > 0 ?
         audio.productName : (audio.manufacturerName ?? 'USB 音频设备');
       this.state.vidPid = 'VID 0x' + audio.vendorId.toString(16) + ' / PID 0x' + audio.productId.toString(16);
+      this.state.capabilityText = this.describeCapability(audio);
       const hasRight: boolean = usbManager.hasRight(audio.name);
       this.state.authorized = hasRight;
       this.state.statusText = hasRight ? '已授权，可开启独占' : '需要授权（点开关会弹系统授权）';
@@ -144,6 +156,38 @@ export class UsbAudioService {
    * 申请权限并连接设备，拿到 fd。
    * @returns fd（>0）或 -1（失败/无设备）。
    */
+  /**
+   * 从设备配置里推断 UAC 版本与音频流接口（仅作展示，不影响是否允许独占）。
+   * @param device USB 设备。
+   */
+  private describeCapability(device: usbManager.USBDevice): string {
+    let audioIf: number = 0;
+    let uacVersion: string = '';
+    try {
+      const cfgs: Array<usbManager.USBConfiguration> = device.configs;
+      for (let c: number = 0; c < cfgs.length; c++) {
+        const ifs: Array<usbManager.USBInterface> = cfgs[c].interfaces;
+        for (let i: number = 0; i < ifs.length; i++) {
+          const it: usbManager.USBInterface = ifs[i];
+          if (it.clazz !== 1) {
+            continue;
+          }
+          // subClass: 1=AudioControl, 2=AudioStreaming, 3=MIDIStreaming
+          if (it.subClass === 2) {
+            audioIf = audioIf + 1;
+          }
+          if (it.subClass === 1 && uacVersion.length === 0) {
+            // protocol: 0x20=UAC2, 0x00=UAC1（按 USB Audio 规范）
+            uacVersion = it.protocol === 32 ? 'UAC2' : 'UAC1';
+          }
+        }
+      }
+    } catch (err) {
+    }
+    const ver: string = uacVersion.length > 0 ? uacVersion : 'UAC';
+    return ver + ' · 音频流接口 ' + audioIf + ' 个';
+  }
+
   async connect(): Promise<number> {
     if (this.state.connected && this.state.fd > 0) {
       return this.state.fd;

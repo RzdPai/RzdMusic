@@ -1366,6 +1366,11 @@ export class MediaService {
       return;   // 参数没变（拖滑杆会连续回调）：不重复下发
     }
     this.lastAfChain = chain;
+    if (MusicStoreService.getInstance().getUsbExclusive()) {
+      // USB 独占走严格模式：不叠加任何滤镜（bit-perfect）
+      this.appendPlayLog('[RzdUsb] 独占模式：跳过滤镜链下发');
+      return;
+    }
     if (this.ijkActive && this.ijkEngine !== undefined) {
       this.ijkEngine.applyTuning(eq, pitch, effects);
       this.appendPlayLog('[RzdTuning] 已下发到 ' + kernelName(this.ijkEngine.kind()) + ' 内核');
@@ -1477,6 +1482,23 @@ export class MediaService {
     } else {
       this.appendPlayLog('[RzdUsb] 已就绪 fd=' + fd + '（下次起播生效）');
     }
+  }
+
+  /**
+   * 设备掉线时由轮询调用：关闭独占、回落普通输出并提示（幂等）。
+   */
+  public onUsbDeviceLost(): void {
+    if (!MusicStoreService.getInstance().getUsbExclusive()) {
+      return;
+    }
+    MusicStoreService.getInstance().setUsbExclusive(false);
+    const usb: UsbAudioService = UsbAudioService.getInstance();
+    usb.disconnect();
+    if (this.ijkEngine !== undefined && this.ijkEngine.setUsbFd !== undefined) {
+      this.ijkEngine.setUsbFd(-1);
+    }
+    this.appendPlayLog('[RzdUsb] 设备掉线 → 已关闭独占并回落普通输出');
+    this.toast('USB 设备已断开，已回落普通输出');
   }
   /** 恢复 FFmpeg 内核（清掉降级标记）。 */
   public resetIjkHealth(): void {
@@ -1635,6 +1657,10 @@ export class MediaService {
 
   /** Creates service, builds SongItemBuilder, and starts async AVPlayer creation. */
   public constructor() {
+    // USB 独占：设备掉线时自动回落（轮询在 UsbAudioService 里）
+    UsbAudioService.getInstance().onLost = (): void => {
+      this.onUsbDeviceLost();
+    };
     // ★ 内核自检：真机日志一眼确认 mpv/FFmpeg 是否可用（mpv 需 libmpv.so）
     // ★ 历史降级标记（ijk_disabled）在 mpv-only 版本里没有意义，启动即清除，避免汽水被永久踢回 AVPlayer
     if (MusicStoreService.getInstance().isIjkDisabled()) {
