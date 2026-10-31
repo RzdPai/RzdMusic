@@ -208,7 +208,7 @@ import {
   shouldUseSplitDetailLayout,
   WindowInfo,
   getWindowInfoState
-, MENU_PAD_TOP, MENU_PAD_BOTTOM, MENU_BORDER_WIDTH , immersiveMedium } from 'musicbasic';
+, MENU_PAD_TOP, MENU_PAD_BOTTOM, MENU_BORDER_WIDTH } from 'musicbasic';
 import {
   BlurStrategy,
   HdsNavDestination,
@@ -1701,39 +1701,18 @@ export struct NowPlayingFeedPage {
 
   /** 左上角模式菜单的内容（当前模式打勾）。 */
   @Builder
-    private FeedModeMenu() {
-      // ★ 2026-10-31（用户：不要对勾，要 qingye-reader 那种"选中项高亮"效果）：
-      //   不再用 MenuItem 的 labelInfo 画 ✓，改成自绘行 —— 选中项用主色文字 + 主色浅底胶囊。
-      Column({ space: 2 }) {
-        ForEach(this.feedModeOptions(), (opt: FeedModeOption) => {
-          Row() {
-            Text(opt.label)
-              .fontSize(15)
-              .fontColor(this.feedMode === opt.value ? this.themeAccentColor() : $r('app.color.font_primary'))
-              .fontWeight(this.feedMode === opt.value ? FontWeight.Medium : FontWeight.Regular)
-              .layoutWeight(1)
-          }
-          .width(196)
-          .height(40)
-          .padding({ left: 14, right: 14 })
-          .borderRadius(12)
-          .backgroundColor(this.feedMode === opt.value ?
-            $r('app.color.menu_selected_surface') : Color.Transparent)
+  private FeedModeMenu() {
+    Menu() {
+      ForEach(this.feedModeOptions(), (opt: FeedModeOption) => {
+        MenuItem({ content: opt.label, labelInfo: this.feedMode === opt.value ? '✓' : '' })
           .onClick((): void => {
             this.applyFeedMode(opt.value);
-            this.showFeedModeMenu = false;
           })
-        }, (opt: FeedModeOption) => 'feed_mode_' + opt.value)
-      }
-      .padding(6)
+      }, (opt: FeedModeOption) => 'feed_mode_' + opt.value)
     }
-
-  /** 三个模式（顺序固定：常规 / 熟悉 / 探索）。 */
-  /** 主题强调色（菜单选中项文字用）。 */
-  private themeAccentColor(): ResourceColor {
-    return $r('app.color.icon_primary');
   }
 
+  /** 三个模式（顺序固定：常规 / 熟悉 / 探索）。 */
   private feedModeOptions(): FeedModeOption[] {
     const list: FeedModeOption[] = [];
     const regular = new FeedModeOption();
@@ -1763,20 +1742,15 @@ export struct NowPlayingFeedPage {
       .backgroundColor(Color.Transparent)
       // 签名是 `bindMenu(isShow, content, options?)`：content 直接给 builder（不是 `{builder}`），
       // isShow 用 `!!`（V2 两向绑定，见全局记忆里 `$$` vs `!!` 那条）。
-        // ★ 2026-10-31（用户：直接用系统材质，不做降级）：bindMenu 的 ContextMenuOptions 没有 systemMaterial，
-        //   所以换成 bindPopup —— PopupCommonOptions 支持 systemMaterial，才是真「光感」。
-        .bindPopup(this.showFeedModeMenu, {
-          builder: (): void => { this.FeedModeMenu(); },
-          placement: Placement.BottomLeft,
-          enableArrow: false,
-          radius: 16,
-          systemMaterial: immersiveMedium(),
-          onStateChange: (event): void => {
-            if (!event.isVisible) {
-              this.showFeedModeMenu = false;
-            }
-          }
-        })
+      .bindMenu(!!this.showFeedModeMenu, this.FeedModeMenu(), {
+        placement: Placement.BottomLeft,
+        // 菜单背板材质：只给档位（跟随设置里的光感等级），不写 adaptiveColor
+        backgroundBlurStyle: buildBarBlurStyle(this.ambientState.level),
+        backgroundColor: $r('app.color.menu_surface'),
+        onDisappear: (): void => {
+          this.showFeedModeMenu = false;
+        }
+      })
   }
   private syncQueueWithNewRows(fresh: RecommendPrivateSongUi[]): void {
     if (!this.queueWasFeed) {
