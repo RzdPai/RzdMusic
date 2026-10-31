@@ -162,6 +162,17 @@ export struct PlaybackPage {
    * 无界实现（1.2.8 还原）：`w = min(子宽, 父宽); if (w > 560) w = 560; if (w > 父宽) w = 父宽; return w;`
    * ⇒ 内容列**上限 560vp**，这就是阔屏手机不再被封面撑爆的关键。
    */
+  /**
+   * 封面边长（宽高同值，方形）。
+   * 取无界两个上限的较小者：`singleColWidthOf` 的 560vp 内容宽 × `sizeScaleOf` 的形态缩放，
+   * 以及"可用高度"（窗口高 − 标题/文字/控制预留）。
+   * ⇒ 阔屏手机在**单列**下封面被同时按宽度和高度约束，不会再压住歌名/歌词/控制区。
+   */
+  private coverSideVp(): number {
+    const byWidth: number = this.singleColMaxVp() * this.sizeScale();
+    const availH: number = Math.max(180, this.expandState.windowHeightVp - (56 + 210));
+    return Math.max(150, Math.min(byWidth, Math.floor(availH * 0.9)));
+  }
   private singleColMaxVp(): number {
     const w: number = this.expandState.windowWidthVp;
     const avail: number = w > 0 ? w - 48 : 360;
@@ -5502,7 +5513,7 @@ export struct PlaybackPage {
                     showControlArea: false
                   })
                 // ★ 宽屏封面高度上限（固定位置 + 封面自适应，避免压住下方内容）
-                .constraintSize({ maxHeight: this.singleColMaxVp(), maxWidth: this.singleColMaxVp() })
+                .constraintSize({ maxHeight: this.coverSideVp(), maxWidth: this.coverSideVp() })
                 .onAreaChange((_o: Area, n: Area): void => {
                 })
                 }
