@@ -1293,16 +1293,27 @@ export struct SettingsDetailPage {
                   void MediaService.getInstance().applyUsbExclusive(enabled);
                 })
             } else {
-              Button('重新扫描 USB 设备')
-                .height(36)
-                .fontSize(14)
-                .backgroundColor($r('app.color.background_secondary'))
-                .fontColor($r('app.color.font_primary'))
-                .onClick((): void => {
-                  void UsbAudioService.getInstance().refresh();
-                })
+              Row({ space: 10 }) {
+                Button('重新扫描')
+                  .height(34)
+                  .fontSize(13)
+                  .backgroundColor($r('app.color.background_secondary'))
+                  .fontColor($r('app.color.font_primary'))
+                  .onClick((): void => {
+                    void UsbAudioService.getInstance().refresh();
+                  })
+                Button('USB 诊断')
+                  .height(34)
+                  .fontSize(13)
+                  .backgroundColor($r('app.color.background_secondary'))
+                  .fontColor($r('app.color.font_primary'))
+                  .onClick((): void => {
+                    void MediaService.getInstance().diagnoseUsb();
+                  })
+              }
+              .margin({ top: 6 })
             }
-                 }
+        }
         .width('100%')
         .padding({ left: 16, right: 16, top: 4, bottom: 8 })
         .borderRadius($r('sys.float.corner_radius_level12'))

@@ -236,48 +236,30 @@ export class MpvAudioEngine implements AudioKernel {
    * 由上层依次尝试并用 `current-ao` 实测决定最终用哪条。
    */
   setUsbMode(mode: string): void {
+    if (mode === 'off') {
+      this.write('audio-exclusive', 'no');
+      this.write('audio-resample', 'yes');
+      this.write('audio-pitch-correction', 'yes');
+      this.write('ao', 'ohaudio');
+      appendPlayLog('[RzdUsb] 已回落 ao=ohaudio');
+      return;
+    }
+    // 严格模式：不做重采样、不做变速变调补偿，尽量把原始 PCM 直送 DAC
+    this.write('audio-resample', 'no');
+    this.write('audio-pitch-correction', 'no');
     if (mode === 'usb') {
       this.write('audio-exclusive', 'no');
       this.write('ao', 'usb-exclusive');
-      appendPlayLog('[RzdUsb] 尝试 ao=usb-exclusive');
-    } else if (mode === 'ohaudio') {
+      appendPlayLog('[RzdUsb] 尝试 ao=usb-exclusive（严格 PCM）');
+    } else {
       this.write('audio-exclusive', 'yes');
       this.write('ao', 'ohaudio');
-      appendPlayLog('[RzdUsb] 尝试 ao=ohaudio + audio-exclusive=yes');
-    } else {
-      this.write('audio-exclusive', 'no');
-      this.write('ao', 'ohaudio');
-      appendPlayLog('[RzdUsb] 已回落 ao=ohaudio');
+      appendPlayLog('[RzdUsb] 尝试 ao=ohaudio + audio-exclusive=yes（严格 PCM）');
     }
   }
   currentAo(): string {
     const ao: string = this.read('current-ao');
     return ao.length > 0 ? ao : this.read('ao');
-  }
-  setUsbFd(fd: number): void {
-    // 切换输出后端会让音频链路重建：先记住位置，切完回跳，避免"切独占就回到 0 秒"
-    const posMs: number = this.position();
-    const wasPlaying: boolean = this.isPlaying();
-    if (wasPlaying) {
-      this.pause();
-    }
-    if (fd > 0) {
-      // 严格模式：不做格式协商、关掉音效与重采样，尽量 bit-perfect
-      this.write('usb-exclusive-compatible', 'no');
-      this.write('usb-exclusive-fd', fd.toString());
-      this.write('ao', 'usb-exclusive');
-      appendPlayLog('[RzdUsb] 已下发 ao=usb-exclusive fd=' + fd);
-    } else {
-      this.write('ao', 'ohaudio');
-      appendPlayLog('[RzdUsb] 已回落 ao=ohaudio');
-    }
-    if (posMs > 300 && this.isPrepared()) {
-      this.seekTo(posMs);
-      appendPlayLog('[RzdUsb] 输出切换后回跳到 ' + Math.round(posMs) + 'ms');
-    }
-    if (wasPlaying) {
-      this.start();
-    }
   }
   applyUsbOutput(enabled: boolean): void {
     const ao: string = enabled ? 'usb-exclusive' : 'ohaudio';

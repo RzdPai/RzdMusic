@@ -29,7 +29,7 @@ import { avSession } from '@kit.AVSessionKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { resourceManager } from '@kit.LocalizationKit';
 import { fileIo as fs } from '@kit.CoreFileKit';
-import { AppStorageKeys, getAppRuntime, Logger, MusicAppState, MusicCardBridge, MusicStoreService, PlayedSongRecord, SongItem, StringResourceUtil, appendPlayLog , UsbAudioService } from 'musicbasic';
+import { AppStorageKeys, getAppRuntime, Logger, MusicAppState, MusicCardBridge, MusicStoreService, PlayedSongRecord, SongItem, StringResourceUtil, appendPlayLog , UsbAudioService, UsbAudioState } from 'musicbasic';
 import { AudioKernel } from '../engine/AudioKernel';
 import { createKernel, isMpvAvailable, preferredKernel } from '../engine/KernelFactory';
 import { AudioInterruptKind, kernelName, PlaybackKernelKind, logKernelSwitch } from '../engine/AudioKernel';
@@ -1544,6 +1544,33 @@ export class MediaService {
   /**
    * 设备掉线时由轮询调用：关闭独占、回落普通输出并提示（幂等）。
    */
+  /**
+   * USB 诊断：把"这个 libmpv 构建有哪些 AO 驱动 / 当前后端 / 设备列表"一次打进日志，
+   * 方便真机上一键取证（设置页「USB 诊断」按钮）。
+   */
+  public async diagnoseUsb(): Promise<void> {
+    const usb: UsbAudioService = UsbAudioService.getInstance();
+    await usb.refresh();
+    const st: UsbAudioState = usb.state;
+    this.appendPlayLog('[RzdUsb] 诊断 设备present=' + st.present + ' authorized=' + st.authorized +
+      ' connected=' + st.connected + ' fd=' + st.fd + ' ' + st.capabilityText);
+    const engine = this.ijkEngine;
+    if (engine !== undefined) {
+      if (engine.listAoDrivers !== undefined) {
+        this.appendPlayLog('[RzdUsb] 诊断 ao驱动=' + engine.listAoDrivers());
+      }
+      if (engine.currentAo !== undefined) {
+        this.appendPlayLog('[RzdUsb] 诊断 current-ao=' + engine.currentAo());
+      }
+      if (engine.audioOutParams !== undefined) {
+        this.appendPlayLog('[RzdUsb] 诊断 输出参数=' + engine.audioOutParams());
+      }
+    } else {
+      this.appendPlayLog('[RzdUsb] 诊断 内核未创建（先播一首歌再诊断）');
+    }
+    this.toast('USB 诊断已写入运行日志');
+  }
+
   public onUsbDeviceLost(): void {
     if (!MusicStoreService.getInstance().getUsbExclusive()) {
       return;
@@ -1551,8 +1578,8 @@ export class MediaService {
     MusicStoreService.getInstance().setUsbExclusive(false);
     const usb: UsbAudioService = UsbAudioService.getInstance();
     usb.disconnect();
-    if (this.ijkEngine !== undefined && this.ijkEngine.setUsbFd !== undefined) {
-      this.ijkEngine.setUsbFd(-1);
+    if (this.ijkEngine !== undefined && this.ijkEngine.setUsbMode !== undefined) {
+      this.ijkEngine.setUsbMode('off');
     }
     this.appendPlayLog('[RzdUsb] 设备掉线 → 已关闭独占并回落普通输出');
     this.toast('USB 设备已断开，已回落普通输出');
