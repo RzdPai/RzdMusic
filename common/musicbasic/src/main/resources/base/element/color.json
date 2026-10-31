@@ -1,5 +1,13 @@
 {
     "color": [
+    {
+      "name": "menu_surface",
+      "value": "#F2F3F5"
+    },
+    {
+      "name": "menu_surface_border",
+      "value": "#1A000000"
+    },
         {
             "name": "panel_surface",
             "value": "#F2F3F5"

@@ -208,7 +208,7 @@ import {
   shouldUseSplitDetailLayout,
   WindowInfo,
   getWindowInfoState
-} from 'musicbasic';
+, MENU_PAD_TOP, MENU_PAD_BOTTOM, MENU_BORDER_WIDTH } from 'musicbasic';
 import {
   BlurStrategy,
   HdsNavDestination,
@@ -1710,6 +1710,14 @@ export struct NowPlayingFeedPage {
           })
       }, (opt: FeedModeOption) => 'feed_mode_' + opt.value)
     }
+    // ★ 2026-10-31（用户：照 qingye-reader 设置页菜单，要"光感"）：MenuOptions 无 backgroundColor/BlurStyle，
+    //   材质加在菜单内容上：半透明 + 超厚模糊 + 16 圆角 + 细描边（日/夜跟随系统）。
+    .padding({ top: MENU_PAD_TOP, bottom: MENU_PAD_BOTTOM })
+    .borderRadius($r('sys.float.corner_radius_level16'))
+    .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THICK,
+      { colorMode: ThemeColorMode.SYSTEM, adaptiveColor: AdaptiveColor.DEFAULT, scale: 1.0 })
+    .backgroundColor($r('app.color.menu_surface'))
+    .border({ width: MENU_BORDER_WIDTH, color: $r('app.color.menu_surface_border') })
   }
 
   /** 三个模式（顺序固定：常规 / 熟悉 / 探索）。 */

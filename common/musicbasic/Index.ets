@@ -183,3 +183,5 @@ export { FeedPlaybackState, FeedQueueEntry } from './src/main/ets/model/FeedPlay
 export { applyScreenOrientation, setScreenOrientation, orientationLabel, ORIENTATION_AUTO, ORIENTATION_PORTRAIT, ORIENTATION_LANDSCAPE } from './src/main/ets/util/ScreenOrientationUtil';
 
 export { UsbAudioService, UsbAudioState } from './src/main/ets/util/UsbAudioService';
+
+export { MENU_PAD_TOP, MENU_PAD_BOTTOM, MENU_BORDER_WIDTH, MENU_BLUR_STYLE } from './src/main/ets/util/RzdMenuStyle';
