@@ -53,7 +53,7 @@ import {
   immersiveMedium,
   buildTitleMaterial,
    guardPlayerBack, PlaybackIntentState, SongItem
-} from 'musicbasic';
+, immersiveMaterial, RzdMaterialStyle } from 'musicbasic';
 import {
   AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, barBlurOptions,
   buildBarBlurStyle, FavoriteEntry, LocateFloatButton,
@@ -733,7 +733,29 @@ export struct RecordListPage {
    *   - 颜色：删除用**用户自定义主题色**，其余文字用 `font_primary`（不再有写死的蓝）。
    */
   @Builder
+  /**
+   * 多选底部操作条（光感版）：与本地音乐页同一套做法 —— 放进空 `Tabs` 壳的 tabBar 槽，材质才生效；
+   * 壳宽收敛、无阴影（详见项目记忆 §202）。
+   */
+  @Builder
   private SelectionActionBar() {
+    Tabs({ barPosition: BarPosition.End }) {
+      TabContent() {
+        Column().width(0).height(0)
+      }
+      .tabBar(this.SelectionActionSlot())
+    }
+    .barHeight(66)
+    .barBackgroundColor(Color.Transparent)
+    .barBackgroundBlurStyle(BlurStyle.NONE)
+    .width(360)
+    .height(66)
+    .align(Alignment.Center)
+  }
+
+  /** 槽内胶囊本体（材质挂这里才生效）。 */
+  @Builder
+  private SelectionActionSlot() {
       Row() {
       SelectionActionCell({
         icon: $r('sys.symbol.trash'),
@@ -766,10 +788,10 @@ export struct RecordListPage {
     .width('100%')
     .height(66)
     .borderRadius(33)
-    .systemMaterial(immersiveMedium())
+    .systemMaterial(immersiveMaterial(RzdMaterialStyle.THIN))
     .border({ width: 0.5, color: $r('sys.color.comp_divider') })
-    .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 8 })
   }
+
 
   /** 把选中的歌一次性加进某个本地歌单（多选底栏「添加至歌单」）。 */
   private addSelectedToPlaylist(playlistId: string): void {

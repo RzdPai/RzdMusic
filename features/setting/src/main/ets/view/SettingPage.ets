@@ -630,14 +630,22 @@ export struct SettingPage {
         originalStyle: {
           contentStyle: {
             titleStyle: {
-              mainTitleColor: $r('sys.color.font_primary')
+              mainTitleColor: $r('app.color.font_primary')
+            },
+            backIconStyle: {
+              iconColor: $r('app.color.font_primary'),
+              backgroundColor: '#1A808080'
             }
           }
         },
         scrollEffectStyle: {
           contentStyle: {
             titleStyle: {
-              mainTitleColor: $r('sys.color.font_primary')
+              mainTitleColor: $r('app.color.font_primary')
+            },
+            backIconStyle: {
+              iconColor: $r('app.color.font_primary'),
+              backgroundColor: '#1A808080'
             }
           }
         },
