@@ -202,12 +202,18 @@ export struct PlaybackPage {
     return Math.max(160, this.expandState.windowWidthVp * weight);
   }
   private coverSideVp(): number {
-    // 宽屏时左栏宽度 = 窗口宽 × 无界 playerLeftPaneWeight（bp≥4 → 0.40，≥3 → 0.45，否则 0.50）
-    const paneW: number = this.playerLeftPaneW();
-    const colBudget: number = this.isWidePlayerLayout() ? Math.min(this.singleColMaxVp(), paneW) : this.singleColMaxVp();
-    const byWidth: number = colBudget * this.sizeScale();
-    const availH: number = Math.max(180, this.expandState.windowHeightVp - (56 + 210));
-    return Math.max(150, Math.min(byWidth, Math.floor(availH * 0.9)));
+    // ★ 照无界 `PlayerPage.flatCoverEdge`（反编译还原，35 条指令）：
+    //   edge = boxW - pad*2;  if (edge >= boxH - 14*2) edge = boxH - 14*2;  if (edge < 0) edge = 0;
+    //   ⇒ 封面边长 = min(盒宽 − 2×内边距, 盒高 − 28)，再夹到 ≥0。
+    //   盒宽 = 内容列预算（宽屏再受无界 playerLeftPaneWeight 约束）× sizeScale；
+    //   盒高 = 窗口高 − 顶栏(56) − 文字/控制预留(180)。
+    const inset: number = 24;
+    const colBudget: number = this.isWidePlayerLayout()
+      ? Math.min(this.singleColMaxVp(), this.playerLeftPaneW())
+      : this.singleColMaxVp();
+    const boxW: number = colBudget * this.sizeScale() - inset * 2;
+    const boxH: number = this.expandState.windowHeightVp - 56 - 180;
+    return Math.max(120, Math.min(boxW, boxH - 28));
   }
   private singleColMaxVp(): number {
     const w: number = this.expandState.windowWidthVp;
