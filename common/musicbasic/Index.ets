@@ -189,3 +189,5 @@ export { MENU_PAD_TOP, MENU_PAD_BOTTOM, MENU_BORDER_WIDTH, MENU_BLUR_STYLE } fro
 export { RzdSelectMenuMaterial } from './src/main/ets/util/RzdSelectMaterial';
 
 export { TabBarConfigModel } from './src/main/ets/model/TabBarConfigModel';
+
+export { KugouShareResolver, KugouShareResult } from './src/main/ets/util/KugouShareResolver';
