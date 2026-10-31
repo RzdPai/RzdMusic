@@ -1353,6 +1353,14 @@ export class MediaService {
         this.updateIsPlay(false);
         this.appendPlayLog('[播放] ijk 永久失去音频焦点');
       } else {
+        // 焦点回来后：独占模式下 AO 可能已被系统重新分配，重新下发一次后端
+        if (MusicStoreService.getInstance().getUsbExclusive() &&
+          UsbAudioService.getInstance().state.connected && engine.setUsbMode !== undefined) {
+          const backend: string = AppStorage.get<string>('rzd_usb_backend') ?? 'usb-exclusive';
+          const mode: string = backend.indexOf('usb') >= 0 ? 'usb' : 'ohaudio';
+          engine.setUsbMode(mode);
+          this.appendPlayLog('[RzdUsb] 焦点恢复后重新应用独占 backend=' + mode);
+        }
         this.resumeIfAutoPaused('focus');
       }
     });
