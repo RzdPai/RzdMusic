@@ -193,6 +193,22 @@ export class MpvAudioEngine implements AudioKernel {
    * 切换音频输出后端。
    * @param enabled true → `ao=usb-exclusive`（需外接 USB DAC 与 USBManager 授权 fd）；false → 回到 `ohaudio`。
    */
+  /**
+   * 启用/关闭 USB 独占输出。
+   * @param fd `usbManager.getFileDescriptor()` 拿到的设备 fd；-1 表示关闭独占。
+   */
+  setUsbFd(fd: number): void {
+    if (fd > 0) {
+      // 严格模式：不做格式协商、关掉音效与重采样，尽量 bit-perfect
+      this.write('usb-exclusive-compatible', 'no');
+      this.write('usb-exclusive-fd', fd.toString());
+      this.write('ao', 'usb-exclusive');
+      appendPlayLog('[RzdUsb] 已下发 ao=usb-exclusive fd=' + fd);
+    } else {
+      this.write('ao', 'ohaudio');
+      appendPlayLog('[RzdUsb] 已回落 ao=ohaudio');
+    }
+  }
   applyUsbOutput(enabled: boolean): void {
     const ao: string = enabled ? 'usb-exclusive' : 'ohaudio';
     this.write('ao', ao);

@@ -181,3 +181,5 @@ export { MotionCoverLayer } from './src/main/ets/view/MotionCoverLayer';
 export { FeedPlaybackState, FeedQueueEntry } from './src/main/ets/model/FeedPlaybackState';
 
 export { applyScreenOrientation, setScreenOrientation, orientationLabel, ORIENTATION_AUTO, ORIENTATION_PORTRAIT, ORIENTATION_LANDSCAPE } from './src/main/ets/util/ScreenOrientationUtil';
+
+export { UsbAudioService, UsbAudioState } from './src/main/ets/util/UsbAudioService';

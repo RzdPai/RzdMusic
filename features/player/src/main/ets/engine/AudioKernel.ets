@@ -84,6 +84,8 @@ export interface AudioKernel {
   release(): void;
   /** 音频输出后端：true=USB 独占（需外接 DAC），false=系统输出。 */
   applyUsbOutput?(enabled: boolean): void;
+  /** 传入 USB DAC 的 fd 以启用独占（-1 表示关闭）。 */
+  setUsbFd?(fd: number): void;
 }
 
 /** 内核种类 → 文案。 */

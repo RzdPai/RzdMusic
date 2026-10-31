@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-import { appendPlayLog , setScreenOrientation } from 'musicbasic';
+import { appendPlayLog , setScreenOrientation , UsbAudioService, UsbAudioState } from 'musicbasic';
 import { bundleManager } from '@kit.AbilityKit';
 import { DrawableDescriptor, LayeredDrawableDescriptor } from '@kit.ArkUI';
 import { guardPlayerBack, PlaybackPreferenceService } from 'musicbasic';
@@ -198,12 +198,26 @@ export struct SettingsDetailPage {
    */
   private readonly homeSourceOptions: string[] = ['QQ', '酷狗', '网易', '酷我', '咪咕', '汽水'];
   private readonly homeSourceValues: string[] = ['qq', 'kg', 'wy', 'kw', 'mg', 'qs'];
+  /** USB 独占状态文案（来自 UsbAudioService 的实时状态）。 */
+  private usbStatusText(): string {
+    const st: UsbAudioState = UsbAudioService.getInstance().state;
+    if (st.connected) {
+      return '已连接：' + st.productName + '（' + st.vidPid + '，fd=' + st.fd + '）';
+    }
+    if (st.present) {
+      return st.productName + '（' + st.vidPid + '）· ' + st.statusText;
+    }
+    return st.statusText;
+  }
+
   private readonly onOffOptions: string[] = ['开', '关'];
   private readonly saveLocationOptions: string[] = ['手动选择', 'Download目录', '自定义目录'];
   private readonly colorModeOptions: string[] = ['日间', '夜间', '跟随系统'];
   private pageScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
+    // USB 独占：设置页打开时轮询设备（本 SDK 无 attach/detach 事件）
+    UsbAudioService.getInstance().startPolling();
     this.refresh();
     this.startEnginePolling();
   }
@@ -1262,6 +1276,11 @@ export struct SettingsDetailPage {
             })
 
           this.SubTitle('USB 独占输出')
+          Text(this.usbStatusText())
+            .fontSize(12)
+            .fontColor($r('app.color.font_tertiary'))
+            .width('100%')
+            .margin({ bottom: 6 })
           this.CapsuleSelector(this.onOffOptions, this.usbExclusive ? 0 : 1,
             (index: number) => {
               const enabled: boolean = index === 0;

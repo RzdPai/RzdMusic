@@ -29,7 +29,7 @@ import { avSession } from '@kit.AVSessionKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { resourceManager } from '@kit.LocalizationKit';
 import { fileIo as fs } from '@kit.CoreFileKit';
-import { AppStorageKeys, getAppRuntime, Logger, MusicAppState, MusicCardBridge, MusicStoreService, PlayedSongRecord, SongItem, StringResourceUtil, appendPlayLog } from 'musicbasic';
+import { AppStorageKeys, getAppRuntime, Logger, MusicAppState, MusicCardBridge, MusicStoreService, PlayedSongRecord, SongItem, StringResourceUtil, appendPlayLog , UsbAudioService } from 'musicbasic';
 import { AudioKernel } from '../engine/AudioKernel';
 import { createKernel, isMpvAvailable, preferredKernel } from '../engine/KernelFactory';
 import { AudioInterruptKind, kernelName, PlaybackKernelKind, logKernelSwitch } from '../engine/AudioKernel';
@@ -1456,13 +1456,26 @@ export class MediaService {
    */
   public async applyUsbExclusive(enabled: boolean): Promise<void> {
     MusicStoreService.getInstance().setUsbExclusive(enabled);
-    if (this.ijkEngine === undefined || !this.ijkActive) {
-      this.appendPlayLog('[RzdUsb] 设置已保存=' + enabled + '（下次起播生效）');
+    const usb: UsbAudioService = UsbAudioService.getInstance();
+    if (!enabled) {
+      usb.disconnect();
+      if (this.ijkEngine !== undefined && this.ijkActive && this.ijkEngine.setUsbFd !== undefined) {
+        this.ijkEngine.setUsbFd(-1);
+      }
+      this.appendPlayLog('[RzdUsb] 已关闭独占，回落普通输出');
       return;
     }
-    this.appendPlayLog('[RzdUsb] 尝试切换 ao usb-exclusive=' + enabled);
-    if (this.ijkEngine.applyUsbOutput !== undefined) {
-      this.ijkEngine.applyUsbOutput(enabled);
+    const fd: number = await usb.connect();
+    if (fd <= 0) {
+      this.appendPlayLog('[RzdUsb] 开启失败：' + usb.state.statusText);
+      this.toast(usb.state.statusText);
+      MusicStoreService.getInstance().setUsbExclusive(false);
+      return;
+    }
+    if (this.ijkEngine !== undefined && this.ijkActive && this.ijkEngine.setUsbFd !== undefined) {
+      this.ijkEngine.setUsbFd(fd);
+    } else {
+      this.appendPlayLog('[RzdUsb] 已就绪 fd=' + fd + '（下次起播生效）');
     }
   }
   /** 恢复 FFmpeg 内核（清掉降级标记）。 */
