@@ -158,8 +158,13 @@ export struct PlaybackPage {
    *   MusicPlayInfoBlock 内部的封面会在此上限内自适应缩小，下方内容位置固定。
    */
   private wideCoverMaxVp(): number {
-    // 用户要求宽屏封面再小一些：取窗口高度的 30%（下限 150vp），下方文字/控制区位置固定
-    return Math.max(150, this.expandState.windowHeightVp * 0.30);
+    // ★ 2026-10-31（阔屏新机 1:1.414 会命中 lg 断点）：不再按"窗口高 × 百分比"，
+    //   改为按**可用高度**算：窗口高 − 标题区(56) − 文字/控制/进度预留(≈210)，
+    //   再留 10% 余量。这样形态比例怎么变，封面都不会顶出可用区域。
+    const reserved: number = 56 + 210;
+    const avail: number = Math.max(220, this.expandState.windowHeightVp - reserved);
+    const cap: number = Math.floor(avail * 0.90);
+    return Math.max(150, Math.min(cap, 420));
   }
   /** Window width/height breakpoint for responsive layout branches. */
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
@@ -5452,7 +5457,7 @@ export struct PlaybackPage {
                     showControlArea: false
                   })
                 // ★ 宽屏封面高度上限（固定位置 + 封面自适应，避免压住下方内容）
-                .constraintSize({ maxHeight: this.wideCoverMaxVp() })
+                .constraintSize({ maxHeight: this.wideCoverMaxVp(), maxWidth: this.wideCoverMaxVp() })
                 .onAreaChange((_o: Area, n: Area): void => {
                 })
                 }
