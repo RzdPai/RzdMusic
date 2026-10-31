@@ -829,9 +829,10 @@ export struct PlaybackPage {
    */
   /** 小歌词预览行数：短高/小窗只留 1 行，避免和第 ② 块一起抢竖向空间（2026-10-31）。 */
   private miniLyricLines(): number {
-    // ★ 修 bug：这里原本被我误替换成 `this.miniLyricLines()`（自递归，非短高时栈溢出）；
-    // 同时按 §230 的算术：363x593 下 进度24+meta60+歌词1行44+控制72=200 > 可用183.4 ⇒ 短高直接不画小歌词。
-    return this.isShortHeightWindow() ? 0 : PlaybackPage.MINI_LYRIC_LINES;
+    // ★ 2026-11-01（用户对比无界截图）：这一版单列**不再画小歌词预览行**。
+    //   无界的同形态布局里根本没有这一行（封面 → 歌名/歌手/来源 → 进度 → 控制），
+    //   我们这行是绝对定位叠在 meta 上，正是"雨爱(Live) 马嘉祺、丁程鑫"重复出现并压住控制行的来源。
+    return 0;
   }
 
   private static readonly MINI_LYRIC_LINES: number = 2;
