@@ -1701,18 +1701,39 @@ export struct NowPlayingFeedPage {
 
   /** 左上角模式菜单的内容（当前模式打勾）。 */
   @Builder
-  private FeedModeMenu() {
-    Menu() {
-      ForEach(this.feedModeOptions(), (opt: FeedModeOption) => {
-        MenuItem({ content: opt.label, labelInfo: this.feedMode === opt.value ? '✓' : '' })
+    private FeedModeMenu() {
+      // ★ 2026-10-31（用户：不要对勾，要 qingye-reader 那种"选中项高亮"效果）：
+      //   不再用 MenuItem 的 labelInfo 画 ✓，改成自绘行 —— 选中项用主色文字 + 主色浅底胶囊。
+      Column({ space: 2 }) {
+        ForEach(this.feedModeOptions(), (opt: FeedModeOption) => {
+          Row() {
+            Text(opt.label)
+              .fontSize(15)
+              .fontColor(this.feedMode === opt.value ? this.themeAccentColor() : $r('app.color.font_primary'))
+              .fontWeight(this.feedMode === opt.value ? FontWeight.Medium : FontWeight.Regular)
+              .layoutWeight(1)
+          }
+          .width(196)
+          .height(40)
+          .padding({ left: 14, right: 14 })
+          .borderRadius(12)
+          .backgroundColor(this.feedMode === opt.value ?
+            $r('app.color.menu_selected_surface') : Color.Transparent)
           .onClick((): void => {
             this.applyFeedMode(opt.value);
+            this.showFeedModeMenu = false;
           })
-      }, (opt: FeedModeOption) => 'feed_mode_' + opt.value)
+        }, (opt: FeedModeOption) => 'feed_mode_' + opt.value)
+      }
+      .padding(6)
     }
-  }
 
   /** 三个模式（顺序固定：常规 / 熟悉 / 探索）。 */
+  /** 主题强调色（菜单选中项文字用）。 */
+  private themeAccentColor(): ResourceColor {
+    return $r('app.color.icon_primary');
+  }
+
   private feedModeOptions(): FeedModeOption[] {
     const list: FeedModeOption[] = [];
     const regular = new FeedModeOption();

@@ -1,6 +1,10 @@
 {
     "color": [
     {
+      "name": "menu_selected_surface",
+      "value": "#2EFFFFFF"
+    },
+    {
       "name": "menu_surface",
       "value": "#1C1C1E"
     },
