@@ -478,7 +478,18 @@ export class MediaService {
 
   private async loadCurrentIntoPlayer(): Promise<void> {
     const idleSong: SongItem | undefined = this.getSongItemAtQueueIndex(this.musicIndex);
-    if (!idleSong || !this.avPlayer) {
+    if (!idleSong) {
+      return;
+    }
+    // ★ 2026-10-31（用户反馈"偶发播放不了、重启才好"）：内核分支必须放在 `!this.avPlayer` 之前。
+    //   以前 avPlayer 未初始化时这里直接 return，`ijkUrl` 明明有值也不会去创建 mpv ⇒
+    //   日志里只剩「走内核 mpv」，既没有 [RzdMpv] 也没有 AVPlayer 日志，表现就是"点了不播"，重启（重新 init）才好。
+    if (this.ijkUrl.length > 0) {
+      this.startIjkPlayback(this.ijkUrl);
+      return;
+    }
+    if (!this.avPlayer) {
+      this.appendPlayLog('[播放] avPlayer 未就绪且无内核地址，挂起等待');
       return;
     }
     this.songItem = await this.songItemBuilder.build(idleSong);
