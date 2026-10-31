@@ -187,3 +187,5 @@ export { UsbAudioService, UsbAudioState } from './src/main/ets/util/UsbAudioServ
 export { MENU_PAD_TOP, MENU_PAD_BOTTOM, MENU_BORDER_WIDTH, MENU_BLUR_STYLE } from './src/main/ets/util/RzdMenuStyle';
 
 export { RzdSelectMenuMaterial } from './src/main/ets/util/RzdSelectMaterial';
+
+export { TabBarConfigModel } from './src/main/ets/model/TabBarConfigModel';
