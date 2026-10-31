@@ -439,6 +439,66 @@ export struct PlaylistsPage {
     AppStorage.setOrCreate('lxPlayLog', (log + '[' + time + '] ' + message + '\n').slice(-20000));
   }
 
+  /**
+   * 解析导入文件，返回**全部**歌单（洛雪整库备份可能含多个）。
+   * 做法：先按明文 JSON 解析；失败再按 gzip(.lxmc) 解压后解析。
+   * 多歌单时对每个歌单合成一个 `playListPart_v2` 再复用 `parseLxMusicJson`，避免重复写字段映射。
+   * @param bytes 文件字节
+   * @param onProgress 进度回调
+   * @returns 歌单数组（空数组=解析失败）
+   */
+  private async parseImportFileAll(bytes: Uint8Array,
+    onProgress?: (done: number, total: number) => void): Promise<PlaylistDto[]> {
+    const decoder: util.TextDecoder = util.TextDecoder.create('utf-8');
+    let text: string = decoder.decodeToString(bytes);
+    if (!text.trimStart().startsWith('{')) {
+      // 头不是 '{' ⇒ 认为是 gzip(.lxmc)
+      try {
+        text = decoder.decodeToString(this.gunzipData(bytes));
+        this.appendImportLog('[导入] gzip 解压成功 大小=' + text.length);
+      } catch (e) {
+        this.appendImportLog('[导入] gzip 解压异常');
+        return [];
+      }
+    }
+    let root: Record<string, Object> | undefined = undefined;
+    try {
+      root = JSON.parse(text) as Record<string, Object>;
+    } catch (e) {
+      return [];
+    }
+    const type: string = root.type as string ?? '';
+    const data = root.data;
+    if ((type === 'playList_v2' || type === 'playList') && Array.isArray(data)) {
+      const arr: Object[] = data as Object[];
+      const out: PlaylistDto[] = [];
+      this.appendImportLog('[导入] 整库备份 歌单数=' + arr.length);
+      for (let i: number = 0; i < arr.length; i++) {
+        const item: Record<string, Object> = arr[i] as Record<string, Object>;
+        const list: Object[] = item.list as Object[] ?? [];
+        if (list.length === 0) {
+          continue;
+        }
+        const synth: Record<string, Object> = {};
+        synth.type = 'playListPart_v2';
+        const payload: Record<string, Object> = {};
+        payload.name = item.name ?? '';
+        payload.list = list;
+        synth.data = payload;
+        const one: PlaylistDto | undefined = await this.parseLxMusicJson(JSON.stringify(synth), undefined);
+        if (one !== undefined && one.songs.length > 0) {
+          out.push(one);
+        }
+        if (onProgress !== undefined) {
+          onProgress(i + 1, arr.length);
+        }
+      }
+      return out;
+    }
+    const single: PlaylistDto | undefined = await this.parseLxMusicJson(text, onProgress);
+    return single !== undefined ? [single] : [];
+  }
+
   /** Parses an imported file: plain JSON or gzip-compressed .lxmc. */
   private async parseImportFile(bytes: Uint8Array,
     onProgress?: (done: number, total: number) => void): Promise<PlaylistDto | undefined> {
@@ -537,17 +597,24 @@ export struct PlaylistsPage {
           fs.readSync(file.fd, buf);
           fs.closeSync(file);
           this.importing = true;
-          this.importProgress = '正在解析文件…';
-          const p = await this.parseImportFile(new Uint8Array(buf), (done: number, total: number): void => {
+          const list = await this.parseImportFileAll(new Uint8Array(buf), (done: number, total: number): void => {
             this.importProgress = '正在导入 ' + done + '/' + total;
           });
           this.importing = false;
-          if (p !== undefined) {
-            this.store.importPlaylist(p.name, p.songs);
-            this.getUIContext().getPromptAction().showToast(
-              { message: '已导入歌单「' + p.name + '」(' + p.songs.length + ' 首)', duration: 2500 });
-          } else {
+          if (list.length === 0) {
             this.getUIContext().getPromptAction().showToast({ message: '无法解析该歌单文件', duration: 2000 });
+          } else {
+            let totalSongs: number = 0;
+            for (let i: number = 0; i < list.length; i++) {
+              const item = list[i];
+              this.store.importPlaylist(item.name.length > 0 ? item.name : ('导入的歌单' + (i + 1)), item.songs);
+              totalSongs += item.songs.length;
+            }
+            const msg: string = list.length === 1 ?
+              ('已导入歌单《' + list[0].name + '》' + totalSongs + ' 首') :
+              ('已导入 ' + list.length + ' 个歌单，共 ' + totalSongs + ' 首');
+            this.getUIContext().getPromptAction().showToast({ message: msg, duration: 2500 });
+            this.appendImportLog('[导入] ' + msg);
           }
         } catch (_err) {
           this.importing = false;
