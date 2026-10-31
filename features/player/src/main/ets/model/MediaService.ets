@@ -1727,17 +1727,23 @@ export class MediaService {
     if (!this.shouldUseIjk() && (songItem.source === 'qs' || outcome.url.indexOf('audio_mp4') >= 0)) {
       this.appendPlayLog('[播放] mpv 不可用（缺少 libmpv）→ 汽水暂时走系统播放器');
     }
+    // ★ 2026-10-31（汽水"12s 未就绪"根因）：内核必须吃**还原后的直链**，不是跳转壳。
+    //   见 §168：以前这里把 outcome.url（redirect.php?u=…）直接给了 mpv，mpv 打不开、12s 超时，
+    //   然后失败重试又落到 AVPlayer（5411001 Cannot Find Host）→ 一直跳歌。
+    const directUrl: string = this.unwrapRedirectUrl(outcome.url);
+    const kernelUrl: string = directUrl.length > 0 ? directUrl : outcome.url;
     if (this.shouldUseIjk() && (songItem.source === 'qs' || outcome.url.indexOf('audio_mp4') >= 0)) {
-      this.ijkUrl = outcome.url;
+      this.ijkUrl = kernelUrl;
       this.appendPlayLog('[播放] 分片流 → 交给内核 ' + kernelName(preferredKernel()));
     } else if (tuningOn && this.shouldUseIjk()) {
       // ★ 播放设置有非默认的音效/升降调：普通曲目也走 FFmpeg，否则 EQ 无处可生效
-      this.ijkUrl = outcome.url;
+      this.ijkUrl = kernelUrl;
       this.appendPlayLog('[播放] 音效已开启 → 普通曲目也走内核 ' + kernelName(preferredKernel()));
     } else {
       this.ijkUrl = '';
     }
-    songItem.url = this.unwrapRedirectUrl(outcome.url);
+    songItem.url = directUrl.length > 0 ? directUrl : outcome.url;
+    this.appendPlayLog('[播放] 装载 URL 已还原=' + (directUrl.length > 0 ? '是' : '否') + ' kernelUrl=' + kernelUrl.substring(0, Math.min(80, kernelUrl.length)));
     // 记录实际使用的音质（可能因自动降级低于偏好设置）
     this.getAppState().currentQuality = outcome.quality;
     appendPlayLog('[播放] resolveOnlineUrl 成功 quality=' + outcome.quality +
