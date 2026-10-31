@@ -260,12 +260,15 @@ export struct PlaybackPage {
   private isWidePlayerLayout(): boolean {
     const w: number = this.expandState.windowWidthVp;
     const h: number = this.expandState.windowHeightVp;
+    // ★ 2026-11-01 修 P0：这里曾被全局替换误改成 `this.isWidePlayerLayout()`（自递归 ⇒ 栈溢出），
+    //   现在恢复成无界 `Breakpoint.isWidePlayerLayout` 的判据：宽断点 >= lg(MD 以上) 且 比例档 != 2（高窄）。
+    const wideBp: boolean = isWidthBreakpointLgOrXl(this.breakpointEnv.widthBreakpoint);
     if (w <= 0 || h <= 0) {
-      return this.isWidePlayerLayout();
+      return wideBp;
     }
     const ratio: number = h / w;
     const ratioClass: number = ratio < 0.8 ? 0 : (ratio < 1.2 ? 1 : 2);
-    return this.isWidePlayerLayout() && ratioClass !== 2;
+    return wideBp && ratioClass !== 2;
   }
   /** Window width/height breakpoint for responsive layout branches. */
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
@@ -6529,14 +6532,6 @@ export struct PlaybackPage {
         .alignItems(VerticalAlign.Center)
         // ★ 2026-10-31：去掉 meta 行的负位移（-24*flatT）——它把 meta 往控制行方向顶，是重叠的一半原因
         .opacity(1 - this.flatT)
-
-        // ★ 2026-11-01（照无界 flatPane）：控制行是**同一列的第 3 块**，参与 SpaceEvenly 分配，不再靠 visibility 叠层
-        Column() {
-          ControlAreaComponent({ showBottomOtherRow: false })
-        }
-        .width(StyleConstants.FULL_WIDTH)
-        .alignItems(HorizontalAlign.Center)
-        .opacity(1 - this.flatT)
       }
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
@@ -6568,8 +6563,7 @@ export struct PlaybackPage {
       }
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
-      // ★ 2026-11-01：控制行已并入 A 面第 3 块（照无界），这一面不再渲染，避免两份控制键叠在一起
-      .visibility(Visibility.None)
+      .visibility(this.flatCtlSwapped ? Visibility.Visible : Visibility.Hidden)
       .opacity(this.flatT)
       .zIndex(this.flatCtlSwapped ? 1 : 0)
       .translate({ y: -PlaybackPage.FLAT_SWAP_D_VP * (1 - this.flatT) })
