@@ -212,7 +212,10 @@ export struct PlaybackPage {
       ? Math.min(this.singleColMaxVp(), this.playerLeftPaneW())
       : this.singleColMaxVp();
     const boxW: number = colBudget * this.sizeScale() - inset * 2;
-    const boxH: number = this.expandState.windowHeightVp - 56 - 180;
+    // 文字/控制区预留：照无界 `flatMetaSide() = 盒宽 / 3` 的思路，元信息块按内容宽的三分之一留，
+    // 再固定留 96vp 给进度条 + 播放/上一首/列表这一行。
+    const metaReserve: number = Math.min(220, Math.max(96, colBudget / 3));
+    const boxH: number = this.expandState.windowHeightVp - 56 - metaReserve - 96;
     return Math.max(120, Math.min(boxW, boxH - 28));
   }
   private singleColMaxVp(): number {
