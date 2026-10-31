@@ -53,7 +53,7 @@ import {
   immersiveMedium,
   buildTitleMaterial,
    guardPlayerBack, PlaybackIntentState, SongItem
-, immersiveMaterial, RzdMaterialStyle } from 'musicbasic';
+, immersiveFlat } from 'musicbasic';
 import {
   AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, barBlurOptions,
   buildBarBlurStyle, FavoriteEntry, LocateFloatButton,
@@ -789,7 +789,7 @@ export struct RecordListPage {
     .width('100%')
     .height(66)
     .borderRadius(33)
-    .systemMaterial(immersiveMaterial(RzdMaterialStyle.THIN))
+    .systemMaterial(immersiveFlat())
     .border({ width: 0.5, color: $r('sys.color.comp_divider') })
   }
 

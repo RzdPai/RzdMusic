@@ -56,3 +56,18 @@ export function immersiveMaterial(style: RzdMaterialStyle = RzdMaterialStyle.REG
 export function immersiveMedium(): SystemUiMaterial | undefined {
   return immersiveMaterial(RzdMaterialStyle.REGULAR);
 }
+/**
+ * 无阴影的薄材质（无背板托底时用：如浮动操作条、贴在列表上的胶囊）。
+ * 与 `immersiveMaterial(THIN)` 的唯一区别是 `applyShadow: false`，避免材质自带的投影糊在内容上。
+ * @returns 材质对象；不支持时 undefined。
+ */
+export function immersiveFlat(): SystemUiMaterial | undefined {
+  if (!uiMaterial.isImmersiveMaterialSupported()) {
+    return undefined;
+  }
+  return new uiMaterial.ImmersiveMaterial({
+    style: uiMaterial.ImmersiveStyle.THIN,
+    applyShadow: false,
+    interactive: false
+  });
+}

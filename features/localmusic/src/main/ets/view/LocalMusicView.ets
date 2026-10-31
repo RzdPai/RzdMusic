@@ -30,7 +30,7 @@ import {
   
   buildBarBlurStyle,
    guardPlayerBack
-, immersiveMaterial, RzdMaterialStyle } from 'musicbasic';
+, immersiveFlat } from 'musicbasic';
 import {
   buildTitleMaterial,
   AmbientState,
@@ -919,7 +919,7 @@ export struct LocalMusicPage {
     .width('100%')
     .height(66)
     .borderRadius(66 / 2)
-    .systemMaterial(immersiveMaterial(RzdMaterialStyle.THIN))
+    .systemMaterial(immersiveFlat())
     .border({ width: 0.5, color: $r('sys.color.comp_divider') })
   }
 
