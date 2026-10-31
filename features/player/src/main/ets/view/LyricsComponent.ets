@@ -171,8 +171,8 @@ export struct LyricsComponent {
       //   这里原来一律拿 store 的值**反向覆盖**共享状态 —— 只要 store 落后一步（异步落盘、云同步只写了 store…）
       //   就会把用户刚选的开关**改回去**，表现就是"点了没反应/过一会儿又变回来"。
       //   共享状态是无歧义的用户选择，这一支直接以它为准并落库（不再回读 store）。
-      this.lyricBlurEnabled = this.lyricBlurState.enabled;
-      if (store.getLyricBlurEnabled() !== this.lyricBlurState.enabled) {
+      // ④ 2026-10-31（用户：以后都不走模糊）⇒ 强制关闭，不再读存储
+      if (false) {
         store.setLyricBlurEnabled(this.lyricBlurState.enabled);
       }
     } else {

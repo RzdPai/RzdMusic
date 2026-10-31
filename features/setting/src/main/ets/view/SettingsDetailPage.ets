@@ -343,13 +343,13 @@ export struct SettingsDetailPage {
           },
           contentStyle: {
             titleStyle: { mainTitleColor: $r('sys.color.font_primary') },
-            backIconStyle: { iconColor: $r('sys.color.font_primary'), backgroundColor: '#1AFFFFFF' }
+            backIconStyle: { iconColor: $r('app.color.font_primary'), backgroundColor: '#1A808080' }
           }
         },
         scrollEffectStyle: {
           contentStyle: {
             titleStyle: { mainTitleColor: $r('sys.color.font_primary') },
-            backIconStyle: { iconColor: $r('sys.color.font_primary'), backgroundColor: '#1AFFFFFF' }
+            backIconStyle: { iconColor: $r('app.color.font_primary'), backgroundColor: '#1A808080' }
           }
         },
         systemMaterialEffect: buildTitleMaterial(this.ambientLevel)
@@ -1430,18 +1430,8 @@ export struct SettingsDetailPage {
               MediaService.getInstance().applyLockScreenPlay(isOn);
             })
 
-          this.SubTitle($r('app.string.setting_sub_lyric_blur'))
-          this.CapsuleSelector(this.onOffOptions, this.lyricBlurEnabled ? 0 : 1,
-            (index: number) => {
-              const isOn: boolean = index === 0;
-              this.lyricBlurEnabled = isOn;
-              MusicStoreService.getInstance().setLyricBlurEnabled(isOn);
-              const state = AppStorageV2.connect(LyricBlurState, AppStorageKeys.LYRIC_BLUR_STATE,
-                () => new LyricBlurState());
-              if (state !== undefined) {
-                state.enabled = isOn;
-              }
-            })
+          // ④ 2026-10-31（用户：以后都不走模糊）：「歌词页模糊效果」设置项已移除
+
 
           this.SubTitle('歌词帧率')
           this.CapsuleSelector(this.lyricFpsOptions, this.lyricFpsValues.indexOf(this.lyricFps),
