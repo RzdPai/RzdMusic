@@ -166,7 +166,7 @@ export struct QueuePlaylistSheet {
         })
     }
     .width(StyleConstants.FULL_WIDTH)
-    .padding({ top: 10, bottom: 10 })
+    .padding({ top: 12, bottom: 12 })
     .onClick(() => {
       this.playQueueIndex(index);
     })
