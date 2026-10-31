@@ -1152,22 +1152,8 @@ export struct ControlAreaComponent {
       } else if (this.showMenuSpeed) {
         this.SpeedRows()
         } else if (this.showMenuTuning) {
+        this.TuningRows()
       } else if (this.showMenuQuality) {
-          Row({ space: 8 }) {
-            SymbolGlyph($r('sys.symbol.chevron_left'))
-              .fontSize(18)
-              .fontColor([$r('app.color.font_primary')])
-            Text('返回')
-              .fontSize(16)
-              .fontColor($r('app.color.font_primary'))
-            Blank()
-          }
-          .width('100%')
-          .height(44)
-          .padding({ left: 4, right: 4 })
-          .onClick((): void => {
-            this.showMenuQuality = false;
-          })
         Text(this.menuQualityMode === 'download' ? '选择下载音质' : '切换音质')
           .fontSize(18)
           .fontWeight(FontWeight.Bold)
@@ -1206,19 +1192,6 @@ export struct ControlAreaComponent {
           })
         }, (q: string) => 'menuq-' + q)
 
-        if (this.menuQualityMode === 'switch') {
-          Row() {
-            Text('返回')
-              .fontSize(15)
-              .fontColor($r('app.color.font_tertiary'))
-          }
-          .width('100%')
-          .height(44)
-          .justifyContent(FlexAlign.Center)
-          .onClick(() => {
-            this.showMenuQuality = false;
-          })
-        }
       } else {
         Text('歌曲菜单')
           .fontSize(18)
@@ -1539,9 +1512,9 @@ export struct ControlAreaComponent {
     }
     .width('100%')
     .height(ControlAreaComponent.MENU_ROW_H_VP)
-    .padding({ left: 16, right: 16 })
-    .borderRadius(10)
-    .backgroundColor($r('app.color.background_secondary'))
+      .padding({ left: 4, right: 4 })
+      .backgroundColor(Color.Transparent)
+      .border({ width: { bottom: 0.5 }, color: $r('app.color.comp_divider') })
   }
 
   /** One menu row: icon + label, tap triggers the given action. */
@@ -1565,7 +1538,6 @@ export struct ControlAreaComponent {
       .padding({ left: 4, right: 4 })
       .backgroundColor(Color.Transparent)
       .border({ width: { bottom: 0.5 }, color: $r('app.color.comp_divider') })
-    .backgroundColor($r('app.color.background_secondary'))
     .onClick(() => {
       action();
     })
