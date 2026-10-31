@@ -143,6 +143,9 @@ export struct SettingsDetailPage {
   /** 屏幕方向：auto / portrait / landscape。 */
   /** USB 独占输出（需外接 USB DAC）。 */
   @Local usbExclusive: boolean = false;
+  @Local tabShowNow: boolean = true;
+  @Local tabShowEcho: boolean = true;
+  @Local tabNowFirst: boolean = true;
   @Local screenOrientation: string = 'auto';
   /** 启动应用自动开始播放（默认关）。 */
   @Local autoPlayOnLaunch: boolean = false;
@@ -199,6 +202,84 @@ export struct SettingsDetailPage {
   private readonly homeSourceOptions: string[] = ['QQ', '酷狗', '网易', '酷我', '咪咕', '汽水'];
   private readonly homeSourceValues: string[] = ['qq', 'kg', 'wy', 'kw', 'mg', 'qs'];
   /** USB 独占状态文案（来自 UsbAudioService 的实时状态）。 */
+  /** 读取 Tab 栏配置（缺省：两个都显示、现在就听在前）。 */
+  private loadTabBarConfig(): void {
+    const raw: string = MusicStoreService.getInstance().getTabBarConfig();
+    if (raw.length === 0) {
+      return;
+    }
+    try {
+      const obj: Record<string, Object> = JSON.parse(raw) as Record<string, Object>;
+      this.tabShowNow = obj.now !== false;
+      this.tabShowEcho = obj.echo !== false;
+      this.tabNowFirst = obj.nowFirst !== false;
+    } catch (err) {
+    }
+  }
+
+  /** 保存并广播 Tab 栏配置（壳层监听 rzd_tab_bar_config 重排）。 */
+  private saveTabBarConfig(): void {
+    const payload: Record<string, Object> = {};
+    payload.now = this.tabShowNow;
+    payload.echo = this.tabShowEcho;
+    payload.nowFirst = this.tabNowFirst;
+    const json: string = JSON.stringify(payload);
+    MusicStoreService.getInstance().setTabBarConfig(json);
+    AppStorage.setOrCreate('rzd_tab_bar_config', json);
+    appendPlayLog('[RzdTabConfig] 保存 ' + json);
+  }
+
+  /** 主题设置最下面的「自定义 Tab 栏」（只允许调整「现在就听」「回响」）。 */
+  @Builder
+  private TabBarCustomSection() {
+    Column() {
+      this.SubTitle('自定义 Tab 栏')
+      Text('首页与「我的」固定显示；这里只调整「现在就听」「回响」')
+        .fontSize(12)
+        .fontColor($r('app.color.font_tertiary'))
+        .width('100%')
+        .margin({ bottom: 6 })
+      this.CapsuleSelector(this.onOffOptions, this.tabShowNow ? 0 : 1,
+        (index: number) => {
+          this.tabShowNow = index === 0;
+          if (!this.tabShowNow && !this.tabShowEcho) {
+            this.tabShowEcho = true;
+          }
+          this.saveTabBarConfig();
+        })
+      Text('现在就听')
+        .fontSize(12)
+        .fontColor($r('app.color.font_tertiary'))
+        .width('100%')
+        .margin({ top: 2, bottom: 10 })
+      this.CapsuleSelector(this.onOffOptions, this.tabShowEcho ? 0 : 1,
+        (index: number) => {
+          this.tabShowEcho = index === 0;
+          if (!this.tabShowNow && !this.tabShowEcho) {
+            this.tabShowNow = true;
+          }
+          this.saveTabBarConfig();
+        })
+      Text('回响')
+        .fontSize(12)
+        .fontColor($r('app.color.font_tertiary'))
+        .width('100%')
+        .margin({ top: 2, bottom: 10 })
+      this.SubTitle('两个页签的顺序')
+      this.CapsuleSelector(['现在就听在前', '回响在前'], this.tabNowFirst ? 0 : 1,
+        (index: number) => {
+          this.tabNowFirst = index === 0;
+          this.saveTabBarConfig();
+        })
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 4, bottom: 8 })
+    .borderRadius($r('sys.float.corner_radius_level12'))
+    .backgroundColor($r('app.color.card_background'))
+    .margin({ top: 12 })
+  }
+
+
   private usbStatusText(): string {
     const st: UsbAudioState = UsbAudioService.getInstance().state;
     if (st.connected) {
@@ -345,6 +426,7 @@ export struct SettingsDetailPage {
     this.audioMix = MusicStoreService.getInstance().getAudioMix();
     this.screenOrientation = MusicStoreService.getInstance().getScreenOrientation();
     this.usbExclusive = MusicStoreService.getInstance().getUsbExclusive();
+    this.loadTabBarConfig();
     this.autoPlayOnLaunch = MusicStoreService.getInstance().getAutoPlayOnLaunch();
     this.lyricBlurEnabled = MusicStoreService.getInstance().getLyricBlurEnabled();
     this.saveToDownloadDir = MusicStoreService.getInstance().getDownloadSaveMode() === 'download';
@@ -1621,6 +1703,8 @@ export struct SettingsDetailPage {
     .scrollBar(BarState.Off)
       // ★ 2026-10-29（用户）：二级设置页滚动要有回弹
       .edgeEffect(EdgeEffect.Spring)
+      // ★ 2026-10-31：自定义 Tab 栏（放最下面，只允许调整「现在就听」「回响」）
+      this.TabBarCustomSection()
   }
 
   /**
