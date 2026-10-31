@@ -51,7 +51,7 @@ import {
   WindowUtil,
   buildTitleMaterial,
   BarScrollHelper
-} from 'musicbasic';
+, TabBarConfigModel } from 'musicbasic';
 import { dispatchShellPlaybackIntent, LXSourceHost, PlaybackPage, PlaybackPageCoverContent, PlayerViewModel,
   prewarmCurrentSongMesh } from 'player';
 import { RecommendPage } from 'recommendation';
@@ -496,6 +496,8 @@ struct Index {
 
   /** Initializes play queue ids from local DB for the session. */
   aboutToAppear() {
+    // 自定义 Tab 栏：启动时读一次配置（设置页改动会广播到 AppStorage）
+    this.tabCfgJson = AppStorage.get<string>('rzd_tab_bar_config') ?? '';
     // 2026-10-23：把"首页返回收尾"注册给 Ability 层（页面级 onBackPress 收不到首页返回）。
     HomeBackBridge.register((): void => {
       this.onHomeBackSignal();
@@ -2113,6 +2115,33 @@ struct Index {
    * 鈿狅笍 闀垮害蹇呴』绛変簬椤电鏁帮紙鐜板湪鏄?**4**锛氭帹鑽?/ 鐜板湪灏卞惉 / 鍥炲搷 / 鎴戠殑锛夛細`TabBarItem` 鎸変笅鏍囧彇銆?
    */
   @Local tabBounceTriggers: number[] = [0, 0, 0, 0];
+
+  /** Tab 栏自定义配置（JSON 原文，来自 AppStorage['rzd_tab_bar_config']）。 */
+  @Local tabCfgJson: string = '';
+
+  /** @returns 解析后的 Tab 栏配置（坏数据回默认）。 */
+  private tabCfg(): TabBarConfigModel {
+    return TabBarConfigModel.parse(this.tabCfgJson);
+  }
+
+  /**
+   * 物理下标（Index.ets 里 TabContent 的固定顺序）→ 逻辑下标（底栏上看到的顺序）。
+   * @param physical 0=首页 1=现在就听 2=回响 3=我的
+   * @returns 逻辑下标；被隐藏时返回 -1。
+   */
+  private tabLogicalOf(physical: number): number {
+    return this.tabCfg().logicalOf(physical);
+  }
+
+  /**
+   * 逻辑下标 → 物理下标。
+   * @param logical 底栏顺序（0..可见数-1）
+   * @returns 物理下标；越界回 0（首页）。
+   */
+  private tabPhysicalOf(logical: number): number {
+    return this.tabCfg().physicalOf(logical);
+  }
+
   /**
    * 銆屽洖鍒伴《閮ㄣ€嶆寚浠わ紙姣忎釜椤电涓€涓紝閫掑瑙﹀彂锛夈€?
    *
