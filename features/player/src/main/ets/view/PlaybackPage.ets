@@ -6529,6 +6529,14 @@ export struct PlaybackPage {
         .alignItems(VerticalAlign.Center)
         // ★ 2026-10-31：去掉 meta 行的负位移（-24*flatT）——它把 meta 往控制行方向顶，是重叠的一半原因
         .opacity(1 - this.flatT)
+
+        // ★ 2026-11-01（照无界 flatPane）：控制行是**同一列的第 3 块**，参与 SpaceEvenly 分配，不再靠 visibility 叠层
+        Column() {
+          ControlAreaComponent({ showBottomOtherRow: false })
+        }
+        .width(StyleConstants.FULL_WIDTH)
+        .alignItems(HorizontalAlign.Center)
+        .opacity(1 - this.flatT)
       }
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
@@ -6560,7 +6568,8 @@ export struct PlaybackPage {
       }
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
-      .visibility(this.flatCtlSwapped ? Visibility.Visible : Visibility.Hidden)
+      // ★ 2026-11-01：控制行已并入 A 面第 3 块（照无界），这一面不再渲染，避免两份控制键叠在一起
+      .visibility(Visibility.None)
       .opacity(this.flatT)
       .zIndex(this.flatCtlSwapped ? 1 : 0)
       .translate({ y: -PlaybackPage.FLAT_SWAP_D_VP * (1 - this.flatT) })
