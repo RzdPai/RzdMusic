@@ -6509,7 +6509,7 @@ export struct PlaybackPage {
           bottom: 12
         })
         .alignItems(VerticalAlign.Center)
-        .translate({ y: -PlaybackPage.FLAT_SWAP_D_VP * this.flatT })
+        // ★ 2026-10-31：去掉 meta 行的负位移（-24*flatT）——它把 meta 往控制行方向顶，是重叠的一半原因
         .opacity(1 - this.flatT)
       }
       .width(StyleConstants.FULL_WIDTH)
@@ -6601,7 +6601,7 @@ export struct PlaybackPage {
         .layoutWeight(1)
         // 濠殿喗绻傞惌渚€鎯佸┑鍫滄勃闁绘劖澹嗛懝?闂佸憡鍔曢幊搴敊?闂佹寧绋掗悺鐚歰ntentOpacity`闂佹寧绋戦悧鎰板箚閵堝棙濯寸€广儱妫楅·鍛磽?1闂?
         .opacity(this.expandState.morphContentOpacity)
-        .padding({ top: 72, bottom: 74 })
+        .padding({ top: this.isShortHeightWindow() ? 48 : 64, bottom: this.isShortHeightWindow() ? 56 : 74 })
       }
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
