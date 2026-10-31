@@ -13,6 +13,7 @@
  * limitations under the License.
  */
 
+import { applyScreenOrientation, TabBarConfigModel } from 'musicbasic';
 import { AbilityConstant, Callee, common, Configuration, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 import { fileIo as fs } from '@kit.CoreFileKit';
@@ -49,6 +50,19 @@ export default class EntryAbility extends UIAbility {
     EntryAbility.registerCardActionChannel(this.callee, this.context);
     // 冷启动也可能是「用派音打开 .js」（文件管理器点开），先把脚本吃进来
     this.handleViewDataWant(want);
+  
+    // Tab 栏自定义：启动时把配置读进 AppStorage，壳层（Index.ets）据此决定渲染哪几个页签
+    try {
+      const raw: string = MusicStoreService.getInstance().getTabBarConfig();
+      const cfg: TabBarConfigModel = TabBarConfigModel.parse(raw);
+      AppStorage.setOrCreate('rzd_tab_bar_config', cfg.toJson());
+      appendPlayLog('[RzdTabConfig] 启动读取 order=' + cfg.physicalOrder().join(',') +
+        ' now=' + cfg.now + ' echo=' + cfg.echo + ' nowFirst=' + cfg.nowFirst);
+    } catch (err) {
+      appendPlayLog('[RzdTabConfig] 启动读取失败');
+    }
+    // 应用用户设置的屏幕方向（auto / portrait / landscape）
+    void applyScreenOrientation(this.context);
   }
 
   /**
