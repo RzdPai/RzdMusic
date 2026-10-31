@@ -669,6 +669,11 @@ struct Index {
 
   @Monitor('tabState.tabIndex')
   onTabIndexChanged(): void {
+    // 配置变化（隐藏页签）后夹紧逻辑下标，避免落在不存在的页签上
+    const maxLogical: number = this.tabCfg().physicalOrder().length - 1;
+    if (this.tabState.tabIndex > maxLogical) {
+      this.tabState.tabIndex = maxLogical;
+    }
     const index: number = this.tabState.tabIndex;
     const rootDepth: number = this.pageIndexInfos.size();
     const homeDepth: number = this.homeStack.size();
@@ -678,7 +683,7 @@ struct Index {
     appendPlayLog(`[RzdTabSwitch] -> ${index} root=${rootDepth} home=${homeDepth} ` +
       `barHidden=${this.searchTabBarHidden} showPlay=${this.appState.isShowPlay} ` +
       `queue=${this.appState.playQueue.length} sel=${this.appState.selectIndex}`);
-    this.tabsController.changeIndex(index);
+    this.tabsController.changeIndex(this.tabPhysicalOf(index));
     // 切完再打一次，确认 HdsTabs 真的换了页（排查"首页空白"是切页还是渲染的问题）
     setTimeout((): void => {
       appendPlayLog(`[RzdTabSwitch] applied idx=${index} (next frame)`);
@@ -3134,6 +3139,7 @@ struct Index {
     //   锛堜袱鏉￠€氶亾閮藉湪 `NowPlayingFeedPage` 閲岋紝瑙佽鏂囦欢澶达級銆?
     //   鍥炬爣 `sys.symbol.music_note_circle_fill` 涓庡彟澶栦笁鏋氬悓涓?fill 绯伙紙宸插湪鏈満
     //   `sysResource.js` 鐨?symbol 琛ㄩ噷鏍稿疄瀛樺湪锛夈€?
+    if (this.tabCfg().now) {
     TabContent() {
       Column() {
         NowPlayingFeedPage({
@@ -3161,9 +3167,11 @@ struct Index {
       .height(StyleConstants.FULL_HEIGHT)
       .expandSafeArea([SafeAreaType.SYSTEM, SafeAreaType.CUTOUT], [SafeAreaEdge.TOP])
     }
-    .tabBar(this.TabBarItem(1, $r('app.string.tab_now_playing'), $r('sys.symbol.music_round_triangle_fill')))
+    .tabBar(this.TabBarItem(this.tabLogicalOf(1), $r('app.string.tab_now_playing'), $r('sys.symbol.music_round_triangle_fill')))
+    }
 
     // 鈽?鐢ㄦ埛 2026-10-12锛氬簳鏍忎腑闂村姞涓€椤点€屽洖鍝嶃€嶏紙鏈堝害鍚瓕鎶ュ憡锛?
+    if (this.tabCfg().echo) {
     TabContent() {
       Column() {
         EchoReviewPage({ scrollTopCommand: this.tabScrollTopCommands[2] })
@@ -3172,7 +3180,8 @@ struct Index {
       .height(StyleConstants.FULL_HEIGHT)
       .expandSafeArea([SafeAreaType.SYSTEM, SafeAreaType.CUTOUT], [SafeAreaEdge.TOP])
     }
-    .tabBar(this.TabBarItem(2, $r('app.string.tab_echo'), $r('sys.symbol.waveform')))
+    .tabBar(this.TabBarItem(this.tabLogicalOf(2), $r('app.string.tab_echo'), $r('sys.symbol.waveform')))
+    }
 
     TabContent() {
       Column() {
@@ -3182,7 +3191,7 @@ struct Index {
       .height(StyleConstants.FULL_HEIGHT)
       .expandSafeArea([SafeAreaType.SYSTEM, SafeAreaType.CUTOUT], [SafeAreaEdge.TOP])
     }
-    .tabBar(this.TabBarItem(3, $r('app.string.tab_cafe_listen'), $r('sys.symbol.person_crop_circle_fill_1')))
+    .tabBar(this.TabBarItem(this.tabLogicalOf(3), $r('app.string.tab_cafe_listen'), $r('sys.symbol.person_crop_circle_fill_1')))
   }
 
   /** Root UI: {@link HdsNavigation} with tabs and optional playback cover. */
@@ -3355,9 +3364,9 @@ struct Index {
           })
           .onChange((index: number) => {
             if (index !== this.tabState.tabIndex) {
-              this.tabState.tabIndex = index;
+              this.tabState.tabIndex = this.tabLogicalOf(index);
               // 鍒囧埌鏂伴〉绛撅細閫変腑鎬佸脊涓€涓嬶紙鐐瑰嚮涓庢粦鍔ㄥ垏鎹㈤兘浼氳蛋杩欓噷锛?
-              this.playTabBounce(index);
+              this.playTabBounce(this.tabState.tabIndex);
               // 鈽?杩蜂綘鏉℃樉闅愯瘖鏂紙`hdc shell hilog | grep RzdMiniBarHide`锛夛細
               //   鍒囧埌銆岀幇鍦ㄥ氨鍚€嶅簲鎵撳嚭 `hidden=true barLayout=HORIZONTAL style=COLLAPSE`锛?
               //   鍒囧洖鏉ュ簲鎵撳嚭 `hidden=false`銆傚彧鑳界湅鏃ュ織锛屾棤璁惧楠岃瘉銆?
@@ -3388,8 +3397,8 @@ struct Index {
           .padding({ bottom: WindowUtil.getInstance().getStartupNavigationBarBottomVp() })
           .onChange((index: number) => {
             if (index !== this.tabState.tabIndex) {
-              this.tabState.tabIndex = index;
-              this.playTabBounce(index);
+              this.tabState.tabIndex = this.tabLogicalOf(index);
+              this.playTabBounce(this.tabState.tabIndex);
             }
           })
           .onTabBarClick((index: number): void => {
