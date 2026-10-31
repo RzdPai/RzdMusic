@@ -327,7 +327,21 @@ export struct PlaylistsPage {
       const type: string = root.type as string ?? '';
       let name: string = '';
       let songsArr: Object[] = [];
-      if (type === 'playListPart' || type === 'playListPart_v2') {
+      if (type === 'playList_v2' || type === 'playList') {
+        // ★ 2026-10-31：洛雪整库导出是 {type:'playList_v2', data:[{name,list:[…]}, …]}，data 是**数组**；
+        //   以前只认 playListPart 的 data:{name,list} ⇒ 直接解析失败（用户反馈 .lxmc 导不进来）。
+        const raw = root.data;
+        let firstList: Record<string, Object> | undefined = undefined;
+        if (Array.isArray(raw) && (raw as Object[]).length > 0) {
+          firstList = (raw as Object[])[0] as Record<string, Object>;
+        } else if (raw !== undefined) {
+          firstList = raw as Record<string, Object>;
+        }
+        if (firstList !== undefined) {
+          name = (firstList.name as string ?? '').trim();
+          songsArr = firstList.list as Object[] ?? [];
+        }
+      } else if (type === 'playListPart' || type === 'playListPart_v2') {
         // LXMusic list part export: { type, data: { name, list: [...] } }
         const data = root.data as Record<string, Object> | undefined;
         if (data !== undefined) {
