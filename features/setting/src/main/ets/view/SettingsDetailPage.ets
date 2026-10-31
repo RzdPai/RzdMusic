@@ -1268,14 +1268,7 @@ export struct SettingsDetailPage {
               this.usbExclusive = enabled;
               void MediaService.getInstance().applyUsbExclusive(enabled);
             })
-          if (this.usbExclusive) {
-            Text('需要外接 USB DAC（UAC1/UAC2）；设备断开时会自动回退普通输出')
-              .fontSize(11)
-              .fontColor($r('app.color.font_tertiary'))
-              .width('100%')
-              .margin({ top: 4 })
-          }
-        }
+                 }
         .width('100%')
         .padding({ left: 16, right: 16, top: 4, bottom: 8 })
         .borderRadius($r('sys.float.corner_radius_level12'))

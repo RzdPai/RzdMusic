@@ -341,7 +341,7 @@ export struct OtherVersionsSheet {
         detents: [SheetSize.MEDIUM, SheetSize.LARGE],
         dragBar: true,
         showClose: false,
-        backgroundColor: $r('sys.color.background_primary'),
+        backgroundColor: $r('app.color.panel_surface'),
         onWillDismiss: (action: DismissSheetAction): void => {
           // Invalidate work immediately; let dismiss() own the system exit animation.
           this.closing = true;

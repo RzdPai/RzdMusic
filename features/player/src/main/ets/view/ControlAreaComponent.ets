@@ -1152,25 +1152,7 @@ export struct ControlAreaComponent {
       } else if (this.showMenuSpeed) {
         this.SpeedRows()
         } else if (this.showMenuTuning) {
-          // ★ 子页「返回」：回到歌曲菜单主列表（不关弹层）；底部按钮此时也会显示「返回」
-          Row({ space: 8 }) {
-            SymbolGlyph($r('sys.symbol.chevron_left'))
-              .fontSize(18)
-              .fontColor([$r('app.color.font_primary')])
-            Text('返回')
-              .fontSize(16)
-              .fontColor($r('app.color.font_primary'))
-            Blank()
-          }
-          .width('100%')
-          .height(44)
-          .padding({ left: 4, right: 4 })
-          .onClick((): void => {
-            this.backToMenuRoot();
-          })
-          this.TuningRows()
       } else if (this.showMenuQuality) {
-          // ★ 子页「返回」：只回到歌曲菜单主列表（不是关掉整个弹层）
           Row({ space: 8 }) {
             SymbolGlyph($r('sys.symbol.chevron_left'))
               .fontSize(18)
@@ -1580,8 +1562,9 @@ export struct ControlAreaComponent {
     }
     .width('100%')
     .height(52)
-    .padding({ left: 16, right: 16 })
-      .borderRadius($r('sys.float.corner_radius_level12'))
+      .padding({ left: 4, right: 4 })
+      .backgroundColor(Color.Transparent)
+      .border({ width: { bottom: 0.5 }, color: $r('app.color.comp_divider') })
     .backgroundColor($r('app.color.background_secondary'))
     .onClick(() => {
       action();
@@ -1617,7 +1600,7 @@ export struct ControlAreaComponent {
       height: this.showMenuComment ? SheetSize.LARGE : 416,
       dragBar: true,
       showClose: false,
-      backgroundColor: $r('app.color.background_secondary'),
+      backgroundColor: $r('app.color.panel_surface'),
       onDisappear: (): void => {
         // 记下关闭动画结束的时刻（重新打开的冷却用），顺手把子页状态清干净
         this.sheetClosedAtMs = Date.now();
