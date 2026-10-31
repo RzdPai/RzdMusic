@@ -1139,7 +1139,8 @@ export struct EchoReviewPage {
       .borderRadius(15)
       .backgroundColor($r('app.color.echo_chip_background'))
       .bindMenu(this.yearMenuItems(), {
-      backgroundBlurStyle: appBarBlurStyle()
+      backgroundBlurStyle: appBarBlurStyle(),
+      backgroundColor: $r('app.color.menu_surface'),
     })
 
       Row({ space: 8 }) {
@@ -1164,7 +1165,8 @@ export struct EchoReviewPage {
       .borderRadius(15)
       .backgroundColor($r('app.color.echo_chip_background'))
       .bindMenu(this.monthMenuItems(), {
-      backgroundBlurStyle: appBarBlurStyle()
+      backgroundBlurStyle: appBarBlurStyle(),
+      backgroundColor: $r('app.color.menu_surface'),
     })
     }
     .width('100%')

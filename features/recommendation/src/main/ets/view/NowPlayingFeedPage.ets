@@ -1746,6 +1746,7 @@ export struct NowPlayingFeedPage {
         placement: Placement.BottomLeft,
         // 菜单背板材质：只给档位（跟随设置里的光感等级），不写 adaptiveColor
         backgroundBlurStyle: buildBarBlurStyle(this.ambientState.level),
+        backgroundColor: $r('app.color.menu_surface'),
         onDisappear: (): void => {
           this.showFeedModeMenu = false;
         }
