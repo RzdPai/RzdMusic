@@ -195,8 +195,17 @@ export struct PlaybackPage {
     }
     return 24;
   }
+  /** 宽屏左栏宽度（无界 playerLeftPaneWeight：bp≥4 → 0.40，≥3 → 0.45，否则 0.50）。 */
+  private playerLeftPaneW(): number {
+    const bp: number = this.breakpointEnv.widthBreakpoint;
+    const weight: number = bp === WidthBreakpoint.WIDTH_XL ? 0.40 : (bp === WidthBreakpoint.WIDTH_LG ? 0.45 : 0.50);
+    return Math.max(160, this.expandState.windowWidthVp * weight);
+  }
   private coverSideVp(): number {
-    const byWidth: number = this.singleColMaxVp() * this.sizeScale();
+    // 宽屏时左栏宽度 = 窗口宽 × 无界 playerLeftPaneWeight（bp≥4 → 0.40，≥3 → 0.45，否则 0.50）
+    const paneW: number = this.playerLeftPaneW();
+    const colBudget: number = this.isWidePlayerLayout() ? Math.min(this.singleColMaxVp(), paneW) : this.singleColMaxVp();
+    const byWidth: number = colBudget * this.sizeScale();
     const availH: number = Math.max(180, this.expandState.windowHeightVp - (56 + 210));
     return Math.max(150, Math.min(byWidth, Math.floor(availH * 0.9)));
   }
