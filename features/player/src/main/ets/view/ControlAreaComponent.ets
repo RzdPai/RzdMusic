@@ -1297,18 +1297,33 @@ export struct ControlAreaComponent {
 
       // 评论子页自带标题栏与关闭，不再叠一个「取消」，否则底部被吃掉一大块
       if (!this.showMenuComment) {
-        Button(this.menuSubPageOpen() ? '返回' : '取消')
-          .width('100%')
-          .height(44)
-          .fontSize(15)
-          .borderRadius(10)
-          .backgroundColor($r('app.color.panel_surface'))
-          .fontColor($r('app.color.font_tertiary'))
-          .margin({ top: 8 })
-          .onClick(() => {
-            this.closeMenuSheet();
-            this.backToMenuRoot();
-          })
+        Row({ space: 12 }) {
+          // ★ 子页时才有「返回」：只回歌曲菜单主列表，不关弹层（用户 2026-10-31 明确要求）
+          if (this.menuSubPageOpen()) {
+            Button('返回')
+              .layoutWeight(1)
+              .height(44)
+              .fontSize(15)
+              .borderRadius(10)
+              .backgroundColor($r('app.color.panel_surface'))
+              .fontColor($r('app.color.font_primary'))
+              .onClick(() => {
+                this.backToMenuRoot();
+              })
+          }
+          Button('取消')
+            .layoutWeight(1)
+            .height(44)
+            .fontSize(15)
+            .borderRadius(10)
+            .backgroundColor($r('app.color.panel_surface'))
+            .fontColor($r('app.color.font_tertiary'))
+            .onClick(() => {
+              this.closeMenuSheet();
+            })
+        }
+        .width('100%')
+        .margin({ top: 8 })
       }
     }
     .width('100%')

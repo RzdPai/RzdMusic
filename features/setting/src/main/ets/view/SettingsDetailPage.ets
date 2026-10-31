@@ -1257,16 +1257,6 @@ export struct SettingsDetailPage {
               this.autoPlayOnLaunch = autoPlay;
               MusicStoreService.getInstance().setAutoPlayOnLaunch(autoPlay);
             })
-
-          this.SubTitle('屏幕方向')
-          this.CapsuleSelector(['自动', '竖屏', '横屏'],
-            this.screenOrientation === 'portrait' ? 1 : (this.screenOrientation === 'landscape' ? 2 : 0),
-            (index: number) => {
-              const mode: string = index === 1 ? 'portrait' : (index === 2 ? 'landscape' : 'auto');
-              this.screenOrientation = mode;
-              const ctx = getContext(this) as common.UIAbilityContext;
-              void setScreenOrientation(ctx, mode);
-            })
         }
         .width('100%')
         .padding({ left: 16, right: 16, top: 4, bottom: 8 })
@@ -1602,6 +1592,15 @@ export struct SettingsDetailPage {
         // 动态封面：歌手 / 专辑 / 歌单页的大封面在联网时播放 Apple Music 的 motion artwork
         // （规格见 docs/apple-motion-cover.md；解析与缓存都在 MotionCoverService，默认开）。
         Column() {
+          this.SubTitle('屏幕方向')
+          this.CapsuleSelector(['自动', '竖屏', '横屏'],
+            this.screenOrientation === 'portrait' ? 1 : (this.screenOrientation === 'landscape' ? 2 : 0),
+            (index: number) => {
+              const mode: string = index === 1 ? 'portrait' : (index === 2 ? 'landscape' : 'auto');
+              this.screenOrientation = mode;
+              const ctx = getContext(this) as common.UIAbilityContext;
+              void setScreenOrientation(ctx, mode);
+            })
           this.SubTitle('动态封面')
           this.CapsuleSelector(this.onOffOptions, this.motionCover ? 0 : 1,
             (index: number) => {
