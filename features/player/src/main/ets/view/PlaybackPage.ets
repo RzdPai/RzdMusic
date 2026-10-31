@@ -166,6 +166,24 @@ export struct PlaybackPage {
     const cap: number = Math.floor(avail * 0.90);
     return Math.max(150, Math.min(cap, 420));
   }
+  /**
+   * 是否用「宽屏播放布局」（左右分栏）。
+   * ★ 2026-10-31（用户要求照无界修阔屏重叠）：无界 `Breakpoint.isWidePlayerLayout(a3 宽断点, a4 比例档)`：
+   *   `v = a3 >= 2; if (a3 >= 2) v = (a4 !== 2);`
+   *   其中比例档由 `高/宽` 算出（无界 `Breakpoint` 反编译还原）：
+   *     ratio < 0.8 → 0（矮宽）；< 1.2 → 1（近方）；否则 → 2（高窄，例如 1:1.414 的阔屏手机）。
+   *   ⇒ **高窄机型即使宽断点命中 lg 也不用双列**，走手机单列布局，从根上避免"封面把文字顶出去"。
+   */
+  private isWidePlayerLayout(): boolean {
+    const w: number = this.expandState.windowWidthVp;
+    const h: number = this.expandState.windowHeightVp;
+    if (w <= 0 || h <= 0) {
+      return this.isWidePlayerLayout();
+    }
+    const ratio: number = h / w;
+    const ratioClass: number = ratio < 0.8 ? 0 : (ratio < 1.2 ? 1 : 2);
+    return this.isWidePlayerLayout() && ratioClass !== 2;
+  }
   /** Window width/height breakpoint for responsive layout branches. */
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
   /** Global music UI and queue state. */
@@ -5410,7 +5428,7 @@ export struct PlaybackPage {
    * Album and lyrics pages share the same blurred backdrop + imageColor so the tint matches.
    */
   private isPhoneLyricsStyleBackdropLayout(): boolean {
-    if (isWidthBreakpointLgOrXl(this.breakpointEnv.widthBreakpoint)) {
+    if (this.isWidePlayerLayout()) {
       return false;
     }
     if (this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_MD &&
@@ -5465,8 +5483,8 @@ export struct PlaybackPage {
                   bottom: 20
                 })
                 .padding({
-                  left: isWidthBreakpointLgOrXl(this.breakpointEnv.widthBreakpoint) ? 48 : 0,
-                  right: isWidthBreakpointLgOrXl(this.breakpointEnv.widthBreakpoint) ? 48 : 0
+                  left: this.isWidePlayerLayout() ? 48 : 0,
+                  right: this.isWidePlayerLayout() ? 48 : 0
                 })
 
                 GridCol({
