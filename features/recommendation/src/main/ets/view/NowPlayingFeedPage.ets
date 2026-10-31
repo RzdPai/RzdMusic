@@ -208,7 +208,7 @@ import {
   shouldUseSplitDetailLayout,
   WindowInfo,
   getWindowInfoState
-, MENU_PAD_TOP, MENU_PAD_BOTTOM, MENU_BORDER_WIDTH } from 'musicbasic';
+, MENU_PAD_TOP, MENU_PAD_BOTTOM, MENU_BORDER_WIDTH , immersiveMedium } from 'musicbasic';
 import {
   BlurStrategy,
   HdsNavDestination,
@@ -1742,15 +1742,20 @@ export struct NowPlayingFeedPage {
       .backgroundColor(Color.Transparent)
       // 签名是 `bindMenu(isShow, content, options?)`：content 直接给 builder（不是 `{builder}`），
       // isShow 用 `!!`（V2 两向绑定，见全局记忆里 `$$` vs `!!` 那条）。
-      .bindMenu(!!this.showFeedModeMenu, this.FeedModeMenu(), {
-        placement: Placement.BottomLeft,
-        // 菜单背板材质：只给档位（跟随设置里的光感等级），不写 adaptiveColor
-        backgroundBlurStyle: buildBarBlurStyle(this.ambientState.level),
-        backgroundColor: $r('app.color.menu_surface'),
-        onDisappear: (): void => {
-          this.showFeedModeMenu = false;
-        }
-      })
+        // ★ 2026-10-31（用户：直接用系统材质，不做降级）：bindMenu 的 ContextMenuOptions 没有 systemMaterial，
+        //   所以换成 bindPopup —— PopupCommonOptions 支持 systemMaterial，才是真「光感」。
+        .bindPopup(this.showFeedModeMenu, {
+          builder: (): void => { this.FeedModeMenu(); },
+          placement: Placement.BottomLeft,
+          enableArrow: false,
+          radius: 16,
+          systemMaterial: immersiveMedium(),
+          onStateChange: (event): void => {
+            if (!event.isVisible) {
+              this.showFeedModeMenu = false;
+            }
+          }
+        })
   }
   private syncQueueWithNewRows(fresh: RecommendPrivateSongUi[]): void {
     if (!this.queueWasFeed) {
