@@ -6308,9 +6308,13 @@ export struct PlaybackPage {
    * @returns 边长（vp）
    */
   private flatCoverSizeVp(): number {
+    // ★ 2026-11-01：封面边长再受"窗口高度比例"兜底（实测 363x593 时原 273.6 太大，
+    //   剩余高度放不下 进度+meta+控制 ⇒ 压）。取 min(盒子公式值, 窗口高 × 0.42)。
+    const winHNow: number = this.expandState.windowHeightVp;
+    const capByWinH: number = winHNow > 0 ? Math.max(120, winHNow * 0.42) : 0;
     const edge: number = this.flatCoverEdgeVp();
     if (edge > 0) {
-      return edge;
+      return capByWinH > 0 ? Math.min(edge, capByWinH) : edge;
     }
     const winW: number = this.expandState.windowWidthVp;
     const winH: number = this.expandState.windowHeightVp;
