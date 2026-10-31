@@ -92,6 +92,10 @@ export interface AudioKernel {
   setUsbMode?(mode: string): void;
   /** @returns 可用音频输出驱动列表（诊断用）。 */
   listAoDrivers?(): string;
+  /** @returns 当前 AO 的设备列表 JSON（诊断用）。 */
+  listAudioDevices?(): string;
+  /** 显式指定音频设备（空串=自动）。 */
+  setAudioDevice?(name: string): void;
 }
 
 /** 内核种类 → 文案。 */

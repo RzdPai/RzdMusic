@@ -225,6 +225,25 @@ export class MpvAudioEngine implements AudioKernel {
    * @returns mpv 当前可用的音频输出驱动列表（属性 `audio-out-drivers`）。
    * 用来判断这个 libmpv 构建到底有没有 `usb-exclusive` 这个 ao 驱动，避免瞎猜。
    */
+  /**
+   * @returns 当前 AO 下的设备列表（mpv 属性 `audio-device-list`，JSON 文本）。
+   * 用来判断 usb-exclusive 这个 AO 是否真的看到了 DAC。
+   */
+  listAudioDevices(): string {
+    return this.read('audio-device-list');
+  }
+
+  /**
+   * 显式指定音频设备（mpv 属性 `audio-device`）。
+   * @param name 设备名；空串表示交给 AO 自动选择。
+   */
+  setAudioDevice(name: string): void {
+    if (name.length === 0) {
+      return;
+    }
+    this.write('audio-device', name);
+    appendPlayLog('[RzdUsb] 指定 audio-device=' + name);
+  }
   listAoDrivers(): string {
     return this.read('audio-out-drivers');
   }

@@ -1515,10 +1515,51 @@ export class MediaService {
    * @param fd 设备 fd（保留给内核记录）。
    * @param attempt 第几次尝试（0/1）。
    */
+  /**
+   * 从 mpv `audio-device-list` 的 JSON 文本里挑出 USB 设备条目。
+   * 只做字符串匹配（不引 JSON 解析，避免结构变化导致崩溃）。
+   * @param list mpv 返回的 JSON 文本。
+   * @returns 设备 name；没有则空串。
+   */
+  private pickUsbDeviceName(list: string): string {
+    const lower: string = list.toLowerCase();
+    const keys: string[] = ['usb', 'uac', 'dac'];
+    for (let i: number = 0; i < keys.length; i++) {
+      const at: number = lower.indexOf(keys[i]);
+      if (at < 0) {
+        continue;
+      }
+      // 往左找最近的 "name":" 取引号内容
+      const left: string = list.substring(0, at);
+      const nameAt: number = left.lastIndexOf('"name":"');
+      if (nameAt < 0) {
+        continue;
+      }
+      const startQuote: number = nameAt + 8;
+      const endQuote: number = list.indexOf('"', startQuote);
+      if (endQuote > startQuote) {
+        return list.substring(startQuote, endQuote);
+      }
+    }
+    return '';
+  }
   private tryUsbMode(engine: AudioKernel, mode: string, fd: number, attempt: number): void {
     if (engine.setUsbMode !== undefined) {
       engine.setUsbMode(mode);
     }
+    // 让 AO 报一次设备列表：能看到 usb/uac 设备时显式指定，成功率更高
+    setTimeout((): void => {
+      if (engine.listAudioDevices !== undefined) {
+        const list: string = engine.listAudioDevices();
+        if (list.length > 0) {
+          this.appendPlayLog('[RzdUsb] 设备列表=' + list);
+          const picked: string = this.pickUsbDeviceName(list);
+          if (picked.length > 0 && engine.setAudioDevice !== undefined) {
+            engine.setAudioDevice(picked);
+          }
+        }
+      }
+    }, 250);
     setTimeout((): void => {
       const ao: string = engine.currentAo !== undefined ? engine.currentAo() : '';
       this.appendPlayLog('[RzdUsb] 模式 ' + mode + ' 校验 current-ao=' + ao);
@@ -1569,6 +1610,9 @@ export class MediaService {
       }
       if (engine.currentAo !== undefined) {
         this.appendPlayLog('[RzdUsb] 诊断 current-ao=' + engine.currentAo());
+      }
+      if (engine.listAudioDevices !== undefined) {
+        this.appendPlayLog('[RzdUsb] 诊断 设备列表=' + engine.listAudioDevices());
       }
       if (engine.audioOutParams !== undefined) {
         this.appendPlayLog('[RzdUsb] 诊断 输出参数=' + engine.audioOutParams());
