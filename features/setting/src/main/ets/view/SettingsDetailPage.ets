@@ -247,47 +247,31 @@ export struct SettingsDetailPage {
   }
   /** 主题设置最下面的「自定义 Tab 栏」（只允许调整「现在就听」「回响」）。 */
   /** 主题设置最下面的「自定义 Tab 栏」：只保留标题、两行开关、顺序三块。 */
+  /** 主题设置最下面的「自定义 Tab 栏」。 */
   @Builder
   private TabBarCustomSection() {
-    Column({ space: 10 }) {
+    Column() {
       this.SubTitle('自定义 Tab 栏')
-      Row() {
-        Text('回响')
-          .fontSize(14)
-          .fontColor($r('app.color.font_primary'))
-          .layoutWeight(1)
-        this.CapsuleSelector(this.onOffOptions, this.tabShowEcho ? 0 : 1,
-          (index: number) => {
-            this.tabShowEcho = index === 0;
-            if (!this.tabShowNow && !this.tabShowEcho) {
-              this.tabShowNow = true;
-            }
-            this.saveTabBarConfig();
-          })
-      }
-      .width('100%')
-      Row() {
-        Text('现在就听')
-          .fontSize(14)
-          .fontColor($r('app.color.font_primary'))
-          .layoutWeight(1)
-        this.CapsuleSelector(this.onOffOptions, this.tabShowNow ? 0 : 1,
-          (index: number) => {
-            this.tabShowNow = index === 0;
-            if (!this.tabShowNow && !this.tabShowEcho) {
-              this.tabShowEcho = true;
-            }
-            this.saveTabBarConfig();
-          })
-      }
-      .width('100%')
-      Row() {
-        Text('两个页签的顺序')
-          .fontSize(14)
-          .fontColor($r('app.color.font_primary'))
-          .layoutWeight(1)
-      }
-      .width('100%')
+      // 先回响、再现在就听（与用户给的顺序一致）；标签独占一行，避免被开关挤没
+      this.SubTitle('回响')
+      this.CapsuleSelector(this.onOffOptions, this.tabShowEcho ? 0 : 1,
+        (index: number) => {
+          this.tabShowEcho = index === 0;
+          if (!this.tabShowNow && !this.tabShowEcho) {
+            this.tabShowNow = true;
+          }
+          this.saveTabBarConfig();
+        })
+      this.SubTitle('现在就听')
+      this.CapsuleSelector(this.onOffOptions, this.tabShowNow ? 0 : 1,
+        (index: number) => {
+          this.tabShowNow = index === 0;
+          if (!this.tabShowNow && !this.tabShowEcho) {
+            this.tabShowEcho = true;
+          }
+          this.saveTabBarConfig();
+        })
+      this.SubTitle('两个页签的顺序')
       this.CapsuleSelector(['现在就听在前', '回响在前'], this.tabNowFirst ? 0 : 1,
         (index: number) => {
           this.tabNowFirst = index === 0;
@@ -295,8 +279,7 @@ export struct SettingsDetailPage {
         })
     }
     .width('100%')
-    .alignItems(HorizontalAlign.Start)
-    .padding({ left: 16, right: 16, top: 8, bottom: 10 })
+    .padding({ left: 16, right: 16, top: 4, bottom: 8 })
     .borderRadius($r('sys.float.corner_radius_level12'))
     .backgroundColor($r('app.color.card_background'))
   }
@@ -1385,15 +1368,19 @@ export struct SettingsDetailPage {
             })
 
           this.SubTitle('USB 独占输出')
-          // ★ 开关始终可见（关掉时只收起下面的状态与按钮，避免整个选项消失）
-          if (UsbAudioService.getInstance().state.present) {
-            this.CapsuleSelector(this.onOffOptions, this.usbExclusive ? 0 : 1,
-              (index: number) => {
-                const enabled: boolean = index === 0;
-                this.usbExclusive = enabled;
-                void MediaService.getInstance().applyUsbExclusive(enabled);
-              })
-          } else {
+          // ★ 开关常显（无 DAC 也能看到）；下面的状态行与两个按钮只在"开启"时出现
+          this.CapsuleSelector(this.onOffOptions, this.usbExclusive ? 0 : 1,
+            (index: number) => {
+              const enabled: boolean = index === 0;
+              this.usbExclusive = enabled;
+              void MediaService.getInstance().applyUsbExclusive(enabled);
+            })
+          if (this.usbExclusive) {
+            Text(this.usbStatusText())
+              .fontSize(12)
+              .fontColor($r('app.color.font_tertiary'))
+              .width('100%')
+              .margin({ top: 6 })
             Row({ space: 10 }) {
               Button('重新扫描')
                 .height(34)
@@ -1413,13 +1400,6 @@ export struct SettingsDetailPage {
                 })
             }
             .margin({ top: 6 })
-          }
-          if (this.usbExclusive) {
-            Text(this.usbStatusText())
-              .fontSize(12)
-              .fontColor($r('app.color.font_tertiary'))
-              .width('100%')
-              .margin({ top: 6 })
           }
         }
         .width('100%')
