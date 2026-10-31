@@ -201,6 +201,26 @@ export class MpvAudioEngine implements AudioKernel {
    * @returns 当前实际生效的音频输出后端（mpv 属性 `current-ao`，例如 `usb-exclusive` / `ohaudio`）。
    * 用来验证"独占有没有真的生效"，不做任何假设。
    */
+  /**
+   * @returns 实际输出参数（采样率 / 格式 / 声道），来自 mpv 的 `audio-out-params` 系列属性。
+   * 独占模式下若这里显示的是 DAC 支持的原始采样率（而不是被系统重采样的 48k），即为 bit-perfect 证据。
+   */
+  audioOutParams(): string {
+    const rate: string = this.read('audio-params/samplerate');
+    const fmt: string = this.read('audio-params/format');
+    const ch: string = this.read('audio-params/channel-count');
+    const parts: string[] = [];
+    if (rate.length > 0) {
+      parts.push(rate + ' Hz');
+    }
+    if (fmt.length > 0) {
+      parts.push(fmt);
+    }
+    if (ch.length > 0) {
+      parts.push(ch + 'ch');
+    }
+    return parts.join(' · ');
+  }
   currentAo(): string {
     const ao: string = this.read('current-ao');
     return ao.length > 0 ? ao : this.read('ao');

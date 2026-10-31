@@ -202,7 +202,10 @@ export struct SettingsDetailPage {
   private usbStatusText(): string {
     const st: UsbAudioState = UsbAudioService.getInstance().state;
     if (st.connected) {
-      return '已连接：' + st.productName + '（' + st.vidPid + '，fd=' + st.fd + '）· ' + st.capabilityText;
+      const outParams: string = AppStorage.get<string>('rzd_usb_out_params') ?? '';
+      const extra: string = outParams.length > 0 ? ' · 输出 ' + outParams : '';
+      return '已连接：' + st.productName + '（' + st.vidPid + '，fd=' + st.fd + '）· ' +
+        st.capabilityText + extra;
     }
     if (st.present) {
       return st.productName + '（' + st.vidPid + '）· ' + st.statusText;

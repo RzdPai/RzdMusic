@@ -1292,6 +1292,14 @@ export class MediaService {
         if (pitch !== 0 || eq[0] !== 0 || eq[1] !== 0 || eq[2] !== 0 || eq[3] !== 0 || eq[4] !== 0) {
           engine.applyTuning(eq, pitch, effectsFromJson(store.getAudioEffects()));
         }
+        // ★ 换歌会重建内核实例：如果 USB 独占处于开启且设备仍在，重新把 fd 交给新实例
+        if (MusicStoreService.getInstance().getUsbExclusive() && UsbAudioService.getInstance().state.connected) {
+          const usbFd: number = UsbAudioService.getInstance().currentFd();
+          if (usbFd > 0 && engine.setUsbFd !== undefined) {
+            engine.setUsbFd(usbFd);
+            this.appendPlayLog('[RzdUsb] 换歌后重新应用独占 fd=' + usbFd);
+          }
+        }
         if (playedGen >= 0) {
           engine.start();
           engine.setVolume(1);
@@ -1487,6 +1495,11 @@ export class MediaService {
         }
         const ao: string = engine.currentAo();
         this.appendPlayLog('[RzdUsb] 校验 current-ao=' + ao);
+        if (ao.indexOf('usb') >= 0 && engine.audioOutParams !== undefined) {
+          const params: string = engine.audioOutParams();
+          AppStorage.setOrCreate('rzd_usb_out_params', params);
+          this.appendPlayLog('[RzdUsb] 实际输出参数 ' + params);
+        }
         if (ao.indexOf('usb') < 0) {
           this.appendPlayLog('[RzdUsb] 独占未生效（current-ao=' + ao + '）→ 回落普通输出');
           this.toast('该设备未能进入 USB 独占（已回落普通输出）');

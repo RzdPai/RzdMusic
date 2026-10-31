@@ -88,6 +88,8 @@ export interface AudioKernel {
   setUsbFd?(fd: number): void;
   /** @returns 当前实际生效的音频输出后端名（用于验证独占是否真的生效）。 */
   currentAo?(): string;
+  /** @returns 实际输出参数（采样率/格式/声道），用于展示 bit-perfect 证据。 */
+  audioOutParams?(): string;
 }
 
 /** 内核种类 → 文案。 */
