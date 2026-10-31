@@ -9216,7 +9216,8 @@ export struct PlaybackPage {
             //                  = `lyricMetaLeftInset()` 已经在这条链上生效，不需要再抄一遍 margin）
             //   两个等式都不经过实测、不经过 `estBoxHVp()`/`metaOffsetY()` ⇒ 完整推导见
             //   `MiniLyricLinesBlock()` 的 JSDoc。
-            this.MiniLyricLinesBlock()
+        // ★ 2026-11-01（对比无界）：无界单列没有这行小歌词预览，它就是截图里重复的"雨爱（Live） 马嘉祺、丁程鑫"
+        // this.MiniLyricLinesBlock()
           }
           // ★ 定高容器（客户口径「让居中盒按容器高居中」）：文字列高度钉死 = 歌名行高 34。
           //   ① 小歌词是**溢出**的兄弟（34 的盒装不下 34+57），不参与这个 34 ⇒ 子节点个数/高度变化
