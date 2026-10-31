@@ -1281,12 +1281,24 @@ export struct SettingsDetailPage {
             .fontColor($r('app.color.font_tertiary'))
             .width('100%')
             .margin({ bottom: 6 })
-          this.CapsuleSelector(this.onOffOptions, this.usbExclusive ? 0 : 1,
-            (index: number) => {
-              const enabled: boolean = index === 0;
-              this.usbExclusive = enabled;
-              void MediaService.getInstance().applyUsbExclusive(enabled);
-            })
+            // ★ 有设备才给开关；没有设备时给「重新扫描」，避免"开了也没声"
+            if (UsbAudioService.getInstance().state.present) {
+              this.CapsuleSelector(this.onOffOptions, this.usbExclusive ? 0 : 1,
+                (index: number) => {
+                  const enabled: boolean = index === 0;
+                  this.usbExclusive = enabled;
+                  void MediaService.getInstance().applyUsbExclusive(enabled);
+                })
+            } else {
+              Button('重新扫描 USB 设备')
+                .height(36)
+                .fontSize(14)
+                .backgroundColor($r('app.color.background_secondary'))
+                .fontColor($r('app.color.font_primary'))
+                .onClick((): void => {
+                  void UsbAudioService.getInstance().refresh();
+                })
+            }
                  }
         .width('100%')
         .padding({ left: 16, right: 16, top: 4, bottom: 8 })

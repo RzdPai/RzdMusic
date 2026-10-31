@@ -198,6 +198,12 @@ export class MpvAudioEngine implements AudioKernel {
    * @param fd `usbManager.getFileDescriptor()` 拿到的设备 fd；-1 表示关闭独占。
    */
   setUsbFd(fd: number): void {
+    // 切换输出后端会让音频链路重建：先记住位置，切完回跳，避免"切独占就回到 0 秒"
+    const posMs: number = this.position();
+    const wasPlaying: boolean = this.isPlaying();
+    if (wasPlaying) {
+      this.pause();
+    }
     if (fd > 0) {
       // 严格模式：不做格式协商、关掉音效与重采样，尽量 bit-perfect
       this.write('usb-exclusive-compatible', 'no');
@@ -207,6 +213,13 @@ export class MpvAudioEngine implements AudioKernel {
     } else {
       this.write('ao', 'ohaudio');
       appendPlayLog('[RzdUsb] 已回落 ao=ohaudio');
+    }
+    if (posMs > 300 && this.isPrepared()) {
+      this.seekTo(posMs);
+      appendPlayLog('[RzdUsb] 输出切换后回跳到 ' + Math.round(posMs) + 'ms');
+    }
+    if (wasPlaying) {
+      this.start();
     }
   }
   applyUsbOutput(enabled: boolean): void {
