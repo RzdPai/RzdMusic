@@ -184,6 +184,32 @@ export class MpvAudioEngine implements AudioKernel {
     return this.prepared;
   }
 
+  /**
+   * 打印"起播为什么没就绪"的关键状态（mpv 属性），给 12s 看门狗用。
+   * 只读属性，不改任何行为。
+   */
+  probeState(): string {
+    return 'idle-active=' + this.read('idle-active') +
+      ' core-idle=' + this.read('core-idle') +
+      ' pause=' + this.read('pause') +
+      ' eof=' + this.read('eof-reached') +
+      ' path=' + this.read('path').substring(0, Math.min(60, this.read('path').length)) +
+      ' demuxer=' + this.read('demuxer') +
+      ' cache=' + this.read('demuxer-cache-state');
+  }
+
+  /**
+   * 起播前的网络参数：UA / Referer / 超时 / 重连。
+   * 抖音系直链与第三方代理常因 UA/Referer 缺失被拒，这里统一给一套常见值。
+   */
+  prepareNetworkOptions(): void {
+    this.write('user-agent', 'Mozilla/5.0 (Linux; HarmonyOS) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36');
+    this.write('http-header-fields', 'Referer: https://www.douyin.com/, Origin: https://www.douyin.com');
+    this.write('network-timeout', '15');
+    this.write('stream-lavf-o', 'reconnect=1,reconnect_streamed=1,reconnect_delay_max=2');
+    appendPlayLog('[RzdMpv] 网络参数已设置（UA/Referer/超时/重连）');
+  }
+
   describeStream(): string {
     return 'codec=' + this.read('audio-codec-name') + ' format=' + this.read('file-format') +
       ' ao=' + this.read('current-ao');

@@ -88,6 +88,10 @@ export interface AudioKernel {
   currentAo?(): string;
   /** @returns 实际输出参数（采样率/格式/声道），用于展示 bit-perfect 证据。 */
   audioOutParams?(): string;
+  /** 起播前设置 UA/Referer/超时/重连等网络参数。 */
+  prepareNetworkOptions?(): void;
+  /** @returns 起播失败时的关键状态（诊断用）。 */
+  probeState?(): string;
   /** 设置独占后端：usb / ohaudio / off。 */
   setUsbMode?(mode: string): void;
   /** @returns 可用音频输出驱动列表（诊断用）。 */

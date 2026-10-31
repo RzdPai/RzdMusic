@@ -1213,6 +1213,8 @@ export class MediaService {
       if (this.ijkEngine !== engine || engine.isPrepared()) {
         return;
       }
+      this.appendPlayLog('[RzdKernel] 状态 ' + (engine.probeState !== undefined ? engine.probeState() : 'n/a'));
+      void this.probeUrlReachability(this.ijkUrl);
       this.appendPlayLog('[RzdKernel] 12s 未就绪（静默失败）→ 重新装载');
       this.markIjkFail();
       this.releaseIjk();
@@ -1366,6 +1368,10 @@ export class MediaService {
       }
     });
     this.armIjkWatchdog(engine);
+    // 起播前统一设置 UA/Referer/超时/重连（抖音系直链与代理常因缺 UA/Referer 被拒）
+    if (engine.prepareNetworkOptions !== undefined) {
+      engine.prepareNetworkOptions();
+    }
     engine.prepare(url);
   }
 
@@ -1423,6 +1429,37 @@ export class MediaService {
   }
 
   /** ijk 播放失败累计；达到 2 次自动降级到系统播放器。 */
+  /**
+   * 用官方 http 模块探测一个 URL 是否可达（只取 1 字节，避免拉流）。
+   * 用来区分"网络/代理不可达"与"mpv 解析失败"——这是汽水 12s 静默失败的关键证据。
+   * @param url 待探测地址。
+   */
+  private async probeUrlReachability(url: string): Promise<void> {
+    if (url.length === 0) {
+      return;
+    }
+    try {
+      const httpRequest = http.createHttp();
+      const resp: http.HttpResponse = await httpRequest.request(url, {
+        method: http.RequestMethod.GET,
+        readTimeout: 6000,
+        connectTimeout: 6000,
+        header: {
+          'Range': 'bytes=0-1',
+          'User-Agent': 'Mozilla/5.0 (Linux; HarmonyOS) AppleWebKit/537.36 Chrome/120.0 Safari/537.36'
+        }
+      });
+      this.appendPlayLog('[RzdProbe] 可达性 code=' + resp.responseCode + ' len=' +
+        (typeof resp.result === 'string' ? (resp.result as string).length : -1) + ' url=' +
+        url.substring(0, Math.min(60, url.length)));
+      httpRequest.destroy();
+    } catch (err) {
+      const e = err as BusinessError;
+      this.appendPlayLog('[RzdProbe] 不可达 code=' + e.code + ' msg=' + e.message +
+        ' url=' + url.substring(0, Math.min(60, url.length)));
+    }
+  }
+
   private markIjkFail(): void {
     // ★ 2026-10-31：mpv 已是唯一内核，**不再做"连续失败就永久降级"** ——
     //   那个标记会把汽水永久踢回 AVPlayer，而 AVPlayer 打不开星海给的代理链（5411001 Cannot Find Host），
