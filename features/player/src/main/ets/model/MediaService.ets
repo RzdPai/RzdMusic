@@ -1477,8 +1477,26 @@ export class MediaService {
       MusicStoreService.getInstance().setUsbExclusive(false);
       return;
     }
-    if (this.ijkEngine !== undefined && this.ijkActive && this.ijkEngine.setUsbFd !== undefined) {
-      this.ijkEngine.setUsbFd(fd);
+    const engine = this.ijkEngine;
+    if (engine !== undefined && this.ijkActive && engine.setUsbFd !== undefined) {
+      engine.setUsbFd(fd);
+      // ★ 800ms 后核对"实际生效的后端"：只要不是 usb-exclusive 就当作失败，回落并提示，不假装成功
+      setTimeout((): void => {
+        if (engine.currentAo === undefined) {
+          return;
+        }
+        const ao: string = engine.currentAo();
+        this.appendPlayLog('[RzdUsb] 校验 current-ao=' + ao);
+        if (ao.indexOf('usb') < 0) {
+          this.appendPlayLog('[RzdUsb] 独占未生效（current-ao=' + ao + '）→ 回落普通输出');
+          this.toast('该设备未能进入 USB 独占（已回落普通输出）');
+          MusicStoreService.getInstance().setUsbExclusive(false);
+          UsbAudioService.getInstance().disconnect();
+          if (engine.setUsbFd !== undefined) {
+            engine.setUsbFd(-1);
+          }
+        }
+      }, 800);
     } else {
       this.appendPlayLog('[RzdUsb] 已就绪 fd=' + fd + '（下次起播生效）');
     }

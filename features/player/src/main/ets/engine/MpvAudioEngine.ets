@@ -197,6 +197,14 @@ export class MpvAudioEngine implements AudioKernel {
    * 启用/关闭 USB 独占输出。
    * @param fd `usbManager.getFileDescriptor()` 拿到的设备 fd；-1 表示关闭独占。
    */
+  /**
+   * @returns 当前实际生效的音频输出后端（mpv 属性 `current-ao`，例如 `usb-exclusive` / `ohaudio`）。
+   * 用来验证"独占有没有真的生效"，不做任何假设。
+   */
+  currentAo(): string {
+    const ao: string = this.read('current-ao');
+    return ao.length > 0 ? ao : this.read('ao');
+  }
   setUsbFd(fd: number): void {
     // 切换输出后端会让音频链路重建：先记住位置，切完回跳，避免"切独占就回到 0 秒"
     const posMs: number = this.position();
