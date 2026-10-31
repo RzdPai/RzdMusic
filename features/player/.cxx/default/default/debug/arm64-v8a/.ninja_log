@@ -1,7 +1,7 @@
 # ninja log v7
-3	370	8151223682744749	build.ninja	5687d7e15b1d322f
-27	47	8151223654131261	clean	d39645f3b20a0ade
-35	1528	8151222987059686	CMakeFiles/mpvnative.dir/mpv_bridge.cpp.o	fb51d609ab2144cf
-1529	1693	8151223001996256	C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/build/default/intermediates/cmake/default/obj/arm64-v8a/libmpvnative.so	6c5aff424d50d68c
+3	370	8151235018142876	build.ninja	5687d7e15b1d322f
+5	25	8151234985993019	clean	d39645f3b20a0ade
 31	1597	8151223689094421	CMakeFiles/mpvnative.dir/mpv_bridge.cpp.o	fb51d609ab2144cf
 1598	1774	8151223704761145	C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/build/default/intermediates/cmake/default/obj/arm64-v8a/libmpvnative.so	6c5aff424d50d68c
+48	1488	8151235024710873	CMakeFiles/mpvnative.dir/mpv_bridge.cpp.o	fb51d609ab2144cf
+1489	1677	8151235039123164	C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/build/default/intermediates/cmake/default/obj/arm64-v8a/libmpvnative.so	6c5aff424d50d68c
