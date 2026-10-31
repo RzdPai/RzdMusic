@@ -30,7 +30,7 @@ import {
   
   buildBarBlurStyle,
    guardPlayerBack
-} from 'musicbasic';
+, immersiveMaterial, RzdMaterialStyle } from 'musicbasic';
 import {
   buildTitleMaterial,
   AmbientState,
@@ -869,12 +869,38 @@ export struct LocalMusicPage {
    * - ⚠️ 2026-10-20：点光（发光）按用户要求**已删除**，不要再加 `.visualEffect(...)`；
    * - **没有蓝色底**：删除用用户自定义主题色，其余文字走 `font_primary`。
    */
+  /**
+   * 多选底部操作条（光感版）。
+   * ★ 2026-10-31（用户：胶囊条透明看不清，要用光感）：按《新 API26 沉浸光感经验汇总》
+   *   `systemMaterial` 只在**受限槽位**渲染，页面 body 顶层自绘 Row 挂上去是 out of scope（=透明）。
+   *   所以这里套一个**空 Tabs 壳**（内容区恒 0，只剩 tabBar 槽），材质挂在**槽内那条 Row** 上；
+   *   壳宽按胶囊实际宽度收敛（不写 100%，否则会吞掉列表滑动），并去掉阴影（无背板托底时投影会糊在内容上）。
+   */
   @Builder
   private SelectionBar() {
-      Row() {
-     SelectionActionCell({
+    Tabs({ barPosition: BarPosition.End }) {
+      TabContent() {
+        Column()
+          .width(0)
+          .height(0)
+      }
+      .tabBar(this.SelectionBarSlot())
+    }
+    .barHeight(66)
+    .barBackgroundColor(Color.Transparent)
+    .barBackgroundBlurStyle(BlurStyle.NONE)
+    .width(360)
+    .height(66)
+    .align(Alignment.Center)
+  }
+
+  /** 槽内胶囊本体（材质挂这里才生效）。 */
+  @Builder
+  private SelectionBarSlot() {
+    Row() {
+      SelectionActionCell({
         icon: $r('sys.symbol.trash'),
-        label: this.selectedCount() > 0 ? `删除(${this.selectedCount()})` : '删除',
+        label: this.selectedCount() > 0 ? ('删除(' + this.selectedCount() + ')') : '删除',
         tint: this.themeState.color,
         onTap: (): void => {
           this.confirmRemove();
@@ -888,15 +914,14 @@ export struct LocalMusicPage {
           this.exitSelectionMode();
         }
       })
-      }
-    // ★ 恢复最初那版（Row + borderRadius + systemMaterial，药丸玻璃）
+    }
     .width('100%')
     .height(66)
-    .borderRadius(33)
-    .systemMaterial(immersiveMedium())
+    .borderRadius(66 / 2)
+    .systemMaterial(immersiveMaterial(RzdMaterialStyle.THIN))
     .border({ width: 0.5, color: $r('sys.color.comp_divider') })
-    .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 8 })
   }
+
 
   /** 单条本地歌行 */
   @Builder
