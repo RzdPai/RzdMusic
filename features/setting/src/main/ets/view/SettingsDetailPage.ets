@@ -1382,39 +1382,41 @@ export struct SettingsDetailPage {
             })
 
           this.SubTitle('USB 独占输出')
-          Text(this.usbStatusText())
-            .fontSize(12)
-            .fontColor($r('app.color.font_tertiary'))
-            .width('100%')
-            .margin({ bottom: 6 })
-            // ★ 有设备才给开关；没有设备时给「重新扫描」，避免"开了也没声"
-            if (UsbAudioService.getInstance().state.present) {
-              this.CapsuleSelector(this.onOffOptions, this.usbExclusive ? 0 : 1,
-                (index: number) => {
-                  const enabled: boolean = index === 0;
-                  this.usbExclusive = enabled;
-                  void MediaService.getInstance().applyUsbExclusive(enabled);
-                })
-            } else {
-              Row({ space: 10 }) {
-                Button('重新扫描')
-                  .height(34)
-                  .fontSize(13)
-                  .backgroundColor($r('app.color.background_secondary'))
-                  .fontColor($r('app.color.font_primary'))
-                  .onClick((): void => {
-                    void UsbAudioService.getInstance().refresh();
+          if (this.usbExclusive) {
+            Text(this.usbStatusText())
+              .fontSize(12)
+              .fontColor($r('app.color.font_tertiary'))
+              .width('100%')
+              .margin({ bottom: 6 })
+              // ★ 有设备才给开关；没有设备时给「重新扫描」，避免"开了也没声"
+              if (UsbAudioService.getInstance().state.present) {
+                this.CapsuleSelector(this.onOffOptions, this.usbExclusive ? 0 : 1,
+                  (index: number) => {
+                    const enabled: boolean = index === 0;
+                    this.usbExclusive = enabled;
+                    void MediaService.getInstance().applyUsbExclusive(enabled);
                   })
-                Button('USB 诊断')
-                  .height(34)
-                  .fontSize(13)
-                  .backgroundColor($r('app.color.background_secondary'))
-                  .fontColor($r('app.color.font_primary'))
-                  .onClick((): void => {
-                    void MediaService.getInstance().diagnoseUsb();
-                  })
-              }
-              .margin({ top: 6 })
+              } else {
+                Row({ space: 10 }) {
+                  Button('重新扫描')
+                    .height(34)
+                    .fontSize(13)
+                    .backgroundColor($r('app.color.card_background'))
+                    .fontColor($r('app.color.font_primary'))
+                    .onClick((): void => {
+                      void UsbAudioService.getInstance().refresh();
+                    })
+                  Button('USB 诊断')
+                    .height(34)
+                    .fontSize(13)
+                    .backgroundColor($r('app.color.card_background'))
+                    .fontColor($r('app.color.font_primary'))
+                    .onClick((): void => {
+                      void MediaService.getInstance().diagnoseUsb();
+                    })
+                }
+                .margin({ top: 6 })
+          }
             }
         }
         .width('100%')
@@ -1712,6 +1714,8 @@ export struct SettingsDetailPage {
         .padding({ left: 16, right: 16, top: 4, bottom: 8 })
         .borderRadius($r('sys.float.corner_radius_level12'))
         .backgroundColor($r('app.color.card_background'))
+        // ★ 自定义 Tab 栏（放最下面）
+        this.TabBarCustomSection()
       }
       .width('100%')
       .padding({ left: 20, right: 20, top: 12, bottom: SETTINGS_PANEL_BOTTOM_VP })
@@ -1725,7 +1729,6 @@ export struct SettingsDetailPage {
       // ★ 2026-10-29（用户）：二级设置页滚动要有回弹
       .edgeEffect(EdgeEffect.Spring)
       // ★ 2026-10-31：自定义 Tab 栏（放最下面，只允许调整「现在就听」「回响」）
-      this.TabBarCustomSection()
   }
 
   /**
