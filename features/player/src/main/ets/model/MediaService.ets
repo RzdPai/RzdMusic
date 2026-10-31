@@ -1177,6 +1177,8 @@ export class MediaService {
   private ijkPollTimer: number = -1;
   /** ijk 静默失败看门狗：prepare 后 N 秒既没 onPrepared 也没 onError 就降级。 */
   private ijkWatchdog: number = -1;
+  /** 本轮装载是否已做过"原地重试 mpv"（避免无限重试）。 */
+  private ijkInlineRetryDone: boolean = false;
   /** 上一次下发的 af 链（相同则不重复下发，避免拖滑杆刷爆日志）。 */
   private lastAfChain: string = '';
   /** 当前是否由 ijk 引擎出声（play/pause/seek 分支据此路由）。 */
@@ -1214,15 +1216,22 @@ export class MediaService {
         return;
       }
       this.appendPlayLog('[RzdKernel] 状态 ' + (engine.probeState !== undefined ? engine.probeState() : 'n/a'));
-      void this.probeUrlReachability(this.ijkUrl);
-      this.appendPlayLog('[RzdKernel] 12s 未就绪（静默失败）→ 重新装载');
+      // ★ 2026-10-31：先原地重试一次 mpv（同一直链），确认是网络/代理问题再放弃；
+      //   以前这里直接 release 并 loadCurrentIntoPlayer ⇒ 落到 AVPlayer（5411001）→ 跳歌，把一次失败放大成整首跳过。
       this.markIjkFail();
       this.releaseIjk();
+      if (!this.ijkInlineRetryDone && this.ijkUrl.length > 0) {
+        this.ijkInlineRetryDone = true;
+        this.appendPlayLog('[RzdKernel] 原地重试 mpv（不再交 AVPlayer）');
+        this.startIjkPlayback(this.ijkUrl);
+        return;
+      }
+      this.appendPlayLog('[RzdKernel] 原地重试仍失败 → 才走换源/下一首');
       this.loadCurrentIntoPlayer();
     }, 12000);
   }
 
-  /** 停止看门狗。 */
+  /** 停止 mpv 看门狗。 */
   private clearIjkWatchdog(): void {
     if (this.ijkWatchdog >= 0) {
       clearInterval(this.ijkWatchdog);
@@ -2633,6 +2642,7 @@ export class MediaService {
    * @returns 本次请求的代次，调用方无需保存（`consumePlayIntent` 会校验）。
    */
   private beginLoadRequest(autoPlay: boolean): number {
+    this.ijkInlineRetryDone = false;
     this.loadGen = this.loadGen + 1;
     this.playWhenPrepared = autoPlay;
     this.lastLoadWantedPlay = autoPlay;
