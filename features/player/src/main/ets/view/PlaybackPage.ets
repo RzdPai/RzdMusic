@@ -6567,6 +6567,8 @@ export struct PlaybackPage {
               coverMuted: this.coverPublishHidden,
               panelLayout: true
             })
+      // ★ 单列封面也受无界 flatCoverEdge 预算约束，否则按列宽撑开会压住下方歌名/歌词/控制
+      .constraintSize({ maxHeight: this.coverSideVp(), maxWidth: this.coverSideVp() })
                 .onAreaChange((_o: Area, n: Area): void => {
                 })
           }
