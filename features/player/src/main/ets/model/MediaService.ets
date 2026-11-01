@@ -2815,6 +2815,14 @@ export class MediaService {
       this.ensureBackgroundAudioTask();
     }
     this.updateMusicIndex(musicIndex);
+    // ★ 2026-11-01（有人反馈"无法播放"）：内核地址已经解析好（日志里有 kernelUrl）时，
+    //   不能因为 AVPlayer 还没创建就 return —— 那会让 mpv 永远不启动，表现就是"点了不播"。
+    //   所以先走内核分支，再判 AVPlayer。
+    if (this.ijkUrl.length > 0) {
+      this.isFirst = false;
+      this.startIjkPlayback(this.ijkUrl);
+      return;
+    }
     if (!this.avPlayer) {
       // Defer play until initAudioPlayer creates AVPlayer; loadAsset is applied then.
       this.appendPlayLog('[播放] avPlayer 未就绪，挂起等待');
