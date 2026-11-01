@@ -1567,12 +1567,8 @@ export struct PlaybackPage {
       this.morphShrinkState().reset();
       this.releasePixelMapQuiet(pixmap);
       this.expandState.endSnapshotShrink();
-    // ★ 2026-11-01（用户反馈：连续开关几次后，展开动画期间没有背景）：
-    //   快照路径（path=snapshot）以前只复位 snapshotFlight，`coverPublishHidden` / `snapshotShrinkOwned` 残留成 1，
-    //   下一轮展开时"发布的封面/背景源"为空 ⇒ 形变那几帧没有背景。这里**两条路径统一完整复位**。
-    this.coverPublishHidden = false;
-    this.snapshotFlight = false;
-    this.expandState.clearSnapshotShrinkOwned();
+    // ⏪ 2026-11-01 回退：关闭收尾里无条件清 snapshotShrinkOwned 会让收缩层归属错乱（连开几次后播放页打不开），
+    //   这里只保留"开页失败安全"（aboutToAppear 里那段），关闭路径的复位仍交给原有 route-remove 分支。
       this.snapshotFlight = false;
       this.isClosing = false;
       ++this.closeGen;
