@@ -45,7 +45,9 @@ export struct SourceManagerList {
   @Event onToggle: (apiId: string) => void = (apiId: string): void => {};
   @Event onSelect: (apiId: string) => void = (apiId: string): void => {};
   @Event onDelete: (apiId: string) => void = (apiId: string): void => {};
-  @Event onCheckUpdate: (api: LXUserApiInfo) => void = (api: LXUserApiInfo): void => {};
+  @Event onCheckUpdate: (api: LXUserApiInfo) => void = (api: LXUserApiInfo): void => {}
+  /** ★ 2026-11-01（用户：左滑加分享，分享的是音源脚本文件本身）。 */
+  @Event onShare: (api: LXUserApiInfo) => void = (api: LXUserApiInfo): void => {};
   @Event onProbe: (apiId: string) => void = (apiId: string): void => {};
   @Event onMove: (dragId: string, targetId: string) => void = (dragId: string, targetId: string): void => {};
 
@@ -93,6 +95,9 @@ export struct SourceManagerList {
       })
       SwipeIcon($r('sys.symbol.arrow_clockwise'), '#1E88E5', (): void => {
         this.onCheckUpdate(api);
+      })
+      SwipeIcon($r('sys.symbol.share'), '#7B1FA2', (): void => {
+        this.onShare(api);
       })
       SwipeIcon($r('sys.symbol.trash'), '#E53935', (): void => {
         this.onDelete(api.id);

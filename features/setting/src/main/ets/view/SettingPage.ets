@@ -19,6 +19,8 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { common, ConfigurationConstant, Want } from '@kit.AbilityKit';
 import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
+import { systemShare } from '@kit.ShareKit';
+import { fileUri } from '@kit.CoreFileKit';
 import { http } from '@kit.NetworkKit';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, BarScrollHelper, RouterUrlConstants, BreakpointType, HomeSourceState, LocalCoverImage, LyricBlurState, LyricFontSizeState, MusicAppState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, WindowInfo, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, getWindowInfoState } from 'musicbasic';
@@ -1437,7 +1439,10 @@ export struct SettingPage {
             onSelect: (apiId: string): void => {
               this.selectLXSource(apiId);
             },
-            onDelete: (apiId: string): void => {
+            onShare: (api: LXUserApiInfo): void => {
+        this.shareSourceFile(api);
+      },
+      onDelete: (apiId: string): void => {
               this.deleteLXSource(apiId);
             },
             onCheckUpdate: (api: LXUserApiInfo): void => {
@@ -1480,6 +1485,42 @@ export struct SettingPage {
     .padding({ left: 20, right: 20, top: 24, bottom: 160 })
   }
 
+  /**
+   * 分享音源脚本文件本身（用户 2026-11-01：左滑「分享」分享的是脚本文件）。
+   * 做法：把 filesDir 里的脚本复制成 cache 下的「音源名_v版本.js」，再拉起系统分享面板。
+   * 排查关键字：`[RzdSourceShare]`。
+   */
+  private async shareSourceFile(api: LXUserApiInfo): Promise<void> {
+    try {
+      const ctx: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      const raw: string = await lxSourceManager.getScript(api.id);
+      if (raw.length === 0) {
+        this.getUIContext().getPromptAction().showToast({ message: '读不到脚本文件，无法分享', duration: 2000 });
+        return;
+      }
+      const bad: RegExp = new RegExp('[\\\\/:*?"<>|]', 'g');
+      const safeName: string = (api.name.length > 0 ? api.name : 'source').replace(bad, '_');
+      const ver: string = api.version.length > 0 ? ('_v' + api.version.replace(bad, '_')) : '';
+      const fileName: string = safeName + ver + '.js';
+      const path: string = ctx.cacheDir + '/' + fileName;
+      const file: fs.File = fs.openSync(path, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
+      fs.writeSync(file.fd, raw);
+      fs.closeSync(file);
+      const uri: string = fileUri.getUriFromPath(path);
+      const record: systemShare.SharedRecord = {
+        utd: 'general.file',
+        uri: uri,
+        title: fileName
+      };
+      const data: systemShare.SharedData = new systemShare.SharedData(record);
+      const controller: systemShare.ShareController = new systemShare.ShareController(data);
+      controller.show(ctx, { previewMode: systemShare.SharePreviewMode.DEFAULT });
+      hilog.info(0x0000, 'RzdSourceShare', '%{public}s', fileName + ' uri=' + uri);
+    } catch (err) {
+      hilog.error(0x0000, 'RzdSourceShare', '%{public}s', JSON.stringify(err).substring(0, 120));
+      this.getUIContext().getPromptAction().showToast({ message: '分享失败', duration: 2000 });
+    }
+  }
   private applyCustomColor(): void {
     this.applyThemeColor(this.customColor.trim());
     this.closeSettingSheet();
