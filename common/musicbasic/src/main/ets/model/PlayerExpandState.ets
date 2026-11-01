@@ -4499,6 +4499,15 @@ export class PlayerExpandState {
    * 瑙?{@link morphOverlayBridging} 椤堕儴閭ｆ璇存槑锛堝惁鍒欎細鍑虹幇涓ゅ紶灏侀潰鍚屾椂椋烇級銆?
    */
   /** @returns 銆岃繖涓€鍏虫槸鍚﹀綊蹇収銆嶁€斺€?鍙粰璇婃柇/鏃ュ織鐢紙浜嬩欢鏃ュ織 `CLO` 鐨?`ss=`锛夈€?*/
+  /**
+   * 清掉"快照层仍归快照所有"的标记。
+   * ★ 2026-11-01：关闭链路两条路径（live / snapshot）收尾时必须都清，否则下一轮展开时
+   *   发布的封面/背景源为空 ⇒ 形变期间没有背景（用户反馈"连续开关几次后展开没背景"）。
+   */
+  public clearSnapshotShrinkOwned(): void {
+    this.snapshotShrinkOwned = false;
+  }
+
   public snapshotShrinkOwnedFlag(): boolean {
     return this.snapshotShrinkOwned;
   }

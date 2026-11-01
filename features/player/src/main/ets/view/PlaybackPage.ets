@@ -1567,6 +1567,12 @@ export struct PlaybackPage {
       this.morphShrinkState().reset();
       this.releasePixelMapQuiet(pixmap);
       this.expandState.endSnapshotShrink();
+    // ★ 2026-11-01（用户反馈：连续开关几次后，展开动画期间没有背景）：
+    //   快照路径（path=snapshot）以前只复位 snapshotFlight，`coverPublishHidden` / `snapshotShrinkOwned` 残留成 1，
+    //   下一轮展开时"发布的封面/背景源"为空 ⇒ 形变那几帧没有背景。这里**两条路径统一完整复位**。
+    this.coverPublishHidden = false;
+    this.snapshotFlight = false;
+    this.expandState.clearSnapshotShrinkOwned();
       this.snapshotFlight = false;
       this.isClosing = false;
       ++this.closeGen;
@@ -3819,6 +3825,14 @@ export struct PlaybackPage {
 
   /** Seeds cover Resource from the current queue item. */
   aboutToAppear(): void {
+    // ★ 2026-11-01（P0 失败安全）：上一轮关闭若是快照路径且快照 miss，可能留下 coverPublishHidden=true /
+    //   snapshotShrinkOwned=true；这两种脏状态会让本页展开时"没有背景"。开页先无条件复位。
+    if (this.coverPublishHidden || this.expandState.snapshotShrinkOwnedFlag()) {
+      MusicStoreService.getInstance().appendRuntimeDiagnostic('[RzdBgPhase] open fail-safe reset coverHidden=' + (this.coverPublishHidden ? 1 : 0) + ' owned=' + (this.expandState.snapshotShrinkOwnedFlag() ? 1 : 0));
+      this.coverPublishHidden = false;
+      this.snapshotFlight = false;
+      this.expandState.clearSnapshotShrinkOwned();
+    }
     PlaybackPage.cancelPendingCloseForOpen();
     this.closeInstance = ++PlaybackPage.instanceSerial;
     // 闂佺绻愰悧鎰邦敊閸ャ劎鈻旈柍褜鍓熷?闁哄鏅滈悷銈囩博鐎涙ǜ浜滈柛顭戝亜閻︻垶寮堕悙璺盒撴俊鐐插€婚幐褔骞嶉鐣屾殸闂佸搫瀚烽崹浼村箺閵忋倕绾ч梽鍥儗?闂佹寧绋掑銊╁磻閿濆绀勭紓浣姑埅鐢碘偓娈垮枓閸?vs 婵炴垶鎸搁敃銉﹀垔濞差亜绠ラ柟鎯х－绾惧鏌ｉ妸銉ヮ仼閻忓浚鍨跺畷姘额敃閵忥紕娈ら梺?`pullDragging`闂?
