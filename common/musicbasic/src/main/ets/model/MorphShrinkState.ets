@@ -247,6 +247,18 @@ export class MorphShrinkState {
     this.translateX = 0;
     this.translateY = 0;
     this.pixmap = undefined;
+    // ★★★ 2026-11-01（跨会话残留 ②）：`reset()` 原来**不清 pending\***。
+    //   于是一条被撤销的关闭（`cancelPendingCloseForOpen`）会把
+    //   「那张 pixmap + 那个 onDone 回调」继续挂在共享状态里：
+    //     · 页面侧 60ms 兜底 `takePendingIfAny()` 仍为真 ⇒ 可能拿一张**已 release 的图**去起补间；
+    //     · 下一轮 `start()` 若拿到旧 `pendingDone`，收尾回调的还是**上一轮会话**。
+    //   `reset()` 是"这一会话作废"的唯一收口点 ⇒ pending 必须一起清（照无界 `reset` 的语义：
+    //   `pixmap=undefined` 之后没有任何"待启动"的东西）。
+    this.pendingPixmap = undefined;
+    this.pendingBox = undefined;
+    this.pendingWinW = 0;
+    this.pendingWinH = 0;
+    this.pendingDone = undefined;
   }
 
   /**

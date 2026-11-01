@@ -1204,6 +1204,12 @@ struct Index {
       return;
     }
     Logger.info(RzdShellLogTag, 'route: push player (animated=false, param.pull=true)');
+    // ★★★ 2026-11-01（「多开几次播放器打不开」）：**先登记新会话，再 push**。
+    //   播放页关闭收尾里有一条 64ms 存活自检（`RzdCloseState +64`），它按名字查栈；
+    //   只要用户在这 64ms 里点了播放条，它就会把**刚 push 进来的新页面**当成残留弹掉
+    //   （日志：`+64 re-pop` 紧跟一次 `OPN`）⇒ 下次点击以为"已经开着"就不再 push。
+    //   `notifyPlayerRoutePushed()` 做两件事：`openSerial++`（旧回调早退）+ 取消旧定时器。
+    PlaybackPage.notifyPlayerRoutePushed();
     this.pageIndexInfos.pushPath({
       name: RouterUrlConstants.PLAYER_PAGE,
       param: new PlayerRouteParam(true)

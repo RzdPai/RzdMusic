@@ -5412,6 +5412,13 @@ export class PlayerExpandState {
     this.morphClipHeight = 0;
     this.morphRadius = 0;
     this.morphContentOpacity = 1;
+    // ★ 2026-11-01（会话边界必须清 `pullMode`，否则"代码与注释长期不一致"）：
+    //   `pullOpenBegin()` 是唯一把它置真的地方（点击打开也走它），而**原来的 `morphReset()` 从不清**
+    //   ⇒ 第一次打开之后它永远是 true ⇒ `backgroundRevealOpacity()` 永远走 `pullBgOpacity()` 那条曲线，
+    //   点击打开/系统返回也按"上拉"的口径算背景（这就是历史注释里反复提到的"有时有有时没有"的土壤）。
+    //   现在按 `PlayerExpandState:4204` 那句既定口径收口：`pullOpenBegin` 置真 / `morphReset` 置假。
+    //   排查关键字：`RzdBgPhase mode=pull|content`。
+    this.pullMode = false;
     Logger.info(PlayerExpandState.logTag, 'morph reset');
   }
 
@@ -5534,6 +5541,16 @@ export class PlayerExpandState {
   @Trace public morphSquashY: number = 1;
 
   /**
+   * ★ 2026-11-01：挤压补间的**代次号**（只给 `squashLandAnim()` 自己用）。
+   *
+   * 挤压是"落地一记弹"，两段定时器（110ms 压下 / 110+320ms 回弹）都跑在
+   * **页面已经开始 pop** 之后 ⇒ 上一轮的定时器完全可能在下一轮会话里才落地。
+   * 代次号保证「旧的那一轮不许再写 `morphSquashY`」，与 `morphGen` 同一套思路。
+   * 排查关键字：`RzdSquash`。
+   */
+  private squashGen: number = 0;
+
+  /**
    * 璺戜竴娆℃棤鐣岀殑"钀藉湴鎸ゅ帇 鈫?鍥炲脊"锛坄squashLand` 鐨勯偅涓ゆ潯琛ラ棿锛夈€?
    *
    * 鈿狅笍 涓ゆ潯**鍏辩敤鍚屼竴涓?`animateTo` 闂寘鍐欏悓涓€涓瓧娈?*鏄埢鎰忕殑锛歚morphSquashY` 鍙槸涓€鏉?
@@ -5549,26 +5566,60 @@ export class PlayerExpandState {
       this.morphSquashY = 1;
       return;
     }
+    // ★★★ 2026-11-01（「连续开关几次后，展开动画期间没背景」的根因之一）：
+    //   本条补间的**回弹那半截**是"先 `setTimeout(110)` 再 `animateTo(320)`"——
+    //   而关闭链的调用顺序是 `squashLandAnim()` → `isShowPlay=false` → 页面 pop，
+    //   110ms 之后这个闭包跑在**已经卸载的页面**上：`ui.animateTo` 一旦不执行闭包（UIContext 已失效），
+    //   `morphSquashY = 1` 这次写入就**永久丢失**，状态卡在 0.86。
+    //   卡住之后 `pullBgOpacity().paintable` 里那条 `morphSquashY === 1` 恒假
+    //   ⇒ 每一轮展开动画期间背景透明度都是 0 ⇒ 甲方报的「展开动画期间没背景」。
+    //   两层修：① 代次号丢弃过期回弹（`squashGen`）；② 回弹结束再补一次**不经 animateTo 的**
+    //   硬写兜底（写不进去就强制写回 1）。排查关键字：`RzdSquash restore-guard`。
+    const gen: number = this.squashGen + 1;
+    this.squashGen = gen;
     this.morphSquashY = 1;
-    // 鈶?鍘嬪埌 SQUASH_Y锛?10ms锛孍ASE_OUT_STR锛?
+    // ① 鍘嬪埌 SQUASH_Y锛?10ms锛孍ASE_OUT_STR锛?
     ui.animateTo({
       duration: PlayerExpandState.SQUASH_MS,
       curve: curves.cubicBezierCurve(0.23, 1.0, 0.32, 1.0)
     }, (): void => {
+      if (gen !== this.squashGen) {
+        return;
+      }
       this.morphSquashY = PlayerExpandState.SQUASH_Y;
     });
-    // 鈶?寮瑰洖 1锛?20ms锛宍cubic-bezier(0.34, 1.56, 0.64, 1)` 鈥斺€?閭ｆ潯 >1 鐨勬帶鍒剁偣灏辨槸"杩囧啿鍥炲脊"锛?
+    // ② 寮瑰洖 1锛?20ms锛宍cubic-bezier(0.34, 1.56, 0.64, 1)`
     setTimeout((): void => {
-      ui.animateTo({
-        duration: PlayerExpandState.SQUASH_BACK_MS,
-        curve: curves.cubicBezierCurve(0.34, 1.56, 0.64, 1)
-      }, (): void => {
-        this.morphSquashY = 1;
-      });
+      if (gen !== this.squashGen) {
+        return;
+      }
+      try {
+        ui.animateTo({
+          duration: PlayerExpandState.SQUASH_BACK_MS,
+          curve: curves.cubicBezierCurve(0.34, 1.56, 0.64, 1)
+        }, (): void => {
+          if (gen === this.squashGen) {
+            this.morphSquashY = 1;
+          }
+        });
+      } catch (error) {
+        Logger.warn(PlayerExpandState.LOG_TAG, `RzdSquash back failed: ${error}`);
+      }
+      // ②′ 兜底：不论动画有没有真的跑（页面可能已经卸载），静止值必须是 1。
+      setTimeout((): void => {
+        if (gen !== this.squashGen) {
+          return;
+        }
+        if (this.morphSquashY !== 1) {
+          Logger.warn(PlayerExpandState.LOG_TAG,
+            `RzdSquash restore-guard stuck=${this.morphSquashY.toFixed(3)} -> 1 (gen=${gen})`);
+          this.morphSquashY = 1;
+        }
+      }, PlayerExpandState.SQUASH_BACK_MS + 40);
     }, PlayerExpandState.SQUASH_MS);
     Logger.info(PlayerExpandState.LOG_TAG,
       `RzdSquash land squashY=${PlayerExpandState.SQUASH_Y} down=${PlayerExpandState.SQUASH_MS}ms ` +
-      `back=${PlayerExpandState.SQUASH_BACK_MS}ms easing=(0.34,1.56,0.64,1)`);
+      `back=${PlayerExpandState.SQUASH_BACK_MS}ms easing=(0.34,1.56,0.64,1) gen=${gen}`);
   }
 
   /** @returns 鏄惁鍏佽璺熸墜涓婃媺锛堝鏍?`pullGestureAliveOf`锛?*浠?ENTERING**锛夈€?*/

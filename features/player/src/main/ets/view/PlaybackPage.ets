@@ -363,14 +363,48 @@ export struct PlaybackPage {
   /** 把静态缓存里那一张拿回本实例（key 必须与当前曲目一致）。命中返回 true。 */
   private adoptSharedMesh(): boolean {
     const key: string = this.currentMeshKey();
-    if (key.length === 0 || PlaybackPage.bgCacheKey !== key || PlaybackPage.bgCachePm === undefined) {
+    if (key.length === 0 || PlaybackPage.bgCacheKey !== key) {
       return false;
     }
-    this.meshSrc = PlaybackPage.bgCachePm;
+    // ★★★ 2026-11-01（跨会话残留 ④「取用前判活」）：见 {@link sharedMeshAlive}。
+    if (!PlaybackPage.sharedMeshAlive()) {
+      appendPlayLog(`[RzdBgPhase] shared-mesh dead key=${key.substring(0, 48)} -> dropped`);
+      PlaybackPage.bgCachePm = undefined;
+      PlaybackPage.bgCacheKey = '';
+      return false;
+    }
+    const pm: image.PixelMap | undefined = PlaybackPage.bgCachePm;
+    if (pm === undefined) {
+      return false;
+    }
+    this.meshSrc = pm;
     this.meshTrackKey = key;
     this.meshSrcVersion = this.meshSrcVersion + 1;
     appendPlayLog(`[RzdBgPhase] shared-mesh adopt ver=${this.meshSrcVersion}`);
     return true;
+  }
+  /**
+   * ★ 2026-11-01（跨会话残留 ④）：**静态背景缓存里那张 PixelMap 还活着吗**。
+   *
+   * 为什么必须判：`onDisAppear` 里会 `releasePixelMapQuiet(this.meshSrc)`，而
+   * `commitMeshSource()` 把**同一个对象**同时挂到了 `PlaybackPage.bgCachePm`（进程级）上
+   * ⇒ 页面一卸载，静态缓存里就留着一份**已 release** 的 PixelMap。下一个实例
+   * `adoptSharedMesh()` 照样把它交给 `MeshCoverBg` ⇒ 画不出任何东西 =「展开动画期间没背景」，
+   * 且要等重新下载解码才恢复（正是"连开几次之后"才出现的形态）。
+   * 判据：**取用前判活**，死掉的缓存整条丢掉（退化为重新下载，绝不会画一张死图）。
+   * 排查关键字：`RzdBgPhase shared-mesh dead`。
+   */
+  private static sharedMeshAlive(): boolean {
+    const pm: image.PixelMap | undefined = PlaybackPage.bgCachePm;
+    if (pm === undefined) {
+      return false;
+    }
+    try {
+      // `PixelMap.isReleased()`（API 22+）；老设备没有这个方法时按"不活"处理（安全降级）。
+      return !pm.isReleased();
+    } catch (error) {
+      return false;
+    }
   }
   /**
    * ★★★ 2026-10-18（用户实测「点击展开时背景**似乎是上一首歌的颜色**」）：
@@ -1483,9 +1517,52 @@ export struct PlaybackPage {
   private closeInstance: number = 0;
   private closeToken: number = 0;
   private closeWatchdogTimer: number = -1;
+  /**
+   * ★ 2026-11-01：关闭收尾里那条 **64ms 存活自检** 的句柄（-1 = 没排）。
+   *
+   * 它必须在「这一轮会话被新打开顶掉」时能被**取消**，否则会出现
+   * 「用户刚点开播放页 → 上一轮的 64ms 回调按名字查到 `player` → 当成残留弹掉」
+   * = 甲方报的「多开几次播放器打不开」。见 {@link finishCloseGuard} / {@link notifyPlayerRoutePushed}。
+   */
+  private closeTailTimer: number = -1;
   private closePath: string = 'live';
   /** 本次关闭是哪个入口触发的（	opbar = 顶栏收起按钮，systemBack = 系统返回/下拉）。只给日志用。 */
   private closeEntrySource: string = 'systemBack';
+
+  /**
+   * ★★★ 2026-11-01（「多开几次播放器打不开」的根因）：
+   * **打开序号** —— 壳层每 push 一次播放页路由就 +1（`Index.pushPlayerRoute()` 调
+   * {@link notifyPlayerRoutePushed}）。关闭链里那些**延迟回调**（64ms 存活自检 / 60ms 快照自启动）
+   * 属于"哪一次打开-关闭会话"，必须能判出来。
+   *
+   * 为什么不能用"按名字查栈"：`getAllPathName().indexOf('player')` 分不清
+   *   · 没收掉的旧路由（真残留，该弹）
+   *   · 用户刚点开的新路由（绝对不能弹）
+   * 真机日志指纹就是这么来的 —— `RzdCloseState +64 alive=0 show=1 size=1 names=player` 紧跟在一次 `OPN` 之后，
+   * 接着 `+64 re-pop`：新页面被上一轮的定时器弹掉了，`isShowPlay` 却还是 true ⇒ 下一次点播放条
+   * 以为"已经开着"就不再 push ⇒ 表现成"打不开"（第二次点才好）。
+   *
+   * 判据：`PlaybackPage.openSerial !== 关闭起手时记下的值` ⇒ 期间有过新打开 ⇒ 旧回调一律早退。
+   * 排查关键字：`RzdSessionGuard`。
+   */
+  public static openSerial: number = 0;
+  /** 取消"上一轮关闭的 64ms 存活自检"（由 {@link notifyPlayerRoutePushed} / `cancelPendingCloseForOpen` 调）。 */
+  private static cancelCloseTail: (() => void) | undefined = undefined;
+
+  /**
+   * 壳层 `pushPlayerRoute()` 里调：**新会话开始**，作废上一会话所有延迟回调。
+   *
+   * ⚠️ 必须与 `cancelPendingCloseForOpen()` 分开：那个还会做"撤销关闭"的清扫动作，
+   *    而这里只做"序号 +1 + 杀掉旧定时器"，任何时机调都无副作用。
+   */
+  public static notifyPlayerRoutePushed(): void {
+    PlaybackPage.openSerial = PlaybackPage.openSerial + 1;
+    const cancel: (() => void) | undefined = PlaybackPage.cancelCloseTail;
+    PlaybackPage.cancelCloseTail = undefined;
+    if (cancel !== undefined) {
+      cancel();
+    }
+  }
 
   public static cancelPendingCloseForOpen(): void {
     const cancel: (() => void) | undefined = PlaybackPage.cancelCloseOwner;
@@ -1494,6 +1571,12 @@ export struct PlaybackPage {
     PlaybackPage.cancelCloseOwner = undefined;
     if (cancel !== undefined) {
       cancel();
+    }
+    // ★ 2026-11-01：上一轮关闭的 64ms 自检也必须一起杀掉（见 `openSerial` 的说明）。
+    const tail: (() => void) | undefined = PlaybackPage.cancelCloseTail;
+    PlaybackPage.cancelCloseTail = undefined;
+    if (tail !== undefined) {
+      tail();
     }
   }
 
@@ -1706,8 +1789,29 @@ export struct PlaybackPage {
     PlaybackPage.ownerInstance = 0;
     PlaybackPage.cancelCloseOwner = undefined;
     // ★ 64ms 存活自检：路由没真的卸掉时（节点残留 = 满屏封面 + 吃触摸），再弹一次。
-    setTimeout((): void => {
+    //
+    // ★★★ 2026-11-01（「多开几次播放器打不开」）：**这条回调必须带会话身份**。
+    //   它按名字查栈（`indexOf('player')`），于是"用户在这个 64ms 里点了播放条"时，
+    //   新 push 进来的播放页会被它当成**残留**弹掉（真机日志指纹：
+    //   `+64 alive=0 show=1 size=1 names=player` → `+64 re-pop`，紧跟在一次 `OPN` 之后）。
+    //   现在两道闸：① 期间有过新打开（`PlaybackPage.openSerial` 变了）⇒ 直接早退；
+    //              ② 新打开时 `notifyPlayerRoutePushed()` 会**取消**这个定时器（句柄存在 `closeTailTimer`）。
+    //   排查关键字：`RzdSessionGuard`。
+    const openSerialAtClose: number = PlaybackPage.openSerial;
+    if (this.closeTailTimer !== -1) {
+      clearTimeout(this.closeTailTimer);
+      this.closeTailTimer = -1;
+    }
+    this.closeTailTimer = setTimeout((): void => {
+      this.closeTailTimer = -1;
+      PlaybackPage.cancelCloseTail = undefined;
       try {
+        if (PlaybackPage.openSerial !== openSerialAtClose) {
+          MusicStoreService.getInstance().appendRuntimeDiagnostic(
+            `RzdSessionGuard +64 skip: session changed serial=${openSerialAtClose}->${PlaybackPage.openSerial} ` +
+              `show=${this.state.isShowPlay ? 1 : 0} alive=${this.isAlive ? 1 : 0}`);
+          return;
+        }
         const left: string[] = this.pageIndexInfos.getAllPathName();
         const still: number = left.indexOf(RouterUrlConstants.PLAYER_PAGE);
         MusicStoreService.getInstance().appendRuntimeDiagnostic(
@@ -1730,6 +1834,14 @@ export struct PlaybackPage {
         MusicStoreService.getInstance().appendRuntimeDiagnostic(`RzdCloseState +64 failed error=${error}`);
       }
     }, 64);
+    PlaybackPage.cancelCloseTail = (): void => {
+      if (this.closeTailTimer !== -1) {
+        clearTimeout(this.closeTailTimer);
+        this.closeTailTimer = -1;
+      }
+      MusicStoreService.getInstance().appendRuntimeDiagnostic(
+        `RzdSessionGuard +64 cancelled by new open (serial=${PlaybackPage.openSerial})`);
+    };
   }
   /**
    * 闂佸搫鐗滈崜姘额敃閸忚偐鈻旈悗锝庡亜椤庢瑩鎮归搹鐟版瀾濠⒀勭矒瀵即顢涘顓炲墾閻庤鐡曠亸娆戝垝閿熺姴绠┑鐘插€介崺宀勬煕濞嗘劦鐒芥繛鏉戭槹閹峰懎顓奸崨顓犫偓濂告煕?LEAVING闂佹寧绋戦悧鍡涱敋椤曗偓瀵粙宕堕妸锔奸獜闂佷紮绲介惉鐓庘枔?`drive = FINGER`闂佹寧绋戦ˇ顓㈠焵?
@@ -3144,8 +3256,15 @@ export struct PlaybackPage {
     //   "贴在播放条位置的小块"（容器被裁剪时的背景）。
     //   ⇒ 判据保留几何门，**只在"容器压根没被裁剪"时放行**：没裁剪 = 没有那个小块的成因。
     //     真正的开/关动画里 `morphClipping()` 为真 ⇒ 行为与旧版逐帧一致。
-    const paintable: boolean = this.expandState.morphSquashY === 1 &&
-      (this.expandState.morphGeomReadyNow() || !this.expandState.morphClipping());
+    // ★★★ 2026-11-01（「连续开关几次后，展开动画期间没背景」的主因）：
+    //   `paintable` 里那条 `morphSquashY === 1` 必须删掉 —— 它是从无界 `pullPaintable` 搬过来的，
+    //   但无界那一侧挤压压的是**整块 morph 玻璃（含背景）**，本仓早就把
+    //   `.scale({y: morphSquashY})` 从播放页路由壳上删了（见 `PlaybackPageRoute.ets:198-221`），
+    //   现在它只压迷你条胶囊 ⇒ 对背景一个像素都不影响，**唯一作用是把背景透明掉**。
+    //   而挤压的回弹那半截跑在页面 pop 之后（见 `PlayerExpandState.squashLandAnim`），一旦丢失
+    //   `morphSquashY` 就卡在 0.86 ⇒ 每一轮展开动画背景都是 0（甲方报的那个现象）。
+    //   ⇒ 判据只保留几何门；挤压值只写日志（`RzdBgPhase squashing=`），不再参与渲染。
+    const paintable: boolean = this.expandState.morphGeomReadyNow() || !this.expandState.morphClipping();
     if (!paintable) {
       return 0;
     }
@@ -4890,6 +5009,12 @@ export struct PlaybackPage {
         shrink.start(this.getUIContext(), pixmap, srcBox, winW, winH, onShrinkDone);
       } else {
         setTimeout((): void => {
+          // ★ 2026-11-01：**也必须带会话身份**。这一轮关闭如果已经被"新打开"撤掉
+          //   （`cancelPendingCloseForOpen()` → `ownsClose` 假），再起补间就是拿一张旧快照
+          //   在新会话里飞一次（观感＝打开时冒出一个旧封面）。见 `PlaybackPage.openSerial`。
+          if (!this.ownsClose(closeToken, 'shell-timeout')) {
+            return;
+          }
           if (shrink.takePendingIfAny()) {
             this.closeDiagnostic('shrink shell-timeout self-start');
             shrink.consumeStart(this.getUIContext());
@@ -6755,6 +6880,11 @@ export struct PlaybackPage {
     const old: image.PixelMap | undefined = this.meshSrc;
     this.meshSrc = undefined;
     this.meshSrcVersion = this.meshSrcVersion + 1;
+    // ★ 2026-11-01：静态缓存指向的就是这一张时，必须先断掉缓存再 release（见 `sharedMeshAlive`）。
+    if (old !== undefined && PlaybackPage.bgCachePm === old) {
+      PlaybackPage.bgCachePm = undefined;
+      PlaybackPage.bgCacheKey = '';
+    }
     if (old !== undefined) {
       this.releasePixelMapQuiet(old);
     }
@@ -8572,8 +8702,19 @@ export struct PlaybackPage {
             //   闂佸憡鐟禍锝夈€呴敃鍌氬珘濠㈣泛顦遍閬嶅级閻戝棗鏋熷褎绮撳畷婵嬪箰鎼达絾鈷曢柣鐘欏嫭绶查柛鈺佺焸瀵劎鎹勯搹鐟版殹闂佹寧绋戦悧鎰帮綖閿旀儳瀵查柤濮愬€楅崺鐘绘煙闊彃鐏遍柧鏂款儔婵″瓨鎷呴悿顖氬箑闂備緡鍋呴弻銊ョ暤韫囨梹濮滃┑顔藉姀閸嬫挻鎷呯悰鈾€鍋撻弽顓炵闁规儼濮ら敍鏃堟煃閵夘垵顓虹紒杈ㄦ皑閳ь剛鎳撻崯顐㈩潩閵婏箑顕辨慨姗嗗幘閺嗘瑩鏌ｉ敐鍡欐嚂缂?
             //   濠电偛鐗嗛鍥汲閳ь剟鏌?(true, FINGER) 闂佸搫鍟晶搴ㄥ磻閿濆绀勭紓浣姑埅鐢碘偓娈垮枓閸嬫挸霉?*濠殿喗蓱閻℃洜鎹㈠▎鎴炲磯閻庡湱濮风粻鏍喐閼割剙鐏╃憸?*闂?
             //   闂備緡鍋€閸嬫捇鏌涢弽銊у闁?`collapseProgress` 闂備緡鍙忕徊浠嬨€冨鍫熷殌濞达絿顭堣闂佹椿婢€缁鳖喚妲愬▎鎾村仺闁靛绠戦悡鏇㈡倵閸︻厼浠︾紒浣规尦閺?闂佺粯鍔楅幊鎾诲吹?闁哄鏅滈弻銊ッ洪弽顓熷仺闁靛ě鍕殸闁哄鏅滆摫婵℃彃鎲＄粙濠勨偓锝庝簻椤ゅ懘鏌ｉ妸銉ヮ仼濠殿喒鏅犻幃?闂佹寧绋戦ˇ顓㈠焵?
-            this.expandState.pullDragging = false;
-            this.expandState.morphDrive = MorphDrive.NONE;
+            // ★ 2026-11-01（跨会话残留 ③）：**旧实例不许写共享状态**。
+            //   这一拍是"页面正在离开"，而新会话可能已经开起来了（`aboutToAppear` 已把
+            //   `PlaybackPage.instanceSerial` 顶掉）⇒ 无条件清 `pullDragging / morphDrive`
+            //   会把**新会话**的上拉跟手直接掐断（观感：再拉一次不跟手）。
+            //   判据与 `aboutToAppear` / `morphSessionOughtToLive()` 同一套：只认"我还是当前实例"。
+            if (this.closeInstance === PlaybackPage.instanceSerial) {
+              this.expandState.pullDragging = false;
+              this.expandState.morphDrive = MorphDrive.NONE;
+            } else {
+              Logger.info(PlaybackPage.logTag,
+                `RzdMorphOnDisappear skip stale pull-clear instance=${this.closeInstance} ` +
+                  `now=${PlaybackPage.instanceSerial}`);
+            }
             // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-16闂?*"闂佺粯鍔楅幊鎾诲吹椤曗偓楠炲秹骞樺畷鍥╋紱濠电偛澶囬崜婵嗭耿娓氣偓瀹曟繈濡歌閺?闂佹眹鍔岀€氼厾鑺遍钘夌窞闁哄鍨堕惃鎴︽煕閿斿搫濮€缂佺粯鐗犻弻?*闂佹寧绋戦¨鈧紒?
             //   婵炴垶鎸搁澶婎焽娴煎瓨鐒介柨婵嗘噹缂嶆牠鏌涘Ο鐓庢瀾婵炶偐鏁诲?*闂佸搫鍟版慨闈涱焽椤栨稓顩?*闂?`morphReset()`闂侀潧妫楅崐浠嬪焵?`morphReset()` 婵?
             //   **`morphGen++` 婵?`morphUsable = false` 婵?`morphSessionStarted = false`**闂?
@@ -8605,8 +8746,18 @@ export struct PlaybackPage {
             this.releaseBackgroundCoverIfPixelMap();
             // 闂?2026-10-15闂佹寧绋掑銊х礊婢舵劕鍐€闁艰婢橀崜褰掓煛閸滀礁鐏ｆ繛鍫熷灥閳瑰啴骞囬鍡櫺㈤梺鎼炲劚瑜扮偟寮ч崘顓滀汗闁圭儤鎸婚幏鍗烆渻閵堝懐浠涢悗鍨瀵?闂?闂備緡鍋€閸嬫捇鏌涢敃鈧幖顐ゆ崲閳ь剙顪冮妶鍫敽缂佹柨顕幐褔鎮滈挊澶嬬彽闂佽　鍋?
             //   闂佹寧绋戦悧鍡涘箚娓氣偓瀹曟艾鈻庨幇顔叫栧┑鐐叉灤閵堝洨顔掗梺鍛婂灩閸庛倝骞愰柆宥呯哗濡わ絽鍟ㄩ埀顒€顦甸弻鍫ュ箣閹烘梻鐛ュ┑鐘虫礀缁诲绮╅弶鎴殨?64闁?4 闂?PixelMap闂佹寧绋戦ˇ顓㈠焵?
-            this.releasePixelMapQuiet(this.meshSrc);
+            // ★★★ 2026-11-01（跨会话残留 ④）：**静态缓存持有同一个对象时不许 release**。
+            //   `commitMeshSource()` 把这一张同时挂到了 `PlaybackPage.bgCachePm`（进程级缓存）上，
+            //   这里一 release，静态缓存里就留着一张**死图** ⇒ 下一次 `adoptSharedMesh()` 把它交出去，
+            //   `MeshCoverBg` 画不出东西 =「展开动画期间没背景」。
+            //   判据：**谁被静态缓存引用，谁由静态缓存负责**（页面只丢自己的引用）。
+            const leavingMesh: image.PixelMap | undefined = this.meshSrc;
             this.meshSrc = undefined;
+            if (leavingMesh !== undefined && leavingMesh === PlaybackPage.bgCachePm) {
+              appendPlayLog('[RzdBgPhase] onDisAppear keep shared-mesh (owned by static cache)');
+            } else if (leavingMesh !== undefined) {
+              this.releasePixelMapQuiet(leavingMesh);
+            }
             // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-17闂?*闁荤偞绋忛崕鑼?*闂佹寧绋戦¨鈧紒杈╂珬闁?40` 闂佸搫鍊瑰妯绘叏閻愮儤鍎?闁诲海鎳撻ˇ闈涱焽閵堝洨鐜绘俊銈傚亾鐟滅増绋戦銉╁川閸忣偄顦辩槐鏃堝箣閻愰潧顥曞┑?婵炴垶姊婚崰搴ｇ礊婵犲洤瀚夋い鎺戝閳ь剙顦甸獮鎰媴鐟欏嫮鐣?闂佺偨鍎查弻锟犲焵?
             //   闁诲海鎳撻崯顐耿椤忓棛鐜绘俊銈傚亾鐟滅増鐩鐢告偄瀹勭増鏆ラ梺鍛婄懐娴滄繂危?*闂佸湱顭堥崐璇差焽?*闂佹寧绋戝濉竐ndingMeshPm`闂佹寧绋戦¨鈧紒杈ㄧ箞閹崇喖濡烽妸褏顔愬┑鐐茬墢閺佸宕抽柨瀣ㄤ簻闁汇垹鎲″銊╂倶韫囨稐鎲鹃柍褜鍏橀崑鎾绘煕閿曚焦銆冪紒顭掔節閺?
             //   婵炴垶鎸搁敃顏勵焽娴煎瓨鐒介柨婵嗘噹缂嶆牠鏌涘▎妯归偗闁革絾鎸冲?`meshSrc`闂?*闂佸湱顭堥崐璇差焽閸愵喗鍎嶉柛鏇ㄥ枤缁犲湱鈧鍠氭慨鏉戭潩閵娿儺娼╂慨婵嗙灱缁犲吋绻濋弴鐐电閻㈩垪鍋?*闂佹寧绋戦悧鍡涘箖閹惧墎灏甸悹鍥ㄥ絻閺佸爼鎮楀☉娅亜鐣锋總鍛婂仺闁绘柨鍚嬮敍鏍涢悧鍫叕缂?
