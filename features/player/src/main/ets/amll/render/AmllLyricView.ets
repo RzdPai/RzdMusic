@@ -340,8 +340,28 @@ export struct AmllLyricView {
     }
   }
 
+  /** 上一次 setLyricLines 的内容指纹（防止上游新数组引用导致每帧重建）。 */
+  @Local lastLyricFp: string = '';
+
   @Monitor('lyricLines')
   onLyricLinesChanged(): void {
+    // ★ 2026-11-01（用户：网易的歌词一直是"大行距"状态收不回来）：
+    //   上游 build 每次都会生成**新数组**，@Param 引用变化就触发本回调 ⇒ 每帧 rebuild ⇒ 测量永远被
+    //   invalidateMeasured() 打断（游标归零、行高回落到 defaultLineHeight），于是 wy 逐字（每行 atom 多、量得慢）
+    //   永远収不回来。这里按**内容指纹**去重：内容没变就完全不做重建。
+    let fpAcc: number = this.lyricLines.length;
+    for (let li: number = 0; li < this.lyricLines.length; li++) {
+      const w0 = this.lyricLines[li].words;
+      const t: string = (w0 !== undefined && w0.length > 0) ? String(w0[0].word ?? '') : '';
+      for (let ci2: number = 0; ci2 < t.length; ci2++) {
+        fpAcc = (fpAcc * 31 + t.charCodeAt(ci2)) % 2147483647;
+      }
+    }
+    const fpNow: string = String(fpAcc);
+    if (fpNow === this.lastLyricFp) {
+      return;
+    }
+    this.lastLyricFp = fpNow;
     if (this.isWindowHidden) {
       // 后台切歌：只更新引擎数据与失效测量缓存，不重绘、不重启帧循环
       this.localTime = this.currentTime;
