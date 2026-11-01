@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,6 +32,11 @@ export struct MiniLyricLinesComponent {
    * 默认 false ⇒ 播放页行为与改动前逐字相同（仍由「设置 → 小歌词」控制）。
    */
   @Param ignoreUserSetting: boolean = false;
+  /**
+   * 画几行：2 = 当前行 + 下一行（默认，行为不变）；1 = 只画当前行。
+   * ★ 2026-11-01（深挖报告 P1-3）：单列短高时只画 1 行，块高 28 才塞得进 meta 的 34 定高盒，不再向下溢出压进度条。
+   */
+  @Param lines: number = 2;
   /**
    * **主行**（当前行）的字色 —— **可选**，不传就还是原来的 token。
    *
@@ -112,14 +117,16 @@ export struct MiniLyricLinesComponent {
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width(StyleConstants.FULL_WIDTH)
-        Text(this.miniLyricLines()[1])
+        if (this.lines >= 2) {
+          Text(this.miniLyricLines()[1])
           // 同上一行：14 → 17fp（用户实测要求"更大"，等比 +3）。
           .fontSize(17)
           .fontColor(this.nextLineColor ?? $r('app.color.play_text_color'))
           .opacity(0.6)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .width(StyleConstants.FULL_WIDTH)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .width(StyleConstants.FULL_WIDTH)
+        }
       }
       .width(StyleConstants.FULL_WIDTH)
       .alignItems(HorizontalAlign.Start)

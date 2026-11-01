@@ -9349,7 +9349,7 @@ export struct PlaybackPage {
         //      ⇒ 与歌名行的「居中盒 + offset」是**两套坐标系**，`estBoxHVp()` ≠ 窗口高时必然偏，
         //        调公式永远调不出来（用户实测三轮）。页 0 已恢复成上游的空壳（见那里的注释）。
         Column() {
-          MiniLyricLinesComponent()
+          MiniLyricLinesComponent({ lines: this.miniLyricLines() })
             .width(StyleConstants.FULL_WIDTH)
             // 左侧口径与歌名行**同源**：歌名行是 `.padding({ left: this.lyricMetaLeftInset(), … })`，
             // 这里是 `.margin({ left: … })`；两者同为 `width('100%')` 的兄弟节点 ⇒ padding ≡ margin。
@@ -9373,7 +9373,7 @@ export struct PlaybackPage {
         .width(StyleConstants.FULL_WIDTH)
         // ⛔ 上一轮这里写的是"高度钉死 57 + 用 offset 补回 h/2"——**这套补偿本轮已删**（见下面 `offset`）。
         //    下面这个 57 只是残页自身的尺寸，它整块是 `Visibility.None`，对布局零影响。
-        .height(this.isShortHeightWindow() ? 28 : PlaybackPage.MINI_LYRIC_BLOCK_H_VP)
+        .height(this.miniLyricLines() >= 2 ? PlaybackPage.MINI_LYRIC_BLOCK_H_VP : 28)
         .justifyContent(FlexAlign.Start)
         // ⛔⛔ 2026-10-18（第五轮）：**这一整块是旧实现的残页：代码保留，但永不参与布局、永不绘制。**
         //   为什么留而不删：本块中间那些中文注释是**双重编码乱码**，`edit` 的 `old_string` 逐字匹配不上
