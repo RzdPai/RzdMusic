@@ -637,7 +637,10 @@ export struct PlaylistDetailPage {
                     //   不再恒为 false —— 用**实际铺上去的那个颜色**算相对亮度再决定前景色。
                     //   只切文字/图标颜色，不加任何遮罩层（用户明确要求）。
                     const lum: number = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-                    this.lightBackdrop = lum > 0.62;
+                    // ★ 2026-11-01（用户：歌单页文字不跟背景取色走，浅底上还是白字）：
+                    //   阈值 0.62 太保守 —— 很多"浅底"其实落在 0.45~0.62（浅灰/米白/浅蓝），
+                    //   会被判成深底 ⇒ 正文恒白 ⇒ 看不清。阈值降到 0.42（仍保留足够暗的分界）。
+                    this.lightBackdrop = lum > 0.42;
                     hilog.info(PLAYLIST_LOG_DOMAIN, PLAYLIST_LOG_TAG,
                       'hero backdrop color %{public}s light=%{public}d', this.avgColor, this.lightBackdrop);
                   }
