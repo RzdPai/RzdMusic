@@ -10,6 +10,8 @@
 import { appendPlayLog } from 'musicbasic';
 import { LXSourcePlatformInfo, LXUserApiInfo, LXUserApiSourceInfo, lxDeclaredPlatforms, lxDeclaredPlatformsOf } from 'player';
 import { LxSourceDeclaredBlock } from './LxSourceTags';
+import { shareSourceScript } from '../util/SourceShare';
+import { common } from '@kit.AbilityKit';
 
 /** 左滑里的圆钮（只有图标）。 */
 @Builder
@@ -115,9 +117,12 @@ export struct SourceManagerList {
       SwipeIcon($r('sys.symbol.arrow_clockwise'), '#1E88E5', (): void => {
         this.onCheckUpdate(api);
       })
-      SwipeTextIcon('分享', '#7B1FA2', (): void => {
+      SwipeIcon($r('sys.symbol.share'), '#7B1FA2', (): void => {
         appendPlayLog('[RzdSourceShare] swipe tap id=' + api.id);
-        this.onShare(api);
+        const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+        shareSourceScript(ctx, api).catch((e: Error): void => {
+          appendPlayLog('[RzdSourceShare] call failed ' + (e.message ?? ''));
+        });
       })
       SwipeIcon($r('sys.symbol.trash'), '#E53935', (): void => {
         this.onDelete(api.id);

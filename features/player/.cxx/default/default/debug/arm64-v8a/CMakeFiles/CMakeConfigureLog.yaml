@@ -84918,3 +84918,1161 @@ events:
       
       
 ...
+
+---
+events:
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineSystem.cmake:228 (message)"
+      - "CMakeLists.txt:6 (project)"
+    message: |
+      The target system is: OHOS - 1 - aarch64
+      The host system is: Windows - 10.0.26200 - AMD64
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCCompiler.cmake:123 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:6 (project)"
+    message: |
+      Compiling the C compiler identification source file "CMakeCCompilerId.c" succeeded.
+      Compiler: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/clang.exe 
+      Build flags: -fdata-sections;-ffunction-sections;-funwind-tables;-fstack-protector-strong;-no-canonical-prefixes;-fno-addrsig;-Wa,--noexecstack;-Wformat;-Werror=format-security;-D__MUSL__
+      Id flags: -c;--target=aarch64-linux-ohos 
+      
+      The output was:
+      0
+      
+      
+      Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "CMakeCCompilerId.o"
+      
+      The C compiler identification is Clang, found in:
+        C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/3.28.2/CompilerIdC/CMakeCCompilerId.o
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCXXCompiler.cmake:126 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:6 (project)"
+    message: |
+      Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" succeeded.
+      Compiler: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/clang++.exe 
+      Build flags: -fdata-sections;-ffunction-sections;-funwind-tables;-fstack-protector-strong;-no-canonical-prefixes;-fno-addrsig;-Wa,--noexecstack;-Wformat;-Werror=format-security;-D__MUSL__
+      Id flags: -c;--target=aarch64-linux-ohos 
+      
+      The output was:
+      0
+      
+      
+      Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "CMakeCXXCompilerId.o"
+      
+      The CXX compiler identification is Clang, found in:
+        C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/3.28.2/CompilerIdCXX/CMakeCXXCompilerId.o
+      
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerABI.cmake:57 (try_compile)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:6 (project)"
+    checks:
+      - "Detecting C compiler ABI info"
+    directories:
+      source: "C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-9y4n47"
+      binary: "C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-9y4n47"
+    cmakeVariables:
+      CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS: "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND"
+      CMAKE_CXX_COMPILER_EXTERNAL_TOOLCHAIN: "D:/command-line-tools/sdk/default/openharmony/native/llvm"
+      CMAKE_CXX_COMPILER_TARGET: "aarch64-linux-ohos"
+      CMAKE_C_COMPILER_EXTERNAL_TOOLCHAIN: "D:/command-line-tools/sdk/default/openharmony/native/llvm"
+      CMAKE_C_COMPILER_TARGET: "aarch64-linux-ohos"
+      CMAKE_C_FLAGS: "-fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa,--noexecstack -Wformat  -D__MUSL__"
+      CMAKE_EXE_LINKER_FLAGS: "--rtlib=compiler-rt -fuse-ld=lld -Wl,--build-id=sha1 -Wl,--warn-shared-textrel -Wl,--fatal-warnings -lunwind -Wl,--no-undefined -Qunused-arguments -Wl,-z,noexecstack -Wl,--gc-sections"
+      CMAKE_POSITION_INDEPENDENT_CODE: "TRUE"
+      CMAKE_SYSROOT: "D:/command-line-tools/sdk/default/openharmony/native/sysroot"
+      HMOS_SDK_NATIVE: "D:\\command-line-tools\\sdk\\default\\hms\\native"
+      OHOS_ARCH: "arm64-v8a"
+      OHOS_SDK_NATIVE: "D:/command-line-tools/sdk/default/openharmony/native"
+    buildResult:
+      variable: "CMAKE_C_ABI_COMPILED"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-9y4n47'
+        
+        Run Build Command(s): D:\\command-line-tools\\sdk\\default\\openharmony\\native\\build-tools\\cmake\\bin\\ninja.exe -v cmTC_ddbb5
+        [1/2] D:\\command-line-tools\\sdk\\default\\openharmony\\native\\llvm\\bin\\clang.exe --target=aarch64-linux-ohos --gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot   -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa,--noexecstack -Wformat  -D__MUSL__  -fPIE   -v -MD -MT CMakeFiles/cmTC_ddbb5.dir/CMakeCCompilerABI.c.o -MF CMakeFiles\\cmTC_ddbb5.dir\\CMakeCCompilerABI.c.o.d -o CMakeFiles/cmTC_ddbb5.dir/CMakeCCompilerABI.c.o -c D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeCCompilerABI.c
+        OHOS (dev) clang version 15.0.4 (llvm-project 00dcd9ccdb860908f60ff11b32239084b0908a08)
+        Target: aarch64-unknown-linux-ohos
+        Thread model: posix
+        InstalledDir: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin
+        clang: warning: argument unused during compilation: '--gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument]
+         (in-process)
+         "D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/clang.exe" -cc1 -triple aarch64-unknown-linux-ohos -emit-obj -mrelax-all --mrelax-relocations -mnoexecstack -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCCompilerABI.c -mrelocation-model pic -pic-level 2 -pic-is-pie -mframe-pointer=non-leaf -ffp-contract=on -fno-rounding-math -mconstructor-aliases -funwind-tables=1 -target-cpu generic -target-feature +neon -target-feature +v8a -target-feature +fix-cortex-a53-835769 -target-abi aapcs -fallow-half-arguments-and-returns -mllvm -treat-scalable-fixed-error-as-warning -debugger-tuning=gdb -v -ffunction-sections -fdata-sections -fcoverage-compilation-dir=C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-9y4n47 -resource-dir D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4 -dependency-file "CMakeFiles\\\\cmTC_ddbb5.dir\\\\CMakeCCompilerABI.c.o.d" -MT CMakeFiles/cmTC_ddbb5.dir/CMakeCCompilerABI.c.o -sys-header-deps -D __MUSL__ -isysroot D:/command-line-tools/sdk/default/openharmony/native/sysroot -internal-isystem D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/include -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include -Wformat -fdebug-compilation-dir=C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-9y4n47 -ferror-limit 19 -stack-protector 2 -fno-signed-char -fgnuc-version=4.2.1 -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_ddbb5.dir/CMakeCCompilerABI.c.o -x c D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeCCompilerABI.c
+        clang -cc1 version 15.0.4 based upon LLVM 15.0.4 default target x86_64-w64-windows-gnu
+        ignoring nonexistent directory "D:/command-line-tools/sdk/default/openharmony/native/sysroot/include"
+        #include "..." search starts here:
+        #include <...> search starts here:
+         D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include
+         D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos
+         D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include
+        End of search list.
+        [2/2] C:\\Windows\\system32\\cmd.exe /C "cd . && D:\\command-line-tools\\sdk\\default\\openharmony\\native\\llvm\\bin\\clang.exe --target=aarch64-linux-ohos --gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa,--noexecstack -Wformat  -D__MUSL__ --rtlib=compiler-rt -fuse-ld=lld -Wl,--build-id=sha1 -Wl,--warn-shared-textrel -Wl,--fatal-warnings -lunwind -Wl,--no-undefined -Qunused-arguments -Wl,-z,noexecstack -Wl,--gc-sections -v CMakeFiles/cmTC_ddbb5.dir/CMakeCCompilerABI.c.o -o cmTC_ddbb5   && cd ."
+        OHOS (dev) clang version 15.0.4 (llvm-project 00dcd9ccdb860908f60ff11b32239084b0908a08)
+        Target: aarch64-unknown-linux-ohos
+        Thread model: posix
+        InstalledDir: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin
+         "D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/ld.lld" --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot -pie -EL --fix-cortex-a53-843419 -z now -z relro -z max-page-size=4096 --hash-style=gnu --hash-style=both --enable-new-dtags --eh-frame-hdr -m aarch64linux -dynamic-linker /lib/ld-musl-aarch64.so.1 -o cmTC_ddbb5 D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o -LD:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos -LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/ -LD:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/ -LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/ --build-id=sha1 --warn-shared-textrel --fatal-warnings -lunwind --no-undefined -z noexecstack --gc-sections CMakeFiles/cmTC_ddbb5.dir/CMakeCCompilerABI.c.o D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a -l:libunwind.a -lc D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a -l:libunwind.a D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerABI.cmake:127 (message)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:6 (project)"
+    message: |
+      Parsed C implicit include dir info: rv=done
+        found start of include info
+        found start of implicit include info
+          add: [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include]
+          add: [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos]
+          add: [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include]
+        end of search list found
+        collapse include dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include] ==> [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include]
+        collapse include dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos] ==> [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos]
+        collapse include dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include] ==> [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include]
+        implicit include dirs: [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include]
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerABI.cmake:159 (message)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:6 (project)"
+    message: |
+      Parsed C implicit link information:
+        link line regex: [^( *|.*[/\\])(ld\\.lld\\.exe|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
+        ignore line: [Change Dir: 'C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-9y4n47']
+        ignore line: []
+        ignore line: [Run Build Command(s): D:\\command-line-tools\\sdk\\default\\openharmony\\native\\build-tools\\cmake\\bin\\ninja.exe -v cmTC_ddbb5]
+        ignore line: [[1/2] D:\\command-line-tools\\sdk\\default\\openharmony\\native\\llvm\\bin\\clang.exe --target=aarch64-linux-ohos --gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot   -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa --noexecstack -Wformat  -D__MUSL__  -fPIE   -v -MD -MT CMakeFiles/cmTC_ddbb5.dir/CMakeCCompilerABI.c.o -MF CMakeFiles\\cmTC_ddbb5.dir\\CMakeCCompilerABI.c.o.d -o CMakeFiles/cmTC_ddbb5.dir/CMakeCCompilerABI.c.o -c D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeCCompilerABI.c]
+        ignore line: [OHOS (dev) clang version 15.0.4 (llvm-project 00dcd9ccdb860908f60ff11b32239084b0908a08)]
+        ignore line: [Target: aarch64-unknown-linux-ohos]
+        ignore line: [Thread model: posix]
+        ignore line: [InstalledDir: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin]
+        ignore line: [clang: warning: argument unused during compilation: '--gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument]]
+        ignore line: [ (in-process)]
+        ignore line: [ "D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/clang.exe" -cc1 -triple aarch64-unknown-linux-ohos -emit-obj -mrelax-all --mrelax-relocations -mnoexecstack -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCCompilerABI.c -mrelocation-model pic -pic-level 2 -pic-is-pie -mframe-pointer=non-leaf -ffp-contract=on -fno-rounding-math -mconstructor-aliases -funwind-tables=1 -target-cpu generic -target-feature +neon -target-feature +v8a -target-feature +fix-cortex-a53-835769 -target-abi aapcs -fallow-half-arguments-and-returns -mllvm -treat-scalable-fixed-error-as-warning -debugger-tuning=gdb -v -ffunction-sections -fdata-sections -fcoverage-compilation-dir=C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-9y4n47 -resource-dir D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4 -dependency-file "CMakeFiles\\\\cmTC_ddbb5.dir\\\\CMakeCCompilerABI.c.o.d" -MT CMakeFiles/cmTC_ddbb5.dir/CMakeCCompilerABI.c.o -sys-header-deps -D __MUSL__ -isysroot D:/command-line-tools/sdk/default/openharmony/native/sysroot -internal-isystem D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/include -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include -Wformat -fdebug-compilation-dir=C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-9y4n47 -ferror-limit 19 -stack-protector 2 -fno-signed-char -fgnuc-version=4.2.1 -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_ddbb5.dir/CMakeCCompilerABI.c.o -x c D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeCCompilerABI.c]
+        ignore line: [clang -cc1 version 15.0.4 based upon LLVM 15.0.4 default target x86_64-w64-windows-gnu]
+        ignore line: [ignoring nonexistent directory "D:/command-line-tools/sdk/default/openharmony/native/sysroot/include"]
+        ignore line: [#include "..." search starts here:]
+        ignore line: [#include <...> search starts here:]
+        ignore line: [ D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include]
+        ignore line: [ D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos]
+        ignore line: [ D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include]
+        ignore line: [End of search list.]
+        ignore line: [[2/2] C:\\Windows\\system32\\cmd.exe /C "cd . && D:\\command-line-tools\\sdk\\default\\openharmony\\native\\llvm\\bin\\clang.exe --target=aarch64-linux-ohos --gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa,--noexecstack -Wformat  -D__MUSL__ --rtlib=compiler-rt -fuse-ld=lld -Wl,--build-id=sha1 -Wl,--warn-shared-textrel -Wl,--fatal-warnings -lunwind -Wl,--no-undefined -Qunused-arguments -Wl,-z,noexecstack -Wl,--gc-sections -v CMakeFiles/cmTC_ddbb5.dir/CMakeCCompilerABI.c.o -o cmTC_ddbb5   && cd ."]
+        ignore line: [OHOS (dev) clang version 15.0.4 (llvm-project 00dcd9ccdb860908f60ff11b32239084b0908a08)]
+        ignore line: [Target: aarch64-unknown-linux-ohos]
+        ignore line: [Thread model: posix]
+        ignore line: [InstalledDir: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin]
+        link line: [ "D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/ld.lld" --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot -pie -EL --fix-cortex-a53-843419 -z now -z relro -z max-page-size=4096 --hash-style=gnu --hash-style=both --enable-new-dtags --eh-frame-hdr -m aarch64linux -dynamic-linker /lib/ld-musl-aarch64.so.1 -o cmTC_ddbb5 D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o -LD:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos -LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/ -LD:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/ -LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/ --build-id=sha1 --warn-shared-textrel --fatal-warnings -lunwind --no-undefined -z noexecstack --gc-sections CMakeFiles/cmTC_ddbb5.dir/CMakeCCompilerABI.c.o D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a -l:libunwind.a -lc D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a -l:libunwind.a D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/ld.lld] ==> ignore
+          arg [--sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot] ==> ignore
+          arg [-pie] ==> ignore
+          arg [-EL] ==> ignore
+          arg [--fix-cortex-a53-843419] ==> ignore
+          arg [-znow] ==> ignore
+          arg [-zrelro] ==> ignore
+          arg [-zmax-page-size=4096] ==> ignore
+          arg [--hash-style=gnu] ==> ignore
+          arg [--hash-style=both] ==> ignore
+          arg [--enable-new-dtags] ==> ignore
+          arg [--eh-frame-hdr] ==> ignore
+          arg [-m] ==> ignore
+          arg [aarch64linux] ==> ignore
+          arg [-dynamic-linker] ==> ignore
+          arg [/lib/ld-musl-aarch64.so.1] ==> ignore
+          arg [-o] ==> ignore
+          arg [cmTC_ddbb5] ==> ignore
+          arg [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o]
+          arg [-LD:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos] ==> dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos]
+          arg [-LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/] ==> dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/]
+          arg [-LD:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/] ==> dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/]
+          arg [-LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/] ==> dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/]
+          arg [--build-id=sha1] ==> ignore
+          arg [--warn-shared-textrel] ==> ignore
+          arg [--fatal-warnings] ==> ignore
+          arg [-lunwind] ==> lib [unwind]
+          arg [--no-undefined] ==> ignore
+          arg [-znoexecstack] ==> ignore
+          arg [--gc-sections] ==> ignore
+          arg [CMakeFiles/cmTC_ddbb5.dir/CMakeCCompilerABI.c.o] ==> ignore
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a] ==> lib [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a]
+          arg [-l:libunwind.a] ==> lib [-l:libunwind.a]
+          arg [-lc] ==> lib [c]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a] ==> lib [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a]
+          arg [-l:libunwind.a] ==> lib [-l:libunwind.a]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o]
+        remove lib [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a]
+        remove lib [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a]
+        collapse library dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos] ==> [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos]
+        collapse library dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/] ==> [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib]
+        collapse library dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/] ==> [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/aarch64-linux-ohos]
+        collapse library dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/] ==> [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos]
+        implicit libs: [unwind;-l:libunwind.a;c;-l:libunwind.a]
+        implicit objs: [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o;D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o;D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o]
+        implicit dirs: [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib;D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/aarch64-linux-ohos;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos]
+        implicit fwks: []
+      
+      
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerABI.cmake:57 (try_compile)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:6 (project)"
+    checks:
+      - "Detecting CXX compiler ABI info"
+    directories:
+      source: "C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-q353f3"
+      binary: "C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-q353f3"
+    cmakeVariables:
+      CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS: "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND"
+      CMAKE_CXX_COMPILER_EXTERNAL_TOOLCHAIN: "D:/command-line-tools/sdk/default/openharmony/native/llvm"
+      CMAKE_CXX_COMPILER_TARGET: "aarch64-linux-ohos"
+      CMAKE_CXX_FLAGS: "-fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa,--noexecstack -Wformat   -D__MUSL__"
+      CMAKE_C_COMPILER_EXTERNAL_TOOLCHAIN: "D:/command-line-tools/sdk/default/openharmony/native/llvm"
+      CMAKE_C_COMPILER_TARGET: "aarch64-linux-ohos"
+      CMAKE_EXE_LINKER_FLAGS: "--rtlib=compiler-rt -fuse-ld=lld -Wl,--build-id=sha1 -Wl,--warn-shared-textrel -Wl,--fatal-warnings -lunwind -Wl,--no-undefined -Qunused-arguments -Wl,-z,noexecstack -Wl,--gc-sections"
+      CMAKE_POSITION_INDEPENDENT_CODE: "TRUE"
+      CMAKE_SYSROOT: "D:/command-line-tools/sdk/default/openharmony/native/sysroot"
+      HMOS_SDK_NATIVE: "D:\\command-line-tools\\sdk\\default\\hms\\native"
+      OHOS_ARCH: "arm64-v8a"
+      OHOS_SDK_NATIVE: "D:/command-line-tools/sdk/default/openharmony/native"
+    buildResult:
+      variable: "CMAKE_CXX_ABI_COMPILED"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-q353f3'
+        
+        Run Build Command(s): D:\\command-line-tools\\sdk\\default\\openharmony\\native\\build-tools\\cmake\\bin\\ninja.exe -v cmTC_9842e
+        [1/2] D:\\command-line-tools\\sdk\\default\\openharmony\\native\\llvm\\bin\\clang++.exe --target=aarch64-linux-ohos --gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot   -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa,--noexecstack -Wformat   -D__MUSL__  -fPIE   -v -MD -MT CMakeFiles/cmTC_9842e.dir/CMakeCXXCompilerABI.cpp.o -MF CMakeFiles\\cmTC_9842e.dir\\CMakeCXXCompilerABI.cpp.o.d -o CMakeFiles/cmTC_9842e.dir/CMakeCXXCompilerABI.cpp.o -c D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeCXXCompilerABI.cpp
+        OHOS (dev) clang version 15.0.4 (llvm-project 00dcd9ccdb860908f60ff11b32239084b0908a08)
+        Target: aarch64-unknown-linux-ohos
+        Thread model: posix
+        InstalledDir: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin
+        clang++: warning: argument unused during compilation: '--gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument]
+         (in-process)
+         "D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/clang++.exe" -cc1 -triple aarch64-unknown-linux-ohos -emit-obj -mrelax-all --mrelax-relocations -mnoexecstack -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCXXCompilerABI.cpp -mrelocation-model pic -pic-level 2 -pic-is-pie -mframe-pointer=non-leaf -ffp-contract=on -fno-rounding-math -mconstructor-aliases -funwind-tables=1 -target-cpu generic -target-feature +neon -target-feature +v8a -target-feature +fix-cortex-a53-835769 -target-abi aapcs -fallow-half-arguments-and-returns -mllvm -treat-scalable-fixed-error-as-warning -debugger-tuning=gdb -v -ffunction-sections -fdata-sections -fcoverage-compilation-dir=C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-q353f3 -resource-dir D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4 -dependency-file "CMakeFiles\\\\cmTC_9842e.dir\\\\CMakeCXXCompilerABI.cpp.o.d" -MT CMakeFiles/cmTC_9842e.dir/CMakeCXXCompilerABI.cpp.o -sys-header-deps -D __MUSL__ -isysroot D:/command-line-tools/sdk/default/openharmony/native/sysroot -internal-isystem D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../include/libcxx-ohos/include/c++/v1 -internal-isystem D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/include -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include -Wformat -fdeprecated-macro -fdebug-compilation-dir=C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-q353f3 -ferror-limit 19 -stack-protector 2 -fno-signed-char -fgnuc-version=4.2.1 -fcxx-exceptions -fexceptions -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_9842e.dir/CMakeCXXCompilerABI.cpp.o -x c++ D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeCXXCompilerABI.cpp
+        clang -cc1 version 15.0.4 based upon LLVM 15.0.4 default target x86_64-w64-windows-gnu
+        ignoring nonexistent directory "D:/command-line-tools/sdk/default/openharmony/native/sysroot/include"
+        #include "..." search starts here:
+        #include <...> search starts here:
+         D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../include/libcxx-ohos/include/c++/v1
+         D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include
+         D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos
+         D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include
+        End of search list.
+        [2/2] C:\\Windows\\system32\\cmd.exe /C "cd . && D:\\command-line-tools\\sdk\\default\\openharmony\\native\\llvm\\bin\\clang++.exe --target=aarch64-linux-ohos --gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa,--noexecstack -Wformat   -D__MUSL__ --rtlib=compiler-rt -fuse-ld=lld -Wl,--build-id=sha1 -Wl,--warn-shared-textrel -Wl,--fatal-warnings -lunwind -Wl,--no-undefined -Qunused-arguments -Wl,-z,noexecstack -Wl,--gc-sections -v CMakeFiles/cmTC_9842e.dir/CMakeCXXCompilerABI.cpp.o -o cmTC_9842e   && cd ."
+        OHOS (dev) clang version 15.0.4 (llvm-project 00dcd9ccdb860908f60ff11b32239084b0908a08)
+        Target: aarch64-unknown-linux-ohos
+        Thread model: posix
+        InstalledDir: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin
+         "D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/ld.lld" --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot -pie -EL --fix-cortex-a53-843419 -z now -z relro -z max-page-size=4096 --hash-style=gnu --hash-style=both --enable-new-dtags --eh-frame-hdr -m aarch64linux -dynamic-linker /lib/ld-musl-aarch64.so.1 -o cmTC_9842e D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o -LD:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos -LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/ -LD:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/ -LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/ --build-id=sha1 --warn-shared-textrel --fatal-warnings -lunwind --no-undefined -z noexecstack --gc-sections CMakeFiles/cmTC_9842e.dir/CMakeCXXCompilerABI.cpp.o -lc++ -lc++abi -lunwind -lm D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a -l:libunwind.a -lc D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a -l:libunwind.a D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerABI.cmake:127 (message)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:6 (project)"
+    message: |
+      Parsed CXX implicit include dir info: rv=done
+        found start of include info
+        found start of implicit include info
+          add: [D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../include/libcxx-ohos/include/c++/v1]
+          add: [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include]
+          add: [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos]
+          add: [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include]
+        end of search list found
+        collapse include dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../include/libcxx-ohos/include/c++/v1] ==> [D:/command-line-tools/sdk/default/openharmony/native/llvm/include/libcxx-ohos/include/c++/v1]
+        collapse include dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include] ==> [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include]
+        collapse include dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos] ==> [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos]
+        collapse include dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include] ==> [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include]
+        implicit include dirs: [D:/command-line-tools/sdk/default/openharmony/native/llvm/include/libcxx-ohos/include/c++/v1;D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include]
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerABI.cmake:159 (message)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:6 (project)"
+    message: |
+      Parsed CXX implicit link information:
+        link line regex: [^( *|.*[/\\])(ld\\.lld\\.exe|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
+        ignore line: [Change Dir: 'C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-q353f3']
+        ignore line: []
+        ignore line: [Run Build Command(s): D:\\command-line-tools\\sdk\\default\\openharmony\\native\\build-tools\\cmake\\bin\\ninja.exe -v cmTC_9842e]
+        ignore line: [[1/2] D:\\command-line-tools\\sdk\\default\\openharmony\\native\\llvm\\bin\\clang++.exe --target=aarch64-linux-ohos --gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot   -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa --noexecstack -Wformat   -D__MUSL__  -fPIE   -v -MD -MT CMakeFiles/cmTC_9842e.dir/CMakeCXXCompilerABI.cpp.o -MF CMakeFiles\\cmTC_9842e.dir\\CMakeCXXCompilerABI.cpp.o.d -o CMakeFiles/cmTC_9842e.dir/CMakeCXXCompilerABI.cpp.o -c D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeCXXCompilerABI.cpp]
+        ignore line: [OHOS (dev) clang version 15.0.4 (llvm-project 00dcd9ccdb860908f60ff11b32239084b0908a08)]
+        ignore line: [Target: aarch64-unknown-linux-ohos]
+        ignore line: [Thread model: posix]
+        ignore line: [InstalledDir: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin]
+        ignore line: [clang++: warning: argument unused during compilation: '--gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument]]
+        ignore line: [ (in-process)]
+        ignore line: [ "D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/clang++.exe" -cc1 -triple aarch64-unknown-linux-ohos -emit-obj -mrelax-all --mrelax-relocations -mnoexecstack -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCXXCompilerABI.cpp -mrelocation-model pic -pic-level 2 -pic-is-pie -mframe-pointer=non-leaf -ffp-contract=on -fno-rounding-math -mconstructor-aliases -funwind-tables=1 -target-cpu generic -target-feature +neon -target-feature +v8a -target-feature +fix-cortex-a53-835769 -target-abi aapcs -fallow-half-arguments-and-returns -mllvm -treat-scalable-fixed-error-as-warning -debugger-tuning=gdb -v -ffunction-sections -fdata-sections -fcoverage-compilation-dir=C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-q353f3 -resource-dir D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4 -dependency-file "CMakeFiles\\\\cmTC_9842e.dir\\\\CMakeCXXCompilerABI.cpp.o.d" -MT CMakeFiles/cmTC_9842e.dir/CMakeCXXCompilerABI.cpp.o -sys-header-deps -D __MUSL__ -isysroot D:/command-line-tools/sdk/default/openharmony/native/sysroot -internal-isystem D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../include/libcxx-ohos/include/c++/v1 -internal-isystem D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/include -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include -Wformat -fdeprecated-macro -fdebug-compilation-dir=C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-q353f3 -ferror-limit 19 -stack-protector 2 -fno-signed-char -fgnuc-version=4.2.1 -fcxx-exceptions -fexceptions -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_9842e.dir/CMakeCXXCompilerABI.cpp.o -x c++ D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeCXXCompilerABI.cpp]
+        ignore line: [clang -cc1 version 15.0.4 based upon LLVM 15.0.4 default target x86_64-w64-windows-gnu]
+        ignore line: [ignoring nonexistent directory "D:/command-line-tools/sdk/default/openharmony/native/sysroot/include"]
+        ignore line: [#include "..." search starts here:]
+        ignore line: [#include <...> search starts here:]
+        ignore line: [ D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../include/libcxx-ohos/include/c++/v1]
+        ignore line: [ D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include]
+        ignore line: [ D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos]
+        ignore line: [ D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include]
+        ignore line: [End of search list.]
+        ignore line: [[2/2] C:\\Windows\\system32\\cmd.exe /C "cd . && D:\\command-line-tools\\sdk\\default\\openharmony\\native\\llvm\\bin\\clang++.exe --target=aarch64-linux-ohos --gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa,--noexecstack -Wformat   -D__MUSL__ --rtlib=compiler-rt -fuse-ld=lld -Wl,--build-id=sha1 -Wl,--warn-shared-textrel -Wl,--fatal-warnings -lunwind -Wl,--no-undefined -Qunused-arguments -Wl,-z,noexecstack -Wl,--gc-sections -v CMakeFiles/cmTC_9842e.dir/CMakeCXXCompilerABI.cpp.o -o cmTC_9842e   && cd ."]
+        ignore line: [OHOS (dev) clang version 15.0.4 (llvm-project 00dcd9ccdb860908f60ff11b32239084b0908a08)]
+        ignore line: [Target: aarch64-unknown-linux-ohos]
+        ignore line: [Thread model: posix]
+        ignore line: [InstalledDir: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin]
+        link line: [ "D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/ld.lld" --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot -pie -EL --fix-cortex-a53-843419 -z now -z relro -z max-page-size=4096 --hash-style=gnu --hash-style=both --enable-new-dtags --eh-frame-hdr -m aarch64linux -dynamic-linker /lib/ld-musl-aarch64.so.1 -o cmTC_9842e D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o -LD:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos -LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/ -LD:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/ -LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/ --build-id=sha1 --warn-shared-textrel --fatal-warnings -lunwind --no-undefined -z noexecstack --gc-sections CMakeFiles/cmTC_9842e.dir/CMakeCXXCompilerABI.cpp.o -lc++ -lc++abi -lunwind -lm D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a -l:libunwind.a -lc D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a -l:libunwind.a D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/ld.lld] ==> ignore
+          arg [--sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot] ==> ignore
+          arg [-pie] ==> ignore
+          arg [-EL] ==> ignore
+          arg [--fix-cortex-a53-843419] ==> ignore
+          arg [-znow] ==> ignore
+          arg [-zrelro] ==> ignore
+          arg [-zmax-page-size=4096] ==> ignore
+          arg [--hash-style=gnu] ==> ignore
+          arg [--hash-style=both] ==> ignore
+          arg [--enable-new-dtags] ==> ignore
+          arg [--eh-frame-hdr] ==> ignore
+          arg [-m] ==> ignore
+          arg [aarch64linux] ==> ignore
+          arg [-dynamic-linker] ==> ignore
+          arg [/lib/ld-musl-aarch64.so.1] ==> ignore
+          arg [-o] ==> ignore
+          arg [cmTC_9842e] ==> ignore
+          arg [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o]
+          arg [-LD:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos] ==> dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos]
+          arg [-LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/] ==> dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/]
+          arg [-LD:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/] ==> dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/]
+          arg [-LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/] ==> dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/]
+          arg [--build-id=sha1] ==> ignore
+          arg [--warn-shared-textrel] ==> ignore
+          arg [--fatal-warnings] ==> ignore
+          arg [-lunwind] ==> lib [unwind]
+          arg [--no-undefined] ==> ignore
+          arg [-znoexecstack] ==> ignore
+          arg [--gc-sections] ==> ignore
+          arg [CMakeFiles/cmTC_9842e.dir/CMakeCXXCompilerABI.cpp.o] ==> ignore
+          arg [-lc++] ==> lib [c++]
+          arg [-lc++abi] ==> lib [c++abi]
+          arg [-lunwind] ==> lib [unwind]
+          arg [-lm] ==> lib [m]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a] ==> lib [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a]
+          arg [-l:libunwind.a] ==> lib [-l:libunwind.a]
+          arg [-lc] ==> lib [c]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a] ==> lib [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a]
+          arg [-l:libunwind.a] ==> lib [-l:libunwind.a]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o]
+        remove lib [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a]
+        remove lib [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a]
+        collapse library dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos] ==> [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos]
+        collapse library dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/] ==> [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib]
+        collapse library dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/] ==> [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/aarch64-linux-ohos]
+        collapse library dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/] ==> [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos]
+        implicit libs: [unwind;c++;c++abi;unwind;m;-l:libunwind.a;c;-l:libunwind.a]
+        implicit objs: [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o;D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o;D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o]
+        implicit dirs: [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib;D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/aarch64-linux-ohos;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos]
+        implicit fwks: []
+      
+      
+...
+
+---
+events:
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineSystem.cmake:228 (message)"
+      - "CMakeLists.txt:6 (project)"
+    message: |
+      The target system is: OHOS - 1 - aarch64
+      The host system is: Windows - 10.0.26200 - AMD64
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCCompiler.cmake:123 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:6 (project)"
+    message: |
+      Compiling the C compiler identification source file "CMakeCCompilerId.c" succeeded.
+      Compiler: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/clang.exe 
+      Build flags: -fdata-sections;-ffunction-sections;-funwind-tables;-fstack-protector-strong;-no-canonical-prefixes;-fno-addrsig;-Wa,--noexecstack;-Wformat;-Werror=format-security;-D__MUSL__
+      Id flags: -c;--target=aarch64-linux-ohos 
+      
+      The output was:
+      0
+      
+      
+      Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "CMakeCCompilerId.o"
+      
+      The C compiler identification is Clang, found in:
+        C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/3.28.2/CompilerIdC/CMakeCCompilerId.o
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCXXCompiler.cmake:126 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:6 (project)"
+    message: |
+      Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" succeeded.
+      Compiler: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/clang++.exe 
+      Build flags: -fdata-sections;-ffunction-sections;-funwind-tables;-fstack-protector-strong;-no-canonical-prefixes;-fno-addrsig;-Wa,--noexecstack;-Wformat;-Werror=format-security;-D__MUSL__
+      Id flags: -c;--target=aarch64-linux-ohos 
+      
+      The output was:
+      0
+      
+      
+      Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "CMakeCXXCompilerId.o"
+      
+      The CXX compiler identification is Clang, found in:
+        C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/3.28.2/CompilerIdCXX/CMakeCXXCompilerId.o
+      
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerABI.cmake:57 (try_compile)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:6 (project)"
+    checks:
+      - "Detecting C compiler ABI info"
+    directories:
+      source: "C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-uqj6yb"
+      binary: "C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-uqj6yb"
+    cmakeVariables:
+      CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS: "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND"
+      CMAKE_CXX_COMPILER_EXTERNAL_TOOLCHAIN: "D:/command-line-tools/sdk/default/openharmony/native/llvm"
+      CMAKE_CXX_COMPILER_TARGET: "aarch64-linux-ohos"
+      CMAKE_C_COMPILER_EXTERNAL_TOOLCHAIN: "D:/command-line-tools/sdk/default/openharmony/native/llvm"
+      CMAKE_C_COMPILER_TARGET: "aarch64-linux-ohos"
+      CMAKE_C_FLAGS: "-fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa,--noexecstack -Wformat  -D__MUSL__"
+      CMAKE_EXE_LINKER_FLAGS: "--rtlib=compiler-rt -fuse-ld=lld -Wl,--build-id=sha1 -Wl,--warn-shared-textrel -Wl,--fatal-warnings -lunwind -Wl,--no-undefined -Qunused-arguments -Wl,-z,noexecstack -Wl,--gc-sections"
+      CMAKE_POSITION_INDEPENDENT_CODE: "TRUE"
+      CMAKE_SYSROOT: "D:/command-line-tools/sdk/default/openharmony/native/sysroot"
+      HMOS_SDK_NATIVE: "D:\\command-line-tools\\sdk\\default\\hms\\native"
+      OHOS_ARCH: "arm64-v8a"
+      OHOS_SDK_NATIVE: "D:/command-line-tools/sdk/default/openharmony/native"
+    buildResult:
+      variable: "CMAKE_C_ABI_COMPILED"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-uqj6yb'
+        
+        Run Build Command(s): D:\\command-line-tools\\sdk\\default\\openharmony\\native\\build-tools\\cmake\\bin\\ninja.exe -v cmTC_e00e2
+        [1/2] D:\\command-line-tools\\sdk\\default\\openharmony\\native\\llvm\\bin\\clang.exe --target=aarch64-linux-ohos --gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot   -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa,--noexecstack -Wformat  -D__MUSL__  -fPIE   -v -MD -MT CMakeFiles/cmTC_e00e2.dir/CMakeCCompilerABI.c.o -MF CMakeFiles\\cmTC_e00e2.dir\\CMakeCCompilerABI.c.o.d -o CMakeFiles/cmTC_e00e2.dir/CMakeCCompilerABI.c.o -c D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeCCompilerABI.c
+        OHOS (dev) clang version 15.0.4 (llvm-project 00dcd9ccdb860908f60ff11b32239084b0908a08)
+        Target: aarch64-unknown-linux-ohos
+        Thread model: posix
+        InstalledDir: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin
+        clang: warning: argument unused during compilation: '--gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument]
+         (in-process)
+         "D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/clang.exe" -cc1 -triple aarch64-unknown-linux-ohos -emit-obj -mrelax-all --mrelax-relocations -mnoexecstack -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCCompilerABI.c -mrelocation-model pic -pic-level 2 -pic-is-pie -mframe-pointer=non-leaf -ffp-contract=on -fno-rounding-math -mconstructor-aliases -funwind-tables=1 -target-cpu generic -target-feature +neon -target-feature +v8a -target-feature +fix-cortex-a53-835769 -target-abi aapcs -fallow-half-arguments-and-returns -mllvm -treat-scalable-fixed-error-as-warning -debugger-tuning=gdb -v -ffunction-sections -fdata-sections -fcoverage-compilation-dir=C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-uqj6yb -resource-dir D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4 -dependency-file "CMakeFiles\\\\cmTC_e00e2.dir\\\\CMakeCCompilerABI.c.o.d" -MT CMakeFiles/cmTC_e00e2.dir/CMakeCCompilerABI.c.o -sys-header-deps -D __MUSL__ -isysroot D:/command-line-tools/sdk/default/openharmony/native/sysroot -internal-isystem D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/include -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include -Wformat -fdebug-compilation-dir=C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-uqj6yb -ferror-limit 19 -stack-protector 2 -fno-signed-char -fgnuc-version=4.2.1 -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_e00e2.dir/CMakeCCompilerABI.c.o -x c D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeCCompilerABI.c
+        clang -cc1 version 15.0.4 based upon LLVM 15.0.4 default target x86_64-w64-windows-gnu
+        ignoring nonexistent directory "D:/command-line-tools/sdk/default/openharmony/native/sysroot/include"
+        #include "..." search starts here:
+        #include <...> search starts here:
+         D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include
+         D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos
+         D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include
+        End of search list.
+        [2/2] C:\\Windows\\system32\\cmd.exe /C "cd . && D:\\command-line-tools\\sdk\\default\\openharmony\\native\\llvm\\bin\\clang.exe --target=aarch64-linux-ohos --gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa,--noexecstack -Wformat  -D__MUSL__ --rtlib=compiler-rt -fuse-ld=lld -Wl,--build-id=sha1 -Wl,--warn-shared-textrel -Wl,--fatal-warnings -lunwind -Wl,--no-undefined -Qunused-arguments -Wl,-z,noexecstack -Wl,--gc-sections -v CMakeFiles/cmTC_e00e2.dir/CMakeCCompilerABI.c.o -o cmTC_e00e2   && cd ."
+        OHOS (dev) clang version 15.0.4 (llvm-project 00dcd9ccdb860908f60ff11b32239084b0908a08)
+        Target: aarch64-unknown-linux-ohos
+        Thread model: posix
+        InstalledDir: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin
+         "D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/ld.lld" --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot -pie -EL --fix-cortex-a53-843419 -z now -z relro -z max-page-size=4096 --hash-style=gnu --hash-style=both --enable-new-dtags --eh-frame-hdr -m aarch64linux -dynamic-linker /lib/ld-musl-aarch64.so.1 -o cmTC_e00e2 D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o -LD:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos -LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/ -LD:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/ -LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/ --build-id=sha1 --warn-shared-textrel --fatal-warnings -lunwind --no-undefined -z noexecstack --gc-sections CMakeFiles/cmTC_e00e2.dir/CMakeCCompilerABI.c.o D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a -l:libunwind.a -lc D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a -l:libunwind.a D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerABI.cmake:127 (message)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:6 (project)"
+    message: |
+      Parsed C implicit include dir info: rv=done
+        found start of include info
+        found start of implicit include info
+          add: [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include]
+          add: [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos]
+          add: [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include]
+        end of search list found
+        collapse include dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include] ==> [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include]
+        collapse include dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos] ==> [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos]
+        collapse include dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include] ==> [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include]
+        implicit include dirs: [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include]
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerABI.cmake:159 (message)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:6 (project)"
+    message: |
+      Parsed C implicit link information:
+        link line regex: [^( *|.*[/\\])(ld\\.lld\\.exe|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
+        ignore line: [Change Dir: 'C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-uqj6yb']
+        ignore line: []
+        ignore line: [Run Build Command(s): D:\\command-line-tools\\sdk\\default\\openharmony\\native\\build-tools\\cmake\\bin\\ninja.exe -v cmTC_e00e2]
+        ignore line: [[1/2] D:\\command-line-tools\\sdk\\default\\openharmony\\native\\llvm\\bin\\clang.exe --target=aarch64-linux-ohos --gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot   -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa --noexecstack -Wformat  -D__MUSL__  -fPIE   -v -MD -MT CMakeFiles/cmTC_e00e2.dir/CMakeCCompilerABI.c.o -MF CMakeFiles\\cmTC_e00e2.dir\\CMakeCCompilerABI.c.o.d -o CMakeFiles/cmTC_e00e2.dir/CMakeCCompilerABI.c.o -c D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeCCompilerABI.c]
+        ignore line: [OHOS (dev) clang version 15.0.4 (llvm-project 00dcd9ccdb860908f60ff11b32239084b0908a08)]
+        ignore line: [Target: aarch64-unknown-linux-ohos]
+        ignore line: [Thread model: posix]
+        ignore line: [InstalledDir: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin]
+        ignore line: [clang: warning: argument unused during compilation: '--gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument]]
+        ignore line: [ (in-process)]
+        ignore line: [ "D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/clang.exe" -cc1 -triple aarch64-unknown-linux-ohos -emit-obj -mrelax-all --mrelax-relocations -mnoexecstack -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCCompilerABI.c -mrelocation-model pic -pic-level 2 -pic-is-pie -mframe-pointer=non-leaf -ffp-contract=on -fno-rounding-math -mconstructor-aliases -funwind-tables=1 -target-cpu generic -target-feature +neon -target-feature +v8a -target-feature +fix-cortex-a53-835769 -target-abi aapcs -fallow-half-arguments-and-returns -mllvm -treat-scalable-fixed-error-as-warning -debugger-tuning=gdb -v -ffunction-sections -fdata-sections -fcoverage-compilation-dir=C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-uqj6yb -resource-dir D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4 -dependency-file "CMakeFiles\\\\cmTC_e00e2.dir\\\\CMakeCCompilerABI.c.o.d" -MT CMakeFiles/cmTC_e00e2.dir/CMakeCCompilerABI.c.o -sys-header-deps -D __MUSL__ -isysroot D:/command-line-tools/sdk/default/openharmony/native/sysroot -internal-isystem D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/include -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include -Wformat -fdebug-compilation-dir=C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-uqj6yb -ferror-limit 19 -stack-protector 2 -fno-signed-char -fgnuc-version=4.2.1 -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_e00e2.dir/CMakeCCompilerABI.c.o -x c D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeCCompilerABI.c]
+        ignore line: [clang -cc1 version 15.0.4 based upon LLVM 15.0.4 default target x86_64-w64-windows-gnu]
+        ignore line: [ignoring nonexistent directory "D:/command-line-tools/sdk/default/openharmony/native/sysroot/include"]
+        ignore line: [#include "..." search starts here:]
+        ignore line: [#include <...> search starts here:]
+        ignore line: [ D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include]
+        ignore line: [ D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos]
+        ignore line: [ D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include]
+        ignore line: [End of search list.]
+        ignore line: [[2/2] C:\\Windows\\system32\\cmd.exe /C "cd . && D:\\command-line-tools\\sdk\\default\\openharmony\\native\\llvm\\bin\\clang.exe --target=aarch64-linux-ohos --gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa,--noexecstack -Wformat  -D__MUSL__ --rtlib=compiler-rt -fuse-ld=lld -Wl,--build-id=sha1 -Wl,--warn-shared-textrel -Wl,--fatal-warnings -lunwind -Wl,--no-undefined -Qunused-arguments -Wl,-z,noexecstack -Wl,--gc-sections -v CMakeFiles/cmTC_e00e2.dir/CMakeCCompilerABI.c.o -o cmTC_e00e2   && cd ."]
+        ignore line: [OHOS (dev) clang version 15.0.4 (llvm-project 00dcd9ccdb860908f60ff11b32239084b0908a08)]
+        ignore line: [Target: aarch64-unknown-linux-ohos]
+        ignore line: [Thread model: posix]
+        ignore line: [InstalledDir: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin]
+        link line: [ "D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/ld.lld" --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot -pie -EL --fix-cortex-a53-843419 -z now -z relro -z max-page-size=4096 --hash-style=gnu --hash-style=both --enable-new-dtags --eh-frame-hdr -m aarch64linux -dynamic-linker /lib/ld-musl-aarch64.so.1 -o cmTC_e00e2 D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o -LD:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos -LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/ -LD:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/ -LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/ --build-id=sha1 --warn-shared-textrel --fatal-warnings -lunwind --no-undefined -z noexecstack --gc-sections CMakeFiles/cmTC_e00e2.dir/CMakeCCompilerABI.c.o D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a -l:libunwind.a -lc D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a -l:libunwind.a D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/ld.lld] ==> ignore
+          arg [--sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot] ==> ignore
+          arg [-pie] ==> ignore
+          arg [-EL] ==> ignore
+          arg [--fix-cortex-a53-843419] ==> ignore
+          arg [-znow] ==> ignore
+          arg [-zrelro] ==> ignore
+          arg [-zmax-page-size=4096] ==> ignore
+          arg [--hash-style=gnu] ==> ignore
+          arg [--hash-style=both] ==> ignore
+          arg [--enable-new-dtags] ==> ignore
+          arg [--eh-frame-hdr] ==> ignore
+          arg [-m] ==> ignore
+          arg [aarch64linux] ==> ignore
+          arg [-dynamic-linker] ==> ignore
+          arg [/lib/ld-musl-aarch64.so.1] ==> ignore
+          arg [-o] ==> ignore
+          arg [cmTC_e00e2] ==> ignore
+          arg [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o]
+          arg [-LD:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos] ==> dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos]
+          arg [-LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/] ==> dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/]
+          arg [-LD:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/] ==> dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/]
+          arg [-LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/] ==> dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/]
+          arg [--build-id=sha1] ==> ignore
+          arg [--warn-shared-textrel] ==> ignore
+          arg [--fatal-warnings] ==> ignore
+          arg [-lunwind] ==> lib [unwind]
+          arg [--no-undefined] ==> ignore
+          arg [-znoexecstack] ==> ignore
+          arg [--gc-sections] ==> ignore
+          arg [CMakeFiles/cmTC_e00e2.dir/CMakeCCompilerABI.c.o] ==> ignore
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a] ==> lib [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a]
+          arg [-l:libunwind.a] ==> lib [-l:libunwind.a]
+          arg [-lc] ==> lib [c]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a] ==> lib [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a]
+          arg [-l:libunwind.a] ==> lib [-l:libunwind.a]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o]
+        remove lib [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a]
+        remove lib [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a]
+        collapse library dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos] ==> [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos]
+        collapse library dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/] ==> [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib]
+        collapse library dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/] ==> [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/aarch64-linux-ohos]
+        collapse library dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/] ==> [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos]
+        implicit libs: [unwind;-l:libunwind.a;c;-l:libunwind.a]
+        implicit objs: [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o;D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o;D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o]
+        implicit dirs: [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib;D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/aarch64-linux-ohos;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos]
+        implicit fwks: []
+      
+      
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerABI.cmake:57 (try_compile)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:6 (project)"
+    checks:
+      - "Detecting CXX compiler ABI info"
+    directories:
+      source: "C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-uupfq0"
+      binary: "C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-uupfq0"
+    cmakeVariables:
+      CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS: "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND"
+      CMAKE_CXX_COMPILER_EXTERNAL_TOOLCHAIN: "D:/command-line-tools/sdk/default/openharmony/native/llvm"
+      CMAKE_CXX_COMPILER_TARGET: "aarch64-linux-ohos"
+      CMAKE_CXX_FLAGS: "-fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa,--noexecstack -Wformat   -D__MUSL__"
+      CMAKE_C_COMPILER_EXTERNAL_TOOLCHAIN: "D:/command-line-tools/sdk/default/openharmony/native/llvm"
+      CMAKE_C_COMPILER_TARGET: "aarch64-linux-ohos"
+      CMAKE_EXE_LINKER_FLAGS: "--rtlib=compiler-rt -fuse-ld=lld -Wl,--build-id=sha1 -Wl,--warn-shared-textrel -Wl,--fatal-warnings -lunwind -Wl,--no-undefined -Qunused-arguments -Wl,-z,noexecstack -Wl,--gc-sections"
+      CMAKE_POSITION_INDEPENDENT_CODE: "TRUE"
+      CMAKE_SYSROOT: "D:/command-line-tools/sdk/default/openharmony/native/sysroot"
+      HMOS_SDK_NATIVE: "D:\\command-line-tools\\sdk\\default\\hms\\native"
+      OHOS_ARCH: "arm64-v8a"
+      OHOS_SDK_NATIVE: "D:/command-line-tools/sdk/default/openharmony/native"
+    buildResult:
+      variable: "CMAKE_CXX_ABI_COMPILED"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-uupfq0'
+        
+        Run Build Command(s): D:\\command-line-tools\\sdk\\default\\openharmony\\native\\build-tools\\cmake\\bin\\ninja.exe -v cmTC_06d1d
+        [1/2] D:\\command-line-tools\\sdk\\default\\openharmony\\native\\llvm\\bin\\clang++.exe --target=aarch64-linux-ohos --gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot   -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa,--noexecstack -Wformat   -D__MUSL__  -fPIE   -v -MD -MT CMakeFiles/cmTC_06d1d.dir/CMakeCXXCompilerABI.cpp.o -MF CMakeFiles\\cmTC_06d1d.dir\\CMakeCXXCompilerABI.cpp.o.d -o CMakeFiles/cmTC_06d1d.dir/CMakeCXXCompilerABI.cpp.o -c D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeCXXCompilerABI.cpp
+        OHOS (dev) clang version 15.0.4 (llvm-project 00dcd9ccdb860908f60ff11b32239084b0908a08)
+        Target: aarch64-unknown-linux-ohos
+        Thread model: posix
+        InstalledDir: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin
+        clang++: warning: argument unused during compilation: '--gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument]
+         (in-process)
+         "D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/clang++.exe" -cc1 -triple aarch64-unknown-linux-ohos -emit-obj -mrelax-all --mrelax-relocations -mnoexecstack -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCXXCompilerABI.cpp -mrelocation-model pic -pic-level 2 -pic-is-pie -mframe-pointer=non-leaf -ffp-contract=on -fno-rounding-math -mconstructor-aliases -funwind-tables=1 -target-cpu generic -target-feature +neon -target-feature +v8a -target-feature +fix-cortex-a53-835769 -target-abi aapcs -fallow-half-arguments-and-returns -mllvm -treat-scalable-fixed-error-as-warning -debugger-tuning=gdb -v -ffunction-sections -fdata-sections -fcoverage-compilation-dir=C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-uupfq0 -resource-dir D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4 -dependency-file "CMakeFiles\\\\cmTC_06d1d.dir\\\\CMakeCXXCompilerABI.cpp.o.d" -MT CMakeFiles/cmTC_06d1d.dir/CMakeCXXCompilerABI.cpp.o -sys-header-deps -D __MUSL__ -isysroot D:/command-line-tools/sdk/default/openharmony/native/sysroot -internal-isystem D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../include/libcxx-ohos/include/c++/v1 -internal-isystem D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/include -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include -Wformat -fdeprecated-macro -fdebug-compilation-dir=C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-uupfq0 -ferror-limit 19 -stack-protector 2 -fno-signed-char -fgnuc-version=4.2.1 -fcxx-exceptions -fexceptions -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_06d1d.dir/CMakeCXXCompilerABI.cpp.o -x c++ D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeCXXCompilerABI.cpp
+        clang -cc1 version 15.0.4 based upon LLVM 15.0.4 default target x86_64-w64-windows-gnu
+        ignoring nonexistent directory "D:/command-line-tools/sdk/default/openharmony/native/sysroot/include"
+        #include "..." search starts here:
+        #include <...> search starts here:
+         D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../include/libcxx-ohos/include/c++/v1
+         D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include
+         D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos
+         D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include
+        End of search list.
+        [2/2] C:\\Windows\\system32\\cmd.exe /C "cd . && D:\\command-line-tools\\sdk\\default\\openharmony\\native\\llvm\\bin\\clang++.exe --target=aarch64-linux-ohos --gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa,--noexecstack -Wformat   -D__MUSL__ --rtlib=compiler-rt -fuse-ld=lld -Wl,--build-id=sha1 -Wl,--warn-shared-textrel -Wl,--fatal-warnings -lunwind -Wl,--no-undefined -Qunused-arguments -Wl,-z,noexecstack -Wl,--gc-sections -v CMakeFiles/cmTC_06d1d.dir/CMakeCXXCompilerABI.cpp.o -o cmTC_06d1d   && cd ."
+        OHOS (dev) clang version 15.0.4 (llvm-project 00dcd9ccdb860908f60ff11b32239084b0908a08)
+        Target: aarch64-unknown-linux-ohos
+        Thread model: posix
+        InstalledDir: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin
+         "D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/ld.lld" --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot -pie -EL --fix-cortex-a53-843419 -z now -z relro -z max-page-size=4096 --hash-style=gnu --hash-style=both --enable-new-dtags --eh-frame-hdr -m aarch64linux -dynamic-linker /lib/ld-musl-aarch64.so.1 -o cmTC_06d1d D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o -LD:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos -LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/ -LD:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/ -LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/ --build-id=sha1 --warn-shared-textrel --fatal-warnings -lunwind --no-undefined -z noexecstack --gc-sections CMakeFiles/cmTC_06d1d.dir/CMakeCXXCompilerABI.cpp.o -lc++ -lc++abi -lunwind -lm D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a -l:libunwind.a -lc D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a -l:libunwind.a D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerABI.cmake:127 (message)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:6 (project)"
+    message: |
+      Parsed CXX implicit include dir info: rv=done
+        found start of include info
+        found start of implicit include info
+          add: [D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../include/libcxx-ohos/include/c++/v1]
+          add: [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include]
+          add: [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos]
+          add: [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include]
+        end of search list found
+        collapse include dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../include/libcxx-ohos/include/c++/v1] ==> [D:/command-line-tools/sdk/default/openharmony/native/llvm/include/libcxx-ohos/include/c++/v1]
+        collapse include dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include] ==> [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include]
+        collapse include dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos] ==> [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos]
+        collapse include dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include] ==> [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include]
+        implicit include dirs: [D:/command-line-tools/sdk/default/openharmony/native/llvm/include/libcxx-ohos/include/c++/v1;D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include]
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerABI.cmake:159 (message)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:6 (project)"
+    message: |
+      Parsed CXX implicit link information:
+        link line regex: [^( *|.*[/\\])(ld\\.lld\\.exe|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
+        ignore line: [Change Dir: 'C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-uupfq0']
+        ignore line: []
+        ignore line: [Run Build Command(s): D:\\command-line-tools\\sdk\\default\\openharmony\\native\\build-tools\\cmake\\bin\\ninja.exe -v cmTC_06d1d]
+        ignore line: [[1/2] D:\\command-line-tools\\sdk\\default\\openharmony\\native\\llvm\\bin\\clang++.exe --target=aarch64-linux-ohos --gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot   -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa --noexecstack -Wformat   -D__MUSL__  -fPIE   -v -MD -MT CMakeFiles/cmTC_06d1d.dir/CMakeCXXCompilerABI.cpp.o -MF CMakeFiles\\cmTC_06d1d.dir\\CMakeCXXCompilerABI.cpp.o.d -o CMakeFiles/cmTC_06d1d.dir/CMakeCXXCompilerABI.cpp.o -c D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeCXXCompilerABI.cpp]
+        ignore line: [OHOS (dev) clang version 15.0.4 (llvm-project 00dcd9ccdb860908f60ff11b32239084b0908a08)]
+        ignore line: [Target: aarch64-unknown-linux-ohos]
+        ignore line: [Thread model: posix]
+        ignore line: [InstalledDir: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin]
+        ignore line: [clang++: warning: argument unused during compilation: '--gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument]]
+        ignore line: [ (in-process)]
+        ignore line: [ "D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/clang++.exe" -cc1 -triple aarch64-unknown-linux-ohos -emit-obj -mrelax-all --mrelax-relocations -mnoexecstack -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCXXCompilerABI.cpp -mrelocation-model pic -pic-level 2 -pic-is-pie -mframe-pointer=non-leaf -ffp-contract=on -fno-rounding-math -mconstructor-aliases -funwind-tables=1 -target-cpu generic -target-feature +neon -target-feature +v8a -target-feature +fix-cortex-a53-835769 -target-abi aapcs -fallow-half-arguments-and-returns -mllvm -treat-scalable-fixed-error-as-warning -debugger-tuning=gdb -v -ffunction-sections -fdata-sections -fcoverage-compilation-dir=C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-uupfq0 -resource-dir D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4 -dependency-file "CMakeFiles\\\\cmTC_06d1d.dir\\\\CMakeCXXCompilerABI.cpp.o.d" -MT CMakeFiles/cmTC_06d1d.dir/CMakeCXXCompilerABI.cpp.o -sys-header-deps -D __MUSL__ -isysroot D:/command-line-tools/sdk/default/openharmony/native/sysroot -internal-isystem D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../include/libcxx-ohos/include/c++/v1 -internal-isystem D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/include -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include -Wformat -fdeprecated-macro -fdebug-compilation-dir=C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-uupfq0 -ferror-limit 19 -stack-protector 2 -fno-signed-char -fgnuc-version=4.2.1 -fcxx-exceptions -fexceptions -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_06d1d.dir/CMakeCXXCompilerABI.cpp.o -x c++ D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeCXXCompilerABI.cpp]
+        ignore line: [clang -cc1 version 15.0.4 based upon LLVM 15.0.4 default target x86_64-w64-windows-gnu]
+        ignore line: [ignoring nonexistent directory "D:/command-line-tools/sdk/default/openharmony/native/sysroot/include"]
+        ignore line: [#include "..." search starts here:]
+        ignore line: [#include <...> search starts here:]
+        ignore line: [ D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../include/libcxx-ohos/include/c++/v1]
+        ignore line: [ D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include]
+        ignore line: [ D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos]
+        ignore line: [ D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include]
+        ignore line: [End of search list.]
+        ignore line: [[2/2] C:\\Windows\\system32\\cmd.exe /C "cd . && D:\\command-line-tools\\sdk\\default\\openharmony\\native\\llvm\\bin\\clang++.exe --target=aarch64-linux-ohos --gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa,--noexecstack -Wformat   -D__MUSL__ --rtlib=compiler-rt -fuse-ld=lld -Wl,--build-id=sha1 -Wl,--warn-shared-textrel -Wl,--fatal-warnings -lunwind -Wl,--no-undefined -Qunused-arguments -Wl,-z,noexecstack -Wl,--gc-sections -v CMakeFiles/cmTC_06d1d.dir/CMakeCXXCompilerABI.cpp.o -o cmTC_06d1d   && cd ."]
+        ignore line: [OHOS (dev) clang version 15.0.4 (llvm-project 00dcd9ccdb860908f60ff11b32239084b0908a08)]
+        ignore line: [Target: aarch64-unknown-linux-ohos]
+        ignore line: [Thread model: posix]
+        ignore line: [InstalledDir: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin]
+        link line: [ "D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/ld.lld" --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot -pie -EL --fix-cortex-a53-843419 -z now -z relro -z max-page-size=4096 --hash-style=gnu --hash-style=both --enable-new-dtags --eh-frame-hdr -m aarch64linux -dynamic-linker /lib/ld-musl-aarch64.so.1 -o cmTC_06d1d D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o -LD:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos -LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/ -LD:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/ -LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/ --build-id=sha1 --warn-shared-textrel --fatal-warnings -lunwind --no-undefined -z noexecstack --gc-sections CMakeFiles/cmTC_06d1d.dir/CMakeCXXCompilerABI.cpp.o -lc++ -lc++abi -lunwind -lm D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a -l:libunwind.a -lc D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a -l:libunwind.a D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/ld.lld] ==> ignore
+          arg [--sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot] ==> ignore
+          arg [-pie] ==> ignore
+          arg [-EL] ==> ignore
+          arg [--fix-cortex-a53-843419] ==> ignore
+          arg [-znow] ==> ignore
+          arg [-zrelro] ==> ignore
+          arg [-zmax-page-size=4096] ==> ignore
+          arg [--hash-style=gnu] ==> ignore
+          arg [--hash-style=both] ==> ignore
+          arg [--enable-new-dtags] ==> ignore
+          arg [--eh-frame-hdr] ==> ignore
+          arg [-m] ==> ignore
+          arg [aarch64linux] ==> ignore
+          arg [-dynamic-linker] ==> ignore
+          arg [/lib/ld-musl-aarch64.so.1] ==> ignore
+          arg [-o] ==> ignore
+          arg [cmTC_06d1d] ==> ignore
+          arg [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o]
+          arg [-LD:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos] ==> dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos]
+          arg [-LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/] ==> dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/]
+          arg [-LD:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/] ==> dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/]
+          arg [-LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/] ==> dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/]
+          arg [--build-id=sha1] ==> ignore
+          arg [--warn-shared-textrel] ==> ignore
+          arg [--fatal-warnings] ==> ignore
+          arg [-lunwind] ==> lib [unwind]
+          arg [--no-undefined] ==> ignore
+          arg [-znoexecstack] ==> ignore
+          arg [--gc-sections] ==> ignore
+          arg [CMakeFiles/cmTC_06d1d.dir/CMakeCXXCompilerABI.cpp.o] ==> ignore
+          arg [-lc++] ==> lib [c++]
+          arg [-lc++abi] ==> lib [c++abi]
+          arg [-lunwind] ==> lib [unwind]
+          arg [-lm] ==> lib [m]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a] ==> lib [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a]
+          arg [-l:libunwind.a] ==> lib [-l:libunwind.a]
+          arg [-lc] ==> lib [c]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a] ==> lib [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a]
+          arg [-l:libunwind.a] ==> lib [-l:libunwind.a]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o]
+        remove lib [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a]
+        remove lib [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a]
+        collapse library dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos] ==> [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos]
+        collapse library dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/] ==> [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib]
+        collapse library dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/] ==> [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/aarch64-linux-ohos]
+        collapse library dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/] ==> [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos]
+        implicit libs: [unwind;c++;c++abi;unwind;m;-l:libunwind.a;c;-l:libunwind.a]
+        implicit objs: [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o;D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o;D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o]
+        implicit dirs: [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib;D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/aarch64-linux-ohos;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos]
+        implicit fwks: []
+      
+      
+...
+
+---
+events:
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineSystem.cmake:228 (message)"
+      - "CMakeLists.txt:6 (project)"
+    message: |
+      The target system is: OHOS - 1 - aarch64
+      The host system is: Windows - 10.0.26200 - AMD64
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCCompiler.cmake:123 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:6 (project)"
+    message: |
+      Compiling the C compiler identification source file "CMakeCCompilerId.c" succeeded.
+      Compiler: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/clang.exe 
+      Build flags: -fdata-sections;-ffunction-sections;-funwind-tables;-fstack-protector-strong;-no-canonical-prefixes;-fno-addrsig;-Wa,--noexecstack;-Wformat;-Werror=format-security;-D__MUSL__
+      Id flags: -c;--target=aarch64-linux-ohos 
+      
+      The output was:
+      0
+      
+      
+      Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "CMakeCCompilerId.o"
+      
+      The C compiler identification is Clang, found in:
+        C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/3.28.2/CompilerIdC/CMakeCCompilerId.o
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCXXCompiler.cmake:126 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:6 (project)"
+    message: |
+      Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" succeeded.
+      Compiler: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/clang++.exe 
+      Build flags: -fdata-sections;-ffunction-sections;-funwind-tables;-fstack-protector-strong;-no-canonical-prefixes;-fno-addrsig;-Wa,--noexecstack;-Wformat;-Werror=format-security;-D__MUSL__
+      Id flags: -c;--target=aarch64-linux-ohos 
+      
+      The output was:
+      0
+      
+      
+      Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "CMakeCXXCompilerId.o"
+      
+      The CXX compiler identification is Clang, found in:
+        C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/3.28.2/CompilerIdCXX/CMakeCXXCompilerId.o
+      
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerABI.cmake:57 (try_compile)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:6 (project)"
+    checks:
+      - "Detecting C compiler ABI info"
+    directories:
+      source: "C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-po2mps"
+      binary: "C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-po2mps"
+    cmakeVariables:
+      CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS: "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND"
+      CMAKE_CXX_COMPILER_EXTERNAL_TOOLCHAIN: "D:/command-line-tools/sdk/default/openharmony/native/llvm"
+      CMAKE_CXX_COMPILER_TARGET: "aarch64-linux-ohos"
+      CMAKE_C_COMPILER_EXTERNAL_TOOLCHAIN: "D:/command-line-tools/sdk/default/openharmony/native/llvm"
+      CMAKE_C_COMPILER_TARGET: "aarch64-linux-ohos"
+      CMAKE_C_FLAGS: "-fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa,--noexecstack -Wformat  -D__MUSL__"
+      CMAKE_EXE_LINKER_FLAGS: "--rtlib=compiler-rt -fuse-ld=lld -Wl,--build-id=sha1 -Wl,--warn-shared-textrel -Wl,--fatal-warnings -lunwind -Wl,--no-undefined -Qunused-arguments -Wl,-z,noexecstack -Wl,--gc-sections"
+      CMAKE_POSITION_INDEPENDENT_CODE: "TRUE"
+      CMAKE_SYSROOT: "D:/command-line-tools/sdk/default/openharmony/native/sysroot"
+      HMOS_SDK_NATIVE: "D:\\command-line-tools\\sdk\\default\\hms\\native"
+      OHOS_ARCH: "arm64-v8a"
+      OHOS_SDK_NATIVE: "D:/command-line-tools/sdk/default/openharmony/native"
+    buildResult:
+      variable: "CMAKE_C_ABI_COMPILED"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-po2mps'
+        
+        Run Build Command(s): D:\\command-line-tools\\sdk\\default\\openharmony\\native\\build-tools\\cmake\\bin\\ninja.exe -v cmTC_40610
+        [1/2] D:\\command-line-tools\\sdk\\default\\openharmony\\native\\llvm\\bin\\clang.exe --target=aarch64-linux-ohos --gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot   -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa,--noexecstack -Wformat  -D__MUSL__  -fPIE   -v -MD -MT CMakeFiles/cmTC_40610.dir/CMakeCCompilerABI.c.o -MF CMakeFiles\\cmTC_40610.dir\\CMakeCCompilerABI.c.o.d -o CMakeFiles/cmTC_40610.dir/CMakeCCompilerABI.c.o -c D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeCCompilerABI.c
+        OHOS (dev) clang version 15.0.4 (llvm-project 00dcd9ccdb860908f60ff11b32239084b0908a08)
+        Target: aarch64-unknown-linux-ohos
+        Thread model: posix
+        InstalledDir: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin
+        clang: warning: argument unused during compilation: '--gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument]
+         (in-process)
+         "D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/clang.exe" -cc1 -triple aarch64-unknown-linux-ohos -emit-obj -mrelax-all --mrelax-relocations -mnoexecstack -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCCompilerABI.c -mrelocation-model pic -pic-level 2 -pic-is-pie -mframe-pointer=non-leaf -ffp-contract=on -fno-rounding-math -mconstructor-aliases -funwind-tables=1 -target-cpu generic -target-feature +neon -target-feature +v8a -target-feature +fix-cortex-a53-835769 -target-abi aapcs -fallow-half-arguments-and-returns -mllvm -treat-scalable-fixed-error-as-warning -debugger-tuning=gdb -v -ffunction-sections -fdata-sections -fcoverage-compilation-dir=C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-po2mps -resource-dir D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4 -dependency-file "CMakeFiles\\\\cmTC_40610.dir\\\\CMakeCCompilerABI.c.o.d" -MT CMakeFiles/cmTC_40610.dir/CMakeCCompilerABI.c.o -sys-header-deps -D __MUSL__ -isysroot D:/command-line-tools/sdk/default/openharmony/native/sysroot -internal-isystem D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/include -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include -Wformat -fdebug-compilation-dir=C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-po2mps -ferror-limit 19 -stack-protector 2 -fno-signed-char -fgnuc-version=4.2.1 -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_40610.dir/CMakeCCompilerABI.c.o -x c D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeCCompilerABI.c
+        clang -cc1 version 15.0.4 based upon LLVM 15.0.4 default target x86_64-w64-windows-gnu
+        ignoring nonexistent directory "D:/command-line-tools/sdk/default/openharmony/native/sysroot/include"
+        #include "..." search starts here:
+        #include <...> search starts here:
+         D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include
+         D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos
+         D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include
+        End of search list.
+        [2/2] C:\\Windows\\system32\\cmd.exe /C "cd . && D:\\command-line-tools\\sdk\\default\\openharmony\\native\\llvm\\bin\\clang.exe --target=aarch64-linux-ohos --gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa,--noexecstack -Wformat  -D__MUSL__ --rtlib=compiler-rt -fuse-ld=lld -Wl,--build-id=sha1 -Wl,--warn-shared-textrel -Wl,--fatal-warnings -lunwind -Wl,--no-undefined -Qunused-arguments -Wl,-z,noexecstack -Wl,--gc-sections -v CMakeFiles/cmTC_40610.dir/CMakeCCompilerABI.c.o -o cmTC_40610   && cd ."
+        OHOS (dev) clang version 15.0.4 (llvm-project 00dcd9ccdb860908f60ff11b32239084b0908a08)
+        Target: aarch64-unknown-linux-ohos
+        Thread model: posix
+        InstalledDir: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin
+         "D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/ld.lld" --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot -pie -EL --fix-cortex-a53-843419 -z now -z relro -z max-page-size=4096 --hash-style=gnu --hash-style=both --enable-new-dtags --eh-frame-hdr -m aarch64linux -dynamic-linker /lib/ld-musl-aarch64.so.1 -o cmTC_40610 D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o -LD:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos -LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/ -LD:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/ -LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/ --build-id=sha1 --warn-shared-textrel --fatal-warnings -lunwind --no-undefined -z noexecstack --gc-sections CMakeFiles/cmTC_40610.dir/CMakeCCompilerABI.c.o D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a -l:libunwind.a -lc D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a -l:libunwind.a D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerABI.cmake:127 (message)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:6 (project)"
+    message: |
+      Parsed C implicit include dir info: rv=done
+        found start of include info
+        found start of implicit include info
+          add: [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include]
+          add: [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos]
+          add: [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include]
+        end of search list found
+        collapse include dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include] ==> [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include]
+        collapse include dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos] ==> [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos]
+        collapse include dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include] ==> [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include]
+        implicit include dirs: [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include]
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerABI.cmake:159 (message)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:6 (project)"
+    message: |
+      Parsed C implicit link information:
+        link line regex: [^( *|.*[/\\])(ld\\.lld\\.exe|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
+        ignore line: [Change Dir: 'C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-po2mps']
+        ignore line: []
+        ignore line: [Run Build Command(s): D:\\command-line-tools\\sdk\\default\\openharmony\\native\\build-tools\\cmake\\bin\\ninja.exe -v cmTC_40610]
+        ignore line: [[1/2] D:\\command-line-tools\\sdk\\default\\openharmony\\native\\llvm\\bin\\clang.exe --target=aarch64-linux-ohos --gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot   -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa --noexecstack -Wformat  -D__MUSL__  -fPIE   -v -MD -MT CMakeFiles/cmTC_40610.dir/CMakeCCompilerABI.c.o -MF CMakeFiles\\cmTC_40610.dir\\CMakeCCompilerABI.c.o.d -o CMakeFiles/cmTC_40610.dir/CMakeCCompilerABI.c.o -c D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeCCompilerABI.c]
+        ignore line: [OHOS (dev) clang version 15.0.4 (llvm-project 00dcd9ccdb860908f60ff11b32239084b0908a08)]
+        ignore line: [Target: aarch64-unknown-linux-ohos]
+        ignore line: [Thread model: posix]
+        ignore line: [InstalledDir: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin]
+        ignore line: [clang: warning: argument unused during compilation: '--gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument]]
+        ignore line: [ (in-process)]
+        ignore line: [ "D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/clang.exe" -cc1 -triple aarch64-unknown-linux-ohos -emit-obj -mrelax-all --mrelax-relocations -mnoexecstack -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCCompilerABI.c -mrelocation-model pic -pic-level 2 -pic-is-pie -mframe-pointer=non-leaf -ffp-contract=on -fno-rounding-math -mconstructor-aliases -funwind-tables=1 -target-cpu generic -target-feature +neon -target-feature +v8a -target-feature +fix-cortex-a53-835769 -target-abi aapcs -fallow-half-arguments-and-returns -mllvm -treat-scalable-fixed-error-as-warning -debugger-tuning=gdb -v -ffunction-sections -fdata-sections -fcoverage-compilation-dir=C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-po2mps -resource-dir D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4 -dependency-file "CMakeFiles\\\\cmTC_40610.dir\\\\CMakeCCompilerABI.c.o.d" -MT CMakeFiles/cmTC_40610.dir/CMakeCCompilerABI.c.o -sys-header-deps -D __MUSL__ -isysroot D:/command-line-tools/sdk/default/openharmony/native/sysroot -internal-isystem D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/include -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include -Wformat -fdebug-compilation-dir=C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-po2mps -ferror-limit 19 -stack-protector 2 -fno-signed-char -fgnuc-version=4.2.1 -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_40610.dir/CMakeCCompilerABI.c.o -x c D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeCCompilerABI.c]
+        ignore line: [clang -cc1 version 15.0.4 based upon LLVM 15.0.4 default target x86_64-w64-windows-gnu]
+        ignore line: [ignoring nonexistent directory "D:/command-line-tools/sdk/default/openharmony/native/sysroot/include"]
+        ignore line: [#include "..." search starts here:]
+        ignore line: [#include <...> search starts here:]
+        ignore line: [ D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include]
+        ignore line: [ D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos]
+        ignore line: [ D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include]
+        ignore line: [End of search list.]
+        ignore line: [[2/2] C:\\Windows\\system32\\cmd.exe /C "cd . && D:\\command-line-tools\\sdk\\default\\openharmony\\native\\llvm\\bin\\clang.exe --target=aarch64-linux-ohos --gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa,--noexecstack -Wformat  -D__MUSL__ --rtlib=compiler-rt -fuse-ld=lld -Wl,--build-id=sha1 -Wl,--warn-shared-textrel -Wl,--fatal-warnings -lunwind -Wl,--no-undefined -Qunused-arguments -Wl,-z,noexecstack -Wl,--gc-sections -v CMakeFiles/cmTC_40610.dir/CMakeCCompilerABI.c.o -o cmTC_40610   && cd ."]
+        ignore line: [OHOS (dev) clang version 15.0.4 (llvm-project 00dcd9ccdb860908f60ff11b32239084b0908a08)]
+        ignore line: [Target: aarch64-unknown-linux-ohos]
+        ignore line: [Thread model: posix]
+        ignore line: [InstalledDir: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin]
+        link line: [ "D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/ld.lld" --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot -pie -EL --fix-cortex-a53-843419 -z now -z relro -z max-page-size=4096 --hash-style=gnu --hash-style=both --enable-new-dtags --eh-frame-hdr -m aarch64linux -dynamic-linker /lib/ld-musl-aarch64.so.1 -o cmTC_40610 D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o -LD:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos -LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/ -LD:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/ -LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/ --build-id=sha1 --warn-shared-textrel --fatal-warnings -lunwind --no-undefined -z noexecstack --gc-sections CMakeFiles/cmTC_40610.dir/CMakeCCompilerABI.c.o D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a -l:libunwind.a -lc D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a -l:libunwind.a D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/ld.lld] ==> ignore
+          arg [--sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot] ==> ignore
+          arg [-pie] ==> ignore
+          arg [-EL] ==> ignore
+          arg [--fix-cortex-a53-843419] ==> ignore
+          arg [-znow] ==> ignore
+          arg [-zrelro] ==> ignore
+          arg [-zmax-page-size=4096] ==> ignore
+          arg [--hash-style=gnu] ==> ignore
+          arg [--hash-style=both] ==> ignore
+          arg [--enable-new-dtags] ==> ignore
+          arg [--eh-frame-hdr] ==> ignore
+          arg [-m] ==> ignore
+          arg [aarch64linux] ==> ignore
+          arg [-dynamic-linker] ==> ignore
+          arg [/lib/ld-musl-aarch64.so.1] ==> ignore
+          arg [-o] ==> ignore
+          arg [cmTC_40610] ==> ignore
+          arg [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o]
+          arg [-LD:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos] ==> dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos]
+          arg [-LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/] ==> dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/]
+          arg [-LD:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/] ==> dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/]
+          arg [-LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/] ==> dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/]
+          arg [--build-id=sha1] ==> ignore
+          arg [--warn-shared-textrel] ==> ignore
+          arg [--fatal-warnings] ==> ignore
+          arg [-lunwind] ==> lib [unwind]
+          arg [--no-undefined] ==> ignore
+          arg [-znoexecstack] ==> ignore
+          arg [--gc-sections] ==> ignore
+          arg [CMakeFiles/cmTC_40610.dir/CMakeCCompilerABI.c.o] ==> ignore
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a] ==> lib [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a]
+          arg [-l:libunwind.a] ==> lib [-l:libunwind.a]
+          arg [-lc] ==> lib [c]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a] ==> lib [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a]
+          arg [-l:libunwind.a] ==> lib [-l:libunwind.a]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o]
+        remove lib [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a]
+        remove lib [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a]
+        collapse library dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos] ==> [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos]
+        collapse library dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/] ==> [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib]
+        collapse library dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/] ==> [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/aarch64-linux-ohos]
+        collapse library dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/] ==> [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos]
+        implicit libs: [unwind;-l:libunwind.a;c;-l:libunwind.a]
+        implicit objs: [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o;D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o;D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o]
+        implicit dirs: [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib;D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/aarch64-linux-ohos;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos]
+        implicit fwks: []
+      
+      
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerABI.cmake:57 (try_compile)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:6 (project)"
+    checks:
+      - "Detecting CXX compiler ABI info"
+    directories:
+      source: "C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-iwwzoc"
+      binary: "C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-iwwzoc"
+    cmakeVariables:
+      CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS: "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND"
+      CMAKE_CXX_COMPILER_EXTERNAL_TOOLCHAIN: "D:/command-line-tools/sdk/default/openharmony/native/llvm"
+      CMAKE_CXX_COMPILER_TARGET: "aarch64-linux-ohos"
+      CMAKE_CXX_FLAGS: "-fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa,--noexecstack -Wformat   -D__MUSL__"
+      CMAKE_C_COMPILER_EXTERNAL_TOOLCHAIN: "D:/command-line-tools/sdk/default/openharmony/native/llvm"
+      CMAKE_C_COMPILER_TARGET: "aarch64-linux-ohos"
+      CMAKE_EXE_LINKER_FLAGS: "--rtlib=compiler-rt -fuse-ld=lld -Wl,--build-id=sha1 -Wl,--warn-shared-textrel -Wl,--fatal-warnings -lunwind -Wl,--no-undefined -Qunused-arguments -Wl,-z,noexecstack -Wl,--gc-sections"
+      CMAKE_POSITION_INDEPENDENT_CODE: "TRUE"
+      CMAKE_SYSROOT: "D:/command-line-tools/sdk/default/openharmony/native/sysroot"
+      HMOS_SDK_NATIVE: "D:\\command-line-tools\\sdk\\default\\hms\\native"
+      OHOS_ARCH: "arm64-v8a"
+      OHOS_SDK_NATIVE: "D:/command-line-tools/sdk/default/openharmony/native"
+    buildResult:
+      variable: "CMAKE_CXX_ABI_COMPILED"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-iwwzoc'
+        
+        Run Build Command(s): D:\\command-line-tools\\sdk\\default\\openharmony\\native\\build-tools\\cmake\\bin\\ninja.exe -v cmTC_4cc25
+        [1/2] D:\\command-line-tools\\sdk\\default\\openharmony\\native\\llvm\\bin\\clang++.exe --target=aarch64-linux-ohos --gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot   -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa,--noexecstack -Wformat   -D__MUSL__  -fPIE   -v -MD -MT CMakeFiles/cmTC_4cc25.dir/CMakeCXXCompilerABI.cpp.o -MF CMakeFiles\\cmTC_4cc25.dir\\CMakeCXXCompilerABI.cpp.o.d -o CMakeFiles/cmTC_4cc25.dir/CMakeCXXCompilerABI.cpp.o -c D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeCXXCompilerABI.cpp
+        OHOS (dev) clang version 15.0.4 (llvm-project 00dcd9ccdb860908f60ff11b32239084b0908a08)
+        Target: aarch64-unknown-linux-ohos
+        Thread model: posix
+        InstalledDir: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin
+        clang++: warning: argument unused during compilation: '--gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument]
+         (in-process)
+         "D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/clang++.exe" -cc1 -triple aarch64-unknown-linux-ohos -emit-obj -mrelax-all --mrelax-relocations -mnoexecstack -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCXXCompilerABI.cpp -mrelocation-model pic -pic-level 2 -pic-is-pie -mframe-pointer=non-leaf -ffp-contract=on -fno-rounding-math -mconstructor-aliases -funwind-tables=1 -target-cpu generic -target-feature +neon -target-feature +v8a -target-feature +fix-cortex-a53-835769 -target-abi aapcs -fallow-half-arguments-and-returns -mllvm -treat-scalable-fixed-error-as-warning -debugger-tuning=gdb -v -ffunction-sections -fdata-sections -fcoverage-compilation-dir=C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-iwwzoc -resource-dir D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4 -dependency-file "CMakeFiles\\\\cmTC_4cc25.dir\\\\CMakeCXXCompilerABI.cpp.o.d" -MT CMakeFiles/cmTC_4cc25.dir/CMakeCXXCompilerABI.cpp.o -sys-header-deps -D __MUSL__ -isysroot D:/command-line-tools/sdk/default/openharmony/native/sysroot -internal-isystem D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../include/libcxx-ohos/include/c++/v1 -internal-isystem D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/include -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include -Wformat -fdeprecated-macro -fdebug-compilation-dir=C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-iwwzoc -ferror-limit 19 -stack-protector 2 -fno-signed-char -fgnuc-version=4.2.1 -fcxx-exceptions -fexceptions -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_4cc25.dir/CMakeCXXCompilerABI.cpp.o -x c++ D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeCXXCompilerABI.cpp
+        clang -cc1 version 15.0.4 based upon LLVM 15.0.4 default target x86_64-w64-windows-gnu
+        ignoring nonexistent directory "D:/command-line-tools/sdk/default/openharmony/native/sysroot/include"
+        #include "..." search starts here:
+        #include <...> search starts here:
+         D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../include/libcxx-ohos/include/c++/v1
+         D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include
+         D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos
+         D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include
+        End of search list.
+        [2/2] C:\\Windows\\system32\\cmd.exe /C "cd . && D:\\command-line-tools\\sdk\\default\\openharmony\\native\\llvm\\bin\\clang++.exe --target=aarch64-linux-ohos --gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa,--noexecstack -Wformat   -D__MUSL__ --rtlib=compiler-rt -fuse-ld=lld -Wl,--build-id=sha1 -Wl,--warn-shared-textrel -Wl,--fatal-warnings -lunwind -Wl,--no-undefined -Qunused-arguments -Wl,-z,noexecstack -Wl,--gc-sections -v CMakeFiles/cmTC_4cc25.dir/CMakeCXXCompilerABI.cpp.o -o cmTC_4cc25   && cd ."
+        OHOS (dev) clang version 15.0.4 (llvm-project 00dcd9ccdb860908f60ff11b32239084b0908a08)
+        Target: aarch64-unknown-linux-ohos
+        Thread model: posix
+        InstalledDir: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin
+         "D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/ld.lld" --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot -pie -EL --fix-cortex-a53-843419 -z now -z relro -z max-page-size=4096 --hash-style=gnu --hash-style=both --enable-new-dtags --eh-frame-hdr -m aarch64linux -dynamic-linker /lib/ld-musl-aarch64.so.1 -o cmTC_4cc25 D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o -LD:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos -LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/ -LD:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/ -LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/ --build-id=sha1 --warn-shared-textrel --fatal-warnings -lunwind --no-undefined -z noexecstack --gc-sections CMakeFiles/cmTC_4cc25.dir/CMakeCXXCompilerABI.cpp.o -lc++ -lc++abi -lunwind -lm D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a -l:libunwind.a -lc D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a -l:libunwind.a D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerABI.cmake:127 (message)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:6 (project)"
+    message: |
+      Parsed CXX implicit include dir info: rv=done
+        found start of include info
+        found start of implicit include info
+          add: [D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../include/libcxx-ohos/include/c++/v1]
+          add: [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include]
+          add: [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos]
+          add: [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include]
+        end of search list found
+        collapse include dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../include/libcxx-ohos/include/c++/v1] ==> [D:/command-line-tools/sdk/default/openharmony/native/llvm/include/libcxx-ohos/include/c++/v1]
+        collapse include dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include] ==> [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include]
+        collapse include dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos] ==> [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos]
+        collapse include dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include] ==> [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include]
+        implicit include dirs: [D:/command-line-tools/sdk/default/openharmony/native/llvm/include/libcxx-ohos/include/c++/v1;D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include]
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeDetermineCompilerABI.cmake:159 (message)"
+      - "D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:6 (project)"
+    message: |
+      Parsed CXX implicit link information:
+        link line regex: [^( *|.*[/\\])(ld\\.lld\\.exe|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
+        ignore line: [Change Dir: 'C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-iwwzoc']
+        ignore line: []
+        ignore line: [Run Build Command(s): D:\\command-line-tools\\sdk\\default\\openharmony\\native\\build-tools\\cmake\\bin\\ninja.exe -v cmTC_4cc25]
+        ignore line: [[1/2] D:\\command-line-tools\\sdk\\default\\openharmony\\native\\llvm\\bin\\clang++.exe --target=aarch64-linux-ohos --gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot   -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa --noexecstack -Wformat   -D__MUSL__  -fPIE   -v -MD -MT CMakeFiles/cmTC_4cc25.dir/CMakeCXXCompilerABI.cpp.o -MF CMakeFiles\\cmTC_4cc25.dir\\CMakeCXXCompilerABI.cpp.o.d -o CMakeFiles/cmTC_4cc25.dir/CMakeCXXCompilerABI.cpp.o -c D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeCXXCompilerABI.cpp]
+        ignore line: [OHOS (dev) clang version 15.0.4 (llvm-project 00dcd9ccdb860908f60ff11b32239084b0908a08)]
+        ignore line: [Target: aarch64-unknown-linux-ohos]
+        ignore line: [Thread model: posix]
+        ignore line: [InstalledDir: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin]
+        ignore line: [clang++: warning: argument unused during compilation: '--gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument]]
+        ignore line: [ (in-process)]
+        ignore line: [ "D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/clang++.exe" -cc1 -triple aarch64-unknown-linux-ohos -emit-obj -mrelax-all --mrelax-relocations -mnoexecstack -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCXXCompilerABI.cpp -mrelocation-model pic -pic-level 2 -pic-is-pie -mframe-pointer=non-leaf -ffp-contract=on -fno-rounding-math -mconstructor-aliases -funwind-tables=1 -target-cpu generic -target-feature +neon -target-feature +v8a -target-feature +fix-cortex-a53-835769 -target-abi aapcs -fallow-half-arguments-and-returns -mllvm -treat-scalable-fixed-error-as-warning -debugger-tuning=gdb -v -ffunction-sections -fdata-sections -fcoverage-compilation-dir=C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-iwwzoc -resource-dir D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4 -dependency-file "CMakeFiles\\\\cmTC_4cc25.dir\\\\CMakeCXXCompilerABI.cpp.o.d" -MT CMakeFiles/cmTC_4cc25.dir/CMakeCXXCompilerABI.cpp.o -sys-header-deps -D __MUSL__ -isysroot D:/command-line-tools/sdk/default/openharmony/native/sysroot -internal-isystem D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../include/libcxx-ohos/include/c++/v1 -internal-isystem D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/include -internal-externc-isystem D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include -Wformat -fdeprecated-macro -fdebug-compilation-dir=C:/Users/Administrator/Desktop/RzdProject/RzdMusic/features/player/.cxx/default/default/debug/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-iwwzoc -ferror-limit 19 -stack-protector 2 -fno-signed-char -fgnuc-version=4.2.1 -fcxx-exceptions -fexceptions -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_4cc25.dir/CMakeCXXCompilerABI.cpp.o -x c++ D:/command-line-tools/sdk/default/openharmony/native/build-tools/cmake/share/cmake-3.28/Modules/CMakeCXXCompilerABI.cpp]
+        ignore line: [clang -cc1 version 15.0.4 based upon LLVM 15.0.4 default target x86_64-w64-windows-gnu]
+        ignore line: [ignoring nonexistent directory "D:/command-line-tools/sdk/default/openharmony/native/sysroot/include"]
+        ignore line: [#include "..." search starts here:]
+        ignore line: [#include <...> search starts here:]
+        ignore line: [ D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../include/libcxx-ohos/include/c++/v1]
+        ignore line: [ D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/include]
+        ignore line: [ D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include/aarch64-linux-ohos]
+        ignore line: [ D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/include]
+        ignore line: [End of search list.]
+        ignore line: [[2/2] C:\\Windows\\system32\\cmd.exe /C "cd . && D:\\command-line-tools\\sdk\\default\\openharmony\\native\\llvm\\bin\\clang++.exe --target=aarch64-linux-ohos --gcc-toolchain=D:/command-line-tools/sdk/default/openharmony/native/llvm --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -fno-addrsig -Wa,--noexecstack -Wformat   -D__MUSL__ --rtlib=compiler-rt -fuse-ld=lld -Wl,--build-id=sha1 -Wl,--warn-shared-textrel -Wl,--fatal-warnings -lunwind -Wl,--no-undefined -Qunused-arguments -Wl,-z,noexecstack -Wl,--gc-sections -v CMakeFiles/cmTC_4cc25.dir/CMakeCXXCompilerABI.cpp.o -o cmTC_4cc25   && cd ."]
+        ignore line: [OHOS (dev) clang version 15.0.4 (llvm-project 00dcd9ccdb860908f60ff11b32239084b0908a08)]
+        ignore line: [Target: aarch64-unknown-linux-ohos]
+        ignore line: [Thread model: posix]
+        ignore line: [InstalledDir: D:/command-line-tools/sdk/default/openharmony/native/llvm/bin]
+        link line: [ "D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/ld.lld" --sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot -pie -EL --fix-cortex-a53-843419 -z now -z relro -z max-page-size=4096 --hash-style=gnu --hash-style=both --enable-new-dtags --eh-frame-hdr -m aarch64linux -dynamic-linker /lib/ld-musl-aarch64.so.1 -o cmTC_4cc25 D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o -LD:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos -LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/ -LD:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/ -LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/ --build-id=sha1 --warn-shared-textrel --fatal-warnings -lunwind --no-undefined -z noexecstack --gc-sections CMakeFiles/cmTC_4cc25.dir/CMakeCXXCompilerABI.cpp.o -lc++ -lc++abi -lunwind -lm D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a -l:libunwind.a -lc D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a -l:libunwind.a D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/ld.lld] ==> ignore
+          arg [--sysroot=D:/command-line-tools/sdk/default/openharmony/native/sysroot] ==> ignore
+          arg [-pie] ==> ignore
+          arg [-EL] ==> ignore
+          arg [--fix-cortex-a53-843419] ==> ignore
+          arg [-znow] ==> ignore
+          arg [-zrelro] ==> ignore
+          arg [-zmax-page-size=4096] ==> ignore
+          arg [--hash-style=gnu] ==> ignore
+          arg [--hash-style=both] ==> ignore
+          arg [--enable-new-dtags] ==> ignore
+          arg [--eh-frame-hdr] ==> ignore
+          arg [-m] ==> ignore
+          arg [aarch64linux] ==> ignore
+          arg [-dynamic-linker] ==> ignore
+          arg [/lib/ld-musl-aarch64.so.1] ==> ignore
+          arg [-o] ==> ignore
+          arg [cmTC_4cc25] ==> ignore
+          arg [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o]
+          arg [-LD:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos] ==> dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos]
+          arg [-LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/] ==> dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/]
+          arg [-LD:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/] ==> dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/]
+          arg [-LD:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/] ==> dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/]
+          arg [--build-id=sha1] ==> ignore
+          arg [--warn-shared-textrel] ==> ignore
+          arg [--fatal-warnings] ==> ignore
+          arg [-lunwind] ==> lib [unwind]
+          arg [--no-undefined] ==> ignore
+          arg [-znoexecstack] ==> ignore
+          arg [--gc-sections] ==> ignore
+          arg [CMakeFiles/cmTC_4cc25.dir/CMakeCXXCompilerABI.cpp.o] ==> ignore
+          arg [-lc++] ==> lib [c++]
+          arg [-lc++abi] ==> lib [c++abi]
+          arg [-lunwind] ==> lib [unwind]
+          arg [-lm] ==> lib [m]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a] ==> lib [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a]
+          arg [-l:libunwind.a] ==> lib [-l:libunwind.a]
+          arg [-lc] ==> lib [c]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a] ==> lib [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a]
+          arg [-l:libunwind.a] ==> lib [-l:libunwind.a]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o]
+          arg [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o] ==> obj [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o]
+        remove lib [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a]
+        remove lib [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/libclang_rt.builtins.a]
+        collapse library dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos] ==> [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos]
+        collapse library dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/] ==> [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib]
+        collapse library dir [D:/command-line-tools/sdk/default/openharmony/native/llvm/bin/../lib/aarch64-linux-ohos/] ==> [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/aarch64-linux-ohos]
+        collapse library dir [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/] ==> [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos]
+        implicit libs: [unwind;c++;c++abi;unwind;m;-l:libunwind.a;c;-l:libunwind.a]
+        implicit objs: [D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/Scrt1.o;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crti.o;D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtbegin.o;D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos/clang_rt.crtend.o;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos/crtn.o]
+        implicit dirs: [D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib;D:/command-line-tools/sdk/default/openharmony/native/llvm/lib/aarch64-linux-ohos;D:/command-line-tools/sdk/default/openharmony/native/sysroot/usr/lib/aarch64-linux-ohos]
+        implicit fwks: []
+      
+      
+...
