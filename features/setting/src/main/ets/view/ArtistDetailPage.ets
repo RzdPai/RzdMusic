@@ -21,7 +21,7 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { common } from '@kit.AbilityKit';
 import { guardPlayerBack, immersiveMedium } from 'musicbasic';
 import { ConcertItem, ConcertService } from '../concert/ConcertService';
-import { AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, SongTitleMarquee, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, shouldUseSplitDetailLayout, splitDetailCardWidthVp } from 'musicbasic';
+import { AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, SongTitleMarquee, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, shouldUseSplitDetailLayout, splitDetailCardWidthVp , immersiveMaterial, RzdMaterialStyle } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType } from '@kit.UIDesignKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import {
@@ -310,7 +310,7 @@ export struct ArtistDetailPage {
 
       Text(this.artistNameText.length > 0 ? this.artistNameText : '歌手')
         .fontSize(13)
-        .fontColor('#99FFFFFF')
+        .fontColor($r('app.color.font_tertiary'))
         .width('100%')
         .padding({ left: 4 })
 
@@ -388,7 +388,7 @@ export struct ArtistDetailPage {
       } else {
         Text('暂无歌手简介')
           .fontSize(13)
-          .fontColor('#99FFFFFF')
+          .fontColor($r('app.color.font_tertiary'))
           .margin({ top: 10 })
       }
     }
@@ -1368,7 +1368,7 @@ export struct ArtistDetailPage {
           .height(28)
           .padding({ left: 12, right: 12 })
           .borderRadius(14)
-          .systemMaterial(immersiveMedium())
+          .systemMaterial(immersiveMaterial(RzdMaterialStyle.THIN))
           .backgroundColor(this.fgTint())
           .margin({ bottom: 10 })
           .onClick(() => {
@@ -1407,7 +1407,7 @@ export struct ArtistDetailPage {
           .width(40)
           .height(40)
           .borderRadius(20)
-          .systemMaterial(immersiveMedium())
+          .systemMaterial(immersiveMaterial(RzdMaterialStyle.THIN))
           .backgroundColor(this.fgTint())
           .onClick(() => {
             this.showAboutPopup = !this.showAboutPopup;
@@ -1457,7 +1457,7 @@ export struct ArtistDetailPage {
           .width(40)
           .height(40)
           .borderRadius(20)
-          .systemMaterial(immersiveMedium())
+          .systemMaterial(immersiveMaterial(RzdMaterialStyle.THIN))
           .backgroundColor(this.fgTint())
           .onClick(() => {
             this.toggleFavoriteArtist();
