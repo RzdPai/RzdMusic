@@ -832,8 +832,9 @@ export struct PlaylistDetailPage {
         title: this.heroTitle(),
         subtitle: this.heroSubtitle(),
         backdropColor: this.backdropColor,
-        fgColor: this.heroFgPrimary(),
-        fgSecondaryColor: this.heroFgSecondary(),
+        // ★ 2026-11-01（用户：列表文字不跟实际底色走）：列表压的是**主题页底色**，不是 Hero 的封面渐变 ⇒ 用主题前景色
+      fgColor: $r('app.color.font_primary'),
+        fgSecondaryColor: $r('app.color.font_tertiary'),
         buttonTint: this.heroButtonTint(),
         buttonBlur: this.heroButtonBlur(),
         onPlayAll: (): void => {
@@ -866,8 +867,9 @@ export struct PlaylistDetailPage {
           batchExitCommand: this.batchExitCommand,
           allowBatchDelete: this.sectionType === 'playlist' && this.playlistId.length > 0,
           backdropColor: this.backdropColor,
-          fgColor: this.heroFgPrimary(),
-          fgSecondaryColor: this.heroFgSecondary(),
+          // ★ 2026-11-01（用户：列表文字不跟实际底色走）：列表压的是**主题页底色**，不是 Hero 的封面渐变 ⇒ 用主题前景色
+      fgColor: $r('app.color.font_primary'),
+          fgSecondaryColor: $r('app.color.font_tertiary'),
           loading: this.listVm.loadingOnline,
           batch: this.batchSelection,
           onBatchModeChange: (active: boolean): void => {
@@ -905,8 +907,9 @@ export struct PlaylistDetailPage {
             allowBatchDelete: this.sectionType === 'playlist' && this.playlistId.length > 0,
             // 「播放全部」吸顶行要用页面底色当不透明背景
             backdropColor: this.backdropColor,
-            fgColor: this.heroFgPrimary(),
-            fgSecondaryColor: this.heroFgSecondary(),
+            // ★ 2026-11-01（用户：列表文字不跟实际底色走）：列表压的是**主题页底色**，不是 Hero 的封面渐变 ⇒ 用主题前景色
+      fgColor: $r('app.color.font_primary'),
+            fgSecondaryColor: $r('app.color.font_tertiary'),
             // 在线榜单/歌单的歌曲是异步拉的，加载中显示骨架而不是空态
             loading: this.listVm.loadingOnline,
             // 与页面底部的批量操作条共用同一份选择状态
