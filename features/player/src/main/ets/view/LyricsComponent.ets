@@ -364,7 +364,9 @@ export struct LyricsComponent {
       }
       this.lastLoadKey = fp;
     }
-    this.lrcLines = [];
+    // ★ 2026-11-01（R1，用户：网易逐字歌词闪）：这里**不再**先清空 lrcLines ——
+    //   清空会让 build() 里的 if (lrcLines.length > 0) 在下一帧销毁整块画布，造成"整屏空白再重画"。
+    //   改为只在"没有当前歌曲"时清空（下面 if (!song) 分支已处理），正常换词走一次性赋值。
     this.rawLyricText = '';
     this.currentLineText = '';
     this.translationLines = [];
@@ -629,7 +631,10 @@ export struct LyricsComponent {
   build() {
     Column() {
       Stack({ alignContent: Alignment.BottomEnd }) {
-        if (this.lrcLines.length > 0) {
+          // ★ 2026-11-01（R4，用户：网易逐字歌词闪）：画布**常驻**，不再按 lrcLines 生死。
+          //   原来换词时 lrcLines 短暂为空 ⇒ 这里销毁 AmllLyricView ⇒ 引擎/测量/弹簧/滚动全部归零 ⇒ 整屏闪。
+          //   保留 if(true) 结构以免大改缩进；空歌词时组件内部自己不会画。
+          if (true) {
           AmllLyricView({
             // ★★★ 2026-10-16：**必须用 `renderLines()`**（掐掉开头的标题行），
             //   否则 `作词：唐恬` / `作曲：钱雷` 会当普通歌词一起滚上去，

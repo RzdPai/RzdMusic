@@ -183,7 +183,9 @@ export class AmllCanvasLyricRenderer {
     this.measureInited = false;
     this.measureCursor = 0;
     this.measureOrder = [];
-    this.measured = [];
+    // ★ 2026-11-01（用户：网易逐字歌词会闪）：不再清空已测量行 —— 清空后首帧 drawGroup 找不到 entry 会直接不画，
+    //   造成"整屏空白 1 帧以上"；保留旧测量值最多让旧排版多显示 1~2 帧，肉眼几乎无感。
+    //   顺序/游标仍然重置，保证新歌词会被重新测量覆盖。
     this.rgbaCache.clear();
   }
 
