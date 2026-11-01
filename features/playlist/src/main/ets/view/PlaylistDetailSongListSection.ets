@@ -381,12 +381,15 @@ export struct PlaylistDetailSongListSection {
   }
 
   private surfaceInk(): ResourceColor {
-    return '#FFFFFF';
+    // ★ 2026-11-01（用户：列表文字不跟实际取到的颜色走）：列表压的是**主题页底色**（日间白 / 夜间近黑），
+    //   不是封面那层彩色渐变 ⇒ 正文一律用主题前景色，深浅由主题决定，不再恒白（恒白在日间＝白底白字）。
+    return $r('app.color.font_primary');
   }
 
   /** 取色底上的次要文字色（与 {@link surfaceInk} 同一结论，只降透明度）。 */
   private surfaceInkSecondary(): ResourceColor {
-    return '#B3FFFFFF';
+    // 同上：次要文字跟主题走（日间深灰 / 夜间浅灰）。
+    return $r('app.color.font_tertiary');
   }
 
   /** 是否已全选当前可见行（批量操作条与列表头共用同一份选择状态）。 */
