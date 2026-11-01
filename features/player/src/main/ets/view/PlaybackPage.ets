@@ -1721,6 +1721,10 @@ export struct PlaybackPage {
           }
           MusicStoreService.getInstance().appendRuntimeDiagnostic(
             `RzdCloseState +64 re-pop idx=${still} top=${left.length - 1}`);
+        // ★ 2026-11-01（用户：多开几次播放器打不开了）：这里补 pop 之后的状态收尾 ——
+        //   日志显示 +64ms 时 `show=1 size=1 names=player`，re-pop 把路由真的弹掉了，但 `isShowPlay` 仍是 true；
+        //   下一次点播放条以为"已经在播放页"就不再 push ⇒ 表现为打不开。这里把它复位。
+        this.state.isShowPlay = false;
         }
       } catch (error) {
         MusicStoreService.getInstance().appendRuntimeDiagnostic(`RzdCloseState +64 failed error=${error}`);
