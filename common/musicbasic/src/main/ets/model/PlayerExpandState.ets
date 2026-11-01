@@ -1751,7 +1751,15 @@ export class PlayerExpandState {
     const gap: number = PlayerExpandState.LYRIC_META_GAP_BELOW_COVER_VP;   // 单列 12（P1-2）      // 50锛堟棤鐣岄粯璁わ級
     const halfRow: number = rowH > 0 ? rowH / 2 : 0;
     // 鈶?t = 0 閭ｄ竴绔細灏侀潰搴曡竟 + gap锛? `fitPlayerOverlay` 鐨?metaY 鈭?metaH/2锛?
-    const fromTop: number = fromRect.y + fromRect.height + gap;
+    // ★ 2026-11-01（用户：充足条件下 meta 应放在「封面底」与「进度条顶」之间居中）：
+  //   先算封面底 → 控制区顶这条带子，再把「meta 行 + 小歌词」整体在带内居中；太小就退回 gap。
+  const chromeReal: number = this.chromeBlockVp > 0 ? this.chromeBlockVp : 176;
+  const bottomLimit: number = this.windowHeightVp - chromeReal - 8;
+  const bandTop: number = fromRect.y + fromRect.height;
+  const band: number = bottomLimit - bandTop;
+  const contentH: number = rowH + 28;
+  const centeredGap: number = band > contentH + gap ? (band - contentH) / 2 : gap;
+  const fromTop: number = bandTop + centeredGap;
     // 鈶?t = 1 閭ｄ竴绔細灏忓皝闈㈤《杈?+ metaTopFixLyric(+28) 鈭?rowH/2
     const lyric: LyricMorphRect = this.lyricMorph(1);
     const toTop: number = lyric.y + PlayerExpandState.META_TOP_FIX_LYRIC_VP - halfRow;
