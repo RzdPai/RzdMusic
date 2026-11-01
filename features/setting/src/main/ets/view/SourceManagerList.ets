@@ -29,6 +29,25 @@ function SwipeIcon(icon: Resource, bg: string, action: () => void) {
   })
 }
 
+/** 左滑里的**文字**圆钮（分享用；不依赖 sys.symbol 是否存在）。 */
+@Builder
+function SwipeTextIcon(label: string, bg: string, action: () => void) {
+  Column() {
+    Text(label)
+      .fontSize(12)
+      .fontColor(Color.White)
+      .fontWeight(FontWeight.Medium)
+  }
+  .width(48)
+  .height(48)
+  .borderRadius(24)
+  .justifyContent(FlexAlign.Center)
+  .backgroundColor(bg)
+  .onClick(() => {
+    action();
+  })
+}
+
 @ComponentV2
 export struct SourceManagerList {
   /** 展示顺序：已勾选在前（按用户顺序），未勾选在后。 */
@@ -96,7 +115,8 @@ export struct SourceManagerList {
       SwipeIcon($r('sys.symbol.arrow_clockwise'), '#1E88E5', (): void => {
         this.onCheckUpdate(api);
       })
-      SwipeIcon($r('sys.symbol.share'), '#7B1FA2', (): void => {
+      SwipeTextIcon('分享', '#7B1FA2', (): void => {
+        appendPlayLog('[RzdSourceShare] swipe tap id=' + api.id);
         this.onShare(api);
       })
       SwipeIcon($r('sys.symbol.trash'), '#E53935', (): void => {
