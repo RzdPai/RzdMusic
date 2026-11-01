@@ -378,9 +378,6 @@ export class AmllLyricPlayerEngine {
     return this.dataManager.getProcessedLines();
   }
 
-  /** 最近一次真实量到的主行高（换词重建时的初值，避免"大行距→弹簧收缩"的闪烁观感）。 */
-  private lastSettledMainH: number = 0;
-
   get defaultLineHeight(): number {
     return this.size[1] / 5;
   }
@@ -499,9 +496,7 @@ export class AmllLyricPlayerEngine {
       bounds.push(bound);
     }
     this.timelineController.setTimeBounds(bounds);
-      // ★ 换词重建：用上次真实行高做初值（没有就用默认），避免行距先大后小的弹簧过程
-      const seedH: number = this.lastSettledMainH > 0 ? this.lastSettledMainH : this.defaultLineHeight;
-      this.layoutCalculator.initHeights(this.groups.length, seedH);
+    this.layoutCalculator.initHeights(this.groups.length, this.defaultLineHeight);
 
     this.measuredMainHeights = new Array<number>(this.groups.length).fill(0);
     this.measuredSubHeights = new Array<number>(this.groups.length).fill(0);
@@ -874,11 +869,6 @@ export class AmllLyricPlayerEngine {
 
   /** 渲染层上报测量的主行块高度 */
   setMeasuredMainHeight(index: number, height: number): void {
-    // ★ 2026-11-01（用户：换歌词时行距突然变得特别大，再弹簧收回来）：记住最近一次真实量到的行高，
-    //   换词重建时用它做初值，避免先用 defaultLineHeight（很大）铺满再逐行弹簧收缩。
-    if (height > 0) {
-      this.lastSettledMainH = height;
-    }
     if (index < 0 || index >= this.groups.length) {
       return;
     }
