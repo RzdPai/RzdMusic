@@ -52,7 +52,7 @@ import {
   buildTitleMaterial,
   BarScrollHelper
 , TabBarConfigModel } from 'musicbasic';
-import { dispatchShellPlaybackIntent, LXSourceHost, PlaybackPage, PlaybackPageCoverContent, PlayerViewModel,
+import { dispatchShellPlaybackIntent, LXSourceHost, PlaybackPage, PlaybackPageCoverContent, PlayerViewModel, warmUpLxSources,
   prewarmCurrentSongMesh } from 'player';
 import { RecommendPage } from 'recommendation';
 import { EchoReviewPage } from 'recommendation';
@@ -496,6 +496,13 @@ struct Index {
 
   /** Initializes play queue ids from local DB for the session. */
   aboutToAppear() {
+    // ★ 2026-11-01（用户：恢复备份/启动后音源显示异常，得手动点一下卡片）：
+    //   启动 3s 后（等 LX 引擎挂载完）预热一次：把 sources 为空的音源逐个加载，让 init 上报并落盘。
+    setTimeout((): void => {
+      warmUpLxSources().catch((_e: Error): void => {
+        // 预热失败不影响启动，静默即可（日志由 warmUpLxSources 内部打）
+      });
+    }, 3000);
     // 自定义 Tab 栏：启动时读一次配置（设置页改动会广播到 AppStorage）
     this.tabCfgJson = AppStorage.get<string>('rzd_tab_bar_config') ?? '';
     // 2026-10-23：把"首页返回收尾"注册给 Ability 层（页面级 onBackPress 收不到首页返回）。

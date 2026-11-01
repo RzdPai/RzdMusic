@@ -65,7 +65,7 @@ export type { LXBatchQualityResult } from './src/main/ets/source/LXQualityApi';
 export { lxDeclaredPlatforms, lxDeclaredPlatformsOf, lxSourceLabel, lxQualityLabel, lxActionLabel }
   from './src/main/ets/util/SourceDeclaredInfo';
 export type { LXSourcePlatformInfo } from './src/main/ets/util/SourceDeclaredInfo';
-export { sourceDisplayName, qualityDisplayName, QUALITY_CHAIN } from './src/main/ets/util/SourceFallbackUtil';
+export { sourceDisplayName, qualityDisplayName, QUALITY_CHAIN, warmUpLxSources } from './src/main/ets/util/SourceFallbackUtil';
 // A4：音质真实探测（会话缓存 + 播放链路回写）
 export { cachedProbe, probeSummary, probeQuality, probeBySample, sampleOf, pickPlaybackQuality, qualityRank, markProbeOk, markProbeFail, parseIntervalSeconds } from './src/main/ets/util/LxQualityProbe';
 export type { ProbeSample } from './src/main/ets/util/LxQualityProbe';

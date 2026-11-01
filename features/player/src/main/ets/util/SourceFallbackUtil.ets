@@ -758,3 +758,48 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
   }
   return new UrlResolveOutcome();
 }
+
+/**
+ * 启动 / 恢复备份后的**音源预热**。
+ *
+ * 背景（2026-11-01 用户反馈）：音源卡片上"平台那一行"来自脚本 init 上报的 `sources`，
+ * 而 `sources` 只有在脚本被**加载**时才会由 `LXSourceEngine` 调 `saveApiSources()` 落盘。
+ * 恢复备份后 `lxActiveSource` 可能为空 ⇒ 一个脚本都没加载 ⇒ 所有卡片显示"异常状态"，
+ * 必须手动点一下卡片才能恢复。
+ *
+ * 做法：把 `sources` 为空的音源逐个切过去加载一遍（每次 `switchToScript` 会等引擎 ready，
+ * 从而触发 init 上报并落盘），全部走完后恢复用户原来的选中项。
+ *
+ * 排查关键字：`[换源] 预热`。
+ * @returns 实际预热（加载过）的音源数量
+ */
+export async function warmUpLxSources(): Promise<number> {
+  const list: LXUserApiInfo[] = lxSourceManager.getApiList();
+  if (list.length === 0) {
+    return 0;
+  }
+  const originalActive: string = activeSourceId();
+  let warmed: number = 0;
+  for (let i: number = 0; i < list.length; i++) {
+    const api: LXUserApiInfo = list[i];
+    const declared: number = api.sources !== undefined ? Object.keys(api.sources).length : 0;
+    if (declared > 0) {
+      continue;
+    }
+    appendPlayLog('[换源] 预热音源 ' + api.name + ' id=' + api.id);
+    AppStorage.setOrCreate('lxActiveSource', api.id);
+    await sleep(60);
+    const ok: boolean = await switchToScript(api.id);
+    if (ok) {
+      warmed++;
+    }
+  }
+  // 恢复用户原来的选中项（没有就保持最后加载的那个）
+  if (originalActive.length > 0 && activeSourceId() !== originalActive) {
+    AppStorage.setOrCreate('lxActiveSource', originalActive);
+    await switchToScript(originalActive);
+  }
+  appendPlayLog('[换源] 预热完成 warmed=' + warmed + ' total=' + list.length +
+    ' active=' + activeSourceId());
+  return warmed;
+}
