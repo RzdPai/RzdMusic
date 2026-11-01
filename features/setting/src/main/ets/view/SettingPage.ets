@@ -1488,12 +1488,17 @@ export struct SettingPage {
   /**
    * 分享音源脚本文件本身（用户 2026-11-01：左滑「分享」分享的是脚本文件）。
    * 做法：把 filesDir 里的脚本复制成 cache 下的「音源名_v版本.js」，再拉起系统分享面板。
-   * 排查关键字：`[RzdSourceShare]`。
+   * ★ 2026-11-01 二次修（用户：点了没反应）：
+   *   ① 入口/失败都写日志（TAG `RzdSourceShare`），便于确认到底是"没点到"还是"分享接口失败"；
+   *   ② ShareKit 在某些机型/HMS 未就绪时会失败 ⇒ 回退到 startAbility(sendData)，两条路都走不通才提示失败。
+   * 排查关键字：`RzdSourceShare`。
    */
   private async shareSourceFile(api: LXUserApiInfo): Promise<void> {
+    hilog.info(0x0000, 'RzdSourceShare', 'tap id=%{public}s name=%{public}s', api.id, api.name);
     try {
       const ctx: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
       const raw: string = await lxSourceManager.getScript(api.id);
+      hilog.info(0x0000, 'RzdSourceShare', 'script len=%{public}d', raw.length);
       if (raw.length === 0) {
         this.getUIContext().getPromptAction().showToast({ message: '读不到脚本文件，无法分享', duration: 2000 });
         return;
@@ -1507,17 +1512,29 @@ export struct SettingPage {
       fs.writeSync(file.fd, raw);
       fs.closeSync(file);
       const uri: string = fileUri.getUriFromPath(path);
-      const record: systemShare.SharedRecord = {
-        utd: 'general.file',
+      hilog.info(0x0000, 'RzdSourceShare', 'file=%{public}s uri=%{public}s', fileName, uri);
+      // ① 优先 ShareKit 面板
+      try {
+        const record: systemShare.SharedRecord = { utd: 'general.file', uri: uri, title: fileName };
+        const data: systemShare.SharedData = new systemShare.SharedData(record);
+        const controller: systemShare.ShareController = new systemShare.ShareController(data);
+        controller.show(ctx, { previewMode: systemShare.SharePreviewMode.DEFAULT });
+        hilog.info(0x0000, 'RzdSourceShare', 'sharekit show ok');
+        return;
+      } catch (e1) {
+        hilog.error(0x0000, 'RzdSourceShare', 'sharekit failed %{public}s', JSON.stringify(e1).substring(0, 160));
+      }
+      // ② 回退：标准 sendData Want（系统"发送到"选择器）
+      const want: Want = {
+        action: 'ohos.want.action.sendData',
         uri: uri,
-        title: fileName
+        type: 'application/octet-stream',
+        parameters: { 'ability.params.stream': [uri] }
       };
-      const data: systemShare.SharedData = new systemShare.SharedData(record);
-      const controller: systemShare.ShareController = new systemShare.ShareController(data);
-      controller.show(ctx, { previewMode: systemShare.SharePreviewMode.DEFAULT });
-      hilog.info(0x0000, 'RzdSourceShare', '%{public}s', fileName + ' uri=' + uri);
+      await ctx.startAbility(want);
+      hilog.info(0x0000, 'RzdSourceShare', 'startAbility sendData ok');
     } catch (err) {
-      hilog.error(0x0000, 'RzdSourceShare', '%{public}s', JSON.stringify(err).substring(0, 120));
+      hilog.error(0x0000, 'RzdSourceShare', 'failed %{public}s', JSON.stringify(err).substring(0, 160));
       this.getUIContext().getPromptAction().showToast({ message: '分享失败', duration: 2000 });
     }
   }
