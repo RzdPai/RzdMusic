@@ -466,7 +466,7 @@ export struct PlaybackTuningPanel {
         .width('100%')
         .blockColor(this.themeStateColor())
         .selectedColor(this.themeStateColor())
-        .trackColor($r('app.color.background_secondary'))
+        .trackColor($r('app.color.chip_surface'))
         .onChange((value: number): void => {
           const semitones: number = Math.round(value);
           if (semitones !== this.pitch) {
@@ -576,7 +576,7 @@ export struct PlaybackTuningPanel {
               .layoutWeight(1)
               .blockColor(this.themeStateColor())
               .selectedColor(this.themeStateColor())
-              .trackColor($r('app.color.background_secondary'))
+              .trackColor($r('app.color.chip_surface'))
               .onChange((value: number): void => {
                 const gain: number = Math.round(value);
                 if (gain !== this.eqGains[index]) {
@@ -635,7 +635,7 @@ export struct PlaybackTuningPanel {
         .width('100%')
         .blockColor(this.themeStateColor())
         .selectedColor(this.themeStateColor())
-        .trackColor($r('app.color.background_secondary'))
+        .trackColor($r('app.color.chip_surface'))
         .onChange((value: number): void => {
           const db: number = Math.round(value);
           if (db !== this.bassDb) {
@@ -656,8 +656,9 @@ export struct PlaybackTuningPanel {
           .height(30)
           .padding({ left: 14, right: 14 })
           .margin({ right: 8, top: 8 })
+          // ★ 2026-11-01（用户：下面这几行按钮看不见）：改用与上面 EQ 胶囊同一套 chip_surface
           .backgroundColor(this.isEffectOn(item.key) ?
-            this.themeStateColor() : $r('app.color.background_secondary'))
+            this.themeStateColor() : $r('app.color.chip_surface'))
           .onClick((): void => {
             this.toggleEffect(item.key);
           })
