@@ -2093,8 +2093,9 @@ export struct NowPlayingFeedPage {
       this.store.addFeedCategoryPlay(row.categoryId);
       Logger.info(RZD_TAG, `rec weight +1 category=${row.categoryId}`);
     }
-    this.appState.queueOrigin = 'feed';
     void OnlinePlayUtil.playList(this.appState, songs, target, this.getUIContext(), false);
+    // ★ 2026-11-01：playList 内部会统一置 'playlist'，这里必须在它之后覆盖回 'feed'
+    this.appState.queueOrigin = 'feed';
     // ① 写回**自家栈**：下一次 `playAt` 的身份判据只看它（不再从 appState.playQueue 反推）
     const entries: FeedQueueEntry[] = [];
     for (let i: number = 0; i < this.feedSource.totalCount(); i++) {

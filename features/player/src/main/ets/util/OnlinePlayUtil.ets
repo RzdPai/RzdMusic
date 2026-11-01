@@ -261,6 +261,10 @@ export class OnlinePlayUtil {
   }
   public static async playList(appState: MusicAppState, songs: LXSearchSong[], startIndex: number,
     uiContext: UIContext | undefined, openPlayer: boolean = true): Promise<boolean> {
+    // ★ 2026-11-01（用户反馈：正常歌曲点播放条却跳到「现在就听」）：
+    //   队列来源标记以前只在 feed 里写、别处从不清 ⇒ 一旦在 feed 播过，之后所有"打开播放页"都会被重定向到 feed。
+    //   这里统一置为 'playlist'；feed 侧在本函数返回后再把它改回 'feed'。
+    appState.queueOrigin = 'playlist';
     // ★ 启动瞬间引擎可能还没 ready：先等最多 3s，避免每次开应用都误弹「音源未就绪」
     const engineReady: boolean = await waitForLxEngineReady(3000);
     if (!engineReady) {

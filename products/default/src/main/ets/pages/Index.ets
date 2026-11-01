@@ -704,7 +704,14 @@ struct Index {
       if (this.appState.queueOrigin === 'feed') {
         // ⑧：当前队列归「现在就听」所有 ⇒ 切到那个 Tab，不打开播放页
         Logger.info(RzdShellLogTag, 'open player redirected to feed tab (queueOrigin=feed)');
-        this.tabState.tabIndex = 1;
+        // ★ 2026-11-01：改用「逻辑下标」并按可见性判定（自定义 Tab 栏后 1 不一定是"现在就听"；它也可能被隐藏）
+        const feedLogical: number = this.tabLogicalOf(NOW_PLAYING_TAB_INDEX);
+        if (feedLogical >= 0) {
+          this.tabState.tabIndex = feedLogical;
+        } else {
+          // 「现在就听」页签被关掉了：退化成正常打开播放页
+          this.appState.isShowPlay = true;
+        }
       } else {
         this.appState.isShowPlay = true;
       }
@@ -1323,7 +1330,14 @@ struct Index {
       if (this.appState.queueOrigin === 'feed') {
         // ⑧：当前队列归「现在就听」所有 ⇒ 切到那个 Tab，不打开播放页
         Logger.info(RzdShellLogTag, 'open player redirected to feed tab (queueOrigin=feed)');
-        this.tabState.tabIndex = 1;
+        // ★ 2026-11-01：改用「逻辑下标」并按可见性判定（自定义 Tab 栏后 1 不一定是"现在就听"；它也可能被隐藏）
+        const feedLogical: number = this.tabLogicalOf(NOW_PLAYING_TAB_INDEX);
+        if (feedLogical >= 0) {
+          this.tabState.tabIndex = feedLogical;
+        } else {
+          // 「现在就听」页签被关掉了：退化成正常打开播放页
+          this.appState.isShowPlay = true;
+        }
       } else {
         this.appState.isShowPlay = true;
       }
