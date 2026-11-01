@@ -1090,22 +1090,31 @@ export class MediaService {
       const src: string = itemRef.source;
       const srcId: string = itemRef.songId;
       const appState: MusicAppState = this.getAppState();
+      // ★ 2026-11-01（用户：只有网易云歌词会闪）：原来**无条件**写文本 + 无条件 lyricVersion++ + 无条件 reloadLyric，
+      //   而 enrichOnlineTrack 在 loadAsset / resolveOnlineUrl / 'playing' 三处各跑一次（wy 命中 TTML 时会二次覆盖），
+      //   每次都让画布销毁重建 ⇒ 闪。现在只有**文本真的变了**才写、才自增版本、才重载。
       const applyLyric: (lyric: string, translation: string, roman: string) => void =
         (lyric: string, translation: string, roman: string): void => {
-          if (lyric.length > 0) {
+          let changed: boolean = false;
+          if (lyric.length > 0 && lyric !== itemRef.lyricText) {
             itemRef.lyricText = lyric;
+            changed = true;
           }
-          if (translation.length > 0) {
+          if (translation.length > 0 && translation !== itemRef.lyricTranslation) {
             itemRef.lyricTranslation = translation;
+            changed = true;
           }
-          if (roman.length > 0) {
+          if (roman.length > 0 && roman !== itemRef.lyricRoman) {
             itemRef.lyricRoman = roman;
+            changed = true;
           }
-          if (lyric.length > 0 || translation.length > 0 || roman.length > 0) {
+          if (changed) {
             appState.lyricVersion++;
-            // 歌词补全后同步到播控中心元数据与实况窗
+            appendPlayLog('[歌词] 变更重建 source=' + src + ' len=' + itemRef.lyricText.length);
             this.liveViewController.reloadLyric(itemRef.lyricText);
             void this.setAVMetadata();
+          } else {
+            appendPlayLog('[歌词] 内容未变，跳过重建 source=' + src);
           }
         };
       // TTML 社区数据库歌词优先级最高（逐字 + 翻译/罗马音随原文），失败再回退各平台全量歌词
