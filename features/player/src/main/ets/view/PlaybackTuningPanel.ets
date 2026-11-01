@@ -428,7 +428,8 @@ export struct PlaybackTuningPanel {
           .height(34)
           .padding({ left: 16, right: 16 })
           .margin({ right: 8, bottom: 8 })
-          .backgroundColor(this.speed === rate ? this.themeStateColor() : $r('app.color.background_secondary'))
+          // ★ 2026-11-01（用户：日间模式下胶囊和背景融在一起，看起来空空的）：未选中改用 panel_surface（日间 #F2F3F5 / 夜间 #1C1C1E）+ 细描边
+          .backgroundColor(this.speed === rate ? this.themeStateColor() : $r('app.color.panel_surface'))
           .onClick((): void => {
             this.applySpeed(rate);
           })
@@ -500,8 +501,10 @@ export struct PlaybackTuningPanel {
             .type(ButtonType.Capsule)
             .height(30)
             .padding({ left: 14, right: 14 })
+            // ★ 2026-11-01（同上）：未选中用 panel_surface + 描边，日间不再"隐身"
             .backgroundColor(this.presetName === preset.name ?
-              this.themeStateColor() : $r('app.color.background_secondary'))
+              this.themeStateColor() : $r('app.color.panel_surface'))
+            .border({ width: 0.5, color: this.presetName === preset.name ? Color.Transparent : $r('app.color.menu_surface_border') })
             .onClick((): void => {
               this.applyPreset(preset);
             })

@@ -1403,6 +1403,9 @@ export struct RecordListPage {
           //   与播放器播放列表里的定位按钮同一个 SVG，见该组件头部注释）
           LocateFloatButton({
             tint: this.themeState.color,
+            // ★ 2026-11-01（用户：定位歌曲按钮位置调高）：原来 bottomInset 用默认 96，贴着底部；
+            //   历史/收藏页底部还有一行内边距，抬到 150 让它明显离开底边。
+            bottomInset: 150,
             clickable: this.currentRecordIndex() >= 0,
             onTap: (): void => {
               this.locateCurrent();
