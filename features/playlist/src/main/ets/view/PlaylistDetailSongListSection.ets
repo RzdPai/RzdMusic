@@ -380,16 +380,37 @@ export struct PlaylistDetailSongListSection {
     return cur.songId === item.songId;
   }
 
+  /** `backdropColor` 是 `rgb(r, g, b)` 或 `#RRGGBB`；按相对亮度判定"浅底"。 */
+  private isLightSurface(): boolean {
+    const c: string = this.backdropColor;
+    let r: number = 0;
+    let g: number = 0;
+    let b: number = 0;
+    const m = c.match(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/);
+    if (m !== null) {
+      r = Number.parseInt(m[1]);
+      g = Number.parseInt(m[2]);
+      b = Number.parseInt(m[3]);
+    } else if (c.length >= 7 && c.startsWith('#')) {
+      r = Number.parseInt(c.substring(1, 3), 16);
+      g = Number.parseInt(c.substring(3, 5), 16);
+      b = Number.parseInt(c.substring(5, 7), 16);
+    } else {
+      return false;
+    }
+    const lum: number = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+    return lum > 0.42;
+  }
+
   private surfaceInk(): ResourceColor {
-    // ★ 2026-11-01（用户：列表文字不跟实际取到的颜色走）：列表压的是**主题页底色**（日间白 / 夜间近黑），
-    //   不是封面那层彩色渐变 ⇒ 正文一律用主题前景色，深浅由主题决定，不再恒白（恒白在日间＝白底白字）。
-    return $r('app.color.font_primary');
+    // ★ 2026-11-01（用户）：墨色必须跟**实际背景色**走，不能跟主题 ——
+    //   日间也可能取到深色背景、夜间也可能取到浅色背景。
+    return this.isLightSurface() ? '#E6000000' : '#FFFFFF';
   }
 
   /** 取色底上的次要文字色（与 {@link surfaceInk} 同一结论，只降透明度）。 */
   private surfaceInkSecondary(): ResourceColor {
-    // 同上：次要文字跟主题走（日间深灰 / 夜间浅灰）。
-    return $r('app.color.font_tertiary');
+    return this.isLightSurface() ? '#99000000' : '#B3FFFFFF';
   }
 
   /** 是否已全选当前可见行（批量操作条与列表头共用同一份选择状态）。 */

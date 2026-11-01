@@ -833,8 +833,9 @@ export struct PlaylistDetailPage {
         subtitle: this.heroSubtitle(),
         backdropColor: this.backdropColor,
         // ★ 2026-11-01（用户：列表文字不跟实际底色走）：列表压的是**主题页底色**，不是 Hero 的封面渐变 ⇒ 用主题前景色
-      fgColor: $r('app.color.font_primary'),
-        fgSecondaryColor: $r('app.color.font_tertiary'),
+      // ★ 2026-11-01（用户：颜色必须跟随**背景**，不能跟随主题 —— 日间也可能取到深色背景、夜间也可能取到浅色背景）
+      fgColor: this.isLightBackdrop() ? '#E6000000' : '#FFFFFF',
+        fgSecondaryColor: this.isLightBackdrop() ? '#99000000' : '#B3FFFFFF',
         buttonTint: this.heroButtonTint(),
         buttonBlur: this.heroButtonBlur(),
         onPlayAll: (): void => {
@@ -868,8 +869,9 @@ export struct PlaylistDetailPage {
           allowBatchDelete: this.sectionType === 'playlist' && this.playlistId.length > 0,
           backdropColor: this.backdropColor,
           // ★ 2026-11-01（用户：列表文字不跟实际底色走）：列表压的是**主题页底色**，不是 Hero 的封面渐变 ⇒ 用主题前景色
-      fgColor: $r('app.color.font_primary'),
-          fgSecondaryColor: $r('app.color.font_tertiary'),
+      // ★ 2026-11-01（用户：颜色必须跟随**背景**，不能跟随主题 —— 日间也可能取到深色背景、夜间也可能取到浅色背景）
+      fgColor: this.isLightBackdrop() ? '#E6000000' : '#FFFFFF',
+          fgSecondaryColor: this.isLightBackdrop() ? '#99000000' : '#B3FFFFFF',
           loading: this.listVm.loadingOnline,
           batch: this.batchSelection,
           onBatchModeChange: (active: boolean): void => {
@@ -908,8 +910,9 @@ export struct PlaylistDetailPage {
             // 「播放全部」吸顶行要用页面底色当不透明背景
             backdropColor: this.backdropColor,
             // ★ 2026-11-01（用户：列表文字不跟实际底色走）：列表压的是**主题页底色**，不是 Hero 的封面渐变 ⇒ 用主题前景色
-      fgColor: $r('app.color.font_primary'),
-            fgSecondaryColor: $r('app.color.font_tertiary'),
+      // ★ 2026-11-01（用户：颜色必须跟随**背景**，不能跟随主题 —— 日间也可能取到深色背景、夜间也可能取到浅色背景）
+      fgColor: this.isLightBackdrop() ? '#E6000000' : '#FFFFFF',
+            fgSecondaryColor: this.isLightBackdrop() ? '#99000000' : '#B3FFFFFF',
             // 在线榜单/歌单的歌曲是异步拉的，加载中显示骨架而不是空态
             loading: this.listVm.loadingOnline,
             // 与页面底部的批量操作条共用同一份选择状态
