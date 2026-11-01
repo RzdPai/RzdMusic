@@ -1600,6 +1600,18 @@ export class PlayerExpandState {
    *   在单列里纯属浪费（`metaTopGeomY` 只有两处调用点）⇒ 单列取 12，省 38vp。
    */
   private static readonly LYRIC_META_GAP_BELOW_COVER_VP: number = 12;
+  /**
+   * 控制区（进度+时间+传输行）**实测高度**，由 PlaybackPage 的 onAreaChange 回填（`reportChromeBlockH`）。
+   * 0 = 还没量到，封面公式回退到 176 的经验值。
+   */
+  @Trace public chromeBlockVp: number = 0;
+
+  /** 回填控制区实测高度（vp）。 */
+  public reportChromeBlockH(h: number): void {
+    if (h > 0 && Math.abs(h - this.chromeBlockVp) > 0.5) {
+      this.chromeBlockVp = h;
+    }
+  }
   /** `fitPlayerOverlay` 閲岄偅涓?纭紪鐮?+8"锛堜笂鐣屽す绱х敤锛夈€?*/
   private static readonly COVER_FIT_BOUND_INSET_VP: number = 8;
   /**
@@ -1867,12 +1879,14 @@ export class PlayerExpandState {
     // ★ 2026-11-01（用户：无界的封面很小）：上面那套"上下对称预留"会把 meta 高度算两遍，
     //   阔屏/窄高窗口里封面被撑到 273.6，导致 meta + 小歌词 + 控制区没地方放。
     //   这里再按**可用高度的 38%** 收一次（下限 COVER_EDGE_MIN_VP），与形态比例解耦。
-    // 高窄机（正常手机，h/w > 1.75）留大一点避免中间大片空白；阔屏/短高仍收在 0.38
-    const aspect: number = h / Math.max(1, w);
-    const capFactor: number = aspect > 1.75 ? 0.52 : 0.38;
-    const smallCap: number = Math.max(PlayerExpandState.COVER_EDGE_MIN_VP, availH * capFactor);
-    if (edge > smallCap) {
-      edge = smallCap;
+    // ★ 2026-11-01（用户：别按比例，直接实时计算）：用**实测**的控制区高度 + 固定 meta/小歌词预留，
+    //   算出"下面四块真正占多少"，封面只能拿剩下的；没有比例系数、没有对称假设。
+    const chromeReal: number = this.chromeBlockVp > 0 ? this.chromeBlockVp : 176;
+    const lyricReal: number = 28;                                  // 短高 1 行的小歌词块（MiniLyricLinesBlock）
+    const reserveBelow: number = chromeReal + gap + metaH + lyricReal + inset;
+    const maxByReserve: number = availH - reserveBelow;
+    if (edge > maxByReserve) {
+      edge = maxByReserve;
     }
     if (edge < 0) {
       edge = 0;

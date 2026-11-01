@@ -6085,6 +6085,8 @@ export struct PlaybackPage {
                     height > 0 && (this.lyricChromeMeasurePending ||
                     Math.abs(height - this.lyricChromeHeight) > 0.5)) {
                     this.lyricChromeHeight = height;
+          // ★ 回填实测高度给封面公式（实时计算，不用比例系数）
+          this.expandState.reportChromeBlockH(height);
                     this.lyricChromeMeasurePending = false;
                     Logger.info('RzdLyricChrome', `measure naturalHeight=${height}`);
                   }
