@@ -61,7 +61,11 @@
             "value": "#FFFFFF"
         },
         {
-            "name": "capsule_background",
+            "name": "chip_surface",
+    "value": "#E3E6EA"
+  },
+  {
+    "name": "capsule_background",
             "value": "#F1F3F5"
         },
         {
