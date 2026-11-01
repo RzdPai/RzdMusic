@@ -187,6 +187,29 @@ class LXSourceManager {
     }
   }
 
+  /**
+   * 同步读脚本原文（只给「导入去重」用；gz_ 压缩格式返回空串表示"无法比较"）。
+   * @param apiId 音源 id
+   * @returns 脚本原文或空串
+   */
+  private readScriptSync(apiId: string): string {
+    try {
+      const p: string = this.getScriptFilePath(apiId);
+      if (!fs.accessSync(p)) {
+        return '';
+      }
+      const st: fs.Stat = fs.statSync(p);
+      const buf: ArrayBuffer = new ArrayBuffer(st.size);
+      const file: fs.File = fs.openSync(p, fs.OpenMode.READ_ONLY);
+      fs.readSync(file.fd, buf, { offset: 0, length: st.size });
+      fs.closeSync(file);
+      const raw: string = util.TextDecoder.create('utf-8').decodeToString(new Uint8Array(buf));
+      return raw.startsWith('gz_') ? '' : raw;
+    } catch (e) {
+      return '';
+    }
+  }
+
   async getScript(apiId: string): Promise<string> {
     let scriptPath: string = this.getScriptFilePath(apiId);
     try {
@@ -320,6 +343,16 @@ class LXSourceManager {
     //   按 @name 去重 —— 同版本直接跳过；不同版本**原地替换**（保留原 id 与选中状态）。
     {
       const existing: LXUserApiInfo[] = this.getApiList();
+      // ★ 2026-11-01（用户：重复识别不该看文件名，应按脚本内容）：
+      //   先按**内容**判重（忽略空白差异），同内容一律视为已存在；再回落到 name+version。
+      const normalizedNew: string = scriptRaw.replace(/\s+/g, '');
+      for (let i: number = 0; i < existing.length; i++) {
+        const oldRaw: string = this.readScriptSync(existing[i].id);
+        if (oldRaw.length > 0 && oldRaw.replace(/\s+/g, '') === normalizedNew) {
+          hilog.info(DOMAIN, TAG, 'import skipped (same content) id=%{public}s', existing[i].id);
+          return { ok: true, message: existing[i].name + ' 已存在（内容相同），未重复导入', info: existing[i] };
+        }
+      }
       for (let i: number = 0; i < existing.length; i++) {
         if (existing[i].name.trim() !== parsed.name.trim()) {
           continue;
