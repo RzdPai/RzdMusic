@@ -16,10 +16,11 @@
 import { guardPlayerBack } from 'musicbasic';
 import { AppStorageV2, CapsuleSegmentButtonV2, ColorMetrics, LengthMetrics, SegmentButtonV2Items, uiObserver } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit';
-import { common, ConfigurationConstant, Want } from '@kit.AbilityKit';
+import { common, ConfigurationConstant, Want, wantConstant } from '@kit.AbilityKit';
 import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { systemShare } from '@kit.ShareKit';
+import { uniformTypeDescriptor } from '@kit.ArkData';
 import { fileUri } from '@kit.CoreFileKit';
 import { http } from '@kit.NetworkKit';
 import { pasteboard } from '@kit.BasicServicesKit';
@@ -1487,16 +1488,17 @@ export struct SettingPage {
 
   /**
    * 分享音源脚本文件本身（用户 2026-11-01：左滑「分享」分享的是脚本文件）。
-   * 做法：把 filesDir 里的脚本复制成 cache 下的「音源名_v版本.js」，再拉起系统分享面板。
-   * ★ 2026-11-01 二次修（用户：点了没反应）：
-   *   ① 入口/失败都写日志（TAG `RzdSourceShare`），便于确认到底是"没点到"还是"分享接口失败"；
-   *   ② ShareKit 在某些机型/HMS 未就绪时会失败 ⇒ 回退到 startAbility(sendData)，两条路都走不通才提示失败。
-   * 排查关键字：`RzdSourceShare`。
+   *
+   * ★ 2026-11-01 二次修（用户：点了没反应）：查了官方文档《分享数据创建及分享面板拉起》，
+   *   `ShareController.show(context, options)` **返回 Promise**，不接 then/catch 的话一旦失败就"静默无反应"。
+   *   现在：① 用 `uniformTypeDescriptor.UniformDataType.PLAIN_TEXT`（脚本是文本）；
+   *        ② show 的 Promise 显式 then/catch 并写进应用内日志（`[RzdSourceShare]`）；
+   *        ③ 失败回退 `startAbility(sendData)`，再失败才 toast。
    */
   private async shareSourceFile(api: LXUserApiInfo): Promise<void> {
     appendPlayLog('[RzdSourceShare] tap id=' + api.id + ' name=' + api.name);
+    const ctx: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     try {
-      const ctx: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
       const raw: string = await lxSourceManager.getScript(api.id);
       appendPlayLog('[RzdSourceShare] script len=' + raw.length);
       if (raw.length === 0) {
@@ -1513,23 +1515,29 @@ export struct SettingPage {
       fs.closeSync(file);
       const uri: string = fileUri.getUriFromPath(path);
       appendPlayLog('[RzdSourceShare] file=' + fileName + ' uri=' + uri);
-      // ① 优先 ShareKit 面板
+      // ① 官方推荐：ShareKit 系统分享面板（show 返回 Promise，必须接住）
       try {
-        const record: systemShare.SharedRecord = { utd: 'general.file', uri: uri, title: fileName };
-        const data: systemShare.SharedData = new systemShare.SharedData(record);
-        const controller: systemShare.ShareController = new systemShare.ShareController(data);
-        controller.show(ctx, { previewMode: systemShare.SharePreviewMode.DEFAULT });
+        const shareData: systemShare.SharedData = new systemShare.SharedData({
+          utd: uniformTypeDescriptor.UniformDataType.PLAIN_TEXT,
+          uri: uri,
+          title: fileName
+        });
+        const controller: systemShare.ShareController = new systemShare.ShareController(shareData);
+        await controller.show(ctx, {
+          selectionMode: systemShare.SelectionMode.SINGLE,
+          previewMode: systemShare.SharePreviewMode.DEFAULT
+        });
         appendPlayLog('[RzdSourceShare] sharekit show ok');
         return;
       } catch (e1) {
         appendPlayLog('[RzdSourceShare] sharekit failed ' + JSON.stringify(e1).substring(0, 160));
       }
-      // ② 回退：标准 sendData Want（系统"发送到"选择器）
+      // ② 回退：文件处理类应用（sendData）
       const want: Want = {
         action: 'ohos.want.action.sendData',
         uri: uri,
-        type: 'application/octet-stream',
-        parameters: { 'ability.params.stream': [uri] }
+        type: 'text/plain',
+        flags: wantConstant.Flags.FLAG_AUTH_READ_URI_PERMISSION
       };
       await ctx.startAbility(want);
       appendPlayLog('[RzdSourceShare] startAbility sendData ok');
