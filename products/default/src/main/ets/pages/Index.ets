@@ -3156,7 +3156,10 @@ struct Index {
           // 搴曢儴璁╀綅涓庝笂闈€屾帹鑽愩€嶉〉鍚屼竴鍒ゆ嵁锛圚DS 娴姩鑳跺泭搴曟爮 6.1.1(24)/60100 璧锋墠瀛樺湪锛夛細
           // 56 = 鑳跺泭楂橈紝+16 = `barBottomMargin` 鐨勫父瑙勫€笺€傚畠鍔犲湪**婊戝姩鍗＄墖鑷繁**韬笂锛?
           // 杩欐牱姣忎竴灞忛兘鑳芥濂借翰寮€搴曟爮锛堣 `NowPlayingFeedPage.FEED_DEFAULT_BOTTOM_RESERVE_VP`锛夈€?
-          bottomReserveVp: deviceInfo.distributionOSApiVersion >= 60100 ? 56 + 16 : 56,
+          // ★ 2026-11-01（用户：平板上「现在就听」的进度条/控制行被 Tab 栏挡住）：
+          //   平板走 HdsTabs 的**双行**底栏（图标+文字），比手机的浮动胶囊更高 ⇒ 额外再让出一行高度。
+          bottomReserveVp: (deviceInfo.distributionOSApiVersion >= 60100 ? 56 + 16 : 56) +
+            (this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_LG || this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_XL ? 56 : 0),
           scrollTopCommand: this.tabScrollTopCommands[1],
           // 鈽呪槄 2026-10-15 鐢ㄦ埛锛氥€屾垜鍚姩搴旂敤杩囦竴浼氬氨浼氳嚜鍔ㄥ紑濮嬫挱鏀撅紝**鑷姩寮€濮嬫挱鏀剧殑閫昏緫搴旇鏄垜鎵撳紑
           //    閭ｄ釜鐜板湪灏卞惉鐨勯〉闈㈢殑鏃跺€?*銆嶃€傛牴鍥犳槸 `HdsTabs` 鐨?`TabContent` 瀛愰〉闈?*鍚姩鏃跺氨鎸傝浇**
