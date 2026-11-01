@@ -1864,6 +1864,13 @@ export class PlayerExpandState {
     if (edge > curEdgeMax) {
       edge = curEdgeMax;
     }
+    // ★ 2026-11-01（用户：无界的封面很小）：上面那套"上下对称预留"会把 meta 高度算两遍，
+    //   阔屏/窄高窗口里封面被撑到 273.6，导致 meta + 小歌词 + 控制区没地方放。
+    //   这里再按**可用高度的 38%** 收一次（下限 COVER_EDGE_MIN_VP），与形态比例解耦。
+    const smallCap: number = Math.max(PlayerExpandState.COVER_EDGE_MIN_VP, availH * 0.38);
+    if (edge > smallCap) {
+      edge = smallCap;
+    }
     if (edge < 0) {
       edge = 0;
     }
