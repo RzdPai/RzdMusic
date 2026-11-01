@@ -346,8 +346,24 @@ export struct LyricsComponent {
     return result;
   }
 
+  /** 上一次 loadLyrics 的"歌 + 歌词"指纹，用于避免重复加载导致的闪烁。 */
+  @Local lastLoadKey: string = '';
+
   @Monitor('state.selectIndex', 'state.playQueueIds', 'state.playQueue', 'state.lyricVersion')
   loadLyrics(): void {
+    // ★ 2026-11-01（用户：网易歌词会闪烁）：@Monitor 挂在 playQueue/lyricVersion 上，
+    //   补全链路或队列更新会重复触发本方法；原来一进来就清空 lrcLines ⇒ 每触发一次闪一次。
+    //   这里先算"同一首歌 + 同一份歌词"的指纹，完全一致就直接返回，不清空、不重解析。
+    const cur = this.state.getCurrentSongItem();
+    if (cur !== undefined && cur !== null) {
+      const s2tFlag: boolean = MusicStoreService.getInstance().getLyricS2t();
+      const fp: string = (cur.songId ?? '') + '|' + (cur.lyricText ?? '').length + '|' +
+        (cur.lyricTranslation ?? '').length + '|' + (s2tFlag ? '1' : '0');
+      if (fp === this.lastLoadKey) {
+        return;
+      }
+      this.lastLoadKey = fp;
+    }
     this.lrcLines = [];
     this.rawLyricText = '';
     this.currentLineText = '';
