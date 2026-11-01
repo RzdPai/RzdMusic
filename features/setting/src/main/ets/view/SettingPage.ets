@@ -23,7 +23,7 @@ import { systemShare } from '@kit.ShareKit';
 import { fileUri } from '@kit.CoreFileKit';
 import { http } from '@kit.NetworkKit';
 import { pasteboard } from '@kit.BasicServicesKit';
-import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, BarScrollHelper, RouterUrlConstants, BreakpointType, HomeSourceState, LocalCoverImage, LyricBlurState, LyricFontSizeState, MusicAppState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, WindowInfo, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, getWindowInfoState } from 'musicbasic';
+import { appendPlayLog, CoverCacheSettingsCard, AmbientState, AppStorageKeys, BarScrollHelper, RouterUrlConstants, BreakpointType, HomeSourceState, LocalCoverImage, LyricBlurState, LyricFontSizeState, MusicAppState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, WindowInfo, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, getWindowInfoState } from 'musicbasic';
 import { BlurStrategy, HdsNavigation, HdsNavigationTitleMode, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { NetworkImportSheet } from 'playlist';
@@ -1494,11 +1494,11 @@ export struct SettingPage {
    * 排查关键字：`RzdSourceShare`。
    */
   private async shareSourceFile(api: LXUserApiInfo): Promise<void> {
-    hilog.info(0x0000, 'RzdSourceShare', 'tap id=%{public}s name=%{public}s', api.id, api.name);
+    appendPlayLog('[RzdSourceShare] tap id=' + api.id + ' name=' + api.name);
     try {
       const ctx: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
       const raw: string = await lxSourceManager.getScript(api.id);
-      hilog.info(0x0000, 'RzdSourceShare', 'script len=%{public}d', raw.length);
+      appendPlayLog('[RzdSourceShare] script len=' + raw.length);
       if (raw.length === 0) {
         this.getUIContext().getPromptAction().showToast({ message: '读不到脚本文件，无法分享', duration: 2000 });
         return;
@@ -1512,17 +1512,17 @@ export struct SettingPage {
       fs.writeSync(file.fd, raw);
       fs.closeSync(file);
       const uri: string = fileUri.getUriFromPath(path);
-      hilog.info(0x0000, 'RzdSourceShare', 'file=%{public}s uri=%{public}s', fileName, uri);
+      appendPlayLog('[RzdSourceShare] file=' + fileName + ' uri=' + uri);
       // ① 优先 ShareKit 面板
       try {
         const record: systemShare.SharedRecord = { utd: 'general.file', uri: uri, title: fileName };
         const data: systemShare.SharedData = new systemShare.SharedData(record);
         const controller: systemShare.ShareController = new systemShare.ShareController(data);
         controller.show(ctx, { previewMode: systemShare.SharePreviewMode.DEFAULT });
-        hilog.info(0x0000, 'RzdSourceShare', 'sharekit show ok');
+        appendPlayLog('[RzdSourceShare] sharekit show ok');
         return;
       } catch (e1) {
-        hilog.error(0x0000, 'RzdSourceShare', 'sharekit failed %{public}s', JSON.stringify(e1).substring(0, 160));
+        appendPlayLog('[RzdSourceShare] sharekit failed ' + JSON.stringify(e1).substring(0, 160));
       }
       // ② 回退：标准 sendData Want（系统"发送到"选择器）
       const want: Want = {
@@ -1532,9 +1532,9 @@ export struct SettingPage {
         parameters: { 'ability.params.stream': [uri] }
       };
       await ctx.startAbility(want);
-      hilog.info(0x0000, 'RzdSourceShare', 'startAbility sendData ok');
+      appendPlayLog('[RzdSourceShare] startAbility sendData ok');
     } catch (err) {
-      hilog.error(0x0000, 'RzdSourceShare', 'failed %{public}s', JSON.stringify(err).substring(0, 160));
+      appendPlayLog('[RzdSourceShare] failed ' + JSON.stringify(err).substring(0, 160));
       this.getUIContext().getPromptAction().showToast({ message: '分享失败', duration: 2000 });
     }
   }
