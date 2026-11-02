@@ -6965,7 +6965,24 @@ export struct PlaybackPage {
     this.meshSrc = undefined;
     this.meshSrcVersion = this.meshSrcVersion + 1;
     // ★ 2026-11-01：静态缓存指向的就是这一张时，必须先断掉缓存再 release（见 `sharedMeshAlive`）。
-    if (old !== undefined && PlaybackPage.bgCachePm === old) {
+    // ★ 2026-11-02（复核 P2）：**缓存里那张也要按 owner 收尾** ——
+    //   换歌时缓存里可能是"无主孤儿"（上一轮页面走了、还没人 adopt），
+    //   而本页 `meshSrc` 是另一张 ⇒ 只清槽不释放就把无主那张彻底漏掉了。
+    const cachedPm: image.PixelMap | undefined = PlaybackPage.bgCachePm;
+    const cachedOwner: number = PlaybackPage.bgCacheOwner;
+    if (cachedPm !== undefined && cachedPm !== old) {
+      PlaybackPage.bgCachePm = undefined;
+      PlaybackPage.bgCacheKey = '';
+      PlaybackPage.bgCacheOwner = 0;
+      if (cachedOwner === 0) {
+        try {
+          cachedPm.release();
+          Logger.info(PlaybackPage.logTag, 'RzdBgPhase cache-drop release orphan (track change)');
+        } catch (error) {
+          Logger.warn(PlaybackPage.logTag, `cache-drop orphan release failed: ${error}`);
+        }
+      }
+    } else if (old !== undefined && PlaybackPage.bgCachePm === old) {
       PlaybackPage.bgCachePm = undefined;
       PlaybackPage.bgCacheKey = '';
       PlaybackPage.bgCacheOwner = 0;
