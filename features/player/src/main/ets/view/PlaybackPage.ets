@@ -359,6 +359,19 @@ export struct PlaybackPage {
    */
   private static bgCacheKey: string = '';
   private static bgCachePm: image.PixelMap | undefined = undefined;
+  /**
+   * ★★★ 2026-11-02（复核 P2：静态缓存替换没接上释放责任）：
+   * **谁持有这张 PixelMap 的释放责任**。
+   * ```
+   *   >0 = 该 `closeInstance` 的页面持有 ⇒ 缓存只是借用（页面卸载时自己收尾 / 移交孤儿）
+   *   =0 = 无主（原页面已走人，缓存自己持有）⇒ 缓存**替换或作废时必须 release 它**
+   * ```
+   * 原来只有"页面卸载不 release 静态那张"，于是下一个页面 `commitMeshSource()` 直接把静态槽
+   * 换成新图、却只 release 传入的本地 `old`（新页通常为空）⇒ 旧那张没有任何显式释放路径。
+   * 现在按 owner 判定：**无主才由缓存释放**，页面还活着就交给页面（它自己的 `onDisAppear` 收）。
+   * 排查关键字：`RzdBgPhase cache-replace` / `cache-orphan`。
+   */
+  private static bgCacheOwner: number = 0;
 
   /** 把静态缓存里那一张拿回本实例（key 必须与当前曲目一致）。命中返回 true。 */
   private adoptSharedMesh(): boolean {
@@ -371,6 +384,7 @@ export struct PlaybackPage {
       appendPlayLog(`[RzdBgPhase] shared-mesh dead key=${key.substring(0, 48)} -> dropped`);
       PlaybackPage.bgCachePm = undefined;
       PlaybackPage.bgCacheKey = '';
+      PlaybackPage.bgCacheOwner = 0;
       return false;
     }
     const pm: image.PixelMap | undefined = PlaybackPage.bgCachePm;
@@ -379,8 +393,10 @@ export struct PlaybackPage {
     }
     this.meshSrc = pm;
     this.meshTrackKey = key;
+    // ★ 2026-11-02：借用的对象记在本页名下 ⇒ 释放责任回到页面。
+    PlaybackPage.bgCacheOwner = this.closeInstance;
     this.meshSrcVersion = this.meshSrcVersion + 1;
-    appendPlayLog(`[RzdBgPhase] shared-mesh adopt ver=${this.meshSrcVersion}`);
+    appendPlayLog(`[RzdBgPhase] shared-mesh adopt ver=${this.meshSrcVersion} owner=${this.closeInstance}`);
     return true;
   }
   /**
@@ -1515,6 +1531,8 @@ export struct PlaybackPage {
   private static ownerInstance: number = 0;
   private static cancelCloseOwner: (() => void) | undefined = undefined;
   private closeInstance: number = 0;
+  /** 本页属于哪一次打开会话（= `aboutToAppear` / `onAppear` 那一刻的 `PlaybackPage.openSerial`）。 */
+  private instanceOpenSerial: number = 0;
   private closeToken: number = 0;
   private closeWatchdogTimer: number = -1;
   /**
@@ -1764,6 +1782,16 @@ export struct PlaybackPage {
       this.releasePixelMapQuiet(pixmap);
     }
     this.expandState.endSnapshotShrink();
+    // ★★★ 2026-11-02（复核候选机制的**结构性封口**）：
+    //   关闭收尾做完 ⇒ 这一页**不许再出图**，直到下一轮 `onAppear` 复位。
+    //   原因（源码可证）：上面 `pop(false)` 之后紧接着 `morphReset()` 会把共享状态恢复成
+    //   `NONE / p=1 / scale=1 / 无裁剪`，而页根可见门（`playerPaints() && !shrinkPageHidden && …`）
+    //   与封面 opacity 会因此重新放行 ⇒ 只要 NavDestination 的退场还没完全卸载，
+    //   旧页面就可能再画一帧**满窗背景/控件**（=「退出播放器封面残留」的候选机制）。
+    //   `shrinkPageHidden` 本来就是"整页不出图"的开关（快照收缩期也用它），
+    //   在这里补成"关闭终态"语义：置真 → 页根 `Visibility.Hidden`，且 `aboutToAppear` / `onAppear` 复位。
+    //   grep 关键字：`RzdCloseRender` 的 `shrinkHidden=1`。
+    this.shrinkPageHidden = true;
     // ★ 残留判据：快照层仍归快照所有、但图已经没了 ⇒ 屏上就是"播放页封面位置的一块残留"。
     //   grep 关键字：`RzdCoverLeak owner-without-pix`
     if (this.expandState.snapshotShrinkOwnedFlag() && this.morphShrinkState().pixmap === undefined) {
@@ -1782,6 +1810,13 @@ export struct PlaybackPage {
           `coverHidden=${this.coverPublishHidden ? 1 : 0}`);
     } catch (error) {
       this.closeDiagnostic(`snap-post-cleanup-log-failed error=${error}`, path);
+    }
+    // ★ 2026-11-02：关闭收尾的**渲染门采样**（判 `rootVis/realOp` 是否已归 0）。
+    //   grep 关键字：`RzdCloseRender post-cleanup`
+    try {
+      this.logCloseRender(`post-cleanup path=${path}`);
+    } catch (error) {
+      this.closeDiagnostic(`render-log-failed error=${error}`, path);
     }
     this.clearCloseGuard();
     ++this.closeGen;
@@ -1817,6 +1852,10 @@ export struct PlaybackPage {
         MusicStoreService.getInstance().appendRuntimeDiagnostic(
           `RzdCloseState +64 alive=${this.isAlive ? 1 : 0} show=${this.state.isShowPlay ? 1 : 0} ` +
             `size=${left.length} idx=${still} names=${left.join(',')}`);
+        // ★ 2026-11-02：+64 这一刻的渲染门采样。理想终态 `rootVis=0 realOp=0 clone=0 snap=0`；
+        //   若这里仍是 1，说明"路由已经没了、屏上还在出图" = 残留现场，直接抓到证据。
+        //   grep 关键字：`RzdCloseRender t+64`
+        this.logCloseRender('t+64');
         if (still >= 0) {
           if (still === left.length - 1) {
             this.pageIndexInfos.pop(false);
@@ -3952,8 +3991,19 @@ export struct PlaybackPage {
       this.snapshotFlight = false;
       this.expandState.clearSnapshotShrinkOwned();
     }
+    // ★ 2026-11-02：上一轮"关闭终态隐藏"必须在这里一并复位（`onAppear` 也会复位，双保险）。
+    this.shrinkPageHidden = false;
     PlaybackPage.cancelPendingCloseForOpen();
     this.closeInstance = ++PlaybackPage.instanceSerial;
+    // ★★★ 2026-11-02（复核 P1风险：页面实例号 ≠ 打开会话号）：
+    //   `instanceSerial` 只证明"我是最新构造的页面"，而壳层**先**登记新会话（`notifyPlayerRoutePushed`）
+    //   与准备形变、**后**才 push ⇒ 旧页面的 `onDisAppear` 完全可能落在
+    //   「新会话已登记、新页 aboutToAppear 还没跑」之间，那时 `instanceSerial` 仍认旧实例。
+    //   ⇒ 另存一份**打开会话号**（`PlaybackPage.openSerial`，每次 push +1），
+    //   生命周期回调里用它判断"我这一轮是不是已经被新一轮顶掉了"。
+    //   实例号继续保留（诊断与 `ownsClose` 用），但不再作为"能否写共享状态"的唯一授权。
+    //   排查关键字：`RzdSessionGuard stale-lifecycle`。
+    this.instanceOpenSerial = PlaybackPage.openSerial;
     // 闂佺绻愰悧鎰邦敊閸ャ劎鈻旈柍褜鍓熷?闁哄鏅滈悷銈囩博鐎涙ǜ浜滈柛顭戝亜閻︻垶寮堕悙璺盒撴俊鐐插€婚幐褔骞嶉鐣屾殸闂佸搫瀚烽崹浼村箺閵忋倕绾ч梽鍥儗?闂佹寧绋掑銊╁磻閿濆绀勭紓浣姑埅鐢碘偓娈垮枓閸?vs 婵炴垶鎸搁敃銉﹀垔濞差亜绠ラ柟鎯х－绾惧鏌ｉ妸銉ヮ仼閻忓浚鍨跺畷姘额敃閵忥紕娈ら梺?`pullDragging`闂?
     // 闂佸湱鍎ょ敮妤呮偂?闂佺粯鍔楅幊鎾诲吹椤曗偓楠炲秹骞樺畷鍥╋紱闁哄鏅滆摫婵″弶鎮傚顔款槻濠殿喒鏅犻幃?闂佸搫鍟崕鑲╂崲閺嶃劎鈻旈柍褜鍓涢幃鎵沪閻愵兛绮梺绋跨箲婵炲﹪寮銏℃櫖闁秆冨焻dc shell hilog | grep "expand intro"`闂佹寧绋戦ˇ顓㈠焵?
     Logger.info(PlaybackPage.logTag,
@@ -5148,6 +5198,40 @@ export struct PlaybackPage {
         `panel=${this.usePanelLayout() ? 1 : 0}`);
   }
 
+
+
+  /**
+   * ★★★ 2026-11-02（复核：日志里 `real=1` 判不出"谁真在出图"，本轮补一条**渲染门采样**）。
+   *
+   * 关闭链每一步都打一条快照。判读（**这是"退出后还在出图"的直接证据**，不必再从归属函数反推）：
+   * ```
+   *   rootVis  播放页根这一帧是否可画（playerPaints && !shrinkPageHidden && !被形变裁掉）
+   *   realOp   播放页真封面的**实际** opacity（realCoverVisible && !snapFlight && !coverPublishHidden）
+   *   clone    壳层克隆封面（morphOverlayBridging；壳层那侧还会再 && playerRouteAlive）
+   *   snap     快照收缩层（visible && pixmap）
+   *   shrinkHidden  关闭终态隐藏门（本文件新增：关闭收尾后置真，只在 onAppear 复位）
+   * ```
+   * 判据：**关闭收尾之后**若 `rootVis=1` 或 `realOp=1` 迟迟不归 0 ⇒ 旧页面仍在出图；
+   * 理想终态是 `rootVis=0 realOp=0 clone=0 snap=0`。
+   * grep 关键字：`RzdCloseRender`。
+   */
+  private logCloseRender(moment: string): void {
+    const e: PlayerExpandState = this.expandState;
+    const rootPaint: boolean = e.playerPaints() && !this.shrinkPageHidden &&
+      (!e.morphClipping() || !e.morphPaintHidden());
+    const realOp: number =
+      (e.realCoverVisible() && !this.snapshotFlight && !this.coverPublishHidden) ? 1 : 0;
+    const shrink: MorphShrinkState = this.morphShrinkState();
+    MusicStoreService.getInstance().appendRuntimeDiagnostic(
+      `RzdCloseRender ${moment} rootVis=${rootPaint ? 1 : 0} realOp=${realOp} ` +
+        `clone=${e.morphOverlayBridging() ? 1 : 0} tail=${e.morphTailOpacity().toFixed(2)} ` +
+        `snap=${shrink.visible ? 1 : 0} snapPix=${shrink.pixmap !== undefined ? 1 : 0} ` +
+        `shrinkHidden=${this.shrinkPageHidden ? 1 : 0} intro=${this.introPaintReady ? 1 : 0} ` +
+        `alive=${this.isAlive ? 1 : 0} show=${this.state.isShowPlay ? 1 : 0} ` +
+        `stage=${e.morphStage} p=${e.morphP.toFixed(3)} ` +
+        `inst=${this.closeInstance}/${PlaybackPage.instanceSerial} ` +
+        `sess=${this.instanceOpenSerial}/${PlaybackPage.openSerial}`);
+  }
 
 
   private closeFullScreenPlayback(): void {
@@ -6884,6 +6968,7 @@ export struct PlaybackPage {
     if (old !== undefined && PlaybackPage.bgCachePm === old) {
       PlaybackPage.bgCachePm = undefined;
       PlaybackPage.bgCacheKey = '';
+      PlaybackPage.bgCacheOwner = 0;
     }
     if (old !== undefined) {
       this.releasePixelMapQuiet(old);
@@ -7617,11 +7702,29 @@ export struct PlaybackPage {
     //   页面重建/转屏都不会丢；本仓原来是页面字段 + `aboutToDisappear` 里 `releasePixelMapQuiet`，
     //   一转屏（页面重建）就彻底没有源 ⇒ 「切换横竖屏背景必消失」。
     //   ⇒ 这里把同一张 PixelMap 挂到**静态缓存**上，新实例/转屏后一句 `adoptSharedMesh()` 就回来了。
+    // ★★★ 2026-11-02（复核 P2：替换要接上释放责任）：先记下被替换的那张与它的归属，
+    //   再覆盖槽位；只有"无主"（`bgCacheOwner === 0`，原页面已经走了）才由缓存负责释放。
+    const previousStatic: image.PixelMap | undefined = PlaybackPage.bgCachePm;
+    const previousOwner: number = PlaybackPage.bgCacheOwner;
     PlaybackPage.bgCacheKey = this.currentMeshKey();
     PlaybackPage.bgCachePm = pm;
+    PlaybackPage.bgCacheOwner = this.closeInstance;
     this.meshSrcVersion = this.meshSrcVersion + 1;
     // ★ 2026-10-18：记下这张图**归属哪一首**（`dropMeshSourceForTrackChange` 与 adopt 守卫都用它）。
     this.meshTrackKey = this.currentMeshKey();
+    // ① 被替换掉的静态槽：**只有无主（owner=0）才由缓存释放**；页面还活着就由页面自己收。
+    if (previousStatic !== undefined && previousStatic !== pm && previousStatic !== old &&
+      previousOwner === 0) {
+      try {
+        previousStatic.release();
+        appendPlayLog('[RzdBgPhase] cache-replace release orphan prev');
+      } catch (error) {
+        Logger.warn(PlaybackPage.logTag, `cache-replace orphan release failed: ${error}`);
+      }
+    }
+    // ② 调用方交出来的本地旧图：**这次一定要 release**（页面已经不用它了）。
+    //    与 ① 互斥：无主那张不会同时是本地 old（本地 old 要么是自己建的、要么是 adopt 借来的，
+    //    借来时 owner 已登记成本页 ⇒ previousOwner ≠ 0）。
     if (old !== undefined && old !== pm) {
       this.releasePixelMapQuiet(old);
     }
@@ -8418,6 +8521,13 @@ export struct PlaybackPage {
           .onAppear(() => {
             this.context = this.getUIContext().getHostContext() as common.UIAbilityContext;
             this.isAlive = true;
+            // ★ 2026-11-02：复用实例再次出现时也重新登记会话号（`aboutToAppear` 可能不重跑）。
+            this.instanceOpenSerial = PlaybackPage.openSerial;
+            // ★ 2026-11-02：上一次关闭若把页面按在"关闭终态隐藏"，这里必须复位。
+            if (this.shrinkPageHidden) {
+              this.shrinkPageHidden = false;
+              PlaybackPage.ev('AP', 'shrinkPageHidden reset');
+            }
             // 鈽呪槄鈽呪槄 2026-10-17锛堝瓙浠ｇ悊瀹氫綅锛夛細**鍏堝悆璺ㄩ〉闈㈢紦鍐?*锛屽啀璧板師鏉ョ殑缃戠粶/璧勬簮鍙栨簮銆?
             //   鍦ㄦ涔嬪墠 `adoptCachedMesh()` 闆惰皟鐢ㄨ€?鈬?姣忔閮戒粠闆朵笅杞?鈬?鐐瑰嚮鎵撳紑閭?350ms 鍐呮病鏈夌湡婧愩€?
             // 鉀?2026-10-17 鍋滅敤锛氭寕杞介偅涓€鎷?`getCurrentSongItem()` 鍙兘杩樻槸**涓婁竴棣?*
@@ -8432,10 +8542,15 @@ export struct PlaybackPage {
             // ★★★ 2026-10-18（第三轮）：**先同步采用一次预热缓存**（`createPixelMapSync`），
             //   形变第 1 帧就有真封面 —— 等价上游"打开前本地封面文件已在"（`wujie.pa:292406-292448`）。
             //   然后再走异步那条（拿网络/资源，顺便取色）。
-            this.adoptWarmMeshSync();
-            // ★ 2026-10-22（＝无界 `svc.bgCache`）：页面重建（转屏/开关播放器）后，
-            //   先吃静态缓存里那**同一张**背景图，避免"背景消失后再慢慢取"。
-            this.adoptSharedMesh();
+            // ★★★ 2026-11-02（复核 P2：静态缓存要**真的被复用**）：
+            //   先试静态缓存里那**同一张**（key 命中就直接借用、不重建、不覆盖）；
+            //   只有未命中才退回 warm 字节同步建图。
+            //   原来顺序相反（warm-sync 在前）⇒ 每次重开都新建一张覆盖静态槽，
+            //   缓存从没被复用过，旧那张也没人显式释放。
+            //   排查关键字：`RzdBgPhase shared-mesh adopt`（复用）/ `adopt-sync`（兜底新建）。
+            if (!this.adoptSharedMesh()) {
+              this.adoptWarmMeshSync();
+            }
             void this.adoptWarmMeshThenTint();
             this.applyPlaybackWindowChromeImmediately();
             // 婵＄偑鍊楅弫璇差焽閻楀牞绱旈柡宥庣厛閸嬔囨煕閹达絾顏犳鐐叉喘瀵喚鎹勯悜妯衡偓杈ㄦ叏濠靛嫬鍔欑紒鏃€娼欓埢搴ㄥ灳瀹曞洨锛涢梺绋跨箰绾绢厽鎱ㄩ幖浣哥畱濞撴艾锕︾粈鍕偣娴ｇ鈷旈柣銈呮閵囧嫰妫冨☉妯款唹闂佺厧鐤囧Λ鍕垂娴兼潙缁╃痪顓炴噽缁犳牠鏌?
@@ -8651,6 +8766,9 @@ export struct PlaybackPage {
             const wasAlive: boolean = this.isAlive;
             this.isAlive = false;
             PlaybackPage.ev('DIS', `wasAlive=${wasAlive ? 1 : 0} show=${this.state.isShowPlay ? 1 : 0}`);
+            // ★ 2026-11-02：卸载这一拍的门采样（`rootVis=1` 说明卸载过程中页面仍可能出图）。
+            //   grep 关键字：`RzdCloseRender on-disappear`
+            this.logCloseRender('on-disappear');
             // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-16闂?*闂佸憡甯炴慨鐢垫暜閳ь剟寮堕埡鍌滄噰闁革絿鍏橀弻鍥晲閸涱厾绋忛梺鍛婅壘閺堫剟顢楅悙鐑樺剭?`state.isShowPlay = false`**闂佹寧绋戦¨鈧紒?
             //   闂佸憡顭囬崰鎰焽閸偅浜ゆ繛鍡樻尭濞咃繝鏌涢幇顓犳噮婵?`this.state.isShowPlay = false;`闂侀潧妫楅崐鎼佹偩閻樿鍙婃い鏍ㄧ懅椤忓崬鈽?*闂佺厧鎼崐濠氬磻閿濆洨妫?*闂佹悶鍎抽崑鐘绘儍閻斿吋鐓傜€光偓閳ь剙鈻撻幋锕€绀冩繛鍡楃箰瀵娊鏌?
             //   闂?`isShowPlay` 闂?*婵犮垻鎳撻崯鍧楁儑閹殿喗宕夋い鏍ㄧ矋閺嗙娀鏌ｉ妸銉ヮ伃闁崇懓绉瑰畷婵嬪Ω閿斿墽鍩?*闂佹寧绋戝濉坣dex.@Monitor('appState.isShowPlay')`
@@ -8683,7 +8801,9 @@ export struct PlaybackPage {
             //       闂備焦褰冪粔鎾囬弻銉ョ婵炲棙鍔栫瑧濡ょ姷鍋涢崐濠氭偤閹达附鍎嶉柛鏇ㄥ幐閺佸嫰鏌熼崹顔拘＄紓宥嗘閺佸秵寰勯崱妯碱唵
             //     閻?Hard exit 婵炴垶鎸诲褰掓儉閸涱喚顩查柛婵嗗閺呮悂鏌ㄥ☉娆忓摵闁稿鎳忕粙澶愬焵椤掑嫬绠€广儱妫涢崹浠嬫⒑閹绘帗婀伴柣銉ユ嚇瀵灚寰勭€ｎ偄鍟婇梺琛″亾濡わ絽鍟ㄩ埀?闂?闂?false 闂?婵犮垻鎳撻崯鍧楁儑娴兼潙缁╅悹楦挎閸?闂?
             setTimeout((): void => {
-              if (this.closeInstance !== PlaybackPage.instanceSerial || this.playerRouteStillPushed()) {
+              if (this.closeInstance !== PlaybackPage.instanceSerial ||
+                this.instanceOpenSerial !== PlaybackPage.openSerial ||
+                this.playerRouteStillPushed()) {
                 Logger.info(PlaybackPage.logTag,
                   'RzdMorphOnDisappear keep isShowPlay (player route still on the stack)');
                 return;
@@ -8706,14 +8826,21 @@ export struct PlaybackPage {
             //   这一拍是"页面正在离开"，而新会话可能已经开起来了（`aboutToAppear` 已把
             //   `PlaybackPage.instanceSerial` 顶掉）⇒ 无条件清 `pullDragging / morphDrive`
             //   会把**新会话**的上拉跟手直接掐断（观感：再拉一次不跟手）。
-            //   判据与 `aboutToAppear` / `morphSessionOughtToLive()` 同一套：只认"我还是当前实例"。
-            if (this.closeInstance === PlaybackPage.instanceSerial) {
+            // ★ 2026-11-02（复核 P1风险）：**实例号不够**。壳层是先登记新会话
+            //   （`pushPlayerRoute()` → `notifyPlayerRoutePushed()` → `openSerial+1`）**再** push，
+            //   而新实例号要到 `aboutToAppear()` 才更新 ⇒ 存在
+            //   「新会话已登记、新页还没构造」的窗口，那时 `closeInstance === instanceSerial` 仍成立。
+            //   ⇒ 必须**同时**要求"打开会话号没被顶掉"。
+            //   排查关键字：`RzdSessionGuard stale-lifecycle`。
+            const currentInstance: boolean = this.closeInstance === PlaybackPage.instanceSerial;
+            const currentSession: boolean = this.instanceOpenSerial === PlaybackPage.openSerial;
+            if (currentInstance && currentSession) {
               this.expandState.pullDragging = false;
               this.expandState.morphDrive = MorphDrive.NONE;
             } else {
               Logger.info(PlaybackPage.logTag,
-                `RzdMorphOnDisappear skip stale pull-clear instance=${this.closeInstance} ` +
-                  `now=${PlaybackPage.instanceSerial}`);
+                `RzdSessionGuard stale-lifecycle skip pull-clear instance=${this.closeInstance}/` +
+                  `${PlaybackPage.instanceSerial} session=${this.instanceOpenSerial}/${PlaybackPage.openSerial}`);
             }
             // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-16闂?*"闂佺粯鍔楅幊鎾诲吹椤曗偓楠炲秹骞樺畷鍥╋紱濠电偛澶囬崜婵嗭耿娓氣偓瀹曟繈濡歌閺?闂佹眹鍔岀€氼厾鑺遍钘夌窞闁哄鍨堕惃鎴︽煕閿斿搫濮€缂佺粯鐗犻弻?*闂佹寧绋戦¨鈧紒?
             //   婵炴垶鎸搁澶婎焽娴煎瓨鐒介柨婵嗘噹缂嶆牠鏌涘Ο鐓庢瀾婵炶偐鏁诲?*闂佸搫鍟版慨闈涱焽椤栨稓顩?*闂?`morphReset()`闂侀潧妫楅崐浠嬪焵?`morphReset()` 婵?
@@ -8732,6 +8859,7 @@ export struct PlaybackPage {
             //       闂佸疇娉曟刊瀵哥箔?婵?`aboutToDisappear()` **闂婎偄娲ら幊姗€濡磋箛娑樿Е閻忕偠鍋愰鍗炩槈閹垮啩绨婚柛銊ょ矙楠?*闂佹寧绋戦悧鍡涘箖閹惧鈻旈柍褜鍓濋妵鎰板閵忕姌锕傛煥濞戞ê顨欑紒妤€顦遍幏瀣矙閹稿骸鈧鏌涢幇顓犳噥缂佹柨鐡ㄧ缓钘壩旂€ｎ剛顦梺?
             setTimeout((): void => {
               if (this.closeInstance !== PlaybackPage.instanceSerial ||
+                this.instanceOpenSerial !== PlaybackPage.openSerial ||
                 (this.closeToken !== 0 && this.closeToken === PlaybackPage.closeOwner) ||
                 this.morphSessionOughtToLive(wasAlive)) {
                 Logger.info(PlaybackPage.logTag,
@@ -8750,11 +8878,19 @@ export struct PlaybackPage {
             //   `commitMeshSource()` 把这一张同时挂到了 `PlaybackPage.bgCachePm`（进程级缓存）上，
             //   这里一 release，静态缓存里就留着一张**死图** ⇒ 下一次 `adoptSharedMesh()` 把它交出去，
             //   `MeshCoverBg` 画不出东西 =「展开动画期间没背景」。
-            //   判据：**谁被静态缓存引用，谁由静态缓存负责**（页面只丢自己的引用）。
+            //   ★ 2026-11-02（复核 P2）：**释放责任要移交**，不能只是"谁都不收"。
+            //   我还是这张的持有者、而我要走了 ⇒ 把 owner 置 0（孤兒），由缓存负责在
+            //   下次替换/作废时 release；若它已经被**更新的页面**借走，则什么都不动。
+            //   排查关键字：`RzdBgPhase cache-orphan`。
             const leavingMesh: image.PixelMap | undefined = this.meshSrc;
             this.meshSrc = undefined;
             if (leavingMesh !== undefined && leavingMesh === PlaybackPage.bgCachePm) {
-              appendPlayLog('[RzdBgPhase] onDisAppear keep shared-mesh (owned by static cache)');
+              if (PlaybackPage.bgCacheOwner === this.closeInstance) {
+                PlaybackPage.bgCacheOwner = 0;
+                appendPlayLog('[RzdBgPhase] cache-orphan (page leaving, cache takes release duty)');
+              } else {
+                appendPlayLog('[RzdBgPhase] onDisAppear keep shared-mesh (borrowed by newer page)');
+              }
             } else if (leavingMesh !== undefined) {
               this.releasePixelMapQuiet(leavingMesh);
             }

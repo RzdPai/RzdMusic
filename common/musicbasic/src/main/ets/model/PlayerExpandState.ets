@@ -3583,6 +3583,13 @@ export class PlayerExpandState {
    * @returns 鍑犱綍鏄惁鍙敤锛坒alse 鏃惰皟鐢ㄦ柟搴旂洿鎺ラ摵婊★紝鍒‖鍋氬舰鍙橈級
    */
   public pullOpenBegin(ui: UIContext, preferFloating: boolean): boolean {
+    // ★★★ 2026-11-02（复核 P1）：**打开是会话起点 ⇒ 先掐掉上一轮的落地挤压**。
+    //   点击打开与上拉打开都走这里（全仓唯一入口），所以放在这是"每次打开都会执行"的位置；
+    //   而关闭落地的 110ms/320ms 回弹不会被它误伤（关闭路径不调本方法）。
+    //   不做这一步的后果：旧 timer 在页面已关闭后仍写 `morphSquashY`，
+    //   新展开的封面克隆/迷你条克隆一起被压，且旧回弹会在动画中途再改一次。
+    //   排查关键字：`RzdSquash stop-restore`。
+    this.stopSquashLand();
     this.beginOpenGeometryAnimation();
     this.pullDragging = true;
     // ★ 2026-10-21：上拉开始的**第一帧**就把系统条顶掉（自绘条由 Shell 的克隆层接管）。
@@ -5549,6 +5556,43 @@ export class PlayerExpandState {
    * 排查关键字：`RzdSquash`。
    */
   private squashGen: number = 0;
+  /** 回弹那半段的定时器句柄（110ms 之后起 320ms 回弹）；-1 = 没排。 */
+  private squashBackTimer: number = -1;
+  /** 回弹结束后的硬写兜底定时器句柄（约 470ms）；-1 = 没排。 */
+  private squashRestoreTimer: number = -1;
+
+  /**
+   * ★★★ 2026-11-02（复核 P1：挤压代次从不在"下一次打开"失效）：
+   * **停止上一轮落地挤压**，把 `morphSquashY` 拉回静止值 1。
+   *
+   * 为什么需要它：`squashGen` 原来只在 `squashLandAnim()` 内部 `+1`
+   * ⇒ 关闭后 110ms / 470ms 那两个回调**没有任何人能取消**，
+   * 它们在"用户已经重新打开播放器"之后仍会写共享的 `morphSquashY`：
+   *   · 新展开的封面克隆（`Index.MorphCoverClone`）与迷你条克隆都读这个值
+   *     ⇒ 展开动画一开始就被压到 0.86，随后又被旧回弹改一次（肉眼＝封面抖一下/高度不对）；
+   *   · 旧回调还会把上一轮的动画计划强加给新会话。
+   * ⇒ 打开这条路（`pullOpenBegin` → 新会话）必须先调本方法：作废旧代次 + 取消两个 timer + 值归 1。
+   *
+   * ⚠️ **只在"新打开/会话开始"调用**。正常关闭落地的 110ms 压下 + 320ms 回弹是既定交互，
+   *   `morphReset()` 不许无条件调它（那会把落地弹按掉）。
+   * 排查关键字：`RzdSquash stop-restore`。
+   */
+  public stopSquashLand(): void {
+    this.squashGen = this.squashGen + 1;
+    if (this.squashBackTimer !== -1) {
+      clearTimeout(this.squashBackTimer);
+      this.squashBackTimer = -1;
+    }
+    if (this.squashRestoreTimer !== -1) {
+      clearTimeout(this.squashRestoreTimer);
+      this.squashRestoreTimer = -1;
+    }
+    if (this.morphSquashY !== 1) {
+      this.morphSquashY = 1;
+      Logger.info(PlayerExpandState.LOG_TAG,
+        `RzdSquash stop-restore gen=${this.squashGen} (new open supersedes last landing)`);
+    }
+  }
 
   /**
    * 璺戜竴娆℃棤鐣岀殑"钀藉湴鎸ゅ帇 鈫?鍥炲脊"锛坄squashLand` 鐨勯偅涓ゆ潯琛ラ棿锛夈€?
@@ -5578,18 +5622,38 @@ export class PlayerExpandState {
     const gen: number = this.squashGen + 1;
     this.squashGen = gen;
     this.morphSquashY = 1;
+    if (this.squashBackTimer !== -1) {
+      clearTimeout(this.squashBackTimer);
+      this.squashBackTimer = -1;
+    }
+    if (this.squashRestoreTimer !== -1) {
+      clearTimeout(this.squashRestoreTimer);
+      this.squashRestoreTimer = -1;
+    }
     // ① 鍘嬪埌 SQUASH_Y锛?10ms锛孍ASE_OUT_STR锛?
-    ui.animateTo({
-      duration: PlayerExpandState.SQUASH_MS,
-      curve: curves.cubicBezierCurve(0.23, 1.0, 0.32, 1.0)
-    }, (): void => {
-      if (gen !== this.squashGen) {
-        return;
-      }
-      this.morphSquashY = PlayerExpandState.SQUASH_Y;
-    });
+    // ★★★ 2026-11-02（复核 P2：兜底注册必须覆盖首段异常）：
+    //   原来这一段**不在 try 里**，而两个兜底 timer 到 ② 才排
+    //   ⇒ 首段 `ui.animateTo` 若同步抛错，兜底一个都排不上，还会把异常抛回调用方
+    //   （`finishCloseGuard` 之后的路由收尾就被打断，只剩 2500ms watchdog 兜底）。
+    //   挤压只是**附加视觉动作**，它的失败不许阻断关闭链 ⇒ 这里捕获并继续排兜底。
+    try {
+      ui.animateTo({
+        duration: PlayerExpandState.SQUASH_MS,
+        curve: curves.cubicBezierCurve(0.23, 1.0, 0.32, 1.0)
+      }, (): void => {
+        if (gen !== this.squashGen) {
+          return;
+        }
+        this.morphSquashY = PlayerExpandState.SQUASH_Y;
+      });
+    } catch (error) {
+      Logger.warn(PlayerExpandState.LOG_TAG, `RzdSquash down failed: ${error}`);
+      // 首段没跑起来 ⇒ 值仍是我们刚写的 1（静止值正确），但回弹/兜底仍要排，
+      // 以便"下一轮打开"拿到干净的起点（与正常路径同一收尾）。
+    }
     // ② 寮瑰洖 1锛?20ms锛宍cubic-bezier(0.34, 1.56, 0.64, 1)`
-    setTimeout((): void => {
+    this.squashBackTimer = setTimeout((): void => {
+      this.squashBackTimer = -1;
       if (gen !== this.squashGen) {
         return;
       }
@@ -5606,7 +5670,8 @@ export class PlayerExpandState {
         Logger.warn(PlayerExpandState.LOG_TAG, `RzdSquash back failed: ${error}`);
       }
       // ②′ 兜底：不论动画有没有真的跑（页面可能已经卸载），静止值必须是 1。
-      setTimeout((): void => {
+      this.squashRestoreTimer = setTimeout((): void => {
+        this.squashRestoreTimer = -1;
         if (gen !== this.squashGen) {
           return;
         }
