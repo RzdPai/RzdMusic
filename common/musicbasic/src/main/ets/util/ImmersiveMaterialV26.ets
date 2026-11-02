@@ -71,3 +71,29 @@ export function immersiveFlat(): SystemUiMaterial | undefined {
     interactive: false
   });
 }
+
+/**
+ * ★ 2026-11-02：按「其它设置 → 光感强度」的 0/1/2/3 档取材质。
+ *
+ * 与 `buildTitleMaterial(level)`（HDS 标题栏用的 `SystemMaterialParams`）**同一张档位表**，
+ * 但这里是通用属性 `systemMaterial` 要的 `SystemUiMaterial`：
+ * ```
+ *   0 跟随系统 → REGULAR（交给系统自适应）
+ *   1 弱       → THIN
+ *   2 均衡     → REGULAR
+ *   3 强       → THICK
+ * ```
+ * 为什么要有它：搜索行那三颗胶囊（返回 / 搜索框 / 切换平台）的注释一直写着"档位跟着光感强度走"，
+ * 但实现里全写死 `immersiveMedium()` ⇒ 用户把光感调到"强"时，标题栏变了、胶囊没变。
+ * @param level 光感强度档位（0~3，越界按 0 处理）
+ */
+export function immersiveFromLevel(level: number): SystemUiMaterial | undefined {
+  switch (level) {
+    case 1:
+      return immersiveMaterial(RzdMaterialStyle.THIN);
+    case 3:
+      return immersiveMaterial(RzdMaterialStyle.THICK);
+    default:
+      return immersiveMaterial(RzdMaterialStyle.REGULAR);
+  }
+}

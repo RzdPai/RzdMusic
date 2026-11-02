@@ -1,4 +1,5 @@
-import { appendPlayLog, Logger, SearchGlassModifier, immersiveMedium } from 'musicbasic';
+import { AppStorageV2 } from '@kit.ArkUI';
+import { AmbientState, AppStorageKeys, appendPlayLog, Logger, immersiveFromLevel } from 'musicbasic';
 
 /** 一镜到底诊断：同时写 HiLog 与**应用内运行日志**（设置→运行日志，无设备时只能靠它取证）。 */
 function morphLog(message: string): void {
@@ -17,6 +18,12 @@ export struct HomeSearchRow {
   @Param gutter: number = 16;
   @Event onOpenSearch: () => void = () => {};
   @Event onOpenRecognize: () => void = () => {};
+  /**
+   * ★ 2026-11-02：光感强度档位（与标题栏 `buildTitleMaterial` 同一张表）。
+   * 首页这端与搜索页那端必须**同一档**，否则一镜到底形变途中能看出材质厚度跳变。
+   */
+  @Local ambientState: AmbientState =
+    AppStorageV2.connect(AmbientState, AppStorageKeys.AMBIENT_STATE, () => new AmbientState())!;
 
   build() {
     Column() {
@@ -32,7 +39,7 @@ export struct HomeSearchRow {
           //   与搜索页那端（`OnlineSearchPage.SearchInputBar`）**逐字同一套**：
           //   `card_background` + 0.5vp 描边。两端不同色会在长镜头中途看出颜色跳变。
           // 与搜索页那端保持同一套：光感 + 半透明底（否则形变途中颜色会跳）
-          .systemMaterial(immersiveMedium())
+          .systemMaterial(immersiveFromLevel(this.ambientState.level))
           .backgroundColor('#33FFFFFF')
           .borderRadius(SEARCH_FIELD_H / 2)
           .border({ width: 0.5, color: $r('sys.color.comp_divider') })
@@ -81,7 +88,7 @@ export struct HomeSearchRow {
         .width(SEARCH_FIELD_H)
         .height(SEARCH_FIELD_H)
         .borderRadius(SEARCH_FIELD_H / 2)
-        .systemMaterial(immersiveMedium())
+        .systemMaterial(immersiveFromLevel(this.ambientState.level))
         .backgroundColor('#33FFFFFF')
         .onClick((): void => {
           this.onOpenRecognize();

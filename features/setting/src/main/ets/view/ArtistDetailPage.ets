@@ -25,8 +25,10 @@ import { AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, Breakp
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType } from '@kit.UIDesignKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import {
-  AlbumInfo, AlbumDetailResult, ArtistInfo, ColorConversion, LXSearchSong, OnlinePlayUtil, SearchPageResult,
-  SingerInfo, SongInfo, SongPageResult, ArtistAlbumPageResult, searchSingers, getArtistDetail, getArtistSongs,
+  AlbumInfo, AlbumDetailResult, ArtistInfo, ColorConversion, LXSearchSong, LXSearchResult, OnlinePlayUtil,
+  SearchPageResult,
+  SingerInfo, SongInfo, SongPageResult, ArtistAlbumPageResult, lxSearch, searchSingers, getArtistDetail,
+  getArtistSongs,
   getArtistAlbums, getAlbumDetail, codeToSource, showSystemShare, buildSongShareText
 } from 'player';
 import { FavoriteEntry } from 'musicbasic';
@@ -646,6 +648,12 @@ export struct ArtistDetailPage {
       }
       if (result.list.length === 0) {
         this.songsHasMore = false;
+        // ★ 2026-11-02：平台"歌手作品"接口**成功但空**也算失败体感 ⇒ 首屏先试现场搜索兜底。
+        if (reset) {
+          const recovered: boolean = await this.searchSongsByArtistName(generation);
+          hilog.info(0, 'RzdArtistSongs',
+            'empty songs -> name search fallback ok=%{public}s', recovered ? 'true' : 'false');
+        }
         return;
       }
       this.songs = reset ? result.list : this.songs.concat(result.list);
@@ -659,14 +667,85 @@ export struct ArtistDetailPage {
     } catch (err) {
       if (this.pageAlive && generation === this.songGeneration) {
         const e: Error = err as Error;
-        this.errorMsg = e.message ?? '加载失败';
-        this.songsHasMore = false;
+        // ★★★ 2026-11-02（用户：「播放页歌曲菜单跳歌手页，有些平台取歌手歌曲失败 code=undefined」）：
+        //   平台侧"歌手作品列表"接口会挂（kw 那条 `获取歌手歌曲失败: code=undefined` 就是
+        //   响应里压根没有 `code` 字段，多半被风控/换了返回体），但**搜索接口还活着**
+        //   ⇒ 首屏失败时直接**用歌手名现场搜一轮**顶上，不要只甩一句错误。
+        //   分页失败（page>1）不兜底：搜索没有"歌手作品"的分页语义，硬翻只会重复。
+        const recovered: boolean = reset ? await this.searchSongsByArtistName(generation) : false;
+        if (!recovered) {
+          this.errorMsg = e.message ?? '加载失败';
+          this.songsHasMore = false;
+          hilog.warn(0, 'RzdArtistSongs', 'songs failed and name-search fallback failed: %{public}s',
+            e.message ?? '');
+        } else {
+          hilog.info(0, 'RzdArtistSongs', 'songs failed -> name search fallback recovered %{public}d',
+            this.songs.length);
+        }
       }
     } finally {
       if (this.pageAlive && generation === this.songGeneration) {
         this.loading = false;
         this.loadingMore = false;
       }
+    }
+  }
+
+  /**
+   * ★★★ 2026-11-02（用户：「播放页通过歌曲菜单跳转歌手页，有些平台会获取歌手歌曲失败：code=undefined。
+   *   这个你看看，至少得保证失败时直接现场搜索」）：
+   *
+   * **现场搜索兜底**：平台侧「歌手作品列表」接口挂了，但**搜索接口还在**
+   * ⇒ 用歌手名直接搜一轮歌曲顶上，别让用户对着空列表 + 报错。
+   *
+   * 判据：
+   * - 只在**第一页**触发（`page > 1` 时不兜底：搜索接口没有"歌手作品"的分页语义，硬翻只会重复）；
+   * - 只在拿到**非空**结果时才接管（空结果仍然回到原来的错误/空态）；
+   * - 接管后 `songsHasMore=false`、`songPage=2`，不再去调那个坏掉的分页接口。
+   *
+   * 为什么用 `lxSearch` 而不是 `getArtistSongs`：后者正是坏掉的那条；
+   * `lxSearch` 走的是和搜索页完全同一条链路（`source` 用 `codeToSource(this.source)`，
+   * 与 `toPlayable()` 里的 source 口径**同一个**，播放不会串源）。
+   *
+   * @param generation 发起时的歌曲代次（页面/排序已变则丢弃结果）
+   * @returns true = 兜底成功（调用方不要再报错）
+   */
+  private async searchSongsByArtistName(generation: number): Promise<boolean> {
+    const name: string = this.artistNameText.trim();
+    if (name.length === 0) {
+      return false;
+    }
+    try {
+      const sourceId: string = codeToSource(this.source);
+      const res: LXSearchResult = await lxSearch(sourceId, name, 1, SONG_PAGE_LIMIT, false);
+      if (!this.pageAlive || generation !== this.songGeneration) {
+        return false;
+      }
+      const list: SongInfo[] = [];
+      for (let i: number = 0; i < res.list.length; i++) {
+        const it: LXSearchSong = res.list[i];
+        const sec: number = Number(it.interval);
+        list.push(new SongInfo(it.songId, it.name, it.singer, it.albumName,
+          Number.isFinite(sec) ? sec : 0, it.img));
+      }
+      if (list.length === 0) {
+        return false;
+      }
+      this.songs = list;
+      this.songsHasMore = false;
+      this.songPage = 2;
+      this.errorMsg = '';
+      if (this.artistNameText.length === 0 && list[0].singer.length > 0) {
+        this.artistNameText = list[0].singer;
+      }
+      hilog.info(0, 'RzdArtistSongs',
+        'name-search fallback source=%{public}s name=%{public}s hits=%{public}d',
+        sourceId, name, list.length);
+      return true;
+    } catch (err) {
+      const e: Error = err as Error;
+      hilog.warn(0, 'RzdArtistSongs', 'name-search fallback failed: %{public}s', e.message ?? '');
+      return false;
     }
   }
 

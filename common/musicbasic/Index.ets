@@ -69,7 +69,7 @@ export { SongDataSource } from './src/main/ets/model/SongDataSource';
 export { PlayedSongRecord } from './src/main/ets/model/PlayedSongRecord';
 export { TabSwitchState } from './src/main/ets/model/TabSwitchState';
 export { AmbientState } from './src/main/ets/model/AmbientState';
-export { immersiveMaterial, immersiveMedium, immersiveFlat, RzdMaterialStyle } from './src/main/ets/util/ImmersiveMaterialV26';
+export { immersiveMaterial, immersiveMedium, immersiveFlat, immersiveFromLevel, RzdMaterialStyle } from './src/main/ets/util/ImmersiveMaterialV26';
 export { ThemeState } from './src/main/ets/model/ThemeState';
 export { HomeSourceState } from './src/main/ets/model/HomeSourceState';
 export { ShowMiniLyricState } from './src/main/ets/model/ShowMiniLyricState';

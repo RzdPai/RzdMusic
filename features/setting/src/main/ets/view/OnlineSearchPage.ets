@@ -17,8 +17,8 @@ import { AppStorageV2, curves, display, uiObserver } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import {
-  immersiveMedium,
-  appBarBlurStyle,  guardPlayerBack, SearchGlassModifier
+  immersiveFromLevel,
+  appBarBlurStyle,  guardPlayerBack
 , RzdSelectMenuMaterial } from 'musicbasic';
 import { AlbumRouteParam, ArtistRouteParam, BreakpointType, ThemeState, WindowUtil } from 'musicbasic';
 import { BlurStrategy, BottomBuilderShowType, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, HideMode, ScrollEffectType } from '@kit.UIDesignKit';
@@ -828,7 +828,11 @@ export struct OnlineSearchPage {
         active.push(this.sources[i].id);
       }
     }
-    return this.query.trim() + '|' + active.join(',');
+    // ★ 2026-11-02：`|v2` = 结果口径版本号。
+    //   上一版综合页**只搜第一个勾选音源**，却用"全部勾选音源"当缓存 key ⇒
+    //   老缓存里躺着"只有一个平台"的假聚合结果。换口径必须换 key，否则用户看到
+    //   的仍是旧的那一份（而且怎么重搜都被缓存挡住）。以后聚合口径再变就继续 +1。
+    return this.query.trim() + '|' + active.join(',') + '|v2';
   }
 
   /**
@@ -971,7 +975,16 @@ export struct OnlineSearchPage {
   private async doSongSearch(): Promise<void> {
     this.songs = [];
     this.covers = {};
-    const activeSources: string[] = this.searchSources();
+    // ★★★ 2026-11-02（用户：「搜索选聚合，结果却只有酷我」）：
+    //   根因就是这一行 —— `searchSources()` 在**综合页**只返回**第一个勾选**的音源
+    //   （2026-10-20 为了"进页面不卡"做的取舍），而综合页默认就是「聚合」，
+    //   勾选顺序里 kw 常排第一 ⇒ 屏上永远只有酷我。
+    //   更糟的是缓存 `searchCacheKey()` 用的是**全部**勾选音源 ⇒
+    //   把"只搜了一个源"的结果当成"全量聚合结果"缓存起来，之后再搜也拿不到别的平台。
+    //   ⇒ 综合页的歌曲这一路改成**全部勾选音源并发**（与歌手/专辑同一口径）。
+    //   ⚠️ 并发量：每个音源 1 条请求 / 20 条结果，最多 7 个音源；与"全勾选 + 三份搜索"相比
+    //     只是歌曲这一路从 1 条变成 N 条，仍在同一次 `Promise.all` 里，不增加屏上节点。
+    const activeSources: string[] = this.overview ? this.overviewFallbackSources() : this.searchSources();
     if (activeSources.length === 0) {
       return;
     }
@@ -1717,8 +1730,11 @@ export struct OnlineSearchPage {
       .width(40)
       .height(40)
       .borderRadius(20)
-      // ★ 材质挂在 Button（A 档宿主）；这条标题栏槽位本身也是 B 档白名单
-      .systemMaterial(immersiveMedium())
+      // ★ 材质挂在 Button（A 档宿主：官方「按钮与选择类」在页面任意区域都生效）
+      // ★ 2026-11-02（用户：「参考 API26 光感文档，恢复搜索页上方返回/搜索框/切换平台的光感」）：
+      //   档位改成**跟着「其它设置 → 光感强度」走**（`immersiveFromLevel`，与标题栏 `buildTitleMaterial`
+      //   同一张档位表）。原来写死 `immersiveMedium()` ⇒ 把光感调到“强”时标题栏变了、这三颗没变。
+      .systemMaterial(immersiveFromLevel(this.ambientState.level))
       .backgroundColor('#33FFFFFF')
       // ★ 2026-10-24（甲方：「返回按钮、搜索框和切换平台这三个尽量都加上沉浸光感」）：
       //   材质档位跟着「其它设置 → 光感强度」走，与标题栏 `buildTitleMaterial` 同一张表。
@@ -1741,6 +1757,13 @@ export struct OnlineSearchPage {
         .height(40)
         .font({ size: 13 })
         .fontColor($r('app.color.font_primary'))
+        // ★★★ 2026-11-02（用户：「切换平台那颗也要光感」）：
+        //   上一版换成官方 `Select` 时**只给它加了半透明底、没挂材质** ⇒ 屏上只有一片
+        //   `#33FFFFFF` 的平底，和旁边两颗玻璃胶囊明显不是一个东西。
+        //   `Select` 属官方「按钮与选择类」（A 档，页面任意区域都生效）⇒ 通用属性
+        //   `.systemMaterial(...)` 在这里是真渲染的，不是 out of scope。
+        //   ⚠️ 菜单本身的光感在 `RzdSelectMenuMaterial` 里（`menuSystemMaterial`），两者互不替代。
+        .systemMaterial(immersiveFromLevel(this.ambientState.level))
         .backgroundColor('#33FFFFFF')
         .borderRadius(20)
         .attributeModifier(new RzdSelectMenuMaterial())
@@ -1947,7 +1970,7 @@ export struct OnlineSearchPage {
       //   在它身上挂实时模糊 = 长镜头全程重算模糊 ⇒ 正是甲方说的"切到搜索页有点卡"。
       //   ⇒ 改用**实底卡片背板**：`card_background`（浅 #FFFFFF / 深 #1C1D1F）+ 0.5vp 描边。
       //   ⚠️ 首页那端（`HomeSearchRow`）必须保持**同一套**背板，否则形变中途会看到颜色跳变。
-      .systemMaterial(immersiveMedium())
+      .systemMaterial(immersiveFromLevel(this.ambientState.level))
         .backgroundColor('#33FFFFFF')
       .borderRadius(20)
       .border({ width: 0.5, color: $r('sys.color.comp_divider') })
@@ -2295,7 +2318,8 @@ export struct OnlineSearchPage {
                         // ★ 2026-10-20（用户：「刚进搜索页非常卡」）：词条**不再挂模糊**
                         //   ——每屏 20 来个胶囊各挂一层 blur，进页面就是一卡。改纯色卡片底，
                         //   与我的页卡片同色（深色下也看得见）。
-                        .systemMaterial(immersiveMedium())
+                        // 热搜/历史词条是 body 里的 Text（B 档，材质不渲染）⇒ 这行只是保留原写法，真正背板是下一行的半透明底。
+                        .systemMaterial(immersiveFromLevel(this.ambientState.level))
         .backgroundColor('#33FFFFFF')
                         .margin({ right: 8, bottom: 8 })
                         .onClick(() => {
@@ -2344,7 +2368,8 @@ export struct OnlineSearchPage {
                         .padding({ left: 14, right: 14, top: 8, bottom: 8 })
                         .borderRadius(18)
                         // 与热搜同一处理：纯色卡片底、不挂模糊（卡顿根因之一）
-                        .systemMaterial(immersiveMedium())
+                        // 热搜/历史词条是 body 里的 Text（B 档，材质不渲染）⇒ 这行只是保留原写法，真正背板是下一行的半透明底。
+                        .systemMaterial(immersiveFromLevel(this.ambientState.level))
         .backgroundColor('#33FFFFFF')
                         .margin({ right: 8, bottom: 8 })
                         .onClick(() => {
