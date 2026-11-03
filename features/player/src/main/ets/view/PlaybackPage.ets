@@ -14,7 +14,7 @@
  */
 
 // 闂佸疇娉曟刊瀵哥箔?`TextController` 闂?ArkUI 闂?*闂佺绻堥崝宀勬儑椤掑嫭鍋濇い鏍ㄥ嚬閺嗘梻绱掗銉殭闁?*闂佹寧绋戦悧鍛箔婢舵劖顥嗛柍褜鍓涢幉?import闂佹寧绋戦悾鐠弖sicPlayInfoBlock` 闂佸憡鑹鹃張顒勵敄濞嗘挻鏅?
-import { AnimatorOptions, AnimatorResult, AppStorageV2, uiObserver, UIUtils, window } from '@kit.ArkUI';
+import { AnimatorOptions, AnimatorResult, AppStorageV2, FrameCallback, FrameNode, UIContext, uiObserver, UIUtils, window } from '@kit.ArkUI';
 import { image } from '@kit.ImageKit';
 import { effectKit } from '@kit.ArkGraphics2D';
 import { common } from '@kit.AbilityKit';
@@ -133,6 +133,31 @@ class CoverDecodePair {
 /** Minimal shape for probing {@link image.PixelMap.release}; {@link Resource} does not carry this. */
 interface PixelMapReleaseProbe {
   release?: () => void;
+}
+
+/** 仅短时持有关闭前的节点代理，用同一 uniqueId 对照退栈后的挂载状态。 */
+class RzdPlayerCloseNodeProbe {
+  nodeId: string;
+  node: FrameNode | null;
+
+  constructor(nodeId: string, node: FrameNode | null) {
+    this.nodeId = nodeId;
+    this.node = node;
+  }
+}
+
+/** 帧空闲阶段的树属性采样；不等同于屏幕像素或 GPU fence。 */
+class RzdPlayerCloseIdleProbe extends FrameCallback {
+  private sample: () => void;
+
+  constructor(sample: () => void) {
+    super();
+    this.sample = sample;
+  }
+
+  onIdle(_timeLeftInNano: number): void {
+    this.sample();
+  }
 }
 
 /**
@@ -1544,8 +1569,9 @@ export struct PlaybackPage {
    */
   private closeTailTimer: number = -1;
   private closePath: string = 'live';
-  /** 本次关闭是哪个入口触发的（	opbar = 顶栏收起按钮，systemBack = 系统返回/下拉）。只给日志用。 */
-  private closeEntrySource: string = 'systemBack';
+  /** 关闭起手捕获的来源；后续退化/快照回调保持该来源。 */
+  private closeEntrySource: string = 'unknown';
+  private closeOpenSerial: number = 0;
 
   /**
    * ★★★ 2026-11-01（「多开几次播放器打不开」的根因）：
@@ -1637,7 +1663,8 @@ export struct PlaybackPage {
 
   private ownsClose(token: number, event: string): boolean {
     const owns: boolean = token !== 0 && token === this.closeToken &&
-      token === PlaybackPage.closeOwner && this.closeInstance === PlaybackPage.ownerInstance;
+      token === PlaybackPage.closeOwner && this.closeInstance === PlaybackPage.ownerInstance &&
+      this.closeOpenSerial === PlaybackPage.openSerial;
     if (!owns) {
       this.closeDiagnostic(`stale-callback-dropped event=${event} token=${token}`);
     }
@@ -1647,6 +1674,7 @@ export struct PlaybackPage {
   private beginCloseGuard(path: string): number {
     this.clearCloseGuard();
     this.closePath = path;
+    this.closeOpenSerial = PlaybackPage.openSerial;
     // ★★★ 2026-10-21（甲方：「用收起按钮关闭播放器，封面会先消失一瞬间再出现」）：
     //   **不能在这里压封面**。上一版把它放在关闭起手 ⇒ 真页面先丢掉封面（第一帧就没了），
     //   而顶替它的壳层克隆层要等 `morphStage` 翻到 LEAVING 之后由壳层下一帧才挂上来
@@ -1700,7 +1728,29 @@ export struct PlaybackPage {
       return;
     }
     const path: string = fallback ? 'fallback' : this.closePath;
-    // Hide intent -> synchronously remove only player route -> reset -> release ownership.
+    const closeUi = this.getUIContext();
+    const closeNodes: RzdPlayerCloseNodeProbe[] = this.captureCloseNodes();
+    this.logCloseNodes('before-hide', closeNodes);
+    // 先向仍在树上的节点提交视觉终态，再移除路由、复位几何。
+    // V2 的普通赋值要等微任务标脏；pop 后再写只能证明字段变了，不能证明旧节点收到更新。
+    // applySync 仅刷新本批视觉状态，绝不包含 isShowPlay/路由，避免同步触发壳层 Monitor pop。
+    try {
+      UIUtils.applySync((): void => {
+        this.coverPublishHidden = true;
+        this.shrinkPageHidden = true;
+        this.expandState.markPlayerSessionClosed();
+      });
+    } catch (error) {
+      this.coverPublishHidden = true;
+      this.shrinkPageHidden = true;
+      this.expandState.markPlayerSessionClosed();
+      this.closeDiagnostic(`hide-submit-failed error=${error}`, path);
+    }
+    if (!this.ownsClose(token, 'after-hide')) {
+      return;
+    }
+    this.logCloseNodes('hidden-before-pop', closeNodes);
+    this.logCloseRender('hidden-before-pop');
     this.state.isShowPlay = false;
     // ★★★ 2026-10-21（甲方：「在播放页内旋转屏幕后关闭，还会留一层封面」）：
     //   **关闭链走到这一步，播放页这一侧就不许再出封面了**。
@@ -1748,6 +1798,7 @@ export struct PlaybackPage {
         this.closeDiagnostic(`route-remove-fallback-failed error=${inner}`, path);
       }
     }
+    this.logCloseNodes('after-pop', closeNodes);
     try {
       this.stopGeoDriver();
       this.expandState.morphReset();
@@ -1782,25 +1833,8 @@ export struct PlaybackPage {
       this.releasePixelMapQuiet(pixmap);
     }
     this.expandState.endSnapshotShrink();
-    // ★★★ 2026-11-02（复核候选机制的**结构性封口**）：
-    //   关闭收尾做完 ⇒ 这一页**不许再出图**，直到下一轮 `onAppear` 复位。
-    //   原因（源码可证）：上面 `pop(false)` 之后紧接着 `morphReset()` 会把共享状态恢复成
-    //   `NONE / p=1 / scale=1 / 无裁剪`，而页根可见门（`playerPaints() && !shrinkPageHidden && …`）
-    //   与封面 opacity 会因此重新放行 ⇒ 只要 NavDestination 的退场还没完全卸载，
-    //   旧页面就可能再画一帧**满窗背景/控件**（=「退出播放器封面残留」的候选机制）。
-    //   `shrinkPageHidden` 本来就是"整页不出图"的开关（快照收缩期也用它），
-    //   在这里补成"关闭终态"语义：置真 → 页根 `Visibility.Hidden`，且 `aboutToAppear` / `onAppear` 复位。
-    //   grep 关键字：`RzdCloseRender` 的 `shrinkHidden=1`。
-    this.shrinkPageHidden = true;
-    // ★★★ 2026-11-03（甲方：「只有下拉关闭会残留封面」）：收尾同时落下**会话级**的关闭标志。
-    //   上面 `shrinkPageHidden` 只管"这一页的页根"，而壳层那张克隆封面（`Index.MorphCoverClone`）是
-    //   **另一个节点**，它的可见性由 `morphPaintHidden()` 与壳层自己的 `playerRouteAlive` 共同决定
-    //   （后者要等 `isShowPlay=false` 的 @Monitor 异步回调才翻转）。
-    //   这里把"本轮会话已关闭"写进共享状态，三条关闭路（下拉/返回/顶栏）都必然经过本函数
-    //   ⇒ 收尾那一帧起，页根、克隆封面、快照收缩层一律不出图，不再依赖任何一条计算出来的门。
-    //   放行点：壳层 `pushPlayerRoute()` 与 `pullOpenBegin()`。
-    //   grep 关键字：`RzdCloseRender` 的 `closed=1`、`RzdCloseEntry src=`。
-    this.expandState.markPlayerSessionClosed();
+    // 隐藏已在 pop 前同步提交；几何复位保持关闭终态，下一轮打开才放行。
+    this.logCloseNodes('after-reset', closeNodes);
     // ★ 残留判据：快照层仍归快照所有、但图已经没了 ⇒ 屏上就是"播放页封面位置的一块残留"。
     //   grep 关键字：`RzdCoverLeak owner-without-pix`
     if (this.expandState.snapshotShrinkOwnedFlag() && this.morphShrinkState().pixmap === undefined) {
@@ -1827,24 +1861,25 @@ export struct PlaybackPage {
     } catch (error) {
       this.closeDiagnostic(`render-log-failed error=${error}`, path);
     }
-    // ★ 2026-11-03：**下一拍**再采一次。关闭链本身是同步的（同一任务里所有门一起写），
-    //   所以屏上不可能出现"收尾中间态"；真正会残留的一定是**之后的某一帧**又把某个门放开了。
-    //   `setTimeout(0)` = 下一个任务，最接近"收尾后画出来的第一帧"。
-    //   判据：这一行必须 `rootVis=0 realOp=0 clone=0 snap=0 closed=1`；
-    //   若这里出现 1，配上 `src=` 就能直接定位是哪条关闭路、放开了哪个门。
-    //   grep 关键字：`RzdCloseRender t+0`。
-    const entryAtClose: string = this.closeEntrySource;
+    // 帧空闲阶段读取关闭前捕获的节点和当前附着节点；旧会话不采新页面。
     const openSerialAtSample: number = PlaybackPage.openSerial;
-    setTimeout((): void => {
-      if (PlaybackPage.openSerial !== openSerialAtSample) {
-        return;
-      }
-      try {
-        this.logCloseRender(`t+0 src=${entryAtClose}`);
-      } catch (error) {
-        this.closeDiagnostic(`render-log-t0-failed error=${error}`, path);
-      }
-    }, 0);
+    try {
+      closeUi.postFrameCallback(new RzdPlayerCloseIdleProbe((): void => {
+        if (PlaybackPage.openSerial !== openSerialAtSample) {
+          return;
+        }
+        this.logCloseNodes('frame-idle', closeNodes, closeUi);
+        this.logCloseRender('frame-idle');
+      }));
+      closeUi.postDelayedFrameCallback(new RzdPlayerCloseIdleProbe((): void => {
+        if (PlaybackPage.openSerial !== openSerialAtSample) {
+          return;
+        }
+        this.logCloseNodes('frame-idle+500', closeNodes, closeUi);
+      }), 500);
+    } catch (error) {
+      this.closeDiagnostic(`frame-probe-failed error=${error}`, path);
+    }
     this.clearCloseGuard();
     ++this.closeGen;
     PlaybackPage.closeOwner = 0;
@@ -2093,6 +2128,18 @@ export struct PlaybackPage {
         return;
       }
       if (!this.dismissMorphActive) {
+        // ★ 2026-11-03（甲方：「很快地下甩会出问题；跟着手指慢慢拉则正常」）：
+        //   极快下甩时 `onActionUpdate` 可能一帧都没来（手势识别成功与抬手落在同一批事件里），
+        //   `dismissMorphActive` 从未置真 ⇒ 旧实现这里直接 return：
+        //   手指甩了、页面纹丝不动，观感就是「甩一下没关掉，得再拉一次才关」。
+        //   ⇒ 只有**确实是快速下甩**（`fastFlick`：方向向下且 |velocityY| ≥ 900）时才补一条明确关闭；
+        //     此刻 `morphP` 仍是 1（完全没有被手指驱动过）⇒ 走的是标准 460ms 反向，
+        //     不会经过任何"半途几何"，也就不存在从错误矩形起飞的问题。
+        //   其余情况（慢慢拉到一半又松手）保持原判据：什么都不做，让页面停在那儿。
+        //   排查关键字：`RzdCloseEntry ... entryBranch=drag-flick-noUpdate`。
+        if (fastFlick) {
+          this.closeFullScreenPlayback('pull', 'drag-flick-noUpdate');
+        }
         return;
       }
       this.dismissMorphActive = false;
@@ -2128,8 +2175,7 @@ export struct PlaybackPage {
         //   下面 `RzdCloseRender` / `RzdCloseEntry` 都靠它区分"下拉 / 系统返回 / 顶栏"三条路，
         //   否则真机日志里三条路长得一模一样，没法定位"为什么只有下拉残留"。
         //   排查关键字：`RzdCloseEntry src=pull`。
-        this.closeEntrySource = 'pull';
-        this.closeFullScreenPlayback();
+        this.closeFullScreenPlayback('pull', 'drag-morph');
         return;
       }
       // 濠电偛鐪查妶鍥╃暫闂傚倸鍟悧鍡涘焵椤掑倶鈧妲愰弶娆惧殨闁荤喓澧楃粈鈧柣搴ｆ嚀閺堫剟寮抽敐澶婄畱濞撴艾锕︾粈澶嬵殽閻愯泛鐓愬┑鈩冩倐閹嫰姊归幇顔拘㈤梺琛″亾閻犺櫣鍎ょ粈鈧?OPEN
@@ -2178,7 +2224,7 @@ export struct PlaybackPage {
       `absVelocity=${speed.toFixed(1)} dir=${collapsingDirection ? 'collapse' : 'open'} ` +
       `fastFlick=${fastFlick} commit=${shouldCloseFallback}`);
     if (shouldCloseFallback) {
-      this.closeFullScreenPlayback();
+      this.closeFullScreenPlayback('pull', 'drag-noMorph');
       return;
     }
     this.getUIContext().animateTo({ duration: 220, curve: Curve.EaseInOut }, (): void => {
@@ -3676,13 +3722,14 @@ export struct PlaybackPage {
         `RzdCloseLiveMorph reverse-now stage=${closeStage} intro=${this.expandIntroRunning ? 1 : 0} ` +
           `p=${this.expandState.morphP.toFixed(3)} cp=${this.expandState.contentProgress().toFixed(3)}`);
       this.closeAfterOpen = false;
-      this.closeEntrySource = 'systemBack';
+      // 顶层入口标记：顶栏收起按钮进来时已写成 'topbar'，这里不能无条件覆盖，否则三条入口又混成一条。
+      this.closeEntrySource = this.closeEntrySource === 'topbar' ? 'topbar' : 'systemBack';
       this.expandState.reverseInFlight = true;
       this.expandIntroRunning = false;
-      this.closeFullScreenPlayback();
+      this.closeFullScreenPlayback(this.closeEntrySource, 'collapse-live');
       return;
     }
-    this.closeEntrySource = 'systemBack';
+    this.closeEntrySource = this.closeEntrySource === 'topbar' ? 'topbar' : 'systemBack';
     this.closeWithAnimation();
   }
   /**
@@ -3714,7 +3761,7 @@ export struct PlaybackPage {
     }
     if (attempt >= 20) {
       this.closeEntrySource = 'defer-live';
-      this.closeFullScreenPlayback();
+      this.closeFullScreenPlayback('defer-live', 'defer-live');
       return;
     }
     setTimeout((): void => {
@@ -5180,7 +5227,9 @@ export struct PlaybackPage {
     this.coverPublishHidden = false;
     this.isClosing = false;
     // 第 ② 支：容器反形变缩回（无界 `onReverseMorph` 的等价物）。
-    this.closeFullScreenPlayback();
+    // 来源沿用**本次关闭的起手入口**（下拉已写成 'pull'，快照路是 topbar/systemBack），只把分支标成 fallback。
+    this.closeFullScreenPlayback(this.closeEntrySource === 'unknown' ? 'systemBack' : this.closeEntrySource,
+      'snapshot-fallback');
   }
 
   /**
@@ -5250,6 +5299,91 @@ export struct PlaybackPage {
    * 理想终态是 `rootVis=0 realOp=0 clone=0 snap=0`。
    * grep 关键字：`RzdCloseRender`。
    */
+  /**
+   * 关闭前把关键节点的代理抓在手里（**永不抛**：诊断绝不能反过来打断关闭链）。
+   *
+   * 为什么要抓：判"残留"必须证明**旧节点到底还在不在树上**。`logCloseRender` 只打 ArkTS 里算出来的门
+   * （`rootVis/realOp/clone`），它证明不了"那个节点还在不在、祖先链是不是把它透明掉了"。
+   * 拿 `uniqueId` 就是身份：退栈后 `uid` 还是同一个 ⇒ 旧树没卸；`live:none` ⇒ 已卸。
+   * ⚠️ 仍然只是**树属性**（`at/vis/op/treeVis/treeOp`），不是屏幕像素，也不能证明 GPU 残留。
+   * 排查关键字：`RzdCloseNodes`。
+   */
+  private captureCloseNodes(): RzdPlayerCloseNodeProbe[] {
+    const ids: string[] = [PLAYER_ROOT_ID, PLAYER_BIG_COVER_ID, 'rzd_player_flat_cover',
+      'rzd_player_cover_clone_host', 'rzd_player_cover_clone_image', 'rzd_shrink_overlay_host',
+      'rzd_playlist_transition_host'];
+    const probes: RzdPlayerCloseNodeProbe[] = [];
+    try {
+      const ui: UIContext = this.getUIContext();
+      for (let i: number = 0; i < ids.length; i++) {
+        let node: FrameNode | null = null;
+        try {
+          node = ui.getFrameNodeById(ids[i]);
+        } catch (error) {
+          node = null;
+        }
+        probes.push(new RzdPlayerCloseNodeProbe(ids[i], node));
+      }
+    } catch (error) {
+      this.closeDiagnostic(`capture-nodes-failed error=${error}`);
+    }
+    return probes;
+  }
+
+  private closeNodeInfo(node: FrameNode | null): string {
+    if (node === null) {
+      return 'none';
+    }
+    try {
+      if (node.isDisposed()) {
+        return 'disposed';
+      }
+      const attached: boolean = node.isAttached();
+      let effectiveOpacity: number = 1;
+      let effectiveVisible: boolean = true;
+      let current: FrameNode | null = node;
+      let depth: number = 0;
+      while (current !== null && depth < 48) {
+        if (current.isDisposed()) {
+          break;
+        }
+        effectiveOpacity *= current.getOpacity();
+        effectiveVisible = effectiveVisible && current.isVisible();
+        current = current.getParent();
+        depth++;
+      }
+      // 只看树属性：uid 用来确认"还是不是同一个节点"，treeVis/treeOp 是**祖先链连乘**后的有效值。
+      // 它们仍不是屏幕像素（合成层 alpha / GPU 残留看不到），只能证明"节点该不该出图"。
+      return `uid:${node.getUniqueId()},at:${attached ? 1 : 0},vis:${node.isVisible() ? 1 : 0},` +
+        `op:${node.getOpacity().toFixed(3)},treeVis:${effectiveVisible ? 1 : 0},` +
+        `treeOp:${effectiveOpacity.toFixed(3)}`;
+    } catch (error) {
+      return `query-error:${String(error)}`;
+    }
+  }
+
+  /** 打印一组节点探针。**整体包 try**：诊断抛异常会把关闭链打断（= 用户说的"关不掉"）。 */
+  private logCloseNodes(moment: string, probes: RzdPlayerCloseNodeProbe[], ui: UIContext = this.getUIContext()): void {
+    try {
+      let details: string = '';
+      for (let i: number = 0; i < probes.length; i++) {
+        const probe: RzdPlayerCloseNodeProbe = probes[i];
+        let live: FrameNode | null = null;
+        try {
+          live = ui.getAttachedFrameNodeById(probe.nodeId);
+        } catch (error) {
+          this.closeDiagnostic(`node-lookup-failed id=${probe.nodeId} error=${error}`);
+        }
+        details += ` ${probe.nodeId}=[old:${this.closeNodeInfo(probe.node)} live:${this.closeNodeInfo(live)}]`;
+      }
+      MusicStoreService.getInstance().appendRuntimeDiagnostic(
+        `RzdCloseNodes ${moment} src=${this.closeEntrySource} token=${this.closeToken} ` +
+          `sess=${this.closeOpenSerial}/${PlaybackPage.openSerial} ${details}`);
+    } catch (error) {
+      this.closeDiagnostic(`close-nodes-log-failed moment=${moment} error=${error}`);
+    }
+  }
+
   private logCloseRender(moment: string): void {
     const e: PlayerExpandState = this.expandState;
     const rootPaint: boolean = e.playerPaints() && !this.shrinkPageHidden &&
@@ -5283,10 +5417,12 @@ export struct PlaybackPage {
   }
 
 
-  private closeFullScreenPlayback(): void {
+  private closeFullScreenPlayback(source: string, entryBranch: string): void {
     if (this.isClosing) {
       return;
     }
+    this.closeEntrySource = source;
+    const usableAtEntry: boolean = this.expandState.morphUsable;
     // ★★★ 2026-10-18（用户：「展开过程中按返回**没有动画**」）：
     //   打开期的那条内容时间线是**逐帧 ticker**（见 `startContentTicker()`），它一直按自己的起点
     //   写到 560ms 为止、**不认**关闭请求 ⇒ 反向一开始就被它把 `contentP` 又顶回 1
@@ -5319,24 +5455,15 @@ export struct PlaybackPage {
     }
     this.refreshCollapseGeometry();
     this.isClosing = true;
-    // ★★★ 2026-11-03（甲方：「**只有下拉关闭会出现封面残留，系统返回正常**」—— 这就是分岔点）：
-    //   `onCollapseRequested()`（系统返回 / 顶栏）在进来之前就写了 `reverseInFlight = true`，
-    //   而**下拉那条路从来没写**。`reverseInFlight` 是壳层那两条"展开收尾"的唯一让路闸：
-    //     · `Index.settlePullOpen().onGeometryFinished`（打开后 300~400ms）
-    //     · `Index.retrySettleLanding()`（再 12×32ms 轮询）
-    //   两处的放行条件都是 `isShowPlay && geomReady && morphUsable && !reverseInFlight`，
-    //   而 `isShowPlay` 要等关闭收尾（`finishCloseGuard`）才变假。于是"打开后 ~700ms 内下拉关闭"
-    //   这个**只有下拉才会出现的时机**，会让 `morphSettleOpen()` 在**关闭动画正中间**被执行：
-    //   它无条件写 `stage=OPEN / drive=NONE / morphP=1`（整屏播放页 + 封面）⇒ 屏上"封面又满屏闪回来"
-    //   ⇒ 观感就是下拉关闭后残留一张封面。系统返回因为提前置了 `reverseInFlight`，永远撞不上。
-    //   ⇒ 活体反向（live）这条路，无论谁触发，进来第一件事就是声明"反向在进行中"。
-    //   清理点：`morphReset()`（会话边界）已复位它，不需要各路径自己清。
-    //   排查关键字：`RzdCloseEntry` 行里的 `rev=1`。
+    // 所有 live 入口统一挡住旧展开收尾。这是时序加固，不能据此认定持续封面残留的根因。
+    // 交互来源与实际几何分支分开记录：drag-noMorph 可能经 refreshCollapseGeometry 恢复几何。
     this.expandState.reverseInFlight = true;
     MusicStoreService.getInstance().appendRuntimeDiagnostic(
       `RzdCloseEntry src=${this.closeEntrySource} path=live stage=${this.expandState.morphStage} ` +
         `p=${this.expandState.morphP.toFixed(3)} drv=${this.expandState.morphDrive} rev=1 ` +
-        `intro=${this.expandIntroRunning ? 1 : 0} show=${this.state.isShowPlay ? 1 : 0}`);
+        `intro=${this.expandIntroRunning ? 1 : 0} show=${this.state.isShowPlay ? 1 : 0} ` +
+        `entryBranch=${entryBranch} usable=${usableAtEntry ? 1 : 0}->${this.expandState.morphUsable ? 1 : 0} ` +
+        `inst=${this.closeInstance} sess=${PlaybackPage.openSerial}`);
     const closeToken: number = this.beginCloseGuard('live');
     this.closeDiagnostic('shrink START');
     // 濠殿喗绻愮徊钘夛耿椤忓牆缁╅柟顖滃瀹曟娊鏌熺紒銏犲箺闁哄倷绶氬畷鎶藉Ω閿旂瓔妲繛鎴炴尭缁夌兘銆呴敃鍌氱鐎广儱鐗嗗▓浼存煕閺傝濡介柡浣哥秺楠炴帟顦查柛鈺傤殜瀹曠娀鎮€靛摜顦╂繛鎴炴尪閸婃捇鏌屽鍫濈闁靛ě鍕瘞闂佸憡鐟ф慨宕囩博鐎靛憡灏庨柧姘€荤粣妤冣偓鍨緲閻楀懐鎷归敓鐘虫櫖?
