@@ -216,7 +216,7 @@ morphSettleOpen(): stage=OPEN / drive=NONE / applyMorphProgress(1) → morphP=1 
 ### 9.3 验证等级
 
 编译级 + 产物级：`assembleHap` 实际执行了 `CompileArkTS`（1min19s），
-`musichomesample-default-signed.hap` = 63,086,884 B（2026/11/03 12:37:57），
+`musichomesample-default-signed.hap` = 63,086,882 B（构建戳 261103-1239，PROPFIND 回读一致 63,086,882 B），
 解包 `ets/modules.abc` 后 `RzdCloseEntry` / `player session closed` / `player session open` / `rev=1`
 各命中 1 次，证明新增代码进了产物。**没有真机**（`hdc list targets` 为空），
 所以"下拉关闭是否真的不再残留封面"仍未验证——需装包后按下节取证。
