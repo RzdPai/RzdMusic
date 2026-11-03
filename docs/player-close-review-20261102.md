@@ -123,3 +123,113 @@
 ## 7. 本轮验证范围
 
 已完成源码对照、提交差异复核、附件时间线核对、官方文档核实与独立只读交叉审查。未修改应用源码、依赖、权限或构建配置，未构建或上机复现。只新增本分析文档，并补正项目/全局记忆。应用修复与真机验收仍由实施模型后续执行。
+
+## 8. 后续实机日志复核（附件 2026-11-03）
+
+附件：[第二份日志](<C:/Users/Administrator/.dsh/attachments/v1/files/f9/f9a77cd65acb97d5729b41463864485a09961352cf24f1eb6e924fc3c39cd4fd/[080041] [卡片] _202611031205_33365.txt>)，76行。基线HEAD=`c24fe6dc`，工作区干净。
+
+### 时间与包版本
+
+`MusicStoreService.appendRuntimeDiagnostic()`以`new Date().toISOString()`写持久诊断，所以`2026-11-02T23:57:49Z`/`23:57:54Z`换算成北京时间是**2026-11-03 07:57:49/54**；附件启动行`[08:00:41]`与持久记录`2026-11-03T00:00:41Z`互相印证。
+
+这晚于`261102-2345`上传回读（11/2 23:46:26 +08）和`261103-0101`上传回读（11/3 01:02:37 +08）。**只能说日志事件发生在两次上传之后**；没有About构建戳、安装记录或版本截图，不能说一定运行了哪个包。`RzdCloseRender`采样代码由`32d9e475`加入；该字段只证明运行日志包含这一实现，不区分2345/0101，也不等同安装包身份证明。
+
+### 这份日志实际证明什么
+
+两轮都是live关闭，`shrink START→FINISH`约323ms/474ms；`FINISH→route-remove`约14ms/5ms；pop/reset同毫秒。post-cleanup、内容Column on-disappear、t+64三处都报告：
+
+```text
+rootVis=0 realOp=0 clone=0 snap=0 snapPix=0 shrinkHidden=1
+```
+
+t+64另有`alive=0 show=0 size=0 idx=-1`。没有watchdog/fallback/re-pop。**结论：未复现持续残留，是强反证，不是屏幕像素层面的排除。**
+
+`intro=1`出现在post-cleanup/on-disappear，但不是可绕过隐藏门的证据：`morphOpacityValue()`虽可能返回1，根节点仍受`shrinkPageHidden=1`的`Visibility.Hidden`门；该内层on-disappear采样发生在稍后`introPaintReady=false`之前，t+64已为0。源码逻辑上intro不能越过根隐藏门，但仍没有真实合成帧采样。
+
+### RzdCloseRender的盲区
+
+`rootVis`、`realOp`、`clone`、`snap`都是ArkTS模型/修饰器条件的计算值，不是组件树探测或屏幕像素：
+
+- `rootVis`对应播放页根visibility表达式；`realOp`对应封面opacity公式；它们不测GPU最后一帧、过渡快照或合成器缓存。
+- `clone`只取共享状态`morphOverlayBridging()`；Shell的`MorphCoverClone`另外受builder挂载条件`morphOverlayBridging || hdsBarSuppressed`、`morphPaintHidden`、`playerRouteAlive`及实际opacity控制。该日志未采样这些最终值，也未采`MorphMiniBarClone`、`MorphMetaBridge`、`ShrinkOverlayHost`节点是否真正挂载。
+- `snap/pix`是`MorphShrinkState`字段，不是RenderNode/图像内容验证。
+- `on-disappear`是正文Column回调，不等同NavDestination的`onHidden/onWillDisappear/onDisAppear`。
+
+源码顺序是pop → reset/共享状态清理 → `shrinkPageHidden=true` → post-cleanup log，调用中没有显式await或timer；**不要声称存在已证实的毫秒级空窗**。但门置位前没有独立采样，关闭动画期间亦无逐帧记录，帧合成期间的短闪、旧合成帧、未检查的Shell层仍未排除。
+
+### 新发现的缓存条件风险
+
+`bgCacheOwner`是单个“最近借用者”编号；同一静态PixelMap可以暂时被多个仍存活的PlaybackPage实例引用。如果B adopt覆盖了A的owner，B先退出会把owner归零；若A仍持有同一PixelMap，此时有第三方commit/track-change按“无主”释放，A就会持有已释放图。
+
+这是**源码上的条件性所有权风险**（中高置信度），本附件没有`adopt/cache-orphan/cache-replace/drop`日志，不能确认发生，更不能将它归因于封面残留。若确认NavPathStack复用/快速重入会造成多借用，实施应改为引用计数/lease集合，或缓存字节、各页独立PixelMap；不要简单加`if(owner===...)`就宣称彻底解决。
+
+### 下一次最小取证
+
+1. 同一次录屏里同时展示设置/关于页构建戳与关闭后残留画面，使故障画面、包版本和运行日志绑定。
+2. 导出一轮完整诊断，不要只截最后几行；记录pop前、reset后、`shrinkPageHidden`置位后、下一帧、NavDestination hidden/willDisappear/disappear、+64。
+3. 同步采Shell克隆的实际挂载、`playerRouteAlive`、`morphPaintHidden`、最终opacity与快照层节点身份。目标是确认画面属于旧播放页、Shell克隆、快照层，还是其他首页/二级页内容；区分瞬闪和持续残留。
+
+官方边界：[NavDestination生命周期](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/arkts-navigation-navdestination)区分导航隐藏、离场与组件树卸载；路由栈为空和逻辑visibility=Hidden都不能代替屏幕像素证据。
+
+## 9. 实施（2026-11-03，条件：甲方补充"**只有下拉关闭会残留，系统返回正常**"）
+
+### 9.1 分岔点定位：下拉这条路**没有**声明"反向在进行中"
+
+三条关闭入口落进收尾时的状态不一样：
+
+| 入口 | 进 `closeFullScreenPlayback()` 之前 | `reverseInFlight` |
+| --- | --- | --- |
+| 系统返回 / 顶栏 | `onCollapseRequested()` 里显式置真 | 真 |
+| 快照路（落位之后） | `closeWithAnimation()`，不经过 live | 假（也不需要） |
+| **下拉** | `onDismissDrag()` 直接调，**没有任何置真** | **假** |
+
+`reverseInFlight` 是壳层"展开收尾"的唯一让路闸，两处放行条件都是
+`isShowPlay && morphGeomReadyNow() && morphUsable && !reverseInFlight`：
+
+- `Index.settlePullOpen().onGeometryFinished`（打开后 300~400ms 的那条补间收尾）
+- `Index.retrySettleLanding()`（再 12×32ms 轮询）
+
+而 `isShowPlay` 要等关闭收尾（`finishCloseGuard`）才变假。于是**"打开后 ~700ms 内下拉关闭"**
+这个只有下拉才会出现的时机，会让 `morphSettleOpen()` 在**关闭动画正中间**被执行：
+
+```text
+morphSettleOpen(): stage=OPEN / drive=NONE / applyMorphProgress(1) → morphP=1 / 圆角=0 / 系统条放回
+```
+
+即整屏播放页（含封面）被重新写回来，然后才 pop。系统返回因为提前置了 `reverseInFlight`，永远撞不上这条。
+这与甲方"只有下拉残留、返回正常"的分岔完全一致。
+
+### 9.2 改动（源码级）
+
+1. `PlaybackPage.closeFullScreenPlayback()`：入口第一件事 `reverseInFlight = true`，
+   并打 `RzdCloseEntry src=<entry> path=live ... rev=1`。无论谁触发 live 关闭都成立。
+2. `PlayerExpandState` 新增 `@Trace playerSessionClosed` + `markPlayerSessionClosed()/Open()/playerPaintAllowed()`：
+   **不看任何几何**的结构判据。`PlaybackPage.finishCloseGuard()` 置真（三条关闭路都必经），
+   壳层 `Index.pushPlayerRoute()` 与 `pullOpenBegin()` 置假。
+3. 三道渲染门挂上它：播放页根 `visibility`、真封面 `opacity`（两处）、壳层
+   `MorphCoverClone` 的 `visibility`+`opacity`、`ShrinkOverlayHost` 的挂载条件。
+4. 诊断：`RzdCloseEntry`（入口 + p/drv/intro）、`RzdCloseRender` 增补
+   `src=/rev=/drv=/pullMode=/srcBarOp=/hs=/miniOut=/closed=`，并在收尾后 `setTimeout(0)`
+   补一条 `t+0` 采样（收尾后真正画出来的第一帧）。
+5. `Index.retrySettleLanding()` / `onGeometryFinished` 追加 `playerPaintAllowed()`，双保险。
+
+### 9.3 验证等级
+
+编译级 + 产物级：`assembleHap` 实际执行了 `CompileArkTS`（1min19s），
+`musichomesample-default-signed.hap` = 63,086,884 B（2026/11/03 12:37:57），
+解包 `ets/modules.abc` 后 `RzdCloseEntry` / `player session closed` / `player session open` / `rev=1`
+各命中 1 次，证明新增代码进了产物。**没有真机**（`hdc list targets` 为空），
+所以"下拉关闭是否真的不再残留封面"仍未验证——需装包后按下节取证。
+
+### 9.4 下次上机判读（一条 grep 就够）
+
+```text
+hdc shell hilog -x | Select-String 'RzdCloseEntry|RzdCloseRender'
+```
+
+- 正常：`RzdCloseEntry src=pull ... rev=1` → `RzdCloseRender post-cleanup ... closed=1 rootVis=0 realOp=0 clone=0`
+  → `RzdCloseRender t+0 ... rootVis=0`。
+- 若 `RzdCloseEntry src=pull` 之后仍出现 `RzdCloseRender ... stage=2 p=1.000 rev=0`：
+  说明还有第三条路把 p 拍回 1（不是壳层落位链），查 `morphSettleOpen` 的其它调用者。
+- 若 `closed=1` 但 `t+0` 里 `rootVis=1`：说明门又被别的写点放开了，查 `shrinkPageHidden` 的复位点。
+

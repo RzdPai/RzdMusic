@@ -1210,6 +1210,11 @@ struct Index {
     //   （日志：`+64 re-pop` 紧跟一次 `OPN`）⇒ 下次点击以为"已经开着"就不再 push。
     //   `notifyPlayerRoutePushed()` 做两件事：`openSerial++`（旧回调早退）+ 取消旧定时器。
     PlaybackPage.notifyPlayerRoutePushed();
+    // ★ 2026-11-03：**打开起点 ⇒ 放行播放页图层**（关闭收尾在 `PlaybackPage.finishCloseGuard()` 里置真）。
+    //   放在这里（而不是只放在 `pullOpenBegin()`）是为了覆盖"几何量不到、不做形变"的退化打开：
+    //   那条路只 push 路由、不跑形变，否则会带着上一轮的"已关闭"标志进来 = 整页不出图。
+    //   排查关键字：`player session open -> player layers allowed`。
+    this.expandState.markPlayerSessionOpen();
     this.pageIndexInfos.pushPath({
       name: RouterUrlConstants.PLAYER_PAGE,
       param: new PlayerRouteParam(true)
@@ -1603,7 +1608,7 @@ struct Index {
    * @param attempt 已重试次数
    */
   private retrySettleLanding(attempt: number): void {
-    if (!this.appState.isShowPlay) {
+    if (!this.appState.isShowPlay || !this.expandState.playerPaintAllowed()) {
       return;
     }
     if (this.expandState.morphGeomReadyNow() && this.expandState.morphUsable &&
@@ -1771,7 +1776,8 @@ struct Index {
         //     `pullGeomReady` 鐨勭瓑浠风墿锛堝彧鍦?`measureMiniDuringPull` 閲忓埌缁堢偣閭ｄ竴鎷嶇疆浣嶏級
         //     鈬?钀戒綅闂ㄥ繀椤荤敤瀹冿紝鍚﹀垯浼氭妸"鍗婁唤鍑犱綍"钀藉畾鎴?OPEN銆?
         if (this.appState.isShowPlay && this.expandState.morphGeomReadyNow() &&
-          this.expandState.morphUsable && !this.expandState.reverseInFlight) {
+          this.expandState.morphUsable && !this.expandState.reverseInFlight &&
+          this.expandState.playerPaintAllowed()) {
           this.expandState.pushMorphTrace('settled');
           this.expandState.morphSettleOpen();
         } else {
@@ -1869,7 +1875,8 @@ struct Index {
    */
   @Builder
   private ShrinkOverlayHost() {
-    if (this.shrinkState.visible && this.shrinkState.pixmap !== undefined) {
+    if (this.shrinkState.visible && this.shrinkState.pixmap !== undefined &&
+      this.expandState.playerPaintAllowed()) {
       // 鈿狅笍 澶栧眰 `Stack` 蹇呴』鏄?**`Alignment.TopStart` + 鏁寸獥鐩?*锛?
       //   `MorphShrinkState` 閭ｇ粍 `endTx/endTy` 鏄寜"`Column` 鏈缉鏀炬椂鍗?`x鈭圼0,W], y鈭圼0,C]`"
       //   鍙嶈В鍑烘潵鐨勶紙瑙侀偅涓枃浠跺ご鐨勫璐︼級鈥斺€?闈犵埗瀹瑰櫒鐨?*宸︿笂瑙掑榻?*鎵嶆垚绔嬨€?
@@ -2075,12 +2082,13 @@ struct Index {
     .width(this.expandState.windowWidthVp > 0 ? this.expandState.windowWidthVp : StyleConstants.FULL_WIDTH)
     .height(this.expandState.windowHeightVp > 0 ? this.expandState.windowHeightVp : StyleConstants.FULL_HEIGHT)
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
-    .opacity(this.expandState.morphOverlayBridgeOpacity() * this.expandState.morphTailOpacity())
+    .opacity(this.expandState.morphOverlayBridgeOpacity() * this.expandState.morphTailOpacity() *
+      (this.expandState.playerPaintAllowed() ? 1 : 0))
     // ★★★ 2026-10-22（甲方：「退出后封面残留」）：除了状态机那道门，再挂一条**结构性**判据 ——
     //   播放页路由不在栈上就不许画。上游的浮层挂在播放页容器里（页面一卸自然消失），
     //   本仓浮层在 Shell，必须靠 `playerRouteAlive` 补齐这条语义。见它的字段注释。
-    .visibility(this.expandState.morphPaintHidden() || !this.playerRouteAlive ?
-      Visibility.Hidden : Visibility.Visible)
+    .visibility(this.expandState.morphPaintHidden() || !this.playerRouteAlive ||
+      !this.expandState.playerPaintAllowed() ? Visibility.Hidden : Visibility.Visible)
     // 鏁村眰涓嶅悆浜嬩欢锛氫笅闈㈠氨鏄挱鏀鹃〉锛岀帺瀹剁殑鐐瑰嚮蹇呴』鐓у父钀藉埌鎾斁椤典笂
     .hitTestBehavior(HitTestMode.None)
     .zIndex(PLAYER_CLONE_Z_INDEX)

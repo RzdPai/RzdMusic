@@ -2893,6 +2893,47 @@ export class PlayerExpandState {
   @Trace public pullMode: boolean = false;
 
   /**
+   * ★★★ 2026-11-03（甲方："**只有下拉关闭会出现封面残留，系统返回等其他方式正常**"）：
+   * 播放页这一轮会话是否"**已经关闭、还没重新打开**"。
+   *
+   * 为什么需要一条不看几何的判据：
+   *   关闭收尾（`PlaybackPage.finishCloseGuard`）里 `morphReset()` 会把几何复位成
+   *   `stage=NONE / morphP=1 / 无裁剪`，而"播放页根是否可见""壳层克隆封面是否在画"依赖的是一组
+   *   **计算出来的门**（`playerPaints()` / `morphTailOpacity()` / `morphOverlayBridging()` /
+   *   `Index.playerRouteAlive` …）。这些门的输入在收尾那一帧同时变化，只要有一条没同时归零，
+   *   屏上就会留一张"播放页封面"——而每条关闭路径（下拉 / 返回 / 顶栏）落进收尾时的
+   *   `morphP / morphStage / morphDrive` 都不一样，所以表现成"只有某一种方式残留"。
+   *
+   * 落法：收尾把本标志置真 ⇒ 与播放页相关的图层**一律不许出图**；只在新一轮打开时置假。
+   * 写点只有两个：`PlaybackPage.finishCloseGuard()`（置真）、壳层 `Index.pushPlayerRoute()` +
+   * `pullOpenBegin()`（置假）。
+   *
+   * 排查关键字：`RzdCloseRender` 行里的 `closed=1`、`RzdCloseEntry`。
+   */
+  @Trace public playerSessionClosed: boolean = false;
+
+  /** 关闭收尾：本轮会话到此为止，下一轮打开之前任何播放页图层都不许出图。 */
+  public markPlayerSessionClosed(): void {
+    if (!this.playerSessionClosed) {
+      this.playerSessionClosed = true;
+      Logger.info(PlayerExpandState.logTag, 'player session closed -> player layers hidden');
+    }
+  }
+
+  /** 打开起点（壳层 `pushPlayerRoute()` / `pullOpenBegin()`）：新一轮会话开始，放行出图。 */
+  public markPlayerSessionOpen(): void {
+    if (this.playerSessionClosed) {
+      this.playerSessionClosed = false;
+      Logger.info(PlayerExpandState.logTag, 'player session open -> player layers allowed');
+    }
+  }
+
+  /** @returns 播放页相关图层现在是否允许出图（= 本轮会话还没关闭）。 */
+  public playerPaintAllowed(): boolean {
+    return !this.playerSessionClosed;
+  }
+
+  /**
    * @returns 鏃犵晫閭ｄ釜 `effT()`锛歚褰㈠彉涓?? morphT : 1`锛坄wujie.pa:176295-176326` 鐨勫叆鍙傦級銆?
    * 闈欐鎬佹亽 1 鈬?涓€鍒?鎸?effT 绠?鐨勫叕寮忓湪闈欐鎬侀兘鍙栨弧鍊笺€?
    */
@@ -3590,6 +3631,9 @@ export class PlayerExpandState {
     //   新展开的封面克隆/迷你条克隆一起被压，且旧回弹会在动画中途再改一次。
     //   排查关键字：`RzdSquash stop-restore`。
     this.stopSquashLand();
+    // ★ 2026-11-03：打开起点 ⇒ 新一轮会话开始（#playerSessionClosed 的唯一放行点之一；
+    //   另一个是壳层 `Index.pushPlayerRoute()`，覆盖"几何不可用、不做形变"的退化打开）。
+    this.markPlayerSessionOpen();
     this.beginOpenGeometryAnimation();
     this.pullDragging = true;
     // ★ 2026-10-21：上拉开始的**第一帧**就把系统条顶掉（自绘条由 Shell 的克隆层接管）。

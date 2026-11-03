@@ -1792,6 +1792,15 @@ export struct PlaybackPage {
     //   在这里补成"关闭终态"语义：置真 → 页根 `Visibility.Hidden`，且 `aboutToAppear` / `onAppear` 复位。
     //   grep 关键字：`RzdCloseRender` 的 `shrinkHidden=1`。
     this.shrinkPageHidden = true;
+    // ★★★ 2026-11-03（甲方：「只有下拉关闭会残留封面」）：收尾同时落下**会话级**的关闭标志。
+    //   上面 `shrinkPageHidden` 只管"这一页的页根"，而壳层那张克隆封面（`Index.MorphCoverClone`）是
+    //   **另一个节点**，它的可见性由 `morphPaintHidden()` 与壳层自己的 `playerRouteAlive` 共同决定
+    //   （后者要等 `isShowPlay=false` 的 @Monitor 异步回调才翻转）。
+    //   这里把"本轮会话已关闭"写进共享状态，三条关闭路（下拉/返回/顶栏）都必然经过本函数
+    //   ⇒ 收尾那一帧起，页根、克隆封面、快照收缩层一律不出图，不再依赖任何一条计算出来的门。
+    //   放行点：壳层 `pushPlayerRoute()` 与 `pullOpenBegin()`。
+    //   grep 关键字：`RzdCloseRender` 的 `closed=1`、`RzdCloseEntry src=`。
+    this.expandState.markPlayerSessionClosed();
     // ★ 残留判据：快照层仍归快照所有、但图已经没了 ⇒ 屏上就是"播放页封面位置的一块残留"。
     //   grep 关键字：`RzdCoverLeak owner-without-pix`
     if (this.expandState.snapshotShrinkOwnedFlag() && this.morphShrinkState().pixmap === undefined) {
@@ -1818,6 +1827,24 @@ export struct PlaybackPage {
     } catch (error) {
       this.closeDiagnostic(`render-log-failed error=${error}`, path);
     }
+    // ★ 2026-11-03：**下一拍**再采一次。关闭链本身是同步的（同一任务里所有门一起写），
+    //   所以屏上不可能出现"收尾中间态"；真正会残留的一定是**之后的某一帧**又把某个门放开了。
+    //   `setTimeout(0)` = 下一个任务，最接近"收尾后画出来的第一帧"。
+    //   判据：这一行必须 `rootVis=0 realOp=0 clone=0 snap=0 closed=1`；
+    //   若这里出现 1，配上 `src=` 就能直接定位是哪条关闭路、放开了哪个门。
+    //   grep 关键字：`RzdCloseRender t+0`。
+    const entryAtClose: string = this.closeEntrySource;
+    const openSerialAtSample: number = PlaybackPage.openSerial;
+    setTimeout((): void => {
+      if (PlaybackPage.openSerial !== openSerialAtSample) {
+        return;
+      }
+      try {
+        this.logCloseRender(`t+0 src=${entryAtClose}`);
+      } catch (error) {
+        this.closeDiagnostic(`render-log-t0-failed error=${error}`, path);
+      }
+    }, 0);
     this.clearCloseGuard();
     ++this.closeGen;
     PlaybackPage.closeOwner = 0;
@@ -2097,7 +2124,11 @@ export struct PlaybackPage {
           this.expandState.pullSpanVp().toFixed(1)} openSpanSrc=${
           this.expandState.pullSpanIsMeasured() ? 'measured' : 'ratio'} commit=${shouldClose}`);
       if (shouldClose) {
-        // 婵炲瓨鍤庨崐妤冨垝?closeFullScreenPlayback闂佹寧绋掗懝楣冩偩閻樺啿顕辨慨姗嗗幖婢跺秹鏌ｉ鐔蜂壕闂佺娉涢敃銈夋嚋娴兼潙鐭楁俊顖氬帬婢舵劖鈷掗柡澶嬪灥閻?0 闂佸憡鍔曠粔鏉戠暤韫囨梹濮?
+        // ★ 2026-11-03（甲方：「只有下拉关闭会残留封面」）：**入口标记必须在这里写**。
+        //   下面 `RzdCloseRender` / `RzdCloseEntry` 都靠它区分"下拉 / 系统返回 / 顶栏"三条路，
+        //   否则真机日志里三条路长得一模一样，没法定位"为什么只有下拉残留"。
+        //   排查关键字：`RzdCloseEntry src=pull`。
+        this.closeEntrySource = 'pull';
         this.closeFullScreenPlayback();
         return;
       }
@@ -3645,11 +3676,13 @@ export struct PlaybackPage {
         `RzdCloseLiveMorph reverse-now stage=${closeStage} intro=${this.expandIntroRunning ? 1 : 0} ` +
           `p=${this.expandState.morphP.toFixed(3)} cp=${this.expandState.contentProgress().toFixed(3)}`);
       this.closeAfterOpen = false;
+      this.closeEntrySource = 'systemBack';
       this.expandState.reverseInFlight = true;
       this.expandIntroRunning = false;
       this.closeFullScreenPlayback();
       return;
     }
+    this.closeEntrySource = 'systemBack';
     this.closeWithAnimation();
   }
   /**
@@ -3674,11 +3707,13 @@ export struct PlaybackPage {
     }
     if (this.expandState.morphP >= 0.999) {
       this.expandIntroRunning = false;
+      this.closeEntrySource = 'snapshot';
       this.expandState.morphSettleOpen();
       this.closeWithAnimation();
       return;
     }
     if (attempt >= 20) {
+      this.closeEntrySource = 'defer-live';
       this.closeFullScreenPlayback();
       return;
     }
@@ -5218,10 +5253,20 @@ export struct PlaybackPage {
   private logCloseRender(moment: string): void {
     const e: PlayerExpandState = this.expandState;
     const rootPaint: boolean = e.playerPaints() && !this.shrinkPageHidden &&
-      (!e.morphClipping() || !e.morphPaintHidden());
+      !e.playerSessionClosed && (!e.morphClipping() || !e.morphPaintHidden());
     const realOp: number =
-      (e.realCoverVisible() && !this.snapshotFlight && !this.coverPublishHidden) ? 1 : 0;
+      (e.realCoverVisible() && !this.snapshotFlight && !this.coverPublishHidden &&
+        e.playerPaintAllowed()) ? 1 : 0;
     const shrink: MorphShrinkState = this.morphShrinkState();
+    // ★ 2026-11-03：补上"为什么某条路会残留"所需的三个**原始**量（不再只看计算出来的门）：
+    //   src        本次关闭的入口（pull / systemBack / topbar / snapshot / defer-live）
+    //   rev        活体反向闸 `reverseInFlight`（壳层展开收尾会不会在关闭中途又把 p 拍回 1）
+    //   drive      驱动源（FINGER 跟手 / ANIM 补间 / NONE）—— 下拉落进收尾时与返回不一样
+    //   srcBarOp   系统/自绘条透明度（它 >0 会强行把 `morphTailOpacity` 压成 0）
+    //   hs/miniOut 条交接闸（`hdsBarSuppressed` / `miniOut`）
+    //   closed     会话级关闭标志（`playerSessionClosed`，本轮新增的结构判据）
+    // grep 关键字：`RzdCloseRender`（配合 `src=` / `closed=` / `rev=`）。
+    const srcBarOp: number = e.sourceBarOpacity();
     MusicStoreService.getInstance().appendRuntimeDiagnostic(
       `RzdCloseRender ${moment} rootVis=${rootPaint ? 1 : 0} realOp=${realOp} ` +
         `clone=${e.morphOverlayBridging() ? 1 : 0} tail=${e.morphTailOpacity().toFixed(2)} ` +
@@ -5229,6 +5274,10 @@ export struct PlaybackPage {
         `shrinkHidden=${this.shrinkPageHidden ? 1 : 0} intro=${this.introPaintReady ? 1 : 0} ` +
         `alive=${this.isAlive ? 1 : 0} show=${this.state.isShowPlay ? 1 : 0} ` +
         `stage=${e.morphStage} p=${e.morphP.toFixed(3)} ` +
+        `src=${this.closeEntrySource} rev=${e.reverseInFlight ? 1 : 0} drv=${e.morphDrive} ` +
+        `pullMode=${e.pullMode ? 1 : 0} srcBarOp=${srcBarOp.toFixed(2)} ` +
+        `hs=${e.hdsBarSuppressed ? 1 : 0} miniOut=${e.miniOut ? 1 : 0} ` +
+        `closed=${e.playerSessionClosed ? 1 : 0} ` +
         `inst=${this.closeInstance}/${PlaybackPage.instanceSerial} ` +
         `sess=${this.instanceOpenSerial}/${PlaybackPage.openSerial}`);
   }
@@ -5270,6 +5319,24 @@ export struct PlaybackPage {
     }
     this.refreshCollapseGeometry();
     this.isClosing = true;
+    // ★★★ 2026-11-03（甲方：「**只有下拉关闭会出现封面残留，系统返回正常**」—— 这就是分岔点）：
+    //   `onCollapseRequested()`（系统返回 / 顶栏）在进来之前就写了 `reverseInFlight = true`，
+    //   而**下拉那条路从来没写**。`reverseInFlight` 是壳层那两条"展开收尾"的唯一让路闸：
+    //     · `Index.settlePullOpen().onGeometryFinished`（打开后 300~400ms）
+    //     · `Index.retrySettleLanding()`（再 12×32ms 轮询）
+    //   两处的放行条件都是 `isShowPlay && geomReady && morphUsable && !reverseInFlight`，
+    //   而 `isShowPlay` 要等关闭收尾（`finishCloseGuard`）才变假。于是"打开后 ~700ms 内下拉关闭"
+    //   这个**只有下拉才会出现的时机**，会让 `morphSettleOpen()` 在**关闭动画正中间**被执行：
+    //   它无条件写 `stage=OPEN / drive=NONE / morphP=1`（整屏播放页 + 封面）⇒ 屏上"封面又满屏闪回来"
+    //   ⇒ 观感就是下拉关闭后残留一张封面。系统返回因为提前置了 `reverseInFlight`，永远撞不上。
+    //   ⇒ 活体反向（live）这条路，无论谁触发，进来第一件事就是声明"反向在进行中"。
+    //   清理点：`morphReset()`（会话边界）已复位它，不需要各路径自己清。
+    //   排查关键字：`RzdCloseEntry` 行里的 `rev=1`。
+    this.expandState.reverseInFlight = true;
+    MusicStoreService.getInstance().appendRuntimeDiagnostic(
+      `RzdCloseEntry src=${this.closeEntrySource} path=live stage=${this.expandState.morphStage} ` +
+        `p=${this.expandState.morphP.toFixed(3)} drv=${this.expandState.morphDrive} rev=1 ` +
+        `intro=${this.expandIntroRunning ? 1 : 0} show=${this.state.isShowPlay ? 1 : 0}`);
     const closeToken: number = this.beginCloseGuard('live');
     this.closeDiagnostic('shrink START');
     // 濠殿喗绻愮徊钘夛耿椤忓牆缁╅柟顖滃瀹曟娊鏌熺紒銏犲箺闁哄倷绶氬畷鎶藉Ω閿旂瓔妲繛鎴炴尭缁夌兘銆呴敃鍌氱鐎广儱鐗嗗▓浼存煕閺傝濡介柡浣哥秺楠炴帟顦查柛鈺傤殜瀹曠娀鎮€靛摜顦╂繛鎴炴尪閸婃捇鏌屽鍫濈闁靛ě鍕瘞闂佸憡鐟ф慨宕囩博鐎靛憡灏庨柧姘€荤粣妤冣偓鍨緲閻楀懐鎷归敓鐘虫櫖?
@@ -6645,7 +6712,8 @@ export struct PlaybackPage {
             //   这一张原来只挂了 `coverPublishHidden`，所以形变全程恒定画着 ⇒ 屏上两份。
             //   参照：封面页那条（`LyricFloatLayer`）从第一天起就是 `realCoverVisible()`。
             //   排查关键字：`RzdCoverOwner`（`real=1 clone=1` 就是两份）。
-            .opacity(this.expandState.realCoverVisible() && !this.coverPublishHidden ? 1 : 0)
+            .opacity(this.expandState.realCoverVisible() && !this.coverPublishHidden &&
+              this.expandState.playerPaintAllowed() ? 1 : 0)
             .onAreaChange((_oldValue: Area, newValue: Area): void => {
               this.expandState.reportBig(
                 areaLengthToVp(newValue.globalPosition.x),
@@ -9017,6 +9085,7 @@ export struct PlaybackPage {
       //    闂佹悶鍎查崕鎶藉礄閿涘嫮纾奸煫鍥ㄦ尭閻撳倿鏌熼棃娑卞劀缂佽鲸绻冪粙澶婎吋閸曨厾鐛ラ梺鐟板槻缁夋挳宕虹仦鍓р枖闁逞屽墮椤曪綁鎮╃喊妯绘櫈闂佹悶鍎伴崟姗€鍩€?
       // 闂佸疇娉曟刊瀵哥箔?婵炴垶鎸搁敃锝囩博鐎靛憡鏆滅憸宀€鍒掑☉銏犲強?LEAVING闂佹寧绋戦悧鍡楋耿椤忓牊鍋ㄥù鍏肩懅缁€鍡涙煃?闂佺绻戞繛濠偽涢幘顔肩闁靛ě鍕瘞闂佸搫鐗滈崜婵嬫閳哄倻鈻旂€广儱鎳庣紞鈧悷婊勬緲瀹曨剟骞栭悜钘壩?
       .visibility(this.expandState.playerPaints() && !this.shrinkPageHidden &&
+        this.expandState.playerPaintAllowed() &&
         (!this.expandState.morphClipping() || !this.expandState.morphPaintHidden()) ?
         Visibility.Visible : Visibility.Hidden)
       // 闁荤喍妞掔粈浣圭珶閳ь剛绱掗幇顓ф當鐟滅増绋掗〃鍥熼崫鍕靛敽 = 闂佸憡鐟崹鐢革綖鐎ｎ偒娈楁俊顖氭惈椤?/ 缂傚倸鍊甸弲婊堝棘?闂?缂傚倸鍊甸弲婊堝棘娓氣偓瀹曘儲鎯旈姀鈺佸Η婵犻潧鍊芥慨銈呂ｉ幖浣圭劷闁挎繂鎳忛崑銉╂煕濞嗘ê鐏ユい顐㈩儔閹矂鍩℃担钘夌厒
@@ -9453,7 +9522,8 @@ export struct PlaybackPage {
           //   闂佸疇娉曟刊瀵哥箔?婵炴垶鎸搁敃銉︽叏閵堝鐓㈤柍杞拌兌閹藉秹鏌ㄥ☉妯荤秮.id` / `onAreaChange`闂?*婵炴垶鎸哥粔纾嬨亹?opacity 閻熸粍婢樺畷顒勫箹?*闂佹寧绋戦惉濂稿矗鎼达絾鏆滈柟闂寸濞呫倗鈧數澧楅〃鍛村春?闂佺繝鐒﹂幐鍫曞焵?
           // ★ 2026-10-18（用户第九/十轮）：**只在"快照已经进手"之后**才把真封面藏掉。
           //   上一轮用 `!isClosing`（在拍快照**之前**就置真）⇒ 快照里没有封面 ⇒ "一关就封面消失"。
-          .opacity(this.expandState.realCoverVisible() && !this.snapshotFlight && !this.coverPublishHidden ? 1 : 0)
+          .opacity(this.expandState.realCoverVisible() && !this.snapshotFlight &&
+            !this.coverPublishHidden && this.expandState.playerPaintAllowed() ? 1 : 0)
           // 闂?婵炴垶鎸搁敃銉︽叏閵堝鐓㈤柍杞拌兌閹藉秹鏌熺喊鍗炲闁糕晛鏈璇测枎閹捐櫕顏為梺鎸庣☉閻楀﹤螞閵堝鍋╅悘鐐跺亹閻﹀秹鏌￠崟闈涚仴妞も晩鍋婇幆鍕冀瑜忓﹢鎾煠婵傚绨荤紒璁崇劍缁嬪绻濋崘銊愭捇鏌ㄥ☉娆戞憿floatingCover.onAreaChange 闂?publishMorphTargets`闂?
           .id(PLAYER_BIG_COVER_ID)
           .onAreaChange((_oldValue: Area, newValue: Area): void => {
