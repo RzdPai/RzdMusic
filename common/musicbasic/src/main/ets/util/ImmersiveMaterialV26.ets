@@ -12,12 +12,34 @@
  */
 
 import { uiMaterial } from '@kit.ArkUI';
+import { deviceInfo } from '@kit.BasicServicesKit';
 
 /** 材质厚度（与 uiMaterial.ImmersiveStyle 对应，这里只留常用几档）。 */
 export enum RzdMaterialStyle {
   THIN = 0,
   REGULAR = 1,
   THICK = 2
+}
+
+/**
+ * 一次性探测日志（排查"没有光感"用）。
+ *
+ * 为什么要它：`systemMaterial` **能编译 ≠ 能渲染** —— 设备不支持时返回的对象会被忽略，
+ * 宿主槽位不合格时框架打 `Material inactive: out of scope`，两种都在屏上表现成"没有玻璃"。
+ * 这一行把**设备能力 + 实际档位**固定下来，下次只要 grep 一条日志就能判断是哪种：
+ * ```
+ * hdc shell hilog -x | Select-String 'RzdMaterial'
+ * ```
+ * 期望（会渲染）：`api=26 built=true`；`built=false` ⇒ 设备不支持 ImmersiveMaterial。
+ */
+let supportLogged: boolean = false;
+
+function logSupportOnce(built: boolean, style: RzdMaterialStyle): void {
+  if (supportLogged) {
+    return;
+  }
+  supportLogged = true;
+  console.info(`[RzdMaterial] api=${deviceInfo.sdkApiVersion} style=${style} built=${built}`);
 }
 
 function styleOf(style: RzdMaterialStyle): uiMaterial.ImmersiveStyle {
@@ -38,15 +60,19 @@ function styleOf(style: RzdMaterialStyle): uiMaterial.ImmersiveStyle {
 export function immersiveMaterial(style: RzdMaterialStyle = RzdMaterialStyle.REGULAR): SystemUiMaterial | undefined {
   try {
     if (!uiMaterial.isImmersiveMaterialSupported()) {
+      logSupportOnce(false, style);
       console.info('[RzdMaterial] immersive material unsupported, fallback to none');
       return undefined;
     }
-    return new uiMaterial.ImmersiveMaterial({
+    const built: uiMaterial.ImmersiveMaterial = new uiMaterial.ImmersiveMaterial({
       style: styleOf(style),
       applyShadow: true,
       interactive: true
     });
+    logSupportOnce(true, style);
+    return built;
   } catch (error) {
+    logSupportOnce(false, style);
     console.info('[RzdMaterial] build material failed: ' + JSON.stringify(error).substring(0, 80));
     return undefined;
   }
@@ -63,13 +89,16 @@ export function immersiveMedium(): SystemUiMaterial | undefined {
  */
 export function immersiveFlat(): SystemUiMaterial | undefined {
   if (!uiMaterial.isImmersiveMaterialSupported()) {
+    logSupportOnce(false, RzdMaterialStyle.THIN);
     return undefined;
   }
-  return new uiMaterial.ImmersiveMaterial({
+  const built: uiMaterial.ImmersiveMaterial = new uiMaterial.ImmersiveMaterial({
     style: uiMaterial.ImmersiveStyle.THIN,
     applyShadow: false,
     interactive: false
   });
+  logSupportOnce(true, RzdMaterialStyle.THIN);
+  return built;
 }
 
 /**

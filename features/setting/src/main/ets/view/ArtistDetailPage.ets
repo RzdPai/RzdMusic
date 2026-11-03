@@ -21,7 +21,7 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { common } from '@kit.AbilityKit';
 import { guardPlayerBack, immersiveMedium } from 'musicbasic';
 import { ConcertItem, ConcertService } from '../concert/ConcertService';
-import { AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, SongTitleMarquee, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, shouldUseSplitDetailLayout, splitDetailCardWidthVp , immersiveMaterial, RzdMaterialStyle } from 'musicbasic';
+import { AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, SongTitleMarquee, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, shouldUseSplitDetailLayout, splitDetailCardWidthVp , immersiveFromLevel } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType } from '@kit.UIDesignKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import {
@@ -1432,7 +1432,12 @@ export struct ArtistDetailPage {
           // ★ 材质必须挂在 Button 上：按《新 API26 沉浸光感经验汇总》§1.1 / §1.3，
           //   「按钮与选择类」是 A 档宿主，页面内任意区域都能渲染 systemMaterial；
           //   自绘 Row / Stack 属 out of scope（编译能过、真机不渲染 ⇒ 表现为"失效"）。
-          //   前提：backgroundColor 必须半透明，否则会把材质整块遮住。
+          //   前提：backgroundColor 必须半透明，否则会把材质整块遮住（文档坑 11 / 12）。
+          // ★★ 2026-11-03（甲方：「三颗按钮恢复光感」）：档位改回**跟随「光感强度」**的
+          //   `immersiveFromLevel(level)`（默认 REGULAR＝中等），与全仓已验收的点位逐字一致 ——
+          //   搜索页返回钮/搜索框、首页搜索行、识别钮、定位钮都是这一套。
+          //   §256 那轮曾把它压成 THIN「跟多选胶囊看齐」，但 THIN 叠在**歌手照片**上几乎看不出玻璃
+          //   ⇒ 甲方观感就是"没有光感"。文档 §1.1 对 A 档按钮**没有**厚度要求，没必要自降一档。
           Button() {
             Row({ space: 6 }) {
               SymbolGlyph($r('sys.symbol.auditorium'))
@@ -1447,7 +1452,7 @@ export struct ArtistDetailPage {
           .height(28)
           .padding({ left: 12, right: 12 })
           .borderRadius(14)
-          .systemMaterial(immersiveMaterial(RzdMaterialStyle.THIN))
+          .systemMaterial(immersiveFromLevel(this.ambientState.level))
           .backgroundColor(this.fgTint())
           .margin({ bottom: 10 })
           .onClick(() => {
@@ -1486,7 +1491,7 @@ export struct ArtistDetailPage {
           .width(40)
           .height(40)
           .borderRadius(20)
-          .systemMaterial(immersiveMaterial(RzdMaterialStyle.THIN))
+          .systemMaterial(immersiveFromLevel(this.ambientState.level))
           .backgroundColor(this.fgTint())
           .onClick(() => {
             this.showAboutPopup = !this.showAboutPopup;
@@ -1536,7 +1541,7 @@ export struct ArtistDetailPage {
           .width(40)
           .height(40)
           .borderRadius(20)
-          .systemMaterial(immersiveMaterial(RzdMaterialStyle.THIN))
+          .systemMaterial(immersiveFromLevel(this.ambientState.level))
           .backgroundColor(this.fgTint())
           .onClick(() => {
             this.toggleFavoriteArtist();
