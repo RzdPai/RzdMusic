@@ -105,6 +105,9 @@ interface KgInfoV2Data {
   nickname?: string;
   playcount?: number;
   songcount?: number;
+  /** 歌单拥有者 userid（`collection_3_<suid>_<slid>_0` 的第二段）。 */
+  suid?: number;
+  global_specialid?: string;
 }
 
 interface KgSongV2RawResponse {
@@ -112,11 +115,18 @@ interface KgSongV2RawResponse {
 }
 
 interface KgSongV2Data {
+  total?: number;
   info?: KgSongV2Item[];
 }
 
 interface KgSongV2Item {
   hash?: string;
+  /** 形如 `陈奕迅 - 十年`：歌手在前、歌名在后，空格-空格分隔。 */
+  filename?: string;
+  /** 时长（**秒**，不是毫秒）。 */
+  duration?: number;
+  album_id?: string | number;
+  trans_param?: KgTransParam;
 }
 
 interface KgGatewayRawResponse {
@@ -140,6 +150,52 @@ interface KgGatewayAlbum {
 interface KgGatewayAudio {
   audio_id?: string;
   timelength?: string;
+}
+
+/**
+ * `https://m.kugou.com/songlist/<gcid>/` 服务端注入的 `window.$output` JSON。
+ *
+ * 这是**唯一不需要签名**的酷狗歌单数据来源（真机/PC 均实测 200 且含数据），
+ * 但它只内联**前 10 首**，且 `listinfo.global_collection_id` 常为空 ⇒
+ * 只用来取"歌单名/封面/作者/拥有者 userid/is_def"，曲目仍走签名接口。
+ */
+interface KgHtmlOutput {
+  encode_gic?: string;
+  info?: KgHtmlInfo;
+  global_collection_id?: string;
+}
+
+interface KgHtmlInfo {
+  listinfo?: KgHtmlListInfo;
+  songs?: KgHtmlSong[];
+}
+
+interface KgHtmlListInfo {
+  name?: string;
+  pic?: string;
+  count?: number;
+  intro?: string;
+  is_def?: number;
+  list_create_userid?: number;
+  list_create_username?: string;
+  global_collection_id?: string;
+}
+
+interface KgHtmlSong {
+  hash?: string;
+  name?: string;
+  timelen?: number;
+  cover?: string;
+  albuminfo?: KgHtmlAlbum;
+  trans_param?: KgTransParam;
+}
+
+interface KgHtmlAlbum {
+  name?: string;
+}
+
+interface KgTransParam {
+  union_cover?: string;
 }
 
 export class KgShareService {
@@ -170,11 +226,26 @@ export class KgShareService {
   private static readonly zlistRewriteRegex: RegExp = new RegExp('^(.*)zlist\\.html');
   private static readonly pagesizeRegex: RegExp = new RegExp('pagesize=\\d+');
   private static readonly pageParamRegex: RegExp = new RegExp('page=\\d+');
+  /** `https://t1.kugou.com/76Kuhf5G6V2` / `https://t.kugou.com/xxx`（`t` 后面可能带数字）。 */
+  private static readonly shortLinkRegex: RegExp = new RegExp('^https?://t\\d*\\.kugou\\.com/[A-Za-z0-9]+');
+  private static readonly gcidAnyRegex: RegExp = new RegExp('gcid_[A-Za-z0-9]+');
+  private static readonly collectionAnyRegex: RegExp = new RegExp('collection_\\d+_\\d+_\\d+_\\d+');
+  /** H5 接口的 Web 盐（`infSign.min.js`，与无界 `KgSonglist.signatureParams` 同一份）。 */
+  private static readonly webSalt: string = 'NVPh5oo715z5DIWAeQlhMDsWXXQV4hwt';
+  /** 进程级稳定的 32 位 hex mid：接口按 header 取它，值不重要但必须每次一致。 */
+  private static kgMid: string = '';
 
   static async fetch(rawId: string): Promise<SharePlaylistInfo> {
     const id: string = rawId.trim();
     if (id.length === 0) {
       throw new Error('无法解析歌单链接');
+    }
+    // ★ 短链 `https://t1.kugou.com/76Kuhf5G6V2`（也有 `t.kugou.com/xxx` 形态）。
+    //   以前两种形态都不匹配：`chainRegex2` 写死 `t\.kugou\.com`，`t1.` 漏掉；
+    //   于是掉进末尾的"通用重定向"分支 —— 而 302 目标是 `activity.kugou.com` 的纯 SPA
+    //   （HTML 里没有任何内联数据，见项目记忆 §199）⇒ 必然"无法解析酷狗链接"。
+    if (KgShareService.shortLinkRegex.test(id)) {
+      return KgShareService.fetchByShortLink(id);
     }
     if (id.includes('special/single/') || id.includes('/songlist/')) {
       const gcidMatch: RegExpExecArray | null = KgShareService.gcidRegex.exec(id);
@@ -579,9 +650,195 @@ export class KgShareService {
     return raw?.list?.info ?? [];
   }
 
+  /**
+   * `gcid_xxx` 形态（`https://m.kugou.com/songlist/gcid_3ztkscspz1z09d/?src_cid=…`）。
+   *
+   * 三级兜底（2026-11-03 实测）：
+   * ① `m.kugou.com/songlist/<gcid>/` 的 `window.$output`（**免签名**）：拿到歌单名/封面/作者，以及
+   *    `list_create_userid` + `is_def`。`is_def=1` = 该用户的「默认收藏」⇒ 反推
+   *    `collection_3_<userid>_1_0`，再用签名接口取**全量**（实测 66 首一次拿全）。
+   * ② `batch_decode`（旧路，签名算法已对但服务端一直回 20006，见记忆 §195–§199）。
+   * ③ `$output` 里内联的前 10 首（**预览**），只有前两级都失败才用，并在 `desc` 里说明。
+   */
   private static async fetchByGcid(gcid: string): Promise<SharePlaylistInfo> {
-    const globalId: string = await KgShareService.decodeGcid(gcid);
-    return KgShareService.fetchByGlobalId(globalId);
+    const html: KgHtmlOutput | undefined = await KgShareService.fetchHtmlOutput(gcid);
+    const listInfo: KgHtmlListInfo | undefined = html?.info?.listinfo;
+    const htmlSongs: SharePlaylistSong[] = KgShareService.buildHtmlOutputSongs(html?.info?.songs ?? []);
+    const ownerId: number = listInfo?.list_create_userid ?? 0;
+    const isDefaultList: boolean = (listInfo?.is_def ?? 0) === 1;
+    if (isDefaultList && ownerId > 0) {
+      const collectionId: string = `collection_3_${ownerId}_1_0`;
+      try {
+        const full: SharePlaylistInfo = await KgShareService.fetchByGlobalId(collectionId);
+        if (full.songs.length > 0) {
+          return full;
+        }
+      } catch (e) {
+        // 反推出来的 id 不成立就往下走，不要让整次导入失败
+      }
+    }
+    try {
+      const globalId: string = await KgShareService.decodeGcid(gcid);
+      if (globalId.length > 0) {
+        return await KgShareService.fetchByGlobalId(globalId);
+      }
+    } catch (e) {
+      // 签名接口可能 20006（服务端不认这套盐），落到 ③
+    }
+    if (htmlSongs.length > 0) {
+      const previewName: string = listInfo?.name ?? '';
+      return {
+        source: SharePlaylistSource.Kg,
+        id: gcid,
+        name: previewName,
+        coverUrl: (listInfo?.pic ?? '').replace('{size}', '240'),
+        desc: '分享页只给了前 10 首预览',
+        author: listInfo?.list_create_username ?? '',
+        playCount: 0,
+        songs: htmlSongs
+      };
+    }
+    throw new Error('这个酷狗歌单打不开');
+  }
+
+  /** 拉 `m.kugou.com/songlist/<gcid>/` 并解析 `window.$output`；任何失败都返回 undefined。 */
+  private static async fetchHtmlOutput(gcid: string): Promise<KgHtmlOutput | undefined> {
+    const headers: Record<string, string> = {
+      'User-Agent': KgShareService.mobileHeaders['User-Agent'],
+      'Referer': 'https://m.kugou.com/',
+    };
+    try {
+      const html: string = await ShareHttpClient.request(
+        `https://m.kugou.com/songlist/${gcid}/`, headers, http.RequestMethod.GET, '', 1);
+      const json: string = KgShareService.extractOutputJson(html);
+      if (json.length === 0) {
+        return undefined;
+      }
+      return JSON.parse(json) as KgHtmlOutput;
+    } catch (e) {
+      return undefined;
+    }
+  }
+
+  /**
+   * 从页面里抠出 `window.$output = {…}` 的 JSON 文本。
+   *
+   * ⚠️ **不能用正则** `\{[\s\S]*?\};`：JSON 里含 `\/` 转义与长字符串，非贪婪匹配会截断在
+   * 第一个 `};`（可能出现在某个字符串内）⇒ `JSON.parse` 直接炸。这里做**花括号配平**，
+   * 并跳过字符串内的括号。
+   */
+  private static extractOutputJson(html: string): string {
+    const anchor: string = 'window.$output';
+    const at: number = html.indexOf(anchor);
+    if (at < 0) {
+      return '';
+    }
+    const start: number = html.indexOf('{', at);
+    if (start < 0) {
+      return '';
+    }
+    let depth: number = 0;
+    let inString: boolean = false;
+    let escaped: boolean = false;
+    for (let i: number = start; i < html.length; i++) {
+      const ch: string = html.charAt(i);
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (ch === '\\') {
+          escaped = true;
+        } else if (ch === '"') {
+          inString = false;
+        }
+        continue;
+      }
+      if (ch === '"') {
+        inString = true;
+        continue;
+      }
+      if (ch === '{') {
+        depth++;
+        continue;
+      }
+      if (ch === '}') {
+        depth--;
+        if (depth === 0) {
+          return html.substring(start, i + 1);
+        }
+      }
+    }
+    return '';
+  }
+
+  /** 把 `$output.info.songs` 转成导入用的曲目（`name` 形如 `歌手 - 歌名`，`timelen` 是毫秒）。 */
+  private static buildHtmlOutputSongs(rawList: KgHtmlSong[]): SharePlaylistSong[] {
+    const songs: SharePlaylistSong[] = [];
+    for (let i: number = 0; i < rawList.length; i++) {
+      const item: KgHtmlSong = rawList[i];
+      const hash: string = item.hash ?? '';
+      if (hash.length === 0) {
+        continue;
+      }
+      const parts: string[] = KgShareService.splitFileName(item.name ?? '');
+      const cover: string = (item.trans_param?.union_cover ?? item.cover ?? '').replace('{size}', '240');
+      const ms: number = item.timelen ?? 0;
+      songs.push({
+        id: hash,
+        name: parts[1],
+        artist: parts[0],
+        album: item.albuminfo?.name ?? '',
+        duration: Math.floor(ms / 1000),
+        img: cover
+      });
+    }
+    return songs;
+  }
+
+  /**
+   * 短链：`https://t1.kugou.com/76Kuhf5G6V2` → 302 → `activity.kugou.com/share/…&global_specialid=collection_…`。
+   *
+   * @ohos 的 `http` 对 GET 会在 `header['location']` 里给出跳转目标（实测，见记忆 §195）；
+   * 若被自动跟随（没有 location），再从响应体里找 `global_specialid=` / `gcid_`。
+   */
+  private static async fetchByShortLink(link: string): Promise<SharePlaylistInfo> {
+    let finalUrl: string = '';
+    try {
+      const client = http.createHttp();
+      const requestHeaders: Record<string, string> = {
+        'User-Agent': KgShareService.mobileHeaders['User-Agent'],
+      };
+      try {
+        const resp: http.HttpResponse = await client.request(link, {
+          method: http.RequestMethod.GET,
+          header: requestHeaders,
+          connectTimeout: 8000,
+          readTimeout: 8000,
+          expectDataType: http.HttpDataType.STRING,
+        });
+        const headers: Record<string, string> = resp.header as Record<string, string>;
+        finalUrl = headers['location'] ?? headers['Location'] ?? '';
+        if (finalUrl.length === 0 && typeof resp.result === 'string') {
+          finalUrl = resp.result as string;
+        }
+      } finally {
+        client.destroy();
+      }
+    } catch (e) {
+      throw new Error('酷狗短链请求失败（网络或链接已失效）');
+    }
+    const gcidMatch: RegExpExecArray | null = KgShareService.gcidAnyRegex.exec(finalUrl);
+    if (gcidMatch !== null && gcidMatch.length > 0) {
+      return KgShareService.fetchByGcid(gcidMatch[0]);
+    }
+    const gidMatch: RegExpExecArray | null = KgShareService.globalCollectionIdRegex.exec(finalUrl);
+    if (gidMatch !== null && gidMatch.length > 1) {
+      return KgShareService.fetchByGlobalId(gidMatch[1]);
+    }
+    const collectionMatch: RegExpExecArray | null = KgShareService.collectionAnyRegex.exec(finalUrl);
+    if (collectionMatch !== null && collectionMatch.length > 0) {
+      return KgShareService.fetchByGlobalId(collectionMatch[0]);
+    }
+    throw new Error('这个酷狗短链里没有歌单信息');
   }
 
   private static async decodeGcid(gcid: string): Promise<string> {
@@ -605,16 +862,29 @@ export class KgShareService {
     return list[0].global_collection_id;
   }
 
+  /**
+   * `global_specialid`（形如 `collection_3_1554363080_1_0`）→ 歌单信息 + 全量曲目。
+   *
+   * ★★★ 2026-11-03 实测订正（此前一直 1001 / 20006 的真因）：
+   * 服务端是**按 header 取 `mid`/`dfid`/`clienttime`** 的（`mid` 缺失时报
+   * `bad type, key: mid (string expected, got nil)`），旧实现把这三个塞进 query 又一起签名 ⇒ 永远 1001。
+   * 现在的口径（与无界 `KgSonglist.signatureParams` 逐字一致，且本机实测通）：
+   * ```
+   *   headers: mid=<32 位 hex>、dfid=-、clienttime=<now>
+   *   query  : appid=1058 & … & clienttime=<now> & mid=<同上> & uuid=<同上> & dfid=-
+   *   signature = md5(盐 + 排序后的 "k=v" 拼接 + 盐)，盐 = NVPh5oo715z5DIWAeQlhMDsWXXQV4hwt
+   * ```
+   * 曲目走 `song_v2`（`pagesize=300` 一页，实测 66 首一次拿全），**不再调 `gateway/v2/album_audio`
+   * 补详情**——那个接口要 app 侧签名，实测直接 `20006 sign error`。
+   * 排查关键字：见 `SharePlaylistInfo.desc` 与调用方 toast。
+   */
   private static async fetchByGlobalId(globalId: string): Promise<SharePlaylistInfo> {
-    const headers: Record<string, string> = {
-      'mid': '1586163242519',
-      'Referer': 'https://m3ws.kugou.com/share/index.php',
-      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A372 Safari/604.1',
-      'dfid': '-',
-      'clienttime': '1586163242519',
-    };
+    const mid: string = KgShareService.newKgMid();
+    const clienttime: string = `${Date.now()}`;
+    const headers: Record<string, string> = KgShareService.webHeaders(mid, clienttime);
     const infoParams: string =
-      `appid=1058&specialid=0&global_specialid=${globalId}&format=jsonp&srcappid=2919&clientver=20000&clienttime=1586163242519&mid=1586163242519&uuid=1586163242519&dfid=-`;
+      `appid=1058&specialid=0&global_specialid=${globalId}&format=jsonp&srcappid=2919&clientver=20000` +
+        `&clienttime=${clienttime}&mid=${mid}&uuid=${mid}&dfid=-`;
     const infoSig: string = await KgShareService.signature(infoParams, 'web', '');
     const infoUrl: string = `https://mobiles.kugou.com/api/v5/special/info_v2?${infoParams}&signature=${infoSig}`;
     const infoBody: string = await ShareHttpClient.request(infoUrl, headers);
@@ -624,14 +894,17 @@ export class KgShareService {
       throw new Error('歌单不存在或已被删除');
     }
     const songcount: number = info.songcount ?? 0;
-    const pageCount: number = Math.ceil(songcount / 300);
-    const pageTasks: Promise<KgSongV2Item[]>[] = [];
-    for (let page = 1; page <= pageCount; page++) {
-      pageTasks.push(KgShareService.fetchSongV2Page(globalId, page, headers));
+    const pageCount: number = songcount > 0 ? Math.ceil(songcount / 300) : 1;
+    const rawSongs: KgSongV2Item[] = [];
+    for (let page: number = 1; page <= pageCount; page++) {
+      const list: KgSongV2Item[] = await KgShareService.fetchSongV2Page(globalId, page, mid);
+      for (let i: number = 0; i < list.length; i++) {
+        rawSongs.push(list[i]);
+      }
+      if (list.length === 0) {
+        break;
+      }
     }
-    const lists: KgSongV2Item[][] = await Promise.all(pageTasks);
-    const hashs: string[] = KgShareService.collectHashs(lists);
-    const details: KgGatewayItem[] = await KgShareService.fetchGateway(hashs);
     const result: SharePlaylistInfo = {
       source: SharePlaylistSource.Kg,
       id: globalId,
@@ -640,20 +913,82 @@ export class KgShareService {
       desc: info.intro ?? '',
       author: info.nickname ?? '',
       playCount: info.playcount ?? 0,
-      songs: KgShareService.buildGatewaySongs(details)
+      songs: KgShareService.buildSongV2Songs(rawSongs)
     };
     return result;
   }
 
-  private static async fetchSongV2Page(globalId: string, page: number,
-    headers: Record<string, string>): Promise<KgSongV2Item[]> {
+  private static async fetchSongV2Page(globalId: string, page: number, mid: string): Promise<KgSongV2Item[]> {
+    const clienttime: string = `${Date.now()}`;
+    const headers: Record<string, string> = KgShareService.webHeaders(mid, clienttime);
     const songParams: string =
-      `appid=1058&global_specialid=${globalId}&specialid=0&plat=0&version=8000&page=${page}&pagesize=300&srcappid=2919&clientver=20000&clienttime=1586163263991&mid=1586163263991&uuid=1586163263991&dfid=-`;
+      `appid=1058&global_specialid=${globalId}&specialid=0&plat=0&version=8000&page=${page}&pagesize=300` +
+        `&srcappid=2919&clientver=20000&clienttime=${clienttime}&mid=${mid}&uuid=${mid}&dfid=-`;
     const songSig: string = await KgShareService.signature(songParams, 'web', '');
     const songUrl: string = `https://mobiles.kugou.com/api/v5/special/song_v2?${songParams}&signature=${songSig}`;
     const songBody: string = await ShareHttpClient.request(songUrl, headers);
     const songRaw: KgSongV2RawResponse = JSON.parse(songBody) as KgSongV2RawResponse;
     return songRaw?.data?.info ?? [];
+  }
+
+  /** H5 接口要求的头：`mid`/`dfid`/`clienttime` 必须在这里（query 里那份不参与取值）。 */
+  private static webHeaders(mid: string, clienttime: string): Record<string, string> {
+    return {
+      'mid': mid,
+      'dfid': '-',
+      'clienttime': clienttime,
+      'Referer': 'https://m.kugou.com/',
+      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15' +
+        ' (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+    };
+  }
+
+  /** @returns 进程内稳定的 32 位 hex mid（接口只要求字符串，但固定下来签名口径才稳定）。 */
+  private static newKgMid(): string {
+    if (KgShareService.kgMid.length === 32) {
+      return KgShareService.kgMid;
+    }
+    let out: string = '';
+    const hexChars: string = '0123456789abcdef';
+    for (let i: number = 0; i < 32; i++) {
+      const idx: number = Math.floor(Math.random() * 16);
+      out += hexChars.charAt(idx);
+    }
+    KgShareService.kgMid = out;
+    return out;
+  }
+
+  /** `陈奕迅 - 十年` → `['陈奕迅', '十年']`（按**最后**一个 ` - ` 切，歌名里本身可能带连字符）。 */
+  private static splitFileName(fileName: string): string[] {
+    const sep: string = ' - ';
+    const at: number = fileName.lastIndexOf(sep);
+    if (at <= 0 || at + sep.length >= fileName.length) {
+      return ['', fileName];
+    }
+    return [fileName.substring(0, at), fileName.substring(at + sep.length)];
+  }
+
+  /** `song_v2` 的原始项 → 导入用曲目（`filename`/`hash`/`duration` 秒/`union_cover`）。 */
+  private static buildSongV2Songs(rawList: KgSongV2Item[]): SharePlaylistSong[] {
+    const songs: SharePlaylistSong[] = [];
+    for (let i: number = 0; i < rawList.length; i++) {
+      const item: KgSongV2Item = rawList[i];
+      const hash: string = item.hash ?? '';
+      if (hash.length === 0) {
+        continue;
+      }
+      const parts: string[] = KgShareService.splitFileName(item.filename ?? '');
+      const cover: string = (item.trans_param?.union_cover ?? '').replace('{size}', '240');
+      songs.push({
+        id: hash,
+        name: parts[1],
+        artist: parts[0],
+        album: '',
+        duration: item.duration ?? 0,
+        img: cover
+      });
+    }
+    return songs;
   }
 
   private static collectHashs(lists: KgSongV2Item[][]): string[] {
@@ -738,10 +1073,9 @@ export class KgShareService {
   }
 
   private static async signature(params: string, platform: string, body: string): Promise<string> {
-    let key: string = 'OIlwieks28dk2k092lksi2UIkp';
-    if (platform === 'web') {
-      key = 'NVPh5oo715z5DIWAeQlhMDsWXXQV4hwt';
-    }
+    const key: string = platform === 'web'
+      ? KgShareService.webSalt
+      : 'OIlwieks28dk2k092lksi2UIkp';
     const parts: string[] = params.split('&');
     parts.sort();
     const signText: string = `${key}${parts.join('')}${body}${key}`;
