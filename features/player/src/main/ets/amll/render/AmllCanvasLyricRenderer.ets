@@ -565,19 +565,99 @@ export class AmllCanvasLyricRenderer {
     context.filter = 'none';
     context.shadowBlur = 0;
     this.drawFocusFrame();
-    const groups = this.engine.groups;
-    const padding = this.style.fontSize * 2;
-    for (let i = 0; i < groups.length; i++) {
-      const group = groups[i];
-      const top = group.posY.getCurrentPosition();
-      const height = this.engine.getLineHeight(i);
+    this.drawVisibleGroups(startY, endY);
+    this.drawInterludeDots();
+    this.drawEdgeFade(this.containerWidth, this.containerHeight);
+    context.restore();
+  }
+
+  /**
+   * 只画与视口相交的行（**二分定位首行 + 顺序扫到末行**），替代原来"每帧遍历全部 group"。
+   *
+   * ★ 2026-11-04（帧率优化 C 项）：120fps 下每帧 O(n) 的遍历（几百行歌词）纯属浪费。
+   *
+   * 为什么二分用 **`posY.getTargetPosition()`** 而不是 `getCurrentPosition()`：
+   *   target = 布局累计行高 + 滚动偏移 ⇒ **按 index 严格单调**，二分的前提成立；
+   *   current 会被行高弹簧过冲影响，个别帧可能与邻居乱序，拿它当二分键会漏行。
+   *   落点之后用 current 精确定界（首行可能因弹簧提前/延后进入视野）。
+   *
+   * 两道保险（宁可慢一帧，也不漏行）：
+   *   ① **前一行守卫**：二分落点的前一行若"当前底边"也已进入视野 ⇒ 说明发生极端过冲/乱序，
+   *      本帧退回全量扫描 `drawAllGroups()`；
+   *   ② 向下扫时**连续两行**判定为视口外才 break（单行抖动不至于提前截断）。
+   */
+  private drawVisibleGroups(startY: number, endY: number): void {
+    const groups: AmllGroupState[] = this.engine.groups;
+    const n: number = groups.length;
+    if (n <= 0) {
+      return;
+    }
+    const padding: number = this.style.fontSize * 2;
+    const threshold: number = startY - padding;
+    const first: number = this.lowerBoundByTarget(threshold, n);
+    // ① 前一行守卫
+    if (first > 0) {
+      const prevTop: number = groups[first - 1].posY.getCurrentPosition();
+      const prevH: number = this.engine.getLineHeight(first - 1);
+      if (prevTop + prevH >= threshold) {
+        this.drawAllGroups(startY, endY);
+        return;
+      }
+    }
+    // ② 顺扫 + 连续两行出界才收尾
+    let misses: number = 0;
+    for (let i: number = first; i < n; i++) {
+      const group: AmllGroupState = groups[i];
+      const top: number = group.posY.getCurrentPosition();
+      if (top - padding > endY) {
+        misses++;
+        if (misses >= 2) {
+          break;
+        }
+        continue;
+      }
+      misses = 0;
+      const height: number = this.engine.getLineHeight(i);
+      if (top + height + padding >= startY) {
+        this.drawGroup(group, this.smoothTime);
+      }
+    }
+  }
+
+  /**
+   * 二分：找第一个"**目标**底边 ≥ 阈值"的行下标（`target` 按 index 严格单调，见上方注释）。
+   * @returns 0..n（n = 全部行都在阈值之上）
+   */
+  private lowerBoundByTarget(threshold: number, n: number): number {
+    let lo: number = 0;
+    let hi: number = n - 1;
+    let ans: number = n;
+    while (lo <= hi) {
+      const mid: number = (lo + hi) >> 1;
+      const targetTop: number = this.engine.groups[mid].posY.getTargetPosition();
+      const h: number = this.engine.getLineHeight(mid);
+      if (targetTop + h >= threshold) {
+        ans = mid;
+        hi = mid - 1;
+      } else {
+        lo = mid + 1;
+      }
+    }
+    return ans;
+  }
+
+  /** 全量扫描兜底（仅在 `drawVisibleGroups()` 的守卫判定"顺序不可信"时用一帧）。 */
+  private drawAllGroups(startY: number, endY: number): void {
+    const groups: AmllGroupState[] = this.engine.groups;
+    const padding: number = this.style.fontSize * 2;
+    for (let i: number = 0; i < groups.length; i++) {
+      const group: AmllGroupState = groups[i];
+      const top: number = group.posY.getCurrentPosition();
+      const height: number = this.engine.getLineHeight(i);
       if (top + height + padding >= startY && top - padding <= endY) {
         this.drawGroup(group, this.smoothTime);
       }
     }
-    this.drawInterludeDots();
-    this.drawEdgeFade(this.containerWidth, this.containerHeight);
-    context.restore();
   }
 
   /** 点击定位行的圆角框：包住整个主行+副行块，弹性弹出/淡出 */
