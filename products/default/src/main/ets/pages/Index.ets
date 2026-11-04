@@ -236,8 +236,6 @@ const PLAYER_CLONE_Z_INDEX: number = 110;
  *     杩欓噷鏄惧紡缁欎竴涓€煎彧鏄负浜?*涓嶄緷璧栧０鏄庨『搴?*銆?
  */
 const SHRINK_OVERLAY_Z_INDEX: number = 130;
-/** 「缓冲中……」全局浮层：**比所有覆盖层都高**（播放覆盖 100 / 克隆 110 / 收起 130）⇒ 任何页面都看得见。 */
-const BUFFERING_OVERLAY_Z_INDEX: number = 200;
 
 /**
  * 鈽?鎾斁椤靛叆鍙?*鍙岃建寮€鍏?*锛堟柦宸ュ浘绗?1 姝ワ級銆?
@@ -697,6 +695,31 @@ struct Index {
     setTimeout((): void => {
       appendPlayLog(`[RzdTabSwitch] applied idx=${index} (next frame)`);
     }, 32);
+  }
+
+  /**
+   * ★★★ 2026-11-05（甲方：「能不能用官方的提示，不要自己写样式」）：
+   * 起播装载期间弹**系统 Toast**（`promptAction.showToast`，官方样式，无自绘）。
+   * 由 `MusicAppState.isResolving`（`@Trace`）翻转驱动：`true` 时弹一次「缓冲中……」，
+   * `false` 时什么都不做（Toast 自己 2s 后消失）。
+   * ⚠️ 只在**开始装载**那一下弹，不是每帧弹，避免刷屏（`showToast` 频率过高会被系统吞掉）。
+   */
+  @Monitor('appState.isResolving')
+  onResolvingChanged(monitor: IMonitor): void {
+    const now: boolean = this.appState.isResolving;
+    const before: boolean = monitor.value()?.before === true;
+    if (!now || before) {
+      return;
+    }
+    appendPlayLog('[缓冲提示] showToast 缓冲中……');
+    try {
+      this.getUIContext().getPromptAction().showToast({
+        message: '缓冲中……',
+        duration: 2000
+      });
+    } catch (e) {
+      appendPlayLog('[缓冲提示] showToast 失败 ' + JSON.stringify(e).substring(0, 100));
+    }
   }
 
   @Monitor('intentState.requestVersion')
@@ -3568,39 +3591,6 @@ struct Index {
 
       // Persistent hidden LX source engine host (webview sandbox for user API scripts).
       LXSourceHost()
-
-      // ★★★ 2026-11-05（甲方：「刚起播时啥提示没有，看起来就像卡住了，加个'缓冲中……'」）：
-      //   以前的提示只画在 `MusicPlayInfoBlock` 里，那块组件**只有播放页用**
-      //   （`PlaybackPage` 两处引用）⇒ 在首页/歌单页点歌时根本没有渲染点，所以一直看不到。
-      //   这里补一个**全屏浮层**：由 `MusicAppState.isResolving`（`@Trace`；起播装载置 true、
-      //   prepared/失败置 false）驱动，挂在壳层 Stack 最后（zIndex 最高，不会被 HDS 标题栏、
-      //   悬浮 mini bar、播放覆盖层挡住），且 `hitTestBehavior(None)` 不拦任何触摸。
-      if (this.appState.isResolving) {
-        Stack() {
-          Row({ space: 8 }) {
-            LoadingProgress()
-              .width(18)
-              .height(18)
-              .color(Color.White)
-            Text('缓冲中……')
-              .fontSize(14)
-              .fontColor(Color.White)
-          }
-          .padding({ left: 18, right: 18, top: 12, bottom: 12 })
-          .borderRadius(22)
-          .backgroundColor('#CC000000')
-        }
-        .width(StyleConstants.FULL_WIDTH)
-        .height(StyleConstants.FULL_HEIGHT)
-        .zIndex(BUFFERING_OVERLAY_Z_INDEX)
-        .hitTestBehavior(HitTestMode.None)
-        .onAppear((): void => {
-          appendPlayLog('[缓冲提示] 显示');
-        })
-        .onDisAppear((): void => {
-          appendPlayLog('[缓冲提示] 隐藏');
-        })
-      }
 
       // 只为"强制重绘"存在的空节点：`shellRepaintTick` 变化 → key 变 → 壳层重画一次。
       ForEach([this.shellRepaintTick], (_t: number) => {
