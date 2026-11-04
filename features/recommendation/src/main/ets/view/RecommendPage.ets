@@ -44,7 +44,7 @@ import {
   immersiveFromLevel
 } from 'musicbasic';
 import { AccountChangedState, PlayerConstants } from 'player';
-import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
+import { BlurStrategy, HideMode, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { RecommendViewModel } from '../viewmodel/RecommendViewModel';
 import { CategoryContentSection } from './CategoryContentSection';
 import { HomeFloatingMiniBar } from './HomeFloatingMiniBar';
@@ -195,8 +195,19 @@ export struct RecommendPage {
    *      这一刻副本与流内那一行的像素位置**完全重合** ⇒ 吸顶瞬间零跳变。
    */
   @Local chipStickyActive: boolean = false;
-  /** 吸顶副本的**当前顶边**（vp）：未吸顶 = 状态栏+标题栏（≈94）；吸顶 = 状态栏（≈38）。 */
+  /**
+   * 吸顶副本的**当前顶边**（vp）：由 {@link stickyLineVp} 按滚动偏移算出。
+   * 展开时 = 状态栏+标题栏（≈94），标题区域收起后 = 只剩状态栏（≈38）⇒ 副本顶到屏幕最上面。
+   */
   @Local chipStickyLineVp: number = 0;
+  /**
+   * 标题区域**开始收起**的滚动偏移（vp）= 分类 Tab 那一行刚好到达标题栏下沿时的偏移
+   * （`chipRowTopInContentVp − contentTopInsetVp()`）。
+   * ★ 2026-11-04（甲方：「现在还没吸顶时标题就被隐藏了，我要的是快吸顶的时候隐藏」）：
+   *   以前 `hideOffset` 写 0 ⇒ 一滚动标题就没了；现在把它当 HDS 的 `hideOffset`，
+   *   同时 {@link stickyLineVp} 的收起曲线也从这里起算。
+   */
+  @Local titleHideStartVp: number = 0;
   @Local titleSearchShown: boolean = false;
 
   /**
@@ -570,7 +581,7 @@ export struct RecommendPage {
    *   而下边沿法要等整整一行滚进标题栏底下才接管，中间那一段会"看不见任何一行"。
    *
    * ★★★ 2026-11-04（甲方截图：「现在吸顶后还是原来那个位置」）：吸顶线**不再写死在标题栏下沿**，
-   *   而是由 `hideTitleBar(active, animated)` 整条收起，副本因此落到状态栏下沿。
+   *   而是跟着 HDS 标题区域的收起进度上移 —— 见 {@link stickyLineVp}。
    *   否则标题栏收起来之后，副本还钉在 94vp，屏幕最上面那 56vp 就是一条空带。
    * @param offset 当前垂直偏移（vp）。
    */
@@ -579,33 +590,64 @@ export struct RecommendPage {
       // 还没量到那一行的位置（首帧 / 分类行还没出现）⇒ 不判吸顶，免得闪一下
       return;
     }
-    // ★★★ 2026-11-04（甲方：「就剩标题还是被提前隐藏这一个问题了（上滑提前，下滑正常）」）：
-    //   改回**离散**控制：判定线与落位线分开。
-    //   · 判定线恒为「状态栏 + 标题栏」（`contentTopInsetVp()` ≈94）：那一行到达标题栏下沿才算吸顶，
-    //     这一刻之前标题栏**一点都不会动**（不再用 `dynamicHideTitleBar` 的跟手收起）；
-    //   · 落位线：吸顶后标题栏由 `hideTitleBar(active, /*animated*/ true)` 整条收起，
-    //     所以副本落在状态栏下沿（≈38）。
-    const judgeLine: number = this.contentTopInsetVp();
-    const threshold: number = this.chipRowTopInContentVp - judgeLine +
+    // ★ 2026-11-04：标题区域**从"快到吸顶"才开始收**（甲方要求），起点 = 那一行到达标题栏下沿的偏移。
+    const hideStart: number = Math.max(0, this.chipRowTopInContentVp - this.contentTopInsetVp());
+    if (Math.abs(hideStart - this.titleHideStartVp) >= 0.5) {
+      this.titleHideStartVp = hideStart;
+    }
+    const stickLine: number = this.stickyLineVp(offset);
+    // 迟滞 2vp：标题区域收起是**跟手**的（向下滚时吸顶线会往回长），
+    // 没有迟滞会在临界点来回抖。
+    const threshold: number = this.chipRowTopInContentVp - stickLine +
       (this.chipStickyActive ? 2 : 0);
     const active: boolean = offset >= threshold;
+    if (Math.abs(stickLine - this.chipStickyLineVp) >= 0.5) {
+      this.chipStickyLineVp = stickLine;
+    }
     if (active !== this.chipStickyActive) {
       this.chipStickyActive = active;
-      this.chipStickyLineVp = active ? this.windowInfo.statusBarTopVp : judgeLine;
       Logger.info('RzdHomeScroll',
         `sticky=${active} offset=${offset} rowTop=${this.chipRowTopInContentVp} rowH=${this.chipRowHeightVp} ` +
-          `line=${this.chipStickyLineVp.toFixed(1)}`);
-    } else if (!active && Math.abs(this.chipStickyLineVp - judgeLine) >= 0.5) {
-      // 未吸顶时保持与内容里那一行同一条线，接管瞬间才不会跳
-      this.chipStickyLineVp = judgeLine;
+          `line=${stickLine.toFixed(1)}`);
     }
   }
 
   /**
-   * 吸顶线（vp）：未吸顶时吸顶副本那一行的**顶边**落在哪里。
+   * 吸顶线（vp）：吸顶副本那一行的**顶边**落在哪里 —— **随标题区域收起而上移**。
+   *
+   * 组成：
+   * - 展开时 = 「状态栏 + HDS 标题栏」（`statusBarTopVp + ROW_HEIGHT_VP` ≈ 38 + 56 = 94），
+   *   与滚动内容顶部那段留白 `contentTopInsetVp()` **同一个数**（副本落在标题栏下沿、不盖标题栏）；
+   * - 收起后 = 只剩状态栏（≈38），副本顶到屏幕最上面。
+   *
+   * 收起进度必须与 HDS 那边的配置**逐字对齐**（见 `build()` 的 `.dynamicHideTitleBar(...)`）：
+   * `mode: SCROLL_UP`（任意位置跟手上滑）、`hideOffset: 0`、`hideRatio: 1.0`
+   * ⇒ 内容每滚 1vp、标题区域收 1vp，滚满 `ROW_HEIGHT_VP` 就收完。
+   * ⚠️ 改那边的三个值，这里必须同步改，否则吸顶副本和标题栏会错位。
+   * 沉浸式（没有 HDS 标题栏）恒为 0。
+   * @param offset 当前垂直偏移（vp）
+   */
+  private stickyLineVp(offset: number): number {
+    const base: number = this.contentTopInsetVp();
+    if (base <= 0) {
+      return 0;
+    }
+    const rowH: number = TitleBarConstants.ROW_HEIGHT_VP;
+    if (rowH <= 0) {
+      return base;
+    }
+    // ★ 2026-11-04：收起曲线从"快吸顶"那一刻（`titleHideStartVp`）起算，
+    //   之后每滚 1vp 收 1vp（与 HDS 的 `hideOffset`/`hideRatio: 1.0` 逐字对齐）。
+    const start: number = this.titleHideStartVp;
+    const collapse: number = Math.min(1, Math.max(0, (offset - start) / rowH));
+    return this.windowInfo.statusBarTopVp + rowH * (1 - collapse);
+  }
+
+  /**
+   * 吸顶线（vp）：吸气顶副本那一行的**顶边**落在哪里。
    *
    * 非沉浸式 = 「状态栏 + HDS 标题栏」（`statusBarTopVp + ROW_HEIGHT_VP` ≈ 38 + 56 = 94），
-   * 与滚动内容顶部那段留白**同一个数**（见 build() 里内容根的第一个空容器）——
+   * 与滚动内容顶部那段留白**同一个数**（见 build() 里内容根的 `padding.top`）——
    * 这样副本落在标题栏下沿、**不盖标题栏**（两处必须同进同出：改一处就要改另一处）。
    * 沉浸式 = 没有 HDS 标题栏（内容从 y=0 起排）⇒ 吸顶线就是 0。
    */
@@ -1080,15 +1122,33 @@ export struct RecommendPage {
       this.HomeBranch()
     }
     .onBackPressed((): boolean => guardPlayerBack('RecommendPage'))
-.hideTitleBar(this.chipStickyActive, true)
-    // ★★★ 2026-11-04（甲方：「就剩标题还是被提前隐藏这一个问题了（上滑提前，下滑正常）」）：
-    //   弃用 dynamicHideTitleBar —— 它是**跟手连续收起**（hideOffset/hideRatio），
-    //   而甲方要的是「Tab 快吸顶的那一刻才收起」。实测把 hideOffset 改成响应式也不会延后
-    //   （属性在首帧就吃掉了），于是上滑时标题总是提前跑掉。
-    //   现在改回**离散**：hideTitleBar(this.chipStickyActive, /*animated*/ true) ——
-    //   chipStickyActive 由 updateChipSticky() 用**固定判定线**（标题栏下沿 ≈94vp）算出，
-    //   ⇒ 那一行到达下沿之前标题栏一动不动；到达后整条标题栏（标题文字 + 听歌识曲）带动画收起，
-    //   吸顶行（分类胶囊 + 右侧搜索钮）落在状态栏下沿 ⇒ 搜索入口不丢。
+    .hideTitleBar(false)
+    .hideBackButton(true)
+    .titleBar(this.getTitleBar())
+    .titleMode(HdsNavDestinationTitleMode.MINI)
+    .bindToScrollable([this.pageScroller])
+    // ★★★ 2026-11-04（甲方：「首页 Tab 栏吸顶后在标题栏下面。有的应用吸顶时直接把标题文字隐藏，
+    //   然后跑到最上面，同时听歌识曲暂时隐藏」）：
+    //   这是 HDS 官方的「标题栏随滚动动态显隐」开关 —— **`bindToScrollable` 只管绑定，
+    //   真正决定"收不收、收什么"的是 `dynamicHideTitleBar`**（以前只 bind 没配它，
+    //   `hideTitleArea` 默认 false ⇒ 标题区域根本不收，Tab 吸顶后永远卡在标题栏下面）。
+    //   · `hideTitleArea: true`：上滑把**整个标题区域**收起 ⇒ 标题文字 + 搜索/听歌识曲菜单
+    //     一起隐藏（正好命中甲方两条要求），内容区上移，吸顶的 Tab 栏顶到最上面；
+    //   · `hideStatusBar: false`：状态栏保持显示（我们只收标题区域）；
+    //   · `HideMode.SCROLL_UP`：任意位置**上滑即收、下滑即回**（跟手，不是"滚到某个位置才动"）；
+    //   · `hideRatio: 1.0`：内容每滚 1vp、标题区域收 1vp（官方范围 [1.0, 3.0]，默认 2.0 会显得"拖沓"）。
+    //   排查/调参：HDS 没给这个动效的回调（SDK 里 `DynamicHideParams` 只有入参、没有 onXxx），
+    //   所以要调手感只能改这三个值——`mode`（SCROLL_UP=跟手 / SCROLL_UP_TO=滚到位置才收）、
+    //   `hideOffset`（从多少 vp 开始收）、`hideRatio`（1.0=1:1 跟手，2.0=收得慢）。
+    .dynamicHideTitleBar({
+      hideTitleArea: true,
+      hideStatusBar: false,
+      mode: HideMode.SCROLL_UP,
+      // ★ 2026-11-04（甲方）：「快吸顶的时候隐藏（刚到标题下面的时候）」——
+      //   起点交给 HDS 当 `hideOffset`：分类 Tab 到达标题栏下沿之前，标题栏**不动**。
+      hideOffset: this.titleHideStartVp,
+      hideRatio: 1.0
+    })
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     .backgroundColor($r('app.color.background_secondary'))
     // 官方一镜到底示例里源页也挂这个（PageOne 的 `NavDestination().transition(OPACITY)`）：
