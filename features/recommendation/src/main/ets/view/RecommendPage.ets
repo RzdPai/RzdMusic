@@ -43,7 +43,7 @@ import {
   buildTitleMaterial
 } from 'musicbasic';
 import { AccountChangedState, PlayerConstants } from 'player';
-import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
+import { BlurStrategy, HideMode, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { RecommendViewModel } from '../viewmodel/RecommendViewModel';
 import { CategoryContentSection } from './CategoryContentSection';
 import { HomeFloatingMiniBar } from './HomeFloatingMiniBar';
@@ -1024,6 +1024,26 @@ export struct RecommendPage {
     .titleBar(this.getTitleBar())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.pageScroller])
+    // ★★★ 2026-11-04（甲方：「首页 Tab 栏吸顶后在标题栏下面。有的应用吸顶时直接把标题文字隐藏，
+    //   然后跑到最上面，同时听歌识曲暂时隐藏」）：
+    //   这是 HDS 官方的「标题栏随滚动动态显隐」开关 —— **`bindToScrollable` 只管绑定，
+    //   真正决定"收不收、收什么"的是 `dynamicHideTitleBar`**（以前只 bind 没配它，
+    //   `hideTitleArea` 默认 false ⇒ 标题区域根本不收，Tab 吸顶后永远卡在标题栏下面）。
+    //   · `hideTitleArea: true`：上滑把**整个标题区域**收起 ⇒ 标题文字 + 搜索/听歌识曲菜单
+    //     一起隐藏（正好命中甲方两条要求），内容区上移，吸顶的 Tab 栏顶到最上面；
+    //   · `hideStatusBar: false`：状态栏保持显示（我们只收标题区域）；
+    //   · `HideMode.SCROLL_UP`：任意位置**上滑即收、下滑即回**（跟手，不是"滚到某个位置才动"）；
+    //   · `hideRatio: 1.0`：内容每滚 1vp、标题区域收 1vp（官方范围 [1.0, 3.0]，默认 2.0 会显得"拖沓"）。
+    //   排查/调参：HDS 没给这个动效的回调（SDK 里 `DynamicHideParams` 只有入参、没有 onXxx），
+    //   所以要调手感只能改这三个值——`mode`（SCROLL_UP=跟手 / SCROLL_UP_TO=滚到位置才收）、
+    //   `hideOffset`（从多少 vp 开始收）、`hideRatio`（1.0=1:1 跟手，2.0=收得慢）。
+    .dynamicHideTitleBar({
+      hideTitleArea: true,
+      hideStatusBar: false,
+      mode: HideMode.SCROLL_UP,
+      hideOffset: 0,
+      hideRatio: 1.0
+    })
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     .backgroundColor($r('app.color.background_secondary'))
     // 官方一镜到底示例里源页也挂这个（PageOne 的 `NavDestination().transition(OPACITY)`）：
