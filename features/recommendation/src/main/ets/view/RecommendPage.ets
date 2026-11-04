@@ -194,8 +194,6 @@ export struct RecommendPage {
    *      这一刻副本与流内那一行的像素位置**完全重合** ⇒ 吸顶瞬间零跳变。
    */
   @Local chipStickyActive: boolean = false;
-  /** 吸顶副本的顶边（vp）：= 状态栏下沿（≈38），即**屏幕最上方**。 */
-  @Local chipStickyLineVp: number = 0;
   @Local titleSearchShown: boolean = false;
 
   /**
@@ -578,14 +576,10 @@ export struct RecommendPage {
       // 还没量到那一行的位置（首帧 / 分类行还没出现）⇒ 不判吸顶，免得闪一下
       return;
     }
-    // ★★★ 2026-11-04（甲方对照官方「类鸿蒙音乐」截图：官方是**先把标题区域隐去**，
-    //   Tab 那一行**照常跟着内容上下滑**，滑到**最顶端**才接管）。
-    //   ⇒ 吸顶线 = 屏幕最上方（状态栏下沿 `statusBarTopVp` ≈38），不是标题栏下沿。
-    //   这样切换瞬间流内那一行的顶边正好在 38、副本也画在 38 ⇒ **位移为零**，不需要任何淡入淡出。
-    const stickLine: number = this.contentTopInsetVp() > 0 ? this.windowInfo.statusBarTopVp : 0;
-    if (Math.abs(stickLine - this.chipStickyLineVp) >= 0.5) {
-      this.chipStickyLineVp = stickLine;
-    }
+    // ★ 2026-11-04：标题栏现在**常驻**（不再收起），所以吸顶线是**恒定**的
+    //   `contentTopInsetVp()`（状态栏+标题栏 ≈94）＝标题栏下沿。
+    //   那一行到达这条线 ⇒ 流内那份隐藏、标题栏的 `stackBuilder` 开始渲染同一条胶囊行。
+    const stickLine: number = this.contentTopInsetVp();
     // 迟滞 2vp，避免临界点抖动
     const threshold: number = this.chipRowTopInContentVp - stickLine +
       (this.chipStickyActive ? 2 : 0);
@@ -763,9 +757,42 @@ export struct RecommendPage {
         // 菜单：吸顶时只留「搜索」（识别随标题一起消失）；展开时 = 识别在前、搜索在后。
         menu: {
           value: this.buildTitleMenuItems()
-        }
+        },
+        // ★ 吸顶时把**分类胶囊行**直接叠进标题栏（官方 `stackBuilder`，since 6.0.0(20)）
+        //   ⇒ Tab 天生在最上面，完全不需要"收起标题栏"，材质/模糊/菜单全部保留。
+        stackBuilder: this.chipStickyActive ? (): void => {
+          this.StickyChipsInBar();
+        } : undefined
       }
     };
+  }
+
+  /**
+   * 吸顶时叠在标题栏里的分类胶囊行（`stackBuilder`）。
+   * 右侧留出菜单宽度，避免压住「搜索」钮（菜单在标题栏右侧，约 40vp + 边距）。
+   */
+  @Builder
+  private StickyChipsInBar() {
+    Row() {
+      Column() {
+        CategoryChipsSection({ recommendViewModel: this.recommendViewModel })
+      }
+      .layoutWeight(1)
+    }
+    .width(StyleConstants.FULL_WIDTH)
+    .height(TitleBarConstants.ROW_HEIGHT_VP)
+    .alignItems(VerticalAlign.Center)
+    .padding({ right: 56 })
+    // 只有胶囊自己吃点击，其余放行
+    .hitTestBehavior(HitTestMode.Transparent)
+    // ★★★ 2026-11-04（甲方：「它到标题下面时会瞬间吸顶，看起来就像突然跳了一下」）：
+    //   流内那一行的顶边在**标题栏下沿**（≈94vp），而这里的胶囊在**栏内**（38..94vp）——
+    //   切换那一帧位置差半个栏高，肉眼就是"跳一下"。
+    //   用官方 `transition` 把插入/移除做成**淡入 + 向上 12vp 滑入**（180ms EaseOut）：
+    //   位移被加速曲线吃掉，视觉上像"滑上去"而不是"跳上去"。
+    .transition(TransitionEffect.OPACITY
+      .combine(TransitionEffect.translate({ y: 12 }))
+      .animation({ duration: 180, curve: Curve.EaseOut }))
   }
 
   /**
@@ -923,16 +950,21 @@ export struct RecommendPage {
             })
 
                   // ★ 四个分类 Tab 那一行：外面包一层**只负责量它**的容器（顶边 / 高度）。
-                  //   吸顶生效时流内这一份走 `Visibility.Hidden`（**保留占位** ⇒ 布局不跳）。
-                  //   ★ 2026-11-04（甲方对照官方）：切换点已经挪到**屏幕最上方**（≈38vp），
-                  //     流内那行与副本在同一位置 ⇒ 切换零位移，**不需要任何淡入淡出**，
-                  //     也就不会出现"重影/半透明两行"那种不好看的过渡。
+                  //   吸顶生效时流内这一份**淡出**（保留占位 ⇒ 布局不跳），
+                  //   同时标题栏里的 `stackBuilder` 那份**淡入并向上滑入**（见 StickyChipsInBar）。
+                  //   ★ 2026-11-04（甲方：「瞬间吸顶像突然跳了一下」）：以前这里是 `Visibility.Hidden`
+                  //     ⇒ 一帧之内"旧行消失 + 新行出现"，位移半个栏高，看起来就是跳。
+                  //     现在两边都走同一段 180ms 过渡：旧行原地淡出、新行从下方 12vp 滑入，
+                  //     视觉上是"换行"而不是"跳行"。
                   //   ⚠️ 别改成 `Visibility.None`：那会把后面所有内容整体上移，吸顶瞬间闪一下。
                   Column() {
                     CategoryChipsSection({ recommendViewModel: this.recommendViewModel })
                   }
                   .width(StyleConstants.FULL_WIDTH)
-                  .visibility(this.chipStickyActive ? Visibility.Hidden : Visibility.Visible)
+                  .opacity(this.chipStickyActive ? 0 : 1)
+                  .animation({ duration: 180, curve: Curve.EaseOut })
+                  // 淡出后不再吃点击（否则会点到看不见的胶囊）
+                  .hitTestBehavior(this.chipStickyActive ? HitTestMode.None : HitTestMode.Default)
                   .onAreaChange((_old: Area, area: Area): void => {
                     this.onChipRowAreaChange(area);
                   })
@@ -1015,37 +1047,10 @@ export struct RecommendPage {
             //     看起来就是一条横贯屏幕的色带。
             //   · `hitTestBehavior(Transparent)`：只有这一行自己吃点击，其余一律放行给下面的内容
             //     （与 RzdVideo 同一口径）。
-            // ★★★ 2026-11-04（甲方对照官方：先隐去标题区域，Tab 行跟着内容滑到最顶端才接管）：
-            //   吸顶后这一行**重新由内容层这份副本画**，位置 = 屏幕最上方（`chipStickyLineVp` ≈38）。
-            //   因为切换点也在 38，流内那行与副本像素级重合 ⇒ 零跳变，不需要过渡动画。
-            //   搜索入口仍在这一行右侧（标题栏收起后按钮不能跟着丢）。
-            if (this.chipStickyActive) {
-              Row({ space: 8 }) {
-                Column() {
-                  CategoryChipsSection({ recommendViewModel: this.recommendViewModel })
-                }
-                .layoutWeight(1)
-
-                Button() {
-                  SymbolGlyph($r('sys.symbol.magnifyingglass'))
-                    .fontSize('22fp')
-                    .fontColor([$r('sys.color.font_primary')])
-                }
-                .type(ButtonType.Normal)
-                .width(36)
-                .height(36)
-                .borderRadius(18)
-                .backgroundColor('#33FFFFFF')
-                .onClick((): void => {
-                  this.openSearch();
-                })
-              }
-              .width(StyleConstants.FULL_WIDTH)
-              .alignItems(VerticalAlign.Center)
-              .padding({ top: this.chipStickyLineVp, right: 16 })
-              .hitTestBehavior(HitTestMode.Transparent)
-              .zIndex(5)
-            }
+            // ★★★ 2026-11-04（甲方）：吸顶后那一行 Tab **不再由这里画**。
+            //   改由标题栏的 `stackBuilder`（见 `StickyChipsInBar()`）直接渲染进标题栏：
+            //   ⇒ Tab 天生就在最上面，且不需要"收起标题栏"（材质/模糊/按钮全保留）。
+            //   流内这一份仍然走 `Visibility.Hidden` 保留占位（见上面那个 Column），不会重复绘制。
           }
           .width(StyleConstants.FULL_WIDTH)
           .layoutWeight(1)
@@ -1088,20 +1093,13 @@ export struct RecommendPage {
     .titleBar(this.getTitleBar())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.pageScroller])
-    // ★★★ 2026-11-04（甲方对照官方截图）：官方是**先把标题区域隐去**，Tab 行照常跟手滑动，
-    //   滑到最顶端才接管。所以这里重新启用 `dynamicHideTitleBar`，但用法与之前不同：
-    //   · `hideOffset: 0` + `hideRatio: 3.0`（官方上限）⇒ 一开始滚动标题区就**慢慢淡出并让出高度**，
-    //     这就是"先把那个隐藏"；因为慢（滚 168vp 才收完），用户看到的是标题自然上移消失；
-    //   · `hideTitleArea: true`：收的是标题区域（标题文字 + 识别），材质/渐变模糊由 HDS 自己过渡；
-    //   · 分类 Tab 的接管点已经挪到 `statusBarTopVp`（屏幕最上方），与副本位置重合 ⇒ 零跳变。
-    //   ⚠️ 不要换回 `hideTitleBar(true)`：那会把整条栏（含背景板）一起拿掉（状态栏发黑、渐变模糊消失）。
-    .dynamicHideTitleBar({
-      hideTitleArea: true,
-      hideStatusBar: false,
-      mode: HideMode.SCROLL_UP,
-      hideOffset: 0,
-      hideRatio: 3.0
-    })
+    // ★★★ 2026-11-04（甲方）：**不要**再用 `dynamicHideTitleBar`。
+    //   它是"跟手连续收起"（`hideOffset/hideRatio`），实测 `hideOffset` 的运行期改动不生效
+    //   ⇒ 上滑一滚标题就提前跑掉；而 `hideTitleBar(true)` 又会把整条栏（含背景板/材质/菜单）
+    //   一起拿掉（状态栏发黑、按钮消失、渐变模糊消失）。
+    //   现在的做法：标题栏常驻（材质/模糊/按钮都在），吸顶时
+    //   ① `title.mainTitle` 置空（标题文字消失）、② 菜单只留「搜索」（识别消失）、
+    //   ③ `stackBuilder` 把分类胶囊行叠进标题栏（Tab 天生在最上面）。
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     .backgroundColor($r('app.color.background_secondary'))
     // 官方一镜到底示例里源页也挂这个（PageOne 的 `NavDestination().transition(OPACITY)`）：
