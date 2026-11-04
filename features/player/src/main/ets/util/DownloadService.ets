@@ -9,6 +9,7 @@ import { getLXMusicUrl } from '../source/LXPlayHelper';
 import { lxEngineIsReady } from '../source/LXSourceEngine';
 import { lxGetLyricFull, lxGetPicFallback, LyricFullResult } from '../source/LXMusicSDK';
 import { getQualityChain, resolveMusicUrlWithFallback, UrlResolveOutcome } from './SourceFallbackUtil';
+import { engineNotReadyToast } from './SourceUpdateHint';
 import { AmllLyricLine } from '../amll/model/AmllTypes';
 import { amllParseLyricText } from '../amll/parse/AmllAutoDetect';
 import { amllStringifyLrc } from '../amll/parse/AmllLyricFormatParsers';
@@ -216,7 +217,7 @@ export class DownloadService {
       return false;
     }
     if (!lxEngineIsReady) {
-      this.toast(uiContext, '音源未就绪，请先在设置中导入并选中源');
+      this.toast(uiContext, engineNotReadyToast());
       return false;
     }
     if (uiContext !== undefined) {

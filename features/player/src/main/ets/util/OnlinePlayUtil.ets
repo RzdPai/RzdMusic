@@ -18,6 +18,7 @@ import { UIContext } from '@kit.ArkUI';
 //    它是上面 `openFullScreen` 那层 `animateTo` 的时长（P1-9），包装删掉后本文件不再用得到它。
 //    常量本体仍留在 `musicbasic`（PC 壳层 `products/pc/.../Index.ets` 还在用，那一条待主线收）。
 import { MusicAppState, MusicStoreService, PlayedSongRecord, QualityInfo, SongItem, appendPlayLog } from 'musicbasic';
+import { engineNotReadyToast } from './SourceUpdateHint';
 import { LXSearchSong, LXQualityType, lxGetLyricFull, lxSearch, WyLyricResult } from '../source/LXMusicSDK';
 import { lxEngineIsReady, waitForLxEngineReady } from '../source/LXSourceEngine';
 import { LXSource } from '../source/Interface';
@@ -120,7 +121,7 @@ export class OnlinePlayUtil {
     // ★ 启动瞬间引擎可能还没 ready：先等最多 3s，避免每次开应用都误弹「音源未就绪」
     const engineReady: boolean = await waitForLxEngineReady(3000);
     if (!engineReady) {
-      OnlinePlayUtil.toast(uiContext, '音源未就绪，请在设置中导入并选中源');
+      OnlinePlayUtil.toast(uiContext, engineNotReadyToast());
       return false;
     }
     // 秒开播放页：搜索结果已含标题/歌手/封面，先建条目入队并打开页面，
@@ -166,7 +167,7 @@ export class OnlinePlayUtil {
     if (needResolve && !lxEngineIsReady) {
       const ok: boolean = await waitForLxEngineReady(3000);
       if (!ok) {
-        OnlinePlayUtil.toast(uiContext, '音源未就绪，请在设置中导入并选中源');
+        OnlinePlayUtil.toast(uiContext, engineNotReadyToast());
         return false;
       }
     }
@@ -272,7 +273,7 @@ export class OnlinePlayUtil {
     // ★ 启动瞬间引擎可能还没 ready：先等最多 3s，避免每次开应用都误弹「音源未就绪」
     const engineReady: boolean = await waitForLxEngineReady(3000);
     if (!engineReady) {
-      OnlinePlayUtil.toast(uiContext, '音源未就绪，请在设置中导入并选中源');
+      OnlinePlayUtil.toast(uiContext, engineNotReadyToast());
       return false;
     }
     if (songs.length === 0) {

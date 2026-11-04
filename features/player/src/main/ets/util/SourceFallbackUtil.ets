@@ -544,6 +544,10 @@ function engineReady(): boolean {
 async function switchToScript(scriptId: string): Promise<boolean> {
   appendPlayLog('[换音源] 切换音源脚本 → ' + scriptId);
   const start: number = Date.now();
+  // ★ 2026-11-04（用户：一直提示「音源未就绪」）：进入前先记下原 active，
+  //   失败（超时）时必须**回滚**——否则 `lxActiveSource` 会停在一个永远 init 不成功的脚本上，
+  //   之后每次播放都撞"引擎未就绪"（日志实证：预热完 `active=` 指向最后那个超时脚本）。
+  const prevActive: string = activeSourceId();
   AppStorage.setOrCreate('lxActiveSource', scriptId);
   const deadline: number = start + SCRIPT_SWITCH_TIMEOUT_MS;
   let sawReloading: boolean = false;
@@ -563,7 +567,12 @@ async function switchToScript(scriptId: string): Promise<boolean> {
     }
     await sleep(SCRIPT_READY_POLL_MS);
   }
-  appendPlayLog('[换音源] 音源脚本加载超时 ' + scriptId);
+  appendPlayLog('[换音源] 音源脚本加载超时 ' + scriptId +
+    (prevActive !== scriptId ? '，回滚 active → ' + (prevActive.length > 0 ? prevActive : '(空)') : ''));
+  // 只回滚"本次自己写进去的那个"：若期间被别的流程改写，就别抢回来
+  if (activeSourceId() === scriptId) {
+    AppStorage.setOrCreate('lxActiveSource', prevActive);
+  }
   return false;
 }
 
@@ -966,6 +975,10 @@ export async function warmUpLxSources(): Promise<number> {
   }
   const originalActive: string = activeSourceId();
   let warmed: number = 0;
+  // ★ 2026-11-04：记下**第一个真的就绪**的脚本。原始 active 为空时（全新安装/恢复备份后），
+  //   以前预热完不恢复 ⇒ active 停在最后那个"试过但超时"的脚本上 ⇒ 之后每次播放都弹
+  //   「音源未就绪」（日志实证：`预热完成 warmed=0 total=10 active=<超时脚本>`）。
+  let firstWarmedId: string = '';
   for (let i: number = 0; i < list.length; i++) {
     const api: LXUserApiInfo = list[i];
     const declared: number = api.sources !== undefined ? Object.keys(api.sources).length : 0;
@@ -978,12 +991,22 @@ export async function warmUpLxSources(): Promise<number> {
     const ok: boolean = await switchToScript(api.id);
     if (ok) {
       warmed++;
+      if (firstWarmedId.length === 0) {
+        firstWarmedId = api.id;
+      }
     }
   }
-  // 恢复用户原来的选中项（没有就保持最后加载的那个）
   if (originalActive.length > 0 && activeSourceId() !== originalActive) {
+    // 用户本来选过：恢复原选中项（哪怕它这次没就绪 —— 那是用户自己的选择）
     AppStorage.setOrCreate('lxActiveSource', originalActive);
     await switchToScript(originalActive);
+  } else if (originalActive.length === 0) {
+    // 全新/未选过：优先落到**第一个成功**的脚本；一个都没成功就**清空**，
+    // 让后续 `resolveMusicUrlWithFallback()` 走它自己的"未选中音源 ⇒ 自动选第一个"兜底，
+    // 而不是继续指着一个 init 失败的脚本。
+    const pick: string = firstWarmedId.length > 0 ? firstWarmedId : '';
+    AppStorage.setOrCreate('lxActiveSource', pick);
+    appendPlayLog('[换源] 预热后选定 active=' + (pick.length > 0 ? pick : '(空，交给播放链路兜底)'));
   }
   appendPlayLog('[换源] 预热完成 warmed=' + warmed + ' total=' + list.length +
     ' active=' + activeSourceId());

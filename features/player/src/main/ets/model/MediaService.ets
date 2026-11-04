@@ -40,6 +40,7 @@ import { BackgroundUtil } from '../util/BackgroundUtil';
 import { MediaTools } from '../util/MediaTools';
 import { lxGetLyricFull, lxGetPicFallback, lxGetTTMLLyric,
   LyricFullResult } from '../source/LXMusicSDK';
+import { engineNotReadyToast } from '../util/SourceUpdateHint';
 import { lxEngineIsReady, waitForLxEngineReady } from '../source/LXSourceEngine';
 import { FallbackOptions, QUALITY_TIER_COOLDOWN_MS, QUALITY_TIER_FAIL_THRESHOLD, UrlResolveOutcome, qualityTierKey, resolveMusicUrlWithFallback, sourceDisplayName } from '../util/SourceFallbackUtil';
 import { SwitchBannerState } from '../model/SwitchBannerState';
@@ -1801,7 +1802,7 @@ export class MediaService {
     // ★ 启动瞬间引擎可能还没 ready：先等 3s，避免误弹「音源未就绪」
     const engineReady: boolean = await waitForLxEngineReady(3000);
     if (!engineReady) {
-      this.toast('音源未就绪，请在设置中导入并选中源');
+      this.toast(engineNotReadyToast());
       return false;
     }
     const name: string = typeof songItem.title === 'string' ? songItem.title : '';
