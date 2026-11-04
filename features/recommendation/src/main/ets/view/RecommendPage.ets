@@ -576,10 +576,11 @@ export struct RecommendPage {
       // 还没量到那一行的位置（首帧 / 分类行还没出现）⇒ 不判吸顶，免得闪一下
       return;
     }
-    // ★ 2026-11-04：标题栏现在**常驻**（不再收起），所以吸顶线是**恒定**的
-    //   `contentTopInsetVp()`（状态栏+标题栏 ≈94）＝标题栏下沿。
-    //   那一行到达这条线 ⇒ 流内那份隐藏、标题栏的 `stackBuilder` 开始渲染同一条胶囊行。
-    const stickLine: number = this.contentTopInsetVp();
+    // ★★★ 2026-11-04（甲方）：**只改这一个数**——吸顶线从「标题栏下沿 94」挪到「屏幕最上方 38」。
+    //   为什么：吸顶副本是用官方 `stackBuilder` 画在**标题栏里面**（38..94）的，
+    //   只有当流内那行的顶边也到 38 时才切换，两份才**像素级重合** ⇒ 不再有半个栏高的跳变。
+    //   94→38 这一段 Tab 行是正常跟着内容滑到标题栏底下的（标题文字此刻已经收走，栏里只剩搜索钮）。
+    const stickLine: number = this.contentTopInsetVp() > 0 ? this.windowInfo.statusBarTopVp : 0;
     // 迟滞 2vp，避免临界点抖动
     const threshold: number = this.chipRowTopInContentVp - stickLine +
       (this.chipStickyActive ? 2 : 0);
@@ -745,21 +746,26 @@ export struct RecommendPage {
       },
       content: {
         title: {
-          // ★★★ 2026-11-04（甲方）：吸顶时**只把标题文字置空**，绝不收起整条标题栏 ——
-          //   官方文档写明 `titleBar` 管的是「返回图标区域 + 标题区域 + 菜单区域 + **背景板**」，
-          //   所以 `hideTitleBar(true)` 会把材质/渐变模糊/按钮一起拿掉（上一版就是这么崩的）。
-          mainTitle: this.chipStickyActive ? '' :
+          // ★★★ 2026-11-04（甲方最终口径）：「是光标题文字和听歌识曲按钮没了，搜索按钮还在，
+          //   此时 Tab 栏还能上下移动，直到吸顶」。
+          //   官方口径（HDS 文档）：`titleBar` 管的是「返回图标区域 + 标题区域 + 菜单区域 + **背景板**」，
+          //   `hideTitleBar(true)` 会连背景板一起拿掉（之前就踩过：状态栏发黑、渐变模糊消失）。
+          //   ⇒ 要"只让标题文字消失"，就**只改内容**：`mainTitle` 置空，其余（背景板/食材/菜单）不动。
+          //   时机：**一滚动就收**（`titleSearchShown` = offset > 20），而不是等吸顶 ——
+          //   这样"标题+识别先走、Tab 继续跟手滑、滑到最上面才吸顶"就是连续的一条线。
+          mainTitle: this.titleSearchShown ? '' :
             (this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ?
               $r('app.string.home_page_title_pc') :
               $r('app.string.home_page_title')),
           mainTitleSize: TitleSize.TITLE_ML
         },
-        // 菜单：吸顶时只留「搜索」（识别随标题一起消失）；展开时 = 识别在前、搜索在后。
+        // 菜单：识别在前、搜索在后；标题文字一起收走时识别也收（只留搜索），
+        // 所以吸顶前后**搜索钮始终是 HDS 标题栏自己的菜单项**（不是我们自己画的按钮）。
         menu: {
           value: this.buildTitleMenuItems()
         },
         // ★ 吸顶时把**分类胶囊行**直接叠进标题栏（官方 `stackBuilder`，since 6.0.0(20)）
-        //   ⇒ Tab 天生在最上面，完全不需要"收起标题栏"，材质/模糊/菜单全部保留。
+        //   ⇒ Tab 天生在最上面，且材质/模糊/菜单全部保留。
         stackBuilder: this.chipStickyActive ? (): void => {
           this.StickyChipsInBar();
         } : undefined
@@ -797,14 +803,15 @@ export struct RecommendPage {
 
   /**
    * 标题栏菜单项：**识别在前、搜索在后**（甲方 2026-11-04：「改成做听歌识曲右搜索」）。
-   * · 吸顶：只留「搜索」（识别随标题文字一起"消失"，但栏/材质/搜索都在）；
-   * · 窄屏顶部：内容里那一整行就是搜索框 ⇒ 只放识别；
-   * · 宽屏：没有内容搜索行 ⇒ 搜索常驻。
+   * · 顶部：内容里那一整行就是搜索框 ⇒ 只放识别；
+   * · 一滚动（`titleSearchShown`）⇒ 标题文字收走，识别也一起收走，**只留搜索**；
+   * · 宽屏没有内容搜索行 ⇒ 搜索常驻。
+   * ⚠️ 搜索钮始终是 **HDS 标题栏自己的菜单项**（不是内容层自绘按钮），甲方要求"搜索按钮还是 HDS"。
    */
   private buildTitleMenuItems(): HdsNavigationMenuItemOptions[] {
     const items: HdsNavigationMenuItemOptions[] = [];
     const wide: boolean = this.breakpointEnv.widthBreakpoint !== WidthBreakpoint.WIDTH_SM;
-    if (!this.chipStickyActive) {
+    if (!this.titleSearchShown && !this.chipStickyActive) {
       items.push({
         content: {
           label: 'identify',
@@ -818,7 +825,7 @@ export struct RecommendPage {
         }
       });
     }
-    if (this.chipStickyActive || this.titleSearchShown || wide) {
+    if (this.titleSearchShown || this.chipStickyActive || wide) {
       items.push({
         content: {
           label: 'search',
@@ -950,21 +957,15 @@ export struct RecommendPage {
             })
 
                   // ★ 四个分类 Tab 那一行：外面包一层**只负责量它**的容器（顶边 / 高度）。
-                  //   吸顶生效时流内这一份**淡出**（保留占位 ⇒ 布局不跳），
-                  //   同时标题栏里的 `stackBuilder` 那份**淡入并向上滑入**（见 StickyChipsInBar）。
-                  //   ★ 2026-11-04（甲方：「瞬间吸顶像突然跳了一下」）：以前这里是 `Visibility.Hidden`
-                  //     ⇒ 一帧之内"旧行消失 + 新行出现"，位移半个栏高，看起来就是跳。
-                  //     现在两边都走同一段 180ms 过渡：旧行原地淡出、新行从下方 12vp 滑入，
-                  //     视觉上是"换行"而不是"跳行"。
+                  //   吸顶生效时流内这一份走 `Visibility.Hidden`（保留占位 ⇒ 布局不跳）。
+                  //   ★ 2026-11-04（甲方）：吸顶线已经挪到屏幕最上方（≈38），与 `stackBuilder`
+                  //     画在标题栏里的那一份**像素级重合** ⇒ 切换零位移，不需要淡入淡出。
                   //   ⚠️ 别改成 `Visibility.None`：那会把后面所有内容整体上移，吸顶瞬间闪一下。
                   Column() {
                     CategoryChipsSection({ recommendViewModel: this.recommendViewModel })
                   }
                   .width(StyleConstants.FULL_WIDTH)
-                  .opacity(this.chipStickyActive ? 0 : 1)
-                  .animation({ duration: 180, curve: Curve.EaseOut })
-                  // 淡出后不再吃点击（否则会点到看不见的胶囊）
-                  .hitTestBehavior(this.chipStickyActive ? HitTestMode.None : HitTestMode.Default)
+                  .visibility(this.chipStickyActive ? Visibility.Hidden : Visibility.Visible)
                   .onAreaChange((_old: Area, area: Area): void => {
                     this.onChipRowAreaChange(area);
                   })
