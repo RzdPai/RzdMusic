@@ -194,6 +194,10 @@ export struct RecommendPage {
    *      这一刻副本与流内那一行的像素位置**完全重合** ⇒ 吸顶瞬间零跳变。
    */
   @Local chipStickyActive: boolean = false;
+  /** 分类行是否已进入标题栏区域（由 stackBuilder 在栏内绘制，层级在背景板之上）。 */
+  @Local chipInBar: boolean = false;
+  /** 栏内纵向位移（vp）：行顶从栏底滑到栏顶时为 56 → 0。 */
+  @Local chipBarOffsetVp: number = 0;
   @Local titleSearchShown: boolean = false;
 
   /**
@@ -576,20 +580,30 @@ export struct RecommendPage {
       // 还没量到那一行的位置（首帧 / 分类行还没出现）⇒ 不判吸顶，免得闪一下
       return;
     }
-    // ★★★ 2026-11-04（甲方）：**只改这一个数**——吸顶线从「标题栏下沿 94」挪到「屏幕最上方 38」。
-    //   为什么：吸顶副本是用官方 `stackBuilder` 画在**标题栏里面**（38..94）的，
-    //   只有当流内那行的顶边也到 38 时才切换，两份才**像素级重合** ⇒ 不再有半个栏高的跳变。
-    //   94→38 这一段 Tab 行是正常跟着内容滑到标题栏底下的（标题文字此刻已经收走，栏里只剩搜索钮）。
-    const stickLine: number = this.contentTopInsetVp() > 0 ? this.windowInfo.statusBarTopVp : 0;
-    // 迟滞 2vp，避免临界点抖动
-    const threshold: number = this.chipRowTopInContentVp - stickLine +
-      (this.chipStickyActive ? 2 : 0);
-    const active: boolean = offset >= threshold;
-    if (active !== this.chipStickyActive) {
-      this.chipStickyActive = active;
+    // ★★★ 2026-11-04（甲方最终方案）：「你直接把他们的层级放到标题上面不就行了」。
+    //   三层状态（全部以**流内那一行顶边的屏幕 y** 判断）：
+    //   · `rowY > 栏底(94)`：正常在内容里滚（栏的模糊会盖住它，还没到呢）；
+    //   · `栏顶(38) < rowY <= 栏底(94)`：**进栏**——改由 `stackBuilder` 在标题栏里画
+    //     （层级在背景板之上 ⇒ 清晰、不被模糊），并用 `offset` 让它在栏内继续跟着滚动上移；
+    //   · `rowY <= 栏顶(38)`：吸顶，`offset` 归 0，停在最上方。
+    const barTop: number = this.contentTopInsetVp() > 0 ? this.windowInfo.statusBarTopVp : 0;
+    const barBottom: number = this.contentTopInsetVp();
+    const rowY: number = this.chipRowTopInContentVp - offset;
+    const sticky: boolean = rowY <= barTop + (this.chipStickyActive ? 2 : 0);
+    const inBar: boolean = !sticky && rowY <= barBottom;
+    if (inBar !== this.chipInBar) {
+      this.chipInBar = inBar;
+    }
+    // 栏内纵向位移：行顶从栏底滑到栏顶（56 → 0）
+    const lift: number = Math.max(0, Math.min(barBottom - barTop, rowY - barTop));
+    if (Math.abs(lift - this.chipBarOffsetVp) >= 0.5) {
+      this.chipBarOffsetVp = lift;
+    }
+    if (sticky !== this.chipStickyActive) {
+      this.chipStickyActive = sticky;
       Logger.info('RzdHomeScroll',
-        `sticky=${active} offset=${offset} rowTop=${this.chipRowTopInContentVp} rowH=${this.chipRowHeightVp} ` +
-          `line=${stickLine.toFixed(1)}`);
+        `sticky=${sticky} inBar=${inBar} offset=${offset} rowY=${rowY.toFixed(1)} ` +
+          `rowTop=${this.chipRowTopInContentVp} lift=${lift.toFixed(1)}`);
     }
   }
 
@@ -716,12 +730,10 @@ export struct RecommendPage {
       //   voidLayoutSafeArea: true 会让它**再退一个状态栏**（标题 76..132）⇒ 恒为 false（标题 38..94）。
       avoidLayoutSafeArea: true,
       style: {
-        // ★★★ 2026-11-04（甲方：「快到顶部时 Tab 会被标题覆盖，看起来很模糊，吸顶后又突然清楚」）：
-        //   那是标题栏的**背景板/渐变模糊**叠在滚动内容之上造成的 —— Tab 行从它下面滑过时被糊掉，
-        //   等它在 `stackBuilder` 里接管又变回清晰。
-        //   修法：**一滚动就把标题栏的材质与模糊关掉**（标题文字此时已收走，栏里只剩两个按钮，
-        //   按钮自带 `#1AFFFFFF` 底色，不依赖背景板）⇒ Tab 行从栏下经过时与在栏内时**同样清晰**。
-        blurStrategy: this.titleSearchShown ? BlurStrategy.DISABLE : BlurStrategy.ENABLE,
+        // ⚠️ 2026-11-04：**不要**按滚动状态关掉模糊/材质 —— 甲方明确要"标题栏保持模糊"。
+        //   （上一版试过 `BlurStrategy.DISABLE`，结果"标题栏没有模糊了"，已回退。）
+        //   Tab 行被栏盖住发虚的问题，改用**层级**解决：让它进 `stackBuilder` 渲染（在背景板之上）。
+        blurStrategy: BlurStrategy.ENABLE,
         scrollEffectOpts: {
           scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR
         },
@@ -747,7 +759,7 @@ export struct RecommendPage {
             }
           }
         },
-        systemMaterialEffect: this.titleSearchShown ? undefined : buildTitleMaterial(this.ambientState.level)
+        systemMaterialEffect: buildTitleMaterial(this.ambientState.level)
       },
       content: {
         title: {
@@ -769,9 +781,11 @@ export struct RecommendPage {
         menu: {
           value: this.buildTitleMenuItems()
         },
-        // ★ 吸顶时把**分类胶囊行**直接叠进标题栏（官方 `stackBuilder`，since 6.0.0(20)）
-        //   ⇒ Tab 天生在最上面，且材质/模糊/菜单全部保留。
-        stackBuilder: this.chipStickyActive ? (): void => {
+        // ★ 分类胶囊行按官方 `stackBuilder`（since 6.0.0(20)）画进标题栏 —— **层级在背景板之上**：
+        //   · 吸顶（`chipStickyActive`）：停在最上方；
+        //   · 进栏中（`chipInBar`）：还在 38..94 这段里跟手滑动，用 `chipBarOffsetVp` 给位移，
+        //     所以它在模糊的背景板上方是**清晰的**（甲方：不要把栏的模糊关掉，把 Tab 放上来就行）。
+        stackBuilder: (this.chipStickyActive || this.chipInBar) ? (): void => {
           this.StickyChipsInBar();
         } : undefined
       }
@@ -796,14 +810,11 @@ export struct RecommendPage {
     .padding({ right: 56 })
     // 只有胶囊自己吃点击，其余放行
     .hitTestBehavior(HitTestMode.Transparent)
-    // ★★★ 2026-11-04（甲方：「它到标题下面时会瞬间吸顶，看起来就像突然跳了一下」）：
-    //   流内那一行的顶边在**标题栏下沿**（≈94vp），而这里的胶囊在**栏内**（38..94vp）——
-    //   切换那一帧位置差半个栏高，肉眼就是"跳一下"。
-    //   用官方 `transition` 把插入/移除做成**淡入 + 向上 12vp 滑入**（180ms EaseOut）：
-    //   位移被加速曲线吃掉，视觉上像"滑上去"而不是"跳上去"。
-    .transition(TransitionEffect.OPACITY
-      .combine(TransitionEffect.translate({ y: 12 }))
-      .animation({ duration: 180, curve: Curve.EaseOut }))
+    // ★★★ 2026-11-04（甲方：「你直接把他们的层级放到标题上面不就行了」）：
+    //   进栏过程中（`chipInBar`）用 `chipBarOffsetVp`（56 → 0）让它**继续跟手往上滑**，
+    //   位置与内容里那一行完全一致；因为画在 `stackBuilder` 里（背景板之上），
+    //   所以它是**清晰的**，不会被标题栏的模糊糊掉。吸顶后 offset 归 0，停在最上方。
+    .translate({ y: this.chipStickyActive ? 0 : this.chipBarOffsetVp })
   }
 
   /**
@@ -972,7 +983,7 @@ export struct RecommendPage {
                     CategoryChipsSection({ recommendViewModel: this.recommendViewModel })
                   }
                   .width(StyleConstants.FULL_WIDTH)
-                  .visibility(this.chipStickyActive ? Visibility.Hidden : Visibility.Visible)
+                  .visibility((this.chipStickyActive || this.chipInBar) ? Visibility.Hidden : Visibility.Visible)
                   .onAreaChange((_old: Area, area: Area): void => {
                     this.onChipRowAreaChange(area);
                   })
