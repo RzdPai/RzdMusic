@@ -787,10 +787,9 @@ export struct RecommendPage {
           //   （那一刻标题栏里放的是 Tab 行，不是标题）。
           //   官方口径：`titleBar` 管「返回图标区域 + 标题区域 + 菜单区域 + 背景板」，
           //   `mainTitle` 置空只影响文字本身，背景板/材质/菜单都不动。
-          mainTitle: (this.chipStickyActive || this.chipInBar) ? '' :
-            (this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ?
-              $r('app.string.home_page_title_pc') :
-              $r('app.string.home_page_title')),
+          mainTitle: this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ?
+            $r('app.string.home_page_title_pc') :
+            $r('app.string.home_page_title'),
           mainTitleSize: TitleSize.TITLE_ML
         },
         // 菜单：识别在前、搜索在后；标题文字一起收走时识别也收（只留搜索），
@@ -853,7 +852,8 @@ export struct RecommendPage {
     // ★★★ 2026-11-05（甲方：「官方的淡入淡出是由当前位置决定的」）：
     //   透明度由 `updateChipSticky()` 按 rowY 算出（`chipBarOpacity` 94→54 走 0→1），
     //   不再用"插入/移除"式的 transition —— 那样是固定 200ms，与滚动位置无关。
-    .opacity(this.chipStickyActive ? 1 : this.chipBarOpacity)
+    // ★ 2026-11-05（甲方）：「一个淡出有这么难做吗」——Tab 行**不淡**，淡出交给 HDS 标题区域。
+    .opacity(1)
   }
 
   /**
@@ -1024,7 +1024,6 @@ export struct RecommendPage {
                   .width(StyleConstants.FULL_WIDTH)
                   .visibility((this.chipStickyActive || this.chipInBar) ? Visibility.Hidden : Visibility.Visible)
                   // 位置驱动的淡出（与栏内那份的淡入互补，见 updateChipSticky）
-                  .opacity(this.chipContentOpacity)
                   .onAreaChange((_old: Area, area: Area): void => {
                     this.onChipRowAreaChange(area);
                   })
@@ -1153,13 +1152,20 @@ export struct RecommendPage {
     .titleBar(this.getTitleBar())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.pageScroller])
-    // ★★★ 2026-11-04（甲方）：**不要**再用 `dynamicHideTitleBar`。
-    //   它是"跟手连续收起"（`hideOffset/hideRatio`），实测 `hideOffset` 的运行期改动不生效
-    //   ⇒ 上滑一滚标题就提前跑掉；而 `hideTitleBar(true)` 又会把整条栏（含背景板/材质/菜单）
-    //   一起拿掉（状态栏发黑、按钮消失、渐变模糊消失）。
-    //   现在的做法：标题栏常驻（材质/模糊/按钮都在），吸顶时
-    //   ① `title.mainTitle` 置空（标题文字消失）、② 菜单只留「搜索」（识别消失）、
-    //   ③ `stackBuilder` 把分类胶囊行叠进标题栏（Tab 天生在最上面）。
+    // ★★★ 2026-11-05（甲方：「一个淡出有这么难做吗」）：
+    //   淡出交给 **HDS 自己的动态显隐** —— 它按滚动位置**连续**淡掉「标题区域」，
+    //   而「菜单区域」（听歌识曲 + 搜索）**不受影响**，仍是 HDS 原生按钮。
+    //   这正是之前一直缺的那半刀：自己画标题会丢 HDS 观感，置空 `mainTitle` 又不是渐隐。
+    //   · `hideRatio: 3.0`（官方上限）⇒ 内容滚 1vp 标题收 1/3vp，168vp 才收完 —— 不会"一滚就没"；
+    //   · `hideOffset: 0` ⇒ 从开始滚动就进入淡出过程（位置驱动），不是到某个点突变；
+    //   · `hideStatusBar: false` ⇒ 状态栏不动。
+    .dynamicHideTitleBar({
+      hideTitleArea: true,
+      hideStatusBar: false,
+      mode: HideMode.SCROLL_UP,
+      hideOffset: 0,
+      hideRatio: 3.0
+    })
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     .backgroundColor($r('app.color.background_secondary'))
     // 官方一镜到底示例里源页也挂这个（PageOne 的 `NavDestination().transition(OPACITY)`）：
