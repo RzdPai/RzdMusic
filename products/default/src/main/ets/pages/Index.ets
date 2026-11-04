@@ -697,6 +697,31 @@ struct Index {
     }, 32);
   }
 
+  /**
+   * ★★★ 2026-11-05（甲方：「能不能用官方的提示，不要自己写样式」）：
+   * 起播装载期间弹**系统 Toast**（`promptAction.showToast`，官方样式，无自绘）。
+   * 由 `MusicAppState.isResolving`（`@Trace`）翻转驱动：`true` 时弹一次「缓冲中……」，
+   * `false` 时什么都不做（Toast 自己 2s 后消失）。
+   * ⚠️ 只在**开始装载**那一下弹，不是每帧弹，避免刷屏（`showToast` 频率过高会被系统吞掉）。
+   */
+  @Monitor('appState.isResolving')
+  onResolvingChanged(monitor: IMonitor): void {
+    const now: boolean = this.appState.isResolving;
+    const before: boolean = monitor.value()?.before === true;
+    if (!now || before) {
+      return;
+    }
+    appendPlayLog('[缓冲提示] showToast 缓冲中……');
+    try {
+      this.getUIContext().getPromptAction().showToast({
+        message: '缓冲中……',
+        duration: 2000
+      });
+    } catch (e) {
+      appendPlayLog('[缓冲提示] showToast 失败 ' + JSON.stringify(e).substring(0, 100));
+    }
+  }
+
   @Monitor('intentState.requestVersion')
   onPlaybackIntentChanged() {
     dispatchShellPlaybackIntent(this.appState, this.intentState, () => {
