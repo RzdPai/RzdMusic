@@ -202,6 +202,8 @@ export struct RecommendPage {
   @Local chipContentOpacity: number = 1;
   /** 标题栏内那份胶囊行的透明度（rowY 94→54 时 0→1）。 */
   @Local chipBarOpacity: number = 0;
+  /** 自绘标题文字的透明度（按 rowY 位置淡出，窗口靠后）。 */
+  @Local titleOverlayOpacity: number = 1;
   @Local titleSearchShown: boolean = false;
 
   /**
@@ -603,26 +605,21 @@ export struct RecommendPage {
     if (Math.abs(lift - this.chipBarOffsetVp) >= 0.5) {
       this.chipBarOffsetVp = lift;
     }
-    // ★★★ 2026-11-05（甲方：「官方的淡入淡出是由当前位置决定的」）：
-    //   不做"插入/移除"式的 200ms 过渡，而是**按当前位置算透明度**，两段互补：
-    //   · 内容里那一行：`rowY` 从 134 走到 94 时 1 → 0（快贴到栏底就开始淡出）；
-    //   · 栏内那一份：`rowY` 从 94 走到 54 时 0 → 1（进栏后淡入，到 54 已全实）。
-    //   两段在 94 处交接，跟手位移同时进行，所以看到的是"边滑边淡"，不是"啪"一下。
-    const fadeSpan: number = 40;
-    const contentOpacity: number = Math.max(0, Math.min(1, (rowY - barBottom) / fadeSpan));
-    if (Math.abs(contentOpacity - this.chipContentOpacity) >= 0.02) {
-      this.chipContentOpacity = contentOpacity;
-    }
-    const barOpacity: number = Math.max(0, Math.min(1, (barBottom - rowY) / fadeSpan));
-    if (Math.abs(barOpacity - this.chipBarOpacity) >= 0.02) {
-      this.chipBarOpacity = barOpacity;
+    // ★★★ 2026-11-05（甲方）：「淡出时机过早……搜索按钮是一直在的，不需要淡出」。
+    //   淡出对象 = **只有标题文字**（自绘在 `HeaderInBar()`），窗口**靠后**且**按位置**算：
+    //   行顶 `rowY` 从「栏底 + 150」走到「栏底」时透明度 1 → 0 —— 也就是离标题栏还有 150vp 才开始淡，
+    //   贴到栏底正好淡完；不再用 `offset`（那会让一滚动就淡）。
+    //   Tab 行本身不淡（`.opacity(1)`），搜索钮在 HDS 菜单里恒显示。
+    const titleFade: number = Math.max(0, Math.min(1, (rowY - barBottom) / 150));
+    if (Math.abs(titleFade - this.titleOverlayOpacity) >= 0.02) {
+      this.titleOverlayOpacity = titleFade;
     }
     if (sticky !== this.chipStickyActive) {
       this.chipStickyActive = sticky;
       Logger.info('RzdHomeScroll',
         `sticky=${sticky} inBar=${inBar} offset=${offset} rowY=${rowY.toFixed(1)} ` +
           `rowTop=${this.chipRowTopInContentVp} lift=${lift.toFixed(1)} ` +
-          `opacity=${contentOpacity.toFixed(2)}/${barOpacity.toFixed(2)}`);
+          `titleFade=${titleFade.toFixed(2)}`);
     }
   }
 
@@ -787,9 +784,8 @@ export struct RecommendPage {
           //   （那一刻标题栏里放的是 Tab 行，不是标题）。
           //   官方口径：`titleBar` 管「返回图标区域 + 标题区域 + 菜单区域 + 背景板」，
           //   `mainTitle` 置空只影响文字本身，背景板/材质/菜单都不动。
-          mainTitle: this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ?
-            $r('app.string.home_page_title_pc') :
-            $r('app.string.home_page_title'),
+          // 标题文字改由 HeaderInBar() 自绘（HDS 无法对文字做连续淡出）；这里恒空避免重叠。
+          mainTitle: '',
           mainTitleSize: TitleSize.TITLE_ML
         },
         // 菜单：识别在前、搜索在后；标题文字一起收走时识别也收（只留搜索），
@@ -797,15 +793,45 @@ export struct RecommendPage {
         menu: {
           value: this.buildTitleMenuItems()
         },
-        // ★ 分类胶囊行按官方 `stackBuilder`（since 6.0.0(20)）画进标题栏 —— **层级在背景板之上**：
-        //   · 吸顶（`chipStickyActive`）：停在最上方；
-        //   · 进栏中（`chipInBar`）：还在 38..94 这段里跟手滑动，用 `chipBarOffsetVp` 给位移，
-        //     所以它在模糊的背景板上方是**清晰的**（甲方：不要把栏的模糊关掉，把 Tab 放上来就行）。
-        stackBuilder: (this.chipStickyActive || this.chipInBar) ? (): void => {
-          this.StickyChipsInBar();
-        } : undefined
+        // ★ `stackBuilder`（since 6.0.0(20)，层级在背景板之上）承载两种内容：
+        //   · 未进栏：**标题文字**（`HeaderInBar()`，按位置淡出）；
+        //   · 进栏/吸顶：分类胶囊行（`StickyChipsInBar()`）。
+        stackBuilder: (this.chipStickyActive || this.chipInBar) ?
+          (): void => {
+            this.StickyChipsInBar();
+          } :
+          (): void => {
+            this.HeaderInBar();
+          }
       }
     };
+  }
+
+  /**
+   * 未进栏时叠在标题栏里的**标题文字**。
+   * ★ 2026-11-05（甲方）：「淡出时机过早……搜索按钮是一直在的，不需要淡出」。
+   *   HDS 的 `mainTitle` 只能有/无、`hideTitleArea` 又会连搜索钮一起淡 ⇒ 标题文字只能自己画，
+   *   才能做到"**晚一点**、按位置连续淡出"，而搜索/识别继续留在 HDS 菜单区域。
+   *   透明度 `titleOverlayOpacity` 由 `updateChipSticky()` 按 **rowY**（离标题栏还有多远）算。
+   */
+  @Builder
+  private HeaderInBar() {
+    Row() {
+      Text(this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ?
+        $r('app.string.home_page_title_pc') :
+        $r('app.string.home_page_title'))
+        .fontSize(this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ? 20 : 24)
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('sys.color.font_primary'))
+        .maxLines(1)
+    }
+    .width(StyleConstants.FULL_WIDTH)
+    .height(TitleBarConstants.ROW_HEIGHT_VP)
+    .alignItems(VerticalAlign.Center)
+    // 右侧让位给 HDS 菜单（识别 + 搜索），不占它们的位置
+    .padding({ left: 16, right: 96 })
+    .hitTestBehavior(HitTestMode.None)
+    .opacity(this.titleOverlayOpacity)
   }
 
   /**
@@ -882,7 +908,7 @@ export struct RecommendPage {
         }
       });
     }
-    if (this.titleSearchShown || this.chipStickyActive || wide) {
+    if (this.titleSearchShown || this.chipStickyActive || this.chipInBar || wide) {
       items.push({
         content: {
           label: 'search',
@@ -1152,20 +1178,13 @@ export struct RecommendPage {
     .titleBar(this.getTitleBar())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.pageScroller])
-    // ★★★ 2026-11-05（甲方：「一个淡出有这么难做吗」）：
-    //   淡出交给 **HDS 自己的动态显隐** —— 它按滚动位置**连续**淡掉「标题区域」，
-    //   而「菜单区域」（听歌识曲 + 搜索）**不受影响**，仍是 HDS 原生按钮。
-    //   这正是之前一直缺的那半刀：自己画标题会丢 HDS 观感，置空 `mainTitle` 又不是渐隐。
-    //   · `hideRatio: 3.0`（官方上限）⇒ 内容滚 1vp 标题收 1/3vp，168vp 才收完 —— 不会"一滚就没"；
-    //   · `hideOffset: 0` ⇒ 从开始滚动就进入淡出过程（位置驱动），不是到某个点突变；
-    //   · `hideStatusBar: false` ⇒ 状态栏不动。
-    .dynamicHideTitleBar({
-      hideTitleArea: true,
-      hideStatusBar: false,
-      mode: HideMode.SCROLL_UP,
-      hideOffset: 0,
-      hideRatio: 3.0
-    })
+    // ★★★ 2026-11-05（甲方：「淡出时机过早、吸顶异常。还有搜索按钮是一直在的，不需要淡出」）：
+    //   `dynamicHideTitleBar` 停用 —— 它淡的是**整块标题区域**（连搜索钮一起淡），
+    //   而且会让标题栏高度变化 ⇒ 我们的吸顶线（按固定 94/38 算）失配，吸顶就"异常"了。
+    //   现在的分工：
+    //   · 标题文字：`mainTitle` 恒空，改由 `HeaderInBar()` 自绘，透明度按**位置**算（见 updateChipSticky），
+    //     且窗口靠后（离标题栏 150vp 才淡到 0）⇒ 不会"一滚就没"；
+    //   · 听歌识曲 + 搜索：都留在 HDS **菜单区域**（原生外观），搜索**从不淡出**，识别只在胶囊进栏时收起。
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     .backgroundColor($r('app.color.background_secondary'))
     // 官方一镜到底示例里源页也挂这个（PageOne 的 `NavDestination().transition(OPACITY)`）：
