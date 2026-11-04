@@ -198,6 +198,10 @@ export struct RecommendPage {
   @Local chipInBar: boolean = false;
   /** 栏内纵向位移（vp）：行顶从栏底滑到栏顶时为 56 → 0。 */
   @Local chipBarOffsetVp: number = 0;
+  /** 内容层那份胶囊行的透明度（按位置算：rowY 134→94 时 1→0）。 */
+  @Local chipContentOpacity: number = 1;
+  /** 标题栏内那份胶囊行的透明度（rowY 94→54 时 0→1）。 */
+  @Local chipBarOpacity: number = 0;
   @Local titleSearchShown: boolean = false;
 
   /**
@@ -599,11 +603,26 @@ export struct RecommendPage {
     if (Math.abs(lift - this.chipBarOffsetVp) >= 0.5) {
       this.chipBarOffsetVp = lift;
     }
+    // ★★★ 2026-11-05（甲方：「官方的淡入淡出是由当前位置决定的」）：
+    //   不做"插入/移除"式的 200ms 过渡，而是**按当前位置算透明度**，两段互补：
+    //   · 内容里那一行：`rowY` 从 134 走到 94 时 1 → 0（快贴到栏底就开始淡出）；
+    //   · 栏内那一份：`rowY` 从 94 走到 54 时 0 → 1（进栏后淡入，到 54 已全实）。
+    //   两段在 94 处交接，跟手位移同时进行，所以看到的是"边滑边淡"，不是"啪"一下。
+    const fadeSpan: number = 40;
+    const contentOpacity: number = Math.max(0, Math.min(1, (rowY - barBottom) / fadeSpan));
+    if (Math.abs(contentOpacity - this.chipContentOpacity) >= 0.02) {
+      this.chipContentOpacity = contentOpacity;
+    }
+    const barOpacity: number = Math.max(0, Math.min(1, (barBottom - rowY) / fadeSpan));
+    if (Math.abs(barOpacity - this.chipBarOpacity) >= 0.02) {
+      this.chipBarOpacity = barOpacity;
+    }
     if (sticky !== this.chipStickyActive) {
       this.chipStickyActive = sticky;
       Logger.info('RzdHomeScroll',
         `sticky=${sticky} inBar=${inBar} offset=${offset} rowY=${rowY.toFixed(1)} ` +
-          `rowTop=${this.chipRowTopInContentVp} lift=${lift.toFixed(1)}`);
+          `rowTop=${this.chipRowTopInContentVp} lift=${lift.toFixed(1)} ` +
+          `opacity=${contentOpacity.toFixed(2)}/${barOpacity.toFixed(2)}`);
     }
   }
 
@@ -796,33 +815,34 @@ export struct RecommendPage {
    */
   @Builder
   private StickyChipsInBar() {
-    // Stack(右侧对齐)：胶囊行 + 右侧**渐隐层**（甲方 2026-11-05：
-    // 「吸顶后右侧直接这样不好看，能不能加一层渐隐」——官方就是这么把第 4 个胶囊淡出的）。
-    Stack({ alignContent: Alignment.End }) {
-      Row() {
+    Row() {
+      // ★★★ 2026-11-05（甲方：「右边那层渐隐是加在 Tab 栏部分的右侧，现在看起来在搜索按钮右侧」）：
+      //   渐隐层只包住**胶囊区**（`layoutWeight(1)` 的那块），Row 自己留 56vp 给搜索钮，
+      //   所以渐隐的终点正好落在胶囊区右端，而不是整行最右侧。
+      Stack({ alignContent: Alignment.End }) {
         Column() {
           CategoryChipsSection({ recommendViewModel: this.recommendViewModel })
         }
-        .layoutWeight(1)
-      }
-      .width(StyleConstants.FULL_WIDTH)
-      .height(TitleBarConstants.ROW_HEIGHT_VP)
-      .alignItems(VerticalAlign.Center)
-      .padding({ right: 56 })
+        .width(StyleConstants.FULL_WIDTH)
 
-      // 渐隐层：盖住右端（含搜索钮下方），让胶囊自然淡出而不是硬切。
-      // 终点色用页面底色，故与标题栏模糊底之间的过渡最接近官方观感。
-      Column()
-        .width(96)
-        .height(StyleConstants.FULL_HEIGHT)
-        .linearGradient({
-          direction: GradientDirection.Right,
-          colors: [['#00000000', 0.0], ['#00000000', 0.15], ['#D9000000', 1.0]]
-        })
-        .hitTestBehavior(HitTestMode.Transparent)
+        // 渐隐层：只盖胶囊区右端，让第 4 个胶囊自然溶掉（官方观感）。
+        Column()
+          .width(72)
+          .height(StyleConstants.FULL_HEIGHT)
+          .linearGradient({
+            direction: GradientDirection.Right,
+            colors: [['#00000000', 0.0], ['#00000000', 0.2], ['#D9000000', 1.0]]
+          })
+          .hitTestBehavior(HitTestMode.Transparent)
+      }
+      .layoutWeight(1)
+      .height(TitleBarConstants.ROW_HEIGHT_VP)
     }
     .width(StyleConstants.FULL_WIDTH)
     .height(TitleBarConstants.ROW_HEIGHT_VP)
+    .alignItems(VerticalAlign.Center)
+    // 右侧给「搜索」钮让位（渐隐层在它左边收尾）
+    .padding({ right: 56 })
     // 只有胶囊自己吃点击，其余放行
     .hitTestBehavior(HitTestMode.Transparent)
     // ★★★ 2026-11-04（甲方：「你直接把他们的层级放到标题上面不就行了」）：
@@ -830,10 +850,10 @@ export struct RecommendPage {
     //   位置与内容里那一行完全一致；因为画在 `stackBuilder` 里（背景板之上），
     //   所以它是**清晰的**，不会被标题栏的模糊糊掉。吸顶后 offset 归 0，停在最上方。
     .translate({ y: this.chipStickyActive ? 0 : this.chipBarOffsetVp })
-    // ★ 2026-11-05（甲方：「快吸顶隐藏时是瞬间隐藏了，能不能改成淡入淡出」）：
-    //   进出标题栏这一段用 200ms 透明度过渡，取代硬切。
-    .transition(TransitionEffect.OPACITY
-      .animation({ duration: 200, curve: Curve.EaseInOut }))
+    // ★★★ 2026-11-05（甲方：「官方的淡入淡出是由当前位置决定的」）：
+    //   透明度由 `updateChipSticky()` 按 rowY 算出（`chipBarOpacity` 94→54 走 0→1），
+    //   不再用"插入/移除"式的 transition —— 那样是固定 200ms，与滚动位置无关。
+    .opacity(this.chipStickyActive ? 1 : this.chipBarOpacity)
   }
 
   /**
@@ -1003,6 +1023,8 @@ export struct RecommendPage {
                   }
                   .width(StyleConstants.FULL_WIDTH)
                   .visibility((this.chipStickyActive || this.chipInBar) ? Visibility.Hidden : Visibility.Visible)
+                  // 位置驱动的淡出（与栏内那份的淡入互补，见 updateChipSticky）
+                  .opacity(this.chipContentOpacity)
                   .onAreaChange((_old: Area, area: Area): void => {
                     this.onChipRowAreaChange(area);
                   })
