@@ -65,7 +65,9 @@ export class PlayerViewModel {
    * @returns true = 已改道去 feed 页（调用方不要再开播放页）
    */
   private redirectFeedToTab(): boolean {
-    if (this.appState.queueOrigin !== 'feed') {
+    // ★ 2026-11-03：不再看粘性的 `queueOrigin`，改成「队列所有权」判据 ——
+    //   `isFeedQueue()` = 来源是 feed **且** 队列版本没被任何后续换队列动作推翻。
+    if (!this.appState.isFeedQueue()) {
       return false;
     }
     const tabState: TabSwitchState = AppStorageV2.connect(TabSwitchState,

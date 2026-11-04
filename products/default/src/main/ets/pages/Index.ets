@@ -701,9 +701,9 @@ struct Index {
   onPlaybackIntentChanged() {
     dispatchShellPlaybackIntent(this.appState, this.intentState, () => {
       // 鐩存帴鎸傝捣鎾斁椤靛嵆鍙細灞曞紑鍔ㄧ敾鐢辨挱鏀鹃〉鑷繁鎾紙瑙?playExpandIntro / morphScaleValue锛夈€?
-      if (this.appState.queueOrigin === 'feed') {
+      if (this.appState.isFeedQueue()) {
         // ⑧：当前队列归「现在就听」所有 ⇒ 切到那个 Tab，不打开播放页
-        Logger.info(RzdShellLogTag, 'open player redirected to feed tab (queueOrigin=feed)');
+        Logger.info(RzdShellLogTag, 'open player redirected to feed tab (feedQueue)');
         // ★ 2026-11-01：改用「逻辑下标」并按可见性判定（自定义 Tab 栏后 1 不一定是"现在就听"；它也可能被隐藏）
         const feedLogical: number = this.tabLogicalOf(NOW_PLAYING_TAB_INDEX);
         if (feedLogical >= 0) {
@@ -1338,9 +1338,12 @@ struct Index {
     //   浼氳鍔ㄧ敾璧风偣鏁翠綋鍋忥紙鐢ㄦ埛瀹炴祴鐨?浠庡皝闈㈠亸宸︿笅瑙掑紑濮?锛夈€?
     const morphOk: boolean = this.expandState.pullOpenBegin(this.getUIContext(), this.navDepth > 0);
     if (!this.appState.isShowPlay) {
-      if (this.appState.queueOrigin === 'feed') {
+      // ★ 2026-11-03：判据从「标记」换成「**队列所有权**」（来源 + 队列版本都要对得上）。
+      //   旧写法只看 `queueOrigin === 'feed'`，而那是"谁最后写过"的粘性标记 ⇒
+      //   在 feed 播过之后，任何一条没清标记的换队列路径都会让播放条错误地跳去 feed。
+      if (this.appState.isFeedQueue()) {
         // ⑧：当前队列归「现在就听」所有 ⇒ 切到那个 Tab，不打开播放页
-        Logger.info(RzdShellLogTag, 'open player redirected to feed tab (queueOrigin=feed)');
+        Logger.info(RzdShellLogTag, 'open player redirected to feed tab (feedQueue)');
         // ★ 2026-11-01：改用「逻辑下标」并按可见性判定（自定义 Tab 栏后 1 不一定是"现在就听"；它也可能被隐藏）
         const feedLogical: number = this.tabLogicalOf(NOW_PLAYING_TAB_INDEX);
         if (feedLogical >= 0) {

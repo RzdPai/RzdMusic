@@ -83,23 +83,29 @@ export class PlayerDataUtil {
   /**
    * Toggles between play and pause; if the engine is on its first load, resolves queue index and loadAsset.
    *
+   * ★ 2026-11-03（甲方：「换源后明明在播，按钮却是暂停态」）：判据从**镜像值** `appState.isPlay`
+   * 换成**引擎真值** `media.isActuallyPlaying()`。
+   * `appState.isPlay` 是事件回调里写出来的镜像，换源/切引擎期间会被 AVPlayer 的迟到事件污染
+   * （明明内核在放，镜像却是 false）⇒ 旧写法会把"暂停"错发成"播放"，按钮看起来就是坏的那一颗。
+   * 引擎真值不会骗人；顺便把镜像校正回来（`syncPlayStateFromEngine`），按钮图标下一帧就对了。
    * @param appState Shared state for isPlay and queue indices.
    */
   public static togglePlayPause(appState: MusicAppState): void {
     const media = MediaService.getInstance();
-    if (appState.isPlay) {
+    if (media.isActuallyPlaying()) {
       media.pause();
-    } else {
-      if (media.getFirst()) {
-        if (appState.getQueueLength() === 0) {
-          return;
-        }
-        const idx = appState.selectIndex;
-        const playIndex = idx < 0 || idx >= appState.getQueueLength() ? 0 : idx;
-        media.loadAsset(playIndex);
-      } else {
-        media.play();
-      }
+      return;
     }
+    media.syncPlayStateFromEngine('toggle');
+    if (media.getFirst()) {
+      if (appState.getQueueLength() === 0) {
+        return;
+      }
+      const idx = appState.selectIndex;
+      const playIndex = idx < 0 || idx >= appState.getQueueLength() ? 0 : idx;
+      media.loadAsset(playIndex);
+      return;
+    }
+    media.play();
   }
 }

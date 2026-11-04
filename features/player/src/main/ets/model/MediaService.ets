@@ -542,11 +542,19 @@ export class MediaService {
 
   /** AVPlayer stateChange: drives prepare/play flow, metadata, and auto-next on completion. */
   private stateCall: (state: string) => Promise<void> = async (state: string) => {
+    // ★★★ 2026-11-03（甲方：「换源后明明在播，按钮却显示成暂停」）：
+    //   **出声的引擎可能已经不是 AVPlayer 了**。换源把音源切到内核（mpv/ijk）之后，
+    //   AVPlayer 仍会陆续抛出 paused / stopped / idle，而本回调末尾统一
+    //   `updateIsPlay(this.state === PLAY)` ⇒ 把 `appState.isPlay` 拍成 false，
+    //   于是"正在播却显示暂停"。⇒ 内核接管期间，AVPlayer 的事件只记账、不改对外状态、也不许它自己起播。
+    const kernelOwns: boolean = this.kernelOwnsAudio;
     switch (state) {
       case 'idle':
         Logger.info(TAG, 'AVPlayer state idle called.');
         this.state = AudioPlayerState.IDLE;
-        await this.loadCurrentIntoPlayer();
+        if (!kernelOwns) {
+          await this.loadCurrentIntoPlayer();
+        }
         break;
       case 'initialized':
         Logger.info(TAG, 'AVPlayer state initialized called.');
@@ -571,8 +579,8 @@ export class MediaService {
         appState.totalTime = MediaTools.msToCountdownTime(this.getDuration());
         appState.progressMax = this.getDuration();
         const playedGen: number = this.consumePlayIntent();
-        this.appendPlayLog('[播放] prepared 本次起播=' + (playedGen >= 0));
-        if (playedGen >= 0) {
+        this.appendPlayLog('[播放] prepared 本次起播=' + (playedGen >= 0) + ' kernelOwns=' + kernelOwns);
+        if (playedGen >= 0 && !kernelOwns) {
           this.ensureBackgroundAudioTask();
           this.startPlayback('prepared', playedGen);
         }
@@ -625,7 +633,9 @@ export class MediaService {
       case 'completed':
         Logger.info(TAG, 'AVPlayer state completed called.');
         this.state = AudioPlayerState.COMPLETED;
-        this.playNextAuto(false);
+        if (!kernelOwns) {
+          this.playNextAuto(false);
+        }
         break;
       case 'stopped':
         Logger.info(TAG, 'AVPlayer state stopped called.');
@@ -656,7 +666,10 @@ export class MediaService {
         this.state = AudioPlayerState.UNKNOWN;
         break;
     }
-    this.updateIsPlay(this.state === AudioPlayerState.PLAY);
+    // 内核接管期间不写 `appState.isPlay`：那时 AVPlayer 的相位不代表真实出声（见本回调开头注释）。
+    if (!kernelOwns) {
+      this.updateIsPlay(this.state === AudioPlayerState.PLAY);
+    }
   };
   /** AVSession remote play: loads first asset or resumes local play. */
   private playCall: () =>void = () => {
@@ -1203,6 +1216,45 @@ export class MediaService {
   private lastAfChain: string = '';
   /** 当前是否由 ijk 引擎出声（play/pause/seek 分支据此路由）。 */
   private ijkActive: boolean = false;
+  /**
+   * ★ 2026-11-03：**内核引擎是否持有"出声权"**（`stateCall` 用它决定要不要理 AVPlayer 的事件）。
+   *
+   * 为什么不能直接用 `ijkActive && ijkEngine !== undefined`：
+   * `parkAvPlayerForKernel()` 里 `reset()` 触发的 `idle` 事件是**异步回来**的，
+   * 那一刻内核实例可能还没创建 ⇒ 守卫会判成"内核没接手" ⇒ `stateCall('idle')`
+   * 又去 `loadCurrentIntoPlayer()` 把刚停掉的 AVPlayer 拉起来（双路出声复发）。
+   * 所以改用这个**显式、同步**的标志：起内核前先置真，`releaseIjk()` 里置假。
+   */
+  private kernelOwnsAudio: boolean = false;
+
+  /**
+   * 把 AVPlayer 停到"不出声、也不抢状态"的位置（**内核引擎接手之前必须调**）。
+   *
+   * 为什么必须有这一步：`loadAsset` 的内核分支（`if (this.ijkUrl.length > 0)`）起完内核就
+   * `return`，根本走不到后面那句 `reset()` ⇒ 如果这一拍 AVPlayer 还在放上一首，
+   * 内核会**和它一起响**（甲方实测「有概率两路同时播放」）。
+   * 同时把 `isPrepared` 归零：`stateCall` 里那两处依赖它的判断才不会拿"上一首 AVPlayer 的残留相位"
+   * 去改动对外状态。（⚠️ **不要动 `isCurrent`** —— 它只在 `seekCall` 里恢复成 true，
+   * 这里置假会让后续 AVPlayer 曲目永远不发布进度。）
+   */
+  private parkAvPlayerForKernel(): void {
+    const p: media.AVPlayer | undefined = this.avPlayer;
+    this.isPrepared = false;
+    if (p === undefined) {
+      return;
+    }
+    try {
+      p.pause();
+    } catch (e) {
+      // 已经 idle/stopped 时 pause 会抛，忽略
+    }
+    try {
+      p.reset();
+    } catch (e) {
+      // 同上：reset 在部分相位会抛，忽略
+    }
+    appendPlayLog('[播放] 内核接手：AVPlayer 已挂起（防双路出声）');
+  }
 
   /**
    * 释放 ijk 引擎与轮询。
@@ -1216,6 +1268,7 @@ export class MediaService {
       this.ijkEngine = undefined;
     }
     this.ijkActive = false;
+    this.kernelOwnsAudio = false;
     this.ijkUrl = '';
   }
 
@@ -1291,7 +1344,16 @@ export class MediaService {
    * @param url 已剥壳的直链。
    */
   private startIjkPlayback(url: string): void {
+    // ★★★ 2026-11-03（甲方：「有概率现在就听会和正常的播放同时播放」）：
+    //   换源后新地址若落在内核流上（`ijkUrl` 非空），`loadAsset` 会**直接跑去起内核并 return**，
+    //   而这条路上**从来没有停过 AVPlayer** —— 上一首还在 AVPlayer 里响、内核又开始放新歌，
+    //   两路同时出声。内核成为出声引擎之前，必须先把 AVPlayer 停到"不出声也不抢状态"的位置。
+    // ⚠️ 顺序不能换：先 `releaseIjk()`（清上一路内核 + 清所有权），
+    //   再**同步**置 `kernelOwnsAudio`，最后才 park —— 否则 `reset()` 异步回来的 idle 事件
+    //   会把刚停掉的 AVPlayer 又拉起来（见 `kernelOwnsAudio` 注释）。
     this.releaseIjk();
+    this.kernelOwnsAudio = true;
+    this.parkAvPlayerForKernel();
     const engine: AudioKernel = createKernel(preferredKernel());
     this.ijkEngine = engine;
     this.ijkActive = true;
@@ -1916,6 +1978,8 @@ export class MediaService {
       appState.playQueueIds = [];
       appState.playQueue = [item];
       appState.selectIndex = 0;
+      // 启动恢复=普通队列；顺手清掉「现在就听」的队列所有权（否则播放条分流会认错页）
+      appState.markQueueReplaced('playlist');
       // ★ 用户 2026-10-29：「启动时就不进行准备」——开机不要预先解析/加载，
       //   否则回退链会在后台跑起来，用户没点播放也会自动出声。
       //   只在「启动应用自动播放」打开时才真的 loadAsset。
@@ -1961,6 +2025,8 @@ export class MediaService {
       appState.playQueue = items;
       appState.playQueueIds = snapshot.localIds;
       appState.selectIndex = snapshot.index;
+      // 启动恢复=普通队列（清「现在就听」的队列所有权，理由同上）
+      appState.markQueueReplaced('playlist');
       this.musicIndex = snapshot.index;
       // ★ 恢复出来的直链可能已过期（真机日志：kuwo 410 IO Resource Not Found），
       //   启动恢复时把在线歌曲的 http 直链清空，让播放链路重新取址（走统一回退链）。
@@ -2944,6 +3010,38 @@ export class MediaService {
     return this.getAppState().isPlay;
   }
 
+  /**
+   * @returns **引擎层真值**：现在到底有没有出声（不看 `appState.isPlay` 这个镜像）。
+   *
+   * 镜像值是在一堆事件回调里写出来的，换源/切内核期间会被**迟到的 AVPlayer 事件**污染
+   * （内核在放，镜像却是 false ⇒ 播放键显示成"暂停"）。凡"按一下要切换状态"的地方
+   * （`PlayerDataUtil.togglePlayPause` 等）都该问这里，而不是问镜像。
+   */
+  public isActuallyPlaying(): boolean {
+    if (this.ijkActive && this.ijkEngine !== undefined) {
+      try {
+        return this.ijkEngine.isPlaying();
+      } catch (e) {
+        return false;
+      }
+    }
+    return this.isPrepared && this.state === AudioPlayerState.PLAY;
+  }
+
+  /**
+   * 把 `appState.isPlay` 校正成引擎真值（幂等；不一致才写 + 打日志）。
+   * @param reason 触发点，写进日志方便 grep：`RzdPlaySync`。
+   */
+  public syncPlayStateFromEngine(reason: string): void {
+    const truth: boolean = this.isActuallyPlaying();
+    const mirror: boolean = this.getAppState().isPlay;
+    if (mirror === truth) {
+      return;
+    }
+    appendPlayLog(`[RzdPlaySync] isPlay ${mirror}->${truth} reason=${reason} kernel=${this.ijkActive ? 1 : 0}`);
+    this.updateIsPlay(truth);
+  }
+
   /** Updates MusicAppState.isPlay and AVSession playback state snapshot. */
   private updateIsPlay(isPlay: boolean) {
     this.getAppState().isPlay = isPlay;
@@ -3041,6 +3139,12 @@ export class MediaService {
    * Starts or resumes playback; triggers prepare if the player is not prepared yet.
    */
   public async play() {
+    // ★ 2026-11-03：内核已声明接管、但实例还没创建好的那一小段窗口里，
+    //   任何 play() 都不能落到下面的 AVPlayer 分支（否则又会把 AVPlayer 拉起来 = 双路出声）。
+    if (this.kernelOwnsAudio && this.ijkEngine === undefined) {
+      this.appendPlayLog('[播放] 内核接管中，忽略本次 play()');
+      return;
+    }
     // ★ 汽水走 ijk 引擎时，play/pause/seek 全部路由过去（AVPlayer 此时保持 idle）
     if (this.ijkActive && this.ijkEngine !== undefined) {
       this.ijkEngine.start();

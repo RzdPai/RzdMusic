@@ -32,8 +32,46 @@ export class  MusicAppState {
    *
    * ★ 2026-10-24（甲方：「其它界面点击播放条时，如果是现在就听的就跳转现在就听页面」）：
    *   壳层的迷你播放条点击据此分流：`'feed'` → 切到「现在就听」Tab，其余 → 打开播放页。
+   *
+   * ★★★ 2026-11-03（甲方：「有的时候播放条处于正常播放时点击也会跳转现在就听」）：
+   *   **这个字段单独不可信** —— 它是个"谁最后写过"的粘性标记，而全仓有十几处
+   *   `playQueue = ...` / `replaceQueue(...)` 的替换点，漏写一处就永远停在旧值上。
+   *   现在配一对**队列版本号**：{@link queueRevision} 每次替换队列 +1，
+   *   {@link feedQueueRevision} 记录 feed 接管时的版本；壳层一律用 {@link isFeedQueue()} 判断，
+   *   只要中间有人换过队列，两者就对不上 ⇒ 自动判成"不归 feed"。
    */
   @Trace public queueOrigin: string = '';
+  /** 队列身份版本：**每次整条替换队列**都必须 +1（走 {@link markQueueReplaced}）。 */
+  @Trace public queueRevision: number = 0;
+  /** 「现在就听」接管时的 `queueRevision`；-1 = 当前队列不属于它。 */
+  @Trace public feedQueueRevision: number = -1;
+
+  /**
+   * 整条队列被替换时调用（**唯一出口语义**）：登记来源，并作废上一任所有者。
+   *
+   * 为什么要把"来源"和"版本"绑一起：壳层的分流判据必须能**自动失效** ——
+   * 只要有任何一处换了队列，{@link isFeedQueue} 立刻变假，不依赖每个调用点都记得清标记。
+   * @param origin 'feed' | 'playlist'（feed 请用 {@link markFeedQueue}）
+   */
+  public markQueueReplaced(origin: string): void {
+    this.queueRevision++;
+    this.queueOrigin = origin;
+    if (origin !== 'feed') {
+      this.feedQueueRevision = -1;
+    }
+  }
+
+  /** 「现在就听」组完自己那份队列（或确认队列就是自己那份）后调用。 */
+  public markFeedQueue(): void {
+    this.queueRevision++;
+    this.queueOrigin = 'feed';
+    this.feedQueueRevision = this.queueRevision;
+  }
+
+  /** @returns 当前队列是否**仍**归「现在就听」所有（壳层/播放条据此分流）。 */
+  public isFeedQueue(): boolean {
+    return this.queueOrigin === 'feed' && this.feedQueueRevision === this.queueRevision;
+  }
   /**
    * 「弹回根页」请求版本号：任意页 +1 后，壳层（`Index.ets`）会把导航栈清回根，
    * 用于「二级页面里点播放条 → 跳到现在就听」这种需要**跨页**退栈的场景。
@@ -156,5 +194,7 @@ export class  MusicAppState {
     this.playQueueIds = [];
     this.playQueue = queue;
     this.selectIndex = index;
+    // ★ 换了整条队列 ⇒ 队列所有权必然易主（不能让「现在就听」的标记粘到新队列上）。
+    this.markQueueReplaced('playlist');
   }
 }

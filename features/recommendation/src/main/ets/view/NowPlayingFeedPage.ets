@@ -2080,6 +2080,10 @@ export struct NowPlayingFeedPage {
       // ★ 必须**显式**写 false：它是壳层"要不要打开播放器"的唯一判据（`if (openUi)`）
       intent.openPlayerUi = false;
       intent.requestVersion++;
+      // ★★ 2026-11-03：这条分支也要**续期队列所有权**。以前只有"重新组队列"那条写 `'feed'`，
+      //   于是"队列本来就是 feed 那份、只是换一首"时来源标记可能还停在 `'playlist'`
+      //   ⇒ 点播放条反而打开了普通播放页（和用户报的另一个方向正好相反，同一条判据）。
+      this.appState.markFeedQueue();
       Logger.info(RZD_TAG,
         `play switch index=${target} ${row.source}_${row.songId} (intent v=${intent.requestVersion})`);
       return;
@@ -2095,7 +2099,9 @@ export struct NowPlayingFeedPage {
     }
     void OnlinePlayUtil.playList(this.appState, songs, target, this.getUIContext(), false);
     // ★ 2026-11-01：playList 内部会统一置 'playlist'，这里必须在它之后覆盖回 'feed'
-    this.appState.queueOrigin = 'feed';
+    // ★ 2026-11-03：改用 `markFeedQueue()` —— 它同时登记**队列版本**，
+    //   之后任何一处换了队列都会让它自动失效（见 `MusicAppState.isFeedQueue()`）。
+    this.appState.markFeedQueue();
     // ① 写回**自家栈**：下一次 `playAt` 的身份判据只看它（不再从 appState.playQueue 反推）
     const entries: FeedQueueEntry[] = [];
     for (let i: number = 0; i < this.feedSource.totalCount(); i++) {
