@@ -88,6 +88,25 @@ export const COMMENT_PAGE_SIZE: number = 15;
 /** 有评论接口的平台。 */
 export const COMMENT_SUPPORTED_SOURCES: string[] = ['kw', 'kg', 'mg', 'tx', 'wy'];
 
+/**
+ * ⛔ 汽水（qs）**暂不支持评论**（2026-11-04 实测，别再盲试）：
+ *
+ * 外部参考实现 `guowenye/qishui-api` 里确实有这样的调用：
+ * ```
+ * GET https://beta-luna.douyin.com/luna/comments
+ *     ?group_id=<track_id>&cursor=&count=20&group_type=track
+ *     &image_strategy=tplv-luna-shrink:200:200&sort_type=hot
+ * ```
+ * 但**匿名调用拿不到数据**：本机实测 4 种参数形态（cursor/count/device_platform/aid…）
+ * 全部返回 `HTTP 200` + **`Content-Length: 0`**（响应头带 `x-tt-logid`，说明请求被受理但没有内容）
+ * ⇒ 该接口要 **登录态**（`sessionid` / `ttwid` cookie），和「我的歌单」「收藏」那批一样。
+ * 该仓库的 README 能力表里也**没有**把评论列进"已验证"。
+ *
+ * 结论：等「汽水账号登录」接上（`/auth/qrcode` 那套）再回来接评论；
+ * 在那之前**不要**把 'qs' 加进下面的数组 —— 否则评论面板会变成"永远空列表"，
+ * 比明确提示不支持更糟。
+ */
+
 /** 这个平台有没有评论接口。 */
 export function commentsSupported(source: string): boolean {
   return COMMENT_SUPPORTED_SOURCES.indexOf(source) >= 0;

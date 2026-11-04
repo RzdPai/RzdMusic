@@ -1,5 +1,9 @@
 import axios, { AxiosResponse } from '@ohos/axios';
 import { qsSearchTracks } from '../geuz/QsApi';
+// ★ 2026-11-04：汽水的歌词/封面只能走内置的 Luna H5 SEO（汽水没有 LX 脚本）。
+//   与 `QsApi` 分开一个文件是**为了避循环依赖**：`QsApi` 反过来 import 本文件的类型，
+//   而 `QsLyric` 只依赖 `@kit.NetworkKit`。
+import { qsCoverUrl, qsLyricText } from '../geuz/QsLyric';
 import CryptoJS from '@ohos/crypto-js';
 import { zlib } from '@kit.BasicServicesKit';
 import { http } from '@kit.NetworkKit';
@@ -992,6 +996,12 @@ export async function lxGetPicFallback(source: string, songId: string, albumId?:
   let result: string = '';
   try {
     switch (source) {
+      case 'qs': {
+        // ★ 2026-11-04：汽水没有 LX 脚本 ⇒ 封面走内置 Luna H5 SEO
+        //   （`seo_track.track.album.url_cover`，顺带把歌词一起缓存下来）。
+        result = await qsCoverUrl(songId);
+        break;
+      }
       case 'kw': {
         // artistpicserver returns a plain image url.
         const url: string = 'https://artistpicserver.kuwo.cn/pic.web?corp=kuwo&type=rid_pic&pictype=500&size=500&rid=' +
@@ -1846,6 +1856,18 @@ export async function lxGetLyricFull(source: string, songId: string, name?: stri
       }
       if (numId.length > 0) {
         return await qqLyricV4Full(numId);
+      }
+    }
+    if (source === 'qs') {
+      // ★ 2026-11-04（甲方：「汽水比别的平台缺好多接口，歌词评论等」）：
+      //   汽水**不是 LX 脚本平台**，`lxGetLyricFallback` 那条链路对它永远是空的；
+      //   歌词只能走内置的 Luna H5 SEO（`geuz/QsLyric.ets` → `luna/h5/seo_track`）。
+      //   拿回来的是**已归一化**的 QRC（逐字时间轴），UI 侧 `amllParseQrc` 直接能吃。
+      //   排查关键字：`RzdSoda`。
+      const qsQrc: string = await qsLyricText(songId);
+      if (qsQrc.length > 0) {
+        const qsResult: LyricFullResult = { main: qsQrc, translation: '', romanLyric: '' };
+        return qsResult;
       }
     }
     const main: string = await lxGetLyricFallback(source, songId, name, singer);
