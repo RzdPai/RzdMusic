@@ -1833,6 +1833,16 @@ export class MediaService {
     songItem.playCached = false;
     if (outcome.switched) {
       // 原源不可用已换源：队列条目改为新源歌曲，后续歌词/封面/下载都走新源
+      // ★★ 2026-11-04（甲方：「现在就听页换源之后按钮状态还是不对」）：
+      //   **改写之前**先记下原始身份 —— UI 判"这一屏是不是正在播的那首"就是拿
+      //   `queue[selectIndex].source/songId` 跟行数据比；这一对一被改掉，
+      //   播放键就画成"播放"（明明在响），点它还会走 `playAt()` 重新组队列（重播/双路）。
+      //   排查关键字：`RzdIdentity`。
+      const originSource: string = songItem.source;
+      const originSongId: string = songItem.songId;
+      this.getAppState().noteSwitchedIdentity(originSource, originSongId);
+      appendPlayLog('[RzdIdentity] 换源 ' + originSource + '|' + originSongId +
+        ' → ' + outcome.source + '|' + outcome.songId);
       songItem.source = outcome.source;
       songItem.songId = outcome.songId;
       if (outcome.albumName.length > 0 && songItem.albumName.length === 0) {
@@ -2818,6 +2828,9 @@ export class MediaService {
     this.scrubberSeekInFlight = false;
     this.scrubberQueuedSeek = undefined;
     this.getAppState().seekResetRevision++;
+    // ★ 2026-11-04：新一轮装载 ⇒ 上一次的"换源前身份"失效（否则会把旧别名误认成当前这首）。
+    //   之后 `resolveOnlineUrl` 若真的换源，会在这条链里重新记一次。
+    this.getAppState().clearSwitchedIdentity();
     // 主动加载新歌即取消尚未执行的一次错误恢复，避免旧定时器干扰新播放
     this.errorRecoveryPending = false;
     // ★ 起播意图必须在**函数最前面**声明：下面 resolveOnlineUrl 是异步的，期间可能
@@ -3363,7 +3376,8 @@ export class MediaService {
   /** Writes selectIndex to MusicAppState and refreshes AVSession metadata when index changes. */
   private updateMusicIndex(musicIndex: number) {
     Logger.info(TAG, 'updateMusicIndex ===> ' + musicIndex);
-    this.getAppState().selectIndex = musicIndex;
+    const st = this.getAppState();
+    st.selectIndex = musicIndex;
     if (this.musicIndex !== musicIndex) {
       this.musicIndex = musicIndex;
     }

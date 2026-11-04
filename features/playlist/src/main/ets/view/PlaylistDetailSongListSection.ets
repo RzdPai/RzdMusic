@@ -370,14 +370,10 @@ export struct PlaylistDetailSongListSection {
    * @returns 是否当前播放
    */
   private isCurrentSong(item: PlaylistSongUi): boolean {
-    const cur: SongItem | undefined = this.appState.getCurrentSongItem();
-    if (cur === undefined) {
-      return false;
-    }
-    if (cur.source !== item.source) {
-      return false;
-    }
-    return cur.songId === item.songId;
+    // ★ 2026-11-04：换源会把队列条目的 `source/songId` 改写成新源 ⇒ 纯比对认不出"当前这首"
+    //   （观感＝列表里"正在播放"的高亮/图标消失）。统一走 `isCurrentRowIdentity()`：
+    //   它多认一次"换源前的原始身份"。
+    return this.appState.isCurrentRowIdentity(item.source, item.songId);
   }
 
   /** `backdropColor` 是 `rgb(r, g, b)` 或 `#RRGGBB`；按相对亮度判定"浅底"。 */

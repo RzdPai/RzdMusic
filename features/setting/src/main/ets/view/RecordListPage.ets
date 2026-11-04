@@ -420,14 +420,9 @@ export struct RecordListPage {
    * @returns 是否当前播放
    */
   private isCurrentRecord(record: PlayedSongRecord): boolean {
-    const cur: SongItem | undefined = this.appState.getCurrentSongItem();
-    if (cur === undefined) {
-      return false;
-    }
-    if (cur.source !== record.source) {
-      return false;
-    }
-    return cur.songId === record.songId;
+    // ★ 2026-11-04：同 `PlaylistDetailSongListSection.isCurrentSong` —— 换源后身份被改写，
+    //   纯比对会丢掉"正在播放"高亮；统一走 `isCurrentRowIdentity()`（多认换源前的原始身份）。
+    return this.appState.isCurrentRowIdentity(record.source, record.songId);
   }
 
   /** 当前播放那首在本列表里的下标（找不到 -1）。 */

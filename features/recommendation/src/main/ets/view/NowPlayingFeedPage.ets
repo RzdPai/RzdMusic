@@ -2133,7 +2133,12 @@ export struct NowPlayingFeedPage {
     for (let i: number = 0; i < total; i++) {
       const row: RecommendPrivateSongUi = this.feedSource.getData(i);
       if (queue[i].source !== row.source || queue[i].songId !== row.songId) {
-        return false;
+        // ★ 2026-11-04：换源会把**当前这一首**的身份改写成新源 ⇒ 不能因此判"整队不匹配"
+        //   （否则下次 playAt 会重建队列 + 重解析 = 又从头放一遍）。
+        //   只要这一行的原始身份就是"换源前的那一对"，就算同一条。
+        if (!this.appState.matchesSwitchedIdentity(row.source, row.songId)) {
+          return false;
+        }
       }
     }
     return true;
@@ -2141,11 +2146,14 @@ export struct NowPlayingFeedPage {
 
   /** 当前这一屏是否就是全局在播的那首（决定播放按钮画"播放"还是"暂停"）。 */
   private isCurrentSong(row: RecommendPrivateSongUi): boolean {
-    const item = this.appState.getCurrentSongItem();
-    if (item === undefined) {
-      return false;
-    }
-    return item.source === row.source && item.songId === row.songId;
+    // ★★ 2026-11-04（甲方：「现在就听页换源之后按钮状态还是不对」）：**换源会改掉队列条目的身份**。
+    //   `MediaService.resolveOnlineUrl` 跨平台换源成功时会把 `queue[selectIndex].source/songId`
+    //   改写成新源（播放/取词必须走新源），于是"条目身份 === 行身份"永远不成立 ⇒
+    //   播放键画成"播放"（明明在响）、歌词与进度也退回"非当前曲"的样式，
+    //   点它还走 `playAt()` 重新组队列（会重播、甚至双路出声）。
+    //   ⇒ `isCurrentRowIdentity()` 会多认一次**换源前的原始身份**（`MusicAppState.switchedOrigin*`，
+    //     `loadAsset` 开头自清）。
+    return this.appState.isCurrentRowIdentity(row.source, row.songId);
   }
 
   /**
@@ -2278,7 +2286,7 @@ export struct NowPlayingFeedPage {
       return;
     }
     const total: number = this.feedSource.totalCount();
-    const index: number = this.feedIndexOf(cur.source, cur.songId);
+    const index: number = this.currentRowIndex();
     if (index < 0) {
       // 在播的不是本页的歌（别处换过队列）⇒ 本页不该插手
       return;
@@ -2302,6 +2310,34 @@ export struct NowPlayingFeedPage {
     for (let i: number = 0; i < total; i++) {
       const row: RecommendPrivateSongUi = this.feedSource.getData(i);
       if (row.source === source && row.songId === songId) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  /**
+   * @returns 全局在播这首在**本页**里的行下标；-1 = 不在本页。
+   *
+   * ★★ 2026-11-04：换源会改写队列条目的 `source/songId`（新源），
+   *   直接拿 `cur.source/songId` 去 `feedIndexOf` 会**查不到**（返回 -1）⇒
+   *   本页会把"正在播的歌"当成"不是我家的"，于是切回本页签时 `ensureAutoplay()` 会重新起播/重组队列。
+   *   这里补一条：若库里记着"当前这一位的换源前身份"，就用它回指那一行。
+   */
+  private currentRowIndex(): number {
+    const cur: SongItem | undefined = this.appState.getCurrentSongItem();
+    if (cur === undefined) {
+      return -1;
+    }
+    const byIdentity: number = this.feedIndexOf(cur.source, cur.songId);
+    if (byIdentity >= 0) {
+      return byIdentity;
+    }
+    // 换源后条目身份已被改写成新源 ⇒ 用"换源前的那一对"回指；一对只对应一行。
+    const total: number = this.feedSource.totalCount();
+    for (let i: number = 0; i < total; i++) {
+      const row: RecommendPrivateSongUi = this.feedSource.getData(i);
+      if (this.appState.matchesSwitchedIdentity(row.source, row.songId)) {
         return i;
       }
     }
@@ -2358,7 +2394,7 @@ export struct NowPlayingFeedPage {
     }
     const cur: SongItem | undefined = this.appState.getCurrentSongItem();
     if (cur !== undefined) {
-      const index: number = this.feedIndexOf(cur.source, cur.songId);
+      const index: number = this.currentRowIndex();
       if (index >= 0) {
         // ★ 2026-10-24（甲方：「在正常播放器播了一首歌，再切到现在就听，始终是那首歌」）：
         //   原来只要"正在播的那首恰好在 feed 里"就直接早退 ⇒ 用户在**别的页面**起的播，

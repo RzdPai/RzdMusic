@@ -56,6 +56,7 @@ export class  MusicAppState {
   public markQueueReplaced(origin: string): void {
     this.queueRevision++;
     this.queueOrigin = origin;
+    this.clearSwitchedIdentity();
     if (origin !== 'feed') {
       this.feedQueueRevision = -1;
     }
@@ -66,11 +67,65 @@ export class  MusicAppState {
     this.queueRevision++;
     this.queueOrigin = 'feed';
     this.feedQueueRevision = this.queueRevision;
+    this.clearSwitchedIdentity();
   }
 
   /** @returns 当前队列是否**仍**归「现在就听」所有（壳层/播放条据此分流）。 */
   public isFeedQueue(): boolean {
     return this.queueOrigin === 'feed' && this.feedQueueRevision === this.queueRevision;
+  }
+
+  /**
+   * 换源前的**原始身份**（当前正在播的那首，只在它身上有效）。
+   *
+   * 背景（2026-11-04，甲方：「现在就听页换源之后按钮状态还是不对」）：
+   * 换源成跨平台成功时，`MediaService.resolveOnlineUrl` 会把**队列条目自己的**
+   * `source/songId` 改写成新源（播放/取词/下载都得走新源，这是对的）；
+   * 但 UI 判"这一屏是不是正在播的那首"用的是 `queue[selectIndex].source/songId` 与行的比对
+   * ⇒ 换源之后这一对被换掉，"当前这首"就**认不出来**了：
+   * 播放键画成"播放"（明明在响）、歌词/进度退回"非当前曲"的样式，
+   * 点那颗键还会走 `playAt()` 重新组队列（重播，甚至双路出声）。
+   * ⇒ 改写之前把原始对记在这里，UI 判等内容时多认一次。
+   *
+   * ⚠️ **只记"一对身份"，不记下标**：解析那一刻 `MediaService.musicIndex` 还是**旧值**
+   *   （`updateMusicIndex` 在其后），按下标记会把别名挂到错的位置上。
+   * 生命周期：每次 `MediaService.loadAsset()` 开头清空（= 换歌/重试都会重置），
+   *   换整条队列时（{@link markQueueReplaced}/{@link markFeedQueue}）也清。
+   */
+  @Trace public switchedOriginSource: string = '';
+  @Trace public switchedOriginSongId: string = '';
+
+  /** 记录"这次换源之前它是谁"（调用点：`MediaService.resolveOnlineUrl` 的换源分支）。 */
+  public noteSwitchedIdentity(source: string, songId: string): void {
+    this.switchedOriginSource = source;
+    this.switchedOriginSongId = songId;
+  }
+
+  /** @returns 这一对身份是不是"换源前的那一对"（调用方再自行确认它就是当前这首）。 */
+  public matchesSwitchedIdentity(source: string, songId: string): boolean {
+    return this.switchedOriginSource.length > 0 && this.switchedOriginSource === source &&
+      this.switchedOriginSongId === songId;
+  }
+
+  /** 清掉换源身份（换歌 / 换整条队列时调，防止旧身份误命中）。 */
+  public clearSwitchedIdentity(): void {
+    this.switchedOriginSource = '';
+    this.switchedOriginSongId = '';
+  }
+
+  /**
+   * @returns 这一行**就是**当前在播那首吗（含"换源后身份被改写"的情况）。
+   * 换源后队列条目已经是新源，但它换源前的身份等于这一行 ⇒ 仍是当前这首。
+   */
+  public isCurrentRowIdentity(rowSource: string, rowSongId: string): boolean {
+    const item = this.getCurrentSongItem();
+    if (item === undefined) {
+      return false;
+    }
+    if (item.source === rowSource && item.songId === rowSongId) {
+      return true;
+    }
+    return this.matchesSwitchedIdentity(rowSource, rowSongId);
   }
   /**
    * 「弹回根页」请求版本号：任意页 +1 后，壳层（`Index.ets`）会把导航栈清回根，
