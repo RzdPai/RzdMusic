@@ -678,10 +678,12 @@ export class AmllCanvasLyricRenderer {
 
     ctx.save();
     ctx.globalAlpha = amllClamp01(group.opacity);
-    // Quantized, bounded blur only for visible groups. Touch scrolling renders sharp text.
-    const blurRadius: number = !this.blurEnabled || this.engine.isTouchScrolled ? 0 :
-      Math.min(6, Math.round(Math.max(0, group.blur) / 2) * 2);
-    ctx.filter = blurRadius >= 2 ? `blur(${blurRadius}px)` : 'none';
+    // ★★★ 2026-11-04（甲方：「模糊可以不要，只要帧率上去就行」）：
+    //   **不再做逐帧模糊**。Canvas 2D 的 `ctx.filter = blur(Npx)` 每次绘制都会触发一次离屏模糊，
+    //   可见行 + 和声行各一次 ⇒ 这是整个歌词渲染里最贵的一项，也是帧率上不去的主力。
+    //   "焦点"改由 opacity / 字号 / 颜色区分（引擎照旧算 group.blur，只是这里不再用它，
+    //   将来若要加回模糊，把它接成一次性离屏层即可）。
+    ctx.filter = 'none';
     ctx.shadowBlur = 0;
 
     // 主行缩放（transform-origin: left；对唱行 transform-origin: right）
@@ -743,10 +745,9 @@ export class AmllCanvasLyricRenderer {
     const bgOriginX: number = group.isBgFirst ? 0 : this.padX;
     ctx.save();
     ctx.globalAlpha *= 0.4 * alpha;
-    // Preserve the original backing-vocal blur reveal, with only cost bounds changed.
-    const transitionBlur: number = !this.blurEnabled || this.engine.isTouchScrolled ? 0 :
-      Math.min(6, Math.round((1 - alpha) * 20 / 2) * 2);
-    ctx.filter = transitionBlur >= 2 ? `blur(${transitionBlur}px)` : 'none';
+    // ★ 2026-11-04：和声行的"模糊淡入"改成**纯透明度淡入**（`globalAlpha` 已按 alpha 走），
+    //   不再逐帧 `ctx.filter` 模糊。硬切感由下面的边缘柔化 + alpha 过渡兜住。
+    ctx.filter = 'none';
     ctx.beginPath();
     ctx.rect(this.padX, spaceTop, this.contentWidth, spaceH);
     ctx.clip();

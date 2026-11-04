@@ -28,6 +28,7 @@ import { AmllLayoutAlignAnchor } from '../core/AmllConsts';
 import { AppStorageKeys, Logger, LyricCenterState, LyricFpsState, MusicStoreService, ShowSubLyricState, WindowUtil } from 'musicbasic';
 import { BusinessError, pasteboard } from '@kit.BasicServicesKit';
 import { AppStorageV2, FrameCallback, window } from '@kit.ArkUI';
+import { displaySync } from '@kit.ArkGraphics2D';
 
 /** 触摸拖动意图阈值（对应 AMLL 的 10px） */
 const TOUCH_INTENT_PX: number = 10;
@@ -37,14 +38,23 @@ const INERTIA_STOP_SPEED: number = 0.05;
 const INERTIA_DECAY: number = 0.95;
 /** 松手后自动对齐回归延迟（毫秒） */
 const AUTO_ALIGN_DELAY_MS: number = 3000;
-/** 帧间隔兜底值（毫秒，120Hz 设备 vsync 间隔 ≈8.3ms）；实际帧率由 postFrameCallback 跟随屏幕刷新率 */
+/** 帧间隔兜底值（毫秒，120Hz 设备 vsync 间隔 ≈8.3ms）；实际帧率由帧驱动决定 */
 const FRAME_INTERVAL_MS: number = 8;
 /** 本地时钟与外部进度的最大偏差（毫秒），超过则视为跳转 */
 const CLOCK_DRIFT_LIMIT_MS: number = 250;
+/** 帧率申请的**下限**（保底帧率，系统省电/降频时也不会低于它努力） */
+const LYRIC_FPS_MIN: number = 60;
+/** 帧率申请的**上限**（再高也没意义：屏幕最高一般 120） */
+const LYRIC_FPS_MAX: number = 120;
 
 /**
- * VSync 帧回调（由 UIContext.postFrameCallback 驱动，跟随屏幕刷新率：
- * 60Hz 设备 60FPS、120Hz 设备 120FPS；窗口不可见时系统自动暂停回调）。
+ * VSync 帧回调 —— **兜底路径**（`postFrameCallback`），仅在 `displaySync` 不可用时使用。
+ *
+ * ★ 2026-11-04（甲方：「我们现在帧率低，实际动画比无界好」）：主路径已换成
+ *   `displaySync.create()` + `setExpectedFrameRateRange({expected, min, max})`，
+ *   因为 **`postFrameCallback` 只是"下一帧叫我"，帧率完全取决于系统当前给多少帧**——
+ *   应用不申请高帧率时多数场景只有 60，120Hz 屏也白搭。
+ *   （对照：无界 `views.LyricsView` 三处 `{min:60,max:120,expected:120}`。）
  */
 class FrameTicker extends FrameCallback {
   private onTick: () => void = (): void => {
@@ -109,6 +119,15 @@ export struct AmllLyricView {
   private engine: AmllLyricPlayerEngine = new AmllLyricPlayerEngine();
   private renderer: AmllCanvasLyricRenderer | undefined = undefined;
   private frameTicker: FrameTicker = new FrameTicker();
+  /**
+   * 主帧驱动：`displaySync`（期望帧率由设置页的「歌词帧率」决定，默认 120，下限 60）。
+   * `undefined` = 本设备/本 API 版本不支持，退回 `postFrameCallback` 兜底。
+   */
+  private frameSync: displaySync.DisplaySync | undefined = undefined;
+  /** displaySync 是否已 start（避免重复 start / 重复 stop） */
+  private syncStarted: boolean = false;
+  /** displaySync 创建失败过（只记一次，别每首歌都试） */
+  private syncUnavailable: boolean = false;
   private lastFrameTime: number = 0;
   private isFrameLoopRunning: boolean = false;
   /** 本地播放时钟（毫秒） */
@@ -174,6 +193,22 @@ export struct AmllLyricView {
   @Monitor('lyricFpsState.fps')
   onLyricFpsChanged(): void {
     this.fpsLimit = this.lyricFpsState.fps;
+    // ★ 2026-11-04：设置页改帧率要**真的生效** —— 把新的期望值重新提交给 displaySync
+    //   （它只认最近一次 setExpectedFrameRateRange）。
+    if (this.frameSync !== undefined) {
+      try {
+        this.frameSync.setExpectedFrameRateRange({
+          expected: this.expectFps(),
+          min: LYRIC_FPS_MIN,
+          max: LYRIC_FPS_MAX
+        });
+        Logger.info('RzdLyricPerf', `frame-driver=displaySync re-requested expected=${this.expectFps()}`);
+      } catch (e) {
+        const err: Error = e as Error;
+        Logger.warn('RzdLyricPerf', 'setExpectedFrameRateRange failed: ' +
+          (err !== undefined && err.message !== undefined ? err.message : '').substring(0, 80));
+      }
+    }
   }
 
   @Monitor('lyricCenterState.enabled')
@@ -271,9 +306,42 @@ export struct AmllLyricView {
    * 启动帧循环（UIContext.postFrameCallback 驱动，跟随屏幕刷新率：
    * 60Hz 设备 60FPS、120Hz 设备 120FPS；窗口不可见时系统自动暂停回调）。
    */
+  /**
+   * 启动帧循环。
+   *
+   * ★ 2026-11-04：主路径 = `displaySync`（**主动申请**帧率）；`postFrameCallback` 只做兜底。
+   *   `displaySync` 还给 `IntervalInfo.timestamp`（本帧到达时间，**纳秒**），
+   *   用它推进动画比 `Date.now()` 准（`Date.now()` 量的是 JS 执行到某行的时间，会被排队抖动污染）。
+   */
   private startFrameLoop(): void {
-    this.lastFrameTime = Date.now();
     this.isFrameLoopRunning = true;
+    // 时间基准由帧回调提供 ⇒ 第一帧 elapsed 必然很大，会被 dt 上限夹到 FRAME_INTERVAL_MS
+    this.lastFrameTime = 0;
+    const sync: displaySync.DisplaySync | undefined = this.ensureFrameSync();
+    if (sync !== undefined) {
+      this.frameTicker.setTick((): void => {
+        this.onFrame();
+      });
+      if (!this.syncStarted) {
+        this.syncStarted = true;
+        try {
+          sync.start();
+          Logger.info('RzdLyricPerf', `frame-driver=displaySync expected=${this.expectFps()} min=${LYRIC_FPS_MIN} ` +
+            `max=${LYRIC_FPS_MAX} userLimit=${this.fpsLimit}`);
+        } catch (e) {
+          const err: Error = e as Error;
+          this.syncStarted = false;
+          this.frameSync = undefined;
+          this.syncUnavailable = true;
+          const msg: string = (err !== undefined && err.message !== undefined) ? err.message : '';
+          Logger.warn('RzdLyricPerf', 'displaySync start failed, fallback=postFrameCallback: ' +
+            msg.substring(0, 120));
+          this.getUIContext().postFrameCallback(this.frameTicker);
+        }
+      }
+      return;
+    }
+    // 兜底：postFrameCallback（帧率取决于系统当前给多少帧，通常是 60）
     this.frameTicker.setTick((): void => {
       this.onFrame();
     });
@@ -282,11 +350,71 @@ export struct AmllLyricView {
 
   private stopFrameLoop(): void {
     this.isFrameLoopRunning = false;
+    if (this.frameSync !== undefined && this.syncStarted) {
+      this.syncStarted = false;
+      try {
+        this.frameSync.stop();
+      } catch (e) {
+        const err: Error = e as Error;
+        Logger.warn('RzdLyricPerf', 'displaySync stop failed: ' +
+          (err !== undefined && err.message !== undefined ? err.message : '').substring(0, 80));
+      }
+    }
   }
 
-  /** 请求下一帧回调（仅在帧循环运行时生效）。 */
+  /** 设置页「歌词帧率」→ 实际申请的帧率（0/非法值按上限处理）。 */
+  private expectFps(): number {
+    const v: number = this.fpsLimit;
+    if (v <= 0) {
+      return LYRIC_FPS_MAX;
+    }
+    return v > LYRIC_FPS_MAX ? LYRIC_FPS_MAX : v;
+  }
+
+  /** 创建（并缓存）displaySync，失败返回 undefined 并记得别再试。 */
+  private ensureFrameSync(): displaySync.DisplaySync | undefined {
+    if (this.frameSync !== undefined) {
+      return this.frameSync;
+    }
+    if (this.syncUnavailable) {
+      return undefined;
+    }
+    try {
+      const sync: displaySync.DisplaySync = displaySync.create();
+      sync.setExpectedFrameRateRange({
+        expected: this.expectFps(),
+        min: LYRIC_FPS_MIN,
+        max: LYRIC_FPS_MAX
+      });
+      sync.on('frame', (info: displaySync.IntervalInfo): void => {
+        this.onSyncFrame(info);
+      });
+      this.frameSync = sync;
+      return sync;
+    } catch (e) {
+      const err: Error = e as Error;
+      this.syncUnavailable = true;
+      const msg: string = (err !== undefined && err.message !== undefined) ? err.message : '';
+      Logger.warn('RzdLyricPerf', 'displaySync unavailable, fallback=postFrameCallback: ' +
+        msg.substring(0, 120));
+      return undefined;
+    }
+  }
+
+  /** displaySync 每帧回调：把**帧时间戳（ns→ms）**交给帧体，不用 `Date.now()`。 */
+  private onSyncFrame(info: displaySync.IntervalInfo): void {
+    const ns: number = info !== undefined && info.timestamp !== undefined ? info.timestamp : 0;
+    // 万一没给时间戳（0），退回墙钟，保证不会卡死
+    const frameMs: number = ns > 0 ? ns / 1000000 : Date.now();
+    this.onFrame(frameMs);
+  }
+
+  /** 请求下一帧（仅 `postFrameCallback` 兜底路径需要；displaySync 会自己持续回调）。 */
   private requestNextFrame(): void {
     if (!this.isFrameLoopRunning) {
+      return;
+    }
+    if (this.syncStarted) {
       return;
     }
     this.getUIContext().postFrameCallback(this.frameTicker);
@@ -294,12 +422,7 @@ export struct AmllLyricView {
 
   private scheduleFrame(): void {
     if (!this.isFrameLoopRunning) {
-      this.lastFrameTime = Date.now();
-      this.isFrameLoopRunning = true;
-      this.frameTicker.setTick((): void => {
-        this.onFrame();
-      });
-      this.requestNextFrame();
+      this.startFrameLoop();
     }
   }
 
@@ -479,16 +602,28 @@ export struct AmllLyricView {
   }
 
   /** 帧循环回调 */
-  private onFrame(): void {
+  /**
+   * 帧循环回调。
+   * @param nowMs 本帧时间（毫秒）。displaySync 路径 = `IntervalInfo.timestamp / 1e6`（单调、不受 JS 排队影响）；
+   *              兜底路径不传，退回 `Date.now()`。
+   */
+  private onFrame(nowMs?: number): void {
     if (this.isWindowHidden || !this.isFrameLoopRunning) {
       // 防御：后台期间或已停止时不推进/不重绘（正常路径已 stopFrameLoop）
       return;
     }
-    const now = Date.now();
-    const elapsed = now - this.lastFrameTime;
+    const now: number = nowMs !== undefined && nowMs > 0 ? nowMs : Date.now();
+    // ★ 2026-11-04（自查抓到的坑）：`startFrameLoop()` 把 `lastFrameTime` 归零当作
+    //   "换时间基准"的标记（displaySync 给的是开机单调 ns→ms，和 `Date.now()` 不同源）。
+    //   ⚠️ 但首帧 elapsed=0 会被下面的帧率闸门判成"还没到间隔"而跳过；
+    //   在 displaySync 路径下 `requestNextFrame()` 是空操作（sync 自己会持续回调），
+    //   于是 `lastFrameTime` 永远停在 0 ⇒ **一帧都画不出来**。
+    //   ⇒ 首帧单独放行，先把基准时间落下来。
+    const firstFrame: boolean = this.lastFrameTime <= 0;
+    const elapsed = firstFrame ? 0 : now - this.lastFrameTime;
     // 帧率上限（设置页 60/90/120/144/165）：未到渲染间隔时跳过本帧。
     // 跳过的 vsync 不推进时间轴，下一帧 elapsed 自然累计到目标间隔，进度不失真
-    if (this.fpsLimit > 0) {
+    if (!firstFrame && this.fpsLimit > 0) {
       const intervalMs: number = 1000 / this.fpsLimit;
       if (elapsed < intervalMs - 0.5) {
         this.requestNextFrame();
@@ -562,15 +697,17 @@ export struct AmllLyricView {
   }
 
   private drawFrame(time: number): void {
-    const active = this.blurPreferenceReady && this.enableBlur && !this.engine.isTouchScrolled;
-    if (this.viewportBlurActive !== active) {
-      this.engine.setConfig({ enableBlur: active });
-      this.viewportBlurActive = active;
-      Logger.info('LyricViewportBlur', `active=${active} enabled=${this.enableBlur} touchScrolled=${this.engine.isTouchScrolled} layers=1 blurMode=visible-line radiusCap=6 quantization=2`);
+    // ★ 2026-11-04（甲方：「模糊可以不要，只要帧率上去就行」）：渲染层已彻底不做逐帧模糊，
+    //   所以这里**不再**跑模糊开关的状态机（原来每次切换还会 `engine.setConfig()` 一次，
+    //   属于白花的开销）。`enableBlur` 设置项与 `blurPreferenceReady` 保留是为了不动上层接口，
+    //   但已不再影响绘制。
+    if (this.viewportBlurActive) {
+      this.viewportBlurActive = false;
+      Logger.info('LyricViewportBlur', 'disabled (per-frame canvas blur removed; frame rate first)');
     }
     this.ensureRenderer();
     if (this.renderer !== undefined) {
-      this.renderer.blurEnabled = active;
+      this.renderer.blurEnabled = false;
       this.renderer.draw(time);
     }
   }
