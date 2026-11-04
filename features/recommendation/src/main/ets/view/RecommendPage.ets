@@ -796,16 +796,33 @@ export struct RecommendPage {
    */
   @Builder
   private StickyChipsInBar() {
-    Row() {
-      Column() {
-        CategoryChipsSection({ recommendViewModel: this.recommendViewModel })
+    // Stack(右侧对齐)：胶囊行 + 右侧**渐隐层**（甲方 2026-11-05：
+    // 「吸顶后右侧直接这样不好看，能不能加一层渐隐」——官方就是这么把第 4 个胶囊淡出的）。
+    Stack({ alignContent: Alignment.End }) {
+      Row() {
+        Column() {
+          CategoryChipsSection({ recommendViewModel: this.recommendViewModel })
+        }
+        .layoutWeight(1)
       }
-      .layoutWeight(1)
+      .width(StyleConstants.FULL_WIDTH)
+      .height(TitleBarConstants.ROW_HEIGHT_VP)
+      .alignItems(VerticalAlign.Center)
+      .padding({ right: 56 })
+
+      // 渐隐层：盖住右端（含搜索钮下方），让胶囊自然淡出而不是硬切。
+      // 终点色用页面底色，故与标题栏模糊底之间的过渡最接近官方观感。
+      Column()
+        .width(96)
+        .height(StyleConstants.FULL_HEIGHT)
+        .linearGradient({
+          direction: GradientDirection.Right,
+          colors: [['#00000000', 0.0], ['#00000000', 0.15], ['#D9000000', 1.0]]
+        })
+        .hitTestBehavior(HitTestMode.Transparent)
     }
     .width(StyleConstants.FULL_WIDTH)
     .height(TitleBarConstants.ROW_HEIGHT_VP)
-    .alignItems(VerticalAlign.Center)
-    .padding({ right: 56 })
     // 只有胶囊自己吃点击，其余放行
     .hitTestBehavior(HitTestMode.Transparent)
     // ★★★ 2026-11-04（甲方：「你直接把他们的层级放到标题上面不就行了」）：
@@ -813,6 +830,10 @@ export struct RecommendPage {
     //   位置与内容里那一行完全一致；因为画在 `stackBuilder` 里（背景板之上），
     //   所以它是**清晰的**，不会被标题栏的模糊糊掉。吸顶后 offset 归 0，停在最上方。
     .translate({ y: this.chipStickyActive ? 0 : this.chipBarOffsetVp })
+    // ★ 2026-11-05（甲方：「快吸顶隐藏时是瞬间隐藏了，能不能改成淡入淡出」）：
+    //   进出标题栏这一段用 200ms 透明度过渡，取代硬切。
+    .transition(TransitionEffect.OPACITY
+      .animation({ duration: 200, curve: Curve.EaseInOut }))
   }
 
   /**
