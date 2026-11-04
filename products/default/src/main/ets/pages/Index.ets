@@ -236,6 +236,8 @@ const PLAYER_CLONE_Z_INDEX: number = 110;
  *     杩欓噷鏄惧紡缁欎竴涓€煎彧鏄负浜?*涓嶄緷璧栧０鏄庨『搴?*銆?
  */
 const SHRINK_OVERLAY_Z_INDEX: number = 130;
+/** Buffer toast minimum gap (ms): isResolving flips repeatedly, throttle keeps it from popping every 2s. */
+const BUFFER_TOAST_MIN_GAP_MS: number = 8000;
 
 /**
  * 鈽?鎾斁椤靛叆鍙?*鍙岃建寮€鍏?*锛堟柦宸ュ浘绗?1 姝ワ級銆?
@@ -698,11 +700,13 @@ struct Index {
   }
 
   /**
-   * ★★★ 2026-11-05（甲方：「能不能用官方的提示，不要自己写样式」）：
-   * 起播装载期间弹**系统 Toast**（`promptAction.showToast`，官方样式，无自绘）。
-   * 由 `MusicAppState.isResolving`（`@Trace`）翻转驱动：`true` 时弹一次「缓冲中……」，
-   * `false` 时什么都不做（Toast 自己 2s 后消失）。
-   * ⚠️ 只在**开始装载**那一下弹，不是每帧弹，避免刷屏（`showToast` 频率过高会被系统吞掉）。
+   * ★★★ 2026-11-05（甲方口径修正）：「我指的是那个两秒钟自动弹一下，不是起播的时候自动弹」
+   *   ⇒ **起播那一次要弹**（系统 Toast，官方样式），但**不能反复弹**。
+   *
+   *   为什么会反复：`isResolving` 在一次起播里可能多次 true → false → true（音质回退、
+   *   脚本来回换、重试都会重新 `beginLoadRequest()`），每次上升沿都弹一下，
+   *   加上 Toast 自身 2s 时长 ⇒ 看起来就是"每两秒弹一下"。
+   *   ⇒ 加**时间节流**：`BUFFER_TOAST_MIN_GAP_MS`（8s）内只允许弹一次。
    */
   @Monitor('appState.isResolving')
   onResolvingChanged(monitor: IMonitor): void {
@@ -711,6 +715,12 @@ struct Index {
     if (!now || before) {
       return;
     }
+    const t: number = Date.now();
+    if (t - this.lastBufferToastMs < BUFFER_TOAST_MIN_GAP_MS) {
+      appendPlayLog('[缓冲提示] 节流跳过 gap=' + (t - this.lastBufferToastMs) + 'ms');
+      return;
+    }
+    this.lastBufferToastMs = t;
     appendPlayLog('[缓冲提示] showToast 缓冲中……');
     try {
       this.getUIContext().getPromptAction().showToast({
@@ -3041,6 +3051,9 @@ struct Index {
    *   强制壳层重绘一次。
    */
   @Local shellRepaintTick: number = 0;
+
+  /** Timestamp (ms) of the last buffering toast - throttles the one at playback start. */
+  private lastBufferToastMs: number = 0;
 
   @Monitor('appState.closeTick')
   onCloseTickChanged(): void {
