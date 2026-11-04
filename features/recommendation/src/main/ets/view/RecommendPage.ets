@@ -194,6 +194,11 @@ export struct RecommendPage {
    *      这一刻副本与流内那一行的像素位置**完全重合** ⇒ 吸顶瞬间零跳变。
    */
   @Local chipStickyActive: boolean = false;
+  /**
+   * 吸顶副本的**当前顶边**（vp）：由 {@link stickyLineVp} 按滚动偏移算出。
+   * 展开时 = 状态栏+标题栏（≈94），标题区域收起后 = 只剩状态栏（≈38）⇒ 副本顶到屏幕最上面。
+   */
+  @Local chipStickyLineVp: number = 0;
   @Local titleSearchShown: boolean = false;
 
   /**
@@ -307,6 +312,7 @@ export struct RecommendPage {
     // （旧 area 为空 ⇒ 必然回调），那时量到的是**内容坐标**，与当前偏移无关。
     this.chipRowTopInContentVp = 0;
     this.chipStickyActive = false;
+    this.chipStickyLineVp = 0;
     this.homeContentLaidOutNotified = false;
     // 容器重建 = 上一轮的补位链已经失去意义（它对着的是那个已经被销毁的 `Scroll`）
     this.homeScrollRestorePending = false;
@@ -564,6 +570,10 @@ export struct RecommendPage {
    *   为什么不是"下边沿法"（行完整滑出视口顶才接管）：顶边法下，副本出现的那一瞬间
    *   流内那一行的顶边**正好也在吸顶线**上 ⇒ 两份像素级重合、切换零跳变；
    *   而下边沿法要等整整一行滚进标题栏底下才接管，中间那一段会"看不见任何一行"。
+   *
+   * ★★★ 2026-11-04（甲方截图：「现在吸顶后还是原来那个位置」）：吸顶线**不再写死在标题栏下沿**，
+   *   而是跟着 HDS 标题区域的收起进度上移 —— 见 {@link stickyLineVp}。
+   *   否则标题栏收起来之后，副本还钉在 94vp，屏幕最上面那 56vp 就是一条空带。
    * @param offset 当前垂直偏移（vp）。
    */
   private updateChipSticky(offset: number): void {
@@ -571,13 +581,49 @@ export struct RecommendPage {
       // 还没量到那一行的位置（首帧 / 分类行还没出现）⇒ 不判吸顶，免得闪一下
       return;
     }
-    const stickLine: number = this.contentTopInsetVp();
-    const active: boolean = offset >= this.chipRowTopInContentVp - stickLine;
+    const stickLine: number = this.stickyLineVp(offset);
+    // 迟滞 2vp：标题区域收起是**跟手**的（向下滚时吸顶线会往回长），
+    // 没有迟滞会在临界点来回抖。
+    const threshold: number = this.chipRowTopInContentVp - stickLine +
+      (this.chipStickyActive ? 2 : 0);
+    const active: boolean = offset >= threshold;
+    if (Math.abs(stickLine - this.chipStickyLineVp) >= 0.5) {
+      this.chipStickyLineVp = stickLine;
+    }
     if (active !== this.chipStickyActive) {
       this.chipStickyActive = active;
       Logger.info('RzdHomeScroll',
-        `sticky=${active} offset=${offset} rowTop=${this.chipRowTopInContentVp} rowH=${this.chipRowHeightVp} line=${stickLine}`);
+        `sticky=${active} offset=${offset} rowTop=${this.chipRowTopInContentVp} rowH=${this.chipRowHeightVp} ` +
+          `line=${stickLine.toFixed(1)}`);
     }
+  }
+
+  /**
+   * 吸顶线（vp）：吸顶副本那一行的**顶边**落在哪里 —— **随标题区域收起而上移**。
+   *
+   * 组成：
+   * - 展开时 = 「状态栏 + HDS 标题栏」（`statusBarTopVp + ROW_HEIGHT_VP` ≈ 38 + 56 = 94），
+   *   与滚动内容顶部那段留白 `contentTopInsetVp()` **同一个数**（副本落在标题栏下沿、不盖标题栏）；
+   * - 收起后 = 只剩状态栏（≈38），副本顶到屏幕最上面。
+   *
+   * 收起进度必须与 HDS 那边的配置**逐字对齐**（见 `build()` 的 `.dynamicHideTitleBar(...)`）：
+   * `mode: SCROLL_UP`（任意位置跟手上滑）、`hideOffset: 0`、`hideRatio: 1.0`
+   * ⇒ 内容每滚 1vp、标题区域收 1vp，滚满 `ROW_HEIGHT_VP` 就收完。
+   * ⚠️ 改那边的三个值，这里必须同步改，否则吸顶副本和标题栏会错位。
+   * 沉浸式（没有 HDS 标题栏）恒为 0。
+   * @param offset 当前垂直偏移（vp）
+   */
+  private stickyLineVp(offset: number): number {
+    const base: number = this.contentTopInsetVp();
+    if (base <= 0) {
+      return 0;
+    }
+    const rowH: number = TitleBarConstants.ROW_HEIGHT_VP;
+    if (rowH <= 0) {
+      return base;
+    }
+    const collapse: number = Math.min(1, Math.max(0, offset / rowH));
+    return this.windowInfo.statusBarTopVp + rowH * (1 - collapse);
   }
 
   /**
@@ -978,7 +1024,9 @@ export struct RecommendPage {
                 CategoryChipsSection({ recommendViewModel: this.recommendViewModel })
               }
               .width(StyleConstants.FULL_WIDTH)
-              .padding({ top: this.contentTopInsetVp() })
+              // ★ 2026-11-04：不再是写死的 `contentTopInsetVp()`（标题栏下沿），
+              //   而是随标题区域收起上移的 `chipStickyLineVp`（收完 = 状态栏下沿）。
+              .padding({ top: this.chipStickyLineVp })
               .hitTestBehavior(HitTestMode.Transparent)
               .zIndex(5)
             }
