@@ -40,8 +40,7 @@ import {
   unregisterHomeSourceRefresh,
   UseAccountRecState,
   WindowInfo,
-  buildTitleMaterial,
-  immersiveFromLevel
+  buildTitleMaterial
 } from 'musicbasic';
 import { AccountChangedState, PlayerConstants } from 'player';
 import { BlurStrategy, HideMode, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
@@ -195,19 +194,6 @@ export struct RecommendPage {
    *      这一刻副本与流内那一行的像素位置**完全重合** ⇒ 吸顶瞬间零跳变。
    */
   @Local chipStickyActive: boolean = false;
-  /**
-   * 吸顶副本的**当前顶边**（vp）：由 {@link stickyLineVp} 按滚动偏移算出。
-   * 展开时 = 状态栏+标题栏（≈94），标题区域收起后 = 只剩状态栏（≈38）⇒ 副本顶到屏幕最上面。
-   */
-  @Local chipStickyLineVp: number = 0;
-  /**
-   * 标题区域**开始收起**的滚动偏移（vp）= 分类 Tab 那一行刚好到达标题栏下沿时的偏移
-   * （`chipRowTopInContentVp − contentTopInsetVp()`）。
-   * ★ 2026-11-04（甲方：「现在还没吸顶时标题就被隐藏了，我要的是快吸顶的时候隐藏」）：
-   *   以前 `hideOffset` 写 0 ⇒ 一滚动标题就没了；现在把它当 HDS 的 `hideOffset`，
-   *   同时 {@link stickyLineVp} 的收起曲线也从这里起算。
-   */
-  @Local titleHideStartVp: number = 0;
   @Local titleSearchShown: boolean = false;
 
   /**
@@ -321,7 +307,7 @@ export struct RecommendPage {
     // （旧 area 为空 ⇒ 必然回调），那时量到的是**内容坐标**，与当前偏移无关。
     this.chipRowTopInContentVp = 0;
     this.chipStickyActive = false;
-    this.chipStickyLineVp = 0;
+
     this.homeContentLaidOutNotified = false;
     // 容器重建 = 上一轮的补位链已经失去意义（它对着的是那个已经被销毁的 `Scroll`）
     this.homeScrollRestorePending = false;
@@ -581,7 +567,7 @@ export struct RecommendPage {
    *   而下边沿法要等整整一行滚进标题栏底下才接管，中间那一段会"看不见任何一行"。
    *
    * ★★★ 2026-11-04（甲方截图：「现在吸顶后还是原来那个位置」）：吸顶线**不再写死在标题栏下沿**，
-   *   而是跟着 HDS 标题区域的收起进度上移 —— 见 {@link stickyLineVp}。
+   *   现在标题栏常驻（不收起），吸顶线因此是**恒定**的标题栏下沿。
    *   否则标题栏收起来之后，副本还钉在 94vp，屏幕最上面那 56vp 就是一条空带。
    * @param offset 当前垂直偏移（vp）。
    */
@@ -590,20 +576,14 @@ export struct RecommendPage {
       // 还没量到那一行的位置（首帧 / 分类行还没出现）⇒ 不判吸顶，免得闪一下
       return;
     }
-    // ★ 2026-11-04：标题区域**从"快到吸顶"才开始收**（甲方要求），起点 = 那一行到达标题栏下沿的偏移。
-    const hideStart: number = Math.max(0, this.chipRowTopInContentVp - this.contentTopInsetVp());
-    if (Math.abs(hideStart - this.titleHideStartVp) >= 0.5) {
-      this.titleHideStartVp = hideStart;
-    }
-    const stickLine: number = this.stickyLineVp(offset);
-    // 迟滞 2vp：标题区域收起是**跟手**的（向下滚时吸顶线会往回长），
-    // 没有迟滞会在临界点来回抖。
+    // ★ 2026-11-04：标题栏现在**常驻**（不再收起），所以吸顶线是**恒定**的
+    //   `contentTopInsetVp()`（状态栏+标题栏 ≈94）＝标题栏下沿。
+    //   那一行到达这条线 ⇒ 流内那份隐藏、标题栏的 `stackBuilder` 开始渲染同一条胶囊行。
+    const stickLine: number = this.contentTopInsetVp();
+    // 迟滞 2vp，避免临界点抖动
     const threshold: number = this.chipRowTopInContentVp - stickLine +
       (this.chipStickyActive ? 2 : 0);
     const active: boolean = offset >= threshold;
-    if (Math.abs(stickLine - this.chipStickyLineVp) >= 0.5) {
-      this.chipStickyLineVp = stickLine;
-    }
     if (active !== this.chipStickyActive) {
       this.chipStickyActive = active;
       Logger.info('RzdHomeScroll',
@@ -612,36 +592,7 @@ export struct RecommendPage {
     }
   }
 
-  /**
-   * 吸顶线（vp）：吸顶副本那一行的**顶边**落在哪里 —— **随标题区域收起而上移**。
-   *
-   * 组成：
-   * - 展开时 = 「状态栏 + HDS 标题栏」（`statusBarTopVp + ROW_HEIGHT_VP` ≈ 38 + 56 = 94），
-   *   与滚动内容顶部那段留白 `contentTopInsetVp()` **同一个数**（副本落在标题栏下沿、不盖标题栏）；
-   * - 收起后 = 只剩状态栏（≈38），副本顶到屏幕最上面。
-   *
-   * 收起进度必须与 HDS 那边的配置**逐字对齐**（见 `build()` 的 `.dynamicHideTitleBar(...)`）：
-   * `mode: SCROLL_UP`（任意位置跟手上滑）、`hideOffset: 0`、`hideRatio: 1.0`
-   * ⇒ 内容每滚 1vp、标题区域收 1vp，滚满 `ROW_HEIGHT_VP` 就收完。
-   * ⚠️ 改那边的三个值，这里必须同步改，否则吸顶副本和标题栏会错位。
-   * 沉浸式（没有 HDS 标题栏）恒为 0。
-   * @param offset 当前垂直偏移（vp）
-   */
-  private stickyLineVp(offset: number): number {
-    const base: number = this.contentTopInsetVp();
-    if (base <= 0) {
-      return 0;
-    }
-    const rowH: number = TitleBarConstants.ROW_HEIGHT_VP;
-    if (rowH <= 0) {
-      return base;
-    }
-    // ★ 2026-11-04：收起曲线从"快吸顶"那一刻（`titleHideStartVp`）起算，
-    //   之后每滚 1vp 收 1vp（与 HDS 的 `hideOffset`/`hideRatio: 1.0` 逐字对齐）。
-    const start: number = this.titleHideStartVp;
-    const collapse: number = Math.min(1, Math.max(0, (offset - start) / rowH));
-    return this.windowInfo.statusBarTopVp + rowH * (1 - collapse);
-  }
+  
 
   /**
    * 吸顶线（vp）：吸气顶副本那一行的**顶边**落在哪里。
@@ -794,45 +745,72 @@ export struct RecommendPage {
       },
       content: {
         title: {
-          mainTitle: this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ?
-            $r('app.string.home_page_title_pc') :
-            $r('app.string.home_page_title'),
+          // ★★★ 2026-11-04（甲方）：吸顶时**只把标题文字置空**，绝不收起整条标题栏 ——
+          //   官方文档写明 `titleBar` 管的是「返回图标区域 + 标题区域 + 菜单区域 + **背景板**」，
+          //   所以 `hideTitleBar(true)` 会把材质/渐变模糊/按钮一起拿掉（上一版就是这么崩的）。
+          mainTitle: this.chipStickyActive ? '' :
+            (this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ?
+              $r('app.string.home_page_title_pc') :
+              $r('app.string.home_page_title')),
           mainTitleSize: TitleSize.TITLE_ML
         },
-        // ★★ 2026-11-04（甲方）：按钮**位置/身份**三态定稿 ——
-        //   · 最顶部：内容里只剩整行搜索框 ⇒ 标题栏里只放「听歌识曲」；
-        //   · 稍微滑动（`titleSearchShown`）：内容里的搜索框滚走了 ⇒ 标题栏补上「搜索」钮，
-        //     顺序按甲方要求 = **识别在左、搜索在右**（所以下面先 push identify，再 push search）；
-        //   · 吸顶：整个标题区域被 `dynamicHideTitleBar` 收起（标题 + 识别一起消失），
-        //     「搜索」钮不丢 —— 它出现在吸顶 Tab 行的右侧（见 HomeBranch 里那份吸顶副本）。
-        //   · 宽屏没有内容里的搜索行（`HomeSearchRow` 只在窄屏渲染）⇒ 宽屏始终保留搜索钮。
+        // 菜单：吸顶时只留「搜索」（识别随标题一起消失）；展开时 = 识别在前、搜索在后。
         menu: {
           value: this.buildTitleMenuItems()
-        }
+        },
+        // ★ 吸顶时把**分类胶囊行**直接叠进标题栏（官方 `stackBuilder`，since 6.0.0(20)）
+        //   ⇒ Tab 天生在最上面，完全不需要"收起标题栏"，材质/模糊/菜单全部保留。
+        stackBuilder: this.chipStickyActive ? (): void => {
+          this.StickyChipsInBar();
+        } : undefined
       }
     };
   }
 
   /**
+   * 吸顶时叠在标题栏里的分类胶囊行（`stackBuilder`）。
+   * 右侧留出菜单宽度，避免压住「搜索」钮（菜单在标题栏右侧，约 40vp + 边距）。
+   */
+  @Builder
+  private StickyChipsInBar() {
+    Row() {
+      Column() {
+        CategoryChipsSection({ recommendViewModel: this.recommendViewModel })
+      }
+      .layoutWeight(1)
+    }
+    .width(StyleConstants.FULL_WIDTH)
+    .height(TitleBarConstants.ROW_HEIGHT_VP)
+    .alignItems(VerticalAlign.Center)
+    .padding({ right: 56 })
+    // 只有胶囊自己吃点击，其余放行
+    .hitTestBehavior(HitTestMode.Transparent)
+  }
+
+  /**
    * 标题栏菜单项：**识别在前、搜索在后**（甲方 2026-11-04：「改成做听歌识曲右搜索」）。
-   * 窄屏顶部时内容里那一整行就是搜索框，标题栏不再重复放搜索；宽屏没有内容搜索行，所以一直保留。
+   * · 吸顶：只留「搜索」（识别随标题文字一起"消失"，但栏/材质/搜索都在）；
+   * · 窄屏顶部：内容里那一整行就是搜索框 ⇒ 只放识别；
+   * · 宽屏：没有内容搜索行 ⇒ 搜索常驻。
    */
   private buildTitleMenuItems(): HdsNavigationMenuItemOptions[] {
     const items: HdsNavigationMenuItemOptions[] = [];
-    items.push({
-      content: {
-        label: 'identify',
-        icon: new SymbolGlyphModifier($r('sys.symbol.identify_song'))
-          .fontSize(22)
-          .fontColor([$r('sys.color.font_primary')]),
-        isEnabled: true,
-        action: (): void => {
-          this.pageIndexInfos.pushPathByName(RouterUrlConstants.MUSIC_RECOGNITION, null);
-        }
-      }
-    });
     const wide: boolean = this.breakpointEnv.widthBreakpoint !== WidthBreakpoint.WIDTH_SM;
-    if (this.titleSearchShown || wide) {
+    if (!this.chipStickyActive) {
+      items.push({
+        content: {
+          label: 'identify',
+          icon: new SymbolGlyphModifier($r('sys.symbol.identify_song'))
+            .fontSize(22)
+            .fontColor([$r('sys.color.font_primary')]),
+          isEnabled: true,
+          action: (): void => {
+            this.pageIndexInfos.pushPathByName(RouterUrlConstants.MUSIC_RECOGNITION, null);
+          }
+        }
+      });
+    }
+    if (this.chipStickyActive || this.titleSearchShown || wide) {
       items.push({
         content: {
           label: 'search',
@@ -1054,37 +1032,10 @@ export struct RecommendPage {
             //     看起来就是一条横贯屏幕的色带。
             //   · `hitTestBehavior(Transparent)`：只有这一行自己吃点击，其余一律放行给下面的内容
             //     （与 RzdVideo 同一口径）。
-            if (this.chipStickyActive) {
-              Row({ space: 8 }) {
-                Column() {
-                  CategoryChipsSection({ recommendViewModel: this.recommendViewModel })
-                }
-                .layoutWeight(1)
-
-                // ★★ 2026-11-04（甲方：「吸顶时只隐藏标题和听歌识曲，不隐藏搜索按钮」）：
-                //   标题区域整体收起后，搜索入口不能跟着消失 ⇒ 它挪到吸顶行右侧。
-                //   样式与内容里那颗识别钮同一套（Button 宿主 + 光感 + 半透明白底）。
-                Button() {
-                  SymbolGlyph($r('sys.symbol.magnifyingglass'))
-                    .fontSize('22fp')
-                    .fontColor([$r('sys.color.font_primary')])
-                }
-                .type(ButtonType.Normal)
-                .width(36)
-                .height(36)
-                .borderRadius(18)
-                .systemMaterial(immersiveFromLevel(this.ambientState.level))
-                .backgroundColor('#33FFFFFF')
-                .onClick((): void => {
-                  this.openSearch();
-                })
-              }
-              .width(StyleConstants.FULL_WIDTH)
-              .alignItems(VerticalAlign.Center)
-              .padding({ top: this.chipStickyLineVp, right: 16 })
-              .hitTestBehavior(HitTestMode.Transparent)
-              .zIndex(5)
-            }
+            // ★★★ 2026-11-04（甲方）：吸顶后那一行 Tab **不再由这里画**。
+            //   改由标题栏的 `stackBuilder`（见 `StickyChipsInBar()`）直接渲染进标题栏：
+            //   ⇒ Tab 天生就在最上面，且不需要"收起标题栏"（材质/模糊/按钮全保留）。
+            //   流内这一份仍然走 `Visibility.Hidden` 保留占位（见上面那个 Column），不会重复绘制。
           }
           .width(StyleConstants.FULL_WIDTH)
           .layoutWeight(1)
@@ -1127,28 +1078,13 @@ export struct RecommendPage {
     .titleBar(this.getTitleBar())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.pageScroller])
-    // ★★★ 2026-11-04（甲方：「首页 Tab 栏吸顶后在标题栏下面。有的应用吸顶时直接把标题文字隐藏，
-    //   然后跑到最上面，同时听歌识曲暂时隐藏」）：
-    //   这是 HDS 官方的「标题栏随滚动动态显隐」开关 —— **`bindToScrollable` 只管绑定，
-    //   真正决定"收不收、收什么"的是 `dynamicHideTitleBar`**（以前只 bind 没配它，
-    //   `hideTitleArea` 默认 false ⇒ 标题区域根本不收，Tab 吸顶后永远卡在标题栏下面）。
-    //   · `hideTitleArea: true`：上滑把**整个标题区域**收起 ⇒ 标题文字 + 搜索/听歌识曲菜单
-    //     一起隐藏（正好命中甲方两条要求），内容区上移，吸顶的 Tab 栏顶到最上面；
-    //   · `hideStatusBar: false`：状态栏保持显示（我们只收标题区域）；
-    //   · `HideMode.SCROLL_UP`：任意位置**上滑即收、下滑即回**（跟手，不是"滚到某个位置才动"）；
-    //   · `hideRatio: 1.0`：内容每滚 1vp、标题区域收 1vp（官方范围 [1.0, 3.0]，默认 2.0 会显得"拖沓"）。
-    //   排查/调参：HDS 没给这个动效的回调（SDK 里 `DynamicHideParams` 只有入参、没有 onXxx），
-    //   所以要调手感只能改这三个值——`mode`（SCROLL_UP=跟手 / SCROLL_UP_TO=滚到位置才收）、
-    //   `hideOffset`（从多少 vp 开始收）、`hideRatio`（1.0=1:1 跟手，2.0=收得慢）。
-    .dynamicHideTitleBar({
-      hideTitleArea: true,
-      hideStatusBar: false,
-      mode: HideMode.SCROLL_UP,
-      // ★ 2026-11-04（甲方）：「快吸顶的时候隐藏（刚到标题下面的时候）」——
-      //   起点交给 HDS 当 `hideOffset`：分类 Tab 到达标题栏下沿之前，标题栏**不动**。
-      hideOffset: this.titleHideStartVp,
-      hideRatio: 1.0
-    })
+    // ★★★ 2026-11-04（甲方）：**不要**再用 `dynamicHideTitleBar`。
+    //   它是"跟手连续收起"（`hideOffset/hideRatio`），实测 `hideOffset` 的运行期改动不生效
+    //   ⇒ 上滑一滚标题就提前跑掉；而 `hideTitleBar(true)` 又会把整条栏（含背景板/材质/菜单）
+    //   一起拿掉（状态栏发黑、按钮消失、渐变模糊消失）。
+    //   现在的做法：标题栏常驻（材质/模糊/按钮都在），吸顶时
+    //   ① `title.mainTitle` 置空（标题文字消失）、② 菜单只留「搜索」（识别消失）、
+    //   ③ `stackBuilder` 把分类胶囊行叠进标题栏（Tab 天生在最上面）。
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     .backgroundColor($r('app.color.background_secondary'))
     // 官方一镜到底示例里源页也挂这个（PageOne 的 `NavDestination().transition(OPACITY)`）：
