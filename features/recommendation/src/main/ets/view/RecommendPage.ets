@@ -716,7 +716,12 @@ export struct RecommendPage {
       //   voidLayoutSafeArea: true 会让它**再退一个状态栏**（标题 76..132）⇒ 恒为 false（标题 38..94）。
       avoidLayoutSafeArea: true,
       style: {
-        blurStrategy: BlurStrategy.ENABLE,
+        // ★★★ 2026-11-04（甲方：「快到顶部时 Tab 会被标题覆盖，看起来很模糊，吸顶后又突然清楚」）：
+        //   那是标题栏的**背景板/渐变模糊**叠在滚动内容之上造成的 —— Tab 行从它下面滑过时被糊掉，
+        //   等它在 `stackBuilder` 里接管又变回清晰。
+        //   修法：**一滚动就把标题栏的材质与模糊关掉**（标题文字此时已收走，栏里只剩两个按钮，
+        //   按钮自带 `#1AFFFFFF` 底色，不依赖背景板）⇒ Tab 行从栏下经过时与在栏内时**同样清晰**。
+        blurStrategy: this.titleSearchShown ? BlurStrategy.DISABLE : BlurStrategy.ENABLE,
         scrollEffectOpts: {
           scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR
         },
@@ -742,7 +747,7 @@ export struct RecommendPage {
             }
           }
         },
-        systemMaterialEffect: buildTitleMaterial(this.ambientState.level)
+        systemMaterialEffect: this.titleSearchShown ? undefined : buildTitleMaterial(this.ambientState.level)
       },
       content: {
         title: {
@@ -804,14 +809,16 @@ export struct RecommendPage {
   /**
    * 标题栏菜单项：**识别在前、搜索在后**（甲方 2026-11-04：「改成做听歌识曲右搜索」）。
    * · 顶部：内容里那一整行就是搜索框 ⇒ 只放识别；
-   * · 一滚动（`titleSearchShown`）⇒ 标题文字收走，识别也一起收走，**只留搜索**；
+   * · 一滚动（`titleSearchShown`）⇒ 标题文字收走，但**识别仍然在**、左侧，搜索在右侧
+   *   （甲方截图反馈：「中间过程搜索框左侧应该有听歌识曲按钮才对，但现在没有」）；
+   * · 吸顶（`chipStickyActive`）⇒ 胶囊行占了标题栏，识别收起，只留搜索；
    * · 宽屏没有内容搜索行 ⇒ 搜索常驻。
-   * ⚠️ 搜索钮始终是 **HDS 标题栏自己的菜单项**（不是内容层自绘按钮），甲方要求"搜索按钮还是 HDS"。
+   * ⚠️ 搜索钮始终是 **HDS 标题栏自己的菜单项**，不是内容层自绘按钮。
    */
   private buildTitleMenuItems(): HdsNavigationMenuItemOptions[] {
     const items: HdsNavigationMenuItemOptions[] = [];
     const wide: boolean = this.breakpointEnv.widthBreakpoint !== WidthBreakpoint.WIDTH_SM;
-    if (!this.titleSearchShown && !this.chipStickyActive) {
+    if (!this.chipStickyActive) {
       items.push({
         content: {
           label: 'identify',
