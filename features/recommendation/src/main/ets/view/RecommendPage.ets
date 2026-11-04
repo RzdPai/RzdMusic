@@ -202,8 +202,6 @@ export struct RecommendPage {
   @Local chipContentOpacity: number = 1;
   /** 标题栏内那份胶囊行的透明度（rowY 94→54 时 0→1）。 */
   @Local chipBarOpacity: number = 0;
-  /** 标题文字 + 听歌识曲的透明度（按滚动位置淡出）。 */
-  @Local titleOverlayOpacity: number = 1;
   @Local titleSearchShown: boolean = false;
 
   /**
@@ -605,20 +603,26 @@ export struct RecommendPage {
     if (Math.abs(lift - this.chipBarOffsetVp) >= 0.5) {
       this.chipBarOffsetVp = lift;
     }
-    // ★★★ 2026-11-05（甲方）：「正确应该进行淡入淡出的是标题文字、听歌识曲按钮、
-    //   Tab 行最右边最后消失的那块」。
-    //   ⇒ 淡出的是 `HeaderInBar()`（标题文字 + 听歌识曲）：滚动前 120vp 内 1 → 0；
-    //     胶囊行本身**不做淡入淡出**（只跟手位移），它右端的渐隐由那层 gradient 负责。
-    const titleFade: number = Math.max(0, Math.min(1, 1 - offset / 120));
-    if (Math.abs(titleFade - this.titleOverlayOpacity) >= 0.02) {
-      this.titleOverlayOpacity = titleFade;
+    // ★★★ 2026-11-05（甲方：「官方的淡入淡出是由当前位置决定的」）：
+    //   不做"插入/移除"式的 200ms 过渡，而是**按当前位置算透明度**，两段互补：
+    //   · 内容里那一行：`rowY` 从 134 走到 94 时 1 → 0（快贴到栏底就开始淡出）；
+    //   · 栏内那一份：`rowY` 从 94 走到 54 时 0 → 1（进栏后淡入，到 54 已全实）。
+    //   两段在 94 处交接，跟手位移同时进行，所以看到的是"边滑边淡"，不是"啪"一下。
+    const fadeSpan: number = 40;
+    const contentOpacity: number = Math.max(0, Math.min(1, (rowY - barBottom) / fadeSpan));
+    if (Math.abs(contentOpacity - this.chipContentOpacity) >= 0.02) {
+      this.chipContentOpacity = contentOpacity;
+    }
+    const barOpacity: number = Math.max(0, Math.min(1, (barBottom - rowY) / fadeSpan));
+    if (Math.abs(barOpacity - this.chipBarOpacity) >= 0.02) {
+      this.chipBarOpacity = barOpacity;
     }
     if (sticky !== this.chipStickyActive) {
       this.chipStickyActive = sticky;
       Logger.info('RzdHomeScroll',
         `sticky=${sticky} inBar=${inBar} offset=${offset} rowY=${rowY.toFixed(1)} ` +
           `rowTop=${this.chipRowTopInContentVp} lift=${lift.toFixed(1)} ` +
-          `titleFade=${titleFade.toFixed(2)}`);
+          `opacity=${contentOpacity.toFixed(2)}/${barOpacity.toFixed(2)}`);
     }
   }
 
@@ -778,73 +782,31 @@ export struct RecommendPage {
       },
       content: {
         title: {
-          // ★★★ 2026-11-05（甲方：「正确应该进行淡入淡出的是标题文字、听歌识曲按钮…」）：
-          //   HDS 的 `mainTitle` 只能"有/无"，做不出连续淡出 ⇒ 标题文字改由我们画在
-          //   `stackBuilder` 里（`HeaderInBar()`），它的透明度由滚动位置驱动；
-          //   标题栏这里恒为**空文字**，避免两者重叠。
-          mainTitle: '',
+          // ★★★ 2026-11-04（甲方截图反馈）：「中间的过程没有标题文字」——
+          //   中间过程（滚动中、尚未吸顶）**标题文字要保留**；只有**胶囊行占住标题栏之后**才置空
+          //   （那一刻标题栏里放的是 Tab 行，不是标题）。
+          //   官方口径：`titleBar` 管「返回图标区域 + 标题区域 + 菜单区域 + 背景板」，
+          //   `mainTitle` 置空只影响文字本身，背景板/材质/菜单都不动。
+          mainTitle: (this.chipStickyActive || this.chipInBar) ? '' :
+            (this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ?
+              $r('app.string.home_page_title_pc') :
+              $r('app.string.home_page_title')),
           mainTitleSize: TitleSize.TITLE_ML
         },
-        // 菜单：只留**搜索**（HDS 原生菜单项，甲方要求"搜索按钮还是 HDS"）。
-        // 听歌识曲也移到 `HeaderInBar()` 里，才能跟标题文字一起淡出。
+        // 菜单：识别在前、搜索在后；标题文字一起收走时识别也收（只留搜索），
+        // 所以吸顶前后**搜索钮始终是 HDS 标题栏自己的菜单项**（不是我们自己画的按钮）。
         menu: {
           value: this.buildTitleMenuItems()
         },
-        // ★ `stackBuilder`（since 6.0.0(20)，层级在背景板之上）承载两种内容：
-        //   · 未进栏：标题文字 + 听歌识曲（`HeaderInBar()`，按滚动位置淡出）；
-        //   · 进栏/吸顶：分类胶囊行（`StickyChipsInBar()`）。
-        stackBuilder: (this.chipStickyActive || this.chipInBar) ?
-          (): void => {
-            this.StickyChipsInBar();
-          } :
-          (): void => {
-            this.HeaderInBar();
-          }
+        // ★ 分类胶囊行按官方 `stackBuilder`（since 6.0.0(20)）画进标题栏 —— **层级在背景板之上**：
+        //   · 吸顶（`chipStickyActive`）：停在最上方；
+        //   · 进栏中（`chipInBar`）：还在 38..94 这段里跟手滑动，用 `chipBarOffsetVp` 给位移，
+        //     所以它在模糊的背景板上方是**清晰的**（甲方：不要把栏的模糊关掉，把 Tab 放上来就行）。
+        stackBuilder: (this.chipStickyActive || this.chipInBar) ? (): void => {
+          this.StickyChipsInBar();
+        } : undefined
       }
     };
-  }
-
-  /**
-   * 未进栏时叠在标题栏里的「标题文字 + 听歌识曲」。
-   * ★ 2026-11-05（甲方）：「正确应该进行淡入淡出的是标题文字、听歌识曲按钮、Tab 行最右边最后消失的那块」
-   *   HDS 的 `mainTitle`/`menu` 只能整体显示或隐藏，做不出连续淡出 ⇒ 这两样改由这里画，
-   *   透明度 `titleOverlayOpacity` 由滚动位置驱动（`updateChipSticky()` 里算）。
-   *   「搜索」仍是 HDS 自己的菜单项（栏右侧），本 Builder 右侧留 56vp 不占它位置。
-   */
-  @Builder
-  private HeaderInBar() {
-    Row() {
-      Text(this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ?
-        $r('app.string.home_page_title_pc') :
-        $r('app.string.home_page_title'))
-        .fontSize(this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ? 20 : 24)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('sys.color.font_primary'))
-        .maxLines(1)
-
-      Blank()
-
-      // 听歌识曲：与标题文字**同一个透明度**，一起淡出。
-      Button() {
-        SymbolGlyph($r('sys.symbol.identify_song'))
-          .fontSize('22fp')
-          .fontColor([$r('sys.color.font_primary')])
-      }
-      .type(ButtonType.Normal)
-      .width(36)
-      .height(36)
-      .borderRadius(18)
-      .backgroundColor('#1AFFFFFF')
-      .onClick((): void => {
-        this.pageIndexInfos.pushPathByName(RouterUrlConstants.MUSIC_RECOGNITION, null);
-      })
-    }
-    .width(StyleConstants.FULL_WIDTH)
-    .height(TitleBarConstants.ROW_HEIGHT_VP)
-    .alignItems(VerticalAlign.Center)
-    .padding({ left: 16, right: 56 })
-    .hitTestBehavior(HitTestMode.Transparent)
-    .opacity(this.titleOverlayOpacity)
   }
 
   /**
@@ -891,30 +853,49 @@ export struct RecommendPage {
     // ★★★ 2026-11-05（甲方：「官方的淡入淡出是由当前位置决定的」）：
     //   透明度由 `updateChipSticky()` 按 rowY 算出（`chipBarOpacity` 94→54 走 0→1），
     //   不再用"插入/移除"式的 transition —— 那样是固定 200ms，与滚动位置无关。
-    // ★ 2026-11-05（甲方）：「你这怎么淡入淡出的是 Tab 行」⇒ 胶囊行**不做淡入淡出**，只跟手位移。
-    .opacity(1)
+    .opacity(this.chipStickyActive ? 1 : this.chipBarOpacity)
   }
 
   /**
-   * 标题栏菜单项：**只有「搜索」**（HDS 原生菜单项）。
-   * ★ 2026-11-05（甲方）：「听歌识曲按钮」要和标题文字一起**淡出**，
-   *   而 HDS 的 `menu` 只能整体显示/隐藏、做不出连续淡出 ⇒ 识别移到 `HeaderInBar()` 自绘。
-   *   搜索不动（甲方要求"搜索按钮还是 HDS"），所以这里恒返回搜索一项。
+   * 标题栏菜单项：**识别在前、搜索在后**（甲方 2026-11-04：「改成做听歌识曲右搜索」）。
+   * · 顶部：内容里那一整行就是搜索框 ⇒ 只放识别；
+   * · 滚动中：识别在左、搜索在右（甲方：「中间过程搜索框左侧应该有听歌识曲按钮」）；
+   * · **一旦胶囊行进入标题栏**（`chipInBar || chipStickyActive`）⇒ 识别立刻收起，只留搜索：
+   *   否则两个按钮会压在胶囊行上（甲方截图：「快吸顶时听歌识曲按钮没有隐藏，导致看起来重叠」）。
+   * · 宽屏没有内容搜索行 ⇒ 搜索常驻。
+   * ⚠️ 搜索钮始终是 **HDS 标题栏自己的菜单项**，不是内容层自绘按钮。
    */
   private buildTitleMenuItems(): HdsNavigationMenuItemOptions[] {
     const items: HdsNavigationMenuItemOptions[] = [];
-    items.push({
-      content: {
-        label: 'search',
-        icon: new SymbolGlyphModifier($r('sys.symbol.magnifyingglass'))
-          .fontSize(22)
-          .fontColor([$r('sys.color.font_primary')]),
-        isEnabled: true,
-        action: (): void => {
-          this.openSearch();
+    const wide: boolean = this.breakpointEnv.widthBreakpoint !== WidthBreakpoint.WIDTH_SM;
+    if (!this.chipStickyActive && !this.chipInBar) {
+      items.push({
+        content: {
+          label: 'identify',
+          icon: new SymbolGlyphModifier($r('sys.symbol.identify_song'))
+            .fontSize(22)
+            .fontColor([$r('sys.color.font_primary')]),
+          isEnabled: true,
+          action: (): void => {
+            this.pageIndexInfos.pushPathByName(RouterUrlConstants.MUSIC_RECOGNITION, null);
+          }
         }
-      }
-    });
+      });
+    }
+    if (this.titleSearchShown || this.chipStickyActive || wide) {
+      items.push({
+        content: {
+          label: 'search',
+          icon: new SymbolGlyphModifier($r('sys.symbol.magnifyingglass'))
+            .fontSize(22)
+            .fontColor([$r('sys.color.font_primary')]),
+          isEnabled: true,
+          action: (): void => {
+            this.openSearch();
+          }
+        }
+      });
+    }
     return items;
   }
 
@@ -1042,7 +1023,8 @@ export struct RecommendPage {
                   }
                   .width(StyleConstants.FULL_WIDTH)
                   .visibility((this.chipStickyActive || this.chipInBar) ? Visibility.Hidden : Visibility.Visible)
-                  .opacity(1)
+                  // 位置驱动的淡出（与栏内那份的淡入互补，见 updateChipSticky）
+                  .opacity(this.chipContentOpacity)
                   .onAreaChange((_old: Area, area: Area): void => {
                     this.onChipRowAreaChange(area);
                   })
