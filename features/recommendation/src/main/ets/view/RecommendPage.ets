@@ -763,14 +763,12 @@ export struct RecommendPage {
       },
       content: {
         title: {
-          // ★★★ 2026-11-04（甲方最终口径）：「是光标题文字和听歌识曲按钮没了，搜索按钮还在，
-          //   此时 Tab 栏还能上下移动，直到吸顶」。
-          //   官方口径（HDS 文档）：`titleBar` 管的是「返回图标区域 + 标题区域 + 菜单区域 + **背景板**」，
-          //   `hideTitleBar(true)` 会连背景板一起拿掉（之前就踩过：状态栏发黑、渐变模糊消失）。
-          //   ⇒ 要"只让标题文字消失"，就**只改内容**：`mainTitle` 置空，其余（背景板/食材/菜单）不动。
-          //   时机：**一滚动就收**（`titleSearchShown` = offset > 20），而不是等吸顶 ——
-          //   这样"标题+识别先走、Tab 继续跟手滑、滑到最上面才吸顶"就是连续的一条线。
-          mainTitle: this.titleSearchShown ? '' :
+          // ★★★ 2026-11-04（甲方截图反馈）：「中间的过程没有标题文字」——
+          //   中间过程（滚动中、尚未吸顶）**标题文字要保留**；只有**胶囊行占住标题栏之后**才置空
+          //   （那一刻标题栏里放的是 Tab 行，不是标题）。
+          //   官方口径：`titleBar` 管「返回图标区域 + 标题区域 + 菜单区域 + 背景板」，
+          //   `mainTitle` 置空只影响文字本身，背景板/材质/菜单都不动。
+          mainTitle: (this.chipStickyActive || this.chipInBar) ? '' :
             (this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ?
               $r('app.string.home_page_title_pc') :
               $r('app.string.home_page_title')),
@@ -820,16 +818,16 @@ export struct RecommendPage {
   /**
    * 标题栏菜单项：**识别在前、搜索在后**（甲方 2026-11-04：「改成做听歌识曲右搜索」）。
    * · 顶部：内容里那一整行就是搜索框 ⇒ 只放识别；
-   * · 一滚动（`titleSearchShown`）⇒ 标题文字收走，但**识别仍然在**、左侧，搜索在右侧
-   *   （甲方截图反馈：「中间过程搜索框左侧应该有听歌识曲按钮才对，但现在没有」）；
-   * · 吸顶（`chipStickyActive`）⇒ 胶囊行占了标题栏，识别收起，只留搜索；
+   * · 滚动中：识别在左、搜索在右（甲方：「中间过程搜索框左侧应该有听歌识曲按钮」）；
+   * · **一旦胶囊行进入标题栏**（`chipInBar || chipStickyActive`）⇒ 识别立刻收起，只留搜索：
+   *   否则两个按钮会压在胶囊行上（甲方截图：「快吸顶时听歌识曲按钮没有隐藏，导致看起来重叠」）。
    * · 宽屏没有内容搜索行 ⇒ 搜索常驻。
    * ⚠️ 搜索钮始终是 **HDS 标题栏自己的菜单项**，不是内容层自绘按钮。
    */
   private buildTitleMenuItems(): HdsNavigationMenuItemOptions[] {
     const items: HdsNavigationMenuItemOptions[] = [];
     const wide: boolean = this.breakpointEnv.widthBreakpoint !== WidthBreakpoint.WIDTH_SM;
-    if (!this.chipStickyActive) {
+    if (!this.chipStickyActive && !this.chipInBar) {
       items.push({
         content: {
           label: 'identify',
