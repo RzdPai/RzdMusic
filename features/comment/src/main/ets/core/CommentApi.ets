@@ -22,6 +22,7 @@
  */
 
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { QsH5Comment, QsH5TrackInfo, qsH5SeoTrack } from 'musicbasic';
 import {
   asNumber,
   asObjectArray,
@@ -86,7 +87,7 @@ export type CommentKind = 'hot' | 'new';
 export const COMMENT_PAGE_SIZE: number = 15;
 
 /** 有评论接口的平台。 */
-export const COMMENT_SUPPORTED_SOURCES: string[] = ['kw', 'kg', 'mg', 'tx', 'wy'];
+export const COMMENT_SUPPORTED_SOURCES: string[] = ['kw', 'kg', 'mg', 'tx', 'wy', 'qs'];
 
 /**
  * ⛔ 汽水（qs）**暂不支持评论**（2026-11-04 实测，别再盲试）：
@@ -894,7 +895,102 @@ export async function fetchComments(song: CommentSongRef, kind: CommentKind, pag
   if (song.source === 'tx') {
     return await txComments(song, kind, page, limit);
   }
+  if (song.source === 'qs') {
+    return await qsCommentsOf(song.songId, kind, page, limit);
+  }
   return await wyComments(song.songId, kind, page, limit);
+}
+
+/**
+ * 汽水（qs）评论 —— **免登录**，走和歌词同一个 H5 SEO 接口（`common/musicbasic` 的 `QsH5Api`）。
+ *
+ * 依据（2026-11-04 实测）：`GET /luna/h5/seo_track?track_id=<id>&device_platform=web` 的响应里
+ * **自带** `comments: { count, comments:[…] }`，每条形如
+ * `{ id, content, count_digged, count_reply, time_created(秒), ip_label,
+ *    user:{ id, nickname, medium_avatar_url:{urls:"<空格分隔的多个地址>"} } }`。
+ * 这一步比 `/luna/comments` 靠谱：后者匿名恒返回 `200 + Content-Length: 0`（要登录态）。
+ *
+ * ⚠️ 能力边界：上游**只给第一页约 5 条**（精选/热门），**不含楼中楼**（只有 `count_reply` 数字）
+ *   ⇒ `maxPage` 恒 1，`total` 用上游的 `count`（几万条也只显示这几条）。
+ *   所以 'new' 与 'hot' 拿到的是同一批 —— 不假装有第二个列表。
+ * @param songId 汽水 track id
+ * @param kind 只影响日志，不影响结果（见上）
+ * @param page >1 直接返回空页，避免评论面板无限下拉
+ */
+async function qsCommentsOf(songId: string, kind: CommentKind, page: number,
+  limit: number): Promise<CommentPage> {
+  const empty: CommentPage = {
+    comments: [],
+    total: 0,
+    page: page,
+    limit: limit,
+    maxPage: 1
+  };
+  if (page > 1) {
+    return empty;
+  }
+  const info: QsH5TrackInfo | undefined = await qsH5SeoTrack(songId);
+  if (info === undefined) {
+    // 失败要抛（与其它平台一致）：面板要能区分"没人评论"和"接口挂了"
+    throw new Error('汽水评论获取失败');
+  }
+  const out: LxComment[] = [];
+  for (let i: number = 0; i < info.comments.length; i++) {
+    const src: QsH5Comment = info.comments[i];
+    const comment: LxComment = makeComment(src.id, src.content, src.userName);
+    comment.userId = src.userId;
+    comment.avatar = src.avatar;
+    comment.timeStr = qsTimeText(src.timeSec);
+    comment.location = src.ipLabel;
+    comment.likedCount = src.diggCount > 0 ? src.diggCount : 0;
+    comment.replyNum = src.replyCount > 0 ? src.replyCount : 0;
+    out.push(comment);
+  }
+  hilog.info(DOMAIN, 'RzdQsComment',
+    'fetch id=%{public}s kind=%{public}s got=%{public}d total=%{public}d',
+    songId, kind, out.length, info.commentTotal);
+  const result: CommentPage = {
+    comments: out,
+    // ⚠️ 用**实际给出的条数**，不用上游的 `count`（实测《小半》count=63143 却只给 5 条）——
+    //   面板若显示"共 63143 条"却只列 5 条，甲方会以为列表坏了。真实总数记在 hilog 里。
+    total: out.length,
+    page: page,
+    limit: limit,
+    maxPage: 1
+  };
+  return result;
+}
+
+/**
+ * 汽水评论时间戳（Unix 秒）→ 面板文案。
+ * 与其它平台保持同一套口吻：1 小时内「N 分钟前」、当天「N 小时前」、一周内「N 天前」、更早「yyyy-MM-dd」。
+ */
+function qsTimeText(timeSec: number): string {
+  if (timeSec <= 0) {
+    return '';
+  }
+  const ms: number = timeSec * 1000;
+  const diff: number = Date.now() - ms;
+  if (diff < 0) {
+    return '';
+  }
+  const minute: number = 60 * 1000;
+  const hour: number = 60 * minute;
+  const day: number = 24 * hour;
+  if (diff < hour) {
+    const m: number = Math.max(1, Math.floor(diff / minute));
+    return m + ' 分钟前';
+  }
+  if (diff < day) {
+    return Math.floor(diff / hour) + ' 小时前';
+  }
+  if (diff < 7 * day) {
+    return Math.floor(diff / day) + ' 天前';
+  }
+  const d: Date = new Date(ms);
+  const mm: string = (d.getMonth() + 1).toString().padStart(2, '0');
+  const dd: string = d.getDate().toString().padStart(2, '0');
+  return d.getFullYear() + '-' + mm + '-' + dd;
 }
 
 /** 同一页去重（平台会在翻页边界重复返回，洛雪的 filterList 就是干这个的）。 */

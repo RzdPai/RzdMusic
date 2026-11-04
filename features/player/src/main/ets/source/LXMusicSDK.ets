@@ -1,9 +1,9 @@
 import axios, { AxiosResponse } from '@ohos/axios';
 import { qsSearchTracks } from '../geuz/QsApi';
-// ★ 2026-11-04：汽水的歌词/封面只能走内置的 Luna H5 SEO（汽水没有 LX 脚本）。
-//   与 `QsApi` 分开一个文件是**为了避循环依赖**：`QsApi` 反过来 import 本文件的类型，
-//   而 `QsLyric` 只依赖 `@kit.NetworkKit`。
-import { qsCoverUrl, qsLyricText } from '../geuz/QsLyric';
+// ★ 2026-11-04：汽水的歌词/封面/评论走**内置**的 Luna H5 SEO（汽水没有 LX 脚本，也免登录）。
+//   实现在 `common/musicbasic`（`api/QsH5Api.ets`）—— `features/comment` 也要用它，
+//   而 features 之间不许互相依赖。`QsApi` 反向 import 本文件类型，所以那个客户端不能放 player 里。
+import { qsCoverUrl, qsLyricText } from 'musicbasic';
 import CryptoJS from '@ohos/crypto-js';
 import { zlib } from '@kit.BasicServicesKit';
 import { http } from '@kit.NetworkKit';
@@ -1861,7 +1861,7 @@ export async function lxGetLyricFull(source: string, songId: string, name?: stri
     if (source === 'qs') {
       // ★ 2026-11-04（甲方：「汽水比别的平台缺好多接口，歌词评论等」）：
       //   汽水**不是 LX 脚本平台**，`lxGetLyricFallback` 那条链路对它永远是空的；
-      //   歌词只能走内置的 Luna H5 SEO（`geuz/QsLyric.ets` → `luna/h5/seo_track`）。
+      //   歌词只能走内置的 Luna H5 SEO（`common/musicbasic` 的 `api/QsH5Api.ets` → `luna/h5/seo_track`）。
       //   拿回来的是**已归一化**的 QRC（逐字时间轴），UI 侧 `amllParseQrc` 直接能吃。
       //   排查关键字：`RzdSoda`。
       const qsQrc: string = await qsLyricText(songId);

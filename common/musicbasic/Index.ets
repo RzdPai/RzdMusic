@@ -55,6 +55,19 @@ export {
 } from './src/main/ets/api/MusicApiDtos';
 export { SongDtoMapper } from './src/main/ets/api/SongDtoMapper';
 
+// ★ 2026-11-04：汽水（qs）免登录 H5 SEO 客户端（逐字歌词 KRC + 封面 + 曲目信息 + 评论）。
+//   放 common 的理由：`features/comment`（评论面板）与 `features/player`（播放链路）都要用，
+//   而 features 之间**不允许互相依赖**（架构约束 products → features → common）。
+export {
+  QsH5TrackInfo,
+  QsH5Comment,
+  qsH5SeoTrack,
+  qsKrcToQrc,
+  qsLyricText,
+  qsCoverUrl,
+  qsComments
+} from './src/main/ets/api/QsH5Api';
+
 // Model: bind getAppRuntime via export const so runtimes that skip re-exported functions still resolve.
 export { CoverCacheService, CoverCacheState } from './src/main/ets/services/CoverCacheService';
 export { CoverCacheSettingsCard } from './src/main/ets/components/CoverCacheSettingsCard';
