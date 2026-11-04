@@ -198,12 +198,6 @@ export struct RecommendPage {
   @Local chipInBar: boolean = false;
   /** 栏内纵向位移（vp）：行顶从栏底滑到栏顶时为 56 → 0。 */
   @Local chipBarOffsetVp: number = 0;
-  /** 内容层那份胶囊行的透明度（按位置算：rowY 134→94 时 1→0）。 */
-  @Local chipContentOpacity: number = 1;
-  /** 标题栏内那份胶囊行的透明度（rowY 94→54 时 0→1）。 */
-  @Local chipBarOpacity: number = 0;
-  /** 自绘标题文字的透明度（按 rowY 位置淡出，窗口靠后）。 */
-  @Local titleOverlayOpacity: number = 1;
   @Local titleSearchShown: boolean = false;
 
   /**
@@ -605,21 +599,11 @@ export struct RecommendPage {
     if (Math.abs(lift - this.chipBarOffsetVp) >= 0.5) {
       this.chipBarOffsetVp = lift;
     }
-    // ★★★ 2026-11-05（甲方）：「淡出时机过早……搜索按钮是一直在的，不需要淡出」。
-    //   淡出对象 = **只有标题文字**（自绘在 `HeaderInBar()`），窗口**靠后**且**按位置**算：
-    //   行顶 `rowY` 从「栏底 + 150」走到「栏底」时透明度 1 → 0 —— 也就是离标题栏还有 150vp 才开始淡，
-    //   贴到栏底正好淡完；不再用 `offset`（那会让一滚动就淡）。
-    //   Tab 行本身不淡（`.opacity(1)`），搜索钮在 HDS 菜单里恒显示。
-    const titleFade: number = Math.max(0, Math.min(1, (rowY - barBottom) / 150));
-    if (Math.abs(titleFade - this.titleOverlayOpacity) >= 0.02) {
-      this.titleOverlayOpacity = titleFade;
-    }
     if (sticky !== this.chipStickyActive) {
       this.chipStickyActive = sticky;
       Logger.info('RzdHomeScroll',
         `sticky=${sticky} inBar=${inBar} offset=${offset} rowY=${rowY.toFixed(1)} ` +
-          `rowTop=${this.chipRowTopInContentVp} lift=${lift.toFixed(1)} ` +
-          `titleFade=${titleFade.toFixed(2)}`);
+          `rowTop=${this.chipRowTopInContentVp} lift=${lift.toFixed(1)}`);
     }
   }
 
@@ -784,8 +768,10 @@ export struct RecommendPage {
           //   （那一刻标题栏里放的是 Tab 行，不是标题）。
           //   官方口径：`titleBar` 管「返回图标区域 + 标题区域 + 菜单区域 + 背景板」，
           //   `mainTitle` 置空只影响文字本身，背景板/材质/菜单都不动。
-          // 标题文字改由 HeaderInBar() 自绘（HDS 无法对文字做连续淡出）；这里恒空避免重叠。
-          mainTitle: '',
+          mainTitle: (this.chipStickyActive || this.chipInBar) ? '' :
+            (this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ?
+              $r('app.string.home_page_title_pc') :
+              $r('app.string.home_page_title')),
           mainTitleSize: TitleSize.TITLE_ML
         },
         // 菜单：识别在前、搜索在后；标题文字一起收走时识别也收（只留搜索），
@@ -793,45 +779,15 @@ export struct RecommendPage {
         menu: {
           value: this.buildTitleMenuItems()
         },
-        // ★ `stackBuilder`（since 6.0.0(20)，层级在背景板之上）承载两种内容：
-        //   · 未进栏：**标题文字**（`HeaderInBar()`，按位置淡出）；
-        //   · 进栏/吸顶：分类胶囊行（`StickyChipsInBar()`）。
-        stackBuilder: (this.chipStickyActive || this.chipInBar) ?
-          (): void => {
-            this.StickyChipsInBar();
-          } :
-          (): void => {
-            this.HeaderInBar();
-          }
+        // ★ 分类胶囊行按官方 `stackBuilder`（since 6.0.0(20)）画进标题栏 —— **层级在背景板之上**：
+        //   · 吸顶（`chipStickyActive`）：停在最上方；
+        //   · 进栏中（`chipInBar`）：还在 38..94 这段里跟手滑动，用 `chipBarOffsetVp` 给位移，
+        //     所以它在模糊的背景板上方是**清晰的**（甲方：不要把栏的模糊关掉，把 Tab 放上来就行）。
+        stackBuilder: (this.chipStickyActive || this.chipInBar) ? (): void => {
+          this.StickyChipsInBar();
+        } : undefined
       }
     };
-  }
-
-  /**
-   * 未进栏时叠在标题栏里的**标题文字**。
-   * ★ 2026-11-05（甲方）：「淡出时机过早……搜索按钮是一直在的，不需要淡出」。
-   *   HDS 的 `mainTitle` 只能有/无、`hideTitleArea` 又会连搜索钮一起淡 ⇒ 标题文字只能自己画，
-   *   才能做到"**晚一点**、按位置连续淡出"，而搜索/识别继续留在 HDS 菜单区域。
-   *   透明度 `titleOverlayOpacity` 由 `updateChipSticky()` 按 **rowY**（离标题栏还有多远）算。
-   */
-  @Builder
-  private HeaderInBar() {
-    Row() {
-      Text(this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ?
-        $r('app.string.home_page_title_pc') :
-        $r('app.string.home_page_title'))
-        .fontSize(this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ? 20 : 24)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('sys.color.font_primary'))
-        .maxLines(1)
-    }
-    .width(StyleConstants.FULL_WIDTH)
-    .height(TitleBarConstants.ROW_HEIGHT_VP)
-    .alignItems(VerticalAlign.Center)
-    // 右侧让位给 HDS 菜单（识别 + 搜索），不占它们的位置
-    .padding({ left: 16, right: 96 })
-    .hitTestBehavior(HitTestMode.None)
-    .opacity(this.titleOverlayOpacity)
   }
 
   /**
@@ -841,16 +797,16 @@ export struct RecommendPage {
   @Builder
   private StickyChipsInBar() {
     Row() {
-      // ★★★ 2026-11-05（甲方：「右边那层渐隐是加在 Tab 栏部分的右侧，现在看起来在搜索按钮右侧」）：
+      // ★ 2026-11-05（甲方：「回到最初那个没有淡入淡出的版本，只保留渐隐」）：
       //   渐隐层只包住**胶囊区**（`layoutWeight(1)` 的那块），Row 自己留 56vp 给搜索钮，
-      //   所以渐隐的终点正好落在胶囊区右端，而不是整行最右侧。
+      //   所以渐隐的终点落在胶囊区右端，而不是整行最右侧。
       Stack({ alignContent: Alignment.End }) {
         Column() {
           CategoryChipsSection({ recommendViewModel: this.recommendViewModel })
         }
         .width(StyleConstants.FULL_WIDTH)
 
-        // 渐隐层：只盖胶囊区右端，让第 4 个胶囊自然溶掉（官方观感）。
+        // 右侧渐隐：让被搜索钮压住的第 4 个胶囊自然溶掉（不做任何淡入淡出动画）。
         Column()
           .width(72)
           .height(StyleConstants.FULL_HEIGHT)
@@ -866,7 +822,6 @@ export struct RecommendPage {
     .width(StyleConstants.FULL_WIDTH)
     .height(TitleBarConstants.ROW_HEIGHT_VP)
     .alignItems(VerticalAlign.Center)
-    // 右侧给「搜索」钮让位（渐隐层在它左边收尾）
     .padding({ right: 56 })
     // 只有胶囊自己吃点击，其余放行
     .hitTestBehavior(HitTestMode.Transparent)
@@ -875,11 +830,6 @@ export struct RecommendPage {
     //   位置与内容里那一行完全一致；因为画在 `stackBuilder` 里（背景板之上），
     //   所以它是**清晰的**，不会被标题栏的模糊糊掉。吸顶后 offset 归 0，停在最上方。
     .translate({ y: this.chipStickyActive ? 0 : this.chipBarOffsetVp })
-    // ★★★ 2026-11-05（甲方：「官方的淡入淡出是由当前位置决定的」）：
-    //   透明度由 `updateChipSticky()` 按 rowY 算出（`chipBarOpacity` 94→54 走 0→1），
-    //   不再用"插入/移除"式的 transition —— 那样是固定 200ms，与滚动位置无关。
-    // ★ 2026-11-05（甲方）：「一个淡出有这么难做吗」——Tab 行**不淡**，淡出交给 HDS 标题区域。
-    .opacity(1)
   }
 
   /**
@@ -908,7 +858,7 @@ export struct RecommendPage {
         }
       });
     }
-    if (this.titleSearchShown || this.chipStickyActive || this.chipInBar || wide) {
+    if (this.titleSearchShown || this.chipStickyActive || wide) {
       items.push({
         content: {
           label: 'search',
@@ -1049,7 +999,6 @@ export struct RecommendPage {
                   }
                   .width(StyleConstants.FULL_WIDTH)
                   .visibility((this.chipStickyActive || this.chipInBar) ? Visibility.Hidden : Visibility.Visible)
-                  // 位置驱动的淡出（与栏内那份的淡入互补，见 updateChipSticky）
                   .onAreaChange((_old: Area, area: Area): void => {
                     this.onChipRowAreaChange(area);
                   })
@@ -1178,13 +1127,13 @@ export struct RecommendPage {
     .titleBar(this.getTitleBar())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.pageScroller])
-    // ★★★ 2026-11-05（甲方：「淡出时机过早、吸顶异常。还有搜索按钮是一直在的，不需要淡出」）：
-    //   `dynamicHideTitleBar` 停用 —— 它淡的是**整块标题区域**（连搜索钮一起淡），
-    //   而且会让标题栏高度变化 ⇒ 我们的吸顶线（按固定 94/38 算）失配，吸顶就"异常"了。
-    //   现在的分工：
-    //   · 标题文字：`mainTitle` 恒空，改由 `HeaderInBar()` 自绘，透明度按**位置**算（见 updateChipSticky），
-    //     且窗口靠后（离标题栏 150vp 才淡到 0）⇒ 不会"一滚就没"；
-    //   · 听歌识曲 + 搜索：都留在 HDS **菜单区域**（原生外观），搜索**从不淡出**，识别只在胶囊进栏时收起。
+    // ★★★ 2026-11-04（甲方）：**不要**再用 `dynamicHideTitleBar`。
+    //   它是"跟手连续收起"（`hideOffset/hideRatio`），实测 `hideOffset` 的运行期改动不生效
+    //   ⇒ 上滑一滚标题就提前跑掉；而 `hideTitleBar(true)` 又会把整条栏（含背景板/材质/菜单）
+    //   一起拿掉（状态栏发黑、按钮消失、渐变模糊消失）。
+    //   现在的做法：标题栏常驻（材质/模糊/按钮都在），吸顶时
+    //   ① `title.mainTitle` 置空（标题文字消失）、② 菜单只留「搜索」（识别消失）、
+    //   ③ `stackBuilder` 把分类胶囊行叠进标题栏（Tab 天生在最上面）。
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     .backgroundColor($r('app.color.background_secondary'))
     // 官方一镜到底示例里源页也挂这个（PageOne 的 `NavDestination().transition(OPACITY)`）：
