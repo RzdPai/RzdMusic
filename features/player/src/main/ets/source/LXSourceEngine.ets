@@ -432,9 +432,14 @@ appendPlayLog(msg);
       if (engineRef.readyRetryCount >= READY_WATCHDOG_MAX_RETRY) {
         LXSourceEngine.appendLog('引擎 注入后 ' + budget + 'ms 仍无 init 事件，停止自动重试（可手动重选音源）');
         engineRef.setReady(false, null);
+        // ★ 2026-11-04：拦了更新检查却完全没有 init ⇒ 下次放行更新检查，别把脚本锁死
+        engineRef.markUpdateCheckAllowAfterFailure('看门狗超时无 init');
         return;
       }
       engineRef.readyRetryCount++;
+      // ★ 2026-11-04：只看门狗超时也算"拦了更新检查仍起不来" ⇒ 让下一次加载放行更新检查，
+      //   否则"拦截"会把一个真的需要清单才能初始化的脚本永久锁死（重试多少次都一样）。
+      engineRef.markUpdateCheckAllowAfterFailure('看门狗超时无 init');
       LXSourceEngine.appendLog('引擎 注入后无 init 事件(第' + engineRef.readyRetryCount + '/' +
         READY_WATCHDOG_MAX_RETRY + '次)，刷新 WebView');
       engineRef.webviewReady = false;
@@ -447,17 +452,93 @@ appendPlayLog(msg);
     }, budget);
   }
 
-  /** Update-source URL fragments seen in popular LX scripts (matched as substrings). */
-  private static readonly UPDATE_URL_PATTERNS: string[] =
+  /**
+   * 更新源 URL（**已知 schema**，可以伪造成"已是最新"）。
+   *
+   * ★ 2026-11-04（甲方：「为啥之前不需要更新也能用（以前好像是会拦截更新）？能不能两个并存，
+   *   实现未更新但是能用」）：我们**本来就是**"拦掉更新检查、让脚本以为自己是最新版"，
+   *   所以以前不更新也能用。但拦截名单只覆盖了野草系这三条 ⇒
+   *   长青/刘阿五 那类（`…/lxmusic/changqing.json`、`/lx/versionh2.php`、`/lx/vers.php`）没命中，
+   *   真请求发出去 ⇒ 脚本看到"发现新版本 v1.3.0，请更新后使用" ⇒ 自己拒绝 init ⇒ 8s 超时。
+   */
+  private static readonly UPDATE_FAKE_PATTERNS: string[] =
     ['grass-source-info', 'source-info', 'source/info'];
 
-  private isUpdateSourceUrl(url: string): boolean {
-    for (let i: number = 0; i < LXSourceEngine.UPDATE_URL_PATTERNS.length; i++) {
-      if (url.indexOf(LXSourceEngine.UPDATE_URL_PATTERNS[i]) >= 0) {
+  /**
+   * 更新清单 URL（**schema 未知**）：不能伪造 body（不知道它要什么字段），
+   * 所以让它**请求失败**——脚本的版本检查通常包在 try/catch 里，失败即"不提示、继续初始化"。
+   */
+  private static readonly UPDATE_MANIFEST_PATTERNS: string[] = [
+    'changqing.json', 'versionh2.php', 'vers.php', 'update.json', 'version.json',
+    'checkupdate', 'check-update', 'upgrade.json', 'updateinfo', '/lx/version'
+  ];
+
+  /** 某脚本被拦过更新检查（值为时间戳）。 */
+  private static blockedKey(scriptId: string): string {
+    return 'lxUpdateBlocked:' + scriptId;
+  }
+
+  /** 某脚本豁免拦截（上次拦了它还是起不来 ⇒ 下次放行让脚本自己决定）。 */
+  private static allowKey(scriptId: string): string {
+    return 'lxUpdateCheckAllow:' + scriptId;
+  }
+
+  private matchesAny(url: string, patterns: string[]): boolean {
+    for (let i: number = 0; i < patterns.length; i++) {
+      if (url.indexOf(patterns[i]) >= 0) {
         return true;
       }
     }
     return false;
+  }
+
+  /**
+   * 该脚本是否"隔离更新检查"（= 应该拦截）。
+   * 若它上次被拦之后仍然 init 失败，说明拦错了（脚本确实需要清单才能跑）⇒ 这次放行。
+   */
+  private shouldBlockUpdateCheck(url: string, scriptId: string): boolean {
+    if (scriptId.length > 0) {
+      const allow: boolean = (AppStorage.get<boolean>(LXSourceEngine.allowKey(scriptId)) ?? false) === true;
+      if (allow) {
+        return false;
+      }
+    }
+    return this.matchesAny(url, LXSourceEngine.UPDATE_FAKE_PATTERNS) ||
+      this.matchesAny(url, LXSourceEngine.UPDATE_MANIFEST_PATTERNS);
+  }
+
+  /** 拦截后记一笔：给设置页展示"有新版本，已拦截以保持可用"，并标记该脚本。 */
+  private noteBlockedUpdateCheck(url: string, scriptId: string, scriptName: string): void {
+    const text: string = '音源「' + scriptName + '」的更新检查已被拦截（保持可用）：' + url.substring(0, 80);
+    try {
+      AppStorage.setOrCreate('lxUpdateBlockedLog', text);
+      AppStorage.setOrCreate('lxUpdateBlockedUrl', url);
+      AppStorage.setOrCreate('lxUpdateBlockedVersion', Date.now());
+      if (scriptId.length > 0) {
+        AppStorage.setOrCreate(LXSourceEngine.blockedKey(scriptId), Date.now());
+      }
+    } catch (e) {
+      // AppStorage 不可用时只打日志
+    }
+    LXSourceEngine.appendLog('[音源] ' + text);
+  }
+
+  /**
+   * 拦截之后脚本**仍然**没就绪 ⇒ 说明"检查失败"它接受不了 ⇒ 下次放行，优先保证"能跑"。
+   * @param reason 触发原因（`init status=false` / `看门狗超时`），只用于日志
+   */
+  private markUpdateCheckAllowAfterFailure(reason: string): void {
+    const scriptId: string = this.currentScriptId;
+    if (scriptId.length === 0) {
+      return;
+    }
+    const blockedAt: number = AppStorage.get<number>(LXSourceEngine.blockedKey(scriptId)) ?? 0;
+    if (blockedAt <= 0) {
+      return;
+    }
+    AppStorage.setOrCreate(LXSourceEngine.allowKey(scriptId), true);
+    LXSourceEngine.appendLog('[音源] ' + (this.currentApiInfo?.name ?? scriptId) +
+      ' 拦截更新检查后仍未就绪（' + reason + '）⇒ 下次放行更新检查');
   }
 
   private handleNativeFetch(data: Record<string, Object>): void {
@@ -467,15 +548,28 @@ appendPlayLog(msg);
     let headers: Record<string, string> = data.headers as Record<string, string>;
     let body: string = data.body as string;
     let timeout: number = (data.timeout as number) || 15000;
-    // 拦截音源脚本的在线更新源请求：返回「当前已是注入版本」的响应，避免脚本因
-    // 更新源版本不符而 init 失败（"服务器异常"）。覆盖常见更新源 URL 形态。
-    if (this.isUpdateSourceUrl(url)) {
-      const curVersion: string = this.currentApiInfo?.version ?? '';
-      const verEsc: string = curVersion.replace(/"/g, '\\"');
-      const fake: string = '{"status":{"success":true,"data":{"m":"' + verEsc + '","s":""}}}';
-      const esc: string = fake.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-      LXSourceEngine.appendLog('引擎 拦截更新源请求 ' + url.substring(0, 80));
-      this.runJs(`window._lx_handleFetchResponse(${requestId}, null, 200, '{}', '${esc}')`);
+    // 拦截音源脚本的**在线更新检查**：让脚本以为"已经是最新/检查不成功"，从而继续初始化。
+    // （"未更新也能用"就靠这里；详见 UPDATE_FAKE_PATTERNS / UPDATE_MANIFEST_PATTERNS 的注释。）
+    const scriptId: string = this.currentScriptId;
+    if (this.shouldBlockUpdateCheck(url, scriptId)) {
+      const scriptName: string = this.currentApiInfo?.name ?? scriptId;
+      this.noteBlockedUpdateCheck(url, scriptId, scriptName);
+      if (this.matchesAny(url, LXSourceEngine.UPDATE_FAKE_PATTERNS)) {
+        // ① schema 已知（野草系）：伪造"当前已是注入版本"
+        const curVersion: string = this.currentApiInfo?.version ?? '';
+        const verEsc: string = curVersion.replace(/"/g, '\\"');
+        const fake: string = '{"status":{"success":true,"data":{"m":"' + verEsc + '","s":""}}}';
+        const esc: string = this.escapeJsString(fake);
+        LXSourceEngine.appendLog('引擎 拦截更新检查（伪造已最新）: ' + url.substring(0, 80));
+        this.runJs(`window._lx_handleFetchResponse(${requestId}, null, 200, '{}', '${esc}')`);
+        return;
+      }
+      // ② schema 未知（长青/星海那类清单）：让它"请求失败"——
+      //    脚本的版本检查基本都包在 try/catch 里，失败即跳过提示、继续 init。
+      const blockErr: string = '{"code":2300006,"message":"update check blocked to keep the source usable"}';
+      const escErr: string = this.escapeJsString(blockErr);
+      LXSourceEngine.appendLog('引擎 拦截更新检查（置为失败以保持可用）: ' + url.substring(0, 80));
+      this.runJs(`window._lx_handleFetchResponse(${requestId}, '${escErr}', 0, '{}', '')`);
       return;
     }
     LXSourceEngine.appendLog('引擎 原生请求 ' + method + ' ' + url.substring(0, 140));
@@ -574,6 +668,8 @@ appendPlayLog(msg);
             lxSourceManager.saveApiSources(this.currentScriptId, srcs);
           } else {
             this.setReady(false, null);
+            // ★ 2026-11-04：拦了更新检查它还是起不来 ⇒ 下次放行（宁可让它自己判断能不能用）
+            this.markUpdateCheckAllowAfterFailure('init status=false');
             if (status && srcs === undefined) {
               LXSourceEngine.appendLog('引擎 init status=true 但缺少 sources，按未就绪处理');
             }

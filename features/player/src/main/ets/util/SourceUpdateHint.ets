@@ -15,6 +15,7 @@
  *   数据源与设置页同一个（`lxUpdateAlert*`，由 `LXSourceEngine.handleJsMessage` 的 `updateAlert` 写）。
  */
 const KEY_UPDATE_LOG: string = 'lxUpdateAlertLog';
+const KEY_BLOCKED_LOG: string = 'lxUpdateBlockedLog';
 
 /**
  * @returns 本会话内脚本上报的「需要更新」摘要（取首行，超过 60 字截断）；没有则空串。
@@ -47,6 +48,17 @@ export function engineNotReadyToast(): string {
   const hint: string = pendingSourceUpdateHint();
   if (hint.length > 0) {
     return '音源需要更新：' + hint + '（设置 → 音源）';
+  }
+  // ★ 2026-11-04：我们**拦掉了**该脚本的更新检查（为了"未更新也能用"），
+  //   但它仍然起不来 ⇒ 说明这次拦截救不了它，如实告诉用户去手动更新。
+  let blocked: string = '';
+  try {
+    blocked = AppStorage.get<string>(KEY_BLOCKED_LOG) ?? '';
+  } catch (e) {
+    blocked = '';
+  }
+  if (blocked.length > 0) {
+    return '音源无法就绪：该音源有新版本但更新检查已被拦截（设置 → 音源 手动更新后再试）';
   }
   return '音源未就绪，请在设置中导入并选中源';
 }
