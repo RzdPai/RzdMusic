@@ -74,6 +74,13 @@ export class LyricLiveViewController {
   private isActive: boolean = false;
   /** True while an async start is in flight (prevents duplicate creation). */
   private isStarting: boolean = false;
+  /**
+   * ★ 2026-11-04：会话级的"用不了实况窗"原因（空串 = 还能试）。
+   * 实测真机：先 `code=401`（512×512 图标超限，已按 48px 修掉），修完变成
+   * `code=1003500005 The right of liveView is not enabled.` ⇒ **应用未在 AGC 开通实况窗权益**，
+   * 这不是代码能解决的。记住它，本会话不再每首歌重试（原来每首都会白跑一次 IPC + 刷一行异常）。
+   */
+  private unsupportedReason: string = '';
   /** Parsed lyric lines of the current track. */
   private lines: AmllLyricLine[] = [];
   /** Last lyric line index pushed; -1 means nothing pushed yet. */
@@ -115,6 +122,11 @@ export class LyricLiveViewController {
     if (this.isActive || this.isStarting) {
       return;
     }
+    // ★ 2026-11-04：权益/开关类失败是**一次性、会话级**的（换歌也不会变），
+    //   以前每首歌都重试一次 ⇒ 每首打一遍同样的异常、白跑一次 IPC。
+    if (this.unsupportedReason.length > 0) {
+      return;
+    }
     this.isStarting = true;
     this.curTitle = title.length > 0 ? title : '正在播放';
     this.curSinger = singer;
@@ -127,7 +139,8 @@ export class LyricLiveViewController {
   private async doStart(): Promise<void> {
     try {
       if (!await liveViewManager.isLiveViewEnabled()) {
-        appendPlayLog('[实况窗] 系统实况窗开关未开启，跳过创建');
+        this.unsupportedReason = '系统实况窗开关未开启';
+        appendPlayLog('[实况窗] 系统实况窗开关未开启，本次会话不再尝试');
         return;
       }
       const agent: WantAgent | undefined = await this.getWantAgent();
@@ -138,15 +151,32 @@ export class LyricLiveViewController {
         appendPlayLog('[实况窗] 创建成功');
         this.pushUpdate(liveView);
       } else {
+        this.unsupportedReason = 'resultCode=' + result.resultCode;
         appendPlayLog('[实况窗] 创建失败 resultCode=' + result.resultCode + ' msg=' + result.message);
       }
     } catch (e) {
       const err: BusinessError = e as BusinessError;
-      appendPlayLog('[实况窗] 创建异常 code=' + err.code + ' msg=' + err.message);
+      appendPlayLog('[实况窗] 创建异常 code=' + err.code + ' msg=' + err.message +
+        (this.isEntitlementError(err.code) ? '（实况窗权益未开通，本会话不再尝试）' : ''));
       Logger.warn(TAG, 'startLiveView failed: ' + err.code + ' ' + err.message);
+      if (this.isEntitlementError(err.code)) {
+        this.unsupportedReason = 'entitlement=' + err.code;
+      }
     } finally {
       this.isStarting = false;
     }
+  }
+
+  /**
+   * 判断是不是"权益/能力未开通"这类**换歌也不会好**的错误。
+   *
+   * `1003500005 The right of liveView is not enabled.` —— AGC 未给应用开通实况窗权益，
+   * 代码侧无解（要去 AppGallery Connect 申请），所以记住它、本会话别再重试。
+   * `401`（参数非法/超限，例如早期的 512×512 图标）也归进来：那是我们自己的参数问题，
+   * 一小时内不会自己好，重试同样只是刷日志。
+   */
+  private isEntitlementError(code: number): boolean {
+    return code === 1003500005 || code === 401;
   }
 
   /**

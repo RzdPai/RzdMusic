@@ -698,6 +698,13 @@ async function tryQualities(sourceCanonical: string, scriptKey: string, songId: 
         ? err.message : JSON.stringify(e);
       lastReason = msg;
       appendPlayLog('[播放] 音质 ' + q + ' 异常: ' + msg.substring(0, 200));
+      // ★★ 网络类失败（DNS/连接/超时）**与音质档位无关**：再试下一档只是白等。
+      //   实测 `2300006 Failed to resolve the host name` 单次要 8.8s，一首歌两档就是 17s+，
+      //   再加一个脚本候选 ⇒ 汽水歌要等半分钟才换平台。这里直接跳出音质链。
+      if (isTransientFailure(msg)) {
+        appendPlayLog('[播放] 网络类失败，跳过 ' + sourceCanonical + ' 其余音质档（省时）');
+        break;
+      }
     }
   }
   transients.set(pairKey(activeSourceId(), key), lastReason);
