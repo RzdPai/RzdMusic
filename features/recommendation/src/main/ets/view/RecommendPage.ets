@@ -785,6 +785,14 @@ export struct RecommendPage {
     .padding({ right: 56 })
     // 只有胶囊自己吃点击，其余放行
     .hitTestBehavior(HitTestMode.Transparent)
+    // ★★★ 2026-11-04（甲方：「它到标题下面时会瞬间吸顶，看起来就像突然跳了一下」）：
+    //   流内那一行的顶边在**标题栏下沿**（≈94vp），而这里的胶囊在**栏内**（38..94vp）——
+    //   切换那一帧位置差半个栏高，肉眼就是"跳一下"。
+    //   用官方 `transition` 把插入/移除做成**淡入 + 向上 12vp 滑入**（180ms EaseOut）：
+    //   位移被加速曲线吃掉，视觉上像"滑上去"而不是"跳上去"。
+    .transition(TransitionEffect.OPACITY
+      .combine(TransitionEffect.translate({ y: 12 }))
+      .animation({ duration: 180, curve: Curve.EaseOut }))
   }
 
   /**
@@ -942,14 +950,21 @@ export struct RecommendPage {
             })
 
                   // ★ 四个分类 Tab 那一行：外面包一层**只负责量它**的容器（顶边 / 高度）。
-                  //   吸顶生效时**流内这一份走 `Visibility.Hidden`**（保留占位、不参与绘制）——
-                  //   与 RzdVideo 逐字同一条口径：屏上任何时刻只有一行分类可见，且布局不跳。
+                  //   吸顶生效时流内这一份**淡出**（保留占位 ⇒ 布局不跳），
+                  //   同时标题栏里的 `stackBuilder` 那份**淡入并向上滑入**（见 StickyChipsInBar）。
+                  //   ★ 2026-11-04（甲方：「瞬间吸顶像突然跳了一下」）：以前这里是 `Visibility.Hidden`
+                  //     ⇒ 一帧之内"旧行消失 + 新行出现"，位移半个栏高，看起来就是跳。
+                  //     现在两边都走同一段 180ms 过渡：旧行原地淡出、新行从下方 12vp 滑入，
+                  //     视觉上是"换行"而不是"跳行"。
                   //   ⚠️ 别改成 `Visibility.None`：那会把后面所有内容整体上移，吸顶瞬间闪一下。
                   Column() {
                     CategoryChipsSection({ recommendViewModel: this.recommendViewModel })
                   }
                   .width(StyleConstants.FULL_WIDTH)
-                  .visibility(this.chipStickyActive ? Visibility.Hidden : Visibility.Visible)
+                  .opacity(this.chipStickyActive ? 0 : 1)
+                  .animation({ duration: 180, curve: Curve.EaseOut })
+                  // 淡出后不再吃点击（否则会点到看不见的胶囊）
+                  .hitTestBehavior(this.chipStickyActive ? HitTestMode.None : HitTestMode.Default)
                   .onAreaChange((_old: Area, area: Area): void => {
                     this.onChipRowAreaChange(area);
                   })
