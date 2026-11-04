@@ -40,10 +40,11 @@ import {
   unregisterHomeSourceRefresh,
   UseAccountRecState,
   WindowInfo,
-  buildTitleMaterial
+  buildTitleMaterial,
+  immersiveFromLevel
 } from 'musicbasic';
 import { AccountChangedState, PlayerConstants } from 'player';
-import { BlurStrategy, HideMode, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
+import { BlurStrategy, HideMode, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { RecommendViewModel } from '../viewmodel/RecommendViewModel';
 import { CategoryContentSection } from './CategoryContentSection';
 import { HomeFloatingMiniBar } from './HomeFloatingMiniBar';
@@ -199,6 +200,14 @@ export struct RecommendPage {
    * 展开时 = 状态栏+标题栏（≈94），标题区域收起后 = 只剩状态栏（≈38）⇒ 副本顶到屏幕最上面。
    */
   @Local chipStickyLineVp: number = 0;
+  /**
+   * 标题区域**开始收起**的滚动偏移（vp）= 分类 Tab 那一行刚好到达标题栏下沿时的偏移
+   * （`chipRowTopInContentVp − contentTopInsetVp()`）。
+   * ★ 2026-11-04（甲方：「现在还没吸顶时标题就被隐藏了，我要的是快吸顶的时候隐藏」）：
+   *   以前 `hideOffset` 写 0 ⇒ 一滚动标题就没了；现在把它当 HDS 的 `hideOffset`，
+   *   同时 {@link stickyLineVp} 的收起曲线也从这里起算。
+   */
+  @Local titleHideStartVp: number = 0;
   @Local titleSearchShown: boolean = false;
 
   /**
@@ -581,6 +590,11 @@ export struct RecommendPage {
       // 还没量到那一行的位置（首帧 / 分类行还没出现）⇒ 不判吸顶，免得闪一下
       return;
     }
+    // ★ 2026-11-04：标题区域**从"快到吸顶"才开始收**（甲方要求），起点 = 那一行到达标题栏下沿的偏移。
+    const hideStart: number = Math.max(0, this.chipRowTopInContentVp - this.contentTopInsetVp());
+    if (Math.abs(hideStart - this.titleHideStartVp) >= 0.5) {
+      this.titleHideStartVp = hideStart;
+    }
     const stickLine: number = this.stickyLineVp(offset);
     // 迟滞 2vp：标题区域收起是**跟手**的（向下滚时吸顶线会往回长），
     // 没有迟滞会在临界点来回抖。
@@ -622,7 +636,10 @@ export struct RecommendPage {
     if (rowH <= 0) {
       return base;
     }
-    const collapse: number = Math.min(1, Math.max(0, offset / rowH));
+    // ★ 2026-11-04：收起曲线从"快吸顶"那一刻（`titleHideStartVp`）起算，
+    //   之后每滚 1vp 收 1vp（与 HDS 的 `hideOffset`/`hideRatio: 1.0` 逐字对齐）。
+    const start: number = this.titleHideStartVp;
+    const collapse: number = Math.min(1, Math.max(0, (offset - start) / rowH));
     return this.windowInfo.statusBarTopVp + rowH * (1 - collapse);
   }
 
@@ -782,36 +799,54 @@ export struct RecommendPage {
             $r('app.string.home_page_title'),
           mainTitleSize: TitleSize.TITLE_ML
         },
-        menu: this.breakpointEnv.widthBreakpoint !== WidthBreakpoint.WIDTH_SM || this.titleSearchShown ? {
-          value: [
-            {
-              content: {
-                label: 'search',
-                icon: new SymbolGlyphModifier($r('sys.symbol.magnifyingglass'))
-                  .fontSize(22)
-                  .fontColor([$r('sys.color.font_primary')]),
-                isEnabled: true,
-                action: (): void => {
-                  this.openSearch();
-                }
-              }
-            },
-            {
-              content: {
-                label: 'identify',
-                icon: new SymbolGlyphModifier($r('sys.symbol.identify_song'))
-                  .fontSize(22)
-                  .fontColor([$r('sys.color.font_primary')]),
-                isEnabled: true,
-                action: (): void => {
-                  this.pageIndexInfos.pushPathByName(RouterUrlConstants.MUSIC_RECOGNITION, null);
-                }
-              }
-            }
-          ]
-        } : undefined
+        // ★★ 2026-11-04（甲方）：按钮**位置/身份**三态定稿 ——
+        //   · 最顶部：内容里只剩整行搜索框 ⇒ 标题栏里只放「听歌识曲」；
+        //   · 稍微滑动（`titleSearchShown`）：内容里的搜索框滚走了 ⇒ 标题栏补上「搜索」钮，
+        //     顺序按甲方要求 = **识别在左、搜索在右**（所以下面先 push identify，再 push search）；
+        //   · 吸顶：整个标题区域被 `dynamicHideTitleBar` 收起（标题 + 识别一起消失），
+        //     「搜索」钮不丢 —— 它出现在吸顶 Tab 行的右侧（见 HomeBranch 里那份吸顶副本）。
+        //   · 宽屏没有内容里的搜索行（`HomeSearchRow` 只在窄屏渲染）⇒ 宽屏始终保留搜索钮。
+        menu: {
+          value: this.buildTitleMenuItems()
+        }
       }
     };
+  }
+
+  /**
+   * 标题栏菜单项：**识别在前、搜索在后**（甲方 2026-11-04：「改成做听歌识曲右搜索」）。
+   * 窄屏顶部时内容里那一整行就是搜索框，标题栏不再重复放搜索；宽屏没有内容搜索行，所以一直保留。
+   */
+  private buildTitleMenuItems(): HdsNavigationMenuItemOptions[] {
+    const items: HdsNavigationMenuItemOptions[] = [];
+    items.push({
+      content: {
+        label: 'identify',
+        icon: new SymbolGlyphModifier($r('sys.symbol.identify_song'))
+          .fontSize(22)
+          .fontColor([$r('sys.color.font_primary')]),
+        isEnabled: true,
+        action: (): void => {
+          this.pageIndexInfos.pushPathByName(RouterUrlConstants.MUSIC_RECOGNITION, null);
+        }
+      }
+    });
+    const wide: boolean = this.breakpointEnv.widthBreakpoint !== WidthBreakpoint.WIDTH_SM;
+    if (this.titleSearchShown || wide) {
+      items.push({
+        content: {
+          label: 'search',
+          icon: new SymbolGlyphModifier($r('sys.symbol.magnifyingglass'))
+            .fontSize(22)
+            .fontColor([$r('sys.color.font_primary')]),
+          isEnabled: true,
+          action: (): void => {
+            this.openSearch();
+          }
+        }
+      });
+    }
+    return items;
   }
 
   @Monitor('homeSourceState.source')
@@ -1020,13 +1055,33 @@ export struct RecommendPage {
             //   · `hitTestBehavior(Transparent)`：只有这一行自己吃点击，其余一律放行给下面的内容
             //     （与 RzdVideo 同一口径）。
             if (this.chipStickyActive) {
-              Column() {
-                CategoryChipsSection({ recommendViewModel: this.recommendViewModel })
+              Row({ space: 8 }) {
+                Column() {
+                  CategoryChipsSection({ recommendViewModel: this.recommendViewModel })
+                }
+                .layoutWeight(1)
+
+                // ★★ 2026-11-04（甲方：「吸顶时只隐藏标题和听歌识曲，不隐藏搜索按钮」）：
+                //   标题区域整体收起后，搜索入口不能跟着消失 ⇒ 它挪到吸顶行右侧。
+                //   样式与内容里那颗识别钮同一套（Button 宿主 + 光感 + 半透明白底）。
+                Button() {
+                  SymbolGlyph($r('sys.symbol.magnifyingglass'))
+                    .fontSize('22fp')
+                    .fontColor([$r('sys.color.font_primary')])
+                }
+                .type(ButtonType.Normal)
+                .width(36)
+                .height(36)
+                .borderRadius(18)
+                .systemMaterial(immersiveFromLevel(this.ambientState.level))
+                .backgroundColor('#33FFFFFF')
+                .onClick((): void => {
+                  this.openSearch();
+                })
               }
               .width(StyleConstants.FULL_WIDTH)
-              // ★ 2026-11-04：不再是写死的 `contentTopInsetVp()`（标题栏下沿），
-              //   而是随标题区域收起上移的 `chipStickyLineVp`（收完 = 状态栏下沿）。
-              .padding({ top: this.chipStickyLineVp })
+              .alignItems(VerticalAlign.Center)
+              .padding({ top: this.chipStickyLineVp, right: 16 })
               .hitTestBehavior(HitTestMode.Transparent)
               .zIndex(5)
             }
@@ -1089,7 +1144,9 @@ export struct RecommendPage {
       hideTitleArea: true,
       hideStatusBar: false,
       mode: HideMode.SCROLL_UP,
-      hideOffset: 0,
+      // ★ 2026-11-04（甲方）：「快吸顶的时候隐藏（刚到标题下面的时候）」——
+      //   起点交给 HDS 当 `hideOffset`：分类 Tab 到达标题栏下沿之前，标题栏**不动**。
+      hideOffset: this.titleHideStartVp,
       hideRatio: 1.0
     })
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])

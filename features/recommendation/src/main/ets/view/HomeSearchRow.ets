@@ -27,7 +27,11 @@ export struct HomeSearchRow {
 
   build() {
     Column() {
-      Row({ space: RECOGNIZE_GAP }) {
+      // ★★ 2026-11-04（甲方：「最顶部时…改成整个搜索框，听歌识曲放进标题」）：
+      //   这一行**只留搜索框**（整行铺满），识别歌曲已移到 HDS 标题栏的菜单里
+      //   （见 `RecommendPage.getTitleBar()`）。`onOpenRecognize` 保留参数以免动调用方，
+      //   但本行不再渲染识别按钮。
+      Row() {
         // ★★ 2026-10-20：**不要**把搜索框包在"玻璃 Stack"里。
         //   一镜到底做形变的是挂 `geometryTransition` 的那个节点；玻璃如果挂在外面那层 Stack 上，
         //   飞起来就只有框里的文字、框本身不动（甲方原话："只有搜索框里的文字有动画"）。
@@ -78,21 +82,7 @@ export struct HomeSearchRow {
             }
           })
 
-        // 识别歌曲：用 Button 作宿主（A 档），页面 body 里也能渲染沉浸材质
-        Button() {
-          SymbolGlyph($r('sys.symbol.identify_song'))
-            .fontSize('24fp')
-            .fontColor([$r('sys.color.font_primary')])
-        }
-        .type(ButtonType.Normal)
-        .width(SEARCH_FIELD_H)
-        .height(SEARCH_FIELD_H)
-        .borderRadius(SEARCH_FIELD_H / 2)
-        .systemMaterial(immersiveFromLevel(this.ambientState.level))
-        .backgroundColor('#33FFFFFF')
-        .onClick((): void => {
-          this.onOpenRecognize();
-        })
+        // 识别歌曲按钮已移到标题栏菜单（2026-11-04 甲方要求）
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)
