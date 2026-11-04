@@ -31,6 +31,16 @@ const PRIMARY_TITLE_MAX: number = 200;
 const MIN_PUSH_INTERVAL_MS: number = 500;
 /** Icon in resources/rawfile shown by the live view pickup layout (mandatory). */
 const LIVE_VIEW_ICON: string = 'liveview_icon.png';
+/**
+ * ★ 2026-11-04：胶囊图标的**解码边长**（px）。
+ *
+ * 真机日志：`[实况窗] 图标已加载 (rawfile/liveview_icon.png)` 之后仍然
+ * `创建异常 code=401 … capsule.icon … [or the parameter length exceeds the limit]`。
+ * 类型已经对了（`capsule.icon = PixelMap`），所以命中的是报错里第二种可能：**参数超限**。
+ * 资源实测 **512×512** RGBA ⇒ 直接塞进胶囊必被拒。这里按 48×48 解码，
+ * 既够胶囊显示，又把像素量降到 1/113。
+ */
+const LIVE_VIEW_ICON_PX: number = 48;
 /** Delay before parsing an uncached (large) lyric off the UI thread hot path. */
 const LYRIC_PARSE_DELAY_MS: number = 250;
 
@@ -402,10 +412,14 @@ export class LyricLiveViewController {
     try {
       const bytes: Uint8Array = ctx.resourceManager.getRawFileContentSync(LIVE_VIEW_ICON);
       const src: image.ImageSource = image.createImageSource(bytes.buffer as ArrayBuffer);
-      const pixmap: image.PixelMap = src.createPixelMapSync();
+      // ★ 按胶囊尺寸解码（原图 512×512 会被服务端判定"参数超限"而 401）
+      const decodeOptions: image.DecodingOptions = {
+        desiredSize: { width: LIVE_VIEW_ICON_PX, height: LIVE_VIEW_ICON_PX }
+      };
+      const pixmap: image.PixelMap = src.createPixelMapSync(decodeOptions);
       src.release();
       this.capsuleIcon = pixmap;
-      appendPlayLog('[实况窗] 图标已加载 (rawfile/' + LIVE_VIEW_ICON + ')');
+      appendPlayLog('[实况窗] 图标已加载 (rawfile/' + LIVE_VIEW_ICON + ' → ' + LIVE_VIEW_ICON_PX + 'px)');
       return pixmap;
     } catch (error) {
       const err: BusinessError = error as BusinessError;

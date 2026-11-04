@@ -33,6 +33,7 @@
  * 排查关键字：`RzdSoda`
  */
 import { http } from '@kit.NetworkKit';
+import { appendPlayLog } from 'musicbasic';
 
 const QS_H5_SEO_TRACK: string = 'https://beta-luna.douyin.com/luna/h5/seo_track';
 const QS_TAG: string = '[RzdSoda]';
@@ -42,6 +43,19 @@ const QS_H5_HEADERS: Record<string, string> = {
     'Chrome/120.0.0.0 Safari/537.36',
   'Accept': 'application/json'
 };
+
+/**
+ * 汽水这边所有诊断都走这里：**两路都打**。
+ *
+ * ★ 2026-11-04：以前只用 `console.info`（→ hilog），而甲方贴的是 App 内「播放日志」面板
+ *   （`appendPlayLog` → `AppStorage['lxPlayLog']`）⇒ 面板里根本看不到汽水歌词的日志，
+ *   排查只能靠 `hdc shell hilog -x | Select-String RzdSoda`。现在两路都写。
+ */
+function qsLog(message: string): void {
+  const line: string = QS_TAG + ' ' + message;
+  console.info(line);
+  appendPlayLog(line);
+}
 
 /** 汽水一首歌的 H5 SEO 详情（只保留我们会用到的那几个字段）。 */
 export class QsH5TrackInfo {
@@ -139,7 +153,7 @@ export function qsKrcToQrc(raw: string): string {
     }
     out.push('[' + lineStart + ',' + lineDur + ']' + words);
   }
-  console.info(QS_TAG + ' qsKrcToQrc lines=' + out.length + ' dropped=' + dropped +
+  qsLog(' qsKrcToQrc lines=' + out.length + ' dropped=' + dropped +
     ' rawLen=' + raw.length);
   return out.join('\n');
 }
@@ -203,7 +217,7 @@ async function qsHttpGet(url: string, headers: Record<string, string>): Promise<
         expectDataType: http.HttpDataType.STRING
       });
       if (resp.responseCode !== 200) {
-        console.info(QS_TAG + ' h5/seo_track http=' + resp.responseCode);
+        qsLog(' h5/seo_track http=' + resp.responseCode);
         return '';
       }
       return typeof resp.result === 'string' ? (resp.result as string) : '';
@@ -211,7 +225,7 @@ async function qsHttpGet(url: string, headers: Record<string, string>): Promise<
       client.destroy();
     }
   } catch (err) {
-    console.info(QS_TAG + ' h5/seo_track failed err=' + JSON.stringify(err).substring(0, 80));
+    qsLog(' h5/seo_track failed err=' + JSON.stringify(err).substring(0, 80));
     return '';
   }
 }
@@ -234,7 +248,7 @@ export async function qsH5SeoTrack(trackId: string): Promise<QsH5TrackInfo | und
     // 兜底：实测**不带任何请求头**也能通（万一哪天按 UA 风控了，这条还能救回来）
     text = await qsHttpGet(url, {});
     if (text.length > 0) {
-      console.info(QS_TAG + ' h5/seo_track retried without UA ok id=' + trackId);
+      qsLog(' h5/seo_track retried without UA ok id=' + trackId);
     }
   }
   if (text.length === 0) {
@@ -252,7 +266,7 @@ export async function qsH5SeoTrack(trackId: string): Promise<QsH5TrackInfo | und
     // ⚠️ **无效 id 也是 200**：只有 status_msg、没有 seo_track.track。
     //   判成失败且**不写缓存**，避免把"风控/抖动"永久固化成"这首歌没歌词"。
     if (statusMsg.length > 0 || (trackName.length === 0 && asNumber(track['duration']) <= 0)) {
-      console.info(QS_TAG + ' h5/seo_track invalid id=' + trackId + ' statusMsg=' +
+      qsLog(' h5/seo_track invalid id=' + trackId + ' statusMsg=' +
         (statusMsg.length > 0 ? statusMsg : '(无)'));
       return undefined;
     }
@@ -276,14 +290,14 @@ export async function qsH5SeoTrack(trackId: string): Promise<QsH5TrackInfo | und
     const hidden: boolean = asBoolean(lyric['hide_request_lyrics']);
     const rawLyric: string = asString(lyric['content']);
     if (hidden) {
-      console.info(QS_TAG + ' h5/seo_track lyric hidden id=' + trackId);
+      qsLog(' h5/seo_track lyric hidden id=' + trackId);
     }
     info.qrc = hidden ? '' : qsLyricOfType(info.lyricType, rawLyric);
   } catch (err) {
-    console.info(QS_TAG + ' h5/seo_track parse failed id=' + trackId);
+    qsLog(' h5/seo_track parse failed id=' + trackId);
     return undefined;
   }
-  console.info(QS_TAG + ' h5/seo_track ok id=' + trackId + ' name=' + info.name +
+  qsLog(' h5/seo_track ok id=' + trackId + ' name=' + info.name +
     ' singer=' + info.singer + ' type=' + (info.lyricType.length > 0 ? info.lyricType : '(空)') +
     ' lyricLines=' + (info.qrc.length > 0 ? info.qrc.split('\n').length : 0) +
     ' cover=' + (info.cover.length > 0 ? 1 : 0));

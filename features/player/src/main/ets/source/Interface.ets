@@ -16,6 +16,21 @@ export function toLXSource(value: string): LXSource {
   return 'kw';
 }
 
+/**
+ * 请求信封里的 `source`：**保留脚本声明的原始键**（别名也原样透传）。
+ *
+ * ★★★ 2026-11-04（踩到的坑，别退回 `toLXSource`）：`toLXSource()` 会把**不认识的键塌成 `'kw'`**。
+ *   实测脚本「全豆要[聚合音源] v9.7」把汽水声明成 `qsvip`（`sourceConfig['qsvip']`，
+ *   `on(request)` 里按 `source === 'qsvip'` 路由到 `qishuiHandler`）；
+ *   一旦经过 `toLXSource('qsvip')` 就变成 `'kw'` ⇒ 脚本把它当酷我处理，
+ *   "平台别名 → qs" 的映射当场失效（请求照样发出去，但拿不到汽水地址）。
+ *   脚本只按字符串路由，不需要白名单，透传即可。
+ * @param value 脚本声明的平台键（如 `qsvip` / `kw`）；空串回落 `'kw'`
+ */
+export function toLXSourceKey(value: string): LXSource {
+  return (value.length > 0 ? value : 'kw') as LXSource;
+}
+
 export interface LXUserApiSourceInfo {
   name: string
   type: string

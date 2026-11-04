@@ -25,6 +25,85 @@ const SOURCE_NAMES: Record<string, string> = {
 // 汽水（qs）也参与跨平台搜索（2026-10-30）
 const PLATFORM_FALLBACK_ORDER: string[] = ['tx', 'kw', 'kg', 'mg', 'wy', 'qs'];
 
+/**
+ * ★★★ 2026-11-04：**平台别名** —— 脚本常用自己的键声明同一个平台，而我们全仓只用规范 id。
+ *
+ * 实测（甲方提供的「全豆要[聚合音源] v9.7 修复优化版.js」）：
+ * ```js
+ * const QISHUI_SOURCE_ID = "qsvip";              // ← 键是 qsvip
+ * const QISHUI_SOURCE_NAME = "汽水VIP";
+ * sourceConfig[QISHUI_SOURCE_ID] = { qualitys: ["128k","320k","flac","flac24bit"] };
+ * ```
+ * 它**没有 `qs` 键** ⇒ 不做映射时它对我们恒等于"不支持汽水"，
+ * 回退链里 `qs` 只剩 `星海音乐源` 一个候选，那条一挂（实测其后端 `yy.zddyr.top` ECONNREFUSED）
+ * 整个汽水平台就被换掉 —— 甲方看到的就是"一直切换酷我"。
+ *
+ * 规范 id → 脚本可能用的别名键（比较时统一小写）。
+ */
+const PLATFORM_ALIAS_KEYS: Map<string, string[]> = new Map<string, string[]>();
+PLATFORM_ALIAS_KEYS.set('qs', ['qsvip', 'qishui', 'qishuivip', '汽水vip', '汽水']);
+
+/** 判定"这条失败是链路/临时问题"而不是"平台真没这首歌"。 */
+function isTransientFailure(reason: string): boolean {
+  const r: string = reason.toLowerCase();
+  return r.indexOf('2300007') >= 0 || r.indexOf('failed to connect') >= 0 ||
+    r.indexOf('timeout') >= 0 || r.indexOf('timed out') >= 0 || r.indexOf('超时') >= 0 ||
+    r.indexOf('oserr') >= 0 || r.indexOf('network') >= 0 || r.indexOf('网络') >= 0;
+}
+
+/**
+ * 脚本声明键（`sourceConfig` 的键）→ 我们的规范平台 id；不认识的返回空串。
+ * @param declaredKey 例如 `qsvip`、`kw`、`汽水VIP`
+ */
+function canonicalKeyOf(declaredKey: string): string {
+  const k: string = declaredKey.trim().toLowerCase();
+  if (k.length === 0) {
+    return '';
+  }
+  if (k === 'kw' || k === 'kg' || k === 'tx' || k === 'wy' || k === 'mg') {
+    return k;
+  }
+  if (k === 'qs') {
+    return 'qs';
+  }
+  const aliases: string[] | undefined = PLATFORM_ALIAS_KEYS.get('qs');
+  if (aliases !== undefined && aliases.indexOf(k) >= 0) {
+    return 'qs';
+  }
+  return '';
+}
+
+/**
+ * @returns 该脚本**实际声明**的、可用来访问 `canon` 平台的键（规范键在前，别名在后）。
+ *          空数组 = 该脚本没声明这个平台。
+ */
+function declaredKeysFor(api: LXUserApiInfo, canon: string): string[] {
+  const out: string[] = [];
+  const sources: Record<string, LXUserApiSourceInfo> = api.sources;
+  if (sources === undefined || sources === null) {
+    return out;
+  }
+  if (sources[canon] !== undefined) {
+    out.push(canon);
+  }
+  const aliases: string[] | undefined = PLATFORM_ALIAS_KEYS.get(canon);
+  if (aliases === undefined) {
+    return out;
+  }
+  const keys: string[] = Object.keys(sources);
+  for (let i: number = 0; i < keys.length; i++) {
+    const key: string = keys[i];
+    if (key === canon) {
+      continue;
+    }
+    if (aliases.indexOf(key.trim().toLowerCase()) >= 0) {
+      out.push(key);
+      appendPlayLog('[回退链] 平台别名 ' + key + ' → ' + canon + '（脚本 ' + api.name + '）');
+    }
+  }
+  return out;
+}
+
 const SCRIPT_SWITCH_TIMEOUT_MS: number = 8000;
 const SCRIPT_READY_POLL_MS: number = 150;
 const SCRIPT_FAIL_COOLDOWN_MS: number = 3 * 60 * 1000;
@@ -157,16 +236,58 @@ export class FallbackCandidate {
   quality: string = '';
   /** 是否换过平台（相对入参平台）。 */
   platformSwitched: boolean = false;
+  /**
+   * ★ 2026-11-04：真正发给脚本的**平台键**（可能≠`platform`）。
+   * 例：规范平台 `qs` 在「全豆要」里声明成 `qsvip` ⇒ `platform='qs'`、`scriptPlatform='qsvip'`。
+   * 请求时必须发 `scriptPlatform`，而对外的 `outcome.source` 仍用规范 `platform`
+   * （否则队列条目会变成应用不认识的平台 id）。
+   */
+  scriptPlatform: string = '';
 }
 
-/** 音质档位权重：越大越高。未识别的排最后。 */
-/** ⑥「声明支持但实际不可用」的 (脚本, 平台) 会话级黑名单。 */
-const blockedPairs: Set<string> = new Set();
+/**
+ * ⑥「声明支持但实际不可用」的 (脚本, 平台) 黑名单 —— **带 TTL**。
+ *
+ * ★★★ 2026-11-04（甲方：「我这一直切换酷我，没法测试」）：原来是模块级 `Set` + 进程内永不过期。
+ *   一次**网络抖动**（实测脚本后端 `yy.zddyr.top` ECONNREFUSED / 2300007）就把
+ *   `(星海音乐源, qs)` 永久拉黑 ⇒ 之后**每一首**汽水歌都直接跳到换平台，只有重启 App 才恢复。
+ *   现在两条纪律：① 带 60s TTL（到期自动解封）；② **网络类失败不拉黑**。
+ */
+const blockedPairs: Map<string, number> = new Map<string, number>();
+/** 黑名单有效期（毫秒）。 */
+const BLOCK_TTL_MS: number = 60000;
 
 function pairKey(scriptId: string, platform: string): string {
   return scriptId + '|' + platform;
 }
 
+/** 该 (脚本,平台) 现在是否仍在黑名单有效期内。 */
+function isPairBlocked(scriptId: string, platform: string): boolean {
+  const at: number | undefined = blockedPairs.get(pairKey(scriptId, platform));
+  if (at === undefined) {
+    return false;
+  }
+  if (Date.now() - at >= BLOCK_TTL_MS) {
+    blockedPairs.delete(pairKey(scriptId, platform));
+    appendPlayLog('[回退链] 黑名单到期解封 ' + platform);
+    return false;
+  }
+  return true;
+}
+
+/** 记一次失败：网络类失败**永不**拉黑（链路问题 ≠ 平台不可用）。 */
+function notePairFailure(scriptId: string, scriptName: string, platform: string, reason: string): void {
+  if (isTransientFailure(reason)) {
+    appendPlayLog('[回退链] 网络类失败，不拉黑 ' + scriptName + '/' + platform +
+      '（' + reason.substring(0, 60) + '）');
+    return;
+  }
+  blockedPairs.set(pairKey(scriptId, platform), Date.now());
+  appendPlayLog('[回退链] 拉黑 ' + scriptName + '/' + platform + '（' + (BLOCK_TTL_MS / 1000) + 's TTL；' +
+    reason.substring(0, 60) + '）');
+}
+
+/** 音质档位权重：越大越高。未识别的排最后。 */
 function qualityWeight(quality: string): number {
   const order: string[] = ['128k', '192k', '320k', 'flac', 'flac24bit', 'hires', 'atmos', 'master'];
   const i: number = order.indexOf(quality);
@@ -250,19 +371,40 @@ export function buildCandidateChain(preferredQuality: string, platform: string):
   //   由 getQualityChain 负责逐档降级；后续候选（换源/换平台）才按声明取档。
   let firstCandidate: boolean = true;
   for (let i: number = 0; i < apis.length; i++) {
-    if (blockedPairs.has(pairKey(apis[i].id, platform))) {
+    if (isPairBlocked(apis[i].id, platform)) {
+      appendPlayLog('[回退链] ' + apis[i].name + '/' + platform + ' 在黑名单期内，跳过');
       continue;
     }
-    const declaredQ: string = bestQualityFor(declaredOf(apis[i], platform), preferredQuality);
-    const q: string = (firstCandidate && preferredQuality.length > 0) ? preferredQuality : declaredQ;
-    if (q.length > 0) {
-      firstCandidate = false;
+    // ★ 2026-11-04：该脚本可能用**别名键**声明这个平台（如 `qsvip`），逐个展开成候选。
+    const keys: string[] = declaredKeysFor(apis[i], platform);
+    if (keys.length === 0) {
+      // 一个都没声明：只有"第一个脚本 + 用户音质"可以硬试一次（历史行为，保留）
+      if (firstCandidate && preferredQuality.length > 0) {
+        const hardTry: FallbackCandidate = new FallbackCandidate();
+        hardTry.scriptId = apis[i].id;
+        hardTry.scriptName = apis[i].name;
+        hardTry.platform = platform;
+        hardTry.scriptPlatform = platform;
+        hardTry.quality = preferredQuality;
+        hardTry.platformSwitched = false;
+        out.push(hardTry);
+        firstCandidate = false;
+      }
+      continue;
     }
-    if (q.length > 0) {
+    for (let k: number = 0; k < keys.length; k++) {
+      const key: string = keys[k];
+      const declaredQ: string = bestQualityFor(declaredOf(apis[i], key), preferredQuality);
+      const q: string = (firstCandidate && preferredQuality.length > 0) ? preferredQuality : declaredQ;
+      if (q.length === 0) {
+        continue;
+      }
+      firstCandidate = false;
       const cand: FallbackCandidate = new FallbackCandidate();
       cand.scriptId = apis[i].id;
       cand.scriptName = apis[i].name;
       cand.platform = platform;
+      cand.scriptPlatform = key;
       cand.quality = q;
       cand.platformSwitched = false;
       out.push(cand);
@@ -270,22 +412,24 @@ export function buildCandidateChain(preferredQuality: string, platform: string):
   }
   // ③ 换平台：先按**平台**聚合出该平台能达到的最高音质，平台之间按这个音质降序；
   //    同一平台内部再按脚本勾选顺序排（甲方口径：哪个平台音质支持最高哪个优先）。
+  //    ★ 2026-11-04：脚本键先**归一化**成规范平台 id（`qsvip`→`qs`），否则别的脚本声明了
+  //      别名时，同一个平台会被当成两个不同平台，排进"换平台"里。
   const platformBest: string[] = [];
   const platformList: string[] = [];
   for (let i: number = 0; i < apis.length; i++) {
-    const platforms: string[] = Object.keys(apis[i].sources);
-    for (let j: number = 0; j < platforms.length; j++) {
-      const p: string = platforms[j];
-      if (p === platform) {
+    const keys: string[] = Object.keys(apis[i].sources);
+    for (let j: number = 0; j < keys.length; j++) {
+      const canon: string = canonicalKeyOf(keys[j]);
+      if (canon.length === 0 || canon === platform) {
         continue;
       }
-      const q: string = bestQualityFor(declaredOf(apis[i], p), preferredQuality);
+      const q: string = bestQualityFor(declaredOf(apis[i], keys[j]), preferredQuality);
       if (q.length === 0) {
         continue;
       }
-      const idx: number = platformList.indexOf(p);
+      const idx: number = platformList.indexOf(canon);
       if (idx < 0) {
-        platformList.push(p);
+        platformList.push(canon);
         platformBest.push(q);
       } else if (qualityWeight(q) > qualityWeight(platformBest[idx])) {
         platformBest[idx] = q;
@@ -302,17 +446,22 @@ export function buildCandidateChain(preferredQuality: string, platform: string):
   for (let k: number = 0; k < order.length; k++) {
     const p: string = platformList[order[k]];
     for (let i: number = 0; i < apis.length; i++) {
-      const q: string = bestQualityFor(declaredOf(apis[i], p), preferredQuality);
-      if (q.length === 0) {
-        continue;
+      const keys: string[] = declaredKeysFor(apis[i], p);
+      for (let n: number = 0; n < keys.length; n++) {
+        const key: string = keys[n];
+        const q: string = bestQualityFor(declaredOf(apis[i], key), preferredQuality);
+        if (q.length === 0) {
+          continue;
+        }
+        const cand: FallbackCandidate = new FallbackCandidate();
+        cand.scriptId = apis[i].id;
+        cand.scriptName = apis[i].name;
+        cand.platform = p;
+        cand.scriptPlatform = key;
+        cand.quality = q;
+        cand.platformSwitched = true;
+        others.push(cand);
       }
-      const cand: FallbackCandidate = new FallbackCandidate();
-      cand.scriptId = apis[i].id;
-      cand.scriptName = apis[i].name;
-      cand.platform = p;
-      cand.quality = q;
-      cand.platformSwitched = true;
-      others.push(cand);
     }
   }
   // ③ 咪咕几乎没源支持 ⇒ 先把"换平台"排前面，同平台换源排后面
@@ -494,9 +643,27 @@ function pickScriptCandidates(source: string, currentId: string): LXUserApiInfo[
   return ordered;
 }
 
-async function tryQualities(source: string, songId: string, name: string, singer: string,
-  chain: string[], preferred: string, noticeDowngrade: boolean,
+/**
+ * 上一轮 `tryQualities` 的失败原因（给黑名单判定用：网络类失败不拉黑）。
+ * key = `脚本id|平台键`。
+ */
+const transients: Map<string, string> = new Map<string, string>();
+
+function lastFailureReason(scriptId: string, scriptPlatform: string): string {
+  const r: string | undefined = transients.get(pairKey(scriptId, scriptPlatform));
+  return r !== undefined ? r : '';
+}
+
+/**
+ * 按音质链逐档取址。
+ * @param sourceCanonical 我们的**规范平台 id**（`outcome.source` 用它，队列/身份才不会被写坏）
+ * @param scriptKey 真正发给脚本的**平台键**（可能是别名，如 `qsvip`）；空串 = 同 `sourceCanonical`
+ */
+async function tryQualities(sourceCanonical: string, scriptKey: string, songId: string, name: string,
+  singer: string, chain: string[], preferred: string, noticeDowngrade: boolean,
   onNotice: ((msg: string) => void) | null, options: FallbackOptions): Promise<UrlResolveOutcome | null> {
+  const key: string = scriptKey.length > 0 ? scriptKey : sourceCanonical;
+  let lastReason: string = '';
   for (let i: number = 0; i < chain.length; i++) {
     const q: string = chain[i];
     if (options.excludeQuality.length > 0 && q === options.excludeQuality) {
@@ -504,12 +671,13 @@ async function tryQualities(source: string, songId: string, name: string, singer
       continue;
     }
     try {
-      const url: string = await getLXMusicUrl(source, songId, q, name, singer);
+      const url: string = await getLXMusicUrl(key, songId, q, name, singer);
       if (url.length > 0 && (options.excludeUrl.length === 0 || url !== options.excludeUrl)) {
         const outcome: UrlResolveOutcome = new UrlResolveOutcome();
         outcome.url = url;
         outcome.quality = q;
-        outcome.source = source;
+        // ★ 对外永远是**规范平台**（脚本键可能是别名，写进队列会变成应用不认识的 id）
+        outcome.source = sourceCanonical;
         outcome.songId = songId;
         outcome.scriptName = activeSourceName();
         if (noticeDowngrade && q !== preferred && onNotice !== null) {
@@ -524,9 +692,15 @@ async function tryQualities(source: string, songId: string, name: string, singer
         appendPlayLog('[播放] 音质 ' + q + ' 无地址');
       }
     } catch (e) {
-      appendPlayLog('[播放] 音质 ' + q + ' 异常: ' + JSON.stringify(e).substring(0, 80));
+      // ★ 2026-11-04：以前打 `JSON.stringify(e)` 得到 `{}`，真正的 2300007/ECONNREFUSED 全丢了。
+      const err: Error = e as Error;
+      const msg: string = (err !== undefined && err.message !== undefined && err.message.length > 0)
+        ? err.message : JSON.stringify(e);
+      lastReason = msg;
+      appendPlayLog('[播放] 音质 ' + q + ' 异常: ' + msg.substring(0, 200));
     }
   }
+  transients.set(pairKey(activeSourceId(), key), lastReason);
   return null;
 }
 
@@ -630,8 +804,8 @@ async function tryPlatformSearch(platform: string, name: string, singer: string,
     appendPlayLog('[换平台] 尝试 ' + platformName + '/' + hit.songId + ' 「' + hit.name + '」');
     const altOpts: FallbackOptions = new FallbackOptions();
     altOpts.excludeUrl = options.excludeUrl;
-    const outcome: UrlResolveOutcome | null = await tryQualities(platform, hit.songId, hit.name, hit.singer,
-      chain, altBase, false, null, altOpts);
+    const outcome: UrlResolveOutcome | null = await tryQualities(platform, platform, hit.songId,
+      hit.name, hit.singer, chain, altBase, false, null, altOpts);
     if (outcome !== null) {
       outcome.switched = true;
       outcome.source = platform;
@@ -729,24 +903,29 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
       }
     }
     const chain: string[] = getQualityChain(c.quality, c.platform);
-    appendPlayLog('[回退链] 试 #' + i + ' ' + c.scriptName + '/' + c.platform + '/' + c.quality +
+    const key: string = c.scriptPlatform.length > 0 ? c.scriptPlatform : c.platform;
+    appendPlayLog('[回退链] 试 #' + i + ' ' + c.scriptName + '/' + c.platform +
+      (key !== c.platform ? '(脚本键=' + key + ')' : '') + '/' + c.quality +
       ' 链路=' + chain.join(' > '));
     const r: UrlResolveOutcome | null = c.platformSwitched
       ? await tryPlatformSearch(c.platform, name, singer, c.quality, onNotice, opts)
-      : await tryQualities(c.platform, songId, name, singer, chain, c.quality, true, onNotice, opts);
+      : await tryQualities(c.platform, key, songId, name, singer, chain, c.quality, true, onNotice, opts);
     if (r !== null) {
       // ★ 只有命中脚本**不是**本次预期脚本时，才算真的换了音源（见 intendedScriptId 注释）。
       if (c.scriptId !== intendedScriptId) {
         r.switchedScriptName = c.scriptName;
       }
-      appendPlayLog('[回退链] 命中 ' + c.scriptName + '/' + c.platform + '/' + r.quality);
+      appendPlayLog('[回退链] 命中 ' + c.scriptName + '/' + c.platform +
+        (key !== c.platform ? '(脚本键=' + key + ')' : '') + '/' + r.quality);
       // A4：解析成功即证明该 (平台, 音质) 能返回真实音频，写进本次会话的探测缓存
       markProbeOk(c.platform, r.quality);
       return r;
     }
-    // ⑥ 该 (脚本, 平台) 这一轮解析失败 ⇒ 会话内拉黑，后续不再浪费时间
-    blockedPairs.add(pairKey(c.scriptId, c.platform));
-    appendPlayLog('[回退链] 拉黑 ' + c.scriptName + '/' + c.platform);
+    // ⑥ 这一轮该 (脚本, 平台) 失败：**只在确定性失败时**拉黑；网络类失败不拉黑（带 60s TTL）
+    //    ⚠️ 黑名单按**规范平台**记（`qs`），不按脚本键（`qsvip`）—— 否则跳过检查那侧对不上。
+    if (!c.platformSwitched) {
+      notePairFailure(c.scriptId, c.scriptName, c.platform, lastFailureReason(c.scriptId, key));
+    }
   }
   // A4：全部候选都失败 ⇒ 把首选候选标记为"未通过"，ToolTip 立刻能反映出来
   if (cands.length > 0) {

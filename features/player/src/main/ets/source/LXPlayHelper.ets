@@ -1,4 +1,4 @@
-import { LXSourceRequestData, LXMusicUrlResult, LXLyricResult, LXPicResult, LXSource, toLXSource } from './Interface';
+import { LXSourceRequestData, LXMusicUrlResult, LXLyricResult, LXPicResult, LXSource, toLXSource, toLXSourceKey } from './Interface';
 import { lxEngineSendRequest, lxEngineRegisterPromise, lxEngineIsReady } from './LXSourceEngine';
 import { lxSearch, lxLeaderboard } from './LXMusicSDK';
 import { qsBoardSongs, qsPlaylistDetail } from '../geuz/QsApi';
@@ -121,7 +121,7 @@ export async function getLXMusicUrl(source: string, songId: string, quality: str
   let playableId: string = await resolvePlayableSongId(source, songId, name, singer);
   let musicInfo: MusicInfoBrief = buildMusicInfo(source, playableId, name, singer);
   let info: MusicUrlRequestInfo = { type: quality, musicInfo: musicInfo };
-  let reqData: LXSourceRequestData = { source: toLXSource(source), action: 'musicUrl', info: info };
+  let reqData: LXSourceRequestData = { source: toLXSourceKey(source), action: 'musicUrl', info: info };
   if (playableId !== songId) {
     logError('发送请求: ' + source + '/' + songId + ' → ' + playableId + '/' + quality);
   } else {
@@ -158,7 +158,7 @@ export async function getLXLyric(source: string, songId: string, name?: string, 
   let playableId: string = await resolvePlayableSongId(source, songId, name, singer);
   let musicInfo: MusicInfoBrief = buildMusicInfo(source, playableId, name, singer);
   let info: LyricPicRequestInfo = { musicInfo: musicInfo };
-  let reqData: LXSourceRequestData = { source: toLXSource(source), action: 'lyric', info: info };
+  let reqData: LXSourceRequestData = { source: toLXSourceKey(source), action: 'lyric', info: info };
   return new Promise<string>((resolve: (text: string) => void, reject: (reason: Error) => void): void => {
     regReq(requestKey, (result: object): void => {
       let lr: LXLyricResult = result as LXLyricResult;
@@ -185,7 +185,7 @@ export async function getLXPic(source: string, songId: string, name?: string, si
   let playableId: string = await resolvePlayableSongId(source, songId, name, singer);
   let musicInfo: MusicInfoBrief = buildMusicInfo(source, playableId, name, singer);
   let info: LyricPicRequestInfo = { musicInfo: musicInfo };
-  let reqData: LXSourceRequestData = { source: toLXSource(source), action: 'pic', info: info };
+  let reqData: LXSourceRequestData = { source: toLXSourceKey(source), action: 'pic', info: info };
   return new Promise<string>((resolve: (url: string) => void, reject: (reason: Error) => void): void => {
     regReq(requestKey, (result: object): void => {
       let pr: LXPicResult = result as LXPicResult;
