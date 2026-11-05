@@ -961,6 +961,10 @@ export struct NowPlayingFeedPage {
   private cardColorJobSeq: number = 0;
   /** 组件是否还挂着（异步回来时页面可能已经销毁）。 */
   private feedAlive: boolean = true;
+  /** 自动跟随进行中：changeIndex 的回声不要再触发一次跟随。 */
+  private followInFlight: boolean = false;
+  /** 上次自动跟随的时间戳（ms），用于去抖。 */
+  private followAtMs: number = 0;
   /** 加载中（空态/加载态的二选一）。 */
   @Local feedLoading: boolean = true;
   /** 已经加载的是哪条通道。 */
@@ -2256,12 +2260,18 @@ export struct NowPlayingFeedPage {
     // 翻页落定后把取色窗口滚到新的当前页（当前 ±2）
     void this.prepareWindow(index, 2);
     this.currentIndex = index;
+    // 自动跟随已经落地：清标记，并且**不再重复发起播放**（声音已经在播这一首）。
+    const followLanding: boolean = this.followInFlight;
+    this.followInFlight = false;
     const total: number = this.feedSource.totalCount();
     Logger.info(RZD_TAG,
-      `swiper idx=${index} total=${total} page=${this.feedPage} exhausted=${this.feedExhausted} loop=${this.feedLoop}`);
+      `swiper idx=${index} total=${total} page=${this.feedPage} exhausted=${this.feedExhausted} loop=${this.feedLoop} follow=${followLanding}`);
     this.requestQualityAround(index);
     if (total - 1 - index <= FEED_PREFETCH_REMAIN) {
       void this.loadMore();
+    }
+    if (followLanding) {
+      return;
     }
     this.playAt(index);
   }
@@ -2280,6 +2290,10 @@ export struct NowPlayingFeedPage {
    */
   @Monitor('appState.selectIndex')
   onPlayingSongChanged(): void {
+    // 跟随进行中（自己引起的回声）或距上次跟随不足 400ms ⇒ 忽略
+    if (this.followInFlight || (Date.now() - this.followAtMs) < 400) {
+      return;
+    }
     const cur: SongItem | undefined = this.appState.getCurrentSongItem();
     if (cur === undefined) {
       return;
@@ -2298,6 +2312,10 @@ export struct NowPlayingFeedPage {
     //   "已经在播这一首就 skip" 的闸（见 `isCurrentSong`）⇒ 不会重复起播/重播。
     if (index !== this.currentIndex) {
       if (this.feedAlive && this.isOnScreen()) {
+        // 自触发闸：changeIndex → onChange → onFeedChanged 会把 currentIndex 改掉并调用 playAt；
+        // 这一步期间若再收到 selectIndex 变化，说明是这次跟随自己引起的回声，直接忽略。
+        this.followInFlight = true;
+        this.followAtMs = Date.now();
         Logger.info(RZD_TAG, `feed follow idx=${index} from=${this.currentIndex}`);
         this.feedController.changeIndex(index);
       } else {
