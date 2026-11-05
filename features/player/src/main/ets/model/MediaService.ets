@@ -1823,7 +1823,18 @@ export class MediaService {
         this.toast(msg);
       }, opts);
     if (outcome.url.length === 0) {
-      this.toast('获取播放地址失败，已尝试全部平台与音源');
+      // ★ 2026-11-05（甲方：「一点播放就瞬间提示获取播放地址失败」）：
+      //   以前无论什么原因都弹同一句「已尝试全部平台与音源」，而"零候选/全被冷却跳过"
+      //   根本没发过请求，用户看到的"瞬间失败"其实是提示在骗人。现在按原因分开说。
+      if (outcome.failReason === 'engine-not-ready') {
+        this.toast(engineNotReadyToast());
+      } else if (outcome.failReason === 'no-candidate') {
+        this.toast('没有可用的音源：请到 设置 → 音源 导入并勾选至少一个音源');
+      } else if (outcome.failReason === 'all-skipped') {
+        this.toast('音源都在冷却中（刚失败过），请 1~3 分钟后再试或手动切换音源');
+      } else {
+        this.toast('获取播放地址失败，已尝试全部平台与音源');
+      }
       return false;
     }
     // 记录本次真实来源：音乐平台 / 音源脚本 / 实际音质，供播放详情页展示与验证换源是否生效

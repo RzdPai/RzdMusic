@@ -46,9 +46,14 @@ PLATFORM_ALIAS_KEYS.set('qs', ['qsvip', 'qishui', 'qishuivip', '汽水vip', '汽
 /** 判定"这条失败是链路/临时问题"而不是"平台真没这首歌"。 */
 function isTransientFailure(reason: string): boolean {
   const r: string = reason.toLowerCase();
+  // ★ 2026-11-05：把**引擎/回调层**的失败也算"临时"——它们跟具体平台无关，
+  //   以前被当成"该平台不可用"写进 60s 黑名单，一旦整条链都这么失败，
+  //   黑名单会把**所有候选**同时封掉 ⇒ 之后每次点播都在 0 次网络请求的情况下瞬间报失败。
   return r.indexOf('2300007') >= 0 || r.indexOf('failed to connect') >= 0 ||
     r.indexOf('timeout') >= 0 || r.indexOf('timed out') >= 0 || r.indexOf('超时') >= 0 ||
-    r.indexOf('oserr') >= 0 || r.indexOf('network') >= 0 || r.indexOf('网络') >= 0;
+    r.indexOf('oserr') >= 0 || r.indexOf('network') >= 0 || r.indexOf('网络') >= 0 ||
+    r.indexOf('econnrefused') >= 0 || r.indexOf('引擎未就绪') >= 0 ||
+    r.indexOf('not ready') >= 0 || r.indexOf('回调未初始化') >= 0;
 }
 
 /**
@@ -127,9 +132,31 @@ export class UrlResolveOutcome {
   switched: boolean = false;
   switchedScriptName: string = '';
   scriptName: string = '';
+  /**
+   * ★ 2026-11-05：失败原因分类，调用方据此给**准确**提示（以前一律「已尝试全部平台与音源」，
+   * 但"零候选"和"候选全失败"是完全不同的两件事，用户看到的却是同一句话）。
+   * 取值：`''`（成功）/`engine-not-ready`/`no-candidate`/`all-skipped`/`all-failed`。
+   */
+  failReason: string = '';
 }
 
 const scriptCooldown: Map<string, number> = new Map();
+
+/**
+ * ★★★ 2026-11-05（甲方：「勾选好多源，一点播放就瞬间提示失败，之后怎么点都失败」）：
+ *   启动/恢复备份后的 `warmUpLxSources()` 会**串行**把每个未上报 sources 的脚本切一遍，
+ *   每次最长 8s（10 个脚本就 80s）。它全程在改写 `lxActiveSource`；
+ *   这期间用户点播放 ⇒ `switchToScript()` 里"目标音源已被其它流程改写，放弃本次切换"
+ *   ⇒ 候选被记 3 分钟冷却 ⇒ **一次网络请求都没发**就瞬间报失败，
+ *   而且接下来几分钟内每个候选都在冷却里 ⇒ 继续瞬间失败。
+ *   ⇒ 播放解析开始时就**抢占式取消预热**，让它立刻收手。
+ */
+let warmUpToken: number = 0;
+
+/** 让正在跑的预热尽快退出（播放链路开头调用）。 */
+export function cancelWarmUp(): void {
+  warmUpToken++;
+}
 
 /** 播放页/列表音质徽标展示名 */
 export function qualityDisplayName(q: string): string {
@@ -334,17 +361,40 @@ export function buildCandidateChain(preferredQuality: string, platform: string):
     return out;
   }
   // ① 只用**已勾选**的音源，且按用户勾选顺序（第一个=默认源）
-  const orderIds: string[] = MusicStoreService.getInstance().getSourceScriptOrder();
-  const apis: LXUserApiInfo[] = [];
-  if (orderIds.length > 0) {
-    for (let i: number = 0; i < orderIds.length; i++) {
-      for (let j: number = 0; j < all.length; j++) {
-        if (all[j].id === orderIds[i]) {
-          apis.push(all[j]);
-          break;
-        }
+  // ★★★ 2026-11-05（甲方：「勾选了好多源，一点播放就瞬间提示失败」）：
+  //   `getSourceScriptOrder()` 的契约是"空数组 = 未配置 ⇒ 回退为全部已导入脚本"
+  //   （见 MusicStoreService 注释），但这里以前**只**按 orderIds 取 ⇒ 只要这个 key
+  //   没写过（旧版本升上来、或只在新版设置页勾过但没触发排序落盘），`apis` 就是空数组，
+  //   函数直接 return 空链 ⇒ 一次网络请求都不发 ⇒ 「获取播放地址失败，已尝试全部平台与音源」
+  //   在几十毫秒内弹出。这正是"瞬间失败"的第一号成因。
+  let orderIds: string[] = MusicStoreService.getInstance().getSourceScriptOrder();
+  if (orderIds.length === 0) {
+    for (let i: number = 0; i < all.length; i++) {
+      if (all[i].id !== undefined && all[i].id.length > 0) {
+        orderIds.push(all[i].id);
       }
     }
+    appendPlayLog('[回退链] 未配置音源顺序 ⇒ 回退为全部已导入（' + orderIds.length + ' 个）');
+  }
+  const apis: LXUserApiInfo[] = [];
+  const missing: string[] = [];
+  for (let i: number = 0; i < orderIds.length; i++) {
+    let hit: boolean = false;
+    for (let j: number = 0; j < all.length; j++) {
+      if (all[j].id === orderIds[i]) {
+        apis.push(all[j]);
+        hit = true;
+        break;
+      }
+    }
+    if (!hit) {
+      missing.push(orderIds[i]);
+    }
+  }
+  if (missing.length > 0) {
+    // 勾选记录里有、已导入列表里没有（脚本被删/换过 id）——记日志，别静默
+    appendPlayLog('[回退链] 勾选记录中 ' + missing.length + ' 个 id 在已导入列表里找不到: ' +
+      missing.slice(0, 3).join(','));
   }
   if (apis.length === 0) {
     appendPlayLog('[回退链] 没有勾选任何音源，直接返回');
@@ -370,6 +420,14 @@ export function buildCandidateChain(preferredQuality: string, platform: string):
   //   声明式取档会把本来能播的档位直接跳过。所以第一个候选一律从"用户音质"起步，
   //   由 getQualityChain 负责逐档降级；后续候选（换源/换平台）才按声明取档。
   let firstCandidate: boolean = true;
+  // ★★★ 2026-11-05（甲方：「音源管理里很多源没显示平台行，得手动一个个点一下」）：
+  //   `api.sources` 只有脚本**被加载过**才会由 init 上报（`saveApiSources`），
+  //   所以"已勾选但从没加载过"的源，`declaredKeysFor()` 返回空 ⇒ 以前直接 `continue` 跳过，
+  //   用户勾了 10 个源，真正能进候选的可能只有 1 个（甚至 0 个）⇒ 瞬间失败。
+  //   现在：这类"未声明"的源也**允许硬试**（用户音质 + 当前平台），最多 2 个，
+  //   排在所有"已声明"候选之后 —— 既不会瞬间失败，也不会让脚本切换次数失控。
+  const MAX_UNDECLARED_CANDIDATES: number = 2;
+  let undeclaredAdded: number = 0;
   for (let i: number = 0; i < apis.length; i++) {
     if (isPairBlocked(apis[i].id, platform)) {
       appendPlayLog('[回退链] ' + apis[i].name + '/' + platform + ' 在黑名单期内，跳过');
@@ -378,8 +436,10 @@ export function buildCandidateChain(preferredQuality: string, platform: string):
     // ★ 2026-11-04：该脚本可能用**别名键**声明这个平台（如 `qsvip`），逐个展开成候选。
     const keys: string[] = declaredKeysFor(apis[i], platform);
     if (keys.length === 0) {
-      // 一个都没声明：只有"第一个脚本 + 用户音质"可以硬试一次（历史行为，保留）
-      if (firstCandidate && preferredQuality.length > 0) {
+      // 一个都没声明：第一个脚本照旧"用户音质硬试一次"；其余未声明源限量硬试
+      const needHardTry: boolean = (firstCandidate && preferredQuality.length > 0) ||
+        (undeclaredAdded < MAX_UNDECLARED_CANDIDATES && preferredQuality.length > 0);
+      if (needHardTry) {
         const hardTry: FallbackCandidate = new FallbackCandidate();
         hardTry.scriptId = apis[i].id;
         hardTry.scriptName = apis[i].name;
@@ -389,6 +449,8 @@ export function buildCandidateChain(preferredQuality: string, platform: string):
         hardTry.platformSwitched = false;
         out.push(hardTry);
         firstCandidate = false;
+        undeclaredAdded++;
+        appendPlayLog('[回退链] 未声明平台（可能没加载过）⇒ 硬试 ' + apis[i].name + '/' + platform);
       }
       continue;
     }
@@ -481,6 +543,36 @@ export function buildCandidateChain(preferredQuality: string, platform: string):
   } else {
     for (let i: number = 0; i < others.length; i++) {
       out.push(others[i]);
+    }
+  }
+  // ★★★ 2026-11-05（"瞬间失败"的第二号成因）：
+  //   候选**全部**被黑名单/未声明过滤掉时（`sources` 还没上报、或整批刚被拉黑），
+  //   以前就返回空链 ⇒ 0 次请求 ⇒ 立刻报失败。这里兜底放一个"硬试"候选：
+  //   优先当前激活脚本，其次第一个勾选脚本，用**用户音质 + 当前平台**硬打一次。
+  //   一次真实请求换来的是"要么能播，要么日志里有真实失败原因"，比空链可靠。
+  if (out.length === 0) {
+    const activeId: string = activeSourceId();
+    let pick: LXUserApiInfo | undefined = undefined;
+    for (let i: number = 0; i < apis.length; i++) {
+      if (activeId.length > 0 && apis[i].id === activeId) {
+        pick = apis[i];
+        break;
+      }
+    }
+    if (pick === undefined) {
+      pick = apis[0];
+    }
+    if (pick !== undefined && preferredQuality.length > 0) {
+      const last: FallbackCandidate = new FallbackCandidate();
+      last.scriptId = pick.id;
+      last.scriptName = pick.name;
+      last.platform = platform;
+      last.scriptPlatform = platform;
+      last.quality = preferredQuality;
+      last.platformSwitched = false;
+      out.push(last);
+      appendPlayLog('[回退链] 候选为空（未声明/全被拉黑）⇒ 兜底硬试 ' + pick.name + '/' + platform +
+        '/' + preferredQuality);
     }
   }
   const head: string[] = [];
@@ -873,6 +965,9 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
   onNotice: ((msg: string) => void) | null,
   options?: FallbackOptions): Promise<UrlResolveOutcome> {
   const opts: FallbackOptions = options ?? new FallbackOptions();
+  // ★ 2026-11-05：先抢占预热 —— 否则后台预热正在反复改写 `lxActiveSource`，
+  //   本次解析的每次 switchToScript 都会被判定"被其它流程改写"而放弃 ⇒ 瞬间失败。
+  cancelWarmUp();
   // ★ 2026-11-01（全新安装导入音源后"瞬间"报"获取播放地址失败"）：
   //   根因是脚本引擎（WebView）当时还没 ready，链上每个候选都在 tryQualities 里毫秒级失败 ⇒ 整条链瞬间走完。
   //   解析前先主动等引擎就绪（最多 4s）；超时返回空结果并留下可诊断日志。
@@ -882,7 +977,9 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
   }
   if (!engineReady()) {
     appendPlayLog('[换源] 引擎未就绪（4s 超时），本次解析放弃；请确认音源脚本已加载');
-    return new UrlResolveOutcome();
+    const noEngine: UrlResolveOutcome = new UrlResolveOutcome();
+    noEngine.failReason = 'engine-not-ready';
+    return noEngine;
   }
   // ★ 2026-11-01（全新安装"瞬间"失败的第二道保险）：导入过音源但**没有任何脚本被选中**时，
   //   activeSourceId() 为空 ⇒ 回退链拿不到脚本 ⇒ 每个候选毫秒级失败。这里自动选用列表里第一个脚本。
@@ -905,19 +1002,32 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
   const intendedScriptId: string = activeAtStart.length > 0
     ? activeAtStart
     : (cands.length > 0 ? cands[0].scriptId : '');
+  if (cands.length === 0) {
+    // ★ 2026-11-05：真的一个候选都没有（未导入音源 / 勾选 id 全部对不上） —— 明确区分出来，
+    //   别让用户以为是"所有平台都试过了"。
+    appendPlayLog('[回退链] 候选为 0（未导入或勾选记录全对不上），本次不做任何请求');
+    const none: UrlResolveOutcome = new UrlResolveOutcome();
+    none.failReason = 'no-candidate';
+    return none;
+  }
+  let attempted: number = 0;
+  let skippedCooldown: number = 0;
   for (let i: number = 0; i < cands.length; i++) {
     const c: FallbackCandidate = cands[i];
     if (c.scriptId !== activeSourceId()) {
       if (scriptCooldown.get(c.scriptId) !== undefined && (scriptCooldown.get(c.scriptId) ?? 0) > Date.now()) {
         appendPlayLog('[换音源] ' + c.scriptName + ' 冷却中，跳过');
+        skippedCooldown++;
         continue;
       }
       const loaded: boolean = await switchToScript(c.scriptId);
       if (!loaded) {
         scriptCooldown.set(c.scriptId, Date.now() + SCRIPT_FAIL_COOLDOWN_MS);
+        skippedCooldown++;
         continue;
       }
     }
+    attempted++;
     const chain: string[] = getQualityChain(c.quality, c.platform);
     const key: string = c.scriptPlatform.length > 0 ? c.scriptPlatform : c.platform;
     appendPlayLog('[回退链] 试 #' + i + ' ' + c.scriptName + '/' + c.platform +
@@ -947,11 +1057,15 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
   if (cands.length > 0) {
     markProbeFail(cands[0].platform, cands[0].quality, '全部候选失败');
   }
-  appendPlayLog('[回退链] 全部候选失败，恢复原音源');
+  appendPlayLog('[回退链] 全部候选失败 候选=' + cands.length + ' 实际尝试=' + attempted +
+    ' 冷却/加载跳过=' + skippedCooldown + ' 黑名单=' + blockedPairs.size + ' 恢复原音源');
   if (activeAtStart.length > 0) {
     AppStorage.setOrCreate('lxActiveSource', activeAtStart);
   }
-  return new UrlResolveOutcome();
+  const failed: UrlResolveOutcome = new UrlResolveOutcome();
+  // ★ 2026-11-05：区分"一个候选都没真正发出去"（全被冷却/换脚本失败挡掉）和"发了但全失败"。
+  failed.failReason = attempted === 0 ? 'all-skipped' : 'all-failed';
+  return failed;
 }
 
 /**
@@ -974,12 +1088,21 @@ export async function warmUpLxSources(): Promise<number> {
     return 0;
   }
   const originalActive: string = activeSourceId();
+  const myToken: number = warmUpToken;
   let warmed: number = 0;
   // ★ 2026-11-04：记下**第一个真的就绪**的脚本。原始 active 为空时（全新安装/恢复备份后），
   //   以前预热完不恢复 ⇒ active 停在最后那个"试过但超时"的脚本上 ⇒ 之后每次播放都弹
   //   「音源未就绪」（日志实证：`预热完成 warmed=0 total=10 active=<超时脚本>`）。
   let firstWarmedId: string = '';
   for (let i: number = 0; i < list.length; i++) {
+    // ★ 2026-11-05：播放请求已抢占 ⇒ 立刻收手（并把 active 还给用户原来的选择）
+    if (warmUpToken !== myToken) {
+      appendPlayLog('[换源] 预热被播放请求抢占，提前结束（已预热 ' + warmed + '/' + list.length + '）');
+      if (originalActive.length > 0) {
+        AppStorage.setOrCreate('lxActiveSource', originalActive);
+      }
+      return warmed;
+    }
     const api: LXUserApiInfo = list[i];
     const declared: number = api.sources !== undefined ? Object.keys(api.sources).length : 0;
     if (declared > 0) {
