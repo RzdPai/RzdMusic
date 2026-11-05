@@ -769,6 +769,17 @@ export class LocalMusic {
       if (size <= 0) {
         return 'failed';
       }
+      // ★ 2026-11-05（甲方：按文件夹导入后整屏 `mw3439cah` 这类垃圾条目）：
+      //   ① 太小的多半是占位/缓存碎片；
+      //   ② 扩展名是音频、文件头却不是 ⇒ 缓存占位或加密文件，播不了。
+      if (size < MIN_AUDIO_BYTES) {
+        appendPlayLog(`[本地音乐] 跳过（体积过小 ${size}B）${label}`);
+        return 'unsupported';
+      }
+      if (!probeLooksLikeAudio(uri, ext)) {
+        appendPlayLog(`[本地音乐] 跳过（文件头不是 ${ext}）${label}`);
+        return 'unsupported';
+      }
       const fingerprint: string = `${size}_${label.toLowerCase()}`;
       if (this.byFingerprint.has(fingerprint)) {
         return 'skipped';
@@ -783,6 +794,16 @@ export class LocalMusic {
       // 读标签要用**另一个**句柄：官方文档明确说同一个 fd 同时给播放器和提取器
       // 会「存在竞争关系，将导致音视频元数据获取异常」
       const meta: LocalMeta = await this.readMetadata(dest, size, key);
+      // ★ 2026-11-05：文件头蒙对了、但解析不出时长的**小文件**同样视为无效
+      //   （典型：把别的格式的前几 KB 拼过来的缓存碎片）。大文件保留，避免误伤。
+      if (meta.durationMs <= 0 && size < INVALID_AUDIO_MAX_BYTES) {
+        appendPlayLog(`[本地音乐] 跳过（无时长且体积小 ${size}B）${label}`);
+        try {
+          fs.unlinkSync(dest);
+        } catch (_e) {
+        }
+        return 'unsupported';
+      }
       // 同目录下的同名 .lrc 一并拷进来：这是**精确匹配**的歌词，播放时优先用它。
       // 「选文件夹」这条路一定拿得到；「选文件」那条路只授权了选中的文件，
       // 兄弟文件多半读不到 —— 读不到就算了，之后还有在线匹配兜底。
@@ -1335,6 +1356,64 @@ export class LocalMusic {
   }
 
   /**
+   * 清掉索引里"根本不是音频"的条目（**只清可疑项**：`durationMs <= 0` 的那些）。
+   *
+   * ★ 2026-11-05（甲方截图：按文件夹导入后整屏 `mw3439cah`）：
+   *   这些条目是旧版本只按扩展名放行时进来的 —— 文件头不对、时长也解析不出，播不响。
+   *   现在进本地音乐页扫一遍时顺手清掉：只当成"垃圾"处理 `durationMs <= 0` 的条目，
+   *   正常解析出时长的条目**一个都不碰**，避免误删。
+   *
+   * @returns 清掉的条目数
+   */
+  pruneInvalidEntries(): number {
+    if (!this.ready || this.dir.length === 0 || this.songs.length === 0) {
+      return 0;
+    }
+    const keep: LocalSongEntry[] = [];
+    let removed: number = 0;
+    for (let i: number = 0; i < this.songs.length; i++) {
+      const song: LocalSongEntry = this.songs[i];
+      if (song.durationMs > 0) {
+        keep.push(song);
+        continue;
+      }
+      const path: string = `${this.dir}/${song.file}`;
+      let ok: boolean = false;
+      try {
+        const st: fs.Stat = fs.statSync(path);
+        ok = st.size >= MIN_AUDIO_BYTES && probeLooksLikeAudio(path, extOf(song.file));
+      } catch (_e) {
+        ok = false;
+      }
+      if (ok) {
+        keep.push(song);
+        continue;
+      }
+      try {
+        fs.unlinkSync(path);
+      } catch (_e) {
+      }
+      if (song.lrc.length > 0) {
+        try {
+          fs.unlinkSync(`${this.dir}/${song.lrc}`);
+        } catch (_e) {
+        }
+      }
+      this.byKey.delete(song.key);
+      this.byFingerprint.delete(song.fingerprint);
+      removed++;
+      appendPlayLog(`[本地音乐] 清理无效条目 ${song.name}（${song.file}）`);
+    }
+    if (removed > 0) {
+      this.songs = keep;
+      this.persist();
+      this.bumpVersion();
+      appendPlayLog(`[本地音乐] 清理完成：移除 ${removed} 个无效条目`);
+    }
+    return removed;
+  }
+
+  /**
    * 扫一遍私有目录，把**没有索引的音频文件**补登记（用户 2026-10-20：
    * 「默认下载时保存到应用私有目录，然后直接扫一下私有目录列出来」）。
    *
@@ -1348,6 +1427,9 @@ export class LocalMusic {
     if (!this.ready || this.dir.length === 0) {
       return 0;
     }
+    // ★ 2026-11-05：进页面先清一遍**历史垃圾条目**（以前按扩展名放行时进来的
+    //   `mw…` 这类无时长、文件头也不对的占位文件）——否则用户得一条条手删。
+    this.pruneInvalidEntries();
     let added: number = 0;
     try {
       const known: Set<string> = new Set<string>();
@@ -1566,7 +1648,82 @@ export function isIgnorableFile(name: string): boolean {
   return !isSupportedAudioFile(name) && !isUnsupportedAudioFile(name);
 }
 
-/** 空的导入统计（带一句提示） */
+/**
+ * 文件头校验：**扩展名说自己是音频，但内容不是**的情况非常常见
+ * （下载器/缓存目录里大量 `mw…`、`abc123` 之类被命名成 `.mp3` 的占位文件、加密缓存、半截下载）。
+ *
+ * ★ 2026-11-05（甲方截图：按文件夹导入后整屏都是 `mw3439cah` 这种条目）：
+ *   以前只按扩展名过滤 ⇒ 这类文件全被当成歌曲导进本地库，既播不了又难删。
+ *   现在导入前读 16 字节按容器头判断，认不出来的直接按"格式不支持"跳过（不动源文件）。
+ *
+ * @param uri 源文件 URI
+ * @param ext 小写扩展名（含点）
+ * @returns true = 文件头像该格式
+ */
+function probeLooksLikeAudio(uri: string, ext: string): boolean {
+  let f: fs.File | null = null;
+  try {
+    f = fs.openSync(uri, fs.OpenMode.READ_ONLY);
+    const buf: ArrayBuffer = new ArrayBuffer(16);
+    const read: number = fs.readSync(f.fd, buf);
+    if (read < 4) {
+      return false;
+    }
+    const b: Uint8Array = new Uint8Array(buf);
+    const b0: number = b[0];
+    const b1: number = b[1];
+    const b2: number = b[2];
+    const b3: number = b[3];
+    if (ext === '.flac') {
+      return b0 === 0x66 && b1 === 0x4C && b2 === 0x61 && b3 === 0x43;   // fLaC
+    }
+    if (ext === '.ogg') {
+      return b0 === 0x4F && b1 === 0x67 && b2 === 0x67 && b3 === 0x53;   // OggS
+    }
+    if (ext === '.wav') {
+      // RIFF....WAVE
+      return b0 === 0x52 && b1 === 0x49 && b2 === 0x46 && b3 === 0x46 &&
+        b[8] === 0x57 && b[9] === 0x41 && b[10] === 0x56 && b[11] === 0x45;
+    }
+    if (ext === '.amr') {
+      return b0 === 0x23 && b1 === 0x21 && b2 === 0x41 && b3 === 0x4D;   // #!AM
+    }
+    if (ext === '.m4a') {
+      // size(4) + 'ftyp'
+      return b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70;
+    }
+    if (ext === '.mp3') {
+      if (b0 === 0x49 && b1 === 0x44 && b2 === 0x33) {
+        return true;                                                    // ID3
+      }
+      return b0 === 0xFF && (b1 & 0xE0) === 0xE0;                       // 帧同步
+    }
+    if (ext === '.aac') {
+      return b0 === 0xFF && (b1 & 0xF6) === 0xF0;                       // ADTS
+    }
+    // 没写规则的扩展名：不拦（保守，只拦上面这些明确的）
+    return true;
+  } catch (e) {
+    hilog.info(DOMAIN, TAG, 'probe failed: %{public}s', JSON.stringify(e));
+    return false;
+  } finally {
+    closeQuietly(f);
+  }
+}
+
+/**
+ * 最小的"像首歌"的字节数：低于它的多半是占位文件/缓存碎片。
+ * （8KB ≈ 128kbps 下的半秒，正常音乐不会这么小。）
+ */
+const MIN_AUDIO_BYTES: number = 8 * 1024;
+
+/**
+ * 无元数据 + 体积很小 ⇒ 判定为无效音频。
+ * 只拦"小且解析不出时长"的，避免误伤大文件（个别格式的时长提取器会给 0）。
+ */
+const INVALID_AUDIO_MAX_BYTES: number = 512 * 1024;
+
+
 function emptyResult(message: string): ImportResult {
   return { added: 0, skipped: 0, unsupported: 0, failed: 0, message: message };
 }
