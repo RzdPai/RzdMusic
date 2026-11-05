@@ -407,6 +407,15 @@ export struct SettingsDetailPage {
         if (this.lxApiList[i].id.length > 0) { ids.push(this.lxApiList[i].id); }
       }
       this.sourceOrderIds = ids;
+      // ★★★ 2026-11-05（真机日志实证：`[回退链] 没有勾选任何音源，直接返回`）：
+      //   这里以前只是**在 UI 上**把"全部已导入"当成已勾选、**从不落盘**，
+      //   而播放链路只认这份持久化配置 ⇒ 空候选链 ⇒ 0 次请求秒失败；
+      //   用户看到"全都勾着"，自然以为已经配置好了。
+      //   ⇒ 首次进来就把这份默认全选**写实**，UI 与播放链路从此一致。
+      if (ids.length > 0) {
+        MusicStoreService.getInstance().setSourceScriptOrder(ids);
+        appendPlayLog('[音源顺序] 首次初始化：全部已导入（' + ids.length + ' 个）已写入配置');
+      }
     }
     this.activeSource = AppStorage.get<string>('lxActiveSource') ?? '';
     if (this.activeSource.length === 0) {
