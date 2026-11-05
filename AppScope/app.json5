@@ -2,8 +2,8 @@
   "app": {
     "bundleName": "com.rzdpai.music",
     "vendor": "rzdpai",
-    "versionCode": 1009004,
-    "versionName": "1.9.0.4",
+    "versionCode": 2000000,
+    "versionName": "2.0.0",
     "icon": "$media:layered_image",
     "label": "$string:app_name",
     "cloudFileSyncEnabled": true,

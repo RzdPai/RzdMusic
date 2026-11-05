@@ -134,7 +134,7 @@ export struct PlaylistDetailSongListSection {
     const branch: string = this.loading ? 'loading' :
       (this.displaySongs.length === 0 ? 'empty' : (this.customSortMode ? 'repeat-sort' : 'lazy-songs'));
     hilog.info(0, 'RzdPlaylistCrashGuard',
-      'list stage=%{public}s branch=%{public}s rows=%{public}d source=%{public}d gen=%{public}d',
+      'list stage=%{public}s branch=%{public}s rows=%{public}d src=%{public}d gen=%{public}d',
       stage, branch, this.displaySongs.length, this.displayDataSource.totalCount(), this.dataGeneration);
   }
 
@@ -146,7 +146,7 @@ export struct PlaylistDetailSongListSection {
     this.syncOriginal();
     this.applyFilterAndSort();
     this.logCrashStage('appear-after-sync');
-    hilog.info(0, 'RzdPlaylistSticky', 'appear single bounded List rows=%{public}d', this.displaySongs.length);
+    hilog.info(0, 'RzdPlaylistSticky', 'appear single List rows=%{public}d', this.displaySongs.length);
   }
 
   @Monitor('customSortCommand')
@@ -335,7 +335,7 @@ export struct PlaylistDetailSongListSection {
         return row.id === item.id && row.source === item.source && row.songId === item.songId;
       });
     }
-    hilog.info(0, 'RzdPlaylistSticky', 'play mapped vmIndex=%{public}d', index);
+    hilog.info(0, 'RzdPlaylistSticky', 'play map vmIdx=%{public}d', index);
     if (index >= 0) {
       this.listVm.requestPlayByListIndex(index, this.getUIContext());
     }
@@ -444,7 +444,7 @@ export struct PlaylistDetailSongListSection {
       this.batch.batchMode = true;
     });
     this.onBatchModeChange(true);
-    hilog.info(BATCH_LOG_DOMAIN, BATCH_LOG_TAG, 'enter batch mode rows=%{public}d', this.displaySongs.length);
+    hilog.info(BATCH_LOG_DOMAIN, BATCH_LOG_TAG, 'batch enter rows=%{public}d', this.displaySongs.length);
   }
 
   /** 退出多选模式。 */
@@ -457,13 +457,13 @@ export struct PlaylistDetailSongListSection {
     });
     this.batch.keys = [];
     this.onBatchModeChange(false);
-    hilog.info(BATCH_LOG_DOMAIN, BATCH_LOG_TAG, 'exit batch mode');
+    hilog.info(BATCH_LOG_DOMAIN, BATCH_LOG_TAG, 'batch exit');
   }
 
   /** 勾选/取消勾选单行。 */
   private toggleSelect(item: PlaylistSongUi): void {
     this.batch.toggle(item.selectionKey());
-    hilog.info(BATCH_LOG_DOMAIN, BATCH_LOG_TAG, 'toggle key=%{public}s selected=%{public}d',
+    hilog.info(BATCH_LOG_DOMAIN, BATCH_LOG_TAG, 'batch toggle key=%{public}s sel=%{public}d',
       item.selectionKey(), this.batch.keys.length);
   }
 
@@ -828,7 +828,7 @@ export struct PlaylistDetailSongListSection {
         this.logCrashStage('list-build-mounted');
       })
       .onAreaChange((_old: Area, area: Area): void => {
-        hilog.info(0, 'RzdPlaylistSticky', 'viewport width=%{public}s height=%{public}s bottom=%{public}d',
+        hilog.info(0, 'RzdPlaylistSticky', 'viewport w=%{public}s h=%{public}s bottom=%{public}d',
           String(area.width), String(area.height), this.bottomPaddingVp);
       })
     }

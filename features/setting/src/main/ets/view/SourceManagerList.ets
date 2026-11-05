@@ -90,7 +90,6 @@ export struct SourceManagerList {
     if (api.id === (AppStorage.get<string>('lxEngineScriptId') ?? '')) {
       const json: string = AppStorage.get<string>('lxEngineSources') ?? '';
       // ★ 2026-10-30：把引擎上报的**原始 key**打出来（判断第 6 个平台到底叫什么）
-      appendPlayLog('[RzdSource] raw=' + json.substring(0, Math.min(json.length, 220)));
       if (json.length > 2) {
         try {
           const live: LXSourcePlatformInfo[] =
@@ -100,7 +99,7 @@ export struct SourceManagerList {
             return live;
           }
         } catch (err) {
-          appendPlayLog('[RzdSource] live sources parse failed');
+          appendPlayLog('[RzdSource] live parse failed');
         }
       }
     }

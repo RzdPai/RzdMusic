@@ -155,13 +155,13 @@ export struct MiniBarActions {
       const ui: UIContext = this.getUIContext();
       const rect = ui.getComponentUtils().getRectangleById(this.actionsNodeId);
       Logger.info('RzdActionsHandoffV12',
-        `kind=measured id=${this.actionsNodeId} hidden=${this.paintHidden} ` +
+        `measured id=${this.actionsNodeId} hidden=${this.paintHidden} ` +
           `rect=${ui.px2vp(rect.windowOffset.x)},${ui.px2vp(rect.windowOffset.y)},` +
           `${ui.px2vp(rect.size.width)},${ui.px2vp(rect.size.height)} ` +
-          `isPlay=${this.playerViewModel.appState.isPlay} iconFp=${PlayerConstants.MINI_ACT_ICON} ` +
-          `buttonVp=${PlayerConstants.MINI_ACT_SIZE} gapVp=${PlayerConstants.MINI_ACT_GAP}`);
+          `isPlay=${this.playerViewModel.appState.isPlay} icon=${PlayerConstants.MINI_ACT_ICON} ` +
+          `btn=${PlayerConstants.MINI_ACT_SIZE} gap=${PlayerConstants.MINI_ACT_GAP}`);
     } catch (error) {
-      Logger.warn('RzdActionsHandoffV12', `kind=measure-miss id=${this.actionsNodeId} error=${error}`);
+      Logger.warn('RzdActionsHandoffV12', `measure miss id=${this.actionsNodeId} err=${error}`);
     }
   }
 }

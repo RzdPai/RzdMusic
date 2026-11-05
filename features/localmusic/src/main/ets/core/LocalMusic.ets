@@ -612,7 +612,7 @@ export class LocalMusic {
     const result: AutoMatchResult = await autoMatchLyric(name, song.singer, song.durationMs);
     if (result.match !== null) {
       this.saveMatch(key, result.match.source, infoToJson(result.match.info));
-      appendPlayLog(`[本地音乐] 歌词匹配成功：${result.match.source}/${result.match.info.songId}`);
+      appendPlayLog(`[本地音乐] lyric matched ${result.match.source}/${result.match.info.songId}`);
       return result.match.info;
     }
     if (result.searched) {
@@ -740,8 +740,8 @@ export class LocalMusic {
       this.persist();
       this.bumpVersion();
     }
-    appendPlayLog(`[本地音乐] 导入结束：新增 ${result.added}，已存在 ${result.skipped}，` +
-      `格式不支持 ${result.unsupported}，失败 ${result.failed}`);
+    appendPlayLog(`[本地音乐] import add=${result.added} skip=${result.skipped} ` +
+      `bad=${result.unsupported} fail=${result.failed}`);
     return result;
   }
 
@@ -773,11 +773,11 @@ export class LocalMusic {
       //   ① 太小的多半是占位/缓存碎片；
       //   ② 扩展名是音频、文件头却不是 ⇒ 缓存占位或加密文件，播不了。
       if (size < MIN_AUDIO_BYTES) {
-        appendPlayLog(`[本地音乐] 跳过（体积过小 ${size}B）${label}`);
+        appendPlayLog(`[本地音乐] skip small ${size}B ${label}`);
         return 'unsupported';
       }
       if (!probeLooksLikeAudio(uri, ext)) {
-        appendPlayLog(`[本地音乐] 跳过（文件头不是 ${ext}）${label}`);
+        appendPlayLog(`[本地音乐] skip bad header ${ext} ${label}`);
         return 'unsupported';
       }
       const fingerprint: string = `${size}_${label.toLowerCase()}`;
@@ -797,7 +797,7 @@ export class LocalMusic {
       // ★ 2026-11-05：文件头蒙对了、但解析不出时长的**小文件**同样视为无效
       //   （典型：把别的格式的前几 KB 拼过来的缓存碎片）。大文件保留，避免误伤。
       if (meta.durationMs <= 0 && size < INVALID_AUDIO_MAX_BYTES) {
-        appendPlayLog(`[本地音乐] 跳过（无时长且体积小 ${size}B）${label}`);
+        appendPlayLog(`[本地音乐] skip no-duration ${size}B ${label}`);
         try {
           fs.unlinkSync(dest);
         } catch (_e) {
@@ -839,7 +839,7 @@ export class LocalMusic {
       return 'added';
     } catch (e) {
       hilog.error(DOMAIN, TAG, 'import failed (%{public}s): %{public}s', label, JSON.stringify(e));
-      appendError(`[本地音乐] 导入失败：${label}`);
+      appendError(`[本地音乐] import failed ${label}`);
       return 'failed';
     } finally {
       closeQuietly(src);
@@ -1146,7 +1146,7 @@ export class LocalMusic {
     this.dropStoreRows(keys);
     this.persist();
     this.bumpVersion();
-    appendPlayLog(`[本地音乐] 删除 ${removed} 首（副本 + 歌单收藏引用一起清）`);
+    appendPlayLog(`[本地音乐] delete ${removed}`);
     return removed;
   }
 
@@ -1402,13 +1402,12 @@ export class LocalMusic {
       this.byKey.delete(song.key);
       this.byFingerprint.delete(song.fingerprint);
       removed++;
-      appendPlayLog(`[本地音乐] 清理无效条目 ${song.name}（${song.file}）`);
     }
     if (removed > 0) {
       this.songs = keep;
       this.persist();
       this.bumpVersion();
-      appendPlayLog(`[本地音乐] 清理完成：移除 ${removed} 个无效条目`);
+      appendPlayLog(`[本地音乐] sweep removed=${removed}`);
     }
     return removed;
   }
@@ -1472,7 +1471,7 @@ export class LocalMusic {
         this.byKey.set(key, entry);
         this.byFingerprint.add(entry.fingerprint);
         added++;
-        appendPlayLog(`[本地音乐] 扫到未登记文件 ${name}`);
+        appendPlayLog(`[本地音乐] adopt ${name}`);
       }
       if (added > 0) {
         this.persist();

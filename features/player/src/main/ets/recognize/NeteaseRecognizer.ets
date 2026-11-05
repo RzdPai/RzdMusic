@@ -44,10 +44,10 @@ export class NeteaseRecognizer {
     const reject = this.pendingReject;
     this.pendingResolve = undefined;
     this.pendingReject = undefined;
-    hilog.info(LOG_DOMAIN, LOG_TAG, 'AFP结果 长度=%{public}d 前缀=%{public}s',
+    hilog.info(LOG_DOMAIN, LOG_TAG, 'AFP len=%{public}d prefix=%{public}s',
       result.length, result.substring(0, 40));
     if (result.startsWith('ERROR:')) {
-      hilog.error(LOG_DOMAIN, LOG_TAG, 'AFP引擎错误: %{public}s', result.substring(6));
+      hilog.error(LOG_DOMAIN, LOG_TAG, 'AFP engine error: %{public}s', result.substring(6));
       if (reject !== undefined) {
         reject(new Error(result.substring(6)));
       }
@@ -61,7 +61,7 @@ export class NeteaseRecognizer {
   private generateFingerprint(samples: Float32Array): Promise<string> {
     return new Promise<string>((resolve: (value: string) => void, reject: (reason: Error) => void): void => {
       if (!this.webReady) {
-        hilog.error(LOG_DOMAIN, LOG_TAG, '指纹引擎未就绪（WebView 未加载完成）');
+        hilog.error(LOG_DOMAIN, LOG_TAG, 'fingerprint engine not ready');
         reject(new Error('网易云指纹引擎未就绪'));
         return;
       }
@@ -73,7 +73,7 @@ export class NeteaseRecognizer {
       this.pendingResolve = resolve;
       this.pendingReject = reject;
       const base64Pcm: string = this.encodePcm(samples);
-      hilog.info(LOG_DOMAIN, LOG_TAG, '提交AFP 输入样本=%{public}d base64长度=%{public}d', samples.length, base64Pcm.length);
+      hilog.info(LOG_DOMAIN, LOG_TAG, 'AFP samples=%{public}d b64=%{public}d', samples.length, base64Pcm.length);
       const script: string = `window.afpStart("${base64Pcm}")`;
       void this.controller.runJavaScript(script).catch((err: Object): void => {
         clearTimeout(this.timeoutTimer);
@@ -81,7 +81,7 @@ export class NeteaseRecognizer {
         const rejectFn = this.pendingReject;
         this.pendingResolve = undefined;
         this.pendingReject = undefined;
-        hilog.error(LOG_DOMAIN, LOG_TAG, 'runJavaScript失败: %{public}s', JSON.stringify(err));
+        hilog.error(LOG_DOMAIN, LOG_TAG, 'runJavaScript fail: %{public}s', JSON.stringify(err));
         if (rejectFn !== undefined) {
           rejectFn(new Error('调用网易云指纹引擎失败'));
         }
@@ -91,7 +91,7 @@ export class NeteaseRecognizer {
         const rejectFn = this.pendingReject;
         this.pendingResolve = undefined;
         this.pendingReject = undefined;
-        hilog.warn(LOG_DOMAIN, LOG_TAG, 'AFP计算超时（%{public}d ms）', AF_TIMEOUT_MS);
+        hilog.warn(LOG_DOMAIN, LOG_TAG, 'AFP timeout %{public}d ms', AF_TIMEOUT_MS);
         if (rejectFn !== undefined) {
           rejectFn(new Error('网易云指纹计算超时'));
         }
@@ -165,7 +165,7 @@ export class NeteaseRecognizer {
     }
     const audioFP: string = await this.generateFingerprint(limited);
     const duration: string = (limited.length / TARGET_RATE).toFixed(3);
-    hilog.info(LOG_DOMAIN, LOG_TAG, 'AFP指纹长度=%{public}d duration=%{public}s', audioFP.length, duration);
+    hilog.info(LOG_DOMAIN, LOG_TAG, 'AFP len=%{public}d duration=%{public}s', audioFP.length, duration);
     const url: string =
       `https://interface.music.163.com/api/music/audio/match?sessionId=0123456789abcdef` +
       `&algorithmCode=shazam_v2&duration=${duration}&rawdata=${encodeURIComponent(audioFP)}` +
@@ -186,7 +186,7 @@ export class NeteaseRecognizer {
     try {
       response = await httpRequest.request(url, options);
     } catch (err) {
-      hilog.error(LOG_DOMAIN, LOG_TAG, '网络请求异常: %{public}s', JSON.stringify(err));
+      hilog.error(LOG_DOMAIN, LOG_TAG, 'net error: %{public}s', JSON.stringify(err));
       throw new RecognitionNetworkError('网易云听歌识曲网络请求失败');
     } finally {
       httpRequest.destroy();
@@ -196,7 +196,7 @@ export class NeteaseRecognizer {
       throw new RecognitionNetworkError(`网易云听歌识曲服务请求失败（${response.responseCode}）`);
     }
     const resultStr: string = response.result as string;
-    hilog.info(LOG_DOMAIN, LOG_TAG, '响应原文(前200): %{public}s', resultStr.substring(0, 200));
+    hilog.info(LOG_DOMAIN, LOG_TAG, 'body(200): %{public}s', resultStr.substring(0, 200));
     let parsed: Record<string, Object>;
     try {
       parsed = JSON.parse(resultStr) as Record<string, Object>;
@@ -221,20 +221,20 @@ export class NeteaseRecognizer {
     if (items === undefined || items === null) {
       return [];
     }
-    hilog.info(LOG_DOMAIN, LOG_TAG, '候选条目数=%{public}d', items.length);
+    hilog.info(LOG_DOMAIN, LOG_TAG, 'candidates=%{public}d', items.length);
     const results: Array<RecognitionResult> = [];
     for (const item of items) {
       const mapped: RecognitionResult | undefined = this.mapItem(item as Record<string, Object>);
       if (mapped !== undefined) {
         results.push(mapped);
-        hilog.info(LOG_DOMAIN, LOG_TAG, '命中候选: %{public}s - %{public}s id=%{public}s',
+        hilog.info(LOG_DOMAIN, LOG_TAG, 'hit: %{public}s - %{public}s id=%{public}s',
           mapped.title, mapped.artist, mapped.providerTrackId);
         if (results.length >= 5) {
           break;
         }
       }
     }
-    hilog.info(LOG_DOMAIN, LOG_TAG, '识别完成 结果数=%{public}d', results.length);
+    hilog.info(LOG_DOMAIN, LOG_TAG, 'done n=%{public}d', results.length);
     return results;
   }
 

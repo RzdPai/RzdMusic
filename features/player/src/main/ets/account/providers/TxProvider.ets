@@ -367,10 +367,10 @@ function beginSuspendDelay(pending: PendingQrLogin): void {
       const info: backgroundTaskManager.DelaySuspendInfo =
         backgroundTaskManager.requestSuspendDelay('QQ 音乐扫码登录，等待手机确认', () => {
           pending.suspendRequestId = 0;
-          hilog.info(0x0000, QR_LOG_TAG, 'QQ 扫码挂起延迟已到期');
+          hilog.info(0x0000, QR_LOG_TAG, 'QQ 扫码挂起到期');
         });
       pending.suspendRequestId = info.requestId;
-      hilog.info(0x0000, QR_LOG_TAG, 'QQ 扫码挂起延迟已申请 %{public}d ms', info.actualDelayTime);
+      hilog.info(0x0000, QR_LOG_TAG, 'QQ 扫码挂起申请 %{public}d ms', info.actualDelayTime);
     }
   } catch (err) {
     const error: Error = err as Error;
@@ -413,7 +413,7 @@ function scheduleQrReconnect(qrcodeID: string, pending: PendingQrLogin, serverRe
     pending.reconnectTimer = -1;
     void reconnectQrMqtt(qrcodeID, pending, serverReference);
   }, delay);
-  hilog.info(0x0000, QR_LOG_TAG, 'QQ 扫码连接断开，%{public}d ms 后重连（第 %{public}d 次，沿用 %{public}s）',
+  hilog.info(0x0000, QR_LOG_TAG, 'QQ 扫码断开 %{public}d ms 后重连 #%{public}d ref=%{public}s',
     delay, pending.reconnectAttempts, serverReference.length > 0 ? limitLogValue(serverReference) : QR_DEFAULT_ENDPOINT);
 }
 
@@ -567,7 +567,7 @@ function resolveQrBrokerEndpoint(rawReference: string): QrEndpointDecision {
       if (decoded.length > 0) value = decoded;
     } catch (err) {
       const decodeError: Error = err as Error;
-      hilog.warn(0x0000, QR_LOG_TAG, 'QQ 扫码：serverReference 解码失败（%{public}s），按原样校验',
+      hilog.warn(0x0000, QR_LOG_TAG, 'QQ 扫码 ref 解码失败 %{public}s, 原样校验',
         decodeError.message ?? '');
     }
   }
@@ -692,7 +692,7 @@ async function connectQrMqtt(qrcodeID: string, pending: PendingQrLogin, serverRe
     //   MQTT 5 明确允许客户端**忽略** Server Reference；忽略之后回到我们自己的官方入口
     //   `wss://mu.y.qq.com:443/ws/handshake`，票据只会发往官方域名，安全性不变。
     hilog.error(0x0000, QR_LOG_TAG,
-      'QQ 扫码忽略不受信任的 serverReference actual=%{public}s reason=%{public}s -> 改用官方入口 endpoint=%{public}s',
+      'QQ 扫码 ref 不受信任 actual=%{public}s reason=%{public}s -> endpoint=%{public}s',
       endpointDecision.raw, endpointDecision.reason, QR_DEFAULT_ENDPOINT);
     endpointDecision.endpoint = QR_DEFAULT_ENDPOINT;
     endpointDecision.source = 'official-fallback';
@@ -738,12 +738,12 @@ async function connectQrMqtt(qrcodeID: string, pending: PendingQrLogin, serverRe
       if (connackReference.trusted) {
         currentReference = info.serverReference;
       } else {
-        hilog.warn(0x0000, QR_LOG_TAG, 'QQ 扫码忽略该 serverReference（重连沿用 %{public}s）',
+        hilog.warn(0x0000, QR_LOG_TAG, 'QQ 扫码忽略 ref, 沿用 %{public}s',
           currentReference.length > 0 ? limitLogValue(currentReference) : QR_DEFAULT_ENDPOINT);
       }
     }
     pending.serverReference = currentReference;
-    hilog.info(0x0000, QR_LOG_TAG, 'QQ 扫码 MQTT 已连接 endpoint=%{public}s，订阅 management.qrcode_login/%{private}s',
+    hilog.info(0x0000, QR_LOG_TAG, 'QQ 扫码 MQTT 已连接 endpoint=%{public}s sub=management.qrcode_login/%{private}s',
       endpointDecision.endpoint, qrcodeID);
     client.subscribe(`management.qrcode_login/${qrcodeID}`, new Map([
       ['authorization', 'tmelogin'],
@@ -791,13 +791,13 @@ async function connectQrMqtt(qrcodeID: string, pending: PendingQrLogin, serverRe
     if (serverRedirect.length > 0) {
       const redirectDecision: QrEndpointDecision = resolveQrBrokerEndpoint(serverRedirect);
       hilog.warn(0x0000, QR_LOG_TAG,
-        'QQ 扫码 CONNACK 拒绝（reason=%{public}d）带 serverReference=%{public}s trusted=%{public}d source=%{public}s note=%{public}s',
+        'QQ 扫码 CONNACK 拒绝 reason=%{public}d ref=%{public}s trusted=%{public}d source=%{public}s note=%{public}s',
         code, redirectDecision.raw, redirectDecision.trusted ? 1 : 0, redirectDecision.source, redirectDecision.reason);
       if (redirectDecision.trusted) {
         redirectReference = serverRedirect;
       } else {
         hilog.error(0x0000, QR_LOG_TAG,
-          'QQ 扫码拒绝按该地址重定向 actual=%{public}s expected=官方域名族[%{public}s] 或官方入口[%{public}s] reason=%{public}s',
+          'QQ 扫码拒绝重定向 actual=%{public}s expect=[%{public}s|%{public}s] reason=%{public}s',
           redirectDecision.raw, QR_TRUSTED_DOMAINS.join('/'), QR_DEFAULT_ENDPOINT, redirectDecision.reason);
       }
     }
@@ -808,7 +808,7 @@ async function connectQrMqtt(qrcodeID: string, pending: PendingQrLogin, serverRe
       // 而它给的地址是原生 TCP 节点（IP:29001），WebSocket 客户端用不了。
       // ⇒ 策略就是「忽略这个地址、重连官方入口」，多试几次撞上不迁移的网关即可。
       if (redirectReference.length > 0 && redirectCount < QR_MAX_REDIRECTS) {
-        hilog.info(0x0000, QR_LOG_TAG, 'QQ 扫码按服务端重定向重连（第 %{public}d 次，reason=%{public}d）',
+        hilog.info(0x0000, QR_LOG_TAG, 'QQ 扫码按重定向重连 #%{public}d reason=%{public}d',
           redirectCount + 1, code);
         await connectQrMqtt(qrcodeID, pending, redirectReference, redirectCount + 1);
         return;
@@ -816,7 +816,7 @@ async function connectQrMqtt(qrcodeID: string, pending: PendingQrLogin, serverRe
       if (redirectCount < QR_MAX_REDIRECTS) {
         // 无参考地址 / 参考地址我们的传输用不了：间隔一下再敲一次官方入口
         hilog.warn(0x0000, QR_LOG_TAG,
-          'QQ 扫码第 %{public}d 次被要求迁移（reason=%{public}d，ref=%{public}s），忽略并重试官方入口',
+          'QQ 扫码第 %{public}d 次要求迁移 reason=%{public}d ref=%{public}s, 重试官方入口',
           redirectCount + 1, code, serverRedirect.length > 0 ? limitLogValue(serverRedirect) : '(empty)');
         await new Promise<void>((resolve) => { setTimeout(resolve, QR_REDIRECT_DELAY_MS); });
         if (pending.cancelled || pending.status === QrLoginStatus.Failed) {
@@ -921,7 +921,7 @@ export class TxProvider implements MusicProvider {
         Object.keys(data).join(','), qrUrl.substring(0, 32));
       throw new Error('获取 QQ 音乐二维码失败');
     }
-    hilog.info(0x0000, QR_LOG_TAG, 'CreateQRCode 成功 keys=[%{public}s] expiresIn=%{public}s qrPrefix=%{public}s',
+    hilog.info(0x0000, QR_LOG_TAG, 'CreateQRCode ok keys=[%{public}s] expiresIn=%{public}s qrPrefix=%{public}s',
       Object.keys(data).join(','), String(data['expiresIn'] ?? ''), qrUrl.substring(0, 24));
     const requestId: string = `${Date.now()}_${Math.floor(Math.random() * 100000)}`;
     const pending: PendingQrLogin = {

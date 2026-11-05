@@ -106,7 +106,7 @@ async function runPrewarm(ui: UIContext, song: SongItem | undefined): Promise<vo
     Logger.info(TAG, `RzdMeshWarm start key=${key.substring(0, 48)} kind=${sourceKindOf(key)}`);
     const bytes: Uint8Array | undefined = await loadMeshBytes(ui, key);
     if (bytes === undefined) {
-      Logger.warn(TAG, `RzdMeshWarm decode-fail key=${key.substring(0, 48)} (见上一条 http-code)`);
+      Logger.warn(TAG, `RzdMeshWarm decode-fail key=${key.substring(0, 48)}`);
       return;
     }
     const tint: string = averageTintOf(bytes);

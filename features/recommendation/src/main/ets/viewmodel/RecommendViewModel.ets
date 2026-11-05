@@ -313,7 +313,7 @@ export class RecommendViewModel {
       this.plazaNotFollowing = true;
     }
     Logger.info('RzdHomeSource',
-      `align plaza/ranking -> ${MusicDataService.sourceName(svcSource)}(${svcSource}) index=${index}`);
+      `align plaza/rank -> ${MusicDataService.sourceName(svcSource)}(${svcSource}) idx=${index}`);
     return true;
   }
 
@@ -467,7 +467,7 @@ export class RecommendViewModel {
       this.plazaHasNext = result.hasNext;
       if (page === 1) {
         hilog.info(PLAZA_DOMAIN, PLAZA_TAG,
-          'plaza loaded: source=%{public}s items=%{public}d total=%{public}d hasNext=%{public}s',
+          'plaza ok src=%{public}s items=%{public}d total=%{public}d hasNext=%{public}s',
           this.plazaSourceCode(), mapped.length, result.total, String(result.hasNext));
         if (mapped.length === 0) {
           // ⚠️ HTTP 200 但一条都没有（QQ 的广场就是这个形态，见 MusicDataService.plazaSupported）：
@@ -475,7 +475,7 @@ export class RecommendViewModel {
           //    现在给一句诚实的说明 + 复用重试入口。
           this.plazaErrorText =
             `${MusicDataService.sourceName(this.plazaSourceCode())}歌单广场暂时没有返回内容（该平台的广场接口可能已失效）`;
-          hilog.warn(PLAZA_DOMAIN, PLAZA_TAG, 'plaza empty: source=%{public}s page=1',
+          hilog.warn(PLAZA_DOMAIN, PLAZA_TAG, 'plaza empty src=%{public}s page=1',
             this.plazaSourceCode());
         }
       }
@@ -485,7 +485,7 @@ export class RecommendViewModel {
         this.plazaPlaylists = [];
         this.plazaHasNext = false;
         this.plazaErrorText = `加载${MusicDataService.sourceName(this.plazaSourceCode())}歌单失败，请检查网络`;
-        hilog.error(PLAZA_DOMAIN, PLAZA_TAG, 'plaza load FAILED: source=%{public}s msg=%{public}s',
+        hilog.error(PLAZA_DOMAIN, PLAZA_TAG, 'plaza fail src=%{public}s msg=%{public}s',
           this.plazaSourceCode(), e.message ?? '');
       }
     }    this.plazaLoading = false;
@@ -533,7 +533,7 @@ export class RecommendViewModel {
       }
       this.rankingBoards = filled;
     }, (err: Object): void => {
-      Logger.warn('RzdRecommend', 'loadRankingBoards failed: ' + JSON.stringify(err).substring(0, 120));
+      Logger.warn('RzdRecommend', 'boards fail ' + JSON.stringify(err).substring(0, 120));
     });
   }
 
@@ -577,7 +577,7 @@ export class RecommendViewModel {
         usedBoardName = '内地榜';
       }
       Logger.info('RzdHomeSource',
-        `guest qq uses 内地榜 songs=${songs.length} gen=${gen}`);
+        `guest qq main board songs=${songs.length} gen=${gen}`);
     }
     if (songs.length === 0) {
       // 未登录 / 账号推荐拿不到内容：走平台榜单歌曲，卡片样式与登录态**完全一致**。
@@ -588,7 +588,7 @@ export class RecommendViewModel {
         degraded = result.degraded;
         usedBoardName = result.boardName;
       } catch (_err) {
-        Logger.warn('RzdHomeSource', `loadHomeSongsAsync threw source=${homeSource} gen=${gen}`);
+        Logger.warn('RzdHomeSource', `home songs throw src=${homeSource} gen=${gen}`);
         songs = [];
       }
     }
@@ -608,11 +608,11 @@ export class RecommendViewModel {
     }
     if (gen !== this.loadGen) {
       // 用户在这条链跑的过程中又换了平台：这次结果作废（见 loadGen 注释）
-      Logger.info('RzdHomeSource', `drop stale result source=${homeSource} gen=${gen} current=${this.loadGen}`);
+      Logger.info('RzdHomeSource', `drop stale src=${homeSource} gen=${gen} cur=${this.loadGen}`);
       return;
     }
     Logger.info('RzdHomeSource',
-      `loaded source=${homeSource} songs=${songs.length} board=${usedBoardName} degraded=${degraded} gen=${gen}`);
+      `loaded src=${homeSource} songs=${songs.length} board=${usedBoardName} degraded=${degraded} gen=${gen}`);
     if (usedBoardName.length > 0) {
       this.homeBoardLabel = usedBoardName;
     }
@@ -818,7 +818,7 @@ export class RecommendViewModel {
     }
     this.featureBoardCovers = covers;
     Logger.info('RzdHomeBoard',
-      `feature board covers ready source=${svcSource} newSongs=${covers['newSongs'] === undefined ? 0 : covers['newSongs'].length}` +
+      `board covers ready src=${svcSource} newSongs=${covers['newSongs'] === undefined ? 0 : covers['newSongs'].length}` +
       ` picked=${covers['picked'] === undefined ? 0 : covers['picked'].length} gen=${gen}`);
   }
 
@@ -985,7 +985,7 @@ export class RecommendViewModel {
         }
       }
       const added: number = OnlinePlayUtil.appendToList(this.appState, songs);
-      console.info('[心动模式] 追加推荐 count=' + added);
+      console.info('[心动] append count=' + added);
       // ★ 追加后要**自动开始播放**（用户反馈：只进列表不出声）。
       //   队列原本是空的时候，从新追加的第一首开始播；已有歌在播就不打断它。
       if (added > 0) {
@@ -999,7 +999,7 @@ export class RecommendViewModel {
           this.appState.isResolving = true;
           MediaService.getInstance().loadAsset(firstNewIndex);
           MediaService.getInstance().play();
-          console.info('[心动模式] 自动播放 index=' + firstNewIndex);
+          console.info('[心动] autoplay idx=' + firstNewIndex);
         }
       }
       if (uiContext !== undefined) {
@@ -1009,7 +1009,7 @@ export class RecommendViewModel {
         });
       }
     } catch (error) {
-      console.info('[心动模式] 追加失败: ' + JSON.stringify(error).substring(0, 80));
+      console.info('[心动] append fail ' + JSON.stringify(error).substring(0, 80));
     }
   }
 

@@ -64,9 +64,9 @@ export struct FeedBlurBackdrop {
       `return 'ok';` +
       `})();`;
     this.controller.runJavaScript(script).then((ret: string): void => {
-      Logger.info(TAG, `cover injected ret=${ret} urlLen=${url.length}`);
+      Logger.info(TAG, `inject ok ret=${ret} urlLen=${url.length}`);
     }).catch((err: Error): void => {
-      Logger.warn(TAG, `cover inject failed: ${err.message ?? ''}`);
+      Logger.warn(TAG, `inject fail err=${err.message ?? ''}`);
     });
   }
 
@@ -92,7 +92,6 @@ export struct FeedBlurBackdrop {
       // 纯背景：不吃触摸，滑动与点击都交给上层
       .hitTestBehavior(HitTestMode.None)
       .onPageEnd((): void => {
-        Logger.info(TAG, 'page end, inject cover');
         this.applied = '';
         this.applyCover();
       })

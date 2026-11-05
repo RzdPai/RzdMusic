@@ -55,7 +55,7 @@ export class KugouShareResolver {
       out.ok = true;
       out.globalSpecialId = inline;
       out.finalUrl = trimmed;
-      appendPlayLog(KugouShareResolver.TAG + ' 直接从链接取得 global_specialid=' + inline);
+      appendPlayLog(KugouShareResolver.TAG + ' inline gid=' + inline);
       return out;
     }
     // 短链：请求一次拿 302 的 Location
@@ -80,16 +80,16 @@ export class KugouShareResolver {
       if (gid.length > 0) {
         out.ok = true;
         out.globalSpecialId = gid;
-        appendPlayLog(KugouShareResolver.TAG + ' 短链解析成功 global_specialid=' + gid);
+        appendPlayLog(KugouShareResolver.TAG + ' short gid=' + gid);
         return out;
       }
       out.reason = '短链里没有 global_specialid（可能不是歌单分享链接）';
-      appendPlayLog(KugouShareResolver.TAG + ' 解析失败 code=' + resp.responseCode +
-        ' 最终地址=' + finalUrl.substring(0, Math.min(120, finalUrl.length)));
+      appendPlayLog(KugouShareResolver.TAG + ' fail code=' + resp.responseCode +
+        ' url=' + finalUrl.substring(0, Math.min(120, finalUrl.length)));
       return out;
     } catch (err) {
       out.reason = '短链请求失败（网络或链接失效）';
-      appendPlayLog(KugouShareResolver.TAG + ' 请求异常');
+      appendPlayLog(KugouShareResolver.TAG + ' request error');
       return out;
     }
   }

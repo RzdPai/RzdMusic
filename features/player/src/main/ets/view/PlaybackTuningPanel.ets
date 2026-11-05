@@ -323,7 +323,7 @@ export struct PlaybackTuningPanel {
     }
     this.customPresets = list;
     this.store.setEqPresets(JSON.stringify(list));
-    appendPlayLog('[RzdAf] 保存 EQ 预设 ' + name);
+    appendPlayLog('[RzdAf] save EQ preset ' + name);
   }
 
   /** 应用某个自定义预设。 */
@@ -332,7 +332,7 @@ export struct PlaybackTuningPanel {
     this.presetName = preset.name;
     this.store.setEqGains(this.eqGains);
     this.scheduleTuning();
-    appendPlayLog('[RzdAf] 应用自定义预设 ' + preset.name);
+    appendPlayLog('[RzdAf] apply preset ' + preset.name);
   }
 
   /** 长按删除某个自定义预设。 */
@@ -341,7 +341,7 @@ export struct PlaybackTuningPanel {
       this.customPresets.filter((p: CustomEqPreset): boolean => p.name !== preset.name);
     this.customPresets = list;
     this.store.setEqPresets(JSON.stringify(list));
-    appendPlayLog('[RzdAf] 删除 EQ 预设 ' + preset.name);
+    appendPlayLog('[RzdAf] delete EQ preset ' + preset.name);
   }
 
 

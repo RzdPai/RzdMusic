@@ -248,7 +248,7 @@ export struct PlaylistBatchActionBar {
     }
     this.appState.playQueue = queue;
     hilog.info(BATCH_LOG_DOMAIN, BATCH_LOG_TAG,
-      'batch play-next requested=%{public}d inserted=%{public}d at=%{public}d', rows.length, added, insertAt);
+      'batch play-next req=%{public}d added=%{public}d at=%{public}d', rows.length, added, insertAt);
     this.toast(added > 0 ? '已插入 ' + added + ' 首到下一首播放' : '所选歌曲已在播放列表中');
     this.onExit();
   }
@@ -269,11 +269,11 @@ export struct PlaylistBatchActionBar {
     try {
       const added: number = await store.addFavorites(records);
       hilog.info(BATCH_LOG_DOMAIN, BATCH_LOG_TAG,
-        'batch favorite persisted requested=%{public}d added=%{public}d', rows.length, added);
+        'batch fav saved req=%{public}d added=%{public}d', rows.length, added);
       this.toast(added > 0 ? '已收藏 ' + added + ' 首' : '所选歌曲已收藏或没有有效歌曲');
       this.onExit();
     } catch (err) {
-      hilog.error(BATCH_LOG_DOMAIN, BATCH_LOG_TAG, 'batch favorite failed %{public}s', String(err));
+      hilog.error(BATCH_LOG_DOMAIN, BATCH_LOG_TAG, 'batch fav fail %{public}s', String(err));
       this.toast('收藏保存失败，请重试');
     } finally {
       this.favoriteSaving = false;
@@ -291,7 +291,7 @@ export struct PlaylistBatchActionBar {
     this.newPlaylistName = '';
     this.setSheetMode(BatchSheetMode.ADD_TO_PLAYLIST);
     hilog.info(BATCH_LOG_DOMAIN, BATCH_LOG_TAG,
-      'open add-to-playlist sheet: selected=%{public}d playlists=%{public}d',
+      'add-to-list sheet sel=%{public}d lists=%{public}d',
       count, this.playlists.length);
   }
 
@@ -306,7 +306,7 @@ export struct PlaylistBatchActionBar {
       }
     }
     notifyPlaylistChanged();
-    hilog.info(BATCH_LOG_DOMAIN, BATCH_LOG_TAG, 'batch add to playlist name=%{public}s added=%{public}d',
+    hilog.info(BATCH_LOG_DOMAIN, BATCH_LOG_TAG, 'batch add-to-list name=%{public}s added=%{public}d',
       p.name, added);
     this.setSheetMode(BatchSheetMode.NONE);
     this.toast(added > 0 ? '已添加 ' + added + ' 首到「' + p.name + '」' : '「' + p.name + '」中已有这些歌曲');
@@ -361,11 +361,11 @@ export struct PlaylistBatchActionBar {
       return;
     }
     if (MusicStoreService.getInstance().getDownloadQualityMode() === 'follow') {
-      console.info('[RzdDownloadQuality] mode=follow direct entry=playlist-batch');
+      console.info('[RzdDownloadQuality] follow direct entry=playlist-batch');
       await this.batchDownload('');
       return;
     }
-    console.info('[RzdDownloadQuality] mode=manual picker-open entry=playlist-batch');
+    console.info('[RzdDownloadQuality] manual picker entry=playlist-batch');
     this.qualityLoading = true;
     this.qualityOptions = [];
     this.setSheetMode(BatchSheetMode.DOWNLOAD_QUALITY);
@@ -381,14 +381,14 @@ export struct PlaylistBatchActionBar {
       missing = result.missing;
     } catch (err) {
       const e: Error = err as Error;
-      hilog.warn(BATCH_LOG_DOMAIN, BATCH_LOG_TAG, 'batch quality threw: %{public}s', e.message ?? '');
+      hilog.warn(BATCH_LOG_DOMAIN, BATCH_LOG_TAG, 'batch quality throw %{public}s', e.message ?? '');
       this.qualityOptions = [];
     }
     this.qualityLoading = false;
     if (this.qualityOptions.length === 0) {
       const first: PlaylistSongUi = online[0];
       hilog.warn(BATCH_LOG_DOMAIN, BATCH_LOG_TAG,
-        'no quality options: source=%{public}s songId=%{public}s name=%{public}s online=%{public}d selected=%{public}d',
+        'no quality opt src=%{public}s songId=%{public}s name=%{public}s online=%{public}d sel=%{public}d',
         first.source, first.songId, typeof first.title === 'string' ? first.title : '',
         online.length, rows.length);
       // 手动模式探测失败仅提示；取消弹层或无选项都不得自动下载。
@@ -399,7 +399,7 @@ export struct PlaylistBatchActionBar {
       return;
     }
     if (missing.length > 0) {
-      hilog.info(BATCH_LOG_DOMAIN, BATCH_LOG_TAG, 'batch quality partial: missing=%{public}d/%{public}d',
+      hilog.info(BATCH_LOG_DOMAIN, BATCH_LOG_TAG, 'batch quality partial miss=%{public}d/%{public}d',
         missing.length, songs.length);
     }
   }
@@ -433,7 +433,7 @@ export struct PlaylistBatchActionBar {
     }
     const started: number = (await DownloadUtil.downloadBatch(tasks, this.getUIContext())).length;
     hilog.info(BATCH_LOG_DOMAIN, BATCH_LOG_TAG,
-      'batch download quality=%{public}s started=%{public}d localSkipped=%{public}d noIdSkipped=%{public}d',
+      'batch dl quality=%{public}s started=%{public}d skipLocal=%{public}d skipNoId=%{public}d',
       quality, started, skippedLocal, skippedNoId);
     let message: string = started > 0 ? '已加入下载队列 ' + started + ' 首' : '没有新增下载任务';
     if (tasks.length > started) {

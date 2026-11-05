@@ -148,10 +148,10 @@ const mapItem = (item: Record<string, Object>): RecognitionResult | undefined =>
 };
 
 export const recognizeKugou = async(pcm: Int16Array): Promise<Array<RecognitionResult>> => {
-  hilog.info(LOG_DOMAIN, LOG_TAG, '识别开始 pcm=%{public}d samples', pcm.length);
+  hilog.info(LOG_DOMAIN, LOG_TAG, 'pcm=%{public}d samples', pcm.length);
   const body: Uint8Array = resampleTo8k(pcm);
   if (body.length === 0) {
-    hilog.warn(LOG_DOMAIN, LOG_TAG, '降采样后音频为空');
+    hilog.warn(LOG_DOMAIN, LOG_TAG, 'downsampled audio empty');
     return [];
   }
   hilog.info(LOG_DOMAIN, LOG_TAG, '8k PCM body=%{public}d bytes', body.length);
@@ -205,36 +205,36 @@ export const recognizeKugou = async(pcm: Int16Array): Promise<Array<RecognitionR
   try {
     response = await httpRequest.request(url, options);
   } catch (err) {
-    hilog.error(LOG_DOMAIN, LOG_TAG, '网络请求异常: %{public}s', JSON.stringify(err));
+    hilog.error(LOG_DOMAIN, LOG_TAG, 'net error: %{public}s', JSON.stringify(err));
     throw new RecognitionNetworkError('酷狗听歌识曲网络请求失败');
   } finally {
     httpRequest.destroy();
   }
   hilog.info(LOG_DOMAIN, LOG_TAG, 'HTTP status=%{public}d', response.responseCode);
   if (response.responseCode < 200 || response.responseCode >= 300) {
-    hilog.error(LOG_DOMAIN, LOG_TAG, '服务返回非2xx: %{public}d', response.responseCode);
+    hilog.error(LOG_DOMAIN, LOG_TAG, 'http non-2xx: %{public}d', response.responseCode);
     throw new RecognitionNetworkError(`酷狗听歌识曲服务请求失败（${response.responseCode}）`);
   }
   const resultStr: string = response.result as string;
-  hilog.info(LOG_DOMAIN, LOG_TAG, '响应原文(前200): %{public}s', resultStr.substring(0, 200));
+  hilog.info(LOG_DOMAIN, LOG_TAG, 'body(200): %{public}s', resultStr.substring(0, 200));
   let parsed: Record<string, Object>;
   try {
     parsed = JSON.parse(resultStr) as Record<string, Object>;
   } catch (err) {
-    hilog.error(LOG_DOMAIN, LOG_TAG, 'JSON解析失败: %{public}s', resultStr.substring(0, 120));
+    hilog.error(LOG_DOMAIN, LOG_TAG, 'json parse fail: %{public}s', resultStr.substring(0, 120));
     throw new RecognitionNetworkError('酷狗听歌识曲服务返回数据异常');
   }
   const status: Object = parsed['status'];
   const errorCode: Object = parsed['error_code'];
   hilog.info(LOG_DOMAIN, LOG_TAG, 'status=%{public}s error_code=%{public}s', String(status), String(errorCode));
   if (status !== 1) {
-    hilog.warn(LOG_DOMAIN, LOG_TAG, 'status != 1，视为未匹配');
+    hilog.warn(LOG_DOMAIN, LOG_TAG, 'status != 1, no match');
     return [];
   }
   const dataRaw: Object = parsed['data'];
   let items: Array<Object> = [];
   if (dataRaw === undefined) {
-    hilog.warn(LOG_DOMAIN, LOG_TAG, 'data 缺失，视为未匹配');
+    hilog.warn(LOG_DOMAIN, LOG_TAG, 'data missing, no match');
     return [];
   }
   if (Array.isArray(dataRaw)) {
@@ -249,26 +249,26 @@ export const recognizeKugou = async(pcm: Int16Array): Promise<Array<RecognitionR
       items = songs;
     } else {
       const keys: string[] = Object.keys(dataRecord);
-      hilog.warn(LOG_DOMAIN, LOG_TAG, 'data 无 list/songs 字段，keys=%{public}s', keys.join(','));
+      hilog.warn(LOG_DOMAIN, LOG_TAG, 'data no list/songs keys=%{public}s', keys.join(','));
     }
   }
-  hilog.info(LOG_DOMAIN, LOG_TAG, '候选条目数=%{public}d', items.length);
+  hilog.info(LOG_DOMAIN, LOG_TAG, 'candidates=%{public}d', items.length);
   if (items.length > 0) {
     const first: Record<string, Object> = items[0] as Record<string, Object>;
-    hilog.info(LOG_DOMAIN, LOG_TAG, '首条字段keys=%{public}s', Object.keys(first).join(','));
+    hilog.info(LOG_DOMAIN, LOG_TAG, 'first keys=%{public}s', Object.keys(first).join(','));
   }
   const results: Array<RecognitionResult> = [];
   for (const item of items) {
     const mapped: RecognitionResult | undefined = mapItem(item as Record<string, Object>);
     if (mapped !== undefined) {
       results.push(mapped);
-      hilog.info(LOG_DOMAIN, LOG_TAG, '命中候选: %{public}s - %{public}s id=%{public}s',
+      hilog.info(LOG_DOMAIN, LOG_TAG, 'hit: %{public}s - %{public}s id=%{public}s',
         mapped.title, mapped.artist, mapped.providerTrackId);
       if (results.length >= 5) {
         break;
       }
     }
   }
-  hilog.info(LOG_DOMAIN, LOG_TAG, '识别完成 结果数=%{public}d', results.length);
+  hilog.info(LOG_DOMAIN, LOG_TAG, 'done n=%{public}d', results.length);
   return results;
 };

@@ -132,10 +132,10 @@ export class WyShareService {
           fullTracks = byIds;
         }
       } catch (e) {
-        appendError('[网易歌单] 按 trackIds 补全失败: ' + JSON.stringify(e).substring(0, 120));
+        appendError('[网易歌单] fill by trackIds fail: ' + JSON.stringify(e).substring(0, 120));
       }
     }
-    appendError('[网易歌单] 解析完成 曲目=' + fullTracks.length + ' 期望=' + expected +
+    appendError('[网易歌单] done tracks=' + fullTracks.length + ' expect=' + expected +
       ' trackIds=' + trackIds.length);
     info.songs = WyShareService.buildSongs(fullTracks);
     return info;
@@ -155,7 +155,7 @@ export class WyShareService {
         const raw: WyTrackAllRaw = JSON.parse(body) as WyTrackAllRaw;
         list = raw.songs ?? [];
       } catch (e) {
-        appendError('[网易歌单] track/all 分页失败 offset=' + offset + ': ' +
+        appendError('[网易歌单] track/all page fail offset=' + offset + ': ' +
           JSON.stringify(e).substring(0, 120));
         break;
       }
@@ -167,7 +167,7 @@ export class WyShareService {
       }
       offset += pageSize;
     }
-    appendError('[网易歌单] track/all 拉取=' + out.length);
+    appendError('[网易歌单] track/all n=' + out.length);
     return out;
   }
 

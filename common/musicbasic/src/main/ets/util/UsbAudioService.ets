@@ -92,7 +92,7 @@ export class UsbAudioService {
     this.pollTimer = setInterval((): void => {
       void this.refresh();
     }, 2000);
-    appendPlayLog(this.tag + ' 设备轮询已启动（2s）');
+    appendPlayLog(this.tag + ' poll start 2s');
     void this.refresh();
   }
 
@@ -101,7 +101,7 @@ export class UsbAudioService {
     if (this.pollTimer >= 0) {
       clearInterval(this.pollTimer);
       this.pollTimer = -1;
-      appendPlayLog(this.tag + ' 设备轮询已停止');
+      appendPlayLog(this.tag + ' poll stop');
     }
   }
 
@@ -143,11 +143,9 @@ export class UsbAudioService {
       const hasRight: boolean = usbManager.hasRight(audio.name);
       this.state.authorized = hasRight;
       this.state.statusText = hasRight ? '已授权，可开启独占' : '需要授权（点开关会弹系统授权）';
-      appendPlayLog(this.tag + ' 设备 name=' + audio.name + ' ' + this.state.vidPid +
-        ' right=' + hasRight);
     } catch (err) {
       const e: BusinessError = err as BusinessError;
-      appendPlayLog(this.tag + ' 枚举失败 code=' + e.code);
+      appendPlayLog(this.tag + ' enum failed code=' + e.code);
       this.state.statusText = 'USB 枚举失败（code=' + e.code + '）';
     }
   }
@@ -196,7 +194,7 @@ export class UsbAudioService {
       await this.refresh();
     }
     if (this.device === undefined) {
-      appendPlayLog(this.tag + ' 连接失败：没有 USB 音频设备');
+      appendPlayLog(this.tag + ' no usb audio device');
       return -1;
     }
     const name: string = this.device.name;
@@ -214,7 +212,7 @@ export class UsbAudioService {
       this.pipe = pipe;
       const fd: number = usbManager.getFileDescriptor(pipe);
       if (fd < 0) {
-        appendPlayLog(this.tag + ' getFileDescriptor 返回 ' + fd + '（ROM 未给 usbfs 权限）');
+        appendPlayLog(this.tag + ' getFileDescriptor fd=' + fd);
         this.state.statusText = '设备已连接但未拿到可用的 fd（该机型不给 usbfs 权限）';
         usbManager.closePipe(pipe);
         this.pipe = undefined;
@@ -223,11 +221,11 @@ export class UsbAudioService {
       this.state.connected = true;
       this.state.fd = fd;
       this.state.statusText = '已连接：' + this.state.productName + '（fd=' + fd + '）';
-      appendPlayLog(this.tag + ' 连接成功 fd=' + fd + ' name=' + name);
+      appendPlayLog(this.tag + ' connected fd=' + fd + ' name=' + name);
       return fd;
     } catch (err) {
       const e: BusinessError = err as BusinessError;
-      appendPlayLog(this.tag + ' 连接异常 code=' + e.code + ' msg=' + e.message);
+      appendPlayLog(this.tag + ' connect error code=' + e.code + ' msg=' + e.message);
       this.state.statusText = '连接失败（code=' + e.code + '）';
       return -1;
     }
@@ -240,7 +238,7 @@ export class UsbAudioService {
         usbManager.closePipe(this.pipe);
       } catch (err) {
       }
-      appendPlayLog(this.tag + ' 已 closePipe，释放 fd=' + this.state.fd);
+      appendPlayLog(this.tag + ' closePipe fd=' + this.state.fd);
       this.pipe = undefined;
     }
     this.state.connected = false;

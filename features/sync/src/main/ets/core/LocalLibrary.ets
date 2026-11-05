@@ -191,7 +191,7 @@ export class LocalLibrary {
   init(context?: common.Context): void {
     const ctx: common.Context | undefined = context !== undefined ? context : getAppRuntime().context;
     if (ctx === undefined) {
-      appendError(`[${TAG}] init without ability context: store not ready, sync library disabled`);
+      appendError(`[${TAG}] init no context, sync off`);
       this.ready = false;
       this.store.init(undefined);
       this.load();
@@ -466,7 +466,7 @@ export class LocalLibrary {
     // 有非本地的收藏行却一首也转不成同步结构（缺 source/songId 的演示数据）：
     // 不能拿空数组去覆盖已有列表，否则会把云端收藏一起清掉。
     if (musics.length === 0 && this.data.loveList.length > 0 && unconvertibleCount(records) > 0) {
-      appendError(`[${TAG}] skip unsyncable favorites (${records.length} rows, none convertible)`);
+      appendError(`[${TAG}] skip favorites rows=${records.length}`);
       return;
     }
     this.data.loveList = musics;
@@ -482,7 +482,7 @@ export class LocalLibrary {
     }
     const musics: LxMusicInfoNew[] = musicsOf(read.online);
     if (musics.length === 0 && this.data.defaultList.length > 0 && unconvertibleCount(read.online) > 0) {
-      appendError(`[${TAG}] skip unsyncable queue (${read.online.length} rows, none convertible)`);
+      appendError(`[${TAG}] skip queue rows=${read.online.length}`);
       return;
     }
     this.data.defaultList = musics;
@@ -506,7 +506,7 @@ export class LocalLibrary {
       if (seenLx.has(meta.lxId)) {
         // 两个本机歌单映射到同一个洛雪 id（只可能来自 MusicStoreService 的 id 碰撞）：
         // 后一个无法参与同步，跳过并记一条错误，避免把协议数据搅乱。
-        appendError(`[${TAG}] duplicate lx list id ${meta.lxId} for playlist ${item.id}, skipped`);
+        appendError(`[${TAG}] dup lx id ${meta.lxId} list ${item.id}`);
         continue;
       }
       seenLx.add(meta.lxId);
@@ -531,7 +531,7 @@ export class LocalLibrary {
       // 有歌行却一首也转不出来：保留上一份，别把歌单清空
       if (musics.length === 0 && item.songs.length > 0 && prev !== null && prev.list.length > 0) {
         entry.list = prev.list;
-        appendError(`[${TAG}] skip unsyncable songs of playlist ${item.id} (${item.songs.length} rows)`);
+        appendError(`[${TAG}] skip songs list ${item.id} rows=${item.songs.length}`);
       }
       next.push(entry);
       keptMetas[item.id] = meta;
@@ -596,7 +596,7 @@ export class LocalLibrary {
       if (localId === undefined || !existingIds.has(localId)) {
         localId = this.createStorePlaylist(entry, existingIds);
         if (localId.length === 0) {
-          appendError(`[${TAG}] materialize remote playlist ${entry.id} failed, skipped`);
+          appendError(`[${TAG}] materialize list ${entry.id} failed`);
           continue;
         }
       }
@@ -656,7 +656,7 @@ export class LocalLibrary {
     }
     if (existingIds.has(created.id)) {
       // 理论上到不了这里（awaitIdSlot 已经避开）；真撞上就明确报错，别静默弄出两个同 id 歌单
-      appendError(`[${TAG}] playlist id collision: ${created.id}, sync of ${entry.id} may be unstable`);
+      appendError(`[${TAG}] id collision ${created.id}/${entry.id}`);
     }
     existingIds.add(created.id);
     return created.id;

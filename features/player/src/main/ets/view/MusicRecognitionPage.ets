@@ -168,13 +168,13 @@ export struct MusicRecognitionPage {
         this.captureProgress = progress;
       });
     } catch (err) {
-      hilog.error(LOG_DOMAIN, LOG_TAG, '麦克风采集异常: %{public}s', JSON.stringify(err));
+      hilog.error(LOG_DOMAIN, LOG_TAG, 'mic capture error: %{public}s', JSON.stringify(err));
       this.handleError(err);
       return;
     }
     const rms: number = MicRecorder.computeRms(samples);
     const durationSec: number = samples.length / 16000;
-    hilog.info(LOG_DOMAIN, LOG_TAG, '采集完成 样本数=%{public}d RMS=%{public}f 时长=%{public}fs',
+    hilog.info(LOG_DOMAIN, LOG_TAG, 'capture done samples=%{public}d rms=%{public}f dur=%{public}fs',
       samples.length, rms, durationSec);
     if (rms < 32 / 32768) {
       this.status = RecognitionStatus.NoAudio;
@@ -187,23 +187,23 @@ export struct MusicRecognitionPage {
       this.engineReports = output.engineReports;
       this.groups = output.groups;
       for (const report of output.engineReports) {
-        hilog.info(LOG_DOMAIN, LOG_TAG, '引擎报告 %{public}s status=%{public}s', report.engine, report.status);
+        hilog.info(LOG_DOMAIN, LOG_TAG, 'engine %{public}s status=%{public}s', report.engine, report.status);
       }
       for (const group of output.groups) {
-        hilog.info(LOG_DOMAIN, LOG_TAG, '引擎 %{public}s 结果数=%{public}d 错误=%{public}s',
+        hilog.info(LOG_DOMAIN, LOG_TAG, 'engine %{public}s n=%{public}d error=%{public}s',
           group.engine, group.results.length, group.error);
       }
       if (output.match !== undefined) {
         this.result = output.match;
         this.status = RecognitionStatus.Matched;
-        hilog.info(LOG_DOMAIN, LOG_TAG, '识别成功: %{public}s id=%{public}s',
+        hilog.info(LOG_DOMAIN, LOG_TAG, 'hit: %{public}s id=%{public}s',
           output.match.title, output.match.providerTrackId);
         await HistoryStore.add(output.match);
         this.history = HistoryStore.load();
       } else {
         this.result = undefined;
         this.status = RecognitionStatus.NotMatched;
-        hilog.warn(LOG_DOMAIN, LOG_TAG, '两个引擎均未返回可展示结果');
+        hilog.warn(LOG_DOMAIN, LOG_TAG, 'no result from either engine');
       }
     } catch (err) {
       this.handleError(err);
@@ -256,22 +256,22 @@ export struct MusicRecognitionPage {
       };
       return song;
     };
-    hilog.info(LOG_DOMAIN, LOG_TAG, '播放识别结果 source=%{public}s id=%{public}s', source, songId);
+    hilog.info(LOG_DOMAIN, LOG_TAG, 'play result source=%{public}s id=%{public}s', source, songId);
     const played: boolean =
       await OnlinePlayUtil.playSearchSong(this.appState, buildSong(songId), this.getUIContext());
     if (!played && (source === 'kg' || source === 'wy')) {
-      hilog.info(LOG_DOMAIN, LOG_TAG, '直连播放失败，按歌名搜索补播: %{public}s - %{public}s', item.title, item.artist);
+      hilog.info(LOG_DOMAIN, LOG_TAG, 'direct play fail, search by title: %{public}s - %{public}s', item.title, item.artist);
       try {
         const res = await lxSearch(source, `${item.title} ${item.artist}`.trim(), 1, 10);
         if (res.list.length > 0) {
           const alt: LXSearchSong = res.list[0];
-          hilog.info(LOG_DOMAIN, LOG_TAG, '搜索补播命中: %{public}s id=%{public}s', alt.name, alt.songId);
+          hilog.info(LOG_DOMAIN, LOG_TAG, 'search hit: %{public}s id=%{public}s', alt.name, alt.songId);
           void OnlinePlayUtil.playSearchSong(this.appState, alt, this.getUIContext());
         } else {
           this.getUIContext().getPromptAction().showToast({ message: '未能找到可播放版本', duration: 2000 });
         }
       } catch (_err) {
-        hilog.error(LOG_DOMAIN, LOG_TAG, '搜索补播异常: %{public}s', JSON.stringify(_err));
+        hilog.error(LOG_DOMAIN, LOG_TAG, 'search fallback error: %{public}s', JSON.stringify(_err));
       }
     }
   }
@@ -607,7 +607,7 @@ export struct MusicRecognitionPage {
           .height(1)
           .opacity(0)
           .onPageEnd(() => {
-            hilog.info(LOG_DOMAIN, LOG_TAG, 'AFP WebView 加载完成 onPageEnd');
+            hilog.info(LOG_DOMAIN, LOG_TAG, 'AFP WebView onPageEnd');
             this.netease.markReady();
           })
       }

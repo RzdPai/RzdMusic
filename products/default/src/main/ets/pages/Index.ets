@@ -695,7 +695,7 @@ struct Index {
     this.tabsController.changeIndex(index);
     // 切完再打一次，确认 HdsTabs 真的换了页（排查"首页空白"是切页还是渲染的问题）
     setTimeout((): void => {
-      appendPlayLog(`[RzdTabSwitch] applied idx=${index} (next frame)`);
+      appendPlayLog(`[RzdTabSwitch] applied idx=${index}`);
     }, 32);
   }
 
@@ -717,18 +717,18 @@ struct Index {
     }
     const t: number = Date.now();
     if (t - this.lastBufferToastMs < BUFFER_TOAST_MIN_GAP_MS) {
-      appendPlayLog('[缓冲提示] 节流跳过 gap=' + (t - this.lastBufferToastMs) + 'ms');
+      appendPlayLog('[缓冲提示] throttle gap=' + (t - this.lastBufferToastMs) + 'ms');
       return;
     }
     this.lastBufferToastMs = t;
-    appendPlayLog('[缓冲提示] showToast 缓冲中……');
+    appendPlayLog('[缓冲提示] toast buffering');
     try {
       this.getUIContext().getPromptAction().showToast({
         message: '缓冲中……',
         duration: 2000
       });
     } catch (e) {
-      appendPlayLog('[缓冲提示] showToast 失败 ' + JSON.stringify(e).substring(0, 100));
+      appendPlayLog('[缓冲提示] toast failed ' + JSON.stringify(e).substring(0, 100));
     }
   }
 
@@ -3664,7 +3664,7 @@ struct Index {
     //   与 Ability 层 `HomeBackBridge.handleBack()` 的壳层处理**重复且冲突**：
     //   两处都判一次，导致"返回自动回首页 / 退出变黑"。
     //   现在只保留唯一实现 `handleShellBack()`，这里仅做转调（保留兜底：万一页面级返回被调用）。
-    appendPlayLog('RzdHomeBackEnter src=Index (delegate)');
+    appendPlayLog('RzdHomeBackEnter src=Index');
     return this.handleShellBack();
   }
   private syncNavDepth(): void {

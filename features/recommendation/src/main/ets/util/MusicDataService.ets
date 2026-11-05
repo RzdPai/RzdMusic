@@ -18,7 +18,7 @@ const LOG_TAG: string = 'RzdPlazaNet';
  */
 function logHttpFailure(stage: string, url: string, err: Object): void {
   const e: BusinessError = err as BusinessError;
-  hilog.warn(LOG_DOMAIN, LOG_TAG, '%{public}s failed: code=%{public}d msg=%{public}s url=%{public}s',
+  hilog.warn(LOG_DOMAIN, LOG_TAG, '%{public}s fail code=%{public}d msg=%{public}s url=%{public}s',
     stage, e.code ?? 0, e.message ?? '', url);
 }
 
@@ -1068,7 +1068,7 @@ async function requestKgJson(url: string): Promise<JsonObject> {
       lastError = error as Error;
     }
   }
-  hilog.warn(LOG_DOMAIN, LOG_TAG, 'kg legacy endpoint gave up: %{public}s url=%{public}s',
+  hilog.warn(LOG_DOMAIN, LOG_TAG, 'kg legacy give up err=%{public}s url=%{public}s',
     lastError.message ?? '', url);
   throw lastError;
 }
@@ -1124,7 +1124,7 @@ async function kgPlazaViaHttps(pageNumber: number, limit: number): Promise<Playl
     ? pageNumber * pageSize < total
     : hasNextFlag === 1 || list.length >= pageSize;
   // 降级路径留一条 hilog（应用内日志面板不再输出）
-  hilog.info(LOG_DOMAIN, LOG_TAG, 'kg https channel ok: items=%{public}d total=%{public}d',
+  hilog.info(LOG_DOMAIN, LOG_TAG, 'kg https ok items=%{public}d total=%{public}d',
     list.length, total);
   return { list, page: pageNumber, limit: pageSize, total, hasNext };
 }
@@ -1563,7 +1563,7 @@ export class MusicDataService {
       } catch (err) {
         const e: Error = err as Error;
         hilog.warn(LOG_DOMAIN, LOG_TAG,
-          'kg legacy plaza failed: %{public}s → fallback to https', e.message ?? '');
+          'kg legacy plaza fail err=%{public}s now https', e.message ?? '');
       }
       if (legacyPage !== null) {
         return legacyPage;
@@ -1571,11 +1571,11 @@ export class MusicDataService {
       try {
         const httpsPage: PlaylistPage = await kgPlazaViaHttps(pageNumber, 30);
         hilog.warn(LOG_DOMAIN, LOG_TAG,
-          'kg plaza served by HTTPS fallback (no category/sort): items=%{public}d', httpsPage.list.length);
+          'kg plaza https fallback items=%{public}d', httpsPage.list.length);
         return httpsPage;
       } catch (err) {
         const e: Error = err as Error;
-        hilog.warn(LOG_DOMAIN, LOG_TAG, 'kg https plaza also failed: %{public}s', e.message ?? '');
+        hilog.warn(LOG_DOMAIN, LOG_TAG, 'kg https plaza fail err=%{public}s', e.message ?? '');
         // 继续走下面的老代码（会再抛一次，由上层给出错误文案）
       }
     }

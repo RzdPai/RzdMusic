@@ -103,7 +103,7 @@ function declaredKeysFor(api: LXUserApiInfo, canon: string): string[] {
     }
     if (aliases.indexOf(key.trim().toLowerCase()) >= 0) {
       out.push(key);
-      appendPlayLog('[回退链] 平台别名 ' + key + ' → ' + canon + '（脚本 ' + api.name + '）');
+      appendPlayLog('[回退链] alias ' + key + ' -> ' + canon + ' script=' + api.name);
     }
   }
   return out;
@@ -296,7 +296,7 @@ function isPairBlocked(scriptId: string, platform: string): boolean {
   }
   if (Date.now() - at >= BLOCK_TTL_MS) {
     blockedPairs.delete(pairKey(scriptId, platform));
-    appendPlayLog('[回退链] 黑名单到期解封 ' + platform);
+    appendPlayLog('[回退链] unblock ' + platform);
     return false;
   }
   return true;
@@ -305,12 +305,12 @@ function isPairBlocked(scriptId: string, platform: string): boolean {
 /** 记一次失败：网络类失败**永不**拉黑（链路问题 ≠ 平台不可用）。 */
 function notePairFailure(scriptId: string, scriptName: string, platform: string, reason: string): void {
   if (isTransientFailure(reason)) {
-    appendPlayLog('[回退链] 网络类失败，不拉黑 ' + scriptName + '/' + platform +
-      '（' + reason.substring(0, 60) + '）');
+    appendPlayLog('[回退链] net-fail no-block ' + scriptName + '/' + platform +
+      ' ' + reason.substring(0, 60));
     return;
   }
   blockedPairs.set(pairKey(scriptId, platform), Date.now());
-  appendPlayLog('[回退链] 拉黑 ' + scriptName + '/' + platform + '（' + (BLOCK_TTL_MS / 1000) + 's TTL；' +
+  appendPlayLog('[回退链] block ' + scriptName + '/' + platform + ' ' + (BLOCK_TTL_MS / 1000) + 's ' +
     reason.substring(0, 60) + '）');
 }
 
@@ -374,7 +374,7 @@ export function buildCandidateChain(preferredQuality: string, platform: string):
         orderIds.push(all[i].id);
       }
     }
-    appendPlayLog('[回退链] 未配置音源顺序 ⇒ 回退为全部已导入（' + orderIds.length + ' 个）');
+    appendPlayLog('[回退链] no order, use all n=' + orderIds.length);
   }
   const apis: LXUserApiInfo[] = [];
   const missing: string[] = [];
@@ -393,11 +393,11 @@ export function buildCandidateChain(preferredQuality: string, platform: string):
   }
   if (missing.length > 0) {
     // 勾选记录里有、已导入列表里没有（脚本被删/换过 id）——记日志，别静默
-    appendPlayLog('[回退链] 勾选记录中 ' + missing.length + ' 个 id 在已导入列表里找不到: ' +
+    appendPlayLog('[回退链] missing ids n=' + missing.length + ' ' +
       missing.slice(0, 3).join(','));
   }
   if (apis.length === 0) {
-    appendPlayLog('[回退链] 没有勾选任何音源，直接返回');
+    appendPlayLog('[回退链] no selected source');
     return out;
   }
   const declaredOf = (api: LXUserApiInfo, p: string): string[] => {
@@ -430,7 +430,7 @@ export function buildCandidateChain(preferredQuality: string, platform: string):
   let undeclaredAdded: number = 0;
   for (let i: number = 0; i < apis.length; i++) {
     if (isPairBlocked(apis[i].id, platform)) {
-      appendPlayLog('[回退链] ' + apis[i].name + '/' + platform + ' 在黑名单期内，跳过');
+      appendPlayLog('[回退链] ' + apis[i].name + '/' + platform + ' blocked, skip');
       continue;
     }
     // ★ 2026-11-04：该脚本可能用**别名键**声明这个平台（如 `qsvip`），逐个展开成候选。
@@ -450,7 +450,7 @@ export function buildCandidateChain(preferredQuality: string, platform: string):
         out.push(hardTry);
         firstCandidate = false;
         undeclaredAdded++;
-        appendPlayLog('[回退链] 未声明平台（可能没加载过）⇒ 硬试 ' + apis[i].name + '/' + platform);
+        appendPlayLog('[回退链] undeclared, hard-try ' + apis[i].name + '/' + platform);
       }
       continue;
     }
@@ -539,7 +539,7 @@ export function buildCandidateChain(preferredQuality: string, platform: string):
     for (let i: number = 0; i < merged.length; i++) {
       out.push(merged[i]);
     }
-    appendPlayLog('[回退链] 起点是咪咕 ⇒ 优先换平台');
+    appendPlayLog('[回退链] mg origin, platform-first');
   } else {
     for (let i: number = 0; i < others.length; i++) {
       out.push(others[i]);
@@ -571,7 +571,7 @@ export function buildCandidateChain(preferredQuality: string, platform: string):
       last.quality = preferredQuality;
       last.platformSwitched = false;
       out.push(last);
-      appendPlayLog('[回退链] 候选为空（未声明/全被拉黑）⇒ 兜底硬试 ' + pick.name + '/' + platform +
+      appendPlayLog('[回退链] empty cands, hard-try ' + pick.name + '/' + platform +
         '/' + preferredQuality);
     }
   }
@@ -579,7 +579,7 @@ export function buildCandidateChain(preferredQuality: string, platform: string):
   for (let i: number = 0; i < Math.min(out.length, 6); i++) {
     head.push((out[i].platformSwitched ? '换平台:' : '') + out[i].scriptName + '/' + out[i].platform + '/' + out[i].quality);
   }
-  appendPlayLog('[回退链] 起点=' + platform + ' 偏好=' + preferredQuality + ' 候选=' + out.length + ' → ' + head.join(' | '));
+  appendPlayLog('[回退链] src=' + platform + ' pref=' + preferredQuality + ' cands=' + out.length + ' -> ' + head.join(' | '));
   return out;
 }
 
@@ -634,7 +634,7 @@ function engineReady(): boolean {
 }
 
 async function switchToScript(scriptId: string): Promise<boolean> {
-  appendPlayLog('[换音源] 切换音源脚本 → ' + scriptId);
+  appendPlayLog('[换音源] switch script -> ' + scriptId);
   const start: number = Date.now();
   // ★ 2026-11-04（用户：一直提示「音源未就绪」）：进入前先记下原 active，
   //   失败（超时）时必须**回滚**——否则 `lxActiveSource` 会停在一个永远 init 不成功的脚本上，
@@ -645,22 +645,22 @@ async function switchToScript(scriptId: string): Promise<boolean> {
   let sawReloading: boolean = false;
   while (Date.now() < deadline) {
     if (activeSourceId() !== scriptId) {
-      appendPlayLog('[换音源] 目标音源已被其它流程改写，放弃本次切换');
+      appendPlayLog('[换音源] script changed by other flow, abort');
       return false;
     }
     if (!engineReady()) {
       sawReloading = true;
     } else if (sawReloading) {
-      appendPlayLog('[换音源] 音源脚本已就绪 ' + scriptId);
+      appendPlayLog('[换音源] script ready ' + scriptId);
       return true;
     } else if (Date.now() - start > SCRIPT_RELOAD_GRACE_MS) {
-      appendPlayLog('[换音源] 音源脚本未观察到重载信号，按就绪处理 ' + scriptId);
+      appendPlayLog('[换音源] no reload signal, treat ready ' + scriptId);
       return true;
     }
     await sleep(SCRIPT_READY_POLL_MS);
   }
-  appendPlayLog('[换音源] 音源脚本加载超时 ' + scriptId +
-    (prevActive !== scriptId ? '，回滚 active → ' + (prevActive.length > 0 ? prevActive : '(空)') : ''));
+  appendPlayLog('[换音源] script load timeout ' + scriptId +
+    (prevActive !== scriptId ? ' rollback active -> ' + (prevActive.length > 0 ? prevActive : '(empty)') : ''));
   // 只回滚"本次自己写进去的那个"：若期间被别的流程改写，就别抢回来
   if (activeSourceId() === scriptId) {
     AppStorage.setOrCreate('lxActiveSource', prevActive);
@@ -728,7 +728,7 @@ function pickScriptCandidates(source: string, currentId: string): LXUserApiInfo[
     }
     const until: number | undefined = scriptCooldown.get(id);
     if (until !== undefined && until > now) {
-      appendPlayLog('[换音源] 跳过冷却中的音源 ' + info.name);
+      appendPlayLog('[换音源] cooldown skip ' + info.name);
       continue;
     }
     ordered.push(info);
@@ -739,7 +739,7 @@ function pickScriptCandidates(source: string, currentId: string): LXUserApiInfo[
     for (let i: number = 0; i < ordered.length; i++) {
       names.push(ordered[i].name);
     }
-    appendPlayLog('[换音源] 依次候选: ' + names.join(' → '));
+    appendPlayLog('[换音源] order: ' + names.join(' → '));
   }
   return ordered;
 }
@@ -768,7 +768,7 @@ async function tryQualities(sourceCanonical: string, scriptKey: string, songId: 
   for (let i: number = 0; i < chain.length; i++) {
     const q: string = chain[i];
     if (options.excludeQuality.length > 0 && q === options.excludeQuality) {
-      appendPlayLog('[播放] 音质 ' + q + ' 上次已失败，跳过');
+      appendPlayLog('[播放] quality ' + q + ' failed before, skip');
       continue;
     }
     try {
@@ -782,15 +782,15 @@ async function tryQualities(sourceCanonical: string, scriptKey: string, songId: 
         outcome.songId = songId;
         outcome.scriptName = activeSourceName();
         if (noticeDowngrade && q !== preferred && onNotice !== null) {
-          appendPlayLog('[播放] 音质降级 ' + preferred + ' -> ' + q);
+          appendPlayLog('[播放] quality downgrade ' + preferred + ' -> ' + q);
           onNotice('当前音质不可用，已切换 ' + qualityDisplayName(q));
         }
         return outcome;
       }
       if (url.length > 0) {
-        appendPlayLog('[播放] 音质 ' + q + ' 返回上次失败地址，跳过');
+        appendPlayLog('[播放] quality ' + q + ' same failed url, skip');
       } else {
-        appendPlayLog('[播放] 音质 ' + q + ' 无地址');
+        appendPlayLog('[播放] quality ' + q + ' no url');
       }
     } catch (e) {
       // ★ 2026-11-04：以前打 `JSON.stringify(e)` 得到 `{}`，真正的 2300007/ECONNREFUSED 全丢了。
@@ -798,12 +798,12 @@ async function tryQualities(sourceCanonical: string, scriptKey: string, songId: 
       const msg: string = (err !== undefined && err.message !== undefined && err.message.length > 0)
         ? err.message : JSON.stringify(e);
       lastReason = msg;
-      appendPlayLog('[播放] 音质 ' + q + ' 异常: ' + msg.substring(0, 200));
+      appendPlayLog('[播放] quality ' + q + ' error: ' + msg.substring(0, 200));
       // ★★ 网络类失败（DNS/连接/超时）**与音质档位无关**：再试下一档只是白等。
       //   实测 `2300006 Failed to resolve the host name` 单次要 8.8s，一首歌两档就是 17s+，
       //   再加一个脚本候选 ⇒ 汽水歌要等半分钟才换平台。这里直接跳出音质链。
       if (isTransientFailure(msg)) {
-        appendPlayLog('[播放] 网络类失败，跳过 ' + sourceCanonical + ' 其余音质档（省时）');
+        appendPlayLog('[播放] 网络失败 skip ' + sourceCanonical);
         break;
       }
     }
@@ -859,7 +859,7 @@ async function tryPlatformSearch(platform: string, name: string, singer: string,
     return null;
   }
   const platformName: string = sourceDisplayName(platform);
-  appendPlayLog('[换平台] 在 ' + platformName + ' 搜索: ' + query);
+  appendPlayLog('[换平台] search ' + platformName + ': ' + query);
   if (onNotice !== null) {
     onNotice('正在切换到' + platformName + '搜索…');
   }
@@ -868,11 +868,11 @@ async function tryPlatformSearch(platform: string, name: string, singer: string,
     const res = await lxSearch(platform, query, 1, 15);
     hits = res.list;
   } catch (e) {
-    appendPlayLog('[换平台] ' + platformName + ' 搜索异常: ' + JSON.stringify(e).substring(0, 80));
+    appendPlayLog('[换平台] ' + platformName + ' search error: ' + JSON.stringify(e).substring(0, 80));
     return null;
   }
   if (hits.length === 0) {
-    appendPlayLog('[换平台] ' + platformName + ' 无搜索结果');
+    appendPlayLog('[换平台] ' + platformName + ' no hit');
     return null;
   }
   // 按匹配分排序，优先精确同名
@@ -909,7 +909,7 @@ async function tryPlatformSearch(platform: string, name: string, singer: string,
     if (hit.songId.length === 0) {
       continue;
     }
-    appendPlayLog('[换平台] 尝试 ' + platformName + '/' + hit.songId + ' 「' + hit.name + '」');
+    appendPlayLog('[换平台] try ' + platformName + '/' + hit.songId + ' ' + hit.name);
     const altOpts: FallbackOptions = new FallbackOptions();
     altOpts.excludeUrl = options.excludeUrl;
     const outcome: UrlResolveOutcome | null = await tryQualities(platform, platform, hit.songId,
@@ -924,14 +924,14 @@ async function tryPlatformSearch(platform: string, name: string, singer: string,
       if (hit.img.length > 0) {
         outcome.img = hit.img;
       }
-      appendPlayLog('[换平台] 成功 → ' + platformName + ' (' + outcome.quality + ')');
+      appendPlayLog('[换平台] ok -> ' + platformName + ' (' + outcome.quality + ')');
       if (onNotice !== null) {
         onNotice('已切换到' + platformName + '播放');
       }
       return outcome;
     }
   }
-  appendPlayLog('[换平台] ' + platformName + ' 搜索到歌曲但均无法解析地址');
+  appendPlayLog('[换平台] ' + platformName + ' hits but no url');
   return null;
 }
 
@@ -942,7 +942,7 @@ async function tryOtherPlatforms(originSource: string, name: string, singer: str
   preferred: string, onNotice: ((msg: string) => void) | null,
   options: FallbackOptions): Promise<UrlResolveOutcome | null> {
   if (name.trim().length === 0) {
-    appendPlayLog('[换平台] 无歌名，无法跨平台搜索');
+    appendPlayLog('[换平台] no title, skip');
     return null;
   }
   for (let i: number = 0; i < PLATFORM_FALLBACK_ORDER.length; i++) {
@@ -956,7 +956,7 @@ async function tryOtherPlatforms(originSource: string, name: string, singer: str
       return outcome;
     }
   }
-  appendPlayLog('[换平台] 全部平台均无法加载');
+  appendPlayLog('[换平台] all platforms failed');
   return null;
 }
 
@@ -976,7 +976,7 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
     await sleep(120);
   }
   if (!engineReady()) {
-    appendPlayLog('[换源] 引擎未就绪（4s 超时），本次解析放弃；请确认音源脚本已加载');
+    appendPlayLog('[换源] engine not ready (4s timeout), abort');
     const noEngine: UrlResolveOutcome = new UrlResolveOutcome();
     noEngine.failReason = 'engine-not-ready';
     return noEngine;
@@ -987,7 +987,7 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
     const apisFirst: LXUserApiInfo[] = lxSourceManager.getApiList();
     if (apisFirst.length > 0) {
       const firstScriptId: string = apisFirst[0].id;
-      appendPlayLog('[换源] 未选中音源，自动选用第一个脚本 id=' + firstScriptId);
+      appendPlayLog('[换源] no active source, use first id=' + firstScriptId);
       AppStorage.setOrCreate('lxActiveSource', firstScriptId);
       await switchToScript(firstScriptId);
     }
@@ -1005,7 +1005,7 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
   if (cands.length === 0) {
     // ★ 2026-11-05：真的一个候选都没有（未导入音源 / 勾选 id 全部对不上） —— 明确区分出来，
     //   别让用户以为是"所有平台都试过了"。
-    appendPlayLog('[回退链] 候选为 0（未导入或勾选记录全对不上），本次不做任何请求');
+    appendPlayLog('[回退链] no candidate, no request');
     const none: UrlResolveOutcome = new UrlResolveOutcome();
     none.failReason = 'no-candidate';
     return none;
@@ -1016,7 +1016,7 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
     const c: FallbackCandidate = cands[i];
     if (c.scriptId !== activeSourceId()) {
       if (scriptCooldown.get(c.scriptId) !== undefined && (scriptCooldown.get(c.scriptId) ?? 0) > Date.now()) {
-        appendPlayLog('[换音源] ' + c.scriptName + ' 冷却中，跳过');
+        appendPlayLog('[换音源] ' + c.scriptName + ' cooldown, skip');
         skippedCooldown++;
         continue;
       }
@@ -1030,9 +1030,9 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
     attempted++;
     const chain: string[] = getQualityChain(c.quality, c.platform);
     const key: string = c.scriptPlatform.length > 0 ? c.scriptPlatform : c.platform;
-    appendPlayLog('[回退链] 试 #' + i + ' ' + c.scriptName + '/' + c.platform +
+    appendPlayLog('[回退链] try #' + i + ' ' + c.scriptName + '/' + c.platform +
       (key !== c.platform ? '(脚本键=' + key + ')' : '') + '/' + c.quality +
-      ' 链路=' + chain.join(' > '));
+      ' chain=' + chain.join(' > '));
     const r: UrlResolveOutcome | null = c.platformSwitched
       ? await tryPlatformSearch(c.platform, name, singer, c.quality, onNotice, opts)
       : await tryQualities(c.platform, key, songId, name, singer, chain, c.quality, true, onNotice, opts);
@@ -1041,7 +1041,7 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
       if (c.scriptId !== intendedScriptId) {
         r.switchedScriptName = c.scriptName;
       }
-      appendPlayLog('[回退链] 命中 ' + c.scriptName + '/' + c.platform +
+      appendPlayLog('[回退链] hit ' + c.scriptName + '/' + c.platform +
         (key !== c.platform ? '(脚本键=' + key + ')' : '') + '/' + r.quality);
       // A4：解析成功即证明该 (平台, 音质) 能返回真实音频，写进本次会话的探测缓存
       markProbeOk(c.platform, r.quality);
@@ -1057,8 +1057,8 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
   if (cands.length > 0) {
     markProbeFail(cands[0].platform, cands[0].quality, '全部候选失败');
   }
-  appendPlayLog('[回退链] 全部候选失败 候选=' + cands.length + ' 实际尝试=' + attempted +
-    ' 冷却/加载跳过=' + skippedCooldown + ' 黑名单=' + blockedPairs.size + ' 恢复原音源');
+  appendPlayLog('[回退链] all failed cands=' + cands.length + ' tried=' + attempted +
+    ' skipped=' + skippedCooldown + ' blocked=' + blockedPairs.size + ' restore origin');
   if (activeAtStart.length > 0) {
     AppStorage.setOrCreate('lxActiveSource', activeAtStart);
   }
@@ -1097,7 +1097,7 @@ export async function warmUpLxSources(): Promise<number> {
   for (let i: number = 0; i < list.length; i++) {
     // ★ 2026-11-05：播放请求已抢占 ⇒ 立刻收手（并把 active 还给用户原来的选择）
     if (warmUpToken !== myToken) {
-      appendPlayLog('[换源] 预热被播放请求抢占，提前结束（已预热 ' + warmed + '/' + list.length + '）');
+      appendPlayLog('[换源] 预热被抢占 ' + warmed + '/' + list.length);
       if (originalActive.length > 0) {
         AppStorage.setOrCreate('lxActiveSource', originalActive);
       }
@@ -1129,7 +1129,7 @@ export async function warmUpLxSources(): Promise<number> {
     // 而不是继续指着一个 init 失败的脚本。
     const pick: string = firstWarmedId.length > 0 ? firstWarmedId : '';
     AppStorage.setOrCreate('lxActiveSource', pick);
-    appendPlayLog('[换源] 预热后选定 active=' + (pick.length > 0 ? pick : '(空，交给播放链路兜底)'));
+    appendPlayLog('[换源] 预热选定 active=' + (pick.length > 0 ? pick : '(空)'));
   }
   appendPlayLog('[换源] 预热完成 warmed=' + warmed + ' total=' + list.length +
     ' active=' + activeSourceId());

@@ -51,11 +51,11 @@ export class MpvAudioEngine implements AudioKernel {
     try {
       const ok: boolean = mpvNative.isAvailable();
       MpvAudioEngine.probed = ok;
-      appendPlayLog('[RzdKernel] mpv 探测=' + ok);
+      appendPlayLog('[RzdKernel] mpv probe=' + ok);
       return ok;
     } catch (err) {
       MpvAudioEngine.probed = false;
-      appendPlayLog('[RzdKernel] mpv 探测失败（未打包 libmpvnative/libmpv）');
+      appendPlayLog('[RzdKernel] mpv probe failed (no libmpv)');
       return false;
     }
   }
@@ -72,7 +72,7 @@ export class MpvAudioEngine implements AudioKernel {
     try {
       this.created = mpvNative.create();
       if (!this.created) {
-        appendPlayLog(this.tag + ' create 失败');
+        appendPlayLog(this.tag + ' create fail');
         this.fail(-1, 'mpv_create failed');
         return;
       }
@@ -81,7 +81,7 @@ export class MpvAudioEngine implements AudioKernel {
       mpvNative.setProperty('volume', '100');
       appendPlayLog(this.tag + ' create ok');
     } catch (err) {
-      appendPlayLog(this.tag + ' create 异常（libmpvnative 未就绪）');
+      appendPlayLog(this.tag + ' create error (libmpvnative not ready)');
       this.fail(-1, 'mpv module missing');
     }
   }
@@ -96,7 +96,7 @@ export class MpvAudioEngine implements AudioKernel {
     appendPlayLog(this.tag + ' prepare url=' + url.substring(0, Math.min(url.length, 90)));
     const ok: boolean = mpvNative.command(['loadfile', url]);
     if (!ok) {
-      appendPlayLog(this.tag + ' loadfile 失败');
+      appendPlayLog(this.tag + ' loadfile fail');
       this.fail(-1, 'loadfile failed');
       return;
     }
@@ -139,7 +139,7 @@ export class MpvAudioEngine implements AudioKernel {
       mpvNative.command(['seek', seconds, 'absolute']);
       appendPlayLog(this.tag + ' seek=' + positionMs);
     } catch (err) {
-      appendPlayLog(this.tag + ' seek 异常');
+      appendPlayLog(this.tag + ' seek error');
     }
   }
 
@@ -177,7 +177,7 @@ export class MpvAudioEngine implements AudioKernel {
 
   onInterrupt(handler: (kind: AudioInterruptKind) => void): void {
     // mpv 的音频焦点由系统 OHAudio 输出层处理；这里保持接口一致（MediaService 的暂停策略仍生效）
-    appendPlayLog(this.tag + ' onInterrupt 注册（由 MediaService 的暂停策略兜底）');
+    appendPlayLog(this.tag + ' onInterrupt registered');
   }
 
   isPrepared(): boolean {
@@ -207,7 +207,7 @@ export class MpvAudioEngine implements AudioKernel {
     this.write('http-header-fields', 'Referer: https://www.douyin.com/, Origin: https://www.douyin.com');
     this.write('network-timeout', '15');
     this.write('stream-lavf-o', 'reconnect=1,reconnect_streamed=1,reconnect_delay_max=2');
-    appendPlayLog('[RzdMpv] 网络参数已设置（UA/Referer/超时/重连）');
+    appendPlayLog('[RzdMpv] net params set');
   }
 
   describeStream(): string {
@@ -286,7 +286,7 @@ export class MpvAudioEngine implements AudioKernel {
       this.write('audio-resample', 'yes');
       this.write('audio-pitch-correction', 'yes');
       this.write('ao', 'ohaudio');
-      appendPlayLog('[RzdUsb] 已回落 ao=ohaudio');
+      appendPlayLog('[RzdUsb] fallback ao=ohaudio');
       return;
     }
     // 严格模式：不做重采样、不做变速变调补偿，尽量把原始 PCM 直送 DAC
@@ -295,11 +295,11 @@ export class MpvAudioEngine implements AudioKernel {
     if (mode === 'usb') {
       this.write('audio-exclusive', 'no');
       this.write('ao', 'usb-exclusive');
-      appendPlayLog('[RzdUsb] 尝试 ao=usb-exclusive（严格 PCM）');
+      appendPlayLog('[RzdUsb] try ao=usb-exclusive (strict PCM)');
     } else {
       this.write('audio-exclusive', 'yes');
       this.write('ao', 'ohaudio');
-      appendPlayLog('[RzdUsb] 尝试 ao=ohaudio + audio-exclusive=yes（严格 PCM）');
+      appendPlayLog('[RzdUsb] try ao=ohaudio + audio-exclusive=yes (strict PCM)');
     }
   }
   currentAo(): string {
@@ -336,7 +336,7 @@ export class MpvAudioEngine implements AudioKernel {
     try {
       mpvNative.setProperty(name, value);
     } catch (err) {
-      appendPlayLog(this.tag + ' setProperty ' + name + ' 异常');
+      appendPlayLog(this.tag + ' setProperty ' + name + ' error');
     }
   }
 

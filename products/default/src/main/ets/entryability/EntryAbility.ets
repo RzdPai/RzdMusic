@@ -56,10 +56,10 @@ export default class EntryAbility extends UIAbility {
       const raw: string = MusicStoreService.getInstance().getTabBarConfig();
       const cfg: TabBarConfigModel = TabBarConfigModel.parse(raw);
       AppStorage.setOrCreate('rzd_tab_bar_config', cfg.toJson());
-      appendPlayLog('[RzdTabConfig] 启动读取 order=' + cfg.physicalOrder().join(',') +
-        ' now=' + cfg.now + ' echo=' + cfg.echo + ' nowFirst=' + cfg.nowFirst);
+      appendPlayLog('[RzdTabConfig] boot order=' + cfg.physicalOrder().join(',') +
+        ' now=' + cfg.now + ' echo=' + cfg.echo + ' first=' + cfg.nowFirst);
     } catch (err) {
-      appendPlayLog('[RzdTabConfig] 启动读取失败');
+      appendPlayLog('[RzdTabConfig] boot read failed');
     }
     // 应用用户设置的屏幕方向（auto / portrait / landscape）
     void applyScreenOrientation(this.context);
@@ -96,18 +96,18 @@ export default class EntryAbility extends UIAbility {
       // 导入结果要如实反映：落盘失败时不能再报「已导入」
       const result: LXApiImportResult = lxSourceManager.importApi(script);
       if (!result.ok) {
-        appendPlayLog('[音源] 导入失败 ' + uri + ' : ' + result.message);
+        appendPlayLog('[音源] import failed ' + uri + ' : ' + result.message);
         AppStorage.setOrCreate(SOURCE_IMPORT_MSG_KEY, '导入失败：' + result.message);
         Logger.error(`EntryAbility: source script rejected ${result.message}`);
         this.flushSourceImportToast();
         return;
       }
-      appendPlayLog('[音源] 已导入脚本 ' + result.message + ' <- ' + uri);
+      appendPlayLog('[音源] imported ' + result.message + ' <- ' + uri);
       AppStorage.setOrCreate(SOURCE_IMPORT_MSG_KEY, '音源「' + result.message + '」已导入');
       Logger.info(`EntryAbility: source script imported from ${uri}`);
     } catch (err) {
       const e: Error = err as Error;
-      appendPlayLog('[音源] 导入失败 ' + uri + ' : ' + (e.message ?? ''));
+      appendPlayLog('[音源] import failed ' + uri + ' : ' + (e.message ?? ''));
       AppStorage.setOrCreate(SOURCE_IMPORT_MSG_KEY, '导入失败：不是有效的音源脚本');
       Logger.error(`EntryAbility: import source script failed ${e.message ?? ''}`);
     }
@@ -248,7 +248,7 @@ export default class EntryAbility extends UIAbility {
         EntryAbility.onCardAction(data, context);
         return null;
       });
-      appendPlayLog('[卡片] 交互通道已注册');
+      appendPlayLog('[卡片] channel ok');
     } catch (error) {
       Logger.error(`register card action channel failed: ${JSON.stringify(error)}`);
     }
@@ -260,12 +260,12 @@ export default class EntryAbility extends UIAbility {
     try {
       params = JSON.parse(data.readString()) as Record<string, string>;
     } catch (_err) {
-      appendPlayLog('[卡片] 动作解析失败');
+      appendPlayLog('[卡片] parse failed');
       return;
     }
     const actionType: string = params.actionType ?? '';
     const formId: string = params.formId ?? '';
-    appendPlayLog('[卡片] 收到动作: ' + actionType);
+    appendPlayLog('[卡片] action=' + actionType);
     // The callee callback arrives on an IPC thread: hop to the JS main thread before touching playback.
     setTimeout((): void => {
       if (actionType.length > 0) {

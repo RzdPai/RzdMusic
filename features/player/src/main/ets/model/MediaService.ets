@@ -214,8 +214,8 @@ export class MediaService {
     const queued: number | undefined = this.scrubberQueuedSeek;
     this.scrubberQueuedSeek = undefined;
     if (queued !== undefined) {
-      appendPlayLog(`[RzdScrubberV20] mode=SeekIntermediate value=${seekDoneTime}` +
-        ` progress=${this.getAppState().progress} preview=component-owned next=${queued}`);
+      appendPlayLog(`[RzdScrubberV20] seek-intermediate value=${seekDoneTime}` +
+        ` progress=${this.getAppState().progress} next=${queued}`);
       this.isCurrent = true;
       if (this.seek(queued)) {
         return;
@@ -229,8 +229,8 @@ export class MediaService {
     appState.progress = seekDoneTime;
     appState.currentTime = MediaTools.msToCountdownTime(seekDoneTime);
     appState.seekDoneRevision++;
-    appendPlayLog(`[RzdScrubberV20] mode=SeekDone value=${seekDoneTime}` +
-      ` progress=${appState.progress} preview=component-owned ack=${appState.seekDoneRevision}`);
+    appendPlayLog(`[RzdScrubberV20] seek-done value=${seekDoneTime}` +
+      ` progress=${appState.progress} ack=${appState.seekDoneRevision}`);
     this.liveViewController.update(seekDoneTime, appState.isPlay);
     this.setPlayState({
       position: {
@@ -244,7 +244,7 @@ export class MediaService {
     // ★ 5400102 = "Operate Not Permit"（对不支持的当前状态做控制操作，例如对 idle 的播放器 setSpeed）。
     //   这类是控制错误，不代表媒体坏了；以前被当成播放失败 → 记录档位失败 → 直接跳歌。
     if (err.code === 5400102) {
-      this.appendPlayLog('[播放] AVPlayer 控制类错误 5400102（忽略，不触发换源/跳歌）');
+      this.appendPlayLog('[播放] AVPlayer err 5400102 ignored');
       return;
     }
     Logger.error(TAG, `Invoke avPlayer failed, code is ${err.code}, message is ${err.message}`);
@@ -277,7 +277,7 @@ export class MediaService {
         MusicStoreService.getInstance().recordFailure(
           qualityTierKey(failedQualityNow, failing.source, scriptId),
           QUALITY_TIER_FAIL_THRESHOLD, QUALITY_TIER_COOLDOWN_MS);
-        appendPlayLog('[播放] 记录档位失败 ' + failing.source + '/' + failedQualityNow);
+        appendPlayLog('[播放] tier-fail ' + failing.source + '/' + failedQualityNow);
       }
     }
     // 关键：reset 后 avPlayer 内部已释放 url 资源，必须同步把 isPrepared 置 false，
@@ -291,8 +291,8 @@ export class MediaService {
     this.pauseReason = 'retry';
     this.resumeWhenReady = true;
     this.logPausePolicy('hang-for-retry', 'retry', true, 'quality=' + failedQualityNow);
-    appendPlayLog('[播放] 错误恢复已挂起 failedUrl=' + failedUrlNow.substring(0, 60) +
-      ' failedQuality=' + failedQualityNow + ' 排队歌曲url已清空=' + (failing !== undefined));
+    appendPlayLog('[播放] recover-pending failedUrl=' + failedUrlNow.substring(0, 60) +
+      ' failedQuality=' + failedQualityNow + ' urlCleared=' + (failing !== undefined));
     this.avPlayer?.reset();
     // 跨源 fallback：reset 是异步完成，500ms 后等状态稳定再清空 url 触发 loadAsset 内部的
     // resolveOnlineUrl（它会走 resolveMusicUrlWithFallback 自动跨源/跨脚本）。
@@ -301,13 +301,13 @@ export class MediaService {
     // reset 回 idle 后 state 已被覆盖成 IDLE，state 检查会让 fallback 被静默跳过。
     setTimeout((): void => {
       if (!this.errorRecoveryPending) {
-        appendPlayLog('[播放] 错误恢复定时器触发，但恢复已被取消（新加载/已成功恢复）');
+        appendPlayLog('[播放] recover timer, cancelled');
         return;
       }
-      appendPlayLog('[播放] 错误恢复定时器触发，开始跨源重试 hasFallbackOnce=' + this.hasFallbackOnce);
+      appendPlayLog('[播放] recover timer, fallback retry hasFallbackOnce=' + this.hasFallbackOnce);
       if (this.hasFallbackOnce) {
         // 已经跨源重试过一次仍失败，跳到列表下一首，避免死循环
-        appendPlayLog('[播放] 跨源 fallback 已用尽，跳到下一首');
+        appendPlayLog('[播放] fallback exhausted, next');
         this.errorRecoveryPending = false;
         this.hasFallbackOnce = false;
         this.playNextAuto(true);
@@ -316,7 +316,7 @@ export class MediaService {
       this.hasFallbackOnce = true;
       this.retryCurrentSongWithFallback().catch((err: Object): void => {
         // 兜底：恢复链路任何未捕获异常都不能让播放器卡死
-        appendPlayLog('[播放] 错误恢复链路异常: ' + JSON.stringify(err).substring(0, 120));
+        appendPlayLog('[播放] recover chain error: ' + JSON.stringify(err).substring(0, 120));
         this.errorRecoveryPending = false;
         this.hasFallbackOnce = false;
         this.playNextAuto(true);
@@ -341,16 +341,16 @@ export class MediaService {
       this.playNextAuto(true);
       return;
     }
-    appendPlayLog('[播放] 跨源 fallback 触发 ' + current.source + '/' +
+    appendPlayLog('[播放] fallback triggered ' + current.source + '/' +
       (typeof current.title === 'string' ? current.title : ''));
     // 清空 url：让 resolveOnlineUrl 走 fallback 而不是直接走缓存
     current.url = '';
     const resolved: boolean = await this.resolveOnlineUrl(current);
-    appendPlayLog('[播放] 跨源重试解析结果=' + resolved + ' 新url=' +
-      (current.url.length > 0 ? '已获得' : '空'));
+    appendPlayLog('[播放] fallback resolve=' + resolved + ' newUrl=' +
+      (current.url.length > 0 ? 'y' : 'n'));
     if (!resolved) {
       // 跨源/跨脚本 fallback 全部失败，直接跳到下一首
-      appendPlayLog('[播放] 跨源 fallback 仍失败，跳到下一首');
+      appendPlayLog('[播放] fallback failed, next');
       this.errorRecoveryPending = false;
       this.hasFallbackOnce = false;
       this.playNextAuto(true);
@@ -372,7 +372,7 @@ export class MediaService {
     this.resumeWhenReady = false;
     void this.loadAsset(this.musicIndex, !wanted);
     this.overridePlayIntent(wanted);
-    this.appendPlayLog('[播放] 降级/换源重试 起播意图=' + wanted);
+    this.appendPlayLog('[播放] retry autoplay=' + wanted);
   }
   /** AVPlayer timeUpdate: refreshes countdown label and progress in MusicAppState when active. */
   private updateTimeCall: (updateTime: number) => void = (updateTime: number) => {
@@ -457,7 +457,7 @@ export class MediaService {
         readTimeout: 120000
       });
       if (resp.responseCode !== 200 || resp.result === undefined) {
-        this.appendPlayLog('[播放] 分片流下载失败 code=' + resp.responseCode);
+        this.appendPlayLog('[播放] hls download fail code=' + resp.responseCode);
         return '';
       }
       const buf: ArrayBuffer = resp.result as ArrayBuffer;
@@ -467,10 +467,10 @@ export class MediaService {
       const file = fs.openSync(path, fs.OpenMode.CREATE | fs.OpenMode.READ_WRITE);
       fs.writeSync(file.fd, buf);
       fs.closeSync(file);
-      this.appendPlayLog('[播放] 分片流已落盘 ' + Math.round(buf.byteLength / 1024) + 'KB');
+      this.appendPlayLog('[播放] hls saved ' + Math.round(buf.byteLength / 1024) + 'KB');
       return path;
     } catch (err) {
-      this.appendPlayLog('[播放] 分片流下载异常');
+      this.appendPlayLog('[播放] hls download error');
       return '';
     } finally {
       req.destroy();
@@ -490,13 +490,13 @@ export class MediaService {
       return;
     }
     if (!this.avPlayer) {
-      this.appendPlayLog('[播放] avPlayer 未就绪且无内核地址，挂起等待');
+      this.appendPlayLog('[播放] avPlayer not ready, no kernel url, wait');
       return;
     }
     this.songItem = await this.songItemBuilder.build(idleSong);
       // ★ 汽水（分片 mp4）：不经 AVPlayer，直接交给 mpv 内核
       if (this.ijkUrl.length === 0 && this.ijkActive) {
-        this.appendPlayLog('[播放] 切回 AVPlayer，释放 ijk 引擎');
+        this.appendPlayLog('[播放] back to AVPlayer, release ijk');
         this.releaseIjk();
       }
       if (this.ijkUrl.length > 0) {
@@ -506,7 +506,7 @@ export class MediaService {
       // ★ 统一“装载前先回 idle”：fdSrc 与 url 混用会让 AVPlayer「有时长/有进度但没声音」，
       //   reset() 会异步回到 idle 再重新进本函数，从而保证每次都从干净状态装载。
       if (this.avPlayer.state !== 'idle') {
-        this.appendPlayLog('[播放] 装载前 reset（当前状态 ' + this.avPlayer.state + '）');
+        this.appendPlayLog('[播放] pre-load reset, state=' + this.avPlayer.state);
         this.avPlayer.reset();
         return;
       }
@@ -515,11 +515,11 @@ export class MediaService {
           const info: fs.Stat = fs.statSync(this.pendingLocalPath);
           const file = fs.openSync(this.pendingLocalPath, fs.OpenMode.READ_ONLY);
           this.avPlayer.fdSrc = { fd: file.fd, offset: 0, length: info.size };
-          this.appendPlayLog('[播放] 装载本地缓存曲目（汽水）size=' + info.size);
+          this.appendPlayLog('[播放] load local cache size=' + info.size);
           this.pendingLocalPath = '';
           return;
         } catch (err) {
-          this.appendPlayLog('[播放] 本地缓存装载失败，退回网络播放');
+          this.appendPlayLog('[播放] local cache load fail, use net');
           this.pendingLocalPath = '';
         }
       }
@@ -527,16 +527,16 @@ export class MediaService {
     if (httpUrl.length > 0) {
       this.avPlayer.url = httpUrl;
       Logger.info(TAG, 'loadAsset avPlayer.url:' + this.avPlayer.url);
-      this.appendPlayLog('[播放] 装载网络曲目 url=' + httpUrl.substring(0, 60));
+      this.appendPlayLog('[播放] load net url=' + httpUrl.substring(0, 60));
     } else {
       const url = this.songItemBuilder.getRealUrl();
       if (url) {
         const avFileDescriptor: media.AVFileDescriptor = { fd: url.fd, offset: url.offset, length: url.length };
         this.avPlayer.fdSrc = avFileDescriptor;
         Logger.info(TAG, 'loadAsset avPlayer.fdSrc:' + this.avPlayer.fdSrc);
-        this.appendPlayLog('[播放] 装载本地曲目 fd');
+        this.appendPlayLog('[播放] load local fd');
       } else {
-        this.appendPlayLog('[播放] idle 无可播地址（url 已清空，等待错误恢复或手动重试）');
+        this.appendPlayLog('[播放] idle, no url, wait retry');
       }
     }
   }
@@ -580,13 +580,12 @@ export class MediaService {
         appState.totalTime = MediaTools.msToCountdownTime(this.getDuration());
         appState.progressMax = this.getDuration();
         const playedGen: number = this.consumePlayIntent();
-        this.appendPlayLog('[播放] prepared 本次起播=' + (playedGen >= 0) + ' kernelOwns=' + kernelOwns);
+        this.appendPlayLog('[播放] prepared autoplay=' + (playedGen >= 0) + ' kernelOwns=' + kernelOwns);
         if (playedGen >= 0 && !kernelOwns) {
           this.ensureBackgroundAudioTask();
           this.startPlayback('prepared', playedGen);
         }
         this.setAVMetadata();
-        Logger.info(TAG, 'AVPlayer prepared succeeded.');
         break;
       case 'playing':
         Logger.info(TAG, 'AVPlayer state playing called.');
@@ -674,7 +673,6 @@ export class MediaService {
   };
   /** AVSession remote play: loads first asset or resumes local play. */
   private playCall: () =>void = () => {
-    Logger.info(TAG, `on play , do play task`);
     if (this.isFirst) {
       this.loadAsset(this.getValidSelectIndex());
     } else {
@@ -723,7 +721,7 @@ export class MediaService {
         //   ⇒ 熄屏即停。**无界没有这条监听**（它后台就老实播），这是本仓从 LX 移植时自己加的。
         //   ⇒ 照上游：断开只记一行日志，**不自动暂停**。要继续暂停请用系统音频中断那条路
         //     （`audioInterrupt` / AVSession 的 pause），那是用户真正按停才触发的。
-        appendPlayLog('[播放] 音频输出设备断开（不自动暂停，照无界）');
+        appendPlayLog('[播放] audio device lost, keep playing');
       };
       manager.on('deviceChange', this.routingCallback);
     } catch (error) {
@@ -783,29 +781,25 @@ export class MediaService {
 
   /** AVSession remote pause. */
   private pauseCall: () =>void = () => {
-    Logger.info(TAG, `on pause , do pause task`);
     this.pausedByInterrupt = false;
     this.pauseOrigin = 'avsession';
     this.pause();
   };
   /** AVSession remote next track. */
   private playNextCall: () =>void = () => {
-    Logger.info(TAG, `on playNext , do playNext task`);
     this.playNextAuto(true);
   };
   /** AVSession remote previous track. */
   private playPreviousCall: () =>void = () => {
-    Logger.info(TAG, `on playPrevious , do playPrevious task`);
     this.playPrevious();
   };
   /** AVSession remote seek (progress bar drag / lyric line click in the control center). */
   private sessionSeekCall: (seekToTime: number) => void = (seekToTime: number) => {
-    Logger.info(TAG, `on seek, do seek task to ${seekToTime}`);
+    Logger.info(TAG, `seek task to=${seekToTime}`);
     this.seek(seekToTime);
   };
   /** AVPlayer volumeChange: mirrors volume into MusicAppState. */
   private volumeChangeCall: (volume: number) => void = (volume: number) => {
-    Logger.info(TAG, `on volumeChangeCall, do volumeChange task`);
     this.getAppState().volume = volume;
   };
 
@@ -974,7 +968,7 @@ export class MediaService {
     // AVPlayer 只支持 prepared / playing / paused / completed 这几种状态设置倍速
     const st: string = player.state;
     if (st !== 'prepared' && st !== 'playing' && st !== 'paused' && st !== 'completed') {
-      this.appendPlayLog('[RzdSpeed] AVPlayer state=' + st + '，暂不设置倍速（等就绪后 applyPlaybackRate 会再调）');
+      this.appendPlayLog('[RzdSpeed] AVPlayer state=' + st + ' defer speed');
       return;
     }
     try {
@@ -982,7 +976,7 @@ export class MediaService {
       this.appendPlayLog('[RzdSpeed] AVPlayer setSpeed ' + target + ' ok');
     } catch (err) {
       const e = err as BusinessError;
-      this.appendPlayLog('[RzdSpeed] AVPlayer setSpeed 失败 code=' + e.code);
+      this.appendPlayLog('[RzdSpeed] setSpeed fail code=' + e.code);
     }
   }
 
@@ -1124,11 +1118,11 @@ export class MediaService {
           }
           if (changed) {
             appState.lyricVersion++;
-            appendPlayLog('[歌词] 变更重建 source=' + src + ' len=' + itemRef.lyricText.length);
+            appendPlayLog('[歌词] rebuild source=' + src + ' len=' + itemRef.lyricText.length);
             this.liveViewController.reloadLyric(itemRef.lyricText);
             void this.setAVMetadata();
           } else {
-            appendPlayLog('[歌词] 内容未变，跳过重建 source=' + src);
+            appendPlayLog('[歌词] unchanged, skip source=' + src);
           }
         };
       // TTML 社区数据库歌词优先级最高（逐字 + 翻译/罗马音随原文），失败再回退各平台全量歌词
@@ -1191,12 +1185,12 @@ export class MediaService {
       const bytes: Uint8Array = new util.Base64Helper().decodeSync(raw);
       const text: string = util.TextDecoder.create('utf-8').decodeToString(bytes);
       if (text.startsWith('http://') || text.startsWith('https://')) {
-        appendPlayLog('[播放] 跳转壳还原直链 ' + text.substring(0, 90));
+        appendPlayLog('[播放] unwrap direct url ' + text.substring(0, 90));
         return text;
       }
       return url;
     } catch (err) {
-      appendPlayLog('[播放] 跳转壳还原失败，继续用原地址');
+      appendPlayLog('[播放] unwrap fail, keep origin url');
       return url;
     }
   }
@@ -1254,7 +1248,7 @@ export class MediaService {
     } catch (e) {
       // 同上：reset 在部分相位会抛，忽略
     }
-    appendPlayLog('[播放] 内核接手：AVPlayer 已挂起（防双路出声）');
+    appendPlayLog('[播放] kernel owns, AVPlayer suspended');
   }
 
   /**
@@ -1289,18 +1283,18 @@ export class MediaService {
       if (this.ijkEngine !== engine || engine.isPrepared()) {
         return;
       }
-      this.appendPlayLog('[RzdKernel] 状态 ' + (engine.probeState !== undefined ? engine.probeState() : 'n/a'));
+      this.appendPlayLog('[RzdKernel] state ' + (engine.probeState !== undefined ? engine.probeState() : 'n/a'));
       // ★ 2026-10-31：先原地重试一次 mpv（同一直链），确认是网络/代理问题再放弃；
       //   以前这里直接 release 并 loadCurrentIntoPlayer ⇒ 落到 AVPlayer（5411001）→ 跳歌，把一次失败放大成整首跳过。
       this.markIjkFail();
       this.releaseIjk();
       if (!this.ijkInlineRetryDone && this.ijkUrl.length > 0) {
         this.ijkInlineRetryDone = true;
-        this.appendPlayLog('[RzdKernel] 原地重试 mpv（不再交 AVPlayer）');
+        this.appendPlayLog('[RzdKernel] retry mpv in place');
         this.startIjkPlayback(this.ijkUrl);
         return;
       }
-      this.appendPlayLog('[RzdKernel] 原地重试仍失败 → 才走换源/下一首');
+      this.appendPlayLog('[RzdKernel] retry failed -> fallback/next');
       this.loadCurrentIntoPlayer();
     }, 12000);
   }
@@ -1359,7 +1353,7 @@ export class MediaService {
     this.ijkEngine = engine;
     this.ijkActive = true;
     const playedGen: number = this.consumePlayIntent();
-    appendPlayLog('[播放] 汽水 → ' + kernelName(engine.kind()) + ' 引擎 gen=' + playedGen);
+    appendPlayLog('[播放] soda -> ' + kernelName(engine.kind()) + ' gen=' + playedGen);
     engine.create({
       onPrepared: (): void => {
         if (this.ijkEngine !== engine) {
@@ -1376,7 +1370,7 @@ export class MediaService {
         this.isPrepared = true;
         this.clearIjkWatchdog();
         this.markIjkOk();
-        this.appendPlayLog('[RzdKernel] 流信息 ' + engine.describeStream());
+        this.appendPlayLog('[RzdKernel] stream ' + engine.describeStream());
         // ★ ijk 路径也要写 AVSession 元数据，否则锁屏/车机看不到歌名封面
         void this.setAVMetadata();
         // 播放设置：EQ / 升降调（实验性；非默认值才下发）
@@ -1393,7 +1387,7 @@ export class MediaService {
             const lastBackend: string = AppStorage.get<string>('rzd_usb_backend') ?? 'usb-exclusive';
             const mode: string = lastBackend.indexOf('usb') >= 0 ? 'usb' : 'ohaudio';
             engine.setUsbMode(mode);
-            this.appendPlayLog('[RzdUsb] 换歌后重新应用独占 backend=' + mode + ' fd=' + usbFd);
+            this.appendPlayLog('[RzdUsb] reapply exclusive backend=' + mode + ' fd=' + usbFd);
           }
         }
         if (playedGen >= 0) {
@@ -1404,9 +1398,9 @@ export class MediaService {
           this.ensureBackgroundAudioTask();
           this.startIjkPolling();
           this.getAppState().isResolving = false;
-          this.appendPlayLog('[播放] ijk 起播 dur=' + dur);
+          this.appendPlayLog('[播放] ijk start dur=' + dur);
         } else {
-          this.appendPlayLog('[播放] ijk 仅装载（无起播意图）');
+          this.appendPlayLog('[播放] ijk load only');
         }
       },
       onDuration: (durationMs: number): void => {
@@ -1418,7 +1412,7 @@ export class MediaService {
         if (this.ijkEngine !== engine) {
           return;
         }
-        appendPlayLog('[播放] ijk 播放完成 → 下一首');
+        appendPlayLog('[播放] ijk completed -> next');
         this.stopIjkPolling();
         this.releaseIjk();
         this.playNextAuto(false);
@@ -1427,7 +1421,7 @@ export class MediaService {
         if (this.ijkEngine !== engine) {
           return;
         }
-        appendPlayLog('[播放] ijk 播放失败 code=' + code + ' msg=' + message + ' → 回退 AVPlayer');
+        appendPlayLog('[播放] ijk fail code=' + code + ' msg=' + message + ' -> AVPlayer');
         this.markIjkFail();
         this.releaseIjk();
         // 回退：AVPlayer 仍持有 songItem.url（可能卡 0 进度，但至少不静默失败）
@@ -1441,12 +1435,12 @@ export class MediaService {
         this.resumeWhenReady = true;
         this.pausedByInterrupt = true;
         this.updateIsPlay(false);
-        this.appendPlayLog('[播放] ijk 失去音频焦点，等待恢复');
+        this.appendPlayLog('[播放] ijk focus lost, wait');
       } else if (kind === AudioInterruptKind.STOP) {
         this.pauseReason = 'focus';
         this.resumeWhenReady = false;
         this.updateIsPlay(false);
-        this.appendPlayLog('[播放] ijk 永久失去音频焦点');
+        this.appendPlayLog('[播放] ijk focus lost forever');
       } else {
         // 焦点回来后：独占模式下 AO 可能已被系统重新分配，重新下发一次后端
         if (MusicStoreService.getInstance().getUsbExclusive() &&
@@ -1454,7 +1448,7 @@ export class MediaService {
           const backend: string = AppStorage.get<string>('rzd_usb_backend') ?? 'usb-exclusive';
           const mode: string = backend.indexOf('usb') >= 0 ? 'usb' : 'ohaudio';
           engine.setUsbMode(mode);
-          this.appendPlayLog('[RzdUsb] 焦点恢复后重新应用独占 backend=' + mode);
+          this.appendPlayLog('[RzdUsb] focus back, reapply backend=' + mode);
         }
         this.resumeIfAutoPaused('focus');
       }
@@ -1485,15 +1479,15 @@ export class MediaService {
     this.lastAfChain = chain;
     if (MusicStoreService.getInstance().getUsbExclusive()) {
       // USB 独占走严格模式：不叠加任何滤镜（bit-perfect）
-      this.appendPlayLog('[RzdUsb] 独占模式：跳过滤镜链下发');
+      this.appendPlayLog('[RzdUsb] exclusive, skip filter chain');
       return;
     }
     if (this.ijkActive && this.ijkEngine !== undefined) {
       this.ijkEngine.applyTuning(eq, pitch, effects);
-      this.appendPlayLog('[RzdTuning] 已下发到 ' + kernelName(this.ijkEngine.kind()) + ' 内核');
+      this.appendPlayLog('[RzdTuning] applied to ' + kernelName(this.ijkEngine.kind()));
       return;
     }
-    this.appendPlayLog('[RzdTuning] 当前走 AVPlayer，设置将在切到内核播放时生效');
+    this.appendPlayLog('[RzdTuning] on AVPlayer, applies on kernel');
   }
 
   /** 组出 af 链（与内核共用 engine/AudioEffects 的实现，保证"是否变化"判断准确）。 */
@@ -1516,7 +1510,7 @@ export class MediaService {
     const store = MusicStoreService.getInstance();
     if (store.getIjkFailStreak() !== 0) {
       store.setIjkFailStreak(0);
-      this.appendPlayLog('[RzdKernel] 失败计数已清零');
+      this.appendPlayLog('[RzdKernel] fail count cleared');
     }
   }
 
@@ -1541,13 +1535,13 @@ export class MediaService {
           'User-Agent': 'Mozilla/5.0 (Linux; HarmonyOS) AppleWebKit/537.36 Chrome/120.0 Safari/537.36'
         }
       });
-      this.appendPlayLog('[RzdProbe] 可达性 code=' + resp.responseCode + ' len=' +
+      this.appendPlayLog('[RzdProbe] reachable code=' + resp.responseCode + ' len=' +
         (typeof resp.result === 'string' ? (resp.result as string).length : -1) + ' url=' +
         url.substring(0, Math.min(60, url.length)));
       httpRequest.destroy();
     } catch (err) {
       const e = err as BusinessError;
-      this.appendPlayLog('[RzdProbe] 不可达 code=' + e.code + ' msg=' + e.message +
+      this.appendPlayLog('[RzdProbe] unreachable code=' + e.code + ' msg=' + e.message +
         ' url=' + url.substring(0, Math.min(60, url.length)));
     }
   }
@@ -1561,9 +1555,9 @@ export class MediaService {
     store.setIjkFailStreak(streak);
     if (store.isIjkDisabled()) {
       store.setIjkDisabled(false);
-      this.appendPlayLog('[RzdKernel] 检测到历史降级标记，已自动清除（统一走 mpv）');
+      this.appendPlayLog('[RzdKernel] legacy ijk flag cleared');
     }
-    this.appendPlayLog('[RzdKernel] mpv 播放失败计数=' + streak + '（继续用 mpv 重试）');
+    this.appendPlayLog('[RzdKernel] mpv fail count=' + streak + '（继续用 mpv 重试）');
   }
 
   /** @returns 当前生效的播放内核名（设置页展示用）。 */
@@ -1584,7 +1578,7 @@ export class MediaService {
   public reloadForKernelChange(): void {
     const playing: boolean = this.state === AudioPlayerState.PLAY ||
       this.state === AudioPlayerState.PAUSE || this.state === AudioPlayerState.COMPLETED;
-    this.appendPlayLog('[RzdKernel] 内核切换 → 重载当前曲目 playing=' + playing);
+    this.appendPlayLog('[RzdKernel] kernel switch -> reload playing=' + playing);
     if (!playing) {
       return;
     }
@@ -1615,19 +1609,19 @@ export class MediaService {
       if (this.ijkEngine !== undefined && this.ijkActive && this.ijkEngine.setUsbMode !== undefined) {
         this.ijkEngine.setUsbMode('off');
       }
-      this.appendPlayLog('[RzdUsb] 已关闭独占，回落普通输出');
+      this.appendPlayLog('[RzdUsb] exclusive off, normal output');
       return;
     }
     const fd: number = await usb.connect();
     if (fd <= 0) {
-      this.appendPlayLog('[RzdUsb] 开启失败：' + usb.state.statusText);
+      this.appendPlayLog('[RzdUsb] enable fail: ' + usb.state.statusText);
       this.toast(usb.state.statusText);
       MusicStoreService.getInstance().setUsbExclusive(false);
       return;
     }
     const engine = this.ijkEngine;
     if (engine === undefined || !this.ijkActive || engine.setUsbMode === undefined) {
-      this.appendPlayLog('[RzdUsb] 已就绪 fd=' + fd + '（下次起播生效）');
+      this.appendPlayLog('[RzdUsb] ready fd=' + fd);
       return;
     }
     // 打印这个构建里可用的 ao 驱动，便于判断能不能真的独占
@@ -1692,25 +1686,25 @@ export class MediaService {
     }, 250);
     setTimeout((): void => {
       const ao: string = engine.currentAo !== undefined ? engine.currentAo() : '';
-      this.appendPlayLog('[RzdUsb] 模式 ' + mode + ' 校验 current-ao=' + ao);
+      this.appendPlayLog('[RzdUsb] mode ' + mode + ' verify current-ao=' + ao);
       const ok: boolean = mode === 'usb' ? ao.indexOf('usb') >= 0 : ao.indexOf('ohaudio') >= 0;
       if (ok) {
         AppStorage.setOrCreate('rzd_usb_backend', mode === 'usb' ? 'usb-exclusive' : 'ohaudio + exclusive');
         if (engine.audioOutParams !== undefined) {
           const params: string = engine.audioOutParams();
           AppStorage.setOrCreate('rzd_usb_out_params', params);
-          this.appendPlayLog('[RzdUsb] 实际输出参数 ' + params);
+          this.appendPlayLog('[RzdUsb] out params ' + params);
         }
-        this.appendPlayLog('[RzdUsb] 独占生效 backend=' + mode + ' fd=' + fd);
+        this.appendPlayLog('[RzdUsb] exclusive active backend=' + mode + ' fd=' + fd);
         this.toast(mode === 'usb' ? 'USB 独占已生效' : 'USB 独占已生效（OHAudio 独占模式）');
         return;
       }
       if (attempt === 0) {
-        this.appendPlayLog('[RzdUsb] usb-exclusive 不可用 → 尝试 ohaudio 独占');
+        this.appendPlayLog('[RzdUsb] usb-exclusive unavailable -> ohaudio');
         this.tryUsbMode(engine, 'ohaudio', fd, 1);
         return;
       }
-      this.appendPlayLog('[RzdUsb] 该设备/ROM 不支持 USB 独占 → 回落普通输出');
+      this.appendPlayLog('[RzdUsb] USB exclusive unsupported -> normal');
       this.toast('该设备不支持 USB 独占（已回落普通输出）');
       MusicStoreService.getInstance().setUsbExclusive(false);
       UsbAudioService.getInstance().disconnect();
@@ -1731,24 +1725,24 @@ export class MediaService {
     const usb: UsbAudioService = UsbAudioService.getInstance();
     await usb.refresh();
     const st: UsbAudioState = usb.state;
-    this.appendPlayLog('[RzdUsb] 诊断 设备present=' + st.present + ' authorized=' + st.authorized +
+    this.appendPlayLog('[RzdUsb] diag present=' + st.present + ' authorized=' + st.authorized +
       ' connected=' + st.connected + ' fd=' + st.fd + ' ' + st.capabilityText);
     const engine = this.ijkEngine;
     if (engine !== undefined) {
       if (engine.listAoDrivers !== undefined) {
-        this.appendPlayLog('[RzdUsb] 诊断 ao驱动=' + engine.listAoDrivers());
+        this.appendPlayLog('[RzdUsb] diag ao=' + engine.listAoDrivers());
       }
       if (engine.currentAo !== undefined) {
-        this.appendPlayLog('[RzdUsb] 诊断 current-ao=' + engine.currentAo());
+        this.appendPlayLog('[RzdUsb] diag current-ao=' + engine.currentAo());
       }
       if (engine.listAudioDevices !== undefined) {
-        this.appendPlayLog('[RzdUsb] 诊断 设备列表=' + engine.listAudioDevices());
+        this.appendPlayLog('[RzdUsb] diag devices=' + engine.listAudioDevices());
       }
       if (engine.audioOutParams !== undefined) {
-        this.appendPlayLog('[RzdUsb] 诊断 输出参数=' + engine.audioOutParams());
+        this.appendPlayLog('[RzdUsb] diag out params=' + engine.audioOutParams());
       }
     } else {
-      this.appendPlayLog('[RzdUsb] 诊断 内核未创建（先播一首歌再诊断）');
+      this.appendPlayLog('[RzdUsb] diag no kernel, play first');
     }
     this.toast('USB 诊断已写入运行日志');
   }
@@ -1763,7 +1757,7 @@ export class MediaService {
     if (this.ijkEngine !== undefined && this.ijkEngine.setUsbMode !== undefined) {
       this.ijkEngine.setUsbMode('off');
     }
-    this.appendPlayLog('[RzdUsb] 设备掉线 → 已关闭独占并回落普通输出');
+    this.appendPlayLog('[RzdUsb] unplugged -> exclusive off');
     this.toast('USB 设备已断开，已回落普通输出');
   }
   /** 恢复 FFmpeg 内核（清掉降级标记）。 */
@@ -1771,7 +1765,7 @@ export class MediaService {
     const store = MusicStoreService.getInstance();
     store.setIjkDisabled(false);
     store.setIjkFailStreak(0);
-    this.appendPlayLog('[RzdKernel] 已恢复 mpv 内核');
+    this.appendPlayLog('[RzdKernel] mpv restored');
   }
   /** @returns 播放设置里是否有非默认的升降调 / EQ（有则普通曲目也走 FFmpeg）。 */
   private isTuningActive(): boolean {
@@ -1807,9 +1801,9 @@ export class MediaService {
     }
     const name: string = typeof songItem.title === 'string' ? songItem.title : '';
     const singer: string = typeof songItem.singer === 'string' ? songItem.singer : '';
-    appendPlayLog('[播放] resolveOnlineUrl 开始 source=' + songItem.source +
-      ' id=' + songItem.songId + ' 排除音质=' + this.failedQuality +
-      ' 排除失败url=' + (this.failedUrl.length > 0 ? '是' : '否'));
+    appendPlayLog('[播放] resolve start source=' + songItem.source +
+      ' id=' + songItem.songId + ' exclQuality=' + this.failedQuality +
+      ' exclUrl=' + (this.failedUrl.length > 0 ? 'y' : 'n'));
     // 失败重解析时排除刚刚失败的同一条地址与同一档音质，避免重复拿到死链
     const opts: FallbackOptions = new FallbackOptions();
     opts.excludeUrl = this.failedUrl;
@@ -1853,7 +1847,7 @@ export class MediaService {
       const originSource: string = songItem.source;
       const originSongId: string = songItem.songId;
       this.getAppState().noteSwitchedIdentity(originSource, originSongId);
-      appendPlayLog('[RzdIdentity] 换源 ' + originSource + '|' + originSongId +
+      appendPlayLog('[RzdIdentity] source ' + originSource + '|' + originSongId +
         ' → ' + outcome.source + '|' + outcome.songId);
       songItem.source = outcome.source;
       songItem.songId = outcome.songId;
@@ -1875,7 +1869,7 @@ export class MediaService {
     //   AVPlayer 能拿到总时长但解不出分片索引 ⇒ 进度恒 0。改走 FFmpeg(ijk) 音频引擎。
     const tuningOn: boolean = this.isTuningActive();
     if (!this.shouldUseIjk() && (songItem.source === 'qs' || outcome.url.indexOf('audio_mp4') >= 0)) {
-      this.appendPlayLog('[播放] mpv 不可用（缺少 libmpv）→ 汽水暂时走系统播放器');
+      this.appendPlayLog('[播放] mpv unavailable -> soda on AVPlayer');
     }
     // ★ 2026-10-31（汽水"12s 未就绪"根因）：内核必须吃**还原后的直链**，不是跳转壳。
     //   见 §168：以前这里把 outcome.url（redirect.php?u=…）直接给了 mpv，mpv 打不开、12s 超时，
@@ -1884,27 +1878,27 @@ export class MediaService {
     const kernelUrl: string = directUrl.length > 0 ? directUrl : outcome.url;
     if (this.shouldUseIjk() && (songItem.source === 'qs' || outcome.url.indexOf('audio_mp4') >= 0)) {
       this.ijkUrl = kernelUrl;
-      this.appendPlayLog('[播放] 分片流 → 交给内核 ' + kernelName(preferredKernel()));
+      this.appendPlayLog('[播放] hls -> kernel ' + kernelName(preferredKernel()));
     } else if (tuningOn && this.shouldUseIjk()) {
       // ★ 播放设置有非默认的音效/升降调：普通曲目也走 FFmpeg，否则 EQ 无处可生效
       this.ijkUrl = kernelUrl;
-      this.appendPlayLog('[播放] 音效已开启 → 普通曲目也走内核 ' + kernelName(preferredKernel()));
+      this.appendPlayLog('[播放] effects on -> kernel ' + kernelName(preferredKernel()));
     } else {
       this.ijkUrl = '';
     }
     songItem.url = directUrl.length > 0 ? directUrl : outcome.url;
-    this.appendPlayLog('[播放] 装载 URL 已还原=' + (directUrl.length > 0 ? '是' : '否') + ' kernelUrl=' + kernelUrl.substring(0, Math.min(80, kernelUrl.length)));
+    this.appendPlayLog('[播放] unwrapped=' + (directUrl.length > 0 ? 'y' : 'n') + ' kernelUrl=' + kernelUrl.substring(0, Math.min(80, kernelUrl.length)));
     // 记录实际使用的音质（可能因自动降级低于偏好设置）
     this.getAppState().currentQuality = outcome.quality;
-    appendPlayLog('[播放] resolveOnlineUrl 成功 quality=' + outcome.quality +
-      ' script=' + outcome.scriptName + ' 换源=' + outcome.switched +
-      (outcome.switchedScriptName.length > 0 ? ' 换脚本=' + outcome.switchedScriptName : ''));
+    appendPlayLog('[播放] resolve ok quality=' + outcome.quality +
+      ' script=' + outcome.scriptName + ' switched=' + outcome.switched +
+      (outcome.switchedScriptName.length > 0 ? ' toScript=' + outcome.switchedScriptName : ''));
     // 触发播放详情页醒目 Banner：跨脚本换源时展示新音源名，3 秒后由 PlaybackPage 自动清除。
     // ★ 2026-10-29：**本次启动的第一次解析一律不弹** —— 冷启动时脚本/引擎状态还在就绪过程中，
     //   真实来源与"用户设置的默认音源"必然对不上，弹出来只会让用户以为是异常换源。
     if (!this.firstResolveDone) {
       this.firstResolveDone = true;
-      appendPlayLog('[播放] 首播不提示换源（本次启动首次解析）');
+      appendPlayLog('[播放] first resolve, no switch notice');
     } else if (outcome.switchedScriptName.length > 0) {
       const banner: SwitchBannerState = SwitchBannerState.connect();
       banner.text = '已切换音源：' + outcome.switchedScriptName;
@@ -1958,10 +1952,10 @@ export class MediaService {
     // ★ 历史降级标记（ijk_disabled）在 mpv-only 版本里没有意义，启动即清除，避免汽水被永久踢回 AVPlayer
     if (MusicStoreService.getInstance().isIjkDisabled()) {
       MusicStoreService.getInstance().setIjkDisabled(false);
-      this.appendPlayLog('[RzdKernel] 启动清理历史降级标记 ijk_disabled');
+      this.appendPlayLog('[RzdKernel] clear legacy ijk_disabled');
     }
-    this.appendPlayLog('[RzdKernel] 自检 mpv=' + (isMpvAvailable() ? '可用' : '不可用') +
-      ' ffmpeg=可用 engine_mode=' + MusicStoreService.getInstance().getEngineMode());
+    this.appendPlayLog('[RzdKernel] selfcheck mpv=' + (isMpvAvailable() ? 'y' : 'n') +
+      ' ffmpeg=y engine_mode=' + MusicStoreService.getInstance().getEngineMode());
     this.songItemBuilder = new SongItemBuilder();
     this.restorePlayMode();
     this.initAudioPlayer();
@@ -2009,9 +2003,9 @@ export class MediaService {
       if (autoPlayOnLaunch) {
         void this.loadAsset(0, false);
       } else {
-        this.appendPlayLog('[播放] 恢复上次歌曲（仅恢复信息，不预加载）: ' + this.resolveSongText(item.title));
+        this.appendPlayLog('[播放] restore last song (info only): ' + this.resolveSongText(item.title));
       }
-      this.appendPlayLog('[播放] 恢复上次歌曲: ' + this.resolveSongText(item.title));
+      this.appendPlayLog('[播放] restore last song: ' + this.resolveSongText(item.title));
     } catch (e) {
       Logger.warn(TAG, 'restoreLastSong failed: ' + JSON.stringify(e).substring(0, 100));
     }
@@ -2062,7 +2056,7 @@ export class MediaService {
         }
       }
       if (staleCleared > 0) {
-        this.appendPlayLog('[播放] 启动恢复清理过期直链 ' + staleCleared + ' 条');
+        this.appendPlayLog('[播放] stale url cleared ' + staleCleared);
       }
       const restoreIndex: number = this.getValidSelectIndex();
       appState.selectIndex = restoreIndex;
@@ -2077,7 +2071,7 @@ export class MediaService {
     if (autoPlayOnLaunch) {
       void this.loadAsset(restoreIndex, false);
     }
-      this.appendPlayLog('[播放] 恢复播放列表 ' + snapshot.online.length + ' 首');
+      this.appendPlayLog('[播放] restore queue n=' + snapshot.online.length);
     } catch (e) {
       Logger.warn(TAG, 'restoreLastQueue failed: ' + JSON.stringify(e).substring(0, 100));
       this.restoreLastSong();
@@ -2172,7 +2166,7 @@ export class MediaService {
           MusicStoreService.getInstance().appendRuntimeDiagnostic(
             '[RzdLockScreenB] audio-interrupt-mode=share (official default; independent = stop-without-resume)');
         } catch (e) {
-          this.appendPlayLog('[播放] 设置音频焦点失败: ' + JSON.stringify(e).substring(0, 100));
+          this.appendPlayLog('[播放] set audio focus fail: ' + JSON.stringify(e).substring(0, 100));
         }
         this.setAVPlayerCallback();
         await this.createSession();
@@ -2181,7 +2175,7 @@ export class MediaService {
         this.restoreLastQueue();
       }
     }) .catch((error: BusinessError) => {
-      Logger.error(TAG, 'this avPlayer: ', `catch error happened,error code is ${error.code}`);
+      Logger.error(TAG, 'this avPlayer: ', `catch error code=${error.code}`);
     });
   }
 
@@ -2228,7 +2222,7 @@ export class MediaService {
             this.resumeWhenReady = true;
             this.logPausePolicy('paused', 'focus', true);
             this.updateIsPlay(false);
-            this.appendPlayLog('[播放] 音频被打断（暂时失焦），等待恢复');
+            this.appendPlayLog('[播放] audio interrupt, wait');
             break;
           case audio.InterruptHint.INTERRUPT_HINT_STOP:
             // 永久失焦，不会再收到 RESUME
@@ -2250,7 +2244,7 @@ export class MediaService {
           // 焦点归还，主动恢复播放
           if (this.pausedByInterrupt && this.avPlayer !== undefined && this.avPlayer.state === 'paused') {
             this.pausedByInterrupt = false;
-            this.appendPlayLog('[播放] 焦点归还，自动恢复播放');
+            this.appendPlayLog('[播放] focus back, resume');
             this.play();
           }
         }
@@ -2274,7 +2268,7 @@ export class MediaService {
       const currentInfo: smartMobilityCommon.SmartMobilityInfo =
         awareness.getSmartMobilityStatus(smartMobilityCommon.SmartMobilityType.HICAR);
       this.lastHiCarStatus = currentInfo.status;
-      this.appendPlayLog('[播放] HiCar 状态监听已注册，当前状态=' + currentInfo.status);
+      this.appendPlayLog('[播放] HiCar listener on, status=' + currentInfo.status);
     } catch (e) {
       Logger.warn(TAG, 'registerHiCarListener failed: ' + JSON.stringify(e).substring(0, 120));
     }
@@ -2347,7 +2341,7 @@ export class MediaService {
       this.session.on('playPrevious', this.playPreviousCall);
       this.session.on('seek', this.sessionSeekCall);
     } catch (error) {
-      Logger.error(TAG, `${error.code} + ${error.message}`);
+      Logger.error(TAG, `register session listeners failed: code=${error.code} msg=${error.message}`);
     }
   }
 
@@ -2363,7 +2357,7 @@ export class MediaService {
       this.session.off('playPrevious');
       this.session.off('seek');
     } catch (error) {
-      Logger.error(TAG, `${error.code} + ${error.message}`);
+      Logger.error(TAG, `unregister session listeners failed: code=${error.code} msg=${error.message}`);
     }
   }
 
@@ -2647,7 +2641,6 @@ export class MediaService {
         if (this.session) {
           try {
             await this.session.setAVMetadata(metadata);
-            Logger.info(TAG, 'SetAVMetadata successfully');
           } catch (err) {
             Logger.error(TAG, `SetAVMetadata failed: ${err instanceof Error ? err.message : String(err)}`);
           }
@@ -2755,7 +2748,7 @@ export class MediaService {
     this.playWhenPrepared = autoPlay;
     this.lastLoadWantedPlay = autoPlay;
     this.playIntentConsumedGen = this.loadGen - 1;
-    this.appendPlayLog('[播放] 装载请求 gen=' + this.loadGen + ' 起播意图=' + autoPlay);
+    this.appendPlayLog('[播放] load req gen=' + this.loadGen + ' autoplay=' + autoPlay);
     // ★ 2026-10-31：汽水/mpv 与队列起播都走这里；以前只有 OnlinePlayUtil 那条路径置 isResolving，
     //   所以「缓冲中…」在界面上永远不出现。统一在"装载请求"处置真，prepared/失败时置假。
     this.getAppState().isResolving = true;
@@ -2799,7 +2792,7 @@ export class MediaService {
       return;
     }
     if (playedGen < this.loadGen) {
-      this.appendPlayLog('[播放] 放弃起播(' + reason + ') 意图已被后续装载取代 ' +
+      this.appendPlayLog('[播放] drop start(' + reason + ') superseded ' +
         playedGen + ' < ' + this.loadGen);
       return;
     }
@@ -2827,7 +2820,7 @@ export class MediaService {
    */
   private overridePlayIntent(autoPlay: boolean): void {
     this.playWhenPrepared = autoPlay;
-    this.appendPlayLog('[播放] 起播意图校正 → ' + autoPlay + ' (gen=' + this.loadGen + ')');
+    this.appendPlayLog('[播放] autoplay corrected -> ' + autoPlay + ' (gen=' + this.loadGen + ')');
   }
 
   /**
@@ -2857,18 +2850,18 @@ export class MediaService {
     this.applyAudioSession(MusicStoreService.getInstance().getAudioMix());
     const len = this.getQueueLength();
     if (len === 0) {
-      this.appendPlayLog('[播放] loadAsset 队列为空');
+      this.appendPlayLog('[播放] loadAsset queue empty');
       Logger.error(TAG, 'play queue is empty when loadAsset');
       return;
     }
     if (musicIndex < 0 || musicIndex >= len) {
-      this.appendPlayLog('[播放] loadAsset 索引越界 ' + musicIndex);
+      this.appendPlayLog('[播放] loadAsset index oob ' + musicIndex);
       Logger.error(TAG, `current musicIndex ${musicIndex}`);
       return;
     }
     const queueSong = this.getSongItemAtQueueIndex(musicIndex);
     if (!queueSong) {
-      this.appendPlayLog('[播放] loadAsset 歌曲解析失败');
+      this.appendPlayLog('[播放] loadAsset resolve fail');
       Logger.error(TAG, `resolve song failed at queue index ${musicIndex}`);
       return;
     }
@@ -2876,7 +2869,7 @@ export class MediaService {
       // 本地歌（导入的设备音频）走**直路**：不联网、不看音源脚本脸色。
       // 没有用户音源脚本的人也必须能放自己导入的文件，所以这里完全不碰 LX 引擎。
       if (!this.localFileExists(queueSong.url)) {
-        this.appendPlayLog('[播放] 本地文件已不在：' + queueSong.url);
+        this.appendPlayLog('[播放] local file gone: ' + queueSong.url);
         // 副本丢了要明确告诉用户，不能静默失败（用户以为是播放器坏了）
         this.toast('文件已经不在了，请重新导入');
         this.getAppState().isResolving = false;
@@ -2916,7 +2909,7 @@ export class MediaService {
     }
     if (!this.avPlayer) {
       // Defer play until initAudioPlayer creates AVPlayer; loadAsset is applied then.
-      this.appendPlayLog('[播放] avPlayer 未就绪，挂起等待');
+      this.appendPlayLog('[播放] avPlayer not ready, wait');
       this.pendingLoadIndex = musicIndex;
       this.pendingLoadOnly = loadOnly === true;
       return;
@@ -2928,7 +2921,7 @@ export class MediaService {
           this.startIjkPlayback(this.ijkUrl);
           return;
         }
-      this.appendPlayLog('[播放] 首次加载 url=' + queueSong.url);
+      this.appendPlayLog('[播放] first load url=' + queueSong.url);
       this.songItem = await this.songItemBuilder.build(queueSong);
       let httpUrl = this.songItemBuilder.getHttpUrl();
       if (this.avPlayer) {
@@ -2952,7 +2945,7 @@ export class MediaService {
         // 关键：错误恢复/上轮 reset 后播放器已在 idle。对 idle 播放器再调 reset()
         // 没有状态变化、不会触发 idle 回调，新 url 永远装不进去（日志表现为
         // 「跨源重试解析结果=true」之后一片安静）。必须直接装载当前曲目。
-        this.appendPlayLog('[播放] 播放器已处 idle，跳过 reset 直接装载 index=' + musicIndex);
+        this.appendPlayLog('[播放] already idle, skip reset index=' + musicIndex);
         await this.loadCurrentIntoPlayer();
       } else {
         await this.reset();
@@ -2992,7 +2985,7 @@ export class MediaService {
 
   /** Executes a desktop-card control action (playPause / next / previous). */
   public handleCardAction(action: string): void {
-    appendPlayLog('[播放] 桌面卡片操作: ' + action);
+    appendPlayLog('[播放] card action: ' + action);
     if (action === 'playPause') {
       if (this.getAppState().isPlay) {
         this.pause();
@@ -3115,8 +3108,8 @@ export class MediaService {
         this.scrubberQueuedSeek = undefined;
         this.getAppState().seekResetRevision++;
         this.isCurrent = wasCurrent;
-        appendPlayLog(`[RzdScrubberV20] mode=SeekRejected value=${ms}` +
-          ` progress=${this.getAppState().progress} preview=component-owned reason=${JSON.stringify(error)}`);
+        appendPlayLog(`[RzdScrubberV20] seek-rejected value=${ms}` +
+          ` progress=${this.getAppState().progress} reason=${JSON.stringify(error)}`);
       }
     }
     return false;
@@ -3153,10 +3146,10 @@ export class MediaService {
    */
   private start(seekMs?: number) {
     Logger.info(TAG, 'AVPlayer start() isPrepared:' + this.isPrepared + ', state:' + this.state +
-      '，seek:' + seekMs + ' → 重载当前歌曲 index=' + this.musicIndex);
-    this.appendPlayLog('[播放] 播放器未就绪，点播放触发重载当前歌曲 index=' + this.musicIndex);
+      ', seek:' + seekMs + ' -> reload index=' + this.musicIndex);
+    this.appendPlayLog('[播放] not ready, reload on play index=' + this.musicIndex);
     this.loadAsset(this.musicIndex).catch((err: Object): void => {
-      appendPlayLog('[播放] 重载当前歌曲异常: ' + JSON.stringify(err).substring(0, 120));
+      appendPlayLog('[播放] reload error: ' + JSON.stringify(err).substring(0, 120));
     });
   }
 
@@ -3167,7 +3160,7 @@ export class MediaService {
     // ★ 2026-11-03：内核已声明接管、但实例还没创建好的那一小段窗口里，
     //   任何 play() 都不能落到下面的 AVPlayer 分支（否则又会把 AVPlayer 拉起来 = 双路出声）。
     if (this.kernelOwnsAudio && this.ijkEngine === undefined) {
-      this.appendPlayLog('[播放] 内核接管中，忽略本次 play()');
+      this.appendPlayLog('[播放] kernel owns, ignore play()');
       return;
     }
     // ★ 汽水走 ijk 引擎时，play/pause/seek 全部路由过去（AVPlayer 此时保持 idle）
@@ -3220,7 +3213,7 @@ export class MediaService {
     // 否则暂停期间完成的那次 resolveOnlineUrl/重试仍会把音乐放起来。
     if (this.playWhenPrepared) {
       this.playWhenPrepared = false;
-      this.appendPlayLog('[播放] 暂停 → 丢弃未消费的起播意图 gen=' + this.loadGen);
+      this.appendPlayLog('[播放] pause, drop autoplay gen=' + this.loadGen);
     }
     if (this.isPrepared && this.state === AudioPlayerState.PLAY && this.avPlayer) {
       this.avPlayer.pause().then(() => {
@@ -3250,7 +3243,7 @@ export class MediaService {
     //   ⇒ feed 队列的自动续播只走顺序下一首，不受全局 playMode 影响。
     //   （手动点"下一首"仍按原逻辑，不受影响。）
     if (!isFromControl && this.getAppState().isFeedQueue()) {
-      Logger.info(TAG, 'playNextAuto: feed queue → 顺序下一首（忽略全局播放模式 ' + this.playMode + '）');
+      Logger.info(TAG, 'playNextAuto feed -> next, mode=' + this.playMode);
       this.playNext();
       return;
     }
@@ -3335,7 +3328,6 @@ export class MediaService {
    * Stops AVPlayer and clears playing state when prepared.
    */
   public async stop() {
-    Logger.info(TAG, 'stop()');
     if (this.isPrepared && this.avPlayer) {
       try {
         await this.avPlayer.stop();
@@ -3348,20 +3340,19 @@ export class MediaService {
           BackgroundUtil.stopContinuousTask(this.abilityContext);
         }
       } catch (error) {
-        Logger.error(TAG, `${error.code} + ${error.message}`);
+        Logger.error(TAG, `stop failed: code=${error.code} msg=${error.message}`);
       }
     }
   }
 
   /** Resets AVPlayer and releases SongItemBuilder resources. */
   private async reset() {
-    Logger.info(TAG, 'reset()');
     await this.songItemBuilder.release();
     if (this.avPlayer) {
       try {
         await this.avPlayer.reset();
       } catch (error) {
-        Logger.error(TAG, `${error.code} + ${error.message}`);
+        Logger.error(TAG, `reset failed: code=${error.code} msg=${error.message}`);
       }
     }
     this.isPrepared = false;
@@ -3386,7 +3377,7 @@ export class MediaService {
           if (err) {
             Logger.error(TAG, `Failed to destroy session. Code: ${err.code}, message: ${err.message}`);
           } else {
-            Logger.info(TAG, `Destroy : SUCCESS `);
+            Logger.info(TAG, `session destroy ok`);
           }
         });
       } catch (error) {
@@ -3468,7 +3459,7 @@ export class MediaService {
         if (err) {
           Logger.info(TAG, `SetAVPlaybackState BusinessError: code: ${err.code}, message: ${err.message}`);
         } else {
-          Logger.info(TAG, 'SetAVPlaybackState successfully');
+          Logger.info(TAG, 'setAVPlaybackState ok');
         }
       });
     }

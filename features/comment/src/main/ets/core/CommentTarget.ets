@@ -44,7 +44,7 @@ export async function commentTargetOf(song: CommentSongRef): Promise<CommentSong
     return song;
   }
   if (targetResolver === null) {
-    hilog.info(DOMAIN, COMMENT_TAG, 'no target resolver for source=%{public}s', song.source);
+    hilog.info(DOMAIN, COMMENT_TAG, 'no resolver src=%{public}s', song.source);
     return null;
   }
   try {
@@ -55,12 +55,12 @@ export async function commentTargetOf(song: CommentSongRef): Promise<CommentSong
     if (!commentsSupported(resolved.source) || resolved.songId.length === 0) {
       return null;
     }
-    hilog.info(DOMAIN, COMMENT_TAG, 'local song %{public}s -> %{public}s/%{public}s',
+    hilog.info(DOMAIN, COMMENT_TAG, 'local %{public}s to %{public}s/%{public}s',
       song.songId, resolved.source, resolved.songId);
     return resolved;
   } catch (err) {
     const e: Error = err as Error;
-    hilog.warn(DOMAIN, COMMENT_TAG, 'resolve target failed: %{public}s', e.message ?? '');
+    hilog.warn(DOMAIN, COMMENT_TAG, 'resolve fail %{public}s', e.message ?? '');
     return null;
   }
 }

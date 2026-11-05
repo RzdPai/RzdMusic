@@ -270,7 +270,7 @@ export class SyncManager {
       state.pendingMode = request;
       this.pendingModeTimer = setTimeout(() => {
         this.pendingModeTimer = 0;
-        appendError(`[${TAG}] sync mode request timed out (no view answered), cancel`);
+        appendError(`[${TAG}] sync mode request timeout, cancel`);
         this.resolveSyncMode('cancel');
       }, MODE_REQUEST_TIMEOUT_MS);
     });

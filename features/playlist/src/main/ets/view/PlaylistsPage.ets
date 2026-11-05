@@ -190,7 +190,7 @@ export struct PlaylistsPage {
       backgroundBlurStyle: appBarBlurStyle()
     })
       .catch((err: BusinessError): void => {
-        console.error('openMenu add failed: ' + err.code + ' ' + err.message);
+        console.error('openMenu fail ' + err.code + ' ' + err.message);
       });
   }
 

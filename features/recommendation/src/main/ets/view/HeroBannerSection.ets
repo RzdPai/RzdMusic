@@ -196,8 +196,7 @@ export struct HeroBannerSection {
     //   这里 return 而不是"兜底走榜单"：本方法是同步的，跳转要等榜单路由参数里的封面，
     //   所以真正的分发在 `onFeatureTap` 那一处（它在进本方法之前就把榜单卡分走了）。
     if (isFeatureBoardCard(item.feature)) {
-      Logger.warn('RzdHomeBoard',
-        `refuse daily30 channel for board card feature=${item.feature} (use openFeatureBoard)`);
+      Logger.warn('RzdHomeBoard', `board card skip daily30 feature=${item.feature}`);
       return;
     }
     const list = this.recommendViewModel.privateSongDisplayList;
@@ -263,7 +262,7 @@ export struct HeroBannerSection {
     const routeBoardId: string = pickFeatureBoardBareId(item.feature, svcSource);
     const boardName: string = RecommendDataUtil.pickFeatureBoardName(item.feature, svcSource);
     if (routeBoardId.length === 0) {
-      Logger.info('RzdHomeBoard', `feature board tap: no board feature=${item.feature} source=${svcSource}`);
+      Logger.info('RzdHomeBoard', `board tap, no board feature=${item.feature} src=${svcSource}`);
       return;
     }
     const param: ToplistRouteParam = await MusicDataService.buildBoardRouteParam(svcSource, routeBoardId, boardName);
@@ -273,9 +272,9 @@ export struct HeroBannerSection {
     //   `lxLeaderboard(tx_27)` —— `fetchBoardSongs` 内部拼出来的最终字符串，
     //                        与详情页 `board songs loaded board=tx_27` 同一行。
     Logger.info('RzdHomeBoard',
-      `feature board tap feature=${item.feature} source=${svcSource} board=${fullBoardId}` +
+      `board tap feature=${item.feature} src=${svcSource} board=${fullBoardId}` +
       ` route=${svcSource} ${routeBoardId} name=${boardName}` +
-      ` detail=fetchBoardSongs(${svcSource},${routeBoardId}) lx=lxLeaderboard(${svcSource}_${routeBoardId})`);
+      ` fetch=${svcSource},${routeBoardId} lx=${svcSource}_${routeBoardId}`);
     const coverId: string = HeroBannerSection.collageCoverId(item.feature);
     const animated: boolean = !getPlaylistTransitionState().prepare(this.getUIContext(), coverId, param.listCover);
     this.pageIndexInfos.pushPathByName(RouterUrlConstants.PLAYLIST_DETAIL, param, animated);

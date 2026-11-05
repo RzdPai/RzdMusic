@@ -133,7 +133,7 @@ export class OnlinePlayUtil {
     appState.replaceQueue([item], 0);
     MediaService.getInstance().loadAsset(0);
     OnlinePlayUtil.openFullScreen(appState, uiContext);
-    OnlinePlayUtil.appendPlayLog('[播放] playSearchSong 秒开，后台解析 ' +
+    OnlinePlayUtil.appendPlayLog('[播放] playSearchSong quick-open, bg resolve ' +
       song.source + '/' + song.songId);
     const lyricItem: SongItem = item;
     const lyricState: MusicAppState = appState;
@@ -188,7 +188,7 @@ export class OnlinePlayUtil {
     appState.isResolving = needResolve;
     MediaService.getInstance().loadAsset(0);
     OnlinePlayUtil.openFullScreen(appState, uiContext);
-    OnlinePlayUtil.appendPlayLog('[播放] playRecord 秒开 needResolve=' + needResolve +
+    OnlinePlayUtil.appendPlayLog('[播放] playRecord quick-open needResolve=' + needResolve +
       ' source=' + record.source + ' id=' + record.songId);
     if (!needResolve) {
       const storeCached: MusicStoreService = MusicStoreService.getInstance();
@@ -258,7 +258,7 @@ export class OnlinePlayUtil {
     }
     const before: number = appState.playQueue.length;
     appState.playQueue = appState.playQueue.concat(items);
-    OnlinePlayUtil.appendPlayLog('[播放] appendToList 追加=' + items.length + ' 队列=' +
+    OnlinePlayUtil.appendPlayLog('[播放] appendToList n=' + items.length + ' queue=' +
       appState.playQueue.length);
     return appState.playQueue.length - before;
   }
@@ -281,8 +281,8 @@ export class OnlinePlayUtil {
     }
     const playIndex = startIndex < 0 || startIndex >= songs.length ? 0 : startIndex;
     const first = songs[playIndex];
-    OnlinePlayUtil.appendPlayLog('[播放] playList index=' + playIndex + ' 歌数=' + songs.length +
-      ' 歌曲=' + first.name + ' src=' + first.source + ' id=' + first.songId);
+    OnlinePlayUtil.appendPlayLog('[播放] playList index=' + playIndex + ' n=' + songs.length +
+      ' song=' + first.name + ' src=' + first.source + ' id=' + first.songId);
     // 秒开播放页：整队先入列并打开页面，仅当前这首由 loadAsset 后台解析地址
     const items: SongItem[] = [];
     for (let i: number = 0; i < songs.length; i++) {
@@ -298,8 +298,8 @@ export class OnlinePlayUtil {
     if (openPlayer) {
       OnlinePlayUtil.openFullScreen(appState, uiContext);
     }
-    OnlinePlayUtil.appendPlayLog('[播放] playList 秒开，后台解析 index=' + playIndex +
-      ' 歌数=' + songs.length + ' openPlayer=' + openPlayer);
+    OnlinePlayUtil.appendPlayLog('[播放] playList quick-open index=' + playIndex +
+      ' n=' + songs.length + ' openPlayer=' + openPlayer);
     // 仅预解析当前及邻近歌曲的歌词（切歌时其余歌曲会自动按需补全），
     // 避免长歌单数百首并发请求导致卡死。
     const preloadCount: number = 8;

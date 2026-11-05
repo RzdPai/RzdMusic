@@ -335,10 +335,10 @@ export class RecommendDataUtil {
           merged.push(ui);
         }
         if (merged.length > 0) {
-          Logger.info('RzdHomeRec', `self-built rec songs=${merged.length} mode=${mode} source=${svcSource}`);
+          Logger.info('RzdHomeRec', `self rec songs=${merged.length} mode=${mode} src=${svcSource}`);
         }
       } catch (err) {
-        Logger.warn('RzdHomeRec', `self-built rec failed: ${(err as Error).message ?? ''}`);
+        Logger.warn('RzdHomeRec', `self rec fail err=${(err as Error).message ?? ''}`);
       }
     }
     if (dedicatedId.length > 0) {
@@ -472,7 +472,7 @@ export class RecommendDataUtil {
     limit: number = 4): Promise<RecommendPrivateSongUi[]> {
     const boardId: string = pickFeatureBoardId(feature, svcSource);
     if (boardId.length === 0) {
-      Logger.info('RzdHomeBoard', `feature board missing feature=${feature} source=${svcSource}`);
+      Logger.info('RzdHomeBoard', `board miss feature=${feature} src=${svcSource}`);
       return [];
     }
     const rows: RecommendPrivateSongUi[] = [];
@@ -483,11 +483,11 @@ export class RecommendDataUtil {
         rows.push(RecommendDataUtil.mapSearchSongToPrivateUi(res.list[i], i, seen));
       }
     } catch (_err) {
-      Logger.warn('RzdHomeBoard', `feature board load failed feature=${feature} board=${boardId}`);
+      Logger.warn('RzdHomeBoard', `board load fail feature=${feature} board=${boardId}`);
       return [];
     }
     await RecommendDataUtil.fillSongCovers(rows);
-    Logger.info('RzdHomeBoard', `feature board loaded feature=${feature} board=${boardId} songs=${rows.length}`);
+    Logger.info('RzdHomeBoard', `board loaded feature=${feature} board=${boardId} songs=${rows.length}`);
     return rows;
   }
 

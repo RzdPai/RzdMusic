@@ -111,7 +111,7 @@ function buildMusicInfo(source: string, songId: string, name?: string, singer?: 
 export async function getLXMusicUrl(source: string, songId: string, quality: string, name?: string,
   singer?: string): Promise<string> {
   if (!lxEngineIsReady || lxEngineSendRequest === null || lxEngineRegisterPromise === null) {
-    logError('引擎未就绪或回调未初始化');
+    logError('engine not ready');
     throw new Error('引擎未就绪或回调未初始化');
   }
   let sendReq: (key: string, data: LXSourceRequestData) => void = lxEngineSendRequest!;
@@ -123,15 +123,15 @@ export async function getLXMusicUrl(source: string, songId: string, quality: str
   let info: MusicUrlRequestInfo = { type: quality, musicInfo: musicInfo };
   let reqData: LXSourceRequestData = { source: toLXSourceKey(source), action: 'musicUrl', info: info };
   if (playableId !== songId) {
-    logError('发送请求: ' + source + '/' + songId + ' → ' + playableId + '/' + quality);
+    logError('req ' + source + '/' + songId + ' -> ' + playableId + '/' + quality);
   } else {
-    logError('发送请求: ' + source + '/' + songId + '/' + quality);
+    logError('req ' + source + '/' + songId + '/' + quality);
   }
   return new Promise<string>((resolve: (url: string) => void, reject: (reason: Error) => void): void => {
     regReq(requestKey, (result: object): void => {
       let mr: LXMusicUrlResult = result as LXMusicUrlResult;
       if (mr !== undefined && mr.data !== undefined && mr.data.url !== undefined && mr.data.url.length > 0) {
-        logError('获取成功: ' + mr.data.url.substring(0, 80));
+        logError('ok ' + mr.data.url.substring(0, 80));
         resolve(mr.data.url);
       } else {
         let msg: string = '响应数据无效: ' + JSON.stringify(result).substring(0, 200);
@@ -139,7 +139,7 @@ export async function getLXMusicUrl(source: string, songId: string, quality: str
         reject(new Error(msg));
       }
     }, (reason: Error): void => {
-      logError('请求失败: ' + reason.message);
+      logError('fail ' + reason.message);
       reject(reason);
     });
     sendReq(requestKey, reqData);
@@ -148,7 +148,7 @@ export async function getLXMusicUrl(source: string, songId: string, quality: str
 
 export async function getLXLyric(source: string, songId: string, name?: string, singer?: string): Promise<string> {
   if (!lxEngineIsReady || lxEngineSendRequest === null || lxEngineRegisterPromise === null) {
-    logError('getLXLyric: 引擎未就绪');
+    logError('getLXLyric: engine not ready');
     throw new Error('LX engine not ready');
   }
   let sendReq: (key: string, data: LXSourceRequestData) => void = lxEngineSendRequest!;
@@ -165,7 +165,7 @@ export async function getLXLyric(source: string, songId: string, name?: string, 
       if (lr.data !== undefined) {
         resolve(lr.data.lyric);
       } else {
-        logError('getLXLyric: 无效响应');
+        logError('getLXLyric: invalid resp');
         reject(new Error('Invalid lyric response'));
       }
     }, reject);
@@ -175,7 +175,7 @@ export async function getLXLyric(source: string, songId: string, name?: string, 
 
 export async function getLXPic(source: string, songId: string, name?: string, singer?: string): Promise<string> {
   if (!lxEngineIsReady || lxEngineSendRequest === null || lxEngineRegisterPromise === null) {
-    logError('getLXPic: 引擎未就绪');
+    logError('getLXPic: engine not ready');
     throw new Error('LX engine not ready');
   }
   let sendReq: (key: string, data: LXSourceRequestData) => void = lxEngineSendRequest!;
@@ -192,7 +192,7 @@ export async function getLXPic(source: string, songId: string, name?: string, si
       if (pr.data !== undefined) {
         resolve(pr.data);
       } else {
-        logError('getLXPic: 无效响应');
+        logError('getLXPic: invalid resp');
         reject(new Error('Invalid pic response'));
       }
     }, reject);
@@ -249,7 +249,7 @@ export async function fetchBoardSongs(source: string, boardId: string): Promise<
           songId: songs[i].songId, coverUrl: songs[i].img
         });
       }
-      logError('[榜单] qs/' + boardId + ' 取到 ' + sodaOut.length + ' 首');
+      logError('[榜单] qs/' + boardId + ' n=' + sodaOut.length);
       return sodaOut;
     }
     const result = await lxLeaderboard(source + '_' + boardId, 1, 500);
@@ -263,10 +263,10 @@ export async function fetchBoardSongs(source: string, boardId: string): Promise<
         title: s.name, singer: s.singer, source: s.source, songId: s.songId, coverUrl: s.img
       });
     }
-    logError('[榜单] ' + source + '/' + boardId + ' 取到 ' + out.length + ' 首');
+    logError('[榜单] ' + source + '/' + boardId + ' n=' + out.length);
     return out;
   } catch (err) {
-    logError('[榜单] ' + source + '/' + boardId + ' 取歌失败: ' + JSON.stringify(err).substring(0, 120));
+    logError('[榜单] ' + source + '/' + boardId + ' fail: ' + JSON.stringify(err).substring(0, 120));
     return [];
   }
 }

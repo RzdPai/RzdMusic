@@ -131,13 +131,13 @@ function readProperties(bytes: Uint8Array, offset: number): ReadPropertyResult {
       // 未覆盖的 property id：不要静默 break（那会截断后续 userProperties /
       // serverReference 解析），至少留一条线索，并按声明长度跳过。
       hilog.warn(0x0000, LOG_TAG,
-        'mqtt 未识别的 property id=0x%{public}s，跳过 %{public}d 字节',
+        'mqtt unknown property id=0x%{public}s skip %{public}d bytes',
         id.toString(16), Math.max(0, end - before));
       break;
     }
     if (cursor <= before) {
       // 防御：避免解析不前进导致死循环
-      hilog.warn(0x0000, LOG_TAG, 'mqtt property 解析未前进，提前结束 id=0x%{public}s', id.toString(16));
+      hilog.warn(0x0000, LOG_TAG, 'mqtt property no progress, abort id=0x%{public}s', id.toString(16));
       break;
     }
   }
@@ -370,7 +370,7 @@ export class MqttClient {
     hilog.info(0x0000, LOG_TAG, 'mqtt suback reason %{public}d', reasonCode);
     if (this.onSuback) this.onSuback(reasonCode);
     if (reasonCode >= 0x80) {
-      hilog.error(0x0000, LOG_TAG, '扫码订阅被拒绝 reason=%{public}d', reasonCode);
+      hilog.error(0x0000, LOG_TAG, 'qr subscribe rejected reason=%{public}d', reasonCode);
     }
   }
 

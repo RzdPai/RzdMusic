@@ -7,7 +7,6 @@ export struct PlaylistTransitionOverlay {
 
   aboutToAppear(): void {
     this.transitionState.hostReady = true;
-    console.info('[RzdOverlayInput] playlist host ready; idle drawing nodes=0');
   }
 
   aboutToDisappear(): void {

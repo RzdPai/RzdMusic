@@ -699,7 +699,7 @@ async function txSongId(song: CommentSongRef): Promise<string> {
   const track: Record<string, Object> = asRecord(asRecord(asRecord(body['req'])['data'])['track_info']);
   const songId: string = asString(track['id']);
   if (songId.length === 0) {
-    hilog.warn(DOMAIN, COMMENT_TAG, 'tx numId resolve failed mid=%{public}s name=%{public}s',
+    hilog.warn(DOMAIN, COMMENT_TAG, 'tx numId fail mid=%{public}s name=%{public}s',
       song.songId, song.name);
     throw new Error('拿不到这首歌的 QQ 歌曲 id，评论取不了');
   }

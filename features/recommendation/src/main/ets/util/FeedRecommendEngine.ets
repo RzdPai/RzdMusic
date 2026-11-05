@@ -121,7 +121,7 @@ export class FeedRecommendEngine {
   static async build(source: string, mode: number, want: number,
     playsByCategory: Record<string, number>): Promise<FeedRecommendPick[]> {
     if (!MusicDataService.plazaSupported(source) || want <= 0) {
-      Logger.info(LOG_TAG, `skip source=${source} plazaSupported=${MusicDataService.plazaSupported(source)}`);
+      Logger.info(LOG_TAG, `skip src=${source} plaza=${MusicDataService.plazaSupported(source)}`);
       return [];
     }
 
@@ -130,7 +130,7 @@ export class FeedRecommendEngine {
     try {
       groups = await MusicDataService.categories(source);
     } catch (err) {
-      Logger.warn(LOG_TAG, `categories failed: ${(err as Error).message ?? ''}`);
+      Logger.warn(LOG_TAG, `categories fail err=${(err as Error).message ?? ''}`);
       return [];
     }
     const categories: CategoryOption[] = [];
@@ -144,7 +144,7 @@ export class FeedRecommendEngine {
       }
     }
     if (categories.length === 0) {
-      Logger.warn(LOG_TAG, `no categories source=${source}`);
+      Logger.warn(LOG_TAG, `no categories src=${source}`);
       return [];
     }
 
@@ -161,7 +161,7 @@ export class FeedRecommendEngine {
       picked.push(pool[idx]);
       pool.splice(idx, 1);
     }
-    Logger.info(LOG_TAG, `picked categories=${picked.map((c: CategoryOption): string => c.name).join('/')}`);
+    Logger.info(LOG_TAG, `picked cats=${picked.map((c: CategoryOption): string => c.name).join('/')}`);
 
     // ③④ 分类 → 歌单 → 歌
     const out: FeedRecommendPick[] = [];
@@ -172,7 +172,7 @@ export class FeedRecommendEngine {
         const page = await MusicDataService.playlists(source, undefined, category.id, 1);
         playlistList = page.list;
       } catch (err) {
-        Logger.warn(LOG_TAG, `playlists failed cat=${category.name}: ${(err as Error).message ?? ''}`);
+        Logger.warn(LOG_TAG, `playlists fail cat=${category.name} err=${(err as Error).message ?? ''}`);
         continue;
       }
       if (playlistList.length === 0) {
@@ -185,7 +185,7 @@ export class FeedRecommendEngine {
         try {
           songs = await PlaylistSearchApi.getPlaylistDetail(source, pl.id);
         } catch (err) {
-          Logger.warn(LOG_TAG, `songs failed pl=${pl.id}: ${(err as Error).message ?? ''}`);
+          Logger.warn(LOG_TAG, `songs fail pl=${pl.id} err=${(err as Error).message ?? ''}`);
           continue;
         }
         if (songs.length === 0) {
@@ -202,7 +202,7 @@ export class FeedRecommendEngine {
       }
     }
     const finalList: FeedRecommendPick[] = shuffled(out);
-    Logger.info(LOG_TAG, `built source=${source} mode=${mode} want=${want} got=${finalList.length}`);
+    Logger.info(LOG_TAG, `built src=${source} mode=${mode} want=${want} got=${finalList.length}`);
     return finalList;
   }
 }

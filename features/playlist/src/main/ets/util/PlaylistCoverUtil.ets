@@ -94,7 +94,7 @@ export async function pickPlaylistCover(playlistId: string): Promise<CoverPickRe
   } catch (err) {
     const e: Error = err as Error;
     // 用户取消也会走到这里（不同版本行为不一致），统一按「没选」处理
-    Logger.warn(TAG, `pick cover cancelled or failed: ${e.message ?? ''}`);
+    Logger.warn(TAG, `pick cover cancel err=${e.message ?? ''}`);
     return { ok: false, uri: '', message: '没有选择图片' };
   }
   if (picked.length === 0 || picked[0].length === 0) {
@@ -109,7 +109,7 @@ export async function pickPlaylistCover(playlistId: string): Promise<CoverPickRe
     copyToSandbox(srcUri, destPath);
   } catch (err) {
     const e: Error = err as Error;
-    Logger.error(TAG, `copy cover failed: ${e.message ?? ''}`);
+    Logger.error(TAG, `copy cover fail err=${e.message ?? ''}`);
     return { ok: false, uri: '', message: '保存封面失败' };
   }
   // 复核一遍：写完之后必须真的能读、且非空 —— 否则界面拿到一个读不到的地址，
@@ -122,13 +122,13 @@ export async function pickPlaylistCover(playlistId: string): Promise<CoverPickRe
     if (size <= 0) {
       return { ok: false, uri: '', message: '保存封面失败：图片是空的' };
     }
-    Logger.info(TAG, `cover file ok, ${size} bytes`);
+    Logger.info(TAG, `cover ok ${size} bytes`);
   } catch (err) {
     const e: Error = err as Error;
-    Logger.error(TAG, `verify cover failed: ${e.message ?? ''}`);
+    Logger.error(TAG, `verify cover fail err=${e.message ?? ''}`);
     return { ok: false, uri: '', message: '保存封面失败：文件校验不通过' };
   }
   const uri: string = fileUri.getUriFromPath(destPath);
-  Logger.info(TAG, `playlist cover saved: ${uri}`);
+  Logger.info(TAG, `cover saved ${uri}`);
   return { ok: true, uri: uri, message: '已设置歌单封面' };
 }

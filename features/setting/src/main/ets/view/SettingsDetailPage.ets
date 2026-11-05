@@ -226,7 +226,7 @@ export struct SettingsDetailPage {
     const json: string = JSON.stringify(payload);
     MusicStoreService.getInstance().setTabBarConfig(json);
     AppStorage.setOrCreate('rzd_tab_bar_config', json);
-    appendPlayLog('[RzdTabConfig] 保存 ' + json);
+    appendPlayLog('[RzdTabConfig] save ' + json);
   }
 
   /** 当前底栏顺序预览（首页/我的固定，中间两项按配置）。 */
@@ -414,7 +414,7 @@ export struct SettingsDetailPage {
       //   ⇒ 首次进来就把这份默认全选**写实**，UI 与播放链路从此一致。
       if (ids.length > 0) {
         MusicStoreService.getInstance().setSourceScriptOrder(ids);
-        appendPlayLog('[音源顺序] 首次初始化：全部已导入（' + ids.length + ' 个）已写入配置');
+        appendPlayLog('[音源顺序] init ' + ids.length);
       }
     }
     this.activeSource = AppStorage.get<string>('lxActiveSource') ?? '';
@@ -621,18 +621,17 @@ export struct SettingsDetailPage {
     if (api.id === (AppStorage.get<string>('lxEngineScriptId') ?? '')) {
       const json: string = AppStorage.get<string>('lxEngineSources') ?? '';
       // ★ 2026-10-30：把引擎上报的**原始 key**打出来（判断第 6 个平台到底叫什么）
-      appendPlayLog('[RzdSource] raw=' + json.substring(0, Math.min(json.length, 600)));
       if (json.length > 2) {
         try {
           const live: LXSourcePlatformInfo[] =
             lxDeclaredPlatforms(JSON.parse(json) as Record<string, LXUserApiSourceInfo>);
-          appendPlayLog('[RzdSource] page persisted=' + declared.length + ' engine=' + live.length +
+          appendPlayLog('[RzdSource] persisted=' + declared.length + ' engine=' + live.length +
             ' labels=' + live.map((it: LXSourcePlatformInfo) => it.source).join(','));
           if (live.length > declared.length) {
             return live;
           }
         } catch (err) {
-          appendPlayLog('[RzdSource] page live parse failed');
+          appendPlayLog('[RzdSource] live parse failed');
         }
       }
     }

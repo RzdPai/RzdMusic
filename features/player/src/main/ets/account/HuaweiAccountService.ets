@@ -324,7 +324,7 @@ export class HuaweiAccountService {
       state.loginViaWeb = false;
       state.lastError = '';
       hilog.info(DOMAIN, TAG,
-        'sign-in ok via=system avatar=%{public}d codePresent=%{public}d; drive requires separate authorization',
+        'sign-in ok via=system avatar=%{public}d code=%{public}d',
         profile.avatarUri.length > 0 ? 1 : 0, profile.authorizationCode.length > 0 ? 1 : 0);
       // 头像链接随时会失效：先存到沙箱，界面随后换成 file:// 本地路径
       const local: string = await this.cacheAvatar(profile.avatarUri);

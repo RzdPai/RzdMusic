@@ -250,7 +250,7 @@ export struct RecommendPage {
     //   （切平台 / 从设置页切回）又会把用户**拉回原来那个位置**，看着像"回顶没生效"。
     this.resetHomeScrollRecord();
     this.pageScroller.scrollEdge(Edge.Top);
-    Logger.info('RzdHomeScroll', `scroll top command: record reset to 0 tries=${this.homeScrollRestoreTries}`);
+    Logger.info('RzdHomeScroll', `top cmd reset0 tries=${this.homeScrollRestoreTries}`);
   }
 
   /**
@@ -321,9 +321,9 @@ export struct RecommendPage {
     //   `measured` 与 `target` 相等 ⇒ `initialOffset` 生效了；`measured` 明显小于 `target`
     //   ⇒ 目标被"内容还没长高"的可滚范围夹住了（补位链接下来会逐帧把它顶上去）。
     Logger.info('RzdHomeScroll',
-      `container attach target=${this.homeScrollOffsetVp} measured=${this.readHomeScrollOffset()}`
+      `attach target=${this.homeScrollOffsetVp} measured=${this.readHomeScrollOffset()}`
         + ` homeLoaded=${this.recommendViewModel.homeLoaded}`
-        + ` dailySongsReady=${this.recommendViewModel.dailySongsReady}`);
+        + ` daily=${this.recommendViewModel.dailySongsReady}`);
     this.startHomeScrollRestore('attach');
   }
 
@@ -418,7 +418,7 @@ export struct RecommendPage {
       this.homeScrollRestorePending = false;
       this.homeScrollRestoreTries = 0;
       this.homeScrollRestoreLastMeasuredVp = -1;
-      Logger.info('RzdHomeScroll', `restore cancelled target cleared target=${this.homeScrollOffsetVp}`);
+      Logger.info('RzdHomeScroll', `restore cancel, target=${this.homeScrollOffsetVp}`);
       return;
     }
     const measured: number = this.readHomeScrollOffset();
@@ -440,7 +440,7 @@ export struct RecommendPage {
       this.homeScrollRestorePending = false;
       this.homeScrollRestoreLastMeasuredVp = -1;
       Logger.info('RzdHomeScroll',
-        `restore gave up measured=${measured} target=${target} ticks=${this.homeScrollRestoreTries}`);
+        `restore abort measured=${measured} target=${target} ticks=${this.homeScrollRestoreTries}`);
       return;
     }
     this.homeScrollRestoreTries = this.homeScrollRestoreTries + 1;
@@ -506,7 +506,7 @@ export struct RecommendPage {
         this.homeScrollRestoreTries = 0;
         this.homeScrollRestoreLastMeasuredVp = -1;
         Logger.info('RzdHomeScroll',
-          `restore cancelled by user scroll measured=${offset} target=${this.homeScrollRestoreTargetVp}`);
+          `restore cancel by user measured=${offset} target=${this.homeScrollRestoreTargetVp}`);
       }
     } else if (scrollState === ScrollState.Idle) {
       // ② `Idle` 有两种来源，必须分开（见方法头注释）：
@@ -670,7 +670,7 @@ export struct RecommendPage {
       this.homeScrollRestoreTries = 0;
       this.homeScrollRestoreLastMeasuredVp = -1;
       Logger.info('RzdHomeScroll',
-        `chain dropped cause=home-loaded-false target=${this.homeScrollOffsetVp}`);
+        `chain drop homeLoaded=false target=${this.homeScrollOffsetVp}`);
       return;
     }
     this.startHomeScrollRestore('home-loaded');
@@ -701,11 +701,11 @@ export struct RecommendPage {
       return;
     }
     this.loadedHomeSource = source;
-    Logger.info('RzdHomeSource', `page reload source=${source}`);
+    Logger.info('RzdHomeSource', `page reload src=${source}`);
     // ★ 换平台 = 首页内容**整体换掉**：这时"停留"没有意义（同一段偏移指向的是另一批数据），
     //   而且旧记录会让 `startHomeScrollRestore` 在新内容上乱拉 ⇒ 记录一并清零并记一行日志。
     this.resetHomeScrollRecord();
-    Logger.info('RzdHomeScroll', `record reset cause=source-change source=${source}`);
+    Logger.info('RzdHomeScroll', `record reset src-change src=${source}`);
     this.recommendViewModel.load();
   }
 
@@ -889,7 +889,7 @@ export struct RecommendPage {
     const source: string = this.homeSourceState.source;
     const supported: boolean = source === 'tx' || source === 'kg' || source === 'wy';
     if (!supported && this.useAccountRecState.enabled) {
-      Logger.info('RzdRecPage', `account-rec off: source=${source} has no provider`);
+      Logger.info('RzdRecPage', `account-rec off src=${source} no provider`);
       this.useAccountRecState.enabled = false;
     }
   }

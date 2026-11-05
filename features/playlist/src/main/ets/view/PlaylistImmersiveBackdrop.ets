@@ -73,7 +73,7 @@ export struct PlaylistImmersiveBackdrop {
     if (this.coveredByTransition()) {
       this.transitionState.cancel('hero-image-failed');
     }
-    hilog.warn(0, 'RzdPlaylistImmersive', 'backdrop photo failed, fallback to color');
+    hilog.warn(0, 'RzdPlaylistImmersive', 'photo fail, use color');
   }
 
   build() {
@@ -112,7 +112,7 @@ export struct PlaylistImmersiveBackdrop {
         .id(this.exposeAnchor ? PLAYLIST_HERO_COVER_ID : 'rzd_playlist_backdrop_silent')
         .onAreaChange((_old: Area, area: Area): void => {
           hilog.info(0, 'RzdPlaylistImmersive',
-            'backdrop anchor top=%{public}s height=%{public}s scrollVp=%{public}f',
+            'anchor top=%{public}s h=%{public}s scrollVp=%{public}f',
             String(area.globalPosition.y), String(area.height), this.scrollVp);
           // 落点可量测后启动封面飞行（未 claim / 封面不匹配时方法内部直接返回）
           this.transitionState.start(this.getUIContext(), this.photo, this.transitionToken);
@@ -137,7 +137,7 @@ export struct PlaylistImmersiveBackdrop {
     .hitTestBehavior(HitTestMode.None)
     .onAreaChange((_old: Area, area: Area): void => {
       hilog.info(0, 'RzdPlaylistImmersive',
-        'backdrop areaTopVp=%{public}s avoidTopVp=%{public}f heroVp=%{public}f heightVp=%{public}s',
+        'top=%{public}s avoid=%{public}f hero=%{public}f h=%{public}s',
         String(area.globalPosition.y), this.topAvoidVp, this.heroHeightVp, String(area.height));
     })
   }

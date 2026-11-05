@@ -146,25 +146,25 @@ export async function saveImageToLocal(url: string, title: string): Promise<Save
     data = await downloadImage(url);
   } catch (err) {
     const e: Error = err as Error;
-    hilog.warn(DOMAIN, COMMENT_TAG, 'download comment image failed: %{public}s', e.message ?? '');
+    hilog.warn(DOMAIN, COMMENT_TAG, 'img download fail %{public}s', e.message ?? '');
     return { ok: false, message: '图片下载失败，检查一下网络' };
   }
   try {
     writeTempFile(tempPath, data);
   } catch (err) {
     const e: Error = err as Error;
-    hilog.warn(DOMAIN, COMMENT_TAG, 'write temp image failed: %{public}s', e.message ?? '');
+    hilog.warn(DOMAIN, COMMENT_TAG, 'img temp write fail %{public}s', e.message ?? '');
     return { ok: false, message: '保存失败：写临时文件出错' };
   }
   try {
     try {
       await saveViaGallery(context, tempPath, ext, title, data);
-      hilog.info(DOMAIN, COMMENT_TAG, 'comment image saved to gallery ext=%{public}s', ext);
+      hilog.info(DOMAIN, COMMENT_TAG, 'img saved ext=%{public}s', ext);
       return { ok: true, message: '已保存到相册' };
     } catch (err) {
       const e: Error = err as Error;
       // 相册那条走不通（常见于模拟器/部分发行版不支持保存对话框）就退回文件选择器
-      hilog.warn(DOMAIN, COMMENT_TAG, 'gallery save failed, fallback to picker: %{public}s', e.message ?? '');
+      hilog.warn(DOMAIN, COMMENT_TAG, 'gallery fail, use picker %{public}s', e.message ?? '');
       const saved: boolean = await saveViaPicker(context, ext, title, data);
       if (saved) {
         return { ok: true, message: '已保存' };
@@ -173,7 +173,7 @@ export async function saveImageToLocal(url: string, title: string): Promise<Save
     }
   } catch (err) {
     const e: Error = err as Error;
-    hilog.warn(DOMAIN, COMMENT_TAG, 'save comment image failed: %{public}s', e.message ?? '');
+    hilog.warn(DOMAIN, COMMENT_TAG, 'img save fail %{public}s', e.message ?? '');
     return { ok: false, message: '保存失败：' + (e.message ?? '未知错误') };
   } finally {
     deleteQuietly(tempPath);

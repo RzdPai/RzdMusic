@@ -213,24 +213,24 @@ export async function collectSourcePayload(): Promise<SourcePayload | null> {
     }
     if (!lxSourceManager.isValidApiId(item.id)) {
       skippedBadId++;
-      Logger.error(TAG, `音源同步 跳过 非法 id=${item.id}`);
+      Logger.error(TAG, `源同步 skip bad-id=${item.id}`);
       continue;
     }
     if (item.script.length === 0) {
       skippedEmpty++;
-      Logger.error(TAG, `音源同步 跳过 脚本读不到 id=${item.id}`);
+      Logger.error(TAG, `源同步 skip no-script id=${item.id}`);
       continue;
     }
     if (item.script.length > MAX_SCRIPT_CHARS) {
       skippedTooLong++;
       Logger.error(TAG,
-        `音源同步 跳过 脚本超限 id=${item.id} chars=${item.script.length} limit=${MAX_SCRIPT_CHARS}`);
+        `源同步 skip script-too-long id=${item.id} chars=${item.script.length} limit=${MAX_SCRIPT_CHARS}`);
       continue;
     }
     if (chars + item.script.length > MAX_TOTAL_CHARS) {
       skippedOverTotal++;
       Logger.error(TAG,
-        `音源同步 跳过 总量超限 id=${item.id} chars=${chars} + ${item.script.length} > ${MAX_TOTAL_CHARS}`);
+        `源同步 skip total-too-long id=${item.id} chars=${chars}+${item.script.length}>${MAX_TOTAL_CHARS}`);
       continue;
     }
     chars += item.script.length;
@@ -248,7 +248,7 @@ export async function collectSourcePayload(): Promise<SourcePayload | null> {
   }
   const skipped: number = skippedOverCount + skippedBadId + skippedEmpty + skippedTooLong + skippedOverTotal;
   Logger.info(TAG,
-    `音源同步 打包 ${entries.length} 个 / 跳过 ${skipped} 个（个数超限=${skippedOverCount} id非法=${skippedBadId} 脚本缺失=${skippedEmpty} 单脚本超限=${skippedTooLong} 总量超限=${skippedOverTotal}）chars=${chars}`);
+    `源同步 pack n=${entries.length} skipped=${skipped} overCount=${skippedOverCount} badId=${skippedBadId} empty=${skippedEmpty} tooLong=${skippedTooLong} overTotal=${skippedOverTotal} chars=${chars}`);
   if (entries.length === 0) {
     return null;
   }
@@ -272,15 +272,15 @@ function isSourcePayload(raw: Object | undefined): boolean {
   }
   const payload = raw as SourcePayload;
   if (payload.kind !== PAYLOAD_KIND) {
-    Logger.error(TAG, `音源同步 忽略 载荷 kind=${payload.kind}`);
+    Logger.error(TAG, `源同步 ignore kind=${payload.kind}`);
     return false;
   }
   if (payload.v !== PAYLOAD_VERSION) {
-    Logger.error(TAG, `音源同步 忽略 载荷版本 v=${payload.v}（本机支持 ${PAYLOAD_VERSION}）`);
+    Logger.error(TAG, `源同步 ignore version v=${payload.v} local=${PAYLOAD_VERSION}`);
     return false;
   }
   if (!Array.isArray(payload.sources)) {
-    Logger.error(TAG, '音源同步 忽略 载荷 sources 不是数组');
+    Logger.error(TAG, '源同步 ignore: sources not array');
     return false;
   }
   return true;
@@ -310,7 +310,7 @@ export async function applySourcePayload(raw: Object | undefined): Promise<Sourc
   try {
     local = await lxSourceManager.listFullApis();
   } catch (e) {
-    Logger.error(TAG, `音源同步 合并失败：本机列表读不到 ${(e as Error).message}`);
+    Logger.error(TAG, `源同步 merge fail, list unreadable: ${(e as Error).message}`);
     return report;
   }
   const localScripts: Map<string, string> = new Map<string, string>();
@@ -325,24 +325,24 @@ export async function applySourcePayload(raw: Object | undefined): Promise<Sourc
     const entry: SourcePayloadEntry = remote[i];
     if (entry === null || entry === undefined || !lxSourceManager.isValidApiId(entry.id)) {
       report.invalid++;
-      Logger.error(TAG, '音源同步 跳过 远端条目 id 非法或缺失');
+      Logger.error(TAG, '源同步 skip remote bad-id');
       continue;
     }
     if (seenRemote.has(entry.id)) {
       report.invalid++;
-      Logger.error(TAG, `音源同步 跳过 远端条目重复 id=${entry.id}`);
+      Logger.error(TAG, `源同步 skip remote dup id=${entry.id}`);
       continue;
     }
     seenRemote.add(entry.id);
     if (typeof entry.script !== 'string' || entry.script.length === 0) {
       report.invalid++;
-      Logger.error(TAG, `音源同步 跳过 远端脚本为空 id=${entry.id}`);
+      Logger.error(TAG, `源同步 skip remote empty-script id=${entry.id}`);
       continue;
     }
     if (entry.script.length > MAX_SCRIPT_CHARS) {
       report.invalid++;
       Logger.error(TAG,
-        `音源同步 跳过 远端脚本超限 id=${entry.id} chars=${entry.script.length} limit=${MAX_SCRIPT_CHARS}`);
+        `源同步 skip remote script-too-long id=${entry.id} chars=${entry.script.length} limit=${MAX_SCRIPT_CHARS}`);
       continue;
     }
     const localScript: string | undefined = localScripts.get(entry.id);
@@ -354,7 +354,7 @@ export async function applySourcePayload(raw: Object | undefined): Promise<Sourc
       // 同 id 不同内容：**保守 —— 保留本机那份**（本机那份就是用户眼前正在用的那份）
       report.conflict++;
       Logger.info(TAG,
-        `音源同步 跳过 冲突，保留本机 id=${entry.id} name=${entry.name} 本机version=${localVersions.get(entry.id)} 远端version=${entry.version}`);
+        `源同步 conflict keep-local id=${entry.id} name=${entry.name} local=${localVersions.get(entry.id)} remote=${entry.version}`);
       continue;
     }
     const result = lxSourceManager.importApiWithId({
@@ -369,18 +369,18 @@ export async function applySourcePayload(raw: Object | undefined): Promise<Sourc
     });
     if (result.outcome === 'added') {
       report.added++;
-      Logger.info(TAG, `音源同步 落盘 id=${entry.id} name=${entry.name} version=${entry.version}`);
+      Logger.info(TAG, `源同步 save id=${entry.id} name=${entry.name} version=${entry.version}`);
     } else if (result.outcome === 'exists') {
       // 理论上到不了这里（上面已经按 id 判过），真到了就按"已存在"计数，不当失败
       report.same++;
     } else {
       report.failed++;
-      Logger.error(TAG, `音源同步 落盘失败 id=${entry.id} : ${result.message}`);
+      Logger.error(TAG, `源同步 save fail id=${entry.id} : ${result.message}`);
     }
   }
   report.activeApplied = applyRemoteActive(payload.activeId);
   Logger.info(TAG,
-    `音源同步 合并 新增=${report.added} 相同=${report.same} 冲突保留本机=${report.conflict} 丢弃=${report.invalid} 失败=${report.failed} 远端共=${report.total} 切选中=${report.activeApplied ? 1 : 0}`);
+    `源同步 merge added=${report.added} same=${report.same} conflict=${report.conflict} dropped=${report.invalid} failed=${report.failed} total=${report.total} active=${report.activeApplied ? 1 : 0}`);
   return report;
 }
 
@@ -403,10 +403,10 @@ function applyRemoteActive(remoteActiveId: string): boolean {
   try {
     AppStorage.setOrCreate('lxActiveSource', remoteActiveId);
     MusicStoreService.getInstance().setActiveSource(remoteActiveId);
-    Logger.info(TAG, `音源同步 恢复选中 id=${remoteActiveId}`);
+    Logger.info(TAG, `源同步 restore-active id=${remoteActiveId}`);
     return true;
   } catch (e) {
-    Logger.error(TAG, `音源同步 恢复选中失败 id=${remoteActiveId} : ${(e as Error).message}`);
+    Logger.error(TAG, `源同步 restore-active fail id=${remoteActiveId} : ${(e as Error).message}`);
     return false;
   }
 }
@@ -448,11 +448,11 @@ export async function attachSourcesToSnapshot(snapshotText: string): Promise<str
   try {
     payload = await collectSourcePayload();
   } catch (e) {
-    Logger.error(TAG, `音源同步 打包异常，本次备份不带音源：${(e as Error).message}`);
+    Logger.error(TAG, `源同步 pack error, no sources in backup: ${(e as Error).message}`);
     return snapshotText;
   }
   if (payload === null) {
-    Logger.info(TAG, '音源同步 本机没有可搬运的音源，本次备份不带 customSources 段');
+    Logger.info(TAG, '源同步 no local sources');
     return snapshotText;
   }
   try {
@@ -461,14 +461,14 @@ export async function attachSourcesToSnapshot(snapshotText: string): Promise<str
     const merged: string = JSON.stringify(snapshot);
     if (merged.length > MAX_BACKUP_CHARS) {
       Logger.error(TAG,
-        `音源同步 跳过 并进来会顶破备份体积闸门 merged=${merged.length} limit=${MAX_BACKUP_CHARS}`);
+        `源同步 skip, backup too big merged=${merged.length} limit=${MAX_BACKUP_CHARS}`);
       return snapshotText;
     }
     Logger.info(TAG,
-      `音源同步 上传 ${payload.count} 个（chars=${payload.chars}，备份长度 ${snapshotText.length} -> ${merged.length}）`);
+      `源同步 upload n=${payload.count} chars=${payload.chars} len ${snapshotText.length}->${merged.length}`);
     return merged;
   } catch (e) {
-    Logger.error(TAG, `音源同步 并进备份失败：${(e as Error).message}`);
+    Logger.error(TAG, `源同步 merge-into-backup fail: ${(e as Error).message}`);
     return snapshotText;
   }
 }
@@ -484,11 +484,11 @@ export async function mergeSourcesFromSnapshot(snapshotText: string): Promise<st
     const snapshot: Record<string, Object> = JSON.parse(snapshotText) as Record<string, Object>;
     raw = snapshot[SOURCE_SYNC_KEY];
   } catch (e) {
-    Logger.error(TAG, `音源同步 读备份 JSON 失败：${(e as Error).message}`);
+    Logger.error(TAG, `源同步 read backup json fail: ${(e as Error).message}`);
     return '';
   }
   if (raw === undefined) {
-    Logger.info(TAG, '音源同步 该备份没有 customSources 段（旧版备份，或上传方本机没有音源）');
+    Logger.info(TAG, '源同步 backup has no customSources');
     return '';
   }
   try {
@@ -496,7 +496,7 @@ export async function mergeSourcesFromSnapshot(snapshotText: string): Promise<st
     return describeSourceMerge(report);
   } catch (e) {
     // 音源合并失败**不能**让设置/歌单的恢复结果变成"失败"
-    Logger.error(TAG, `音源合并异常（不影响设置/歌单/备份结论）：${(e as Error).message}`);
+    Logger.error(TAG, `源同步 merge error (others unaffected): ${(e as Error).message}`);
     return '';
   }
 }
@@ -515,7 +515,7 @@ export async function mergeSourcesIntoRestoreResult(snapshotText: string, messag
   try {
     summary = await mergeSourcesFromSnapshot(snapshotText);
   } catch (e) {
-    Logger.error(TAG, `音源合并外壳异常（已忽略，不影响备份恢复结论）：${(e as Error).message}`);
+    Logger.error(TAG, `源同步 merge outer error (ignored): ${(e as Error).message}`);
     summary = '';
   }
   return summary.length > 0 ? `${message}；${summary}` : message;

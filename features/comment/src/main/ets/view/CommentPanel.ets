@@ -147,7 +147,7 @@ export struct CommentPanel {
   /** 换歌了：清空重来（面板被宿主复用、没有重建时靠这里兜住）。 */
   @Monitor('songKey')
   onSongKeyChanged(): void {
-    hilog.info(DOMAIN, COMMENT_TAG, 'song changed -> %{public}s', this.songKey);
+    hilog.info(DOMAIN, COMMENT_TAG, 'song change %{public}s', this.songKey);
     this.reset();
     void this.start();
   }
@@ -245,14 +245,14 @@ export struct CommentPanel {
       } else {
         this.newTotal = result.total;
       }
-      hilog.info(DOMAIN, COMMENT_TAG, '%{public}s page=%{public}d -> %{public}d comments (total %{public}d)',
+      hilog.info(DOMAIN, COMMENT_TAG, '%{public}s page=%{public}d got=%{public}d total=%{public}d',
         this.kind(), page, result.comments.length, result.total);
     } catch (err) {
       if (myToken !== this.token) {
         return;
       }
       const message: string = (err as Error).message;
-      hilog.warn(DOMAIN, COMMENT_TAG, 'load comments failed: %{public}s', message);
+      hilog.warn(DOMAIN, COMMENT_TAG, 'comments fail %{public}s', message);
       this.error = message;
     } finally {
       if (myToken === this.token) {
@@ -305,7 +305,7 @@ export struct CommentPanel {
     // 默认按「整图可见」显示（细长截图一进来就能看全）
     this.viewerZoomTouched = false;
     this.viewerVisible = true;
-    hilog.info(DOMAIN, COMMENT_TAG, 'open image viewer index=%{public}d count=%{public}d',
+    hilog.info(DOMAIN, COMMENT_TAG, 'viewer open idx=%{public}d count=%{public}d',
       this.viewerIndex, this.viewerImages.length);
   }
 
@@ -525,7 +525,7 @@ export struct CommentPanel {
     });
     next.set(url, ratio);
     this.viewerRatios = next;
-    hilog.info(DOMAIN, COMMENT_TAG, 'image ratio=%{public}f url=%{public}s', ratio, url);
+    hilog.info(DOMAIN, COMMENT_TAG, 'img ratio=%{public}f url=%{public}s', ratio, url);
   }
 
   /**
@@ -543,7 +543,7 @@ export struct CommentPanel {
       this.toast(result.message);
     } catch (err) {
       const e: Error = err as Error;
-      hilog.warn(DOMAIN, COMMENT_TAG, 'save image failed: %{public}s', e.message ?? '');
+      hilog.warn(DOMAIN, COMMENT_TAG, 'img save fail %{public}s', e.message ?? '');
       this.toast('保存失败');
     } finally {
       this.saving = false;

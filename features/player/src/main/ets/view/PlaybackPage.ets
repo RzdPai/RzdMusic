@@ -2079,7 +2079,7 @@ export struct PlaybackPage {
       //   闂佺偨鍎查弻锟犲焵?闂佸憡鍨煎▍锝夌嵁閸モ斁鍋?= `isClosing` 闂佸憡銇涢埀顒冨皺缁夎泛霉濠婂啯锛旂紒杈ㄧ懅閹?`closeFullScreenPlayback()` 闂佹眹鍔岀€氼垵妫㈠┑鐘虫礀缁绘垿寮悙鐑樼厒濠电姴绻掔粈鍡涙煥?
       //   **闁诲海鎳撻懟顖炲矗韫囨梻鈻旂€广儱鎳庡В澶愭煟?* = 闂佸綊娼ч鍛箾瀹ュ鍐€閻熸瑥瀚幏杈ㄧ箾鐏炵硶鍋撻崘鑼帓闁哄鏅滈悷杈╂濞嗘挻鐒介柨婵嗘绗戦梺褰掓涧椤戝懏绻涘鍥ㄥ磯妞ゆ牗绮嶉弳鐘绘⒒閸屻倕娅嶆い锝勭矙閺佸秶浠﹂挊澶岊唽闂?`RzdMorph dismiss pan start`闂佹寧绋戦ˇ顓㈠焵?
       Logger.warn(PlayerExpandState.LOG_TAG,
-        `RzdMorph dismiss blocked: isClosing=true offsetY=${offsetY.toFixed(1)} ended=${ended}`);
+        `RzdMorph dismiss blocked offsetY=${offsetY.toFixed(1)} ended=${ended}`);
       return;
     }
     const progress: number = this.dismissProgressFromDrag(offsetY);
@@ -3160,7 +3160,7 @@ export struct PlaybackPage {
       this.lyricChromeProgress = 1;
     });
     Logger.info('RzdLyricChrome',
-      `show 触发源=${src} naturalHeight=${this.lyricChromeHeight}`);
+      `show src=${src} h=${this.lyricChromeHeight}`);
   }
 
   /**
@@ -3454,7 +3454,7 @@ export struct PlaybackPage {
       Logger.info('RzdLyricChrome', `hide auto naturalHeight=${this.lyricChromeHeight}`);
     }, PlaybackPage.CHROME_AUTO_HIDE_MS);
     Logger.info('RzdLyricChrome',
-      `idle arm 触发源=${src} ms=${PlaybackPage.CHROME_AUTO_HIDE_MS} sw=${this.playbackSwiperIndex}`);
+      `idle arm src=${src} ms=${PlaybackPage.CHROME_AUTO_HIDE_MS} sw=${this.playbackSwiperIndex}`);
   }
 
   /**
@@ -3542,7 +3542,7 @@ export struct PlaybackPage {
     // 上游 10 个 sheet flag 在本仓只有两个真面板：更多/音质菜单 与 辅助 sheet。
     if (this.playMenuOpen || this.auxSheetOpen) {
       Logger.info('RzdLyricChrome',
-        `hide skip 触发源=${src} panel(menu=${this.playMenuOpen ? 1 : 0} aux=${this.auxSheetOpen ? 1 : 0})`);
+        `hide skip src=${src} menu=${this.playMenuOpen ? 1 : 0} aux=${this.auxSheetOpen ? 1 : 0}`);
       return;
     }
     this.stopChromeAutoHide();
@@ -3554,7 +3554,7 @@ export struct PlaybackPage {
       this.lyricChromeProgress = 0;
     });
     Logger.info('RzdLyricChrome',
-      `hide 触发源=${src} naturalHeight=${this.lyricChromeHeight}`);
+      `hide src=${src} h=${this.lyricChromeHeight}`);
   }
 
   /**
@@ -3874,7 +3874,7 @@ export struct PlaybackPage {
       }, wait + 32);
     }
     Logger.info(PlaybackPage.logTag,
-      `RzdFlowLight color apply deferred ${wait.toFixed(0)}ms (morph quiet window)`);
+      `RzdFlowLight color deferred ${wait.toFixed(0)}ms`);
     return wait;
   }
 
@@ -4129,7 +4129,6 @@ export struct PlaybackPage {
     //     闁归潧绉崇槐浼存儑閻斿壊鍔€濞戞挸顑呰ぐ鍌炵嵁閼稿灚鏉归悶娑樼焸閸嬪懏绋夐埀顒備沪閸屾ǚ鍋?
     this.appliedTintVersion = this.coverTint.version;
     this.tintReady = false;
-    Logger.info('RzdPlaybackMeshOnly', 'background=mesh fixed=1');
     const song = this.state.getCurrentSongItem();
     this.releaseBackgroundCoverIfPixelMap();
     this.imageLabel = song !== undefined ? song.label : $r('app.media.ic_avatar1');
@@ -4188,7 +4187,7 @@ export struct PlaybackPage {
       this.collapseWatchdogTimer = -1;
       if (this.collapseProgress > 0) {
         Logger.error(PlaybackPage.logTag,
-          `expand watchdog fired progress=${this.collapseProgress}, force full screen`);
+          `expand watchdog fired p=${this.collapseProgress}, force open`);
         this.collapseProgress = 0;
       }
     }, PlaybackPage.COLLAPSE_WATCHDOG_MS);
@@ -4363,7 +4362,7 @@ export struct PlaybackPage {
       this.expandState.morphReset();
     } else {
       Logger.info(PlaybackPage.logTag,
-        'RzdMorphAboutToDisappear keep session (morphSessionOughtToLive: isAlive/showPlay/geom)');
+        'RzdMorphAboutToDisappear keep session');
     }
     ++this.lyricMorphGen;
     this.lyricMorphVisible = false;
@@ -4412,7 +4411,7 @@ export struct PlaybackPage {
     if (this.morphRetryLeft > 0) {
       this.morphRetryLeft--;
       Logger.warn(PlaybackPage.logTag,
-        `expand intro: anchors not ready, retry (left=${this.morphRetryLeft}) ` +
+        `expand intro: anchors not ready, retry left=${this.morphRetryLeft} ` +
         `usable=${this.expandState.morphUsable} bigKnown=${this.expandState.bigCoverAnchored()}`);
       setTimeout((): void => {
         if (this.isAlive && !this.isClosing) {
@@ -4426,7 +4425,7 @@ export struct PlaybackPage {
     //   "闂佽　鍋撻柟顖嗗懐锛為梺鍛婃煟閸斿酣寮ィ鍐ㄎュù锝囧劋缁绢垶鏌熼幁鎺戝姤闁诡垬鍊栭幏?闂侀潧妫楅崐鍧楀焵椤戣棄浜鹃梺鎼炲劤閸嬫盯鐛幘璇茬?闂佸憡锚椤戝棙鏅舵惔銊ョ闁告侗鍙庨崯鍥倶閻愭彃鈧潡鎮甸鑺ュ劅?闂備緡鍙忕徊浠嬨€冨鍫熷殌濞达絿顭堣闂佹眹鍨荤划顖毼?*闂佺懓鐡ㄩ崹鐟扳枔閹达箑鐭楅柟瀵稿仦椤?*闂?
     //   婵炴垶姊婚崰鎰邦敆濠婂牆鍙婃い鏍ㄧ矋閺嗗繘鏌熼弶鎴濇Щ鐎殿喛濮ゅ鍕吋閸涱厼鍞ㄦ俊顐到閻楀繐鈻?闂佺粯鍔楅幊鎾诲吹?闁哄鏅滈弻銊ッ洪弽顓熷仺闁靛ě鍕殸闂佸搫瀚烽崹鍗炍涢锕€绀夐柕濞у嫭姣?闂佹眹鍔岀€氼厼顭囬棃娑掓敠闁规壋鏂侀崑?
     Logger.error(PlaybackPage.logTag,
-      'expand intro: anchors never became ready, landing without animation (setFinalStatus)');
+      'expand intro: anchors never ready, land without anim');
     this.expandState.morphReset();
     this.expandState.morphSettleOpen();
     // 闂佸搫鍟版慨瀛樻叏閳哄懏鍋ㄩ柡鍕箲閸庢澘霉閿濆懐小缂佲€冲暢缁犳盯宕ㄥǎ顑藉亾韫囨搩鍤曢柍褜鍓熷濠氣€﹂幒鏃傤槷闂佸憡鐔粻鎴﹀垂椤栫偛鏋侀柟缁㈠枔閳ь剙顦扮€电厧顫濋銈庝紘闂佺儵鏅滃娆愮閻樿鎹?婵炴垶鎸哥粔鍫曞极?闂佹眹鍔岀€氼喗鎱ㄩ幖浣哥畱濞撴艾锕︾粈鍕煙閸偅灏紒妤€顦锝夊焵椤掑嫬绠绘い鎾跺枑閺夌懓顪冮妶鍥舵殰缂?
@@ -4671,7 +4670,7 @@ export struct PlaybackPage {
     //   （那时 `morphStage === OPEN`，快照拍到的就是完整的展开态，不会闪）。
     if (this.closeAfterOpen) {
       this.closeAfterOpen = false;
-      Logger.info(PlaybackPage.logTag, 'RzdCloseLiveMorph deferred-close now');
+      Logger.info(PlaybackPage.logTag, 'RzdCloseLiveMorph deferred now');
       this.onCollapseRequested();
     }
   }
@@ -5107,7 +5106,7 @@ export struct PlaybackPage {
         //   閻?`shrinkPixmap = undefined` 闂佺偨鍎查弻锟犲焵?闂?**闂婎偄娲ら幊姗€濡磋箛娑樼；?*闂佹寧绋掑畝鎼佸磻閸涙潙鍙婃い鏍ㄧ懅椤忚京鈧?*濠电姴顭槐鏇㈡偘?* PixelMap
         //     闂?080闁?400闁?B 闂?10MB 缂備胶瀚忓鍥╊槴闂佹寧绋戦懟顖炲矗閳╁啰顩叉い鎰╁€曠瑧闂佽鍏涘鎺旂博閹绢喗鍎庨柡澶嬪灩缁屽潡鏌ｉ～顒€濡挎繛鐓庡暟閳ь剛鎳撻崯顐㈩潩閵婏妇鈻旂€广儱瀚粣妤呮偠濮樼厧浜滄繛鍙夌墵瀵劑鐓ù瀣壕?
         //     婵炴垶鎸搁敃锝囩博閹绢喗鍋?*濠电姵娲栫换瀣姳閳╁啯浜ゆ繛鍡楁捣椤忛亶鏌?* 闂?濠殿噯绲界换鎰板矗瑜庣粙澶愬焵椤掆偓閳诲酣鍩勯崘鈺佸晩闂佽　鍋撻柟顖嗗嫮褰滈柣蹇撶箰瀹曨剟藝閸ф鍋╂繛鍡楁捣椤忚京鈧鍠氭刊瀵告濞嗘挻鍎庨柡澶嬪灥閻撳倸鈽夐幘鎰佸剮缂佹梹娼欓埢搴ㄥ灳閸愭彃缍橀梻鍌氬亞閸樿姤鏅堕悩鍨仏妞ゆ劑鍎哄ú顒勬煟閳哄倻澹勭紒杈ㄥ哺婵?
-        Logger.info(PlaybackPage.logTag, 'RzdShrinkOverlay onDone (overlay hidden, pixmap dropped)');
+        Logger.info(PlaybackPage.logTag, 'RzdShrinkOverlay onDone');
         //   闁靛棗鐬奸弫銈囧寲閼姐倗鍩犻弶鈺傛煥濞叉牠宕楅幎鑺ワ紨闁挎稑鑻慨鈺呮偨閼姐倗娉㈤柡澶屽枔濞堟垿寮捄琛″亾濞嗘帒鍓归柡鍜佸灠娴犵娀宕烽妸锔芥嫳闁哄鍎冲▓鎴烇紣濠婂棗顥忛柨娑樼灱閸斞囧触?*缂佹劒鑳堕崝褔宕ｅΟ璇茬亣闁诲繑濯芥竟?*闁靛棗绋勭槐?
         //   闁告鍠庡ú婊堟晬濮濇orphLand()` 闁硅泛锕﹀ù澶嬫媴瀹ュ洨鏋傞柟?`LANDING` 闁?`morphContainerActive()` 濞寸姴绉崇拹鐔兼儑?
         //   闁?鐟滆埇鍨硅ぐ澶屸偓鍦嚀濞呮帞绱掕閻㈣崵鎮?`morphClipHeight()` 閻熶椒鐒﹂崹姘▔閳ь剟寮舵幊閳ь兛姊桵eshCoverBg` 闂侇叏绲肩粩瀵镐沪閸屾繄顎€闁活偀鍋撻悶姘煎亯椤ュ棝骞?闂佹彃绉寸紓?
@@ -5489,7 +5488,7 @@ export struct PlaybackPage {
       //   闂?闁哄鏅滈悷鈺呭闯閻戣姤鍋ㄩ柕濠忕畱閳數鈧鍠掗崑鎾绘煙椤戣法顦﹂柛鎴節瀵灚寰勭仦鍓ф殸缂備焦妫忛崹鎶藉磻閿濆绀勯柣妯夸含缁夊潡鏌涜箛鏃傜煀缂併劍濞婂銊╁箲閹板灚鏂€闂佹寧绋戦悧濠偽涢妶澶嬪仼鐎光偓閳ь剙鈻撻幋锕€缁╅柟顖滃瀹曟娊鏌￠崼顐㈠婵炶偐鏁告禍鎼佸矗濡偐鎲归梻浣瑰絻缁夌敻寮绘繝鍥ㄧ厒闊洦娲滈惌鎺楁煟閹邦喗顏熺紒杈ㄥ哺婵?
       if (!this.expandState.ensureMorphGeomForClose()) {
         Logger.warn(PlaybackPage.logTag,
-          'close: geometry unresolved on both ends 闂?close without morph animation');
+          'close: geometry unresolved both ends, no morph');
       }
       // 闂佸疇妫勯幊澶娢?2026-10-15闂佹寧绋戦悧蹇涘矗鎼淬劌绠规い鎺嶇劍閿熴儵鏌ｉ敐鍛効缂?*闂佺绻戞繛濠偽涢幘顔肩睄闁割偅娲樺В鎰槈閹捐櫕鎹ｇ紒鎲嬬畵瀹?*闂佹寧绋戦ˇ顐﹀焵椤掍焦鐓涢柍?
       //   **闁哄鏅滈悷銈囩博鐎涙ê绶為柛鏇ㄥ亝閻ㄦ垿鏌￠崟闈涚仯闁轰降鍊濋獮瀣暋閹殿喗婢栧┑鐐存綑椤戝啴鍩€椤掆偓閼活垶宕ｈ濮婂顢橀悢绋垮晩闂佽　鍋撻柟顖嗗嫮褰滈梺鍛婂灩婵磭绮婚灏栨煢闁炽儱鍟胯闂佹眹鍨洪惇褰掑焵椤掆偓缁夎泛鈻撻幋锔藉剳闁绘柨鎽滄竟宀勬煕閵壯冃為柍?*
@@ -5600,9 +5599,9 @@ export struct PlaybackPage {
       //        闂佹悶鍎虫慨宕囨嫻閻斿摜鐝堕柛鎰皺濠€鎾煟?`@Monitor` 婵炴垶姊婚崰宥囨閹殿喗瀚柛鎰╁妿閺?闂佺偨鍎查弻锟犲焵?闁荤喐鐟ゅù鍥敋濮樿泛绀勯柤鎭掑劜濞堝爼鏌ｉ妸銉ヮ仾闁轰胶鍋ら弻灞剧箾鎼存挸浜鹃柛宀嬪缁€?
       this.expandState.focusMorphOverlayForPageCollapse(this.getUIContext());
       Logger.info(PlaybackPage.logTag,
-        `RzdMorph close tween from morphT=${closeFromT.toFixed(3)} 闂?${morphCloseMs}ms ` +
-        `(=REVERSE_MS ${PlaybackPage.REVERSE_MS} 闁?max(REVERSE_MIN_RATIO ${PlaybackPage.REVERSE_MIN_RATIO}, morphT)) ` +
-        `easing=REVERSE_EASING(0.85,0,0.5,0.88) overlayP=${this.expandState.morphOverlayProgress().toFixed(3)} ` +
+        `RzdMorph close tween from=${closeFromT.toFixed(3)} ms=${morphCloseMs} ` +
+        `revMs=${PlaybackPage.REVERSE_MS} minRatio=${PlaybackPage.REVERSE_MIN_RATIO} ` +
+        `overlayP=${this.expandState.morphOverlayProgress().toFixed(3)} ` +
         `overlayAnimating=${this.expandState.overlayTweenAnimating()} ` +
         `coverClone=${this.expandState.morphOverlayBridging()} ` +
         `realCover=${this.expandState.realCoverVisible()}`);
@@ -5670,9 +5669,9 @@ export struct PlaybackPage {
           //   闂佸疇娉曟刊瀵哥箔?婵炴垶鎸搁敃顏勵焽?`closeGen !== this.closeGen` 闂備緡鍙忕徊鎯ь焽?*婵炴垶鎸哥粔鐑藉礂?*闁哄鏅滈悷锕傛偋閸楃偑鈧帡宕崘顏嗙崶闂備緡鍙忕徊鎯?闂佸搫鍊块。锔剧博鐎涙ɑ濮滄い鏃傚帶瑜扮娀姊婚崒銈呭箹闁告埊绻濋獮鎺楀Ψ瑜滈崥鈧?闂?
           //      闂佸搫绉村ú銈囨崲閺冨洢浜归柟鐑橆殔娴滄繂鈽夐幘顖氫壕闁哄鍎愰崰姘额敇閹间焦鏅柛顐ｇ箘閺嗗﹪鎮硅濠㈡﹢宕虹仦鐐氦婵炲棙鎸稿▍锟犳煛閸愨晜鏋勭紒鍙樺嵆閹虫盯顢旈崟顓犵暢濠电偞鎸搁幏鎴犳濠靛鐓ｉ柟顖嗗懐顢呴梺鐓庮殠娴滄繈宕滈妶澶嬫櫖濠㈣泛鐗冮崑?
           Logger.warn(PlaybackPage.logTag,
-            `RzdMorph close aborted by new morph session gen=${gen} ` +
+            `RzdMorph close aborted by new session gen=${gen} ` +
             `liveGen=${this.expandState.morphGen} stage=${this.expandState.morphStage} ` +
-            `闂?release isClosing + finish the close`);
+            `-> release isClosing`);
           this.isClosing = false;
           // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-16闂?*"闂佺粯鍔楅幊鎾诲吹椤曗偓瀹曟骞庨懞銉川 / 缂備緡鍨靛畷鐢靛垝閻戞ɑ浜ら柡鍌涘缁€鈧?闁哄鏅滈悷銈囩博閹绢喖绾ч柨娑樺閻ｉ亶鏌￠崼姘壕闂佸憡鑹剧花鑲╃博閹绢喖閿?*闂佹寧绋戦¨鈧紒?
           //   婵炴垶鎸搁敃顏勵焽娴煎瓨鐒介柨婵嗘閽傚鏌￠崘锝嗘珚闁逞屽厴閸?*闂佸憡鐟禍婵嬪棘娴ｅ壊鍤曢柍褜鍓氱粋?`isClosing`闂佹寧绋戦張顒勬儉閸涙潙瀚夊璺侯儏閼靛綊寮?闂佺绻戞繛濠偽?闁哄鏅滈悷銈呪枎閵忥紕顩查悗锝庡亝閹烽亶妫?*
@@ -6868,11 +6867,6 @@ export struct PlaybackPage {
             this.flatCoverBoxWVp = w;
           }
           // ★ 2026-11-01 诊断（grep `[RzdFlatRects]`）：封面盒子/边长/窗口一次打齐
-          appendPlayLog('[RzdFlatRects] cover box=' + w.toFixed(1) + 'x' + h.toFixed(1) +
-            ' edge=' + this.flatCoverEdgeVp().toFixed(1) +
-            ' size=' + this.flatCoverSizeVp().toFixed(1) +
-            ' win=' + this.expandState.windowWidthVp.toFixed(0) + 'x' + this.expandState.windowHeightVp.toFixed(0) +
-            ' swapped=' + (this.flatCtlSwapped ? 1 : 0) + ' flatT=' + this.flatT.toFixed(2));
           if (h > 0 && Math.abs(h - this.flatCoverBoxHVp) > 0.5) {
             this.flatCoverBoxHVp = h;
           }
@@ -7128,7 +7122,6 @@ export struct PlaybackPage {
     // the retained destination underneath and moves its HDS title into the status bar.
     // Keep layout policy owned by EntryAbility; only recolor system chrome.
     wu.applyPlaybackWindowChrome(true, false);
-    Logger.info('RzdPlayerRoute', 'enter overlay: window layout unchanged');
     if (this.isPcFreeWindowDecor()) {
       wu.applyPcPlaybackDecorButtonStyle(true);
     }
@@ -7589,7 +7582,7 @@ export struct PlaybackPage {
         this.releasePixelMapQuiet(pm);
         return;
       }
-      Logger.info(PlaybackPage.logTag, 'RzdBgCache adopt cached mesh (no download needed)');
+      Logger.info(PlaybackPage.logTag, 'RzdBgCache adopt cached mesh');
       this.commitMeshSource(pm, this.meshSrc);
     } catch (err) {
       const e = err as BusinessError;
@@ -8955,7 +8948,7 @@ export struct PlaybackPage {
                 this.diagAppearBranch = 'skipClose';
                 PlaybackPage.ev('AP', `skipClose since=${sinceCloseMs}`);
                 Logger.info(PlaybackPage.logTag,
-                  `RzdMorphOnAppear skip intro: closing. isClosing=${this.isClosing} ` +
+                  `RzdMorphOnAppear skip intro, isClosing=${this.isClosing} ` +
                   `stage=${this.expandState.morphStage} sinceClose=${sinceCloseMs}ms ` +
                   `p=${this.expandState.morphP.toFixed(3)}`);
                 // 闂?闂?婵炴垶鎸哥粔鐢稿箰闁秴绀夐柕濞у嫭姣?婵炴垶鏌ㄩ鍛此囩紒妯讳氦婵☆垵娅ｇ粻鎴濐渻?*闂佺娉涢敃銈夊吹閹寸偞濯撮柡鍥ｅ墲閸庝即鎮?*闂?
@@ -9017,14 +9010,14 @@ export struct PlaybackPage {
                 this.instanceOpenSerial !== PlaybackPage.openSerial ||
                 this.playerRouteStillPushed()) {
                 Logger.info(PlaybackPage.logTag,
-                  'RzdMorphOnDisappear keep isShowPlay (player route still on the stack)');
+                  'RzdMorphOnDisappear keep isShowPlay, route alive');
                 return;
               }
               if (!this.state.isShowPlay) {
                 return;
               }
               Logger.warn(PlaybackPage.logTag,
-                'RzdMorphOnDisappear fallback: player route gone but isShowPlay still true 闂?release it');
+                'RzdMorphOnDisappear fallback: route gone but isShowPlay true -> release');
         this.expandState.requestCollapse();
             }, 0);
             // 婵炴垶鎸搁鍕博閺夋垟鏋庨柍鈺佸暙閳數鈧鍠掗崑鎾绘⒑閹绘帞校闁哄苯锕﹂幐?闂佺绻愰悧鎾诲闯濞差亜绀冪€广儱娲ㄧ槐?闂佹眹鍔岀€氫即濡存惔銏″劅闊洢鍎崇粣妤呮煙鐠虹尨鍔熺紒顕呭灦瀹曟岸宕奸弴鐕傜礉婵炴垶姊婚崰搴ㄥ矗瑜斿畷鍫曟倷閹绘帞顔?
@@ -9075,10 +9068,10 @@ export struct PlaybackPage {
                 (this.closeToken !== 0 && this.closeToken === PlaybackPage.closeOwner) ||
                 this.morphSessionOughtToLive(wasAlive)) {
                 Logger.info(PlaybackPage.logTag,
-                  'RzdMorphOnDisappear keep session (morphSessionOughtToLive)');
+                  'RzdMorphOnDisappear keep session');
                 return;
               }
-              Logger.info(PlaybackPage.logTag, 'RzdMorphOnDisappear reset (session no longer needed)');
+              Logger.info(PlaybackPage.logTag, 'RzdMorphOnDisappear reset');
               this.expandState.morphReset();
             }, 0);
             this.stopChromeAutoHide();
@@ -9099,9 +9092,9 @@ export struct PlaybackPage {
             if (leavingMesh !== undefined && leavingMesh === PlaybackPage.bgCachePm) {
               if (PlaybackPage.bgCacheOwner === this.closeInstance) {
                 PlaybackPage.bgCacheOwner = 0;
-                appendPlayLog('[RzdBgPhase] cache-orphan (page leaving, cache takes release duty)');
+                appendPlayLog('[RzdBgPhase] cache-orphan, page leaving');
               } else {
-                appendPlayLog('[RzdBgPhase] onDisAppear keep shared-mesh (borrowed by newer page)');
+                appendPlayLog('[RzdBgPhase] keep shared-mesh, borrowed');
               }
             } else if (leavingMesh !== undefined) {
               this.releasePixelMapQuiet(leavingMesh);
@@ -9116,7 +9109,6 @@ export struct PlaybackPage {
             // 婵＄偑鍊楅弫璇差焽娴煎瓨鐒婚柍褜鍓熷畷鐑藉传閸曨亞涓嶉梺鐟版惈椤﹀崬顭囬崘顔藉殞闁圭粯甯楅悵銈夋煕閺傝濡块柡渚€绠栭弫宥咁潩椤撶喐顔掗柣蹇曞仜缁绘垹绮婇敃鍌氱濠㈣泛顑嗙瑧闂佸綊鏅查懗鍫曟偨婵犳碍鍎?GPU 閻庢鍠掗崑鎾绘⒑鎼存挸浜鹃梺鎸庣☉閼活垶骞冨Δ鍛煑濡鑳堕悷婵嬫偣閸ャ儱鍔ゆ繛鍛囧洦鍤€婵°倕鍟弳?
             const wu = WindowUtil.getInstance();
             wu.applyPlaybackWindowChrome(false, false);
-            Logger.info('RzdPlayerRoute', 'leave overlay: window layout unchanged');
             wu.applyPcPlaybackDecorButtonStyle(false);
           })
 

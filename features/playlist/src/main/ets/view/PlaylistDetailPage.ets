@@ -214,7 +214,7 @@ export struct PlaylistDetailPage {
     if (band !== this.lastScrollBand) {
       this.lastScrollBand = band;
       hilog.info(0, 'RzdPlaylistImmersive',
-        'scrollVp=%{public}f thresholdVp=264 avoidTopVp=%{public}f inFlow=%{public}d',
+        'scrollVp=%{public}f thrVp=264 avoidTopVp=%{public}f inFlow=%{public}d',
         this.detailScrollVp, this.windowInfo.statusBarTopVp, this.isPcImmersiveBottomBarInFlow() ? 1 : 0);
     }
   }
@@ -259,7 +259,7 @@ export struct PlaylistDetailPage {
 
   aboutToAppear(): void {
     hilog.info(0, 'RzdPlaylistCrashGuard',
-      'page appear-before-build section=%{public}s rows=%{public}d inFlow=%{public}d',
+      'appear section=%{public}s rows=%{public}d inFlow=%{public}d',
       this.sectionType, this.listVm.playlistSongUis.length, this.isPcImmersiveBottomBarInFlow() ? 1 : 0);
   }
 
@@ -275,11 +275,11 @@ export struct PlaylistDetailPage {
       return true;
     }
     if (this.backCommitted) {
-      hilog.info(0, 'RzdPlaylistTransition', 'back coalesced session=%{public}d', this.transitionToken);
+      hilog.info(0, 'RzdPlaylistTransition', 'back coalesce session=%{public}d', this.transitionToken);
       return true;
     }
     this.backCommitted = true;
-    hilog.info(0, 'RzdPlaylistTransition', 'back accepted session=%{public}d framework POP; no queued stack mutation',
+    hilog.info(0, 'RzdPlaylistTransition', 'back accept session=%{public}d framework POP',
       this.transitionToken);
     return false;
   }
@@ -503,7 +503,7 @@ export struct PlaylistDetailPage {
     if (!this.heroBuildLogged) {
       this.heroBuildLogged = true;
       hilog.info(0, 'RzdPlaylistCrashGuard',
-        'parent-hero build-enter section=%{public}s rows=%{public}d binding=arrow-parent',
+        'hero build section=%{public}s rows=%{public}d bind=arrow-parent',
         this.sectionType, this.listVm.playlistSongUis.length);
     }
     return this.coverVersion >= 0 ? this.heroCoverUrl() : '';
@@ -529,7 +529,7 @@ export struct PlaylistDetailPage {
     // 显式重建：大图这一帧就换成新封面
     this.coverVersion++;
     this.toast(result.message);
-    hilog.info(PLAYLIST_LOG_DOMAIN, PLAYLIST_LOG_TAG, 'playlist cover updated id=%{public}s',
+    hilog.info(PLAYLIST_LOG_DOMAIN, PLAYLIST_LOG_TAG, 'cover updated id=%{public}s',
       this.playlistId);
   }
 
@@ -642,7 +642,7 @@ export struct PlaylistDetailPage {
                     //   会被判成深底 ⇒ 正文恒白 ⇒ 看不清。阈值降到 0.42（仍保留足够暗的分界）。
                     this.lightBackdrop = lum > 0.42;
                     hilog.info(PLAYLIST_LOG_DOMAIN, PLAYLIST_LOG_TAG,
-                      'hero backdrop color %{public}s light=%{public}d', this.avgColor, this.lightBackdrop);
+                      'hero color %{public}s light=%{public}d', this.avgColor, this.lightBackdrop);
                   }
                 } finally {
                   resolve();
@@ -661,7 +661,7 @@ export struct PlaylistDetailPage {
       }
     } catch (err) {
       const e: Error = err as Error;
-      hilog.warn(PLAYLIST_LOG_DOMAIN, PLAYLIST_LOG_TAG, 'hero color pick failed: %{public}s', e.message ?? '');
+      hilog.warn(PLAYLIST_LOG_DOMAIN, PLAYLIST_LOG_TAG, 'hero color fail %{public}s', e.message ?? '');
     } finally {
       req.destroy();
     }
@@ -1059,7 +1059,7 @@ export struct PlaylistDetailPage {
       backgroundBlurStyle: appBarBlurStyle()
     })
       .catch((err: BusinessError): void => {
-        hilog.error(PLAYLIST_LOG_DOMAIN, PLAYLIST_LOG_TAG, 'openMenu more failed: %{public}d %{public}s',
+        hilog.error(PLAYLIST_LOG_DOMAIN, PLAYLIST_LOG_TAG, 'openMenu fail %{public}d %{public}s',
           err.code, err.message);
       });
   }
@@ -1330,7 +1330,7 @@ export struct PlaylistDetailPage {
       //   这里打的是 `fetchBoardSongs` 内部真正交给 `lxLeaderboard` 的**完整 id**
       //   （它自己拼 `source + '_' + boardId`），所以它是"同一个 id"最硬的证据。
       hilog.info(PLAYLIST_LOG_DOMAIN, 'RzdHomeBoard',
-        'board songs loaded board=%{public}s count=%{public}d', this.boardSource + '_' + this.boardId,
+        'board songs ok board=%{public}s count=%{public}d', this.boardSource + '_' + this.boardId,
         entries.length);
       songs = entries.map((e: BoardSongEntry): BoardSongParam => {
         return {
@@ -1339,12 +1339,12 @@ export struct PlaylistDetailPage {
       });
       if (songs.length === 0) {
         hilog.warn(PLAYLIST_LOG_DOMAIN, PLAYLIST_LOG_TAG,
-          'board songs empty source=%{public}s id=%{public}s', this.boardSource, this.boardId);
+          'board songs empty src=%{public}s id=%{public}s', this.boardSource, this.boardId);
       }
     } catch (err) {
       const e: Error = err as Error;
       hilog.warn(PLAYLIST_LOG_DOMAIN, PLAYLIST_LOG_TAG,
-        'board songs failed: %{public}s', e.message ?? '');
+        'board songs fail %{public}s', e.message ?? '');
       songs = [];
     } finally {
       this.listVm.finishBoardLoading(songs);
@@ -1364,7 +1364,7 @@ export struct PlaylistDetailPage {
       this.transitionState.start(this.getUIContext(), this.heroCoverUrl(), this.transitionToken);
     }, 0);
     hilog.info(PLAYLIST_LOG_DOMAIN, PLAYLIST_LOG_TAG,
-      'page appear sectionType=%{public}s playlistId=%{public}s title=%{public}s',
+      'appear type=%{public}s id=%{public}s title=%{public}s',
       this.sectionType, this.playlistId, this.listTitle);
     if (this.boardSource.length > 0 && this.boardId.length > 0) {
       // 打开榜单：先把预取到的（可能为空）铺上，再异步拉真正的歌曲。
@@ -1438,7 +1438,7 @@ export struct PlaylistDetailPage {
    * @param mode 0 默认 / 1 按歌名 / 2 按歌手。
    */
   private applySortMode(mode: number): void {
-    hilog.info(PLAYLIST_LOG_DOMAIN, PLAYLIST_LOG_TAG, 'sort mode -> %{public}d', mode);
+    hilog.info(PLAYLIST_LOG_DOMAIN, PLAYLIST_LOG_TAG, 'sort mode=%{public}d', mode);
     this.batchExitCommand++;
     if (this.externalSortMode === mode) {
       this.externalSortMode = -1;

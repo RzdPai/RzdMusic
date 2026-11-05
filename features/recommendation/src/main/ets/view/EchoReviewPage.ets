@@ -301,7 +301,7 @@ export struct EchoReviewPage {
   /** 历史变化（播放器、歌曲菜单…都会 +1 `historyVersion`）后重算。 */
   @Monitor('store.historyVersion')
   onHistoryChanged(): void {
-    hilog.info(ECHO_DOMAIN, ECHO_TAG, 'history changed (v=%{public}d) -> reload', this.store.historyVersion);
+    hilog.info(ECHO_DOMAIN, ECHO_TAG, 'history change v=%{public}d reload', this.store.historyVersion);
     this.reload();
   }
 
@@ -807,7 +807,7 @@ export struct EchoReviewPage {
       items.push({ value: this.monthLabel, action: (): void => { /* 只有当前月时点它没意义 */ } });
     }
     hilog.info(ECHO_DOMAIN, ECHO_TAG,
-      'month menu built year=%{public}d items=%{public}d (fallbackYear=%{public}d selMonth=%{public}d)',
+      'month menu year=%{public}d items=%{public}d fbYear=%{public}d sel=%{public}d',
       this.viewYear(), items.length, year, selMonth);
     return items;
   }
@@ -853,11 +853,11 @@ export struct EchoReviewPage {
    */
   private openSong(item: EchoTopSong): void {
     if (item.record.songId.length === 0) {
-      hilog.warn(ECHO_DOMAIN, ECHO_TAG, 'song record incomplete, skip (no search fallback) name=%{public}s',
+      hilog.warn(ECHO_DOMAIN, ECHO_TAG, 'record incomplete skip name=%{public}s',
         item.name);
       return;
     }
-    hilog.info(ECHO_DOMAIN, ECHO_TAG, 'play song name=%{public}s source=%{public}s id=%{public}s',
+    hilog.info(ECHO_DOMAIN, ECHO_TAG, 'play name=%{public}s src=%{public}s id=%{public}s',
       item.name, item.record.source, item.record.songId);
     void OnlinePlayUtil.playRecord(this.appState, item.record, this.getUIContext());
   }
@@ -871,7 +871,7 @@ export struct EchoReviewPage {
     param.source = EchoReviewPage.sourceCode(item.source);
     param.name = item.name;
     param.picUrl = item.img;
-    hilog.info(ECHO_DOMAIN, ECHO_TAG, 'open artist name=%{public}s source=%{public}d', item.name, param.source);
+    hilog.info(ECHO_DOMAIN, ECHO_TAG, 'open artist name=%{public}s src=%{public}d', item.name, param.source);
     this.pageIndexInfos.pushPathByName(RouterUrlConstants.ARTIST_DETAIL, param);
   }
 
@@ -881,7 +881,7 @@ export struct EchoReviewPage {
       return;
     }
     if (item.albumId.length === 0) {
-      hilog.info(ECHO_DOMAIN, ECHO_TAG, 'album id missing, fallback to search name=%{public}s', item.name);
+      hilog.info(ECHO_DOMAIN, ECHO_TAG, 'album id miss, search name=%{public}s', item.name);
       this.pageIndexInfos.pushPathByName(RouterUrlConstants.ONLINE_SEARCH, item.name);
       return;
     }
@@ -942,7 +942,7 @@ export struct EchoReviewPage {
     }
     this.sectionTitle = name;
     hilog.info(ECHO_DOMAIN, ECHO_TAG,
-      'title section -> %{public}s [%{public}s %{public}f]', name, why, value);
+      'title %{public}s %{public}s %{public}f', name, why, value);
   }
 
 
@@ -1400,7 +1400,7 @@ export struct EchoReviewPage {
     const topDrop: number = innerX * SIDE_TOP_SLOPE;
     const bottomRise: number = innerX * SIDE_BOTTOM_SLOPE;
     hilog.info(ECHO_DOMAIN, ECHO_TAG,
-      'sideQuad rank=%{public}s side=%{public}f innerX=%{public}f topDrop=%{public}f bottomRise=%{public}f',
+      'side rank=%{public}s side=%{public}f innerX=%{public}f top=%{public}f bottom=%{public}f',
       rank, side, innerX, topDrop, bottomRise);
     // ★★★ 2026-10-14 第七轮：**两张侧卡共用这一个"左边"矩阵**（真机上左边那张是唯一被量证正确的）。
     //   右边那张不再走分支，而是由外层 `.scale({ x: -1, y: 1 })` **整层镜像**得到（见 `SongCover()`）——
@@ -1420,7 +1420,7 @@ export struct EchoReviewPage {
     for (let i: number = 0; i < probe.length; i++) {
       const q: number[] = m.transformPoint([probe[i][0], probe[i][1]]);
       hilog.info(ECHO_DOMAIN, ECHO_TAG,
-        'TrapFix %{public}s src(%{public}f,%{public}f)->(%{public}f,%{public}f)',
+        'trapfix %{public}s src %{public}f,%{public}f to %{public}f,%{public}f',
         rank, probe[i][0], probe[i][1], q[0], q[1]);
     }
     return m;

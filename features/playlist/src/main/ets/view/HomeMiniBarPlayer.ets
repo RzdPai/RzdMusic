@@ -494,9 +494,9 @@ export struct HomeMiniBarPlayer {
           `w=${areaLengthToVp(area.width)} pinned=${this.contentHeightVp} ` +
           `cap=${this.contentMaxHeightVp()} lowProfile=${this.isLowProfileBar()} pad=${this.rowPadVp()} ` +
           `padL=${this.sidePadVp()} padR=${this.actionsTrailVp()} ` +
-          `coverVisual=${this.coverVisualEdgeVp()} ` +
+          `coverVis=${this.coverVisualEdgeVp()} ` +
           `coverScale=${this.coverVisualEdgeVp() / HomeMiniBarPlayer.COVER_EDGE_DESIGN_VP} ` +
-          `opticalGap=${opticalGap} ` +
+          `optGap=${opticalGap} ` +
           `space=${HomeMiniBarPlayer.CAPSULE_SPACE_VP} ` +
           `hosting=${this.followAppMiniBarExpanded ? 'home' : 'floating'} ` +
           `selfPlate=${this.showSelfDrawnBackplate} ownSquash=${this.contentOwnsSquash} ` +

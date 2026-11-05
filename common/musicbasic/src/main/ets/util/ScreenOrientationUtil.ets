@@ -57,11 +57,11 @@ export async function applyScreenOrientation(context: common.UIAbilityContext): 
     const win: window.Window = await window.getLastWindow(context);
     const target: window.Orientation = toWindowOrientation(mode);
     await win.setPreferredOrientation(target);
-    appendPlayLog('[RzdOrientation] 已应用 ' + mode + ' → ' + target);
+    appendPlayLog('[RzdOrientation] applied ' + mode + ' -> ' + target);
     return true;
   } catch (err) {
     const e: BusinessError = err as BusinessError;
-    appendPlayLog('[RzdOrientation] 应用失败 code=' + e.code + ' mode=' + mode);
+    appendPlayLog('[RzdOrientation] apply failed code=' + e.code + ' mode=' + mode);
     return false;
   }
 }
@@ -73,6 +73,6 @@ export async function applyScreenOrientation(context: common.UIAbilityContext): 
  */
 export async function setScreenOrientation(context: common.UIAbilityContext, mode: string): Promise<void> {
   MusicStoreService.getInstance().setScreenOrientation(mode);
-  appendPlayLog('[RzdOrientation] 切换为 ' + mode);
+  appendPlayLog('[RzdOrientation] switch ' + mode);
   await applyScreenOrientation(context);
 }

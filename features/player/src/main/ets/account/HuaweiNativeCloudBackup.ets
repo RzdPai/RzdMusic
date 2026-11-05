@@ -102,11 +102,11 @@ export class HuaweiNativeCloudBackup {
       }
       // partial文件即使同步也不会被恢复发现；rename目标不存在，不删除旧版本。
       fileIo.renameSync(staging, path);
-      hilog.info(0, TAG, 'backup wrote local file bytes=%{public}d; waiting for confirmed upload',
+      hilog.info(0, TAG, 'backup wrote local bytes=%{public}d',
         bytes.length);
       // 只有这里返回（即 getCoreFileSyncState === UPLOAD_SUCCESS）才允许提示「已备份」
       await this.synchronize(fileUri.getUriFromPath(path));
-      hilog.info(0, TAG, 'backup upload confirmed, reporting success to user');
+      hilog.info(0, TAG, 'backup upload confirmed');
       return '备份成功';
     } catch (err) {
       return this.failure('备份', err as BusinessError);
@@ -145,7 +145,7 @@ export class HuaweiNativeCloudBackup {
             location, state ?? -1);
           break;
         }
-        hilog.info(0, TAG, 'restore skip candidate location=%{public}d state=%{public}d (not uploaded)',
+        hilog.info(0, TAG, 'restore skip candidate location=%{public}d state=%{public}d',
           location, state ?? -1);
       }
       if (path.length === 0 && fileIo.accessSync(base)) {

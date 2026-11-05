@@ -93,7 +93,7 @@ export async function resolveSample(source: string): Promise<ProbeSample | undef
     const preset: ProbeSample | undefined = SAMPLES.get(source);
   if (preset !== undefined) {
     resolvedSamples.set(source, preset);
-    appendPlayLog('[RzdQualityProbe] 样曲(预置) ' + source + ' → ' + preset.name + ' (' + preset.interval + ')');
+    appendPlayLog('[RzdQualityProbe] sample(preset) ' + source + ' → ' + preset.name + ' (' + preset.interval + ')');
     return preset;
   }
   // ★ 汽水（qs）没有脚本、也没有预置样曲表：用一次内置搜索惰性解析（进程内缓存）
@@ -108,14 +108,14 @@ export async function resolveSample(source: string): Promise<ProbeSample | undef
         soda.singer = first.singer;
         soda.interval = first.interval;
         resolvedSamples.set(source, soda);
-        appendPlayLog('[RzdQualityProbe] 样曲(汽水搜索) → ' + soda.name);
+        appendPlayLog('[RzdQualityProbe] sample(soda) -> ' + soda.name);
         return soda;
       }
     } catch (err) {
-      appendPlayLog('[RzdQualityProbe] 汽水样曲解析失败');
+      appendPlayLog('[RzdQualityProbe] soda sample resolve fail');
     }
   }
-  appendPlayLog('[RzdQualityProbe] 该平台没有预置样曲 ' + source);
+  appendPlayLog('[RzdQualityProbe] no preset sample ' + source);
   const fallback: ProbeSample | undefined = SAMPLES.get(source);
   if (fallback !== undefined) {
     resolvedSamples.set(source, fallback);
@@ -230,13 +230,13 @@ export async function probeQuality(source: string, songId: string, quality: stri
   } catch (err) {
     result.detail = '取址异常';
     sessionCache.set(key, result);
-    appendPlayLog('[RzdQualityProbe] ' + source + '/' + quality + ' 取址异常');
+    appendPlayLog('[RzdQualityProbe] ' + source + '/' + quality + ' url error');
     return result;
   }
   if (url.length === 0) {
     result.detail = '无地址';
     sessionCache.set(key, result);
-    appendPlayLog('[RzdQualityProbe] ' + source + '/' + quality + ' 无地址');
+    appendPlayLog('[RzdQualityProbe] ' + source + '/' + quality + ' no url');
     return result;
   }
   appendPlayLog('[RzdQualityProbe] start ' + source + '/' + quality + ' url=' + url.substring(0, Math.min(60, url.length)));
@@ -292,7 +292,7 @@ export async function probeQuality(source: string, songId: string, quality: stri
       if (code === 403 || code === 405 || code === 416) {
         result.ok = true;
         result.detail = '取址成功（服务器拒绝探测请求 ' + code + '）';
-        appendPlayLog('[RzdQualityProbe] ' + source + '/' + quality + ' 取址成功（探测被拒 ' + code + '）');
+        appendPlayLog('[RzdQualityProbe] ' + source + '/' + quality + ' url ok (probe rejected ' + code + ')');
         sessionCache.set(key, result);
         return result;
       }
@@ -309,7 +309,7 @@ export async function probeQuality(source: string, songId: string, quality: stri
     const looksAudioUrl: boolean = /\.(mp3|m4a|flac|mgg|mflac|ape|wav|aac|ogg|opus)(\?|$)/i.test(url);
     if (!looksAudioCt && !looksAudioUrl) {
       result.detail = '非音频类型 ' + ct;
-      appendPlayLog('[RzdQualityProbe] ' + source + '/' + quality + ' 失败：' + result.detail);
+      appendPlayLog('[RzdQualityProbe] ' + source + '/' + quality + ' fail: ' + result.detail);
       sessionCache.set(key, result);
       return result;
     }
@@ -318,7 +318,7 @@ export async function probeQuality(source: string, songId: string, quality: stri
     // 只做"体量合理"的软校验：真实音频至少几百 KB；错误提示页通常只有几 KB
     if (!Number.isNaN(bytes) && bytes > 0 && bytes < 32 * 1024) {
       result.detail = '体积过小（' + bytes + 'B，疑似错误提示）';
-      appendPlayLog('[RzdQualityProbe] ' + source + '/' + quality + ' 失败：' + result.detail);
+      appendPlayLog('[RzdQualityProbe] ' + source + '/' + quality + ' fail: ' + result.detail);
       sessionCache.set(key, result);
       return result;
     }
@@ -329,7 +329,7 @@ export async function probeQuality(source: string, songId: string, quality: stri
     return result;
   } catch (err) {
     result.detail = '请求异常';
-    appendPlayLog('[RzdQualityProbe] ' + source + '/' + quality + ' 请求异常');
+    appendPlayLog('[RzdQualityProbe] ' + source + '/' + quality + ' request error');
     sessionCache.set(key, result);
     return result;
   } finally {
@@ -343,7 +343,7 @@ export function markProbeOk(source: string, quality: string, scriptId: string = 
   r.ok = true;
   r.detail = '已验证';
   sessionCache.set(cacheKey(source, quality, scriptId), r);
-  appendPlayLog('[RzdQualityProbe] ' + source + '/' + quality + ' 由播放链路标记为已验证');
+  appendPlayLog('[RzdQualityProbe] ' + source + '/' + quality + ' verified by playback');
 }
 
 /** 播放/下载解析失败后回写"这个音质不可用"。 */

@@ -1165,7 +1165,7 @@ export struct NowPlayingFeedPage {
     AccountService.init(this.abilityContext());
     const accounts: PlatformAccount[] = AccountService.listAccounts();
     const acc: PlatformAccount | undefined = this.pickAccount(accounts, src);
-    Logger.info(RZD_TAG, `load platform=${src} accounts=${accounts.length} matched=${acc !== undefined}`);
+    Logger.info(RZD_TAG, `load src=${src} accounts=${accounts.length} matched=${acc !== undefined}`);
     if (acc === undefined) {
       // 未登录（或该平台没登录）：走**当前平台的榜单**。
       void this.loadChart(src);
@@ -1220,12 +1220,12 @@ export struct NowPlayingFeedPage {
     const recRows: RecommendPrivateSongUi[] =
       await this.loadSelfBuiltRecommend(src, this.feedRecommendWant());
     if (recRows.length > 0) {
-      Logger.info(RZD_TAG, `load self-built rec songs=${recRows.length} mode=${this.feedMode}`);
+      Logger.info(RZD_TAG, `load self rec songs=${recRows.length} mode=${this.feedMode}`);
       await this.applyRows(recRows, FeedOrigin.BOARD);
       return;
     }
     if (boardId.length === 0) {
-      Logger.warn(RZD_TAG, `load no-board platform=${src}`);
+      Logger.warn(RZD_TAG, `load no-board src=${src}`);
       this.applyEmpty(`「${this.sourceLabel()}」暂无可用榜单`);
       return;
     }
@@ -1241,7 +1241,7 @@ export struct NowPlayingFeedPage {
       await this.applyRows(rows, FeedOrigin.BOARD);
     } catch (err) {
       const e = err as BusinessError;
-      Logger.error(RZD_TAG, `load failed board=${boardId} code=${e.code} msg=${e.message}`);
+      Logger.error(RZD_TAG, `load fail board=${boardId} code=${e.code} msg=${e.message}`);
       this.applyEmpty(`「${this.sourceLabel()}」榜单暂时取不到`);
     }
   }
@@ -1267,7 +1267,7 @@ export struct NowPlayingFeedPage {
     try {
       const ids: string[] = await AccountService.getDailyTrackIds(acc.id);
       if (ids.length === 0) {
-        Logger.warn(RZD_TAG, `daily empty platform=${src} account=${acc.id}`);
+        Logger.warn(RZD_TAG, `daily empty src=${src} acc=${acc.id}`);
         this.applyEmpty(`「${this.sourceLabel()}」每日推荐暂时取不到`);
         return;
       }
@@ -1279,11 +1279,11 @@ export struct NowPlayingFeedPage {
       // ★ 记下"这条通道问的是哪个账号" —— {@link fetchChannelRows} 再拉一批时要用同一个 id
       //   （理由见 {@link feedAccountId} 的注释）。
       this.feedAccountId = acc.id;
-      Logger.info(RZD_TAG, `load daily platform=${src} ids=${ids.length} songs=${rows.length}`);
+      Logger.info(RZD_TAG, `load daily src=${src} ids=${ids.length} songs=${rows.length}`);
       await this.applyRows(rows, FeedOrigin.DAILY);
     } catch (err) {
       const e = err as BusinessError;
-      Logger.error(RZD_TAG, `load daily failed platform=${src} code=${e.code} msg=${e.message}`);
+      Logger.error(RZD_TAG, `load daily fail src=${src} code=${e.code} msg=${e.message}`);
       // kw / mg 在本工程**没有 provider 实现**（`features/player/.../account/providers` 只有
       // tx / wy / kg）⇒ 这两个平台的"每日推荐"拿不到是真实现状，如实写清楚。
       this.applyEmpty(`「${this.sourceLabel()}」未接入每日推荐，请切换到 QQ / 网易云 / 酷狗`);
@@ -1318,9 +1318,9 @@ export struct NowPlayingFeedPage {
         this.feedDurations.set(this.songKey(ui), pick.song.interval);
         rows.push(ui);
       }
-      Logger.info(RZD_TAG, `self-built rec picks=${picks.length} rows=${rows.length}`);
+      Logger.info(RZD_TAG, `self rec picks=${picks.length} rows=${rows.length}`);
     } catch (err) {
-      Logger.warn(RZD_TAG, `self-built rec failed: ${(err as Error).message ?? ''}`);
+      Logger.warn(RZD_TAG, `self rec fail err=${(err as Error).message ?? ''}`);
       return [];
     }
     return rows;
@@ -1413,7 +1413,7 @@ export struct NowPlayingFeedPage {
         this.ensureAutoplay();
       } else {
         Logger.info(RZD_TAG,
-          `autoplay deferred (not on screen) tab=${this.tabState.tabIndex} mine=${this.barTabIndex} total=${fresh.length}`);
+          `autoplay defer tab=${this.tabState.tabIndex} mine=${this.barTabIndex} total=${fresh.length}`);
       }
     }
   }
@@ -1567,7 +1567,7 @@ export struct NowPlayingFeedPage {
       const added: RecommendPrivateSongUi[] = rows === undefined ? [] : this.appendRows(rows);
       Logger.info(RZD_TAG,
         `refetch round=${this.feedRefetchRounds} max=${FEED_MAX_REFETCH_ROUNDS} origin=${this.feedOriginName()} ` +
-          `platform=${this.svcSource()} raw=${rows === undefined ? 0 : rows.length} added=${added.length} ` +
+          `src=${this.svcSource()} raw=${rows === undefined ? 0 : rows.length} added=${added.length} ` +
           `total=${this.feedSource.totalCount()} streak=${this.feedEmptyStreak}`);
       // ★★ 队列同步：feed 变长的同时，**全局播放队列也要跟着变长** —— 否则
       //    `MediaService.playNext()` 读到的是旧的队列长度，播完最后一首会 **wrap 回第 0 首**
@@ -1585,7 +1585,7 @@ export struct NowPlayingFeedPage {
       const e = err as BusinessError;
       this.feedEmptyStreak++;
       Logger.error(RZD_TAG,
-        `refetch failed origin=${this.feedOriginName()} platform=${this.svcSource()} page=${this.feedPage} ` +
+        `refetch fail origin=${this.feedOriginName()} src=${this.svcSource()} page=${this.feedPage} ` +
           `round=${this.feedRefetchRounds} streak=${this.feedEmptyStreak} code=${e.code} msg=${e.message}`);
       if (this.feedEmptyStreak >= FEED_EMPTY_STREAK) {
         this.markExhausted('fetch-error');
@@ -1623,12 +1623,12 @@ export struct NowPlayingFeedPage {
     const src: string = this.svcSource();
     const boardId: string = pickFeatureBoardId('newSongs', src);
     if (boardId.length === 0) {
-      Logger.warn(RZD_TAG, `page skipped board-missing platform=${src} page=${page}`);
+      Logger.warn(RZD_TAG, `page skip no-board src=${src} page=${page}`);
       return undefined;
     }
     const limit: number = this.boardFetchLimit(page);
     Logger.info(RZD_TAG,
-      `page request board=${boardId} platform=${src} page=${page} limit=${limit} prev=${this.feedSource.totalCount()}`);
+      `page req board=${boardId} src=${src} page=${page} limit=${limit} prev=${this.feedSource.totalCount()}`);
     const res: LXSearchResult = await lxLeaderboard(boardId, page, limit);
     const rows: RecommendPrivateSongUi[] = [];
     for (let i: number = 0; i < res.list.length; i++) {
@@ -1662,12 +1662,12 @@ export struct NowPlayingFeedPage {
     }
     const accountId: string = this.feedAccountId;
     if (accountId.length === 0) {
-      Logger.warn(RZD_TAG, `refetch daily skipped (no account id) platform=${this.svcSource()}`);
+      Logger.warn(RZD_TAG, `refetch daily skip, no acc src=${this.svcSource()}`);
       return undefined;
     }
     const ids: string[] = await AccountService.getDailyTrackIds(accountId);
     if (ids.length === 0) {
-      Logger.warn(RZD_TAG, `refetch daily empty ids account=${accountId}`);
+      Logger.warn(RZD_TAG, `refetch daily no ids acc=${accountId}`);
       return [];
     }
     const tracks: PlatformTrackInfo[] = await AccountService.getTrackDetails(accountId, ids);
@@ -1686,7 +1686,7 @@ export struct NowPlayingFeedPage {
     // ★ 2026-10-24（甲方：「现在就听左上角那个菜单，不要站位了，做成选择模式」）：
     //   以前这里只打日志 + toast 占位。现在打开「常规 / 熟悉 / 探索」选择菜单，
     //   菜单绑在 `FeedModeMenuAnchor()` 这个 1×1 锚点上（HDS 顶栏图标槽位不能挂 bindMenu）。
-    Logger.info(RZD_TAG, `feed mode menu open current=${this.feedMode}`);
+    Logger.info(RZD_TAG, `feed mode menu cur=${this.feedMode}`);
     this.showFeedModeMenu = !this.showFeedModeMenu;
   }
 
@@ -1698,7 +1698,7 @@ export struct NowPlayingFeedPage {
     }
     this.feedMode = mode;
     this.store.setFeedMode(mode);
-    Logger.info(RZD_TAG, `feed mode changed -> ${mode}`);
+    Logger.info(RZD_TAG, `feed mode -> ${mode}`);
     const label: string = mode === 1 ? '熟悉模式' : (mode === 2 ? '探索模式' : '常规模式');
     this.toast(label);
   }
@@ -1768,7 +1768,7 @@ export struct NowPlayingFeedPage {
   }
   private syncQueueWithNewRows(fresh: RecommendPrivateSongUi[]): void {
     if (!this.queueWasFeed) {
-      Logger.info(RZD_TAG, `refetch queue untouched (queue != feed) new=${fresh.length}`);
+      Logger.info(RZD_TAG, `refetch queue keep new=${fresh.length}`);
       return;
     }
     const songs: LXSearchSong[] = [];
@@ -1776,7 +1776,7 @@ export struct NowPlayingFeedPage {
       songs.push(this.toLxSong(fresh[i]));
     }
     const appended: number = OnlinePlayUtil.appendQueue(this.appState, songs);
-    Logger.info(RZD_TAG, `refetch queue append=${appended} totalQueue=${this.appState.getQueueLength()}`);
+    Logger.info(RZD_TAG, `refetch queue add=${appended} total=${this.appState.getQueueLength()}`);
   }
 
   /**
@@ -1809,7 +1809,7 @@ export struct NowPlayingFeedPage {
     if (!this.feedExhausted) {
       this.feedExhausted = true;
       Logger.info(RZD_TAG,
-        `exhausted reason=${reason} page=${this.feedPage} total=${this.feedSource.totalCount()}`);
+        `exhaust reason=${reason} page=${this.feedPage} total=${this.feedSource.totalCount()}`);
     }
     this.syncLoop();
   }
@@ -1828,7 +1828,7 @@ export struct NowPlayingFeedPage {
     }
     this.feedLoop = enable;
     Logger.info(RZD_TAG,
-      `loop -> ${enable} total=${this.feedSource.totalCount()} exhausted=${this.feedExhausted}`);
+      `loop=${enable} total=${this.feedSource.totalCount()} exhausted=${this.feedExhausted}`);
   }
 
   /**
@@ -1839,7 +1839,7 @@ export struct NowPlayingFeedPage {
    */
   private refreshFeed(): void {
     Logger.info(RZD_TAG,
-      `refresh platform=${this.svcSource()} origin=${this.feedOrigin} total=${this.feedSource.totalCount()}`);
+      `refresh src=${this.svcSource()} origin=${this.feedOrigin} total=${this.feedSource.totalCount()}`);
     this.load();
   }
 
@@ -2069,7 +2069,7 @@ export struct NowPlayingFeedPage {
     const queue: SongItem[] = this.appState.playQueue;
     if (this.isCurrentSong(row)) {
       // 已经在播这一首（含"点封面/点播放键"重复点同一屏）：不动队列、不重置进度
-      Logger.info(RZD_TAG, `play skip (already current) index=${target} ${row.source}_${row.songId}`);
+      Logger.info(RZD_TAG, `play skip cur idx=${target} ${row.source}_${row.songId}`);
       return;
     }
     if (queue.length === songs.length && this.queueMatchesFeed(queue)) {
@@ -2085,17 +2085,16 @@ export struct NowPlayingFeedPage {
       //   ⇒ 点播放条反而打开了普通播放页（和用户报的另一个方向正好相反，同一条判据）。
       this.appState.markFeedQueue();
       Logger.info(RZD_TAG,
-        `play switch index=${target} ${row.source}_${row.songId} (intent v=${intent.requestVersion})`);
+        `play switch idx=${target} ${row.source}_${row.songId} v=${intent.requestVersion}`);
       return;
     }
     // 组队列（官方入口）——整份队列 + 下标；★ 第 5 参 `false` = **不打开播放器**（见 §2）
-    Logger.info(RZD_TAG, `play index=${target} songs=${songs.length} (playList openPlayer=false)`);
     // ★ 2026-10-24（⑧）：这条队列归「现在就听」所有 ⇒ 打上来源标记。
     //   壳层迷你条点击据此分流：`'feed'` 切到本页 Tab，其余照旧打开播放页。
     // ⑥ 权重回写：这一首来自歌单广场的某个分类 ⇒ 该分类 +1（下轮抽样更容易被选中）
     if (row.categoryId.length > 0) {
       this.store.addFeedCategoryPlay(row.categoryId);
-      Logger.info(RZD_TAG, `rec weight +1 category=${row.categoryId}`);
+      Logger.info(RZD_TAG, `rec +1 cat=${row.categoryId}`);
     }
     void OnlinePlayUtil.playList(this.appState, songs, target, this.getUIContext(), false);
     // ★ 2026-11-01：playList 内部会统一置 'playlist'，这里必须在它之后覆盖回 'feed'
@@ -2114,7 +2113,7 @@ export struct NowPlayingFeedPage {
     this.feedPlayback.resetTo(entries, target);
     // ⚠️ 这份 entries 只是"本页认为的队列"；判断"播放器里装的是不是它"仍要拿 `appState.playQueue` 比对
     //   （用户可能在别的页面换过队列 —— 那是**外部事实**，feed 自己的栈不能拿来当真相）。
-    Logger.info(RZD_TAG, `feed stack queue=${entries.length} index=${target} v=${this.feedPlayback.version}`);
+    Logger.info(RZD_TAG, `feed stack queue=${entries.length} idx=${target} v=${this.feedPlayback.version}`);
   }
 
   /**
@@ -2183,7 +2182,7 @@ export struct NowPlayingFeedPage {
   private onPlayButton(row: RecommendPrivateSongUi, index: number): void {
     if (this.isCurrentSong(row)) {
       this.playerViewModel.togglePlayPause();
-      Logger.info(RZD_TAG, `play toggle via PlayerViewModel -> ${this.appState.isPlay}`);
+      Logger.info(RZD_TAG, `play toggle -> ${this.appState.isPlay}`);
       return;
     }
     this.playAt(index);
@@ -2221,7 +2220,7 @@ export struct NowPlayingFeedPage {
     }
     if (this.store.isFavorite(row.source, row.songId)) {
       this.store.removeFavorite(row.source, row.songId);
-      Logger.info(RZD_TAG, `favorite off ${row.source}_${row.songId}`);
+      Logger.info(RZD_TAG, `fav off ${row.source}_${row.songId}`);
       return;
     }
     const record = new PlayedSongRecord();
@@ -2234,7 +2233,7 @@ export struct NowPlayingFeedPage {
     record.lyric = '';
     record.time = Date.now();
     this.store.addFavorite(record);
-    Logger.info(RZD_TAG, `favorite on ${row.source}_${row.songId}`);
+    Logger.info(RZD_TAG, `fav on ${row.source}_${row.songId}`);
   }
 
   private toast(message: string): void {
@@ -2259,7 +2258,7 @@ export struct NowPlayingFeedPage {
     this.currentIndex = index;
     const total: number = this.feedSource.totalCount();
     Logger.info(RZD_TAG,
-      `swiper -> index=${index} total=${total} page=${this.feedPage} exhausted=${this.feedExhausted} loop=${this.feedLoop}`);
+      `swiper idx=${index} total=${total} page=${this.feedPage} exhausted=${this.feedExhausted} loop=${this.feedLoop}`);
     this.requestQualityAround(index);
     if (total - 1 - index <= FEED_PREFETCH_REMAIN) {
       void this.loadMore();
@@ -2299,18 +2298,18 @@ export struct NowPlayingFeedPage {
     //   "已经在播这一首就 skip" 的闸（见 `isCurrentSong`）⇒ 不会重复起播/重播。
     if (index !== this.currentIndex) {
       if (this.feedAlive && this.isOnScreen()) {
-        Logger.info(RZD_TAG, `auto-follow 自动上滑 index=${index} from=${this.currentIndex}`);
+        Logger.info(RZD_TAG, `feed follow idx=${index} from=${this.currentIndex}`);
         this.feedController.changeIndex(index);
       } else {
         this.currentIndex = index;
-        Logger.info(RZD_TAG, `auto-follow 同步下标（不在屏上）index=${index}`);
+        Logger.info(RZD_TAG, `feed follow sync idx=${index}`);
       }
     }
     if (total - 1 - index > FEED_PREFETCH_REMAIN) {
       return;
     }
     Logger.info(RZD_TAG,
-      `tail watch index=${index} total=${total} ${cur.source}_${cur.songId} -> loadMore`);
+      `tail idx=${index} total=${total} ${cur.source}_${cur.songId} loadMore`);
     void this.loadMore();
   }
 
@@ -2379,7 +2378,7 @@ export struct NowPlayingFeedPage {
   onTabSwitched(): void {
     const onScreen: boolean = this.isOnScreen();
     Logger.info(RZD_TAG,
-      `tab -> ${this.tabState.tabIndex} mine=${this.barTabIndex} onScreen=${onScreen}`);
+      `tab=${this.tabState.tabIndex} mine=${this.barTabIndex} onScreen=${onScreen}`);
     if (!onScreen) {
       return;
     }
@@ -2416,18 +2415,18 @@ export struct NowPlayingFeedPage {
         //   本页永远不接管、一直是那一首。判据必须再加一条：**队列得是本页自己的栈**。
         if (this.feedPlayback.active && this.feedPlayback.index === index &&
           this.queueMatchesFeed(this.appState.playQueue)) {
-          Logger.info(RZD_TAG, `activate skip (feed owns this queue) index=${index}`);
+          Logger.info(RZD_TAG, `activate skip, feed owns idx=${index}`);
           return;
         }
         // 队列不是本页的（或下标对不上）⇒ 本页**接管**，并停在正在听的那一首上
-        Logger.info(RZD_TAG, `activate take over index=${index} from other queue`);
+        Logger.info(RZD_TAG, `activate take over idx=${index} other queue`);
         this.currentIndex = index;
         this.playAt(index);
         return;
       }
     }
     Logger.info(RZD_TAG,
-      `activate autoplay index=${this.currentIndex} total=${total} tab=${this.tabState.tabIndex}`);
+      `activate autoplay idx=${this.currentIndex} total=${total} tab=${this.tabState.tabIndex}`);
     this.playAt(this.currentIndex);
   }
 
@@ -2450,7 +2449,7 @@ export struct NowPlayingFeedPage {
     const row: RecommendPrivateSongUi = this.feedSource.getData(index);
     const title: string = typeof row.title === 'string' ? row.title : '';
     const singer: string = typeof row.singer === 'string' ? row.singer : '';
-    Logger.info(RZD_TAG, `share song=${row.source}_${row.songId} title=${title}`);
+    Logger.info(RZD_TAG, `share ${row.source}_${row.songId} title=${title}`);
     showSystemShare(this.getUIContext(), buildSongShareText(title, singer, row.source, row.songId), '歌曲分享');
   }
 
@@ -2502,14 +2501,14 @@ export struct NowPlayingFeedPage {
     if (this.loadedSource === this.homeSourceState.source) {
       return;
     }
-    Logger.info(RZD_TAG, `source changed -> reload ${this.homeSourceState.source}`);
+    Logger.info(RZD_TAG, `src change reload ${this.homeSourceState.source}`);
     this.load();
   }
 
   /** 账号变了（登录/退出）⇒ 两条通道可能要互换，整页重载。 */
   @Monitor('accountChangedState.version')
   onAccountChanged(): void {
-    Logger.info(RZD_TAG, `account changed (v=${this.accountChangedState.version}) -> reload`);
+    Logger.info(RZD_TAG, `acc change v=${this.accountChangedState.version} reload`);
     this.load();
   }
 
@@ -3708,7 +3707,7 @@ export struct NowPlayingFeedPage {
     this.pageTint = cachedTint;
     this.tintReady = true;
     this.pageTintIsLight = cachedLum > FEED_INK_LIGHT_THRESHOLD;
-    Logger.info(RZD_TAG, `tint apply index=${index} tint=${cachedTint}`);
+    Logger.info(RZD_TAG, `tint apply idx=${index} tint=${cachedTint}`);
   }
 
   /**
@@ -3935,7 +3934,7 @@ export struct NowPlayingFeedPage {
     } catch (err) {
       const e = err as BusinessError;
       // 取色失败不影响播放 —— 保留上一个色（或兜底色）
-      Logger.warn(RZD_TAG, `tint failed code=${e.code} msg=${e.message} url=${url}`);
+      Logger.warn(RZD_TAG, `tint fail code=${e.code} msg=${e.message} url=${url}`);
       // 单次失败会让那一屏永远没有自己的颜色（滑几次就露出来）⇒ 失败后重试一次
       if (!this.tintRetried.has(url)) {
         this.tintRetried.add(url);

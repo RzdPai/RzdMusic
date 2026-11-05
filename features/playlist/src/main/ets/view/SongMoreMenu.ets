@@ -127,12 +127,12 @@ export struct SongMoreMenu {
     this.downloadSongSnapshot = song;
     const generation: number = ++this.qualityGeneration;
     if (this.store.getDownloadQualityMode() === 'follow') {
-      console.info('[RzdDownloadQuality] mode=follow direct entry=song-more');
+      console.info('[RzdDownloadQuality] follow direct entry=song-more');
       void DownloadUtil.downloadSong(song.source, song.songId, song.name, song.singer, '',
         this.getUIContext(), song.img, song.albumName);
       return;
     }
-    console.info('[RzdDownloadQuality] mode=manual picker-open entry=song-more');
+    console.info('[RzdDownloadQuality] manual picker entry=song-more');
     this.qualityLoading = true;
     this.qualityOptions = [];
     this.openSheet(1);

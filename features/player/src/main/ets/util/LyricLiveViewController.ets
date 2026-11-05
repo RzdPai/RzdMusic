@@ -140,7 +140,7 @@ export class LyricLiveViewController {
     try {
       if (!await liveViewManager.isLiveViewEnabled()) {
         this.unsupportedReason = '系统实况窗开关未开启';
-        appendPlayLog('[实况窗] 系统实况窗开关未开启，本次会话不再尝试');
+        appendPlayLog('[实况窗] 系统开关未开启, 本会话跳过');
         return;
       }
       const agent: WantAgent | undefined = await this.getWantAgent();
@@ -157,7 +157,7 @@ export class LyricLiveViewController {
     } catch (e) {
       const err: BusinessError = e as BusinessError;
       appendPlayLog('[实况窗] 创建异常 code=' + err.code + ' msg=' + err.message +
-        (this.isEntitlementError(err.code) ? '（实况窗权益未开通，本会话不再尝试）' : ''));
+        (this.isEntitlementError(err.code) ? '（权益未开通）' : ''));
       Logger.warn(TAG, 'startLiveView failed: ' + err.code + ' ' + err.message);
       if (this.isEntitlementError(err.code)) {
         this.unsupportedReason = 'entitlement=' + err.code;
@@ -449,7 +449,7 @@ export class LyricLiveViewController {
       const pixmap: image.PixelMap = src.createPixelMapSync(decodeOptions);
       src.release();
       this.capsuleIcon = pixmap;
-      appendPlayLog('[实况窗] 图标已加载 (rawfile/' + LIVE_VIEW_ICON + ' → ' + LIVE_VIEW_ICON_PX + 'px)');
+      appendPlayLog('[实况窗] icon loaded rawfile/' + LIVE_VIEW_ICON + ' -> ' + LIVE_VIEW_ICON_PX + 'px');
       return pixmap;
     } catch (error) {
       const err: BusinessError = error as BusinessError;

@@ -257,7 +257,7 @@ export class DownloadService {
     }
     this.tasks.push(task);
     this.retryCounts.delete(id);
-    appendPlayLog('[下载] 入队 ' + task.fileName);
+    appendPlayLog('[下载] enqueue ' + task.fileName);
     if (!silent) {
       this.toast(uiContext, '已加入下载队列');
     }
@@ -656,7 +656,7 @@ export class DownloadService {
       task.progress = 100;
       task.message = '已完成';
       task.speed = '';
-      appendPlayLog('[下载] 完成 ' + task.fileName);
+      appendPlayLog('[下载] done ' + task.fileName);
       this.notify(true);
       this.toastLatest('下载完成: ' + task.name);
       this.pump();
@@ -676,7 +676,7 @@ export class DownloadService {
   /** 失败自动重试（间隔 1s，最多 2 次），超限标记失败。 */
   private failTask(task: DownloadTask, reason: string): void {
     this.cleanupTemp(task);
-    appendPlayLog('[下载] 失败(' + reason + ') ' + task.fileName);
+    appendPlayLog('[下载] fail(' + reason + ') ' + task.fileName);
     if (reason.indexOf('Resume') === 0) {
       // 续传校验失败重下不算消耗重试次数（对齐 lx-music）
       this.retryCounts.delete(task.id);
@@ -884,10 +884,10 @@ export class DownloadService {
       }
       try {
         await writeAudioMetadata(filePath, writer);
-        appendPlayLog('[下载] 元信息嵌入完成 封面=' + (pixelMap !== undefined) +
+        appendPlayLog('[下载] meta embedded cover=' + (pixelMap !== undefined) +
           ' 歌词=' + (embedLyric.length > 0));
       } catch (e) {
-        appendPlayLog('[下载] 元信息写入失败: ' + JSON.stringify(e).substring(0, 200));
+        appendPlayLog('[下载] meta write fail: ' + JSON.stringify(e).substring(0, 200));
       } finally {
         if (pixelMap !== undefined) {
           pixelMap.release();
@@ -902,7 +902,7 @@ export class DownloadService {
           // ignore
         }
       }
-      appendPlayLog('[下载] 元信息嵌入异常，使用原始文件');
+      appendPlayLog('[下载] meta error, use original');
     }
   }
 
@@ -988,7 +988,7 @@ export class DownloadService {
     let finalPath: string = '';
     // ── 第 1 步：私有副本（无条件，本地音乐列表靠它）
     const privatePath: string = await this.keepPrivateCopy(task, tmpPath);
-    appendPlayLog('[下载] 私有目录已留档 ' + privatePath);
+    appendPlayLog('[下载] kept private ' + privatePath);
     // ── 第 2 步：按用户设置再导出（可选）
     if (saveMode === 'download') {
       await this.ensureDownloadDir();
@@ -1020,7 +1020,7 @@ export class DownloadService {
       await this.copyTo(tmpPath, uris[0]);
       finalPath = new fileUri.FileUri(uris[0]).path;
     }
-    appendPlayLog('[下载] 已导出 ' + finalPath);
+    appendPlayLog('[下载] exported ' + finalPath);
     const wantLrc: boolean = MusicStoreService.getInstance().getDownloadLrc();
     if (lrcText.length > 0 && wantLrc) {
       try {
@@ -1029,7 +1029,7 @@ export class DownloadService {
           fs.OpenMode.CREATE | fs.OpenMode.READ_WRITE | fs.OpenMode.TRUNC);
         fs.writeSync(lrcFile.fd, lrcText);
         fs.closeSync(lrcFile);
-        appendPlayLog('[下载] 已导出歌词 ' + lrcPath);
+        appendPlayLog('[下载] lyric exported ' + lrcPath);
       } catch (_e) {
         // lrc is optional
       }
@@ -1092,7 +1092,7 @@ export class DownloadService {
     const custom: string = MusicStoreService.getInstance().getDownloadDirUri();
     if (custom.length > 0) {
       this.downloadDirUri = custom;
-      appendPlayLog('[下载] 使用自定义目录 uri=' + this.downloadDirUri);
+      appendPlayLog('[下载] custom dir uri=' + this.downloadDirUri);
       return;
     }
     const context: common.Context | undefined =
@@ -1106,7 +1106,7 @@ export class DownloadService {
     const result: string[] = await documentViewPicker.save(opt);
     if (result.length > 0) {
       this.downloadDirUri = result[0];
-      appendPlayLog('[下载] 目录 uri=' + this.downloadDirUri);
+      appendPlayLog('[下载] dir uri=' + this.downloadDirUri);
     }
   }
 
@@ -1126,16 +1126,16 @@ export class DownloadService {
       const documentViewPicker: picker.DocumentViewPicker = new picker.DocumentViewPicker(context);
       const result: string[] = await documentViewPicker.select(opt);
       if (result.length === 0) {
-        appendPlayLog('[下载] 自定义目录：用户取消');
+        appendPlayLog('[下载] custom dir cancelled');
         return '';
       }
       const uri: string = result[0];
       MusicStoreService.getInstance().setDownloadDirUri(uri);
       this.downloadDirUri = uri;
-      appendPlayLog('[下载] 自定义目录已设置 uri=' + uri);
+      appendPlayLog('[下载] custom dir set uri=' + uri);
       return uri;
     } catch (error) {
-      appendPlayLog('[下载] 选择目录失败: ' + JSON.stringify(error).substring(0, 100));
+      appendPlayLog('[下载] pick dir fail: ' + JSON.stringify(error).substring(0, 100));
       return '';
     }
   }
@@ -1144,7 +1144,7 @@ export class DownloadService {
   public clearCustomDownloadDir(): void {
     MusicStoreService.getInstance().setDownloadDirUri('');
     this.downloadDirUri = '';
-    appendPlayLog('[下载] 已恢复系统下载目录');
+    appendPlayLog('[下载] restore system dir');
   }
 
   /** 下载封面图片并解码为 PixelMap。 */

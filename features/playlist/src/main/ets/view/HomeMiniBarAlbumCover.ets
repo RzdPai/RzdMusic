@@ -307,11 +307,11 @@ export struct HomeMiniBarAlbumCover {
         visual,
         visual / 2);
       Logger.info('RzdMiniCoverLayout',
-        `visual=${visual} y=${areaLengthToVp(newValue.globalPosition.y)} ` +
-          `box=${this.coverBoxEdgeVp()} scale=${this.coverScale()} capsule=${this.capsuleHeightVp} ` +
-          `radius=${visual / 2} offsetX=${this.coverOffsetXVp()} ` +
-          `twoRow=${this.isTwoRowBarLayout()} lockedShort=${this.lockTwoRowCoverSize} ` +
-          `upstreamScale=${this.usesUpstreamCoverScale()}`);
+        `vis=${visual} y=${areaLengthToVp(newValue.globalPosition.y)} ` +
+          `box=${this.coverBoxEdgeVp()} scale=${this.coverScale()} cap=${this.capsuleHeightVp} ` +
+          `r=${visual / 2} ox=${this.coverOffsetXVp()} ` +
+          `twoRow=${this.isTwoRowBarLayout()} lockShort=${this.lockTwoRowCoverSize} ` +
+          `upScale=${this.usesUpstreamCoverScale()}`);
     })
   }
 }

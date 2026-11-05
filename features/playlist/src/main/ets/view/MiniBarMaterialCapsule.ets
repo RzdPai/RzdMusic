@@ -399,9 +399,9 @@ export struct MiniBarMaterialCapsule {
       if (!this.slotRejectLogged) {
         this.slotRejectLogged = true;
         Logger.info(LOG_TAG,
-          `slot-rejected slotW=${this.probeSlotW} slotH=${this.probeSlotH} minTrustW=${minTrustW} ` +
-            `barW=${this.barWidth} fallbackContentW=${this.contentLayerWidthVp()} ` +
-            `fallbackContentX=${this.contentLayerLeftVp()}`);
+          `slot reject slotW=${this.probeSlotW} slotH=${this.probeSlotH} minTrustW=${minTrustW} ` +
+            `barW=${this.barWidth} fbW=${this.contentLayerWidthVp()} ` +
+            `fbX=${this.contentLayerLeftVp()}`);
       }
       return;
     }
@@ -418,11 +418,11 @@ export struct MiniBarMaterialCapsule {
     const capsuleR: number = this.probeBoxX + capsuleLeft + this.barWidth;
     const slotR: number = this.probeSlotX + this.probeSlotW;
     Logger.info(LOG_TAG,
-      `follow-slot slotW=${wantSlotW} slotCenterX=${wantCenterX} ` +
+      `follow slot slotW=${wantSlotW} slotCx=${wantCenterX} ` +
         `contentW=${this.contentLayerWidthVp()} contentX=${this.contentLayerLeftVp()} ` +
-        `capsuleLeft=${capsuleLeft} barW=${this.barWidth} ` +
-        `slotInsetL=${(this.probeSlotX - this.probeBoxX) - capsuleLeft} ` +
-        `slotInsetR=${capsuleR - slotR}`);
+        `capL=${capsuleLeft} barW=${this.barWidth} ` +
+        `insetL=${(this.probeSlotX - this.probeBoxX) - capsuleLeft} ` +
+        `insetR=${capsuleR - slotR}`);
   }
 
   /**
@@ -559,13 +559,13 @@ export struct MiniBarMaterialCapsule {
     const asideR: number = this.measureRightVp(MINI_BAR_ASIDE_ID);
     const asideGap: number = asideR > 0 ? capsuleR - asideR : -1;
     Logger.info(FIT_LOG_TAG,
-      `winW=${winW} side=${side} availableW=${availableW} ` +
+      `winW=${winW} side=${side} availW=${availableW} ` +
         `barW=${this.barWidth} barH=${this.barHeight} ` +
         `boxW=${boxW} boxH=${boxH} boxX=${this.probeBoxX} boxY=${this.probeBoxY} ` +
-        `capsuleX=${capsuleX} capsuleR=${capsuleR} ` +
+        `capX=${capsuleX} capR=${capsuleR} ` +
         `contentX=${this.probeContentX} contentW=${this.probeContentW} contentR=${contentR} ` +
         `contentH=${this.probeContentH} ` +
-        `slotW=${this.probeSlotW} slotX=${this.probeSlotX} contentInCapsule=${contentR <= capsuleR} ` +
+        `slotW=${this.probeSlotW} slotX=${this.probeSlotX} inCap=${contentR <= capsuleR} ` +
         `slackW=${this.slackW} slackH=${this.slackH} m=${this.resolvedBottomMarginVp()} ` +
         `rightGap=${rightGap} expectRightGap=${side} ` +
         `asideR=${asideR} asideGap=${asideGap} ` +

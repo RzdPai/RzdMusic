@@ -703,7 +703,7 @@ export struct AmllLyricView {
     //   但已不再影响绘制。
     if (this.viewportBlurActive) {
       this.viewportBlurActive = false;
-      Logger.info('LyricViewportBlur', 'disabled (per-frame canvas blur removed; frame rate first)');
+      Logger.info('LyricViewportBlur', 'disabled');
     }
     this.ensureRenderer();
     if (this.renderer !== undefined) {
@@ -907,7 +907,7 @@ export struct AmllLyricView {
           if (Math.abs(w - this.viewWidth) > 0.5 || Math.abs(h - this.viewHeight) > 0.5) {
             this.viewWidth = w;
             this.viewHeight = h;
-            Logger.info('LyricViewportBlur', `resize=${w}x${h} layers=1 blend=source-over blurMode=visible-line`);
+            Logger.info('LyricViewportBlur', `resize=${w}x${h} layers=1`);
             this.engine.onResize(w, h);
             if (this.renderer !== undefined) {
               this.renderer.onResize(w, h);

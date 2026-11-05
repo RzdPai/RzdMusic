@@ -111,7 +111,7 @@ class LXSourceManager {
     // （setFilesDir 全仓库只有 LXSourceHost 一处调用，早于它读取的消费者会看到
     // 「暂无导入的音源」并且再也恢复不了）。所以这种情况下不缓存。
     if (this.filesDir.length === 0) {
-      hilog.warn(DOMAIN, TAG, 'filesDir 未初始化，跳过读取且不缓存');
+      hilog.warn(DOMAIN, TAG, 'filesDir not ready, skip read');
       return [];
     }
     this.apiList = this.loadApiListFromFile();
@@ -133,7 +133,7 @@ class LXSourceManager {
     //   （引擎很快就绪、filesDir 稍后才注入的时序）。现在无论如何先更新内存列表，
     //   落盘由 saveApiListToFile() 自己判断 filesDir 是否可用。
     if (this.filesDir.length === 0) {
-      hilog.warn(DOMAIN, TAG, "saveApiSources: filesDir 未就绪，仅更新内存（落盘跳过）");
+      hilog.warn(DOMAIN, TAG, 'saveApiSources: filesDir not ready, memory only');
     }
     const list: LXUserApiInfo[] = this.getApiList();
     for (let i: number = 0; i < list.length; i++) {
@@ -329,7 +329,7 @@ class LXSourceManager {
    */
   importApi(scriptRaw: string): LXApiImportResult {
     if (!this.ready()) {
-      hilog.error(DOMAIN, TAG, 'importApi aborted: filesDir 未初始化（脚本没落盘）');
+      hilog.error(DOMAIN, TAG, 'importApi aborted: filesDir not ready');
       return { ok: false, message: '存储目录未就绪，导入失败', info: null };
     }
     let parsed: ApiScriptInfo;
@@ -389,13 +389,13 @@ class LXSourceManager {
     // 先落脚本再改列表：任何一步失败都不要往列表里塞半成品
     this.saveScript(apiId, scriptRaw);
     if (!fs.accessSync(this.getScriptFilePath(apiId))) {
-      hilog.error(DOMAIN, TAG, 'importApi aborted: 脚本落盘校验失败 id=%{public}s', apiId);
+      hilog.error(DOMAIN, TAG, 'importApi aborted: script save verify failed id=%{public}s', apiId);
       return { ok: false, message: '脚本写入失败，请重试', info: null };
     }
     // 关键：先把已存在的列表读进内存，再 push —— 否则会把老音源整表覆盖掉
     let list: LXUserApiInfo[] = this.getApiList();
     if (this.apiList === null) {
-      hilog.error(DOMAIN, TAG, 'importApi aborted: 列表未加载（拒绝覆盖已有音源）');
+      hilog.error(DOMAIN, TAG, 'importApi aborted: list not loaded');
       return { ok: false, message: '存储目录未就绪，导入失败', info: null };
     }
     list.push(apiInfo);
@@ -580,11 +580,11 @@ class LXSourceManager {
    */
   importApiWithId(seed: LXApiSeed): LXApiUpsertResult {
     if (!this.ready()) {
-      hilog.error(DOMAIN, TAG, 'importApiWithId aborted: filesDir 未初始化');
+      hilog.error(DOMAIN, TAG, 'importApiWithId aborted: filesDir not ready');
       return { outcome: 'failed', message: '存储目录未就绪' };
     }
     if (!this.isValidApiId(seed.id)) {
-      hilog.error(DOMAIN, TAG, 'importApiWithId aborted: 非法 id=%{public}s', seed.id);
+      hilog.error(DOMAIN, TAG, 'importApiWithId aborted: bad id=%{public}s', seed.id);
       return { outcome: 'failed', message: '音源 id 非法' };
     }
     if (seed.script.length === 0) {
@@ -593,7 +593,7 @@ class LXSourceManager {
     // 先读列表（getApiList 顺带把列表读进内存），后面 push 才不会把已有音源整表覆盖掉
     const list: LXUserApiInfo[] = this.getApiList();
     if (this.apiList === null) {
-      hilog.error(DOMAIN, TAG, 'importApiWithId aborted: 列表未加载（拒绝覆盖已有音源）');
+      hilog.error(DOMAIN, TAG, 'importApiWithId aborted: list not loaded');
       return { outcome: 'failed', message: '存储目录未就绪' };
     }
     for (let i: number = 0; i < list.length; i++) {
@@ -603,7 +603,7 @@ class LXSourceManager {
     }
     this.saveScript(seed.id, seed.script);
     if (!fs.accessSync(this.getScriptFilePath(seed.id))) {
-      hilog.error(DOMAIN, TAG, 'importApiWithId aborted: 脚本落盘校验失败 id=%{public}s', seed.id);
+      hilog.error(DOMAIN, TAG, 'importApiWithId aborted: script save verify failed id=%{public}s', seed.id);
       return { outcome: 'failed', message: '脚本写入失败' };
     }
     const info: LXUserApiInfo = {

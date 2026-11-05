@@ -72,17 +72,17 @@ export default class PcAbility extends UIAbility {
       }
       const result: LXApiImportResult = lxSourceManager.importApi(script);
       if (!result.ok) {
-        appendPlayLog('[音源] 导入失败 ' + uri + ' : ' + result.message);
+        appendPlayLog('[音源] import failed ' + uri + ' : ' + result.message);
         AppStorage.setOrCreate(SOURCE_IMPORT_MSG_KEY, '导入失败：' + result.message);
         Logger.error(`PcAbility: source script rejected ${result.message}`);
         this.flushSourceImportToast();
         return;
       }
-      appendPlayLog('[音源] 已导入脚本 ' + result.message + ' <- ' + uri);
+      appendPlayLog('[音源] imported ' + result.message + ' <- ' + uri);
       AppStorage.setOrCreate(SOURCE_IMPORT_MSG_KEY, '音源「' + result.message + '」已导入');
     } catch (err) {
       const e: Error = err as Error;
-      appendPlayLog('[音源] 导入失败 ' + uri + ' : ' + (e.message ?? ''));
+      appendPlayLog('[音源] import failed ' + uri + ' : ' + (e.message ?? ''));
       AppStorage.setOrCreate(SOURCE_IMPORT_MSG_KEY, '导入失败：不是有效的音源脚本');
       Logger.error(`PcAbility: import source script failed ${e.message ?? ''}`);
     }

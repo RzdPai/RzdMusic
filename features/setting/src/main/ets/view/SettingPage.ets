@@ -238,7 +238,7 @@ export struct SettingPage {
       //   首次进来就把这份默认全选写实，UI 与播放链路一致。
       if (ids.length > 0) {
         MusicStoreService.getInstance().setSourceScriptOrder(ids);
-        appendPlayLog('[音源顺序] 首次初始化：全部已导入（' + ids.length + ' 个）已写入配置');
+        appendPlayLog('[音源顺序] init ' + ids.length);
       }
     }
     this.activeSource = AppStorage.get<string>('lxActiveSource') ?? '';

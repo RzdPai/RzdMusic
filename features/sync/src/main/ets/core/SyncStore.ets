@@ -70,7 +70,7 @@ export class SyncStore {
   init(context?: common.Context): void {
     const ctx: common.Context | undefined = context !== undefined ? context : getAppRuntime().context;
     if (ctx === undefined) {
-      appendError(`[${TAG}] init failed: no ability context`);
+      appendError(`[${TAG}] init failed: no context`);
       this.ready = false;
       return;
     }
