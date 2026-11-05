@@ -3243,6 +3243,17 @@ export class MediaService {
    */
   public playNextAuto(isFromControl: boolean) {
     Logger.info(TAG, 'playNextAuto mode:' + this.playMode);
+    // ★★★ 2026-11-05（甲方：「现在就听独立出来就是为了保证播放器设成单曲循环时不受影响，但现在还是受影响」）：
+    //   「现在就听」的队列是它自己的一份（`MusicAppState.isFeedQueue()`），播完**必须**顺下一首；
+    //   而 `playMode` 是**播放器**那一套（单曲循环/随机/顺序）。以前这里只看 playMode，
+    //   于是播放器停在单曲循环时，feed 播完就把同一首重放，用户听到"卡在这首不走"。
+    //   ⇒ feed 队列的自动续播只走顺序下一首，不受全局 playMode 影响。
+    //   （手动点"下一首"仍按原逻辑，不受影响。）
+    if (!isFromControl && this.getAppState().isFeedQueue()) {
+      Logger.info(TAG, 'playNextAuto: feed queue → 顺序下一首（忽略全局播放模式 ' + this.playMode + '）');
+      this.playNext();
+      return;
+    }
     switch (this.playMode) {
       case MusicPlayMode.SINGLE_CYCLE:
         if (isFromControl) {

@@ -2291,6 +2291,21 @@ export struct NowPlayingFeedPage {
       // 在播的不是本页的歌（别处换过队列）⇒ 本页不该插手
       return;
     }
+    // ★★★ 2026-11-05（甲方：「在现在就听里播完会切下一首，但界面还是上一首，没有自动上滑」）：
+    //   声音走了、界面没跟 —— 因为 `currentIndex` 只在**用户手滑**（`Swiper.onChange`）时更新。
+    //   自动续播改变了在播歌曲 ⇒ 这里把竖向 Swiper 跟过去（在屏上才动画，不在屏上只同步下标，
+    //   回到本页时直接显示正在播的那一首）。
+    //   ⚠️ `changeIndex` 会触发 `onChange → onFeedChanged → playAt`，而 `playAt` 自带
+    //   "已经在播这一首就 skip" 的闸（见 `isCurrentSong`）⇒ 不会重复起播/重播。
+    if (index !== this.currentIndex) {
+      if (this.feedAlive && this.isOnScreen()) {
+        Logger.info(RZD_TAG, `auto-follow 自动上滑 index=${index} from=${this.currentIndex}`);
+        this.feedController.changeIndex(index);
+      } else {
+        this.currentIndex = index;
+        Logger.info(RZD_TAG, `auto-follow 同步下标（不在屏上）index=${index}`);
+      }
+    }
     if (total - 1 - index > FEED_PREFETCH_REMAIN) {
       return;
     }
