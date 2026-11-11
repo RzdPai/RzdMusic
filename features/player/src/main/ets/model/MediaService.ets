@@ -24,7 +24,7 @@ import { audio } from '@kit.AudioKit';
 import { smartMobilityCommon } from '@kit.CarKit';
 import { image } from '@kit.ImageKit';
 import { http } from '@kit.NetworkKit';
-import { common, wantAgent } from '@kit.AbilityKit';
+import { common, wantAgent, WantAgent } from '@kit.AbilityKit';
 import { notificationManager } from '@kit.NotificationKit';
 import { avSession } from '@kit.AVSessionKit';
 import { BusinessError } from '@kit.BasicServicesKit';
@@ -2587,7 +2587,7 @@ export class MediaService {
       // 已在前台就复用实例（跟锁屏 wantAgent 同款），别把播放态重启一遍
       actionFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG]
     };
-    wantAgent.getWantAgent(agentInfo).then((agent: wantAgent.WantAgent): void => {
+    wantAgent.getWantAgent(agentInfo).then((agent: WantAgent): void => {
       const request: notificationManager.NotificationRequest = {
         id: MediaService.UNLOCK_LYRIC_NOTIFY_ID,
         notificationSlotType: notificationManager.SlotType.SERVICE_INFORMATION,
