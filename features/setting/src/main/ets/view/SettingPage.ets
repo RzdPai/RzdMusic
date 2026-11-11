@@ -43,6 +43,7 @@ import { DownloadManagerSection } from './DownloadManagerSection';
 import { LxSourceDeclaredBlock } from './LxSourceTags';
 import { SourceManagerList } from './SourceManagerList';
 import { importSourceFiles } from '../util/SourceFileImport';
+import { checkAndApplySourceUpdate, SourceUpdateApplyResult } from '../util/SourceUpdate';
 const LX_ONLINE_IMPORT_MAX_BYTES: number = 9 * 1024 * 1024;
 const LX_ONLINE_IMPORT_TIMEOUT: number = 15000;
 const DEFAULT_SETTING_INDEX: number = 4;
@@ -379,6 +380,26 @@ export struct SettingPage {
     }
   }
 
+  /** 用系统浏览器打开外部链接（更新页/主页这类非脚本链接走这里，避免把网页当脚本导入）。 */
+  private openInBrowser(url: string, label: string): void {
+    if (url.length === 0 || !/^https?:\/\//.test(url)) {
+      this.toast('链接无效');
+      return;
+    }
+    try {
+      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      const want: Want = {
+        action: 'ohos.want.action.viewData',
+        entities: ['entity.system.browsable'],
+        uri: url
+      };
+      ctx.startAbility(want);
+      appendPlayLog('[RzdUpdate] open browser url=' + url.substring(0, 80));
+    } catch (err) {
+      this.toast('无法打开浏览器：' + ((err as Error).message ?? ''));
+    }
+  }
+
   /** Copies the QQ group number to the system clipboard. */
   private copyQqGroup(): void {
     const groupNumber: string = '1050543607';
@@ -421,14 +442,22 @@ export struct SettingPage {
     this.startEnginePolling();
   }
 
-  /** 检查更新：版本比对（远端比对留待后续）。 */
-  private checkSourceUpdate(api: LXUserApiInfo): void {
-    const current: string = api.version.length > 0 ? api.version : '未知';
-    this.getUIContext().getPromptAction().showToast({
-      message: '当前版本 ' + current + '（最新）',
-      duration: 2000
-    });
-    console.info('[RzdSourceUpdate] ' + api.name + ' version=' + current);
+  /** 检查更新：自动下载新版本并原地覆盖（不再只弹 toast / 跳浏览器）。 */
+  private async checkSourceUpdate(api: LXUserApiInfo): Promise<void> {
+    this.toast('检查更新中…');
+    const result: SourceUpdateApplyResult = await checkAndApplySourceUpdate(api);
+    if (result.applied) {
+      this.refresh();
+      this.toast(result.message);
+      return;
+    }
+    if (result.openUrl.length > 0) {
+      this.toast(result.message);
+      this.openInBrowser(result.openUrl, '音源更新');
+      return;
+    }
+    this.toast(result.message);
+    console.info('[RzdSourceUpdate] ' + api.name + ' no update: ' + result.message);
   }
 
   private deleteLXSource(apiId: string): void {
@@ -1455,7 +1484,7 @@ export struct SettingPage {
               this.deleteLXSource(apiId);
             },
             onCheckUpdate: (api: LXUserApiInfo): void => {
-              this.checkSourceUpdate(api);
+              void this.checkSourceUpdate(api);
             },
             onMove: (dragId: string, targetId: string): void => {
               this.moveSourceTo(dragId, targetId);
