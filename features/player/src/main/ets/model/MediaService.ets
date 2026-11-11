@@ -25,6 +25,7 @@ import { smartMobilityCommon } from '@kit.CarKit';
 import { image } from '@kit.ImageKit';
 import { http } from '@kit.NetworkKit';
 import { common, wantAgent } from '@kit.AbilityKit';
+import { notificationManager } from '@kit.NotificationKit';
 import { avSession } from '@kit.AVSessionKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { resourceManager } from '@kit.LocalizationKit';
@@ -102,6 +103,22 @@ export class MediaService {
   private desktopLyricEnabled: boolean = false;
   /** 悬浮窗当前是否可见（去重，避免重复调用系统接口）。 */
   private desktopLyricVisible: boolean = false;
+  /** 悬浮窗当前是否被用户锁定（锁定后窗口固定、不再响应拖动/设置，只能由应用侧解锁）。 */
+  private desktopLyricLocked: boolean = false;
+  /** 本次会话是否已注册 onDesktopLyricStateChanged（防重复注册）。 */
+  private desktopLyricLockWatched: boolean = false;
+  /** 「锁状态变化」回调列表（设置页、播放页顶栏各自注册，离开时摘除）。 */
+  private desktopLyricLockListeners: Array<(locked: boolean) => void> = [];
+  /** 「解锁桌面歌词」通知的固定 id：同 id 重发 = 更新，解锁后 cancel。 */
+  private static readonly UNLOCK_LYRIC_NOTIFY_ID: number = 1018;
+  /**
+   * 解锁通知按钮拉起本应用时携带的参数键（值恒为 true）。
+   * ▼ EntryAbility 认这个键来触发解锁；因为 Want.parameters 是 Record（字面量键），
+   *   这里的常量只做文档用，EntryAbility 那边是同值硬编码。
+   */
+  public static readonly UNLOCK_LYRIC_PARAM_KEY: string = 'rzd_unlock_desktop_lyric';
+  /** 解锁通知当前是否已发布（去重：避免每次锁状态同步都反复 publish/cancel）。 */
+  private unlockNotifyActive: boolean = false;
   /** 当前推给蓝牙设备的歌词句（singleLyricText），变了才重推。 */
   private btLyricText: string = '';
   /** 最近一次推给系统的播放态（判断「停播/出错」要收起悬浮窗用）。 */
@@ -2383,6 +2400,8 @@ export class MediaService {
       }
       await session.enableDesktopLyric(true);
       this.desktopLyricEnabled = true;
+      // 悬浮窗交给系统后就要开始盯「锁定状态」（enable 之后任何时刻用户都可能去锁它）。
+      this.watchDesktopLyricLock(session);
       Logger.info(TAG, 'system lyric enabled');
     } catch (error) {
       // 6600110 / 6600111：没开启或系统不支持，忽略即可
@@ -2454,10 +2473,179 @@ export class MediaService {
     }
     session.enableDesktopLyric(true).then(() => {
       this.desktopLyricEnabled = true;
+      // 补 enable 的路径同样要盯「锁定状态」（异步回调里注册，见 watchDesktopLyricLock 的防重复闸）。
+      this.watchDesktopLyricLock(session);
       this.syncDesktopLyric();
     }).catch((error: BusinessError) => {
       Logger.warn(TAG, `enableDesktopLyric failed: ${error.message}`);
     });
+  }
+
+  /**
+   * 注册桌面歌词悬浮窗「锁定状态」监听并同步一次当前值。
+   *
+   * 用户在系统悬浮窗上点「锁定」后，窗口固定、上面的控件（含解锁按钮）不再响应 ——
+   * 这是系统的设计（锁定 = 不挡桌面操作），解锁只能由应用侧调
+   * `setDesktopLyricState({ isLocked: false })`，所以这里必须把锁状态记下来。
+   */
+  private watchDesktopLyricLock(session: avSession.AVSession): void {
+    if (this.desktopLyricLockWatched) {
+      return;
+    }
+    this.desktopLyricLockWatched = true;
+    try {
+      session.onDesktopLyricStateChanged((state: avSession.DesktopLyricState): void => {
+        this.desktopLyricLocked = state.isLocked;
+        this.notifyDesktopLyricLock(state.isLocked);
+        Logger.info(TAG, `desktop lyric locked -> ${state.isLocked}`);
+      });
+      session.getDesktopLyricState().then((state: avSession.DesktopLyricState): void => {
+        this.desktopLyricLocked = state.isLocked;
+        this.notifyDesktopLyricLock(state.isLocked);
+      }).catch((error: BusinessError): void => {
+        Logger.warn(TAG, `getDesktopLyricState failed: ${error.message}`);
+      });
+    } catch (error) {
+      this.desktopLyricLockWatched = false;
+      Logger.warn(TAG, `onDesktopLyricStateChanged failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /** @returns 桌面歌词悬浮窗当前是否处于锁定态（没启用/没会话时恒为 false）。 */
+  public isDesktopLyricLocked(): boolean {
+    return this.desktopLyricLocked;
+  }
+
+  /**
+   * 注册「桌面歌词锁定状态变化」回调（设置页、播放页顶栏实时刷新用）。
+   * 同一回调重复注册会被忽略；离开时调 {@link removeDesktopLyricLockListener} 摘除。
+   */
+  public addDesktopLyricLockListener(listener: (locked: boolean) => void): void {
+    if (this.desktopLyricLockListeners.indexOf(listener) < 0) {
+      this.desktopLyricLockListeners.push(listener);
+    }
+  }
+
+  /** 摘除 {@link addDesktopLyricLockListener} 注册的回调（传注册时的同一引用）。 */
+  public removeDesktopLyricLockListener(listener: (locked: boolean) => void): void {
+    const index: number = this.desktopLyricLockListeners.indexOf(listener);
+    if (index >= 0) {
+      this.desktopLyricLockListeners.splice(index, 1);
+    }
+  }
+
+  /**
+   * 把最新锁定态广播给所有已注册的回调（on 事件 / get 同步 / 解锁成功三个来源共用）。
+   * ▼ 逐个同步调用即可：回调们都只是给 @Local 赋值，没有重活，不值得引入异步队列。
+   * ▼ 同时联动通知栏：锁定 ⇒ 发「解锁歌词」通知（悬浮窗自身已不响应，通知是系统侧
+   *   唯一能放自定义按钮的地方——播控中心媒体卡片的按钮集合是固定的，加不了自定义项）；
+   *   解锁 ⇒ 撤掉通知。三个来源都会走到这里，所以通知的生灭跟着这一处走就够。
+   */
+  private notifyDesktopLyricLock(locked: boolean): void {
+    for (let i = 0; i < this.desktopLyricLockListeners.length; i++) {
+      this.desktopLyricLockListeners[i](locked);
+    }
+    if (locked) {
+      this.publishUnlockNotification();
+    } else {
+      this.cancelUnlockNotification();
+    }
+  }
+
+  /**
+   * 发布「桌面歌词已锁定」通知（带「解锁歌词」操作按钮）。
+   *
+   * ▼ 为什么走通知：用户锁定悬浮窗后，系统媒体卡片（锁屏 / 下拉通知栏 / 播控中心）
+   *   的按钮集合按会话类型固定（audio = 收藏/上一首/播放暂停/下一首/循环模式），
+   *   应用塞不进自定义按钮；通知是系统侧唯一支持自定义操作按钮（actionButtons）
+   *   的常驻载体，和媒体卡片同在通知栏，离用户的视线最近。
+   * ▼ 按钮的 wantAgent = 拉起本应用 + 参数 `rzd_unlock_desktop_lyric: true`，
+   *   EntryAbility 在 onCreate / onNewWant 里认这个参数并调 {@link unlockDesktopLyric}。
+   * ▼ 未授权通知 / 通知被关闭时 publish 静默失败（打日志），应用内入口不受影响。
+   */
+  private publishUnlockNotification(): void {
+    // 去重：已发布就不重发（同 id 重发本身也无害，省一次系统调用而已）
+    if (this.unlockNotifyActive) {
+      return;
+    }
+    const ctx: common.UIAbilityContext | undefined = this.abilityContext;
+    if (ctx === undefined) {
+      return;
+    }
+    const agentInfo: wantAgent.WantAgentInfo = {
+      wants: [
+        {
+          bundleName: ctx.abilityInfo.bundleName,
+          moduleName: ctx.abilityInfo.moduleName,
+          abilityName: ctx.abilityInfo.name,
+          // 点通知按钮 = 「解锁桌面歌词」：参数键与 EntryAbility 的硬编码同值
+          parameters: { 'rzd_unlock_desktop_lyric': true }
+        }
+      ],
+      actionType: wantAgent.OperationType.START_ABILITY,
+      requestCode: 0,
+      // 已在前台就复用实例（跟锁屏 wantAgent 同款），别把播放态重启一遍
+      actionFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG]
+    };
+    wantAgent.getWantAgent(agentInfo).then((agent: wantAgent.WantAgent): void => {
+      const request: notificationManager.NotificationRequest = {
+        id: MediaService.UNLOCK_LYRIC_NOTIFY_ID,
+        notificationSlotType: notificationManager.SlotType.SERVICE_INFORMATION,
+        content: {
+          notificationContentType: notificationManager.ContentType.NOTIFICATION_CONTENT_BASIC_TEXT,
+          normal: {
+            title: '桌面歌词已锁定',
+            text: '悬浮窗已固定，点「解锁歌词」恢复拖动与设置'
+          }
+        },
+        actionButtons: [
+          {
+            title: '解锁歌词',
+            wantAgent: agent
+          }
+        ]
+      };
+      this.unlockNotifyActive = true;
+      notificationManager.publish(request).catch((error: BusinessError): void => {
+        this.unlockNotifyActive = false;
+        Logger.warn(TAG, `publish unlock notification failed: ${error.message}`);
+      });
+    }).catch((error: BusinessError): void => {
+      Logger.warn(TAG, `getWantAgent for unlock notification failed: ${error.message}`);
+    });
+  }
+
+  /** 撤掉「解锁桌面歌词」通知（任何路径解锁成功都会经 {@link notifyDesktopLyricLock} 走到这里）。 */
+  private cancelUnlockNotification(): void {
+    if (!this.unlockNotifyActive) {
+      return;
+    }
+    this.unlockNotifyActive = false;
+    notificationManager.cancel(MediaService.UNLOCK_LYRIC_NOTIFY_ID).catch((error: BusinessError): void => {
+      Logger.warn(TAG, `cancel unlock notification failed: ${error.message}`);
+    });
+  }
+
+  /**
+   * 解锁桌面歌词悬浮窗（播放页顶栏 / 设置页的「解锁桌面歌词」入口共用）。
+   * @returns true = 解锁成功（无会话或系统调用失败返回 false，调用方保持按钮态不动）
+   */
+  public async unlockDesktopLyric(): Promise<boolean> {
+    const session: avSession.AVSession | undefined = this.session;
+    if (session === undefined) {
+      return false;
+    }
+    try {
+      const unlocked: avSession.DesktopLyricState = { isLocked: false };
+      await session.setDesktopLyricState(unlocked);
+      this.desktopLyricLocked = false;
+      this.notifyDesktopLyricLock(false);
+      Logger.info(TAG, 'desktop lyric unlocked');
+      return true;
+    } catch (error) {
+      Logger.warn(TAG, `setDesktopLyricState failed: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
   }
 
   /**
