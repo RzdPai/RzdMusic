@@ -1444,6 +1444,10 @@ export struct PlaybackPage {
    */
   private static readonly LYRIC_META_TITLE_FP: number = 15;
   private static readonly LYRIC_META_ARTIST_FP: number = 12;
+  /** 歌名上一行「平台 · 音质」常显文案字号：歌词页（随歌名 15fp）。 */
+  private static readonly LYRIC_META_TAG_FP: number = 11;
+  /** 歌名上一行「平台 · 音质」常显文案颜色（金黄色）。 */
+  private static readonly LYRIC_META_TAG_COLOR: string = '#FFD700';
   /**
    * **闁诲繐绻嬬欢姘焽閻楀牄浜滈柣銏㈩焾娴滄繂鈽夐幘顖氫壕缂?*闂佹眹鍔岀€氼參鎮洪弴銏犺Е?濠殿喗绻傞張顒佹櫠濠婂應鍋撳☉娆樻當鐟滄澘娼￠弫宥夊锤閹额亪鏌ㄥ☉姗嗘Т闁逞屽墯閺岋繝鍩€?闁诲簼绲婚～澶愭偉閿濆绫嶉柣妯虹仛濞?`chrome().titleSize` / `chrome().artistSize`闂佹寧绋戝﹢妗縇L 濠碘剝顨愮紞鍥╂濮樿泛违?
    *
@@ -1465,6 +1469,8 @@ export struct PlaybackPage {
    */
   private static readonly META_TITLE_FP_COVER: number = 20;
   private static readonly META_ARTIST_FP_COVER: number = 14;
+  /** 歌名上一行「平台 · 音质」常显文案字号：封面页（随歌名 20fp）。 */
+  private static readonly META_TAG_FP_COVER: number = 14;
 
   /**
    * 閻熸粎澧楅幐鍛婃櫠閻樿櫕浜ゆ繛鍡楁捣椤忛亶鎮介鍡楁噺閻?*濠殿喗绻傞懟顖炲箖閺囩姭鍋撳☉娆樻當鐟?*闂佹寧绋戝姝遍梺鎸庣☉椤︻偊鍩€椤掍焦鐓涢柍?婵炴垶鎸堕崐妤咁敂椤掍胶鈻曢悗锝庡枟閿涚喖鏌?*濠殿喗绻傞惌渚€鎯佸┑鍥ヤ簻濞达絽鍟扮粻濠氬箹?*闂佸湱绮敮鎺楀焵椤掑偆鍎犻柍?
@@ -1485,6 +1491,35 @@ export struct PlaybackPage {
   private metaArtistFp(): number {
     return PlaybackPage.lerpFp(PlaybackPage.META_ARTIST_FP_COVER,
       PlaybackPage.LYRIC_META_ARTIST_FP, this.lyricMorphT);
+  }
+
+  /**
+   * 歌名上一行常显的「平台 · 音质」文案。
+   *
+   * 2026-11-11：原「点歌名弹 `bindPopup`」的方式**保留不变**，这里只是额外在歌名上方
+   * 常显一行同样的信息，省去每次点击。缺平台或缺音质时自动降级，两者都没有返回空串
+   * （UI 侧用 `Visibility.None` 让该行不占位）。
+   */
+  private metaSourceQualityText(): string {
+    const song = this.state.getCurrentSongItem();
+    if (!song) {
+      return '';
+    }
+    const src: string = sourceDisplayName(song.source ?? '');
+    const quality: string = qualityDisplayName(song.quality ?? '');
+    if (src.length === 0) {
+      return quality;
+    }
+    if (quality.length === 0) {
+      return src;
+    }
+    return `${src} · ${quality}`;
+  }
+
+  /** 歌名上一行「平台 · 音质」字号：封面页 14fp → 歌词页 11fp，与歌名同比例缩放。 */
+  private metaTagFp(): number {
+    return PlaybackPage.lerpFp(PlaybackPage.META_TAG_FP_COVER,
+      PlaybackPage.LYRIC_META_TAG_FP, this.lyricMorphT);
   }
 
   /**
@@ -9683,6 +9718,21 @@ export struct PlaybackPage {
           Column() {
             Row() {
           Column() {
+            // ★ 2026-11-11：平台 · 音质 常显在歌名上一行（金黄色）。
+            //   原来的「点歌名/歌手弹 bindPopup」**保留**，这里只是多给一处免点击的常显。
+            //   本行是歌名列 Column 的第 1 个子节点：title/singer 与小歌词（流式兄弟）整体下移，
+            //   `LYRIC_META_ROW_H_VP = 34` 不变——metaRow 是 `VerticalAlign.Center` 定高行，
+            //   内容溢出由居中吸收，`metaOffsetY()` / `metaTopGeomY()` 的几何口径不受影响。
+            Text(this.metaSourceQualityText())
+              .fontSize(this.metaTagFp())
+              .fontWeight(FontWeight.Medium)
+              .fontColor(PlaybackPage.LYRIC_META_TAG_COLOR)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .textAlign(TextAlign.Start)
+              .width(StyleConstants.FULL_WIDTH)
+              .margin({ bottom: 1 })
+              .visibility(this.metaSourceQualityText().length > 0 ? Visibility.Visible : Visibility.None)
             Text(this.state.getCurrentSongItem()?.title ?? '', { controller: this.titleController })
               // 闂?缂備焦妫忛崹鎶藉磻閿濆棛鈻斿┑鐘插暙琚氶梺鎸庣☉閻楀棛鏁?`MusicPlayInfoBlock` 闂佹眹鍔岀€氼垱绂嶇€靛憡瀚婚柨婵嗙箳缁€鍡涙煃閵夛附鐓涢柍?闁?`publishMetaEndpoint`
               .id(PLAYER_META_TITLE_ID)

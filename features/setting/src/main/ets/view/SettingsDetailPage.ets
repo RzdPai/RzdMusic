@@ -44,7 +44,7 @@ import { CustomColorSheetContent } from './CustomColorSheetContent';
 import { CapsuleSegmentedSelector } from './CapsuleSegmentedSelector';
 import { LxSourceDeclaredBlock } from './LxSourceTags';
 import { SourceManagerList } from './SourceManagerList';
-import { readOfficialUpdateAlert, SourceUpdateInfo } from '../util/SourceUpdate';
+import { checkAndApplySourceUpdate, SourceUpdateApplyResult } from '../util/SourceUpdate';
 import { LengthMetrics } from '@kit.ArkUI';
 
 /** 单次「测试音源」对每个平台最多试几档（从最高往下，命中即停）。 */
@@ -745,33 +745,22 @@ export struct SettingsDetailPage {
     this.startEnginePolling();
   }
 
-  /** 版本比对：脚本自带 version 与已保存版本一致即视为最新（真正的远端比对在 A4 之后接）。 */
+  /** 检查更新并自动下载覆盖（不再只跳浏览器）。 */
   private async checkSourceUpdateRemote(api: LXUserApiInfo): Promise<void> {
-    // ① 只走官方：读引擎上报的 updateAlert，不再自研请求
-    const info: SourceUpdateInfo = readOfficialUpdateAlert();
-    // ★ 2026-10-29（用户：引擎日志有"更新提示"，点检查更新没反应）：把卡片与 alert 一次打全
-    appendPlayLog('[RzdSourceUpdate] card=' + api.name + ' ver=' + api.version +
-      ' hasUpdate=' + info.hasUpdate + ' msg=' + info.message +
-      ' url=' + info.updateUrl + ' err=' + info.error);
-    if (info.hasUpdate) {
-      this.getUIContext().getPromptAction().showDialog({
-        title: '发现新版本',
-        message: (info.message.length > 0 ? info.message : '有新版本可用') +
-          (info.updateUrl.length > 0 ? ('\n' + info.updateUrl) : ''),
-        buttons: [
-          { text: '取消', color: '#666666' },
-          { text: '前往更新', color: this.themeState.color }
-        ]
-      }).then((result) => {
-        if (result.index === 1 && info.updateUrl.length > 0) {
-          // ★ 2026-10-30（用户）：更新链接是网页（kdocs），不下载、直接跳浏览器
-          this.openInBrowser(info.updateUrl, '音源更新');
-        }
-      });
+    this.toast('检查更新中…');
+    const result: SourceUpdateApplyResult = await checkAndApplySourceUpdate(api);
+    if (result.applied) {
+      this.refresh();
+      this.toast(result.message);
       return;
     }
-    // ① 没有更新就**静默**（只在日志里留痕）
-    appendPlayLog('[RzdSourceUpdate] ' + api.name + ' no update: ' + info.error);
+    if (result.openUrl.length > 0) {
+      this.toast(result.message);
+      this.openInBrowser(result.openUrl, '音源更新');
+      return;
+    }
+    this.toast(result.message);
+    appendPlayLog('[RzdSourceUpdate] ' + api.name + ' no update: ' + result.message);
   }
 
   /** 用系统浏览器打开外部链接（更新页/主页这类非脚本链接走这里，避免把网页当脚本导入）。 */
@@ -792,15 +781,6 @@ export struct SettingsDetailPage {
     } catch (err) {
       this.toast('无法打开浏览器：' + ((err as Error).message ?? ''));
     }
-  }
-
-  private checkSourceUpdate(api: LXUserApiInfo): void {
-    const current: string = api.version.length > 0 ? api.version : '未知';
-    this.getUIContext().getPromptAction().showToast({
-      message: '当前版本 ' + current + '（最新）',
-      duration: 2000
-    });
-    appendPlayLog('[RzdSourceUpdate] ' + api.name + ' version=' + current);
   }
 
   private deleteLXSource(apiId: string): void {
