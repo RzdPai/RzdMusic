@@ -25,6 +25,7 @@ import {
   WindowInfo
 } from 'musicbasic';
 import { MusicAppState } from '../model/PlayerModels';
+import { MediaService } from '../model/MediaService';
 
 /** Full-screen playback top bar: back action and song-menu affordance. */
 @ComponentV2
@@ -53,6 +54,22 @@ export struct TopAreaComponent {
   /** Shared app state (read-only usage in this bar). */
   @Local state: MusicAppState =
     AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
+  /**
+   * 桌面歌词悬浮窗是否被用户锁定（顶栏中间「解锁歌词」胶囊的显隐依据）。
+   *
+   * ▼ 背景：用户在系统悬浮窗上点「锁定」后，窗口固定、**悬浮窗自身的一切控件
+   *   （含系统给的解锁按钮）都不再响应** —— 这是系统的设计（锁定 = 不挡桌面操作）。
+   *   解锁只能由应用侧调 `AVSession.setDesktopLyricState({ isLocked: false })`，
+   *   所以播放页顶栏必须有一个人工入口（设置页「桌面歌词」开关下面还有一个，互为备份）。
+   */
+  @Local desktopLyricLocked: boolean = false;
+  /**
+   * MediaService「锁定状态变化」回调（aboutToAppear 注册、aboutToDisappear 摘除）。
+   * ▼ 注册/摘除必须传**同一个引用**，所以做成稳定的箭头函数属性，不能在生命周期里现写。
+   */
+  private readonly onDesktopLyricLockChange: (locked: boolean) => void = (locked: boolean): void => {
+    this.desktopLyricLocked = locked;
+  };
   /** Window metrics for immersive title padding. */
   @Local windowInfo: WindowInfo = getWindowInfoState();
   /**
@@ -73,6 +90,24 @@ export struct TopAreaComponent {
     AppStorageV2.connect(PlayerExpandState, AppStorageKeys.PLAYER_EXPAND_STATE,
       () => new PlayerExpandState())!;
 
+  /**
+   * 进场：先同步一次当前锁定态，再注册「锁定状态变化」监听。
+   * ▼ 必须先同步再注册：悬浮窗可能在播放页没开着时就已经被锁上了，
+   *   监听只覆盖"注册之后"的变化，进场那一眼得靠 `isDesktopLyricLocked()` 补齐。
+   */
+  aboutToAppear(): void {
+    this.desktopLyricLocked = MediaService.getInstance().isDesktopLyricLocked();
+    MediaService.getInstance().addDesktopLyricLockListener(this.onDesktopLyricLockChange);
+  }
+
+  /**
+   * 离场：摘除监听（传注册时的同一引用，见 {@link onDesktopLyricLockChange}）。
+   * ▼ 本组件在播放页里挂了两处（手机布局 / 另一布局变体），各自成对注册/摘除，互不干扰。
+   */
+  aboutToDisappear(): void {
+    MediaService.getInstance().removeDesktopLyricLockListener(this.onDesktopLyricLockChange);
+  }
+
   /** Renders back and song-menu row with safe-area aware trailing padding. */
   build() {
     Row() {
@@ -84,6 +119,37 @@ export struct TopAreaComponent {
         .onClick((): void => {
           this.onBackClick();
         })
+      // ▼ 桌面歌词被锁定时的「解锁歌词」胶囊：顶栏中间（SpaceBetween 三孩子 ⇒ 自动居中）。
+      //   显隐只看 desktopLyricLocked —— 锁定 ⇒ 歌词必已开启，不用再 && 开关态。
+      //   点击调应用侧 `setDesktopLyricState({ isLocked: false })` 解锁（悬浮窗自身已不响应）。
+      if (this.desktopLyricLocked) {
+        Row({ space: 4 }) {
+          SymbolGlyph($r('sys.symbol.lock_open'))
+            .fontSize(16)
+            .fontColor([$r('app.color.font_primary')])
+          Text('解锁歌词')
+            .fontSize(13)
+            .fontColor($r('app.color.font_primary'))
+        }
+        // 胶囊尺寸：顶栏手机档只有 44vp，整体压在 30vp 高以内，避免把顶行撑高、
+        //   返回键 / 歌曲菜单键跟着跳位。
+        .height(30)
+        .padding({ left: 12, right: 14 })
+        .borderRadius(15)
+        .backgroundColor($r('app.color.card_background'))
+        .shadow({ radius: 12, color: '#33000000', offsetY: 2 })
+        .accessibilityText('解锁桌面歌词')
+        .accessibilityLevel('yes')
+        .onClick((): void => {
+          // 解锁成功 ⇒ MediaService 会广播 notifyDesktopLyricLock(false)，这里再本地置
+          //   false 一次做双保险，胶囊即时消失、不用等回调绕一圈。
+          void MediaService.getInstance().unlockDesktopLyric().then((ok: boolean): void => {
+            if (ok) {
+              this.desktopLyricLocked = false;
+            }
+          });
+        })
+      }
       SymbolGlyph($r('sys.symbol.dot_grid_1x2_circle'))
         .fontSize(24)
         .fontWeight(FontWeight.Regular)

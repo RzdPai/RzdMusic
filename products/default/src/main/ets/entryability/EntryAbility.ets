@@ -50,6 +50,9 @@ export default class EntryAbility extends UIAbility {
     EntryAbility.registerCardActionChannel(this.callee, this.context);
     // 冷启动也可能是「用派音打开 .js」（文件管理器点开），先把脚本吃进来
     this.handleViewDataWant(want);
+    // 冷启动也可能是点了通知栏「解锁歌词」按钮拉起（悬浮窗锁定时进程被杀的场景很少，
+    // 但 AVSession 若还活着就会走到这；会话没建好时 unlockDesktopLyric 内部安全返回 false）
+    this.handleUnlockLyricWant(want);
   
     // Tab 栏自定义：启动时把配置读进 AppStorage，壳层（Index.ets）据此决定渲染哪几个页签
     try {
@@ -429,5 +432,28 @@ export default class EntryAbility extends UIAbility {
     appendPlayLog('[卡片] onNewWant');
     // 应用已在运行时，从文件管理器「用派音打开 .js」走这条路（导入音源脚本）
     this.handleViewDataWant(want);
+    // 应用已在运行时，点通知栏「解锁歌词」按钮走这条路（热路径：悬浮窗锁定 + 应用在后台）
+    this.handleUnlockLyricWant(want);
+  }
+
+  /**
+   * 「通知栏解锁桌面歌词」按钮的处理。
+   *
+   * 桌面歌词悬浮窗被锁定后自身不再响应，应用在通知栏发了一条带「解锁歌词」
+   * 操作按钮的通知（见 MediaService.publishUnlockNotification）；按钮的 wantAgent
+   * 拉起本 Ability 并带参数 `rzd_unlock_desktop_lyric: true`，这里认这个参数并解锁。
+   * 冷启动（onCreate）/ 热启动（onNewWant）都调用本方法，参数不对时直接返回。
+   */
+  private handleUnlockLyricWant(want: Want): void {
+    const params: Record<string, Object> | undefined = want.parameters;
+    // 值恒为 boolean true（wantAgent 里写死的），严格判 true 防止误触
+    if (params === undefined || params['rzd_unlock_desktop_lyric'] !== true) {
+      return;
+    }
+    appendPlayLog('[桌面歌词] unlock requested from notification');
+    void MediaService.getInstance().unlockDesktopLyric().then((ok: boolean): void => {
+      // ok=false 一般是「会话还没建好」（冷启动极早阶段点按钮）——悬浮窗此时也不存在，无需补救
+      appendPlayLog('[桌面歌词] unlock from notification ' + (ok ? 'ok' : 'no-session'));
+    });
   }
 }

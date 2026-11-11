@@ -3023,7 +3023,7 @@ struct Index {
       }
       .hideTitleBar(true)
       .onBackPressed((): boolean => {
-        return true;
+        return this.handleShellBack();
       })
     } else if (name === SEARCH_ROUTE_NAME) {
       OnlineSearchPage({
