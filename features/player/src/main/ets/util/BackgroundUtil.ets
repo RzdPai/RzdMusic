@@ -25,6 +25,17 @@ export class BackgroundUtil {
   private static observingCancel: boolean = false;
   private static failureShown: boolean = false;
   private static operations: Promise<void> = Promise.resolve();
+  /** 由 MediaService 注入的判定：现在是否仍需要长时任务（真在出声 / 待焦点恢复）。 */
+  private static shouldHoldTask: (() => boolean) | undefined = undefined;
+  /** 最近一次 start/stop 用的 context（系统取消回调里补申请时复用）。 */
+  private static lastContext: common.UIAbilityContext | undefined = undefined;
+  /** 系统取消后的连续补申请次数（防"取消风暴"死循环）。 */
+  private static systemCancelRequeues: number = 0;
+
+  /** 注入「是否仍需要长时任务」的判定（MediaService 启动时调用一次）。 */
+  public static setTaskHoldPredicate(predicate: () => boolean): void {
+    BackgroundUtil.shouldHoldTask = predicate;
+  }
 
   private static diagnostic(message: string): void {
     const line: string = '[RzdLockScreenB] ' + message;
@@ -42,6 +53,9 @@ export class BackgroundUtil {
 
   public static startContinuousTask(context?: common.UIAbilityContext): void {
     BackgroundUtil.requested = true;
+    if (context) {
+      BackgroundUtil.lastContext = context;
+    }
     BackgroundUtil.enqueue(context);
   }
 
@@ -93,6 +107,17 @@ export class BackgroundUtil {
           //   （1=已取消/完成，2=后台负载过高，3=用户移除通知…），必须原样落进持久诊断。
           BackgroundUtil.running = false;
           BackgroundUtil.diagnostic(`stop-continuous system-cancel reason=${info.reason} info=${JSON.stringify(info)}`);
+          // ★ 系统取消 ≠ 应用放弃：还在出声（或临时失焦待恢复）且用户没关开关时，
+          //   必须立即补申请长时任务——否则后台几秒后进程被冻结，声音就此断掉。
+          //   上限 3 次防"取消风暴"；补申请成功后计数清零。
+          const hold: boolean = BackgroundUtil.shouldHoldTask !== undefined ?
+            BackgroundUtil.shouldHoldTask() : false;
+          if (BackgroundUtil.requested && hold && BackgroundUtil.systemCancelRequeues < 3) {
+            BackgroundUtil.systemCancelRequeues++;
+            BackgroundUtil.diagnostic(
+              `requeue-after-cancel attempt=${BackgroundUtil.systemCancelRequeues}`);
+            BackgroundUtil.enqueue(BackgroundUtil.lastContext);
+          }
         });
         BackgroundUtil.observingCancel = true;
       } catch (error) {
@@ -122,6 +147,8 @@ export class BackgroundUtil {
       await backgroundTaskManager.startBackgroundRunning(context,
         backgroundTaskManager.BackgroundMode.AUDIO_PLAYBACK, agent);
       BackgroundUtil.running = true;
+      // 补申请成功：清掉"系统取消"计数，下一轮取消后仍有 3 次补偿机会。
+      BackgroundUtil.systemCancelRequeues = 0;
       BackgroundUtil.diagnostic('start-continuous(err=0) ok');
     } catch (error) {
       const err: BusinessError = error as BusinessError;
