@@ -2561,7 +2561,9 @@ export class MediaService {
    *   的常驻载体，和媒体卡片同在通知栏，离用户的视线最近。
    * ▼ 按钮的 wantAgent = 拉起本应用 + 参数 `rzd_unlock_desktop_lyric: true`，
    *   EntryAbility 在 onCreate / onNewWant 里认这个参数并调 {@link unlockDesktopLyric}。
-   * ▼ 未授权通知 / 通知被关闭时 publish 静默失败（打日志），应用内入口不受影响。
+   * ▼ ★ 2026-11-12（用户：「桌面歌词解锁只做在状态栏」）：这条通知是解锁的**唯一**入口
+   *   （播放页顶栏胶囊、设置页按钮均已移除）。未授权通知 / 通知被关闭时 publish
+   *   静默失败（打日志），此时无解锁入口 —— 设置页开桌面歌词时会顺带申请通知授权。
    */
   private publishUnlockNotification(): void {
     // 去重：已发布就不重发（同 id 重发本身也无害，省一次系统调用而已）
@@ -2627,8 +2629,8 @@ export class MediaService {
   }
 
   /**
-   * 解锁桌面歌词悬浮窗（播放页顶栏 / 设置页的「解锁桌面歌词」入口共用）。
-   * @returns true = 解锁成功（无会话或系统调用失败返回 false，调用方保持按钮态不动）
+   * 解锁桌面歌词悬浮窗（唯一调用方：通知栏「解锁歌词」按钮 → EntryAbility）。
+   * @returns true = 解锁成功（无会话或系统调用失败返回 false）
    */
   public async unlockDesktopLyric(): Promise<boolean> {
     const session: avSession.AVSession | undefined = this.session;
