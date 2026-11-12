@@ -881,9 +881,10 @@ export class LocalMusic {
       const source: media.AVFileDescriptor = { fd: file.fd, offset: 0, length: size };
       extractor.fdSrc = source;
       const meta: media.AVMetadata = await extractor.fetchMetadata();
-      out.name = asText(meta.title);
-      out.singer = asText(meta.artist);
-      out.album = asText(meta.album);
+      // 系统解出的可能是乱码（GBK 标签被错读），置空让下面的 ID3/文件名兜底接管
+      out.name = looksGarbled(asText(meta.title)) ? '' : asText(meta.title);
+      out.singer = looksGarbled(asText(meta.artist)) ? '' : asText(meta.artist);
+      out.album = looksGarbled(asText(meta.album)) ? '' : asText(meta.album);
       out.durationMs = asNumber(meta.duration);
       out.coverFile = await this.saveCover(extractor, key);
     } catch (e) {
@@ -1968,6 +1969,55 @@ function decodeText(bytes: Uint8Array, encoding: string): string {
   }
 }
 
+/** ID3 文本通用清洗：去 NUL、去首尾空白 */
+function cleanId3String(s: string): string {
+  return s.replace(/\u0000/g, '').trim();
+}
+
+/** 逐字节按 Latin-1 映射成字符串（ID3 enc=0 的规范读法，遇 NUL 截断） */
+function latin1ToString(bytes: Uint8Array): string {
+  let s: string = '';
+  for (let i: number = 0; i < bytes.length; i++) {
+    if (bytes[i] === 0) {
+      break;
+    }
+    s += String.fromCharCode(bytes[i]);
+  }
+  return s;
+}
+
+/** 是否含 CJK 字符（GBK 试解成功的判定条件：GBK 只用于写中文） */
+function containsCjk(s: string): boolean {
+  for (let i: number = 0; i < s.length; i++) {
+    const c: number = s.charCodeAt(i);
+    if ((c >= 0x2E80 && c <= 0x9FFF) || (c >= 0x3000 && c <= 0x303F) || (c >= 0xFF00 && c <= 0xFFEF)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * 系统解出的标签疑似乱码（GBK 被逐字节当 Latin-1 读、或解码失败出替换符）。
+ * 特征：含 U+FFFD，或 Latin-1 补充区字符扎堆（正常歌名最多零星一两个重音字母）。
+ */
+function looksGarbled(s: string): boolean {
+  if (s.length === 0) {
+    return false;
+  }
+  if (s.indexOf('\uFFFD') >= 0) {
+    return true;
+  }
+  let high: number = 0;
+  for (let i: number = 0; i < s.length; i++) {
+    const c: number = s.charCodeAt(i);
+    if (c >= 0x80 && c <= 0xFF) {
+      high++;
+    }
+  }
+  return high >= 3 && high * 2 >= s.length;
+}
+
 function closeQuietly(file: fs.File | null): void {
   if (file === null) {
     return;
@@ -2034,28 +2084,43 @@ function decodeId3Text(data: Uint8Array): string {
     return '';
   }
   const enc: number = data[0];
-  const body: Uint8Array = data.subarray(1);
+  let body: Uint8Array = data.subarray(1);
   try {
-    if (enc === 0) {
-      let s: string = '';
-      for (let i: number = 0; i < body.length; i++) {
-        if (body[i] === 0) {
-          break;
-        }
-        s += String.fromCharCode(body[i]);
+    if (enc === 1 || enc === 2) {
+      // UTF-16：先认 BOM；ID3v2.4 的 enc=2 是无 BOM 的大端
+      if (body.length >= 2 && body[0] === 0xFF && body[1] === 0xFE) {
+        return cleanId3String(decodeText(body.subarray(2), 'utf-16le'));
       }
-      return s.trim();
+      if (body.length >= 2 && body[0] === 0xFE && body[1] === 0xFF) {
+        return cleanId3String(decodeText(body.subarray(2), 'utf-16be'));
+      }
+      return cleanId3String(decodeText(body, enc === 2 ? 'utf-16be' : 'utf-16le'));
     }
     if (enc === 3) {
-      return decodeText(body, 'utf-8').replace(/\u0000/g, '').trim();
+      return cleanId3String(decodeText(body, 'utf-8'));
     }
-    if (enc === 1 || enc === 2) {
-      const decoder: util.TextDecoder = util.TextDecoder.create('utf-16le');
-      return decoder.decodeToString(body).replace(/\u0000/g, '').trim();
+    // enc=0：规范是 Latin-1，但中文标签常实为 GBK（乱码主因），个别标签器还会写成 UTF-8
+    let hasHighByte: boolean = false;
+    for (let i: number = 0; i < body.length; i++) {
+      if (body[i] > 0x7F) {
+        hasHighByte = true;
+        break;
+      }
     }
+    if (hasHighByte) {
+      const utf8: string = decodeText(body, 'utf-8');
+      if (utf8.length > 0 && utf8.indexOf('\uFFFD') < 0) {
+        return cleanId3String(utf8);
+      }
+      const gbk: string = decodeText(body, 'gbk');
+      if (gbk.length > 0 && gbk.indexOf('\uFFFD') < 0 && containsCjk(gbk)) {
+        return cleanId3String(gbk);
+      }
+    }
+    return latin1ToString(body).trim();
   } catch (_e) {
   }
-  return decodeText(body, 'utf-8').replace(/\u0000/g, '').trim();
+  return cleanId3String(decodeText(body, 'utf-8'));
 }
 
 function readBytesRange(path: string, offset: number, length: number): Uint8Array | null {
