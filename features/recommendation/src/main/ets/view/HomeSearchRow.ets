@@ -43,8 +43,11 @@ export struct HomeSearchRow {
           //   与搜索页那端（`OnlineSearchPage.SearchInputBar`）**逐字同一套**：
           //   `card_background` + 0.5vp 描边。两端不同色会在长镜头中途看出颜色跳变。
           // 与搜索页那端保持同一套：光感 + 半透明底（否则形变途中颜色会跳）
+          // ★ 2026-11-13（参考 @tangs/components 调优）：底色改深浅色自适应资源 ——
+          //   浅色白纱 #33FFFFFF、深色黑纱 #33000000（该库 light `#3fff` / dark `#3000` 的思路）。
+          //   原来深色也写死 20% 白 ⇒ 深色下玻璃发灰发白。两端同一资源，形变中途仍无跳变。
           .systemMaterial(immersiveFromLevel(this.ambientState.level))
-          .backgroundColor('#33FFFFFF')
+          .backgroundColor($r('app.color.immersive_glass_overlay'))
           .borderRadius(SEARCH_FIELD_H / 2)
           .border({ width: 0.5, color: $r('sys.color.comp_divider') })
           .clip(true)
