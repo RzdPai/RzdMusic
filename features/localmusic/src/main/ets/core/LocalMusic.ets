@@ -756,7 +756,7 @@ export class LocalMusic {
 
   /** @returns added / skipped / unsupported / failed */
   private async importOne(uri: string, label: string): Promise<string> {
-    const ext: string = extOf(label);
+    let ext: string = extOf(label);
     if (!isSupportedAudioFile(label)) {
       hilog.info(DOMAIN, TAG, 'skip unsupported file: %{public}s', label);
       return 'unsupported';
@@ -777,8 +777,18 @@ export class LocalMusic {
         return 'unsupported';
       }
       if (!probeLooksLikeAudio(uri, ext)) {
-        appendPlayLog(`[本地音乐] skip bad header ${ext} ${label}`);
-        return 'unsupported';
+        // ★ 2026-11-13（用户：`D:\Downloads\江南.flac` 导不进来）：
+        //   下载 bug 修复前落盘的文件名按**请求音质**命名（.flac），
+        //   内容却是回退链实际给的 128k MP3 ⇒ 扩展名和文件头对不上。
+        //   文件本体能播，不该一棍子打死报「格式不支持」——按文件头嗅探真实格式，
+        //   是支持的格式就**修正扩展名**导进来；嗅探不出（加密缓存/占位碎片）才拒。
+        const sniffed: string = detectAudioExtByContent(uri);
+        if (sniffed.length === 0) {
+          appendPlayLog(`[本地音乐] skip bad header ${ext} ${label}`);
+          return 'unsupported';
+        }
+        appendPlayLog(`[本地音乐] fix ext ${ext} -> ${sniffed} ${label}`);
+        ext = sniffed;
       }
       const fingerprint: string = `${size}_${label.toLowerCase()}`;
       if (this.byFingerprint.has(fingerprint)) {
@@ -881,9 +891,10 @@ export class LocalMusic {
       const source: media.AVFileDescriptor = { fd: file.fd, offset: 0, length: size };
       extractor.fdSrc = source;
       const meta: media.AVMetadata = await extractor.fetchMetadata();
-      out.name = asText(meta.title);
-      out.singer = asText(meta.artist);
-      out.album = asText(meta.album);
+      // 系统解出的可能是乱码（GBK 标签被错读），置空让下面的 ID3/文件名兜底接管
+      out.name = looksGarbled(asText(meta.title)) ? '' : asText(meta.title);
+      out.singer = looksGarbled(asText(meta.artist)) ? '' : asText(meta.artist);
+      out.album = looksGarbled(asText(meta.album)) ? '' : asText(meta.album);
       out.durationMs = asNumber(meta.duration);
       out.coverFile = await this.saveCover(extractor, key);
     } catch (e) {
@@ -1711,6 +1722,77 @@ function probeLooksLikeAudio(uri: string, ext: string): boolean {
 }
 
 /**
+ * 按**文件头**嗅探音频的真实格式（能跳过 ID3v2 前置标签）。
+ *
+ * ★ 2026-11-13：给 `importOne` 的「扩展名与内容不符」兜底用——
+ *   典型：下载 bug 时期的 `xxx.flac`，名字按请求音质起的，内容其实是 128k MP3。
+ *
+ * @param uri 源文件 URI
+ * @returns 支持的扩展名（含点，如 `.mp3`）；认不出返回 ''
+ */
+function detectAudioExtByContent(uri: string): string {
+  let f: fs.File | null = null;
+  try {
+    f = fs.openSync(uri, fs.OpenMode.READ_ONLY);
+    const buf: ArrayBuffer = new ArrayBuffer(16);
+    const read: number = fs.readSync(f.fd, buf);
+    if (read < 4) {
+      return '';
+    }
+    let b: Uint8Array = new Uint8Array(buf);
+    // ID3v2 前置标签（"ID3"）：MP3 常见，个别 FLAC/其它格式也会带。
+    // 真正的容器头在标签之后，按标签头 6-9 字节的 syncsafe 长度跳过去再读。
+    if (b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x33) {
+      if (read < 10) {
+        return '';
+      }
+      const tagSize: number = ((b[6] & 0x7F) << 21) | ((b[7] & 0x7F) << 14) |
+        ((b[8] & 0x7F) << 7) | (b[9] & 0x7F);
+      const footer: number = (b[5] & 0x10) !== 0 ? 10 : 0;
+      const buf2: ArrayBuffer = new ArrayBuffer(16);
+      const read2: number = fs.readSync(f.fd, buf2, { offset: 10 + tagSize + footer, length: 16 });
+      if (read2 < 4) {
+        return '';
+      }
+      b = new Uint8Array(buf2);
+    }
+    const b0: number = b[0];
+    const b1: number = b[1];
+    const b2: number = b[2];
+    const b3: number = b[3];
+    if (b0 === 0x66 && b1 === 0x4C && b2 === 0x61 && b3 === 0x43) {
+      return '.flac';                                                        // fLaC
+    }
+    if (b0 === 0x4F && b1 === 0x67 && b2 === 0x67 && b3 === 0x53) {
+      return '.ogg';                                                         // OggS
+    }
+    if (b0 === 0x52 && b1 === 0x49 && b2 === 0x46 && b3 === 0x46 &&
+      b[8] === 0x57 && b[9] === 0x41) {
+      return '.wav';                                                         // RIFF....WA(VE)
+    }
+    if (b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) {
+      return '.m4a';                                                         // size + ftyp
+    }
+    if (b0 === 0x23 && b1 === 0x21 && b2 === 0x41 && b3 === 0x4D) {
+      return '.amr';                                                         // #!AM
+    }
+    // 注意顺序：ADTS 也满足 MP3 的 11 位帧同步，必须先判 aac 再判 mp3
+    if (b0 === 0xFF && (b1 & 0xF6) === 0xF0) {
+      return '.aac';                                                         // ADTS
+    }
+    if (b0 === 0xFF && (b1 & 0xE0) === 0xE0) {
+      return '.mp3';                                                         // MPEG 帧同步
+    }
+    return '';
+  } catch (e) {
+    hilog.info(DOMAIN, TAG, 'sniff failed: %{public}s', JSON.stringify(e));
+    return '';
+  } finally {
+    closeQuietly(f);
+  }
+}
+
+/**
  * 最小的"像首歌"的字节数：低于它的多半是占位文件/缓存碎片。
  * （8KB ≈ 128kbps 下的半秒，正常音乐不会这么小。）
  */
@@ -1968,6 +2050,55 @@ function decodeText(bytes: Uint8Array, encoding: string): string {
   }
 }
 
+/** ID3 文本通用清洗：去 NUL、去首尾空白 */
+function cleanId3String(s: string): string {
+  return s.replace(/\u0000/g, '').trim();
+}
+
+/** 逐字节按 Latin-1 映射成字符串（ID3 enc=0 的规范读法，遇 NUL 截断） */
+function latin1ToString(bytes: Uint8Array): string {
+  let s: string = '';
+  for (let i: number = 0; i < bytes.length; i++) {
+    if (bytes[i] === 0) {
+      break;
+    }
+    s += String.fromCharCode(bytes[i]);
+  }
+  return s;
+}
+
+/** 是否含 CJK 字符（GBK 试解成功的判定条件：GBK 只用于写中文） */
+function containsCjk(s: string): boolean {
+  for (let i: number = 0; i < s.length; i++) {
+    const c: number = s.charCodeAt(i);
+    if ((c >= 0x2E80 && c <= 0x9FFF) || (c >= 0x3000 && c <= 0x303F) || (c >= 0xFF00 && c <= 0xFFEF)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * 系统解出的标签疑似乱码（GBK 被逐字节当 Latin-1 读、或解码失败出替换符）。
+ * 特征：含 U+FFFD，或 Latin-1 补充区字符扎堆（正常歌名最多零星一两个重音字母）。
+ */
+function looksGarbled(s: string): boolean {
+  if (s.length === 0) {
+    return false;
+  }
+  if (s.indexOf('\uFFFD') >= 0) {
+    return true;
+  }
+  let high: number = 0;
+  for (let i: number = 0; i < s.length; i++) {
+    const c: number = s.charCodeAt(i);
+    if (c >= 0x80 && c <= 0xFF) {
+      high++;
+    }
+  }
+  return high >= 3 && high * 2 >= s.length;
+}
+
 function closeQuietly(file: fs.File | null): void {
   if (file === null) {
     return;
@@ -2034,28 +2165,43 @@ function decodeId3Text(data: Uint8Array): string {
     return '';
   }
   const enc: number = data[0];
-  const body: Uint8Array = data.subarray(1);
+  let body: Uint8Array = data.subarray(1);
   try {
-    if (enc === 0) {
-      let s: string = '';
-      for (let i: number = 0; i < body.length; i++) {
-        if (body[i] === 0) {
-          break;
-        }
-        s += String.fromCharCode(body[i]);
+    if (enc === 1 || enc === 2) {
+      // UTF-16：先认 BOM；ID3v2.4 的 enc=2 是无 BOM 的大端
+      if (body.length >= 2 && body[0] === 0xFF && body[1] === 0xFE) {
+        return cleanId3String(decodeText(body.subarray(2), 'utf-16le'));
       }
-      return s.trim();
+      if (body.length >= 2 && body[0] === 0xFE && body[1] === 0xFF) {
+        return cleanId3String(decodeText(body.subarray(2), 'utf-16be'));
+      }
+      return cleanId3String(decodeText(body, enc === 2 ? 'utf-16be' : 'utf-16le'));
     }
     if (enc === 3) {
-      return decodeText(body, 'utf-8').replace(/\u0000/g, '').trim();
+      return cleanId3String(decodeText(body, 'utf-8'));
     }
-    if (enc === 1 || enc === 2) {
-      const decoder: util.TextDecoder = util.TextDecoder.create('utf-16le');
-      return decoder.decodeToString(body).replace(/\u0000/g, '').trim();
+    // enc=0：规范是 Latin-1，但中文标签常实为 GBK（乱码主因），个别标签器还会写成 UTF-8
+    let hasHighByte: boolean = false;
+    for (let i: number = 0; i < body.length; i++) {
+      if (body[i] > 0x7F) {
+        hasHighByte = true;
+        break;
+      }
     }
+    if (hasHighByte) {
+      const utf8: string = decodeText(body, 'utf-8');
+      if (utf8.length > 0 && utf8.indexOf('\uFFFD') < 0) {
+        return cleanId3String(utf8);
+      }
+      const gbk: string = decodeText(body, 'gbk');
+      if (gbk.length > 0 && gbk.indexOf('\uFFFD') < 0 && containsCjk(gbk)) {
+        return cleanId3String(gbk);
+      }
+    }
+    return latin1ToString(body).trim();
   } catch (_e) {
   }
-  return decodeText(body, 'utf-8').replace(/\u0000/g, '').trim();
+  return cleanId3String(decodeText(body, 'utf-8'));
 }
 
 function readBytesRange(path: string, offset: number, length: number): Uint8Array | null {

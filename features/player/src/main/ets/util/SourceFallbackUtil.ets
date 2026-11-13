@@ -120,6 +120,12 @@ export class FallbackOptions {
   allowScriptSwitch: boolean = true;
   /** 原平台全部失败后，按歌名+歌手到其它平台搜索重试（默认开）。 */
   allowPlatformSwitch: boolean = true;
+  /**
+   * ★ 显式指定的首选音质档位（下载用）：空串 = 用播放偏好。
+   * 下载弹层选了 FLAC 而播放偏好是 128k 时，如果不传它，
+   * 回退链会按播放偏好从 128k 起步 —— 用户选的档位被静默忽略。
+   */
+  preferredQuality: string = '';
 }
 
 export class UrlResolveOutcome {
@@ -992,7 +998,8 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
       await switchToScript(firstScriptId);
     }
   }
-  const preferred: string = await PlaybackPreferenceService.resolveDefaultQuality();
+  const preferred: string = opts.preferredQuality.length > 0 ? opts.preferredQuality
+    : await PlaybackPreferenceService.resolveDefaultQuality();
   const activeAtStart: string = activeSourceId();
   // ★ B2/B3 唯一回退链：顺序完全由 buildCandidateChain() 决定（同平台源优先 → 换平台按音质）
   const cands: FallbackCandidate[] = buildCandidateChain(preferred, source);
