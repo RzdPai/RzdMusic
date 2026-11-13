@@ -51,6 +51,34 @@
     {
       "name": "playlist_home_favorites_empty",
       "value": "No favorite songs yet"
+    },
+    {
+      "name": "mine_playlist_export",
+      "value": "Export"
+    },
+    {
+      "name": "mine_playlist_rename",
+      "value": "Rename"
+    },
+    {
+      "name": "mine_playlist_delete",
+      "value": "Delete"
+    },
+    {
+      "name": "mine_playlist_new",
+      "value": "New playlist"
+    },
+    {
+      "name": "mine_playlist_name_placeholder",
+      "value": "Enter playlist name"
+    },
+    {
+      "name": "mine_playlist_confirm",
+      "value": "Confirm"
+    },
+    {
+      "name": "mine_playlist_empty",
+      "value": "No playlists yet"
     }
   ]
 }
