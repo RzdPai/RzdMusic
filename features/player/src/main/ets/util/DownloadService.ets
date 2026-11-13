@@ -8,7 +8,7 @@ import { MusicStoreService, appendPlayLog } from 'musicbasic';
 import { getLXMusicUrl } from '../source/LXPlayHelper';
 import { lxEngineIsReady } from '../source/LXSourceEngine';
 import { lxGetLyricFull, lxGetPicFallback, LyricFullResult } from '../source/LXMusicSDK';
-import { getQualityChain, resolveMusicUrlWithFallback, UrlResolveOutcome } from './SourceFallbackUtil';
+import { getQualityChain, resolveMusicUrlWithFallback, UrlResolveOutcome, FallbackOptions } from './SourceFallbackUtil';
 import { engineNotReadyToast } from './SourceUpdateHint';
 import { AmllLyricLine } from '../amll/model/AmllTypes';
 import { amllParseLyricText } from '../amll/parse/AmllAutoDetect';
@@ -581,8 +581,14 @@ export class DownloadService {
     try {
       // 1) 解析下载地址：按所选音质起、逐档向下兜底
       // ★ B3：下载和播放共用同一条回退链（resolveMusicUrlWithFallback 内部就是 buildCandidateChain）
+      // ★ 修正「部分歌曲下载后报格式不支持」：把 enqueue 时的档位快照传进回退链。
+      //   以前链内 preferred 取的是**播放偏好**——用户在下载弹层选了 FLAC、播放偏好却是 128k 时，
+      //   实际下到的是 128k 内容，而文件名仍按请求档位写成 .flac ⇒ 本地导入按文件头校验时
+      //   判「格式不支持」。
+      const dlOptions: FallbackOptions = new FallbackOptions();
+      dlOptions.preferredQuality = task.requestedQuality;
       const dlOutcome: UrlResolveOutcome = await resolveMusicUrlWithFallback(
-        task.source, task.songId, task.name, task.singer, '', null);
+        task.source, task.songId, task.name, task.singer, '', null, dlOptions);
       console.info('[RzdFallback] download via chain ok=' + (dlOutcome.url.length > 0) +
         ' quality=' + dlOutcome.quality + ' script=' + dlOutcome.scriptName);
       let url: string = dlOutcome.url;
@@ -611,6 +617,10 @@ export class DownloadService {
         this.failTask(task, '获取下载地址失败');
         return;
       }
+      // 1.5) 实际音质可能已降级：文件名（扩展名 + 音质标签）必须按**实际解析到的**档位重建，
+      //      否则「请求 FLAC、下到 128k」时文件仍叫 xxx.flac（扩展名造假，导入时被拒）。
+      task.fileName = this.buildFileName(task.name, task.singer, task.quality);
+      this.notify(true);
       if (this.findIndex(task.id) < 0) {
         return;
       }
@@ -633,6 +643,9 @@ export class DownloadService {
       if (stat.size < 1024) {
         throw new Error('文件内容异常');
       }
+      // 2.5) 按实际容器头修正扩展名：有的服务器不按请求档位返回内容（要 flac 给 mp3），
+      //      本地音乐导入按「扩展名 + 文件头」双重校验，对不上会被判「格式不支持」。
+      this.correctFileExtByContent(task, tmpPath);
       // 3) 元信息（标题/歌手/专辑/封面/歌词）
       task.message = '写入元信息';
       this.notify(true);
@@ -845,6 +858,71 @@ export class DownloadService {
         finish(false, '网络请求失败');
       });
     });
+  }
+
+  /** 识别文件头对应的音频容器扩展名（含点）；认不出返回空串（保留原扩展名，不拦下载）。 */
+  private detectAudioExt(path: string): string {
+    let file: fs.File | undefined = undefined;
+    try {
+      file = fs.openSync(path, fs.OpenMode.READ_ONLY);
+      const buf: ArrayBuffer = new ArrayBuffer(16);
+      const read: number = fs.readSync(file.fd, buf);
+      if (read < 4) {
+        return '';
+      }
+      const b: Uint8Array = new Uint8Array(buf);
+      if (b[0] === 0x66 && b[1] === 0x4C && b[2] === 0x61 && b[3] === 0x43) {
+        return '.flac';                                                          // fLaC
+      }
+      if (b[0] === 0x4F && b[1] === 0x67 && b[2] === 0x67 && b[3] === 0x53) {
+        return '.ogg';                                                           // OggS
+      }
+      if (read >= 12 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
+        b[8] === 0x57 && b[9] === 0x41 && b[10] === 0x56 && b[11] === 0x45) {
+        return '.wav';                                                           // RIFF....WAVE
+      }
+      if (read >= 8 && b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) {
+        return '.m4a';                                                           // size + 'ftyp'
+      }
+      if (b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x33) {
+        return '.mp3';                                                           // ID3
+      }
+      if (b[0] === 0xFF && (b[1] & 0xF6) === 0xF0) {
+        return '.aac';                                                           // ADTS
+      }
+      if (b[0] === 0xFF && (b[1] & 0xE0) === 0xE0) {
+        return '.mp3';                                                           // 帧同步
+      }
+      return '';
+    } catch (_e) {
+      return '';
+    } finally {
+      if (file !== undefined) {
+        try {
+          fs.closeSync(file);
+        } catch (_e) {
+          // ignore
+        }
+      }
+    }
+  }
+
+  /** 下载完成后按实际内容修正扩展名（只改保存文件名，内容不动）。 */
+  private correctFileExtByContent(task: DownloadTask, path: string): void {
+    const realExt: string = this.detectAudioExt(path);
+    if (realExt.length === 0) {
+      appendPlayLog('[下载] container unknown, keep ext of ' + task.fileName);
+      return;
+    }
+    const dot: number = task.fileName.lastIndexOf('.');
+    const currentExt: string = dot >= 0 ? task.fileName.substring(dot).toLowerCase() : '';
+    if (currentExt === realExt) {
+      return;
+    }
+    task.fileName = (dot >= 0 ? task.fileName.substring(0, dot) : task.fileName) + realExt;
+    appendPlayLog('[下载] ext corrected ' + (currentExt.length > 0 ? currentExt : '(无)') +
+      ' -> ' + realExt + ' quality=' + task.quality);
+    this.notify(true);
   }
 
   private async fetchLyric(task: DownloadTask): Promise<LyricFullResult> {
