@@ -24,7 +24,7 @@ import { AlbumRouteParam, ArtistRouteParam, BreakpointType, ThemeState, WindowUt
 import { BlurStrategy, BottomBuilderShowType, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, HideMode, ScrollEffectType } from '@kit.UIDesignKit';
 import { AppStorageKeys, AmbientState, FavoriteEntry, MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord, QualityInfo, RouterUrlConstants, SongItem, SongTitleMarquee, ToplistRouteParam, appendPlayLog, barBlurOptions, buildTitleMaterial } from 'musicbasic';
 import { HomeMiniBarPlayer, MiniBarMaterialCapsule } from 'playlist';
-import { AlbumInfo, LXQualityOption, LXSearchSong, LXSearchResult, SingerInfo, lxGetPicFallback, lxGetQualityOptions, lxSearch, lxTxHotSearch, lxSearchSuggest, searchAlbums, searchSingers, sourceToCode, DownloadTask, DownloadUtil, OnlinePlayUtil, PlaylistSearchApi, platformRegistry, lxSourceManager, searchPlatformSongs, searchPlatformSheets } from 'player';
+import { platformBrandColor, AlbumInfo, LXQualityOption, LXSearchSong, LXSearchResult, SingerInfo, lxGetPicFallback, lxGetQualityOptions, lxSearch, lxTxHotSearch, lxSearchSuggest, searchAlbums, searchSingers, sourceToCode, DownloadTask, DownloadUtil, OnlinePlayUtil, PlaylistSearchApi, platformRegistry, lxSourceManager, searchPlatformSongs, searchPlatformSheets } from 'player';
 import type { SearchPlaylistInfo, SearchPlaylistSong } from 'player';
 import { sourceName } from 'player';
 import { SongMoreMenu } from 'playlist';
@@ -836,14 +836,9 @@ export struct OnlineSearchPage {
   }
 
   private sourceColor(source: string): string {
-    switch (source) {
-      case 'kw': return '#FF6B35';
-      case 'kg': return '#4A90D9';
-      case 'tx': return '#31C27C';
-      case 'wy': return '#C62F2F';
-      case 'mg': return '#FF4081';
-    }
-    return '#6B6B6B';
+    // ★ 2026-11-14：品牌色统一取 `platformBrandColor()`（唯一一份，含 `qs` 汽水）
+    const color: string = platformBrandColor(source);
+    return color.length > 0 ? color : '#6B6B6B';
   }
 
   /** 菜单条目文字（聚合用中文，其余走平台名）。 */

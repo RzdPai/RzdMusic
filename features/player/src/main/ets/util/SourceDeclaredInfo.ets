@@ -257,6 +257,33 @@ const LX_SOURCE_NAMES: Record<string, string> = {
   'local': ''
 };
 
+/**
+ * 平台品牌色（记录页 / 搜索页 / 歌单页的圆点与胶囊底色）。
+ * ⚠️ **兜底色不要放进来** —— 三处调用方的兜底色本来就不同（灰阶不同），
+ *    这里只负责"认识的平台给什么颜色"，不认识就返回空串由调用方决定。
+ * ★ 2026-11-14：原来三处各带一份 switch，其中两处漏了 `qs`（汽水）⇒
+ *    同一首汽水歌在歌单页是青色、在记录页/搜索页却退成灰色。
+ */
+const PLATFORM_BRAND_COLORS: Record<string, string> = {
+  'kw': '#FF6B35',
+  'kg': '#4A90D9',
+  'tx': '#31C27C',
+  'wy': '#C62F2F',
+  'mg': '#FF4081',
+  'qs': '#00C2A8'
+};
+
+/**
+ * 平台品牌色。
+ * @param id 平台 id（支持别名折叠，如 `qsvip` → `qs`）
+ * @returns 颜色串；未收录的平台返回空串
+ */
+export function platformBrandColor(id: string): string {
+  const key: string = normalizePlatformId(id);
+  const color: string | undefined = PLATFORM_BRAND_COLORS[key];
+  return color !== undefined ? color : '';
+}
+
 /** 内置可选音质档 → 短标签（与设置页音质档命名保持一致）。 */
 const LX_QUALITY_LABELS: Record<string, string> = {
   '128k': '128K',

@@ -16,7 +16,7 @@
 import { AppStorageV2, uiObserver } from '@kit.ArkUI';
 import { guardPlayerBack, AmbientState, BreakpointType, ThemeState } from 'musicbasic';
 import { AppStorageKeys, MusicAppState, MusicStoreService, PlayedSongRecord, SongTitleMarquee, TabSwitchState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
-import { platformLabel, OnlinePlayUtil } from 'player';
+import { platformBrandColor, platformLabel, OnlinePlayUtil } from 'player';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType } from '@kit.UIDesignKit';
 import { SongMoreMenu } from './SongMoreMenu';
 
@@ -171,15 +171,9 @@ export struct PlaylistHomePage {
   }
 
   private sourceColor(source: string): string {
-    switch (source) {
-      case 'kw': return '#FF6B35';
-      case 'kg': return '#4A90D9';
-      case 'tx': return '#31C27C';
-      case 'wy': return '#C62F2F';
-      case 'mg': return '#FF4081';
-      case 'qs': return '#00C2A8';
-    }
-    return '#6B6B6B';
+    // ★ 2026-11-14：品牌色统一取 `platformBrandColor()`（唯一一份）
+    const color: string = platformBrandColor(source);
+    return color.length > 0 ? color : '#6B6B6B';
   }
 
   /** 平台中文名统一取 `platformLabel()`（`SourceDeclaredInfo` 里的唯一一份）。 */
