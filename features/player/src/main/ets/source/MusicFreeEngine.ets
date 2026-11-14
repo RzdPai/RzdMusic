@@ -2,7 +2,7 @@ import { webview } from '@kit.ArkWeb';
 import { util } from '@kit.ArkTS';
 import { http } from '@kit.NetworkKit';
 import { lxSourceManager } from './LXSourceManager';
-import { appendPlayLog } from 'musicbasic';
+import { appendPlayLog, MusicStoreService } from 'musicbasic';
 
 /**
  * MusicFree 插件引擎（隐藏 WebView）。
@@ -53,6 +53,19 @@ const MF_READY_TIMEOUT_MS: number = 20000;
 /** JS 分片大小（与 LX 引擎同一口径：API 26 单次注入过长会截断）。 */
 const MF_CHUNK_SIZE: number = 20000;
 
+/**
+ * 快通道载荷地址。`.invalid` 是 RFC 2606 保留域，绝不会真的出网，
+ * 一律由 Web 组件的 onInterceptRequest 在应用内应答。
+ */
+const MF_INIT_URL: string = 'https://rzd-mf-init.invalid/plugin.js';
+/**
+ * 快通道「载荷是否到手」的确认预算（ms）。桥拿到整包后**先回 `mfFetchAck` 再装载**，
+ * 所以这个计时只覆盖通道本身；绝不能拿它判断插件是否已就绪（会把启动慢误判成失败）。
+ */
+const MF_FETCH_ACK_MS: number = 1500;
+/** 快通道失败后允许自动回退分片的次数上限（回退一次就够）。 */
+const MF_FALLBACK_MAX: number = 2;
+
 class MfBridgeProxy implements MfProxy {
   callback: (message: string) => void = (): void => {};
 
@@ -71,8 +84,25 @@ export struct MusicFreeEngine {
   private pendingCalls: Map<string, MfPendingCall> = new Map();
   private currentApiId: string = '';
   private currentScriptB64: string = '';
+  /** 插件源码原文：快通道直接返回它（不 base64），分片通道继续用 b64。 */
+  private currentScriptText: string = '';
   private loadingApiId: string = '';
   private readyTimerId: number = -1;
+  /**
+   * Web 控制器是否已绑定（onControllerAttached）。官方约束：此回调之前调用
+   * Web 组件相关 API 会抛 js-error 异常（17100001）。
+   */
+  private controllerAttached: boolean = false;
+  /** 本次注入起始时刻（ms），用于统计 injectMs。 */
+  private injectStartedAt: number = 0;
+  /** 已收到快通道 `mfFetchAck` 的代际。 */
+  private fetchAckGen: number = -1;
+  private fetchAckTimerId: number = -1;
+  /** 已对哪一代际回退过分片（一代际只回退一次）。 */
+  private fallbackGen: number = -1;
+  private fallbackCount: number = 0;
+  /** 注入后完全没有 mfReady 时把本次会话钉在分片通道（换插件解除）。 */
+  private pinChunked: boolean = false;
 
   aboutToAppear(): void {
     mfEngineLoadPlugin = (apiId: string): void => {
@@ -94,6 +124,8 @@ export struct MusicFreeEngine {
   }
 
   aboutToDisappear(): void {
+    this.controllerAttached = false;
+    this.clearFetchAckWatch();
     mfEngineLoadPlugin = null;
     mfEngineSendCall = null;
     mfEngineLoadScript = null;
@@ -172,6 +204,15 @@ export struct MusicFreeEngine {
     const changed: boolean = this.currentApiId !== apiId || this.currentScriptB64 !== b64;
     this.currentApiId = apiId;
     this.currentScriptB64 = b64;
+    this.currentScriptText = script;
+    if (changed) {
+      // 换插件：回退额度与「钉回分片」都按插件重置
+      this.fallbackCount = 0;
+      this.fallbackGen = -1;
+      this.pinChunked = false;
+      this.fetchAckGen = -1;
+      this.clearFetchAckWatch();
+    }
     mfEngineApiId = apiId;
     mfEngineReady = false;
     mfEnginePlatform = '';
@@ -187,6 +228,12 @@ export struct MusicFreeEngine {
       return;
     }
     // 换插件：重载页面，确保上一份插件的全局状态（模块缓存 / 闭包变量）不残留
+    if (!this.controllerAttached) {
+      // 控制器还没绑定：此时 refresh/runJavaScript 必抛 17100001，
+      // 载荷已在 currentScript* 里，等 onPageEnd 注入即可。
+      MusicFreeEngine.log('控制器未绑定 → 等 onPageEnd 注入 id=' + apiId);
+      return;
+    }
     this.webReady = false;
     try {
       this.controller.refresh();
@@ -197,11 +244,55 @@ export struct MusicFreeEngine {
     }
   }
 
+  /**
+   * 注入入口：决定走快通道还是分片通道。
+   * 快通道只发一条极短 JS 让桥自己 fetch，载荷由 {@link handleInterceptRequest}
+   * 一次性返回插件原文；分片通道是既有行为，作为强制回退档与自动兜底。
+   */
   private injectPlugin(): void {
     if (this.currentScriptB64.length === 0) {
       return;
     }
     const gen: number = this.pageGen;
+    this.injectStartedAt = Date.now();
+    this.fetchAckGen = -1;
+    this.clearFetchAckWatch();
+    if (this.isFastInjectEnabled()) {
+      this.injectPluginFast(gen);
+    } else {
+      MusicFreeEngine.log('注入通道=chunked gen=' + gen);
+      this.injectPluginChunked(gen);
+    }
+  }
+
+  /** 快通道是否可用（看门狗钉住或设置强制时停用）。 */
+  private isFastInjectEnabled(): boolean {
+    if (this.pinChunked) {
+      return false;
+    }
+    try {
+      return MusicStoreService.getInstance().getLxInjectMode() !== 'chunked';
+    } catch (e) {
+      return true;
+    }
+  }
+
+  private injectPluginFast(gen: number): void {
+    try {
+      this.runJs(`window._mf_init_fetch(${gen})`);
+      MusicFreeEngine.log('注入插件(快通道) gen=' + gen + ' 载荷=' + this.currentScriptText.length + 'B');
+      this.armFetchAckWatch(gen);
+      this.armReadyTimer(gen);
+    } catch (e) {
+      MusicFreeEngine.log('快通道发起异常 → 分片: ' + JSON.stringify(e).substring(0, 100));
+      this.fallbackToChunks(gen, '发起异常');
+    }
+  }
+
+  /** 分片通道（既有实现，逻辑未改）。 */
+  private injectPluginChunked(gen: number): void {
+    // 进了分片通道就不再需要「载荷是否到手」的确认，撤掉计时器避免二次回退
+    this.clearFetchAckWatch();
     const b64: string = this.currentScriptB64;
     const codes: string[] = [];
     codes.push(`window._mf_begin(${gen});`);
@@ -214,6 +305,70 @@ export struct MusicFreeEngine {
     this.armReadyTimer(gen);
   }
 
+  /** 单条 JS 执行（不经 runSequential，避免为一条语句建 Promise 链）。 */
+  private runJs(code: string): void {
+    try {
+      this.controller.runJavaScript(code).catch((e: Object): void => {
+        MusicFreeEngine.log('runJs 失败: ' + JSON.stringify(e).substring(0, 120));
+      });
+    } catch (e) {
+      MusicFreeEngine.log('runJs 同步异常: ' + JSON.stringify(e).substring(0, 120));
+    }
+  }
+
+  private armFetchAckWatch(gen: number): void {
+    this.clearFetchAckWatch();
+    const self: MusicFreeEngine = this;
+    this.fetchAckTimerId = setTimeout((): void => {
+      self.fetchAckTimerId = -1;
+      if (self.fetchAckGen === gen) {
+        // 载荷已到手：后面慢是插件自己的事，交给就绪计时器，绝不二次注入
+        return;
+      }
+      self.fallbackToChunks(gen, 'ack 超时 ' + MF_FETCH_ACK_MS + 'ms');
+    }, MF_FETCH_ACK_MS);
+  }
+
+  private clearFetchAckWatch(): void {
+    if (this.fetchAckTimerId !== -1) {
+      clearTimeout(this.fetchAckTimerId);
+      this.fetchAckTimerId = -1;
+    }
+  }
+
+  /**
+   * 回退到分片通道。三重闸：代际已变丢弃、载荷已到手不动、每代际只回退一次。
+   * @param gen 失败的那次代际
+   * @param why 失败原因（进日志）
+   */
+  private fallbackToChunks(gen: number, why: string): void {
+    if (gen !== this.pageGen) {
+      MusicFreeEngine.log('回退跳过（代际已变 ' + gen + '→' + this.pageGen + '）原因=' + why);
+      return;
+    }
+    if (this.fetchAckGen === gen) {
+      MusicFreeEngine.log('回退跳过（载荷已到手）原因=' + why);
+      return;
+    }
+    if (this.fallbackGen === gen) {
+      MusicFreeEngine.log('回退跳过（本代已回退过）原因=' + why);
+      return;
+    }
+    if (this.currentScriptB64.length === 0) {
+      MusicFreeEngine.log('回退跳过（无载荷）原因=' + why);
+      return;
+    }
+    if (this.fallbackCount >= MF_FALLBACK_MAX) {
+      MusicFreeEngine.log('回退已达上限(' + MF_FALLBACK_MAX + ') 放弃原因=' + why);
+      return;
+    }
+    this.fallbackCount++;
+    this.fallbackGen = gen;
+    MusicFreeEngine.log('快通道回退分片(' + this.fallbackCount + '/' + MF_FALLBACK_MAX +
+      ') 原因=' + why + ' gen=' + gen);
+    this.injectPluginChunked(gen);
+  }
+
   /** 注入后迟迟没有 mfReady：报错而不是静默卡死。 */
   private armReadyTimer(gen: number): void {
     this.clearReadyTimer();
@@ -224,6 +379,11 @@ export struct MusicFreeEngine {
         return;
       }
       MusicFreeEngine.log('注入后 ' + MF_READY_TIMEOUT_MS + 'ms 未就绪');
+      // 完全没有 mfReady 也意味着这次注入没成功：刷新重试若还走同一条通道多半重复失败
+      if (!self.pinChunked) {
+        self.pinChunked = true;
+        MusicFreeEngine.log('无 mfReady → 本次会话固定分片通道（换插件后解除）');
+      }
       self.failPending(new Error('MusicFree 插件加载超时'));
     }, MF_READY_TIMEOUT_MS);
   }
@@ -296,6 +456,22 @@ export struct MusicFreeEngine {
         }
         return;
       }
+      if (event === 'mfFetchAck') {
+        // 桥已拿到整包（装载之前就回）：此后绝不再回退分片
+        const ackGen: number = data.gen !== undefined ? data.gen as number : -1;
+        const ackLen: number = data.length !== undefined ? data.length as number : 0;
+        this.fetchAckGen = ackGen;
+        this.clearFetchAckWatch();
+        MusicFreeEngine.log('快通道载荷到达 gen=' + ackGen + ' ' + ackLen + 'B');
+        return;
+      }
+      if (event === 'mfFetchError') {
+        const errGen: number = data.gen !== undefined ? data.gen as number : -1;
+        const errMsg: string = (data.message as string) ?? '';
+        MusicFreeEngine.log('快通道失败 gen=' + errGen + ' msg=' + errMsg.substring(0, 120));
+        this.fallbackToChunks(errGen, '桥上报: ' + errMsg);
+        return;
+      }
       if (event === 'mfReady') {
         const gen: number = data.gen !== undefined ? data.gen as number : -1;
         if (gen >= 0 && gen !== this.pageGen) {
@@ -321,7 +497,11 @@ export struct MusicFreeEngine {
         }
         mfEngineMethods = list;
         this.clearReadyTimer();
-        MusicFreeEngine.log('就绪 ✓ platform=' + mfEnginePlatform + ' 方法=' + list.length);
+        this.clearFetchAckWatch();
+        // injectMs = 从发起注入到插件上报就绪的总耗时（与 LX 引擎同一口径）
+        const injectMs: number = this.injectStartedAt > 0 ? Date.now() - this.injectStartedAt : -1;
+        MusicFreeEngine.log('就绪 ✓ platform=' + mfEnginePlatform + ' 方法=' + list.length +
+          ' injectMs=' + injectMs);
         AppStorage.setOrCreate('mfEngineReady', true);
         AppStorage.setOrCreate('mfEnginePlatform', mfEnginePlatform);
         return;
@@ -421,8 +601,63 @@ export struct MusicFreeEngine {
     }
   }
 
+  /**
+   * 拦截快通道载荷请求：只认 {@link MF_INIT_URL}，其余一律 `return null` 原样放行。
+   * @param event 拦截事件
+   * @returns 载荷响应；非目标请求返回 null 表示不拦截
+   */
+  private handleInterceptRequest(event: OnInterceptRequestEvent): WebResourceResponse | null {
+    try {
+      if (event === undefined || event === null || event.request === undefined) {
+        return null;
+      }
+      const url: string = event.request.getRequestUrl();
+      if (url.indexOf(MF_INIT_URL) !== 0) {
+        return null;
+      }
+      return this.buildInitResponse();
+    } catch (e) {
+      MusicFreeEngine.log('拦截载荷异常: ' + JSON.stringify(e).substring(0, 100));
+      return null;
+    }
+  }
+
+  /**
+   * 构造载荷响应：插件**原文**（ArrayBuffer），不再 base64。
+   * 官方要求顺序：data → mimeType → encoding → header → code → **最后** setIsReady(true)，
+   * 顺序错会让同步 XHR 阻塞。跨域头必须带：页面源是 `resource://rawfile`。
+   * @returns 已装配好的响应对象
+   */
+  private buildInitResponse(): WebResourceResponse {
+    const response: WebResourceResponse = new WebResourceResponse();
+    const encoder: util.TextEncoder = new util.TextEncoder();
+    const bytes: Uint8Array = encoder.encodeInto(this.currentScriptText);
+    const buffer: ArrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    const headers: Header[] = [
+      { headerKey: 'Access-Control-Allow-Origin', headerValue: '*' },
+      { headerKey: 'Cache-Control', headerValue: 'no-store' }
+    ];
+    response.setResponseData(buffer);
+    response.setResponseMimeType('text/javascript');
+    response.setResponseEncoding('utf-8');
+    response.setResponseHeader(headers);
+    response.setResponseCode(200);
+    response.setReasonMessage('OK');
+    response.setResponseIsReady(true);
+    return response;
+  }
+
   build(): void {
     Web({ src: $rawfile('mf_runtime.html'), controller: this.controller })
+      .onControllerAttached((): void => {
+        // 官方：此回调之前不得调用 Web 组件相关 API（否则抛 js-error 17100001）
+        this.controllerAttached = true;
+        MusicFreeEngine.log('控制器已绑定，待注入=' + this.currentScriptText.length + 'B');
+      })
+      .onInterceptRequest((event: OnInterceptRequestEvent) => {
+        // 快通道载荷：桥 fetch 的目标地址在这里应答，其余请求返回 null 原样放行
+        return this.handleInterceptRequest(event);
+      })
       .javaScriptAccess(true)
       .domStorageAccess(true)
       .fileAccess(true)

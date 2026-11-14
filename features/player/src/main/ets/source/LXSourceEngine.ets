@@ -126,6 +126,13 @@ export struct LXSourceEngine {
   private outgoingQueue: QueuedJs[] = [];
   /** initScript 的并发保护：aboutToAppear 与 @Watch 可能同时触发加载。 */
   private loadingSourceId: string = '';
+  /**
+   * Web 控制器是否已绑定到 Web 组件（由 onControllerAttached 置真）。
+   * ★ 官方约束：「在此回调之前不要调用 Web 组件相关 API，否则抛 js-error 异常」
+   *   —— 冷启动时 aboutToAppear 早于控制器绑定，此时 refresh()/runJavaScript()
+   *   会抛 17100001。以前是 catch 住了但顺带白注入一次，现在先判这个标志。
+   */
+  private controllerAttached: boolean = false;
   /** 本次注入的起始时刻（ms），用于统计 injectMs（冷启动注入耗时的唯一可信指标）。 */
   private injectStartedAt: number = 0;
   /** 已收到快通道 `initFetchAck` 的代际；等于本次注入代际时禁止再回退分片。 */
@@ -232,6 +239,7 @@ export struct LXSourceEngine {
   }
 
   aboutToDisappear(): void {
+    this.controllerAttached = false;
     this.clearReadyWatchdog();
     this.clearFetchAckWatch();
     lxEngineSendRequest = null;
@@ -313,6 +321,13 @@ export struct LXSourceEngine {
     this.webviewReady = false;
     LXSourceEngine.appendLog('引擎 脚本变更 → 重新加载页面 id=' + apiInfo.id +
       ' 载荷=' + initDataJson.length + 'B');
+    if (!this.controllerAttached) {
+      // 控制器还没绑定（冷启动 aboutToAppear 早于 Web 组件挂载）：
+      // 此时调 refresh/runJavaScript 必抛 17100001，注入也必然落空。
+      // 载荷已存在 currentInitJson 里，等 onPageEnd 注入即可。
+      LXSourceEngine.appendLog('引擎 控制器未绑定 → 等 onPageEnd 注入 id=' + apiInfo.id);
+      return;
+    }
     try {
       this.controller.refresh();
     } catch (e) {
@@ -404,6 +419,7 @@ export struct LXSourceEngine {
   }
 
   destroy(): void {
+    this.controllerAttached = false;
     this.clearReadyWatchdog();
     this.clearFetchAckWatch();
     this.clearAllRequests();
@@ -1008,6 +1024,11 @@ appendPlayLog(msg);
 
   build(): void {
     Web({ src: $rawfile('lx_bridge.html'), controller: this.controller })
+      .onControllerAttached((): void => {
+        // 官方：此回调之前不得调用 Web 组件相关 API（否则抛 js-error 17100001）
+        this.controllerAttached = true;
+        LXSourceEngine.appendLog('引擎 控制器已绑定，待注入=' + this.currentInitJson.length + 'B');
+      })
       .javaScriptAccess(true)
       .domStorageAccess(true)
       .fileAccess(true)
