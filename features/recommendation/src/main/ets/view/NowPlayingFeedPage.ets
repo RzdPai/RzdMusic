@@ -217,7 +217,7 @@ import {
   ScrollEffectType,
   TitleSize
 } from '@kit.UIDesignKit';
-import {
+import { lxQualityLabel,
   AccountChangedState,
   AccountService,
   buildSongShareText,
@@ -1987,20 +1987,13 @@ export struct NowPlayingFeedPage {
     return pills;
   }
 
-  /** LX 音质 id → 卡片上的短标签（与 `RecordListPage.qualityLabel` 同一张对照表）。 */
+  /**
+   * LX 音质 id → 卡片上的短标签。
+   * ★ 2026-11-14：统一取 `lxQualityLabel()`（唯一一份），不再自带对照表
+   *   （旧表把 `flac24bit` 标成「Hi-Res」，权威表里那是 `hires` 的标签）。
+   */
   private qualityLabel(quality: string): string {
-    switch (quality) {
-      case '128k':
-        return '128k';
-      case '320k':
-        return '320k';
-      case 'flac':
-        return 'FLAC';
-      case 'flac24bit':
-        return 'Hi-Res';
-      default:
-        return quality;
-    }
+    return lxQualityLabel(quality);
   }
 
   // ─────────────────────────── 播放 ───────────────────────────

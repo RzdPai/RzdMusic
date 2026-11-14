@@ -16,7 +16,7 @@
 import { AppStorageV2, uiObserver } from '@kit.ArkUI';
 import { guardPlayerBack, AmbientState, BreakpointType, ThemeState } from 'musicbasic';
 import { AppStorageKeys, MusicAppState, MusicStoreService, PlayedSongRecord, SongTitleMarquee, TabSwitchState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
-import { OnlinePlayUtil } from 'player';
+import { platformLabel, OnlinePlayUtil } from 'player';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType } from '@kit.UIDesignKit';
 import { SongMoreMenu } from './SongMoreMenu';
 
@@ -182,16 +182,10 @@ export struct PlaylistHomePage {
     return '#6B6B6B';
   }
 
+  /** 平台中文名统一取 `platformLabel()`（`SourceDeclaredInfo` 里的唯一一份）。 */
   private sourceLabel(source: string): string {
-    switch (source) {
-      case 'kw': return '酷我';
-      case 'kg': return '酷狗';
-      case 'tx': return 'QQ';
-      case 'wy': return '网易云';
-      case 'mg': return '咪咕';
-      case 'qs': return '汽水';
-    }
-    return source;
+    const text: string = platformLabel(source);
+    return text.length > 0 ? text : source;
   }
 
   private formatTime(ts: number): string {

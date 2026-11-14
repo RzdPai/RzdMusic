@@ -70,7 +70,7 @@ import {
   BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions,
   HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize
 } from '@kit.UIDesignKit';
-import { OnlinePlayUtil, sourceDisplayName, sourceToCode } from 'player';
+import { lxQualityLabel, OnlinePlayUtil, sourceDisplayName, sourceToCode } from 'player';
 import { SongMoreMenu } from 'playlist';
 import { displaySync } from '@kit.ArkGraphics2D';
 import { RecordRowItem } from './RecordRowItem';
@@ -702,16 +702,15 @@ export struct RecordListPage {
     }
   }
 
-  /** Maps an LX quality id to a short Chinese label. */
+  /**
+   * LX 音质 id → 短标签。
+   * ★ 2026-11-14：不再自带一份对照表，统一取 `lxQualityLabel()`（唯一一份）。
+   *   旧表把 `flac24bit` 标成「Hi-Res」，而权威表里 `Hi-Res` 是 `hires`、
+   *   `flac24bit` 是「24Bit」—— 同档位两个名字且标错了。
+   */
   private qualityLabel(quality: string | undefined): string {
     const q: string = quality ?? '';
-    switch (q) {
-      case '128k': return '128k';
-      case '320k': return '320k';
-      case 'flac': return 'FLAC';
-      case 'flac24bit': return 'Hi-Res';
-      default: return q.length > 0 ? q : '—';
-    }
+    return q.length > 0 ? lxQualityLabel(q) : '—';
   }
 
   /** Normalizes missing fields so rows never render `undefined`. */
