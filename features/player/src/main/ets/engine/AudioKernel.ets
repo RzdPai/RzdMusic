@@ -3,13 +3,14 @@
  *
  * 播放内核抽象层。
  *
- * 目的：让「系统播放器（AVPlayer）」与「第三方解码内核（FFmpeg/ijk，未来 mpv）」在 MediaService
+ * 目的：让「系统播放器（AVPlayer）」与「第三方解码内核（当前是 mpv）」在 MediaService
  * 眼里是同一套接口 —— MediaService 只持有唯一状态机，内核只负责「出声 + 报进度」。
  *
- * 现状：
- * - `IjkAudioEngine`（@ohos/ijkplayer，FFmpeg audio-only）已实现本接口，用于汽水分片 mp4 / 开启音效的曲目；
- * - `MpvAudioEngine` 是**占位实现**：接口齐全但不可用（缺 `libmpv.so` 与 `libmpvnative` NAPI 包装），
- *   等拿到 arm64 的 `libmpv.so` 后只需把它的方法接到 NAPI，MediaService 一行不用改。
+ * 现状（2026-11-15 核实，**旧注释与此完全相反，已重写**）：
+ * - `MpvAudioEngine` 是**真正在用的**第三方内核：`libmpv.so` + `libmpvnative` 已打进包，
+ *   用于汽水分片 mp4 / 开启音效的曲目；
+ * - `IjkAudioEngine`（@ohos/ijkplayer）**已被整体移除**，`PlaybackKernelKind` 里不再有它；
+ * - AVPlayer 由 MediaService 自己管理，不经过 `KernelFactory`。
  *
  * 排查日志关键字：`RzdKernel`。
  */
@@ -21,9 +22,10 @@ import { AudioEffects } from './AudioEffects';
 export enum PlaybackKernelKind {
   /** 系统 AVPlayer（默认，万能但不支持分片 mp4 边下边播/音效）。 */
   AVPLAYER = 0,
-  /** FFmpeg（通过 @ohos/ijkplayer 的纯音频通道）。 */
-  /** libmpv（待接入）。 */
+  /** libmpv（**当前实际使用的内核**）。 */
   MPV = 2
+  // ⚠️ 没有 `1`：那是已移除的 `IJK = 1`（@ohos/ijkplayer）。编号**故意留空不重排**，
+  //   避免有人"顺手"把 MPV 改成 1 —— 枚举数值可能出现在日志与历史数据里。
 }
 
 /** 音频焦点中断归一化结果。 */

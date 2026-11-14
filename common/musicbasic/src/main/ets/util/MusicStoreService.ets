@@ -86,10 +86,16 @@ const KEY_AUDIO_MIX: string = 'audio_mix';
 const KEY_AUTOPLAY_ON_LAUNCH: string = 'autoplay_on_launch';
 const KEY_TUNING_PITCH: string = 'tuning_pitch';
 const KEY_TUNING_EQ: string = 'tuning_eq_gains';
-/** 汽水（FFmpeg 内核）连续失败次数。 */
-const KEY_IJK_FAIL_STREAK: string = 'ijk_fail_streak';
-/** 汽水是否已临时禁用 FFmpeg 内核（连续失败后自动回退 AVPlayer）。 */
-const KEY_IJK_DISABLED: string = 'ijk_disabled';
+/**
+ * 「内核连续失败次数」的落盘键。
+ *
+ * ⚠️ **键值 `ijk_fail_streak` / `ijk_disabled` 故意不改**：它们已经写进用户设备，
+ *   改值会丢掉「内核被临时禁用」的既有状态。这里只把**标识符**正名成 `KERNEL`
+ *   （2026-11-15：内核早已是 mpv，ijk 只是历史名）。
+ */
+const KEY_KERNEL_FAIL_STREAK: string = 'ijk_fail_streak';
+/** 「内核是否被临时禁用」的落盘键（值同 {@link KEY_KERNEL_FAIL_STREAK} 的说明，保持旧值）。 */
+const KEY_KERNEL_DISABLED: string = 'ijk_disabled';
 /** 播放内核选择：auto=自动 / av=强制系统播放器 / ffmpeg=强制 FFmpeg。 */
 const KEY_ENGINE_MODE: string = 'engine_mode';
 /**
@@ -2175,39 +2181,39 @@ export class MusicStoreService {
       store.flush();
     }
     /** @returns 汽水 FFmpeg 内核的连续失败次数。 */
-    public getIjkFailStreak(): number {
+    public getKernelFailStreak(): number {
       const store = this.getStore();
       if (store === undefined) {
         return 0;
       }
-      return store.getSync(KEY_IJK_FAIL_STREAK, 0) as number;
+      return store.getSync(KEY_KERNEL_FAIL_STREAK, 0) as number;
     }
 
-    public setIjkFailStreak(streak: number): void {
+    public setKernelFailStreak(streak: number): void {
       const store = this.getStore();
       if (store === undefined) {
         return;
       }
-      store.putSync(KEY_IJK_FAIL_STREAK, streak);
+      store.putSync(KEY_KERNEL_FAIL_STREAK, streak);
     }
 
     /** @returns 是否已临时禁用 FFmpeg 内核（连续失败自动降级）。 */
-    public isIjkDisabled(): boolean {
+    public isKernelDisabled(): boolean {
       const store = this.getStore();
       if (store === undefined) {
         return false;
       }
-      return store.getSync(KEY_IJK_DISABLED, false) as boolean;
+      return store.getSync(KEY_KERNEL_DISABLED, false) as boolean;
     }
 
-    public setIjkDisabled(disabled: boolean): void {
+    public setKernelDisabled(disabled: boolean): void {
       const store = this.getStore();
       if (store === undefined) {
         return;
       }
-      store.putSync(KEY_IJK_DISABLED, disabled);
+      store.putSync(KEY_KERNEL_DISABLED, disabled);
       if (disabled) {
-        store.putSync(KEY_IJK_FAIL_STREAK, 0);
+        store.putSync(KEY_KERNEL_FAIL_STREAK, 0);
       }
     }
     public setEqGains(gains: number[]): void {

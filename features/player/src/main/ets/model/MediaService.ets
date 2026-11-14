@@ -482,10 +482,10 @@ export class MediaService {
       return;
     }
     // ★ 2026-10-31（用户反馈"偶发播放不了、重启才好"）：内核分支必须放在 `!this.avPlayer` 之前。
-    //   以前 avPlayer 未初始化时这里直接 return，`ijkUrl` 明明有值也不会去创建 mpv ⇒
+    //   以前 avPlayer 未初始化时这里直接 return，`kernelUrl` 明明有值也不会去创建 mpv ⇒
     //   日志里只剩「走内核 mpv」，既没有 [RzdMpv] 也没有 AVPlayer 日志，表现就是"点了不播"，重启（重新 init）才好。
-    if (this.ijkUrl.length > 0) {
-      this.startIjkPlayback(this.ijkUrl);
+    if (this.kernelUrl.length > 0) {
+      this.startKernelPlayback(this.kernelUrl);
       return;
     }
     if (!this.avPlayer) {
@@ -494,12 +494,12 @@ export class MediaService {
     }
     this.songItem = await this.songItemBuilder.build(idleSong);
       // ★ 汽水（分片 mp4）：不经 AVPlayer，直接交给 mpv 内核
-      if (this.ijkUrl.length === 0 && this.ijkActive) {
-        this.appendPlayLog('[播放] back to AVPlayer, release ijk');
-        this.releaseIjk();
+      if (this.kernelUrl.length === 0 && this.kernelActive) {
+        this.appendPlayLog('[播放] back to AVPlayer, release kernel');
+        this.releaseKernel();
       }
-      if (this.ijkUrl.length > 0) {
-        this.startIjkPlayback(this.ijkUrl);
+      if (this.kernelUrl.length > 0) {
+        this.startKernelPlayback(this.kernelUrl);
         return;
       }
       // ★ 统一“装载前先回 idle”：fdSrc 与 url 混用会让 AVPlayer「有时长/有进度但没声音」，
@@ -543,7 +543,7 @@ export class MediaService {
   /** AVPlayer stateChange: drives prepare/play flow, metadata, and auto-next on completion. */
   private stateCall: (state: string) => Promise<void> = async (state: string) => {
     // ★★★ 2026-11-03（甲方：「换源后明明在播，按钮却显示成暂停」）：
-    //   **出声的引擎可能已经不是 AVPlayer 了**。换源把音源切到内核（mpv/ijk）之后，
+    //   **出声的引擎可能已经不是 AVPlayer 了**。换源把音源切到内核（mpv）之后，
     //   AVPlayer 仍会陆续抛出 paused / stopped / idle，而本回调末尾统一
     //   `updateIsPlay(this.state === PLAY)` ⇒ 把 `appState.isPlay` 拍成 false，
     //   于是"正在播却显示暂停"。⇒ 内核接管期间，AVPlayer 的事件只记账、不改对外状态、也不许它自己起播。
@@ -956,8 +956,8 @@ export class MediaService {
     }
     // 内核（mpv）在播时只改内核，绝不动 AVPlayer：
     // 之前对 idle 的 AVPlayer 调 setSpeed 会触发 5400102，被错误恢复当成播放失败 → 直接跳歌。
-    if (this.ijkActive) {
-      this.applyIjkRate();
+    if (this.kernelActive) {
+      this.applyKernelRate();
       return;
     }
     const player: media.AVPlayer | undefined = this.avPlayer;
@@ -1258,36 +1258,38 @@ export class MediaService {
   }
 
   // ===== 播放内核（mpv）：汽水分片流 / 音效曲目 =====
+  // ⚠️ 本节标识符原为 `ijk*`（早期内核是 @ohos/ijkplayer）。mpv 跑通后 ijk 已整体移除，
+  //   2026-11-15 统一正名为 `kernel*` —— **看到 `ijk` 别以为是 FFmpeg 内核**。
 
-  /** 当前 ijk 引擎实例（仅在汽水分片流时存在）。 */
-  private ijkEngine: AudioKernel | undefined = undefined;
-  /** 待用 ijk 播放的地址；空串表示走 AVPlayer。 */
-  private ijkUrl: string = '';
+  /** 当前内核引擎实例（mpv；仅在走第三方内核时存在）。 */
+  private kernelEngine: AudioKernel | undefined = undefined;
+  /** 待用内核播放的地址；空串表示走 AVPlayer。 */
+  private kernelUrl: string = '';
   /** 进度轮询定时器句柄（-1 表示未启动）。 */
-  private ijkPollTimer: number = -1;
-  /** ijk 静默失败看门狗：prepare 后 N 秒既没 onPrepared 也没 onError 就降级。 */
-  private ijkWatchdog: number = -1;
+  private kernelPollTimer: number = -1;
+  /** 内核静默失败看门狗：prepare 后 N 秒既没 onPrepared 也没 onError 就降级。 */
+  private kernelWatchdog: number = -1;
   /** 本轮装载是否已做过"原地重试 mpv"（避免无限重试）。 */
-  private ijkInlineRetryDone: boolean = false;
+  private kernelInlineRetryDone: boolean = false;
   /** 上一次下发的 af 链（相同则不重复下发，避免拖滑杆刷爆日志）。 */
   private lastAfChain: string = '';
-  /** 当前是否由 ijk 引擎出声（play/pause/seek 分支据此路由）。 */
-  private ijkActive: boolean = false;
+  /** 当前是否由内核引擎出声（play/pause/seek 分支据此路由）。 */
+  private kernelActive: boolean = false;
   /**
    * ★ 2026-11-03：**内核引擎是否持有"出声权"**（`stateCall` 用它决定要不要理 AVPlayer 的事件）。
    *
-   * 为什么不能直接用 `ijkActive && ijkEngine !== undefined`：
+   * 为什么不能直接用 `kernelActive && kernelEngine !== undefined`：
    * `parkAvPlayerForKernel()` 里 `reset()` 触发的 `idle` 事件是**异步回来**的，
    * 那一刻内核实例可能还没创建 ⇒ 守卫会判成"内核没接手" ⇒ `stateCall('idle')`
    * 又去 `loadCurrentIntoPlayer()` 把刚停掉的 AVPlayer 拉起来（双路出声复发）。
-   * 所以改用这个**显式、同步**的标志：起内核前先置真，`releaseIjk()` 里置假。
+   * 所以改用这个**显式、同步**的标志：起内核前先置真，`releaseKernel()` 里置假。
    */
   private kernelOwnsAudio: boolean = false;
 
   /**
    * 把 AVPlayer 停到"不出声、也不抢状态"的位置（**内核引擎接手之前必须调**）。
    *
-   * 为什么必须有这一步：`loadAsset` 的内核分支（`if (this.ijkUrl.length > 0)`）起完内核就
+   * 为什么必须有这一步：`loadAsset` 的内核分支（`if (this.kernelUrl.length > 0)`）起完内核就
    * `return`，根本走不到后面那句 `reset()` ⇒ 如果这一拍 AVPlayer 还在放上一首，
    * 内核会**和它一起响**（甲方实测「有概率两路同时播放」）。
    * 同时把 `isPrepared` 归零：`stateCall` 里那两处依赖它的判断才不会拿"上一首 AVPlayer 的残留相位"
@@ -1314,46 +1316,46 @@ export class MediaService {
   }
 
   /**
-   * 释放 ijk 引擎与轮询。
+   * 释放内核引擎与轮询。
    * 每次换歌 / 回退 AVPlayer 前都要调用，避免两套引擎同时出声。
    */
-  private releaseIjk(): void {
-    this.clearIjkWatchdog();
-    this.stopIjkPolling();
-    if (this.ijkEngine !== undefined) {
-      this.ijkEngine.release();
-      this.ijkEngine = undefined;
+  private releaseKernel(): void {
+    this.clearKernelWatchdog();
+    this.stopKernelPolling();
+    if (this.kernelEngine !== undefined) {
+      this.kernelEngine.release();
+      this.kernelEngine = undefined;
     }
-    this.ijkActive = false;
+    this.kernelActive = false;
     this.kernelOwnsAudio = false;
-    this.ijkUrl = '';
+    this.kernelUrl = '';
   }
 
   /** 停止进度轮询。 */
-  private stopIjkPolling(): void {
-    if (this.ijkPollTimer >= 0) {
-      clearInterval(this.ijkPollTimer);
-      this.ijkPollTimer = -1;
+  private stopKernelPolling(): void {
+    if (this.kernelPollTimer >= 0) {
+      clearInterval(this.kernelPollTimer);
+      this.kernelPollTimer = -1;
     }
   }
 
-  /** 启动 ijk 看门狗：12 秒内没 prepared / error 就当作静默失败并降级。 */
-  private armIjkWatchdog(engine: AudioKernel): void {
-    this.clearIjkWatchdog();
-    this.ijkWatchdog = setInterval((): void => {
-      this.clearIjkWatchdog();
-      if (this.ijkEngine !== engine || engine.isPrepared()) {
+  /** 启动内核看门狗：12 秒内没 prepared / error 就当作静默失败并降级。 */
+  private armKernelWatchdog(engine: AudioKernel): void {
+    this.clearKernelWatchdog();
+    this.kernelWatchdog = setInterval((): void => {
+      this.clearKernelWatchdog();
+      if (this.kernelEngine !== engine || engine.isPrepared()) {
         return;
       }
       this.appendPlayLog('[RzdKernel] state ' + (engine.probeState !== undefined ? engine.probeState() : 'n/a'));
       // ★ 2026-10-31：先原地重试一次 mpv（同一直链），确认是网络/代理问题再放弃；
       //   以前这里直接 release 并 loadCurrentIntoPlayer ⇒ 落到 AVPlayer（5411001）→ 跳歌，把一次失败放大成整首跳过。
-      this.markIjkFail();
-      this.releaseIjk();
-      if (!this.ijkInlineRetryDone && this.ijkUrl.length > 0) {
-        this.ijkInlineRetryDone = true;
+      this.markKernelFail();
+      this.releaseKernel();
+      if (!this.kernelInlineRetryDone && this.kernelUrl.length > 0) {
+        this.kernelInlineRetryDone = true;
         this.appendPlayLog('[RzdKernel] retry mpv in place');
-        this.startIjkPlayback(this.ijkUrl);
+        this.startKernelPlayback(this.kernelUrl);
         return;
       }
       this.appendPlayLog('[RzdKernel] retry failed -> fallback/next');
@@ -1362,21 +1364,21 @@ export class MediaService {
   }
 
   /** 停止 mpv 看门狗。 */
-  private clearIjkWatchdog(): void {
-    if (this.ijkWatchdog >= 0) {
-      clearInterval(this.ijkWatchdog);
-      this.ijkWatchdog = -1;
+  private clearKernelWatchdog(): void {
+    if (this.kernelWatchdog >= 0) {
+      clearInterval(this.kernelWatchdog);
+      this.kernelWatchdog = -1;
     }
   }
 
-  /** 启动进度轮询：把 ijk 的位置/时长写进 MusicAppState（UI 唯一真源）。 */
-  private startIjkPolling(): void {
-    this.stopIjkPolling();
-    this.ijkPollTimer = setInterval((): void => {
-      if (!this.ijkActive || this.ijkEngine === undefined) {
+  /** 启动进度轮询：把内核的位置/时长写进 MusicAppState（UI 唯一真源）。 */
+  private startKernelPolling(): void {
+    this.stopKernelPolling();
+    this.kernelPollTimer = setInterval((): void => {
+      if (!this.kernelActive || this.kernelEngine === undefined) {
         return;
       }
-      const engine: AudioKernel = this.ijkEngine;
+      const engine: AudioKernel = this.kernelEngine;
       const pos: number = engine.position();
       const dur: number = engine.duration();
       const st = this.getAppState();
@@ -1387,7 +1389,7 @@ export class MediaService {
         st.totalTime = MediaTools.msToCountdownTime(dur);
       }
       // 每 5 秒把位置同步给 AVSession（锁屏/车机进度条），避免只有 0 秒
-      if (this.ijkActive && Math.floor(pos / 5000) !== Math.floor((pos - 500) / 5000)) {
+      if (this.kernelActive && Math.floor(pos / 5000) !== Math.floor((pos - 500) / 5000)) {
         this.setPlayState({
           state: avSession.PlaybackState.PLAYBACK_STATE_PLAY,
           position: { elapsedTime: pos, updateTime: new Date().getTime() }
@@ -1397,28 +1399,28 @@ export class MediaService {
   }
 
   /**
-   * 用 ijk 引擎播放一条流（汽水分片 mp4）。
+   * 用内核引擎播放一条流（汽水分片 mp4）。
    * @param url 已剥壳的直链。
    */
-  private startIjkPlayback(url: string): void {
+  private startKernelPlayback(url: string): void {
     // ★★★ 2026-11-03（甲方：「有概率现在就听会和正常的播放同时播放」）：
-    //   换源后新地址若落在内核流上（`ijkUrl` 非空），`loadAsset` 会**直接跑去起内核并 return**，
+    //   换源后新地址若落在内核流上（`kernelUrl` 非空），`loadAsset` 会**直接跑去起内核并 return**，
     //   而这条路上**从来没有停过 AVPlayer** —— 上一首还在 AVPlayer 里响、内核又开始放新歌，
     //   两路同时出声。内核成为出声引擎之前，必须先把 AVPlayer 停到"不出声也不抢状态"的位置。
-    // ⚠️ 顺序不能换：先 `releaseIjk()`（清上一路内核 + 清所有权），
+    // ⚠️ 顺序不能换：先 `releaseKernel()`（清上一路内核 + 清所有权），
     //   再**同步**置 `kernelOwnsAudio`，最后才 park —— 否则 `reset()` 异步回来的 idle 事件
     //   会把刚停掉的 AVPlayer 又拉起来（见 `kernelOwnsAudio` 注释）。
-    this.releaseIjk();
+    this.releaseKernel();
     this.kernelOwnsAudio = true;
     this.parkAvPlayerForKernel();
     const engine: AudioKernel = createKernel(preferredKernel());
-    this.ijkEngine = engine;
-    this.ijkActive = true;
+    this.kernelEngine = engine;
+    this.kernelActive = true;
     const playedGen: number = this.consumePlayIntent();
     appendPlayLog('[播放] soda -> ' + kernelName(engine.kind()) + ' gen=' + playedGen);
     engine.create({
       onPrepared: (): void => {
-        if (this.ijkEngine !== engine) {
+        if (this.kernelEngine !== engine) {
           return;
         }
         const dur: number = engine.duration();
@@ -1430,10 +1432,10 @@ export class MediaService {
         st.isResolving = false;
         this.state = AudioPlayerState.PLAY;
         this.isPrepared = true;
-        this.clearIjkWatchdog();
-        this.markIjkOk();
+        this.clearKernelWatchdog();
+        this.markKernelOk();
         this.appendPlayLog('[RzdKernel] stream ' + engine.describeStream());
-        // ★ ijk 路径也要写 AVSession 元数据，否则锁屏/车机看不到歌名封面
+        // ★ 内核路径也要写 AVSession 元数据，否则锁屏/车机看不到歌名封面
         void this.setAVMetadata();
         // 播放设置：EQ / 升降调（实验性；非默认值才下发）
         const store = MusicStoreService.getInstance();
@@ -1455,14 +1457,14 @@ export class MediaService {
         if (playedGen >= 0) {
           engine.start();
           engine.setVolume(1);
-          this.applyIjkRate();
+          this.applyKernelRate();
           this.updateIsPlay(true);
           this.ensureBackgroundAudioTask();
-          this.startIjkPolling();
+          this.startKernelPolling();
           this.getAppState().isResolving = false;
-          this.appendPlayLog('[播放] ijk start dur=' + dur);
+          this.appendPlayLog('[播放] kernel start dur=' + dur);
         } else {
-          this.appendPlayLog('[播放] ijk load only');
+          this.appendPlayLog('[播放] kernel load only');
         }
       },
       onDuration: (durationMs: number): void => {
@@ -1471,38 +1473,38 @@ export class MediaService {
         st.totalTime = MediaTools.msToCountdownTime(durationMs);
       },
       onCompleted: (): void => {
-        if (this.ijkEngine !== engine) {
+        if (this.kernelEngine !== engine) {
           return;
         }
-        appendPlayLog('[播放] ijk completed -> next');
-        this.stopIjkPolling();
-        this.releaseIjk();
+        appendPlayLog('[播放] kernel completed -> next');
+        this.stopKernelPolling();
+        this.releaseKernel();
         this.playNextAuto(false);
       },
       onError: (code: number, message: string): void => {
-        if (this.ijkEngine !== engine) {
+        if (this.kernelEngine !== engine) {
           return;
         }
-        appendPlayLog('[播放] ijk fail code=' + code + ' msg=' + message + ' -> AVPlayer');
-        this.markIjkFail();
-        this.releaseIjk();
+        appendPlayLog('[播放] kernel fail code=' + code + ' msg=' + message + ' -> AVPlayer');
+        this.markKernelFail();
+        this.releaseKernel();
         // 回退：AVPlayer 仍持有 songItem.url（可能卡 0 进度，但至少不静默失败）
         this.loadCurrentIntoPlayer();
       }
     });
-    // ★ 音频焦点：ijk 自己也会收到系统中断，这里统一转成与 AVPlayer 一致的暂停/恢复策略
+    // ★ 音频焦点：内核自己也会收到系统中断，这里统一转成与 AVPlayer 一致的暂停/恢复策略
     engine.onInterrupt((kind: AudioInterruptKind): void => {
       if (kind === AudioInterruptKind.PAUSE) {
         this.pauseReason = 'focus';
         this.resumeWhenReady = true;
         this.pausedByInterrupt = true;
         this.updateIsPlay(false);
-        this.appendPlayLog('[播放] ijk focus lost, wait');
+        this.appendPlayLog('[播放] kernel focus lost, wait');
       } else if (kind === AudioInterruptKind.STOP) {
         this.pauseReason = 'focus';
         this.resumeWhenReady = false;
         this.updateIsPlay(false);
-        this.appendPlayLog('[播放] ijk focus lost forever');
+        this.appendPlayLog('[播放] kernel focus lost forever');
       } else {
         // 焦点回来后：独占模式下 AO 可能已被系统重新分配，重新下发一次后端
         if (MusicStoreService.getInstance().getUsbExclusive() &&
@@ -1515,7 +1517,7 @@ export class MediaService {
         this.resumeIfAutoPaused('focus');
       }
     });
-    this.armIjkWatchdog(engine);
+    this.armKernelWatchdog(engine);
     // 起播前统一设置 UA/Referer/超时/重连（抖音系直链与代理常因缺 UA/Referer 被拒）
     if (engine.prepareNetworkOptions !== undefined) {
       engine.prepareNetworkOptions();
@@ -1523,7 +1525,7 @@ export class MediaService {
     engine.prepare(url);
   }
 
-  /** 把当前倍速应用到 ijk（AVPlayer 与 ijk 各自生效）。 */
+  /** 把当前倍速应用到内核（AVPlayer 与内核各自生效）。 */
   /**
    * 播放中修改「播放设置」（EQ / 升降调）后调用：立刻把新参数下发给当前引擎。
    * - mpv 正在出声：重新 `applyTuning`（FFmpeg `af` 链）；
@@ -1544,9 +1546,9 @@ export class MediaService {
       this.appendPlayLog('[RzdUsb] exclusive, skip filter chain');
       return;
     }
-    if (this.ijkActive && this.ijkEngine !== undefined) {
-      this.ijkEngine.applyTuning(eq, pitch, effects);
-      this.appendPlayLog('[RzdTuning] applied to ' + kernelName(this.ijkEngine.kind()));
+    if (this.kernelActive && this.kernelEngine !== undefined) {
+      this.kernelEngine.applyTuning(eq, pitch, effects);
+      this.appendPlayLog('[RzdTuning] applied to ' + kernelName(this.kernelEngine.kind()));
       return;
     }
     this.appendPlayLog('[RzdTuning] on AVPlayer, applies on kernel');
@@ -1561,22 +1563,22 @@ export class MediaService {
    * 连续 2 次播放失败会写 `ijk_disabled`（持久化），之后汽水先走系统播放器；
    * 现在 mpv 是唯一内核，该标记启动时会被清掉（见构造函数）。
    */
-  private shouldUseIjk(): boolean {
+  private isKernelEnabled(): boolean {
     // ★ 2026-10-31（用户拍板）：播放内核统一走 mpv，不再提供「系统播放器 / FFmpeg」选项。
     //   只有当 mpv 连续失败被自动降级（ijk_disabled）时才回落 AVPlayer。
-    return !MusicStoreService.getInstance().isIjkDisabled();
+    return !MusicStoreService.getInstance().isKernelDisabled();
   }
 
-  /** ijk 播放成功后清零失败计数。 */
-  private markIjkOk(): void {
+  /** 内核播放成功后清零失败计数。 */
+  private markKernelOk(): void {
     const store = MusicStoreService.getInstance();
-    if (store.getIjkFailStreak() !== 0) {
-      store.setIjkFailStreak(0);
+    if (store.getKernelFailStreak() !== 0) {
+      store.setKernelFailStreak(0);
       this.appendPlayLog('[RzdKernel] fail count cleared');
     }
   }
 
-  /** ijk 播放失败累计；达到 2 次自动降级到系统播放器。 */
+  /** 内核播放失败累计；达到 2 次自动降级到系统播放器。 */
   /**
    * 用官方 http 模块探测一个 URL 是否可达（只取 1 字节，避免拉流）。
    * 用来区分"网络/代理不可达"与"mpv 解析失败"——这是汽水 12s 静默失败的关键证据。
@@ -1608,15 +1610,15 @@ export class MediaService {
     }
   }
 
-  private markIjkFail(): void {
+  private markKernelFail(): void {
     // ★ 2026-10-31：mpv 已是唯一内核，**不再做"连续失败就永久降级"** ——
     //   那个标记会把汽水永久踢回 AVPlayer，而 AVPlayer 打不开星海给的代理链（5411001 Cannot Find Host），
     //   结果就是"汽水一首也放不了、还一直跳歌"。这里只计数与打日志，失败由上层跨源重试处理。
     const store = MusicStoreService.getInstance();
-    const streak: number = store.getIjkFailStreak() + 1;
-    store.setIjkFailStreak(streak);
-    if (store.isIjkDisabled()) {
-      store.setIjkDisabled(false);
+    const streak: number = store.getKernelFailStreak() + 1;
+    store.setKernelFailStreak(streak);
+    if (store.isKernelDisabled()) {
+      store.setKernelDisabled(false);
       this.appendPlayLog('[RzdKernel] legacy ijk flag cleared');
     }
     this.appendPlayLog('[RzdKernel] mpv fail count=' + streak + '（继续用 mpv 重试）');
@@ -1624,10 +1626,10 @@ export class MediaService {
 
   /** @returns 当前生效的播放内核名（设置页展示用）。 */
   public engineName(): string {
-    if (MusicStoreService.getInstance().isIjkDisabled()) {
+    if (MusicStoreService.getInstance().isKernelDisabled()) {
       return 'mpv（已降级到系统播放器）';
     }
-    if (this.ijkActive) {
+    if (this.kernelActive) {
       return 'mpv · 正在使用';
     }
     return 'mpv';
@@ -1645,7 +1647,7 @@ export class MediaService {
       return;
     }
     const index: number = this.musicIndex;
-    this.releaseIjk();
+    this.releaseKernel();
     void this.loadAsset(index);
   }
   /**
@@ -1654,7 +1656,7 @@ export class MediaService {
   public kernelSummary(): string {
     const mode: string = MusicStoreService.getInstance().getEngineMode();
     const modeText: string = mode === 'av' ? '系统' : (mode === 'ffmpeg' ? 'FFmpeg' : (mode === 'mpv' ? 'mpv' : '自动'));
-    const active: string = this.ijkActive ? kernelName(this.ijkEngine !== undefined ? this.ijkEngine.kind() : PlaybackKernelKind.MPV) : 'AVPlayer';
+    const active: string = this.kernelActive ? kernelName(this.kernelEngine !== undefined ? this.kernelEngine.kind() : PlaybackKernelKind.MPV) : 'AVPlayer';
     return modeText + ' · ' + active;
   }
   /**
@@ -1668,8 +1670,8 @@ export class MediaService {
     const usb: UsbAudioService = UsbAudioService.getInstance();
     if (!enabled) {
       usb.disconnect();
-      if (this.ijkEngine !== undefined && this.ijkActive && this.ijkEngine.setUsbMode !== undefined) {
-        this.ijkEngine.setUsbMode('off');
+      if (this.kernelEngine !== undefined && this.kernelActive && this.kernelEngine.setUsbMode !== undefined) {
+        this.kernelEngine.setUsbMode('off');
       }
       this.appendPlayLog('[RzdUsb] exclusive off, normal output');
       return;
@@ -1681,8 +1683,8 @@ export class MediaService {
       MusicStoreService.getInstance().setUsbExclusive(false);
       return;
     }
-    const engine = this.ijkEngine;
-    if (engine === undefined || !this.ijkActive || engine.setUsbMode === undefined) {
+    const engine = this.kernelEngine;
+    if (engine === undefined || !this.kernelActive || engine.setUsbMode === undefined) {
       this.appendPlayLog('[RzdUsb] ready fd=' + fd);
       return;
     }
@@ -1789,7 +1791,7 @@ export class MediaService {
     const st: UsbAudioState = usb.state;
     this.appendPlayLog('[RzdUsb] diag present=' + st.present + ' authorized=' + st.authorized +
       ' connected=' + st.connected + ' fd=' + st.fd + ' ' + st.capabilityText);
-    const engine = this.ijkEngine;
+    const engine = this.kernelEngine;
     if (engine !== undefined) {
       if (engine.listAoDrivers !== undefined) {
         this.appendPlayLog('[RzdUsb] diag ao=' + engine.listAoDrivers());
@@ -1816,17 +1818,17 @@ export class MediaService {
     MusicStoreService.getInstance().setUsbExclusive(false);
     const usb: UsbAudioService = UsbAudioService.getInstance();
     usb.disconnect();
-    if (this.ijkEngine !== undefined && this.ijkEngine.setUsbMode !== undefined) {
-      this.ijkEngine.setUsbMode('off');
+    if (this.kernelEngine !== undefined && this.kernelEngine.setUsbMode !== undefined) {
+      this.kernelEngine.setUsbMode('off');
     }
     this.appendPlayLog('[RzdUsb] unplugged -> exclusive off');
     this.toast('USB 设备已断开，已回落普通输出');
   }
   /** 恢复 FFmpeg 内核（清掉降级标记）。 */
-  public resetIjkHealth(): void {
+  public resetKernelHealth(): void {
     const store = MusicStoreService.getInstance();
-    store.setIjkDisabled(false);
-    store.setIjkFailStreak(0);
+    store.setKernelDisabled(false);
+    store.setKernelFailStreak(0);
     this.appendPlayLog('[RzdKernel] mpv restored');
   }
   /** @returns 播放设置里是否有非默认的升降调 / EQ（有则普通曲目也走 FFmpeg）。 */
@@ -1846,12 +1848,12 @@ export class MediaService {
     }
     return false;
   }
-  private applyIjkRate(): void {
-    if (this.ijkEngine === undefined) {
+  private applyKernelRate(): void {
+    if (this.kernelEngine === undefined) {
       return;
     }
     const rate: number = this.getAppState().playbackRate;
-    this.ijkEngine.setSpeed(rate);
+    this.kernelEngine.setSpeed(rate);
   }
 
   private async resolveOnlineUrl(songItem: SongItem): Promise<boolean> {
@@ -1927,9 +1929,9 @@ export class MediaService {
     //   （`mime_type=audio_mp4`，给浏览器 MSE 用）。AVPlayer 边下边播解不出分片索引 ⇒ 卡 0。
     //   这类流先整段落盘，再走 fdSrc 播本地完整文件（只对汽水生效，其它平台不受影响）。
     // ★ 2026-10-30：汽水给的是 douyinvod 分片 mp4（`audio_mp4`，MSE 用途），
-    //   AVPlayer 能拿到总时长但解不出分片索引 ⇒ 进度恒 0。改走 FFmpeg(ijk) 音频引擎。
+    //   AVPlayer 能拿到总时长但解不出分片索引 ⇒ 进度恒 0。改走 mpv 音频内核。
     const tuningOn: boolean = this.isTuningActive();
-    if (!this.shouldUseIjk() && (songItem.source === 'qs' || outcome.url.indexOf('audio_mp4') >= 0)) {
+    if (!this.isKernelEnabled() && (songItem.source === 'qs' || outcome.url.indexOf('audio_mp4') >= 0)) {
       this.appendPlayLog('[播放] mpv unavailable -> soda on AVPlayer');
     }
     // ★ 2026-10-31（汽水"12s 未就绪"根因）：内核必须吃**还原后的直链**，不是跳转壳。
@@ -1937,15 +1939,15 @@ export class MediaService {
     //   然后失败重试又落到 AVPlayer（5411001 Cannot Find Host）→ 一直跳歌。
     const directUrl: string = this.unwrapRedirectUrl(outcome.url);
     const kernelUrl: string = directUrl.length > 0 ? directUrl : outcome.url;
-    if (this.shouldUseIjk() && (songItem.source === 'qs' || outcome.url.indexOf('audio_mp4') >= 0)) {
-      this.ijkUrl = kernelUrl;
+    if (this.isKernelEnabled() && (songItem.source === 'qs' || outcome.url.indexOf('audio_mp4') >= 0)) {
+      this.kernelUrl = kernelUrl;
       this.appendPlayLog('[播放] hls -> kernel ' + kernelName(preferredKernel()));
-    } else if (tuningOn && this.shouldUseIjk()) {
+    } else if (tuningOn && this.isKernelEnabled()) {
       // ★ 播放设置有非默认的音效/升降调：普通曲目也走 FFmpeg，否则 EQ 无处可生效
-      this.ijkUrl = kernelUrl;
+      this.kernelUrl = kernelUrl;
       this.appendPlayLog('[播放] effects on -> kernel ' + kernelName(preferredKernel()));
     } else {
-      this.ijkUrl = '';
+      this.kernelUrl = '';
     }
     songItem.url = directUrl.length > 0 ? directUrl : outcome.url;
     this.appendPlayLog('[播放] unwrapped=' + (directUrl.length > 0 ? 'y' : 'n') + ' kernelUrl=' + kernelUrl.substring(0, Math.min(80, kernelUrl.length)));
@@ -2011,8 +2013,8 @@ export class MediaService {
     };
     // ★ 内核自检：真机日志一眼确认 mpv/FFmpeg 是否可用（mpv 需 libmpv.so）
     // ★ 历史降级标记（ijk_disabled）在 mpv-only 版本里没有意义，启动即清除，避免汽水被永久踢回 AVPlayer
-    if (MusicStoreService.getInstance().isIjkDisabled()) {
-      MusicStoreService.getInstance().setIjkDisabled(false);
+    if (MusicStoreService.getInstance().isKernelDisabled()) {
+      MusicStoreService.getInstance().setKernelDisabled(false);
       this.appendPlayLog('[RzdKernel] clear legacy ijk_disabled');
     }
     this.appendPlayLog('[RzdKernel] selfcheck mpv=' + (isMpvAvailable() ? 'y' : 'n') +
@@ -2827,7 +2829,7 @@ export class MediaService {
    * @returns 本次请求的代次，调用方无需保存（`consumePlayIntent` 会校验）。
    */
   private beginLoadRequest(autoPlay: boolean): number {
-    this.ijkInlineRetryDone = false;
+    this.kernelInlineRetryDone = false;
     this.loadGen = this.loadGen + 1;
     this.playWhenPrepared = autoPlay;
     this.lastLoadWantedPlay = autoPlay;
@@ -2925,9 +2927,9 @@ export class MediaService {
     // ★ 起播意图必须在**函数最前面**声明：下面 resolveOnlineUrl 是异步的，期间可能
     //   有别的 loadAsset 插进来。放在异步之后声明会让「谁最后跑完谁说了算」，
     //   启动恢复就会偶发地自动播放。
-    // ★ 换歌：清掉上一首的「汽水 ijk 地址」并释放引擎，避免 ijk 与 AVPlayer 同时出声、
+    // ★ 换歌：清掉上一首的「汽水内核地址」并释放引擎，避免内核与 AVPlayer 同时出声、
     //   或把上一首的汽水地址套到新歌上（本地歌根本不会走 resolveOnlineUrl）。
-    this.releaseIjk();
+    this.releaseKernel();
     this.beginLoadRequest(loadOnly !== true);
     // 换歌：清掉上一首蓝牙歌词句，避免车机残留
     this.btLyricText = '';
@@ -2986,9 +2988,9 @@ export class MediaService {
     // ★ 2026-11-01（有人反馈"无法播放"）：内核地址已经解析好（日志里有 kernelUrl）时，
     //   不能因为 AVPlayer 还没创建就 return —— 那会让 mpv 永远不启动，表现就是"点了不播"。
     //   所以先走内核分支，再判 AVPlayer。
-    if (this.ijkUrl.length > 0) {
+    if (this.kernelUrl.length > 0) {
       this.isFirst = false;
-      this.startIjkPlayback(this.ijkUrl);
+      this.startKernelPlayback(this.kernelUrl);
       return;
     }
     if (!this.avPlayer) {
@@ -3001,8 +3003,8 @@ export class MediaService {
     if (this.isFirst) {
       this.isFirst = false;
         // ★ 汽水/音效曲目：首次加载也必须交给内核，不能走 AVPlayer（真机日志证实这里抢跑）
-        if (this.ijkUrl.length > 0) {
-          this.startIjkPlayback(this.ijkUrl);
+        if (this.kernelUrl.length > 0) {
+          this.startKernelPlayback(this.kernelUrl);
           return;
         }
       this.appendPlayLog('[播放] first load url=' + queueSong.url);
@@ -3120,9 +3122,9 @@ export class MediaService {
    * （`PlayerDataUtil.togglePlayPause` 等）都该问这里，而不是问镜像。
    */
   public isActuallyPlaying(): boolean {
-    if (this.ijkActive && this.ijkEngine !== undefined) {
+    if (this.kernelActive && this.kernelEngine !== undefined) {
       try {
-        return this.ijkEngine.isPlaying();
+        return this.kernelEngine.isPlaying();
       } catch (e) {
         return false;
       }
@@ -3140,7 +3142,7 @@ export class MediaService {
     if (mirror === truth) {
       return;
     }
-    appendPlayLog(`[RzdPlaySync] isPlay ${mirror}->${truth} reason=${reason} kernel=${this.ijkActive ? 1 : 0}`);
+    appendPlayLog(`[RzdPlaySync] isPlay ${mirror}->${truth} reason=${reason} kernel=${this.kernelActive ? 1 : 0}`);
     this.updateIsPlay(truth);
   }
 
@@ -3164,12 +3166,12 @@ export class MediaService {
    * @param ms Target position in ms, clamped to [0, duration].
    */
   public seek(ms: number): boolean {
-    if (this.ijkActive && this.ijkEngine !== undefined) {
-      this.ijkEngine.seekTo(ms);
+    if (this.kernelActive && this.kernelEngine !== undefined) {
+      this.kernelEngine.seekTo(ms);
       const st = this.getAppState();
       st.progress = ms;
       st.currentTime = MediaTools.msToCountdownTime(ms);
-      this.appendPlayLog('[播放] ijk seek=' + ms);
+      this.appendPlayLog('[播放] kernel seek=' + ms);
       return true;
     }
     if (this.isPrepared && this.state != AudioPlayerState.ERROR && this.avPlayer) {
@@ -3201,8 +3203,8 @@ export class MediaService {
 
   /** Current playback position in ms from AVPlayer, or 0 if not prepared. */
   private getCurrentTime() {
-    if (this.ijkActive && this.ijkEngine !== undefined) {
-      return this.ijkEngine.position();
+    if (this.kernelActive && this.kernelEngine !== undefined) {
+      return this.kernelEngine.position();
     }
     if (this.isPrepared && this.avPlayer) {
       return this.avPlayer.currentTime;
@@ -3212,8 +3214,8 @@ export class MediaService {
 
   /** Total duration in ms from AVPlayer, or 0 if not prepared. */
   private getDuration() {
-    if (this.ijkActive && this.ijkEngine !== undefined) {
-      return this.ijkEngine.duration();
+    if (this.kernelActive && this.kernelEngine !== undefined) {
+      return this.kernelEngine.duration();
     }
     if (this.isPrepared && this.avPlayer) {
       return this.avPlayer.duration;
@@ -3243,17 +3245,17 @@ export class MediaService {
   public async play() {
     // ★ 2026-11-03：内核已声明接管、但实例还没创建好的那一小段窗口里，
     //   任何 play() 都不能落到下面的 AVPlayer 分支（否则又会把 AVPlayer 拉起来 = 双路出声）。
-    if (this.kernelOwnsAudio && this.ijkEngine === undefined) {
+    if (this.kernelOwnsAudio && this.kernelEngine === undefined) {
       this.appendPlayLog('[播放] kernel owns, ignore play()');
       return;
     }
-    // ★ 汽水走 ijk 引擎时，play/pause/seek 全部路由过去（AVPlayer 此时保持 idle）
-    if (this.ijkActive && this.ijkEngine !== undefined) {
-      this.ijkEngine.start();
-      this.applyIjkRate();
+    // ★ 汽水走内核引擎时，play/pause/seek 全部路由过去（AVPlayer 此时保持 idle）
+    if (this.kernelActive && this.kernelEngine !== undefined) {
+      this.kernelEngine.start();
+      this.applyKernelRate();
       this.updateIsPlay(true);
-      this.startIjkPolling();
-      this.appendPlayLog('[播放] ijk play()');
+      this.startKernelPolling();
+      this.appendPlayLog('[播放] kernel play()');
       return;
     }
     Logger.info(TAG, 'AVPlayer play() isPrepared:' + this.isPrepared + ', state:' + this.state);
@@ -3278,11 +3280,11 @@ export class MediaService {
    * Pauses playback when currently in PLAY state.
    */
   public pause() {
-    if (this.ijkActive && this.ijkEngine !== undefined) {
-      this.ijkEngine.pause();
+    if (this.kernelActive && this.kernelEngine !== undefined) {
+      this.kernelEngine.pause();
       this.updateIsPlay(false);
-      this.stopIjkPolling();
-      this.appendPlayLog('[播放] ijk pause()');
+      this.stopKernelPolling();
+      this.appendPlayLog('[播放] kernel pause()');
       return;
     }
     Logger.info(TAG, 'AVPlayer pause() isPrepared:' + this.isPrepared + ', state:' + this.state);
