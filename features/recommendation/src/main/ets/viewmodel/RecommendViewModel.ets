@@ -216,7 +216,7 @@ export class RecommendViewModel {
   private syncHomeSourceIndices(): void {
     const home: string = this.homeSourceState.source;
     const mapped: string = RecommendDataUtil.mapHomeSource(home);
-    const list: string[] = MusicDataService.sourceList;
+    const list: string[] = MusicDataService.sourceList();
     let idx: number = 0;
     for (let i: number = 0; i < list.length; i++) {
       if (list[i] === mapped || list[i] === home) {
@@ -249,8 +249,49 @@ export class RecommendViewModel {
     this.categoryTabItems = RecommendDataUtil.getCategoryTabs();
     this.chartList = [];
     this.syncHomeSourceIndices();
+    // 能力屏蔽：选中的平台如果根本出不了内容（插件没实现推荐 / 榜单），
+    // 对齐到第一个可用平台，别让首屏停在一张空卡片上。
+    this.normalizeSectionSources();
     this.refreshGuestMode();
     void this.loadHomeData(this.loadGen);
+  }
+
+  /**
+   * 把广场 / 排行榜的选中项对齐到「真的有内容」的平台。
+   *
+   * ★ 2026-11-09（用户：「原版是有屏蔽的，榜单和推荐都只有部分平台」）：
+   *   内置平台照旧；MusicFree 平台按插件是否实现对应接口筛选
+   *   （推荐：`getRecommendSheetTags`；榜单：`getTopLists`）。
+   */
+  private normalizeSectionSources(): void {
+    const all: string[] = MusicDataService.sourceList();
+    const plaza: string[] = MusicDataService.plazaSourceList();
+    if (plaza.length > 0 && plaza.indexOf(this.plazaSourceCode()) < 0) {
+      this.plazaSourceIndex = Math.max(0, all.indexOf(plaza[0]));
+      this.plazaPage = 1;
+      this.plazaCategoryId = '';
+      this.plazaCategoryName = '';
+      this.plazaSortIndex = 0;
+    }
+    const ranking: string[] = MusicDataService.rankingSourceList();
+    if (ranking.length > 0 && ranking.indexOf(this.rankingSourceCode()) < 0) {
+      this.rankingSourceIndex = Math.max(0, all.indexOf(ranking[0]));
+    }
+  }
+
+  /** 歌单广场可选的平台（已按「有没有推荐接口」过滤）。 */
+  public plazaSources(): string[] {
+    return MusicDataService.plazaSourceList();
+  }
+
+  /** 排行榜可选的平台（已按「有没有榜单接口」过滤）。 */
+  public rankingSources(): string[] {
+    return MusicDataService.rankingSourceList();
+  }
+
+  /** 平台 id → `sourceList()` 里的下标（胶囊点击要传原始下标）。 */
+  public sourceIndexOf(code: string): number {
+    return MusicDataService.sourceList().indexOf(code);
   }
 
   /**
@@ -290,7 +331,7 @@ export class RecommendViewModel {
     }
     this.alignedHomeSource = homeSource;
     const svcSource: string = RecommendDataUtil.mapHomeSource(homeSource);
-    const index: number = MusicDataService.sourceList.indexOf(svcSource);
+    const index: number = MusicDataService.sourceList().indexOf(svcSource);
     if (index < 0) {
       return false;
     }
@@ -366,7 +407,11 @@ export class RecommendViewModel {
 
   /** Source id of the currently selected playlist-plaza source. */
   public plazaSourceCode(): string {
-    return MusicDataService.sourceList[this.plazaSourceIndex];
+    const list: string[] = MusicDataService.sourceList();
+    if (list.length === 0) {
+      return 'kw';
+    }
+    return list[Math.min(Math.max(this.plazaSourceIndex, 0), list.length - 1)];
   }
 
   /**
@@ -385,7 +430,11 @@ export class RecommendViewModel {
 
   /** Source id of the currently selected ranking source. */
   public rankingSourceCode(): string {
-    return MusicDataService.sourceList[this.rankingSourceIndex];
+    const list: string[] = MusicDataService.sourceList();
+    if (list.length === 0) {
+      return 'kw';
+    }
+    return list[Math.min(Math.max(this.rankingSourceIndex, 0), list.length - 1)];
   }
 
   /** Switches the plaza source and reloads sort/category/playlists. */
@@ -473,8 +522,7 @@ export class RecommendViewModel {
           // ⚠️ HTTP 200 但一条都没有（QQ 的广场就是这个形态，见 MusicDataService.plazaSupported）：
           //    以前这里既不报错也没内容，广场就是**一块空白**，用户只能看到"没反应"。
           //    现在给一句诚实的说明 + 复用重试入口。
-          this.plazaErrorText =
-            `${MusicDataService.sourceName(this.plazaSourceCode())}歌单广场暂时没有返回内容（该平台的广场接口可能已失效）`;
+          this.plazaErrorText = MusicDataService.plazaEmptyHint(this.plazaSourceCode());
           hilog.warn(PLAZA_DOMAIN, PLAZA_TAG, 'plaza empty src=%{public}s page=1',
             this.plazaSourceCode());
         }

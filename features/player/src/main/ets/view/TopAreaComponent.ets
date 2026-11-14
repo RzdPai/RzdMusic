@@ -53,10 +53,6 @@ export struct TopAreaComponent {
   /** Shared app state (read-only usage in this bar). */
   @Local state: MusicAppState =
     AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
-  /**
-   * ★ 2026-11-12（用户：「桌面歌词解锁只做在状态栏」）：移除顶栏「解锁歌词」胶囊，
-   *   解锁入口只保留通知栏那条带按钮的通知（MediaService.publishUnlockNotification）。
-   */
   /** Window metrics for immersive title padding. */
   @Local windowInfo: WindowInfo = getWindowInfoState();
   /**
@@ -76,16 +72,6 @@ export struct TopAreaComponent {
   @Local expandState: PlayerExpandState =
     AppStorageV2.connect(PlayerExpandState, AppStorageKeys.PLAYER_EXPAND_STATE,
       () => new PlayerExpandState())!;
-
-  /**
-   * 进场/离场：不再有需要注册的监听（2026-11-12 起「解锁歌词」只走通知栏，
-   * 顶栏不再感知桌面歌词锁定态），留空实现保持组件结构完整。
-   */
-  aboutToAppear(): void {
-  }
-
-  aboutToDisappear(): void {
-  }
 
   /** Renders back and song-menu row with safe-area aware trailing padding. */
   build() {

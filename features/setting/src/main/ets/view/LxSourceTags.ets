@@ -15,8 +15,8 @@ import { LXSourcePlatformInfo, probeSummary } from 'player';
 
 /** 小标签的字号（fp）。 */
 const CHIP_FONT_SIZE: number = 11;
-/** 小标签的圆角（vp）。 */
-const CHIP_RADIUS: number = 6;
+/** 平台名列宽（vp）：中文四字以内 + 「·」对齐，其余交给右侧说明。 */
+const PLATFORM_COL_WIDTH: number = 58;
 
 /** 没检测到声明时的中性提示（**不猜平台**）。 */
 function lxMissingDeclaredText(active: boolean): string {
@@ -25,9 +25,14 @@ function lxMissingDeclaredText(active: boolean): string {
 }
 
 /**
- * 一条音源条目下面的「声明摘要」：一行平台标签 + 一行音质/动作说明。
+ * 一条音源条目下面的「声明摘要」：**逐平台一行**（平台 / 音质·动作 / 测试状态）。
  *
- * 调用方负责在 `items` 为空时改画中性提示（见 {@link LxSourceDeclaredBlock}）。
+ * ★ 2026-11-09（用户：「LX 部分得点两下是不是有点麻烦了，测试里面不就有吗。
+ *   把那个删了直接显示测试」）：
+ *   旧实现是「一个平台胶囊 + 胶囊内再 bindPopup 看音质/验证结果」—— 看一次信息要点
+ *   两下（先点 ⓘ，再点胶囊）。现在把二级气泡整个删掉，直接平铺：
+ *   打开「关于」气泡就能看到每个平台的最高音质和测试结论。
+ *   胶囊本身也去掉了填充色（红色主题下像"这个源有错"）。
  */
 @ComponentV2
 export struct LxSourceDeclaredTags {
@@ -36,103 +41,53 @@ export struct LxSourceDeclaredTags {
 
   /** 该脚本声明的平台摘要；空数组 = 还没检测到。 */
   @Param items: LXSourcePlatformInfo[] = [];
-  /** 强调色（主题色），用于平台标签的底。 */
-  @Param accentColor: ResourceColor = '#E60012';
 
-  /** 一行平台的文字，例如「酷我 · 网易云 · 咪咕」。 */
-  private platformText(): string {
-    const parts: string[] = [];
-    for (let i: number = 0; i < this.items.length; i++) {
-      parts.push(this.items[i].label);
+  /** 单个平台的「最高音质 · 动作」说明（没有就空串）。 */
+  private qualityActionOf(item: LXSourcePlatformInfo): string {
+    const bits: string[] = [];
+    if (item.bestQuality.length > 0) {
+      bits.push('最高 ' + item.bestQuality);
     }
-    return parts.join(' · ');
-  }
-
-  /**
-   * 每个平台一段「音质 / 动作」说明，例如「酷我 最高24Bit · 取链接；网易云 最高320K」。
-   *
-   * 逐平台列出、不把全部档位堆在一起：脚本里各平台的音质集本来就可以不同
-   * （实测有的脚本 kw 有 flac、wy 只有 320k），合并会给出错误暗示。
-   */
-  private qualityActionText(): string {
-    const parts: string[] = [];
-    for (let i: number = 0; i < this.items.length; i++) {
-      const item: LXSourcePlatformInfo = this.items[i];
-      const bits: string[] = [];
-      if (item.bestQuality.length > 0) {
-        bits.push(item.bestQuality);
-      }
-      if (item.actions.length > 0) {
-        bits.push(item.actions.join('/'));
-      }
-      if (bits.length > 0) {
-        // ★ 用户 2026-10-11：「音源管理里面的 · 也去掉」——its 里可能有空段（标签置空的动作/音质），
-    //   直接 join 会留下孤零零的分隔符 ⇒ 先过滤空段再拼。
+    if (item.actions.length > 0) {
+      bits.push(item.actions.join('/'));
+    }
     const kept: string[] = bits.filter((b: string) => b.length > 0);
-    parts.push(kept.length > 0 ? item.label + ' ' + kept.join(' · ') : item.label);
-      }
-    }
-    return parts.join('；');
+    return kept.join(' · ');
   }
 
-  /** 平台 ToolTip 是否展开。 */
-  @Local showPlatformTips: boolean = false;
-
-  /** A4：按平台汇总探测状态（探测的是"播放会用到的档位"）。 */
-  private probeTag(item: LXSourcePlatformInfo): string {
+  /** 测试结论（已验证 / 未通过 / 未测）；没声明音质的平台不显示。 */
+  private probeTextOf(item: LXSourcePlatformInfo): string {
     if (item.bestQuality.length === 0) {
       return '';
     }
-    return ' · ' + probeSummary(item.source, this.apiId);
-  }
-
-  /** A3：每个平台一行「平台 · 最高音质」。 */
-  @Builder
-  private PlatformTips() {
-    Column({ space: 4 }) {
-      ForEach(this.items, (item: LXSourcePlatformInfo) => {
-        Text(item.label + (item.bestQuality.length > 0 ? '：标注 ' + item.bestQuality : '：音质未声明') + this.probeTag(item))
-          .fontSize(CHIP_FONT_SIZE)
-          .fontColor($r('sys.color.font_primary'))
-          .maxLines(1)
-      }, (item: LXSourcePlatformInfo) => 'tip_' + item.source)
-    }
-    .padding(8)
-    .alignItems(HorizontalAlign.Start)
+    return probeSummary(item.source, this.apiId);
   }
 
   build() {
     Column({ space: 4 }) {
-      Row() {
-        Text(this.platformText())
-          .fontSize(CHIP_FONT_SIZE)
-          .fontColor($r('sys.color.font_on_primary'))
-          .padding({ left: 6, right: 6, top: 1, bottom: 1 })
-          .borderRadius(CHIP_RADIUS)
-          .backgroundColor(this.accentColor)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .layoutWeight(1)
-          // ★ A3：点平台标签弹出 ToolTip，逐平台显示它支持的最高音质
-          .bindPopup(this.showPlatformTips, {
-            builder: (): void => {
-              this.PlatformTips()
-            },
-            placement: Placement.Bottom,
-            enableArrow: true,
-            onStateChange: (e) => {
-              if (!e.isVisible) {
-                this.showPlatformTips = false;
-              }
-            }
-          })
-          .onClick(() => {
-            this.showPlatformTips = !this.showPlatformTips;
-          })
-      }
-      .width('100%')
-
-
+      ForEach(this.items, (item: LXSourcePlatformInfo) => {
+        Row({ space: 6 }) {
+          Text(item.label)
+            .fontSize(CHIP_FONT_SIZE)
+            .fontColor($r('sys.color.font_primary'))
+            .width(PLATFORM_COL_WIDTH)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          Text(this.qualityActionOf(item).length > 0 ? this.qualityActionOf(item) : '音质未声明')
+            .fontSize(CHIP_FONT_SIZE)
+            .fontColor($r('sys.color.font_tertiary'))
+            .layoutWeight(1)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          if (this.probeTextOf(item).length > 0) {
+            Text(this.probeTextOf(item))
+              .fontSize(CHIP_FONT_SIZE)
+              .fontColor($r('sys.color.font_secondary'))
+              .maxLines(1)
+          }
+        }
+        .width('100%')
+      }, (item: LXSourcePlatformInfo) => 'decl_' + item.source)
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
@@ -168,7 +123,6 @@ export struct LxSourceDeclaredBlock {
       } else {
         LxSourceDeclaredTags({
           items: this.items,
-          accentColor: this.accentColor,
           apiId: this.apiId
         })
       }

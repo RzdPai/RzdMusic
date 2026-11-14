@@ -72,8 +72,10 @@ export struct HomePlazaSection {
     Scroll() {
       Row({ space: 8 }) {
         // 首尾留白放在内容行里（Scroll 自身不加 padding），胶囊圆角不被裁切
-        ForEach(MusicDataService.sourceList, (item: string, index?: number) => {
-          this.SourceChip(MusicDataService.sourceName(item), index ?? 0)
+        // 只列「有推荐歌单接口」的平台（原版 MusicFree 的能力屏蔽）：
+        // 元力的哔哩哔哩只有榜单、没有推荐，就不该出现在这里。
+        ForEach(this.recommendViewModel.plazaSources(), (item: string) => {
+          this.SourceChip(MusicDataService.sourceName(item), this.recommendViewModel.sourceIndexOf(item))
         }, (item: string) => `plaza-src-${item}`)
       }
     }

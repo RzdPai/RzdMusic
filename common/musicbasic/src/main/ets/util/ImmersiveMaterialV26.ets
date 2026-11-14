@@ -34,6 +34,27 @@ export enum RzdMaterialStyle {
  */
 let supportLogged: boolean = false;
 
+/**
+ * 设备是否支持沉浸材质。
+ *
+ * ★ 为什么不能直接调 `uiMaterial.isImmersiveMaterialSupported()`：
+ *   整个 `uiMaterial` 命名空间是 **API 26 新增**的，在更低的系统版本上它是
+ *   `undefined` —— 直接调成员会抛 TypeError。编译器对这处的提示是
+ *   「It is recommended to use apiAvailable to safeguard API compatibility」，
+ *   对应的运行时手段就是「版本号 + try/catch」双保险：
+ *   `deviceInfo.sdkApiVersion` 在所有版本上都有，先用它挡一道，再兜住异常。
+ */
+function immersiveSupported(): boolean {
+  if (deviceInfo.sdkApiVersion < 26) {
+    return false;
+  }
+  try {
+    return uiMaterial.isImmersiveMaterialSupported();
+  } catch (e) {
+    return false;
+  }
+}
+
 function logSupportOnce(built: boolean, style: RzdMaterialStyle): void {
   if (supportLogged) {
     return;
@@ -59,7 +80,7 @@ function styleOf(style: RzdMaterialStyle): uiMaterial.ImmersiveStyle {
  */
 export function immersiveMaterial(style: RzdMaterialStyle = RzdMaterialStyle.REGULAR): SystemUiMaterial | undefined {
   try {
-    if (!uiMaterial.isImmersiveMaterialSupported()) {
+    if (!immersiveSupported()) {
       logSupportOnce(false, style);
       console.info('[RzdMaterial] immersive material unsupported, fallback to none');
       return undefined;
@@ -88,7 +109,7 @@ export function immersiveMedium(): SystemUiMaterial | undefined {
  * @returns 材质对象；不支持时 undefined。
  */
 export function immersiveFlat(): SystemUiMaterial | undefined {
-  if (!uiMaterial.isImmersiveMaterialSupported()) {
+  if (!immersiveSupported()) {
     logSupportOnce(false, RzdMaterialStyle.THIN);
     return undefined;
   }

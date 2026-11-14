@@ -18,9 +18,7 @@ import { UIContext } from '@kit.ArkUI';
 //    它是上面 `openFullScreen` 那层 `animateTo` 的时长（P1-9），包装删掉后本文件不再用得到它。
 //    常量本体仍留在 `musicbasic`（PC 壳层 `products/pc/.../Index.ets` 还在用，那一条待主线收）。
 import { MusicAppState, MusicStoreService, PlayedSongRecord, QualityInfo, SongItem, appendPlayLog } from 'musicbasic';
-import { engineNotReadyToast } from './SourceUpdateHint';
 import { LXSearchSong, LXQualityType, lxGetLyricFull, lxSearch, WyLyricResult } from '../source/LXMusicSDK';
-import { lxEngineIsReady, waitForLxEngineReady } from '../source/LXSourceEngine';
 import { LXSource } from '../source/Interface';
 import { MediaService } from '../model/MediaService';
 
@@ -118,12 +116,9 @@ export class OnlinePlayUtil {
    */
   public static async playSearchSong(appState: MusicAppState, song: LXSearchSong,
     uiContext: UIContext | undefined): Promise<boolean> {
-    // ★ 启动瞬间引擎可能还没 ready：先等最多 3s，避免每次开应用都误弹「音源未就绪」
-    const engineReady: boolean = await waitForLxEngineReady(3000);
-    if (!engineReady) {
-      OnlinePlayUtil.toast(uiContext, engineNotReadyToast());
-      return false;
-    }
+    // ★ 2026-11-09（用户：「播放 LX 的音乐一直提示音源未就绪」）：不再在这里预等引擎。
+    //   预等会把「上一次播的是 MusicFree」这种完全正常的状态误判成故障（LX 引擎此时
+    //   本来就没加载 LX 脚本），直接拦掉播放。就绪等待由解析链路按候选脚本自己完成。
     // 秒开播放页：搜索结果已含标题/歌手/封面，先建条目入队并打开页面，
     // 播放地址交给 loadAsset 在后台解析（换源/降级可能耗时数秒），页面不再干等。
     // 解析完成后 MediaService.resolveOnlineUrl 会把 url/音质/音源脚本回填到该条目。
@@ -164,13 +159,7 @@ export class OnlinePlayUtil {
   public static async playRecord(appState: MusicAppState, record: PlayedSongRecord,
     uiContext: UIContext | undefined): Promise<boolean> {
     const needResolve: boolean = record.url.length === 0;
-    if (needResolve && !lxEngineIsReady) {
-      const ok: boolean = await waitForLxEngineReady(3000);
-      if (!ok) {
-        OnlinePlayUtil.toast(uiContext, engineNotReadyToast());
-        return false;
-      }
-    }
+    // ★ 2026-11-09：同上 —— 去掉「引擎未就绪就不播」的前置门槛，交给解析链路自己等。
     // kw 老记录可能带 MUSIC_ 前缀，去掉才能正确解析
     if (record.source === 'kw' && record.songId.startsWith('MUSIC_')) {
       record.songId = record.songId.substring(6);
@@ -270,12 +259,7 @@ export class OnlinePlayUtil {
     // ★ 2026-11-03：改用 `markQueueReplaced` —— 它同时把**队列版本号** +1，
     //   壳层用 `isFeedQueue()`（来源 + 版本都要对得上）判断，漏写一处的后果从"永久错"降级为"只错一次"。
     appState.markQueueReplaced('playlist');
-    // ★ 启动瞬间引擎可能还没 ready：先等最多 3s，避免每次开应用都误弹「音源未就绪」
-    const engineReady: boolean = await waitForLxEngineReady(3000);
-    if (!engineReady) {
-      OnlinePlayUtil.toast(uiContext, engineNotReadyToast());
-      return false;
-    }
+    // ★ 2026-11-09：去掉开播前的「引擎未就绪」硬门槛（原因见 playSearchSong）。
     if (songs.length === 0) {
       return false;
     }

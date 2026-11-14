@@ -22,7 +22,6 @@ import { appBarBlurStyle, barBlurOptions, guardPlayerBack } from 'musicbasic';
 import { AppStorageKeys, BarScrollHelper, BreakpointType, getPlaylistTransitionState, MusicAppState, ThemeState } from 'musicbasic';
 import { AmbientState, MusicStoreService, PlayedSongRecord, PlaylistDto, RouterUrlConstants, TitleBarConstants, ToplistRouteParam, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, LocalCoverImage } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
-import { lxSearch } from 'player';
 import { localMusic, LocalMusicImportState, localMusicImportState } from 'localmusic';
 import { gunzipBytes } from '../util/GunzipUtil';
 import { registerPlaylistRefresh, unregisterPlaylistRefresh } from '../util/PlaylistRefreshBus';
@@ -279,47 +278,13 @@ export struct PlaylistsPage {
   }
 
   /**
-   * Converts a legacy playlist id to the id the current source expects.
-   * Kugou needs a 32-char hex hash (old exports carry a numeric id or none);
-   * Netease accepts its numeric id (empty ids are refilled via search).
-   * Runs once at import time so playback never needs network lookups.
-   * @returns The converted id (unchanged when conversion is not needed or fails).
+   * Parses an LXMusic playlist export JSON into a playlist.
+   *
+   * 这里**不做任何 id 转换、不发网络请求**：旧导出的 kg 数字 id / wy 空 id /
+   * kw 的 MUSIC_ 前缀等，统一由播放链路 `LXPlayHelper.resolvePlayableSongId()`
+   * 按需补齐并缓存。以前在导入时对每首歌 await 一次搜索（500 首 = 500 次串行
+   * 请求），既拖慢导入又与播放链路那套转换重复，已删除。
    */
-  private async convertLegacyId(source: string, songId: string, name: string, singer: string): Promise<string> {
-    if (source === 'kw' && songId.startsWith('MUSIC_')) {
-      return songId.substring(6);
-    }
-    if (source === 'kg' && !/^[0-9A-Fa-f]{32}$/.test(songId)) {
-      try {
-        const res = await lxSearch('kg', (name + ' ' + singer).trim(), 1, 10);
-        for (let i: number = 0; i < res.list.length; i++) {
-          if (res.list[i].name.trim() === name.trim() && res.list[i].songId.length === 32) {
-            return res.list[i].songId;
-          }
-        }
-        if (res.list.length > 0 && res.list[0].songId.length === 32) {
-          return res.list[0].songId;
-        }
-        return songId;
-      } catch (_err) {
-        return songId;
-      }
-    }
-    if (source === 'wy' && songId.length === 0) {
-      try {
-        const res = await lxSearch('wy', (name + ' ' + singer).trim(), 1, 10);
-        if (res.list.length > 0 && res.list[0].songId.length > 0) {
-          return res.list[0].songId;
-        }
-        return songId;
-      } catch (_err) {
-        return songId;
-      }
-    }
-    return songId;
-  }
-
-  /** Parses an LXMusic playlist export JSON into a playlist (legacy ids converted). */
   private async parseLxMusicJson(text: string,
     onProgress?: (done: number, total: number) => void): Promise<PlaylistDto | undefined> {
     try {
@@ -398,12 +363,9 @@ export struct PlaylistsPage {
         record.interval = o.interval as string ?? '';
         record.img = img;
         record.time = Date.now();
-        // Keep songs even when the id field is missing from legacy exports;
-        // convert kg/wy legacy ids once so playback needs no network lookups.
+        // 旧导出可能缺 id，但保留这条记录：id 标准化统一交给播放链路
+        // `resolvePlayableSongId()` 按需处理，导入期零网络请求、零转换。
         if (record.source.length > 0) {
-          const nameText: string = typeof record.name === 'string' ? record.name : '';
-          const singerText: string = typeof record.singer === 'string' ? record.singer : '';
-          record.songId = await this.convertLegacyId(record.source, record.songId, nameText, singerText);
           songs.push(record);
         }
         if (onProgress !== undefined) {

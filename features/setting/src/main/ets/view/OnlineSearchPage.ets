@@ -24,7 +24,7 @@ import { AlbumRouteParam, ArtistRouteParam, BreakpointType, ThemeState, WindowUt
 import { BlurStrategy, BottomBuilderShowType, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, HideMode, ScrollEffectType } from '@kit.UIDesignKit';
 import { AppStorageKeys, AmbientState, FavoriteEntry, MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord, QualityInfo, RouterUrlConstants, SongItem, SongTitleMarquee, ToplistRouteParam, appendPlayLog, barBlurOptions, buildTitleMaterial } from 'musicbasic';
 import { HomeMiniBarPlayer, MiniBarMaterialCapsule } from 'playlist';
-import { AlbumInfo, LXQualityOption, LXSearchSong, LXSearchResult, SingerInfo, lxGetPicFallback, lxGetQualityOptions, lxSearch, lxTxHotSearch, lxSearchSuggest, searchAlbums, searchSingers, sourceToCode, DownloadTask, DownloadUtil, OnlinePlayUtil, PlaylistSearchApi } from 'player';
+import { AlbumInfo, LXQualityOption, LXSearchSong, LXSearchResult, SingerInfo, lxGetPicFallback, lxGetQualityOptions, lxSearch, lxTxHotSearch, lxSearchSuggest, searchAlbums, searchSingers, sourceToCode, DownloadTask, DownloadUtil, OnlinePlayUtil, PlaylistSearchApi, platformRegistry, lxSourceManager, searchPlatformSongs, searchPlatformSheets } from 'player';
 import type { SearchPlaylistInfo, SearchPlaylistSong } from 'player';
 import { sourceName } from 'player';
 import { SongMoreMenu } from 'playlist';
@@ -248,32 +248,22 @@ export struct OnlineSearchPage {
     AppStorageV2.connect(ThemeState, AppStorageKeys.THEME_STATE, () => new ThemeState())!;
   @Local ambientState: AmbientState =
     AppStorageV2.connect(AmbientState, AppStorageKeys.AMBIENT_STATE, () => new AmbientState())!;
-  @Local sources: SourceCheck[] = [
-    new SourceCheck('酷我', 'kw', true),
-    new SourceCheck('酷狗', 'kg', true),
-    new SourceCheck('QQ', 'tx', true),
-    new SourceCheck('网易', 'wy', true),
-    new SourceCheck('咪咕', 'mg', true),
-    new SourceCheck('汽水', 'qs', true)
-  ];
+  /**
+   * 参与搜索的平台：用户在「音源管理 → 平台管理」里勾选的**全部平台**，
+   * 含 MusicFree 插件带来的哔哩哔哩 / YouTube 等（2026-11-09 用户要求共存）。
+   * 在首帧后由 {@link rebuildSources} 从注册表生成，不再硬编码 6 个。
+   */
+  @Local sources: SourceCheck[] = [];
   /** Index of the selected source in {@link sourceSelectOptions}; 0 means all sources. */
   /** ③ 关注状态变更计数器（驱动重绘）。 */
   @Local followTick: number = 0;
   @Local selectedSourceIndex: number = 0;
   @Local searchSource: string = 'all';
   @Local showSources: boolean = false;
-  private readonly sourceMenuIds: string[] = ['kw', 'kg', 'tx', 'wy', 'mg', 'qs', 'all'];
+  @Local sourceMenuIds: string[] = ['all'];
   /** Display text of the selected source on the dropdown button. */
   @Local selectedSourceText: string = '全部';
-  private readonly sourceSelectOptions: SelectOption[] = [
-    { value: '全部' },
-    { value: '酷我' },
-    { value: '酷狗' },
-    { value: 'QQ' },
-    { value: '网易' },
-    { value: '咪咕' },
-    { value: '汽水' }
-  ];
+  @Local sourceSelectOptions: SelectOption[] = [{ value: '全部' }];
   /** 搜索类别选项（歌曲/歌单/歌手/专辑）。 */
   private readonly modeSelectOptions: SelectOption[] = [
     { value: '歌曲' },
@@ -347,10 +337,15 @@ export struct OnlineSearchPage {
 
   /** 当前模式下源下拉的选中下标（歌手/专辑模式把「全部」映射为第一个音源）。 */
   private displaySourceIndex(): number {
-    if (this.searchMode === 2 || this.searchMode === 3) {
-      return this.selectedSourceIndex === 0 ? 0 : this.selectedSourceIndex - 1;
+    const total: number = this.sourceOptionsForMode().length;
+    if (total === 0) {
+      return 0;
     }
-    return this.selectedSourceIndex;
+    if (this.searchMode === 2 || this.searchMode === 3) {
+      const v: number = this.selectedSourceIndex === 0 ? 0 : this.selectedSourceIndex - 1;
+      return Math.min(Math.max(v, 0), total - 1);
+    }
+    return Math.min(Math.max(this.selectedSourceIndex, 0), total - 1);
   }
 
   /** 应用音源选择（semanticIndex: 0=全部，1..5=对应音源）并按需重搜。 */
@@ -367,13 +362,15 @@ export struct OnlineSearchPage {
     return 0;
   }
   private applySourceSelection(semanticIndex: number): void {
-    this.selectedSourceIndex = semanticIndex;
-    this.selectedSourceText = semanticIndex === 0 ? '全部' :
-      this.sourceSelectOptions[semanticIndex].value as string;
+    const max: number = this.sourceSelectOptions.length - 1;
+    const index: number = semanticIndex < 0 ? 0 : (semanticIndex > max ? 0 : semanticIndex);
+    this.selectedSourceIndex = index;
+    this.selectedSourceText = index === 0 ? '全部' :
+      this.sourceSelectOptions[index].value as string;
     for (let i: number = 0; i < this.sources.length; i++) {
-      this.sources[i].checked = (semanticIndex === 0) || (i === semanticIndex - 1);
+      this.sources[i].checked = (index === 0) || (i === index - 1);
     }
-    this.searchSource = semanticIndex === 0 ? 'all' : this.sources[semanticIndex - 1].id;
+    this.searchSource = index === 0 ? 'all' : this.sources[index - 1].id;
     this.showSources = false;
     this.store.setSearchSource(this.searchSource);
     hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'source-selected source=%{public}s searching=%{public}s',
@@ -385,7 +382,7 @@ export struct OnlineSearchPage {
 
   /** 当前专辑搜索是否为酷我源（酷我结果不展示歌曲数）。 */
   private isKwAlbumSource(): boolean {
-    return this.searchMode === 3 && this.selectedSourceIndex === 1;
+    return this.searchMode === 3 && this.currentSuggestSource() === 'kw';
   }
 
   private formatByteSize(n: number): string {
@@ -630,6 +627,7 @@ export struct OnlineSearchPage {
     this.preapplyStatusBarColor();
     setTimeout((): void => {
       this.searchHistory = this.store.getSearchHistory();
+      this.syncSourcesIfNeeded();
       this.restoreSearchSource();
       void this.loadHotWords();
       hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
@@ -648,6 +646,61 @@ export struct OnlineSearchPage {
     }
   }
 
+  /**
+   * 从平台注册表重建「参与搜索的平台」列表。
+   *
+   * 口径与「平台管理」完全一致：勾选的平台（含 MusicFree 动态平台）、按用户拖动顺序。
+   * 重建时保留用户当前选中的平台（按 id 找回），避免平台探测回填后选中项跳回「全部」。
+   */
+  private rebuildSources(): void {
+    const previous: string = this.searchSource;
+    const apis = lxSourceManager.getApiList();
+    const defs = platformRegistry.allPlatforms(apis);
+    const next: SourceCheck[] = [];
+    const opts: SelectOption[] = [{ value: '全部' }];
+    const menuIds: string[] = ['all'];
+    for (let i: number = 0; i < defs.length; i++) {
+      if (!defs[i].sourceEnabled || !platformRegistry.isEnabled(defs[i].id)) {
+        continue;
+      }
+      const label: string = defs[i].label;
+      next.push(new SourceCheck(label, defs[i].id, true));
+      opts.push({ value: label });
+      menuIds.push(defs[i].id);
+    }
+    this.sources = next;
+    this.sourceSelectOptions = opts;
+    this.sourceMenuIds = menuIds;
+    // 选中项按 id 重新定位；只有「全部」或原平台仍存在时才保留
+    if (previous !== 'all') {
+      const semantic: number = this.sourceSemanticIndex(previous);
+      this.selectedSourceIndex = semantic;
+      this.searchSource = semantic === 0 ? 'all' : previous;
+      this.selectedSourceText = semantic === 0 ? '全部' :
+        (this.sourceSelectOptions[semantic].value as string);
+    }
+  }
+
+  /** 平台清单发生变化（导入/删除音源、平台勾选变化）时才重建，避免每帧重排。 */
+  private syncSourcesIfNeeded(): void {
+    const apis = lxSourceManager.getApiList();
+    const defs = platformRegistry.allPlatforms(apis);
+    const ids: string[] = [];
+    for (let i: number = 0; i < defs.length; i++) {
+      if (defs[i].sourceEnabled && platformRegistry.isEnabled(defs[i].id)) {
+        ids.push(defs[i].id);
+      }
+    }
+    const signature: string = ids.join(',');
+    if (signature === this.sourcesSignature && this.sources.length > 0) {
+      return;
+    }
+    this.sourcesSignature = signature;
+    this.rebuildSources();
+  }
+
+  private sourcesSignature: string = '';
+
   /** Restores the persisted source selection; defaults to all sources. */
   private restoreSearchSource(): void {
     const cached: string = this.store.getSearchSource();
@@ -658,9 +711,13 @@ export struct OnlineSearchPage {
         break;
       }
     }
+    if (index < 0 || index > this.sources.length) {
+      index = 0;
+    }
     this.selectedSourceIndex = index;
     this.searchSource = index === 0 ? 'all' : this.sources[index - 1].id;
-    this.selectedSourceText = index === 0 ? '全部' : this.sourceSelectOptions[index].value as string;
+    this.selectedSourceText = index === 0 ? '全部' :
+      (this.sourceSelectOptions.length > index ? this.sourceSelectOptions[index].value as string : '全部');
     for (let i: number = 0; i < this.sources.length; i++) {
       this.sources[i].checked = (index === 0) || (i === index - 1);
     }
@@ -795,15 +852,8 @@ export struct OnlineSearchPage {
   }
 
   private sourceLabel(source: string): string {
-    switch (source) {
-      case 'kw': return '酷我';
-      case 'kg': return '酷狗';
-      case 'tx': return 'QQ';
-      case 'wy': return '网易';
-      case 'mg': return '咪咕';
-      case 'qs': return '汽水';
-    }
-    return source;
+    // 平台一行 = 一个来源；MusicFree 的名字跟随源名（小蜗 / 元力KW），洛雪用中文名
+    return platformRegistry.labelOf(source);
   }
 
   /** Result columns template per width breakpoint: 1 (SM) / 2 (MD) / 3 (LG) / 4 (XL). */
@@ -821,6 +871,18 @@ export struct OnlineSearchPage {
     return new BreakpointType<number>(1, 2, 3, 4).getValue(this.breakpointEnv.widthBreakpoint);
   }
 
+  /**
+   * 应用「音源管理 → 平台管理」的用户偏好（2026-11-08）：
+   *   1. 过滤掉用户停用的平台；
+   *   2. 按用户长按拖动出来的平台顺序排序。
+   * 只作用于「本次真正要请求的平台列表」，不改 this.sources 数组本身 ——
+   * 那套数组与 sourceMenuIds / sourceSelectOptions 的语义下标（0=全部，1..5）是硬绑定，
+   * 重排会让下拉菜单与选源错位。
+   */
+  private applyPlatformPrefs(ids: string[]): string[] {
+    return platformRegistry.sortIds(platformRegistry.filterEnabled(ids));
+  }
+
   /** Cache key for the current query + enabled sources. */
   private searchCacheKey(): string {    const active: string[] = [];
     for (let i: number = 0; i < this.sources.length; i++) {
@@ -828,11 +890,12 @@ export struct OnlineSearchPage {
         active.push(this.sources[i].id);
       }
     }
+    const activeWithPrefs: string[] = this.applyPlatformPrefs(active);
     // ★ 2026-11-02：`|v2` = 结果口径版本号。
     //   上一版综合页**只搜第一个勾选音源**，却用"全部勾选音源"当缓存 key ⇒
     //   老缓存里躺着"只有一个平台"的假聚合结果。换口径必须换 key，否则用户看到
     //   的仍是旧的那一份（而且怎么重搜都被缓存挡住）。以后聚合口径再变就继续 +1。
-    return this.query.trim() + '|' + active.join(',') + '|v2';
+    return this.query.trim() + '|' + activeWithPrefs.join(',') + '|v3';
   }
 
   /**
@@ -899,6 +962,8 @@ export struct OnlineSearchPage {
     if (this.query.trim().length === 0) {
       return;
     }
+    // 平台清单可能在别处被改过（导入 MusicFree 订阅、平台管理勾选）——搜索前对齐一次
+    this.syncSourcesIfNeeded();
     this.searching = true;
     this.searchedOnce = true;
     this.errorMsg = '';
@@ -960,16 +1025,19 @@ export struct OnlineSearchPage {
    *   ⇒ **综合页只取第一个勾选的音源**；单类页签（歌曲/歌单/歌手/专辑）保持原样，全勾的都搜。
    */
   private searchSources(): string[] {
-    const out: string[] = [];
+    const checked: string[] = [];
     for (let i: number = 0; i < this.sources.length; i++) {
       if (this.sources[i].checked) {
-        out.push(this.sources[i].id);
-        if (this.overview) {
-          break;
-        }
+        checked.push(this.sources[i].id);
       }
     }
-    return out;
+    // 平台管理偏好：停用平台不搜、按用户拖动顺序排，综合页再取排第一的那个。
+    const prefs: string[] = this.applyPlatformPrefs(checked);
+    const effective: string[] = prefs.length > 0 ? prefs : platformRegistry.sortIds(checked);
+    if (this.overview) {
+      return effective.length > 0 ? [effective[0]] : [];
+    }
+    return effective;
   }
 
   private async doSongSearch(): Promise<void> {
@@ -1006,7 +1074,8 @@ export struct OnlineSearchPage {
     let all: LXSearchSong[] = [];
     const searchPromises: Promise<LXSearchResult>[] = [];
     for (let i: number = 0; i < activeSources.length; i++) {
-      searchPromises.push(lxSearch(activeSources[i], this.query, 1, 20));
+      // 统一路由：洛雪平台走内置接口，MusicFree 平台走它对应的插件（一源一平台）
+      searchPromises.push(searchPlatformSongs(activeSources[i], this.query, 1, 20));
     }
     const results: PromiseSettledResult<LXSearchResult>[] = await Promise.allSettled(searchPromises);
     for (let i: number = 0; i < results.length; i++) {
@@ -1039,7 +1108,7 @@ export struct OnlineSearchPage {
     for (let i: number = 0; i < activeSources.length; i++) {
       try {
         const list: SearchPlaylistInfo[] =
-          await PlaylistSearchApi.searchPlaylists(activeSources[i], this.query, 1);
+          await searchPlatformSheets(activeSources[i], this.query, 1);
         for (let j: number = 0; j < list.length; j++) {
           all.push(list[j]);
         }
@@ -1065,25 +1134,30 @@ export struct OnlineSearchPage {
    *     单类页签仍走 `searchSources()` 的原口径。
    */
   private overviewFallbackSources(): string[] {
-    const out: string[] = [];
+    const checked: string[] = [];
     for (let i: number = 0; i < this.sources.length; i++) {
       if (this.sources[i].checked) {
-        out.push(this.sources[i].id);
+        checked.push(this.sources[i].id);
       }
     }
-    if (out.length === 0) {
+    const all: string[] = checked.length > 0 ? checked : [];
+    if (all.length === 0) {
       for (let i: number = 0; i < this.sources.length; i++) {
-        out.push(this.sources[i].id);
+        all.push(this.sources[i].id);
       }
     }
-    return out;
+    // 综合页的兜底链也按平台管理顺序走：用户拖到前面的平台优先命中。
+    const prefs: string[] = this.applyPlatformPrefs(all);
+    return prefs.length > 0 ? prefs : platformRegistry.sortIds(all);
   }
 
   /** Searches singers across the enabled sources (geuz source codes). */
   private async doSingerSearch(): Promise<void> {
-    const activeSources: string[] = this.overview ? this.overviewFallbackSources() : this.searchSources();
+    // 歌手/专辑是内置接口能力，MusicFree 插件（含 B 站这类独有平台）没有对应方法，跳过
+    const activeSources: string[] = (this.overview ? this.overviewFallbackSources() : this.searchSources())
+      .filter((id: string): boolean => platformRegistry.isBuiltin(id));
     if (activeSources.length === 0) {
-      this.errorMsg = '请至少选择一个音源';
+      this.singers = [];
       return;
     }
     const all: SingerInfo[] = [];
@@ -1117,9 +1191,10 @@ export struct OnlineSearchPage {
 
   /** Searches albums across the enabled sources. */
   private async doAlbumSearch(): Promise<void> {
-    const activeSources: string[] = this.overview ? this.overviewFallbackSources() : this.searchSources();
+    const activeSources: string[] = (this.overview ? this.overviewFallbackSources() : this.searchSources())
+      .filter((id: string): boolean => platformRegistry.isBuiltin(id));
     if (activeSources.length === 0) {
-      this.errorMsg = '请至少选择一个音源';
+      this.albums = [];
       return;
     }
     const all: AlbumInfo[] = [];
@@ -1735,9 +1810,7 @@ export struct OnlineSearchPage {
       //   档位改成**跟着「其它设置 → 光感强度」走**（`immersiveFromLevel`，与标题栏 `buildTitleMaterial`
       //   同一张档位表）。原来写死 `immersiveMedium()` ⇒ 把光感调到“强”时标题栏变了、这三颗没变。
       .systemMaterial(immersiveFromLevel(this.ambientState.level))
-      // ★ 2026-11-13（参考 @tangs/components 调优）：玻璃底色改深浅色自适应资源，
-      //   深色下黑纱替代白纱（原写死 #33FFFFFF，深色模式发灰）。
-      .backgroundColor($r('app.color.immersive_glass_overlay'))
+      .backgroundColor('#33FFFFFF')
       // ★ 2026-10-24（甲方：「返回按钮、搜索框和切换平台这三个尽量都加上沉浸光感」）：
       //   材质档位跟着「其它设置 → 光感强度」走，与标题栏 `buildTitleMaterial` 同一张表。
       .accessibilityText('返回')
@@ -1766,7 +1839,7 @@ export struct OnlineSearchPage {
         //   `.systemMaterial(...)` 在这里是真渲染的，不是 out of scope。
         //   ⚠️ 菜单本身的光感在 `RzdSelectMenuMaterial` 里（`menuSystemMaterial`），两者互不替代。
         .systemMaterial(immersiveFromLevel(this.ambientState.level))
-        .backgroundColor($r('app.color.immersive_glass_overlay'))
+        .backgroundColor('#33FFFFFF')
         .borderRadius(20)
         .attributeModifier(new RzdSelectMenuMaterial())
         .onSelect((index: number) => {
@@ -1973,9 +2046,7 @@ export struct OnlineSearchPage {
       //   ⇒ 改用**实底卡片背板**：`card_background`（浅 #FFFFFF / 深 #1C1D1F）+ 0.5vp 描边。
       //   ⚠️ 首页那端（`HomeSearchRow`）必须保持**同一套**背板，否则形变中途会看到颜色跳变。
       .systemMaterial(immersiveFromLevel(this.ambientState.level))
-      // ★ 2026-11-13（参考 @tangs/components 调优）：玻璃底色改深浅色自适应资源（深色黑纱）。
-      //   与首页那端（HomeSearchRow）同一资源 ⇒ 形变中途无颜色跳变。
-        .backgroundColor($r('app.color.immersive_glass_overlay'))
+        .backgroundColor('#33FFFFFF')
       .borderRadius(20)
       .border({ width: 0.5, color: $r('sys.color.comp_divider') })
       .clip(true)
@@ -2324,8 +2395,7 @@ export struct OnlineSearchPage {
                         //   与我的页卡片同色（深色下也看得见）。
                         // 热搜/历史词条是 body 里的 Text（B 档，材质不渲染）⇒ 这行只是保留原写法，真正背板是下一行的半透明底。
                         .systemMaterial(immersiveFromLevel(this.ambientState.level))
-                        // ★ 2026-11-13（参考 @tangs/components 调优）：底色改深浅色自适应资源（深色黑纱）。
-                        .backgroundColor($r('app.color.immersive_glass_overlay'))
+        .backgroundColor('#33FFFFFF')
                         .margin({ right: 8, bottom: 8 })
                         .onClick(() => {
                           this.applyKeyword(keyword);
@@ -2375,8 +2445,7 @@ export struct OnlineSearchPage {
                         // 与热搜同一处理：纯色卡片底、不挂模糊（卡顿根因之一）
                         // 热搜/历史词条是 body 里的 Text（B 档，材质不渲染）⇒ 这行只是保留原写法，真正背板是下一行的半透明底。
                         .systemMaterial(immersiveFromLevel(this.ambientState.level))
-                        // ★ 2026-11-13（参考 @tangs/components 调优）：底色改深浅色自适应资源（深色黑纱）。
-                        .backgroundColor($r('app.color.immersive_glass_overlay'))
+        .backgroundColor('#33FFFFFF')
                         .margin({ right: 8, bottom: 8 })
                         .onClick(() => {
                           this.applyKeyword(keyword);

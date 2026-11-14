@@ -129,6 +129,12 @@ export struct LXSourceEngine {
     this.loadingSourceId = sourceId;
     try {
       let fullInfo: LXUserApiInfoFull | null = await lxSourceManager.getFullApiInfo(sourceId);
+      if (fullInfo !== null && fullInfo.kind === 'mf') {
+        // MusicFree 插件由 MusicFreeEngine 负责，塞进 LX 桥只会 init 失败
+        LXSourceEngine.appendLog('引擎 跳过 MusicFree 插件 id=' + sourceId + '（走 mf 运行时）');
+        this.setReady(false, null);
+        return;
+      }
       if (fullInfo !== null) {
         LXSourceEngine.appendLog('引擎 读取脚本成功 name=' + fullInfo.name + ' len=' + fullInfo.script.length);
         this.initScript(fullInfo);

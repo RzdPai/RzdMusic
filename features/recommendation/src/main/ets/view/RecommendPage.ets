@@ -797,24 +797,16 @@ export struct RecommendPage {
   @Builder
   private StickyChipsInBar() {
     Row() {
-      // ★ 2026-11-05（甲方：「回到最初那个没有淡入淡出的版本，只保留渐隐」）：
-      //   渐隐层只包住**胶囊区**（`layoutWeight(1)` 的那块），Row 自己留 56vp 给搜索钮，
-      //   所以渐隐的终点落在胶囊区右端，而不是整行最右侧。
-      Stack({ alignContent: Alignment.End }) {
-        Column() {
-          CategoryChipsSection({ recommendViewModel: this.recommendViewModel })
-        }
-        .width(StyleConstants.FULL_WIDTH)
-
-        // 右侧渐隐：让被搜索钮压住的第 4 个胶囊自然溶掉（不做任何淡入淡出动画）。
-        Column()
-          .width(72)
-          .height(StyleConstants.FULL_HEIGHT)
-          .linearGradient({
-            direction: GradientDirection.Right,
-            colors: [['#00000000', 0.0], ['#00000000', 0.2], ['#D9000000', 1.0]]
-          })
-          .hitTestBehavior(HitTestMode.Transparent)
+      // ★ 修订：原来这里叠了一层 alpha 85% 纯黑的 linearGradient
+      //   覆盖层冒充「渐隐」，实际是把胶囊行右侧**盖黑**并遮住下层内容。
+      //   改为让胶囊行自己的横向 Scroll 用官方 `.fadingEdge()`：渐隐作用于内容
+      //   自身 alpha、露出下方标题栏背景，既不发黑也不遮挡内容。
+      //   Row 仍留 56vp 给搜索钮，胶囊区用 layoutWeight(1) 占满剩余宽度。
+      Column() {
+        CategoryChipsSection({
+          recommendViewModel: this.recommendViewModel,
+          enableFadingEdge: true
+        })
       }
       .layoutWeight(1)
       .height(TitleBarConstants.ROW_HEIGHT_VP)

@@ -1,6 +1,10 @@
 import { LXSourceRequestData, LXMusicUrlResult, LXLyricResult, LXPicResult, LXSource, toLXSource, toLXSourceKey } from './Interface';
 import { lxEngineSendRequest, lxEngineRegisterPromise, lxEngineIsReady } from './LXSourceEngine';
-import { lxSearch, lxLeaderboard } from './LXMusicSDK';
+import { lxSearch, lxLeaderboard, LXSearchSong } from './LXMusicSDK';
+import { lxSourceManager } from './LXSourceManager';
+import { isMfOnlyPlatform, mfGetLyric, mfGetMediaSource, mfGetSheetSongs, mfSearch, musicFreeApisForPlatform } from './MusicFreeAdapter';
+import { isMfPlatformId } from '../util/SourceDeclaredInfo';
+import { LXUserApiInfo } from './Interface';
 import { qsBoardSongs, qsPlaylistDetail } from '../geuz/QsApi';
 import { appendError } from 'musicbasic';
 
@@ -29,7 +33,10 @@ export { logError };
 
 /**
  * 播放期歌曲 id 统一兜底转换缓存：key 为 source|songId，避免同一首歌反复搜索。
- * 在线导入/歌单迁移等任何入口存入的非本源标准 id 都在这里最终转换。
+ *
+ * 这是 id 标准化的**唯一真源**：在线导入 / 歌单迁移 / 播放队列等任何入口存入的
+ * 非本源标准 id（酷狗数字 id、kw 的 MUSIC_ 前缀、网易旧导出空 id）都在这里最终
+ * 转换，且只在真正要播放那首歌时才发生。导入期不再做任何转换或网络请求。
  */
 const playableIdCache: Map<string, string> = new Map();
 
@@ -63,22 +70,38 @@ async function resolveKgHash(name: string, singer: string): Promise<string> {
 }
 
 /**
- * 播放前统一把 id 转成各源播放要求的标准形态：
- * 酷狗数字/其它形式 id → 32 位 Hash；酷我带 MUSIC_ 前缀的旧导出 → 去前缀。
+ * 播放前统一把 id 转成各源播放要求的标准形态（**唯一真源**）：
+ * · 酷狗数字/其它形式 id → 32 位 Hash（按歌名+歌手搜索补齐）；
+ * · 酷我带 MUSIC_ 前缀的旧导出 → 去前缀；
+ * · 网易旧导出的空 id → 按歌名+歌手搜索补齐。
  * 其余源原样返回。
+ *
+ * 空 id 的缓存 key 必须带上歌名与歌手：否则所有缺 id 的歌会共用 `wy|`，互相污染。
+ * 搜索失败时保持原值且**不写缓存**，避免一次失败导致该首歌永久失败。
  */
 export async function resolvePlayableSongId(source: string, songId: string, name?: string,
   singer?: string): Promise<string> {
-  if (songId.length === 0) {
-    return songId;
-  }
-  const cacheKey: string = source + '|' + songId;
+  const cacheKey: string = songId.length === 0
+    ? source + '|' + (name ?? '') + '|' + (singer ?? '')
+    : source + '|' + songId;
   const cached: string | undefined = playableIdCache.get(cacheKey);
   if (cached !== undefined) {
     return cached;
   }
   let resolved: string = songId;
-  if (source === 'kg' && !isKgHash(songId)) {
+  if (songId.length === 0 && source === 'wy') {
+    const query: string = ((name ?? '') + ' ' + (singer ?? '')).trim();
+    if (query.length > 0) {
+      try {
+        const res = await lxSearch('wy', query, 1, 10);
+        if (res.list.length > 0 && res.list[0].songId.length > 0) {
+          resolved = res.list[0].songId;
+        }
+      } catch (_err) {
+        // 搜索失败保持空 id，由上层走正常的失败流程
+      }
+    }
+  } else if (source === 'kg' && !isKgHash(songId)) {
     const hash: string = await resolveKgHash(name ?? '', singer ?? '');
     if (hash.length > 0) {
       resolved = hash;
@@ -86,7 +109,10 @@ export async function resolvePlayableSongId(source: string, songId: string, name
   } else if (source === 'kw' && songId.startsWith('MUSIC_')) {
     resolved = songId.substring(6);
   }
-  playableIdCache.set(cacheKey, resolved);
+  // 只缓存成功结果：搜索失败留空以便下次重试，也避免脏 id 被永久固化
+  if (resolved.length > 0) {
+    playableIdCache.set(cacheKey, resolved);
+  }
   return resolved;
 }
 
@@ -108,9 +134,167 @@ function buildMusicInfo(source: string, songId: string, name?: string, singer?: 
   return info;
 }
 
+/**
+ * 该平台可用的 MusicFree 音源（已按用户启用状态过滤）。
+ *
+ * ★ 只在**需要兜底时**才查：MusicFree 插件要现加载（重载页面 + 注入），
+ *   不能因为"列表里有 mf 源"就让每次播放都多绕一圈。
+ */
+function enabledMusicFreeApis(source: string): LXUserApiInfo[] {
+  // ★ 2026-11-09：播放只按**平台**找插件（`mfplat:` 精确匹配；洛雪六平台按插件声明的
+  //   platform / 名字匹配），不看「平台管理里勾没勾」—— 勾选决定的是搜索 / 广场要不要显示；
+  //   已经进了歌单 / 历史的歌，用户主动播时不能因为平台栏被取消勾选就放不出来。
+  return musicFreeApisForPlatform(source, lxSourceManager.getApiList());
+}
+
+/** 逐个别 MusicFree 源试播放地址；全失败返回空串（不抛，让调用方决定报哪个错）。 */
+async function tryMusicFreeUrl(source: string, songId: string, quality: string, name?: string,
+  singer?: string): Promise<string> {
+  const apis: LXUserApiInfo[] = enabledMusicFreeApis(source);
+  if (apis.length > 0) {
+    // 兜底：极端路径（通知栏/桌面快捷方式冷启动直接播）可能还没走到首页宿主，
+    // 先把「需要 mf 运行时」置位，宿主组件随之挂载。
+    AppStorage.setOrCreate('mfEngineNeeded', true);
+  }
+  for (let i: number = 0; i < apis.length; i++) {
+    try {
+      const url: string = await mfGetMediaSource(apis[i], songId, quality, name, singer);
+      if (url.length > 0) {
+        logError('[mf] ' + source + ' 命中 ' + apis[i].name);
+        return url;
+      }
+    } catch (err) {
+      logError('[mf] ' + apis[i].name + ' 失败: ' + ((err as Error).message ?? ''));
+      // ★★★ 2026-11-09（用户：「播放洛雪的歌直接播放失败，已尝试所有平台和音源」）：
+      //   跨源兜底时 `songId` 是**别的来源**的 id（洛雪脚本搜出来的 wy/kw id），
+      //   插件不一定认识。按歌名 + 歌手在插件里搜一次，用搜到的 id 再取一次地址。
+      const found: string = await searchIdInPlugin(apis[i], name, singer);
+      if (found.length > 0 && found !== songId) {
+        try {
+          const retry: string = await mfGetMediaSource(apis[i], found, quality, name, singer);
+          if (retry.length > 0) {
+            logError('[mf] ' + source + ' 命中 ' + apis[i].name + '（按歌名匹配 ' + found + '）');
+            return retry;
+          }
+        } catch (_e2) {
+          // 换下一个插件
+        }
+      }
+    }
+  }
+  return '';
+}
+
+/** `插件id|歌名|歌手` → 插件侧歌曲 id（避免每档音质都搜一遍）。 */
+const mfIdCache: Map<string, string> = new Map<string, string>();
+/** 搜不到时的冷却（同一首歌 60s 内不再重复搜，避免每档音质都白等一次）。 */
+const mfIdMiss: Map<string, number> = new Map<string, number>();
+
+function normalizeSongText(s: string): string {
+  return s.trim().toLowerCase().replace(/\(.*?\)/g, ' ').replace(/（.*?）/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * 在插件里按歌名 + 歌手找歌曲 id。
+ *
+ * 只在 `getMediaSource` 失败后才调用：说明这个 id 插件不认（跨来源兜底），
+ * 用插件自己的搜索结果重新定位。命中要求**歌名一致**，歌手只做排序加权，
+ * 宁可返回空也不要放错歌。
+ */
+async function searchIdInPlugin(api: LXUserApiInfo, name?: string, singer?: string): Promise<string> {
+  const title: string = (name ?? '').trim();
+  if (title.length === 0) {
+    return '';
+  }
+  const key: string = api.id + '|' + title + '|' + (singer ?? '');
+  const cached: string | undefined = mfIdCache.get(key);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const missUntil: number | undefined = mfIdMiss.get(key);
+  if (missUntil !== undefined && missUntil > Date.now()) {
+    return '';
+  }
+  const wantTitle: string = normalizeSongText(title);
+  const wantSinger: string = normalizeSongText(singer ?? '');
+  let picked: string = '';
+  try {
+    const res = await mfSearch(api, title, 1, 10);
+    for (let i: number = 0; i < res.list.length; i++) {
+      if (normalizeSongText(res.list[i].name) !== wantTitle) {
+        continue;
+      }
+      if (wantSinger.length > 0 &&
+        normalizeSongText(res.list[i].singer).indexOf(wantSinger) < 0 &&
+        wantSinger.indexOf(normalizeSongText(res.list[i].singer)) < 0) {
+        continue;
+      }
+      picked = res.list[i].songId;
+      break;
+    }
+  } catch (_err) {
+    picked = '';
+  }
+  if (picked.length > 0) {
+    mfIdCache.set(key, picked);
+  } else {
+    mfIdMiss.set(key, Date.now() + 60 * 1000);
+  }
+  return picked;
+}
+
+/**
+ * 直接向 MusicFree 插件要一个播放地址（不经过 LX 引擎）。
+ *
+ * ★ 2026-11-09（用户：「你别把这个禁了啊」）：洛雪脚本全部失败、或用户一个
+ *   LX 脚本都没装时，声明了同名平台的插件（元力WY / 元力KW …）仍然能供地址。
+ *   回退链在「零候选 / 全失败」时用这个入口补最后一枪。
+ */
+export async function getMusicFreeUrlForPlatform(source: string, songId: string, quality: string,
+  name?: string, singer?: string): Promise<string> {
+  try {
+    return await tryMusicFreeUrl(source, songId, quality, name, singer);
+  } catch (_e) {
+    return '';
+  }
+}
+
+/** 逐个 MusicFree 源试歌词；全失败返回空串。 */
+async function tryMusicFreeLyric(source: string, songId: string, name?: string,
+  singer?: string): Promise<string> {
+  const apis: LXUserApiInfo[] = enabledMusicFreeApis(source);
+  for (let i: number = 0; i < apis.length; i++) {
+    try {
+      const lyric: string = await mfGetLyric(apis[i], songId, name, singer);
+      if (lyric.length > 0) {
+        return lyric;
+      }
+    } catch (_err) {
+      // 换下一个
+    }
+  }
+  return '';
+}
+
 export async function getLXMusicUrl(source: string, songId: string, quality: string, name?: string,
   singer?: string): Promise<string> {
+  // ★ 2026-11-09：MusicFree 独有平台（哔哩哔哩 / YouTube / `mf:xxx`）LX 脚本不认识，
+  //   直接问插件。以前会先发一次必然失败的 LX 请求，白白多等 5 秒。
+  if (isMfOnlyPlatform(source)) {
+    const direct: string = await tryMusicFreeUrl(source, songId, quality, name, singer);
+    if (direct.length > 0) {
+      return direct;
+    }
+    throw new Error('该平台没有可用的 MusicFree 音源');
+  }
   if (!lxEngineIsReady || lxEngineSendRequest === null || lxEngineRegisterPromise === null) {
+    // ★ LX 引擎没就绪（没导入 LX 脚本 / 脚本全部不可用）不再直接失败：
+    //   用户可能只导入了 MusicFree 插件，那就该走插件取地址。
+    const fallback: string = await tryMusicFreeUrl(source, songId, quality, name, singer);
+    if (fallback.length > 0) {
+      return fallback;
+    }
     logError('engine not ready');
     throw new Error('引擎未就绪或回调未初始化');
   }
@@ -140,14 +324,34 @@ export async function getLXMusicUrl(source: string, songId: string, quality: str
       }
     }, (reason: Error): void => {
       logError('fail ' + reason.message);
-      reject(reason);
+      // LX 脚本拿不到 → 试 MusicFree 同平台插件（用户可能两个都装了）
+      tryMusicFreeUrl(source, songId, quality, name, singer).then((url: string): void => {
+        if (url.length > 0) {
+          resolve(url);
+        } else {
+          reject(reason);
+        }
+      }).catch((): void => {
+        reject(reason);
+      });
     });
     sendReq(requestKey, reqData);
   });
 }
 
 export async function getLXLyric(source: string, songId: string, name?: string, singer?: string): Promise<string> {
+  if (isMfOnlyPlatform(source)) {
+    const direct: string = await tryMusicFreeLyric(source, songId, name, singer);
+    if (direct.length > 0) {
+      return direct;
+    }
+    throw new Error('该平台没有可用的 MusicFree 音源');
+  }
   if (!lxEngineIsReady || lxEngineSendRequest === null || lxEngineRegisterPromise === null) {
+    const fallback: string = await tryMusicFreeLyric(source, songId, name, singer);
+    if (fallback.length > 0) {
+      return fallback;
+    }
     logError('getLXLyric: engine not ready');
     throw new Error('LX engine not ready');
   }
@@ -168,7 +372,17 @@ export async function getLXLyric(source: string, songId: string, name?: string, 
         logError('getLXLyric: invalid resp');
         reject(new Error('Invalid lyric response'));
       }
-    }, reject);
+    }, (reason: Error): void => {
+      tryMusicFreeLyric(source, songId, name, singer).then((lyric: string): void => {
+        if (lyric.length > 0) {
+          resolve(lyric);
+        } else {
+          reject(reason);
+        }
+      }).catch((): void => {
+        reject(reason);
+      });
+    });
     sendReq(requestKey, reqData);
   });
 }
@@ -232,6 +446,27 @@ export async function fetchBoardSongs(source: string, boardId: string): Promise<
     return [];
   }
   try {
+    // ★ 2026-11-09（用户：「我记 MusicFree 是有榜单的」）：MF 榜单详情走插件协议，
+    //   不能拼 `source + '_' + boardId` 去问洛雪引擎（那里没有这个平台）。
+    if (isMfPlatformId(source)) {
+      const apis: LXUserApiInfo[] = musicFreeApisForPlatform(source, lxSourceManager.getApiList());
+      if (apis.length === 0) {
+        return [];
+      }
+      const songs: LXSearchSong[] = await mfGetSheetSongs(apis[0], boardId, 1, true);
+      const mfOut: BoardSongEntry[] = [];
+      for (let i: number = 0; i < songs.length; i++) {
+        if (songs[i].songId.length === 0) {
+          continue;
+        }
+        mfOut.push({
+          title: songs[i].name, singer: songs[i].singer, source: source,
+          songId: songs[i].songId, coverUrl: songs[i].img
+        });
+      }
+      logError('[榜单] mf/' + boardId + ' n=' + mfOut.length);
+      return mfOut;
+    }
     // ★ 汽水（qs）：没有脚本榜单接口，榜/歌单都走内置 Luna（见 geuz/QsApi）。
     //   boardId 形如 `qs_hot` / `qs_new` / `qs_west`（榜单卡）或纯歌单 id（歌单详情）。
     if (source === 'qs') {

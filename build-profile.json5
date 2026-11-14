@@ -5,13 +5,13 @@
         "name": "default",
         "type": "HarmonyOS",
         "material": {
-          "storeFile": "C:/Users/Administrator/Desktop/RzdProject/RzdMusic/.sign/RzdMusic.p12",
+          "storeFile": "/root/Project/RzdMusic/.sign/RzdMusic.p12",
           "storePassword": "00000024df23d71e292edfa6afb17a48aeaf4c371da959fd41bec1448ebef491b33d2cdde8fcfc8379e732c47e66b806dbef2368",
           "keyAlias": "rzdmusic",
           "keyPassword": "00000024df23d71e292edfa6afb17a48aeaf4c371da959fd41bec1448ebef491b33d2cdde8fcfc8379e732c47e66b806dbef2368",
           "signAlg": "SHA256withECDSA",
-          "profile": "C:/Users/Administrator/Desktop/RzdProject/RzdMusic/.sign/RzdMusicRelease.p7b",
-          "certpath": "C:/Users/Administrator/Desktop/RzdProject/RzdMusic/.sign/app_cert_chain.cer"
+          "profile": "/root/Project/RzdMusic/.sign/RzdMusicRelease.p7b",
+          "certpath": "/root/Project/RzdMusic/.sign/app_cert_chain.cer"
         }
       }
     ],

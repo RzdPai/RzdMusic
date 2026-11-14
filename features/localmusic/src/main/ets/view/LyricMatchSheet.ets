@@ -26,7 +26,7 @@ import {
   platformLabel,
   scoreCandidate,
   searchCandidates
-} from '../core/LyricMatch';
+} from 'player';
 
 const DOMAIN: number = 0x0001;
 const TAG: string = 'LyricMatchSheet';

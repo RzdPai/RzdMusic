@@ -54,7 +54,7 @@ import {
   localMusicImportState
 } from '../core/LocalMusic';
 import { LyricMatchSheet } from './LyricMatchSheet';
-import type { MatchSongInfo } from '../core/LyricMatch';
+import type { MatchSongInfo } from 'player';
 
 const DOMAIN: number = 0x0001;
 const TAG: string = 'LocalMusicPage';

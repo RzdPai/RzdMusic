@@ -1,6 +1,10 @@
 import { SearchPlaylistInfo, SearchPlaylistSong, fmtDuration } from './PlaylistSearchTypes';
 import { PlaylistSearchHttp, numOf, strOf, toHttps, fixSingleQuoteJson } from './PlaylistSearchHttp';
 import { QsPlaylistHit, qsPlaylistDetail, qsSearchPlaylists } from '../geuz/QsApi';
+import { isMfPlatformId } from '../util/SourceDeclaredInfo';
+import { mfGetSheetSongs, musicFreeApisForPlatform } from '../source/MusicFreeAdapter';
+import { lxSourceManager } from '../source/LXSourceManager';
+import { LXSearchSong } from '../source/LXMusicSDK';
 
 const WY_SEARCH_LIMIT: number = 30;
 const TX_PLAYLIST_PAGE_SIZE: number = 20;
@@ -74,6 +78,21 @@ export class PlaylistSearchApi {
   }
 
   static async getPlaylistDetail(source: string, id: string): Promise<SearchPlaylistSong[]> {
+    // ★ 2026-11-09：MusicFree 平台的歌单 / 榜单也走这里（广场卡片点击、搜索页歌单）。
+    //   插件只有 `getTopListDetail` / `getMusicSheetInfo` 两种入口，适配器里已做兼容。
+    if (isMfPlatformId(source)) {
+      const apis = musicFreeApisForPlatform(source, lxSourceManager.getApiList());
+      if (apis.length === 0) {
+        return [];
+      }
+      const songs: LXSearchSong[] = await mfGetSheetSongs(apis[0], id);
+      const out: SearchPlaylistSong[] = [];
+      for (let i: number = 0; i < songs.length; i++) {
+        out.push(SearchPlaylistSong.of(songs[i].songId, songs[i].name, songs[i].singer,
+          songs[i].albumName, songs[i].interval, songs[i].source, songs[i].img));
+      }
+      return out;
+    }
     if (source === 'wy') {
       return PlaylistSearchApi.wyPlaylistDetail(id);
     }

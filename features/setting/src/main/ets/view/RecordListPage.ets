@@ -36,9 +36,13 @@
  *   （`getFavoriteArtists()` / `getFavoriteAlbums()`）；删除走 `removeHistoryByIds()` /
  *   `removeFavorite()`。本页只是它的视图适配器（`RecordDataSource` 那层懒加载）。
  *
- * ★ 长列表纪律：`List` + `LazyForEach` + 稳定 key（`recordSource.keyOf(index)`，
+ * ★ 长列表纪律：`List` + `LazyForEach` + 稳定 key（`recordSource.keyOfRecord(record)`，
  *   前缀区分历史 `h_` / 收藏 `f_`，带重建版本号）。**不要**把行塞进 Column 里
  *   —— `LazyForEach` 离开滚动容器就不再懒加载，几千条历史会全建节点（见全局记忆 §18.3）。
+ *   **keyGenerator 只能用回调带进来的 item**，不能拿 index 反查数组（官方不保证调用顺序）。
+ * ★ 行组件 `RecordRowItem` 必须是 **V2 复用组件**（`@ReusableV2 + @ComponentV2`）：
+ *   本页是 `@ComponentV2`，官方混用矩阵里「V2 普通组件 + V1 复用组件」= 编译只告警、
+ *   运行不创建 ⇒ 列表全空（2026-11-10 就是这么白屏的）。
  *
  * ★ 取色（用户明确：取色不能照搬参考工程 —— 我们有自定义主题色）：
  *   卡片 / 背景 / 分割线 / 正文与副标题文字走 `$r('app.color.*')` / `$r('sys.color.*')`（深浅自动适配）；
@@ -68,6 +72,8 @@ import {
 } from '@kit.UIDesignKit';
 import { OnlinePlayUtil, sourceDisplayName, sourceToCode } from 'player';
 import { SongMoreMenu } from 'playlist';
+import { displaySync } from '@kit.ArkGraphics2D';
+import { RecordRowItem } from './RecordRowItem';
 
 /** 「最近播放」模式。 */
 export const RECORD_MODE_HISTORY: string = 'history';
@@ -117,6 +123,15 @@ const DOMAIN: number = 0x0000;
 const TAG: string = 'RzdRecordList';
 
 /**
+ * 分帧装载：首帧只喂这么多行，其余按帧补（官方《高负载场景分帧渲染》「转场场景」）。
+ *
+ * 首帧的量 = 一屏可见行（高 800vp / 70vp ≈ 11 行）+ `cachedCount`（8 行）再留点余量 ⇒ 24。
+ * 后续每帧 48 行：200 条历史 4 帧补完（120Hz 下约 33ms），用户感知不到，但转场首帧只处理 24 行。
+ */
+const FIRST_FRAME_ROWS: number = 24;
+const FRAME_ROWS: number = 48;
+
+/**
  * 记录（历史 / 收藏）列表的懒加载数据源。
  *
  * 数据本身仍由 `MusicStoreService` 持有（唯一真源），这个类只是它的视图适配器：
@@ -144,6 +159,21 @@ class RecordDataSource implements IDataSource {
     if (record === undefined) {
       return this.prefix + this.version + '#' + index;
     }
+    return this.keyOfRecord(record);
+  }
+
+  /**
+   * 直接按记录生成 key（`LazyForEach` 的 keyGenerator 用这个）。
+   *
+   * ⚠️ 官方《LazyForEach 使用限制》原文：「itemGenerator 函数的调用顺序不一定和数据源中的数据项
+   *   相同，开发过程中不要假设 itemGenerator 和 keyGenerator 函数是否执行及其执行顺序」。
+   *   所以 keyGenerator **不能拿 index 反查数组**（会错位/取到 undefined ⇒ 多行同 key ⇒ 少行甚至全空），
+   *   只能用回调带进来的 item 本身算。
+   */
+  public keyOfRecord(record: PlayedSongRecord): string {
+    if (record === undefined) {
+      return this.prefix + this.version + '#';
+    }
     return this.prefix + this.version + '_' + record.source + '_' + record.songId;
   }
 
@@ -154,6 +184,31 @@ class RecordDataSource implements IDataSource {
     this.version = version;
     for (let i: number = 0; i < this.listeners.length; i++) {
       this.listeners[i].onDataReloaded();
+    }
+  }
+
+  /**
+   * 往尾部追加一批（分帧装载用）。
+   *
+   * 走 `onDataAdd` 而不是 `onDataReloaded`：官方《LazyForEach 数据更新》要求增量更新用
+   * `onDataAdd`，这样框架只新建新增那几行，**已经建好的行不会重建**；
+   * 而 `onDataReloaded` 会把已建节点全部丢掉重建 —— 分帧就白做了。
+   */
+  public appendRecords(next: PlayedSongRecord[], prefix: string, version: number): void {
+    if (next.length === 0) {
+      return;
+    }
+    const start: number = this.records.length;
+    this.prefix = prefix;
+    this.version = version;
+    for (let i: number = 0; i < next.length; i++) {
+      this.records.push(next[i]);
+    }
+    for (let l: number = 0; l < this.listeners.length; l++) {
+      const listener: DataChangeListener = this.listeners[l];
+      for (let i: number = 0; i < next.length; i++) {
+        listener.onDataAdd(start + i);
+      }
     }
   }
 
@@ -219,6 +274,26 @@ export struct RecordListPage {
    * 见 {@link forceReloadRecords}。
    */
   @Local recordsVersion: number = 0;
+  /**
+   * 本页是否在前台（`onShown` / `onHidden` 维护）。
+   *
+   * 只用来决定「后台要不要重建列表」，不参与 UI 绘制，所以走普通成员不占状态槽。
+   * 配合 `pendingRefresh`：后台期间数据变了先记账，回到本页再一次性刷新。
+   */
+  private pageVisible: boolean = true;
+  /** 后台期间被 @Monitor 拦下的刷新请求（回到本页时补做）。 */
+  private pendingRefresh: boolean = false;
+  /**
+   * 分帧装载（官方《高负载场景分帧渲染》→「转场场景」）：
+   * 转场动画首帧只加载一屏数据，其余在后续帧补，避免首帧被 200 行撑爆导致动画掉帧。
+   */
+  private pendingRecords: PlayedSongRecord[] = [];
+  /** 下一帧要从哪儿开始补。 */
+  private pendingNext: number = 0;
+  private pendingPrefix: string = 'h_';
+  private frameSync: displaySync.DisplaySync | undefined = undefined;
+  /** 本机拿不到帧回调（极少数）时置 true，退化成一次性装载。 */
+  private frameSyncUnavailable: boolean = false;
   /** 关注页顶部「近期演唱会」：{ 歌手名, 场次 }，拿不到就是空数组（卡片不显示） */
   @Local upcomingShows: UpcomingShow[] = [];
   /**
@@ -247,6 +322,8 @@ export struct RecordListPage {
    * 壳层那条悬浮播放条会一直不显示（全局开关卡在 true）。
    */
   aboutToDisappear(): void {
+    // 分帧还没补完就离开页面 ⇒ 必须停帧回调，否则它会一直跟着 vsync 跑
+    this.stopFramePump();
     if (this.appState.selectionActive) {
       this.appState.selectionActive = false;
       hilog.info(DOMAIN, TAG, 'reset selectionActive on disappear');
@@ -256,18 +333,34 @@ export struct RecordListPage {
   /** 历史 / 收藏在别处被改动（播放器、歌曲菜单…）时刷新列表。 */
   @Monitor('store.historyVersion', 'store.favoriteVersion')
   refreshRecords(): void {
-    this.followingArtists = this.store.getFavoriteArtists();
-    if (this.isFollowing()) {
-      void this.loadUpcomingShows();
+    // ★ 2026-11-10（用户：这两个页面切页面卡）：页面被上层页面盖住时**不要**重建列表。
+    //   播放器每切一首歌都会 `addHistory()` → `historyVersion++`，原实现会立刻重读+重建整表
+    //   （`onDataReloaded()` 让 LazyForEach 丢掉已建节点）。等用户真的回到本页（`onShown`）再刷。
+    if (!this.pageVisible) {
+      this.pendingRefresh = true;
+      return;
     }
+    this.pendingRefresh = false;
     if (this.isFollowing()) {
-      this.records = [];
-      this.favoriteAlbums = [];
-      this.favoritePlaylists = [];
+      this.followingArtists = this.store.getFavoriteArtists();
+      if (this.records.length > 0) {
+        this.records = [];
+      }
+      if (this.favoriteAlbums.length > 0) {
+        this.favoriteAlbums = [];
+      }
+      if (this.favoritePlaylists.length > 0) {
+        this.favoritePlaylists = [];
+      }
+      void this.loadUpcomingShows();
     } else if (this.isHistory()) {
       this.records = this.normalizeRecords(this.store.getHistory());
-      this.favoriteAlbums = [];
-      this.favoritePlaylists = [];
+      if (this.favoriteAlbums.length > 0) {
+        this.favoriteAlbums = [];
+      }
+      if (this.favoritePlaylists.length > 0) {
+        this.favoritePlaylists = [];
+      }
     } else {
       this.records = this.normalizeRecords(this.store.getFavorites());
       this.favoriteAlbums = this.store.getFavoriteAlbums();
@@ -286,10 +379,80 @@ export struct RecordListPage {
     return this.mode === RECORD_MODE_HISTORY;
   }
 
-  /** 把当前 `records` 灌进懒加载数据源（**数据变化后必须调它**）。 */
+  /** 把当前 `records` 灌进懒加载数据源（**分帧**：首帧一屏，其余按帧补）。 */
   private publishRecords(): void {
     const prefix: string = this.isHistory() ? 'h_' : 'f_';
-    this.recordSource.applyRecords(this.records, prefix, this.recordsVersion);
+    this.stopFramePump();
+    const total: number = this.records.length;
+    const first: number = Math.min(total, FIRST_FRAME_ROWS);
+    this.recordSource.applyRecords(this.records.slice(0, first), prefix, this.recordsVersion);
+    this.pendingRecords = this.records;
+    this.pendingPrefix = prefix;
+    this.pendingNext = first;
+    if (first < total) {
+      hilog.info(DOMAIN, TAG, 'paged load total=%{public}d first=%{public}d', total, first);
+      this.startFramePump();
+    }
+  }
+
+  /** 开帧回调（displaySync，与屏幕 vsync 对齐；拿不到就退化成一帧装完）。 */
+  private startFramePump(): void {
+    if (this.frameSyncUnavailable || this.frameSync !== undefined) {
+      return;
+    }
+    try {
+      const sync: displaySync.DisplaySync = displaySync.create();
+      sync.setExpectedFrameRateRange({ expected: 120, min: 60, max: 120 });
+      sync.on('frame', (): void => {
+        this.pumpOneFrame();
+      });
+      sync.start();
+      this.frameSync = sync;
+    } catch (err) {
+      this.frameSyncUnavailable = true;
+      hilog.warn(DOMAIN, TAG, 'frame pump unavailable: %{public}s', (err as Error).message);
+      this.appendRemainingRecords();
+    }
+  }
+
+  /** 每帧补一批（`onDataAdd` 增量，不重建已建行）。 */
+  private pumpOneFrame(): void {
+    const total: number = this.pendingRecords.length;
+    if (this.pendingNext >= total) {
+      this.stopFramePump();
+      return;
+    }
+    const to: number = Math.min(total, this.pendingNext + FRAME_ROWS);
+    this.recordSource.appendRecords(this.pendingRecords.slice(this.pendingNext, to),
+      this.pendingPrefix, this.recordsVersion);
+    this.pendingNext = to;
+    if (this.pendingNext >= total) {
+      this.stopFramePump();
+    }
+  }
+
+  /** 兜底：没有帧回调时一次性补完。 */
+  private appendRemainingRecords(): void {
+    const total: number = this.pendingRecords.length;
+    if (this.pendingNext < total) {
+      this.recordSource.appendRecords(this.pendingRecords.slice(this.pendingNext, total),
+        this.pendingPrefix, this.recordsVersion);
+      this.pendingNext = total;
+    }
+  }
+
+  private stopFramePump(): void {
+    const sync: displaySync.DisplaySync | undefined = this.frameSync;
+    this.frameSync = undefined;
+    if (sync === undefined) {
+      return;
+    }
+    try {
+      sync.stop();
+      sync.off('frame');
+    } catch (_err) {
+      // 已经停了就算了
+    }
   }
 
   /**
@@ -302,9 +465,8 @@ export struct RecordListPage {
    * 所有行 key 全变 → 强制全部重建，立即显示新平台。
    */
   private forceReloadRecords(): void {
-    this.refreshRecords();
     this.recordsVersion++;
-    this.publishRecords();
+    this.refreshRecords();
   }
 
   // ─────────────────────────────── 记录：播放 / 多选 / 删除 ───────────────────────────────
@@ -443,12 +605,14 @@ export struct RecordListPage {
    * **贴右下角的浮动圆按钮**：拇指自然落点，且不挡列表内容。
    */
   private locateCurrent(): void {
+    // 分帧还没补完时先把剩余数据补进去，否则 `scrollToIndex` 会越界（数据源里只有前 24 条）
+    this.appendRemainingRecords();
+    this.stopFramePump();
     const index: number = this.currentRecordIndex();
     if (index < 0) {
       this.getUIContext().getPromptAction().showToast({ message: '当前没有正在播放的歌曲', duration: 1600 });
       return;
     }
-    this.recordSource.getData(index);
     this.pageScroller.scrollToIndex(index, true, ScrollAlign.CENTER);
     hilog.info(DOMAIN, TAG, 'locate current index=%{public}d', index);
   }
@@ -710,7 +874,6 @@ export struct RecordListPage {
     })
   }
 
-  /** 多选模式操作条：全选 / 删除(n) / 取消。 */
   /**
    * 多选底栏（用户 2026-10-19：全选/删除/取消 那一排改成**HDS 底栏那种操作条**）。
    *
@@ -725,9 +888,8 @@ export struct RecordListPage {
    *     `adaptiveColor = AVERAGE` 才会"取背后画面平均色"，底下的画面换色它跟着换；
    *   - ⚠️ 2026-10-20（用户：「接入的是**沉浸光感**，不是发光，把这堆发光删了」）：
    *     原来这里还挂了 `hdsEffect` 点光（每格按下发亮 + 条子本体受光），**已全部删除**；
-    *   - 颜色：删除用**用户自定义主题色**，其余文字用 `font_primary`（不再有写死的蓝）。
-    */
-  /**
+   *   - 颜色：删除用**用户自定义主题色**，其余文字用 `font_primary`（不再有写死的蓝）。
+   *
    * 多选底部操作条（光感版）：与本地音乐页同一套做法 —— 放进空 `Tabs` 壳的 tabBar 槽，材质才生效；
    * 壳宽收敛、无阴影（详见项目记忆 §202）。
    */
@@ -847,127 +1009,6 @@ export struct RecordListPage {
     .height('100%')
     .padding({ left: 16, right: 16, top: 8, bottom: 16 })
     .backgroundColor($r('sys.color.background_secondary'))
-  }
-
-  /** 单条播放记录行（多选模式下带勾选框；行高与封面照搬参考的行规格）。 */
-  @Builder
-  private RecordRow(record: PlayedSongRecord, index: number) {
-    Column() {
-      if (index > 0) {
-        Divider()
-          .strokeWidth(0.6)
-          .color($r('app.color.comp_divider'))
-          .margin({ left: 72 })
-      }
-      Row({ space: 12 }) {
-        if (this.selectionMode) {
-          Toggle({ type: ToggleType.Checkbox, isOn: this.isSelected(record) })
-            .width(24)
-            .height(24)
-            .selectedColor(this.themeState.color)
-            .onChange((isOn: boolean) => {
-              this.toggleSelect(record, isOn);
-            })
-        }
-        if ((record.img ?? '').length > 0) {
-          Image(record.img)
-            .width(ROW_COVER)
-            .height(ROW_COVER)
-            .borderRadius(R_COVER)
-            .objectFit(ImageFit.Cover)
-        } else {
-          Row() {
-            SymbolGlyph($r('sys.symbol.music_note_list'))
-              .fontSize(16)
-              .fontColor([$r('sys.color.font_tertiary')])
-          }
-          .width(ROW_COVER)
-          .height(ROW_COVER)
-          .borderRadius(R_COVER)
-          .backgroundColor($r('sys.color.background_tertiary'))
-          .justifyContent(FlexAlign.Center)
-        }
-        Column({ space: 4 }) {
-          // ★ 2026-10-15（用户实测反馈）：历史页歌名原来还是 `Ellipsis` ⇒ 换成跑马灯
-          //   （用户要求「各个页面歌曲名过长时改为用跑马灯显示」，这一处漏了）。
-          //   字号/字色逐字保留；父容器是 `Column` ⇒ 用组件默认的 `width('100%')` 约束宽度。
-          Row({ space: 6 }) {
-            SongTitleMarquee({
-              text: record.name,
-              titleFontSize: F_ITEM,
-              // ★ 用户 2026-10-19：正在播放的那首**歌名用主题色**（用户可自定义颜色）
-              titleFontColor: this.isCurrentRecord(record) ? this.themeState.color : $r('sys.color.font_primary'),
-              titleFontWeight: FontWeight.Normal,
-              // ★ 用户 2026-10-19 第二轮：小竖条要**紧贴歌名右侧**（不是整行最右边）⇒
-              //   歌名不再占满主轴（去掉 layoutWeight），改 `hugContent`（`flexShrink(1)`）。
-              hugContent: true
-            })
-            // 播放中的动态小竖条（5 根；暂停就停，见 musicbasic 的 NowPlayingIndicator）
-            if (this.isCurrentRecord(record)) {
-              NowPlayingIndicator({
-                playing: this.appState.isPlay,
-                color: this.themeState.color
-              })
-            }
-          }
-          .width('100%')
-          .alignItems(VerticalAlign.Center)
-          Text(((record.singer ?? '').length > 0 ? record.singer : ''))
-            .fontSize(F_SUB)
-            .fontColor($r('sys.color.font_tertiary'))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-        }
-        .alignItems(HorizontalAlign.Start)
-        .layoutWeight(1)
-        if (!this.selectionMode) {
-          Column({ space: 4 }) {
-            // 音质（与时长同色同字号；无 quality 时显示 "—"）
-            Text(this.qualityLabel(record.quality))
-              .fontSize($r('sys.float.Caption_S'))
-              .fontColor($r('sys.color.font_tertiary'))
-              .maxLines(1)
-            // 平台标签（与搜索 SongRowItem 位置/样式/颜色一致；品牌色是数据）
-            Text(this.platformLabel(record.source))
-              .fontSize($r('sys.float.Caption_S'))
-              .padding({ left: 4, right: 4, top: 1, bottom: 1 })
-              .borderRadius($r('sys.float.corner_radius_level2'))
-              .fontColor($r('sys.color.font_on_primary'))
-              .backgroundColor(this.platformColor(record.source))
-          }
-          .alignItems(HorizontalAlign.Center)
-          // ★ 右侧是**和其它界面一致的歌曲菜单**（`SongMoreMenu`：播放/下载/加歌单/加收藏/加队列）。
-          //   历史与收藏两个模式共用这一行，所以两边同时生效。
-          //   行本身仍然可点（点整行 = 播放），菜单按钮自己消费点击、不会连带触发播放。
-          SongMoreMenu({
-            song: {
-              songId: record.songId, name: record.name, singer: record.singer,
-              albumName: record.albumName, albumId: record.albumId, source: record.source,
-              interval: record.interval, img: record.img, types: []
-            },
-            iconSize: 18,
-            // 换源后立刻重建列表，保证平台标签/封面实时更新
-            onSongSwitched: (): void => {
-              this.forceReloadRecords();
-            }
-          })
-        }
-      }
-      .width('100%')
-      .height(LIST_ROW_HEIGHT)
-      .padding({ left: 14, right: 14 })
-      .onClick(() => {
-        if (this.selectionMode) {
-          this.toggleSelect(record, !this.isSelected(record));
-          return;
-        }
-        this.playRecord(record);
-      })
-    }
-    .width('100%')
-    // 行底**透明**（= 页面底色）：参考工程的 HistoryView 用的就是普通 `List`（`SongListPane`
-    // 里没有任何卡片底），不是"一张张卡" —— 照搬参考就不该给它加卡面
-    .backgroundColor(Color.Transparent)
   }
 
   /** 收藏分组的小标题（歌手 / 专辑 / 歌曲）。 */
@@ -1161,9 +1202,14 @@ export struct RecordListPage {
     return shouldUseSplitDetailLayout(this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint);
   }
 
-  /** @returns 宽屏列数：XL 3 列，其余（含手机横屏）2 列。 */
-  private wideRecordLanes(): number {
-    return this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_XL ? 3 : 2;
+  /**
+   * 宽屏多列的 `Grid.columnsTemplate`：XL 三列、其余（含手机横屏）两列。
+   *
+   * ⚠️ 原来这里返回的是列数，给 `List.lanes(count, 16)` 用 —— 那条属性会让 List 丢懒加载，
+   *   已改成 Grid 的模板字符串（见 build 里 SongGrid 的注释）。
+   */
+  private wideRecordColumns(): string {
+    return this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_XL ? '1fr 1fr 1fr' : '1fr 1fr';
   }
 
   /**
@@ -1216,8 +1262,7 @@ export struct RecordListPage {
     }
     .type(ButtonType.Normal)
     .systemMaterial(immersiveMedium())
-    // ★ 2026-11-13（参考 @tangs/components 调优）：玻璃底色改深浅色自适应资源（深色黑纱 #33000000）。
-    .backgroundColor($r('app.color.immersive_glass_overlay'))
+    .backgroundColor('#33FFFFFF')
     .width('100%')
     .padding(14)
     .borderRadius(16)
@@ -1271,6 +1316,17 @@ export struct RecordListPage {
           barBlurOptions())
 
         Stack({ alignContent: Alignment.TopStart }) {
+          // ★★ 2026-11-10「切页面卡」的真正修法：**容器分离**。
+          //   ① 官方《LazyForEach 使用限制》原文：「容器组件内只能包含一个 LazyForEach。以 List 为例，
+          //      **不建议同时包含 ListItem、ForEach、LazyForEach**」—— 原实现把关注页/歌单页的
+          //      ForEach、空态与底部占位的 ListItem、歌曲的 LazyForEach 全塞在同一个 List 里。
+          //   ② 原来还挂着 `.lanes(...)`：List 一旦进入多列布局模式，懒加载就退化成**全量创建**
+          //      （同样 200 条数据，滚动不卡是因为节点早建完了，卡的是"进入页面的那一帧"）。
+          //   现在按数据量分流：
+          //      · 关注 / 歌单 / 专辑 —— 数据少，`List + ForEach`，保留 `contentStartOffset` 等 List 专有能力；
+          //      · 历史 / 收藏的歌曲 —— 长列表，`Grid + LazyForEach`，多列用 `columnsTemplate`
+          //        （**绝不能用 List.lanes**），首帧只建可视区 + cachedCount。
+          if (this.isFollowing() || this.category !== 'song') {
           List({ space: 0, scroller: this.pageScroller }) {
 
           // ★ 关注模式（用户 2026-10-20）：只列关注的歌手，点进歌手详情
@@ -1325,29 +1381,9 @@ export struct RecordListPage {
 
           // ★ 2026-10-29（用户：收藏页「歌曲 17」删掉 → 随后又说历史页的也删掉）：
           //   两个模式的歌曲列表都不再插这行分组标题（`FavoriteGroupHeader` 保留定义，当前无人调用）。
-
-          // ★ 多选操作条已移到**底部**（见 build 里的 SelectionActionBar），列表内不再插入
-
-          // ★ 长列表用 LazyForEach + 稳定 key（数据源见 RecordDataSource）
-          if (this.category === 'song' && !this.isFollowing()) {
-            LazyForEach(this.recordSource, (record: PlayedSongRecord, index: number) => {
-              ListItem() {
-                this.RecordRow(record, index)
-              }
-            }, (record: PlayedSongRecord, index: number) => this.recordSource.keyOf(index))
-          }
-
-          if (this.category === 'song' && !this.isFollowing() && this.records.length === 0) {
-            ListItem() {
-              Text(this.isHistory() ? '暂无播放历史' : '暂无收藏歌曲')
-                .fontSize($r('sys.float.Caption_L'))
-                .fontColor($r('sys.color.font_tertiary'))
-                .width('100%')
-                .height(72)
-                .padding({ left: 14, right: 14 })
-                .textAlign(TextAlign.Center)
-            }
-          }
+          // ★ 多选操作条已移到**底部**（见 build 里的 SelectionActionBar），列表内不再插入。
+          // ★ 歌曲列表**不在这里**：为了保住懒加载，它单独走下面的 `Grid + LazyForEach`
+          //   （本 List 只服务关注 / 歌单 / 专辑三个短列表，纯 `ForEach`，符合官方「一个容器只放一种渲染方式」）。
 
           ListItem() {
             Column()
@@ -1361,8 +1397,11 @@ export struct RecordListPage {
         //   这样静止时首行不会被标题栏压住；一旦上滑，内容就滚到标题栏底下，
         //   HDS 标题栏自带的渐变模糊（GRADUAL_BLUR）才会显形 —— 与「平台音乐」页同一机制。
         .contentStartOffset(this.isFollowing() ? this.titleTopInset() : 0)
-        // 宽屏多列（历史/收藏都是短行 ⇒ 两列才不浪费横向空间）；窄屏仍是单列
-        .lanes(this.isWideRecordLayout() ? this.wideRecordLanes() : 1, 16)
+        // ⚠️ 这里**绝对不能**再写 `.lanes(...)`：List 一旦进多列布局模式，懒加载会退化为
+        //   全量创建（200 条历史 = 转场首帧建 200 行）。宽屏多列交给下面 Grid 的 columnsTemplate。
+        // 官方长列表优化：预缓存可视区外的节点，避免滚动时反复创建/销毁行组件
+        // （每行含跑马灯、播放指示竖条、SongMoreMenu 等重组件）。
+        .cachedCount(8)
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring)
         // ★★ 让内容能画进状态栏（"延伸进状态栏"）的**官方正解**。
@@ -1379,6 +1418,72 @@ export struct RecordListPage {
           left: this.contentPaddingSide(),
           right: this.contentPaddingSide()
         })
+        }
+
+        // ★★ 历史 / 收藏的歌曲列表：`Grid + LazyForEach`。
+        //   为什么不是 List：List 的 `lanes` 一设就丢懒加载；而 `columnsTemplate` 不会。
+        //   为什么不是和上面共用 List：官方「一个容器只放一种渲染方式」，混放会把整个容器拉回全量创建。
+        //   首帧只建「可视区 + cachedCount 行」，200 条历史不再一次性全建。
+        if (!this.isFollowing() && this.category === 'song') {
+          Grid(this.pageScroller) {
+            LazyForEach(this.recordSource, (record: PlayedSongRecord, index: number) => {
+              GridItem() {
+                // @ReusableV2 行组件（V2 体系）：滑出屏幕进复用池，滑回来只更新 @Param 不重建子树
+                RecordRowItem({
+                  record: record,
+                  rowIndex: index,
+                  selectionMode: this.selectionMode,
+                  selected: this.isSelected(record),
+                  isCurrent: this.isCurrentRecord(record),
+                  playing: this.appState.isPlay,
+                  accent: this.themeState.color,
+                  qualityText: this.qualityLabel(record.quality),
+                  platformText: this.platformLabel(record.source),
+                  platformTint: this.platformColor(record.source),
+                  onTapRow: (row: PlayedSongRecord): void => {
+                    this.playRecord(row);
+                  },
+                  onToggleRow: (row: PlayedSongRecord, on: boolean): void => {
+                    this.toggleSelect(row, on);
+                  },
+                  onSongSwitched: (): void => {
+                    this.forceReloadRecords();
+                  }
+                })
+              }
+              // Grid 的 item 必须有确定高度，父容器才能算出行数 → 懒加载才成立
+              .height(LIST_ROW_HEIGHT)
+            }, (record: PlayedSongRecord) => this.recordSource.keyOfRecord(record))
+          }
+          .width('100%')
+          .height('100%')
+          // 宽屏多列：XL 三列、其余两列；窄屏单列（等价于原来的 lanes，但不破坏懒加载）
+          .columnsTemplate(this.isWideRecordLayout() ? this.wideRecordColumns() : '1fr')
+          .columnsGap(this.isWideRecordLayout() ? 16 : 0)
+          .rowsGap(0)
+          .cachedCount(this.isWideRecordLayout() ? 6 : 8)
+          .scrollBar(BarState.Off)
+          .edgeEffect(EdgeEffect.Spring)
+          .clipContent(ContentClipMode.SAFE_AREA)
+          .padding({
+            left: this.contentPaddingSide(),
+            right: this.contentPaddingSide(),
+            // Grid 没有 List 的「底部占位 ListItem」，底部让位（浮动播放条）用 padding 给
+            bottom: this.bottomReservedVp()
+          })
+        }
+
+        // 歌曲模式的空态放容器外面：塞进 Grid 会破坏「容器里只有 LazyForEach」这条纪律。
+        if (!this.isFollowing() && this.category === 'song' && this.records.length === 0) {
+          Text(this.isHistory() ? '暂无播放历史' : '暂无收藏歌曲')
+            .fontSize($r('sys.float.Caption_L'))
+            .fontColor($r('sys.color.font_tertiary'))
+            .width('100%')
+            .height(72)
+            .padding({ left: 14, right: 14 })
+            .textAlign(TextAlign.Center)
+            .margin({ top: this.titleTopInset() })
+        }
 
 
         // ★ 用户 2026-10-19：多选时底部放一条**HDS 风格操作条**（删除 / 添加至歌单 / 取消收藏 / 取消）；
@@ -1425,6 +1530,17 @@ export struct RecordListPage {
         return true;
       }
       return guardPlayerBack('RecordListPage');
+    })
+    // ★ 2026-11-10：后台期间挂起刷新（见 `refreshRecords` 头部），回到本页补做一次。
+    //   没有这两条时，播放器每切一首歌都会在**看不见的本页**上重建 200 条的列表。
+    .onShown((): void => {
+      this.pageVisible = true;
+      if (this.pendingRefresh) {
+        this.refreshRecords();
+      }
+    })
+    .onHidden((): void => {
+      this.pageVisible = false;
     })
     .hideTitleBar(false)
     .hideBackButton(false)

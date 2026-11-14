@@ -1,9 +1,11 @@
 import { MusicStoreService, PlaybackPreferenceService, appendPlayLog } from 'musicbasic';
-import { getLXMusicUrl } from '../source/LXPlayHelper';
+import { getLXMusicUrl, getMusicFreeUrlForPlatform } from '../source/LXPlayHelper';
 import { lxSearch, LXSearchSong } from '../source/LXMusicSDK';
+import { musicFreeApisForPlatform } from '../source/MusicFreeAdapter';
 import { LXUserApiInfo, LXUserApiSourceInfo } from '../source/Interface';
 import { lxSourceManager } from '../source/LXSourceManager';
 import { markProbeFail, markProbeOk } from './LxQualityProbe';
+import { isMfPlatformId, mfApiIdOf, normalizePlatformId, platformIdFromLabel } from './SourceDeclaredInfo';
 
 export const QUALITY_CHAIN: string[] =
   ['master', 'atmos_plus', 'atmos', 'hires', 'flac24bit', 'flac', '320k', '128k'];
@@ -79,13 +81,34 @@ function canonicalKeyOf(declaredKey: string): string {
 }
 
 /**
+ * 是否是洛雪六平台（wy / kw / tx / kg / mg / qs）。
+ *
+ * ★ 2026-11-09（用户定稿规则）：「洛雪不允许回退到 MusicFree，但是 MusicFree 运行换洛雪」。
+ *   六平台只走洛雪脚本；插件只在 MusicFree 平台或未知平台上兜底。反向回退（插件失败 →
+ *   按歌名到六平台搜同名歌）不受影响。
+ */
+function isLxPlatformKey(platform: string): boolean {
+  return canonicalKeyOf(platform).length > 0;
+}
+
+/**
  * @returns 该脚本**实际声明**的、可用来访问 `canon` 平台的键（规范键在前，别名在后）。
  *          空数组 = 该脚本没声明这个平台。
  */
 function declaredKeysFor(api: LXUserApiInfo, canon: string): string[] {
   const out: string[] = [];
   const sources: Record<string, LXUserApiSourceInfo> = api.sources;
+  const override: string[] | undefined = overridePlatformsOf(api);
+  // ★ 2026-11-09（用户：「LX 是修改支持的平台」）：用户裁掉的平台直接不参与兜底，
+  //   哪怕脚本声明里有它 —— 声明 ≠ 现在还能用。
+  if (override !== undefined && override.indexOf(canon) < 0) {
+    return out;
+  }
   if (sources === undefined || sources === null) {
+    // 用户手动补的平台：没有声明数据，按规范键硬试一次
+    if (override !== undefined) {
+      out.push(canon);
+    }
     return out;
   }
   if (sources[canon] !== undefined) {
@@ -93,6 +116,9 @@ function declaredKeysFor(api: LXUserApiInfo, canon: string): string[] {
   }
   const aliases: string[] | undefined = PLATFORM_ALIAS_KEYS.get(canon);
   if (aliases === undefined) {
+    if (out.length === 0 && override !== undefined) {
+      out.push(canon);
+    }
     return out;
   }
   const keys: string[] = Object.keys(sources);
@@ -106,7 +132,42 @@ function declaredKeysFor(api: LXUserApiInfo, canon: string): string[] {
       appendPlayLog('[回退链] alias ' + key + ' -> ' + canon + ' script=' + api.name);
     }
   }
+  if (out.length === 0 && override !== undefined) {
+    out.push(canon);
+  }
   return out;
+}
+
+/** 用户手动修正的平台列表（空 / 未设置 = 不覆盖，返回 undefined）。 */
+function overridePlatformsOf(api: LXUserApiInfo): string[] | undefined {
+  const list: string[] | undefined = api.platformOverride;
+  if (list === undefined || list === null || list.length === 0) {
+    return undefined;
+  }
+  const out: string[] = [];
+  for (let i: number = 0; i < list.length; i++) {
+    const id: string = canonicalKeyOf(list[i]);
+    if (id.length > 0 && out.indexOf(id) < 0) {
+      out.push(id);
+    }
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+/**
+ * 这个脚本「现在能供哪些平台」的键（用于换平台兜底）。
+ *
+ * 用户裁过平台就以 `platformOverride` 为准；否则用脚本声明。
+ */
+function effectivePlatformKeys(api: LXUserApiInfo): string[] {
+  const override: string[] | undefined = overridePlatformsOf(api);
+  if (override !== undefined) {
+    return override;
+  }
+  if (api.sources === undefined || api.sources === null) {
+    return [];
+  }
+  return Object.keys(api.sources);
 }
 
 const SCRIPT_SWITCH_TIMEOUT_MS: number = 8000;
@@ -120,12 +181,6 @@ export class FallbackOptions {
   allowScriptSwitch: boolean = true;
   /** 原平台全部失败后，按歌名+歌手到其它平台搜索重试（默认开）。 */
   allowPlatformSwitch: boolean = true;
-  /**
-   * ★ 显式指定的首选音质档位（下载用）：空串 = 用播放偏好。
-   * 下载弹层选了 FLAC 而播放偏好是 128k 时，如果不传它，
-   * 回退链会按播放偏好从 128k 起步 —— 用户选的档位被静默忽略。
-   */
-  preferredQuality: string = '';
 }
 
 export class UrlResolveOutcome {
@@ -206,8 +261,38 @@ export function qualityDisplayName(q: string): string {
 }
 
 export function sourceDisplayName(source: string): string {
-  const name: string = SOURCE_NAMES[source];
-  return name === undefined ? source : name;
+  const name: string | undefined = SOURCE_NAMES[source];
+  if (name !== undefined) {
+    return name;
+  }
+  // MusicFree 平台：名字跟随源（小蜗 / 元力KW）。记录页 / 历史页都靠这里取中文名，
+  // 显示 `mfplat:` 前缀的原始 id 对用户没有意义。
+  const apiId: string = mfApiIdOf(source);
+  if (apiId.length > 0) {
+    try {
+      const list: LXUserApiInfo[] = lxSourceManager.getApiList();
+      for (let i: number = 0; i < list.length; i++) {
+        if (list[i].id === apiId) {
+          // 备注优先：用户给同一个订阅里的两个「元力WY」改名后要能区分；
+          // 其次是插件自报的平台名，最后才是导入时的来源名。
+          const rawRemark: string | undefined = list[i].remark;
+          const remark: string = rawRemark !== undefined ? rawRemark.trim() : '';
+          if (remark.length > 0) {
+            return remark;
+          }
+          const platform: string = list[i].platform !== undefined ? list[i].platform.trim() : '';
+          if (platform.length > 0) {
+            return platform;
+          }
+          return list[i].name.length > 0 ? list[i].name : 'MusicFree';
+        }
+      }
+    } catch (_err) {
+      return 'MusicFree';
+    }
+    return 'MusicFree';
+  }
+  return source;
 }
 
 export function qualityTierKey(quality: string, source: string, scriptId: string): string {
@@ -269,6 +354,15 @@ export class FallbackCandidate {
   quality: string = '';
   /** 是否换过平台（相对入参平台）。 */
   platformSwitched: boolean = false;
+  /**
+   * 是否是 **MusicFree 插件**候选。
+   *
+   * ★ 2026-11-09（用户：「你别把这个禁了啊」）：插件必须能进回退链（用户按勾选顺序
+   *   排的源就该被尊重），但它**不能**喂给 `switchToScript()` —— LX 引擎对
+   *   `kind==='mf'` 直接 `setReady(false)`，永远等不到 init，正是「音源未就绪」的根因。
+   *   `true` ⇒ 走 `mfGetMediaSource`，全程不碰 LX 引擎。
+   */
+  isMf: boolean = false;
   /**
    * ★ 2026-11-04：真正发给脚本的**平台键**（可能≠`platform`）。
    * 例：规范平台 `qs` 在「全豆要」里声明成 `qsvip` ⇒ `platform='qs'`、`scriptPlatform='qsvip'`。
@@ -360,7 +454,8 @@ function bestQualityFor(declared: string[], preferred: string): string {
  * 3. 没有任何源支持当前平台 ⇒ 换平台：其余源支持的平台按"最高音质"降序，逐个排进候选；
  * 4. 播放与下载都只调这一个函数（下载侧不得另写一份）。
  */
-export function buildCandidateChain(preferredQuality: string, platform: string): FallbackCandidate[] {
+export function buildCandidateChain(preferredQuality: string, platform: string,
+  forcePlatformSwitch: boolean = false): FallbackCandidate[] {
   const out: FallbackCandidate[] = [];
   const all: LXUserApiInfo[] = lxSourceManager.getApiList();
   if (all.length === 0) {
@@ -370,11 +465,11 @@ export function buildCandidateChain(preferredQuality: string, platform: string):
   // ★★★ 2026-11-05（甲方：「勾选了好多源，一点播放就瞬间提示失败」）：
   //   `getSourceScriptOrder()` 的契约是"空数组 = 未配置 ⇒ 回退为全部已导入脚本"
   //   （见 MusicStoreService 注释），但这里以前**只**按 orderIds 取 ⇒ 只要这个 key
-  //   没写过（旧版本升上来、或只在新版设置页勾过但没触发排序落盘），`apis` 就是空数组，
+  //   没写过（旧版本升上来、或只在新版设置页勾过但没触发排序落盘），候选就是空数组，
   //   函数直接 return 空链 ⇒ 一次网络请求都不发 ⇒ 「获取播放地址失败，已尝试全部平台与音源」
   //   在几十毫秒内弹出。这正是"瞬间失败"的第一号成因。
   let orderIds: string[] = MusicStoreService.getInstance().getSourceScriptOrder();
-  if (orderIds.length === 0) {
+  if (orderIds.length === 0 && !MusicStoreService.getInstance().hasSourceScriptOrderConfig()) {
     for (let i: number = 0; i < all.length; i++) {
       if (all[i].id !== undefined && all[i].id.length > 0) {
         orderIds.push(all[i].id);
@@ -382,13 +477,26 @@ export function buildCandidateChain(preferredQuality: string, platform: string):
     }
     appendPlayLog('[回退链] no order, use all n=' + orderIds.length);
   }
-  const apis: LXUserApiInfo[] = [];
+  const sources: LXUserApiInfo[] = [];
+  const lxApis: LXUserApiInfo[] = [];
   const missing: string[] = [];
+  let mfCount: number = 0;
   for (let i: number = 0; i < orderIds.length; i++) {
     let hit: boolean = false;
     for (let j: number = 0; j < all.length; j++) {
       if (all[j].id === orderIds[i]) {
-        apis.push(all[j]);
+        // ★★★ 2026-11-09（用户：「播放 LX 的音乐一直提示音源未就绪」+「你别把这个禁了啊」）：
+        //   MusicFree 插件**不能**塞给 `switchToScript()`（引擎对插件 `setReady(false)`，
+        //   永远等不到 init，这就是「音源未就绪」的根因）；但也不能把它踢出回退链 ——
+        //   元力系插件本来就按六平台聚合，洛雪脚本全挂时它是唯一的活路。
+        //   正确处理：插件按**用户勾选顺序**占一个候选位，播放时走 `mfGetMediaSource`，
+        //   全程不碰 LX 引擎（见 FallbackCandidate.isMf）。
+        sources.push(all[j]);
+        if (all[j].kind === 'mf') {
+          mfCount++;
+        } else {
+          lxApis.push(all[j]);
+        }
         hit = true;
         break;
       }
@@ -397,12 +505,15 @@ export function buildCandidateChain(preferredQuality: string, platform: string):
       missing.push(orderIds[i]);
     }
   }
+  if (mfCount > 0) {
+    appendPlayLog('[回退链] mf plugins in chain n=' + mfCount + '（走插件取址，不进 LX 引擎）');
+  }
   if (missing.length > 0) {
     // 勾选记录里有、已导入列表里没有（脚本被删/换过 id）——记日志，别静默
     appendPlayLog('[回退链] missing ids n=' + missing.length + ' ' +
       missing.slice(0, 3).join(','));
   }
-  if (apis.length === 0) {
+  if (sources.length === 0) {
     appendPlayLog('[回退链] no selected source');
     return out;
   }
@@ -434,21 +545,49 @@ export function buildCandidateChain(preferredQuality: string, platform: string):
   //   排在所有"已声明"候选之后 —— 既不会瞬间失败，也不会让脚本切换次数失控。
   const MAX_UNDECLARED_CANDIDATES: number = 2;
   let undeclaredAdded: number = 0;
-  for (let i: number = 0; i < apis.length; i++) {
-    if (isPairBlocked(apis[i].id, platform)) {
-      appendPlayLog('[回退链] ' + apis[i].name + '/' + platform + ' blocked, skip');
+  // `forcePlatformSwitch`（MusicFree 歌回退洛雪）时同平台段整体不参与：
+  // 插件歌曲的 id 洛雪脚本不认，只能按歌名到六平台重新搜，见下面的「换平台」段。
+  for (let i: number = 0; !forcePlatformSwitch && i < sources.length; i++) {
+    const src: LXUserApiInfo = sources[i];
+    // 插件候选：只排「同平台」，取址走 mfGetMediaSource（不碰 LX 引擎）。
+    // 跨平台交给下面的 LX「换平台」链（插件跨平台需要先搜索，链上没有名字信息）。
+    if (src.kind === 'mf') {
+      // ★ 2026-11-09（用户定稿：「洛雪不允许回退到 MusicFree，但是 MusicFree 运行换洛雪」）：
+      //   六平台（wy/kw/tx/kg/mg/qs）的候选链里**不摆插件**，洛雪脚本全挂了也不派给插件。
+      //   反向（插件取不到地址 → 按歌名换洛雪）仍然保留，见 resolveMusicUrlWithFallback。
+      if (isLxPlatformKey(platform)) {
+        continue;
+      }
+      if (!mfSupportsPlatform(src, platform)) {
+        continue;
+      }
+      const mfCand: FallbackCandidate = new FallbackCandidate();
+      mfCand.scriptId = src.id;
+      mfCand.scriptName = mfPluginLabel(src);
+      mfCand.platform = platform;
+      mfCand.scriptPlatform = platform;
+      mfCand.quality = preferredQuality.length > 0 ? preferredQuality : '320k';
+      mfCand.platformSwitched = false;
+      mfCand.isMf = true;
+      out.push(mfCand);
+      firstCandidate = false;
+      appendPlayLog('[回退链] mf candidate ' + mfCand.scriptName + '/' + platform);
+      continue;
+    }
+    if (isPairBlocked(src.id, platform)) {
+      appendPlayLog('[回退链] ' + src.name + '/' + platform + ' blocked, skip');
       continue;
     }
     // ★ 2026-11-04：该脚本可能用**别名键**声明这个平台（如 `qsvip`），逐个展开成候选。
-    const keys: string[] = declaredKeysFor(apis[i], platform);
+    const keys: string[] = declaredKeysFor(src, platform);
     if (keys.length === 0) {
       // 一个都没声明：第一个脚本照旧"用户音质硬试一次"；其余未声明源限量硬试
       const needHardTry: boolean = (firstCandidate && preferredQuality.length > 0) ||
         (undeclaredAdded < MAX_UNDECLARED_CANDIDATES && preferredQuality.length > 0);
       if (needHardTry) {
         const hardTry: FallbackCandidate = new FallbackCandidate();
-        hardTry.scriptId = apis[i].id;
-        hardTry.scriptName = apis[i].name;
+        hardTry.scriptId = src.id;
+        hardTry.scriptName = src.name;
         hardTry.platform = platform;
         hardTry.scriptPlatform = platform;
         hardTry.quality = preferredQuality;
@@ -456,21 +595,21 @@ export function buildCandidateChain(preferredQuality: string, platform: string):
         out.push(hardTry);
         firstCandidate = false;
         undeclaredAdded++;
-        appendPlayLog('[回退链] undeclared, hard-try ' + apis[i].name + '/' + platform);
+        appendPlayLog('[回退链] undeclared, hard-try ' + src.name + '/' + platform);
       }
       continue;
     }
     for (let k: number = 0; k < keys.length; k++) {
       const key: string = keys[k];
-      const declaredQ: string = bestQualityFor(declaredOf(apis[i], key), preferredQuality);
+      const declaredQ: string = bestQualityFor(declaredOf(src, key), preferredQuality);
       const q: string = (firstCandidate && preferredQuality.length > 0) ? preferredQuality : declaredQ;
       if (q.length === 0) {
         continue;
       }
       firstCandidate = false;
       const cand: FallbackCandidate = new FallbackCandidate();
-      cand.scriptId = apis[i].id;
-      cand.scriptName = apis[i].name;
+      cand.scriptId = src.id;
+      cand.scriptName = src.name;
       cand.platform = platform;
       cand.scriptPlatform = key;
       cand.quality = q;
@@ -484,14 +623,14 @@ export function buildCandidateChain(preferredQuality: string, platform: string):
   //      别名时，同一个平台会被当成两个不同平台，排进"换平台"里。
   const platformBest: string[] = [];
   const platformList: string[] = [];
-  for (let i: number = 0; i < apis.length; i++) {
-    const keys: string[] = Object.keys(apis[i].sources);
+  for (let i: number = 0; i < lxApis.length; i++) {
+    const keys: string[] = effectivePlatformKeys(lxApis[i]);
     for (let j: number = 0; j < keys.length; j++) {
       const canon: string = canonicalKeyOf(keys[j]);
       if (canon.length === 0 || canon === platform) {
         continue;
       }
-      const q: string = bestQualityFor(declaredOf(apis[i], keys[j]), preferredQuality);
+      const q: string = bestQualityFor(declaredOf(lxApis[i], keys[j]), preferredQuality);
       if (q.length === 0) {
         continue;
       }
@@ -513,17 +652,17 @@ export function buildCandidateChain(preferredQuality: string, platform: string):
   const others: FallbackCandidate[] = [];
   for (let k: number = 0; k < order.length; k++) {
     const p: string = platformList[order[k]];
-    for (let i: number = 0; i < apis.length; i++) {
-      const keys: string[] = declaredKeysFor(apis[i], p);
+    for (let i: number = 0; i < lxApis.length; i++) {
+      const keys: string[] = declaredKeysFor(lxApis[i], p);
       for (let n: number = 0; n < keys.length; n++) {
         const key: string = keys[n];
-        const q: string = bestQualityFor(declaredOf(apis[i], key), preferredQuality);
+        const q: string = bestQualityFor(declaredOf(lxApis[i], key), preferredQuality);
         if (q.length === 0) {
           continue;
         }
         const cand: FallbackCandidate = new FallbackCandidate();
-        cand.scriptId = apis[i].id;
-        cand.scriptName = apis[i].name;
+        cand.scriptId = lxApis[i].id;
+        cand.scriptName = lxApis[i].name;
         cand.platform = p;
         cand.scriptPlatform = key;
         cand.quality = q;
@@ -559,26 +698,42 @@ export function buildCandidateChain(preferredQuality: string, platform: string):
   if (out.length === 0) {
     const activeId: string = activeSourceId();
     let pick: LXUserApiInfo | undefined = undefined;
-    for (let i: number = 0; i < apis.length; i++) {
-      if (activeId.length > 0 && apis[i].id === activeId) {
-        pick = apis[i];
+    for (let i: number = 0; i < lxApis.length; i++) {
+      if (activeId.length > 0 && lxApis[i].id === activeId) {
+        pick = lxApis[i];
         break;
       }
     }
     if (pick === undefined) {
-      pick = apis[0];
+      pick = lxApis.length > 0 ? lxApis[0] : undefined;
     }
     if (pick !== undefined && preferredQuality.length > 0) {
-      const last: FallbackCandidate = new FallbackCandidate();
-      last.scriptId = pick.id;
-      last.scriptName = pick.name;
-      last.platform = platform;
-      last.scriptPlatform = platform;
-      last.quality = preferredQuality;
-      last.platformSwitched = false;
-      out.push(last);
-      appendPlayLog('[回退链] empty cands, hard-try ' + pick.name + '/' + platform +
-        '/' + preferredQuality);
+      if (forcePlatformSwitch) {
+        // MusicFree 歌回退洛雪：没有任何脚本上报过平台声明时，按六平台逐个"换平台搜索"，
+        // 宁可多几条候选（命中即停），也别返回空链。
+        for (let p: number = 0; p < PLATFORM_FALLBACK_ORDER.length; p++) {
+          const alt: FallbackCandidate = new FallbackCandidate();
+          alt.scriptId = pick.id;
+          alt.scriptName = pick.name;
+          alt.platform = PLATFORM_FALLBACK_ORDER[p];
+          alt.scriptPlatform = PLATFORM_FALLBACK_ORDER[p];
+          alt.quality = preferredQuality;
+          alt.platformSwitched = true;
+          out.push(alt);
+        }
+        appendPlayLog('[回退链] no declared platform, switch-platform by name ' + pick.name);
+      } else {
+        const last: FallbackCandidate = new FallbackCandidate();
+        last.scriptId = pick.id;
+        last.scriptName = pick.name;
+        last.platform = platform;
+        last.scriptPlatform = platform;
+        last.quality = preferredQuality;
+        last.platformSwitched = false;
+        out.push(last);
+        appendPlayLog('[回退链] empty cands, hard-try ' + pick.name + '/' + platform +
+          '/' + preferredQuality);
+      }
     }
   }
   const head: string[] = [];
@@ -674,12 +829,96 @@ async function switchToScript(scriptId: string): Promise<boolean> {
   return false;
 }
 
-function scriptSupportsPlatform(info: LXUserApiInfo, source: string): boolean {
-  const map: Record<string, LXUserApiSourceInfo> | undefined = info.sources;
-  if (map === undefined) {
+/**
+ * 这个 id 是不是一个**能进 LX 引擎**的脚本（存在且不是 MusicFree 插件）。
+ *
+ * ★ `lxActiveSource` 是全局的，MusicFree 播放也会把它写成插件 id；LX 引擎对插件
+ *   `setReady(false)`，所以不能把「active 有值」当成「LX 引擎有脚本」。
+ */
+function isLxScriptId(id: string): boolean {
+  if (id.length === 0) {
     return false;
   }
-  return map[source] !== undefined;
+  const list: LXUserApiInfo[] = lxSourceManager.getApiList();
+  for (let i: number = 0; i < list.length; i++) {
+    if (list[i].id === id) {
+      return list[i].kind !== 'mf';
+    }
+  }
+  return false;
+}
+
+/**
+ * 给一个平台挑一个能用的 LX 脚本：优先「启用顺序里声明支持该平台」的，其次第一个启用的脚本。
+ * 只做**预选**，真正的就绪等待由 `switchToScript()` 负责。
+ */
+function pickLxScriptFor(platform: string): LXUserApiInfo | undefined {
+  const all: LXUserApiInfo[] = lxSourceManager.getApiList();
+  if (all.length === 0) {
+    return undefined;
+  }
+  const orderIds: string[] = MusicStoreService.getInstance().getSourceScriptOrder();
+  const consider: LXUserApiInfo[] = [];
+  if (orderIds.length > 0) {
+    for (let i: number = 0; i < orderIds.length; i++) {
+      for (let j: number = 0; j < all.length; j++) {
+        if (all[j].id === orderIds[i] && all[j].kind !== 'mf') {
+          consider.push(all[j]);
+          break;
+        }
+      }
+    }
+  } else {
+    for (let i: number = 0; i < all.length; i++) {
+      if (all[i].kind !== 'mf') {
+        consider.push(all[i]);
+      }
+    }
+  }
+  for (let i: number = 0; i < consider.length; i++) {
+    if (scriptSupportsPlatform(consider[i], platform)) {
+      return consider[i];
+    }
+  }
+  return consider.length > 0 ? consider[0] : undefined;
+}
+
+function scriptSupportsPlatform(info: LXUserApiInfo, source: string): boolean {
+  const canon: string = canonicalKeyOf(source);
+  const override: string[] | undefined = overridePlatformsOf(info);
+  if (override !== undefined) {
+    // 用户裁过：只认勾上的平台（声明里有也不算）
+    return canon.length > 0 && override.indexOf(canon) >= 0;
+  }
+  const map: Record<string, LXUserApiSourceInfo> | undefined = info.sources;
+  if (map === undefined || map === null) {
+    return false;
+  }
+  return map[source] !== undefined || (canon.length > 0 && map[canon] !== undefined);
+}
+
+/**
+ * MusicFree 插件是否声明支持该平台。
+ *
+ * `sources` 对插件永远为空（那是 LX 脚本 init 上报的），所以不能用上面那个函数；
+ * 插件认 `platform`（元力WY）和条目名（网易 / QQ音乐）两处。
+ */
+function mfSupportsPlatform(api: LXUserApiInfo, platform: string): boolean {
+  // 这里不能用 `canonicalKeyOf()`（只认六平台 + 汽水），插件还有 bilibili / youtube 等。
+  const canon: string = normalizePlatformId(platform);
+  if (canon.length === 0) {
+    return false;
+  }
+  return platformIdFromLabel(api.platform) === canon || platformIdFromLabel(api.name) === canon;
+}
+
+/** 插件的显示名：用户备注 > 插件自报平台名 > 条目名。 */
+function mfPluginLabel(api: LXUserApiInfo): string {
+  const remark: string | undefined = api.remark;
+  if (remark !== undefined && remark.trim().length > 0) {
+    return remark.trim();
+  }
+  return api.platform.length > 0 ? api.platform : api.name;
 }
 
 function pickScriptCandidates(source: string, currentId: string): LXUserApiInfo[] {
@@ -698,12 +937,14 @@ function pickScriptCandidates(source: string, currentId: string): LXUserApiInfo[
   }
   // 用户配置的多选顺序；空则用全部导入顺序
   let orderIds: string[] = [];
+  let configured: boolean = false;
   try {
     orderIds = MusicStoreService.getInstance().getSourceScriptOrder();
+    configured = MusicStoreService.getInstance().hasSourceScriptOrderConfig();
   } catch (_e) {
-    orderIds = [];
+    configured = false;
   }
-  if (orderIds.length === 0) {
+  if (orderIds.length === 0 && !configured) {
     for (let i: number = 0; i < list.length; i++) {
       if (list[i].id !== undefined && list[i].id.length > 0) {
         orderIds.push(list[i].id);
@@ -966,52 +1207,158 @@ async function tryOtherPlatforms(originSource: string, name: string, singer: str
   return null;
 }
 
+/**
+ * 最后一枪：直接问「声明了这个平台的 MusicFree 插件」要地址。
+ *
+ * ★★★ 2026-11-09（用户：「播放洛雪的歌直接播放失败，已尝试所有平台和音源。
+ *   你别把这个禁了啊」）：
+ *   洛雪脚本会失效（后端跑路 / 平台改接口），这时元力系插件往往还能取到同一首歌的地址
+ *   —— 它们是按六平台聚合的，`wy` / `kw` 这些 id 本来就通用。
+ *   所以「插件不进 LX 引擎」≠「插件不参与兜底」：插件不能当 `lxActiveSource`，
+ *   但必须是回退链的最后一道保险。零候选（一个 LX 脚本都没装）时同样要走到这里。
+ */
+async function tryMusicFreeLastResort(source: string, songId: string, name: string, singer: string,
+  preferred: string, onNotice: ((msg: string) => void) | null,
+  options: FallbackOptions): Promise<UrlResolveOutcome | null> {
+  // ★★★ 2026-11-09（用户定稿）：「洛雪不允许回退到 MusicFree，但是 MusicFree 运行换洛雪」。
+  //   这里是唯一入口，规则只写一份：六平台一律不走插件。
+  if (isLxPlatformKey(source)) {
+    appendPlayLog('[回退链] ' + source + ' 是洛雪平台，不回退到 MusicFree');
+    return null;
+  }
+  const apis: LXUserApiInfo[] = musicFreeApisForPlatform(source, lxSourceManager.getApiList());
+  if (apis.length === 0) {
+    return null;
+  }
+  const chain: string[] = getQualityChain(preferred, source);
+  appendPlayLog('[回退链] mf last-resort ' + source + ' plugins=' + apis.length +
+    ' chain=' + chain.join('>'));
+  let pluginName: string = apis[0].platform.length > 0 ? apis[0].platform : apis[0].name;
+  const remark: string | undefined = apis[0].remark;
+  if (remark !== undefined && remark.trim().length > 0) {
+    pluginName = remark.trim();
+  }
+  // 插件的音质只有 standard/high/super 三档，音质链试 3 档足够；
+  // 再多只是同一档重复请求，白等。
+  const maxTry: number = Math.min(chain.length, 3);
+  for (let i: number = 0; i < maxTry; i++) {
+    const q: string = chain[i];
+    if (options.excludeQuality.length > 0 && q === options.excludeQuality) {
+      continue;
+    }
+    const url: string = await getMusicFreeUrlForPlatform(source, songId, q, name, singer);
+    if (url.length === 0 || (options.excludeUrl.length > 0 && url === options.excludeUrl)) {
+      continue;
+    }
+    const outcome: UrlResolveOutcome = new UrlResolveOutcome();
+    outcome.url = url;
+    outcome.quality = q;
+    outcome.source = source;
+    outcome.songId = songId;
+    outcome.scriptName = pluginName;
+    if (q !== preferred && onNotice !== null) {
+      onNotice('当前音质不可用，已切换 ' + qualityDisplayName(q));
+    }
+    appendPlayLog('[回退链] mf hit ' + pluginName + '/' + source + '/' + q);
+    return outcome;
+  }
+  appendPlayLog('[回退链] mf all failed ' + source);
+  return null;
+}
+
 export async function resolveMusicUrlWithFallback(source: string, songId: string,
   name: string, singer: string, interval: string,
   onNotice: ((msg: string) => void) | null,
   options?: FallbackOptions): Promise<UrlResolveOutcome> {
   const opts: FallbackOptions = options ?? new FallbackOptions();
+  // ★ 2026-11-09：MusicFree 平台（`mfplat:<插件id>`）根本不需要 LX 引擎 ——
+  //   以前是靠「未声明平台硬试」把它塞进候选链才碰巧能播；现在候选链只收 LX 脚本，
+  //   这里必须显式短路，否则「只装了插件」的用户连插件自己的歌都放不出来。
+  const mfOrigin: boolean = isMfPlatformId(source);
+  if (mfOrigin) {
+    const mfPreferred: string = await PlaybackPreferenceService.resolveDefaultQuality();
+    const mfChain: string[] = getQualityChain(mfPreferred, source);
+    appendPlayLog('[回退链] MusicFree 平台直连 ' + source);
+    const direct: UrlResolveOutcome | null = await tryQualities(source, source, songId, name, singer,
+      mfChain, mfPreferred, false, onNotice, opts);
+    if (direct !== null) {
+      // tryQualities 默认把「当前 LX 脚本」写进 scriptName，对插件来源是错的
+      direct.scriptName = sourceDisplayName(source);
+      return direct;
+    }
+    // ★★★ 2026-11-09（用户定稿：「MusicFree 运行换洛雪」）：插件取不到地址时继续往下走，
+    //   按歌名 + 歌手到洛雪六平台搜同名歌。插件歌曲 id 洛雪脚本不认，所以只能「换平台搜索」，
+    //   不能让候选链拿这个 id 去 `tryQualities` —— 见 buildCandidateChain 的 forcePlatformSwitch。
+    appendPlayLog('[回退链] mf 直连失败，改按歌名换洛雪');
+  }
+  /** 洛雪平台 / MusicFree 平台都不再问插件：前者按规则禁止，后者已经直连试过了。 */
+  const allowMfRescue: boolean = !mfOrigin && !isLxPlatformKey(source);
+  /** 候选链用的平台：MusicFree 歌没有洛雪平台归属，传空串只生成「换平台」候选。 */
+  const lookupPlatform: string = mfOrigin ? '' : source;
   // ★ 2026-11-05：先抢占预热 —— 否则后台预热正在反复改写 `lxActiveSource`，
   //   本次解析的每次 switchToScript 都会被判定"被其它流程改写"而放弃 ⇒ 瞬间失败。
   cancelWarmUp();
-  // ★ 2026-11-01（全新安装导入音源后"瞬间"报"获取播放地址失败"）：
-  //   根因是脚本引擎（WebView）当时还没 ready，链上每个候选都在 tryQualities 里毫秒级失败 ⇒ 整条链瞬间走完。
-  //   解析前先主动等引擎就绪（最多 4s）；超时返回空结果并留下可诊断日志。
-  const bootDeadline: number = Date.now() + 4000;
-  while (!engineReady() && Date.now() < bootDeadline) {
-    await sleep(120);
-  }
-  if (!engineReady()) {
-    appendPlayLog('[换源] engine not ready (4s timeout), abort');
-    const noEngine: UrlResolveOutcome = new UrlResolveOutcome();
-    noEngine.failReason = 'engine-not-ready';
-    return noEngine;
-  }
-  // ★ 2026-11-01（全新安装"瞬间"失败的第二道保险）：导入过音源但**没有任何脚本被选中**时，
-  //   activeSourceId() 为空 ⇒ 回退链拿不到脚本 ⇒ 每个候选毫秒级失败。这里自动选用列表里第一个脚本。
-  if (activeSourceId().length === 0) {
-    const apisFirst: LXUserApiInfo[] = lxSourceManager.getApiList();
-    if (apisFirst.length > 0) {
-      const firstScriptId: string = apisFirst[0].id;
-      appendPlayLog('[换源] no active source, use first id=' + firstScriptId);
-      AppStorage.setOrCreate('lxActiveSource', firstScriptId);
-      await switchToScript(firstScriptId);
+  // ★★★ 2026-11-09（用户：「播放 LX 的音乐一直提示音源未就绪。只能用 MusicFree 的播放一下，
+  //   回退切换平台才能用」）：
+  //   根因是这里**一上来就死等引擎就绪**。而 `lxActiveSource` 可能正指着一个 MusicFree
+  //   插件（上次播放留下的），LX 引擎加载它时直接 `setReady(false)` —— 永远等不到就绪，
+  //   于是每次播放都在这里被拦下，回退链连一次切换都没跑过。
+  //   正确做法：active 不是 LX 脚本就先预选一个能供当前平台的脚本并等它 init；
+  //   真的没有可用脚本时，让回退链按候选逐个切换（每次自带超时 + 回滚），最后再报失败。
+  const activeNow: string = activeSourceId();
+  let hasLxScript: boolean = isLxScriptId(activeNow);
+  if (!hasLxScript) {
+    const pick: LXUserApiInfo | undefined = pickLxScriptFor(lookupPlatform);
+    if (pick !== undefined) {
+      appendPlayLog('[换源] active 不是 LX 脚本(' + (activeNow.length > 0 ? activeNow : 'empty') +
+        ')，预选 ' + pick.name);
+      // 只置 active（宿主会挂引擎、开始注入），剩下的交给回退链按候选逐个
+      // switchToScript（那次会带 8s 超时 + 失败回滚）。
+      AppStorage.setOrCreate('lxActiveSource', pick.id);
+      hasLxScript = true;
+    } else {
+      appendPlayLog('[换源] 没有可用的 LX 脚本（active=' + (activeNow.length > 0 ? activeNow : 'empty') + '）');
     }
   }
-  const preferred: string = opts.preferredQuality.length > 0 ? opts.preferredQuality
-    : await PlaybackPreferenceService.resolveDefaultQuality();
+  const preferred: string = await PlaybackPreferenceService.resolveDefaultQuality();
   const activeAtStart: string = activeSourceId();
   // ★ B2/B3 唯一回退链：顺序完全由 buildCandidateChain() 决定（同平台源优先 → 换平台按音质）
-  const cands: FallbackCandidate[] = buildCandidateChain(preferred, source);
+  const cands: FallbackCandidate[] = buildCandidateChain(preferred, lookupPlatform, mfOrigin);
+  // ★ 2026-11-09：**先建链再等引擎** —— 用户把 MusicFree 插件排在第一位时，
+  //   起播根本不需要 LX 引擎，等它 4s 纯属白等。只有第一个候选是 LX 脚本才等。
+  //   （后面若从插件回退到脚本，`switchToScript()` 自己会等 init。）
+  if (hasLxScript && (cands.length === 0 || !cands[0].isMf)) {
+    const bootDeadline: number = Date.now() + 4000;
+    while (!engineReady() && Date.now() < bootDeadline) {
+      await sleep(120);
+    }
+  }
   // ★ 本次播放"预期使用的脚本"：引擎已加载脚本时就是它；冷启动（未加载任何脚本）时
   //   取回退链第一个候选（= 用户设置的默认音源脚本）。
   //   只有命中脚本**不等于**它，才算真的"切换了音源"，否则不该弹「已切换音源：xxx」。
+  let firstLx: FallbackCandidate | undefined = undefined;
+  for (let i: number = 0; i < cands.length; i++) {
+    if (!cands[i].isMf) {
+      firstLx = cands[i];
+      break;
+    }
+  }
   const intendedScriptId: string = activeAtStart.length > 0
     ? activeAtStart
-    : (cands.length > 0 ? cands[0].scriptId : '');
+    : (firstLx !== undefined ? firstLx.scriptId : '');
   if (cands.length === 0) {
     // ★ 2026-11-05：真的一个候选都没有（未导入音源 / 勾选 id 全部对不上） —— 明确区分出来，
     //   别让用户以为是"所有平台都试过了"。
+    // ★ 2026-11-09：但「没有 LX 脚本」不等于「没有音源」—— 只装了 MusicFree 插件的用户，
+    //   插件就是唯一出路。先问插件，再报 no-candidate。
+    //   ⚠️ 洛雪六平台例外（用户定稿：洛雪不允许回退到 MusicFree），`allowMfRescue` 已经排除。
+    if (allowMfRescue) {
+      const mfOnly: UrlResolveOutcome | null = await tryMusicFreeLastResort(source, songId, name,
+        singer, preferred, onNotice, opts);
+      if (mfOnly !== null) {
+        return mfOnly;
+      }
+    }
     appendPlayLog('[回退链] no candidate, no request');
     const none: UrlResolveOutcome = new UrlResolveOutcome();
     none.failReason = 'no-candidate';
@@ -1019,9 +1366,30 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
   }
   let attempted: number = 0;
   let skippedCooldown: number = 0;
+  let switchFailed: number = 0;
+  // 插件候选只需要跑一次（一次会把该平台的所有插件都试完），同批后面直接跳过。
+  let mfTried: boolean = false;
   for (let i: number = 0; i < cands.length; i++) {
     const c: FallbackCandidate = cands[i];
-    if (c.scriptId !== activeSourceId()) {
+    if (c.isMf) {
+      if (mfTried) {
+        continue;
+      }
+      mfTried = true;
+      const mfHit: UrlResolveOutcome | null = await tryMusicFreeLastResort(c.platform, songId, name,
+        singer, c.quality, onNotice, opts);
+      if (mfHit !== null) {
+        if (c.scriptId !== intendedScriptId) {
+          mfHit.switchedScriptName = c.scriptName;
+        }
+        markProbeOk(c.platform, mfHit.quality);
+        return mfHit;
+      }
+      continue;
+    }
+    // 同一个脚本但引擎还没就绪（刚切过来 / 正在 reload）也要走 switchToScript 等它，
+    // 否则请求会被 LXSourceEngine 排队到 20s 才超时。
+    if (c.scriptId !== activeSourceId() || !engineReady()) {
       if (scriptCooldown.get(c.scriptId) !== undefined && (scriptCooldown.get(c.scriptId) ?? 0) > Date.now()) {
         appendPlayLog('[换音源] ' + c.scriptName + ' cooldown, skip');
         skippedCooldown++;
@@ -1029,6 +1397,7 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
       }
       const loaded: boolean = await switchToScript(c.scriptId);
       if (!loaded) {
+        switchFailed++;
         scriptCooldown.set(c.scriptId, Date.now() + SCRIPT_FAIL_COOLDOWN_MS);
         skippedCooldown++;
         continue;
@@ -1064,6 +1433,16 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
   if (cands.length > 0) {
     markProbeFail(cands[0].platform, cands[0].quality, '全部候选失败');
   }
+  // ★ 2026-11-09（用户：「播放洛雪的歌直接播放失败，已尝试所有平台和音源」）：
+  //   LX 脚本全挂时，声明了该平台的 MusicFree 插件往往还能取到地址 —— 最后再问一次。
+  //   ⚠️ 只对「非洛雪平台」生效（用户定稿：洛雪不允许回退到 MusicFree）。
+  if (allowMfRescue && !mfTried) {
+    const mfRescue: UrlResolveOutcome | null = await tryMusicFreeLastResort(source, songId, name,
+      singer, preferred, onNotice, opts);
+    if (mfRescue !== null) {
+      return mfRescue;
+    }
+  }
   appendPlayLog('[回退链] all failed cands=' + cands.length + ' tried=' + attempted +
     ' skipped=' + skippedCooldown + ' blocked=' + blockedPairs.size + ' restore origin');
   if (activeAtStart.length > 0) {
@@ -1071,7 +1450,10 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
   }
   const failed: UrlResolveOutcome = new UrlResolveOutcome();
   // ★ 2026-11-05：区分"一个候选都没真正发出去"（全被冷却/换脚本失败挡掉）和"发了但全失败"。
-  failed.failReason = attempted === 0 ? 'all-skipped' : 'all-failed';
+  // ★ 2026-11-09：候选全部卡在「脚本起不来」和「全在冷却」是两回事，提示不能混。
+  failed.failReason = attempted === 0
+    ? (switchFailed > 0 ? 'engine-not-ready' : 'all-skipped')
+    : 'all-failed';
   return failed;
 }
 
@@ -1094,7 +1476,13 @@ export async function warmUpLxSources(): Promise<number> {
   if (list.length === 0) {
     return 0;
   }
-  const originalActive: string = activeSourceId();
+  const rawActive: string = activeSourceId();
+  // 指向插件 / 已删除脚本的 active 不算「用户选过」—— 预热结束后不能把它恢复回来，
+  // 否则又回到「LX 引擎永远等不到 init」的死局（2026-11-09 用户反馈）。
+  const originalActive: string = isLxScriptId(rawActive) ? rawActive : '';
+  if (originalActive.length === 0 && rawActive.length > 0) {
+    AppStorage.setOrCreate('lxActiveSource', '');
+  }
   const myToken: number = warmUpToken;
   let warmed: number = 0;
   // ★ 2026-11-04：记下**第一个真的就绪**的脚本。原始 active 为空时（全新安装/恢复备份后），
@@ -1111,6 +1499,11 @@ export async function warmUpLxSources(): Promise<number> {
       return warmed;
     }
     const api: LXUserApiInfo = list[i];
+    // ★ 2026-11-09：插件由 MusicFree 运行时负责，塞进 LX 引擎只会 setReady(false)
+    //   并让预热白等 8s×N（用户看到的「音源未就绪」也有它一份）。
+    if (api.kind === 'mf') {
+      continue;
+    }
     const declared: number = api.sources !== undefined ? Object.keys(api.sources).length : 0;
     if (declared > 0) {
       continue;

@@ -23,8 +23,8 @@
  */
 
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { lxSearch } from 'player';
-import type { LXSearchSong, LXSearchResult } from 'player';
+import { lxSearch } from '../source/LXMusicSDK';
+import type { LXSearchSong, LXSearchResult } from '../source/LXMusicSDK';
 
 const DOMAIN: number = 0x0001;
 const TAG: string = 'LyricMatch';
@@ -51,22 +51,6 @@ export interface MatchSongInfo {
 
 /** 参与匹配的平台：优先 QQ → 网易云 → 酷狗 → 酷我 → 咪咕 */
 export const MATCH_PLATFORMS: string[] = ['tx', 'wy', 'kg', 'kw', 'mg'];
-
-/** 平台名（显示用） */
-const PLATFORM_LABELS: Record<string, string> = {
-  'kw': '酷我',
-  'kg': '酷狗',
-  'tx': 'QQ',
-  'mg': '咪咕',
-  'wy': '网易',
-  'qs': '汽水'
-};
-
-/** 平台的中文名（认不出来的就原样显示） */
-export function platformLabel(source: string): string {
-  const label: string | undefined = PLATFORM_LABELS[source];
-  return label === undefined ? source : label;
-}
 
 /** 差在这个范围内认为「就是同一首」 */
 const DURATION_STRONG_MS: number = 3000;

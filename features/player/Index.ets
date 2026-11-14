@@ -44,6 +44,31 @@ export { MusicRecognitionPageBuilder } from './src/main/ets/view/MusicRecognitio
 export { VolumeSlider } from './src/main/ets/view/VolumeSlider';
 export { OnlinePlayUtil } from './src/main/ets/util/OnlinePlayUtil';
 export { LXSourceHost } from './src/main/ets/source/LXSourceHost';
+// MusicFree 生态适配（订阅导入 / 平台识别 / 插件调用）
+export {
+  MusicFreeEngine, ensureMfReady, waitMfReady, mfCall, mfEngineReady, mfEnginePlatform, mfEngineMethods
+} from './src/main/ets/source/MusicFreeEngine';
+export {
+  platformIdFromLabel, parseMusicFreeSubscription, importMusicFreeSubscription, importMusicFreeSubscriptionText,
+  importMusicFreePluginUrl, importMusicFreePluginScript, importSourceScriptAuto,
+  looksLikeMusicFreePlugin, musicFreeApisForPlatform, mfSearch, mfGetMediaSource, mfGetLyric,
+  mfSearchSheets, mfTopLists, mfRecommendGroups, mfGetSheetSongs, mfPlatformIdOfApi,
+  isMfOnlyPlatform, updateSubscription, mfPlatformHasCap,
+  backfillMusicFreePlatforms
+} from './src/main/ets/source/MusicFreeAdapter';
+export type { MfTopListGroup } from './src/main/ets/source/MusicFreeAdapter';
+// 插件能力标记（静态扫描）：UI 据它屏蔽「推荐 / 榜单 / 歌单」等入口
+export {
+  MF_CAP_MEDIA, MF_CAP_LYRIC, MF_CAP_SEARCH, MF_CAP_SEARCH_SHEET, MF_CAP_SHEET,
+  MF_CAP_TOP_LIST, MF_CAP_RECOMMEND, MF_CAP_ALBUM, MF_CAP_ARTIST,
+  scanMfCaps, mfHasCap
+} from './src/main/ets/util/MfCapability';
+// 平台搜索路由：搜索页 / 歌单广场 / 批量下载统一从这里分派「内置 / LX 脚本 / MusicFree 插件」
+export {
+  searchPlatformSongs, searchPlatformSheets, platformPlazaFeed, platformPlazaGroups,
+  platformRankingGroups, enabledPlatformIds
+} from './src/main/ets/source/PlatformSearch';
+export type { MfSubscriptionEntry, MfImportReport } from './src/main/ets/source/MusicFreeAdapter';
 export { LXSourceEngine, lxEngineIsReady } from './src/main/ets/source/LXSourceEngine';
 export { lxSourceManager } from './src/main/ets/source/LXSourceManager';
 export type { LXApiImportResult } from './src/main/ets/source/LXSourceManager';
@@ -62,9 +87,14 @@ export { lxGetQualityOptions, lxGetQualityOptionsForSongs, LXQualityOption } fro
 export type { LXBatchQualityResult } from './src/main/ets/source/LXQualityApi';
 // 平台中文名（kw→酷我、wy→网易云…），批量下载的失败提示里要带上它
 // 音源脚本「声明了哪些平台 / 什么音质 / 能做什么」的只读摘要（「音源管理」用）
-export { lxDeclaredPlatforms, lxDeclaredPlatformsOf, lxSourceLabel, lxQualityLabel, lxActionLabel }
+export { lxDeclaredPlatforms, lxDeclaredPlatformsOf, lxSourceLabel, lxQualityLabel, lxActionLabel,  LX_PLATFORM_ORDER, normalizePlatformId, isOnlinePlatformId, platformLabel, isLxSearchPlatform,
+  isMfPlatformId, MF_PLATFORM_PREFIX, musicFreeSubscriptionLabel, looksLikeHostName }
   from './src/main/ets/util/SourceDeclaredInfo';
 export type { LXSourcePlatformInfo } from './src/main/ets/util/SourceDeclaredInfo';
+// ★ 平台管理（2026-11-09 第三版）：洛雪固定六平台 + 每个 MusicFree 插件各一行（名字跟源走）。
+//   勾选 = 搜索 / 广场显示哪些平台；排序 = 平台顺序。平台与音源启用完全解耦。
+export { platformRegistry } from './src/main/ets/util/PlatformRegistry';
+export type { PlatformDef, PlatformOrigin } from './src/main/ets/util/PlatformRegistry';
 export { sourceDisplayName, qualityDisplayName, QUALITY_CHAIN, warmUpLxSources } from './src/main/ets/util/SourceFallbackUtil';
 // A4：音质真实探测（会话缓存 + 播放链路回写）
 export { cachedProbe, probeSummary, probeQuality, probeBySample, sampleOf, pickPlaybackQuality, qualityRank, markProbeOk, markProbeFail, parseIntervalSeconds } from './src/main/ets/util/LxQualityProbe';
@@ -80,7 +110,7 @@ export { DownloadUtil } from './src/main/ets/util/DownloadUtil';
 export { DownloadService, DownloadStatus, DownloadTask } from './src/main/ets/util/DownloadService';
 export type { TxToplistInfo, TxSinger } from './src/main/ets/source/LXMusicSDK';
 export type { LXSearchSong, LXSearchResult, LXQualityType, LXLeaderboardEntry, WyLyricResult, LyricFullResult } from './src/main/ets/source/LXMusicSDK';
-export type { LXUserApiInfo, LXUserApiInfoFull, LXUserApiSourceInfo, LXSource, LXQuality } from './src/main/ets/source/Interface';
+export type { LXUserApiInfo, LXUserApiInfoFull, LXUserApiSourceInfo, LXSource, LXQuality, MfSubscriptionInfo } from './src/main/ets/source/Interface';
 export { AmllLyricFormat } from './src/main/ets/amll/model/AmllTypes';
 export { amllProbeLyricText, amllProbeToString, amllFormatName } from './src/main/ets/amll/util/AmllParserProbe';
 export type { AmllProbeResult } from './src/main/ets/amll/util/AmllParserProbe';
@@ -120,3 +150,12 @@ export { prewarmCurrentSongMesh, meshWarmKeyOf } from './src/main/ets/util/MeshW
 export { MeshCoverBg } from './src/main/ets/view/MeshCoverBg';
 
 export { PlaybackTuningPanel } from './src/main/ets/view/PlaybackTuningPanel';
+
+// 在线歌词匹配（打分 / 逐平台搜索）：原本在 localmusic 里，播放页「搜索歌词」也要用同一套，
+// 所以下沉到 player —— localmusic 与播放页都从这里取，**只保留一份实现**。
+export {
+  MATCH_PLATFORMS, normalizeForMatch, singerTokens, parseIntervalMs,
+  scoreCandidate, pickAutoMatch, searchCandidates, autoMatchLyric, fromSearchSong, toSearchSong,
+  infoToJson, infoFromJson
+} from './src/main/ets/util/LyricMatch';
+export type { MatchSongInfo, LyricCandidate, LyricMatch, AutoMatchResult } from './src/main/ets/util/LyricMatch';

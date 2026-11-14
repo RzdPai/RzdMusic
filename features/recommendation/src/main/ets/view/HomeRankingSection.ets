@@ -57,8 +57,9 @@ export struct HomeRankingSection {
   private SourceBar() {
     Scroll() {
       Row({ space: 8 }) {
-        ForEach(MusicDataService.sourceList, (item: string, index?: number) => {
-          this.SourceChip(MusicDataService.sourceName(item), index ?? 0)
+        // 只列「有榜单接口」的平台（原版 MusicFree 的能力屏蔽）
+        ForEach(this.recommendViewModel.rankingSources(), (item: string) => {
+          this.SourceChip(MusicDataService.sourceName(item), this.recommendViewModel.sourceIndexOf(item))
         }, (item: string) => `rank-src-${item}`)
       }
     }

@@ -1,7 +1,10 @@
 import { http } from '@kit.NetworkKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BusinessError } from '@kit.BasicServicesKit';
-import { lxTxToplistInfo, TxToplistInfo, qsBoardSongs, qsDiscoverPlaylists, QsPlaylistHit, LXSearchSong } from 'player';
+import { lxTxToplistInfo, TxToplistInfo, qsBoardSongs, qsDiscoverPlaylists, QsPlaylistHit, LXSearchSong,
+  platformRegistry, lxSourceManager, platformPlazaFeed, platformRankingGroups,
+  mfGetSheetSongs, musicFreeApisForPlatform, mfPlatformHasCap, MF_CAP_RECOMMEND, MF_CAP_TOP_LIST } from 'player';
+import type { LXUserApiInfo, SearchPlaylistInfo } from 'player';
 import { BoardSongParam, ToplistRouteParam } from 'musicbasic';
 import { cryptoFramework } from '@kit.CryptoArchitectureKit';
 import { buffer, util } from '@kit.ArkTS';
@@ -786,25 +789,37 @@ async function fetchMgRanks(): Promise<MgRankEntry[]> {
 }
 
 
-const SOURCES: string[] = ['kw', 'kg', 'tx', 'wy', 'mg', 'qs'];
+/**
+ * 广场 / 排行榜的平台顺序：用户在「平台管理」里勾选并排序的全部平台。
+ *
+ * ★ 2026-11-09（用户：「搜索、歌单广场等各种地方直接显示用户勾选的所有平台」）：
+ *   不再硬编码 LX 六平台 —— MusicFree 插件带来的哔哩哔哩 / YouTube 也会出现在这一行。
+ *   结果按签名缓存，避免每次渲染都重建整张表。
+ */
+let cachedSourceList: string[] = [];
+let cachedSourceSignature: string = '';
+
+function enabledSourceList(): string[] {
+  const apis = lxSourceManager.getApiList();
+  const defs = platformRegistry.allPlatforms(apis);
+  const ids: string[] = [];
+  for (let i: number = 0; i < defs.length; i++) {
+    if (defs[i].sourceEnabled && platformRegistry.isEnabled(defs[i].id)) {
+      ids.push(defs[i].id);
+    }
+  }
+  const signature: string = ids.join(',');
+  if (signature === cachedSourceSignature && cachedSourceList.length > 0) {
+    return cachedSourceList;
+  }
+  cachedSourceSignature = signature;
+  cachedSourceList = ids;
+  return cachedSourceList;
+}
 
 function sourceDisplayName(source: string): string {
-  if (source === 'kw') {
-    return '酷我';
-  }
-  if (source === 'kg') {
-    return '酷狗';
-  }
-  if (source === 'tx') {
-    return 'QQ';
-  }
-  if (source === 'wy') {
-    return '网易';
-  }
-  if (source === 'qs') {
-    return '汽水';
-  }
-  return '咪咕';
+  // MusicFree 平台的名字跟随源名（小蜗 / 元力KW），洛雪平台用中文名
+  return platformRegistry.labelOf(source);
 }
 
 function boardIdList(source: string): string[] {
@@ -1371,7 +1386,69 @@ export function pickDedicatedBoardName(source: string): string {
 }
 
 export class MusicDataService {
-  static readonly sourceList: string[] = SOURCES;
+  /** 动态平台清单（含 MusicFree 平台）；按当前启用/排序实时计算。 */
+  static sourceList(): string[] {
+    return enabledSourceList();
+  }
+
+  /**
+   * 歌单广场可选的平台清单（UI 平台胶囊用）。
+   *
+   * ★ 2026-11-09（用户：「原版是有屏蔽的，榜单和推荐都只有部分平台」）：
+   *   只列**真能出内容**的平台 —— 内置平台按 `plazaSupported()`，
+   *   MusicFree 平台要求插件实现了推荐歌单接口。这样用户不会点进一个
+   *   永远空白的平台，也不会看到「榜单被当成推荐」。
+   */
+  static plazaSourceList(): string[] {
+    const all: string[] = MusicDataService.sourceList();
+    const out: string[] = [];
+    const apis: LXUserApiInfo[] = lxSourceManager.getApiList();
+    for (let i: number = 0; i < all.length; i++) {
+      const p: string = all[i];
+      if (platformRegistry.isMfPlatform(p)) {
+        if (mfPlatformHasCap(p, MF_CAP_RECOMMEND, apis)) {
+          out.push(p);
+        }
+        continue;
+      }
+      // 内置平台：QQ 的广场接口实测一条都出不来（见 plazaSupported 注释），其余都能出
+      // —— 注意**不能**直接用 `plazaSupported()`：它把汽水也判成 false（那是「首页平台
+      // 跟随」的语义），而汽水广场走 Luna，是有数据的。
+      if (p !== 'tx') {
+        out.push(p);
+      }
+    }
+    return out;
+  }
+
+  /** 排行榜可选的平台清单：MusicFree 平台要求插件实现了 `getTopLists`。 */
+  static rankingSourceList(): string[] {
+    const all: string[] = MusicDataService.sourceList();
+    const out: string[] = [];
+    const apis: LXUserApiInfo[] = lxSourceManager.getApiList();
+    for (let i: number = 0; i < all.length; i++) {
+      const p: string = all[i];
+      if (platformRegistry.isMfPlatform(p) && !mfPlatformHasCap(p, MF_CAP_TOP_LIST, apis)) {
+        continue;
+      }
+      out.push(p);
+    }
+    return out;
+  }
+
+  /**
+   * 广场空态文案。
+   *
+   * ★ 2026-11-09：MusicFree 平台和内置平台的「空」是两回事 ——
+   *   插件根本没实现推荐接口时，说「接口可能已失效」会让人以为网络坏了。
+   */
+  static plazaEmptyHint(source: string): string {
+    const name: string = MusicDataService.sourceName(source);
+    if (platformRegistry.isMfPlatform(source) && !MusicDataService.plazaSupported(source)) {
+      return name + '没有提供推荐歌单';
+    }
+    return name + '歌单广场暂时没有返回内容（该平台的广场接口可能已失效）';
+  }
 
   static sourceName(source: string): string {
     return sourceDisplayName(source);
@@ -1393,6 +1470,12 @@ export class MusicDataService {
    * @returns true = 广场可跟随该平台。
    */
   static plazaSupported(source: string): boolean {
+    // MusicFree 平台：广场 = 插件的推荐歌单接口。原版 MusicFree 也只给实现了
+    // `getRecommendSheetTags` / `getRecommendSheetsByTag` 的平台显示推荐
+    // （例如元力的哔哩哔哩只有榜单、没有推荐）。
+    if (platformRegistry.isMfPlatform(source)) {
+      return mfPlatformHasCap(source, MF_CAP_RECOMMEND, lxSourceManager.getApiList());
+    }
     // ★ 汽水（qs）没有「分类 → 歌单」结构（只有推荐流），别让推荐引擎按分类去猜，
     //   否则 categories('qs') 会落到别的平台兜底 —— 首页推荐改走指定榜（qs_hot）。
     if (source === 'qs') {
@@ -1402,6 +1485,10 @@ export class MusicDataService {
   }
 
   static sortOptions(source: string): SortOption[] {
+    // 插件没有「排序」概念（`getTopLists` 直接给榜单），别在 UI 上摆一排点了没用的胶囊
+    if (platformRegistry.isMfPlatform(source)) {
+      return [];
+    }
     // 酷狗老接口（`yueku/v9/special/getSpecial`）**认 `t=` 排序参数**，所以这里保留
     // 完整排序胶囊。注意：只有当广场走的是老接口时才有效 —— 万一降级到 HTTPS 通道
     // （`m.kugou.com/plist/index`），排序参数会被忽略，但分类和排序的 UI 仍然正确存在，
@@ -1422,6 +1509,9 @@ export class MusicDataService {
   }
 
   static async categories(source: string): Promise<CategoryGroup[]> {
+    if (platformRegistry.isMfPlatform(source)) {
+      return [];
+    }
     try {
       if (source === 'kw') {
         const tagUrl = 'http://wapi.kuwo.cn/api/pc/classify/playlist/getTagList?cmd=rcm_keyword_playlist&user=0&prod=kwplayer_pc_9.0.5.0&vipver=9.0.5.0&source=kwplayer_pc_9.0.5.0&loginUid=0&loginSid=0&appUid=76039576';
@@ -1520,6 +1610,33 @@ export class MusicDataService {
   }
 
   static async playlists(source: string, sortId?: string, categoryId?: string, page: number = 1): Promise<PlaylistPage> {
+    // ★ 2026-11-09（用户：「歌单广场没获取到就提示没获取到，现在显示一个榜单」）：
+    //   MusicFree 平台的广场内容 = 插件的**推荐歌单**（`getRecommendSheetTags` /
+    //   `getRecommendSheetsByTag`）。没有推荐接口就返回空 → UI 走「没获取到」空态，
+    //   不再拿 `getTopLists` 的榜单顶替（那是排行榜的内容）。
+    if (platformRegistry.isMfPlatform(source)) {
+      let items: SearchPlaylistInfo[] = [];
+      try {
+        items = page <= 1 ? await platformPlazaFeed(source) : [];
+      } catch (_err) {
+        items = [];
+      }
+      const mfList: PlaylistData[] = [];
+      for (let i: number = 0; i < items.length; i++) {
+        mfList.push({
+          id: items[i].id,
+          name: items[i].name,
+          author: items[i].creator,
+          image: items[i].coverUrl,
+          count: items[i].trackCount > 0 ? String(items[i].trackCount) : '',
+          time: '',
+          listenCount: items[i].playCount > 0 ? String(items[i].playCount) : '',
+          category: '',
+          source: source
+        });
+      }
+      return { list: mfList, page: Math.max(1, page), limit: mfList.length, total: mfList.length, hasNext: false };
+    }
     // ★ 汽水：广场推荐歌单走内置 Luna（/luna/discover/mix，一次 30 张、只有第一页）
     if (source === 'qs') {
       const hits: QsPlaylistHit[] = await qsDiscoverPlaylists(page, 30);
@@ -1702,6 +1819,28 @@ export class MusicDataService {
    * @returns 榜单列表（含封面）。
    */
   static async boardsWithCovers(source: string): Promise<BoardData[]> {
+    // ★ 2026-11-09（用户：「我记 MusicFree 是有榜单的，你检查一下」）：
+    //   MusicFree 插件的榜单入口是 `getTopLists`（协议里唯一稳定的推荐位），
+    //   以前这里没有分支，MF 平台会落到酷我写死表 ⇒ 点进去 0 首歌。
+    if (platformRegistry.isMfPlatform(source)) {
+      const out: BoardData[] = [];
+      try {
+        // ★ 排行榜 = 插件的 `getTopLists`（不是广场推荐）。两者是两套接口，别混用。
+        const groups: SearchPlaylistInfo[][] = await platformRankingGroups(source);
+        for (let g: number = 0; g < groups.length; g++) {
+          for (let i: number = 0; i < groups[g].length; i++) {
+            const item: SearchPlaylistInfo = groups[g][i];
+            if (item.id.length === 0 || out.some((b: BoardData): boolean => b.id === item.id)) {
+              continue;
+            }
+            out.push({ id: item.id, name: item.name, source: source, cover: item.coverUrl });
+          }
+        }
+      } catch (_err) {
+        // 插件没有 getTopLists / 请求失败 → 空态
+      }
+      return out;
+    }
     // 全平台优先走实时接口，不截断数量；失败再回退写死表
     if (source === 'qs') {
       // ★ 汽水：只有三张固定榜（发现页 discover_top_song_list），没有可枚举的榜单接口
@@ -1790,6 +1929,17 @@ export class MusicDataService {
     }
     const map: Record<string, string> = {};
     try {
+      // MusicFree 榜单列表自带封面，直接从 getTopLists 的结果里取
+      if (platformRegistry.isMfPlatform(source)) {
+        const boards: BoardData[] = await MusicDataService.boardsWithCovers(source);
+        for (let i: number = 0; i < boards.length; i++) {
+          if (boards[i].cover.length > 0) {
+            map[boards[i].id] = boards[i].cover;
+          }
+        }
+        boardCoverCache.set(source, map);
+        return map;
+      }
       if (source === 'wy') {
         const root: JsonObject = await requestJson('https://music.163.com/api/toplist');
         const items: JsonObject[] = asArray(root['list']);
@@ -1876,6 +2026,29 @@ export class MusicDataService {
   }
 
   static async tracks(source: string, boardId: string): Promise<TrackData[]> {
+    // ★ 2026-11-09（用户：「我记 MusicFree 是有榜单的，你检查一下」）：
+    //   MF 平台的榜单歌曲走插件的 `getTopListDetail` / `getMusicSheetInfo`，
+    //   不能再落到下面「酷我 kbangserver」的 HTTP 分支（那会拿 MF 的榜单 id 去请求酷我）。
+    if (platformRegistry.isMfPlatform(source)) {
+      const apis: LXUserApiInfo[] = musicFreeApisForPlatform(source, lxSourceManager.getApiList());
+      if (apis.length === 0) {
+        return [];
+      }
+      const songs: LXSearchSong[] = await mfGetSheetSongs(apis[0], boardId, 1, true);
+      const mfTracks: TrackData[] = [];
+      for (let i: number = 0; i < songs.length; i++) {
+        mfTracks.push({
+          songId: songs[i].songId,
+          name: songs[i].name,
+          artist: songs[i].singer,
+          album: songs[i].albumName,
+          image: songs[i].img,
+          duration: songs[i].interval,
+          source: source
+        });
+      }
+      return mfTracks;
+    }
     // ★ 汽水：榜单整块来自内置 Luna 接口（见 player/geuz/QsApi.qsBoardSongs），不走上/下游的 http 解析
     if (source === 'qs') {
       const bangid: string = boardId.startsWith('qs_') ? boardId.substring(3) : boardId;

@@ -27,12 +27,15 @@ import { appendPlayLog } from './LxLogger';
 const STORE_NAME: string = 'music_store';
 const KEY_RUNTIME_DIAGNOSTICS: string = 'runtime_diagnostics_v1';
 const MAX_RUNTIME_DIAGNOSTICS: number = 5000;
-const KEY_HISTORY: string = 'history_list';
-const KEY_FAVORITES: string = 'favorite_list';
+const KEY_HISTORY: string = 'history_list';const KEY_FAVORITES: string = 'favorite_list';
 const KEY_FAVORITE_ARTISTS: string = 'favorite_artists';
 const KEY_FAVORITE_ALBUMS: string = 'favorite_albums';
 const KEY_FAVORITE_PLAYLISTS: string = 'favorite_playlists';
 const KEY_SEARCH_HISTORY: string = 'search_history';
+/** 手动搜索到的歌词（`source|songId` → lrc 文本，JSON）。 */
+const KEY_MANUAL_LYRIC: string = 'manual_lyric_v1';
+/** 手动歌词最多缓存多少首（超出丢最早的）。 */
+const MAX_MANUAL_LYRIC: number = 120;
 const KEY_AMBIENT_LEVEL: string = 'ambient_level';
 const KEY_THEME_COLOR: string = 'theme_color';
 const KEY_HOME_SOURCE: string = 'home_source';
@@ -113,6 +116,17 @@ const KEY_LYRIC_BLUR: string = 'lyric_blur';
 const KEY_CROSS_SCRIPT_FALLBACK: string = 'cross_script_fallback';
 /** 音源脚本参与依次调用的顺序（JSON 字符串数组，空=全部按导入顺序）。 */
 const KEY_SOURCE_SCRIPT_ORDER: string = 'source_script_order';
+/** 用户是否**明确**配置过音源勾选（区分「空数组 = 全都没勾」与「从未配置 = 默认全选」）。 */
+const KEY_SOURCE_ORDER_CONFIGURED: string = 'source_script_order_configured';
+/**
+ * 「音源管理」列表的行顺序（`sub:<订阅id>` / `api:<源id>`）。
+ *
+ * ★ 2026-11-09（用户：「现在音源没法拖动排序了」）：源列表一行是**整个订阅**，
+ *   没有这个键就只能按导入顺序排；拖动后写这里，订阅整包和独立脚本才能混排。
+ *   与 `source_script_order` 分开存：后者是「启用集合 + 播放兜底优先级」，
+ *   只有插件 id，表达不了订阅这一行。
+ */
+const KEY_SOURCE_ROW_ORDER: string = 'source_row_order';
 const KEY_QUALITY_TIER_HEALTH: string = 'quality_tier_health';
 const KEY_SHOW_HOME_PLAZA: string = 'show_home_plaza';
 const KEY_SHOW_HOME_RANKING: string = 'show_home_ranking';
@@ -290,7 +304,50 @@ export class MusicStoreService {
     await store.flush();
   }
 
+  /**
+   * 历史 / 收藏列表的内存缓存（key → 同一份数组）。
+   *
+   * ★ 2026-11-10（用户：历史/收藏页「切页面卡」）：
+   *   这两个列表原来**每次 `getHistory()` / `getFavorites()` 都要
+   *   `preferences.getSync` + `JSON.parse` 整段字符串**，而一行历史里还塞了整首歌词
+   *   （见 {@link stripRecordPayload}），200 首就是 MB 级的 JSON。
+   *   进页面要 parse 一次、切歌写盘要 stringify 一次、播放页判断收藏还要再 parse 一次
+   *   ⇒ 条数越多，切页面/切歌越卡，且开销随条数线性增长。
+   *
+   *   现在：列表**只在首次读盘时解析一次**，之后所有读都是取内存引用；
+   *   所有写路径（{@link writeList}、{@link addFavorites}）同步更新这份缓存。
+   *   preferences 仍是唯一持久化真源，缓存只是它的读-through 镜像。
+   */
+  private listCache: Map<string, PlayedSongRecord[]> = new Map<string, PlayedSongRecord[]>();
+
+  /**
+   * 落盘前剥掉「大而不用的字段」，返回是否有改动。
+   *
+   * 目前只有 `lyric`：历史/收藏里存的是**整首 LRC 全文**，但播放时
+   * `OnlinePlayUtil.playRecord` 每次都会 `resolveLyricFull()` 重新拉（旧缓存里的逐行 LRC
+   * 反而会被新链路的逐字歌词覆盖，见那里的注释），所以这份歌词是纯体积。
+   * 剥掉后 200 首历史的 JSON 从 MB 级降到几十 KB：读盘、parse、写盘全部变快。
+   */
+  private stripRecordPayload(list: PlayedSongRecord[]): boolean {
+    let changed: boolean = false;
+    for (let i: number = 0; i < list.length; i++) {
+      const record: PlayedSongRecord | undefined = list[i];
+      if (record === undefined || record === null) {
+        continue;
+      }
+      if (typeof record.lyric === 'string' && record.lyric.length > 0) {
+        record.lyric = '';
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
   private readList(key: string): PlayedSongRecord[] {
+    const cached: PlayedSongRecord[] | undefined = this.listCache.get(key);
+    if (cached !== undefined) {
+      return cached;
+    }
     const store = this.getStore();
     if (store === undefined) {
       return [];
@@ -298,18 +355,108 @@ export class MusicStoreService {
     const text: string = store.getSync(key, '[]') as string;
     try {
       const list: PlayedSongRecord[] = JSON.parse(text) as PlayedSongRecord[];
-      return list !== undefined ? list : [];
+      const safe: PlayedSongRecord[] = list !== undefined && list !== null ? list : [];
+      this.listCache.set(key, safe);
+      // 旧版本把歌词全文写进了历史/收藏：第一次读到就顺手瘦身并落盘（此后不再触发）
+      if (this.stripRecordPayload(safe)) {
+        this.writeList(key, safe);
+      }
+      return safe;
     } catch (_err) {
       return [];
     }
   }
 
   private writeList(key: string, list: PlayedSongRecord[]): void {
+    this.stripRecordPayload(list);
+    this.listCache.set(key, list);
     const store = this.getStore();
     if (store === undefined) {
       return;
     }
     store.putSync(key, JSON.stringify(list));
+    store.flush();
+  }
+
+  // ---------------------------------------------------------------- 手动歌词
+
+  private manualLyricMap(): Record<string, string> {
+    const store = this.getStore();
+    if (store === undefined) {
+      return {};
+    }
+    const text: string = store.getSync(KEY_MANUAL_LYRIC, '{}') as string;
+    try {
+      const map: Record<string, string> = JSON.parse(text) as Record<string, string>;
+      return map !== null && map !== undefined ? map : {};
+    } catch (_err) {
+      return {};
+    }
+  }
+
+  /**
+   * 取用户手动搜索到的歌词。
+   *
+   * ★ 2026-11-09（用户：「MusicFree 很多源没有歌词接口，加个搜索歌词」）：
+   *   在线歌的歌词来自插件（`getLyric`）或洛雪内置接口；插件没实现就只能手搜。
+   *   手搜结果要**持久化**并按 `source|songId` 命中，否则每次重播又变回没有歌词。
+   */
+  public getManualLyric(source: string, songId: string): string {
+    if (source.length === 0 || songId.length === 0) {
+      return '';
+    }
+    const map: Record<string, string> = this.manualLyricMap();
+    const lyric: string | undefined = map[source + '|' + songId];
+    return lyric !== undefined && lyric !== null ? lyric : '';
+  }
+
+  /** 保存 / 覆盖手动歌词（空串 = 删除）。 */
+  public setManualLyric(source: string, songId: string, lyric: string): void {
+    if (source.length === 0 || songId.length === 0) {
+      return;
+    }
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    const map: Record<string, string> = this.manualLyricMap();
+    const key: string = source + '|' + songId;
+    if (lyric.length === 0) {
+      return this.clearManualLyric(source, songId);
+    }
+    map[key] = lyric;
+    // 有界缓存：超了就丢最早的（JSON 对象 key 按插入顺序枚举）
+    const keys: string[] = Object.keys(map);
+    let finalMap: Record<string, string> = map;
+    if (keys.length > MAX_MANUAL_LYRIC) {
+      finalMap = {};
+      for (let i: number = keys.length - MAX_MANUAL_LYRIC; i < keys.length; i++) {
+        finalMap[keys[i]] = map[keys[i]];
+      }
+    }
+    store.putSync(KEY_MANUAL_LYRIC, JSON.stringify(finalMap));
+    store.flush();
+  }
+
+  /** 删除手动歌词（回到插件 / 内置接口的歌词）。 */
+  public clearManualLyric(source: string, songId: string): void {
+    if (source.length === 0 || songId.length === 0) {
+      return;
+    }
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    const map: Record<string, string> = this.manualLyricMap();
+    const key: string = source + '|' + songId;
+    const keys: string[] = Object.keys(map);
+    const next: Record<string, string> = {};
+    for (let i: number = 0; i < keys.length; i++) {
+      if (keys[i] !== key) {
+        next[keys[i]] = map[keys[i]];
+      }
+    }
+    store.putSync(KEY_MANUAL_LYRIC, JSON.stringify(next));
     store.flush();
   }
 
@@ -427,12 +574,17 @@ export class MusicStoreService {
     if (added.length === 0) {
       return 0;
     }
-    const oldText: string = store.getSync(KEY_FAVORITES, '[]') as string;
-    store.putSync(KEY_FAVORITES, JSON.stringify(added.concat(before)));
+    // 走内存缓存 + 统一瘦身：不再为了回滚多读一次 preferences（`before` 就是盘上的内容）
+    const merged: PlayedSongRecord[] = added.concat(before);
+    this.stripRecordPayload(merged);
+    const oldText: string = JSON.stringify(before);
+    this.listCache.set(KEY_FAVORITES, merged);
+    store.putSync(KEY_FAVORITES, JSON.stringify(merged));
     try {
       await store.flush();
     } catch (error) {
       store.putSync(KEY_FAVORITES, oldText);
+      this.listCache.set(KEY_FAVORITES, before);
       throw new Error('批量收藏持久化失败：' + (error as Error).message);
     }
     this.favoriteVersion++;
@@ -567,6 +719,21 @@ export class MusicStoreService {
     }
   }
 
+  /**
+   * 用户是否明确配置过音源勾选。
+   *
+   * ★ 2026-11-09：原来用「order 为空」表示未配置，导致用户取消最后一个源时
+   *   播放链路 / 设置页都把它当成「没配置过 ⇒ 全部启用」，勾选自己弹回来。
+   *   现在单独记一个标记：空数组 + 已配置 = 真的一个都不启用。
+   */
+  public hasSourceScriptOrderConfig(): boolean {
+    const store = this.getStore();
+    if (store === undefined) {
+      return false;
+    }
+    return store.getSync(KEY_SOURCE_ORDER_CONFIGURED, false) as boolean;
+  }
+
   public setSourceScriptOrder(ids: string[]): void {
     const store = this.getStore();
     if (store === undefined) {
@@ -579,6 +746,53 @@ export class MusicStoreService {
       }
     }
     store.putSync(KEY_SOURCE_SCRIPT_ORDER, JSON.stringify(cleaned));
+    store.putSync(KEY_SOURCE_ORDER_CONFIGURED, true);
+    store.flush();
+  }
+
+  /**
+   * 「音源管理」列表行顺序（`sub:<订阅id>` / `api:<源id>`）。
+   * 空数组 = 还没拖过，UI 按「订阅在前、独立脚本按启用顺序」的默认排法。
+   */
+  public getSourceRowOrder(): string[] {
+    const store = this.getStore();
+    if (store === undefined) {
+      return [];
+    }
+    const raw: string = store.getSync(KEY_SOURCE_ROW_ORDER, '') as string;
+    if (raw.length === 0) {
+      return [];
+    }
+    try {
+      const arr: Object = JSON.parse(raw) as Object;
+      if (!Array.isArray(arr)) {
+        return [];
+      }
+      const out: string[] = [];
+      for (let i: number = 0; i < (arr as Object[]).length; i++) {
+        const key: string = String((arr as Object[])[i] ?? '');
+        if (key.length > 0 && out.indexOf(key) < 0) {
+          out.push(key);
+        }
+      }
+      return out;
+    } catch (_e) {
+      return [];
+    }
+  }
+
+  public setSourceRowOrder(keys: string[]): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    const cleaned: string[] = [];
+    for (let i: number = 0; i < keys.length; i++) {
+      if (keys[i].length > 0 && cleaned.indexOf(keys[i]) < 0) {
+        cleaned.push(keys[i]);
+      }
+    }
+    store.putSync(KEY_SOURCE_ROW_ORDER, JSON.stringify(cleaned));
     store.flush();
   }
 

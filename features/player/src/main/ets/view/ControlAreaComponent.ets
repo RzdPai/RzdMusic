@@ -31,6 +31,8 @@ import { buildSongShareText, showSystemShare } from '../util/ShareUtil';
 import { sourceToCode } from '../geuz/index';
 import { QueuePlaylistSheet } from './QueuePlaylistSheet';
 import { OtherVersionsSheet } from './OtherVersionsSheet';
+import { LyricSearchPanel } from './LyricSearchPanel';
+import { parseIntervalMs } from '../util/LyricMatch';
 import { CommentPanel } from 'comment';
 import type { CommentSongRef } from 'comment';
 
@@ -295,6 +297,8 @@ export struct ControlAreaComponent {
    * 「添加到歌单」一样是**同一个弹层里的一个子页**，靠这个标志切换。
    */
   @Local showMenuComment: boolean = false;
+  /** 歌曲菜单里的「搜索歌词」子页（MusicFree 插件没实现 getLyric 时的兜底）。 */
+  @Local showMenuLyric: boolean = false;
   /**
    * 共享播放意图（`AppStorageV2`）。
    *
@@ -372,6 +376,7 @@ export struct ControlAreaComponent {
     this.showMenuPlaylist = false;
     this.showMenuQuality = false;
     this.showMenuSpeed = false;
+    this.showMenuLyric = false;
     this.menuQualityMode = 'switch';
   }
 
@@ -400,6 +405,8 @@ export struct ControlAreaComponent {
       this.showMenuComment = true;
     } else if (page === 'speed') {
       this.showMenuSpeed = true;
+    } else if (page === 'lyric') {
+      this.showMenuLyric = true;
     } else if (page === 'tuning') {
       this.tuningPitch = this.store.getTuningPitch();
       this.eqGains = this.store.getEqGains();
@@ -526,7 +533,7 @@ export struct ControlAreaComponent {
   /** @returns 当前是否在歌曲菜单的某个子页（音质/播放设置/加歌单…）。 */
   private menuSubPageOpen(): boolean {
     return this.showMenuQuality || this.showMenuSpeed || this.showMenuTuning ||
-      this.showMenuPlaylist;
+      this.showMenuPlaylist || this.showMenuLyric;
   }
 
   /** 子页 → 回到歌曲菜单主列表（不关弹层）。 */
@@ -535,6 +542,7 @@ export struct ControlAreaComponent {
     this.showMenuSpeed = false;
     this.showMenuTuning = false;
     this.showMenuPlaylist = false;
+    this.showMenuLyric = false;
   }
 
   private closeMenuSheet(): void {
@@ -543,6 +551,7 @@ export struct ControlAreaComponent {
     this.showMenuQuality = false;
     this.showMenuComment = false;
     this.showMenuSpeed = false;
+    this.showMenuLyric = false;
   }
 
   /**
@@ -645,6 +654,12 @@ export struct ControlAreaComponent {
     const source: string = song !== undefined ? song.source : '';
     const songId: string = song !== undefined ? song.songId : '';
     showSystemShare(this.getUIContext(), buildSongShareText(title, singer, source, songId), '歌曲分享');
+  }
+
+  /** 当前歌名（字符串；Resource 形态给空串，搜索框用）。 */
+  private currentTitle(): string {
+    const song = this.currentSong();
+    return song !== undefined && typeof song.title === 'string' ? song.title : '';
   }
 
   /** Current song singer text for the menu info rows. */
@@ -1143,6 +1158,21 @@ export struct ControlAreaComponent {
         }
         .width('100%')
         .height('100%')
+      } else if (this.showMenuLyric) {
+        LyricSearchPanel({
+          songTitle: this.currentTitle(),
+          songSinger: this.currentSinger(),
+          songSource: this.currentSong()?.source ?? '',
+          songId: this.currentSong()?.songId ?? '',
+          durationMs: parseIntervalMs(this.currentSong()?.interval ?? ''),
+          accentColor: this.themeState.color,
+          onApplied: (): void => {
+            this.closeMenuSheet();
+          },
+          onBack: (): void => {
+            this.backToMenuRoot();
+          }
+        })
       } else if (this.showMenuPlaylist) {
         this.PlaylistPickerRows()
       } else if (this.showMenuSpeed) {
@@ -1206,13 +1236,10 @@ export struct ControlAreaComponent {
         this.MenuRow('搜索其它版本', $r('sys.symbol.magnifyingglass'), (): void => {
           this.searchOtherVersions();
         })
-        // ★ 2026-11-13（用户：「播放页内的歌曲菜单我忘记加下载了」）：
-        //   底部工具行那颗「下载」早就有，但「更多」打开的这份歌曲菜单里一直缺入口。
-        //   走同一个 `openDownloadQuality()`：音质模式=follow 直接下，
-        //   =manual 弹「选择下载音质」子页（本文件已有完整实现，这里只补入口）。
-        //   本地歌 / 没有音源的歌函数内部自己拦，不用在这里判。
-        this.MenuRow('下载', $r('sys.symbol.arrow_down_circle'), (): void => {
-          void this.openDownloadQuality();
+        // ★ 2026-11-09（用户：「MusicFree 很多源没有歌词接口，加个搜索歌词」）：
+        //   复用本地歌那套逐平台搜索/打分，只把结果应用到当前在线歌。
+        this.MenuRow('搜索歌词', $r('sys.symbol.text_and_magnifyingglass'), (): void => {
+          this.openSheetFor('lyric');
         })
         this.MenuRow('添加到歌单', $r('sys.symbol.plus'), (): void => {
           this.openPlaylistPicker();
@@ -1255,7 +1282,8 @@ export struct ControlAreaComponent {
       }
 
       // 评论子页自带标题栏与关闭，不再叠一个「取消」，否则底部被吃掉一大块
-      if (!this.showMenuComment) {
+      // 评论 / 搜索歌词子页自带标题栏与返回，不再叠共用按钮栏（否则内容区被压掉一截）
+      if (!this.showMenuComment && !this.showMenuLyric) {
         Row({ space: 12 }) {
           // ★ 子页时才有「返回」：只回歌曲菜单主列表，不关弹层（用户 2026-10-31 明确要求）
           if (this.menuSubPageOpen()) {
@@ -1573,7 +1601,8 @@ export struct ControlAreaComponent {
     })
     .bindSheet(this.menuSheetOpen(), this.MenuSheet(), {
       // 评论子页要整屏高度才够看（列表 + 两个页签）；菜单本身保持固定 360
-      height: this.showMenuComment ? SheetSize.LARGE : 416,
+      // 评论 / 搜索歌词都是「列表型」子页，固定 416 只够看三四行 ⇒ 给大高度
+      height: this.showMenuComment || this.showMenuLyric ? SheetSize.LARGE : 416,
       dragBar: true,
       showClose: false,
       backgroundColor: $r('app.color.panel_surface'),

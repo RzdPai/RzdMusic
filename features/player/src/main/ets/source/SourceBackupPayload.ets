@@ -58,7 +58,7 @@
 import { deviceInfo } from '@kit.BasicServicesKit';
 import { Logger, MusicStoreService } from 'musicbasic';
 import { lxSourceManager } from './LXSourceManager';
-import type { LXUserApiInfoFull } from './Interface';
+import type { LXUserApiInfo, LXUserApiInfoFull } from './Interface';
 
 const TAG: string = 'RzdSyncSources';
 
@@ -394,6 +394,19 @@ function applyRemoteActive(remoteActiveId: string): boolean {
     return false;
   }
   if (!lxSourceManager.hasApi(remoteActiveId)) {
+    return false;
+  }
+  // ★ 2026-11-09：`lxActiveSource` 只能是 LX 脚本。备份可能是在旧版本里做的，
+  //   里面记的是 MusicFree 插件 id —— 恢复回去会让 LX 引擎永远 init 不了。
+  let isLxScript: boolean = false;
+  const list: LXUserApiInfo[] = lxSourceManager.getApiList();
+  for (let i: number = 0; i < list.length; i++) {
+    if (list[i].id === remoteActiveId) {
+      isLxScript = list[i].kind !== 'mf';
+      break;
+    }
+  }
+  if (!isLxScript) {
     return false;
   }
   const current: string = activeSourceId();

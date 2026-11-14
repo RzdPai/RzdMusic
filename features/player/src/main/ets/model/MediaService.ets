@@ -24,8 +24,7 @@ import { audio } from '@kit.AudioKit';
 import { smartMobilityCommon } from '@kit.CarKit';
 import { image } from '@kit.ImageKit';
 import { http } from '@kit.NetworkKit';
-import { common, wantAgent, WantAgent } from '@kit.AbilityKit';
-import { notificationManager } from '@kit.NotificationKit';
+import { common, wantAgent } from '@kit.AbilityKit';
 import { avSession } from '@kit.AVSessionKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { resourceManager } from '@kit.LocalizationKit';
@@ -42,7 +41,6 @@ import { MediaTools } from '../util/MediaTools';
 import { lxGetLyricFull, lxGetPicFallback, lxGetTTMLLyric,
   LyricFullResult } from '../source/LXMusicSDK';
 import { engineNotReadyToast } from '../util/SourceUpdateHint';
-import { lxEngineIsReady, waitForLxEngineReady } from '../source/LXSourceEngine';
 import { FallbackOptions, QUALITY_TIER_COOLDOWN_MS, QUALITY_TIER_FAIL_THRESHOLD, UrlResolveOutcome, qualityTierKey, resolveMusicUrlWithFallback, sourceDisplayName } from '../util/SourceFallbackUtil';
 import { SwitchBannerState } from '../model/SwitchBannerState';
 import { amllGetCachedLyric, amllParseLyricCached } from '../amll/parse/AmllAutoDetect';
@@ -103,22 +101,6 @@ export class MediaService {
   private desktopLyricEnabled: boolean = false;
   /** 悬浮窗当前是否可见（去重，避免重复调用系统接口）。 */
   private desktopLyricVisible: boolean = false;
-  /** 悬浮窗当前是否被用户锁定（锁定后窗口固定、不再响应拖动/设置，只能由应用侧解锁）。 */
-  private desktopLyricLocked: boolean = false;
-  /** 本次会话是否已注册 onDesktopLyricStateChanged（防重复注册）。 */
-  private desktopLyricLockWatched: boolean = false;
-  /** 「锁状态变化」回调列表（设置页、播放页顶栏各自注册，离开时摘除）。 */
-  private desktopLyricLockListeners: Array<(locked: boolean) => void> = [];
-  /** 「解锁桌面歌词」通知的固定 id：同 id 重发 = 更新，解锁后 cancel。 */
-  private static readonly UNLOCK_LYRIC_NOTIFY_ID: number = 1018;
-  /**
-   * 解锁通知按钮拉起本应用时携带的参数键（值恒为 true）。
-   * ▼ EntryAbility 认这个键来触发解锁；因为 Want.parameters 是 Record（字面量键），
-   *   这里的常量只做文档用，EntryAbility 那边是同值硬编码。
-   */
-  public static readonly UNLOCK_LYRIC_PARAM_KEY: string = 'rzd_unlock_desktop_lyric';
-  /** 解锁通知当前是否已发布（去重：避免每次锁状态同步都反复 publish/cancel）。 */
-  private unlockNotifyActive: boolean = false;
   /** 当前推给蓝牙设备的歌词句（singleLyricText），变了才重推。 */
   private btLyricText: string = '';
   /** 最近一次推给系统的播放态（判断「停播/出错」要收起悬浮窗用）。 */
@@ -643,13 +625,6 @@ export class MediaService {
           `pos=${this.getCurrentTime()} bg=${this.bgEnterWall > 0 ? 1 : 0} ` + BackgroundUtil.snapshot());
         this.pauseOrigin = '';
         this.state = AudioPlayerState.PAUSE;
-        // ★ 两种情况长时任务不能丢（丢了 = 后台被冻结 = 焦点归还的 RESUME 永远无人处理，声音就此断掉）：
-        //   1) `pausedByInterrupt`：系统临时失焦暂停（语音输入/其他应用抢焦点），焦点归还时会自动恢复；
-        //   2) `kernelOwns`：内核（mpv）在出声，AVPlayer 的 paused 只是 park/reset 的迟到残留事件。
-        if (kernelOwns || this.pausedByInterrupt) {
-          this.lockScreenDiagnostic(`paused keep-task (${kernelOwns ? 'kernel-owns' : 'focus-resume'})`);
-          break;
-        }
         if (this.abilityContext) {
           BackgroundUtil.stopContinuousTask(this.abilityContext);
         }
@@ -677,8 +652,7 @@ export class MediaService {
           this.avPlayer.reset();
         }
         // 官方《后台播放》要求：停止时主动取消长时任务（不停任务但也不再放音频会被系统终止）
-        // ★ 内核出声期间 AVPlayer 的 stopped 是换源残留事件，不能据此丢任务（丢了后台必被冻结）。
-        if (!kernelOwns && this.abilityContext) {
+        if (this.abilityContext) {
           BackgroundUtil.stopContinuousTask(this.abilityContext);
         }
         break;
@@ -1007,10 +981,7 @@ export class MediaService {
 
   /** Reconciles background policy without changing the user's current playback intent. */
   public onApplicationBackground(): void {
-    // ★ 引擎真值兜底：`isPlayingState` 只是事件回调写出来的镜像，换源/切内核期间
-    //   会被迟到事件污染成 false（见 isActuallyPlaying 注释）——按 Home 那一刻
-    //   判成"没在播"就会漏补长时任务，后台几秒后被系统冻结、声音切断。
-    const playing: boolean = this.isPlayingState() || this.isActuallyPlaying();
+    const playing: boolean = this.isPlayingState();
     const enabled: boolean = MusicStoreService.getInstance().getLockScreenPlay();
     this.lockScreenDiagnostic(`onBackground(playing=${playing}) lockscreen enabled=${enabled}`);
     // ★ 取证起点：进后台的墙钟 + 播放位置（回前台用 onApplicationForeground 结算差值）
@@ -1042,7 +1013,7 @@ export class MediaService {
     const advance: number = this.bgEnterPosition > 0 ? this.getCurrentTime() - this.bgEnterPosition : 0;
     const playerState: string = this.avPlayer !== undefined ? this.avPlayer.state : 'none';
     const enabled: boolean = MusicStoreService.getInstance().getLockScreenPlay();
-    const playing: boolean = this.isPlayingState() || this.isActuallyPlaying();
+    const playing: boolean = this.isPlayingState();
     if (wall > 0) {
       const stalled: boolean = wall > 1000 && advance < wall / 2;
       this.lockScreenDiagnostic(`bg-leave(${stalled ? 'stall' : 'keep'}) wall=${wall} pos-delta=${advance} ` +
@@ -1089,7 +1060,20 @@ export class MediaService {
    * @param songItem 队列项（`source === 'local'`）。
    */
   private async enrichLocalTrack(songItem: SongItem): Promise<void> {
-    if (songItem.lyricText.length > 0 || localLyricResolver === null) {
+    if (songItem.lyricText.length > 0) {
+      return;
+    }
+    // 用户手搜的歌词对本地歌同样有效（本地没有同名 .lrc 时的唯一来源）
+    const manual: string = MusicStoreService.getInstance()
+      .getManualLyric(songItem.source, songItem.songId);
+    if (manual.length > 0) {
+      songItem.lyricText = manual;
+      this.getAppState().lyricVersion++;
+      this.liveViewController.reloadLyric(songItem.lyricText);
+      void this.setAVMetadata();
+      return;
+    }
+    if (localLyricResolver === null) {
       return;
     }
     try {
@@ -1103,6 +1087,49 @@ export class MediaService {
     } catch (_error) {
       // 歌词是可选能力，取不到就静默跳过
     }
+  }
+
+  /**
+   * 应用用户手动搜索到的歌词（播放页歌曲菜单 →「搜索歌词」）。
+   *
+   * 做三件事：落盘（重播仍生效）、写当前曲目、通知歌词画布 / 实况窗重建。
+   * @param lyric 主歌词（LRC / TTML 文本）
+   * @param translation 翻译（可空）
+   * @param roman 罗马音（可空）
+   * @returns 是否应用成功（没有当前歌曲时为 false）
+   */
+  public applyManualLyric(lyric: string, translation: string, roman: string): boolean {
+    const song: SongItem | undefined = this.getAppState().getCurrentSongItem();
+    if (song === undefined || lyric.length === 0) {
+      return false;
+    }
+    MusicStoreService.getInstance().setManualLyric(song.source, song.songId, lyric);
+    song.lyricText = lyric;
+    song.lyricTranslation = translation;
+    song.lyricRoman = roman;
+    this.getAppState().lyricVersion++;
+    this.liveViewController.reloadLyric(lyric);
+    void this.setAVMetadata();
+    appendPlayLog('[歌词] 手动应用 source=' + song.source + ' len=' + lyric.length);
+    return true;
+  }
+
+  /**
+   * 恢复自动歌词：删掉手动搜索结果，重新走插件 / 内置接口取词。
+   *
+   * 只清当前歌的手动记录（其他歌不受影响）。
+   */
+  public async restoreAutoLyric(): Promise<void> {
+    const song: SongItem | undefined = this.getAppState().getCurrentSongItem();
+    if (song === undefined) {
+      return;
+    }
+    MusicStoreService.getInstance().clearManualLyric(song.source, song.songId);
+    song.lyricText = '';
+    song.lyricTranslation = '';
+    song.lyricRoman = '';
+    this.getAppState().lyricVersion++;
+    await this.enrichOnlineTrack(song);
   }
 
   /**
@@ -1153,23 +1180,30 @@ export class MediaService {
             appendPlayLog('[歌词] unchanged, skip source=' + src);
           }
         };
-      // TTML 社区数据库歌词优先级最高（逐字 + 翻译/罗马音随原文），失败再回退各平台全量歌词
-      const fallbackFullLyric: () => void = (): void => {
-        void lxGetLyricFull(src, srcId, trackName, trackSinger).then((full: LyricFullResult): void => {
-          applyLyric(full.main, full.translation, full.romanLyric);
+      // ★ 2026-11-09：用户手搜的歌词优先（插件没有 lyric 接口时唯一的来源），
+      //   已经在 MusicStoreService 里按 source|songId 持久化，重播仍然有效。
+      const manual: string = MusicStoreService.getInstance().getManualLyric(src, srcId);
+      if (manual.length > 0) {
+        applyLyric(manual, '', '');
+      } else {
+        // TTML 社区数据库歌词优先级最高（逐字 + 翻译/罗马音随原文），失败再回退各平台全量歌词
+        const fallbackFullLyric: () => void = (): void => {
+          void lxGetLyricFull(src, srcId, trackName, trackSinger).then((full: LyricFullResult): void => {
+            applyLyric(full.main, full.translation, full.romanLyric);
+          }).catch((_err: Object): void => {
+            // lyric is optional
+          });
+        };
+        void lxGetTTMLLyric(srcId).then((ttml: string): void => {
+          if (ttml.length > 0) {
+            applyLyric(ttml, '', '');
+            return;
+          }
+          fallbackFullLyric();
         }).catch((_err: Object): void => {
-          // lyric is optional
+          fallbackFullLyric();
         });
-      };
-      void lxGetTTMLLyric(srcId).then((ttml: string): void => {
-        if (ttml.length > 0) {
-          applyLyric(ttml, '', '');
-          return;
-        }
-        fallbackFullLyric();
-      }).catch((_err: Object): void => {
-        fallbackFullLyric();
-      });
+      }
     }
     if (songItem.cover.length === 0) {
       try {
@@ -1821,12 +1855,11 @@ export class MediaService {
   }
 
   private async resolveOnlineUrl(songItem: SongItem): Promise<boolean> {
-    // ★ 启动瞬间引擎可能还没 ready：先等 3s，避免误弹「音源未就绪」
-    const engineReady: boolean = await waitForLxEngineReady(3000);
-    if (!engineReady) {
-      this.toast(engineNotReadyToast());
-      return false;
-    }
+    // ★★★ 2026-11-09（用户：「播放 LX 的音乐一直提示音源未就绪」）：
+    //   这里原本先 `waitForLxEngineReady(3000)`，不等就 return —— 但 `lxActiveSource`
+    //   可能指着一个 MusicFree 插件（上次播放留下的），LX 引擎永远不会就绪 ⇒ 100% 被拦。
+    //   现在把「选脚本 + 等 init + 回滚」全部交给 `resolveMusicUrlWithFallback()`：
+    //   它会先预选 LX 脚本、按候选逐个切换（每次自带超时），最后才按真实原因报失败。
     const name: string = typeof songItem.title === 'string' ? songItem.title : '';
     const singer: string = typeof songItem.singer === 'string' ? songItem.singer : '';
     appendPlayLog('[播放] resolve start source=' + songItem.source +
@@ -1972,9 +2005,6 @@ export class MediaService {
 
   /** Creates service, builds SongItemBuilder, and starts async AVPlayer creation. */
   public constructor() {
-    // ★ 长时任务"该不该补申请"的判定注入：真在出声，或临时失焦等焦点归还。
-    //   系统取消长时任务时 BackgroundUtil 据此决定是否立即补申请（防后台冻结断音）。
-    BackgroundUtil.setTaskHoldPredicate((): boolean => this.isActuallyPlaying() || this.pausedByInterrupt);
     // USB 独占：设备掉线时自动回落（轮询在 UsbAudioService 里）
     UsbAudioService.getInstance().onLost = (): void => {
       this.onUsbDeviceLost();
@@ -2239,11 +2269,6 @@ export class MediaService {
       if (interruptEvent.forceType === audio.InterruptForceType.INTERRUPT_FORCE) {
         switch (interruptEvent.hintType) {
           case audio.InterruptHint.INTERRUPT_HINT_PAUSE:
-            // ★ 先立标志、再 pause：'paused' 状态回调可能在 pause() 进行中就触发，
-            //   那时必须已经能看到「临时失焦、待恢复」，否则长时任务会被误停（后台断音根因）。
-            this.pausedByInterrupt = true;
-            this.pauseReason = 'focus';
-            this.resumeWhenReady = true;
             // 暂时失焦（语音输入场景），后续会收到 RESUME
             if (this.avPlayer !== undefined && this.avPlayer.state === 'playing') {
               try {
@@ -2252,7 +2277,10 @@ export class MediaService {
                 Logger.warn(TAG, 'audioInterrupt pause failed: ' + JSON.stringify(e).substring(0, 120));
               }
             }
+            this.pausedByInterrupt = true;
             // 临时失焦（含输入法语音输入）⇒ 走统一策略，焦点归还时自动恢复
+            this.pauseReason = 'focus';
+            this.resumeWhenReady = true;
             this.logPausePolicy('paused', 'focus', true);
             this.updateIsPlay(false);
             this.appendPlayLog('[播放] audio interrupt, wait');
@@ -2416,8 +2444,6 @@ export class MediaService {
       }
       await session.enableDesktopLyric(true);
       this.desktopLyricEnabled = true;
-      // 悬浮窗交给系统后就要开始盯「锁定状态」（enable 之后任何时刻用户都可能去锁它）。
-      this.watchDesktopLyricLock(session);
       Logger.info(TAG, 'system lyric enabled');
     } catch (error) {
       // 6600110 / 6600111：没开启或系统不支持，忽略即可
@@ -2489,181 +2515,10 @@ export class MediaService {
     }
     session.enableDesktopLyric(true).then(() => {
       this.desktopLyricEnabled = true;
-      // 补 enable 的路径同样要盯「锁定状态」（异步回调里注册，见 watchDesktopLyricLock 的防重复闸）。
-      this.watchDesktopLyricLock(session);
       this.syncDesktopLyric();
     }).catch((error: BusinessError) => {
       Logger.warn(TAG, `enableDesktopLyric failed: ${error.message}`);
     });
-  }
-
-  /**
-   * 注册桌面歌词悬浮窗「锁定状态」监听并同步一次当前值。
-   *
-   * 用户在系统悬浮窗上点「锁定」后，窗口固定、上面的控件（含解锁按钮）不再响应 ——
-   * 这是系统的设计（锁定 = 不挡桌面操作），解锁只能由应用侧调
-   * `setDesktopLyricState({ isLocked: false })`，所以这里必须把锁状态记下来。
-   */
-  private watchDesktopLyricLock(session: avSession.AVSession): void {
-    if (this.desktopLyricLockWatched) {
-      return;
-    }
-    this.desktopLyricLockWatched = true;
-    try {
-      session.onDesktopLyricStateChanged((state: avSession.DesktopLyricState): void => {
-        this.desktopLyricLocked = state.isLocked;
-        this.notifyDesktopLyricLock(state.isLocked);
-        Logger.info(TAG, `desktop lyric locked -> ${state.isLocked}`);
-      });
-      session.getDesktopLyricState().then((state: avSession.DesktopLyricState): void => {
-        this.desktopLyricLocked = state.isLocked;
-        this.notifyDesktopLyricLock(state.isLocked);
-      }).catch((error: BusinessError): void => {
-        Logger.warn(TAG, `getDesktopLyricState failed: ${error.message}`);
-      });
-    } catch (error) {
-      this.desktopLyricLockWatched = false;
-      Logger.warn(TAG, `onDesktopLyricStateChanged failed: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  /** @returns 桌面歌词悬浮窗当前是否处于锁定态（没启用/没会话时恒为 false）。 */
-  public isDesktopLyricLocked(): boolean {
-    return this.desktopLyricLocked;
-  }
-
-  /**
-   * 注册「桌面歌词锁定状态变化」回调（设置页、播放页顶栏实时刷新用）。
-   * 同一回调重复注册会被忽略；离开时调 {@link removeDesktopLyricLockListener} 摘除。
-   */
-  public addDesktopLyricLockListener(listener: (locked: boolean) => void): void {
-    if (this.desktopLyricLockListeners.indexOf(listener) < 0) {
-      this.desktopLyricLockListeners.push(listener);
-    }
-  }
-
-  /** 摘除 {@link addDesktopLyricLockListener} 注册的回调（传注册时的同一引用）。 */
-  public removeDesktopLyricLockListener(listener: (locked: boolean) => void): void {
-    const index: number = this.desktopLyricLockListeners.indexOf(listener);
-    if (index >= 0) {
-      this.desktopLyricLockListeners.splice(index, 1);
-    }
-  }
-
-  /**
-   * 把最新锁定态广播给所有已注册的回调（on 事件 / get 同步 / 解锁成功三个来源共用）。
-   * ▼ 逐个同步调用即可：回调们都只是给 @Local 赋值，没有重活，不值得引入异步队列。
-   * ▼ 同时联动通知栏：锁定 ⇒ 发「解锁歌词」通知（悬浮窗自身已不响应，通知是系统侧
-   *   唯一能放自定义按钮的地方——播控中心媒体卡片的按钮集合是固定的，加不了自定义项）；
-   *   解锁 ⇒ 撤掉通知。三个来源都会走到这里，所以通知的生灭跟着这一处走就够。
-   */
-  private notifyDesktopLyricLock(locked: boolean): void {
-    for (let i = 0; i < this.desktopLyricLockListeners.length; i++) {
-      this.desktopLyricLockListeners[i](locked);
-    }
-    if (locked) {
-      this.publishUnlockNotification();
-    } else {
-      this.cancelUnlockNotification();
-    }
-  }
-
-  /**
-   * 发布「桌面歌词已锁定」通知（带「解锁歌词」操作按钮）。
-   *
-   * ▼ 为什么走通知：用户锁定悬浮窗后，系统媒体卡片（锁屏 / 下拉通知栏 / 播控中心）
-   *   的按钮集合按会话类型固定（audio = 收藏/上一首/播放暂停/下一首/循环模式），
-   *   应用塞不进自定义按钮；通知是系统侧唯一支持自定义操作按钮（actionButtons）
-   *   的常驻载体，和媒体卡片同在通知栏，离用户的视线最近。
-   * ▼ 按钮的 wantAgent = 拉起本应用 + 参数 `rzd_unlock_desktop_lyric: true`，
-   *   EntryAbility 在 onCreate / onNewWant 里认这个参数并调 {@link unlockDesktopLyric}。
-   * ▼ ★ 2026-11-12（用户：「桌面歌词解锁只做在状态栏」）：这条通知是解锁的**唯一**入口
-   *   （播放页顶栏胶囊、设置页按钮均已移除）。未授权通知 / 通知被关闭时 publish
-   *   静默失败（打日志），此时无解锁入口 —— 设置页开桌面歌词时会顺带申请通知授权。
-   */
-  private publishUnlockNotification(): void {
-    // 去重：已发布就不重发（同 id 重发本身也无害，省一次系统调用而已）
-    if (this.unlockNotifyActive) {
-      return;
-    }
-    const ctx: common.UIAbilityContext | undefined = this.abilityContext;
-    if (ctx === undefined) {
-      return;
-    }
-    const agentInfo: wantAgent.WantAgentInfo = {
-      wants: [
-        {
-          bundleName: ctx.abilityInfo.bundleName,
-          moduleName: ctx.abilityInfo.moduleName,
-          abilityName: ctx.abilityInfo.name,
-          // 点通知按钮 = 「解锁桌面歌词」：参数键与 EntryAbility 的硬编码同值
-          parameters: { 'rzd_unlock_desktop_lyric': true }
-        }
-      ],
-      actionType: wantAgent.OperationType.START_ABILITY,
-      requestCode: 0,
-      // 已在前台就复用实例（跟锁屏 wantAgent 同款），别把播放态重启一遍
-      actionFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG]
-    };
-    wantAgent.getWantAgent(agentInfo).then((agent: WantAgent): void => {
-      const request: notificationManager.NotificationRequest = {
-        id: MediaService.UNLOCK_LYRIC_NOTIFY_ID,
-        notificationSlotType: notificationManager.SlotType.SERVICE_INFORMATION,
-        content: {
-          notificationContentType: notificationManager.ContentType.NOTIFICATION_CONTENT_BASIC_TEXT,
-          normal: {
-            title: '桌面歌词已锁定',
-            text: '悬浮窗已固定，点「解锁歌词」恢复拖动与设置'
-          }
-        },
-        actionButtons: [
-          {
-            title: '解锁歌词',
-            wantAgent: agent
-          }
-        ]
-      };
-      this.unlockNotifyActive = true;
-      notificationManager.publish(request).catch((error: BusinessError): void => {
-        this.unlockNotifyActive = false;
-        Logger.warn(TAG, `publish unlock notification failed: ${error.message}`);
-      });
-    }).catch((error: BusinessError): void => {
-      Logger.warn(TAG, `getWantAgent for unlock notification failed: ${error.message}`);
-    });
-  }
-
-  /** 撤掉「解锁桌面歌词」通知（任何路径解锁成功都会经 {@link notifyDesktopLyricLock} 走到这里）。 */
-  private cancelUnlockNotification(): void {
-    if (!this.unlockNotifyActive) {
-      return;
-    }
-    this.unlockNotifyActive = false;
-    notificationManager.cancel(MediaService.UNLOCK_LYRIC_NOTIFY_ID).catch((error: BusinessError): void => {
-      Logger.warn(TAG, `cancel unlock notification failed: ${error.message}`);
-    });
-  }
-
-  /**
-   * 解锁桌面歌词悬浮窗（唯一调用方：通知栏「解锁歌词」按钮 → EntryAbility）。
-   * @returns true = 解锁成功（无会话或系统调用失败返回 false）
-   */
-  public async unlockDesktopLyric(): Promise<boolean> {
-    const session: avSession.AVSession | undefined = this.session;
-    if (session === undefined) {
-      return false;
-    }
-    try {
-      const unlocked: avSession.DesktopLyricState = { isLocked: false };
-      await session.setDesktopLyricState(unlocked);
-      this.desktopLyricLocked = false;
-      this.notifyDesktopLyricLock(false);
-      Logger.info(TAG, 'desktop lyric unlocked');
-      return true;
-    } catch (error) {
-      Logger.warn(TAG, `setDesktopLyricState failed: ${error instanceof Error ? error.message : String(error)}`);
-      return false;
-    }
   }
 
   /**

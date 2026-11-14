@@ -40,6 +40,19 @@ import {
   RecommendSingerUi
 } from '../model/RecommendUiModels';
 
+
+/**
+ * Hero 轮播的三组渐变色（**全文件唯一一份**）。
+ *
+ * 原来 `loadSourceBannersAsync` 与 `loadTxBannersAsync` 各抄了一遍同样的三元组，
+ * 改一处颜色就得记得改两处 —— 抽成常量后只有这一个真源。
+ */
+const HERO_BANNER_GRADIENTS: string[][] = [
+  ['#152238', '#2E4A78'],
+  ['#3D2F55', '#6B5A8C'],
+  ['#5C2D2D', '#9A5C4A']
+];
+
 /** 「新歌推荐」卡的取值标识（= 所在平台**新歌榜**）。 */
 const HERO_FEATURE_NEW_SONGS: string = 'newSongs';
 /** 「精选推荐」卡的取值标识（= 所在平台**热歌榜**）。 */
@@ -579,11 +592,6 @@ export class RecommendDataUtil {
       boards = [];
     }
     const banners: RecommendHeroCardUi[] = [];
-    const gradients: string[][] = [
-      ['#152238', '#2E4A78'],
-      ['#3D2F55', '#6B5A8C'],
-      ['#5C2D2D', '#9A5C4A']
-    ];
     const label: string = MusicDataService.sourceName(svcSource);
     for (let i: number = 0; i < boards.length && banners.length < 3; i++) {
       const ui = new RecommendHeroCardUi();
@@ -594,8 +602,8 @@ export class RecommendDataUtil {
       ui.topid = '';
       ui.source = boards[i].source;
       ui.boardId = boards[i].id;
-      ui.gradientStart = gradients[banners.length][0];
-      ui.gradientEnd = gradients[banners.length][1];
+      ui.gradientStart = HERO_BANNER_GRADIENTS[banners.length][0];
+      ui.gradientEnd = HERO_BANNER_GRADIENTS[banners.length][1];
       banners.push(ui);
     }
     return banners;
@@ -888,11 +896,6 @@ export class RecommendDataUtil {
   public static async loadTxBannersAsync(): Promise<RecommendHeroCardUi[]> {
     const topids: string[] = ['26', '27', '4'];
     const banners: RecommendHeroCardUi[] = [];
-    const gradients: string[][] = [
-      ['#152238', '#2E4A78'],
-      ['#3D2F55', '#6B5A8C'],
-      ['#5C2D2D', '#9A5C4A']
-    ];
     for (let i: number = 0; i < topids.length; i++) {
       try {
         const info = await lxTxToplistInfo(topids[i]);
@@ -903,8 +906,8 @@ export class RecommendDataUtil {
           ui.subLine = 'QQ音乐每日更新';
           ui.coverUrl = info.pic;
           ui.topid = topids[i];
-          ui.gradientStart = gradients[i][0];
-          ui.gradientEnd = gradients[i][1];
+          ui.gradientStart = HERO_BANNER_GRADIENTS[i][0];
+          ui.gradientEnd = HERO_BANNER_GRADIENTS[i][1];
           banners.push(ui);
         }
       } catch (_err) {

@@ -37,8 +37,8 @@ export {
   toSearchSong,
   infoToJson,
   infoFromJson
-} from './src/main/ets/core/LyricMatch';
-export type { MatchSongInfo, LyricCandidate, LyricMatch, AutoMatchResult } from './src/main/ets/core/LyricMatch';
+} from 'player';
+export type { MatchSongInfo, LyricCandidate, LyricMatch, AutoMatchResult } from 'player';
 
 export { LyricMatchSheet, applyPickedMatch } from './src/main/ets/view/LyricMatchSheet';
 export {

@@ -13,27 +13,24 @@
  * limitations under the License.
  */
 
-import { appendPlayLog , setScreenOrientation , UsbAudioService, UsbAudioState , TabBarConfigModel } from 'musicbasic';
+import { appendPlayLog, setScreenOrientation, UsbAudioService, UsbAudioState, TabBarConfigModel } from 'musicbasic';
 import { bundleManager } from '@kit.AbilityKit';
 import { DrawableDescriptor, LayeredDrawableDescriptor } from '@kit.ArkUI';
-import { guardPlayerBack, PlaybackPreferenceService } from 'musicbasic';
-import { AppStorageV2, CapsuleSegmentButtonV2, ColorMetrics, SegmentButtonV2Items, uiObserver } from '@kit.ArkUI';
+import { guardPlayerBack } from 'musicbasic';
+import { AppStorageV2, CapsuleSegmentButtonV2, ColorMetrics, SegmentButtonV2Items } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { common, ConfigurationConstant, Want } from '@kit.AbilityKit';
-import { notificationManager } from '@kit.NotificationKit';
-import { fileIo as fs, picker } from '@kit.CoreFileKit';
-import { util } from '@kit.ArkTS';
+
 import { http } from '@kit.NetworkKit';
 import { pasteboard } from '@kit.BasicServicesKit';
-import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, BreakpointType, HomeSourceState, LyricBlurState, LyricCenterState, LyricFontSizeState, LyricFpsState, MotionCoverState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
+import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, HomeSourceState, LyricCenterState, LyricFontSizeState, LyricFpsState, MotionCoverState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, immersiveFromLevel } from 'musicbasic';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
-import {
-  DownloadService,
-   LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatforms, lxDeclaredPlatformsOf, lxSourceManager, MediaService
-, PlaybackTuningPanel } from 'player';
+import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
+import { DownloadService, LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatforms, lxDeclaredPlatformsOf, lxSourceManager, MediaService, lxSourceLabel, LX_PLATFORM_ORDER, normalizePlatformId, musicFreeSubscriptionLabel } from 'player';
 import type { LXApiImportResult } from 'player';
-import { pickPlaybackQuality, probeBySample, qualityRank, QUALITY_CHAIN } from 'player';
+import { importMusicFreeSubscriptionText, importSourceScriptAuto, parseMusicFreeSubscription, updateSubscription, backfillMusicFreePlatforms } from 'player';
+import type { MfImportReport, MfSubscriptionEntry, MfSubscriptionInfo } from 'player';
+import { probeBySample, QUALITY_CHAIN } from 'player';
 import type { LXUserApiSourceInfo } from 'player';
 import { SyncSettingsPanel } from 'sync';
 import { AccountManageSheet } from '../account/AccountManageSheet';
@@ -43,8 +40,9 @@ import { importSourceFiles } from '../util/SourceFileImport';
 
 import { CustomColorSheetContent } from './CustomColorSheetContent';
 import { CapsuleSegmentedSelector } from './CapsuleSegmentedSelector';
-import { LxSourceDeclaredBlock } from './LxSourceTags';
+
 import { SourceManagerList } from './SourceManagerList';
+import { PlatformManagerSheet } from './PlatformManagerSheet';
 import { readOfficialUpdateAlert, SourceUpdateInfo } from '../util/SourceUpdate';
 import { LengthMetrics } from '@kit.ArkUI';
 
@@ -52,6 +50,20 @@ import { LengthMetrics } from '@kit.ArkUI';
 const PROBE_MAX_TIERS: number = 5;
 const LX_ONLINE_IMPORT_MAX_BYTES: number = 9 * 1024 * 1024;
 const LX_ONLINE_IMPORT_TIMEOUT: number = 15000;
+
+/** 源显示名（与音源列表同一口径）：备注 > 插件自报平台名 > 导入时的名称。 */
+function displayNameOfApi(api: LXUserApiInfo): string {
+  const rawRemark: string | undefined = api.remark;
+  const remark: string = rawRemark !== undefined ? rawRemark.trim() : '';
+  if (remark.length > 0) {
+    return remark;
+  }
+  const platform: string = api.platform !== undefined ? api.platform.trim() : '';
+  if (platform.length > 0) {
+    return platform;
+  }
+  return api.name;
+}
 
 /**
  * 各子面板**底部**要留的高度（vp）—— 让最后一行不被二级页底部那条官方浮动播放条压住。
@@ -89,16 +101,48 @@ export struct SettingsDetailPage {
   @Local themeState: ThemeState =
     AppStorageV2.connect(ThemeState, AppStorageKeys.THEME_STATE, () => new ThemeState())!;
   @Local lxApiList: LXUserApiInfo[] = [];
+  /** 已导入的 MusicFree 订阅（源管理按它分组，整包可更新）。 */
+  @Local subscriptions: MfSubscriptionInfo[] = [];
   @Local sourceOrderIds: string[] = [];
+  /** 音源管理列表的行顺序（`sub:<订阅id>` / `api:<源id>`），拖动排序后持久化。 */
+  @Local sourceRowOrder: string[] = [];
+  /**
+   * 音源数据的版本号：每次 `refresh()` 自增。
+   *
+   * ★ 2026-11-09（用户：「修改备注后列表中名称没刷新，得重进页面」）：
+   *   备注改的是**对象字段**，`apis` / `subscriptions` 数组里装的还是同一批对象引用，
+   *   V2 对这些 @Param 可能判定"没变"而不下发。显式传一个版本号，子列表无条件重建。
+   */
+  @Local sourceDataVersion: number = 0;
+  /** 备注编辑弹层的目标（空 = 未打开）。 */
+  @Local remarkTargetId: string = '';
+  @Local remarkTargetName: string = '';
+  @Local remarkDraft: string = '';
+  /** 订阅「编辑」时先选的订阅 id（空 = 没打开选择面板）。 */
+  @Local remarkPickSubId: string = '';
+  /** 订阅（= 音源本身）备注编辑的目标与草稿。 */
+  @Local subRemarkTargetId: string = '';
+  @Local subRemarkTargetName: string = '';
+  @Local subRemarkDraft: string = '';
+  /** 「修改支持的平台」弹层的目标与草稿（LX 脚本用）。 */
+  @Local platformTargetId: string = '';
+  @Local platformDraft: string[] = [];
+  /** 音源管理右上角菜单（导入 / 平台管理）的展开态。 */
+  @Local showSourceMenu: boolean = false;
+  /**
+   * 音源管理相关弹层：0 = 不显示，1 = 平台管理，3 = 在线导入，
+   * 4 = MusicFree 源备注，5 = LX 脚本支持平台。
+   * 一个组件只能挂一个 `bindSheet`，所以用枚举分工（与 PlaylistBatchActionBar 同一写法）。
+   */
+  @Local sourceSheet: number = 0;
   /** 长按拖动排序：当前被拖动的音源 id。 */
-  @Local dragSourceId: string = '';
   @Local activeSource: string = '';
-  @Local engineReady: boolean = false;
   @Local engineSources: string = '{}';
   @Local lastError: string = '';
   @Local playLog: string = '';
   @Local onlineUrl: string = '';
   @Local importing: boolean = false;
+
   @Local store: MusicStoreService = MusicStoreService.getInstance();
   @Local ambientLevel: number = 0;
   @Local customColor: string = '';
@@ -131,12 +175,6 @@ export struct SettingsDetailPage {
   @Local bluetoothLyric: boolean = false;
   /** 系统是否支持桌面歌词：undefined = 还没探测过。 */
   @Local desktopLyricSupport: boolean | undefined = undefined;
-  /** 桌面歌词悬浮窗是否被用户锁定（解锁入口只保留通知栏，这里只用于提示文案）。 */
-  @Local desktopLyricLocked: boolean = false;
-  /** MediaService 锁状态回调（aboutToAppear 注册、aboutToDisappear 摘除，注册/摘除必须是同一引用）。 */
-  private readonly onDesktopLyricLockChange: (locked: boolean) => void = (locked: boolean): void => {
-    this.desktopLyricLocked = locked;
-  };
   /**
    * 锁屏继续播放（默认 **开**）。
    *
@@ -237,21 +275,6 @@ export struct SettingsDetailPage {
   }
 
   /** 当前底栏顺序预览（首页/我的固定，中间两项按配置）。 */
-  private tabOrderPreview(): string {
-    const cfg: TabBarConfigModel = TabBarConfigModel.parse(
-      MusicStoreService.getInstance().getTabBarConfig());
-    const names: string[] = ['首页'];
-    if (cfg.now && cfg.echo) {
-      names.push(cfg.nowFirst ? '现在就听' : '回响');
-      names.push(cfg.nowFirst ? '回响' : '现在就听');
-    } else if (cfg.now) {
-      names.push('现在就听');
-    } else {
-      names.push('回响');
-    }
-    names.push('我的');
-    return '当前顺序：' + names.join(' → ');
-  }
   /** 主题设置最下面的「自定义 Tab 栏」（只允许调整「现在就听」「回响」）。 */
   /** 主题设置最下面的「自定义 Tab 栏」：只保留标题、两行开关、顺序三块。 */
   /** 主题设置最下面的「自定义 Tab 栏」。 */
@@ -286,9 +309,6 @@ export struct SettingsDetailPage {
     .backgroundColor($r('app.color.card_background'))
   }
 
-
-
-
   private usbStatusText(): string {
     const st: UsbAudioState = UsbAudioService.getInstance().state;
     if (st.connected) {
@@ -313,6 +333,14 @@ export struct SettingsDetailPage {
     UsbAudioService.getInstance().startPolling();
     this.refresh();
     this.startEnginePolling();
+    // 音源管理：元力系插件平台名要跑一遍才知道（旧数据还是「元力音源」），后台补一轮
+    if (this.sheetIndex === 5) {
+      void backfillMusicFreePlatforms(this.lxApiList).then((count: number): void => {
+        if (count > 0) {
+          this.refresh();
+        }
+      });
+    }
   }
 
   private detailTitle(): string {
@@ -334,9 +362,27 @@ export struct SettingsDetailPage {
     }
   }
 
-  private cachedTitleBar: HdsNavigationTitleBarOptions | undefined = undefined;
-
   private getDetailTitleBar(): HdsNavigationTitleBarOptions {
+    /**
+     * ★ 2026-11-08（用户：「不要两个页面啊…直接放进音源管理页的右上角，
+     *   顺带把导入音源也放进那里」）：
+     *   音源管理页的「导入音源 / 平台管理」收进标题栏右上角**一个菜单**。
+     *   HDS 顶栏图标槽位只能给 action，不能挂 bindMenu —— 所以这里只负责把菜单打开，
+     *   菜单本体绑在内容区右上角的锚点上（与 NowPlayingFeedPage 的 FeedModeMenu 同一写法）。
+     */
+    const menus: HdsNavigationMenuItemOptions[] = [];
+    if (this.sheetIndex === 5) {
+      menus.push({
+        content: {
+          label: '音源管理操作',
+          icon: $r('sys.symbol.more'),
+          isEnabled: true,
+          action: (): void => {
+            this.showSourceMenu = !this.showSourceMenu;
+          }
+        }
+      });
+    }
     return {
       padding: { start: LengthMetrics.vp(16), end: LengthMetrics.vp(16) },
       style: {
@@ -363,6 +409,7 @@ export struct SettingsDetailPage {
       },
       content: {
         title: { mainTitle: this.detailTitle(), mainTitleSize: TitleSize.TITLE_ML },
+        menu: { value: menus },
         backIcon: {
           label: 'back',
           icon: $r('sys.symbol.chevron_left'),
@@ -375,26 +422,6 @@ export struct SettingsDetailPage {
     };
   }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   /** Applies a theme color (hex) and persists it. */
   private applyThemeColor(color: string): void {
     if (!/^#[0-9a-fA-F]{6}$/.test(color)) {
@@ -405,10 +432,31 @@ export struct SettingsDetailPage {
 
   }
 
+  /**
+   * MusicFree 插件的平台名是**异步**回填的（要等隐藏 WebView 把插件跑起来），
+   * 导入那一刻列表里还是订阅给的名字。这里补两次延时刷新，让名字/平台标签自动变准。
+   * （组件是 `@ComponentV2`，没有 `@StorageLink`/`@Watch`，所以不用数据监听而用定时刷新。）
+   */
+  private schedulePlatformRefresh(): void {
+    setTimeout((): void => {
+      this.refresh();
+    }, 3000);
+    setTimeout((): void => {
+      this.refresh();
+    }, 9000);
+  }
+
   private refresh(): void {
     this.lxApiList = lxSourceManager.getApiList();
+    this.subscriptions = lxSourceManager.getSubscriptions();
+    // 备注只改对象字段（数组引用不变），显式递增版本号让列表无条件重建
+    this.sourceDataVersion++;
+    // 先把「订阅只启用一半」的脏数据修掉，再读启用列表 —— 否则勾选态与平台管理
+    // 的「源已停用」会各说各话（用户 2026-11-09：「我源启用了啊」）。
+    lxSourceManager.repairSourceEnableState();
     this.sourceOrderIds = MusicStoreService.getInstance().getSourceScriptOrder();
-    if (this.sourceOrderIds.length === 0) {
+    this.sourceRowOrder = MusicStoreService.getInstance().getSourceRowOrder();
+    if (this.sourceOrderIds.length === 0 && !MusicStoreService.getInstance().hasSourceScriptOrderConfig()) {
       const ids: string[] = [];
       for (let i: number = 0; i < this.lxApiList.length; i++) {
         if (this.lxApiList[i].id.length > 0) { ids.push(this.lxApiList[i].id); }
@@ -425,11 +473,6 @@ export struct SettingsDetailPage {
       }
     }
     this.activeSource = AppStorage.get<string>('lxActiveSource') ?? '';
-    if (this.activeSource.length === 0) {
-      this.engineReady = false;
-    } else {
-      this.engineReady = AppStorage.get<boolean>('lxEngineReady') === true;
-    }
     this.engineSources = AppStorage.get<string>('lxEngineSources') ?? '{}';
     this.ambientLevel = MusicStoreService.getInstance().getAmbientLevel();
     this.showMiniLyric = MusicStoreService.getInstance().getShowMiniLyric();
@@ -438,13 +481,7 @@ export struct SettingsDetailPage {
     // 会话是「第一次推歌」时才建的，所以这里主动探一次支持性（否则设置页只能说「未知」）
     void MediaService.getInstance().probeDesktopLyricSupport().then((supported: boolean): void => {
       this.desktopLyricSupport = supported;
-      // 探测回调落地时再对一次锁定态：进场那一刻可能还没有会话，这里拿到的是最新值。
-      this.desktopLyricLocked = MediaService.getInstance().isDesktopLyricLocked();
     });
-    // 锁定态先同步一次（悬浮窗可能在本页没开着时就被锁上了，监听只覆盖"之后"的变化）
-    this.desktopLyricLocked = MediaService.getInstance().isDesktopLyricLocked();
-    // 用户从悬浮窗上点「锁定」时实时刷新本页按钮态（aboutToDisappear 里摘除）
-    MediaService.getInstance().addDesktopLyricLockListener(this.onDesktopLyricLockChange);
     // 锁屏继续播放：缺省（没有这条记录）= 开
     this.lockScreenPlay = MusicStoreService.getInstance().getLockScreenPlay();
     this.audioMix = MusicStoreService.getInstance().getAudioMix();
@@ -537,18 +574,6 @@ export struct SettingsDetailPage {
   private contentTopOffset(): number {
     return this.embedded ? 0 :
       PageTopInsetHelper.contentOffsetVp(this.boxTopVp);
-  }
-
-  private activeSourceLabel(): string {
-    if (this.activeSource.length === 0) {
-      return '未选择';
-    }
-    for (let i = 0; i < this.lxApiList.length; i++) {
-      if (this.lxApiList[i].id === this.activeSource) {
-        return this.lxApiList[i].name;
-      }
-    }
-    return this.activeSource;
   }
 
   /**
@@ -652,17 +677,6 @@ export struct SettingsDetailPage {
     return declared;
   }
 
-  private nameFormatLabel(): string {
-    const idx = this.nameFormatValues.indexOf(this.downloadNameFormat);
-    return idx >= 0 ? this.nameFormatOptions[idx] : this.downloadNameFormat;
-  }
-
-  private colorModeLabel(): string {
-    if (this.colorMode === 0) return '日间';
-    if (this.colorMode === 1) return '夜间';
-    return '跟随系统';
-  }
-
   private isDarkTheme(): boolean {
     const mode: number = this.colorMode;
     if (mode === 0) {
@@ -681,11 +695,6 @@ export struct SettingsDetailPage {
   /** @returns 当前平台是否支持"用登录状态获取推荐"（只有 QQ / 酷狗 / 网易 有 provider 实现）。 */
   private accountRecSupported(): boolean {
     return this.homeSource === 'qq' || this.homeSource === 'kg' || this.homeSource === 'wy';
-  }
-
-  private homeSourceLabel(): string {
-    const idx = this.homeSourceValues.indexOf(this.homeSource);
-    return idx >= 0 ? this.homeSourceOptions[idx] : this.homeSource;
   }
 
   private toast(message: string): void {
@@ -741,8 +750,6 @@ export struct SettingsDetailPage {
 
   aboutToDisappear(): void {
     this.stopEnginePolling();
-    // 摘除锁定态监听（传注册时的同一引用，见 onDesktopLyricLockChange 的说明）。
-    MediaService.getInstance().removeDesktopLyricLockListener(this.onDesktopLyricLockChange);
   }
 
   private selectLXSource(apiId: string): void {
@@ -756,7 +763,6 @@ export struct SettingsDetailPage {
     AppStorage.setOrCreate('lxActiveSource', next);
     MusicStoreService.getInstance().setActiveSource(next);
     this.activeSource = next;
-    this.engineReady = false;
     this.startEnginePolling();
   }
 
@@ -809,15 +815,6 @@ export struct SettingsDetailPage {
     }
   }
 
-  private checkSourceUpdate(api: LXUserApiInfo): void {
-    const current: string = api.version.length > 0 ? api.version : '未知';
-    this.getUIContext().getPromptAction().showToast({
-      message: '当前版本 ' + current + '（最新）',
-      duration: 2000
-    });
-    appendPlayLog('[RzdSourceUpdate] ' + api.name + ' version=' + current);
-  }
-
   private deleteLXSource(apiId: string): void {
     if (this.activeSource === apiId) {
       AppStorage.setOrCreate('lxActiveSource', '');
@@ -829,6 +826,89 @@ export struct SettingsDetailPage {
     }
     lxSourceManager.removeApi(apiId);
     this.refresh();
+  }
+
+  /** 订阅地址 → 列表里显示的名字（主机名，避免全是「MusicFree 订阅」）。 */
+  private subscriptionNameOf(url: string): string {
+    const m: RegExpExecArray | null = /^https?:\/\/([^/]+)/i.exec(url.trim());
+    if (m !== null && m[1].length > 0) {
+      return m[1];
+    }
+    return 'MusicFree 订阅';
+  }
+
+  /** 订阅（音源本身）的展示名（备注 > 人类可读名 > 中性兜底，绝不显示裸域名）。 */
+  private subLabelOf(sub: MfSubscriptionInfo): string {
+    let ordinal: number = 1;
+    for (let i: number = 0; i < this.subscriptions.length; i++) {
+      if (this.subscriptions[i].id === sub.id) {
+        ordinal = i + 1;
+        break;
+      }
+    }
+    return musicFreeSubscriptionLabel(sub, ordinal, this.subscriptions.length);
+  }
+
+  /** 更新整份 MusicFree 订阅（重新拉 url，逐个覆盖插件）。 */
+  private async updateSubscriptionPack(sub: MfSubscriptionInfo): Promise<void> {
+    if (sub.url.length === 0) {
+      this.toast('这份订阅来自文件，请重新选择文件导入');
+      return;
+    }
+    this.toast('正在更新「' + this.subLabelOf(sub) + '」…');
+    try {
+      const report: MfImportReport = await updateSubscription(sub.id);
+      this.refresh();
+      this.schedulePlatformRefresh();
+      this.toast(report.ok ? ('已更新：' + report.message) : ('更新失败：' + report.message));
+    } catch (err) {
+      this.toast('更新失败：' + ((err as Error).message ?? '网络异常'));
+    }
+  }
+
+  /** 删除整份订阅（含其下所有插件）。 */
+  private confirmDeleteSubscription(sub: MfSubscriptionInfo): void {
+    this.getUIContext().showAlertDialog({
+      title: '删除订阅',
+      message: '确定删除「' + this.subLabelOf(sub) + '」及其 ' + sub.apiIds.length.toString() + ' 个音源吗？',
+      autoCancel: true,
+      alignment: DialogAlignment.Center,
+      primaryButton: {
+        value: '取消',
+        action: (): void => {
+        }
+      },
+      secondaryButton: {
+        value: '删除',
+        fontColor: $r('sys.color.warning'),
+        action: (): void => {
+          const removed: number = lxSourceManager.removeSubscription(sub.id);
+          // 被删插件可能还在播放默认源 / 备选链里：按**删除后**的真实列表清掉悬空 id
+          const liveIds: string[] = [];
+          const live: LXUserApiInfo[] = lxSourceManager.getApiList();
+          for (let a: number = 0; a < live.length; a++) {
+            liveIds.push(live[a].id);
+          }
+          const nextOrder: string[] = [];
+          for (let i: number = 0; i < this.sourceOrderIds.length; i++) {
+            if (liveIds.indexOf(this.sourceOrderIds[i]) >= 0) {
+              nextOrder.push(this.sourceOrderIds[i]);
+            }
+          }
+          if (nextOrder.length !== this.sourceOrderIds.length) {
+            MusicStoreService.getInstance().setSourceScriptOrder(nextOrder);
+          }
+          if (this.activeSource.length > 0 && liveIds.indexOf(this.activeSource) < 0) {
+            AppStorage.setOrCreate('lxActiveSource', '');
+            MusicStoreService.getInstance().setActiveSource('');
+            this.activeSource = '';
+          }
+          this.refresh();
+          this.schedulePlatformRefresh();
+          this.toast('已删除 ' + removed.toString() + ' 个音源');
+        }
+      }
+    });
   }
 
   /** Imports source scripts from multiple local files, retaining per-file failures. */
@@ -876,17 +956,35 @@ export struct SettingsDetailPage {
         return;
       }
       try {
-        const imported: LXApiImportResult = lxSourceManager.importApi(script);
-        if (!imported.ok) {
-          this.toast('导入失败：' + imported.message);
+        // ① 订阅 JSON（MusicFree 生态常见写法）：一次导一整包插件
+        const entries: MfSubscriptionEntry[] = script.trimStart().startsWith('{')
+          ? parseMusicFreeSubscription(script) : [];
+        if (entries.length > 0) {
+          this.toast('发现 ' + entries.length + ' 个插件，正在逐个加载…');
+          const report: MfImportReport =
+            await importMusicFreeSubscriptionText(script, url, this.subscriptionNameOf(url));
+          this.refresh();
+          this.onlineUrl = '';
+          if (report.ok) {
+            AppStorage.setOrCreate('mfEngineNeeded', true);
+            this.toast('订阅导入完成：' + report.message);
+            this.pathStack.pop();
+            this.schedulePlatformRefresh();
+          } else {
+            this.toast('订阅导入失败：' + report.message);
+          }
           return;
         }
+        // ② 单脚本：LX 脚本 / MusicFree 插件自动分派
+        const message: string = await importSourceScriptAuto(script, '');
         this.refresh();
         this.pathStack.pop();
         this.onlineUrl = '';
-        this.toast('已导入「' + imported.message + '」');
-      } catch (_parseErr) {
-        this.toast('导入失败: 无效的脚本文件');
+        AppStorage.setOrCreate('mfEngineNeeded', true);
+        this.toast('已导入「' + message + '」');
+        this.schedulePlatformRefresh();
+      } catch (err) {
+        this.toast('导入失败：' + ((err as Error).message ?? '无效的脚本文件'));
       }
     } catch (_err) {
       this.toast('拉取失败，请检查网络');
@@ -897,33 +995,6 @@ export struct SettingsDetailPage {
   }
 
   /** 检查更新命中后用它的 updateUrl 直接替换该音源。 */
-  private async importLXSourceFromUrl(url: string): Promise<void> {
-    if (url.length === 0 || !/^https?:\/\//.test(url)) {
-      this.toast('更新链接无效');
-      return;
-    }
-    const httpRequest = http.createHttp();
-    try {
-      const resp: http.HttpResponse = await httpRequest.request(url, {
-        method: http.RequestMethod.GET,
-        connectTimeout: LX_ONLINE_IMPORT_TIMEOUT,
-        readTimeout: LX_ONLINE_IMPORT_TIMEOUT,
-        expectDataType: http.HttpDataType.STRING
-      });
-      if (resp.responseCode !== 200 || typeof resp.result !== 'string') {
-        this.toast('新版本下载失败');
-        return;
-      }
-      const imported: LXApiImportResult = lxSourceManager.importApi(resp.result as string);
-      this.refresh();
-      this.toast(imported.ok ? '已更新：' + imported.message : '更新失败：' + imported.message);
-      appendPlayLog('[RzdSourceUpdate] import from ' + url + ' ok=' + imported.ok);
-    } catch (err) {
-      this.toast('更新失败，请检查网络');
-    } finally {
-      httpRequest.destroy();
-    }
-  }
 
   private selectColorMode(mode: number): void {
     this.colorMode = mode;
@@ -1024,13 +1095,24 @@ export struct SettingsDetailPage {
       MusicStoreService.getInstance().setDownloadSaveMode(download ? 'download' : 'ask');
   }
 
+  /** 在线导入（整页 / 半模态共用同一个输入区，只保留一份实现）。 */
   @Builder
   private OnlineImportSheet() {
+    Column() {
+      this.OnlineImportContent()
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, top: this.panelTopInset() + 8, bottom: SETTINGS_PANEL_BOTTOM_VP })
+  }
+
+  /** 在线导入的输入区。 */
+  @Builder
+  private OnlineImportContent() {
     Column({ space: 16 }) {
       TextInput({ text: this.onlineUrl, placeholder: $r('app.string.setting_online_import_placeholder') })
         .width('100%')
         .height(44)
-        .borderRadius($r('sys.float.corner_radius_level6'))
+        .borderRadius($r('sys.float.corner_radius_level16'))
         .padding({ left: 12, right: 12 })
         .onChange((value: string) => {
           this.onlineUrl = value;
@@ -1044,7 +1126,12 @@ export struct SettingsDetailPage {
           .backgroundColor($r('app.color.background_secondary'))
           .fontColor($r('sys.color.font_primary'))
           .onClick(() => {
-                  })
+            if (this.sourceSheet === 3) {
+              this.sourceSheet = 0;
+              return;
+            }
+            this.pathStack.pop();
+          })
         Button(this.importing ? $r('app.string.setting_online_import_loading') : $r('app.string.setting_online_import_confirm'))
           .layoutWeight(1)
           .height(44)
@@ -1058,7 +1145,6 @@ export struct SettingsDetailPage {
       .width('100%')
     }
     .width('100%')
-    .padding({ left: 20, right: 20, top: this.panelTopInset() + 8, bottom: SETTINGS_PANEL_BOTTOM_VP })
   }
 
   /** 平台账号管理弹窗：账号管理。整页导航时内容需避开标题栏（AccountManageSheet 自身仅按弹窗场景留 12vp）。 */
@@ -1099,9 +1185,6 @@ export struct SettingsDetailPage {
     .height('100%')
   }
 
-  /** Cached title bar options so scrolling rebuilds do not recreate material params. */
-  private cachedTitleBarOptions: HdsNavigationTitleBarOptions | undefined = undefined;
-
   /**
    * 页根（`HdsNavDestination`）在**窗口坐标**里的顶边 y（vp），由 `onAreaChange` 实测。
    * 默认 0 = "页盒贴屏幕顶"。量到非 0 后，子面板让位（`panelTopInset` / `contentTopOffset`）
@@ -1109,55 +1192,7 @@ export struct SettingsDetailPage {
    */
   @Local boxTopVp: number = 0;
 
-  /** 盒顶量出来（或变化）后丢弃标题栏缓存，让 `avoidLayoutSafeArea` 跟着改。 */
-  @Monitor('boxTopVp')
-  onBoxTopChanged(): void {
-    this.cachedTitleBarOptions = undefined;
-  }
-
-  /** 光感等级变化时丢弃标题栏缓存，使设置页自身标题栏的沉浸材质实时跟随设置变化。 */
-  @Monitor('ambientLevel')
-  onAmbientLevelChanged(): void {
-    this.cachedTitleBarOptions = undefined;
-  }
-
   /** HDS title bar with system material and gradient blur. */
-  private getTitleBar(): HdsNavigationTitleBarOptions {
-    if (this.cachedTitleBarOptions !== undefined) {
-      return this.cachedTitleBarOptions;
-    }
-    this.cachedTitleBarOptions = {
-      // ★ 盒顶实测贴屏幕顶（0）时才让 HDS 标题栏自己退回状态栏下方（否则标题会掉 38+38）。
-      avoidLayoutSafeArea: PageTopInsetHelper.avoidLayoutSafeArea(this.boxTopVp),
-      style: {
-        blurStrategy: BlurStrategy.ENABLE,
-        scrollEffectOpts: {
-          scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR
-        },
-        originalStyle: {
-          contentStyle: {
-            titleStyle: {
-              mainTitleColor: $r('sys.color.font_primary')
-            }
-          }
-        },
-        scrollEffectStyle: {
-          contentStyle: {
-            titleStyle: {
-              mainTitleColor: $r('sys.color.font_primary')
-            }
-          }
-        }
-      },
-      content: {
-        title: {
-          mainTitle: $r('app.string.setting_title'),
-          mainTitleSize: TitleSize.TITLE_ML
-        }
-      }
-    };
-    return this.cachedTitleBarOptions;
-  }
 
   @Builder
   private CardTitle(title: Resource | string) {
@@ -1264,33 +1299,16 @@ export struct SettingsDetailPage {
 
   @Builder
   private CustomColorSheet() {
-    // ★ 修正「自定义颜色二级页内容与标题栏/状态栏重叠」：其它子面板都有
-    //   `Blank().height(this.panelTopInset())`（避让状态栏 + HDS 标题栏）和
-    //   `SETTINGS_PANEL_BOTTOM_VP`（避让底部悬浮播放条），这里原来漏了两个 ⇒
-    //   内容标题「自定义主题颜色」顶进返回按钮那一行，「取消」贴着播放条。
-    Scroll() {
-      Column() {
-        Blank().height(this.panelTopInset())
-        CustomColorSheetContent({
-          customColor: this.customColor,
-          accentColor: this.themeState.color,
-          presetColors: this.presetColors,
-          onColorSelected: (color: string): void => { this.customColor = color; },
-          onTextChange: (value: string): void => { this.customColor = value; },
-          onApply: (): void => { this.applyCustomColor(); },
-          onCancel: (): void => { this.pathStack.pop(); }
-        })
-      }
-      .width('100%')
-      .padding({ bottom: SETTINGS_PANEL_BOTTOM_VP })
-    }
-    .width('100%')
-    .height('100%')
-    .scrollBar(BarState.Off)
-    // ★ 2026-10-29（用户）：二级设置页滚动要有回弹
-    .edgeEffect(EdgeEffect.Spring)
+    CustomColorSheetContent({
+      customColor: this.customColor,
+      accentColor: this.themeState.color,
+      presetColors: this.presetColors,
+      onColorSelected: (color: string): void => { this.customColor = color; },
+      onTextChange: (value: string): void => { this.customColor = value; },
+      onApply: (): void => { this.applyCustomColor(); },
+      onCancel: (): void => { this.pathStack.pop(); }
+    })
   }
-
 
   /** 显式读取版本号，让共享 store 的异步恢复和其它入口修改驱动刷新。 */
   private networkBaseQuality(wifi: boolean): string {
@@ -1470,7 +1488,6 @@ export struct SettingsDetailPage {
             })
 
           // ④ 2026-10-31（用户：以后都不走模糊）：「歌词页模糊效果」设置项已移除
-
 
           this.SubTitle('歌词帧率')
           this.CapsuleSelector(this.lyricFpsOptions, this.lyricFpsValues.indexOf(this.lyricFps),
@@ -1751,11 +1768,6 @@ export struct SettingsDetailPage {
     if (!this.desktopLyric) {
       return '';
     }
-    if (this.desktopLyricLocked) {
-      // 锁定时悬浮窗自身不再响应；解锁入口只保留通知栏（2026-11-12 用户要求
-      // 「桌面歌词解锁只做在状态栏」），这里只提示用户去通知栏找那条通知。
-      return '桌面歌词已锁定：位置固定、不再响应拖动和设置。需要调整时展开通知栏，点「桌面歌词已锁定」通知里的「解锁歌词」按钮。';
-    }
     return '';
   }
 
@@ -1864,14 +1876,6 @@ export struct SettingsDetailPage {
               MusicStoreService.getInstance().setDesktopLyric(isOn);
               // 立刻生效：开 → 需要时先 enable 再显示；关 → 收起悬浮窗
               MediaService.getInstance().refreshDesktopLyric();
-              if (isOn) {
-                // ▼ 开桌面歌词顺带申请通知授权（用户手势时机，系统弹授权框；已授权则静默）：
-                //   ★ 2026-11-12 起「解锁歌词」通知是解锁悬浮窗的**唯一**入口
-                //   （见 MediaService.publishUnlockNotification），没授权这条通知发不出来，
-                //   锁定后用户将无法解锁 —— 所以开关打开时必须尽力把授权拿到手。
-                const notifCtx = getContext(this) as common.UIAbilityContext;
-                void notificationManager.requestEnableNotification(notifCtx).catch((): void => {});
-              }
             })
           Text(this.desktopLyricHint())
             .fontSize($r('sys.float.Caption_M'))
@@ -2099,7 +2103,6 @@ export struct SettingsDetailPage {
       .edgeEffect(EdgeEffect.Spring)
   }
 
-
   private isSourceInOrder(apiId: string): boolean {
     return this.sourceOrderIds.indexOf(apiId) >= 0;
   }
@@ -2108,30 +2111,53 @@ export struct SettingsDetailPage {
     MusicStoreService.getInstance().setSourceScriptOrder(this.sourceOrderIds);
   }
 
-  /** 长按拖动排序：把 dragId 移到 targetId 的位置（用于 `onDrop`）。 */
-  private moveSourceTo(dragId: string, targetId: string): void {
-    if (dragId.length === 0 || dragId === targetId) {
-      return;
+  /** 订阅整包启用 / 停用：一次性改完所有成员，只落盘一次。 */
+  private toggleSubscription(sub: MfSubscriptionInfo, enabled: boolean): void {
+    const members: string[] = [];
+    for (let i: number = 0; i < this.lxApiList.length; i++) {
+      if (this.lxApiList[i].subId === sub.id) {
+        members.push(this.lxApiList[i].id);
+      }
     }
-    const from: number = this.sourceOrderIds.indexOf(dragId);
-    const to: number = this.sourceOrderIds.indexOf(targetId);
-    if (from < 0 || to < 0) {
+    if (members.length === 0) {
       return;
     }
     const next: string[] = [];
-    for (let i: number = 0; i < this.sourceOrderIds.length; i++) {
-      next.push(this.sourceOrderIds[i]);
+    if (enabled) {
+      for (let i: number = 0; i < this.sourceOrderIds.length; i++) {
+        next.push(this.sourceOrderIds[i]);
+      }
+      for (let i: number = 0; i < members.length; i++) {
+        if (next.indexOf(members[i]) < 0) {
+          next.push(members[i]);
+        }
+      }
+    } else {
+      for (let i: number = 0; i < this.sourceOrderIds.length; i++) {
+        if (members.indexOf(this.sourceOrderIds[i]) < 0) {
+          next.push(this.sourceOrderIds[i]);
+        }
+      }
     }
-    next.splice(from, 1);
-    next.splice(to, 0, dragId);
     this.sourceOrderIds = next;
     this.persistSourceOrder();
-    this.dragSourceId = '';
-    appendPlayLog('[RzdSourceOrder] move ' + dragId + ' -> ' + targetId + ' = ' + next.join(' > '));
+    // 停用的源不能继续当「当前使用」，否则 UI 会出现「当前使用 + 未启用」的矛盾状态
+    if (!enabled && this.activeSource.length > 0 && members.indexOf(this.activeSource) >= 0) {
+      AppStorage.setOrCreate('lxActiveSource', '');
+      MusicStoreService.getInstance().setActiveSource('');
+      this.activeSource = '';
+    }
+    // 平台清单按「已启用源」派生，启用状态变了要重建一次
+    this.schedulePlatformRefresh();
   }
 
   private toggleSourceInOrder(apiId: string): void {
     const idx: number = this.sourceOrderIds.indexOf(apiId);
+    if (idx >= 0 && this.activeSource === apiId) {
+      AppStorage.setOrCreate('lxActiveSource', '');
+      MusicStoreService.getInstance().setActiveSource('');
+      this.activeSource = '';
+    }
     if (idx >= 0) {
       const next: string[] = [];
       for (let i: number = 0; i < this.sourceOrderIds.length; i++) {
@@ -2149,38 +2175,212 @@ export struct SettingsDetailPage {
       this.sourceOrderIds = next;
     }
     this.persistSourceOrder();
+    // 关掉某个源后它的平台要从「平台管理 / 搜索 / 广场」消失；重新打开要回来
+    this.schedulePlatformRefresh();
   }
 
-  private moveSourceOrderUp(apiId: string): void {
-    const idx: number = this.sourceOrderIds.indexOf(apiId);
-    if (idx <= 0) {
-      return;
-    }
+  /**
+   * 音源列表拖动后的行顺序落地。
+   *
+   * ★ 2026-11-09（用户：「现在音源没法拖动排序了」）：
+   *   列表一行是「订阅整包 / 独立脚本」，行顺序单独存（`source_row_order`）；
+   *   同时把它换算成播放兜底的源优先级 —— 订阅整包按**块**移动，
+   *   块内成员相对顺序不变（用户拖的是整包，不是包里的某一个插件）。
+   * @param keys 新行顺序
+   */
+  private applySourceRowOrder(keys: string[]): void {
+    this.sourceRowOrder = keys;
+    MusicStoreService.getInstance().setSourceRowOrder(keys);
+
+    const current: string[] = this.sourceOrderIds;
     const next: string[] = [];
-    for (let i: number = 0; i < this.sourceOrderIds.length; i++) {
-      next.push(this.sourceOrderIds[i]);
+    for (let k: number = 0; k < keys.length; k++) {
+      const key: string = keys[k];
+      if (key.startsWith('api:')) {
+        const id: string = key.substring(4);
+        if (current.indexOf(id) >= 0 && next.indexOf(id) < 0) {
+          next.push(id);
+        }
+      } else if (key.startsWith('sub:')) {
+        const members: string[] = this.memberIdsOfSub(key.substring(4));
+        for (let m: number = 0; m < members.length; m++) {
+          if (current.indexOf(members[m]) >= 0 && next.indexOf(members[m]) < 0) {
+            next.push(members[m]);
+          }
+        }
+      }
     }
-    const tmp: string = next[idx - 1];
-    next[idx - 1] = next[idx];
-    next[idx] = tmp;
+    // 没出现在行顺序里的启用源（理论上不该有）追加在末尾，避免被排序"丢掉"
+    for (let i: number = 0; i < current.length; i++) {
+      if (next.indexOf(current[i]) < 0) {
+        next.push(current[i]);
+      }
+    }
     this.sourceOrderIds = next;
     this.persistSourceOrder();
+    appendPlayLog('[音源顺序] drag rows=' + keys.length);
   }
 
-  private moveSourceOrderDown(apiId: string): void {
-    const idx: number = this.sourceOrderIds.indexOf(apiId);
-    if (idx < 0 || idx >= this.sourceOrderIds.length - 1) {
+  /** 订阅下的成员 id（插件侧 `subId` 与订阅侧 `apiIds` 双向兜底，兼容老数据）。 */
+  private memberIdsOfSub(subId: string): string[] {
+    const out: string[] = [];
+    for (let i: number = 0; i < this.lxApiList.length; i++) {
+      if (this.lxApiList[i].subId === subId && out.indexOf(this.lxApiList[i].id) < 0) {
+        out.push(this.lxApiList[i].id);
+      }
+    }
+    for (let s: number = 0; s < this.subscriptions.length; s++) {
+      if (this.subscriptions[s].id !== subId) {
+        continue;
+      }
+      const ids: string[] = this.subscriptions[s].apiIds;
+      for (let k: number = 0; k < ids.length; k++) {
+        if (out.indexOf(ids[k]) < 0) {
+          out.push(ids[k]);
+        }
+      }
+    }
+    return out;
+  }
+
+  /** 打开 MusicFree 源的备注编辑器（预填当前备注；没备注就填原名）。 */
+  private openRemarkEditor(api: LXUserApiInfo): void {
+    this.remarkTargetId = api.id;
+    const rawRemark: string | undefined = api.remark;
+    const remark: string = rawRemark !== undefined ? rawRemark.trim() : '';
+    this.remarkTargetName = remark.length > 0 ? remark : displayNameOfApi(api);
+    this.remarkDraft = this.remarkTargetName;
+    this.sourceSheet = 4;
+  }
+
+  /** 保存备注：只改 `remark`，不动 `name` / `platform`（后者参与订阅更新去重）。 */
+  private submitRemark(): void {
+    if (this.remarkTargetId.length === 0) {
+      this.sourceSheet = 0;
       return;
     }
-    const next: string[] = [];
-    for (let i: number = 0; i < this.sourceOrderIds.length; i++) {
-      next.push(this.sourceOrderIds[i]);
+    lxSourceManager.setApiRemark(this.remarkTargetId, this.remarkDraft);
+    this.sourceSheet = 0;
+    this.remarkTargetId = '';
+    this.refresh();
+    this.toast('已保存');
+  }
+
+  /**
+   * 订阅（音源本身）的「编辑」：直接改这份订阅的备注。
+   *
+   * ★ 2026-11-09（用户：「那个修改备注是修改音源本身的备注，只显示域名太难看了」）：
+   *   之前这里先进「选成员」再改插件备注 —— 语义错了。订阅 = 音源，成员 = 平台来源；
+   *   左滑改的是音源自己的名字。成员备注仍可在「关于」气泡里单独改。
+   */
+  private openSubscriptionEditor(sub: MfSubscriptionInfo): void {
+    this.remarkPickSubId = sub.id;
+    this.subRemarkTargetId = sub.id;
+    let ordinal: number = 1;
+    for (let i: number = 0; i < this.subscriptions.length; i++) {
+      if (this.subscriptions[i].id === sub.id) {
+        ordinal = i + 1;
+        break;
+      }
     }
-    const tmp: string = next[idx + 1];
-    next[idx + 1] = next[idx];
-    next[idx] = tmp;
-    this.sourceOrderIds = next;
-    this.persistSourceOrder();
+    this.subRemarkTargetName = musicFreeSubscriptionLabel(sub, ordinal, this.subscriptions.length);
+    const rawRemark: string | undefined = sub.remark;
+    this.subRemarkDraft = rawRemark !== undefined ? rawRemark.trim() : '';
+    this.sourceSheet = 6;
+  }
+
+  /**
+   * 保存订阅备注（空串 = 清除，回退到订阅自带名）。
+   *
+   * ★ 2026-11-09（用户：「修改备注后弹窗不会自动关闭」）：保存即关闭半模态，
+   *   列表靠 `sourceDataVersion` 立刻换名，不必退出页面再进来。
+   */
+  private submitSubscriptionRemark(): void {
+    if (this.subRemarkTargetId.length === 0) {
+      this.sourceSheet = 0;
+      return;
+    }
+    lxSourceManager.setSubscriptionRemark(this.subRemarkTargetId, this.subRemarkDraft);
+    this.subRemarkTargetId = '';
+    this.subRemarkDraft = '';
+    this.remarkPickSubId = '';
+    this.sourceSheet = 0;
+    this.refresh();
+    this.toast('已保存');
+  }
+
+  /** 订阅下的成员（插件侧 subId 与订阅侧 apiIds 双向兜底）。 */
+  private subMembersOf(subId: string): LXUserApiInfo[] {
+    const out: LXUserApiInfo[] = [];
+    for (let i: number = 0; i < this.lxApiList.length; i++) {
+      const api: LXUserApiInfo = this.lxApiList[i];
+      if (api.subId === subId && out.indexOf(api) < 0) {
+        out.push(api);
+      }
+    }
+    if (out.length > 0) {
+      return out;
+    }
+    // 老数据：插件侧 subId 为空，订阅侧记着 apiIds
+    for (let s: number = 0; s < this.subscriptions.length; s++) {
+      if (this.subscriptions[s].id !== subId) {
+        continue;
+      }
+      const ids: string[] = this.subscriptions[s].apiIds;
+      for (let k: number = 0; k < ids.length; k++) {
+        for (let j: number = 0; j < this.lxApiList.length; j++) {
+          if (this.lxApiList[j].id === ids[k] && out.indexOf(this.lxApiList[j]) < 0) {
+            out.push(this.lxApiList[j]);
+          }
+        }
+      }
+    }
+    return out;
+  }
+
+  /**
+   * 打开「修改支持的平台」（仅 LX 脚本）。
+   *
+   * 预填的是**当前生效**的平台（用户裁过就是裁过的，没裁过就是脚本声明的）。
+   */
+  private openPlatformEditor(api: LXUserApiInfo): void {
+    this.platformTargetId = api.id;
+    const effective: LXSourcePlatformInfo[] = lxDeclaredPlatformsOf(api);
+    const ids: string[] = [];
+    for (let i: number = 0; i < effective.length; i++) {
+      const id: string = normalizePlatformId(effective[i].source);
+      if (ids.indexOf(id) < 0 && LX_PLATFORM_ORDER.indexOf(id) >= 0) {
+        ids.push(id);
+      }
+    }
+    this.platformDraft = ids;
+    this.sourceSheet = 5;
+  }
+
+  /** 保存「支持的平台」：空数组 = 恢复跟随脚本声明。 */
+  private submitPlatforms(): void {
+    if (this.platformTargetId.length === 0) {
+      this.sourceSheet = 0;
+      return;
+    }
+    lxSourceManager.setApiPlatforms(this.platformTargetId, this.platformDraft);
+    this.sourceSheet = 0;
+    this.platformTargetId = '';
+    this.refresh();
+  }
+
+  /** 勾 / 取消一个平台（草稿）。 */
+  private toggleDraftPlatform(id: string, checked: boolean): void {
+    const next: string[] = [];
+    for (let i: number = 0; i < this.platformDraft.length; i++) {
+      if (this.platformDraft[i] !== id) {
+        next.push(this.platformDraft[i]);
+      }
+    }
+    if (checked) {
+      next.push(id);
+    }
+    this.platformDraft = next;
   }
 
   private orderedApiListForUi(): LXUserApiInfo[] {
@@ -2206,40 +2406,59 @@ export struct SettingsDetailPage {
     return out;
   }
 
-  /** 音源管理弹窗：导入按钮 + 源列表。 */
+  /**
+   * 音源管理（唯一实现，2026-11-08 第二版）。
+   *
+   * ★ 用户：「不要两个页面啊，这不又成屎山了吗。你直接放进音源管理页的右上角，
+   *   顺带把导入音源也放进那里」：
+   *   - 平台管理不再是一个子页面，改成半模态（`sourceSheet === 1`，标题走 HDS 的
+   *     `bindSheet.title`，不再自绘第二根标题栏）；
+   *   - 导入（文件 / 链接）与平台管理收进右上角**一个菜单**（`SourceActionsMenu`，
+   *   popup 的 `systemMaterial` 吃用户设置的光感档（与标题栏同一份 `immersiveFromLevel`）。
+   *
+   * ★ 2026-11-09（用户：「源和平台都分开」）：源列表只显示订阅 / 独立脚本，
+   *   平台勾选全部归「平台管理」（`sourceSheet === 1`），这里不再有「编辑平台」入口。
+   */
   @Builder
-  private SourceManagerSheet() {
-    Column({ space: 12 }) {
-      if (this.lxApiList.length === 0) {
-        Text($r('app.string.setting_lx_empty'))
-          .fontSize($r('sys.float.Body_S'))
-          .fontColor($r('sys.color.font_tertiary'))
-          .width('100%')
-      }
-
+  private SourceManagerPanel() {
+    Stack({ alignContent: Alignment.TopEnd }) {
       Scroll(this.pageScroller) {
         Column({ space: 8 }) {
           /**
            * ★ 顶部这段留白放在**滚动内容里面**（不是外层 padding），目的是让卡片能**滑到 HDS
-           *   标题栏底下**（沉浸式）：静止时与原来一样、第一张卡正好在标题栏下沿，
-           *   一往上滑就从标题栏（渐变模糊材质）底下穿过去，顶上那 56vp 不再是一段"死空白"。
+           *   标题栏底下**（沉浸式）：静止时第一张卡正好在标题栏下沿，
+           *   一往上滑就从标题栏（渐变模糊材质）底下穿过去。
            *   用户 2026-10-11：「音源管理页面上方下方都一大块空白，能不能去掉」。
            */
           Blank().height(PageTopInsetHelper.contentOffsetVp(this.boxTopVp))
-          Text('勾选参与依次调用，上下键调整优先级；圆点为当前默认音源')
-            .fontSize($r('sys.float.Caption_M'))
-            .fontColor($r('sys.color.font_tertiary'))
-            .width('100%')
 
-          // 统一实现：单列勾选 + 整卡拖动 + 左滑（检查更新 / 删除）
+          if (this.lxApiList.length === 0) {
+            Text($r('app.string.setting_lx_empty'))
+              .fontSize($r('sys.float.Body_S'))
+              .fontColor($r('sys.color.font_tertiary'))
+              .width('100%')
+          }
+
+          // 统一实现：一行一个源（订阅整包 / 独立脚本）+ 勾选启用 + 左滑操作
           SourceManagerList({
             apis: this.orderedApiListForUi(),
+            subscriptions: this.subscriptions,
+            rowOrder: this.sourceRowOrder,
             orderIds: this.sourceOrderIds,
             activeId: this.activeSource,
             accentColor: this.themeState.color,
-            draggableEnabled: this.engineReady,
+            dataVersion: this.sourceDataVersion,
             onToggle: (apiId: string): void => {
               this.toggleSourceInOrder(apiId);
+            },
+            onReorderRows: (keys: string[]): void => {
+              this.applySourceRowOrder(keys);
+            },
+            onEditRemark: (api: LXUserApiInfo): void => {
+              this.openRemarkEditor(api);
+            },
+            onEditPlatforms: (api: LXUserApiInfo): void => {
+              this.openPlatformEditor(api);
             },
             onSelect: (apiId: string): void => {
               this.selectLXSource(apiId);
@@ -2253,70 +2472,380 @@ export struct SettingsDetailPage {
             onProbe: (apiId: string): void => {
               void this.runQualityProbe(apiId);
             },
-            onMove: (dragId: string, targetId: string): void => {
-              this.moveSourceTo(dragId, targetId);
+            onToggleSubscription: (sub: MfSubscriptionInfo, enabled: boolean): void => {
+              this.toggleSubscription(sub, enabled);
+            },
+            onUpdateSubscription: (sub: MfSubscriptionInfo): void => {
+              void this.updateSubscriptionPack(sub);
+            },
+            onEditSubscription: (sub: MfSubscriptionInfo): void => {
+              this.openSubscriptionEditor(sub);
+            },
+            onDeleteSubscription: (sub: MfSubscriptionInfo): void => {
+              this.confirmDeleteSubscription(sub);
             }
           })
-
-          Row({ space: 10 }) {
-            Button($r('app.string.setting_lx_import_file'))
-              .layoutWeight(1)
-              .height(42)
-              .fontSize($r('sys.float.Body_M'))
-              .backgroundColor(this.themeState.color)
-              .fontColor($r('sys.color.font_on_primary'))
-              .onClick(() => {
-                void this.importLXSource();
-              })
-            Button($r('app.string.setting_lx_import_online'))
-              .layoutWeight(1)
-              .height(42)
-              .fontSize($r('sys.float.Body_M'))
-              .backgroundColor(this.themeState.color)
-              .fontColor($r('sys.color.font_on_primary'))
-              .onClick(() => {
-                this.pushSubSheet(0);
-              })
-          }
-          .width('100%')
-          .margin({ top: 12 })
         }
         .width('100%')
       }
-      .layoutWeight(1)
+      .width('100%')
+      .height('100%')
       .clipContent(ContentClipMode.SAFE_AREA)
       .scrollBar(BarState.Off)
       // ★ 2026-10-29（用户）：二级设置页滚动要有回弹
       .edgeEffect(EdgeEffect.Spring)
       .align(Alignment.Top)
-      // ★ 底部那段"给悬浮播放条让位"的留白**必须留在列表里**（`contentEndOffset` = 内容末端到显示区
-      //   边界的距离，官方 @since 22，List/Scroll 通用）—— 它随内容一起滚走。
-      //   用户 2026-10-11 报「音源管理页面底部还是空白，我感觉是你又把底部留白写死在屏幕底部而不是列表底部」
-      //   —— 原来这段写在外层容器的 `padding({ bottom })` 上：那是**固定在屏幕底部的一条死带**，
-      //   列表永远用不到它，滚到底就露一块空白。现在改成内容末端的偏移，滚到底刚好停在播放条上方。
+      // ★ 底部"给悬浮播放条让位"的留白留在**列表里**（`contentEndOffset`），随内容一起滚走。
       .contentEndOffset(SETTINGS_PANEL_BOTTOM_VP)
+
+      // 菜单锚点：1×1 透明节点，只负责给 popup 定位（点击由标题栏图标触发）
+      this.SourceMenuAnchor()
     }
     .width('100%')
     .height('100%')
-    .align(Alignment.Top)
-    // 顶部的 56vp 已经挪进 Scroll 内容里（见上面那个 `Blank()`），这里**不再补**顶部留白 ——
-    // 否则就是"标题栏 56 + 外层 56"两份，顶上白白多一段（用户报的"上方一大块空白"）。
-    // 底部留白同理：已改成 Scroll 的 `contentEndOffset`，外层**不再占位**。
-    .padding({ left: 20, right: 20 })
+    // 两侧间距与设置页主列表同一口径（用户报「怎么两侧间距都这么大」：
+    // 原来是本面板 20 + 平台管理再 16 = 36，现在只在这里给一次）
+    .padding({ left: 16, right: 16 })
+  }
+
+  /**
+   * 音源管理右上角菜单的**锚点**。
+   *
+   * HDS 标题栏的图标槽位只能给 `action`（不能挂 bindMenu），所以菜单绑在这个 1×1 节点上，
+   * `placement: BottomRight` + 右上角对齐 ⇒ 视觉上从标题栏图标正下方展开。
+   * 1×1 且 `HitTestMode.None`，不遮挡、不拦截列表点击。
+   * （同一写法见 `NowPlayingFeedPage.FeedModeMenuAnchor`。）
+   */
+  @Builder
+  private SourceMenuAnchor() {
+    Row()
+      .width(1)
+      .height(1)
+      .margin({ top: PageTopInsetHelper.contentOffsetVp(this.boxTopVp), right: 24 })
+      .hitTestBehavior(HitTestMode.None)
+      .bindPopup(this.showSourceMenu, {
+        builder: (): void => {
+          this.SourceActionsMenu();
+        },
+        placement: Placement.BottomRight,
+        enableArrow: false,
+        radius: 16,
+        // ★ 光感档跟随用户的「沉浸光感」设置（不是写死中等），与标题栏/胶囊同一口径
+        systemMaterial: immersiveFromLevel(this.ambientLevel),
+        onStateChange: (event): void => {
+          if (!event.isVisible) {
+            this.showSourceMenu = false;
+          }
+        }
+      })
+  }
+
+  /** 音源管理的两个操作（导入 / 平台管理），收纳在标题栏菜单里。 */
+  @Builder
+  private SourceActionsMenu() {
+    Menu() {
+      MenuItem({ content: '从文件导入音源 / 订阅' })
+        .onClick((): void => {
+          this.showSourceMenu = false;
+          void this.importLXSource();
+        })
+      MenuItem({ content: '从链接导入音源 / 订阅' })
+        .onClick((): void => {
+          this.showSourceMenu = false;
+          this.sourceSheet = 3;
+        })
+      MenuItem({ content: '平台管理' })
+        .onClick((): void => {
+          this.showSourceMenu = false;
+          this.sourceSheet = 1;
+        })
+    }
+  }
+
+  /** 音源管理相关弹层的统一内容（一个组件只能挂一个 bindSheet，用 `sourceSheet` 分工）。 */
+  @Builder
+  private SourceSheetContent() {
+    Column() {
+      if (this.sourceSheet === 1) {
+        PlatformManagerSheet({
+          apis: this.lxApiList,
+          subscriptions: this.subscriptions,
+          accentColor: this.themeState.color,
+          onPlatformsChanged: (): void => {
+            this.refresh();
+          }
+        })
+      } else if (this.sourceSheet === 3) {
+        this.OnlineImportContent()
+      } else if (this.sourceSheet === 4) {
+        this.RemarkSheetContent()
+      } else if (this.sourceSheet === 5) {
+        this.PlatformSheetContent()
+      } else if (this.sourceSheet === 6) {
+        this.SubscriptionEditContent()
+      }
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ left: 16, right: 16, bottom: 8 })
+  }
+
+  /**
+   * MusicFree 源备注编辑。
+   *
+   * ★ 2026-11-09（用户：「MusicFree 的源支持一下修改备注」）：订阅里常有两个同名插件
+   *   （都叫「元力WY」），源列表 / 平台管理靠这个备注区分。
+   */
+  @Builder
+  private RemarkSheetContent() {
+    Column({ space: 12 }) {
+      Text('备注「' + this.remarkTargetName + '」')
+        .fontSize($r('sys.float.Body_M'))
+        .fontColor($r('sys.color.font_secondary'))
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('100%')
+
+      TextInput({ text: this.remarkDraft, placeholder: '留空则恢复插件原名' })
+        .width('100%')
+        .height(44)
+        .borderRadius($r('sys.float.corner_radius_level6'))
+        .padding({ left: 12, right: 12 })
+        .maxLength(24)
+        .onChange((value: string): void => {
+          this.remarkDraft = value;
+        })
+        .onSubmit((): void => {
+          this.submitRemark();
+        })
+
+      Row({ space: 12 }) {
+        Button('取消')
+          .layoutWeight(1)
+          .height(40)
+          .fontSize($r('sys.float.Body_M'))
+          .borderRadius($r('sys.float.corner_radius_level6'))
+          .backgroundColor($r('sys.color.background_tertiary'))
+          .fontColor($r('sys.color.font_secondary'))
+          .onClick((): void => {
+            this.sourceSheet = 0;
+          })
+        Button('保存')
+          .layoutWeight(1)
+          .height(40)
+          .fontSize($r('sys.float.Body_M'))
+          .borderRadius($r('sys.float.corner_radius_level6'))
+          .backgroundColor(this.themeState.color)
+          .fontColor($r('sys.color.font_on_primary'))
+          .onClick((): void => {
+            this.submitRemark();
+          })
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding({ top: 8 })
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  /**
+   * LX 脚本「实际支持平台」编辑。
+   *
+   * ★ 2026-11-09（用户：「LX 是修改支持的平台，因为源不稳定，平台可能失效」）：
+   *   脚本 init 上报的是**声明**，接口失效后用户要能把它从兜底链里摘掉，
+   *   否则每次播放都会先在这个平台上白等一轮再换源。
+   */
+  @Builder
+  private PlatformSheetContent() {
+    Column({ space: 0 }) {
+      List({ space: 6 }) {
+        ForEach(LX_PLATFORM_ORDER, (id: string) => {
+          ListItem() {
+            Row({ space: 10 }) {
+              Checkbox()
+                .select(this.platformDraft.indexOf(id) >= 0)
+                .selectedColor(this.themeState.color)
+                .width(20)
+                .height(20)
+                .onChange((checked: boolean): void => {
+                  this.toggleDraftPlatform(id, checked);
+                })
+              Text(lxSourceLabel(id))
+                .fontSize($r('sys.float.Body_M'))
+                .fontColor($r('sys.color.font_primary'))
+                .layoutWeight(1)
+            }
+            .width('100%')
+            .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+            .borderRadius($r('sys.float.corner_radius_level6'))
+            .backgroundColor($r('app.color.comp_background_list_card'))
+          }
+        }, (id: string) => 'platform_edit_' + id)
+      }
+      .width('100%')
+      .layoutWeight(1)
+      .scrollBar(BarState.Off)
+
+      Row({ space: 12 }) {
+        Button('取消')
+          .layoutWeight(1)
+          .height(40)
+          .fontSize($r('sys.float.Body_M'))
+          .borderRadius($r('sys.float.corner_radius_level6'))
+          .backgroundColor($r('sys.color.background_tertiary'))
+          .fontColor($r('sys.color.font_secondary'))
+          .onClick((): void => {
+            this.sourceSheet = 0;
+          })
+        Button('保存')
+          .layoutWeight(1)
+          .height(40)
+          .fontSize($r('sys.float.Body_M'))
+          .borderRadius($r('sys.float.corner_radius_level6'))
+          .backgroundColor(this.themeState.color)
+          .fontColor($r('sys.color.font_on_primary'))
+          .onClick((): void => {
+            this.submitPlatforms();
+          })
+      }
+      .width('100%')
+      .padding({ top: 8 })
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ top: 8 })
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  /**
+   * 订阅「编辑」：改音源本身的备注 + 成员备注入口。
+   *
+   * ★ 2026-11-09（用户：「那个修改备注是修改音源本身的备注，只显示域名太难看了」）：
+   *   顶部第一件事就是给这份音源起名（默认值不会再是 `13413.kstore.vip` 这种主机名）；
+   *   下面的成员列表只是「里面有什么 + 想单独改哪个插件的备注」。
+   */
+  @Builder
+  private SubscriptionEditContent() {
+    Column({ space: 12 }) {
+      TextInput({ text: this.subRemarkDraft, placeholder: this.subRemarkTargetName })
+        .width('100%')
+        .height(44)
+        .borderRadius($r('sys.float.corner_radius_level6'))
+        .padding({ left: 12, right: 12 })
+        .maxLength(24)
+        .onChange((value: string): void => {
+          this.subRemarkDraft = value;
+        })
+        .onSubmit((): void => {
+          this.submitSubscriptionRemark();
+        })
+
+      Row({ space: 12 }) {
+        Button('取消')
+          .layoutWeight(1)
+          .height(40)
+          .fontSize($r('sys.float.Body_M'))
+          .borderRadius($r('sys.float.corner_radius_level6'))
+          .backgroundColor($r('sys.color.background_tertiary'))
+          .fontColor($r('sys.color.font_secondary'))
+          .onClick((): void => {
+            this.sourceSheet = 0;
+          })
+        Button('保存')
+          .layoutWeight(1)
+          .height(40)
+          .fontSize($r('sys.float.Body_M'))
+          .borderRadius($r('sys.float.corner_radius_level6'))
+          .backgroundColor(this.themeState.color)
+          .fontColor($r('sys.color.font_on_primary'))
+          .onClick((): void => {
+            this.submitSubscriptionRemark();
+          })
+      }
+      .width('100%')
+
+      List({ space: 6 }) {
+        ForEach(this.subMembersOf(this.remarkPickSubId), (api: LXUserApiInfo) => {
+          ListItem() {
+            Row({ space: 8 }) {
+              Column({ space: 2 }) {
+                Text(displayNameOfApi(api))
+                  .fontSize($r('sys.float.Body_M'))
+                  .fontColor($r('sys.color.font_primary'))
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .width('100%')
+                Text('MusicFree' + (api.platform.length > 0 ? ' · ' + api.platform : ''))
+                  .fontSize($r('sys.float.Caption_S'))
+                  .fontColor($r('sys.color.font_tertiary'))
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .width('100%')
+              }
+              .alignItems(HorizontalAlign.Start)
+              .layoutWeight(1)
+
+              SymbolGlyph($r('sys.symbol.square_and_pencil'))
+                .fontSize(18)
+                .fontColor([$r('sys.color.icon_secondary')])
+            }
+            .width('100%')
+            .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+            .borderRadius($r('sys.float.corner_radius_level6'))
+            .backgroundColor($r('app.color.comp_background_list_card'))
+            .onClick((): void => {
+              this.openRemarkEditor(api);
+            })
+          }
+        }, (api: LXUserApiInfo) => 'sub_edit_' + api.id)
+      }
+      .width('100%')
+      .layoutWeight(1)
+      .scrollBar(BarState.Off)
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ top: 8 })
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  /** 弹层标题（HDS 半模态规范：标题由系统画，内容不再自绘标题栏）。 */
+  private sourceSheetTitle(): string {
+    if (this.sourceSheet === 1) {
+      return '平台管理';
+    }
+    if (this.sourceSheet === 4) {
+      return '修改备注';
+    }
+    if (this.sourceSheet === 5) {
+      return '支持的平台';
+    }
+    if (this.sourceSheet === 6) {
+      return '音源备注';
+    }
+    return '从链接导入';
+  }
+
+  /** 弹层高度：平台管理要容纳拖动排序，编辑与在线导入矮一些。 */
+  private sourceSheetHeight(): number {
+    if (this.sourceSheet === 1) {
+      return 640;
+    }
+    if (this.sourceSheet === 4) {
+      return 260;
+    }
+    if (this.sourceSheet === 5) {
+      return 520;
+    }
+    if (this.sourceSheet === 6) {
+      return 600;
+    }
+    return 300;
   }
 
   private applyCustomColor(): void {
     this.applyThemeColor(this.customColor.trim());
   }
-
-  @Builder
-  private GroupDivider() {
-    Divider()
-      .strokeWidth(0.5)
-      .color($r('sys.color.comp_divider'))
-      .margin({ left: 16, right: 12 })
-  }
-
 
   build() {
     if (this.embedded) {
@@ -2329,6 +2858,13 @@ export struct SettingsDetailPage {
       .hideTitleBar(false)
       .titleBar(this.getDetailTitleBar())
       .titleMode(HdsNavDestinationTitleMode.MINI)
+      /**
+       * ★ 2026-11-08（用户：「进入音源管理页面更是直接就变了，连最基础的切页动画都没有」）：
+       *   HDS 的 `HdsNavDestination` 默认不套系统转场（外层 `HdsNavigation` 挂了
+       *   `customNavContentTransition`，非歌单页返回 undefined ⇒ 没有动画）。
+       *   这里显式声明系统默认转场（右侧滑入 + 淡入），二级设置页恢复"正常的翻页感"。
+       */
+      .systemTransition(NavigationSystemTransitionType.DEFAULT)
       .onReady((context: NavDestinationContext) => {
         this.pathStack = context.pathStack;
       })
@@ -2378,7 +2914,7 @@ export struct SettingsDetailPage {
         } else if (this.sheetIndex === 4) {
           this.PlaybackSheet()
         } else if (this.sheetIndex === 5) {
-          this.SourceManagerSheet()
+          this.SourceManagerPanel()
         } else if (this.sheetIndex === 6) {
           this.DownloadSheet()
         } else if (this.sheetIndex === 7) {
@@ -2402,6 +2938,23 @@ export struct SettingsDetailPage {
       //   ⚠️ 宽屏内嵌（`embedded`，右栏那一支）不参与状态栏避让（外层大设置页负责）。
       .padding({ left: 4, right: 4 })
       .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+      // ★ 2026-11-08：音源管理的弹层（平台管理 / 实际支持平台 / 在线导入）挂在**根容器**上。
+      //   一个组件只能挂一个 bindSheet，用 `sourceSheet` 枚举分工（见 SourceSheetContent）。
+      //   标题交给 HDS 半模态画（`title`），内容不再自绘标题栏 —— 这正是上一版「两个页面」的来源。
+      .bindSheet(this.sourceSheet > 0, this.SourceSheetContent(), {
+        height: this.sourceSheetHeight(),
+        title: { title: this.sourceSheetTitle() },
+        dragBar: true,
+        showClose: false,
+        backgroundColor: $r('app.color.background_secondary'),
+        onWillDismiss: (action: DismissSheetAction): void => {
+          this.sourceSheet = 0;
+          action.dismiss();
+        },
+        onDisappear: (): void => {
+          this.sourceSheet = 0;
+        }
+      })
   }
 
 }
