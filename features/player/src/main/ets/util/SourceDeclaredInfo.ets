@@ -218,9 +218,26 @@ const EXTRA_PLATFORM_NAMES: Record<string, string> = {
   'apple': 'Apple Music'
 };
 
+/**
+ * 是否是**洛雪六平台**（kw / kg / tx / wy / mg / qs，含别名折叠）。
+ *
+ * ★ 2026-11-09 用户定稿规则：「洛雪不允许回退到 MusicFree，但是 MusicFree 运行换洛雪」。
+ *   所以「洛雪平台」这个判定有两条用途，都必须在**同一份**清单上做（别再抄第二份）：
+ *   ① 搜索：能否用内置 `lxSearch` 直接查；
+ *   ② 播放兜底：洛雪平台在洛雪脚本失败后**不得**临时升级到 MusicFree 插件。
+ *   ⚠️ 注意平台键 ≠ 来源：MusicFree 插件同样可以声明 `kw`（如元力KW），
+ *   插件参与洛雪平台播放走的是回退链里的 `isMf` 候选（**按用户勾选**），
+ *   不是这种"失败后临时升级"。
+ * @param id 平台 id（可带别名，如 `qsvip`）
+ * @returns 属于洛雪六平台时为 true
+ */
+export function isLxPlatform(id: string): boolean {
+  return LX_PLATFORM_ORDER.indexOf(normalizePlatformId(id)) >= 0;
+}
+
 /** 能否用项目内置搜索（`lxSearch`）直接查这个平台。 */
 export function isLxSearchPlatform(id: string): boolean {
-  return LX_PLATFORM_ORDER.indexOf(normalizePlatformId(id)) >= 0;
+  return isLxPlatform(id);
 }
 
 /** 平台 id → 中文名；取不到时原样回平台 id（**不要**兜成「酷我」那样会误导）。 */
