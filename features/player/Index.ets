@@ -88,7 +88,7 @@ export { lxGetQualityOptions, lxGetQualityOptionsForSongs, LXQualityOption } fro
 export type { LXBatchQualityResult } from './src/main/ets/source/LXQualityApi';
 // 平台中文名（kw→酷我、wy→网易云…），批量下载的失败提示里要带上它
 // 音源脚本「声明了哪些平台 / 什么音质 / 能做什么」的只读摘要（「音源管理」用）
-export { lxDeclaredPlatforms, lxDeclaredPlatformsOf, lxSourceLabel, lxQualityLabel, lxActionLabel,  LX_PLATFORM_ORDER, normalizePlatformId, isOnlinePlatformId, platformLabel, isLxSearchPlatform,
+export { lxDeclaredPlatforms, lxDeclaredPlatformsOf, lxSourceLabel, lxQualityLabel, lxActionLabel,  LX_PLATFORM_ORDER, normalizePlatformId, isOnlinePlatformId, platformLabel, platformBrandColor, isLxPlatform, isLxSearchPlatform,
   isMfPlatformId, MF_PLATFORM_PREFIX, musicFreeSubscriptionLabel, looksLikeHostName }
   from './src/main/ets/util/SourceDeclaredInfo';
 export type { LXSourcePlatformInfo } from './src/main/ets/util/SourceDeclaredInfo';

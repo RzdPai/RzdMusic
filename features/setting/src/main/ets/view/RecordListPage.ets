@@ -70,7 +70,7 @@ import {
   BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions,
   HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize
 } from '@kit.UIDesignKit';
-import { lxQualityLabel, OnlinePlayUtil, sourceDisplayName, sourceToCode } from 'player';
+import { lxQualityLabel, OnlinePlayUtil, platformBrandColor, sourceDisplayName, sourceToCode } from 'player';
 import { SongMoreMenu } from 'playlist';
 import { displaySync } from '@kit.ArkGraphics2D';
 import { RecordRowItem } from './RecordRowItem';
@@ -692,14 +692,11 @@ export struct RecordListPage {
    *    映射与 `OnlineSearchPage` 的 `SongRowItem.sourceColor` 逐条一致。
    */
   private platformColor(source: string | undefined): string {
-    switch (source ?? '') {
-      case 'kw': return '#FF6B35';
-      case 'kg': return '#4A90D9';
-      case 'tx': return '#31C27C';
-      case 'wy': return '#C62F2F';
-      case 'mg': return '#FF4081';
-      default: return '#8C9095';
-    }
+    // ★ 2026-11-14：品牌色统一取 `platformBrandColor()`（唯一一份）。
+    //   以前这里 / `OnlineSearchPage` / `PlaylistHomePage` 各带一份 switch，
+    //   三份里只有歌单页补了 `qs` ⇒ 汽水记录在这里退成灰色。
+    const color: string = platformBrandColor(source ?? '');
+    return color.length > 0 ? color : '#8C9095';
   }
 
   /**
