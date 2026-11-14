@@ -92,6 +92,16 @@ const KEY_IJK_FAIL_STREAK: string = 'ijk_fail_streak';
 const KEY_IJK_DISABLED: string = 'ijk_disabled';
 /** 播放内核选择：auto=自动 / av=强制系统播放器 / ffmpeg=强制 FFmpeg。 */
 const KEY_ENGINE_MODE: string = 'engine_mode';
+/**
+ * 音源脚本运行时选择：auto=按脚本能力探测路由 / webview=强制 ArkWeb / quickjs=强制 QuickJS。
+ * 与播放内核的 {@link KEY_ENGINE_MODE} 是两件事，别混用。
+ */
+const KEY_LX_ENGINE_MODE: string = 'lx_engine_mode_v1';
+/**
+ * 音源脚本的注入通道：auto=快通道优先且失败自动回退 / chunked=强制旧的 base64 分片。
+ * 留这一档是为了「快通道在真机上出问题时能不开新包就退回今天的表现」。
+ */
+const KEY_LX_INJECT_MODE: string = 'lx_inject_mode_v1';
 /** 音效开关（JSON：低音/立体声/人声消除/夜间/混响）。 */
 const KEY_AUDIO_EFFECTS: string = 'audio_effects';
 /** 屏幕方向：auto=跟随系统/陀螺仪，portrait=锁定竖屏，landscape=锁定横屏。 */
@@ -2081,6 +2091,54 @@ export class MusicStoreService {
         return;
       }
       store.putSync(KEY_ENGINE_MODE, mode);
+    }
+
+    /**
+     * 音源脚本运行时。
+     * @returns auto（默认，按脚本能力探测路由）/ webview / quickjs；未知值一律回落 auto。
+     */
+    public getLxEngineMode(): string {
+      const store = this.getStore();
+      if (store === undefined) {
+        return 'auto';
+      }
+      const mode: string = store.getSync(KEY_LX_ENGINE_MODE, 'auto') as string;
+      if (mode === 'webview' || mode === 'quickjs') {
+        return mode;
+      }
+      return 'auto';
+    }
+
+    public setLxEngineMode(mode: string): void {
+      const store = this.getStore();
+      if (store === undefined) {
+        return;
+      }
+      store.putSync(KEY_LX_ENGINE_MODE, mode);
+      store.flush();
+    }
+
+    /**
+     * 音源脚本注入通道。快通道 = 桥用 fetch 拉整包（onInterceptRequest 一次返回），
+     * 替代旧的 base64 分片 runJavaScript；失败会自动回退分片，本开关只用于强制回退。
+     * @returns auto（默认）/ chunked。
+     */
+    public getLxInjectMode(): string {
+      const store = this.getStore();
+      if (store === undefined) {
+        return 'auto';
+      }
+      const mode: string = store.getSync(KEY_LX_INJECT_MODE, 'auto') as string;
+      return mode === 'chunked' ? 'chunked' : 'auto';
+    }
+
+    public setLxInjectMode(mode: string): void {
+      const store = this.getStore();
+      if (store === undefined) {
+        return;
+      }
+      store.putSync(KEY_LX_INJECT_MODE, mode === 'chunked' ? 'chunked' : 'auto');
+      store.flush();
     }
     /** @returns 汽水 FFmpeg 内核的连续失败次数。 */
     public getIjkFailStreak(): number {

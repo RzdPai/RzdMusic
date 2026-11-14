@@ -3,7 +3,8 @@ import { util } from '@kit.ArkTS';
 import { http } from '@kit.NetworkKit';
 import { LXUserApiInfoFull, LXUserApiSourceInfo, LXSourceRequestData } from './Interface';
 import { lxSourceManager } from './LXSourceManager';
-import { appendPlayLog } from 'musicbasic';
+import { appendPlayLog, MusicStoreService } from 'musicbasic';
+import { ScriptProfile, probeScript, formatProfile, canRunWithoutWebView } from './ScriptProbe';
 
 export let lxEngineSendRequest: ((key: string, data: LXSourceRequestData) => void) | null = null;
 export let lxEngineRegisterPromise: ((key: string,
@@ -39,6 +40,28 @@ const READY_WATCHDOG_MAX_MS: number = 30000;
 const READY_WATCHDOG_MAX_RETRY: number = 2;
 /** 未就绪期间排队的请求最多等待多久（ms），超时按失败回给调用方，避免永久挂起。 */
 const QUEUED_REQUEST_TTL_MS: number = 20000;
+
+/**
+ * 快通道注入的载荷地址。
+ * 主机名是刻意不存在的 `.invalid`（RFC 2606 保留顶级域）：请求绝不会真的出网，
+ * 一律由 Web 组件的 onInterceptRequest 在应用内应答。
+ */
+const LX_INIT_URL: string = 'https://rzd-lx-init.invalid/init.json';
+
+/**
+ * 快通道「载荷是否到手」的确认预算（ms）。
+ * 桥拿到整包后会**先回 `initFetchAck` 再解析**，所以这个计时只覆盖「通道本身通不通」。
+ * ★ 绝不能拿它判断「脚本是否初始化完成」：脚本自身的启动期联网校验可能要好几秒，
+ *   误判会触发第二次注入（`_lx_init` 同代际重入会重置状态），把正常启动打断
+ *   —— 这正是历史遗留的「冷启动脚本双注入」问题的成因。
+ */
+const INIT_FETCH_ACK_MS: number = 1500;
+
+/**
+ * 快通道失败后允许自动回退分片的次数上限。
+ * 分片通道是既有可用行为，回退一次就够；不设上限会在通道性故障时反复重灌 1.6 MB。
+ */
+const INIT_FALLBACK_MAX: number = 2;
 
 /** 未就绪期间排队的 JS 语句。 */
 interface QueuedJs {
@@ -103,6 +126,22 @@ export struct LXSourceEngine {
   private outgoingQueue: QueuedJs[] = [];
   /** initScript 的并发保护：aboutToAppear 与 @Watch 可能同时触发加载。 */
   private loadingSourceId: string = '';
+  /** 本次注入的起始时刻（ms），用于统计 injectMs（冷启动注入耗时的唯一可信指标）。 */
+  private injectStartedAt: number = 0;
+  /** 已收到快通道 `initFetchAck` 的代际；等于本次注入代际时禁止再回退分片。 */
+  private fetchAckGen: number = -1;
+  /** 快通道 ack 计时器句柄（-1 表示未挂）。 */
+  private fetchAckTimerId: number = -1;
+  /** 已回退分片的次数（换脚本时归零）。 */
+  private fallbackCount: number = 0;
+  /** 已对哪一代际回退过分片（一代际只允许一次，换脚本/刷新后由新代际自然覆盖）。 */
+  private fallbackGen: number = -1;
+  /** 看门狗判定「注入后完全没有 init」后把本次会话钉在分片通道（换脚本时解除）。 */
+  private pinChunked: boolean = false;
+  /** 当前脚本的能力画像（Phase 0 只打日志；Phase 1 起据它决定能否离开 WebView）。 */
+  private scriptProfile: ScriptProfile = {
+    needsDom: false, needsWebCrypto: false, needsCompression: false, reason: ''
+  };
   @State isReady: boolean = false;
   @State sources: Record<string, LXUserApiSourceInfo> = {};
   @StorageLink('lxActiveSource') @Watch('onActiveSourceChanged') lxActiveSource: string = '';
@@ -194,6 +233,7 @@ export struct LXSourceEngine {
 
   aboutToDisappear(): void {
     this.clearReadyWatchdog();
+    this.clearFetchAckWatch();
     lxEngineSendRequest = null;
     lxEngineRegisterPromise = null;
     lxEngineIsReady = false;
@@ -231,6 +271,17 @@ export struct LXSourceEngine {
       this.setReady(false, null);
       return;
     }
+    // Phase 0：只探测并打日志（先收集真实分布，再决定 QuickJS 值不值得做）。
+    // 探测是纯文本扫描（十几条 indexOf），1.6 MB 脚本毫秒级，可放在装载路径上；
+    // 本阶段三种开关取值的行为仍是同一个 ArkWeb 引擎，探测结果不参与路由。
+    this.scriptProfile = probeScript(apiInfo.script);
+    const profileText: string = formatProfile(this.scriptProfile);
+    const canQuick: boolean = canRunWithoutWebView(this.scriptProfile);
+    LXSourceEngine.appendLog('引擎 脚本能力 ' + profileText +
+      ' 可无 DOM 运行=' + canQuick + ' lxEngineMode=' + this.lxEngineMode());
+    // 落 AppStorage：设置页/诊断可直接显示，也免得以后为了看一眼再探测一遍
+    AppStorage.setOrCreate('lxScriptProfile', profileText);
+    AppStorage.setOrCreate('lxScriptNeedsDom', this.scriptProfile.needsDom);
     let proxyInfo: LXProxyInfo = { host: '', port: '' };
     let initData: LXInitData = {
       name: apiInfo.name,
@@ -254,6 +305,10 @@ export struct LXSourceEngine {
     }
     // 换脚本：先降级，杜绝「旧脚本的 ready 被当成新脚本的 ready」
     this.readyRetryCount = 0;
+    // 回退额度按脚本重置：新脚本值得一次完整的快通道尝试
+    this.fallbackCount = 0;
+    this.pinChunked = false;
+    this.clearFetchAckWatch();
     this.setReady(false, null);
     this.webviewReady = false;
     LXSourceEngine.appendLog('引擎 脚本变更 → 重新加载页面 id=' + apiInfo.id +
@@ -350,6 +405,7 @@ export struct LXSourceEngine {
 
   destroy(): void {
     this.clearReadyWatchdog();
+    this.clearFetchAckWatch();
     this.clearAllRequests();
     this.outgoingQueue = [];
     this.currentInitJson = '';
@@ -395,13 +451,90 @@ appendPlayLog(msg);
     }
   }
 
+  /**
+   * 注入入口：决定走快通道还是分片通道。
+   *
+   * 快通道（默认）：只发一条极短 JS 让桥自己 fetch，载荷由 {@link handleInterceptRequest}
+   * 一次性返回原始 JSON —— 1 次跨进程往返替代 114 次，且不再 base64（省 33% 体积）。
+   * 分片通道：今天的既有行为，作为强制回退档与自动兜底，逻辑一字未改。
+   *
+   * @param initDataJson 注入载荷（JSON 文本）。
+   */
   private injectScript(initDataJson: string): void {
-    LXSourceEngine.appendLog('引擎 注入脚本（webviewReady=' + this.webviewReady + '）');
-    // Large user scripts exceed the WebView evaluateJavaScript size limit on
-    // newer systems (API 26 truncates and fails with "Invalid or unexpected
-    // token"), so the base64 payload is injected in chunks. Chunks run
-    // sequentially to keep their order on the JS side.
     const gen: number = this.pageGen;
+    this.injectStartedAt = Date.now();
+    this.fetchAckGen = -1;
+    this.clearFetchAckWatch();
+    if (initDataJson.length === 0) {
+      LXSourceEngine.appendLog('引擎 注入跳过（空载荷）gen=' + gen);
+      return;
+    }
+    if (this.isFastInjectEnabled()) {
+      this.injectScriptFast(gen, initDataJson);
+    } else {
+      LXSourceEngine.appendLog('引擎 注入通道=chunked（设置强制回退）gen=' + gen);
+      this.injectScriptChunked(gen, initDataJson);
+    }
+  }
+
+  /**
+   * 快通道是否可用。默认可用；设置里把注入通道强制成 `chunked` 时停用
+   * —— 这是「快通道在真机上出问题、但不想等新包」时的逃生口。
+   * @returns 允许走快通道时为 true。
+   */
+  private isFastInjectEnabled(): boolean {
+    if (this.pinChunked) {
+      return false;
+    }
+    try {
+      return MusicStoreService.getInstance().getLxInjectMode() !== 'chunked';
+    } catch (e) {
+      // 读设置失败按可用处理：快通道自身有自动回退，不必因存储异常降级
+      return true;
+    }
+  }
+
+  /**
+   * 读取音源运行时开关（auto / webview / quickjs）。
+   * Phase 0 只用于打日志：本阶段三种取值的行为都还是 ArkWeb，QuickJS 未接入。
+   * @returns 开关值；读取失败回落 auto。
+   */
+  private lxEngineMode(): string {
+    try {
+      return MusicStoreService.getInstance().getLxEngineMode();
+    } catch (e) {
+      return 'auto';
+    }
+  }
+
+  /**
+   * 快通道：让桥去 fetch 整包载荷。
+   * @param gen 本次代际。
+   * @param initDataJson 载荷（此处只为了打长度日志与兜底重灌）。
+   */
+  private injectScriptFast(gen: number, initDataJson: string): void {
+    try {
+      this.runJs(`window._lx_init_fetch(${gen})`);
+      LXSourceEngine.appendLog('引擎 注入(快通道) gen=' + gen + ' 载荷=' + initDataJson.length + 'B');
+      this.armFetchAckWatch(gen, initDataJson);
+      this.armReadyWatchdog(gen, initDataJson.length);
+    } catch (e) {
+      LXSourceEngine.appendLog('引擎 快通道发起异常 → 分片: ' + JSON.stringify(e).substring(0, 100));
+      this.fallbackToChunks(gen, initDataJson, '发起异常');
+    }
+  }
+
+  /**
+   * 分片通道（原有实现，保持逐字不变）。
+   * 大脚本会超过 WebView evaluateJavaScript 的入参上限（API 26 会截断并报
+   * "Invalid or unexpected token"），所以 base64 后按 20000 字符切片、串行执行。
+   * @param gen 本次代际。
+   * @param initDataJson 载荷。
+   */
+  private injectScriptChunked(gen: number, initDataJson: string): void {
+    // 进了分片通道就不再需要「载荷是否到手」的确认：必须撤掉 ack 计时器，
+    // 否则它会晚一步再触发一次回退 ⇒ 同一代际灌两遍分片，把桥的装配数组搅乱。
+    this.clearFetchAckWatch();
     const b64: string = this.toBase64(initDataJson);
     const partSize: number = 20000;
     const codes: string[] = [];
@@ -415,6 +548,125 @@ appendPlayLog(msg);
     LXSourceEngine.appendLog('引擎 注入分片数=' + (codes.length - 2) + ' gen=' + gen);
     this.runJsSequential(codes);
     this.armReadyWatchdog(gen, b64.length);
+  }
+
+  /**
+   * 挂「载荷是否到手」的计时器。超时前没收到 `initFetchAck` 就认定通道不通，回退分片。
+   * 收到 ack 会在 {@link clearFetchAckWatch} 里撤掉，因此正常路径永不回退。
+   * @param gen 本次代际。
+   * @param initDataJson 载荷（回退时重灌用）。
+   */
+  private armFetchAckWatch(gen: number, initDataJson: string): void {
+    this.clearFetchAckWatch();
+    const engineRef: LXSourceEngine = this;
+    this.fetchAckTimerId = setTimeout((): void => {
+      engineRef.fetchAckTimerId = -1;
+      if (engineRef.fetchAckGen === gen) {
+        // 载荷已到手：后面慢是脚本自己的事，交给就绪看门狗，绝不在这里二次注入
+        return;
+      }
+      engineRef.fallbackToChunks(gen, initDataJson, 'ack 超时 ' + INIT_FETCH_ACK_MS + 'ms');
+    }, INIT_FETCH_ACK_MS);
+  }
+
+  /** 撤掉快通道 ack 计时器。 */
+  private clearFetchAckWatch(): void {
+    if (this.fetchAckTimerId !== -1) {
+      clearTimeout(this.fetchAckTimerId);
+      this.fetchAckTimerId = -1;
+    }
+  }
+
+  /**
+   * 自动回退到分片通道（快通道失败的兜底）。
+   * 三重闸：代际已变则丢弃、载荷已到手则不动、回退次数用光则只记日志。
+   * @param gen 失败的那次代际。
+   * @param initDataJson 当时的载荷。
+   * @param why 失败原因（进日志）。
+   */
+  private fallbackToChunks(gen: number, initDataJson: string, why: string): void {
+    if (gen !== this.pageGen) {
+      LXSourceEngine.appendLog('引擎 回退跳过（代际已变 ' + gen + '→' + this.pageGen + '）原因=' + why);
+      return;
+    }
+    if (this.fetchAckGen === gen) {
+      LXSourceEngine.appendLog('引擎 回退跳过（载荷已到手）原因=' + why);
+      return;
+    }
+    // 一代际只回退一次：「发起异常 / 桥报错 / ack 超时」三条路可能先后到，
+    // 不设这道闸就会对同一份载荷重复灌分片。
+    if (this.fallbackGen === gen) {
+      LXSourceEngine.appendLog('引擎 回退跳过（本代已回退过）原因=' + why);
+      return;
+    }
+    if (initDataJson.length === 0) {
+      LXSourceEngine.appendLog('引擎 回退跳过（无载荷）原因=' + why);
+      return;
+    }
+    if (this.fallbackCount >= INIT_FALLBACK_MAX) {
+      LXSourceEngine.appendLog('引擎 回退已达上限(' + INIT_FALLBACK_MAX + ') 放弃原因=' + why);
+      return;
+    }
+    this.fallbackCount++;
+    this.fallbackGen = gen;
+    LXSourceEngine.appendLog('引擎 快通道回退分片(' + this.fallbackCount + '/' + INIT_FALLBACK_MAX +
+      ') 原因=' + why + ' gen=' + gen);
+    this.injectScriptChunked(gen, initDataJson);
+  }
+
+  /**
+   * 拦截快通道载荷请求。
+   * 只认 {@link LX_INIT_URL}，其余一律 `return null` 原样放行（页面主文档、mf_env.js、
+   * 脚本自己发的真实网络请求都不能被劫持）。
+   * @param event 拦截事件。
+   * @returns 载荷响应；非目标请求返回 null 表示不拦截。
+   */
+  private handleInterceptRequest(event: OnInterceptRequestEvent): WebResourceResponse | null {
+    try {
+      if (event === undefined || event === null || event.request === undefined) {
+        return null;
+      }
+      const url: string = event.request.getRequestUrl();
+      if (url.indexOf(LX_INIT_URL) !== 0) {
+        return null;
+      }
+      return this.buildInitResponse();
+    } catch (e) {
+      LXSourceEngine.appendLog('引擎 拦截载荷异常: ' + JSON.stringify(e).substring(0, 100));
+      return null;
+    }
+  }
+
+  /**
+   * 构造载荷响应：整包原始 JSON（ArrayBuffer）。
+   *
+   * 为什么用 ArrayBuffer 而不是文件句柄：载荷本来就在内存里（`currentInitJson`），
+   * 落盘再读回来纯属多一次 I/O 和一份临时文件；ArrayBuffer 只多一次 IPC 拷贝。
+   * 也不用 base64：省 33% 体积。
+   *
+   * ⚠️ 调用顺序按官方要求：先 data / encoding / mimeType / header / code，**最后**
+   * `setResponseIsReady(true)` 才触发返回，顺序错了会让同步 XHR 阻塞。
+   * 跨域头是必须的：页面源是 `resource://rawfile`，fetch 到 https 属跨域。
+   * @returns 已装配好的响应对象。
+   */
+  private buildInitResponse(): WebResourceResponse {
+    const response: WebResourceResponse = new WebResourceResponse();
+    const payload: string = this.currentInitJson;
+    const encoder: util.TextEncoder = new util.TextEncoder();
+    const bytes: Uint8Array = encoder.encodeInto(payload);
+    const buffer: ArrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    const headers: Header[] = [
+      { headerKey: 'Access-Control-Allow-Origin', headerValue: '*' },
+      { headerKey: 'Cache-Control', headerValue: 'no-store' }
+    ];
+    response.setResponseData(buffer);
+    response.setResponseMimeType('application/json');
+    response.setResponseEncoding('utf-8');
+    response.setResponseHeader(headers);
+    response.setResponseCode(200);
+    response.setReasonMessage('OK');
+    response.setResponseIsReady(true);
+    return response;
   }
 
   /**
@@ -446,6 +698,12 @@ appendPlayLog(msg);
       // ★ 2026-11-04：只看门狗超时也算"拦了更新检查仍起不来" ⇒ 让下一次加载放行更新检查，
       //   否则"拦截"会把一个真的需要清单才能初始化的脚本永久锁死（重试多少次都一样）。
       engineRef.markUpdateCheckAllowAfterFailure('看门狗超时无 init');
+      // ★ Phase 0.5：完全没有 init 也意味着「这次注入没成功」。刷新重试若还走同一条通道，
+      //   很可能重复失败 ⇒ 本次会话把注入钉回分片通道（今天的既有行为），换脚本时解除。
+      if (!engineRef.pinChunked) {
+        engineRef.pinChunked = true;
+        LXSourceEngine.appendLog('引擎 注入后无 init → 本次会话固定分片通道（换脚本后解除）');
+      }
       LXSourceEngine.appendLog('引擎 注入后无 init 事件(第' + engineRef.readyRetryCount + '/' +
         READY_WATCHDOG_MAX_RETRY + '次)，刷新 WebView');
       engineRef.webviewReady = false;
@@ -656,8 +914,11 @@ appendPlayLog(msg);
           let srcs: Record<string, LXUserApiSourceInfo> =
             data.sources as Record<string, LXUserApiSourceInfo>;
           const gen: number = data.gen !== undefined ? (data.gen as number) : -1;
+          // injectMs = 从发起注入到桥上报 init 的总耗时：Phase 0.5 的唯一验收指标，
+          // 快通道与分片通道都打这一条，便于上机直接对比。
+          const injectMs: number = this.injectStartedAt > 0 ? Date.now() - this.injectStartedAt : -1;
           LXSourceEngine.appendLog('引擎 init 事件 status=' + status + ' gen=' + gen +
-            ' pageGen=' + this.pageGen +
+            ' pageGen=' + this.pageGen + ' injectMs=' + injectMs +
             (errorMsg.length > 0 ? ' msg=' + errorMsg.substring(0, 80) : ''));
           if (gen >= 0 && gen !== this.pageGen) {
             // 刷新/换脚本后迟到的旧代际事件：丢弃，避免把新脚本的状态写错
@@ -665,9 +926,10 @@ appendPlayLog(msg);
             break;
           }
           if (status && srcs !== undefined) {
-            // 成功即归零重试额度并撤掉看门狗
+            // 成功即归零重试额度并撤掉看门狗（快通道 ack 计时器也一并撤掉）
             this.readyRetryCount = 0;
             this.clearReadyWatchdog();
+            this.clearFetchAckWatch();
             this.setReady(true, srcs);
             LXSourceEngine.appendLog('引擎 就绪 ✓ sources=' + Object.keys(srcs).length);
             // 回写脚本平台信息，供换源时按平台择优（以前从不回写，一直是 {}）
@@ -680,6 +942,24 @@ appendPlayLog(msg);
               LXSourceEngine.appendLog('引擎 init status=true 但缺少 sources，按未就绪处理');
             }
           }
+          break;
+        }
+        case 'initFetchAck': {
+          // 桥已拿到整包载荷（**解析之前**就回这条）：到此为止通道是通的，
+          // 后面再慢都属于脚本自身启动，不能再回退分片重灌。
+          const ackGen: number = data.gen !== undefined ? (data.gen as number) : -1;
+          const ackLen: number = data.length !== undefined ? (data.length as number) : 0;
+          this.fetchAckGen = ackGen;
+          this.clearFetchAckWatch();
+          LXSourceEngine.appendLog('引擎 快通道载荷到达 gen=' + ackGen + ' ' + ackLen + 'B');
+          break;
+        }
+        case 'initFetchError': {
+          const errGen: number = data.gen !== undefined ? (data.gen as number) : -1;
+          const errMsg: string = (data.message as string) || '';
+          LXSourceEngine.appendLog('引擎 快通道失败 gen=' + errGen +
+            ' msg=' + errMsg.substring(0, 120));
+          this.fallbackToChunks(errGen, this.currentInitJson, '桥上报: ' + errMsg);
           break;
         }
         case 'response': {
@@ -738,6 +1018,10 @@ appendPlayLog(msg);
         name: 'ohos_bridge',
         methodList: this.methodList,
         controller: this.controller
+      })
+      .onInterceptRequest((event: OnInterceptRequestEvent) => {
+        // 快通道载荷：桥 fetch 的目标地址在这里应答，其余请求返回 null 原样放行
+        return this.handleInterceptRequest(event);
       })
       .onPageEnd((): void => {
         // 每次页面加载都递增代际：注入的载荷【不再一次性消费】，

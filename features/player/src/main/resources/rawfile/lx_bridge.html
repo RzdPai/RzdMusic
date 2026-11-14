@@ -112,6 +112,81 @@
     window._lx_init(gen, JSON.parse(json));
   };
 
+  // ---------------------------------------------------------------------------
+  // 快通道注入（替代上面的 base64 分片）
+  //
+  // 分片通道的问题：1.6 MB 脚本 base64 后约 2.13 MB，按 20000 字符切要 114 片，
+  // 每片一次跨 ArkTS↔WebView 的 runJavaScript 且串行等待，是冷启动卡顿的确定来源。
+  // 快通道：原生侧只发一条极短 JS（本函数），载荷由 onInterceptRequest 一次性返回；
+  // 不再 base64（省 33% 体积），也不再逐片往返。
+  //
+  // 协议（与 LXSourceEngine.injectScript 严格对应）：
+  //   原生 → window._lx_init_fetch(gen)
+  //   本函数 → fetch(INIT_URL) → onInterceptRequest 返回整包 JSON 文本
+  //   本函数 → initFetchAck（**先回 ack 再解析**：让原生知道"载荷已到手"，
+  //            避免把"脚本自己启动慢"误判成"通道失败"而去重发一遍分片，打断脚本初始化）
+  //   本函数 → _lx_init(gen, 数据)  ← 与分片通道汇入同一个入口，代际语义完全一致
+  // 任何一步失败都回 initFetchError，原生据此回退分片通道。
+  // ---------------------------------------------------------------------------
+  var LX_INIT_URL = 'https://rzd-lx-init.invalid/init.json';
+  /** 最近一次请求载荷的代际：晚到的旧代际响应直接丢弃（换脚本/刷新后不能覆盖新载荷）。 */
+  var lxFetchGen = -1;
+
+  /**
+   * 快通道：拉取整包载荷并交给 _lx_init。
+   * @param gen 代际，由原生侧传入。
+   */
+  window._lx_init_fetch = function(gen) {
+    lxFetchGen = gen;
+    var url = LX_INIT_URL + '?gen=' + gen;
+    // ⚠️ 不要给 fetch 加 cache:'no-store' —— 那会带出 Cache-Control 请求头，
+    // 使其变成「非简单请求」而触发 CORS 预检（OPTIONS），而预检需要额外应答
+    // Access-Control-Allow-Headers，白白多一层失败点。URL 带 gen 本身就天然不重复。
+    fetch(url).then(function(resp) {
+      if (!resp.ok) {
+        throw new Error('http ' + resp.status);
+      }
+      return resp.text();
+    }).then(function(text) {
+      if (gen !== lxFetchGen) {
+        // 已被新一代际取代：丢弃，绝不能拿旧载荷去初始化新脚本
+        console.info('_lx_init_fetch: 丢弃过期代际 gen=' + gen + ' 当前=' + lxFetchGen);
+        return;
+      }
+      window._lx_init_apply(gen, text);
+    }).catch(function(e) {
+      sendToNative({
+        event: 'initFetchError',
+        data: { gen: gen, message: String(e && e.message ? e.message : e) }
+      });
+    });
+  };
+
+  /**
+   * 消费快通道载荷：先回 ack，再解析并初始化。
+   * @param gen 代际。
+   * @param jsonText 整包载荷（原生侧原始 JSON 文本，非 base64）。
+   */
+  window._lx_init_apply = function(gen, jsonText) {
+    var text = jsonText || '';
+    sendToNative({ event: 'initFetchAck', data: { gen: gen, length: text.length } });
+    if (text.length === 0) {
+      sendToNative({ event: 'initFetchError', data: { gen: gen, message: 'empty payload' } });
+      return;
+    }
+    var data = null;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      sendToNative({
+        event: 'initFetchError',
+        data: { gen: gen, message: 'parse: ' + String(e && e.message ? e.message : e) }
+      });
+      return;
+    }
+    window._lx_init(gen, data);
+  };
+
   var pendingRequests = {};
   var requestIdCounter = 0;
 
