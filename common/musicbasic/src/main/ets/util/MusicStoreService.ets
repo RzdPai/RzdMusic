@@ -152,6 +152,14 @@ const KEY_CARD_PLAYING: string = 'music_card_playing';
 const KEY_CARD_LYRIC: string = 'music_card_lyric';
 const KEY_CARD_PENDING_ACTION: string = 'music_card_pending_action';
 const KEY_LAST_QUEUE: string = 'last_queue';
+/**
+ * 队列的「当前索引」单独存一个键。
+ *
+ * ★ 2026-11-14（交接书 §8.2 #11）：切歌时**队列内容没变**，变的只有索引，
+ *   但旧实现每次都把整条快照（上千条记录 + `JSON.stringify` + `flush()`）重写一遍，
+ *   是切歌卡顿的确定来源。拆开后：切歌只写这一个整数，队列真变了才重写整条快照。
+ */
+const KEY_LAST_QUEUE_INDEX: string = 'last_queue_index_v1';
 const KEY_COLOR_MODE: string = 'color_mode';
 const KEY_KEEP_SCREEN_ON: string = 'keep_screen_on';
 const KEY_DOWNLOAD_QUALITY_TAG: string = 'download_quality_tag';
@@ -1915,6 +1923,32 @@ export class MusicStoreService {
       return;
     }
     store.putSync(KEY_LAST_QUEUE, json);
+    store.flush();
+  }
+
+  /**
+   * 上次持久化的「队列当前索引」。
+   * @returns 索引；没有记录时返回 -1（调用方据此决定要不要回落到快照里的旧值）
+   */
+  public getLastQueueIndex(): number {
+    const store = this.getStore();
+    if (store === undefined) {
+      return -1;
+    }
+    const value: number = store.getSync(KEY_LAST_QUEUE_INDEX, -1) as number;
+    return value >= 0 ? value : -1;
+  }
+
+  /**
+   * 只写索引（切歌路径专用：队列内容没变，没必要重写整条快照）。
+   * @param index 当前播放索引
+   */
+  public setLastQueueIndex(index: number): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_LAST_QUEUE_INDEX, index);
     store.flush();
   }
 

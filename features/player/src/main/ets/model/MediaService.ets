@@ -2101,10 +2101,14 @@ export class MediaService {
       const appState = this.getAppState();
       appState.playQueue = items;
       appState.playQueueIds = snapshot.localIds;
-      appState.selectIndex = snapshot.index;
+      // ★ 2026-11-14：索引单独存了（切歌不再重写整条快照）⇒ 以那个小键为准，
+      //   快照里的 `index` 只是没有小键（老版本升级上来）时的兜底。
+      const persistedIndex: number = MusicStoreService.getInstance().getLastQueueIndex();
+      const restoreIdx: number = persistedIndex >= 0 ? persistedIndex : snapshot.index;
+      appState.selectIndex = restoreIdx;
       // 启动恢复=普通队列（清「现在就听」的队列所有权，理由同上）
       appState.markQueueReplaced('playlist');
-      this.musicIndex = snapshot.index;
+      this.musicIndex = restoreIdx;
       // ★ 恢复出来的直链可能已过期（真机日志：kuwo 410 IO Resource Not Found），
       //   启动恢复时把在线歌曲的 http 直链清空，让播放链路重新取址（走统一回退链）。
       let staleCleared: number = 0;
@@ -2139,19 +2143,38 @@ export class MediaService {
     }
   }
 
+  /**
+   * 已持久化的队列**内容**指纹（只有它变了才重写整条快照）。
+   *
+   * ★ 2026-11-14（交接书 §8.2 #11）：本方法在 `loadAsset()` 末尾被调用 ⇒ **每次切歌都执行**。
+   *   旧实现无条件把整条队列（真机 1469 首）逐条 `fromSongItem` + `JSON.stringify` +
+   *   `putSync` + **同步 `flush()`** 落盘。而切歌时队列内容一个字都没变，变的只有索引。
+   *   现在：内容没变就只写索引（一个整数），队列真变了才重建整条快照。
+   */
+  private queueSnapshotStamp: string = '';
+
   /** Snapshots the current queue (online items + local ids + index) to preferences. */
   private persistQueueSnapshot(): void {
     const appState = this.getAppState();
-    const online: PlayedSongRecord[] = [];
-    for (let i = 0; i < appState.playQueue.length; i++) {
-      online.push(MusicStoreService.fromSongItem(appState.playQueue[i]));
+    const index: number = appState.selectIndex;
+    const ids: number[] = appState.playQueueIds;
+    // 指纹 = 整条替换版本 + 条数 + id 序列：覆盖「整条换队列 / 增删 / 重排」三种变化
+    const stamp: string = appState.queueRevision + '|' + appState.playQueue.length + '|' + ids.join(',');
+    if (stamp !== this.queueSnapshotStamp) {
+      const online: PlayedSongRecord[] = [];
+      for (let i: number = 0; i < appState.playQueue.length; i++) {
+        online.push(MusicStoreService.fromSongItem(appState.playQueue[i]));
+      }
+      const snapshot: QueueSnapshot = {
+        online: online,
+        localIds: ids,
+        index: index
+      };
+      MusicStoreService.getInstance().setLastQueue(JSON.stringify(snapshot));
+      this.queueSnapshotStamp = stamp;
     }
-    const snapshot: QueueSnapshot = {
-      online: online,
-      localIds: appState.playQueueIds,
-      index: appState.selectIndex
-    };
-    MusicStoreService.getInstance().setLastQueue(JSON.stringify(snapshot));
+    // 索引每次都要最新（很小，但仍走 flush —— 万一进程被杀，重启能回到这首歌）
+    MusicStoreService.getInstance().setLastQueueIndex(index);
   }
 
   /** Global singleton stored on AppRuntime.mediaServiceRef. */
