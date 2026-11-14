@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,16 @@
  * limitations under the License.
  */
 
-import { ImmersiveType, getWindowInfoState, WindowInfo } from 'musicbasic';
+import { AppStorageV2 } from '@kit.ArkUI';
+import {
+  AppStorageKeys,
+  ImmersiveType,
+  getWindowInfoState,
+  MINI_BAR_COVER_FLOATING_ID,
+  PlayerExpandState,
+  WindowInfo,
+  areaLengthToVp
+} from 'musicbasic';
 import { PlayerConstants, PlayerViewModel } from 'player';
 
 /**
@@ -30,6 +39,17 @@ export struct MiniBarAlbumCover {
   @Param followAppMiniBarExpanded: boolean = true;
   /** Window layout flags affecting compact immersive cover sizing. */
   @Local windowInfo: WindowInfo = getWindowInfoState();
+  /**
+   * 整页形变状态：把本封面的窗口矩形报出去（展开动画的**起点端点**）。
+   *
+   * 二级页面（推入了详情页）显示的是壳层那条悬浮迷你条，用的是本组件；
+   * 从这条迷你条上拉打开播放页时，起点的锚点就是这里的封面矩形 ——
+   * 不报的话锚点还停在上一次首页那条迷你条的位置上（首页/二级页的横向内边距不同，
+   * 展开的起点会横向偏一点）。
+   */
+  @Local expandState: PlayerExpandState =
+    AppStorageV2.connect(PlayerExpandState, AppStorageKeys.PLAYER_EXPAND_STATE,
+      () => new PlayerExpandState())!;
 
   /**
    * Returns a safe positive total duration for the ring progress control.
@@ -84,9 +104,19 @@ export struct MiniBarAlbumCover {
     Stack({ alignContent: Alignment.Center }) {
       Image(this.playerViewModel.songCoverUrl().length > 0 ?
         this.playerViewModel.songCoverUrl() : this.playerViewModel.songCover())
+        .id(MINI_BAR_COVER_FLOATING_ID)
         .width(this.coverSideLengthVp())
         .height(this.coverSideLengthVp())
         .borderRadius(this.coverBorderRadiusVp())
+        // 把迷你条封面的窗口矩形报给共享状态：它是整页形变（展开动画）的起点端点，
+        // 与播放页大封面的 reportBig 配对。
+        .onAreaChange((_oldValue: Area, newValue: Area) => {
+          this.expandState.reportMini(
+            areaLengthToVp(newValue.globalPosition.x),
+            areaLengthToVp(newValue.globalPosition.y),
+            areaLengthToVp(newValue.width),
+            this.coverBorderRadiusVp());
+        })
       if (!this.isImmersiveFreeWindowCover()) {
         Progress({
           value: this.playerViewModel.appState.progress,
@@ -108,5 +138,7 @@ export struct MiniBarAlbumCover {
       }
     }
     .padding(this.isImmersiveFreeWindowCover() ? { top: 8, bottom: 8, left: 32 } : { top: 6, bottom: 6, left: 6 })
+    // 形变期间按 `MiniMorph.metaOpacityAt = clamp(1 - t/0.35)` 淡出（比右侧按钮的 0.20 晚）
+    .opacity(this.expandState.miniBarMetaOpacity())
   }
 }

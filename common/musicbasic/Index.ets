@@ -22,6 +22,7 @@ import { AppRuntimeStorage, getAppRuntime as getAppRuntimeFromModel } from './sr
 // Constants (single Constants.ets file; class names unchanged)
 export {
   AppStorageKeys,
+  BarLayoutModes,
   BreakpointConstants,
   GridConstants,
   PlaybackIntentLogEvent,
@@ -35,6 +36,7 @@ export {
 } from './src/main/ets/constants/Constants';
 export { LiveViewConst } from './src/main/ets/constants/LiveViewConst';
 
+export { SearchGlassModifier } from './src/main/ets/components/SearchGlassModifier';
 export { TabItem } from './src/main/ets/model/TabItem';
 
 // Data and in-memory DB mocks
@@ -53,7 +55,22 @@ export {
 } from './src/main/ets/api/MusicApiDtos';
 export { SongDtoMapper } from './src/main/ets/api/SongDtoMapper';
 
+// ★ 2026-11-04：汽水（qs）免登录 H5 SEO 客户端（逐字歌词 KRC + 封面 + 曲目信息 + 评论）。
+//   放 common 的理由：`features/comment`（评论面板）与 `features/player`（播放链路）都要用，
+//   而 features 之间**不允许互相依赖**（架构约束 products → features → common）。
+export {
+  QsH5TrackInfo,
+  QsH5Comment,
+  qsH5SeoTrack,
+  qsKrcToQrc,
+  qsLyricText,
+  qsCoverUrl,
+  qsComments
+} from './src/main/ets/api/QsH5Api';
+
 // Model: bind getAppRuntime via export const so runtimes that skip re-exported functions still resolve.
+export { CoverCacheService, CoverCacheState } from './src/main/ets/services/CoverCacheService';
+export { CoverCacheSettingsCard } from './src/main/ets/components/CoverCacheSettingsCard';
 export { AppRuntimeStorage };
 export const getAppRuntime = getAppRuntimeFromModel;
 export { MenuData } from './src/main/ets/model/MenuData';
@@ -65,14 +82,22 @@ export { SongDataSource } from './src/main/ets/model/SongDataSource';
 export { PlayedSongRecord } from './src/main/ets/model/PlayedSongRecord';
 export { TabSwitchState } from './src/main/ets/model/TabSwitchState';
 export { AmbientState } from './src/main/ets/model/AmbientState';
+export { immersiveMaterial, immersiveMedium, immersiveFlat, immersiveFromLevel, RzdMaterialStyle } from './src/main/ets/util/ImmersiveMaterialV26';
 export { ThemeState } from './src/main/ets/model/ThemeState';
 export { HomeSourceState } from './src/main/ets/model/HomeSourceState';
 export { ShowMiniLyricState } from './src/main/ets/model/ShowMiniLyricState';
+export { CoverTintState } from './src/main/ets/model/CoverTintState';
 export { ShowSubLyricState } from './src/main/ets/model/ShowSubLyricState';
 export { LyricFpsState } from './src/main/ets/model/LyricFpsState';
 export { LyricCenterState } from './src/main/ets/model/LyricCenterState';
 export { CoverRadiusState } from './src/main/ets/model/CoverRadiusState';
 export { FavoriteEntry } from './src/main/ets/model/FavoriteEntry';
+export { PlaylistTransitionState, PlaylistTransitionRect, getPlaylistTransitionState,
+  PLAYLIST_HERO_COVER_ID, PLAYLIST_TRANSITION_HOST_ID } from './src/main/ets/model/PlaylistTransitionState';
+export { DataBackupService } from './src/main/ets/util/DataBackupService';
+export { registerHomeSourceRefresh, unregisterHomeSourceRefresh,
+  notifyHomeSourceRefresh } from './src/main/ets/util/HomeSourceBus';
+export { PlaybackPreferenceService } from './src/main/ets/util/PlaybackPreferenceService';
 export { MusicCardBridge } from './src/main/ets/model/MusicCardBridge';
 export type { MusicCardSnapshot } from './src/main/ets/model/MusicCardBridge';
 export { PlaybackFullscreenState } from './src/main/ets/model/PlaybackFullscreenState';
@@ -81,13 +106,16 @@ export { LyricFontSizeState } from './src/main/ets/model/LyricFontSizeState';
 export { UseAccountRecState } from './src/main/ets/model/UseAccountRecState';
 export { HomePlazaState } from './src/main/ets/model/HomePlazaState';
 export { HomeRankingState } from './src/main/ets/model/HomeRankingState';
+// ★★★ 2026-10-17（用户实测「点击打开播放页时背景是别的歌的颜色」）：当前歌曲 64×64 网格的
+//   预热缓存（壳层按"当前曲目变化"写入，播放页 onAppear 直接采用）。见 MeshWarmState 头部。
+export { MeshWarmState } from './src/main/ets/model/MeshWarmState';
 export { ToplistRouteParam, BoardSongParam } from './src/main/ets/model/ToplistRouteParam';
 export { RankingRouteParam } from './src/main/ets/model/RankingRouteParam';
 export { ArtistRouteParam, AlbumRouteParam } from './src/main/ets/model/ArtistRouteParam';
 export { PlaylistDto } from './src/main/ets/model/PlaylistDto';
 
 // util
-export { BreakpointType, isWidthBreakpointLgOrXl } from './src/main/ets/util/BreakpointSystem';
+export { BreakpointType, isWidthBreakpointLgOrXl, shouldUseSplitDetailLayout, splitDetailCardWidthVp } from './src/main/ets/util/BreakpointSystem';
 export { Logger } from './src/main/ets/util/Logger';
 export { StringResourceUtil } from './src/main/ets/util/StringResourceUtil';
 export { ImmersiveType } from './src/main/ets/util/ImmersiveType';
@@ -97,11 +125,82 @@ export {
   WINDOW_INFO_STORAGE_KEY,
   getWindowInfoState
 } from './src/main/ets/util/WindowUtil';
-export { getStatusBarTopVpFromWindowUtil } from './src/main/ets/util/StatusBarInsetUtil';
+export {
+  getStatusBarTopVpFromWindowUtil,
+  getNavigationBarBottomVpFromWindowUtil,
+  getKeyboardBottomVpFromWindowUtil
+} from './src/main/ets/util/StatusBarInsetUtil';
+export { PageTopInsetHelper } from './src/main/ets/util/PageTopInsetHelper';
 export { buildTitleMaterial } from './src/main/ets/util/TitleMaterial';
 export { SdkApiUtil } from './src/main/ets/util/SdkApiUtil';
+export { BarScrollHelper, BarScrollDeltaTracker } from './src/main/ets/util/BarScrollHelper';
+export { guardPlayerBack } from './src/main/ets/util/PlayerBackGuard';
+export { ColorConversion } from './src/main/ets/util/ColorConversion';
 export { MusicStoreService } from './src/main/ets/util/MusicStoreService';
 export { appendPlayLog, appendError } from './src/main/ets/util/LxLogger';
 
 export { MusicEmptyComponent } from './src/main/ets/components/MusicEmptyComponent';
 export { MusicTextIcon } from './src/main/ets/components/MusicTextIcon';
+// 歌名跑马灯：各页面歌曲列表行 / 播放页歌名的统一出口（TextOverflow.MARQUEE + marqueeOptions）
+export { SongTitleMarquee } from './src/main/ets/components/SongTitleMarquee';
+// 封面图：本地沙箱文件自己解码成 PixelMap 再显示（绕开 file:// URI 的解析差异）
+export { LocalCoverImage } from './src/main/ets/components/LocalCoverImage';
+export {
+  PlayerExpandState,
+  MINI_BAR_COVER_ID,
+  PLAYER_BIG_COVER_ID,
+  PLAYER_ROOT_ID,
+  areaLengthToVp
+} from './src/main/ets/model/PlayerExpandState';
+export type { LyricMorphRect } from './src/main/ets/model/PlayerExpandState';
+// ★ 2026-10-16（照搬无界 `design/logic/BarCollapse`）：控制条「拖动收起/展开」手势状态机
+export { BarCollapse, BarAction, BarAxis } from './src/main/ets/model/BarCollapse';
+// ★★★ 2026-10-17（照搬无界 `design/animation/ShrinkOverlay`）：非手势关闭那一棒 ——
+//   缩的不是活页面，而是**一张满窗快照**（用户第 ② 条「有背景但是高度特低」的正解）。
+//   ⚠️ 目前**还没接线**（无调用者），见本文件与 `RzdMusic记忆.md` §127 的施工图。
+export { MorphShrinkState } from './src/main/ets/model/MorphShrinkState';
+export type { MorphShrinkRect } from './src/main/ets/model/MorphShrinkState';
+// 裁剪容器形变（对标无界 ExpandAnimation）：阶段机 + 容器几何
+export { MorphMetaBridge } from './src/main/ets/components/MorphMetaBridge';
+export { MorphMetaEndpoint, MINI_META_TITLE_ID, MINI_META_SINGER_ID,
+  PLAYER_META_TITLE_ID, PLAYER_META_SINGER_ID } from './src/main/ets/model/MorphMetaGeometry';
+export { MorphStage, MorphDrive } from './src/main/ets/model/PlayerExpandState';
+export {
+  MINI_BAR_ID,
+  MINI_BAR_FLOATING_ID,
+  MINI_BAR_COVER_FLOATING_ID,
+  MINI_BAR_ASIDE_ID,
+  MINI_BAR_ASIDE_FLOATING_ID,
+  MORPH_HOST_ID
+} from './src/main/ets/model/PlayerExpandState';
+export { traditionalize } from './src/main/ets/util/SimplifiedToTraditional';
+export { NowPlayingIndicator } from './src/main/ets/view/NowPlayingIndicator';
+export { SelectionActionCell } from './src/main/ets/view/SelectionActionCell';
+export { LocateFloatButton } from './src/main/ets/view/LocateFloatButton';
+export {
+  buildBarBlurStyle,
+  barBlurOptions,
+  barMaterial,
+  appBarBlurStyle
+} from './src/main/ets/util/BarMaterial';
+// 动态封面（Apple Music motion artwork；规格 docs/apple-motion-cover.md）：
+//   MotionCoverState = 其它设置里的总开关（默认开）；MotionCoverService = SSR 解析 + 缓存；
+//   MotionCoverLayer = 盖在歌手/专辑/歌单页大封面之上的那一层 Video（静音循环 + 失败退回静图）。
+export { MotionCoverState } from './src/main/ets/model/MotionCoverState';
+export { MotionCover, MotionCoverKind } from './src/main/ets/model/MotionCover';
+export { MotionCoverService } from './src/main/ets/services/MotionCoverService';
+export { MotionCoverLayer } from './src/main/ets/view/MotionCoverLayer';
+
+export { FeedPlaybackState, FeedQueueEntry } from './src/main/ets/model/FeedPlaybackState';
+
+export { applyScreenOrientation, setScreenOrientation, orientationLabel, ORIENTATION_AUTO, ORIENTATION_PORTRAIT, ORIENTATION_LANDSCAPE } from './src/main/ets/util/ScreenOrientationUtil';
+
+export { UsbAudioService, UsbAudioState } from './src/main/ets/util/UsbAudioService';
+
+export { MENU_PAD_TOP, MENU_PAD_BOTTOM, MENU_BORDER_WIDTH, MENU_BLUR_STYLE } from './src/main/ets/util/RzdMenuStyle';
+
+export { RzdSelectMenuMaterial } from './src/main/ets/util/RzdSelectMaterial';
+
+export { TabBarConfigModel } from './src/main/ets/model/TabBarConfigModel';
+
+export { KugouShareResolver, KugouShareResult } from './src/main/ets/util/KugouShareResolver';

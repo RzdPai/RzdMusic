@@ -22,6 +22,13 @@ export class ToplistRouteParam {
   topid: string = '';
   /** Display title shown in the title bar. */
   listTitle: string = '';
+  /**
+   * 榜单 / 歌单自身的封面地址（榜单封面、在线歌单封面、横幅大图）。
+   *
+   * 详情页大图 Hero 只用这个，**不要**退回「第一首歌的封面」——那会让歌单/榜单页
+   * 看起来像专辑页。为空时详情页显示内置占位图。
+   */
+  listCover: string = '';
   /** 'history' or 'favorites' to load local store lists instead of an online toplist. */
   sectionType: string = '';
   /** Playlist id when sectionType is 'playlist'. */
@@ -32,7 +39,14 @@ export class ToplistRouteParam {
   boardSource: string = '';
   /** Board id within the board source. */
   boardId: string = '';
-  /** Prefetched board songs (filled by the caller before navigation). */
+  /**
+   * 榜单歌曲（**不再由调用方预取**）。
+   *
+   * 打开榜单只等封面，不等歌曲：详情页会自己异步拉歌并显示骨架屏。
+   * 详情页的取数走 player 的 `fetchBoardSongs`，不依赖调用方。
+   *
+   * ⚠️ 不要在这里放回调函数：导航参数经框架传递后，挂在对象上的函数会丢失。
+   */
   boardSongs: BoardSongParam[] = [];
 }
 

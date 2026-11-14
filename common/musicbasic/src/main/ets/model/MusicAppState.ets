@@ -27,12 +27,126 @@ export class  MusicAppState {
   @Trace public playQueue: SongItem[] = [];
   /** Current queue: song ids only; rows resolved on demand via {@link MusicDbApi}. */
   @Trace public playQueueIds: number[] = [];
+  /**
+   * 当前播放队列的**来源**：'' = 普通队列（歌单/搜索/收藏…），'feed' = 「现在就听」。
+   *
+   * ★ 2026-10-24（甲方：「其它界面点击播放条时，如果是现在就听的就跳转现在就听页面」）：
+   *   壳层的迷你播放条点击据此分流：`'feed'` → 切到「现在就听」Tab，其余 → 打开播放页。
+   *
+   * ★★★ 2026-11-03（甲方：「有的时候播放条处于正常播放时点击也会跳转现在就听」）：
+   *   **这个字段单独不可信** —— 它是个"谁最后写过"的粘性标记，而全仓有十几处
+   *   `playQueue = ...` / `replaceQueue(...)` 的替换点，漏写一处就永远停在旧值上。
+   *   现在配一对**队列版本号**：{@link queueRevision} 每次替换队列 +1，
+   *   {@link feedQueueRevision} 记录 feed 接管时的版本；壳层一律用 {@link isFeedQueue()} 判断，
+   *   只要中间有人换过队列，两者就对不上 ⇒ 自动判成"不归 feed"。
+   */
+  @Trace public queueOrigin: string = '';
+  /** 队列身份版本：**每次整条替换队列**都必须 +1（走 {@link markQueueReplaced}）。 */
+  @Trace public queueRevision: number = 0;
+  /** 「现在就听」接管时的 `queueRevision`；-1 = 当前队列不属于它。 */
+  @Trace public feedQueueRevision: number = -1;
+
+  /**
+   * 整条队列被替换时调用（**唯一出口语义**）：登记来源，并作废上一任所有者。
+   *
+   * 为什么要把"来源"和"版本"绑一起：壳层的分流判据必须能**自动失效** ——
+   * 只要有任何一处换了队列，{@link isFeedQueue} 立刻变假，不依赖每个调用点都记得清标记。
+   * @param origin 'feed' | 'playlist'（feed 请用 {@link markFeedQueue}）
+   */
+  public markQueueReplaced(origin: string): void {
+    this.queueRevision++;
+    this.queueOrigin = origin;
+    this.clearSwitchedIdentity();
+    if (origin !== 'feed') {
+      this.feedQueueRevision = -1;
+    }
+  }
+
+  /** 「现在就听」组完自己那份队列（或确认队列就是自己那份）后调用。 */
+  public markFeedQueue(): void {
+    this.queueRevision++;
+    this.queueOrigin = 'feed';
+    this.feedQueueRevision = this.queueRevision;
+    this.clearSwitchedIdentity();
+  }
+
+  /** @returns 当前队列是否**仍**归「现在就听」所有（壳层/播放条据此分流）。 */
+  public isFeedQueue(): boolean {
+    return this.queueOrigin === 'feed' && this.feedQueueRevision === this.queueRevision;
+  }
+
+  /**
+   * 换源前的**原始身份**（当前正在播的那首，只在它身上有效）。
+   *
+   * 背景（2026-11-04，甲方：「现在就听页换源之后按钮状态还是不对」）：
+   * 换源成跨平台成功时，`MediaService.resolveOnlineUrl` 会把**队列条目自己的**
+   * `source/songId` 改写成新源（播放/取词/下载都得走新源，这是对的）；
+   * 但 UI 判"这一屏是不是正在播的那首"用的是 `queue[selectIndex].source/songId` 与行的比对
+   * ⇒ 换源之后这一对被换掉，"当前这首"就**认不出来**了：
+   * 播放键画成"播放"（明明在响）、歌词/进度退回"非当前曲"的样式，
+   * 点那颗键还会走 `playAt()` 重新组队列（重播，甚至双路出声）。
+   * ⇒ 改写之前把原始对记在这里，UI 判等内容时多认一次。
+   *
+   * ⚠️ **只记"一对身份"，不记下标**：解析那一刻 `MediaService.musicIndex` 还是**旧值**
+   *   （`updateMusicIndex` 在其后），按下标记会把别名挂到错的位置上。
+   * 生命周期：每次 `MediaService.loadAsset()` 开头清空（= 换歌/重试都会重置），
+   *   换整条队列时（{@link markQueueReplaced}/{@link markFeedQueue}）也清。
+   */
+  @Trace public switchedOriginSource: string = '';
+  @Trace public switchedOriginSongId: string = '';
+
+  /** 记录"这次换源之前它是谁"（调用点：`MediaService.resolveOnlineUrl` 的换源分支）。 */
+  public noteSwitchedIdentity(source: string, songId: string): void {
+    this.switchedOriginSource = source;
+    this.switchedOriginSongId = songId;
+  }
+
+  /** @returns 这一对身份是不是"换源前的那一对"（调用方再自行确认它就是当前这首）。 */
+  public matchesSwitchedIdentity(source: string, songId: string): boolean {
+    return this.switchedOriginSource.length > 0 && this.switchedOriginSource === source &&
+      this.switchedOriginSongId === songId;
+  }
+
+  /** 清掉换源身份（换歌 / 换整条队列时调，防止旧身份误命中）。 */
+  public clearSwitchedIdentity(): void {
+    this.switchedOriginSource = '';
+    this.switchedOriginSongId = '';
+  }
+
+  /**
+   * @returns 这一行**就是**当前在播那首吗（含"换源后身份被改写"的情况）。
+   * 换源后队列条目已经是新源，但它换源前的身份等于这一行 ⇒ 仍是当前这首。
+   */
+  public isCurrentRowIdentity(rowSource: string, rowSongId: string): boolean {
+    const item = this.getCurrentSongItem();
+    if (item === undefined) {
+      return false;
+    }
+    if (item.source === rowSource && item.songId === rowSongId) {
+      return true;
+    }
+    return this.matchesSwitchedIdentity(rowSource, rowSongId);
+  }
+  /**
+   * 「弹回根页」请求版本号：任意页 +1 后，壳层（`Index.ets`）会把导航栈清回根，
+   * 用于「二级页面里点播放条 → 跳到现在就听」这种需要**跨页**退栈的场景。
+   */
+  @Trace public popToRootVersion: number = 0;
+
+  /** 请求壳层把导航栈弹回根页。 */
+  public requestPopToRoot(): void {
+    this.popToRootVersion++;
+  }
+
   /** Index in {@link playQueueIds} for the current track. */
   @Trace public selectIndex: number = 0;
   /** Whether audio is currently playing. */
   @Trace public isPlay: boolean = false;
   /** Elapsed position for the progress bar (0..progressMax when known). */
   @Trace public progress: number = 0;
+  /** RzdScrubberV20: actual seekDone publication, including a seek to an unchanged position. */
+  @Trace public seekDoneRevision: number = 0;
+  @Trace public seekResetRevision: number = 0;
   /** Duration for the current track, or 0/1 when unknown. */
   @Trace public progressMax: number = 0;
   /** Formatted current time string for UI. */
@@ -41,6 +155,14 @@ export class  MusicAppState {
   @Trace public totalTime: string = '00:00';
   /** Whether the full-screen player overlay is visible. */
   @Trace public isShowPlay: boolean = false;
+  /**
+   * 壳层重绘信号（每关闭一次播放页 +1）。
+   *
+   * ★ 2026-10-20（真机：「退出后概率性残留满屏封面，但 alive=0 / 栈已空 / 三个交接开关都是 false」）：
+   *   收尾那一拍里 `isShowPlay` 从 false → false **不构成状态变化**，壳层就不重绘，
+   *   屏幕上留的是最后一帧封面。壳层监听这个 tick，用它当 `ForEach` 的 key 强制重绘一次。
+   */
+  @Trace public closeTick: number = 0;
   /** Time spent on the now-playing sub-page (e.g. to auto-hide chrome). */
   @Trace public pageShowTime: number = 0;
   /** UI volume in 0..1; mirrored to the player when applied. */
@@ -51,6 +173,35 @@ export class  MusicAppState {
   @Trace public imageColor: string = 'rgba(0, 0, 2, 1.00)';
   /** HdsTabs mini bar expanded (true) vs compact (false). */
   @Trace public miniBarExpanded: boolean = false;
+  /**
+   * 双层底栏排布模式：0 = HORIZONTAL（单排）/ 1 = VERTICAL（迷你条与页签上下两排）。
+   *
+   * 默认 **1 = 上下两排**，与 musicfreeOH 的 `AppState.hdsBarLayoutMode = 1` 一致：
+   * 迷你条是一条窄胶囊、页签单独一排。这就是 MusicFree 的默认观感。
+   *
+   * 收起/展开由 HDS 内部状态机负责（我们只在 `onBarStyleChange` 里读结果），
+   * 不要用滚动去驱动它。
+   *
+   * 这里存 number 而不是 HdsBarLayoutMode，是为了让 common 层不依赖 HDS UI 类型；
+   * 壳层负责与 `HdsBarLayoutMode` 互转。仅在 API ≥ 6.1.1(24) 生效，低版本传 undefined。
+   * @see BarLayoutModes
+   */
+  @Trace public hdsBarLayoutMode: number = 1;
+
+  /**
+   * 列表页是否处于**多选模式**（历史/收藏/歌单详情共用）。
+   *
+   * 壳层据此临时隐藏二级页那条悬浮播放条：多选时底部要放操作条（删除/添加至歌单/取消收藏），
+   * 两条都留着会叠在一起（用户 2026-10-19：「注意我们原本二级页面统一会有的一个播放条得临时隐藏」）。
+   */
+  @Trace public selectionActive: boolean = false;
+
+  /**
+   * 播放倍速（用户 2026-10-19：「播放页面歌曲菜单加个倍速」）。
+   *
+   * 1.0 = 原速；由 MediaService 调 AVPlayer.setSpeed 应用，换源后要重新应用一次。
+   */
+  @Trace public playbackRate: number = 1.0;
   /** Bumped whenever the current track's lyric text is refreshed (async fill). */
   @Trace public lyricVersion: number = 0;
   /** 当前实际播放音质（含自动降级后的结果；空表示尚未解析）。 */
@@ -98,5 +249,7 @@ export class  MusicAppState {
     this.playQueueIds = [];
     this.playQueue = queue;
     this.selectIndex = index;
+    // ★ 换了整条队列 ⇒ 队列所有权必然易主（不能让「现在就听」的标记粘到新队列上）。
+    this.markQueueReplaced('playlist');
   }
 }

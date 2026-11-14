@@ -4,7 +4,8 @@ import { webview } from '@kit.ArkWeb';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
-import { AppStorageKeys, AmbientState, MusicAppState, MusicStoreService, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
+import {appBarBlurStyle,  guardPlayerBack} from 'musicbasic';
+import { AppStorageKeys, AmbientState, MusicAppState, MusicStoreService, SongTitleMarquee, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { RecognitionResult, RecognitionStatus, EngineReport, EngineResultGroup } from '../recognize/RecognitionTypes';
 import { MicCancelledError, MicPermissionError, MicRecorder } from '../recognize/MicRecorder';
 import { RecognitionNetworkError } from '../recognize/errors';
@@ -167,13 +168,13 @@ export struct MusicRecognitionPage {
         this.captureProgress = progress;
       });
     } catch (err) {
-      hilog.error(LOG_DOMAIN, LOG_TAG, '麦克风采集异常: %{public}s', JSON.stringify(err));
+      hilog.error(LOG_DOMAIN, LOG_TAG, 'mic capture error: %{public}s', JSON.stringify(err));
       this.handleError(err);
       return;
     }
     const rms: number = MicRecorder.computeRms(samples);
     const durationSec: number = samples.length / 16000;
-    hilog.info(LOG_DOMAIN, LOG_TAG, '采集完成 样本数=%{public}d RMS=%{public}f 时长=%{public}fs',
+    hilog.info(LOG_DOMAIN, LOG_TAG, 'capture done samples=%{public}d rms=%{public}f dur=%{public}fs',
       samples.length, rms, durationSec);
     if (rms < 32 / 32768) {
       this.status = RecognitionStatus.NoAudio;
@@ -186,23 +187,23 @@ export struct MusicRecognitionPage {
       this.engineReports = output.engineReports;
       this.groups = output.groups;
       for (const report of output.engineReports) {
-        hilog.info(LOG_DOMAIN, LOG_TAG, '引擎报告 %{public}s status=%{public}s', report.engine, report.status);
+        hilog.info(LOG_DOMAIN, LOG_TAG, 'engine %{public}s status=%{public}s', report.engine, report.status);
       }
       for (const group of output.groups) {
-        hilog.info(LOG_DOMAIN, LOG_TAG, '引擎 %{public}s 结果数=%{public}d 错误=%{public}s',
+        hilog.info(LOG_DOMAIN, LOG_TAG, 'engine %{public}s n=%{public}d error=%{public}s',
           group.engine, group.results.length, group.error);
       }
       if (output.match !== undefined) {
         this.result = output.match;
         this.status = RecognitionStatus.Matched;
-        hilog.info(LOG_DOMAIN, LOG_TAG, '识别成功: %{public}s id=%{public}s',
+        hilog.info(LOG_DOMAIN, LOG_TAG, 'hit: %{public}s id=%{public}s',
           output.match.title, output.match.providerTrackId);
         await HistoryStore.add(output.match);
         this.history = HistoryStore.load();
       } else {
         this.result = undefined;
         this.status = RecognitionStatus.NotMatched;
-        hilog.warn(LOG_DOMAIN, LOG_TAG, '两个引擎均未返回可展示结果');
+        hilog.warn(LOG_DOMAIN, LOG_TAG, 'no result from either engine');
       }
     } catch (err) {
       this.handleError(err);
@@ -255,22 +256,22 @@ export struct MusicRecognitionPage {
       };
       return song;
     };
-    hilog.info(LOG_DOMAIN, LOG_TAG, '播放识别结果 source=%{public}s id=%{public}s', source, songId);
+    hilog.info(LOG_DOMAIN, LOG_TAG, 'play result source=%{public}s id=%{public}s', source, songId);
     const played: boolean =
       await OnlinePlayUtil.playSearchSong(this.appState, buildSong(songId), this.getUIContext());
     if (!played && (source === 'kg' || source === 'wy')) {
-      hilog.info(LOG_DOMAIN, LOG_TAG, '直连播放失败，按歌名搜索补播: %{public}s - %{public}s', item.title, item.artist);
+      hilog.info(LOG_DOMAIN, LOG_TAG, 'direct play fail, search by title: %{public}s - %{public}s', item.title, item.artist);
       try {
         const res = await lxSearch(source, `${item.title} ${item.artist}`.trim(), 1, 10);
         if (res.list.length > 0) {
           const alt: LXSearchSong = res.list[0];
-          hilog.info(LOG_DOMAIN, LOG_TAG, '搜索补播命中: %{public}s id=%{public}s', alt.name, alt.songId);
+          hilog.info(LOG_DOMAIN, LOG_TAG, 'search hit: %{public}s id=%{public}s', alt.name, alt.songId);
           void OnlinePlayUtil.playSearchSong(this.appState, alt, this.getUIContext());
         } else {
           this.getUIContext().getPromptAction().showToast({ message: '未能找到可播放版本', duration: 2000 });
         }
       } catch (_err) {
-        hilog.error(LOG_DOMAIN, LOG_TAG, '搜索补播异常: %{public}s', JSON.stringify(_err));
+        hilog.error(LOG_DOMAIN, LOG_TAG, 'search fallback error: %{public}s', JSON.stringify(_err));
       }
     }
   }
@@ -352,12 +353,14 @@ export struct MusicRecognitionPage {
         .justifyContent(FlexAlign.Center)
       }
       Column({ space: 2 }) {
-        Text(item.title)
-          .fontSize($r('sys.float.Body_M'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('sys.color.font_primary'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        // ★ 歌名过长时跑马灯（用户要求「各个页面歌曲名过长时改为用跑马灯显示」）。
+        //   字号/字色/字重逐字保留，唯一变化是溢出行为：`Ellipsis` → `MARQUEE`。
+        SongTitleMarquee({
+          text: item.title,
+          titleFontSize: $r('sys.float.Body_M'),
+          titleFontColor: $r('sys.color.font_primary'),
+          titleFontWeight: FontWeight.Medium
+        })
         Text((item.artist.length > 0 ? item.artist : '未知歌手') +
           (item.album.length > 0 ? ' · ' + item.album : ''))
           .fontSize($r('sys.float.Caption_M'))
@@ -394,7 +397,7 @@ export struct MusicRecognitionPage {
               this.getUIContext().getPromptAction().showToast({ message: '已复制', duration: 1500 });
             }
           }
-        ])
+        ], { backgroundBlurStyle: appBarBlurStyle() })
     }
     .width('100%')
     .padding({ top: 10, bottom: 10 })
@@ -554,10 +557,19 @@ export struct MusicRecognitionPage {
           }
           .width('100%')
           .padding({
+            // ★ 2026-10-11 第二十轮（用户：「我想让它延伸进状态栏」）：这段留白在**滚动内容里**
+            //   （Scroll 的内容根 Column 的 padding），所以必须含状态栏那一段。
+            //   依据：页根 `NavDestination` 内容区从屏幕 **y=0** 起排（壳层 `HdsNavigation` 自带
+            //   `ignoreLayoutSafeArea([...],[TOP,BOTTOM])`；`expandSafeArea` 只扩绘制区、不改布局）
+            //   ⇒ "静止时首屏内容落在标题栏下沿" = 偏移 状态栏 + 56。
+            //   上滑时内容从标题栏底下**再穿进状态栏** —— 靠的是下面 Scroll 自己那句
+            //   `clipContent(ContentClipMode.SAFE_AREA)`（官方《开发应用沉浸式效果》→「滚动类场景」：
+            //   「设置滚动容器的内容裁剪属性 `clipContent(ContentClipMode.SAFE_AREA)`，
+            //    **将内容层裁剪区域扩展至避让区**」）。原来 Scroll 用的是默认 `BOUNDARY`（按组件区域裁）
+            //   ⇒ 行到状态栏那条就被裁掉，所以"偏移放哪都没用"。
             top: getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP,
             left: 16,
-            right: 16,
-            bottom: 24
+            right: 16
           })
         }
         .width('100%')
@@ -565,6 +577,16 @@ export struct MusicRecognitionPage {
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring)
         .align(Alignment.Top)
+        // ★★ 让内容能画进状态栏（"延伸进状态栏"）的**官方正解**：
+        //   官方《开发应用沉浸式效果》→「滚动类场景」② —— 设置滚动容器的内容裁剪属性
+        //   `clipContent(ContentClipMode.SAFE_AREA)`，**将内容层裁剪区域扩展至避让区**。
+        //   ⚠️ 链上任何祖先都**不能**再写 `clip(true)`（官方："需要确保父组件未设置 clip 等裁剪属性"）。
+        .clipContent(ContentClipMode.SAFE_AREA)
+        // ★ 底部"给悬浮播放条让位"的留白留在**滚动内容里**（原来是内容根 Column 的
+        //   `padding({ bottom: 24 })`，也随内容滚 —— 但按 2026-10-11 统一口径换成
+        //   `contentEndOffset`，与 `RecordListPage` / `SettingsDetailPage` / 其它页同一写法）。
+        //   反面做法（禁）：写在外层容器的 `padding({ bottom })` 上 = 屏幕底部一条死带。
+        .contentEndOffset(24)
 
         // 网易云 AFP 指纹 WASM 的隐藏宿主（与 LXSourceEngine 同款配置）：
         // 使用 1x1 + opacity(0) 而非负坐标定位，保证 WebView 在
@@ -585,18 +607,36 @@ export struct MusicRecognitionPage {
           .height(1)
           .opacity(0)
           .onPageEnd(() => {
-            hilog.info(LOG_DOMAIN, LOG_TAG, 'AFP WebView 加载完成 onPageEnd');
+            hilog.info(LOG_DOMAIN, LOG_TAG, 'AFP WebView onPageEnd');
             this.netease.markReady();
           })
       }
       .width('100%')
       .height('100%')
+      // ⚠️ 这里原来写 `.clip(true)`（上一轮"要挡住内容"的错误口径下加的）**已删除** ——
+      //   官方《开发应用沉浸式效果》：「子节点可以单独设置该属性……**需要确保父组件未设置 clip
+      //   等裁剪属性**」⇒ 祖先有一层 `clip(true)`，里面 Scroll 的
+      //   `clipContent(ContentClipMode.SAFE_AREA)` 就白设了，行到状态栏那条仍被裁掉。
+      //   （`Scroll` 自己默认的裁剪语义保持不变，别再动。）
+      // ★ 状态栏那一条归页面（2026-10-11 第二十轮，用户：「我想让它延伸进状态栏」）：
+      //   这里是**内容容器**，**不加任何顶部 padding** —— 容器从屏幕 y=0 起排，里面的 `Scroll`
+      //   拿到整屏视口；"状态栏 + 标题栏"那段留白改由 Scroll 内容根 Column 的
+      //   `padding top = 状态栏 + 56` 提供。
+      //   页根的 `expandSafeArea(TOP)` + `backgroundColor` 继续把页面底色铺到状态栏那一条。
     }
+    .onBackPressed((): boolean => guardPlayerBack('MusicRecognitionPage'))
     .hideTitleBar(false)
     .titleBar(this.getTitleBar())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.pageScroller])
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+    // ★★ 状态栏三件套（2026-10-11 定稿，用户第三次纠正后）：这里的 `ignoreLayoutSafeArea` **必须带 TOP** ——
+    //   HDS 标题栏自己会按"状态栏高度"往下让位，所以页面盒子必须从屏幕 y=0 起排；
+    //   只写 BOTTOM（盒子从状态栏下沿起排）会变成"盒子让一次 + 标题栏再让一次" ⇒
+    //   整条标题掉到状态栏下面约一个状态栏高度（用户原话「整个标题移到了状态栏下面」），
+    //   内容也跟着多顶 38vp（「上方留的空距有点大了」）。
+    //   盒子从 0 起排后：标题栏 = 38..94 ✔，滚动内容根 Column 的 `padding top`（状态栏 + 56 = 94）正好落在 94 ✔。
+    //   ⚠️ 旧注释里"根节点带 TOP 会把标题/搜索按钮顶进状态栏 / 只能留 BOTTOM"那句**是错的**，已作废。
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     .systemBarStyle(
       { statusBarContentColor: this.isDarkTheme() ? '#FFFFFF' : '#000000' },

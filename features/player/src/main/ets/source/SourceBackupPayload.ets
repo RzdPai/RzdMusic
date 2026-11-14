@@ -1,0 +1,535 @@
+/**
+ * RzdMusic 自定义音源（音源脚本）的跨设备搬运层 —— **唯一实现**。
+ *
+ * ★★ 为什么不是"洛雪同步"——先看这段，再看代码（用户报的"洛雪同步没把音源同步上去"）
+ *
+ * 官方洛雪同步协议里**没有音源这个模块**，音源走不了 `getEnabledFeatures` 协商出来的那条通道。
+ * 已逐条核对上游源码（2026-10 核对，均为官方仓库当前 master/main）：
+ *   - 服务端 `lyswhut/lx-music-sync-server/src/constants.ts`：
+ *       `export const FeaturesList = ['list', 'dislike'] as const`
+ *   - 服务端 `src/modules/index.ts`：
+ *       `export const featureVersion = { list: 1, dislike: 1 } as const`，`modules` 只有 list / dislike
+ *   - 服务端 `src/types/sync_common.d.ts`（**线上契约**）：客户端可实现的动作只有
+ *       `getEnabledFeatures` / `finished` + `list_sync_get_md5|get_sync_mode|get_list_data|set_list_data|finished|onListSyncAction`
+ *       + `dislike_sync_*`（同名一整套），**没有任何 source_* 动作**
+ *   - 桌面端 `lyswhut/lx-music-desktop/src/main/modules/sync/client/modules/index.ts`：
+ *       `modules = { list, dislike }`、`featureVersion = { list: 1, dislike: 1 }`
+ *       （同一文件里还留着一行注释掉的 `// export * as theme from './theme'` —— "再加一个模块"
+ *        就长这个样子，而 source 不在其中）
+ *   - 官方文档 `lxmusic.toside.cn/mobile/faq/sync`：同步功能只讲"同步各端收藏的歌曲"
+ *
+ * 而且服务端是**它自己遍历 `FeaturesList` 驱动整个同步流程**的（`src/server/sync/sync.ts`），
+ * 客户端单方面多报一个 feature 只会被忽略；客户端能主动调用的方法也只有服务端注册的那几个
+ * （`src/modules/index.ts` 的 `callObj` = list + dislike 的 handler），所以**没有任何办法**
+ * 让音源搭上这条连接。至于把音源塞进 `list` 载荷里"走私"：服务端的快照 key 是列表 JSON 的 md5，
+ * 一塞就与官方客户端对不上，两边会反复弹合并框 —— 那等于毁掉互操作性，不能做。
+ *
+ * ⇒ 音源只能在**我们自己的载荷**里搬。本工程现有**三条**自有备份通道，全部经过这里：
+ *   1. `WebDavBackupService`（`rzdmusic-backup-*.json`，同一个 WebDAV 账号）；
+ *   2. `HuaweiNativeCloudBackup`（系统华为云空间 / CoreFileKit `cloudSync.FileSync`）；
+ *   3. `HuaweiCloudSync`（旧网页云盘 / Drive OpenAPI）。
+ * 三条通道的产物都是 `DataBackupService.exportSnapshotText()` 的同一份 JSON，
+ * 差别只在"写去哪里"，所以本文件只在**快照文本进出**这一层做挂载：
+ * 上行 `attachSourcesToSnapshot()`、下行 `mergeSourcesFromSnapshot()`。
+ * 字段名全是**我们自己定的**，不冒充洛雪协议字段；
+ * 旧版本客户端读到未知键会忽略，旧备份没有该键时按"没有音源"处理 ⇒ 双向兼容。
+ *
+ * ★★ 为什么这个文件在 `features/player` 而不在 `features/sync`：
+ *   - `features/sync` 依赖 `features/player`（`sync/oh-package.json5` 里有 `"player": "file:../player"`），
+ *     反向依赖会成环 ⇒ **player 绝不能 import sync**；
+ *   - 而本文件的宿主（`HuaweiNativeCloudBackup` / `HuaweiCloudSync`）和音源的**唯一真源**
+ *     （`LXSourceManager`，在 player 内）**都在 player 这一侧**；
+ *   - 所以实现放 player、由 player 的 `Index.ets` 导出，`features/sync` 反向引用它。
+ *     **全仓只有这一份实现**（原先 sync 里的 `SourceSync.ets` 已删除，不留薄转发层，
+ *     免得日后有人改了其中一份、另一份静默发散）。
+ *
+ * 冲突策略（保守，一条都不许"静默丢"，每条跳过的都要有日志）：
+ *   同 id + 脚本内容相同   → 跳过（本来就一样）
+ *   同 id + 脚本内容不同   → **保留本机那一份**，只记日志（把两边 version 打出来）
+ *   本机没有该 id          → 落盘（id 原样保留，两台设备才认得出是同一份音源）
+ *   本机有、远端没有       → **一律不删**（远端只是没带，不代表用户想删）
+ *   远端 activeId 且本机当前没有选中、且合并后本地确有该 id → 才把本机选中切过去
+ *
+ * ⚠️ 载荷格式**已推给用户用过**（键名 / kind / v 都不能动）：
+ *     `customSources` / `kind = 'rzdmusic-custom-sources'` / `v = 1`。
+ *     三条通道写出来的音源段互相可直接读（同一个 `SOURCE_SYNC_KEY`、同一套校验）。
+ */
+
+import { deviceInfo } from '@kit.BasicServicesKit';
+import { Logger, MusicStoreService } from 'musicbasic';
+import { lxSourceManager } from './LXSourceManager';
+import type { LXUserApiInfo, LXUserApiInfoFull } from './Interface';
+
+const TAG: string = 'RzdSyncSources';
+
+/** 备份 JSON 里放音源的那一段（我们自己定的键名）。 */
+export const SOURCE_SYNC_KEY: string = 'customSources';
+
+/** 载荷自描述：kind + v 让"这到底是不是我们的音源段"有确定答案，不靠猜键名。 */
+const PAYLOAD_KIND: string = 'rzdmusic-custom-sources';
+const PAYLOAD_VERSION: number = 1;
+
+/** 一次最多搬多少个音源（多出来的跳过并记日志，不让同步整体挂掉）。 */
+export const MAX_SOURCES: number = 100;
+/**
+ * 单个脚本的长度上限（字符数，UTF-16 code unit，比字节数保守）。
+ *
+ * 参照：洛雪自定义源文档里给出的脚本体量是几十 KB 级；桌面端 v2.8.0 的更新日志还专门
+ * "增大在线导入自定义源文件的大小限制"（issue #1857）。512K 字符对正常脚本绰绰有余，
+ * 又能挡住"把别的东西当脚本塞进来"的情况。
+ */
+export const MAX_SCRIPT_CHARS: number = 512 * 1024;
+/** 音源段总长度上限（字符数）。 */
+export const MAX_TOTAL_CHARS: number = 2 * 1024 * 1024;
+/**
+ * 备份 JSON 整体长度闸门。
+ *
+ * `DataBackupService.restoreSnapshotText` 里硬性写着"备份为空或超过 16MB 限制"；
+ * `WebDavBackupService.request()` 的 `maxLimit` 与 `HuaweiNativeCloudBackup.MAX_BYTES`
+ * 也都是 16MB。并进来的音源段一旦把整份备份顶破这些闸门，**备份/恢复这个既有功能就废了**
+ * —— 所以并之前先量整体长度，超了就整段不并
+ * （宁可这一次不带音源，也不能把备份搞坏），并记日志。
+ */
+const MAX_BACKUP_CHARS: number = 15 * 1024 * 1024;
+
+/** 载荷里的一个音源 */
+export interface SourcePayloadEntry {
+  id: string;
+  name: string;
+  description: string;
+  author: string;
+  homepage: string;
+  version: string;
+  allowShowUpdateAlert: boolean;
+  /** 脚本原文（已解压的明文） */
+  script: string;
+}
+
+/** 音源段载荷（写进备份 JSON 的 `customSources`） */
+export interface SourcePayload {
+  kind: string;
+  v: number;
+  exportedAt: number;
+  device: string;
+  /** 上传方当时选中的音源 id（空串 = 没选） */
+  activeId: string;
+  /** 实际带上的音源个数（= sources.length） */
+  count: number;
+  /** 只用于日志/排障：脚本总字符数 */
+  chars: number;
+  sources: SourcePayloadEntry[];
+}
+
+/** 合并结果（数量 + 原因分类，供日志与界面文案） */
+export interface SourceMergeReport {
+  /** 远端有、本机没有 ⇒ 新落盘 */
+  added: number;
+  /** 两边同 id 且脚本一致 */
+  same: number;
+  /** 两边同 id 但脚本不同 ⇒ 保留本机 */
+  conflict: number;
+  /** 结构非法 / id 非法 / 脚本为空 ⇒ 丢弃 */
+  invalid: number;
+  /** 落盘失败 */
+  failed: number;
+  /** 远端一共给了多少条 */
+  total: number;
+  /** 是否把本机选中的音源切到了远端那个 */
+  activeApplied: boolean;
+}
+
+function emptyReport(): SourceMergeReport {
+  return { added: 0, same: 0, conflict: 0, invalid: 0, failed: 0, total: 0, activeApplied: false };
+}
+
+/**
+ * 载荷里的设备名（只用于日志/排障，不参与任何判据）。
+ *
+ * 取值口径与 `features/sync` 的 `SyncStore.defaultDeviceName()` **逐字相同**
+ * （市场名 → 产品型号 → 品牌 + HarmonyOS → 'HarmonyOS'），这样已经上传过的备份
+ * 与新备份的 `device` 字段口径一致，不会因为搬到 player 而变样。
+ */
+function sourcePayloadDevice(): string {
+  try {
+    const market: string = deviceInfo.marketName;
+    if (market !== undefined && market.length > 0) {
+      return market;
+    }
+    const model: string = deviceInfo.productModel;
+    if (model !== undefined && model.length > 0) {
+      return model;
+    }
+    const brand: string = deviceInfo.brand;
+    if (brand !== undefined && brand.length > 0) {
+      return `${brand} HarmonyOS`;
+    }
+  } catch (_err) {
+    // 某些设备上 deviceInfo 取不到，走兜底
+  }
+  return 'HarmonyOS';
+}
+
+function currentDeviceName(): string {
+  try {
+    return sourcePayloadDevice();
+  } catch (_err) {
+    return '';
+  }
+}
+
+function activeSourceId(): string {
+  try {
+    return MusicStoreService.getInstance().getActiveSource();
+  } catch (_err) {
+    return '';
+  }
+}
+
+/**
+ * 打包本机音源（上行侧）。
+ *
+ * @returns 载荷；本机一个可用音源都没有时返回 null（调用方就不写这一段，省得往备份里塞空对象）
+ */
+export async function collectSourcePayload(): Promise<SourcePayload | null> {
+  let full: LXUserApiInfoFull[] = [];
+  try {
+    full = await lxSourceManager.listFullApis();
+  } catch (e) {
+    Logger.error(TAG, `collect failed: ${(e as Error).message}`);
+    return null;
+  }
+  const entries: SourcePayloadEntry[] = [];
+  let chars: number = 0;
+  let skippedOverCount: number = 0;
+  let skippedBadId: number = 0;
+  let skippedEmpty: number = 0;
+  let skippedTooLong: number = 0;
+  let skippedOverTotal: number = 0;
+  for (let i: number = 0; i < full.length; i++) {
+    const item = full[i];
+    if (entries.length >= MAX_SOURCES) {
+      skippedOverCount++;
+      continue;
+    }
+    if (!lxSourceManager.isValidApiId(item.id)) {
+      skippedBadId++;
+      Logger.error(TAG, `源同步 skip bad-id=${item.id}`);
+      continue;
+    }
+    if (item.script.length === 0) {
+      skippedEmpty++;
+      Logger.error(TAG, `源同步 skip no-script id=${item.id}`);
+      continue;
+    }
+    if (item.script.length > MAX_SCRIPT_CHARS) {
+      skippedTooLong++;
+      Logger.error(TAG,
+        `源同步 skip script-too-long id=${item.id} chars=${item.script.length} limit=${MAX_SCRIPT_CHARS}`);
+      continue;
+    }
+    if (chars + item.script.length > MAX_TOTAL_CHARS) {
+      skippedOverTotal++;
+      Logger.error(TAG,
+        `源同步 skip total-too-long id=${item.id} chars=${chars}+${item.script.length}>${MAX_TOTAL_CHARS}`);
+      continue;
+    }
+    chars += item.script.length;
+    const entry: SourcePayloadEntry = {
+      id: item.id,
+      name: item.name,
+      description: item.description,
+      author: item.author,
+      homepage: item.homepage,
+      version: item.version,
+      allowShowUpdateAlert: item.allowShowUpdateAlert,
+      script: item.script
+    };
+    entries.push(entry);
+  }
+  const skipped: number = skippedOverCount + skippedBadId + skippedEmpty + skippedTooLong + skippedOverTotal;
+  Logger.info(TAG,
+    `源同步 pack n=${entries.length} skipped=${skipped} overCount=${skippedOverCount} badId=${skippedBadId} empty=${skippedEmpty} tooLong=${skippedTooLong} overTotal=${skippedOverTotal} chars=${chars}`);
+  if (entries.length === 0) {
+    return null;
+  }
+  const payload: SourcePayload = {
+    kind: PAYLOAD_KIND,
+    v: PAYLOAD_VERSION,
+    exportedAt: Date.now(),
+    device: currentDeviceName(),
+    activeId: activeSourceId(),
+    count: entries.length,
+    chars: chars,
+    sources: entries
+  };
+  return payload;
+}
+
+/** 远端那一段是不是我们的音源载荷（不认识的键/版本一律当"没有"） */
+function isSourcePayload(raw: Object | undefined): boolean {
+  if (raw === undefined || raw === null) {
+    return false;
+  }
+  const payload = raw as SourcePayload;
+  if (payload.kind !== PAYLOAD_KIND) {
+    Logger.error(TAG, `源同步 ignore kind=${payload.kind}`);
+    return false;
+  }
+  if (payload.v !== PAYLOAD_VERSION) {
+    Logger.error(TAG, `源同步 ignore version v=${payload.v} local=${PAYLOAD_VERSION}`);
+    return false;
+  }
+  if (!Array.isArray(payload.sources)) {
+    Logger.error(TAG, '源同步 ignore: sources not array');
+    return false;
+  }
+  return true;
+}
+
+/**
+ * 合并远端音源段（下行侧，恢复备份时调用）。
+ *
+ * ★ 全程只调用 lxSourceManager 的两个方法（listFullApis / importApiWithId），
+ *   不在别处另持一份音源状态 —— 音源的唯一真源仍然是 LXSourceManager。
+ *
+ * @param raw 备份 JSON 里的 `customSources` 段；缺省/不认识 = 没有音源，直接返回空报告
+ */
+export async function applySourcePayload(raw: Object | undefined): Promise<SourceMergeReport> {
+  const report: SourceMergeReport = emptyReport();
+  if (raw === undefined || raw === null) {
+    return report;
+  }
+  if (!isSourcePayload(raw)) {
+    return report;
+  }
+  const payload = raw as SourcePayload;
+  const remote: SourcePayloadEntry[] = payload.sources as SourcePayloadEntry[];
+  report.total = remote.length;
+  // 本机现状：id -> 脚本原文。冲突判定靠它，不靠时间戳（两边设备时钟不可信）。
+  let local: LXUserApiInfoFull[] = [];
+  try {
+    local = await lxSourceManager.listFullApis();
+  } catch (e) {
+    Logger.error(TAG, `源同步 merge fail, list unreadable: ${(e as Error).message}`);
+    return report;
+  }
+  const localScripts: Map<string, string> = new Map<string, string>();
+  const localVersions: Map<string, string> = new Map<string, string>();
+  for (let i: number = 0; i < local.length; i++) {
+    const item = local[i];
+    localScripts.set(item.id, item.script);
+    localVersions.set(item.id, item.version);
+  }
+  const seenRemote: Set<string> = new Set<string>();
+  for (let i: number = 0; i < remote.length; i++) {
+    const entry: SourcePayloadEntry = remote[i];
+    if (entry === null || entry === undefined || !lxSourceManager.isValidApiId(entry.id)) {
+      report.invalid++;
+      Logger.error(TAG, '源同步 skip remote bad-id');
+      continue;
+    }
+    if (seenRemote.has(entry.id)) {
+      report.invalid++;
+      Logger.error(TAG, `源同步 skip remote dup id=${entry.id}`);
+      continue;
+    }
+    seenRemote.add(entry.id);
+    if (typeof entry.script !== 'string' || entry.script.length === 0) {
+      report.invalid++;
+      Logger.error(TAG, `源同步 skip remote empty-script id=${entry.id}`);
+      continue;
+    }
+    if (entry.script.length > MAX_SCRIPT_CHARS) {
+      report.invalid++;
+      Logger.error(TAG,
+        `源同步 skip remote script-too-long id=${entry.id} chars=${entry.script.length} limit=${MAX_SCRIPT_CHARS}`);
+      continue;
+    }
+    const localScript: string | undefined = localScripts.get(entry.id);
+    if (localScript !== undefined) {
+      if (localScript === entry.script) {
+        report.same++;
+        continue;
+      }
+      // 同 id 不同内容：**保守 —— 保留本机那份**（本机那份就是用户眼前正在用的那份）
+      report.conflict++;
+      Logger.info(TAG,
+        `源同步 conflict keep-local id=${entry.id} name=${entry.name} local=${localVersions.get(entry.id)} remote=${entry.version}`);
+      continue;
+    }
+    const result = lxSourceManager.importApiWithId({
+      id: entry.id,
+      script: entry.script,
+      name: entry.name,
+      description: entry.description,
+      author: entry.author,
+      homepage: entry.homepage,
+      version: entry.version,
+      allowShowUpdateAlert: entry.allowShowUpdateAlert
+    });
+    if (result.outcome === 'added') {
+      report.added++;
+      Logger.info(TAG, `源同步 save id=${entry.id} name=${entry.name} version=${entry.version}`);
+    } else if (result.outcome === 'exists') {
+      // 理论上到不了这里（上面已经按 id 判过），真到了就按"已存在"计数，不当失败
+      report.same++;
+    } else {
+      report.failed++;
+      Logger.error(TAG, `源同步 save fail id=${entry.id} : ${result.message}`);
+    }
+  }
+  report.activeApplied = applyRemoteActive(payload.activeId);
+  Logger.info(TAG,
+    `源同步 merge added=${report.added} same=${report.same} conflict=${report.conflict} dropped=${report.invalid} failed=${report.failed} total=${report.total} active=${report.activeApplied ? 1 : 0}`);
+  return report;
+}
+
+/**
+ * 按远端记录恢复"选中的音源"，条件收得很紧：
+ *   远端有记录 + 本机当前没选 + 这个 id 现在本机确实存在。
+ * 任何一条不满足就什么都不做（不抢用户当前的选择）。
+ */
+function applyRemoteActive(remoteActiveId: string): boolean {
+  if (typeof remoteActiveId !== 'string' || remoteActiveId.length === 0) {
+    return false;
+  }
+  if (!lxSourceManager.hasApi(remoteActiveId)) {
+    return false;
+  }
+  // ★ 2026-11-09：`lxActiveSource` 只能是 LX 脚本。备份可能是在旧版本里做的，
+  //   里面记的是 MusicFree 插件 id —— 恢复回去会让 LX 引擎永远 init 不了。
+  let isLxScript: boolean = false;
+  const list: LXUserApiInfo[] = lxSourceManager.getApiList();
+  for (let i: number = 0; i < list.length; i++) {
+    if (list[i].id === remoteActiveId) {
+      isLxScript = list[i].kind !== 'mf';
+      break;
+    }
+  }
+  if (!isLxScript) {
+    return false;
+  }
+  const current: string = activeSourceId();
+  if (current.length > 0) {
+    return false;
+  }
+  try {
+    AppStorage.setOrCreate('lxActiveSource', remoteActiveId);
+    MusicStoreService.getInstance().setActiveSource(remoteActiveId);
+    Logger.info(TAG, `源同步 restore-active id=${remoteActiveId}`);
+    return true;
+  } catch (e) {
+    Logger.error(TAG, `源同步 restore-active fail id=${remoteActiveId} : ${(e as Error).message}`);
+    return false;
+  }
+}
+
+/** 合并结果 -> 一句给人看的话（拼在恢复成功提示后面） */
+export function describeSourceMerge(report: SourceMergeReport): string {
+  if (report.total === 0) {
+    return '';
+  }
+  const parts: string[] = [`音源 新增 ${report.added}`];
+  if (report.same > 0) {
+    parts.push(`已有 ${report.same}`);
+  }
+  if (report.conflict > 0) {
+    parts.push(`保留本机 ${report.conflict}`);
+  }
+  if (report.invalid > 0) {
+    parts.push(`丢弃 ${report.invalid}`);
+  }
+  if (report.failed > 0) {
+    parts.push(`失败 ${report.failed}`);
+  }
+  if (report.activeApplied) {
+    parts.push('已恢复选中');
+  }
+  return parts.join(' · ');
+}
+
+// ------------------------------------------------------------------ 备份/恢复的挂载点（三条通道共用）
+
+/**
+ * 把音源段并进备份 JSON（上行）。WebDAV / 系统云空间 / 旧网页云盘三条通道都走这里。
+ *
+ * ★ 任何一步不顺利都**原样返回入参**：音源同步再重要，也不能把"备份"这件事本身弄坏。
+ *   （调用方拿到原样文本后照旧走它自己的"确认上云"判据，本函数不改任何成败结论。）
+ */
+export async function attachSourcesToSnapshot(snapshotText: string): Promise<string> {
+  let payload: SourcePayload | null = null;
+  try {
+    payload = await collectSourcePayload();
+  } catch (e) {
+    Logger.error(TAG, `源同步 pack error, no sources in backup: ${(e as Error).message}`);
+    return snapshotText;
+  }
+  if (payload === null) {
+    Logger.info(TAG, '源同步 no local sources');
+    return snapshotText;
+  }
+  try {
+    const snapshot: Record<string, Object> = JSON.parse(snapshotText) as Record<string, Object>;
+    snapshot[SOURCE_SYNC_KEY] = payload as Object;
+    const merged: string = JSON.stringify(snapshot);
+    if (merged.length > MAX_BACKUP_CHARS) {
+      Logger.error(TAG,
+        `源同步 skip, backup too big merged=${merged.length} limit=${MAX_BACKUP_CHARS}`);
+      return snapshotText;
+    }
+    Logger.info(TAG,
+      `源同步 upload n=${payload.count} chars=${payload.chars} len ${snapshotText.length}->${merged.length}`);
+    return merged;
+  } catch (e) {
+    Logger.error(TAG, `源同步 merge-into-backup fail: ${(e as Error).message}`);
+    return snapshotText;
+  }
+}
+
+/**
+ * 从备份 JSON 里取音源段并保守合并（下行）。WebDAV / 系统云空间 / 旧网页云盘三条通道都走这里。
+ *
+ * @returns 给界面看的一句话摘要；备份里没有音源段（旧备份 / 上传方本机没有音源）时返回空串
+ */
+export async function mergeSourcesFromSnapshot(snapshotText: string): Promise<string> {
+  let raw: Object | undefined = undefined;
+  try {
+    const snapshot: Record<string, Object> = JSON.parse(snapshotText) as Record<string, Object>;
+    raw = snapshot[SOURCE_SYNC_KEY];
+  } catch (e) {
+    Logger.error(TAG, `源同步 read backup json fail: ${(e as Error).message}`);
+    return '';
+  }
+  if (raw === undefined) {
+    Logger.info(TAG, '源同步 backup has no customSources');
+    return '';
+  }
+  try {
+    const report: SourceMergeReport = await applySourcePayload(raw);
+    return describeSourceMerge(report);
+  } catch (e) {
+    // 音源合并失败**不能**让设置/歌单的恢复结果变成"失败"
+    Logger.error(TAG, `源同步 merge error (others unaffected): ${(e as Error).message}`);
+    return '';
+  }
+}
+
+/**
+ * 恢复侧的"安全外壳"：把 `mergeSourcesFromSnapshot` 包成**绝不抛异常、绝不改结论**的一步。
+ *
+ * 三条通道的恢复路径统一用它：无论音源段是坏的、版本不认识、还是落盘失败，
+ * 都只留下一行日志，原样返回宿主（设置/歌单）的恢复结论字符串。
+ *
+ * @param message 宿主恢复流程给出的结论（「恢复成功」/「没有可恢复的备份」/「恢复失败…」）
+ * @returns 结论 + 音源摘要（没有音源段时就是原结论，逐字符不变）
+ */
+export async function mergeSourcesIntoRestoreResult(snapshotText: string, message: string): Promise<string> {
+  let summary: string = '';
+  try {
+    summary = await mergeSourcesFromSnapshot(snapshotText);
+  } catch (e) {
+    Logger.error(TAG, `源同步 merge outer error (ignored): ${(e as Error).message}`);
+    summary = '';
+  }
+  return summary.length > 0 ? `${message}；${summary}` : message;
+}

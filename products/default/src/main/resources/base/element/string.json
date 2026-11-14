@@ -1,5 +1,13 @@
-{
+﻿{
   "string": [
+    {
+      "name": "tab_echo",
+      "value": "回响"
+    },
+    {
+      "name": "tab_now_playing",
+      "value": "现在就听"
+    },
     {
       "name": "module_desc",
       "value": "module description"

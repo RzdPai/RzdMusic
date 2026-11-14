@@ -5,6 +5,21 @@
       "copyCodeResource": {
         "enable": false
       }
+    },
+    // 只保留 arm64-v8a 的 native 库（ijkplayer 的 FFmpeg so 有 arm64 + x86_64 两套，
+    // 全打进去包体从 25MB 涨到 80MB；x86_64 只有模拟器需要）。
+    // 合法字段见 hvigor 的 ohos-module-build-profile-schema.json：nativeLib.filter.{excludes|select}
+    "nativeLib": {
+      "filter": {
+        "excludes": [
+          "**/x86_64/**"
+        ]
+      },
+      // 去掉 so 里的调试符号，进一步压体积
+      "debugSymbol": {
+        "strip": true,
+        "exclude": []
+      }
     }
   },
   "buildOptionSet": [

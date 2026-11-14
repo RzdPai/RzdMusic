@@ -14,8 +14,8 @@
  */
 
 import { AppStorageV2, uiObserver } from '@kit.ArkUI';
-import { AmbientState, BreakpointType, ThemeState } from 'musicbasic';
-import { AppStorageKeys, MusicAppState, MusicStoreService, PlayedSongRecord, TabSwitchState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
+import { guardPlayerBack, AmbientState, BreakpointType, ThemeState } from 'musicbasic';
+import { AppStorageKeys, MusicAppState, MusicStoreService, PlayedSongRecord, SongTitleMarquee, TabSwitchState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { OnlinePlayUtil } from 'player';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType } from '@kit.UIDesignKit';
 import { SongMoreMenu } from './SongMoreMenu';
@@ -42,6 +42,11 @@ export struct PlaylistHomePage {
   @Local selectedMap: Record<string, boolean> = {};
   /** Scroller bound to the HDS title bar so the scroll effect (gradient blur) can fire. */
   private pageScroller: Scroller = new Scroller();
+  /**
+   * 列表重建版本号：只用于「切换平台」后强制重建所有行（key 里带上它）。
+   * 见 {@link forceReload}。
+   */
+  @Local listVersion: number = 0;
 
   aboutToAppear(): void {
     this.refresh();
@@ -52,6 +57,19 @@ export struct PlaylistHomePage {
   refresh(): void {
     this.historyList = this.store.getHistory();
     this.favoriteList = this.store.getFavorites();
+  }
+
+  /**
+   * 「切换平台」后强制刷新（照搬「重命名歌单」那套显式刷新做法）。
+   *
+   * 换源改了库里的 source/songId，理论上 `@Monitor` 会来刷新，但
+   * `ForEach` 的 key 是 `source_songId` 且列表可能正在复用节点 —— 实测会出现
+   * 「库改了、列表还是旧的」。这里重读数据后再抬一次 `listVersion`，
+   * key 全变 → 强制整表重建，平台标签与封面立刻跟着变。
+   */
+  private forceReload(): void {
+    this.refresh();
+    this.listVersion++;
   }
 
   @Monitor('tabState.playlistSection')
@@ -159,6 +177,7 @@ export struct PlaylistHomePage {
       case 'tx': return '#31C27C';
       case 'wy': return '#C62F2F';
       case 'mg': return '#FF4081';
+      case 'qs': return '#00C2A8';
     }
     return '#6B6B6B';
   }
@@ -170,6 +189,7 @@ export struct PlaylistHomePage {
       case 'tx': return 'QQ';
       case 'wy': return '网易云';
       case 'mg': return '咪咕';
+      case 'qs': return '汽水';
     }
     return source;
   }
@@ -208,12 +228,15 @@ export struct PlaylistHomePage {
         .borderRadius($r('sys.float.corner_radius_level3'))
         .objectFit(ImageFit.Cover)
       Column({ space: 4 }) {
-        Text(record.name)
-          .fontSize($r('sys.float.Body_L'))
-          .fontWeight(FontWeight.Regular)
-          .fontColor($r('sys.color.font_primary'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        // ★ 2026-10-15：这里是「历史 / 收藏」记录行的歌名（与 `RecordListPage` 同一批数据），
+        //   上一轮铺跑马灯时漏了这一处 ⇒ 补上（用户报的第 2 条说的就是这类页面）。
+        //   字号/字重/字色逐字保留；父容器是 `Column` ⇒ 用组件默认的 `width('100%')` 约束宽度。
+        SongTitleMarquee({
+          text: record.name,
+          titleFontSize: $r('sys.float.Body_L'),
+          titleFontWeight: FontWeight.Regular,
+          titleFontColor: $r('sys.color.font_primary')
+        })
         Row({ space: 6 }) {
           Text(record.singer)
             .fontSize($r('sys.float.Caption_M'))
@@ -244,7 +267,11 @@ export struct PlaylistHomePage {
             albumName: record.albumName, albumId: record.albumId, source: record.source,
             interval: record.interval, img: record.img, types: []
           },
-          iconSize: 18
+          iconSize: 18,
+          // 换源后立刻重建列表，保证平台标签/封面实时更新
+          onSongSwitched: (): void => {
+            this.forceReload();
+          }
         })
       }
     }
@@ -263,13 +290,13 @@ export struct PlaylistHomePage {
   private titleButtonBlur(): BlurStyle {
     switch (this.ambientState.level) {
       case 1:
-        return BlurStyle.Thin;
+        return BlurStyle.COMPONENT_ULTRA_THIN;
       case 2:
-        return BlurStyle.Regular;
+        return BlurStyle.COMPONENT_THIN;
       case 3:
-        return BlurStyle.Thick;
+        return BlurStyle.COMPONENT_REGULAR;
       default:
-        return BlurStyle.Thin;
+        return BlurStyle.COMPONENT_ULTRA_THIN;
     }
   }
 
@@ -372,7 +399,9 @@ export struct PlaylistHomePage {
   /** HDS title bar with system material and gradient blur. */
   private getTitleBar(): HdsNavigationTitleBarOptions {
     return {
-      avoidLayoutSafeArea: true,
+      // ★ 2026-10-11 真机定论（设置页截图量出来的）：HDS 标题栏容器本来就在状态栏下沿，
+      //   voidLayoutSafeArea: true 会让它**再退一个状态栏**（标题 76..132）⇒ 恒为 false（标题 38..94）。
+      avoidLayoutSafeArea: false,
       style: {
         blurStrategy: BlurStrategy.ENABLE,
         scrollEffectOpts: {
@@ -408,24 +437,33 @@ export struct PlaylistHomePage {
                 ListItem() {
                   this.SongRow(record, true)
                 }
-              }, (record: PlayedSongRecord) => record.source + '_' + record.songId)
-              ListItem() {
-                Column()
-                  .height(64)
-                  .width('100%')
-              }
+              }, (record: PlayedSongRecord) => this.listVersion + '_' + record.source + '_' + record.songId)
             }
             .width('100%')
             .layoutWeight(1)
             .scrollBar(BarState.Off)
-            .clip(false)
+            // ★★ 让内容能画进状态栏的**官方正解**（官方《开发应用沉浸式效果》→「滚动类场景」）：
+            //   「设置父组件滚动容器和子组件相同的背景色，设置滚动容器的内容裁剪属性
+            //    `clipContent(ContentClipMode.SAFE_AREA)`，**将内容层裁剪区域扩展至避让区**。」
+            //   原来写 `.clip(true)`（List 默认 `CONTENT_ONLY`，按内容区裁）⇒ 行滚到状态栏就被裁掉。
+            //   ⚠️ 链上任何祖先都**不能**再写 `clip(true)`（官方："需要确保父组件未设置 clip 等裁剪属性"）。
+            .clipContent(ContentClipMode.SAFE_AREA)
             .divider({
               strokeWidth: 0.5,
               color: $r('sys.color.comp_divider'),
               startMargin: 16,
               endMargin: 16
             })
+            // ★ 定稿（用户：「我想让它延伸进状态栏」）："状态栏 + HDS 标题栏"（≈38 + 56 = 94）
+            //   这一整段留白**放进滚动内容里**（页根带 `ignoreLayoutSafeArea(TOP,BOTTOM)` ⇒ 盒子从
+            //   屏幕 y=0 起排，标题栏自己让位到 38..94）⇒ 偏移 = 状态栏 + 56 = 94。
+            //   静止时第一行正好落在标题栏下沿，上滑则整行从标题栏底下再穿进状态栏。
             .contentStartOffset(getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP)
+            // ★ 底部"给悬浮播放条让位"的留白留在**列表里**（`contentEndOffset`，@since 22，
+            //   List/Scroll 通用）：随内容一起滚走。原来写的是**列表末尾一个 64vp 的 ListItem**，
+            //   效果一样，这里换成与 `RecordListPage` / `SettingsDetailPage` 同一口径。
+            //   反面做法（禁）：写在外层容器的 `padding({ bottom })` 上 = 屏幕底部一条死带。
+            .contentEndOffset(64)
           }
         } else {
           if (this.favoriteList.length === 0) {
@@ -444,40 +482,63 @@ export struct PlaylistHomePage {
                 ListItem() {
                   this.SongRow(record, false)
                 }
-              }, (record: PlayedSongRecord) => record.source + '_' + record.songId)
-              ListItem() {
-                Column()
-                  .height(64)
-                  .width('100%')
-              }
+              }, (record: PlayedSongRecord) => this.listVersion + '_' + record.source + '_' + record.songId)
             }
             .width('100%')
             .layoutWeight(1)
             .scrollBar(BarState.Off)
-            .clip(false)
+            // ★ 同上一支：`clip(true)` → `clipContent(ContentClipMode.SAFE_AREA)`，理由见上面的注释。
+            .clipContent(ContentClipMode.SAFE_AREA)
             .divider({
               strokeWidth: 0.5,
               color: $r('sys.color.comp_divider'),
               startMargin: 16,
               endMargin: 16
             })
+            // ★ 同一支的偏移算式（= 状态栏 + 56 = 94），理由见上面那处 contentStartOffset。
             .contentStartOffset(getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP)
+            // ★ 同一支的底部留白，理由见上面那处 contentEndOffset（必须留在列表里，随内容滚走）。
+            .contentEndOffset(64)
           }
         }
       }
       .width('100%')
       .height('100%')
+      // ⚠️ 这里原来写 `.clip(true)`（上一轮"要挡住内容"的错误口径下加的）**已删除** ——
+      //   官方《开发应用沉浸式效果》：「子节点可以单独设置该属性……**需要确保父组件未设置 clip
+      //   等裁剪属性**」⇒ 祖先有一层 `clip(true)`，上面两支 List 的
+      //   `clipContent(ContentClipMode.SAFE_AREA)` 就白设了。
+      //   （两支 `List` 自己默认的裁剪语义保持不变，别再动。）
       .padding({
+        // ★ 状态栏那一条归页面（2026-10-11 第二十轮，用户：「我想让它延伸进状态栏」）：
+        //   这里是**内容容器**，顶部 padding 已删 —— 容器从屏幕 y=0 起排、List 拿整屏视口，
+        //   "状态栏 + 标题栏"那段留白改由上面两处 `contentStartOffset(状态栏 + 56)` 提供。
         left: new BreakpointType(16, 24, 32, 32).getValue(this.breakpointEnv.widthBreakpoint),
         right: new BreakpointType(16, 24, 32, 32).getValue(this.breakpointEnv.widthBreakpoint)
       })
     }
+    .onBackPressed((): boolean => guardPlayerBack('PlaylistHomePage'))
     .hideTitleBar(false)
     .hideBackButton(true)
     .titleBar(this.getTitleBar())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.pageScroller])
+    // ★★ 状态栏三件套（2026-10-11 定稿，用户第三次纠正后）：
+    //   ① `expandSafeArea(TOP,BOTTOM)`：把**页面底色**铺到状态栏/导航条那两条（只扩绘制区）；
+    //   ② `ignoreLayoutSafeArea(...[TOP, BOTTOM])` —— **TOP 必须给**：HDS 的标题栏自己会按"状态栏高度"
+    //      往下让位，所以**页面盒子必须从屏幕 y=0 起排**；只写 BOTTOM 变成"盒子让一次 + 标题栏再让一次"
+    //      ⇒ 整条标题掉到状态栏下面约一个状态栏高度（用户原话「整个标题移到了状态栏下面」），
+    //      内容也跟着多顶 38vp（「上方留的空距有点大了」）。
+    //      盒子从 0 起排后：标题栏 = 38..94 ✔，上面两处 `contentStartOffset` 的 94 正好落在 94 ✔
+    //      （这就是它们**必须**写「状态栏 + 56」而不是只写 56 的原因；顶部那段留白**不要**改回容器 padding）。
+    //      ⚠️ 旧注释里"根节点带 TOP 会把 HDS 标题栏顶进状态栏 / 只能留 BOTTOM"那句**是错的**，已作废。
+    //   ③ 滚动容器 `clipContent(ContentClipMode.SAFE_AREA)` + 祖先链零 `clip(true)`：行能**画进**状态栏。
+    // ★★ 用户 2026-10-11：「顶栏标题错位的问题还在，你应该参考一下其他显示正常的页面是怎么写的」。
+    //   逐页对比后：显示正常的 MinePage / RecommendPage **都没有** expandSafeArea，
+    //   而所有标题偏低的页面都有 ⇒ 照正常页面去掉它（官方语义：expandSafeArea 只延伸**绘制区**，
+    //   「子组件相对屏幕位置不变」，但它会让 HDS 标题栏的定位多让一次）。
+    //   页面底色由页盒自身 ackgroundColor 铺满（盒顶 = 0，实测见 RzdPageTopInset），不需要它补状态栏那一条。
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
-    .backgroundColor($r('sys.color.background_secondary'))
+    .backgroundColor($r('app.color.page_background'))
   }
 }

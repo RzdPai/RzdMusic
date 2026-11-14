@@ -14,7 +14,7 @@
  */
 
 
-import { uiObserver } from '@kit.ArkUI';
+import { LengthMetrics, uiObserver } from '@kit.ArkUI';
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import { BreakpointType, getWindowInfoState, ImmersiveType, StyleConstants, WindowInfo } from 'musicbasic';
 import { RecommendCategoryTabUi } from '../model/RecommendUiModels';
@@ -29,6 +29,8 @@ export struct CategoryChipsSection {
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
   /** VM supplying tabs and handling category selection changes. */
   @Param recommendViewModel: RecommendViewModel = new RecommendViewModel();
+  /** 仅吸顶副本开启：用官方边缘渐隐代替黑色覆盖层（流内那一行保持原样）。 */
+  @Param enableFadingEdge: boolean = false;
   /** Title bar insets, immersive decor, and related window metrics. */
   @Local windowInfo: WindowInfo = getWindowInfoState();
 
@@ -94,6 +96,11 @@ export struct CategoryChipsSection {
     }
     .scrollBar(BarState.Off)
     .scrollable(ScrollDirection.Horizontal)
+    // 官方边缘渐隐：作用于内容自身 alpha，露出下方背景，不会像黑色覆盖层那样遮挡内容。
+    // 仅吸顶副本（`stackBuilder`）开启；流内那一行默认 false。
+    .fadingEdge(this.enableFadingEdge, {
+      fadingEdgeLength: LengthMetrics.vp(40)
+    })
     .width(StyleConstants.FULL_WIDTH)
     .align(this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ? Alignment.Start : Alignment.Center)
     .padding({

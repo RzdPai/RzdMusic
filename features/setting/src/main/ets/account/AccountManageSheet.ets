@@ -1,10 +1,12 @@
 import { common } from '@kit.AbilityKit';
 import { AppStorageV2 } from '@kit.ArkUI';
 import { AccountService } from 'player';
+import { HuaweiAccountService } from 'player';
 import { PlatformAccount, sourceName } from 'player';
 import { QrCodeLoginResult, QrCodeLoginState, QrLoginStatus } from 'player';
 import { AppStorageKeys, MusicStoreService, ThemeState } from 'musicbasic';
 import { CapsuleSegmentedSelector } from '../view/CapsuleSegmentedSelector';
+import { HuaweiAccountCard } from './HuaweiAccountCard';
 
 @ComponentV2
 export struct AccountManageSheet {
@@ -20,6 +22,8 @@ export struct AccountManageSheet {
   @Local avatarFailed: Set<string> = new Set();
   @Local themeState: ThemeState =
     AppStorageV2.connect(ThemeState, AppStorageKeys.THEME_STATE, () => new ThemeState())!;
+  private qrGeneration: number = 0;
+  private qrActive: boolean = false;
   private qrKey: string = '';
   private qrTimer: number = -1;
   private sourceList: string[] = ['wy', 'tx', 'kg'];
@@ -27,14 +31,19 @@ export struct AccountManageSheet {
   @Param onClose: () => void = () => {};
 
   aboutToAppear(): void {
+    this.qrActive = true;
     const context: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     if (context !== undefined) {
       AccountService.init(context);
+      // 华为账号：记录上下文并恢复上次的登录态（静默恢复，不会弹授权页）
+      HuaweiAccountService.getInstance().init(context);
     }
     this.initAsync();
   }
 
   aboutToDisappear(): void {
+    this.qrActive = false;
+    this.qrGeneration++;
     this.stopQrLogin();
     const source: string = this.source;
     if (source === 'tx' && this.qrKey.length > 0) {
@@ -70,6 +79,7 @@ export struct AccountManageSheet {
   }
 
   private resetQrState(): void {
+    this.qrGeneration++;
     this.qrKey = '';
     this.qrUrl = '';
     this.qrStatus = QrLoginStatus.Waiting;
@@ -78,11 +88,19 @@ export struct AccountManageSheet {
   }
 
   private startQrLogin(): void {
+    if (!this.qrActive || this.method !== 'qrcode') {
+      return;
+    }
     this.error = '';
+    this.cancelCurrentQr();
     this.resetQrState();
+    const generation: number = this.qrGeneration;
     const source: string = this.source;
     AccountService.createQrCode(source).then((state: QrCodeLoginState) => {
-      if (source !== this.source) return;
+      if (!this.qrActive || generation !== this.qrGeneration || source !== this.source) {
+        AccountService.cancelQrCode(source, state.key);
+        return;
+      }
       this.qrKey = state.key;
       this.qrUrl = state.qrUrl;
       this.qrStatus = state.status;
@@ -96,7 +114,9 @@ export struct AccountManageSheet {
         this.pollQrCodeStatus(source, state.key);
       }, 500);
     }).catch((err: Error) => {
-      if (source !== this.source) return;
+      if (!this.qrActive || generation !== this.qrGeneration || source !== this.source) {
+        return;
+      }
       this.qrStatus = QrLoginStatus.Failed;
       this.qrMessage = err.message ?? '获取二维码失败';
     });
@@ -111,7 +131,8 @@ export struct AccountManageSheet {
       if (result.status === QrLoginStatus.Confirmed) {
         this.stopQrLogin();
         this.reloadAccounts();
-        this.startQrLogin();
+        this.qrMessage = '账号已登录';
+        this.getUIContext().getPromptAction().showToast({ message: '扫码登录成功', duration: 2000 });
         return;
       }
       if (result.status === QrLoginStatus.Expired || result.status === QrLoginStatus.Failed) return;
@@ -184,7 +205,9 @@ export struct AccountManageSheet {
   private qrStatusText(): string {
     if (this.qrStatus === QrLoginStatus.Waiting) return '请使用手机客户端扫码登录';
     if (this.qrStatus === QrLoginStatus.Scanned) return '已扫码，请在手机上确认';
-    if (this.qrStatus === QrLoginStatus.Confirmed) return '扫码成功，登录中...';
+    if (this.qrStatus === QrLoginStatus.Confirmed) {
+      return '扫码登录成功';
+    }
     if (this.qrStatus === QrLoginStatus.Expired) return '二维码已过期';
     if (this.qrStatus === QrLoginStatus.Failed) {
       return this.qrMessage.length > 0 ? this.qrMessage : '二维码登录失败';
@@ -270,6 +293,9 @@ export struct AccountManageSheet {
     Column() {
       Scroll() {
       Column({ space: 10 }) {
+        // 华为账号（系统账号）在最上面，并用分隔线和下面的音乐平台账号分开
+        HuaweiAccountCard()
+
         if (this.accounts.length > 0) {
           ForEach(this.accounts, (account: PlatformAccount) => {
             this.accountItem(account)

@@ -94,17 +94,21 @@ export class MusicMemoryStore {
     };
 
     const heroSub: Resource = $r('app.string.hero_banner_subline_brand');
+    // ⚠️ 这里原来用的是打包内配图 ic_recommend1..5.png；那 5 张图已按"首页大卡直接用
+    //    歌曲封面"的需求删除（见 features/recommendation 的 getFeatureHeroCards），
+    //    所以这里统一回落通用占位图，避免引用已不存在的资源导致编译失败。
+    const heroPlaceholder: Resource = $r('app.media.ic_avatar1');
 
     appendHeroRow($r('app.string.hero_1_badge'), $r('app.string.hero_1_title'), heroSub,
-      $r('app.media.ic_recommend1'), '#152238', '#2E4A78');
+      heroPlaceholder, '#152238', '#2E4A78');
     appendHeroRow($r('app.string.hero_2_badge'), $r('app.string.hero_2_title'), heroSub,
-      $r('app.media.ic_recommend2'), '#2B3F5C', '#5A7A9E');
+      heroPlaceholder, '#2B3F5C', '#5A7A9E');
     appendHeroRow($r('app.string.hero_3_badge'), $r('app.string.hero_3_title'), heroSub,
-      $r('app.media.ic_recommend3'), '#3D2F55', '#6B5A8C');
+      heroPlaceholder, '#3D2F55', '#6B5A8C');
     appendHeroRow($r('app.string.hero_4_badge'), $r('app.string.hero_4_title'), heroSub,
-      $r('app.media.ic_recommend4'), '#5C2D2D', '#9A5C4A');
+      heroPlaceholder, '#5C2D2D', '#9A5C4A');
     appendHeroRow($r('app.string.hero_5_badge'), $r('app.string.hero_5_title'), heroSub,
-      $r('app.media.ic_recommend5'), '#1A2F4A', '#3D5C82');
+      heroPlaceholder, '#1A2F4A', '#3D5C82');
 
     const appendRecommendCardRow = (
       title: Resource,

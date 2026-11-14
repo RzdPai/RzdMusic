@@ -1,0 +1,13 @@
+官方 Slider 文档复核（14c）
+来源：https://developer.huawei.com/consumer/cn/doc/harmonyos-references/ts-basic-components-slider
+MCP ID：alliance/document/cn/harmonyos-references/ts-basic-components-slider
+本轮通过 tools/mcp-query.ps1 getDocumentsById 返回正文。
+
+trackThickness(value: Length)：设置滑轨粗细，会影响滑块大小。
+设定值小于等于0或大于滑动条宽高时取默认值。
+blockSize(value: SizeOptions)：设置滑块大小；设置宽高之一小于等于0时取默认值。
+sliderInteractionMode 默认 SliderInteraction.SLIDE_AND_CLICK，鼠标或手指按下即发生移动。
+
+实现约束：不把24直接传给16vp盒的trackThickness；保留原track12/block1/height16，
+仅给无输入、透明block的绘制Slider施加scale.y=14/12或24/12。
+本文件为人工整理的核对摘录，不是完整返回JSON；原始返回见本轮MCP工具日志。

@@ -36,6 +36,30 @@
       "data": {
         "description": "Settings detail sub page"
       }
+    },
+    {
+      "name": "SettingPage",
+      "pageSourceFile": "src/main/ets/view/SettingPage.ets",
+      "buildFunction": "SettingPageBuilder",
+      "data": {
+        "description": "The whole settings page itself, entered from the Mine tab (replaces the deleted MineSettingsPage)"
+      }
+    },
+    {
+      "name": "MinePlaylistPage",
+      "pageSourceFile": "src/main/ets/view/MinePlaylistPage.ets",
+      "buildFunction": "MinePlaylistPageBuilder",
+      "data": {
+        "description": "All-playlists page pushed from the Mine tab (the deleted playlist tab keeps its full capability here)"
+      }
+    },
+    {
+      "name": "RecordListPage",
+      "pageSourceFile": "src/main/ets/view/RecordListPage.ets",
+      "buildFunction": "RecordListPageBuilder",
+      "data": {
+        "description": "Recently played / favorites list, one page with two modes (Mine tab quick entries)"
+      }
     }
   ]
 }

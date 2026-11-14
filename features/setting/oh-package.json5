@@ -9,6 +9,8 @@
   "dependencies": {
     "musicbasic": "file:../../common/musicbasic",
     "player": "file:../player",
-    "playlist": "file:../playlist"
+    "playlist": "file:../playlist",
+    "localmusic": "file:../localmusic",
+    "sync": "file:../sync"
   }
 }

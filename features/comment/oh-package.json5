@@ -1,0 +1,12 @@
+{
+  "license": "Apache-2.0",
+  "devDependencies": {},
+  "author": "",
+  "name": "comment",
+  "description": "Platform song comments (kw / kg / tx / wy / mg) for RzdMusic",
+  "main": "./Index.ets",
+  "version": "1.0.0",
+  "dependencies": {
+    "musicbasic": "file:../../common/musicbasic"
+  }
+}

@@ -13,14 +13,23 @@
  * limitations under the License.
  */
 
+import { applyScreenOrientation, TabBarConfigModel } from 'musicbasic';
 import { AbilityConstant, Callee, common, Configuration, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
+import { fileIo as fs } from '@kit.CoreFileKit';
+import { util } from '@kit.ArkTS';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { formBindingData, formProvider } from '@kit.FormKit';
 import { rpc } from '@kit.IPCKit';
 import { CardImageHelper } from '../musiccard/CardImageHelper';
 import { appendPlayLog, getAppRuntime, Logger, MusicCardBridge, MusicCardSnapshot, MusicStoreService, WindowUtil } from 'musicbasic';
-import { MediaService } from 'player';
+import { HomeBackBridge } from '../pages/HomeBackBridge';
+import { AppStorageKeys, MorphShrinkState, PlayerExpandState } from 'musicbasic';
+import { lxSourceManager, MediaService } from 'player';
+import type { LXApiImportResult } from 'player';
+
+/** AppStorage key：上一次「用派音打开脚本」的结果文案（供窗口就绪后 toast）。 */
+const SOURCE_IMPORT_MSG_KEY: string = 'lxSourceImportMsg';
 
 /** Main UIAbility for the default phone product: wires app runtime, window util, and media singleton. */
 export default class EntryAbility extends UIAbility {
@@ -32,8 +41,95 @@ export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     getAppRuntime().context = this.context;
     Logger.info('EntryAbility: Ability onCreate');
+    // ⚠️ 必须在这里（任何 importApi 之前）把音源存储目录告诉 LXSourceManager：
+    //    它原来只由 LXSourceHost.aboutToAppear 赋值，而「用派音打开 .js」是 onCreate
+    //    里导入的 —— 那时 filesDir 还是空串，脚本与列表被写到无效路径（静默失败），
+    //    表现就是「音源管理里只剩刚导入的那个、重启后连它也没了」。
+    lxSourceManager.init(this.context);
     this.applyStoredColorMode();
     EntryAbility.registerCardActionChannel(this.callee, this.context);
+    // 冷启动也可能是「用派音打开 .js」（文件管理器点开），先把脚本吃进来
+    this.handleViewDataWant(want);
+  
+    // Tab 栏自定义：启动时把配置读进 AppStorage，壳层（Index.ets）据此决定渲染哪几个页签
+    try {
+      const raw: string = MusicStoreService.getInstance().getTabBarConfig();
+      const cfg: TabBarConfigModel = TabBarConfigModel.parse(raw);
+      AppStorage.setOrCreate('rzd_tab_bar_config', cfg.toJson());
+      appendPlayLog('[RzdTabConfig] boot order=' + cfg.physicalOrder().join(',') +
+        ' now=' + cfg.now + ' echo=' + cfg.echo + ' first=' + cfg.nowFirst);
+    } catch (err) {
+      appendPlayLog('[RzdTabConfig] boot read failed');
+    }
+    // 应用用户设置的屏幕方向（auto / portrait / landscape）
+    void applyScreenOrientation(this.context);
+  }
+
+  /**
+   * 「用派音打开脚本文件」的处理。
+   *
+   * 文件管理器 / 其他应用以 `ohos.want.action.viewData` + `file://...` 拉起本应用
+   * （声明见 module.json5 的 skills：type = general.java-script，linkFeature = FileOpen）。
+   * 行为与设置页里的「导入音源」完全一致 —— 读文件 → `lxSourceManager.importApi`。
+   *
+   * @param want 启动参数；不是 viewData 或没有 uri 时直接返回。
+   */
+  private handleViewDataWant(want: Want): void {
+    if (want.action !== 'ohos.want.action.viewData') {
+      return;
+    }
+    const uri: string = want.uri ?? '';
+    if (uri.length === 0) {
+      return;
+    }
+    try {
+      const file: fs.File = fs.openSync(uri, fs.OpenMode.READ_ONLY);
+      let script: string = '';
+      try {
+        const stat: fs.Stat = fs.statSync(uri);
+        const buf: ArrayBuffer = new ArrayBuffer(stat.size);
+        fs.readSync(file.fd, buf, { offset: 0, length: stat.size });
+        script = util.TextDecoder.create('utf-8').decodeToString(new Uint8Array(buf));
+      } finally {
+        fs.closeSync(file);
+      }
+      // 导入结果要如实反映：落盘失败时不能再报「已导入」
+      const result: LXApiImportResult = lxSourceManager.importApi(script);
+      if (!result.ok) {
+        appendPlayLog('[音源] import failed ' + uri + ' : ' + result.message);
+        AppStorage.setOrCreate(SOURCE_IMPORT_MSG_KEY, '导入失败：' + result.message);
+        Logger.error(`EntryAbility: source script rejected ${result.message}`);
+        this.flushSourceImportToast();
+        return;
+      }
+      appendPlayLog('[音源] imported ' + result.message + ' <- ' + uri);
+      AppStorage.setOrCreate(SOURCE_IMPORT_MSG_KEY, '音源「' + result.message + '」已导入');
+      Logger.info(`EntryAbility: source script imported from ${uri}`);
+    } catch (err) {
+      const e: Error = err as Error;
+      appendPlayLog('[音源] import failed ' + uri + ' : ' + (e.message ?? ''));
+      AppStorage.setOrCreate(SOURCE_IMPORT_MSG_KEY, '导入失败：不是有效的音源脚本');
+      Logger.error(`EntryAbility: import source script failed ${e.message ?? ''}`);
+    }
+    this.flushSourceImportToast();
+  }
+
+  /** 把「脚本导入结果」提示出来（窗口还没就绪时先留着，等 onWindowStageCreate 或回前台再提示）。 */
+  private flushSourceImportToast(): void {
+    const message: string = AppStorage.get<string>(SOURCE_IMPORT_MSG_KEY) ?? '';
+    if (message.length === 0) {
+      return;
+    }
+    const ui = getAppRuntime().uiContext;
+    if (ui === undefined) {
+      return;   // 窗口未就绪：留着，onForeground / loadContent 回调里再提示
+    }
+    AppStorage.setOrCreate(SOURCE_IMPORT_MSG_KEY, '');
+    try {
+      ui.getPromptAction().showToast({ message: message, duration: 2500 });
+    } catch (error) {
+      Logger.warn(`source import toast failed: ${JSON.stringify(error)}`);
+    }
   }
 
   /** Applies the user-saved color mode on startup (0=light, 1=dark, 2=follow system). */
@@ -69,6 +165,8 @@ export default class EntryAbility extends UIAbility {
       } catch (error) {
         Logger.error(`getMainWindowSync error ${JSON.stringify(error)}`);
       }
+      // 冷启动如果是「用派音打开脚本」，导入已经做完了，这里把结果提示出来
+      this.flushSourceImportToast();
       if (err.code) {
         Logger.error(`Failed to load the content. Cause: ${JSON.stringify(err) ?? ''}`);
         return;
@@ -125,8 +223,19 @@ export default class EntryAbility extends UIAbility {
     } catch (error) {
       Logger.error(`syncLiveViewOnForeground ${JSON.stringify(error)}`);
     }
+    // ★ 结算后台那段"墙钟 vs 播放位置"的差值，并按官方《后台播放》补一次长时任务申请。
+    //   排查关键字：RzdLockScreenB 的 bg-enter / bg-leave(stall|keep)。
+    try {
+      MediaService.getInstance().onApplicationForeground();
+    } catch (error) {
+      const err: BusinessError = error as BusinessError;
+      MusicStoreService.getInstance().appendRuntimeDiagnostic(
+        `[RzdLockScreenB] onForeground(err=${err.code}) msg=${err.message}`);
+    }
     MusicCardBridge.notify();
     this.consumeCardAction();
+    // 热启动的脚本导入结果在这里提示（onNewWant 时窗口已经就绪，通常当场就提示过了）
+    this.flushSourceImportToast();
   }
   /**
    * Registers the interactive-card channel. Card buttons post
@@ -139,7 +248,7 @@ export default class EntryAbility extends UIAbility {
         EntryAbility.onCardAction(data, context);
         return null;
       });
-      appendPlayLog('[卡片] 交互通道已注册');
+      appendPlayLog('[卡片] channel ok');
     } catch (error) {
       Logger.error(`register card action channel failed: ${JSON.stringify(error)}`);
     }
@@ -151,12 +260,12 @@ export default class EntryAbility extends UIAbility {
     try {
       params = JSON.parse(data.readString()) as Record<string, string>;
     } catch (_err) {
-      appendPlayLog('[卡片] 动作解析失败');
+      appendPlayLog('[卡片] parse failed');
       return;
     }
     const actionType: string = params.actionType ?? '';
     const formId: string = params.formId ?? '';
-    appendPlayLog('[卡片] 收到动作: ' + actionType);
+    appendPlayLog('[卡片] action=' + actionType);
     // The callee callback arrives on an IPC thread: hop to the JS main thread before touching playback.
     setTimeout((): void => {
       if (actionType.length > 0) {
@@ -170,7 +279,7 @@ export default class EntryAbility extends UIAbility {
     }, 0);
   }
 
-  /** Form ids of live cards; re-reads the shared file only when unknown, at most once a minute. */
+  /** Form ids of live cards; re-reads the shared file only when unknown, at most once every 2s. */
   private static resolveCardFormIds(): string[] {
     const store: MusicStoreService = MusicStoreService.getInstance();
     const cached: string[] = store.getCardFormIds();
@@ -178,7 +287,9 @@ export default class EntryAbility extends UIAbility {
       return cached;
     }
     const now: number = Date.now();
-    if (now - EntryAbility.lastFormIdRefresh < 60000) {
+    // ⚠️ 这里原来是 60 秒节流：卡片是在 FormExtensionAbility 进程里添加的，formId 经共享存储回传，
+    //    节流太长会导致「刚拖到桌面的卡片一分钟内不刷新」。改成 2 秒（仍然避免每次推都读盘）。
+    if (now - EntryAbility.lastFormIdRefresh < 2000) {
       return cached;
     }
     EntryAbility.lastFormIdRefresh = now;
@@ -277,14 +388,46 @@ export default class EntryAbility extends UIAbility {
     }
   }
 
-  /** App moved to background; notifies media layer for background-task policy. */
+  /**
+   * 2026-10-23：首页系统返回时页面级 `Index.onBackPress()` 收不到（日志里从无 RzdHomeBackEnter）。
+   * 这里只记账 + 交回系统；清理浮层的逻辑放在页面层（Ability 里拿不到 AppStorageV2）。
+   * @returns false = 交回系统（该退到桌面就退）
+   */
+  onBackPressed(): boolean {
+    try {
+      MusicStoreService.getInstance().appendRuntimeDiagnostic('RzdHomeBackEnter src=EntryAbility');
+      // 通知页面层做收尾（Ability 里拿不到 AppStorageV2，用 AppStorage 打信号，Index 监听）。
+      // 先让壳层处理（弹页面 / 切回首页）；壳层说"没得弹"才交回系统退出
+      const consumed: boolean = HomeBackBridge.handleBack();
+      if (consumed) {
+        return true;
+      }
+      const cleaned: boolean = true;
+      MusicStoreService.getInstance().appendRuntimeDiagnostic(`RzdHomeBackEnter cleaned=${cleaned ? 1 : 0} calls=${HomeBackBridge.calls}`);
+    } catch (err) {
+    }
+    return false;
+  }
+
+
   onBackground() {
     // Ability has back to background
     Logger.info('EntryAbility: Ability onBackground');
-    MediaService.getInstance().onApplicationBackground();
+    const media: MediaService = MediaService.getInstance();
+    MusicStoreService.getInstance().appendRuntimeDiagnostic(
+      `[RzdLockScreenB] onBackground(playing=${media.isPlayingState()}) source=EntryAbility`);
+    try {
+      media.onApplicationBackground();
+    } catch (error) {
+      const err: BusinessError = error as BusinessError;
+      MusicStoreService.getInstance().appendRuntimeDiagnostic(
+        `[RzdLockScreenB] onBackground(err=${err.code}) msg=${err.message}`);
+    }
   }
   /** Warm-start delivery (no card payload here: card actions arrive on the callee channel). */
   onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     appendPlayLog('[卡片] onNewWant');
+    // 应用已在运行时，从文件管理器「用派音打开 .js」走这条路（导入音源脚本）
+    this.handleViewDataWant(want);
   }
 }

@@ -18,21 +18,46 @@ import { http } from '@kit.NetworkKit';
 import { image } from '@kit.ImageKit';
 import { effectKit } from '@kit.ArkGraphics2D';
 import { BusinessError } from '@kit.BasicServicesKit';
-import { AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
+import { common } from '@kit.AbilityKit';
+import { guardPlayerBack, immersiveMedium } from 'musicbasic';
+import { ConcertItem, ConcertService } from '../concert/ConcertService';
+import { AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, SongTitleMarquee, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, shouldUseSplitDetailLayout, splitDetailCardWidthVp , immersiveFromLevel } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType } from '@kit.UIDesignKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import {
-  AlbumInfo, AlbumDetailResult, ArtistInfo, ColorConversion, LXSearchSong, OnlinePlayUtil, SearchPageResult,
-  SingerInfo, SongInfo, SongPageResult, ArtistAlbumPageResult, searchSingers, getArtistDetail, getArtistSongs,
+  AlbumInfo, AlbumDetailResult, ArtistInfo, ColorConversion, LXSearchSong, LXSearchResult, OnlinePlayUtil,
+  SearchPageResult,
+  SingerInfo, SongInfo, SongPageResult, ArtistAlbumPageResult, lxSearch, searchSingers, getArtistDetail,
+  getArtistSongs,
   getArtistAlbums, getAlbumDetail, codeToSource, showSystemShare, buildSongShareText
 } from 'player';
 import { FavoriteEntry } from 'musicbasic';
 import { SongMoreMenu } from 'playlist';
-import { CapsuleSegmentedSelector } from './CapsuleSegmentedSelector';
+import { MotionCoverLayer } from 'musicbasic';
+import { DetailImmersiveBackdrop } from './DetailImmersiveBackdrop';
+import { WindowInfo, getWindowInfoState } from 'musicbasic';
+import { ArtistDetailDataSource } from './ArtistDetailDataSource';
 
 const DANGER_COLOR: string = '#E64545';
 const SONG_PAGE_LIMIT: number = 50;
 const ALBUM_PAGE_LIMIT: number = 50;
+
+/**
+ * ★ 双胞胎常量：`DetailImmersiveBackdrop` 的 `heroHeightVp` / `rowHeightVp` 默认值
+ * （本页没有覆写这两个 `@Param`，所以照片画框 = 320 + 56 + 状态栏避让）。
+ * 只有算「状态栏那一条在照片里对应哪一块」时才用得到；改那两处默认值时必须同步这里。
+ */
+const BACKDROP_HERO_VP: number = 320;
+const BACKDROP_ROW_VP: number = 56;
+
+/**
+ * 列表行封面边长（vp）：**歌曲行与专辑行必须同尺寸**。
+ *
+ * ★ 2026-10-24（甲方：「歌手页的专辑这个列表的封面大小刚刚好，你把最热和最新也改成这个大小」）：
+ *   专辑列表一直是 56；歌曲行原来是 42。现在两边都用这个常量（含行高 72、圆角 6），
+ *   以后要调大小只改这一处。
+ */
+const SONG_ROW_COVER_VP: number = 56;
 
 /** 秒数 → mm:ss 时长文本。 */
 function formatInterval(seconds: number): string {
@@ -41,6 +66,20 @@ function formatInterval(seconds: number): string {
   s = s % 60;
   const ss: string = s < 10 ? '0' + s : String(s);
   return m + ':' + ss;
+}
+
+/**
+ * 取色器给的通道值（0–255）→ `rgb(r, g, b)`。
+ *
+ * ⚠️ **不经过 `ColorConversion.dealColor`**：那个函数是给"深底白字"页面底色设计的，
+ * 亮度上限锁死在 0.3（约 RGB 76）⇒ 结果永远是深色，拿它判"背景亮不亮"必然判成"暗"。
+ * 判状态栏前景色必须用**照片本身的原始亮度**（状态栏那一条压的就是原始照片）。
+ */
+function toRgbString(red: number, green: number, blue: number): string {
+  const r: number = Math.max(0, Math.min(255, Math.round(red)));
+  const g: number = Math.max(0, Math.min(255, Math.round(green)));
+  const b: number = Math.max(0, Math.min(255, Math.round(blue)));
+  return `rgb(${r}, ${g}, ${b})`;
 }
 
 /**
@@ -69,7 +108,14 @@ export struct ArtistDetailPage {
     AppStorageV2.connect(AmbientState, AppStorageKeys.AMBIENT_STATE, () => new AmbientState())!;
   @Local songs: SongInfo[] = [];
   @Local albums: AlbumInfo[] = [];
-  @Local activeTab: number = 1;
+  @Local activeTab: number = 0;
+  /**
+   * 吸顶行三页签的选中项：`0=最热 / 1=最新 / 2=专辑`（顺序照甲方 2026-10-24 的指定）。
+   *
+   * 缺省 = **最热**（0，甲方 2026-10-24 指定）；它与 `activeTab = 0`（歌曲）、
+   * `songSort = 0`（最热）、`init()` 里的 `loadSongs(1, true)` 是**同一套默认值**，
+   * 改顺序/改缺省时四者必须一起改，否则首屏会「标签说最热、内容却是专辑列表」。
+   */
   @Local segmentIndex: number = 0;
   @Local loading: boolean = false;
   @Local loadingMore: boolean = false;
@@ -79,28 +125,143 @@ export struct ArtistDetailPage {
   @Local albumPage: number = 1;
   @Local songSort: number = 0;
   @Local artistNameText: string = '';
+  /** 即将举办的演唱会（拿不到就是空数组，UI 侧据此隐藏入口） */
+  @Local concerts: ConcertItem[] = [];
+  /** 演唱会半模态弹层是否展开 */
+  @Local concertSheet: boolean = false;
   @Local artistPicUrlText: string = '';
   @Local effectiveArtistId: string = '';
   @Local effectiveArtistMid: string = '';
   @Local errorMsg: string = '';
   @Local avgColor: string = '#1f1f22';
+  /**
+   * ★ 状态栏判据用的**原始色**（不压暗），只在取色回调里写：
+   *  * `photoTopColor`：照片里**真正压在状态栏那一条下面**的那块区域的平均色 —— 滚动前的判据；
+   *  * `photoRawAvgColor`：整张照片的原始平均色 —— 区域取色失败时的兜底判据。
+   * 空串 = 还没有照片像素（首帧 / 没图 / 失败），此时判据退回 `avgColor`。
+   */
+  @Local photoTopColor: string = '';
+  @Local photoRawAvgColor: string = '';
+  /** 上一次打过的状态栏判据日志（内容相同就不再刷）。 */
+  private lastStatusBarLog: string = '';
   @Local imageFailed: boolean = false;
   @Local isFavoriteArtist: boolean = false;
   @Local artistDesc: string = '';
   @Local showAboutPopup: boolean = false;
+  @Local windowInfo: WindowInfo = getWindowInfoState();
+  @Local detailScrollVp: number = 0;
+  private lastScrollBand: number = -1;
   private scroller: Scroller = new Scroller();
 
+  private updateImmersiveScroll(): void {
+    this.detailScrollVp = Math.max(0, this.scroller.currentOffset().yOffset);
+    const band: number = Math.floor(this.detailScrollVp / 56);
+    if (band !== this.lastScrollBand) {
+      this.lastScrollBand = band;
+      hilog.info(0, 'RzdDetailImmersive', 'artist scrollVp=%{public}f thresholdVp=264 avoidTopVp=%{public}f',
+        this.detailScrollVp, this.windowInfo.statusBarTopVp);
+    }
+  }
+
+  /**
+   * 页内可用高度（vp）= 窗口高 − 状态栏避让。
+   *
+   * 为什么照片层要这个数值而不是自己写 `'100%'` / `LayoutPolicy.matchParent`：
+   * 它挂在内容驱动的 Stack 里，百分比 / matchParent 会在首帧量成 0 高 ⇒ 照片整张不画
+   * （用户报的"歌手页顶部是纯色不是照片"）。这里由页面把确定值传下去。
+   * @returns 高度（vp）；窗口尺寸还没量到时返回 0，调用方按"不画照片"处理。
+   */
+  private pageContentHeightVp(): number {
+    const hPx: number = this.windowInfo.windowSize.height;
+    if (hPx <= 0) {
+      return 0;
+    }
+    return Math.max(0, this.getUIContext().px2vp(hPx) - this.windowInfo.statusBarTopVp);
+  }
+
+  /**
+   * 歌曲/专辑列表视口要避让的顶部高度 = **状态栏 + HDS 标题栏**（≈38 + 56 = 94）。
+   *
+   * ★ 2026-10-11 定稿（用户第三次纠正）：页根 `HdsNavDestination` 的 `ignoreLayoutSafeArea`
+   *   **必须带 TOP** —— HDS 标题栏自己会按"状态栏高度"往下让位，所以页面盒子要从屏幕 y=0 起排
+   *   （只写 BOTTOM = "盒子让一次 + 标题栏再让一次" ⇒ 整条标题掉到状态栏下面约一个状态栏高度，
+   *   用户原话「整个标题移到了状态栏下面」，内容也多顶 38vp「上方留的空距有点大了」）。
+   *   盒子从 0 起排后：标题栏 = 38..94，所以这里**必须**给「状态栏 + 56」= 94
+   *   （改前那个 `TitleBarConstants.ROW_HEIGHT_VP`（56）是"盒子从状态栏下沿起排"时代的旧口径，
+   *   会让首屏顶到标题栏底下）。
+   *   本页是整页大图形态，状态栏那一条仍然归**照片**（`DetailImmersiveBackdrop` 自己那层带
+   *   `ignoreLayoutSafeArea(TOP)`，不受这里影响），所以**不需要** `clipContent`。
+   */
+  private titleTopInset(): number {
+    return getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP;
+  }
+  private songData: ArtistDetailDataSource<SongInfo> = new ArtistDetailDataSource<SongInfo>();
+  private albumData: ArtistDetailDataSource<AlbumInfo> = new ArtistDetailDataSource<AlbumInfo>();
+  private songGeneration: number = 0;
+  private albumGeneration: number = 0;
+  private pageAlive: boolean = false;
+  @Local albumsLoading: boolean = false;
+
+  @Monitor('songs')
+  onSongsChanged(): void {
+    this.songData.reload(this.songs);
+  }
+
+  @Monitor('albums')
+  onAlbumsChanged(): void {
+    this.albumData.reload(this.albums);
+  }
+
+  aboutToDisappear(): void {
+    this.pageAlive = false;
+    this.songGeneration++;
+    this.albumGeneration++;
+    hilog.info(0, 'RzdArtistSticky', 'cancel page requests gen=%{public}d', this.songGeneration);
+  }
+
   aboutToAppear(): void {
-    const favSource: string = codeToSource(this.source);
-    const favId: string = this.effectiveArtistId.length > 0 ? this.effectiveArtistId : this.effectiveArtistMid;
-    this.isFavoriteArtist = favId.length > 0 && this.store.isFavoriteArtist(favSource, favId);
+    this.pageAlive = true;
+    // ★ 状态栏前景色**不再**在这里用 window 接口预下发（原来的 preapplyStatusBarColor 已删）：
+    //   官方《HdsNavigation》systemBarStyle 说明：「不建议混合使用 systemBarStyle 属性和 window 设置
+    //   状态栏样式的相关接口，例如：setWindowSystemBarProperties。」且「当页面设置不同样式时，在页面
+    //   转场开始时生效」⇒ 声明式的 `.systemBarStyle` 就是唯一真源，转场开始那一刻框架就该换色。
+    //   这里只打一条进页判据（触发点 = entry），真机 grep RzdArtistStatusBar 就能对上。
+    this.logStatusBarDecision('entry');
+    // ★ 关注状态的判定必须放在 `effectiveArtistId/mid` 赋值**之后**（见下方 refreshFavoriteState），
+    //   否则这里读到的是空串 ⇒ 已关注的歌手进页仍显示"未关注"。
     hilog.info(0x0000, 'RzdArtistDetail', 'aboutToAppear: name=%{public}s source=%{public}d id=%{public}s',
       this.artistName, this.source, this.artistId);
     this.artistNameText = this.artistName;
+    void this.loadConcerts();
     this.artistPicUrlText = this.artistPicUrl;
     this.effectiveArtistId = this.artistId;
     this.effectiveArtistMid = this.artistMid;
+    this.refreshFavoriteState();
     void this.init();
+  }
+
+  /**
+   * 重新判定「是否已关注」。
+   * ★ 双键匹配（id / mid 都可能被存进收藏，见 `toggleFavoriteArtist`），
+   *   并在 `resolveSingerBySearch` 拿到新 id 后再调一次。
+   *   日志：`RzdArtistFav`
+   */
+  private refreshFavoriteState(): void {
+    const favSource: string = codeToSource(this.source);
+    const id: string = this.effectiveArtistId;
+    const mid: string = this.effectiveArtistMid;
+    // 优先按歌手名判定（收藏=关注，同一歌手跨平台只算一次）；名字为空才退回按 id 判定
+    const displayName: string = this.artistNameText.length > 0 ? this.artistNameText : this.artistName;
+    let followed: boolean = this.store.isFollowingArtistByName(displayName);
+    if (!followed && id.length > 0) {
+      followed = this.store.isFavoriteArtist(favSource, id);
+    }
+    if (!followed && mid.length > 0) {
+      followed = this.store.isFavoriteArtist(favSource, mid);
+    }
+    this.isFavoriteArtist = followed;
+    hilog.info(0x0000, 'RzdArtistFav', 'refresh src=%{public}s id=%{public}s mid=%{public}s fav=%{public}s',
+      favSource, id, mid, followed ? 'true' : 'false');
   }
 
   private async init(): Promise<void> {
@@ -110,7 +271,16 @@ export struct ArtistDetailPage {
     if (this.artistPicUrlText.length > 0) {
       void this.loadBackdropColor();
     }
-    await this.loadAlbums(1);
+    // 缺省页签 = 最热（`activeTab = 0` / `segmentIndex = 0` / `songSort = 0` 三者一致）；
+    // 专辑列表等切到「专辑」页签时再拉（`onSegmentSelect(2)` 里已经处理）。
+    await this.loadSongs(1, true);
+    // ★ 自愈：外部传进来的 id/mid 可能失效（例如从关注页进来的旧收藏），
+    //   首屏一首都没有且已知歌手名时，按名字重新解析一次再重载。
+    if (this.songs.length === 0 && this.artistNameText.length > 0) {
+      hilog.info(0x0000, 'RzdArtistDetail', 'empty songs, retry by name: %{public}s', this.artistNameText);
+      await this.resolveSingerBySearch();
+      await this.loadSongs(1, true);
+    }
     void this.loadArtistDesc();
   }
 
@@ -123,6 +293,78 @@ export struct ArtistDetailPage {
     } catch (_err) {
       // ignore
     }
+  }
+
+  @Builder
+  private ConcertSheet() {
+    Column({ space: 12 }) {
+      Row({ space: 8 }) {
+        SymbolGlyph($r('sys.symbol.auditorium'))
+          .fontSize(18)
+          .fontColor([this.fgPrimary()])
+        Text('即将举办的演唱会')
+          .fontSize(17)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.fgPrimary())
+      }
+      .width('100%')
+      .padding({ left: 4 })
+
+      Text(this.artistNameText.length > 0 ? this.artistNameText : '歌手')
+        .fontSize(13)
+        .fontColor($r('app.color.font_tertiary'))
+        .width('100%')
+        .padding({ left: 4 })
+
+      List({ space: 10 }) {
+        ForEach(this.concerts, (c: ConcertItem) => {
+          ListItem() {
+            Column({ space: 4 }) {
+              Text(c.title)
+                .fontSize(15)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(this.fgPrimary())
+                .maxLines(1)
+                // 超长跑马灯（TextOverflow.MARQUEE + marqueeOptions 才生效）
+                .textOverflow({ overflow: TextOverflow.MARQUEE })
+                .marqueeOptions({ start: true, step: 6 })
+                .width('100%')
+              Row({ space: 6 }) {
+                Text(c.whenText)
+                  .fontSize(12)
+                  .fontColor('#CCFFFFFF')
+                if (c.venueName.length > 0) {
+                  Text('·')
+                    .fontSize(12)
+                    .fontColor('#66FFFFFF')
+                  Text(c.venueName + (c.city.length > 0 ? (' · ' + c.city) : ''))
+                    .fontSize(12)
+                    .fontColor('#CCFFFFFF')
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.MARQUEE })
+                    .marqueeOptions({ start: true, step: 6 })
+                    .layoutWeight(1)
+                }
+              }
+              .width('100%')
+            }
+            .width('100%')
+            .padding({ left: 14, right: 14, top: 12, bottom: 12 })
+            .borderRadius(14)
+            // 弹层里不用光感（光感会降低可读性），用半透明底色
+            .backgroundColor('#24FFFFFF')
+            .alignItems(HorizontalAlign.Start)
+          }
+        }, (c: ConcertItem) => c.id)
+      }
+      .width('100%')
+      .layoutWeight(1)
+      .scrollBar(BarState.Off)
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ left: 16, right: 16, top: 8, bottom: 16 })
+    .backgroundBlurStyle(BlurStyle.COMPONENT_THIN)
   }
 
   @Builder
@@ -148,12 +390,32 @@ export struct ArtistDetailPage {
       } else {
         Text('暂无歌手简介')
           .fontSize(13)
-          .fontColor('#99FFFFFF')
+          .fontColor($r('app.color.font_tertiary'))
           .margin({ top: 10 })
       }
     }
     .padding(16)
     .width(300)
+  }
+
+  /**
+   * 拉取该歌手的「即将举办的演唱会」（Apple Music 私有接口）。
+   * 拿不到就保持空数组 → Hero 里那颗胶囊不显示（优雅降级）。
+   * 日志：`RzdConcert`
+   */
+  private async loadConcerts(): Promise<void> {
+    const name: string = this.artistNameText.length > 0 ? this.artistNameText : this.artistName;
+    if (name.trim().length === 0) {
+      return;
+    }
+    const cached: ConcertItem[] | undefined = ConcertService.getInstance().peek(name);
+    if (cached !== undefined) {
+      this.concerts = cached;
+      return;
+    }
+    const list: ConcertItem[] = await ConcertService.getInstance().upcoming(name);
+    this.concerts = list;
+    console.info('[RzdConcert] hero capsule visible=' + (list.length > 0) + ' count=' + list.length);
   }
 
   private async resolveSingerBySearch(): Promise<void> {
@@ -163,6 +425,7 @@ export struct ArtistDetailPage {
         const first: SingerInfo = result.list[0];
         this.effectiveArtistId = first.id;
         this.effectiveArtistMid = '';
+        this.refreshFavoriteState();
         this.artistPicUrlText = first.picUrl.length > 0 ? first.picUrl : this.artistPicUrlText;
         if (this.artistPicUrlText.length > 0) {
           void this.loadBackdropColor();
@@ -173,16 +436,50 @@ export struct ArtistDetailPage {
     }
   }
 
-  /** 下载歌手图片并取平均主色作为页面背景渐变底色。 */
+  /**
+   * 取色代次：**动态封面的首帧**比平台静态图晚到，晚到的取色响应绝不能盖掉新的
+   * （否则屏上是绿图、底色是棕的 —— 甲方 2026-10-24 报的那条）。
+   */
+  private colorSeq: number = 0;
+  /**
+   * 已经按**动态封面首帧**取过色了 ⇒ 之后凡是"按平台静态图取色"的调用一律作废。
+   *
+   * 否则会出现"先绿一下又跳回棕色"：屏上明明是 Apple 那张图，底色却按平台那张图算。
+   * 清空条件只有一个：页面换了歌手（= 新实例）。
+   */
+  private motionColorApplied: boolean = false;
+
+  /**
+   * 用**平台静态歌手图**取色（首次进入时的默认取色）。
+   */
   private async loadBackdropColor(): Promise<void> {
+    if (this.motionColorApplied) {
+      return;
+    }
+    await this.loadBackdropColorFrom(this.artistPicUrlText);
+  }
+
+  /**
+   * 用指定照片地址取两个颜色：
+   *  * `avgColor`：全图主色经 `ColorConversion.dealColor` 压暗 —— 页面渐变底、文字、标题栏底色都用它；
+   *  * `photoRawAvgColor` + `photoTopColor`：**原始**（不压暗）平均色，只给状态栏判据用。
+   *
+   * @param url 取色用的照片地址：平台的静态歌手图，或**动态封面的首帧**（`previewFrame`）。
+   *            动态封面一上场屏上的图就换成 Apple 那张 ⇒ 必须按它重算，否则底色和画面对不上。
+   */
+  private async loadBackdropColorFrom(url: string): Promise<void> {
+    if (url.length === 0) {
+      return;
+    }
+    const seq: number = ++this.colorSeq;
     const req: http.HttpRequest = http.createHttp();
     try {
-      const resp: http.HttpResponse = await req.request(this.artistPicUrlText, {
+      const resp: http.HttpResponse = await req.request(url, {
         method: http.RequestMethod.GET,
         expectDataType: http.HttpDataType.ARRAY_BUFFER,
         readTimeout: 15000
       });
-      if (resp.responseCode !== 200 || resp.result === undefined) {
+      if (resp.responseCode !== 200 || resp.result === undefined || seq !== this.colorSeq) {
         return;
       }
       const src: image.ImageSource = image.createImageSource(resp.result as ArrayBuffer);
@@ -193,20 +490,24 @@ export struct ArtistDetailPage {
             effectKit.createColorPicker(pixelMap,
               (error: Error | undefined, colorPicker: effectKit.ColorPicker | undefined) => {
                 try {
-                  if (error === undefined && colorPicker !== undefined) {
-                    const color = colorPicker.getLargestProportionColor();
+                  if (error === undefined && colorPicker !== undefined && seq === this.colorSeq) {
+                    const color = colorPicker.getMainColorSync();
                     const arr: number[] = ColorConversion.dealColor(color.red, color.green, color.blue);
                     const r: number = Math.max(0, Math.min(255, arr[0]));
                     const g: number = Math.max(0, Math.min(255, arr[1]));
                     const b: number = Math.max(0, Math.min(255, arr[2]));
                     this.avgColor = `rgb(${r}, ${g}, ${b})`;
                     this.cachedTitleBar = undefined;
+                    // ★ 同一个 picker 顺手取「原始平均色」当兜底判据（不压暗，见 toRgbString 的说明）。
+                    const raw: effectKit.Color = colorPicker.getAverageColor();
+                    this.photoRawAvgColor = toRgbString(raw.red, raw.green, raw.blue);
                   }
                 } finally {
                   resolve();
                 }
               });
           });
+          this.logStatusBarDecision(seq === this.colorSeq ? 'avg-sample' : 'avg-sample-stale');
         } finally {
           try {
             pixelMap.release();
@@ -214,6 +515,7 @@ export struct ArtistDetailPage {
             // ignore
           }
         }
+        await this.loadStatusBarStripColor(src, seq);
       } finally {
         src.release();
       }
@@ -224,10 +526,111 @@ export struct ArtistDetailPage {
     }
   }
 
+  /**
+   * 只解出「状态栏那一条压在照片上的区域」并取它的平均色 → `photoTopColor`。
+   *
+   * 为什么必须按区域取，而不是拿全图主色/全图平均色凑合：
+   * 状态栏是**半透明图标压在照片最上面一条**上，判"图标该黑还是该白"只能看**那一条**的亮度。
+   * 全图主色（`getLargestProportionColor`）表达的是"照片里占比最大的颜色"，跟顶部那一条可以
+   * 完全不搭（例：白天空的歌手照 → 主色是深色衣服 ⇒ 判成白图标 ⇒ 压在浅色天空上什么都看不见）。
+   *
+   * 区域按照片在屏幕上的**实际显示方式**反推（照片层是 `ImageFit.Cover`、竖向居中裁剪）：
+   *   画框 = 宽 × (Hero 320 + 标题栏行 56 + 状态栏避让)vp，状态栏那一条 = 画框顶部 bandVp。
+   * 取不到（解码不支持区域 / 尺寸还没量到）就返回，判据退回 `photoRawAvgColor` → `avgColor`。
+   * @param src 已经创建好的图片源（本方法内只做一次小区域解码）。
+   * @param seq 取色代次（与 `loadBackdropColorFrom` 同一个）：过期响应不许写 `photoTopColor`。
+   */
+  private async loadStatusBarStripColor(src: image.ImageSource, seq: number): Promise<void> {
+    try {
+      const info: image.ImageInfo = await src.getImageInfo();
+      const region: image.Region | undefined = this.statusBarStripRegion(info.size.width, info.size.height);
+      if (region === undefined) {
+        return;
+      }
+      const stripSize: image.Size = {
+        width: Math.max(1, Math.round(region.size.width / 4)),
+        height: Math.max(1, Math.round(region.size.height / 4))
+      };
+      const opts: image.DecodingOptions = {
+        desiredRegion: region,
+        desiredSize: stripSize,
+        cropAndScaleStrategy: image.CropAndScaleStrategy.CROP_FIRST
+      };
+      hilog.info(0x0000, 'RzdArtistStatusBar',
+        'strip region x=%{public}d y=%{public}d w=%{public}d h=%{public}d imgW=%{public}d imgH=%{public}d avoidVp=%{public}f',
+        region.x, region.y, region.size.width, region.size.height, info.size.width, info.size.height,
+        this.windowInfo.statusBarTopVp);
+      const strip: image.PixelMap = await src.createPixelMap(opts);
+      try {
+        await new Promise<void>((resolve: () => void) => {
+          effectKit.createColorPicker(strip,
+            (error: Error | undefined, colorPicker: effectKit.ColorPicker | undefined) => {
+              try {
+                if (error === undefined && colorPicker !== undefined && seq === this.colorSeq) {
+                  const raw: effectKit.Color = colorPicker.getAverageColor();
+                  this.photoTopColor = toRgbString(raw.red, raw.green, raw.blue);
+                }
+              } finally {
+                resolve();
+              }
+            });
+        });
+      } finally {
+        try {
+          strip.release();
+        } catch (_err) {
+          // ignore
+        }
+      }
+      this.logStatusBarDecision(seq === this.colorSeq ? 'strip-sample' : 'strip-sample-stale');
+    } catch (_err) {
+      // 区域解码失败：判据退回整图原始平均色（loadBackdropColor 里已经取到）
+      hilog.warn(0x0000, 'RzdArtistStatusBar', 'strip sample failed, fallback to whole-image average');
+    }
+  }
+
+  /**
+   * 状态栏那一条在**源图**里对应哪一块（`ImageFit.Cover` + 竖向居中裁剪的逆运算）。
+   * @param imgW 源图宽（px）。
+   * @param imgH 源图高（px）。
+   * @returns 区域；窗口尺寸/避让高度还没量到（=0）时返回 undefined。
+   */
+  private statusBarStripRegion(imgW: number, imgH: number): image.Region | undefined {
+    const bandVp: number = this.windowInfo.statusBarTopVp;
+    const boxWvp: number = this.getUIContext().px2vp(this.windowInfo.windowSize.width);
+    const boxHvp: number = BACKDROP_HERO_VP + BACKDROP_ROW_VP + bandVp;
+    if (bandVp <= 0 || boxWvp <= 0 || boxHvp <= 0 || imgW <= 0 || imgH <= 0) {
+      return undefined;
+    }
+    // vp/px：Cover 取长边比例，画框一定被铺满，多出来的方向居中裁掉
+    const scaleVpPerPx: number = Math.max(boxWvp / imgW, boxHvp / imgH);
+    if (!Number.isFinite(scaleVpPerPx) || scaleVpPerPx <= 0) {
+      return undefined;
+    }
+    const cropTopVp: number = Math.max(0, (imgH * scaleVpPerPx - boxHvp) / 2);
+    const y0: number = Math.max(0, Math.min(imgH - 1, Math.floor(cropTopVp / scaleVpPerPx)));
+    const y1: number = Math.max(y0 + 1, Math.min(imgH, Math.ceil((cropTopVp + bandVp) / scaleVpPerPx)));
+    const region: image.Region = {
+      x: 0,
+      y: y0,
+      size: { width: imgW, height: y1 - y0 }
+    };
+    return region;
+  }
+
   private async loadSongs(page: number, reset: boolean): Promise<void> {
-    if (this.loading || this.loadingMore) {
+    if (!this.pageAlive || (!reset && (this.loading || this.loadingMore))) {
       return;
     }
+    const generation: number = reset ? ++this.songGeneration : this.songGeneration;
+    const identity: string = this.effectiveArtistId + ':' + this.effectiveArtistMid;
+    const sort: number = this.songSort;
+    if (reset) {
+      this.loadingMore = false;
+      this.errorMsg = '';
+    }
+    hilog.info(0, 'RzdArtistSticky', 'songs start gen=%{public}d sort=%{public}d page=%{public}d',
+      generation, sort, page);
     if (reset) {
       this.loading = true;
     } else {
@@ -238,8 +641,19 @@ export struct ArtistDetailPage {
       const order: string = this.songSort === 0 ? 'hot' : 'time';
       const result: SongPageResult = await getArtistSongs(this.source, this.effectiveArtistId, this.effectiveArtistMid,
         order, SONG_PAGE_LIMIT, offset, this.artistNameText);
+      if (!this.pageAlive || generation !== this.songGeneration || sort !== this.songSort ||
+        identity !== this.effectiveArtistId + ':' + this.effectiveArtistMid) {
+        hilog.info(0, 'RzdArtistSticky', 'songs stale/cancel gen=%{public}d', generation);
+        return;
+      }
       if (result.list.length === 0) {
         this.songsHasMore = false;
+        // ★ 2026-11-02：平台"歌手作品"接口**成功但空**也算失败体感 ⇒ 首屏先试现场搜索兜底。
+        if (reset) {
+          const recovered: boolean = await this.searchSongsByArtistName(generation);
+          hilog.info(0, 'RzdArtistSongs',
+            'empty songs -> name search fallback ok=%{public}s', recovered ? 'true' : 'false');
+        }
         return;
       }
       this.songs = reset ? result.list : this.songs.concat(result.list);
@@ -248,24 +662,109 @@ export struct ArtistDetailPage {
       if (this.artistNameText.length === 0 && this.songs.length > 0) {
         this.artistNameText = this.songs[0].singer.length > 0 ? this.songs[0].singer : this.artistNameText;
       }
-      if (result.hasMore && this.songs.length < SONG_PAGE_LIMIT * 2 && page < 3) {
-        void this.loadSongs(page + 1, false);
+      hilog.info(0, 'RzdArtistSticky', 'songs ready gen=%{public}d loaded=%{public}d more=%{public}d',
+        generation, this.songs.length, this.songsHasMore ? 1 : 0);
+    } catch (err) {
+      if (this.pageAlive && generation === this.songGeneration) {
+        const e: Error = err as Error;
+        // ★★★ 2026-11-02（用户：「播放页歌曲菜单跳歌手页，有些平台取歌手歌曲失败 code=undefined」）：
+        //   平台侧"歌手作品列表"接口会挂（kw 那条 `获取歌手歌曲失败: code=undefined` 就是
+        //   响应里压根没有 `code` 字段，多半被风控/换了返回体），但**搜索接口还活着**
+        //   ⇒ 首屏失败时直接**用歌手名现场搜一轮**顶上，不要只甩一句错误。
+        //   分页失败（page>1）不兜底：搜索没有"歌手作品"的分页语义，硬翻只会重复。
+        const recovered: boolean = reset ? await this.searchSongsByArtistName(generation) : false;
+        if (!recovered) {
+          this.errorMsg = e.message ?? '加载失败';
+          this.songsHasMore = false;
+          hilog.warn(0, 'RzdArtistSongs', 'songs failed and name-search fallback failed: %{public}s',
+            e.message ?? '');
+        } else {
+          hilog.info(0, 'RzdArtistSongs', 'songs failed -> name search fallback recovered %{public}d',
+            this.songs.length);
+        }
       }
+    } finally {
+      if (this.pageAlive && generation === this.songGeneration) {
+        this.loading = false;
+        this.loadingMore = false;
+      }
+    }
+  }
+
+  /**
+   * ★★★ 2026-11-02（用户：「播放页通过歌曲菜单跳转歌手页，有些平台会获取歌手歌曲失败：code=undefined。
+   *   这个你看看，至少得保证失败时直接现场搜索」）：
+   *
+   * **现场搜索兜底**：平台侧「歌手作品列表」接口挂了，但**搜索接口还在**
+   * ⇒ 用歌手名直接搜一轮歌曲顶上，别让用户对着空列表 + 报错。
+   *
+   * 判据：
+   * - 只在**第一页**触发（`page > 1` 时不兜底：搜索接口没有"歌手作品"的分页语义，硬翻只会重复）；
+   * - 只在拿到**非空**结果时才接管（空结果仍然回到原来的错误/空态）；
+   * - 接管后 `songsHasMore=false`、`songPage=2`，不再去调那个坏掉的分页接口。
+   *
+   * 为什么用 `lxSearch` 而不是 `getArtistSongs`：后者正是坏掉的那条；
+   * `lxSearch` 走的是和搜索页完全同一条链路（`source` 用 `codeToSource(this.source)`，
+   * 与 `toPlayable()` 里的 source 口径**同一个**，播放不会串源）。
+   *
+   * @param generation 发起时的歌曲代次（页面/排序已变则丢弃结果）
+   * @returns true = 兜底成功（调用方不要再报错）
+   */
+  private async searchSongsByArtistName(generation: number): Promise<boolean> {
+    const name: string = this.artistNameText.trim();
+    if (name.length === 0) {
+      return false;
+    }
+    try {
+      const sourceId: string = codeToSource(this.source);
+      const res: LXSearchResult = await lxSearch(sourceId, name, 1, SONG_PAGE_LIMIT, false);
+      if (!this.pageAlive || generation !== this.songGeneration) {
+        return false;
+      }
+      const list: SongInfo[] = [];
+      for (let i: number = 0; i < res.list.length; i++) {
+        const it: LXSearchSong = res.list[i];
+        const sec: number = Number(it.interval);
+        list.push(new SongInfo(it.songId, it.name, it.singer, it.albumName,
+          Number.isFinite(sec) ? sec : 0, it.img));
+      }
+      if (list.length === 0) {
+        return false;
+      }
+      this.songs = list;
+      this.songsHasMore = false;
+      this.songPage = 2;
+      this.errorMsg = '';
+      if (this.artistNameText.length === 0 && list[0].singer.length > 0) {
+        this.artistNameText = list[0].singer;
+      }
+      hilog.info(0, 'RzdArtistSongs',
+        'name-search fallback source=%{public}s name=%{public}s hits=%{public}d',
+        sourceId, name, list.length);
+      return true;
     } catch (err) {
       const e: Error = err as Error;
-      this.errorMsg = e.message ?? '加载失败';
-      this.songsHasMore = false;
-    } finally {
-      this.loading = false;
-      this.loadingMore = false;
+      hilog.warn(0, 'RzdArtistSongs', 'name-search fallback failed: %{public}s', e.message ?? '');
+      return false;
     }
   }
 
   private async loadAlbums(page: number): Promise<void> {
+    if (!this.pageAlive || this.albumsLoading) {
+      return;
+    }
+    this.albumsLoading = true;
+    const generation: number = ++this.albumGeneration;
+    const identity: string = this.effectiveArtistId + ':' + this.effectiveArtistMid;
     try {
       const offset: number = (page - 1) * ALBUM_PAGE_LIMIT;
       const result: ArtistAlbumPageResult = await getArtistAlbums(this.source, this.effectiveArtistId, this.effectiveArtistMid,
         ALBUM_PAGE_LIMIT, offset);
+      if (!this.pageAlive || generation !== this.albumGeneration ||
+        identity !== this.effectiveArtistId + ':' + this.effectiveArtistMid) {
+        hilog.info(0, 'RzdArtistSticky', 'albums stale/cancel gen=%{public}d', generation);
+        return;
+      }
       if (result.list.length === 0) {
         this.albumsHasMore = false;
         return;
@@ -278,11 +777,14 @@ export struct ArtistDetailPage {
       this.albums = page === 1 ? result.list : this.albums.concat(result.list);
       this.albumsHasMore = result.hasMore;
       this.albumPage = page + 1;
-      if (result.hasMore && this.albums.length < ALBUM_PAGE_LIMIT * 2 && page < 3) {
-        void this.loadAlbums(page + 1);
-      }
     } catch (_err) {
-      this.albumsHasMore = false;
+      if (this.pageAlive && generation === this.albumGeneration) {
+        this.albumsHasMore = false;
+      }
+    } finally {
+      if (this.pageAlive && generation === this.albumGeneration) {
+        this.albumsLoading = false;
+      }
     }
   }
 
@@ -298,16 +800,17 @@ export struct ArtistDetailPage {
     }
   }
 
-  /** 三块分段：0=专辑，1=最新，2=最热。 */
+  /** 三块分段：**0=最热，1=最新，2=专辑**（甲方 2026-10-24 指定顺序，原来是 专辑/最新/最热）。 */
   private onSegmentSelect(index: number): void {
     this.segmentIndex = index;
-    if (index === 0) {
+    if (index === 2) {
       this.activeTab = 1;
       if (this.albums.length === 0) {
         void this.loadAlbums(1);
       }
       return;
     }
+    // 1 = 最新（sort 1）、0 = 最热（sort 0）
     const sort: number = index === 1 ? 1 : 0;
     const needReload: boolean = this.activeTab !== 0 || this.songSort !== sort || this.songs.length === 0;
     this.activeTab = 0;
@@ -345,6 +848,9 @@ export struct ArtistDetailPage {
 
   /** 歌手歌曲 → 可播放的 LXSearchSong。 */
   private toPlayable(song: SongInfo): LXSearchSong {
+    // 优先用歌曲自身封面，没有再退回歌手头像
+    const cover: string = (song.picUrl !== undefined && song.picUrl.length > 0) ?
+      song.picUrl : this.artistPicUrlText;
     return {
       songId: song.id,
       name: song.name,
@@ -353,7 +859,7 @@ export struct ArtistDetailPage {
       albumId: '',
       source: codeToSource(this.source),
       interval: formatInterval(song.interval),
-      img: this.artistPicUrlText,
+      img: cover,
       types: []
     };
   }
@@ -362,19 +868,21 @@ export struct ArtistDetailPage {
   private buttonBlur(): BlurStyle {
     switch (this.ambientState.level) {
       case 1:
-        return BlurStyle.Thin;
+        return BlurStyle.COMPONENT_ULTRA_THIN;
       case 2:
-        return BlurStyle.Regular;
+        return BlurStyle.COMPONENT_THIN;
       case 3:
-        return BlurStyle.Thick;
+        return BlurStyle.COMPONENT_REGULAR;
       default:
-        return BlurStyle.Regular;
+        return BlurStyle.COMPONENT_THIN;
     }
   }
 
-  /** 取色背景是否偏浅（决定前景文字/图标用深色还是白色）。 */
-  private isLightBackdrop(): boolean {
-    const c: string = this.avgColor;
+  /**
+   * 颜色亮不亮 —— **全页唯一判据**（`#RRGGBB` 与 `rgb(r, g, b)` 都认；认不出来按"暗"处理）。
+   * 页面文字/图标、标题栏图标、状态栏前景色全部走它，谁都不许另写一套。
+   */
+  private isLightColor(c: string): boolean {
     let r: number = -1;
     let g: number = -1;
     let b: number = -1;
@@ -397,6 +905,81 @@ export struct ArtistDetailPage {
     return (0.299 * r + 0.587 * g + 0.114 * b) > 150;
   }
 
+  /**
+   * 取色背景是否偏浅 —— 判的是**页面正文的背景**。
+   *
+   * ⚠️ `avgColor` 是 `ColorConversion.dealColor` 压暗过的（亮度上限 0.3），所以这里几乎恒为 false
+   * ⇒ 页面文字/图标恒用白色。**这是对的**：正文压在的就是这块压暗底色本身（见 `HdsNavDestination
+   * .backgroundColor(this.avgColor)` + 照片层的渐变遮罩底部色）。
+   * ★ 但**不能拿它当状态栏的判据** —— 状态栏那一条压的是**原始照片**，不是这块压暗底色。
+   */
+  private isLightBackdrop(): boolean {
+    return this.isLightColor(this.avgColor);
+  }
+
+  /**
+   * 滚动前压在状态栏那一条下面的颜色 = 照片顶部那一条的原始平均色。
+   * 没有照片像素时（首帧 / 没图 / 取色失败）退回 `photoRawAvgColor` → `avgColor`：
+   * 那两个时刻状态栏那一条确实是页面自己的底色（照片层顶部是 `Color.Transparent`，压不出东西来）。
+   */
+  private statusBarOriginalBackground(): string {
+    if (this.photoTopColor.length > 0) {
+      return this.photoTopColor;
+    }
+    if (this.photoRawAvgColor.length > 0) {
+      return this.photoRawAvgColor;
+    }
+    return this.avgColor;
+  }
+
+  /**
+   * `.systemBarStyle` 的**第一个**参数（官方：`originalStyle` = 「系统状态栏**初始**样式」）。
+   *
+   * 三种状态分别该是什么色（对应官方 HdsNavDestination.systemBarStyle 的语义）：
+   *   ① 首帧 / 没图 / 取色失败：状态栏那一条 = 页面自己的底色 `avgColor`（压暗深色）⇒ 白图标；
+   *   ② 照片就位（未滚动，滚动 < 264vp）：那一条压的是**照片顶部**⇒ 由照片顶部原始亮度算，浅色照片给黑图标；
+   *   ③ 滚动过 264vp（动态档）：见 {@link statusBarScrollEffectColor}。
+   * 官方：「未设置 systemBarStyle 属性时，颜色默认值同主标题栏字体颜色」—— 我们显式给，判据一律由背景算出。
+   */
+  private statusBarOriginalColor(): string {
+    return this.isLightColor(this.statusBarOriginalBackground()) ? '#000000' : '#FFFFFF';
+  }
+
+  /**
+   * `.systemBarStyle` 的**第二个**参数（官方：`scrollEffectStyle` = 「动态样式生效后，系统状态栏对应的
+   * **最终**动态样式」）。
+   *
+   * ⚠️ 官方说的是"**最终**"：动态档的终点是照片完全上移出状态栏（照片画框 376vp+避让，滚动超过它就没照片了），
+   * 那时那一条压的是「页面压暗底色」本身（也正是滚动档标题栏 `scrollEffectStyle.backgroundStyle.backgroundColor`
+   * 用的 `avgColor`）⇒ 判据取 `avgColor`。
+   * 动态档切换点是 264vp，此时照片还剩一小截 ⇒ 理论上有一小段（264vp ~ 照片画框高）照片与判据不完全同步；
+   * **这一点是有意取的保守值**：若改成用照片色，越过照片画框后就会变成"黑图标压深底"（更差）。
+   * 与第一个参数**必须分开算**：把同一个值塞给两个参数，等于承认两种状态里必有一种是错的。
+   */
+  private statusBarScrollEffectColor(): string {
+    return this.isLightColor(this.avgColor) ? '#000000' : '#FFFFFF';
+  }
+
+  /**
+   * 状态栏判据日志：打出**下发值 + 判据来源 + 触发点**（真机 `grep RzdArtistStatusBar`）。
+   * 内容没变就不打，避免 build 每帧刷屏。
+   * @param trigger 触发点：entry（进页）/ avg-sample（主色回来）/ strip-sample（顶部条回来）/ pic-url（照片地址变化）
+   */
+  private logStatusBarDecision(trigger: string): void {
+    const original: string = this.statusBarOriginalColor();
+    const scrolled: string = this.statusBarScrollEffectColor();
+    const strip: string = this.photoTopColor.length > 0 ? this.photoTopColor : '(none)';
+    const rawAvg: string = this.photoRawAvgColor.length > 0 ? this.photoRawAvgColor : '(none)';
+    const line: string = trigger + '|' + original + '|' + scrolled + '|' + strip + '|' + rawAvg + '|' + this.avgColor;
+    if (line === this.lastStatusBarLog) {
+      return;
+    }
+    this.lastStatusBarLog = line;
+    hilog.info(0x0000, 'RzdArtistStatusBar',
+      'trigger=%{public}s original=%{public}s scrollEffect=%{public}s strip=%{public}s rawAvg=%{public}s avgColor=%{public}s',
+      trigger, original, scrolled, strip, rawAvg, this.avgColor);
+  }
+
   /** 标题栏返回/菜单按钮的半透明底色。 */
   private fgTitleIconBg(): string {
     return this.isLightBackdrop() ? '#1A000000' : '#1AFFFFFF';
@@ -405,6 +988,32 @@ export struct ArtistDetailPage {
   /** 主文字颜色：浅色背景用深字，深色背景用白字。 */
   private fgPrimary(): string {
     return this.isLightBackdrop() ? '#E6000000' : '#FFFFFF';
+  }
+
+  /** 取色回来（avgColor 变化）⇒ 标题栏图标色与滚动档底色都是它推出来的，缓存必须作废。 */
+  @Monitor('avgColor')
+  onAvgColorChanged(): void {
+    this.cachedTitleBar = undefined;
+  }
+
+  /**
+   * 歌手照片地址到手（`resolveSingerBySearch()` 搜到 / 路由带进来晚了一拍）时重下发一次判据。
+   *
+   * 理由：`photoTopColor` 只在**取到色**之后才有值，而取色的输入是照片地址；地址本身可能是异步才有的。
+   * ⚠️ 这里**只**更新判据状态（`@Local`）让 `.systemBarStyle` 重新求值，不再走
+   * `WindowUtil.setWindowSystemBarProperties`（官方明确不建议两套混用，见 aboutToAppear 的注释）。
+   */
+  @Monitor('artistPicUrlText')
+  onArtistPicUrlChanged(): void {
+    // 标题栏缓存里存的是构建那一刻的 avgColor 快照，照片换了要让它重建。
+    this.cachedTitleBar = undefined;
+    this.logStatusBarDecision('pic-url');
+  }
+
+  /** 顶部条取色回来：`.systemBarStyle` 的第一个参数会在这次状态变更后重新求值。 */
+  @Monitor('photoTopColor')
+  onPhotoTopColorChanged(): void {
+    this.logStatusBarDecision('strip-applied');
   }
 
   /** 次要文字颜色。 */
@@ -417,24 +1026,63 @@ export struct ArtistDetailPage {
     return this.isLightBackdrop() ? '#1A000000' : '#33FFFFFF';
   }
 
+  /**
+   * Hero 中间那颗「播放全部」圆钮的底色 —— **固定白色**（用户 2026-10-24 指定）。
+   *
+   * 不跟 `fgTint()`（照片明暗派生的半透明底）走：那颗按钮是这一页唯一的主动作，
+   * 实心白圆 + 深色三角，在深浅照片上都一样清楚。
+   */
+  private playAllButtonColor(): string {
+    return '#FFFFFF';
+  }
+
+  /** 白圆上的播放三角：固定深色（白底上用 `fgPrimary()` 会变成"白底白字"看不见）。 */
+  private playAllGlyphColor(): string {
+    return '#1F1F22';
+  }
+
   /** 分隔线颜色。 */
   private fgDivider(): string {
     return this.isLightBackdrop() ? '#1F000000' : '#26FFFFFF';
   }
 
   private playSong(song: SongInfo): void {
-    void OnlinePlayUtil.playSearchSong(this.appState, this.toPlayable(song), this.getUIContext());
+    // 整表入队，从当前曲开始，才能自动下一首
+    if (this.songs.length === 0) {
+      void OnlinePlayUtil.playSearchSong(this.appState, this.toPlayable(song), this.getUIContext());
+      return;
+    }
+    const list: LXSearchSong[] = [];
+    let start: number = 0;
+    for (let i: number = 0; i < this.songs.length; i++) {
+      list.push(this.toPlayable(this.songs[i]));
+      if (this.songs[i].id === song.id) {
+        start = i;
+      }
+    }
+    void OnlinePlayUtil.playList(this.appState, list, start, this.getUIContext());
   }
 
   private playAll(): void {
-    if (this.songs.length === 0) {
+    if (!this.pageAlive || this.activeTab !== 0 || this.loading || this.songs.length === 0) {
       return;
     }
     const list: LXSearchSong[] = [];
     for (let i: number = 0; i < this.songs.length; i++) {
       list.push(this.toPlayable(this.songs[i]));
     }
-    void OnlinePlayUtil.playList(this.appState, list, 0, this.getUIContext());
+    const generation: number = this.songGeneration;
+    const sort: number = this.songSort;
+    hilog.info(0, 'RzdArtistSticky', 'playall dispatch gen=%{public}d sort=%{public}d readyLoaded=%{public}d more=%{public}d',
+      generation, sort, list.length, this.songsHasMore ? 1 : 0);
+    void OnlinePlayUtil.playList(this.appState, list, 0, this.getUIContext()).then((accepted: boolean): void => {
+      if (!this.pageAlive || generation !== this.songGeneration || sort !== this.songSort) {
+        hilog.info(0, 'RzdArtistSticky', 'playall completion canceled gen=%{public}d', generation);
+        return;
+      }
+      hilog.info(0, 'RzdArtistSticky', 'playall accepted=%{public}d gen=%{public}d count=%{public}d',
+        accepted ? 1 : 0, generation, list.length);
+    });
   }
 
   /** 收藏：把歌手歌曲加入以歌手名命名的歌单（不存在则创建）。 */
@@ -446,10 +1094,11 @@ export struct ArtistDetailPage {
       this.getUIContext().getPromptAction().showToast({ message: '歌手信息不完整，无法收藏', duration: 2000 });
       return;
     }
-    if (this.store.isFavoriteArtist(sourceId, id)) {
-      this.store.removeFavoriteArtist(sourceId, id);
+    const followName: string = this.artistNameText.length > 0 ? this.artistNameText : this.artistName;
+    if (this.store.isFollowingArtistByName(followName)) {
+      this.store.unfollowArtistByName(followName);
       this.isFavoriteArtist = false;
-      this.getUIContext().getPromptAction().showToast({ message: '已取消收藏', duration: 1800 });
+      this.getUIContext().getPromptAction().showToast({ message: '已取消关注', duration: 1800 });
       return;
     }
     const entry: FavoriteEntry = new FavoriteEntry();
@@ -460,9 +1109,9 @@ export struct ArtistDetailPage {
     entry.img = this.artistPicUrl;
     entry.count = this.songs.length;
     entry.time = Date.now();
-    this.store.addFavoriteArtist(entry);
+    this.store.followArtistByName(entry);
     this.isFavoriteArtist = true;
-    this.getUIContext().getPromptAction().showToast({ message: '已收藏歌手', duration: 1800 });
+    this.getUIContext().getPromptAction().showToast({ message: '已关注歌手', duration: 1800 });
   }
 
   /** 拉取歌手全部歌曲（分页累加，最多 600 首）。 */
@@ -501,21 +1150,27 @@ export struct ArtistDetailPage {
     this.pageIndexInfos.pop();
   }
 
-  /** 歌曲行：封面 + 歌名/歌手 + 时长 + 更多菜单。 */
+  /**
+   * 歌曲行：封面 + 歌名/歌手 + 时长 + 更多菜单。
+   *
+   * ★ 2026-10-24（甲方：「歌手页的专辑这个列表的封面大小刚刚好，你把最热和最新也改成这个大小」）：
+   *   封面从 42×42 改成 **56×56**（与 `AlbumRowView` 逐像素同尺寸、同圆角），行高 56 → 72
+   *   （56 的封面塞进 56 的行会顶满、没有上下留白）。两个列表现在视觉上是同一套。
+   */
   @Builder
   private SongRowView(item: SongInfo, index: number) {
-    Row({ space: 10 }) {
+    Row({ space: 12 }) {
       if (item.picUrl.length > 0) {
         Image(item.picUrl)
-          .width(42)
-          .height(42)
-          .borderRadius(8)
+          .width(SONG_ROW_COVER_VP)
+          .height(SONG_ROW_COVER_VP)
+          .borderRadius(6)
           .objectFit(ImageFit.Cover)
       } else if (this.artistPicUrlText.length > 0 && !this.imageFailed) {
         Image(this.artistPicUrlText)
-          .width(42)
-          .height(42)
-          .borderRadius(8)
+          .width(SONG_ROW_COVER_VP)
+          .height(SONG_ROW_COVER_VP)
+          .borderRadius(6)
           .objectFit(ImageFit.Cover)
       } else {
         Row() {
@@ -525,18 +1180,23 @@ export struct ArtistDetailPage {
             .height(20)
             .fontColor(['#B3FFFFFF'])
         }
-        .width(42)
-        .height(42)
-        .borderRadius(8)
+        .width(SONG_ROW_COVER_VP)
+        .height(SONG_ROW_COVER_VP)
+        .borderRadius(6)
         .justifyContent(FlexAlign.Center)
         .backgroundColor('#22FFFFFF')
       }
       Column({ space: 2 }) {
-        Text(item.name)
-          .fontSize(15)
-          .fontColor(this.fgPrimary())
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        // ★ 2026-10-15：**歌曲行**的歌名过长改跑马灯（用户要求「各个页面歌曲名过长时改为用跑马灯显示」）。
+        //   字号/字色逐字保留（字色是随底取色的 `fgPrimary()`）；父容器是 `Column` ⇒ 默认 `fillByWidth`。
+        //   ⚠️ 只改这一行歌曲名 —— 下面的歌手·专辑行、`AlbumRowView` 里的专辑名、`ArtistHero()` 里的
+        //      歌手名**一律不动**（它们不是歌名）。
+        SongTitleMarquee({
+          text: item.name,
+          titleFontSize: 15,
+          titleFontColor: this.fgPrimary(),
+          titleFontWeight: FontWeight.Normal
+        })
         Text(item.singer + (item.albumName.length > 0 ? ' · ' + item.albumName : ''))
           .fontSize(12)
           .fontColor(this.fgSecondary())
@@ -559,7 +1219,8 @@ export struct ArtistDetailPage {
       })
     }
     .width('100%')
-    .height(56)
+    // 与 `AlbumRowView` 同高（56 的封面 + 上下各 8 的留白）
+    .height(72)
     .padding({ left: 16, right: 16 })
     .alignItems(VerticalAlign.Center)
     .onClick(() => {
@@ -567,14 +1228,14 @@ export struct ArtistDetailPage {
     })
   }
 
-  /** 专辑行。 */
+  /** 专辑行（封面尺寸 = {@link SONG_ROW_COVER_VP}，歌曲行必须与它一致）。 */
   @Builder
   private AlbumRowView(item: AlbumInfo) {
     Row({ space: 12 }) {
       Image(item.picUrl.length > 0 ? item.picUrl : this.artistPicUrlText.length > 0 ?
         this.artistPicUrlText : $r('app.media.ic_avatar1'))
-        .width(56)
-        .height(56)
+        .width(SONG_ROW_COVER_VP)
+        .height(SONG_ROW_COVER_VP)
         .borderRadius(6)
         .objectFit(ImageFit.Cover)
       Column({ space: 3 }) {
@@ -611,6 +1272,27 @@ export struct ArtistDetailPage {
     })
   }
 
+  /**
+   * @returns 宽屏（平板 / 阔屏 / **手机横屏**）走「**左侧歌手卡 + 右侧列表**」。
+   *
+   * 甲方 2026-10-24：「回响页、现在就听页…歌手页…都适配一下其它比例。
+   * 像歌手页左侧显示一张歌手卡片，右侧是列表」+ 第二轮：「我手机横屏看，那两个页面还是之前的样式」。
+   * ⇒ 判据放进 `shouldUseSplitDetailLayout`：LG/XL **或** MD 宽 + SM 高（手机横屏）。
+   */
+  private isWideLayout(): boolean {
+    return shouldUseSplitDetailLayout(this.breakpointEnv.widthBreakpoint, this.breakpointEnv.heightBreakpoint);
+  }
+
+  /**
+   * 左侧歌手卡宽度（vp）：随可用高度收（手机横屏可用高只有 300 出头，卡片必须跟着变窄，
+   * 否则方形封面 + 文字放不下）。算法见 `splitDetailCardWidthVp`。
+   */
+  private heroCardWidthVp(): number {
+    const available: number = this.getUIContext().px2vp(this.windowInfo.windowSize.height) -
+      this.titleTopInset() - 32;
+    return splitDetailCardWidthVp(this.breakpointEnv.widthBreakpoint, available);
+  }
+
   private openAlbum(item: AlbumInfo): void {
     const param = new AlbumRouteParam();
     param.source = this.source;
@@ -623,11 +1305,30 @@ export struct ArtistDetailPage {
     this.pageIndexInfos.pushPathByName(RouterUrlConstants.ALBUM_DETAIL, param);
   }
 
-  /** HDS 标题栏：返回 + 分享/更多三枚按钮（无标题文字），沉浸渐变模糊。 */
+  /**
+   * HDS 标题栏：返回 + 分享/更多三枚按钮（无标题文字）。
+   *
+   * ★ 沉浸光感（官方真实材质，不是自绘近似）：
+   *   `style.systemMaterialEffect = buildTitleMaterial(ambientState.level)`
+   *   走的是 HDS 的 `TitleBarStyleOptions.systemMaterialEffect`（`@since 6.1.0(23)`，
+   *   本工程 default/pc 的 compatible 都 ≥ 23，可用）。
+   *   为什么必须是它：官方《沉浸光感功耗优化》明确 ——
+   *   「其他组件仅在 Navigation/NavDestination 标题栏或横向 Tabs 中 barPosition 为
+   *     BarPosition.End 的底部 TabBar 中生效。在其他区域中设置沉浸光感效果不生效。」
+   *   标题栏正是允许区域，所以只有挂在这里才是**系统的**光感。
+   *
+   * ★ 想看到材质，两件事必须同时成立（官方 FAQ《材质效果的显示层级问题》：
+   *   「沉浸光感的视觉层级位于组件的 backgroundColor、backgroundBlurStyle 等属性之下」）：
+   *   ① 不滚动时 `originalStyle.backgroundStyle.backgroundColor` 必须是 `Color.Transparent`
+   *      —— 否则那块不透明底把材质整个盖住，看起来就是"一块纯色"；
+   *   ② 标题栏上不要再叠 `backgroundBlurStyle` / `backgroundEffect`
+   *      —— 材质自带模糊，叠加既是重复处理也会互相干扰。
+   *   两者本页都满足：只有 `scrollEffectStyle`（滚过 264vp 之后那一档）才落 `avgColor`。
+   */
   private cachedTitleBar: HdsNavigationTitleBarOptions | undefined = undefined;
 
   private getArtistTitleBar(): HdsNavigationTitleBarOptions {
-    hilog.info(0x0000, 'RzdArtistDetail', 'getArtistTitleBar called');
+    hilog.info(0x0000, 'RzdArtistDetail', 'getArtistTitleBar called level=%{public}d', this.ambientState.level);
     let bar = this.cachedTitleBar;
     if (bar === undefined) {
       bar = {
@@ -636,11 +1337,17 @@ export struct ArtistDetailPage {
           end: LengthMetrics.vp(16)
         },
         style: {
+          // ENABLE：让 HDS 在滚动渐变那一档也走模糊档（原来被改成 DISABLE，等于把材质链断掉）。
           blurStrategy: BlurStrategy.ENABLE,
           scrollEffectOpts: {
-            scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR
+            enableScrollEffect: true,
+            scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR,
+            blurEffectiveStartOffset: LengthMetrics.vp(0),
+            blurEffectiveEndOffset: LengthMetrics.vp(264)
           },
           originalStyle: {
+            // ① 不滚动时**必须透明**，否则盖住材质（见上面注释）。
+            backgroundStyle: { backgroundColor: Color.Transparent },
             contentStyle: {
               backIconStyle: {
                 iconColor: this.fgPrimary(),
@@ -653,6 +1360,7 @@ export struct ArtistDetailPage {
             }
           },
           scrollEffectStyle: {
+            backgroundStyle: { backgroundColor: this.avgColor },
             contentStyle: {
               backIconStyle: {
                 iconColor: this.fgPrimary(),
@@ -703,240 +1411,599 @@ export struct ArtistDetailPage {
     }
     const style = bar.style;
     if (style !== undefined) {
-      style.systemMaterialEffect = buildTitleMaterial(this.ambientState.level);
+      // ★ 官方沉浸光感材质（IMMERSIVE + 档位跟随环境光等级）。
+      //   ⚠️ 千万不要再写回 `{ materialType: hdsMaterial.MaterialType.NONE }` ——
+      //   那正是用户报的"原本歌手页上面有光感，现在没了"。
+      const material = buildTitleMaterial(this.ambientState.level);
+      style.systemMaterialEffect = material;
+      hilog.info(0x0000, 'RzdArtistDetail',
+        'titleBar material type=%{public}d level=%{public}d avgColor=%{public}s',
+        material.materialType ?? -1, material.materialLevel ?? -1, this.avgColor);
     }
     return bar;
   }
 
-  build() {
-    HdsNavDestination() {
+  @Builder
+  private ArtistHero() {
+    Stack({ alignContent: Alignment.Bottom }) {
       Column() {
-        Stack({ alignContent: Alignment.Bottom }) {
-          if (this.artistPicUrlText.length > 0 && !this.imageFailed) {
-            Image(this.artistPicUrlText)
-              .width('100%')
-              .height(320)
-              .objectFit(ImageFit.Cover)
-              .onError(() => {
-                this.imageFailed = true;
-              })
-          } else {
-            Column()
-              .width('100%')
-              .height(320)
-              .justifyContent(FlexAlign.Center)
-              .backgroundColor('#1f2328')
-          }
-
-          Column()
-            .width('100%')
-            .height(150)
-            .position({ y: 170 })
-            .linearGradient({
-              colors: [[Color.Transparent, 0], [this.avgColor, 1]],
-              angle: 180,
-              direction: GradientDirection.Bottom
-            })
-
-          Column() {
-            Text(this.artistNameText.length > 0 ? this.artistNameText : '歌手')
-              .fontSize(28)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(this.fgPrimary())
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .width('100%')
-              .textAlign(TextAlign.Center)
-              .padding({ left: 20, right: 20 })
-
-            Row({ space: 14 }) {
-              Row() {
-                SymbolGlyph($r('sys.symbol.person_crop_circle_fill_1'))
-                  .fontSize(18)
-                  .fontWeight(FontWeight.Regular)
-                  .height(18)
-                  .fontColor([this.fgPrimary()])
-              }
-              .width(40)
-              .height(40)
-              .borderRadius(20)
-              .backgroundColor(this.fgTint())
-              .backgroundBlurStyle(this.buttonBlur())
-              .alignItems(VerticalAlign.Center)
-              .justifyContent(FlexAlign.Center)
-              .onClick(() => {
-                this.showAboutPopup = !this.showAboutPopup;
-              })
-              .bindPopup($$this.showAboutPopup, {
-                builder: this.AboutPopup,
-                placement: Placement.Top,
-                enableArrow: true,
-                backgroundBlurStyle: this.buttonBlur(),
-                onStateChange: (event: PopupStateChangeParam): void => {
-                  if (!event.isVisible) {
-                    this.showAboutPopup = false;
-                  }
-                }
-              })
-
-              Row() {
-                SymbolGlyph($r('sys.symbol.play_fill'))
-                  .fontSize(26)
-                  .fontWeight(FontWeight.Regular)
-                  .height(26)
-                  .fontColor([this.fgPrimary()])
-              }
-              .width(60)
-              .height(60)
-              .borderRadius(30)
-              .backgroundColor(this.fgTint())
-              .backgroundBlurStyle(this.buttonBlur())
-              .alignItems(VerticalAlign.Center)
-              .justifyContent(FlexAlign.Center)
-              .onClick(() => {
-                this.playAll();
-              })
-
-              Row() {
-                SymbolGlyph(this.isFavoriteArtist ? $r('sys.symbol.heart_fill') : $r('sys.symbol.heart'))
-                  .fontSize(18)
-                  .fontWeight(FontWeight.Regular)
-                  .height(18)
-                  .fontColor([this.fgPrimary()])
-              }
-              .width(40)
-              .height(40)
-              .borderRadius(20)
-              .backgroundColor(this.fgTint())
-              .backgroundBlurStyle(this.buttonBlur())
-              .alignItems(VerticalAlign.Center)
-              .justifyContent(FlexAlign.Center)
-              .onClick(() => {
-                this.toggleFavoriteArtist();
-              })
+        // 即将举办的演唱会（Apple Music 私有接口；拿不到就不显示这一颗）
+        if (this.concerts.length > 0) {
+          // ★ 材质必须挂在 Button 上：按《新 API26 沉浸光感经验汇总》§1.1 / §1.3，
+          //   「按钮与选择类」是 A 档宿主，页面内任意区域都能渲染 systemMaterial；
+          //   自绘 Row / Stack 属 out of scope（编译能过、真机不渲染 ⇒ 表现为"失效"）。
+          //   前提：backgroundColor 必须半透明，否则会把材质整块遮住（文档坑 11 / 12）。
+          // ★★ 2026-11-03（甲方：「三颗按钮恢复光感」）：档位改回**跟随「光感强度」**的
+          //   `immersiveFromLevel(level)`（默认 REGULAR＝中等），与全仓已验收的点位逐字一致 ——
+          //   搜索页返回钮/搜索框、首页搜索行、识别钮、定位钮都是这一套。
+          //   §256 那轮曾把它压成 THIN「跟多选胶囊看齐」，但 THIN 叠在**歌手照片**上几乎看不出玻璃
+          //   ⇒ 甲方观感就是"没有光感"。文档 §1.1 对 A 档按钮**没有**厚度要求，没必要自降一档。
+          Button() {
+            Row({ space: 6 }) {
+              SymbolGlyph($r('sys.symbol.auditorium'))
+                .fontSize(13)
+                .fontColor([this.fgPrimary()])
+              Text('即将举办的演唱会')
+                .fontSize(12)
+                .fontColor(this.fgPrimary())
             }
-            .justifyContent(FlexAlign.Center)
-            .padding({ top: 12 })
           }
-          .width('100%')
-          .padding({ left: 16, right: 16, bottom: 16 })
+          .type(ButtonType.Normal)
+          .height(28)
+          .padding({ left: 12, right: 12 })
+          .borderRadius(14)
+          .systemMaterial(immersiveFromLevel(this.ambientState.level))
+          .backgroundColor(this.fgTint())
+          .margin({ bottom: 10 })
+          .onClick(() => {
+            this.concertSheet = true;
+          })
+          .bindSheet($$this.concertSheet, this.ConcertSheet(), {
+            height: SheetSize.MEDIUM,
+            showClose: true,
+            // 弹层本身走真模糊（无底色），避免关掉"光感"的设备上整层透明
+            blurStyle: BlurStyle.COMPONENT_THIN,
+            backgroundColor: Color.Transparent,
+            maskColor: '#33000000'
+          })
         }
-        .width('100%')
-        .height(320)
 
-        Row({ space: 8 }) {
-          Column() {
-            CapsuleSegmentedSelector({
-              labels: ['专辑', '最新', '最热'],
-              selectedIndex: this.segmentIndex,
-              accentColor: this.themeState.color,
-              compact: true,
-              onSelect: (index: number): void => {
-                this.onSegmentSelect(index);
+        Text(this.artistNameText.length > 0 ? this.artistNameText : '歌手')
+          .fontSize(28)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.fgPrimary())
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+          .textAlign(TextAlign.Center)
+          .padding({ left: 20, right: 20 })
+
+        Row({ space: 14 }) {
+          // 歌手信息（简介弹窗）：info_circle_fill（甲方 2026-10-24 指定）
+          Button() {
+            SymbolGlyph($r('sys.symbol.info_circle_fill'))
+              .fontSize(18)
+              .fontWeight(FontWeight.Regular)
+              .height(18)
+              .fontColor([this.fgPrimary()])
+          }
+          .type(ButtonType.Normal)
+          .width(40)
+          .height(40)
+          .borderRadius(20)
+          .systemMaterial(immersiveFromLevel(this.ambientState.level))
+          .backgroundColor(this.fgTint())
+          .onClick(() => {
+            this.showAboutPopup = !this.showAboutPopup;
+          })
+          .bindPopup($$this.showAboutPopup, {
+            builder: this.AboutPopup,
+            placement: Placement.Top,
+            enableArrow: true,
+            backgroundBlurStyle: this.buttonBlur(),
+            onStateChange: (event: PopupStateChangeParam): void => {
+              if (!event.isVisible) {
+                this.showAboutPopup = false;
               }
+            }
+          })
+
+          if (this.activeTab === 0) {
+            // 播放全部：固定白色实心（甲方 2026-10-24），**不挂材质**
+            Button() {
+              SymbolGlyph($r('sys.symbol.play_fill'))
+                .fontSize(26)
+                .fontWeight(FontWeight.Regular)
+                .height(26)
+                .fontColor([this.playAllGlyphColor()])
+            }
+            .type(ButtonType.Normal)
+            .width(60)
+            .height(60)
+            .borderRadius(30)
+            .backgroundColor(this.playAllButtonColor())
+            .enabled(!this.loading && this.songs.length > 0)
+            .opacity(this.loading || this.songs.length === 0 ? 0.5 : 1)
+            .onClick(() => {
+              this.playAll();
             })
           }
-          .width(216)
+
+          // 关注 / 取消关注
+          Button() {
+            SymbolGlyph(this.isFavoriteArtist ? $r('sys.symbol.heart_fill') : $r('sys.symbol.heart'))
+              .fontSize(18)
+              .fontWeight(FontWeight.Regular)
+              .height(18)
+              .fontColor([this.fgPrimary()])
+          }
+          .type(ButtonType.Normal)
+          .width(40)
+          .height(40)
+          .borderRadius(20)
+          .systemMaterial(immersiveFromLevel(this.ambientState.level))
+          .backgroundColor(this.fgTint())
+          .onClick(() => {
+            this.toggleFavoriteArtist();
+          })
         }
-        .width('100%')
         .justifyContent(FlexAlign.Center)
-        .padding({ left: 16, right: 16, top: 6, bottom: 4 })
+        .padding({ top: 12 })
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, bottom: 16 })
+    }
+    .width('100%')
+    .height(320)
+  }
 
-        Scroll(this.scroller) {
-          Column({ space: 0 }) {
-            if (this.loading && this.songs.length === 0) {
-              Column() {
-                LoadingProgress()
-                  .width(32)
-                  .height(32)
-                  .color(this.fgPrimary())
-              }
-              .width('100%')
-              .padding({ top: 60, bottom: 60 })
-              .justifyContent(FlexAlign.Center)
-            } else if (this.errorMsg.length > 0 && this.songs.length === 0) {
-              Column({ space: 8 }) {
-                Text(this.errorMsg)
-                  .fontSize(13)
-                  .fontColor(this.fgSecondary())
-                  .textAlign(TextAlign.Center)
-                  .padding({ left: 24, right: 24 })
-              }
-              .width('100%')
-              .padding({ top: 60, bottom: 60 })
-            } else {
-              if (this.activeTab === 0) {
-                ForEach(this.songs, (item: SongInfo, index: number) => {
-                  this.SongRowView(item, index)
-                  if (index < this.songs.length - 1) {
-                    Divider()
-                      .strokeWidth(0.5)
-                      .color(this.fgDivider())
-                      .margin({ left: 68, right: 16 })
-                  }
-                }, (item: SongInfo) => item.id + '_' + item.name)
-                if (this.songsHasMore) {
-                  Row() {
-                    Text(this.loadingMore ? '加载中…' : '上拉加载更多')
-                      .fontSize(12)
-                      .fontColor(this.fgSecondary())
-                      .padding({ top: 12, bottom: 12 })
-                      .onClick(() => {
-                        this.loadMore();
-                      })
-                  }
-                  .width('100%')
-                  .justifyContent(FlexAlign.Center)
-                }
-              } else {
-                ForEach(this.albums, (item: AlbumInfo, index: number) => {
-                  this.AlbumRowView(item)
-                  if (index < this.albums.length - 1) {
-                    Divider()
-                      .strokeWidth(0.5)
-                      .color(this.fgDivider())
-                      .margin({ left: 84, right: 16 })
-                  }
-                }, (item: AlbumInfo) => item.id + '_' + item.name)
-                if (this.albumsHasMore) {
-                  Row() {
-                    Text('上拉加载更多')
-                      .fontSize(12)
-                      .fontColor(this.fgSecondary())
-                      .padding({ top: 12, bottom: 12 })
-                      .onClick(() => {
-                        this.loadMore();
-                      })
-                  }
-                  .width('100%')
-                  .justifyContent(FlexAlign.Center)
-                }
-              }
-            }
+
+  @Builder
+  private ArtistStickyHeader() {
+    Column() {
+      // ⛔ 2026-10-24（用户：「歌手页的播放全部有两个，多余了，只保留中间那个圆形的」）：
+      //   这里原来还有一行 `▶ 播放全部 · 已加载 N 首`（52vp、整行可点）。它和 Hero 里那颗
+      //   圆形播放按钮是同一个 `playAll()`，重复了 ⇒ 整行删除，只留 Hero 中间那颗圆钮。
+      // ★ 2026-10-24（用户给了截图）：「专辑、最新、最热的样式改成这样的，胶囊不是很好看」：
+      //   胶囊换成**纯文字页签 + 选中项主题色短横线**；顺序按用户指定：最热 → 最新 → 专辑。
+      this.ArtistSectionTabs()
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Center)
+    .backgroundColor(this.avgColor)
+  }
+
+  /**
+   * 吸顶行的三个页签（甲方截图那套样式）。
+   *
+   * 样式：纯文字、数字紧跟在文字后面、选中的那个更亮更粗、下面一条主题色短横线；
+   *       **没有胶囊底**（原来的 `CapsuleSegmentedSelector` 已撤掉）。
+   * 顺序：**最热 → 最新 → 专辑**（`onSegmentSelect()` 的映射已同步改成 0/1/2）。
+   */
+  @Builder
+  private ArtistSectionTabs() {
+    Row() {
+      this.SectionTab('最热', 0, this.songTabCount())
+      this.SectionTab('最新', 1, this.songTabCount())
+      this.SectionTab('专辑', 2, this.albumTabCount())
+    }
+    .width('100%')
+    // 宽屏（平板/折叠展开）别把三个词摊到两头去：最宽 460 后居中
+    .constraintSize({ maxWidth: 460 })
+    .padding({ left: 8, right: 8, top: 8, bottom: 4 })
+  }
+
+  /** 一个页签：文字（+数量）+ 选中时的主题色短横线。 */
+  @Builder
+  private SectionTab(label: string, index: number, count: string) {
+    Column({ space: 5 }) {
+      Row({ space: 6 }) {
+        // ⚠️ 字号**保持原本这一档**（19/17）—— 甲方 2026-10-24：「不用改大，改回原本那个大小，
+        //   只要改大封面那些就行了」⇒ 页签回到原尺寸，要变大的是**列表里的封面**（见 `SongRowView`）。
+        Text(label)
+          .fontSize(this.segmentIndex === index ? 19 : 17)
+          .fontWeight(this.segmentIndex === index ? FontWeight.Bold : FontWeight.Medium)
+          .fontColor(this.segmentIndex === index ? this.fgPrimary() : this.fgSecondary())
+          .maxLines(1)
+        if (count.length > 0) {
+          // 数字比汉字再小一号（截图里也是这个关系）：位数据多时（1708 这种）在窄屏才放得下
+          Text(count)
+            .fontSize(this.segmentIndex === index ? 16 : 15)
+            .fontWeight(this.segmentIndex === index ? FontWeight.Bold : FontWeight.Medium)
+            .fontColor(this.segmentIndex === index ? this.fgPrimary() : this.fgSecondary())
+            .maxLines(1)
+        }
+      }
+      // 短横线：选中 = 主题色；未选中 = 同高空位（切换时整行高度不跳）
+      Column()
+        .width(this.segmentIndex === index ? 24 : 0)
+        .height(3)
+        .borderRadius(1.5)
+        .backgroundColor(this.segmentIndex === index ? this.themeState.color : Color.Transparent)
+    }
+    .layoutWeight(1)
+    .justifyContent(FlexAlign.Center)
+    .onClick((): void => {
+      this.onSegmentSelect(index);
+    })
+  }
+
+  /**
+   * 「最热 / 最新」后面的数字：这两个是**同一批歌的两种排序**，条数就是同一个歌手歌曲总数。
+   * 优先用路由带来的 `songNum`（列表还没加载时也有数），没有就用已加载条数。
+   */
+  private songTabCount(): string {
+    const n: number = this.songNum > 0 ? this.songNum : this.songs.length;
+    return n > 0 ? String(n) : '';
+  }
+
+  /** 「专辑」标签后的数字：优先用路由带来的专辑数，没有就用已加载的条数。 */
+  private albumTabCount(): string {
+    const n: number = this.albumSize > 0 ? this.albumSize : this.albums.length;
+    return n > 0 ? String(n) : '';
+  }
+
+  /**
+   * 列表主体（歌曲 / 专辑两套 `LazyForEach` + 上拉加载更多）。
+   *
+   * 抽成独立 `@Builder` 是为了**宽窄两套布局共用同一份列表**：
+   * 窄屏放进 `ListItemGroup`（吸顶页签），宽屏放进右侧那一列（页签在列表外）。
+   */
+  @Builder
+  private ArtistListBody() {
+    if (this.activeTab === 0 && this.loading && this.songs.length === 0) {
+      ListItem() {
+        Column() {
+          LoadingProgress()
+            .width(32)
+            .height(32)
+            .color(this.fgPrimary())
+        }
+        .width('100%')
+        .padding({ top: 60, bottom: 60 })
+        .justifyContent(FlexAlign.Center)
+      }
+    } else if (this.activeTab === 0 && this.errorMsg.length > 0 && this.songs.length === 0) {
+      ListItem() {
+        Column({ space: 8 }) {
+          Text(this.errorMsg)
+            .fontSize(13)
+            .fontColor(this.fgSecondary())
+            .textAlign(TextAlign.Center)
+            .padding({ left: 24, right: 24 })
+        }
+        .width('100%')
+        .padding({ top: 60, bottom: 60 })
+      }
+    } else {
+      if (this.activeTab === 0) {
+        LazyForEach(this.songData, (item: SongInfo, index: number) => {
+          ListItem() {
+            this.SongRowView(item, index)
           }
-          .width('100%')
+        }, (item: SongInfo) => this.source + ':' + item.id)
+        if (this.songsHasMore) {
+          ListItem() {
+            Row() {
+              Text(this.loadingMore ? '加载中…' : '上拉加载更多')
+                .fontSize(12)
+                .fontColor(this.fgSecondary())
+                .padding({ top: 12, bottom: 12 })
+                .onClick(() => {
+                  this.loadMore();
+                })
+            }
+            .width('100%')
+            .justifyContent(FlexAlign.Center)
+          }
+        }
+      } else {
+        LazyForEach(this.albumData, (item: AlbumInfo) => {
+          ListItem() {
+            this.AlbumRowView(item)
+          }
+        }, (item: AlbumInfo) => this.source + ':' + item.id + ':' + item.mid)
+        if (this.albumsHasMore) {
+          ListItem() {
+            Row() {
+              Text('上拉加载更多')
+                .fontSize(12)
+                .fontColor(this.fgSecondary())
+                .padding({ top: 12, bottom: 12 })
+                .onClick(() => {
+                  this.loadMore();
+                })
+            }
+            .width('100%')
+            .justifyContent(FlexAlign.Center)
+          }
+        }
+      }
+    }
+  }
+
+  /** 窄屏（手机竖屏/横屏）：原来的单列形态 —— 列表第一项就是歌手大图。 */
+  @Builder
+  private NarrowBody() {
+    List({ scroller: this.scroller }) {
+      ListItem() {
+        this.ArtistHero()
+      }
+      ListItemGroup({ header: this.ArtistStickyHeader() }) {
+        this.ArtistListBody()
+      }
+    }
+    .width('100%')
+    // MINI 标题栏是**浮在内容之上的窄条**（`titleMode(MINI)`）⇒ 视口要给它让位：
+    // `titleTopInset()` = 状态栏 + 56 = 94（盒子从屏幕 y=0 起排，HDS 标题栏落在 38..94）。
+    .height('calc(100% - ' + this.titleTopInset() + 'vp)')
+    .margin({ top: this.titleTopInset() })
+    .contentEndOffset(96)
+    .sticky(StickyStyle.Header)
+    .cachedCount(4)
+    .scrollBar(BarState.Off)
+    .edgeEffect(EdgeEffect.Spring)
+    .onReachEnd((): void => {
+      this.loadMore();
+    })
+    .onDidScroll((): void => {
+      this.updateImmersiveScroll();
+    })
+  }
+
+  /**
+   * 宽屏（平板 / 阔屏 / 横屏）：**左侧歌手卡 + 右侧列表**（甲方 2026-10-24 指定的参考形态）。
+   *
+   * 左卡固定宽（LG 360 / XL 420），右列吃剩下的宽度；页签从"吸顶"变成"列内固定头"，
+   * 因为宽屏下右列独立滚动，吸顶已经没有意义。
+   */
+  @Builder
+  private WideBody() {
+    Row({ space: 24 }) {
+      this.ArtistWideCard()
+
+      Column() {
+        this.ArtistStickyHeader()
+        List({ scroller: this.scroller }) {
+          this.ArtistListBody()
         }
         .width('100%')
         .layoutWeight(1)
+        // 宽屏两/三列（手机横屏 2 列；XL 3 列）——与左侧竖卡配合，右侧不再"一页一条"
+        .lanes(this.wideListLanes(), 16)
+        .contentEndOffset(96)
+        .cachedCount(6)
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring)
-        .align(Alignment.Top)
-        .onReachEnd(() => {
+        .onReachEnd((): void => {
           this.loadMore();
         })
+        .onDidScroll((): void => {
+          this.updateImmersiveScroll();
+        })
+      }
+      .layoutWeight(1)
+      .height('100%')
+      .padding({ bottom: 16 })
+    }
+    .width('100%')
+    .height('100%')
+    .alignItems(VerticalAlign.Top)
+    .padding({ left: 24, right: 24, top: this.titleTopInset(), bottom: 16 })
+  }
+
+  /**
+   * 宽屏左侧那张歌手卡 —— **与歌单页的卡同一套结构**（甲方 2026-10-24 第三轮指定）：
+   *
+   * 甲方原话：「各大平台返回的歌手图通常不是竖着的（有的甚至是横的），所以左侧也改成歌单一样的吧
+   * （方形照片的接口都是有的）。顺带提醒你一下，因为它是放在左侧的，所以左侧那个卡片是竖着的。」
+   *
+   * ⇒ 卡是**竖的**；封面区强制成**方形**（`aspectRatio(1)` + `ImageFit.Cover` 居中裁），
+   *   空白用**同一张图的模糊**铺满 ⇒ 横图/竖图都不会把卡片撑变形；
+   *   有动态封面时（Apple 的 `previewFrame` 本身就是 1:1）方形那一张直接换成它。
+   */
+  @Builder
+  private ArtistWideCard() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      // ① 背景 = 同一张歌手图的模糊（横图也不会露白边）
+      if (this.artistPicUrlText.length > 0 && !this.imageFailed) {
+        Image(this.artistPicUrlText)
+          .width('100%')
+          .height('100%')
+          .objectFit(ImageFit.Cover)
+          .blur(48)
+          .scale({ x: 1.2, y: 1.2 })
+      }
+      // ② 压暗一层：白字压在模糊图上才稳
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor('#66000000')
+
+      Column({ space: 12 }) {
+        // ③ 方形封面（+ 动态封面层）
+        Stack({ alignContent: Alignment.TopStart }) {
+          Image(this.artistPicUrlText.length > 0 ? this.artistPicUrlText : $r('app.media.ic_avatar1'))
+            .width('100%')
+            .aspectRatio(1)
+            .objectFit(ImageFit.Cover)
+          if (this.artistNameText.length > 0) {
+            MotionCoverLayer({
+              kind: 'artist',
+              name: this.artistNameText,
+              fallbackPoster: this.artistPicUrlText,
+              onPosterReady: (posterUrl: string): void => {
+                this.motionColorApplied = true;
+                void this.loadBackdropColorFrom(posterUrl);
+              }
+            })
+              .width('100%')
+              .aspectRatio(1)
+          }
+        }
+        .width('100%')
+        .aspectRatio(1)
+        .borderRadius(18)
+        .clip(true)
+        .shadow({ radius: 24, color: '#4D000000', offsetX: 0, offsetY: 8 })
+
+        Text(this.artistNameText.length > 0 ? this.artistNameText : '歌手')
+          .fontSize(24)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.fgPrimary())
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+
+        Row({ space: 10 }) {
+          // 关于（歌手信息）
+          Row() {
+            SymbolGlyph($r('sys.symbol.info_circle_fill'))
+              .fontSize(18)
+              .height(18)
+              .fontColor([this.playAllGlyphColor()])
+          }
+          .width(40)
+          .height(40)
+          .borderRadius(20)
+          .backgroundColor(this.playAllButtonColor())
+          .justifyContent(FlexAlign.Center)
+          .onClick(() => {
+            this.showAboutPopup = !this.showAboutPopup;
+          })
+          .bindPopup($$this.showAboutPopup, {
+            builder: this.AboutPopup,
+            placement: Placement.Top,
+            enableArrow: true,
+            onStateChange: (event: PopupStateChangeParam): void => {
+              if (!event.isVisible) {
+                this.showAboutPopup = false;
+              }
+            }
+          })
+
+          // 播放全部（实心白圆，与窄屏那颗一致）
+          Row() {
+            SymbolGlyph($r('sys.symbol.play_fill'))
+              .fontSize(26)
+              .height(26)
+              .fontColor([this.playAllGlyphColor()])
+          }
+          .width(56)
+          .height(56)
+          .borderRadius(28)
+          .backgroundColor(this.playAllButtonColor())
+          .justifyContent(FlexAlign.Center)
+          .enabled(!this.loading && this.songs.length > 0)
+          .opacity(this.loading || this.songs.length === 0 ? 0.5 : 1)
+          .onClick(() => {
+            this.playAll();
+          })
+
+          // 收藏（添加到以歌手名命名的歌单）
+          Row() {
+            SymbolGlyph(this.isFavoriteArtist ? $r('sys.symbol.heart_fill') : $r('sys.symbol.heart'))
+              .fontSize(18)
+              .height(18)
+              .fontColor([this.playAllGlyphColor()])
+          }
+          .width(40)
+          .height(40)
+          .borderRadius(20)
+          .backgroundColor(this.playAllButtonColor())
+          .justifyContent(FlexAlign.Center)
+          .onClick(() => {
+            this.toggleFavoriteArtist();
+          })
+        }
+        .padding({ top: 2 })
       }
       .width('100%')
-      .height('100%')
+      .padding(16)
+      .alignItems(HorizontalAlign.Start)
     }
+    .width(this.heroCardWidthVp())
+    .height('100%')
+    .borderRadius(24)
+    .clip(true)
+    .backgroundColor(this.avgColor)
+  }
+
+  /**
+   * @returns 宽屏右侧列表的**列数**（甲方 2026-10-24：「歌单页歌手页右侧不应该改多列吗
+   * （至少我在手机上横屏看还是一页，但是感觉这个情况下两列合理一些）」）。
+   *
+   * 手机横屏（MD 宽 + SM 高）与 LG 都是 **2 列**，XL 才给 3 列 —— 行高 72vp、内容很短，
+   * 两列在 780vp 宽下每列仍有 ~370vp，读起来不挤。
+   */
+  private wideListLanes(): number {
+    return this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_XL ? 3 : 2;
+  }
+
+  build() {
+    HdsNavDestination() {
+      Stack({ alignContent: Alignment.TopStart }) {
+        // 宽屏时照片不再铺满页头（左卡片自己带图），背景只留一层取色渐变，
+        // 否则「整屏一张大图 + 右侧列表」会互相打架（甲方要的是左侧一张卡）。
+        if (!this.isWideLayout()) {
+          DetailImmersiveBackdrop({
+            photo: this.artistPicUrlText,
+            color: this.avgColor,
+            topAvoidVp: this.windowInfo.statusBarTopVp,
+            // ★ 页内可用高度（vp）：照片层必须拿到**显式数值**才画得出来（见该组件类注释）。
+            pageHeightVp: this.pageContentHeightVp(),
+            scrollVp: this.detailScrollVp,
+            page: 'artist',
+            // 动态封面（其它设置里可关）：按歌手名去 Apple Music 解析 motion artwork
+            motionKind: 'artist',
+            motionName: this.artistNameText,
+            // 首帧一到就按它重新取色（否则屏上是 Apple 那张图、底色还是平台那张图的颜色）
+            onMotionPoster: (posterUrl: string): void => {
+              this.motionColorApplied = true;
+              void this.loadBackdropColorFrom(posterUrl);
+            }
+          })
+        }
+        if (this.isWideLayout()) {
+          this.WideBody()
+        } else {
+          this.NarrowBody()
+        }
+      }
+      .width(LayoutPolicy.matchParent)
+      .height(LayoutPolicy.matchParent)
+    }
+    .onBackPressed((): boolean => guardPlayerBack('ArtistDetailPage'))
     .hideTitleBar(false)
     .titleBar(this.getArtistTitleBar())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.scroller])
+    // ★★ 状态栏三件套（2026-10-11 定稿，用户第三次纠正后）：
+    //   ① `expandSafeArea(TOP,BOTTOM)` —— 只扩**绘制**区（官方《安全区域》：「expandSafeArea 属性
+    //      支持组件在不改变布局情况下扩展其绘制区域至安全区外」「仅作用于当前组件，不会向父组件或
+    //      子组件传递」）⇒ NavDestination 自己的 `backgroundColor(avgColor)` 也铺到状态栏那一条 ⇒
+    //      首帧 / 没图 / 图加载失败时，那一条就是页面自己的底色，和判据（statusBarOriginalColor 的
+    //      ① 档）一致，不会出现"壳层背景色的一条接缝"。
+    //   ② `ignoreLayoutSafeArea(...[TOP, BOTTOM])` —— **TOP 必须给**：HDS 标题栏自己会按
+    //      "状态栏高度"往下让位，所以页面盒子必须从屏幕 y=0 起排；只写 BOTTOM 就是"盒子让一次 +
+    //      标题栏再让一次" ⇒ 整条标题掉到状态栏下面约一个状态栏高度（用户原话「整个标题移到了
+    //      状态栏下面」），首屏内容也多顶 38vp（「上方留的空距有点大了」）。
+    //      盒子从 0 起排后：标题栏 = 38..94，列表视口的 `titleTopInset()`（= 94）正好落在 94 ✔。
+    //      ⚠️ 旧注释里"ignoreLayoutSafeArea 会改布局、标题栏/返回键会一起顶进状态栏，所以只让它管
+    //      BOTTOM"那句**是错的**（把"盒子让位"与"标题栏让位"算成了同一次），已作废。
+    //   照片层要压到状态栏底下仍由它自己那层负责：`DetailImmersiveBackdrop` 内部单独写了
+    //   `ignoreLayoutSafeArea([SYSTEM], [TOP])`（见该文件 :82），只作用于它自己 —— 这一句不动。
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    // ★ 状态栏样式的**唯一真源**（不再叠加 window 级 setWindowSystemBarProperties，官方：
+    //   「不建议混合使用 systemBarStyle 属性和 window 设置状态栏样式的相关接口」；
+    //   「初次设置 Navigation/NavDestination 的 systemBarStyle 属性时，会备份当前状态栏样式用于后续的
+    //    恢复场景」—— 由框架负责备份/恢复，手动下发反而会把这个模型打乱）。
+    //   两个参数按官方语义分开算：第一个 = 进页/未滚动的那一刻（照片顶部那一条），
+    //   第二个 = 滚动动态档生效后的最终态（压暗底色本身）。
     .systemBarStyle(
-      { statusBarContentColor: this.isLightBackdrop() ? '#000000' : '#FFFFFF' },
-      { statusBarContentColor: this.isLightBackdrop() ? '#000000' : '#FFFFFF' })
+      { statusBarContentColor: this.statusBarOriginalColor() },
+      { statusBarContentColor: this.statusBarScrollEffectColor() })
     .backgroundColor(this.avgColor)
   }
 }

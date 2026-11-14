@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; connect-src * data: blob:;">
+<title>MusicFree Runtime</title>
+<style>html,body{margin:0;padding:0;background:transparent;overflow:hidden;}</style>
+</head>
+<body>
+<script src="./mf_env.js"></script>
+<script>
+  (function () {
+    var bridged = window.ohos_bridge && window.ohos_bridge.onMessage;
+    function notify(obj) {
+      try {
+        if (bridged) {
+          window.ohos_bridge.onMessage(JSON.stringify(obj));
+        }
+      } catch (e) {
+        // 桥不可用时只能靠 console（宿主 onConsole 会转进播放日志）
+        console.error('mf_runtime notify failed: ' + (e && e.message));
+      }
+    }
+    // 相对路径加载失败时 _mf_load 不存在 —— 与其让宿主等 20s 超时，不如立刻报错
+    if (typeof window._mf_load !== 'function') {
+      notify({ event: 'mfReady', data: { gen: -1, ok: false, error: 'mf_env.js 未加载' } });
+      return;
+    }
+    notify({ event: 'pageReady', data: {} });
+  })();
+</script>
+</body>
+</html>

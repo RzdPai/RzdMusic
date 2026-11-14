@@ -20,7 +20,7 @@
  * - 逐词渐变扫描高亮（对应 CSS mask-image 渐变遮罩的 calc 后备方案）
  * - 强调效果（逐字符缩放/位移/辉光，对应 Web Animation API 的关键帧）
  * - 漂浮动画（对应 composite: add 的 float 动画）
- * - 距离模糊（对应 filter: blur）
+ * - 单透明画布，可见行距离模糊（上限 6px、2px 离散档，拖动清晰）
  * - 背景人声行滑动（对应 bgWrapper 的 slideY/scale）
  * - 间奏点呼吸动画
  */
@@ -183,7 +183,9 @@ export class AmllCanvasLyricRenderer {
     this.measureInited = false;
     this.measureCursor = 0;
     this.measureOrder = [];
-    this.measured = [];
+    // ★ 2026-11-01（用户：网易逐字歌词会闪）：不再清空已测量行 —— 清空后首帧 drawGroup 找不到 entry 会直接不画，
+    //   造成"整屏空白 1 帧以上"；保留旧测量值最多让旧排版多显示 1~2 帧，肉眼几乎无感。
+    //   顺序/游标仍然重置，保证新歌词会被重新测量覆盖。
     this.rgbaCache.clear();
   }
 
@@ -532,6 +534,8 @@ export class AmllCanvasLyricRenderer {
 
   // ==================== 绘制 ====================
 
+  public blurEnabled: boolean = false;
+
   draw(renderTime: number): void {
     this.advanceSmoothTime(renderTime);
     // 间奏点透明度按真实时间推进（拖动时 draw 高频调用，渐隐实时生效）
@@ -544,25 +548,116 @@ export class AmllCanvasLyricRenderer {
     // 先确认容器有真实尺寸再测量：0 宽度下测量会生成病态行高（每字符一行），
     // 且首帧测量顺序建立后行高迟迟无法被真实值替换
     this.ensureMeasured();
-    this.ctx.reset();
-    this.ctx.save();
-    this.ctx.globalCompositeOperation = 'source-over';
-    this.ctx.filter = 'none';
-    this.ctx.shadowBlur = 0;
+    this.drawViewportSlice(this.ctx, 0, h, 0);
+  }
 
-    // 点击定位圆角框（画在歌词文本之下，随行滚动）
+  /** Render only groups intersecting this bounded surface; keep original viewport coordinates. */
+  private drawViewportSlice(context: CanvasRenderingContext2D, startY: number, endY: number,
+    originY: number): void {
+    this.ctx = context;
+    context.reset();
+    context.save();
+    context.translate(0, -originY);
+    context.beginPath();
+    context.rect(0, startY, this.containerWidth, endY - startY);
+    context.clip();
+    context.globalCompositeOperation = 'source-over';
+    context.filter = 'none';
+    context.shadowBlur = 0;
     this.drawFocusFrame();
-
-    const groups = this.engine.groups;
-    for (let i = 0; i < groups.length; i++) {
-      this.drawGroup(groups[i], this.smoothTime);
-    }
-    this.ctx.restore();
-
+    this.drawVisibleGroups(startY, endY);
     this.drawInterludeDots();
+    this.drawEdgeFade(this.containerWidth, this.containerHeight);
+    context.restore();
+  }
 
-    // 上下边缘渐隐遮罩：避免歌词被视口直接裁切的割裂感
-    this.drawEdgeFade(w, h);
+  /**
+   * 只画与视口相交的行（**二分定位首行 + 顺序扫到末行**），替代原来"每帧遍历全部 group"。
+   *
+   * ★ 2026-11-04（帧率优化 C 项）：120fps 下每帧 O(n) 的遍历（几百行歌词）纯属浪费。
+   *
+   * 为什么二分用 **`posY.getTargetPosition()`** 而不是 `getCurrentPosition()`：
+   *   target = 布局累计行高 + 滚动偏移 ⇒ **按 index 严格单调**，二分的前提成立；
+   *   current 会被行高弹簧过冲影响，个别帧可能与邻居乱序，拿它当二分键会漏行。
+   *   落点之后用 current 精确定界（首行可能因弹簧提前/延后进入视野）。
+   *
+   * 两道保险（宁可慢一帧，也不漏行）：
+   *   ① **前一行守卫**：二分落点的前一行若"当前底边"也已进入视野 ⇒ 说明发生极端过冲/乱序，
+   *      本帧退回全量扫描 `drawAllGroups()`；
+   *   ② 向下扫时**连续两行**判定为视口外才 break（单行抖动不至于提前截断）。
+   */
+  private drawVisibleGroups(startY: number, endY: number): void {
+    const groups: AmllGroupState[] = this.engine.groups;
+    const n: number = groups.length;
+    if (n <= 0) {
+      return;
+    }
+    const padding: number = this.style.fontSize * 2;
+    const threshold: number = startY - padding;
+    const first: number = this.lowerBoundByTarget(threshold, n);
+    // ① 前一行守卫
+    if (first > 0) {
+      const prevTop: number = groups[first - 1].posY.getCurrentPosition();
+      const prevH: number = this.engine.getLineHeight(first - 1);
+      if (prevTop + prevH >= threshold) {
+        this.drawAllGroups(startY, endY);
+        return;
+      }
+    }
+    // ② 顺扫 + 连续两行出界才收尾
+    let misses: number = 0;
+    for (let i: number = first; i < n; i++) {
+      const group: AmllGroupState = groups[i];
+      const top: number = group.posY.getCurrentPosition();
+      if (top - padding > endY) {
+        misses++;
+        if (misses >= 2) {
+          break;
+        }
+        continue;
+      }
+      misses = 0;
+      const height: number = this.engine.getLineHeight(i);
+      if (top + height + padding >= startY) {
+        this.drawGroup(group, this.smoothTime);
+      }
+    }
+  }
+
+  /**
+   * 二分：找第一个"**目标**底边 ≥ 阈值"的行下标（`target` 按 index 严格单调，见上方注释）。
+   * @returns 0..n（n = 全部行都在阈值之上）
+   */
+  private lowerBoundByTarget(threshold: number, n: number): number {
+    let lo: number = 0;
+    let hi: number = n - 1;
+    let ans: number = n;
+    while (lo <= hi) {
+      const mid: number = (lo + hi) >> 1;
+      const targetTop: number = this.engine.groups[mid].posY.getTargetPosition();
+      const h: number = this.engine.getLineHeight(mid);
+      if (targetTop + h >= threshold) {
+        ans = mid;
+        hi = mid - 1;
+      } else {
+        lo = mid + 1;
+      }
+    }
+    return ans;
+  }
+
+  /** 全量扫描兜底（仅在 `drawVisibleGroups()` 的守卫判定"顺序不可信"时用一帧）。 */
+  private drawAllGroups(startY: number, endY: number): void {
+    const groups: AmllGroupState[] = this.engine.groups;
+    const padding: number = this.style.fontSize * 2;
+    for (let i: number = 0; i < groups.length; i++) {
+      const group: AmllGroupState = groups[i];
+      const top: number = group.posY.getCurrentPosition();
+      const height: number = this.engine.getLineHeight(i);
+      if (top + height + padding >= startY && top - padding <= endY) {
+        this.drawGroup(group, this.smoothTime);
+      }
+    }
   }
 
   /** 点击定位行的圆角框：包住整个主行+副行块，弹性弹出/淡出 */
@@ -663,14 +758,12 @@ export class AmllCanvasLyricRenderer {
 
     ctx.save();
     ctx.globalAlpha = amllClamp01(group.opacity);
-    // 拖动/滚动交互期间（含松手后自动对齐回归前）不模糊任何行：
-    // 视口边缘进出与 overscan 区域的行在 calcLayout 中仍会拿到模糊目标，绘制层直接跳过
-    const blurVal = this.engine.isTouchScrolled ? 0 : Math.min(16, group.blur);
-    if (blurVal > 0.01) {
-      ctx.filter = `blur(${blurVal.toFixed(2)}px)`;
-    } else {
-      ctx.filter = 'none';
-    }
+    // ★★★ 2026-11-04（甲方：「模糊可以不要，只要帧率上去就行」）：
+    //   **不再做逐帧模糊**。Canvas 2D 的 `ctx.filter = blur(Npx)` 每次绘制都会触发一次离屏模糊，
+    //   可见行 + 和声行各一次 ⇒ 这是整个歌词渲染里最贵的一项，也是帧率上不去的主力。
+    //   "焦点"改由 opacity / 字号 / 颜色区分（引擎照旧算 group.blur，只是这里不再用它，
+    //   将来若要加回模糊，把它接成一次性离屏层即可）。
+    ctx.filter = 'none';
     ctx.shadowBlur = 0;
 
     // 主行缩放（transform-origin: left；对唱行 transform-origin: right）
@@ -732,14 +825,9 @@ export class AmllCanvasLyricRenderer {
     const bgOriginX: number = group.isBgFirst ? 0 : this.padX;
     ctx.save();
     ctx.globalAlpha *= 0.4 * alpha;
-    // 出现/消失过渡：随显示进度模糊淡出——出现时从强模糊渐变到清晰，收起时反向
-    // （数值取大：过渡初期透明度低，弱模糊肉眼不可见）
-    const transitionBlur = (1 - alpha) * 20;
-    if (transitionBlur > 0.1) {
-      ctx.filter = `blur(${transitionBlur.toFixed(2)}px)`;
-    } else {
-      ctx.filter = 'none';
-    }
+    // ★ 2026-11-04：和声行的"模糊淡入"改成**纯透明度淡入**（`globalAlpha` 已按 alpha 走），
+    //   不再逐帧 `ctx.filter` 模糊。硬切感由下面的边缘柔化 + alpha 过渡兜住。
+    ctx.filter = 'none';
     ctx.beginPath();
     ctx.rect(this.padX, spaceTop, this.contentWidth, spaceH);
     ctx.clip();
@@ -1087,7 +1175,7 @@ export class AmllCanvasLyricRenderer {
       const rowWords = rows[r];
       const y = subTop + r * textH + textH * 0.85;
       const rowW = rowWidths !== undefined ? rowWidths[r] : this.rowWidth(rowWords);
-      const rowX = isDuet ? startX + maxW - rowW : startX;
+      const rowX = isDuet ? startX + maxW - rowW : this.centeredStartX(rowW);
       let x = rowX;
       for (let i = 0; i < rowWords.length; i++) {
         const m = rowWords[i];
@@ -1203,7 +1291,7 @@ export class AmllCanvasLyricRenderer {
     for (let r = 0; r < rows.length; r++) {
       const rowWords = rows[r];
       const y = subTop + r * textH + textH * 0.85;
-      const rowX = isDuet ? startX + maxW - this.rowWidth(rowWords) : startX;
+      const rowX = isDuet ? startX + maxW - this.rowWidth(rowWords) : this.centeredStartX(this.rowWidth(rowWords));
       let x = rowX;
       for (let i = 0; i < rowWords.length; i++) {
         const m = rowWords[i];

@@ -14,7 +14,7 @@
  */
 
 import { ConfigurationConstant } from '@kit.AbilityKit';
-import { AppStorageV2, UIContext, window } from '@kit.ArkUI';
+import { AppStorageV2, display, UIContext, window } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { AppStorageKeys } from '../constants/Constants';
 import { ImmersiveType } from './ImmersiveType';
@@ -106,6 +106,18 @@ export class WindowUtil {
   private startupStatusBarTopVp: number = 0;
   /** Navigation bar inset (vp) captured at startup while the window is not yet full-screen. */
   private startupNavigationBarBottomVp: number = 0;
+  /**
+   * Last known-good status bar inset (vp).
+   *
+   * ⚠️ 为什么必须留一份"最后一次量到的好值"：`statusBarTopVp` 是**布局输入**（每页顶部让位
+   * `状态栏 + 56`、播放页顶部 padding 都读它）。系统避让区一时给不出来（`avoidSystem`
+   * 还没到、`UIContext` 还没 cache、窗口进出 layout-full-screen）时，老代码把它写成 **0**，
+   * 之后 `avoidAreaChange` 若不再上报同一个值，这个 0 就**永久留下**——于是页顶让位从
+   * `38 + 56` 悄悄变成 `56`，内容整体上移 38 顶进 HDS 标题栏，表现为「标题下移 / 内容压标题」。
+   */
+  private lastGoodStatusBarTopVp: number = 0;
+  /** Last known-good nav bar bottom inset (vp); same rationale as {@link lastGoodStatusBarTopVp}. */
+  private lastGoodNavigationBarBottomVp: number = 0;
 
   /** @returns Status bar inset (vp) captured at startup; stable across full-screen toggles. */
   public getStartupStatusBarTopVp(): number {
@@ -128,27 +140,159 @@ export class WindowUtil {
   };
 
   /**
+   * Converts px to vp even when {@link uiContext} is not cached yet (falls back to display density).
+   * @param px Length in px.
+   * @returns Length in vp, or 0 when the density is unavailable.
+   */
+  private px2vpSafe(px: number): number {
+    const ctx = this.uiContext;
+    if (ctx !== undefined) {
+      return ctx.px2vp(px);
+    }
+    try {
+      const density: number = display.getDefaultDisplaySync().densityPixels;
+      return density > 0 ? px / density : 0;
+    } catch (error) {
+      let err = error as BusinessError;
+      Logger.error(`px2vpSafe failed. Code: ${err.code}, message: ${err.message}`);
+      return 0;
+    }
+  }
+
+  /**
+   * Reads the system status bar height straight from the window, bypassing the cached avoid area.
+   * @returns Status bar top inset in vp; 0 when the window is not ready.
+   */
+  private readStraightStatusBarTopVp(): number {
+    const win = this.mainWindow;
+    if (win === undefined) {
+      return 0;
+    }
+    try {
+      return this.px2vpSafe(win.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM).topRect.height);
+    } catch (error) {
+      let err = error as BusinessError;
+      Logger.error(`read status bar avoid area failed. Code: ${err.code}, message: ${err.message}`);
+      return 0;
+    }
+  }
+
+  /**
+   * Reads the home-indicator height straight from the window, bypassing the cached avoid area.
+   * @returns Nav bar bottom inset in vp; 0 when the window is not ready.
+   */
+  private readStraightNavigationBarBottomVp(): number {
+    const win = this.mainWindow;
+    if (win === undefined) {
+      return 0;
+    }
+    try {
+      return this.px2vpSafe(win.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR).bottomRect.height);
+    } catch (error) {
+      let err = error as BusinessError;
+      Logger.error(`read nav bar avoid area failed. Code: ${err.code}, message: ${err.message}`);
+      return 0;
+    }
+  }
+
+  /**
+   * Reads the soft-keyboard avoid height straight from the window, bypassing the cached avoid area.
+   * @returns Keyboard height in vp; 0 when the keyboard is not shown or the window is not ready.
+   */
+  private readStraightKeyboardBottomVp(): number {
+    const win = this.mainWindow;
+    if (win === undefined) {
+      return 0;
+    }
+    try {
+      const area: window.AvoidArea = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_KEYBOARD);
+      return area.visible && area.bottomRect.height > 0 ? this.px2vpSafe(area.bottomRect.height) : 0;
+    } catch (error) {
+      let err = error as BusinessError;
+      Logger.error(`read keyboard avoid area failed. Code: ${err.code}, message: ${err.message}`);
+      return 0;
+    }
+  }
+
+  /**
+   * Status bar top inset (vp) for layout, resolved so that it is never a stale 0.
+   *
+   * 取值顺序：缓存值 → 直接向窗口量（同一帧就能拿到）→ 最后一次量到的好值 → 启动快照。
+   * 本方法是**只读**的（不在 build 期间写状态），所以可以安全地在 `build()` 里调用。
+   * @returns Status bar top inset in vp.
+   */
+  public resolveStatusBarTopVp(): number {
+    const cached: number = this.mainWindowInfo.statusBarTopVp;
+    if (cached > 0) {
+      return cached;
+    }
+    const straight: number = this.readStraightStatusBarTopVp();
+    if (straight > 0) {
+      return straight;
+    }
+    return this.lastGoodStatusBarTopVp > 0 ? this.lastGoodStatusBarTopVp : this.startupStatusBarTopVp;
+  }
+
+  /**
+   * Nav bar bottom inset (vp) for layout; resolution order matches {@link resolveStatusBarTopVp}.
+   * @returns Nav bar bottom inset in vp.
+   */
+  public resolveNavigationBarBottomVp(): number {
+    const cached: number = this.mainWindowInfo.navigationBarBottomVp;
+    if (cached > 0) {
+      return cached;
+    }
+    const straight: number = this.readStraightNavigationBarBottomVp();
+    if (straight > 0) {
+      return straight;
+    }
+    return this.lastGoodNavigationBarBottomVp > 0 ?
+      this.lastGoodNavigationBarBottomVp : this.startupNavigationBarBottomVp;
+  }
+
+  /**
+   * Soft-keyboard avoid height (vp) for layout; **0 means "no keyboard"**.
+   *
+   * ⚠️ 与 {@link resolveStatusBarTopVp} / {@link resolveNavigationBarBottomVp} 的关键区别：
+   *    这里**不做** `lastGood*` 兜底 —— 对状态栏/导航栏来说 0 是"没量到"（会让页顶让位少一截），
+   *    对键盘来说 **0 就是合法值**（= 没弹出）。真正要防的是反向的**陈旧非 0**（键盘收起时报文漏收
+   *    ⇒ 悬浮条永远抬着），所以：缓存里没有（`updateWindowInfo` 之前）或缓存说"键盘正在显示"时，
+   *   都再向窗口现量一次；只有缓存明确说"不可见"时才直接返回 0（**不弹键盘是常态，
+   *   不为它多做一次窗口查询**）。
+   * 本方法是**只读**的（不在 build 期间写状态），可以安全地在 `build()` 里调用；它读的是
+   * `@Trace avoidKeyboard`，所以键盘弹出/收起会自动驱动重新布局（无需页面自己再挂监听）。
+   * @returns Keyboard height in vp; 0 when no soft keyboard is shown.
+   */
+  public resolveKeyboardBottomVp(): number {
+    const cached: window.AvoidArea | undefined = this.mainWindowInfo.avoidKeyboard;
+    if (cached === undefined) {
+      return this.readStraightKeyboardBottomVp();
+    }
+    const cachedShowing: boolean = cached.visible && cached.bottomRect.height > 0;
+    return cachedShowing ? this.readStraightKeyboardBottomVp() : 0;
+  }
+
+  /**
    * Recalculates status bar and home-indicator offsets in vp from avoid areas and UIContext.
+   *
+   * ⚠️ 这里**不允许**再把已经量到的好值覆盖成 0：量不到就保留 {@link lastGoodStatusBarTopVp}。
    */
   private syncWindowInsetsVp(): void {
-    const ctx = this.uiContext;
     const info = this.mainWindowInfo;
-    if (ctx === undefined) {
-      info.statusBarTopVp = 0;
-      info.navigationBarBottomVp = 0;
-      return;
+    const sysVp: number = info.avoidSystem !== undefined ? this.px2vpSafe(info.avoidSystem.topRect.height) : 0;
+    const straightStatusVp: number = this.readStraightStatusBarTopVp();
+    const statusVp: number = sysVp > 0 ? sysVp : straightStatusVp;
+    info.statusBarTopVp = statusVp > 0 ? statusVp : this.lastGoodStatusBarTopVp;
+    if (info.statusBarTopVp > 0) {
+      this.lastGoodStatusBarTopVp = info.statusBarTopVp;
     }
-    const sys = info.avoidSystem;
-    if (sys !== undefined) {
-      info.statusBarTopVp = ctx.px2vp(sys.topRect.height);
-    } else {
-      info.statusBarTopVp = 0;
-    }
-    const nav = info.avoidNavigationIndicator;
-    if (nav !== undefined) {
-      info.navigationBarBottomVp = ctx.px2vp(nav.bottomRect.height);
-    } else {
-      info.navigationBarBottomVp = 0;
+    const navVp: number = info.avoidNavigationIndicator !== undefined ?
+      this.px2vpSafe(info.avoidNavigationIndicator.bottomRect.height) : 0;
+    const straightNavVp: number = this.readStraightNavigationBarBottomVp();
+    const navFinalVp: number = navVp > 0 ? navVp : straightNavVp;
+    info.navigationBarBottomVp = navFinalVp > 0 ? navFinalVp : this.lastGoodNavigationBarBottomVp;
+    if (info.navigationBarBottomVp > 0) {
+      this.lastGoodNavigationBarBottomVp = info.navigationBarBottomVp;
     }
     if (this.startupStatusBarTopVp === 0 && info.statusBarTopVp > 0) {
       this.startupStatusBarTopVp = info.statusBarTopVp;
@@ -156,6 +300,9 @@ export class WindowUtil {
     if (this.startupNavigationBarBottomVp === 0 && info.navigationBarBottomVp > 0) {
       this.startupNavigationBarBottomVp = info.navigationBarBottomVp;
     }
+    Logger.info('RzdWindowInsets',
+      `statusBarTopVp=${info.statusBarTopVp} navBarBottomVp=${info.navigationBarBottomVp} ` +
+        `avoidSystemVp=${sysVp} straightStatusVp=${straightStatusVp} avoidNavVp=${navVp} straightNavVp=${straightNavVp}`);
   }
 
   /** Handler: main window status type changed. */
@@ -184,6 +331,11 @@ export class WindowUtil {
         this.mainWindowInfo.avoidSystemGesture = avoidOptions.area;
       } else if (avoidOptions.type === window.AvoidAreaType.TYPE_KEYBOARD) {
         this.mainWindowInfo.avoidKeyboard = avoidOptions.area;
+        // 键盘避让诊断（`hdc shell hilog | grep RzdKeyboardAvoid`）：这里只报原始量，
+        // 换算成 vp、以及谁拿它去让位，由消费方（壳层悬浮播放条）自己打点。
+        Logger.info('RzdKeyboardAvoid',
+          `window avoidAreaChange keyboard visible=${avoidOptions.area.visible} ` +
+            `bottomPx=${avoidOptions.area.bottomRect.height}`);
       } else if (avoidOptions.type === window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR) {
         this.mainWindowInfo.avoidNavigationIndicator = avoidOptions.area;
       }

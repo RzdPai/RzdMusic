@@ -132,7 +132,7 @@ export class MicRecorder {
     }
     if (this.chunks.length >= TARGET_SAMPLES) {
       this.targetReached = true;
-      hilog.info(DOMAIN, TAG, '采集完成 样本数=%{public}d（目标%{public}d）', this.chunks.length, TARGET_SAMPLES);
+      hilog.info(DOMAIN, TAG, 'record done samples=%{public}d target=%{public}d', this.chunks.length, TARGET_SAMPLES);
       void this.finish();
     }
   }
@@ -187,7 +187,7 @@ export class MicRecorder {
       const value: number = this.chunks[i] * 32768;
       out[i] = Math.max(-32768, Math.min(32767, Math.round(value)));
     }
-    hilog.info(DOMAIN, TAG, '输出PCM 样本数=%{public}d 时长=%{public}fs', out.length, out.length / TARGET_SAMPLE_RATE);
+    hilog.info(DOMAIN, TAG, 'pcm samples=%{public}d dur=%{public}fs', out.length, out.length / TARGET_SAMPLE_RATE);
     return out;
   }
 }

@@ -14,12 +14,26 @@
  */
 
 export { Player } from './src/main/ets/view/Player';
+export { qsBoardSongs, qsDiscoverPlaylists, qsPlaylistDetail, qsSearchPlaylists, qsSearchTracks, qsDeviceQuery, QsPlaylistHit } from './src/main/ets/geuz/QsApi';
 export { QueuePlaylistSheet } from './src/main/ets/view/QueuePlaylistSheet';
 export { PlayerConstants } from './src/main/ets/constant/PlayerConstants';
 export { AccountChangedState } from './src/main/ets/account/AccountChangedState';
 export { SwitchBannerState, SWITCH_BANNER_STORAGE_KEY } from './src/main/ets/model/SwitchBannerState';
 export { PlaybackPage, PlaybackPageCoverContent, PlaybackPagePanelCoverContent } from './src/main/ets/view/PlaybackPage';
-export { MediaService } from './src/main/ets/model/MediaService';
+export { MediaService, setLocalLyricResolver } from './src/main/ets/model/MediaService';
+export type { LocalLyricResolver } from './src/main/ets/model/MediaService';
+// 华为账号（系统 Account Kit + 网页授权双路径）登录：登录态 + 资料 + 回退判据
+export {
+  HuaweiAccountService, HuaweiAccountState, HuaweiAuthError, HuaweiLoginMode, HuaweiLoginOutcome
+} from './src/main/ets/account/HuaweiAccountService';
+export type { HuaweiAccountProfile } from './src/main/ets/account/HuaweiAccountService';
+export {
+  HuaweiAccountCode, huaweiNeedsWebFallback, huaweiFallbackReason, huaweiIsCapabilityUnavailable
+} from './src/main/ets/account/HuaweiAccountCode';
+// 华为云空间直存（设置 + 歌单备份/恢复，走云盘 OpenAPI，不经 WebDAV 网关）
+export { HuaweiCloudSync } from './src/main/ets/account/HuaweiCloudSync';
+export { HuaweiNativeCloudBackup } from './src/main/ets/account/HuaweiNativeCloudBackup';
+export type { HuaweiDriveUser } from './src/main/ets/account/HuaweiCloudSync';
 export { MusicAppState } from './src/main/ets/model/PlayerModels';
 export { PlayerViewModel } from './src/main/ets/viewmodel/PlayerViewModel';
 export { MusicPlayMode, AudioPlayerState } from './src/main/ets/model/MusicData';
@@ -30,21 +44,73 @@ export { MusicRecognitionPageBuilder } from './src/main/ets/view/MusicRecognitio
 export { VolumeSlider } from './src/main/ets/view/VolumeSlider';
 export { OnlinePlayUtil } from './src/main/ets/util/OnlinePlayUtil';
 export { LXSourceHost } from './src/main/ets/source/LXSourceHost';
+// MusicFree 生态适配（订阅导入 / 平台识别 / 插件调用）
+export {
+  MusicFreeEngine, ensureMfReady, waitMfReady, mfCall, mfEngineReady, mfEnginePlatform, mfEngineMethods
+} from './src/main/ets/source/MusicFreeEngine';
+export {
+  platformIdFromLabel, parseMusicFreeSubscription, importMusicFreeSubscription, importMusicFreeSubscriptionText,
+  importMusicFreePluginUrl, importMusicFreePluginScript, importSourceScriptAuto,
+  looksLikeMusicFreePlugin, musicFreeApisForPlatform, mfSearch, mfGetMediaSource, mfGetLyric,
+  mfSearchSheets, mfTopLists, mfRecommendGroups, mfGetSheetSongs, mfPlatformIdOfApi,
+  isMfOnlyPlatform, updateSubscription, mfPlatformHasCap,
+  backfillMusicFreePlatforms
+} from './src/main/ets/source/MusicFreeAdapter';
+export type { MfTopListGroup } from './src/main/ets/source/MusicFreeAdapter';
+// 插件能力标记（静态扫描）：UI 据它屏蔽「推荐 / 榜单 / 歌单」等入口
+export {
+  MF_CAP_MEDIA, MF_CAP_LYRIC, MF_CAP_SEARCH, MF_CAP_SEARCH_SHEET, MF_CAP_SHEET,
+  MF_CAP_TOP_LIST, MF_CAP_RECOMMEND, MF_CAP_ALBUM, MF_CAP_ARTIST,
+  scanMfCaps, mfHasCap
+} from './src/main/ets/util/MfCapability';
+// 平台搜索路由：搜索页 / 歌单广场 / 批量下载统一从这里分派「内置 / LX 脚本 / MusicFree 插件」
+export {
+  searchPlatformSongs, searchPlatformSheets, platformPlazaFeed, platformPlazaGroups,
+  platformRankingGroups, enabledPlatformIds
+} from './src/main/ets/source/PlatformSearch';
+export type { MfSubscriptionEntry, MfImportReport } from './src/main/ets/source/MusicFreeAdapter';
 export { LXSourceEngine, lxEngineIsReady } from './src/main/ets/source/LXSourceEngine';
 export { lxSourceManager } from './src/main/ets/source/LXSourceManager';
-export { getLXMusicUrl, getLXLyric, getLXPic, logError } from './src/main/ets/source/LXPlayHelper';
-export { lxGetQualityOptions, LXQualityOption } from './src/main/ets/source/LXQualityApi';
+export type { LXApiImportResult } from './src/main/ets/source/LXSourceManager';
+// 自定义音源的跨设备搬运载荷（**全仓唯一实现**）：WebDAV / 系统华为云空间 / 旧网页云盘
+// 三条备份通道都以它为挂载点。放在 player 是因为 sync → player 是单向依赖，
+// player 反向 import sync 会成环（详见该文件头部说明）。
+export {
+  SOURCE_SYNC_KEY, MAX_SOURCES, MAX_SCRIPT_CHARS,
+  collectSourcePayload, applySourcePayload, describeSourceMerge,
+  attachSourcesToSnapshot, mergeSourcesFromSnapshot, mergeSourcesIntoRestoreResult
+} from './src/main/ets/source/SourceBackupPayload';
+export type { SourcePayload, SourcePayloadEntry, SourceMergeReport } from './src/main/ets/source/SourceBackupPayload';
+export { getLXMusicUrl, getLXLyric, getLXPic, logError, fetchBoardSongs } from './src/main/ets/source/LXPlayHelper';
+export type { BoardSongEntry } from './src/main/ets/source/LXPlayHelper';
+export { lxGetQualityOptions, lxGetQualityOptionsForSongs, LXQualityOption } from './src/main/ets/source/LXQualityApi';
+export type { LXBatchQualityResult } from './src/main/ets/source/LXQualityApi';
+// 平台中文名（kw→酷我、wy→网易云…），批量下载的失败提示里要带上它
+// 音源脚本「声明了哪些平台 / 什么音质 / 能做什么」的只读摘要（「音源管理」用）
+export { lxDeclaredPlatforms, lxDeclaredPlatformsOf, lxSourceLabel, lxQualityLabel, lxActionLabel,  LX_PLATFORM_ORDER, normalizePlatformId, isOnlinePlatformId, platformLabel, isLxSearchPlatform,
+  isMfPlatformId, MF_PLATFORM_PREFIX, musicFreeSubscriptionLabel, looksLikeHostName }
+  from './src/main/ets/util/SourceDeclaredInfo';
+export type { LXSourcePlatformInfo } from './src/main/ets/util/SourceDeclaredInfo';
+// ★ 平台管理（2026-11-09 第三版）：洛雪固定六平台 + 每个 MusicFree 插件各一行（名字跟源走）。
+//   勾选 = 搜索 / 广场显示哪些平台；排序 = 平台顺序。平台与音源启用完全解耦。
+export { platformRegistry } from './src/main/ets/util/PlatformRegistry';
+export type { PlatformDef, PlatformOrigin } from './src/main/ets/util/PlatformRegistry';
+export { sourceDisplayName, qualityDisplayName, QUALITY_CHAIN, warmUpLxSources } from './src/main/ets/util/SourceFallbackUtil';
+// A4：音质真实探测（会话缓存 + 播放链路回写）
+export { cachedProbe, probeSummary, probeQuality, probeBySample, sampleOf, pickPlaybackQuality, qualityRank, markProbeOk, markProbeFail, parseIntervalSeconds } from './src/main/ets/util/LxQualityProbe';
+export type { ProbeSample } from './src/main/ets/util/LxQualityProbe';
+export type { ProbeResult } from './src/main/ets/util/LxQualityProbe';
 export { lxSearch, lxLeaderboard, getLeaderboardEntries, lxGetPicFallback, lxGetLyricFallback,
-  lxTxToplist, lxTxToplistInfo, lxTxSingerList, lxKgSingerList, lxTxToplistList, lxTxHotSearch,
+  lxTxToplist, lxTxToplistInfo, lxTxSingerList, lxKgSingerList, lxWySingerList, lxKwSingerList, lxMgSingerList, lxTxToplistList, lxTxHotSearch, lxSearchSuggest,
   lxGetWyLyricAll, lxGetTTMLLyric, lxGetLyricFull } from './src/main/ets/source/LXMusicSDK';
 export { buildSongShareText, showSystemShare } from './src/main/ets/util/ShareUtil';
 export { LyricLiveViewController } from './src/main/ets/util/LyricLiveViewController';
 export type { LiveViewLyricPayload } from './src/main/ets/util/LyricLiveViewController';
 export { DownloadUtil } from './src/main/ets/util/DownloadUtil';
 export { DownloadService, DownloadStatus, DownloadTask } from './src/main/ets/util/DownloadService';
-export type { TxToplistInfo } from './src/main/ets/source/LXMusicSDK';
+export type { TxToplistInfo, TxSinger } from './src/main/ets/source/LXMusicSDK';
 export type { LXSearchSong, LXSearchResult, LXQualityType, LXLeaderboardEntry, WyLyricResult, LyricFullResult } from './src/main/ets/source/LXMusicSDK';
-export type { LXUserApiInfo, LXUserApiInfoFull, LXUserApiSourceInfo, LXSource, LXQuality } from './src/main/ets/source/Interface';
+export type { LXUserApiInfo, LXUserApiInfoFull, LXUserApiSourceInfo, LXSource, LXQuality, MfSubscriptionInfo } from './src/main/ets/source/Interface';
 export { AmllLyricFormat } from './src/main/ets/amll/model/AmllTypes';
 export { amllProbeLyricText, amllProbeToString, amllFormatName } from './src/main/ets/amll/util/AmllParserProbe';
 export type { AmllProbeResult } from './src/main/ets/amll/util/AmllParserProbe';
@@ -63,3 +129,33 @@ export { SingerInfo, AlbumInfo, SongInfo, ArtistInfo, SearchPageResult, SongPage
 export type { ArtistDetailParams, AlbumDetailParams } from './src/main/ets/geuz/index';
 export { searchSingers, searchAlbums, sourceToCode, codeToSource, getArtistDetail, getArtistSongs,
   getArtistAlbums, getAlbumDetail } from './src/main/ets/geuz/index';
+export { PLAYER_BIG_COVER_ID } from './src/main/ets/view/MusicPlayInfoBlock';
+// 播放页的「小歌词」两行（当前行 + 下一行），渲染在播放条插槽里。
+// ⚠️ 底栏页签「现在就听」要在**歌名上方**画同样的两行歌词，而 HAR 只能按导出面引用
+//   （不能深链到 `src/main/ets/view/` 内部文件）⇒ 这里补一行导出，**组件本身一行未改**
+//   （用户明确"歌词渲染不在范围"）。用法见 `recommendation/.../NowPlayingFeedPage` 的 `FeedLyric`。
+export { MiniLyricLinesComponent } from './src/main/ets/view/MiniLyricLinesComponent';
+// ★★ 2026-10-15：**网格流动背景**的算法层 —— 照搬无界 1.2.4 的
+//   `design/logic/MeshGradient.ets` + `design/logic/MeshSource.ets`（两个模块**零外部依赖**）。
+//   依据：`_recover/logic-src/播放页背景-MeshGradient与MeshSource定稿.md` §2/§3。
+//   导出是为了让它们**进编译图**（本仓 hvigor 对 HAR 按引用编译：没被 import 的文件不参与编译，
+//   构建照样绿 ⇒ 必须先挂上导出面才验证得到）。下一步的 `MeshCoverBg` 组件会消费它们。
+export { MeshField, MeshCP, CP_W, CP_H, cp, defaultConf, generateConf } from './src/main/ets/util/MeshGradient';
+export { SRC_EDGE, hueOfSeed, fillFallback, fillFallbackFromColor, enhanceColors, boxBlurRgba } from './src/main/ets/util/MeshSource';
+// ★★★ 2026-10-17（用户实测「点击打开播放页时背景是别的歌的颜色」）：**提前预热**当前歌曲的
+//   64×64 网格源（壳层按"当前曲目变化"调用，结果存 `MeshWarmState`，播放页 onAppear 采用）。
+export { prewarmCurrentSongMesh, meshWarmKeyOf } from './src/main/ets/util/MeshWarmService';
+// ★★ 2026-10-15：**网格形变背景的组件层**（`NodeContainer` + 自定义 `RenderNode.draw`
+//   + `drawPixelMapMesh` + `displaySync` 20fps + 径向暗角），照搬无界 `MeshCoverBg`。
+export { MeshCoverBg } from './src/main/ets/view/MeshCoverBg';
+
+export { PlaybackTuningPanel } from './src/main/ets/view/PlaybackTuningPanel';
+
+// 在线歌词匹配（打分 / 逐平台搜索）：原本在 localmusic 里，播放页「搜索歌词」也要用同一套，
+// 所以下沉到 player —— localmusic 与播放页都从这里取，**只保留一份实现**。
+export {
+  MATCH_PLATFORMS, normalizeForMatch, singerTokens, parseIntervalMs,
+  scoreCandidate, pickAutoMatch, searchCandidates, autoMatchLyric, fromSearchSong, toSearchSong,
+  infoToJson, infoFromJson
+} from './src/main/ets/util/LyricMatch';
+export type { MatchSongInfo, LyricCandidate, LyricMatch, AutoMatchResult } from './src/main/ets/util/LyricMatch';

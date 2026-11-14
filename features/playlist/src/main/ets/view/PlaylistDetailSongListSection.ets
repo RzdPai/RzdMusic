@@ -14,23 +14,41 @@
  */
 
 
-import { uiObserver } from '@kit.ArkUI';
-import { BreakpointType, MusicStoreService, PlayedSongRecord, StyleConstants } from 'musicbasic';
+import { AppStorageV2, uiObserver } from '@kit.ArkUI';
+import { MusicAppState, SongItem } from 'musicbasic';
+import { hilog } from '@kit.PerformanceAnalysisKit';
+import {
+  AppStorageKeys,
+  LocalCoverImage,
+  BreakpointType,
+  MusicStoreService,
+  PlayedSongRecord,
+  NowPlayingIndicator,
+  SongTitleMarquee,
+  StyleConstants,
+  ThemeState
+} from 'musicbasic';
+import { PlaylistBatchSelectionStore } from '../model/PlaylistBatchSelectionStore';
 import { PlaylistSongUi } from '../model/PlaylistUiModels';
+import { PlaylistSongUiDataSource } from '../model/PlaylistSongUiDataSource';
 import { MusicListPlaybackViewModel } from '../viewmodel/MusicListPlaybackViewModel';
 import { SongMoreMenu } from './SongMoreMenu';
 
-/** Bottom reserve (vp) inside the list so the last row clears the floating mini bar. */
-const SONG_LIST_END_RESERVE_VP: number = 72;
+const BATCH_LOG_DOMAIN: number = 0x0000;
+const BATCH_LOG_TAG: string = 'RzdPlaylistMultiSelect';
 
 /** Sort modes: 0 = default, 1 = by title, 2 = by singer. */
 const SORT_DEFAULT: number = 0;
 const SORT_TITLE: number = 1;
 const SORT_SINGER: number = 2;
 
+/** 加载骨架的行数（固定 key，不需要 LazyForEach —— 只有 6 行）。 */
+const SKELETON_ROW_KEYS: string[] = ['sk-0', 'sk-1', 'sk-2', 'sk-3', 'sk-4', 'sk-5'];
+
 /**
- * Playlist song list with play-all header, sort menu, search filter, lazy list,
- * and nested scroll behavior for detail page.
+ * Playlist song list with play-all header, MusicFree-style multi-select batch
+ * operations, search filter, lazy list, and nested scroll behavior.
+ * Sorting now lives in the host page's overflow menu (see {@link externalSortMode}).
  */
 @ComponentV2
 export struct PlaylistDetailSongListSection {
@@ -42,7 +60,6 @@ export struct PlaylistDetailSongListSection {
   @Local displaySongs: PlaylistSongUi[] = [];
   /** Original song order from the store / view model (restored when search/sort cleared). */
   @Local originalSongs: PlaylistSongUi[] = [];
-  @Param listHeightVp: number = 700;
   @Param playlistId: string = '';
   /** Search keyword from the host page; filters the list in real-time. */
   @Param searchKeyword: string = '';
@@ -52,20 +69,90 @@ export struct PlaylistDetailSongListSection {
   @Param customSortCommand: number = 0;
   /** 歌曲去重指令（递增触发对歌单执行去重）。 */
   @Param dedupeCommand: number = 0;
+  /** 强制退出多选模式指令（递增触发：宿主从菜单进入排序/去重时收起批量操作条）。 */
+  @Param batchExitCommand: number = 0;
+  /** 多选模式是否可用（本地歌单可批量删除；榜单/在线歌单只能批量播放/下载/收藏）。 */
+  @Param allowBatchDelete: boolean = false;
+  /**
+   * 页面取色背景（Hero 渐变没入的那个颜色）。
+   *
+   * 只有一处用途：「播放全部」行吸顶时要有**不透明**背景，否则歌曲行会从它下面透出来。
+   * 传入的必须是同一个色值，吸顶行才能和页面融成一体。
+   */
+  @Param backdropColor: string = '#1f1f22';
+  // ★★ 用户 2026-10-12 的对比度 bug 修法（见 `surfaceInk()` 头上那段）：底色与文字色**必须同源**。
+  //   本组件铺的那块底就是 `backdropColor`（吸顶组头 = 整页底色），而它由宿主
+  //   `PlaylistDetailPage` 用 `ColorConversion.dealColor` 压暗后给出 ⇒「恒深底 ⇒ 正文恒白字」
+  //   这一条结论**只在宿主那一处算**（与歌手页同款），本组件直接取用它。
+  //   下面两个 `@Param` 现在保留作 API 兼容与默认值来源（`surfaceInk()` 目前返回常量白）。
+  @Param fgColor: ResourceColor = '#FFFFFF';
+  @Param fgSecondaryColor: ResourceColor = '#B3FFFFFF';
+  /**
+   * 歌曲是否还在加载中（在线榜单/歌单的异步拉取）。
+   *
+   * 为真时渲染骨架屏，避免「先闪一下居中占位图标、再突然出现整列」的跳变。
+   */
+  @Param loading: boolean = false;
+  /** 多选模式变化回调，宿主据此隐藏浮动迷你条。 */
+  @Param onBatchModeChange: (active: boolean) => void = (_active: boolean): void => {};
   @Local sortMode: number = SORT_DEFAULT;
-  /** True when custom reordering mode is active (up/down arrows on rows). */
+  /** True when custom reordering mode is active (drag handle on rows). */
   @Local customSortMode: boolean = false;
-  /** List vertical scroller instance bound to the List. */
-  private scroller: Scroller = new Scroller();
+  /**
+   * 多选（批量操作）共享状态。
+   *
+   * 由宿主页面创建并同时传给本组件与 {@link PlaylistBatchActionBar}，
+   * 保证「勾选」和「已选 N 首 / 全选 / 取已选」读的是同一份。
+   */
+  @Param batch: PlaylistBatchSelectionStore = new PlaylistBatchSelectionStore();
+  /** 主题色：多选勾选圈选中态用。 */
+  @Local themeState: ThemeState =
+    AppStorageV2.connect(ThemeState, AppStorageKeys.THEME_STATE, () => new ThemeState())!;
+  /** 共享播放状态：判定「当前正在播放」那一行（歌名变色 + 动态竖条），以及播放/暂停态。 */
+  @Local appState: MusicAppState =
+    AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
+  /** The page binds HDS title effects to this same bounded List. */
+  @Param pageScroller: Scroller = new Scroller();
+  @Param bottomPaddingVp: number = 96;
+  @Param revealOffsetVp: number = 0;
+  /** Report the already-bound List scroll; never bind the page Scroller to a second container. */
+  @Event onContentDidScroll: () => void = (): void => {};
+  /**
+   * 列表**列数**（1 = 单列，`>=2` = 多列 lanes）。
+   *
+   * 甲方 2026-10-24：「歌单页歌手页右侧不应该改多列吗（至少我在手机上横屏看还是一页，
+   * 但是感觉这个情况下两列合理一些）」⇒ 宽屏（左卡版式）时由宿主传 2/3。
+   * ⚠️ 多列时**不再用** `ListItemGroup`（吸顶多列没有意义，且 group 在 lanes 下的行为不确定），
+   *    播放全部行改成普通 ListItem。
+   */
+  @Param lanesCount: number = 1;
+  @BuilderParam heroBuilder: () => void = this.EmptyHero;
+  private displayDataSource: PlaylistSongUiDataSource = new PlaylistSongUiDataSource([]);
+  private dataGeneration: number = 0;
+
+  private logCrashStage(stage: string): void {
+    const branch: string = this.loading ? 'loading' :
+      (this.displaySongs.length === 0 ? 'empty' : (this.customSortMode ? 'repeat-sort' : 'lazy-songs'));
+    hilog.info(0, 'RzdPlaylistCrashGuard',
+      'list stage=%{public}s branch=%{public}s rows=%{public}d src=%{public}d gen=%{public}d',
+      stage, branch, this.displaySongs.length, this.displayDataSource.totalCount(), this.dataGeneration);
+  }
+
+  @Builder
+  private EmptyHero() {}
 
   aboutToAppear(): void {
+    this.logCrashStage('appear-before-sync');
     this.syncOriginal();
     this.applyFilterAndSort();
+    this.logCrashStage('appear-after-sync');
+    hilog.info(0, 'RzdPlaylistSticky', 'appear single List rows=%{public}d', this.displaySongs.length);
   }
 
   @Monitor('customSortCommand')
   onCustomSortCommand(): void {
     if (this.playlistId.length > 0) {
+      this.exitBatchMode();
       this.customSortMode = true;
       this.syncOriginal();
       this.applyFilterAndSort();
@@ -77,6 +164,7 @@ export struct PlaylistDetailSongListSection {
     if (this.playlistId.length === 0) {
       return;
     }
+    this.exitBatchMode();
     this.customSortMode = false;
     const removed: number = MusicStoreService.getInstance().dedupePlaylistSongs(this.playlistId);
     this.listVm.loadPlaylistSongs(this.playlistId);
@@ -101,12 +189,21 @@ export struct PlaylistDetailSongListSection {
     this.applyFilterAndSort();
   }
 
+  /** 宿主标题栏「四个点」菜单里的排序项通过这里下发（0 默认 / 1 按歌名 / 2 按歌手）。 */
   @Monitor('externalSortMode')
   onExternalSortChanged(): void {
     if (this.externalSortMode >= 0) {
+      this.exitBatchMode();
+      this.customSortMode = false;
       this.sortMode = this.externalSortMode;
       this.applyFilterAndSort();
     }
+  }
+
+  /** 宿主强制退出多选模式（进入排序 / 去重 / 拖拽排序前收起批量操作条）。 */
+  @Monitor('batchExitCommand')
+  onBatchExitCommand(): void {
+    this.exitBatchMode();
   }
 
   private syncOriginal(): void {
@@ -130,6 +227,9 @@ export struct PlaylistDetailSongListSection {
       ui.source = record.source;
       ui.songId = record.songId;
       ui.coverUrl = record.img;
+      ui.albumName = record.albumName;
+      ui.albumId = record.albumId;
+      ui.interval = record.interval;
       uis.push(ui);
     }
     this.originalSongs = uis;
@@ -161,6 +261,30 @@ export struct PlaylistDetailSongListSection {
       });
     }
     this.displaySongs = result;
+    this.dataGeneration++;
+    this.logCrashStage('data-before-reload');
+    this.displayDataSource.reloadData(result);
+    this.logCrashStage('data-after-reload');
+    this.pruneSelection();
+    hilog.info(0, 'RzdPlaylistSticky', 'data rows=%{public}d custom=%{public}d loading=%{public}d',
+      result.length, this.customSortMode ? 1 : 0, this.loading ? 1 : 0);
+  }
+
+  /** 列表变化（删除/去重/过滤）后丢弃已不存在的选择键，避免"已选 N"与实际不符。 */
+  private pruneSelection(): void {
+    if (this.batch.keys.length === 0) {
+      return;
+    }
+    const alive: string[] = [];
+    for (let i: number = 0; i < this.displaySongs.length; i++) {
+      const key: string = this.displaySongs[i].selectionKey();
+      if (this.batch.has(key)) {
+        alive.push(key);
+      }
+    }
+    if (alive.length !== this.batch.keys.length) {
+      this.batch.keys = alive;
+    }
   }
 
   /** 拖动排序回调：仅排序模式下应用新顺序。 */
@@ -194,93 +318,213 @@ export struct PlaylistDetailSongListSection {
     this.applyFilterAndSort();
   }
 
-  /** Stable per-song key (source_songId) so deletions update the list correctly. */
+  /** Stable per-song key (source_songId) so deletions and selection update correctly. */
   private songKeyOf(item: PlaylistSongUi): string {
     if (item.source.length > 0 && item.songId.length > 0) {
-      return 'pl-' + item.source + '_' + item.songId;
+      return 'pl-' + item.source + '_' + item.songId + '-' + item.id;
     }
     return 'pl-local-' + item.id;
   }
 
-  /** Sort menu items for the list-check icon. */
-  private sortMenuItems(): MenuElement[] {
-    return [
-      {
-        value: '默认排序',
-        action: (): void => {
-          this.sortMode = SORT_DEFAULT;
-          this.applyFilterAndSort();
-        }
-      },
-      {
-        value: '按歌名排序',
-        action: (): void => {
-          this.sortMode = SORT_TITLE;
-          this.applyFilterAndSort();
-        }
-      },
-      {
-        value: '按歌手排序',
-        action: (): void => {
-          this.sortMode = SORT_SINGER;
-          this.applyFilterAndSort();
-        }
-      }
-    ];
+  /** Resolve on click, not while building every row; filtered/sorted indices are not VM indices. */
+  private playDisplayedSong(item: PlaylistSongUi): void {
+    const rows: PlaylistSongUi[] = this.listVm.playlistSongUis;
+    let index: number = rows.indexOf(item);
+    if (index < 0) {
+      index = rows.findIndex((row: PlaylistSongUi): boolean => {
+        return row.id === item.id && row.source === item.source && row.songId === item.songId;
+      });
+    }
+    hilog.info(0, 'RzdPlaylistSticky', 'play map vmIdx=%{public}d', index);
+    if (index >= 0) {
+      this.listVm.requestPlayByListIndex(index, this.getUIContext());
+    }
+  }
+
+  private toast(message: string): void {
+    this.getUIContext().getPromptAction().showToast({ message: message, duration: 2000 });
+  }
+
+  // ───────────────────── 取色底上的前景色（对比度恒定） ─────────────────────
+  //
+  // ★★ 用户 2026-10-12：「歌单页（如首页每日三十首）多选时**下方文字会跟随背景自动变化颜色**，
+  //   日间模式下背景取了黑色，而文字依然是黑色」。
+  //
+  // 现场：整块内容（含多选时切换出来的「已选 N 首 / 全选 / 完成」那一行、以及歌曲行文字）
+  //   压在**封面动态取色**的 `backdropColor` 上（见 `StickyPlayAllHeader`：
+  //   `.backgroundColor(this.backdropColor)`），而文字色来自宿主算的 `@Param fgColor`
+  //   （`PlaylistDetailPage.heroFgPrimary()` → `isLightBackdrop()`）—— 底与字是**两条独立通道**：
+  //   底色一变（换歌单 / 换封面 / 异步取色回来），文字色只要没跟着同一帧一起翻，就会落到
+  //   「深底 + 深字」= 用户看到的「文字跟着背景变、却越变越看不见」。
+  //
+  // 修法（两步，缺一不可）：
+  //   ① 宿主侧：`PlaylistDetailPage` 的 `lightBackdrop` **定死为 false**（与歌手页 `ArtistDetailPage`
+  //      逐字同款口径：`dealColor` 压暗过的底 ⇒ 正文恒白字）。原来那句"按 WCAG 对比度挑黑白"的判据
+  //      在 `dealColor` 的取值域里会翻成 true，正是黑底黑字的来源（详见宿主里的注释）。
+  //   ② 本组件侧：取色底上的前景色**只认这一条结论**（恒白字），不再自己按底色现算一次
+  //      —— 同一个量两处各算一遍，必然在临界底色上打架（一边白字一边黑字）。
+  /** 取色底上的主文字色（与 `StickyPlayAllHeader` 铺的 `backdropColor` 成对）。 */
+  /**
+   * 这一行是不是**当前正在播放**的那首（用户 2026-10-19：歌名变色 + 动态竖条）。
+   * @param item 列表行
+   * @returns 是否当前播放
+   */
+  private isCurrentSong(item: PlaylistSongUi): boolean {
+    // ★ 2026-11-04：换源会把队列条目的 `source/songId` 改写成新源 ⇒ 纯比对认不出"当前这首"
+    //   （观感＝列表里"正在播放"的高亮/图标消失）。统一走 `isCurrentRowIdentity()`：
+    //   它多认一次"换源前的原始身份"。
+    return this.appState.isCurrentRowIdentity(item.source, item.songId);
+  }
+
+  /** `backdropColor` 是 `rgb(r, g, b)` 或 `#RRGGBB`；按相对亮度判定"浅底"。 */
+  private isLightSurface(): boolean {
+    const c: string = this.backdropColor;
+    let r: number = 0;
+    let g: number = 0;
+    let b: number = 0;
+    const m = c.match(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/);
+    if (m !== null) {
+      r = Number.parseInt(m[1]);
+      g = Number.parseInt(m[2]);
+      b = Number.parseInt(m[3]);
+    } else if (c.length >= 7 && c.startsWith('#')) {
+      r = Number.parseInt(c.substring(1, 3), 16);
+      g = Number.parseInt(c.substring(3, 5), 16);
+      b = Number.parseInt(c.substring(5, 7), 16);
+    } else {
+      return false;
+    }
+    const lum: number = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+    return lum > 0.42;
+  }
+
+  private surfaceInk(): ResourceColor {
+    // ★ 2026-11-01（用户）：墨色必须跟**实际背景色**走，不能跟主题 ——
+    //   日间也可能取到深色背景、夜间也可能取到浅色背景。
+    return this.isLightSurface() ? '#E6000000' : '#FFFFFF';
+  }
+
+  /** 取色底上的次要文字色（与 {@link surfaceInk} 同一结论，只降透明度）。 */
+  private surfaceInkSecondary(): ResourceColor {
+    return this.isLightSurface() ? '#99000000' : '#B3FFFFFF';
+  }
+
+  /** 是否已全选当前可见行（批量操作条与列表头共用同一份选择状态）。 */
+  private isAllSelected(): boolean {
+    return this.displaySongs.length > 0 && this.batch.keys.length >= this.displaySongs.length;
+  }
+
+  /** 全选 / 取消全选。 */
+  private toggleSelectAll(): void {
+    if (this.isAllSelected()) {
+      this.batch.keys = [];
+      return;
+    }
+    const keys: string[] = [];
+    for (let i: number = 0; i < this.displaySongs.length; i++) {
+      keys.push(this.displaySongs[i].selectionKey());
+    }
+    this.batch.keys = keys;
+  }
+
+  // ---------------------------------------------------------------------------
+  // MusicFree 式多选（批量操作）
+  // ---------------------------------------------------------------------------
+
+  /** 进入多选模式：清空上一次的选择，并通知宿主隐藏浮动迷你条。 */
+  private enterBatchMode(): void {
+    if (this.displaySongs.length === 0) {
+      this.toast('暂无歌曲');
+      return;
+    }
+    this.customSortMode = false;
+    this.batch.keys = [];
+    // 与 MusicFree 同款：进出都包一层 250ms EaseInOut，避免底栏突变
+    this.getUIContext().animateTo({ duration: 250, curve: Curve.EaseInOut }, (): void => {
+      this.batch.batchMode = true;
+    });
+    this.onBatchModeChange(true);
+    hilog.info(BATCH_LOG_DOMAIN, BATCH_LOG_TAG, 'batch enter rows=%{public}d', this.displaySongs.length);
+  }
+
+  /** 退出多选模式。 */
+  private exitBatchMode(): void {
+    if (!this.batch.batchMode) {
+      return;
+    }
+    this.getUIContext().animateTo({ duration: 250, curve: Curve.EaseInOut }, (): void => {
+      this.batch.batchMode = false;
+    });
+    this.batch.keys = [];
+    this.onBatchModeChange(false);
+    hilog.info(BATCH_LOG_DOMAIN, BATCH_LOG_TAG, 'batch exit');
+  }
+
+  /** 勾选/取消勾选单行。 */
+  private toggleSelect(item: PlaylistSongUi): void {
+    this.batch.toggle(item.selectionKey());
+    hilog.info(BATCH_LOG_DOMAIN, BATCH_LOG_TAG, 'batch toggle key=%{public}s sel=%{public}d',
+      item.selectionKey(), this.batch.keys.length);
+  }
+
+  @Builder
+  private BatchCheckRing(row: PlaylistSongUi) {
+    SymbolGlyph(this.batch.has(row.selectionKey()) ?
+      $r('sys.symbol.checkmark_circle_fill') : $r('sys.symbol.circle'))
+      .fontSize(24)
+      .fontColor([this.batch.has(row.selectionKey()) ? this.themeState.color : this.surfaceInkSecondary()])
+      .transition(TransitionEffect.OPACITY)
   }
 
   /**
-   * Builds a single playlist row: metadata, tags, overflow affordance, and tap-to-play.
+   * Builds a single playlist row: optional selection ring, metadata, tags,
+   * overflow affordance, and tap-to-play.
    * @param item Song UI model for the row.
    * @param index Zero-based index in the playlist for playback requests.
    */
   @Builder
   private PlaylistSongRow(item: PlaylistSongUi, index: number) {
     Row({ space: 8 }) {
+      if (this.batch.batchMode) {
+        this.BatchCheckRing(item)
+      }
+
       if (item.coverUrl.length > 0) {
-        Image(item.coverUrl)
-          .width(44)
-          .height(44)
-          .borderRadius($r('sys.float.corner_radius_level3'))
-          .objectFit(ImageFit.Cover)
+        LocalCoverImage({ src: item.coverUrl, cacheHttp: true, imageWidth: 44, imageHeight: 44, radius: 8 })
       }
       Column({ space: 4 }) {
-        Text(item.title)
-          .fontSize($r('sys.float.Body_M'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.playlist_detail_song_title'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        // ★ 歌名过长时跑马灯（用户要求「各个页面歌曲名过长时改为用跑马灯显示」）。
+        //   本源同时服务「每日30首」与「歌单详情」⇒ 这一处替换把两块一起覆盖。
+        //   字号/字色/字重逐字保留（字色是随底取色的 `surfaceInk()`），
+        //   唯一变化是溢出行为：`Ellipsis` → `MARQUEE`。
         Row({ space: 6 }) {
-          Text('VIP')
-            .fontSize($r('sys.float.Caption_S'))
-            .lineHeight(13)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.playlist_detail_tag_text'))
-            .padding({
-              left: 4,
-              right: 4,
-              top: 1,
-              bottom: 1
+          SongTitleMarquee({
+            text: item.title,
+            titleFontSize: $r('sys.float.Body_M'),
+            // ★ 用户 2026-10-19：正在播放那首的**歌名用主题色**（用户可自定义颜色）
+            titleFontColor: this.isCurrentSong(item) ? this.themeState.color : this.surfaceInk(),
+            titleFontWeight: FontWeight.Medium,
+            // ★ 用户 2026-10-19 第二轮：小竖条要**紧贴歌名右侧**（不是整行最右边）
+            hugContent: true
+          })
+          // 播放中动态小竖条（5 根；暂停就停）
+          if (this.isCurrentSong(item)) {
+            NowPlayingIndicator({
+              playing: this.appState.isPlay,
+              color: this.themeState.color
             })
-            .backgroundColor($r('app.color.playlist_detail_tag_background'))
-            .borderRadius($r('sys.float.corner_radius_level2'))
-          Text($r('app.string.playlist_tag_spatial'))
-            .fontSize($r('sys.float.Caption_S'))
-            .fontColor($r('app.color.playlist_detail_tag_text'))
-            .padding({
-              left: 4,
-              right: 4,
-              top: 1,
-              bottom: 1
-            })
-            .backgroundColor($r('app.color.playlist_detail_tag_background'))
-            .borderRadius($r('sys.float.corner_radius_level2'))
+          }
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+        Row({ space: 6 }) {
+          // VIP / 空间音频标识已按需求**移除**：这两枚标签目前是写死的（不看歌曲真实
+          // 版权字段），只会让每一行都挂两个没有信息量的角标，视觉上很吵。
           Text(item.singer)
             .fontSize($r('sys.float.Caption_M'))
             .lineHeight(16)
             .fontWeight(FontWeight.Regular)
-            .fontColor($r('app.color.primary40'))
+            .fontColor(this.surfaceInkSecondary())
             .maxLines(1)
             .layoutWeight(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -294,17 +538,18 @@ export struct PlaylistDetailSongListSection {
           .fontSize(20)
           .fontWeight(FontWeight.Regular)
           .height(20)
-          .fontColor([$r('sys.color.icon_tertiary')])
+          .fontColor([this.surfaceInkSecondary()])
           .margin({ right: 4 })
-      } else {
+      } else if (!this.batch.batchMode) {
         SongMoreMenu({
           song: {
             songId: item.songId, name: typeof item.title === 'string' ? item.title : '',
             singer: typeof item.singer === 'string' ? item.singer : '',
-            albumName: '', albumId: '', source: item.source,
-            interval: '', img: item.coverUrl, types: []
+            albumName: item.albumName, albumId: item.albumId, source: item.source,
+            interval: item.interval, img: item.coverUrl, types: []
           },
           iconSize: 18,
+          iconColor: this.surfaceInkSecondary(),
           playlistId: this.playlistId,
           onSongDeleted: (): void => {
             this.reloadFromStore();
@@ -313,120 +558,279 @@ export struct PlaylistDetailSongListSection {
       }
     }
     .width(StyleConstants.FULL_WIDTH)
+    // 行内左右留白：之前把内边距放在 List 上，而 List 两侧 padding 会被 lanes 分栏
+    // 吃掉一部分，行内容（封面、右侧按钮）就贴到屏幕边上了。改成按行加。
     .padding({
+      left: new BreakpointType(16, 24, 0, 0).getValue(this.breakpointEnv.widthBreakpoint),
+      right: new BreakpointType(16, 24, 32, 32).getValue(this.breakpointEnv.widthBreakpoint),
       top: 10,
       bottom: 10,
     })
+    .gesture(LongPressGesture().onAction((): void => {
+      // MusicFree 同款：长按任意一行进入多选并勾选该行
+      if (this.customSortMode) {
+        return;
+      }
+      if (!this.batch.batchMode) {
+        this.enterBatchMode();
+      }
+      this.toggleSelect(item);
+    }))
     .onClick(() => {
       if (this.customSortMode) {
         return;
       }
-      this.listVm.requestPlayByListIndex(index, this.getUIContext());
+      if (this.batch.batchMode) {
+        this.toggleSelect(item);
+        return;
+      }
+      this.playDisplayedSong(item);
     })
   }
 
-  /**
-   * Keeps the list viewport at the host-provided height so long playlists can
-   * scroll inside their own List (enabling the scroll bar and edge bounce).
-   * @returns Effective section height in vp.
-   */
-  private effectiveListHeightVp(): number {
-    return this.listHeightVp;
-  }
-
-  /**
-   * Builds header, sort affordance, and multi-lane list of songs.
-   */
-  build() {
-    Column() {
-      Row() {
+  /** 「播放全部」行：多选模式下切换为「已选 N 首 / 全选 / 完成」。 */
+  @Builder
+  private PlayAllHeader() {
+    Row() {
+      if (this.batch.batchMode) {
+        Text('已选 ' + this.batch.keys.length + ' 首')
+          .fontSize($r('sys.float.Subtitle_L'))
+          .fontWeight(FontWeight.Medium)
+          .lineHeight(24)
+          .fontColor(this.surfaceInk())
+      } else {
         Row({ space: 8 }) {
           SymbolGlyph($r('sys.symbol.play_round_triangle_fill'))
             .fontSize(32)
             .fontWeight(FontWeight.Regular)
             .height(32)
-            .fontColor([$r('app.color.playlist_play_all_icon')])
+            .fontColor([this.surfaceInk()])
           Text($r('app.string.playlist_play_all'))
             .fontSize($r('sys.float.Subtitle_L'))
             .fontWeight(FontWeight.Medium)
             .lineHeight(24)
-            .fontColor($r('app.color.mini_bar_primary'))
+            .fontColor(this.surfaceInk())
           Text(`${this.displaySongs.length}`)
             .fontSize($r('sys.float.Subtitle_L'))
             .fontWeight(FontWeight.Medium)
             .lineHeight(24)
-            .fontColor($r('app.color.mini_bar_primary'))
+            .fontColor(this.surfaceInk())
         }
         .onClick(() => {
           if (this.displaySongs.length > 0) {
-            this.listVm.requestPlayByListIndex(0, this.getUIContext());
+            this.playDisplayedSong(this.displaySongs[0]);
           }
         })
+      }
 
-        Blank()
-        if (this.customSortMode) {
-          Text('完成')
-            .fontSize($r('sys.float.Body_S'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.primary40'))
-            .onClick(() => {
-              this.saveCustomSort();
-            })
-        } else {
-          SymbolGlyph($r('sys.symbol.list_checkmask'))
-            .fontSize(20)
-            .fontWeight(FontWeight.Regular)
-            .height(20)
-            .fontColor([$r('app.color.primary40')])
-            .bindMenu(this.sortMenuItems())
-        }
+      Blank()
+
+      if (this.batch.batchMode) {
+        Text(this.isAllSelected() ? '取消全选' : '全选')
+          .fontSize($r('sys.float.Body_S'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.surfaceInkSecondary())
+          .onClick(() => {
+            this.toggleSelectAll();
+          })
+        Text('完成')
+          .fontSize($r('sys.float.Body_S'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.surfaceInkSecondary())
+          .margin({ left: 20 })
+          .onClick(() => {
+            this.exitBatchMode();
+          })
+      } else if (this.customSortMode) {
+        Text('完成')
+          .fontSize($r('sys.float.Body_S'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.surfaceInkSecondary())
+          .onClick(() => {
+            this.saveCustomSort();
+          })
+      } else {
+        // 多选入口：沿用原来那个图标按钮的样式（不额外加文字标签）
+        SymbolGlyph($r('sys.symbol.list_checkmask'))
+          .fontSize(20)
+          .fontWeight(FontWeight.Regular)
+          .height(20)
+          .fontColor([this.surfaceInkSecondary()])
+          .onClick(() => {
+            this.enterBatchMode();
+          })
+      }
+    }
+    .width(StyleConstants.FULL_WIDTH)
+    .padding({
+      left: new BreakpointType(16, 24, 0, 0).getValue(this.breakpointEnv.widthBreakpoint),
+      right: new BreakpointType(16, 24, 32, 32).getValue(this.breakpointEnv.widthBreakpoint),
+      top: new BreakpointType(8, 8, 16, 16).getValue(this.breakpointEnv.widthBreakpoint)
+    })
+  }
+
+  /**
+   * 播放全部行 + 歌曲列表。
+   *
+   * 唯一有界 List：首项 Hero，ListItemGroup.header 为播放全部行。
+   * 普通歌曲用 LazyForEach；仅自定义排序保留 Repeat.onMove。
+   * 批量操作条由宿主作为 List 的同级节点固定在屏幕底部。
+   */
+  @Builder
+  private StickyPlayAllHeader() {
+    Column() {
+      this.PlayAllHeader()
+    }
+    .width(StyleConstants.FULL_WIDTH)
+    .padding({ bottom: 8 })
+    .backgroundColor(this.backdropColor)
+  }
+
+  /**
+   * 歌曲区（加载态 / 空态 / 自定义排序 Repeat / 普通 LazyForEach / 底部留白）——
+   * **宽窄两支共用**：窄屏放进 `ListItemGroup`（吸顶播放全部行），宽屏放进普通 List（多列 lanes）。
+   */
+  @Builder
+  private SongCells() {
+    if (this.loading) {
+      ListItem() {
+      Column({ space: 12 }) {
+        LoadingProgress()
+          .width(28)
+          .height(28)
+          .color($r('app.color.primary40'))
+        Text('正在加载歌曲…')
+          .fontSize($r('sys.float.Body_S'))
+          .fontColor(this.surfaceInkSecondary())
       }
       .width(StyleConstants.FULL_WIDTH)
-      .padding({
-        left: new BreakpointType(16, 24, 0, 0).getValue(this.breakpointEnv.widthBreakpoint),
-        right: new BreakpointType(16, 24, 32, 32).getValue(this.breakpointEnv.widthBreakpoint),
-        top: new BreakpointType(8, 8, 16, 16).getValue(this.breakpointEnv.widthBreakpoint)
-      })
-
-      if (this.displaySongs.length === 0) {
-        Column() {
-          Text('未找到歌曲')
-            .fontSize($r('sys.float.Body_S'))
-            .fontColor($r('sys.color.font_tertiary'))
-        }
-        .width(StyleConstants.FULL_WIDTH)
-        .height(120)
-        .justifyContent(FlexAlign.Center)
+      .padding({ top: 48, bottom: 48 })
+      .justifyContent(FlexAlign.Center)
       }
 
-      List({ scroller: this.scroller }) {
+      // 骨架行：只画几条占位，让「马上要出现一列歌」这件事有预期
+      ForEach(SKELETON_ROW_KEYS, (key: string) => {
+        ListItem() {
+        Row({ space: 12 }) {
+          Column()
+            .width(44)
+            .height(44)
+            .borderRadius(8)
+            .backgroundColor($r('sys.color.background_tertiary'))
+          Column({ space: 8 }) {
+            Column()
+              .width('62%')
+              .height(13)
+              .borderRadius(4)
+              .backgroundColor($r('sys.color.background_tertiary'))
+            Column()
+              .width('38%')
+              .height(11)
+              .borderRadius(4)
+              .backgroundColor($r('sys.color.background_tertiary'))
+          }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
+        }
+        .width(StyleConstants.FULL_WIDTH)
+        .height(64)
+        .padding({ left: 16, right: 16 })
+        .alignItems(VerticalAlign.Center)
+        }
+      }, (key: string) => key)
+    } else if (this.displaySongs.length === 0) {
+      ListItem() {
+      Column() {
+        Text('未找到歌曲')
+          .fontSize($r('sys.float.Body_S'))
+          .fontColor(this.surfaceInkSecondary())
+      }
+      .width(StyleConstants.FULL_WIDTH)
+      .height(120)
+      .justifyContent(FlexAlign.Center)
+      }
+    } else if (this.customSortMode) {
+        // Keep the original drag callback only in explicit custom-sort mode.
+        // Nested group drag delivery remains device-unverified.
         Repeat<PlaylistSongUi>(this.displaySongs)
           .each((obj: RepeatItem<PlaylistSongUi>) => {
             ListItem() {
-              this.PlaylistSongRow(obj.item, this.displaySongs.indexOf(obj.item))
+              // ★ 用 `obj.index`，**不要**再写 `this.displaySongs.indexOf(obj.item)`：
+              //   后者是 O(n) 的线性查找，而 `displaySongs` 是 @Local 观测数组，
+              //   每次元素读取都要走一遍代理陷阱 —— 几百行时整体是 O(n²) 的代理访问，
+              //   这是「打开几百首歌的歌单要等一会」的主要来源。
+              this.PlaylistSongRow(obj.item, obj.index)
             }
           })
           .key((item: PlaylistSongUi) => this.songKeyOf(item))
           .onMove((from: number, to: number): void => {
             this.moveSong(from, to);
           })
+    } else {
+      LazyForEach(this.displayDataSource, (item: PlaylistSongUi, index: number) => {
+        ListItem() {
+          this.PlaylistSongRow(item, index)
+        }
+      }, (item: PlaylistSongUi): string => this.songKeyOf(item))
+    }
+    ListItem() {
+      Column().width(StyleConstants.FULL_WIDTH).height(this.bottomPaddingVp)
+    }
+  }
+
+  build() {
+    if (this.lanesCount > 1) {
+      // ── 宽屏（左卡 + 右列表）：**多列**。
+      //    ⚠️ 「播放全部」行**不能**放进多列 List：lanes 下每个 ListItem 只占一列 ⇒ 会被挤成半宽。
+      //    ⇒ 放在 List **外面**（固定头，不随列表滚），列里只剩 Hero（宽屏为空）与歌曲。
+      Column() {
+        this.StickyPlayAllHeader()
+        List({ scroller: this.pageScroller }) {
+          ListItem() {
+            this.heroBuilder()
+          }
+          this.SongCells()
+        }
+        .width(StyleConstants.FULL_WIDTH)
+        .layoutWeight(1)
+        .lanes(this.lanesCount, 16)
+        .onDidScroll((): void => { this.onContentDidScroll(); })
+        .cachedCount(8)
+        .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring)
+        .onAppear((): void => {
+          this.logCrashStage('list-build-mounted');
+        })
       }
-      .nestedScroll({
-        scrollForward: NestedScrollMode.PARENT_FIRST,
-        scrollBackward: NestedScrollMode.SELF_FIRST
-      })
-      .lanes(new BreakpointType(1, 2, 2, 2).getValue(this.breakpointEnv.widthBreakpoint), 32)
       .width(StyleConstants.FULL_WIDTH)
+      .height(StyleConstants.FULL_HEIGHT)
+    } else {
+      List({ scroller: this.pageScroller }) {
+        ListItem() {
+          this.heroBuilder()
+        }
+        ListItemGroup({ header: this.StickyPlayAllHeader() }) {
+        // 加载态排在最前面：在线榜单/歌单的歌曲是异步拉的，之前这里直接把空态画出来，
+        // 结果是「先闪一下居中的占位图标，再突然整列出现」。现在先给骨架 + 转圈，
+        // 数据到了再换成真正的列表，视觉上不会跳。
+          this.SongCells()
+        }
+        .translate({ y: this.revealOffsetVp })
+      }
+      .width(StyleConstants.FULL_WIDTH)
+      .height(StyleConstants.FULL_HEIGHT)
+      .sticky(StickyStyle.Header)
+      .onDidScroll((): void => { this.onContentDidScroll(); })
+      .cachedCount(4)
       .scrollBar(BarState.On)
       .edgeEffect(EdgeEffect.Spring)
-      .contentEndOffset(SONG_LIST_END_RESERVE_VP)
-      .padding({
-        left: new BreakpointType(16, 24, 0, 0).getValue(this.breakpointEnv.widthBreakpoint),
-        right: new BreakpointType(16, 24, 32, 32).getValue(this.breakpointEnv.widthBreakpoint),
-        bottom: 0
+      .onAppear((): void => {
+        this.logCrashStage('list-build-mounted');
+      })
+      .onAreaChange((_old: Area, area: Area): void => {
+        hilog.info(0, 'RzdPlaylistSticky', 'viewport w=%{public}s h=%{public}s bottom=%{public}d',
+          String(area.width), String(area.height), this.bottomPaddingVp);
       })
     }
-    .width(StyleConstants.FULL_WIDTH)
-    .height(this.effectiveListHeightVp())
   }
 }

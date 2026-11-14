@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 
 import { commonEventManager, BusinessError } from '@kit.BasicServicesKit';
 import { wantAgent, WantAgent } from '@kit.AbilityKit';
+import { image } from '@kit.ImageKit';
 import { liveViewManager } from '@kit.LiveViewKit';
 import { appendPlayLog, getAppRuntime, LiveViewConst, Logger } from 'musicbasic';
 import { AmllLyricLine } from '../amll/model/AmllTypes';
@@ -30,6 +31,16 @@ const PRIMARY_TITLE_MAX: number = 200;
 const MIN_PUSH_INTERVAL_MS: number = 500;
 /** Icon in resources/rawfile shown by the live view pickup layout (mandatory). */
 const LIVE_VIEW_ICON: string = 'liveview_icon.png';
+/**
+ * ★ 2026-11-04：胶囊图标的**解码边长**（px）。
+ *
+ * 真机日志：`[实况窗] 图标已加载 (rawfile/liveview_icon.png)` 之后仍然
+ * `创建异常 code=401 … capsule.icon … [or the parameter length exceeds the limit]`。
+ * 类型已经对了（`capsule.icon = PixelMap`），所以命中的是报错里第二种可能：**参数超限**。
+ * 资源实测 **512×512** RGBA ⇒ 直接塞进胶囊必被拒。这里按 48×48 解码，
+ * 既够胶囊显示，又把像素量降到 1/113。
+ */
+const LIVE_VIEW_ICON_PX: number = 48;
 /** Delay before parsing an uncached (large) lyric off the UI thread hot path. */
 const LYRIC_PARSE_DELAY_MS: number = 250;
 
@@ -63,6 +74,13 @@ export class LyricLiveViewController {
   private isActive: boolean = false;
   /** True while an async start is in flight (prevents duplicate creation). */
   private isStarting: boolean = false;
+  /**
+   * ★ 2026-11-04：会话级的"用不了实况窗"原因（空串 = 还能试）。
+   * 实测真机：先 `code=401`（512×512 图标超限，已按 48px 修掉），修完变成
+   * `code=1003500005 The right of liveView is not enabled.` ⇒ **应用未在 AGC 开通实况窗权益**，
+   * 这不是代码能解决的。记住它，本会话不再每首歌重试（原来每首都会白跑一次 IPC + 刷一行异常）。
+   */
+  private unsupportedReason: string = '';
   /** Parsed lyric lines of the current track. */
   private lines: AmllLyricLine[] = [];
   /** Last lyric line index pushed; -1 means nothing pushed yet. */
@@ -81,6 +99,17 @@ export class LyricLiveViewController {
   private wantAgentInstance?: WantAgent = undefined;
   /** Timestamp of the last push; throttles word-level lyric updates. */
   private lastPushTime: number = 0;
+  /**
+   * 胶囊图标（`capsule.icon`）—— **运行时必填**。
+   *
+   * ★★★ 2026-10-21（真机日志：`[实况窗] 创建异常 code=401 msg=The type of capsule.icon must be
+   *   string | image.PixelMap [or the parameter is mandatory]`，每次起播都失败）：
+   *   SDK 里 `CapsuleData.icon?: string | image.PixelMap` 标的是可选，**服务端却校验必填**。
+   *   这里把 `resources/rawfile/liveview_icon.png` 解码成 `PixelMap`（比传路径稳，不受沙箱路径规则影响），
+   *   缓存一份反复用；拿不到就只记日志、不阻断实况窗。
+   */
+  private capsuleIcon?: image.PixelMap = undefined;
+  private capsuleIconTried: boolean = false;
 
   /**
    * Creates the live view for the given track. No-op when the live view is
@@ -91,6 +120,11 @@ export class LyricLiveViewController {
    */
   public start(title: string, singer: string, lyricText: string): void {
     if (this.isActive || this.isStarting) {
+      return;
+    }
+    // ★ 2026-11-04：权益/开关类失败是**一次性、会话级**的（换歌也不会变），
+    //   以前每首歌都重试一次 ⇒ 每首打一遍同样的异常、白跑一次 IPC。
+    if (this.unsupportedReason.length > 0) {
       return;
     }
     this.isStarting = true;
@@ -105,7 +139,8 @@ export class LyricLiveViewController {
   private async doStart(): Promise<void> {
     try {
       if (!await liveViewManager.isLiveViewEnabled()) {
-        appendPlayLog('[实况窗] 系统实况窗开关未开启，跳过创建');
+        this.unsupportedReason = '系统实况窗开关未开启';
+        appendPlayLog('[实况窗] 系统开关未开启, 本会话跳过');
         return;
       }
       const agent: WantAgent | undefined = await this.getWantAgent();
@@ -116,15 +151,32 @@ export class LyricLiveViewController {
         appendPlayLog('[实况窗] 创建成功');
         this.pushUpdate(liveView);
       } else {
+        this.unsupportedReason = 'resultCode=' + result.resultCode;
         appendPlayLog('[实况窗] 创建失败 resultCode=' + result.resultCode + ' msg=' + result.message);
       }
     } catch (e) {
       const err: BusinessError = e as BusinessError;
-      appendPlayLog('[实况窗] 创建异常 code=' + err.code + ' msg=' + err.message);
+      appendPlayLog('[实况窗] 创建异常 code=' + err.code + ' msg=' + err.message +
+        (this.isEntitlementError(err.code) ? '（权益未开通）' : ''));
       Logger.warn(TAG, 'startLiveView failed: ' + err.code + ' ' + err.message);
+      if (this.isEntitlementError(err.code)) {
+        this.unsupportedReason = 'entitlement=' + err.code;
+      }
     } finally {
       this.isStarting = false;
     }
+  }
+
+  /**
+   * 判断是不是"权益/能力未开通"这类**换歌也不会好**的错误。
+   *
+   * `1003500005 The right of liveView is not enabled.` —— AGC 未给应用开通实况窗权益，
+   * 代码侧无解（要去 AppGallery Connect 申请），所以记住它、本会话别再重试。
+   * `401`（参数非法/超限，例如早期的 512×512 图标）也归进来：那是我们自己的参数问题，
+   * 一小时内不会自己好，重试同样只是刷日志。
+   */
+  private isEntitlementError(code: number): boolean {
+    return code === 1003500005 || code === 401;
   }
 
   /**
@@ -338,18 +390,73 @@ export class LyricLiveViewController {
           liveViewLockScreenAbilityName: LiveViewConst.LIVE_VIEW_LOCK_ABILITY,
           liveViewLockScreenAbilityParameters: lockScreenParams
         },
-        capsule: {
-          type: liveViewManager.CapsuleType.CAPSULE_TYPE_TEXT,
-          status: 1,
-          title: this.capsuleText(),
-          content: this.fitText(this.curSinger, CAPSULE_TEXT_MAX)
-        }
+        capsule: this.buildCapsule()
       }
     };
     if (agent !== undefined) {
       liveView.liveViewData.primary.clickAction = agent;
     }
     return liveView;
+  }
+
+  /**
+   * 组装胶囊（含**必填**的 `icon`）。
+   *
+   * `capsule.icon` 在 SDK 里是可选项、服务端却按必填校验（401），所以这里显式带上；
+   * 图标取自 `resources/rawfile/liveview_icon.png`，解码成 `PixelMap` 后缓存。
+   */
+  private buildCapsule(): liveViewManager.TextCapsule {
+    const capsule: liveViewManager.TextCapsule = {
+      type: liveViewManager.CapsuleType.CAPSULE_TYPE_TEXT,
+      status: 1,
+      title: this.capsuleText(),
+      content: this.fitText(this.curSinger, CAPSULE_TEXT_MAX),
+      // ★ 2026-10-21（真机：图标补上后又报 `capsule.backgroundColor must be string
+      //   [or the parameter is mandatory]`）：SDK 标可选、服务端同样按必填校验 ⇒ 显式给一个
+      //   深色底（与播放页胶囊同一色系），避免每次起播都 401。
+      backgroundColor: '#FF1F1F23'
+    };
+    const icon: image.PixelMap | undefined = this.ensureCapsuleIcon();
+    if (icon !== undefined) {
+      capsule.icon = icon;
+    }
+    return capsule;
+  }
+
+  /**
+   * @returns 胶囊图标 PixelMap（首次调用时从 rawfile 解码，之后走缓存；失败返回 undefined 并记日志）。
+   */
+  private ensureCapsuleIcon(): image.PixelMap | undefined {
+    if (this.capsuleIcon !== undefined) {
+      return this.capsuleIcon;
+    }
+    if (this.capsuleIconTried) {
+      return undefined;
+    }
+    this.capsuleIconTried = true;
+    const ctx = getAppRuntime().context;
+    if (ctx === undefined) {
+      Logger.warn(TAG, 'capsule icon skipped: context undefined');
+      return undefined;
+    }
+    try {
+      const bytes: Uint8Array = ctx.resourceManager.getRawFileContentSync(LIVE_VIEW_ICON);
+      const src: image.ImageSource = image.createImageSource(bytes.buffer as ArrayBuffer);
+      // ★ 按胶囊尺寸解码（原图 512×512 会被服务端判定"参数超限"而 401）
+      const decodeOptions: image.DecodingOptions = {
+        desiredSize: { width: LIVE_VIEW_ICON_PX, height: LIVE_VIEW_ICON_PX }
+      };
+      const pixmap: image.PixelMap = src.createPixelMapSync(decodeOptions);
+      src.release();
+      this.capsuleIcon = pixmap;
+      appendPlayLog('[实况窗] icon loaded rawfile/' + LIVE_VIEW_ICON + ' -> ' + LIVE_VIEW_ICON_PX + 'px');
+      return pixmap;
+    } catch (error) {
+      const err: BusinessError = error as BusinessError;
+      Logger.warn(TAG, 'capsule icon load failed: ' + err.code + ' ' + err.message);
+      appendPlayLog('[实况窗] 图标加载失败 code=' + err.code);
+      return undefined;
+    }
   }
 
   /** Updates the live view card/capsule and broadcasts the payload to the lock screen. Throttled. */

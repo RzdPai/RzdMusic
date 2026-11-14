@@ -20,3 +20,7 @@ export { HomeCapsuleHeader } from './src/main/ets/view/HomeCapsuleHeader';
 export { WearableHome } from './src/main/ets/view/WearableHome';
 export { HomePlazaSection } from './src/main/ets/view/HomePlazaSection';
 export { HomeRankingSection } from './src/main/ets/view/HomeRankingSection';
+export { EchoReviewPage } from './src/main/ets/view/EchoReviewPage';
+export { NowPlayingFeedPage } from './src/main/ets/view/NowPlayingFeedPage';
+
+export { FeedRecommendEngine, FeedRecommendPick } from './src/main/ets/util/FeedRecommendEngine';

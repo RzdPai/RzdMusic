@@ -72,6 +72,8 @@ export class GridConstants {
 export class RouterUrlConstants {
   /** Playlist detail page. */
   public static readonly PLAYLIST_DETAIL: string = 'PlaylistDetailPage';
+  /** 首页「每日30首」入口打开的推荐列表页。 */
+  public static readonly DAILY_THIRTY: string = 'DailyThirtyPage';
   public static readonly MUSIC_RECOGNITION: string = 'MusicRecognitionPage';
   /** Split-column playlist (wide) page. */
   public static readonly SPLIT_COLUMN_PLAYLIST: string = 'SplitColumnPlaylistPage';
@@ -80,12 +82,70 @@ export class RouterUrlConstants {
   /** Artist detail page (singer profile with full song list). */
   public static readonly ARTIST_DETAIL: string = 'ArtistDetailPage';
   public static readonly SETTINGS_DETAIL: string = 'SettingsDetailPage';
+  /**
+   * 「我的」→「设置」的二级页（搜索框 + 设置项分组列表）。
+   *
+   * 二级页本体只列入口，点进去仍是 {@link SETTINGS_DETAIL}（同一个 `sheetIndex` 语义），
+   * 所以它和原来的「设置」页签指向同一批详情页，不存在两份设置项实现。
+   */
+  public static readonly MINE_SETTINGS: string = 'MineSettingsPage';
+  /**
+   * 「我的」→「设置」的二级页 = **我们原本那个大设置页**（`SettingPage`）。
+   *
+   * ★ 用户 2026-10-11 明确：设置页用回我们原本的 `SettingPage`
+   * （原来它是底栏第 4 个页签；页签收成两个之后改成从「我的」页进，**内容不重写**）；
+   * 其中顶部的「登录音乐」大卡片**搬到「我的」页顶部**（见 `LoginMusicCard.ets`），
+   * 所以这一页里不再有那张卡。
+   *
+   * `MINE_SETTINGS`（旧名，指向已被删掉的 `MineSettingsPage`）保留常量只为兼容，
+   * 新的跳转一律用这个名字。
+   */
+  public static readonly SETTING_PAGE: string = 'SettingPage';
+  /** 「我的」→「全部歌单」的二级页（= 原来那个「歌单」页签的整页）。
+   *
+   * ★ 底栏从四个页签收成两个（推荐 / 我的）之后，「歌单」页签被删掉，
+   * 它的**整页能力**（新建 / 排序 / 导入 / 改封面 / 删除）只能从「我的」页进，
+   * 所以这里给它一个路由名；路由表条目在
+   * `features/setting/src/main/resources/base/profile/router_map.json`，
+   * Builder 在 `features/setting/src/main/ets/view/MinePlaylistPage.ets`（薄壳，渲染
+   * `features/playlist` 的 `PlaylistsPage`，**没有第二份实现**）。
+   */
+  public static readonly MINE_PLAYLIST: string = 'MinePlaylistPage';
   /** Album detail page (album cover + track list). */
   public static readonly ALBUM_DETAIL: string = 'AlbumDetailPage';
+  /**
+   * 「我的」→「最近播放 / 收藏」的二级页（同一张列表，靠参数分模式）。
+   *
+   * ★ 用户 2026-10-11 要求「我的」页**完全照搬**参考工程 lxmusic-harmony 的 MineView：
+   * 那一页的「最近播放 / 收藏」不是页内的分段胶囊，而是**各自一个子页面**
+   * （参考：`views/HistoryView.ets` 与内置收藏歌单详情）。
+   * 我们的历史 / 收藏数据本来就在 `MusicStoreService` 里，所以用**一页两模式**，
+   * 不新开两份列表实现。
+   *
+   * 路由表条目在 `features/setting/src/main/resources/base/profile/router_map.json`。
+   */
+  public static readonly RECORD_LIST: string = 'RecordListPage';
+  /**
+   * 「我的」→「云端音乐」的二级页（WebDAV 云端曲库）。
+   *
+   * ★ 照搬参考工程：它的「云端音乐」入口走的是 `core/webdav/*` + `views/WebDavView.ets`
+   * （WebDAV 上的曲库），不是 LX-Server。我们 `features/sync` 里已经有 WebDAV 客户端与凭据，
+   * 所以这一页落在 `features/sync`，路由表条目在
+   * `features/sync/src/main/resources/base/profile/router_map.json`。
+   */
+  public static readonly CLOUD_MUSIC: string = 'CloudMusicPage';
   /** Settings category sub-page (second level of the settings menu). */
   public static readonly SETTING_CATEGORY: string = 'SettingCategoryPage';
   /** Guest ranking boards overview page (multi-source). */
   public static readonly RANKING_BOARDS: string = 'RankingBoardsPage';
+  /**
+   * 全屏播放页（形变入口）。
+   *
+   * ★ 施工图第 1 步：播放页从"壳层浮层"改成 **NavDestination 推入**
+   * （`pushPath` 第二参 `animated = false`，形变自己就是动画），对标无界 1.2.4。
+   * 路由表在 `features/player/src/main/resources/base/profile/router_map.json`。
+   */
+  public static readonly PLAYER_PAGE: string = 'player';
   /** Guest ranking board detail page (board track list). */
 }
 
@@ -142,6 +202,27 @@ export class SdkConstants {
    * that needs the same floor; do not duplicate the magic number 23.
    */
   public static readonly HDS_TABS_BAR_FLOATING_MIN_SDK_API: number = 23;
+  /**
+   * API 24 = HarmonyOS 6.1.1(24)。自此版本起 `HdsTabs` 的 miniBar 支持
+   * `barLayoutMode`（迷你条与页签上下两排 / 单排），低版本必须传 undefined。
+   */
+  public static readonly HDS_TABS_BAR_TWO_ROW_MIN_SDK_API: number = 24;
+  /**
+   * `deviceInfo.distributionOSApiVersion` 上 6.1.1(24) 的取值
+   * （该字段格式为主版本*10000 + 次版本*100 + 补丁，与 `sdkApiVersion` 不同）。
+   */
+  public static readonly DISTRIBUTION_OS_6_1_1_CODE: number = 60101;
+}
+
+/**
+ * 双层底栏排布模式（数值与 HDS 的 `HdsBarLayoutMode` 一致）。
+ * 放在 common 层而不是直接引用 HDS 枚举，是为了避免 common 依赖 HDS UI 类型。
+ */
+export class BarLayoutModes {
+  /** 单排：迷你条被拉成整条通栏（"宽"样式 = 展开播放态）。 */
+  public static readonly HORIZONTAL: number = 0;
+  /** 上下两排：迷你条是一条"窄"胶囊、页签单独一排（**默认**）。 */
+  public static readonly VERTICAL: number = 1;
 }
 
 /**
@@ -168,6 +249,9 @@ export class AppStorageKeys {
   public static readonly APP_RUNTIME: string = 'musichome_AppRuntimeStorage';
   /** {@link TabSwitchState} (bottom tab / playlist section switching). */
   public static readonly TAB_SWITCH_STATE: string = 'musichome_TabSwitchState';
+
+  /** 「现在就听」自己的播放栈（与 MusicAppState 解耦，见 FeedPlaybackState）。 */
+  public static readonly FEED_PLAYBACK_STATE: string = 'musichome_FeedPlaybackState';
   /** {@link AmbientState} (bottom-bar immersive material level). */
   public static readonly AMBIENT_STATE: string = 'musichome_AmbientState';
 /** {@link ThemeState} (app accent color). */
@@ -176,6 +260,16 @@ public static readonly THEME_STATE: string = 'musichome_ThemeState';
 public static readonly HOME_SOURCE_STATE: string = 'musichome_HomeSourceState';
 /** {@link ShowMiniLyricState} (playback page mini lyric lines). */
 public static readonly SHOW_MINI_LYRIC_STATE: string = 'musichome_ShowMiniLyricState';
+/** {@link CoverTintState} (flow-light colors extracted from the current cover). */
+public static readonly COVER_TINT_STATE: string = 'musichome_CoverTintState';
+  /** {@link PlayerExpandState} (playback page one-shot expand animation). */
+  public static readonly PLAYER_EXPAND_STATE: string = 'musichome_PlayerExpandState';
+  /**
+   * ★★★ 2026-10-17（照搬无界 `MainPage.__shrink` + `shrinkPixmap`）：
+   * 非手势关闭那一棒的**浮层状态**（{@link MorphShrinkState}）。
+   * 播放页写（拍快照 + `start`），壳层读（渲染满窗 Image 浮层）⇒ 必须是共享状态。
+   */
+  public static readonly MORPH_SHRINK_STATE: string = 'musichome_MorphShrinkState';
 /** {@link ShowSubLyricState} (lyrics page translation/romanization sub-lines). */
 public static readonly SHOW_SUB_LYRIC_STATE: string = 'musichome_ShowSubLyricState';
 /** {@link LyricFpsState} (lyrics page render frame rate). */
@@ -193,4 +287,8 @@ public static readonly USE_ACCOUNT_REC_STATE: string = 'musichome_UseAccountRecS
 public static readonly HOME_PLAZA_STATE: string = 'musichome_HomePlazaState';
 /** {@link HomeRankingState} (home page shows the ranking boards section). */
 public static readonly HOME_RANKING_STATE: string = 'musichome_HomeRankingState';
+/** {@link MeshWarmState} (pre-warmed 64x64 mesh bytes of the current song cover). */
+public static readonly MESH_WARM_STATE: string = 'musichome_MeshWarmState';
+/** {@link MotionCoverState}（歌手 / 专辑 / 歌单页的「动态封面」开关，默认开）。 */
+public static readonly MOTION_COVER_STATE: string = 'musichome_MotionCoverState';
 }

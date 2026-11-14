@@ -17,7 +17,7 @@
  * AMLL 歌词视图组件（ArkUI 版）。
  *
  * 忠实复刻 applemusic-like-lyrics 的核心组件：
- * - Canvas 渲染逐词扫描高亮、强调动画、距离模糊、间奏点
+ * - 单 Canvas 渲染逐词扫描高亮、强调动画、间奏点；可见行有界离散模糊
  * - 物理弹簧滚动 + 触摸拖动 + 惯性 + 5 秒自动对齐回归
  * - 点击歌词行跳转
  */
@@ -28,6 +28,7 @@ import { AmllLayoutAlignAnchor } from '../core/AmllConsts';
 import { AppStorageKeys, Logger, LyricCenterState, LyricFpsState, MusicStoreService, ShowSubLyricState, WindowUtil } from 'musicbasic';
 import { BusinessError, pasteboard } from '@kit.BasicServicesKit';
 import { AppStorageV2, FrameCallback, window } from '@kit.ArkUI';
+import { displaySync } from '@kit.ArkGraphics2D';
 
 /** 触摸拖动意图阈值（对应 AMLL 的 10px） */
 const TOUCH_INTENT_PX: number = 10;
@@ -37,14 +38,23 @@ const INERTIA_STOP_SPEED: number = 0.05;
 const INERTIA_DECAY: number = 0.95;
 /** 松手后自动对齐回归延迟（毫秒） */
 const AUTO_ALIGN_DELAY_MS: number = 3000;
-/** 帧间隔兜底值（毫秒，120Hz 设备 vsync 间隔 ≈8.3ms）；实际帧率由 postFrameCallback 跟随屏幕刷新率 */
+/** 帧间隔兜底值（毫秒，120Hz 设备 vsync 间隔 ≈8.3ms）；实际帧率由帧驱动决定 */
 const FRAME_INTERVAL_MS: number = 8;
 /** 本地时钟与外部进度的最大偏差（毫秒），超过则视为跳转 */
 const CLOCK_DRIFT_LIMIT_MS: number = 250;
+/** 帧率申请的**下限**（保底帧率，系统省电/降频时也不会低于它努力） */
+const LYRIC_FPS_MIN: number = 60;
+/** 帧率申请的**上限**（再高也没意义：屏幕最高一般 120） */
+const LYRIC_FPS_MAX: number = 120;
 
 /**
- * VSync 帧回调（由 UIContext.postFrameCallback 驱动，跟随屏幕刷新率：
- * 60Hz 设备 60FPS、120Hz 设备 120FPS；窗口不可见时系统自动暂停回调）。
+ * VSync 帧回调 —— **兜底路径**（`postFrameCallback`），仅在 `displaySync` 不可用时使用。
+ *
+ * ★ 2026-11-04（甲方：「我们现在帧率低，实际动画比无界好」）：主路径已换成
+ *   `displaySync.create()` + `setExpectedFrameRateRange({expected, min, max})`，
+ *   因为 **`postFrameCallback` 只是"下一帧叫我"，帧率完全取决于系统当前给多少帧**——
+ *   应用不申请高帧率时多数场景只有 60，120Hz 屏也白搭。
+ *   （对照：无界 `views.LyricsView` 三处 `{min:60,max:120,expected:120}`。）
  */
 class FrameTicker extends FrameCallback {
   private onTick: () => void = (): void => {
@@ -79,8 +89,10 @@ export struct AmllLyricView {
   @Param glowColor: string = '#FFFFFF';
   /** 歌词列宽度比例 */
   @Param lineWidthAspect: number = 0.8;
-  /** 是否启用距离模糊 */
-  @Param enableBlur: boolean = true;
+  /** Whether the stored preference enables viewport blur. */
+  @Param enableBlur: boolean = false;
+  /** Parent has synchronously read the persisted preference. */
+  @Param blurPreferenceReady: boolean = false;
   /** 是否启用非当前行缩放 */
   @Param enableScale: boolean = true;
   /** 是否隐藏已播放的行 */
@@ -94,15 +106,28 @@ export struct AmllLyricView {
   /** 文字动画渐变宽度（主文字字体大小倍数） */
   @Param wordFadeWidth: number = 0.5;
   /** 内容起始偏移（上方留白） */
+  /** 当前行在视口里的相对位置（0=顶, 0.5=正中，越小越靠上）。 */
+  @Param alignPosition: number = 0.5;
+
   @Param contentStartOffset: number = 40;
   /** 内容结束偏移（下方留白） */
   @Param contentEndOffset: number = 200;
 
   private settings: RenderingContextSettings = new RenderingContextSettings(true);
   private ctx: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.settings);
+  @Local viewportBlurActive: boolean = true;
   private engine: AmllLyricPlayerEngine = new AmllLyricPlayerEngine();
   private renderer: AmllCanvasLyricRenderer | undefined = undefined;
   private frameTicker: FrameTicker = new FrameTicker();
+  /**
+   * 主帧驱动：`displaySync`（期望帧率由设置页的「歌词帧率」决定，默认 120，下限 60）。
+   * `undefined` = 本设备/本 API 版本不支持，退回 `postFrameCallback` 兜底。
+   */
+  private frameSync: displaySync.DisplaySync | undefined = undefined;
+  /** displaySync 是否已 start（避免重复 start / 重复 stop） */
+  private syncStarted: boolean = false;
+  /** displaySync 创建失败过（只记一次，别每首歌都试） */
+  private syncUnavailable: boolean = false;
   private lastFrameTime: number = 0;
   private isFrameLoopRunning: boolean = false;
   /** 本地播放时钟（毫秒） */
@@ -140,9 +165,50 @@ export struct AmllLyricView {
   @Local lyricCenterState: LyricCenterState =
     AppStorageV2.connect(LyricCenterState, AppStorageKeys.LYRIC_CENTER_STATE, () => new LyricCenterState())!;
 
+  /**
+   * 帧率诊断（`hdc shell hilog | grep RzdLyricPerf`）。
+   *
+   * 设置页的「歌词帧率」只在这里的帧循环生效，用户很难肉眼判断有没有吃上；
+   * 每 3 秒打一条「上限 vs 实测」，真机上就能直接看出设置是否生效
+   * （例如上限 60 时 actual 应≈60，而不是 120）。
+   */
+  private perfFrames: number = 0;
+  private perfWindowStartMs: number = 0;
+
+  private countPerfFrame(now: number): void {
+    if (this.perfWindowStartMs === 0) {
+      this.perfWindowStartMs = now;
+      this.perfFrames = 0;
+    }
+    this.perfFrames++;
+    const span: number = now - this.perfWindowStartMs;
+    if (span >= 3000) {
+      Logger.info('RzdLyricPerf', `lyric fps limit=${this.fpsLimit} actual=${Math.round(this.perfFrames * 1000 / span)}` +
+        ` frames=${this.perfFrames}/${span}ms`);
+      this.perfFrames = 0;
+      this.perfWindowStartMs = now;
+    }
+  }
+
   @Monitor('lyricFpsState.fps')
   onLyricFpsChanged(): void {
     this.fpsLimit = this.lyricFpsState.fps;
+    // ★ 2026-11-04：设置页改帧率要**真的生效** —— 把新的期望值重新提交给 displaySync
+    //   （它只认最近一次 setExpectedFrameRateRange）。
+    if (this.frameSync !== undefined) {
+      try {
+        this.frameSync.setExpectedFrameRateRange({
+          expected: this.expectFps(),
+          min: LYRIC_FPS_MIN,
+          max: LYRIC_FPS_MAX
+        });
+        Logger.info('RzdLyricPerf', `frame-driver=displaySync re-requested expected=${this.expectFps()}`);
+      } catch (e) {
+        const err: Error = e as Error;
+        Logger.warn('RzdLyricPerf', 'setExpectedFrameRateRange failed: ' +
+          (err !== undefined && err.message !== undefined ? err.message : '').substring(0, 80));
+      }
+    }
   }
 
   @Monitor('lyricCenterState.enabled')
@@ -170,7 +236,8 @@ export struct AmllLyricView {
       enableSpring: this.enableSpring,
       wordFadeWidth: this.wordFadeWidth,
       alignAnchor: AmllLayoutAlignAnchor.Center,
-      alignPosition: 0.5
+      // 焦点行位置由 alignPosition 决定（原来写死 0.5 = 正中）
+      alignPosition: this.alignPosition
     });
     this.localTime = this.currentTime;
     this.lastExternalTime = this.currentTime;
@@ -239,9 +306,42 @@ export struct AmllLyricView {
    * 启动帧循环（UIContext.postFrameCallback 驱动，跟随屏幕刷新率：
    * 60Hz 设备 60FPS、120Hz 设备 120FPS；窗口不可见时系统自动暂停回调）。
    */
+  /**
+   * 启动帧循环。
+   *
+   * ★ 2026-11-04：主路径 = `displaySync`（**主动申请**帧率）；`postFrameCallback` 只做兜底。
+   *   `displaySync` 还给 `IntervalInfo.timestamp`（本帧到达时间，**纳秒**），
+   *   用它推进动画比 `Date.now()` 准（`Date.now()` 量的是 JS 执行到某行的时间，会被排队抖动污染）。
+   */
   private startFrameLoop(): void {
-    this.lastFrameTime = Date.now();
     this.isFrameLoopRunning = true;
+    // 时间基准由帧回调提供 ⇒ 第一帧 elapsed 必然很大，会被 dt 上限夹到 FRAME_INTERVAL_MS
+    this.lastFrameTime = 0;
+    const sync: displaySync.DisplaySync | undefined = this.ensureFrameSync();
+    if (sync !== undefined) {
+      this.frameTicker.setTick((): void => {
+        this.onFrame();
+      });
+      if (!this.syncStarted) {
+        this.syncStarted = true;
+        try {
+          sync.start();
+          Logger.info('RzdLyricPerf', `frame-driver=displaySync expected=${this.expectFps()} min=${LYRIC_FPS_MIN} ` +
+            `max=${LYRIC_FPS_MAX} userLimit=${this.fpsLimit}`);
+        } catch (e) {
+          const err: Error = e as Error;
+          this.syncStarted = false;
+          this.frameSync = undefined;
+          this.syncUnavailable = true;
+          const msg: string = (err !== undefined && err.message !== undefined) ? err.message : '';
+          Logger.warn('RzdLyricPerf', 'displaySync start failed, fallback=postFrameCallback: ' +
+            msg.substring(0, 120));
+          this.getUIContext().postFrameCallback(this.frameTicker);
+        }
+      }
+      return;
+    }
+    // 兜底：postFrameCallback（帧率取决于系统当前给多少帧，通常是 60）
     this.frameTicker.setTick((): void => {
       this.onFrame();
     });
@@ -250,11 +350,71 @@ export struct AmllLyricView {
 
   private stopFrameLoop(): void {
     this.isFrameLoopRunning = false;
+    if (this.frameSync !== undefined && this.syncStarted) {
+      this.syncStarted = false;
+      try {
+        this.frameSync.stop();
+      } catch (e) {
+        const err: Error = e as Error;
+        Logger.warn('RzdLyricPerf', 'displaySync stop failed: ' +
+          (err !== undefined && err.message !== undefined ? err.message : '').substring(0, 80));
+      }
+    }
   }
 
-  /** 请求下一帧回调（仅在帧循环运行时生效）。 */
+  /** 设置页「歌词帧率」→ 实际申请的帧率（0/非法值按上限处理）。 */
+  private expectFps(): number {
+    const v: number = this.fpsLimit;
+    if (v <= 0) {
+      return LYRIC_FPS_MAX;
+    }
+    return v > LYRIC_FPS_MAX ? LYRIC_FPS_MAX : v;
+  }
+
+  /** 创建（并缓存）displaySync，失败返回 undefined 并记得别再试。 */
+  private ensureFrameSync(): displaySync.DisplaySync | undefined {
+    if (this.frameSync !== undefined) {
+      return this.frameSync;
+    }
+    if (this.syncUnavailable) {
+      return undefined;
+    }
+    try {
+      const sync: displaySync.DisplaySync = displaySync.create();
+      sync.setExpectedFrameRateRange({
+        expected: this.expectFps(),
+        min: LYRIC_FPS_MIN,
+        max: LYRIC_FPS_MAX
+      });
+      sync.on('frame', (info: displaySync.IntervalInfo): void => {
+        this.onSyncFrame(info);
+      });
+      this.frameSync = sync;
+      return sync;
+    } catch (e) {
+      const err: Error = e as Error;
+      this.syncUnavailable = true;
+      const msg: string = (err !== undefined && err.message !== undefined) ? err.message : '';
+      Logger.warn('RzdLyricPerf', 'displaySync unavailable, fallback=postFrameCallback: ' +
+        msg.substring(0, 120));
+      return undefined;
+    }
+  }
+
+  /** displaySync 每帧回调：把**帧时间戳（ns→ms）**交给帧体，不用 `Date.now()`。 */
+  private onSyncFrame(info: displaySync.IntervalInfo): void {
+    const ns: number = info !== undefined && info.timestamp !== undefined ? info.timestamp : 0;
+    // 万一没给时间戳（0），退回墙钟，保证不会卡死
+    const frameMs: number = ns > 0 ? ns / 1000000 : Date.now();
+    this.onFrame(frameMs);
+  }
+
+  /** 请求下一帧（仅 `postFrameCallback` 兜底路径需要；displaySync 会自己持续回调）。 */
   private requestNextFrame(): void {
     if (!this.isFrameLoopRunning) {
+      return;
+    }
+    if (this.syncStarted) {
       return;
     }
     this.getUIContext().postFrameCallback(this.frameTicker);
@@ -262,12 +422,7 @@ export struct AmllLyricView {
 
   private scheduleFrame(): void {
     if (!this.isFrameLoopRunning) {
-      this.lastFrameTime = Date.now();
-      this.isFrameLoopRunning = true;
-      this.frameTicker.setTick((): void => {
-        this.onFrame();
-      });
-      this.requestNextFrame();
+      this.startFrameLoop();
     }
   }
 
@@ -297,18 +452,39 @@ export struct AmllLyricView {
         lineWidthAspect: this.lineWidthAspect,
         paddingXEm: 0.6,
         bgLineScale: 0.7,
-        subLineScale: 0.5,
+        subLineScale: 1.0,
         showSubLyric: this.showSubLyricState.enabled,
         lyricCenter: this.lyricCenterState.enabled
       };
       this.renderer = new AmllCanvasLyricRenderer(this.ctx, this.engine, style);
+      // Single transparent surface: no additive blend or idle edge canvases.
       this.renderer.onResize(this.viewWidth, this.viewHeight);
       this.rendererInited = true;
     }
   }
 
+  /** 上一次 setLyricLines 的内容指纹（防止上游新数组引用导致每帧重建）。 */
+  @Local lastLyricFp: string = '';
+
   @Monitor('lyricLines')
   onLyricLinesChanged(): void {
+    // ★ 2026-11-01（用户：网易的歌词一直是"大行距"状态收不回来）：
+    //   上游 build 每次都会生成**新数组**，@Param 引用变化就触发本回调 ⇒ 每帧 rebuild ⇒ 测量永远被
+    //   invalidateMeasured() 打断（游标归零、行高回落到 defaultLineHeight），于是 wy 逐字（每行 atom 多、量得慢）
+    //   永远収不回来。这里按**内容指纹**去重：内容没变就完全不做重建。
+    let fpAcc: number = this.lyricLines.length;
+    for (let li: number = 0; li < this.lyricLines.length; li++) {
+      const w0 = this.lyricLines[li].words;
+      const t: string = (w0 !== undefined && w0.length > 0) ? String(w0[0].word ?? '') : '';
+      for (let ci2: number = 0; ci2 < t.length; ci2++) {
+        fpAcc = (fpAcc * 31 + t.charCodeAt(ci2)) % 2147483647;
+      }
+    }
+    const fpNow: string = String(fpAcc);
+    if (fpNow === this.lastLyricFp) {
+      return;
+    }
+    this.lastLyricFp = fpNow;
     if (this.isWindowHidden) {
       // 后台切歌：只更新引擎数据与失效测量缓存，不重绘、不重启帧循环
       this.localTime = this.currentTime;
@@ -416,7 +592,7 @@ export struct AmllLyricView {
         lineWidthAspect: this.lineWidthAspect,
         paddingXEm: 0.6,
         bgLineScale: 0.7,
-        subLineScale: 0.5,
+        subLineScale: 1.0,
         showSubLyric: this.showSubLyricState.enabled
       });
       // 不调用 onResize：避免触发全量重测（首帧清空测量缓存导致整屏闪烁）
@@ -426,16 +602,28 @@ export struct AmllLyricView {
   }
 
   /** 帧循环回调 */
-  private onFrame(): void {
+  /**
+   * 帧循环回调。
+   * @param nowMs 本帧时间（毫秒）。displaySync 路径 = `IntervalInfo.timestamp / 1e6`（单调、不受 JS 排队影响）；
+   *              兜底路径不传，退回 `Date.now()`。
+   */
+  private onFrame(nowMs?: number): void {
     if (this.isWindowHidden || !this.isFrameLoopRunning) {
       // 防御：后台期间或已停止时不推进/不重绘（正常路径已 stopFrameLoop）
       return;
     }
-    const now = Date.now();
-    const elapsed = now - this.lastFrameTime;
+    const now: number = nowMs !== undefined && nowMs > 0 ? nowMs : Date.now();
+    // ★ 2026-11-04（自查抓到的坑）：`startFrameLoop()` 把 `lastFrameTime` 归零当作
+    //   "换时间基准"的标记（displaySync 给的是开机单调 ns→ms，和 `Date.now()` 不同源）。
+    //   ⚠️ 但首帧 elapsed=0 会被下面的帧率闸门判成"还没到间隔"而跳过；
+    //   在 displaySync 路径下 `requestNextFrame()` 是空操作（sync 自己会持续回调），
+    //   于是 `lastFrameTime` 永远停在 0 ⇒ **一帧都画不出来**。
+    //   ⇒ 首帧单独放行，先把基准时间落下来。
+    const firstFrame: boolean = this.lastFrameTime <= 0;
+    const elapsed = firstFrame ? 0 : now - this.lastFrameTime;
     // 帧率上限（设置页 60/90/120/144/165）：未到渲染间隔时跳过本帧。
     // 跳过的 vsync 不推进时间轴，下一帧 elapsed 自然累计到目标间隔，进度不失真
-    if (this.fpsLimit > 0) {
+    if (!firstFrame && this.fpsLimit > 0) {
       const intervalMs: number = 1000 / this.fpsLimit;
       if (elapsed < intervalMs - 0.5) {
         this.requestNextFrame();
@@ -444,6 +632,8 @@ export struct AmllLyricView {
     }
     let dt = elapsed;
     this.lastFrameTime = now;
+    // 真正渲染的一帧才计数（被上限跳过的帧不算），用于核对设置是否生效
+    this.countPerfFrame(now);
     if (dt <= 0 || dt > 100) {
       dt = FRAME_INTERVAL_MS;
     }
@@ -507,8 +697,17 @@ export struct AmllLyricView {
   }
 
   private drawFrame(time: number): void {
+    // ★ 2026-11-04（甲方：「模糊可以不要，只要帧率上去就行」）：渲染层已彻底不做逐帧模糊，
+    //   所以这里**不再**跑模糊开关的状态机（原来每次切换还会 `engine.setConfig()` 一次，
+    //   属于白花的开销）。`enableBlur` 设置项与 `blurPreferenceReady` 保留是为了不动上层接口，
+    //   但已不再影响绘制。
+    if (this.viewportBlurActive) {
+      this.viewportBlurActive = false;
+      Logger.info('LyricViewportBlur', 'disabled');
+    }
     this.ensureRenderer();
     if (this.renderer !== undefined) {
+      this.renderer.blurEnabled = false;
       this.renderer.draw(time);
     }
   }
@@ -688,53 +887,68 @@ export struct AmllLyricView {
     this.onSeekTime(startTime);
   }
 
+  @Monitor('enableBlur', 'blurPreferenceReady')
+  onBlurChanged(): void {
+    // drawFrame owns the effective gate, including touch scrolling; do not overwrite it here.
+    if (!this.isWindowHidden) {
+      this.drawFrame(this.localTime);
+      this.scheduleFrame();
+    }
+  }
+
   build() {
-    Canvas(this.ctx)
-      .width('100%')
-      .height('100%')
-      .blendMode(BlendMode.PLUS, BlendApplyType.OFFSCREEN)
-      .onAreaChange((_oldArea: Area, newArea: Area) => {
-        const w = Number.parseFloat(newArea.width.toString());
-        const h = Number.parseFloat(newArea.height.toString());
-        if (Math.abs(w - this.viewWidth) > 0.5 || Math.abs(h - this.viewHeight) > 0.5) {
-          this.viewWidth = w;
-          this.viewHeight = h;
-          this.engine.onResize(w, h);
-          if (this.renderer !== undefined) {
-            this.renderer.onResize(w, h);
+    Stack({ alignContent: Alignment.TopStart }) {
+      Canvas(this.ctx)
+        .width('100%')
+        .height('100%')
+        .onAreaChange((_oldArea: Area, newArea: Area) => {
+          const w = Number.parseFloat(newArea.width.toString());
+          const h = Number.parseFloat(newArea.height.toString());
+          if (Math.abs(w - this.viewWidth) > 0.5 || Math.abs(h - this.viewHeight) > 0.5) {
+            this.viewWidth = w;
+            this.viewHeight = h;
+            Logger.info('LyricViewportBlur', `resize=${w}x${h} layers=1`);
+            this.engine.onResize(w, h);
+            if (this.renderer !== undefined) {
+              this.renderer.onResize(w, h);
+            }
+            this.drawFrame(this.localTime);
           }
-          this.drawFrame(this.localTime);
-        }
-      })
-      .onTouch((event: TouchEvent) => {
-        this.handleCanvasTouch(event);
-      })
-      .gesture(
-        PanGesture(new PanGestureOptions({ direction: PanDirection.Vertical }))
-          .onActionStart((event: GestureEvent) => {
-            this.handlePanStart(event);
-          })
-          .onActionUpdate((event: GestureEvent) => {
-            this.handlePanUpdate(event);
-          })
-          .onActionEnd((event: GestureEvent) => {
-            this.handlePanEnd(event);
-          })
-          .onActionCancel((event: GestureEvent) => {
-            this.handlePanEnd(event);
-          })
-      )
-      .gesture(
-        TapGesture()
-          .onAction((event: GestureEvent) => {
-            this.handleTap(event);
-          })
-      )
-      .gesture(
-        LongPressGesture({ repeat: false, duration: 500 })
-          .onAction((event: GestureEvent) => {
-            this.handleLongPress(event);
-          })
-      )
+        })
+        .onTouch((event: TouchEvent) => {
+          this.handleCanvasTouch(event);
+        })
+        .gesture(
+          PanGesture(new PanGestureOptions({ direction: PanDirection.Vertical }))
+            .onActionStart((event: GestureEvent) => {
+              this.handlePanStart(event);
+            })
+            .onActionUpdate((event: GestureEvent) => {
+              this.handlePanUpdate(event);
+            })
+            .onActionEnd((event: GestureEvent) => {
+              this.handlePanEnd(event);
+            })
+            .onActionCancel((event: GestureEvent) => {
+              this.handlePanEnd(event);
+            })
+        )
+        .gesture(
+          TapGesture()
+            .onAction((event: GestureEvent) => {
+              this.handleTap(event);
+            })
+        )
+        .gesture(
+          LongPressGesture({ repeat: false, duration: 500 })
+            .onAction((event: GestureEvent) => {
+              this.handleLongPress(event);
+            })
+        )
+
+    }
+    .width('100%')
+    .height('100%')
+    .clip(true)
   }
 }

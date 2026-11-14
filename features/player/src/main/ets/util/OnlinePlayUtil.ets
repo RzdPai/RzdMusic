@@ -14,9 +14,11 @@
  */
 
 import { UIContext } from '@kit.ArkUI';
-import { MusicAppState, MusicStoreService, PlayedSongRecord, PlaybackShellConstants, QualityInfo, SongItem, appendPlayLog } from 'musicbasic';
+// ⚠️ `PlaybackShellConstants.OPEN_PLAYER_UI_ANIMATION_MS` 已从本文件的 import 里去掉：
+//    它是上面 `openFullScreen` 那层 `animateTo` 的时长（P1-9），包装删掉后本文件不再用得到它。
+//    常量本体仍留在 `musicbasic`（PC 壳层 `products/pc/.../Index.ets` 还在用，那一条待主线收）。
+import { MusicAppState, MusicStoreService, PlayedSongRecord, QualityInfo, SongItem, appendPlayLog } from 'musicbasic';
 import { LXSearchSong, LXQualityType, lxGetLyricFull, lxSearch, WyLyricResult } from '../source/LXMusicSDK';
-import { lxEngineIsReady } from '../source/LXSourceEngine';
 import { LXSource } from '../source/Interface';
 import { MediaService } from '../model/MediaService';
 
@@ -75,18 +77,32 @@ export class OnlinePlayUtil {
     }
   }
 
-  /** Opens the full-screen player inside an animateTo so shared elements morph smoothly. */
-  private static openFullScreen(appState: MusicAppState, uiContext: UIContext | undefined): void {
-    if (uiContext !== undefined) {
-      uiContext.animateTo({
-        duration: PlaybackShellConstants.OPEN_PLAYER_UI_ANIMATION_MS,
-        curve: Curve.EaseInOut
-      }, () => {
-        appState.isShowPlay = true;
-      });
-    } else {
-      appState.isShowPlay = true;
-    }
+  /**
+   * 挂起全屏播放页浮层（**裸置位，外面不许再套 `animateTo`**）。
+   *
+   * ★★ 2026-10-15：这一段原来是
+   * `uiContext.animateTo({ duration: OPEN_PLAYER_UI_ANIMATION_MS, curve: EaseInOut },
+   *  () => { appState.isShowPlay = true; })` —— **旧动画时代的写法，已删除**。
+   *
+   * 为什么必须裸置位（`派音动画Bug清单.md` **P1-9**，交叉核对记录 §6.2 标 `[我核] ✅ 成立`）：
+   * 1. `PlayerViewModel.openFullScreenWithSharedElementTransition()`（`viewmodel/PlayerViewModel.ets`）
+   *    的注释**明令禁止**这层包装：那会给"挂载播放页浮层 + 形变几何初始化"整段套一层隐式动画，
+   *    **形变的起点被这层动画吃掉** ⇒ 用户看到的正是"从搜索结果/播放记录打开播放器时，
+   *    播放页从中间某处开始长大 / 先僵一下再展开"，而不是从迷你条长出来。
+   * 2. 展开动画由**播放页自己**播（`PlaybackPage.playExpandIntro` → `playMorphOpenIntro`），
+   *    它依赖 `UIUtils.applySync` 把"压到起点"同步刷出去；外面再套一层 `animateTo`
+   *    等于把那层隐式动画又套回来，两条路（点击打开 / 手指拖动打开）会重新分叉。
+   * 3. 同仓的"正确写法"全是裸置位（壳层 `products/default/.../Index.ets` 的
+   *    `dispatchShellPlaybackIntent` 回调、`MiniBarPlayer` / `HomeMiniBarPlayer` /
+   *    `RecommendViewModel` / `LocalMusicView`）—— **只有这里和 PC 壳层是旧的**。
+   *
+   * 判据（应为 0 命中）：`grep -rn "animateTo" --include=*.ets | Select-String "isShowPlay"`。
+   * @param appState 共享播控状态（壳层 `@Monitor('appState.isShowPlay')` 会用这个字段挂载浮层）
+   * @param _uiContext 仅保留形参以不动现有调用点签名；本方法已不再需要 UIContext
+   *        （`toast` 那条路仍在用，见各 `play*` 方法）。
+   */
+  private static openFullScreen(appState: MusicAppState, _uiContext: UIContext | undefined): void {
+    appState.isShowPlay = true;
   }
 
   /**
@@ -95,15 +111,14 @@ export class OnlinePlayUtil {
    * MusicAppState.lyricVersion.
    * @param appState Shared playback state.
    * @param song Search / leaderboard song.
-   * @param uiContext Used for toast prompts and the open animation.
+   * @param uiContext Used for toast prompts only (the open animation is played by the player page itself).
    * @returns True when the song was queued and playback started.
    */
   public static async playSearchSong(appState: MusicAppState, song: LXSearchSong,
     uiContext: UIContext | undefined): Promise<boolean> {
-    if (!lxEngineIsReady) {
-      OnlinePlayUtil.toast(uiContext, '音源未就绪，请在设置中导入并选中源');
-      return false;
-    }
+    // ★ 2026-11-09（用户：「播放 LX 的音乐一直提示音源未就绪」）：不再在这里预等引擎。
+    //   预等会把「上一次播的是 MusicFree」这种完全正常的状态误判成故障（LX 引擎此时
+    //   本来就没加载 LX 脚本），直接拦掉播放。就绪等待由解析链路按候选脚本自己完成。
     // 秒开播放页：搜索结果已含标题/歌手/封面，先建条目入队并打开页面，
     // 播放地址交给 loadAsset 在后台解析（换源/降级可能耗时数秒），页面不再干等。
     // 解析完成后 MediaService.resolveOnlineUrl 会把 url/音质/音源脚本回填到该条目。
@@ -113,7 +128,7 @@ export class OnlinePlayUtil {
     appState.replaceQueue([item], 0);
     MediaService.getInstance().loadAsset(0);
     OnlinePlayUtil.openFullScreen(appState, uiContext);
-    OnlinePlayUtil.appendPlayLog('[播放] playSearchSong 秒开，后台解析 ' +
+    OnlinePlayUtil.appendPlayLog('[播放] playSearchSong quick-open, bg resolve ' +
       song.source + '/' + song.songId);
     const lyricItem: SongItem = item;
     const lyricState: MusicAppState = appState;
@@ -138,16 +153,13 @@ export class OnlinePlayUtil {
    * Plays a stored history / favorite record; reuses a cached url when available.
    * @param appState Shared playback state.
    * @param record Stored song record.
-   * @param uiContext Used for toast prompts and the open animation.
+   * @param uiContext Used for toast prompts only (the open animation is played by the player page itself).
    * @returns True when the song was queued and playback started.
    */
   public static async playRecord(appState: MusicAppState, record: PlayedSongRecord,
     uiContext: UIContext | undefined): Promise<boolean> {
     const needResolve: boolean = record.url.length === 0;
-    if (needResolve && !lxEngineIsReady) {
-      OnlinePlayUtil.toast(uiContext, '音源未就绪，请在设置中导入并选中源');
-      return false;
-    }
+    // ★ 2026-11-09：同上 —— 去掉「引擎未就绪就不播」的前置门槛，交给解析链路自己等。
     // kw 老记录可能带 MUSIC_ 前缀，去掉才能正确解析
     if (record.source === 'kw' && record.songId.startsWith('MUSIC_')) {
       record.songId = record.songId.substring(6);
@@ -159,11 +171,13 @@ export class OnlinePlayUtil {
     appState.playQueueIds = [];
     appState.playQueue = [item];
     appState.selectIndex = 0;
+    // ★ 整条队列被这一首替换掉了 ⇒ 队列所有权回到普通播放（清了「现在就听」的粘性标记）
+    appState.markQueueReplaced('playlist');
     appState.currentQuality = needResolve ? '' : record.quality;
     appState.isResolving = needResolve;
     MediaService.getInstance().loadAsset(0);
     OnlinePlayUtil.openFullScreen(appState, uiContext);
-    OnlinePlayUtil.appendPlayLog('[播放] playRecord 秒开 needResolve=' + needResolve +
+    OnlinePlayUtil.appendPlayLog('[播放] playRecord quick-open needResolve=' + needResolve +
       ' source=' + record.source + ' id=' + record.songId);
     if (!needResolve) {
       const storeCached: MusicStoreService = MusicStoreService.getInstance();
@@ -205,22 +219,54 @@ export class OnlinePlayUtil {
    * @param appState Shared playback state.
    * @param songs Search / leaderboard songs.
    * @param startIndex Index to start playback at.
-   * @param uiContext Used for toast prompts and the open animation.
+   * @param uiContext Used for toast prompts only (the open animation is played by the player page itself).
+   * @param openPlayer 是否**同时打开全屏播放页**（默认 `true` = 原行为，现有 4 参调用点一行都不用改）。
+   *   传 `false` 的只有底栏页签「现在就听」（`NowPlayingFeedPage`）：那一页自己就是"现在在听什么"的
+   *   全屏呈现，用户明确要求「打开这个页面**不会打开播放器**」。
+   *   ⚠️ 用这个参数、**不要**在调用点事后把 `appState.isShowPlay` 掰回去：
+   *   {@link openFullScreen} 一置位，壳层的 `@Monitor('appState.isShowPlay')`（**同步**触发）
+   *   就会在 `pushPlayerRoute()` 里读到那个 true（`products/default/.../Index.ets`）
+   *   —— 事后回滚等于"请求过又撤销"，监听方**已经读到过中间值**了。
+   *   （本节 2026-10-15 订正：`openFullScreen` 原来是在 `uiContext.animateTo()` 的闭包里置位的，
+   *    那一层包装已按 `派音动画Bug清单.md` P1-9 删除，但"不能事后回滚"这条理由与包装无关，
+   *    照旧成立 —— 差别只在于"读到 true"与"读到 true 并吃掉一层隐式动画"。）
    * @returns True when the queue was built and playback started.
    */
-  public static async playList(appState: MusicAppState, songs: LXSearchSong[], startIndex: number,
-    uiContext: UIContext | undefined): Promise<boolean> {
-    if (!lxEngineIsReady) {
-      OnlinePlayUtil.toast(uiContext, '音源未就绪，请在设置中导入并选中源');
-      return false;
+  /**
+   * 把一批歌**追加**到当前播放队列末尾（不动当前播放项）。
+   * 用于首页「心动模式」：点一下往队列里再补 100 首推荐。
+   * @returns 实际追加成功的首数
+   */
+  public static appendToList(appState: MusicAppState, songs: LXSearchSong[]): number {
+    if (songs.length === 0) {
+      return 0;
     }
+    const items: SongItem[] = [];
+    for (let i: number = 0; i < songs.length; i++) {
+      items.push(OnlinePlayUtil.buildSongItem(songs[i]));
+    }
+    const before: number = appState.playQueue.length;
+    appState.playQueue = appState.playQueue.concat(items);
+    OnlinePlayUtil.appendPlayLog('[播放] appendToList n=' + items.length + ' queue=' +
+      appState.playQueue.length);
+    return appState.playQueue.length - before;
+  }
+  public static async playList(appState: MusicAppState, songs: LXSearchSong[], startIndex: number,
+    uiContext: UIContext | undefined, openPlayer: boolean = true): Promise<boolean> {
+    // ★ 2026-11-01（用户反馈：正常歌曲点播放条却跳到「现在就听」）：
+    //   队列来源标记以前只在 feed 里写、别处从不清 ⇒ 一旦在 feed 播过，之后所有"打开播放页"都会被重定向到 feed。
+    //   这里统一置为 'playlist'；feed 侧在本函数返回后再把它改回 'feed'。
+    // ★ 2026-11-03：改用 `markQueueReplaced` —— 它同时把**队列版本号** +1，
+    //   壳层用 `isFeedQueue()`（来源 + 版本都要对得上）判断，漏写一处的后果从"永久错"降级为"只错一次"。
+    appState.markQueueReplaced('playlist');
+    // ★ 2026-11-09：去掉开播前的「引擎未就绪」硬门槛（原因见 playSearchSong）。
     if (songs.length === 0) {
       return false;
     }
     const playIndex = startIndex < 0 || startIndex >= songs.length ? 0 : startIndex;
     const first = songs[playIndex];
-    OnlinePlayUtil.appendPlayLog('[播放] playList index=' + playIndex + ' 歌数=' + songs.length +
-      ' 歌曲=' + first.name + ' src=' + first.source + ' id=' + first.songId);
+    OnlinePlayUtil.appendPlayLog('[播放] playList index=' + playIndex + ' n=' + songs.length +
+      ' song=' + first.name + ' src=' + first.source + ' id=' + first.songId);
     // 秒开播放页：整队先入列并打开页面，仅当前这首由 loadAsset 后台解析地址
     const items: SongItem[] = [];
     for (let i: number = 0; i < songs.length; i++) {
@@ -232,9 +278,12 @@ export class OnlinePlayUtil {
     appState.currentQuality = '';
     appState.isResolving = true;
     MediaService.getInstance().loadAsset(playIndex);
-    OnlinePlayUtil.openFullScreen(appState, uiContext);
-    OnlinePlayUtil.appendPlayLog('[播放] playList 秒开，后台解析 index=' + playIndex +
-      ' 歌数=' + songs.length);
+    // ★ openPlayer = false 时**根本不请求**全屏播放页（见本方法的 @param 说明）。
+    if (openPlayer) {
+      OnlinePlayUtil.openFullScreen(appState, uiContext);
+    }
+    OnlinePlayUtil.appendPlayLog('[播放] playList quick-open index=' + playIndex +
+      ' n=' + songs.length + ' openPlayer=' + openPlayer);
     // 仅预解析当前及邻近歌曲的歌词（切歌时其余歌曲会自动按需补全），
     // 避免长歌单数百首并发请求导致卡死。
     const preloadCount: number = 8;
@@ -261,5 +310,36 @@ export class OnlinePlayUtil {
       });
     }
     return true;
+  }
+
+  /**
+   * 往**现有**播放队列尾部追加若干在线歌曲（不重开队列、不动 `selectIndex`、不触发任何 UI）。
+   *
+   * ★「现在就听」（`NowPlayingFeedPage`）到底之后**再拉一批**时用它：
+   *   feed 变长了、队列也得跟着变长，否则 `MediaService.playNext()`（`MediaService.ets:1988`，
+   *   「Loads the next queue index in linear order (**wraps to 0 at end**)」）读到的是**实时**
+   *   `getQueueLength()` —— 队列不长，"播完最后一首"就 wrap 回第 0 首，用户听到的还是旧的那一批。
+   *   追加之后，下一个下标自然落在新拉进来的那几首上。
+   *
+   * ⚠️ 调用方必须自己保证"**只追加真正新增的歌**"（本方法**不去重**）：
+   *   队列与 feed 是两份东西，这里没有"已见过"的口径可查 —— 重复追加会让队列里出现重复曲目。
+   * ⚠️ `@Trace` 数组必须**整体赋值**才可靠地触发观察（`playQueue` 是 `@Trace`）：
+   *   这里用 `concat` 生成新数组再赋回去，**不要**用 `push`（`push` 改的是同一个引用）。
+   * ⚠️ **不动 `selectIndex`**：追加只影响"后面还有什么"，当前这首与该下标的位置都没变。
+   * @param appState 共享播控状态（`playQueue` 的真源）。
+   * @param songs 要追加的在线歌曲（顺序 = 它们在 feed 里的顺序）。
+   * @returns 真正追加了几首。
+   */
+  public static appendQueue(appState: MusicAppState, songs: LXSearchSong[]): number {
+    if (songs.length === 0) {
+      return 0;
+    }
+    const items: SongItem[] = [];
+    for (let i: number = 0; i < songs.length; i++) {
+      items.push(OnlinePlayUtil.buildSongItem(songs[i]));
+    }
+    // ⚠️ 整体赋值（见上面 @Trace 那条说明）
+    appState.playQueue = appState.playQueue.concat(items);
+    return items.length;
   }
 }

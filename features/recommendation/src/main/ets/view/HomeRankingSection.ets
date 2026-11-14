@@ -15,17 +15,13 @@ export struct HomeRankingSection {
   /** True when hosted inside the category content (parent already applies the gutter). */
   @Param embedded: boolean = false;
   @Consumer('pageIndexInfos') pageIndexInfos: NavPathStack = new NavPathStack();
-  private hotBoardCount: number = 12;
-
   private homeScrollGutterH(): number {
     return new BreakpointType(16, 24, 32, 32).getValue(this.breakpointEnv.widthBreakpoint);
   }
 
+  /** 展示全部榜单（不再截断为 12 个）。 */
   private hotBoards(): RecommendBoardUi[] {
-    if (this.recommendViewModel.rankingBoards.length <= this.hotBoardCount) {
-      return this.recommendViewModel.rankingBoards;
-    }
-    return this.recommendViewModel.rankingBoards.slice(0, this.hotBoardCount);
+    return this.recommendViewModel.rankingBoards;
   }
 
   @Builder
@@ -61,8 +57,9 @@ export struct HomeRankingSection {
   private SourceBar() {
     Scroll() {
       Row({ space: 8 }) {
-        ForEach(MusicDataService.sourceList, (item: string, index?: number) => {
-          this.SourceChip(MusicDataService.sourceName(item), index ?? 0)
+        // 只列「有榜单接口」的平台（原版 MusicFree 的能力屏蔽）
+        ForEach(this.recommendViewModel.rankingSources(), (item: string) => {
+          this.SourceChip(MusicDataService.sourceName(item), this.recommendViewModel.sourceIndexOf(item))
         }, (item: string) => `rank-src-${item}`)
       }
     }
@@ -119,7 +116,13 @@ export struct HomeRankingSection {
       Column({ space: 8 }) {
         ForEach(this.hotBoards(), (item: RecommendBoardUi, index?: number) => {
           this.BoardRow(item, index ?? 0)
-        }, (item: RecommendBoardUi) => `rank-${item.source}_${item.id}`)
+        },
+        // ★ key 里必须带上 cover。
+        // 榜单列表是**两次**赋值：先给不带封面的列表，异步拿到封面后再整体替换。
+        // ForEach 只在 key 变化时才重建子节点；key 只用 source_id 时两次完全相同
+        // → 第二次带封面的赋值不会重绘 → 封面看起来"加载不出来"；
+        // 切平台时 id 变了才刷新，这就是"来回切平台才能加载出来"的原因。
+        (item: RecommendBoardUi) => `rank-${item.source}_${item.id}_${item.cover}`)
       }
       .width(StyleConstants.FULL_WIDTH)
       .margin({ top: 10 })

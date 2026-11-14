@@ -1,6 +1,7 @@
 import { uiObserver } from '@kit.ArkUI';
 import {
   BreakpointType,
+  getPlaylistTransitionState,
   RouterUrlConstants,
   StyleConstants
 } from 'musicbasic';
@@ -70,19 +71,33 @@ export struct HomePlazaSection {
   private SourceBar() {
     Scroll() {
       Row({ space: 8 }) {
-        ForEach(MusicDataService.sourceList, (item: string, index?: number) => {
-          this.SourceChip(MusicDataService.sourceName(item), index ?? 0)
+        // 首尾留白放在内容行里（Scroll 自身不加 padding），胶囊圆角不被裁切
+        // 只列「有推荐歌单接口」的平台（原版 MusicFree 的能力屏蔽）：
+        // 元力的哔哩哔哩只有榜单、没有推荐，就不该出现在这里。
+        ForEach(this.recommendViewModel.plazaSources(), (item: string) => {
+          this.SourceChip(MusicDataService.sourceName(item), this.recommendViewModel.sourceIndexOf(item))
         }, (item: string) => `plaza-src-${item}`)
       }
     }
     .scrollable(ScrollDirection.Horizontal)
     .scrollBar(BarState.Off)
     .width(StyleConstants.FULL_WIDTH)
+    // ★ 2026-10-29（用户：Tab 仍贴边）：外层 Column 已经有 homeScrollGutterH()，
+    //   这里**不能再加一层 padding**（双层留白会让首尾胶囊看起来被裁掉）。
+    //   只在内容行两端补 2vp，保证首个/末个胶囊的圆角完整可见。
+    .edgeEffect(EdgeEffect.Spring)
+    // ★ 2026-10-29（用户：胶囊仍被裁；照 RzdVideo 那条 Scroll）：自身不加 padding，
+    //   改为**不裁切边界**；首尾留白交给内容行的 Blank，胶囊圆角完整可见。
+    .clip(false)
+    // ★ 2026-10-31（用户：歌单广场那行 Tab 离左侧太远）：内容窄于视口时 Scroll 默认居中，
+    //   显式靠左对齐，让胶囊与「歌单广场」标题左边缘对齐。
+    .align(Alignment.Start)
+    .padding({ left: 0, right: 0 })
   }
 
   @Builder
   private FilterBar() {
-    Flex({ wrap: FlexWrap.Wrap }) {
+    Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
       Row({ space: 4 }) {
         Text(this.recommendViewModel.plazaCategoryName.length > 0 ?
           this.recommendViewModel.plazaCategoryName : $r('app.string.home_plaza_default'))
@@ -131,6 +146,7 @@ export struct HomePlazaSection {
           .borderRadius(8)
           .objectFit(ImageFit.Cover)
           .alt($r('app.media.ic_avatar1'))
+          .id(`playlist-plaza-cover-${item.source}-${item.id}`)
         if (item.listenCount.length > 0) {
           Row({ space: 4 }) {
             SymbolGlyph($r('sys.symbol.play_round_triangle_fill'))
@@ -179,7 +195,11 @@ export struct HomePlazaSection {
       param.onlineSource = item.source;
       param.playlistId = item.id;
       param.listTitle = item.name;
-      this.pageIndexInfos.pushPathByName(RouterUrlConstants.PLAYLIST_DETAIL, param);
+      // 在线歌单封面随路由带下去：详情页 Hero 用它，而不是第一首歌的封面
+      param.listCover = item.image;
+      const animated: boolean = !getPlaylistTransitionState().prepare(this.getUIContext(),
+        `playlist-plaza-cover-${item.source}-${item.id}`, item.image);
+      this.pageIndexInfos.pushPathByName(RouterUrlConstants.PLAYLIST_DETAIL, param, animated);
     })
   }
 
@@ -216,7 +236,6 @@ export struct HomePlazaSection {
   }
 
   @Builder
-  @Builder
   private PlaylistGrid() {
     Row({ space: 12 }) {
       ForEach(this.plazaColumnIndexes(), (column: number) => {
@@ -230,6 +249,7 @@ export struct HomePlazaSection {
       }, (column: number) => `plaza-col-${column}-${this.plazaColumnCount()}`)
     }
     .width(StyleConstants.FULL_WIDTH)
+    .alignItems(VerticalAlign.Top)
   }
 
   @Builder
@@ -279,7 +299,7 @@ export struct HomePlazaSection {
                 .fontColor($r('sys.color.font_secondary'))
                 .alignSelf(ItemAlign.Start)
                 .margin({ top: 12, bottom: 8 })
-              Flex({ wrap: FlexWrap.Wrap }) {
+              Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
                 ForEach(group.items, (item: CategoryOption) => {
                   Text(item.name)
                     .fontSize(14)
@@ -314,8 +334,7 @@ export struct HomePlazaSection {
 
   @Builder
   private PlazaBody() {
-    if (this.recommendViewModel.plazaLoading) {
-      Column({ space: 12 }) {
+    if (this.recommendViewModel.plazaLoading) {      Column({ space: 12 }) {
         LoadingProgress()
           .width(32)
           .height(32)
@@ -371,6 +390,12 @@ export struct HomePlazaSection {
         .borderRadius(20)
         .backgroundColor($r('app.color.background_secondary'))
         .margin({ top: 12 })
+        // ★ 2026-10-29（用户：滑到底自动加载，不用手点）：
+        //   这个「加载更多」行只在 hasNext && 未在加载时渲染，
+        //   它一进入可见区域就说明用户滑到底了 ⇒ 直接触发下一页。
+        .onAppear(() => {
+          this.recommendViewModel.loadMorePlazaPlaylists();
+        })
         .onClick(() => {
           this.recommendViewModel.loadMorePlazaPlaylists();
         })
@@ -386,6 +411,8 @@ export struct HomePlazaSection {
   build() {
     Column() {
       this.SectionHeader()
+      // ⚠️ 用户要求简洁：删掉「XX音乐的歌单广场接口暂时不可用，这里仍显示…」那行说明。
+      //    行为不变（平台不支持时仍不切、保留原来能用的广场），只是不再用文字解释。
       this.SourceBar()
       this.FilterBar()
       this.PlazaBody()

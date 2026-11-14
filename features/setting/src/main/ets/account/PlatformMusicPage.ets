@@ -1,12 +1,15 @@
 import { common } from '@kit.AbilityKit';
 import { AppStorageV2 } from '@kit.ArkUI';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { HdsNavDestination, HdsNavDestinationTitleMode, TitleSize } from '@kit.UIDesignKit';
-import { AppStorageKeys, MusicAppState, ThemeState } from 'musicbasic';
+import { AppStorageKeys, FavoriteEntry, MusicAppState, MusicStoreService, SongTitleMarquee, ThemeState } from 'musicbasic';
 import { LXSearchSong, OnlinePlayUtil } from 'player';
 import { AccountService } from 'player';
 import { PlatformAccount, PlaylistInfo, PlaylistTrackInfo, PlatformTrackInfo, PlaylistMutationTrack, sourceName } from 'player';
 
 const DANGER_COLOR: string = '#E64545';
+/** 日志标签：grep `RzdPlatformCollect` 看收藏/取消收藏在线歌单的链路。 */
+const COLLECT_TAG: string = 'RzdPlatformCollect';
 
 const songCache: Map<string, PlatformTrackInfo[]> = new Map();
 
@@ -34,6 +37,8 @@ export struct PlatformMusicPage {
   @Local selectedTitle: string = '';
   @Local selectedSource: string = '';
   @Local selectedDestination: PlaylistDestination | null = null;
+  /** 当前选中的在线歌单是否已收藏（「我的」页歌单卡第二段的数据就是它写进去的）。 */
+  @Local selectedFavorited: boolean = false;
   @Local songs: PlatformTrackInfo[] = [];
   @Local isLoading: boolean = false;
   @Local error: string = '';
@@ -151,6 +156,73 @@ export struct PlatformMusicPage {
     this.currentPlaylists = group === undefined ? [] : group.playlists;
   }
 
+  /**
+   * 同步「当前选中的在线歌单是否已收藏」。
+   *
+   * 每次切换选中项（歌单 / 每日推荐 / 账号默认）都要跑一次：每日推荐与账号默认不是
+   * 歌单（`selectedDestination === null`），那颗星要消失，不能残留上一张歌单的状态。
+   */
+  private syncSelectedFavorited(): void {
+    const dest: PlaylistDestination | null = this.selectedDestination;
+    this.selectedFavorited = dest !== null && dest.playlistId.length > 0 &&
+      MusicStoreService.getInstance().isFavoritePlaylist(this.selectedSource, dest.playlistId);
+  }
+
+  /** 当前选中歌单在 `currentPlaylists` 里的原始条目（拿 total / dirId 用）。 */
+  private selectedPlaylistInfo(): PlaylistInfo | undefined {
+    const dest: PlaylistDestination | null = this.selectedDestination;
+    if (dest === null || dest.playlistId.length === 0) {
+      return undefined;
+    }
+    for (let i: number = 0; i < this.currentPlaylists.length; i++) {
+      if (this.currentPlaylists[i].id === dest.playlistId) {
+        return this.currentPlaylists[i];
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * 收藏 / 取消收藏当前这张**在线歌单**。
+   *
+   * 写入 `MusicStoreService` 的 `favorite_playlists`（`FavoriteEntry`）：
+   *   · `id` / `source` = 平台歌单 id / 平台标识；`name` = 歌单名；
+   *   · `sub` = 平台名（`sourceName`）；`count` = 曲目数（优先用已拉到的 `songs`，
+   *     没拉到就用歌单自带的 `total` 文本，**都不编**）；
+   *   · `img` = 第一首曲目的封面（`songs[0].picUrl`，拿不到就留空 ⇒ 界面用占位图）。
+   * 「我的」页歌单卡的「收藏歌单」那一段就是读它（`@Monitor favoritePlaylistVersion`）。
+   */
+  private toggleCollectSelected(): void {
+    const dest: PlaylistDestination | null = this.selectedDestination;
+    if (dest === null || dest.playlistId.length === 0) {
+      return;
+    }
+    const store: MusicStoreService = MusicStoreService.getInstance();
+    if (store.isFavoritePlaylist(this.selectedSource, dest.playlistId)) {
+      store.removeFavoritePlaylist(this.selectedSource, dest.playlistId);
+      this.selectedFavorited = false;
+      hilog.info(0x0000, COLLECT_TAG, 'uncollect source=%{public}s id=%{public}s',
+        this.selectedSource, dest.playlistId);
+      return;
+    }
+    const entry: FavoriteEntry = new FavoriteEntry();
+    entry.id = dest.playlistId;
+    entry.source = this.selectedSource;
+    entry.name = this.selectedTitle;
+    entry.sub = sourceName(this.selectedSource);
+    const info: PlaylistInfo | undefined = this.selectedPlaylistInfo();
+    const totalText: string = info !== undefined ? info.total : '';
+    const parsed: number = totalText.length > 0 ? Number.parseInt(totalText, 10) : Number.NaN;
+    entry.count = this.songs.length > 0 ? this.songs.length : (Number.isNaN(parsed) ? 0 : parsed);
+    entry.img = this.songs.length > 0 ? this.songs[0].picUrl : '';
+    entry.time = Date.now();
+    store.addFavoritePlaylist(entry);
+    this.selectedFavorited = true;
+    hilog.info(0x0000, COLLECT_TAG,
+      'collect name=%{public}s source=%{public}s id=%{public}s count=%{public}d',
+      entry.name, entry.source, entry.id, entry.count);
+  }
+
   private async selectDaily(account: PlatformAccount): Promise<void> {
     const key: string = `${account.id}:daily`;
     this.selectedKey = key;
@@ -158,6 +230,8 @@ export struct PlatformMusicPage {
     this.selectedTitle = this.dailyTitle(account.source);
     this.selectedSource = account.source;
     this.selectedDestination = null;
+    // 每日推荐不是「歌单」，收藏星要消失（否则会残留上一张歌单的收藏态）
+    this.syncSelectedFavorited();
     this.error = '';
     const cached: PlatformTrackInfo[] | undefined = songCache.get(key);
     if (cached !== undefined) {
@@ -196,6 +270,7 @@ export struct PlatformMusicPage {
     destination.dirId = playlist.dirId;
     destination.isEditable = playlist.isEditable;
     this.selectedDestination = destination;
+    this.syncSelectedFavorited();
     this.error = '';
     const cached: PlatformTrackInfo[] | undefined = songCache.get(key);
     if (cached !== undefined) {
@@ -332,12 +407,14 @@ export struct PlatformMusicPage {
           .backgroundColor($r('sys.color.background_tertiary'))
       }
       Column() {
-        Text(song.name)
-          .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('sys.color.font_primary'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        // ★ 2026-10-15：歌名过长改跑马灯（用户要求「各个页面歌曲名过长时改为用跑马灯显示」）。
+        //   字号/字重/字色逐字保留；父容器是 `Column` ⇒ 用组件默认的 `fillByWidth`（`width('100%')`）。
+        SongTitleMarquee({
+          text: song.name,
+          titleFontSize: 13,
+          titleFontColor: $r('sys.color.font_primary'),
+          titleFontWeight: FontWeight.Medium
+        })
         Text(song.singer.length > 0 ? `${song.singer}${song.album.length > 0 ? ` · ${song.album}` : ''}` : song.album)
           .fontSize(11)
           .fontColor($r('sys.color.font_tertiary'))
@@ -404,6 +481,12 @@ export struct PlatformMusicPage {
       AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
     void OnlinePlayUtil.playList(appState, songs, startIndex, this.getUIContext());
   }
+
+  /**
+   * 华为账号卡片在本页面**不渲染**：它属于「登录平台音乐」那个面板
+   * （`AccountManageSheet`，见 `HuaweiAccountCard`）。本页面是「用平台账号听歌」的
+   * 歌单浏览页，混进来会让两件事看起来是一回事。
+   */
 
   build() {
     Column() {
@@ -544,6 +627,25 @@ export struct PlatformMusicPage {
                   .margin({ top: 2 })
               }
               .alignItems(HorizontalAlign.Start)
+              .layoutWeight(1)
+
+              // ★ 收藏这张在线歌单（「我的」页歌单卡第二段「收藏歌单」的数据来源）。
+              //   只在选中的是**歌单**时出现；每日推荐 / 账号默认没有歌单身份，不给这颗星。
+              if (this.selectedDestination !== null && this.selectedDestination.playlistId.length > 0) {
+                Row() {
+                  SymbolGlyph(this.selectedFavorited ? $r('sys.symbol.star_fill') : $r('sys.symbol.star'))
+                    .fontSize(22)
+                    .fontColor([this.selectedFavorited ? this.themeState.color : $r('sys.color.icon_tertiary')])
+                }
+                .width(40)
+                .height(40)
+                .justifyContent(FlexAlign.Center)
+                .onClick(() => {
+                  this.toggleCollectSelected();
+                })
+                .accessibilityText(this.selectedFavorited ? '取消收藏歌单' : '收藏歌单')
+                .accessibilityLevel('yes')
+              }
             }
             .width('100%')
             .padding({ left: 20, right: 20, top: 6, bottom: 8 })
@@ -593,14 +695,26 @@ export struct PlatformMusicPage {
         }
         .width('100%')
         .layoutWeight(1)
-        .padding({ top: this.contentTopOffset })
+        // ★ 用户 2026-10-11：「平台音乐页面上方有一块空白」——宿主面板已经让过一次顶（大设置页/二级页的首个 Blank），
+      //   这里再让一次就叠成一块死空白 ⇒ 内层不再加顶部 padding，让位只由宿主的滚动内容负责。
+      // ★ 用户 2026-10-12：「留白要写在**列表顶部**，不是屏幕顶部」⇒ 用官方 `contentStartOffset`
+      //   （滚动组件通用属性：内容起始到显示区边界的距离，**随内容滚走**），不再用外层 padding、也不用首个 Blank。
+      .contentStartOffset(this.contentTopOffset)
+        // ★★ 官方《开发应用沉浸式效果》→「滚动类场景」②：滚动容器要设
+        //   `clipContent(ContentClipMode.SAFE_AREA)` 才能"把内容层裁剪区域扩展至避让区"
+        //   —— 否则内容只会被按内容框裁掉，**永远画不进状态栏**（用户报「平台音乐页内容没延伸进状态栏」）。
+        //   ⚠️ 链上祖先不许有 `clip(true)`。
+        .clipContent(ContentClipMode.SAFE_AREA)
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring)
       }
     }
       .width('100%')
       .height('100%')
-      .backgroundColor($r('sys.color.background_secondary'))
+      // ★ 2026-10-12：页面级底色统一走 `app.color.page_background`
+      //   （base #F1F3F5 / dark #FF1C1C1E）—— 夜间模式的"各个页面背景"由这个 token 一处决定，
+      //   不再直接用 `sys.color.background_secondary`（系统色不在应用资源表里，改不动、也无法统一）。
+      .backgroundColor($r('app.color.page_background'))
   }
 }
 

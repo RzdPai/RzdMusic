@@ -3,7 +3,8 @@ export enum SharePlaylistSource {
   Tx = 'tx',
   Kw = 'kw',
   Kg = 'kg',
-  Mg = 'mg'
+  Mg = 'mg',
+  Qs = 'qs'
 }
 
 export interface SharePlaylistSong {
@@ -12,6 +13,8 @@ export interface SharePlaylistSong {
   artist: string;
   album: string;
   duration: number;
+  /** 歌曲封面；没有时导入侧留空，勿用歌单封面顶替。 */
+  img: string;
 }
 
 export interface SharePlaylistInfo {

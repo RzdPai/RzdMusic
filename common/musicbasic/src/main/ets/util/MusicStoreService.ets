@@ -22,26 +22,111 @@ import { PlayedSongRecord } from '../model/PlayedSongRecord';
 import { PlaylistDto } from '../model/PlaylistDto';
 import { SongItem } from '../model/SongData';
 import { getAppRuntime } from '../model/AppRuntimeStorage';
+import { appendPlayLog } from './LxLogger';
 
 const STORE_NAME: string = 'music_store';
-const KEY_HISTORY: string = 'history_list';
-const KEY_FAVORITES: string = 'favorite_list';
+const KEY_RUNTIME_DIAGNOSTICS: string = 'runtime_diagnostics_v1';
+const MAX_RUNTIME_DIAGNOSTICS: number = 5000;
+const KEY_HISTORY: string = 'history_list';const KEY_FAVORITES: string = 'favorite_list';
 const KEY_FAVORITE_ARTISTS: string = 'favorite_artists';
 const KEY_FAVORITE_ALBUMS: string = 'favorite_albums';
+const KEY_FAVORITE_PLAYLISTS: string = 'favorite_playlists';
 const KEY_SEARCH_HISTORY: string = 'search_history';
+/** 手动搜索到的歌词（`source|songId` → lrc 文本，JSON）。 */
+const KEY_MANUAL_LYRIC: string = 'manual_lyric_v1';
+/** 手动歌词最多缓存多少首（超出丢最早的）。 */
+const MAX_MANUAL_LYRIC: number = 120;
 const KEY_AMBIENT_LEVEL: string = 'ambient_level';
 const KEY_THEME_COLOR: string = 'theme_color';
 const KEY_HOME_SOURCE: string = 'home_source';
 const KEY_SHOW_MINI_LYRIC: string = 'show_mini_lyric';
+const KEY_DESKTOP_LYRIC: string = 'desktop_lyric';
+/** 车载蓝牙歌词：通过 AVMetadata.singleLyricText 向蓝牙设备推送当前句（默认关）。 */
+const KEY_BLUETOOTH_LYRIC: string = 'bluetooth_lyric';
+/**
+ * 动态封面（歌手 / 专辑 / 歌单页的 Apple Music motion artwork，**默认开**）。
+ * 消费方：`MotionCoverLayer`（`common/musicbasic/view`）+ `MotionCoverState`（共享状态）。
+ */
+const KEY_MOTION_COVER: string = 'motion_cover_enabled';
+
+/**
+ * 「现在就听」的模式：0 = 常规 / 1 = 熟悉 / 2 = 探索。
+ *
+ * ★ 2026-10-24（甲方：「现在就听左上角那个菜单，不要站位了，做成选择模式（常规模式、熟悉模式、探索模式）」）：
+ *   模式决定自建推荐算法里「已听过的歌 / 新歌」的取用比例（见 `features/recommendation` 的推荐器）：
+ *   - 常规：分类随机（现状）；
+ *   - 熟悉：偏向用户**听过/收藏过**的歌所在分类；
+ *   - 探索：偏向**没出现过**的分类，减少重复。
+ */
+const KEY_FEED_MODE: string = 'feed_mode';
+/** 自建推荐：分类 id → 点过的次数（JSON）。 */
+const KEY_FEED_CATEGORY_PLAYS: string = 'feed_category_plays';
+/** 华为账号登录资料（JSON，形状由 features/player 的 HuaweiAccountService 定义，这里只当字符串存）。 */
+const KEY_HUAWEI_ACCOUNT: string = 'huawei_account';
+/** 华为云盘访问令牌（JSON：accessToken / refreshToken / expiresAt）。 */
+const KEY_HUAWEI_DRIVE_TOKEN: string = 'huawei_drive_token';
+const KEY_PLAYBACK_FLOW_LIGHT: string = 'playback_flow_light';
+/**
+ * 锁屏/后台继续播放（默认 **开**）。
+ *
+ * ★ 2026-10-18（用户：「现在似乎不能锁屏播放，你在播放设置里加一下，默认开」）：
+ *   对应"音频后台长时任务"（`BackgroundUtil.startContinuousTask` /
+ *   `module.json5` 的 `backgroundModes: ["audioPlayback"]` + `KEEP_BACKGROUND_RUNNING`）。
+ *   ⚠️ 默认值必须是 `true`：老用户升级上来没有这条记录，读不到就得按"开"处理，
+ *     否则装上就是"锁屏不播"，正好是用户报的那个现象。
+ */
+const KEY_LOCK_SCREEN_PLAY: string = 'lock_screen_play';
 const KEY_SHOW_SUB_LYRIC: string = 'show_sub_lyric';
+const KEY_SHOW_LYRIC_TRANSLATION: string = 'show_lyric_translation';
+const KEY_SHOW_LYRIC_ROMA: string = 'show_lyric_roma';
+const KEY_LYRIC_S2T: string = 'lyric_s2t';
 const KEY_PLAY_QUALITY: string = 'play_quality';
 const KEY_AUDIO_MIX: string = 'audio_mix';
+/** 启动应用自动开始播放（默认关）。 */
+const KEY_AUTOPLAY_ON_LAUNCH: string = 'autoplay_on_launch';
+const KEY_TUNING_PITCH: string = 'tuning_pitch';
+const KEY_TUNING_EQ: string = 'tuning_eq_gains';
+/** 汽水（FFmpeg 内核）连续失败次数。 */
+const KEY_IJK_FAIL_STREAK: string = 'ijk_fail_streak';
+/** 汽水是否已临时禁用 FFmpeg 内核（连续失败后自动回退 AVPlayer）。 */
+const KEY_IJK_DISABLED: string = 'ijk_disabled';
+/** 播放内核选择：auto=自动 / av=强制系统播放器 / ffmpeg=强制 FFmpeg。 */
+const KEY_ENGINE_MODE: string = 'engine_mode';
+/** 音效开关（JSON：低音/立体声/人声消除/夜间/混响）。 */
+const KEY_AUDIO_EFFECTS: string = 'audio_effects';
+/** 屏幕方向：auto=跟随系统/陀螺仪，portrait=锁定竖屏，landscape=锁定横屏。 */
+const KEY_SCREEN_ORIENTATION: string = 'screen_orientation';
+/** 自定义 EQ 预设（JSON 数组：[{name, gains[5]}]）。 */
+const KEY_EQ_PRESETS: string = 'eq_custom_presets';
+/** USB 独占输出（需要外接 USB DAC）。 */
+const KEY_USB_EXCLUSIVE: string = 'usb_exclusive';
+/** Tab 栏自定义（只允许「现在就听」/「回响」）：JSON "{now:bool,echo:bool,nowFirst:bool}"。 */
+const KEY_TAB_BAR_CONFIG: string = 'tab_bar_config';
 const KEY_DOWNLOAD_SAVE_MODE: string = 'download_save_mode';
+const KEY_DOWNLOAD_QUALITY_MODE: string = 'download_quality_mode';
+const KEY_DOWNLOAD_MANUAL_QUALITY: string = 'download_manual_quality';
 const KEY_DOWNLOAD_NAME_FORMAT: string = 'download_name_format';
+const KEY_DOWNLOAD_DIR_URI: string = 'download_dir_uri';
+const KEY_APP_ICON_VARIANT: string = 'app_icon_variant';
+const KEY_CONCERT_TOKEN: string = 'concert_token';
+const KEY_CONCERT_TOKEN_AT: string = 'concert_token_at';
 const KEY_LYRIC_FPS: string = 'lyric_fps';
 const KEY_LYRIC_CENTER: string = 'lyric_center';
 const KEY_LYRIC_BLUR: string = 'lyric_blur';
 const KEY_CROSS_SCRIPT_FALLBACK: string = 'cross_script_fallback';
+/** 音源脚本参与依次调用的顺序（JSON 字符串数组，空=全部按导入顺序）。 */
+const KEY_SOURCE_SCRIPT_ORDER: string = 'source_script_order';
+/** 用户是否**明确**配置过音源勾选（区分「空数组 = 全都没勾」与「从未配置 = 默认全选」）。 */
+const KEY_SOURCE_ORDER_CONFIGURED: string = 'source_script_order_configured';
+/**
+ * 「音源管理」列表的行顺序（`sub:<订阅id>` / `api:<源id>`）。
+ *
+ * ★ 2026-11-09（用户：「现在音源没法拖动排序了」）：源列表一行是**整个订阅**，
+ *   没有这个键就只能按导入顺序排；拖动后写这里，订阅整包和独立脚本才能混排。
+ *   与 `source_script_order` 分开存：后者是「启用集合 + 播放兜底优先级」，
+ *   只有插件 id，表达不了订阅这一行。
+ */
+const KEY_SOURCE_ROW_ORDER: string = 'source_row_order';
 const KEY_QUALITY_TIER_HEALTH: string = 'quality_tier_health';
 const KEY_SHOW_HOME_PLAZA: string = 'show_home_plaza';
 const KEY_SHOW_HOME_RANKING: string = 'show_home_ranking';
@@ -70,6 +155,10 @@ const KEY_DOWNLOAD_TASKS: string = 'download_tasks';
 const KEY_USE_ACCOUNT_REC: string = 'use_account_rec';
 const ACTIVE_SOURCE_FILE: string = 'lx_active_source.txt';
 
+/** Policy groups, not the fallback ordering in player/SourceFallbackUtil. */
+const NETWORK_BASE_QUALITIES: string[] = ['128k', '320k', 'flac', 'flac24bit'];
+const NETWORK_EXTENDED_QUALITIES: string[] = ['hires', 'atmos', 'atmos_plus', 'master'];
+
 /** Persisted health record for one (script | platform | quality) tier. */
 interface QualityTierHealth {
   fails: number;
@@ -93,16 +182,39 @@ export class MusicStoreService {
   @Trace public favoriteVersion: number = 0;
   @Trace public favoriteArtistVersion: number = 0;
   @Trace public favoriteAlbumVersion: number = 0;
+  /**
+   * 收藏的**在线歌单**（平台歌单，不是本地自建）版本号。
+   *
+   * 为什么需要它：参考工程 lxmusic-harmony 的「我的」页歌单卡是
+   * 「自建歌单 | 收藏歌单」两段，我们此前缺第二段的数据源（见 MinePage 的说明）。
+   * 现在补齐：`getFavoritePlaylists()` 存 `FavoriteEntry`（id/source/name/sub/img/count），
+   * 由平台音乐页的收藏按钮写入；界面 `@Monitor('store.favoritePlaylistVersion')` 自动刷新。
+   */
+  @Trace public favoritePlaylistVersion: number = 0;
   /** Bumped on every search history mutation; observable for UI refresh. */
   @Trace public searchHistoryVersion: number = 0;
   /** Bumped on every playlist mutation; observable for UI refresh. */
   @Trace public playlistVersion: number = 0;
+  /** Invalidation only: preferences hold the sole network quality policy truth. */
+  @Trace public networkQualityVersion: number = 0;
+  /**
+   * `getPlaylists()` 的解析结果缓存（键 = {@link playlistVersion}）。
+   *
+   * 见 `getPlaylists()` 里的说明：它每次都要把整份歌单 JSON 重新 parse 并重建记录，
+   * 而 UI 侧（歌单列表、歌单详情页的封面/标题、批量操作条、播放器选歌单）
+   * 会在每一帧里调用它好几次。
+   */
+  private playlistsCache: PlaylistDto[] | undefined = undefined;
+  private playlistsCacheVersion: number = -1;
 
   /** Process-wide singleton. */
   public static getInstance(): MusicStoreService {
     if (MusicStoreService.instance === undefined) {
       MusicStoreService.instance = new MusicStoreService();
     }
+    // Initialize outside UI getters whenever context is available (component field/startup access).
+    MusicStoreService.instance.ensureNetworkQualityPolicy(true);
+    MusicStoreService.instance.ensureNetworkQualityPolicy(false);
     return MusicStoreService.instance;
   }
 
@@ -118,7 +230,124 @@ export class MusicStoreService {
     return this.store;
   }
 
+  private diagnosticPending: string = '';
+  private diagnosticFlushRunning: boolean = false;
+  private diagnosticDirty: boolean = false;
+
+  /** RzdRuntimeDiag: event-only diagnostics; never call from frame/ticker callbacks. */
+  public appendRuntimeDiagnostic(message: string): void {
+    const entry: string = `[${new Date().toISOString()}] ${message}\n`;
+    appendPlayLog(message);
+    console.info('[RzdRuntimeDiag] ' + message);
+    this.diagnosticPending = (this.diagnosticPending + entry).slice(-MAX_RUNTIME_DIAGNOSTICS);
+    try {
+      const store: preferences.Preferences | undefined = this.getStore();
+      if (store === undefined) {
+        console.warn('[RzdRuntimeDiag] persistence pending: context unavailable');
+        return;
+      }
+      const previous: string = store.getSync(KEY_RUNTIME_DIAGNOSTICS, '') as string;
+      const combined: string = previous + this.diagnosticPending;
+      let bounded: string = combined.slice(-MAX_RUNTIME_DIAGNOSTICS);
+      if (combined.length > MAX_RUNTIME_DIAGNOSTICS) {
+        const firstBreak: number = bounded.indexOf('\n');
+        if (firstBreak >= 0) {
+          bounded = bounded.substring(firstBreak + 1);
+        }
+      }
+      store.putSync(KEY_RUNTIME_DIAGNOSTICS, bounded);
+      this.diagnosticPending = '';
+      this.diagnosticDirty = true;
+      this.flushRuntimeDiagnostics(store);
+    } catch (err) {
+      console.error('[RzdRuntimeDiag] persistence-write-failed ' + JSON.stringify(err));
+    }
+  }
+
+  /** Serial, coalesced disk writes; a later event retries a failed flush. */
+  private async flushRuntimeDiagnostics(store: preferences.Preferences): Promise<void> {
+    if (this.diagnosticFlushRunning) {
+      return;
+    }
+    this.diagnosticFlushRunning = true;
+    try {
+      while (this.diagnosticDirty) {
+        this.diagnosticDirty = false;
+        await store.flush();
+      }
+    } catch (err) {
+      this.diagnosticDirty = true;
+      const failure: string = '[RzdRuntimeDiag] persistence-flush-failed ' + JSON.stringify(err);
+      appendPlayLog(failure);
+      console.error(failure);
+    } finally {
+      this.diagnosticFlushRunning = false;
+    }
+  }
+
+  public getRuntimeDiagnostics(): string {
+    try {
+      const store: preferences.Preferences | undefined = this.getStore();
+      const persisted: string = store === undefined ? '' : store.getSync(KEY_RUNTIME_DIAGNOSTICS, '') as string;
+      return (persisted + this.diagnosticPending).slice(-MAX_RUNTIME_DIAGNOSTICS);
+    } catch (err) {
+      return '[RzdRuntimeDiag] persistence-read-failed ' + JSON.stringify(err);
+    }
+  }
+
+  /** Backup restore completion barrier: propagate persistence failures to the caller. */
+  public async flushPendingWrites(): Promise<void> {
+    const store: preferences.Preferences | undefined = this.getStore();
+    if (store === undefined) {
+      throw new Error('音乐存储未初始化');
+    }
+    await store.flush();
+  }
+
+  /**
+   * 历史 / 收藏列表的内存缓存（key → 同一份数组）。
+   *
+   * ★ 2026-11-10（用户：历史/收藏页「切页面卡」）：
+   *   这两个列表原来**每次 `getHistory()` / `getFavorites()` 都要
+   *   `preferences.getSync` + `JSON.parse` 整段字符串**，而一行历史里还塞了整首歌词
+   *   （见 {@link stripRecordPayload}），200 首就是 MB 级的 JSON。
+   *   进页面要 parse 一次、切歌写盘要 stringify 一次、播放页判断收藏还要再 parse 一次
+   *   ⇒ 条数越多，切页面/切歌越卡，且开销随条数线性增长。
+   *
+   *   现在：列表**只在首次读盘时解析一次**，之后所有读都是取内存引用；
+   *   所有写路径（{@link writeList}、{@link addFavorites}）同步更新这份缓存。
+   *   preferences 仍是唯一持久化真源，缓存只是它的读-through 镜像。
+   */
+  private listCache: Map<string, PlayedSongRecord[]> = new Map<string, PlayedSongRecord[]>();
+
+  /**
+   * 落盘前剥掉「大而不用的字段」，返回是否有改动。
+   *
+   * 目前只有 `lyric`：历史/收藏里存的是**整首 LRC 全文**，但播放时
+   * `OnlinePlayUtil.playRecord` 每次都会 `resolveLyricFull()` 重新拉（旧缓存里的逐行 LRC
+   * 反而会被新链路的逐字歌词覆盖，见那里的注释），所以这份歌词是纯体积。
+   * 剥掉后 200 首历史的 JSON 从 MB 级降到几十 KB：读盘、parse、写盘全部变快。
+   */
+  private stripRecordPayload(list: PlayedSongRecord[]): boolean {
+    let changed: boolean = false;
+    for (let i: number = 0; i < list.length; i++) {
+      const record: PlayedSongRecord | undefined = list[i];
+      if (record === undefined || record === null) {
+        continue;
+      }
+      if (typeof record.lyric === 'string' && record.lyric.length > 0) {
+        record.lyric = '';
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
   private readList(key: string): PlayedSongRecord[] {
+    const cached: PlayedSongRecord[] | undefined = this.listCache.get(key);
+    if (cached !== undefined) {
+      return cached;
+    }
     const store = this.getStore();
     if (store === undefined) {
       return [];
@@ -126,18 +355,108 @@ export class MusicStoreService {
     const text: string = store.getSync(key, '[]') as string;
     try {
       const list: PlayedSongRecord[] = JSON.parse(text) as PlayedSongRecord[];
-      return list !== undefined ? list : [];
+      const safe: PlayedSongRecord[] = list !== undefined && list !== null ? list : [];
+      this.listCache.set(key, safe);
+      // 旧版本把歌词全文写进了历史/收藏：第一次读到就顺手瘦身并落盘（此后不再触发）
+      if (this.stripRecordPayload(safe)) {
+        this.writeList(key, safe);
+      }
+      return safe;
     } catch (_err) {
       return [];
     }
   }
 
   private writeList(key: string, list: PlayedSongRecord[]): void {
+    this.stripRecordPayload(list);
+    this.listCache.set(key, list);
     const store = this.getStore();
     if (store === undefined) {
       return;
     }
     store.putSync(key, JSON.stringify(list));
+    store.flush();
+  }
+
+  // ---------------------------------------------------------------- 手动歌词
+
+  private manualLyricMap(): Record<string, string> {
+    const store = this.getStore();
+    if (store === undefined) {
+      return {};
+    }
+    const text: string = store.getSync(KEY_MANUAL_LYRIC, '{}') as string;
+    try {
+      const map: Record<string, string> = JSON.parse(text) as Record<string, string>;
+      return map !== null && map !== undefined ? map : {};
+    } catch (_err) {
+      return {};
+    }
+  }
+
+  /**
+   * 取用户手动搜索到的歌词。
+   *
+   * ★ 2026-11-09（用户：「MusicFree 很多源没有歌词接口，加个搜索歌词」）：
+   *   在线歌的歌词来自插件（`getLyric`）或洛雪内置接口；插件没实现就只能手搜。
+   *   手搜结果要**持久化**并按 `source|songId` 命中，否则每次重播又变回没有歌词。
+   */
+  public getManualLyric(source: string, songId: string): string {
+    if (source.length === 0 || songId.length === 0) {
+      return '';
+    }
+    const map: Record<string, string> = this.manualLyricMap();
+    const lyric: string | undefined = map[source + '|' + songId];
+    return lyric !== undefined && lyric !== null ? lyric : '';
+  }
+
+  /** 保存 / 覆盖手动歌词（空串 = 删除）。 */
+  public setManualLyric(source: string, songId: string, lyric: string): void {
+    if (source.length === 0 || songId.length === 0) {
+      return;
+    }
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    const map: Record<string, string> = this.manualLyricMap();
+    const key: string = source + '|' + songId;
+    if (lyric.length === 0) {
+      return this.clearManualLyric(source, songId);
+    }
+    map[key] = lyric;
+    // 有界缓存：超了就丢最早的（JSON 对象 key 按插入顺序枚举）
+    const keys: string[] = Object.keys(map);
+    let finalMap: Record<string, string> = map;
+    if (keys.length > MAX_MANUAL_LYRIC) {
+      finalMap = {};
+      for (let i: number = keys.length - MAX_MANUAL_LYRIC; i < keys.length; i++) {
+        finalMap[keys[i]] = map[keys[i]];
+      }
+    }
+    store.putSync(KEY_MANUAL_LYRIC, JSON.stringify(finalMap));
+    store.flush();
+  }
+
+  /** 删除手动歌词（回到插件 / 内置接口的歌词）。 */
+  public clearManualLyric(source: string, songId: string): void {
+    if (source.length === 0 || songId.length === 0) {
+      return;
+    }
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    const map: Record<string, string> = this.manualLyricMap();
+    const key: string = source + '|' + songId;
+    const keys: string[] = Object.keys(map);
+    const next: Record<string, string> = {};
+    for (let i: number = 0; i < keys.length; i++) {
+      if (keys[i] !== key) {
+        next[keys[i]] = map[keys[i]];
+      }
+    }
+    store.putSync(KEY_MANUAL_LYRIC, JSON.stringify(next));
     store.flush();
   }
 
@@ -231,6 +550,45 @@ export class MusicStoreService {
       this.writeList(KEY_FAVORITES, list);
       this.favoriteVersion++;
     }
+  }
+
+  /** One durable write, stable dedupe, and exactly one library-version notification. */
+  public async addFavorites(records: PlayedSongRecord[]): Promise<number> {
+    const store = this.getStore();
+    if (store === undefined) {
+      throw new Error('收藏存储不可用');
+    }
+    const before: PlayedSongRecord[] = this.getFavorites();
+    const ids: Set<string> = new Set<string>();
+    for (const item of before) {
+      ids.add(item.source + '_' + item.songId);
+    }
+    const added: PlayedSongRecord[] = [];
+    for (const record of records) {
+      const id: string = record.source + '_' + record.songId;
+      if (!ids.has(id)) {
+        ids.add(id);
+        added.push(record);
+      }
+    }
+    if (added.length === 0) {
+      return 0;
+    }
+    // 走内存缓存 + 统一瘦身：不再为了回滚多读一次 preferences（`before` 就是盘上的内容）
+    const merged: PlayedSongRecord[] = added.concat(before);
+    this.stripRecordPayload(merged);
+    const oldText: string = JSON.stringify(before);
+    this.listCache.set(KEY_FAVORITES, merged);
+    store.putSync(KEY_FAVORITES, JSON.stringify(merged));
+    try {
+      await store.flush();
+    } catch (error) {
+      store.putSync(KEY_FAVORITES, oldText);
+      this.listCache.set(KEY_FAVORITES, before);
+      throw new Error('批量收藏持久化失败：' + (error as Error).message);
+    }
+    this.favoriteVersion++;
+    return added.length;
   }
 
   /** Adds a song to favorites (dedupe by source+songId). */
@@ -329,6 +687,115 @@ export class MusicStoreService {
    * source script to find the song. Enabled by default to keep the historical
    * cross-script recovery behaviour.
    */
+
+  /**
+   * 参与「播放失败依次换音源」的脚本 id 顺序（用户可多选并手动排序）。
+   * 空数组表示未配置：回退为全部已导入脚本的当前列表顺序。
+   */
+  public getSourceScriptOrder(): string[] {
+    const store = this.getStore();
+    if (store === undefined) {
+      return [];
+    }
+    const raw: string = store.getSync(KEY_SOURCE_SCRIPT_ORDER, '') as string;
+    if (raw.length === 0) {
+      return [];
+    }
+    try {
+      const arr: Object = JSON.parse(raw) as Object;
+      if (!Array.isArray(arr)) {
+        return [];
+      }
+      const out: string[] = [];
+      for (let i: number = 0; i < (arr as Object[]).length; i++) {
+        const id: string = String((arr as Object[])[i] ?? '');
+        if (id.length > 0 && out.indexOf(id) < 0) {
+          out.push(id);
+        }
+      }
+      return out;
+    } catch (_e) {
+      return [];
+    }
+  }
+
+  /**
+   * 用户是否明确配置过音源勾选。
+   *
+   * ★ 2026-11-09：原来用「order 为空」表示未配置，导致用户取消最后一个源时
+   *   播放链路 / 设置页都把它当成「没配置过 ⇒ 全部启用」，勾选自己弹回来。
+   *   现在单独记一个标记：空数组 + 已配置 = 真的一个都不启用。
+   */
+  public hasSourceScriptOrderConfig(): boolean {
+    const store = this.getStore();
+    if (store === undefined) {
+      return false;
+    }
+    return store.getSync(KEY_SOURCE_ORDER_CONFIGURED, false) as boolean;
+  }
+
+  public setSourceScriptOrder(ids: string[]): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    const cleaned: string[] = [];
+    for (let i: number = 0; i < ids.length; i++) {
+      if (ids[i].length > 0 && cleaned.indexOf(ids[i]) < 0) {
+        cleaned.push(ids[i]);
+      }
+    }
+    store.putSync(KEY_SOURCE_SCRIPT_ORDER, JSON.stringify(cleaned));
+    store.putSync(KEY_SOURCE_ORDER_CONFIGURED, true);
+    store.flush();
+  }
+
+  /**
+   * 「音源管理」列表行顺序（`sub:<订阅id>` / `api:<源id>`）。
+   * 空数组 = 还没拖过，UI 按「订阅在前、独立脚本按启用顺序」的默认排法。
+   */
+  public getSourceRowOrder(): string[] {
+    const store = this.getStore();
+    if (store === undefined) {
+      return [];
+    }
+    const raw: string = store.getSync(KEY_SOURCE_ROW_ORDER, '') as string;
+    if (raw.length === 0) {
+      return [];
+    }
+    try {
+      const arr: Object = JSON.parse(raw) as Object;
+      if (!Array.isArray(arr)) {
+        return [];
+      }
+      const out: string[] = [];
+      for (let i: number = 0; i < (arr as Object[]).length; i++) {
+        const key: string = String((arr as Object[])[i] ?? '');
+        if (key.length > 0 && out.indexOf(key) < 0) {
+          out.push(key);
+        }
+      }
+      return out;
+    } catch (_e) {
+      return [];
+    }
+  }
+
+  public setSourceRowOrder(keys: string[]): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    const cleaned: string[] = [];
+    for (let i: number = 0; i < keys.length; i++) {
+      if (keys[i].length > 0 && cleaned.indexOf(keys[i]) < 0) {
+        cleaned.push(keys[i]);
+      }
+    }
+    store.putSync(KEY_SOURCE_ROW_ORDER, JSON.stringify(cleaned));
+    store.flush();
+  }
+
   public getCrossScriptFallback(): boolean {
     const store = this.getStore();
     if (store === undefined) {
@@ -553,6 +1020,56 @@ export class MusicStoreService {
     return store.getSync(KEY_SHOW_MINI_LYRIC, false) as boolean;
   }
 
+  /** 仅供旧备份/云同步兼容读取；播放页已固定为网格背景。 */
+  public getPlaybackFlowLight(): boolean {
+    const store = this.getStore();
+    if (store === undefined) {
+      return false;
+    }
+    return store.getSync(KEY_PLAYBACK_FLOW_LIGHT, false) as boolean;
+  }
+
+  /** 仅供旧备份/云同步兼容写入；播放页已固定为网格背景。 */
+  public setPlaybackFlowLight(enabled: boolean): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_PLAYBACK_FLOW_LIGHT, enabled);
+    store.flush();
+  }
+
+  /**
+   * 是否允许**锁屏/后台继续播放**（默认 **开**）。
+   *
+   * 语义：开 = 播放时申请"音频后台长时任务"，息屏/锁屏/切到后台都继续放；
+   * 关 = 不加长时任务，退到后台由系统按普通应用处理（听感上就是"锁屏就停"）。
+   *
+   * ⚠️ 读不到存储时**返回 true**（不是 false）：老用户装机没有这条记录，
+   *   按"开"处理才不会一升级就丢锁屏播放。
+   * @returns True = 允许锁屏/后台继续播放
+   */
+  public getLockScreenPlay(): boolean {
+    const store = this.getStore();
+    if (store === undefined) {
+      return true;
+    }
+    return store.getSync(KEY_LOCK_SCREEN_PLAY, true) as boolean;
+  }
+
+  /**
+   * 持久化「锁屏播放」开关。
+   * @param enabled True = 允许锁屏/后台继续播放
+   */
+  public setLockScreenPlay(enabled: boolean): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_LOCK_SCREEN_PLAY, enabled);
+    this.appendRuntimeDiagnostic(`[RzdLockscreen] lockscreen enabled=${enabled} event=setting-write`);
+  }
+
   /** Whether the lyrics/playback page keeps the screen on. */
   public getKeepScreenOn(): boolean {
     const store = this.getStore();
@@ -573,6 +1090,68 @@ export class MusicStoreService {
   }
 
   /** Whether downloaded file names include the quality tag. */
+  /** 自定义下载目录（用户通过目录选择器选的 uri；空 = 用系统下载目录）。 */
+  /** 自定义软件图标变体（default/blue/green/purple/orange/dark）。 */
+  /** Apple Music amp-api 的 Bearer token（自动抓取后缓存，约 70 天有效）。 */
+  public getConcertToken(): string {
+    const store: preferences.Preferences | undefined = this.getStore();
+    if (store === undefined) {
+      return '';
+    }
+    return store.getSync(KEY_CONCERT_TOKEN, '') as string;
+  }
+
+  public setConcertToken(token: string): void {
+    const store: preferences.Preferences | undefined = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_CONCERT_TOKEN, token);
+    store.putSync(KEY_CONCERT_TOKEN_AT, Date.now());
+    store.flush();
+  }
+
+  /** token 写入时间（毫秒）。 */
+  public getConcertTokenAt(): number {
+    const store: preferences.Preferences | undefined = this.getStore();
+    if (store === undefined) {
+      return 0;
+    }
+    return store.getSync(KEY_CONCERT_TOKEN_AT, 0) as number;
+  }
+  public getAppIconVariant(): string {
+    const store: preferences.Preferences | undefined = this.getStore();
+    if (store === undefined) {
+      return 'default';
+    }
+    return store.getSync(KEY_APP_ICON_VARIANT, 'default') as string;
+  }
+
+  public setAppIconVariant(variant: string): void {
+    const store: preferences.Preferences | undefined = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_APP_ICON_VARIANT, variant);
+    store.flush();
+  }
+  public getDownloadDirUri(): string {
+    const store: preferences.Preferences | undefined = this.getStore();
+    if (store === undefined) {
+      return '';
+    }
+    return store.getSync(KEY_DOWNLOAD_DIR_URI, '') as string;
+  }
+
+  public setDownloadDirUri(uri: string): void {
+    const store: preferences.Preferences | undefined = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_DOWNLOAD_DIR_URI, uri);
+    store.flush();
+  }
+
   public getDownloadQualityTag(): boolean {
     const store = this.getStore();
     if (store === undefined) {
@@ -637,6 +1216,121 @@ export class MusicStoreService {
     }
     store.putSync(KEY_SHOW_MINI_LYRIC, enabled);
     store.flush();
+  }
+
+  /**
+   * @returns 桌面歌词（系统悬浮窗歌词）开关，默认**关**。
+   *
+   * 默认关：`enableDesktopLyric` 在部分机型上会顺带要悬浮窗授权，
+   * 用户没主动开就不该被弹窗打扰（要显示歌词的地方，播控中心 / 锁屏本来就有）。
+   */
+  public getDesktopLyric(): boolean {
+    const store = this.getStore();
+    if (store === undefined) {
+      return false;
+    }
+    return store.getSync(KEY_DESKTOP_LYRIC, false) as boolean;
+  }
+
+  /** 持久化桌面歌词开关。 */
+  public setDesktopLyric(enabled: boolean): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_DESKTOP_LYRIC, enabled);
+    store.flush();
+  }
+
+  /**
+   * @returns 车载蓝牙歌词开关，默认**关**。
+   * 开启后通过 AVMetadata.singleLyricText 向车机/蓝牙音箱推送当前歌词句；
+   * 部分设备可能因此略增卡顿，故与洛雪一致默认关闭。
+   */
+  public getBluetoothLyric(): boolean {
+    const store = this.getStore();
+    if (store === undefined) {
+      return false;
+    }
+    return store.getSync(KEY_BLUETOOTH_LYRIC, false) as boolean;
+  }
+
+  /** 持久化车载蓝牙歌词开关。 */
+  public setBluetoothLyric(enabled: boolean): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_BLUETOOTH_LYRIC, enabled);
+    store.flush();
+  }
+
+  /** @returns 华为账号登录资料的 JSON（没登录过返回空串）。 */
+  public getHuaweiAccount(): string {
+    const store = this.getStore();
+    if (store === undefined) {
+      return '';
+    }
+    return store.getSync(KEY_HUAWEI_ACCOUNT, '') as string;
+  }
+
+  /** 保存 / 清除华为账号登录资料（传空串 = 退出登录）。 */
+  public setHuaweiAccount(json: string): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_HUAWEI_ACCOUNT, json);
+    store.flush();
+  }
+
+  /** @returns 华为云盘访问令牌的 JSON（没连接过返回空串）。 */
+  public getHuaweiDriveToken(): string {
+    const store = this.getStore();
+    if (store === undefined) {
+      return '';
+    }
+    return store.getSync(KEY_HUAWEI_DRIVE_TOKEN, '') as string;
+  }
+
+  /** 保存华为云盘令牌（传空串 = 断开）。 */
+  public setHuaweiDriveToken(json: string): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_HUAWEI_DRIVE_TOKEN, json);
+    store.flush();
+  }
+
+  /** @returns 歌单的原始 JSON（云备份/恢复用，与 preferences 里存的是同一份格式）。 */
+  public playlistsJson(): string {
+    return JSON.stringify(this.getPlaylists());
+  }
+
+  /**
+   * 用一份原始 JSON 覆盖歌单（云恢复用）。
+   *
+   * 解析失败就原样不动现有数据、返回 false —— 恢复是「要么完整生效、要么不生效」，
+   * 不做半截写入。
+   */
+  public replacePlaylistsJson(json: string): boolean {
+    const store = this.getStore();
+    if (store === undefined || json.length === 0) {
+      return false;
+    }
+    try {
+      const list: Object[] = JSON.parse(json) as Object[];
+      if (!Array.isArray(list)) {
+        return false;
+      }
+      store.putSync(KEY_PLAYLISTS, json);
+      store.flush();
+      this.playlistVersion++;
+      return true;
+    } catch (_err) {
+      return false;
+    }
   }
 
   /** @returns Playback page cover corner radius in vp; default 8. */
@@ -736,6 +1430,227 @@ export class MusicStoreService {
     store.flush();
   }
 
+  /**
+   * 显示歌词翻译（对齐 lx player.isShowLyricTranslation）。
+   * 默认跟随历史 showSubLyric；若单独存过则用单独值。
+   */
+  public getShowLyricTranslation(): boolean {
+    const store = this.getStore();
+    if (store === undefined) {
+      return true;
+    }
+    // 未单独配置时跟随历史 showSubLyric
+    return store.getSync(KEY_SHOW_LYRIC_TRANSLATION,
+      store.getSync(KEY_SHOW_SUB_LYRIC, true)) as boolean;
+  }
+
+  public setShowLyricTranslation(show: boolean): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_SHOW_LYRIC_TRANSLATION, show);
+    // 兼容：任一子开关开启则 showSubLyric 为 true
+    const roma: boolean = this.getShowLyricRoma();
+    store.putSync(KEY_SHOW_SUB_LYRIC, show || roma);
+    store.flush();
+  }
+
+  /**
+   * 显示歌词罗马音（对齐 lx player.isShowLyricRoma）。
+   * 目前主要网易源有罗马音。
+   */
+  public getShowLyricRoma(): boolean {
+    const store = this.getStore();
+    if (store === undefined) {
+      return true;
+    }
+    return store.getSync(KEY_SHOW_LYRIC_ROMA,
+      store.getSync(KEY_SHOW_SUB_LYRIC, true)) as boolean;
+  }
+
+  public setShowLyricRoma(show: boolean): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_SHOW_LYRIC_ROMA, show);
+    const trans: boolean = this.getShowLyricTranslation();
+    store.putSync(KEY_SHOW_SUB_LYRIC, show || trans);
+    store.flush();
+  }
+
+  /**
+   * 将播放的中文歌词转为繁体（对齐 lx player.isS2t）。默认关闭。
+   */
+  public getLyricS2t(): boolean {
+    const store = this.getStore();
+    if (store === undefined) {
+      return false;
+    }
+    return store.getSync(KEY_LYRIC_S2T, false) as boolean;
+  }
+
+  public setLyricS2t(enabled: boolean): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_LYRIC_S2T, enabled);
+    store.flush();
+  }
+
+  private networkQualityKey(wifi: boolean): string {
+    return wifi ? 'play_quality_wifi' : 'play_quality_cellular';
+  }
+
+  /** Fill missing policy fields only. An established network tier always outranks legacy global. */
+  private ensureNetworkQualityPolicy(wifi: boolean): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    const key: string = this.networkQualityKey(wifi);
+    if (store.hasSync(key + '_base') && store.hasSync(key + '_extended') &&
+      store.hasSync(key + '_extended_enabled')) {
+      return;
+    }
+    let tier: string = '320k';
+    if (store.hasSync(key)) {
+      tier = store.getSync(key, '320k') as string;
+    } else {
+      // Historical migration only; never read this global policy during normal resolution/download.
+      const extended: string = this.getPlayExtendedQuality();
+      tier = this.getPlayExtendedEnabled() && NETWORK_EXTENDED_QUALITIES.includes(extended) ?
+        extended : this.getPlayQuality();
+    }
+    const isExtended: boolean = NETWORK_EXTENDED_QUALITIES.includes(tier);
+    if (!store.hasSync(key + '_base')) {
+      store.putSync(key + '_base', NETWORK_BASE_QUALITIES.includes(tier) ? tier : '320k');
+    }
+    if (!store.hasSync(key + '_extended')) {
+      store.putSync(key + '_extended', isExtended ? tier : 'hires');
+    }
+    if (!store.hasSync(key + '_extended_enabled')) {
+      store.putSync(key + '_extended_enabled', isExtended);
+    }
+    // Compatibility output only, never a second policy input after migration.
+    this.persistNetworkEffective(wifi, 'migrate');
+  }
+
+  public getNetworkBaseQuality(wifi: boolean): string {
+    const version: number = this.networkQualityVersion;
+    this.ensureNetworkQualityPolicy(wifi);
+    const store = this.getStore();
+    const value: string = store === undefined ? '320k' :
+      store.getSync(this.networkQualityKey(wifi) + '_base', '320k') as string;
+    return NETWORK_BASE_QUALITIES.includes(value) ? value : '320k';
+  }
+
+  public getNetworkExtendedQuality(wifi: boolean): string {
+    const version: number = this.networkQualityVersion;
+    this.ensureNetworkQualityPolicy(wifi);
+    const store = this.getStore();
+    const value: string = store === undefined ? 'hires' :
+      store.getSync(this.networkQualityKey(wifi) + '_extended', 'hires') as string;
+    return NETWORK_EXTENDED_QUALITIES.includes(value) ? value : 'hires';
+  }
+
+  public getNetworkExtendedEnabled(wifi: boolean): boolean {
+    const version: number = this.networkQualityVersion;
+    this.ensureNetworkQualityPolicy(wifi);
+    const store = this.getStore();
+    return store !== undefined && store.getSync(this.networkQualityKey(wifi) + '_extended_enabled', false) === true;
+  }
+
+  public getNetworkPlayQuality(wifi: boolean): string {
+    return this.getNetworkExtendedEnabled(wifi) ? this.getNetworkExtendedQuality(wifi) :
+      this.getNetworkBaseQuality(wifi);
+  }
+
+  private persistNetworkEffective(wifi: boolean, reason: string): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    const key: string = this.networkQualityKey(wifi);
+    const enabled: boolean = store.getSync(key + '_extended_enabled', false) === true;
+    const base: string = store.getSync(key + '_base', '320k') as string;
+    const extended: string = store.getSync(key + '_extended', 'hires') as string;
+    const effective: string = enabled ? extended : base;
+    store.putSync(key, effective);
+    this.networkQualityVersion++;
+    console.info('[RzdQualityPolicy] network config reason=' + reason + ' key=' + key +
+      ' enabled=' + enabled + ' base=' + base + ' extension=' + extended + ' effective=' + effective);
+    store.flush().catch((): void => {
+      console.error('[RzdQualityPolicy] network config flush failed key=' + key);
+    });
+  }
+
+  public setNetworkBaseQuality(wifi: boolean, quality: string): void {
+    if (!NETWORK_BASE_QUALITIES.includes(quality)) {
+      return;
+    }
+    this.ensureNetworkQualityPolicy(wifi);
+    const store = this.getStore();
+    if (store !== undefined) {
+      store.putSync(this.networkQualityKey(wifi) + '_base', quality);
+      this.persistNetworkEffective(wifi, 'base');
+    }
+  }
+
+  public setNetworkExtendedQuality(wifi: boolean, quality: string): void {
+    if (!NETWORK_EXTENDED_QUALITIES.includes(quality)) {
+      return;
+    }
+    this.ensureNetworkQualityPolicy(wifi);
+    const store = this.getStore();
+    if (store !== undefined) {
+      store.putSync(this.networkQualityKey(wifi) + '_extended', quality);
+      this.persistNetworkEffective(wifi, 'extension');
+    }
+  }
+
+  public setNetworkExtendedEnabled(wifi: boolean, enabled: boolean): void {
+    this.ensureNetworkQualityPolicy(wifi);
+    const store = this.getStore();
+    if (store !== undefined) {
+      store.putSync(this.networkQualityKey(wifi) + '_extended_enabled', enabled);
+      this.persistNetworkEffective(wifi, 'switch');
+    }
+  }
+
+  /** Explicit player/old backup selection atomically changes only this network's active group. */
+  public setNetworkPlayQuality(wifi: boolean, quality: string): void {
+    const extended: boolean = NETWORK_EXTENDED_QUALITIES.includes(quality);
+    if (!extended && !NETWORK_BASE_QUALITIES.includes(quality)) {
+      return;
+    }
+    this.ensureNetworkQualityPolicy(wifi);
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    const key: string = this.networkQualityKey(wifi);
+    store.putSync(key + (extended ? '_extended' : '_base'), quality);
+    store.putSync(key + '_extended_enabled', extended);
+    this.persistNetworkEffective(wifi, 'explicit');
+  }
+
+  public getWebDavConfig(): string {
+    const store = this.getStore();
+    return store === undefined ? '' : store.getSync('webdav_config', '') as string;
+  }
+
+  public setWebDavConfig(value: string): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync('webdav_config', value);
+    store.flush();
+  }
+
   /** @returns The persisted playback quality; default '128k'. */
   public getPlayQuality(): string {
     const store = this.getStore();
@@ -753,6 +1668,7 @@ export class MusicStoreService {
       return;
     }
     store.putSync(KEY_PLAY_QUALITY, quality);
+    // Legacy backup field only. Never overwrite established per-network preferences.
     store.flush();
   }
 
@@ -1012,6 +1928,204 @@ export class MusicStoreService {
   }
 
   /** @returns Whether playback mixes with other apps (shared audio focus). */
+  /** 启动应用是否自动开始播放（默认关）。 */
+  public getAutoPlayOnLaunch(): boolean {
+    const store = this.getStore();
+    if (store === undefined) {
+      return false;
+    }
+    return store.getSync(KEY_AUTOPLAY_ON_LAUNCH, false) as boolean;
+  }
+
+  public setAutoPlayOnLaunch(enabled: boolean): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_AUTOPLAY_ON_LAUNCH, enabled);
+  }
+
+
+    /** ★ 播放设置：升降调半音数（-12~+12，0=原调）。 */
+    public getTuningPitch(): number {
+      const store = this.getStore();
+      if (store === undefined) {
+        return 0;
+      }
+      return store.getSync(KEY_TUNING_PITCH, 0) as number;
+    }
+
+    public setTuningPitch(semitones: number): void {
+      const store = this.getStore();
+      if (store === undefined) {
+        return;
+      }
+      store.putSync(KEY_TUNING_PITCH, semitones);
+    }
+
+    /** ★ 播放设置：5 段均衡器增益（dB，-12~+12），默认全 0。 */
+    public getEqGains(): number[] {
+      const store = this.getStore();
+      const fallback: number[] = [0, 0, 0, 0, 0];
+      if (store === undefined) {
+        return fallback;
+      }
+      const raw: string = store.getSync(KEY_TUNING_EQ, '') as string;
+      if (raw.length === 0) {
+        return fallback;
+      }
+      try {
+        const parsed: number[] = JSON.parse(raw) as number[];
+        if (Array.isArray(parsed) && parsed.length === 5) {
+          return parsed;
+        }
+      } catch (err) {
+      }
+      return fallback;
+    }
+
+    /** @returns Tab 栏配置 JSON（空串=默认：两个都显示、现在就听在前）。 */
+    public getTabBarConfig(): string {
+      const store = this.getStore();
+      if (store === undefined) {
+        return '';
+      }
+      return store.getSync(KEY_TAB_BAR_CONFIG, '') as string;
+    }
+
+    public setTabBarConfig(json: string): void {
+      const store = this.getStore();
+      if (store === undefined) {
+        return;
+      }
+      store.putSync(KEY_TAB_BAR_CONFIG, json);
+    }
+    /** @returns 是否启用 USB 独占输出（默认关）。 */
+    public getUsbExclusive(): boolean {
+      const store = this.getStore();
+      if (store === undefined) {
+        return false;
+      }
+      return store.getSync(KEY_USB_EXCLUSIVE, false) as boolean;
+    }
+
+    public setUsbExclusive(enabled: boolean): void {
+      const store = this.getStore();
+      if (store === undefined) {
+        return;
+      }
+      store.putSync(KEY_USB_EXCLUSIVE, enabled);
+    }
+    /** @returns 自定义 EQ 预设 JSON（由 player 的 AudioEffects 解析）。 */
+    public getEqPresets(): string {
+      const store = this.getStore();
+      if (store === undefined) {
+        return '';
+      }
+      return store.getSync(KEY_EQ_PRESETS, '') as string;
+    }
+
+    public setEqPresets(json: string): void {
+      const store = this.getStore();
+      if (store === undefined) {
+        return;
+      }
+      store.putSync(KEY_EQ_PRESETS, json);
+    }
+    /** @returns 屏幕方向（auto / portrait / landscape）。 */
+    public getScreenOrientation(): string {
+      const store = this.getStore();
+      if (store === undefined) {
+        return 'auto';
+      }
+      const mode: string = store.getSync(KEY_SCREEN_ORIENTATION, 'auto') as string;
+      return mode.length > 0 ? mode : 'auto';
+    }
+
+    public setScreenOrientation(mode: string): void {
+      const store = this.getStore();
+      if (store === undefined) {
+        return;
+      }
+      store.putSync(KEY_SCREEN_ORIENTATION, mode);
+    }
+    /** @returns 音效开关 JSON（由 player 的 AudioEffects 解析）。 */
+    public getAudioEffects(): string {
+      const store = this.getStore();
+      if (store === undefined) {
+        return '';
+      }
+      return store.getSync(KEY_AUDIO_EFFECTS, '') as string;
+    }
+
+    public setAudioEffects(json: string): void {
+      const store = this.getStore();
+      if (store === undefined) {
+        return;
+      }
+      store.putSync(KEY_AUDIO_EFFECTS, json);
+    }
+    /** @returns 播放内核选择（auto / av / ffmpeg）。 */
+    public getEngineMode(): string {
+      const store = this.getStore();
+      if (store === undefined) {
+        return 'auto';
+      }
+      const mode: string = store.getSync(KEY_ENGINE_MODE, 'auto') as string;
+      return mode.length > 0 ? mode : 'auto';
+    }
+
+    public setEngineMode(mode: string): void {
+      const store = this.getStore();
+      if (store === undefined) {
+        return;
+      }
+      store.putSync(KEY_ENGINE_MODE, mode);
+    }
+    /** @returns 汽水 FFmpeg 内核的连续失败次数。 */
+    public getIjkFailStreak(): number {
+      const store = this.getStore();
+      if (store === undefined) {
+        return 0;
+      }
+      return store.getSync(KEY_IJK_FAIL_STREAK, 0) as number;
+    }
+
+    public setIjkFailStreak(streak: number): void {
+      const store = this.getStore();
+      if (store === undefined) {
+        return;
+      }
+      store.putSync(KEY_IJK_FAIL_STREAK, streak);
+    }
+
+    /** @returns 是否已临时禁用 FFmpeg 内核（连续失败自动降级）。 */
+    public isIjkDisabled(): boolean {
+      const store = this.getStore();
+      if (store === undefined) {
+        return false;
+      }
+      return store.getSync(KEY_IJK_DISABLED, false) as boolean;
+    }
+
+    public setIjkDisabled(disabled: boolean): void {
+      const store = this.getStore();
+      if (store === undefined) {
+        return;
+      }
+      store.putSync(KEY_IJK_DISABLED, disabled);
+      if (disabled) {
+        store.putSync(KEY_IJK_FAIL_STREAK, 0);
+      }
+    }
+    public setEqGains(gains: number[]): void {
+      const store = this.getStore();
+      if (store === undefined) {
+        return;
+      }
+      store.putSync(KEY_TUNING_EQ, JSON.stringify(gains));
+    }
+
   public getAudioMix(): boolean {
     const store = this.getStore();
     if (store === undefined) {
@@ -1030,7 +2144,72 @@ export class MusicStoreService {
     store.flush();
   }
 
-  /** @returns Download save mode: 'ask' (manual folder picker) or 'download' (app Download dir). */
+  @Trace public downloadQualityVersion: number = 0;
+
+  /** Missing/invalid historical keys migrate to follow, never the legacy global quality. */
+  public getDownloadQualityMode(): string {
+    const store = this.getStore();
+    if (store === undefined) {
+      return 'follow';
+    }
+    const mode = store.getSync(KEY_DOWNLOAD_QUALITY_MODE, '') as string;
+    if (mode === 'follow' || mode === 'manual') {
+      return mode;
+    }
+    store.putSync(KEY_DOWNLOAD_QUALITY_MODE, 'follow');
+    store.flush();
+    console.info('[RzdDownloadQuality] migrate mode=follow');
+    return 'follow';
+  }
+
+  public setDownloadQualityMode(mode: string): void {
+    if (mode !== 'follow' && mode !== 'manual') {
+      return;
+    }
+    const store = this.getStore();
+    if (store !== undefined) {
+      store.putSync(KEY_DOWNLOAD_QUALITY_MODE, mode);
+      store.flush();
+      this.downloadQualityVersion++;
+    }
+  }
+
+  public getDownloadManualQuality(): string {
+    const store = this.getStore();
+    if (store === undefined) {
+      return '320k';
+    }
+    const quality = store.getSync(KEY_DOWNLOAD_MANUAL_QUALITY, '') as string;
+    if (NETWORK_BASE_QUALITIES.includes(quality) || NETWORK_EXTENDED_QUALITIES.includes(quality)) {
+      return quality;
+    }
+    store.putSync(KEY_DOWNLOAD_MANUAL_QUALITY, '320k');
+    store.flush();
+    return '320k';
+  }
+
+  public setDownloadManualQuality(quality: string): void {
+    if (!NETWORK_BASE_QUALITIES.includes(quality) && !NETWORK_EXTENDED_QUALITIES.includes(quality)) {
+      return;
+    }
+    const store = this.getStore();
+    if (store !== undefined) {
+      store.putSync(KEY_DOWNLOAD_MANUAL_QUALITY, quality);
+      store.flush();
+      this.downloadQualityVersion++;
+    }
+  }
+
+  /**
+   * @returns 下载**导出**方式（注意：不是"存哪儿"）：
+   *  - `'download'` = 下载完再导出到系统 Download 目录（首次要授权）；
+   *  - `'ask'` = 下载完弹系统保存对话框导出。
+   *
+   * ★ 2026-10-20 修正（用户：「**不是新增保存方式**，就是无论用户选哪个，都会在私有目录留一份」）：
+   *   上一版把 `'private'` 当成第三档保存方式（还设成默认）理解错了。正确语义是
+   *   **私有目录永远留一份**（`DownloadService.keepPrivateCopy`，本地音乐靠它列出已下载的歌），
+   *   这里这个开关只决定"要不要再导出到外部一份"。
+   */
   public getDownloadSaveMode(): string {
     const store = this.getStore();
     if (store === undefined) {
@@ -1040,13 +2219,14 @@ export class MusicStoreService {
     return mode.length > 0 ? mode : 'ask';
   }
 
-  /** Persists the download save mode ('ask'|'download'). */
+  /** Persists the download export mode ('download'|'ask'). */
   public setDownloadSaveMode(mode: string): void {
     const store = this.getStore();
     if (store === undefined) {
       return;
     }
-    store.putSync(KEY_DOWNLOAD_SAVE_MODE, mode);
+    // 兼容上一版误存的 'private'：映射回 'ask'（私有副本本来就是无条件留的）
+    store.putSync(KEY_DOWNLOAD_SAVE_MODE, mode === 'private' ? 'ask' : mode);
     store.flush();
   }
 
@@ -1087,6 +2267,83 @@ export class MusicStoreService {
       return;
     }
     store.putSync(KEY_PLAYLIST_ADD_POSITION, position);
+    store.flush();
+  }
+
+  /**
+   * @returns 是否启用「动态封面」（歌手 / 专辑 / 歌单页；**默认开**）。
+   *
+   * 语义：开关只管"要不要去解析并播放 Apple Music 的 motion artwork"。
+   * 关掉后三页立刻退回静图，`MotionCoverLayer` 连请求都不发（见那里的 `reload()`）。
+   */
+  /**
+   * @returns 「现在就听」的选择模式：0 = 常规 / 1 = 熟悉 / 2 = 探索（默认常规）。
+   */
+  /**
+   * @returns 分类 id → 被点过的次数（自建推荐算法的加权依据，JSON 存 preferences）。
+   */
+  public getFeedCategoryPlays(): Record<string, number> {
+    const store = this.getStore();
+    if (store === undefined) {
+      return {};
+    }
+    const raw: string = store.getSync(KEY_FEED_CATEGORY_PLAYS, '') as string;
+    if (raw.length === 0) {
+      return {};
+    }
+    try {
+      return JSON.parse(raw) as Record<string, number>;
+    } catch (_err) {
+      return {};
+    }
+  }
+
+  /** 记录一次"点了这个分类下的歌"（推荐算法据此提高该分类的权重）。 */
+  public addFeedCategoryPlay(categoryId: string): void {
+    if (categoryId.length === 0) {
+      return;
+    }
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    const plays: Record<string, number> = this.getFeedCategoryPlays();
+    plays[categoryId] = (plays[categoryId] ?? 0) + 1;
+    store.putSync(KEY_FEED_CATEGORY_PLAYS, JSON.stringify(plays));
+  }
+
+  public getFeedMode(): number {
+    const store = this.getStore();
+    if (store === undefined) {
+      return 0;
+    }
+    return store.getSync(KEY_FEED_MODE, 0) as number;
+  }
+
+  /** Persists the 「现在就听」 mode. */
+  public setFeedMode(mode: number): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_FEED_MODE, mode);
+  }
+
+  public getMotionCoverEnabled(): boolean {
+    const store = this.getStore();
+    if (store === undefined) {
+      return true;
+    }
+    return store.getSync(KEY_MOTION_COVER, true) as boolean;
+  }
+
+  /** Persists the dynamic-cover switch. */
+  public setMotionCoverEnabled(enabled: boolean): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_MOTION_COVER, enabled);
     store.flush();
   }
 
@@ -1133,6 +2390,52 @@ export class MusicStoreService {
   }
 
   /** @returns Whether the artist is in favorites. */
+  /**
+   * ★ 收藏 / 关注合并为一套数据（2026-10-29 用户要求）：
+   *   歌手页那颗按钮统一叫「关注」，但**数据就是 favoriteArtists**（跨平台同一位歌手只算一次），
+   *   关注页展示的也是同一份列表 —— 不再有"收藏一套、关注另一套"的分裂。
+   *   匹配口径 = 歌手名（trim 后比较）：所以从 A 平台收藏过的歌手，在 B 平台打开也显示已关注。
+   */
+  public isFollowingArtistByName(name: string): boolean {
+    const target: string = name.trim();
+    if (target.length === 0) {
+      return false;
+    }
+    const list: FavoriteEntry[] = this.getFavoriteArtists();
+    for (let i: number = 0; i < list.length; i++) {
+      if (list[i].name.trim() === target) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** 关注（= 收藏歌手）：按名字去重，已存在就不重复加。 */
+  public followArtistByName(entry: FavoriteEntry): void {
+    const target: string = entry.name.trim();
+    if (target.length === 0) {
+      return;
+    }
+    if (this.isFollowingArtistByName(target)) {
+      return;
+    }
+    this.addFavoriteArtist(entry);
+  }
+
+  /** 取消关注：把同名歌手的所有条目一并移除（顺便清掉历史遗留的多平台重复项）。 */
+  public unfollowArtistByName(name: string): void {
+    const target: string = name.trim();
+    if (target.length === 0) {
+      return;
+    }
+    const list: FavoriteEntry[] = this.getFavoriteArtists();
+    for (let i: number = 0; i < list.length; i++) {
+      if (list[i].name.trim() === target) {
+        this.removeFavoriteArtist(list[i].source, list[i].id);
+      }
+    }
+  }
+
   public isFavoriteArtist(source: string, id: string): boolean {
     const list: FavoriteEntry[] = this.getFavoriteArtists();
     for (let i: number = 0; i < list.length; i++) {
@@ -1187,6 +2490,58 @@ export class MusicStoreService {
   /** @returns Whether the album is in favorites. */
   public isFavoriteAlbum(source: string, id: string): boolean {
     const list: FavoriteEntry[] = this.getFavoriteAlbums();
+    for (let i: number = 0; i < list.length; i++) {
+      if (list[i].id === id && list[i].source === source) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** @returns 收藏的在线歌单（按收藏时间，最新在前）。 */
+  public getFavoritePlaylists(): FavoriteEntry[] {
+    const store = this.getStore();
+    if (store === undefined) {
+      return [];
+    }
+    const text: string = store.getSync(KEY_FAVORITE_PLAYLISTS, '[]') as string;
+    try {
+      return JSON.parse(text) as FavoriteEntry[];
+    } catch (_err) {
+      return [];
+    }
+  }
+
+  /** 收藏（或刷新）一张在线歌单；同 `source` + `id` 只留一条。 */
+  public addFavoritePlaylist(entry: FavoriteEntry): void {
+    const list: FavoriteEntry[] = this.getFavoritePlaylists();
+    const kept: FavoriteEntry[] = [];
+    for (let i: number = 0; i < list.length; i++) {
+      if (list[i].id !== entry.id || list[i].source !== entry.source) {
+        kept.push(list[i]);
+      }
+    }
+    kept.unshift(entry);
+    this.saveFavoriteEntries(KEY_FAVORITE_PLAYLISTS, kept);
+    this.favoritePlaylistVersion++;
+  }
+
+  /** 取消收藏一张在线歌单。 */
+  public removeFavoritePlaylist(source: string, id: string): void {
+    const list: FavoriteEntry[] = this.getFavoritePlaylists();
+    const kept: FavoriteEntry[] = [];
+    for (let i: number = 0; i < list.length; i++) {
+      if (list[i].id !== id || list[i].source !== source) {
+        kept.push(list[i]);
+      }
+    }
+    this.saveFavoriteEntries(KEY_FAVORITE_PLAYLISTS, kept);
+    this.favoritePlaylistVersion++;
+  }
+
+  /** @returns 该在线歌单是否已收藏。 */
+  public isFavoritePlaylist(source: string, id: string): boolean {
+    const list: FavoriteEntry[] = this.getFavoritePlaylists();
     for (let i: number = 0; i < list.length; i++) {
       if (list[i].id === id && list[i].source === source) {
         return true;
@@ -1382,11 +2737,27 @@ export class MusicStoreService {
     record.url = obj.url as string ?? '';
     record.lyric = obj.lyric as string ?? '';
     record.time = obj.time as number ?? 0;
+    // ⚠️ 这两个字段一度漏掉（写的时候存了、读的时候没取）：
+    //   quality 丢了 → 重启后「当前音质」回落到默认 128k；
+    //   playScript 丢了 → 卡片/日志里「哪个音源脚本放的」变空。
+    // 凡是往 PlayedSongRecord 里加字段，这里**必须**跟着加一行。
+    record.quality = obj.quality as string ?? '';
+    record.playScript = obj.playScript as string ?? '';
     return record;
   }
 
   /** @returns All user playlists (newest first). */
   public getPlaylists(): PlaylistDto[] {
+    // ★ 缓存：preferences 里存的是**整份歌单 JSON**，这里每次都要 JSON.parse 一遍并
+    //   逐条重建所有歌单的所有歌曲记录 —— 复杂度是「全部歌单 × 全部歌曲」，跟你要查的
+    //   那个歌单无关。而歌单详情页的 Hero 标题/封面、歌单列表页、批量操作条都会在
+    //   build 期间调用它，一帧里能调好几次：歌单一多、歌曲一多，页面就会卡住。
+    //   所有写路径都是 `persistPlaylists()` + `playlistVersion++`（共 8 处，已逐一核对），
+    //   所以用版本号做键就能保证不会读到脏数据。
+    if (this.playlistsCache !== undefined && this.playlistsCacheVersion === this.playlistVersion) {
+      // 返回副本：调用方习惯 `list.unshift(p)` 之后再 persist，不能让它改到缓存本身
+      return this.playlistsCache.slice();
+    }
     const store = this.getStore();
     if (store === undefined) {
       return [];
@@ -1400,6 +2771,12 @@ export class MusicStoreService {
         const p = new PlaylistDto();
         p.id = o.id as string ?? '';
         p.name = o.name as string ?? '';
+        // ★★ 这一行是「自定义歌单封面不生效」的真正原因：
+        //    `persistPlaylists()` 一直把 cover 写进 preferences，但这里**从来没读回来** ——
+        //    于是任何一次重新解析（版本号一变就会重解析）之后 `p.cover` 都变成空串，
+        //    界面（列表 + 详情页大图）自然永远看不到自定义封面，重启也一样。
+        //    凡是往 PlaylistDto 里加字段，这里必须跟着加一行。
+        p.cover = o.cover as string ?? '';
         p.createTime = o.createTime as number ?? 0;
         const songs: Object[] = o.songs as Object[] ?? [];
         p.songs = [];
@@ -1408,8 +2785,12 @@ export class MusicStoreService {
         }
         list.push(p);
       }
-      return list;
+      this.playlistsCache = list;
+      this.playlistsCacheVersion = this.playlistVersion;
+      return list.slice();
     } catch (_err) {
+      this.playlistsCache = [];
+      this.playlistsCacheVersion = this.playlistVersion;
       return [];
     }
   }
@@ -1485,6 +2866,53 @@ export class MusicStoreService {
         this.playlistVersion++;
         return;
       }
+    }
+  }
+
+  /**
+   * 设置歌单封面。
+   *
+   * @param id 歌单 id。
+   * @param cover 封面地址：自定义封面是**沙箱文件 URI**（`file://...`，由
+   *              `features/playlist` 的 `pickPlaylistCover` 落盘后给出）；
+   *              传空串表示清掉自定义封面（在线导入的歌单清掉后就回到内置占位图）。
+   */
+  public setPlaylistCover(id: string, cover: string): void {
+    const list: PlaylistDto[] = this.getPlaylists();
+    for (let i: number = 0; i < list.length; i++) {
+      if (list[i].id === id) {
+        list[i].cover = cover;
+        this.persistPlaylists(list);
+        this.playlistVersion++;
+        return;
+      }
+    }
+  }
+
+  /**
+   * 把某首在线歌的封面写回所有包含它的本地歌单（导入后无封面、播放后补全）。
+   * 仅在原 img 为空或与新地址不同时写入，避免无意义刷盘。
+   */
+  public updateSongCoverInPlaylists(source: string, songId: string, img: string): void {
+    if (source.length === 0 || songId.length === 0 || img.length === 0) {
+      return;
+    }
+    const list: PlaylistDto[] = this.getPlaylists();
+    let changed: boolean = false;
+    for (let i: number = 0; i < list.length; i++) {
+      const songs: PlayedSongRecord[] = list[i].songs;
+      for (let j: number = 0; j < songs.length; j++) {
+        if (songs[j].source === source && songs[j].songId === songId) {
+          if (songs[j].img !== img) {
+            songs[j].img = img;
+            changed = true;
+          }
+        }
+      }
+    }
+    if (changed) {
+      this.persistPlaylists(list);
+      this.playlistVersion++;
     }
   }
 
@@ -1583,7 +3011,7 @@ export class MusicStoreService {
    */
   public dedupePlaylistSongs(playlistId: string): number {
     const list: PlaylistDto[] = this.getPlaylists();
-    const priorityOrder: string[] = ['mg', 'kw', 'kg', 'wy', 'tx'];
+    const priorityOrder: string[] = ['mg', 'kw', 'kg', 'wy', 'tx', 'qs'];
     for (let i: number = 0; i < list.length; i++) {
       if (list[i].id !== playlistId) {
         continue;

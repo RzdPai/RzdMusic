@@ -31,6 +31,7 @@ export function sourceToCode(source: string): number {
     case 'tx': return 1;
     case 'mg': return 3;
     case 'kw': return 4;
+    case 'qs': return 5;
     default: return 2;
   }
 }
@@ -42,6 +43,7 @@ export function codeToSource(code: number): string {
     case 1: return 'tx';
     case 3: return 'mg';
     case 4: return 'kw';
+  case 5: return 'qs';
     default: return 'wy';
   }
 }

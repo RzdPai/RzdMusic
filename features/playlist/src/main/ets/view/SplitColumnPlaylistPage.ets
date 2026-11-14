@@ -15,7 +15,7 @@
 
 
 import { HdsNavDestination } from '@kit.UIDesignKit';
-import { StyleConstants, WindowUtil } from 'musicbasic';
+import { guardPlayerBack, StyleConstants, WindowUtil } from 'musicbasic';
 import { MusicListPlaybackViewModel } from '../viewmodel/MusicListPlaybackViewModel';
 import { PlaylistLaneListSection } from './PlaylistLaneListSection';
 import { PlaylistSplitHero } from './PlaylistSplitHero';
@@ -55,6 +55,7 @@ export struct SplitColumnPlaylistPage {
           ]
         })
       }
+      .onBackPressed((): boolean => guardPlayerBack('SplitColumnPlaylistPage'))
       .hideTitleBar(true)
       .backgroundColor('#18181a')
       .onAppear(() => {
@@ -91,6 +92,7 @@ export struct SplitColumnPlaylistPage {
           ]
         })
       }
+      .onBackPressed((): boolean => guardPlayerBack('SplitColumnPlaylistPage'))
       .hideTitleBar(true)
       .backgroundColor('#18181a')
       .onAppear(() => {

@@ -1,5 +1,21 @@
 {
     "color": [
+    {
+      "name": "menu_selected_surface",
+      "value": "#14000000"
+    },
+    {
+      "name": "menu_surface",
+      "value": "#F2F3F5"
+    },
+    {
+      "name": "menu_surface_border",
+      "value": "#1A000000"
+    },
+        {
+            "name": "panel_surface",
+            "value": "#F2F3F5"
+        },
         {
             "name": "primary60",
             "value": "#99000000"
@@ -33,6 +49,10 @@
             "value": "#F1F3F5"
         },
         {
+            "name": "page_background",
+            "value": "#F1F3F5"
+        },
+        {
             "name": "card_background",
             "value": "#FFFFFF"
         },
@@ -41,7 +61,11 @@
             "value": "#FFFFFF"
         },
         {
-            "name": "capsule_background",
+            "name": "chip_surface",
+    "value": "#E3E6EA"
+  },
+  {
+    "name": "capsule_background",
             "value": "#F1F3F5"
         },
         {
@@ -53,8 +77,12 @@
             "value": "#F1F3F5"
         },
         {
+            "name": "morph_mini_solid_surface",
+            "value": "#FFF1F3F5"
+        },
+        {
             "name": "floating_mini_bar_sheet_background",
-            "value": "#F1F3F5"
+            "value": "#CCF1F3F5"
         },
         {
             "name": "floating_mini_bar_immersive_background",

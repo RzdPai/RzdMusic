@@ -49,6 +49,10 @@
       "value": "Top singers"
     },
     {
+      "name": "home_new_songs",
+      "value": "New songs"
+    },
+    {
       "name": "home_category_featured",
       "value": "Featured songs"
     },

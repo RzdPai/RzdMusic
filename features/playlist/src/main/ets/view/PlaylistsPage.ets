@@ -18,12 +18,18 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { common } from '@kit.AbilityKit';
 import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
-import { BreakpointType, ThemeState } from 'musicbasic';
-import { AmbientState, AppStorageKeys, MusicStoreService, PlayedSongRecord, PlaylistDto, RouterUrlConstants, TitleBarConstants, ToplistRouteParam, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
+import { appBarBlurStyle, barBlurOptions, guardPlayerBack } from 'musicbasic';
+import { AppStorageKeys, BarScrollHelper, BreakpointType, getPlaylistTransitionState, MusicAppState, ThemeState } from 'musicbasic';
+import { AmbientState, MusicStoreService, PlayedSongRecord, PlaylistDto, RouterUrlConstants, TitleBarConstants, ToplistRouteParam, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, LocalCoverImage } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
-import { lxSearch, SharePlaylistService, SharePlaylistSource } from 'player';
+import { localMusic, LocalMusicImportState, localMusicImportState } from 'localmusic';
 import { gunzipBytes } from '../util/GunzipUtil';
 import { registerPlaylistRefresh, unregisterPlaylistRefresh } from '../util/PlaylistRefreshBus';
+import { pickPlaylistCover } from '../util/PlaylistCoverUtil';
+import type { CoverPickResult } from '../util/PlaylistCoverUtil';
+// ★「网络导入」表单是**共用组件**（「我的」页歌单卡的「歌单导入」也直接用它），
+//   **不要在页面里再写一份**（用户 2026-10-11 要求两处都走同一个入口）。
+import { NetworkImportSheet } from './NetworkImportSheet';
 
 /**
  * LXMusic playlist export JSON shape (one song entry).
@@ -90,10 +96,13 @@ function playlistsAddMenuComponent() {
       })
   }
   .width(220)
+  // ① 沉浸光感：菜单本身吃系统材质 + 统一圆角（与选择栏同一观感层级）
 }
 
 @ComponentV2
 export struct PlaylistsPage {
+  /** 「回到顶部」指令：壳层点了当前页签时递增（底部页签设计规范）。 */
+  @Param scrollTopCommand: number = 0;
   /** Window breakpoint for the HDS home-style responsive title. */
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
   /** Nav stack for opening history / favorites list pages. */
@@ -108,8 +117,7 @@ export struct PlaylistsPage {
   @Local showSheet: boolean = false;
   /** 当前弹窗类型：0=新建/重命名歌单，1=导入方式选择，2=网络导入表单。 */
   @Local activeSheet: number = 0;
-  /** True when playlist reordering mode is active (drag rows to reorder). */
-  @Local playlistSortMode: boolean = false;
+  // ★「排序模式」这个中间态已删（用户 2026-10-11：去掉排序按钮，长按直接拖、拖完就落库）
   @Local newPlaylistName: string = '';
   @Local selectedPlaylist: PlaylistDto | undefined = undefined;
   @Local selectedPlaylistId: string = '';
@@ -117,18 +125,36 @@ export struct PlaylistsPage {
   @Local importing: boolean = false;
   /** Import progress text shown in the loading sheet. */
   @Local importProgress: string = '';
-  /** 网络导入选中的来源（网易云/QQ/酷我/酷狗/咪咕）。 */
-  @Local onlineSource: string = 'wy';
-  /** 网络导入粘贴的分享链接/ID。 */
-  @Local onlineLink: string = '';
-  /** 网络导入进行中。 */
-  @Local onlineImporting: boolean = false;
+  // ⚠️ 网络导入那份表单的状态（来源 / 链接 / 进行中）**已经搬进共用组件** `NetworkImportSheet`，
+  //    本页不再持有 —— 见文件上方那条 import 注释。
   /** 标题栏加号菜单图标 componentId（openMenu 锚点）。 */
   private readonly addMenuTargetId: string = 'playlists_add_menu_icon';
   /** 缓存菜单内容节点，避免每次点击重复创建。 */
   private addMenuNode: ComponentContent<Object> | null = null;
   /** Scroller bound to the HDS title bar so the scroll effect (gradient blur) can fire. */
   private pageScroller: Scroller = new Scroller();
+  /** 全局播控状态：滚动联动双层底栏需要写 miniBarExpanded / hdsBarLayoutMode。 */
+  @Local appState: MusicAppState =
+    AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
+  /** 「本地音乐」入口要显示曲库首数：订阅它的导入状态，导入/删除后自动刷新。 */
+  @Local localMusicState: LocalMusicImportState = localMusicImportState();
+  /** 「本地音乐」路由名（与 features/localmusic 的 router_map.json 一致）。 */
+  private static readonly LOCAL_MUSIC_ROUTE: string = 'LocalMusicPage';
+
+  /**
+   * 滚动联动双层底栏（上滑收起 / 下滑展开）。
+   *
+   * 用户要求「全都自动收起展开」—— 底栏是所有 Tab 共用的一个控件，
+   * 只要有一个页面不接回调，就会出现"有的页面收、有的不收"。
+   * @param offset 本帧滚动增量（vp）。
+   */
+  private onPageScrollFrame(offset: number): void {
+    if (!BarScrollHelper.isEnabled()) {
+      return;
+    }
+    BarScrollHelper.notifyScrollDelta(this.getUIContext(), this.appState, offset,
+      this.breakpointEnv.widthBreakpoint as number);
+  }
 
 
   aboutToAppear(): void {
@@ -156,9 +182,14 @@ export struct PlaylistsPage {
     if (this.addMenuNode === null) {
       this.addMenuNode = new ComponentContent(this.getUIContext(), wrapBuilder(playlistsAddMenuComponent));
     }
-    this.getUIContext().getPromptAction().openMenu(this.addMenuNode, { id: this.addMenuTargetId })
+    this.getUIContext().getPromptAction().openMenu(this.addMenuNode, { id: this.addMenuTargetId }, {
+      // 材质只给**档位**（跟随设置里的光感等级）；不额外指定 adaptiveColor，
+      // 让系统按档位自己出材质，避免"取背后平均色"那种发灰的观感
+      placement: Placement.BottomRight,
+      backgroundBlurStyle: appBarBlurStyle()
+    })
       .catch((err: BusinessError): void => {
-        console.error('openMenu add failed: ' + err.code + ' ' + err.message);
+        console.error('openMenu fail ' + err.code + ' ' + err.message);
       });
   }
 
@@ -176,11 +207,17 @@ export struct PlaylistsPage {
       }, 400);
     } else if (action === 'online') {
       setTimeout((): void => {
-        this.onlineLink = '';
+        // 链接清空由 `NetworkImportSheet` 自己管（取消时按 `clearLinkOnClose`、导入成功后也清）
         this.activeSheet = 2;
         this.showSheet = true;
       }, 400);
     }
+  }
+
+  /** 壳层点了当前页签：滚回顶部（底部页签设计规范）。 */
+  @Monitor('scrollTopCommand')
+  onScrollTopCommand(): void {
+    this.pageScroller.scrollEdge(Edge.Top);
   }
 
   @Monitor('store.playlistVersion')
@@ -198,8 +235,11 @@ export struct PlaylistsPage {
     let changed: boolean = list.length !== this.playlists.length;
     if (!changed) {
       for (let i: number = 0; i < list.length; i++) {
+        // ⚠️ cover 必须参与比较：只换了封面的那次刷新，别的字段一模一样，
+        //    少了这一条就会「store 已更新、界面不动」（用户反馈的「设置封面未生效」）。
         if (list[i].id !== this.playlists[i].id || list[i].name !== this.playlists[i].name ||
-          list[i].songs.length !== this.playlists[i].songs.length) {
+          list[i].songs.length !== this.playlists[i].songs.length ||
+          list[i].cover !== this.playlists[i].cover) {
           changed = true;
           break;
         }
@@ -238,47 +278,13 @@ export struct PlaylistsPage {
   }
 
   /**
-   * Converts a legacy playlist id to the id the current source expects.
-   * Kugou needs a 32-char hex hash (old exports carry a numeric id or none);
-   * Netease accepts its numeric id (empty ids are refilled via search).
-   * Runs once at import time so playback never needs network lookups.
-   * @returns The converted id (unchanged when conversion is not needed or fails).
+   * Parses an LXMusic playlist export JSON into a playlist.
+   *
+   * 这里**不做任何 id 转换、不发网络请求**：旧导出的 kg 数字 id / wy 空 id /
+   * kw 的 MUSIC_ 前缀等，统一由播放链路 `LXPlayHelper.resolvePlayableSongId()`
+   * 按需补齐并缓存。以前在导入时对每首歌 await 一次搜索（500 首 = 500 次串行
+   * 请求），既拖慢导入又与播放链路那套转换重复，已删除。
    */
-  private async convertLegacyId(source: string, songId: string, name: string, singer: string): Promise<string> {
-    if (source === 'kw' && songId.startsWith('MUSIC_')) {
-      return songId.substring(6);
-    }
-    if (source === 'kg' && !/^[0-9A-Fa-f]{32}$/.test(songId)) {
-      try {
-        const res = await lxSearch('kg', (name + ' ' + singer).trim(), 1, 10);
-        for (let i: number = 0; i < res.list.length; i++) {
-          if (res.list[i].name.trim() === name.trim() && res.list[i].songId.length === 32) {
-            return res.list[i].songId;
-          }
-        }
-        if (res.list.length > 0 && res.list[0].songId.length === 32) {
-          return res.list[0].songId;
-        }
-        return songId;
-      } catch (_err) {
-        return songId;
-      }
-    }
-    if (source === 'wy' && songId.length === 0) {
-      try {
-        const res = await lxSearch('wy', (name + ' ' + singer).trim(), 1, 10);
-        if (res.list.length > 0 && res.list[0].songId.length > 0) {
-          return res.list[0].songId;
-        }
-        return songId;
-      } catch (_err) {
-        return songId;
-      }
-    }
-    return songId;
-  }
-
-  /** Parses an LXMusic playlist export JSON into a playlist (legacy ids converted). */
   private async parseLxMusicJson(text: string,
     onProgress?: (done: number, total: number) => void): Promise<PlaylistDto | undefined> {
     try {
@@ -286,7 +292,21 @@ export struct PlaylistsPage {
       const type: string = root.type as string ?? '';
       let name: string = '';
       let songsArr: Object[] = [];
-      if (type === 'playListPart' || type === 'playListPart_v2') {
+      if (type === 'playList_v2' || type === 'playList') {
+        // ★ 2026-10-31：洛雪整库导出是 {type:'playList_v2', data:[{name,list:[…]}, …]}，data 是**数组**；
+        //   以前只认 playListPart 的 data:{name,list} ⇒ 直接解析失败（用户反馈 .lxmc 导不进来）。
+        const raw = root.data;
+        let firstList: Record<string, Object> | undefined = undefined;
+        if (Array.isArray(raw) && (raw as Object[]).length > 0) {
+          firstList = (raw as Object[])[0] as Record<string, Object>;
+        } else if (raw !== undefined) {
+          firstList = raw as Record<string, Object>;
+        }
+        if (firstList !== undefined) {
+          name = (firstList.name as string ?? '').trim();
+          songsArr = firstList.list as Object[] ?? [];
+        }
+      } else if (type === 'playListPart' || type === 'playListPart_v2') {
         // LXMusic list part export: { type, data: { name, list: [...] } }
         const data = root.data as Record<string, Object> | undefined;
         if (data !== undefined) {
@@ -343,12 +363,9 @@ export struct PlaylistsPage {
         record.interval = o.interval as string ?? '';
         record.img = img;
         record.time = Date.now();
-        // Keep songs even when the id field is missing from legacy exports;
-        // convert kg/wy legacy ids once so playback needs no network lookups.
+        // 旧导出可能缺 id，但保留这条记录：id 标准化统一交给播放链路
+        // `resolvePlayableSongId()` 按需处理，导入期零网络请求、零转换。
         if (record.source.length > 0) {
-          const nameText: string = typeof record.name === 'string' ? record.name : '';
-          const singerText: string = typeof record.singer === 'string' ? record.singer : '';
-          record.songId = await this.convertLegacyId(record.source, record.songId, nameText, singerText);
           songs.push(record);
         }
         if (onProgress !== undefined) {
@@ -382,6 +399,66 @@ export struct PlaylistsPage {
       now.getMinutes().toString().padStart(2, '0') + ':' +
       now.getSeconds().toString().padStart(2, '0');
     AppStorage.setOrCreate('lxPlayLog', (log + '[' + time + '] ' + message + '\n').slice(-20000));
+  }
+
+  /**
+   * 解析导入文件，返回**全部**歌单（洛雪整库备份可能含多个）。
+   * 做法：先按明文 JSON 解析；失败再按 gzip(.lxmc) 解压后解析。
+   * 多歌单时对每个歌单合成一个 `playListPart_v2` 再复用 `parseLxMusicJson`，避免重复写字段映射。
+   * @param bytes 文件字节
+   * @param onProgress 进度回调
+   * @returns 歌单数组（空数组=解析失败）
+   */
+  private async parseImportFileAll(bytes: Uint8Array,
+    onProgress?: (done: number, total: number) => void): Promise<PlaylistDto[]> {
+    const decoder: util.TextDecoder = util.TextDecoder.create('utf-8');
+    let text: string = decoder.decodeToString(bytes);
+    if (!text.trimStart().startsWith('{')) {
+      // 头不是 '{' ⇒ 认为是 gzip(.lxmc)
+      try {
+        text = decoder.decodeToString(this.gunzipData(bytes));
+        this.appendImportLog('[导入] gzip 解压成功 大小=' + text.length);
+      } catch (e) {
+        this.appendImportLog('[导入] gzip 解压异常');
+        return [];
+      }
+    }
+    let root: Record<string, Object> | undefined = undefined;
+    try {
+      root = JSON.parse(text) as Record<string, Object>;
+    } catch (e) {
+      return [];
+    }
+    const type: string = root.type as string ?? '';
+    const data = root.data;
+    if ((type === 'playList_v2' || type === 'playList') && Array.isArray(data)) {
+      const arr: Object[] = data as Object[];
+      const out: PlaylistDto[] = [];
+      this.appendImportLog('[导入] 整库备份 歌单数=' + arr.length);
+      for (let i: number = 0; i < arr.length; i++) {
+        const item: Record<string, Object> = arr[i] as Record<string, Object>;
+        const list: Object[] = item.list as Object[] ?? [];
+        if (list.length === 0) {
+          continue;
+        }
+        const synth: Record<string, Object> = {};
+        synth.type = 'playListPart_v2';
+        const payload: Record<string, Object> = {};
+        payload.name = item.name ?? '';
+        payload.list = list;
+        synth.data = payload;
+        const one: PlaylistDto | undefined = await this.parseLxMusicJson(JSON.stringify(synth), undefined);
+        if (one !== undefined && one.songs.length > 0) {
+          out.push(one);
+        }
+        if (onProgress !== undefined) {
+          onProgress(i + 1, arr.length);
+        }
+      }
+      return out;
+    }
+    const single: PlaylistDto | undefined = await this.parseLxMusicJson(text, onProgress);
+    return single !== undefined ? [single] : [];
   }
 
   /** Parses an imported file: plain JSON or gzip-compressed .lxmc. */
@@ -449,10 +526,6 @@ export struct PlaylistsPage {
     }
   }
 
-  private readonly onlineSourceOptions: string[] = ['网易云', 'QQ', '酷我', '酷狗', '咪咕'];
-  private readonly onlineSourceValues: SharePlaylistSource[] =
-    [SharePlaylistSource.Wy, SharePlaylistSource.Tx, SharePlaylistSource.Kw, SharePlaylistSource.Kg, SharePlaylistSource.Mg];
-
   /** 把秒数格式化为 "mm:ss"。 */
   private fmtDuration(seconds: number): string {
     const s: number = Math.max(0, Math.floor(seconds));
@@ -461,49 +534,11 @@ export struct PlaylistsPage {
     return `${mm.toString().padStart(2, '0')}:${ss.toString().padStart(2, '0')}`;
   }
 
+  // ⚠️「从分享链接拉取歌单并导入」的实现**已整体搬进** `NetworkImportSheet`（共用组件）。
+  //    这里**不要**再写一份：`importOnlinePlaylist()` / `onlineSource` / `onlineLink` /
+  //    `onlineImporting` / `onlineSourceOptions` / `onlineSourceValues` 都在那个组件里，
+  //    本页只负责弹它、并处理 onClose / onImported。
   /** 从分享链接/ID 拉取歌单并导入。 */
-  private async importOnlinePlaylist(): Promise<void> {
-    const link: string = this.onlineLink.trim();
-    if (link.length === 0) {
-      this.getUIContext().getPromptAction().showToast({ message: '请粘贴歌单分享链接或ID', duration: 2000 });
-      return;
-    }
-    this.onlineImporting = true;
-    try {
-      const info = await SharePlaylistService.fetchPlaylist(link, this.onlineSource as SharePlaylistSource);
-      if (info.songs.length === 0) {
-        this.getUIContext().getPromptAction().showToast({ message: '歌单为空或解析失败', duration: 2000 });
-        return;
-      }
-      const songs: PlayedSongRecord[] = [];
-      for (let i = 0; i < info.songs.length; i++) {
-        const s = info.songs[i];
-        const record = new PlayedSongRecord();
-        record.songId = s.id;
-        record.name = s.name;
-        record.singer = s.artist;
-        record.albumName = s.album;
-        record.albumId = '';
-        record.source = info.source;
-        record.interval = this.fmtDuration(s.duration);
-        record.img = info.coverUrl;
-        record.time = Date.now();
-        songs.push(record);
-      }
-      const name: string = info.name.length > 0 ? info.name : '导入的歌单';
-      this.store.importPlaylist(name, songs);
-      this.showSheet = false;
-      this.onlineLink = '';
-      this.getUIContext().getPromptAction().showToast(
-        { message: '已导入歌单「' + name + '」(' + songs.length + ' 首)', duration: 2500 });
-    } catch (e) {
-      const err = e as Error;
-      this.getUIContext().getPromptAction().showToast(
-        { message: err.message ?? '导入失败，请检查链接', duration: 2500 });
-    } finally {
-      this.onlineImporting = false;
-    }
-  }
 
   /** Imports an LXMusic playlist JSON file chosen by the user. */
   private importPlaylistFile(): void {
@@ -524,17 +559,24 @@ export struct PlaylistsPage {
           fs.readSync(file.fd, buf);
           fs.closeSync(file);
           this.importing = true;
-          this.importProgress = '正在解析文件…';
-          const p = await this.parseImportFile(new Uint8Array(buf), (done: number, total: number): void => {
+          const list = await this.parseImportFileAll(new Uint8Array(buf), (done: number, total: number): void => {
             this.importProgress = '正在导入 ' + done + '/' + total;
           });
           this.importing = false;
-          if (p !== undefined) {
-            this.store.importPlaylist(p.name, p.songs);
-            this.getUIContext().getPromptAction().showToast(
-              { message: '已导入歌单「' + p.name + '」(' + p.songs.length + ' 首)', duration: 2500 });
-          } else {
+          if (list.length === 0) {
             this.getUIContext().getPromptAction().showToast({ message: '无法解析该歌单文件', duration: 2000 });
+          } else {
+            let totalSongs: number = 0;
+            for (let i: number = 0; i < list.length; i++) {
+              const item = list[i];
+              this.store.importPlaylist(item.name.length > 0 ? item.name : ('导入的歌单' + (i + 1)), item.songs);
+              totalSongs += item.songs.length;
+            }
+            const msg: string = list.length === 1 ?
+              ('已导入歌单《' + list[0].name + '》' + totalSongs + ' 首') :
+              ('已导入 ' + list.length + ' 个歌单，共 ' + totalSongs + ' 首');
+            this.getUIContext().getPromptAction().showToast({ message: msg, duration: 2500 });
+            this.appendImportLog('[导入] ' + msg);
           }
         } catch (_err) {
           this.importing = false;
@@ -568,15 +610,9 @@ export struct PlaylistsPage {
     }
   }
 
-  /** Enters playlist reordering mode (drag to reorder). */
-  private enterPlaylistSortMode(): void {
-    this.playlistSortMode = true;
-  }
-
-  /** Exits playlist reordering mode and persists the new order. */
-  private exitPlaylistSortMode(): void {
-    this.playlistSortMode = false;
-  }
+  // ★ 2026-10-11：「排序模式」这套中间态（`playlistSortMode` / `enterPlaylistSortMode()` /
+  //   `exitPlaylistSortMode()`）已按用户要求**删除** —— 标题栏那颗「排序」按钮没了，
+  //   长按歌单行直接就能拖（见 `movePlaylist` 与行的 `.onLongPress` 注释），拖完立刻落库。
 
   /** Persists the current playlist order after a drag reorder. */
   private persistPlaylistOrder(): void {
@@ -587,76 +623,172 @@ export struct PlaylistsPage {
     this.store.reorderPlaylists(ids);
   }
 
-  /** 拖动排序回调：仅排序模式下应用新顺序。 */
+  /**
+   * 拖动排序回调：**直接应用并落库**。
+   *
+   * ★ 2026-10-11 用户报「长按也能拖动，但松手之后位置还是原来的」—— 旧实现只在
+   *   `playlistSortMode` 为真时才应用新顺序，而且**要等用户点标题栏那颗「排序」→「完成」**
+   *   才 `reorderPlaylists()` 落库；中间任何一次 `store.playlistVersion` 变化（增删歌、
+   *   改封面…）都会把列表刷回旧顺序 ⇒ 看着就是"拖完又弹回去"。
+   *   现在：拖一下就应用 + **立刻落库**（`MusicStoreService.reorderPlaylists`），
+   *   也不需要"排序模式"这个中间态了（长按就是拖动，见行的 `.onLongPress` 注释）。
+   */
   private movePlaylist(from: number, to: number): void {
-    if (!this.playlistSortMode) {
-      return;
-    }
     if (from === to || from < 0 || to < 0 || from >= this.playlists.length || to >= this.playlists.length) {
       return;
     }
     const moved: PlaylistDto[] = this.playlists.splice(from, 1);
     this.playlists.splice(to, 0, moved[0]);
     this.playlists = [...this.playlists];
+    this.persistPlaylistOrder();
   }
 
   /** Frosted glass strength of the playlist row popup, following the ambient light level. */
   private playlistMenuBlur(): BlurStyle {
     switch (this.ambientState.level) {
       case 1:
-        return BlurStyle.Thin;
+        return BlurStyle.COMPONENT_ULTRA_THIN;
       case 2:
-        return BlurStyle.Regular;
+        return BlurStyle.COMPONENT_THIN;
       case 3:
-        return BlurStyle.Thick;
+        return BlurStyle.COMPONENT_REGULAR;
       default:
-        return BlurStyle.Regular;
+        return BlurStyle.COMPONENT_THIN;
     }
   }
 
-  /** 我的歌单 section header：排序 + 新增（仅收藏栏显示）。 */
+  /**
+   * 我的歌单 section header。
+   *
+   * ★ 2026-10-11：用户要求**去掉那颗「排序」按钮**，改成"直接长按就拖"（见 `movePlaylist`），
+   *   所以这里不再有「完成」按钮，header 只留一条留白（原来那颗按钮就是为了退出排序模式）。
+   */
   @Builder
   private PlaylistsHeader() {
     Row() {
       Blank()
-      if (this.playlistSortMode) {
-        Text('完成')
-          .fontSize($r('sys.float.Body_S'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.themeState.color)
-          .onClick(() => {
-            this.persistPlaylistOrder();
-            this.exitPlaylistSortMode();
-          })
-      }
     }
     .width('100%')
     .padding({ top: 8, bottom: 12 })
   }
 
-  /** One playlist row: cover (first song's album art / placeholder), name, song count, chevron. */
+  /**
+   * 「本地音乐」入口行（放在歌单页面里，按需求：本地音乐归歌单页面）。
+   *
+   * 本地音乐是一个独立 HAR（`features/localmusic`），它自带路由页 `LocalMusicPage`
+   * （见该模块的 `router_map.json`），所以这里只需要一个入口把路由推出去，
+   * **不**在本文件里写导入/列表逻辑。
+   *
+   * 副标题显示曲库首数：读 `localMusicImportState().version` 让它跟着
+   * "导入 / 删除 / 歌词匹配"一起刷新（那个字段就是为这种订阅准备的）。
+   */
+  @Builder
+  private LocalMusicEntry() {
+    Row({ space: 12 }) {
+      Row() {
+        SymbolGlyph($r('sys.symbol.music_note_list'))
+          .fontSize(18)
+          .fontColor([this.themeState.color])
+      }
+      .width(44)
+      .height(44)
+      .borderRadius($r('sys.float.corner_radius_level3'))
+      .backgroundColor($r('sys.color.background_tertiary'))
+      .justifyContent(FlexAlign.Center)
+
+      Column({ space: 2 }) {
+        Text('本地音乐')
+          .fontSize($r('sys.float.Body_L'))
+          .fontColor($r('sys.color.font_primary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(this.localMusicSubtitle())
+          .fontSize($r('sys.float.Caption_M'))
+          .fontColor($r('sys.color.font_tertiary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(18)
+        .fontColor([$r('sys.color.font_tertiary')])
+    }
+    .width('100%')
+    .padding({ top: 8, bottom: 8 })
+    .onClick(() => {
+      // 路由名与 localmusic 模块 router_map.json 里的 name 一致
+      this.pageIndexInfos.pushPathByName(PlaylistsPage.LOCAL_MUSIC_ROUTE, null);
+    })
+  }
+
+  /**
+   * 给某个歌单设置自定义封面（相册选图 → 拷进沙箱 → 写进歌单）。
+   *
+   * 写库会 +playlistVersion，`@Monitor('store.playlistVersion')` 里的 refresh() 会重读列表，
+   * 封面立刻就能看到；详情页大图也用同一个字段。
+   */
+  private async pickCoverFor(p: PlaylistDto): Promise<void> {
+    const result: CoverPickResult = await pickPlaylistCover(p.id);
+    if (!result.ok) {
+      this.getUIContext().getPromptAction().showToast({ message: result.message, duration: 2000 });
+      return;
+    }
+    MusicStoreService.getInstance().setPlaylistCover(p.id, result.uri);
+    this.appendImportLog('[封面] 歌单 ' + p.name + ' -> ' + result.uri);
+    this.getUIContext().getPromptAction().showToast({ message: result.message, duration: 2000 });
+    // 显式重建列表：只换封面时行 key 之外的东西没变，靠 @Monitor 里的 changed 判断有时
+    // 不够稳（Repeat 复用节点），这里照「重命名」那套手法把列表短暂摘掉再挂回。
+    if (this.listVisible) {
+      this.listVisible = false;
+      setTimeout((): void => {
+        this.listVisible = true;
+      }, 50);
+    }
+  }
+
+  /** @returns 「本地音乐」入口的副标题：有歌显示首数，没有就提示导入。 */  private localMusicSubtitle(): string {
+    // 读一下 version：导入/删除/匹配后自动重算
+    const version: number = this.localMusicState.version;
+    const count: number = localMusic.count();
+    if (count > 0) {
+      return `${count} 首` + (version >= 0 ? '' : '');
+    }
+    return '导入设备音频（选文件 / 选文件夹）';
+  }
+
+  /** One playlist row: cover (custom/source cover first, else first song's album art), name, count, chevron. */
   @Builder
   private PlaylistRow(p: PlaylistDto) {
     Row({ space: 12 }) {
-      // 歌单封面：取第一首歌的专辑封面；空歌单或无封面时用灰底音符占位
-      if (p.songs.length > 0 && p.songs[0].img.length > 0) {
-        Image(p.songs[0].img)
+      // 歌单封面优先级：歌单自己的封面（自定义 / 在线导入时带过来的）> 第一首歌的专辑图 > 灰底音符占位
+      // 自定义封面是沙箱文件 → 交给 LocalCoverImage 自己解码成 PixelMap 显示
+      Stack() {
+        if (p.cover.length > 0) {
+          LocalCoverImage({ src: p.cover, imageWidth: 44, imageHeight: 44, radius: 8 })
+        } else if (p.songs.length > 0 && p.songs[0].img.length > 0) {
+          Image(p.songs[0].img)
+            .width(44)
+            .height(44)
+            .borderRadius($r('sys.float.corner_radius_level3'))
+            .objectFit(ImageFit.Cover)
+        } else {
+          Row() {
+            SymbolGlyph($r('sys.symbol.music_note_list'))
+              .fontSize(16)
+              .fontColor([$r('sys.color.font_tertiary')])
+          }
           .width(44)
           .height(44)
           .borderRadius($r('sys.float.corner_radius_level3'))
-          .objectFit(ImageFit.Cover)
-      } else {
-        Row() {
-          SymbolGlyph($r('sys.symbol.music_note_list'))
-            .fontSize(16)
-            .fontColor([$r('sys.color.font_tertiary')])
+          .backgroundColor($r('sys.color.background_tertiary'))
+          .justifyContent(FlexAlign.Center)
         }
-        .width(44)
-        .height(44)
-        .borderRadius($r('sys.float.corner_radius_level3'))
-        .backgroundColor($r('sys.color.background_tertiary'))
-        .justifyContent(FlexAlign.Center)
       }
+      .id(`playlist-local-cover-${p.id}`)
+      .width(44)
+      .height(44)
       Column({ space: 4 }) {
         Text(p.name)
           .fontSize($r('sys.float.Body_M'))
@@ -671,123 +803,91 @@ export struct PlaylistsPage {
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
 
-      if (this.playlistSortMode) {
-        SymbolGlyph($r('sys.symbol.line_3_horizontal'))
-          .fontSize(20)
-          .fontColor([$r('sys.color.icon_tertiary')])
-          .margin({ right: 4 })
-      } else {
-        SymbolGlyph($r('sys.symbol.dot_grid_1x2_circle'))
-          .fontSize(18)
-          .fontColor([$r('sys.color.font_tertiary')])
-          .margin({ right: 4 })
-          .bindMenu([
-            {
-              value: $r('app.string.mine_playlist_export'),
-              action: (): void => {
-                this.selectedPlaylist = p;
-                this.exportPlaylist();
-              }
-            },
-            {
-              value: $r('app.string.mine_playlist_rename'),
-              action: (): void => {
-                this.selectedPlaylist = p;
-                this.renamePlaylist();
-              }
-            },
-            {
-              value: $r('app.string.mine_playlist_delete'),
-              action: (): void => {
-                this.selectedPlaylist = p;
-                this.deletePlaylist();
-              }
+      // ⋯ 菜单：**永远都在**（导出 / 设置封面 / 移除封面 / 重命名 / 删除）。
+      // ⚠️ 2026-10-11 之前这里有个 `if (playlistSortMode)` 分支，进排序模式后这颗按钮会被
+      //    换成拖动手柄 ⇒ 用户看到的就是「歌单右侧的菜单按钮没了，无法删除」。现在排序模式
+      //    已删（长按行直接拖，见 movePlaylist），这一颗按钮不再被换掉。
+      SymbolGlyph($r('sys.symbol.dot_grid_1x2_circle'))
+        .fontSize(18)
+        .fontColor([$r('sys.color.font_tertiary')])
+        .margin({ right: 4 })
+        .bindMenu([
+          {
+            value: $r('app.string.mine_playlist_export'),
+            action: (): void => {
+              this.selectedPlaylist = p;
+              this.exportPlaylist();
             }
-          ], {
-            backgroundBlurStyle: this.playlistMenuBlur()
-          })
-        SymbolGlyph($r('sys.symbol.chevron_right'))
-          .fontSize(18)
-          .fontColor([$r('sys.color.font_tertiary')])
-      }
+          },
+          {
+            // 自定义封面：相册选图 → 拷进沙箱 → 写进歌单（详情页大图与这里都会用它）
+            value: '设置歌单封面',
+            action: (): void => {
+              void this.pickCoverFor(p);
+            }
+          },
+          {
+            value: '移除自定义封面',
+            action: (): void => {
+              MusicStoreService.getInstance().setPlaylistCover(p.id, '');
+              this.getUIContext().getPromptAction().showToast({ message: '已移除自定义封面', duration: 2000 });
+            }
+          },
+          {
+            value: $r('app.string.mine_playlist_rename'),
+            action: (): void => {
+              this.selectedPlaylist = p;
+              this.renamePlaylist();
+            }
+          },
+          {
+            value: $r('app.string.mine_playlist_delete'),
+            action: (): void => {
+              this.selectedPlaylist = p;
+              this.deletePlaylist();
+            }
+          }
+        ], {
+          backgroundBlurStyle: this.playlistMenuBlur(),
+          backgroundColor: $r('app.color.menu_surface'),
+        })
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(18)
+        .fontColor([$r('sys.color.font_tertiary')])
     }
     .width('100%')
     .padding({ top: 12, bottom: 12 })
+    // ★ 长按 = 直接进入拖动排序（用户 2026-10-11 要求：去掉「排序」按钮，长按就拖）。
+    //   ArkUI 的 `List` + `Repeat.onMove` 本来就是"长按拖动"，这里不需要额外的模式开关；
+    //   拖动落到 `movePlaylist()`，它**立刻落库**（`MusicStoreService.reorderPlaylists`），
+    //   所以松手后顺序不会再被刷回去（用户报的"松手之后位置还是原来的"）。
     .onClick(() => {
-      if (this.playlistSortMode) {
-        return;
-      }
       const param = new ToplistRouteParam();
       param.sectionType = 'playlist';
       param.playlistId = p.id;
       param.listTitle = p.name;
-      this.pageIndexInfos.pushPathByName(RouterUrlConstants.PLAYLIST_DETAIL, param);
+      // 本地歌单自身封面（新建的为空，详情页显示占位图；不用第一首歌的封面顶替）
+      param.listCover = p.cover.length > 0 ? p.cover :
+        (p.songs.length > 0 ? p.songs[0].img : '');
+      const animated: boolean = !getPlaylistTransitionState().prepare(this.getUIContext(),
+        `playlist-local-cover-${p.id}`, param.listCover);
+      this.pageIndexInfos.pushPathByName(RouterUrlConstants.PLAYLIST_DETAIL, param, animated);
     })
   }
 
-  /** 网络导入表单弹窗：选来源 + 粘贴链接。 */
+  /** 网络导入表单弹窗：**共用组件** `NetworkImportSheet`（版式与逻辑都在那边，别在这里重写）。 */
   @Builder
   private OnlineImportSheet() {
-    Column({ space: 16 }) {
-      Row({ space: 8 }) {
-        Text('来源')
-          .fontSize($r('sys.float.Body_M'))
-          .fontColor($r('sys.color.font_secondary'))
-        Select(this.onlineSourceOptions.map((v: string): SelectOption => { return { value: v }; }))
-          .selected(this.onlineSourceValues.indexOf(this.onlineSource as SharePlaylistSource))
-          .value(this.onlineSourceOptions[this.onlineSourceValues.indexOf(this.onlineSource as SharePlaylistSource)])
-          .layoutWeight(1)
-          .height(44)
-          .fontColor($r('sys.color.font_primary'))
-          .borderRadius($r('sys.float.corner_radius_level6'))
-          .backgroundColor($r('sys.color.background_secondary'))
-          .onSelect((index: number) => {
-            this.onlineSource = this.onlineSourceValues[index];
-          })
+    NetworkImportSheet({
+      onClose: (): void => {
+        this.showSheet = false;
+      },
+      onImported: (name: string, count: number): void => {
+        this.showSheet = false;
+        this.getUIContext().getPromptAction().showToast(
+          { message: '已导入歌单「' + name + '」(' + count + ' 首)', duration: 2500 });
       }
-      .width('100%')
-
-      TextArea({ text: this.onlineLink, placeholder: '粘贴歌单分享链接或ID' })
-        .width('100%')
-        .height(96)
-        .borderRadius($r('sys.float.corner_radius_level6'))
-        .padding({ left: 12, right: 12, top: 10, bottom: 10 })
-        .fontSize($r('sys.float.Body_M'))
-        .fontColor($r('sys.color.font_primary'))
-        .backgroundColor($r('sys.color.background_secondary'))
-        .onChange((value: string) => {
-          this.onlineLink = value;
-        })
-
-      Row({ space: 12 }) {
-        Button('取消')
-          .layoutWeight(1)
-          .height(44)
-          .fontSize($r('sys.float.Body_L'))
-          .borderRadius($r('sys.float.corner_radius_level6'))
-          .backgroundColor($r('sys.color.background_secondary'))
-          .fontColor($r('sys.color.font_tertiary'))
-          .onClick(() => {
-            this.showSheet = false;
-            this.onlineLink = '';
-          })
-        Button(this.onlineImporting ? '导入中…' : '导入')
-          .layoutWeight(1)
-          .height(44)
-          .fontSize($r('sys.float.Body_L'))
-          .borderRadius($r('sys.float.corner_radius_level6'))
-          .backgroundColor(this.themeState.color)
-          .fontColor($r('sys.color.font_on_primary'))
-          .enabled(!this.onlineImporting)
-          .onClick(() => {
-            void this.importOnlinePlaylist();
-          })
-      }
-      .width('100%')
-    }
-    .width('100%')
-    .padding({ left: 20, right: 20, bottom: 24 })
-    .backgroundColor($r('sys.color.background_secondary'))
+    })
   }
 
   /**
@@ -890,7 +990,9 @@ export struct PlaylistsPage {
   /** HDS title bar with system material and gradient blur. */
   private getTitleBar(): HdsNavigationTitleBarOptions {
     return {
-      avoidLayoutSafeArea: true,
+      // ★ 2026-10-11 真机定论（设置页截图量出来的）：HDS 标题栏容器本来就在状态栏下沿，
+      //   voidLayoutSafeArea: true 会让它**再退一个状态栏**（标题 76..132）⇒ 恒为 false（标题 38..94）。
+      avoidLayoutSafeArea: false,
       style: {
         blurStrategy: BlurStrategy.ENABLE,
         scrollEffectOpts: {
@@ -927,16 +1029,8 @@ export struct PlaylistsPage {
         },
         menu: {
           value: [
-            {
-              content: {
-                label: 'sort',
-                icon: $r('sys.symbol.list_checkmask'),
-                isEnabled: true,
-                action: (): void => {
-                  this.enterPlaylistSortMode();
-                }
-              }
-            },
+            // ★ 用户 2026-10-11：「你顺手把排序按钮去掉，直接长按触发排序」——
+            //   所以这里**只有「+」**（新建 / 导入）；拖动排序改成长按歌单行（见 PlaylistRow）。
             {
               content: {
                 label: 'add',
@@ -962,15 +1056,22 @@ export struct PlaylistsPage {
             ListItem() {
               this.PlaylistsHeader()
             }
+            // 「本地音乐」入口：放在歌单列表最上面（需求：本地音乐放歌单页面）
+            ListItem() {
+              this.LocalMusicEntry()
+            }
             Repeat<PlaylistDto>(this.playlists)
               .each((obj: RepeatItem<PlaylistDto>) => {
                 ListItem() {
                   this.PlaylistRow(obj.item)
                 }
               })
-              // key 必须含 songs.length 与首曲封面：添加/删除歌曲或首曲封面变化时强制重建行，数量/封面才会刷新
+              // key 必须含 songs.length、首曲封面**与歌单自己的封面**：添加/删除歌曲、
+              // 首曲封面变化、或换了自定义封面时都要强制重建行，数量/封面才会刷新。
+              // （漏掉 p.cover 就是「设置封面之后列表不生效」的原因：Repeat 复用旧节点，
+              //   属性停在旧值，重启前一直看着旧封面。）
               .key((item: PlaylistDto) => item.id + '_' + item.name + '_' + item.songs.length + '_' +
-              (item.songs.length > 0 ? item.songs[0].img : ''))
+              item.cover + '_' + (item.songs.length > 0 ? item.songs[0].img : ''))
               .onMove((from: number, to: number): void => {
                 this.movePlaylist(from, to);
               })
@@ -983,18 +1084,41 @@ export struct PlaylistsPage {
                   .padding({ top: 16, bottom: 16 })
               }
             }
-            ListItem() {
-              Column()
-                .height(48)
-                .width('100%')
-            }
           }
           .width('100%')
           .height('100%')
           .scrollBar(BarState.Off)
           .edgeEffect(EdgeEffect.Spring)
-          .clip(false)
+          // ★★ 让内容能画进状态栏（"延伸进状态栏"）的**官方正解**。
+          //   官方《开发应用沉浸式效果》→「滚动类场景」原文：
+          //     「滚动容器设置 expandSafeArea 属性生效，但当父组件是滚动容器时，子组件设置 expandSafeArea
+          //      不生效。对于滚动容器的子组件……② 设置父组件滚动容器和子组件相同的背景色，
+          //      设置滚动容器的内容裁剪属性 `clipContent(ContentClipMode.SAFE_AREA)`，
+          //      **将内容层裁剪区域扩展至避让区**。」
+          //   原来这里写的是 `.clip(true)`（List 默认 `ContentClipMode.CONTENT_ONLY`，按内容区裁）
+          //   ⇒ 行一滚到状态栏那条就被裁掉，所以"偏移放哪都没用"。
+          //   ⚠️ 链上任何祖先都**不能**再写 `clip(true)`（官方："需要确保父组件未设置 clip 等裁剪属性"）。
+          .clipContent(ContentClipMode.SAFE_AREA)
+          // 滚动联动双层底栏：上滑收起、下滑展开（与首页/我的/设置一致）
+          .onScrollFrameBegin((offset: number): OnScrollFrameBeginHandlerResult => {
+            this.onPageScrollFrame(offset);
+            return { offsetRemain: offset };
+          })
+          // ★ 2026-10-11 定稿（用户：「我的意思是现在不会延伸到状态栏，而我想让它延伸进状态栏」）：
+          //   "状态栏 + HDS 标题栏"（≈38 + 56 = 94）这一整段留白**放进滚动内容里**，而不是加在容器上。
+          //   依据：页根写了 `ignoreLayoutSafeArea([SYSTEM], [TOP, BOTTOM])` ⇒ 页面盒子从屏幕 **y=0** 起排
+          //   （HDS 标题栏自己会让位到 38..94，盒子**不能**再让一次），所以"静止时第一行正好落在
+          //   标题栏下沿"= 偏移量必须是 状态栏 + 56 = 94。
+          //   效果：往上滚时整行从标题栏底下**再穿进状态栏**（`clipContent(SAFE_AREA)` 把内容裁剪区
+          //   扩到避让区，行一路画到屏幕最顶端），
+          //   而容器 padding 那套会让滚动视口从状态栏下沿起排、状态栏那一条永远是死背景。
           .contentStartOffset(getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP)
+          // ★ 底部那段"给悬浮播放条让位"的留白**必须留在列表里**（`contentEndOffset` = 内容末端到
+          //   显示区边界的距离，官方 `ScrollableCommonMethod` @since 22，List/Scroll 通用）—— 它随
+          //   内容一起滚走。原来写的是**列表末尾一个 48vp 的 `ListItem`＋`Column`**：作用于内容也对，
+          //   但用 `contentEndOffset` 与 `RecordListPage` / `SettingsDetailPage` 口径一致，一行搞定。
+          //   反面做法（禁）：写在外层容器的 `padding({ bottom })` 上 —— 那是固定在屏幕底部的死带。
+          .contentEndOffset(48)
           .divider({
             strokeWidth: 0.5,
             color: $r('sys.color.comp_divider'),
@@ -1015,14 +1139,42 @@ export struct PlaylistsPage {
       }
       .width('100%')
       .height('100%')
+      // ⚠️ 这里原来写 `.clip(true)`（上一轮"要挡住内容"的错误口径下加的）**已删除** ——
+      //   官方《开发应用沉浸式效果》：「子节点可以单独设置该属性……**需要确保父组件未设置 clip
+      //   等裁剪属性**」⇒ 祖先只要有一层 `clip(true)`，滚动容器自己的
+      //   `clipContent(ContentClipMode.SAFE_AREA)` 就白设了，行到状态栏那条仍被裁掉。
+      //   （`List` 自己默认的裁剪语义保持不变，别再动它。）
+      // ★ 状态栏那一条归页面（2026-10-11 第二十轮，用户：「我想让它延伸进状态栏」）：
+      //   这里是**内容容器**，**不加任何顶部 padding** —— 容器从屏幕 y=0 起排，
+      //   里面的 `List` 才有完整的整屏视口；"状态栏 + 标题栏"那段留白改由 List 自己的
+      //   `contentStartOffset(状态栏 + 56)` 提供（见上面那处），静止时第一行仍落在标题栏下沿，
+      //   一上滑整行就从标题栏底下穿进状态栏。
+      //   页根的 `expandSafeArea(TOP)` + `backgroundColor` 继续负责把页面底色铺到状态栏那一条。
     }
+    .onBackPressed((): boolean => guardPlayerBack('PlaylistsPage'))
     .hideTitleBar(false)
     .hideBackButton(true)
     .titleBar(this.getTitleBar())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.pageScroller])
+    // ★★ 状态栏三件套（2026-10-11 定稿，用户第三次纠正后）：
+    //   ① `expandSafeArea(TOP,BOTTOM)`：把**页面底色**铺到状态栏/导航条那两条（只扩绘制区）；
+    //   ② `ignoreLayoutSafeArea(...[TOP, BOTTOM])` —— **TOP 必须给**：
+    //      HDS 的标题栏自己会按"状态栏高度"往下让位，所以**页面盒子必须从屏幕 y=0 起排**，
+    //      否则就是"盒子已经让开状态栏(38) + 标题栏再让一次(38)" ⇒ 整条标题掉到状态栏下面
+    //      约一个状态栏高度（用户原话：「整个标题移到了状态栏下面」），连带内容也多顶下去
+    //      38vp（「上方留的空距有点大了」）。
+    //      盒子从 0 起排后：标题栏 = 38..94 ✔，内容偏移 94（= 状态栏 + 标题栏）正好落在 94 ✔。
+    //      ⚠️ 旧注释里"根节点带 TOP 会把标题顶进状态栏 / 只能留 BOTTOM"那句**是错的**，已作废。
+    //   ③ 滚动容器 `clipContent(ContentClipMode.SAFE_AREA)` + 祖先链零 `clip(true)`：
+    //      让行能**画进**状态栏那一条（"延伸进状态栏"）。
+    // ★★ 用户 2026-10-11：「顶栏标题错位的问题还在，你应该参考一下其他显示正常的页面是怎么写的」。
+    //   逐页对比后：显示正常的 MinePage / RecommendPage **都没有** expandSafeArea，
+    //   而所有标题偏低的页面都有 ⇒ 照正常页面去掉它（官方语义：expandSafeArea 只延伸**绘制区**，
+    //   「子组件相对屏幕位置不变」，但它会让 HDS 标题栏的定位多让一次）。
+    //   页面底色由页盒自身 ackgroundColor 铺满（盒顶 = 0，实测见 RzdPageTopInset），不需要它补状态栏那一条。
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
-    .backgroundColor($r('sys.color.background_secondary'))
+    .backgroundColor($r('app.color.page_background'))
     .bindSheet($$this.showSheet, this.MainSheet(), {
       height: SheetSize.FIT_CONTENT,
       dragBar: false,

@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>涓撹緫灏侀潰 路 闀滃儚妯＄硦鑳屾櫙</title>
+<style>
+  /* ============================================================
+     2脳2 鍒嗗潡
+       TL 鍘熷灏侀潰锛堟竻鏅帮級   TR 姘村钩闀滃儚
+       BL 鍨傜洿闀滃儚           BR 灏侀潰涓昏壊绾壊
+     闄?TL 澶栨暣浣撻珮鏂ā绯婏紱TL 鐢ㄤ笁灞傘€屾竻鏅扳啋杞绘ā绯娾啋閲嶆ā绯娿€?     閫愮骇杩囨浮锛屾渶鍚庢帴鍒拌儗鏅笂銆?
+     鍙皟鍙傛暟
+       --stage    鑸炲彴杈归暱锛岄粯璁よ鍙ｇ煭杈癸紱鍥哄畾灏哄鏀规垚 1080px
+       --blur     鑳屾櫙妯＄硦鍗婂緞锛堣秺澶ц秺鍍忛浘锛?       --solid    鍙充笅绾壊锛堝彇鑷皝闈富鑹诧級
+       --vignette 鏆楄 0~1
+       --noise    棰楃矑 0~1锛屽帇浣忓ぇ闈㈢Н鑹插甫
+     鎹㈠皝闈細--cover 鏀规垚 url("assets/cover.jpg") 鎴栬嚜宸辩殑鍥剧墖
+     ============================================================ */
+  :root{
+    --stage: min(100vw, 100vh);
+    --blur: 13vmin;
+    --solid: #a0377b;
+    --vignette: .18;
+    --noise: .05;
+    --cover: none; /* 封面由 App 注入 */
+  }
+
+  *{ box-sizing:border-box; }
+  html, body{ margin:0; height:100%; background:#08080a; }
+  body{ display:grid; place-items:center; overflow:hidden; }
+
+  .stage{
+    position:relative;
+    width:var(--stage);
+    height:var(--stage);
+    overflow:hidden;
+    background:var(--solid);
+    isolation:isolate;
+  }
+
+  /* ---------- 鑳屾櫙灞傦細2脳2 ---------- */
+  .bg{
+    position:absolute; inset:0; z-index:0;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    grid-template-rows:1fr 1fr;
+    background:var(--solid);
+    filter:blur(var(--blur)) saturate(1.22) brightness(1.02);
+    transform:scale(1.16);        /* 琛ュ伩妯＄硦閫犳垚鐨勫缂樻敹缂?*/
+    will-change:filter, transform;
+  }
+  .bg .tile{ position:relative; overflow:hidden; }
+  .bg .tile::before{
+    content:"";
+    position:absolute; inset:-1px;          /* 鍘绘帀瀛愬儚绱犳帴缂?*/
+    background-image:var(--cover);
+    background-size:cover;
+    background-position:center;
+  }
+  .bg .tr::before{ transform:scaleX(-1); }  /* 鍙充笂锛氭按骞抽暅鍍?*/
+  .bg .bl::before{ transform:scaleY(-1); }  /* 宸︿笅锛氬瀭鐩撮暅鍍?*/
+  .bg .br::before{ display:none; }          /* 鍙充笅锛氱函鑹?*/
+  .bg .br{ background:var(--solid); }
+
+  /* ---------- 宸︿笂锛氭笎杩涙ā绯婄殑娓呮櫚灞?---------- */
+  .hero{
+    position:absolute;
+    left:0; top:0;
+    width:50%; height:50%;
+    pointer-events:none;
+  }
+  .hero::before{
+    content:"";
+    position:absolute; inset:0;
+    background-image:var(--cover);
+    background-size:cover;
+    background-position:center;
+  }
+
+  /* L0 娓呮櫚涓讳綋锛氭í鍚?+ 绾靛悜鍚勮嚜涓€閬撻伄缃╋紙宓屽鐩镐箻 = 浜ら泦锛?*/
+  .l0{ z-index:4; }
+  .l0::before{
+    mask-image:
+      linear-gradient(90deg, #000 0 72%, transparent 94%),
+      linear-gradient(180deg, #000 0 72%, transparent 94%);
+    mask-composite:intersect;
+  }
+
+  /* 涓嶆敮鎸?mask-composite 鐨勬祻瑙堝櫒閫€鍥炴枩鍚戣繃娓★紝閬垮厤鏁村潡娑堝け */
+  @supports not (mask-composite: intersect){
+    .l0::before{
+      mask-image:linear-gradient(135deg, #000 0 62%, transparent 92%);
+    }
+  }
+
+  /* L1 杞绘ā绯婏細鍙湪杩囨浮甯﹂噷鍑虹幇 */
+  .l1{ z-index:3; filter:blur(1.2vmin); }
+  .l1::before{
+    mask-image:
+      linear-gradient(90deg, transparent 0 66%, #000 82%, transparent 100%),
+      linear-gradient(180deg, transparent 0 66%, #000 82%, transparent 100%);
+  }
+
+  /* L2 閲嶆ā绯婏細鎶婃竻鏅板眰閫佸埌鑳屾櫙鐨勬ā绯婂害涓?*/
+  .l2{ z-index:2; filter:blur(3vmin); }
+  .l2::before{
+    mask-image:
+      linear-gradient(90deg, transparent 0 84%, #000 94%, transparent 100%),
+      linear-gradient(180deg, transparent 0 84%, #000 94%, transparent 100%);
+  }
+
+  /* ---------- 璐ㄦ劅 ---------- */
+  .stage::before{
+    content:"";
+    position:absolute; inset:0; z-index:5;
+    pointer-events:none;
+    opacity:var(--noise);
+    mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size:14vmin 14vmin;
+  }
+  .stage::after{
+    content:"";
+    position:absolute; inset:0; z-index:6;
+    pointer-events:none;
+    background:radial-gradient(125% 125% at 24% 20%,
+      rgba(0,0,0,0) 38%,
+      rgba(0,0,0,calc(var(--vignette) * .55)) 72%,
+      rgba(0,0,0,var(--vignette)) 100%);
+  }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="bg">
+      <div class="tile tl"></div>
+      <div class="tile tr"></div>
+      <div class="tile bl"></div>
+      <div class="tile br"></div>
+    </div>
+    <div class="hero l2"></div>
+    <div class="hero l1"></div>
+    <div class="hero l0"></div>
+  </div>
+</body>
+</html>

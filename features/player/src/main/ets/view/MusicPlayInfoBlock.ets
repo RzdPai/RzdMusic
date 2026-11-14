@@ -15,11 +15,28 @@
 
 
 import { AppStorageV2, uiObserver } from '@kit.ArkUI';
-import { AppStorageKeys, BreakpointConstants, CoverRadiusState, MusicStoreService, PlayedSongRecord, StyleConstants, ThemeState } from 'musicbasic';
+import {
+  AppStorageKeys,
+  BreakpointConstants,
+  CoverRadiusState,
+  MusicStoreService,
+  PLAYER_BIG_COVER_ID,
+  PLAYER_META_TITLE_ID,
+  PLAYER_META_SINGER_ID,
+  MorphMetaEndpoint,
+  PlayedSongRecord,
+  PlayerExpandState,
+  StyleConstants,
+  ThemeState,
+  areaLengthToVp
+} from 'musicbasic';
 import { MusicAppState } from '../model/PlayerModels';
 import { PlayerConstants } from '../constant/PlayerConstants';
 import { ControlAreaComponent } from './ControlAreaComponent';
 import { amllParseLyricCached } from '../amll/parse/AmllAutoDetect';
+
+/** 播放页大封面的组件 id（常量定义已提到 common 层，见 PlayerExpandState.ets）。 */
+export { PLAYER_BIG_COVER_ID } from 'musicbasic';
 
 /** Album art, title/artist block, and control area for full-screen playback layouts. */
 @ComponentV2
@@ -41,6 +58,70 @@ export struct MusicPlayInfoBlock {
   @Param panelLayout: boolean = false;
   /** When false, omits the embedded ControlAreaComponent (external shared control area used instead). */
   @Param showControlArea: boolean = true;
+  /**
+   * 关闭期封口（宿主 `PlaybackPage` 的 `coverPublishHidden`）。
+   *
+   * ★ 2026-10-21（甲方：「点收起按钮关闭播放器会出现两个封面，一个正常飞回去，一个跟随播放器下移」）：
+   *   本仓关闭动画是**壳层克隆封面**在窗坐标里飞到胶囊，播放页这一侧必须一张封面都不出；
+   *   而下面 `.opacity(realCoverVisible() ? 1 : 0)` 只封了"形变相位"那一段——
+   *   `finishCloseGuard` 里 `morphReset()` 把相位写回静止态之后、pop 过渡还没走完的那几帧，
+   *   门会重新打开 ⇒ 面板布局这两处就是"第二张封面跟着播放器下移"的缝。由宿主显式封口。
+   */
+  @Param coverMuted: boolean = false;
+
+  /** 共享的展开几何：大封面要把自己的窗口矩形上报进去（封面续飞到歌词页的起点）。 */
+  @Local expandState: PlayerExpandState =
+    AppStorageV2.connect(PlayerExpandState, AppStorageKeys.PLAYER_EXPAND_STATE,
+      () => new PlayerExpandState())!;
+
+  @Monitor('state.selectIndex')
+  onMorphTrackChanged(): void {
+    this.expandState.cancelMetaForTrackChange();
+    this.publishMeta(false, this.useAlbumCoverBackground);
+    this.publishMeta(true, this.useAlbumCoverBackground);
+  }
+
+  private titleController: TextController = new TextController();
+  private singerController: TextController = new TextController();
+
+  private publishMeta(singer: boolean, compact: boolean = false): void {
+    const endpoint = new MorphMetaEndpoint();
+    endpoint.id = singer ? PLAYER_META_SINGER_ID : PLAYER_META_TITLE_ID;
+    endpoint.controller = singer ? this.singerController : this.titleController;
+    const content = singer ? (this.state.getCurrentSongItem()?.singer ?? '') :
+      (this.state.getCurrentSongItem()?.title ?? '');
+    endpoint.content = typeof content === 'string' ? content :
+      this.getUIContext().getHostContext()!.resourceManager.getStringSync(content.id);
+    // Same canonical fp value as the genuine Text. getNumber(float with vp/fp)
+    // returns resolved px, so it must never be assigned to an fp endpoint.
+    endpoint.fontFp = this.metaFontFp(singer, compact);
+    endpoint.family = singer ? PlayerConstants.FONT_FAMILY_BLACK : PlayerConstants.FONT_FAMILY_BOLD;
+    endpoint.weight = singer ? 400 : 700;
+    endpoint.color = singer ? $r('app.color.play_text_color') : $r('app.color.player_text_primary');
+    endpoint.opacity = singer ? 1 : 0.86;
+    endpoint.maxLines = singer ? 1 : 2;
+    this.expandState.registerMorphMeta(false, singer, endpoint);
+  }
+
+  /**
+   * Canonical declared fp for BOTH genuine Text and its bridge endpoint.
+   * Existing resource definitions: title 20vp, MD title 30fp, singer 14fp.
+   * Convert only the legacy vp size, preserving its pixels at any system font scale.
+   * Text applies fp scaling once; never multiply density/fontScale again in the bridge.
+   */
+  private metaFontFp(singer: boolean, compact: boolean = false): number {
+    if (!compact && this.panelLayout) {
+      return singer ? 22 : 24;
+    }
+    if (singer && (compact || !this.isMdCompactInfoTypography())) {
+      return 14;
+    }
+    if (!singer && !compact && this.isMdCompactInfoTypography()) {
+      return 30;
+    }
+    const ui = this.getUIContext();
+    return ui.px2fp(ui.vp2px(20));
+  }
 
   /** True on MD width + MD height fold inner layout for compact title sizing. */
   private isMdCompactInfoTypography(): boolean {
@@ -76,14 +157,23 @@ export struct MusicPlayInfoBlock {
   }
 
   aboutToAppear(): void {
-    this.coverRadiusState.radius = MusicStoreService.getInstance().getCoverCornerRadius();
+    // ★★★ 2026-10-17（用户要求删掉"自定义封面圆角"设置）：
+    //   原来这里是 `= MusicStoreService.getInstance().getCoverCornerRadius()`。
+    //   现在封面圆角只有**一个来源** —— 无界 `CoverMorph.radiusPlayer = 8`，与内置播放页、
+    //   浮层克隆三处同值（这也顺带消掉"动画结束时圆角跳一下"）。
+    this.coverRadiusState.radius = PlayerExpandState.COVER_RADIUS_PLAYER_VP;
     this.coverSpringScale = this.state.isPlay ? 1.05 : 0.95;
     this.coverSpringTarget = this.coverSpringScale;
+    // 初始缩放也要报出去：形变量测发生在同一帧，晚了就还是按 1.0 算端点
+    this.publishCoverScale();
     this.prewarmLyricCache();
     this.refreshFavorite();
+    this.publishMeta(false, this.useAlbumCoverBackground);
+    this.publishMeta(true, this.useAlbumCoverBackground);
   }
 
   aboutToDisappear(): void {
+    this.expandState.invalidateMorphMetaTarget(this.titleController, this.singerController);
     if (this.coverSpringTimer > 0) {
       clearInterval(this.coverSpringTimer);
       this.coverSpringTimer = 0;
@@ -116,18 +206,41 @@ export struct MusicPlayInfoBlock {
   @Builder
   MusicInfoTextsCompactCover() {
     Column() {
-      Text(this.state.getCurrentSongItem()?.title ?? '')
-        .fontSize($r('app.float.title_font_play'))
+      // ★ 歌名过长时跑马灯（用户要求「各个页面歌曲名过长时改为用跑马灯显示」）。
+      //   ⚠️ 这里**故意不用共用组件 `SongTitleMarquee`，而是就地加属性**：
+      //     这两个 Text 挂着 `PLAYER_META_TITLE_ID` + `onAreaChange → publishMeta()`，
+      //     是**形变续飞封面的端点量测源**；换组件会改结构/改量测，等于动形变 ——
+      //     而本次改动明令"形变相关一行都不要碰"。就地加属性则结构、id、量测、`controller`
+      //     一个都不变，只有"溢出行为"和"行数语义"变了。
+      Text(this.state.getCurrentSongItem()?.title ?? '', { controller: this.titleController })
+        .id(PLAYER_META_TITLE_ID)
+        .onAreaChange((): void => { this.publishMeta(false, true); })
+        .fontSize(this.metaFontFp(false, true))
         .fontColor($r('app.color.player_text_primary'))
         .opacity(0.86)
         .fontWeight(FontWeight.Bold)
         .fontFamily(PlayerConstants.FONT_FAMILY_BOLD)
-        .maxLines(2)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        // ⚠️ `MARQUEE` 生效时 `maxLines` 不生效（官方《Text》：跑马灯只在单行语义下滚）
+        //   ⇒ 原来的 `maxLines(2)` 已去掉：歌名从"最多两行省略"变成"一行跑马灯"。
+        //   这是"歌名过长用跑马灯"的必然代价（不换行才能整条读完）。形变量测不受影响：
+        //   `onAreaChange` 量的是这个 Text 自己的矩形，行数变了它照样上报。
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.MARQUEE })
+        .marqueeOptions({
+          start: true,
+          fromStart: true,
+          step: 4,
+          loop: -1,
+          delay: 1000,
+          fadeout: false,
+          marqueeStartPolicy: MarqueeStartPolicy.DEFAULT
+        })
         .width(StyleConstants.FULL_WIDTH)
-      Text(this.state.getCurrentSongItem()?.singer ?? '')
+      Text(this.state.getCurrentSongItem()?.singer ?? '', { controller: this.singerController })
+        .id(PLAYER_META_SINGER_ID)
+        .onAreaChange((): void => { this.publishMeta(true, true); })
         .textAlign(TextAlign.Start)
-        .fontSize($r('app.float.font_fourteen'))
+        .fontSize(this.metaFontFp(true, true))
         .fontColor($r('app.color.play_text_color'))
         .fontFamily(PlayerConstants.FONT_FAMILY_BLACK)
         .margin({ top: 2 })
@@ -137,11 +250,29 @@ export struct MusicPlayInfoBlock {
         .textOverflow({ overflow: TextOverflow.Ellipsis })
     }
     .width(StyleConstants.FULL_WIDTH)
+    .opacity(this.expandState.targetMetaOpacity())
   }
 
   /** Linear scale for dismiss gesture; clamped so the cover never measures/render as zero-size. */
   private coverDisplayScale(): number {
     return Math.min(1, Math.max(0.02, this.coverLinearScale));
+  }
+
+  /**
+   * @returns 封面上当前**实际生效**的缩放（收起手势的线性缩放 × 播放态弹簧）。
+   *
+   * 为什么要把它报给共享状态：展开形变的"续飞封面"终点 = 播放页封面的窗口矩形，
+   * 而 `getPositionToWindowWithTransform()` 量到的是**含这两个缩放**的矩形。
+   * 不报出去的话，桥接封面会按"布局矩形 × 1.0"落位，而真实封面是 ×1.05（播放态），
+   * p=1 交棒那一刻就会跳 5% —— 用户实测的「结束时封面大小跳一下」。
+   */
+  private effectiveCoverScale(): number {
+    return this.coverDisplayScale() * this.coverSpringScale;
+  }
+
+  /** 把当前封面缩放同步给共享形变状态（见 {@link effectiveCoverScale}）。 */
+  private publishCoverScale(): void {
+    this.expandState.setCoverScaleLive(this.effectiveCoverScale());
   }
 
   /** 播放/暂停封面弹簧缩放：播放放大、暂停缩小（手写阻尼弹簧，可见回弹） */
@@ -155,6 +286,15 @@ export struct MusicPlayInfoBlock {
   onPlayStateChanged(): void {
     this.coverSpringTarget = this.state.isPlay ? 1.05 : 0.95;
     this.ensureCoverSpring();
+  }
+
+  /**
+   * 下拉收起跟手时 `coverLinearScale` 逐帧在变，封面的实际缩放跟着变 —— 同步给共享状态，
+   * 否则"收起过程中又去展开"这类打断场景下，续飞封面的端点会按旧的缩放算。
+   */
+  @Monitor('coverLinearScale')
+  onCoverLinearScaleChanged(): void {
+    this.publishCoverScale();
   }
 
   private ensureCoverSpring(): void {
@@ -173,15 +313,24 @@ export struct MusicPlayInfoBlock {
     const now = Date.now();
     const dt = Math.min(50, now - this.coverSpringLast);
     this.coverSpringLast = now;
+    // The bridge freezes its visual cover endpoint; hold the real endpoint spring too.
+    // Resume the existing spring after ownership returns, without removing its animation.
+    if (this.expandState.morphSessionDriving()) {
+      return;
+    }
     const STIFFNESS = 220;
     const DAMPING = 13;
     const acc = (this.coverSpringTarget - this.coverSpringScale) * STIFFNESS -
       this.coverSpringVelocity * DAMPING;
     this.coverSpringVelocity += acc * (dt / 1000);
     this.coverSpringScale += this.coverSpringVelocity * (dt / 1000);
+    // 弹簧每动一帧就把"当前封面缩放"同步给共享状态：形变的续飞封面终点跟着它走，
+    // 落位那一刻两边才是同一个矩形（否则收官跳 5%）。
+    this.publishCoverScale();
     if (Math.abs(this.coverSpringTarget - this.coverSpringScale) < 0.0005 &&
       Math.abs(this.coverSpringVelocity) < 0.0005) {
       this.coverSpringScale = this.coverSpringTarget;
+      this.publishCoverScale();
       clearInterval(this.coverSpringTimer);
       this.coverSpringTimer = 0;
     }
@@ -204,11 +353,33 @@ export struct MusicPlayInfoBlock {
   CoverInfo() {
     Stack({ alignContent: Alignment.Center }) {
       Image(this.currentCoverSource())
+        .id(PLAYER_BIG_COVER_ID)
         .constraintSize({ maxWidth: '100%', maxHeight: '100%' })
         .aspectRatio(1)
         .objectFit(ImageFit.Cover)
         .syncLoad(true)
         .borderRadius(this.coverRadiusState.radius)
+        // ⚠️ 形变期间**不画这张封面**：那一刻是"桥接封面"在从迷你条封面飞过来
+        //    （2026-10-15 起它在**壳层浮层**里：`products/default .../Index.ets` 的
+        //     `MorphCoverClone()`；PC 壳层仍走 `PlaybackPage.MorphCoverBridge`）。
+        //    两边都画就是"出现两个封面"，
+        //    而且这张是按布局走的、和飞行中的那张不同步，看着就是两个错位的封面。
+        //    形变结束（相位回到 OPEN/NONE）后恒为 1，静止态逐像素不变。
+        // ★★ 2026-10-15：形变期间由**续飞封面**代表它（续飞封面一直飞到 p=1，真机实测这样最稳）；
+        //   形变容器一撤（`realCoverVisible()` = `!morphContainerActive()`）就地交棒 ——
+        //   那一刻容器是恒等变换、续飞封面正好落在真实封面上，不会跳，也不会同时出现两个封面。
+        // ★★★ 2026-10-21：再加宿主封口 `coverMuted`（关闭期恒不画，见 @Param 注释）。
+        .opacity(this.expandState.realCoverVisible() && !this.coverMuted ? 1 : 0)
+        // 把大封面的窗口矩形报给共享状态：封面「续飞到歌词页」要靠它当起点。
+        // 用 onAreaChange 而不是 getRectangleById —— 后者的单位没有文档保证（实测是 px），
+        // 而 onAreaChange 的 globalPosition/width 明确是 vp。
+        .onAreaChange((_oldValue: Area, newValue: Area) => {
+          this.expandState.reportBig(
+            areaLengthToVp(newValue.globalPosition.x),
+            areaLengthToVp(newValue.globalPosition.y),
+            areaLengthToVp(newValue.width),
+            this.coverRadiusState.radius);
+        })
     }
     .width(StyleConstants.FULL_WIDTH)
     .layoutWeight(1)
@@ -228,16 +399,31 @@ export struct MusicPlayInfoBlock {
   MusicInfoTexts() {
     Column() {
       Flex({ justifyContent: FlexAlign.SpaceBetween, alignItems: ItemAlign.Center }) {
-        Text(this.state.getCurrentSongItem()?.title ?? '')
+        // ★ 歌名过长时跑马灯（同上：就地加属性，不换组件、不动形变量测源）。
+        Text(this.state.getCurrentSongItem()?.title ?? '', { controller: this.titleController })
+          .id(PLAYER_META_TITLE_ID)
+          .onAreaChange((): void => { this.publishMeta(false); })
           .layoutWeight(1)
-          .fontSize(this.panelLayout ? 24 : (this.isMdCompactInfoTypography() ?
-            $r('app.float.title_font_play_md') : $r('app.float.title_font_play')))
+          .fontSize(this.metaFontFp(false))
           .fontColor($r('app.color.player_text_primary'))
           .opacity(0.86)
           .fontWeight(FontWeight.Bold)
           .fontFamily(PlayerConstants.FONT_FAMILY_BOLD)
-          .maxLines(2)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          // `MARQUEE` 生效时 `maxLines` 不生效 ⇒ 原来的 `maxLines(2)` 去掉（见上一处的说明）。
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.MARQUEE })
+          .marqueeOptions({
+            start: true,
+            fromStart: true,
+            step: 4,
+            loop: -1,
+            delay: 1000,
+            fadeout: false,
+            marqueeStartPolicy: MarqueeStartPolicy.DEFAULT
+          })
+          // ★ 歌名/歌手这一行仍然走"原来的飞入"（所有权交接门，用户明确不改）——
+          //   只是**门从整行挪到了这两个 Text 上**，好把收藏按钮摘出去（见下）。
+          .opacity(this.expandState.targetMetaOpacity())
         Row({ space: 4 }) {
           SymbolGlyph(this.isCurrentFavorite ? $r('sys.symbol.heart_fill') : $r('sys.symbol.heart'))
             .fontSize(20)
@@ -248,13 +434,23 @@ export struct MusicPlayInfoBlock {
               this.toggleFavorite();
             })
         }
+        // ★★ 2026-10-15 用户定调（两次强调）：「**先飞入的是小歌词和收藏按钮**」
+        //   「收藏**不是自己入场**啊，是**和小歌词一起**」
+        //   ⇒ 收藏按钮与小歌词**同一组、同一时间窗**（都读 `earlyRiseVp()`），一起从下升起；
+        //   ⚠️ 必须把它从**整行透明门**里摘出来（原来那一行的 `.opacity(targetMetaOpacity())` 挂在
+        //      外层 Column 上：形变期间恒 0、到形变结束才显示 ⇒ 我给它加位移也看不见，
+        //      用户实测"收藏按钮动画结束后突然冒出来"）。
+        //      所以现在：行门只压在歌名/歌手的 Text 上，这个按钮**自己一直可见**、只做位移入场。
+        //   ⚠️ 也不要给它单独一套窗口 —— 它和小歌词是**一组**。
+        .translate({ y: this.expandState.earlyRiseVp() })
       }
       .width(StyleConstants.FULL_WIDTH)
 
-      Text(this.state.getCurrentSongItem()?.singer ?? '')
+      Text(this.state.getCurrentSongItem()?.singer ?? '', { controller: this.singerController })
+        .id(PLAYER_META_SINGER_ID)
+        .onAreaChange((): void => { this.publishMeta(true); })
         .textAlign(TextAlign.Start)
-        .fontSize(this.panelLayout ? 22 : (this.isMdCompactInfoTypography() ?
-          $r('app.float.title_font_play') : $r('app.float.font_fourteen')))
+        .fontSize(this.metaFontFp(true))
         .fontColor($r('app.color.play_text_color'))
         .fontFamily(PlayerConstants.FONT_FAMILY_BLACK)
         .margin({ top: 2 })
@@ -262,8 +458,30 @@ export struct MusicPlayInfoBlock {
         .fontWeight(FontWeight.Regular)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
+        // 同上：行门挪到具体 Text 上
+        .opacity(this.expandState.targetMetaOpacity())
+
+      // ★ 起播/解析期间的可见反馈：否则用户以为卡住了
+      if (this.state.isResolving) {
+        Row({ space: 6 }) {
+          LoadingProgress()
+            .width(12)
+            .height(12)
+            .color($r('app.color.player_text_primary'))
+          Text('缓冲中…')
+            .fontSize(12)
+            .fontColor($r('app.color.player_text_primary'))
+            .opacity(0.7)
+        }
+        .margin({ top: 4 })
+      }
     }
     .margin({ top: $r('app.float.music_info_margin_top') })
+    // ⚠️ 2026-10-15：**这里不再挂整行的透明门**（原来 `.opacity(targetMetaOpacity())` 在这一层）——
+    //   它会把行内的**收藏按钮**一起压成 0，导致"收藏按钮动画结束后突然冒出来"。
+    //   现在这个门分别挂在歌名 Text 与歌手 Text 上（见上），收藏按钮自己只做位移入场，
+    //   与小歌词**同一组**一起从下升起。
+    //   歌名/歌手的时序语义（克隆层接管期间为 0、交回播放页才显示）**完全没变**。
   }
 
   /** Responsive grid placing cover, texts, and ControlAreaComponent. */
@@ -305,6 +523,7 @@ export struct MusicPlayInfoBlock {
         Column() {
           Column() {
             Image(this.currentCoverSource())
+              .id(PLAYER_BIG_COVER_ID)
               .width(StyleConstants.FULL_WIDTH)
               .aspectRatio(1)
               .objectFit(ImageFit.Cover)
@@ -314,6 +533,20 @@ export struct MusicPlayInfoBlock {
               })
               .borderRadius(this.coverRadiusState.radius)
               .clip(true)
+              // 形变期间不画（那一刻由"桥接封面"在飞，见 CoverInfo 里的同一条注释）
+              // ★★ 2026-10-15：形变期间由**续飞封面**代表它（续飞封面一直飞到 p=1，真机实测这样最稳）；
+        //   形变容器一撤（`realCoverVisible()` = `!morphContainerActive()`）就地交棒 ——
+        //   那一刻容器是恒等变换、续飞封面正好落在真实封面上，不会跳，也不会同时出现两个封面。
+        // ★★★ 2026-10-21：再加宿主封口 `coverMuted`（关闭期恒不画，见 @Param 注释）。
+        .opacity(this.expandState.realCoverVisible() && !this.coverMuted ? 1 : 0)
+              // 同上：面板布局下的大封面也要上报矩形
+              .onAreaChange((_oldValue: Area, newValue: Area) => {
+                this.expandState.reportBig(
+                  areaLengthToVp(newValue.globalPosition.x),
+                  areaLengthToVp(newValue.globalPosition.y),
+                  areaLengthToVp(newValue.width),
+                  this.coverRadiusState.radius);
+              })
               .scale({
                 x: this.coverDisplayScale() * this.coverSpringScale,
                 y: this.coverDisplayScale() * this.coverSpringScale,
@@ -331,7 +564,10 @@ export struct MusicPlayInfoBlock {
               ControlAreaComponent({ showBottomOtherRow: false })
             }
           }
-          .height(276)
+          // ★ 2026-11-01（对比报告 §5）：原来写死 `.height(276)` 且 `justifyContent(End)`、无 clip，
+          //   内容超过 276 就向上溢出压住歌名 ⇒ 改成自适应高度（内容撑开）+ 裁剪兜底。
+          .constraintSize({ maxHeight: '62%' })
+          .clip(true)
           .justifyContent(FlexAlign.End)
         }
         .height(StyleConstants.FULL_HEIGHT)

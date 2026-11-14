@@ -6,9 +6,8 @@ import { http } from '@kit.NetworkKit';
 import { image } from '@kit.ImageKit';
 import { MusicStoreService, appendPlayLog } from 'musicbasic';
 import { getLXMusicUrl } from '../source/LXPlayHelper';
-import { lxEngineIsReady } from '../source/LXSourceEngine';
 import { lxGetLyricFull, lxGetPicFallback, LyricFullResult } from '../source/LXMusicSDK';
-import { getQualityChain } from './SourceFallbackUtil';
+import { getQualityChain, resolveMusicUrlWithFallback, UrlResolveOutcome } from './SourceFallbackUtil';
 import { AmllLyricLine } from '../amll/model/AmllTypes';
 import { amllParseLyricText } from '../amll/parse/AmllAutoDetect';
 import { amllStringifyLrc } from '../amll/parse/AmllLyricFormatParsers';
@@ -33,6 +32,8 @@ export class DownloadTask {
   albumName: string = '';
   imgUrl: string = '';
   quality: string = '';
+  /** Immutable enqueue-time tier; resolved quality may downgrade without changing retry policy. */
+  requestedQuality: string = '';
   fileName: string = '';
   status: string = DownloadStatus.WAITING;
   progress: number = 0;
@@ -52,6 +53,7 @@ export class DownloadTask {
     t.albumName = this.albumName;
     t.imgUrl = this.imgUrl;
     t.quality = this.quality;
+    t.requestedQuality = this.requestedQuality;
     t.fileName = this.fileName;
     t.status = this.status;
     t.progress = this.progress;
@@ -206,10 +208,16 @@ export class DownloadService {
   enqueue(source: string, songId: string, name: string, singer: string, quality: string,
     uiContext: UIContext | undefined, imgUrl: string = '', albumName: string = '',
     silent: boolean = false): boolean {
-    if (!lxEngineIsReady) {
-      this.toast(uiContext, '音源未就绪，请先在设置中导入并选中源');
+    // Default callers must resolve the network before enqueue (DownloadUtil does this).
+    // Never defer preference lookup until execution, or overwrite an explicit batch selection.
+    if (quality.length === 0) {
+      console.warn('[RzdQualityPolicy] download rejected: missing enqueue-time tier snapshot');
       return false;
     }
+    // ★ 2026-11-09（用户：「播放 LX 的音乐一直提示音源未就绪」）：
+    //   这里原来按 `lxEngineIsReady` 直接拒绝入队，但「上次播的是 MusicFree」时 LX 引擎
+    //   本来就没加载脚本 —— 那是正常状态，不是故障。解析链路会自己选脚本 / 等 init，
+    //   真失败也会落到任务状态里，不该在入队这一步一刀切。
     if (uiContext !== undefined) {
       this.uiContext = uiContext;
       try {
@@ -237,16 +245,36 @@ export class DownloadService {
     task.albumName = albumName;
     task.imgUrl = imgUrl;
     task.quality = quality;
+    task.requestedQuality = quality;
+    console.info('[RzdQualityPolicy] download snapshot id=' + id + ' requested=' + quality);
     task.fileName = this.buildFileName(name, singer, quality);
+    // Failed tasks are replaced, never duplicated under the same stable id.
+    const oldIndex: number = this.findIndex(id);
+    if (oldIndex >= 0) {
+      this.tasks.splice(oldIndex, 1);
+    }
     this.tasks.push(task);
     this.retryCounts.delete(id);
-    appendPlayLog('[下载] 入队 ' + task.fileName);
+    appendPlayLog('[下载] enqueue ' + task.fileName);
     if (!silent) {
       this.toast(uiContext, '已加入下载队列');
     }
     this.notify(true);
     this.pump();
     return true;
+  }
+
+  /** Returns accepted task ids only; completion is reported by snapshots/listeners, never by enqueue. */
+  enqueueBatch(rows: DownloadTask[], uiContext: UIContext | undefined): string[] {
+    const accepted: string[] = [];
+    for (const row of rows) {
+      if (this.enqueue(row.source, row.songId, row.name, row.singer, row.quality,
+        uiContext, row.imgUrl, row.albumName, true)) {
+        accepted.push(row.source + '_' + row.songId + '_' + row.quality);
+      }
+    }
+    appendPlayLog('[下载批量] requested=' + rows.length + ' accepted=' + accepted.length);
+    return accepted;
   }
 
   /** 重试失败任务（从头开始）。 */
@@ -406,6 +434,7 @@ export class DownloadService {
         t.albumName = row.albumName ?? '';
         t.imgUrl = row.imgUrl ?? '';
         t.quality = row.quality ?? '';
+        t.requestedQuality = row.requestedQuality ?? t.quality;
         t.fileName = row.fileName ?? '';
         t.status = row.status ?? DownloadStatus.PAUSED;
         t.message = row.message ?? '';
@@ -549,9 +578,22 @@ export class DownloadService {
     }
     try {
       // 1) 解析下载地址：按所选音质起、逐档向下兜底
-      const chain: string[] = getQualityChain(task.quality, task.source);
-      let url: string = '';
-      for (let i: number = 0; i < chain.length; i++) {
+      // ★ B3：下载和播放共用同一条回退链（resolveMusicUrlWithFallback 内部就是 buildCandidateChain）
+      const dlOutcome: UrlResolveOutcome = await resolveMusicUrlWithFallback(
+        task.source, task.songId, task.name, task.singer, '', null);
+      console.info('[RzdFallback] download via chain ok=' + (dlOutcome.url.length > 0) +
+        ' quality=' + dlOutcome.quality + ' script=' + dlOutcome.scriptName);
+      let url: string = dlOutcome.url;
+      if (url.length > 0) {
+        // 命中统一回退链：音质/平台/脚本都由链决定，下面沿用原有下载流程
+        task.quality = dlOutcome.quality;
+        console.info('[RzdFallback] download hit via chain quality=' + dlOutcome.quality +
+          ' platform=' + dlOutcome.source + ' script=' + dlOutcome.scriptName);
+      }
+      const chain: string[] = getQualityChain(task.requestedQuality, task.source);
+      console.info('[RzdQualityPolicy] download resolve id=' + task.id +
+        ' snapshot=' + task.requestedQuality + ' chain=' + chain.join(','));
+      for (let i: number = 0; i < chain.length && url.length === 0; i++) {
         try {
           const u: string = await getLXMusicUrl(task.source, task.songId, chain[i], task.name, task.singer);
           if (u.length > 0) {
@@ -612,9 +654,10 @@ export class DownloadService {
       task.progress = 100;
       task.message = '已完成';
       task.speed = '';
-      appendPlayLog('[下载] 完成 ' + task.fileName);
+      appendPlayLog('[下载] done ' + task.fileName);
       this.notify(true);
       this.toastLatest('下载完成: ' + task.name);
+      this.pump();
     } catch (err) {
       if (this.findIndex(task.id) < 0) {
         return;
@@ -631,7 +674,7 @@ export class DownloadService {
   /** 失败自动重试（间隔 1s，最多 2 次），超限标记失败。 */
   private failTask(task: DownloadTask, reason: string): void {
     this.cleanupTemp(task);
-    appendPlayLog('[下载] 失败(' + reason + ') ' + task.fileName);
+    appendPlayLog('[下载] fail(' + reason + ') ' + task.fileName);
     if (reason.indexOf('Resume') === 0) {
       // 续传校验失败重下不算消耗重试次数（对齐 lx-music）
       this.retryCounts.delete(task.id);
@@ -839,10 +882,10 @@ export class DownloadService {
       }
       try {
         await writeAudioMetadata(filePath, writer);
-        appendPlayLog('[下载] 元信息嵌入完成 封面=' + (pixelMap !== undefined) +
+        appendPlayLog('[下载] meta embedded cover=' + (pixelMap !== undefined) +
           ' 歌词=' + (embedLyric.length > 0));
       } catch (e) {
-        appendPlayLog('[下载] 元信息写入失败: ' + JSON.stringify(e).substring(0, 200));
+        appendPlayLog('[下载] meta write fail: ' + JSON.stringify(e).substring(0, 200));
       } finally {
         if (pixelMap !== undefined) {
           pixelMap.release();
@@ -857,7 +900,7 @@ export class DownloadService {
           // ignore
         }
       }
-      appendPlayLog('[下载] 元信息嵌入异常，使用原始文件');
+      appendPlayLog('[下载] meta error, use original');
     }
   }
 
@@ -924,16 +967,39 @@ export class DownloadService {
     return this.pad2(Math.floor(totalSec / 60)) + ':' + this.pad2(totalSec % 60) + '.' + m3;
   }
 
-  /** 保存到目标位置：Download 目录（授权一次复用）或系统保存对话框。 */
+  /**
+   * 保存到目标位置。
+   *
+   * ★ 2026-10-20 修正（用户：「**不是新增保存方式**，就是无论用户选哪个，都会在私有目录留一份」）：
+   *   上一版把 `'private'` 做成了第三种保存方式（默认值），理解错了。正确语义是：
+   *   1. **不管用户选什么**，都先在 `<filesDir>/local_music/` 留一份私有副本 ——
+   *      本地音乐页扫这个目录，所以"下载完就在本地音乐里"永远成立；
+   *   2. 用户设置 = `'download'` 时，再往系统 Download 目录**导出一份**；
+   *      设置 = `'ask'` 时，再弹系统保存对话框导出。
+   *   即"私有副本是保底，导出是额外的"。
+   *
+   * ⚠️ 目录名 `local_music` 必须与 `features/localmusic/core/LocalMusic.ets` 的 `DIR_NAME` 一致
+   *    （跨 features 不能互相 import，只能靠这个约定；改一处必须改两处）。
+   */
   private async saveToDestination(task: DownloadTask, tmpPath: string, lrcText: string): Promise<void> {
     const saveMode: string = MusicStoreService.getInstance().getDownloadSaveMode();
     let finalPath: string = '';
+    // ── 第 1 步：私有副本（无条件，本地音乐列表靠它）
+    const privatePath: string = await this.keepPrivateCopy(task, tmpPath);
+    appendPlayLog('[下载] kept private ' + privatePath);
+    // ── 第 2 步：按用户设置再导出（可选）
     if (saveMode === 'download') {
       await this.ensureDownloadDir();
       if (this.downloadDirUri.length === 0) {
         throw new Error('未授权下载目录');
       }
-      const destPath: string = new fileUri.FileUri(this.downloadDirUri + '/' + task.fileName).path;
+      let destPath: string = new fileUri.FileUri(this.downloadDirUri + '/' + encodeURIComponent(task.fileName)).path;
+      // Never truncate an existing user download with the same title.
+      if (fs.accessSync(destPath)) {
+        const uniqueName: string = task.fileName.replace(/(\.[^.]+)$/, '_' + Date.now() +
+          '_' + Math.floor(Math.random() * 1000000) + '$1');
+        destPath = new fileUri.FileUri(this.downloadDirUri + '/' + encodeURIComponent(uniqueName)).path;
+      }
       await this.copyTo(tmpPath, destPath);
       finalPath = destPath;
     } else {
@@ -952,7 +1018,7 @@ export class DownloadService {
       await this.copyTo(tmpPath, uris[0]);
       finalPath = new fileUri.FileUri(uris[0]).path;
     }
-    appendPlayLog('[下载] 已保存 ' + finalPath);
+    appendPlayLog('[下载] exported ' + finalPath);
     const wantLrc: boolean = MusicStoreService.getInstance().getDownloadLrc();
     if (lrcText.length > 0 && wantLrc) {
       try {
@@ -961,11 +1027,48 @@ export class DownloadService {
           fs.OpenMode.CREATE | fs.OpenMode.READ_WRITE | fs.OpenMode.TRUNC);
         fs.writeSync(lrcFile.fd, lrcText);
         fs.closeSync(lrcFile);
-        appendPlayLog('[下载] 已导出歌词 ' + lrcPath);
+        appendPlayLog('[下载] lyric exported ' + lrcPath);
       } catch (_e) {
         // lrc is optional
       }
     }
+  }
+
+  /**
+   * 在应用私有目录里留一份副本（**无条件**，本地音乐靠它列出已下载的歌）。
+   * @param task 下载任务
+   * @param tmpPath 刚下完的临时文件
+   * @returns 私有副本的绝对路径
+   */
+  private async keepPrivateCopy(task: DownloadTask, tmpPath: string): Promise<string> {
+    const hostContext: common.Context | undefined =
+      this.uiContext !== undefined ? this.uiContext.getHostContext() : undefined;
+    if (hostContext === undefined) {
+      throw new Error('拿不到应用上下文');
+    }
+    const dir: string = `${hostContext.filesDir}/local_music`;
+    if (!fs.accessSync(dir)) {
+      fs.mkdirSync(dir);
+    }
+    let destPath: string = `${dir}/${task.fileName}`;
+    if (!fs.accessSync(destPath)) {
+      await this.copyTo(tmpPath, destPath);
+      return destPath;
+    }
+    // 同名已存在：内容一样（同一次下载重试）就复用，不一样再起新名，避免覆盖用户已有的歌
+    try {
+      const existSize: number = fs.statSync(destPath).size;
+      const tmpSize: number = fs.statSync(tmpPath).size;
+      if (existSize === tmpSize) {
+        return destPath;
+      }
+    } catch (_e) {
+    }
+    const uniqueName: string = task.fileName.replace(/(\.[^.]+)$/, '_' + Date.now() +
+      '_' + Math.floor(Math.random() * 1000000) + '$1');
+    destPath = `${dir}/${uniqueName}`;
+    await this.copyTo(tmpPath, destPath);
+    return destPath;
   }
 
   private async copyTo(srcPath: string, destPathOrUri: string): Promise<void> {
@@ -983,6 +1086,13 @@ export class DownloadService {
     if (this.downloadDirUri.length > 0) {
       return;
     }
+    // ★ API 26：优先用用户在设置里选的自定义目录
+    const custom: string = MusicStoreService.getInstance().getDownloadDirUri();
+    if (custom.length > 0) {
+      this.downloadDirUri = custom;
+      appendPlayLog('[下载] custom dir uri=' + this.downloadDirUri);
+      return;
+    }
     const context: common.Context | undefined =
       this.uiContext !== undefined ? this.uiContext.getHostContext() : undefined;
     if (context === undefined) {
@@ -994,8 +1104,45 @@ export class DownloadService {
     const result: string[] = await documentViewPicker.save(opt);
     if (result.length > 0) {
       this.downloadDirUri = result[0];
-      appendPlayLog('[下载] 目录 uri=' + this.downloadDirUri);
+      appendPlayLog('[下载] dir uri=' + this.downloadDirUri);
     }
+  }
+
+  /**
+   * 打开"目录选择器"让用户选自定义下载目录（API 26 的 FOLDER 模式），并把 uri 持久化。
+   * @returns 选中的 uri（取消则返回空串）
+   */
+  public async pickCustomDownloadDir(): Promise<string> {
+    const context: common.Context | undefined =
+      this.uiContext !== undefined ? this.uiContext.getHostContext() : undefined;
+    if (context === undefined) {
+      return '';
+    }
+    try {
+      const opt: picker.DocumentSelectOptions = new picker.DocumentSelectOptions();
+      opt.selectMode = picker.DocumentSelectMode.FOLDER;
+      const documentViewPicker: picker.DocumentViewPicker = new picker.DocumentViewPicker(context);
+      const result: string[] = await documentViewPicker.select(opt);
+      if (result.length === 0) {
+        appendPlayLog('[下载] custom dir cancelled');
+        return '';
+      }
+      const uri: string = result[0];
+      MusicStoreService.getInstance().setDownloadDirUri(uri);
+      this.downloadDirUri = uri;
+      appendPlayLog('[下载] custom dir set uri=' + uri);
+      return uri;
+    } catch (error) {
+      appendPlayLog('[下载] pick dir fail: ' + JSON.stringify(error).substring(0, 100));
+      return '';
+    }
+  }
+
+  /** 清空自定义目录（回到系统下载目录）。 */
+  public clearCustomDownloadDir(): void {
+    MusicStoreService.getInstance().setDownloadDirUri('');
+    this.downloadDirUri = '';
+    appendPlayLog('[下载] restore system dir');
   }
 
   /** 下载封面图片并解码为 PixelMap。 */

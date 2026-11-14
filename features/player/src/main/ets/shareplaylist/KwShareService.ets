@@ -17,6 +17,9 @@ interface KwRawTrack {
   artist?: string;
   album?: string;
   duration?: string;
+  pic?: string;
+  albumpic?: string;
+  web_albumpic_short?: string;
 }
 
 export class KwShareService {
@@ -43,12 +46,17 @@ export class KwShareService {
     const songs: SharePlaylistSong[] = [];
     for (let i = 0; i < tracks.length; i++) {
       const t: KwRawTrack = tracks[i];
+      let pic: string = t.pic ?? t.albumpic ?? t.web_albumpic_short ?? '';
+      if (pic.length > 0 && !pic.startsWith('http')) {
+        pic = 'https://img2.kuwo.cn/star/albumcover/' + pic;
+      }
       songs.push({
         id: t.id ?? '',
         name: TextUtils.decodeName(t.name ?? ''),
         artist: TextUtils.decodeName(t.artist ?? ''),
         album: TextUtils.decodeName(t.album ?? ''),
-        duration: Number(t.duration ?? '0')
+        duration: Number(t.duration ?? '0'),
+        img: pic
       });
     }
     info.songs = songs;

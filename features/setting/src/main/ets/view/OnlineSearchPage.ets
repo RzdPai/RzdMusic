@@ -13,14 +13,43 @@
  * limitations under the License.
  */
 
-import { AppStorageV2, Chip, ChipSize, LengthMetrics, uiObserver } from '@kit.ArkUI';
+import { AppStorageV2, curves, display, uiObserver } from '@kit.ArkUI';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
-import { AlbumRouteParam, ArtistRouteParam, BreakpointType, ThemeState, TitleBarConstants, WindowUtil, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
-import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions, HdsNavigationTitleBarOptions, HideMode, ScrollEffectType, TextStyleMode, TitleSize } from '@kit.UIDesignKit';
-import { AppStorageKeys, AmbientState, MusicAppState, MusicStoreService, PlayedSongRecord, QualityInfo, RouterUrlConstants, SongItem, ToplistRouteParam, buildTitleMaterial } from 'musicbasic';
-import { AlbumInfo, LXQualityOption, LXSearchSong, LXSearchResult, SingerInfo, lxGetPicFallback, lxGetQualityOptions, lxSearch, lxTxHotSearch, searchAlbums, searchSingers, sourceToCode, DownloadService, DownloadUtil, OnlinePlayUtil, PlaylistSearchApi } from 'player';
+import {
+  immersiveFromLevel,
+  appBarBlurStyle,  guardPlayerBack
+, RzdSelectMenuMaterial } from 'musicbasic';
+import { AlbumRouteParam, ArtistRouteParam, BreakpointType, ThemeState, WindowUtil } from 'musicbasic';
+import { BlurStrategy, BottomBuilderShowType, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, HideMode, ScrollEffectType } from '@kit.UIDesignKit';
+import { AppStorageKeys, AmbientState, FavoriteEntry, MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord, QualityInfo, RouterUrlConstants, SongItem, SongTitleMarquee, ToplistRouteParam, appendPlayLog, barBlurOptions, buildTitleMaterial } from 'musicbasic';
+import { HomeMiniBarPlayer, MiniBarMaterialCapsule } from 'playlist';
+import { AlbumInfo, LXQualityOption, LXSearchSong, LXSearchResult, SingerInfo, lxGetPicFallback, lxGetQualityOptions, lxSearch, lxTxHotSearch, lxSearchSuggest, searchAlbums, searchSingers, sourceToCode, DownloadTask, DownloadUtil, OnlinePlayUtil, PlaylistSearchApi, platformRegistry, lxSourceManager, searchPlatformSongs, searchPlatformSheets } from 'player';
 import type { SearchPlaylistInfo, SearchPlaylistSong } from 'player';
+import { sourceName } from 'player';
 import { SongMoreMenu } from 'playlist';
+import { SourceChip } from './SourceChip';
+
+/** 日志域与标签（真机排查：`hdc shell hilog | findstr RzdSearchPage`）。 */
+const SEARCH_LOG_DOMAIN: number = 0x0000;
+const SEARCH_LOG_TAG: string = 'RzdSearchPage';
+
+/** 搜索页底部迷你播放条（与其它二级页同一套 56vp 胶囊）。 */
+const SEARCH_MINI_BAR_H: number = 56;
+const SEARCH_MINI_BAR_BOTTOM_MARGIN: number = 12;
+const SEARCH_MINI_BAR_SIDE_MARGIN: number = 16;
+
+/**
+ * 一镜到底诊断。
+ *
+ * ⚠️ 只写 `hilog` 是不够的：应用内「设置 → 运行日志」看的是 `appendPlayLog`
+ *    （AppStorage 里的 `lxPlayLog` 环形缓冲），没有 hdc 时那是**唯一**能取证的地方。
+ *    所以这里两个都写。
+ */
+function morphLog(message: string): void {
+  appendPlayLog('[RzdSearchMorph] ' + message);
+  hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph ' + message);
+}
 
 /** Observable per-source checkbox state. */
 @ObservedV2
@@ -97,17 +126,25 @@ struct SongRowItem {
           this.onLoadCover(this.song);
         })
       Column({ space: 2 }) {
-        Text(this.song.name)
-          .fontSize($r('sys.float.Body_L'))
-          .fontColor($r('sys.color.font_primary'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .width('100%')
+        // ★ 歌名过长时跑马灯（用户要求「各个页面歌曲名过长时改为用跑马灯显示」）。
+        //   换掉了原来的 `Text(song.name).maxLines(1).textOverflow(Ellipsis)`，
+        //   字号/字色/字重/宽度约束**逐字保留**（`textAlign(TextAlign.Start)` 本来就是默认值，
+        //   且 `TextOverflow.MARQUEE` 生效时官方注明 textAlign 不生效）；`SongTitleMarquee` 自带 `layoutWeight(1)`，
+        //   等价于这里原来那句 `.width('100%')`（父 Column 已 `layoutWeight(1)`）。
+        SongTitleMarquee({
+          text: this.song.name,
+          titleFontSize: $r('sys.float.Body_L'),
+          titleFontColor: $r('sys.color.font_primary'),
+          titleFontWeight: FontWeight.Normal
+        })
+        // ⚠️ 这一行原来误写成 `TextOverflow.MARQUEE`（歌手名跑马灯 = 用户没要的东西，
+        //   且没有 `marqueeOptions` ⇒ 走的是 SDK 默认参数）。本次**恢复成 Ellipsis**，
+        //   把跑马灯让给真正该滚的歌名那一行。
         Text(this.song.singer)
           .fontSize($r('sys.float.Caption_M'))
           .fontColor($r('sys.color.font_tertiary'))
           .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.MARQUEE })
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%')
       }
       .alignItems(HorizontalAlign.Start)
@@ -145,8 +182,10 @@ struct SongRowItem {
     }
     .width('100%')
     .padding({ top: 6, bottom: 6, left: 16, right: 16 })
-    .borderRadius($r('sys.float.corner_radius_level8'))
-    .backgroundColor($r('app.color.card_background'))
+    // ★ 用户 2026-10-20（截图口径）：**歌曲行去卡片、改分隔线**。
+    //   原来这里是 `borderRadius + backgroundColor(card_background)`（= 一行一张卡片），
+    //   现在只留一条底部细分隔线，行与行贴在一起。
+    .border({ width: { bottom: 0.5 }, color: $r('sys.color.comp_divider') })
     .gesture(LongPressGesture().onAction((): void => {
       // 长按进入批量选择模式并勾选该歌曲
       this.selection.batchMode = true;
@@ -166,14 +205,39 @@ struct SongRowItem {
  * Online multi-source music search page (routed from the home top bar search entry).
  */
 @ComponentV2
-struct OnlineSearchPage {
+export struct OnlineSearchPage {
+  /**
+   * 本页是否在最上面（首页那套底栏据此隐藏/恢复）。
+   * 由页自身的 `aboutToAppear` / `aboutToDisappear` 驱动：返回键、系统返回、手势任何退出路径都会走到。
+   * ⚠️ 不要用 `Navigation.onNavBarStateChange` 去推：首页自己也是内层栈的路由页，
+   *    navBar 永远不可见，会把底栏高度压成 0（Tab 栏 + 迷你条一起消失）。
+   */
+  @Event onShowChange: (open: boolean) => void = (_open: boolean): void => {};
   /** Window width breakpoint for responsive result columns. */
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
   /** Initial search query supplied by the route param (e.g. singer name). */
   @Param routeParam: Object = '';
   @Consumer('pageIndexInfos') pageStack: NavPathStack = new NavPathStack();
+  /**
+   * 本页**实际所在**的导航栈（由 `NavDestination.onReady` 给出，官方示例同款）。
+   * 搜索页可能被推到壳层共享栈，也可能被推到首页 Tab 的内层栈，关闭时必须弹对应那个。
+   */
+  private ownStack: NavPathStack | undefined = undefined;
   @Local query: string = '';
+  /** 输入中的联想候选（洛雪式：输入后下方弹出推荐） */
+  @Local suggestWords: string[] = [];
+  @Local showSuggest: boolean = false;
+  private suggestTimerId: number = -1;
+  /**
+   * 程序化改 `query` 后要"吃掉"一次 `onChange`（不排联想请求）。
+   * 见 `applyKeyword()` 的注释：点词条会先把 query 赋好，`onChange` 若照常排联想，
+   * 联想层就会在搜索结果出来后再冒出来。
+   */
+  private suppressSuggestOnce: boolean = false;
+  private suggestSeq: number = 0;
   @Local searching: boolean = false;
+  /** 是否**真的发起过**一次搜索（空态提示只在搜过之后才显示，入场态不该出现）。 */
+  @Local searchedOnce: boolean = false;
   @Local songs: LXSearchSong[] = [];
   @Local errorMsg: string = '';
   @Local playingNow: string = '';
@@ -184,25 +248,22 @@ struct OnlineSearchPage {
     AppStorageV2.connect(ThemeState, AppStorageKeys.THEME_STATE, () => new ThemeState())!;
   @Local ambientState: AmbientState =
     AppStorageV2.connect(AmbientState, AppStorageKeys.AMBIENT_STATE, () => new AmbientState())!;
-  @Local sources: SourceCheck[] = [
-    new SourceCheck('酷我', 'kw', true),
-    new SourceCheck('酷狗', 'kg', true),
-    new SourceCheck('QQ', 'tx', true),
-    new SourceCheck('网易', 'wy', true),
-    new SourceCheck('咪咕', 'mg', true)
-  ];
+  /**
+   * 参与搜索的平台：用户在「音源管理 → 平台管理」里勾选的**全部平台**，
+   * 含 MusicFree 插件带来的哔哩哔哩 / YouTube 等（2026-11-09 用户要求共存）。
+   * 在首帧后由 {@link rebuildSources} 从注册表生成，不再硬编码 6 个。
+   */
+  @Local sources: SourceCheck[] = [];
   /** Index of the selected source in {@link sourceSelectOptions}; 0 means all sources. */
+  /** ③ 关注状态变更计数器（驱动重绘）。 */
+  @Local followTick: number = 0;
   @Local selectedSourceIndex: number = 0;
+  @Local searchSource: string = 'all';
+  @Local showSources: boolean = false;
+  @Local sourceMenuIds: string[] = ['all'];
   /** Display text of the selected source on the dropdown button. */
   @Local selectedSourceText: string = '全部';
-  private readonly sourceSelectOptions: SelectOption[] = [
-    { value: '全部' },
-    { value: '酷我' },
-    { value: '酷狗' },
-    { value: 'QQ' },
-    { value: '网易' },
-    { value: '咪咕' }
-  ];
+  @Local sourceSelectOptions: SelectOption[] = [{ value: '全部' }];
   /** 搜索类别选项（歌曲/歌单/歌手/专辑）。 */
   private readonly modeSelectOptions: SelectOption[] = [
     { value: '歌曲' },
@@ -210,6 +271,18 @@ struct OnlineSearchPage {
     { value: '歌手' },
     { value: '专辑' }
   ];
+  /**
+   * 页签清单（用户 2026-10-20 截图）：**综合 / 歌曲 / 歌单 / 歌手 / 专辑**，纯文字胶囊。
+   *
+   * 第 0 格「综合」不对应 `searchMode`（那套枚举 0..3 是给"单类结果页"用的），
+   * 它由 {@link overview} 单独控制；1..4 与 `searchMode` 0..3 一一对应。
+   */
+  private readonly tabLabels: string[] = ['综合', '歌曲', '歌单', '歌手', '专辑'];
+  /**
+   * 是否停在「综合」页签（用户 2026-10-20：综合页 = 歌手卡 + 歌曲区 + 专辑区 + 查看更多）。
+   * 默认 true —— 一进来搜完就是综合页，与华为音乐一致。
+   */
+  @Local overview: boolean = true;
   @Local searchHistory: string[] = [];
   @Local hotWords: string[] = [];
   /** Lazily fetched cover urls keyed by source_songId. */
@@ -218,12 +291,24 @@ struct OnlineSearchPage {
   private loadingCovers: Set<string> = new Set();
   /** Scroller of the result list, bound to the HDS title bar for the search-row hide. */
   private listScroller: Scroller = new Scroller();
-  /** Top inset cleared as the search row hides on scroll; stays at the title bar height. */
-  @Local contentPaddingTop: number = 148;
-  @Local searchBarHeight: number = 40;
-  @Local searchHeaderHeight: number = 96;
-  /** titleBar 区总高（状态栏 + 标题行，不含搜索框）。搜索框在主体顶部时用它避开系统区域。 */
-  @Local titleBarTopHeight: number = 108;
+  /** Result inset: measured title builders' bottom minus the actual content top. */
+  @Local contentPaddingTop: number = 0;
+  /** Window-space bottom edges measured from the actual HDS builders. */
+  @Local searchRowBottomVp: number = 0;
+  @Local titleWidthVp: number = 0;
+  @Local typeBarBottomVp: number = 0;
+
+  /**
+   * 页根在**窗口坐标**里的顶边 y（vp），由页根 `onAreaChange` 实测。
+   *
+   * ★ 2026-10-20（用户：「搜索页顶部怎么又一块空白。之前是正常的，你参考一下之前怎么写的」）：
+   *   自绘顶栏后顶部留白**不能写死** —— `hideTitleBar(true)` 之后 HDS 的 NavDestination 究竟
+   *   有没有把标题栏那 56vp 让出来，取决于系统版本，写死 `状态栏高度` 就会在"系统已经让过"的
+   *   机型上**多空一条**。所以照其它页（`RecordListPage` / `MinePage`）的成熟做法：
+   *   量盒顶 → 用 `PageTopInsetHelper.targetContentTopVp() - 标题栏高度` 反推"标题行顶边"，
+   *   两者相减就是**还差多少**（盒顶已在标题行下方时正好为 0，不会多空）。
+   */
+  @Local boxTopVp: number = 0;
   /** Search mode: 0 = songs, 1 = playlists, 2 = singers, 3 = albums. */
   @Local searchMode: number = 0;
   /** Playlist search results. */
@@ -252,29 +337,52 @@ struct OnlineSearchPage {
 
   /** 当前模式下源下拉的选中下标（歌手/专辑模式把「全部」映射为第一个音源）。 */
   private displaySourceIndex(): number {
-    if (this.searchMode === 2 || this.searchMode === 3) {
-      return this.selectedSourceIndex === 0 ? 0 : this.selectedSourceIndex - 1;
+    const total: number = this.sourceOptionsForMode().length;
+    if (total === 0) {
+      return 0;
     }
-    return this.selectedSourceIndex;
+    if (this.searchMode === 2 || this.searchMode === 3) {
+      const v: number = this.selectedSourceIndex === 0 ? 0 : this.selectedSourceIndex - 1;
+      return Math.min(Math.max(v, 0), total - 1);
+    }
+    return Math.min(Math.max(this.selectedSourceIndex, 0), total - 1);
   }
 
   /** 应用音源选择（semanticIndex: 0=全部，1..5=对应音源）并按需重搜。 */
-  private applySourceSelection(semanticIndex: number): void {
-    this.selectedSourceIndex = semanticIndex;
-    this.selectedSourceText = semanticIndex === 0 ? '全部' :
-      this.sourceSelectOptions[semanticIndex].value as string;
-    for (let i: number = 0; i < this.sources.length; i++) {
-      this.sources[i].checked = (semanticIndex === 0) || (i === semanticIndex - 1);
+  /** 平台 id → 语义下标：'all' = 0，其余按 @Local sources 顺序 +1；查不到回 0（宁可选全部，也不要越界闪退）。 */
+  private sourceSemanticIndex(source: string): number {
+    if (source === 'all') {
+      return 0;
     }
-    this.store.setSearchSource(semanticIndex === 0 ? 'all' : this.sources[semanticIndex - 1].id);
-    if (this.query.trim().length > 0 && !this.searching) {
+    for (let i: number = 0; i < this.sources.length; i++) {
+      if (this.sources[i].id === source) {
+        return i + 1;
+      }
+    }
+    return 0;
+  }
+  private applySourceSelection(semanticIndex: number): void {
+    const max: number = this.sourceSelectOptions.length - 1;
+    const index: number = semanticIndex < 0 ? 0 : (semanticIndex > max ? 0 : semanticIndex);
+    this.selectedSourceIndex = index;
+    this.selectedSourceText = index === 0 ? '全部' :
+      this.sourceSelectOptions[index].value as string;
+    for (let i: number = 0; i < this.sources.length; i++) {
+      this.sources[i].checked = (index === 0) || (i === index - 1);
+    }
+    this.searchSource = index === 0 ? 'all' : this.sources[index - 1].id;
+    this.showSources = false;
+    this.store.setSearchSource(this.searchSource);
+    hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'source-selected source=%{public}s searching=%{public}s',
+      this.searchSource, String(this.searching));
+    if (this.query.trim().length > 0) {
       void this.doSearch();
     }
   }
 
   /** 当前专辑搜索是否为酷我源（酷我结果不展示歌曲数）。 */
   private isKwAlbumSource(): boolean {
-    return this.searchMode === 3 && this.selectedSourceIndex === 1;
+    return this.searchMode === 3 && this.currentSuggestSource() === 'kw';
   }
 
   private formatByteSize(n: number): string {
@@ -302,12 +410,30 @@ struct OnlineSearchPage {
   }
 
   /** 打开批量音质弹层并并发拉取每首歌的真实音质+大小，按音质合计。 */
+  private downloadSongs: LXSearchSong[] = [];
+
   private async openBatchQualitySheet(): Promise<void> {
+    this.downloadSongs = this.selectedSongs().map((song: LXSearchSong): LXSearchSong => {
+      return {
+        source: song.source, songId: song.songId, name: song.name, singer: song.singer,
+        albumName: song.albumName, albumId: song.albumId, interval: song.interval,
+        img: song.img, types: song.types.slice()
+      };
+    });
+    if (this.downloadSongs.length === 0) {
+      return;
+    }
+    if (this.store.getDownloadQualityMode() === 'follow') {
+      console.info('[RzdDownloadQuality] mode=follow direct entry=search-batch');
+      await this.confirmBatchDownload('');
+      return;
+    }
+    console.info('[RzdDownloadQuality] mode=manual picker-open entry=search-batch');
     this.showQualitySheet = true;
     this.batchQualityLoading = true;
     this.batchSizeText = {};
     const texts: Record<string, string> = {};
-    const selected: LXSearchSong[] = this.selectedSongs();
+    const selected: LXSearchSong[] = this.downloadSongs.slice();
     if (selected.length > 0) {
       const tasks: Promise<LXQualityOption[]>[] = [];
       for (let i: number = 0; i < selected.length; i++) {
@@ -344,13 +470,25 @@ struct OnlineSearchPage {
     this.batchQualityLoading = false;
   }
 
-  /** Recomputes the content top inset from the actual status bar height + title row + search row. */
+  /**
+   * Recomputes the content top inset from the title row height + search row height.
+   *
+   * ★ 2026-10-11（用户：「我想让它延伸进状态栏」）：这段留白住在**滚动内容里**
+   *   （`List.contentStartOffset`），页根 `NavDestination` 带
+   *   `ignoreLayoutSafeArea([SYSTEM], [TOP, BOTTOM])` ⇒ 页面盒子从屏幕 **y=0** 起排
+   *   （HDS 标题栏自己让位到 38..94）⇒ 要"静止时第一行落在标题栏下沿"，就必须写「状态栏 + 56」= 94。
+   *   上滑时行从标题栏底下**再穿进状态栏** —— 靠 `List.clipContent(ContentClipMode.SAFE_AREA)`
+   *   （List 默认是 `ContentClipMode.CONTENT_ONLY`，按内容区裁，行到状态栏那条就被切一刀）。
+   */
   private refreshContentPaddingTop(): void {
-    // titleBar 区总高（状态栏 + 标题行）：搜索框现在位于主体顶部，只需避开这一段
-    this.titleBarTopHeight =
-      getStatusBarTopVpFromWindowUtil() + TitleBarConstants.ROW_HEIGHT_VP;
-    // 主体内容顶部：标题行 + bottomBuilder（搜索框+模式切换）实测高度
-    this.contentPaddingTop = this.titleBarTopHeight + this.searchHeaderHeight;
+    const bottom: number = Math.max(this.searchRowBottomVp, this.typeBarBottomVp);
+    const inset: number = Math.max(0, bottom - this.boxTopVp);
+    if (Math.abs(inset - this.contentPaddingTop) > 0.5) {
+      this.contentPaddingTop = inset;
+      hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
+        'RzdSearchTitleMeasure rowBottom=%{public}f typeBottom=%{public}f boxTop=%{public}f inset=%{public}f',
+        this.searchRowBottomVp, this.typeBarBottomVp, this.boxTopVp, inset);
+    }
   }
 
   /** 当前搜索类别结果区是否为空（用于热搜/历史/空态渲染）。 */
@@ -390,22 +528,25 @@ struct OnlineSearchPage {
   }
 
   /** 按所选音质把勾选歌曲批量加入下载队列。 */
-  private confirmBatchDownload(quality: string): void {
-    const service: DownloadService = DownloadService.getInstance();
-    let count: number = 0;
-    for (let i: number = 0; i < this.songs.length; i++) {
-      const song: LXSearchSong = this.songs[i];
-      if (this.selection.keys.indexOf(this.songKey(song)) >= 0) {
-        service.enqueue(song.source, song.songId, song.name, song.singer, quality,
-          this.getUIContext(), song.img, song.albumName, true);
-        count++;
+  private async confirmBatchDownload(quality: string): Promise<void> {
+    const tasks: DownloadTask[] = [];
+    for (const song of this.downloadSongs.slice()) {
+      if (song.source.length > 0 && song.songId.length > 0) {
+        const task: DownloadTask = new DownloadTask();
+        task.source = song.source;
+        task.songId = song.songId;
+        task.name = song.name;
+        task.singer = song.singer;
+        task.quality = quality;
+        task.imgUrl = song.img;
+        task.albumName = song.albumName;
+        tasks.push(task);
       }
     }
     this.showQualitySheet = false;
     this.exitBatchMode();
-    if (count > 0) {
-      this.toast('已加入下载队列 ' + count + ' 首（' + quality + '）');
-    }
+    const count: number = (await DownloadUtil.downloadBatch(tasks, this.getUIContext())).length;
+    this.toast(count > 0 ? '已加入下载队列 ' + count + ' 首' : '没有新增下载任务');
   }
 
   /** True when the app currently renders in dark color mode (drives status bar icon color).
@@ -427,22 +568,41 @@ struct OnlineSearchPage {
 
   /** 进页前先把状态栏图标色翻到本页应有的值，避免从首页（彩色 Hero 上白图标）push 过来时
    *  状态栏颜色比页面晚一帧更新、产生一小会割裂。 */
+  /**
+   * 预热状态栏文字色。
+   *
+   * ★ 性能（甲方 2026-10-20：「切换到搜索页有点卡」）：`setWindowSystemBarProperties` 是一次
+   *   **窗口 IPC**，原来每次进搜索页都在 `aboutToAppear` 里同步调一次，正好压在转场首帧上。
+   *   ⇒ 整个进程只做一次，且延到首帧之后。
+   */
+  private static statusBarPreapplied: boolean = false;
+
   private preapplyStatusBarColor(): void {
-    const color: string = this.isDarkTheme() ? '#FFFFFF' : '#000000';
-    WindowUtil.getInstance().setWindowSystemBarProperties({ statusBarContentColor: color });
+    if (OnlineSearchPage.statusBarPreapplied) {
+      return;
+    }
+    OnlineSearchPage.statusBarPreapplied = true;
+    setTimeout((): void => {
+      const color: string = this.isDarkTheme() ? '#FFFFFF' : '#000000';
+      try {
+        WindowUtil.getInstance().setWindowSystemBarProperties({ statusBarContentColor: color });
+      } catch (_err) {
+        // 状态栏次要属性，失败不影响页面
+      }
+    }, 0);
   }
 
   /** 搜索框/Select 的磨砂强度，跟随软件内沉浸光感设置（与浮层迷你播放器一致）。 */
   private searchControlBlur(): BlurStyle {
     switch (this.ambientState.level) {
       case 1:
-        return BlurStyle.Thin;
+        return BlurStyle.COMPONENT_ULTRA_THIN;
       case 2:
-        return BlurStyle.Regular;
+        return BlurStyle.COMPONENT_THIN;
       case 3:
-        return BlurStyle.Thick;
+        return BlurStyle.COMPONENT_REGULAR;
       default:
-        return BlurStyle.Thin;
+        return BlurStyle.COMPONENT_ULTRA_THIN;
     }
   }
 
@@ -452,12 +612,28 @@ struct OnlineSearchPage {
     this.cachedTitleBar = undefined;
   }
 
+  /** 进页时间戳（性能取证用，见 `aboutToAppear` / 内容首帧日志）。 */
+  private static enterAtMs: number = 0;
+
   aboutToAppear(): void {
+    OnlineSearchPage.enterAtMs = Date.now();
+    morphLog('target aboutToAppear');
+    this.onShowChange(true);
     this.refreshContentPaddingTop();
-    this.searchHistory = this.store.getSearchHistory();
-    this.restoreSearchSource();
+    // ★ 2026-10-24（甲方：「切换到搜索页会有点卡」）：
+    //   `getSearchHistory()` / `getSearchSource()` 都是 **preferences（跨进程 IPC）同步读**，
+    //   原来直接压在 `aboutToAppear` 里 = 正好卡在长镜头转场的第一帧上。
+    //   ⇒ 和历史/热搜一起，统一挪到首帧之后（setTimeout 0）。
     this.preapplyStatusBarColor();
-    void this.loadHotWords();
+    setTimeout((): void => {
+      this.searchHistory = this.store.getSearchHistory();
+      this.syncSourcesIfNeeded();
+      this.restoreSearchSource();
+      void this.loadHotWords();
+      hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
+        'RzdSearchPerf deferred-init done after %{public}dms', OnlineSearchPage.enterAtMs > 0 ?
+          Date.now() - OnlineSearchPage.enterAtMs : -1);
+    }, 0);
     if (this.routeParam !== '' && typeof this.routeParam === 'string' && (this.routeParam as string).length > 0) {
       this.query = this.routeParam as string;
       void this.doSearch();
@@ -470,6 +646,61 @@ struct OnlineSearchPage {
     }
   }
 
+  /**
+   * 从平台注册表重建「参与搜索的平台」列表。
+   *
+   * 口径与「平台管理」完全一致：勾选的平台（含 MusicFree 动态平台）、按用户拖动顺序。
+   * 重建时保留用户当前选中的平台（按 id 找回），避免平台探测回填后选中项跳回「全部」。
+   */
+  private rebuildSources(): void {
+    const previous: string = this.searchSource;
+    const apis = lxSourceManager.getApiList();
+    const defs = platformRegistry.allPlatforms(apis);
+    const next: SourceCheck[] = [];
+    const opts: SelectOption[] = [{ value: '全部' }];
+    const menuIds: string[] = ['all'];
+    for (let i: number = 0; i < defs.length; i++) {
+      if (!defs[i].sourceEnabled || !platformRegistry.isEnabled(defs[i].id)) {
+        continue;
+      }
+      const label: string = defs[i].label;
+      next.push(new SourceCheck(label, defs[i].id, true));
+      opts.push({ value: label });
+      menuIds.push(defs[i].id);
+    }
+    this.sources = next;
+    this.sourceSelectOptions = opts;
+    this.sourceMenuIds = menuIds;
+    // 选中项按 id 重新定位；只有「全部」或原平台仍存在时才保留
+    if (previous !== 'all') {
+      const semantic: number = this.sourceSemanticIndex(previous);
+      this.selectedSourceIndex = semantic;
+      this.searchSource = semantic === 0 ? 'all' : previous;
+      this.selectedSourceText = semantic === 0 ? '全部' :
+        (this.sourceSelectOptions[semantic].value as string);
+    }
+  }
+
+  /** 平台清单发生变化（导入/删除音源、平台勾选变化）时才重建，避免每帧重排。 */
+  private syncSourcesIfNeeded(): void {
+    const apis = lxSourceManager.getApiList();
+    const defs = platformRegistry.allPlatforms(apis);
+    const ids: string[] = [];
+    for (let i: number = 0; i < defs.length; i++) {
+      if (defs[i].sourceEnabled && platformRegistry.isEnabled(defs[i].id)) {
+        ids.push(defs[i].id);
+      }
+    }
+    const signature: string = ids.join(',');
+    if (signature === this.sourcesSignature && this.sources.length > 0) {
+      return;
+    }
+    this.sourcesSignature = signature;
+    this.rebuildSources();
+  }
+
+  private sourcesSignature: string = '';
+
   /** Restores the persisted source selection; defaults to all sources. */
   private restoreSearchSource(): void {
     const cached: string = this.store.getSearchSource();
@@ -480,17 +711,118 @@ struct OnlineSearchPage {
         break;
       }
     }
+    if (index < 0 || index > this.sources.length) {
+      index = 0;
+    }
     this.selectedSourceIndex = index;
-    this.selectedSourceText = index === 0 ? '全部' : this.sourceSelectOptions[index].value as string;
+    this.searchSource = index === 0 ? 'all' : this.sources[index - 1].id;
+    this.selectedSourceText = index === 0 ? '全部' :
+      (this.sourceSelectOptions.length > index ? this.sourceSelectOptions[index].value as string : '全部');
     for (let i: number = 0; i < this.sources.length; i++) {
       this.sources[i].checked = (index === 0) || (i === index - 1);
     }
   }
 
   /** Loads the QQ hot search words for the search hint area. */
+  /**
+   * 热搜词。
+   *
+   * ★ 性能（`切换到搜索页有点卡`）：原来是**每次进页面都发一次网络请求**，且首帧就在跑。
+   *   改成：进程内缓存 + 首帧之后异步拉；有缓存就直接用，不再发请求。
+   */
+  private static hotWordsCache: string[] = [];
+
   private async loadHotWords(): Promise<void> {
-    const words = await lxTxHotSearch();
-    this.hotWords = words.slice(0, 10);
+    if (OnlineSearchPage.hotWordsCache.length > 0) {
+      this.hotWords = OnlineSearchPage.hotWordsCache.slice(0, 10);
+      return;
+    }
+    try {
+      const words: string[] = await lxTxHotSearch();
+      OnlineSearchPage.hotWordsCache = words.slice(0, 10);
+      this.hotWords = OnlineSearchPage.hotWordsCache;
+    } catch (_err) {
+      // 热搜是装饰性内容，失败就留空
+    }
+  }
+
+  /** 输入防抖后拉联想词（对齐 lx-music 搜索框下方候选） */
+  private scheduleSuggest(value: string): void {
+    const key: string = value.trim();
+    if (this.suggestTimerId >= 0) {
+      try {
+        clearTimeout(this.suggestTimerId);
+      } catch (_e) {
+      }
+      this.suggestTimerId = -1;
+    }
+    if (key.length === 0) {
+      this.suggestWords = [];
+      this.showSuggest = false;
+      return;
+    }
+    // 已有搜索结果时仍可显示联想，方便改关键词
+    const seq: number = ++this.suggestSeq;
+    this.suggestTimerId = setTimeout((): void => {
+      void this.loadSuggest(key, seq);
+    }, 280) as number;
+  }
+
+  private currentSuggestSource(): string {
+    if (this.selectedSourceIndex <= 0) {
+      return 'all';
+    }
+    const idx: number = this.selectedSourceIndex - 1;
+    if (idx < 0 || idx >= this.sources.length) {
+      return 'all';
+    }
+    return this.sources[idx].id;
+  }
+
+  private async loadSuggest(key: string, seq: number): Promise<void> {
+    try {
+      const words: string[] = await lxSearchSuggest(key, this.currentSuggestSource());
+      if (seq !== this.suggestSeq) {
+        return;
+      }
+      // 新数组引用，确保 ForEach 刷新
+      this.suggestWords = words.slice();
+      this.showSuggest = this.suggestWords.length > 0 && this.query.trim().length > 0;
+      console.info('[搜索联想UI] n=' + this.suggestWords.length + ' src=' + this.currentSuggestSource());
+    } catch (_e) {
+      if (seq === this.suggestSeq) {
+        this.suggestWords = [];
+        this.showSuggest = false;
+      }
+    }
+  }
+
+  /**
+   * 收起联想层。
+   *
+   * ★ 2026-10-20（用户：「**回车搜索时联想词不会消失**」）：
+   *   原来这里只把 `showSuggest` 置 false，但 `scheduleSuggest` 那个 **280ms 防抖定时器还在跑**，
+   *   定时器一到就把 `showSuggest` 又置回 true ⇒ 表现就是"按了回车，联想层过一会儿又冒出来"。
+   *   现在顺手**清定时器**并 `suggestSeq++`（让已经在途的请求作废，不再写回状态）。
+   */
+  private hideSuggest(): void {
+    this.showSuggest = false;
+    this.suggestSeq++;
+    if (this.suggestTimerId >= 0) {
+      try {
+        clearTimeout(this.suggestTimerId);
+      } catch (_e) {
+      }
+      this.suggestTimerId = -1;
+    }
+  }
+
+  private pickSuggest(word: string): void {
+    this.hideSuggest();
+    this.suppressSuggestOnce = true;
+    this.query = word;
+    this.suggestWords = [];
+    void this.doSearch();
   }
 
   /** Reloads search history when the store changes. */
@@ -514,15 +846,14 @@ struct OnlineSearchPage {
     return '#6B6B6B';
   }
 
+  /** 菜单条目文字（聚合用中文，其余走平台名）。 */
+  private sourceMenuLabel(source: string): string {
+    return this.sourceLabel(source);
+  }
+
   private sourceLabel(source: string): string {
-    switch (source) {
-      case 'kw': return '酷我';
-      case 'kg': return '酷狗';
-      case 'tx': return 'QQ';
-      case 'wy': return '网易';
-      case 'mg': return '咪咕';
-    }
-    return source;
+    // 平台一行 = 一个来源；MusicFree 的名字跟随源名（小蜗 / 元力KW），洛雪用中文名
+    return platformRegistry.labelOf(source);
   }
 
   /** Result columns template per width breakpoint: 1 (SM) / 2 (MD) / 3 (LG) / 4 (XL). */
@@ -540,6 +871,18 @@ struct OnlineSearchPage {
     return new BreakpointType<number>(1, 2, 3, 4).getValue(this.breakpointEnv.widthBreakpoint);
   }
 
+  /**
+   * 应用「音源管理 → 平台管理」的用户偏好（2026-11-08）：
+   *   1. 过滤掉用户停用的平台；
+   *   2. 按用户长按拖动出来的平台顺序排序。
+   * 只作用于「本次真正要请求的平台列表」，不改 this.sources 数组本身 ——
+   * 那套数组与 sourceMenuIds / sourceSelectOptions 的语义下标（0=全部，1..5）是硬绑定，
+   * 重排会让下拉菜单与选源错位。
+   */
+  private applyPlatformPrefs(ids: string[]): string[] {
+    return platformRegistry.sortIds(platformRegistry.filterEnabled(ids));
+  }
+
   /** Cache key for the current query + enabled sources. */
   private searchCacheKey(): string {    const active: string[] = [];
     for (let i: number = 0; i < this.sources.length; i++) {
@@ -547,15 +890,104 @@ struct OnlineSearchPage {
         active.push(this.sources[i].id);
       }
     }
-    return this.query.trim() + '|' + active.join(',');
+    const activeWithPrefs: string[] = this.applyPlatformPrefs(active);
+    // ★ 2026-11-02：`|v2` = 结果口径版本号。
+    //   上一版综合页**只搜第一个勾选音源**，却用"全部勾选音源"当缓存 key ⇒
+    //   老缓存里躺着"只有一个平台"的假聚合结果。换口径必须换 key，否则用户看到
+    //   的仍是旧的那一份（而且怎么重搜都被缓存挡住）。以后聚合口径再变就继续 +1。
+    return this.query.trim() + '|' + activeWithPrefs.join(',') + '|v3';
   }
 
+  /**
+   * 点词条（最近搜索 / 热搜）发起搜索。
+   *
+   * ★★ 2026-10-20（用户：「点击词条搜索后会出现联想词（之前修过一次）」—— 回归了）：
+   *   真因是 `this.query = keyword` 是**程序化赋值**，`Search.onChange` 照样会触发 ⇒
+   *   `scheduleSuggest()` 又排了一个 280ms 的联想请求，定时器一到联想层就冒出来。
+   *   上一轮只清了 `doSearch()` 之前的那批定时器，清不到"赋值之后新排的那个"。
+   *   现在用 `suppressSuggestOnce` 标记：程序化赋值后**第一次** `onChange` 只同步值、不排联想。
+   */
+  private applyKeyword(keyword: string): void {
+    this.hideSuggest();
+    this.suppressSuggestOnce = true;
+    this.query = keyword;
+    void this.doSearch();
+  }
+
+  private searchRequestRunning: boolean = false;
+  private searchRequestQueued: boolean = false;
+  private searchDisposed: boolean = false;
+
+  /** Serialize changes so the latest selected source always receives a fresh result pass. */
   private async doSearch(): Promise<void> {
+    this.searchRequestQueued = true;
+    if (this.searchRequestRunning || this.searchDisposed) {
+      return;
+    }
+    this.searchRequestRunning = true;
+    try {
+      while (this.searchRequestQueued && !this.searchDisposed) {
+        this.searchRequestQueued = false;
+        hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
+          'RzdSearchSource request start source=%{public}s', this.currentSuggestSource());
+        await this.doSearchOnce();
+        hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
+          'RzdSearchSource request end queued=%{public}s', String(this.searchRequestQueued));
+      }
+    } finally {
+      this.searchRequestRunning = false;
+      this.searching = false;
+    }
+  }
+
+  aboutToDisappear(): void {
+    this.searchDisposed = true;
+    this.searchRequestQueued = false;
+    this.hideSuggest();
+    this.appState.selectionActive = false;
+    morphLog('target aboutToDisappear');
+    // ⚠️ 这里**不要**再 `onShowChange(false)`：它在转场那一帧里改壳层状态（底栏高度 0→56），
+    //    壳层随即重排，源节点（首页的 Search）被推迟到下一帧才创建 ⇒ 两端配不成一对 ⇒ 退出没有动画。
+    //    真机日志实证：target disappear → target aboutToDisappear → bar searching=false → source appear。
+    //    底栏恢复改到 `closeSearch()` 的 animateTo.onFinish 里。
+  }
+
+  private async doSearchOnce(): Promise<void> {
+    // ★ 2026-10-20（用户：「点击词条跳转搜索时还会显示联想词」）：真因是这里只把
+    //   `showSuggest` 置 false、**没清 280ms 防抖定时器**，定时器一到又把联想层打开。
+    //   `hideSuggest()` 现在会一起 clearTimeout + `suggestSeq++`，所以这里统一走它
+    //   （回车提交、点词条、点联想词三条路都覆盖）。
+    this.hideSuggest();
+    this.suggestWords = [];
     if (this.query.trim().length === 0) {
       return;
     }
+    // 平台清单可能在别处被改过（导入 MusicFree 订阅、平台管理勾选）——搜索前对齐一次
+    this.syncSourcesIfNeeded();
     this.searching = true;
+    this.searchedOnce = true;
     this.errorMsg = '';
+    // ★ 用户 2026-10-20：综合页要**一次**同时拿到歌曲/歌手/专辑（三份并发），
+    //   任一有结果就清掉错误提示（单类搜索各自会写 errorMsg，这里统一兜回来）。
+    if (this.overview) {
+      this.songs = [];
+      this.singers = [];
+      this.playlists = [];
+      this.albums = [];
+      this.covers = {};
+      await Promise.all([this.doSongSearch(), this.doSingerSearch(), this.doAlbumSearch(),
+        this.doPlaylistSearch()]);
+      if (this.songs.length > 0 || this.singers.length > 0 || this.albums.length > 0 ||
+        this.playlists.length > 0) {
+        this.errorMsg = '';
+        this.store.addSearchHistory(this.query);
+      }
+      this.searching = false;
+      hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
+        'overview songs=%{public}d singers=%{public}d albums=%{public}d playlists=%{public}d',
+        this.songs.length, this.singers.length, this.albums.length, this.playlists.length);
+      return;
+    }
     if (this.searchMode === 1) {
       this.playlists = [];
       await this.doPlaylistSearch();
@@ -574,16 +1006,54 @@ struct OnlineSearchPage {
       this.searching = false;
       return;
     }
-    this.songs = [];
-    this.covers = {};
-    const activeSources: string[] = [];
+    await this.doSongSearch();
+    this.searching = false;
+    return;
+  }
+
+  /**
+   * 歌曲搜索（用户 2026-10-20：「综合」页签要一次同时有歌曲/歌手/专辑）。
+   *
+   * 从 `doSearch()` 里**原样抽出来**，不碰 `this.searching`（由调用方管），
+   * 这样「综合」页签可以 `Promise.all` 三份搜索，「歌曲」页签仍走原来的单份路径。
+   */
+  /**
+   * 本次搜索要走哪些音源。
+   *
+   * ★ 2026-10-20（用户：「搜索页还是卡」）：综合页要同时拉 歌曲/歌手/专辑 三份，
+   *   若再乘上"已勾选的 N 个音源"就是十几条并发请求，进页面会明显卡。
+   *   ⇒ **综合页只取第一个勾选的音源**；单类页签（歌曲/歌单/歌手/专辑）保持原样，全勾的都搜。
+   */
+  private searchSources(): string[] {
+    const checked: string[] = [];
     for (let i: number = 0; i < this.sources.length; i++) {
       if (this.sources[i].checked) {
-        activeSources.push(this.sources[i].id);
+        checked.push(this.sources[i].id);
       }
     }
+    // 平台管理偏好：停用平台不搜、按用户拖动顺序排，综合页再取排第一的那个。
+    const prefs: string[] = this.applyPlatformPrefs(checked);
+    const effective: string[] = prefs.length > 0 ? prefs : platformRegistry.sortIds(checked);
+    if (this.overview) {
+      return effective.length > 0 ? [effective[0]] : [];
+    }
+    return effective;
+  }
+
+  private async doSongSearch(): Promise<void> {
+    this.songs = [];
+    this.covers = {};
+    // ★★★ 2026-11-02（用户：「搜索选聚合，结果却只有酷我」）：
+    //   根因就是这一行 —— `searchSources()` 在**综合页**只返回**第一个勾选**的音源
+    //   （2026-10-20 为了"进页面不卡"做的取舍），而综合页默认就是「聚合」，
+    //   勾选顺序里 kw 常排第一 ⇒ 屏上永远只有酷我。
+    //   更糟的是缓存 `searchCacheKey()` 用的是**全部**勾选音源 ⇒
+    //   把"只搜了一个源"的结果当成"全量聚合结果"缓存起来，之后再搜也拿不到别的平台。
+    //   ⇒ 综合页的歌曲这一路改成**全部勾选音源并发**（与歌手/专辑同一口径）。
+    //   ⚠️ 并发量：每个音源 1 条请求 / 20 条结果，最多 7 个音源；与"全勾选 + 三份搜索"相比
+    //     只是歌曲这一路从 1 条变成 N 条，仍在同一次 `Promise.all` 里，不增加屏上节点。
+    const activeSources: string[] = this.overview ? this.overviewFallbackSources() : this.searchSources();
     if (activeSources.length === 0) {
-      this.searching = false;
       return;
     }
     const cacheKey: string = this.searchCacheKey();
@@ -604,7 +1074,8 @@ struct OnlineSearchPage {
     let all: LXSearchSong[] = [];
     const searchPromises: Promise<LXSearchResult>[] = [];
     for (let i: number = 0; i < activeSources.length; i++) {
-      searchPromises.push(lxSearch(activeSources[i], this.query, 1, 20));
+      // 统一路由：洛雪平台走内置接口，MusicFree 平台走它对应的插件（一源一平台）
+      searchPromises.push(searchPlatformSongs(activeSources[i], this.query, 1, 20));
     }
     const results: PromiseSettledResult<LXSearchResult>[] = await Promise.allSettled(searchPromises);
     for (let i: number = 0; i < results.length; i++) {
@@ -624,17 +1095,11 @@ struct OnlineSearchPage {
     } else {
       this.store.addSearchHistory(this.query);
     }
-    this.searching = false;
   }
 
   /** Searches playlists across the enabled sources. */
   private async doPlaylistSearch(): Promise<void> {
-    const activeSources: string[] = [];
-    for (let i: number = 0; i < this.sources.length; i++) {
-      if (this.sources[i].checked) {
-        activeSources.push(this.sources[i].id);
-      }
-    }
+    const activeSources: string[] = this.searchSources();
     if (activeSources.length === 0) {
       this.errorMsg = '请至少选择一个音源';
       return;
@@ -643,7 +1108,7 @@ struct OnlineSearchPage {
     for (let i: number = 0; i < activeSources.length; i++) {
       try {
         const list: SearchPlaylistInfo[] =
-          await PlaylistSearchApi.searchPlaylists(activeSources[i], this.query, 1);
+          await searchPlatformSheets(activeSources[i], this.query, 1);
         for (let j: number = 0; j < list.length; j++) {
           all.push(list[j]);
         }
@@ -659,16 +1124,40 @@ struct OnlineSearchPage {
     }
   }
 
-  /** Searches singers across the enabled sources (geuz source codes). */
-  private async doSingerSearch(): Promise<void> {
-    const activeSources: string[] = [];
+  /**
+   * 「综合」页签的歌手/专辑要有兜底音源。
+   *
+   * ★ 用户 2026-10-20：「我们原本的搜索页的综合不止有歌曲，还有歌手啥的」——
+   *   `searchSources()` 在综合页只返回**第一个勾选**的音源（当时为了不卡做的取舍），
+   *   而个别平台的歌手/专辑接口会返回空 ⇒ 综合页就只剩歌曲。
+   *   ⇒ 综合页先把所有勾选音源都试一遍（歌手/专辑各一次请求、命中即停），
+   *     单类页签仍走 `searchSources()` 的原口径。
+   */
+  private overviewFallbackSources(): string[] {
+    const checked: string[] = [];
     for (let i: number = 0; i < this.sources.length; i++) {
       if (this.sources[i].checked) {
-        activeSources.push(this.sources[i].id);
+        checked.push(this.sources[i].id);
       }
     }
+    const all: string[] = checked.length > 0 ? checked : [];
+    if (all.length === 0) {
+      for (let i: number = 0; i < this.sources.length; i++) {
+        all.push(this.sources[i].id);
+      }
+    }
+    // 综合页的兜底链也按平台管理顺序走：用户拖到前面的平台优先命中。
+    const prefs: string[] = this.applyPlatformPrefs(all);
+    return prefs.length > 0 ? prefs : platformRegistry.sortIds(all);
+  }
+
+  /** Searches singers across the enabled sources (geuz source codes). */
+  private async doSingerSearch(): Promise<void> {
+    // 歌手/专辑是内置接口能力，MusicFree 插件（含 B 站这类独有平台）没有对应方法，跳过
+    const activeSources: string[] = (this.overview ? this.overviewFallbackSources() : this.searchSources())
+      .filter((id: string): boolean => platformRegistry.isBuiltin(id));
     if (activeSources.length === 0) {
-      this.errorMsg = '请至少选择一个音源';
+      this.singers = [];
       return;
     }
     const all: SingerInfo[] = [];
@@ -681,8 +1170,15 @@ struct OnlineSearchPage {
           singer.id = code + '_' + singer.id;
           all.push(singer);
         }
-      } catch (_err) {
-        // skip failing source
+        hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
+          'singer source=%{public}s hits=%{public}d', activeSources[i], result.list.length);
+      } catch (err) {
+        hilog.warn(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
+          'singer source=%{public}s failed %{public}s', activeSources[i], JSON.stringify(err));
+      }
+      // 综合页：拿到就停，避免多平台重复拉同一批歌手。
+      if (this.overview && all.length > 0) {
+        break;
       }
     }
     this.singers = all;
@@ -695,14 +1191,10 @@ struct OnlineSearchPage {
 
   /** Searches albums across the enabled sources. */
   private async doAlbumSearch(): Promise<void> {
-    const activeSources: string[] = [];
-    for (let i: number = 0; i < this.sources.length; i++) {
-      if (this.sources[i].checked) {
-        activeSources.push(this.sources[i].id);
-      }
-    }
+    const activeSources: string[] = (this.overview ? this.overviewFallbackSources() : this.searchSources())
+      .filter((id: string): boolean => platformRegistry.isBuiltin(id));
     if (activeSources.length === 0) {
-      this.errorMsg = '请至少选择一个音源';
+      this.albums = [];
       return;
     }
     const all: AlbumInfo[] = [];
@@ -713,8 +1205,14 @@ struct OnlineSearchPage {
         for (let j: number = 0; j < result.list.length; j++) {
           all.push(result.list[j]);
         }
-      } catch (_err) {
-        // skip failing source
+        hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
+          'album source=%{public}s hits=%{public}d', activeSources[i], result.list.length);
+      } catch (err) {
+        hilog.warn(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
+          'album source=%{public}s failed %{public}s', activeSources[i], JSON.stringify(err));
+      }
+      if (this.overview && all.length > 0) {
+        break;
       }
     }
     this.albums = all;
@@ -732,6 +1230,8 @@ struct OnlineSearchPage {
     param.playlistId = p.id;
     param.onlineSource = p.source;
     param.listTitle = p.name;
+    // 歌单自己的封面随路由带下去：详情页 Hero 用它，而不是第一首歌的封面
+    param.listCover = p.coverUrl;
     this.pageStack.pushPathByName(RouterUrlConstants.PLAYLIST_DETAIL, param);
   }
 
@@ -781,6 +1281,33 @@ struct OnlineSearchPage {
   }
 
   /** Fetches playlist songs and saves them into a brand-new playlist named after it. */
+  /**
+   * 收藏 / 取消收藏这张**在线歌单**（写 `favorite_playlists`，我的页「收藏歌单」那一段读它）。
+   *
+   * 只存"身份 + 展示信息"（id / source / 名字 / 作者 / 曲目数 / 封面），**不拉歌曲列表**——
+   * 收藏是"留着以后听"的动作，不是导入；要落到本地歌单请用菜单里的「导入为我的歌单」。
+   * 已经收藏过的再点 = 取消收藏（同一颗星在平台音乐页也能取消，两处同一份数据）。
+   */
+  private collectPlaylist(p: SearchPlaylistInfo): void {
+    const store = this.store;
+    if (store.isFavoritePlaylist(p.source, p.id)) {
+      store.removeFavoritePlaylist(p.source, p.id);
+      this.getUIContext().getPromptAction().showToast({ message: '已取消收藏', duration: 1800 });
+      return;
+    }
+    const entry = new FavoriteEntry();
+    entry.id = p.id;
+    entry.source = p.source;
+    entry.name = p.name.length > 0 ? p.name : '在线歌单';
+    entry.sub = p.creator.length > 0 ? p.creator : sourceName(p.source);
+    entry.count = p.trackCount;
+    entry.img = p.coverUrl;
+    entry.time = Date.now();
+    store.addFavoritePlaylist(entry);
+    this.getUIContext().getPromptAction().showToast(
+      { message: '已收藏', duration: 1500 });
+  }
+
   private async addPlaylistToMine(p: SearchPlaylistInfo): Promise<void> {
     try {
       const songs: SearchPlaylistSong[] = await PlaylistSearchApi.getPlaylistDetail(p.source, p.id);
@@ -791,6 +1318,13 @@ struct OnlineSearchPage {
       const store = this.store;
       const created = store.createPlaylist(p.name.length > 0 ? p.name : '导入的歌单');
       const targetId: string = created.id;
+      // ★ 导入时把**源歌单封面**一起存下来：在线歌单自带封面，存了之后列表与详情页大图
+      //   都能显示（以前没存，详情页就只能显示占位图 —— 用户反馈的「导入的歌单没封面」）。
+      //   源歌单没给封面时退一步用第一首歌的专辑图（导入这一刻的快照）。
+      const cover: string = p.coverUrl.length > 0 ? p.coverUrl : (songs[0].picUrl ?? '');
+      if (cover.length > 0) {
+        store.setPlaylistCover(targetId, cover);
+      }
       let added = 0;
       for (let i = 0; i < songs.length; i++) {
         const record = this.searchPlaylistSongToRecord(songs[i]);
@@ -939,6 +1473,7 @@ struct OnlineSearchPage {
             .fontColor($r('sys.color.font_primary'))
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .textAlign(TextAlign.Start)
             .layoutWeight(1)
         }
         .width('100%')
@@ -957,7 +1492,18 @@ struct OnlineSearchPage {
         .margin({ right: 4 })
         .bindMenu([
           {
-            value: '添加到我的歌单',
+            // ★ 用户 2026-10-11：「歌单菜单添加到我的歌单行为从创建一个歌单改为收藏该歌单」。
+            //   原来这一项 = `addPlaylistToMine()`（拉全量歌曲、`createPlaylist()` 落一张本地歌单）。
+            //   现在改成**收藏该在线歌单**（写 `MusicStoreService` 的 `favorite_playlists`），
+            //   与「我的 → 歌单卡 → 收藏歌单」那一段同一份数据；导入能力保留为下面单独一项，
+            //   免得多出来的歌单没人知道从哪来（能力一个都没丢）。
+            value: '收藏该歌单',
+            action: (): void => {
+              this.collectPlaylist(p);
+            }
+          },
+          {
+            value: '导入为我的歌单',
             action: (): void => {
               void this.addPlaylistToMine(p);
             }
@@ -968,21 +1514,89 @@ struct OnlineSearchPage {
               void this.addPlaylistToQueue(p);
             }
           }
-        ])
+        ], {
+          backgroundBlurStyle: appBarBlurStyle(),
+          backgroundColor: $r('app.color.menu_surface'),
+        })
       SymbolGlyph($r('sys.symbol.chevron_right'))
         .fontSize(18)
         .fontColor([$r('sys.color.font_tertiary')])
     }
     .width('100%')
-    .padding({ top: 6, bottom: 6, left: 16, right: 16 })
-    .borderRadius($r('sys.float.corner_radius_level8'))
-    .backgroundColor($r('app.color.card_background'))
+    .padding({ top: 8, bottom: 8, left: 16, right: 16 })
+    // ★ 2026-10-20（用户：「专辑和歌手怎么还是卡片」）⇒ 歌单行同样去卡片、改分隔线
+    .border({ width: { bottom: 0.5 }, color: $r('sys.color.comp_divider') })
     .onClick(() => {
       void this.openPlaylist(p);
     })
   }
 
-  /** 歌手搜索结果行：圆头像 + 名字 + 专辑/歌曲数；点击进入歌手详情页。 */
+  /** 歌手 id 形如 `source_rawId`（见 `doSingerSearch`）：拆出音源号。 */
+  private singerSource(s: SingerInfo): number {
+    const sep: number = s.id.indexOf('_');
+    return sep > 0 ? Number(s.id.substring(0, sep)) : 2;
+  }
+
+  /** 歌手 id 里真正的原始 id（去掉 `source_` 前缀）。 */
+  private singerRawId(s: SingerInfo): string {
+    const sep: number = s.id.indexOf('_');
+    return sep > 0 && sep < s.id.length - 1 ? s.id.substring(sep + 1) : s.id;
+  }
+
+  /** 是否已关注（关注 = 收藏歌手，与「我的 → 关注」页共用同一份数据）。 */
+  private isFollowingSinger(s: SingerInfo): boolean {
+    // ③ 关注状态存在 MusicStoreService（非 V2 可观察对象）里，改完界面不会自己刷新。
+    //   这里读一下 @Local 计数器，让关注/取关后的重绘能立刻发生。
+    if (this.followTick >= 0) {
+      return this.store.isFavoriteArtist(String(this.singerSource(s)), this.singerRawId(s));
+    }
+    return false;
+  }
+
+  /** 关注 / 取消关注。 */
+  private toggleFollowSinger(s: SingerInfo): void {
+    const source: string = String(this.singerSource(s));
+    const rawId: string = this.singerRawId(s);
+    if (this.store.isFavoriteArtist(source, rawId)) {
+      this.store.removeFavoriteArtist(source, rawId);
+      this.followTick++;
+      this.toast('已取消关注');
+      hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'unfollow singer=%{public}s', s.name);
+      return;
+    }
+    const entry: FavoriteEntry = new FavoriteEntry();
+    entry.source = source;
+    entry.id = rawId;
+    entry.name = s.name;
+    entry.img = s.picUrl;
+    entry.sub = s.albumSize > 0 ? `专辑 ${s.albumSize}` : '';
+    entry.count = s.songNum;
+    entry.time = Date.now();
+    this.store.addFavoriteArtist(entry);
+    this.followTick++;
+    this.toast('已关注');
+    hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'follow singer=%{public}s', s.name);
+  }
+
+  /**
+   * 关注 / 已关注 胶囊按钮（用户 2026-10-20：「搜索页的歌手部分后面加上关注/已关注」）。
+   * 搜索结果的歌手行、综合页顶部歌手卡共用这一个。
+   */
+  @Builder
+  private FollowButton(s: SingerInfo) {
+    Text(this.isFollowingSinger(s) ? '已关注' : '+ 关注')
+      .fontSize($r('sys.float.Caption_M'))
+      .fontWeight(FontWeight.Medium)
+      .fontColor(this.isFollowingSinger(s) ? $r('sys.color.font_tertiary') : this.themeState.color)
+      .padding({ left: 12, right: 12, top: 5, bottom: 5 })
+      .borderRadius(14)
+      .backgroundColor($r('sys.color.comp_background_tertiary'))
+      .onClick((): void => {
+        this.toggleFollowSinger(s);
+      })
+  }
+
+  /** 歌手搜索结果行：封面 + 名字 + 专辑/歌曲数；点击进入歌手详情页。 */
   @Builder
   private SingerResultRow(s: SingerInfo) {
     Row({ space: 12 }) {
@@ -1005,6 +1619,8 @@ struct OnlineSearchPage {
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
+      // ★ 2026-10-20（用户：「搜索页的歌手部分后面加上关注/已关注」）
+      this.FollowButton(s)
       SymbolGlyph($r('sys.symbol.chevron_right'))
         .fontSize(18)
         .fontWeight(FontWeight.Regular)
@@ -1012,9 +1628,9 @@ struct OnlineSearchPage {
         .fontColor([$r('sys.color.font_tertiary')])
     }
     .width('100%')
-    .padding({ top: 6, bottom: 6, left: 16, right: 16 })
-    .borderRadius($r('sys.float.corner_radius_level8'))
-    .backgroundColor($r('app.color.card_background'))
+    .padding({ top: 8, bottom: 8, left: 16, right: 16 })
+    // ★ 2026-10-20（用户：「专辑和歌手怎么还是卡片」）⇒ 去卡片、改分隔线
+    .border({ width: { bottom: 0.5 }, color: $r('sys.color.comp_divider') })
     .onClick(() => {
       const param = new ArtistRouteParam();
       const sep: number = s.id.indexOf('_');
@@ -1064,9 +1680,9 @@ struct OnlineSearchPage {
         .fontColor([$r('sys.color.font_tertiary')])
     }
     .width('100%')
-    .padding({ top: 6, bottom: 6, left: 16, right: 16 })
-    .borderRadius($r('sys.float.corner_radius_level8'))
-    .backgroundColor($r('app.color.card_background'))
+    .padding({ top: 8, bottom: 8, left: 16, right: 16 })
+    // ★ 2026-10-20（用户：「专辑和歌手怎么还是卡片」）⇒ 去卡片、改分隔线
+    .border({ width: { bottom: 0.5 }, color: $r('sys.color.comp_divider') })
     .onClick(() => {
       const param = new AlbumRouteParam();
       param.source = 2;
@@ -1079,169 +1695,472 @@ struct OnlineSearchPage {
     })
   }
 
-  /** Title-bar bottom area: search input plus the fixed mode chips right below it. */
-  @Builder
-  private SearchHeaderBar() {
-    Column() {
-      this.SearchInputBar()
+  private searchController: SearchController = new SearchController();
+  private searchClosing: boolean = false;
 
-      Row({ space: 8 }) {
-        ForEach(this.modeSelectOptions, (opt: SelectOption, index: number) => {
-          this.ModeTabChip(opt.value as string, this.modeTabIcon(index), this.searchMode === index,
-            (): void => {
-              this.changeSearchMode(index);
-            })
-        }, (opt: SelectOption) => 'mode-' + opt.value + '-' + this.searchMode)
-      }
-      .width('100%')
-      .height(40)
-      .padding({ left: 16, right: 16 })
-      .margin({ top: 8 })
-      .justifyContent(FlexAlign.Start)
-    }
-    .width('100%')
-    .padding({ bottom: 8 })
-    .onAreaChange((_oldArea: Area, newArea: Area): void => {
-      const height: number = Number(newArea.height);
-      if (height > 0 && Math.abs(height - this.searchHeaderHeight) > 0.5) {
-        this.searchHeaderHeight = height;
-      }
-    })
+  /**
+   * 关闭搜索页。
+   *
+   * 关掉系统转场 + 用同一个弹簧包住 `pop(false)`，两端的 `geometryTransition`
+   * 才会把搜索框原路收回首页（官方示例 `SearchLongTakeTransitionPageTwo.ets:86-92`）。
+   */
+  /** 搜索页自己的迷你播放条：与其它二级页同一套（MiniBarMaterialCapsule + HDS systemMaterialEffect）。 */
+  /** 胶囊宽度：屏宽 - 两侧 margin（与二级页那条同一算法口径）。 */
+  private searchMiniBarWidthVp(): number {
+    return Math.max(0, this.searchMiniBarWinWVp() - SEARCH_MINI_BAR_SIDE_MARGIN * 2);
   }
 
-  /** 搜索输入行：音源选择嵌在最左 + 搜索框，整行一个圆角胶囊。 */
-  @Builder
-  private SearchInputBar() {
-    Row() {
-      Row() {
-        // 音源选择：自定义触发按钮 + bindMenu 自定义菜单。系统 Select 的菜单宽度跟随
-        // 控件宽度且菜单项文字左对齐，无法满足「文字居中 + 窄菜单」的要求。
-        Row({ space: 4 }) {
-          Text(this.sourceOptionsForMode()[this.displaySourceIndex()].value as string)
-            .fontSize(14)
-            .fontWeight(FontWeight.Regular)
-            .fontColor($r('sys.color.font_primary'))
-            .maxLines(1)
-          SymbolGlyph($r('sys.symbol.chevron_down'))
-            .fontSize(12)
-            .fontWeight(FontWeight.Regular)
-            .fontColor([$r('sys.color.font_secondary')])
-        }
-        .height(40)
-        .constraintSize({ minWidth: 78 })
-        .padding({ left: 10, right: 8 })
-        .justifyContent(FlexAlign.Center)
-        .bindMenu(this.SourceMenuBuilder())
-
-        // 搜索框
-        Search({ value: this.query, placeholder: $r('app.string.home_search_placeholder') })
-          .id('online_search_input')
-          .layoutWeight(1)
-          .height(40)
-          .borderWidth(0)
-          .backgroundColor(Color.Transparent)
-          .backgroundBlurStyle(this.searchControlBlur())
-          .searchButton($r('app.string.search_button'))
-          .onChange((value: string) => {
-            this.query = value;
-          })
-          .onSubmit(() => {
-            void this.doSearch();
-          })
-      }
-      .width('100%')
-      .height(40)
-      .borderRadius(20)
-      .backgroundColor($r('app.color.floating_mini_bar_background'))
-      .backgroundBlurStyle(this.searchControlBlur())
-      // 注意：左右 padding 由调用方（build 主体顶部）控制，保证与 List padding(12,12) 严格对
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16 })
-    .onAreaChange((_oldArea: Area, newArea: Area): void => {
-      const height: number = Number(newArea.height);
-      if (height > 0 && Math.abs(height - this.searchBarHeight) > 0.5) {
-        this.searchBarHeight = height;
-        this.refreshContentPaddingTop();
-      }
-    })
+  /** 键盘弹出时把播放条抬到键盘上方（WindowUtil 的 avoidKeyboard 是 @Trace，会驱动重排）。 */
+  private searchMiniBarKeyboardLiftVp(): number {
+    const kb: number = WindowUtil.getInstance().resolveKeyboardBottomVp();
+    return kb > SEARCH_MINI_BAR_BOTTOM_MARGIN ? kb - SEARCH_MINI_BAR_BOTTOM_MARGIN : 0;
   }
 
-  /** 音源下拉菜单：菜单项文字居中、整体宽度贴合内容（替代系统 Select 的宽菜单）。 */
-  @Builder
-  private SourceMenuBuilder() {
-    Column({ space: 2 }) {
-      ForEach(this.sourceOptionsForMode(), (opt: SelectOption, idx: number) => {
-        Text(opt.value as string)
-          .fontSize(14)
-          .fontWeight(FontWeight.Regular)
-          .textAlign(TextAlign.Center)
-          .width(88)
-          .padding({ top: 9, bottom: 9, left: 16, right: 16 })
-          .borderRadius(10)
-          .fontColor(this.displaySourceIndex() === idx ? $r('sys.color.brand') :
-            $r('sys.color.font_primary'))
-          .backgroundColor(this.displaySourceIndex() === idx ? $r('sys.color.comp_background_tertiary') :
-            Color.Transparent)
-          .onClick(() => {
-            const semantic: number = (this.searchMode === 2 || this.searchMode === 3) ? idx + 1 : idx;
-            this.applySourceSelection(semantic);
-          })
-      }, (opt: SelectOption) => opt.value as string)
+  private searchMiniBarWinWVp(): number {
+    try {
+      return this.getUIContext().px2vp(display.getDefaultDisplaySync().width);
+    } catch (err) {
+      return 360;
     }
-    .padding(6)
   }
 
-  /** 标题栏自定义内容：返回 + 「搜索」大标题 + 播放全部。模式切换已移到主体顶部。 */
   @Builder
-  private SearchTitleStackBuilder() {
+  private searchMiniBar() {
+    MiniBarMaterialCapsule({
+      barWidth: this.searchMiniBarWidthVp(),
+      barHeight: SEARCH_MINI_BAR_H,
+      bottomMargin: SEARCH_MINI_BAR_BOTTOM_MARGIN,
+      material: buildTitleMaterial(this.ambientState.level),
+      fitWinWVp: this.searchMiniBarWinWVp(),
+      fitSideMarginVp: SEARCH_MINI_BAR_SIDE_MARGIN
+    }) {
+      HomeMiniBarPlayer({
+        showPreviousTrack: false,
+        followAppMiniBarExpanded: false,
+        showSelfDrawnBackplate: false,
+        contentHeightVp: SEARCH_MINI_BAR_H
+      })
+    }
+  }
+
+  private closeSearch(): void {
+    if (guardPlayerBack('OnlineSearchPage')) {
+      morphLog('close blocked by player');
+      return;
+    }
+    if (this.searchClosing) {
+      morphLog('close already running');
+      return;
+    }
+    this.searchClosing = true;
+    this.hideSuggest();
+    this.getUIContext().getFocusController().clearFocus();
+    morphLog('close request');
+    this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, (): void => {
+      this.searchClosing = false;
+      // ★ 必须弹**本页所在的那个栈**（官方示例用 `NavDestinationContext.pathStack`）。
+      //   本页可能被推到壳层共享栈，也可能被推到首页 Tab 的内层栈。
+      const stack: NavPathStack = this.ownStack ?? this.pageStack;
+      morphLog(`pop inside-animate own=${this.ownStack !== undefined} size=${stack.size()}`);
+      stack.pop(false);
+    });
+    // 底栏恢复：**等转场结束再恢复**（在转场帧里改壳层状态会把两端拆到不同帧）。
+    // 弹簧的 onFinish 实测要到 1s 才来，所以这里用固定 320ms（转场时长量级）先恢复，
+    // 450ms 再补一次幂等兜底。
+    setTimeout((): void => {
+      morphLog('bar restore 320ms');
+      this.onShowChange(false);
+    }, 320);
+    setTimeout((): void => {
+      morphLog('bar restore 450ms fallback');
+      this.onShowChange(false);
+    }, 450);
+  }
+
+  /** 内容首行要让开的浮层高度：状态栏 + 搜索行 56 + 类型栏 44。 */
+  private searchContentTopInsetVp(): number {
+    return WindowUtil.getInstance().resolveStatusBarTopVp() + 56 + 44;
+  }
+
+  private searchSideVp(): number {
+    if (this.titleWidthVp >= 840) {
+      return 32;
+    }
+    if (this.titleWidthVp >= 600) {
+      return 24;
+    }
+    return 16;
+  }
+
+  /** Upstream SearchPageNew.searchBar: title stack, 56vp row / 40vp glass / 10vp gap. */
+  @Builder
+  private searchRow() {
     Row({ space: 10 }) {
-      Row() {
+      Button() {
         SymbolGlyph($r('sys.symbol.chevron_left'))
           .fontSize(20)
-          .fontWeight(FontWeight.Regular)
-          .height(20)
           .fontColor([$r('sys.color.font_primary')])
       }
+      .type(ButtonType.Normal)
       .width(40)
       .height(40)
       .borderRadius(20)
-      .backgroundColor($r('app.color.floating_mini_bar_background'))
-      .backgroundBlurStyle(this.searchControlBlur())
-      .alignItems(VerticalAlign.Center)
-      .justifyContent(FlexAlign.Center)
-      .onClick(() => {
-        this.pageStack.pop();
+      // ★ 材质挂在 Button（A 档宿主：官方「按钮与选择类」在页面任意区域都生效）
+      // ★ 2026-11-02（用户：「参考 API26 光感文档，恢复搜索页上方返回/搜索框/切换平台的光感」）：
+      //   档位改成**跟着「其它设置 → 光感强度」走**（`immersiveFromLevel`，与标题栏 `buildTitleMaterial`
+      //   同一张档位表）。原来写死 `immersiveMedium()` ⇒ 把光感调到“强”时标题栏变了、这三颗没变。
+      .systemMaterial(immersiveFromLevel(this.ambientState.level))
+      .backgroundColor('#33FFFFFF')
+      // ★ 2026-10-24（甲方：「返回按钮、搜索框和切换平台这三个尽量都加上沉浸光感」）：
+      //   材质档位跟着「其它设置 → 光感强度」走，与标题栏 `buildTitleMaterial` 同一张表。
+      .accessibilityText('返回')
+      .onClick((): void => {
+        this.closeSearch();
       })
 
-      Text($r('app.string.search_title'))
-        .fontSize(22)
+      // ★★ 搜索框**不再包玻璃 Stack**：做形变的是挂 `geometryTransition` 的节点，
+      //   背景必须落在 `Search` 自己身上，否则飞起来的只有文字、框不动
+      //   （官方示例 `PageTwo.ets:47-57` 就是把 backgroundColor 挂在 Search 上）。
+      this.SearchInputBar()
+
+      // ★ 2026-10-31（用户：光感优先 + 不要对勾、要颜色高亮）：切换平台改用官方 Select
+      //   参照 qingye-reader：Select 的选项用 selectedOptionBgColor 高亮（不是 ✓），
+      //   菜单材质走 RzdSelectMenuMaterial（menuBackgroundColor/BlurStyle/menuOutline/menuSystemMaterial）。
+      Select(this.sourceOptionsForMode())
+        .selected(this.displaySourceIndex())
+        .value(this.searchSource === 'all' ? '聚合' : this.selectedSourceText)
+        .height(40)
+        .font({ size: 13 })
+        .fontColor($r('app.color.font_primary'))
+        // ★★★ 2026-11-02（用户：「切换平台那颗也要光感」）：
+        //   上一版换成官方 `Select` 时**只给它加了半透明底、没挂材质** ⇒ 屏上只有一片
+        //   `#33FFFFFF` 的平底，和旁边两颗玻璃胶囊明显不是一个东西。
+        //   `Select` 属官方「按钮与选择类」（A 档，页面任意区域都生效）⇒ 通用属性
+        //   `.systemMaterial(...)` 在这里是真渲染的，不是 out of scope。
+        //   ⚠️ 菜单本身的光感在 `RzdSelectMenuMaterial` 里（`menuSystemMaterial`），两者互不替代。
+        .systemMaterial(immersiveFromLevel(this.ambientState.level))
+        .backgroundColor('#33FFFFFF')
+        .borderRadius(20)
+        .attributeModifier(new RzdSelectMenuMaterial())
+        .onSelect((index: number) => {
+          const offset: number = (this.searchMode === 2 || this.searchMode === 3) ? 1 : 0;
+          this.applySourceSelection(index + offset);
+        })
+    }
+    .width('100%')
+    .height(56)
+    .padding({ left: this.searchSideVp(), right: this.searchSideVp() })
+    .alignItems(VerticalAlign.Center)
+    .onAreaChange((_oldArea: Area, newArea: Area): void => {
+      this.titleWidthVp = Number(newArea.width);
+      const top: number = newArea.globalPosition.y as number;
+      const height: number = Number(newArea.height);
+      this.searchRowBottomVp = top + height;
+      const status: number = WindowUtil.getInstance().resolveStatusBarTopVp();
+      hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
+        'RzdSearchTitleMeasure rowTop=%{public}f rowBottom=%{public}f height=%{public}f status=%{public}f deltaTop=%{public}f expectedBottom=%{public}f',
+        top, top + height, height, status, top - status, status + 56);
+      this.refreshContentPaddingTop();
+    })
+  }
+
+  /**
+   * 类型栏：**胶囊样式**（甲方 2026-10-20：改回我们之前的胶囊，不要上游那种纯文字+竖线）。
+   * 选中 = 主题色实心 + 反白字；未选中 = 卡片底 + 主文字色。
+   */
+  @Builder
+  private typeBar() {
+    Scroll() {
+      Row({ space: 8 }) {
+        ForEach(this.tabLabels, (label: string, idx: number) => {
+          Text(label)
+            .fontSize($r('sys.float.Body_M'))
+            .fontWeight(this.currentTabIndex() === idx ? FontWeight.Medium : FontWeight.Regular)
+            .fontColor(this.currentTabIndex() === idx ?
+              $r('sys.color.font_on_primary') : $r('sys.color.font_primary'))
+            .maxLines(1)
+            .padding({ left: 16, right: 16, top: 7, bottom: 7 })
+            .borderRadius(18)
+            .backgroundColor(this.currentTabIndex() === idx ?
+              this.themeState.color : $r('app.color.background_secondary'))
+            .onClick((): void => {
+              this.selectTab(idx);
+            })
+        }, (label: string) => 'findtab-' + label)
+      }
+      .padding({ left: 16, right: 16 })
+      .height('100%')
+      .alignItems(VerticalAlign.Center)
+    }
+    .scrollable(ScrollDirection.Horizontal)
+    .scrollBar(BarState.Off)
+    .width('100%')
+    .height(44)
+    .align(Alignment.Start)
+  }
+
+  /** 当前选中的页签下标（0 = 综合，1..4 = `searchMode` 0..3）。 */
+  private currentTabIndex(): number {
+    return this.overview ? 0 : this.searchMode + 1;
+  }
+
+  /** 点页签：综合只切标志，其余走既有的 `changeSearchMode`（会自己重搜）。 */
+  private selectTab(index: number): void {
+    if (index === 0) {
+      if (!this.overview) {
+        this.overview = true;
+        if (this.query.trim().length > 0 && !this.searching) {
+          void this.doSearch();
+        }
+      }
+      return;
+    }
+    const mode: number = index - 1;
+    this.overview = false;
+    if (this.searchMode === mode) {
+      if (this.query.trim().length > 0 && !this.searching) {
+        void this.doSearch();
+      }
+      return;
+    }
+    this.changeSearchMode(mode);
+    hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'tab switch mode=%{public}d', mode);
+  }
+
+  /** 综合页的分区标题（可带一颗"播放全部"三角钮 —— 用户 2026-10-20：圆形不好看，要三角）。 */
+  @Builder
+  private SectionHeader(label: string, withPlay: boolean) {
+    Row({ space: 10 }) {
+      Text(label)
+        .fontSize($r('sys.float.Title_S'))
         .fontWeight(FontWeight.Bold)
         .fontColor($r('sys.color.font_primary'))
-        .maxLines(1)
-
-      Blank()
-
-      if (this.songs.length > 0 && this.searchMode === 0) {
-        Text($r('app.string.search_play_all'))
-          .fontSize($r('sys.float.Body_M'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('sys.color.font_primary'))
-          .height(40)
-          .padding({ left: 14, right: 14 })
-          .borderRadius(20)
-          .backgroundColor($r('app.color.floating_mini_bar_background'))
-          .backgroundBlurStyle(this.searchControlBlur())
-          .textAlign(TextAlign.Center)
-          .onClick(() => {
+      if (withPlay) {
+        SymbolGlyph($r('sys.symbol.play_round_triangle_fill'))
+          .fontSize(30)
+          .fontWeight(FontWeight.Regular)
+          .height(30)
+          .fontColor([this.themeState.color])
+          .onClick((): void => {
             this.playAll();
           })
       }
+      Blank()
     }
     .width('100%')
-    .height('100%')
+    .height(48)
     .padding({ left: 16, right: 16 })
     .alignItems(VerticalAlign.Center)
+  }
+
+  /** 综合页底部的「查看更多 ›」。 */
+  @Builder
+  private MoreRow(label: string, tabIndex: number) {
+    Row({ space: 2 }) {
+      Text(label)
+        .fontSize($r('sys.float.Caption_L'))
+        .fontColor($r('sys.color.font_tertiary'))
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(14)
+        .fontColor([$r('sys.color.font_tertiary')])
+    }
+    .width('100%')
+    .height(44)
+    .justifyContent(FlexAlign.Center)
+    .onClick((): void => {
+      this.selectTab(tabIndex);
+    })
+  }
+
+  /** 综合页顶部的歌手卡：头像 + 「歌手：X」+ 歌曲/专辑数，点进歌手详情。 */
+  @Builder
+  private OverviewSingerCard(s: SingerInfo) {
+    Row({ space: 12 }) {
+      Image(s.picUrl.length > 0 ? s.picUrl : $r('app.media.ic_avatar1'))
+        .width(56)
+        .height(56)
+        .borderRadius(28)
+        .objectFit(ImageFit.Cover)
+      Column({ space: 4 }) {
+        Text('歌手：' + s.name)
+          .fontSize($r('sys.float.Body_L'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('sys.color.font_primary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text((s.songNum > 0 ? `歌曲：${s.songNum}` : `歌曲：${this.songs.length}`) +
+          ' ｜ ' + (s.albumSize > 0 ? `专辑：${s.albumSize}` : `专辑：${this.albums.length}`))
+          .fontSize($r('sys.float.Caption_M'))
+          .fontColor($r('sys.color.font_tertiary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+      // ★ 2026-10-20：综合页的歌手卡也带关注按钮
+      this.FollowButton(s)
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(18)
+        .fontColor([$r('sys.color.font_tertiary')])
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+    .onClick((): void => {
+      const param = new ArtistRouteParam();
+      const sep: number = s.id.indexOf('_');
+      if (sep > 0 && sep < s.id.length - 1) {
+        param.source = Number(s.id.substring(0, sep));
+        param.id = s.id.substring(sep + 1);
+      } else {
+        param.source = 2;
+        param.id = s.id;
+      }
+      param.name = s.name;
+      param.picUrl = s.picUrl;
+      param.albumSize = s.albumSize;
+      param.songNum = s.songNum;
+      this.pageStack.pushPathByName(RouterUrlConstants.ARTIST_DETAIL, param);
+    })
+  }
+
+  /**
+   * 目标端原生 Search。
+   *
+   * ★ 一镜到底的属性**照官方示例**（`transitions-collection` 的
+   *   `SearchLongTakeTransition/SearchLongTakeTransitionPageTwo.ets:47-57`）：
+   *   - `geometryTransition(ID)` **不带 follow**（follow 只写在源端）；
+   *   - `.transition(TransitionEffect.opacity(0.99))` —— 让它自己全程"可见地"参与形变，
+   *     不加这一条会被系统当成"淡入"，看起来就是一坨生硬的替换；
+   *   - `defaultFocus(true)` + `focusOnTouch(true)`：落位即聚焦、点心即出键盘。
+   */
+  @Builder
+  private SearchInputBar() {
+    Search({ value: this.query, placeholder: '艺人、歌曲或专辑', controller: this.searchController })
+      .id('online_search_input')
+      .height(40)
+      // 背景/圆角挂在 Search 自己身上（与首页那端完全同一套）——这样形变时"整个框"都在动。
+      // ★ 2026-10-24（甲方：「那个搜索框如果不行的话，就改一下背板，现在半透明的不是很好看」）：
+      //   `Search` **吃不到** HDS 的 `systemMaterialEffect`（只挂在 HDS 组件上），通用属性
+      //   `.systemMaterial()` 又要 API 26（本机 SDK 24 没有）；而且这棵节点正是**做形变的那一个**，
+      //   在它身上挂实时模糊 = 长镜头全程重算模糊 ⇒ 正是甲方说的"切到搜索页有点卡"。
+      //   ⇒ 改用**实底卡片背板**：`card_background`（浅 #FFFFFF / 深 #1C1D1F）+ 0.5vp 描边。
+      //   ⚠️ 首页那端（`HomeSearchRow`）必须保持**同一套**背板，否则形变中途会看到颜色跳变。
+      .systemMaterial(immersiveFromLevel(this.ambientState.level))
+        .backgroundColor('#33FFFFFF')
+      .borderRadius(20)
+      .border({ width: 0.5, color: $r('sys.color.comp_divider') })
+      .clip(true)
+      // 占位色与首页那端**同一套**：两端不同色就会在形变瞬间看到"白字突然变灰"。
+      // （官方示例用 sys.color.mask_secondary；我们深色主题下它太淡、看着像"文字消失"，
+      //   所以两端统一成已验证可见的 font_secondary —— 关键是两端一致。）
+      .placeholderColor($r('sys.color.font_secondary'))
+      .placeholderFont({ size: 16 })
+      .textFont({ size: 16 })
+      .fontColor($r('sys.color.font_primary'))
+      .caretStyle({ color: $r('sys.color.font_primary') })
+      .searchIcon({ size: 16, color: $r('sys.color.font_secondary') })
+      .cancelButton({
+        style: CancelButtonStyle.INPUT,
+        icon: { size: 17, color: $r('sys.color.font_secondary') }
+      })
+      .layoutWeight(1)
+      .geometryTransition('wanting_search_field')
+      .transition(TransitionEffect.opacity(0.99))
+      .defaultFocus(true)
+      .focusOnTouch(true)
+      .responseRegion({ x: 0, y: -4, width: '100%', height: 40 })
+      .onFocus((): void => {
+        hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph target focus');
+      })
+      .onBlur((): void => {
+        hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchMorph target blur');
+      })
+      .onChange((value: string): void => {
+        this.query = value;
+        if (this.suppressSuggestOnce) {
+          this.suppressSuggestOnce = false;
+          return;
+        }
+        this.scheduleSuggest(value);
+      })
+      .onSubmit((): void => {
+        this.hideSuggest();
+        void this.doSearch();
+        this.searchController.stopEditing();
+      })
+      .onEditChange((isEditing: boolean): void => {
+        // Keyboard dismissal preserves suggestions until submission, selection, or scrolling.
+        if (isEditing) {
+          this.showSuggest = this.suggestWords.length > 0 && this.query.trim().length > 0;
+        }
+      })
+      .width('100%')
+      // 诊断用：目标节点是否被卸载/重建（退出没动画的第一手判据）。
+      .onAppear((): void => {
+        morphLog('target appear');
+      })
+      .onDisAppear((): void => {
+        morphLog('target disappear');
+      })
+      .onAreaChange((_oldArea: Area, newArea: Area): void => {
+        morphLog(`target rect x=${(newArea.globalPosition.x as number).toFixed(1)} ` +
+          `y=${(newArea.globalPosition.y as number).toFixed(1)} ` +
+          `w=${Number(newArea.width).toFixed(1)} h=${Number(newArea.height).toFixed(1)}`);
+      })
+  }
+
+  /** Fixed source menu order; semantic source indices remain 0=all, 1..5=kw..mg. */
+  /** 平台切换菜单（MenuElement[]）：系统按歌曲菜单同款渲染深色面板 + 分隔线。 */
+  private sourceMenuElements(): MenuElement[] {
+    const items: MenuElement[] = [];
+    for (let i: number = 0; i < this.sourceMenuIds.length; i++) {
+      const source: string = this.sourceMenuIds[i];
+      const label: string = source === 'all' ? '聚合搜索' : this.sourceMenuLabel(source);
+      const checked: boolean = this.searchSource === source;
+      items.push({
+        value: checked ? ('✓ ' + label) : label,
+        action: (): void => {
+          this.applySourceSelection(this.sourceSemanticIndex(source));
+        }
+      });
+    }
+    return items;
+  }
+
+  @Builder
+  private SourceMenuBuilder() {
+    // ★ 2026-10-29（用户纠正：参照「普通歌曲菜单」那套，不是半模态 sheet）：
+    //   仍走 `.bindMenu(自定义 builder)`（= RzdVideo 的"自绘内容 + 系统菜单窗口"），
+    //   条目用 Button + 半透明底，材质/光感由系统菜单窗口提供；不做自绘面板、不加遮罩。
+    Column({ space: 2 }) {
+      ForEach(this.sourceMenuIds, (source: string, idx: number) => {
+        Button() {
+          Row({ space: 8 }) {
+            Text(source === 'all' ? '聚合搜索' : this.sourceMenuLabel(source))
+              .fontSize(15)
+              .fontColor($r('sys.color.font_primary'))
+              .layoutWeight(1)
+              .textAlign(TextAlign.Start)
+            if (this.searchSource === source) {
+              SymbolGlyph($r('sys.symbol.checkmark'))
+                .fontSize(16)
+                .fontColor([$r('sys.color.font_emphasize')])
+            }
+          }
+          .width('100%')
+          .padding({ left: 14, right: 14 })
+        }
+        .type(ButtonType.Normal)
+        .width(200)
+        .height(44)
+        .borderRadius(12)
+        .backgroundColor(this.searchSource === source ? '#1F000000' : Color.Transparent)
+        .onClick((): void => {
+          this.applySourceSelection(this.sourceSemanticIndex(source));
+        })
+      }, (source: string) => source)
+    }
+    .padding(6)
   }
 
   /** 切换模式时同步处理歌手/专辑自动选源。复用原 ModeSwitchBuilder 行为。 */
@@ -1348,20 +2267,21 @@ struct OnlineSearchPage {
             }
           }
         },
+        // ★ 2026-10-20：本页现在被推到**首页 Tab 的内层 Navigation**（宿主结构见 Index.ets）。
+        //   那层导航的坐标原点是 0（外层 HdsNavigation 的导航栏内容区），
+        //   所以 HDS 顶栏必须 avoidLayoutSafeArea: true 才会自己让出状态栏那 38vp；
+        //   之前写 false 是因为当时它被推到外层 HdsNavigation，基准已经是 38 —— 两个宿主别混用口径。
+        avoidLayoutSafeArea: true,
         content: {
-          title: {
-            mainTitle: $r('app.string.search_title'),
-            mainTitleSize: TitleSize.TITLE_ML
-          },
-          backIcon: {
-            label: 'back',
-            icon: $r('sys.symbol.chevron_left'),
-            isEnabled: true
+          stackBuilder: (): void => {
+            this.searchRow()
           },
           bottomBuilder: {
             builder: (): void => {
-              this.SearchHeaderBar()
-            }
+              this.typeBar()
+            },
+            height: 40,
+            showType: BottomBuilderShowType.DIRECTLY_SHOW
           }
         }
       };
@@ -1434,18 +2354,18 @@ struct OnlineSearchPage {
     .padding({ left: 16, right: 16, top: 12, bottom: 12 })
   }
 
-  build() {
-    HdsNavDestination() {
+  @Builder
+  private searchContent() {
       Column() {
-        // 模式切换/加载/错误态统一放进下方 List 作为滚动内容：
-        // 初始位于标题栏与搜索框下方，滚动时可滑到标题栏后面（内容延伸至屏幕顶部）。
+        // ★ 2026-10-20 第六轮：搜索框 + 页签回到 **HDS 标题栏的 bottomBuilder**（见
+        //   `getSearchTitleBar()`），页面主体只剩列表 ⇒ 顶部让位/状态栏延伸全由 HDS + 
+        //   `List.contentStartOffset(contentPaddingTop)` 负责，与历史页/我的页同一套。
 
         Stack({ alignContent: Alignment.Center }) {
           List({ scroller: this.listScroller }) {
-            if (this.query.trim().length === 0 && !this.searching) {
+            if (!this.searching && this.resultEmpty()) {
               ListItem() {
-              if (!this.searching && this.hotWords.length > 0 &&
-                this.resultEmpty()) {
+              if (this.hotWords.length > 0) {
                 Column({ space: 12 }) {
                   Row() {
                     Text($r('app.string.search_hot_title'))
@@ -1456,30 +2376,32 @@ struct OnlineSearchPage {
                   }
                   .width('100%')
 
-                  // 热搜：原生 Grid 4 列，等宽对齐
-                  Grid() {
+                  // 热搜：Flex 自动换行 + 文字宽度自适应。
+                  // 原来用 4 栏等宽 Grid 且文字居中，短词两侧留一大片空白、
+                  // 长词被截断，整块看起来就是"每个词条长度都一样"。
+                  Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
                     ForEach(this.hotWords, (keyword: string) => {
-                      GridItem() {
-                        Text(keyword)
-                          .fontSize($r('sys.float.Body_M'))
-                          .fontColor($r('sys.color.font_primary'))
-                          .maxLines(1)
-                          .textOverflow({ overflow: TextOverflow.Ellipsis })
-                          .width('100%')
-                          .height(40)
-                          .borderRadius(20)
-                          .backgroundColor($r('app.color.background_secondary'))
-                          .textAlign(TextAlign.Center)
-                          .onClick(() => {
-                            this.query = keyword;
-                            void this.doSearch();
-                          })
-                      }
+                      Text(keyword)
+                        .fontSize($r('sys.float.Body_M'))
+                        .fontColor($r('sys.color.font_primary'))
+                        // ⚠️ 不设 maxLines(1)、也不设固定宽度：词条宽度完全由文字决定，
+                        //    长词整条显示，短词就是短胶囊。原来固定宽度 + 省略号就是
+                        //    「看着每个词条长度都像固定，长的词条显示不完整」的根因。
+                        .textAlign(TextAlign.Start)
+                        .padding({ left: 14, right: 14, top: 8, bottom: 8 })
+                        .borderRadius(18)
+                        // ★ 2026-10-20（用户：「刚进搜索页非常卡」）：词条**不再挂模糊**
+                        //   ——每屏 20 来个胶囊各挂一层 blur，进页面就是一卡。改纯色卡片底，
+                        //   与我的页卡片同色（深色下也看得见）。
+                        // 热搜/历史词条是 body 里的 Text（B 档，材质不渲染）⇒ 这行只是保留原写法，真正背板是下一行的半透明底。
+                        .systemMaterial(immersiveFromLevel(this.ambientState.level))
+        .backgroundColor('#33FFFFFF')
+                        .margin({ right: 8, bottom: 8 })
+                        .onClick(() => {
+                          this.applyKeyword(keyword);
+                        })
                     }, (keyword: string) => 'hot-' + keyword)
                   }
-                  .columnsTemplate('1fr 1fr 1fr 1fr')
-                  .columnsGap(8)
-                  .rowsGap(8)
                   .width('100%')
                   .padding({ left: 0, right: 0 })
                 }
@@ -1490,8 +2412,7 @@ struct OnlineSearchPage {
               }
 
               ListItem() {
-              if (!this.searching && this.searchHistory.length > 0 &&
-                this.resultEmpty()) {
+              if (this.searchHistory.length > 0) {
                 Column({ space: 12 }) {
                   Row() {
                     Text($r('app.string.search_history_title'))
@@ -1509,30 +2430,28 @@ struct OnlineSearchPage {
                   }
                   .width('100%')
 
-                  // 搜索历史：原生 Grid 4 列，等宽对齐
-                  Grid() {
+                  // 搜索历史：与热搜同款「自动换行 + 宽度自适应」。
+                  // 原来也是 4 栏等宽 Grid + 文字居中，长词被截断、短词两边一片空白，
+                  // 看起来就是「每个词条长度都固定」。
+                  Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
                     ForEach(this.searchHistory, (keyword: string) => {
-                      GridItem() {
-                        Text(keyword)
-                          .fontSize($r('sys.float.Body_M'))
-                          .fontColor($r('sys.color.font_primary'))
-                          .maxLines(1)
-                          .textOverflow({ overflow: TextOverflow.Ellipsis })
-                          .width('100%')
-                          .height(40)
-                          .borderRadius(20)
-                          .backgroundColor($r('app.color.background_secondary'))
-                          .textAlign(TextAlign.Center)
-                          .onClick(() => {
-                            this.query = keyword;
-                            void this.doSearch();
-                          })
-                      }
+                      Text(keyword)
+                        .fontSize($r('sys.float.Body_M'))
+                        .fontColor($r('sys.color.font_primary'))
+                        // 不设 maxLines / 不设固定宽度：词条宽度完全由文字决定
+                        .textAlign(TextAlign.Start)
+                        .padding({ left: 14, right: 14, top: 8, bottom: 8 })
+                        .borderRadius(18)
+                        // 与热搜同一处理：纯色卡片底、不挂模糊（卡顿根因之一）
+                        // 热搜/历史词条是 body 里的 Text（B 档，材质不渲染）⇒ 这行只是保留原写法，真正背板是下一行的半透明底。
+                        .systemMaterial(immersiveFromLevel(this.ambientState.level))
+        .backgroundColor('#33FFFFFF')
+                        .margin({ right: 8, bottom: 8 })
+                        .onClick(() => {
+                          this.applyKeyword(keyword);
+                        })
                     }, (keyword: string) => keyword)
                   }
-                  .columnsTemplate('1fr 1fr 1fr 1fr')
-                  .columnsGap(8)
-                  .rowsGap(8)
                   .width('100%')
                 }
                 .width('100%')
@@ -1554,7 +2473,103 @@ struct OnlineSearchPage {
             }
           }
 
-          if (this.searchMode === 1) {
+          if (this.overview && !this.searching) {
+            // ── 综合页（用户 2026-10-20 截图）：歌手卡 → 歌曲区 → 专辑区 → 歌手区，各带「查看更多」
+            if (this.singers.length > 0) {
+              ListItem() {
+                this.OverviewSingerCard(this.singers[0])
+              }
+            }
+            if (this.songs.length > 0) {
+              ListItem() {
+                this.SectionHeader('歌曲', true)
+              }
+              ForEach(this.songs.slice(0, 10), (song: LXSearchSong) => {
+                ListItem() {
+                  SongRowItem({
+                    song: song,
+                    selection: this.selection,
+                    coverUrl: this.songCover(song),
+                    sourceLabel: this.sourceLabel(song.source),
+                    sourceColor: this.sourceColor(song.source),
+                    onLoadCover: (s: LXSearchSong): void => {
+                      this.loadSongCover(s);
+                    },
+                    onPlay: (s: LXSearchSong): void => {
+                      this.playSong(s);
+                    }
+                  })
+                }
+              }, (song: LXSearchSong) => 'ovw-s-' + song.source + '_' + song.songId + '_' + song.img)
+              if (this.songs.length > 10) {
+                ListItem() {
+                  this.MoreRow('查看更多歌曲', 1)
+                }
+              }
+            }
+            if (this.playlists.length > 0) {
+              ListItem() {
+                this.SectionHeader('歌单', false)
+              }
+              ForEach(this.playlists.slice(0, 3), (p: SearchPlaylistInfo) => {
+                ListItem() {
+                  this.PlaylistRow(p)
+                }
+                .margin({ bottom: 12 })
+              }, (p: SearchPlaylistInfo) => 'ovw-p-' + p.source + '_' + p.id)
+              if (this.playlists.length > 3) {
+                ListItem() {
+                  this.MoreRow('查看更多歌单', 2)
+                }
+              }
+            }
+            // ── 综合页（甲方 2026-10-20 参考华为音乐）：
+            //    顶部歌手卡（搜到的第一个歌手）→ 歌曲 → 歌单(3) → 歌手(3) → 专辑(3)，后三段各带「查看更多」
+            if (this.singers.length > 0) {
+              ListItem() {
+                this.SectionHeader('歌手', false)
+              }
+              ForEach(this.singers.slice(0, 3), (s: SingerInfo) => {
+                ListItem() {
+                  this.SingerResultRow(s)
+                }
+              }, (s: SingerInfo) => 'ovw-g-' + s.id)
+              if (this.singers.length > 3) {
+                ListItem() {
+                  this.MoreRow('查看更多歌手', 3)
+                }
+              }
+            }
+            if (this.albums.length > 0) {
+              ListItem() {
+                this.SectionHeader('专辑', false)
+              }
+              ForEach(this.albums.slice(0, 3), (a: AlbumInfo) => {
+                ListItem() {
+                  this.AlbumResultRow(a)
+                }
+              }, (a: AlbumInfo) => 'ovw-a-' + a.id + '_' + a.name)
+              if (this.albums.length > 3) {
+                ListItem() {
+                  this.MoreRow('查看更多专辑', 4)
+                }
+              }
+            }
+            // ⚠️ 空态只在**真的搜过且一条都没有**时出现：
+            //   原来只判"三类结果都为空"，于是**未搜索的入场态（热搜/历史）也会显示"没有找到相关内容"**。
+            if (this.searchedOnce && !this.searching &&
+              this.songs.length === 0 && this.singers.length === 0 &&
+              this.albums.length === 0 && this.playlists.length === 0) {
+              ListItem() {
+                Text('没有找到相关内容')
+                  .fontSize($r('sys.float.Caption_L'))
+                  .fontColor($r('sys.color.font_tertiary'))
+                  .width('100%')
+                  .height(88)
+                  .textAlign(TextAlign.Center)
+              }
+            }
+          } else if (this.searchMode === 1) {
             ForEach(this.playlists, (p: SearchPlaylistInfo) => {
               ListItem() {
                 this.PlaylistRow(p)
@@ -1592,7 +2607,8 @@ struct OnlineSearchPage {
                   }
                 })
               }
-              .margin({ bottom: 12 })
+              // ★ 用户 2026-10-20：去卡片改分隔线 ⇒ 行间不再留 12vp 空隙
+              //   （细线由 `SongRowItem` 自己那条 bottom border 画，左右各内缩 16）
             }, (song: LXSearchSong) => song.source + '_' + song.songId + '_' + song.img)
           }
         }
@@ -1600,12 +2616,44 @@ struct OnlineSearchPage {
           .height('100%')
           .scrollBar(BarState.Off)
           .edgeEffect(EdgeEffect.Spring)
-          .lanes(this.resultLaneCount(), 12)
-          .contentStartOffset(this.contentPaddingTop)
+          // ⚠️ 不要给结果列表开多栏（原来按断点 1/2/3/4 栏）：
+          //    歌曲行本身是「封面 + 标题/歌手 + 来源/时长」的整行卡片，铺成多栏会把
+          //    文字挤窄、行与行长度还参差不齐，看起来就是"文字被拉伸对齐了"。
+          //    搜索结果统一单栏、左对齐。
+          // 内容铺到状态栏底下（可滚进去），但**首行**要让开浮层：状态栏 + 搜索行 56 + 类型栏 44。
+          .contentStartOffset(this.searchContentTopInsetVp())
           .padding({
             left: 12,
             right: 12,
             bottom: 0
+          })
+          // ★★ 让内容能画进状态栏（"延伸进状态栏"）的**官方正解**：
+          //   官方《开发应用沉浸式效果》→「滚动类场景」② —— 设置滚动容器的内容裁剪属性
+          //   `clipContent(ContentClipMode.SAFE_AREA)`，**将内容层裁剪区域扩展至避让区**。
+          //   原来 List 用的是默认 `ContentClipMode.CONTENT_ONLY`（按内容区裁）
+          //   ⇒ 行一滚到状态栏那条就被裁掉，所以"偏移放哪都没用"。
+          //   ⚠️ 链上任何祖先都**不能**再写 `clip(true)`（官方："需要确保父组件未设置 clip 等裁剪属性"）。
+          .clipContent(ContentClipMode.SAFE_AREA)
+          // ★ 底部留白**必须放在滚动视口里**（`contentEndOffset` = 内容末端到显示区边界的距离，随内容滚走）：
+          //   这一页原来**一点底部留白都没有** ⇒ 滚到底最后一行会被壳层那条悬浮播放条压住。
+          //   值与其他二级页同口径：56(播放条) + 16 + 16 = 88。
+          //   ⚠️ 别写在外层容器的 `padding({bottom})` 上 —— 那是固定在屏幕底部的死带（用户点过的老毛病）。
+              // 88 原有留白 + 64 = 搜索页迷你播放条（56 + 间距 8），避免最后一行被压住
+    .contentEndOffset(152)
+          .onScrollFrameBegin((offset: number): OnScrollFrameBeginHandlerResult => {
+            // 列表滑动时自动收起联想（签名与 MinePage 一致）
+            if (this.showSuggest && Math.abs(offset) > 1) {
+              this.hideSuggest();
+            }
+            return { offsetRemain: offset };
+          })
+          // 性能取证：进页 → 内容首帧 的耗时（无设备时的唯一判据，见 `aboutToAppear`）。
+          .onAppear((): void => {
+            const enterAt: number = OnlineSearchPage.enterAtMs;
+            hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
+              'RzdSearchPerf content-onAppear after %{public}dms',
+              enterAt > 0 ? Date.now() - enterAt : -1);
+            appendPlayLog(`[RzdSearchPerf] content-onAppear ${enterAt > 0 ? Date.now() - enterAt : -1}ms`);
           })
 
           if (this.searching) {
@@ -1617,6 +2665,61 @@ struct OnlineSearchPage {
                 .fontSize($r('sys.float.Caption_L'))
                 .fontColor($r('sys.color.font_tertiary'))
             }
+          }
+
+          // 半透明悬浮候选：顶边与搜索框底对齐（contentPaddingTop = 标题+搜索区高度）
+          if (this.showSuggest && this.suggestWords.length > 0 && !this.searching) {
+            // 父层 Transparent：点击/滑动可穿透到下方 List，从而触发滚动自动收起
+            Column() {
+              Scroll() {
+                Column({ space: 0 }) {
+                  ForEach(this.suggestWords, (word: string, idx: number) => {
+                    // ★ 用户 2026-10-20 截图：联想词每行 = 放大镜 + 文字 + 一条分隔线
+                    Row({ space: 12 }) {
+                      SymbolGlyph($r('sys.symbol.magnifyingglass'))
+                        .fontSize(17)
+                        .fontColor([$r('sys.color.font_tertiary')])
+                      Text(word)
+                        .fontSize(15)
+                        .fontColor($r('sys.color.font_primary'))
+                        .maxLines(1)
+                        .textOverflow({ overflow: TextOverflow.Ellipsis })
+                        .layoutWeight(1)
+                        .textAlign(TextAlign.Start)
+                    }
+                    .width('100%')
+                    .padding({ left: 20, right: 16, top: 11, bottom: 11 })
+                    .border({ width: { bottom: 0.5 }, color: $r('sys.color.comp_divider') })
+                    .onClick(() => {
+                      this.pickSuggest(word);
+                    })
+                  }, (word: string, idx: number) => 'sgf-' + idx + '-' + word)
+                }
+                .width('100%')
+              }
+              .width('100%')
+              .constraintSize({ maxHeight: 480 })
+              .scrollBar(BarState.Off)
+              // 与迷你播放条/搜索框同款磨砂：#30 透明度灰底 + 材质模糊
+              // ★ API 26：改用系统沉浸材质（中等厚度）；背景/描边/阴影由材质接管
+              .backgroundBlurStyle(this.searchControlBlur())
+              .clip(true)
+              .clip(true)
+              .clip(true)
+              .hitTestBehavior(HitTestMode.Default)
+            }
+            .width('100%')
+            .height('100%')
+            .padding({
+              left: 16,
+              right: 16,
+              // Same measured HDS bottom edge as the result list.
+              top: this.contentPaddingTop
+            })
+            .alignItems(HorizontalAlign.Start)
+            .justifyContent(FlexAlign.Start)
+            .hitTestBehavior(HitTestMode.Transparent)
+            .zIndex(30)
           }
         }
         .width('100%')
@@ -1663,37 +2766,121 @@ struct OnlineSearchPage {
       }
       .width('100%')
       .height('100%')
+      .onAreaChange((_oldArea: Area, newArea: Area): void => {
+        // 量盒顶（窗口坐标 vp）只用于排查日志：HDS 标题栏方案下顶部由 HDS 自己让位
+        const top: number = newArea.globalPosition.y as number;
+        if (Math.abs(top - this.boxTopVp) > 0.5) {
+          this.boxTopVp = top;
+          this.refreshContentPaddingTop();
+          hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG, 'RzdSearchTop boxTop=%{public}f', top);
+        }
+      })
+      // 页面主体从屏幕顶起排，让位由 `List.contentStartOffset(contentPaddingTop)` 负责
       .padding({ top: 0 })
-    }
-    .hideTitleBar(false)
-    .hideBackButton(true)
-    .titleBar(this.getSearchTitleBar())
-    .titleMode(HdsNavDestinationTitleMode.MINI)
-    .dynamicHideTitleBar({
-      hideTitleArea: false,
-      hideBottomBuilder: false,
-      hideStatusBar: false,
-      mode: HideMode.SCROLL_UP,
-      hideOffset: 0,
-      hideRatio: 2.0
-    })
-    .bindToScrollable([this.listScroller])
-    .backgroundColor($r('app.color.background_secondary'))
-    .systemBarStyle(
-      { statusBarContentColor: this.isDarkTheme() ? '#FFFFFF' : '#000000' },
-      { statusBarContentColor: this.isDarkTheme() ? '#FFFFFF' : '#000000' })
-    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
-    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
-    .bindSheet(this.showQualitySheet, this.BatchQualitySheet(), {
-      detents: [SheetSize.FIT_CONTENT],
-      dragBar: true,
-      showClose: true,
-      backgroundColor: $r('app.color.background_secondary'),
-      onWillDismiss: (action: DismissSheetAction) => {
-        action.dismiss();
-        this.showQualitySheet = false;
+      .bindSheet(this.showQualitySheet, this.BatchQualitySheet(), {
+        detents: [SheetSize.FIT_CONTENT],
+        dragBar: true,
+        showClose: true,
+        backgroundColor: $r('app.color.background_secondary'),
+        onWillDismiss: (action: DismissSheetAction): void => {
+          action.dismiss();
+          this.showQualitySheet = false;
+        }
+      })
+  }
+
+  build() {
+    this.routedContent()
+  }
+
+  @Builder
+  private routedContent() {
+    // ★★ 2026-10-20（甲方口径：不用 HDS 的实色背板，顶栏保持透明）：
+    //   目标页改成**普通 `NavDestination`**，与官方示例一致
+    //   （`transitions-collection/SearchLongTakeTransitionPageTwo.ets` 就是普通 NavDestination
+    //     + `.hideTitleBar(true)` + 搜索行画在页面内容里）。
+    //   之前的 `HdsNavDestination` 会在 pop 时跑自己的页面转场（真机日志里源节点被甩到 x=-一屏宽），
+    //   把 `geometryTransition` 的一镜到底挤掉 —— 这就是"进有动画、退没有"的根。
+    //   搜索行的**位置与外观不变**：状态栏下方 0~56，玻璃胶囊 40、间距 10、右侧音源胶囊；
+    //   区别只是它不再由 HDS 标题栏承载，页面顶部也没有任何实色背板。
+    NavDestination() {
+      // 内容铺满整页（含状态栏区域），搜索行/类型栏**浮**在上面：
+      // 甲方 2026-10-20：「内容还是没延伸进状态栏」——列表要能滚到状态栏底下，
+      // 所以不能再用"状态栏占位 → 行 → 类型栏 → 内容"的竖排，改成 Stack 覆盖。
+      Stack({ alignContent: Alignment.TopStart }) {
+        Column() {
+          this.searchContent()
+        }
+        .width('100%')
+        .height('100%')
+
+        Column() {
+          this.searchRow()
+          this.typeBar()
+        }
+        .width('100%')
+        // 浮层自己让状态栏：搜索行仍是 56 高（玻璃胶囊 40），位置就是状态栏正下方。
+        .padding({ top: WindowUtil.getInstance().resolveStatusBarTopVp() })
+        .backgroundColor(Color.Transparent)
+        // ★★★ 2026-10-24（甲方：「搜索页的联想那个框会被上面那行（综合、歌单、歌曲、歌手、专辑）挡住」）：
+        //   联想面板的 `top` 取的是 `contentPaddingTop = max(searchRowBottom, typeBarBottom) - boxTop`，
+        //   而 `typeBarBottomVp` **从来没有被写过**（恒 0）⇒ inset 只等于搜索行底边（94vp），
+        //   面板顶部那 44vp（类型栏高度）正好压在胶囊行下面 ⇒ 看起来"被挡住"。
+        //   ⇒ 在**整个浮层**（搜索行 + 类型栏）上量一次底边，写回 `typeBarBottomVp`。
+        .onAreaChange((_old: Area, area: Area): void => {
+          const bottom: number = Number(area.globalPosition.y) + Number(area.height);
+          if (Math.abs(bottom - this.typeBarBottomVp) > 0.5) {
+            this.typeBarBottomVp = bottom;
+            this.refreshContentPaddingTop();
+          }
+        })
+
+        // 方式 C：搜索页自己的迷你播放条（与其它二级页同一套 56vp 胶囊 + HDS 材质）
+        Column() {
+          this.searchMiniBar()
+        }
+        .width('100%')
+        .height('100%')
+        .justifyContent(FlexAlign.End)
+        .padding({ bottom: SEARCH_MINI_BAR_BOTTOM_MARGIN })
+        // 键盘避让：键盘弹出时整条上抬，避免被输入法盖住
+        .translate({ y: -this.searchMiniBarKeyboardLiftVp() })
+        .hitTestBehavior(HitTestMode.Transparent)
       }
+      .width('100%')
+      .height('100%')
+      .backgroundColor($r('app.color.background_secondary'))
+    }
+    .onBackPressed((): boolean => {
+      this.closeSearch();
+      return true;
     })
+    // 官方示例：从 `NavDestinationContext` 拿本页所在的栈（`PageOne.ets:61-64`）。
+    .onReady((context: NavDestinationContext): void => {
+      this.ownStack = context.pathStack;
+    })
+    // 搜索行已画在页面内容里（见上面那个 Column），这里彻底关掉标题栏：
+    // 没有 HDS 的实色背板，也不会在 pop 时被标题栏子树拆解拖累转场。
+    .hideTitleBar(true)
+    .hideBackButton(true)
+    .backgroundColor($r('app.color.background_secondary'))
+    // ★★ 用户 2026-10-11：「顶栏标题错位的问题还在，你应该参考一下其他显示正常的页面是怎么写的」。
+    //   逐页对比后：显示正常的 MinePage / RecommendPage **都没有** expandSafeArea，
+    //   而所有标题偏低的页面都有 ⇒ 照正常页面去掉它（官方语义：expandSafeArea 只延伸**绘制区**，
+    //   「子组件相对屏幕位置不变」，但它会让 HDS 标题栏的定位多让一次）。
+    //   页面底色由页盒自身 ackgroundColor 铺满（盒顶 = 0，实测见 RzdPageTopInset），不需要它补状态栏那一条。
+    // ★★ 状态栏三件套（2026-10-11 定稿，用户第三次纠正后）：这里的 `ignoreLayoutSafeArea` **必须带 TOP** ——
+    //   HDS 标题栏自己会按"状态栏高度"往下让位，所以页面盒子必须从屏幕 y=0 起排；
+    //   只写 BOTTOM（盒子从状态栏下沿起排）会变成"盒子让一次 + 标题栏再让一次" ⇒
+    //   整条标题掉到状态栏下面约一个状态栏高度（用户原话「整个标题移到了状态栏下面」），
+    //   内容也跟着多顶 38vp（「上方留的空距有点大了」）。
+    //   盒子从 0 起排后：标题栏 = 38..94 ✔，`List.contentStartOffset(titleBarTopHeight + searchHeaderHeight)`
+    //   里的 `titleBarTopHeight`（= 状态栏 + 56 = 94）正好落在 94 ✔。
+    //   ⚠️ 旧注释里"根节点带 TOP 会把标题/搜索按钮顶进状态栏 / 只能留 BOTTOM"那句**是错的**，已作废。
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    // 官方一镜到底示例里目标页也挂这个（PageTwo 的 `NavDestination().transition(OPACITY)`）：
+    // 配合 push(false) + animateTo，页面自己淡入，看起来只剩搜索框在飞。
+    .transition(TransitionEffect.OPACITY)
   }
 }
 

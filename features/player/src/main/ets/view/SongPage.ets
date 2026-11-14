@@ -16,8 +16,8 @@
 import { AppStorageV2 } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { MediaService } from '../model/MediaService';
-import { sourceDisplayName } from '../util/SourceFallbackUtil';
-import { AppStorageKeys, Logger, MusicAppState, SongItem, StyleConstants } from 'musicbasic';
+import { sourceDisplayName, qualityDisplayName } from '../util/SourceFallbackUtil';
+import { guardPlayerBack, AppStorageKeys, Logger, MusicAppState, SongItem, StyleConstants } from 'musicbasic';
 
 @Builder
 export function SongPageBuilder() {
@@ -70,6 +70,9 @@ struct SongPage {
   /** Resolved quality id, suffixed with （缓存） when served from a local cached file. */
   private qualityLabel(): string {
     const song: SongItem | undefined = this.currentSong();
+    if (song !== undefined && (song.source === 'local' || song.quality === 'local')) {
+      return '本地';
+    }
     let q: string = song?.quality ?? '';
     if (q.length === 0) {
       q = this.state.currentQuality;
@@ -77,7 +80,8 @@ struct SongPage {
     if (q.length === 0) {
       return '未知';
     }
-    return song?.playCached === true ? q + '（缓存）' : q;
+    const name: string = qualityDisplayName(q);
+    return song?.playCached === true ? name + '（缓存）' : name;
   }
 
   private handleCrownVolume(event: CrownEvent): void {
@@ -243,6 +247,7 @@ struct SongPage {
       .width(StyleConstants.FULL_WIDTH)
       .height(StyleConstants.FULL_HEIGHT)
     }
+    .onBackPressed((): boolean => guardPlayerBack('SongPage'))
     .hideTitleBar(true)
     .focusable(true)
     .focusOnTouch(true)

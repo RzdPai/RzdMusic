@@ -17,6 +17,7 @@
  * Moved from common/mediacommon/src/main/ets/utils/MediaService.ets
  */
 
+import { util } from '@kit.ArkTS';
 import { AppStorageV2 } from '@kit.ArkUI';
 import { media } from '@kit.MediaKit';
 import { audio } from '@kit.AudioKit';
@@ -27,15 +28,20 @@ import { common, wantAgent } from '@kit.AbilityKit';
 import { avSession } from '@kit.AVSessionKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { resourceManager } from '@kit.LocalizationKit';
-import { AppStorageKeys, getAppRuntime, Logger, MusicAppState, MusicCardBridge, MusicStoreService, PlayedSongRecord, SongItem, StringResourceUtil, appendPlayLog } from 'musicbasic';
+import { fileIo as fs } from '@kit.CoreFileKit';
+import { AppStorageKeys, getAppRuntime, Logger, MusicAppState, MusicCardBridge, MusicStoreService, PlayedSongRecord, SongItem, StringResourceUtil, appendPlayLog , UsbAudioService, UsbAudioState } from 'musicbasic';
+import { AudioKernel } from '../engine/AudioKernel';
+import { createKernel, isMpvAvailable, preferredKernel } from '../engine/KernelFactory';
+import { AudioInterruptKind, kernelName, PlaybackKernelKind, logKernelSwitch } from '../engine/AudioKernel';
+import { AudioEffects, buildAfChain, effectsFromJson } from '../engine/AudioEffects';
 import SongItemBuilder from '../util/SongItemBuilder';
 import { AudioPlayerState, MusicPlayMode } from './MusicData';
 import { BackgroundUtil } from '../util/BackgroundUtil';
 import { MediaTools } from '../util/MediaTools';
 import { lxGetLyricFull, lxGetPicFallback, lxGetTTMLLyric,
   LyricFullResult } from '../source/LXMusicSDK';
-import { lxEngineIsReady } from '../source/LXSourceEngine';
-import { FallbackOptions, QUALITY_TIER_COOLDOWN_MS, QUALITY_TIER_FAIL_THRESHOLD, UrlResolveOutcome, qualityTierKey, resolveMusicUrlWithFallback } from '../util/SourceFallbackUtil';
+import { engineNotReadyToast } from '../util/SourceUpdateHint';
+import { FallbackOptions, QUALITY_TIER_COOLDOWN_MS, QUALITY_TIER_FAIL_THRESHOLD, UrlResolveOutcome, qualityTierKey, resolveMusicUrlWithFallback, sourceDisplayName } from '../util/SourceFallbackUtil';
 import { SwitchBannerState } from '../model/SwitchBannerState';
 import { amllGetCachedLyric, amllParseLyricCached } from '../amll/parse/AmllAutoDetect';
 import { AmllLyricLine } from '../amll/model/AmllTypes';
@@ -43,6 +49,28 @@ import { buildPlainLrc, truncateLrc } from '../util/LrcUtils';
 import { LyricLiveViewController } from '../util/LyricLiveViewController';
 
 const TAG = 'MediaService';
+
+/** 导入设备音频（`features/localmusic`）使用的音源 id。 */
+const LOCAL_SOURCE: string = 'local';
+
+/**
+ * 为「本地歌」（`source === 'local'`）提供歌词文本。
+ *
+ * ⚠️ 依赖方向是**反向注册**的：歌词归 `localmusic` 管（同名 `.lrc`，或用户手动匹配到的
+ *    平台歌曲），而 `localmusic` 依赖本模块 —— 所以不能在这里 import 它。
+ *    `localmusic` 在 init 时把解析器注册进来，播放时由本模块回调。
+ */
+export type LocalLyricResolver = (song: SongItem) => Promise<string>;
+
+let localLyricResolver: LocalLyricResolver | null = null;
+
+/**
+ * 注册（传 null 则清除）本地歌词解析器。
+ * @param resolver 解析器；null 表示清除。
+ */
+export function setLocalLyricResolver(resolver: LocalLyricResolver | null): void {
+  localLyricResolver = resolver;
+}
 
 /** Persisted play queue snapshot: online records, local db ids, and current index. */
 interface QueueSnapshot {
@@ -60,9 +88,23 @@ export class MediaService {
     return getAppRuntime().context;
   }
   /** Underlying Harmony AVPlayer; undefined until createAVPlayer succeeds. */
+  /** ★ 汽水分片流已落盘的本地路径（空串=没有）。 */
+  private pendingLocalPath: string = '';
   public avPlayer?: media.AVPlayer;
   /** Active AV session for lock screen / headset / system media controls. */
   private session?: avSession.AVSession;
+  /** 桌面歌词：系统是否支持（`isDesktopLyricSupported` 的结果）。 */
+  private desktopLyricSupported: boolean = false;
+  /** 支持性是否已探测过（没探测过时设置页要显示「未知」而不是「不支持」）。 */
+  private desktopLyricSupportKnown: boolean = false;
+  /** 本会话是否已 enableDesktopLyric（否则调 setDesktopLyricVisible 会报 6600110）。 */
+  private desktopLyricEnabled: boolean = false;
+  /** 悬浮窗当前是否可见（去重，避免重复调用系统接口）。 */
+  private desktopLyricVisible: boolean = false;
+  /** 当前推给蓝牙设备的歌词句（singleLyricText），变了才重推。 */
+  private btLyricText: string = '';
+  /** 最近一次推给系统的播放态（判断「停播/出错」要收起悬浮窗用）。 */
+  private lastPlaybackState: avSession.PlaybackState = avSession.PlaybackState.PLAYBACK_STATE_IDLE;
   private audioManager: audio.AudioManager | undefined = undefined;
   private routingCallback: ((action: audio.DeviceChangeAction) => void) | undefined = undefined;
   /** Audio session manager for cross-app concurrency policy (play alongside other apps). */
@@ -87,20 +129,67 @@ export class MediaService {
   private musicIndex: number = 0;
   /** True when displayed progress should track AVPlayer time updates (false during seek). */
   private isCurrent: boolean = true;
-  /** When false, prepared state will not auto-start play (e.g. load-only). */
-  private isNeedPlay: boolean = true;
+  /**
+   * 「本次装载完成后是否自动起播」。
+   *
+   * 语义是**装载意图**，不是播放器状态：`loadAsset()` 每次都重新声明它，
+   * `prepared` 回调读取后立刻消费（置 false），所以它永远不会越过一次 prepare 生效。
+   *
+   * ⚠️ 历史坑：这个字段原来是 `isNeedPlay` + `this.isNeedPlay = loadOnly !== true`，
+   * 并且错误恢复链路里还有一处无条件 `= true`。启动恢复（`loadOnly = true` → false）
+   * 与错误恢复（无条件 true）会互相覆盖，结果**启动时偶尔自动开始播放**
+   * （典型时序：恢复时音质不可用 → 自动切档 → 重试把意图改回 true → prepare 完成就起播）。
+   */
+  private playWhenPrepared: boolean = false;
+  /** 最近一次 loadAsset 是否用户要起播（失败降级重试时沿用，避免 isPlay=false 导致不自动播） */
+  private lastLoadWantedPlay: boolean = false;
+  /**
+   * 装载代次：`loadAsset()` 每次自增。
+   *
+   * `prepared` 回调只认「本代次」的意图 —— 上一代遗留的 prepare 回调不能消费掉
+   * 新一代的起播意图，新一代的意图也不会被上一代的回调吃掉（用户点了播放却没响的根因）。
+   */
+  private loadGen: number = 0;
+  /** 已被消费（或已被新代次取代）的装载代次：≤ 该值的意图均已失效。 */
+  private playIntentConsumedGen: number = 0;
   /** Queue index to load once AVPlayer is ready; -1 means none. */
   private pendingLoadIndex: number = -1;
   /** Whether the pending load should skip starting playback. */
   private pendingLoadOnly: boolean = false;
   /** True while playback was paused by a temporary audio interruption and should auto-resume. */
   private pausedByInterrupt: boolean = false;
+  /**
+   * 暂停原因的唯一真源（grep `RzdPausePolicy`）。
+   * none / user / focus / headphone / hicar / voice / retry / error
+   */
+  private pauseReason: string = 'none';
+  /** 这次暂停是否应在条件满足后自动恢复（临时原因才置 true）。 */
+  private resumeWhenReady: boolean = false;
+  /** 是否在后台（锁屏场景）：耳机拔出暂停只在**前台**生效，避免历史坑"锁屏拔耳机→自己 pause→锁屏放不了"。 */
+  private appInBackground: boolean = false;
+  /**
+   * 锁屏/后台取证（2026-10-20 夜，用户报「锁屏播放不工作，开关开关都一样」）。
+   *
+   * ★ 这一组只**取证**，不改变任何播放行为：
+   *   进后台记一次「墙钟 + 播放位置」，回前台再算「墙钟走了多久 / 播放位置走了多久」：
+   *   · 位置几乎不动 ⇒ 后台被暂停或进程被冻结（再看 state / 长时任务标志 / paused 事件定性）；
+   *   · 位置照常前进 ⇒ 后台其实在放，那用户说的"不工作"就是锁屏卡片/播控控件那条线；
+   *   · 位置前进但没声音 ⇒ 属于系统"后台管控静音"，不是暂停。
+   *   进程被冻结时定时器一起停，所以不靠定时器取样，只靠进出后台这一对时间戳。
+   * 排查关键字：`RzdLockScreenB` 的 `bg-enter` / `bg-leave(stall|keep)` / `event=paused origin=`。
+   */
+  private bgEnterWall: number = 0;
+  private bgEnterPosition: number = 0;
+  /** 最近一次暂停是谁发起的：`app`（应用内 UI）/ `avsession`（锁屏、耳机、播控中心），空 = 系统事件。 */
+  private pauseOrigin: string = '';
   /** True after we've already attempted one cross-source fallback for the current track; prevents
    *  an infinite loop when the fallback source also fails AVPlayer. */
   private hasFallbackOnce: boolean = false;
   /** Playback URL that failed last; the fallback must never hand it back. */
   private failedUrl: string = '';
   /** Quality id that failed last; skipped when rebuilding the retry chain. */
+  /** 本次启动是否已完成过一次在线解析（首次不弹换源提示）。 */
+  private firstResolveDone: boolean = false;
   private failedQuality: string = '';
   /**
    * True while a playback error is waiting for its deferred (500ms) fallback
@@ -114,14 +203,33 @@ export class MediaService {
   /** Owns the system live view (实况窗) lifecycle and lock screen lyric sync. */
   private liveViewController: LyricLiveViewController = new LyricLiveViewController();
 
+  // RzdScrubberV20: one native seek in flight; coalesce overlapping input to the latest target.
+  private scrubberSeekInFlight: boolean = false;
+  private scrubberQueuedSeek: number | undefined = undefined;
+
   /** AVPlayer seekDone: marks seek finished and updates AVSession position. */
   private seekCall: (seekDoneTime: number) => void = (seekDoneTime: number) => {
+    this.scrubberSeekInFlight = false;
+    const queued: number | undefined = this.scrubberQueuedSeek;
+    this.scrubberQueuedSeek = undefined;
+    if (queued !== undefined) {
+      appendPlayLog(`[RzdScrubberV20] seek-intermediate value=${seekDoneTime}` +
+        ` progress=${this.getAppState().progress} next=${queued}`);
+      this.isCurrent = true;
+      if (this.seek(queued)) {
+        return;
+      }
+      this.getAppState().seekResetRevision++;
+    }
     this.isCurrent = true;
     Logger.info(TAG, `AVPlayer seek succeeded, seek time is ${seekDoneTime}`);
     // 立即同步进度到 UI（暂停时无 timeUpdate 事件，不更新则歌词/进度条不跟随）
     const appState = this.getAppState();
     appState.progress = seekDoneTime;
     appState.currentTime = MediaTools.msToCountdownTime(seekDoneTime);
+    appState.seekDoneRevision++;
+    appendPlayLog(`[RzdScrubberV20] seek-done value=${seekDoneTime}` +
+      ` progress=${appState.progress} ack=${appState.seekDoneRevision}`);
     this.liveViewController.update(seekDoneTime, appState.isPlay);
     this.setPlayState({
       position: {
@@ -132,8 +240,18 @@ export class MediaService {
   };
   /** AVPlayer error: logs and resets the player. */
   private errorCall: (err: BusinessError) => void = (err: BusinessError) => {
+    // ★ 5400102 = "Operate Not Permit"（对不支持的当前状态做控制操作，例如对 idle 的播放器 setSpeed）。
+    //   这类是控制错误，不代表媒体坏了；以前被当成播放失败 → 记录档位失败 → 直接跳歌。
+    if (err.code === 5400102) {
+      this.appendPlayLog('[播放] AVPlayer err 5400102 ignored');
+      return;
+    }
     Logger.error(TAG, `Invoke avPlayer failed, code is ${err.code}, message is ${err.message}`);
+    this.lockScreenDiagnostic(`avplayer(err=${err.code}) msg=${err.message}`);
     appendPlayLog('[播放] AVPlayer 报错 code=' + err.code + ' msg=' + err.message);
+    this.scrubberSeekInFlight = false;
+    this.scrubberQueuedSeek = undefined;
+    this.getAppState().seekResetRevision++;
     // 记录本次失败的 url / 音质，后续 fallback 不得再把同一条地址返回（否则会对同一条
     // 死链无限重试，这正是播放页被卡住的根因）。
     const failedUrlNow: string = this.avPlayer?.url ?? '';
@@ -158,7 +276,7 @@ export class MediaService {
         MusicStoreService.getInstance().recordFailure(
           qualityTierKey(failedQualityNow, failing.source, scriptId),
           QUALITY_TIER_FAIL_THRESHOLD, QUALITY_TIER_COOLDOWN_MS);
-        appendPlayLog('[播放] 记录档位失败 ' + failing.source + '/' + failedQualityNow);
+        appendPlayLog('[播放] tier-fail ' + failing.source + '/' + failedQualityNow);
       }
     }
     // 关键：reset 后 avPlayer 内部已释放 url 资源，必须同步把 isPrepared 置 false，
@@ -168,8 +286,12 @@ export class MediaService {
     this.isPrepared = false;
     this.updateIsPlay(false);
     this.errorRecoveryPending = true;
-    appendPlayLog('[播放] 错误恢复已挂起 failedUrl=' + failedUrlNow.substring(0, 60) +
-      ' failedQuality=' + failedQualityNow + ' 排队歌曲url已清空=' + (failing !== undefined));
+    // 这次"暂停"是链路自己造成的（降质/换源），重试成功后要能自动续播
+    this.pauseReason = 'retry';
+    this.resumeWhenReady = true;
+    this.logPausePolicy('hang-for-retry', 'retry', true, 'quality=' + failedQualityNow);
+    appendPlayLog('[播放] recover-pending failedUrl=' + failedUrlNow.substring(0, 60) +
+      ' failedQuality=' + failedQualityNow + ' urlCleared=' + (failing !== undefined));
     this.avPlayer?.reset();
     // 跨源 fallback：reset 是异步完成，500ms 后等状态稳定再清空 url 触发 loadAsset 内部的
     // resolveOnlineUrl（它会走 resolveMusicUrlWithFallback 自动跨源/跨脚本）。
@@ -178,13 +300,13 @@ export class MediaService {
     // reset 回 idle 后 state 已被覆盖成 IDLE，state 检查会让 fallback 被静默跳过。
     setTimeout((): void => {
       if (!this.errorRecoveryPending) {
-        appendPlayLog('[播放] 错误恢复定时器触发，但恢复已被取消（新加载/已成功恢复）');
+        appendPlayLog('[播放] recover timer, cancelled');
         return;
       }
-      appendPlayLog('[播放] 错误恢复定时器触发，开始跨源重试 hasFallbackOnce=' + this.hasFallbackOnce);
+      appendPlayLog('[播放] recover timer, fallback retry hasFallbackOnce=' + this.hasFallbackOnce);
       if (this.hasFallbackOnce) {
         // 已经跨源重试过一次仍失败，跳到列表下一首，避免死循环
-        appendPlayLog('[播放] 跨源 fallback 已用尽，跳到下一首');
+        appendPlayLog('[播放] fallback exhausted, next');
         this.errorRecoveryPending = false;
         this.hasFallbackOnce = false;
         this.playNextAuto(true);
@@ -193,7 +315,7 @@ export class MediaService {
       this.hasFallbackOnce = true;
       this.retryCurrentSongWithFallback().catch((err: Object): void => {
         // 兜底：恢复链路任何未捕获异常都不能让播放器卡死
-        appendPlayLog('[播放] 错误恢复链路异常: ' + JSON.stringify(err).substring(0, 120));
+        appendPlayLog('[播放] recover chain error: ' + JSON.stringify(err).substring(0, 120));
         this.errorRecoveryPending = false;
         this.hasFallbackOnce = false;
         this.playNextAuto(true);
@@ -218,17 +340,16 @@ export class MediaService {
       this.playNextAuto(true);
       return;
     }
-    appendPlayLog('[播放] 跨源 fallback 触发 ' + current.source + '/' +
+    appendPlayLog('[播放] fallback triggered ' + current.source + '/' +
       (typeof current.title === 'string' ? current.title : ''));
     // 清空 url：让 resolveOnlineUrl 走 fallback 而不是直接走缓存
     current.url = '';
-    this.isNeedPlay = true;
     const resolved: boolean = await this.resolveOnlineUrl(current);
-    appendPlayLog('[播放] 跨源重试解析结果=' + resolved + ' 新url=' +
-      (current.url.length > 0 ? '已获得' : '空'));
+    appendPlayLog('[播放] fallback resolve=' + resolved + ' newUrl=' +
+      (current.url.length > 0 ? 'y' : 'n'));
     if (!resolved) {
       // 跨源/跨脚本 fallback 全部失败，直接跳到下一首
-      appendPlayLog('[播放] 跨源 fallback 仍失败，跳到下一首');
+      appendPlayLog('[播放] fallback failed, next');
       this.errorRecoveryPending = false;
       this.hasFallbackOnce = false;
       this.playNextAuto(true);
@@ -236,7 +357,21 @@ export class MediaService {
     }
     // resolveOnlineUrl 已填好新 url/source/songId，加载播放
     this.errorRecoveryPending = false;
-    this.loadAsset(this.musicIndex);
+    // ★ 沿用「出错前那次装载」的起播意图：
+    //   - 用户点播/切歌（autoPlay=true）后音质无源或地址失败 → 降级/换源后必须自动播放
+    //   - 启动恢复（loadOnly）→ 仍不自动播放
+    // 以前用 isPlay 判断：报错时 isPlay 已被置 false，导致降级后永远不自动播。
+    let wanted: boolean = this.lastLoadWantedPlay;
+    // 若这次暂停是"自动重试"造成的（不是用户按停），重试成功后就该继续播
+    if (!wanted && this.pauseReason === 'retry' && this.resumeWhenReady) {
+      wanted = true;
+      this.logPausePolicy('retry-resume', 'retry', true);
+    }
+    this.pauseReason = 'none';
+    this.resumeWhenReady = false;
+    void this.loadAsset(this.musicIndex, !wanted);
+    this.overridePlayIntent(wanted);
+    this.appendPlayLog('[播放] retry autoplay=' + wanted);
   }
   /** AVPlayer timeUpdate: refreshes countdown label and progress in MusicAppState when active. */
   private updateTimeCall: (updateTime: number) => void = (updateTime: number) => {
@@ -246,6 +381,8 @@ export class MediaService {
       appState.currentTime = MediaTools.msToCountdownTime(updateTime);
       appState.progress = updateTime;
       this.syncCardLyric(updateTime);
+      // 车载蓝牙歌词：按进度换句（在节流元数据之前，查找很便宜）
+      this.refreshBluetoothLyricAt(updateTime);
     }
   };
 
@@ -292,37 +429,132 @@ export class MediaService {
    * state transition, so the 'idle' callback never fires and the track would
    * never load — the silent "stuck playback / play button dead" bug.
    */
+  /**
+   * 把音频流整段下载到 cacheDir（仅用于分片 mp4 这类原生边下边播处理不好的流）。
+   * @param url 直链。
+   * @returns 本地路径；失败返回空串。
+   */
+  private async cacheStreamToLocal(url: string): Promise<string> {
+    const ctx: common.UIAbilityContext | undefined = this.abilityContext;
+    if (ctx === undefined) {
+      return '';
+    }
+    const dir: string = ctx.cacheDir + '/soda_stream';
+    try {
+      if (!fs.accessSync(dir)) {
+        fs.mkdirSync(dir);
+      }
+    } catch (err) {
+    }
+    const path: string = dir + '/stream_' + Date.now().toString() + '.m4a';
+    const req: http.HttpRequest = http.createHttp();
+    try {
+      const resp: http.HttpResponse = await req.request(url, {
+        method: http.RequestMethod.GET,
+        expectDataType: http.HttpDataType.ARRAY_BUFFER,
+        connectTimeout: 15000,
+        readTimeout: 120000
+      });
+      if (resp.responseCode !== 200 || resp.result === undefined) {
+        this.appendPlayLog('[播放] hls download fail code=' + resp.responseCode);
+        return '';
+      }
+      const buf: ArrayBuffer = resp.result as ArrayBuffer;
+      if (buf.byteLength < 32 * 1024) {
+        return '';
+      }
+      const file = fs.openSync(path, fs.OpenMode.CREATE | fs.OpenMode.READ_WRITE);
+      fs.writeSync(file.fd, buf);
+      fs.closeSync(file);
+      this.appendPlayLog('[播放] hls saved ' + Math.round(buf.byteLength / 1024) + 'KB');
+      return path;
+    } catch (err) {
+      this.appendPlayLog('[播放] hls download error');
+      return '';
+    } finally {
+      req.destroy();
+    }
+  }
+
   private async loadCurrentIntoPlayer(): Promise<void> {
     const idleSong: SongItem | undefined = this.getSongItemAtQueueIndex(this.musicIndex);
-    if (!idleSong || !this.avPlayer) {
+    if (!idleSong) {
+      return;
+    }
+    // ★ 2026-10-31（用户反馈"偶发播放不了、重启才好"）：内核分支必须放在 `!this.avPlayer` 之前。
+    //   以前 avPlayer 未初始化时这里直接 return，`ijkUrl` 明明有值也不会去创建 mpv ⇒
+    //   日志里只剩「走内核 mpv」，既没有 [RzdMpv] 也没有 AVPlayer 日志，表现就是"点了不播"，重启（重新 init）才好。
+    if (this.ijkUrl.length > 0) {
+      this.startIjkPlayback(this.ijkUrl);
+      return;
+    }
+    if (!this.avPlayer) {
+      this.appendPlayLog('[播放] avPlayer not ready, no kernel url, wait');
       return;
     }
     this.songItem = await this.songItemBuilder.build(idleSong);
+      // ★ 汽水（分片 mp4）：不经 AVPlayer，直接交给 mpv 内核
+      if (this.ijkUrl.length === 0 && this.ijkActive) {
+        this.appendPlayLog('[播放] back to AVPlayer, release ijk');
+        this.releaseIjk();
+      }
+      if (this.ijkUrl.length > 0) {
+        this.startIjkPlayback(this.ijkUrl);
+        return;
+      }
+      // ★ 统一“装载前先回 idle”：fdSrc 与 url 混用会让 AVPlayer「有时长/有进度但没声音」，
+      //   reset() 会异步回到 idle 再重新进本函数，从而保证每次都从干净状态装载。
+      if (this.avPlayer.state !== 'idle') {
+        this.appendPlayLog('[播放] pre-load reset, state=' + this.avPlayer.state);
+        this.avPlayer.reset();
+        return;
+      }
+      if (this.pendingLocalPath.length > 0) {
+        try {
+          const info: fs.Stat = fs.statSync(this.pendingLocalPath);
+          const file = fs.openSync(this.pendingLocalPath, fs.OpenMode.READ_ONLY);
+          this.avPlayer.fdSrc = { fd: file.fd, offset: 0, length: info.size };
+          this.appendPlayLog('[播放] load local cache size=' + info.size);
+          this.pendingLocalPath = '';
+          return;
+        } catch (err) {
+          this.appendPlayLog('[播放] local cache load fail, use net');
+          this.pendingLocalPath = '';
+        }
+      }
     const httpUrl: string = this.songItemBuilder.getHttpUrl();
     if (httpUrl.length > 0) {
       this.avPlayer.url = httpUrl;
       Logger.info(TAG, 'loadAsset avPlayer.url:' + this.avPlayer.url);
-      this.appendPlayLog('[播放] 装载网络曲目 url=' + httpUrl.substring(0, 60));
+      this.appendPlayLog('[播放] load net url=' + httpUrl.substring(0, 60));
     } else {
       const url = this.songItemBuilder.getRealUrl();
       if (url) {
         const avFileDescriptor: media.AVFileDescriptor = { fd: url.fd, offset: url.offset, length: url.length };
         this.avPlayer.fdSrc = avFileDescriptor;
         Logger.info(TAG, 'loadAsset avPlayer.fdSrc:' + this.avPlayer.fdSrc);
-        this.appendPlayLog('[播放] 装载本地曲目 fd');
+        this.appendPlayLog('[播放] load local fd');
       } else {
-        this.appendPlayLog('[播放] idle 无可播地址（url 已清空，等待错误恢复或手动重试）');
+        this.appendPlayLog('[播放] idle, no url, wait retry');
       }
     }
   }
 
   /** AVPlayer stateChange: drives prepare/play flow, metadata, and auto-next on completion. */
   private stateCall: (state: string) => Promise<void> = async (state: string) => {
+    // ★★★ 2026-11-03（甲方：「换源后明明在播，按钮却显示成暂停」）：
+    //   **出声的引擎可能已经不是 AVPlayer 了**。换源把音源切到内核（mpv/ijk）之后，
+    //   AVPlayer 仍会陆续抛出 paused / stopped / idle，而本回调末尾统一
+    //   `updateIsPlay(this.state === PLAY)` ⇒ 把 `appState.isPlay` 拍成 false，
+    //   于是"正在播却显示暂停"。⇒ 内核接管期间，AVPlayer 的事件只记账、不改对外状态、也不许它自己起播。
+    const kernelOwns: boolean = this.kernelOwnsAudio;
     switch (state) {
       case 'idle':
         Logger.info(TAG, 'AVPlayer state idle called.');
         this.state = AudioPlayerState.IDLE;
-        await this.loadCurrentIntoPlayer();
+        if (!kernelOwns) {
+          await this.loadCurrentIntoPlayer();
+        }
         break;
       case 'initialized':
         Logger.info(TAG, 'AVPlayer state initialized called.');
@@ -339,19 +571,20 @@ export class MediaService {
         Logger.info(TAG, 'AVPlayer state prepared called.');
         this.state = AudioPlayerState.PREPARED;
         this.isPrepared = true;
+        // ★ 换源后 AVPlayer 的倍速会回到 1.0x ⇒ 每次 prepared 都补应用一次（用户 2026-10-19 倍速需求）
+        this.applyPlaybackRate();
         // 地址已就绪：结束「解析中」状态
         this.getAppState().isResolving = false;
         const appState = this.getAppState();
         appState.totalTime = MediaTools.msToCountdownTime(this.getDuration());
         appState.progressMax = this.getDuration();
-        this.appendPlayLog('[播放] prepared isNeedPlay=' + this.isNeedPlay);
-        if (this.avPlayer && this.isNeedPlay) {
+        const playedGen: number = this.consumePlayIntent();
+        this.appendPlayLog('[播放] prepared autoplay=' + (playedGen >= 0) + ' kernelOwns=' + kernelOwns);
+        if (playedGen >= 0 && !kernelOwns) {
           this.ensureBackgroundAudioTask();
-          this.avPlayer.play();
+          this.startPlayback('prepared', playedGen);
         }
         this.setAVMetadata();
-        this.isNeedPlay = true;
-        Logger.info(TAG, 'AVPlayer prepared succeeded.');
         break;
       case 'playing':
         Logger.info(TAG, 'AVPlayer state playing called.');
@@ -364,6 +597,7 @@ export class MediaService {
         // 播放成功：该音质档位健康，清除冷却/失败计数（冷却到期后自动升回高档位）
         this.recordQualityTierSuccess();
         this.ensureBackgroundAudioTask();
+        this.lockScreenDiagnostic(`event=playing bg=${this.bgEnterWall > 0 ? 1 : 0} ` + BackgroundUtil.snapshot());
         const playingSong = this.getSongItemAtQueueIndex(this.musicIndex);
         if (playingSong !== undefined) {
           // 实况窗随播放创建（本地实况窗仅前台可建，失败自动降级）
@@ -386,15 +620,29 @@ export class MediaService {
         break;
       case 'paused':
         Logger.info(TAG, 'AVPlayer state paused called.');
+        // ★ 谁暂停的：空来源 = 系统自己（焦点/后台管控），不是我们调的
+        this.lockScreenDiagnostic(`event=paused origin=${this.pauseOrigin.length > 0 ? this.pauseOrigin : 'system'} ` +
+          `pos=${this.getCurrentTime()} bg=${this.bgEnterWall > 0 ? 1 : 0} ` + BackgroundUtil.snapshot());
+        this.pauseOrigin = '';
         this.state = AudioPlayerState.PAUSE;
+        if (this.abilityContext) {
+          BackgroundUtil.stopContinuousTask(this.abilityContext);
+        }
         break;
       case 'completed':
         Logger.info(TAG, 'AVPlayer state completed called.');
         this.state = AudioPlayerState.COMPLETED;
-        this.playNextAuto(false);
+        if (!kernelOwns) {
+          this.playNextAuto(false);
+        }
         break;
       case 'stopped':
         Logger.info(TAG, 'AVPlayer state stopped called.');
+        // ★ 锁屏后「声音停 + 进度不走」如果落在 STOP 而不是 PAUSE，就是焦点/系统策略把它停掉的
+        //   （见 audioInterruptMode 那段注释：INDEPENDENT_MODE 是"停止且不恢复"策略）。
+        this.lockScreenDiagnostic(`event=stopped origin=${this.pauseOrigin.length > 0 ? this.pauseOrigin : 'system'} ` +
+          `pos=${this.getCurrentTime()} bg=${this.bgEnterWall > 0 ? 1 : 0} ` + BackgroundUtil.snapshot());
+        this.pauseOrigin = '';
         this.state = AudioPlayerState.STOP;
         // 关键：stop 后 avPlayer 会被 reset 回 idle，isPrepared 必须同步置 false，
         // 否则 play() 会误判 isPrepared=true 而直接对无 url 的 avPlayer 调 play()，
@@ -402,6 +650,10 @@ export class MediaService {
         this.isPrepared = false;
         if (this.avPlayer) {
           this.avPlayer.reset();
+        }
+        // 官方《后台播放》要求：停止时主动取消长时任务（不停任务但也不再放音频会被系统终止）
+        if (this.abilityContext) {
+          BackgroundUtil.stopContinuousTask(this.abilityContext);
         }
         break;
       case 'released':
@@ -413,11 +665,13 @@ export class MediaService {
         this.state = AudioPlayerState.UNKNOWN;
         break;
     }
-    this.updateIsPlay(this.state === AudioPlayerState.PLAY);
+    // 内核接管期间不写 `appState.isPlay`：那时 AVPlayer 的相位不代表真实出声（见本回调开头注释）。
+    if (!kernelOwns) {
+      this.updateIsPlay(this.state === AudioPlayerState.PLAY);
+    }
   };
   /** AVSession remote play: loads first asset or resumes local play. */
   private playCall: () =>void = () => {
-    Logger.info(TAG, `on play , do play task`);
     if (this.isFirst) {
       this.loadAsset(this.getValidSelectIndex());
     } else {
@@ -447,10 +701,26 @@ export class MediaService {
         if (!lostOutput) {
           return;
         }
-        appendPlayLog('[播放] 音频输出设备断开，自动暂停');
-        if (this.avPlayer !== undefined && !this.isPlayPaused()) {
-          this.pause();
+        // ★ 2026-10-28：恢复"断开耳机自动暂停"（用户要求），但**只在前后台判定为前台时**执行。
+        //   历史坑：锁屏/后台时系统重排音频路由也会发 DISCONNECT，旧实现直接 pause ⇒ 锁屏放不了。
+        //   现在后台只记日志不暂停；前台才 pause，且不自动恢复（用户重新戴上要自己点播放）。
+        if (this.appInBackground) {
+          appendPlayLog('[RzdPausePolicy] headphone-disconnect ignored bg=1 (avoid lock-screen stall)');
+          return;
         }
+        this.pauseBy('headphone', false);
+        return;
+        // ★★★ 2026-10-22（甲方：「锁屏不能播放」；真机日志 `未命名1_1792679196597.txt` 直接给出证据）：
+        // ```
+        //   22:19:58  [RzdLockScreenB] bg-enter playing=1 … background-mode=ok   ← 后台任务成功
+        //   22:20:05  [播放] 音频输出设备断开，自动暂停
+        //   22:20:05  [RzdLockScreenB] pause-called origin=app                    ← 是**我们自己**停的
+        // ```
+        //   锁屏那一下系统会重排音频路由（尤其蓝牙/耳机），这里收到 DISCONNECT 就 `pause()`
+        //   ⇒ 熄屏即停。**无界没有这条监听**（它后台就老实播），这是本仓从 LX 移植时自己加的。
+        //   ⇒ 照上游：断开只记一行日志，**不自动暂停**。要继续暂停请用系统音频中断那条路
+        //     （`audioInterrupt` / AVSession 的 pause），那是用户真正按停才触发的。
+        appendPlayLog('[播放] audio device lost, keep playing');
       };
       manager.on('deviceChange', this.routingCallback);
     } catch (error) {
@@ -472,6 +742,36 @@ export class MediaService {
     }
   }
 
+  /** 统一日志：每次暂停/恢复都写一行，便于抓现场。 */
+  private logPausePolicy(action: string, reason: string, autoResume: boolean, extra: string = ''): void {
+    appendPlayLog('[RzdPausePolicy] ' + action + ' reason=' + reason +
+      ' autoResume=' + (autoResume ? '1' : '0') + ' bg=' + (this.appInBackground ? '1' : '0') +
+      ' state=' + this.state + (extra.length > 0 ? (' ' + extra) : ''));
+  }
+
+  /** 按原因暂停：临时原因（focus/voice/retry）标记为"可自动恢复"。 */
+  public pauseBy(reason: string, autoResume: boolean): void {
+    this.pauseReason = reason;
+    this.resumeWhenReady = autoResume;
+    this.pauseOrigin = reason;
+    this.logPausePolicy('pause', reason, autoResume);
+    this.pause();
+  }
+
+  /** 条件满足时按原因恢复：只有"因临时原因暂停 + 允许自动恢复"才真正起播。 */
+  public resumeIfAutoPaused(reason: string): void {
+    const allowed: boolean = this.resumeWhenReady && this.pauseReason !== 'user' &&
+      this.pauseReason !== 'none';
+    this.logPausePolicy('resume-request', reason, allowed, 'pausedBy=' + this.pauseReason);
+    if (!allowed) {
+      return;
+    }
+    this.resumeWhenReady = false;
+    this.pauseReason = 'none';
+    this.pauseOrigin = '';
+    this.play();
+  }
+
   private isPlayPaused(): boolean {
     return this.state === AudioPlayerState.PAUSE || this.state === AudioPlayerState.STOP ||
       this.state === AudioPlayerState.ERROR || this.state === AudioPlayerState.IDLE ||
@@ -480,28 +780,25 @@ export class MediaService {
 
   /** AVSession remote pause. */
   private pauseCall: () =>void = () => {
-    Logger.info(TAG, `on pause , do pause task`);
     this.pausedByInterrupt = false;
+    this.pauseOrigin = 'avsession';
     this.pause();
   };
   /** AVSession remote next track. */
   private playNextCall: () =>void = () => {
-    Logger.info(TAG, `on playNext , do playNext task`);
     this.playNextAuto(true);
   };
   /** AVSession remote previous track. */
   private playPreviousCall: () =>void = () => {
-    Logger.info(TAG, `on playPrevious , do playPrevious task`);
     this.playPrevious();
   };
   /** AVSession remote seek (progress bar drag / lyric line click in the control center). */
   private sessionSeekCall: (seekToTime: number) => void = (seekToTime: number) => {
-    Logger.info(TAG, `on seek, do seek task to ${seekToTime}`);
+    Logger.info(TAG, `seek task to=${seekToTime}`);
     this.seek(seekToTime);
   };
   /** AVPlayer volumeChange: mirrors volume into MusicAppState. */
   private volumeChangeCall: (volume: number) => void = (volume: number) => {
-    Logger.info(TAG, `on volumeChangeCall, do volumeChange task`);
     this.getAppState().volume = volume;
   };
 
@@ -567,14 +864,165 @@ export class MediaService {
     }
   }
 
+  private lockScreenDiagnostic(message: string): void {
+    MusicStoreService.getInstance().appendRuntimeDiagnostic('[RzdLockScreenB] ' + message);
+  }
+
   /** Starts or refreshes continuous background audio task (required after some track-switch paths). */
   private ensureBackgroundAudioTask(): void {
+    // ★★★ 2026-10-18（用户：「现在似乎不能锁屏播放，你在播放设置里加一下，默认开」）：
+    //   设置项 = `MusicStoreService.getLockScreenPlay()`（默认 **true**）。
+    //   关掉时**不申请**长时任务（并把可能在跑的停掉），开时照旧走 `BackgroundUtil`。
+    if (!MusicStoreService.getInstance().getLockScreenPlay()) {
+      this.lockScreenDiagnostic('lockscreen enabled=false continuous=skipped');
+      if (this.abilityContext) {
+        BackgroundUtil.stopContinuousTask(this.abilityContext);
+      }
+      return;
+    }
+    this.lockScreenDiagnostic('lockscreen enabled=true continuous=requested');
     BackgroundUtil.startContinuousTask(this.abilityContext);
   }
 
-  /** Called when the app goes to background while playing; keeps continuous task if needed. */
+  /**
+   * 把「锁屏播放」开关同步给系统的**后台播放模式**（`avSession.setBackgroundPlayMode`，@since 24）。
+   *
+   * 官方 FAQ 明确要求应用内的"是否支持后台播放"开关必须与这个模式一致，
+   * 否则退后台会被强制暂停 / 实况窗展示错误。audio 类型的默认值是 ENABLE，
+   * 但既然我们有开关，就必须显式下发，不能依赖默认值。
+   *
+   * 排查日志关键字：`RzdLockScreen`。
+   */
+  private backgroundModeOperations: Promise<void> = Promise.resolve();
+
+  private applyBackgroundPlayMode(): Promise<void> {
+    // Serialize rapid setting changes; read the latest persisted setting when executing.
+    this.backgroundModeOperations = this.backgroundModeOperations.then(async (): Promise<void> => {
+      const enabled: boolean = MusicStoreService.getInstance().getLockScreenPlay();
+      const session: avSession.AVSession | undefined = this.session;
+      if (session === undefined) {
+        this.lockScreenDiagnostic(`lockscreen enabled=${enabled} avsession=idle mode=deferred`);
+        return;
+      }
+      try {
+        const mode: avSession.BackgroundPlayMode = enabled ?
+          avSession.BackgroundPlayMode.ENABLE_BACKGROUND_PLAY :
+          avSession.BackgroundPlayMode.DISABLE_BACKGROUND_PLAY;
+        await session.setBackgroundPlayMode(mode);
+        this.lockScreenDiagnostic(`lockscreen enabled=${enabled} background-mode=ok`);
+      } catch (error) {
+        const err: BusinessError = error as BusinessError;
+        this.lockScreenDiagnostic(`background-mode(err=${err.code}) msg=${err.message}`);
+      }
+    });
+    return this.backgroundModeOperations;
+  }
+
+  /**
+   * 应用「锁屏播放」开关（设置页切换后直接调，立即生效，不必等下一次起播）。
+   *
+   * · 开：正在播就立刻补上长时任务；
+   * · 关：立刻停掉长时任务（当前这首不会被打断，只是不再受"锁屏保活"保护）。
+   * @param enabled True = 允许锁屏/后台继续播放
+   */
+  public applyLockScreenPlay(enabled: boolean): void {
+    const playing: boolean = this.getAppState().isPlay;
+    this.lockScreenDiagnostic(`lockscreen enabled=${enabled} source=setting playing=${playing}`);
+    // ★ 两种状态都同步给系统（见 applyBackgroundPlayMode 的注释）
+    this.applyBackgroundPlayMode();
+    if (enabled) {
+      if (playing) {
+        this.ensureBackgroundAudioTask();
+      }
+      return;
+    }
+    if (this.abilityContext) {
+      BackgroundUtil.stopContinuousTask(this.abilityContext);
+    }
+  }
+
+  /**
+   * 把 `MusicAppState.playbackRate` 应用到 AVPlayer（`setSpeed`）。
+   *
+   * 用户 2026-10-19：「播放页面歌曲菜单加个倍速」。
+   * ⚠️ 每次 `prepared` 都要重新应用一次：AVPlayer 换源后会回到 1.0x，不补就会"换首歌倍速就没了"。
+   * @param rate 目标倍速；不传则取共享状态里当前值
+   */
+  public applyPlaybackRate(rate?: number): void {
+    const state = this.getAppState();
+    const target: number = rate ?? state.playbackRate;
+    if (rate !== undefined) {
+      state.playbackRate = target;
+    }
+    // 内核（mpv）在播时只改内核，绝不动 AVPlayer：
+    // 之前对 idle 的 AVPlayer 调 setSpeed 会触发 5400102，被错误恢复当成播放失败 → 直接跳歌。
+    if (this.ijkActive) {
+      this.applyIjkRate();
+      return;
+    }
+    const player: media.AVPlayer | undefined = this.avPlayer;
+    if (player === undefined) {
+      return;
+    }
+    // AVPlayer 只支持 prepared / playing / paused / completed 这几种状态设置倍速
+    const st: string = player.state;
+    if (st !== 'prepared' && st !== 'playing' && st !== 'paused' && st !== 'completed') {
+      this.appendPlayLog('[RzdSpeed] AVPlayer state=' + st + ' defer speed');
+      return;
+    }
+    try {
+      player.setSpeed(target);
+      this.appendPlayLog('[RzdSpeed] AVPlayer setSpeed ' + target + ' ok');
+    } catch (err) {
+      const e = err as BusinessError;
+      this.appendPlayLog('[RzdSpeed] setSpeed fail code=' + e.code);
+    }
+  }
+
+  /** Reconciles background policy without changing the user's current playback intent. */
   public onApplicationBackground(): void {
-    if (this.getAppState().isPlay) {
+    const playing: boolean = this.isPlayingState();
+    const enabled: boolean = MusicStoreService.getInstance().getLockScreenPlay();
+    this.lockScreenDiagnostic(`onBackground(playing=${playing}) lockscreen enabled=${enabled}`);
+    // ★ 取证起点：进后台的墙钟 + 播放位置（回前台用 onApplicationForeground 结算差值）
+    this.appInBackground = true;
+    this.bgEnterWall = Date.now();
+    this.bgEnterPosition = this.getCurrentTime();
+    const playerState: string = this.avPlayer !== undefined ? this.avPlayer.state : 'none';
+    this.lockScreenDiagnostic(`bg-enter playing=${playing ? 1 : 0} pos=${this.bgEnterPosition} ` +
+      `state=${playerState} session=${this.session !== undefined ? 'yes' : 'no'} ${BackgroundUtil.snapshot()}`);
+    void this.applyBackgroundPlayMode();
+    if (enabled && playing) {
+      this.ensureBackgroundAudioTask();
+    } else if (!enabled) {
+      if (this.abilityContext) {
+        BackgroundUtil.stopContinuousTask(this.abilityContext);
+      }
+    }
+  }
+
+  /**
+   * 应用回到前台：结算后台那段的「墙钟时间 vs 播放位置」差值（见 `bgEnterWall` 的注释）。
+   *
+   * 另外按官方《后台播放》的要求补一次长时任务申请：系统可能在后台自行取消长时任务
+   * （焦点打断、通知被移除等），而音频没有停的情况下原代码不会重新申请，
+   * 下一次锁屏就会因为"没有长时任务"被挂起。
+   */
+  public onApplicationForeground(): void {
+    const wall: number = this.bgEnterWall > 0 ? Date.now() - this.bgEnterWall : 0;
+    const advance: number = this.bgEnterPosition > 0 ? this.getCurrentTime() - this.bgEnterPosition : 0;
+    const playerState: string = this.avPlayer !== undefined ? this.avPlayer.state : 'none';
+    const enabled: boolean = MusicStoreService.getInstance().getLockScreenPlay();
+    const playing: boolean = this.isPlayingState();
+    if (wall > 0) {
+      const stalled: boolean = wall > 1000 && advance < wall / 2;
+      this.lockScreenDiagnostic(`bg-leave(${stalled ? 'stall' : 'keep'}) wall=${wall} pos-delta=${advance} ` +
+        `playing=${playing ? 1 : 0} state=${playerState} lockscreen enabled=${enabled} ` + BackgroundUtil.snapshot());
+    }
+    this.appInBackground = false;
+    this.bgEnterWall = 0;
+    this.bgEnterPosition = 0;
+    if (enabled && playing) {
       this.ensureBackgroundAudioTask();
     }
   }
@@ -584,12 +1032,104 @@ export class MediaService {
     return this.getAppState().resolveSongAtQueueIndex(index);
   }
 
-  /** Shows a toast via the current UIContext when available. */
+  /** 通过当前 UIContext 弹一条 toast（没有 UIContext 时静默跳过）。 */
   private toast(message: string): void {
     const uiContext = getAppRuntime().uiContext;
     if (uiContext !== undefined) {
       uiContext.getPromptAction().showToast({ message: message, duration: 2000 });
     }
+  }
+
+  /** @returns 本地歌背后的沙箱音频文件是否还在磁盘上。 */
+  private localFileExists(path: string): boolean {
+    if (path.length === 0) {
+      return false;
+    }
+    try {
+      return fs.accessSync(path);
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  /**
+   * 补齐本地歌的歌词：只走**反向注册**的解析器，不联网。
+   *
+   * 歌词归 `localmusic` 管（同名 `.lrc`，或用户手动匹配到的平台歌曲），
+   * 而 `localmusic` 依赖本模块，所以由它注册进来、这里回调（见 setLocalLyricResolver）。
+   * @param songItem 队列项（`source === 'local'`）。
+   */
+  private async enrichLocalTrack(songItem: SongItem): Promise<void> {
+    if (songItem.lyricText.length > 0) {
+      return;
+    }
+    // 用户手搜的歌词对本地歌同样有效（本地没有同名 .lrc 时的唯一来源）
+    const manual: string = MusicStoreService.getInstance()
+      .getManualLyric(songItem.source, songItem.songId);
+    if (manual.length > 0) {
+      songItem.lyricText = manual;
+      this.getAppState().lyricVersion++;
+      this.liveViewController.reloadLyric(songItem.lyricText);
+      void this.setAVMetadata();
+      return;
+    }
+    if (localLyricResolver === null) {
+      return;
+    }
+    try {
+      const lyric: string = await localLyricResolver(songItem);
+      if (lyric.length > 0) {
+        songItem.lyricText = lyric;
+        this.getAppState().lyricVersion++;
+        this.liveViewController.reloadLyric(songItem.lyricText);
+        void this.setAVMetadata();
+      }
+    } catch (_error) {
+      // 歌词是可选能力，取不到就静默跳过
+    }
+  }
+
+  /**
+   * 应用用户手动搜索到的歌词（播放页歌曲菜单 →「搜索歌词」）。
+   *
+   * 做三件事：落盘（重播仍生效）、写当前曲目、通知歌词画布 / 实况窗重建。
+   * @param lyric 主歌词（LRC / TTML 文本）
+   * @param translation 翻译（可空）
+   * @param roman 罗马音（可空）
+   * @returns 是否应用成功（没有当前歌曲时为 false）
+   */
+  public applyManualLyric(lyric: string, translation: string, roman: string): boolean {
+    const song: SongItem | undefined = this.getAppState().getCurrentSongItem();
+    if (song === undefined || lyric.length === 0) {
+      return false;
+    }
+    MusicStoreService.getInstance().setManualLyric(song.source, song.songId, lyric);
+    song.lyricText = lyric;
+    song.lyricTranslation = translation;
+    song.lyricRoman = roman;
+    this.getAppState().lyricVersion++;
+    this.liveViewController.reloadLyric(lyric);
+    void this.setAVMetadata();
+    appendPlayLog('[歌词] 手动应用 source=' + song.source + ' len=' + lyric.length);
+    return true;
+  }
+
+  /**
+   * 恢复自动歌词：删掉手动搜索结果，重新走插件 / 内置接口取词。
+   *
+   * 只清当前歌的手动记录（其他歌不受影响）。
+   */
+  public async restoreAutoLyric(): Promise<void> {
+    const song: SongItem | undefined = this.getAppState().getCurrentSongItem();
+    if (song === undefined) {
+      return;
+    }
+    MusicStoreService.getInstance().clearManualLyric(song.source, song.songId);
+    song.lyricText = '';
+    song.lyricTranslation = '';
+    song.lyricRoman = '';
+    this.getAppState().lyricVersion++;
+    await this.enrichOnlineTrack(song);
   }
 
   /**
@@ -613,47 +1153,66 @@ export class MediaService {
       const src: string = itemRef.source;
       const srcId: string = itemRef.songId;
       const appState: MusicAppState = this.getAppState();
+      // ★ 2026-11-01（用户：只有网易云歌词会闪）：原来**无条件**写文本 + 无条件 lyricVersion++ + 无条件 reloadLyric，
+      //   而 enrichOnlineTrack 在 loadAsset / resolveOnlineUrl / 'playing' 三处各跑一次（wy 命中 TTML 时会二次覆盖），
+      //   每次都让画布销毁重建 ⇒ 闪。现在只有**文本真的变了**才写、才自增版本、才重载。
       const applyLyric: (lyric: string, translation: string, roman: string) => void =
         (lyric: string, translation: string, roman: string): void => {
-          if (lyric.length > 0) {
+          let changed: boolean = false;
+          if (lyric.length > 0 && lyric !== itemRef.lyricText) {
             itemRef.lyricText = lyric;
+            changed = true;
           }
-          if (translation.length > 0) {
+          if (translation.length > 0 && translation !== itemRef.lyricTranslation) {
             itemRef.lyricTranslation = translation;
+            changed = true;
           }
-          if (roman.length > 0) {
+          if (roman.length > 0 && roman !== itemRef.lyricRoman) {
             itemRef.lyricRoman = roman;
+            changed = true;
           }
-          if (lyric.length > 0 || translation.length > 0 || roman.length > 0) {
+          if (changed) {
             appState.lyricVersion++;
-            // 歌词补全后同步到播控中心元数据与实况窗
+            appendPlayLog('[歌词] rebuild source=' + src + ' len=' + itemRef.lyricText.length);
             this.liveViewController.reloadLyric(itemRef.lyricText);
             void this.setAVMetadata();
+          } else {
+            appendPlayLog('[歌词] unchanged, skip source=' + src);
           }
         };
-      // TTML 社区数据库歌词优先级最高（逐字 + 翻译/罗马音随原文），失败再回退各平台全量歌词
-      const fallbackFullLyric: () => void = (): void => {
-        void lxGetLyricFull(src, srcId, trackName, trackSinger).then((full: LyricFullResult): void => {
-          applyLyric(full.main, full.translation, full.romanLyric);
+      // ★ 2026-11-09：用户手搜的歌词优先（插件没有 lyric 接口时唯一的来源），
+      //   已经在 MusicStoreService 里按 source|songId 持久化，重播仍然有效。
+      const manual: string = MusicStoreService.getInstance().getManualLyric(src, srcId);
+      if (manual.length > 0) {
+        applyLyric(manual, '', '');
+      } else {
+        // TTML 社区数据库歌词优先级最高（逐字 + 翻译/罗马音随原文），失败再回退各平台全量歌词
+        const fallbackFullLyric: () => void = (): void => {
+          void lxGetLyricFull(src, srcId, trackName, trackSinger).then((full: LyricFullResult): void => {
+            applyLyric(full.main, full.translation, full.romanLyric);
+          }).catch((_err: Object): void => {
+            // lyric is optional
+          });
+        };
+        void lxGetTTMLLyric(srcId).then((ttml: string): void => {
+          if (ttml.length > 0) {
+            applyLyric(ttml, '', '');
+            return;
+          }
+          fallbackFullLyric();
         }).catch((_err: Object): void => {
-          // lyric is optional
+          fallbackFullLyric();
         });
-      };
-      void lxGetTTMLLyric(srcId).then((ttml: string): void => {
-        if (ttml.length > 0) {
-          applyLyric(ttml, '', '');
-          return;
-        }
-        fallbackFullLyric();
-      }).catch((_err: Object): void => {
-        fallbackFullLyric();
-      });
+      }
     }
     if (songItem.cover.length === 0) {
       try {
         const pic: string = await lxGetPicFallback(songItem.source, songItem.songId, songItem.albumId, name, singer);
         if (pic.length > 0) {
           songItem.cover = pic;
+          // 写回歌单持久化，列表下次能显示
+          MusicStoreService.getInstance().updateSongCoverInPlaylists(
+            songItem.source, songItem.songId, pic);
           // Refresh AVSession metadata so the control-center card shows the real cover.
           this.setAVMetadata();
         }
@@ -669,27 +1228,668 @@ export class MediaService {
    * @param songItem Queue item with non-empty source and empty url.
    * @returns True when the url was resolved.
    */
-  private async resolveOnlineUrl(songItem: SongItem): Promise<boolean> {
-    if (!lxEngineIsReady) {
-      this.toast('音源未就绪，请在设置中导入并选中源');
-      return false;
+  /**
+   * 把「跳转壳」还原成真实音频直链。
+   * 目前见过一种：`https://host/lx/api/redirect.php?u=<base64 的真实 http 地址>`。
+   * @param url 脚本返回的原始地址。
+   * @returns 直链；不是跳转壳就原样返回。
+   */
+  private unwrapRedirectUrl(url: string): string {
+    try {
+      if (url.indexOf('redirect.php') < 0) {
+        return url;
+      }
+      const m: RegExpMatchArray | null = url.match(/[?&]u=([A-Za-z0-9+/=%]+)/);
+      if (m === null || m.length < 2) {
+        return url;
+      }
+      const raw: string = decodeURIComponent(m[1]);
+      const bytes: Uint8Array = new util.Base64Helper().decodeSync(raw);
+      const text: string = util.TextDecoder.create('utf-8').decodeToString(bytes);
+      if (text.startsWith('http://') || text.startsWith('https://')) {
+        appendPlayLog('[播放] unwrap direct url ' + text.substring(0, 90));
+        return text;
+      }
+      return url;
+    } catch (err) {
+      appendPlayLog('[播放] unwrap fail, keep origin url');
+      return url;
     }
+  }
+
+  // ===== 播放内核（mpv）：汽水分片流 / 音效曲目 =====
+
+  /** 当前 ijk 引擎实例（仅在汽水分片流时存在）。 */
+  private ijkEngine: AudioKernel | undefined = undefined;
+  /** 待用 ijk 播放的地址；空串表示走 AVPlayer。 */
+  private ijkUrl: string = '';
+  /** 进度轮询定时器句柄（-1 表示未启动）。 */
+  private ijkPollTimer: number = -1;
+  /** ijk 静默失败看门狗：prepare 后 N 秒既没 onPrepared 也没 onError 就降级。 */
+  private ijkWatchdog: number = -1;
+  /** 本轮装载是否已做过"原地重试 mpv"（避免无限重试）。 */
+  private ijkInlineRetryDone: boolean = false;
+  /** 上一次下发的 af 链（相同则不重复下发，避免拖滑杆刷爆日志）。 */
+  private lastAfChain: string = '';
+  /** 当前是否由 ijk 引擎出声（play/pause/seek 分支据此路由）。 */
+  private ijkActive: boolean = false;
+  /**
+   * ★ 2026-11-03：**内核引擎是否持有"出声权"**（`stateCall` 用它决定要不要理 AVPlayer 的事件）。
+   *
+   * 为什么不能直接用 `ijkActive && ijkEngine !== undefined`：
+   * `parkAvPlayerForKernel()` 里 `reset()` 触发的 `idle` 事件是**异步回来**的，
+   * 那一刻内核实例可能还没创建 ⇒ 守卫会判成"内核没接手" ⇒ `stateCall('idle')`
+   * 又去 `loadCurrentIntoPlayer()` 把刚停掉的 AVPlayer 拉起来（双路出声复发）。
+   * 所以改用这个**显式、同步**的标志：起内核前先置真，`releaseIjk()` 里置假。
+   */
+  private kernelOwnsAudio: boolean = false;
+
+  /**
+   * 把 AVPlayer 停到"不出声、也不抢状态"的位置（**内核引擎接手之前必须调**）。
+   *
+   * 为什么必须有这一步：`loadAsset` 的内核分支（`if (this.ijkUrl.length > 0)`）起完内核就
+   * `return`，根本走不到后面那句 `reset()` ⇒ 如果这一拍 AVPlayer 还在放上一首，
+   * 内核会**和它一起响**（甲方实测「有概率两路同时播放」）。
+   * 同时把 `isPrepared` 归零：`stateCall` 里那两处依赖它的判断才不会拿"上一首 AVPlayer 的残留相位"
+   * 去改动对外状态。（⚠️ **不要动 `isCurrent`** —— 它只在 `seekCall` 里恢复成 true，
+   * 这里置假会让后续 AVPlayer 曲目永远不发布进度。）
+   */
+  private parkAvPlayerForKernel(): void {
+    const p: media.AVPlayer | undefined = this.avPlayer;
+    this.isPrepared = false;
+    if (p === undefined) {
+      return;
+    }
+    try {
+      p.pause();
+    } catch (e) {
+      // 已经 idle/stopped 时 pause 会抛，忽略
+    }
+    try {
+      p.reset();
+    } catch (e) {
+      // 同上：reset 在部分相位会抛，忽略
+    }
+    appendPlayLog('[播放] kernel owns, AVPlayer suspended');
+  }
+
+  /**
+   * 释放 ijk 引擎与轮询。
+   * 每次换歌 / 回退 AVPlayer 前都要调用，避免两套引擎同时出声。
+   */
+  private releaseIjk(): void {
+    this.clearIjkWatchdog();
+    this.stopIjkPolling();
+    if (this.ijkEngine !== undefined) {
+      this.ijkEngine.release();
+      this.ijkEngine = undefined;
+    }
+    this.ijkActive = false;
+    this.kernelOwnsAudio = false;
+    this.ijkUrl = '';
+  }
+
+  /** 停止进度轮询。 */
+  private stopIjkPolling(): void {
+    if (this.ijkPollTimer >= 0) {
+      clearInterval(this.ijkPollTimer);
+      this.ijkPollTimer = -1;
+    }
+  }
+
+  /** 启动 ijk 看门狗：12 秒内没 prepared / error 就当作静默失败并降级。 */
+  private armIjkWatchdog(engine: AudioKernel): void {
+    this.clearIjkWatchdog();
+    this.ijkWatchdog = setInterval((): void => {
+      this.clearIjkWatchdog();
+      if (this.ijkEngine !== engine || engine.isPrepared()) {
+        return;
+      }
+      this.appendPlayLog('[RzdKernel] state ' + (engine.probeState !== undefined ? engine.probeState() : 'n/a'));
+      // ★ 2026-10-31：先原地重试一次 mpv（同一直链），确认是网络/代理问题再放弃；
+      //   以前这里直接 release 并 loadCurrentIntoPlayer ⇒ 落到 AVPlayer（5411001）→ 跳歌，把一次失败放大成整首跳过。
+      this.markIjkFail();
+      this.releaseIjk();
+      if (!this.ijkInlineRetryDone && this.ijkUrl.length > 0) {
+        this.ijkInlineRetryDone = true;
+        this.appendPlayLog('[RzdKernel] retry mpv in place');
+        this.startIjkPlayback(this.ijkUrl);
+        return;
+      }
+      this.appendPlayLog('[RzdKernel] retry failed -> fallback/next');
+      this.loadCurrentIntoPlayer();
+    }, 12000);
+  }
+
+  /** 停止 mpv 看门狗。 */
+  private clearIjkWatchdog(): void {
+    if (this.ijkWatchdog >= 0) {
+      clearInterval(this.ijkWatchdog);
+      this.ijkWatchdog = -1;
+    }
+  }
+
+  /** 启动进度轮询：把 ijk 的位置/时长写进 MusicAppState（UI 唯一真源）。 */
+  private startIjkPolling(): void {
+    this.stopIjkPolling();
+    this.ijkPollTimer = setInterval((): void => {
+      if (!this.ijkActive || this.ijkEngine === undefined) {
+        return;
+      }
+      const engine: AudioKernel = this.ijkEngine;
+      const pos: number = engine.position();
+      const dur: number = engine.duration();
+      const st = this.getAppState();
+      st.progress = pos;
+      st.currentTime = MediaTools.msToCountdownTime(pos);
+      if (dur > 0 && st.progressMax !== dur) {
+        st.progressMax = dur;
+        st.totalTime = MediaTools.msToCountdownTime(dur);
+      }
+      // 每 5 秒把位置同步给 AVSession（锁屏/车机进度条），避免只有 0 秒
+      if (this.ijkActive && Math.floor(pos / 5000) !== Math.floor((pos - 500) / 5000)) {
+        this.setPlayState({
+          state: avSession.PlaybackState.PLAYBACK_STATE_PLAY,
+          position: { elapsedTime: pos, updateTime: new Date().getTime() }
+        });
+      }
+    }, 500);
+  }
+
+  /**
+   * 用 ijk 引擎播放一条流（汽水分片 mp4）。
+   * @param url 已剥壳的直链。
+   */
+  private startIjkPlayback(url: string): void {
+    // ★★★ 2026-11-03（甲方：「有概率现在就听会和正常的播放同时播放」）：
+    //   换源后新地址若落在内核流上（`ijkUrl` 非空），`loadAsset` 会**直接跑去起内核并 return**，
+    //   而这条路上**从来没有停过 AVPlayer** —— 上一首还在 AVPlayer 里响、内核又开始放新歌，
+    //   两路同时出声。内核成为出声引擎之前，必须先把 AVPlayer 停到"不出声也不抢状态"的位置。
+    // ⚠️ 顺序不能换：先 `releaseIjk()`（清上一路内核 + 清所有权），
+    //   再**同步**置 `kernelOwnsAudio`，最后才 park —— 否则 `reset()` 异步回来的 idle 事件
+    //   会把刚停掉的 AVPlayer 又拉起来（见 `kernelOwnsAudio` 注释）。
+    this.releaseIjk();
+    this.kernelOwnsAudio = true;
+    this.parkAvPlayerForKernel();
+    const engine: AudioKernel = createKernel(preferredKernel());
+    this.ijkEngine = engine;
+    this.ijkActive = true;
+    const playedGen: number = this.consumePlayIntent();
+    appendPlayLog('[播放] soda -> ' + kernelName(engine.kind()) + ' gen=' + playedGen);
+    engine.create({
+      onPrepared: (): void => {
+        if (this.ijkEngine !== engine) {
+          return;
+        }
+        const dur: number = engine.duration();
+        const st = this.getAppState();
+        if (dur > 0) {
+          st.progressMax = dur;
+          st.totalTime = MediaTools.msToCountdownTime(dur);
+        }
+        st.isResolving = false;
+        this.state = AudioPlayerState.PLAY;
+        this.isPrepared = true;
+        this.clearIjkWatchdog();
+        this.markIjkOk();
+        this.appendPlayLog('[RzdKernel] stream ' + engine.describeStream());
+        // ★ ijk 路径也要写 AVSession 元数据，否则锁屏/车机看不到歌名封面
+        void this.setAVMetadata();
+        // 播放设置：EQ / 升降调（实验性；非默认值才下发）
+        const store = MusicStoreService.getInstance();
+        const eq: number[] = store.getEqGains();
+        const pitch: number = store.getTuningPitch();
+        if (pitch !== 0 || eq[0] !== 0 || eq[1] !== 0 || eq[2] !== 0 || eq[3] !== 0 || eq[4] !== 0) {
+          engine.applyTuning(eq, pitch, effectsFromJson(store.getAudioEffects()));
+        }
+        // ★ 换歌会重建内核实例：如果 USB 独占处于开启且设备仍在，重新把 fd 交给新实例
+        if (MusicStoreService.getInstance().getUsbExclusive() && UsbAudioService.getInstance().state.connected) {
+          const usbFd: number = UsbAudioService.getInstance().currentFd();
+          if (usbFd > 0 && engine.setUsbMode !== undefined) {
+            const lastBackend: string = AppStorage.get<string>('rzd_usb_backend') ?? 'usb-exclusive';
+            const mode: string = lastBackend.indexOf('usb') >= 0 ? 'usb' : 'ohaudio';
+            engine.setUsbMode(mode);
+            this.appendPlayLog('[RzdUsb] reapply exclusive backend=' + mode + ' fd=' + usbFd);
+          }
+        }
+        if (playedGen >= 0) {
+          engine.start();
+          engine.setVolume(1);
+          this.applyIjkRate();
+          this.updateIsPlay(true);
+          this.ensureBackgroundAudioTask();
+          this.startIjkPolling();
+          this.getAppState().isResolving = false;
+          this.appendPlayLog('[播放] ijk start dur=' + dur);
+        } else {
+          this.appendPlayLog('[播放] ijk load only');
+        }
+      },
+      onDuration: (durationMs: number): void => {
+        const st = this.getAppState();
+        st.progressMax = durationMs;
+        st.totalTime = MediaTools.msToCountdownTime(durationMs);
+      },
+      onCompleted: (): void => {
+        if (this.ijkEngine !== engine) {
+          return;
+        }
+        appendPlayLog('[播放] ijk completed -> next');
+        this.stopIjkPolling();
+        this.releaseIjk();
+        this.playNextAuto(false);
+      },
+      onError: (code: number, message: string): void => {
+        if (this.ijkEngine !== engine) {
+          return;
+        }
+        appendPlayLog('[播放] ijk fail code=' + code + ' msg=' + message + ' -> AVPlayer');
+        this.markIjkFail();
+        this.releaseIjk();
+        // 回退：AVPlayer 仍持有 songItem.url（可能卡 0 进度，但至少不静默失败）
+        this.loadCurrentIntoPlayer();
+      }
+    });
+    // ★ 音频焦点：ijk 自己也会收到系统中断，这里统一转成与 AVPlayer 一致的暂停/恢复策略
+    engine.onInterrupt((kind: AudioInterruptKind): void => {
+      if (kind === AudioInterruptKind.PAUSE) {
+        this.pauseReason = 'focus';
+        this.resumeWhenReady = true;
+        this.pausedByInterrupt = true;
+        this.updateIsPlay(false);
+        this.appendPlayLog('[播放] ijk focus lost, wait');
+      } else if (kind === AudioInterruptKind.STOP) {
+        this.pauseReason = 'focus';
+        this.resumeWhenReady = false;
+        this.updateIsPlay(false);
+        this.appendPlayLog('[播放] ijk focus lost forever');
+      } else {
+        // 焦点回来后：独占模式下 AO 可能已被系统重新分配，重新下发一次后端
+        if (MusicStoreService.getInstance().getUsbExclusive() &&
+          UsbAudioService.getInstance().state.connected && engine.setUsbMode !== undefined) {
+          const backend: string = AppStorage.get<string>('rzd_usb_backend') ?? 'usb-exclusive';
+          const mode: string = backend.indexOf('usb') >= 0 ? 'usb' : 'ohaudio';
+          engine.setUsbMode(mode);
+          this.appendPlayLog('[RzdUsb] focus back, reapply backend=' + mode);
+        }
+        this.resumeIfAutoPaused('focus');
+      }
+    });
+    this.armIjkWatchdog(engine);
+    // 起播前统一设置 UA/Referer/超时/重连（抖音系直链与代理常因缺 UA/Referer 被拒）
+    if (engine.prepareNetworkOptions !== undefined) {
+      engine.prepareNetworkOptions();
+    }
+    engine.prepare(url);
+  }
+
+  /** 把当前倍速应用到 ijk（AVPlayer 与 ijk 各自生效）。 */
+  /**
+   * 播放中修改「播放设置」（EQ / 升降调）后调用：立刻把新参数下发给当前引擎。
+   * - mpv 正在出声：重新 `applyTuning`（FFmpeg `af` 链）；
+   * - AVPlayer 正在出声：无法热更新，等下一首走 mpv 时生效（由 `isTuningActive` 决定路由）。
+   */
+  public refreshTuning(): void {
+    const store = MusicStoreService.getInstance();
+    const eq: number[] = store.getEqGains();
+    const pitch: number = store.getTuningPitch();
+    const effects: AudioEffects = effectsFromJson(store.getAudioEffects());
+    const chain: string = MediaService.afChainOf(eq, pitch, effects);
+    if (chain === this.lastAfChain) {
+      return;   // 参数没变（拖滑杆会连续回调）：不重复下发
+    }
+    this.lastAfChain = chain;
+    if (MusicStoreService.getInstance().getUsbExclusive()) {
+      // USB 独占走严格模式：不叠加任何滤镜（bit-perfect）
+      this.appendPlayLog('[RzdUsb] exclusive, skip filter chain');
+      return;
+    }
+    if (this.ijkActive && this.ijkEngine !== undefined) {
+      this.ijkEngine.applyTuning(eq, pitch, effects);
+      this.appendPlayLog('[RzdTuning] applied to ' + kernelName(this.ijkEngine.kind()));
+      return;
+    }
+    this.appendPlayLog('[RzdTuning] on AVPlayer, applies on kernel');
+  }
+
+  /** 组出 af 链（与内核共用 engine/AudioEffects 的实现，保证"是否变化"判断准确）。 */
+  private static afChainOf(eqGains: number[], pitchSemitones: number, effects: AudioEffects): string {
+    return buildAfChain(eqGains, pitchSemitones, effects);
+  }
+  /**
+   * @returns 是否允许使用 mpv 内核。
+   * 连续 2 次播放失败会写 `ijk_disabled`（持久化），之后汽水先走系统播放器；
+   * 现在 mpv 是唯一内核，该标记启动时会被清掉（见构造函数）。
+   */
+  private shouldUseIjk(): boolean {
+    // ★ 2026-10-31（用户拍板）：播放内核统一走 mpv，不再提供「系统播放器 / FFmpeg」选项。
+    //   只有当 mpv 连续失败被自动降级（ijk_disabled）时才回落 AVPlayer。
+    return !MusicStoreService.getInstance().isIjkDisabled();
+  }
+
+  /** ijk 播放成功后清零失败计数。 */
+  private markIjkOk(): void {
+    const store = MusicStoreService.getInstance();
+    if (store.getIjkFailStreak() !== 0) {
+      store.setIjkFailStreak(0);
+      this.appendPlayLog('[RzdKernel] fail count cleared');
+    }
+  }
+
+  /** ijk 播放失败累计；达到 2 次自动降级到系统播放器。 */
+  /**
+   * 用官方 http 模块探测一个 URL 是否可达（只取 1 字节，避免拉流）。
+   * 用来区分"网络/代理不可达"与"mpv 解析失败"——这是汽水 12s 静默失败的关键证据。
+   * @param url 待探测地址。
+   */
+  private async probeUrlReachability(url: string): Promise<void> {
+    if (url.length === 0) {
+      return;
+    }
+    try {
+      const httpRequest = http.createHttp();
+      const resp: http.HttpResponse = await httpRequest.request(url, {
+        method: http.RequestMethod.GET,
+        readTimeout: 6000,
+        connectTimeout: 6000,
+        header: {
+          'Range': 'bytes=0-1',
+          'User-Agent': 'Mozilla/5.0 (Linux; HarmonyOS) AppleWebKit/537.36 Chrome/120.0 Safari/537.36'
+        }
+      });
+      this.appendPlayLog('[RzdProbe] reachable code=' + resp.responseCode + ' len=' +
+        (typeof resp.result === 'string' ? (resp.result as string).length : -1) + ' url=' +
+        url.substring(0, Math.min(60, url.length)));
+      httpRequest.destroy();
+    } catch (err) {
+      const e = err as BusinessError;
+      this.appendPlayLog('[RzdProbe] unreachable code=' + e.code + ' msg=' + e.message +
+        ' url=' + url.substring(0, Math.min(60, url.length)));
+    }
+  }
+
+  private markIjkFail(): void {
+    // ★ 2026-10-31：mpv 已是唯一内核，**不再做"连续失败就永久降级"** ——
+    //   那个标记会把汽水永久踢回 AVPlayer，而 AVPlayer 打不开星海给的代理链（5411001 Cannot Find Host），
+    //   结果就是"汽水一首也放不了、还一直跳歌"。这里只计数与打日志，失败由上层跨源重试处理。
+    const store = MusicStoreService.getInstance();
+    const streak: number = store.getIjkFailStreak() + 1;
+    store.setIjkFailStreak(streak);
+    if (store.isIjkDisabled()) {
+      store.setIjkDisabled(false);
+      this.appendPlayLog('[RzdKernel] legacy ijk flag cleared');
+    }
+    this.appendPlayLog('[RzdKernel] mpv fail count=' + streak + '（继续用 mpv 重试）');
+  }
+
+  /** @returns 当前生效的播放内核名（设置页展示用）。 */
+  public engineName(): string {
+    if (MusicStoreService.getInstance().isIjkDisabled()) {
+      return 'mpv（已降级到系统播放器）';
+    }
+    if (this.ijkActive) {
+      return 'mpv · 正在使用';
+    }
+    return 'mpv';
+  }
+
+  /**
+   * 切换播放内核后调用：立刻按新内核重载当前曲目（免用户手动切歌）。
+   * 只在正在播放/暂停时动作；否则下一首自然生效。
+   */
+  public reloadForKernelChange(): void {
+    const playing: boolean = this.state === AudioPlayerState.PLAY ||
+      this.state === AudioPlayerState.PAUSE || this.state === AudioPlayerState.COMPLETED;
+    this.appendPlayLog('[RzdKernel] kernel switch -> reload playing=' + playing);
+    if (!playing) {
+      return;
+    }
+    const index: number = this.musicIndex;
+    this.releaseIjk();
+    void this.loadAsset(index);
+  }
+  /**
+   * @returns 内核摘要（设置页「播放设置」副标题用），例如 `mpv`。
+   */
+  public kernelSummary(): string {
+    const mode: string = MusicStoreService.getInstance().getEngineMode();
+    const modeText: string = mode === 'av' ? '系统' : (mode === 'ffmpeg' ? 'FFmpeg' : (mode === 'mpv' ? 'mpv' : '自动'));
+    const active: string = this.ijkActive ? kernelName(this.ijkEngine !== undefined ? this.ijkEngine.kind() : PlaybackKernelKind.MPV) : 'AVPlayer';
+    return modeText + ' · ' + active;
+  }
+  /**
+   * 应用 USB 独占设置（用户 2026-10-31 需求）。
+   * @param enabled true=尝试 `ao=usb-exclusive`（需外接 USB DAC）；false=回到普通输出。
+   * 说明：真正独占还需要 USBManager 授权的 fd（`usb-exclusive-fd`），当前版本先下发 ao 并记录日志，
+   * 没有 DAC 时 mpv 会自动回退普通输出，不会静默失声。
+   */
+  public async applyUsbExclusive(enabled: boolean): Promise<void> {
+    MusicStoreService.getInstance().setUsbExclusive(enabled);
+    const usb: UsbAudioService = UsbAudioService.getInstance();
+    if (!enabled) {
+      usb.disconnect();
+      if (this.ijkEngine !== undefined && this.ijkActive && this.ijkEngine.setUsbMode !== undefined) {
+        this.ijkEngine.setUsbMode('off');
+      }
+      this.appendPlayLog('[RzdUsb] exclusive off, normal output');
+      return;
+    }
+    const fd: number = await usb.connect();
+    if (fd <= 0) {
+      this.appendPlayLog('[RzdUsb] enable fail: ' + usb.state.statusText);
+      this.toast(usb.state.statusText);
+      MusicStoreService.getInstance().setUsbExclusive(false);
+      return;
+    }
+    const engine = this.ijkEngine;
+    if (engine === undefined || !this.ijkActive || engine.setUsbMode === undefined) {
+      this.appendPlayLog('[RzdUsb] ready fd=' + fd);
+      return;
+    }
+    // 打印这个构建里可用的 ao 驱动，便于判断能不能真的独占
+    if (engine.listAoDrivers !== undefined) {
+      this.appendPlayLog('[RzdUsb] 可用 ao 驱动=' + engine.listAoDrivers());
+    }
+    this.tryUsbMode(engine, 'usb', fd, 0);
+  }
+
+  /**
+   * 依次尝试独占后端，并用 `current-ao` 实测决定是否成功（不假设）。
+   * 顺序：ao=usb-exclusive → ao=ohaudio + audio-exclusive=yes → 失败回落。
+   * @param engine 当前内核。
+   * @param mode `usb` / `ohaudio`。
+   * @param fd 设备 fd（保留给内核记录）。
+   * @param attempt 第几次尝试（0/1）。
+   */
+  /**
+   * 从 mpv `audio-device-list` 的 JSON 文本里挑出 USB 设备条目。
+   * 只做字符串匹配（不引 JSON 解析，避免结构变化导致崩溃）。
+   * @param list mpv 返回的 JSON 文本。
+   * @returns 设备 name；没有则空串。
+   */
+  private pickUsbDeviceName(list: string): string {
+    const lower: string = list.toLowerCase();
+    const keys: string[] = ['usb', 'uac', 'dac'];
+    for (let i: number = 0; i < keys.length; i++) {
+      const at: number = lower.indexOf(keys[i]);
+      if (at < 0) {
+        continue;
+      }
+      // 往左找最近的 "name":" 取引号内容
+      const left: string = list.substring(0, at);
+      const nameAt: number = left.lastIndexOf('"name":"');
+      if (nameAt < 0) {
+        continue;
+      }
+      const startQuote: number = nameAt + 8;
+      const endQuote: number = list.indexOf('"', startQuote);
+      if (endQuote > startQuote) {
+        return list.substring(startQuote, endQuote);
+      }
+    }
+    return '';
+  }
+  private tryUsbMode(engine: AudioKernel, mode: string, fd: number, attempt: number): void {
+    if (engine.setUsbMode !== undefined) {
+      engine.setUsbMode(mode);
+    }
+    // 让 AO 报一次设备列表：能看到 usb/uac 设备时显式指定，成功率更高
+    setTimeout((): void => {
+      if (engine.listAudioDevices !== undefined) {
+        const list: string = engine.listAudioDevices();
+        if (list.length > 0) {
+          this.appendPlayLog('[RzdUsb] 设备列表=' + list);
+          const picked: string = this.pickUsbDeviceName(list);
+          if (picked.length > 0 && engine.setAudioDevice !== undefined) {
+            engine.setAudioDevice(picked);
+          }
+        }
+      }
+    }, 250);
+    setTimeout((): void => {
+      const ao: string = engine.currentAo !== undefined ? engine.currentAo() : '';
+      this.appendPlayLog('[RzdUsb] mode ' + mode + ' verify current-ao=' + ao);
+      const ok: boolean = mode === 'usb' ? ao.indexOf('usb') >= 0 : ao.indexOf('ohaudio') >= 0;
+      if (ok) {
+        AppStorage.setOrCreate('rzd_usb_backend', mode === 'usb' ? 'usb-exclusive' : 'ohaudio + exclusive');
+        if (engine.audioOutParams !== undefined) {
+          const params: string = engine.audioOutParams();
+          AppStorage.setOrCreate('rzd_usb_out_params', params);
+          this.appendPlayLog('[RzdUsb] out params ' + params);
+        }
+        this.appendPlayLog('[RzdUsb] exclusive active backend=' + mode + ' fd=' + fd);
+        this.toast(mode === 'usb' ? 'USB 独占已生效' : 'USB 独占已生效（OHAudio 独占模式）');
+        return;
+      }
+      if (attempt === 0) {
+        this.appendPlayLog('[RzdUsb] usb-exclusive unavailable -> ohaudio');
+        this.tryUsbMode(engine, 'ohaudio', fd, 1);
+        return;
+      }
+      this.appendPlayLog('[RzdUsb] USB exclusive unsupported -> normal');
+      this.toast('该设备不支持 USB 独占（已回落普通输出）');
+      MusicStoreService.getInstance().setUsbExclusive(false);
+      UsbAudioService.getInstance().disconnect();
+      if (engine.setUsbMode !== undefined) {
+        engine.setUsbMode('off');
+      }
+    }, 800);
+  }
+
+  /**
+   * 设备掉线时由轮询调用：关闭独占、回落普通输出并提示（幂等）。
+   */
+  /**
+   * USB 诊断：把"这个 libmpv 构建有哪些 AO 驱动 / 当前后端 / 设备列表"一次打进日志，
+   * 方便真机上一键取证（设置页「USB 诊断」按钮）。
+   */
+  public async diagnoseUsb(): Promise<void> {
+    const usb: UsbAudioService = UsbAudioService.getInstance();
+    await usb.refresh();
+    const st: UsbAudioState = usb.state;
+    this.appendPlayLog('[RzdUsb] diag present=' + st.present + ' authorized=' + st.authorized +
+      ' connected=' + st.connected + ' fd=' + st.fd + ' ' + st.capabilityText);
+    const engine = this.ijkEngine;
+    if (engine !== undefined) {
+      if (engine.listAoDrivers !== undefined) {
+        this.appendPlayLog('[RzdUsb] diag ao=' + engine.listAoDrivers());
+      }
+      if (engine.currentAo !== undefined) {
+        this.appendPlayLog('[RzdUsb] diag current-ao=' + engine.currentAo());
+      }
+      if (engine.listAudioDevices !== undefined) {
+        this.appendPlayLog('[RzdUsb] diag devices=' + engine.listAudioDevices());
+      }
+      if (engine.audioOutParams !== undefined) {
+        this.appendPlayLog('[RzdUsb] diag out params=' + engine.audioOutParams());
+      }
+    } else {
+      this.appendPlayLog('[RzdUsb] diag no kernel, play first');
+    }
+    this.toast('USB 诊断已写入运行日志');
+  }
+
+  public onUsbDeviceLost(): void {
+    if (!MusicStoreService.getInstance().getUsbExclusive()) {
+      return;
+    }
+    MusicStoreService.getInstance().setUsbExclusive(false);
+    const usb: UsbAudioService = UsbAudioService.getInstance();
+    usb.disconnect();
+    if (this.ijkEngine !== undefined && this.ijkEngine.setUsbMode !== undefined) {
+      this.ijkEngine.setUsbMode('off');
+    }
+    this.appendPlayLog('[RzdUsb] unplugged -> exclusive off');
+    this.toast('USB 设备已断开，已回落普通输出');
+  }
+  /** 恢复 FFmpeg 内核（清掉降级标记）。 */
+  public resetIjkHealth(): void {
+    const store = MusicStoreService.getInstance();
+    store.setIjkDisabled(false);
+    store.setIjkFailStreak(0);
+    this.appendPlayLog('[RzdKernel] mpv restored');
+  }
+  /** @returns 播放设置里是否有非默认的升降调 / EQ（有则普通曲目也走 FFmpeg）。 */
+  private isTuningActive(): boolean {
+    const store = MusicStoreService.getInstance();
+    if (store.getTuningPitch() !== 0) {
+      return true;
+    }
+    if (effectsFromJson(store.getAudioEffects()).anyOn()) {
+      return true;
+    }
+    const gains: number[] = store.getEqGains();
+    for (let i: number = 0; i < gains.length; i++) {
+      if (gains[i] !== 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+  private applyIjkRate(): void {
+    if (this.ijkEngine === undefined) {
+      return;
+    }
+    const rate: number = this.getAppState().playbackRate;
+    this.ijkEngine.setSpeed(rate);
+  }
+
+  private async resolveOnlineUrl(songItem: SongItem): Promise<boolean> {
+    // ★★★ 2026-11-09（用户：「播放 LX 的音乐一直提示音源未就绪」）：
+    //   这里原本先 `waitForLxEngineReady(3000)`，不等就 return —— 但 `lxActiveSource`
+    //   可能指着一个 MusicFree 插件（上次播放留下的），LX 引擎永远不会就绪 ⇒ 100% 被拦。
+    //   现在把「选脚本 + 等 init + 回滚」全部交给 `resolveMusicUrlWithFallback()`：
+    //   它会先预选 LX 脚本、按候选逐个切换（每次自带超时），最后才按真实原因报失败。
     const name: string = typeof songItem.title === 'string' ? songItem.title : '';
     const singer: string = typeof songItem.singer === 'string' ? songItem.singer : '';
-    appendPlayLog('[播放] resolveOnlineUrl 开始 source=' + songItem.source +
-      ' id=' + songItem.songId + ' 排除音质=' + this.failedQuality +
-      ' 排除失败url=' + (this.failedUrl.length > 0 ? '是' : '否'));
+    appendPlayLog('[播放] resolve start source=' + songItem.source +
+      ' id=' + songItem.songId + ' exclQuality=' + this.failedQuality +
+      ' exclUrl=' + (this.failedUrl.length > 0 ? 'y' : 'n'));
     // 失败重解析时排除刚刚失败的同一条地址与同一档音质，避免重复拿到死链
     const opts: FallbackOptions = new FallbackOptions();
     opts.excludeUrl = this.failedUrl;
     opts.excludeQuality = this.failedQuality;
-    opts.allowScriptSwitch = true;
+    // 与「播放失败自动跨音源脚本」同一开关：同时控制跨平台搜索
+    const allowFb: boolean = MusicStoreService.getInstance().getCrossScriptFallback();
+    opts.allowScriptSwitch = allowFb;
+    opts.allowPlatformSwitch = allowFb;
     const outcome: UrlResolveOutcome = await resolveMusicUrlWithFallback(songItem.source,
       songItem.songId, name, singer, '', (msg: string): void => {
         this.toast(msg);
       }, opts);
     if (outcome.url.length === 0) {
-      this.toast('获取播放地址失败，已尝试全部可用音源');
+      // ★ 2026-11-05（甲方：「一点播放就瞬间提示获取播放地址失败」）：
+      //   以前无论什么原因都弹同一句「已尝试全部平台与音源」，而"零候选/全被冷却跳过"
+      //   根本没发过请求，用户看到的"瞬间失败"其实是提示在骗人。现在按原因分开说。
+      if (outcome.failReason === 'engine-not-ready') {
+        this.toast(engineNotReadyToast());
+      } else if (outcome.failReason === 'no-candidate') {
+        this.toast('没有可用的音源：请到 设置 → 音源 导入并勾选至少一个音源');
+      } else if (outcome.failReason === 'all-skipped') {
+        this.toast('音源都在冷却中（刚失败过），请 1~3 分钟后再试或手动切换音源');
+      } else {
+        this.toast('获取播放地址失败，已尝试全部平台与音源');
+      }
       return false;
     }
     // 记录本次真实来源：音乐平台 / 音源脚本 / 实际音质，供播放详情页展示与验证换源是否生效
@@ -700,6 +1900,16 @@ export class MediaService {
     songItem.playCached = false;
     if (outcome.switched) {
       // 原源不可用已换源：队列条目改为新源歌曲，后续歌词/封面/下载都走新源
+      // ★★ 2026-11-04（甲方：「现在就听页换源之后按钮状态还是不对」）：
+      //   **改写之前**先记下原始身份 —— UI 判"这一屏是不是正在播的那首"就是拿
+      //   `queue[selectIndex].source/songId` 跟行数据比；这一对一被改掉，
+      //   播放键就画成"播放"（明明在响），点它还会走 `playAt()` 重新组队列（重播/双路）。
+      //   排查关键字：`RzdIdentity`。
+      const originSource: string = songItem.source;
+      const originSongId: string = songItem.songId;
+      this.getAppState().noteSwitchedIdentity(originSource, originSongId);
+      appendPlayLog('[RzdIdentity] source ' + originSource + '|' + originSongId +
+        ' → ' + outcome.source + '|' + outcome.songId);
       songItem.source = outcome.source;
       songItem.songId = outcome.songId;
       if (outcome.albumName.length > 0 && songItem.albumName.length === 0) {
@@ -709,16 +1919,54 @@ export class MediaService {
         songItem.cover = outcome.img;
       }
     }
-    songItem.url = outcome.url;
+    // ★ 2026-10-30：部分脚本把真实地址套在自家跳转里
+    //   （如 `…/lx/api/redirect.php?u=<base64(http://ip:port/stream-…)>`）。
+    //   AVPlayer 对这种 302→http 的链路会报 5400103（IO error），
+    //   这里把 base64 还原成直链再交给播放器。
+    // ★ 2026-10-30（汽水：有总时长但进度恒 0）：脚本给的是 douyinvod 的**分片 mp4**
+    //   （`mime_type=audio_mp4`，给浏览器 MSE 用）。AVPlayer 边下边播解不出分片索引 ⇒ 卡 0。
+    //   这类流先整段落盘，再走 fdSrc 播本地完整文件（只对汽水生效，其它平台不受影响）。
+    // ★ 2026-10-30：汽水给的是 douyinvod 分片 mp4（`audio_mp4`，MSE 用途），
+    //   AVPlayer 能拿到总时长但解不出分片索引 ⇒ 进度恒 0。改走 FFmpeg(ijk) 音频引擎。
+    const tuningOn: boolean = this.isTuningActive();
+    if (!this.shouldUseIjk() && (songItem.source === 'qs' || outcome.url.indexOf('audio_mp4') >= 0)) {
+      this.appendPlayLog('[播放] mpv unavailable -> soda on AVPlayer');
+    }
+    // ★ 2026-10-31（汽水"12s 未就绪"根因）：内核必须吃**还原后的直链**，不是跳转壳。
+    //   见 §168：以前这里把 outcome.url（redirect.php?u=…）直接给了 mpv，mpv 打不开、12s 超时，
+    //   然后失败重试又落到 AVPlayer（5411001 Cannot Find Host）→ 一直跳歌。
+    const directUrl: string = this.unwrapRedirectUrl(outcome.url);
+    const kernelUrl: string = directUrl.length > 0 ? directUrl : outcome.url;
+    if (this.shouldUseIjk() && (songItem.source === 'qs' || outcome.url.indexOf('audio_mp4') >= 0)) {
+      this.ijkUrl = kernelUrl;
+      this.appendPlayLog('[播放] hls -> kernel ' + kernelName(preferredKernel()));
+    } else if (tuningOn && this.shouldUseIjk()) {
+      // ★ 播放设置有非默认的音效/升降调：普通曲目也走 FFmpeg，否则 EQ 无处可生效
+      this.ijkUrl = kernelUrl;
+      this.appendPlayLog('[播放] effects on -> kernel ' + kernelName(preferredKernel()));
+    } else {
+      this.ijkUrl = '';
+    }
+    songItem.url = directUrl.length > 0 ? directUrl : outcome.url;
+    this.appendPlayLog('[播放] unwrapped=' + (directUrl.length > 0 ? 'y' : 'n') + ' kernelUrl=' + kernelUrl.substring(0, Math.min(80, kernelUrl.length)));
     // 记录实际使用的音质（可能因自动降级低于偏好设置）
     this.getAppState().currentQuality = outcome.quality;
-    appendPlayLog('[播放] resolveOnlineUrl 成功 quality=' + outcome.quality +
-      ' script=' + outcome.scriptName + ' 换源=' + outcome.switched +
-      (outcome.switchedScriptName.length > 0 ? ' 换脚本=' + outcome.switchedScriptName : ''));
+    appendPlayLog('[播放] resolve ok quality=' + outcome.quality +
+      ' script=' + outcome.scriptName + ' switched=' + outcome.switched +
+      (outcome.switchedScriptName.length > 0 ? ' toScript=' + outcome.switchedScriptName : ''));
     // 触发播放详情页醒目 Banner：跨脚本换源时展示新音源名，3 秒后由 PlaybackPage 自动清除。
-    if (outcome.switchedScriptName.length > 0) {
+    // ★ 2026-10-29：**本次启动的第一次解析一律不弹** —— 冷启动时脚本/引擎状态还在就绪过程中，
+    //   真实来源与"用户设置的默认音源"必然对不上，弹出来只会让用户以为是异常换源。
+    if (!this.firstResolveDone) {
+      this.firstResolveDone = true;
+      appendPlayLog('[播放] first resolve, no switch notice');
+    } else if (outcome.switchedScriptName.length > 0) {
       const banner: SwitchBannerState = SwitchBannerState.connect();
       banner.text = '已切换音源：' + outcome.switchedScriptName;
+      banner.ts = Date.now();
+    } else if (outcome.switched) {
+      const banner: SwitchBannerState = SwitchBannerState.connect();
+      banner.text = '已切换到' + sourceDisplayName(outcome.source) + '播放';
       banner.ts = Date.now();
     }
     await this.enrichOnlineTrack(songItem);
@@ -757,6 +2005,18 @@ export class MediaService {
 
   /** Creates service, builds SongItemBuilder, and starts async AVPlayer creation. */
   public constructor() {
+    // USB 独占：设备掉线时自动回落（轮询在 UsbAudioService 里）
+    UsbAudioService.getInstance().onLost = (): void => {
+      this.onUsbDeviceLost();
+    };
+    // ★ 内核自检：真机日志一眼确认 mpv/FFmpeg 是否可用（mpv 需 libmpv.so）
+    // ★ 历史降级标记（ijk_disabled）在 mpv-only 版本里没有意义，启动即清除，避免汽水被永久踢回 AVPlayer
+    if (MusicStoreService.getInstance().isIjkDisabled()) {
+      MusicStoreService.getInstance().setIjkDisabled(false);
+      this.appendPlayLog('[RzdKernel] clear legacy ijk_disabled');
+    }
+    this.appendPlayLog('[RzdKernel] selfcheck mpv=' + (isMpvAvailable() ? 'y' : 'n') +
+      ' ffmpeg=y engine_mode=' + MusicStoreService.getInstance().getEngineMode());
     this.songItemBuilder = new SongItemBuilder();
     this.restorePlayMode();
     this.initAudioPlayer();
@@ -795,8 +2055,18 @@ export class MediaService {
       appState.playQueueIds = [];
       appState.playQueue = [item];
       appState.selectIndex = 0;
-      void this.loadAsset(0, true);
-      this.appendPlayLog('[播放] 恢复上次歌曲: ' + this.resolveSongText(item.title));
+      // 启动恢复=普通队列；顺手清掉「现在就听」的队列所有权（否则播放条分流会认错页）
+      appState.markQueueReplaced('playlist');
+      // ★ 用户 2026-10-29：「启动时就不进行准备」——开机不要预先解析/加载，
+      //   否则回退链会在后台跑起来，用户没点播放也会自动出声。
+      //   只在「启动应用自动播放」打开时才真的 loadAsset。
+      const autoPlayOnLaunch: boolean = MusicStoreService.getInstance().getAutoPlayOnLaunch();
+      if (autoPlayOnLaunch) {
+        void this.loadAsset(0, false);
+      } else {
+        this.appendPlayLog('[播放] restore last song (info only): ' + this.resolveSongText(item.title));
+      }
+      this.appendPlayLog('[播放] restore last song: ' + this.resolveSongText(item.title));
     } catch (e) {
       Logger.warn(TAG, 'restoreLastSong failed: ' + JSON.stringify(e).substring(0, 100));
     }
@@ -832,12 +2102,37 @@ export class MediaService {
       appState.playQueue = items;
       appState.playQueueIds = snapshot.localIds;
       appState.selectIndex = snapshot.index;
+      // 启动恢复=普通队列（清「现在就听」的队列所有权，理由同上）
+      appState.markQueueReplaced('playlist');
       this.musicIndex = snapshot.index;
+      // ★ 恢复出来的直链可能已过期（真机日志：kuwo 410 IO Resource Not Found），
+      //   启动恢复时把在线歌曲的 http 直链清空，让播放链路重新取址（走统一回退链）。
+      let staleCleared: number = 0;
+      for (let qi: number = 0; qi < items.length; qi++) {
+        const it = items[qi];
+        const u: string = it.url;
+        if (u.startsWith('http://') || u.startsWith('https://')) {
+          it.url = '';
+          staleCleared++;
+        }
+      }
+      if (staleCleared > 0) {
+        this.appendPlayLog('[播放] stale url cleared ' + staleCleared);
+      }
       const restoreIndex: number = this.getValidSelectIndex();
       appState.selectIndex = restoreIndex;
       this.musicIndex = restoreIndex;
-      void this.loadAsset(restoreIndex, true);
-      this.appendPlayLog('[播放] 恢复播放列表 ' + snapshot.online.length + ' 首');
+      // 启动恢复：默认只 prepare；设置里开了「启动应用自动开始播放」才真正起播
+    const autoPlayOnLaunch: boolean = MusicStoreService.getInstance().getAutoPlayOnLaunch();
+    this.appendPlayLog('[播放] 启动恢复 autoPlay=' + autoPlayOnLaunch);
+    // ★ 用户 2026-10-29：「启动时就不进行准备」——
+    //   之前即使没开「启动自动播放」也会 `loadAsset(index, loadOnly=true)`，
+    //   解析过程会跑回退链，结果用户没点播放却自动出声。
+    //   现在：只有开了启动自动播放才 loadAsset；否则只恢复队列/索引/元信息。
+    if (autoPlayOnLaunch) {
+      void this.loadAsset(restoreIndex, false);
+    }
+      this.appendPlayLog('[播放] restore queue n=' + snapshot.online.length);
     } catch (e) {
       Logger.warn(TAG, 'restoreLastQueue failed: ' + JSON.stringify(e).substring(0, 100));
       this.restoreLastSong();
@@ -916,23 +2211,32 @@ export class MediaService {
       if (avPlayer !== null) {
         this.avPlayer = avPlayer;
         this.registerAudioDeviceListener();
-        // Shared audio focus lets this app play alongside other apps when enabled.
+        // ★★★ 2026-10-20 夜（用户：「锁屏后声音直接停了，进度也不走」；根因按官方文档定）：
+        //   官方《处理音频焦点变化》原文：
+        //     · SHARE_MODE 是**默认且推荐**：「推荐使用共享焦点模式（SHARE_MODE）……避免系统默认策略
+        //       （如 STOP）导致音频流无法恢复」；
+        //     · INDEPENDENT_MODE：「音乐与音乐之间为停止策略——后播的流会停止前播的流，
+        //       且前播的流不会收到恢复事件，无法自动恢复」。
+        //   原代码在"混音关"（默认）时把焦点模式设成 INDEPENDENT_MODE ⇒ 只要出现后续音乐类音频流，
+        //   AVPlayer 就被**停止**（声音停、进度不走，正是用户看到的症状），且收不到恢复事件。
+        //   上游无界音乐**从不设 audioInterruptMode**（保持默认 SHARE_MODE），它的"混音"
+        //   只走 `activateAudioSession(CONCURRENCY_MIX_WITH_OTHERS)`。⇒ 这里照上游改成恒 SHARE_MODE。
+        //   排查关键字：`RzdLockScreenB` 的 `audio-interrupt-mode=share`。
         try {
-          const mixEnabled: boolean = MusicStoreService.getInstance().getAudioMix();
-          this.avPlayer.audioInterruptMode = mixEnabled ?
-            audio.InterruptMode.SHARE_MODE : audio.InterruptMode.INDEPENDENT_MODE;
-          this.appendPlayLog('[播放] 音频焦点模式=' + (mixEnabled ? '共享' : '独占'));
+          this.avPlayer.audioInterruptMode = audio.InterruptMode.SHARE_MODE;
+          MusicStoreService.getInstance().appendRuntimeDiagnostic(
+            '[RzdLockScreenB] audio-interrupt-mode=share (official default; independent = stop-without-resume)');
         } catch (e) {
-          this.appendPlayLog('[播放] 设置音频焦点失败: ' + JSON.stringify(e).substring(0, 100));
+          this.appendPlayLog('[播放] set audio focus fail: ' + JSON.stringify(e).substring(0, 100));
         }
         this.setAVPlayerCallback();
-        this.createSession();
+        await this.createSession();
         this.applyAudioSession(MusicStoreService.getInstance().getAudioMix());
         this.applyPendingLoadRequest();
         this.restoreLastQueue();
       }
     }) .catch((error: BusinessError) => {
-      Logger.error(TAG, 'this avPlayer: ', `catch error happened,error code is ${error.code}`);
+      Logger.error(TAG, 'this avPlayer: ', `catch error code=${error.code}`);
     });
   }
 
@@ -960,6 +2264,8 @@ export class MediaService {
    */
   private audioInterruptCall: (interruptEvent: audio.InterruptEvent) => Promise<void> =
     async (interruptEvent: audio.InterruptEvent) => {
+      this.lockScreenDiagnostic(`event=audioInterrupt force=${interruptEvent.forceType} ` +
+        `hint=${interruptEvent.hintType} eventType=${interruptEvent.eventType}`);
       if (interruptEvent.forceType === audio.InterruptForceType.INTERRUPT_FORCE) {
         switch (interruptEvent.hintType) {
           case audio.InterruptHint.INTERRUPT_HINT_PAUSE:
@@ -972,8 +2278,12 @@ export class MediaService {
               }
             }
             this.pausedByInterrupt = true;
+            // 临时失焦（含输入法语音输入）⇒ 走统一策略，焦点归还时自动恢复
+            this.pauseReason = 'focus';
+            this.resumeWhenReady = true;
+            this.logPausePolicy('paused', 'focus', true);
             this.updateIsPlay(false);
-            this.appendPlayLog('[播放] 音频被打断（暂时失焦），等待恢复');
+            this.appendPlayLog('[播放] audio interrupt, wait');
             break;
           case audio.InterruptHint.INTERRUPT_HINT_STOP:
             // 永久失焦，不会再收到 RESUME
@@ -995,7 +2305,7 @@ export class MediaService {
           // 焦点归还，主动恢复播放
           if (this.pausedByInterrupt && this.avPlayer !== undefined && this.avPlayer.state === 'paused') {
             this.pausedByInterrupt = false;
-            this.appendPlayLog('[播放] 焦点归还，自动恢复播放');
+            this.appendPlayLog('[播放] focus back, resume');
             this.play();
           }
         }
@@ -1011,15 +2321,15 @@ export class MediaService {
         const status: number = info.status;
         if (this.lastHiCarStatus === smartMobilityCommon.SmartMobilityStatus.RUNNING &&
           status === smartMobilityCommon.SmartMobilityStatus.IDLE) {
-          this.appendPlayLog('[播放] HiCar 断开，自动暂停');
-          this.pause();
+            // HiCar 断开 ⇒ 走统一暂停策略（临时失去外部输出，不自动恢复）
+            this.pauseBy('hicar', false);
         }
         this.lastHiCarStatus = status;
       });
       const currentInfo: smartMobilityCommon.SmartMobilityInfo =
         awareness.getSmartMobilityStatus(smartMobilityCommon.SmartMobilityType.HICAR);
       this.lastHiCarStatus = currentInfo.status;
-      this.appendPlayLog('[播放] HiCar 状态监听已注册，当前状态=' + currentInfo.status);
+      this.appendPlayLog('[播放] HiCar listener on, status=' + currentInfo.status);
     } catch (e) {
       Logger.warn(TAG, 'registerHiCarListener failed: ' + JSON.stringify(e).substring(0, 120));
     }
@@ -1043,33 +2353,41 @@ export class MediaService {
     try {
       this.session = await avSession.createAVSession(this.abilityContext, 'SESSION_NAME', 'audio');
       Logger.info(TAG, `session create done : sessionId : ${this.session.sessionId}`);
-      this.session.activate();
+      // Preserve one session for background and lock-screen control; do not deactivate for UI preferences.
+      await this.session.activate();
+      this.lockScreenDiagnostic('avsession=active activate=ok');
+      // Existing background mode support is retained; wait for it before draining pending playback.
+      // Official avsession-background-scene requires the mode to match the in-app setting.
+      await this.applyBackgroundPlayMode();
       void this.enableSystemLyric(this.session);
     } catch (error) {
-      Logger.error(TAG, `${error.code} + ${error.message}`);
+      const err: BusinessError = error as BusinessError;
+      this.lockScreenDiagnostic(`avsession=idle create-or-activate(err=${err.code}) msg=${err.message}`);
     }
     this.setAVMetadata();
     let wantAgentInfo: wantAgent.WantAgentInfo = {
       wants: [
         {
           bundleName: this.abilityContext.abilityInfo.bundleName,
+          moduleName: this.abilityContext.abilityInfo.moduleName,
           abilityName: this.abilityContext.abilityInfo.name
         }
       ],
-      actionType: wantAgent.OperationType.START_ABILITIES,
+      actionType: wantAgent.OperationType.START_ABILITY,
       requestCode: 0,
       actionFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG]
     };
-    wantAgent.getWantAgent(wantAgentInfo).then((agent) => {
+    try {
+      const agent = await wantAgent.getWantAgent(wantAgentInfo);
       if (this.session) {
-        this.session.setLaunchAbility(agent);
+        await this.session.setLaunchAbility(agent);
+        this.lockScreenDiagnostic('wantAgent launch=ok');
       }
-    })
-      .catch((err: BusinessError) => {
-        Logger.error(TAG, `getWantAgent failed, code: ${JSON.stringify(err.code)}, ` +
-        `message: ${JSON.stringify(err.message)}`);
-      });
-    this.registerSessionControlListeners();
+    } catch (error) {
+      const err: BusinessError = error as BusinessError;
+      this.lockScreenDiagnostic(`wantAgent launch(err=${err.code}) msg=${err.message}`);
+    }
+    await this.registerSessionControlListeners();
   }
 
   /** Subscribe to AVSession controller commands (play / pause / next / previous). */
@@ -1084,7 +2402,7 @@ export class MediaService {
       this.session.on('playPrevious', this.playPreviousCall);
       this.session.on('seek', this.sessionSeekCall);
     } catch (error) {
-      Logger.error(TAG, `${error.code} + ${error.message}`);
+      Logger.error(TAG, `register session listeners failed: code=${error.code} msg=${error.message}`);
     }
   }
 
@@ -1100,7 +2418,7 @@ export class MediaService {
       this.session.off('playPrevious');
       this.session.off('seek');
     } catch (error) {
-      Logger.error(TAG, `${error.code} + ${error.message}`);
+      Logger.error(TAG, `unregister session listeners failed: code=${error.code} msg=${error.message}`);
     }
   }
 
@@ -1112,15 +2430,205 @@ export class MediaService {
   private async enableSystemLyric(session: avSession.AVSession): Promise<void> {
     try {
       const supported: boolean = await avSession.isDesktopLyricSupported();
+      this.desktopLyricSupported = supported;
+      this.desktopLyricSupportKnown = true;
       if (!supported) {
         Logger.info(TAG, 'system lyric not supported on this device');
         return;
       }
+      // ⚠️ 开关关着时**不调用** enableDesktopLyric：部分机型这一步会顺带要悬浮窗授权，
+      //    用户既然关了这个功能就不该被打扰（lxmusic 同款取舍，用户开开关时再补 enable）。
+      if (!MusicStoreService.getInstance().getDesktopLyric()) {
+        Logger.info(TAG, 'desktop lyric off by user, skip enableDesktopLyric');
+        return;
+      }
       await session.enableDesktopLyric(true);
+      this.desktopLyricEnabled = true;
       Logger.info(TAG, 'system lyric enabled');
     } catch (error) {
+      // 6600110 / 6600111：没开启或系统不支持，忽略即可
       Logger.warn(TAG, `enable system lyric failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      this.syncDesktopLyric();
     }
+  }
+
+  /**
+   * 同步系统桌面歌词悬浮窗的显隐。
+   *
+   * 有带时间轴的歌词、用户开关是开的、且不是「停播 / 空闲 / 出错」时显示；其余收起。
+   * **暂停时刻意不收起**：一会儿就续播了，窗口跟着一显一隐更烦。
+   *
+   * 数据是单向推的：歌词通过 `AVMetadata.lyric`（标准 LRC）交给系统，进度由系统
+   * 拿 `AVPlaybackState.position` 自己外推，应用不需要逐句推。
+   */
+  private syncDesktopLyric(): void {
+    const session = this.session;
+    if (session === undefined || !this.desktopLyricSupported || !this.desktopLyricEnabled) {
+      return;
+    }
+    const song: SongItem | undefined = this.getSongItemAtQueueIndex(this.musicIndex);
+    const hasLyric: boolean = song !== undefined && this.hasTimedLyric(song);
+    const dead: boolean = this.lastPlaybackState === avSession.PlaybackState.PLAYBACK_STATE_STOP ||
+      this.lastPlaybackState === avSession.PlaybackState.PLAYBACK_STATE_IDLE ||
+      this.lastPlaybackState === avSession.PlaybackState.PLAYBACK_STATE_ERROR;
+    const want: boolean = MusicStoreService.getInstance().getDesktopLyric() && hasLyric && !dead;
+    if (want === this.desktopLyricVisible) {
+      return;
+    }
+    this.desktopLyricVisible = want;
+    session.setDesktopLyricVisible(want).then(() => {
+      Logger.info(TAG, `desktop lyric visible -> ${want}`);
+    }).catch((error: BusinessError) => {
+      Logger.warn(TAG, `setDesktopLyricVisible failed: ${error.message}`);
+    });
+  }
+
+  /**
+   * 这首歌有没有能交给系统的歌词。
+   *
+   * 系统靠 `[mm:ss.xx]` 时间标签自己滚动，**纯文本歌词解析不了**（会显示异常），
+   * 所以这里按「有没有时间标签」判断；歌词还没解析完时退化成对原文的正则判断。
+   */
+  private hasTimedLyric(song: SongItem): boolean {
+    const cached: AmllLyricLine[] | undefined = amllGetCachedLyric(song.lyricText);
+    if (cached === undefined) {
+      return /\[\d{1,2}:\d{1,2}/.test(song.lyricText);
+    }
+    return buildPlainLrc(cached).length > 0;
+  }
+
+  /**
+   * 用户改了「桌面歌词」开关后调用（设置页）。
+   *
+   * 开：还没 enable 过就先补 enable，再按播放状态定显隐；
+   * 关：直接重算（want 会是 false，悬浮窗收起）。
+   */
+  public refreshDesktopLyric(): void {
+    const session = this.session;
+    if (session === undefined) {
+      return;
+    }
+    if (!MusicStoreService.getInstance().getDesktopLyric() || this.desktopLyricEnabled) {
+      this.syncDesktopLyric();
+      return;
+    }
+    session.enableDesktopLyric(true).then(() => {
+      this.desktopLyricEnabled = true;
+      this.syncDesktopLyric();
+    }).catch((error: BusinessError) => {
+      Logger.warn(TAG, `enableDesktopLyric failed: ${error.message}`);
+    });
+  }
+
+  /**
+   * 探测系统是否支持桌面歌词（设置页提示用）。
+   *
+   * 会话是「第一次推歌」时才建的，所以没播过歌时支持性是未知的 —— 直接当不支持
+   * 会误导用户，这里主动问一次。
+   */
+  public async probeDesktopLyricSupport(): Promise<boolean> {
+    if (this.desktopLyricSupportKnown) {
+      return this.desktopLyricSupported;
+    }
+    try {
+      const supported: boolean = await avSession.isDesktopLyricSupported();
+      this.desktopLyricSupported = supported;
+      this.desktopLyricSupportKnown = true;
+      return supported;
+    } catch (error) {
+      Logger.warn(TAG, `probe desktop lyric failed: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
+  }
+
+  /** @returns 支持性；未探测过返回 undefined（设置页据此显示「未知」）。 */
+  public desktopLyricSupport(): boolean | undefined {
+    return this.desktopLyricSupportKnown ? this.desktopLyricSupported : undefined;
+  }
+
+
+  /**
+   * 用户切换「车载蓝牙歌词」开关后调用（设置页）。
+   * 立刻按当前进度重推 / 清空 singleLyricText。
+   */
+  public refreshBluetoothLyric(): void {
+    const pos: number = this.getCurrentTime();
+    this.refreshBluetoothLyricAt(pos, true);
+  }
+
+  /**
+   * 按播放进度更新蓝牙当前句；句变了才 setAVMetadata（轻量，不重拉封面）。
+   * @param positionMs 当前进度
+   * @param force 开关变化时强制推一次（含清空）
+   */
+  private refreshBluetoothLyricAt(positionMs: number, force: boolean = false): void {
+    const next: string = this.resolveBluetoothLyricLine(positionMs);
+    if (!force && next === this.btLyricText) {
+      return;
+    }
+    this.btLyricText = next;
+    if (!this.session || !this.abilityContext) {
+      return;
+    }
+    const song = this.getSongItemAtQueueIndex(this.musicIndex);
+    if (song === undefined) {
+      return;
+    }
+    const ctx = this.abilityContext;
+    const metadata: avSession.AVMetadata = {
+      assetId: `${this.musicIndex}`,
+      title: StringResourceUtil.resolve(ctx, song.title),
+      artist: StringResourceUtil.resolve(ctx, song.singer),
+      duration: this.getDuration()
+    };
+    const cachedLyric: AmllLyricLine[] | undefined = amllGetCachedLyric(song.lyricText);
+    if (cachedLyric !== undefined) {
+      const lrcText: string = truncateLrc(buildPlainLrc(cachedLyric));
+      if (lrcText.length > 0) {
+        metadata.lyric = lrcText;
+      }
+    } else if (song.lyricText.length > 0 && /\[\d{1,2}:\d{1,2}/.test(song.lyricText)) {
+      const normalized: string = song.lyricText.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').join('\r\n');
+      metadata.lyric = truncateLrc(normalized);
+    }
+    if (next.length > 0) {
+      metadata.singleLyricText = next;
+    }
+    this.session.setAVMetadata(metadata).then(() => {
+      Logger.info(TAG, 'bluetooth singleLyricText updated len=' + next.length);
+    }).catch((err: BusinessError) => {
+      Logger.warn(TAG, `push bluetooth lyric failed: ${err.message}`);
+    });
+  }
+
+  /**
+   * 计算当前应推给蓝牙设备的歌词原文句。
+   * 开关关 / 无时间轴歌词 / 尚未唱到第一句 → 空串（不下发字段）。
+   */
+  private resolveBluetoothLyricLine(positionMs: number): string {
+    if (!MusicStoreService.getInstance().getBluetoothLyric()) {
+      return '';
+    }
+    const song: SongItem | undefined = this.getSongItemAtQueueIndex(this.musicIndex);
+    if (song === undefined || song.lyricText.length === 0) {
+      return '';
+    }
+    const lines: AmllLyricLine[] | undefined = amllGetCachedLyric(song.lyricText);
+    if (lines === undefined || lines.length === 0) {
+      return '';
+    }
+    let current: string = '';
+    for (let i: number = 0; i < lines.length; i++) {
+      if (lines[i].startTime > positionMs) {
+        break;
+      }
+      const text: string = MediaService.lineText(lines[i]);
+      if (text.length > 0) {
+        current = text;
+      }
+    }
+    return current;
   }
 
   private async setAVMetadata(): Promise<void> {
@@ -1157,8 +2665,7 @@ export class MediaService {
           }
         }
         const song = metaSong;
-        // 播控中心歌词：统一转标准 LRC（系统要求标准歌词格式，总量 ≤128KB）。
-        // 歌词未缓存时（大歌词首次解析耗时长）延迟到解析完成后重推，避免阻塞 UI 线程。
+        // 播控中心歌词：统一转标准 LRC；车载蓝牙用 singleLyricText 推当前句（移植自 lxmusic-harmony）。
         const cachedLyric: AmllLyricLine[] | undefined = amllGetCachedLyric(song.lyricText);
         const metadata: avSession.AVMetadata = {
           assetId: `${id}`,
@@ -1172,7 +2679,22 @@ export class MediaService {
             metadata.lyric = lrcText;
           }
         } else if (song.lyricText.length > 0) {
+          const raw: string = song.lyricText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+          if (/\[\d{1,2}:\d{1,2}/.test(raw)) {
+            const normalized: string = raw.split('\n').join('\r\n');
+            const lrcText: string = truncateLrc(normalized);
+            if (lrcText.length > 0) {
+              metadata.lyric = lrcText;
+            }
+          }
           this.scheduleLyricMetadataRefresh();
+        }
+        // 蓝牙歌词：当前句纯文本（API 17+ singleLyricText）
+        const posMs: number = this.getCurrentTime();
+        const btLine: string = this.resolveBluetoothLyricLine(posMs);
+        this.btLyricText = btLine;
+        if (btLine.length > 0) {
+          metadata.singleLyricText = btLine;
         }
         if (mediaImage !== undefined) {
           metadata.mediaImage = mediaImage;
@@ -1180,11 +2702,12 @@ export class MediaService {
         if (this.session) {
           try {
             await this.session.setAVMetadata(metadata);
-            Logger.info(TAG, 'SetAVMetadata successfully');
           } catch (err) {
             Logger.error(TAG, `SetAVMetadata failed: ${err instanceof Error ? err.message : String(err)}`);
           }
         }
+        // 换歌 / 歌词就绪后重算桌面歌词悬浮窗（没词就收起）
+        this.syncDesktopLyric();
       } finally {
         if (mediaImage !== undefined) {
           try {
@@ -1199,8 +2722,17 @@ export class MediaService {
     }
   }
 
-  /** Downloads cover bytes and decodes them into a PixelMap for AVSession metadata. */
+  /**
+   * 取封面并解码成 PixelMap（播控中心 / 锁屏卡片用）。
+   *
+   * ★ 必须区分「网络封面」和「本地文件封面」：本地音乐的封面是**沙箱文件 URI**
+   *   （`file://...`，见 features/localmusic 的 getCoverUri），拿 http 去取必然失败 ——
+   *   这正是「本地音乐在控制中心看不到封面」的原因（在线歌走 http 所以正常）。
+   */
   private async loadCoverPixelMap(coverUrl: string): Promise<PixelMap | undefined> {
+    if (this.isLocalCover(coverUrl)) {
+      return await this.decodeLocalCoverPixelMap(coverUrl);
+    }
     const httpRequest = http.createHttp();
     try {
       const resp: http.HttpResponse = await httpRequest.request(coverUrl, {
@@ -1225,9 +2757,131 @@ export class MediaService {
     }
   }
 
+  /** 封面是不是「本地文件」（应用沙箱的 file:// URI 或绝对路径）。 */
+  private isLocalCover(cover: string): boolean {
+    return cover.startsWith('file://') || cover.startsWith('/');
+  }
+
+  /**
+   * 本地封面（沙箱文件）→ PixelMap。
+   *
+   * 用 fd 解码（`image.createImageSource(fd)`）而不是把整个文件读进内存：
+   * 封面可能有几百 KB～几 MB，读字节再解码会白占一份内存。
+   */
+  private async decodeLocalCoverPixelMap(cover: string): Promise<PixelMap | undefined> {
+    let file: fs.File | undefined = undefined;
+    try {
+      file = fs.openSync(cover, fs.OpenMode.READ_ONLY);
+      const imageSource = image.createImageSource(file.fd);
+      try {
+        return await imageSource.createPixelMap();
+      } finally {
+        imageSource.release();
+      }
+    } catch (error) {
+      Logger.warn(TAG, `local cover decode failed: ${error instanceof Error ? error.message : String(error)}`);
+      return undefined;
+    } finally {
+      if (file !== undefined) {
+        try {
+          fs.closeSync(file);
+        } catch (_err) {
+        }
+      }
+    }
+  }
+
   /** Appends a marker line to the shared run log (visible in settings). */
   private appendPlayLog(message: string): void {
     appendPlayLog(message);
+  }
+
+  /**
+   * 声明一次装载请求的起播意图，并让此前所有未消费的意图作废。
+   *
+   * @param autoPlay 本次装载完成后是否自动起播。默认 true（用户点歌、切歌、续播）。
+   *                 启动恢复 / 只预热地址时传 false。
+   * @returns 本次请求的代次，调用方无需保存（`consumePlayIntent` 会校验）。
+   */
+  private beginLoadRequest(autoPlay: boolean): number {
+    this.ijkInlineRetryDone = false;
+    this.loadGen = this.loadGen + 1;
+    this.playWhenPrepared = autoPlay;
+    this.lastLoadWantedPlay = autoPlay;
+    this.playIntentConsumedGen = this.loadGen - 1;
+    this.appendPlayLog('[播放] load req gen=' + this.loadGen + ' autoplay=' + autoPlay);
+    // ★ 2026-10-31：汽水/mpv 与队列起播都走这里；以前只有 OnlinePlayUtil 那条路径置 isResolving，
+    //   所以「缓冲中…」在界面上永远不出现。统一在"装载请求"处置真，prepared/失败时置假。
+    this.getAppState().isResolving = true;
+    return this.loadGen;
+  }
+
+  /**
+   * 消费当前装载代次的起播意图。
+   *
+   * 无论结果如何都会把该代次标记为“已消费”，因此同一个意图绝不会触发第二次 play()；
+   * 若期间又来了新的装载请求（`loadGen` 已前进），本次意图直接作废 —— 这正是
+   * **启动恢复不会因为紧接着的一次音质降级重试而变成自动播放** 的关键。
+   *
+   * @returns 应当起播时返回这次意图所属的代次；不应起播时返回 -1。
+   */
+  private consumePlayIntent(): number {
+    if (this.playIntentConsumedGen >= this.loadGen) {
+      return -1;
+    }
+    this.playIntentConsumedGen = this.loadGen;
+    const shouldPlay: boolean = this.playWhenPrepared;
+    this.playWhenPrepared = false;
+    return shouldPlay ? this.loadGen : -1;
+  }
+
+  /**
+   * 唯一一处「由本服务主动起播」的入口。
+   *
+   * **所有**自动起播都必须走这里（prepared 回调、单曲循环重播），不能再直接调
+   * `avPlayer.play()`：这样才能保证「启动恢复 + 音质降级重试」那条路径即使中间
+   * 又插进来一次装载请求，也不会偷偷把音乐放起来。
+   *
+   * 起播前会复核「意图代次是否仍是当前代次」：`consumePlayIntent()` 之后到这里之间
+   * 还可能有一次 await，期间若来了新的装载请求（`loadGen` 前进），本次起播直接放弃。
+   *
+   * @param reason 调用来源，只用于播放日志定位问题。
+   * @param playedGen 该意图所属的装载代次（由 {@link consumePlayIntent} 给出）。
+   */
+  private startPlayback(reason: string, playedGen: number): void {
+    if (!this.avPlayer) {
+      return;
+    }
+    if (playedGen < this.loadGen) {
+      this.appendPlayLog('[播放] drop start(' + reason + ') superseded ' +
+        playedGen + ' < ' + this.loadGen);
+      return;
+    }
+    this.appendPlayLog('[播放] 起播(' + reason + ') gen=' + playedGen);
+    this.ensureBackgroundAudioTask();
+    this.lockScreenDiagnostic(`play branch=${reason} gen=${playedGen}`);
+    try {
+      this.avPlayer.play().catch((err: BusinessError): void => {
+        this.lockScreenDiagnostic(`play(err=${err.code}) branch=${reason} msg=${err.message}`);
+      });
+    } catch (error) {
+      const err: BusinessError = error as BusinessError;
+      this.lockScreenDiagnostic(`play(err=${err.code}) branch=${reason} msg=${err.message}`);
+    }
+  }
+
+  /**
+   * 对齐「本次装载完成后是否起播」的意图。
+   *
+   * 只应在**刚调用完 `loadAsset` / `loadAssetWithoutAutoPlay` 之后同步调用**：
+   * `loadAsset` 的函数体会同步跑到第一个 await 之前，所以此处的写入一定属于同一次装载。
+   * 用在「不应该由 loadAsset 默认值决定」的场景（删掉正在播的那首歌、错误恢复重试）。
+   *
+   * @param autoPlay 期望的起播意图。
+   */
+  private overridePlayIntent(autoPlay: boolean): void {
+    this.playWhenPrepared = autoPlay;
+    this.appendPlayLog('[播放] autoplay corrected -> ' + autoPlay + ' (gen=' + this.loadGen + ')');
   }
 
   /**
@@ -1237,27 +2891,61 @@ export class MediaService {
    * @param loadOnly When true, only load without starting playback.
    */
   public async loadAsset(musicIndex: number, loadOnly?: boolean): Promise<void> {
+    this.scrubberSeekInFlight = false;
+    this.scrubberQueuedSeek = undefined;
+    this.getAppState().seekResetRevision++;
+    // ★ 2026-11-04：新一轮装载 ⇒ 上一次的"换源前身份"失效（否则会把旧别名误认成当前这首）。
+    //   之后 `resolveOnlineUrl` 若真的换源，会在这条链里重新记一次。
+    this.getAppState().clearSwitchedIdentity();
     // 主动加载新歌即取消尚未执行的一次错误恢复，避免旧定时器干扰新播放
     this.errorRecoveryPending = false;
+    // ★ 起播意图必须在**函数最前面**声明：下面 resolveOnlineUrl 是异步的，期间可能
+    //   有别的 loadAsset 插进来。放在异步之后声明会让「谁最后跑完谁说了算」，
+    //   启动恢复就会偶发地自动播放。
+    // ★ 换歌：清掉上一首的「汽水 ijk 地址」并释放引擎，避免 ijk 与 AVPlayer 同时出声、
+    //   或把上一首的汽水地址套到新歌上（本地歌根本不会走 resolveOnlineUrl）。
+    this.releaseIjk();
+    this.beginLoadRequest(loadOnly !== true);
+    // 换歌：清掉上一首蓝牙歌词句，避免车机残留
+    this.btLyricText = '';
     this.applyAudioSession(MusicStoreService.getInstance().getAudioMix());
     const len = this.getQueueLength();
     if (len === 0) {
-      this.appendPlayLog('[播放] loadAsset 队列为空');
+      this.appendPlayLog('[播放] loadAsset queue empty');
       Logger.error(TAG, 'play queue is empty when loadAsset');
       return;
     }
     if (musicIndex < 0 || musicIndex >= len) {
-      this.appendPlayLog('[播放] loadAsset 索引越界 ' + musicIndex);
+      this.appendPlayLog('[播放] loadAsset index oob ' + musicIndex);
       Logger.error(TAG, `current musicIndex ${musicIndex}`);
       return;
     }
     const queueSong = this.getSongItemAtQueueIndex(musicIndex);
     if (!queueSong) {
-      this.appendPlayLog('[播放] loadAsset 歌曲解析失败');
+      this.appendPlayLog('[播放] loadAsset resolve fail');
       Logger.error(TAG, `resolve song failed at queue index ${musicIndex}`);
       return;
     }
-    if (queueSong.url.length === 0 && queueSong.source.length > 0) {
+    if (queueSong.source === LOCAL_SOURCE) {
+      // 本地歌（导入的设备音频）走**直路**：不联网、不看音源脚本脸色。
+      // 没有用户音源脚本的人也必须能放自己导入的文件，所以这里完全不碰 LX 引擎。
+      if (!this.localFileExists(queueSong.url)) {
+        this.appendPlayLog('[播放] local file gone: ' + queueSong.url);
+        // 副本丢了要明确告诉用户，不能静默失败（用户以为是播放器坏了）
+        this.toast('文件已经不在了，请重新导入');
+        this.getAppState().isResolving = false;
+        return;
+      }
+      // ★ 音质徽标：本地没有音质协商，统一按 'local' 显示「本地」。
+      //   必须**写在这条播放直路上**，而不是只写在「本地音乐」页那个入口：
+      //   重启后恢复上次播放的本地歌、或从歌单/队列播本地歌都走这里，
+      //   以前这些路径不写 → `appState.currentQuality` 为空 → 徽标掉到 '128k' 兜底，
+      //   用户看到的就是「本地歌的音质重启后变成 128K」。
+      //   注意：这只影响展示用的徽标，不参与本地歌的歌词/封面匹配（那条路在
+      //   enrichLocalTrack / localLyricResolver 里，互不影响）。
+      this.getAppState().currentQuality = LOCAL_SOURCE;
+      await this.enrichLocalTrack(queueSong);
+    } else if (queueSong.url.length === 0 && queueSong.source.length > 0) {
       const resolved = await this.resolveOnlineUrl(queueSong);
       this.appendPlayLog('[播放] resolveOnlineUrl=' + resolved);
       if (!resolved) {
@@ -1267,33 +2955,43 @@ export class MediaService {
     } else if (queueSong.source.length > 0) {
       await this.enrichOnlineTrack(queueSong);
     }
-    this.ensureBackgroundAudioTask();
+    // Load-only startup restoration must not claim an audio playback background task.
+    if (loadOnly !== true) {
+      this.ensureBackgroundAudioTask();
+    }
     this.updateMusicIndex(musicIndex);
+    // ★ 2026-11-01（有人反馈"无法播放"）：内核地址已经解析好（日志里有 kernelUrl）时，
+    //   不能因为 AVPlayer 还没创建就 return —— 那会让 mpv 永远不启动，表现就是"点了不播"。
+    //   所以先走内核分支，再判 AVPlayer。
+    if (this.ijkUrl.length > 0) {
+      this.isFirst = false;
+      this.startIjkPlayback(this.ijkUrl);
+      return;
+    }
     if (!this.avPlayer) {
       // Defer play until initAudioPlayer creates AVPlayer; loadAsset is applied then.
-      this.appendPlayLog('[播放] avPlayer 未就绪，挂起等待');
+      this.appendPlayLog('[播放] avPlayer not ready, wait');
       this.pendingLoadIndex = musicIndex;
       this.pendingLoadOnly = loadOnly === true;
       return;
     }
     if (this.isFirst) {
       this.isFirst = false;
-      this.appendPlayLog('[播放] 首次加载 url=' + queueSong.url);
+        // ★ 汽水/音效曲目：首次加载也必须交给内核，不能走 AVPlayer（真机日志证实这里抢跑）
+        if (this.ijkUrl.length > 0) {
+          this.startIjkPlayback(this.ijkUrl);
+          return;
+        }
+      this.appendPlayLog('[播放] first load url=' + queueSong.url);
       this.songItem = await this.songItemBuilder.build(queueSong);
       let httpUrl = this.songItemBuilder.getHttpUrl();
       if (this.avPlayer) {
         if (httpUrl.length > 0) {
-          if (loadOnly) {
-            this.isNeedPlay = false;
-          }
           this.avPlayer.url = httpUrl;
           Logger.info(TAG, 'loadAsset avPlayer.url:' + this.avPlayer.url);
         } else {
           let url = this.songItemBuilder.getRealUrl();
           if (url) {
-            if (loadOnly) {
-              this.isNeedPlay = false;
-            }
             let avFileDescriptor: media.AVFileDescriptor = { fd: url.fd, offset: url.offset, length: url.length };
             this.avPlayer.fdSrc = avFileDescriptor;
             Logger.info(TAG, 'loadAsset avPlayer.fdSrc:' + this.avPlayer.fdSrc);
@@ -1304,12 +3002,11 @@ export class MediaService {
       // 非首次切歌：无条件 reset（不依赖 isPrepared）。快速连续切歌时，上一首可能尚未
       // prepared（isPrepared=false），此时 stop() 会因 guard 空转导致新歌不加载。
       // reset 后 avPlayer 回到 idle，idle 状态回调会重新 build 当前歌曲并触发 prepare。
-      this.isNeedPlay = loadOnly !== true;
       if (this.state === AudioPlayerState.IDLE) {
         // 关键：错误恢复/上轮 reset 后播放器已在 idle。对 idle 播放器再调 reset()
         // 没有状态变化、不会触发 idle 回调，新 url 永远装不进去（日志表现为
         // 「跨源重试解析结果=true」之后一片安静）。必须直接装载当前曲目。
-        this.appendPlayLog('[播放] 播放器已处 idle，跳过 reset 直接装载 index=' + musicIndex);
+        this.appendPlayLog('[播放] already idle, skip reset index=' + musicIndex);
         await this.loadCurrentIntoPlayer();
       } else {
         await this.reset();
@@ -1349,7 +3046,7 @@ export class MediaService {
 
   /** Executes a desktop-card control action (playPause / next / previous). */
   public handleCardAction(action: string): void {
-    appendPlayLog('[播放] 桌面卡片操作: ' + action);
+    appendPlayLog('[播放] card action: ' + action);
     if (action === 'playPause') {
       if (this.getAppState().isPlay) {
         this.pause();
@@ -1392,6 +3089,38 @@ export class MediaService {
     return this.getAppState().isPlay;
   }
 
+  /**
+   * @returns **引擎层真值**：现在到底有没有出声（不看 `appState.isPlay` 这个镜像）。
+   *
+   * 镜像值是在一堆事件回调里写出来的，换源/切内核期间会被**迟到的 AVPlayer 事件**污染
+   * （内核在放，镜像却是 false ⇒ 播放键显示成"暂停"）。凡"按一下要切换状态"的地方
+   * （`PlayerDataUtil.togglePlayPause` 等）都该问这里，而不是问镜像。
+   */
+  public isActuallyPlaying(): boolean {
+    if (this.ijkActive && this.ijkEngine !== undefined) {
+      try {
+        return this.ijkEngine.isPlaying();
+      } catch (e) {
+        return false;
+      }
+    }
+    return this.isPrepared && this.state === AudioPlayerState.PLAY;
+  }
+
+  /**
+   * 把 `appState.isPlay` 校正成引擎真值（幂等；不一致才写 + 打日志）。
+   * @param reason 触发点，写进日志方便 grep：`RzdPlaySync`。
+   */
+  public syncPlayStateFromEngine(reason: string): void {
+    const truth: boolean = this.isActuallyPlaying();
+    const mirror: boolean = this.getAppState().isPlay;
+    if (mirror === truth) {
+      return;
+    }
+    appendPlayLog(`[RzdPlaySync] isPlay ${mirror}->${truth} reason=${reason} kernel=${this.ijkActive ? 1 : 0}`);
+    this.updateIsPlay(truth);
+  }
+
   /** Updates MusicAppState.isPlay and AVSession playback state snapshot. */
   private updateIsPlay(isPlay: boolean) {
     this.getAppState().isPlay = isPlay;
@@ -1411,19 +3140,47 @@ export class MediaService {
    *
    * @param ms Target position in ms, clamped to [0, duration].
    */
-  public seek(ms: number) {
+  public seek(ms: number): boolean {
+    if (this.ijkActive && this.ijkEngine !== undefined) {
+      this.ijkEngine.seekTo(ms);
+      const st = this.getAppState();
+      st.progress = ms;
+      st.currentTime = MediaTools.msToCountdownTime(ms);
+      this.appendPlayLog('[播放] ijk seek=' + ms);
+      return true;
+    }
     if (this.isPrepared && this.state != AudioPlayerState.ERROR && this.avPlayer) {
       // SeekMode.SEEK_CLOSEST(2)：帧级精确 seek，跳转到距目标最近的帧（不限于关键帧），
       // 保证点击歌词/进度条拖拽准确落在目标时间，不会落到目标前最近的关键帧
       let seekMode: number = 2;
       let realTime = (ms <= 0 ? 0 : (ms >= this.getDuration() ? this.getDuration() : ms));
+      if (this.scrubberSeekInFlight) {
+        this.scrubberQueuedSeek = realTime;
+        return true;
+      }
+      const wasCurrent: boolean = this.isCurrent;
       this.isCurrent = false;
-      this.avPlayer.seek(realTime, seekMode);
+      this.scrubberSeekInFlight = true;
+      try {
+        this.avPlayer.seek(realTime, seekMode);
+        return true;
+      } catch (error) {
+        this.scrubberSeekInFlight = false;
+        this.scrubberQueuedSeek = undefined;
+        this.getAppState().seekResetRevision++;
+        this.isCurrent = wasCurrent;
+        appendPlayLog(`[RzdScrubberV20] seek-rejected value=${ms}` +
+          ` progress=${this.getAppState().progress} reason=${JSON.stringify(error)}`);
+      }
     }
+    return false;
   }
 
   /** Current playback position in ms from AVPlayer, or 0 if not prepared. */
   private getCurrentTime() {
+    if (this.ijkActive && this.ijkEngine !== undefined) {
+      return this.ijkEngine.position();
+    }
     if (this.isPrepared && this.avPlayer) {
       return this.avPlayer.currentTime;
     }
@@ -1432,6 +3189,9 @@ export class MediaService {
 
   /** Total duration in ms from AVPlayer, or 0 if not prepared. */
   private getDuration() {
+    if (this.ijkActive && this.ijkEngine !== undefined) {
+      return this.ijkEngine.duration();
+    }
     if (this.isPrepared && this.avPlayer) {
       return this.avPlayer.duration;
     }
@@ -1447,10 +3207,10 @@ export class MediaService {
    */
   private start(seekMs?: number) {
     Logger.info(TAG, 'AVPlayer start() isPrepared:' + this.isPrepared + ', state:' + this.state +
-      '，seek:' + seekMs + ' → 重载当前歌曲 index=' + this.musicIndex);
-    this.appendPlayLog('[播放] 播放器未就绪，点播放触发重载当前歌曲 index=' + this.musicIndex);
+      ', seek:' + seekMs + ' -> reload index=' + this.musicIndex);
+    this.appendPlayLog('[播放] not ready, reload on play index=' + this.musicIndex);
     this.loadAsset(this.musicIndex).catch((err: Object): void => {
-      appendPlayLog('[播放] 重载当前歌曲异常: ' + JSON.stringify(err).substring(0, 120));
+      appendPlayLog('[播放] reload error: ' + JSON.stringify(err).substring(0, 120));
     });
   }
 
@@ -1458,20 +3218,35 @@ export class MediaService {
    * Starts or resumes playback; triggers prepare if the player is not prepared yet.
    */
   public async play() {
+    // ★ 2026-11-03：内核已声明接管、但实例还没创建好的那一小段窗口里，
+    //   任何 play() 都不能落到下面的 AVPlayer 分支（否则又会把 AVPlayer 拉起来 = 双路出声）。
+    if (this.kernelOwnsAudio && this.ijkEngine === undefined) {
+      this.appendPlayLog('[播放] kernel owns, ignore play()');
+      return;
+    }
+    // ★ 汽水走 ijk 引擎时，play/pause/seek 全部路由过去（AVPlayer 此时保持 idle）
+    if (this.ijkActive && this.ijkEngine !== undefined) {
+      this.ijkEngine.start();
+      this.applyIjkRate();
+      this.updateIsPlay(true);
+      this.startIjkPolling();
+      this.appendPlayLog('[播放] ijk play()');
+      return;
+    }
     Logger.info(TAG, 'AVPlayer play() isPrepared:' + this.isPrepared + ', state:' + this.state);
     this.ensureBackgroundAudioTask();
     if (!this.isPrepared) {
       this.start(0);
     } else if (this.avPlayer) {
       try {
-        this.avPlayer.play().then(() => {
-          // 恢复播放后无需再 seek 到当前时间：暂停位置原地续播，避免立刻 seek 造成短暂音频毛刺
-          // （进度由 timeUpdate 事件自动同步）
-          this.updateIsPlay(true);
-          this.state = AudioPlayerState.PLAY;
-        });
+        this.lockScreenDiagnostic('play branch=resume');
+        await this.avPlayer.play();
+        // Resume at the current position; timeUpdate publishes progress.
+        this.updateIsPlay(true);
+        this.state = AudioPlayerState.PLAY;
       } catch (error) {
-        Logger.error(TAG, `${error.code} + ${error.message}`);
+        const err: BusinessError = error as BusinessError;
+        this.lockScreenDiagnostic(`play(err=${err.code}) branch=resume msg=${err.message}`);
       }
     }
   }
@@ -1480,7 +3255,27 @@ export class MediaService {
    * Pauses playback when currently in PLAY state.
    */
   public pause() {
+    if (this.ijkActive && this.ijkEngine !== undefined) {
+      this.ijkEngine.pause();
+      this.updateIsPlay(false);
+      this.stopIjkPolling();
+      this.appendPlayLog('[播放] ijk pause()');
+      return;
+    }
     Logger.info(TAG, 'AVPlayer pause() isPrepared:' + this.isPrepared + ', state:' + this.state);
+    // 记录暂停来源：调用方（avsession / 各处 UI）已置位则保留，否则记 'app'。
+    if (this.pauseOrigin.length === 0) {
+      this.pauseOrigin = 'app';
+    }
+    // ★ 2026-10-22（排查「锁屏后自己停」）：每次 pause 先记一行来源，配合各调用点的
+    //   `markPauseOrigin('…')` 就能一次定位是谁按停的。grep 关键字：`pause-called origin=`。
+    this.lockScreenDiagnostic(`pause-called origin=${this.pauseOrigin}`);
+    // 用户的暂停是最终意图：丢掉任何还没被 prepared 消费掉的「自动起播」意图，
+    // 否则暂停期间完成的那次 resolveOnlineUrl/重试仍会把音乐放起来。
+    if (this.playWhenPrepared) {
+      this.playWhenPrepared = false;
+      this.appendPlayLog('[播放] pause, drop autoplay gen=' + this.loadGen);
+    }
     if (this.isPrepared && this.state === AudioPlayerState.PLAY && this.avPlayer) {
       this.avPlayer.pause().then(() => {
         this.state = AudioPlayerState.PAUSE;
@@ -1490,7 +3285,7 @@ export class MediaService {
           BackgroundUtil.stopContinuousTask(this.abilityContext);
         }
       }).catch((err: BusinessError) => {
-        Logger.error(TAG, 'Failed to pause,error message is :' + err.message);
+        this.lockScreenDiagnostic(`pause(err=${err.code}) msg=${err.message}`);
       })
     }
   }
@@ -1502,16 +3297,23 @@ export class MediaService {
    */
   public playNextAuto(isFromControl: boolean) {
     Logger.info(TAG, 'playNextAuto mode:' + this.playMode);
+    // ★★★ 2026-11-05（甲方：「现在就听独立出来就是为了保证播放器设成单曲循环时不受影响，但现在还是受影响」）：
+    //   「现在就听」的队列是它自己的一份（`MusicAppState.isFeedQueue()`），播完**必须**顺下一首；
+    //   而 `playMode` 是**播放器**那一套（单曲循环/随机/顺序）。以前这里只看 playMode，
+    //   于是播放器停在单曲循环时，feed 播完就把同一首重放，用户听到"卡在这首不走"。
+    //   ⇒ feed 队列的自动续播只走顺序下一首，不受全局 playMode 影响。
+    //   （手动点"下一首"仍按原逻辑，不受影响。）
+    if (!isFromControl && this.getAppState().isFeedQueue()) {
+      Logger.info(TAG, 'playNextAuto feed -> next, mode=' + this.playMode);
+      this.playNext();
+      return;
+    }
     switch (this.playMode) {
       case MusicPlayMode.SINGLE_CYCLE:
         if (isFromControl) {
           this.playNext();
         } else if (this.avPlayer) {
-          try {
-            this.avPlayer.play();
-          } catch (error) {
-            Logger.error(TAG, `${error.code} + ${error.message}`);
-          }
+          this.startPlayback('single-cycle', this.loadGen);
         }
         break;
       case MusicPlayMode.ORDER:
@@ -1587,7 +3389,6 @@ export class MediaService {
    * Stops AVPlayer and clears playing state when prepared.
    */
   public async stop() {
-    Logger.info(TAG, 'stop()');
     if (this.isPrepared && this.avPlayer) {
       try {
         await this.avPlayer.stop();
@@ -1600,20 +3401,19 @@ export class MediaService {
           BackgroundUtil.stopContinuousTask(this.abilityContext);
         }
       } catch (error) {
-        Logger.error(TAG, `${error.code} + ${error.message}`);
+        Logger.error(TAG, `stop failed: code=${error.code} msg=${error.message}`);
       }
     }
   }
 
   /** Resets AVPlayer and releases SongItemBuilder resources. */
   private async reset() {
-    Logger.info(TAG, 'reset()');
     await this.songItemBuilder.release();
     if (this.avPlayer) {
       try {
         await this.avPlayer.reset();
       } catch (error) {
-        Logger.error(TAG, `${error.code} + ${error.message}`);
+        Logger.error(TAG, `reset failed: code=${error.code} msg=${error.message}`);
       }
     }
     this.isPrepared = false;
@@ -1638,7 +3438,7 @@ export class MediaService {
           if (err) {
             Logger.error(TAG, `Failed to destroy session. Code: ${err.code}, message: ${err.message}`);
           } else {
-            Logger.info(TAG, `Destroy : SUCCESS `);
+            Logger.info(TAG, `session destroy ok`);
           }
         });
       } catch (error) {
@@ -1651,7 +3451,8 @@ export class MediaService {
   /** Writes selectIndex to MusicAppState and refreshes AVSession metadata when index changes. */
   private updateMusicIndex(musicIndex: number) {
     Logger.info(TAG, 'updateMusicIndex ===> ' + musicIndex);
-    this.getAppState().selectIndex = musicIndex;
+    const st = this.getAppState();
+    st.selectIndex = musicIndex;
     if (this.musicIndex !== musicIndex) {
       this.musicIndex = musicIndex;
     }
@@ -1701,23 +3502,29 @@ export class MediaService {
     } else if (index === appState.selectIndex) {
       const next: number = Math.min(appState.selectIndex, appState.getQueueLength() - 1);
       appState.selectIndex = next;
-      this.isNeedPlay = appState.isPlay;
       void this.loadAsset(next);
+      // 删掉的正是当前播放的歌：只在**原本就在播**时自动续播下一首；
+      // 暂停状态下删歌不应该把音乐放起来（loadAsset 默认起播意图为 true，这里对齐回来）。
+      this.overridePlayIntent(appState.isPlay);
     }
     this.persistQueueSnapshot();
   }
 
   /** Pushes playback state (play/pause and position) to AVSession. */
   private async setPlayState(playbackState: avSession.AVPlaybackState) {
+    if (playbackState.state !== undefined) {
+      this.lastPlaybackState = playbackState.state;
+    }
     if (this.session) {
       this.session.setAVPlaybackState(playbackState, (err: BusinessError) => {
         if (err) {
           Logger.info(TAG, `SetAVPlaybackState BusinessError: code: ${err.code}, message: ${err.message}`);
         } else {
-          Logger.info(TAG, 'SetAVPlaybackState successfully');
+          Logger.info(TAG, 'setAVPlaybackState ok');
         }
       });
     }
+    // 播放态变化要重算桌面歌词悬浮窗：暂停保持显示，停播/空闲/出错收起
+    this.syncDesktopLyric();
   }
 }
-

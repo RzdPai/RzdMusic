@@ -1,6 +1,14 @@
 {
   "routerMap": [
     {
+      "name": "player",
+      "pageSourceFile": "src/main/ets/view/PlaybackPageRoute.ets",
+      "buildFunction": "PlaybackPageBuilder",
+      "data": {
+        "description": "Full-screen player, pushed as HdsNavDestination with animated=false (morph owns the animation)"
+      }
+    },
+    {
       "name": "songPage",
       "pageSourceFile": "src/main/ets/view/SongPage.ets",
       "buildFunction": "SongPageBuilder"

@@ -34,4 +34,16 @@ export class SdkApiUtil {
   public static isSdkApiAtLeast(minSdkApi: number): boolean {
     return deviceInfo.sdkApiVersion >= minSdkApi;
   }
+
+  /**
+   * `distributionOSApiVersion` 判据。
+   *
+   * 它与 {@link isSdkApiAtLeast} 读的不是同一个字段：HDS 的 miniBar `barLayoutMode`
+   * 等能力按「发行版版本」门控（6.1.1(24) → 60101），用 `sdkApiVersion` 判断会误放行/误拦截。
+   * @param versionCode 形如 60101 的发行版版本码（见 SdkConstants.DISTRIBUTION_OS_6_1_1_CODE）。
+   * @returns True when the device distribution version is at least versionCode.
+   */
+  public static isDistributionOsApiAtLeast(versionCode: number): boolean {
+    return deviceInfo.distributionOSApiVersion >= versionCode;
+  }
 }

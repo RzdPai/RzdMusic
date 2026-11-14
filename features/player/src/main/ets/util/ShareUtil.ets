@@ -39,6 +39,9 @@ export function buildSongShareText(title: string, singer: string, source: string
     link = 'https://music.163.com/#/song?id=' + songId;
   } else if (source === 'mg' && songId.length > 0) {
     link = 'https://music.migu.cn/v3/music/song/' + songId;
+  } else if (source === 'qs' && songId.length > 0) {
+    // ★ 汽水（qs）：没有公开的 song 落地页，用「听歌识曲式」的搜索页兜底
+    link = 'https://music.douyin.com/qishui/search?keyword=' + encodeURIComponent(title + ' ' + singer);
   }
   let text: string = title + ' - ' + singer;
   if (link.length > 0) {

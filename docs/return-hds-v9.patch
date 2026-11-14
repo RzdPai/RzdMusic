@@ -1,0 +1,203 @@
+diff --git a/common/musicbasic/src/main/ets/model/PlayerExpandState.ets b/common/musicbasic/src/main/ets/model/PlayerExpandState.ets
+index 4423da6..0bcd965 100644
+--- a/common/musicbasic/src/main/ets/model/PlayerExpandState.ets
++++ b/common/musicbasic/src/main/ets/model/PlayerExpandState.ets
+@@ -2286,6 +2286,47 @@ export class PlayerExpandState {
+    *   同一帧里系统条出现、自绘条消失 ⇒ 无缝，且不会出现两套皮叠着）。
+    */
+   @Trace public hdsBarSuppressed: boolean = false;
++  // RzdReturnHdsV9: paint ownership only; gesture/geometry/settle rules stay live.
++  @Trace public returnHdsVisible: boolean = false;
++  private returnHdsLogAt: number = 0;
++  private returnFingerP: number = -1;
++
++  public sourceBarPaintHidden(): boolean {
++    return this.shrinkHidesBar || (!this.returnHdsVisible &&
++      (this.sourceBarHidden || this.miniOut || this.hdsBarSuppressed));
++  }
++
++  private syncReturnHds(t: number): void {
++    const previous: number = this.morphP;
++    let next: boolean = this.returnHdsVisible;
++    if (this.morphDrive === MorphDrive.FINGER && this.pullDragging) {
++      if (this.returnFingerP >= 0) {
++        if (t < this.returnFingerP - 0.0001) {
++          next = true;
++        } else if (t > this.returnFingerP + 0.0001) {
++          next = false;
++        }
++      }
++      this.returnFingerP = t;
++    } else {
++      this.returnFingerP = -1;
++      if (t > previous + 0.0001) {
++        // Commit/reopen returns drawing to the player before its first frame.
++        next = false;
++      }
++    }
++    const changed: boolean = next !== this.returnHdsVisible;
++    this.returnHdsVisible = next;
++    const now: number = Date.now();
++    if (changed || (next && now - this.returnHdsLogAt >= 80)) {
++      this.returnHdsLogAt = now;
++      Logger.info('RzdReturnHdsV9',
++        `owner=${next ? 'source-hds' : 'morph'} p=${t.toFixed(3)} prev=${previous.toFixed(3)} ` +
++          `finger=${this.pullDragging} drive=${this.morphDrive} stage=${this.morphStage} ` +
++          `sourcePaintHidden=${this.sourceBarPaintHidden()} playerPaint=${next ? 0 : 1} ` +
++          `clonePaint=${next ? 0 : 1} squash=${this.morphSquashY}`);
++    }
++  }
+   @Trace public metaBridgeActive: boolean = false;
+   @Trace public metaBridgeGeneration: number = 0;
+   private sourceTitle: MorphMetaEndpoint | undefined = undefined;
+@@ -4721,6 +4762,7 @@ export class PlayerExpandState {
+     //     鐢变笅闈㈢殑 `@Monitor('morphP')` 鍦?*姣忎竴甯?*鎶婂嚑浣曢噸绠椾竴娆?
+     //     鈥斺€?涓庝笂娓?姣忓抚 `applyPullProgress(effT())`"鍚屾瀯銆?
+     //   鈿狅笍 `morphPApplying` 鏄槻鍥炵幆鐨勶細鏈柟娉曡嚜宸卞啓 `morphP` 鏃朵笉瑕佽鑷繁鐨?monitor 鍐嶇畻涓€閬嶃€?
++    this.syncReturnHds(t);
+     this.morphPApplying = true;
+     if (this.morphP !== t) {
+       this.morphP = t;
+@@ -4864,6 +4906,8 @@ export class PlayerExpandState {
+    *          锛堝惁鍒欎細鎶婃挱鏀鹃〉鍘嬫垚 1vp 鐨勪竴鏉＄粏缂濓級銆?
+    */
+   public morphBeginEntering(): boolean {
++    this.returnHdsVisible = false;
++    this.returnFingerP = -1;
+     this.morphStage = MorphStage.ENTERING;
+     this.morphDrive = MorphDrive.FINGER;
+     this.morphGen = this.morphGen + 1;
+@@ -5084,6 +5128,8 @@ export class PlayerExpandState {
+ 
+   /** 澶嶄綅鍒?娌℃湁杩欏鍔ㄧ敾"鐨勯潤姝㈡€侊紙鍑犱綍缂哄け銆佸嵏杞姐€佸紓甯告椂閮借蛋杩欓噷锛夈€?*/
+   public morphReset(): void {
++    this.returnHdsVisible = false;
++    this.returnFingerP = -1;
+     // 上游 `finishReverse` / 会话结束都会 `setMiniOut(false)`（`wujie.pa:147562-147568`）。
+     this.miniOut = false;
+     // ★ 2026-10-21：复位 = 回到"没有形变动画"的静止态 ⇒ 系统条必须在场（交接闸清掉）。
+diff --git a/features/player/src/main/ets/view/PlaybackPage.ets b/features/player/src/main/ets/view/PlaybackPage.ets
+index cbe24bc..23e0a0d 100644
+--- a/features/player/src/main/ets/view/PlaybackPage.ets
++++ b/features/player/src/main/ets/view/PlaybackPage.ets
+@@ -2519,6 +2519,9 @@ export struct PlaybackPage {
+    *    闂佹椿娼块崝宥夊春濞戞埃鍋撻崷顓炰沪缂佷礁鐡ㄧ粙濠囨偄鐞涒檧鍋撳Ο鍏煎闁靛牆鐗忕粻鏍级閳哄倻鎳佺紒鏃€鎸抽幃娆撴儌閸濄儳鐛?闂佸搫鍟版慨鐑藉疾椤愶箑绀夐柕濞у嫭姣庨悗娈垮枓閸嬫挸鈹戦纰卞剮缂佹顦靛浼搭敍閻愨晛浜鹃煫鍥ㄦ⒐椤牠鏌?闂?
+    */
+   private morphOpacityValue(): number {
++    if (this.expandState.returnHdsVisible) {
++      return 0;
++    }
+     // 闂?闂佺厧顨庢禍锝夋儊婢跺鍤楅柤鎭掑劤閸ㄥジ鏌ㄥ☉娆掑濠殿喒鏅犻幃鐣岀磼濡鐒搁梻鍌氬€归幐鎶藉焵椤掍礁濮囬柟鑸靛哺瀹曟岸鏌ㄧ€ｎ偆鍘愰柣鐘叉川缁垶寮抽悢鍏兼櫖闁割偅绻勯悰锕傛煛瀹ュ懏鎼愰柛娅诲洦鍎撻柍褜鍓熷顔炬崉閾忚娈滅紓浣规煥椤戝懘宕?return闂佹寧绋戦惌鍌毭归崒姘煎殨闁逞屽墴閺屻劑鍩€椤掑嫭鏅璺虹墐閸?
+     //   闂佽　鍋撻柟顖嗗嫯鍚柡澶嗘櫆閻熲晠宕抽悜钘夊強妞ゆ牗纰嶇粈鍫濃槈閹捐泛鍔嬫繝鈧导鏉戠闁兼亽鍎插▓?*濠殿噯绲界换鎰板箮濮樿埖鐒鹃柛濠勫櫏濞煎爼鎮圭€ｎ亜鏆熼柡?*闂佹寧绋戞總鏃傜箔閺嶎厼绀冩繛鍡樺灦閻ｉ亶鏌￠崟闈涚仧閻炴俺椴哥粙澶愵敂閸涱喗瀚虫俊?`@Local` 闁诲孩绋掗〃鍡涱敊瀹€鍕櫖?
+     //   婵炴垶鎸告鍛婃叏閳哄懏鍋ㄩ柤濮愬€曠瑧闂佽鍏涚粈渚€鎮鹃鍕闁靛闄勯敓銉╂煕韫囨洦鍔滅紒杈ㄧ懅閻ヮ亪顢涘顒侀敪闁荤姴娲ｇ槐顔炬濮樿泛违闁稿本绮嶉弳蹇涙煙閺夋垵妲绘繝鈧鍫濈闁靛ě鍕瘞**缂傚倷鐒﹂幐璇差焽椤愶絿鈻曢悗锝庝簼閸?*闁荤姴娲╅褔宕哄畝鍕剭闁告洦鍋呴惃鎴︽煛閸曢潧鐏￠柡浣告贡娴滃憡銈ｉ崘銊ょ凹婵炴垶鎸撮崑鎾绘煕閹烘洖鍚规繛鍫熷灴瀹曟劗绮悰鈥充壕?
+diff --git a/features/playlist/src/main/ets/view/HomeMiniBarAlbumCover.ets b/features/playlist/src/main/ets/view/HomeMiniBarAlbumCover.ets
+index 3ab33cb..81e79da 100644
+--- a/features/playlist/src/main/ets/view/HomeMiniBarAlbumCover.ets
++++ b/features/playlist/src/main/ets/view/HomeMiniBarAlbumCover.ets
+@@ -297,7 +297,7 @@ export struct HomeMiniBarAlbumCover {
+     // 形变期间按反编译的 `MiniMorph.metaOpacityAt = clamp(1 - t/0.35)` 淡出：
+     // 封面这一档比右侧按钮（`actionsOpacityAt = 1 - t/0.20`）**晚**消失，
+     // 观感就是用户描述的"按钮先没、文字/封面后没"。
+-    .opacity(this.expandState.miniBarMetaOpacity())
++    .opacity(this.expandState.returnHdsVisible ? 1 : this.expandState.miniBarMetaOpacity())
+     .translate({ x: this.coverOffsetXVp() })
+     // 把迷你条封面的窗口矩形报给共享状态：它是"展开动画"的起点端点。
+     // 与播放页大封面的 reportBig 配对，两个端点齐了以后整页形变才有依据。
+diff --git a/features/playlist/src/main/ets/view/HomeMiniBarPlayer.ets b/features/playlist/src/main/ets/view/HomeMiniBarPlayer.ets
+index be42107..4581cd8 100644
+--- a/features/playlist/src/main/ets/view/HomeMiniBarPlayer.ets
++++ b/features/playlist/src/main/ets/view/HomeMiniBarPlayer.ets
+@@ -433,7 +433,7 @@ export struct HomeMiniBarPlayer {
+           actionsNodeId: MINI_BAR_ASIDE_ID,
+           showPreviousTrack: this.showPreviousTrack,
+           // 操作区：`MiniMorph.actionsOpacityAt = clamp(1 - t/0.20)`，比封面那一档更早消失
+-          actionsOpacity: this.expandState.miniBarOpacity()
++          actionsOpacity: this.expandState.returnHdsVisible ? 1 : this.expandState.miniBarOpacity()
+         })
+       }
+       // ★★★ 2026-10-18（照搬上游 `.animation(BAR_ANIM)`，`wujie.pa:69053-69057` / `:69118-69121`）：
+@@ -471,8 +471,7 @@ export struct HomeMiniBarPlayer {
+     // 展开形变的**起点矩形**就是这一层：给个 id 让 `getFrameNodeById` 量它
+     // （`onAreaChange` 给的是布局几何、不含 transform，量出来的起点会偏）。
+     .id(MINI_BAR_ID)
+-    .visibility((this.expandState.sourceBarHidden || this.expandState.shrinkHidesBar ||
+-      this.expandState.miniOut) ? Visibility.Hidden : Visibility.Visible)
++    .visibility(this.expandState.sourceBarPaintHidden() ? Visibility.Hidden : Visibility.Visible)
+     // 诊断（`hdc shell hilog | grep RzdMiniBarGeom`）：本行**实测**矩形 + 左右内距。
+     // 判据（钉住高度的两条迷你条）：
+     //   `padL == padR`（内容中心 ≡ 胶囊中心）、`h == cap`（行盒 ≡ 胶囊盒）、
+diff --git a/features/playlist/src/main/ets/view/HomeMiniBarPlayerAside.ets b/features/playlist/src/main/ets/view/HomeMiniBarPlayerAside.ets
+index 72b7972..5bb1fe8 100644
+--- a/features/playlist/src/main/ets/view/HomeMiniBarPlayerAside.ets
++++ b/features/playlist/src/main/ets/view/HomeMiniBarPlayerAside.ets
+@@ -248,7 +248,7 @@ export struct HomeMiniBarPlayerAside {
+         .overlay((): void => { this.MetaFadeMask(); }, { align: Alignment.TopStart })
+         // 元信息那一档的透明度（真实迷你条恒 1，克隆层按 metaOpacityAt 传值）
+         .opacity(this.isMorphClone ? this.metaOpacity :
+-          (this.expandState.sourceBarHidden ? 0 : this.metaOpacity))
++          (this.expandState.sourceBarPaintHidden() ? 0 : this.metaOpacity))
+         // 被封面"推着往右走"（反编译 λ1e 的 `coverRightShiftAt`）；真实迷你条恒 0
+         .translate({ x: this.metaShiftX })
+         .onClick(() => {
+diff --git a/features/playlist/src/main/ets/view/MiniBarMaterialCapsule.ets b/features/playlist/src/main/ets/view/MiniBarMaterialCapsule.ets
+index 1fb3a7b..5008995 100644
+--- a/features/playlist/src/main/ets/view/MiniBarMaterialCapsule.ets
++++ b/features/playlist/src/main/ets/view/MiniBarMaterialCapsule.ets
+@@ -722,6 +722,15 @@ export struct MiniBarMaterialCapsule {
+     //   `alignContent: TopStart`：内容层改成 `.position()` 之后就按盒左上角定位（见 ContentLayer），
+     //   不再靠 Stack 的居中"顺带"对齐（那也是上一版错位的隐因之一）。
+     Stack({ alignContent: Alignment.TopStart }) {
++      // RzdReturnHdsV9: opaque underlay belongs to the source capsule only.
++      // HDS above remains the sole systemMaterialEffect renderer; never clips the player.
++      Column()
++        .width(this.barWidth)
++        .height(this.barHeight)
++        .backgroundColor($r('app.color.morph_mini_solid_surface'))
++        .borderRadius(this.barHeight / 2)
++        .position({ x: this.capsuleLeftVp(), y: this.capsuleTopVp() })
++        .hitTestBehavior(HitTestMode.None)
+       HdsTabs({ barPosition: BarPosition.End }) {
+         TabContent() {
+           // 非空占位：空 `TabContent` 在真机上 HDS 不画浮动胶囊背板/材质（2026-10-01 实测）。
+diff --git a/products/default/src/main/ets/pages/Index.ets b/products/default/src/main/ets/pages/Index.ets
+index 1c15214..decdf70 100644
+--- a/products/default/src/main/ets/pages/Index.ets
++++ b/products/default/src/main/ets/pages/Index.ets
+@@ -2089,7 +2089,7 @@ struct Index {
+                 `squashY=${this.expandState.morphSquashY}`);
+           }
+         })
+-        .visibility((this.expandState.sourceBarHidden || this.expandState.shrinkHidesBar || this.expandState.miniOut || this.expandState.hdsBarSuppressed) ? Visibility.Hidden : Visibility.Visible)
++        .visibility(this.expandState.sourceBarPaintHidden() ? Visibility.Hidden : Visibility.Visible)
+         .onAppear((): void => {
+           Logger.info('RzdHomeMiniBarMaterial',
+             `material=capsule(systemMaterialEffect) ambient=${this.ambientLevelIndex()} ` +
+@@ -2281,7 +2281,7 @@ struct Index {
+     .hitTestBehavior(HitTestMode.Transparent)
+     .zIndex(20)
+     // Hidden preserves anchors/layout and hides the floating bar with its controls immediately.
+-    .visibility((this.expandState.sourceBarHidden || this.expandState.shrinkHidesBar || this.expandState.miniOut || this.expandState.hdsBarSuppressed) ? Visibility.Hidden : Visibility.Visible)
++    .visibility(this.expandState.sourceBarPaintHidden() ? Visibility.Hidden : Visibility.Visible)
+   }
+ 
+   /**
+@@ -2935,7 +2935,8 @@ struct Index {
+       //   —— 与上游 `MainPage` 同构：一级页 = `miniBar` 槽（无胶囊容器、无 slack）；
+       //   二级页 = {@link MiniBarMaterialCapsule}（自己一个 HdsTabs 浮动胶囊，本文件 {@link floatingMiniBar}）。
+       //   ⇒ 两条播放条从此是"同一个内容组件 + 两套宿主"，不再共用同一个宿主组件。
+-      if ((this.expandState.morphSessionDriving() || this.expandState.hdsBarSuppressed) &&
++      if (!this.expandState.returnHdsVisible &&
++        (this.expandState.morphSessionDriving() || this.expandState.hdsBarSuppressed) &&
+         this.expandState.asideWinW > 0) {
+         this.MorphMiniBarClone()
+       }
+@@ -2947,7 +2948,8 @@ struct Index {
+       //    瀹冩湁鑷繁鐨勬椂闂寸嚎锛坄morphOverlayP`锛?60ms + 蹇嚭鎱㈡敹锛夛紝涓庡彟涓や唤鍚屽眰锛坺Index 110锛夈€?
+       //    椤剁偣/缁堢偣閲忔祴涓庡彟澶栦袱浠藉悓婧愶紙`reportMini` / `reportBig`锛夛紝鎵€浠ヤ笁鑰呮槸涓€璧疯蛋鐨勩€?
+       //    娓叉煋闂ㄥ啓鍦?builder 閲岋紙`morphOverlayBridging()`锛夈€?
+-      if (this.expandState.morphOverlayBridging() || this.expandState.hdsBarSuppressed) {
++      if (!this.expandState.returnHdsVisible &&
++        (this.expandState.morphOverlayBridging() || this.expandState.hdsBarSuppressed)) {
+         this.MorphCoverClone()
+       }
+ 

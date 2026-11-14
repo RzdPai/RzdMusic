@@ -1,14 +1,48 @@
 import { http } from '@kit.NetworkKit';
 
 export class PlaylistSearchHttp {
-  static async getText(url: string, headers?: Record<string, string>): Promise<string> {
+  static async getText(url: string, headers?: Record<string, string>,
+    readTimeoutMs: number = 15000): Promise<string> {
     const client = http.createHttp();
     try {
       const resp: http.HttpResponse = await client.request(url, {
         method: http.RequestMethod.GET,
         connectTimeout: 10000,
-        readTimeout: 15000,
+        readTimeout: readTimeoutMs,
         header: headers
+      });
+      if (resp.responseCode === 200) {
+        return resp.result as string;
+      }
+      return '';
+    } catch (e) {
+      throw new Error('歌单网络请求失败');
+    } finally {
+      client.destroy();
+    }
+  }
+
+  /** POST JSON body（QQ musicu 等接口用）。 */
+  static async postText(url: string, body: string, headers?: Record<string, string>,
+    readTimeoutMs: number = 20000): Promise<string> {
+    const client = http.createHttp();
+    try {
+      const hdr: Record<string, string> = {};
+      if (headers !== undefined) {
+        const keys: string[] = Object.keys(headers);
+        for (let i = 0; i < keys.length; i++) {
+          hdr[keys[i]] = headers[keys[i]];
+        }
+      }
+      if (hdr['Content-Type'] === undefined) {
+        hdr['Content-Type'] = 'application/json';
+      }
+      const resp: http.HttpResponse = await client.request(url, {
+        method: http.RequestMethod.POST,
+        connectTimeout: 10000,
+        readTimeout: readTimeoutMs,
+        header: hdr,
+        extraData: body
       });
       if (resp.responseCode === 200) {
         return resp.result as string;

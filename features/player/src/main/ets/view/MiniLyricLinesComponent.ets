@@ -25,6 +25,34 @@ import { amllParseLyricCached } from '../amll/parse/AmllAutoDetect';
  */
 @ComponentV2
 export struct MiniLyricLinesComponent {
+  /**
+   * true 时**无视用户的小歌词开关**强制渲染（底栏页签「现在就听」用；播放页不传 ⇒ 默认 false）。
+   *
+   * ⚠️ 只影响"画不画"，**取词/解析/行号逻辑一行不动**：
+   * 默认 false ⇒ 播放页行为与改动前逐字相同（仍由「设置 → 小歌词」控制）。
+   */
+  @Param ignoreUserSetting: boolean = false;
+  /**
+   * 画几行：2 = 当前行 + 下一行（默认，行为不变）；1 = 只画当前行。
+   * ★ 2026-11-01（深挖报告 P1-3）：单列短高时只画 1 行，块高 28 才塞得进 meta 的 34 定高盒，不再向下溢出压进度条。
+   */
+  @Param lines: number = 2;
+  /**
+   * **主行**（当前行）的字色 —— **可选**，不传就还是原来的 token。
+   *
+   * 为什么要有：底栏页签「现在就听」的背景是**按封面动态取色**的，浅色封面会取出浅色底，
+   * 而组件里原来写死的 `app.color.player_text_primary` 是**白色** ⇒ 浅底上这两行看不见。
+   * 组件自己拿不到那一页的"底色亮不亮"，所以由**调用方选好颜色传进来**。
+   *
+   * ⚠️ 默认值给 `undefined`（而不是 `$r(...)`）：`@Param` 的默认值表达式会在**声明处**求值，
+   *   这里用 `undefined` + 使用处的 `??` 兜底，求值时机最稳（也避免默认值求值早于 `$r` 可用）。
+   * ⚠️ **播放页不传** ⇒ `??` 落到原来的 `$r('app.color.player_text_primary')`，行为逐字不变。
+   */
+  @Param mainLineColor: ResourceColor | undefined = undefined;
+  /**
+   * **次行**（下一行）的字色 —— **可选**，不传就还是原来的 token（见 {@link mainLineColor}）。
+   */
+  @Param nextLineColor: ResourceColor | undefined = undefined;
   @Local state: MusicAppState =
     AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
   @Local miniLyricState: ShowMiniLyricState =
@@ -75,26 +103,39 @@ export struct MiniLyricLinesComponent {
 
   build() {
     // 未开启时完全不占位；开启后常驻两行空间（切换页面/滑动不跳动）
-    if (this.miniLyricState.enabled) {
+    // ⚠️ `ignoreUserSetting` 只放宽这个门（见它的 @Param 注释），渲染逻辑一字未改。
+    if (this.miniLyricState.enabled || this.ignoreUserSetting) {
       Column({ space: 3 }) {
         Text(this.miniLyricLines()[0])
-          .fontSize(15)
-          .fontColor($r('app.color.player_text_primary'))
+          // ★ 2026-10-17（**用户实测要求：更大**）：当前行 15 → 18fp（+3），
+          //   下一行 14 → 17fp（+3）等比加大一档；配合 `PlaybackPage.MINI_LYRIC_LINE_H_VP`
+          //   22 → 26 / 块高 49 → 57（那里有完整说明）。
+          .fontSize(18)
+          // 调用方给了颜色就用它（「现在就听」页按取色底传深浅两档），没给就是原来的白 token
+          .fontColor(this.mainLineColor ?? $r('app.color.player_text_primary'))
           .opacity(0.92)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width(StyleConstants.FULL_WIDTH)
-        Text(this.miniLyricLines()[1])
-          .fontSize(14)
-          .fontColor($r('app.color.play_text_color'))
+        if (this.lines >= 2) {
+          Text(this.miniLyricLines()[1])
+          // 同上一行：14 → 17fp（用户实测要求"更大"，等比 +3）。
+          .fontSize(17)
+          .fontColor(this.nextLineColor ?? $r('app.color.play_text_color'))
           .opacity(0.6)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .width(StyleConstants.FULL_WIDTH)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .width(StyleConstants.FULL_WIDTH)
+        }
       }
       .width(StyleConstants.FULL_WIDTH)
       .alignItems(HorizontalAlign.Start)
-      .margin({ top: 2, bottom: -10 })
+      // ⚠️ 2026-10-15：这里原来写 `margin({ top: 2, bottom: -10 })`。`bottom: -10` 是
+      //    "播放页那一页贴底、再往下压一点"的历史补丁 —— 它**已经**在
+      //    `PlaybackPage` 调用点上被 `MINI_LYRIC_SINK_VP` 取代（两处负边距会叠加，
+      //    小歌词会被压到页外看不见）。所以这里**不再给 bottom**，
+      //    让位量只有一个来源：调用点。`top: 2` 保留（原观感）。
+      .margin({ top: 2 })
     }
   }
 }

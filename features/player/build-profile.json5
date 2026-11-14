@@ -5,6 +5,15 @@
       "copyCodeResource": {
         "enable": false
       }
+    },
+    // libmpv NAPI（src/main/cpp/mpv_bridge.cpp）只编 arm64-v8a
+    "externalNativeOptions": {
+      "path": "./src/main/cpp/CMakeLists.txt",
+      "arguments": "-DOHOS_STL=c++_shared -DCMAKE_BUILD_TYPE=RelWithDebInfo",
+      "abiFilters": [
+        "arm64-v8a"
+      ],
+      "cppFlags": ""
     }
   },
   "buildOptionSet": [
