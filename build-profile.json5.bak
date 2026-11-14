@@ -1,0 +1,137 @@
+{
+  "app": {
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "storeFile": "C:/Users/Administrator/Desktop/RzdMusic.p12",
+          "storePassword": "00000024EC0BD9E65B156D78AC515D32DE274AF233574C99EC1B46C3E46BF53AE5ECBE5C1153EB827E67B6213E2CED163E972E14",
+          "keyAlias": "RzdMusic",
+          "keyPassword": "000000248086D1EF6CFF0B945341666877DD1F8A165E2343E1FE1F129280A71AF8613BE4D198AFCA09205EE5E7CA708099C3DD57",
+          "signAlg": "SHA256withECDSA",
+          "profile": "C:/Users/Administrator/Desktop/RzdMusicRelease.p7b",
+          "certpath": "C:/Users/Administrator/Desktop/发布.cer"
+        }
+      }
+    ],
+    "products": [
+      {
+        "name": "default",
+        "signingConfig": "default",
+        "compatibleSdkVersion": "6.1.0(23)",
+        "targetSdkVersion": "6.1.0(23)",
+        "runtimeOS": "HarmonyOS",
+        "buildOption": {
+          "strictMode": {
+            "caseSensitiveCheck": true,
+            "useNormalizedOHMUrl": true
+          }
+        }
+      },
+      {
+        "name": "pc",
+        "signingConfig": "default",
+        "compatibleSdkVersion": "6.1.0(23)",
+        "targetSdkVersion": "6.1.0(23)",
+        "runtimeOS": "HarmonyOS",
+        "buildOption": {
+          "strictMode": {
+            "caseSensitiveCheck": true,
+            "useNormalizedOHMUrl": true
+          }
+        }
+      }
+    ],
+    "buildModeSet": [
+      {
+        "name": "debug"
+      },
+      {
+        "name": "release"
+      }
+    ]
+  },
+  "modules": [
+    {
+      "name": "musichomesample",
+      "srcPath": "./products/default",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "playlist",
+      "srcPath": "./features/playlist",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default",
+            "pc"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "musicbasic",
+      "srcPath": "./common/musicbasic"
+    },
+    {
+      "name": "musichomepcsample",
+      "srcPath": "./products/pc",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "pc"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "player",
+      "srcPath": "./features/player",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default",
+            "pc"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "recommendation",
+      "srcPath": "./features/recommendation",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default",
+            "pc"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "setting",
+      "srcPath": "./features/setting",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default",
+            "pc"
+          ]
+        }
+      ]
+    }
+  ]
+}

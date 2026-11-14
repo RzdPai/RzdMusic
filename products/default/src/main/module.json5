@@ -1,0 +1,103 @@
+{
+  "module": {
+    "name": "musichomesample",
+    "type": "entry",
+    "description": "$string:module_desc",
+    "mainElement": "MusichomeAbility",
+    "deviceTypes": [
+      "phone",
+      "tablet"
+    ],
+    "deliveryWithInstall": true,
+    "installationFree": false,
+    "pages": "$profile:main_pages",
+    "requestPermissions": [
+      {
+        "name": "ohos.permission.INTERNET"
+      },
+      {
+        "name": "ohos.permission.MICROPHONE",
+        "reason": "$string:reason_microphone",
+        "usedScene": {
+          "abilities": [
+            "MusichomeAbility"
+          ],
+          "when": "inuse"
+        }
+      },
+      {
+        "name": "ohos.permission.KEEP_BACKGROUND_RUNNING",
+        "reason": "$string:reason_background",
+        "usedScene": {
+          "abilities": [
+            "MusichomeAbility"
+          ],
+          "when": "always"
+        }
+      },
+      {
+        "name": "ohos.permission.ACCESS_CAR_DISTRIBUTED_ENGINE"
+      }
+    ],
+    "abilities": [
+      {
+        "name": "MusichomeAbility",
+        "srcEntry": "./ets/entryability/EntryAbility.ets",
+        "description": "$string:EntryAbility_desc",
+        "icon": "$media:ic_music_icon",
+        "label": "$string:EntryAbility_label",
+        "startWindowIcon": "$media:startIcon",
+        "startWindowBackground": "$color:start_window_background",
+        "exported": true,
+        "minWindowHeight": 480,
+        "minWindowWidth": 360,
+        "orientation": "follow_desktop",
+        "backgroundModes": [
+          "audioPlayback"
+        ],
+        "skills": [
+          {
+            "entities": [
+              "entity.system.home"
+            ],
+            "actions": [
+              "action.system.home"
+            ]
+          }
+        ]
+      }
+    ],
+    "extensionAbilities": [
+      {
+        "name": "MusicCardAbility",
+        "srcEntry": "./ets/musiccard/MusicCardAbility.ets",
+        "type": "form",
+        "exported": false,
+        "metadata": [
+          {
+            "name": "ohos.extension.form",
+            "resource": "$profile:form_config"
+          }
+        ]
+      },
+      {
+        "name": "MusichomeBackupAbility",
+        "srcEntry": "./ets/phonebackupextability/PhoneBackupExtAbility.ets",
+        "type": "backup",
+        "exported": false,
+        "metadata": [
+          {
+            "name": "ohos.extension.backup",
+            "resource": "$profile:backup_config"
+          },
+        ]
+      },
+      {
+        "name": "LiveViewExtAbility",
+        "srcEntry": "./ets/liveview/LiveViewExtAbility.ets",
+        "type": "liveViewLockScreen",
+        "exported": false
+      }
+    ]
+  }
+}

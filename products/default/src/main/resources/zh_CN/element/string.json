@@ -1,0 +1,48 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "模块描述"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "description"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "派音"
+    },
+    {
+      "name": "reason_background",
+      "value": "允许应用在播放音乐场景使用保持在后台运行的能力。"
+    },
+    {
+      "name": "tab_home",
+      "value": "推荐"
+    },
+    {
+      "name": "tab_music_hall",
+      "value": "歌单"
+    },
+    {
+      "name": "tab_cafe_listen",
+      "value": "我的"
+    },
+    {
+      "name": "tab_mine",
+      "value": "设置"
+    },
+    {
+      "name": "placeholder_tab_not_implemented",
+      "value": "该功能暂未实现"
+    },
+    {
+      "name": "music_card_name",
+      "value": "正在播放"
+    },
+    {
+      "name": "music_card_desc",
+      "value": "显示当前播放歌曲"
+    }
+  ]
+}

@@ -1,0 +1,232 @@
+﻿{
+  "string": [
+    {
+      "name": "setting_title",
+      "value": "Settings"
+    },
+    {
+      "name": "setting_lx_section_title",
+      "value": "Music Source"
+    },
+    {
+      "name": "setting_lx_empty",
+      "value": "No sources imported yet"
+    },
+    {
+      "name": "setting_lx_ready",
+      "value": "✓ Ready"
+    },
+    {
+      "name": "setting_lx_import_file",
+      "value": "Import Script"
+    },
+    {
+      "name": "setting_lx_import_online",
+      "value": "Import Online"
+    },
+    {
+      "name": "setting_online_import_title",
+      "value": "Import Source Online"
+    },
+    {
+      "name": "setting_online_import_placeholder",
+      "value": "Enter script URL (http/https)"
+    },
+    {
+      "name": "setting_online_import_cancel",
+      "value": "Cancel"
+    },
+    {
+      "name": "setting_online_import_confirm",
+      "value": "Import"
+    },
+    {
+      "name": "setting_online_import_loading",
+      "value": "Importing…"
+    },
+    {
+      "name": "setting_theme_title", "value": "Theme Color"
+    },
+    {
+      "name": "setting_theme_custom", "value": "Custom"
+    },
+    {
+      "name": "setting_theme_apply", "value": "Apply"
+    },
+    {
+      "name": "setting_ambient_title", "value": "Ambient Light Level"
+    },
+    {
+      "name": "setting_mini_lyric_title", "value": "Mini Lyrics on Player"
+    },
+    {
+      "name": "setting_audio_mix_title", "value": "Play Alongside Other Apps"
+    },
+    {
+      "name": "setting_download_dir_title", "value": "Save to App Download Directory"
+    },
+    {
+      "name": "setting_download_name_title", "value": "Download File Name Format"
+    },
+    {
+      "name": "setting_playlist_add_title", "value": "Add to Playlist Position"
+    },
+    {
+      "name": "mine_playlists_title", "value": "My Playlists"
+    },
+    {
+      "name": "mine_playlist_import", "value": "Import"
+    },
+    {
+      "name": "mine_playlist_new", "value": "New"
+    },
+    {
+      "name": "mine_playlist_more", "value": "More"
+    },
+    {
+      "name": "mine_playlist_name_placeholder", "value": "Playlist name"
+    },
+    {
+      "name": "mine_playlist_confirm", "value": "OK"
+    },
+    {
+      "name": "mine_playlist_cancel", "value": "Cancel"
+    },
+    {
+      "name": "mine_playlist_export", "value": "Export Playlist"
+    },
+    {
+      "name": "mine_playlist_rename", "value": "Rename"
+    },
+    {
+      "name": "mine_playlist_delete", "value": "Delete Playlist"
+    },
+    {
+      "name": "mine_playlist_empty", "value": "No playlists yet, tap New above"
+    },
+    {
+      "name": "search_song_menu", "value": "Song Menu"
+    },
+    {
+      "name": "search_menu_play", "value": "Play"
+    },
+    {
+      "name": "search_menu_download", "value": "Download"
+    },
+    {
+      "name": "search_menu_add_playlist", "value": "Add to Playlist"
+    },
+    {
+      "name": "search_add_to_playlist", "value": "Add to Playlist"
+    },
+    {
+      "name": "mine_playlist_new_confirm", "value": "Create & Add"
+    },
+    {
+      "name": "search_menu_add_favorite", "value": "Add to Favorites"
+    },
+    {
+      "name": "setting_quality_title",
+      "value": "Playback Quality"
+    },
+    {
+      "name": "mine_title",
+      "value": "Mine"
+    },
+    {
+      "name": "mine_history_title",
+      "value": "Play History"
+    },
+    {
+      "name": "mine_favorites_title",
+      "value": "Favorites"
+    },
+    {
+      "name": "mine_about_title",
+      "value": "About"
+    },
+    {
+      "name": "mine_about_app_name",
+      "value": "App Name"
+    },
+    {
+      "name": "mine_about_version",
+      "value": "Version"
+    },
+    {
+      "name": "mine_version",
+      "value": "1.7.0"
+    },
+    {
+      "name": "mine_about_bundle",
+      "value": "Bundle"
+    },
+    {
+      "name": "mine_bundle_name",
+      "value": "com.rzdpai.music"
+    },
+    {
+      "name": "mine_about_qq_group", "value": "QQ Group"
+    },
+    {
+      "name": "mine_qq_group", "value": "1050543607"
+    },
+    {
+      "name": "mine_donate", "value": "Donate"
+    },
+    {
+      "name": "mine_about_desc",
+      "value": "PaiYin · LX Music port for HarmonyOS, based on MusicHome and the LX source protocol"
+    },
+    {
+      "name": "search_title",
+      "value": "Search"
+    },
+    {
+      "name": "search_placeholder",
+      "value": "Search online songs"
+    },
+    {
+      "name": "search_button",
+      "value": "Search"
+    },
+    {
+      "name": "search_play_all",
+      "value": "Play All"
+    },
+    {
+      "name": "search_hot_title",
+      "value": "Hot Search"
+    },
+    {
+      "name": "search_history_title",
+      "value": "Search History"
+    },
+    {
+      "name": "search_history_clear",
+      "value": "Clear"
+    },
+    {
+      "name": "setting_last_error_title", "value": "Last source error"
+    },
+    {
+      "name": "setting_log_title", "value": "Run Log"
+    },
+    {
+      "name": "setting_log_copy", "value": "Copy"
+    },
+    {
+      "name": "setting_log_refresh", "value": "Refresh"
+    },
+    {
+      "name": "setting_log_empty", "value": "No log yet"
+    },
+    {
+      "name": "search_empty_hint",
+      "value": "Enter keywords to search online songs"
+    },
+    {
+      "name": "setting_search_placeholder", "value": "Search settings"
+    }
+  ]
+}

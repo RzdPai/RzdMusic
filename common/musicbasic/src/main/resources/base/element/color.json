@@ -1,0 +1,104 @@
+{
+    "color": [
+        {
+            "name": "primary60",
+            "value": "#99000000"
+        },
+        {
+            "name": "primary40",
+            "value": "#66000000"
+        },
+        {
+            "name": "primary5",
+            "value": "#0C000000"
+        },
+        {
+            "name": "on_primary90",
+            "value": "#E5FFFFFF"
+        },
+        {
+            "name": "font_primary",
+            "value": "#E5000000"
+        },
+        {
+            "name": "font_tertiary",
+            "value": "#66000000"
+        },
+        {
+            "name": "icon_primary",
+            "value": "#E5000000"
+        },
+        {
+            "name": "background_secondary",
+            "value": "#F1F3F5"
+        },
+        {
+            "name": "card_background",
+            "value": "#FFFFFF"
+        },
+        {
+            "name": "comp_background_list_card",
+            "value": "#FFFFFF"
+        },
+        {
+            "name": "capsule_background",
+            "value": "#F1F3F5"
+        },
+        {
+            "name": "background_secondary_translucent",
+            "value": "#E6F1F3F5"
+        },
+        {
+            "name": "playlist_detail_background",
+            "value": "#F1F3F5"
+        },
+        {
+            "name": "floating_mini_bar_sheet_background",
+            "value": "#F1F3F5"
+        },
+        {
+            "name": "floating_mini_bar_immersive_background",
+            "value": "#30F1F3F5"
+        },
+        {
+            "name": "pc_floating_mini_bar_immersive_surface",
+            "value": "#FFFFFF"
+        },
+        {
+            "name": "comp_divider",
+            "value": "#33000000"
+        },
+        {
+            "name": "mini_bar_primary",
+            "value": "#E6000000"
+        },
+        {
+            "name": "mini_bar_cover_ring_track",
+            "value": "#1AFFFFFF"
+        },
+        {
+            "name": "mini_bar_cover_ring_progress",
+            "value": "#99FFFFFF"
+        },
+        {
+            "name": "mini_bar_cover_rhythm_glyph",
+            "value": "#FFFFFF"
+        },
+        {
+            "name": "playlist_detail_song_title",
+            "value": "#222222"
+        },
+        {
+            "name": "playlist_detail_tag_text",
+            "value": "#806540"
+        },
+        {
+            "name": "playlist_detail_tag_background",
+            "value": "#33C79E63"
+        },
+        {
+            "name": "playlist_play_all_icon",
+            "value": "#FF1949"
+        }
+    ]
+}

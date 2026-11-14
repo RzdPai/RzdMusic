@@ -1,0 +1,14 @@
+{
+  "module": {
+    "name": "playlist",
+    "type": "har",
+    "description": "$string:musiclist_shared_desc",
+    "deviceTypes": [
+      "phone",
+      "tablet",
+      "tv",
+      "wearable"
+    ],
+    "routerMap": "$profile:router_map"
+  }
+}

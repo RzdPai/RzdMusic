@@ -1,0 +1,380 @@
+﻿{
+  "string": [
+    {
+      "name": "setting_title",
+      "value": "设置"
+    },
+    {
+      "name": "setting_lx_section_title",
+      "value": "音源管理"
+    },
+    {
+      "name": "setting_lx_empty",
+      "value": "暂无导入的音源，点击下方按钮导入"
+    },
+    {
+      "name": "setting_lx_ready",
+      "value": "✓ 就绪"
+    },
+    {
+      "name": "setting_lx_import_file",
+      "value": "导入音源脚本"
+    },
+    {
+      "name": "setting_lx_import_online",
+      "value": "在线导入"
+    },
+    {
+      "name": "setting_online_import_title",
+      "value": "在线导入音源"
+    },
+    {
+      "name": "setting_online_import_placeholder",
+      "value": "输入音源脚本 URL（http/https）"
+    },
+    {
+      "name": "setting_online_import_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "setting_online_import_confirm",
+      "value": "导入"
+    },
+    {
+      "name": "setting_online_import_loading",
+      "value": "导入中…"
+    },
+    {
+      "name": "setting_theme_title",
+      "value": "主题颜色"
+    },
+    {
+      "name": "setting_theme_custom",
+      "value": "自定义"
+    },
+    {
+      "name": "setting_theme_apply",
+      "value": "应用"
+    },
+    {
+      "name": "setting_ambient_title",
+      "value": "沉浸光感强度"
+    },
+    {
+      "name": "setting_mini_lyric_title",
+      "value": "播放页显示小歌词"
+    },
+    {
+      "name": "setting_audio_mix_title",
+      "value": "与其他应用同时播放"
+    },
+    {
+      "name": "setting_download_dir_title",
+      "value": "保存到应用 Download 目录"
+    },
+    {
+      "name": "setting_download_name_title",
+      "value": "下载文件名称格式"
+    },
+    {
+      "name": "setting_playlist_add_title",
+      "value": "添加到列表位置"
+    },
+    {
+      "name": "mine_playlists_title",
+      "value": "我的歌单"
+    },
+    {
+      "name": "mine_playlist_import",
+      "value": "导入"
+    },
+    {
+      "name": "mine_playlist_new",
+      "value": "新建"
+    },
+    {
+      "name": "mine_playlist_more",
+      "value": "更多"
+    },
+    {
+      "name": "mine_playlist_name_placeholder",
+      "value": "请输入歌单名称"
+    },
+    {
+      "name": "mine_playlist_confirm",
+      "value": "确定"
+    },
+    {
+      "name": "mine_playlist_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "mine_playlist_export",
+      "value": "导出歌单"
+    },
+    {
+      "name": "mine_playlist_rename",
+      "value": "重命名"
+    },
+    {
+      "name": "mine_playlist_delete",
+      "value": "删除歌单"
+    },
+    {
+      "name": "mine_playlist_empty",
+      "value": "暂无歌单，点击右上角新建"
+    },
+    {
+      "name": "search_song_menu",
+      "value": "歌曲菜单"
+    },
+    {
+      "name": "search_menu_play",
+      "value": "播放"
+    },
+    {
+      "name": "search_menu_download",
+      "value": "下载"
+    },
+    {
+      "name": "search_menu_add_playlist",
+      "value": "添加到歌单"
+    },
+    {
+      "name": "search_add_to_playlist",
+      "value": "添加到歌单"
+    },
+    {
+      "name": "mine_playlist_new_confirm",
+      "value": "新建并添加"
+    },
+    {
+      "name": "search_menu_add_favorite",
+      "value": "添加到收藏"
+    },
+    {
+      "name": "setting_quality_title",
+      "value": "播放音质"
+    },
+    {
+      "name": "mine_title",
+      "value": "我的"
+    },
+    {
+      "name": "mine_history_title",
+      "value": "播放历史"
+    },
+    {
+      "name": "mine_favorites_title",
+      "value": "我的收藏"
+    },
+    {
+      "name": "mine_about_title",
+      "value": "关于"
+    },
+    {
+      "name": "mine_about_app_name",
+      "value": "应用名称"
+    },
+    {
+      "name": "mine_about_version",
+      "value": "版本"
+    },
+    {
+      "name": "mine_version",
+      "value": "1.7.0"
+    },
+    {
+      "name": "mine_about_bundle",
+      "value": "包名"
+    },
+    {
+      "name": "mine_bundle_name",
+      "value": "com.rzdpai.music"
+    },
+    {
+      "name": "mine_about_qq_group",
+      "value": "QQ群"
+    },
+    {
+      "name": "mine_qq_group",
+      "value": "1050543607"
+    },
+    {
+      "name": "mine_donate",
+      "value": "捐赠支持"
+    },
+    {
+      "name": "mine_about_desc",
+      "value": "派音 · LX Music 鸿蒙移植版，基于 MusicHome 工程与 LX 音源协议"
+    },
+    {
+      "name": "search_title",
+      "value": "搜索"
+    },
+    {
+      "name": "search_placeholder",
+      "value": "搜索在线歌曲"
+    },
+    {
+      "name": "search_button",
+      "value": "搜索"
+    },
+    {
+      "name": "search_play_all",
+      "value": "播放全部"
+    },
+    {
+      "name": "search_hot_title",
+      "value": "热搜推荐"
+    },
+    {
+      "name": "search_history_title",
+      "value": "搜索历史"
+    },
+    {
+      "name": "search_history_clear",
+      "value": "清空"
+    },
+    {
+      "name": "setting_last_error_title",
+      "value": "最近一次音源错误"
+    },
+    {
+      "name": "setting_log_title",
+      "value": "运行日志"
+    },
+    {
+      "name": "setting_log_copy",
+      "value": "复制"
+    },
+    {
+      "name": "setting_log_refresh",
+      "value": "刷新"
+    },
+    {
+      "name": "setting_log_empty",
+      "value": "暂无日志"
+    },
+    {
+      "name": "search_empty_hint",
+      "value": "输入关键词搜索在线歌曲"
+    },
+    {
+      "name": "setting_group_source",
+      "value": "音源设置"
+    },
+    {
+      "name": "setting_group_playback",
+      "value": "播放设置"
+    },
+    {
+      "name": "setting_group_download",
+      "value": "下载设置"
+    },
+    {
+      "name": "setting_group_theme",
+      "value": "主题"
+    },
+    {
+      "name": "setting_group_other",
+      "value": "其它"
+    },
+    {
+      "name": "setting_sub_quality",
+      "value": "播放音质"
+    },
+    {
+      "name": "setting_sub_mini_lyric",
+      "value": "播放页显示小歌词"
+    },
+    {
+      "name": "setting_sub_audio_mix",
+      "value": "与其他应用同时播放"
+    },
+    {
+      "name": "setting_sub_lyric_blur",
+      "value": "歌词页模糊效果"
+    },
+    {
+      "name": "setting_sub_lyric_font_size",
+      "value": "歌词字号"
+    },
+    {
+      "name": "setting_sub_name_format",
+      "value": "文件名称格式"
+    },
+    {
+      "name": "setting_sub_save_location",
+      "value": "保存位置"
+    },
+    {
+      "name": "setting_sub_theme_color",
+      "value": "主题颜色"
+    },
+    {
+      "name": "setting_sub_color_mode",
+      "value": "日间夜间"
+    },
+    {
+      "name": "setting_sub_ambient",
+      "value": "沉浸光感强度"
+    },
+    {
+      "name": "setting_sub_add_position",
+      "value": "添加到列表位置"
+    },
+    {
+      "name": "setting_sub_keep_screen_on",
+      "value": "歌词页不熄屏"
+    },
+    {
+      "name": "setting_sub_quality_tag",
+      "value": "下载文件标注音质"
+    },
+    {
+      "name": "setting_sub_home_source",
+      "value": "首页来源平台"
+    },
+    {
+      "name": "setting_sub_use_account_rec",
+      "value": "使用登录获取推荐"
+    },
+    {
+      "name": "setting_sub_about",
+      "value": "关于"
+    },
+    {
+      "name": "setting_sub_log",
+      "value": "日志"
+    },
+    {
+      "name": "setting_color_mode_light",
+      "value": "日间"
+    },
+    {
+      "name": "setting_color_mode_dark",
+      "value": "夜间"
+    },
+    {
+      "name": "setting_color_mode_system",
+      "value": "跟随系统"
+    },
+    {
+      "name": "setting_save_manual",
+      "value": "手动选择"
+    },
+    {
+      "name": "setting_save_download",
+      "value": "Download目录"
+    },
+    {
+      "name": "menu_add_to_queue",
+      "value": "添加到播放列表"
+    },
+    {
+      "name": "setting_search_placeholder",
+      "value": "搜索设置"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "string": [
+    {
+      "name": "playlist_home_title",
+      "value": "Mine"
+    },
+    {
+      "name": "playlist_home_clear_history",
+      "value": "Clear"
+    },
+    {
+      "name": "playlist_home_history",
+      "value": "History"
+    },
+    {
+      "name": "playlist_home_favorites",
+      "value": "Favorites"
+    },
+    {
+      "name": "playlist_home_history_empty",
+      "value": "No play history yet"
+    },
+    {
+      "name": "playlist_home_favorites_empty",
+      "value": "No favorite songs yet"
+    }
+  ]
+}

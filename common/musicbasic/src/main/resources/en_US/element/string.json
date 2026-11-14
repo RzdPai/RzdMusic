@@ -1,0 +1,247 @@
+{
+  "string": [
+    {
+      "name": "home_tab_featured",
+      "value": "Featured"
+    },
+    {
+      "name": "home_tab_artist",
+      "value": "Artist"
+    },
+    {
+      "name": "home_tab_ai_music",
+      "value": "AI Music"
+    },
+    {
+      "name": "home_tab_charts",
+      "value": "Charts"
+    },
+    {
+      "name": "home_tab_categories",
+      "value": "Categories"
+    },
+    {
+      "name": "home_page_title",
+      "value": "Recommend"
+    },
+    {
+      "name": "home_page_title_pc",
+      "value": "Home"
+    },
+    {
+      "name": "home_search_placeholder",
+      "value": "Search"
+    },
+    {
+      "name": "home_search_placeholder_pc",
+      "value": "Songs, artists, audiobooks, and more"
+    },
+    {
+      "name": "home_for_you_title",
+      "value": "Hi Raven, recommended for you"
+    },
+    {
+      "name": "home_private_songs_title",
+      "value": "Great songs worth saving in one tap"
+    },
+    {
+      "name": "home_category_singers",
+      "value": "Top singers"
+    },
+    {
+      "name": "home_category_featured",
+      "value": "Featured songs"
+    },
+    {
+      "name": "home_category_charts",
+      "value": "Charts"
+    },
+    {
+      "name": "home_category_loading",
+      "value": "Loading..."
+    },
+    {
+      "name": "home_category_regions",
+      "value": "Regions" },
+    {
+      "name": "home_category_empty",
+      "value": "No data, please try again later"
+    },
+    {
+      "name": "playlist_detail_title",
+      "value": "Speed and Passion of Dynamic Electronic Music"
+    },
+    {
+      "name": "playlist_detail_desc",
+      "value": "High-energy rhythm — step into the world of electronic beats and soaring melodies."
+    },
+    {
+      "name": "playlist_play_count",
+      "value": "34.56M"
+    },
+    {
+      "name": "playlist_play_all",
+      "value": "Play all"
+    },
+    {
+      "name": "playlist_collect",
+      "value": "Favorite"
+    },
+    {
+      "name": "playlist_download",
+      "value": "Download"
+    },
+    {
+      "name": "playlist_tag_spatial",
+      "value": "Spatial audio"
+    },
+    {
+      "name": "private_song_title",
+      "value": "Huawei Music"
+    },
+    {
+      "name": "private_song_singer1",
+      "value": "Mason Reed"
+    },
+    {
+      "name": "private_song_singer2",
+      "value": "Blake Owen"
+    },
+    {
+      "name": "private_song_singer3",
+      "value": "Quinn Ellis"
+    },
+    {
+      "name": "private_song_singer4",
+      "value": "Noah Pierce"
+    },
+    {
+      "name": "private_song_singer5",
+      "value": "Luna Hayes"
+    },
+    {
+      "name": "private_song_singer6",
+      "value": "Ethan Cole"
+    },
+    {
+      "name": "private_song_singer7",
+      "value": "Aria Brooks"
+    },
+    {
+      "name": "private_song_singer8",
+      "value": "Logan West"
+    },
+    {
+      "name": "private_song_singer9",
+      "value": "Nora Quinn"
+    },
+    {
+      "name": "private_song_singer10",
+      "value": "Caleb Stone"
+    },
+    {
+      "name": "private_song_singer11",
+      "value": "Mia Foster"
+    },
+    {
+      "name": "private_song_singer12",
+      "value": "Owen Blake"
+    },
+    {
+      "name": "hero_banner_subline_brand",
+      "value": "HUAWEI music"
+    },
+    {
+      "name": "hero_1_badge",
+      "value": "Music FM"
+    },
+    {
+      "name": "hero_1_title",
+      "value": "Listen now"
+    },
+    {
+      "name": "hero_2_badge",
+      "value": "March 18"
+    },
+    {
+      "name": "hero_2_title",
+      "value": "Daily 30"
+    },
+    {
+      "name": "hero_3_badge",
+      "value": "NEW"
+    },
+    {
+      "name": "hero_3_title",
+      "value": "New picks"
+    },
+    {
+      "name": "hero_4_badge",
+      "value": "MODE"
+    },
+    {
+      "name": "hero_4_title",
+      "value": "Heartbeat mode"
+    },
+    {
+      "name": "hero_5_badge",
+      "value": "PICK"
+    },
+    {
+      "name": "hero_5_title",
+      "value": "Featured"
+    },
+    {
+      "name": "rec_1_title",
+      "value": "Gentle noon | Voices passing through the world"
+    },
+    {
+      "name": "rec_1_play",
+      "value": "81.88M"
+    },
+    {
+      "name": "rec_2_title",
+      "value": "Uncommon poetry choir"
+    },
+    {
+      "name": "rec_2_play",
+      "value": "57.67M"
+    },
+    {
+      "name": "rec_3_title",
+      "value": "Radio send | City outing guide"
+    },
+    {
+      "name": "rec_3_play",
+      "value": "2.57M"
+    },
+    {
+      "name": "rec_4_title",
+      "value": "Synth sounds in neon city"
+    },
+    {
+      "name": "rec_4_play",
+      "value": "1.29M"
+    },
+    {
+      "name": "rec_5_title",
+      "value": "Early summer dream in BGM"
+    },
+    {
+      "name": "rec_5_play",
+      "value": "880K"
+    },
+    {
+      "name": "rec_6_title",
+      "value": "Rock ballads with passion"
+    },
+    {
+      "name": "rec_6_play",
+      "value": "630K"
+    },
+    {
+      "name": "empty_text",
+      "value": "No content"
+    }
+  ]
+}

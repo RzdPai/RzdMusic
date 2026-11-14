@@ -1,0 +1,28 @@
+{
+  "string": [
+    {
+      "name": "playback_shared_desc",
+      "value": "shared_desc"
+    },
+    {
+      "name": "lrc_empty_placeholder",
+      "value": "Pure instrumental music"
+    },
+    {
+      "name": "player_menu_quality",
+      "value": "Switch Quality"
+    },
+    {
+      "name": "player_menu_singer",
+      "value": "Singer"
+    },
+    {
+      "name": "player_menu_album",
+      "value": "Album"
+    },
+    {
+      "name": "player_menu_share",
+      "value": "Share"
+    }
+  ]
+}

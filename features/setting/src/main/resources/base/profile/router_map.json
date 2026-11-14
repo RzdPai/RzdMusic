@@ -1,0 +1,41 @@
+{
+  "routerMap": [
+    {
+      "name": "OnlineSearchPage",
+      "pageSourceFile": "src/main/ets/view/OnlineSearchPage.ets",
+      "buildFunction": "OnlineSearchPageBuilder",
+      "data": {
+        "description": "Online multi-source music search"
+      }
+    },
+    {
+      "name": "PlatformMusicPage",
+      "pageSourceFile": "src/main/ets/account/PlatformMusicPage.ets",
+      "buildFunction": "PlatformMusicPageBuilder"
+    },
+    {
+      "name": "ArtistDetailPage",
+      "pageSourceFile": "src/main/ets/view/ArtistDetailPage.ets",
+      "buildFunction": "ArtistDetailPageBuilder",
+      "data": {
+        "description": "Singer profile with full song list"
+      }
+    },
+    {
+      "name": "AlbumDetailPage",
+      "pageSourceFile": "src/main/ets/view/AlbumDetailPage.ets",
+      "buildFunction": "AlbumDetailPageBuilder",
+      "data": {
+        "description": "Album detail with track list"
+      }
+    },
+    {
+      "name": "SettingsDetailPage",
+      "pageSourceFile": "src/main/ets/view/SettingsDetailPage.ets",
+      "buildFunction": "SettingsDetailPageBuilder",
+      "data": {
+        "description": "Settings detail sub page"
+      }
+    }
+  ]
+}

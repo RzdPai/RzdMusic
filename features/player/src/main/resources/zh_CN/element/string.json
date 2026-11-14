@@ -1,0 +1,28 @@
+{
+  "string": [
+    {
+      "name": "playback_shared_desc",
+      "value": "shared_desc"
+    },
+    {
+      "name": "lrc_empty_placeholder",
+      "value": "此歌曲为纯音乐，请欣赏"
+    },
+    {
+      "name": "player_menu_quality",
+      "value": "切换音质"
+    },
+    {
+      "name": "player_menu_singer",
+      "value": "歌手"
+    },
+    {
+      "name": "player_menu_album",
+      "value": "专辑"
+    },
+    {
+      "name": "player_menu_share",
+      "value": "分享"
+    }
+  ]
+}

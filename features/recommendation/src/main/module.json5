@@ -1,0 +1,14 @@
+{
+  "module": {
+    "name": "recommendation",
+    "type": "har",
+    "description": "$string:recommend_shared_desc",
+    "deviceTypes": [
+      "phone",
+      "tablet",
+      "tv",
+      "wearable"
+    ],
+    "routerMap": "$profile:router_map"
+  }
+}

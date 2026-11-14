@@ -1,0 +1,64 @@
+{
+  "string": [
+    {
+      "name": "recommend_shared_desc",
+      "value": "shared_desc"
+    },
+    {
+      "name": "brand_huawei_music",
+      "value": "Huawei Music"
+    },
+    {
+      "name": "capsule_nav_home",
+      "value": "Home"
+    },
+    {
+      "name": "capsule_nav_concert_hall",
+      "value": "Concert Hall"
+    },
+    {
+      "name": "capsule_nav_kids",
+      "value": "Kids"
+    },
+    {
+      "name": "capsule_nav_spatial_audio",
+      "value": "Spatial Audio"
+    },
+    {
+      "name": "capsule_nav_home_time",
+      "value": "At Home"
+    },
+    {
+      "name": "home_plaza_title",
+      "value": "Playlist Plaza"
+    },
+    {
+      "name": "home_ranking_title",
+      "value": "Rankings"
+    },
+    {
+      "name": "home_ranking_view_all",
+      "value": "All charts"
+    },
+    {
+      "name": "home_plaza_default",
+      "value": "Default"
+    },
+    {
+      "name": "home_plaza_choose_category",
+      "value": "Choose category"
+    },
+    {
+      "name": "home_plaza_load_more",
+      "value": "Load more"
+    },
+    {
+      "name": "home_plaza_no_more",
+      "value": "No more playlists"
+    },
+    {
+      "name": "home_guest_retry",
+      "value": "Tap to retry"
+    }
+  ]
+}

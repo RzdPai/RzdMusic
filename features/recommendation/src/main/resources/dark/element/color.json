@@ -1,0 +1,44 @@
+{
+  "color": [
+    {
+      "name": "chip_unselected_background",
+      "value": "#2E3033"
+    },
+    {
+      "name": "chip_selected_background",
+      "value": "#FFFFFFFF"
+    },
+    {
+      "name": "chip_unselected_text",
+      "value": "#E5FFFFFF"
+    },
+    {
+      "name": "chip_selected_text",
+      "value": "#E6000000"
+    },
+    {
+      "name": "top_bar_search_background",
+      "value": "#19FFFFFF"
+    },
+    {
+      "name": "home_icon_button_background",
+      "value": "#19FFFFFF"
+    },
+    {
+      "name": "home_icon_button_border",
+      "value": "#66FFFFFF"
+    },
+    {
+      "name": "private_song_like_color",
+      "value": "#FF1949"
+    },
+    {
+      "name": "card_title_text",
+      "value": "#E6FFFFFF"
+    },
+    {
+      "name": "card_play_count_icon",
+      "value": "#FFFFFF"
+    }
+  ]
+}
