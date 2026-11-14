@@ -43,6 +43,7 @@ export { SongPageBuilder } from './src/main/ets/view/SongPage';
 export { MusicRecognitionPageBuilder } from './src/main/ets/view/MusicRecognitionPage';
 export { VolumeSlider } from './src/main/ets/view/VolumeSlider';
 export { OnlinePlayUtil } from './src/main/ets/util/OnlinePlayUtil';
+export { probeScriptUpdate, SourceUpdateProbeResult } from './src/main/ets/util/SourceUpdateProbe';
 export { LXSourceHost } from './src/main/ets/source/LXSourceHost';
 // MusicFree 生态适配（订阅导入 / 平台识别 / 插件调用）
 export {

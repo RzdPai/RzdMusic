@@ -14,12 +14,14 @@
  *   所以：只要本会话收到过脚本的更新提示，就把"需要更新"如实说出来。
  *   数据源与设置页同一个（`lxUpdateAlert*`，由 `LXSourceEngine.handleJsMessage` 的 `updateAlert` 写）。
  */
-const KEY_UPDATE_LOG: string = 'lxUpdateAlertLog';
-const KEY_BLOCKED_LOG: string = 'lxUpdateBlockedLog';
+import { KEY_ALERT_LOG as KEY_UPDATE_LOG, KEY_BLOCKED_LOG } from 'musicbasic';
 
 /**
  * @returns 本会话内脚本上报的「需要更新」摘要（取首行，超过 60 字截断）；没有则空串。
- *          ⚠️ `AppStorage` 是内存态，所以拿到的必然是**本次启动**的提示，不存在陈旧数据。
+ *          ⚠️ `AppStorage` 是内存态 ⇒ 拿到的是**本次启动**的提示，不会跨重启陈旧；
+ *          但它是**全局**键（最后一次上报的原文，不分脚本），所以这里只适合"这个会话
+ *          有没有提示过"这种全局判断。要判断**某个源**有没有更新，
+ *          用 `musicbasic` 的 `readScriptUpdateAlert(scriptId)`。
  */
 export function pendingSourceUpdateHint(): string {
   let log: string = '';

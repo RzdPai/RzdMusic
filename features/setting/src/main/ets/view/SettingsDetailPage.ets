@@ -44,6 +44,7 @@ import { CapsuleSegmentedSelector } from './CapsuleSegmentedSelector';
 import { SourceManagerList } from './SourceManagerList';
 import { PlatformManagerSheet } from './PlatformManagerSheet';
 import { readOfficialUpdateAlert, SourceUpdateInfo } from '../util/SourceUpdate';
+import { probeScriptUpdate, SourceUpdateProbeResult } from 'player';
 import { LengthMetrics } from '@kit.ArkUI';
 
 /** 单次「测试音源」对每个平台最多试几档（从最高往下，命中即停）。 */
@@ -768,8 +769,10 @@ export struct SettingsDetailPage {
 
   /** 版本比对：脚本自带 version 与已保存版本一致即视为最新（真正的远端比对在 A4 之后接）。 */
   private async checkSourceUpdateRemote(api: LXUserApiInfo): Promise<void> {
-    // ① 只走官方：读引擎上报的 updateAlert，不再自研请求
-    const info: SourceUpdateInfo = readOfficialUpdateAlert();
+    // ① 只走官方：读引擎上报的 updateAlert，不再自研请求。
+    //    ★ 2026-11-14：**必须按脚本 id 读**。以前读的是全局键，本次启动里第一个上报过
+    //    告警的源会把对话框劫持给之后检查的所有源（甲方：「检查其它音源还是这个源的提示」）。
+    const info: SourceUpdateInfo = readOfficialUpdateAlert(api.id);
     // ★ 2026-10-29（用户：引擎日志有"更新提示"，点检查更新没反应）：把卡片与 alert 一次打全
     appendPlayLog('[RzdSourceUpdate] card=' + api.name + ' ver=' + api.version +
       ' hasUpdate=' + info.hasUpdate + ' msg=' + info.message +
@@ -791,7 +794,61 @@ export struct SettingsDetailPage {
       });
       return;
     }
-    // ① 没有更新就**静默**（只在日志里留痕）
+    // ② 更新检查被应用拦截过：**如实说"查不了"**（不能假装已是最新，也不能借别的源的告警）。
+    //    这是「有的源走的官方渠道，却不提示」的主因：星海那类脚本的版本检查 URL 命中
+    //    `UPDATE_MANIFEST_PATTERNS`（如 `versionh2.php`），被应用强制置为失败以保住可用性，
+    //    脚本的 checkUpdate 进 catch ⇒ 永远不上报 ⇒ 检查更新过去只能静默。
+    if (info.blocked) {
+      // ★ 2026-11-14：脚本的版本检查被拦了（为了"未更新也能用"），脚本因此不会上报告警。
+      //   这里由应用**原样重放**那条被拦的 URL 拿真实结论 —— URL 是从脚本自己的请求里
+      //   抓的（含 ?ver=…），不需要猜任何规则；且只在用户主动点「检查更新」时发。
+      const probe: SourceUpdateProbeResult = await probeScriptUpdate(info.blockedUrl, api.version);
+      appendPlayLog('[RzdSourceUpdate] ' + api.name + ' blocked probe ok=' + probe.ok +
+        ' hasUpdate=' + probe.hasUpdate + ' err=' + probe.error);
+      if (probe.hasUpdate) {
+        this.getUIContext().getPromptAction().showDialog({
+          title: '发现新版本',
+          message: (probe.message.length > 0 ? probe.message : '有新版本可用') +
+            (probe.updateUrl.length > 0 ? ('\n' + probe.updateUrl) : ''),
+          buttons: [
+            { text: '取消', color: '#666666' },
+            { text: '前往更新', color: this.themeState.color }
+          ]
+        }).then((result) => {
+          if (result.index === 1 && probe.updateUrl.length > 0) {
+            this.openInBrowser(probe.updateUrl, '音源更新');
+          }
+        });
+        return;
+      }
+      if (probe.ok) {
+        // 接口有正常响应但没有更新地址：如实体贴服务端原话（星海这类返回「你已是最新版本」），
+        // 没有原话就只说"未给出更新地址" —— 都不自称"已是最新"（那是我们的推断）。
+        this.toast(probe.message.length > 0
+          ? ('「' + api.name + '」' + probe.message)
+          : ('「' + api.name + '」的更新接口未返回更新地址'));
+        return;
+      }
+      // 连代打都失败：说清"查不了"以及原因，并留一个可手动打开的线索
+      const canOpen: boolean = /^https?:\/\//.test(info.blockedUrl);
+      this.getUIContext().getPromptAction().showDialog({
+        title: '无法检查该音源的更新',
+        message: '「' + api.name + '」的版本检查已被应用拦截（为了"未更新也能用"），' +
+          '代办查询也没有成功。\n' +
+          (probe.error.length > 0 ? ('原因：' + probe.error + '\n') : '') +
+          (canOpen ? ('可手动打开它的检查地址：\n' + info.blockedUrl) : '请到音源作者的发布页确认。'),
+        buttons: canOpen
+          ? [{ text: '取消', color: '#666666' },
+             { text: '打开检查地址', color: this.themeState.color }]
+          : [{ text: '知道了', color: this.themeState.color }]
+      }).then((result) => {
+        if (canOpen && result.index === 1) {
+          this.openInBrowser(info.blockedUrl, '音源更新检查');
+        }
+      });
+      return;
+    }
+    // ③ 该源确实没有任何更新线索：静默（只在日志里留痕）
     appendPlayLog('[RzdSourceUpdate] ' + api.name + ' no update: ' + info.error);
   }
 
