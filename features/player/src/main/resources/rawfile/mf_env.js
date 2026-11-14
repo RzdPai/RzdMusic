@@ -1659,6 +1659,49 @@
       sendToNative({ event: 'mfReady', data: { gen: gen, ok: false, error: 'decode failed: ' + e.message } });
       return;
     }
+    applyPluginCode(gen, code);
+  };
+
+  // 快通道：载荷由原生 onInterceptRequest 一次性返回**原文**（不再 base64）。
+  // 协议与 LX 桥的 _lx_init_fetch 一致（这里改叫 _mf_init_*，避开已有的 _mf_fetch_response）：先回 ack 再解析/装载，原生据此判断
+  // 「载荷是否到手」而不是「插件是否已就绪」——后者会把插件自身启动慢误判成通道失败。
+  var MF_INIT_URL = 'https://rzd-mf-init.invalid/plugin.js';
+  /** 最近一次请求载荷的代际：晚到的旧代际响应直接丢弃。 */
+  var mfFetchGen = -1;
+
+  global._mf_init_fetch = function (gen) {
+    mfFetchGen = gen;
+    // 不加 cache:'no-store'：会带出 Cache-Control 请求头变成非简单请求、触发 CORS 预检
+    fetch(MF_INIT_URL + '?gen=' + gen).then(function (resp) {
+      if (!resp.ok) {
+        throw new Error('http ' + resp.status);
+      }
+      return resp.text();
+    }).then(function (text) {
+      if (gen !== mfFetchGen) {
+        log('快通道丢弃过期代际 gen=' + gen + ' 当前=' + mfFetchGen);
+        return;
+      }
+      global._mf_init_apply(gen, text);
+    }).catch(function (e) {
+      sendToNative({
+        event: 'mfFetchError',
+        data: { gen: gen, message: String(e && e.message ? e.message : e) }
+      });
+    });
+  };
+
+  global._mf_init_apply = function (gen, code) {
+    sendToNative({ event: 'mfFetchAck', data: { gen: gen, length: (code || '').length } });
+    if (!code) {
+      sendToNative({ event: 'mfReady', data: { gen: gen, ok: false, error: 'empty payload' } });
+      return;
+    }
+    applyPluginCode(gen, code);
+  };
+
+  /** 插件源码（原文）→ 加载并上报 mfReady。分片通道与快通道共用这一段。 */
+  function applyPluginCode(gen, code) {
     try {
       plugin = loadPlugin(code);
       var methods = [];
@@ -1684,7 +1727,7 @@
       log('插件加载失败: ' + msg);
       sendToNative({ event: 'mfReady', data: { gen: gen, ok: false, error: msg } });
     }
-  };
+  }
 
   global._mf_call = function (callId, method, argsJson) {
     if (plugin === null) {
