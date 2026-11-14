@@ -1,4 +1,5 @@
 import { SharePlaylistInfo, SharePlaylistSource } from './SharePlaylistTypes';
+import { platformLabel } from '../util/SourceDeclaredInfo';
 import { WyShareService } from './WyShareService';
 import { TxShareService } from './TxShareService';
 import { KwShareService } from './KwShareService';
@@ -57,15 +58,15 @@ export class SharePlaylistService {
   static sourceLabel(source: SharePlaylistSource): string {
     switch (source) {
       case SharePlaylistSource.Wy:
-        return '网易云';
+        return platformLabel(SharePlaylistSource.Wy);
       case SharePlaylistSource.Tx:
-        return 'QQ';
+        return platformLabel(SharePlaylistSource.Tx);
       case SharePlaylistSource.Kw:
-        return '酷我';
+        return platformLabel(SharePlaylistSource.Kw);
       case SharePlaylistSource.Kg:
-        return '酷狗';
+        return platformLabel(SharePlaylistSource.Kg);
       case SharePlaylistSource.Mg:
-        return '咪咕';
+        return platformLabel(SharePlaylistSource.Mg);
       default:
         return String(source);
     }

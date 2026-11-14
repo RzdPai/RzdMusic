@@ -245,7 +245,12 @@ export struct SettingsDetailPage {
    *   这两个平台的歌单广场接口可用，自建推荐在它们上面也能取到"分类 → 歌单 → 歌"。
    *   ⚠️ 值域与 `RecommendDataUtil.mapHomeSource()` 一致：qq 是 tx 的别名，其余直接用 source id。
    */
-  private readonly homeSourceOptions: string[] = ['QQ', '酷狗', '网易', '酷我', '咪咕', '汽水'];
+  /**
+   * 首页来源的**显示标签**，与下面的 `homeSourceValues` 一一对应（存的是 id，不是标签）。
+   * ⚠️ 不要用 `platformLabel()` 生成：这里的 QQ 用的是 `'qq'`（历史值），
+   *   而平台 id 表里 QQ 是 `'tx'`，套用会显示成 "qq"。
+   */
+  private readonly homeSourceOptions: string[] = ['QQ', '酷狗', '网易云', '酷我', '咪咕', '汽水'];
   private readonly homeSourceValues: string[] = ['qq', 'kg', 'wy', 'kw', 'mg', 'qs'];
   /** USB 独占状态文案（来自 UsbAudioService 的实时状态）。 */
   /** 读取 Tab 栏配置（缺省：两个都显示、现在就听在前）。 */

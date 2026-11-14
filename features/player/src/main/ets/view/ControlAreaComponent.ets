@@ -17,6 +17,7 @@ import { searchSingers, SearchPageResult, SingerInfo } from '../geuz/index';
 
 import { AppStorageV2, curves, uiObserver } from '@kit.ArkUI';
 import { AVCastPicker } from '@kit.AVSessionKit';
+import { platformLabel } from '../util/SourceDeclaredInfo';
 import { appendPlayLog, AppStorageKeys, ArtistRouteParam, BreakpointType, isWidthBreakpointLgOrXl, Logger, MusicStoreService, PlaybackPreferenceService, PlaybackIntentState, PlayedSongRecord, PlaylistDto, PlayerExpandState, RouterUrlConstants, SongItem, StyleConstants, ThemeState } from 'musicbasic';
 import { PlayerConstants } from '../constant/PlayerConstants';
 import { MusicPlayMode } from '../model/MusicData';
@@ -615,11 +616,10 @@ export struct ControlAreaComponent {
     if (src.length === 0 || src === 'local') {
       return src === 'local' ? '本地' : '';
     }
-    const map: Record<string, string> = {
-      'tx': 'QQ', 'wy': '网易', 'kg': '酷狗', 'kw': '酷我', 'mg': '咪咕', 'qs': '汽水'
-    };
-    const name: string | undefined = map[src];
-    return name !== undefined ? name : src;
+    // ★ 2026-11-14：中文名统一取 `platformLabel()`（唯一一份），
+    //   这里原来自带一份 map，且把 `wy` 写成「网易」（别处是「网易云」）。
+    const name: string = platformLabel(src);
+    return name.length > 0 ? name : src;
   }
 
 

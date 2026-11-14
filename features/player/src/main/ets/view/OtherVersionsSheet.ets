@@ -4,6 +4,7 @@ import { AppStorageKeys, MusicAppState, PlaybackIntentState, SongItem, ThemeStat
 import { LXSearchResult, LXSearchSong, lxSearch } from '../source/LXMusicSDK';
 import { lxEngineIsReady } from '../source/LXSourceEngine';
 import { OnlinePlayUtil } from '../util/OnlinePlayUtil';
+import { platformLabel } from '../util/SourceDeclaredInfo';
 
 class VersionResultRow {
   key: string = '';
@@ -66,8 +67,14 @@ export struct OtherVersionsSheet {
   private queueItemsSnapshot: SongItem[] = [];
   private idsValueSnapshot: string = '';
   private intentVersion: number = 0;
+  /**
+   * 要跨源比对的平台。
+   * ★ 2026-11-14：原来这里还有一个平行的 `sourceNames` 数组（**只有 5 项**，漏了「汽水」），
+   *   而 `sources` 有 6 项 ⇒ `sourceNames[5]` 是 undefined，「汽水」那一栏标题是空的。
+   *   现在中文名统一取 `platformLabel()`（`SourceDeclaredInfo` 里的唯一一份），
+   *   两个数组不可能再漂移。
+   */
   private readonly sources: string[] = ['kw', 'kg', 'tx', 'wy', 'mg', 'qs'];
-  private readonly sourceNames: string[] = ['酷我', '酷狗', 'QQ', '网易', '咪咕'];
 
   private intent(): PlaybackIntentState {
     return AppStorageV2.connect(PlaybackIntentState, AppStorageKeys.PLAYBACK_INTENT_STATE,
@@ -186,7 +193,7 @@ export struct OtherVersionsSheet {
       const result: PromiseSettledResult<LXSearchResult> = results[i];
       const header: VersionResultRow = new VersionResultRow();
       header.key = 'source:' + this.sources[i];
-      header.label = this.sourceNames[i];
+      header.label = platformLabel(this.sources[i]);
       rows.push(header);
       if (result.status === 'fulfilled') {
         const seen: Set<string> = new Set<string>();

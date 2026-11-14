@@ -6,6 +6,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import {appBarBlurStyle,  guardPlayerBack} from 'musicbasic';
 import { AppStorageKeys, AmbientState, MusicAppState, MusicStoreService, SongTitleMarquee, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
+import { platformLabel } from '../util/SourceDeclaredInfo';
 import { RecognitionResult, RecognitionStatus, EngineReport, EngineResultGroup } from '../recognize/RecognitionTypes';
 import { MicCancelledError, MicPermissionError, MicRecorder } from '../recognize/MicRecorder';
 import { RecognitionNetworkError } from '../recognize/errors';
@@ -119,14 +120,10 @@ export struct MusicRecognitionPage {
     }
   }
 
+  /** 平台中文名统一取 `platformLabel()`（`SourceDeclaredInfo` 里的唯一一份）。 */
   private providerName(provider: string): string {
-    if (provider === 'kg') {
-      return '酷狗';
-    }
-    if (provider === 'wy') {
-      return '网易云';
-    }
-    return provider;
+    const text: string = platformLabel(provider);
+    return text.length > 0 ? text : provider;
   }
 
   /** True when the app currently renders in dark color mode (drives status bar icon color). */

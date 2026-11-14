@@ -5,7 +5,7 @@ import { musicFreeApisForPlatform } from '../source/MusicFreeAdapter';
 import { LXUserApiInfo, LXUserApiSourceInfo } from '../source/Interface';
 import { lxSourceManager } from '../source/LXSourceManager';
 import { markProbeFail, markProbeOk } from './LxQualityProbe';
-import { isMfPlatformId, mfApiIdOf, normalizePlatformId, platformIdFromLabel } from './SourceDeclaredInfo';
+import { isLxPlatform, isMfPlatformId, mfApiIdOf, normalizePlatformId, platformIdFromLabel, platformLabel } from './SourceDeclaredInfo';
 
 export const QUALITY_CHAIN: string[] =
   ['master', 'atmos_plus', 'atmos', 'hires', 'flac24bit', 'flac', '320k', '128k'];
@@ -13,15 +13,6 @@ export const QUALITY_CHAIN: string[] =
 export const EXTENDED_QUALITIES: string[] = ['master', 'atmos_plus', 'atmos', 'hires'];
 
 const STANDARD_LADDER: string[] = ['flac24bit', 'flac', '320k', '128k'];
-
-const SOURCE_NAMES: Record<string, string> = {
-  'kw': '酷我',
-  'kg': '酷狗',
-  'tx': 'QQ',
-  'wy': '网易云',
-  'qs': '汽水',
-  'mg': '咪咕'
-};
 
 /** 跨平台搜索顺序（排除原平台后按此优先）。 */
 // 汽水（qs）也参与跨平台搜索（2026-10-30）
@@ -261,9 +252,10 @@ export function qualityDisplayName(q: string): string {
 }
 
 export function sourceDisplayName(source: string): string {
-  const name: string | undefined = SOURCE_NAMES[source];
-  if (name !== undefined) {
-    return name;
+  // ★ 2026-11-14：LX 六平台的中文名不再在本文件维护第二份，统一取
+  //   `SourceDeclaredInfo.platformLabel()`（顺带支持 `qsvip`/`soda` 等别名折叠）。
+  if (isLxPlatform(source)) {
+    return platformLabel(source);
   }
   // MusicFree 平台：名字跟随源（小蜗 / 元力KW）。记录页 / 历史页都靠这里取中文名，
   // 显示 `mfplat:` 前缀的原始 id 对用户没有意义。
