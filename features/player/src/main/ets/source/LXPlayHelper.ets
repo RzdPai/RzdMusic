@@ -3,7 +3,7 @@ import { lxEngineSendRequest, lxEngineRegisterPromise, lxEngineIsReady } from '.
 import { lxSearch, lxLeaderboard, LXSearchSong } from './LXMusicSDK';
 import { lxSourceManager } from './LXSourceManager';
 import { isMfOnlyPlatform, mfGetLyric, mfGetMediaSource, mfGetSheetSongs, mfSearch, musicFreeApisForPlatform } from './MusicFreeAdapter';
-import { isMfPlatformId } from '../util/SourceDeclaredInfo';
+import { isLxPlatform, isMfPlatformId } from '../util/SourceDeclaredInfo';
 import { LXUserApiInfo } from './Interface';
 import { qsBoardSongs, qsPlaylistDetail } from '../geuz/QsApi';
 import { appendError } from 'musicbasic';
@@ -291,9 +291,14 @@ export async function getLXMusicUrl(source: string, songId: string, quality: str
   if (!lxEngineIsReady || lxEngineSendRequest === null || lxEngineRegisterPromise === null) {
     // ★ LX 引擎没就绪（没导入 LX 脚本 / 脚本全部不可用）不再直接失败：
     //   用户可能只导入了 MusicFree 插件，那就该走插件取地址。
-    const fallback: string = await tryMusicFreeUrl(source, songId, quality, name, singer);
-    if (fallback.length > 0) {
-      return fallback;
+    // ★ 2026-11-14：但**洛雪六平台**同样不许升级到插件 —— 与 `allowMfRescue`、
+    //   `buildCandidateChain`（六平台候选链不摆插件）保持同一条定稿规则，
+    //   否则「LX 不能回退到 MF」就有第三个后门。插件歌回退洛雪是反方向，不在此列。
+    if (!isLxPlatform(source)) {
+      const fallback: string = await tryMusicFreeUrl(source, songId, quality, name, singer);
+      if (fallback.length > 0) {
+        return fallback;
+      }
     }
     logError('engine not ready');
     throw new Error('引擎未就绪或回调未初始化');
@@ -324,7 +329,20 @@ export async function getLXMusicUrl(source: string, songId: string, quality: str
       }
     }, (reason: Error): void => {
       logError('fail ' + reason.message);
-      // LX 脚本拿不到 → 试 MusicFree 同平台插件（用户可能两个都装了）
+      // ★ 2026-11-14（甲方再次确认：「LX 不能回退到 MF，但是 MF 可以回退到 LX」，
+      //   且提醒「mf 的源里面也可以有 kw」）：
+      //   洛雪六平台**失败后不得临时升级到 MusicFree 插件** —— 这条定稿本来只写在
+      //   SourceFallbackUtil 的 `allowMfRescue` 里，而这里是个后门：无条件 try 一次
+      //   同平台插件，既不看平台规则、也不看用户勾选（`enabledMusicFreeApis` 只看平台），
+      //   后果是每次洛雪失败都白等一次插件装载（真机实测 502 之后白等 6s），
+      //   还会把**没勾选**的插件拉起来。
+      //   勾选过的 MusicFree 插件要参与洛雪平台播放，走的是回退链里的 `isMf` 候选
+      //   （按勾选顺序），不需要这个后门。非洛雪平台保留原行为。
+      if (isLxPlatform(source)) {
+        logError('mf-skip lx ' + source);
+        reject(reason);
+        return;
+      }
       tryMusicFreeUrl(source, songId, quality, name, singer).then((url: string): void => {
         if (url.length > 0) {
           resolve(url);
