@@ -78,6 +78,12 @@ export { SongItem, QualityInfo } from './src/main/ets/model/SongData';
 export { OptionItem } from './src/main/ets/model/OptionItem';
 export { MusicAppState } from './src/main/ets/model/MusicAppState';
 export { PlaybackIntentState } from './src/main/ets/model/PlaybackIntentState';
+export {
+  SourceUpdateInfo, readScriptUpdateAlert, readGlobalUpdateAlert, globalAlertOwnedBy,
+  scriptAlertUrlKey, scriptAlertLogKey, scriptAlertAtKey,
+  scriptBlockedAtKey, scriptBlockedUrlKey, scriptAllowKey,
+  KEY_ALERT_LOG, KEY_ALERT_URL, KEY_ALERT_AT, KEY_ALERT_OWNER, KEY_BLOCKED_LOG, KEY_BLOCKED_URL
+} from './src/main/ets/model/SourceUpdateAlert';
 export { SongDataSource } from './src/main/ets/model/SongDataSource';
 export { PlayedSongRecord } from './src/main/ets/model/PlayedSongRecord';
 export { TabSwitchState } from './src/main/ets/model/TabSwitchState';

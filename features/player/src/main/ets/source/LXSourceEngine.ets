@@ -3,7 +3,13 @@ import { util } from '@kit.ArkTS';
 import { http } from '@kit.NetworkKit';
 import { LXUserApiInfoFull, LXUserApiSourceInfo, LXSourceRequestData } from './Interface';
 import { lxSourceManager } from './LXSourceManager';
-import { appendPlayLog, MusicStoreService } from 'musicbasic';
+import {
+  appendPlayLog, MusicStoreService,
+  scriptAlertUrlKey, scriptAlertLogKey, scriptAlertAtKey,
+  scriptBlockedAtKey, scriptBlockedUrlKey, scriptAllowKey,
+  KEY_ALERT_LOG, KEY_ALERT_URL, KEY_ALERT_AT, KEY_ALERT_OWNER,
+  KEY_BLOCKED_LOG, KEY_BLOCKED_URL
+} from 'musicbasic';
 import { ScriptProfile, probeScript, formatProfile, canRunWithoutWebView } from './ScriptProbe';
 
 export let lxEngineSendRequest: ((key: string, data: LXSourceRequestData) => void) | null = null;
@@ -753,16 +759,6 @@ appendPlayLog(msg);
     'checkupdate', 'check-update', 'upgrade.json', 'updateinfo', '/lx/version'
   ];
 
-  /** 某脚本被拦过更新检查（值为时间戳）。 */
-  private static blockedKey(scriptId: string): string {
-    return 'lxUpdateBlocked:' + scriptId;
-  }
-
-  /** 某脚本豁免拦截（上次拦了它还是起不来 ⇒ 下次放行让脚本自己决定）。 */
-  private static allowKey(scriptId: string): string {
-    return 'lxUpdateCheckAllow:' + scriptId;
-  }
-
   private matchesAny(url: string, patterns: string[]): boolean {
     for (let i: number = 0; i < patterns.length; i++) {
       if (url.indexOf(patterns[i]) >= 0) {
@@ -778,7 +774,7 @@ appendPlayLog(msg);
    */
   private shouldBlockUpdateCheck(url: string, scriptId: string): boolean {
     if (scriptId.length > 0) {
-      const allow: boolean = (AppStorage.get<boolean>(LXSourceEngine.allowKey(scriptId)) ?? false) === true;
+      const allow: boolean = (AppStorage.get<boolean>(scriptAllowKey(scriptId)) ?? false) === true;
       if (allow) {
         return false;
       }
@@ -791,11 +787,13 @@ appendPlayLog(msg);
   private noteBlockedUpdateCheck(url: string, scriptId: string, scriptName: string): void {
     const text: string = '音源「' + scriptName + '」的更新检查已被拦截（保持可用）：' + url.substring(0, 80);
     try {
-      AppStorage.setOrCreate('lxUpdateBlockedLog', text);
-      AppStorage.setOrCreate('lxUpdateBlockedUrl', url);
+      AppStorage.setOrCreate(KEY_BLOCKED_LOG, text);
+      AppStorage.setOrCreate(KEY_BLOCKED_URL, url);
       AppStorage.setOrCreate('lxUpdateBlockedVersion', Date.now());
       if (scriptId.length > 0) {
-        AppStorage.setOrCreate(LXSourceEngine.blockedKey(scriptId), Date.now());
+        AppStorage.setOrCreate(scriptBlockedAtKey(scriptId), Date.now());
+        // 按脚本记下被拦的那条 URL：设置页点「检查更新」时据此说明"为什么查不了"
+        AppStorage.setOrCreate(scriptBlockedUrlKey(scriptId), url);
       }
     } catch (e) {
       // AppStorage 不可用时只打日志
@@ -812,11 +810,11 @@ appendPlayLog(msg);
     if (scriptId.length === 0) {
       return;
     }
-    const blockedAt: number = AppStorage.get<number>(LXSourceEngine.blockedKey(scriptId)) ?? 0;
+    const blockedAt: number = AppStorage.get<number>(scriptBlockedAtKey(scriptId)) ?? 0;
     if (blockedAt <= 0) {
       return;
     }
-    AppStorage.setOrCreate(LXSourceEngine.allowKey(scriptId), true);
+    AppStorage.setOrCreate(scriptAllowKey(scriptId), true);
     LXSourceEngine.appendLog('[音源] ' + (this.currentApiInfo?.name ?? scriptId) +
       ' 拦截更新检查后仍未就绪（' + reason + '）⇒ 下次放行更新检查');
   }
@@ -1000,13 +998,21 @@ appendPlayLog(msg);
           let updateUrl: string = (data.updateUrl as string) || '';
           LXSourceEngine.appendLog('[音源] 更新提示: ' + log.substring(0, 200) +
             (updateUrl.length > 0 ? ' url=' + updateUrl : ''));
+          // ★ 2026-11-14（甲方：「检查出来之后检查其它音源还是这个源的提示」）：
+          //   告警**必须按脚本分开存**。以前只有全局 `lxUpdateAlert*`，于是本次启动里
+          //   第一个上报过告警的源，会把「发现新版本」对话框劫持给之后检查的所有源。
+          AppStorage.setOrCreate(scriptAlertUrlKey(this.currentScriptId), updateUrl);
+          AppStorage.setOrCreate(scriptAlertLogKey(this.currentScriptId), log);
+          AppStorage.setOrCreate(scriptAlertAtKey(this.currentScriptId), Date.now());
+          // 全局键继续写（播放失败的「音源需要更新」提示要用），但**记下归属**，
+          // 读的人据此判断这条告警是不是当前这个源的，跨源就不再借用。
+          AppStorage.setOrCreate(KEY_ALERT_OWNER, this.currentScriptId);
+          AppStorage.setOrCreate(KEY_ALERT_LOG, log);
+          AppStorage.setOrCreate(KEY_ALERT_URL, updateUrl);
+          AppStorage.setOrCreate(KEY_ALERT_AT, Date.now());
+          // 回调是**附加**动作：以前写在 else 里，一旦有人接了这根线，设置页就永远读不到。
           if (this.onUpdateAlert !== null) {
             this.onUpdateAlert(log, updateUrl);
-          } else {
-            // 无 UI 回调时落 AppStorage，设置页可读取展示
-            AppStorage.setOrCreate('lxUpdateAlertLog', log);
-            AppStorage.setOrCreate('lxUpdateAlertUrl', updateUrl);
-            AppStorage.setOrCreate('lxUpdateAlertVersion', Date.now());
           }
           break;
         }
@@ -1077,8 +1083,18 @@ appendPlayLog(msg);
         const jsText: string = msg.getMessage();
         if (jsText.indexOf('更新提示') >= 0) {
           const u: RegExpMatchArray | null = jsText.match(/url=(\S+)/);
-          AppStorage.setOrCreate('rzd_update_alert_url', u !== null && u.length > 1 ? u[1] : '');
-          AppStorage.setOrCreate('rzd_update_alert_log', jsText.substring(0, Math.min(jsText.length, 160)));
+          const alertUrl: string = u !== null && u.length > 1 ? u[1] : '';
+          const alertLog: string = jsText.substring(0, Math.min(jsText.length, 160));
+          // ★ 2026-11-14：**同时按脚本分键**。有些脚本只 console 打「更新提示」、不 send
+          //   updateAlert；以前这里只写全局 `rzd_update_alert_*`，导致「检查更新」去扫
+          //   整段播放日志（`lastIndexOf('更新提示')`）—— 那必然抓到**别的源**的提示。
+          if (this.currentScriptId.length > 0) {
+            AppStorage.setOrCreate(scriptAlertUrlKey(this.currentScriptId), alertUrl);
+            AppStorage.setOrCreate(scriptAlertLogKey(this.currentScriptId), alertLog);
+            AppStorage.setOrCreate(scriptAlertAtKey(this.currentScriptId), Date.now());
+          }
+          AppStorage.setOrCreate('rzd_update_alert_url', alertUrl);
+          AppStorage.setOrCreate('rzd_update_alert_log', alertLog);
         }
       } catch (e) {
       }

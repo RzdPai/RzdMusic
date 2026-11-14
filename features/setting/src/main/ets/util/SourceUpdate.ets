@@ -1,79 +1,33 @@
 /*
  * Copyright (c) 2026 RzdPai
  *
- * 音源更新：**只走官方通道**。
+ * 音源更新：**只走官方通道**（读脚本自己上报的 updateAlert，不自研请求）。
  *
- * 洛雪脚本在 `UPDATE_ENABLE` 为真时会调用它的 checkUpdate，并通过
- * `lx.EVENT_NAMES.updateAlert` 上报 `{ log, updateUrl }`；我们的引擎已经接住并写入
- * AppStorage（见 `LXSourceEngine.ets` 的 `case 'updateAlert'`：
- * `lxUpdateAlertUrl` / `lxUpdateAlertLog` / `lxUpdateAlertVersion`）。
+ * 2026-11-14 收敛到 `musicbasic` 的 `SourceUpdateAlert`：
+ *   · 键名与读取逻辑只有一份（历史上键名写错过一次，导致「检查更新」恒为 false）；
+ *   · 告警**按脚本分键**，`readOfficialUpdateAlert(scriptId)` 绝不跨源借用
+ *     —— 修「检查出来之后检查其它音源还是这个源的提示」；
+ *   · 更新检查被应用拦截过的脚本如实回报 `blocked`（我们没查到，也不该说"已是最新"）。
  *
- * ★ 2026-10-30 清理：之前我额外加过一套 `rzd_update_alert_*` 键与 `appendLog` 抓取，
- *   既是重复通道、键名又写错（官方键是 `lxUpdateAlert*`），于是「检查更新」一直是 false。
- *   现在收敛到这一处，按三条优先级读：
- *     ① 官方 alert（引擎写 AppStorage）
- *     ② 播放日志缓冲里的「更新提示: … url=…」（有些脚本只打日志、不上报 alert）
- *     ③ AppStorageV2 的 UpdateAlertState 镜像（历史兼容）
+ * 旧实现里的两处已删除：
+ *   ① 扫播放日志 `lastIndexOf('更新提示')`：日志是全局的，抓到的必然是**最后一个**打
+ *      「更新提示」的源，正是串台的来源。现在引擎在 onConsole 里就按脚本分键写好了。
+ *   ② AppStorageV2 的 `UpdateAlertState` 镜像：同一份数据存两处，只会漂移。
  */
 
-import { AppStorageV2 } from '@kit.ArkUI';
+import { SourceUpdateInfo, readScriptUpdateAlert, readGlobalUpdateAlert } from 'musicbasic';
 
-/** 引擎上报的 updateAlert 镜像（AppStorageV2 通道）。 */
-@ObservedV2
-export class UpdateAlertState {
-  @Trace updateUrl: string = '';
-  @Trace log: string = '';
-}
-
-/** 一次检查的结果。 */
-export class SourceUpdateInfo {
-  hasUpdate: boolean = false;
-  message: string = '';
-  updateUrl: string = '';
-  error: string = '';
-}
+export { SourceUpdateInfo };
 
 /**
  * 读取官方 updateAlert（不发生任何网络请求）。
- * @returns 有更新时 `hasUpdate=true` 并带 url/log；否则 `error` 给出说明。
+ * @param scriptId 音源脚本 id；传了就只看**这个源**自己的告警（推荐）
+ * @returns 结果；`hasUpdate` / `blocked` 都为假表示该源没有任何更新线索
  */
-export function readOfficialUpdateAlert(): SourceUpdateInfo {
-  const out: SourceUpdateInfo = new SourceUpdateInfo();
-  const state: UpdateAlertState | undefined =
-    AppStorageV2.connect(UpdateAlertState, 'rzd_update_alert', () => new UpdateAlertState());
-
-  // ① 官方通道：引擎接住脚本的 updateAlert 事件后写下的键
-  let url: string = AppStorage.get<string>('lxUpdateAlertUrl') ?? '';
-  let log: string = AppStorage.get<string>('lxUpdateAlertLog') ?? '';
-
-  // ② 日志兜底：脚本只打「更新提示: … url=…」时，从播放日志缓冲里抓
-  if (url.length === 0) {
-    const buf: string = AppStorage.get<string>('lxPlayLog') ?? '';
-    const idx: number = buf.lastIndexOf('更新提示');
-    if (idx >= 0) {
-      const line: string = buf.substring(idx, Math.min(buf.length, idx + 200));
-      const m: RegExpMatchArray | null = line.match(/url=(\S+)/);
-      if (m !== null && m.length > 1) {
-        url = m[1];
-      }
-      log = line.split('\n')[0].substring(0, 120);
-    }
+export function readOfficialUpdateAlert(scriptId: string = ''): SourceUpdateInfo {
+  if (scriptId.length > 0) {
+    return readScriptUpdateAlert(scriptId);
   }
-
-  // ③ 历史镜像兜底
-  if (url.length === 0 && state !== undefined && state.updateUrl.length > 0) {
-    url = state.updateUrl;
-    log = state.log;
-  }
-
-  if (url.length > 0) {
-    out.hasUpdate = true;
-    out.updateUrl = url;
-    out.message = log;
-    console.info('[RzdSourceUpdate] alert url=' + url);
-    return out;
-  }
-  out.error = '该音源未上报更新（脚本 UPDATE_ENABLE 未开启或已是最新）';
-  console.info('[RzdSourceUpdate] no alert');
-  return out;
+  // 拿不到脚本 id 才退回全局口径（会跨源共用，只适合做"本会话有没有提示过"的判断）
+  return readGlobalUpdateAlert();
 }
