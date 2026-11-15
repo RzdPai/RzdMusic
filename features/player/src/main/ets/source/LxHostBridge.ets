@@ -170,6 +170,49 @@ function md5Of(text: string): string {
   }
 }
 
+/**
+ * 计算摘要（WebCrypto `crypto.subtle.digest` 的底层）。
+ * @param alg SHA1/SHA224/SHA256/SHA384/SHA512（已去掉连字符、大写）
+ * @param data 原始字节
+ * @returns 摘要字节
+ */
+function digestBytes(alg: string, data: Uint8Array): Uint8Array {
+  // `digestSync()` **不收参数**：先 updateSync 灌数据，再 digestSync() 取结果（踩过一次）。
+  const md: cryptoFramework.Md = cryptoFramework.createMd(alg.length > 0 ? alg : 'SHA256');
+  md.updateSync({ data: data });
+  const out: cryptoFramework.DataBlob = md.digestSync();
+  return out.data;
+}
+
+/**
+ * HMAC（WebCrypto `crypto.subtle.sign({name:'HMAC'})` 的底层）。
+ */
+function hmacBytes(alg: string, key: Uint8Array, data: Uint8Array): Uint8Array {
+  // 官方口径：`createMac('SHA256')` 算 HMAC-SHA256；密钥要用 `createSymKeyGenerator('HMAC|SHA256')`
+  // 的 `convertKeySync` 转成 SymKey（`Mac.init` 收的是 SymKey，不是裸字节 —— 这坑先踩过）。
+  const a: string = alg.length > 0 ? alg : 'SHA256';
+  const gen: cryptoFramework.SymKeyGenerator = cryptoFramework.createSymKeyGenerator('HMAC|' + a);
+  const symKey: cryptoFramework.SymKey = gen.convertKeySync({ data: key });
+  const mac: cryptoFramework.Mac = cryptoFramework.createMac(a);
+  mac.initSync(symKey);
+  mac.updateSync({ data: data });
+  return mac.doFinalSync().data;
+}
+
+/** base64 → 字节（失败返回空数组，调用方按空处理）。 */
+function bytesFromB64(b64: string): Uint8Array {
+  try {
+    return new util.Base64Helper().decodeSync(b64);
+  } catch (_e) {
+    return new Uint8Array(0);
+  }
+}
+
+/** 字节 → base64。 */
+function b64FromBytes(bytes: Uint8Array): string {
+  return new util.Base64Helper().encodeToStringSync(bytes);
+}
+
 /** 随机字节 → base64。 */
 function randomBytesBase64(n: number): string {
   try {
@@ -227,6 +270,19 @@ export async function handleHostCalls(rt: QuickJsRuntime, calls: QuickJsCall[],
         case 'crypto.md5': {
           const args: Record<string, Object> = parseArgs(call.args);
           rt.resolve(call.id, JSON.stringify(md5Of(String(args['s'] ?? ''))), true);
+          break;
+        }
+        case 'crypto.digest': {
+          const args: Record<string, Object> = parseArgs(call.args);
+          const data: Uint8Array = bytesFromB64(String(args['b64'] ?? ''));
+          rt.resolve(call.id, JSON.stringify(b64FromBytes(digestBytes(String(args['alg'] ?? ''), data))), true);
+          break;
+        }
+        case 'crypto.hmac': {
+          const args: Record<string, Object> = parseArgs(call.args);
+          const key: Uint8Array = bytesFromB64(String(args['keyB64'] ?? ''));
+          const data: Uint8Array = bytesFromB64(String(args['dataB64'] ?? ''));
+          rt.resolve(call.id, JSON.stringify(b64FromBytes(hmacBytes(String(args['alg'] ?? ''), key, data))), true);
           break;
         }
         case 'crypto.randomBytes': {

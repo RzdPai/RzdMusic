@@ -152,11 +152,13 @@ export function probeScript(script: string): ScriptProfile {
  */
 export function canRunWithoutWebView(profile: ScriptProfile): boolean {
   // ★ 2026-11-15（用户：「是特性，不是整个脚本」）——按**能力**判，不是按脚本整体一刀切：
-  //   · XHR：PRELUDE 有垫片（转宿主 http）⇒ 不阻断；
-  //   · DOM / WebCrypto / CompressionStream / WebSocket：QuickJS 侧确实提供不了 ⇒ 阻断。
-  //   以后每补齐一项能力，就从这里去掉一个条件 —— 这就是"按特性混合"的进度条。
-  return !profile.needsDom && !profile.needsWebCrypto &&
-    !profile.needsCompression && !profile.needsWebSocket;
+  //   · XHR：有垫片（转宿主 http）⇒ 不阻断；
+  //   · crypto.subtle：已补 digest/HMAC 子集 ⇒ 不再一票否决；真用到 AES/RSA 会 reject，
+  //     由"失败即回落 + 记住判定"接住；
+  //   · CompressionStream / WebSocket：还没补 ⇒ 仍然阻断（补完就从这里去掉）；
+  //   · **真 DOM：永远阻断**（等于要再实现一个浏览器，不做）。
+  //   每补齐一项能力就从这里删一个条件 —— 这就是"按特性混合"的进度条。
+  return !profile.needsDom && !profile.needsCompression && !profile.needsWebSocket;
 }
 
 /**

@@ -199,6 +199,68 @@ const PRELUDE: string = `
     globalThis.clearInterval = clearTimer;
   }
 
+  // ── WebCrypto 子集（2026-11-15：把"签名类"能力从 WebView 搬到 ArkTS）──────
+  // LX 脚本用 crypto.subtle 绝大多数是为了**签名**：digest(SHA-256) 与 HMAC。
+  // 这里给出这两个的最小实现（底层是 ArkTS 的 cryptoFramework），
+  // 于是"用了 crypto.subtle"不再一票否决 QuickJS —— 真用到 AES/RSA 之类没实现的算子时，
+  // Promise 会 reject，宿主侧 qjs miss -> webview 接住并记住判定（失败即回落）。
+  var b64FromBuf = function (buf) {
+    var bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+    var bin = '';
+    for (var i = 0; i < bytes.length; i++) { bin += String.fromCharCode(bytes[i]); }
+    return globalThis.btoa(bin);
+  };
+  var bufFromB64 = function (b64) {
+    var bin = globalThis.atob(b64);
+    var out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) { out[i] = bin.charCodeAt(i); }
+    return out.buffer;
+  };
+  var normalizeAlg = function (alg) {
+    var m = alg && alg.hash ? alg.hash : alg;
+    var name = (m && m.name) ? m.name : m;
+    return String(name || '').toUpperCase().replace('-', '');
+  };
+  if (typeof globalThis.crypto === 'undefined') { globalThis.crypto = {}; }
+  if (typeof globalThis.crypto.getRandomValues !== 'function') {
+    globalThis.crypto.getRandomValues = function (arr) {
+      var n = arr.length;
+      globalThis.__qjsCall('crypto.randomBytes', { n: n }).then(function (b64) {
+        var bytes = new Uint8Array(bufFromB64(b64));
+        for (var i = 0; i < n && i < bytes.length; i++) { arr[i] = bytes[i]; }
+      });
+      return arr;
+    };
+  }
+  if (typeof globalThis.crypto.subtle === 'undefined') {
+    globalThis.crypto.subtle = {
+      digest: function (alg, data) {
+        return globalThis.__qjsCall('crypto.digest',
+          { alg: normalizeAlg(alg), b64: b64FromBuf(data) }).then(function (out) {
+            return bufFromB64(out);
+          });
+      },
+      importKey: function (format, keyData, alg) {
+        // 只支持 raw 的 HMAC 密钥：直接存字节，sign 时再交给宿主
+        return Promise.resolve({ __hmacKeyB64: b64FromBuf(keyData), __alg: normalizeAlg(alg) });
+      },
+      sign: function (alg, key, data) {
+        if (!key || !key.__hmacKeyB64) {
+          return Promise.reject(new Error('unsupported key for crypto.subtle.sign'));
+        }
+        return globalThis.__qjsCall('crypto.hmac', {
+          alg: normalizeAlg(alg) || key.__alg,
+          keyB64: key.__hmacKeyB64,
+          dataB64: b64FromBuf(data)
+        }).then(function (out) { return bufFromB64(out); });
+      },
+      // 未实现的算子：**明确 reject**（让宿主回落 WebView，别静默返回错数据）
+      encrypt: function () { return Promise.reject(new Error('crypto.subtle.encrypt not available in QuickJS')); },
+      decrypt: function () { return Promise.reject(new Error('crypto.subtle.decrypt not available in QuickJS')); },
+      verify: function () { return Promise.reject(new Error('crypto.subtle.verify not available in QuickJS')); }
+    };
+  }
+
   // ── XMLHttpRequest（2026-11-15：按**特性**路由的关键一块）───────────────
   // LX 脚本里有一部分是直接用 new XMLHttpRequest() 的，不走 lx.request。
   // 以前这类脚本只能整支丢给 WebView；现在用它把请求转成宿主调用（ArkTS 侧 http），

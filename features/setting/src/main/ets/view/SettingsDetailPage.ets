@@ -2017,10 +2017,12 @@ export struct SettingsDetailPage {
           // ★ 2026-11-15：从「只显示状态」升级成**可选**。
           //   QuickJS 现在能跑真实脚本、能重放取址请求并拿到与 WebView **完全一致**的地址，
           //   所以可以给开关了；任何时候 QuickJS 失败都会自动回落 WebView（混合，不是二选一）。
-          this.CapsuleSelector(['自动', 'WebView', 'QuickJS'],
-            this.lxEngineMode === 'webview' ? 1 : (this.lxEngineMode === 'quickjs' ? 2 : 0),
+          // 三个取值沿用存储键的 auto/quickjs/webview，界面上按用户口径叫：
+          // 混合（默认，按能力自动选）/ QuickJS优先 / ArkWeb优先
+          this.CapsuleSelector(['混合', 'QuickJS优先', 'ArkWeb优先'],
+            this.lxEngineMode === 'quickjs' ? 1 : (this.lxEngineMode === 'webview' ? 2 : 0),
             (index: number) => {
-              const mode: string = index === 1 ? 'webview' : (index === 2 ? 'quickjs' : 'auto');
+              const mode: string = index === 1 ? 'quickjs' : (index === 2 ? 'webview' : 'auto');
               this.lxEngineMode = mode;
               MusicStoreService.getInstance().setLxEngineMode(mode);
             })
@@ -2048,8 +2050,8 @@ export struct SettingsDetailPage {
             .fontColor($r('app.color.font_tertiary'))
             .width('100%')
             .margin({ top: 6 })
-          Text('自动：只对「一键测」验证过的脚本走 QuickJS，其余走 WebView。' +
-            'WebView：永远走浏览器引擎。QuickJS：强制走本地引擎，失败自动回落。')
+          Text('混合：按脚本用到的能力自动选 —— 能力都搬过来了就走 QuickJS，否则走 ArkWeb；' +
+            '失败也会自动回落。QuickJS优先 / ArkWeb优先：固定优先某一侧，另一种只做兜底。')
             .fontSize(12)
             .fontColor($r('app.color.font_tertiary'))
             .width('100%')
