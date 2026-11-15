@@ -1563,6 +1563,36 @@ export class MediaService {
    * 连续 2 次播放失败会写 `ijk_disabled`（持久化），之后汽水先走系统播放器；
    * 现在 mpv 是唯一内核，该标记启动时会被清掉（见构造函数）。
    */
+  /**
+   * 这条地址是否「必须交给内核」。
+   *
+   * ★ 2026-11-15（真机日志）：B 站（MusicFree 插件）给的是 DASH 分片
+   *   `…/136667343_u2-1-30232.m4s?…`，AVPlayer 直接报
+   *   `5400106 Unsupported Format: CONTAINER_ERR - unsupport container format type`
+   *   ⇒ 落进跨源回退、按歌名换到别的平台（**源被悄悄换掉**，用户听到的不是原本那首源）。
+   *   这与汽水那条「分片 mp4（`audio_mp4`）AVPlayer 解不出分片索引」是**同一类问题**，
+   *   已有先例就是交给 mpv，所以这里把 DASH 分片也纳入。
+   *
+   * ⚠️ 只按**格式特征**判断（不按域名）：`.m4s` 是分片媒体段（moof+mdat），
+   *   AVPlayer 明确不支持；`.m4a`/`.mp4` 完整文件仍走 AVPlayer。
+   *   万一内核也解不开，`markKernelFail()` 只计数不降级（2026-10-31 起内核是唯一的，
+   *   不再"连续失败就永久降级"），失败照旧由上层跨源重试兜底 ⇒ 不会连累汽水。
+   * @param source 歌曲来源平台 id
+   * @param url 已还原的直链
+   * @returns 需要内核时为 true
+   */
+  private needsKernelForUrl(source: string, url: string): boolean {
+    if (source === 'qs') {
+      // 汽水：分片 mp4，AVPlayer 拿得到总时长但解不出分片索引（进度恒 0）
+      return true;
+    }
+    if (url.indexOf('audio_mp4') >= 0) {
+      return true;
+    }
+    // DASH 分片媒体段（B 站 `.m4s` 等）：AVPlayer 报 CONTAINER_ERR
+    return url.indexOf('.m4s') >= 0;
+  }
+
   private isKernelEnabled(): boolean {
     // ★ 2026-10-31（用户拍板）：播放内核统一走 mpv，不再提供「系统播放器 / FFmpeg」选项。
     //   只有当 mpv 连续失败被自动降级（ijk_disabled）时才回落 AVPlayer。
@@ -1931,7 +1961,7 @@ export class MediaService {
     // ★ 2026-10-30：汽水给的是 douyinvod 分片 mp4（`audio_mp4`，MSE 用途），
     //   AVPlayer 能拿到总时长但解不出分片索引 ⇒ 进度恒 0。改走 mpv 音频内核。
     const tuningOn: boolean = this.isTuningActive();
-    if (!this.isKernelEnabled() && (songItem.source === 'qs' || outcome.url.indexOf('audio_mp4') >= 0)) {
+    if (!this.isKernelEnabled() && this.needsKernelForUrl(songItem.source, outcome.url)) {
       this.appendPlayLog('[播放] mpv unavailable -> soda on AVPlayer');
     }
     // ★ 2026-10-31（汽水"12s 未就绪"根因）：内核必须吃**还原后的直链**，不是跳转壳。
@@ -1939,9 +1969,9 @@ export class MediaService {
     //   然后失败重试又落到 AVPlayer（5411001 Cannot Find Host）→ 一直跳歌。
     const directUrl: string = this.unwrapRedirectUrl(outcome.url);
     const kernelUrl: string = directUrl.length > 0 ? directUrl : outcome.url;
-    if (this.isKernelEnabled() && (songItem.source === 'qs' || outcome.url.indexOf('audio_mp4') >= 0)) {
+    if (this.isKernelEnabled() && this.needsKernelForUrl(songItem.source, outcome.url)) {
       this.kernelUrl = kernelUrl;
-      this.appendPlayLog('[播放] hls -> kernel ' + kernelName(preferredKernel()));
+      this.appendPlayLog('[播放] fragment/dash -> kernel ' + kernelName(preferredKernel()));
     } else if (tuningOn && this.isKernelEnabled()) {
       // ★ 播放设置有非默认的音效/升降调：普通曲目也走 FFmpeg，否则 EQ 无处可生效
       this.kernelUrl = kernelUrl;
