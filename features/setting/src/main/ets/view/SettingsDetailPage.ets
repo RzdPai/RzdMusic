@@ -23,6 +23,7 @@ import { common, ConfigurationConstant, Want } from '@kit.AbilityKit';
 
 import { http } from '@kit.NetworkKit';
 import { pasteboard } from '@kit.BasicServicesKit';
+import { notificationManager } from '@kit.NotificationKit';
 import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, HomeSourceState, LyricCenterState, LyricFontSizeState, LyricFpsState, MotionCoverState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, immersiveFromLevel } from 'musicbasic';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
@@ -176,6 +177,18 @@ export struct SettingsDetailPage {
   @Local bluetoothLyric: boolean = false;
   /** 系统是否支持桌面歌词：undefined = 还没探测过。 */
   @Local desktopLyricSupport: boolean | undefined = undefined;
+  /** 桌面歌词悬浮窗是否被用户锁定（解锁入口只保留通知栏，这里只用于提示文案）。 */
+  @Local desktopLyricLocked: boolean = false;
+  /**
+   * MediaService 锁状态回调（aboutToAppear 注册、aboutToDisappear 摘除，两者必须传同一引用）。
+   *
+   * ★ 2026-11-15：移植自 GitHub 已合并的 PR #9 / #11 的净效果 ——
+   *   锁定后悬浮窗自身不再响应，解锁入口**只有通知栏那条通知**（用户 2026-11-12 定调），
+   *   所以这里只做提示，不再放应用内解锁按钮。
+   */
+  private readonly onDesktopLyricLockChange: (locked: boolean) => void = (locked: boolean): void => {
+    this.desktopLyricLocked = locked;
+  };
   /**
    * 锁屏继续播放（默认 **开**）。
    *
@@ -335,6 +348,9 @@ export struct SettingsDetailPage {
   private pageScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
+    // 桌面歌词锁定态：先同步一次（可能在别处已经锁了），再注册变化监听
+    this.desktopLyricLocked = MediaService.getInstance().isDesktopLyricLocked();
+    MediaService.getInstance().addDesktopLyricLockListener(this.onDesktopLyricLockChange);
     // USB 独占：设置页打开时轮询设备（本 SDK 无 attach/detach 事件）
     UsbAudioService.getInstance().startPolling();
     this.refresh();
@@ -756,6 +772,8 @@ export struct SettingsDetailPage {
 
   aboutToDisappear(): void {
     this.stopEnginePolling();
+    // 摘除锁状态监听（传注册时的同一引用，见 onDesktopLyricLockChange）
+    MediaService.getInstance().removeDesktopLyricLockListener(this.onDesktopLyricLockChange);
   }
 
   private selectLXSource(apiId: string): void {
@@ -1847,6 +1865,11 @@ export struct SettingsDetailPage {
     if (!this.desktopLyric) {
       return '';
     }
+    if (this.desktopLyricLocked) {
+      // 锁定时悬浮窗自身不再响应；解锁入口只保留通知栏，这里只提示用户去哪儿找
+      return '桌面歌词已锁定：位置固定、不再响应拖动和设置。需要调整时展开通知栏，' +
+        '点「桌面歌词已锁定」通知里的「解锁歌词」按钮。';
+    }
     return '';
   }
 
@@ -1955,6 +1978,13 @@ export struct SettingsDetailPage {
               MusicStoreService.getInstance().setDesktopLyric(isOn);
               // 立刻生效：开 → 需要时先 enable 再显示；关 → 收起悬浮窗
               MediaService.getInstance().refreshDesktopLyric();
+              if (isOn) {
+                // ★ 2026-11-15（PR #11）：解锁悬浮窗**只有**通知栏那条带按钮的通知，
+                //   没授权通知就发不出来 ⇒ 锁定后用户再也解不开。所以开开关时（用户手势时机）
+                //   顺手申请一次通知授权；已授权则静默。
+                const notifCtx = getContext(this) as common.UIAbilityContext;
+                void notificationManager.requestEnableNotification(notifCtx).catch((): void => {});
+              }
             })
           Text(this.desktopLyricHint())
             .fontSize($r('sys.float.Caption_M'))
