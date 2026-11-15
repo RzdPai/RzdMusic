@@ -484,6 +484,7 @@ export class LocalMusic {
           return true;
         }
       } catch (_e) {
+        // accessSync 抛错 = 文件不存在（歌词被用户删了/从没落盘），按"没有歌词"处理
       }
     }
     try {
@@ -661,6 +662,7 @@ export class LocalMusic {
       try {
         options.maxSelectNumber = 1;
       } catch (_e) {
+        // 个别 ROM 的 picker 不接受这个字段：设不上就算了，选目录本身不依赖它
       }
       const documentPicker: picker.DocumentViewPicker = new picker.DocumentViewPicker(context);
       results = await documentPicker.select(options);
@@ -682,6 +684,10 @@ export class LocalMusic {
           uris = listFolderFiles(decoded);
         }
       } catch (_e) {
+        // ★ 2026-11-15（§7.6）：pick 返回 0 条时的兜底路径，失败必须留痕 ——
+        //   否则用户看到的就是"选了文件夹导进来 0 首"，日志里一句解释都没有
+        appendPlayLog(`[本地音乐] folder fallback failed ${folderUri}: ` +
+          JSON.stringify(_e).substring(0, 100));
       }
     }
     if (uris.length === 0) {
@@ -823,6 +829,7 @@ export class LocalMusic {
         try {
           fs.unlinkSync(dest);
         } catch (_e) {
+          // 本来就没拷成功/已被别的路径删掉：不删也行，下次导入同一首会覆盖
         }
         return 'unsupported';
       }
@@ -837,6 +844,7 @@ export class LocalMusic {
             lrc = `${key}.lrc`;
           }
         } catch (_e) {
+          // 同 L486：不存在就是没有 ID3 内嵌歌词
         }
       }
       const entry: LocalSongEntry = {
@@ -1023,6 +1031,9 @@ export class LocalMusic {
           this.writeSidecarLrc(key, full.main);
         }
       } catch (_e) {
+        // ★ 2026-11-15（§7.6）：本地歌"没有歌词"要能分清是**接口失败**还是**没匹配到**
+        appendPlayLog(`[本地音乐] lyric fetch failed ${info.name}: ` +
+          JSON.stringify(_e).substring(0, 100));
       }
     }
     this.persist();
@@ -1067,6 +1078,9 @@ export class LocalMusic {
               this.persist();
             }
           } catch (_e) {
+            // 批量补歌词：单首失败不该中断整批，但失败率是"为什么还有歌没词"的唯一线索
+            appendPlayLog(`[本地音乐] lyric backfill failed ${song.name}: ` +
+              JSON.stringify(_e).substring(0, 100));
           }
         }
         result.ok++;
@@ -1417,11 +1431,13 @@ export class LocalMusic {
       try {
         fs.unlinkSync(path);
       } catch (_e) {
+        // 删不掉的坏文件就留在盘上（下面还会查 keep 列表），不阻断其余条目
       }
       if (song.lrc.length > 0) {
         try {
           fs.unlinkSync(`${this.dir}/${song.lrc}`);
         } catch (_e) {
+          // 歌词可能本来就不存在（用户手删过）
         }
       }
       this.byKey.delete(song.key);
@@ -2121,6 +2137,7 @@ async function downloadBytes(url: string): Promise<ArrayBuffer | null> {
     try {
       req.destroy();
     } catch (_e2) {
+      // 请求已结束/已销毁：destroy 幂等失败无意义
     }
   }
 }
@@ -2182,6 +2199,7 @@ function decodeId3Text(data: Uint8Array): string {
     }
     return latin1ToString(body).trim();
   } catch (_e) {
+    // 走到这里说明上面的分支里有编码异常 —— 下面用 UTF-8 尽力再解一次，解不出就是空串
   }
   return cleanId3String(decodeText(body, 'utf-8'));
 }
