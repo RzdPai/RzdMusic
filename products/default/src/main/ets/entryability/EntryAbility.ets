@@ -25,7 +25,7 @@ import { CardImageHelper } from '../musiccard/CardImageHelper';
 import { appendPlayLog, getAppRuntime, Logger, MusicCardBridge, MusicCardSnapshot, MusicStoreService, WindowUtil } from 'musicbasic';
 import { HomeBackBridge } from '../pages/HomeBackBridge';
 import { AppStorageKeys, MorphShrinkState, PlayerExpandState } from 'musicbasic';
-import { lxSourceManager, MediaService } from 'player';
+import { lxSourceManager, MediaService, quickJsSelfTest } from 'player';
 import type { LXApiImportResult } from 'player';
 
 /** AppStorage key：上一次「用派音打开脚本」的结果文案（供窗口就绪后 toast）。 */
@@ -52,6 +52,10 @@ export default class EntryAbility extends UIAbility {
     this.handleViewDataWant(want);
     // 冷启动也可能是点了通知栏「解锁歌词」按钮拉起（会话没建好时 unlockDesktopLyric 内部安全返回 false）
     this.handleUnlockLyricWant(want);
+    // ★ 2026-11-15：QuickJS 引擎自检（双引擎 Phase 1）。纯日志、不参与业务、失败不抛。
+    //   真机日志里看到 `[qjs] self-test ok …` 才说明 libquickjs.so 能加载 / 引擎能建 /
+    //   投递箱（宿主桥）能往返 —— 这是把 LX 脚本从 WebView 迁到 QuickJS 的前置条件。
+    quickJsSelfTest();
   
     // Tab 栏自定义：启动时把配置读进 AppStorage，壳层（Index.ets）据此决定渲染哪几个页签
     try {

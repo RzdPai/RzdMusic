@@ -72,6 +72,7 @@ export {
 } from './src/main/ets/source/PlatformSearch';
 export type { MfSubscriptionEntry, MfImportReport } from './src/main/ets/source/MusicFreeAdapter';
 export { LXSourceEngine, lxEngineIsReady } from './src/main/ets/source/LXSourceEngine';
+export { QuickJsRuntime, QuickJsCall, quickJsSelfTest } from './src/main/ets/source/QuickJsRuntime';
 export { lxSourceManager } from './src/main/ets/source/LXSourceManager';
 export type { LXApiImportResult } from './src/main/ets/source/LXSourceManager';
 // 自定义音源的跨设备搬运载荷（**全仓唯一实现**）：WebDAV / 系统华为云空间 / 旧网页云盘
