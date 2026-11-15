@@ -3023,7 +3023,9 @@ struct Index {
       }
       .hideTitleBar(true)
       .onBackPressed((): boolean => {
-        return true;
+        // ★ 2026-11-15（移植自已合并的 PR #9）：这里原来无条件 `return true`，
+        //   把首页的物理返回键彻底吞掉了；正确做法是交给 `handleShellBack()` 决定。
+        return this.handleShellBack();
       })
     } else if (name === SEARCH_ROUTE_NAME) {
       OnlineSearchPage({
