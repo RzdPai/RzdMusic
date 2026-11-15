@@ -61,7 +61,10 @@ export async function applyScreenOrientation(context: common.UIAbilityContext): 
     return true;
   } catch (err) {
     const e: BusinessError = err as BusinessError;
-    appendPlayLog('[RzdOrientation] apply failed code=' + e.code + ' mode=' + mode);
+    // 1300002 = 「窗口未创建或已销毁」。调用方必须在窗口就绪后调（见 EntryAbility 的注释），
+    // 这里把错误码含义直接写进日志，免得下次又要去查文档。
+    const hint: string = e.code === 1300002 ? ' (窗口未就绪/已销毁)' : '';
+    appendPlayLog('[RzdOrientation] apply failed code=' + e.code + hint + ' mode=' + mode);
     return false;
   }
 }

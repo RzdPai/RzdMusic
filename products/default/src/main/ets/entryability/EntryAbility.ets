@@ -67,8 +67,11 @@ export default class EntryAbility extends UIAbility {
     } catch (err) {
       appendPlayLog('[RzdTabConfig] boot read failed');
     }
-    // 应用用户设置的屏幕方向（auto / portrait / landscape）
-    void applyScreenOrientation(this.context);
+    // 应用用户设置的屏幕方向交给 onWindowStageCreate —— ★ 2026-11-15：
+    //   原来写在这里，但 onCreate 阶段**窗口还没创建**，`window.getLastWindow()` 必抛
+    //   `1300002 This window state is abnormal. Possible cause: The window is not created or destroyed.`
+    //   ⇒ 用户设的「横屏/竖屏」在冷启动时**根本不生效**（每次日志都能看到 apply failed）。
+    //   ⇒ 挪到窗口就绪之后再调。
   }
 
   /**
@@ -188,6 +191,9 @@ export default class EntryAbility extends UIAbility {
         const isDark: boolean = this.context.config.colorMode ===
           ConfigurationConstant.ColorMode.COLOR_MODE_DARK;
         windowUtil.applyNavigationBarColor(isDark);
+        // ★ 2026-11-15：窗口此时才真正就绪，应用用户设置的屏幕方向（auto/portrait/landscape）。
+        //   放在这里才拿得到 window；onCreate 阶段调必然 1300002。
+        void applyScreenOrientation(this.context);
       } catch (err) {
         let error = err as BusinessError;
         Logger.error(`WindowUtil init error ${error.code} ${error.message}`);
