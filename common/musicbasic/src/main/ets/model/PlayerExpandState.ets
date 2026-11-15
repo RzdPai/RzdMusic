@@ -269,10 +269,10 @@ export function areaLengthToVp(value: Length | undefined): number {
  * 鑰屼笖杩蜂綘鏉″皝闈笌鎾斁椤靛ぇ灏侀潰鍦ㄥ姩鐢绘湡闂撮兘琚殣钘忥紝鐢婚潰涓婂彧鏈変竴寮犲皝闈㈠湪椋烇紝
  * 涓嶄細鍑虹幇涓ゅ紶灏侀潰鍚屾椂鍙鐨勯噸褰便€?
  *
- * ## 鐩镐綅
+ * ## 相位
  *
  * ```
- *   绌洪棽         preparing            animating             绌洪棽
+ *   空闲         preparing            animating             空闲
  *  progress=1 鈫?progress=0 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈫?progress 0鈫? 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈫?progress=1
  *  锛堟湭鎸傝浇锛?  椤甸潰閫忔槑銆侀噺涓ょ鐭╁舰    椋炶灏侀潰鍙銆佽糠浣犳潯灏侀潰闅愯棌
  * ```
@@ -360,8 +360,8 @@ export class PlayerExpandState {
    *
    * 鈿狅笍 鐢?`onAreaChange` 鑰屼笉鏄?`getRectangleById`锛氬悗鑰呯殑鏂囨。娌℃湁鍐欏崟浣嶏紙瀹炴祴鍙ｅ緞涓?px锛夛紝
    * 鍓嶈€呮槑纭槸 vp銆傚姩鐢荤殑浣嶇Щ涓庡昂瀵搁兘鐩存帴褰?vp 鐢紝鍗曚綅閿欎簡浼氭暣浣撻敊浣嶄竴鏁翠釜瀵嗗害鍊嶃€?
-   * @param x 宸﹁竟鐣岋紙vp锛岀獥鍙ｅ潗鏍囷級
-   * @param y 涓婅竟鐣岋紙vp锛岀獥鍙ｅ潗鏍囷級
+   * @param x 左边界（vp，窗口坐标）
+   * @param y 上边界（vp，窗口坐标）
    * @param size 杈归暱锛坴p锛?
    * @param radius 鍦嗚锛坴p锛?
    */
@@ -377,8 +377,8 @@ export class PlayerExpandState {
 
   /**
    * 鎾斁椤靛ぇ灏侀潰涓婃姤鑷繁鍦ㄧ獥鍙ｄ腑鐨勭煩褰€傚姩鐢诲涓婚潬瀹冨垽鏂€岀粓鐐归噺鍒颁簡娌℃湁銆嶃€?
-   * @param x 宸﹁竟鐣岋紙vp锛岀獥鍙ｅ潗鏍囷級
-   * @param y 涓婅竟鐣岋紙vp锛岀獥鍙ｅ潗鏍囷級
+   * @param x 左边界（vp，窗口坐标）
+   * @param y 上边界（vp，窗口坐标）
    * @param size 杈归暱锛坴p锛?
    * @param radius 鍦嗚锛坴p锛?
    */
@@ -498,9 +498,9 @@ export class PlayerExpandState {
    *   `clamp((effT-0.18)/0.44)`锛夆€斺€?鎻愬彇鎴愬嚱鏁板弽鑰屾洿闅惧拰鍙嶇紪璇戦€愬瓧瀵圭収锛屾墍浠ユ病鎺ャ€?
    * 鈿狅笍 鐣欑潃鏄负浜?*涓嬩竴澶?*瑕佺敤鏃跺埆鍐嶆墜鍐欎竴閬嶏紙鎵嬪啓灏辨湁鍐欓敊鍖洪棿鐨勯闄╋級锛?
    *    瀹冩槸 `private static` 涓旀槸**绾嚱鏁?*锛屼笉浼氳璇綋鎴愮姸鎬佸叆鍙ｃ€?
-   * @param value 杩涘害
-   * @param from 鍖洪棿璧风偣
-   * @param to 鍖洪棿缁堢偣
+   * @param value 进度
+   * @param from 区间起点
+   * @param to 区间终点
    * @returns 褰掍竴鍖栧€?
    * 澶嶆牳鍛戒护锛歚grep -rn 'window01' RzdMusic --include=*.ets`锛堟湡鏈涳細鍙湁鏈瀹氫箟锛?
    */
@@ -653,7 +653,7 @@ export class PlayerExpandState {
   // 鏃犵晫 `MainPage` 閭ｄ竴灞傛湁涓€瀵瑰父閲忥紙`寮€鍏虫挱鏀惧櫒-鎵嬪娍璺緞瀹氱.md` 搂0 閫熸煡 L27/L29 +
   // 搂鍏?甯搁噺琛?L620-631锛涘嚭澶勪氦鍙夎 `ExpandAnimation椹卞姩涓庤ˉ闂村畾绋?md` 搂涓?
   // 銆屼袱濂楁椂闀胯〃鐨勭湡瀹炲叧绯汇€嶁€斺€擿ENTER_MS`/`REVERSE_MS` **鍚屽睘 MainPage 閭ｄ竴灞?*锛夛細
-  //   路 杩涘叆锛歚ENTER_MS = 560` + `EASE_OUT_STR (0.23,1,0.32,1)`
+  //   · 进入：`ENTER_MS = 560` + `EASE_OUT_STR (0.23,1,0.32,1)`
   //   路 鏀惰捣锛歚animateMorphT(reverseMs, t=0, REVERSE_EASING)`锛屽叾涓?
   //     `reverseMs = round(REVERSE_MS(460) 脳 max(REVERSE_MIN_RATIO(0.4), morphT))`銆?
   //     `REVERSE_EASING = cubic-bezier(0.85, 0, 0.5, 0.88)`
@@ -677,7 +677,7 @@ export class PlayerExpandState {
   //   锛堝悓鏂囦欢鍏跺畠鎺ュ彛閮芥槸 `declare interface`锛夆噿 瀹冧笉鏄叏灞€鍙鐨勶紱`@kit.ArkUI` 涔?*娌℃湁**
   //   瀵煎嚭 `UIShape`锛堢紪璇戝疄娴嬶細`Module '"@kit.ArkUI"' has no exported member 'UIShape'`锛夈€?
   //   鈬?鏇茬嚎**灏卞湪鍞竴閭ｄ釜 `animateTo` 鐨勮皟鐢ㄧ偣涓婂唴鑱斿啓**锛堟湰娆℃敼鎴愭寜 `progress` 璧颁袱鍒嗘敮鐨勪笁鍏冿級锛?
-  //   涓庡伐绋嬮噷鏃㈡湁鐨勪袱澶勫悓娆撅紙`products/default .../Index.ets`銆乣PlaybackPage.ets`锛夛細
+  //   与工程里既有的两处同款（`products/default .../Index.ets`、`PlaybackPage.ets`）：
   //       curve: curves.cubicBezierCurve(0.23, 1.0, 0.32, 1.0)
   //   鏀规洸绾垮彧鏀归偅**涓€澶?*锛坄morphOverlayTweenTo` 閲岋級锛屼笉瑕佸彟璧峰寘瑁呫€?
 
@@ -826,7 +826,7 @@ export class PlayerExpandState {
    * 浣嗗厠闅嗗眰鐨勬樉闅愰棬鏄?`morphOverlayBridging()`锛? 娴眰杩涘害 `morphOverlayP` 鍦?(0,1) 涔嬮棿锛夛紝
    * **涓よ€呬笉鏄簰琛ュ叧绯?* 鈬?鍙娴眰閭ｆ潯琛ラ棿娌¤窇璧锋潵锛堟垨宸茶窇鍒?0锛夛紝灏变細鎺夎繘
    * **"鐪熷皝闈笉鐢?+ 鍏嬮殕灞備笉鐢?鐨勭┖妗?*锛?
-   *   路 涓嬫媺鍏抽棴锛氱┖妗ｉ噷灞忎笂**娌℃湁灏侀潰**锛屼竴鐩寸瓑鍒版挱鏀鹃〉钀戒綅锛坄morphLand()` 涔嬪悗
+   *   · 下拉关闭：空档里屏上**没有封面**，一直等到播放页落位（`morphLand()` 之后
    *     `morphContainerActive()` 杞亣锛夌湡灏侀潰鎵嶅啋鍑烘潵 鈬?瑙傛劅"灏侀潰**鍒板姩鐢荤粨鏉熸墠鏀惰捣**"锛?
    *   路 鐐瑰嚮鎵撳紑锛氬悓鐞嗭紝璧锋墜閭ｄ竴娈垫病鏈夊皝闈紝鑰岄〉闈㈠凡缁忛摵寮€ 鈬?瑙傛劅"灏侀潰**鐩存帴灏卞埌缁撴潫浣嶇疆**"銆?
    *
@@ -1028,7 +1028,7 @@ export class PlayerExpandState {
    *
    * 鈽呪槄 澶嶆牳锛?026-10-15锛屽垽鎹 `git grep -n coverVisualRadius -- "*.ets"`锛夛細
    *    **鏈嚱鏁板叏浠撻浂璋冪敤鐐?*锛堝彧鏈夎繖涓€澶勫畾涔?+ 涓ゅ娉ㄩ噴锛夛紝鎵€浠?D3 璁扮殑杩欐潯宸紓
-   *    **骞朵笉鍦ㄦ椿鐨勬覆鏌撹矾寰勪笂**銆傛椿鐨勫渾瑙掓槸杩欎袱鏉★細
+   *    **并不在活的渲染路径上**。活的圆角是这两条：
    *    路 **褰㈠彉瀹瑰櫒**锛歚applyMorphProgress()` 閲?`morphRadius = visualRadius / scale`锛?
    *      鑰?`visualRadius = initRadiusVisual * (1 - t)`锛坄initRadiusVisual = 鑳跺泭楂?/ 2`锛?
    *      鈥斺€?杩?*宸茬粡灏辨槸鏃犵晫鐨勫舰鐘?*锛氫袱绔偣绾挎€ф彃鍊?+ **闄や互 scale**
@@ -1063,7 +1063,7 @@ export class PlayerExpandState {
   // 鎴戜滑杩欒竟**鍒绘剰涓嶉潬杩愯鏃舵祴閲?*锛氭瓕璇嶉〉灏侀潰鐨勪綅缃洿鎺ョ敱绐楀彛灏哄绠楀嚭鏉?
   // 锛坄LYRIC_COVER_EDGE_VP` + 鍑犱釜姣斾緥锛夛紝杩欐牱锛?
   //   1. 涓嶄緷璧?`onAreaChange` 鐨勬椂搴忥紙閭ｄ釜鍦ㄥ垏椤靛姩鐢婚噷寰堝鏄撴嬁鍒颁腑闂存€侊級锛?
-  //   2. 浠绘剰鏃跺埢鎵撴柇閮借嚜娲斤紱
+  //   2. 任意时刻打断都自洽；
   //   3. 绐勫睆/瀹藉睆閮借窡鐫€绐楀彛璧帮紝涓嶇敤涓烘瘡绉嶆柇鐐瑰悇閰嶄竴濂椼€?
 
   /**
@@ -1362,7 +1362,7 @@ export class PlayerExpandState {
    *   function animateMorph(ui, 鈥? quietMs, onBlocked): boolean {
    *     const now = Date.now();
    *     MorphGuard.morphQuietUntil = now + quietMs;            // 鈽?璧疯ˉ闂存椂鎶?瀹夐潤绐楀彛"鎺ㄥ埌鏈潵
-   *     if (!(now >= MorphGuard.colorSettleUntil)) {           // 閰嶈壊杩樻病瀹夊畾
+   *     if (!(now >= MorphGuard.colorSettleUntil)) {           // 配色还没安定
    *       onBlocked(); return false;                           // 鈽?杩欐褰㈠彉**涓嶈捣**
    *     }
    *     ui.animateTo({ curve }, 鈥?; return true;
@@ -1381,7 +1381,7 @@ export class PlayerExpandState {
    *     return;                                         // 鈽?鏈涓嶄笂鑹?
    *   }
    *   鈥︽甯镐笂鑹测€?
-   *   // 閲嶈瘯 位锛坵ujie.pa:157930-157939锛夛細colorModeRetryQueued = false; syncReportChrome();
+   *   // 重试 λ（wujie.pa:157930-157939）：colorModeRetryQueued = false; syncReportChrome();
    * ```
    * 鈬?璇箟锛?*褰㈠彉鍔ㄧ敾璺戠潃鐨勬椂鍊欙紝閰嶈壊涓€寰嬪線鍚庢尓**锛堟敼鑹蹭細鎵撴柇/姹℃煋姝ｅ湪璺戠殑琛ラ棿锛?
    *   瑙傛劅灏辨槸"鍔ㄧ敾涓€旇儗鏅壊绐佺劧璺充竴涓?锛夛紝绐楀彛涓€杩囪嚜鍔ㄨˉ涓€娆°€?
@@ -1428,7 +1428,7 @@ export class PlayerExpandState {
    * **姝岃瘝椤甸偅涓€妫?`Column`锛圫wiper 椤?1 鐨勫唴瀹圭洅锛夌殑绐楀彛椤惰竟**锛坴p锛屽疄娴嬶紱0 = 杩樻病閲忓埌锛夈€?
    *
    * ## 涓轰粈涔堣瀹?
-   * 鏃犵晫 `lyricPadTop() = overlayBoxH()/2 + morph.bottomYAtLyric() + 23`
+   * 无界 `lyricPadTop() = overlayBoxH()/2 + morph.bottomYAtLyric() + 23`
    * 锛坄wujie.pa:172855-172890`锛岄€愭潯宸茶В锛夈€傛妸褰掓。绗旇閭ｇ粍瀹炴祴鍊间唬杩涘幓
    * 锛坄700/2 + (鈭?75.28) + 23 = 197.72`锛夊弽瑙ｏ細
    * ```
@@ -1473,7 +1473,7 @@ export class PlayerExpandState {
 
   /**
    * 姝岃瘝椤靛唴瀹圭洅椤惰竟涓婃姤锛堢敱姝岃瘝椤甸偅妫?`Column` 鐨?`onAreaChange` 鍠傦紝`globalPosition.y`锛夈€?
-   * @param topVp 鐩掗《锛坴p锛岀獥鍙ｅ潗鏍囷級
+   * @param topVp 盒顶（vp，窗口坐标）
    */
   public reportLyricBoxTop(topVp: number): void {
     const v: number = topVp > 0 ? topVp : 0;
@@ -1487,7 +1487,7 @@ export class PlayerExpandState {
 
   /**
    * 鎾斁椤甸〉鐩掗《杈逛笂鎶ワ紙鐢辫矾鐢卞３鐨?`onAreaChange` 鍠傦紝`area.position.y`锛夈€?
-   * @param boxTopVp 椤电洅椤讹紙vp锛岀獥鍙ｅ潗鏍囷級
+   * @param boxTopVp 页盒顶（vp，窗口坐标）
    */
   public reportPageBoxTop(boxTopVp: number): void {
     const v: number = boxTopVp > 0 ? boxTopVp : 0;
@@ -1625,7 +1625,7 @@ export class PlayerExpandState {
    *   85531  ldobjbyname 0x55, "metaTopFixLyric"      ; acc = a3.metaTopFixLyric
    *   85534  ldnull / stricteq 鈫?jnez L19             ; 浼?null 鈬?鐢ㄩ粯璁?
    *   85537  ldundefined / stricteq 鈫?jnez L19        ; 浼?undefined 鈬?鐢ㄩ粯璁?
-   *   85540  mov v0, v1                               ; 鍚﹀垯鐢ㄨ皟鐢ㄦ柟缁欑殑
+   *   85540  mov v0, v1                               ; 否则用调用方给的
    *   85542  lda v0 / 85543 stobjbyname "metaTopFixLyric"
    * ```
    *   鈬?**榛樿鍊?= `+28`锛岃€屼笖 `85527` 涔嬪悗銆愭病鏈?`neg`銆戙€?*
@@ -1684,7 +1684,7 @@ export class PlayerExpandState {
    *   // 鈶?CoverMorph 鐨勮捣鐐癸紙wujie.pa:177459-177464锛?
    *   metaYPlayer = fit.metaY          // 鐢?refitOverlay 鍐欏叆
    *   // 鈶?灏侀潰涓績锛坧layerCoverGeomRect 鐨?鈶?姝ュ凡缁忕畻鍑烘潵锛?
-   *   centerY = contentTop + metaY     鍏朵腑 metaY = curMetaY(0) + edge/2 + gap + metaH/2
+   *   centerY = contentTop + metaY     其中 metaY = curMetaY(0) + edge/2 + gap + metaH/2
    *   // 鈶?姝岃瘝椤甸偅涓€绔殑鍏冧俊鎭潡椤惰竟锛坵ujie.pa:85582-85599锛?
    *   metaOffsetYAt(1) = topYAtLyric + metaTopFixLyric
    *   // 鈶?鍏冧俊鎭潡**涓績**闅?t 璧扮殑閭ｆ潯绾?
@@ -1697,7 +1697,7 @@ export class PlayerExpandState {
    *   t = 0锛歮etaTop(0) = centerY 鈭?edge/2 鈭?gap + metaH/2 鈭?metaH/2 = 灏侀潰搴曡竟 + gap(50)
    *   t = 1锛歮etaTop(1) = topYAtLyric + metaTopFixLyric
    *                     = (topInset + 48.72) + (鈭?6) = topInset + 22.72
-   *          鎴戜滑鐨勶細     = lyricCoverYOf() = topInset + LYRIC_ROW_TOPBAR_H_VP(56)
+   *          我们的：     = lyricCoverYOf() = topInset + LYRIC_ROW_TOPBAR_H_VP(56)
    *          涓よ€呭樊 26 鏄?*璁捐宸?*锛屼笉鏄噺娴嬪樊 鈥斺€?瑙佷笅闈?閭?26vp 鍒板簳鏄粈涔?銆?
    * ```
    *
@@ -1780,7 +1780,7 @@ export class PlayerExpandState {
    *   y: lyricMetaMorphY(t) + t 脳 (lyricFloatRect().size 鈭?LYRIC_META_ROW_H_VP) / 2
    * ```
    * 鈿狅笍 涓よ€?*蹇呴』鍚屾鏀?*锛堣繖閲屾槸鍞竴鍏佽澶嶅埗閭ｆ潯琛ㄨ揪寮忕殑鍦版柟锛屽鍒剁洰鐨勬槸瀵硅处锛夈€?
-   * @param t 褰㈠彉杩涘害
+   * @param t 形变进度
    * @param rowH 鍏冧俊鎭鑷韩楂樺害锛坄PlaybackPage.LYRIC_META_ROW_H_VP`锛?
    */
   public metaTopInUseYAt(t: number, rowH: number): number {
@@ -1870,8 +1870,8 @@ export class PlayerExpandState {
       curEdgeMax = PlayerExpandState.COVER_EDGE_MIN_VP;
     }
     // 鈶?`fitPlayerOverlay`
-    const metaH: number = PlayerExpandState.COVER_FIT_META_H_VP;      // 60锛堟棤鐣屽厹搴曪級
-    const gap: number = PlayerExpandState.COVER_FIT_META_GAP_VP;      // 50锛堟棤鐣岄粯璁わ級
+    const metaH: number = PlayerExpandState.COVER_FIT_META_H_VP;      // 60（无界兜底）
+    const gap: number = PlayerExpandState.COVER_FIT_META_GAP_VP;      // 50（无界默认）
     const inset: number = PlayerExpandState.COVER_FIT_BOUND_INSET_VP; // 8锛堟棤鐣岀‖缂栫爜锛?
     const maxForBox: number = availH - 2 * (gap + metaH + inset);
     let edge: number = curEdgeMax;
@@ -2206,7 +2206,7 @@ export class PlayerExpandState {
    *   `applyMorphProgress()` 鐨?缂╂斁 + 绔栫洿瑁佸壀绐楀彛"锛坄morphScale/morphTx/morphTy/morphClipHeight`锛?
    *   鈬?杩欎竴鏃?*浠庢潵娌¤鎺ョ嚎**锛坄MORPH_MIN_SCALE` 涔熷彧琚畠璇伙級銆?
    * @deprecated 闆惰皟鐢ㄨ€呫€傛椿鐨勫舰鍙樿捣鐐硅 {@link applyMorphProgress} 涓?`morphInitParams()`銆?
-   * 澶嶆牳鍛戒护锛歚grep -rn 'morphStartScale\|morphCenterXPercent\|MORPH_MIN_SCALE' RzdMusic --include=*.ets`
+   * 复核命令：`grep -rn 'morphStartScale\|morphCenterXPercent\|MORPH_MIN_SCALE' RzdMusic --include=*.ets`
    */
   public morphStartScale(): number {
     if (!this.morphGeometryReady()) {
@@ -2251,7 +2251,7 @@ export class PlayerExpandState {
    * 鑰屾椿鐨勯偅鏉¤矾鏄?*澹冲眰/杩蜂綘鏉″悇鑷寔鎵嬪娍銆佺洿鎺ヨ皟 `applyMorphProgress()`**锛堣涓嬮潰 搂浜旂偣浜?閭ｆ锛夈€?
    *
    * @deprecated 闆惰鑰呴浂鍐欒€呫€傝窡鎵嬭繘搴﹁璧?{@link applyMorphProgress}銆?
-   * 澶嶆牳鍛戒护锛歚grep -rn 'dragUpdateToken\|setDragUpdate' RzdMusic --include=*.ets`
+   * 复核命令：`grep -rn 'dragUpdateToken\|setDragUpdate' RzdMusic --include=*.ets`
    */
   @Trace public dragUpdateToken: number = 0;
 
@@ -2342,9 +2342,9 @@ export class PlayerExpandState {
   //         缁熶竴鐧昏鍦ㄨ繖閲岋紝**鍚庢潵鐨勪汉鍒啀鐓у畠鍐?* 鈥斺€?D5 瑕侀槻鐨勫氨鏄?鏀归敊鍦版柟"銆?
   //      路 鍦嗚 / 灏侀潰鏃у彛寰勶細`coverVisualRadius()`銆乣coverX()`銆乣coverY()`銆?
   //        `coverSize()`銆乣coverRadius()`銆乣coverOpacity()`
-  //      路 灏侀潰涓ゆ。閫忔槑搴︾殑鏃у彛寰勶細`miniCoverOpacity()`銆乣innerCoverOpacity()`
+  //      · 封面两档透明度的旧口径：`miniCoverOpacity()`、`innerCoverOpacity()`
   //      路 鏃ф暣椤甸€忔槑搴?/ 瑁佸壀璺緞锛歚pageOpacity()`銆乣clipCommands()`
-  //      路 鏃х浉浣嶉棬锛歚hasGeometry()`銆乣armExpand()`銆乣beginAnimating()`銆乣finishAnimating()`
+  //      · 旧相位门：`hasGeometry()`、`armExpand()`、`beginAnimating()`、`finishAnimating()`
   //      路 鏃?鎺у埗鍖鸿嚜鍔ㄦ敹璧?锛歚chromeShouldAutoHide()`銆乣collapseChrome()`銆?
   //        `revealChrome()`銆佷互鍙?*鏈被**鐨?`touchChrome()`
   //        锛堚殸锔?`PlaybackPage` 閲屽彟鏈変竴涓?*鍚屽悕鐨勭鏈夋柟娉?*锛岄偅涓槸**娲荤殑** 鈥斺€?
@@ -2382,7 +2382,7 @@ export class PlayerExpandState {
   //
   // 浠ュ強 `initParams` 鐨勬帹瀵硷紙鍏ㄦ槸**瀹炴祴**锛岃 reportMini / reportWindow锛夛細
   //   initScale      = 杩蜂綘鏉″皝闈㈠ / 绐楀彛瀹?
-  //   initClipHeight = px2vp(杩蜂綘鏉″皝闈㈤珮 / initScale)
+  //   initClipHeight = px2vp(迷你条封面高 / initScale)
   //   initTranslateX = px2vp(capsuleLeft - (绐楀彛瀹?- 灏侀潰瀹? / 2)
   //   initTranslateY = px2vp(capsuleTop - (灏侀潰楂?- 灏侀潰楂?initScale) / 2)
 
@@ -2627,7 +2627,7 @@ export class PlayerExpandState {
    *
    * ## 涓轰粈涔堝師鏉ラ偅濂楁槸"涓€闀滃埌搴曠殑椋炲叆"锛堣€屽畠涓嶆槸鏃犵晫鐨勫仛娉曪級
    *
-   * 鍘熸潵 `metaBridgeOwnsPaint()` 涓虹湡鏃讹細
+   * 原来 `metaBridgeOwnsPaint()` 为真时：
    * ```
    *   路 澹冲眰 MorphMetaBridge 鍦ㄣ€愮獥鍙ｅ潗鏍囥€戠敾涓€浠芥瓕鍚?姝屾墜鍏嬮殕锛?
    *     鐢?morphMetaFrame() 鐨?x/y + 瀛楀彿脳scale 浠?杩蜂綘鏉￠偅涓€琛?涓€璺彃鍊奸鍒?钀界偣閭ｄ竴琛?锛?
@@ -2976,7 +2976,7 @@ export class PlayerExpandState {
    *       if (!isMorphTarget()) return;
    *       ...閲?playerCoverRect / playerMetaRect锛岃秺鐣屾垨閲忎笉鍒?鈫?schedulePublishRetry()...
    *       ExpandSnapshot.playerCoverRect = cover; playerMetaRect = meta;
-   *       if (!pullMode) {                                 // 鐐瑰嚮鎵撳紑锛歱ullMode === false
+   *       if (!pullMode) {                                 // 点击打开：pullMode === false
    *         if (!pullGeomReady) { pullGeomReady = true;    // 鈫?缃綅
    *                               expand.applyPullProgress(ui, pullT); } }
    *   PlayerPage.onPullTChanged:                          // 174826-174850
@@ -3129,7 +3129,7 @@ export class PlayerExpandState {
 
   // 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?鈽呪槄鈽?鐜板満鑷瘉锛?*鍔ㄤ綔杞ㄨ抗**锛堜笉渚濊禆 hdc 涔熻兘鐪嬪嚭"璋佸厛璋佸悗"锛夆晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲
   //
-  // ## 涓轰粈涔堥渶瑕佸畠
+  // ## 为什么需要它
   //
   // 銆岀偣鍑绘墦寮€ / 鐐瑰嚮鍏抽棴 / 绯荤粺杩斿洖娌℃湁鍔ㄧ敾銆嶈繖鏉￠摼涓婏紝**椤哄簭**鏈韩灏辨槸鑷彉閲忕殑鏈€澶у€硷細
   // 鍚屼竴涓嚱鏁板厛璋冭繕鏄悗璋冿紝缁撴灉瀹屽叏涓嶅悓锛埪?3 鐨?`onAppear` 璇垽銆伮?03 鐨?`onDisappear`
@@ -3169,8 +3169,8 @@ export class PlayerExpandState {
    * 鐢?*瀹炴祴**锛坄measureMini`锛岃蛋 `getRectangleById`锛夎€屼笉鏄?`onAreaChange` 鐨?
    * `globalPosition`锛氬悗鑰呯粰鐨勬槸**甯冨眬**浣嶇疆锛孒DS 娴姩搴曟爮濡傛灉瀵硅兌鍥婂仛杩囧钩绉?鍋忕疆锛?
    * 閲忓嚭鏉ョ殑璧风偣灏变細鏁翠綋鍋忥紙鐢ㄦ埛瀹炴祴鍒扮殑"浠庡皝闈㈠亸宸︿笅瑙掑紑濮?灏辨槸杩欎釜锛夈€?
-   * @param x 宸﹁竟鐣岋紙vp锛岀獥鍙ｅ潗鏍囷級
-   * @param y 涓婅竟鐣岋紙vp锛岀獥鍙ｅ潗鏍囷級
+   * @param x 左边界（vp，窗口坐标）
+   * @param y 上边界（vp，窗口坐标）
    * @param w 瀹藉害锛坴p锛?
    * @param h 楂樺害锛坴p锛?
    * @param radius 鍦嗚锛坴p锛?
@@ -3848,7 +3848,7 @@ export class PlayerExpandState {
    *   灏变笉鍔ㄦ墜鎰?锛岃€岀幇鍦?*鐢ㄦ埛鏄庣‘瑕佹眰鎵嬫劅瀵归綈鏃犵晫**锛岃椤捐檻鐨勬潯浠朵笉鍐嶆垚绔?鈬?鎸夋棤鐣岃惤鍦般€?
    *
    * 鈽?**涓や釜鏂瑰悜鍏辩敤鍚屼竴涓?`T`**锛堟棤鐣屽氨鏄繖鏍凤級锛?
-   *   路 鎵撳紑锛歚morphT >= COMMIT_T`锛堟湰鏂囦欢 `pullOpenShouldCommit()`锛夛紱
+   *   · 打开：`morphT >= COMMIT_T`（本文件 `pullOpenShouldCommit()`）；
    *   路 鍏抽棴锛?*鐩稿閲?* `delta >= max(baseT/2, COMMIT_T)`锛坄PlaybackPage.onDismissDrag`锛?
    *     瀵规爣鏃犵晫 `reverseQuitDelta()`锛夆€斺€?**涓嶆槸**"缂╁埌鏌愪釜鐧惧垎姣斿氨鍏?銆?
    *   鈬?婊″睍寮€璧锋墜鍏抽棴鏃堕槇鍊?= `max(0.5, 0.32) = 0.5`锛堣鎷夊洖鍘?50% 鎵嶅叧锛夈€?
@@ -3863,7 +3863,7 @@ export class PlayerExpandState {
    *   鈬?鏃犵晫鐨?`COMMIT_VELOCITY = 900`銆?
    * 鑰屼笖閭ｄ竴鏉℃湰鏉ュ氨鏄?*鎵撳紑鏂瑰悜**鐨勫垽鎹細`morphT` 姝ｆ槸鏃犵晫
    *   `MainPage.pullUpdate` 绠楀嚭鏉ョ殑**涓婃媺鎵撳紑**杩涘害锛坄clamp(-vp2px(dy)/pullRangePx)`锛夈€?
-   *   鏀惰捣鏂瑰悜閭ｆ潯锛坄PlaybackPage.onDismissDrag`锛孌1锛夋槸 RzdMusic 鐨勫弽鍚戞墜鍔匡紝
+   *   收起方向那条（`PlaybackPage.onDismissDrag`，D1）是 RzdMusic 的反向手势，
    *   宸茬粡鎸夊悓涓€鏁伴钀藉湴锛涜繖閲屾妸**鎵撳紑**鏂瑰悜涔熻ˉ榻?鈬?涓ゆ潯鎵嬪娍鐨勬彁浜ゅ垽鎹悓婧愬悓棰濄€?
    *
    * 鈿狅笍 **涓嶇収鎶勭鍙?*锛堟竻鍗?搂鍏?绗?3 鏉★級锛歋DK 鐨?`GestureEvent.velocityY` 娌℃壙璇烘柟鍚戙€?
@@ -3874,7 +3874,7 @@ export class PlayerExpandState {
 
   // 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲 寮€ / 鍏充袱鍚戠殑鎻愪氦鍒ゆ嵁锛?*鍙湪杩欓噷瀹氫箟涓€浠?*锛堟湰杞敹鏁涳級 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲
   //
-  // 鏀舵暃鐨勭敱鏉ワ紙`_recover\logic-src\娲鹃煶鍔ㄧ敾Bug娓呭崟.md` P0-1 + 搂6.5锛夛細
+  // 收敛的由来（`_recover\logic-src\派音动画Bug清单.md` P0-1 + §6.5）：
   //   鍘熸潵杩欎袱涓暟**鍒嗗眳涓や釜鏂囦欢**锛堟墦寮€鍦?`PlayerExpandState`銆佹敹鍦?`PlaybackPage`锛夛紝
   //   娌℃湁浠讳綍浜ゅ弶鏍￠獙 鈥斺€?鑰屽畠浠槸**浜掗€嗙殑涓ゆ潯鎵嬪娍**锛屾敼涓€涓笉鏀瑰彟涓€涓氨浼氬湪涓寸晫浣嶇疆鎵撴灦
   //   锛堟墜鎰熶笂鏄?鐢╀笉涓婂幓锛屼竴鏉炬墜鍙堟帀涓嬫潵"锛夈€?
@@ -3928,7 +3928,7 @@ export class PlayerExpandState {
    * 鈿狅笍 鍒ゆ嵁鍏ㄩ儴鏄?*鍏ュ弬鐨勭函鍑芥暟**锛氫笉璇讳笂涓€甯с€佷笉鍋氱疮鍔狅紙娓呭崟 搂涓€ 1.1 鐨勫悓涓€鏉¤姹傦級銆?
    * @param progress 褰撳墠涓婃媺杩涘害 0鈥?锛堜紶 `morphP` 鈥斺€?**灞忎笂鐪熸鍦ㄧ敤鐨勯偅涓€?*锛?
    *   鑰屼笉鏄嬁 `offsetY` 閲嶇畻涓€閬嶏細璧锋墜涓€旇ˉ閲忚繃閿氱偣鏃?`pullSpanVp()` 浼氬彉锛?
-   *   閲嶇畻鍑虹殑鍊间笌鐢婚潰涓嶄竴鑷达級
+   *   重算出的值与画面不一致）
    * @param offsetY 鏉炬墜鏃剁殑绔栫洿浣嶇Щ锛坴p锛?*涓婃媺涓鸿礋**锛?
    * @param velocityY 鏉炬墜鏃剁殑绔栫洿閫熷害锛坄GestureEvent.velocityY`锛寁p/s锛?
    * @returns true = 灞曞紑鍒板簳锛沠alse = 鍥炲脊骞跺嵏杞?
@@ -3939,7 +3939,7 @@ export class PlayerExpandState {
     const speed: number = Math.abs(velocityY);
     const fastFlick: boolean = opening && speed >= PlayerExpandState.PULL_OPEN_COMMIT_VELOCITY;
     const commit: boolean = reached || fastFlick;
-    // 涓婃満鎺掓煡锛歚hdc shell hilog -x | Select-String 'RzdMorph pull commit'`
+    // 上机排查：`hdc shell hilog -x | Select-String 'RzdMorph pull commit'`
     // 鈿狅笍 杩欎竴琛?*涓?`PlaybackPage.onDismissDrag` 閭ｆ潯鍚屾瀯**锛氶兘鎶?*涓や釜鏂瑰悜鐨勯槇鍊?+ 涓や釜鍒嗘瘝**
     //    鎵撳湪鍚屼竴琛岋紙瑙?`pullSpanIsMeasured()` 鐨勬敞閲婏級鈥斺€?鍙墦"姣斿€?vs 闃堝€?浼氱户缁棌浣?
     //    "涓や釜鍒嗘瘝涓嶆槸鍚屼竴涓暱搴?杩欎欢浜嬶紝涓嬫杩樹細鏈変汉鎶婃敹璧风殑 38% 鎹㈢畻鎴?0.62 鍘诲拰 0.45 姣斻€?
@@ -3978,7 +3978,7 @@ export class PlayerExpandState {
 
   // 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ 妗ユ帴灏侀潰锛堝鏍囨棤鐣?CoverMorph 鐨?璧风偣鈭堣糠浣犳潯"閭ｄ竴鍗婏級鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   //
-  // 涓轰粈涔堥渶瑕佸畠锛氭暣椤靛舰鍙樻槸"鎶婃挱鏀鹃〉鏁翠綋缂╂斁"锛岀缉鏀惧悗鐨勯〉闈㈠湪 p 寰堝皬鏃跺彧闇插嚭**椤甸潰椤堕儴**
+  // 为什么需要它：整页形变是"把播放页整体缩放"，缩放后的页面在 p 很小时只露出**页面顶部**
   // 閭ｄ竴灏忔埅 鈥斺€?閭ｆ椂鍊欒兘鐪嬪埌鐨勫綋鐒朵笉鏄皝闈㈢殑浣嶇疆銆傚彲鐢ㄦ埛瑕佺殑鏄?
   // 銆屽皝闈粠灏忔挱鏀惧櫒閭ｅ紶**閫愭笎鏀惧ぇ銆佹敼浣嶇疆銆佹敼鍦嗚**锛屼竴闀滃埌搴曟垚鎾斁椤点€嶃€?
   // 鎵€浠ュ舰鍙樻棭鏈熷崟鐙敾涓€寮?缁灏侀潰"锛氫粠杩蜂綘鏉″皝闈㈢殑鐭╁舰璧板埌**褰撳墠甯ф挱鏀鹃〉灏侀潰**
@@ -4068,7 +4068,7 @@ export class PlayerExpandState {
   /**
    * @returns 妗ユ帴灏侀潰鐨勪竴甯х煩褰紙vp锛?*瀹夸富鍧愭爣**锛夈€?
    *
-   * - 璧风偣锛氳糠浣犳潯灏侀潰锛坄MiniMorph` 閭ｄ竴鍗婏紝瀹炴祴锛夛紱
+   * - 起点：迷你条封面（`MiniMorph` 那一半，实测）；
    * - 缁堢偣锛氭挱鏀鹃〉灏侀潰鍦?*褰撳墠甯?*鐨勫睆骞曠煩褰?鈥斺€?鍐呭灞傛槸"鍥哄畾瀹夸富灏哄 + 灞呬腑绛夋瘮缂╂斁 s"锛?
    *   鎵€浠ラ〉鍐呭潗鏍?(x, y) 鏄犲皠鍒?`鍐呭灞傚乏涓婅 + (x, y) * s`锛岃€屽唴瀹瑰眰宸︿笂瑙掑張鐢?
    *   绐楀彛锛堣创搴曞眳涓€佸昂瀵?`morphWinW/H`锛変笌 `s` 鍐冲畾銆倀 = 1 鏃剁獥鍙?= 瀹夸富銆乻 = 1锛?
@@ -4144,7 +4144,7 @@ export class PlayerExpandState {
   //
   // 缁撴瀯锛?*涓ゅ眰**锛屼袱涓繘搴﹀悇鑷埌鐐癸級锛?
   //   路 涓?灞?= 鎾斁椤佃嚜宸憋細`morphP` 椹卞姩鐨勬暣椤?scale/translate/clip锛?*350ms `Curve.EaseInOut`**
-  //     锛堣皟鐢ㄧ偣娌″姩锛歚PlaybackPage.MORPH_OPEN_DURATION_MS`锛夛紱
+  //     （调用点没动：`PlaybackPage.MORPH_OPEN_DURATION_MS`）；
   //   路 涓?灞?= **澹冲眰娴眰**锛坄products/default .../Index.ets` 鐨?`MorphCoverClone()`锛夛細
   //     `morphOverlayP` 椹卞姩锛?*560ms + `curves.cubicBezierCurve(0.23, 1.0, 0.32, 1.0)`**銆?
   //
@@ -4182,7 +4182,7 @@ export class PlayerExpandState {
     //   鈬?瀹冭"绾嚑浣?鎽嗗ソ涔嬪悗**鍙堣瀹瑰櫒鐨?morphScale 缂╀簡涓€娆?*
     //   鈬?灞忎笂鐪嬪埌鐨勬槸"椤甸潰鍦ㄧ缉銆佸皝闈㈣窡鐫€椤甸潰涓€璧风缉" = 鐢ㄦ埛璇寸殑銆岃窡闅忕潃鎾斁鍣ㄣ€?
     // ```
-    // ## 鐓ф惉鍋氭硶锛堟湰鍑芥暟灏辨槸閭ｄ竴妫掞級
+    // ## 照搬做法（本函数就是那一棒）
     //   澹冲眰杩欎唤"缁灏侀潰"**鍦ㄥ鍣ㄤ箣澶?*锛堟弧灞?Stack 涓婏級锛岀敤**绐楀彛鍧愭爣**鐩存帴钀戒綅
     //   鈬?鍙鎶婂畠鐨勮繘搴︽帴鎴?*椤甸潰杩涘害 `morphP`**锛屽氨绛変簬鏃犵晫閭ｅ紶 `floatingCover`锛?
     //     涓€寮犲皝闈€佷竴鏉℃椂闂寸嚎銆佺函鍑犱綍銆佷笉鍙楀鍣ㄥ彉鎹€?
@@ -4310,7 +4310,7 @@ export class PlayerExpandState {
     // 鈽呪槄 2026-10-15锛堢収鎼棤鐣屻€屼袱灞傚悇璺戝悇鐨勩€佷簰涓嶆墦鏂€嶏級锛?
     //   鎾斁椤佃惤浣嶄箣鍚?*涓嶈**绔嬪埢鎾ゆ帀娴眰銆?
     //
-    //   瀹炴祴鏃跺簭锛堥兘鍦ㄨ繖浠戒唬鐮侀噷锛夛細
+    //   实测时序（都在这份代码里）：
     //     路 鎾斁椤甸偅鏉?= `Index.settlePullOpen` 鐨?`PULL_OPEN_SETTLE_MS + 20`
     //       鈬?**320ms** 灏?`morphSettleOpen()`锛宍morphBridging()` 闅忎箣鍙樺亣锛?
     //     路 娴眰閭ｆ潯   = `MORPH_OVERLAY_DURATION_MS(560)`銆?
@@ -4669,7 +4669,7 @@ export class PlayerExpandState {
     }
     // 鈽呪槄鈽呪槄 2026-10-17锛?*鐢ㄦ埛绗?2/3 鏉＄殑鏍瑰洜**锛夛細**鍙湁"姝ｅ湪灞曞紑"鎵嶈璧疯繘鍦鸿ˉ闂?*銆?
     //
-    // ## 鐥囩姸锛堢敤鎴峰師璇濓級
+    // ## 症状（用户原话）
     // ```
     //   鈶?涓嬫媺鍏抽棴锛氬皝闈㈢洿鎺ュ氨鏄渶鍒濋偅涓皬鍦嗗舰锛屽姩鐢荤粨鏉熷悗**绐佺劧鏉ヤ竴涓?鍙樺ぇ鍒颁腑闂村ぇ灏侀潰"鐨勬牱寮?*锛岀劧鍚庢秷澶?
     //   鈶?绯荤粺杩斿洖鍏抽棴锛?*鍑虹幇涓や釜灏侀潰** 鈥斺€?涓€涓窡闅忔挱鏀鹃〉寰€涓嬶紝
@@ -4679,7 +4679,7 @@ export class PlayerExpandState {
     // ```
     //   鏀惰捣閭ｄ竴渚э細`closeFullScreenPlayback()` 鈫?`focusMorphOverlayForPageCollapse()`锛堟妸娴眰琛ュ埌 **0**锛?
     //              鈫?`morphBeginLeaving()` 鎶?`morphDrive` 缃垚 **ANIM**锛圠EAVING 鐩镐綅锛?
-    //   澹冲眰鐩戝惉锛歚@Monitor('expandState.morphDrive') onMorphDriveChanged()`
+    //   壳层监听：`@Monitor('expandState.morphDrive') onMorphDriveChanged()`
     //              鈫?鏈嚱鏁般€傚畠鍙垽 `morphDrive === ANIM && morphContainerActive()`锛?
     //                **瀹屽叏涓嶇湅鐩镐綅** 鈬?鏀惰捣杩欎竴璺?*涔熶細鍛戒腑** 鈬?璧蜂竴鏉?**0 鈫?1 鐨?杩涘満"琛ラ棿**
     //              鈫?鑰屼笖鏈嚱鏁颁笅闈㈣繕浼氭妸 `morphOverlayCollapseOwned` **娓呮垚 false**
@@ -4688,7 +4688,7 @@ export class PlayerExpandState {
     //     鈬?澹冲眰娴眰閭ｄ唤"缁灏侀潰"鍦?*鍏抽棴杩囩▼涓湞鎾斁椤甸偅涓ぇ灏侀潰椋炲洖鍘?*
     //     鈬?灏辨槸 鈶?鐨?鏈熬绐佺劧鏉ヤ竴涓彉澶у埌涓棿閭ｄ釜澶у皝闈?銆佲憿 鐨?绗簩涓皝闈粠灏忓渾鍦堝彉澶?
     // ```
-    // ## 鏀规硶
+    // ## 改法
     //   鐩镐綅蹇呴』鏄?**ENTERING**锛?姝ｅ湪灞曞紑"锛夋墠鏀捐 鈥斺€?涓庝笂娓稿悓鏋勶細
     //   涓婃父閭ｄ釜娴眰鎸傚湪 `K_PULL_ACTIVE`锛坄lx_pull_active`锛変笂锛岃€屽畠**鍙敱 `setMiniOut(out)` 鍐?*锛?
     //   鏀惰捣閭ｄ竴璺蛋鐨勬槸鍙︿竴鏀紙`retargetToLiveCover()`锛夛紝**涓嶅瓨鍦ㄤ袱鏉℃柟鍚戠浉鍙嶇殑琛ラ棿鍚屾椂璺?*銆?
@@ -4796,7 +4796,7 @@ export class PlayerExpandState {
       duration: overlayMs,
       // 鈽?娴眰杩欎竴灞?*鍗曠嫭**鐨勬椂闀?鏇茬嚎锛?
       //   杩涘叆 = 鏃犵晫 `ENTER_MS(560)` + `EASE_OUT_STR`锛?
-      //   鏀惰捣 = 鏃犵晫 `MainPage.animateMorphT(reverseMs, 0, REVERSE_EASING)`
+      //   收起 = 无界 `MainPage.animateMorphT(reverseMs, 0, REVERSE_EASING)`
       //          锛坄reverseMs = 460 脳 max(0.4, morphT)`銆乣REVERSE_EASING = (0.85,0,0.5,0.88)`锛?
       //          鈥斺€?涓庢挱鏀鹃〉閭ｄ竴灞?*閫愬瓧鍚屾簮**锛屾墍浠ヤ袱灞備笉浼氫笉鍚屾銆?
       //   鈿狅笍 鏇茬嚎鍐呰仈鍐欏湪杩欓噷锛屽埆鎶芥垚杩斿洖 `ICurve`/`UIShape` 鐨勫寘瑁呭嚱鏁帮紙閭ｄ袱涓被鍨嬪湪鏈満 SDK
@@ -4889,10 +4889,10 @@ export class PlayerExpandState {
    * 鈬?鈽?椤哄甫纭瘉锛?*涓婃父鑷繁璁や负"涓や釜鏉ユ簮宸?<1% 灏变笉蹇呬慨"**锛堥偅鏉?`1e-2` 鎶ゆ爮锛?
    * 鈬?鎴戜滑娴嬮噺閾句笂 `<1%` 鐨勫嚭鍏?*涓嶆槸 bug**锛屼笉瑕佷负瀹冩敼鍏紡銆?
    * @param ui UIContext
-   * @param id 缁勪欢 id
+   * @param id 组件 id
    * @param naturalLayout true = 鐢?*涓嶅惈鍙樻崲**鐨?`getPositionToWindow()`锛堜笌"甯冨眬灏哄"鑷唇锛?
    *        缁?*甯?scale 鐨勮妭鐐?*鐢紱涓婃父瀵瑰簲 `getRectByFrameNode`锛?
-   * @returns 绐楀彛鐭╁舰锛涢噺涓嶅埌杩斿洖 undefined
+   * @returns 窗口矩形；量不到返回 undefined
    */
   private measureNode(ui: UIContext, id: string, naturalLayout: boolean = false): NodeRect | undefined {
     if (id.length === 0) {
@@ -5000,14 +5000,14 @@ export class PlayerExpandState {
    *   灞忎笂灏辨槸"涓€鍧楀簳鑹茬獥鍙?+ 涓棿涓€涓缉灏忕殑鎾斁椤?锛堢敤鎴峰疄娴嬶細"榛戠獥鍙ｏ紝涓棿鏄挱鏀惧櫒"锛夈€?
    *   杩欎竴鐗堣**鍙鐭╁舰涓庡唴瀹瑰眰涓ユ牸鍚屽昂瀵?*锛氬唴瀹规案杩滃～婊″彲瑙嗙煩褰紝涓嶅瓨鍦ㄧ暀鐧姐€?
    *
-   * 涓夋潯涓嶅彉閲忥細
+   * 三条不变量：
    *   1. 鍙鐭╁舰鍥涜竟鍚勮嚜鎻掑€硷細宸?涓?鈫?0銆佸彸/涓?鈫?瀹夸富灏哄锛?*璧风偣 = 杩蜂綘鏉￠偅鏉¤兌鍥?*
    *      锛堢敤鎴疯鐨?鏁翠釜鎾斁鏉″欢浼搁摵寮€"锛夛紝涓嬭竟鍦ㄥ墠 25% 鍏堣创鍒板涓诲簳杈癸紙鍚﹀垯搴曢儴閭?
    *      鍑犲崄 vp 鏁存鍔ㄧ敾閮界┖鐫€锛夛紱
    *   2. 鍐呭灞傞珮搴?= 瑁佸壀楂樺害 = 鍙楂樺害 / 缂╂斁 鈬?鍙鐭╁舰閲?*姝ｅソ**鏄暣椤碉紝
    *      娌℃湁鐣欑櫧銆佷篃娌℃湁瑁佸垏锛?
    *   3. 鍐呭灞傜瓑鍙鐭╁舰鎺ヨ繎鏁村睆锛堝楂樻瘮鎺ヨ繎椤甸潰锛夋墠娴幇锛岄伩鍏嶄腑娈电湅鍒拌鍘嬫墎鐨勯〉闈€?
-   * @param p 0 = 杩蜂綘鏉￠偅鏉¤兌鍥婏紝1 = 婊″睆
+   * @param p 0 = 迷你条那条胶囊，1 = 满屏
    */
   public applyMorphProgress(p: number): void {
     const t: number = p < 0 ? 0 : (p > 1 ? 1 : p);
@@ -5125,7 +5125,7 @@ export class PlayerExpandState {
     // 鈽呪槄鈽呪槄 2026-10-17锛?*鐓ф惉鏃犵晫 `visualRadiusAt`** 鈥斺€?鐢ㄦ埛鐐瑰悕銆屽渾瑙掑暐鐨勯兘涓嶄竴鏍枫€嶏級
     // ```
     //   鏃犵晫锛歷isualRadius = lerp(vp(miniCover.width)/2, 鐩爣鍦嗚缁濆鍊?34, t)   // 涓ょ鐐?lerp
-    //         鐒跺悗 radius = visualRadius / scale                              // wujie.pa:85604-85613
+    //         然后 radius = visualRadius / scale                              // wujie.pa:85604-85613
     //         鏀跺熬 位1onFinish 鍐嶆妸 radius 褰?0                                 // 钀藉畾 = 0 鍦嗚
     //   鎴戜滑鍘熸潵锛歷isualRadius = initRadiusVisual * (1 - t)   鈫?鐩寸嚎寰€ 0 鏀讹紝涓姣斾笂娓稿皬
     // ```
@@ -5511,7 +5511,7 @@ export class PlayerExpandState {
   /**
    * @returns 鏈疆褰㈠彉鐨?*缁堢偣鍑犱綍**鏄惁宸查噺鍒帮紙= 瀹瑰櫒鍙互钀介潪鎭掔瓑 `scale/translate/clip`锛夈€?
    *
-   * 瀵规爣鏃犵晫 `PlayerPage.pullGeomReady`锛坄wujie.pa` 168236 / 176221 / 176232锛夛細
+   * 对标无界 `PlayerPage.pullGeomReady`（`wujie.pa` 168236 / 176221 / 176232）：
    * 閭ｄ袱涓皟鐢ㄧ偣锛坄onPullTChanged` 鐨勯棬銆乣publishMorphTargets` 鐨勭疆浣嶏級灏辨槸瀹冪殑鍏ㄩ儴璇箟
    * 鈥斺€?**"鍑犱綍娌￠綈灏卞埆鍔ㄥ鍣?**銆?
    *
@@ -5565,7 +5565,7 @@ export class PlayerExpandState {
   //   鏃犵晫 1.2.4 鐨勬敹璧疯惤浣嶄笉鏄?鍟竴涓嬩氦杩樿糠浣犳潯"锛岃€屾槸**鍏堝帇鎵併€佸啀寮瑰洖**锛?
   //   ```
   //     squashLand()  L153727-153800
-  //       setMorph(LANDING, ANIM)                       // 杩欎竴甯ф挱鏀鹃〉涓嶅啀缁樺埗
+  //       setMorph(LANDING, ANIM)                       // 这一帧播放页不再绘制
   //       animateSquash(SQUASH_Y=0.86, SQUASH_MS=110, EASE_OUT_STR)   // 鈫?鍘嬪埌 0.86
   //         onDone 鈫?finishReverse(true)
   //     绱ч殢鍏跺悗鐨勫洖寮癸紙L163786-163855锛岀幓鐠冭兌鍥?瑙﹀簳寮瑰洖"锛?
@@ -5978,7 +5978,7 @@ export class PlayerExpandState {
    *
    * 鈽呪槄鈽?2026-10-16锛?*鏀规涓€澶勭畻閿欑殑鍒ゆ嵁**锛屽瓧鑺傜爜閫愭潯澶嶆牳锛夛細
    *   鏀瑰墠鏄?`u >= 340 ? 2 : (u >= 252 ? 1 : 0)`銆?
-   *   鈿狅笍 涓や釜閿欙細
+   *   ⚠️ 两个错：
    *     鈶?**340 琚綋鎴愪簡 `FULL.total`** 鈥斺€?瀹冨叾瀹炴槸**鍩虹嚎楂樺害**锛堣 `CHROME_BASELINE_H_VP`锛夛紱
    *     鈶?鍒嗙晫鍊兼柟鍚戝弽浜?鈥斺€?鏃犵晫鏄?`usableH >= 340 鈭?tier.total`锛屼笉鏄?`usableH >= tier.total`銆?
    *   鈬?姝ｇ‘闃堝€?**FULL 90 / MEDIUM 88**锛堟敼鍓嶆槸 340 / 252锛屽樊浜嗕竴涓噺绾э級銆?
@@ -6215,7 +6215,7 @@ export class PlayerExpandState {
    * S1 鐨?*鑷瘉**锛氭妸涓や釜绾嚱鏁板湪"鏈満褰撳墠绐楀彛"涓嬬殑鍊兼墦鍑烘潵锛岀敤鏉ユ牳瀵瑰畠浠湪**鎵嬫満妗?*涓?
    * 鏄惁鎭板ソ绛変簬鎴戜滑宸茬粡鍦ㄧ敤鐨勫浐瀹氬€硷紙`sizeK = 1` / `side = 16`锛夈€?
    *
-   * 鎺掓煡鍏抽敭瀛楋細`hdc shell hilog -x | Select-String 'RzdSizeTier'`
+   * 排查关键字：`hdc shell hilog -x | Select-String 'RzdSizeTier'`
    * 鏈熸湜锛堟墜鏈猴級锛歚side=16 sizeK=1`锛屼笖 `fixedOk=true`锛堜袱涓浐瀹氬€间笌妗ｄ綅鍊间竴鑷达級銆?
    * @param widthBp 瀹藉害鏂偣
    */
@@ -6377,7 +6377,7 @@ export class PlayerExpandState {
   /**
    * S2 鐨?*鑷瘉**锛氭妸瀹藉睆/闈㈡澘涓ゆ。鍦ㄦ湰鏈虹獥鍙ｄ笅鐨勫崰姣斾笌涓ゆ爮瀹藉害鎵撳嚭鏉ャ€?
    *
-   * 鎺掓煡鍏抽敭瀛楋細`hdc shell hilog -x | Select-String 'RzdWideCols'`
+   * 排查关键字：`hdc shell hilog -x | Select-String 'RzdWideCols'`
    * 鏈熸湜锛堟墜鏈猴紝妯睆闄ゅ锛夛細`isWide=false isPanel=false`锛堜袱鏍忛兘涓嶅弬涓庡竷灞€锛屽彧鏄妸鏁扮畻鍑烘潵澶囨煡锛夈€?
    * @param widthBp 瀹藉害鏂偣
    * @param isPanel 褰撳墠鏄惁璧伴潰鏉垮竷灞€锛坄PlaybackPage.usePanelLayout()`锛?
@@ -6481,7 +6481,7 @@ export class PlayerExpandState {
   //     鍓╀笅鐨勫彧鏄?MEDIUM/COMPACT 妗ｈ缂╁皬"锛屽睘瀹藉睆/骞虫澘锛堣澶囧彈闄愶級銆?
   //   路 `seekSize` 32/30/28锛氣槄 **2026-10-16 璁㈡** 鈥斺€?瀹冪殑璇箟鏄?
   //     **浼犺緭鏉′笂涓や釜鏂瑰舰鍥炬爣鎸夐挳锛堜笂涓€棣?涓嬩竴棣栵級鐨勫搴?*锛坄wujie.pa:181429` / `181639`锛?
-  //     `Image().width(chrome().seekSize).aspectRatio(1)`锛夛紝**涓庤繘搴︽潯鏃犲叧**
+  //     `Image().width(chrome().seekSize).aspectRatio(1)`），**与进度条无关**
   //     鈬?宸茶惤鍦颁负 `chromeSeekSize()`锛屾秷璐圭偣 = `ControlAreaComponent` 閭ｄ袱涓?`Image`銆?
   //     鏃ф敞閲婇噷"鎴戜滑缁欑殑鏄?`slider_height = 16vp`锛屼袱鑰呬笉鏄悓涓€涓噺"杩欏彞**缁撹閿欎簡**锛?
   //     瀹冧滑**鏍规湰涓嶆槸鍚屼竴涓厓绱犮€佷笉闇€瑕佸榻?*銆?
@@ -6500,7 +6500,7 @@ export class PlayerExpandState {
    *
    * 鈽呪槄鈽?2026-10-16锛?*鏈疆鍒犳帀浜嗚繖鏉￠摼涓婂彟澶栦袱涓垚鍛?*锛?
    *
-   * 鍘熸潵杩欓噷杩樻湁 `lastChromeTouchMs` + `CHROME_AUTO_HIDE_MS(3000)` + `chromeShouldAutoHide()` +
+   * 原来这里还有 `lastChromeTouchMs` + `CHROME_AUTO_HIDE_MS(3000)` + `chromeShouldAutoHide()` +
    * `collapseChrome()` 鈥斺€?**鍥涗釜鎴愬憳鍏ㄩ儴闆舵秷璐?*锛堟湰鏂囦欢 :1623 鏃╁氨璁拌繃"鏃ф帶鍒跺尯鑷姩鏀惰捣"鏄鐨勶紝
    * 浣嗕竴鐩存病鍒狅級銆傚畠浠笉鍙槸"娌＄敤"锛岃€屾槸**鏈夊**锛?
    * ```
@@ -6611,7 +6611,7 @@ export class PlayerExpandState {
    *   娌℃湁浠讳綍鍦版柟鐢?鏃ц浆鍦虹殑 `animating`"鏉ユ贰鍏ユ贰鍑哄皝闈€?
    * 鈿狅笍 鍚屾棌鐨?{@link miniCoverOpacity}锛堣鍚屼竴涓?`animating`锛?*涔熸槸闆惰皟鐢ㄨ€?*銆?
    * @deprecated 闆惰皟鐢ㄨ€呫€傚皝闈㈢殑鏄鹃殣璇风敤 {@link realCoverVisible} / {@link morphOverlayBridging}銆?
-   * 澶嶆牳鍛戒护锛歚grep -rn 'coverOpacity()\|miniCoverOpacity()' RzdMusic --include=*.ets`
+   * 复核命令：`grep -rn 'coverOpacity()\|miniCoverOpacity()' RzdMusic --include=*.ets`
    */
   public coverOpacity(): number {
     return this.animating ? 1 : 0;

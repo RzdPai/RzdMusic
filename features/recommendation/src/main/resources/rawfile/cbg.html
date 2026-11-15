@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>涓撹緫灏侀潰 路 闀滃儚妯＄硦鑳屾櫙</title>
+<title>专辑封面 · 镜像模糊背景</title>
 <style>
   /* ============================================================
-     2脳2 鍒嗗潡
+     2×2 分块
        TL 鍘熷灏侀潰锛堟竻鏅帮級   TR 姘村钩闀滃儚
        BL 鍨傜洿闀滃儚           BR 灏侀潰涓昏壊绾壊
      闄?TL 澶栨暣浣撻珮鏂ā绯婏紱TL 鐢ㄤ笁灞傘€屾竻鏅扳啋杞绘ā绯娾啋閲嶆ā绯娿€?     閫愮骇杩囨浮锛屾渶鍚庢帴鍒拌儗鏅笂銆?
@@ -14,7 +14,7 @@
        --stage    鑸炲彴杈归暱锛岄粯璁よ鍙ｇ煭杈癸紱鍥哄畾灏哄鏀规垚 1080px
        --blur     鑳屾櫙妯＄硦鍗婂緞锛堣秺澶ц秺鍍忛浘锛?       --solid    鍙充笅绾壊锛堝彇鑷皝闈富鑹诧級
        --vignette 鏆楄 0~1
-       --noise    棰楃矑 0~1锛屽帇浣忓ぇ闈㈢Н鑹插甫
+       --noise    颗粒 0~1，压住大面积色带
      鎹㈠皝闈細--cover 鏀规垚 url("assets/cover.jpg") 鎴栬嚜宸辩殑鍥剧墖
      ============================================================ */
   :root{
@@ -39,7 +39,7 @@
     isolation:isolate;
   }
 
-  /* ---------- 鑳屾櫙灞傦細2脳2 ---------- */
+  /* ---------- 背景层：2×2 ---------- */
   .bg{
     position:absolute; inset:0; z-index:0;
     display:grid;
@@ -110,7 +110,7 @@
       linear-gradient(180deg, transparent 0 84%, #000 94%, transparent 100%);
   }
 
-  /* ---------- 璐ㄦ劅 ---------- */
+  /* ---------- 质感 ---------- */
   .stage::before{
     content:"";
     position:absolute; inset:0; z-index:5;

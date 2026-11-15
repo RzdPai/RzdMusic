@@ -141,7 +141,7 @@ const NOW_PLAYING_TAB_INDEX: number = 1;
  * 鑳屾櫙锛堝畼鏂广€婅嚜瀹氫箟閿洏銆嬶級锛氱郴缁熼粯璁ょ殑閿洏閬胯**鍙繚璇佽緭鍏ユ涓嶈閬尅**锛?
  * 杈撳叆妗嗕笅闈㈢殑缁勪欢锛堟湰鏉℃偓娴挱鏀炬潯灏辨槸锛変細琚敭鐩樺帇浣?鈬?蹇呴』鑷繁鎸夐敭鐩橀珮搴﹂伩璁┿€?
  *
- * 绠楀紡锛坄floatingMiniBarKeyboardLiftVp()`锛夛細
+ * 算式（`floatingMiniBarKeyboardLiftVp()`）：
  *   lift = 閿洏楂樺害 + {@link FLOATING_MINI_BAR_KEYBOARD_GAP_VP} 鈭?甯告€佷笅鑳跺泭绂诲睆搴曠殑鏃㈡湁闂撮殭
  * 鍏朵腑"鏃㈡湁闂撮殭"鎸?2026-10-12 鐨勭湡鏈轰袱鐐规爣瀹?`gap 鈮?1.8 脳 barBottomMargin` 鍙嶆帹
  * 锛堣 {@link floatingMiniBar} 閲岄偅涓ゆ潯瀹炴祴璁板綍锛夆€斺€?鍑忔帀瀹冩槸涓轰簡**涓嶈鎶婂凡缁忔湁鐨勯偅浠介棿闅?
@@ -242,7 +242,7 @@ const BUFFER_TOAST_MIN_GAP_MS: number = 8000;
 /**
  * 鈽?鎾斁椤靛叆鍙?*鍙岃建寮€鍏?*锛堟柦宸ュ浘绗?1 姝ワ級銆?
  *
- * - `true` 锛氭挱鏀鹃〉浣滀负 **NavDestination** 鎺ㄥ叆锛坄pushPath(..., animated = false)`锛夛紝
+ * - `true` ：播放页作为 **NavDestination** 推入（`pushPath(..., animated = false)`），
  *   瀹屽叏瀵规爣鏃犵晫 1.2.4銆傜郴缁熻浆鍦哄繀椤诲叧鎺?鈥斺€?褰㈠彉鑷繁灏辨槸鍔ㄧ敾锛屼袱濂楀姩鐢诲彔鍦ㄤ竴璧?
  *   灏辨槸鐢ㄦ埛鎶ョ殑"鍔ㄧ敾涓€斿皝闈㈠綊浣?/ 搴曢儴绌轰竴鍧?銆?
  * - `false`锛氭棫璺緞锛屾挱鏀鹃〉浣滀负澹冲眰 Stack 閲岀殑娴眰锛坄isShowPlay` 鏉′欢娓叉煋锛夈€?
@@ -254,7 +254,7 @@ const BUFFER_TOAST_MIN_GAP_MS: number = 8000;
  * 鑰屽舰鍙樻伆鎭拌閫忓嚭閭ｆ潯杩蜂綘鏉?鈬?"涓€鎺ㄥ叆灏辨垚涓€鍧椼€佸簳閮ㄥ張缂轰竴鍧?銆?
  *
  * **杩欐鐨勮В鑽紙閫嗗悜寰楀埌锛屽凡鏍稿疄鍒?API 灞傦級**锛?
- * 鏃犵晫鐨勬挱鏀鹃〉 `HdsNavDestination` **璁句簡 `mode(NavDestinationMode.DIALOG)`**
+ * 无界的播放页 `HdsNavDestination` **设了 `mode(NavDestinationMode.DIALOG)`**
  * 锛坄wujie.pa:190804-190811`锛夈€傚畼鏂硅涔夛紙鏈満 SDK
  * `openharmony/ets/component/nav_destination.d.ts:317-333`锛夛細
  * > "Dialog mode, where the navigation destination is **transparent by default**,
@@ -1057,7 +1057,7 @@ struct Index {
    *   const s = src ?? this.ownMorphSource;
    *   if (!this.beginMorphEnter(s)) { this.enterAnimStarted = false;
    *                                   this.nav.pushPath({ name: R_PLAYER }); return; }  // 閫€鍖栵細鏃犲舰鍙?
-   *   // beginMorphEnter 鍐呴儴宸茬粡 pushPath({name, param:{pull:true}}, animated=false)
+   *   // beginMorphEnter 内部已经 pushPath({name, param:{pull:true}}, animated=false)
    *   ExpandSnapshot.onPullReady = 位;      // 灏辩华 鈫?commitPull() 鈫?animateMorphT(400, t=1)
    * }
    * ```
@@ -1175,7 +1175,7 @@ struct Index {
       //   杩欎竴娈靛師鏉ユ槸"`false` 鈬?`pullDragging=false` + `morphReset()` + `morphSettleOpen()`
       //   + `return false`"锛屼篃灏辨槸**鏁存鏀惧純褰㈠彉浼氳瘽**銆?
       //   鈿狅笍 鑰?`pullOpenBegin` 杩斿洖 `false` 鐨?*鍞竴**鍘熷洜鏄?杩欎竴鎷嶉噺涓嶅埌涓滆タ"鈥斺€?
-      //   鐐瑰嚮鎵撳紑鏃惰繖**蹇呯劧**鍙戠敓锛堟挱鏀鹃〉杩樻病鎸傝浇銆佸皝闈㈣妭鐐逛笉瀛樺湪锛夛紝
+      //   点击打开时这**必然**发生（播放页还没挂载、封面节点不存在），
       //   浜庢槸杩欎竴娆℃墦寮€琚案涔呭垽鎴?鍑犱綍娌￠噺鍒?鈬?鏃犲舰鍙樿惤浣?锛?
       //   **杩炰竴娆¤ˉ閲忛兘娌¤瘯杩?*锛堢敤鎴峰疄娴嬨€岀偣鍑绘墦寮€鎾斁鍣ㄦ病鏈夊皝闈?鑳屾櫙鍔ㄧ敾銆嶏級銆?
       //   鏃犵晫鐨勫舰鐘讹紙`MainPage.openPlayerMorph` 149679锛夛細`beginMorphEnter` 杩斿洖 false 鏃?
@@ -1428,7 +1428,7 @@ struct Index {
       //   杩欓噷鍘熸潵鏄?`if (!pullDragging || !morphGenAlive(gen)) return;`锛屽叾涓?
       //   `gen` 鏄?*鍙戣捣閭ｄ竴鍒?*鎹曡幏鐨?`morphGen`銆?
       //
-      // ## 涓轰粈涔堝畠鍦ㄧ偣鍑昏繖鏉¤矾涓婃槸閿欑殑
+      // ## 为什么它在点击这条路上是错的
       //   `morphGen` 鐨勮涔夋槸"杩欎竴杞舰鍙樹細璇濈殑缂栧彿"锛屽畠琚?`morphReset()` **鎺ㄩ珮**銆?
       //   鑰岀偣鍑绘墦寮€鏃讹紝`pushPath` 浼氳**鏃ч〉闈㈠疄渚嬪嵏杞?*锛屾棫瀹炰緥鐨?`onDisAppear` 浼氳蛋
       //   锛堥偅鏉¤矾涓婄洰鍓嶅彧鏈?`morphUsable` 涓虹湡灏辫烦杩?杩欎竴灞備繚鎶わ紝瑙?`PlaybackPage.onDisAppear`锛?
@@ -1955,7 +1955,7 @@ struct Index {
    * 鍙嶇紪璇戜緷鎹紙`MiniMorph娓叉煋鏂逛笌椤跺簳鏍忔贰鍏ュ叕寮?md`锛夛細
    *   路 `位1e` 鍏冧俊鎭厠闅嗭細`position(miniMetaLeft, miniMetaTop)` + `translate({x: coverRightShiftAt(t)})`
    *     + `opacity(metaOpacityAt(t))`锛坄clamp(1 - t/0.35)`锛?
-   *   路 `位1f` 鎿嶄綔鍖哄厠闅嗭細`translate({y: coverRiseAt(t)})` + `opacity(actionsOpacityAt(t))`
+   *   · `λ1f` 操作区克隆：`translate({y: coverRiseAt(t)})` + `opacity(actionsOpacityAt(t))`
    *     锛坄clamp(1 - t/0.20)`锛屾瘮鍏冧俊鎭洿鏃╂秷澶?鈥斺€?"鍙充晶涓変釜鎸夐挳鎱㈡參闅愯棌"灏辨槸杩欐潯锛?
    *   路 闈㈤偅涓€妫掞紙灏侀潰鍏嬮殕锛?*涔熷湪杩欎釜澹冲眰閲?*浜?鈥斺€?瑙?{@link MorphCoverClone}
    *     锛?026-10-15 浠?`PlaybackPage.MorphCoverBridge` 鎼潵锛涗袱渚х煩褰㈠悓婧愶級銆?
@@ -2516,7 +2516,7 @@ struct Index {
       if (this.isNowPlayingTabActive() || this.navDepth > 0) {
         // 鈽呪槄鈽呪槄 2026-10-17锛?*淇敤鎴峰疄娴嬨€屼簩绾ч〉闈細鍑虹幇涓や釜鎾斁鏉°€?*锛?
         //   鍘熸潵杩欓噷鍙垽 `tabIndex === 姝ｅ湪鎾斁`锛?*娌″垽 `navDepth`** 鈥斺€?浜岀骇椤靛湪鏍堜笂鏃讹紝
-        //   浜岀骇椤佃嚜宸遍偅鏉″畼鏂规诞鍔ㄦ爮锛坄floatingMiniBar`锛夊凡缁忓湪鐢伙紝棣栭〉杩欐潯鍙堟病鍗歌浇
+        //   二级页自己那条官方浮动栏（`floatingMiniBar`）已经在画，首页这条又没卸载
         //   鈬?灞忎笂涓ゆ潯鎾斁鏉°€傛湰鏂囦欢 L1617 鐨勬敞閲婃棭灏卞啓鏄庤繖鏉′笉鍙橀噺
         //   銆屸殸锔?浜岀骇椤甸潰鍦ㄦ爤涓婃椂涓嶆覆鏌擄紙`navDepth > 0`锛夈€嶁€斺€?浠ｇ爜娌¤窡涓娿€?
         //   鈬?琛ヤ笂 `navDepth > 0`锛氫簩绾ч〉鍦ㄦ爤涓婃椂杩欎竴鏉″悓鏍风粰 0 楂橈紙**涓嶅嵏杞?*锛?
@@ -3618,7 +3618,7 @@ struct Index {
     .id(MORPH_HOST_ID)
     // 鈽?涓婃媺鎵撳紑鎾斁椤碉紙璺熸墜锛屽鏍囨棤鐣?ExpandAnimation.applyPullProgress锛夈€?
     //   蹇呴』鎸傚湪**澹冲眰**锛氭挱鏀鹃〉鍦?`isShowPlay` 涓?false 鏃惰繕娌℃寕杞斤紝鏀朵笉鍒版墜鎸囦簨浠躲€?
-    //   涓庢挱鏀鹃〉閲岀殑涓嬫媺鏀惰捣鏂瑰悜鐩稿弽锛屼袱鏉℃墜鍔夸簰涓嶅啿绐侊紱
+    //   与播放页里的下拉收起方向相反，两条手势互不冲突；
     //   骞朵笖鍙湁"浠庡睆骞曚笅鍗婇儴鍒嗚捣鎵?鎵嶆帴绠★紝涓棿鍖哄煙鐨勪笂婊戠収鏃т氦缁欏垪琛?姝岃瘝婊氬姩銆?
     .gesture(
       PanGesture(this.pullOpenOption)

@@ -836,12 +836,21 @@
         });
       },
       on: function(eventName, handler) {
-        if (eventNames.indexOf(eventName) === -1) return Promise.reject(new Error('The event is not supported: ' + eventName));
+        // ★ 2026-11-15（交接书 §8.2 #12）：**未知事件不再 reject**。
+        //   上游 LX 对不支持的 `lx.on(...)` 是静默忽略的；我们原来直接 reject，
+        //   脚本里 `lx.on('xxx')` 不接 catch 就变成 unhandled rejection，能把脚本初始化打断
+        //   （表现为"音源未就绪"这类无头案）。这里改成：登记不了就**记账放行**。
+        if (eventNames.indexOf(eventName) === -1) {
+          console.warn('[lx_bridge] lx.on unsupported event ignored: ' + eventName);
+          return Promise.resolve();
+        }
         switch (eventName) {
           case EVENT_NAMES.request:
             events.request = handler;
             break;
-          default: return Promise.reject(new Error('The event is not supported: ' + eventName));
+          default:
+            console.warn('[lx_bridge] lx.on event not wired, ignored: ' + eventName);
+            return Promise.resolve();
         }
         return Promise.resolve();
       },
