@@ -185,9 +185,16 @@ const PRELUDE: string = `
     globalThis.sessionStorage = makeStore();
   }
 
-  var SUPPORTED_EVENTS = { request: 1, inited: 1, updateAlert: 1 };
+  var SUPPORTED_EVENTS = { request: 1, inited: 1, updateAlert: 1 };  // 与 LX_EVENT_NAMES 同集合
+
+  // ★ 2026-11-15（真机 + 本地复现双重确认）：EVENT_NAMES 必须挂在 lx 上！
+  //   脚本第 16 行是 const { EVENT_NAMES, request, on, send, env, version } = globalThis.lx，
+  //   少了 EVENT_NAMES 就会在 on(EVENT_NAMES.request, …) 处抛
+  //   cannot read property 'request' of undefined —— 两支脚本死在同一行就是这个原因。
+  var LX_EVENT_NAMES = { request: 'request', inited: 'inited', updateAlert: 'updateAlert' };
 
   globalThis.lx = {
+    EVENT_NAMES: LX_EVENT_NAMES,
     request: function (url, options, callback) {
       if (typeof callback === 'function') {
         // 老式回调风格：包一层
