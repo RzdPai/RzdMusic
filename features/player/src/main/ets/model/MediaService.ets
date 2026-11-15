@@ -643,6 +643,13 @@ export class MediaService {
           `pos=${this.getCurrentTime()} bg=${this.bgEnterWall > 0 ? 1 : 0} ` + BackgroundUtil.snapshot());
         this.pauseOrigin = '';
         this.state = AudioPlayerState.PAUSE;
+        // ★ 两种情况长时任务不能丢（丢了 = 后台被冻结 = 焦点归还的 RESUME 永远无人处理，声音就此断掉）：
+        //   1) `pausedByInterrupt`：系统临时失焦暂停（语音输入/其他应用抢焦点），焦点归还时会自动恢复；
+        //   2) `kernelOwns`：内核（mpv）在出声，AVPlayer 的 paused 只是 park/reset 的迟到残留事件。
+        if (kernelOwns || this.pausedByInterrupt) {
+          this.lockScreenDiagnostic(`paused keep-task (${kernelOwns ? 'kernel-owns' : 'focus-resume'})`);
+          break;
+        }
         if (this.abilityContext) {
           BackgroundUtil.stopContinuousTask(this.abilityContext);
         }
@@ -670,7 +677,8 @@ export class MediaService {
           this.avPlayer.reset();
         }
         // 官方《后台播放》要求：停止时主动取消长时任务（不停任务但也不再放音频会被系统终止）
-        if (this.abilityContext) {
+        // ★ 内核出声期间 AVPlayer 的 stopped 是换源残留事件，不能据此丢任务（丢了后台必被冻结）。
+        if (!kernelOwns && this.abilityContext) {
           BackgroundUtil.stopContinuousTask(this.abilityContext);
         }
         break;
@@ -999,7 +1007,10 @@ export class MediaService {
 
   /** Reconciles background policy without changing the user's current playback intent. */
   public onApplicationBackground(): void {
-    const playing: boolean = this.isPlayingState();
+    // ★ 引擎真值兜底：`isPlayingState` 只是事件回调写出来的镜像，换源/切内核期间
+    //   会被迟到事件污染成 false（见 isActuallyPlaying 注释）——按 Home 那一刻
+    //   判成"没在播"就会漏补长时任务，后台几秒后被系统冻结、声音切断。
+    const playing: boolean = this.isPlayingState() || this.isActuallyPlaying();
     const enabled: boolean = MusicStoreService.getInstance().getLockScreenPlay();
     this.lockScreenDiagnostic(`onBackground(playing=${playing}) lockscreen enabled=${enabled}`);
     // ★ 取证起点：进后台的墙钟 + 播放位置（回前台用 onApplicationForeground 结算差值）
@@ -1031,7 +1042,7 @@ export class MediaService {
     const advance: number = this.bgEnterPosition > 0 ? this.getCurrentTime() - this.bgEnterPosition : 0;
     const playerState: string = this.avPlayer !== undefined ? this.avPlayer.state : 'none';
     const enabled: boolean = MusicStoreService.getInstance().getLockScreenPlay();
-    const playing: boolean = this.isPlayingState();
+    const playing: boolean = this.isPlayingState() || this.isActuallyPlaying();
     if (wall > 0) {
       const stalled: boolean = wall > 1000 && advance < wall / 2;
       this.lockScreenDiagnostic(`bg-leave(${stalled ? 'stall' : 'keep'}) wall=${wall} pos-delta=${advance} ` +
@@ -1961,6 +1972,9 @@ export class MediaService {
 
   /** Creates service, builds SongItemBuilder, and starts async AVPlayer creation. */
   public constructor() {
+    // ★ 长时任务"该不该补申请"的判定注入：真在出声，或临时失焦等焦点归还。
+    //   系统取消长时任务时 BackgroundUtil 据此决定是否立即补申请（防后台冻结断音）。
+    BackgroundUtil.setTaskHoldPredicate((): boolean => this.isActuallyPlaying() || this.pausedByInterrupt);
     // USB 独占：设备掉线时自动回落（轮询在 UsbAudioService 里）
     UsbAudioService.getInstance().onLost = (): void => {
       this.onUsbDeviceLost();
@@ -2225,6 +2239,11 @@ export class MediaService {
       if (interruptEvent.forceType === audio.InterruptForceType.INTERRUPT_FORCE) {
         switch (interruptEvent.hintType) {
           case audio.InterruptHint.INTERRUPT_HINT_PAUSE:
+            // ★ 先立标志、再 pause：'paused' 状态回调可能在 pause() 进行中就触发，
+            //   那时必须已经能看到「临时失焦、待恢复」，否则长时任务会被误停（后台断音根因）。
+            this.pausedByInterrupt = true;
+            this.pauseReason = 'focus';
+            this.resumeWhenReady = true;
             // 暂时失焦（语音输入场景），后续会收到 RESUME
             if (this.avPlayer !== undefined && this.avPlayer.state === 'playing') {
               try {
@@ -2233,10 +2252,7 @@ export class MediaService {
                 Logger.warn(TAG, 'audioInterrupt pause failed: ' + JSON.stringify(e).substring(0, 120));
               }
             }
-            this.pausedByInterrupt = true;
             // 临时失焦（含输入法语音输入）⇒ 走统一策略，焦点归还时自动恢复
-            this.pauseReason = 'focus';
-            this.resumeWhenReady = true;
             this.logPausePolicy('paused', 'focus', true);
             this.updateIsPlay(false);
             this.appendPlayLog('[播放] audio interrupt, wait');
@@ -2561,7 +2577,9 @@ export class MediaService {
    *   的常驻载体，和媒体卡片同在通知栏，离用户的视线最近。
    * ▼ 按钮的 wantAgent = 拉起本应用 + 参数 `rzd_unlock_desktop_lyric: true`，
    *   EntryAbility 在 onCreate / onNewWant 里认这个参数并调 {@link unlockDesktopLyric}。
-   * ▼ 未授权通知 / 通知被关闭时 publish 静默失败（打日志），应用内入口不受影响。
+   * ▼ ★ 2026-11-12（用户：「桌面歌词解锁只做在状态栏」）：这条通知是解锁的**唯一**入口
+   *   （播放页顶栏胶囊、设置页按钮均已移除）。未授权通知 / 通知被关闭时 publish
+   *   静默失败（打日志），此时无解锁入口 —— 设置页开桌面歌词时会顺带申请通知授权。
    */
   private publishUnlockNotification(): void {
     // 去重：已发布就不重发（同 id 重发本身也无害，省一次系统调用而已）
@@ -2627,8 +2645,8 @@ export class MediaService {
   }
 
   /**
-   * 解锁桌面歌词悬浮窗（播放页顶栏 / 设置页的「解锁桌面歌词」入口共用）。
-   * @returns true = 解锁成功（无会话或系统调用失败返回 false，调用方保持按钮态不动）
+   * 解锁桌面歌词悬浮窗（唯一调用方：通知栏「解锁歌词」按钮 → EntryAbility）。
+   * @returns true = 解锁成功（无会话或系统调用失败返回 false）
    */
   public async unlockDesktopLyric(): Promise<boolean> {
     const session: avSession.AVSession | undefined = this.session;
