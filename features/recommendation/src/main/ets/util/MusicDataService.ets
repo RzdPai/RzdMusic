@@ -216,6 +216,7 @@ async function fillTxCovers(map: Record<string, string>): Promise<void> {
       }
     }
   } catch (_err) {
+    // 榜单封面是**可选**信息：拿不到就退默认封面，不阻断榜单列表
   }
   const need: string[] = boardIdList('tx');
   const missing: string[] = [];
@@ -327,6 +328,7 @@ async function fetchTxRanks(): Promise<TxRankEntry[]> {
         break;
       }
     } catch (_e) {
+      // 换试下一个榜单 id：单个 id 失效不影响整体（下面还有兜底榜单）
     }
   }
   return out;
@@ -382,6 +384,7 @@ async function fetchKgRanks(): Promise<KgRankEntry[]> {
       out.push(entry);
     }
   } catch (_err) {
+    // 条目级解析失败：跳过坏条目，返回已收集的部分（榜单不会因为一条脏数据整块空掉）
   }
   return out;
 }
@@ -626,6 +629,7 @@ async function fillMgCovers(map: Record<string, string>): Promise<void> {
           map[columnId] = cover;
         }
       } catch (_e) {
+        // 单列封面并发抓取：某一列失败就少一个封面，不影响其它列
       }
     })());
   }
@@ -723,6 +727,7 @@ async function fetchMgRanks(): Promise<MgRankEntry[]> {
       http.RequestMethod.GET, undefined, MIGU_HEADERS);
     collectMiguRankEntries(asObject(root['data']), out, seen);
   } catch (_err) {
+    // 咪咕榜单索引整块失败：out 保持为空，调用方会退回静态榜单表
   }
   const need: string[] = [];
   for (let i: number = 0; i < MG_EXTRA_RANK_IDS.length; i++) {
@@ -781,6 +786,7 @@ async function fetchMgRanks(): Promise<MgRankEntry[]> {
         entry.cover = cover;
         out.push(entry);
       } catch (_e) {
+        // 单个榜单并发抓取失败：丢掉这一条，其它继续
       }
     })());
   }
@@ -1859,6 +1865,7 @@ export class MusicDataService {
             ({ id: item.id, name: item.name, source, cover: item.cover }));
         }
       } catch (_err) {
+        // 在线榜单拿不到 ⇒ 下面退回内置榜单表（这是设计好的降级路径，不是错误）
       }
     }
     if (source === 'kg') {
@@ -1869,6 +1876,7 @@ export class MusicDataService {
             ({ id: item.id, name: item.name, source, cover: item.cover }));
         }
       } catch (_err) {
+        // 在线榜单拿不到 ⇒ 下面退回内置榜单表（这是设计好的降级路径，不是错误）
       }
     }
     if (source === 'wy') {
@@ -1879,6 +1887,7 @@ export class MusicDataService {
             ({ id: item.id, name: item.name, source, cover: item.cover }));
         }
       } catch (_err) {
+        // 在线榜单拿不到 ⇒ 下面退回内置榜单表（这是设计好的降级路径，不是错误）
       }
     }
     if (source === 'mg') {
@@ -1889,6 +1898,7 @@ export class MusicDataService {
             ({ id: item.id, name: item.name, source, cover: item.cover }));
         }
       } catch (_err) {
+        // 在线榜单拿不到 ⇒ 下面退回内置榜单表（这是设计好的降级路径，不是错误）
       }
     }
     if (source === 'tx') {
@@ -1899,6 +1909,7 @@ export class MusicDataService {
             ({ id: item.id, name: item.name, source, cover: item.cover }));
         }
       } catch (_err) {
+        // 在线榜单拿不到 ⇒ 下面退回内置榜单表（这是设计好的降级路径，不是错误）
       }
     }
     const list: BoardData[] = MusicDataService.boards(source);
@@ -2166,6 +2177,7 @@ export class MusicDataService {
           raw = details;
         }
       } catch (_err) {
+        // 详情接口只是"补全字段"，失败就用搜索结果的原始字段（不阻断播放）
       }
     }
     return raw.map((item: JsonObject): TrackData => formatTrack(source, item)).filter((item: TrackData) => item.name.length > 0);
