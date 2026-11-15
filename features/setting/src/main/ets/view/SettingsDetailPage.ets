@@ -27,7 +27,7 @@ import { notificationManager } from '@kit.NotificationKit';
 import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, HomeSourceState, LyricCenterState, LyricFontSizeState, LyricFpsState, MotionCoverState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, immersiveFromLevel } from 'musicbasic';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
-import { DownloadService, LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatforms, lxDeclaredPlatformsOf, lxSourceManager, MediaService, lxSourceLabel, LX_PLATFORM_ORDER, normalizePlatformId, musicFreeSubscriptionLabel, quickJsSelfTest } from 'player';
+import { DownloadService, LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatforms, lxDeclaredPlatformsOf, lxSourceManager, MediaService, lxSourceLabel, LX_PLATFORM_ORDER, normalizePlatformId, musicFreeSubscriptionLabel, quickJsSelfTest, runScriptInQuickJs, QuickJsRunResult } from 'player';
 import type { LXApiImportResult } from 'player';
 import { importMusicFreeSubscriptionText, importSourceScriptAuto, parseMusicFreeSubscription, updateSubscription, backfillMusicFreePlatforms } from 'player';
 import type { MfImportReport, MfSubscriptionEntry, MfSubscriptionInfo } from 'player';
@@ -181,6 +181,10 @@ export struct SettingsDetailPage {
   @Local desktopLyricLocked: boolean = false;
   /** QuickJS 自检结果（设置页「音源引擎」卡片显示；空串 = 本次会话还没跑过）。 */
   @Local quickJsState: string = '';
+  /** QuickJS 跑真脚本的结果（同上） */
+  @Local quickJsScriptState: string = '';
+  /** 是否正在跑（防重复点） */
+  @Local quickJsRunning: boolean = false;
   /**
    * MediaService 锁状态回调（aboutToAppear 注册、aboutToDisappear 摘除，两者必须传同一引用）。
    *
@@ -777,6 +781,41 @@ export struct SettingsDetailPage {
     this.stopEnginePolling();
     // 摘除锁状态监听（传注册时的同一引用，见 onDesktopLyricLockChange）
     MediaService.getInstance().removeDesktopLyricLockListener(this.onDesktopLyricLockChange);
+  }
+
+  /**
+   * 「用 QuickJS 跑一遍当前音源脚本」——双引擎 Phase 4 的比较入口。
+   *
+   * 为什么放这儿：用户 2026-11-15 明确「关键是追求效率，不是完全独立」。
+   * 要判断该不该把某个脚本切到 QuickJS，就得先量出**同一支脚本在两种引擎下的耗时**。
+   * 这条路径不碰 WebView，也不影响正在播的歌。
+   */
+  private async runQuickJsScriptProbe(): Promise<void> {
+    if (this.quickJsRunning) {
+      return;
+    }
+    this.quickJsRunning = true;
+    this.quickJsScriptState = '正在跑…';
+    try {
+      const activeId: string = this.activeSource;
+      if (activeId.length === 0 || activeId.indexOf('mfplat:') === 0) {
+        this.quickJsScriptState = '当前音源不是 LX 脚本（MusicFree 插件走另一条引擎）';
+        return;
+      }
+      const script: string = await lxSourceManager.getScript(activeId);
+      if (script.length === 0) {
+        this.quickJsScriptState = '读不到脚本原文（可能被 gz 压缩或未下载完整）';
+        return;
+      }
+      const r: QuickJsRunResult = await runScriptInQuickJs(script, 4000);
+      this.quickJsScriptState = r.ok ?
+        ('成功 · 平台 ' + r.platforms.join('/') + ' · 宿主调用 ' + r.hostCalls + ' 次 · ' + r.elapsedMs + 'ms') :
+        ('失败 · ' + r.error + '（' + r.elapsedMs + 'ms）');
+    } catch (e) {
+      this.quickJsScriptState = '异常：' + JSON.stringify(e).substring(0, 120);
+    } finally {
+      this.quickJsRunning = false;
+    }
   }
 
   private selectLXSource(apiId: string): void {
@@ -1942,6 +1981,20 @@ export struct SettingsDetailPage {
               // 同步跑（建引擎 + 4 次 evaluateScript，约 2~5ms），结果写日志也给用户看
               this.quickJsState = quickJsSelfTest();
             })
+          Button('用 QuickJS 跑一遍当前音源脚本')
+            .height(34)
+            .fontSize(13)
+            .backgroundColor($r('app.color.card_background'))
+            .fontColor($r('app.color.font_primary'))
+            .margin({ top: 8, left: 8 })
+            .onClick((): void => {
+              void this.runQuickJsScriptProbe();
+            })
+          Text(this.quickJsScriptState.length > 0 ? this.quickJsScriptState : '还没跑过脚本')
+            .fontSize(12)
+            .fontColor($r('app.color.font_tertiary'))
+            .width('100%')
+            .margin({ top: 6 })
           Text(this.quickJsState.length > 0 ? ('自检：' + this.quickJsState) :
             $r('app.string.setting_engine_selftest_empty'))
             .fontSize(12)
