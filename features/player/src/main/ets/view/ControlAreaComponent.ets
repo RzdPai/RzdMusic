@@ -1111,6 +1111,9 @@ export struct ControlAreaComponent {
           // 这一排现在是「投播 / 下载 / 评论 / 更多」四个真入口。
           // 原来第二颗铃铛（通知）是没接功能的占位，用户要求把它换掉：铃铛去掉，
           // 下载左移一位，空出来的位置放「评论」——比藏在「更多」里少点两下。
+          // ⚠️ 这一排的 label 会进 `accessibilityText`，而它的两个重载分别是 `string` 和 `Resource`、
+          //    **不接受联合类型** ⇒ 底部这排只能继续用裸字符串（与旁边的「评论」「更多」一致）。
+          //    菜单里那颗「下载」走 `MenuRow(label: string | Resource)`，已改成 `$r(...)`。
           this.bottomOtherGlyph($r('sys.symbol.arrow_down_circle'), '下载', (): void => {
             this.openDownloadQuality();
           })
@@ -1241,6 +1244,15 @@ export struct ControlAreaComponent {
         this.MenuRow('搜索歌词', $r('sys.symbol.text_and_magnifyingglass'), (): void => {
           this.openSheetFor('lyric');
         })
+        // ★ 2026-11-15（合并 PR #15，用户：「播放页内的歌曲菜单我忘记加下载了」）：
+        //   底部工具行那颗「下载」早就有，但「更多」打开的这份歌曲菜单里一直缺入口。
+        //   走同一个 `openDownloadQuality()`：音质模式=follow 直接下，=manual 弹「选择下载音质」子页
+        //   （本文件已有完整实现，这里只补入口）；本地歌 / 没有音源的歌函数内部自己拦。
+        //   文案走资源（审查补的）：同一菜单里「切换音质」「分享」早就走 `$r(...)` 了。
+        this.MenuRow($r('app.string.player_menu_download'), $r('sys.symbol.arrow_down_circle'),
+          (): void => {
+            this.openDownloadQuality();
+          })
         this.MenuRow('添加到歌单', $r('sys.symbol.plus'), (): void => {
           this.openPlaylistPicker();
         })

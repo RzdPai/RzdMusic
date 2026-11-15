@@ -23,6 +23,10 @@
     {
       "name": "player_menu_share",
       "value": "分享"
+    },
+    {
+      "name": "player_menu_download",
+      "value": "下载"
     }
   ]
 }
