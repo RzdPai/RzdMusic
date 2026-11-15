@@ -51,6 +51,34 @@
     {
       "name": "playlist_home_favorites_empty",
       "value": "暂无收藏歌曲"
+    },
+    {
+      "name": "mine_playlist_export",
+      "value": "导出"
+    },
+    {
+      "name": "mine_playlist_rename",
+      "value": "重命名"
+    },
+    {
+      "name": "mine_playlist_delete",
+      "value": "删除"
+    },
+    {
+      "name": "mine_playlist_new",
+      "value": "新建歌单"
+    },
+    {
+      "name": "mine_playlist_name_placeholder",
+      "value": "输入歌单名称"
+    },
+    {
+      "name": "mine_playlist_confirm",
+      "value": "确定"
+    },
+    {
+      "name": "mine_playlist_empty",
+      "value": "暂无歌单"
     }
   ]
 }

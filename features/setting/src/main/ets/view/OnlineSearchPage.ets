@@ -1735,7 +1735,9 @@ export struct OnlineSearchPage {
       //   档位改成**跟着「其它设置 → 光感强度」走**（`immersiveFromLevel`，与标题栏 `buildTitleMaterial`
       //   同一张档位表）。原来写死 `immersiveMedium()` ⇒ 把光感调到“强”时标题栏变了、这三颗没变。
       .systemMaterial(immersiveFromLevel(this.ambientState.level))
-      .backgroundColor('#33FFFFFF')
+      // ★ 2026-11-13（参考 @tangs/components 调优）：玻璃底色改深浅色自适应资源，
+      //   深色下黑纱替代白纱（原写死 #33FFFFFF，深色模式发灰）。
+      .backgroundColor($r('app.color.immersive_glass_overlay'))
       // ★ 2026-10-24（甲方：「返回按钮、搜索框和切换平台这三个尽量都加上沉浸光感」）：
       //   材质档位跟着「其它设置 → 光感强度」走，与标题栏 `buildTitleMaterial` 同一张表。
       .accessibilityText('返回')
@@ -1764,7 +1766,7 @@ export struct OnlineSearchPage {
         //   `.systemMaterial(...)` 在这里是真渲染的，不是 out of scope。
         //   ⚠️ 菜单本身的光感在 `RzdSelectMenuMaterial` 里（`menuSystemMaterial`），两者互不替代。
         .systemMaterial(immersiveFromLevel(this.ambientState.level))
-        .backgroundColor('#33FFFFFF')
+        .backgroundColor($r('app.color.immersive_glass_overlay'))
         .borderRadius(20)
         .attributeModifier(new RzdSelectMenuMaterial())
         .onSelect((index: number) => {
@@ -1971,7 +1973,9 @@ export struct OnlineSearchPage {
       //   ⇒ 改用**实底卡片背板**：`card_background`（浅 #FFFFFF / 深 #1C1D1F）+ 0.5vp 描边。
       //   ⚠️ 首页那端（`HomeSearchRow`）必须保持**同一套**背板，否则形变中途会看到颜色跳变。
       .systemMaterial(immersiveFromLevel(this.ambientState.level))
-        .backgroundColor('#33FFFFFF')
+      // ★ 2026-11-13（参考 @tangs/components 调优）：玻璃底色改深浅色自适应资源（深色黑纱）。
+      //   与首页那端（HomeSearchRow）同一资源 ⇒ 形变中途无颜色跳变。
+        .backgroundColor($r('app.color.immersive_glass_overlay'))
       .borderRadius(20)
       .border({ width: 0.5, color: $r('sys.color.comp_divider') })
       .clip(true)
@@ -2320,7 +2324,8 @@ export struct OnlineSearchPage {
                         //   与我的页卡片同色（深色下也看得见）。
                         // 热搜/历史词条是 body 里的 Text（B 档，材质不渲染）⇒ 这行只是保留原写法，真正背板是下一行的半透明底。
                         .systemMaterial(immersiveFromLevel(this.ambientState.level))
-        .backgroundColor('#33FFFFFF')
+                        // ★ 2026-11-13（参考 @tangs/components 调优）：底色改深浅色自适应资源（深色黑纱）。
+                        .backgroundColor($r('app.color.immersive_glass_overlay'))
                         .margin({ right: 8, bottom: 8 })
                         .onClick(() => {
                           this.applyKeyword(keyword);
@@ -2370,7 +2375,8 @@ export struct OnlineSearchPage {
                         // 与热搜同一处理：纯色卡片底、不挂模糊（卡顿根因之一）
                         // 热搜/历史词条是 body 里的 Text（B 档，材质不渲染）⇒ 这行只是保留原写法，真正背板是下一行的半透明底。
                         .systemMaterial(immersiveFromLevel(this.ambientState.level))
-        .backgroundColor('#33FFFFFF')
+                        // ★ 2026-11-13（参考 @tangs/components 调优）：底色改深浅色自适应资源（深色黑纱）。
+                        .backgroundColor($r('app.color.immersive_glass_overlay'))
                         .margin({ right: 8, bottom: 8 })
                         .onClick(() => {
                           this.applyKeyword(keyword);

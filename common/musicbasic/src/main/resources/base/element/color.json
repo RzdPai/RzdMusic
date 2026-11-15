@@ -127,6 +127,10 @@
         {
             "name": "playlist_play_all_icon",
             "value": "#FF1949"
+        },
+        {
+            "name": "immersive_glass_overlay",
+            "value": "#33FFFFFF"
         }
     ]
 }

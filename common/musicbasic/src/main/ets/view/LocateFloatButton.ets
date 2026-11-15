@@ -157,8 +157,10 @@ export struct LocateFloatButton {
     .borderRadius(20)
     // ★ 不要蓝色底：材质背板（浅色下是半透明白、深色下是半透明黑，并跟随背后画面）
     // ★ 材质挂 Button（A 档宿主）；backgroundColor 必须半透明才透得出材质
+    // ★ 2026-11-13（参考 @tangs/components 调优）：改深浅色自适应资源 ——
+    //   原来左右两侧分支写的是同一个 '#33FFFFFF'（历史遗留的冗余三元），深色下发灰。
     .systemMaterial(immersiveMedium())
-    .backgroundColor(this.rightSide ? '#33FFFFFF' : '#33FFFFFF')
+    .backgroundColor($r('app.color.immersive_glass_overlay'))
     .shadow({ radius: 14, color: 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 4 })
     .enabled(this.clickable)
     .opacity(this.clickable ? 1 : 0.45)

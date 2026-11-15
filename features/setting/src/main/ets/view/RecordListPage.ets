@@ -725,9 +725,8 @@ export struct RecordListPage {
    *     `adaptiveColor = AVERAGE` 才会"取背后画面平均色"，底下的画面换色它跟着换；
    *   - ⚠️ 2026-10-20（用户：「接入的是**沉浸光感**，不是发光，把这堆发光删了」）：
    *     原来这里还挂了 `hdsEffect` 点光（每格按下发亮 + 条子本体受光），**已全部删除**；
-   *   - 颜色：删除用**用户自定义主题色**，其余文字用 `font_primary`（不再有写死的蓝）。
-   */
-  @Builder
+    *   - 颜色：删除用**用户自定义主题色**，其余文字用 `font_primary`（不再有写死的蓝）。
+    */
   /**
    * 多选底部操作条（光感版）：与本地音乐页同一套做法 —— 放进空 `Tabs` 壳的 tabBar 槽，材质才生效；
    * 壳宽收敛、无阴影（详见项目记忆 §202）。
@@ -1217,7 +1216,8 @@ export struct RecordListPage {
     }
     .type(ButtonType.Normal)
     .systemMaterial(immersiveMedium())
-    .backgroundColor('#33FFFFFF')
+    // ★ 2026-11-13（参考 @tangs/components 调优）：玻璃底色改深浅色自适应资源（深色黑纱 #33000000）。
+    .backgroundColor($r('app.color.immersive_glass_overlay'))
     .width('100%')
     .padding(14)
     .borderRadius(16)
