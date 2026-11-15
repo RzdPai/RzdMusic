@@ -15,6 +15,37 @@
     return new Promise(function (resolve, reject) { pending[id] = { resolve: resolve, reject: reject }; });
   };
 
+  // ── 宿主 → 脚本 的事件派发（2026-11-15：Phase 2 的另一半）──────────────
+  // lx.on('request', handler) 注册的 handler 只能由宿主调用。WebView 侧靠
+  // window._lx_handleRequest；QuickJS 侧就靠这两个函数：
+  //   __qjsInvoke(event, payloadJson)  发起一次调用（结果异步写进 slot）
+  //   __qjsInvokeResult()              查询是否完成 + 返回值/错误
+  globalThis.__qjsInvokeSlot = null;
+  globalThis.__qjsInvoke = function (eventName, dataJson) {
+    var h = handlers[eventName];
+    var slot = { done: false, value: null, error: null };
+    globalThis.__qjsInvokeSlot = slot;
+    if (!h) {
+      slot.done = true;
+      slot.error = 'no handler for event: ' + eventName;
+      return 'no-handler';
+    }
+    var finish = function (v) { slot.done = true; slot.value = v === undefined ? null : v; };
+    var fail = function (e) { slot.done = true; slot.error = String((e && e.message) || e); };
+    try {
+      var r = h(JSON.parse(dataJson));
+      if (r && typeof r.then === 'function') { r.then(finish, fail); } else { finish(r); }
+    } catch (e) {
+      fail(e);
+    }
+    return 'pending';
+  };
+  globalThis.__qjsInvokeResult = function () {
+    var s = globalThis.__qjsInvokeSlot;
+    if (!s) { return JSON.stringify({ done: true, value: null, error: 'no slot' }); }
+    return JSON.stringify({ done: s.done, value: s.value, error: s.error });
+  };
+
   // ArkTS 侧调用：取走当前所有待处理的宿主调用
   globalThis.__qjsDrain = function () {
     var out = outbox;

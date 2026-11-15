@@ -13,6 +13,15 @@ import {AppStorageKeys,
 import { ScriptProfile, probeScript, formatProfile, canRunWithoutWebView } from './ScriptProbe';
 
 export let lxEngineSendRequest: ((key: string, data: LXSourceRequestData) => void) | null = null;
+
+/**
+ * 最近一次真实派发给脚本的 `request` 载荷（`{source, action, info}`）。
+ *
+ * ★ 2026-11-15：给「用 QuickJS 重放上一次取址请求」用的 —— 与其让用户手填一个
+ * 平台 + songmid，不如**直接重放刚才 WebView 侧真跑过的那一条**，保证两边输入完全一致，
+ * 这样比出来的耗时才有意义。
+ */
+export let lxLastRequestData: LXSourceRequestData | undefined = undefined;
 export let lxEngineRegisterPromise: ((key: string,
   resolve: (result: object) => void, reject: (reason: Error) => void) => void) | null = null;
 export let lxEngineIsReady: boolean = false;
@@ -356,6 +365,7 @@ export struct LXSourceEngine {
   }
 
   sendRequest(requestKey: string, data: LXSourceRequestData): void {
+    lxLastRequestData = data;
     let reqJson: string = JSON.stringify(data) || '';
     let b64: string = this.toBase64(reqJson);
     const code: string = `window._lx_handleRequest('${requestKey}', atob('${b64}'))`;

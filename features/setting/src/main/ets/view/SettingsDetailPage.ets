@@ -27,7 +27,7 @@ import { notificationManager } from '@kit.NotificationKit';
 import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, HomeSourceState, LyricCenterState, LyricFontSizeState, LyricFpsState, MotionCoverState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, immersiveFromLevel } from 'musicbasic';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
-import { DownloadService, LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatforms, lxDeclaredPlatformsOf, lxSourceManager, MediaService, lxSourceLabel, LX_PLATFORM_ORDER, normalizePlatformId, musicFreeSubscriptionLabel, quickJsSelfTest, runScriptInQuickJs, QuickJsRunResult } from 'player';
+import { DownloadService, LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatforms, lxDeclaredPlatformsOf, lxSourceManager, MediaService, lxSourceLabel, LX_PLATFORM_ORDER, normalizePlatformId, musicFreeSubscriptionLabel, quickJsSelfTest, runScriptInQuickJs, QuickJsRunResult, runScriptAndInvoke, QuickJsInvokeResult, lxLastRequestData } from 'player';
 import type { LXApiImportResult } from 'player';
 import { importMusicFreeSubscriptionText, importSourceScriptAuto, parseMusicFreeSubscription, updateSubscription, backfillMusicFreePlatforms } from 'player';
 import type { MfImportReport, MfSubscriptionEntry, MfSubscriptionInfo } from 'player';
@@ -811,6 +811,44 @@ export struct SettingsDetailPage {
       this.quickJsScriptState = r.ok ?
         ('成功 · 平台 ' + r.platforms.join('/') + ' · 宿主调用 ' + r.hostCalls + ' 次 · ' + r.elapsedMs + 'ms') :
         ('失败 · ' + r.error + '（' + r.elapsedMs + 'ms）');
+    } catch (e) {
+      this.quickJsScriptState = '异常：' + JSON.stringify(e).substring(0, 120);
+    } finally {
+      this.quickJsRunning = false;
+    }
+  }
+
+  /**
+   * 「用 QuickJS 重放上一次取址请求」—— 双引擎最关键的比较。
+   *
+   * 为什么是"重放"：脚本初始化（`inited`）只是热身；真正决定播放快慢的是
+   * `lx.on('request', …)` 里那条取址逻辑。这里把 WebView 侧**最近一次真跑过**的
+   * `{source, action, info}` 原样丢给 QuickJS，输入完全一致，耗时才有可比性。
+   */
+  private async replayLastRequestInQuickJs(): Promise<void> {
+    if (this.quickJsRunning) {
+      return;
+    }
+    this.quickJsRunning = true;
+    this.quickJsScriptState = '正在重放…';
+    try {
+      if (lxLastRequestData === undefined) {
+        this.quickJsScriptState = '还没有可取址的请求 —— 先在 WebView 下播一首（或等它预热完）再回来';
+        return;
+      }
+      const payload: string = JSON.stringify(lxLastRequestData);
+      const activeId: string = this.activeSource;
+      const script: string = await lxSourceManager.getScript(activeId);
+      if (script.length === 0) {
+        this.quickJsScriptState = '读不到脚本原文';
+        return;
+      }
+      const r: QuickJsInvokeResult = await runScriptAndInvoke(script, 'request', payload, 6000);
+      this.quickJsScriptState = r.ok ?
+        ('重放成功 · ' + r.elapsedMs + 'ms · 宿主调用 ' + r.hostCalls + ' 次 · ' +
+          r.valueJson.substring(0, 80)) :
+        ('重放失败 · ' + (r.error.length > 0 ? r.error : '未知') +
+          (r.elapsedMs > 0 ? '（' + r.elapsedMs + 'ms）' : ''));
     } catch (e) {
       this.quickJsScriptState = '异常：' + JSON.stringify(e).substring(0, 120);
     } finally {
@@ -1989,6 +2027,15 @@ export struct SettingsDetailPage {
             .margin({ top: 8, left: 8 })
             .onClick((): void => {
               void this.runQuickJsScriptProbe();
+            })
+          Button('用 QuickJS 重放上一次取址请求')
+            .height(34)
+            .fontSize(13)
+            .backgroundColor($r('app.color.card_background'))
+            .fontColor($r('app.color.font_primary'))
+            .margin({ top: 8, left: 8 })
+            .onClick((): void => {
+              void this.replayLastRequestInQuickJs();
             })
           Text(this.quickJsScriptState.length > 0 ? this.quickJsScriptState : '还没跑过脚本')
             .fontSize(12)

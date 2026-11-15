@@ -40,6 +40,18 @@ export class LxScriptInitInfo {
   raw: string = '';
 }
 
+/** 一次「宿主 → 脚本」事件调用的结果（Phase 2 的另一半）。 */
+export class QuickJsInvokeResult {
+  ok: boolean = false;
+  /** 脚本 handler 的返回值（JSON 字符串；通常就是取址结果） */
+  valueJson: string = '';
+  /** 耗时（从发起调用到 handler 的 Promise 落定，含其中所有网络往返） */
+  elapsedMs: number = -1;
+  /** 期间处理了多少次宿主调用（脚本自己要发请求才有） */
+  hostCalls: number = 0;
+  error: string = '';
+}
+
 /** 一次「把脚本跑在 QuickJS 里」的结果。 */
 export class QuickJsRunResult {
   ok: boolean = false;
@@ -341,6 +353,91 @@ export async function runScriptInQuickJs(scriptText: string, timeoutMs: number =
   } catch (e) {
     out.error = JSON.stringify(e).substring(0, 160);
     appendPlayLog('[qjs] 跑脚本抛异常: ' + out.error);
+    return out;
+  } finally {
+    rt.release();
+  }
+}
+
+/**
+ * 跑脚本 → 等 inited → **再向脚本派发一次真实事件**（`lx.on('request', …)` 那条回调）。
+ *
+ * 这是把 QuickJS 真正用于业务的最后一块：WebView 侧靠 `window._lx_handleRequest` 派发，
+ * QuickJS 侧靠 PRELUDE 里的 `__qjsInvoke`。
+ *
+ * @param scriptText 脚本原文
+ * @param eventName 事件名（现在只有 `request`）
+ * @param payloadJson 事件载荷（与 WebView 侧 `sendRequest(requestKey, data)` 的 data 同形）
+ * @param timeoutMs 总预算
+ */
+export async function runScriptAndInvoke(scriptText: string, eventName: string,
+  payloadJson: string, timeoutMs: number = 6000): Promise<QuickJsInvokeResult> {
+  const out: QuickJsInvokeResult = new QuickJsInvokeResult();
+  const rt: QuickJsRuntime = new QuickJsRuntime();
+  const initInfo: LxScriptInitInfo = new LxScriptInitInfo();
+  try {
+    if (!rt.start('invoke')) {
+      out.error = '引擎启动失败';
+      return out;
+    }
+    rt.evaluate(scriptText, 'lx_script.js');
+    // 第一步：等脚本 inited（其后它才注册好 request handler）
+    const initDeadline: number = Date.now() + 4000;
+    while (Date.now() < initDeadline && !initInfo.inited) {
+      rt.driveTimers();
+      const calls: QuickJsCall[] = rt.drain();
+      if (calls.length > 0) {
+        out.hostCalls += await handleHostCalls(rt, calls, initInfo);
+      }
+      await sleep(calls.length > 0 ? 8 : 20);
+    }
+    if (!initInfo.inited) {
+      out.error = '脚本没有上报 inited，跳过事件派发';
+      appendPlayLog('[qjs] invoke 中止：' + out.error);
+      return out;
+    }
+    // 第二步：派发一次真实事件并等它落定
+    const started: number = Date.now();
+    appendPlayLog('[qjs] invoke 事件=' + eventName + ' 载荷=' + payloadJson.length + 'B');
+    rt.evaluate(`__qjsInvoke(${JSON.stringify(eventName)}, ${JSON.stringify(payloadJson)})`, 'rzd_invoke.js');
+    while (Date.now() - started < timeoutMs) {
+      rt.driveTimers();
+      const calls: QuickJsCall[] = rt.drain();
+      if (calls.length > 0) {
+        out.hostCalls += await handleHostCalls(rt, calls, initInfo);
+      }
+      const raw: string = rt.evaluate('__qjsInvokeResult()', 'rzd_invoke_result.js');
+      if (raw.length > 0) {
+        try {
+          const st: Record<string, Object> = JSON.parse(raw) as Record<string, Object>;
+          if (st['done'] === true) {
+            out.elapsedMs = Date.now() - started;
+            const err: string = (st['error'] as string) ?? '';
+            if (err.length > 0) {
+              out.error = err;
+            } else {
+              out.ok = true;
+              const v: Object = st['value'];
+              out.valueJson = v === null || v === undefined ? '' : JSON.stringify(v);
+            }
+            break;
+          }
+        } catch (_e) {
+          // 结果为非 JSON：当作还没好，继续等
+        }
+      }
+      await sleep(calls.length > 0 ? 8 : 20);
+    }
+    if (out.elapsedMs < 0) {
+      out.error = '事件在 ' + timeoutMs + 'ms 内没有落定';
+    }
+    appendPlayLog('[qjs] invoke 完成 ok=' + out.ok + ' 耗时=' + out.elapsedMs +
+      'ms 宿主调用=' + out.hostCalls + ' 结果=' + out.valueJson.substring(0, 120) +
+      (out.error.length > 0 ? ' 错误=' + out.error.substring(0, 120) : ''));
+    return out;
+  } catch (e) {
+    out.error = JSON.stringify(e).substring(0, 160);
+    appendPlayLog('[qjs] invoke 抛异常: ' + out.error);
     return out;
   } finally {
     rt.release();
