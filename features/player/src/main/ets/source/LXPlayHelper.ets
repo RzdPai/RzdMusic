@@ -1,6 +1,6 @@
 import { LXSourceRequestData, LXMusicUrlResult, LXLyricResult, LXPicResult, LXSource, toLXSource, toLXSourceKey } from './Interface';
 import { lxEngineSendRequest, lxEngineRegisterPromise, lxEngineIsReady, lxLastRequestData,
-  scriptCanRunWithoutWebView } from './LXSourceEngine';
+  scriptCanRunWithoutWebView, lxEngineEnsureWebView } from './LXSourceEngine';
 import { lxSearch, lxLeaderboard, LXSearchSong } from './LXMusicSDK';
 import { lxSourceManager } from './LXSourceManager';
 import { isMfOnlyPlatform, mfGetLyric, mfGetMediaSource, mfGetSheetSongs, mfSearch, musicFreeApisForPlatform } from './MusicFreeAdapter';
@@ -523,6 +523,11 @@ export async function getLXMusicUrl(source: string, songId: string, quality: str
     }
     // 记下"这支脚本在这台机器上跑不了"，下次 auto 直接走 WebView（不重复付超时）
     rememberVerdict(activeScriptId, false);
+    // ★ 2026-11-16：QuickJS 没接住 ⇒ 立刻把 WebView 拉起来（混合的"兜底腿"）。
+    //   接下来 `sendReq` 会因为引擎未就绪而进队列（TTL 20s），页面加载完自动补发。
+    if (lxEngineEnsureWebView !== null) {
+      lxEngineEnsureWebView();
+    }
     logError('qjs miss -> webview (' + engineMode + ')');
   }
   if (!lxEngineIsReady || lxEngineSendRequest === null || lxEngineRegisterPromise === null) {

@@ -31,6 +31,15 @@ export let lxLastRequestData: LXSourceRequestData | undefined = undefined;
 export let lxLastInitTotalMs: number = -1;
 
 /**
+ * 「现在把 WebView 拉起来」—— 由组件注入，供 `LXPlayHelper` 在 QuickJS 取址失败时调用。
+ *
+ * ★ 2026-11-16（用户：「按特性混合」）：QuickJS 能服务这支脚本时**不创建 Web 组件**
+ *   （省一个渲染进程）；真失败时再把它挂上去，靠 `sendRequest` 的未就绪队列
+ *   （TTL 20s）自动补发，用户无感。
+ */
+export let lxEngineEnsureWebView: (() => void) | null = null;
+
+/**
  * 每支脚本「能不能脱离 WebView 跑」的探测结果（`ScriptProbe.canRunWithoutWebView`）。
  *
  * ★ 2026-11-15：`LXPlayHelper` 的 `auto` 路由要用它当闸门 —— 纯文本扫描（~4ms），
@@ -191,6 +200,12 @@ export struct LXSourceEngine {
   /** 看门狗判定「注入后完全没有 init」后把本次会话钉在分片通道（换脚本时解除）。 */
   private pinChunked: boolean = false;
   /** 当前脚本的能力画像（Phase 0 只打日志；Phase 1 起据它决定能否离开 WebView）。 */
+  /**
+   * 是否真的挂载 Web 组件。默认 **false** —— 由 `initScript()` 决定要不要 WebView：
+   * 该脚本能走 QuickJS 就不挂，省掉 WebView 的渲染进程与内存。
+   * 失败时由 {@link lxEngineEnsureWebView} 拉起来。
+   */
+  @State private webMounted: boolean = false;
   private scriptProfile: ScriptProfile = {
     needsDom: false, needsWebCrypto: false, needsCompression: false,
     needsXhr: false, needsWebSocket: false, reason: ''
@@ -270,6 +285,12 @@ export struct LXSourceEngine {
 
   aboutToAppear(): void {
     LXSourceEngine.appendLog('引擎 aboutToAppear active=' + this.lxActiveSource);
+    lxEngineEnsureWebView = (): void => {
+      if (!this.webMounted) {
+        this.webMounted = true;
+        LXSourceEngine.appendLog('引擎 按需拉起 WebView（QuickJS 没接住）');
+      }
+    };
     lxEngineSendRequest = (key: string, data: LXSourceRequestData): void => {
       this.sendRequest(key, data);
     };
@@ -316,6 +337,28 @@ export struct LXSourceEngine {
     this.pendingRequests.clear();
   }
 
+  /**
+   * 脚本声明的动作是否只有 `musicUrl`（取播放地址）。
+   * @param apiInfo 脚本信息
+   * @returns true = 只做取址（可以放心不挂 WebView）
+   */
+  private scriptOnlyMusicUrl(apiInfo: LXUserApiInfoFull): boolean {
+    const keys: string[] = Object.keys(apiInfo.sources);
+    if (keys.length === 0) {
+      return false;
+    }
+    for (let i: number = 0; i < keys.length; i++) {
+      const src: LXUserApiSourceInfo = apiInfo.sources[keys[i]];
+      const actions: string[] = src !== undefined && src.actions !== undefined ? src.actions : [];
+      for (let j: number = 0; j < actions.length; j++) {
+        if (actions[j] !== 'musicUrl') {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
   initScript(apiInfo: LXUserApiInfoFull): void {
     LXSourceEngine.appendLog('引擎 initScript name=' + apiInfo.name + ' webviewReady=' + this.webviewReady);
     this.currentApiInfo = apiInfo;
@@ -333,6 +376,27 @@ export struct LXSourceEngine {
     const profileText: string = formatProfile(this.scriptProfile);
     const canQuick: boolean = canRunWithoutWebView(this.scriptProfile);
     scriptCanQuick.set(apiInfo.id, canQuick);
+    // ★ 2026-11-16：决定这支脚本要不要 WebView。
+    //   `ArkWeb优先` → 一定要；`QuickJS优先` → 先不挂；`混合` → 探测过关且没被判死才不挂。
+    const mode: string = this.lxEngineMode();
+    const persisted: boolean | undefined =
+      MusicStoreService.getInstance().getQuickJsVerdict(apiInfo.id);
+    // ★ 2026-11-16：只有「脚本声明的动作全是 musicUrl」时才敢不挂 WebView。
+    //   歌词(lyric)/封面(pic) 还走 `getLXLyric`/`getLXPic`，它们仍以 `lxEngineIsReady` 为闸门
+    //   —— 不挂 WebView 就会静默丢歌词/封面。等这些也搬到 QuickJS 再放宽。
+    const onlyMusicUrl: boolean = this.scriptOnlyMusicUrl(apiInfo);
+    const skipWeb: boolean = onlyMusicUrl && (mode === 'quickjs' ||
+      (mode === 'auto' && persisted !== false && canQuick));
+    if (!skipWeb && !this.webMounted) {
+      this.webMounted = true;
+    }
+    LXSourceEngine.appendLog('引擎 WebView ' + (skipWeb ? '不挂载（QuickJS 接管）' : '挂载') +
+      ' mode=' + mode + ' verdict=' + (persisted === undefined ? '未测' : (persisted ? '可' : '否')) +
+      ' canQuick=' + canQuick);
+    if (skipWeb) {
+      // 不刷新、不注入：脚本交给 QuickJS。真失败会调 lxEngineEnsureWebView 把 Web 拉起来。
+      return;
+    }
     LXSourceEngine.appendLog('引擎 脚本能力 ' + profileText +
       ' 可无 DOM 运行=' + canQuick + ' lxEngineMode=' + this.lxEngineMode());
     // 落 AppStorage：设置页/诊断可直接显示，也免得以后为了看一眼再探测一遍
@@ -1075,7 +1139,11 @@ appendPlayLog(msg);
   }
 
   build(): void {
-    Web({ src: $rawfile('lx_bridge.html'), controller: this.controller })
+    // ★ 2026-11-16：build 只能有一个容器根节点 ⇒ 用 1×1 的 Stack 包住。
+    //   QuickJS 接管时不创建 Web 子节点（不是「加载空白页」——那样仍有渲染进程）。
+    Stack() {
+      if (this.webMounted) {
+        Web({ src: $rawfile('lx_bridge.html'), controller: this.controller })
       .onControllerAttached((): void => {
         // 官方：此回调之前不得调用 Web 组件相关 API（否则抛 js-error 17100001）
         this.controllerAttached = true;
@@ -1153,8 +1221,12 @@ appendPlayLog(msg);
         }
         return false;
       })
-      .width(1)
-      .height(1)
-      .opacity(0)
+          .width(1)
+          .height(1)
+          .opacity(0)
+      }
+    }
+    .width(1)
+    .height(1)
   }
 }
