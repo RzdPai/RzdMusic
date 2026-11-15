@@ -4,10 +4,10 @@ import { notificationManager } from '@kit.NotificationKit';
 import { fileIo as fs, fileUri, picker } from '@kit.CoreFileKit';
 import { http } from '@kit.NetworkKit';
 import { image } from '@kit.ImageKit';
-import { MusicStoreService, appendPlayLog } from 'musicbasic';
+import { MusicStoreService, appendPlayLog, sniffAudioContainerExt } from 'musicbasic';
 import { getLXMusicUrl } from '../source/LXPlayHelper';
 import { lxGetLyricFull, lxGetPicFallback, LyricFullResult } from '../source/LXMusicSDK';
-import { getQualityChain, resolveMusicUrlWithFallback, UrlResolveOutcome } from './SourceFallbackUtil';
+import { FallbackOptions, getQualityChain, resolveMusicUrlWithFallback, UrlResolveOutcome } from './SourceFallbackUtil';
 import { AmllLyricLine } from '../amll/model/AmllTypes';
 import { amllParseLyricText } from '../amll/parse/AmllAutoDetect';
 import { amllStringifyLrc } from '../amll/parse/AmllLyricFormatParsers';
@@ -579,8 +579,13 @@ export class DownloadService {
     try {
       // 1) 解析下载地址：按所选音质起、逐档向下兜底
       // ★ B3：下载和播放共用同一条回退链（resolveMusicUrlWithFallback 内部就是 buildCandidateChain）
+      // ★ 2026-11-15（合并 PR #13「部分歌曲下载后报格式不支持」）：把 enqueue 时的档位快照传进回退链。
+      //   以前链内 preferred 取的是**播放偏好** —— 用户在下载弹层选了 FLAC、播放偏好却是 128k 时，
+      //   实际下到的是 128k 内容，而文件名仍按请求档位写成 .flac ⇒ 本地导入按文件头校验时判「格式不支持」。
+      const dlOptions: FallbackOptions = new FallbackOptions();
+      dlOptions.preferredQuality = task.requestedQuality;
       const dlOutcome: UrlResolveOutcome = await resolveMusicUrlWithFallback(
-        task.source, task.songId, task.name, task.singer, '', null);
+        task.source, task.songId, task.name, task.singer, '', null, dlOptions);
       console.info('[RzdFallback] download via chain ok=' + (dlOutcome.url.length > 0) +
         ' quality=' + dlOutcome.quality + ' script=' + dlOutcome.scriptName);
       let url: string = dlOutcome.url;
@@ -609,6 +614,10 @@ export class DownloadService {
         this.failTask(task, '获取下载地址失败');
         return;
       }
+      // 1.5) ★ 2026-11-15（PR #13）：实际音质可能已降级 —— 文件名（扩展名 + 音质标签）必须按
+      //      **实际解析到的**档位重建，否则「请求 FLAC、下到 128k」时文件仍叫 xxx.flac（扩展名造假）。
+      task.fileName = this.buildFileName(task.name, task.singer, task.quality);
+      this.notify(true);
       if (this.findIndex(task.id) < 0) {
         return;
       }
@@ -631,6 +640,12 @@ export class DownloadService {
       if (stat.size < 1024) {
         throw new Error('文件内容异常');
       }
+      // 2.5) ★ 2026-11-15（PR #13）：按实际**容器头**再修正一次扩展名。
+      //      有的服务器不按请求档位返回内容（要 flac 给 mp3），本地音乐导入按「扩展名 + 文件头」
+      //      双重校验，对不上会被判「格式不支持」。
+      //      ⚠️ 这里改的是 `task.fileName`；真正写标签的是下面的 `embedMetadata(tmpPath, …)`，
+      //      而 taglib 是**按内容嗅探**格式的（临时文件名是 dl_*.tmp 也照样写），不依赖扩展名。
+      this.correctFileExtByContent(task, tmpPath);
       // 3) 元信息（标题/歌手/专辑/封面/歌词）
       task.message = '写入元信息';
       this.notify(true);
@@ -1169,6 +1184,33 @@ export class DownloadService {
     } finally {
       req.destroy();
     }
+  }
+
+  /**
+   * 按实际**容器头**修正扩展名（只改 `task.fileName`，内容不动）。
+   *
+   * ★ 2026-11-15（合并 PR #13）：嗅探实现收敛到 `musicbasic` 的 `sniffAudioContainerExt`
+   *   —— 原本 PR 在 `DownloadService` 里另写了一份、而且**不跳 ID3v2 前置标签**，
+   *   于是「带 ID3 标签的 FLAC」在下载侧被改名成 `.mp3`、在导入侧又被认回 `.flac`，两边打架。
+   * @param task 当前下载任务（会就地改 fileName）
+   * @param path 临时文件路径（`dl_*.tmp`，内容已经是最终音频）
+   */
+  private correctFileExtByContent(task: DownloadTask, path: string): void {
+    const realExt: string = sniffAudioContainerExt(path);
+    const dot: number = task.fileName.lastIndexOf('.');
+    const currentExt: string = dot >= 0 ? task.fileName.substring(dot).toLowerCase() : '';
+    if (realExt.length === 0) {
+      appendPlayLog('[下载] container unknown, keep ext ' + (currentExt.length > 0 ? currentExt : '(无)') +
+        ' of ' + task.fileName);
+      return;
+    }
+    if (currentExt === realExt) {
+      return;
+    }
+    task.fileName = (dot >= 0 ? task.fileName.substring(0, dot) : task.fileName) + realExt;
+    appendPlayLog('[下载] ext corrected ' + (currentExt.length > 0 ? currentExt : '(无)') +
+      ' -> ' + realExt + ' quality=' + task.quality);
+    this.notify(true);
   }
 
   /** 构建下载文件名（命名模板 + 可选音质标签），与原 DownloadUtil 规则一致。 */
