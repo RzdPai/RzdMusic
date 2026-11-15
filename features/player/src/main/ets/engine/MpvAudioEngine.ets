@@ -201,10 +201,30 @@ export class MpvAudioEngine implements AudioKernel {
   /**
    * 起播前的网络参数：UA / Referer / 超时 / 重连。
    * 抖音系直链与第三方代理常因 UA/Referer 缺失被拒，这里统一给一套常见值。
+   *
+   * ★ 2026-11-15（B 站实测）：同一份直链
+   *   **不带 Referer → 403 + `<html>403 Forbidden`；带 Referer → 206 + ftypiso5(fMP4)**。
+   *   MusicFree 插件取址时本来就把 `headers`（含 `referer: https://www.bilibili.com/video/<bvid>`）
+   *   一起返回了，以前我们把 headers 丢了 ⇒ AVPlayer 拿到的是 403 的 HTML ⇒
+   *   报 `CONTAINER_ERR`。AVPlayer 在本 SDK 版本无法按请求带 header，所以这类地址必须走内核。
+   * @param referer 插件给的 Referer（空串 = 用抖音默认值）
+   * @param userAgent 插件给的 UA（空串 = 用默认值）
    */
-  prepareNetworkOptions(): void {
-    this.write('user-agent', 'Mozilla/5.0 (Linux; HarmonyOS) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36');
-    this.write('http-header-fields', 'Referer: https://www.douyin.com/, Origin: https://www.douyin.com');
+  prepareNetworkOptions(referer?: string, userAgent?: string): void {
+    const ref: string = referer !== undefined ? referer.trim() : '';
+    const ua: string = userAgent !== undefined ? userAgent.trim() : '';
+    const defaultUa: string = 'Mozilla/5.0 (Linux; HarmonyOS) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
+    this.write('user-agent', ua.length > 0 ? ua : defaultUa);
+    if (ref.length > 0) {
+      // 插件给的 Referer 优先：它决定了 CDN 是否放行（B 站缺它就是 403）
+      const origin: string = ref.indexOf('https://') === 0
+        ? 'https://' + ref.substring(8).split('/')[0] : '';
+      this.write('http-header-fields',
+        'Referer: ' + ref + (origin.length > 0 ? ', Origin: ' + origin : ''));
+      appendPlayLog('[RzdMpv] net params ref=' + ref.substring(0, 60));
+    } else {
+      this.write('http-header-fields', 'Referer: https://www.douyin.com/, Origin: https://www.douyin.com');
+    }
     this.write('network-timeout', '15');
     this.write('stream-lavf-o', 'reconnect=1,reconnect_streamed=1,reconnect_delay_max=2');
     appendPlayLog('[RzdMpv] net params set');

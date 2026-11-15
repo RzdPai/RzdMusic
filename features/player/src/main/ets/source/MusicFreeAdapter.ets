@@ -698,7 +698,54 @@ export async function mfSearch(api: LXUserApiInfo, query: string, page: number,
  * @param singer 歌手
  */
 /**
- * 从插件 `getMediaSource` 的返回值里取播放地址。
+ * 插件取址时一并返回的**请求头**（`url → [Referer, UA]`）。
+ *
+ * ★ 2026-11-15（B 站实测）：插件返回的是 `{ url, headers }`，headers 里带
+ *   `referer: https://www.bilibili.com/video/<bvid>`。我们以前**只取 url、把 headers 丢了**
+ *   ⇒ B 站 CDN 直接 403（返回 `<html>403 Forbidden`）⇒ AVPlayer 报
+ *   `CONTAINER_ERR-unsupport container format type`、mpv 的 `demuxer=` 也是空。
+ *   带 Referer 同一份地址是 **206 + ftypiso5(fMP4)**，完全可播。
+ *   AVPlayer 在本 SDK 版本无法按请求带 header ⇒ 这类地址必须交给内核（mpv）。
+ */
+const mediaHeaderCache: Map<string, string[]> = new Map();
+const MEDIA_HEADER_CACHE_MAX: number = 64;
+
+/** 记下某地址需要的请求头（只在真有 Referer/UA 时记）。 */
+function rememberMediaHeaders(url: string, referer: string, userAgent: string): void {
+  if (url.length === 0 || (referer.length === 0 && userAgent.length === 0)) {
+    return;
+  }
+  if (mediaHeaderCache.size >= MEDIA_HEADER_CACHE_MAX) {
+    const first: string | undefined = mediaHeaderCache.keys().next().value;
+    if (first !== undefined) {
+      mediaHeaderCache.delete(first);
+    }
+  }
+  mediaHeaderCache.set(url, [referer, userAgent]);
+}
+
+/**
+ * 取某播放地址需要的 Referer（插件给的）。
+ * @param url 插件返回的**原始**地址（未 unwrap）
+ * @returns Referer；没有则空串
+ */
+export function mediaRefererFor(url: string): string {
+  const hit: string[] | undefined = mediaHeaderCache.get(url);
+  return hit !== undefined ? hit[0] : '';
+}
+
+/**
+ * 取某播放地址需要的 UA（插件给的）。
+ * @param url 插件返回的**原始**地址
+ * @returns UA；没有则空串
+ */
+export function mediaUserAgentFor(url: string): string {
+  const hit: string[] | undefined = mediaHeaderCache.get(url);
+  return hit !== undefined ? hit[1] : '';
+}
+
+/**
+ * 从插件 `getMediaSource` 的返回值里取播放地址（并顺手记下它要求的请求头）。
  * @param json 插件返回的原始字符串（可能是 JSON 对象，也可能直接是带引号的 URL）
  * @returns 播放地址；取不到抛错
  */
@@ -717,6 +764,27 @@ function urlFromMediaSource(json: string): string {
   const url: string = (parsed.url as string) ?? '';
   if (url.length === 0) {
     throw new Error('插件没有返回播放地址');
+  }
+  // 记下插件要求的 Referer / UA（B 站没它就是 403）
+  let referer: string = '';
+  let userAgent: string = '';
+  const rawHeaders: Object | undefined = parsed.headers;
+  if (rawHeaders !== undefined && rawHeaders !== null && typeof rawHeaders === 'object') {
+    const rec: Record<string, Object> = rawHeaders as Record<string, Object>;
+    const keys: string[] = Object.keys(rec);
+    for (let i: number = 0; i < keys.length; i++) {
+      const lower: string = keys[i].toLowerCase();
+      const value: string = typeof rec[keys[i]] === 'string' ? rec[keys[i]] as string : '';
+      if (lower === 'referer' || lower === 'referrer') {
+        referer = value;
+      } else if (lower === 'user-agent' || lower === 'ua') {
+        userAgent = value;
+      }
+    }
+  }
+  rememberMediaHeaders(url, referer, userAgent);
+  if (referer.length > 0) {
+    appendPlayLog('[mf] media headers referer=' + referer.substring(0, 70));
   }
   return url;
 }
