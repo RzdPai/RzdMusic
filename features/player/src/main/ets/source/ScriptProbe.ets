@@ -36,6 +36,17 @@ export interface ScriptProfile {
   needsWebCrypto: boolean;
   /** 是否用到压缩流（Compression/DecompressionStream），QuickJS 侧未补齐时必须留在 WebView。 */
   needsCompression: boolean;
+  /**
+   * 是否直接用 `XMLHttpRequest`（不走 `lx.request`）。
+   * ★ 2026-11-15：**不再阻断 QuickJS** —— PRELUDE 已提供 XHR 垫片（转成宿主 http 调用）。
+   *   单独记下来只为了在日志里说明"这支脚本用了 XHR，走的是垫片"。
+   */
+  needsXhr: boolean;
+  /**
+   * 是否用 WebSocket。（QuickJS 侧**没有**实现，也难在不引入真实 socket 的情况下实现
+   * —— 目前判为「必须 WebView」。）
+   */
+  needsWebSocket: boolean;
   /** 命中的关键词（最多 {@link MAX_REASON} 个），只用于日志排查。 */
   reason: string;
 }
@@ -71,6 +82,16 @@ const COMPRESSION_KEYS: string[] = [
   'compressionstream'
 ];
 
+/** XHR 关键词（有垫片 ⇒ 不阻断 QuickJS，只做记录）。 */
+const XHR_KEYS: string[] = [
+  'xmlhttprequest'
+];
+
+/** WebSocket 关键词（QuickJS 侧未实现 ⇒ 阻断）。 */
+const WEBSOCKET_KEYS: string[] = [
+  'websocket'
+];
+
 /**
  * 扫描一组关键词，返回命中的第一个（未命中返回空串）。
  * @param haystack 已转小写的脚本文本。
@@ -103,7 +124,8 @@ function scanKeys(haystack: string, keys: string[], hits: string[]): boolean {
  */
 export function probeScript(script: string): ScriptProfile {
   if (script.length === 0) {
-    return { needsDom: false, needsWebCrypto: false, needsCompression: false, reason: '' };
+    return { needsDom: false, needsWebCrypto: false, needsCompression: false,
+      needsXhr: false, needsWebSocket: false, reason: '' };
   }
   // 只转一次小写：关键词全小写，脚本里大小写混写都要认（`document` / `Document` / `DOCUMENT`）。
   const haystack: string = script.toLowerCase();
@@ -111,10 +133,14 @@ export function probeScript(script: string): ScriptProfile {
   const needsDom: boolean = scanKeys(haystack, DOM_KEYS, hits);
   const needsWebCrypto: boolean = scanKeys(haystack, CRYPTO_KEYS, hits);
   const needsCompression: boolean = scanKeys(haystack, COMPRESSION_KEYS, hits);
+  const needsXhr: boolean = scanKeys(haystack, XHR_KEYS, hits);
+  const needsWebSocket: boolean = scanKeys(haystack, WEBSOCKET_KEYS, hits);
   return {
     needsDom: needsDom,
     needsWebCrypto: needsWebCrypto,
     needsCompression: needsCompression,
+    needsXhr: needsXhr,
+    needsWebSocket: needsWebSocket,
     reason: hits.join(',')
   };
 }
@@ -125,7 +151,12 @@ export function probeScript(script: string): ScriptProfile {
  * @returns 三项能力都不需要时为 true。
  */
 export function canRunWithoutWebView(profile: ScriptProfile): boolean {
-  return !profile.needsDom && !profile.needsWebCrypto && !profile.needsCompression;
+  // ★ 2026-11-15（用户：「是特性，不是整个脚本」）——按**能力**判，不是按脚本整体一刀切：
+  //   · XHR：PRELUDE 有垫片（转宿主 http）⇒ 不阻断；
+  //   · DOM / WebCrypto / CompressionStream / WebSocket：QuickJS 侧确实提供不了 ⇒ 阻断。
+  //   以后每补齐一项能力，就从这里去掉一个条件 —— 这就是"按特性混合"的进度条。
+  return !profile.needsDom && !profile.needsWebCrypto &&
+    !profile.needsCompression && !profile.needsWebSocket;
 }
 
 /**
@@ -135,6 +166,8 @@ export function canRunWithoutWebView(profile: ScriptProfile): boolean {
  */
 export function formatProfile(profile: ScriptProfile): string {
   const reason: string = profile.reason.length > 0 ? profile.reason : '-';
+  // xhr 只做记录（有垫片，不阻断）；ws 阻断（QuickJS 侧未实现）
   return 'dom=' + profile.needsDom + ' crypto=' + profile.needsWebCrypto +
-    ' zip=' + profile.needsCompression + ' reason=' + reason;
+    ' zip=' + profile.needsCompression + ' xhr=' + profile.needsXhr +
+    ' ws=' + profile.needsWebSocket + ' reason=' + reason;
 }

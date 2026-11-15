@@ -199,6 +199,97 @@ const PRELUDE: string = `
     globalThis.clearInterval = clearTimer;
   }
 
+  // ── XMLHttpRequest（2026-11-15：按**特性**路由的关键一块）───────────────
+  // LX 脚本里有一部分是直接用 new XMLHttpRequest() 的，不走 lx.request。
+  // 以前这类脚本只能整支丢给 WebView；现在用它把请求转成宿主调用（ArkTS 侧 http），
+  // 于是「支持 XHR」不再等于「必须有 WebView」——这就是按特性混合的意义。
+  if (typeof globalThis.XMLHttpRequest === 'undefined') {
+    var XHR = function () {
+      this.readyState = 0;
+      this.status = 0;
+      this.statusText = '';
+      this.responseText = '';
+      this.response = '';
+      this.responseType = '';
+      this.withCredentials = false;
+      this.timeout = 0;
+      this.onload = null;
+      this.onerror = null;
+      this.onreadystatechange = null;
+      this.ontimeout = null;
+      this._headers = {};
+      this._method = 'GET';
+      this._url = '';
+      this._body = null;
+      this._aborted = false;
+    };
+    XHR.prototype.open = function (method, url) {
+      this._method = String(method || 'GET').toUpperCase();
+      this._url = String(url || '');
+      this.readyState = 1;
+      if (typeof this.onreadystatechange === 'function') { this.onreadystatechange(); }
+    };
+    XHR.prototype.setRequestHeader = function (k, v) { this._headers[k] = v; };
+    XHR.prototype.getAllResponseHeaders = function () {
+      var src = this._respHeaders || {};
+      var out = '';
+      for (var k in src) { if (Object.prototype.hasOwnProperty.call(src, k)) { out += k + ': ' + src[k] + '\r\n'; } }
+      return out;
+    };
+    XHR.prototype.getResponseHeader = function (k) {
+      var src = this._respHeaders || {};
+      var hit = src[String(k).toLowerCase()];
+      return hit === undefined ? null : hit;
+    };
+    XHR.prototype.abort = function () { this._aborted = true; };
+    XHR.prototype.send = function (body) {
+      var self = this;
+      this._body = body === undefined ? null : body;
+      var opts = { method: this._method, headers: this._headers, timeout: this.timeout > 0 ? this.timeout : 15000 };
+      if (this._body !== null) { opts.body = typeof this._body === 'string' ? this._body : JSON.stringify(this._body); }
+      globalThis.__qjsCall('request', { url: this._url, options: opts }).then(function (resp) {
+        if (self._aborted) { return; }
+        self.readyState = 4;
+        self.status = resp && resp.statusCode ? resp.statusCode : 0;
+        self.statusText = (resp && resp.statusMessage) || '';
+        self._respHeaders = (resp && resp.headers) || {};
+        var raw = resp && resp.raw !== undefined && resp.raw !== null ? resp.raw : '';
+        self.responseText = typeof raw === 'string' ? raw : JSON.stringify(raw);
+        self.response = self.responseType === 'json' ? (resp ? resp.body : null) : self.responseText;
+        if (typeof self.onreadystatechange === 'function') { self.onreadystatechange(); }
+        if (typeof self.onload === 'function') { self.onload(); }
+      }, function (err) {
+        if (self._aborted) { return; }
+        self.readyState = 4;
+        self.status = 0;
+        if (typeof self.onerror === 'function') { self.onerror(err); }
+      });
+    };
+    globalThis.XMLHttpRequest = XHR;
+  }
+
+  // ── TextEncoder / TextDecoder（QuickJS 无；脚本用它处理 UTF-8/GBK 字节）──
+  if (typeof globalThis.TextEncoder === 'undefined') {
+    globalThis.TextEncoder = function () {};
+    globalThis.TextEncoder.prototype.encode = function (str) {
+      var s = String(str === undefined ? '' : str);
+      var utf8 = unescape(encodeURIComponent(s));
+      var out = new Uint8Array(utf8.length);
+      for (var i = 0; i < utf8.length; i++) { out[i] = utf8.charCodeAt(i); }
+      return out;
+    };
+  }
+  if (typeof globalThis.TextDecoder === 'undefined') {
+    globalThis.TextDecoder = function (enc) { this.encoding = enc || 'utf-8'; };
+    globalThis.TextDecoder.prototype.decode = function (bytes) {
+      if (!bytes) { return ''; }
+      var arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+      var bin = '';
+      for (var i = 0; i < arr.length; i++) { bin += String.fromCharCode(arr[i]); }
+      try { return decodeURIComponent(escape(bin)); } catch (e) { return bin; }
+    };
+  }
+
   // ── localStorage / sessionStorage：内存版（脚本用它们存 token）──
   if (typeof globalThis.localStorage === 'undefined') {
     var makeStore = function () {

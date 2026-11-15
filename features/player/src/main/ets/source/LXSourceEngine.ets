@@ -192,7 +192,8 @@ export struct LXSourceEngine {
   private pinChunked: boolean = false;
   /** 当前脚本的能力画像（Phase 0 只打日志；Phase 1 起据它决定能否离开 WebView）。 */
   private scriptProfile: ScriptProfile = {
-    needsDom: false, needsWebCrypto: false, needsCompression: false, reason: ''
+    needsDom: false, needsWebCrypto: false, needsCompression: false,
+    needsXhr: false, needsWebSocket: false, reason: ''
   };
   @State isReady: boolean = false;
   @State sources: Record<string, LXUserApiSourceInfo> = {};
