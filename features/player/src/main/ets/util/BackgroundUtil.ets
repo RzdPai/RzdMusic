@@ -16,7 +16,7 @@
 import { wantAgent, common } from '@kit.AbilityKit';
 import { backgroundTaskManager } from '@kit.BackgroundTasksKit';
 import { BusinessError } from '@kit.BasicServicesKit';
-import { Logger, MusicStoreService } from 'musicbasic';
+import {AppStorageKeys,  Logger, MusicStoreService } from 'musicbasic';
 
 /** Serializes start/stop so a pending WantAgent cannot restart a disabled task. */
 export class BackgroundUtil {
@@ -240,7 +240,7 @@ export class BackgroundUtil {
       BackgroundUtil.diagnostic(`start-continuous(err=${err.code}) stage=${stage} msg=${err.message}`);
       if (!BackgroundUtil.failureShown) {
         BackgroundUtil.failureShown = true;
-        AppStorage.setOrCreate('lxLastError', '后台播放任务申请失败，请查看运行日志（' + err.code + '）');
+        AppStorage.setOrCreate(AppStorageKeys.LX_LAST_ERROR, '后台播放任务申请失败，请查看运行日志（' + err.code + '）');
       }
     }
   }

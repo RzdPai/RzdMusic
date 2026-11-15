@@ -1,4 +1,4 @@
-import { MusicStoreService, PlaybackPreferenceService, appendPlayLog } from 'musicbasic';
+import {AppStorageKeys,  MusicStoreService, PlaybackPreferenceService, appendPlayLog } from 'musicbasic';
 import { getLXMusicUrl, getMusicFreeUrlForPlatform } from '../source/LXPlayHelper';
 import { lxSearch, LXSearchSong } from '../source/LXMusicSDK';
 import { musicFreeApisForPlatform } from '../source/MusicFreeAdapter';
@@ -302,7 +302,7 @@ export const QUALITY_TIER_FAIL_THRESHOLD: number = 2;
 export const QUALITY_TIER_COOLDOWN_MS: number = 12 * 60 * 60 * 1000;
 
 export function activeSourceId(): string {
-  return AppStorage.get<string>('lxActiveSource') ?? '';
+  return AppStorage.get<string>(AppStorageKeys.LX_ACTIVE_SOURCE) ?? '';
 }
 
 export function activeSourceName(): string {
@@ -322,7 +322,7 @@ export function activeSourceName(): string {
 
 function declaredQualitys(source: string): string[] | null {
   try {
-    const raw: string = AppStorage.get<string>('lxEngineSources') ?? '';
+    const raw: string = AppStorage.get<string>(AppStorageKeys.LX_ENGINE_SOURCES) ?? '';
     if (raw.length === 0 || raw === '{}') {
       return null;
     }
@@ -790,7 +790,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 function engineReady(): boolean {
-  return AppStorage.get<boolean>('lxEngineReady') === true;
+  return AppStorage.get<boolean>(AppStorageKeys.LX_ENGINE_READY) === true;
 }
 
 async function switchToScript(scriptId: string): Promise<boolean> {
@@ -800,7 +800,7 @@ async function switchToScript(scriptId: string): Promise<boolean> {
   //   失败（超时）时必须**回滚**——否则 `lxActiveSource` 会停在一个永远 init 不成功的脚本上，
   //   之后每次播放都撞"引擎未就绪"（日志实证：预热完 `active=` 指向最后那个超时脚本）。
   const prevActive: string = activeSourceId();
-  AppStorage.setOrCreate('lxActiveSource', scriptId);
+  AppStorage.setOrCreate(AppStorageKeys.LX_ACTIVE_SOURCE, scriptId);
   const deadline: number = start + SCRIPT_SWITCH_TIMEOUT_MS;
   let sawReloading: boolean = false;
   while (Date.now() < deadline) {
@@ -823,7 +823,7 @@ async function switchToScript(scriptId: string): Promise<boolean> {
     (prevActive !== scriptId ? ' rollback active -> ' + (prevActive.length > 0 ? prevActive : '(empty)') : ''));
   // 只回滚"本次自己写进去的那个"：若期间被别的流程改写，就别抢回来
   if (activeSourceId() === scriptId) {
-    AppStorage.setOrCreate('lxActiveSource', prevActive);
+    AppStorage.setOrCreate(AppStorageKeys.LX_ACTIVE_SOURCE, prevActive);
   }
   return false;
 }
@@ -1313,7 +1313,7 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
         ')，预选 ' + pick.name);
       // 只置 active（宿主会挂引擎、开始注入），剩下的交给回退链按候选逐个
       // switchToScript（那次会带 8s 超时 + 失败回滚）。
-      AppStorage.setOrCreate('lxActiveSource', pick.id);
+      AppStorage.setOrCreate(AppStorageKeys.LX_ACTIVE_SOURCE, pick.id);
       hasLxScript = true;
     } else {
       appendPlayLog('[换源] 没有可用的 LX 脚本（active=' + (activeNow.length > 0 ? activeNow : 'empty') + '）');
@@ -1447,7 +1447,7 @@ export async function resolveMusicUrlWithFallback(source: string, songId: string
   appendPlayLog('[回退链] all failed cands=' + cands.length + ' tried=' + attempted +
     ' skipped=' + skippedCooldown + ' blocked=' + blockedPairs.size + ' restore origin');
   if (activeAtStart.length > 0) {
-    AppStorage.setOrCreate('lxActiveSource', activeAtStart);
+    AppStorage.setOrCreate(AppStorageKeys.LX_ACTIVE_SOURCE, activeAtStart);
   }
   const failed: UrlResolveOutcome = new UrlResolveOutcome();
   // ★ 2026-11-05：区分"一个候选都没真正发出去"（全被冷却/换脚本失败挡掉）和"发了但全失败"。
@@ -1482,7 +1482,7 @@ export async function warmUpLxSources(): Promise<number> {
   // 否则又回到「LX 引擎永远等不到 init」的死局（2026-11-09 用户反馈）。
   const originalActive: string = isLxScriptId(rawActive) ? rawActive : '';
   if (originalActive.length === 0 && rawActive.length > 0) {
-    AppStorage.setOrCreate('lxActiveSource', '');
+    AppStorage.setOrCreate(AppStorageKeys.LX_ACTIVE_SOURCE, '');
   }
   const myToken: number = warmUpToken;
   let warmed: number = 0;
@@ -1495,7 +1495,7 @@ export async function warmUpLxSources(): Promise<number> {
     if (warmUpToken !== myToken) {
       appendPlayLog('[换源] 预热被抢占 ' + warmed + '/' + list.length);
       if (originalActive.length > 0) {
-        AppStorage.setOrCreate('lxActiveSource', originalActive);
+        AppStorage.setOrCreate(AppStorageKeys.LX_ACTIVE_SOURCE, originalActive);
       }
       return warmed;
     }
@@ -1510,7 +1510,7 @@ export async function warmUpLxSources(): Promise<number> {
       continue;
     }
     appendPlayLog('[换源] 预热音源 ' + api.name + ' id=' + api.id);
-    AppStorage.setOrCreate('lxActiveSource', api.id);
+    AppStorage.setOrCreate(AppStorageKeys.LX_ACTIVE_SOURCE, api.id);
     await sleep(60);
     const ok: boolean = await switchToScript(api.id);
     if (ok) {
@@ -1522,14 +1522,14 @@ export async function warmUpLxSources(): Promise<number> {
   }
   if (originalActive.length > 0 && activeSourceId() !== originalActive) {
     // 用户本来选过：恢复原选中项（哪怕它这次没就绪 —— 那是用户自己的选择）
-    AppStorage.setOrCreate('lxActiveSource', originalActive);
+    AppStorage.setOrCreate(AppStorageKeys.LX_ACTIVE_SOURCE, originalActive);
     await switchToScript(originalActive);
   } else if (originalActive.length === 0) {
     // 全新/未选过：优先落到**第一个成功**的脚本；一个都没成功就**清空**，
     // 让后续 `resolveMusicUrlWithFallback()` 走它自己的"未选中音源 ⇒ 自动选第一个"兜底，
     // 而不是继续指着一个 init 失败的脚本。
     const pick: string = firstWarmedId.length > 0 ? firstWarmedId : '';
-    AppStorage.setOrCreate('lxActiveSource', pick);
+    AppStorage.setOrCreate(AppStorageKeys.LX_ACTIVE_SOURCE, pick);
     appendPlayLog('[换源] 预热选定 active=' + (pick.length > 0 ? pick : '(空)'));
   }
   appendPlayLog('[换源] 预热完成 warmed=' + warmed + ' total=' + list.length +

@@ -101,7 +101,7 @@ struct Index {
     this.themeState.color = MusicStoreService.getInstance().getThemeColor();
     // 与手机壳一致：把持久化的「首页来源平台」灌进共享状态（漏了这一段 = 冷启动后首页平台永远是 qq）
     this.homeSourceState.source = MusicStoreService.getInstance().getHomeSource();
-    AppStorage.setOrCreate('lxPlayQuality', MusicStoreService.getInstance().getPlayQuality());
+    AppStorage.setOrCreate(AppStorageKeys.LX_PLAY_QUALITY, MusicStoreService.getInstance().getPlayQuality());
     // 本地音乐库与同步客户端启动初始化（与手机壳层一致）：
     // 同时把这两个 HAR 拉进 pc 的构建图（hvigor 对 HAR 是按引用编译的）。
     // ⚠️ 各自包 try/catch：它们不是播放的前置条件，但一旦抛出去会中断 aboutToAppear。

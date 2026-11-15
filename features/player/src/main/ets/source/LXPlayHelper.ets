@@ -6,7 +6,7 @@ import { isMfOnlyPlatform, mfGetLyric, mfGetMediaSource, mfGetSheetSongs, mfSear
 import { isLxPlatform, isMfPlatformId } from '../util/SourceDeclaredInfo';
 import { LXUserApiInfo } from './Interface';
 import { qsBoardSongs, qsPlaylistDetail } from '../geuz/QsApi';
-import { appendError } from 'musicbasic';
+import {AppStorageKeys,  appendError } from 'musicbasic';
 
 interface MusicInfoBrief {
   songmid: string;
@@ -154,7 +154,7 @@ async function tryMusicFreeUrl(source: string, songId: string, quality: string, 
   if (apis.length > 0) {
     // 兜底：极端路径（通知栏/桌面快捷方式冷启动直接播）可能还没走到首页宿主，
     // 先把「需要 mf 运行时」置位，宿主组件随之挂载。
-    AppStorage.setOrCreate('mfEngineNeeded', true);
+    AppStorage.setOrCreate(AppStorageKeys.MF_ENGINE_NEEDED, true);
   }
   for (let i: number = 0; i < apis.length; i++) {
     try {

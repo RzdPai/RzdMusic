@@ -289,7 +289,7 @@ export struct SettingsDetailPage {
     payload.nowFirst = this.tabNowFirst;
     const json: string = JSON.stringify(payload);
     MusicStoreService.getInstance().setTabBarConfig(json);
-    AppStorage.setOrCreate('rzd_tab_bar_config', json);
+    AppStorage.setOrCreate(AppStorageKeys.TAB_BAR_CONFIG, json);
     appendPlayLog('[RzdTabConfig] save ' + json);
   }
 
@@ -331,7 +331,7 @@ export struct SettingsDetailPage {
   private usbStatusText(): string {
     const st: UsbAudioState = UsbAudioService.getInstance().state;
     if (st.connected) {
-      const outParams: string = AppStorage.get<string>('rzd_usb_out_params') ?? '';
+      const outParams: string = AppStorage.get<string>(AppStorageKeys.USB_OUT_PARAMS) ?? '';
       const extra: string = outParams.length > 0 ? ' · 输出 ' + outParams : '';
       return '已连接：' + st.productName + '（' + st.vidPid + '，fd=' + st.fd + '）· ' +
         st.capabilityText + extra;
@@ -494,8 +494,8 @@ export struct SettingsDetailPage {
         appendPlayLog('[音源顺序] init ' + ids.length);
       }
     }
-    this.activeSource = AppStorage.get<string>('lxActiveSource') ?? '';
-    this.engineSources = AppStorage.get<string>('lxEngineSources') ?? '{}';
+    this.activeSource = AppStorage.get<string>(AppStorageKeys.LX_ACTIVE_SOURCE) ?? '';
+    this.engineSources = AppStorage.get<string>(AppStorageKeys.LX_ENGINE_SOURCES) ?? '{}';
     this.ambientLevel = MusicStoreService.getInstance().getAmbientLevel();
     this.showMiniLyric = MusicStoreService.getInstance().getShowMiniLyric();
     this.desktopLyric = MusicStoreService.getInstance().getDesktopLyric();
@@ -527,9 +527,9 @@ export struct SettingsDetailPage {
     this.downloadLrc = MusicStoreService.getInstance().getDownloadLrc();
     this.lyricFps = MusicStoreService.getInstance().getLyricFps();
     this.lyricCenter = MusicStoreService.getInstance().getLyricCenterEnabled();
-    this.lastError = AppStorage.get<string>('lxLastError') ?? '';
+    this.lastError = AppStorage.get<string>(AppStorageKeys.LX_LAST_ERROR) ?? '';
     const persistentLog: string = MusicStoreService.getInstance().getRuntimeDiagnostics();
-    this.playLog = (AppStorage.get<string>('lxPlayLog') ?? '') +
+    this.playLog = (AppStorage.get<string>(AppStorageKeys.LX_PLAY_LOG) ?? '') +
       (persistentLog.length > 0 ? '\n──── 持久诊断（重启保留）────\n' + persistentLog : '');
     this.colorMode = MusicStoreService.getInstance().getColorMode();
     this.iconVariant = MusicStoreService.getInstance().getAppIconVariant();
@@ -678,8 +678,8 @@ export struct SettingsDetailPage {
     const declared: LXSourcePlatformInfo[] = lxDeclaredPlatformsOf(api);
     // ★ 2026-10-30：音源管理二级页原来只用持久化快照（可能少平台，例如 5 个而引擎上报 6 个）。
     //   当前引擎脚本改为「引擎实时 sources 优先」，与 SourceManagerList 同一套口径。
-    if (api.id === (AppStorage.get<string>('lxEngineScriptId') ?? '')) {
-      const json: string = AppStorage.get<string>('lxEngineSources') ?? '';
+    if (api.id === (AppStorage.get<string>(AppStorageKeys.LX_ENGINE_SCRIPT_ID) ?? '')) {
+      const json: string = AppStorage.get<string>(AppStorageKeys.LX_ENGINE_SOURCES) ?? '';
       // ★ 2026-10-30：把引擎上报的**原始 key**打出来（判断第 6 个平台到底叫什么）
       if (json.length > 2) {
         try {
@@ -757,7 +757,7 @@ export struct SettingsDetailPage {
     this.stopEnginePolling();
     this.engineTimer = setInterval(() => {
       this.refresh();
-      if (this.activeSource.length === 0 || AppStorage.get<boolean>('lxEngineReady') === true) {
+      if (this.activeSource.length === 0 || AppStorage.get<boolean>(AppStorageKeys.LX_ENGINE_READY) === true) {
         this.stopEnginePolling();
       }
     }, 1000);
@@ -784,7 +784,7 @@ export struct SettingsDetailPage {
     //   原来点当前默认那一行会把它清成空字符串（`? ' : apiId`）⇒ 一圈圆点全是空心，看着像没选中。
     //   现在点击恒为「设为默认」，不再有「点一下取消默认」这种状态。
     const next: string = apiId;
-    AppStorage.setOrCreate('lxActiveSource', next);
+    AppStorage.setOrCreate(AppStorageKeys.LX_ACTIVE_SOURCE, next);
     MusicStoreService.getInstance().setActiveSource(next);
     this.activeSource = next;
     this.startEnginePolling();
@@ -897,7 +897,7 @@ export struct SettingsDetailPage {
 
   private deleteLXSource(apiId: string): void {
     if (this.activeSource === apiId) {
-      AppStorage.setOrCreate('lxActiveSource', '');
+      AppStorage.setOrCreate(AppStorageKeys.LX_ACTIVE_SOURCE, '');
       MusicStoreService.getInstance().setActiveSource('');
       this.activeSource = '';
     }
@@ -979,7 +979,7 @@ export struct SettingsDetailPage {
             MusicStoreService.getInstance().setSourceScriptOrder(nextOrder);
           }
           if (this.activeSource.length > 0 && liveIds.indexOf(this.activeSource) < 0) {
-            AppStorage.setOrCreate('lxActiveSource', '');
+            AppStorage.setOrCreate(AppStorageKeys.LX_ACTIVE_SOURCE, '');
             MusicStoreService.getInstance().setActiveSource('');
             this.activeSource = '';
           }
@@ -1046,7 +1046,7 @@ export struct SettingsDetailPage {
           this.refresh();
           this.onlineUrl = '';
           if (report.ok) {
-            AppStorage.setOrCreate('mfEngineNeeded', true);
+            AppStorage.setOrCreate(AppStorageKeys.MF_ENGINE_NEEDED, true);
             this.toast('订阅导入完成：' + report.message);
             this.pathStack.pop();
             this.schedulePlatformRefresh();
@@ -1060,7 +1060,7 @@ export struct SettingsDetailPage {
         this.refresh();
         this.pathStack.pop();
         this.onlineUrl = '';
-        AppStorage.setOrCreate('mfEngineNeeded', true);
+        AppStorage.setOrCreate(AppStorageKeys.MF_ENGINE_NEEDED, true);
         this.toast('已导入「' + message + '」');
         this.schedulePlatformRefresh();
       } catch (err) {
@@ -2252,7 +2252,7 @@ export struct SettingsDetailPage {
     this.persistSourceOrder();
     // 停用的源不能继续当「当前使用」，否则 UI 会出现「当前使用 + 未启用」的矛盾状态
     if (!enabled && this.activeSource.length > 0 && members.indexOf(this.activeSource) >= 0) {
-      AppStorage.setOrCreate('lxActiveSource', '');
+      AppStorage.setOrCreate(AppStorageKeys.LX_ACTIVE_SOURCE, '');
       MusicStoreService.getInstance().setActiveSource('');
       this.activeSource = '';
     }
@@ -2263,7 +2263,7 @@ export struct SettingsDetailPage {
   private toggleSourceInOrder(apiId: string): void {
     const idx: number = this.sourceOrderIds.indexOf(apiId);
     if (idx >= 0 && this.activeSource === apiId) {
-      AppStorage.setOrCreate('lxActiveSource', '');
+      AppStorage.setOrCreate(AppStorageKeys.LX_ACTIVE_SOURCE, '');
       MusicStoreService.getInstance().setActiveSource('');
       this.activeSource = '';
     }

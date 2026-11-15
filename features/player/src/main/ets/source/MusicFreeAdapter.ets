@@ -8,7 +8,7 @@ import {
 import { lxSourceManager } from './LXSourceManager';
 import { isMfPlatformId, mfApiIdOf, mfPlatformIdOf, platformIdFromLabel } from '../util/SourceDeclaredInfo';
 import { mfHasCap } from '../util/MfCapability';
-import { appendPlayLog } from 'musicbasic';
+import {AppStorageKeys,  appendPlayLog } from 'musicbasic';
 import { SearchPlaylistInfo } from '../shareplaylistsearch/PlaylistSearchTypes';
 
 // 平台识别全仓只有一个实现（util 层），这里 re-export 保持调用方不变
@@ -185,7 +185,7 @@ async function importMusicFreePluginInternal(script: string, fallbackName: strin
   }
   const info: LXUserApiInfo | null = result.info;
   if (info !== null) {
-    AppStorage.setOrCreate('mfEngineNeeded', true);
+    AppStorage.setOrCreate(AppStorageKeys.MF_ENGINE_NEEDED, true);
     if (manifestName.length === 0) {
       // 不 await：探测要等隐藏 WebView 挂载 + 重载 + 注入，几秒钟起步，
       // 卡在这里会让「导入 6 个插件的订阅」等到 1 分钟以上。
@@ -277,7 +277,7 @@ export async function backfillMusicFreePlatforms(apis: LXUserApiInfo[]): Promise
     return 0;
   }
   backfillRunning = true;
-  AppStorage.setOrCreate('mfEngineNeeded', true);
+  AppStorage.setOrCreate(AppStorageKeys.MF_ENGINE_NEEDED, true);
   let done: number = 0;
   try {
     // 引擎挂载最多等 6s（打开面板时通常已经在了）；等不到就下次再来

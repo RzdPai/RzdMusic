@@ -14,7 +14,7 @@
  */
 
 import { uiObserver } from '@kit.ArkUI';
-import {appBarBlurStyle, 
+import {AppStorageKeys, appBarBlurStyle, 
   areaLengthToVp,
   BreakpointType,
   getPlaylistTransitionState,
@@ -212,7 +212,7 @@ export struct HeroBannerSection {
         coverUrl: list[i].coverUrl
       });
     }
-    AppStorage.setOrCreate('dailyThirtySongs', JSON.stringify(rows));
+    AppStorage.setOrCreate(AppStorageKeys.DAILY_THIRTY_SONGS, JSON.stringify(rows));
     const param = new ToplistRouteParam();
     param.sectionType = 'daily30';
     param.listTitle = typeof item.title === 'string' && item.title.length > 0 ? item.title : '每日30首';

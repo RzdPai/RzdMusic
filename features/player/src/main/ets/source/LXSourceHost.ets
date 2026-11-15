@@ -1,4 +1,4 @@
-import { MusicStoreService } from 'musicbasic';
+import {AppStorageKeys,  MusicStoreService } from 'musicbasic';
 import { LXSourceEngine } from './LXSourceEngine';
 import { MusicFreeEngine } from './MusicFreeEngine';
 import { lxSourceManager } from './LXSourceManager';
@@ -35,7 +35,7 @@ export struct LXSourceHost {
     //   之后每次播洛雪平台都被判「音源未就绪」。这里直接忽略插件 id（真正播插件时
     //   MusicFree 走自己的运行时，不依赖这个字段）。
     if (saved.length > 0 && !this.isMfPlugin(saved)) {
-      AppStorage.setOrCreate('lxActiveSource', saved);
+      AppStorage.setOrCreate(AppStorageKeys.LX_ACTIVE_SOURCE, saved);
     }
     if (this.lxActiveSource.length > 0) {
       this.showEngine = true;

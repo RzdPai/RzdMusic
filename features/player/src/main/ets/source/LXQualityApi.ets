@@ -2,6 +2,7 @@ import { http } from '@kit.NetworkKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { LXSearchSong, LXQualityType, lxResolveTxNumId, lxSearch } from './LXMusicSDK';
 import { LXUserApiSourceInfo } from './Interface';
+import { AppStorageKeys } from 'musicbasic';
 
 const LOG_DOMAIN: number = 0x0000;
 const LOG_TAG: string = 'RzdLxQuality';
@@ -293,7 +294,7 @@ async function txQualitys(song: LXSearchSong): Promise<LXQualityOption[]> {
  */
 export function declaredSourceQualitys(source: string): string[] {
   try {
-    const raw: string = AppStorage.get<string>('lxEngineSources') ?? '';
+    const raw: string = AppStorage.get<string>(AppStorageKeys.LX_ENGINE_SOURCES) ?? '';
     if (raw.length === 0 || raw === '{}') {
       return [];
     }

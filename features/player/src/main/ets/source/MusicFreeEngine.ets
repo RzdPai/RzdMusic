@@ -2,7 +2,7 @@ import { webview } from '@kit.ArkWeb';
 import { util } from '@kit.ArkTS';
 import { http } from '@kit.NetworkKit';
 import { lxSourceManager } from './LXSourceManager';
-import { appendPlayLog, MusicStoreService } from 'musicbasic';
+import {AppStorageKeys,  appendPlayLog, MusicStoreService } from 'musicbasic';
 
 /**
  * MusicFree 插件引擎（隐藏 WebView）。
@@ -216,7 +216,7 @@ export struct MusicFreeEngine {
     mfEngineApiId = apiId;
     mfEngineReady = false;
     mfEnginePlatform = '';
-    AppStorage.setOrCreate('mfEngineReady', false);
+    AppStorage.setOrCreate(AppStorageKeys.MF_ENGINE_READY, false);
     if (!changed && this.webReady) {
       this.injectPlugin();
       return;
@@ -502,8 +502,8 @@ export struct MusicFreeEngine {
         const injectMs: number = this.injectStartedAt > 0 ? Date.now() - this.injectStartedAt : -1;
         MusicFreeEngine.log('就绪 ✓ platform=' + mfEnginePlatform + ' 方法=' + list.length +
           ' injectMs=' + injectMs);
-        AppStorage.setOrCreate('mfEngineReady', true);
-        AppStorage.setOrCreate('mfEnginePlatform', mfEnginePlatform);
+        AppStorage.setOrCreate(AppStorageKeys.MF_ENGINE_READY, true);
+        AppStorage.setOrCreate(AppStorageKeys.MF_ENGINE_PLATFORM, mfEnginePlatform);
         return;
       }
       if (event === 'mfResult') {

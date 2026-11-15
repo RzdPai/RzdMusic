@@ -3,7 +3,7 @@ import { qsSearchTracks } from '../geuz/QsApi';
 // ★ 2026-11-04：汽水的歌词/封面/评论走**内置**的 Luna H5 SEO（汽水没有 LX 脚本，也免登录）。
 //   实现在 `common/musicbasic`（`api/QsH5Api.ets`）—— `features/comment` 也要用它，
 //   而 features 之间不许互相依赖。`QsApi` 反向 import 本文件类型，所以那个客户端不能放 player 里。
-import { qsCoverUrl, qsLyricText } from 'musicbasic';
+import {AppStorageKeys,  qsCoverUrl, qsLyricText } from 'musicbasic';
 import CryptoJS from '@ohos/crypto-js';
 import { zlib } from '@kit.BasicServicesKit';
 import { http } from '@kit.NetworkKit';
@@ -965,7 +965,7 @@ function parseMgQuality(formats: Object[]): LXQualityType[] {
 
 /** Appends a line to the shared lx play log (visible in the settings page). */
 function appendLxLog(msg: string): void {
-  let prev: string = AppStorage.get<string>('lxPlayLog') || '';
+  let prev: string = AppStorage.get<string>(AppStorageKeys.LX_PLAY_LOG) || '';
   let now: Date = new Date();
   let time: string = now.getHours().toString().padStart(2, '0') + ':' +
     now.getMinutes().toString().padStart(2, '0') + ':' +
@@ -974,7 +974,7 @@ function appendLxLog(msg: string): void {
   if (log.length > 20000) {
     log = log.substring(log.length - 5000);
   }
-  AppStorage.setOrCreate('lxPlayLog', log);
+  AppStorage.setOrCreate(AppStorageKeys.LX_PLAY_LOG, log);
 }
 
 /**

@@ -3,7 +3,7 @@ import { util } from '@kit.ArkTS';
 import { http } from '@kit.NetworkKit';
 import { LXUserApiInfoFull, LXUserApiSourceInfo, LXSourceRequestData } from './Interface';
 import { lxSourceManager } from './LXSourceManager';
-import {
+import {AppStorageKeys, 
   appendPlayLog, MusicStoreService,
   scriptAlertUrlKey, scriptAlertLogKey, scriptAlertAtKey,
   scriptBlockedAtKey, scriptBlockedUrlKey, scriptAllowKey,
@@ -216,10 +216,10 @@ export struct LXSourceEngine {
     this.isReady = ready;
     lxEngineIsReady = ready;
     this.sources = ready && srcs !== null ? srcs : {};
-    AppStorage.setOrCreate('lxEngineReady', ready);
-    AppStorage.setOrCreate('lxEngineSources', ready && srcs !== null ? (JSON.stringify(srcs) || '{}') : '{}');
+    AppStorage.setOrCreate(AppStorageKeys.LX_ENGINE_READY, ready);
+    AppStorage.setOrCreate(AppStorageKeys.LX_ENGINE_SOURCES, ready && srcs !== null ? (JSON.stringify(srcs) || '{}') : '{}');
     // 暴露「当前就绪的是哪个脚本」，换源逻辑据此判断目标脚本是否真的就绪
-    AppStorage.setOrCreate('lxEngineScriptId', ready ? this.currentScriptId : '');
+    AppStorage.setOrCreate(AppStorageKeys.LX_ENGINE_SCRIPT_ID, ready ? this.currentScriptId : '');
     LXSourceEngine.appendLog('引擎 ready=' + ready + ' scriptId=' + this.currentScriptId +
       ' gen=' + this.pageGen + ' retry=' + this.readyRetryCount);
     if (ready) {
@@ -251,8 +251,8 @@ export struct LXSourceEngine {
     lxEngineSendRequest = null;
     lxEngineRegisterPromise = null;
     lxEngineIsReady = false;
-    AppStorage.setOrCreate('lxEngineReady', false);
-    AppStorage.setOrCreate('lxEngineScriptId', '');
+    AppStorage.setOrCreate(AppStorageKeys.LX_ENGINE_READY, false);
+    AppStorage.setOrCreate(AppStorageKeys.LX_ENGINE_SCRIPT_ID, '');
     this.outgoingQueue = [];
     this.currentInitJson = '';
     this.currentScriptId = '';
@@ -294,8 +294,8 @@ export struct LXSourceEngine {
     LXSourceEngine.appendLog('引擎 脚本能力 ' + profileText +
       ' 可无 DOM 运行=' + canQuick + ' lxEngineMode=' + this.lxEngineMode());
     // 落 AppStorage：设置页/诊断可直接显示，也免得以后为了看一眼再探测一遍
-    AppStorage.setOrCreate('lxScriptProfile', profileText);
-    AppStorage.setOrCreate('lxScriptNeedsDom', this.scriptProfile.needsDom);
+    AppStorage.setOrCreate(AppStorageKeys.LX_SCRIPT_PROFILE, profileText);
+    AppStorage.setOrCreate(AppStorageKeys.LX_SCRIPT_NEEDS_DOM, this.scriptProfile.needsDom);
     let proxyInfo: LXProxyInfo = { host: '', port: '' };
     let initData: LXInitData = {
       name: apiInfo.name,
@@ -789,7 +789,7 @@ appendPlayLog(msg);
     try {
       AppStorage.setOrCreate(KEY_BLOCKED_LOG, text);
       AppStorage.setOrCreate(KEY_BLOCKED_URL, url);
-      AppStorage.setOrCreate('lxUpdateBlockedVersion', Date.now());
+      AppStorage.setOrCreate(AppStorageKeys.LX_UPDATE_BLOCKED_VERSION, Date.now());
       if (scriptId.length > 0) {
         AppStorage.setOrCreate(scriptBlockedAtKey(scriptId), Date.now());
         // 按脚本记下被拦的那条 URL：设置页点「检查更新」时据此说明"为什么查不了"
@@ -1093,8 +1093,8 @@ appendPlayLog(msg);
             AppStorage.setOrCreate(scriptAlertLogKey(this.currentScriptId), alertLog);
             AppStorage.setOrCreate(scriptAlertAtKey(this.currentScriptId), Date.now());
           }
-          AppStorage.setOrCreate('rzd_update_alert_url', alertUrl);
-          AppStorage.setOrCreate('rzd_update_alert_log', alertLog);
+          AppStorage.setOrCreate(AppStorageKeys.UPDATE_ALERT_URL, alertUrl);
+          AppStorage.setOrCreate(AppStorageKeys.UPDATE_ALERT_LOG, alertLog);
         }
       } catch (e) {
       }

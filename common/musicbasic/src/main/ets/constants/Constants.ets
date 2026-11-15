@@ -291,4 +291,58 @@ public static readonly HOME_RANKING_STATE: string = 'musichome_HomeRankingState'
 public static readonly MESH_WARM_STATE: string = 'musichome_MeshWarmState';
 /** {@link MotionCoverState}（歌手 / 专辑 / 歌单页的「动态封面」开关，默认开）。 */
 public static readonly MOTION_COVER_STATE: string = 'musichome_MotionCoverState';
+
+
+  // ────────────────────────────────────────────────────────────────────────
+  // ★ 2026-11-15（交接书 §7.8「AppStorage 裸键」）：下面 23 个键原先在 15 个文件里**各写各的字面量**，
+  //   同一个键（`lxActiveSource`）在 5 个模块里重复 21 次 —— 写错一个字符就是静默不生效，
+  //   而且 AppStorage 是**全局单例**，跨对象的键串味过一次（更新提示串台）就是这类问题。
+  //   现在一律走这里；`grep AppStorage\.(get|setOrCreate)('[a-z]` 应恒为空。
+  // ────────────────────────────────────────────────────────────────────────
+  /** 当前默认音源 id（洛雪脚本 id 或 `mfplat:<插件id>`）—— 全仓 21 处读写，散在 player/setting/壳层 */
+  public static readonly LX_ACTIVE_SOURCE: string = 'lxActiveSource';
+  /** 洛雪脚本引擎（WebView）是否就绪 */
+  public static readonly LX_ENGINE_READY: string = 'lxEngineReady';
+  /** 引擎当前装载的脚本 id */
+  public static readonly LX_ENGINE_SCRIPT_ID: string = 'lxEngineScriptId';
+  /** 脚本 getSources() 上报的平台列表快照 */
+  public static readonly LX_ENGINE_SOURCES: string = 'lxEngineSources';
+  /** 脚本能力画像（ScriptProbe 的结果，日志/设置页用） */
+  public static readonly LX_SCRIPT_PROFILE: string = 'lxScriptProfile';
+  /** 脚本是否需要 DOM */
+  public static readonly LX_SCRIPT_NEEDS_DOM: string = 'lxScriptNeedsDom';
+  /** 更新检查被应用拦截时记下的版本号 */
+  public static readonly LX_UPDATE_BLOCKED_VERSION: string = 'lxUpdateBlockedVersion';
+  /** 脚本上报的更新地址（跨模块读取） */
+  public static readonly UPDATE_ALERT_URL: string = 'rzd_update_alert_url';
+  /** 脚本上报的更新说明 */
+  public static readonly UPDATE_ALERT_LOG: string = 'rzd_update_alert_log';
+  /** MusicFree 引擎是否被需要（有 mf 源时才装载） */
+  public static readonly MF_ENGINE_NEEDED: string = 'mfEngineNeeded';
+  /** MusicFree 引擎是否就绪 */
+  public static readonly MF_ENGINE_READY: string = 'mfEngineReady';
+  /** MusicFree 插件上报的平台名 */
+  public static readonly MF_ENGINE_PLATFORM: string = 'mfEnginePlatform';
+  /** MusicFree 平台列表版本号（变了就刷新 UI） */
+  public static readonly MF_PLATFORM_VERSION: string = 'mfPlatformVersion';
+  /** 壳层与播放页共享的当前音质档位 */
+  public static readonly LX_PLAY_QUALITY: string = 'lxPlayQuality';
+  /** 播放日志缓冲（壳层播放条/日志页读） */
+  public static readonly LX_PLAY_LOG: string = 'lxPlayLog';
+  /** 播放页流光开关（壳层也要读） */
+  public static readonly LX_PLAYBACK_FLOW_LIGHT: string = 'lxPlaybackFlowLight';
+  /** 最近一条全局错误提示（Toast 用） */
+  public static readonly LX_LAST_ERROR: string = 'lxLastError';
+  /** 下载任务列表快照 */
+  public static readonly LX_DOWNLOAD_TASKS: string = 'lxDownloadTasks';
+  /** 下载任务列表版本号（变了才刷新） */
+  public static readonly LX_DOWNLOAD_TASKS_VERSION: string = 'lxDownloadTasksVersion';
+  /** 首页「每日 30 首」缓存 */
+  public static readonly DAILY_THIRTY_SONGS: string = 'dailyThirtySongs';
+  /** 自定义页签配置（EntryAbility 写、设置页读写） */
+  public static readonly TAB_BAR_CONFIG: string = 'rzd_tab_bar_config';
+  /** USB 音频后端（ohaudio / 其它） */
+  public static readonly USB_BACKEND: string = 'rzd_usb_backend';
+  /** USB 输出参数（采样率/位深等） */
+  public static readonly USB_OUT_PARAMS: string = 'rzd_usb_out_params';
 }

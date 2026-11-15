@@ -97,12 +97,12 @@ export class MusicListPlaybackViewModel {
 
   /** Appends a marker line to the shared run log (visible in settings). */
   private appendListLog(message: string): void {
-    const log: string = AppStorage.get<string>('lxPlayLog') ?? '';
+    const log: string = AppStorage.get<string>(AppStorageKeys.LX_PLAY_LOG) ?? '';
     const now: Date = new Date();
     const time: string = now.getHours().toString().padStart(2, '0') + ':' +
       now.getMinutes().toString().padStart(2, '0') + ':' +
       now.getSeconds().toString().padStart(2, '0');
-    AppStorage.setOrCreate('lxPlayLog', (log + '[' + time + '] ' + message + '\n').slice(-20000));
+    AppStorage.setOrCreate(AppStorageKeys.LX_PLAY_LOG, (log + '[' + time + '] ' + message + '\n').slice(-20000));
   }
 
   /** Loads the current play queue (online items plus local ids) into the playlist rows. */
@@ -137,7 +137,7 @@ export class MusicListPlaybackViewModel {
    * `dailyThirtySongs`；playlist 不能反向依赖 recommendation，所以用共享状态中转。
    */
   public loadDailyThirtySongs(): void {
-    const raw: string = AppStorage.get<string>('dailyThirtySongs') ?? '';
+    const raw: string = AppStorage.get<string>(AppStorageKeys.DAILY_THIRTY_SONGS) ?? '';
     const uis: PlaylistSongUi[] = [];
     if (raw.length > 0) {
       try {
@@ -219,12 +219,12 @@ export class MusicListPlaybackViewModel {
     } catch (err) {
       errInfo = JSON.stringify(err).substring(0, 120);
     }
-    const log: string = AppStorage.get<string>('lxPlayLog') ?? '';
+    const log: string = AppStorage.get<string>(AppStorageKeys.LX_PLAY_LOG) ?? '';
     const now: Date = new Date();
     const time: string = now.getHours().toString().padStart(2, '0') + ':' +
       now.getMinutes().toString().padStart(2, '0') + ':' +
       now.getSeconds().toString().padStart(2, '0');
-    AppStorage.setOrCreate('lxPlayLog',
+    AppStorage.setOrCreate(AppStorageKeys.LX_PLAY_LOG,
       (log + '[' + time + '] [榜单] topid=' + topid + ' 结果=' + uis.length +
         (errInfo.length > 0 ? ' 异常=' + errInfo : '') + '\n').slice(-20000));
     this.playlistSongUis = uis;
@@ -255,8 +255,8 @@ export class MusicListPlaybackViewModel {
         uis.push(ui);
       }
     } catch (err) {
-      const log: string = AppStorage.get<string>('lxPlayLog') ?? '';
-      AppStorage.setOrCreate('lxPlayLog',
+      const log: string = AppStorage.get<string>(AppStorageKeys.LX_PLAY_LOG) ?? '';
+      AppStorage.setOrCreate(AppStorageKeys.LX_PLAY_LOG,
         (log + '[在线歌单] 加载失败 ' + source + '/' + id + '\n').slice(-20000));
     }
     this.playlistSongUis = uis;

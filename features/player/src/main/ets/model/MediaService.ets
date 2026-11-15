@@ -298,7 +298,7 @@ export class MediaService {
       // 音质档位健康度：仅在 AVPlayer 真正报错（而非解析无地址）时记失败，
       // 连败到阈值后该「脚本+平台+音质」组合进冷却，后续歌曲直接跳过该档位
       if (failedQualityNow.length > 0 && failing.source.length > 0) {
-        const scriptId: string = AppStorage.get<string>('lxActiveSource') ?? '';
+        const scriptId: string = AppStorage.get<string>(AppStorageKeys.LX_ACTIVE_SOURCE) ?? '';
         MusicStoreService.getInstance().recordFailure(
           qualityTierKey(failedQualityNow, failing.source, scriptId),
           QUALITY_TIER_FAIL_THRESHOLD, QUALITY_TIER_COOLDOWN_MS);
@@ -848,7 +848,7 @@ export class MediaService {
     if (song === undefined || quality.length === 0 || song.source.length === 0) {
       return;
     }
-    const scriptId: string = AppStorage.get<string>('lxActiveSource') ?? '';
+    const scriptId: string = AppStorage.get<string>(AppStorageKeys.LX_ACTIVE_SOURCE) ?? '';
     MusicStoreService.getInstance().recordSuccess(qualityTierKey(quality, song.source, scriptId));
   }
 
@@ -1214,11 +1214,11 @@ export class MediaService {
   private async enrichOnlineTrack(songItem: SongItem): Promise<void> {
     const name: string = typeof songItem.title === 'string' ? songItem.title : '';
     const singer: string = typeof songItem.singer === 'string' ? songItem.singer : '';
-    const log: string = AppStorage.get<string>('lxPlayLog') ?? '';
+    const log: string = AppStorage.get<string>(AppStorageKeys.LX_PLAY_LOG) ?? '';
     const time: string = new Date().getHours().toString().padStart(2, '0') + ':' +
       new Date().getMinutes().toString().padStart(2, '0') + ':' +
       new Date().getSeconds().toString().padStart(2, '0');
-    AppStorage.setOrCreate('lxPlayLog', (log + '[' + time + '] [补全] source=' + songItem.source +
+    AppStorage.setOrCreate(AppStorageKeys.LX_PLAY_LOG, (log + '[' + time + '] [补全] source=' + songItem.source +
       ' lyricLen=' + songItem.lyricText.length + ' coverLen=' + songItem.cover.length + '\n').slice(-20000));
     {
       const itemRef: SongItem = songItem;
@@ -1539,7 +1539,7 @@ export class MediaService {
         if (MusicStoreService.getInstance().getUsbExclusive() && UsbAudioService.getInstance().state.connected) {
           const usbFd: number = UsbAudioService.getInstance().currentFd();
           if (usbFd > 0 && engine.setUsbMode !== undefined) {
-            const lastBackend: string = AppStorage.get<string>('rzd_usb_backend') ?? 'usb-exclusive';
+            const lastBackend: string = AppStorage.get<string>(AppStorageKeys.USB_BACKEND) ?? 'usb-exclusive';
             const mode: string = lastBackend.indexOf('usb') >= 0 ? 'usb' : 'ohaudio';
             engine.setUsbMode(mode);
             this.appendPlayLog('[RzdUsb] reapply exclusive backend=' + mode + ' fd=' + usbFd);
@@ -1600,7 +1600,7 @@ export class MediaService {
         // 焦点回来后：独占模式下 AO 可能已被系统重新分配，重新下发一次后端
         if (MusicStoreService.getInstance().getUsbExclusive() &&
           UsbAudioService.getInstance().state.connected && engine.setUsbMode !== undefined) {
-          const backend: string = AppStorage.get<string>('rzd_usb_backend') ?? 'usb-exclusive';
+          const backend: string = AppStorage.get<string>(AppStorageKeys.USB_BACKEND) ?? 'usb-exclusive';
           const mode: string = backend.indexOf('usb') >= 0 ? 'usb' : 'ohaudio';
           engine.setUsbMode(mode);
           this.appendPlayLog('[RzdUsb] focus back, reapply backend=' + mode);
@@ -1844,10 +1844,10 @@ export class MediaService {
       this.appendPlayLog('[RzdUsb] mode ' + mode + ' verify current-ao=' + ao);
       const ok: boolean = mode === 'usb' ? ao.indexOf('usb') >= 0 : ao.indexOf('ohaudio') >= 0;
       if (ok) {
-        AppStorage.setOrCreate('rzd_usb_backend', mode === 'usb' ? 'usb-exclusive' : 'ohaudio + exclusive');
+        AppStorage.setOrCreate(AppStorageKeys.USB_BACKEND, mode === 'usb' ? 'usb-exclusive' : 'ohaudio + exclusive');
         if (engine.audioOutParams !== undefined) {
           const params: string = engine.audioOutParams();
-          AppStorage.setOrCreate('rzd_usb_out_params', params);
+          AppStorage.setOrCreate(AppStorageKeys.USB_OUT_PARAMS, params);
           this.appendPlayLog('[RzdUsb] out params ' + params);
         }
         this.appendPlayLog('[RzdUsb] exclusive active backend=' + mode + ' fd=' + fd);

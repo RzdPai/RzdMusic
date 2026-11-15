@@ -57,7 +57,7 @@ export default class EntryAbility extends UIAbility {
     try {
       const raw: string = MusicStoreService.getInstance().getTabBarConfig();
       const cfg: TabBarConfigModel = TabBarConfigModel.parse(raw);
-      AppStorage.setOrCreate('rzd_tab_bar_config', cfg.toJson());
+      AppStorage.setOrCreate(AppStorageKeys.TAB_BAR_CONFIG, cfg.toJson());
       appendPlayLog('[RzdTabConfig] boot order=' + cfg.physicalOrder().join(',') +
         ' now=' + cfg.now + ' echo=' + cfg.echo + ' first=' + cfg.nowFirst);
     } catch (err) {

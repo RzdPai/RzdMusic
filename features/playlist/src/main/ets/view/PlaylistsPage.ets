@@ -393,12 +393,12 @@ export struct PlaylistsPage {
 
   /** Appends a marker line to the shared run log (visible in settings). */
   private appendImportLog(message: string): void {
-    const log: string = AppStorage.get<string>('lxPlayLog') ?? '';
+    const log: string = AppStorage.get<string>(AppStorageKeys.LX_PLAY_LOG) ?? '';
     const now: Date = new Date();
     const time: string = now.getHours().toString().padStart(2, '0') + ':' +
       now.getMinutes().toString().padStart(2, '0') + ':' +
       now.getSeconds().toString().padStart(2, '0');
-    AppStorage.setOrCreate('lxPlayLog', (log + '[' + time + '] ' + message + '\n').slice(-20000));
+    AppStorage.setOrCreate(AppStorageKeys.LX_PLAY_LOG, (log + '[' + time + '] ' + message + '\n').slice(-20000));
   }
 
   /**

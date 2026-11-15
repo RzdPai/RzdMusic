@@ -506,7 +506,7 @@ struct Index {
       });
     }, 3000);
     // 自定义 Tab 栏：启动时读一次配置（设置页改动会广播到 AppStorage）
-    this.tabCfgJson = AppStorage.get<string>('rzd_tab_bar_config') ?? '';
+    this.tabCfgJson = AppStorage.get<string>(AppStorageKeys.TAB_BAR_CONFIG) ?? '';
     // 2026-10-23：把"首页返回收尾"注册给 Ability 层（页面级 onBackPress 收不到首页返回）。
     HomeBackBridge.register((): void => {
       this.onHomeBackSignal();
@@ -535,8 +535,8 @@ struct Index {
     this.themeState.color = MusicStoreService.getInstance().getThemeColor();
     this.homeSourceState.source = MusicStoreService.getInstance().getHomeSource();
     this.miniLyricState.enabled = MusicStoreService.getInstance().getShowMiniLyric();
-    AppStorage.setOrCreate('lxPlayQuality', MusicStoreService.getInstance().getPlayQuality());
-    AppStorage.setOrCreate('lxPlaybackFlowLight', MusicStoreService.getInstance().getPlaybackFlowLight());
+    AppStorage.setOrCreate(AppStorageKeys.LX_PLAY_QUALITY, MusicStoreService.getInstance().getPlayQuality());
+    AppStorage.setOrCreate(AppStorageKeys.LX_PLAYBACK_FLOW_LIGHT, MusicStoreService.getInstance().getPlaybackFlowLight());
     // 鏈湴闊充箰搴撲笌鍚屾瀹㈡埛绔湪鍚姩鏃跺垵濮嬪寲锛氭湰鍦伴煶涔愯寤烘矙绠辩洰褰曞苟杞藉叆绱㈠紩锛?
     // 鍚屾瀹㈡埛绔璇诲洖鏈嶅姟鍣ㄥ湴鍧€涓庡紑鍏筹紙寮€鍏充负鍏虫椂涓嶈繛鏈嶅姟绔級銆?
     //

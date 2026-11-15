@@ -3,7 +3,7 @@ import { fileIo as fs } from '@kit.CoreFileKit';
 import { zlib } from '@kit.BasicServicesKit';
 import { util } from '@kit.ArkTS';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { MusicStoreService, appendPlayLog } from 'musicbasic';
+import {AppStorageKeys,  MusicStoreService, appendPlayLog } from 'musicbasic';
 import { LXUserApiInfo, LXUserApiInfoFull, LXUserApiSourceInfo, MfSubscriptionInfo } from './Interface';
 
 import { normalizePlatformId, platformIdFromLabel } from '../util/SourceDeclaredInfo';
@@ -630,7 +630,7 @@ class LXSourceManager {
       this.saveApiListToFile();
       // 通知界面：异步探测回填完成（设置页监听后 refresh，不然要重进页面才看到）
       try {
-        AppStorage.setOrCreate('mfPlatformVersion', Date.now());
+        AppStorage.setOrCreate(AppStorageKeys.MF_PLATFORM_VERSION, Date.now());
       } catch (e) {
         // AppStorage 不可用（极早期）时忽略
       }

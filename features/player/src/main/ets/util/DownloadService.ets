@@ -4,7 +4,7 @@ import { notificationManager } from '@kit.NotificationKit';
 import { fileIo as fs, fileUri, picker } from '@kit.CoreFileKit';
 import { http } from '@kit.NetworkKit';
 import { image } from '@kit.ImageKit';
-import { MusicStoreService, appendPlayLog, sniffAudioContainerExt } from 'musicbasic';
+import {AppStorageKeys,  MusicStoreService, appendPlayLog, sniffAudioContainerExt } from 'musicbasic';
 import { getLXMusicUrl } from '../source/LXPlayHelper';
 import { lxGetLyricFull, lxGetPicFallback, LyricFullResult } from '../source/LXMusicSDK';
 import { FallbackOptions, getQualityChain, resolveMusicUrlWithFallback, UrlResolveOutcome } from './SourceFallbackUtil';
@@ -505,14 +505,14 @@ export class DownloadService {
     }
     this.lastNotifyAt = now;
     const text: string = JSON.stringify(this.tasks) ?? '[]';
-    AppStorage.setOrCreate('lxDownloadTasks', text);
+    AppStorage.setOrCreate(AppStorageKeys.LX_DOWNLOAD_TASKS, text);
     try {
       MusicStoreService.getInstance().setDownloadTasks(text);
     } catch (_e) {
       // persistence is best-effort
     }
-    const ver: number = AppStorage.get<number>('lxDownloadTasksVersion') ?? 0;
-    AppStorage.setOrCreate('lxDownloadTasksVersion', ver + 1);
+    const ver: number = AppStorage.get<number>(AppStorageKeys.LX_DOWNLOAD_TASKS_VERSION) ?? 0;
+    AppStorage.setOrCreate(AppStorageKeys.LX_DOWNLOAD_TASKS_VERSION, ver + 1);
     const snapshot: DownloadTask[] = this.getTasksSnapshot();
     for (let i: number = 0; i < this.listeners.length; i++) {
       try {

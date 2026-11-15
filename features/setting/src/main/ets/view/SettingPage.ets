@@ -136,8 +136,8 @@ export struct SettingPage {
         appendPlayLog('[音源顺序] init ' + ids.length);
       }
     }
-    this.activeSource = AppStorage.get<string>('lxActiveSource') ?? '';
-    this.engineReady = this.activeSource.length > 0 && AppStorage.get<boolean>('lxEngineReady') === true;
+    this.activeSource = AppStorage.get<string>(AppStorageKeys.LX_ACTIVE_SOURCE) ?? '';
+    this.engineReady = this.activeSource.length > 0 && AppStorage.get<boolean>(AppStorageKeys.LX_ENGINE_READY) === true;
     // 设置页自身标题栏的沉浸材质档位（与详情页共用同一个 buildTitleMaterial）
     this.ambientLevel = MusicStoreService.getInstance().getAmbientLevel();
   }

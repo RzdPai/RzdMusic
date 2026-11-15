@@ -56,7 +56,7 @@
  */
 
 import { deviceInfo } from '@kit.BasicServicesKit';
-import { Logger, MusicStoreService } from 'musicbasic';
+import {AppStorageKeys,  Logger, MusicStoreService } from 'musicbasic';
 import { lxSourceManager } from './LXSourceManager';
 import type { LXUserApiInfo, LXUserApiInfoFull } from './Interface';
 
@@ -414,7 +414,7 @@ function applyRemoteActive(remoteActiveId: string): boolean {
     return false;
   }
   try {
-    AppStorage.setOrCreate('lxActiveSource', remoteActiveId);
+    AppStorage.setOrCreate(AppStorageKeys.LX_ACTIVE_SOURCE, remoteActiveId);
     MusicStoreService.getInstance().setActiveSource(remoteActiveId);
     Logger.info(TAG, `源同步 restore-active id=${remoteActiveId}`);
     return true;
