@@ -199,6 +199,23 @@ const PRELUDE: string = `
     globalThis.clearInterval = clearTimer;
   }
 
+  // ── CompressionStream / DecompressionStream：**明确不支持** ────────────────
+  // 2026-11-16 结论：@ohos.zlib 只有**文件/fd 级**接口（gzopen/zip/unzip），
+  // 没有内存版 inflate。要做就得落临时文件中转（每次 2 次文件 IO + zlib），
+  // 而目前**没有一支实测脚本用到它** —— 与其写一条没验证过的半吊子路径，
+  // 不如让它**立刻失败**：宿主侧 qjs miss -> webview 会接住并回落 ArkWeb。
+  // 等真出现 zip=true 的脚本再按临时文件方案补（见 docs/TODO-20261115.md）。
+  if (typeof globalThis.DecompressionStream === 'undefined') {
+    globalThis.DecompressionStream = function () {
+      throw new Error('DecompressionStream 尚未在 QuickJS 侧实现（请回落 ArkWeb）');
+    };
+  }
+  if (typeof globalThis.CompressionStream === 'undefined') {
+    globalThis.CompressionStream = function () {
+      throw new Error('CompressionStream 尚未在 QuickJS 侧实现（请回落 ArkWeb）');
+    };
+  }
+
   // ── WebCrypto 子集（2026-11-15：把"签名类"能力从 WebView 搬到 ArkTS）──────
   // LX 脚本用 crypto.subtle 绝大多数是为了**签名**：digest(SHA-256) 与 HMAC。
   // 这里给出这两个的最小实现（底层是 ArkTS 的 cryptoFramework），
