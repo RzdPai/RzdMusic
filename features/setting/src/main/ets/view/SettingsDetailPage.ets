@@ -131,7 +131,7 @@ export struct SettingsDetailPage {
   @Local bluetoothLyric: boolean = false;
   /** 系统是否支持桌面歌词：undefined = 还没探测过。 */
   @Local desktopLyricSupport: boolean | undefined = undefined;
-  /** 桌面歌词悬浮窗是否被用户锁定（锁定后只能从这里解锁）。 */
+  /** 桌面歌词悬浮窗是否被用户锁定（解锁入口只保留通知栏，这里只用于提示文案）。 */
   @Local desktopLyricLocked: boolean = false;
   /** MediaService 锁状态回调（aboutToAppear 注册、aboutToDisappear 摘除，注册/摘除必须是同一引用）。 */
   private readonly onDesktopLyricLockChange: (locked: boolean) => void = (locked: boolean): void => {
@@ -1736,8 +1736,9 @@ export struct SettingsDetailPage {
       return '';
     }
     if (this.desktopLyricLocked) {
-      // 锁定时悬浮窗自身不再响应，用户只能靠这个提示找到下方的解锁按钮（或播放页顶栏入口）。
-      return '桌面歌词已锁定：位置固定、不再响应拖动和设置。需要调整时点下方「解锁桌面歌词」。';
+      // 锁定时悬浮窗自身不再响应；解锁入口只保留通知栏（2026-11-12 用户要求
+      // 「桌面歌词解锁只做在状态栏」），这里只提示用户去通知栏找那条通知。
+      return '桌面歌词已锁定：位置固定、不再响应拖动和设置。需要调整时展开通知栏，点「桌面歌词已锁定」通知里的「解锁歌词」按钮。';
     }
     return '';
   }
@@ -1849,8 +1850,9 @@ export struct SettingsDetailPage {
               MediaService.getInstance().refreshDesktopLyric();
               if (isOn) {
                 // ▼ 开桌面歌词顺带申请通知授权（用户手势时机，系统弹授权框；已授权则静默）：
-                //   悬浮窗被锁定后应用会在通知栏发一条带「解锁歌词」按钮的通知
-                //   （见 MediaService.publishUnlockNotification），没授权这条通知发不出来。
+                //   ★ 2026-11-12 起「解锁歌词」通知是解锁悬浮窗的**唯一**入口
+                //   （见 MediaService.publishUnlockNotification），没授权这条通知发不出来，
+                //   锁定后用户将无法解锁 —— 所以开关打开时必须尽力把授权拿到手。
                 const notifCtx = getContext(this) as common.UIAbilityContext;
                 void notificationManager.requestEnableNotification(notifCtx).catch((): void => {});
               }
@@ -1860,25 +1862,6 @@ export struct SettingsDetailPage {
             .fontColor($r('sys.color.font_tertiary'))
             .width('100%')
             .padding({ top: 6 })
-          // ▼ 桌面歌词被锁定时的第二入口（第一入口在播放页顶栏）：悬浮窗自身已不响应，
-          //   只有应用侧调 setDesktopLyricState({isLocked:false}) 能解开。
-          //   显隐 = 开关开着 && 处于锁定态；解锁失败（无会话等）按钮保持原状。
-          if (this.desktopLyric && this.desktopLyricLocked) {
-            Button('解锁桌面歌词')
-              .height(34)
-              .fontSize(13)
-              .backgroundColor($r('app.color.card_background'))
-              .fontColor($r('app.color.font_primary'))
-              .margin({ top: 6 })
-              .onClick((): void => {
-                // 成功才收按钮；失败留在原地等用户重试（Toast/日志由 MediaService 打）。
-                void MediaService.getInstance().unlockDesktopLyric().then((ok: boolean): void => {
-                  if (ok) {
-                    this.desktopLyricLocked = false;
-                  }
-                });
-              })
-          }
         // 车载蓝牙歌词（移植自 lxmusic-harmony）：AVMetadata.singleLyricText 推当前句
           this.SubTitle('车载蓝牙歌词')
           this.CapsuleSelector(this.onOffOptions, this.bluetoothLyric ? 0 : 1,
