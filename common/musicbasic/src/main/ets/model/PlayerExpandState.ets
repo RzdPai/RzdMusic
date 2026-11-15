@@ -2194,42 +2194,7 @@ export class PlayerExpandState {
     return this.miniSize > 0 && this.windowWidthVp > 0 && this.windowHeightVp > 0;
   }
 
-  /**
-   * @returns 璧风偣缂╂斁姣斾緥锛堟暣椤典粠杩欎箞澶у紑濮嬫斁澶э紝鏈€鍚庡埌 1锛夈€?
-   *
-   * 鐢ㄧ獥鍙?*鐭竟**鍋氬垎姣嶏細杩蜂綘鏉″皝闈㈠湪涓や釜鏂瑰悜涓婂崰鐨勬瘮渚嬩笉鍚岋紝鍙栫煭杈硅兘寰楀埌
-   * "涓嶄細灏忓埌鐪嬩笉瑙併€佷篃涓嶈嚦浜庡ぇ鍒扮湅涓嶅嚭鍔ㄧ敾"鐨勯偅涓€妗ｃ€?
-   *
-   * 鈽呪槄 2026-10-15锛?*宸插垽瀹氫负姝讳唬鐮?*锛宍RzdMusic璁板繂.md` 搂59锛夛細闆惰皟鐢ㄨ€呫€?
-   *   瀹冨拰绱ч偦鐨?{@link morphCenterXPercent} / {@link morphCenterYPercent} 鏄?*鍚屼竴鏃?*锛?
-   *   "鏁撮〉 `scale` + 缁曡糠浣犳潯涓績缂╂斁"閭ｅ**鏃╂湡褰㈠彉**鐨勬畫鐣欍€傛椿鐨勫舰鍙樿蛋
-   *   `applyMorphProgress()` 鐨?缂╂斁 + 绔栫洿瑁佸壀绐楀彛"锛坄morphScale/morphTx/morphTy/morphClipHeight`锛?
-   *   鈬?杩欎竴鏃?*浠庢潵娌¤鎺ョ嚎**锛坄MORPH_MIN_SCALE` 涔熷彧琚畠璇伙級銆?
-   * @deprecated 闆惰皟鐢ㄨ€呫€傛椿鐨勫舰鍙樿捣鐐硅 {@link applyMorphProgress} 涓?`morphInitParams()`銆?
-   * 复核命令：`grep -rn 'morphStartScale\|morphCenterXPercent\|MORPH_MIN_SCALE' RzdMusic --include=*.ets`
-   */
-  public morphStartScale(): number {
-    if (!this.morphGeometryReady()) {
-      return 1;
-    }
-    const shortSide: number = Math.min(this.windowWidthVp, this.windowHeightVp);
-    const raw: number = this.miniSize / shortSide;
-    return Math.max(PlayerExpandState.MORPH_MIN_SCALE, Math.min(1, raw));
-  }
 
-  /**
-   * @returns 缂╂斁閿氱偣 X锛?*鏈〉鍧愭爣绯?*涓嬬殑鐧惧垎姣斿瓧绗︿覆锛堝 `'12%'`锛夈€?
-   * @param progress 灞曞紑杩涘害 0鈥?锛堢粓鐐规椂閿氱偣鍥炲埌灞呬腑锛岄伩鍏嶉潤姝㈡€佸亸蹇冿級
-   * @deprecated 闆惰皟鐢ㄨ€咃紱涓?{@link morphStartScale} 鍚屽睘"鏃╂湡缁曢敋鐐圭缉鏀?閭ｄ竴鏃忔畫鐣欍€?
-   * 澶嶆牳鍛戒护锛歚grep -rn 'morphCenterXPercent' RzdMusic --include=*.ets`锛堟湡鏈涳細鍙湁鏈瀹氫箟锛?
-   */
-  public morphCenterXPercent(progress: number): string {
-    const target: number = this.windowWidthVp > 0 ? (this.miniX + this.miniSize / 2) / this.windowWidthVp : 0.5;
-    const p: number = progress < 0 ? 0 : (progress > 1 ? 1 : progress);
-    // 璧风偣鐢ㄨ糠浣犳潯鐨勪綅缃紝缁堢偣鍥炲埌 50%锛堥潤姝㈡€佷笉鍋忓績锛?
-    const percent: number = (target + (0.5 - target) * p) * 100;
-    return percent.toFixed(2) + '%';
-  }
 
   /**
    * @returns 缂╂斁閿氱偣 Y锛屾湰椤靛潗鏍囩郴涓嬬殑鐧惧垎姣斿瓧绗︿覆銆?
@@ -2246,15 +2211,6 @@ export class PlayerExpandState {
 
   /**
    * 鈽呪槄 2026-10-15锛?*宸插垽瀹氫负姝讳唬鐮?*锛宍RzdMusic璁板繂.md` 搂59锛夛細娉ㄩ噴閲岄偅涓?`setDragUpdate`
-   * **鍏ㄤ粨涓嶅瓨鍦?*锛坄grep -rn 'setDragUpdate' RzdMusic --include=*.ets` 鏃犲懡涓級鈬?鏈瓧娈?
-   * 鏃㈡病鏈夊啓鑰呬篃娌℃湁璇昏€呫€傚畠灞炰簬涓婁竴鐗?鎶婅窡鎵嬪洖璋冨杩涘叡浜姸鎬?鐨勫皾璇曪紝
-   * 鑰屾椿鐨勯偅鏉¤矾鏄?*澹冲眰/杩蜂綘鏉″悇鑷寔鎵嬪娍銆佺洿鎺ヨ皟 `applyMorphProgress()`**锛堣涓嬮潰 搂浜旂偣浜?閭ｆ锛夈€?
-   *
-   * @deprecated 闆惰鑰呴浂鍐欒€呫€傝窡鎵嬭繘搴﹁璧?{@link applyMorphProgress}銆?
-   * 复核命令：`grep -rn 'dragUpdateToken\|setDragUpdate' RzdMusic --include=*.ets`
-   */
-  @Trace public dragUpdateToken: number = 0;
-
   // 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?浜旂偣浜斻€佷笂鎷夋墦寮€锛堝鏍囨棤鐣?ExpandAnimation.applyPullProgress锛夆晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲
   //
   // 鏃犵晫閭ｅ鏄?*鎵嬪娍椹卞姩**鐨勶細`onDown / onMove(205 鏉? / onUp` 鎶婃墜鎸囦綅绉绘槧灏勬垚涓€涓繘搴︼紝
@@ -3521,43 +3477,13 @@ export class PlayerExpandState {
     return 'none';
   }
 
-  /**
-   * @returns 涓ょ鐨勫嚑浣曟槸鍚﹂兘閲忓埌浜嗭紙鍙互璧板舰鍙樿矾寰勶級銆?
-   *
-   * 鈽呪槄 2026-10-15锛?*宸插垽瀹氫负姝讳唬鐮?*锛宍RzdMusic璁板繂.md` 搂60锛夛細**闆惰皟鐢ㄨ€?*銆?
-   *   瀹冭姹?`bigSize > 0`锛堥偅鏄?`reportBig` **涓婃姤鍊?*锛夛紝鑰屾椿鐨勫垽鎹槸
-   *   {@link morphIntroAnchorsReady}锛?*鍚屾椂鎺ュ彈** `bigNodeKnown`锛團rameNode 閲忓埌鐨勶紝鏈€鍑嗭級
-   *   涓?`bigSize`锛堜笂鎶ュ厹搴曪級锛屽苟涓旇繕瑕佹眰 `morphUsable && endCoverSize > 0`銆?
-   *   鈬?鏈嚱鏁版槸閭ｆ潯鍒ゆ嵁**鏇存棭銆佹洿寮?*鐨勭増鏈細鐪熸帴涓婂畠浼氳"FrameNode 閲忓埌浜嗕絾 areaChange
-   *     杩樻病涓婃姤"閭ｄ竴甯ц璇垽鎴?鍑犱綍娌￠綈" 鈬?鐐瑰嚮鎵撳紑閫€鍖栨垚鏃犲姩鐢昏惤浣嶏紙搂56.15 淇繃鐨勯偅涓潙锛夈€?
-   * @deprecated 闆惰皟鐢ㄨ€呫€傚垽鎹鐢?{@link morphIntroAnchorsReady}銆?
-   * 澶嶆牳鍛戒护锛歚grep -rn 'morphReady(' RzdMusic --include=*.ets`锛堟湡鏈涳細鍙湁鏈瀹氫箟锛?
-   */
-  public morphReady(): boolean {
-    return this.miniSize > 0 && this.bigSize > 0 && this.morphBoxWidth() > 0 && this.morphBoxHeight() > 0;
-  }
 
   /** @returns 褰㈠彉绐楀彛褰撳墠鏄惁鏈夋晥锛堥潤姝㈡€?false锛岃皟鐢ㄦ柟璇ョ敤 `'100%'`锛夈€?*/
   public morphClipping(): boolean {
     return this.morphUsable && this.morphContainerActive();
   }
 
-  /**
-   * @returns 瀹夸富锛? 鍐呭灞傚浐瀹氬昂瀵革級瀹藉害锛坴p锛夈€?
-   * @deprecated 闆惰皟鐢ㄨ€咃紙`RzdMusic璁板繂.md` 搂59锛夈€傚涓诲昂瀵稿湪**鍐呴儴**鐢?`morphBoxWidth()`
-   *   鐩村彇锛涘澶栨病鏈夋秷璐硅€呫€傚鏍革細`grep -rn 'morphHostW' RzdMusic --include=*.ets`
-   */
-  public morphHostW(): number {
-    return this.morphBoxW > 0 ? this.morphBoxW : this.morphBoxWidth();
-  }
 
-  /**
-   * @returns 瀹夸富锛? 鍐呭灞傚浐瀹氬昂瀵革級楂樺害锛坴p锛夈€?
-   * @deprecated 闆惰皟鐢ㄨ€咃紙鍚?{@link morphHostW}锛夈€?
-   */
-  public morphHostH(): number {
-    return this.morphBoxH > 0 ? this.morphBoxH : this.morphBoxHeight();
-  }
 
   // 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ 璺熸墜鎵撳紑锛氫袱鏉℃墜鍔垮叡鐢ㄥ悓涓€濂楅┍鍔?鏀跺熬 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   //
@@ -4363,40 +4289,6 @@ export class PlayerExpandState {
     return this.windowHeightVp;
   }
 
-  /**
-   * 鎶?*灞忓箷鍧愭爣**鐨勫皝闈㈢煩褰紝鎹㈢畻鎴愬舰鍙樺鍣?*鏈湴**鐨?`.position()` / `.width()` 鍊笺€?
-   *
-   * @deprecated **闆惰皟鐢ㄨ€咃紝涓旀柟娉曟湰韬湪鐪熸満涓婅璇佷吉杩?鈥斺€?涓嶈鎺ヤ笂瀹冦€?*
-   *
-   * ## 涓轰粈涔堢暀鐫€瀹冿紙鑰屼笉鏄垹鎺夛級
-   *
-   * 瀹冪殑鎺ㄥ鏈韩鏄?*瀵圭殑**锛堝氨鏄鍣ㄥ彉鎹?`y_灞?= H/2 + (y_鏈?鈭?H/2)s + d` 鐨勯€嗭級锛?
-   * 浣嗗畠渚濊禆涓€涓?*鍦ㄦ湰浠撲笉鎴愮珛鐨勫墠鎻?*锛歚.scale()` 缁?*瀹瑰櫒涓績**銆?
-   *
-   * 鐪熸満鍙嶈瘉锛堟湰浠撴湁涓ゆ鐙珛璁板綍锛夛細
-   * 路 `morphCoverRectAt()` 鐨勬敞閲婏細閫嗗彉鎹㈠洖椤靛唴鍧愭爣 鈬?鐪熸満缁撴灉"**灏侀潰璺戝埌宸︿笂瑙?*"
-   *   锛堣鏄?`.scale()` 鐨勬灑杞翠笉鏄垜浠ヤ负鐨勫鍣ㄤ腑蹇冿級锛?
-   * 路 2026-10-16 `PlaybackPage.coverLocalRect()`锛氭垜鍘熷湴閲嶈俯涓€閬嶏紝鐢ㄦ埛瀹炴祴
-   *   銆?*灏侀潰鏄鍒板睆骞曞**銆嶁噿 鍐嶆璇佹槑璇ュ墠鎻愪笉鎴愮珛銆?
-   *
-   * 鈬?鐜板湪鐨勫仛娉曟槸 `PlaybackPage.coverLocalRect()` **鐩存帴杩斿洖 `lyricFloatRect()`**
-   *   锛堢函鍑犱綍銆侀浂鎹㈢畻锛夈€傜暀杩欎釜鍑芥暟鏄负浜嗕笅娆℃湁浜烘兂"閫嗗彉鎹竴涓?鏃讹紝
-   *   鑳藉厛鐪嬪埌**涓ゆ鐪熸満鍙嶈瘉**鍐嶅喅瀹氾紝鑰屼笉鏄涓夋閲嶈俯銆?
-   */
-  public coverLocalRectFor(screen: LyricMorphRect): LyricMorphRect {
-    const s: number = Math.max(0.05, this.morphScale);
-    const w: number = this.coverHostW();
-    const h: number = this.coverHostH();
-    const tx: number = this.morphTx;
-    const ty: number = this.morphTy;
-    return {
-      x: w / 2 + (screen.x - w / 2 - tx) / s,
-      y: h / 2 + (screen.y - h / 2 - ty) / s,
-      size: screen.size / s,
-      height: screen.height / s,
-      radius: screen.radius / s
-    };
-  }
 
   /** @returns 娴眰鎷疯礉鐨勪笉閫忔槑搴︼紙涓庢挱鏀鹃〉閭ｄ唤鍚屽彛寰勶細鐢荤殑鏃跺€欐亽 1锛夈€?*/
   public morphOverlayBridgeOpacity(): number {
@@ -4918,38 +4810,6 @@ export class PlayerExpandState {
     }
   }
 
-  /**
-   * @returns 鏁撮〉涓嶉€忔槑搴︼細0锛堣繕鍦ㄨ糠浣犳潯閭ｄ竴灏忓潡銆佷笉鍙锛夆啋 1锛堝畬鍏ㄩ摵寮€锛夈€?
-   *
-   * 鈽呪槄 2026-10-15锛?*宸插垽瀹氫负姝讳唬鐮?*锛宍RzdMusic璁板繂.md` 搂59锛夛細**闆惰皟鐢ㄨ€?* 鈥斺€?
-   *   鍙湁 `products/default/.../Index.ets` 鐨?*娉ㄩ噴**閲屾彁鍒板畠锛圠837 / L1431锛夛紝浠ｇ爜閲屾病璋冦€?
-   * 鈿狅笍 杩欎竴鏉℃瘮鍚屾棌鐨勫叾浠栧嚑涓洿鍊煎緱璁颁竴绗旓細**娉ㄩ噴鎶婂畠璇存垚"娲荤殑"**锛?
-   *    璇绘敞閲婄殑浜轰細浠ヤ负"鎾斁椤靛湪褰㈠彉鏃╂湡鏄贰鍏ョ殑"銆傚疄闄呬笉鏄?鈥斺€?鎾斁椤垫槸**鍗婇€忔槑鐢诲嚭鏉?*鐨?
-   *    锛堢粯鍒剁殑瑙傛劅鐢?鏁撮〉缂╂斁 + 瑁佸壀绐楀彛 + 鑳屾櫙灞?`backgroundRevealOpacity`"涓夎€呭叡鍚屽喅瀹氾級锛?
-   *    鑰屾暣椤靛苟娌℃湁涓€涓?`.opacity(morphPageOpacity())`銆?
-   * 鈬?涓ゆ潯鍑鸿矾锛岄兘闇€瑕佺湡鏈哄垽瑙傛劅锛屾墍浠ユ湰杞?*鍙爣娉ㄣ€佷笉鏀?*锛?
-   *   锛坅锛夋帴涓婂畠锛堝姞涓€娆℃暣椤垫贰鍏ワ級鈥斺€?浼氭敼鍙樿鎰燂紝涓斾笌"涓嶈娣″叆娣″嚭"鐨勭敤鎴峰畾璋冨彲鑳藉啿绐侊紱
-   *   锛坆锛夋妸閭ｆ娉ㄩ噴鏀规帀锛堣娓?娌℃湁鏁撮〉娣″叆"锛夆€斺€?闆堕闄╋紝浣嗗睘浜庢枃妗ｆ暣鐞嗐€?
-   * @deprecated 闆惰皟鐢ㄨ€呫€?
-   * 澶嶆牳鍛戒护锛歚grep -rn 'morphPageOpacity' RzdMusic --include=*.ets`锛堟湡鏈涳細鍙湁娉ㄩ噴鍛戒腑锛?
-   */
-  public morphPageOpacity(): number {
-    if (!this.morphUsable) {
-      return 1;
-    }
-    // LANDING = 宸茬粡浜よ繕缁欒糠浣犳潯锛堝鏍?`playerPaintsOf = false`锛夛細杩欎竴甯ц捣鎾斁椤?
-    // **涓嶅啀鐢?*锛屽惁鍒欎細鍦ㄨ糠浣犳潯灏侀潰涓婄暀涓€涓悓灏哄鐨勬繁鑹插皬鏂瑰潡锛岀洿鍒拌鍗歌浇銆?
-    if (this.morphStage === MorphStage.LANDING) {
-      return 0;
-    }
-    if (this.morphStage !== MorphStage.ENTERING && this.morphStage !== MorphStage.LEAVING) {
-      return 1;
-    }
-    // 鈿狅笍 蹇呴』**鏃╀簬**杩蜂綘鏉＄殑娣″嚭锛坄miniBarOpacity`锛?锝?0%锛夎蛋瀹岋細
-    //    涓よ竟閮藉湪娣＄殑鏃跺€欎腑闂翠細鍑虹幇"鍗婇€忔槑鐨勮糠浣犳潯 + 鍗婇€忔槑鐨勬挱鏀鹃〉"锛?
-    //    鍙犺捣鏉ユ槸鍧楀彂鐏扮殑绯婃枒銆傝繖閲?12% 灏卞埌浣嶏紝涔嬪悗鐢辨挱鏀鹃〉閭ｅ眰鎺ョ銆?
-    return Math.min(1, this.contentProgress() / 0.12);
-  }
 
   /**
    * @returns 杩蜂綘鏉＄殑娣″嚭绯绘暟锛堝鏍?`MiniMorph.actionsOpacityAt = clamp(1 - t/0.20)`锛夈€?
@@ -6601,26 +6461,7 @@ export class PlayerExpandState {
     return this.lerp(this.miniRadius, this.bigRadius, this.progress);
   }
 
-  /**
-   * @returns 椋炶灏侀潰涓嶉€忔槑搴︼細鍔ㄧ敾鏈熼棿鍙銆?
-   *
-   * 鈽呪槄 2026-10-15锛?*宸插垽瀹氫负姝讳唬鐮?*锛宍RzdMusic璁板繂.md` 搂60锛夛細**闆惰皟鐢ㄨ€?*锛?
-   *   鑰屼笖瀹冭鐨?`animating` 灞?*鏃ц浆鍦?*閭ｄ竴鏃忥紙鍚?{@link clipActive}锛夆€斺€?
-   *   娲荤殑褰㈠彉閲?灏侀潰璋佸湪鐢?鐢?`realCoverVisible()`锛堟挱鏀鹃〉鐪熷皝闈級
-   *   涓?`morphOverlayBridging()`锛堝３灞傚厠闅嗗皝闈級**涓ユ牸浜掕ˉ鐨勪竴瀵归棬**鍐冲畾锛?
-   *   娌℃湁浠讳綍鍦版柟鐢?鏃ц浆鍦虹殑 `animating`"鏉ユ贰鍏ユ贰鍑哄皝闈€?
-   * 鈿狅笍 鍚屾棌鐨?{@link miniCoverOpacity}锛堣鍚屼竴涓?`animating`锛?*涔熸槸闆惰皟鐢ㄨ€?*銆?
-   * @deprecated 闆惰皟鐢ㄨ€呫€傚皝闈㈢殑鏄鹃殣璇风敤 {@link realCoverVisible} / {@link morphOverlayBridging}銆?
-   * 复核命令：`grep -rn 'coverOpacity()\|miniCoverOpacity()' RzdMusic --include=*.ets`
-   */
-  public coverOpacity(): number {
-    return this.animating ? 1 : 0;
-  }
 
-  /** @returns 杩蜂綘鏉″皝闈笉閫忔槑搴︼細鍔ㄧ敾鏈熼棿闅愯棌锛岄伩鍏嶄笌椋炶灏侀潰閲嶅奖銆?*/
-  public miniCoverOpacity(): number {
-    return this.animating ? 0 : 1;
-  }
 
   /** @returns 鎾斁椤靛ぇ灏侀潰涓嶉€忔槑搴︼細鍔ㄧ敾鏈熼棿闅愯棌锛堥琛屽皝闈㈤《鏇垮畠锛夈€?*/
   public innerCoverOpacity(): number {
@@ -6644,23 +6485,6 @@ export class PlayerExpandState {
     return Math.min(1, this.progress / 0.45);
   }
 
-  /**
-   * 鈽呪槄 2026-10-15锛?*宸插垽瀹氫负姝讳唬鐮?*锛宍RzdMusic璁板繂.md` 搂59锛夛細鏈綋鏄?鏃ц浆鍦?閭ｄ竴鏃忕殑娈嬬暀銆?
-   *
-   * 鏈被閲?`preparing` / `animating` / `progress` 涓変釜瀛楁锛圠202-206锛夊睘**鏇存棭鐨勯偅濂?
-   * 銆屾暣椤垫贰鍏?+ 璐村簳涓婃粦銆嶈浆鍦?*锛涙椿鐨勫舰鍙橀摼璧扮殑鏄?`morphStage` / `morphP` / `applyMorphProgress()`锛?
-   * **瀹屽叏涓嶈瀹冧滑**锛堣 L1164 閭ｆ娉ㄩ噴锛夈€傛湰鏂规硶鍙湪瀹冧滑涔嬩笂鍋氫簡涓€娆℃垨杩愮畻 鈬?鍚屾牱娌℃湁璋冪敤鑰呫€?
-   *
-   * 鈿狅笍 **鏁呮剰淇濈暀鑰屼笉鏄垹闄?*锛氬畠涓?`morphClipping()`锛堟椿鐨勮鍓棬锛夎涔変笂鏈夐噸鍙狅紝
-   *    鍒犻櫎鏃惰嫢鏈変汉璇妸璋冪敤鐐逛粠 `morphClipping()` 鎹㈡垚瀹冦€佹垨鍙嶈繃鏉ワ紝灏变細鍔ㄥ埌瑁佸壀琛屼负銆?
-   *    鐣欏湪杩欓噷鐨勪唬浠峰彧鏄嚑琛岋紱鎶婂畠鍙樻垚"娲荤殑"鎵嶆槸椋庨櫓銆?
-   * @deprecated 鏃犺皟鐢ㄨ€呫€傝鐢ㄨ鍓棬璇风敤 {@link morphClipping}銆?
-   * @returns 鏃ц浆鍦虹浉浣嶆槸鍚﹀浜?闇€瑕佽鍓?銆?
-   * 澶嶆牳鍛戒护锛歚grep -rn 'clipActive' RzdMusic --include=*.ets`锛堟湡鏈涳細鍙湁鏈瀹氫箟锛?
-   */
-  public clipActive(): boolean {
-    return this.preparing || this.animating;
-  }
 
   /**
    * @returns clip 绐楀彛鐨?SVG path 鍛戒护锛堝崟浣?vp锛屼綔鐢ㄥ湪鎾斁椤靛涓昏嚜宸辩殑鍧愭爣绯讳笂锛夈€?
