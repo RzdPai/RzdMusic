@@ -6,9 +6,16 @@
  * ── 为什么现在有这个文件 ────────────────────────────────────────────────────
  * 交接书 `docs/双引擎重构交接书-20261114.md` 的 Phase 1 是「把 QuickJS 编进来」，
  * 原先估的代价主要在**交叉编译 QuickJS + 自己写 NAPI 绑定**。这两件都不用做了：
- * 社区已有 HAR `@devzeng/quickjs`（ohpm，`compatibleSdkVersion 12`、
- * `byteCodeHar` + `useNormalizedOHMUrl`，与本工程一致），预编译好 `libquickjs.so`。
- * 源码也在 `参考项目/ohos_quickjs/`（同一仓库 `hhtczengjing/ohos_quickjs`），要打补丁随时改。
+ * 社区 HAR `@devzeng/quickjs`（ohpm）确实能跑脚本，但它**不打微任务泵** ——
+ * 它的 `evaluateScript` 就是一次 `JS_Eval` 就返回，而 QuickJS 的 Promise 回调
+ * （`.then` / `catch` / `await` 续体）全在 job queue 里，必须宿主循环调
+ * `JS_ExecutePendingJob` 才执行。真机实测（2026-11-15 14:20）表现就是
+ * `[qjs] self-test fail: Promise 未回填，__t=pending`；LX 脚本全是 async 的 ⇒ 这条路走不通。
+ *
+ * 所以本工程用的是 **本地自建 HAR `quickjs-rzd`**（`common/quickjs/`，源自
+ * `参考项目/ohos_quickjs/` 同一份源码），在 `napi_init.cpp` 里补了：
+ *   · `RunPendingJobs()`，并挂在 `evaluateScript` / `callFunction` / `construct` 之后；
+ *   · 额外导出 `runPendingJobs(engineHandle)` 给 ArkTS 侧显式催一次。
  *
  * ── 它给了什么 / 没给什么 ───────────────────────────────────────────────────
  * 给了：`JSContext` / `JSValue`（JavaScriptCore 风格），`evaluateScript`、属性读写、
@@ -32,7 +39,8 @@
  * 「.so 能加载 / 引擎能建 / 脚本能跑 / 投递箱能往返」。看到 `ok` 才谈得上继续迁移。
  */
 
-import { JSContext, JSValue } from '@devzeng/quickjs';
+import { JSContext, JSValue } from 'quickjs';
+import { runPendingJobs } from 'libquickjs.so';
 import { appendPlayLog } from 'musicbasic';
 
 /** 一次被 JS 侧投递出来的宿主调用。 */
@@ -247,6 +255,22 @@ export class QuickJsRuntime {
   public resolve(id: number, dataJson: string, ok: boolean = true): void {
     const safe: string = dataJson.length > 0 ? dataJson : 'null';
     this.evaluate(`__qjsResolve(${id}, ${JSON.stringify(safe)}, ${ok ? 'true' : 'false'})`, 'rzd_resolve.js');
+    // 显式再泵一次：不依赖 "evaluateScript 顺带泵" 这层隐含行为，
+    // 脚本的 .then 续体、以及续体里继续发起的宿主调用都能立刻反映到下一次 drain()。
+    this.pump();
+  }
+
+  /** 催一次微任务队列（自建 HAR 的 `runPendingJobs`） */
+  public pump(): void {
+    const ctx: JSContext | null = this.ctx;
+    if (ctx === null || this.released) {
+      return;
+    }
+    try {
+      runPendingJobs(ctx.engineHandle);
+    } catch (e) {
+      appendPlayLog('[qjs] pump 失败: ' + JSON.stringify(e).substring(0, 120));
+    }
   }
 
   /** 释放引擎（幂等） */
@@ -276,18 +300,18 @@ export class QuickJsRuntime {
  *
  * 现在**不参与任何业务逻辑**，只在 `EntryAbility.onCreate` 里跑一次（约 1~3ms）。
  */
-export function quickJsSelfTest(): void {
+export function quickJsSelfTest(): string {
   const rt: QuickJsRuntime = new QuickJsRuntime();
   try {
     if (!rt.start('selftest')) {
       appendPlayLog('[qjs] self-test: 引擎不可用（start 失败，详见上一条）');
-      return;
+      return '引擎不可用';
     }
     // 1) 纯计算
     const sum: string = rt.evaluate('1 + 41', 'selftest.js');
     if (sum !== '42') {
       appendPlayLog('[qjs] self-test fail: 1+41 = ' + sum);
-      return;
+      return '脚本执行失败（1+41=' + sum + '）';
     }
     // 2) 投递箱往返：JS 侧发起一次 lx.send，ArkTS 侧取走并回填
     rt.evaluate(`globalThis.__t = 'pending'; lx.send('inited', { ok: 1 }).then(function (r) {
@@ -296,21 +320,25 @@ export function quickJsSelfTest(): void {
     const calls: QuickJsCall[] = rt.drain();
     if (calls.length !== 1 || calls[0].method !== 'send') {
       appendPlayLog('[qjs] self-test fail: 投递箱空/错，calls=' + calls.length);
-      return;
+      return '投递箱异常（calls=' + calls.length + '）';
     }
     rt.resolve(calls[0].id, '{"ok":1}');
     const settled: string = rt.evaluate('globalThis.__t', 'selftest_check.js');
     if (settled.indexOf('resolved') !== 0) {
       appendPlayLog('[qjs] self-test fail: Promise 未回填，__t=' + settled);
-      return;
+      return 'Promise 未回填（缺微任务泵？）';
     }
     // 3) 宿主桥的两件基础能力（atob/btoa 走 JS 侧实现，不发投递箱）
     const b64: string = rt.evaluate("btoa('abc')", 'selftest_b64.js');
-    appendPlayLog('[qjs] self-test ok · eval=1+41:' + sum + ' · bridge=' + calls[0].method +
-      ' → ' + settled + ' · btoa(abc)=' + b64);
+    const line: string = '[qjs] self-test ok · eval=1+41:' + sum + ' · bridge=' + calls[0].method +
+      ' → ' + settled + ' · btoa(abc)=' + b64;
+    appendPlayLog(line);
+    return '通过：' + settled + ' · btoa=' + b64;
   } catch (e) {
     appendPlayLog('[qjs] self-test 抛异常: ' + JSON.stringify(e).substring(0, 200));
+    return '抛异常：' + JSON.stringify(e).substring(0, 80);
   } finally {
     rt.release();
   }
+  return '未知结果';
 }

@@ -1,0 +1,14 @@
+{
+  "name": "quickjs",
+  "version": "0.1.0",
+  "description": "QuickJS for HarmonyOS（本地自建：补了微任务泵，见 napi_init.cpp RunPendingJobs）",
+  "main": "Index.ets",
+  "author": "zengjing <hhtczengjing@gmail.com>",
+  "keywords": [ "quickjs", "javascript", "js", "jsc" ],
+  "homepage": "https://github.com/hhtczengjing/ohos_quickjs",
+  "repository": "https://github.com/hhtczengjing/ohos_quickjs.git",
+  "license": "MIT",
+  "dependencies": {
+    "libquickjs.so": "file:./src/main/cpp/types/libquickjs"
+  }
+}

@@ -88,6 +88,12 @@
       "srcPath": "./common/musicbasic"
     },
     {
+      // ★ 2026-11-15：本地自建 QuickJS HAR（源自 参考项目/ohos_quickjs，
+      //   补了微任务泵 runPendingJobs，见 common/quickjs/src/main/cpp/napi_init.cpp）
+      "name": "quickjs",
+      "srcPath": "./common/quickjs"
+    },
+    {
       "name": "musichomepcsample",
       "srcPath": "./products/pc",
       "targets": [

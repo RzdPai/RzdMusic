@@ -339,6 +339,22 @@
     {
       "name": "setting_search_placeholder",
       "value": "搜索设置"
+    },
+    {
+      "name": "setting_sub_engine",
+      "value": "音源引擎"
+    },
+    {
+      "name": "setting_engine_selftest",
+      "value": "运行 QuickJS 自检"
+    },
+    {
+      "name": "setting_engine_selftest_empty",
+      "value": "还没跑过自检"
+    },
+    {
+      "name": "setting_engine_hint",
+      "value": "当前 LX 音源脚本走 WebView（稳定）。QuickJS 引擎接入已完成，但宿主能力（XHR / crypto / DOM 桩 / 定时器）补齐前不提供切换 —— 在那之前选它会直接导致音源不可用，所以这里只保留自检入口。"
     }
   ]
 }

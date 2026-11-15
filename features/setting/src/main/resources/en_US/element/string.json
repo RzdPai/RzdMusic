@@ -223,6 +223,22 @@
     {
       "name": "setting_search_placeholder",
       "value": "Search settings"
+    },
+    {
+      "name": "setting_sub_engine",
+      "value": "Source engine"
+    },
+    {
+      "name": "setting_engine_selftest",
+      "value": "Run QuickJS self-test"
+    },
+    {
+      "name": "setting_engine_selftest_empty",
+      "value": "Not run yet"
+    },
+    {
+      "name": "setting_engine_hint",
+      "value": "LX source scripts currently run in a WebView (stable). The QuickJS engine is integrated, but switching is not offered until the host capabilities (XHR / crypto / DOM stubs / timers) are complete — picking it early would simply break every source, so only a self-test entry is exposed here."
     }
   ]
 }

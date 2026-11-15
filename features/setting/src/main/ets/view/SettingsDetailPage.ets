@@ -27,7 +27,7 @@ import { notificationManager } from '@kit.NotificationKit';
 import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, HomeSourceState, LyricCenterState, LyricFontSizeState, LyricFpsState, MotionCoverState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, immersiveFromLevel } from 'musicbasic';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
-import { DownloadService, LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatforms, lxDeclaredPlatformsOf, lxSourceManager, MediaService, lxSourceLabel, LX_PLATFORM_ORDER, normalizePlatformId, musicFreeSubscriptionLabel } from 'player';
+import { DownloadService, LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatforms, lxDeclaredPlatformsOf, lxSourceManager, MediaService, lxSourceLabel, LX_PLATFORM_ORDER, normalizePlatformId, musicFreeSubscriptionLabel, quickJsSelfTest } from 'player';
 import type { LXApiImportResult } from 'player';
 import { importMusicFreeSubscriptionText, importSourceScriptAuto, parseMusicFreeSubscription, updateSubscription, backfillMusicFreePlatforms } from 'player';
 import type { MfImportReport, MfSubscriptionEntry, MfSubscriptionInfo } from 'player';
@@ -179,6 +179,8 @@ export struct SettingsDetailPage {
   @Local desktopLyricSupport: boolean | undefined = undefined;
   /** 桌面歌词悬浮窗是否被用户锁定（解锁入口只保留通知栏，这里只用于提示文案）。 */
   @Local desktopLyricLocked: boolean = false;
+  /** QuickJS 自检结果（设置页「音源引擎」卡片显示；空串 = 本次会话还没跑过）。 */
+  @Local quickJsState: string = '';
   /**
    * MediaService 锁状态回调（aboutToAppear 注册、aboutToDisappear 摘除，两者必须传同一引用）。
    *
@@ -1904,6 +1906,53 @@ export struct SettingsDetailPage {
                 state.enabled = isOn;
               }
             })
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 4, bottom: 8 })
+        .borderRadius($r('sys.float.corner_radius_level12'))
+        .backgroundColor($r('app.color.card_background'))
+        // ★ 2026-11-15（用户：「QuickJS 如果真能完全走，就在其它设置里加个引擎设置的选项」）：
+        //   现在只给**状态 + 自检入口**，不给切换开关 —— 原因是宿主能力（XHR / crypto / DOM 桩 /
+        //   定时器）还没补，切过去会让每个音源都不可用。等 Phase 3 落地后，把这里换成
+        //   `CapsuleSelector(['WebView','QuickJS'], …)` 并接到 LXSourceEngine 上即可。
+        Column() {
+          this.SubTitle($r('app.string.setting_sub_engine'))
+          Row({ space: 8 }) {
+            Text('WebView')
+              .fontSize(13)
+              .fontColor($r('app.color.font_primary'))
+              .padding({ left: 10, right: 10, top: 3, bottom: 3 })
+              .borderRadius(11)
+              .backgroundColor($r('app.color.card_background'))
+            Text('QuickJS · 已接入未启用')
+              .fontSize(13)
+              .fontColor($r('app.color.font_tertiary'))
+              .padding({ left: 10, right: 10, top: 3, bottom: 3 })
+              .borderRadius(11)
+              .backgroundColor($r('app.color.card_background'))
+          }
+          .margin({ top: 6 })
+          Button($r('app.string.setting_engine_selftest'))
+            .height(34)
+            .fontSize(13)
+            .backgroundColor($r('app.color.card_background'))
+            .fontColor($r('app.color.font_primary'))
+            .margin({ top: 8 })
+            .onClick((): void => {
+              // 同步跑（建引擎 + 4 次 evaluateScript，约 2~5ms），结果写日志也给用户看
+              this.quickJsState = quickJsSelfTest();
+            })
+          Text(this.quickJsState.length > 0 ? ('自检：' + this.quickJsState) :
+            $r('app.string.setting_engine_selftest_empty'))
+            .fontSize(12)
+            .fontColor($r('app.color.font_tertiary'))
+            .width('100%')
+            .margin({ top: 6 })
+          Text($r('app.string.setting_engine_hint'))
+            .fontSize(12)
+            .fontColor($r('app.color.font_tertiary'))
+            .width('100%')
+            .margin({ top: 6 })
         }
         .width('100%')
         .padding({ left: 16, right: 16, top: 4, bottom: 8 })
