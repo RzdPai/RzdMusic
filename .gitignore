@@ -9,3 +9,4 @@ node_modules/
 output/
 local.properties
 .buildcache/
+dist/
