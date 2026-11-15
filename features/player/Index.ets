@@ -53,6 +53,7 @@ export {
   platformIdFromLabel, parseMusicFreeSubscription, importMusicFreeSubscription, importMusicFreeSubscriptionText,
   importMusicFreePluginUrl, importMusicFreePluginScript, importSourceScriptAuto,
   looksLikeMusicFreePlugin, musicFreeApisForPlatform, mfSearch, mfGetMediaSource, mfGetLyric,
+  mediaRefererFor, mediaUserAgentFor,
   mfSearchSheets, mfTopLists, mfRecommendGroups, mfGetSheetSongs, mfPlatformIdOfApi,
   isMfOnlyPlatform, updateSubscription, mfPlatformHasCap,
   backfillMusicFreePlatforms

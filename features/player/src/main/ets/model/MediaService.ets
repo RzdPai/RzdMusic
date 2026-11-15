@@ -41,6 +41,7 @@ import { MediaTools } from '../util/MediaTools';
 import { lxGetLyricFull, lxGetPicFallback, lxGetTTMLLyric,
   LyricFullResult } from '../source/LXMusicSDK';
 import { engineNotReadyToast } from '../util/SourceUpdateHint';
+import { mediaRefererFor, mediaUserAgentFor } from '../source/MusicFreeAdapter';
 import { FallbackOptions, QUALITY_TIER_COOLDOWN_MS, QUALITY_TIER_FAIL_THRESHOLD, UrlResolveOutcome, qualityTierKey, resolveMusicUrlWithFallback, sourceDisplayName } from '../util/SourceFallbackUtil';
 import { SwitchBannerState } from '../model/SwitchBannerState';
 import { amllGetCachedLyric, amllParseLyricCached } from '../amll/parse/AmllAutoDetect';
@@ -1265,6 +1266,15 @@ export class MediaService {
   private kernelEngine: AudioKernel | undefined = undefined;
   /** 待用内核播放的地址；空串表示走 AVPlayer。 */
   private kernelUrl: string = '';
+  /**
+   * 内核起播时该曲目需要的 Referer / UA。
+   * ★ 2026-11-15：MusicFree 插件取址会返回 `headers`（B 站是
+   *   `referer: https://www.bilibili.com/video/<bvid>`），缺了它 CDN 直接 403
+   *   （实测：不带 → 403 + HTML；带 → 206 + ftypiso5 fMP4）。
+   *   AVPlayer 在本 SDK 版本无法按请求带 header ⇒ 这类地址必须走内核并传下去。
+   */
+  private kernelReferer: string = '';
+  private kernelUserAgent: string = '';
   /** 进度轮询定时器句柄（-1 表示未启动）。 */
   private kernelPollTimer: number = -1;
   /** 内核静默失败看门狗：prepare 后 N 秒既没 onPrepared 也没 onError 就降级。 */
@@ -1329,6 +1339,8 @@ export class MediaService {
     this.kernelActive = false;
     this.kernelOwnsAudio = false;
     this.kernelUrl = '';
+    this.kernelReferer = '';
+    this.kernelUserAgent = '';
   }
 
   /** 停止进度轮询。 */
@@ -1520,7 +1532,7 @@ export class MediaService {
     this.armKernelWatchdog(engine);
     // 起播前统一设置 UA/Referer/超时/重连（抖音系直链与代理常因缺 UA/Referer 被拒）
     if (engine.prepareNetworkOptions !== undefined) {
-      engine.prepareNetworkOptions();
+      engine.prepareNetworkOptions(this.kernelReferer, this.kernelUserAgent);
     }
     engine.prepare(url);
   }
@@ -1939,15 +1951,24 @@ export class MediaService {
     //   然后失败重试又落到 AVPlayer（5411001 Cannot Find Host）→ 一直跳歌。
     const directUrl: string = this.unwrapRedirectUrl(outcome.url);
     const kernelUrl: string = directUrl.length > 0 ? directUrl : outcome.url;
-    if (this.isKernelEnabled() && (songItem.source === 'qs' || outcome.url.indexOf('audio_mp4') >= 0)) {
+    // ★ 2026-11-15：插件要求特定 Referer 的地址（B 站）也必须走内核 ——
+    //   AVPlayer 无法按请求带 header，硬喂给它只会拿到 403 的 HTML 页面。
+    const needReferer: string = mediaRefererFor(outcome.url);
+    if (this.isKernelEnabled() &&
+      (songItem.source === 'qs' || outcome.url.indexOf('audio_mp4') >= 0 || needReferer.length > 0)) {
       this.kernelUrl = kernelUrl;
-      this.appendPlayLog('[播放] hls -> kernel ' + kernelName(preferredKernel()));
+      this.kernelReferer = needReferer;
+      this.kernelUserAgent = mediaUserAgentFor(outcome.url);
+      this.appendPlayLog('[播放] hls/headers -> kernel ' + kernelName(preferredKernel()) +
+        (needReferer.length > 0 ? ' (referer)' : ''));
     } else if (tuningOn && this.isKernelEnabled()) {
       // ★ 播放设置有非默认的音效/升降调：普通曲目也走 FFmpeg，否则 EQ 无处可生效
       this.kernelUrl = kernelUrl;
       this.appendPlayLog('[播放] effects on -> kernel ' + kernelName(preferredKernel()));
     } else {
       this.kernelUrl = '';
+      this.kernelReferer = '';
+      this.kernelUserAgent = '';
     }
     songItem.url = directUrl.length > 0 ? directUrl : outcome.url;
     this.appendPlayLog('[播放] unwrapped=' + (directUrl.length > 0 ? 'y' : 'n') + ' kernelUrl=' + kernelUrl.substring(0, Math.min(80, kernelUrl.length)));

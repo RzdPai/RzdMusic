@@ -90,8 +90,12 @@ export interface AudioKernel {
   currentAo?(): string;
   /** @returns 实际输出参数（采样率/格式/声道），用于展示 bit-perfect 证据。 */
   audioOutParams?(): string;
-  /** 起播前设置 UA/Referer/超时/重连等网络参数。 */
-  prepareNetworkOptions?(): void;
+  /**
+   * 起播前设置 UA/Referer/超时/重连等网络参数。
+   * @param referer 按曲目覆盖 Referer（插件取址时给的）；空串 = 用默认值（抖音系）
+   * @param userAgent 按曲目覆盖 UA；空串 = 用默认值
+   */
+  prepareNetworkOptions?(referer?: string, userAgent?: string): void;
   /** @returns 起播失败时的关键状态（诊断用）。 */
   probeState?(): string;
   /** 设置独占后端：usb / ohaudio / off。 */
