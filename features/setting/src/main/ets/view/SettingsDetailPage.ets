@@ -27,7 +27,7 @@ import { notificationManager } from '@kit.NotificationKit';
 import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, HomeSourceState, LyricCenterState, LyricFontSizeState, LyricFpsState, MotionCoverState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, immersiveFromLevel } from 'musicbasic';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
-import { DownloadService, LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatforms, lxDeclaredPlatformsOf, lxSourceManager, MediaService, lxSourceLabel, LX_PLATFORM_ORDER, normalizePlatformId, musicFreeSubscriptionLabel, quickJsSelfTest, runScriptInQuickJs, QuickJsRunResult, runScriptAndInvoke, QuickJsInvokeResult, lxLastRequestData } from 'player';
+import { DownloadService, LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatforms, lxDeclaredPlatformsOf, lxSourceManager, MediaService, lxSourceLabel, LX_PLATFORM_ORDER, normalizePlatformId, musicFreeSubscriptionLabel, quickJsSelfTest, runScriptInQuickJs, QuickJsRunResult, runScriptAndInvoke, QuickJsInvokeResult, lxLastRequestData, runQuickJsOneClickCheck } from 'player';
 import type { LXApiImportResult } from 'player';
 import { importMusicFreeSubscriptionText, importSourceScriptAuto, parseMusicFreeSubscription, updateSubscription, backfillMusicFreePlatforms } from 'player';
 import type { MfImportReport, MfSubscriptionEntry, MfSubscriptionInfo } from 'player';
@@ -829,6 +829,22 @@ export struct SettingsDetailPage {
    * `lx.on('request', …)` 里那条取址逻辑。这里把 WebView 侧**最近一次真跑过**的
    * `{source, action, info}` 原样丢给 QuickJS，输入完全一致，耗时才有可比性。
    */
+  /** 一键测：自检 + 脚本初始化 + 重放取址 + 与 WebView 对照（见 player 侧实现） */
+  private async runOneClickCheck(): Promise<void> {
+    if (this.quickJsRunning) {
+      return;
+    }
+    this.quickJsRunning = true;
+    this.quickJsScriptState = '正在测…（约 1~2 秒）';
+    try {
+      this.quickJsScriptState = await runQuickJsOneClickCheck();
+    } catch (e) {
+      this.quickJsScriptState = '一键测异常：' + JSON.stringify(e).substring(0, 140);
+    } finally {
+      this.quickJsRunning = false;
+    }
+  }
+
   private async replayLastRequestInQuickJs(): Promise<void> {
     if (this.quickJsRunning) {
       return;
@@ -2008,38 +2024,23 @@ export struct SettingsDetailPage {
               this.lxEngineMode = mode;
               MusicStoreService.getInstance().setLxEngineMode(mode);
             })
-          Button($r('app.string.setting_engine_selftest'))
+          // ★ 2026-11-15（用户：「能不能一键测」）：三项合成一键 —— 逐项点会得到三行散日志，
+          //   还要人工判断"两个引擎给的是不是同一个地址"。这里一次跑完、一次判定。
+          Button(this.quickJsRunning ? '正在测…' : '一键测（QuickJS 引擎）')
             .height(34)
             .fontSize(13)
             .backgroundColor($r('app.color.card_background'))
             .fontColor($r('app.color.font_primary'))
+            .enabled(!this.quickJsRunning)
             .margin({ top: 8 })
             .onClick((): void => {
-              // 同步跑（建引擎 + 4 次 evaluateScript，约 2~5ms），结果写日志也给用户看
-              this.quickJsState = quickJsSelfTest();
+              void this.runOneClickCheck();
             })
-          Button('用 QuickJS 跑一遍当前音源脚本')
-            .height(34)
-            .fontSize(13)
-            .backgroundColor($r('app.color.card_background'))
-            .fontColor($r('app.color.font_primary'))
-            .margin({ top: 8, left: 8 })
-            .onClick((): void => {
-              void this.runQuickJsScriptProbe();
-            })
-          Button('用 QuickJS 重放上一次取址请求')
-            .height(34)
-            .fontSize(13)
-            .backgroundColor($r('app.color.card_background'))
-            .fontColor($r('app.color.font_primary'))
-            .margin({ top: 8, left: 8 })
-            .onClick((): void => {
-              void this.replayLastRequestInQuickJs();
-            })
-          Text(this.quickJsScriptState.length > 0 ? this.quickJsScriptState : '还没跑过脚本')
+          Text(this.quickJsScriptState.length > 0 ? this.quickJsScriptState : '还没测过')
             .fontSize(12)
             .fontColor($r('app.color.font_tertiary'))
             .width('100%')
+            .lineHeight(18)
             .margin({ top: 6 })
           Text(this.quickJsState.length > 0 ? ('自检：' + this.quickJsState) :
             $r('app.string.setting_engine_selftest_empty'))

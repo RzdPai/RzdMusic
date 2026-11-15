@@ -72,7 +72,7 @@ export {
 } from './src/main/ets/source/PlatformSearch';
 export type { MfSubscriptionEntry, MfImportReport } from './src/main/ets/source/MusicFreeAdapter';
 export { LXSourceEngine, lxEngineIsReady } from './src/main/ets/source/LXSourceEngine';
-export { lxLastRequestData } from './src/main/ets/source/LXSourceEngine';
+export { lxLastRequestData, lxLastInitTotalMs } from './src/main/ets/source/LXSourceEngine';
 export { QuickJsRuntime, QuickJsCall, quickJsSelfTest } from './src/main/ets/source/QuickJsRuntime';
 export { runScriptInQuickJs, runScriptAndInvoke, handleHostCalls, QuickJsRunResult, QuickJsInvokeResult, LxScriptInitInfo, QuickJsScriptSession } from './src/main/ets/source/LxHostBridge';
 export { lxSourceManager } from './src/main/ets/source/LXSourceManager';
@@ -86,7 +86,8 @@ export {
   attachSourcesToSnapshot, mergeSourcesFromSnapshot, mergeSourcesIntoRestoreResult
 } from './src/main/ets/source/SourceBackupPayload';
 export type { SourcePayload, SourcePayloadEntry, SourceMergeReport } from './src/main/ets/source/SourceBackupPayload';
-export { getLXMusicUrl, getLXLyric, getLXPic, logError, fetchBoardSongs } from './src/main/ets/source/LXPlayHelper';
+export { getLXMusicUrl, getLXLyric, getLXPic, logError, fetchBoardSongs,
+  runQuickJsOneClickCheck, lastWebViewUrl, lastWebViewUrlMs } from './src/main/ets/source/LXPlayHelper';
 export type { BoardSongEntry } from './src/main/ets/source/LXPlayHelper';
 export { lxGetQualityOptions, lxGetQualityOptionsForSongs, LXQualityOption } from './src/main/ets/source/LXQualityApi';
 export type { LXBatchQualityResult } from './src/main/ets/source/LXQualityApi';

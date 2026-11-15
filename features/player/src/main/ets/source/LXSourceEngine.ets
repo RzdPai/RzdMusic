@@ -22,6 +22,13 @@ export let lxEngineSendRequest: ((key: string, data: LXSourceRequestData) => voi
  * 这样比出来的耗时才有意义。
  */
 export let lxLastRequestData: LXSourceRequestData | undefined = undefined;
+
+/**
+ * 最近一次 WebView 脚本初始化的 `totalMs`（"脚本读完" → "收到 inited"）。
+ * ★ 2026-11-15：给「一键测」做对照用 —— 没有这个数就只能拿 `injectMs` 去和
+ * QuickJS 的总耗时比，那是两个口径（见 2026-11-15 的教训）。
+ */
+export let lxLastInitTotalMs: number = -1;
 export let lxEngineRegisterPromise: ((key: string,
   resolve: (result: object) => void, reject: (reason: Error) => void) => void) | null = null;
 export let lxEngineIsReady: boolean = false;
@@ -954,6 +961,7 @@ appendPlayLog(msg);
           const injectMs: number = this.injectStartedAt > 0 ? Date.now() - this.injectStartedAt : -1;
           // totalMs = 「脚本读完」→「收到 inited」：与 QuickJS 的 runScriptInQuickJs 同口径
           const totalMs: number = this.scriptLoadAt > 0 ? Date.now() - this.scriptLoadAt : -1;
+          lxLastInitTotalMs = totalMs;
           LXSourceEngine.appendLog('引擎 init 事件 status=' + status + ' gen=' + gen +
             ' pageGen=' + this.pageGen + ' injectMs=' + injectMs + ' totalMs=' + totalMs +
             (errorMsg.length > 0 ? ' msg=' + errorMsg.substring(0, 80) : ''));

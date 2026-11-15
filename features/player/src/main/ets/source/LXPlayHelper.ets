@@ -1,5 +1,5 @@
 import { LXSourceRequestData, LXMusicUrlResult, LXLyricResult, LXPicResult, LXSource, toLXSource, toLXSourceKey } from './Interface';
-import { lxEngineSendRequest, lxEngineRegisterPromise, lxEngineIsReady } from './LXSourceEngine';
+import { lxEngineSendRequest, lxEngineRegisterPromise, lxEngineIsReady, lxLastRequestData } from './LXSourceEngine';
 import { lxSearch, lxLeaderboard, LXSearchSong } from './LXMusicSDK';
 import { lxSourceManager } from './LXSourceManager';
 import { isMfOnlyPlatform, mfGetLyric, mfGetMediaSource, mfGetSheetSongs, mfSearch, musicFreeApisForPlatform } from './MusicFreeAdapter';
@@ -7,7 +7,9 @@ import { isLxPlatform, isMfPlatformId } from '../util/SourceDeclaredInfo';
 import { LXUserApiInfo } from './Interface';
 import { qsBoardSongs, qsPlaylistDetail } from '../geuz/QsApi';
 import {AppStorageKeys,  appendError, appendPlayLog, MusicStoreService } from 'musicbasic';
-import { QuickJsScriptSession } from './LxHostBridge';
+import { QuickJsScriptSession, runScriptInQuickJs, runScriptAndInvoke, QuickJsRunResult, QuickJsInvokeResult } from './LxHostBridge';
+import { quickJsSelfTest } from './QuickJsRuntime';
+import { lxLastInitTotalMs } from './LXSourceEngine';
 
 interface MusicInfoBrief {
   songmid: string;
@@ -292,6 +294,14 @@ async function tryMusicFreeLyric(source: string, songId: string, name?: string,
 let quickJsSession: QuickJsScriptSession = new QuickJsScriptSession();
 
 /**
+ * 最近一次**经 WebView**取回的播放地址与耗时（ms）。
+ * ★ 2026-11-15：给「一键测」做 A/B 对照 —— 直接比"两个引擎返回的地址是否一致"，
+ *   比人工看两条日志可靠得多。
+ */
+export let lastWebViewUrl: string = '';
+export let lastWebViewUrlMs: number = -1;
+
+/**
  * 从脚本 handler 的返回值里抠出播放地址。
  *
  * LX 的契约是 `{data:{url}}`，但实测有的脚本直接 resolve 一个字符串
@@ -358,6 +368,62 @@ async function resolveUrlViaQuickJs(reqData: LXSourceRequestData): Promise<strin
   }
 }
 
+/**
+ * 「一键测」：把 QuickJS 侧的三项验证跑成一条结论，并和 WebView 的实测数据对照。
+ *
+ * 为什么做成一键：三项分别点会得到三行散日志，还得人工判断"两个引擎给的地址是不是同一个"、
+ * "871 和 122 到底是不是同一口径"。这里一次跑完、一次判定。
+ *
+ * 全过程**不碰正在播的 WebView**（走独立的 QuickJS 实例），随时可点。
+ * @returns 多行文本（直接贴到设置页那张卡片里）
+ */
+export async function runQuickJsOneClickCheck(): Promise<string> {
+  const lines: string[] = [];
+  // ① 引擎自检
+  const self: string = quickJsSelfTest();
+  lines.push('① 自检：' + (self.indexOf('通过') === 0 ? '通过 · ' + self : self));
+
+  // ② 当前音源脚本在 QuickJS 里初始化
+  const activeId: string = MusicStoreService.getInstance().getActiveSource();
+  if (activeId.length === 0 || activeId.indexOf('mfplat:') === 0) {
+    lines.push('② 脚本：跳过（当前音源不是 LX 脚本）');
+    return lines.join('\n');
+  }
+  const script: string = await lxSourceManager.getScript(activeId);
+  if (script.length === 0) {
+    lines.push('② 脚本：跳过（读不到脚本原文）');
+    return lines.join('\n');
+  }
+  const run: QuickJsRunResult = await runScriptInQuickJs(script, 4000);
+  lines.push('② 脚本：' + (run.ok ?
+    ('ok · 平台 ' + run.platforms.join('/') + ' · ' + run.elapsedMs + 'ms') :
+    ('失败 · ' + run.error)));
+
+  // ③ 重放最近一次真实取址，并与 WebView 的结果对拍
+  if (lxLastRequestData === undefined) {
+    lines.push('③ 取址：跳过（还没播过歌，没有可重放的请求）');
+  } else {
+    const inv: QuickJsInvokeResult = await runScriptAndInvoke(script, 'request',
+      JSON.stringify(lxLastRequestData), 6000);
+    const qjsUrl: string = extractUrlFromValue(inv.valueJson);
+    if (!inv.ok || qjsUrl.length === 0) {
+      lines.push('③ 取址：失败 · ' + (inv.error.length > 0 ? inv.error : '没拿到地址'));
+    } else {
+      let verdict: string = '（WebView 还没结果，无法对拍）';
+      if (lastWebViewUrl.length > 0) {
+        verdict = lastWebViewUrl === qjsUrl ? '· 与 WebView **一致** ✓' : '· 与 WebView **不一致** ✗';
+      }
+      lines.push('③ 取址：ok · ' + inv.elapsedMs + 'ms · ' + qjsUrl.substring(0, 56) + '… ' + verdict);
+    }
+  }
+
+  // ④ 对照：WebView 侧最近一次实测
+  const wvInit: string = lxLastInitTotalMs > 0 ? (lxLastInitTotalMs + 'ms') : '未记录';
+  const wvUrl: string = lastWebViewUrlMs >= 0 ? (lastWebViewUrlMs + 'ms') : '未记录';
+  lines.push('④ 对照：WebView 脚本初始化 ' + wvInit + ' · 取址 ' + wvUrl);
+  return lines.join('\n');
+}
+
 export async function getLXMusicUrl(source: string, songId: string, quality: string, name?: string,
   singer?: string): Promise<string> {
   // ★ 2026-11-09：MusicFree 独有平台（哔哩哔哩 / YouTube / `mf:xxx`）LX 脚本不认识，
@@ -408,10 +474,13 @@ export async function getLXMusicUrl(source: string, songId: string, quality: str
     logError('qjs miss -> webview');
   }
   return new Promise<string>((resolve: (url: string) => void, reject: (reason: Error) => void): void => {
+    const reqStartedAt: number = Date.now();
     regReq(requestKey, (result: object): void => {
       let mr: LXMusicUrlResult = result as LXMusicUrlResult;
       if (mr !== undefined && mr.data !== undefined && mr.data.url !== undefined && mr.data.url.length > 0) {
         logError('ok ' + mr.data.url.substring(0, 80));
+        lastWebViewUrl = mr.data.url;
+        lastWebViewUrlMs = Date.now() - reqStartedAt;
         resolve(mr.data.url);
       } else {
         let msg: string = '响应数据无效: ' + JSON.stringify(result).substring(0, 200);
