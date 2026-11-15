@@ -95,6 +95,96 @@ const PRELUDE: string = `
     if (ok === false) { p.reject(value); } else { p.resolve(value); }
   };
 
+  // ── 宿主环境补齐（2026-11-15 真机教训）────────────────────────────────────
+  // QuickJS 里**没有** console / window / setTimeout / localStorage。
+  // 实录：两支脚本跑 QuickJS 都在 ~2s 后抛 「TypeError: cannot read property 'request' of undefined」，
+  // 说明它们在某个异步回调里摸了一个我们没提供的全局 —— 先把常见的这几个补齐。
+  if (typeof globalThis.console !== 'object' || globalThis.console === null) {
+    var logBuf = [];
+    globalThis.__qjsLogs = logBuf;
+    var push = function (level) {
+      return function () {
+        try {
+          var parts = [];
+          for (var i = 0; i < arguments.length; i++) {
+            var v = arguments[i];
+            parts.push(typeof v === 'string' ? v : JSON.stringify(v));
+          }
+          logBuf.push(level + ' ' + parts.join(' '));
+          if (logBuf.length > 200) { logBuf.shift(); }
+        } catch (e) { /* 日志失败不能影响脚本 */ }
+      };
+    };
+    globalThis.console = { log: push('log'), info: push('info'), warn: push('warn'),
+      error: push('error'), debug: push('debug') };
+  }
+  // 脚本常用 「window」 / 「self」 / 「global」 做环境判定
+  if (typeof globalThis.window === 'undefined') { globalThis.window = globalThis; }
+  if (typeof globalThis.self === 'undefined') { globalThis.self = globalThis; }
+  if (typeof globalThis.global === 'undefined') { globalThis.global = globalThis; }
+
+  // ── 定时器：QuickJS 没有事件循环 ⇒ 只登记，由 ArkTS 侧 __qjsRunTimers() 驱动 ──
+  // ⚠️ __qjsRunTimers 必须**无条件**定义（driveTimers() 每次都调），
+  //    不能放在 if(!setTimeout) 里面 —— 否则宿主已有 setTimeout 时就缺这个函数。
+  globalThis.__qjsTimers = globalThis.__qjsTimers || [];
+  globalThis.__qjsTimerSeq = globalThis.__qjsTimerSeq || 0;
+  if (typeof globalThis.__qjsRunTimers !== 'function') {
+    globalThis.__qjsRunTimers = function () {
+      var now = Date.now();
+      var due = [];
+      var list = globalThis.__qjsTimers;
+      for (var i = list.length - 1; i >= 0; i--) {
+        if (list[i].at <= now) {
+          var t = list[i];
+          due.push(t);
+          if (t.interval > 0) { t.at = now + t.interval; } else { list.splice(i, 1); }
+        }
+      }
+      for (var j = due.length - 1; j >= 0; j--) {
+        try { due[j].fn.apply(globalThis, due[j].args); } catch (e) { /* 脚本自己的错 */ }
+      }
+      return due.length;
+    };
+  }
+  if (typeof globalThis.setTimeout !== 'function') {
+    var addTimer = function (fn, delay, args, repeat) {
+      var id = ++globalThis.__qjsTimerSeq;
+      globalThis.__qjsTimers.push({ id: id, at: Date.now() + (delay > 0 ? delay : 0),
+        fn: fn, args: args, interval: repeat ? (delay > 0 ? delay : 1) : 0 });
+      return id;
+    };
+    globalThis.setTimeout = function (fn, delay) {
+      return addTimer(fn, delay, Array.prototype.slice.call(arguments, 2), false);
+    };
+    globalThis.setInterval = function (fn, delay) {
+      return addTimer(fn, delay, Array.prototype.slice.call(arguments, 2), true);
+    };
+    var clearTimer = function (id) {
+      for (var i = 0; i < globalThis.__qjsTimers.length; i++) {
+        if (globalThis.__qjsTimers[i].id === id) { globalThis.__qjsTimers.splice(i, 1); return; }
+      }
+    };
+    globalThis.clearTimeout = clearTimer;
+    globalThis.clearInterval = clearTimer;
+  }
+
+  // ── localStorage / sessionStorage：内存版（脚本用它们存 token）──
+  if (typeof globalThis.localStorage === 'undefined') {
+    var makeStore = function () {
+      var data = Object.create(null);
+      return {
+        getItem: function (k) { return Object.prototype.hasOwnProperty.call(data, k) ? data[k] : null; },
+        setItem: function (k, v) { data[k] = String(v); },
+        removeItem: function (k) { delete data[k]; },
+        clear: function () { data = Object.create(null); },
+        key: function (i) { return Object.keys(data)[i] ?? null; },
+        get length() { return Object.keys(data).length; }
+      };
+    };
+    globalThis.localStorage = makeStore();
+    globalThis.sessionStorage = makeStore();
+  }
+
   var SUPPORTED_EVENTS = { request: 1, inited: 1, updateAlert: 1 };
 
   globalThis.lx = {
@@ -201,7 +291,15 @@ export class QuickJsRuntime {
       this.ctx = new JSContext();
       this.ctx.name = 'qjs-' + tag;
       this.ctx.exceptionHandler = (context: JSContext, exception: JSValue): void => {
-        appendPlayLog('[qjs] 未捕获异常: ' + exception.toString());
+        // ★ 必须打 errorStack：`toString()` 对异常对象常给空串，上一版因此丢掉了行号
+        let stack: string = '';
+        try {
+          stack = exception.errorStack;
+        } catch (_e) {
+          stack = '';
+        }
+        appendPlayLog('[qjs] 未捕获异常: ' + exception.toString() +
+          (stack.length > 0 ? ' | stack=' + stack.substring(0, 400) : ''));
       };
       this.evaluate(PRELUDE, 'rzd_prelude.js');
       return true;
@@ -221,13 +319,42 @@ export class QuickJsRuntime {
     try {
       const v: JSValue = ctx.evaluateScript(script, sourceURL);
       if (v.isException) {
-        appendPlayLog('[qjs] 脚本异常 ' + (sourceURL ?? '') + ': ' + v.toString());
+        let stack: string = '';
+        try {
+          stack = v.errorStack;
+        } catch (_e) {
+          stack = '';
+        }
+        appendPlayLog('[qjs] 脚本异常 ' + (sourceURL ?? '') + ': ' + v.toString() +
+          (stack.length > 0 ? ' | stack=' + stack.substring(0, 400) : ''));
         return '';
       }
       return v.isUndefined ? '' : v.toString();
     } catch (e) {
       appendPlayLog('[qjs] 执行失败: ' + JSON.stringify(e).substring(0, 200));
       return '';
+    }
+  }
+
+  /**
+   * 跑掉已到期的 `setTimeout` / `setInterval`（QuickJS 没有事件循环，只能由这里驱动）。
+   * @returns 本次执行了几个
+   */
+  public driveTimers(): number {
+    const n: string = this.evaluate('__qjsRunTimers()', 'rzd_timers.js');
+    const v: number = n.length > 0 ? Number(n) : 0;
+    return Number.isFinite(v) ? v : 0;
+  }
+
+  /** 脚本侧攒下的 console 输出（最多 200 条），取走即清空 */
+  public takeConsoleLogs(): string[] {
+    const raw: string = this.evaluate('JSON.stringify(globalThis.__qjsLogs || [])', 'rzd_logs.js');
+    this.evaluate('(globalThis.__qjsLogs = [])', 'rzd_logs_clear.js');
+    try {
+      const arr: Object[] = JSON.parse(raw) as Object[];
+      return Array.isArray(arr) ? arr.map((x: Object): string => String(x)) : [];
+    } catch (_e) {
+      return [];
     }
   }
 

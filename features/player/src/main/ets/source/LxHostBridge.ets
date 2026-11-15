@@ -298,12 +298,20 @@ export async function runScriptInQuickJs(scriptText: string, timeoutMs: number =
       out.error = '引擎启动失败';
       return out;
     }
+    // 诊断：先把脚本头部和「lx 到底是什么」记下来 —— 上一版失败时日志里连这都没有，
+    // 只能靠猜（2026-11-15 两支脚本都报 `cannot read property 'request' of undefined`）。
+    const env: string = rt.evaluate('typeof lx + "/" + typeof lx.request + "/" + typeof window + "/" + typeof setTimeout', 'env.js');
+    appendPlayLog('[qjs] 环境 lx=' + env + ' 脚本长度=' + scriptText.length);
+    const head: string = scriptText.replace(/\s+/g, ' ').substring(0, 260);
+    appendPlayLog('[qjs] 脚本头: ' + head);
     // 脚本常把自己挂到 `globalThis.` 上；直接 eval 即可（PRELUDE 已装好 lx/fetch/atob）
     rt.evaluate(scriptText, 'lx_script.js');
     const initInfo: LxScriptInitInfo = new LxScriptInitInfo();
     let rounds: number = 0;
     while (Date.now() - started < timeoutMs && rounds < 60) {
       rounds++;
+      // 定时器先跑：脚本常用 setTimeout(init, 0) 启动
+      rt.driveTimers();
       const calls: QuickJsCall[] = rt.drain();
       if (calls.length > 0) {
         out.hostCalls += await handleHostCalls(rt, calls, initInfo);
@@ -320,6 +328,11 @@ export async function runScriptInQuickJs(scriptText: string, timeoutMs: number =
     out.ok = initInfo.inited;
     if (!out.inited) {
       out.error = '脚本没有在 ' + timeoutMs + 'ms 内上报 inited（可能依赖 WebView 专有 API）';
+      const logs: string[] = rt.takeConsoleLogs();
+      if (logs.length > 0) {
+        appendPlayLog('[qjs] 脚本 console（' + logs.length + ' 条，最多显示 8 条）: ' +
+          logs.slice(-8).join(' || ').substring(0, 600));
+      }
     }
     appendPlayLog('[qjs] 跑脚本完成 ok=' + out.ok + ' 平台=' + out.platforms.length +
       ' 宿主调用=' + out.hostCalls + ' 耗时=' + out.elapsedMs + 'ms' +
