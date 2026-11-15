@@ -697,6 +697,59 @@ export async function mfSearch(api: LXUserApiInfo, query: string, page: number,
  * @param name 歌名（拿不到原始 item 时构造最小对象用）
  * @param singer 歌手
  */
+/**
+ * 从插件 `getMediaSource` 的返回值里取播放地址。
+ * @param json 插件返回的原始字符串（可能是 JSON 对象，也可能直接是带引号的 URL）
+ * @returns 播放地址；取不到抛错
+ */
+function urlFromMediaSource(json: string): string {
+  let parsed: Record<string, Object>;
+  try {
+    parsed = JSON.parse(json) as Record<string, Object>;
+  } catch (_err) {
+    // 少数插件直接返回 URL 字符串
+    const plain: string = json.replace(/^"|"$/g, '');
+    if (plain.startsWith('http')) {
+      return plain;
+    }
+    throw new Error('播放地址解析失败');
+  }
+  const url: string = (parsed.url as string) ?? '';
+  if (url.length === 0) {
+    throw new Error('插件没有返回播放地址');
+  }
+  return url;
+}
+
+/**
+ * 按歌名+歌手在当前插件里重搜一次，并取回**插件自己的完整对象**。
+ *
+ * ★ 2026-11-15（真机：B 站两首歌都 `[mf] bilibili 失败: Cannot read properties of
+ *   undefined (reading 'cid')`）：`getMediaSource` 要的是**插件搜索返回的那份原始对象**，
+ *   而我们的内存缓存（`rawItemCache`）是**会话级**的 —— 缓存没命中时会退化成只带
+ *   `id/platform/title/artist` 的最小对象，B 站插件读不到 `cid` 之类字段就直接抛。
+ *   重搜一次既能把完整对象补回缓存，也顺带修掉"重启后 / 从历史进来"的同类失败。
+ * @param api 插件
+ * @param songId 目标歌曲 id
+ * @param keyword 搜索关键词（歌名+歌手）
+ * @returns 未命中返回空串
+ */
+async function refetchRawItem(api: LXUserApiInfo, songId: string, keyword: string): Promise<string> {
+  if (keyword.length === 0) {
+    return '';
+  }
+  try {
+    // mfSearch 内部会经 songOfRow → rememberRawItem 把每行的原始对象写进缓存
+    await mfSearch(api, keyword, 1, 20);
+  } catch (_e) {
+    return '';
+  }
+  const fresh: string = recallRawItem(api.id, songId);
+  appendPlayLog('[mf] refetch ' + api.name + ' id=' + songId +
+    (fresh.length > 0 ? ' ok len=' + fresh.length : ' miss'));
+  return fresh;
+}
+
 export async function mfGetMediaSource(api: LXUserApiInfo, songId: string, quality: string,
   name?: string, singer?: string): Promise<string> {
   if (!(await ensureMfReady(api.id))) {
@@ -717,23 +770,30 @@ export async function mfGetMediaSource(api: LXUserApiInfo, songId: string, quali
     minimal.artist = singer ?? '';
     music = minimal;
   }
-  const json: string = await mfCall('getMediaSource', [music, mfQualityOf(quality)]);
-  let parsed: Record<string, Object>;
+  // 诊断：命中/缺失 + 载荷长度。B 站那类"插件要完整对象"的失败靠这行区分
+  appendPlayLog('[mf] getMediaSource ' + api.name + '/' + songId +
+    ' cache=' + (rawJson.length > 0 ? 'hit' : 'miss') + ' len=' + rawJson.length);
   try {
-    parsed = JSON.parse(json) as Record<string, Object>;
-  } catch (_err) {
-    // 少数插件直接返回 URL 字符串
-    const plain: string = json.replace(/^"|"$/g, '');
-    if (plain.startsWith('http')) {
-      return plain;
+    return urlFromMediaSource(await mfCall('getMediaSource', [music, mfQualityOf(quality)]));
+  } catch (err) {
+    const reason: string = (err as Error).message ?? '';
+    appendPlayLog('[mf] getMediaSource fail ' + api.name + ' reason=' + reason.substring(0, 100));
+    // 重搜一次再试（B 站这类插件要搜索项里的字段，最小对象喂不进去）
+    const keyword: string = ((name ?? '') + ' ' + (singer ?? '')).trim();
+    const fresh: string = await refetchRawItem(api, songId, keyword);
+    if (fresh.length === 0) {
+      throw err as Error;
     }
-    throw new Error('播放地址解析失败');
+    try {
+      const retried: string = urlFromMediaSource(await mfCall('getMediaSource',
+        [JSON.parse(fresh) as Object, mfQualityOf(quality)]));
+      appendPlayLog('[mf] getMediaSource retry ok ' + api.name + '/' + songId);
+      return retried;
+    } catch (_e2) {
+      // 重搜也救不回来：把**第一次**的原因抛出去（更贴近真实失败原因）
+      throw err as Error;
+    }
   }
-  const url: string = (parsed.url as string) ?? '';
-  if (url.length === 0) {
-    throw new Error('插件没有返回播放地址');
-  }
-  return url;
 }
 
 /**
