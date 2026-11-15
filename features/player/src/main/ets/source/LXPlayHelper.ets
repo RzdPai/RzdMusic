@@ -379,48 +379,55 @@ async function resolveUrlViaQuickJs(reqData: LXSourceRequestData): Promise<strin
  */
 export async function runQuickJsOneClickCheck(): Promise<string> {
   const lines: string[] = [];
+  // 每一行也写进运行日志（[qjs]{check}）—— 用户看界面、我看日志，
+  // 否则让人手抄四行结论太蠢。最后再打 [qjs]{check} DONE 便于 grep。
+  const note = (line: string): void => {
+    lines.push(line);
+    appendPlayLog('[qjs]{check} ' + line);
+  };
   // ① 引擎自检
   const self: string = quickJsSelfTest();
-  lines.push('① 自检：' + (self.indexOf('通过') === 0 ? '通过 · ' + self : self));
+  note('① 自检：' + (self.indexOf('通过') === 0 ? '通过 · ' + self : self));
 
   // ② 当前音源脚本在 QuickJS 里初始化
   const activeId: string = MusicStoreService.getInstance().getActiveSource();
   if (activeId.length === 0 || activeId.indexOf('mfplat:') === 0) {
-    lines.push('② 脚本：跳过（当前音源不是 LX 脚本）');
+    note('② 脚本：跳过（当前音源不是 LX 脚本）');
     return lines.join('\n');
   }
   const script: string = await lxSourceManager.getScript(activeId);
   if (script.length === 0) {
-    lines.push('② 脚本：跳过（读不到脚本原文）');
+    note('② 脚本：跳过（读不到脚本原文）');
     return lines.join('\n');
   }
   const run: QuickJsRunResult = await runScriptInQuickJs(script, 4000);
-  lines.push('② 脚本：' + (run.ok ?
+  note('② 脚本：' + (run.ok ?
     ('ok · 平台 ' + run.platforms.join('/') + ' · ' + run.elapsedMs + 'ms') :
     ('失败 · ' + run.error)));
 
   // ③ 重放最近一次真实取址，并与 WebView 的结果对拍
   if (lxLastRequestData === undefined) {
-    lines.push('③ 取址：跳过（还没播过歌，没有可重放的请求）');
+    note('③ 取址：跳过（还没播过歌，没有可重放的请求）');
   } else {
     const inv: QuickJsInvokeResult = await runScriptAndInvoke(script, 'request',
       JSON.stringify(lxLastRequestData), 6000);
     const qjsUrl: string = extractUrlFromValue(inv.valueJson);
     if (!inv.ok || qjsUrl.length === 0) {
-      lines.push('③ 取址：失败 · ' + (inv.error.length > 0 ? inv.error : '没拿到地址'));
+      note('③ 取址：失败 · ' + (inv.error.length > 0 ? inv.error : '没拿到地址'));
     } else {
       let verdict: string = '（WebView 还没结果，无法对拍）';
       if (lastWebViewUrl.length > 0) {
         verdict = lastWebViewUrl === qjsUrl ? '· 与 WebView **一致** ✓' : '· 与 WebView **不一致** ✗';
       }
-      lines.push('③ 取址：ok · ' + inv.elapsedMs + 'ms · ' + qjsUrl.substring(0, 56) + '… ' + verdict);
+      note('③ 取址：ok · ' + inv.elapsedMs + 'ms · ' + qjsUrl.substring(0, 56) + '… ' + verdict);
     }
   }
 
   // ④ 对照：WebView 侧最近一次实测
   const wvInit: string = lxLastInitTotalMs > 0 ? (lxLastInitTotalMs + 'ms') : '未记录';
   const wvUrl: string = lastWebViewUrlMs >= 0 ? (lastWebViewUrlMs + 'ms') : '未记录';
-  lines.push('④ 对照：WebView 脚本初始化 ' + wvInit + ' · 取址 ' + wvUrl);
+  note('④ 对照：WebView 脚本初始化 ' + wvInit + ' · 取址 ' + wvUrl);
+  appendPlayLog('[qjs]{check} DONE');
   return lines.join('\n');
 }
 
