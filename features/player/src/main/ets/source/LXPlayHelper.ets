@@ -466,6 +466,12 @@ export async function runQuickJsOneClickCheck(): Promise<string> {
   const wvInit: string = lxLastInitTotalMs > 0 ? (lxLastInitTotalMs + 'ms') : '未记录';
   const wvUrl: string = lastWebViewUrlMs >= 0 ? (lastWebViewUrlMs + 'ms') : '未记录';
   note('④ 对照：WebView 脚本初始化 ' + wvInit + ' · 取址 ' + wvUrl);
+  // ⑤/⑥ 给验收用：能力画像 + WebView 到底挂没挂（省没省资源的唯一凭证）
+  const profile: string = (AppStorage.get<string>(AppStorageKeys.LX_SCRIPT_PROFILE) ?? '未探测');
+  const webMounted: boolean = AppStorage.get<boolean>(AppStorageKeys.LX_WEB_MOUNTED) ?? true;
+  note('⑤ 能力画像：' + profile);
+  note('⑥ WebView：' + (webMounted ? '已挂载（当前走 ArkWeb 或已回落）' : '未挂载（QuickJS 接管，省一个渲染进程）') +
+    ' · 判定=' + (lookupVerdict(activeId) === true ? '可' : (lookupVerdict(activeId) === false ? '否' : '未测')));
   // ★ 验证通过 ⇒ 允许 `auto` 对这支脚本走 QuickJS（失败过一次就永远不许）
   if (run.ok && lookupVerdict(activeId) !== false) {
     rememberVerdict(activeId, true);

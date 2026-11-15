@@ -309,6 +309,8 @@ public static readonly MOTION_COVER_STATE: string = 'musichome_MotionCoverState'
   public static readonly LX_ENGINE_SOURCES: string = 'lxEngineSources';
   /** 脚本能力画像（ScriptProbe 的结果，日志/设置页用） */
   public static readonly LX_SCRIPT_PROFILE: string = 'lxScriptProfile';
+  /** WebView 是否真的挂载了（QuickJS 接管时为 false）——「按特性混合」省没省资源的唯一凭证 */
+  public static readonly LX_WEB_MOUNTED: string = 'lxWebMounted';
   /** 脚本是否需要 DOM */
   public static readonly LX_SCRIPT_NEEDS_DOM: string = 'lxScriptNeedsDom';
   /** 更新检查被应用拦截时记下的版本号 */

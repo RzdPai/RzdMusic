@@ -390,6 +390,7 @@ export struct LXSourceEngine {
     if (!skipWeb && !this.webMounted) {
       this.webMounted = true;
     }
+    AppStorage.setOrCreate(AppStorageKeys.LX_WEB_MOUNTED, !skipWeb);
     LXSourceEngine.appendLog('引擎 WebView ' + (skipWeb ? '不挂载（QuickJS 接管）' : '挂载') +
       ' mode=' + mode + ' verdict=' + (persisted === undefined ? '未测' : (persisted ? '可' : '否')) +
       ' canQuick=' + canQuick);
