@@ -44,7 +44,9 @@ export struct HomeSearchRow {
           //   `card_background` + 0.5vp 描边。两端不同色会在长镜头中途看出颜色跳变。
           // 与搜索页那端保持同一套：光感 + 半透明底（否则形变途中颜色会跳）
           .systemMaterial(immersiveFromLevel(this.ambientState.level))
-          .backgroundColor('#33FFFFFF')
+          // ★ 2026-11-15（合并 PR #16）：底色改深浅色自适应资源（浅色白纱 / 深色黑纱）。
+          //   与搜索页那端（`OnlineSearchPage`）**同一资源** ⇒ 形变中途仍无颜色跳变。
+          .backgroundColor($r('app.color.immersive_glass_overlay'))
           .borderRadius(SEARCH_FIELD_H / 2)
           .border({ width: 0.5, color: $r('sys.color.comp_divider') })
           .clip(true)

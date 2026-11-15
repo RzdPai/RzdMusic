@@ -23,6 +23,10 @@
     {
       "name": "player_menu_share",
       "value": "Share"
+    },
+    {
+      "name": "player_menu_download",
+      "value": "Download"
     }
   ]
 }

@@ -1,17 +1,17 @@
 {
     "color": [
-    {
-      "name": "menu_selected_surface",
-      "value": "#14000000"
-    },
-    {
-      "name": "menu_surface",
-      "value": "#F2F3F5"
-    },
-    {
-      "name": "menu_surface_border",
-      "value": "#1A000000"
-    },
+        {
+            "name": "menu_selected_surface",
+            "value": "#14000000"
+        },
+        {
+            "name": "menu_surface",
+            "value": "#F2F3F5"
+        },
+        {
+            "name": "menu_surface_border",
+            "value": "#1A000000"
+        },
         {
             "name": "panel_surface",
             "value": "#F2F3F5"
@@ -62,10 +62,10 @@
         },
         {
             "name": "chip_surface",
-    "value": "#E3E6EA"
-  },
-  {
-    "name": "capsule_background",
+            "value": "#E3E6EA"
+        },
+        {
+            "name": "capsule_background",
             "value": "#F1F3F5"
         },
         {
@@ -127,6 +127,10 @@
         {
             "name": "playlist_play_all_icon",
             "value": "#FF1949"
+        },
+        {
+            "name": "immersive_glass_overlay",
+            "value": "#33FFFFFF"
         }
     ]
 }

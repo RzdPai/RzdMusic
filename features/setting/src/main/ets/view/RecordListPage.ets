@@ -1258,7 +1258,8 @@ export struct RecordListPage {
     }
     .type(ButtonType.Normal)
     .systemMaterial(immersiveMedium())
-    .backgroundColor('#33FFFFFF')
+    // ★ 2026-11-15（合并 PR #16）：玻璃底色改深浅色自适应资源（深色黑纱 #33000000）。
+    .backgroundColor($r('app.color.immersive_glass_overlay'))
     .width('100%')
     .padding(14)
     .borderRadius(16)
