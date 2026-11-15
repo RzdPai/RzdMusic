@@ -302,6 +302,18 @@ export let lastWebViewUrl: string = '';
 export let lastWebViewUrlMs: number = -1;
 
 /**
+ * 每支脚本「能不能在 QuickJS 里跑」的判定缓存（本次进程内有效）。
+ *
+ * ★ 2026-11-15 实测定了 auto 的口径：QuickJS 与 WebView **取回的地址逐字节相同**
+ *   （`③ 一致 ✓`），且取址 218ms vs 245ms、脚本初始化 119ms vs 821ms。
+ *   所以 `auto` = **QuickJS 优先，失败回落 WebView**。
+ *   缓存是为了让"跑不了 QuickJS 的脚本"只付一次 4s 超时代价，之后直接走 WebView。
+ * @key 脚本 id
+ * @value true=可跑（已验证） / false=跑不了（已验证，别重试）
+ */
+const quickJsVerdict: Map<string, boolean> = new Map<string, boolean>();
+
+/**
  * 从脚本 handler 的返回值里抠出播放地址。
  *
  * LX 的契约是 `{data:{url}}`，但实测有的脚本直接 resolve 一个字符串
@@ -427,6 +439,11 @@ export async function runQuickJsOneClickCheck(): Promise<string> {
   const wvInit: string = lxLastInitTotalMs > 0 ? (lxLastInitTotalMs + 'ms') : '未记录';
   const wvUrl: string = lastWebViewUrlMs >= 0 ? (lastWebViewUrlMs + 'ms') : '未记录';
   note('④ 对照：WebView 脚本初始化 ' + wvInit + ' · 取址 ' + wvUrl);
+  // ★ 验证通过 ⇒ 允许 `auto` 对这支脚本走 QuickJS（失败过一次就永远不许）
+  if (run.ok && quickJsVerdict.get(activeId) !== false) {
+    quickJsVerdict.set(activeId, true);
+    note('⑤ 结论：这支脚本可以走 QuickJS（`自动` 模式下次会用它）');
+  }
   appendPlayLog('[qjs]{check} DONE');
   return lines.join('\n');
 }
@@ -470,15 +487,25 @@ export async function getLXMusicUrl(source: string, songId: string, quality: str
   } else {
     logError('req ' + source + '/' + songId + '/' + quality);
   }
-  // ★ 2026-11-15：`lxEngineMode=quickjs` 时先用常驻 QuickJS 会话取地址；
-  //   拿不到（或会话没就绪）就**继续走下面的 WebView 流程** —— 自动回落，用户无感。
-  if (MusicStoreService.getInstance().getLxEngineMode() === 'quickjs') {
+  // ★ 2026-11-15：`quickjs` 与 `auto` 都先试 QuickJS；
+  //   `auto` 额外看判定缓存（跑不了就别每次都白等 4s）。拿不到就继续走下面的 WebView 流程。
+  const engineMode: string = MusicStoreService.getInstance().getLxEngineMode();
+  const activeScriptId: string = MusicStoreService.getInstance().getActiveSource();
+  const verdict: boolean | undefined = quickJsVerdict.get(activeScriptId);
+  // `auto` 只对**已验证跑得通**的脚本启用 QuickJS（`verdict === true`，由「一键测」写入）；
+  // 没验证过的一律先走 WebView —— 绝不拿没测过的脚本换引擎。
+  const wantQuickJs: boolean = engineMode === 'quickjs' ||
+    (engineMode === 'auto' && verdict === true);
+  if (wantQuickJs) {
     const quickUrl: string = await resolveUrlViaQuickJs(reqData);
     if (quickUrl.length > 0) {
+      quickJsVerdict.set(activeScriptId, true);
       logError('qjs ok ' + quickUrl.substring(0, 80));
       return quickUrl;
     }
-    logError('qjs miss -> webview');
+    // 记下"这支脚本在这台机器上跑不了"，下次 auto 直接走 WebView（不重复付超时）
+    quickJsVerdict.set(activeScriptId, false);
+    logError('qjs miss -> webview (' + engineMode + ')');
   }
   return new Promise<string>((resolve: (url: string) => void, reject: (reason: Error) => void): void => {
     const reqStartedAt: number = Date.now();

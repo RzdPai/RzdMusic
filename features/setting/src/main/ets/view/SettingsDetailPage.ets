@@ -2048,8 +2048,8 @@ export struct SettingsDetailPage {
             .fontColor($r('app.color.font_tertiary'))
             .width('100%')
             .margin({ top: 6 })
-          Text('QuickJS 走本地自建引擎（不创建 WebView，冷启动更快）；任何一步失败都会自动回落 WebView。' +
-            '先点下面的按钮确认这支脚本在 QuickJS 里能跑通，再切过去。')
+          Text('自动：只对「一键测」验证过的脚本走 QuickJS，其余走 WebView。' +
+            'WebView：永远走浏览器引擎。QuickJS：强制走本地引擎，失败自动回落。')
             .fontSize(12)
             .fontColor($r('app.color.font_tertiary'))
             .width('100%')
