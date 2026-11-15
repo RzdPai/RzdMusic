@@ -23,9 +23,18 @@ import { amllGetCachedLyric, amllParseLyricCached } from '../amll/parse/AmllAuto
 
 const TAG = 'LyricLiveViewController';
 
-/** Capsule / card / lock screen text length limits of the live view templates. */
-const CAPSULE_TEXT_MAX: number = 120;
-const RICH_TEXT_MAX: number = 120;
+/**
+ * 各文案字段的长度上限。
+ *
+ * ★ 2026-11-15（真机 `创建异常 code=401 … layoutData.title … [or the parameter length exceeds the limit]`）：
+ *   官方文档里 `PickupLayout.title` / `PickupLayout.content` / `TextCapsule.title` /
+ *   `TextCapsule.content` / `RichText.text` 统统是「**长度小于 128**」，而这里原来取 120
+ *   —— 只留 8 个字符余量太贴边（客户端与服务端对"长度"的计法未必一致）。
+ *   统一收到 100，肉眼无差别（卡片一行也就十几字）。
+ *   `PrimaryData.title` 的限制是「小于 1024」，200 有充足余量，不动。
+ */
+const CAPSULE_TEXT_MAX: number = 100;
+const RICH_TEXT_MAX: number = 100;
 const PRIMARY_TITLE_MAX: number = 200;
 /** Minimum interval between two live view pushes (throttles word-level lyric updates). */
 const MIN_PUSH_INTERVAL_MS: number = 500;
@@ -156,10 +165,17 @@ export class LyricLiveViewController {
       }
     } catch (e) {
       const err: BusinessError = e as BusinessError;
+      // ★ 2026-11-15：把**各字段的实际长度**打出来。401 的报错只给一个字段名
+      //   （`layoutData.title … length exceeds the limit`），光看它无法判断究竟哪一项超了，
+      //   下次看这行就能直接定位。
       appendPlayLog('[实况窗] 创建异常 code=' + err.code + ' msg=' + err.message +
-        (this.isEntitlementError(err.code) ? '（权益未开通）' : ''));
+        (this.isEntitlementError(err.code) ? '（权益未开通）' : '') +
+        ' | lens title=' + this.curTitle.length + ' singer=' + this.curSinger.length +
+        ' line=' + this.curLineText.length + ' next=' + this.nextLineText.length +
+        ' cap=' + this.capsuleText().length);
       Logger.warn(TAG, 'startLiveView failed: ' + err.code + ' ' + err.message);
       if (this.isEntitlementError(err.code)) {
+        // 只有"权益未开通"才记住并停止重试；401（参数问题）不记，下一首还会试
         this.unsupportedReason = 'entitlement=' + err.code;
       }
     } finally {
@@ -170,13 +186,17 @@ export class LyricLiveViewController {
   /**
    * 判断是不是"权益/能力未开通"这类**换歌也不会好**的错误。
    *
-   * `1003500005 The right of liveView is not enabled.` —— AGC 未给应用开通实况窗权益，
-   * 代码侧无解（要去 AppGallery Connect 申请），所以记住它、本会话别再重试。
-   * `401`（参数非法/超限，例如早期的 512×512 图标）也归进来：那是我们自己的参数问题，
-   * 一小时内不会自己好，重试同样只是刷日志。
+   * 只有 `1003500005 The right of liveView is not enabled.`（AGC 未开通实况窗权益）
+   * 算这一类 —— 代码侧无解，记住它、本会话别再重试。
+   *
+   * ★ 2026-11-15：**`401` 不再算这一类**。401 是"参数非法/超限"，而我们的入参
+   *   绝大部分来自**歌曲数据**（标题/歌手/歌词长度）⇒ 换一首歌很可能就好了。
+   *   以前把 401 也归成"权益未开通"⇒ 一首标题超长的歌会把实况窗**整场禁掉**
+   *   （真机日志里就是 B 站那个《…》超长合集名触发的），这是明确的错判。
+   *   现在 401 只记日志、**不置 `unsupportedReason`** ⇒ 下一首（数据正常）仍会尝试。
    */
   private isEntitlementError(code: number): boolean {
-    return code === 1003500005 || code === 401;
+    return code === 1003500005;
   }
 
   /**
