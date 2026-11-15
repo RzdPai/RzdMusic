@@ -444,6 +444,124 @@ export async function runScriptAndInvoke(scriptText: string, eventName: string,
   }
 }
 
+/**
+ * 一支脚本的**常驻 QuickJS 会话**（引擎 + prelude + 已 init 的脚本）。
+ *
+ * 为什么要常驻：`runScriptAndInvoke()` 每次都要 建引擎 + 装 prelude + eval 脚本
+ * （真机实测 122~345ms）。日常切歌是**每首歌都要取一次地址**，那个初始化成本
+ * 摊到每首歌上就不能接受了 —— WebView 那边也是常驻的（页面只在换脚本时重载）。
+ * 所以这里按 scriptId 缓存，脚本变了才重建。
+ */
+export class QuickJsScriptSession {
+  private rt: QuickJsRuntime = new QuickJsRuntime();
+  private initInfo: LxScriptInitInfo = new LxScriptInitInfo();
+  private scriptId: string = '';
+  private ready: boolean = false;
+  private opening: boolean = false;
+
+  public isReadyFor(scriptId: string): boolean {
+    return this.ready && this.scriptId === scriptId && this.rt.isReady();
+  }
+
+  /** 打开会话（幂等：同 scriptId 且已就绪时直接返回 true） */
+  public async open(scriptId: string, scriptText: string, timeoutMs: number = 4000): Promise<boolean> {
+    if (this.isReadyFor(scriptId)) {
+      return true;
+    }
+    if (this.opening) {
+      // 有别的调用正在开：等它（最多 timeoutMs）
+      const deadline: number = Date.now() + timeoutMs;
+      while (this.opening && Date.now() < deadline) {
+        await sleep(20);
+      }
+      return this.isReadyFor(scriptId);
+    }
+    this.opening = true;
+    this.close();
+    this.scriptId = scriptId;
+    try {
+      if (!this.rt.start('session')) {
+        appendPlayLog('[qjs] 会话启动失败');
+        return false;
+      }
+      this.rt.evaluate(scriptText, 'lx_script.js');
+      const deadline: number = Date.now() + timeoutMs;
+      while (Date.now() < deadline && !this.initInfo.inited) {
+        this.rt.driveTimers();
+        const calls: QuickJsCall[] = this.rt.drain();
+        if (calls.length > 0) {
+          await handleHostCalls(this.rt, calls, this.initInfo);
+        }
+        await sleep(calls.length > 0 ? 6 : 16);
+      }
+      this.ready = this.initInfo.inited;
+      appendPlayLog('[qjs] 会话 ' + (this.ready ? '就绪' : '未就绪') +
+        ' script=' + scriptId + ' 平台=' + this.initInfo.platforms.join('/'));
+      return this.ready;
+    } catch (e) {
+      appendPlayLog('[qjs] 会话打开异常: ' + JSON.stringify(e).substring(0, 160));
+      return false;
+    } finally {
+      this.opening = false;
+    }
+  }
+
+  /**
+   * 向脚本派发一次事件并等它落定（复用常驻引擎，无初始化开销）。
+   * @returns 脚本 handler 的返回值（通常就是取址结果）；失败返回空串
+   */
+  public async invoke(eventName: string, payloadJson: string,
+    timeoutMs: number = 8000): Promise<string> {
+    if (!this.rt.isReady()) {
+      return '';
+    }
+    const started: number = Date.now();
+    this.rt.evaluate(`__qjsInvoke(${JSON.stringify(eventName)}, ${JSON.stringify(payloadJson)})`,
+      'rzd_invoke.js');
+    while (Date.now() - started < timeoutMs) {
+      this.rt.driveTimers();
+      const calls: QuickJsCall[] = this.rt.drain();
+      if (calls.length > 0) {
+        await handleHostCalls(this.rt, calls, this.initInfo);
+      }
+      const raw: string = this.rt.evaluate('__qjsInvokeResult()', 'rzd_invoke_result.js');
+      if (raw.length > 0) {
+        try {
+          const st: Record<string, Object> = JSON.parse(raw) as Record<string, Object>;
+          if (st['done'] === true) {
+            const err: string = (st['error'] as string) ?? '';
+            const v: Object = st['value'];
+            const ms: number = Date.now() - started;
+            if (err.length > 0) {
+              appendPlayLog('[qjs] invoke 失败 ' + eventName + ' ' + ms + 'ms: ' + err.substring(0, 120));
+              return '';
+            }
+            appendPlayLog('[qjs] invoke ok ' + eventName + ' ' + ms + 'ms');
+            return v === null || v === undefined ? '' : JSON.stringify(v);
+          }
+        } catch (_e) {
+          // 还没好
+        }
+      }
+      await sleep(calls.length > 0 ? 6 : 16);
+    }
+    appendPlayLog('[qjs] invoke 超时 ' + eventName + ' ' + timeoutMs + 'ms');
+    return '';
+  }
+
+  /** 关闭会话（脚本变了 / 退出时） */
+  public close(): void {
+    this.ready = false;
+    this.initInfo = new LxScriptInitInfo();
+    try {
+      this.rt.release();
+    } catch (_e) {
+      // 释放失败无补救
+    }
+    this.rt = new QuickJsRuntime();
+  }
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise<void>((resolve: () => void): void => {
     setTimeout(resolve, ms);

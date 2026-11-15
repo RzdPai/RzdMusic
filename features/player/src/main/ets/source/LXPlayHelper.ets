@@ -6,7 +6,8 @@ import { isMfOnlyPlatform, mfGetLyric, mfGetMediaSource, mfGetSheetSongs, mfSear
 import { isLxPlatform, isMfPlatformId } from '../util/SourceDeclaredInfo';
 import { LXUserApiInfo } from './Interface';
 import { qsBoardSongs, qsPlaylistDetail } from '../geuz/QsApi';
-import {AppStorageKeys,  appendError } from 'musicbasic';
+import {AppStorageKeys,  appendError, appendPlayLog, MusicStoreService } from 'musicbasic';
+import { QuickJsScriptSession } from './LxHostBridge';
 
 interface MusicInfoBrief {
   songmid: string;
@@ -277,6 +278,86 @@ async function tryMusicFreeLyric(source: string, songId: string, name?: string,
   return '';
 }
 
+/**
+ * 常驻的 QuickJS 会话（按 scriptId 复用；换脚本才重建）。
+ *
+ * ★ 2026-11-15：「混合引擎」的落地件 —— 用户定调「关键追求效率，不是完全独立」。
+ *   真机实测（聆澜音源 7749 字）：
+ *     · WebView 换脚本：`totalMs=871`（页面创建 + 导航 + onPageEnd）
+ *     · QuickJS 冷启：`耗时=122~318ms`
+ *     · 两边**取回的播放地址完全一致**（同一个 kuwo URL）
+ *   ⇒ 引擎选择不再是非此即彼：`lxEngineMode` 选 `quickjs` 时走这里，
+ *     任何一步失败都**自动回落 WebView**，两条腿都留着。
+ */
+let quickJsSession: QuickJsScriptSession = new QuickJsScriptSession();
+
+/**
+ * 从脚本 handler 的返回值里抠出播放地址。
+ *
+ * LX 的契约是 `{data:{url}}`，但实测有的脚本直接 resolve 一个字符串
+ * （真机日志 `结果="http://car-er.kuwo.cn/…"`）⇒ 三种形状都认。
+ * @param valueJson `JSON.stringify(handler 返回值)`
+ */
+function extractUrlFromValue(valueJson: string): string {
+  if (valueJson.length === 0) {
+    return '';
+  }
+  try {
+    const v: Object = JSON.parse(valueJson) as Object;
+    if (typeof v === 'string') {
+      return v as string;
+    }
+    if (v !== null && typeof v === 'object') {
+      const obj: Record<string, Object> = v as Record<string, Object>;
+      const data: Object = obj['data'];
+      if (data !== undefined && data !== null && typeof data === 'object') {
+        const u: Object = (data as Record<string, Object>)['url'];
+        if (typeof u === 'string' && (u as string).length > 0) {
+          return u as string;
+        }
+      }
+      const direct: Object = obj['url'];
+      if (typeof direct === 'string' && (direct as string).length > 0) {
+        return direct as string;
+      }
+    }
+  } catch (_e) {
+    // 不是 JSON：可能就是裸 URL
+    if (valueJson.indexOf('http') === 0) {
+      return valueJson;
+    }
+  }
+  return '';
+}
+
+/**
+ * 用 QuickJS 取一次播放地址。
+ * @returns 地址；拿不到返回空串（调用方据此回落 WebView）
+ */
+async function resolveUrlViaQuickJs(reqData: LXSourceRequestData): Promise<string> {
+  try {
+    const activeId: string = MusicStoreService.getInstance().getActiveSource();
+    if (activeId.length === 0 || activeId.indexOf('mfplat:') === 0) {
+      return '';
+    }
+    const script: string = await lxSourceManager.getScript(activeId);
+    if (script.length === 0) {
+      appendPlayLog('[qjs] 取不到脚本原文，回落 WebView');
+      return '';
+    }
+    const ready: boolean = await quickJsSession.open(activeId, script, 4000);
+    if (!ready) {
+      appendPlayLog('[qjs] 会话未就绪，回落 WebView');
+      return '';
+    }
+    const valueJson: string = await quickJsSession.invoke('request', JSON.stringify(reqData), 8000);
+    return extractUrlFromValue(valueJson);
+  } catch (e) {
+    appendPlayLog('[qjs] 取址异常，回落 WebView: ' + JSON.stringify(e).substring(0, 140));
+    return '';
+  }
+}
+
 export async function getLXMusicUrl(source: string, songId: string, quality: string, name?: string,
   singer?: string): Promise<string> {
   // ★ 2026-11-09：MusicFree 独有平台（哔哩哔哩 / YouTube / `mf:xxx`）LX 脚本不认识，
@@ -315,6 +396,16 @@ export async function getLXMusicUrl(source: string, songId: string, quality: str
     logError('req ' + source + '/' + songId + ' -> ' + playableId + '/' + quality);
   } else {
     logError('req ' + source + '/' + songId + '/' + quality);
+  }
+  // ★ 2026-11-15：`lxEngineMode=quickjs` 时先用常驻 QuickJS 会话取地址；
+  //   拿不到（或会话没就绪）就**继续走下面的 WebView 流程** —— 自动回落，用户无感。
+  if (MusicStoreService.getInstance().getLxEngineMode() === 'quickjs') {
+    const quickUrl: string = await resolveUrlViaQuickJs(reqData);
+    if (quickUrl.length > 0) {
+      logError('qjs ok ' + quickUrl.substring(0, 80));
+      return quickUrl;
+    }
+    logError('qjs miss -> webview');
   }
   return new Promise<string>((resolve: (url: string) => void, reject: (reason: Error) => void): void => {
     regReq(requestKey, (result: object): void => {

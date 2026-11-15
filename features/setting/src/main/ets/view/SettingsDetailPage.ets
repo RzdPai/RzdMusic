@@ -181,6 +181,8 @@ export struct SettingsDetailPage {
   @Local desktopLyricLocked: boolean = false;
   /** QuickJS 自检结果（设置页「音源引擎」卡片显示；空串 = 本次会话还没跑过）。 */
   @Local quickJsState: string = '';
+  /** 音源运行时引擎：auto（按能力探测，默认，等同 WebView）/ webview / quickjs */
+  @Local lxEngineMode: string = 'auto';
   /** QuickJS 跑真脚本的结果（同上） */
   @Local quickJsScriptState: string = '';
   /** 是否正在跑（防重复点） */
@@ -355,6 +357,8 @@ export struct SettingsDetailPage {
   private pageScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
+    // 音源运行时引擎（auto / webview / quickjs）
+    this.lxEngineMode = MusicStoreService.getInstance().getLxEngineMode();
     // 桌面歌词锁定态：先同步一次（可能在别处已经锁了），再注册变化监听
     this.desktopLyricLocked = MediaService.getInstance().isDesktopLyricLocked();
     MediaService.getInstance().addDesktopLyricLockListener(this.onDesktopLyricLockChange);
@@ -1994,21 +1998,16 @@ export struct SettingsDetailPage {
         //   `CapsuleSelector(['WebView','QuickJS'], …)` 并接到 LXSourceEngine 上即可。
         Column() {
           this.SubTitle($r('app.string.setting_sub_engine'))
-          Row({ space: 8 }) {
-            Text('WebView')
-              .fontSize(13)
-              .fontColor($r('app.color.font_primary'))
-              .padding({ left: 10, right: 10, top: 3, bottom: 3 })
-              .borderRadius(11)
-              .backgroundColor($r('app.color.card_background'))
-            Text('QuickJS · 已接入未启用')
-              .fontSize(13)
-              .fontColor($r('app.color.font_tertiary'))
-              .padding({ left: 10, right: 10, top: 3, bottom: 3 })
-              .borderRadius(11)
-              .backgroundColor($r('app.color.card_background'))
-          }
-          .margin({ top: 6 })
+          // ★ 2026-11-15：从「只显示状态」升级成**可选**。
+          //   QuickJS 现在能跑真实脚本、能重放取址请求并拿到与 WebView **完全一致**的地址，
+          //   所以可以给开关了；任何时候 QuickJS 失败都会自动回落 WebView（混合，不是二选一）。
+          this.CapsuleSelector(['自动', 'WebView', 'QuickJS'],
+            this.lxEngineMode === 'webview' ? 1 : (this.lxEngineMode === 'quickjs' ? 2 : 0),
+            (index: number) => {
+              const mode: string = index === 1 ? 'webview' : (index === 2 ? 'quickjs' : 'auto');
+              this.lxEngineMode = mode;
+              MusicStoreService.getInstance().setLxEngineMode(mode);
+            })
           Button($r('app.string.setting_engine_selftest'))
             .height(34)
             .fontSize(13)
@@ -2044,6 +2043,12 @@ export struct SettingsDetailPage {
             .margin({ top: 6 })
           Text(this.quickJsState.length > 0 ? ('自检：' + this.quickJsState) :
             $r('app.string.setting_engine_selftest_empty'))
+            .fontSize(12)
+            .fontColor($r('app.color.font_tertiary'))
+            .width('100%')
+            .margin({ top: 6 })
+          Text('QuickJS 走本地自建引擎（不创建 WebView，冷启动更快）；任何一步失败都会自动回落 WebView。' +
+            '先点下面的按钮确认这支脚本在 QuickJS 里能跑通，再切过去。')
             .fontSize(12)
             .fontColor($r('app.color.font_tertiary'))
             .width('100%')
