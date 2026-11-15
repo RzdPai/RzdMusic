@@ -340,6 +340,7 @@ export class MpvAudioEngine implements AudioKernel {
         mpvNative.destroy();
       }
     } catch (err) {
+      // 销毁期 native 已释放会抛；下面统一把 created 置 false，调用方据此判"已释放"
     }
     this.created = false;
     this.prepared = false;

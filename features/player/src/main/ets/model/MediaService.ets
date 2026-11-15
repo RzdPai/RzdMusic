@@ -471,6 +471,9 @@ export class MediaService {
         fs.mkdirSync(dir);
       }
     } catch (err) {
+      // ★ 2026-11-15（§7.6 禁止静默）：以前这里吞掉异常，紧接着往不存在的目录写文件，
+      //   最终表现为「下载/播放失败」且日志里什么都没有。现在留下现场。
+      this.lockScreenDiagnostic('soda_stream mkdir failed: ' + JSON.stringify(err).substring(0, 120));
     }
     const path: string = dir + '/stream_' + Date.now().toString() + '.m4a';
     const req: http.HttpRequest = http.createHttp();
@@ -775,6 +778,8 @@ export class MediaService {
     try {
       manager.off('deviceChange', callback);
     } catch (_err) {
+      // 注销失败没有补救动作（监听器随 AudioManager 生命周期走），留一行便于排查重复回调
+      Logger.warn(TAG, 'off deviceChange failed: ' + JSON.stringify(_err).substring(0, 80));
     }
   }
 
@@ -2472,6 +2477,8 @@ export class MediaService {
         awareness.getSmartMobilityStatus(smartMobilityCommon.SmartMobilityType.HICAR);
       this.lastHiCarStatus = currentInfo.status;
     } catch (_e) {
+      // 非车机设备上取不到状态是常态 —— 但"车机连接后没暂停"要能查到是不是这里失败
+      Logger.warn(TAG, 'refreshHiCarStatus failed: ' + JSON.stringify(_e).substring(0, 100));
     }
   }
 
@@ -3088,6 +3095,7 @@ export class MediaService {
         try {
           fs.closeSync(file);
         } catch (_err) {
+          // 句柄已关/已失效：没有任何补救空间，静默即可（真正的失败在上面的 decode 里）
         }
       }
     }

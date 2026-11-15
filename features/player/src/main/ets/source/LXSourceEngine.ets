@@ -1097,6 +1097,9 @@ appendPlayLog(msg);
           AppStorage.setOrCreate(AppStorageKeys.UPDATE_ALERT_LOG, alertLog);
         }
       } catch (e) {
+        // ★ 2026-11-15（§7.6）：脚本上报的 updateAlert 解析失败必须留痕 ——
+        //   "检查更新说已是最新"曾经就是这类静默吞掉造成的无头案。
+        LXSourceEngine.appendLog('引擎 updateAlert 解析失败: ' + JSON.stringify(e).substring(0, 120));
       }
         const level: MessageLevel = msg.getMessageLevel();
         if (level === MessageLevel.Error || level === MessageLevel.Warn) {

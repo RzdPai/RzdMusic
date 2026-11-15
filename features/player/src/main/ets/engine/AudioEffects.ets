@@ -126,6 +126,10 @@ export function effectsFromJson(raw: string): AudioEffects {
     out.limiter = obj['limiter'] === true;
     out.haas = obj['haas'] === true;
   } catch (err) {
+    // 持久化的 JSON 损坏 ⇒ 退回默认值（不影响出声），但必须留痕，否则"音效设置不生效"无从查起。
+    // 本文件不依赖 Logger/TAG（纯模型层），用 console 打一条带关键字 `RzdAf` 的日志即可 grep。
+    console.warn('[RzdAf] effects json parse failed, fallback to default: ' +
+      JSON.stringify(err).substring(0, 100));
   }
   return out;
 }

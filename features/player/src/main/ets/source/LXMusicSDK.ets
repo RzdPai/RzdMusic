@@ -2718,7 +2718,11 @@ async function tipSearchKuwo(key: string): Promise<string[]> {
         }
       }
     }
-  } catch (_e) {
+  }
+  catch (_e) {
+    // ★ 2026-11-15（§7.6 禁止静默）：联想是可选能力，失败就返回已收集的词，
+    //   但必须留一行 —— 否则「搜索框没有联想词」无从判断是接口挂了还是解析挂了
+    appendLxLog('[联想kw] fail: ' + JSON.stringify(_e).substring(0, 100));
   }
   // 2) 回退：搜索接口歌名当联想
   if (words.length < 5) {
@@ -2746,7 +2750,11 @@ async function tipSearchKuwo(key: string): Promise<string[]> {
           }
         }
       }
-    } catch (_e2) {
+    }
+    catch (_e2) {
+      // ★ 2026-11-15（§7.6 禁止静默）：联想是可选能力，失败就返回已收集的词，
+      //   但必须留一行 —— 否则「搜索框没有联想词」无从判断是接口挂了还是解析挂了
+      appendLxLog('[联想kw] fail: ' + JSON.stringify(_e2).substring(0, 100));
     }
   }
   appendLxLog('[联想kw] n=' + words.length);
@@ -2794,7 +2802,11 @@ async function tipSearchTx(key: string): Promise<string[]> {
         }
       }
     }
-  } catch (_e) {
+  }
+  catch (_e) {
+    // ★ 2026-11-15（§7.6 禁止静默）：联想是可选能力，失败就返回已收集的词，
+    //   但必须留一行 —— 否则「搜索框没有联想词」无从判断是接口挂了还是解析挂了
+    appendLxLog('[联想tx] fail: ' + JSON.stringify(_e).substring(0, 100));
   }
   return words;
 }
@@ -2846,7 +2858,11 @@ async function tipSearchWy(key: string): Promise<string[]> {
         }
       }
     }
-  } catch (_e) {
+  }
+  catch (_e) {
+    // ★ 2026-11-15（§7.6 禁止静默）：联想是可选能力，失败就返回已收集的词，
+    //   但必须留一行 —— 否则「搜索框没有联想词」无从判断是接口挂了还是解析挂了
+    appendLxLog('[联想wy] fail: ' + JSON.stringify(_e).substring(0, 100));
   }
   return words;
 }
@@ -2882,7 +2898,11 @@ async function tipSearchKg(key: string): Promise<string[]> {
       }
     }
     appendLxLog('[联想kg] n=' + words.length);
-  } catch (_e) {
+  }
+  catch (_e) {
+    // ★ 2026-11-15（§7.6 禁止静默）：联想是可选能力，失败就返回已收集的词，
+    //   但必须留一行 —— 否则「搜索框没有联想词」无从判断是接口挂了还是解析挂了
+    appendLxLog('[联想kg] fail: ' + JSON.stringify(_e).substring(0, 100));
   }
   return words;
 }
@@ -2941,7 +2961,11 @@ async function tipSearchMg(key: string): Promise<string[]> {
         }
       }
     }
-  } catch (_e) {
+  }
+  catch (_e) {
+    // ★ 2026-11-15（§7.6 禁止静默）：联想是可选能力，失败就返回已收集的词，
+    //   但必须留一行 —— 否则「搜索框没有联想词」无从判断是接口挂了还是解析挂了
+    appendLxLog('[联想mg] fail: ' + JSON.stringify(_e).substring(0, 100));
   }
   return words;
 }

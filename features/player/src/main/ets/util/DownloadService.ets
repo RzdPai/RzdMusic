@@ -1078,6 +1078,7 @@ export class DownloadService {
         return destPath;
       }
     } catch (_e) {
+      // stat 失败（残留临时文件不存在/无权限）⇒ 按"没下过"处理，下面会正常重下并生成唯一名
     }
     const uniqueName: string = task.fileName.replace(/(\.[^.]+)$/, '_' + Date.now() +
       '_' + Math.floor(Math.random() * 1000000) + '$1');
