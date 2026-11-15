@@ -1,5 +1,6 @@
 import { LXSourceRequestData, LXMusicUrlResult, LXLyricResult, LXPicResult, LXSource, toLXSource, toLXSourceKey } from './Interface';
-import { lxEngineSendRequest, lxEngineRegisterPromise, lxEngineIsReady, lxLastRequestData } from './LXSourceEngine';
+import { lxEngineSendRequest, lxEngineRegisterPromise, lxEngineIsReady, lxLastRequestData,
+  scriptCanRunWithoutWebView } from './LXSourceEngine';
 import { lxSearch, lxLeaderboard, LXSearchSong } from './LXMusicSDK';
 import { lxSourceManager } from './LXSourceManager';
 import { isMfOnlyPlatform, mfGetLyric, mfGetMediaSource, mfGetSheetSongs, mfSearch, musicFreeApisForPlatform } from './MusicFreeAdapter';
@@ -459,21 +460,6 @@ export async function getLXMusicUrl(source: string, songId: string, quality: str
     }
     throw new Error('该平台没有可用的 MusicFree 音源');
   }
-  if (!lxEngineIsReady || lxEngineSendRequest === null || lxEngineRegisterPromise === null) {
-    // ★ LX 引擎没就绪（没导入 LX 脚本 / 脚本全部不可用）不再直接失败：
-    //   用户可能只导入了 MusicFree 插件，那就该走插件取地址。
-    // ★ 2026-11-14：但**洛雪六平台**同样不许升级到插件 —— 与 `allowMfRescue`、
-    //   `buildCandidateChain`（六平台候选链不摆插件）保持同一条定稿规则，
-    //   否则「LX 不能回退到 MF」就有第三个后门。插件歌回退洛雪是反方向，不在此列。
-    if (!isLxPlatform(source)) {
-      const fallback: string = await tryMusicFreeUrl(source, songId, quality, name, singer);
-      if (fallback.length > 0) {
-        return fallback;
-      }
-    }
-    logError('engine not ready');
-    throw new Error('引擎未就绪或回调未初始化');
-  }
   let sendReq: (key: string, data: LXSourceRequestData) => void = lxEngineSendRequest!;
   let regReq: (key: string,
     resolve: (result: object) => void, reject: (reason: Error) => void) => void = lxEngineRegisterPromise!;
@@ -489,14 +475,20 @@ export async function getLXMusicUrl(source: string, songId: string, quality: str
   }
   // ★ 2026-11-15：`quickjs` 与 `auto` 都先试 QuickJS；
   //   `auto` 额外看判定缓存（跑不了就别每次都白等 4s）。拿不到就继续走下面的 WebView 流程。
+  // ★ 2026-11-15（用户：「似乎都是 QuickJS 更快，那还需要混合吗」）：
+  //   混合的意义**不是**"两个引擎交替用"，而是「QuickJS 优先 + WebView 兜底」。
+  //   `auto` 的闸门从「一键测验证过」放宽到「脚本能力探测过关（不需要 DOM）」——
+  //   `ScriptProbe` 纯文本扫描（~4ms）就能判，覆盖绝大多数脚本；跑不通再由下面兜底。
+  //   另外：**WebView 引擎没就绪时也允许走 QuickJS**（否则没导入脚本就只能报错）。
   const engineMode: string = MusicStoreService.getInstance().getLxEngineMode();
   const activeScriptId: string = MusicStoreService.getInstance().getActiveSource();
   const verdict: boolean | undefined = quickJsVerdict.get(activeScriptId);
-  // `auto` 只对**已验证跑得通**的脚本启用 QuickJS（`verdict === true`，由「一键测」写入）；
-  // 没验证过的一律先走 WebView —— 绝不拿没测过的脚本换引擎。
-  const wantQuickJs: boolean = engineMode === 'quickjs' ||
-    (engineMode === 'auto' && verdict === true);
-  if (wantQuickJs) {
+  const engineReady: boolean = lxEngineIsReady && lxEngineSendRequest !== null &&
+    lxEngineRegisterPromise !== null;
+  const autoEligible: boolean = engineMode === 'auto' &&
+    (verdict === true || (verdict === undefined && scriptCanRunWithoutWebView(activeScriptId)));
+  const wantQuickJs: boolean = engineMode === 'quickjs' || autoEligible || !engineReady;
+  if (wantQuickJs && engineMode !== 'webview') {
     const quickUrl: string = await resolveUrlViaQuickJs(reqData);
     if (quickUrl.length > 0) {
       quickJsVerdict.set(activeScriptId, true);
@@ -506,6 +498,21 @@ export async function getLXMusicUrl(source: string, songId: string, quality: str
     // 记下"这支脚本在这台机器上跑不了"，下次 auto 直接走 WebView（不重复付超时）
     quickJsVerdict.set(activeScriptId, false);
     logError('qjs miss -> webview (' + engineMode + ')');
+  }
+  if (!lxEngineIsReady || lxEngineSendRequest === null || lxEngineRegisterPromise === null) {
+    // ★ LX 引擎没就绪（没导入 LX 脚本 / 脚本全部不可用）不再直接失败：
+    //   用户可能只导入了 MusicFree 插件，那就该走插件取地址。
+    // ★ 2026-11-14：但**洛雪六平台**同样不许升级到插件 —— 与 `allowMfRescue`、
+    //   `buildCandidateChain`（六平台候选链不摆插件）保持同一条定稿规则，
+    //   否则「LX 不能回退到 MF」就有第三个后门。插件歌回退洛雪是反方向，不在此列。
+    if (!isLxPlatform(source)) {
+      const fallback: string = await tryMusicFreeUrl(source, songId, quality, name, singer);
+      if (fallback.length > 0) {
+        return fallback;
+      }
+    }
+    logError('engine not ready');
+    throw new Error('引擎未就绪或回调未初始化');
   }
   return new Promise<string>((resolve: (url: string) => void, reject: (reason: Error) => void): void => {
     const reqStartedAt: number = Date.now();

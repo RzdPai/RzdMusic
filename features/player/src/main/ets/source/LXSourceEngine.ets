@@ -29,6 +29,19 @@ export let lxLastRequestData: LXSourceRequestData | undefined = undefined;
  * QuickJS 的总耗时比，那是两个口径（见 2026-11-15 的教训）。
  */
 export let lxLastInitTotalMs: number = -1;
+
+/**
+ * 每支脚本「能不能脱离 WebView 跑」的探测结果（`ScriptProbe.canRunWithoutWebView`）。
+ *
+ * ★ 2026-11-15：`LXPlayHelper` 的 `auto` 路由要用它当闸门 —— 纯文本扫描（~4ms），
+ *   在 `initScript` 里顺手算好缓存，避免每首歌都重新读盘+解压+扫描。
+ */
+const scriptCanQuick: Map<string, boolean> = new Map<string, boolean>();
+
+/** @returns true = 该脚本探测为「不需要 DOM」，可以优先走 QuickJS */
+export function scriptCanRunWithoutWebView(scriptId: string): boolean {
+  return scriptCanQuick.get(scriptId) === true;
+}
 export let lxEngineRegisterPromise: ((key: string,
   resolve: (result: object) => void, reject: (reason: Error) => void) => void) | null = null;
 export let lxEngineIsReady: boolean = false;
@@ -318,6 +331,7 @@ export struct LXSourceEngine {
     this.scriptProfile = probeScript(apiInfo.script);
     const profileText: string = formatProfile(this.scriptProfile);
     const canQuick: boolean = canRunWithoutWebView(this.scriptProfile);
+    scriptCanQuick.set(apiInfo.id, canQuick);
     LXSourceEngine.appendLog('引擎 脚本能力 ' + profileText +
       ' 可无 DOM 运行=' + canQuick + ' lxEngineMode=' + this.lxEngineMode());
     // 落 AppStorage：设置页/诊断可直接显示，也免得以后为了看一眼再探测一遍
