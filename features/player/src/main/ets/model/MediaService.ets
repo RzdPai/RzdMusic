@@ -1415,6 +1415,12 @@ export class MediaService {
    * @param url 已剥壳的直链。
    */
   private startKernelPlayback(url: string): void {
+    // ★★★ 2026-11-15（真机日志：`[RzdMpv] net params set` 之后**没有** `ref=`）：
+    //   `releaseKernel()` 会清 `kernelReferer`，而它正是本方法的第一句 ——
+    //   **先清再读**，传给 mpv 的 Referer 永远是空串 ⇒ B 站照样 403。
+    //   所以在 release 之前先把本曲目要用的请求头取出来。
+    const referer: string = this.kernelReferer;
+    const userAgent: string = this.kernelUserAgent;
     // ★★★ 2026-11-03（甲方：「有概率现在就听会和正常的播放同时播放」）：
     //   换源后新地址若落在内核流上（`kernelUrl` 非空），`loadAsset` 会**直接跑去起内核并 return**，
     //   而这条路上**从来没有停过 AVPlayer** —— 上一首还在 AVPlayer 里响、内核又开始放新歌，
@@ -1532,7 +1538,7 @@ export class MediaService {
     this.armKernelWatchdog(engine);
     // 起播前统一设置 UA/Referer/超时/重连（抖音系直链与代理常因缺 UA/Referer 被拒）
     if (engine.prepareNetworkOptions !== undefined) {
-      engine.prepareNetworkOptions(this.kernelReferer, this.kernelUserAgent);
+      engine.prepareNetworkOptions(referer, userAgent);
     }
     engine.prepare(url);
   }
