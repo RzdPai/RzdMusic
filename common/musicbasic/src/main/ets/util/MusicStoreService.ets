@@ -104,6 +104,15 @@ const KEY_ENGINE_MODE: string = 'engine_mode';
  */
 const KEY_LX_ENGINE_MODE: string = 'lx_engine_mode_v1';
 /**
+ * 「这支脚本能不能走 QuickJS」的**跨重启**判定。
+ *
+ * ★ 2026-11-16：之前判定只存在内存（`quickJsVerdict` Map），每次冷启动都要为跑不了的脚本
+ * 再付一次 4s 超时。现在把结论持久化：`失败`的脚本记住，`成功`的也记住（用于「混合」模式
+ * 直接选 QuickJS，不必等一键测）。
+ * 值格式：`id1=1,id2=0,…`（1=可跑 / 0=跑不了）；最多保留 40 条，超出丢最旧的。
+ */
+const KEY_LX_QUICKJS_VERDICT: string = 'lx_quickjs_verdict_v1';
+/**
  * 音源脚本的注入通道：auto=快通道优先且失败自动回退 / chunked=强制旧的 base64 分片。
  * 留这一档是为了「快通道在真机上出问题时能不开新包就退回今天的表现」。
  */
@@ -2149,6 +2158,57 @@ export class MusicStoreService {
         return mode;
       }
       return 'auto';
+    }
+
+    /**
+     * 读取某脚本的 QuickJS 判定。
+     * @param scriptId 音源脚本 id
+     * @returns true=可跑 / false=跑不了 / undefined=还没测过
+     */
+    public getQuickJsVerdict(scriptId: string): boolean | undefined {
+      if (scriptId.length === 0) {
+        return undefined;
+      }
+      const raw: string = this.getQuickJsVerdictTable();
+      const items: string[] = raw.length > 0 ? raw.split(',') : [];
+      for (let i: number = 0; i < items.length; i++) {
+        const kv: string[] = items[i].split('=');
+        if (kv.length === 2 && kv[0] === scriptId) {
+          return kv[1] === '1';
+        }
+      }
+      return undefined;
+    }
+
+    /**
+     * 记住某脚本的 QuickJS 判定（跨重启）。
+     * @param scriptId 音源脚本 id
+     * @param can true=可跑 / false=跑不了
+     */
+    public setQuickJsVerdict(scriptId: string, can: boolean): void {
+      if (scriptId.length === 0) {
+        return;
+      }
+      const items: string[] = this.getQuickJsVerdictTable().split(',').filter((x: string): boolean => {
+        return x.length > 0 && x.split('=')[0] !== scriptId;
+      });
+      items.push(scriptId + '=' + (can ? '1' : '0'));
+      // 只留最近 40 条，避免无限增长
+      const tail: string[] = items.length > 40 ? items.slice(items.length - 40) : items;
+      const store = this.getStore();
+      if (store === undefined) {
+        return;
+      }
+      store.putSync(KEY_LX_QUICKJS_VERDICT, tail.join(','));
+      store.flush();
+    }
+
+    private getQuickJsVerdictTable(): string {
+      const store = this.getStore();
+      if (store === undefined) {
+        return '';
+      }
+      return store.getSync(KEY_LX_QUICKJS_VERDICT, '') as string;
     }
 
     public setLxEngineMode(mode: string): void {

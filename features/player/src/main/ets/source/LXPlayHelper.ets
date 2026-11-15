@@ -315,6 +315,32 @@ export let lastWebViewUrlMs: number = -1;
 const quickJsVerdict: Map<string, boolean> = new Map<string, boolean>();
 
 /**
+ * 取某脚本的 QuickJS 判定：内存 → 持久化（跨重启）。
+ * ★ 2026-11-16：以前只看内存，冷启动后又要为跑不了的脚本再付一次 4s 超时。
+ * @param scriptId 脚本 id
+ * @returns true/false/undefined（未测过）
+ */
+function lookupVerdict(scriptId: string): boolean | undefined {
+  const inMem: boolean | undefined = quickJsVerdict.get(scriptId);
+  if (inMem !== undefined) {
+    return inMem;
+  }
+  const persisted: boolean | undefined = MusicStoreService.getInstance().getQuickJsVerdict(scriptId);
+  if (persisted !== undefined) {
+    quickJsVerdict.set(scriptId, persisted);
+  }
+  return persisted;
+}
+
+/**
+ * 记住判定：内存 + 持久化一起。
+ */
+function rememberVerdict(scriptId: string, can: boolean): void {
+  quickJsVerdict.set(scriptId, can);
+  MusicStoreService.getInstance().setQuickJsVerdict(scriptId, can);
+}
+
+/**
  * 从脚本 handler 的返回值里抠出播放地址。
  *
  * LX 的契约是 `{data:{url}}`，但实测有的脚本直接 resolve 一个字符串
@@ -441,8 +467,8 @@ export async function runQuickJsOneClickCheck(): Promise<string> {
   const wvUrl: string = lastWebViewUrlMs >= 0 ? (lastWebViewUrlMs + 'ms') : '未记录';
   note('④ 对照：WebView 脚本初始化 ' + wvInit + ' · 取址 ' + wvUrl);
   // ★ 验证通过 ⇒ 允许 `auto` 对这支脚本走 QuickJS（失败过一次就永远不许）
-  if (run.ok && quickJsVerdict.get(activeId) !== false) {
-    quickJsVerdict.set(activeId, true);
+  if (run.ok && lookupVerdict(activeId) !== false) {
+    rememberVerdict(activeId, true);
     note('⑤ 结论：这支脚本可以走 QuickJS（`自动` 模式下次会用它）');
   }
   appendPlayLog('[qjs]{check} DONE');
@@ -482,7 +508,7 @@ export async function getLXMusicUrl(source: string, songId: string, quality: str
   //   另外：**WebView 引擎没就绪时也允许走 QuickJS**（否则没导入脚本就只能报错）。
   const engineMode: string = MusicStoreService.getInstance().getLxEngineMode();
   const activeScriptId: string = MusicStoreService.getInstance().getActiveSource();
-  const verdict: boolean | undefined = quickJsVerdict.get(activeScriptId);
+  const verdict: boolean | undefined = lookupVerdict(activeScriptId);
   const engineReady: boolean = lxEngineIsReady && lxEngineSendRequest !== null &&
     lxEngineRegisterPromise !== null;
   const autoEligible: boolean = engineMode === 'auto' &&
@@ -491,12 +517,12 @@ export async function getLXMusicUrl(source: string, songId: string, quality: str
   if (wantQuickJs && engineMode !== 'webview') {
     const quickUrl: string = await resolveUrlViaQuickJs(reqData);
     if (quickUrl.length > 0) {
-      quickJsVerdict.set(activeScriptId, true);
+      rememberVerdict(activeScriptId, true);
       logError('qjs ok ' + quickUrl.substring(0, 80));
       return quickUrl;
     }
     // 记下"这支脚本在这台机器上跑不了"，下次 auto 直接走 WebView（不重复付超时）
-    quickJsVerdict.set(activeScriptId, false);
+    rememberVerdict(activeScriptId, false);
     logError('qjs miss -> webview (' + engineMode + ')');
   }
   if (!lxEngineIsReady || lxEngineSendRequest === null || lxEngineRegisterPromise === null) {
