@@ -753,6 +753,7 @@ export struct OnlineSearchPage {
       try {
         clearTimeout(this.suggestTimerId);
       } catch (_e) {
+        // 定时器可能已触发/已清空：重复 clear 无害
       }
       this.suggestTimerId = -1;
     }
@@ -812,6 +813,7 @@ export struct OnlineSearchPage {
       try {
         clearTimeout(this.suggestTimerId);
       } catch (_e) {
+        // 定时器可能已触发/已清空：重复 clear 无害
       }
       this.suggestTimerId = -1;
     }

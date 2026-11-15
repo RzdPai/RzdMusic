@@ -110,6 +110,7 @@ export class CardImageHelper {
       try {
         fileIo.closeSync(oldest);
       } catch (_err) {
+        // 句柄已释放/已失效：关闭失败没有补救动作
       }
     }
   }
@@ -118,6 +119,7 @@ export class CardImageHelper {
     try {
       fileIo.unlinkSync(path);
     } catch (_err) {
+      // 待删文件可能已不存在：删不掉不影响主流程
     }
   }
 }

@@ -127,6 +127,7 @@ export struct LocalCoverImage {
         try {
           await fs.close(file);
         } catch (_err) {
+          // 句柄已释放/已失效：关闭失败没有补救动作
         }
       }
     }

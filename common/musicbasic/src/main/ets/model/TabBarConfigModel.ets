@@ -42,6 +42,7 @@ export class TabBarConfigModel {
       out.echo = obj.echo !== false;
       out.nowFirst = obj.nowFirst !== false;
     } catch (err) {
+      // 持久化配置解析失败：退回默认值（不影响启动）
     }
     // 允许两个都关（底栏剩「推荐」「我的」两项；下标映射已支持，见 Index.ets 的 tabLogicalOf）
     return out;

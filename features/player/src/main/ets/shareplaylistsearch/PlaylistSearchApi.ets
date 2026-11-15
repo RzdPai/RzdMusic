@@ -207,6 +207,7 @@ export class PlaylistSearchApi {
           tracks = byIds;
         }
       } catch (_e) {
+        // 失败无补救动作：按"没有"处理（该值都是可选信息）
       }
     }
 
@@ -310,6 +311,7 @@ export class PlaylistSearchApi {
           result.push(songs[k]);
         }
       } catch (_e) {
+        // 失败无补救动作：按"没有"处理（该值都是可选信息）
       }
     }
     return result;
@@ -392,6 +394,7 @@ export class PlaylistSearchApi {
           return songs;
         }
       } catch (_e) {
+        // 失败无补救动作：按"没有"处理（该值都是可选信息）
       }
     }
     return empty;

@@ -304,6 +304,7 @@ export struct PlaybackTuningPanel {
         }
       }
     } catch (err) {
+      // 失败无补救动作：按"没有"处理（该值都是可选信息）
     }
     return out;
   }

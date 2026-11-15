@@ -278,6 +278,7 @@ export struct SettingsDetailPage {
       this.tabShowEcho = obj.echo !== false;
       this.tabNowFirst = obj.nowFirst !== false;
     } catch (err) {
+      // 持久化配置解析失败：退回默认值（不影响启动）
     }
   }
 

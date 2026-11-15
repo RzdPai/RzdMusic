@@ -1312,6 +1312,7 @@ struct Index {
         }
         this.expandState.morphReset();
       } catch (error) {
+        // 重置失败：状态会被下一次进入覆盖
       }
     }, 400);
   }

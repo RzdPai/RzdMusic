@@ -216,7 +216,9 @@ export class CoverCacheService {
       if (partial.length > 0) {
         try {
           await fs.unlink(partial);
-        } catch (_ignored) {}
+        } catch (_ignored) {
+          // 待删文件可能已不存在：删不掉不影响主流程
+        }
       }
       return '';
     } finally {

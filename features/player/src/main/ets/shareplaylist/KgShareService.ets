@@ -474,6 +474,7 @@ export class KgShareService {
       try {
         return await KgShareService.fetchByChainSpecialId(specialId, chain);
       } catch (e) {
+        // 该来源不可用：调用方会继续试下一个来源
       }
     }
     return KgShareService.fetchByChainPcShare(chain);

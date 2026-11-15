@@ -278,6 +278,7 @@ export struct LocalMusicPage {
       try {
         this.getUIContext().getPromptAction().showToast({ message: msg, duration: 3500 });
       } catch (_e) {
+        // 提示失败不影响业务（用户少看一条 Toast）
       }
       this.refresh();
     } catch (e) {
@@ -422,6 +423,7 @@ export struct LocalMusicPage {
     try {
       this.matchSheetDurationMs = localMusic.durationMsOf(item.songId);
     } catch (_e) {
+      // 失败无补救动作：按"没有"处理（该值都是可选信息）
     }
     this.showMatchSheet = true;
   }

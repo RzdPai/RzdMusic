@@ -73,6 +73,7 @@ async function fillSingerAlbumSizes(list: SingerInfo[]): Promise<void> {
         }
       }
     } catch (e) {
+      // 失败无补救动作：按"没有"处理（该值都是可选信息）
     }
   }
 }

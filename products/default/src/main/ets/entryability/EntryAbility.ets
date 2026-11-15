@@ -155,6 +155,7 @@ export default class EntryAbility extends UIAbility {
     try {
       this.callee.off('cardAction');
     } catch (_err) {
+      // 注销监听失败：监听器随对象生命周期回收，不会泄漏回调
     }
     Logger.info('EntryAbility: Ability onDestroy');
   }
@@ -319,6 +320,7 @@ export default class EntryAbility extends UIAbility {
         formProvider.updateForm(formId, data).catch((_err: BusinessError): void => {
         });
       } catch (_err) {
+        // 失败无补救动作：按"没有"处理（该值都是可选信息）
       }
     });
   }
@@ -367,6 +369,7 @@ export default class EntryAbility extends UIAbility {
         EntryAbility.pushCardDataTo(ids[i], getAppRuntime().context as common.UIAbilityContext);
       }
     } catch (_err) {
+      // 失败无补救动作：按"没有"处理（该值都是可选信息）
     }
   }
 
@@ -411,6 +414,7 @@ export default class EntryAbility extends UIAbility {
       const cleaned: boolean = true;
       MusicStoreService.getInstance().appendRuntimeDiagnostic(`RzdHomeBackEnter cleaned=${cleaned ? 1 : 0} calls=${HomeBackBridge.calls}`);
     } catch (err) {
+      // 诊断日志落盘失败：不能因为写日志失败而影响主流程
     }
     return false;
   }

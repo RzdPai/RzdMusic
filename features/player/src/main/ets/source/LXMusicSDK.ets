@@ -394,10 +394,12 @@ async function httpGetNative(url: string, headers: Record<string, string> = {}):
       return JSON.stringify(result);
     }
   } catch (_e) {
+    // 失败无补救动作：按"没有"处理（该值都是可选信息）
   } finally {
     try {
       httpRequest.destroy();
     } catch (_d) {
+      // 请求已结束：destroy 幂等失败无意义
     }
   }
   // 回退 axios

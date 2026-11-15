@@ -15,6 +15,7 @@ export class HistoryStore {
         HistoryStore.store = preferences.getPreferencesSync(context, { name: STORE_NAME });
       }
     } catch (err) {
+      // 失败无补救动作：按"没有"处理（该值都是可选信息）
     }
   }
 
@@ -78,6 +79,7 @@ export class HistoryStore {
       store.putSync(HISTORY_KEY, JSON.stringify(records));
       await store.flush();
     } catch (err) {
+      // 落盘失败：内存态仍可用，下次变更会再写一次
     }
   }
 }

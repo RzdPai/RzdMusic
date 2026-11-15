@@ -976,12 +976,14 @@ export class RecommendDataUtil {
           singers = await lxKgSingerList(count);
         }
       } catch (_e2) {
+        // 失败无补救动作：按"没有"处理（该值都是可选信息）
       }
     }
     if (singers.length === 0 && svc !== 'tx') {
       try {
         singers = await lxTxSingerList(count);
       } catch (_e3) {
+        // 该来源不可用：调用方会继续试下一个来源
       }
     }
     if (singers.length > 0) {

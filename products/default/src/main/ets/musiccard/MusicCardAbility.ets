@@ -76,6 +76,7 @@ export default class MusicCardAbility extends FormExtensionAbility {
       const data: formBindingData.FormBindingData = formBindingData.createFormBindingData(payload);
       await formProvider.updateForm(formId, data);
     } catch (_err) {
+      // 卡片刷新失败：下次定时刷新会补上
     }
   }
 }

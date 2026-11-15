@@ -112,6 +112,7 @@ export async function getArtistDetail(artistId: string): Promise<ArtistInfo> {
   try {
     desc = await descP
   } catch (e) {
+    // 该来源不可用：调用方会继续试下一个来源
   }
   return new ArtistInfo(artistId, '', '', '', '', albumNum, songNum, desc)
 }

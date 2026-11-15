@@ -181,6 +181,7 @@ export class UsbAudioService {
         }
       }
     } catch (err) {
+      // 失败无补救动作：按"没有"处理（该值都是可选信息）
     }
     const ver: string = uacVersion.length > 0 ? uacVersion : 'UAC';
     return ver + ' · 音频流接口 ' + audioIf + ' 个';
@@ -237,6 +238,7 @@ export class UsbAudioService {
       try {
         usbManager.closePipe(this.pipe);
       } catch (err) {
+        // 管道已关闭：重复关闭无意义
       }
       appendPlayLog(this.tag + ' closePipe fd=' + this.state.fd);
       this.pipe = undefined;

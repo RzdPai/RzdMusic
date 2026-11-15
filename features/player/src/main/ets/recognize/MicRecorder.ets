@@ -99,6 +99,7 @@ export class MicRecorder {
       try {
         capturer.off('readData');
       } catch (err) {
+        // 注销监听失败：监听器随对象生命周期回收，不会泄漏回调
       }
       void capturer.stop().catch(() => {
       });
@@ -156,14 +157,17 @@ export class MicRecorder {
       try {
         capturer.off('readData');
       } catch (err) {
+        // 注销监听失败：监听器随对象生命周期回收，不会泄漏回调
       }
       try {
         await capturer.stop();
       } catch (err) {
+        // 该来源不可用：调用方会继续试下一个来源
       }
       try {
         await capturer.release();
       } catch (err) {
+        // 该来源不可用：调用方会继续试下一个来源
       }
       this.capturer = undefined;
     }

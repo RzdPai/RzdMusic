@@ -428,6 +428,7 @@ async function fetchWyRanks(): Promise<WyRankEntry[]> {
       out.push(entry);
     }
   } catch (_err) {
+    // 失败无补救动作：按"没有"处理（该值都是可选信息）
   }
   // 补充：toplist/detail 有时字段更全（weapi 不便直调时，api/toplist 已足够）
   return out;

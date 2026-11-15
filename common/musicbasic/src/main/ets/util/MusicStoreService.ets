@@ -1772,6 +1772,7 @@ export class MusicStoreService {
     try {
       preferences.removePreferencesFromCacheSync(ctx, { name: STORE_NAME });
     } catch (_err) {
+      // 失败无补救动作：按"没有"处理（该值都是可选信息）
     }
     this.attachContext(ctx);
   }
@@ -2030,6 +2031,7 @@ export class MusicStoreService {
           return parsed;
         }
       } catch (err) {
+        // 失败无补救动作：按"没有"处理（该值都是可选信息）
       }
       return fallback;
     }
