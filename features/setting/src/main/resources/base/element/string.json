@@ -81,50 +81,6 @@
       "value": "添加到列表位置"
     },
     {
-      "name": "mine_playlists_title",
-      "value": "我的歌单"
-    },
-    {
-      "name": "mine_playlist_import",
-      "value": "导入"
-    },
-    {
-      "name": "mine_playlist_new",
-      "value": "新建"
-    },
-    {
-      "name": "mine_playlist_more",
-      "value": "更多"
-    },
-    {
-      "name": "mine_playlist_name_placeholder",
-      "value": "请输入歌单名称"
-    },
-    {
-      "name": "mine_playlist_confirm",
-      "value": "确定"
-    },
-    {
-      "name": "mine_playlist_cancel",
-      "value": "取消"
-    },
-    {
-      "name": "mine_playlist_export",
-      "value": "导出歌单"
-    },
-    {
-      "name": "mine_playlist_rename",
-      "value": "重命名"
-    },
-    {
-      "name": "mine_playlist_delete",
-      "value": "删除歌单"
-    },
-    {
-      "name": "mine_playlist_empty",
-      "value": "暂无歌单，点击右上角新建"
-    },
-    {
       "name": "search_song_menu",
       "value": "歌曲菜单"
     },
@@ -143,10 +99,6 @@
     {
       "name": "search_add_to_playlist",
       "value": "添加到歌单"
-    },
-    {
-      "name": "mine_playlist_new_confirm",
-      "value": "新建并添加"
     },
     {
       "name": "search_menu_add_favorite",

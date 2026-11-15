@@ -45,85 +45,64 @@
       "value": "Importing…"
     },
     {
-      "name": "setting_theme_title", "value": "Theme Color"
+      "name": "setting_theme_title",
+      "value": "Theme Color"
     },
     {
-      "name": "setting_theme_custom", "value": "Custom"
+      "name": "setting_theme_custom",
+      "value": "Custom"
     },
     {
-      "name": "setting_theme_apply", "value": "Apply"
+      "name": "setting_theme_apply",
+      "value": "Apply"
     },
     {
-      "name": "setting_ambient_title", "value": "Ambient Light Level"
+      "name": "setting_ambient_title",
+      "value": "Ambient Light Level"
     },
     {
-      "name": "setting_mini_lyric_title", "value": "Mini Lyrics on Player"
+      "name": "setting_mini_lyric_title",
+      "value": "Mini Lyrics on Player"
     },
     {
-      "name": "setting_audio_mix_title", "value": "Play Alongside Other Apps"
+      "name": "setting_audio_mix_title",
+      "value": "Play Alongside Other Apps"
     },
     {
-      "name": "setting_download_dir_title", "value": "Save to App Download Directory"
+      "name": "setting_download_dir_title",
+      "value": "Save to App Download Directory"
     },
     {
-      "name": "setting_download_name_title", "value": "Download File Name Format"
+      "name": "setting_download_name_title",
+      "value": "Download File Name Format"
     },
     {
-      "name": "setting_playlist_add_title", "value": "Add to Playlist Position"
+      "name": "setting_playlist_add_title",
+      "value": "Add to Playlist Position"
     },
     {
-      "name": "mine_playlists_title", "value": "My Playlists"
+      "name": "search_song_menu",
+      "value": "Song Menu"
     },
     {
-      "name": "mine_playlist_import", "value": "Import"
+      "name": "search_menu_play",
+      "value": "Play"
     },
     {
-      "name": "mine_playlist_new", "value": "New"
+      "name": "search_menu_download",
+      "value": "Download"
     },
     {
-      "name": "mine_playlist_more", "value": "More"
+      "name": "search_menu_add_playlist",
+      "value": "Add to Playlist"
     },
     {
-      "name": "mine_playlist_name_placeholder", "value": "Playlist name"
+      "name": "search_add_to_playlist",
+      "value": "Add to Playlist"
     },
     {
-      "name": "mine_playlist_confirm", "value": "OK"
-    },
-    {
-      "name": "mine_playlist_cancel", "value": "Cancel"
-    },
-    {
-      "name": "mine_playlist_export", "value": "Export Playlist"
-    },
-    {
-      "name": "mine_playlist_rename", "value": "Rename"
-    },
-    {
-      "name": "mine_playlist_delete", "value": "Delete Playlist"
-    },
-    {
-      "name": "mine_playlist_empty", "value": "No playlists yet, tap New above"
-    },
-    {
-      "name": "search_song_menu", "value": "Song Menu"
-    },
-    {
-      "name": "search_menu_play", "value": "Play"
-    },
-    {
-      "name": "search_menu_download", "value": "Download"
-    },
-    {
-      "name": "search_menu_add_playlist", "value": "Add to Playlist"
-    },
-    {
-      "name": "search_add_to_playlist", "value": "Add to Playlist"
-    },
-    {
-      "name": "mine_playlist_new_confirm", "value": "Create & Add"
-    },
-    {
-      "name": "search_menu_add_favorite", "value": "Add to Favorites"
+      "name": "search_menu_add_favorite",
+      "value": "Add to Favorites"
     },
     {
       "name": "setting_quality_title",
@@ -174,13 +153,16 @@
       "value": "com.rzdpai.music"
     },
     {
-      "name": "mine_about_qq_group", "value": "QQ Group"
+      "name": "mine_about_qq_group",
+      "value": "QQ Group"
     },
     {
-      "name": "mine_qq_group", "value": "1050543607"
+      "name": "mine_qq_group",
+      "value": "1050543607"
     },
     {
-      "name": "mine_donate", "value": "Donate"
+      "name": "mine_donate",
+      "value": "Donate"
     },
     {
       "name": "mine_about_desc",
@@ -215,26 +197,32 @@
       "value": "Clear"
     },
     {
-      "name": "setting_last_error_title", "value": "Last source error"
+      "name": "setting_last_error_title",
+      "value": "Last source error"
     },
     {
-      "name": "setting_log_title", "value": "Run Log"
+      "name": "setting_log_title",
+      "value": "Run Log"
     },
     {
-      "name": "setting_log_copy", "value": "Copy"
+      "name": "setting_log_copy",
+      "value": "Copy"
     },
     {
-      "name": "setting_log_refresh", "value": "Refresh"
+      "name": "setting_log_refresh",
+      "value": "Refresh"
     },
     {
-      "name": "setting_log_empty", "value": "No log yet"
+      "name": "setting_log_empty",
+      "value": "No log yet"
     },
     {
       "name": "search_empty_hint",
       "value": "Enter keywords to search online songs"
     },
     {
-      "name": "setting_search_placeholder", "value": "Search settings"
+      "name": "setting_search_placeholder",
+      "value": "Search settings"
     }
   ]
 }
