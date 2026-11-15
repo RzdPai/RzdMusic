@@ -1206,6 +1206,14 @@ export struct ControlAreaComponent {
         this.MenuRow('搜索其它版本', $r('sys.symbol.magnifyingglass'), (): void => {
           this.searchOtherVersions();
         })
+        // ★ 2026-11-13（用户：「播放页内的歌曲菜单我忘记加下载了」）：
+        //   底部工具行那颗「下载」早就有，但「更多」打开的这份歌曲菜单里一直缺入口。
+        //   走同一个 `openDownloadQuality()`：音质模式=follow 直接下，
+        //   =manual 弹「选择下载音质」子页（本文件已有完整实现，这里只补入口）。
+        //   本地歌 / 没有音源的歌函数内部自己拦，不用在这里判。
+        this.MenuRow('下载', $r('sys.symbol.arrow_down_circle'), (): void => {
+          void this.openDownloadQuality();
+        })
         this.MenuRow('添加到歌单', $r('sys.symbol.plus'), (): void => {
           this.openPlaylistPicker();
         })
