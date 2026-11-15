@@ -530,7 +530,6 @@ export struct SettingPage {
       MusicStoreService.getInstance().setDownloadSaveMode(download ? 'download' : 'ask');
   }
 
-  @Builder
   /**
    * 在线导入（音源）：★ 2026-10-31（用户：和「在线导入歌单」用同一个半模态）——
    * 直接复用歌单那边的共用组件 `NetworkImportSheet`，不再自己写一个只有 URL 输入框的简易表单。

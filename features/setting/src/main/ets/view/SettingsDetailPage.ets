@@ -1264,15 +1264,31 @@ export struct SettingsDetailPage {
 
   @Builder
   private CustomColorSheet() {
-    CustomColorSheetContent({
-      customColor: this.customColor,
-      accentColor: this.themeState.color,
-      presetColors: this.presetColors,
-      onColorSelected: (color: string): void => { this.customColor = color; },
-      onTextChange: (value: string): void => { this.customColor = value; },
-      onApply: (): void => { this.applyCustomColor(); },
-      onCancel: (): void => { this.pathStack.pop(); }
-    })
+    // ★ 修正「自定义颜色二级页内容与标题栏/状态栏重叠」：其它子面板都有
+    //   `Blank().height(this.panelTopInset())`（避让状态栏 + HDS 标题栏）和
+    //   `SETTINGS_PANEL_BOTTOM_VP`（避让底部悬浮播放条），这里原来漏了两个 ⇒
+    //   内容标题「自定义主题颜色」顶进返回按钮那一行，「取消」贴着播放条。
+    Scroll() {
+      Column() {
+        Blank().height(this.panelTopInset())
+        CustomColorSheetContent({
+          customColor: this.customColor,
+          accentColor: this.themeState.color,
+          presetColors: this.presetColors,
+          onColorSelected: (color: string): void => { this.customColor = color; },
+          onTextChange: (value: string): void => { this.customColor = value; },
+          onApply: (): void => { this.applyCustomColor(); },
+          onCancel: (): void => { this.pathStack.pop(); }
+        })
+      }
+      .width('100%')
+      .padding({ bottom: SETTINGS_PANEL_BOTTOM_VP })
+    }
+    .width('100%')
+    .height('100%')
+    .scrollBar(BarState.Off)
+    // ★ 2026-10-29（用户）：二级设置页滚动要有回弹
+    .edgeEffect(EdgeEffect.Spring)
   }
 
 
