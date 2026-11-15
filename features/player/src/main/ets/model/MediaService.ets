@@ -160,6 +160,15 @@ export class MediaService {
   /** True while playback was paused by a temporary audio interruption and should auto-resume. */
   private pausedByInterrupt: boolean = false;
   /**
+   * 「待焦点恢复」的看门狗句柄（-1 = 没在跑）。
+   * ★ 2026-11-15（合并 PR #12 时补）：待恢复期间长时任务**刻意不停**（否则后台被冻结、
+   *   焦点归还的 RESUME 没人处理），但系统一直不还焦点时这个标志会永远为真、任务被无限期占着。
+   *   见 {@link markFocusHold}。
+   */
+  private interruptHoldTimer: number = -1;
+  /** 焦点一直不回来多久就认了、释放长时任务（ms）。 */
+  private static readonly FOCUS_HOLD_TIMEOUT_MS: number = 60000;
+  /**
    * 暂停原因的唯一真源（grep `RzdPausePolicy`）。
    * none / user / focus / headphone / hicar / voice / retry / error
    */
@@ -626,6 +635,15 @@ export class MediaService {
           `pos=${this.getCurrentTime()} bg=${this.bgEnterWall > 0 ? 1 : 0} ` + BackgroundUtil.snapshot());
         this.pauseOrigin = '';
         this.state = AudioPlayerState.PAUSE;
+        // ★ 2026-11-15（合并 PR #12）：两种情况长时任务**不能丢**
+        //   （丢了 = 后台被冻结 = 焦点归还的 RESUME 永远无人处理，声音就此断掉）：
+        //   1) `pausedByInterrupt`：系统临时失焦暂停（语音输入 / 别的应用抢焦点），焦点归还会自动恢复；
+        //   2) `kernelOwns`：内核（mpv）在出声，AVPlayer 的 paused 只是 park/reset 的迟到残留事件。
+        if (kernelOwns || this.pausedByInterrupt) {
+          this.lockScreenDiagnostic(`paused keep-task (${kernelOwns ? 'kernel-owns' : 'focus-resume'}) ` +
+            BackgroundUtil.snapshot());
+          break;
+        }
         if (this.abilityContext) {
           BackgroundUtil.stopContinuousTask(this.abilityContext);
         }
@@ -653,7 +671,8 @@ export class MediaService {
           this.avPlayer.reset();
         }
         // 官方《后台播放》要求：停止时主动取消长时任务（不停任务但也不再放音频会被系统终止）
-        if (this.abilityContext) {
+        // ★ 2026-11-15（PR #12）：内核出声期间 AVPlayer 的 stopped 是换源残留事件，不能据此丢任务
+        if (!kernelOwns && this.abilityContext) {
           BackgroundUtil.stopContinuousTask(this.abilityContext);
         }
         break;
@@ -781,7 +800,7 @@ export class MediaService {
 
   /** AVSession remote pause. */
   private pauseCall: () =>void = () => {
-    this.pausedByInterrupt = false;
+    this.markFocusHold(false);
     this.pauseOrigin = 'avsession';
     this.pause();
   };
@@ -867,6 +886,40 @@ export class MediaService {
 
   private lockScreenDiagnostic(message: string): void {
     MusicStoreService.getInstance().appendRuntimeDiagnostic('[RzdLockScreenB] ' + message);
+  }
+
+  /**
+   * 临时失焦标志 `pausedByInterrupt` 的**唯一写入口**：置/清标志并维护看门狗。
+   *
+   * 为什么必须走这里（2026-11-15，合并 PR #12 时补齐）：
+   *   - 失焦期间长时任务**不再停**（停了就会被系统冻结，焦点归还的 RESUME 永远没人处理，声音断掉）；
+   *   - 但"系统一直不还焦点"（对方应用崩了 / 永久占用）时标志会永远为真 ⇒ 长时任务被无限期占着，
+   *     既费电也容易被判成「非法使用后台任务」。所以给 60s 看门狗：到点还没恢复就释放任务，
+   *     用户再按播放会重新申请。
+   * @param on true = 进入「临时失焦、待恢复」；false = 退出
+   */
+  private markFocusHold(on: boolean): void {
+    this.pausedByInterrupt = on;
+    if (this.interruptHoldTimer >= 0) {
+      clearTimeout(this.interruptHoldTimer);
+      this.interruptHoldTimer = -1;
+    }
+    if (!on) {
+      return;
+    }
+    this.interruptHoldTimer = setTimeout((): void => {
+      this.interruptHoldTimer = -1;
+      if (!this.pausedByInterrupt || this.isActuallyPlaying()) {
+        return;
+      }
+      this.pausedByInterrupt = false;
+      this.resumeWhenReady = false;
+      this.lockScreenDiagnostic('focus-hold-timeout ' + BackgroundUtil.snapshot());
+      this.appendPlayLog('[播放] 焦点一直没回来，释放长时任务');
+      if (this.abilityContext) {
+        BackgroundUtil.stopContinuousTask(this.abilityContext);
+      }
+    }, MediaService.FOCUS_HOLD_TIMEOUT_MS);
   }
 
   /** Starts or refreshes continuous background audio task (required after some track-switch paths). */
@@ -982,7 +1035,10 @@ export class MediaService {
 
   /** Reconciles background policy without changing the user's current playback intent. */
   public onApplicationBackground(): void {
-    const playing: boolean = this.isPlayingState();
+    // ★ 2026-11-15（合并 PR #12）：引擎真值兜底。`isPlayingState` 只是事件回调写出来的镜像，
+    //   换源 / 切内核期间会被迟到事件污染成 false —— 按 Home 那一刻判成"没在播"就会漏补长时任务，
+    //   后台几秒后被系统冻结、声音切断。
+    const playing: boolean = this.isPlayingState() || this.isActuallyPlaying();
     const enabled: boolean = MusicStoreService.getInstance().getLockScreenPlay();
     this.lockScreenDiagnostic(`onBackground(playing=${playing}) lockscreen enabled=${enabled}`);
     // ★ 取证起点：进后台的墙钟 + 播放位置（回前台用 onApplicationForeground 结算差值）
@@ -1014,7 +1070,8 @@ export class MediaService {
     const advance: number = this.bgEnterPosition > 0 ? this.getCurrentTime() - this.bgEnterPosition : 0;
     const playerState: string = this.avPlayer !== undefined ? this.avPlayer.state : 'none';
     const enabled: boolean = MusicStoreService.getInstance().getLockScreenPlay();
-    const playing: boolean = this.isPlayingState();
+    // ★ 2026-11-15（PR #12）：同 onApplicationBackground —— 用引擎真值兜底，别信被迟到事件污染的镜像
+    const playing: boolean = this.isPlayingState() || this.isActuallyPlaying();
     if (wall > 0) {
       const stalled: boolean = wall > 1000 && advance < wall / 2;
       this.lockScreenDiagnostic(`bg-leave(${stalled ? 'stall' : 'keep'}) wall=${wall} pos-delta=${advance} ` +
@@ -1515,7 +1572,7 @@ export class MediaService {
       if (kind === AudioInterruptKind.PAUSE) {
         this.pauseReason = 'focus';
         this.resumeWhenReady = true;
-        this.pausedByInterrupt = true;
+        this.markFocusHold(true);
         this.updateIsPlay(false);
         this.appendPlayLog('[播放] kernel focus lost, wait');
       } else if (kind === AudioInterruptKind.STOP) {
@@ -2034,6 +2091,9 @@ export class MediaService {
 
   /** Creates service, builds SongItemBuilder, and starts async AVPlayer creation. */
   public constructor() {
+    // ★ 2026-11-15（合并 PR #12）：长时任务"该不该补申请"的判定注入。
+    //   真在出声，或临时失焦等焦点归还 ⇒ 系统取消后要立刻补回来（否则后台几秒后被冻结、声音切断）。
+    BackgroundUtil.setTaskHoldPredicate((): boolean => this.isActuallyPlaying() || this.pausedByInterrupt);
     // USB 独占：设备掉线时自动回落（轮询在 UsbAudioService 里）
     UsbAudioService.getInstance().onLost = (): void => {
       this.onUsbDeviceLost();
@@ -2321,6 +2381,12 @@ export class MediaService {
       if (interruptEvent.forceType === audio.InterruptForceType.INTERRUPT_FORCE) {
         switch (interruptEvent.hintType) {
           case audio.InterruptHint.INTERRUPT_HINT_PAUSE:
+            // ★ 2026-11-15（合并 PR #12）：**先立标志、再 pause**。
+            //   'paused' 状态回调可能在 pause() 进行中就触发，那时必须已经能看到
+            //   「临时失焦、待恢复」，否则长时任务会被误停（后台断音根因）。
+            this.markFocusHold(true);
+            this.pauseReason = 'focus';
+            this.resumeWhenReady = true;
             // 暂时失焦（语音输入场景），后续会收到 RESUME
             if (this.avPlayer !== undefined && this.avPlayer.state === 'playing') {
               try {
@@ -2329,10 +2395,6 @@ export class MediaService {
                 Logger.warn(TAG, 'audioInterrupt pause failed: ' + JSON.stringify(e).substring(0, 120));
               }
             }
-            this.pausedByInterrupt = true;
-            // 临时失焦（含输入法语音输入）⇒ 走统一策略，焦点归还时自动恢复
-            this.pauseReason = 'focus';
-            this.resumeWhenReady = true;
             this.logPausePolicy('paused', 'focus', true);
             this.updateIsPlay(false);
             this.appendPlayLog('[播放] audio interrupt, wait');
@@ -2346,7 +2408,7 @@ export class MediaService {
                 Logger.warn(TAG, 'audioInterrupt stop pause failed: ' + JSON.stringify(e).substring(0, 120));
               }
             }
-            this.pausedByInterrupt = false;
+            this.markFocusHold(false);
             this.updateIsPlay(false);
             break;
           default:
@@ -2356,7 +2418,7 @@ export class MediaService {
         if (interruptEvent.hintType === audio.InterruptHint.INTERRUPT_HINT_RESUME) {
           // 焦点归还，主动恢复播放
           if (this.pausedByInterrupt && this.avPlayer !== undefined && this.avPlayer.state === 'paused') {
-            this.pausedByInterrupt = false;
+            this.markFocusHold(false);
             this.appendPlayLog('[播放] focus back, resume');
             this.play();
           }
@@ -3332,7 +3394,7 @@ export class MediaService {
       this.avPlayer.pause().then(() => {
         this.state = AudioPlayerState.PAUSE;
         this.updateIsPlay(false);
-        this.pausedByInterrupt = false;
+        this.markFocusHold(false);
         if (this.abilityContext) {
           BackgroundUtil.stopContinuousTask(this.abilityContext);
         }
