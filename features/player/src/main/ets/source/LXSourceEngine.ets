@@ -139,6 +139,16 @@ export struct LXSourceEngine {
    *   会抛 17100001。以前是 catch 住了但顺带白注入一次，现在先判这个标志。
    */
   private controllerAttached: boolean = false;
+  /**
+   * 脚本「从磁盘读完」的时刻（ms）。
+   *
+   * ★ 2026-11-15：为了和 QuickJS 侧做**同口径比较**才加的 —— QuickJS 那边的
+   * `runScriptInQuickJs()` 报的是「建引擎 + 装 prelude + eval 脚本 + 收到 inited」的总时间；
+   * 这边以前只报 `injectMs`（发起注入 → 收到 inited），**不含页面创建/载荷准备**，
+   * 拿这两个数直接比会得出「WebView 快 7 倍」的错误结论。
+   * 现在两边都从「脚本已就绪」算到「收到 inited」，才有可比性。
+   */
+  private scriptLoadAt: number = 0;
   /** 本次注入的起始时刻（ms），用于统计 injectMs（冷启动注入耗时的唯一可信指标）。 */
   private injectStartedAt: number = 0;
   /** 已收到快通道 `initFetchAck` 的代际；等于本次注入代际时禁止再回退分片。 */
@@ -188,6 +198,7 @@ export struct LXSourceEngine {
         return;
       }
       if (fullInfo !== null) {
+        this.scriptLoadAt = Date.now();
         LXSourceEngine.appendLog('引擎 读取脚本成功 name=' + fullInfo.name + ' len=' + fullInfo.script.length);
         this.initScript(fullInfo);
       } else {
@@ -931,8 +942,10 @@ appendPlayLog(msg);
           // injectMs = 从发起注入到桥上报 init 的总耗时：Phase 0.5 的唯一验收指标，
           // 快通道与分片通道都打这一条，便于上机直接对比。
           const injectMs: number = this.injectStartedAt > 0 ? Date.now() - this.injectStartedAt : -1;
+          // totalMs = 「脚本读完」→「收到 inited」：与 QuickJS 的 runScriptInQuickJs 同口径
+          const totalMs: number = this.scriptLoadAt > 0 ? Date.now() - this.scriptLoadAt : -1;
           LXSourceEngine.appendLog('引擎 init 事件 status=' + status + ' gen=' + gen +
-            ' pageGen=' + this.pageGen + ' injectMs=' + injectMs +
+            ' pageGen=' + this.pageGen + ' injectMs=' + injectMs + ' totalMs=' + totalMs +
             (errorMsg.length > 0 ? ' msg=' + errorMsg.substring(0, 80) : ''));
           if (gen >= 0 && gen !== this.pageGen) {
             // 刷新/换脚本后迟到的旧代际事件：丢弃，避免把新脚本的状态写错
