@@ -5056,11 +5056,29 @@ export struct PlaybackPage {
       this.closeDiagnostic(
         `snapshot-callback ${pixmap !== undefined ? 'ok' : 'miss'} ` +
           `code=${errCode} pix=${pixmap !== undefined ? 1 : 0} err=${errDetail}`);
-      // ★★★ 2026-10-22（**照无界**：判据只看 `pixmap`）：真机日志 `code=undefined pix=1` 证明
-      //   快照一直是成功的；`err` 只是个没有 code 的空壳。按 `err` 判失败 = 白扔一张好图、
-      //   退回第 ② 支反形变（那才是"两张封面"的来源）。
-      if (pixmap === undefined) {
-        this.closeLiveMorphFallback(`snapshot-empty(${errCode})`);
+      // ★★★ 2026-11-17（**按无界 1.3.3 的实际判据改回来**）：
+      //   反汇编 `PlayerPage.closeWithAnimation` 的快照回调（`ark_disasm` 出的
+      //   `&entry.src.main.ets.pages.PlayerPage&.#~@0>@1*#`）逻辑是：
+      //   ```
+      //     if (!err) {                                   // 成功 = err 为假
+      //       ExpandSnapshot.onShrinkBack(pixmap, mySrcBox);
+      //       nav.pop(false);
+      //     } else {
+      //       hilog.warn('root snapshot failed, fallback: ' + JSON.stringify(err));
+      //       nav.pop();                                  // 失败：直接 pop，不做动画
+      //     }
+      //   ```
+      //   ⇒ 无界**用 err 判失败**，而我们 2026-10-22 改成了"只看 pixmap"，
+      //   理由是"`code=undefined pix=1` 证明快照成功"。那条推理**没有证据**：
+      //   err 是空壳**不等于**图是好的（可能就是一张空白/半帧图）。
+      //   两种判据下分叉的正是用户复现的那种回调 —— 于是我们走的是一条无界**从不走**的路。
+      //   现在与无界对齐：`err` 为真 或 没有图 ⇒ 走兜底；只有两者都干净才用这张图。
+      if (err !== null && err !== undefined || pixmap === undefined) {
+        this.closeLiveMorphFallback(
+          `snapshot-reject(err=${errDetail},pix=${pixmap !== undefined ? 1 : 0})`);
+        if (pixmap !== undefined) {
+          this.releasePixelMapQuiet(pixmap);
+        }
         return;
       }
       // ★★★ 2026-10-18（用户第十轮：「收起过程中**按钮/封面又成了两个**」）：
@@ -5094,7 +5112,7 @@ export struct PlaybackPage {
         //     闂備緡鍋€閸嬫捇鏌涢妷褍浠滄鐐存崌瀵敻鍩€椤掑嫬閿ら煫鍥ф捣閻﹀秹鏌涘▎妯圭凹婵″弶鎮傚畷鍫曟倷閹绘帞鍘掗梺鍛婎焽閸犳劕顭囬悽鍛婂剭闁告洦鍣搴ㄦ煙閹殿喖鏋旈柟韫嵆閹潡鎮欓崗澶婁壕?
         //   闂佸疇娉曟刊瀵哥箔?婵犮垺鍎肩划鍓ф喆閿曞倸鍌ㄩ柣鏃堟敱缁€鍫ユ煟閹炬瀚敍瀣煙?`Logger.warn`闂佹寧绋戦懟顖炴嚐閻旂厧绠┑鐘插€搁弬褔鏌涢妷褍孝闁汇埄鍋呭璇测槈濡ゅ啰娈ゆ繛瀵稿Ь閸╂牕螞閳哄嫮鐤€婵°倕顑囩粈鍒濩LO` 闂?`fb=`闂佹寧绋戦¨鈧紒?
         //     **婵炴垶鎸撮崑鎾寸箾閸″繐澧查柛鈺佹嚇瀹曞爼骞嗚缁侇噣鏌涘▎妯虹仩闁搞劎鏅幏?*闂佹寧绋戦悧鎰帮綖?`closeFallbackReason`闂佹寧绋戦ˇ顓㈠焵?
-        this.closeLiveMorphFallback(`snapFail(${err.code})`);
+        this.closeLiveMorphFallback(`snapFail(${errCode})`);
         return;
       }
       this.restorePlaybackWindowChrome();
