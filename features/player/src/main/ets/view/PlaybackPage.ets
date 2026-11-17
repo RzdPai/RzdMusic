@@ -2372,7 +2372,15 @@ export struct PlaybackPage {
       //   "是浮层没缩小" 还是 "真封面没让位（两张封面同时在）"。
       // ★ 2026-10-31（用户反馈日志刷屏）：形变量测日志改为「只在关键变化时打印」，
       //   否则每帧一条，一晚上几十万行，真机排障反而更难。
-      const lyricLogKey: string = this.lyricMorphT.toFixed(2) + '/' + this.expandState.realCoverVisible().toString();
+      // ★ 2026-11-17（真机日志实测仍是刷屏）：`t.toFixed(2)` 每一帧都是新值
+      //   （0.332→0.286→0.244…步进 0.01~0.05）⇒ 去重形同虚设，一次浮层动画仍打 30~40 行。
+      //   改成**按 0.1 分档**（0..10 共 11 档）+ 关键状态位参与去重：
+      //   一次动画最多 11 行，仍然能看出"起点/中点/终点"的 anchor/big/win/cover/rect 走势，
+      //   但不再把整份日志淹掉（真机排障时要的是曲线，不是每一帧）。
+      const lyricLogKey: string = Math.round(this.lyricMorphT * 10).toString() + '/' +
+        (this.expandState.realCoverVisible() ? '1' : '0') +
+        (this.expandState.morphOverlayBridging() ? '1' : '0') +
+        (this.expandState.morphSessionDriving() ? '1' : '0');
       const lyricLogChanged: boolean = lyricLogKey !== this.lastLyricLogKey;
       if (lyricLogChanged) {
         this.lastLyricLogKey = lyricLogKey;
