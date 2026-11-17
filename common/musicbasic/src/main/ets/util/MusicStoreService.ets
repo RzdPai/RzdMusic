@@ -24,6 +24,7 @@ import { SongItem } from '../model/SongData';
 import { getAppRuntime } from '../model/AppRuntimeStorage';
 import { appendPlayLog } from './LxLogger';
 
+import { Logger } from './Logger';
 const STORE_NAME: string = 'music_store';
 const KEY_RUNTIME_DIAGNOSTICS: string = 'runtime_diagnostics_v1';
 const MAX_RUNTIME_DIAGNOSTICS: number = 5000;
@@ -273,12 +274,12 @@ export class MusicStoreService {
   public appendRuntimeDiagnostic(message: string): void {
     const entry: string = `[${new Date().toISOString()}] ${message}\n`;
     appendPlayLog(message);
-    console.info('[RzdRuntimeDiag] ' + message);
+    Logger.info('[RzdRuntimeDiag] ' + message);
     this.diagnosticPending = (this.diagnosticPending + entry).slice(-MAX_RUNTIME_DIAGNOSTICS);
     try {
       const store: preferences.Preferences | undefined = this.getStore();
       if (store === undefined) {
-        console.warn('[RzdRuntimeDiag] persistence pending: context unavailable');
+        Logger.warn('[RzdRuntimeDiag] persistence pending: context unavailable');
         return;
       }
       const previous: string = store.getSync(KEY_RUNTIME_DIAGNOSTICS, '') as string;
@@ -295,7 +296,7 @@ export class MusicStoreService {
       this.diagnosticDirty = true;
       this.flushRuntimeDiagnostics(store);
     } catch (err) {
-      console.error('[RzdRuntimeDiag] persistence-write-failed ' + JSON.stringify(err));
+      Logger.error('[RzdRuntimeDiag] persistence-write-failed ' + JSON.stringify(err));
     }
   }
 
@@ -314,7 +315,7 @@ export class MusicStoreService {
       this.diagnosticDirty = true;
       const failure: string = '[RzdRuntimeDiag] persistence-flush-failed ' + JSON.stringify(err);
       appendPlayLog(failure);
-      console.error(failure);
+      Logger.error(failure);
     } finally {
       this.diagnosticFlushRunning = false;
     }
@@ -1615,10 +1616,10 @@ export class MusicStoreService {
     const effective: string = enabled ? extended : base;
     store.putSync(key, effective);
     this.networkQualityVersion++;
-    console.info('[RzdQualityPolicy] network config reason=' + reason + ' key=' + key +
+    Logger.info('[RzdQualityPolicy] network config reason=' + reason + ' key=' + key +
       ' enabled=' + enabled + ' base=' + base + ' extension=' + extended + ' effective=' + effective);
     store.flush().catch((): void => {
-      console.error('[RzdQualityPolicy] network config flush failed key=' + key);
+      Logger.error('[RzdQualityPolicy] network config flush failed key=' + key);
     });
   }
 
@@ -2342,7 +2343,7 @@ export class MusicStoreService {
     }
     store.putSync(KEY_DOWNLOAD_QUALITY_MODE, 'follow');
     store.flush();
-    console.info('[RzdDownloadQuality] migrate mode=follow');
+    Logger.info('[RzdDownloadQuality] migrate mode=follow');
     return 'follow';
   }
 

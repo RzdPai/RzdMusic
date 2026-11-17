@@ -75,6 +75,7 @@ import { SongMoreMenu } from 'playlist';
 import { displaySync } from '@kit.ArkGraphics2D';
 import { RecordRowItem } from './RecordRowItem';
 
+import { Logger } from 'musicbasic';
 /** 「最近播放」模式。 */
 export const RECORD_MODE_HISTORY: string = 'history';
 /** 「收藏」模式。 */
@@ -1284,7 +1285,7 @@ export struct RecordListPage {
     }
     out.sort((a: UpcomingShow, b: UpcomingShow): number => a.item.startISO.localeCompare(b.item.startISO));
     this.upcomingShows = out;
-    console.info('[RzdConcert] following card count=' + out.length);
+    Logger.info('[RzdConcert] following card count=' + out.length);
   }
 
   build() {

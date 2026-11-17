@@ -38,6 +38,7 @@ import { DetailImmersiveBackdrop } from './DetailImmersiveBackdrop';
 import { WindowInfo, getWindowInfoState } from 'musicbasic';
 import { ArtistDetailDataSource } from './ArtistDetailDataSource';
 
+import { Logger } from 'musicbasic';
 const DANGER_COLOR: string = '#E64545';
 const SONG_PAGE_LIMIT: number = 50;
 const ALBUM_PAGE_LIMIT: number = 50;
@@ -415,7 +416,7 @@ export struct ArtistDetailPage {
     }
     const list: ConcertItem[] = await ConcertService.getInstance().upcoming(name);
     this.concerts = list;
-    console.info('[RzdConcert] hero capsule visible=' + (list.length > 0) + ' count=' + list.length);
+    Logger.info('[RzdConcert] hero capsule visible=' + (list.length > 0) + ' count=' + list.length);
   }
 
   private async resolveSingerBySearch(): Promise<void> {

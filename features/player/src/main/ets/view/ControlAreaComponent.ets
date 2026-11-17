@@ -451,13 +451,13 @@ export struct ControlAreaComponent {
     this.downloadSongSnapshot = song;
     const generation: number = ++this.downloadProbeGeneration;
     if (this.store.getDownloadQualityMode() === 'follow') {
-      console.info('[RzdDownloadQuality] mode=follow direct entry=control');
+      Logger.info('[RzdDownloadQuality] mode=follow direct entry=control');
       this.closeMenuSheet();
       await DownloadUtil.downloadSong(song.source, song.songId, song.name, song.singer, '',
         this.getUIContext(), song.img, song.albumName);
       return;
     }
-    console.info('[RzdDownloadQuality] mode=manual picker-open entry=control');
+    Logger.info('[RzdDownloadQuality] mode=manual picker-open entry=control');
     this.downloadQualityOptions = [];
     this.openSheetFor('qualityDownload');
     try {
@@ -760,11 +760,11 @@ export struct ControlAreaComponent {
         queue !== this.playerViewModel.appState.playQueue || ids !== this.playerViewModel.appState.playQueueIds ||
         index !== this.playerViewModel.appState.selectIndex || key !== currentKey ||
         (index < queue.length && current !== song)) {
-        console.info('[RzdOtherVersionSearch] discard delayed open gen=' + gen);
+        Logger.info('[RzdOtherVersionSearch] discard delayed open gen=' + gen);
         return;
       }
       this.showOtherVersionsSheet = true;
-      console.info('[RzdOtherVersionSearch] open sheet keywordLength=' + this.otherVersionsKeyword.length);
+      Logger.info('[RzdOtherVersionSearch] open sheet keywordLength=' + this.otherVersionsKeyword.length);
     }, SHEET_REOPEN_GUARD_MS);
   }
 
@@ -798,7 +798,7 @@ export struct ControlAreaComponent {
     if (generation === this.networkLookupGeneration) {
       this.currentNetworkWifi = wifi;
     }
-    console.info('[RzdQualityPolicy] explicit tier=' + q + ' queueIndex=' + index);
+    Logger.info('[RzdQualityPolicy] explicit tier=' + q + ' queueIndex=' + index);
     // Do not reload a different song if the user switched tracks while network lookup was pending.
     if (song !== undefined && song.source.length > 0 && song.source !== 'local' &&
       appState.selectIndex === index && appState.getCurrentSongItem() === song) {
@@ -809,7 +809,7 @@ export struct ControlAreaComponent {
       intent.pendingQueueIndex = index;
       intent.openPlayerUi = false;
       intent.requestVersion++;
-      console.info('[RzdQualityPolicy] explicit re-resolve requested tier=' + q);
+      Logger.info('[RzdQualityPolicy] explicit re-resolve requested tier=' + q);
     }
     this.getUIContext().getPromptAction().showToast({ message: '已选择当前网络音质 ' + qualityDisplayName(q), duration: 2000 });
   }

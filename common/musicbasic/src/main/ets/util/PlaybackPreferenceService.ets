@@ -1,6 +1,7 @@
 import { connection } from '@kit.NetworkKit';
 import { MusicStoreService } from './MusicStoreService';
 
+import { Logger } from './Logger';
 /** Network defaults are read at each URL resolution; unknown/offline uses cellular policy. */
 export class PlaybackPreferenceService {
   static async resolveCurrentNetworkWifi(): Promise<boolean> {
@@ -10,7 +11,7 @@ export class PlaybackPreferenceService {
       return caps.bearerTypes.includes(connection.NetBearType.BEARER_WIFI) ||
         caps.bearerTypes.includes(connection.NetBearType.BEARER_ETHERNET);
     } catch (_error) {
-      console.warn('[RzdQualityPolicy] network unknown; using cellular');
+      Logger.warn('[RzdQualityPolicy] network unknown; using cellular');
       return false;
     }
   }
@@ -25,7 +26,7 @@ export class PlaybackPreferenceService {
     const wifi: boolean = await PlaybackPreferenceService.resolveCurrentNetworkWifi();
     const store = MusicStoreService.getInstance();
     const quality: string = store.getNetworkPlayQuality(wifi);
-    console.info('[RzdQualityPolicy] network=' + (wifi ? 'wifi/ethernet' : 'cellular') +
+    Logger.info('[RzdQualityPolicy] network=' + (wifi ? 'wifi/ethernet' : 'cellular') +
       ' enabled=' + store.getNetworkExtendedEnabled(wifi) +
       ' base=' + store.getNetworkBaseQuality(wifi) +
       ' extension=' + store.getNetworkExtendedQuality(wifi) + ' effective=' + quality);

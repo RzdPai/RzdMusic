@@ -14,6 +14,7 @@
 import { uiMaterial } from '@kit.ArkUI';
 import { deviceInfo } from '@kit.BasicServicesKit';
 
+import { Logger } from './Logger';
 /** 材质厚度（与 uiMaterial.ImmersiveStyle 对应，这里只留常用几档）。 */
 export enum RzdMaterialStyle {
   THIN = 0,
@@ -60,7 +61,7 @@ function logSupportOnce(built: boolean, style: RzdMaterialStyle): void {
     return;
   }
   supportLogged = true;
-  console.info(`[RzdMaterial] api=${deviceInfo.sdkApiVersion} style=${style} built=${built}`);
+  Logger.info(`[RzdMaterial] api=${deviceInfo.sdkApiVersion} style=${style} built=${built}`);
 }
 
 function styleOf(style: RzdMaterialStyle): uiMaterial.ImmersiveStyle {
@@ -82,7 +83,7 @@ export function immersiveMaterial(style: RzdMaterialStyle = RzdMaterialStyle.REG
   try {
     if (!immersiveSupported()) {
       logSupportOnce(false, style);
-      console.info('[RzdMaterial] immersive material unsupported, fallback to none');
+      Logger.info('[RzdMaterial] immersive material unsupported, fallback to none');
       return undefined;
     }
     const built: uiMaterial.ImmersiveMaterial = new uiMaterial.ImmersiveMaterial({
@@ -94,7 +95,7 @@ export function immersiveMaterial(style: RzdMaterialStyle = RzdMaterialStyle.REG
     return built;
   } catch (error) {
     logSupportOnce(false, style);
-    console.info('[RzdMaterial] build material failed: ' + JSON.stringify(error).substring(0, 80));
+    Logger.info('[RzdMaterial] build material failed: ' + JSON.stringify(error).substring(0, 80));
     return undefined;
   }
 }

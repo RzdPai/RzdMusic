@@ -35,6 +35,7 @@ import { PlaylistBatchSelectionStore } from '../model/PlaylistBatchSelectionStor
 import { PlaylistSongUi } from '../model/PlaylistUiModels';
 import { notifyPlaylistChanged } from '../util/PlaylistRefreshBus';
 
+import { Logger } from 'musicbasic';
 const BATCH_LOG_DOMAIN: number = 0x0000;
 const BATCH_LOG_TAG: string = 'RzdPlaylistBatchBar';
 
@@ -361,11 +362,11 @@ export struct PlaylistBatchActionBar {
       return;
     }
     if (MusicStoreService.getInstance().getDownloadQualityMode() === 'follow') {
-      console.info('[RzdDownloadQuality] follow direct entry=playlist-batch');
+      Logger.info('[RzdDownloadQuality] follow direct entry=playlist-batch');
       await this.batchDownload('');
       return;
     }
-    console.info('[RzdDownloadQuality] manual picker entry=playlist-batch');
+    Logger.info('[RzdDownloadQuality] manual picker entry=playlist-batch');
     this.qualityLoading = true;
     this.qualityOptions = [];
     this.setSheetMode(BatchSheetMode.DOWNLOAD_QUALITY);

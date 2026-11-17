@@ -6,6 +6,7 @@ import { lxEngineIsReady } from '../source/LXSourceEngine';
 import { OnlinePlayUtil } from '../util/OnlinePlayUtil';
 import { platformLabel } from '../util/SourceDeclaredInfo';
 
+import { Logger } from 'musicbasic';
 class VersionResultRow {
   key: string = '';
   label: string = '';
@@ -114,7 +115,7 @@ export struct OtherVersionsSheet {
   @Monitor('appState.selectIndex', 'appState.playQueue', 'appState.playQueueIds')
   onQueueChanged(): void {
     if (this.visible && !this.targetValid()) {
-      console.info('[RzdOtherVersionSearch] target changed; dismiss');
+      Logger.info('[RzdOtherVersionSearch] target changed; dismiss');
       this.cancel();
     }
   }
@@ -173,14 +174,14 @@ export struct OtherVersionsSheet {
       return;
     }
     this.loading = true;
-    console.info('[RzdOtherVersionSearch] start gen=' + gen + ' keywordLength=' + query.length);
+    Logger.info('[RzdOtherVersionSearch] start gen=' + gen + ' keywordLength=' + query.length);
     const tasks: Promise<LXSearchResult>[] = [];
     for (const source of this.sources) {
       tasks.push(lxSearch(source, query, 1, 20));
     }
     const results: PromiseSettledResult<LXSearchResult>[] = await Promise.allSettled(tasks);
     if (gen !== this.generation || !this.targetValid()) {
-      console.info('[RzdOtherVersionSearch] discard late gen=' + gen);
+      Logger.info('[RzdOtherVersionSearch] discard late gen=' + gen);
       if (gen === this.generation) {
         this.cancel();
       }
@@ -223,7 +224,7 @@ export struct OtherVersionsSheet {
     this.status = failed === this.sources.length ? '搜索失败，请检查网络后重试' :
       (count === 0 ? '未找到其它版本，可修改关键词重试' :
         (failed > 0 ? '部分来源搜索失败，可重新搜索' : '点击歌曲替换当前队列位置并播放'));
-    console.info('[RzdOtherVersionSearch] finish gen=' + gen + ' count=' + count + ' failed=' + failed);
+    Logger.info('[RzdOtherVersionSearch] finish gen=' + gen + ' count=' + count + ' failed=' + failed);
   }
 
   private replaceCurrent(song: LXSearchSong): void {
@@ -274,7 +275,7 @@ export struct OtherVersionsSheet {
     intent.pendingQueueIndex = index;
     intent.openPlayerUi = false;
     intent.requestVersion++;
-    console.info('[RzdOtherVersionSearch] replace index=' + index + ' queueLength=' +
+    Logger.info('[RzdOtherVersionSearch] replace index=' + index + ' queueLength=' +
       this.appState.getQueueLength() + ' requestVersion=' + intent.requestVersion);
   }
 
@@ -334,7 +335,7 @@ export struct OtherVersionsSheet {
           const width: number = typeof area.width === 'number' ? area.width : parseFloat(area.width.toString());
           if (width > 0 && Math.abs(width - this.listWidthVp) > 0.5) {
             this.listWidthVp = width;
-            console.info('[RzdOtherVersionSearch] list widthVp=' + width + ' outerInset=8 cardInset=0');
+            Logger.info('[RzdOtherVersionSearch] list widthVp=' + width + ' outerInset=8 cardInset=0');
           }
         })
     }.width('100%').height('100%').padding({ left: 8, right: 8, bottom: 16 })

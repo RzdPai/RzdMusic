@@ -5,6 +5,7 @@ import { DataBackupService, MusicStoreService } from 'musicbasic';
 // 这里只引用）。详见 features/player/src/main/ets/source/SourceBackupPayload.ets 头部。
 import { attachSourcesToSnapshot, mergeSourcesIntoRestoreResult } from 'player';
 
+import { Logger } from 'musicbasic';
 export class WebDavConfig {
   url: string = '';
   user: string = '';
@@ -57,7 +58,7 @@ export class WebDavBackupService {
       if (method === http.RequestMethod.PUT) {
         headers['If-None-Match'] = '*';
       }
-      console.info('[RzdWebDAV] request method=' + method);
+      Logger.info('[RzdWebDAV] request method=' + method);
       const response = await req.request(config.url.trim().replace(/\/+$/, '') + '/' + encodeURIComponent(name), {
         method: method,
         header: headers,
@@ -67,7 +68,7 @@ export class WebDavBackupService {
         readTimeout: 30000,
         maxLimit: 16 * 1024 * 1024
       });
-      console.info('[RzdWebDAV] response=' + response.responseCode);
+      Logger.info('[RzdWebDAV] response=' + response.responseCode);
       if (response.responseCode === 401 || response.responseCode === 403) {
         throw new Error('WebDAV认证或写入权限失败');
       }

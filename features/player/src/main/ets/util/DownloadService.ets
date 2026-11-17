@@ -13,6 +13,7 @@ import { amllParseLyricText } from '../amll/parse/AmllAutoDetect';
 import { amllStringifyLrc } from '../amll/parse/AmllLyricFormatParsers';
 import { writeAudioMetadata, AudioMetadataWriter } from '@dabing/taglib_harmony';
 
+import { Logger } from 'musicbasic';
 /** lx-music 风格的下载任务状态机：排队 / 下载中 / 暂停 / 已完成 / 失败。 */
 export class DownloadStatus {
   static readonly WAITING: string = 'waiting';
@@ -211,7 +212,7 @@ export class DownloadService {
     // Default callers must resolve the network before enqueue (DownloadUtil does this).
     // Never defer preference lookup until execution, or overwrite an explicit batch selection.
     if (quality.length === 0) {
-      console.warn('[RzdQualityPolicy] download rejected: missing enqueue-time tier snapshot');
+      Logger.warn('[RzdQualityPolicy] download rejected: missing enqueue-time tier snapshot');
       return false;
     }
     // ★ 2026-11-09（用户：「播放 LX 的音乐一直提示音源未就绪」）：
@@ -246,7 +247,7 @@ export class DownloadService {
     task.imgUrl = imgUrl;
     task.quality = quality;
     task.requestedQuality = quality;
-    console.info('[RzdQualityPolicy] download snapshot id=' + id + ' requested=' + quality);
+    Logger.info('[RzdQualityPolicy] download snapshot id=' + id + ' requested=' + quality);
     task.fileName = this.buildFileName(name, singer, quality);
     // Failed tasks are replaced, never duplicated under the same stable id.
     const oldIndex: number = this.findIndex(id);
@@ -586,17 +587,17 @@ export class DownloadService {
       dlOptions.preferredQuality = task.requestedQuality;
       const dlOutcome: UrlResolveOutcome = await resolveMusicUrlWithFallback(
         task.source, task.songId, task.name, task.singer, '', null, dlOptions);
-      console.info('[RzdFallback] download via chain ok=' + (dlOutcome.url.length > 0) +
+      Logger.info('[RzdFallback] download via chain ok=' + (dlOutcome.url.length > 0) +
         ' quality=' + dlOutcome.quality + ' script=' + dlOutcome.scriptName);
       let url: string = dlOutcome.url;
       if (url.length > 0) {
         // 命中统一回退链：音质/平台/脚本都由链决定，下面沿用原有下载流程
         task.quality = dlOutcome.quality;
-        console.info('[RzdFallback] download hit via chain quality=' + dlOutcome.quality +
+        Logger.info('[RzdFallback] download hit via chain quality=' + dlOutcome.quality +
           ' platform=' + dlOutcome.source + ' script=' + dlOutcome.scriptName);
       }
       const chain: string[] = getQualityChain(task.requestedQuality, task.source);
-      console.info('[RzdQualityPolicy] download resolve id=' + task.id +
+      Logger.info('[RzdQualityPolicy] download resolve id=' + task.id +
         ' snapshot=' + task.requestedQuality + ' chain=' + chain.join(','));
       for (let i: number = 0; i < chain.length && url.length === 0; i++) {
         try {

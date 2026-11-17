@@ -30,6 +30,7 @@ import { sourceName } from 'player';
 import { SongMoreMenu } from 'playlist';
 import { SourceChip } from './SourceChip';
 
+import { Logger } from 'musicbasic';
 /** 日志域与标签（真机排查：`hdc shell hilog | findstr RzdSearchPage`）。 */
 const SEARCH_LOG_DOMAIN: number = 0x0000;
 const SEARCH_LOG_TAG: string = 'RzdSearchPage';
@@ -424,11 +425,11 @@ export struct OnlineSearchPage {
       return;
     }
     if (this.store.getDownloadQualityMode() === 'follow') {
-      console.info('[RzdDownloadQuality] mode=follow direct entry=search-batch');
+      Logger.info('[RzdDownloadQuality] mode=follow direct entry=search-batch');
       await this.confirmBatchDownload('');
       return;
     }
-    console.info('[RzdDownloadQuality] mode=manual picker-open entry=search-batch');
+    Logger.info('[RzdDownloadQuality] mode=manual picker-open entry=search-batch');
     this.showQualitySheet = true;
     this.batchQualityLoading = true;
     this.batchSizeText = {};
@@ -789,7 +790,7 @@ export struct OnlineSearchPage {
       // 新数组引用，确保 ForEach 刷新
       this.suggestWords = words.slice();
       this.showSuggest = this.suggestWords.length > 0 && this.query.trim().length > 0;
-      console.info('[搜索联想UI] n=' + this.suggestWords.length + ' src=' + this.currentSuggestSource());
+      Logger.info('[搜索联想UI] n=' + this.suggestWords.length + ' src=' + this.currentSuggestSource());
     } catch (_e) {
       if (seq === this.suggestSeq) {
         this.suggestWords = [];

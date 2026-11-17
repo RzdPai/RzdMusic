@@ -6,6 +6,7 @@ import { mfGetSheetSongs, musicFreeApisForPlatform } from '../source/MusicFreeAd
 import { lxSourceManager } from '../source/LXSourceManager';
 import { LXSearchSong } from '../source/LXMusicSDK';
 
+import { Logger } from 'musicbasic';
 const WY_SEARCH_LIMIT: number = 30;
 const TX_PLAYLIST_PAGE_SIZE: number = 20;
 const KW_PLAYLIST_PAGE_SIZE: number = 20;
@@ -593,7 +594,7 @@ export class PlaylistSearchApi {
           hits[i].cover, hits[i].author, 'qs'));
       }
     } catch (err) {
-      console.info('[RzdSoda] playlist search failed: ' + JSON.stringify(err).substring(0, 80));
+      Logger.info('[RzdSoda] playlist search failed: ' + JSON.stringify(err).substring(0, 80));
     }
     return list;
   }
@@ -606,9 +607,9 @@ export class PlaylistSearchApi {
         out.push(SearchPlaylistSong.of(songs[i].songId, songs[i].name, songs[i].singer,
           songs[i].albumName, songs[i].interval, 'qs', songs[i].img));
       }
-      console.info('[RzdSoda] playlist page id=' + id + ' got=' + out.length);
+      Logger.info('[RzdSoda] playlist page id=' + id + ' got=' + out.length);
     } catch (err) {
-      console.info('[RzdSoda] playlist page failed id=' + id);
+      Logger.info('[RzdSoda] playlist page failed id=' + id);
     }
     return out;
   }

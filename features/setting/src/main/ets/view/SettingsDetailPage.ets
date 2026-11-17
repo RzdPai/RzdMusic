@@ -48,6 +48,7 @@ import { readOfficialUpdateAlert, SourceUpdateInfo } from '../util/SourceUpdate'
 import { probeScriptUpdate, SourceUpdateProbeResult } from 'player';
 import { LengthMetrics } from '@kit.ArkUI';
 
+import { Logger } from 'musicbasic';
 /** 单次「测试音源」对每个平台最多试几档（从最高往下，命中即停）。 */
 const PROBE_MAX_TIERS: number = 5;
 const LX_ONLINE_IMPORT_MAX_BYTES: number = 9 * 1024 * 1024;
@@ -670,18 +671,18 @@ export struct SettingsDetailPage {
               break;
             }
             if (r !== undefined) {
-              console.info('[RzdQualityProbe] ' + api.name + ' ' + info.source + '/' + qualities[q] +
+              Logger.info('[RzdQualityProbe] ' + api.name + ' ' + info.source + '/' + qualities[q] +
                 ' → ' + (r.ok ? '已验证' : ('未通过:' + r.detail)));
             }
           } catch (err) {
-            console.info('[RzdQualityProbe] probe threw for ' + info.source);
+            Logger.info('[RzdQualityProbe] probe threw for ' + info.source);
           }
         }
       }
     }
     // ③ 探完刷新一次列表（换数组引用）⇒ 平台 ToolTip 立刻能读到「已验证 / 未通过」
     this.lxApiList = lxSourceManager.getApiList().slice();
-    console.info('[RzdQualityProbe] probe round finished, list refreshed');
+    Logger.info('[RzdQualityProbe] probe round finished, list refreshed');
     this.toast('测试完成：' + passed + '/' + total + ' 通过');
   }
 
@@ -1210,13 +1211,13 @@ export struct SettingsDetailPage {
     try {
       bundleManager.setAlternateIcon(v.value === 'default' ? '' : v.value)
         .then((): void => {
-          console.info('[RzdAltIcon] set ok name=' + v.value);
+          Logger.info('[RzdAltIcon] set ok name=' + v.value);
         })
         .catch((err: BusinessError): void => {
-          console.info('[RzdAltIcon] set failed name=' + v.value + ' code=' + err.code + ' msg=' + err.message);
+          Logger.info('[RzdAltIcon] set failed name=' + v.value + ' code=' + err.code + ' msg=' + err.message);
         });
     } catch (error) {
-      console.info('[RzdAltIcon] set threw: ' + JSON.stringify(error).substring(0, 80));
+      Logger.info('[RzdAltIcon] set threw: ' + JSON.stringify(error).substring(0, 80));
     }
     this.getUIContext().getPromptAction().showToast({
       message: '已应用图标：' + v.label,
@@ -1239,7 +1240,7 @@ export struct SettingsDetailPage {
       }
       this.appliedIcon = new LayeredDrawableDescriptor(fg, bg);
     } catch (error) {
-      console.info('[RzdIcon] layered descriptor failed: ' + JSON.stringify(error).substring(0, 80));
+      Logger.info('[RzdIcon] layered descriptor failed: ' + JSON.stringify(error).substring(0, 80));
     }
   }
 
@@ -1536,7 +1537,7 @@ export struct SettingsDetailPage {
   }
 
   private logNetworkQuality(wifi: boolean, action: string): void {
-    console.info(`[RzdQualitySettings] network=${wifi ? 'wifi-ethernet' : 'cellular'} action=${action} ` +
+    Logger.info(`[RzdQualitySettings] network=${wifi ? 'wifi-ethernet' : 'cellular'} action=${action} ` +
       `enabled=${this.store.getNetworkExtendedEnabled(wifi)} base=${this.store.getNetworkBaseQuality(wifi)} ` +
       `extended=${this.store.getNetworkExtendedQuality(wifi)} effective=${this.store.getNetworkPlayQuality(wifi)}`);
   }
@@ -1776,7 +1777,7 @@ export struct SettingsDetailPage {
       selectedIndex: this.downloadQualityMode() === 'manual' ? 1 : 0,
       $selectedIndex: (index: number): void => {
         this.store.setDownloadQualityMode(index === 1 ? 'manual' : 'follow');
-        console.info('[RzdDownloadQuality] settings mode=' + this.store.getDownloadQualityMode());
+        Logger.info('[RzdDownloadQuality] settings mode=' + this.store.getDownloadQualityMode());
       },
       buttonBackgroundColor: ColorMetrics.resourceColor($r('app.color.capsule_background')),
       buttonMinHeight: LengthMetrics.vp(40),

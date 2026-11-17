@@ -39,6 +39,7 @@
 import { http } from '@kit.NetworkKit';
 import { appendPlayLog } from '../util/LxLogger';
 
+import { Logger } from '../util/Logger';
 const QS_H5_SEO_TRACK: string = 'https://beta-luna.douyin.com/luna/h5/seo_track';
 const QS_TAG: string = '[RzdSoda]';
 
@@ -51,11 +52,11 @@ const QS_H5_HEADERS: Record<string, string> = {
 
 /**
  * 汽水这边所有诊断都走这里：hilog + 应用内「播放日志」**双写**。
- * （只写 console.info 的话，甲方贴的播放日志面板里永远看不到。）
+ * （只写 Logger.info 的话，甲方贴的播放日志面板里永远看不到。）
  */
 function qsLog(message: string): void {
   const line: string = QS_TAG + ' ' + message;
-  console.info(line);
+  Logger.info(line);
   appendPlayLog(line);
 }
 

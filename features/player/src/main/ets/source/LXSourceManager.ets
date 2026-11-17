@@ -9,6 +9,7 @@ import { LXUserApiInfo, LXUserApiInfoFull, LXUserApiSourceInfo, MfSubscriptionIn
 import { normalizePlatformId, platformIdFromLabel } from '../util/SourceDeclaredInfo';
 import { scanMfCaps } from '../util/MfCapability';
 
+import { Logger } from 'musicbasic';
 const DOMAIN: number = 0x0000;
 /** 插件 manifest 里不是「音源名」的 platform 取值（客户端类型）。 */
 const MF_NON_PLATFORM_VALUES: string[] = ['pc', 'web', 'h5', 'mobile', 'android', 'ios'];
@@ -374,7 +375,7 @@ class LXSourceManager {
       hilog.info(DOMAIN, TAG, 'script saved: %{public}s bytes=%{public}d', scriptPath, data.length);
     } catch (err) {
       const e: Error = err as Error;
-      // 这里以前是 console.error：落盘失败只进控制台，用户和日志都看不到
+      // 这里以前是 Logger.error：落盘失败只进控制台，用户和日志都看不到
       hilog.error(DOMAIN, TAG, 'saveScript FAILED path=%{public}s : %{public}s', scriptPath, e.message ?? '');
     }
   }

@@ -1033,7 +1033,7 @@ export class RecommendViewModel {
         }
       }
       const added: number = OnlinePlayUtil.appendToList(this.appState, songs);
-      console.info('[心动] append count=' + added);
+      Logger.info('[心动] append count=' + added);
       // ★ 追加后要**自动开始播放**（用户反馈：只进列表不出声）。
       //   队列原本是空的时候，从新追加的第一首开始播；已有歌在播就不打断它。
       if (added > 0) {
@@ -1047,7 +1047,7 @@ export class RecommendViewModel {
           this.appState.isResolving = true;
           MediaService.getInstance().loadAsset(firstNewIndex);
           MediaService.getInstance().play();
-          console.info('[心动] autoplay idx=' + firstNewIndex);
+          Logger.info('[心动] autoplay idx=' + firstNewIndex);
         }
       }
       if (uiContext !== undefined) {
@@ -1057,7 +1057,7 @@ export class RecommendViewModel {
         });
       }
     } catch (error) {
-      console.info('[心动] append fail ' + JSON.stringify(error).substring(0, 80));
+      Logger.info('[心动] append fail ' + JSON.stringify(error).substring(0, 80));
     }
   }
 

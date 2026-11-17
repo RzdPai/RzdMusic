@@ -14,6 +14,7 @@
 import { http } from '@kit.NetworkKit';
 import { LXQualityType, LXSearchResult, LXSearchSong } from '../source/LXMusicSDK';
 
+import { Logger } from 'musicbasic';
 const QS_SEARCH_TRACK: string = 'https://beta-luna.douyin.com/luna/search/track';
 const QS_SEARCH_PLAYLIST: string = 'https://beta-luna.douyin.com/luna/search/playlist';
 /** 接口固定每页 20 条 */
@@ -210,13 +211,13 @@ async function qsGetJson(url: string): Promise<Record<string, Object>> {
       readTimeout: 20000
     });
     if (resp.responseCode !== 200) {
-      console.info('[RzdSoda] http=' + resp.responseCode + ' ' + url.substring(0, 80));
+      Logger.info('[RzdSoda] http=' + resp.responseCode + ' ' + url.substring(0, 80));
       return {};
     }
     const text: string = typeof resp.result === 'string' ? (resp.result as string) : '';
     return text.length > 0 ? (JSON.parse(text) as Record<string, Object>) : {};
   } catch (error) {
-    console.info('[RzdSoda] request error: ' + JSON.stringify(error).substring(0, 100));
+    Logger.info('[RzdSoda] request error: ' + JSON.stringify(error).substring(0, 100));
     return {};
   } finally {
     req.destroy();
@@ -234,7 +235,7 @@ export async function qsSearchTracks(query: string, page: number, limit: number)
   if (list.length > limit) {
     list = list.slice(0, limit);
   }
-  console.info('[RzdSoda] search q=' + query + ' page=' + page + ' got=' + list.length +
+  Logger.info('[RzdSoda] search q=' + query + ' page=' + page + ' got=' + list.length +
     ' more=' + hasMore(body));
   return { list: list, total: 0, limit: limit, source: 'qs' };
 }
@@ -265,13 +266,13 @@ async function qsPostJson(path: string, payloadJson: string): Promise<Record<str
       readTimeout: 25000
     });
     if (resp.responseCode !== 200) {
-      console.info('[RzdSoda] POST http=' + resp.responseCode + ' ' + path);
+      Logger.info('[RzdSoda] POST http=' + resp.responseCode + ' ' + path);
       return {};
     }
     const text: string = typeof resp.result === 'string' ? (resp.result as string) : '';
     return text.length > 0 ? (JSON.parse(text) as Record<string, Object>) : {};
   } catch (error) {
-    console.info('[RzdSoda] POST error: ' + JSON.stringify(error).substring(0, 100));
+    Logger.info('[RzdSoda] POST error: ' + JSON.stringify(error).substring(0, 100));
     return {};
   } finally {
     req.destroy();
@@ -331,7 +332,7 @@ export async function qsBoardSongs(bangid: string, page: number,
     }
   }
   if (Object.keys(chart).length === 0) {
-    console.info('[RzdSoda] board not found: ' + wanted + ' charts=' + charts.length);
+    Logger.info('[RzdSoda] board not found: ' + wanted + ' charts=' + charts.length);
     return [];
   }
   const songs: LXSearchSong[] = [];
@@ -345,7 +346,7 @@ export async function qsBoardSongs(bangid: string, page: number,
     }
   }
   const out: LXSearchSong[] = limit > 0 && songs.length > limit ? songs.slice(0, limit) : songs;
-  console.info('[RzdSoda] board=' + wanted + ' got=' + out.length);
+  Logger.info('[RzdSoda] board=' + wanted + ' got=' + out.length);
   return out;
 }
 // ────────────────────────────────────────────────────────────────
@@ -391,7 +392,7 @@ export async function qsPlaylistDetail(id: string, page: number, limit: number):
     }
   }
   const out: LXSearchSong[] = limit > 0 && songs.length > limit ? songs.slice(0, limit) : songs;
-  console.info('[RzdSoda] playlist detail id=' + id + ' page=' + page + ' got=' + out.length +
+  Logger.info('[RzdSoda] playlist detail id=' + id + ' page=' + page + ' got=' + out.length +
     ' next=' + (qsDetailCursor.length > 0 ? 'yes' : 'no'));
   return out;
 }
@@ -447,7 +448,7 @@ export async function qsSearchPlaylists(keyword: string, page: number,
       break;
     }
   }
-  console.info('[RzdSoda] playlist search q=' + keyword + ' page=' + page + ' got=' + items.length);
+  Logger.info('[RzdSoda] playlist search q=' + keyword + ' page=' + page + ' got=' + items.length);
   return items;
 }
 // ────────────────────────────────────────────────────────────────
@@ -499,7 +500,7 @@ export async function qsDiscoverPlaylists(page: number, limit: number): Promise<
       break;
     }
   }
-  console.info('[RzdSoda] discover playlists page=' + page + ' got=' + out.length +
+  Logger.info('[RzdSoda] discover playlists page=' + page + ' got=' + out.length +
     ' seenTotal=' + qsPlazaSeen.length);
   return out;
 }

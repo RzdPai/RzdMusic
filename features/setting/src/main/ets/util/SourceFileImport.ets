@@ -3,6 +3,7 @@ import { picker, fileIo as fs } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { importMusicFreeSubscriptionText, importSourceScriptAuto, parseMusicFreeSubscription } from 'player';
 
+import { Logger } from 'musicbasic';
 /** 从文件 uri 里取文件名（去掉扩展名），当作订阅名。 */
 function fileNameOf(uri: string): string {
   const raw: string = uri.split('/').pop() ?? '';
@@ -52,10 +53,10 @@ export async function importSourceFiles(context: common.Context): Promise<string
       }
       await importSourceScriptAuto(script, '');
       success++;
-      console.info('[RzdSourceImport] file=' + (index + 1) + ' success');
+      Logger.info('[RzdSourceImport] file=' + (index + 1) + ' success');
     } catch (error) {
       failures.push('第' + (index + 1) + '个：' + (error as Error).message);
-      console.warn('[RzdSourceImport] file=' + (index + 1) + ' failed');
+      Logger.warn('[RzdSourceImport] file=' + (index + 1) + ' failed');
     } finally {
       if (file !== undefined) {
         fs.closeSync(file);

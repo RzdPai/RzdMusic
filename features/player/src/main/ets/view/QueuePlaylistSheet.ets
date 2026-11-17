@@ -18,6 +18,7 @@ import { AppStorageKeys, PlaybackIntentState, SongItem, SongTitleMarquee, StyleC
 import { MusicAppState } from '../model/PlayerModels';
 import { MediaService } from '../model/MediaService';
 
+import { Logger } from 'musicbasic';
 /**
  * Lazy queue data source: resolves rows on demand from the live play queue so
  * long queues (hundreds of songs) never materialize all rows at once.
@@ -83,7 +84,7 @@ export struct QueuePlaylistSheet {
       return;
     }
     this.queueScroller.scrollToIndex(index, true, ScrollAlign.CENTER);
-    console.info('[RzdQueueLocate] locate index=' + index + ' count=' + count);
+    Logger.info('[RzdQueueLocate] locate index=' + index + ' count=' + count);
   }
 
   /** Refreshes the lazy queue source when the queue or the current index changes. */
@@ -197,7 +198,7 @@ export struct QueuePlaylistSheet {
     .width(StyleConstants.FULL_WIDTH)
     .height('100%')
     .onAreaChange((_oldArea: Area, area: Area): void => {
-      console.info('[RzdQueueLocate] viewport height=' + area.height + ' outerBottomPadding=0');
+      Logger.info('[RzdQueueLocate] viewport height=' + area.height + ' outerBottomPadding=0');
     })
   }
 

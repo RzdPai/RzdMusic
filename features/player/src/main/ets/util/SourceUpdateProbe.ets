@@ -26,6 +26,7 @@
 import { http } from '@kit.NetworkKit';
 import { util } from '@kit.ArkTS';
 
+import { Logger } from 'musicbasic';
 /** 更新接口里可能承载「更新地址」的字段名（全部小写比较）。 */
 const URL_FIELDS: string[] = [
   'update_url', 'updateurl', 'update_link', 'updatelink', 'download_url', 'downloadurl',
@@ -200,7 +201,7 @@ export async function probeScriptUpdate(updateUrl: string, currentVersion: strin
     out.message = findMessageField(parsed, 0);
     out.hasUpdate = out.updateUrl.length > 0;
     // 给日志留一条可核对的痕迹（版本号只用于人工对照）
-    console.info('[RzdSourceUpdateProbe] ver=' + currentVersion +
+    Logger.info('[RzdSourceUpdateProbe] ver=' + currentVersion +
       ' hasUpdate=' + out.hasUpdate + ' msg=' + out.message.substring(0, 80));
     return out;
   } catch (err) {

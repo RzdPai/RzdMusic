@@ -7,6 +7,7 @@ import { lxSourceManager } from '../source/LXSourceManager';
 import { markProbeFail, markProbeOk } from './LxQualityProbe';
 import { isLxPlatform, isMfPlatformId, mfApiIdOf, normalizePlatformId, platformIdFromLabel, platformLabel } from './SourceDeclaredInfo';
 
+import { Logger } from 'musicbasic';
 export const QUALITY_CHAIN: string[] =
   ['master', 'atmos_plus', 'atmos', 'hires', 'flac24bit', 'flac', '320k', '128k'];
 
@@ -771,7 +772,7 @@ export function getQualityChain(preferred: string, source: string): string[] {
   if (out.indexOf(preferred) < 0 && QUALITY_CHAIN.indexOf(preferred) >= 0) {
     out.unshift(preferred);
   }
-  console.info('[RzdQualityPolicy] chain source=' + source + ' preferred=' + preferred +
+  Logger.info('[RzdQualityPolicy] chain source=' + source + ' preferred=' + preferred +
     ' policy=network-or-explicit');
   for (let i: number = 0; i < standard.length; i++) {
     if (out.indexOf(standard[i]) < 0) {

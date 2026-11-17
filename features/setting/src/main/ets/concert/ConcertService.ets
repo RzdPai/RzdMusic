@@ -24,6 +24,7 @@
 import { http } from '@kit.NetworkKit';
 import { MusicStoreService } from 'musicbasic';
 
+import { Logger } from 'musicbasic';
 /** 单场演唱会。 */
 export interface ConcertItem {
   id: string;
@@ -98,7 +99,7 @@ export class ConcertService {
     this.token = token.trim();
     if (this.token.length > 0) {
       MusicStoreService.getInstance().setConcertToken(this.token);
-      console.info('[RzdConcert] token override len=' + this.token.length);
+      Logger.info('[RzdConcert] token override len=' + this.token.length);
     }
   }
 
@@ -115,7 +116,7 @@ export class ConcertService {
     try {
       await this.ensureToken();
       if (this.token.length === 0) {
-        console.info('[RzdConcert] no token, skip: ' + name);
+        Logger.info('[RzdConcert] no token, skip: ' + name);
         this.cache.set(artistName, []);
         return [];
       }
@@ -126,16 +127,16 @@ export class ConcertService {
         out = await this.queryStorefront(name, storefront);
         if (out.length > 0) {
           this.hitStorefront = storefront;
-          console.info('[RzdConcert] hit storefront=' + storefront + ' artist=' + name +
+          Logger.info('[RzdConcert] hit storefront=' + storefront + ' artist=' + name +
             ' count=' + out.length);
           break;
         }
       }
       if (out.length === 0) {
-        console.info('[RzdConcert] no concerts artist=' + name);
+        Logger.info('[RzdConcert] no concerts artist=' + name);
       }
     } catch (error) {
-      console.info('[RzdConcert] failed: ' + JSON.stringify(error).substring(0, 120));
+      Logger.info('[RzdConcert] failed: ' + JSON.stringify(error).substring(0, 120));
       out = [];
     }
     this.cache.set(artistName, out);
@@ -176,7 +177,7 @@ export class ConcertService {
     const savedAt: number = store.getConcertTokenAt();
     if (saved.length > 0 && Date.now() - savedAt < TOKEN_TTL_MS) {
       this.token = saved;
-      console.info('[RzdConcert] token from prefs len=' + saved.length);
+      Logger.info('[RzdConcert] token from prefs len=' + saved.length);
       return;
     }
     // ① 抓 HTML（不带 Origin！）
@@ -186,7 +187,7 @@ export class ConcertService {
     }
     const jsHits: RegExpMatchArray | null = html.match(JS_PATTERN);
     if (jsHits === null || jsHits.length === 0) {
-      console.info('[RzdConcert] js bundle not found in html');
+      Logger.info('[RzdConcert] js bundle not found in html');
       return;
     }
     const jsPath: string = jsHits[0];
@@ -206,13 +207,13 @@ export class ConcertService {
       this.adoptToken(hit[0], jsPath);
       return;
     }
-    console.info('[RzdConcert] token not found in ' + jsPath + ' (' + js.length + ' bytes)');
+    Logger.info('[RzdConcert] token not found in ' + jsPath + ' (' + js.length + ' bytes)');
   }
 
   private adoptToken(token: string, source: string): void {
     this.token = token;
     MusicStoreService.getInstance().setConcertToken(token);
-    console.info('[RzdConcert] token acquired from ' + source + ' len=' + token.length);
+    Logger.info('[RzdConcert] token acquired from ' + source + ' len=' + token.length);
   }
 
   private async findArtistId(artistName: string, storefront: string): Promise<string> {
@@ -335,13 +336,13 @@ export class ConcertService {
         readTimeout: 30000
       });
       if (res.responseCode !== 200) {
-        console.info('[RzdConcert] http=' + res.responseCode + ' origin=' + withOrigin +
+        Logger.info('[RzdConcert] http=' + res.responseCode + ' origin=' + withOrigin +
           ' ' + url.substring(0, 70));
         return '';
       }
       return typeof res.result === 'string' ? (res.result as string) : '';
     } catch (error) {
-      console.info('[RzdConcert] request error: ' + JSON.stringify(error).substring(0, 100));
+      Logger.info('[RzdConcert] request error: ' + JSON.stringify(error).substring(0, 100));
       return '';
     } finally {
       req.destroy();
@@ -381,7 +382,7 @@ export function formatWhen(startISO: string, timezone: string): string {
         minute = Number(nums[3]);
       }
     } catch (error) {
-      console.info('[RzdConcert] tz fallback: ' + timezone);
+      Logger.info('[RzdConcert] tz fallback: ' + timezone);
     }
   }
   const hh: string = hour < 10 ? ('0' + hour) : hour.toString();

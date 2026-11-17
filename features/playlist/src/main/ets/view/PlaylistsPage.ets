@@ -31,6 +31,7 @@ import type { CoverPickResult } from '../util/PlaylistCoverUtil';
 //   **不要在页面里再写一份**（用户 2026-10-11 要求两处都走同一个入口）。
 import { NetworkImportSheet } from './NetworkImportSheet';
 
+import { Logger } from 'musicbasic';
 /**
  * LXMusic playlist export JSON shape (one song entry).
  */
@@ -189,7 +190,7 @@ export struct PlaylistsPage {
       backgroundBlurStyle: appBarBlurStyle()
     })
       .catch((err: BusinessError): void => {
-        console.error('openMenu fail ' + err.code + ' ' + err.message);
+        Logger.error('openMenu fail ' + err.code + ' ' + err.message);
       });
   }
 

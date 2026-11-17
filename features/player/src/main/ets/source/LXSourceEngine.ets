@@ -12,6 +12,7 @@ import {AppStorageKeys,
 } from 'musicbasic';
 import { ScriptProfile, probeScript, formatProfile, canRunWithoutWebView } from './ScriptProbe';
 
+import { Logger } from 'musicbasic';
 export let lxEngineSendRequest: ((key: string, data: LXSourceRequestData) => void) | null = null;
 
 /**
@@ -961,7 +962,7 @@ appendPlayLog(msg);
       return;
     }
     LXSourceEngine.appendLog('引擎 原生请求 ' + method + ' ' + url.substring(0, 140));
-    console.info('[TRACE:nativeFetch] req start id=' + requestId + ' url=' + url.substring(0, 100));
+    Logger.info('[TRACE:nativeFetch] req start id=' + requestId + ' url=' + url.substring(0, 100));
 
     let httpRequest = http.createHttp();
     let reqHeaders: Record<string, string> = {};
@@ -1006,16 +1007,16 @@ appendPlayLog(msg);
         respBody = textDecoder.decodeToString(resp.result as Uint8Array);
       }
       LXSourceEngine.appendLog('引擎 原生请求完成 code=' + resp.responseCode + ' len=' + respBody.length);
-      console.info('[TRACE:nativeFetch] req ok id=' + requestId + ' code=' + resp.responseCode + ' bodyLen=' + respBody.length);
+      Logger.info('[TRACE:nativeFetch] req ok id=' + requestId + ' code=' + resp.responseCode + ' bodyLen=' + respBody.length);
       let headersJson: string = JSON.stringify(resp.header) || '{}';
       let escHeaders: string = this.escapeJsString(headersJson);
       let escBody: string = this.escapeJsString(respBody);
       this.runJs(`window._lx_handleFetchResponse(${requestId}, null, ${resp.responseCode}, '${escHeaders}', '${escBody}')`);
-      console.info('[TRACE:nativeFetch] js callback sent id=' + requestId);
+      Logger.info('[TRACE:nativeFetch] js callback sent id=' + requestId);
     }).catch((err: Object): void => {
       let errMsg: string = JSON.stringify(err);
       LXSourceEngine.appendLog('引擎 原生请求异常 ' + errMsg.substring(0, 140));
-      console.error('[TRACE:nativeFetch] req fail id=' + requestId + ' err=' + errMsg);
+      Logger.error('[TRACE:nativeFetch] req fail id=' + requestId + ' err=' + errMsg);
       let escErr: string = this.escapeJsString(errMsg);
       this.runJs(`window._lx_handleFetchResponse(${requestId}, '${escErr}', 0, '{}', '')`);
     });
@@ -1137,7 +1138,7 @@ appendPlayLog(msg);
         }
       }
     } catch (e) {
-      console.error('LXSourceEngine handleJsMessage error:', JSON.stringify(e));
+      Logger.error('LXSourceEngine handleJsMessage error:', JSON.stringify(e));
     }
   }
 
@@ -1193,7 +1194,7 @@ appendPlayLog(msg);
         this.setReady(false, null);
       })
       .onConsole((event: OnConsoleEvent): boolean => {
-        // 桥里的 console.error（含 sendToNative 桥缺失、JS 异常）第一次变得可见
+        // 桥里的 Logger.error（含 sendToNative 桥缺失、JS 异常）第一次变得可见
         const msg: ConsoleMessage = event.message;
       // ★ 2026-10-29：脚本只打日志「更新提示: … url=…」，抓到就写进官方 alert（检查更新才读得到）
       try {

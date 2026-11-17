@@ -17,6 +17,7 @@ import { UIContext } from '@kit.ArkUI';
 import { MusicAppState, MusicStoreService, PlaybackPreferenceService, SongItem } from 'musicbasic';
 import { DownloadService, DownloadTask } from './DownloadService';
 
+import { Logger } from 'musicbasic';
 /**
  * 下载入口门面：所有下载统一进入 DownloadService 任务队列
  * （并发调度 + 进度 + 失败重试 + 元信息嵌入），不再内联下载。
@@ -25,16 +26,16 @@ export class DownloadUtil {
   /** Resolve once at entry; retries only use DownloadTask.requestedQuality. */
   public static async resolveQualitySnapshot(explicitQuality: string = ''): Promise<string> {
     if (explicitQuality.length > 0) {
-      console.info('[RzdDownloadQuality] snapshot selection=explicit tier=' + explicitQuality);
+      Logger.info('[RzdDownloadQuality] snapshot selection=explicit tier=' + explicitQuality);
       return explicitQuality;
     }
     const store: MusicStoreService = MusicStoreService.getInstance();
     if (store.getDownloadQualityMode() === 'manual') {
-      console.warn('[RzdDownloadQuality] mode=manual rejected missing explicit quality');
+      Logger.warn('[RzdDownloadQuality] mode=manual rejected missing explicit quality');
       return '';
     }
     const quality: string = await PlaybackPreferenceService.resolveDefaultQuality();
-    console.info('[RzdDownloadQuality] snapshot selection=network-follow tier=' + quality);
+    Logger.info('[RzdDownloadQuality] snapshot selection=network-follow tier=' + quality);
     return quality;
   }
 
@@ -57,7 +58,7 @@ export class DownloadUtil {
         continue;
       }
       task.requestedQuality = task.quality;
-      console.info('[RzdDownloadQuality] enqueue explicit tier=' + task.quality + ' source=' + task.source);
+      Logger.info('[RzdDownloadQuality] enqueue explicit tier=' + task.quality + ' source=' + task.source);
       snapshots.push(task);
     }
     return DownloadService.getInstance().enqueueBatch(snapshots, uiContext);
@@ -101,7 +102,7 @@ export class DownloadUtil {
     if (snapshot.length === 0) {
       return;
     }
-    console.info('[RzdDownloadQuality] enqueue explicit tier=' + snapshot + ' source=' + source);
+    Logger.info('[RzdDownloadQuality] enqueue explicit tier=' + snapshot + ' source=' + source);
     DownloadService.getInstance().enqueue(source, songId, name, singer, snapshot, uiContext,
       imgUrl, albumName);
   }

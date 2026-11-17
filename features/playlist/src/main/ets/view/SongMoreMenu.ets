@@ -33,6 +33,7 @@ import { notifyPlaylistChanged } from '../util/PlaylistRefreshBus';
 import { CommentPanel } from 'comment';
 import type { CommentSongRef } from 'comment';
 
+import { Logger } from 'musicbasic';
 /**
  * 半模态「重新打开」的冷却时间（ms）。
  *
@@ -127,12 +128,12 @@ export struct SongMoreMenu {
     this.downloadSongSnapshot = song;
     const generation: number = ++this.qualityGeneration;
     if (this.store.getDownloadQualityMode() === 'follow') {
-      console.info('[RzdDownloadQuality] follow direct entry=song-more');
+      Logger.info('[RzdDownloadQuality] follow direct entry=song-more');
       void DownloadUtil.downloadSong(song.source, song.songId, song.name, song.singer, '',
         this.getUIContext(), song.img, song.albumName);
       return;
     }
-    console.info('[RzdDownloadQuality] manual picker entry=song-more');
+    Logger.info('[RzdDownloadQuality] manual picker entry=song-more');
     this.qualityLoading = true;
     this.qualityOptions = [];
     this.openSheet(1);

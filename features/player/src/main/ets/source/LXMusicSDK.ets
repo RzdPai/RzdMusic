@@ -10,6 +10,7 @@ import { http } from '@kit.NetworkKit';
 import { util } from '@kit.ArkTS';
 import { amllDecryptQrcHex } from '../amll/parse/AmllQrcCodec';
 
+import { Logger } from 'musicbasic';
 export interface LXSearchSong {
   songId: string;
   name: string;
@@ -1807,7 +1808,7 @@ async function wyLyricPlain(songId: string): Promise<Record<string, Object>> {
       const yrcLen: number = (yrcObj.lyric as string || '').length;
       const lrcObj: Record<string, Object> = parsed.lrc as Record<string, Object> || {};
       const lrcLen: number = (lrcObj.lyric as string || '').length;
-      console.info('[wyPlain] code=' + String(parsed.code) + ' yrcLen=' + yrcLen + ' lrcLen=' + lrcLen);
+      Logger.info('[wyPlain] code=' + String(parsed.code) + ' yrcLen=' + yrcLen + ' lrcLen=' + lrcLen);
       return parsed;
     } catch (_err) {
       return {};
