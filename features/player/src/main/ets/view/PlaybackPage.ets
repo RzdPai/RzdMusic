@@ -421,6 +421,10 @@ export struct PlaybackPage {
     // ★ 2026-11-02：借用的对象记在本页名下 ⇒ 释放责任回到页面。
     PlaybackPage.bgCacheOwner = this.closeInstance;
     this.meshSrcVersion = this.meshSrcVersion + 1;
+    // ★ 2026-11-18：借用这一步进**持久诊断**（普通日志会被后面的关闭链挤出缓冲）
+    MusicStoreService.getInstance().appendRuntimeDiagnostic(
+      `[RzdBgPhase] shared-mesh adopt ver=${this.meshSrcVersion} owner=${this.closeInstance} key=` +
+      key.substring(0, 20));
     appendPlayLog(`[RzdBgPhase] shared-mesh adopt ver=${this.meshSrcVersion} owner=${this.closeInstance}`);
     return true;
   }
@@ -4419,6 +4423,17 @@ export struct PlaybackPage {
    * 婵°倕鍊归敋閻庤濞婂畷锝呂熼搹瑙勭槗闁诲海鎳撻崯鎶藉吹濠婂喚鍟呴柛妤冨仦閻ㄦ垿鏌涘▎鎯奉亪鎯冮鍕櫖閻忕偠鍋愰懝楣冩煛?闁诲繐绻嬬欢姘焽娴兼潙绠為柕蹇娾偓鍐茬睄闂佸憡鐟﹂敋闁?婵炴垶姊婚崰宥囩博鐎靛憡灏庨梺鍨儐闂勫秴霉濠婂啯顥撻柍?
    */
   private playExpandIntro(): void {
+    // ★ 2026-11-18：**先落一条最小日志**，再算细节。
+    //   上一版把「算 key」和「打日志」放在同一个 try 里 —— 只要 `currentMeshKey()` 之类
+    //   抛一次，整条诊断就**一个字都不留**（用户三份日志都找不到它，很可能就是这种"自己把自己吞了"）。
+    //   排查关键字：`RzdBgPhase intro-begin` / `intro-start`。
+    try {
+      appendPlayLog('[RzdBgPhase] intro-begin inst=' + this.closeInstance);
+      MusicStoreService.getInstance().appendRuntimeDiagnostic(
+        '[RzdBgPhase] intro-begin inst=' + this.closeInstance);
+    } catch (e) {
+      // 连这条都写不出来，只能是日志设施本身出问题
+    }
     // ★ 2026-11-17（用户：「现在只会概率背景消失了」，并给了关闭链日志）：
     //   背景是「共享网格」（静态缓存 `bgCachePm` + 组件内兜底），涉及**跨页面实例**的
     //   PixelMap 借用/移交，出问题时分散在 `RzdBgPhaseMesh` 的多条日志里，一份日志拼不出来。
