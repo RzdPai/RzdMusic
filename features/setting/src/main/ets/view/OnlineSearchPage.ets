@@ -237,6 +237,15 @@ export struct OnlineSearchPage {
   private suppressSuggestOnce: boolean = false;
   private suggestSeq: number = 0;
   @Local searching: boolean = false;
+  // ── 分页（2026-11-17 新增：原来搜索结果只取第 1 页 20 条，滚到底不会继续）──
+  /** 已加载到第几页（1 起）。只在「非综合」的单一结果页里推进。 */
+  @Local resultPage: number = 1;
+  /** 正在追加下一页（避免滚动触发重入） */
+  @Local loadingMore: boolean = false;
+  /** 已经到底（本页返回 0 条 / 不足一页） */
+  @Local noMoreResults: boolean = false;
+  /** 每页条数（与首屏一致，别各写各的） */
+  private static readonly SEARCH_PAGE_SIZE: number = 20;
   /** 是否**真的发起过**一次搜索（空态提示只在搜过之后才显示，入场态不该出现）。 */
   @Local searchedOnce: boolean = false;
   @Local songs: LXSearchSong[] = [];
@@ -1041,6 +1050,9 @@ export struct OnlineSearchPage {
   private async doSongSearch(): Promise<void> {
     this.songs = [];
     this.covers = {};
+    // 新一轮搜索：分页状态归零（否则上一轮的 "已到底" 会让新结果无法继续加载）
+    this.resultPage = 1;
+    this.noMoreResults = false;
     // ★★★ 2026-11-02（用户：「搜索选聚合，结果却只有酷我」）：
     //   根因就是这一行 —— `searchSources()` 在**综合页**只返回**第一个勾选**的音源
     //   （2026-10-20 为了"进页面不卡"做的取舍），而综合页默认就是「聚合」，
@@ -1096,6 +1108,78 @@ export struct OnlineSearchPage {
   }
 
   /** Searches playlists across the enabled sources. */
+  /**
+   * 滚到底 → 追加下一页（**只在「歌曲」这一页生效**）。
+   *
+   * ★ 2026-11-17：搜索结果原来只有第 1 页 20 条，滚到底什么都不会发生 —— 用户得换关键词。
+   *   这里按 `resultPage` 只推进「歌曲」这一路：
+   *   · 综合页（`overview`）不做 —— 它把多个音源的第 1 页拼在一起，页号语义会乱；
+   *   · 歌单/歌手/专辑结果是聚合去重后的少量条目，多数场景一页就到底，先不做，
+   *     直接置 `noMoreResults`（免得每次滚到底都白跑一次网络）。
+   *   · 返回 0 条 或 不足一页 ⇒ 到底。
+   */
+  private async loadMore(): Promise<void> {
+    if (this.searching || this.loadingMore || this.noMoreResults) {
+      return;
+    }
+    if (this.query.trim().length === 0 || this.overview || this.searchMode !== 0) {
+      return;
+    }
+    this.loadingMore = true;
+    try {
+      const next: number = this.resultPage + 1;
+      const sources: string[] = this.searchSources();
+      if (sources.length === 0) {
+        this.noMoreResults = true;
+        return;
+      }
+      const promises: Promise<LXSearchResult>[] = [];
+      for (let i: number = 0; i < sources.length; i++) {
+        promises.push(searchPlatformSongs(sources[i], this.query, next,
+          OnlineSearchPage.SEARCH_PAGE_SIZE));
+      }
+      const settled: PromiseSettledResult<LXSearchResult>[] = await Promise.allSettled(promises);
+      // 去重键用「源 + 歌曲 id」：多源并发时同一首会出现在不同平台，各自保留
+      const seen: Set<string> = new Set<string>();
+      for (let i: number = 0; i < this.songs.length; i++) {
+        seen.add(this.songs[i].source + '_' + this.songs[i].songId);
+      }
+      const added: LXSearchSong[] = [];
+      let rawCount: number = 0;
+      for (let i: number = 0; i < settled.length; i++) {
+        const r: PromiseSettledResult<LXSearchResult> = settled[i];
+        if (r.status !== 'fulfilled' || r.value.list === undefined) {
+          continue;
+        }
+        rawCount += r.value.list.length;
+        for (let j: number = 0; j < r.value.list.length; j++) {
+          const item: LXSearchSong = r.value.list[j];
+          const key: string = item.source + '_' + item.songId;
+          if (seen.has(key)) {
+            continue;
+          }
+          seen.add(key);
+          added.push(item);
+        }
+      }
+      if (added.length > 0) {
+        this.songs = this.songs.concat(added);
+      }
+      this.resultPage = next;
+      // 每源都没返回 / 每源都不足一页 ⇒ 到底
+      const perSourceShort: boolean = rawCount <= sources.length * OnlineSearchPage.SEARCH_PAGE_SIZE;
+      if (rawCount === 0 || (perSourceShort && added.length === 0)) {
+        this.noMoreResults = true;
+      }
+      Logger.info('[搜索分页] page=' + next + ' 新增=' + added.length + ' 总=' + this.songs.length +
+        ' 到底=' + this.noMoreResults);
+    } catch (e) {
+      Logger.warn('[搜索分页] 失败: ' + JSON.stringify(e).substring(0, 140));
+    } finally {
+      this.loadingMore = false;
+    }
+  }
+
   private async doPlaylistSearch(): Promise<void> {
     const activeSources: string[] = this.searchSources();
     if (activeSources.length === 0) {
@@ -2611,12 +2695,45 @@ export struct OnlineSearchPage {
               // ★ 用户 2026-10-20：去卡片改分隔线 ⇒ 行间不再留 12vp 空隙
               //   （细线由 `SongRowItem` 自己那条 bottom border 画，左右各内缩 16）
             }, (song: LXSearchSong) => song.source + '_' + song.songId + '_' + song.img)
+            // ★ 2026-11-17：分页尾标 —— 加载中有提示，到底了明确说「没有更多了」，
+            //   否则滚到底没反应会被当成"卡住了"。
+            if (!this.overview && this.songs.length > 0) {
+              ListItem() {
+                Row() {
+                  if (this.loadingMore) {
+                    LoadingProgress()
+                      .width(18)
+                      .height(18)
+                      .color($r('sys.color.font_secondary'))
+                    Text('正在加载更多…')
+                      .fontSize($r('sys.float.Body_S'))
+                      .fontColor($r('sys.color.font_secondary'))
+                      .margin({ left: 8 })
+                  } else if (this.noMoreResults) {
+                    Text('没有更多了')
+                      .fontSize($r('sys.float.Body_S'))
+                      .fontColor($r('sys.color.font_tertiary'))
+                  } else {
+                    Text('上滑加载更多')
+                      .fontSize($r('sys.float.Body_S'))
+                      .fontColor($r('sys.color.font_tertiary'))
+                  }
+                }
+                .width('100%')
+                .height(48)
+                .justifyContent(FlexAlign.Center)
+              }
+            }
           }
         }
           .width('100%')
           .height('100%')
           .scrollBar(BarState.Off)
           .edgeEffect(EdgeEffect.Spring)
+          // ★ 2026-11-17：滚到底自动追加下一页（只在「歌曲」单结果页生效，见 loadMore()）
+          .onReachEnd(() => {
+            void this.loadMore();
+          })
           // ⚠️ 不要给结果列表开多栏（原来按断点 1/2/3/4 栏）：
           //    歌曲行本身是「封面 + 标题/歌手 + 来源/时长」的整行卡片，铺成多栏会把
           //    文字挤窄、行与行长度还参差不齐，看起来就是"文字被拉伸对齐了"。
