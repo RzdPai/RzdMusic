@@ -74,7 +74,7 @@ export type { MfSubscriptionEntry, MfImportReport } from './src/main/ets/source/
 export { LXSourceEngine, lxEngineIsReady } from './src/main/ets/source/LXSourceEngine';
 export { lxLastRequestData, lxLastInitTotalMs } from './src/main/ets/source/LXSourceEngine';
 export { QuickJsRuntime, QuickJsCall, quickJsSelfTest } from './src/main/ets/source/QuickJsRuntime';
-export { runScriptInQuickJs, runScriptAndInvoke, handleHostCalls, QuickJsRunResult, QuickJsInvokeResult, LxScriptInitInfo, QuickJsScriptSession } from './src/main/ets/source/LxHostBridge';
+export { runScriptInQuickJs, runScriptAndInvoke, handleHostCalls, QuickJsRunResult, QuickJsInvokeResult, LxScriptInitInfo, QuickJsScriptSession, QuickJsInvokeOutcome } from './src/main/ets/source/LxHostBridge';
 export { lxSourceManager } from './src/main/ets/source/LXSourceManager';
 export type { LXApiImportResult } from './src/main/ets/source/LXSourceManager';
 // 自定义音源的跨设备搬运载荷（**全仓唯一实现**）：WebDAV / 系统华为云空间 / 旧网页云盘

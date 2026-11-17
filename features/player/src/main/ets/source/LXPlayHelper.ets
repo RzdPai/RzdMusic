@@ -8,7 +8,7 @@ import { isLxPlatform, isMfPlatformId } from '../util/SourceDeclaredInfo';
 import { LXUserApiInfo } from './Interface';
 import { qsBoardSongs, qsPlaylistDetail } from '../geuz/QsApi';
 import {AppStorageKeys,  appendError, appendPlayLog, MusicStoreService } from 'musicbasic';
-import { QuickJsScriptSession, runScriptInQuickJs, runScriptAndInvoke, QuickJsRunResult, QuickJsInvokeResult } from './LxHostBridge';
+import { QuickJsScriptSession, QuickJsInvokeOutcome, runScriptInQuickJs, runScriptAndInvoke, QuickJsRunResult, QuickJsInvokeResult } from './LxHostBridge';
 import { quickJsSelfTest } from './QuickJsRuntime';
 import { lxLastInitTotalMs } from './LXSourceEngine';
 
@@ -388,10 +388,52 @@ class QuickJsResolveOutcome {
    * ★ 2026-11-17：区分这两者 —— 引擎 bug 不能把某个音源永久判死。
    */
   engineBroken: boolean = false;
+  /** 脚本 handler 的失败原因（用于区分"缺能力"与"对面服务挂了"） */
+  error: string = '';
 }
 
 /** 本次运行内 QuickJS 引擎是否已被判定为坏（坏了就别再反复试，省 4s 超时）。 */
 let quickJsEngineBroken: boolean = false;
+
+/**
+ * 本次运行内每支脚本的**瞬时**失败次数。
+ *
+ * ★ 2026-11-17 真机教训：RzdPai 音源的后端 `c.newweb.top` 返回 403，「鉴权失败」
+ *   被写成持久化的「这支脚本跑不了」⇒ 音源在 `混合` 模式下被**永久判死**。
+ *   但那是**对面服务挂了**，不是脚本能力问题。所以：
+ *   - 只有「引擎给不了这个能力」类错误才**持久化判否**；
+ *   - 其余（网络/鉴权/后端/超时）只在**本次运行内**累计，达到 3 次就不再用 QuickJS
+ *     （避免每首歌都白等），下次启动重新给机会。
+ */
+const transientFailCount: Map<string, number> = new Map<string, number>();
+const TRANSIENT_FAIL_LIMIT: number = 3;
+
+/**
+ * 判断错误是不是「引擎侧确实给不了」（应当持久化判否）。
+ *
+ * 只认明确的"脚本跑在 QuickJS 上缺东西"签名；其它一律当瞬时失败 ——
+ * 宁可多试几次，也不能把对面服务端挂了记成脚本不能跑。
+ * @param err 脚本 handler 的失败原因
+ */
+function isCapabilityError(err: string): boolean {
+  const e: string = err.toLowerCase();
+  const markers: string[] = [
+    'is not defined',           // x is not defined：缺 DOM/Web API
+    'is not a function',        // 缺方法
+    'not available in quickjs', // 我们显式抛的"没实现"
+    'cannot read propert',      // 缺对象（如 document.xxx）
+    'syntaxerror',
+    'decompressionstream',
+    'compressionstream',
+    'websocket'
+  ];
+  for (let i: number = 0; i < markers.length; i++) {
+    if (e.indexOf(markers[i]) >= 0) {
+      return true;
+    }
+  }
+  return false;
+}
 
 /**
  * 用 QuickJS 取一次播放地址。
@@ -422,8 +464,9 @@ async function resolveUrlViaQuickJs(reqData: LXSourceRequestData): Promise<Quick
       appendPlayLog('[qjs] 会话未就绪 → 本次运行暂不再尝试 QuickJS，回落 WebView');
       return out;
     }
-    const valueJson: string = await quickJsSession.invoke('request', JSON.stringify(reqData), 8000);
-    out.url = extractUrlFromValue(valueJson);
+    const inv: QuickJsInvokeOutcome = await quickJsSession.invoke('request', JSON.stringify(reqData), 8000);
+    out.url = extractUrlFromValue(inv.valueJson);
+    out.error = inv.error;
     return out;
   } catch (e) {
     appendPlayLog('[qjs] 取址异常，回落 WebView: ' + JSON.stringify(e).substring(0, 140));
@@ -477,7 +520,9 @@ export async function runQuickJsOneClickCheck(): Promise<string> {
       JSON.stringify(lxLastRequestData), 6000);
     const qjsUrl: string = extractUrlFromValue(inv.valueJson);
     if (!inv.ok || qjsUrl.length === 0) {
-      note('③ 取址：失败 · ' + (inv.error.length > 0 ? inv.error : '没拿到地址'));
+      const kind: string = inv.error.length === 0 ? '没拿到地址' :
+        (isCapabilityError(inv.error) ? '缺能力（该脚本只能 ArkWeb）' : '瞬时失败（对面服务/网络，可重试）');
+      note('③ 取址：失败 · ' + kind + ' · ' + inv.error.substring(0, 100));
     } else {
       let verdict: string = '（WebView 还没结果，无法对拍）';
       if (lastWebViewUrl.length > 0) {
@@ -553,8 +598,23 @@ export async function getLXMusicUrl(source: string, songId: string, quality: str
       return quickOut.url;
     }
     // 记下"这支脚本在这台机器上跑不了"，下次 auto 直接走 WebView（不重复付超时）
-    if (!quickOut.engineBroken) {
+    if (quickOut.engineBroken) {
+      // 引擎自身问题：不写判定（本次运行已置 quickJsEngineBroken）
+    } else if (quickOut.url.length === 0 && quickOut.error.length > 0 && isCapabilityError(quickOut.error)) {
+      // 明确"缺能力" ⇒ 持久化判否，以后别再试
       rememberVerdict(activeScriptId, false);
+      logError('qjs capability-miss ' + quickOut.error.substring(0, 80));
+    } else {
+      // 瞬时失败（网络/鉴权/后端/超时）⇒ 只在本会话内计数，不落盘
+      const n: number = (transientFailCount.get(activeScriptId) ?? 0) + 1;
+      transientFailCount.set(activeScriptId, n);
+      if (n >= TRANSIENT_FAIL_LIMIT) {
+        rememberVerdict(activeScriptId, false);
+        logError('qjs transient x' + n + ' → 本次运行不再尝试（不落盘）: ' +
+          quickOut.error.substring(0, 80));
+      } else {
+        logError('qjs transient x' + n + '（不落盘）: ' + quickOut.error.substring(0, 80));
+      }
     }
     // ★ 2026-11-16：QuickJS 没接住 ⇒ 立刻把 WebView 拉起来（混合的"兜底腿"）。
     //   接下来 `sendReq` 会因为引擎未就绪而进队列（TTL 20s），页面加载完自动补发。

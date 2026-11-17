@@ -40,6 +40,16 @@ export class LxScriptInitInfo {
   raw: string = '';
 }
 
+/** `QuickJsScriptSession.invoke()` 的结果：值 + 错误文本（用来判断"是不是引擎给不了这个能力"）。 */
+export class QuickJsInvokeOutcome {
+  /** 脚本 handler 的返回值（JSON）；失败为空串 */
+  valueJson: string = '';
+  /** 失败原因（成功为空串） */
+  error: string = '';
+  /** 耗时 */
+  elapsedMs: number = -1;
+}
+
 /** 一次「宿主 → 脚本」事件调用的结果（Phase 2 的另一半）。 */
 export class QuickJsInvokeResult {
   ok: boolean = false;
@@ -567,9 +577,11 @@ export class QuickJsScriptSession {
    * @returns 脚本 handler 的返回值（通常就是取址结果）；失败返回空串
    */
   public async invoke(eventName: string, payloadJson: string,
-    timeoutMs: number = 8000): Promise<string> {
+    timeoutMs: number = 8000): Promise<QuickJsInvokeOutcome> {
+    const outcome: QuickJsInvokeOutcome = new QuickJsInvokeOutcome();
     if (!this.rt.isReady()) {
-      return '';
+      outcome.error = 'session not ready';
+      return outcome;
     }
     const started: number = Date.now();
     this.rt.evaluate(`__qjsInvoke(${JSON.stringify(eventName)}, ${JSON.stringify(payloadJson)})`,
@@ -588,12 +600,15 @@ export class QuickJsScriptSession {
             const err: string = (st['error'] as string) ?? '';
             const v: Object = st['value'];
             const ms: number = Date.now() - started;
+            outcome.elapsedMs = ms;
             if (err.length > 0) {
-              appendPlayLog('[qjs] invoke 失败 ' + eventName + ' ' + ms + 'ms: ' + err.substring(0, 120));
-              return '';
+              outcome.error = err;
+              appendPlayLog('[qjs] invoke 失败 ' + eventName + ' ' + ms + 'ms: ' + err.substring(0, 160));
+              return outcome;
             }
             appendPlayLog('[qjs] invoke ok ' + eventName + ' ' + ms + 'ms');
-            return v === null || v === undefined ? '' : JSON.stringify(v);
+            outcome.valueJson = v === null || v === undefined ? '' : JSON.stringify(v);
+            return outcome;
           }
         } catch (_e) {
           // 还没好
@@ -601,8 +616,9 @@ export class QuickJsScriptSession {
       }
       await sleep(calls.length > 0 ? 6 : 16);
     }
+    outcome.error = 'timeout after ' + timeoutMs + 'ms';
     appendPlayLog('[qjs] invoke 超时 ' + eventName + ' ' + timeoutMs + 'ms');
-    return '';
+    return outcome;
   }
 
   /** 关闭会话（脚本变了 / 退出时） */
