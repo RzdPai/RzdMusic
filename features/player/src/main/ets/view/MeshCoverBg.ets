@@ -44,6 +44,9 @@ import { image } from '@kit.ImageKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { SRC_EDGE, boxBlurRgba, fillFallback, hueOfSeed } from '../util/MeshSource';
 import { MeshField } from '../util/MeshGradient';
+import { CoverCacheService } from 'musicbasic';
+import { fileIo as fs } from '@kit.CoreFileKit';
+import { common } from '@kit.AbilityKit';
 
 /** 每格细分数（无界 `MESH_SUB`）。 */
 const MESH_SUB: number = 4;
@@ -532,6 +535,9 @@ export struct MeshCoverBg {
   private srcVer: number = -1;
   /** 上次采用/丢弃那一版源时的 `seed`（配合 {@link srcVer} 判"是不是同一首"）。 */
   private srcSeed: string = '';
+  /** 本地缓存文件解出来的那张（与页面传进来的 `src` 是两回事，各自负责释放）。 */
+  private localCoverPm: image.PixelMap | undefined = undefined;
+  private localCoverSeed: string = '';
 
   /** 挂载时刻（ms）—— {@link FIRST_SOURCE_GRACE_MS} 的起点。 */
   private mountMs: number = 0;
@@ -570,6 +576,8 @@ export struct MeshCoverBg {
     this.controller.node.src = null;
     this.releaseFallback();
     this.releaseCachedCover();
+    // ★ 2026-11-18：本地缓存文件解出来的那张也要放（它与页面传入的 src 各自独立）
+    this.releaseLocalCover();
   }
 
   // ★★★ 2026-10-17（照搬无界 `@Watch`：`coverPath→onSourceChanged`、`seed→onSourceChanged`）
@@ -620,6 +628,15 @@ export struct MeshCoverBg {
     //   上游对兜底**不做** `enhanceColors`（`wujie.pa:64074-64081`，只有 `decoded` 为真才做）。
     // 我们这一侧的 `src` 由页面给（在线封面要下载），拿不到时就在**组件内**造兜底网格
     // ——与上游同一个位置、同一个算法（`fillFallback` / `hueOfSeed` 已在 `MeshSource` 里）。
+    // ★★★★ 2026-11-18（用户提议「直接搬无界的本地解码方案」）：**先试本地缓存文件**。
+    //   无界点开播放页时 `decodeCover()` 是 `fs.openSync` + 本地解码 ⇒ 1 帧就有真封面，
+    //   所以它的背景首帧永远不空。我们原来只有"等页面下载完把 PixelMap 传进来"这条路，
+    //   首帧只能等 ⇒ 才有那 96ms 空白窗。
+    //   现在：封面一旦被 `CoverCacheService` 落过盘（看歌词/封面/点过播放页都会落），
+    //   这里就能在**同一帧**同步解码画出来，等价于无界的本地封面文件。
+    if (this.paintLocalCoverSync(gen)) {
+      return;
+    }
     if (this.src !== undefined) {
       if (this.isSrcForCurrentSeed()) {
         this.srcVer = this.srcVersion;
@@ -739,6 +756,102 @@ export struct MeshCoverBg {
    * 这是"点击打开第 1 帧就该是真封面"的实现路径（无界靠本地封面文件，我们靠这份缓存）。
    * @param gen 发起这次绘制时的代际号（同拍内又换了歌 ⇒ 这张作废）
    */
+  /**
+   * 从 `CoverCacheService` 的本地缓存文件**同步解码**并出图（无界 `decodeCover()` 的等价物）。
+   *
+   * 与 {@link paintCachedCoverSync}（字节缓存 4 首/16KB）互补：
+   * 那个只在**同一进程内**有效，换进程就没了；这个走磁盘，跨启动有效，覆盖面大得多。
+   * @param gen 代际号（同拍内换歌 ⇒ 作废）
+   * @returns 画上了返回 true
+   */
+  private paintLocalCoverSync(gen: number): boolean {
+    if (this.disposed || this.seed.length === 0) {
+      return false;
+    }
+    if (this.localCoverSeed === this.seed && this.localCoverPm !== undefined) {
+      // 这一首已经从本地文件解过一次：直接确保它在画
+      if (this.controller.node.src !== this.localCoverPm) {
+        this.controller.node.src = this.localCoverPm;
+        this.controller.node.invalidate();
+        this.onFrameNow();
+      }
+      return true;
+    }
+    let source: image.ImageSource | undefined = undefined;
+    let file: fs.File | undefined = undefined;
+    try {
+      const host: common.Context | undefined = this.hostContext();
+      if (host === undefined) {
+        return false;
+      }
+      const path: string = CoverCacheService.getInstance().cachedPathSync(host, this.seed);
+      if (path.length === 0) {
+        return false;
+      }
+      file = fs.openSync(path, fs.OpenMode.READ_ONLY);
+      source = image.createImageSource(file.fd);
+      const pm: image.PixelMap | undefined = source.createPixelMapSync();
+      if (pm === undefined) {
+        return false;
+      }
+      this.releaseLocalCover();
+      this.localCoverPm = pm;
+      this.localCoverSeed = this.seed;
+      this.controller.node.src = pm;
+      this.graceSpent = true;
+      this.clearGraceTimer();
+      this.controller.node.invalidate();
+      this.onFrameNow();
+      hilog.info(DOMAIN, TAG,
+        'RzdBgPhaseMesh source=local-file gen=%{public}d seedLen=%{public}d t=%{public}d',
+        gen, this.seed.length, Math.round(this.accMs));
+      return true;
+    } catch (err) {
+      hilog.warn(DOMAIN, TAG, 'RzdBgPhaseMesh local-file decode failed: %{public}s',
+        String(err).substring(0, 120));
+      return false;
+    } finally {
+      try {
+        if (source !== undefined) {
+          source.release();
+        }
+      } catch (e1) {
+        // 释放失败无补救
+      }
+      try {
+        if (file !== undefined) {
+          fs.closeSync(file);
+        }
+      } catch (e2) {
+        // 关不上就当关了
+      }
+    }
+  }
+
+  /** 取宿主上下文（缓存目录要用）。 */
+  private hostContext(): common.Context | undefined {
+    try {
+      return this.getUIContext().getHostContext();
+    } catch (err) {
+      return undefined;
+    }
+  }
+
+  /** 释放本地文件解出来的那张（换歌/退场时）。 */
+  private releaseLocalCover(): void {
+    const pm: image.PixelMap | undefined = this.localCoverPm;
+    this.localCoverPm = undefined;
+    this.localCoverSeed = '';
+    if (pm === undefined) {
+      return;
+    }
+    try {
+      pm.release();
+    } catch (err) {
+      // 已释放过无妨
+    }
+  }
+
   private paintCachedCoverSync(gen: number): boolean {
     if (this.disposed) {
       return false;

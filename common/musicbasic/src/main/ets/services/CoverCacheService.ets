@@ -120,6 +120,51 @@ export class CoverCacheService {
     return !this.state.clearing && job.generation === this.state.generation;
   }
 
+  /**
+   * **同步版**：这张封面在本地缓存里有文件就返回路径，否则空串（2026-11-18 新增）。
+   *
+   * 用途 = 搬无界的「本地解码」：无界点开播放页时 `decodeCover()` 是
+   * `fs.openSync` + 本地解码，**1 帧**就有真封面，所以它的背景首帧永远不会空。
+   * 我们以前只有异步 `resolve()`（要等网络），于是首帧只能等 —— 那 96ms 空白窗口就是这么来的。
+   * 有了这个同步查询，`MeshCoverBg` 就能在**同一帧**把已有封面画出来。
+   *
+   * ⚠️ 只做「查」不做「下」：不命中就返回空串，由调用方决定画兜底还是等。
+   * @param context 用于确定缓存目录（内部 `configure` 幂等）
+   * @param url 封面地址（与异步接口同一个 key 规则：sha256(utf8(url))）
+   */
+  cachedPathSync(context: common.Context, url: string): string {
+    if (url.length === 0) {
+      return '';
+    }
+    try {
+      this.configure(context);
+      const key: string = this.keySync(url);
+      if (key.length === 0) {
+        return '';
+      }
+      const path: string = this.directory + '/' + key + '.cover';
+      return fs.accessSync(path) ? path : '';
+    } catch (err) {
+      return '';
+    }
+  }
+
+  /** 同步算 key：与 {@link key} 同规则（sha256 hex），用 `digestSync`（先 updateSync 再 digestSync）。 */
+  private keySync(url: string): string {
+    try {
+      const md: cryptoFramework.Md = cryptoFramework.createMd('SHA256');
+      md.updateSync({ data: new Uint8Array(buffer.from(url, 'utf-8').buffer) });
+      const result: cryptoFramework.DataBlob = md.digestSync();
+      let key: string = '';
+      for (let i: number = 0; i < result.data.length; i++) {
+        key += result.data[i].toString(16).padStart(2, '0');
+      }
+      return key;
+    } catch (err) {
+      return '';
+    }
+  }
+
   private async run(job: CoverJob): Promise<string> {
     let key: string = '';
     let request: http.HttpRequest | undefined = undefined;
