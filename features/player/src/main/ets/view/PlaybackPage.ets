@@ -4440,12 +4440,23 @@ export struct PlaybackPage {
     //   这里在**展开起手**打一条自描述的行：这一页有没有源、缓存里那张还活着吗、
     //   key 对得上吗、释放责任在谁 —— 下次"背景消失"跑一次就能定位到是哪一环。
     //   排查关键字：`RzdBgPhase intro-start`。
+    // 分两级记：**先记只读字段**（不会抛），再记可能抛的计算字段。
+    // 这样即使 key 计算炸了，我们至少还有 `mesh`/`ver` 这两个关键读数。
+    try {
+      appendPlayLog('[RzdBgPhase] intro-start-A mesh=' +
+        (this.meshSrc !== undefined ? 1 : 0) + ' ver=' + this.meshSrcVersion +
+        ' inst=' + this.closeInstance);
+      MusicStoreService.getInstance().appendRuntimeDiagnostic(
+        '[RzdBgPhase] intro-start-A mesh=' + (this.meshSrc !== undefined ? 1 : 0) +
+        ' ver=' + this.meshSrcVersion + ' inst=' + this.closeInstance);
+    } catch (eA) {
+      // 连只读字段都写不出来：日志设施本身的问题
+    }
     try {
       const curKey: string = this.currentMeshKey();
       const cachePm: image.PixelMap | undefined = PlaybackPage.bgCachePm;
-      const introBgLine: string = '[RzdBgPhase] intro-start mesh=' + (this.meshSrc !== undefined ? 'pm' : 'none') +
-        ' ver=' + this.meshSrcVersion +
-        ' key=' + (curKey.length > 0 ? curKey.substring(0, 20) : '-') +
+      const introBgLine: string = '[RzdBgPhase] intro-start-B key=' +
+        (curKey.length > 0 ? curKey.substring(0, 20) : '-') +
         ' cacheKey=' + (PlaybackPage.bgCacheKey.length > 0 ?
           PlaybackPage.bgCacheKey.substring(0, 20) : '-') +
         ' keyMatch=' + (curKey.length > 0 && curKey === PlaybackPage.bgCacheKey ? 1 : 0) +
@@ -4454,11 +4465,9 @@ export struct PlaybackPage {
         ' cacheOwner=' + PlaybackPage.bgCacheOwner +
         ' inst=' + this.closeInstance;
       appendPlayLog(introBgLine);
-      // ★ 2026-11-18：**同时写进持久诊断**。用户贴日志时经常只给尾部（关闭链那几十行），
-      //   而「持久诊断（重启保留）」那一段一定会被带上 —— 这条因此不会再"正好被截掉"。
       MusicStoreService.getInstance().appendRuntimeDiagnostic(introBgLine);
     } catch (e) {
-      // 诊断绝不影响展开
+      // 计算字段抛了：A 行已经在，能定位到是这一步的问题
     }
     // 闂?**缂傚倷鑳堕崰宥囩博閹绢喖绀傞柕澶堝劚缂?+ 闂佸搫鍟版慨鐑藉疾椤愩埄鍤曢煫鍥ㄦ尭楠炴垿骞?*闂佹寧绋掔喊宥嗘櫠瀹ュ瀚夊璺侯儏閳數鈧鍠掗崑鎾绘煛閸屾粍鍤€缂佹唻绻濋弫宥夊醇閵忕姳鍖栭梺鍛婂灦閻綊鍩€椤戞寧绁伴柟鐧哥秮楠炴﹢顢橀悢宄邦棈闂佹悶鍎伴崟姗€鍩€椤戞寧顦风紒妤€鍊块獮蹇斿緞鐎ｎ偆绻侀梺褰掓涧椤戞垹妲愬鑸电劸闁瑰瓨甯為惌銈夊级閳哄倻鎳囬柛锝夋敱濞艰鈽夐弽銈呬壕?
     //   閻?闂佸綊娼ч鍡欌偓鍨壘椤垽鏁愰崨顔垮惈婵＄偟鎳撳畷顒佹叏?闂?闁荤姳璁查弲婵堝垝娴兼潙绠ラ悗锝庝簻閳笺垽鏌?
