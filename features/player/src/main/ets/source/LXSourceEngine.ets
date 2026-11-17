@@ -393,7 +393,9 @@ export struct LXSourceEngine {
     AppStorage.setOrCreate(AppStorageKeys.LX_WEB_MOUNTED, !skipWeb);
     LXSourceEngine.appendLog('引擎 WebView ' + (skipWeb ? '不挂载（QuickJS 接管）' : '挂载') +
       ' mode=' + mode + ' verdict=' + (persisted === undefined ? '未测' : (persisted ? '可' : '否')) +
-      ' canQuick=' + canQuick);
+      ' canQuick=' + canQuick +
+      ' raw=' + (MusicStoreService.getInstance().getQuickJsVerdictRaw().length > 0 ?
+        MusicStoreService.getInstance().getQuickJsVerdictRaw().substring(0, 80) : '-'));
     if (skipWeb) {
       // 不刷新、不注入：脚本交给 QuickJS。真失败会调 lxEngineEnsureWebView 把 Web 拉起来。
       return;

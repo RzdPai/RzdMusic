@@ -113,7 +113,7 @@ const KEY_LX_ENGINE_MODE: string = 'lx_engine_mode_v1';
  */
 // ★ 版本号随「引擎/宿主能力」变更而 bump：旧版本里记下的 `否` 可能来自应用自身的 bug
 //   （2026-11-17 的 PRELUDE 语法错误就把两个音源误判成"跑不了"），换版本即作废重测。
-const KEY_LX_QUICKJS_VERDICT: string = 'lx_quickjs_verdict_v2';
+const KEY_LX_QUICKJS_VERDICT: string = 'lx_quickjs_verdict_v3';
 /**
  * 音源脚本的注入通道：auto=快通道优先且失败自动回退 / chunked=强制旧的 base64 分片。
  * 留这一档是为了「快通道在真机上出问题时能不开新包就退回今天的表现」。
@@ -2215,6 +2215,16 @@ export class MusicStoreService {
       }
       store.putSync(KEY_LX_QUICKJS_VERDICT, tail.join(','));
       store.flush();
+    }
+
+    /**
+     * 判定表的**原始串**（只给日志诊断用）。
+     * ★ 2026-11-17：`verdict=否` 到底是 `0:cap`（缺能力）还是老版本的裸 `0`（已作废），
+     *   只看渲染后的 true/false 分不出来 —— 打原文一眼就清楚，也顺便能看出
+     *   "用户装的到底是不是新包"（新包里这个键叫 `_v3`）。
+     */
+    public getQuickJsVerdictRaw(): string {
+      return this.getQuickJsVerdictTable();
     }
 
     private getQuickJsVerdictTable(): string {
