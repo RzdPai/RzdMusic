@@ -4416,7 +4416,7 @@ export struct PlaybackPage {
     try {
       const curKey: string = this.currentMeshKey();
       const cachePm: image.PixelMap | undefined = PlaybackPage.bgCachePm;
-      appendPlayLog('[RzdBgPhase] intro-start mesh=' + (this.meshSrc !== undefined ? 'pm' : 'none') +
+      const introBgLine: string = '[RzdBgPhase] intro-start mesh=' + (this.meshSrc !== undefined ? 'pm' : 'none') +
         ' ver=' + this.meshSrcVersion +
         ' key=' + (curKey.length > 0 ? curKey.substring(0, 20) : '-') +
         ' cacheKey=' + (PlaybackPage.bgCacheKey.length > 0 ?
@@ -4425,7 +4425,11 @@ export struct PlaybackPage {
         ' cachePm=' + (cachePm !== undefined ? 1 : 0) +
         ' alive=' + (PlaybackPage.sharedMeshAlive() ? 1 : 0) +
         ' cacheOwner=' + PlaybackPage.bgCacheOwner +
-        ' inst=' + this.closeInstance);
+        ' inst=' + this.closeInstance;
+      appendPlayLog(introBgLine);
+      // ★ 2026-11-18：**同时写进持久诊断**。用户贴日志时经常只给尾部（关闭链那几十行），
+      //   而「持久诊断（重启保留）」那一段一定会被带上 —— 这条因此不会再"正好被截掉"。
+      MusicStoreService.getInstance().appendRuntimeDiagnostic(introBgLine);
     } catch (e) {
       // 诊断绝不影响展开
     }
