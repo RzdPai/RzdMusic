@@ -111,7 +111,9 @@ const KEY_LX_ENGINE_MODE: string = 'lx_engine_mode_v1';
  * 直接选 QuickJS，不必等一键测）。
  * 值格式：`id1=1,id2=0,…`（1=可跑 / 0=跑不了）；最多保留 40 条，超出丢最旧的。
  */
-const KEY_LX_QUICKJS_VERDICT: string = 'lx_quickjs_verdict_v1';
+// ★ 版本号随「引擎/宿主能力」变更而 bump：旧版本里记下的 `否` 可能来自应用自身的 bug
+//   （2026-11-17 的 PRELUDE 语法错误就把两个音源误判成"跑不了"），换版本即作废重测。
+const KEY_LX_QUICKJS_VERDICT: string = 'lx_quickjs_verdict_v2';
 /**
  * 音源脚本的注入通道：auto=快通道优先且失败自动回退 / chunked=强制旧的 base64 分片。
  * 留这一档是为了「快通道在真机上出问题时能不开新包就退回今天的表现」。

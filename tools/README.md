@@ -48,3 +48,32 @@ EOF
 ⚠️ **PRELUDE 是 ArkTS 的模板字符串**，里面一旦出现反引号，模块直接就语法崩。
 而且「找第一个反引号」的检查器会因为截断而误判通过 —— 导出时务必确认
 `qjs-prelude.js` 的字节数与预期接近（现在约 9 KB），或直接 `node tools/qjs-repro.js` 跑一遍。
+
+## 七、`check-prelude.py` —— 改 PRELUDE 后**必跑**
+
+```bash
+cd /root/Project/RzdMusic && python3 tools/check-prelude.py   # 退出码 0 才算过
+```
+
+它做两件事：
+1. 从 `QuickJsRuntime.ets` 抽出 `PRELUDE` 模板字符串；
+2. **模拟 ArkTS 模板字符串的转义处理**，把"真正发给 QuickJS 的那段 JS"写到
+   `tools/qjs-prelude.js`，再 `node --check`。
+
+### 为什么必须有它（2026-11-17 事故）
+
+XHR 垫片里写了 `out += '\\r\\n'`（只有一重转义）。文件里看着合法，
+`node --check 原文` 也通过 —— 但 **ArkTS 模板字符串会把 `\r\n` 变成真实换行**，
+字符串字面量被截断，真机直接：
+
+```
+[qjs] 未捕获异常: SyntaxError: unexpected end of string | stack= at rzd_prelude.js:250
+[qjs] self-test fail: 投递箱空/错，calls=0
+```
+
+后果不只是报错：`lx` 没装上 ⇒ QuickJS 取址必失败 ⇒ 判定被写成"跑不了"并持久化 ⇒
+**两个音源在 `混合` 模式里被永久判死**。
+
+所以：**PRELUDE 里凡是要发给 JS 的反斜杠，必须写双份**（`\\r\\n`、`/\\s+/`），
+并且每次改完跑这个脚本。顺带：PRELUDE 里**不能出现反引号**（会截断模板），
+脚本也会检查这一点。

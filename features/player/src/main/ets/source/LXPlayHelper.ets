@@ -379,31 +379,56 @@ function extractUrlFromValue(valueJson: string): string {
   return '';
 }
 
+/** `resolveUrlViaQuickJs` 的结果：地址 + 失败原因分类。 */
+class QuickJsResolveOutcome {
+  /** 取到的播放地址；空串 = 没取到 */
+  url: string = '';
+  /**
+   * 失败是**引擎侧**问题（PRELUDE 装配失败 / 会话起不来），不是"这支脚本跑不了"。
+   * ★ 2026-11-17：区分这两者 —— 引擎 bug 不能把某个音源永久判死。
+   */
+  engineBroken: boolean = false;
+}
+
+/** 本次运行内 QuickJS 引擎是否已被判定为坏（坏了就别再反复试，省 4s 超时）。 */
+let quickJsEngineBroken: boolean = false;
+
 /**
  * 用 QuickJS 取一次播放地址。
- * @returns 地址；拿不到返回空串（调用方据此回落 WebView）
+ * @returns 地址 + 是否为引擎侧失败
  */
-async function resolveUrlViaQuickJs(reqData: LXSourceRequestData): Promise<string> {
+async function resolveUrlViaQuickJs(reqData: LXSourceRequestData): Promise<QuickJsResolveOutcome> {
+  const out: QuickJsResolveOutcome = new QuickJsResolveOutcome();
+  if (quickJsEngineBroken) {
+    out.engineBroken = true;
+    return out;
+  }
   try {
     const activeId: string = MusicStoreService.getInstance().getActiveSource();
     if (activeId.length === 0 || activeId.indexOf('mfplat:') === 0) {
-      return '';
+      return out;
     }
     const script: string = await lxSourceManager.getScript(activeId);
     if (script.length === 0) {
       appendPlayLog('[qjs] 取不到脚本原文，回落 WebView');
-      return '';
+      return out;
     }
     const ready: boolean = await quickJsSession.open(activeId, script, 4000);
     if (!ready) {
-      appendPlayLog('[qjs] 会话未就绪，回落 WebView');
-      return '';
+      // 会话起不来分两种：PRELUDE 装配失败（引擎坏）/ 脚本 4s 内没 inited（脚本问题）。
+      // `open()` 内部已记日志；这里保守地按"引擎坏"处理一次，避免把应用 bug 记成脚本判定。
+      quickJsEngineBroken = true;
+      out.engineBroken = true;
+      appendPlayLog('[qjs] 会话未就绪 → 本次运行暂不再尝试 QuickJS，回落 WebView');
+      return out;
     }
     const valueJson: string = await quickJsSession.invoke('request', JSON.stringify(reqData), 8000);
-    return extractUrlFromValue(valueJson);
+    out.url = extractUrlFromValue(valueJson);
+    return out;
   } catch (e) {
     appendPlayLog('[qjs] 取址异常，回落 WebView: ' + JSON.stringify(e).substring(0, 140));
-    return '';
+    out.engineBroken = true;
+    return out;
   }
 }
 
@@ -521,14 +546,16 @@ export async function getLXMusicUrl(source: string, songId: string, quality: str
     (verdict === true || (verdict === undefined && scriptCanRunWithoutWebView(activeScriptId)));
   const wantQuickJs: boolean = engineMode === 'quickjs' || autoEligible || !engineReady;
   if (wantQuickJs && engineMode !== 'webview') {
-    const quickUrl: string = await resolveUrlViaQuickJs(reqData);
-    if (quickUrl.length > 0) {
+    const quickOut: QuickJsResolveOutcome = await resolveUrlViaQuickJs(reqData);
+    if (quickOut.url.length > 0) {
       rememberVerdict(activeScriptId, true);
-      logError('qjs ok ' + quickUrl.substring(0, 80));
-      return quickUrl;
+      logError('qjs ok ' + quickOut.url.substring(0, 80));
+      return quickOut.url;
     }
     // 记下"这支脚本在这台机器上跑不了"，下次 auto 直接走 WebView（不重复付超时）
-    rememberVerdict(activeScriptId, false);
+    if (!quickOut.engineBroken) {
+      rememberVerdict(activeScriptId, false);
+    }
     // ★ 2026-11-16：QuickJS 没接住 ⇒ 立刻把 WebView 拉起来（混合的"兜底腿"）。
     //   接下来 `sendReq` 会因为引擎未就绪而进队列（TTL 20s），页面加载完自动补发。
     if (lxEngineEnsureWebView !== null) {

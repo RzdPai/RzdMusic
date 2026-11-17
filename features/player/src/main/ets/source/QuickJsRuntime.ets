@@ -312,7 +312,7 @@ const PRELUDE: string = `
     XHR.prototype.getAllResponseHeaders = function () {
       var src = this._respHeaders || {};
       var out = '';
-      for (var k in src) { if (Object.prototype.hasOwnProperty.call(src, k)) { out += k + ': ' + src[k] + '\r\n'; } }
+      for (var k in src) { if (Object.prototype.hasOwnProperty.call(src, k)) { out += k + ': ' + src[k] + '\\r\\n'; } }
       return out;
     };
     XHR.prototype.getResponseHeader = function (k) {
@@ -510,6 +510,20 @@ export class QuickJsRuntime {
           (stack.length > 0 ? ' | stack=' + stack.substring(0, 400) : ''));
       };
       this.evaluate(PRELUDE, 'rzd_prelude.js');
+      // ★ 2026-11-17：**PRELUDE 自检**。真机出现过 "SyntaxError: unexpected end of string"
+      //   导致 `lx` 根本没装上，而调用方把它当成"脚本跑不了"记进了持久化判定 —— 一次
+      //   应用自身的 bug 就把某个音源永久判死。这里明确区分：PRELUDE 装不上 = 引擎坏，
+      //   不是脚本的问题，上层据此**不写判定**。
+      // 注意：lx 不存在时直接写 `typeof lx.request` 会抛 "cannot read property"，
+      // 所以先用三元短路，避免把"引擎坏"包装成一条吓人的异常日志。
+      const probe: string = this.evaluate(
+        '"typeof lx=" + typeof lx + "|request=" + (typeof lx === "object" ? typeof lx.request : "n/a")',
+        'rzd_probe.js');
+      if (probe.indexOf('typeof lx=object|request=function') !== 0) {
+        appendPlayLog('[qjs] PRELUDE 装配失败（' + probe + '）—— 引擎侧 bug，不记为脚本判定');
+        this.release();
+        return false;
+      }
       return true;
     } catch (e) {
       appendPlayLog('[qjs] 启动失败: ' + JSON.stringify(e).substring(0, 200));

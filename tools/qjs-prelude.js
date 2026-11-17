@@ -1,5 +1,3 @@
-// 由 features/player/src/main/ets/source/QuickJsRuntime.ets 的 PRELUDE 抽出（自动生成，别手改）。
-// 用途：在没有真机的情况下，用 node 复现 QuickJS 侧脚本失败。见 tools/README.md。
 
 (function () {
   if (globalThis.__qjsReady) { return; }
@@ -136,6 +134,176 @@
     globalThis.clearInterval = clearTimer;
   }
 
+  // ── CompressionStream / DecompressionStream：**明确不支持** ────────────────
+  // 2026-11-16 结论：@ohos.zlib 只有**文件/fd 级**接口（gzopen/zip/unzip），
+  // 没有内存版 inflate。要做就得落临时文件中转（每次 2 次文件 IO + zlib），
+  // 而目前**没有一支实测脚本用到它** —— 与其写一条没验证过的半吊子路径，
+  // 不如让它**立刻失败**：宿主侧 qjs miss -> webview 会接住并回落 ArkWeb。
+  // 等真出现 zip=true 的脚本再按临时文件方案补（见 docs/TODO-20261115.md）。
+  if (typeof globalThis.DecompressionStream === 'undefined') {
+    globalThis.DecompressionStream = function () {
+      throw new Error('DecompressionStream 尚未在 QuickJS 侧实现（请回落 ArkWeb）');
+    };
+  }
+  if (typeof globalThis.CompressionStream === 'undefined') {
+    globalThis.CompressionStream = function () {
+      throw new Error('CompressionStream 尚未在 QuickJS 侧实现（请回落 ArkWeb）');
+    };
+  }
+
+  // ── WebCrypto 子集（2026-11-15：把"签名类"能力从 WebView 搬到 ArkTS）──────
+  // LX 脚本用 crypto.subtle 绝大多数是为了**签名**：digest(SHA-256) 与 HMAC。
+  // 这里给出这两个的最小实现（底层是 ArkTS 的 cryptoFramework），
+  // 于是"用了 crypto.subtle"不再一票否决 QuickJS —— 真用到 AES/RSA 之类没实现的算子时，
+  // Promise 会 reject，宿主侧 qjs miss -> webview 接住并记住判定（失败即回落）。
+  var b64FromBuf = function (buf) {
+    var bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+    var bin = '';
+    for (var i = 0; i < bytes.length; i++) { bin += String.fromCharCode(bytes[i]); }
+    return globalThis.btoa(bin);
+  };
+  var bufFromB64 = function (b64) {
+    var bin = globalThis.atob(b64);
+    var out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) { out[i] = bin.charCodeAt(i); }
+    return out.buffer;
+  };
+  var normalizeAlg = function (alg) {
+    var m = alg && alg.hash ? alg.hash : alg;
+    var name = (m && m.name) ? m.name : m;
+    return String(name || '').toUpperCase().replace('-', '');
+  };
+  if (typeof globalThis.crypto === 'undefined') { globalThis.crypto = {}; }
+  if (typeof globalThis.crypto.getRandomValues !== 'function') {
+    globalThis.crypto.getRandomValues = function (arr) {
+      var n = arr.length;
+      globalThis.__qjsCall('crypto.randomBytes', { n: n }).then(function (b64) {
+        var bytes = new Uint8Array(bufFromB64(b64));
+        for (var i = 0; i < n && i < bytes.length; i++) { arr[i] = bytes[i]; }
+      });
+      return arr;
+    };
+  }
+  if (typeof globalThis.crypto.subtle === 'undefined') {
+    globalThis.crypto.subtle = {
+      digest: function (alg, data) {
+        return globalThis.__qjsCall('crypto.digest',
+          { alg: normalizeAlg(alg), b64: b64FromBuf(data) }).then(function (out) {
+            return bufFromB64(out);
+          });
+      },
+      importKey: function (format, keyData, alg) {
+        // 只支持 raw 的 HMAC 密钥：直接存字节，sign 时再交给宿主
+        return Promise.resolve({ __hmacKeyB64: b64FromBuf(keyData), __alg: normalizeAlg(alg) });
+      },
+      sign: function (alg, key, data) {
+        if (!key || !key.__hmacKeyB64) {
+          return Promise.reject(new Error('unsupported key for crypto.subtle.sign'));
+        }
+        return globalThis.__qjsCall('crypto.hmac', {
+          alg: normalizeAlg(alg) || key.__alg,
+          keyB64: key.__hmacKeyB64,
+          dataB64: b64FromBuf(data)
+        }).then(function (out) { return bufFromB64(out); });
+      },
+      // 未实现的算子：**明确 reject**（让宿主回落 WebView，别静默返回错数据）
+      encrypt: function () { return Promise.reject(new Error('crypto.subtle.encrypt not available in QuickJS')); },
+      decrypt: function () { return Promise.reject(new Error('crypto.subtle.decrypt not available in QuickJS')); },
+      verify: function () { return Promise.reject(new Error('crypto.subtle.verify not available in QuickJS')); }
+    };
+  }
+
+  // ── XMLHttpRequest（2026-11-15：按**特性**路由的关键一块）───────────────
+  // LX 脚本里有一部分是直接用 new XMLHttpRequest() 的，不走 lx.request。
+  // 以前这类脚本只能整支丢给 WebView；现在用它把请求转成宿主调用（ArkTS 侧 http），
+  // 于是「支持 XHR」不再等于「必须有 WebView」——这就是按特性混合的意义。
+  if (typeof globalThis.XMLHttpRequest === 'undefined') {
+    var XHR = function () {
+      this.readyState = 0;
+      this.status = 0;
+      this.statusText = '';
+      this.responseText = '';
+      this.response = '';
+      this.responseType = '';
+      this.withCredentials = false;
+      this.timeout = 0;
+      this.onload = null;
+      this.onerror = null;
+      this.onreadystatechange = null;
+      this.ontimeout = null;
+      this._headers = {};
+      this._method = 'GET';
+      this._url = '';
+      this._body = null;
+      this._aborted = false;
+    };
+    XHR.prototype.open = function (method, url) {
+      this._method = String(method || 'GET').toUpperCase();
+      this._url = String(url || '');
+      this.readyState = 1;
+      if (typeof this.onreadystatechange === 'function') { this.onreadystatechange(); }
+    };
+    XHR.prototype.setRequestHeader = function (k, v) { this._headers[k] = v; };
+    XHR.prototype.getAllResponseHeaders = function () {
+      var src = this._respHeaders || {};
+      var out = '';
+      for (var k in src) { if (Object.prototype.hasOwnProperty.call(src, k)) { out += k + ': ' + src[k] + '\r\n'; } }
+      return out;
+    };
+    XHR.prototype.getResponseHeader = function (k) {
+      var src = this._respHeaders || {};
+      var hit = src[String(k).toLowerCase()];
+      return hit === undefined ? null : hit;
+    };
+    XHR.prototype.abort = function () { this._aborted = true; };
+    XHR.prototype.send = function (body) {
+      var self = this;
+      this._body = body === undefined ? null : body;
+      var opts = { method: this._method, headers: this._headers, timeout: this.timeout > 0 ? this.timeout : 15000 };
+      if (this._body !== null) { opts.body = typeof this._body === 'string' ? this._body : JSON.stringify(this._body); }
+      globalThis.__qjsCall('request', { url: this._url, options: opts }).then(function (resp) {
+        if (self._aborted) { return; }
+        self.readyState = 4;
+        self.status = resp && resp.statusCode ? resp.statusCode : 0;
+        self.statusText = (resp && resp.statusMessage) || '';
+        self._respHeaders = (resp && resp.headers) || {};
+        var raw = resp && resp.raw !== undefined && resp.raw !== null ? resp.raw : '';
+        self.responseText = typeof raw === 'string' ? raw : JSON.stringify(raw);
+        self.response = self.responseType === 'json' ? (resp ? resp.body : null) : self.responseText;
+        if (typeof self.onreadystatechange === 'function') { self.onreadystatechange(); }
+        if (typeof self.onload === 'function') { self.onload(); }
+      }, function (err) {
+        if (self._aborted) { return; }
+        self.readyState = 4;
+        self.status = 0;
+        if (typeof self.onerror === 'function') { self.onerror(err); }
+      });
+    };
+    globalThis.XMLHttpRequest = XHR;
+  }
+
+  // ── TextEncoder / TextDecoder（QuickJS 无；脚本用它处理 UTF-8/GBK 字节）──
+  if (typeof globalThis.TextEncoder === 'undefined') {
+    globalThis.TextEncoder = function () {};
+    globalThis.TextEncoder.prototype.encode = function (str) {
+      var s = String(str === undefined ? '' : str);
+      var utf8 = unescape(encodeURIComponent(s));
+      var out = new Uint8Array(utf8.length);
+      for (var i = 0; i < utf8.length; i++) { out[i] = utf8.charCodeAt(i); }
+      return out;
+    };
+  }
+  if (typeof globalThis.TextDecoder === 'undefined') {
+    globalThis.TextDecoder = function (enc) { this.encoding = enc || 'utf-8'; };
+    globalThis.TextDecoder.prototype.decode = function (bytes) {
+      if (!bytes) { return ''; }
+      var arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+      var bin = '';
+      for (var i = 0; i < arr.length; i++) { bin += String.fromCharCode(arr[i]); }
+      try { return decodeURIComponent(escape(bin)); } catch (e) { return bin; }
+    };
+  }
+
   // ── localStorage / sessionStorage：内存版（脚本用它们存 token）──
   if (typeof globalThis.localStorage === 'undefined') {
     var makeStore = function () {
@@ -215,7 +383,7 @@
     // atob/btoa 是同步的、且脚本里用得极多 ⇒ 用 QuickJS 自带能力实现，不走投递箱
     globalThis.atob = function (b64) {
       var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
-      var str = String(b64).replace(/[\\s=]+/g, '');
+      var str = String(b64).replace(/[\s=]+/g, '');
       var out = '';
       for (var i = 0; i < str.length; i += 4) {
         var e1 = chars.indexOf(str.charAt(i)), e2 = chars.indexOf(str.charAt(i + 1)),
@@ -241,3 +409,4 @@
     };
   }
 })();
+
