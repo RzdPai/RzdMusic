@@ -386,9 +386,72 @@ class LXSourceManager {
    * 成功后注意：脚本与列表都写进 `filesDir`，**重启依然在**；失败会如实返回原因，
    * 不会再出现「提示已导入、实际没落盘、重启就没了」。
    * @param scriptRaw 脚本原文。
+   * @param sourceUrl 「从链接导入」时的源地址（文件导入传空串）。存下来给「检查更新」用。
    * @returns 导入结果（ok / message / info）。
    */
-  importApi(scriptRaw: string): LXApiImportResult {
+  /**
+   * **就地替换**某个音源脚本（在线更新的落地动作）。
+   *
+   * ★ 2026-11-17（待办 §8.2 #4）：「检查更新」查到新版后，以前只能让用户自己去作者主页
+   *   手动重导 —— 而 `importApi()` 每次都会**新建一个 id**，重导一次就多一条重复音源。
+   *   这里保持 id 不变，只换脚本内容 + 刷新脚本自述信息（名字/版本/作者/主页/描述），
+   *   用户自己设过的东西（备注、平台裁剪 `platformOverride`、归属订阅 `subId`、`sourceUrl`）一律保留。
+   *
+   * @param apiId 要更新的音源 id
+   * @param scriptRaw 新脚本原文
+   * @returns 导入结果（info 是更新后的条目）
+   */
+  replaceApiScript(apiId: string, scriptRaw: string): LXApiImportResult {
+    if (!this.ready()) {
+      return { ok: false, message: '存储目录未就绪', info: null };
+    }
+    let parsed: ApiScriptInfo;
+    try {
+      parsed = this.parseScriptInfo(scriptRaw);
+    } catch (err) {
+      return { ok: false, message: '新脚本解析失败：' + ((err as Error).message ?? ''), info: null };
+    }
+    const list: LXUserApiInfo[] = this.getApiList();
+    let idx: number = -1;
+    for (let i: number = 0; i < list.length; i++) {
+      if (list[i].id === apiId) {
+        idx = i;
+        break;
+      }
+    }
+    if (idx < 0) {
+      return { ok: false, message: '音源不存在', info: null };
+    }
+    // 先落脚本，成功后再改列表（与 importApi 同口径：不留半成品）
+    this.saveScript(apiId, scriptRaw);
+    if (!fs.accessSync(this.getScriptFilePath(apiId))) {
+      return { ok: false, message: '脚本写入失败', info: null };
+    }
+    const old: LXUserApiInfo = list[idx];
+    const next: LXUserApiInfo = {
+      id: old.id,
+      name: parsed.name.length > 0 ? parsed.name : old.name,
+      description: parsed.description,
+      allowShowUpdateAlert: old.allowShowUpdateAlert,
+      author: parsed.author.length > 0 ? parsed.author : old.author,
+      homepage: parsed.homepage.length > 0 ? parsed.homepage : old.homepage,
+      version: parsed.version,
+      kind: old.kind,
+      platform: old.platform,
+      subId: old.subId,
+      // 保留用户设置：平台裁剪 / 备注 / 来源链接
+      sources: old.sources,
+      platformOverride: old.platformOverride,
+      remark: old.remark,
+      sourceUrl: old.sourceUrl
+    };
+    list[idx] = next;
+    this.apiList = list;
+    this.saveApiListToFile();
+    return { ok: true, message: next.name + ' 已更新到 ' + next.version, info: next };
+  }
+
+  importApi(scriptRaw: string, sourceUrl: string = ''): LXApiImportResult {
     if (!this.ready()) {
       hilog.error(DOMAIN, TAG, 'importApi aborted: filesDir not ready');
       return { ok: false, message: '存储目录未就绪，导入失败', info: null };
@@ -448,7 +511,8 @@ class LXSourceManager {
       kind: 'lx',
       platform: '',
       subId: '',
-      sources: {}
+      sources: {},
+      sourceUrl: sourceUrl.trim()
     };
     // 先落脚本再改列表：任何一步失败都不要往列表里塞半成品
     this.saveScript(apiId, scriptRaw);

@@ -972,8 +972,108 @@ export struct SettingsDetailPage {
       });
       return;
     }
-    // ③ 该源确实没有任何更新线索：静默（只在日志里留痕）
-    appendPlayLog('[RzdSourceUpdate] ' + api.name + ' no update: ' + info.error);
+    // ③ 没有告警、也没有被拦的 URL。
+    //   ★ 2026-11-17（待办 §8.2 #4）：这一段**原来是静默的** —— 用户点「检查更新」什么都不发生。
+    //   现在按"有没有在线地址"如实说明，能查到就真查：
+    //   · 有来源链接（`sourceUrl`，从链接导入时存下的）⇒ 重新拉取并比对脚本 `@version`；
+    //   · 属于订阅但订阅地址为空 ⇒ 文件导入的订阅，明确告知要重新选文件；
+    //   · 既无链接也无所属订阅 ⇒ 本地文件导入的洛雪脚本，明确告知要重新导入脚本。
+    const srcUrl: string = (api.sourceUrl ?? '').trim();
+    if (srcUrl.length > 0) {
+      await this.recheckFromSourceUrl(api, srcUrl);
+      return;
+    }
+    if (api.subId.length > 0) {
+      let subUrl: string = '';
+      const subs: MfSubscriptionInfo[] = lxSourceManager.getSubscriptions();
+      for (let i: number = 0; i < subs.length; i++) {
+        if (subs[i].id === api.subId) {
+          subUrl = subs[i].url;
+          break;
+        }
+      }
+      appendPlayLog('[RzdSourceUpdate] ' + api.name + ' sub=' + api.subId + ' subUrl=' +
+        (subUrl.length > 0 ? subUrl.substring(0, 60) : '-'));
+      this.toast(subUrl.length > 0
+        ? ('「' + api.name + '」暂时没有查到更新线索（订阅地址：' + subUrl + '）')
+        : ('「' + api.name + '」这份订阅来自本地文件，没有在线地址可比对；有新版请重新选择文件导入'));
+      return;
+    }
+    this.toast('「' + api.name + '」不是从链接导入的，没有在线更新地址；有新版请重新导入脚本文件');
+  }
+
+  /**
+   * 用音源的来源链接重新拉一次脚本，比对 `@version`（用户点「检查更新」且没有官报告警时才会走到）。
+   *
+   * 这是「订阅在线更新」的落地：文件导入没地址（如实说明），链接导入有地址（这里真查），
+   * 查到新版可以直接**就地替换**（`replaceApiScript`，id 不变、不会多出一条重复音源）。
+   */
+  private async recheckFromSourceUrl(api: LXUserApiInfo, srcUrl: string): Promise<void> {
+    const req: http.HttpRequest = http.createHttp();
+    let text: string = '';
+    let netError: string = '';
+    try {
+      const resp: http.HttpResponse = await req.request(srcUrl, {
+        method: http.RequestMethod.GET,
+        connectTimeout: 10000,
+        readTimeout: 15000,
+        header: { 'User-Agent': 'rzdmusic/2.0' }
+      });
+      if (resp.responseCode === 200) {
+        text = typeof resp.result === 'string'
+          ? resp.result as string
+          : JSON.stringify(resp.result);
+      } else {
+        netError = 'HTTP ' + resp.responseCode;
+      }
+    } catch (err) {
+      netError = (err as Error).message ?? '网络失败';
+    } finally {
+      req.destroy();
+    }
+    if (text.length === 0) {
+      appendPlayLog('[RzdSourceUpdate] ' + api.name + ' recheck failed: ' + netError);
+      this.toast('「' + api.name + '」重新拉取失败：' + netError);
+      return;
+    }
+    const m: RegExpExecArray | null = /@version\s+([^\r\n*]{1,36})/.exec(text);
+    const latest: string = m !== null ? m[1].trim() : '';
+    appendPlayLog('[RzdSourceUpdate] ' + api.name + ' recheck current=' + api.version +
+      ' latest=' + latest + ' len=' + text.length);
+    if (latest.length === 0) {
+      // 拿不到版本号：不瞎猜「是否有新版」，让用户能自己看
+      this.getUIContext().getPromptAction().showDialog({
+        title: '已重新拉取该音源',
+        message: '但没从脚本头部解析到 @version，无法判断是否有新版。\n' +
+          '可以据此地址重新导入：\n' + srcUrl,
+        buttons: [{ text: '知道了', color: this.themeState.color }]
+      });
+      return;
+    }
+    if (latest === api.version) {
+      this.toast('「' + api.name + '」已是最新版本（' + latest + '）');
+      return;
+    }
+    this.getUIContext().getPromptAction().showDialog({
+      title: '发现新版本',
+      message: '「' + api.name + '」当前 ' + api.version + '，最新 ' + latest + '。\n' +
+        '可以直接就地更新（音源 id 与你的设置都会保留）。',
+      buttons: [
+        { text: '取消', color: '#666666' },
+        { text: '立即更新', color: this.themeState.color }
+      ]
+    }).then((result) => {
+      if (result.index !== 1) {
+        return;
+      }
+      const r: LXApiImportResult = lxSourceManager.replaceApiScript(api.id, text);
+      appendPlayLog('[RzdSourceUpdate] replace ok=' + r.ok + ' msg=' + r.message);
+      this.toast(r.ok ? ('已更新到 ' + latest) : ('更新失败：' + r.message));
+      if (r.ok) {
+        this.refresh();
+        this.schedulePlatformRefresh();
+      }
+    });
   }
 
   /** 用系统浏览器打开外部链接（更新页/主页这类非脚本链接走这里，避免把网页当脚本导入）。 */
@@ -1157,7 +1257,10 @@ export struct SettingsDetailPage {
           return;
         }
         // ② 单脚本：LX 脚本 / MusicFree 插件自动分派
-        const message: string = await importSourceScriptAuto(script, '');
+        // ★ 2026-11-17（待办 §8.2 #4）：**把来源 URL 一起存下去** —— 以前 `('')` 把 URL 扔掉，
+        //   导致这类音源在「检查更新」里永远只能沉默。注意先取出再清空（下面会 `onlineUrl = ''`）。
+        const importedFrom: string = this.onlineUrl.trim();
+        const message: string = await importSourceScriptAuto(script, '', importedFrom);
         this.refresh();
         this.pathStack.pop();
         this.onlineUrl = '';

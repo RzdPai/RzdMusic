@@ -464,11 +464,13 @@ export function looksLikeMusicFreePlugin(text: string): boolean {
  * @param fallbackName 名字兜底（订阅里给的 name 或文件名）
  * @returns 给用户看的提示
  */
-export async function importSourceScriptAuto(script: string, fallbackName: string): Promise<string> {
+export async function importSourceScriptAuto(script: string, fallbackName: string,
+  sourceUrl: string = ''): Promise<string> {
   if (looksLikeMusicFreePlugin(script)) {
     return await importMusicFreePluginScript(script, fallbackName);
   }
-  const result = lxSourceManager.importApi(script);
+  // 洛雪脚本：把「从哪条链接拉来的」一起存下，「检查更新」才有地址可重新拉取比对
+  const result = lxSourceManager.importApi(script, sourceUrl);
   if (!result.ok) {
     throw new Error(result.message);
   }
