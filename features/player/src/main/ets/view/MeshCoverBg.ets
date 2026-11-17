@@ -837,15 +837,19 @@ export struct MeshCoverBg {
     const blank: boolean = this.controller.node.src === null;
     const elapsed: number = Date.now() - this.mountMs;
     const withinGrace: boolean = !this.graceSpent && elapsed < FIRST_SOURCE_GRACE_MS;
+    // ★★★ 2026-11-18（用户实测：「现在只会概率背景消失了」）：**取消"故意空白"窗口**。
+    //   原设计照搬无界：它点开播放页时封面是 `fs.openSync` + 本地解码，1 帧就上真图，
+    //   所以留 96ms 空白等真源、绝不先亮一张哈希色。但**我们的封面是网络下载**，
+    //   不保证 96ms 到 ⇒ 展开动画从挂载第 0 帧开始时，前 ~96ms 背景就是空的
+    //   （真机日志 `fallback hold-blank` 就是它）。
+    //   现在改成：**永远先画兜底色**（宁可颜色先不准，也不让屏上出现空洞）。
+    //   真源到手后 `source=cover` 会覆盖它，观感上是"颜色从接近的色块过渡到真封面"。
+    //   ⇒ 这条分支保留日志（`fallback grace-skip`），方便确认"到底是不是这一步导致的空白"。
     if (blank && withinGrace) {
-      this.controller.node.src = null;
-      this.controller.node.invalidate();
-      this.onFrameNow();
       hilog.info(DOMAIN, TAG,
-        'RzdBgPhaseMesh fallback hold-blank gen=%{public}d elapsed=%{public}d seedLen=%{public}d',
+        'RzdBgPhaseMesh fallback grace-skip（改为立刻画兜底，不再空白）gen=%{public}d ' +
+          'elapsed=%{public}d seedLen=%{public}d',
         gen, Math.round(elapsed), this.seed.length);
-      this.scheduleGracePaint();
-      return;
     }
     this.graceSpent = true;
     this.clearGraceTimer();
