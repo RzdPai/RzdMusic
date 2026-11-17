@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<!--
+  听歌识曲的**指纹计算宿主页** —— 离屏 Web 组件加载它, 见 `services/AfpBridge.ets`。
+
+  ★★★ 为什么要一个 Web 组件才能算指纹:
+    指纹算法是网易云的 WebAssembly(`afp.wasm.js` 里 base64 内联的 300KB wasm),
+    而 **ArkTS 与本仓的 quickjs 沙箱都不支持 WebAssembly** —— ArkWeb 是 Chromium,
+    是这台设备上唯一能跑 wasm 的地方。
+
+  ★ 两个 script 的**顺序不能反**: `afp.wasm.js` 顶层是 `const WASM_BINARY = '<base64>'`,
+    `afp.js` 靠 `typeof WASM_BINARY == 'undefined'` 判断要不要去 `require()` 它。
+    先加载二进制那份 ⇒ 走同一个全局词法环境里的那个常量, **不触发 require**
+    (浏览器里没有 require, 反了会 ReferenceError)。
+
+  ⚠️ 这一页**不显示**、不接受用户输入, 只是一个计算容器。
+-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>afp</title>
+</head>
+<body>
+<script src="afp.wasm.js"></script>
+<script src="afp.js"></script>
+<script>
+  'use strict';
+
+  // ⚠️⚠️ 覆盖上游的 `b64encode`: 它写的是 `btoa(String.fromCharCode(...data))` ——
+  //   spread 会把每个字节摊成一个实参, 指纹一长就 **RangeError: Maximum call stack
+  //   size exceeded**。这里按 32KB 分块, 语义完全相同。
+  //   ★ 覆盖必须在 afp.js **之后**(它在顶层就给 globalThis 赋了一份);
+  //     而 GenerateFP 是**调用时**才读 globalThis.b64encode ⇒ 覆盖生效。
+  globalThis.b64encode = function (data) {
+    var CHUNK = 0x8000;
+    var out = '';
+    for (var i = 0; i < data.length; i += CHUNK) {
+      out += String.fromCharCode.apply(null, data.subarray(i, i + CHUNK));
+    }
+    return btoa(out);
+  };
+
+  /** base64(Int16LE PCM) → Int16Array */
+  function b64ToInt16(b64) {
+    var bin = atob(b64);
+    var n = bin.length;
+    var u8 = new Uint8Array(n);
+    for (var i = 0; i < n; i++) {
+      u8[i] = bin.charCodeAt(i);
+    }
+    // ★ 奇数字节时丢掉最后半个采样(不可能发生, 但别让 Int16Array 抛)
+    return new Int16Array(u8.buffer, 0, n >> 1);
+  }
+
+  /**
+   * ArkTS 侧调它发起一次计算。
+   * ★ PCM **不作为参数传进来** —— 它有几百 KB, 塞进 `runJavaScript` 的脚本字符串里
+   *   既难读也有长度风险。改成 JS 主动向 `afpHost.pullPcm()` 取(见 AfpBridge)。
+   */
+  window.afpRun = function (seq) {
+    try {
+      var b64 = afpHost.pullPcm();
+      if (!b64) {
+        afpHost.onErr(seq, 'no-pcm');
+        return;
+      }
+      var i16 = b64ToInt16(b64);
+      // 指纹算法吃的是 8kHz 单声道 **Float32**(±1.0), 与 Web 侧 AudioBuffer 同口径
+      var f32 = new Float32Array(i16.length);
+      for (var i = 0; i < i16.length; i++) {
+        f32[i] = i16[i] / 32768;
+      }
+      GenerateFP(f32).then(
+        function (fp) { afpHost.onFp(seq, fp); },
+        function (e) { afpHost.onErr(seq, String((e && e.message) || e)); }
+      );
+    } catch (e) {
+      afpHost.onErr(seq, String((e && e.message) || e));
+    }
+  };
+
+  /** 给 ArkTS 侧确认"wasm 那两个脚本真的到位了" —— 见 AfpBridge.ensureReady */
+  window.afpReady = function () {
+    return typeof GenerateFP === 'function' && typeof WASM_BINARY === 'string';
+  };
+</script>
+</body>
+</html>

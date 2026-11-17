@@ -1837,10 +1837,15 @@ export struct PlaybackPage {
     this.logCloseNodes('after-reset', closeNodes);
     // ★ 残留判据：快照层仍归快照所有、但图已经没了 ⇒ 屏上就是"播放页封面位置的一块残留"。
     //   grep 关键字：`RzdCoverLeak owner-without-pix`
-    if (this.expandState.snapshotShrinkOwnedFlag() && this.morphShrinkState().pixmap === undefined) {
+    // ★ 2026-11-17：判据必须用 **reset() 之前**抓到的 `pixmap`。
+    //   以前这里重新读 `morphShrinkState().pixmap` —— 而上面几行刚 `reset()` 清过它，
+    //   于是只要 own 标记还在就**必然命中**，日志里那条 `owner-without-pix` 是**假报警**，
+    //   会把人往"快照图丢了"上引（真机 11:25:47 那条就是）。现在改用快照值，只在真丢图时报。
+    if (this.expandState.snapshotShrinkOwnedFlag() && pixmap === undefined) {
       MusicStoreService.getInstance().appendRuntimeDiagnostic(
         `RzdCoverLeak owner-without-pix path=${path} instance=${this.closeInstance} token=${this.closeToken} ` +
-          `snapFlight=${this.snapshotFlight ? 1 : 0} coverHidden=${this.coverPublishHidden ? 1 : 0}`);
+          `snapFlight=${this.snapshotFlight ? 1 : 0} coverHidden=${this.coverPublishHidden ? 1 : 0} ` +
+          `fallback=${fallback ? 1 : 0}`);
     }
     // ★ 封面残留排查（2026-10-28）：关闭链跑完后，把"快照层是否还占着"打全。
     //   判据：snapOwned=1 但 pix=0 ⇒ 快照层还挂着却已没有图（观感就是一张残留封面）。
@@ -5037,11 +5042,20 @@ export struct PlaybackPage {
       //   排查关键字：`snapshot-callback`。
       const errCode: string = (err === null || err === undefined) ? '-' :
         `${(err as BusinessError).code}`;
-      const errMsg: string = (err === null || err === undefined) ? '-' :
-        `${(err as BusinessError).message}`;
+      // ★ 2026-11-17（用户日志 `snapshot-callback miss code=undefined pix=1`）：
+      //   这里的 `ok/miss` 以前按 **err 是否为空** 判 ⇒ 只要回调带了任何 err 对象就写 `miss`，
+      //   哪怕图是好的（`pix=1`）。真正的判据从下一行起一直是 `pixmap`，两处口径不一致
+      //   ⇒ 日志把人往"快照失败"引，实际是成功的。现在统一按 `pixmap` 判。
+      let errDetail: string = '-';
+      if (err !== null && err !== undefined) {
+        const be: BusinessError = err as BusinessError;
+        errDetail = (be.code === undefined && be.message === undefined)
+          ? JSON.stringify(err).substring(0, 120)   // 空壳 err：至少留下它到底是什么
+          : (`${be.code}:${be.message}`);
+      }
       this.closeDiagnostic(
-        `snapshot-callback ${(err === null || err === undefined) && pixmap !== undefined ? 'ok' : 'miss'} ` +
-          `code=${errCode} pix=${pixmap !== undefined ? 1 : 0} msg=${errMsg}`);
+        `snapshot-callback ${pixmap !== undefined ? 'ok' : 'miss'} ` +
+          `code=${errCode} pix=${pixmap !== undefined ? 1 : 0} err=${errDetail}`);
       // ★★★ 2026-10-22（**照无界**：判据只看 `pixmap`）：真机日志 `code=undefined pix=1` 证明
       //   快照一直是成功的；`err` 只是个没有 code 的空壳。按 `err` 判失败 = 白扔一张好图、
       //   退回第 ② 支反形变（那才是"两张封面"的来源）。
