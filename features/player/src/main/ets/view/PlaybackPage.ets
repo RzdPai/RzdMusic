@@ -9040,6 +9040,27 @@ export struct PlaybackPage {
               if (this.isClosing || this.expandState.morphStage === MorphStage.LANDING ||
                 (sinceCloseMs >= 0 && sinceCloseMs < PlaybackPage.CLOSE_WINDOW_MS)) {
                 this.diagAppearBranch = 'skipClose';
+                // ★ 2026-11-18：**这条分支以前完全没有诊断**。
+                //   用户"快速开→立即返回"的测法（间隔 ~1s < CLOSE_WINDOW_MS=1500）**永远**走这里，
+                //   于是 `playExpandIntro()` 一次都不跑 —— 这就是三份日志里都没有 `intro-begin` 的原因。
+                //   这里补一条同口径的自描述行（写在**独立的 try** 里，绝不被其它计算拖累）。
+                try {
+                  appendPlayLog('[RzdBgPhase] intro-skip sinceClose=' + sinceCloseMs +
+                    ' stage=' + this.expandState.morphStage +
+                    ' mesh=' + (this.meshSrc !== undefined ? 1 : 0) +
+                    ' ver=' + this.meshSrcVersion +
+                    ' cachePm=' + (PlaybackPage.bgCachePm !== undefined ? 1 : 0) +
+                    ' inst=' + this.closeInstance);
+                  MusicStoreService.getInstance().appendRuntimeDiagnostic(
+                    '[RzdBgPhase] intro-skip sinceClose=' + sinceCloseMs +
+                    ' stage=' + this.expandState.morphStage +
+                    ' mesh=' + (this.meshSrc !== undefined ? 1 : 0) +
+                    ' ver=' + this.meshSrcVersion +
+                    ' cachePm=' + (PlaybackPage.bgCachePm !== undefined ? 1 : 0) +
+                    ' inst=' + this.closeInstance);
+                } catch (e) {
+                  // 诊断绝不影响进场
+                }
                 PlaybackPage.ev('AP', `skipClose since=${sinceCloseMs}`);
                 Logger.info(PlaybackPage.logTag,
                   `RzdMorphOnAppear skip intro, isClosing=${this.isClosing} ` +
