@@ -495,6 +495,16 @@ export struct PlaybackPage {
    *   与它无关的"关闭期不给播放页封面出图"是本仓适配门，见上面 `coverPublishHidden`。
    */
   private coverHiddenScale: number = 0;
+  /**
+   * 本次关闭要不要打**节点快照**（`RzdCloseNodes` 那 6 行，每行 ~1KB）。
+   *
+   * ★ 2026-11-18：「持久诊断」缓冲只有 5000 **字符**，而一次关闭的 6 条节点快照就有 ~6KB
+   *   ⇒ 连关几次就把整段缓冲刷光，连我刚加的 `RzdBgPhase intro-start` 都被挤掉
+   *   （用户连贴两份日志都找不到它，就是这个原因）。
+   *   ⇒ 默认**不打**；只有本次关闭出现过异常（快照被拒 / 走兜底 / 疑似泄漏）才打开。
+   *   正常情况下留 `RzdCloseChain` / `RzdCoverOwner` / `RzdCloseRender` 这些短行就够。
+   */
+  private closeNodesVerbose: boolean = false;
   /** 横屏左栏封面区的实测盒尺寸（vp）——见 `flatLandscapeCoverEdgeVp()`。 */
   @Local flatCoverBoxWVp: number = 0;
   @Local flatCoverBoxHVp: number = 0;
@@ -1730,7 +1740,7 @@ export struct PlaybackPage {
     const path: string = fallback ? 'fallback' : this.closePath;
     const closeUi = this.getUIContext();
     const closeNodes: RzdPlayerCloseNodeProbe[] = this.captureCloseNodes();
-    this.logCloseNodes('before-hide', closeNodes);
+    if (this.closeNodesVerbose) { this.logCloseNodes('before-hide', closeNodes); }
     // 先向仍在树上的节点提交视觉终态，再移除路由、复位几何。
     // V2 的普通赋值要等微任务标脏；pop 后再写只能证明字段变了，不能证明旧节点收到更新。
     // applySync 仅刷新本批视觉状态，绝不包含 isShowPlay/路由，避免同步触发壳层 Monitor pop。
@@ -1749,7 +1759,7 @@ export struct PlaybackPage {
     if (!this.ownsClose(token, 'after-hide')) {
       return;
     }
-    this.logCloseNodes('hidden-before-pop', closeNodes);
+    if (this.closeNodesVerbose) { this.logCloseNodes('hidden-before-pop', closeNodes); }
     this.logCloseRender('hidden-before-pop');
     this.state.isShowPlay = false;
     // ★★★ 2026-10-21（甲方：「在播放页内旋转屏幕后关闭，还会留一层封面」）：
@@ -1798,7 +1808,7 @@ export struct PlaybackPage {
         this.closeDiagnostic(`route-remove-fallback-failed error=${inner}`, path);
       }
     }
-    this.logCloseNodes('after-pop', closeNodes);
+    if (this.closeNodesVerbose) { this.logCloseNodes('after-pop', closeNodes); }
     try {
       this.stopGeoDriver();
       this.expandState.morphReset();
@@ -1834,7 +1844,7 @@ export struct PlaybackPage {
     }
     this.expandState.endSnapshotShrink();
     // 隐藏已在 pop 前同步提交；几何复位保持关闭终态，下一轮打开才放行。
-    this.logCloseNodes('after-reset', closeNodes);
+    if (this.closeNodesVerbose) { this.logCloseNodes('after-reset', closeNodes); }
     // ★ 残留判据：快照层仍归快照所有、但图已经没了 ⇒ 屏上就是"播放页封面位置的一块残留"。
     //   grep 关键字：`RzdCoverLeak owner-without-pix`
     // ★ 2026-11-17：判据必须用 **reset() 之前**抓到的 `pixmap`。
@@ -1842,6 +1852,7 @@ export struct PlaybackPage {
     //   于是只要 own 标记还在就**必然命中**，日志里那条 `owner-without-pix` 是**假报警**，
     //   会把人往"快照图丢了"上引（真机 11:25:47 那条就是）。现在改用快照值，只在真丢图时报。
     if (this.expandState.snapshotShrinkOwnedFlag() && pixmap === undefined) {
+      this.closeNodesVerbose = true;   // 疑似泄漏：本次关闭的节点快照全打
       MusicStoreService.getInstance().appendRuntimeDiagnostic(
         `RzdCoverLeak owner-without-pix path=${path} instance=${this.closeInstance} token=${this.closeToken} ` +
           `snapFlight=${this.snapshotFlight ? 1 : 0} coverHidden=${this.coverPublishHidden ? 1 : 0} ` +
@@ -1873,14 +1884,14 @@ export struct PlaybackPage {
         if (PlaybackPage.openSerial !== openSerialAtSample) {
           return;
         }
-        this.logCloseNodes('frame-idle', closeNodes, closeUi);
+        if (this.closeNodesVerbose) { this.logCloseNodes('frame-idle', closeNodes, closeUi); }
         this.logCloseRender('frame-idle');
       }));
       closeUi.postDelayedFrameCallback(new RzdPlayerCloseIdleProbe((): void => {
         if (PlaybackPage.openSerial !== openSerialAtSample) {
           return;
         }
-        this.logCloseNodes('frame-idle+500', closeNodes, closeUi);
+        if (this.closeNodesVerbose) { this.logCloseNodes('frame-idle+500', closeNodes, closeUi); }
       }), 500);
     } catch (error) {
       this.closeDiagnostic(`frame-probe-failed error=${error}`, path);
@@ -4090,6 +4101,7 @@ export struct PlaybackPage {
     this.shrinkPageHidden = false;
     PlaybackPage.cancelPendingCloseForOpen();
     this.closeInstance = ++PlaybackPage.instanceSerial;
+    this.closeNodesVerbose = false;   // 新实例起手默认不打节点快照
     // ★★★ 2026-11-02（复核 P1风险：页面实例号 ≠ 打开会话号）：
     //   `instanceSerial` 只证明"我是最新构造的页面"，而壳层**先**登记新会话（`notifyPlayerRoutePushed`）
     //   与准备形变、**后**才 push ⇒ 旧页面的 `onDisAppear` 完全可能落在
@@ -5285,6 +5297,7 @@ export struct PlaybackPage {
    * @param reason 为什么没走 pixmap 那条（写进持久诊断）
    */
   private closeLiveMorphFallback(reason: string): void {
+    this.closeNodesVerbose = true;   // 走了兜底：本次关闭的节点快照全打（否则缓冲会被它们吃光）
     this.closeDiagnostic(`reverse-morph-fallback reason=${reason}`, 'fallback');
     PlaybackPage.closeFallbackReason = reason;
     // 第 ② 支不要压封面：这条路上封面由"续飞封面 / 真封面"那套互补门负责，
