@@ -27,7 +27,7 @@ import { notificationManager } from '@kit.NotificationKit';
 import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, HomeSourceState, LyricCenterState, LyricFontSizeState, LyricFpsState, MotionCoverState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, immersiveFromLevel } from 'musicbasic';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
-import { DownloadService, LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatforms, lxDeclaredPlatformsOf, lxSourceManager, MediaService, lxSourceLabel, LX_PLATFORM_ORDER, normalizePlatformId, musicFreeSubscriptionLabel, quickJsSelfTest, runScriptInQuickJs, QuickJsRunResult, runScriptAndInvoke, QuickJsInvokeResult, lxLastRequestData, runQuickJsOneClickCheck } from 'player';
+import { DownloadService, LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatforms, lxDeclaredPlatformsOf, lxSourceManager, MediaService, lxSourceLabel, LX_PLATFORM_ORDER, normalizePlatformId, musicFreeSubscriptionLabel } from 'player';
 import type { LXApiImportResult } from 'player';
 import { importMusicFreeSubscriptionText, importSourceScriptAuto, parseMusicFreeSubscription, updateSubscription, backfillMusicFreePlatforms } from 'player';
 import type { MfImportReport, MfSubscriptionEntry, MfSubscriptionInfo } from 'player';
@@ -180,14 +180,8 @@ export struct SettingsDetailPage {
   @Local desktopLyricSupport: boolean | undefined = undefined;
   /** 桌面歌词悬浮窗是否被用户锁定（解锁入口只保留通知栏，这里只用于提示文案）。 */
   @Local desktopLyricLocked: boolean = false;
-  /** QuickJS 自检结果（设置页「音源引擎」卡片显示；空串 = 本次会话还没跑过）。 */
-  @Local quickJsState: string = '';
-  /** 音源运行时引擎：auto（按能力探测，默认，等同 WebView）/ webview / quickjs */
+  /** 音源运行时引擎：auto（混合，默认）/ quickjs（QuickJS优先）/ webview（ArkWeb优先） */
   @Local lxEngineMode: string = 'auto';
-  /** QuickJS 跑真脚本的结果（同上） */
-  @Local quickJsScriptState: string = '';
-  /** 是否正在跑（防重复点） */
-  @Local quickJsRunning: boolean = false;
   /**
    * MediaService 锁状态回调（aboutToAppear 注册、aboutToDisappear 摘除，两者必须传同一引用）。
    *
@@ -795,34 +789,6 @@ export struct SettingsDetailPage {
    * 要判断该不该把某个脚本切到 QuickJS，就得先量出**同一支脚本在两种引擎下的耗时**。
    * 这条路径不碰 WebView，也不影响正在播的歌。
    */
-  private async runQuickJsScriptProbe(): Promise<void> {
-    if (this.quickJsRunning) {
-      return;
-    }
-    this.quickJsRunning = true;
-    this.quickJsScriptState = '正在跑…';
-    try {
-      const activeId: string = this.activeSource;
-      if (activeId.length === 0 || activeId.indexOf('mfplat:') === 0) {
-        this.quickJsScriptState = '当前音源不是 LX 脚本（MusicFree 插件走另一条引擎）';
-        return;
-      }
-      const script: string = await lxSourceManager.getScript(activeId);
-      if (script.length === 0) {
-        this.quickJsScriptState = '读不到脚本原文（可能被 gz 压缩或未下载完整）';
-        return;
-      }
-      const r: QuickJsRunResult = await runScriptInQuickJs(script, 4000);
-      this.quickJsScriptState = r.ok ?
-        ('成功 · 平台 ' + r.platforms.join('/') + ' · 宿主调用 ' + r.hostCalls + ' 次 · ' + r.elapsedMs + 'ms') :
-        ('失败 · ' + r.error + '（' + r.elapsedMs + 'ms）');
-    } catch (e) {
-      this.quickJsScriptState = '异常：' + JSON.stringify(e).substring(0, 120);
-    } finally {
-      this.quickJsRunning = false;
-    }
-  }
-
   /**
    * 「用 QuickJS 重放上一次取址请求」—— 双引擎最关键的比较。
    *
@@ -831,52 +797,6 @@ export struct SettingsDetailPage {
    * `{source, action, info}` 原样丢给 QuickJS，输入完全一致，耗时才有可比性。
    */
   /** 一键测：自检 + 脚本初始化 + 重放取址 + 与 WebView 对照（见 player 侧实现） */
-  private async runOneClickCheck(): Promise<void> {
-    if (this.quickJsRunning) {
-      return;
-    }
-    this.quickJsRunning = true;
-    this.quickJsScriptState = '正在测…（约 1~2 秒）';
-    try {
-      this.quickJsScriptState = await runQuickJsOneClickCheck();
-    } catch (e) {
-      this.quickJsScriptState = '一键测异常：' + JSON.stringify(e).substring(0, 140);
-    } finally {
-      this.quickJsRunning = false;
-    }
-  }
-
-  private async replayLastRequestInQuickJs(): Promise<void> {
-    if (this.quickJsRunning) {
-      return;
-    }
-    this.quickJsRunning = true;
-    this.quickJsScriptState = '正在重放…';
-    try {
-      if (lxLastRequestData === undefined) {
-        this.quickJsScriptState = '还没有可取址的请求 —— 先在 WebView 下播一首（或等它预热完）再回来';
-        return;
-      }
-      const payload: string = JSON.stringify(lxLastRequestData);
-      const activeId: string = this.activeSource;
-      const script: string = await lxSourceManager.getScript(activeId);
-      if (script.length === 0) {
-        this.quickJsScriptState = '读不到脚本原文';
-        return;
-      }
-      const r: QuickJsInvokeResult = await runScriptAndInvoke(script, 'request', payload, 6000);
-      this.quickJsScriptState = r.ok ?
-        ('重放成功 · ' + r.elapsedMs + 'ms · 宿主调用 ' + r.hostCalls + ' 次 · ' +
-          r.valueJson.substring(0, 80)) :
-        ('重放失败 · ' + (r.error.length > 0 ? r.error : '未知') +
-          (r.elapsedMs > 0 ? '（' + r.elapsedMs + 'ms）' : ''));
-    } catch (e) {
-      this.quickJsScriptState = '异常：' + JSON.stringify(e).substring(0, 120);
-    } finally {
-      this.quickJsRunning = false;
-    }
-  }
-
   private selectLXSource(apiId: string): void {
     // ★ 2026-10-29（用户：选中汽水音源后平台仍显示「未检测」）：选择后重新读一次音源列表，
     //   让它带上引擎 init 回写的 sources（getApiList 有缓存，不重读就一直是旧快照）。
@@ -2112,17 +2032,12 @@ export struct SettingsDetailPage {
         .padding({ left: 16, right: 16, top: 4, bottom: 8 })
         .borderRadius($r('sys.float.corner_radius_level12'))
         .backgroundColor($r('app.color.card_background'))
-        // ★ 2026-11-15（用户：「QuickJS 如果真能完全走，就在其它设置里加个引擎设置的选项」）：
-        //   现在只给**状态 + 自检入口**，不给切换开关 —— 原因是宿主能力（XHR / crypto / DOM 桩 /
-        //   定时器）还没补，切过去会让每个音源都不可用。等 Phase 3 落地后，把这里换成
-        //   `CapsuleSelector(['WebView','QuickJS'], …)` 并接到 LXSourceEngine 上即可。
+        // ★ 2026-11-17（用户：「把那个音源引擎下面多余的东西（包括一键测按钮）删了，
+        //   只留小标题和选项」）：这一块现在只有「小标题 + 三选一的选择器」。
+        //   一键测按钮、自检结果、三段说明文字全部去掉 —— 设置页不是调试台。
+        //   （探测能力本身还在 `player` 侧导出，将来需要时仍可从别处调用。）
         Column() {
           this.SubTitle($r('app.string.setting_sub_engine'))
-          // ★ 2026-11-15：从「只显示状态」升级成**可选**。
-          //   QuickJS 现在能跑真实脚本、能重放取址请求并拿到与 WebView **完全一致**的地址，
-          //   所以可以给开关了；任何时候 QuickJS 失败都会自动回落 WebView（混合，不是二选一）。
-          // 三个取值沿用存储键的 auto/quickjs/webview，界面上按用户口径叫：
-          // 混合（默认，按能力自动选）/ QuickJS优先 / ArkWeb优先
           this.CapsuleSelector(['混合', 'QuickJS优先', 'ArkWeb优先'],
             this.lxEngineMode === 'quickjs' ? 1 : (this.lxEngineMode === 'webview' ? 2 : 0),
             (index: number) => {
@@ -2130,41 +2045,6 @@ export struct SettingsDetailPage {
               this.lxEngineMode = mode;
               MusicStoreService.getInstance().setLxEngineMode(mode);
             })
-          // ★ 2026-11-15（用户：「能不能一键测」）：三项合成一键 —— 逐项点会得到三行散日志，
-          //   还要人工判断"两个引擎给的是不是同一个地址"。这里一次跑完、一次判定。
-          Button(this.quickJsRunning ? '正在测…' : '一键测（QuickJS 引擎）')
-            .height(34)
-            .fontSize(13)
-            .backgroundColor($r('app.color.card_background'))
-            .fontColor($r('app.color.font_primary'))
-            .enabled(!this.quickJsRunning)
-            .margin({ top: 8 })
-            .onClick((): void => {
-              void this.runOneClickCheck();
-            })
-          Text(this.quickJsScriptState.length > 0 ? this.quickJsScriptState : '还没测过')
-            .fontSize(12)
-            .fontColor($r('app.color.font_tertiary'))
-            .width('100%')
-            .lineHeight(18)
-            .margin({ top: 6 })
-          Text(this.quickJsState.length > 0 ? ('自检：' + this.quickJsState) :
-            $r('app.string.setting_engine_selftest_empty'))
-            .fontSize(12)
-            .fontColor($r('app.color.font_tertiary'))
-            .width('100%')
-            .margin({ top: 6 })
-          Text('混合：按脚本用到的能力自动选 —— 能力都搬过来了就走 QuickJS，否则走 ArkWeb；' +
-            '失败也会自动回落。QuickJS优先 / ArkWeb优先：固定优先某一侧，另一种只做兜底。')
-            .fontSize(12)
-            .fontColor($r('app.color.font_tertiary'))
-            .width('100%')
-            .margin({ top: 6 })
-          Text($r('app.string.setting_engine_hint'))
-            .fontSize(12)
-            .fontColor($r('app.color.font_tertiary'))
-            .width('100%')
-            .margin({ top: 6 })
         }
         .width('100%')
         .padding({ left: 16, right: 16, top: 4, bottom: 8 })
