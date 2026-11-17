@@ -609,8 +609,11 @@ export async function getLXMusicUrl(source: string, songId: string, quality: str
       const n: number = (transientFailCount.get(activeScriptId) ?? 0) + 1;
       transientFailCount.set(activeScriptId, n);
       if (n >= TRANSIENT_FAIL_LIMIT) {
-        rememberVerdict(activeScriptId, false);
-        logError('qjs transient x' + n + ' → 本次运行不再尝试（不落盘）: ' +
+        // ★ 2026-11-17 修正：这里以前调 `rememberVerdict`（会**落盘**）——
+        //   等于"对面抽风 3 次就把音源永久判死"，与刚定的口径自相矛盾。
+        //   改成**只写内存**：本次运行不再试，下次启动重新给机会。
+        quickJsVerdict.set(activeScriptId, false);
+        logError('qjs transient x' + n + ' → 本次运行不再尝试（下次启动重试）: ' +
           quickOut.error.substring(0, 80));
       } else {
         logError('qjs transient x' + n + '（不落盘）: ' + quickOut.error.substring(0, 80));

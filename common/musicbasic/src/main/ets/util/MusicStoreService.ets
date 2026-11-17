@@ -2176,7 +2176,18 @@ export class MusicStoreService {
       for (let i: number = 0; i < items.length; i++) {
         const kv: string[] = items[i].split('=');
         if (kv.length === 2 && kv[0] === scriptId) {
-          return kv[1] === '1';
+          const v: string = kv[1];
+          if (v === '1') {
+            return true;
+          }
+          // ★ 2026-11-17 **自愈**：只有带原因的 `0:cap`（明确"缺能力"）才当永久判否。
+          //   老版本写下的裸 `0` 分不清是"缺能力"还是"当时对面服务挂了" ⇒ 当**未测**，
+          //   下次播放会重试一次并在拿到结论后重写。这样一次应用 bug 的历史误判
+          //   不需要用户手动清缓存就能自己恢复。
+          if (v.indexOf('0:') === 0) {
+            return false;
+          }
+          return undefined;
         }
       }
       return undefined;
@@ -2194,7 +2205,8 @@ export class MusicStoreService {
       const items: string[] = this.getQuickJsVerdictTable().split(',').filter((x: string): boolean => {
         return x.length > 0 && x.split('=')[0] !== scriptId;
       });
-      items.push(scriptId + '=' + (can ? '1' : '0'));
+      // `1` = 可跑；`0:cap` = 明确缺能力（永久）。**瞬时失败永远不落盘**。
+      items.push(scriptId + '=' + (can ? '1' : '0:cap'));
       // 只留最近 40 条，避免无限增长
       const tail: string[] = items.length > 40 ? items.slice(items.length - 40) : items;
       const store = this.getStore();
