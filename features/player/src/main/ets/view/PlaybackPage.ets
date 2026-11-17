@@ -8976,6 +8976,23 @@ export struct PlaybackPage {
             }, 96);
             if (this.expandState.morphContainerActive() || this.expandState.morphSessionStarted) {
               this.diagAppearBranch = 'morph';
+              // ★ 2026-11-18：**这条才是正常打开走的路**（壳层驱动形变，页面只配合收尾）。
+              //   前两轮我只给 `intro` / `skipClose` 加了诊断，于是"正常打开"的日志里一个字都没有，
+              //   我还据此推断成"用户测法一直走 skipClose" —— 那是**错的**。
+              //   这里补同口径的自描述行（独立 try，绝不被后续计算拖累）。
+              try {
+                appendPlayLog('[RzdBgPhase] intro-morph mesh=' +
+                  (this.meshSrc !== undefined ? 1 : 0) + ' ver=' + this.meshSrcVersion +
+                  ' cachePm=' + (PlaybackPage.bgCachePm !== undefined ? 1 : 0) +
+                  ' stage=' + this.expandState.morphStage + ' inst=' + this.closeInstance);
+                MusicStoreService.getInstance().appendRuntimeDiagnostic(
+                  '[RzdBgPhase] intro-morph mesh=' + (this.meshSrc !== undefined ? 1 : 0) +
+                  ' ver=' + this.meshSrcVersion +
+                  ' cachePm=' + (PlaybackPage.bgCachePm !== undefined ? 1 : 0) +
+                  ' stage=' + this.expandState.morphStage + ' inst=' + this.closeInstance);
+              } catch (eM) {
+                // 诊断绝不影响进场
+              }
               this.introPaintReady = true;
               this.expandIntroRunning = false;
               // 闂佸疇妫勯幊澶娢?2026-10-16闂佹寧绋戦悧蹇涘磻閿濆绀勯柡鍕箳閻斿懐鈧灚婢樼€氼喖鈻?*闂佸憡鍨规慨宕囩礊瀹ュ洦鍋橀柕澶嗘櫅濞?*闂佹寧绋戦¨鈧紒?
