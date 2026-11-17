@@ -4407,6 +4407,28 @@ export struct PlaybackPage {
    * 婵°倕鍊归敋閻庤濞婂畷锝呂熼搹瑙勭槗闁诲海鎳撻崯鎶藉吹濠婂喚鍟呴柛妤冨仦閻ㄦ垿鏌涘▎鎯奉亪鎯冮鍕櫖閻忕偠鍋愰懝楣冩煛?闁诲繐绻嬬欢姘焽娴兼潙绠為柕蹇娾偓鍐茬睄闂佸憡鐟﹂敋闁?婵炴垶姊婚崰宥囩博鐎靛憡灏庨梺鍨儐闂勫秴霉濠婂啯顥撻柍?
    */
   private playExpandIntro(): void {
+    // ★ 2026-11-17（用户：「现在只会概率背景消失了」，并给了关闭链日志）：
+    //   背景是「共享网格」（静态缓存 `bgCachePm` + 组件内兜底），涉及**跨页面实例**的
+    //   PixelMap 借用/移交，出问题时分散在 `RzdBgPhaseMesh` 的多条日志里，一份日志拼不出来。
+    //   这里在**展开起手**打一条自描述的行：这一页有没有源、缓存里那张还活着吗、
+    //   key 对得上吗、释放责任在谁 —— 下次"背景消失"跑一次就能定位到是哪一环。
+    //   排查关键字：`RzdBgPhase intro-start`。
+    try {
+      const curKey: string = this.currentMeshKey();
+      const cachePm: image.PixelMap | undefined = PlaybackPage.bgCachePm;
+      appendPlayLog('[RzdBgPhase] intro-start mesh=' + (this.meshSrc !== undefined ? 'pm' : 'none') +
+        ' ver=' + this.meshSrcVersion +
+        ' key=' + (curKey.length > 0 ? curKey.substring(0, 20) : '-') +
+        ' cacheKey=' + (PlaybackPage.bgCacheKey.length > 0 ?
+          PlaybackPage.bgCacheKey.substring(0, 20) : '-') +
+        ' keyMatch=' + (curKey.length > 0 && curKey === PlaybackPage.bgCacheKey ? 1 : 0) +
+        ' cachePm=' + (cachePm !== undefined ? 1 : 0) +
+        ' alive=' + (PlaybackPage.sharedMeshAlive() ? 1 : 0) +
+        ' cacheOwner=' + PlaybackPage.bgCacheOwner +
+        ' inst=' + this.closeInstance);
+    } catch (e) {
+      // 诊断绝不影响展开
+    }
     // 闂?**缂傚倷鑳堕崰宥囩博閹绢喖绀傞柕澶堝劚缂?+ 闂佸搫鍟版慨鐑藉疾椤愩埄鍤曢煫鍥ㄦ尭楠炴垿骞?*闂佹寧绋掔喊宥嗘櫠瀹ュ瀚夊璺侯儏閳數鈧鍠掗崑鎾绘煛閸屾粍鍤€缂佹唻绻濋弫宥夊醇閵忕姳鍖栭梺鍛婂灦閻綊鍩€椤戞寧绁伴柟鐧哥秮楠炴﹢顢橀悢宄邦棈闂佹悶鍎伴崟姗€鍩€椤戞寧顦风紒妤€鍊块獮蹇斿緞鐎ｎ偆绻侀梺褰掓涧椤戞垹妲愬鑸电劸闁瑰瓨甯為惌銈夊级閳哄倻鎳囬柛锝夋敱濞艰鈽夐弽銈呬壕?
     //   閻?闂佸綊娼ч鍡欌偓鍨壘椤垽鏁愰崨顔垮惈婵＄偟鎳撳畷顒佹叏?闂?闁荤姳璁查弲婵堝垝娴兼潙绠ラ悗锝庝簻閳笺垽鏌?
     //   閻?婵炴垶鎸堕崐妤咁敂椤掑嫭鐓ユ慨妯哄船娴狀垶鏌ㄥ☉妯煎ⅲ缂侇垳濮甸幏鍛存偐閾忣偉鎷柣蹇撶箣缁舵艾顭?+ 闂佸湱铏庨崢浠嬪棘娴ｅ箍浜滈梻鍫熺〒濞堥亶姊婚崼顐ｇ窙缂佽鲸宀搁弻鍫熺鐎ｎ亝顏￠梺鍛婂浮椤ｏ妇鑺?闂?闁荤姍鍕凡闁奸晲鍗冲畷锝咁潨閸垻顦ーtryStartMorphIntro`闂佹寧绋戦¨鈧紒?
