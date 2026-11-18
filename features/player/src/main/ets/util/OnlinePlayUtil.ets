@@ -102,7 +102,15 @@ export class OnlinePlayUtil {
    *        （`toast` 那条路仍在用，见各 `play*` 方法）。
    */
   private static openFullScreen(appState: MusicAppState, _uiContext: UIContext | undefined): void {
-    appState.isShowPlay = true;
+    // ★★★ 2026-11-18（用户定调，照搬无界）：「播放」不等于「展开播放器」。
+    //   无界点歌只是开始播放 + 底部播放条出现，**不会**自动进播放页；要进就点播放条。
+    //   这里原来是 `appState.isShowPlay = true`，覆盖了搜索/榜单/歌单/卡片/菜单「播放」
+    //   等**一大票**入口（`playSearchSong` / `playList` / 榜单…），
+    //   所以前面只改 `openPlayerUi` 那 5 处根本不够 —— 用户实测「各页面播放仍会打开播放器」。
+    //   ⇒ 统一在**这一个收口**里停掉：凡是"由播放动作带来的展开"全部不再执行。
+    //   唯一合法的展开入口是播放条点击（`PlayerViewModel.openFullScreenWithSharedElementTransition`）。
+    //   排查关键字：`RzdPlayerOpen blocked by play intent`。
+    OnlinePlayUtil.appendPlayLog('[RzdPlayerOpen] blocked by play intent（点播放条才会展开）');
   }
 
   /**
