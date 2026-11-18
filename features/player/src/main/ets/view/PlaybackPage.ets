@@ -378,78 +378,12 @@ export struct PlaybackPage {
    *   闂佺懓绠嶉崹娲偤閺囥垹绫?`publishMeshSource` 闂備焦褰冮敃銉╁棘娴ｅ湱鈻斿┑鐘辫兌椤忚京鈧鍠氭刊瀵告鏉堛劎鈻旈柧蹇撳帨閺佸嫰鏌￠崘鈺佸姸闁稿孩顨婂鏌ヮ敍濮樿鲸鍕鹃梻渚囧亐閸嬫捇鏌?闁诲骸婀遍崑鐐差渻閸屾鐔兼晬閸曨厔鍥⒑椤撱劎鍒扮紒鍗炵埣瀹?闂?
    */
   @Local meshSrc: image.PixelMap | undefined = undefined;
-  /**
-   * ★ 2026-10-22（＝无界 `svc.bgCache`）：背景图**进程级**缓存。
-   *
-   * 无界的背景缓存挂在服务里（`PlayerPage.refreshBgCache` 里 `this.svc.bgCache.clear()`），
-   * 不属于页面实例 ⇒ 页面重建（转屏）不会丢。本仓原来是页面字段，`aboutToDisappear` 一放就没，
-   * 于是「切换横竖屏背景必消失」。
-   */
-  private static bgCacheKey: string = '';
-  private static bgCachePm: image.PixelMap | undefined = undefined;
-  /**
-   * ★★★ 2026-11-02（复核 P2：静态缓存替换没接上释放责任）：
-   * **谁持有这张 PixelMap 的释放责任**。
-   * ```
-   *   >0 = 该 `closeInstance` 的页面持有 ⇒ 缓存只是借用（页面卸载时自己收尾 / 移交孤儿）
-   *   =0 = 无主（原页面已走人，缓存自己持有）⇒ 缓存**替换或作废时必须 release 它**
-   * ```
-   * 原来只有"页面卸载不 release 静态那张"，于是下一个页面 `commitMeshSource()` 直接把静态槽
-   * 换成新图、却只 release 传入的本地 `old`（新页通常为空）⇒ 旧那张没有任何显式释放路径。
-   * 现在按 owner 判定：**无主才由缓存释放**，页面还活着就交给页面（它自己的 `onDisAppear` 收）。
-   * 排查关键字：`RzdBgPhase cache-replace` / `cache-orphan`。
-   */
-  private static bgCacheOwner: number = 0;
+  // ★ 2026-11-18（减法）：`bgCacheKey/bgCachePm/bgCacheOwner` + `adoptSharedMesh()` +
+  //   `sharedMeshAlive()` + 孤儿协议**已删除**。理由：它们存在的前提是"背景自己要找图、
+  //   所以要跨页面实例借一张内存 PixelMap"；现在源统一来自 `resolveBarCoverPixelMap()`
+  //   （播放条那张：在线走磁盘缓存、本地走磁盘文件）⇒ 跨实例借用不再必要，
+  //   而 owner/孤儿/判活正是历史竞态的根源（`cache-orphan` 那串日志全是它）。
 
-  /** 把静态缓存里那一张拿回本实例（key 必须与当前曲目一致）。命中返回 true。 */
-  private adoptSharedMesh(): boolean {
-    const key: string = this.currentMeshKey();
-    if (key.length === 0 || PlaybackPage.bgCacheKey !== key) {
-      return false;
-    }
-    // ★★★ 2026-11-01（跨会话残留 ④「取用前判活」）：见 {@link sharedMeshAlive}。
-    if (!PlaybackPage.sharedMeshAlive()) {
-      appendPlayLog(`[RzdBgPhase] shared-mesh dead key=${key.substring(0, 48)} -> dropped`);
-      PlaybackPage.bgCachePm = undefined;
-      PlaybackPage.bgCacheKey = '';
-      PlaybackPage.bgCacheOwner = 0;
-      return false;
-    }
-    const pm: image.PixelMap | undefined = PlaybackPage.bgCachePm;
-    if (pm === undefined) {
-      return false;
-    }
-    this.meshSrc = pm;
-    this.meshTrackKey = key;
-    // ★ 2026-11-02：借用的对象记在本页名下 ⇒ 释放责任回到页面。
-    PlaybackPage.bgCacheOwner = this.closeInstance;
-    this.meshSrcVersion = this.meshSrcVersion + 1;
-    appendPlayLog(`[RzdBgPhase] shared-mesh adopt ver=${this.meshSrcVersion} owner=${this.closeInstance}`);
-    return true;
-  }
-  /**
-   * ★ 2026-11-01（跨会话残留 ④）：**静态背景缓存里那张 PixelMap 还活着吗**。
-   *
-   * 为什么必须判：`onDisAppear` 里会 `releasePixelMapQuiet(this.meshSrc)`，而
-   * `commitMeshSource()` 把**同一个对象**同时挂到了 `PlaybackPage.bgCachePm`（进程级）上
-   * ⇒ 页面一卸载，静态缓存里就留着一份**已 release** 的 PixelMap。下一个实例
-   * `adoptSharedMesh()` 照样把它交给 `MeshCoverBg` ⇒ 画不出任何东西 =「展开动画期间没背景」，
-   * 且要等重新下载解码才恢复（正是"连开几次之后"才出现的形态）。
-   * 判据：**取用前判活**，死掉的缓存整条丢掉（退化为重新下载，绝不会画一张死图）。
-   * 排查关键字：`RzdBgPhase shared-mesh dead`。
-   */
-  private static sharedMeshAlive(): boolean {
-    const pm: image.PixelMap | undefined = PlaybackPage.bgCachePm;
-    if (pm === undefined) {
-      return false;
-    }
-    try {
-      // `PixelMap.isReleased()`（API 22+）；老设备没有这个方法时按"不活"处理（安全降级）。
-      return !pm.isReleased();
-    } catch (error) {
-      return false;
-    }
-  }
   /**
    * ★★★ 2026-10-18（用户实测「点击展开时背景**似乎是上一首歌的颜色**」）：
    * 当前 `meshSrc` **归属的曲目 key**（`''` = 还没有源）。
@@ -7209,29 +7143,7 @@ export struct PlaybackPage {
     const old: image.PixelMap | undefined = this.meshSrc;
     this.meshSrc = undefined;
     this.meshSrcVersion = this.meshSrcVersion + 1;
-    // ★ 2026-11-01：静态缓存指向的就是这一张时，必须先断掉缓存再 release（见 `sharedMeshAlive`）。
-    // ★ 2026-11-02（复核 P2）：**缓存里那张也要按 owner 收尾** ——
-    //   换歌时缓存里可能是"无主孤儿"（上一轮页面走了、还没人 adopt），
-    //   而本页 `meshSrc` 是另一张 ⇒ 只清槽不释放就把无主那张彻底漏掉了。
-    const cachedPm: image.PixelMap | undefined = PlaybackPage.bgCachePm;
-    const cachedOwner: number = PlaybackPage.bgCacheOwner;
-    if (cachedPm !== undefined && cachedPm !== old) {
-      PlaybackPage.bgCachePm = undefined;
-      PlaybackPage.bgCacheKey = '';
-      PlaybackPage.bgCacheOwner = 0;
-      if (cachedOwner === 0) {
-        try {
-          cachedPm.release();
-          Logger.info(PlaybackPage.logTag, 'RzdBgPhase cache-drop release orphan (track change)');
-        } catch (error) {
-          Logger.warn(PlaybackPage.logTag, `cache-drop orphan release failed: ${error}`);
-        }
-      }
-    } else if (old !== undefined && PlaybackPage.bgCachePm === old) {
-      PlaybackPage.bgCachePm = undefined;
-      PlaybackPage.bgCacheKey = '';
-      PlaybackPage.bgCacheOwner = 0;
-    }
+    // ★ 2026-11-18（减法）：这里原来还有一整段"静态缓存槽位/孤儿释放"的处理 —— 随静态缓存一并删除。
     if (old !== undefined) {
       this.releasePixelMapQuiet(old);
     }
@@ -7360,11 +7272,8 @@ export struct PlaybackPage {
     //   ⇒ 照无界：缓存没了就**重跑一遍取图取色**；缓存还在才只 bump 令牌。
     //   排查关键字：`refresh-on-resize rebuild`（重建）/ `refresh-on-resize ver=`（只 bump）。
     if (this.meshSrc === undefined) {
-      // ① 先吃静态缓存（＝无界 `svc.bgCache`，转屏后同一首一定有）；② 没有才重跑取图取色。
-      if (this.adoptSharedMesh()) {
-        appendPlayLog(`[RzdBgPhase] refresh-on-resize shared-cache win=${w}x${h}`);
-        return;
-      }
+      // ★ 2026-11-18（减法）：原来这里先吃"静态缓存"（跨实例借用）；该机制已删除。
+      //   ⇒ 没有源就直接重跑取图（在线走磁盘缓存命中，本地走磁盘文件，都很快）。
       this.meshSrcVersion = this.meshSrcVersion + 1;
       appendPlayLog(`[RzdBgPhase] refresh-on-resize rebuild ver=${this.meshSrcVersion} win=${w}x${h}`);
       this.getImageColor();
@@ -7843,6 +7752,16 @@ export struct PlaybackPage {
     }
   }
 
+  /** 把"排队等下一步"的那张网格源正式提交（`pendingMeshPm` → `meshSrc`）。 */
+  private republishMeshSourceIfAny(): void {
+    const pending: image.PixelMap | undefined = this.pendingMeshPm;
+    if (pending === undefined) {
+      return;
+    }
+    this.pendingMeshPm = undefined;
+    this.commitMeshSource(pending, this.meshSrc);
+  }
+
   private async getImageColorAsync(): Promise<void> {
     const jobSeq: number = ++this.imageColorJobSeq;
     const ctx = this.context;
@@ -8116,52 +8035,14 @@ export struct PlaybackPage {
    * @param old 闁荤偞鍑归崑鍛瑰☉銏犵闁靛繆鈧磭顏遍梺姹囧妼鐎氼厼螞椤愨懇鏀﹂柟鏉垮缁€鍕⒒閸垹浠ч柍瑙勭墵瀹曟艾鈻庨幘铏彽闂佽　鍋撻柟鎯ф噽缁€?
    */
   private commitMeshSource(pm: image.PixelMap, old: image.PixelMap | undefined): void {
+    // ★ 2026-11-18（减法）：只剩"赋值 + 释放旧值"。
+    //   原来这里还要维护静态缓存槽位、owner、孤儿释放 —— 随静态缓存一并删除（见字段区注释）。
     this.meshSrc = pm;
-    // ★★★ 2026-10-22（照搬无界 `svc.bgCache`：背景图缓存**不属于页面实例**）：
-    //   无界的背景缓存放在服务里（`PlayerPage.refreshBgCache` 里那句 `this.svc.bgCache.clear()`），
-    //   页面重建/转屏都不会丢；本仓原来是页面字段 + `aboutToDisappear` 里 `releasePixelMapQuiet`，
-    //   一转屏（页面重建）就彻底没有源 ⇒ 「切换横竖屏背景必消失」。
-    //   ⇒ 这里把同一张 PixelMap 挂到**静态缓存**上，新实例/转屏后一句 `adoptSharedMesh()` 就回来了。
-    // ★★★ 2026-11-02（复核 P2：替换要接上释放责任）：先记下被替换的那张与它的归属，
-    //   再覆盖槽位；只有"无主"（`bgCacheOwner === 0`，原页面已经走了）才由缓存负责释放。
-    const previousStatic: image.PixelMap | undefined = PlaybackPage.bgCachePm;
-    const previousOwner: number = PlaybackPage.bgCacheOwner;
-    PlaybackPage.bgCacheKey = this.currentMeshKey();
-    PlaybackPage.bgCachePm = pm;
-    PlaybackPage.bgCacheOwner = this.closeInstance;
     this.meshSrcVersion = this.meshSrcVersion + 1;
-    // ★ 2026-10-18：记下这张图**归属哪一首**（`dropMeshSourceForTrackChange` 与 adopt 守卫都用它）。
     this.meshTrackKey = this.currentMeshKey();
-    // ① 被替换掉的静态槽：**只有无主（owner=0）才由缓存释放**；页面还活着就由页面自己收。
-    if (previousStatic !== undefined && previousStatic !== pm && previousStatic !== old &&
-      previousOwner === 0) {
-      try {
-        previousStatic.release();
-        appendPlayLog('[RzdBgPhase] cache-replace release orphan prev');
-      } catch (error) {
-        Logger.warn(PlaybackPage.logTag, `cache-replace orphan release failed: ${error}`);
-      }
-    }
-    // ② 调用方交出来的本地旧图：**这次一定要 release**（页面已经不用它了）。
-    //    与 ① 互斥：无主那张不会同时是本地 old（本地 old 要么是自己建的、要么是 adopt 借来的，
-    //    借来时 owner 已登记成本页 ⇒ previousOwner ≠ 0）。
     if (old !== undefined && old !== pm) {
       this.releasePixelMapQuiet(old);
     }
-  }
-
-  /**
-   * 闁诲海鎳撻ˇ闈涱焽閵堝洨鐜绘俊銈傚亾鐟滅増绋掑濠氬炊瑜嶇粻鐢告煕濮橆剚鍞夐挊鐔封槈閹剧鏀绘繛鎾崇埣瀹曘儲鎯斿┑鍫紘濠电偛妫寸槐鏇犵礊婢舵劕鍐€闁稿繗鍋愰悥?闂佺偨鍎查弻锟犲焵?婵炴垶鎸哥€涒晛螞閵堝鍋╃€光偓閸曨偂绨兼繛鎴炴惄娴滎亪宕抽崫銉﹀珰?濞达絽绉归弫宥夊锤閸撳jie.pa:157930-157939`闂?
-   * 闁?`syncReportChrome()` 闂佸搫瀚烽崹浼村箖閹惧鈻旈柍褜鍓氱粋鎺楀嫉閻㈢數娈ら梺?*缂備焦鍔栭〃鍛般亹濞戞瑧鈻旈柍褜鍓氬濠氬炊瑜庨惃鎴︽煙鐠虹尨鏀绘繛鎾崇埣瀵剚瀵奸弶鎴濊祴闂佽偐顢婄亸顏囨＂婵炴垶鎸搁敃銈夌嵁?*闂?
-   * 濠电偛澶囬崜婵嗭耿娴ｅ壊鍤楅柛娑樺彄婢舵劖鍎嶉柛鏇ㄥ墰閻栭亶鏌￠崘顓炵厫婵℃彃鎽滅划姘舵倻濡粯鍎ユ繛杈剧稻閸ゅ酣鍩€?
-   */
-  private republishMeshSourceIfAny(): void {
-    const pending: image.PixelMap | undefined = this.pendingMeshPm;
-    if (pending === undefined) {
-      return;
-    }
-    this.pendingMeshPm = undefined;
-    this.commitMeshSource(pending, this.meshSrc);
   }
 
   /** Downloads an online cover url and decodes it into a PixelMap (best-effort). */
@@ -9019,15 +8900,9 @@ export struct PlaybackPage {
             // ★★★ 2026-10-18（第三轮）：**先同步采用一次预热缓存**（`createPixelMapSync`），
             //   形变第 1 帧就有真封面 —— 等价上游"打开前本地封面文件已在"（`wujie.pa:292406-292448`）。
             //   然后再走异步那条（拿网络/资源，顺便取色）。
-            // ★★★ 2026-11-02（复核 P2：静态缓存要**真的被复用**）：
-            //   先试静态缓存里那**同一张**（key 命中就直接借用、不重建、不覆盖）；
-            //   只有未命中才退回 warm 字节同步建图。
-            //   原来顺序相反（warm-sync 在前）⇒ 每次重开都新建一张覆盖静态槽，
-            //   缓存从没被复用过，旧那张也没人显式释放。
-            //   排查关键字：`RzdBgPhase shared-mesh adopt`（复用）/ `adopt-sync`（兜底新建）。
-            if (!this.adoptSharedMesh()) {
-              this.adoptWarmMeshSync();
-            }
+            // ★ 2026-11-18（减法）：静态缓存借用已删除 ⇒ 直接走预热字节同步建图
+            //   （warm 未命中时，`getImageColorAsync()` 会用磁盘缓存/磁盘文件补上）。
+            this.adoptWarmMeshSync();
             void this.adoptWarmMeshThenTint();
             this.applyPlaybackWindowChromeImmediately();
             // 婵＄偑鍊楅弫璇差焽閻楀牞绱旈柡宥庣厛閸嬔囨煕閹达絾顏犳鐐叉喘瀵喚鎹勯悜妯衡偓杈ㄦ叏濠靛嫬鍔欑紒鏃€娼欓埢搴ㄥ灳瀹曞洨锛涢梺绋跨箰绾绢厽鎱ㄩ幖浣哥畱濞撴艾锕︾粈鍕偣娴ｇ鈷旈柣銈呮閵囧嫰妫冨☉妯款唹闂佺厧鐤囧Λ鍕垂娴兼潙缁╃痪顓炴噽缁犳牠鏌?
@@ -9353,30 +9228,10 @@ export struct PlaybackPage {
             this.releaseBackgroundCoverIfPixelMap();
             // 闂?2026-10-15闂佹寧绋掑銊х礊婢舵劕鍐€闁艰婢橀崜褰掓煛閸滀礁鐏ｆ繛鍫熷灥閳瑰啴骞囬鍡櫺㈤梺鎼炲劚瑜扮偟寮ч崘顓滀汗闁圭儤鎸婚幏鍗烆渻閵堝懐浠涢悗鍨瀵?闂?闂備緡鍋€閸嬫捇鏌涢敃鈧幖顐ゆ崲閳ь剙顪冮妶鍫敽缂佹柨顕幐褔鎮滈挊澶嬬彽闂佽　鍋?
             //   闂佹寧绋戦悧鍡涘箚娓氣偓瀹曟艾鈻庨幇顔叫栧┑鐐叉灤閵堝洨顔掗梺鍛婂灩閸庛倝骞愰柆宥呯哗濡わ絽鍟ㄩ埀顒€顦甸弻鍫ュ箣閹烘梻鐛ュ┑鐘虫礀缁诲绮╅弶鎴殨?64闁?4 闂?PixelMap闂佹寧绋戦ˇ顓㈠焵?
-            // ★★★ 2026-11-01（跨会话残留 ④）：**静态缓存持有同一个对象时不许 release**。
-            //   `commitMeshSource()` 把这一张同时挂到了 `PlaybackPage.bgCachePm`（进程级缓存）上，
-            //   这里一 release，静态缓存里就留着一张**死图** ⇒ 下一次 `adoptSharedMesh()` 把它交出去，
-            //   `MeshCoverBg` 画不出东西 =「展开动画期间没背景」。
-            //   ★ 2026-11-02（复核 P2）：**释放责任要移交**，不能只是"谁都不收"。
-            //   我还是这张的持有者、而我要走了 ⇒ 把 owner 置 0（孤兒），由缓存负责在
-            //   下次替换/作废时 release；若它已经被**更新的页面**借走，则什么都不动。
-            //   排查关键字：`RzdBgPhase cache-orphan`。
+            // ★ 2026-11-18（减法）：静态缓存已删除 ⇒ 本页持有的网格源在这里直接释放。
             const leavingMesh: image.PixelMap | undefined = this.meshSrc;
             this.meshSrc = undefined;
-            if (leavingMesh !== undefined && leavingMesh === PlaybackPage.bgCachePm) {
-              if (PlaybackPage.bgCacheOwner === this.closeInstance) {
-                PlaybackPage.bgCacheOwner = 0;
-                appendPlayLog('[RzdBgPhase] cache-orphan, page leaving');
-              } else {
-                appendPlayLog('[RzdBgPhase] keep shared-mesh, borrowed');
-              }
-            } else if (leavingMesh !== undefined) {
-              this.releasePixelMapQuiet(leavingMesh);
-            }
-            // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-17闂?*闁荤偞绋忛崕鑼?*闂佹寧绋戦¨鈧紒杈╂珬闁?40` 闂佸搫鍊瑰妯绘叏閻愮儤鍎?闁诲海鎳撻ˇ闈涱焽閵堝洨鐜绘俊銈傚亾鐟滅増绋戦銉╁川閸忣偄顦辩槐鏃堝箣閻愰潧顥曞┑?婵炴垶姊婚崰搴ｇ礊婵犲洤瀚夋い鎺戝閳ь剙顦甸獮鎰媴鐟欏嫮鐣?闂佺偨鍎查弻锟犲焵?
-            //   闁诲海鎳撻崯顐耿椤忓棛鐜绘俊銈傚亾鐟滅増鐩鐢告偄瀹勭増鏆ラ梺鍛婄懐娴滄繂危?*闂佸湱顭堥崐璇差焽?*闂佹寧绋戝濉竐ndingMeshPm`闂佹寧绋戦¨鈧紒杈ㄧ箞閹崇喖濡烽妸褏顔愬┑鐐茬墢閺佸宕抽柨瀣ㄤ簻闁汇垹鎲″銊╂倶韫囨稐鎲鹃柍褜鍏橀崑鎾绘煕閿曚焦銆冪紒顭掔節閺?
-            //   婵炴垶鎸搁敃顏勵焽娴煎瓨鐒介柨婵嗘噹缂嶆牠鏌涘▎妯归偗闁革絾鎸冲?`meshSrc`闂?*闂佸湱顭堥崐璇差焽閸愵喗鍎嶉柛鏇ㄥ枤缁犲湱鈧鍠氭慨鏉戭潩閵娿儺娼╂慨婵嗙灱缁犲吋绻濋弴鐐电閻㈩垪鍋?*闂佹寧绋戦悧鍡涘箖閹惧墎灏甸悹鍥ㄥ絻閺佸爼鎮楀☉娅亜鐣锋總鍛婂仺闁绘柨鍚嬮敍鏍涢悧鍫叕缂?
-            //   婵?闁?37 闂備緡鍙忕徊濂告煂?闂婎偄娴傞崑鍡涘矗?PixelMap 濠电姵娲栫换鎴犵博?闂佸憡鑹炬總鏃傜博鐎涙鈻旀い蹇撳閸╁矂鏌ｅΟ娆惧晣缂佽鲸宀告俊?
+            this.releasePixelMapQuiet(leavingMesh);
             this.releasePixelMapQuiet(this.pendingMeshPm);
             this.pendingMeshPm = undefined;
             this.imageLabel = $r('app.media.ic_avatar1');
