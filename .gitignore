@@ -11,3 +11,13 @@ local.properties
 .buildcache/
 .cxx/
 *.cxx/
+
+# ── 仓库只保留源码（2026-11-18 用户要求）─────────────────────────────────
+# 文档、日志分析、逆向产物（无界 app/hap/反汇编）一律**不进仓库**，只留在本机。
+# 需要看就在工作区里看；要交给别人走 WebDAV，不走 GitHub。
+docs/
+_wujie133/
+*.app
+*.pa
+*.hap
+*.hap.unsigned
