@@ -813,6 +813,12 @@ export struct SettingsDetailPage {
 
   /** 版本比对：脚本自带 version 与已保存版本一致即视为最新（真正的远端比对在 A4 之后接）。 */
   private async checkSourceUpdateRemote(api: LXUserApiInfo): Promise<void> {
+    // ★ 2026-11-18（用户：「点击检查更新没有任何反应，就像卡了一下，加个小提示」）：
+    //   整条链最短也要 2.6s（脚本自查要等它真的跑一遍）⇒ 先把提示打出来，别让人以为没响应。
+    this.getUIContext().getPromptAction().showToast({
+      message: '正在检查更新……',
+      duration: 4000
+    });
     // ① 只走官方：读引擎上报的 updateAlert，不再自研请求。
     //    ★ 2026-11-14：**必须按脚本 id 读**。以前读的是全局键，本次启动里第一个上报过
     //    告警的源会把对话框劫持给之后检查的所有源（甲方：「检查其它音源还是这个源的提示」）。
@@ -832,8 +838,8 @@ export struct SettingsDetailPage {
         ]
       }).then((result) => {
         if (result.index === 1 && info.updateUrl.length > 0) {
-          // ★ 2026-10-30（用户）：更新链接是网页（kdocs），不下载、直接跳浏览器
-          this.openInBrowser(info.updateUrl, '音源更新');
+          // ★ 2026-11-18（用户）：**直链脚本就现场更新，网页才跳浏览器**（分流见 applyUpdateTarget）
+          void this.applyUpdateTarget(api, info.message, info.updateUrl);
         }
       });
       return;
@@ -860,7 +866,7 @@ export struct SettingsDetailPage {
           ]
         }).then((result) => {
           if (result.index === 1 && probe.updateUrl.length > 0) {
-            this.openInBrowser(probe.updateUrl, '音源更新');
+            void this.applyUpdateTarget(api, probe.message, probe.updateUrl);
           }
         });
         return;
@@ -974,7 +980,7 @@ export struct SettingsDetailPage {
           : [{ text: '知道了', color: this.themeState.color }]
       }).then((result) => {
         if (url.length > 0 && result.index === 1) {
-          this.openInBrowser(url, '音源更新');
+          void this.applyUpdateTarget(api, log, url);
         }
       });
       return true;
@@ -1005,7 +1011,7 @@ export struct SettingsDetailPage {
             : [{ text: '知道了', color: this.themeState.color }]
         }).then((result) => {
           if (probe.updateUrl.length > 0 && result.index === 1) {
-            this.openInBrowser(probe.updateUrl, '音源更新');
+            void this.applyUpdateTarget(api, probe.message, probe.updateUrl);
           }
         });
         return true;
@@ -1145,6 +1151,101 @@ export struct SettingsDetailPage {
         this.schedulePlatformRefresh();
       }
     });
+  }
+
+  /**
+   * 对"更新地址"分流处理（用户 2026-11-18 明确要求）：
+   * - 拉回来一看**就是脚本**（`.js` 直链，或内容是洛雪脚本源码）⇒ **就地更新**
+   *   （`replaceApiScript`，音源 id 与用户设置都保留，不产生重复条目）；
+   * - 否则（网页 / 网盘落地页 / 发布页）⇒ **跳浏览器**。
+   *
+   * ⚠️ 只拿一次内容：先按文本拉，再嗅探，避免"嗅探一次、导入一次"发两遍请求。
+   * @param api 被检查的音源
+   * @param message 服务端/脚本给出的说明（成功时一并提示）
+   * @param updateUrl 更新地址（脚本自己给的）
+   */
+  private async applyUpdateTarget(api: LXUserApiInfo, message: string, updateUrl: string): Promise<void> {
+    if (updateUrl.length === 0 || !/^https?:\/\//.test(updateUrl)) {
+      this.toast(message.length > 0 ? ('「' + api.name + '」' + message) : ('「' + api.name + '」未给出更新地址'));
+      return;
+    }
+    this.getUIContext().getPromptAction().showToast({ message: '正在获取更新……', duration: 3000 });
+    let text: string = '';
+    try {
+      text = await this.fetchText(updateUrl);
+    } catch (err) {
+      appendPlayLog('[RzdSourceUpdate] ' + api.name + ' 取更新内容失败: ' +
+        JSON.stringify(err).substring(0, 120));
+    }
+    if (this.looksLikeScript(text, updateUrl)) {
+      // —— 直链脚本：就地更新
+      const m: RegExpExecArray | null = /@version\s+([^\r\n*]{1,36})/.exec(text);
+      const latest: string = m !== null ? m[1].trim() : '';
+      appendPlayLog('[RzdSourceUpdate] ' + api.name + ' 直链脚本 len=' + text.length +
+        ' current=' + api.version + ' latest=' + latest);
+      try {
+        const r: LXApiImportResult = lxSourceManager.replaceApiScript(api.id, text);
+        appendPlayLog('[RzdSourceUpdate] 直链 replace ok=' + r.ok + ' msg=' + r.message);
+        this.toast(r.ok
+          ? ('「' + api.name + '」已更新' + (latest.length > 0 ? ('到 ' + latest) : '') )
+          : ('更新失败：' + r.message));
+        if (r.ok) {
+          this.refresh();
+          this.schedulePlatformRefresh();
+        }
+        return;
+      } catch (err) {
+        appendPlayLog('[RzdSourceUpdate] 直链 replace 抛异常: ' +
+          JSON.stringify(err).substring(0, 120));
+        this.toast('更新失败，正在打开下载页');
+      }
+    }
+    // —— 不是脚本（网页/网盘/发布页）：跳浏览器
+    this.openInBrowser(updateUrl, '音源更新');
+  }
+
+  /** 拉一段文本（带超时；失败抛异常由调用方处理）。 */
+  private async fetchText(url: string): Promise<string> {
+    const req: http.HttpRequest = http.createHttp();
+    try {
+      const resp: http.HttpResponse = await req.request(url, {
+        method: http.RequestMethod.GET,
+        connectTimeout: 8000,
+        readTimeout: 15000,
+        header: { 'User-Agent': 'rzdmusic/2.0' }
+      });
+      if (resp.responseCode !== 200 || resp.result === undefined) {
+        return '';
+      }
+      return typeof resp.result === 'string'
+        ? resp.result
+        : JSON.stringify(resp.result);
+    } finally {
+      req.destroy();
+    }
+  }
+
+  /**
+   * 这段内容是不是**洛雪脚本源码**。
+   * 判据（宁可漏判成网页，也不要把网页当脚本导进去）：
+   * - 地址以 `.js` 结尾，且内容不像 HTML；
+   * - 或内容里同时出现 `lx.` 与（`@name` / `@version` / `module.exports` / `globalThis.lx`）。
+   * @param text 拉回来的文本（可能为空）
+   * @param url 来源地址
+   */
+  private looksLikeScript(text: string, url: string): boolean {
+    if (text.length < 40) {
+      return false;
+    }
+    const head: string = text.substring(0, 200).toLowerCase();
+    if (head.indexOf('<!doctype') >= 0 || head.indexOf('<html') >= 0) {
+      return false;
+    }
+    const hasLx: boolean = text.indexOf('lx.') >= 0 || text.indexOf('globalThis.lx') >= 0;
+    const hasMeta: boolean = text.indexOf('@name') >= 0 || text.indexOf('@version') >= 0 ||
+      text.indexOf('module.exports') >= 0 || text.indexOf('lx.send') >= 0;
+    const jsUrl: boolean = /\.js(\?|#|$)/i.test(url);
+    return (jsUrl && hasMeta) || (hasLx && hasMeta);
   }
 
   /** 用系统浏览器打开外部链接（更新页/主页这类非脚本链接走这里，避免把网页当脚本导入）。 */
