@@ -20,6 +20,7 @@ import { effectKit } from '@kit.ArkGraphics2D';
 import { common } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { http } from '@kit.NetworkKit';
+import { fileIo as fs } from '@kit.CoreFileKit';
 import {
   AppStorageKeys,
   BreakpointConstants,
@@ -59,7 +60,9 @@ import {
   // 2026-10-18：meta 行「评论」按钮靠它把请求传给 `ControlAreaComponent`（共享序号，见字段注释）。
   PlaybackIntentState,
   WindowInfo,
-  WindowUtil
+  WindowUtil,
+  // 2026-11-18：背景封面「先读本地缓存」，与列表封面共用同一份磁盘缓存
+  CoverCacheService
 } from 'musicbasic';
 import type { LyricMorphRect } from 'musicbasic';
 import { MusicAppState } from '../model/PlayerModels';
@@ -421,10 +424,6 @@ export struct PlaybackPage {
     // ★ 2026-11-02：借用的对象记在本页名下 ⇒ 释放责任回到页面。
     PlaybackPage.bgCacheOwner = this.closeInstance;
     this.meshSrcVersion = this.meshSrcVersion + 1;
-    // ★ 2026-11-18：借用这一步进**持久诊断**（普通日志会被后面的关闭链挤出缓冲）
-    MusicStoreService.getInstance().appendRuntimeDiagnostic(
-      `[RzdBgPhase] shared-mesh adopt ver=${this.meshSrcVersion} owner=${this.closeInstance} key=` +
-      key.substring(0, 20));
     appendPlayLog(`[RzdBgPhase] shared-mesh adopt ver=${this.meshSrcVersion} owner=${this.closeInstance}`);
     return true;
   }
@@ -503,7 +502,7 @@ export struct PlaybackPage {
    * 本次关闭要不要打**节点快照**（`RzdCloseNodes` 那 6 行，每行 ~1KB）。
    *
    * ★ 2026-11-18：「持久诊断」缓冲只有 5000 **字符**，而一次关闭的 6 条节点快照就有 ~6KB
-   *   ⇒ 连关几次就把整段缓冲刷光，连我刚加的 `RzdBgPhase intro-start` 都被挤掉
+   *   ⇒ 连关几次就把整段缓冲刷光，别的诊断（背景/缓存那条链）会被一起挤掉
    *   （用户连贴两份日志都找不到它，就是这个原因）。
    *   ⇒ 默认**不打**；只有本次关闭出现过异常（快照被拒 / 走兜底 / 疑似泄漏）才打开。
    *   正常情况下留 `RzdCloseChain` / `RzdCoverOwner` / `RzdCloseRender` 这些短行就够。
@@ -4423,52 +4422,7 @@ export struct PlaybackPage {
    * 婵°倕鍊归敋閻庤濞婂畷锝呂熼搹瑙勭槗闁诲海鎳撻崯鎶藉吹濠婂喚鍟呴柛妤冨仦閻ㄦ垿鏌涘▎鎯奉亪鎯冮鍕櫖閻忕偠鍋愰懝楣冩煛?闁诲繐绻嬬欢姘焽娴兼潙绠為柕蹇娾偓鍐茬睄闂佸憡鐟﹂敋闁?婵炴垶姊婚崰宥囩博鐎靛憡灏庨梺鍨儐闂勫秴霉濠婂啯顥撻柍?
    */
   private playExpandIntro(): void {
-    // ★ 2026-11-18：**先落一条最小日志**，再算细节。
-    //   上一版把「算 key」和「打日志」放在同一个 try 里 —— 只要 `currentMeshKey()` 之类
-    //   抛一次，整条诊断就**一个字都不留**（用户三份日志都找不到它，很可能就是这种"自己把自己吞了"）。
-    //   排查关键字：`RzdBgPhase intro-begin` / `intro-start`。
-    try {
-      appendPlayLog('[RzdBgPhase] intro-begin inst=' + this.closeInstance);
-      MusicStoreService.getInstance().appendRuntimeDiagnostic(
-        '[RzdBgPhase] intro-begin inst=' + this.closeInstance);
-    } catch (e) {
-      // 连这条都写不出来，只能是日志设施本身出问题
-    }
-    // ★ 2026-11-17（用户：「现在只会概率背景消失了」，并给了关闭链日志）：
-    //   背景是「共享网格」（静态缓存 `bgCachePm` + 组件内兜底），涉及**跨页面实例**的
-    //   PixelMap 借用/移交，出问题时分散在 `RzdBgPhaseMesh` 的多条日志里，一份日志拼不出来。
-    //   这里在**展开起手**打一条自描述的行：这一页有没有源、缓存里那张还活着吗、
-    //   key 对得上吗、释放责任在谁 —— 下次"背景消失"跑一次就能定位到是哪一环。
-    //   排查关键字：`RzdBgPhase intro-start`。
-    // 分两级记：**先记只读字段**（不会抛），再记可能抛的计算字段。
-    // 这样即使 key 计算炸了，我们至少还有 `mesh`/`ver` 这两个关键读数。
-    try {
-      appendPlayLog('[RzdBgPhase] intro-start-A mesh=' +
-        (this.meshSrc !== undefined ? 1 : 0) + ' ver=' + this.meshSrcVersion +
-        ' inst=' + this.closeInstance);
-      MusicStoreService.getInstance().appendRuntimeDiagnostic(
-        '[RzdBgPhase] intro-start-A mesh=' + (this.meshSrc !== undefined ? 1 : 0) +
-        ' ver=' + this.meshSrcVersion + ' inst=' + this.closeInstance);
-    } catch (eA) {
-      // 连只读字段都写不出来：日志设施本身的问题
-    }
-    try {
-      const curKey: string = this.currentMeshKey();
-      const cachePm: image.PixelMap | undefined = PlaybackPage.bgCachePm;
-      const introBgLine: string = '[RzdBgPhase] intro-start-B key=' +
-        (curKey.length > 0 ? curKey.substring(0, 20) : '-') +
-        ' cacheKey=' + (PlaybackPage.bgCacheKey.length > 0 ?
-          PlaybackPage.bgCacheKey.substring(0, 20) : '-') +
-        ' keyMatch=' + (curKey.length > 0 && curKey === PlaybackPage.bgCacheKey ? 1 : 0) +
-        ' cachePm=' + (cachePm !== undefined ? 1 : 0) +
-        ' alive=' + (PlaybackPage.sharedMeshAlive() ? 1 : 0) +
-        ' cacheOwner=' + PlaybackPage.bgCacheOwner +
-        ' inst=' + this.closeInstance;
-      appendPlayLog(introBgLine);
-      MusicStoreService.getInstance().appendRuntimeDiagnostic(introBgLine);
-    } catch (e) {
-      // 计算字段抛了：A 行已经在，能定位到是这一步的问题
-    }
+
     // 闂?**缂傚倷鑳堕崰宥囩博閹绢喖绀傞柕澶堝劚缂?+ 闂佸搫鍟版慨鐑藉疾椤愩埄鍤曢煫鍥ㄦ尭楠炴垿骞?*闂佹寧绋掔喊宥嗘櫠瀹ュ瀚夊璺侯儏閳數鈧鍠掗崑鎾绘煛閸屾粍鍤€缂佹唻绻濋弫宥夊醇閵忕姳鍖栭梺鍛婂灦閻綊鍩€椤戞寧绁伴柟鐧哥秮楠炴﹢顢橀悢宄邦棈闂佹悶鍎伴崟姗€鍩€椤戞寧顦风紒妤€鍊块獮蹇斿緞鐎ｎ偆绻侀梺褰掓涧椤戞垹妲愬鑸电劸闁瑰瓨甯為惌銈夊级閳哄倻鎳囬柛锝夋敱濞艰鈽夐弽銈呬壕?
     //   閻?闂佸綊娼ч鍡欌偓鍨壘椤垽鏁愰崨顔垮惈婵＄偟鎳撳畷顒佹叏?闂?闁荤姳璁查弲婵堝垝娴兼潙绠ラ悗锝庝簻閳笺垽鏌?
     //   閻?婵炴垶鎸堕崐妤咁敂椤掑嫭鐓ユ慨妯哄船娴狀垶鏌ㄥ☉妯煎ⅲ缂侇垳濮甸幏鍛存偐閾忣偉鎷柣蹇撶箣缁舵艾顭?+ 闂佸湱铏庨崢浠嬪棘娴ｅ箍浜滈梻鍫熺〒濞堥亶姊婚崼顐ｇ窙缂佽鲸宀搁弻鍫熺鐎ｎ亝顏￠梺鍛婂浮椤ｏ妇鑺?闂?闁荤姍鍕凡闁奸晲鍗冲畷锝咁潨閸垻顦ーtryStartMorphIntro`闂佹寧绋戦¨鈧紒?
@@ -8060,8 +8014,65 @@ export struct PlaybackPage {
    *   婵炴垶鎸哥粔瀵告崲閳ь剙鈽夐幘鑽ょ窗闁稿孩顨婂鏌ヮ敍濮橆剚娅冩繛鎴炴尭椤戝牆霉閸ャ劎鈻旈柍褜鍓熼弻鍡楊吋閸涱垱顔堥梻鍌氱墱濞煎潡鍩€椤戣法绠筪esiredSize` + `editable` 闂佸搫瀚烽崹鎵崲閳ь剙顪冮妶鍫濆惞婵?闂佺偨鍎查弻锟犲焵?
    *   缂傚倸鍟崹鍫曟偋缁嬪簱鏀﹂柟閭﹀灱濞诧綁鏌?64闁?4 婵炴垶鎸搁敃銈囨暜椤愶箑鎹堕柡澶娿仒缁?`enhanceColors` / `boxBlurRgba`闂佹寧绋戦悧鎰帮綖?`publishMeshSource`闂佹寧绋戦ˇ顓㈠焵?
    */
+  /**
+   * 这张封面的**本地缓存文件**路径（没有就空串）。
+   *
+   * 与 `MeshCoverBg.paintLocalCoverSync` 用同一个 `CoverCacheService`：
+   * 「背景首帧同步出图」和「背景取图不重复下载」两件事共用一份缓存。
+   * @param url 封面地址
+   */
+  private static localCoverPath(url: string): string {
+    if (url.length === 0) {
+      return '';
+    }
+    try {
+      const host: common.Context = getContext() as common.Context;
+      if (host === undefined || host === null) {
+        return '';
+      }
+      return CoverCacheService.getInstance().cachedPathSync(host, url);
+    } catch (err) {
+      return '';
+    }
+  }
+
   private static async loadOnlineCoverPair(url: string): Promise<CoverDecodePair> {
     const out: CoverDecodePair = new CoverDecodePair();
+    // ★★★ 2026-11-18（用户：「封面都飞入了，说明肯定有封面，为啥还要重新拉取一次」）：
+    //   背景用的这张封面以前**无条件走网络**，即使列表/歌词页早就把它下过并落进
+    //   `CoverCacheService`（`cacheDir/rzd-http-covers-v1/<sha256>.cover`）。
+    //   ⇒ 先读本地文件（与无界 `decodeCover()` 同一个思路），命中就**完全不发请求**；
+    //   没命中才下载，并**顺手交给缓存**落盘（下次就命中）。
+    const cachedPath: string = PlaybackPage.localCoverPath(url);
+    if (cachedPath.length > 0) {
+      try {
+        const file: fs.File = fs.openSync(cachedPath, fs.OpenMode.READ_ONLY);
+        try {
+          const src: image.ImageSource = image.createImageSource(file.fd);
+          try {
+            out.full = await src.createPixelMap();
+            out.mesh = await src.createPixelMap({
+              desiredSize: { width: SRC_EDGE, height: SRC_EDGE },
+              desiredPixelFormat: image.PixelMapFormat.RGBA_8888,
+              editable: true
+            });
+          } finally {
+            src.release();
+          }
+        } finally {
+          fs.closeSync(file);
+        }
+        if (out.mesh !== undefined) {
+          Logger.info(PlaybackPage.logTag, 'RzdBgPhase cover from local cache (no fetch)');
+          return out;
+        }
+      } catch (err) {
+        // 本地文件坏了：当作没命中，走下载
+        Logger.warn(PlaybackPage.logTag, 'local cover decode failed, fallback to http');
+        out.full = undefined;
+        out.mesh = undefined;
+      }
+    }
     const req: http.HttpRequest = http.createHttp();
     try {
       const resp: http.HttpResponse = await req.request(url, {
@@ -8976,23 +8987,7 @@ export struct PlaybackPage {
             }, 96);
             if (this.expandState.morphContainerActive() || this.expandState.morphSessionStarted) {
               this.diagAppearBranch = 'morph';
-              // ★ 2026-11-18：**这条才是正常打开走的路**（壳层驱动形变，页面只配合收尾）。
-              //   前两轮我只给 `intro` / `skipClose` 加了诊断，于是"正常打开"的日志里一个字都没有，
-              //   我还据此推断成"用户测法一直走 skipClose" —— 那是**错的**。
-              //   这里补同口径的自描述行（独立 try，绝不被后续计算拖累）。
-              try {
-                appendPlayLog('[RzdBgPhase] intro-morph mesh=' +
-                  (this.meshSrc !== undefined ? 1 : 0) + ' ver=' + this.meshSrcVersion +
-                  ' cachePm=' + (PlaybackPage.bgCachePm !== undefined ? 1 : 0) +
-                  ' stage=' + this.expandState.morphStage + ' inst=' + this.closeInstance);
-                MusicStoreService.getInstance().appendRuntimeDiagnostic(
-                  '[RzdBgPhase] intro-morph mesh=' + (this.meshSrc !== undefined ? 1 : 0) +
-                  ' ver=' + this.meshSrcVersion +
-                  ' cachePm=' + (PlaybackPage.bgCachePm !== undefined ? 1 : 0) +
-                  ' stage=' + this.expandState.morphStage + ' inst=' + this.closeInstance);
-              } catch (eM) {
-                // 诊断绝不影响进场
-              }
+
               this.introPaintReady = true;
               this.expandIntroRunning = false;
               // 闂佸疇妫勯幊澶娢?2026-10-16闂佹寧绋戦悧蹇涘磻閿濆绀勯柡鍕箳閻斿懐鈧灚婢樼€氼喖鈻?*闂佸憡鍨规慨宕囩礊瀹ュ洦鍋橀柕澶嗘櫅濞?*闂佹寧绋戦¨鈧紒?
@@ -9066,27 +9061,7 @@ export struct PlaybackPage {
               if (this.isClosing || this.expandState.morphStage === MorphStage.LANDING ||
                 (sinceCloseMs >= 0 && sinceCloseMs < PlaybackPage.CLOSE_WINDOW_MS)) {
                 this.diagAppearBranch = 'skipClose';
-                // ★ 2026-11-18：**这条分支以前完全没有诊断**。
-                //   用户"快速开→立即返回"的测法（间隔 ~1s < CLOSE_WINDOW_MS=1500）**永远**走这里，
-                //   于是 `playExpandIntro()` 一次都不跑 —— 这就是三份日志里都没有 `intro-begin` 的原因。
-                //   这里补一条同口径的自描述行（写在**独立的 try** 里，绝不被其它计算拖累）。
-                try {
-                  appendPlayLog('[RzdBgPhase] intro-skip sinceClose=' + sinceCloseMs +
-                    ' stage=' + this.expandState.morphStage +
-                    ' mesh=' + (this.meshSrc !== undefined ? 1 : 0) +
-                    ' ver=' + this.meshSrcVersion +
-                    ' cachePm=' + (PlaybackPage.bgCachePm !== undefined ? 1 : 0) +
-                    ' inst=' + this.closeInstance);
-                  MusicStoreService.getInstance().appendRuntimeDiagnostic(
-                    '[RzdBgPhase] intro-skip sinceClose=' + sinceCloseMs +
-                    ' stage=' + this.expandState.morphStage +
-                    ' mesh=' + (this.meshSrc !== undefined ? 1 : 0) +
-                    ' ver=' + this.meshSrcVersion +
-                    ' cachePm=' + (PlaybackPage.bgCachePm !== undefined ? 1 : 0) +
-                    ' inst=' + this.closeInstance);
-                } catch (e) {
-                  // 诊断绝不影响进场
-                }
+
                 PlaybackPage.ev('AP', `skipClose since=${sinceCloseMs}`);
                 Logger.info(PlaybackPage.logTag,
                   `RzdMorphOnAppear skip intro, isClosing=${this.isClosing} ` +
