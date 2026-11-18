@@ -20,7 +20,7 @@ import { effectKit } from '@kit.ArkGraphics2D';
 import { common } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { http } from '@kit.NetworkKit';
-import { fileIo as fs } from '@kit.CoreFileKit';
+import { fileIo as fs, fileUri } from '@kit.CoreFileKit';
 import {
   AppStorageKeys,
   BreakpointConstants,
@@ -7720,7 +7720,22 @@ export struct PlaybackPage {
     if (!song || song.source === undefined) {
       return undefined;
     }
-    // ① 在线封面：沿用已有的「磁盘缓存优先」链，命中零请求
+    // ① **本地文件封面**：本地导入的歌把内嵌封面抽成 `files/local_music/covers/<key>.jpg`，
+    //   `SongItem.cover` 存的是它的 **file:// URI**（`LocalMusic.getCoverUri`）。
+    //   播放条能把这张显示出来，正是靠 `Image(file uri)` 原生支持；
+    //   而我们这边原来把它当**在线 URL 去发 http** ⇒ 必然失败 ⇒ 掉回平均色（用户看到的"纯色"）。
+    //   ⇒ 先按本地文件解码。排查关键字：`RzdBgSrc bar-cover file`。
+    if (PlaybackPage.isLocalFileUri(song.cover)) {
+      const filePm: image.PixelMap | undefined = await this.decodeFilePixelMap(song.cover);
+      if (filePm !== undefined) {
+        if (jobSeq === this.imageColorJobSeq) {
+          return filePm;
+        }
+        this.releasePixelMapQuiet(filePm);
+        return undefined;
+      }
+    }
+    // ② 在线封面：沿用已有的「磁盘缓存优先」链，命中零请求
     if (song.cover.length > 0) {
       try {
         const pair: CoverDecodePair = await PlaybackPage.loadOnlineCoverPair(song.cover);
@@ -7739,6 +7754,55 @@ export struct PlaybackPage {
     }
     // ② 本地内嵌封面 / 无封面占位图：与播放条完全同一张（`song.label`）
     return await this.decodeResourcePixelMap(song.label);
+  }
+
+  /** `cover` 是不是本地文件（`file://` URI 或绝对路径）。 */
+  private static isLocalFileUri(uri: string): boolean {
+    return uri.startsWith('file://') || uri.startsWith('datashare://') || uri.startsWith('/');
+  }
+
+  /**
+   * 从**本地文件**解出网格用的 64×64 PixelMap（本地导入歌的内嵌封面就是这种）。
+   * @param uriOrPath `file://` URI 或绝对路径
+   */
+  private async decodeFilePixelMap(uriOrPath: string): Promise<image.PixelMap | undefined> {
+    let source: image.ImageSource | undefined = undefined;
+    let file: fs.File | undefined = undefined;
+    try {
+      let path: string = uriOrPath;
+      if (path.startsWith('file://')) {
+        path = new fileUri.FileUri(uriOrPath).path;
+      }
+      file = fs.openSync(path, fs.OpenMode.READ_ONLY);
+      source = image.createImageSource(file.fd);
+      const pm: image.PixelMap = await source.createPixelMap({
+        desiredSize: { width: SRC_EDGE, height: SRC_EDGE },
+        desiredPixelFormat: image.PixelMapFormat.RGBA_8888,
+        editable: true
+      });
+      appendPlayLog('[RzdBgSrc] bar-cover file ok');
+      return pm;
+    } catch (err) {
+      const e = err as BusinessError;
+      Logger.warn(PlaybackPage.logTag,
+        'RzdBgSrc file cover decode failed, code=' + e?.code + ', message=' + e?.message);
+      return undefined;
+    } finally {
+      try {
+        if (source !== undefined) {
+          source.release();
+        }
+      } catch (e2) {
+        // 释放失败无补救
+      }
+      try {
+        if (file !== undefined) {
+          fs.closeSync(file);
+        }
+      } catch (e3) {
+        // 关不上就当关了
+      }
+    }
   }
 
   /**
