@@ -224,8 +224,8 @@ class MeshRenderNode extends RenderNode {
   flow: number = 1;
   private brush: drawing.Brush = new drawing.Brush();
 
-  /** 诊断节流：`draw-skip` 每秒最多一条（RenderNode 里没有组件状态，用静态）。 */
-  private static lastSkipLogMs: number = 0;
+  /** 诊断节流：`draw-skip` 每个节点每秒最多一条（per-node：静态会把新节点的首条吞掉）。 */
+  private lastSkipLogMs: number = 0;
   /** 首帧画成功只记一次。 */
   private static firstDrawLogged: boolean = false;
 
@@ -237,8 +237,8 @@ class MeshRenderNode extends RenderNode {
       //   背景"消失"到底是 ①没源（src=null）还是 ②画布尺寸 0？两者修法完全不同。
       //   每秒最多一条。排查关键字：`RzdMesh draw-skip`。
       const nowMs: number = Date.now();
-      if (nowMs - MeshRenderNode.lastSkipLogMs >= 1000) {
-        MeshRenderNode.lastSkipLogMs = nowMs;
+      if (nowMs - this.lastSkipLogMs >= 1000) {
+        this.lastSkipLogMs = nowMs;
         appendPlayLog('RzdMesh draw-skip src=' + (this.src === null ? 'null' : 'ok') +
           ' w=' + w + ' h=' + h);
       }
@@ -442,6 +442,15 @@ class MeshBgController extends NodeController {
     //   ⇒ 保留（只影响"暂停态补画一帧"，不改变任何像素内容），并在 `backgroundRevealOpacity()` 一侧
     //     严格照搬上游的取值链。
     this.node.invalidate();
+    // ★ 2026-11-18（同上）：`resize()` 里这次 `invalidate()` 在"节点刚挂载、还没进渲染树"
+    //   那一拍会被丢掉。再补一次**下一拍**的重画，双保险（`onAreaChange` 那边也有一处）。
+    setTimeout((): void => {
+      try {
+        this.node.invalidate();
+      } catch (err) {
+        // 节点已销毁：忽略
+      }
+    }, 0);
   }
 }
 
@@ -1352,6 +1361,23 @@ export struct MeshCoverBg {
           const wVp: number = Number(newArea.width);
           const hVp: number = this.fixedHVp > 0 ? this.fixedHVp : Number(newArea.height);
           this.controller.resize(wVp, hVp);
+          // ★★★ 2026-11-18（**背景消失的真因**，运行日志实测）：
+          //   真机日志是
+          //   ```
+          //   RzdMesh draw-skip src=ok w=0 h=0        ← 唯一那次 draw 发生在 0×0
+          //   RzdMesh resize 0x0 -> 376x809.14        ← 尺寸到得比 draw 晚
+          //   （然后再也没有 draw-first）
+          //   ```
+          //   ⇒ `RenderNode` 首次 `draw()` 在**尺寸还没出来**时被调用，画不出；
+          //   尺寸到位后 `resize()` 里的 `invalidate()` **没能把节点重新标脏**
+          //   （节点在那一拍还没真正挂进渲染树）⇒ 之后再没人叫它 ⇒ 屏上永远空着。
+          //   这正好解释"有概率"：取决于 draw / 布局 / 挂载三者的先后。
+          //   ⇒ 尺寸一到位，就**在这一帧之后补一次重画**（`setTimeout(0)` 让挂载先完成）。
+          if (wVp > 0 && hVp > 0) {
+            setTimeout((): void => {
+              this.onFrameNow();
+            }, 0);
+          }
         })
 
       if (this.scrim) {
