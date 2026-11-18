@@ -7334,36 +7334,6 @@ export struct PlaybackPage {
     }, 150);
   }
 
-  /**
-   * 闁宠棄鎳夊Σ鍕煡閸涱亝顫?2026-10-17闁?*閻犳亽鍔戦妴澶愭閵忋垻绉归柡宥呭悑缁喚绱撻幘宕囨憼** 闁炽儲鏌￠埀?濞ｅ浂鍠撻埀顒€鑻惈宥咁嚕閳ь剟鎯冮崟顒侇槯闁稿﹥鐟﹀Σ鎼佹嫅濠靛﹤顥忛柕鍡楃▌缁?
-   *
-   * ## 濞戞捁妗ㄧ划鍫熺▕閸繄娼旂€殿喒鍋撻柡鍐煐濡叉悂鎷戝┑濠傤棌
-   *   闁哄啰濮烽弲顐︽焽閿濆嫮顏卞〒?`MeshCoverBg` 闁衡偓閸撲焦鐣遍柡?**`$$.imgLocal`闁挎稑鐗婂﹢浼村捶閺夎法娈遍梻鍫涘灪閺嬪啯绂掔拋鍦** 闁炽儲鏌￠埀?闁圭虎鍘介弬渚€宕抽妸锕€鈪电€殿喒鍋撻梺顓ㄧ导缁旀挳宕?
-   *   閻忓繋绶氬鏉款啅閼碱剛鐥呴柛锔哄妽濠€浼村捶?闁?闁煎啿鏈▍娆戠箔椤戣法顏遍悽顖嗗啯鐨戦柡?*闁活亞鍠庨惃婵嬫?*闁汇劌瀚伴崢銈夋嚌鐠囇呯缂備礁瀚▎銏ゆ煂瀹€鍕簼濞?`makeFallback()`
-   *   闁挎稑鐗婄€?`seed` 闁肩灏欏ù澶愭焻閻樺灚鐣?*闁搞儲绋栭～?HSL 婵炴挻鍔曡ぐ?*闁挎稑顦悢鈧柡鍫墰閺併倖绋夊鍕憪闁?
-   *   闁瑰瓨鍨冲鎴炴交濞嗗海顏卞〒姘€鍐闂傚牄鍨归ˇ鍧楀及?*闁革负鍔庨崵?URL**闁挎稒宀搁妴澶愭閵忥紕妲ㄦ繛鍡忓墲婢э箑顕ｉ埀顒勬焾閼恒儲笑闁哄倹婢橀悿鍕瑹鐎ｃ劉鍋撴稊顤砮shSrc` 濞戞捁娅ｉ埞?闁?
-   *   缂備礁瀚▎銏ゅ礃?`makeFallback()` 闁稿繐鐗撻妴濠冪▔?闁?閻忕偛绻嬬粭鍌滀焊鏉堛劍笑闂侇叏绲界槐鍫曞箰?seed 闁肩灏欏ù澶愭偨鐠囨彃姣夐柡澶堝劤濞堟垿宕楀鍐亢缂傚啯鍨堕悧鎼佹晬?*闁藉啯绻嗘竟?*闁挎稑顧€缁?
-   *   缂佹稑顦卞﹢锛勪焊娓氣偓濞肩増绋夌€ｎ厽绁伴悷娆欑悼閻栨粎鈧懓鏈晶鐘诲箲閵忋垺鍩傞梺鏉跨Х婢瑰﹪鏁嶅畝鍕簼闁哄啳娉涙慨鈺呮偨缂佹ɑ锛嶇紓浣规尰濞碱偅绂嶉崱鎰ㄥ亾?
-   *
-   * ## 闁稿纰嶇涵鍫曟晬閸垻鎼煎ù鐘烘腹缁剚绋夋繝鍐煑"闁哄牜鍓欏﹢瀵镐焊娓氣偓濞肩増绋夐埀顒勬儎閺夋垶韬?闁?
-   *   婵絽绻戦濂稿箵閹邦亝鍞夌紓鍐╁灦閻楃鈹冮幇顓燁槯闁挎稑鏈俊?*鐎规瓕灏欑划?enhance+blur 閺夆晛娲ㄥ▓?64閼?4 RGBA 缂傚倹鎸搁崯?*闁?6KB闁挎稑顦崇换娑㈠触鐏炵晫鏆婇柣?key
-   *   閻庢稒蓱閸?*闂傚牊鐟﹂埀顑跨閻⊙冣枔?*闁挎稒绋愮粭鍛▔閳ь剙鈻庨敓鐘偓澶愭閵忊€崇槸閺夌偠濮ゅ鍌炴嚐?key 閺夆晜蓱濡叉悂宕ョ仦鑲╊伇濡絾鐗槐婵堜焊鏉堚晜绾柟鎭掑劙缁姵娼诲▎搴℃暅缂傚倹鎸搁崯鍧楁煂瀹ュ懐绱?PixelMap
-   *   闁?闁瑰灚鎸哥槐鎴﹀礉閵娧勬毎缂佹鍏涚粩瀵告暜瑜嶅銊╁及椤栨粍鍩傞梺鏉跨Х婢瑰﹪鏁嶇仦钘夊箲閹煎瓨娲滅紞澶愬冀閻撳骸娑ч柣顏嗗枑椤掓粓宕楀鍐亢闁?
-   *   闁宠法濯寸粭?閻?*缂傚倹鎸搁崯?*闁兼澘濂旂粭澶愬及?PixelMap闁挎稒纰嶆晶宥夊嫉婢跺缍€缂佺姭鍋撻柛妤佹穿缁辨瑧鐥姘暥閻庢稒锕槐姘舵晬瀹€鍕┾偓澶愭閵忥紕妲ㄦ繛鍠°倕娈扮€规悂浜堕埀?PixelMap闁?
-   *     闂侇偀鍋撻柛锕佹閸欏酣寮閸ゆ粌顔忛柆宥呮珵闁衡偓?闁?濞戞挸绉崇槐浼村矗瀹€鍕闂佹彃锕ラ弬渚€濡?
-   *   闁宠法濯寸粭?key 濞戞挸绉寸亸顕€鏌婂蹇曠闁瑰箍鍨洪悺鏇㈡晬婢跺棗娅?濞戞挸绉归崳浼存偨椤帞绀勫☉鎾崇С缁变即骞庢繝浣虹憪濞戞挴鍋撳Λ锝嗙墱濞堟垿鏌婂鍫濐棌濞戞挻褰冮崺灞炬交濞嗗海顏卞Λ锝嗙壄缁辨岸濡?
-   *
-   * ## 闁粹偓?2026-10-17 鐟滅増鎸搁妵澶愬箻閵堝懏绀€闁挎稑鐗忛弫銈夊箣瀹勬壆鏉芥繛鏉戭儍閳?*閻忕偞娲栫槐鎴炴交閸モ斁鏌ゅ☉鎿冨幘濞堟垿寮伴娆戠憪濞戞挴鍋撳Λ锝嗙墬閻℃洟鎯冮崟顖ｆ澒闁?*闁靛棗绋勭槐?
-   *   闁哄秶鎳撳ú婊堟晬?*濡炪倗鏁诲浼村箰閸屾繃绁伴梺顓ㄧ导缁旀挳骞?`state.getCurrentSongItem()` 閺夆晜蓱濡插憡绋夋繝浣侯伇濡?*闁挎稑鐗忔慨鎼佸箑娴ｇ儤鏆犻悹瀣暟閺併倝寮悷鐗堝€甸柛鎰懕缁辨岸鏁?
-   *   濞存粌瀛╁Σ?`currentMeshKey()` 濞戞梻鍠愬Σ鍛婄▔婵犱胶顏卞Λ锝嗙墱濞?key 闁?闁告稒鍨濋懙鎴炵▔婵犱胶顏卞Λ锝嗙墱濞堟垹绱撻幘鍐叉毐 闁?鐎殿喒鍋撻柛锕€鎼慨鈺呮偨缂佹ɑ鏉归柣銊ュ濡?*濞戞挸锕ｇ粩瀛橈純閺嶎偅鐣遍梺鏉跨Х婢?*闁?
-   *   闁挎稑鐗嗛幃鎾寸▔閳ь剟骞忓鍕憪 `meshSeed()` 濞戞梻鍠嶇槐浼村矗閺嵮冪厒濞戞挸锕ｇ粩瀛橈純?闁?闁稿繑绮岀花宕囩磾閹寸偟澹愰柛姘湰閻楅亶寮伴娆戠憪濞戞挴鍋撳Λ锝嗙墱濞堟垿鎳濋懠顒佺ゲ闁靛棗鍋婄槐?
-   *   闁?**閻犳亽鍔戦妴澶愭閵忋垻澶勯悗娑櫳戦弳锝呪枔闂堟稐绮婚柣?*闁挎稑鐗呯粭鍛存?`adoptCachedMesh()` 濞ｅ洦绻勯弳鈧悗鍦仧楠炲洦鎷?*闁哄啰濮鹃惃鐔兼偨閵娧冧化**闁?
-   *     闁告劖鐟х槐锕傚礃閺屻儱浜濆☉鎾卞€涢、鎴炵▕閻斿嘲鍤掗柛鎺斿█濞呭酣鏁嶆径鍫氬亾閸屾繍娲ｉ柟顓滃灩椤﹁尙鈧懓鍠涚槐婵婄疀閸涙番鈧繘宕楅崼锛版帡宕?闁圭鍊藉ù鍥籍閸撲礁笑闁诡兛鐒﹀Σ鍛婄▔婵犱胶顏卞Λ?閺夆晜鐟ら柌婊堝礈瀹ュ棗绲?
-   *   闁炽儲鏌￠埀?濞撴艾顑呴々褔鎮介崡鐑囩处閻忕偛鍊稿﹢?push 闁告挸绉垫俊姝屻亹閹惧啿顤呮慨婵嗚嫰閸熸挻娼诲☉姘﹂柟顑跨筏缁辨繈骞嬮弽顑藉亾閸涱喖惟缂傚啯鍨堕悧鎼佸磻濮橆厼鐏?`AppStorageV2` 闁稿繐褰夐棅鈺呮偐閼哥鍋撴担纰樺亾?
-   *     闁?婵繐绲藉﹢顏堝箻椤撶喐鏉归柣銊ュ閸嬪懏绋夐埀顒侊純?閻犳劗鍠曢惌妤冪磼鐎涙ê袘闁?*濞戞挸绉烽々?*闁告瑯浜濇俊鍝ョ磽閹惧磭鎽犻梺鎻掔У閺屽﹪骞掗妷銈囩憪濞存粌妫旂花銊╁Υ?
-   */
-  private static meshBufKey: string = '';
-  private static meshBuf: Uint8Array | undefined = undefined;
 
   /** @returns 鐟滅増鎸告晶鐘差潰鐏炵偓閿ら柣銊ュ缂嶅寮介懖鈺冨閻?key闁? 閻忓繋绶氬?URL / 闁哄牜鍓欏﹢瀵告導閸曨剛鐖遍柡宥呮穿閻︽垿鏁嶅☉妯虹悼濞戞挸绉撮崺宀€绮氭潪鎷岊洬闁挎稑顦埀?*/
   private currentMeshKey(): string {
@@ -7504,34 +7474,6 @@ export struct PlaybackPage {
     this.commitMeshSource(pm, this.meshSrc);
   }
 
-  private async adoptCachedMesh(): Promise<void> {
-    // ★ 2026-10-18：同上——只挡"这一首已经有源"，不再用"任何源都算好了"。
-    if (!this.isAlive || (this.meshSrc !== undefined && this.meshTrackKey === this.currentMeshKey())) {
-      return;
-    }
-    const buf: Uint8Array | undefined = PlaybackPage.meshBuf;
-    const key: string = this.currentMeshKey();
-    if (buf === undefined || key.length === 0 || PlaybackPage.meshBufKey !== key) {
-      return;
-    }
-    try {
-      const copy: Uint8Array = buf.slice();
-      const pm: image.PixelMap = await image.createPixelMap(copy.buffer, {
-        size: { width: SRC_EDGE, height: SRC_EDGE },
-        pixelFormat: image.PixelMapFormat.RGBA_8888,
-        editable: true
-      });
-      if (!this.isAlive || (this.meshSrc !== undefined && this.meshTrackKey === this.currentMeshKey())) {
-        this.releasePixelMapQuiet(pm);
-        return;
-      }
-      Logger.info(PlaybackPage.logTag, 'RzdBgCache adopt cached mesh');
-      this.commitMeshSource(pm, this.meshSrc);
-    } catch (err) {
-      const e = err as BusinessError;
-      Logger.warn(PlaybackPage.logTag, `adoptCachedMesh failed code=${e?.code}, message=${e?.message}`);
-    }
-  }
 
   /**
    * @returns 闂佺厧鍟块張顒€鈻嶅▎鎴犵＞闁瑰鍋熸竟鎰版煟?*闂佺绻戠划宀€鑺卞畷鍥╃煋鐎广儱鎳愰幗?* 闂佺偨鍎查弻锟犲焵?闂佺粯鎸嗛崟顒€鍓堕梺鍝勫暟婵兘寮?`seedOfParts($$.title, $$.artist)`
@@ -7814,11 +7756,6 @@ export struct PlaybackPage {
       //   鈬?鏁存褰㈠彉鎷夸笉鍒扮湡婧愶紝灞忎笂鏄?`makeFallback()` 鎸?title|singer 鍝堝笇鍑烘潵鐨勮壊鐩?
       //   = 鐢ㄦ埛鍙嶅鎶ョ殑銆岀偣鍑诲睍寮€鑳屾櫙杩樻槸鏈夐棶棰?/ 棰滆壊涓嶅銆嶃€?
       //   鈿狅笍 瀛?*瀛楄妭**涓嶅瓨 PixelMap锛堣法椤?release 浼氬弻閲婃斁锛涢潤鎬?PixelMap 缂撳瓨瀹炴祴浼氭樉绀轰笂涓€棣栵級銆?
-      const warmKey: string = this.currentMeshKey();
-      if (warmKey.length > 0) {
-        PlaybackPage.meshBufKey = warmKey;
-        PlaybackPage.meshBuf = u8.slice();
-      }
     } catch (err) {
       const e = err as BusinessError;
       Logger.warn(PlaybackPage.logTag, `mesh source build failed code=${e?.code}, message=${e?.message}`);
