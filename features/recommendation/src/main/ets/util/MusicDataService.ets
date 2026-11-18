@@ -1488,7 +1488,13 @@ export class MusicDataService {
     if (source === 'qs') {
       return false;
     }
-    return source !== 'tx';
+    // ★ 2026-11-19（用户：「首页还是固定那几首」）：**QQ 不再排除**。
+    //   以前这里写死 `source !== 'tx'`（注释说"QQ 广场接口实测一条都出不来"），
+    //   而 `categories('tx')` / `playlists('tx')` 的实现其实都在（`get_all_categories` +
+    //   `get_category_content`）⇒ 等于把 QQ 的自建推荐**整个关掉**，
+    //   首页只好永远用同一张固定榜单（这就是"每次都是那几首"的直接原因）。
+    //   现在放行：真拿不到内容时上层会记日志并退回多榜随机（见 `loadHomeSongsAsync`）。
+    return true;
   }
 
   static sortOptions(source: string): SortOption[] {

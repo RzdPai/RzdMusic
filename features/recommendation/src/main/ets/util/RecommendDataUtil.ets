@@ -355,7 +355,15 @@ export class RecommendDataUtil {
         Logger.warn('RzdHomeRec', `self rec fail err=${(err as Error).message ?? ''}`);
       }
     }
-    if (dedicatedId.length > 0) {
+    // ★★★ 2026-11-19（用户：「首页还是固定那几首，是不是每次重启不会刷新」）：
+    //   原来是**先用"指定榜单"填满**（一张榜固定 N 首）⇒ 自建推荐为空时屏上永远同一批歌。
+    //   现在顺序改为：自建推荐 → **多榜随机抽** → 指定榜单兜底。
+    //   （自建推荐能出内容时它已经填够，后面两步自然不跑。）
+    const needRandomBoards: boolean = merged.length === 0;
+    if (needRandomBoards) {
+      await RecommendDataUtil.appendRandomBoardSongs(svcSource, targetCount, merged, seen);
+    }
+    if (merged.length === 0 && dedicatedId.length > 0) {
       try {
         const tracks: TrackData[] = await MusicDataService.tracks(svcSource, dedicatedId);
         for (let i: number = 0; i < tracks.length && merged.length < targetCount; i++) {
@@ -430,6 +438,71 @@ export class RecommendDataUtil {
     result.boardName = usedDedicatedBoard ? dedicatedName : '';
     result.degraded = !usedDedicatedBoard && merged.length > 0;
     return result;
+  }
+
+  /**
+   * **多榜随机抽歌**：随机挑几张榜、每张榜随机取一段 —— 让"没有自建推荐"的平台也不至于天天一样。
+   *
+   * 为什么需要它：`boards[0..3]` + 每张榜前 N 首 = **完全固定**的组合，
+   * 用户每次进首页看到的就是同一批（"首页还是那几首"）。
+   * @param source 服务侧平台代号
+   * @param want 需要几首
+   * @param out 结果追加到这个数组（原地修改）
+   * @param seen 去重键（原地修改）
+   */
+  private static async appendRandomBoardSongs(source: string, want: number,
+    out: RecommendPrivateSongUi[], seen: string[]): Promise<void> {
+    let boards: BoardData[] = [];
+    try {
+      boards = await MusicDataService.boardsWithCovers(source);
+    } catch (_err) {
+      boards = [];
+    }
+    if (boards.length === 0) {
+      try {
+        boards = MusicDataService.boards(source);
+      } catch (_err) {
+        boards = [];
+      }
+    }
+    if (boards.length === 0) {
+      return;
+    }
+    // 随机挑榜（不打乱原数组）
+    const pool: BoardData[] = boards.slice();
+    const pickCount: number = Math.min(pool.length, 4);
+    const tasks: Promise<TrackData[]>[] = [];
+    for (let i: number = 0; i < pickCount && pool.length > 0; i++) {
+      const idx: number = Math.floor(Math.random() * pool.length);
+      const boardId: string = pool[idx].id;
+      pool.splice(idx, 1);
+      tasks.push(MusicDataService.tracks(source, boardId).catch((): TrackData[] => []));
+    }
+    const settled: TrackData[][] = await Promise.all(tasks);
+    for (let i: number = 0; i < settled.length && out.length < want; i++) {
+      const tracks: TrackData[] = settled[i].slice();
+      // 榜内也随机切片：从随机起点连续取，避免"总是榜单前几首"
+      const span: number = Math.max(1, Math.min(tracks.length, want * 2));
+      const startAt: number = tracks.length > span ? Math.floor(Math.random() * (tracks.length - span)) : 0;
+      const window: TrackData[] = tracks.slice(startAt, startAt + span);
+      for (let j: number = 0; j < window.length && out.length < want; j++) {
+        const track: TrackData = window[j];
+        const key: string = track.source + '_' + track.songId;
+        if (track.songId.length === 0 || seen.indexOf(key) >= 0) {
+          continue;
+        }
+        seen.push(key);
+        const ui = new RecommendPrivateSongUi();
+        ui.id = out.length;
+        ui.title = track.name;
+        ui.singer = track.artist;
+        ui.source = track.source;
+        ui.songId = track.songId;
+        ui.coverUrl = track.image;
+        out.push(ui);
+      }
+    }
+    Logger.info('RzdHomeRec', `random boards src=${source} picked=${tasks.length} songs=${out.length}`);
   }
 
   /**
