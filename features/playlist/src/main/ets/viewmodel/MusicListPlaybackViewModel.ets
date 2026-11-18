@@ -397,7 +397,11 @@ export class MusicListPlaybackViewModel {
     }
     if (this.isCurrentSong(item)) {
       this.playbackIntent.pendingPlaySongId = -1;
-      this.playbackIntent.openPlayerUi = true;
+      // ★ 2026-11-18（用户定调，照搬无界）：「点列表歌曲」**不自动展开播放器**——
+      //   无界点歌只是替换列表/开始播放，得手动点播放条才展开。
+      //   这样展开动画只有一个入口（播放条），而播放条左侧那颗封面**100% 存在**，
+      //   形变起点/背景源都能直接复用它，不再出现"封面还没有/背景空一块"的偶发。
+      this.playbackIntent.openPlayerUi = false;
       this.playbackIntent.requestVersion++;
       return;
     }

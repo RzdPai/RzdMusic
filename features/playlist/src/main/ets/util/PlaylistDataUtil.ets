@@ -77,7 +77,8 @@ export class PlaylistDataUtil {
       return;
     }
     intent.pendingPlaySongId = songId;
-    intent.openPlayerUi = true;
+    // ★ 2026-11-18（照搬无界）：点列表歌曲只播放、不自动展开播放器（见 MusicListPlaybackViewModel 注释）
+    intent.openPlayerUi = false;
     intent.requestVersion++;
   }
 }

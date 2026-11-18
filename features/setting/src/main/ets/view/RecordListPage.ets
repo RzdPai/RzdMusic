@@ -499,7 +499,8 @@ export struct RecordListPage {
       AppStorageKeys.PLAYBACK_INTENT_STATE, (): PlaybackIntentState => new PlaybackIntentState())!;
     intent.pendingPlaySongId = -1;
     intent.pendingQueueIndex = 0;
-    intent.openPlayerUi = true;
+        // ★ 2026-11-18（照搬无界）：点歌只播放、不自动展开播放器；展开只保留「点播放条」一个入口
+intent.openPlayerUi = false;
     intent.requestVersion++;
     hilog.info(DOMAIN, TAG, 'play-all rows=%{public}d queue=%{public}d', this.records.length, queue.length);
   }

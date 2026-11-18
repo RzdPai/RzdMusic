@@ -1075,7 +1075,8 @@ export class RecommendDataUtil {
    */
   public static applyPlaybackIntentForSongId(songId: number, intent: PlaybackIntentState): void {
     intent.pendingPlaySongId = songId;
-    intent.openPlayerUi = true;
+        // ★ 2026-11-18（照搬无界）：点歌只播放、不自动展开播放器；展开只保留「点播放条」一个入口
+intent.openPlayerUi = false;
     intent.requestVersion++;
   }
 

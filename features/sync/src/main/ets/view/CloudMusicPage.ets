@@ -401,7 +401,8 @@ export struct CloudMusicPage {
       AppStorageKeys.PLAYBACK_INTENT_STATE, (): PlaybackIntentState => new PlaybackIntentState())!;
     intent.pendingPlaySongId = -1;
     intent.pendingQueueIndex = 0;
-    intent.openPlayerUi = true;
+        // ★ 2026-11-18（照搬无界）：点歌只播放、不自动展开播放器；展开只保留「点播放条」一个入口
+intent.openPlayerUi = false;
     intent.requestVersion++;
     hilog.info(DOMAIN, LOG_TAG, 'play requested key=%{public}s queue=1', song.key);
   }
