@@ -42,6 +42,7 @@ import { DrawContext, FrameNode, NodeController, RenderNode, UIContext } from '@
 import { drawing, displaySync } from '@kit.ArkGraphics2D';
 import { image } from '@kit.ImageKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { appendPlayLog } from 'musicbasic';
 import { SRC_EDGE, boxBlurRgba, fillFallback, hueOfSeed } from '../util/MeshSource';
 import { MeshField } from '../util/MeshGradient';
 import { CoverCacheService } from 'musicbasic';
@@ -223,11 +224,29 @@ class MeshRenderNode extends RenderNode {
   flow: number = 1;
   private brush: drawing.Brush = new drawing.Brush();
 
+  /** 诊断节流：`draw-skip` 每秒最多一条（RenderNode 里没有组件状态，用静态）。 */
+  private static lastSkipLogMs: number = 0;
+  /** 首帧画成功只记一次。 */
+  private static firstDrawLogged: boolean = false;
+
   draw(context: DrawContext): void {
     const w: number = context.sizeInPixel.width;
     const h: number = context.sizeInPixel.height;
     if (this.src === null || w <= 0 || h <= 0) {
+      // ★ 2026-11-18：**决定性诊断**（静态字段，RenderNode 里没有组件状态）——
+      //   背景"消失"到底是 ①没源（src=null）还是 ②画布尺寸 0？两者修法完全不同。
+      //   每秒最多一条。排查关键字：`RzdMesh draw-skip`。
+      const nowMs: number = Date.now();
+      if (nowMs - MeshRenderNode.lastSkipLogMs >= 1000) {
+        MeshRenderNode.lastSkipLogMs = nowMs;
+        appendPlayLog('RzdMesh draw-skip src=' + (this.src === null ? 'null' : 'ok') +
+          ' w=' + w + ' h=' + h);
+      }
       return;
+    }
+    if (!MeshRenderNode.firstDrawLogged) {
+      MeshRenderNode.firstDrawLogged = true;
+      appendPlayLog('RzdMesh draw-first src=ok w=' + w + ' h=' + h);
     }
     this.field.update(this.tSec, w, h, this.flow);
     context.canvas.attachBrush(this.brush);
@@ -377,6 +396,11 @@ class MeshBgController extends NodeController {
   }
 
   resize(w: number, h: number): void {
+    // ★ 2026-11-18：尺寸进运行日志 —— "画布被压成 0 高"是背景消失的另一半可能。
+    //   只在尺寸真变时记，排查关键字：`RzdMesh resize`。
+    if (w !== this.w || h !== this.h) {
+      appendPlayLog('RzdMesh resize ' + this.w + 'x' + this.h + ' -> ' + w + 'x' + h);
+    }
     this.w = w;
     this.h = h;
     if (w <= 0 || h <= 0) {
