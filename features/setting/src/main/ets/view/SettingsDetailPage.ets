@@ -622,6 +622,8 @@ export struct SettingsDetailPage {
    * @param onlyApiId 传了 apiId 就只测这一个源；不传则保持旧行为（全部已启用源）。
    */
   private async runQualityProbe(onlyApiId?: string): Promise<void> {
+    // ★ 2026-11-18（用户：「顺带给源测试也加一下提示」）：一轮要发很多请求，先把提示打出来。
+    this.getUIContext().getPromptAction().showToast({ message: '正在测试音源……', duration: 4000 });
     let passed: number = 0;
     let total: number = 0;
     const ordered: LXUserApiInfo[] = this.orderedApiListForUi();

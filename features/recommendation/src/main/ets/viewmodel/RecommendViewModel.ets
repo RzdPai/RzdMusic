@@ -21,6 +21,7 @@ import { image } from '@kit.ImageKit';
 import { effectKit } from '@kit.ArkGraphics2D';
 import { AppStorageKeys, HomeSourceState, Logger, MusicAppState, MusicStoreService, PlaybackIntentState, getAppRuntime } from 'musicbasic';
 import { AccountService, ColorConversion, LXSearchSong, MediaService, OnlinePlayUtil } from 'player';
+import type { LoginSession, PlatformAccount } from 'player';
 import { RecommendSongUiDataSource } from '../model/RecommendSongUiDataSource';import {
   RecommendBoardUi,
   RecommendCardUi,
@@ -592,10 +593,42 @@ export class RecommendViewModel {
    * @param gen 本次加载的世代号（{@link load} 递增）。中途用户又换了平台时，
    *   旧世代的结果**一律丢弃**，避免把上一次平台的响应写进当前平台。
    */
+  /**
+   * 当前首页平台是否有**可用的登录态**（决定能不能走"平台自己的推荐"）。
+   * @returns 设置里"用登录状态获取推荐"的开关之外，还要真的有 session
+   */
+  private async hasPlatformSession(): Promise<boolean> {
+    const src: string = this.homeSourceState.source;
+    if (src !== 'qq' && src !== 'kg' && src !== 'wy') {
+      return false;
+    }
+    try {
+      const accounts: PlatformAccount[] = AccountService.listAccounts();
+      for (let i: number = 0; i < accounts.length; i++) {
+        const account: PlatformAccount = accounts[i];
+        if (account.source !== src) {
+          continue;
+        }
+        const session: LoginSession | undefined = await AccountService.getSession(account.id);
+        if (session !== undefined && session.source === src) {
+          return true;
+        }
+      }
+    } catch (_err) {
+      return false;
+    }
+    return false;
+  }
+
   private async loadHomeData(gen: number): Promise<void> {
+    // ★★★ 2026-11-18（用户口径）：
+    //   「**用户登录了这个平台并且设置了通过平台获取推荐** 才走平台，其余的都走我们自己的算法。」
+    //   以前只看了设置开关 —— 未登录也"以为能用账号推荐"，于是空了之后就落到固定榜单，
+    //   屏上永远是那几首。现在两条都要满足：设置开 **且** 该平台真有可用登录态。
     let useAccountRec: boolean = false;
     try {
-      useAccountRec = MusicStoreService.getInstance().getUseAccountRec();
+      const wantAccountRec: boolean = MusicStoreService.getInstance().getUseAccountRec();
+      useAccountRec = wantAccountRec && await this.hasPlatformSession();
     } catch (_err) {
       useAccountRec = false;
     }
@@ -610,23 +643,11 @@ export class RecommendViewModel {
     if (useAccountRec) {
       songs = await RecommendDataUtil.loadTxAccountDailyTracksAsync();
     }
-    // ★ **未登录 + QQ：直接用内地榜**（用户 2026-10 明确要求）。
-    //   缘由：当年 QQ 的「指定榜单」接口（musicu.fcg GetDetail）对未登录请求已失效，
-    //   首页实际一直是落在内地榜兜底上；后来把那支接口修好（经典 `fcg_v8_toplist_cp`）之后
-    //   首页变成了"新歌榜"，用户要求未登录时回到内地榜。
-    //   ⚠️ 这里是**正向选择**而不是降级 ⇒ 不置 `degraded`（界面不说"取不到、已改用别的榜"）。
-    if (songs.length === 0 && !useAccountRec && homeSource === 'qq') {
-      try {
-        songs = await RecommendDataUtil.loadPrivateSongListAsync(12, 'qq');
-      } catch (_err) {
-        songs = [];
-      }
-      if (songs.length > 0) {
-        usedBoardName = '内地榜';
-      }
-      Logger.info('RzdHomeSource',
-        `guest qq main board songs=${songs.length} gen=${gen}`);
-    }
+    // ★★★ 2026-11-18（用户：「首页推荐怎么都是那几首歌」）：**删掉这段"未登录 + QQ 直接用内地榜"**。
+    //   它把「我们自己那套算法」整条跳过了，内地榜 12 首固定 ⇒ 每次进来都是同样几首。
+    //   现在未登录/未开账号推荐一律交给 `loadHomeSongsAsync()`：
+    //   它**先跑自建推荐**（歌单广场分类 → 加权抽分类 → 抽歌单 → 抽歌），不足才用榜单补齐。
+    //   排查关键字：`RzdHomeRec self rec songs=…`。
     if (songs.length === 0) {
       // 未登录 / 账号推荐拿不到内容：走平台榜单歌曲，卡片样式与登录态**完全一致**。
       // ⚠️ 用 try/catch 包住：这条链里任何异常都不许把下面的兜底跳过去（兜底必须可达）。

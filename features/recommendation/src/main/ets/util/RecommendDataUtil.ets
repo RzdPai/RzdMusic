@@ -321,11 +321,12 @@ export class RecommendDataUtil {
     // QQ 新歌榜 / 酷狗飙升榜 / 网易飙升榜（见 MusicDataService.pickDedicatedBoardId）。
     // 这样出来的歌内容稳定、封面也齐，不需要靠多榜单轮询去凑。
     const dedicatedId: string = pickDedicatedBoardId(svcSource);
-    // ★ 2026-10-24（甲方：「那个推荐登录了直接用每日三十首。我们算法再好也比不过大厂的啊」）：
-    //   自建推荐**只在游客态**（"用登录状态获取推荐"关着）生效；登录态一点不插手，
-    //   首页照旧走平台每日推荐 / 指定榜单。
-    const useAccountRec: boolean = MusicStoreService.getInstance().getUseAccountRec();
-    if (!useAccountRec) {
+    // ★★★ 2026-11-18（用户口径）：「登录了某平台并且设置了用平台推荐」才走平台，其余都走自建算法。
+    //   调用方（`RecommendViewModel.loadHomeData`）已经在**真的没有可用登录态**时才会进到这里，
+    //   所以这里**不再二次看开关** —— 以前这里也判一次 `getUseAccountRec()`，
+    //   于是"开关开着但没登录"的场景两条判据打架：既不走平台（没 session），
+    //   又把自建推荐跳过 ⇒ 只剩固定榜单 ⇒ 首页永远是那几首。
+    {
       try {
         const plays: Record<string, number> = MusicStoreService.getInstance().getFeedCategoryPlays();
         const mode: number = MusicStoreService.getInstance().getFeedMode();
