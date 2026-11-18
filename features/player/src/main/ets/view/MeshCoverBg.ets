@@ -92,58 +92,15 @@ const FALLBACK_BLUR_PASSES: number = 3;
  *
  * ⇒ 我们的等价物：
  *   ① 挂载后 96ms 内不画兜底（等 `adoptWarmMesh` / 解码这 1~3 帧）；
- *   ② 真源到手后把它的字节记进 {@link MeshSeedCache}，同一首**下次打开第 1 帧就是真封面**。
+ *   ② 真源由页面统一供给（见 `PlaybackPage.resolveBarCoverPixelMap()`：磁盘缓存 / 磁盘文件），
+ *      组件内**不再自带字节缓存**（2026-11-18 减法：与磁盘缓存重叠）。
  * 96ms ≈ 6 帧@60Hz：够覆盖"预热命中 + `image.createPixelMap`"这条 1~3 帧的链，
  * 又短到即使没命中也不会让下层（首页）长时间外露。
  */
 const FIRST_SOURCE_GRACE_MS: number = 96;
 
-/** 真源字节缓存容量（首）。16KB/首 ⇒ 最多 64KB 常驻内存。 */
-const SEED_CACHE_CAP: number = 4;
 
-/**
- * ★★★★ 2026-10-20：**按 `seed`（= `title + artist`）缓存"已加工好的真源字节"**（模块级，跨挂载存活）。
- *
- * 这是无界「封面固化成本地文件」（`PlaybackService.updateCover` 的 `coverCache`）在本仓的**内存版**等价物：
- * 无界靠它做到"点开那一刻就有真封面"，我们原来的 `src` 只由页面给、页面一退就没了
- * ⇒ 每次点开都从"兜底哈希色"开始。缓存住之后，同一首再点开是**第 1 帧就真封面**。
- *
- * ⚠️ 只存**字节**、不存 `PixelMap`（跨页面持有 PixelMap 会双重释放）；
- *    每次取用都 `createPixelMapSync` 一张新的，所有权归组件。
- */
-class MeshSeedCache {
-  private keys: string[] = [];
-  private items: Uint8Array[] = [];
 
-  get(seed: string): Uint8Array | undefined {
-    if (seed.length === 0) {
-      return undefined;
-    }
-    const i: number = this.keys.indexOf(seed);
-    return i < 0 ? undefined : this.items[i];
-  }
-
-  /** 写入并把它挪到"最新"位置（`keys[0]` = 最近一次用过）。 */
-  put(seed: string, bytes: Uint8Array): void {
-    if (seed.length === 0 || bytes.length === 0) {
-      return;
-    }
-    const i: number = this.keys.indexOf(seed);
-    if (i >= 0) {
-      this.keys.splice(i, 1);
-      this.items.splice(i, 1);
-    }
-    this.keys.unshift(seed);
-    this.items.unshift(bytes);
-    while (this.keys.length > SEED_CACHE_CAP) {
-      this.keys.pop();
-      this.items.pop();
-    }
-  }
-}
-
-/** 全局唯一的真源字节缓存（模块级；跨组件挂载/卸载存活）。 */
-const seedCache: MeshSeedCache = new MeshSeedCache();
 
 const TAG: string = 'RzdMeshCoverBg';
 const DOMAIN: number = 0x0000;
@@ -608,7 +565,6 @@ export struct MeshCoverBg {
     this.stopFrames();
     this.controller.node.src = null;
     this.releaseFallback();
-    this.releaseCachedCover();
     // ★ 2026-11-18：本地缓存文件解出来的那张也要放（它与页面传入的 src 各自独立）
     this.releaseLocalCover();
   }
@@ -678,11 +634,8 @@ export struct MeshCoverBg {
         // 真源来了，兜底那张没用了（本组件持有它的所有权）
         this.releaseFallback();
         // ★ 2026-10-20：真源已到 ⇒ 起手窗口作废，并把它的字节记进模块级缓存
-        //   （= 无界「封面固化成本地文件」，见 MeshSeedCache 的注释）。
         this.graceSpent = true;
         this.clearGraceTimer();
-        this.releaseCachedCover();
-        this.rememberSourceBytes(this.src);
         this.controller.node.invalidate();
         this.onFrameNow();
         // ★ 只加日志：**形变期间会不会换源**由这一行判定 ——
@@ -699,11 +652,9 @@ export struct MeshCoverBg {
           'seedLen=%{public}d oldSeedLen=%{public}d t=%{public}d',
         gen, this.srcVersion, this.seed.length, this.srcSeed.length, Math.round(this.accMs));
     }
-    // ★ 2026-10-20：**先查"这一首的真源字节缓存"**（无界靠本地封面文件做到的那一步）。
-    //   命中 ⇒ 立刻画真封面（不画哈希兜底，屏上不会有"先错后对"的那一跳）。
-    if (this.paintCachedCoverSync(gen)) {
-      return;
-    }
+    // ★ 2026-11-18（减法）：组件内的"字节缓存"（`MeshSeedCache`）已删除 ——
+    //   它与 `CoverCacheService` 的磁盘缓存功能重叠，且只在同进程内有效。
+    //   真源的那条同步路径现在是上面的 `paintLocalCoverSync()`（读磁盘文件）。
     this.paintFallbackDeferred(gen);
   }
 
@@ -742,46 +693,6 @@ export struct MeshCoverBg {
     clearTimeout(id);
   }
 
-  /**
-   * 把真源（**已经 enhance + blur 过的** 64×64）的字节记进模块级缓存，键 = 当前 `seed`。
-   *
-   * 为什么存字节而不是 PixelMap：见 {@link MeshSeedCache}。
-   * 为什么是"已经加工过"的：`this.src` 本来就是页面/预热那条链加工完的成品，
-   * 存它 = 下次取用时 1:1 复现同一张图（不会二次 enhance、不会二次模糊）。
-   */
-  private rememberSourceBytes(pm: image.PixelMap): void {
-    if (this.seed.length === 0) {
-      return;
-    }
-    if (seedCache.get(this.seed) !== undefined) {
-      return;
-    }
-    try {
-      const bytes: number = pm.getPixelBytesNumber();
-      if (bytes !== SRC_EDGE * SRC_EDGE * 4) {
-        // 尺寸/通道口径不对就不缓存（例如设备返回 BGRA 或带 stride）——
-        // 下次仍走"等真源 / 兜底"两条老路，不会画错。
-        hilog.info(DOMAIN, TAG, 'RzdBgPhaseMesh seed-cache skip bytes=%{public}d', bytes);
-        return;
-      }
-      const buf: ArrayBuffer = new ArrayBuffer(bytes);
-      pm.readPixelsToBufferSync(buf);
-      const u8: Uint8Array = new Uint8Array(buf);
-      seedCache.put(this.seed, u8);
-      // ★ 真机判据（对齐任务书 §3.2）：把**真封面主色**的色相打出来，
-      //   和 `fallback hue=…` 那一行一比就知道"兜底色相离封面有多远"。
-      //   `hdc shell hilog -x | Select-String 'RzdBgPhaseMesh (fallback|source-color)'`
-      hilog.info(DOMAIN, TAG,
-        'RzdBgPhaseMesh source-color avg=%{public}s hue=%{public}d seedLen=%{public}d',
-        avgHexOf(u8), Math.round(hueOfAverage(u8)), this.seed.length);
-      hilog.info(DOMAIN, TAG, 'RzdBgPhaseMesh seed-cache put seedLen=%{public}d bytes=%{public}d',
-        this.seed.length, bytes);
-    } catch (err) {
-      const e = err as BusinessErrorLike;
-      hilog.warn(DOMAIN, TAG, 'seed-cache read failed code=%{public}d msg=%{public}s',
-        e.code, e.message);
-    }
-  }
 
   /**
    * 若模块级缓存里已有**这一首**的真源字节 ⇒ 同步画出来并返回 `true`。
@@ -792,7 +703,7 @@ export struct MeshCoverBg {
   /**
    * 从 `CoverCacheService` 的本地缓存文件**同步解码**并出图（无界 `decodeCover()` 的等价物）。
    *
-   * 与 {@link paintCachedCoverSync}（字节缓存 4 首/16KB）互补：
+   * 与页面的 `resolveBarCoverPixelMap()` 互补（那边在**页面层**取图，这边只在组件内兜底）：
    * 那个只在**同一进程内**有效，换进程就没了；这个走磁盘，跨启动有效，覆盖面大得多。
    * @param gen 代际号（同拍内换歌 ⇒ 作废）
    * @returns 画上了返回 true
@@ -885,67 +796,6 @@ export struct MeshCoverBg {
     }
   }
 
-  private paintCachedCoverSync(gen: number): boolean {
-    if (this.disposed) {
-      return false;
-    }
-    const bytes: Uint8Array | undefined = seedCache.get(this.seed);
-    if (bytes === undefined || bytes.length !== SRC_EDGE * SRC_EDGE * 4) {
-      return false;
-    }
-    // 同一 seed 的缓存图已经解码过 ⇒ 直接确保它在画
-    const cached: image.PixelMap | undefined = this.cachedPm;
-    if (cached !== undefined && this.cachedSeed === this.seed) {
-      this.graceSpent = true;
-      this.clearGraceTimer();
-      if (this.controller.node.src !== cached) {
-        // ⚠️ 顺序：**先换绑定、再释放旧图**（与上游 `node.src = pm; old.release()` 一致）
-        this.controller.node.src = cached;
-        this.releaseFallback();
-        this.controller.node.invalidate();
-        this.onFrameNow();
-      }
-      return true;
-    }
-    let pm: image.PixelMap | undefined = undefined;
-    try {
-      pm = image.createPixelMapSync(bytes.buffer, {
-        size: { width: SRC_EDGE, height: SRC_EDGE },
-        srcPixelFormat: image.PixelMapFormat.RGBA_8888,
-        pixelFormat: image.PixelMapFormat.RGBA_8888,
-        editable: true
-      });
-    } catch (err) {
-      const e = err as BusinessErrorLike;
-      hilog.warn(DOMAIN, TAG, 'cached cover createPixelMapSync failed code=%{public}d msg=%{public}s',
-        e.code, e.message);
-      return false;
-    }
-    if (pm === undefined) {
-      return false;
-    }
-    if (this.disposed || gen !== this.srcGen) {
-      pm.release();
-      return false;
-    }
-    const oldCached: image.PixelMap | undefined = this.cachedPm;
-    this.cachedPm = pm;
-    this.cachedSeed = this.seed;
-    this.graceSpent = true;
-    this.clearGraceTimer();
-    // ⚠️ 顺序：**先换绑定、再释放旧图**（与上游 `node.src = pm; old.release()` 一致）
-    this.controller.node.src = pm;
-    this.releaseFallback();
-    if (oldCached !== undefined) {
-      this.releasePixelMapQuiet(oldCached);
-    }
-    this.controller.node.invalidate();
-    this.onFrameNow();
-    hilog.info(DOMAIN, TAG,
-      'RzdBgPhaseMesh source=seed-cache gen=%{public}d seedLen=%{public}d t=%{public}d',
-      gen, this.seed.length, Math.round(this.accMs));
-    return true;
-  }
 
   /** 静默释放（已从渲染节点上解绑的图才可调用）。 */
   private releasePixelMapQuiet(pm: image.PixelMap): void {
@@ -957,20 +807,6 @@ export struct MeshCoverBg {
     }
   }
 
-  /** 释放缓存图（本组件持有其所有权）。 */
-  private releaseCachedCover(): void {
-    const pm: image.PixelMap | undefined = this.cachedPm;
-    this.cachedPm = undefined;
-    this.cachedSeed = '';
-    if (pm !== undefined) {
-      try {
-        pm.release();
-      } catch (err) {
-        const e = err as BusinessErrorLike;
-        hilog.warn(DOMAIN, TAG, 'cached cover release failed code=%{public}d', e.code);
-      }
-    }
-  }
 
   /**
    * 走"兜底"之前的最后一关：**画布还空着、且仍处在挂载后的起手窗口内 ⇒ 先空着**。
