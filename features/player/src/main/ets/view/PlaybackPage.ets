@@ -8021,6 +8021,25 @@ export struct PlaybackPage {
    * 「背景首帧同步出图」和「背景取图不重复下载」两件事共用一份缓存。
    * @param url 封面地址
    */
+  /**
+   * 下载封面并落进 `CoverCacheService` 的磁盘缓存，返回本地路径（失败返回空串）。
+   * @param url 封面地址
+   */
+  private static async downloadCoverToCache(url: string): Promise<string> {
+    if (url.length === 0) {
+      return '';
+    }
+    try {
+      const host: common.Context = getContext() as common.Context;
+      if (host === undefined || host === null) {
+        return '';
+      }
+      return await CoverCacheService.getInstance().resolve(host, url);
+    } catch (err) {
+      return '';
+    }
+  }
+
   private static localCoverPath(url: string): string {
     if (url.length === 0) {
       return '';
@@ -8071,6 +8090,40 @@ export struct PlaybackPage {
         Logger.warn(PlaybackPage.logTag, 'local cover decode failed, fallback to http');
         out.full = undefined;
         out.mesh = undefined;
+      }
+    }
+    // ★ 2026-11-18：没命中缓存时**交给 `CoverCacheService` 下载并落盘**，不自己裸发 http ——
+    //   这样下一次打开就是"本地命中、零请求"，也让播放页与列表封面共用同一条下载/缓存链路。
+    const downloaded: string = await PlaybackPage.downloadCoverToCache(url);
+    if (downloaded.length > 0) {
+      let file: fs.File | undefined = undefined;
+      try {
+        file = fs.openSync(downloaded, fs.OpenMode.READ_ONLY);
+        const src: image.ImageSource = image.createImageSource(file.fd);
+        try {
+          out.full = await src.createPixelMap();
+          out.mesh = await src.createPixelMap({
+            desiredSize: { width: SRC_EDGE, height: SRC_EDGE },
+            desiredPixelFormat: image.PixelMapFormat.RGBA_8888,
+            editable: true
+          });
+        } finally {
+          src.release();
+        }
+        if (out.mesh !== undefined) {
+          return out;
+        }
+      } catch (err) {
+        out.full = undefined;
+        out.mesh = undefined;
+      } finally {
+        if (file !== undefined) {
+          try {
+            fs.closeSync(file);
+          } catch (e2) {
+            // 关不上就当关了
+          }
+        }
       }
     }
     const req: http.HttpRequest = http.createHttp();
