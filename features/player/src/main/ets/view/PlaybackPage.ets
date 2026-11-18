@@ -76,7 +76,7 @@ import { LyricsComponent } from './LyricsComponent';
 import { MiniLyricLinesComponent } from './MiniLyricLinesComponent';
 import { MeshCoverBg } from './MeshCoverBg';
 // 闂?缂傚倸鍟崹鍫曟偋閹间焦鍤勯悘鐐靛亾閻濐垶鏌ｉ妸銉ヮ仼鐟滄澘娲畷鍫曟倷椤掑倶鍋婂┑顔矫顓㈠吹鎼淬劍鏅柛顐犲灩瀵箖鏌熺喊鍗炲婵☆偁鍊濋幃?`design/logic/MeshSource.ets`闂?
-import { SRC_EDGE, enhanceColors, boxBlurRgba } from '../util/MeshSource';
+import { SRC_EDGE, enhanceColors, boxBlurRgba, hueOfSeed } from '../util/MeshSource';
 // 闂佸疇娉曟刊瀵哥箔?闂佸綊娼ч鍡椻攦閳ь剛绱掗幇顒€顏╅柣顐㈡閹?*婵?0 閻庤鐡曠亸娆戝垝閳╁啰鈻旂€广儱娲﹂弳蹇涙倵閻熸澘鏆曠紒?*闂佹寧绋戦悧蹇涘矗鎼淬劌绠规い鎺嶇劍閿熴儵鏌ｉ敐鍛効缂佽鲸澹嗘禍鍛婄瑹閳ь剙顭?濠殿喗绻傞懟顖炲箖閺囥垹缁╅悷娆忓閻?`Swiper` 婵犮垼鍩栭悧婊冣枔閹寸姵鍟洪柛鈩冪懄绾句即鎮橀悙鎻掍喊缂佽鲸宀搁弫?
 //    婵?*闁诲海顢婂Λ鍕儓?/ 闂傚倸鐗勯崹鍝勵熆濡吋鏆滈柛鎰╁妿濠€浼存⒑椤撱劎瀵奸悶姘朵憾瀵爼鍨鹃崘鑼偓濠氭煛閳ь剟顢涘▎鎴犵厳闂侀潻璐熼崝搴ㄥ极?*闂佹寧绋戝濉巙sicPlayInfoBlock` 闂?1817 / 2101 婵炴垶鎸堕崐鏇⑺囬埡鍛櫖?
 //    闂?import 婵炴垶鎸哥粔鐑藉礂濮椻偓瀹曟岸鎮╅鐟颁壕闁稿瞼鍋涙禍婵嗏槈閹惧崬鈧牕顭囬鐐茬闁糕剝蓱閺嗘粓鏌ｉ妸銉ヮ伀缂侇喚鍎ょ粙澶愬焵椤掑嫬鍙婃い鏍ㄧ懅閻熸挸鈽夐幘顖氫壕闂佺鍕垫缂佽鲸鐟╁顐﹀级閹寸姵缍勯柣蹇撶箣缁舵艾顭囬悧鍫涗簻闁稿繐鎽滈悷銏ゆ偡閺囩偞顥犳繛鎻掞功娴狅箓宕掑顓炩偓銈嗩殽閻愰鍟囩紒杈ㄥ哺婵?
@@ -8040,6 +8040,26 @@ export struct PlaybackPage {
     }
   }
 
+  /**
+   * 背景兜底色：由与网格相同的 `seed` 推出同色系的两档深色（对角渐变用）。
+   *
+   * 用在「网格还没就绪」的那一帧，保证那一段绝不是空洞（用户口径：可以有近似色，不能没有背景）。
+   * @param seed 网格种子（`meshSeed()`）
+   * @param step 0 = 起点色 / 1 = 终点色
+   */
+  private static solidFallbackColor(seed: string, step: number): string {
+    let hue: number = 0;
+    try {
+      hue = hueOfSeed(seed);
+    } catch (err) {
+      hue = 210;
+    }
+    const h: number = step === 0 ? hue : (hue + 46) % 360;
+    const s: number = step === 0 ? 34 : 26;
+    const l: number = step === 0 ? 16 : 11;
+    return `hsl(${Math.round(h)}, ${s}%, ${l}%)`;
+  }
+
   private static localCoverPath(url: string): string {
     if (url.length === 0) {
       return '';
@@ -8611,9 +8631,22 @@ export struct PlaybackPage {
             //   恰好**只在"还没有网格源"的起手几帧存在** ⇒ 打开那一瞬屏上就是
             //   「透出来的下层首页 + 一圈 15%~40% 黑的暗角」= 用户看到的那块"上一首的颜色"。
             //   ⇒ 起手就保持纯透明（与上游一致）；网格源到了由 `MeshCoverBg` 自己画（它恒有兜底网格，不会空）。
-            Blank()
-              .width(0)
-              .height(0)
+            // ★★★ 2026-11-18（用户实测「复现了背景消失」，且日志显示 adopt 成功）：
+            //   这里原来在**没有 `meshSrc` 时画的是一个 0×0 的 Blank** ⇒ 背景宿主整个是空的，
+            //   屏上就"没有背景"。上游这么做的原因是它本地解码必成功、几乎不会走到这一支；
+            //   我们的源要等页面下载/借用，**这一支会被真的走到**。
+            //   ⇒ 改成**同色系纯色兜底**：用与网格同一个 `seed` 推出的色相铺一层对角渐变，
+            //     网格一就绪就会被 `MeshCoverBg` 完全盖住；盖之前也绝不会是空洞。
+            //   排查关键字：`RzdBgLayer solid-fallback`。
+            Column()
+              .width('100%')
+              .height('100%')
+              .linearGradient({
+                angle: 135,
+                colors: [[PlaybackPage.solidFallbackColor(this.meshSeed(), 0), 0.0],
+                         [PlaybackPage.solidFallbackColor(this.meshSeed(), 1), 1.0]]
+              })
+              .opacity(this.backgroundRevealOpacity())
               // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-17闂佹寧绋戦悧蹇涘极閵堝绠ｉ柛鎴欏€楃粣妤呮煏閸℃顨欑紒妤€鍊块獮蹇斿緞鐎ｎ亖鍙洪悗娈垮枓閸嬫捇鏌￠崼婵愭Ъ闁稿孩顨婂鏌ヮ敍閵堝洨顦?*闂佺粯鍔楅幊鎾诲吹椤斿彞娌柡鍥╁仧绾?/ 闂佺绻戞繛濠偽?/ 缂備緡鍨靛畷鐢靛垝閻戞ɑ浜ら柡鍌涘缁€鈧┑鐐插閸撴繂锕㈡笟鈧幊妤冧沪閻愵剛褰?*闂侀潧妫楃粙鍕?
               //
               // ## 闂佸搫鐗嗛幖顐﹀春濡ゅ懏鏅柛顐秵閸ゃ垹霉閻欏懐鎮奸柣?+ 婵炴垶鎸堕崐鎾绘煂濠婂懏瀚氱紓浣股戝▓鍫曟煕濡も偓閸熻法娆㈤柆宥嗘櫖?
