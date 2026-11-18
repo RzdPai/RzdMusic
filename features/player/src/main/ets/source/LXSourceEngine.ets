@@ -214,8 +214,29 @@ export struct LXSourceEngine {
   @State isReady: boolean = false;
   @State sources: Record<string, LXUserApiSourceInfo> = {};
   @StorageLink('lxActiveSource') @Watch('onActiveSourceChanged') lxActiveSource: string = '';
+  /**
+   * ★ 2026-11-18：**「检查更新」用的临时重载通道**（洛雪第二套更新机制的入口）。
+   *
+   * 背景：洛雪音源的更新有两套 ——
+   *   ① 引擎侧：拿导入链接重新拉脚本、比对 `@version`（本仓 `recheckFromSourceUrl`）；
+   *   ② **脚本侧**：脚本自己 `checkUpdate()`，用 `lx.send('updateAlert', {log, updateUrl})` 上报，
+   *      或者干脆只打印一行文字。**这一套与"是否从链接导入"完全无关**，
+   *      以前设置页遇到本地导入的源就直接断言"没有在线更新地址"，把它整条堵死了。
+   * ⇒ 设置页把一个"探测请求"写进 `lxProbeTick`，本组件据此**临时加载该音源**，
+   *   让它的自查逻辑真跑一遍；跑完设置页再发一次（带回原 active 源）恢复现场。
+   */
+  @StorageLink('lxProbeTick') @Watch('onProbeTickChanged') lxProbeTick: number = 0;
   private currentApiInfo: LXUserApiInfoFull | null = null;
   onUpdateAlert: ((log: string, updateUrl: string) => void) | null = null;
+
+  /** 设置页"检查更新"触发的临时重载：跑一遍该音源自己的自查逻辑。 */
+  onProbeTickChanged(): void {
+    const target: string = AppStorage.get<string>('lxProbeSource') ?? '';
+    LXSourceEngine.appendLog('引擎 probe reload → ' + target + ' tick=' + this.lxProbeTick);
+    if (target.length > 0) {
+      this.loadSourceById(target);
+    }
+  }
 
   onActiveSourceChanged(): void {
     LXSourceEngine.appendLog('引擎 active 变化 → ' + this.lxActiveSource);

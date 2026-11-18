@@ -24,10 +24,10 @@ import { common, ConfigurationConstant, Want } from '@kit.AbilityKit';
 import { http } from '@kit.NetworkKit';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { notificationManager } from '@kit.NotificationKit';
-import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, HomeSourceState, LyricCenterState, LyricFontSizeState, LyricFpsState, MotionCoverState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, immersiveFromLevel } from 'musicbasic';
+import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, HomeSourceState, LyricCenterState, LyricFontSizeState, LyricFpsState, MotionCoverState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, immersiveFromLevel, scriptAlertAtKey, scriptAlertLogKey, scriptAlertUrlKey } from 'musicbasic';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
-import { DownloadService, LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatforms, lxDeclaredPlatformsOf, lxSourceManager, MediaService, lxSourceLabel, LX_PLATFORM_ORDER, normalizePlatformId, musicFreeSubscriptionLabel } from 'player';
+import { DownloadService, LXSourceEngine, LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatforms, lxDeclaredPlatformsOf, lxSourceManager, MediaService, lxSourceLabel, LX_PLATFORM_ORDER, normalizePlatformId, musicFreeSubscriptionLabel } from 'player';
 import type { LXApiImportResult } from 'player';
 import { importMusicFreeSubscriptionText, importSourceScriptAuto, parseMusicFreeSubscription, updateSubscription, backfillMusicFreePlatforms } from 'player';
 import type { MfImportReport, MfSubscriptionEntry, MfSubscriptionInfo } from 'player';
@@ -919,7 +919,120 @@ export struct SettingsDetailPage {
         : ('「' + api.name + '」这份订阅来自本地文件，没有在线地址可比对；有新版请重新选择文件导入'));
       return;
     }
-    this.toast('「' + api.name + '」不是从链接导入的，没有在线更新地址；有新版请重新导入脚本文件');
+    // ★★★ 2026-11-18（用户实测）：「洛雪的更新不是两套吗，一个是引擎自带的检查，
+    //   另一个是有的源可能不会用那个而是直接打印文字提示」。
+    //   ⇒ 之前这里**直接断言"没有在线更新地址"**，等于把"脚本自己那套"整条路堵死了：
+    //     星海这类源是在脚本里 `checkUpdate()` 自查、再用 `lx.send('updateAlert', …)` 上报，
+    //     或者干脆只打印一行文字，**跟有没有 sourceUrl 完全无关**。
+    //   ⇒ 现在：**重载这个音源**，让它自己的自查真跑一遍，然后看它报了什么。
+    await this.probeScriptSelfUpdate(api);
+  }
+
+  /**
+   * 让**音源脚本自己**做一次更新检查（洛雪的第二套机制）。
+   *
+   * 做法：重载该音源（脚本 `init` 里的 `checkUpdate()` 会重新跑），等 2.6s，
+   * 再看这次重载期间脚本有没有上报 `updateAlert`（引擎 `handleJsMessage` 按脚本分键存）。
+   *
+   * - 有上报 ⇒ 弹窗给出脚本自己写的提示；带 `updateUrl` 就给「打开下载页」；
+   * - 只在日志里打印 ⇒ 把这次窗口内新出现的日志行原样呈现（脚本打什么就显示什么）；
+   * - 什么都没说 ⇒ 才如实告诉用户"这份音源没有提供在线更新检查"。
+   * @param api 被检查的音源
+   */
+  private async probeScriptSelfUpdate(api: LXUserApiInfo): Promise<void> {
+    const logKey: string = scriptAlertLogKey(api.id);
+    const urlKey: string = scriptAlertUrlKey(api.id);
+    const atKey: string = scriptAlertAtKey(api.id);
+    const beforeAt: number = AppStorage.get<number>(atKey) ?? 0;
+    const beforeLog: string = AppStorage.get<string>(logKey) ?? '';
+    const beforePlayLog: string = AppStorage.get<string>('lxPlayLog') ?? '';
+    appendPlayLog('[RzdSourceUpdate] ' + api.name + ' 走脚本自查（重载音源）');
+    // 通过引擎的临时重载通道触发（`LXSourceEngine` 是 struct、没有单例；
+    // 它 `@StorageLink('lxProbeTick')` 收到变化就会 `loadSourceById`）。
+    const activeBefore: string = AppStorage.get<string>('lxActiveSource') ?? '';
+    AppStorage.setOrCreate<string>('lxProbeSource', api.id);
+    AppStorage.setOrCreate<number>('lxProbeTick', (AppStorage.get<number>('lxProbeTick') ?? 0) + 1);
+    await new Promise<void>((resolve) => {
+      setTimeout((): void => resolve(), 2600);
+    });
+    const at: number = AppStorage.get<number>(atKey) ?? 0;
+    const log: string = AppStorage.get<string>(logKey) ?? '';
+    const url: string = AppStorage.get<string>(urlKey) ?? '';
+    if (at > beforeAt && log.length > 0 && log !== beforeLog) {
+      // ① 脚本主动上报了（洛雪的 "引擎侧接收" 那半）
+      appendPlayLog('[RzdSourceUpdate] ' + api.name + ' 脚本上报: ' + log.substring(0, 120) +
+        (url.length > 0 ? ' url=' + url.substring(0, 80) : ''));
+      this.getUIContext().getPromptAction().showDialog({
+        title: '「' + api.name + '」的更新提示',
+        message: log + (url.length > 0 ? ('\n\n下载 / 发布页：\n' + url) : ''),
+        buttons: url.length > 0
+          ? [{ text: '取消', color: '#666666' },
+             { text: '打开下载页', color: this.themeState.color }]
+          : [{ text: '知道了', color: this.themeState.color }]
+      }).then((result) => {
+        if (url.length > 0 && result.index === 1) {
+          this.openInBrowser(url, '音源更新');
+        }
+      });
+      return;
+    }
+    // 跑完把现场恢复成原来的 active 源（探测别的源时尤其重要）
+    if (activeBefore.length > 0 && activeBefore !== api.id) {
+      AppStorage.setOrCreate<string>('lxProbeSource', activeBefore);
+      AppStorage.setOrCreate<number>('lxProbeTick', (AppStorage.get<number>('lxProbeTick') ?? 0) + 1);
+    }
+    // ② 没上报 updateAlert：看它这次有没有**打印文字**（洛雪的第二半：有的源只打日志）
+    const afterPlayLog: string = AppStorage.get<string>('lxPlayLog') ?? '';
+    // ★ 用**标记行**切分，不按长度切：`appendPlayLog` 超长会从头部截断，
+    //   长度相减会切错位置（把旧行当新行，或把新行切掉一半）。
+    const marker: string = '[RzdSourceUpdate] ' + api.name + ' 走脚本自查';
+    const markerAt: number = afterPlayLog.lastIndexOf(marker);
+    const fresh: string = markerAt >= 0 ? afterPlayLog.substring(markerAt + marker.length) :
+      (afterPlayLog.length > beforePlayLog.length
+        ? afterPlayLog.substring(beforePlayLog.length) : '');
+    const lines: string[] = fresh.length > 0 ? this.pickScriptSelfUpdateLines(fresh, api.name) : [];
+    if (lines.length > 0) {
+      appendPlayLog('[RzdSourceUpdate] ' + api.name + ' 脚本自查打印 ' + lines.length + ' 行');
+      this.getUIContext().getPromptAction().showDialog({
+        title: '「' + api.name + '」的更新检查结果',
+        message: lines.join('\n'),
+        buttons: [{ text: '知道了', color: this.themeState.color }]
+      });
+      return;
+    }
+    // ③ 脚本什么都没说：这才叫"没有提供在线更新检查"
+    this.toast('「' + api.name + '」自己没做更新检查（既没上报版本信息，也没有打印提示）；' +
+      '有新版请到音源作者的发布页重新获取脚本');
+  }
+
+  /**
+   * 从"这次重载期间新增的日志"里挑出像**更新提示**的行（避免把引擎自己的加载日志当成结果）。
+   * @param fresh 新增日志文本
+   * @param name 音源名（用于排除含自身名字的加载日志）
+   */
+  private pickScriptSelfUpdateLines(fresh: string, name: string): string[] {
+    const out: string[] = [];
+    const all: string[] = fresh.split('\n');
+    for (let i: number = 0; i < all.length; i++) {
+      const raw: string = all[i].trim();
+      if (raw.length === 0) {
+        continue;
+      }
+      const line: string = raw.replace(/^\[[^\]]*\]\s*/, '');
+      if (line.startsWith('引擎 ') || line.startsWith('[RzdSourceUpdate]') ||
+        line.startsWith('[音源] 更新提示') || line.startsWith('[换源]') ||
+        line.startsWith('[播放]')) {
+        continue;
+      }
+      if (line.length < 2) {
+        continue;
+      }
+      out.push(line.length > 300 ? line.substring(0, 300) + '…' : line);
+      if (out.length >= 6) {
+        break;
+      }
+    }
+    return out;
   }
 
   /**
