@@ -5878,10 +5878,26 @@ export struct PlaybackPage {
    *   `_recover/logic-src/闂佺儵鏅╅崰妤呮偉閿濆鐓?闁诲海顢婂Λ鍕儓閸℃稒顥堥柕蹇婂墲缁惰尙绱撴担鍝勬瀺缂?闂佸搫鍊藉Λ鍕閹版澘鐐婇柛娆嶅劤閻熴垹螖閻樺弶婀伴柡?md` 闁?闂侀潧妫楅懟顖炲垂娴犲绠叉い鏇楀亾闁革絾鎮傚畷锝夋偐椤旂懓浜剧€广儱鍟犻崑?
    */
   private usesPhoneSwiperLayout(): boolean {
+    // ★★★ 2026-11-18（**平板竖屏出现两个封面的根**）：
+    //   这个判据原来只看断点（`SM` 或 `MD` ⇒ 真），而**实际布局**由 `buildControlStack()`
+    //   的另一套条件决定：
+    //   ```
+    //     if (usePanelLayout()) { 双栏 }
+    //     else if (!(bp===SM || (bp===MD && heightBp===SM))) { 宽屏 GridRow（左侧栏封面 = 正常那个） }
+    //     else { 手机 Swiper（浮层 LyricFloatLayer 里**再画一个**封面） }
+    //   ```
+    //   ⇒ 平板竖屏通常 `bp=MD` 且高度不是 SM ⇒ 走 **宽屏 GridRow**，
+    //   但本判据仍为真 ⇒ `LyricFloatLayer()` 也挂上来 ⇒ **屏上两个封面**
+    //   （用户实测：一个在左侧栏正常，另一个"中间偏上"就是浮层这个）。
+    //   ⇒ 改成**与布局分支逐字对齐**：只有真的走手机 Swiper 那一条时才算 true。
+    if (this.usePanelLayout()) {
+      return false;
+    }
     if (this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_SM) {
       return true;
     }
-    return this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_MD;
+    return this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_MD &&
+      this.breakpointEnv.heightBreakpoint === HeightBreakpoint.HEIGHT_SM;
   }
 
   /**
