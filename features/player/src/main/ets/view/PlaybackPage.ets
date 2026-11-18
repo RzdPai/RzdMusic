@@ -4739,22 +4739,6 @@ export struct PlaybackPage {
   //   闂?闂?`phoneSwiperBackdropImage` 婵炴垶鎸撮崑鎾绘偣瑜戝〒鍦箔閸涱垳妫柛鏍电磿缁€澶愭煕韫囧濡虹紒顔哄姂濮婂潡骞嗛幍顔筋啀闂佹椿娼块崝蹇涘焵椤掆偓閹冲矂鍩€?
   //   闂佸憡甯炴繛鈧繛鍛缁楃喎鈹戦崶褏銈︽繛鎴炴尭缁ㄥ吋顨ラ崶顒佸亱闁冲搫鍠氶崕濠囨煕濞嗘垶鐒块柛銈嗙矊铻為柍褜鍓熼弫宥夊锤椤ｆ槴ules.abc GONE闂佹寧绋戦ˇ鎶斤綖?RzdMusic闁荤姳鐒﹀妯兼崲?md 闁?6.15闂?
 
-  /**
-   * True when value looks like a decoded PixelMap ({@link Resource} has no release).
-   *
-   * 闂佸疇娉曟刊瀵哥箔?2026-10-15闂佹寧绋掓穱娲磿濡ゅ懎鐤炬い鏍ㄧ⊕閺嗩參鎮楅崷顓炰沪婵＄偛鍊歌灒闁挎稑瀚棟闂?`imageLabel` **闂佽鍘界敮濠勬嫻?`Resource`**闂佹寧绋戦悧鍛箔婢舵劕绀冪€广儱鐗滃鍫曟偣瑜嶉鍡涘垂濮橆厾顩烽悹浣哥－缁?
-   *   PixelMap闂佹寧绋戦ˇ顐﹀闯?闂佸搫鐗滈崜姘跺蓟閻斿皝鏋栭柡鍥╁仦闊剟鎮圭€ｎ亜鏆熼柡浣靛€濋幃娆戞喆閸曨亣鍩呴柡澶嗘櫆閺屻劌煤?false闂佹寧绋戦懟顖炴偪閸曨垱鈷旈柛娑卞幖閸ゆ帡鏌?*闂佺绻戠划宀€鑺卞畷鍥ｅ亾閻熸壆澧曠€?*闂?
-   *   婵烇絽娲︾换鍕汲閳ь剙鈽夐幘宕囆㈤柛銊ョ秺閺佸秴顫㈠鐮甽easeBackgroundCoverIfPixelMap()` 婵炲濮寸粔鐟邦焽椤掑倵鍋撻悷鏉挎殭闁搞劎鏅悮鍓ф嫚閼碱兘鍋撻悜鑺ユ櫖闁割偓绲介崜褰掓煛閸滀礁鐏﹂柛瀣嚇瀵爼妾遍柣顓熷劤椤斿繘骞撻幒鎾瑰惈
-   *   缂備焦顨忛崗娑氱箔娓氣偓瀹曗剝鎷呮搴ｆ闁哄鍎愰崳锝呪枔?`backgroundImageSource()` 婵炴垶鎸撮崑鎾绘偣瑜戝〒鍦箔閸涱垳妫柛鏍电磿缁€澶愭偡?RzdMusic闁荤姳鐒﹀妯兼崲?md 闁?6.15闂佹寧绋戦¨鈧紒?
-   *   婵炲濮伴崕閬嶅箖濡ゅ懏鍤愰柕澶涢檮缁犳帒霉濠婂嫭銇濋柛锝嗘倐瀵剟鎮ч崼婢晠鎮峰▎娆戞偧闁绘牗绮庣槐鎺楀箻鐎甸晲鍑介梺琛″亾闁硅鍔楃粻?`imageLabel`闂佹寧绋戦惌浣烘崲閺嶎厼绾ч柍銉ュ暱閻庡鏌￠埀顒勵敍濞嗘垹鐛ラ梺鐓庮殠娴滄粍鎱ㄩ埡鍛厒鐎广儱妫欓悡鈧梺姹囧灮閸犳劙寮查妷鈺佄?
-   */
-  private isPixelMapCover(value: string | image.PixelMap | Resource): boolean {
-    if (typeof value !== 'object' || value === null) {
-      return false;
-    }
-    const probe = value as PixelMapReleaseProbe;
-    return typeof probe.release === 'function';
-  }
 
 
   /** Safe PixelMap.release for locals (blur/decoded temps). */
