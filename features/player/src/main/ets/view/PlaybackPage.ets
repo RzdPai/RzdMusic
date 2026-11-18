@@ -16,7 +16,6 @@
 // 闂佸疇娉曟刊瀵哥箔?`TextController` 闂?ArkUI 闂?*闂佺绻堥崝宀勬儑椤掑嫭鍋濇い鏍ㄥ嚬閺嗘梻绱掗銉殭闁?*闂佹寧绋戦悧鍛箔婢舵劖顥嗛柍褜鍓涢幉?import闂佹寧绋戦悾鐠弖sicPlayInfoBlock` 闂佸憡鑹鹃張顒勵敄濞嗘挻鏅?
 import { AnimatorOptions, AnimatorResult, AppStorageV2, FrameCallback, FrameNode, UIContext, uiObserver, UIUtils, window } from '@kit.ArkUI';
 import { image } from '@kit.ImageKit';
-import { effectKit } from '@kit.ArkGraphics2D';
 import { common } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { http } from '@kit.NetworkKit';
@@ -334,7 +333,6 @@ export struct PlaybackPage {
    *   {@link getImageColorAsync}闂佹寧绋戦ˇ顓㈠焵椤掆偓閸婅崵鎮锕€鍨傞悗锝傛櫇缁犱粙鏌?`PixelMap | Resource` 闂佸搫瀚烽崹顖滄嫻閻斿摜顩查柛鈩冾殔閹垿鎮?
    *   {@link isPixelMapCover} / {@link originalCoverSource} 闂備緡鍙忕徊鎯ь焽椤栫偛绀傛繝濠傚暟娣囨椽鏌涢幒鎴烆棡闁轰緡鍣ｆ俊?
    */
-  @Local imageLabel: image.PixelMap | Resource = $r('app.media.ic_avatar1');
   /** Cross-script source-switch banner state; AppStorageV2-backed for reactive UI. */
   @Local switchBanner: SwitchBannerState = SwitchBannerState.connect();
   /** Last seen banner timestamp for the deferred clear (avoids stale clears). */
@@ -3243,7 +3241,9 @@ export struct PlaybackPage {
         Column()
           .width('100%')
           .height('100%')
-          .backgroundColor(this.state.imageColor)
+          // ★ 2026-11-18（减法）：原来是 `.backgroundColor(this.state.imageColor)`（封面的平均色）。
+          //   现在平均色已不产出 ⇒ 改成固定中性底色；真正出图的是上面的网格。
+          .backgroundColor(PlaybackPage.defaultImageBgColor)
           .opacity(Math.max(0, Math.min(1, this.expandState.contentP)))
       }
       .width(this.expandState.windowWidthVp)
@@ -4092,8 +4092,6 @@ export struct PlaybackPage {
     this.appliedTintVersion = this.coverTint.version;
     this.tintReady = false;
     const song = this.state.getCurrentSongItem();
-    this.releaseBackgroundCoverIfPixelMap();
-    this.imageLabel = song !== undefined ? song.label : $r('app.media.ic_avatar1');
     this.applyKeepScreenOn(true);
     // 婵＄偑鍊楅弫璇差焽娴兼潙绠ラ柟鎯х－绾惧鏌￠崘顓熺【妞も敪鍥у嚑婵犲﹤鍟崵鎺楁煛閸繍妲规繝鈧鐔镐氦闁搞儯鍔嶉崺鍌炴煟閵娿儱顏柧鍡橆殽閻愬弶瀚呯紒杈ㄧ箘缁晝鈧綆浜滅粊顕€鎮峰▎娆戠暠鐟滄澘鍊搁妴鎺楀川椤栨稑鈧偤鎮规担鎻掑⒉婵＄偛鍊挎俊?
     if (this.switchBanner.ts > 0) {
@@ -4758,27 +4756,6 @@ export struct PlaybackPage {
     return typeof probe.release === 'function';
   }
 
-  /**
-   * Releases native PixelMap backing if {@link imageLabel} is a decoded bitmap (not a Resource).
-   *
-   * 闂佸疇娉曟刊瀵哥箔?2026-10-15闂?*閻庤鐡曞鎾剁箔婢舵劕绀冪€广儱瀚粣妤呮煕濞戞瑥鐏婇柤鍨灦缁傛帞鎷嬪畷鍥┬繛鎴炴尰缁繘濡?*闂佹寧绋戝濉眒ageLabel` 闂佽鍘界敮濠勬嫻?`Resource`闂佹寧绋戦惌渚€锝?
-   *   {@link isPixelMapCover}闂佹寧绋戦ˇ顓㈠焵椤掆偓閸婇鎮潏銊р枖妞ゅ繐娲ㄥ▓鍫曟煟椤剙濡块柛瀣剁秮閺佸秹宕搁崚鐒峯utToAppear` / `onDisAppear`闂佹寧绋戦ˇ顔炬崲濮樿埖鍋╂繛鍡楃箰閺傃囨煛瀹ュ懎娈╃紒?
-   *   闂佹悶鍎虫慨宕囨嫻閻斿憡浜ゆ繛鍡樺姈绗戞繛鎴炴尨閸嬫捇鏌?*闁诲海鎳撻ˇ顖炲矗韫囨洜纾?*闂佹寧绋掗惌顔剧博閻愵剛鈻旈柍褜鍓氱粋鎺楀Ψ閵夛箑鈧敻鏌涘▎蹇曞婵犫偓娴ｅ湱顩查柣鎴灻儫婵炶揪绲界粔鏉懨瑰Ο鑽ょ畽闁绘劕澧庣粻?`imageLabel`闂佹寧绋戦懟顖炴偩閻樺磭顩风€广儱娲ゆ慨褍霉閸忛棿浜㈢紒鈧€ｎ剚瀚婚柨婵嗩槸濞呯偤鏌￠埀顒佺┍閹典礁浜?
-   *   闂佸疇娉曟刊瀵哥箔?闂佸憡鐟ョ粔鐟邦焽娴兼潙鏋佹繛鍡樺俯閸炴煡鏌ㄥ☉妯煎婵犫偓閺夊簱鏋庨柍鈺佸暞閺嗩參鏌涢弬璇插闁靛棗娴烽弫顕€鏁冩担鍥ㄥ浮瀹曟ê鐣烽崶銊ф殸闂佹寧绋戦¨鈧紒杈╁缁傛帡濡烽妷銉瀫闂佺厧鍟块張顒€鈻嶅▎鎴滄勃闁稿本绋栭々顐︽煛鐏炵偓灏垫繛?*濠殿喗绻愮徊鎯?*闁哄鏅滈悷鈺呭闯闁垮顕辨慨妯诲墯濞煎爼姊洪幓鎺炴敾闁哄倷绶氶幆鍐礋椤栨矮绨奸悗?
-   *   PixelMap 闂佺偨鍎查弻锟犲焵?"闂佺绻愰悧鎾诲闯閹绢喖缁╁ǎ鍥ㄥ閸嬫挻鎷呯粙鎸庢珒闂?`@Local` 闁荤喐鐟辩粻鎴ｃ亹閸岀偛绠查柕蹇ョ磿閻?婵炴垶鎼╅崣鍐ㄎ涢崸妤佲挄闁哄啫鍊圭徊濠氭偣鐎ｎ亜鏆欓悗瑙勫▕閺佸秶浠﹂悾灞惧墤婵炲瓨绮岀€涒晝绱為弮鍫濇嵍?use-after-free闂?
-   */
-  private releaseBackgroundCoverIfPixelMap(): void {
-    if (!this.isPixelMapCover(this.imageLabel)) {
-      return;
-    }
-    try {
-      (this.imageLabel as image.PixelMap).release();
-    } catch (error) {
-      const err = error as BusinessError;
-      Logger.warn(PlaybackPage.logTag,
-        `background cover PixelMap.release failed, code=${err?.code}, message=${err?.message}`);
-    }
-  }
 
   /** Safe PixelMap.release for locals (blur/decoded temps). */
   private releasePixelMapQuiet(pm: image.PixelMap | undefined | null): void {
@@ -7796,175 +7773,12 @@ export struct PlaybackPage {
       this.releasePixelMapQuiet(barPm);
       return;
     }
-    this.releaseBackgroundCoverIfPixelMap();
-    // Online songs without a resolved cover use the default art for the blurred backdrop.
-    this.imageLabel = song.source.length > 0 && song.cover.length === 0 ? $r('app.media.ic_avatar1') : song.label;
-
-    // Online songs always use a neutral dark backdrop; the blurred cover renders on top.
-    // Local color extraction is only for local tracks and never tints red.
-    if (song.source.length > 0) {
-      if (this.isAlive) {
-        this.state.imageColor = 'rgba(20, 20, 22, 0.5)';
-      }
-      // 闂侀潻璐熼崝搴ㄥ吹鎼粹槅娼伴悘鐐靛亾闁裤倝鏌ㄥ☉娆掑鐟?*闁荤喐鐟辩徊鍧楁偉?*闁诲繐绻嬬欢姘焽閹殿喚纾兼繛鍡樺姉閵堬箓鏌涜箛鎿冩Ц鐟滄澘娲幊婵嬫嚑椤掍焦娈㈤梺?
-      //
-      // 闂佸疇妫勯幊澶娢?2026-10-15闂佹寧绋掓穱铏规崲閺嶎厽鐓傞悘鐐舵閺傃囨煛婢跺牆鍔ョ紒缁樻礃鐎?`effectKit.createEffect(coverPm).blur(imageBlurRadius())`
-      //   婵☆偅婢樼€氼厾鎲伴崱娑樿摕闁规崘灏欓杈┾偓娈垮枤婵絻鍟紓?PixelMap 閻熸粎澧楅幐鍝ヨ姳閹惰棄鐐?闂佺偨鍎查弻锟犲焵?**闁荤姴娲㈤崕鐢搞€傞埡浣碘偓鎺楀矗婢跺苯甯悗鍦焾瀵爼寮抽敐鍡樺闁规儳鍘栫划濠氭煟?*闂佹寧绋戦悧鎰板磿濡ゅ懎鐤炬い鏍ㄧ⊕閺嗩參鎮楅崷顓炰沪婵＄偛鍊歌灒闁挎稑瀚棟闂?
-      //   闁圭厧鐡ㄥú鏍瑰Ο鑲╃＜婵炲棙鍨堕悾閬嶆煛?{@link originalCoverSource()} 闂佹眹鍔岀€氼剛鏁锝嗗弿閻庯綆浜炲▓閬嶆⒒閸偅绶涚紒杈ㄥ哺婵?
-      //   闂?`imageLabel` 婵炴垶鎸哥粔鎾疮閳ь剟鎮跺鐓庝函缂佷焦鎸抽獮瀣箛椤掓垝鑳堕崠鏍ㄧ節閸屾稓顩梺鎸庣⊕缁嬫牞顣鹃梺娲诲枙濞村洨鎹㈤弽銊р枖闁逞屽墮椤垽濡烽妶鍥╊啍闂佷紮绲鹃悷杈╂濠靛鐐婇柣妯跨簿缁€?
-      if (song.cover.length > 0 && this.isAlive) {
-        try {
-          const pair: CoverDecodePair =
-            await PlaybackPage.loadOnlineCoverPair(song.cover);
-          // 闂佸疇妫勯幊澶娢?2026-10-15闂佹寧绋掑銊х礊婢舵劕鍐€闁艰婢橀崜褰掓煛閸滀礁鐏ｆ繛鍫熷灥閳瑰啴骞囬崜浣侯槱64闁?4闂佹寧绋戦ˇ顖氾耿椤忓牆瑙﹂悘鐐跺亹椤忚鲸绻涢崱蹇婂亾閼碱剛鎲柡澶屽仒缁瑩宕抽悜钘夌闁绘艾顕粈澶娒瑰┃鍨偓妤冨垝娴煎瓨鍤勯悘鐐靛亾閻濐垶鎮?
-          if (pair.mesh !== undefined && this.isAlive && jobSeq === this.imageColorJobSeq) {
-            this.publishMeshSource(pair.mesh);
-          } else {
-            this.releasePixelMapQuiet(pair.mesh);
-          }
-          this.releasePixelMapQuiet(pair.full);
-        } catch (_err) {
-          // 闂佸憡鐟﹂悧鐐寸珶婵犲啫绶為弶鍫亯琚濇繛鎴炴尭缁夊瓨绺介弽顓炰紶鐎广儱妫欑亸锟犳煛閳ь剟骞橀崨顖滅崶闂佺厧鍟块張顒€鈻嶅▎鎴炲皫闁哄娉曢弶浠嬫煛閸愵厼鐓愰懚鈺冪磼椤栨凹鐓紒杈ㄧ箖缁嬪顓奸崨顓熸珒闂傚倸娲犻崑鎾绘偡閺囨碍绁扮紒缁樼墪椤曪綁鎮╁ú缁樻濠电偞鎸稿鍫曟偂鐎ｎ喖鐐?
-        }
-      }
-      // 闂佸疇妫勯幊澶娢ｉ崟顖氱叀?2026-10-17闂佹寧绋戦悧蹇涘极閵堝绠ｉ柡瀣靛亐閸嬫挾浠﹂悙顒€绱﹂梺鍦檸閸樹粙寮笟鈧幃鈺呮嚋绾版ê浜惧ù锝呮惈娴狀垶鏌涢幋鐘靛笡濠⒀嶇畱椤曪綁鍩€椤掑嫬绠绘い鎾跺枑閺夊綊鏌?闂?闂佺厧鍟块張顒€鈻嶅▎鎾冲強妞ゆ牜鍋熼幏銊╂煟閵娿儱顏电紒閬嶄憾閹瑩鏌呭☉姘间紘婵炴垶鎸搁鍡涘箰闁秴缁╅柟顖嗗嫮娈ゅ┑顔界箰缁蹭粙鎮ラ崼鏇炍ョ€广儱绻掔粈?
-      //
-      // ## 闂佸搫鐗嗛幖顐﹀春濡ゅ懏鏅柛顐秵閸ゃ垹霉閻欏懐鎮奸柣鏍ㄧ矒瀹曪繝宕橀懠顒傜畳闂佹寧绋戞總鏃傜箔婢舵劕鍙婃い鏍ㄧ矊椤曟煡鏌?
-      // ```
-      //   闂侀潻璐熼崝搴ㄥ吹鎼粹槅娼伴悘鐐靛亾闁裤倝鏌ｉ妸銉ヮ伂闁稿孩顨婂?*婵炴垶鎸哥粔闈浳ｉ幖浣哥煑闁哄稁鍓欓ˉ蹇涙倶?*闂佹寧绋戦悧鎾诲磻閸涱喚鈻旈柍褜鍓涙禒锕傚磼濞戞锕傛煕閹邦厾鎳勬い鎺撴尦閹啴宕熼鍓ь唴婵?rgba(20,20,22,0.5)闂佹寧绋戦¨鈧紒?
-      //   闂佹椿浜為崰鎰邦敆濠婂牊鍎嶉柛鏇ㄥ枛閸撳綊鏌￠崪浣哥仭婵?*缂傚倸鍟崹鍫曟偋閹间礁鐐?*闂佹寧绋戝濉竨blishMeshSource(pair.mesh)`闂佹寧绋戦¨鈧紒杈ㄧ箞閹虫挾浠﹂悾灞炬疁闂佸憡鐟禍婊冿耿?
-      //   `song.cover.length > 0` 闂佸搫鍟抽崺鏍ㄦ櫠閻樺啿顕辨慨妯诲墯濞煎爼鎮峰▎娆戝埌闁搞値鍙冨鍫曞Ψ閿濆倸浜?
-      //   闂佸搫鐗滄禍婵嬪箰闁秴缁╅柣鎰靛墯椤ρ囨倶韫囧海绐旀繛?URL 闂佸憡鐟崹鐢稿礂濡粯浜ゆ俊顖濆吹濮婇箖鏌涢幒鏂款暭濠⒀勭矒閺佸秹宕搁。濯data 闂?resolve闂佹寧绋戦ˇ顐﹀闯?闂佸搫鍟ㄩ崹娲儉閸涱垳纾鹃柟瀵稿仧婢规劕鈽夐弮鍌氭瀾闁汇儱鎳樺畷锝夊冀椤掆偓椤?
-      //   闂?闁诲繒鍋涚换瀣箔閸屾粈鐒婇弶鍫涘妽绗戦梻渚囧弿缁蹭粙鎯囬悧鍫熶氦闁硅揪濡囬幏銊╁箹?= 闂佹椿娼块崝宥夊春濞戙垺鍎戦悗锝庝簻閻撳倿鏌?闂佺厧鍟块張顒€鈻嶅▎鎾冲強妞ゆ牜鍋熼幏銊╂煟?闂?
-      //   婵炴垶鎸撮崑鎾绘煟閹邦垼娼愰柟鎼佷憾瀵?闂?闁诲繐绻嬬欢姘焽?metadata 闂佸憡甯￠。锔剧礊?闂?`onCurrentTrackForBackground` 闂佸憡鍔曠粔椋庣玻閸ャ劎鈻旈柍褜鍓欓埢?闂?濠殿喗绻愮徊浠嬫偉閸洖违?
-      // ```
-      // ## 婵犮垼娉涚€氼噣鎮块崱娑欐櫖?*婵炴垶鎸哥粔纾嬨亹閸岀偛鍙婇幖瀛樼箖瀹曟彃霉閿濆棙绀夋い顐㈩儑閹插瓨寰勬繛鎯т壕?*闂佹寧绋戦懟顖濄亹瑜忛幏瀣煛娴ｇ儤娈滈梺鐓庮殠娴滄粎鎹㈡笟鈧銊╂嚋閸偅鐣伴梺?
-      //   闂佺厧鍟块張顒€鈻嶅▎鎾崇煑妞ゅ繐娴傞崵澶愭偣?闁诲繐绻嬬欢姘焽娴兼潙瀚夊璺侯儑濮婇箖鏌￠崼婵愭Ц闁糕晛鐭傞獮?闂佸搫鐗嗛ˇ顖炲矗瑜旀俊?*婵炴垶鎸哥€涒晠骞愰柆宥呯哗闁告挆鍐冿箓鏌熼璺ㄥ妽婵☆偁鍊濆畷?*
-      //   闂?闁诲繐绻嬬欢姘焽閻楀牊浜ゆ俊顖濆吹濮婇箖鏌涢幒鏂款暭濠⒀勭矒瀵喚鎷嬮崷顓狀槷**闂佸搫鐗嗛ˇ閬嶅疾椤愶箑鎹?*闂傚倸鎳忛弻褏绮╃€涙ê顕辨慨姗嗗墮婵粙鏌涢幇顒傂㈢憸鏉挎处缁嬪鍩€椤掆偓閳诲酣鍩ラ崨顖滎槱闂佸搫鐗冮崑鎾愁熆?`BG_RETRY_MAX` 濠电偛妫屽Σ鍕?
-      //     濠殿噯绲界换鎴︻敃婵傚憡鐒鹃柛濠勫櫏濞诧綁寮?`isAlive` + `jobSeq` 闁哄鏅滈悷銈囨偖闁秵鐒奸柟鍓х帛閿涘矂鏌ㄥ☉姗嗘Ф闁?
-      //   闂佸疇娉曟刊瀵哥箔?婵炴垶鎸哥粔鐑藉礂濮椻偓瀵噣鎮╃紒姗嗏偓娆撴⒑閹绘帞啸闁伙富鍨堕弫宥咁潩椤掑倹顔堥梻鍌氱墑閸ㄥ鍨惧Ο灏栧亾閸︻厼浠掔紒妤€顦遍埀顒佺⊕閿氭繝鈧鍫熸櫖闁割偆鍠愰幏閬嶆煕閿旀儳顣兼俊顐犲€濆畷?闂佽浜介崕杈亹濞戞﹩娼╅梻鈧幇顔炬毌婵犮垺鍎肩划鍓ф喆閿曞倹鏅璺侯儐椤ρ囨偡閺囨氨顦﹀ù鐘靛█楠炲秶鈧絻鍔夐崑?
-      if (song.cover.length === 0 || this.meshSrcVersion === 0) {
-        this.scheduleBackgroundRetry(jobSeq, 0);
-      }
-      return;
-    }
-
-    let mediaData: Uint8Array;
-    try {
-      mediaData = await ctx.resourceManager.getMediaContent(song.label.id);
-    } catch (error) {
-      const err = error as BusinessError;
-      Logger.error(PlaybackPage.logTag,
-        `getMediaContent failed, code=${err?.code}, message=${err?.message}`);
-      if (this.isAlive) {
-        this.state.imageColor = PlaybackPage.defaultImageBgColor;
-      }
-      return;
-    }
-    if (!mediaData || mediaData.byteLength === 0) {
-      Logger.error(PlaybackPage.logTag, 'getMediaContent returned empty buffer');
-      if (this.isAlive) {
-        this.state.imageColor = PlaybackPage.defaultImageBgColor;
-      }
-      return;
-    }
-
-    let pixelMap: image.PixelMap | undefined = undefined;
-    // 闂佸疇妫勯幊澶娢?2026-10-15闂佹寧绋戦悧蹇涘矗鎼淬劌绠规い鎺嶇劍閿熴儵鏌?`decodeCover`闂佹寧绋戦¨鈧紒鍙樺嵆瀹曘儳浠﹂懖鈺婁紘濠电偛鏋撮妵鐗堝浮閹?*婵＄偑鍊楅崕銈嗘櫠濠婂牆绀冪€广儱鎳庡В澶娾槈閹绢垰浜鹃悗?64闁?4**闂?
-    //   闁诲海鎳撻崯顖涙櫠閻樿鍙婃い鏍ㄧ矌缁夊綊鏌″鍫濐棈闁稿孩顨婂鏌ヮ敍濠婂嫮鏆犲┑鐘欏嫬濮х紒杈ㄧ懇瀵噣鎮╅崹顐ｇ彧 `SRC_EDGE = 64`闂佹寧绋戦ˇ顓㈠焵椤掆偓閸婄锕?64闁?4 婵炴垶鎸搁敃銈嗙?`enhanceColors`
-    //   + `boxBlurRgba(9, 3)`闂佹寧绋戦懟顖炲疮閳ь剟鎮?`drawPixelMapMesh` **闂佽　鍋撻柟顖嗕椒娴烽梻浣稿⒔閸庛倕顕ｈ瀵偊寮堕幋鐘崇秳** 闂?
-    //   闁荤喐鐟ラ崐褰掑礉閸涙潙鍙?婵犮垹鐖㈤崱妤婃闂佺鍕垫畷缂佷緤绠撳畷?闂佹寧绋戞總鏃傜箔?闂佺绻堥崝宀勫垂鎼淬垺缍囬柕濞у啳濮甸梺缁樻寙閸涱収鏆?+ 婵°倕鍊硅摫闁哄苯顦灒闁挎稑瀚棟"闂佸搫瀚烽崹顖滄偖鏉堚晝鐭撶€广儱瀚浠嬫偡濡ゅ嫸楠忛柍?
-    let meshPm: image.PixelMap | undefined = undefined;
-    const imageSource = image.createImageSource(mediaData.buffer as ArrayBuffer);
-    try {
-      pixelMap = await imageSource.createPixelMap();
-      // 闂佸疇妫勯幊澶娢?2026-10-15闂佹寧绋掑銊х礊婢舵劕鍐€闁稿繗鍋愰悥?*闂佸憡顨嗗ú婊呪偓姘煎幗缁嬪鍩€椤掍胶鈻?try** 闂佺偨鍎查弻锟犲焵?闁诲海鎳撻崯顐﹀Φ閹寸姵瀚?*婵炴垶鎸哥粔鐑藉礂?*闂?闂佸憡鐟﹂悧鐐寸珶?闂備緡鍙忕徊鎯ь焽椤栨粍宕夋い鏍ㄧ懅椤忛亶鎮?abort闂?
-      //   闂佸憡顭囬崰鎰焽閻㈢鍙婃い鏍ㄧ箘椤庘偓婵炴垶鎸诲Σ鎺曨暰闂佹椿鍠曠粈渚€骞冮幘瀵糕枖闁逞屽墯缁?`try`闂佹寧绋戦惌渚€鍩€椤掆偓閻倿宕戦崨顔锯枖?`catch` 婵?`return`闂佹寧绋戦悧鍡涙嚐閻旂厧绀冩繛鍡樻尵鐢盯鎮规担闈涒偓鏇犺姳閹惰姤鍤岄悹鍥囧懐顦?
-      //   闂?64闁?4 闂備緡鍙忕徊鑲╃博閺夋埈娼伴柕澶堝€楅璇测槈閹绢垰浜炬繝銏″劶缁墽鎲撮敃鍌涙櫖鐎光偓閸愵亞顔?`state.imageColor`闂佹寧绋戦悧鎰板磿濡ゅ懎鐤炬い鏍ㄨ壘缁插潡鏌″鍥ㄧ効濠㈢懓锕弫宥嗗緞閹邦剙骞嬫繛鏉戝悑閻喚绮╃€靛憡灏庨柧姘€规稉銏ゆ煏?
-      //   缂傚倸鍟崹鍫曟偋缁嬪簱鏀﹂柟閭﹀幖閻熷繐鈽夐幘宕囆㈤柛鈺佺焸瀹曪綁顢旈崘顏嗙崶闂備緡鍋€閸嬫捇鏌?闁诲骸婀遍崑鐐差渻閸屾鐔兼晬閸曨厔鍥箹鐎涙ɑ绀€婵?闂佹寧绋戦張顒€危?*闂佸憡鐟崹璺侯瀶妞嬪海妫?*闂佹眹鍔岀€氬摜妲愬┑鍥┾枖鐎广儱鐗滈崵澶愭煙闁垮澧柣蹇旂箞瀹曪綁寮介鈧ˉ蹇涙煏?
-      try {
-        meshPm = await imageSource.createPixelMap({
-          desiredSize: { width: SRC_EDGE, height: SRC_EDGE },
-          desiredPixelFormat: image.PixelMapFormat.RGBA_8888,
-          editable: true
-        });
-      } catch (meshError) {
-        const me = meshError as BusinessError;
-        Logger.warn(PlaybackPage.logTag,
-          `mesh source decode failed, code=${me?.code}, message=${me?.message}`);
-      }
-    } catch (error) {
-      const err = error as BusinessError;
-      Logger.error(PlaybackPage.logTag,
-        `createPixelMap failed, code=${err?.code}, message=${err?.message}`);
-      if (this.isAlive) {
-        this.state.imageColor = PlaybackPage.defaultImageBgColor;
-      }
-      return;
-    } finally {
-      try {
-        imageSource.release();
-      } catch (error) {
-        const err = error as BusinessError;
-        Logger.warn(PlaybackPage.logTag,
-          `imageSource.release failed, resourceId=${song.label.id}, code=${err?.code}, message=${err?.message}`);
-      }
-    }
-
-    if (pixelMap === undefined) {
-      return;
-    }
-
-    if (!this.isAlive || jobSeq !== this.imageColorJobSeq) {
-      this.releasePixelMapQuiet(pixelMap);
-      return;
-    }
-
-    await new Promise<void>((resolve: () => void) => {
-      effectKit.createColorPicker(pixelMap,
-        (error: Error | undefined, colorPicker: effectKit.ColorPicker | undefined) => {
-          try {
-            if (!this.isAlive || jobSeq !== this.imageColorJobSeq) {
-              return;
-            }
-            if (error || colorPicker === undefined) {
-              const msg =
-                error ? `${(error as BusinessError).code} ${(error as BusinessError).message}` : 'no picker';
-              Logger.error(PlaybackPage.logTag, `createColorPicker failed: ${msg}`);
-              this.state.imageColor = PlaybackPage.defaultImageBgColor;
-              return;
-            }
-            const color = colorPicker.getMainColorSync();
-            const colorArr = ColorConversion.dealColor(color.red, color.green, color.blue);
-            const r = clampRgbByte(colorArr[0]);
-            const g = clampRgbByte(colorArr[1]);
-            const b = clampRgbByte(colorArr[2]);
-            this.state.imageColor = `rgba(${r}, ${g}, ${b}, 0.4)`;
-            // 闂佸憡鑹炬總鏃傜博閺夋垟鏋庨柍銉ュ暱缁插潡鏌ょ涵鍛毢婵炲牊鍨圭槐鎺楀箻鐎甸晲鍑芥俊鐐€曢幖顐︽偨椤愩倗涓嶆俊銈勮兌閵堬箓鏌涜箛鎿冩Ъ濠㈢懓锕弫宥呯暆閳ь剙銆掗悜钘夌濠㈣泛锕ら弲娆戔偓鐐瑰€涘銊х博鐎涙鈻?ColorPicker 闂佹眹鍔岀€氼剛妲愰幋锔界叆闁?
-            this.publishFlowLightColors(color.red, color.green, color.blue);
-          } finally {
-            resolve();
-          }
-        });
-    });
-
-    if (!this.isAlive || jobSeq !== this.imageColorJobSeq) {
-      this.releasePixelMapQuiet(pixelMap);
-      return;
-    }
-
-    // 闂佸疇妫勯幊澶娢?2026-10-15闂佹寧绋掓穱铏规崲閺嶎厽鐓傞悘鐐舵閺傃囨煛婢跺牆鍔滄俊鍙夋倐婵″鈧懓纰乫fectKit.blur(imageBlurRadius())` 婵☆偅婢樼€氼厾鎲伴崱娑樿摕闁规崘灏欓杈┾偓娈垮枤婵絻鍟紓?PixelMap
-    //   闁荤姍鍐惧剳缂?`imageLabel` 閻熸粎澧楅幑渚€宕曞Δ鍛柧妞ゆ牗姘ㄦ穱娲煕閵夈倕瀚庨柍褜鍓欑粔鏌ュ焵椤掆偓閸婁粙宕曞Δ鍛柧妞ゆ牗绋掗弳顓㈡煙鐎涙ê濮囬柣銈呭瀵噣鎳滈惃鍕兌閸栨牗绻濋崒娑樷偓?*闁哄鏅滈悷锕€顭囬婊勫磯妞ゆ牗鑹鹃崵鎺楁煛娴ｈ櫣绡€缂傚秴顑夊畷鎴濐煥閸涱喗娈?* 闂佺偨鍎查弻锟犲焵?
-    //   `imageLabel` 婵烇絽娲︾换鍐偓鍨⒐缁?`song.label`闂?*闂佸憡顭囬崰搴綖閹邦喕鐒婂〒姘ｅ亾婵?Resource**闂佹寧绋戦¨鈧紒?
-    //   闂?{@link originalCoverSource} 婵炲瓨鍤庨崐妤冨垝娴煎瓨鍤勯悘鐐靛亾閻濐垶鎮?+ 缂傚倷绀佺€氼亜鈻庨姀銏㈡／?`.blur()` 闂佸憡顭堥褔鎮块崟顖氱睄闁煎摜娈戞担鍝勫濠电偛绨遍崑?
-    //   闁荤喐鐟辩徊鍧楁偉濠婂牆绀勯柣鎴炆戦梽宥夋煟?PixelMap 闂佸憡鐟禍婵嗭耿閸ヮ剙绀夐柍銉ㄥ皺閼规儳鈽夐幘绛硅含婵為棿鍗抽弻鍥晲閸♀晛浠归梺鍛婄懄閻楃偞绔熸繝鍥ㄦ櫖鐎光偓閳ь剟寮妶鍥ｅ亾閻熸媽瀚扮€规挸妫楅锝夊礃閿旂懓浜?
-    //   闂佸疇娉曟刊瀵哥箔?婵＄偑鍊曢幖顐︽偨椤愩倖鍠嗛柨婵嗘缁旀潙鈽夐幘顖氫壕婵炴垶鎼╂禍顏勨枔閿濆绠栭柨婵嗙箳缁愭霉閻橆喖鍔氬褏濮烽幃顕€顢曢敃鈧▍鐐烘煛閳ь剟宕滆閻ｈ鲸鎱ㄥ┑鎾剁ɑ婵?濠殿喗绻愮徊钘夛耿椤忓洢浜归柟鎯х－娣囨椽鏌涢妷褍浜鹃悷鏇炴瀵骞橀懜鐢垫殸闂備緡鍙忕徊鐣屾?PixelMap"
-    //      闂佹寧绋戦悧鍛箔閸涱厸鏋庨柍鈺佸暙鎼村﹥鎱?婵＄偑鍊楅弫璇差焽娴兼潙纭€婵繂鏈粊浼存煛?`releaseBackgroundCoverIfPixelMap()` 婵炴潙鍚嬪畝鎼佸闯閹绢喖缁╅柟顖嗗懏娈滈梺鎸庣☉椤р偓缂?
-    //      闂佺粯绮嶅妯猴耿?`imageLabel` 闂佽鍘界敮濠勬嫻?Resource 闂?**闂佺厧鍟块張顒€鈻嶅▎鎴滄勃闁稿本鐟ч悷婵嬫煕閹邦剛校閻庡灚妫冨鍨緞婢跺搴婃繛杈剧稻濞叉垹妲愰幍顔藉仏妞ゆ劧绠戝▍鐐烘煛閳ь剟宕滆閻ｅ崬霉閿濆懐孝婵?*闂?
-    // 闂佸疇妫勯幊澶娢?2026-10-15闂佹寧绋掔喊宥咃耿娴兼潙鎹?闂佸憡鍔曢幊鎰版偪閸℃瑤鐒婂〒姘ｅ亾婵為棿鍗抽幆?64闁?4 缂傚倸鍟崹鍫曟偋缁嬪簱鏀﹂柟閭︿簽閻﹀秴霉濠у灝鈧洟宕甸銏犲偍濞村吋鐟х粈鍕煠閸愬弶婀版繛鍛懅娴狅箓宕掑鍕闂佹寧绋戦¨鈧紒?
-    //    闁诲海鎳撻崯鏉库枔閹达附鍋ㄩ柣鏃堟敱閸ゆ帡鏌涘☉鏍у婵犫偓閿熺姴缁╅柛锔诲幗閺?`meshSrc` 闂佸綊鏅查悞锕€锕㈡笟鈧弫宥夊醇閻斿嘲绨ュ┑顔界箓閺堫剙顪冮崒鐐寸厒濠电姴鍟弶鐟扳槈閹剧姊楃紒鏃€娼欓锝夋偑閸涱垳顦柣?`publishMeshSource`闂佹寧绋戦ˇ顓㈠焵?
-    this.publishMeshSource(meshPm);
-    this.releasePixelMapQuiet(pixelMap);
+    // ★★★ 2026-11-18（减法）：**这里以下的老兜底路径整段删除** ——
+    //   `imageColor` 平均色（effectKit 取色）、内嵌 `mediaData` 解码、`imageLabel` 背景、
+    //   `publishMeshSource(meshPm)` 的老出口，全部由上面的「播放条那张封面」取代。
+    //   保留下来的唯一行为：取不到图时打一行日志（便于定位"为什么这次没背景"）。
+    appendPlayLog('[RzdBgSrc] bar-cover 取不到（song.cover=' +
+      (song.cover.length > 0 ? 'set' : 'empty') + ' labelAvailable=1），背景用网格自身的兜底');
   }
 
   /**
@@ -9225,7 +9039,6 @@ export struct PlaybackPage {
             }, 0);
             this.stopChromeAutoHide();
             this.imageColorJobSeq++;
-            this.releaseBackgroundCoverIfPixelMap();
             // 闂?2026-10-15闂佹寧绋掑銊х礊婢舵劕鍐€闁艰婢橀崜褰掓煛閸滀礁鐏ｆ繛鍫熷灥閳瑰啴骞囬鍡櫺㈤梺鎼炲劚瑜扮偟寮ч崘顓滀汗闁圭儤鎸婚幏鍗烆渻閵堝懐浠涢悗鍨瀵?闂?闂備緡鍋€閸嬫捇鏌涢敃鈧幖顐ゆ崲閳ь剙顪冮妶鍫敽缂佹柨顕幐褔鎮滈挊澶嬬彽闂佽　鍋?
             //   闂佹寧绋戦悧鍡涘箚娓氣偓瀹曟艾鈻庨幇顔叫栧┑鐐叉灤閵堝洨顔掗梺鍛婂灩閸庛倝骞愰柆宥呯哗濡わ絽鍟ㄩ埀顒€顦甸弻鍫ュ箣閹烘梻鐛ュ┑鐘虫礀缁诲绮╅弶鎴殨?64闁?4 闂?PixelMap闂佹寧绋戦ˇ顓㈠焵?
             // ★ 2026-11-18（减法）：静态缓存已删除 ⇒ 本页持有的网格源在这里直接释放。
@@ -9234,7 +9047,6 @@ export struct PlaybackPage {
             this.releasePixelMapQuiet(leavingMesh);
             this.releasePixelMapQuiet(this.pendingMeshPm);
             this.pendingMeshPm = undefined;
-            this.imageLabel = $r('app.media.ic_avatar1');
             // 婵＄偑鍊楅弫璇差焽娴煎瓨鐒婚柍褜鍓熷畷鐑藉传閸曨亞涓嶉梺鐟版惈椤﹀崬顭囬崘顔藉殞闁圭粯甯楅悵銈夋煕閺傝濡块柡渚€绠栭弫宥咁潩椤撶喐顔掗柣蹇曞仜缁绘垹绮婇敃鍌氱濠㈣泛顑嗙瑧闂佸綊鏅查懗鍫曟偨婵犳碍鍎?GPU 閻庢鍠掗崑鎾绘⒑鎼存挸浜鹃梺鎸庣☉閼活垶骞冨Δ鍛煑濡鑳堕悷婵嬫偣閸ャ儱鍔ゆ繛鍛囧洦鍤€婵°倕鍟弳?
             const wu = WindowUtil.getInstance();
             wu.applyPlaybackWindowChrome(false, false);
