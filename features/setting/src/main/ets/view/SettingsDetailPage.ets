@@ -24,7 +24,7 @@ import { common, ConfigurationConstant, Want } from '@kit.AbilityKit';
 import { http } from '@kit.NetworkKit';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { notificationManager } from '@kit.NotificationKit';
-import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, HomeSourceState, LyricCenterState, LyricFontSizeState, LyricFpsState, MotionCoverState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, immersiveFromLevel, scriptAlertAtKey, scriptAlertLogKey, scriptAlertUrlKey } from 'musicbasic';
+import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, HomeSourceState, LyricCenterState, LyricFontSizeState, LyricFpsState, MotionCoverState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, immersiveFromLevel, scriptAlertAtKey, scriptAlertLogKey, scriptAlertUrlKey, scriptBlockedUrlKey } from 'musicbasic';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { DownloadService, LXSourceEngine, LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatforms, lxDeclaredPlatformsOf, lxSourceManager, MediaService, lxSourceLabel, LX_PLATFORM_ORDER, normalizePlatformId, musicFreeSubscriptionLabel } from 'player';
@@ -898,7 +898,14 @@ export struct SettingsDetailPage {
     //   · 有来源链接（`sourceUrl`，从链接导入时存下的）⇒ 重新拉取并比对脚本 `@version`；
     //   · 属于订阅但订阅地址为空 ⇒ 文件导入的订阅，明确告知要重新选文件；
     //   · 既无链接也无所属订阅 ⇒ 本地文件导入的洛雪脚本，明确告知要重新导入脚本。
+    // ★ 2026-11-18（用户订正）：**先走洛雪自己的机制**（脚本自查 / 脚本自己提供的更新 URL），
+    //   不再拿"导入链接"当更新地址 —— 那是我们自己另发明的，与洛雪的行为不是一回事。
+    //   只有脚本侧完全没线索时，才退回"用导入链接重拉一次比对 @version"作为兜底。
     const srcUrl: string = (api.sourceUrl ?? '').trim();
+    const scriptOwned: boolean = await this.probeScriptSelfUpdate(api);
+    if (scriptOwned) {
+      return;
+    }
     if (srcUrl.length > 0) {
       await this.recheckFromSourceUrl(api, srcUrl);
       return;
@@ -919,13 +926,9 @@ export struct SettingsDetailPage {
         : ('「' + api.name + '」这份订阅来自本地文件，没有在线地址可比对；有新版请重新选择文件导入'));
       return;
     }
-    // ★★★ 2026-11-18（用户实测）：「洛雪的更新不是两套吗，一个是引擎自带的检查，
-    //   另一个是有的源可能不会用那个而是直接打印文字提示」。
-    //   ⇒ 之前这里**直接断言"没有在线更新地址"**，等于把"脚本自己那套"整条路堵死了：
-    //     星海这类源是在脚本里 `checkUpdate()` 自查、再用 `lx.send('updateAlert', …)` 上报，
-    //     或者干脆只打印一行文字，**跟有没有 sourceUrl 完全无关**。
-    //   ⇒ 现在：**重载这个音源**，让它自己的自查真跑一遍，然后看它报了什么。
-    await this.probeScriptSelfUpdate(api);
+    // 脚本侧没结论、也没有导入链接、也不是订阅：只有这时才说"没线索"。
+    this.toast('「' + api.name + '」没有提供更新检查（脚本没上报版本信息、也没请求自己的更新接口）；' +
+      '有新版请到音源作者的发布页重新获取脚本');
   }
 
   /**
@@ -939,7 +942,7 @@ export struct SettingsDetailPage {
    * - 什么都没说 ⇒ 才如实告诉用户"这份音源没有提供在线更新检查"。
    * @param api 被检查的音源
    */
-  private async probeScriptSelfUpdate(api: LXUserApiInfo): Promise<void> {
+  private async probeScriptSelfUpdate(api: LXUserApiInfo): Promise<boolean> {
     const logKey: string = scriptAlertLogKey(api.id);
     const urlKey: string = scriptAlertUrlKey(api.id);
     const atKey: string = scriptAlertAtKey(api.id);
@@ -974,12 +977,47 @@ export struct SettingsDetailPage {
           this.openInBrowser(url, '音源更新');
         }
       });
-      return;
+      return true;
     }
     // 跑完把现场恢复成原来的 active 源（探测别的源时尤其重要）
     if (activeBefore.length > 0 && activeBefore !== api.id) {
       AppStorage.setOrCreate<string>('lxProbeSource', activeBefore);
       AppStorage.setOrCreate<number>('lxProbeTick', (AppStorage.get<number>('lxProbeTick') ?? 0) + 1);
+    }
+    // ★★ 2026-11-18（用户订正：「更新链接是由脚本自己提供的，不是拿导入链接重拉」）：
+    //   洛雪的更新检查是**脚本自己去请求它自己的版本接口**（如 `…/lx/versionh2.php?ver=`），
+    //   我们为了"未更新也能用"把这类 URL 拦成失败，但**把 URL 原样记下了**（`scriptBlockedUrlKey`）。
+    //   ⇒ 用户点「检查更新」时，用**脚本自己那条 URL** 代打一次，拿服务端原话。
+    //   （刚重载过 ⇒ 脚本这一次的 checkUpdate 已经把 URL 送进来了，这里读到的是最新的。）
+    const blockedUrl: string = AppStorage.get<string>(scriptBlockedUrlKey(api.id)) ?? '';
+    if (/^https?:\/\//.test(blockedUrl)) {
+      const probe: SourceUpdateProbeResult = await probeScriptUpdate(blockedUrl, api.version);
+      appendPlayLog('[RzdSourceUpdate] ' + api.name + ' script-url probe ok=' + probe.ok +
+        ' hasUpdate=' + probe.hasUpdate + ' url=' + probe.updateUrl.substring(0, 80));
+      if (probe.hasUpdate) {
+        this.getUIContext().getPromptAction().showDialog({
+          title: '发现新版本',
+          message: (probe.message.length > 0 ? probe.message : '有新版本可用') +
+            (probe.updateUrl.length > 0 ? ('\n\n下载 / 发布页：\n' + probe.updateUrl) : ''),
+          buttons: probe.updateUrl.length > 0
+            ? [{ text: '取消', color: '#666666' },
+               { text: '前往更新', color: this.themeState.color }]
+            : [{ text: '知道了', color: this.themeState.color }]
+        }).then((result) => {
+          if (probe.updateUrl.length > 0 && result.index === 1) {
+            this.openInBrowser(probe.updateUrl, '音源更新');
+          }
+        });
+        return true;
+      }
+      if (probe.ok) {
+        // 服务端有正常回应但没给新版本地址：**如实贴它的原话**（如「你已是最新版本」）
+        this.toast(probe.message.length > 0
+          ? ('「' + api.name + '」' + probe.message)
+          : ('「' + api.name + '」的更新接口未返回更新地址'));
+        return true;
+      }
+      appendPlayLog('[RzdSourceUpdate] ' + api.name + ' 脚本更新接口代打失败: ' + probe.error);
     }
     // ② 没上报 updateAlert：看它这次有没有**打印文字**（洛雪的第二半：有的源只打日志）
     const afterPlayLog: string = AppStorage.get<string>('lxPlayLog') ?? '';
@@ -998,11 +1036,11 @@ export struct SettingsDetailPage {
         message: lines.join('\n'),
         buttons: [{ text: '知道了', color: this.themeState.color }]
       });
-      return;
+      return true;
     }
-    // ③ 脚本什么都没说：这才叫"没有提供在线更新检查"
-    this.toast('「' + api.name + '」自己没做更新检查（既没上报版本信息，也没有打印提示）；' +
-      '有新版请到音源作者的发布页重新获取脚本');
+    // ④ 脚本什么都没说：这次**没有结论**（返回 false，让上层决定要不要退回导入链接比对）
+    appendPlayLog('[RzdSourceUpdate] ' + api.name + ' 脚本侧没给出结论（无 alert / 无更新 URL / 无打印）');
+    return false;
   }
 
   /**
