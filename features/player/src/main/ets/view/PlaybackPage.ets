@@ -7703,6 +7703,82 @@ export struct PlaybackPage {
    *   闂?闂?`imageLabel` 婵犮垼娉涚粔宕囩礊閸涙潙绠?*闂佸憡顭囬崰搴綖閹邦喕鐒婂〒姘ｅ亾婵?*闂佹寧绋戝濉昬source`闂佹寧绋戦¨鈧紒閬嶄憾閸?缂備胶濮甸〃鍛村吹?`state.imageColor`
    *   闂佹寧绋戦悧濠囧箰闁秴缁╁Δ锝呭暔閳ь剙顦甸幊妤冧沪閻愵剛褰查梻渚囧弿缁蹭粙鎯囨导鏉戠煑闁哄秲鍔庢竟澶愭煠绾拋鍤嬬紒? 濠电偟绻濈粈渚€宕㈠鍫熷殞閻忕偛鍊甸崑鎾诲磼濞嗘帒骞€闂傚倸鍊婚ˉ鎰暰闂佹椿鍠曠粈渚€宕甸銏犵骇闁靛／鍕殸 PixelMap **闂佸憡鐟禍鐐哄极閵堝棛顩查幖绮光偓宕囨偧闂佽偐顢婇婊呮濠靛鍋ㄩ柕濞垮劤閺嗘岸鏌涘Δ鈧崯璺ㄦ?*闂?
    */
+  /**
+   * 取出**播放条显示的那张封面**并解成网格用的 PixelMap。
+   *
+   * 与 `PlayerViewModel.songCover()/songCoverUrl()` 同一判据（播放条就是这么选的）：
+   * ```
+   *   coverUrl 非空   ⇒ 在线封面（磁盘缓存 → 下载落盘）
+   *   否则            ⇒ song.label 这个 Resource（本地内嵌封面 / 无封面时的占位图）
+   * ```
+   * 三种歌都必有图 ⇒ 背景侧不需要"没有封面"分支。
+   * @param jobSeq 取色任务序号（换歌即作废）
+   * @returns 网格源；失败返回 undefined（此时上层退回老路径）
+   */
+  private async resolveBarCoverPixelMap(jobSeq: number): Promise<image.PixelMap | undefined> {
+    const song = this.state.getCurrentSongItem();
+    if (!song || song.source === undefined) {
+      return undefined;
+    }
+    // ① 在线封面：沿用已有的「磁盘缓存优先」链，命中零请求
+    if (song.cover.length > 0) {
+      try {
+        const pair: CoverDecodePair = await PlaybackPage.loadOnlineCoverPair(song.cover);
+        if (jobSeq !== this.imageColorJobSeq) {
+          this.releasePixelMapQuiet(pair.full);
+          this.releasePixelMapQuiet(pair.mesh);
+          return undefined;
+        }
+        this.releasePixelMapQuiet(pair.full);
+        if (pair.mesh !== undefined) {
+          return pair.mesh;
+        }
+      } catch (err) {
+        Logger.warn(PlaybackPage.logTag, 'RzdBgSrc online cover failed, fall back to label');
+      }
+    }
+    // ② 本地内嵌封面 / 无封面占位图：与播放条完全同一张（`song.label`）
+    return await this.decodeResourcePixelMap(song.label);
+  }
+
+  /**
+   * 把一个 `Resource` 解成网格用的 64×64 PixelMap。
+   * @param res 图片资源（`$r('app.media.xxx')` 或歌曲内嵌封面资源）
+   */
+  private async decodeResourcePixelMap(res: Resource): Promise<image.PixelMap | undefined> {
+    let source: image.ImageSource | undefined = undefined;
+    try {
+      const ctx: common.Context | undefined = this.context;
+      if (ctx === undefined) {
+        return undefined;
+      }
+      const bytes: Uint8Array = await ctx.resourceManager.getMediaContent(res.id);
+      if (bytes === undefined || bytes.byteLength === 0) {
+        return undefined;
+      }
+      source = image.createImageSource(bytes.buffer as ArrayBuffer);
+      const pm: image.PixelMap = await source.createPixelMap({
+        desiredSize: { width: SRC_EDGE, height: SRC_EDGE },
+        desiredPixelFormat: image.PixelMapFormat.RGBA_8888,
+        editable: true
+      });
+      return pm;
+    } catch (err) {
+      const e = err as BusinessError;
+      Logger.warn(PlaybackPage.logTag,
+        'RzdBgSrc label decode failed, code=' + e?.code + ', message=' + e?.message);
+      return undefined;
+    } finally {
+      try {
+        if (source !== undefined) {
+          source.release();
+        }
+      } catch (e2) {
+        // 释放失败无补救
+      }
+    }
+  }
+
   private async getImageColorAsync(): Promise<void> {
     const jobSeq: number = ++this.imageColorJobSeq;
     const ctx = this.context;
@@ -7717,6 +7793,24 @@ export struct PlaybackPage {
       //   闂佹寧绋戦悧鍡涘箖閹惧鈻旈柍褜鍓氶敍鍐冀閵娧勬啓婵炴垶鎸哥粔宕囨閹殿喗鍠嗛柨鏇楀亾鐟?`selectIndex`/`playQueueIds` 闂?`@Monitor`闂?
       //   闂?闁哄鏅滈悷銈囩博閹绢喖鏋侀柡澶嬪灥瑜扮娀姊洪鍨撻柣銉ユ嚇瀵灚寰勬惔鈥冲闂佸搫鎷嬮崹鐣屾濠靛鍎庨柡澶嬪灥閻撳倿鏌ｉ～顒€濡介柛鈺傜洴瀹曟岸宕堕妸褎鎲欓梺闈涙閸婄敻宕?闂佽　鍋撻悷娆忓閻忓洭鎮硅濠㈡﹢骞冮幘瀵糕枖闁逞屽墴瀵?*闂佸搫鐗嗛ˇ閬嶅疾椤愶附鐓傜€广儱鎳庣徊?*闂佹寧绋戦悧濠傘€掗懜闈涚窞?4 濠?闁?400ms闂佹寧绋戦ˇ顓㈠焵?
       this.scheduleBackgroundRetry(jobSeq, 0);
+      return;
+    }
+    // ★★★ 2026-11-18（用户提议，采纳）：「**直接引用播放条那张封面**」。
+    //   播放条那张是 100% 周全的：在线歌用 `coverUrl`、本地歌用内嵌封面（`song.label`）、
+    //   没有封面的歌用占位图（`ic_avatar1`）—— 三种情况都**必有图**。
+    //   ⇒ 背景不再各自找源，直接把同一张解成 PixelMap 交给网格：
+    //     · 在线：磁盘缓存命中即解码（零请求）/ 未命中下载并落盘；
+    //     · 本地 & 无封面：`song.label` 这个 Resource 解码（这正是播放条显示的那张）；
+    //   ⇒ 于是"没有封面怎么办"这一整类兜底都不再需要（后续会逐步删掉）。
+    //   排查关键字：`RzdBgSrc bar-cover`。
+    const barPm: image.PixelMap | undefined = await this.resolveBarCoverPixelMap(jobSeq);
+    if (barPm !== undefined) {
+      if (this.isAlive && jobSeq === this.imageColorJobSeq) {
+        appendPlayLog('[RzdBgSrc] bar-cover ok bytes=' + barPm.getPixelBytesNumber());
+        this.publishMeshSource(barPm);
+        return;
+      }
+      this.releasePixelMapQuiet(barPm);
       return;
     }
     this.releaseBackgroundCoverIfPixelMap();
