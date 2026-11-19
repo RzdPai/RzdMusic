@@ -202,113 +202,25 @@ export async function getArtistDetail(singerId: string): Promise<ArtistInfo> {
 }
 
 export async function getArtistSongs(singerId: string, order: string, limit: number, offset: number): Promise<SongPageResult> {
-  const page: number = limit > 0 ? Math.floor(offset / limit) + 1 : 1
-  // ★★★ 2026-11-19（用户："咪咕列表能显示有多少首歌曲，但打开后一首歌都没显示"）：
-  //   本机实测（`curl` 同一个接口）：`bmw/singer/song/v1.0` 对**有效的 singerId** 返回的是
-  //   `contents[0].view = "ZJ-Singer-Song-Scroll"`、`contents[0].contents[j].songItem` ——
-  //   与我们原来的解析**结构一致**。所以问题大概率落在"拿到的 singerId 不对 / 这一档参数被拒"。
-  //   这里做三件事，并**把每一档的读数写进应用内运行日志**（关键字 `RzdMgArtist`）：
-  //     ① 先按 `type=1` 请求；② 空则去掉 `type` 再请求；③ 仍空则带 `pageSize` 再请求。
-  //   哪一档开始有数据，日志会直接告诉我们。
-  const urls: string[] = [];
-  urls.push('https://app.c.nf.migu.cn/bmw/singer/song/v1.0?pageNo=' + page + '&singerId=' +
-    encodeURIComponent(singerId) + '&type=1');
-  urls.push('https://app.c.nf.migu.cn/bmw/singer/song/v1.0?pageNo=' + page + '&singerId=' +
-    encodeURIComponent(singerId));
-  urls.push('https://app.c.nf.migu.cn/bmw/singer/song/v1.0?pageNo=' + page + '&pageSize=' + limit +
-    '&singerId=' + encodeURIComponent(singerId) + '&type=1');
-  let lastCode: string = '';
-  for (let i: number = 0; i < urls.length; i++) {
-    try {
-      const raw: MgBaseResponse = await httpGetJson(urls[i], { 'User-Agent': MG_UA }) as MgBaseResponse;
-      lastCode = String(raw.code);
-      const contentData = raw.data as MgContentData;
-      const blocks: number = contentData !== undefined && contentData.contents !== undefined
-        ? contentData.contents.length : -1;
-      const items = findSongItems(contentData !== undefined ? contentData.contents : undefined);
-      const list = mapMgSongs(items);
-      appendPlayLog('[RzdMgArtist] try' + (i + 1) + ' singer=' + singerId + ' code=' + lastCode +
-        ' blocks=' + blocks + ' songs=' + list.length);
-      if (list.length > 0) {
-        return new SongPageResult(list, list.length, list.length >= limit);
-      }
-    } catch (err) {
-      appendPlayLog('[RzdMgArtist] try' + (i + 1) + ' singer=' + singerId + ' 抛异常: ' +
-        JSON.stringify(err).substring(0, 100));
-    }
+  // ★ 2026-11-19（用户：「不要兜底，我们直接暂时不做了」）：
+  //   咪咕歌手页**暂时不做**。这里只保留"按 singerId 取一次 + 一行日志"，
+  //   不做重试、不用搜索接口冒充歌手曲库（那是假数据）。
+  //   以后要真做，先找一个**对任意 singerId 都稳定**的接口，再来接这里。
+  const page: number = limit > 0 ? Math.floor(offset / limit) + 1 : 1;
+  const url: string = 'https://app.c.nf.migu.cn/bmw/singer/song/v1.0?pageNo=' + page +
+    '&singerId=' + encodeURIComponent(singerId) + '&type=1';
+  const raw: MgBaseResponse = await httpGetJson(url, { 'User-Agent': MG_UA }) as MgBaseResponse;
+  if (raw.code !== '000000') {
+    appendPlayLog('[RzdMgArtist] singer=' + singerId + ' code=' + String(raw.code) + '（咪咕歌手页暂不支持）');
+    throw new Error('获取歌手歌曲列表失败');
   }
-  appendPlayLog('[RzdMgArtist] 三档都空 singer=' + singerId + ' code=' + lastCode);
-  return new SongPageResult([], 0, false);
+  const contentData = raw.data as MgContentData;
+  const items = findSongItems(contentData !== undefined ? contentData.contents : undefined);
+  const list = mapMgSongs(items);
+  appendPlayLog('[RzdMgArtist] singer=' + singerId + ' songs=' + list.length + '（咪咕歌手页暂不支持）');
+  return new SongPageResult(list, list.length, list.length >= limit);
 }
 
-/**
- * **按歌手名搜歌**（咪咕歌手页的兜底）。
- *
- * 为什么需要：`bmw/singer/song/v1.0` 在部分 `singerId` 下会返回 `code:000000` 但 `contents` 为空
- * （本机实测：有效 id `953012` 有 30 首，另一个 id 就是空），而**搜索接口一直可用**。
- * ⇒ 歌手页拿不到歌时，用"按名字搜"补齐，并按 `singerList` 过滤只留这位歌手的歌。
- * @param artistName 歌手名
- * @param limit 每页条数
- * @param offset 偏移
- */
-export async function getArtistSongsByName(artistName: string, limit: number,
-  offset: number): Promise<SongPageResult> {
-  const name: string = artistName.trim();
-  if (name.length === 0) {
-    return new SongPageResult([], 0, false);
-  }
-  const page: number = limit > 0 ? Math.floor(offset / limit) + 1 : 1;
-  const url: string = 'https://app.c.nf.migu.cn/bmw/search/song/v1.0?pageNo=' + page +
-    '&text=' + encodeURIComponent(name);
-  try {
-    const raw: MgBaseResponse = await httpGetJson(url, { 'User-Agent': MG_UA }) as MgBaseResponse;
-    const data = raw.data as MgContentData;
-    const rows: Record<string, Object>[] = data !== undefined && data.items !== undefined
-      ? data.items as Record<string, Object>[] : [];
-    const out: SongInfo[] = [];
-    for (let i: number = 0; i < rows.length && out.length < limit; i++) {
-      const item = rows[i]['song'] as Record<string, Object> | undefined;
-      if (item === undefined || item === null) {
-        continue;
-      }
-      const singers = item['singerList'] as Record<string, Object>[] | undefined;
-      let singerHit: boolean = false;
-      let singerLine: string = '';
-      if (singers !== undefined) {
-        for (let k: number = 0; k < singers.length; k++) {
-          const sn: string = String(singers[k]['name'] ?? '');
-          if (sn.length === 0) {
-            continue;
-          }
-          singerLine = singerLine.length === 0 ? sn : (singerLine + '/' + sn);
-          if (sn === name || sn.indexOf(name) >= 0 || name.indexOf(sn) >= 0) {
-            singerHit = true;
-          }
-        }
-      }
-      if (!singerHit) {
-        continue;
-      }
-      const id: string = String(item['contentId'] ?? '');
-      const songName: string = String(item['songName'] ?? '');
-      if (id.length === 0 || songName.length === 0) {
-        continue;
-      }
-      const album: string = String(item['album'] ?? '');
-      const dur: number = Number(item['duration'] ?? 0);
-      const img1: string = String(item['img1'] ?? item['img2'] ?? '');
-      const pic: string = img1.length > 0 && img1.startsWith('/')
-        ? 'https://d.musicapp.migu.cn' + img1 : img1;
-      out.push(new SongInfo(id, songName, singerLine, album, dur, pic));
-    }
-    appendPlayLog('[RzdMgArtist] byName name=' + name + ' rows=' + rows.length + ' songs=' + out.length);
-    return new SongPageResult(out, out.length, out.length >= limit);
-  } catch (err) {
-    appendPlayLog('[RzdMgArtist] byName 抛异常 name=' + name + ' ' +
-      JSON.stringify(err).substring(0, 100));
-    return new SongPageResult([], 0, false);
-  }
-}
 
 async function getMgAlbumCount(id: string, retryNum: number = 0): Promise<number> {
   if (retryNum > 2 || id.length === 0) return 0

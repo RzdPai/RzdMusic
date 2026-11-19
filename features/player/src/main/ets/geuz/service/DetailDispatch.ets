@@ -5,7 +5,7 @@ import { AlbumDetailResult } from '../model/SearchModels'
 import { getArtistDetail as wyDetail, getArtistSongs as wySongs, getArtistAlbums as wyAlbums } from './WyDetailApi'
 import { getArtistDetail as kgDetail, getArtistSongs as kgSongs, getArtistAlbums as kgAlbums } from './KgDetailApi'
 import { getArtistDetail as txDetail, getArtistSongs as txSongs, getArtistAlbums as txAlbums } from './TxDetailApi'
-import { getArtistDetail as mgDetail, getArtistSongs as mgSongs, getArtistAlbums as mgAlbums, getArtistSongsByName } from './MgDetailApi'
+import { getArtistDetail as mgDetail, getArtistSongs as mgSongs, getArtistAlbums as mgAlbums } from './MgDetailApi'
 import { getArtistDetail as kwDetail, getArtistSongs as kwSongs, getArtistAlbums as kwAlbums } from './KwDetailApi'
 import { getAlbum as wyAlbum } from './WyDetailApi'
 import { getAlbum as kgAlbum } from './KgDetailApi'
@@ -25,15 +25,10 @@ export async function getArtistSongs(source: number, id: string, mid: string, or
   offset: number, artistName: string = ''): Promise<SongPageResult> {
   if (source === 0) return kgSongs(id, order, limit, offset)
   if (source === 1) return txSongs(mid.length > 0 ? mid : id, order, limit, offset)
-  // ★ 2026-11-19：咪咕歌手页 —— `singerId` 那条口对部分 id 会返回空 contents，
-  //   而"按歌手名搜歌"一直可用 ⇒ 先用 id 取，空了再按名字补（只在这一家这么做）。
-  if (source === 3) {
-    const byId = await mgSongs(id, order, limit, offset)
-    if (byId.list.length > 0 || artistName.trim().length === 0) {
-      return byId
-    }
-    return await getArtistSongsByName(artistName, limit, offset)
-  }
+  // ★ 2026-11-19（用户：「不要兜底，我们直接暂时不做了」）：
+  //   咪咕的歌手页**暂时不做** —— 按名字搜出来的不是"该歌手的曲库"，属于假数据，宁可不给。
+  //   原来的按名字兜底已删除；这里回到"只按 singerId 取"。
+  if (source === 3) return mgSongs(id, order, limit, offset)
   if (source === 4) return kwSongs(id, order, limit, offset, artistName)
   return wySongs(id, order, limit, offset)
 }
