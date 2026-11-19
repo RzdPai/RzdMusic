@@ -726,10 +726,24 @@ export class LocalMusic {
    */
   async importFiles(context: common.UIAbilityContext): Promise<ImportResult> {
     try {
-      const options: picker.AudioSelectOptions = new picker.AudioSelectOptions();
+      // ★★★ 2026-11-19（用户：「直接导入音乐文件会提示文件已经不存在了」）：
+      //   原来用 `AudioViewPicker`，它给的是**媒体库 URI**（`file://media/…`）——
+      //   这类 URI 的授权/持久化语义与文件系统不同，重启后容易失效，而且 `fs.accessSync` 判不了。
+      //   ⇒ 改用 `DocumentViewPicker` + 音频后缀过滤：拿到的是**文件 URI**（`file://docs/…`），
+      //   与「选文件夹」那条完全同源（`persistPermission` / `openSync` 都按同一套走）。
+      const options: picker.DocumentSelectOptions = new picker.DocumentSelectOptions();
+      options.selectMode = picker.DocumentSelectMode.FILE;
       options.maxSelectNumber = MAX_PICK;
-      const audioPicker: picker.AudioViewPicker = new picker.AudioViewPicker(context);
-      const uris: string[] = await audioPicker.select(options);
+      try {
+        options.fileSuffixFilters = [
+          '音频(.mp3, .flac, .m4a, .aac, .wav, .ogg, .opus, .wma, .ape, .dsf)|' +
+            '.mp3,.flac,.m4a,.aac,.wav,.ogg,.opus,.wma,.ape,.dsf'
+        ];
+      } catch (_e) {
+        // 个别 ROM 不认这个字段：不设就显示全部文件，importOne 里还有格式嗅探兜底
+      }
+      const documentPicker: picker.DocumentViewPicker = new picker.DocumentViewPicker(context);
+      const uris: string[] = await documentPicker.select(options);
       // ★ 2026-11-19：不复制文件了 ⇒ 必须把这批文件的授权**持久化**，否则重启后读不到
       await this.persistAccess(uris);
       return await this.importUris(uris);

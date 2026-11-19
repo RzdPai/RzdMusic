@@ -1125,9 +1125,30 @@ export class MediaService {
       return false;
     }
     try {
-      return fs.accessSync(path);
+      if (fs.accessSync(path)) {
+        return true;
+      }
     } catch (_error) {
+      // 落到下面的"打开试试"
+    }
+    // ★★★ 2026-11-19（用户：「直接导入音乐文件会提示文件已经不存在了」）：
+    //   **单个文件导入**（AudioViewPicker）拿到的是**媒体 URI**（`file://media/...`），
+    //   `fs.accessSync(uri)` 对它返回 false / 抛错 —— 但 `fs.openSync(uri)` 是能打开的。
+    //   ⇒ 判存在改成"access 不行就 open 一下再关"，两种来源（docs 路径 / media URI）都能覆盖。
+    let file: fs.File | undefined = undefined;
+    try {
+      file = fs.openSync(path, fs.OpenMode.READ_ONLY);
+      return true;
+    } catch (_e2) {
       return false;
+    } finally {
+      try {
+        if (file !== undefined) {
+          fs.closeSync(file);
+        }
+      } catch (_e3) {
+        // 关不上就算了
+      }
     }
   }
 
