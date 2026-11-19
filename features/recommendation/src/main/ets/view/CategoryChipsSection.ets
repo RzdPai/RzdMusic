@@ -16,6 +16,7 @@
 
 import { LengthMetrics, uiObserver } from '@kit.ArkUI';
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
+import { buildImmersiveMaterial } from 'musicbasic';
 import { BreakpointType, getWindowInfoState, ImmersiveType, StyleConstants, WindowInfo } from 'musicbasic';
 import { RecommendCategoryTabUi } from '../model/RecommendUiModels';
 import { RecommendViewModel } from '../viewmodel/RecommendViewModel';
@@ -86,6 +87,13 @@ export struct CategoryChipsSection {
               $r('app.color.chip_selected_background') :
               $r('app.color.chip_unselected_background'))
           .borderRadius(this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ? 8 : 21)
+          // ★★★ 2026-11-19（用户给了官方华为音乐截图：「Tab 栏**胶囊**改光感，不是加个背板」）：
+          //   材质挂在**每个胶囊**上 —— 吸顶那一份画在 `Navigation` 标题栏槽位里（B 档白名单）⇒ 生效；
+          //   流内那一份在 body 里 ⇒ 不生效（无所谓，观感一致）。
+          //   不支持该能力的设备返回 undefined ⇒ 无材质，胶囊原底色照旧。
+          // 官方截图里**选中那枚是实心浅色胶囊**（不是玻璃）⇒ 材质只挂**未选中**的。
+          .systemMaterial(this.recommendViewModel.selectedCategoryIndex === index ?
+            undefined : buildImmersiveMaterial())
           .justifyContent(FlexAlign.Center)
           .onClick(() => {
             this.recommendViewModel.selectCategory(index ?? 0);

@@ -816,12 +816,10 @@ export struct RecommendPage {
     .height(TitleBarConstants.ROW_HEIGHT_VP)
     .alignItems(VerticalAlign.Center)
     .padding({ right: 56 })
-    // ★★★ 2026-11-19（用户：「首页的 Tab 只有**吸顶状态**需要接光感」）：
-    //   这一份就画在 **Navigation 标题栏槽位里**（官方 B 档白名单），所以 `systemMaterial` 有效；
-    //   流内那一份在页面 body 里（B 档越界）写了也没用 ——
-    //   所以**只在这里挂**，吸顶出现/消失天然靠这一行自己的可见性控制。
-    //   不支持该能力的设备 `buildImmersiveMaterial()` 返回 undefined ⇒ 无材质，原底色照旧。
-    .systemMaterial(buildImmersiveMaterial())
+    // ★ 2026-11-19 订正（用户给了官方截图）：**不要**给整条 Row 挂材质 ——
+    //   那样会得到一条"整宽背板"（截图里那条硬边玻璃）。官方是**每个胶囊自己**有光感。
+    //   ⇒ 材质改挂在 `CategoryChipsSection` 的每个胶囊上（见那个文件），
+    //     这一行不再有任何材质。
     // 只有胶囊自己吃点击，其余放行
     .hitTestBehavior(HitTestMode.Transparent)
     // ★★★ 2026-11-04（甲方：「你直接把他们的层级放到标题上面不就行了」）：
