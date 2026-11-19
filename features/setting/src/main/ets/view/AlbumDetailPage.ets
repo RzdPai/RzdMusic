@@ -22,7 +22,7 @@ import { http } from '@kit.NetworkKit';
 import { image } from '@kit.ImageKit';
 import { effectKit } from '@kit.ArkGraphics2D';
 import { AlbumDetailResult, AlbumInfo, ColorConversion, LXSearchSong, OnlinePlayUtil, SongInfo, getAlbumDetail, codeToSource, showSystemShare, buildSongShareText } from 'player';
-import { SongMoreMenu, PlaylistFloatingMiniBar } from 'playlist';
+import { SongMoreMenu } from 'playlist';
 import { DetailImmersiveBackdrop } from './DetailImmersiveBackdrop';
 import { ArtistDetailDataSource } from './ArtistDetailDataSource';
 import { WindowInfo, getWindowInfoState } from 'musicbasic';
@@ -921,16 +921,6 @@ export struct AlbumDetailPage {
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring)
         .onDidScroll((): void => { this.updateImmersiveScroll(); })
-        // ★ 2026-11-19（用户：「从搜索页进入专辑页时底部没有播放条」）：
-        //   二级页统一那套迷你播放条（56vp 胶囊 + HDS 材质），与搜索页/听歌记录完全同一套。
-        Column() {
-          PlaylistFloatingMiniBar()
-        }
-        .width('100%')
-        .height('100%')
-        .justifyContent(FlexAlign.End)
-        .padding({ bottom: 12 })
-        .hitTestBehavior(HitTestMode.Transparent)
       }
       .width(LayoutPolicy.matchParent)
       .height(LayoutPolicy.matchParent)

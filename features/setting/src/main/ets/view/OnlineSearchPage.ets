@@ -1320,6 +1320,9 @@ export struct OnlineSearchPage {
     param.listTitle = p.name;
     // 歌单自己的封面随路由带下去：详情页 Hero 用它，而不是第一首歌的封面
     param.listCover = p.coverUrl;
+    // ★ 2026-11-19（用户）：搜索页进来时手动隐藏了壳层底栏 ⇒ 跳到二级页前**恢复**，
+    //   否则那个页面会看到"没有播放条"，或者（更糟）被我们手绘一条之后变成**两条**。
+    this.onShowChange(false);
     this.pageStack.pushPathByName(RouterUrlConstants.PLAYLIST_DETAIL, param);
   }
 
@@ -1795,6 +1798,7 @@ export struct OnlineSearchPage {
       param.picUrl = a.picUrl;
       param.artistName = a.artistName;
       param.size = a.size;
+      this.onShowChange(false);
       this.pageStack.pushPathByName(RouterUrlConstants.ALBUM_DETAIL, param);
     })
   }
