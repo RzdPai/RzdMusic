@@ -366,7 +366,7 @@ export struct ArtistDetailPage {
     .width('100%')
     .height('100%')
     .padding({ left: 16, right: 16, top: 8, bottom: 16 })
-    // ★ 2026-11-19（用户：「直接把之前那层模糊材质去掉」）：旧的真模糊删掉，改系统沉浸光感。
+    // 光感材质（叠在 `bindSheet` 的 blurStyle 背板之上；单独用会变透明）
     .systemMaterial(immersiveFromLevel(this.ambientState.level))
   }
 
@@ -1464,8 +1464,10 @@ export struct ArtistDetailPage {
           .bindSheet($$this.concertSheet, this.ConcertSheet(), {
             height: SheetSize.MEDIUM,
             showClose: true,
-            // ★ 2026-11-19（用户：「演唱会半模态直接把之前那层模糊材质去掉不就行了」）：
-            //   删掉 `blurStyle` 那层旧模糊，改成**系统沉浸光感**（材质挂在内容根，见 `ConcertSheet()`）。
+            // ★ 2026-11-19 订正（用户："演唱会半模态现在变成透明了"）：
+            //   `blurStyle` 是**背板**，删掉它就整层透明 —— 光感材质只能叠在**背板之上**，
+            //   不能代替背板。⇒ 恢复真模糊作底，材质仍挂在内容根（见 `ConcertSheet()`）。
+            blurStyle: BlurStyle.COMPONENT_THIN,
             backgroundColor: Color.Transparent,
             maskColor: '#33000000'
           })
