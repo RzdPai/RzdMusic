@@ -119,6 +119,11 @@ function toHttps(url: string): string {
   if (url.length === 0) {
     return ''
   }
+  // 老接口里 `pic` 字段是**相对片段**（如 `300/s4s94/31/1175162622.jpg`），
+  // 拼不出完整地址 —— 直接丢掉，让上层用 `hts_img` / `img`（本机实测这两个才是完整地址）。
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    return ''
+  }
   return url.startsWith('http://') ? 'https://' + url.substring('http://'.length) : url
 }
 
@@ -214,8 +219,8 @@ export async function kwLegacyArtistAlbums(artistId: string, limit: number,
       continue
     }
     const artist: string = clean(pick(it, ['ARTIST', 'artist']))
-    const pic: string = toHttps(pick(it, ['falbum', 'FALBUM', 'web_albumpic_short', 'web_albumpic',
-      'WEB_ALBUM_PIC', 'pic']))
+    const pic: string = toHttps(pick(it, ['hts_img', 'HTS_IMG', 'img', 'IMG', 'falbum', 'FALBUM',
+      'web_albumpic_short', 'web_albumpic', 'WEB_ALBUM_PIC']))
     const time: string = pick(it, ['RELEASEDATE', 'releasedate', 'PUBLICTIME', 'publishtime'])
     out.push(new AlbumInfo(albumId, '', name, pic, 0, artist, 0, time))
   }
@@ -247,8 +252,8 @@ export async function kwLegacySearchAlbum(keyword: string, page: number,
     // ★★★ 2026-11-19（用户：「酷我有专辑搜索结果了，但是没有封面」）：
     //   无界解析酷我专辑搜索只用了四个键：`albumid` / `artist` / **`falbum`** / `name`
     //   —— 封面字段叫 `falbum`，不是我们猜的 `web_albumpic*`。补上它（并保留其它候选兜底）。
-    const pic: string = toHttps(pick(it, ['falbum', 'FALBUM', 'web_albumpic_short', 'web_albumpic',
-      'WEB_ALBUM_PIC', 'pic']))
+    const pic: string = toHttps(pick(it, ['hts_img', 'HTS_IMG', 'img', 'IMG', 'falbum', 'FALBUM',
+      'web_albumpic_short', 'web_albumpic', 'WEB_ALBUM_PIC']))
     const time: string = pick(it, ['RELEASEDATE', 'releasedate'])
     out.push(new AlbumInfo(albumId, '', name, pic, 0, artist, 0, time))
   }
@@ -265,8 +270,8 @@ export async function kwLegacyAlbum(albumId: string): Promise<AlbumDetailResult>
   const root: Record<string, Object> = await kwLegacyGet(url)
   const name: string = clean(pick(root, ['ALBUM', 'album', 'NAME', 'name']))
   const artist: string = clean(pick(root, ['ARTIST', 'artist']))
-  const pic: string = toHttps(pick(root, ['falbum', 'FALBUM', 'web_albumpic_short', 'web_albumpic',
-    'WEB_ALBUM_PIC', 'pic']))
+  const pic: string = toHttps(pick(root, ['hts_img', 'HTS_IMG', 'img', 'IMG', 'falbum', 'FALBUM',
+    'web_albumpic_short', 'web_albumpic', 'WEB_ALBUM_PIC']))
   const time: string = pick(root, ['RELEASEDATE', 'releasedate', 'PUBLICTIME', 'publishtime'])
   const info: AlbumInfo = new AlbumInfo(albumId, '', name, pic, 0, artist, 0, time)
   const rows: Record<string, Object>[] = asArray(root['musiclist'] ?? root['abslist'])
