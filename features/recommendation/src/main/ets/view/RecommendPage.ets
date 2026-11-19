@@ -783,9 +783,13 @@ export struct RecommendPage {
         //   · 吸顶（`chipStickyActive`）：停在最上方；
         //   · 进栏中（`chipInBar`）：还在 38..94 这段里跟手滑动，用 `chipBarOffsetVp` 给位移，
         //     所以它在模糊的背景板上方是**清晰的**（甲方：不要把栏的模糊关掉，把 Tab 放上来就行）。
-        stackBuilder: (this.chipStickyActive || this.chipInBar) ? (): void => {
+        // ★★★ 2026-11-19（用户：抄官方"到顶部标题淡出"，并修下推时突然位移）：
+        //   原来是 `stackBuilder: 条件 ? builder : undefined` —— 到线那一刻**突然挂上/摘掉**，
+        //   上推看不见问题，下推时会"啪"一下出现（用户说的突然位移）。
+        //   ⇒ 改成**常驻**，只用透明度渐隐渐显（官方就是淡出）。
+        stackBuilder: (): void => {
           this.StickyChipsInBar();
-        } : undefined
+        }
       }
     };
   }
@@ -815,6 +819,9 @@ export struct RecommendPage {
     .height(TitleBarConstants.ROW_HEIGHT_VP)
     .alignItems(VerticalAlign.Center)
     .padding({ right: 56 })
+    // 淡入淡出（常驻渲染，只动 alpha ⇒ 下推时不会"啪"一下跳出来）
+    .opacity((this.chipStickyActive || this.chipInBar) ? 1 : 0)
+    .animation({ duration: 180, curve: Curve.EaseOut })
     // ★ 2026-11-19 订正（用户给了官方截图）：**不要**给整条 Row 挂材质 ——
     //   那样会得到一条"整宽背板"（截图里那条硬边玻璃）。官方是**每个胶囊自己**有光感。
     //   ⇒ 材质改挂在 `CategoryChipsSection` 的每个胶囊上（见那个文件），

@@ -73,6 +73,7 @@ export struct SongMoreMenu {
   @Param onSongSwitched: (() => void) | null = null;
 
   /** Global music app state for playback requests. */
+  @Local showMenu: boolean = false;
   @Local appState: MusicAppState =
     AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
   /** Local store for playlists and favorites. */
@@ -482,6 +483,31 @@ export struct SongMoreMenu {
   }
 
   /** Popup menu items for the song actions. */
+  /** 列表里那枚「更多」的弹窗（Popup 属 A 档 ⇒ 内容根可挂系统沉浸光感）。 */
+  @Builder
+  private MenuPopup() {
+    Column() {
+      ForEach(this.menuItems(), (item: MenuElement) => {
+        Row() {
+          Text(item.value)
+            .fontSize(15)
+            .fontColor($r('app.color.font_primary'))
+        }
+        .width('100%')
+        .height(44)
+        .padding({ left: 16, right: 16 })
+        .onClick(() => {
+          this.showMenu = false;
+          item.action();
+        })
+      }, (item: MenuElement): string => String(item.value))
+    }
+    .width(180)
+    .padding({ top: 6, bottom: 6 })
+    .borderRadius(16)
+    .systemMaterial(immersiveFromLevel(this.ambientState.level))
+  }
+
   private menuItems(): MenuElement[] {
     const items: MenuElement[] = [
       {
@@ -725,8 +751,23 @@ export struct SongMoreMenu {
         .fontSize(this.iconSize)
         .fontColor([this.iconColor])
     }
-    .bindMenu(this.menuItems(), {
-      backgroundBlurStyle: this.menuBlur()
+    .onClick(() => {
+      // 换成 bindPopup 后要自己开（`bindMenu` 是自带点击的）
+      this.showMenu = !this.showMenu;
+    })
+    // ★★ 2026-11-19（用户：「bindMenu 不支持光感直接换个组件」）：
+    //   `bindMenu` 的 options 里没有 `systemMaterial`（只有 backgroundBlurStyle），
+    //   而 **Popup 属于官方 A 档**（弹窗类接口）⇒ 换成 `bindPopup` + 自绘内容根挂材质。
+    .bindPopup(this.showMenu, {
+      builder: this.MenuPopup(),
+      placement: Placement.BottomRight,
+      popupColor: Color.Transparent,
+      enableArrow: false,
+      onStateChange: (event) => {
+        if (!event.isVisible) {
+          this.showMenu = false;
+        }
+      }
     })
     .bindSheet($$this.showSheet, this.ActiveSheet(), {
       // 评论要整屏高度才够看；其余弹层按内容自适应

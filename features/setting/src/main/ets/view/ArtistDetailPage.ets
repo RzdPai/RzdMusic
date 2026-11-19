@@ -299,6 +299,7 @@ export struct ArtistDetailPage {
   @Builder
   private ConcertSheet() {
     Column({ space: 12 }) {
+      // 材质见根节点 `.systemMaterial(...)`（半模态属 A 档，全页面生效）。
       Row({ space: 8 }) {
         SymbolGlyph($r('sys.symbol.auditorium'))
           .fontSize(18)
@@ -365,7 +366,8 @@ export struct ArtistDetailPage {
     .width('100%')
     .height('100%')
     .padding({ left: 16, right: 16, top: 8, bottom: 16 })
-    .backgroundBlurStyle(BlurStyle.COMPONENT_THIN)
+    // ★ 2026-11-19（用户：「直接把之前那层模糊材质去掉」）：旧的真模糊删掉，改系统沉浸光感。
+    .systemMaterial(immersiveFromLevel(this.ambientState.level))
   }
 
   @Builder
@@ -1462,8 +1464,8 @@ export struct ArtistDetailPage {
           .bindSheet($$this.concertSheet, this.ConcertSheet(), {
             height: SheetSize.MEDIUM,
             showClose: true,
-            // 弹层本身走真模糊（无底色），避免关掉"光感"的设备上整层透明
-            blurStyle: BlurStyle.COMPONENT_THIN,
+            // ★ 2026-11-19（用户：「演唱会半模态直接把之前那层模糊材质去掉不就行了」）：
+            //   删掉 `blurStyle` 那层旧模糊，改成**系统沉浸光感**（材质挂在内容根，见 `ConcertSheet()`）。
             backgroundColor: Color.Transparent,
             maskColor: '#33000000'
           })
