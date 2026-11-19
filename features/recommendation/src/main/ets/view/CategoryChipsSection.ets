@@ -64,6 +64,19 @@ export struct CategoryChipsSection {
   /**
    * Renders a row of selectable category pills with icon+title and selected styling.
    */
+  /** 当前是否浅色（日间）模式。日间胶囊保持实心浅色，不叠材质（避免色差）。 */
+  private colorModeIsLight(): boolean {
+    try {
+      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext | undefined;
+      if (ctx === undefined || ctx.config === undefined) {
+        return false;
+      }
+      return ctx.config.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT;
+    } catch (_e) {
+      return false;
+    }
+  }
+
   build() {
     Scroll() {
       Row({ space: new BreakpointType(8, 12, 16, 16).getValue(this.breakpointEnv.widthBreakpoint) }) {
@@ -92,8 +105,11 @@ export struct CategoryChipsSection {
           //   流内那一份在 body 里 ⇒ 不生效（无所谓，观感一致）。
           //   不支持该能力的设备返回 undefined ⇒ 无材质，胶囊原底色照旧。
           // 官方截图里**选中那枚是实心浅色胶囊**（不是玻璃）⇒ 材质只挂**未选中**的。
-          .systemMaterial(this.recommendViewModel.selectedCategoryIndex === index ?
-            undefined : buildImmersiveMaterial())
+          // ★ 2026-11-19（用户：「日间模式下这有点色差」）：**浅色模式不挂材质** ——
+          //   日间的胶囊本来就是浅色实心，叠上材质会被系统改掉底色（偏灰/偏白），
+          //   与官方日间观感对不上。夜间挂材质、日间保持原色，两种模式都对。
+          .systemMaterial(this.recommendViewModel.selectedCategoryIndex === index ||
+            this.colorModeIsLight() ? undefined : buildImmersiveMaterial())
           .justifyContent(FlexAlign.Center)
           .onClick(() => {
             this.recommendViewModel.selectCategory(index ?? 0);
