@@ -17,7 +17,7 @@ import { AppStorageV2 } from '@kit.ArkUI';
 
 import { LengthMetrics, uiObserver } from '@kit.ArkUI';
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
-import { AmbientState, AppStorageKeys } from 'musicbasic';
+import { AmbientState, AppStorageKeys, immersiveFlat } from 'musicbasic';
 import { BreakpointType, getWindowInfoState, ImmersiveType, StyleConstants, WindowInfo } from 'musicbasic';
 import { RecommendCategoryTabUi } from '../model/RecommendUiModels';
 import { RecommendViewModel } from '../viewmodel/RecommendViewModel';
@@ -107,9 +107,12 @@ export struct CategoryChipsSection {
           //   流内那一份在 body 里 ⇒ 不生效（无所谓，观感一致）。
           //   不支持该能力的设备返回 undefined ⇒ 无材质，胶囊原底色照旧。
           // 官方截图里**选中那枚是实心浅色胶囊**（不是玻璃）⇒ 材质只挂**未选中**的。
-          // ★ 2026-11-19 订正（照官方 Sample）：**胶囊自己不再挂材质** ——
-          //   官方首页整条标题栏是 `IMMERSIVE + ADAPTIVE`，行里的胶囊只是**实心/半透明底色**，
-          //   所以日间夜间都不割裂；我们之前在胶囊上挂材质反而叠出玻璃块。
+          // ★★★ 2026-11-19（用户："首页那几个按钮**吸顶之后没有光感**"）：胶囊自己要有材质。
+          //   用 **`immersiveFlat()`（无阴影薄材质）** —— 仓里注释写明它专给"贴在列表上的胶囊、
+          //   无背板托底的浮动条"用；带阴影的档位压在照片上会糊成一团，看起来就像"没光感"。
+          //   只挂**未选中**（选中那枚是实心浅色）。
+          .systemMaterial(this.recommendViewModel.selectedCategoryIndex === index ?
+            undefined : immersiveFlat())
           .justifyContent(FlexAlign.Center)
           .onClick(() => {
             this.recommendViewModel.selectCategory(index ?? 0);

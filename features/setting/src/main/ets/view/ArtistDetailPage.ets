@@ -19,6 +19,7 @@ import { image } from '@kit.ImageKit';
 import { effectKit } from '@kit.ArkGraphics2D';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { common } from '@kit.AbilityKit';
+import { immersiveFlat } from 'musicbasic';
 import { guardPlayerBack, immersiveMedium } from 'musicbasic';
 import { ConcertItem, ConcertService } from '../concert/ConcertService';
 import { AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, SongTitleMarquee, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, shouldUseSplitDetailLayout, splitDetailCardWidthVp , immersiveFromLevel } from 'musicbasic';
@@ -367,7 +368,7 @@ export struct ArtistDetailPage {
     .height('100%')
     .padding({ left: 16, right: 16, top: 8, bottom: 16 })
     // 光感材质（叠在 `bindSheet` 的 blurStyle 背板之上；单独用会变透明）
-    .systemMaterial(immersiveFromLevel(this.ambientState.level))
+    .systemMaterial(immersiveFlat())
   }
 
   @Builder
@@ -1455,7 +1456,7 @@ export struct ArtistDetailPage {
           .height(28)
           .padding({ left: 12, right: 12 })
           .borderRadius(14)
-          .systemMaterial(immersiveFromLevel(this.ambientState.level))
+          .systemMaterial(immersiveFlat())
           .backgroundColor(this.fgTint())
           .margin({ bottom: 10 })
           .onClick(() => {
@@ -1496,7 +1497,7 @@ export struct ArtistDetailPage {
           .width(40)
           .height(40)
           .borderRadius(20)
-          .systemMaterial(immersiveFromLevel(this.ambientState.level))
+          .systemMaterial(immersiveFlat())
           .backgroundColor(this.fgTint())
           .onClick(() => {
             this.showAboutPopup = !this.showAboutPopup;
@@ -1546,7 +1547,7 @@ export struct ArtistDetailPage {
           .width(40)
           .height(40)
           .borderRadius(20)
-          .systemMaterial(immersiveFromLevel(this.ambientState.level))
+          .systemMaterial(immersiveFlat())
           .backgroundColor(this.fgTint())
           .onClick(() => {
             this.toggleFavoriteArtist();
@@ -1874,7 +1875,7 @@ export struct ArtistDetailPage {
           .width(40)
           .height(40)
           .borderRadius(20)
-          .systemMaterial(immersiveFromLevel(this.ambientState.level))
+          .systemMaterial(immersiveFlat())
           .backgroundColor(this.playAllButtonColor())
           .onClick(() => {
             this.showAboutPopup = !this.showAboutPopup;

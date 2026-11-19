@@ -18,7 +18,7 @@ import {
   AmbientState,
   AppStorageKeys,
   buildBarBlurStyle,
-  immersiveFromLevel,
+  immersiveMedium,
   MusicAppState,
   MusicStoreService,
   PlayedSongRecord,
@@ -276,7 +276,7 @@ export struct SongMoreMenu {
       this.ActiveSheetBody()
     }
     .width('100%')
-    .systemMaterial(immersiveFromLevel(this.ambientState.level))
+    .systemMaterial(immersiveMedium())
   }
 
   @Builder
@@ -505,7 +505,7 @@ export struct SongMoreMenu {
     .width(180)
     .padding({ top: 6, bottom: 6 })
     .borderRadius(16)
-    .systemMaterial(immersiveFromLevel(this.ambientState.level))
+    .systemMaterial(immersiveMedium())
   }
 
   private menuItems(): MenuElement[] {
@@ -776,7 +776,8 @@ export struct SongMoreMenu {
       dragBar: false,
       // 用 bindSheet 原生 title 区域显示标题，X 关闭按钮由系统保证跟标题水平对齐（与播放详情页一致）
       title: this.sheetTitle(),
-      backgroundColor: $r('app.color.background_secondary'),
+      // ★ 2026-11-19（用户："大的半模态是不透明"）：不透明底色会把材质整块盖住 ⇒ 透明底。
+      backgroundColor: Color.Transparent,
       onWillDismiss: (action: DismissSheetAction) => {
         action.dismiss();
         this.showSheet = false;
