@@ -16,7 +16,7 @@
 
 import { LengthMetrics, uiObserver } from '@kit.ArkUI';
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
-import { buildImmersiveMaterial } from 'musicbasic';
+import { buildImmersiveMaterial, immersiveMaterialSupported } from 'musicbasic';
 import { BreakpointType, getWindowInfoState, ImmersiveType, StyleConstants, WindowInfo } from 'musicbasic';
 import { RecommendCategoryTabUi } from '../model/RecommendUiModels';
 import { RecommendViewModel } from '../viewmodel/RecommendViewModel';
@@ -98,18 +98,21 @@ export struct CategoryChipsSection {
           .backgroundColor(
             this.recommendViewModel.selectedCategoryIndex === index ?
               $r('app.color.chip_selected_background') :
-              $r('app.color.chip_unselected_background'))
+              // 未选中：有材质就让材质决定底色（否则日间会浮出一层灰 = 用户说的"色差"）
+              (immersiveMaterialSupported() ? Color.Transparent :
+                $r('app.color.chip_unselected_background')))
           .borderRadius(this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ? 8 : 21)
           // ★★★ 2026-11-19（用户给了官方华为音乐截图：「Tab 栏**胶囊**改光感，不是加个背板」）：
           //   材质挂在**每个胶囊**上 —— 吸顶那一份画在 `Navigation` 标题栏槽位里（B 档白名单）⇒ 生效；
           //   流内那一份在 body 里 ⇒ 不生效（无所谓，观感一致）。
           //   不支持该能力的设备返回 undefined ⇒ 无材质，胶囊原底色照旧。
           // 官方截图里**选中那枚是实心浅色胶囊**（不是玻璃）⇒ 材质只挂**未选中**的。
-          // ★ 2026-11-19（用户：「日间模式下这有点色差」）：**浅色模式不挂材质** ——
-          //   日间的胶囊本来就是浅色实心，叠上材质会被系统改掉底色（偏灰/偏白），
-          //   与官方日间观感对不上。夜间挂材质、日间保持原色，两种模式都对。
-          .systemMaterial(this.recommendViewModel.selectedCategoryIndex === index ||
-            this.colorModeIsLight() ? undefined : buildImmersiveMaterial())
+          // ★ 2026-11-19 订正（用户："官方日间模式也有材质"）：**日夜都挂材质**。
+          //   日间那点色差的原因是**底色冲突**：材质生效时系统会把 backgroundColor 改成透明，
+          //   我们原来给未选中胶囊写死了 `chip_unselected_background` ⇒ 日间在材质上浮出一层灰。
+          //   ⇒ 见下面 `backgroundColor`：有材质时给 `Color.Transparent`，让材质自己决定底色。
+          .systemMaterial(this.recommendViewModel.selectedCategoryIndex === index ?
+            undefined : buildImmersiveMaterial())
           .justifyContent(FlexAlign.Center)
           .onClick(() => {
             this.recommendViewModel.selectCategory(index ?? 0);
