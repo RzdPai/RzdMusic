@@ -2,6 +2,7 @@ import { SingerInfo } from '../model/SearchModels'
 import { AlbumInfo } from '../model/SearchModels'
 import { SearchPageResult } from '../model/SearchModels'
 import { kwGet } from './KwRequest'
+import { kwLegacySearchAlbum } from './KwLegacy'
 import { cleanText } from './HttpUtils'
 
 const PAGE_SIZE: number = 30
@@ -108,6 +109,17 @@ async function searchSingerNew(keyword: string, page: number): Promise<SearchPag
 }
 
 export async function searchAlbum(keyword: string, page: number): Promise<SearchPageResult<AlbumInfo>> {
+  // ★★★ 2026-11-19（对齐无界）：**专辑搜索走老接口** `ft=album`（不需要鉴权）。
+  //   原来的 `api/www/search/searchAlbumBykeyWord` 在无界里根本不存在，
+  //   而它需要 cookie+csrf+Secret，实测一路空 ⇒ 酷我专辑搜不到。
+  try {
+    const legacy = await kwLegacySearchAlbum(keyword, page, PAGE_SIZE);
+    if (legacy.length > 0) {
+      return new SearchPageResult<AlbumInfo>(legacy, page + 1, legacy.length);
+    }
+  } catch (_e) {
+    // 退回原实现
+  }
   return searchAlbumNew(keyword, page)
 }
 

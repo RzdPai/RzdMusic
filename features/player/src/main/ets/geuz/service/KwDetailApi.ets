@@ -6,6 +6,7 @@ import { AlbumInfo } from '../model/SearchModels'
 import { ArtistAlbumPageResult } from '../model/SearchModels'
 import { AlbumDetailResult } from '../model/SearchModels'
 import { kwGet } from './KwRequest'
+import { kwLegacyAlbum, kwLegacyArtist, kwLegacyArtistAlbums, kwLegacyArtistSongs } from './KwLegacy'
 import { cleanText } from './HttpUtils'
 
 const KW_UA = 'Mozilla/5.0 (Linux; Android 12)'
@@ -103,6 +104,17 @@ interface KwAlbumInfoItem {
 }
 
 export async function getArtistDetail(artistId: string): Promise<ArtistInfo> {
+  // ★★★ 2026-11-19（用户："不是让你看看无界吗"）：无界对酷我**只用老接口**
+  //   （`search.kuwo.cn/r.s?stype=artistinfo`），不需要 cookie/csrf/Secret；
+  //   我们这套 api/www 一路空 ⇒ 先走老接口，取不到再退回原实现。
+  try {
+    const legacy: ArtistInfo = await kwLegacyArtist(artistId);
+    if (legacy.name.length > 0 || legacy.briefDesc.length > 0 || legacy.songNum > 0) {
+      return legacy;
+    }
+  } catch (_e) {
+    // 老接口失败：走原实现
+  }
   let albumP = fetchArtistAlbumCount(artistId)
   let songP = fetchArtistSongCount(artistId)
   let descP = fetchArtistDesc(artistId)
@@ -166,6 +178,15 @@ interface KwArtistMusicItem {
 
 export async function getArtistSongs(artistId: string, order: string, limit: number, offset: number,
   artistName: string = ''): Promise<SongPageResult> {
+  // ★ 老接口 `stype=artist2music` 优先（无界同源）
+  try {
+    const legacy: SongPageResult = await kwLegacyArtistSongs(artistId, limit, offset);
+    if (legacy.list.length > 0) {
+      return legacy;
+    }
+  } catch (_e) {
+    // 退回原实现
+  }
   let page = Math.floor(offset / limit) + 1
   let url = 'http://www.kuwo.cn/api/www/artist/artistMusic?artistId=' + artistId +
     '&pn=' + page + '&rn=' + limit + '&httpsStatus=1'
@@ -189,6 +210,15 @@ export async function getArtistSongs(artistId: string, order: string, limit: num
 
 export async function getArtistAlbums(artistId: string, limit: number,
   offset: number): Promise<ArtistAlbumPageResult> {
+  // ★ 老接口 `stype=albumlist` 优先（无界同源）
+  try {
+    const legacy: ArtistAlbumPageResult = await kwLegacyArtistAlbums(artistId, limit, offset);
+    if (legacy.list.length > 0) {
+      return legacy;
+    }
+  } catch (_e) {
+    // 退回原实现
+  }
   let page = Math.floor(offset / limit) + 1
   return artistAlbumsNew(artistId, page, limit, offset)
 }
@@ -216,6 +246,15 @@ async function artistAlbumsNew(artistId: string, page: number, limit: number,
 }
 
 export async function getAlbum(albumId: string, albumName: string = ''): Promise<AlbumDetailResult> {
+  // ★ 老接口 `stype=albuminfo` 优先（无界同源）
+  try {
+    const legacy: AlbumDetailResult = await kwLegacyAlbum(albumId);
+    if (legacy.list.length > 0 || legacy.info.name.length > 0) {
+      return legacy;
+    }
+  } catch (_e) {
+    // 退回原实现
+  }
   let url = 'http://www.kuwo.cn/api/www/album/albumInfo?albumId=' + albumId +
     '&pn=1&rn=1000&httpsStatus=1'
   let raw = await kwGet(url) as KwAlbumDetailResponse

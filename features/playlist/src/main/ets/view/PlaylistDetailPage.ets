@@ -13,6 +13,7 @@
  * limitations under the License.
  */
 
+import { PlaylistFloatingMiniBar } from './PlaylistFloatingMiniBar';
 import { AppStorageV2, ComponentContent, LengthMetrics, uiObserver } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { fileIo as fs, picker } from '@kit.CoreFileKit';
@@ -1545,6 +1546,16 @@ export struct PlaylistDetailPage {
           }
         })
         this.PlaylistNavDestinationSlot()
+        // ★ 2026-11-19（用户：「从搜索页进入歌单页时底部没有播放条」）：
+        //   二级页统一那套迷你播放条（现成组件 `PlaylistFloatingMiniBar`，与其它二级页同一套）。
+        Column() {
+          PlaylistFloatingMiniBar()
+        }
+        .width('100%')
+        .height('100%')
+        .justifyContent(FlexAlign.End)
+        .padding({ bottom: 12 })
+        .hitTestBehavior(HitTestMode.Transparent)
       }
       .width(LayoutPolicy.matchParent)
       .height(LayoutPolicy.matchParent)
