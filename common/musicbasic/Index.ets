@@ -211,3 +211,4 @@ export { RzdSelectMenuMaterial } from './src/main/ets/util/RzdSelectMaterial';
 export { TabBarConfigModel } from './src/main/ets/model/TabBarConfigModel';
 
 export { KugouShareResolver, KugouShareResult } from './src/main/ets/util/KugouShareResolver';
+export { ImmersiveSurface } from './src/main/ets/components/ImmersiveSurface';

@@ -19,7 +19,7 @@ import { image } from '@kit.ImageKit';
 import { effectKit } from '@kit.ArkGraphics2D';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { common } from '@kit.AbilityKit';
-import { immersiveFlat } from 'musicbasic';
+import { immersiveFlat, ImmersiveSurface } from 'musicbasic';
 import { guardPlayerBack, immersiveMedium } from 'musicbasic';
 import { ConcertItem, ConcertService } from '../concert/ConcertService';
 import { AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, SongTitleMarquee, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, shouldUseSplitDetailLayout, splitDetailCardWidthVp , immersiveFromLevel } from 'musicbasic';
@@ -1535,23 +1535,21 @@ export struct ArtistDetailPage {
             })
           }
 
-          // 关注 / 取消关注
-          Button() {
+          // 关注 / 取消关注 —— 用真材质底板（空 HdsTabs 壳那条路径），不再靠 `.systemMaterial()`
+          ImmersiveSurface({
+            surfaceWidth: 40,
+            surfaceHeight: 40,
+            fallbackColor: this.fgTint(),
+            onTap: (): void => {
+              this.toggleFavoriteArtist();
+            }
+          }) {
             SymbolGlyph(this.isFavoriteArtist ? $r('sys.symbol.heart_fill') : $r('sys.symbol.heart'))
               .fontSize(18)
               .fontWeight(FontWeight.Regular)
               .height(18)
               .fontColor([this.fgPrimary()])
           }
-          .type(ButtonType.Normal)
-          .width(40)
-          .height(40)
-          .borderRadius(20)
-          .systemMaterial(immersiveFlat())
-          .backgroundColor(this.fgTint())
-          .onClick(() => {
-            this.toggleFavoriteArtist();
-          })
         }
         .justifyContent(FlexAlign.Center)
         .padding({ top: 12 })
