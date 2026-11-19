@@ -13,7 +13,6 @@
  * limitations under the License.
  */
 
-import { buildImmersiveMaterial } from 'musicbasic';
 import { guardPlayerBack } from 'musicbasic';
 import { AppStorageV2, curves, SymbolGlyphModifier, uiObserver } from '@kit.ArkUI';
 import {

@@ -1,3 +1,4 @@
+import { AppStorageV2 } from '@kit.ArkUI';
 /*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +17,7 @@
 
 import { LengthMetrics, uiObserver } from '@kit.ArkUI';
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
-import { buildImmersiveMaterial, immersiveMaterialSupported } from 'musicbasic';
+import { AmbientState, AppStorageKeys, immersiveFromLevel } from 'musicbasic';
 import { BreakpointType, getWindowInfoState, ImmersiveType, StyleConstants, WindowInfo } from 'musicbasic';
 import { RecommendCategoryTabUi } from '../model/RecommendUiModels';
 import { RecommendViewModel } from '../viewmodel/RecommendViewModel';
@@ -34,6 +35,9 @@ export struct CategoryChipsSection {
   @Param enableFadingEdge: boolean = false;
   /** Title bar insets, immersive decor, and related window metrics. */
   @Local windowInfo: WindowInfo = getWindowInfoState();
+  /** 光感强度（软件设置里那一档）：材质档位跟随它，与全仓其它点位一致。 */
+  @Local ambientState: AmbientState = AppStorageV2.connect(AmbientState, AppStorageKeys.AMBIENT_STATE,
+    () => new AmbientState())!;
 
   private homeScrollGutterH(): number {
     return new BreakpointType(16, 24, 32, 32).getValue(this.breakpointEnv.widthBreakpoint);
@@ -99,8 +103,7 @@ export struct CategoryChipsSection {
             this.recommendViewModel.selectedCategoryIndex === index ?
               $r('app.color.chip_selected_background') :
               // 未选中：有材质就让材质决定底色（否则日间会浮出一层灰 = 用户说的"色差"）
-              (immersiveMaterialSupported() ? Color.Transparent :
-                $r('app.color.chip_unselected_background')))
+              Color.Transparent)
           .borderRadius(this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ? 8 : 21)
           // ★★★ 2026-11-19（用户给了官方华为音乐截图：「Tab 栏**胶囊**改光感，不是加个背板」）：
           //   材质挂在**每个胶囊**上 —— 吸顶那一份画在 `Navigation` 标题栏槽位里（B 档白名单）⇒ 生效；
@@ -112,7 +115,7 @@ export struct CategoryChipsSection {
           //   我们原来给未选中胶囊写死了 `chip_unselected_background` ⇒ 日间在材质上浮出一层灰。
           //   ⇒ 见下面 `backgroundColor`：有材质时给 `Color.Transparent`，让材质自己决定底色。
           .systemMaterial(this.recommendViewModel.selectedCategoryIndex === index ?
-            undefined : buildImmersiveMaterial())
+            undefined : immersiveFromLevel(this.ambientState.level))
           .justifyContent(FlexAlign.Center)
           .onClick(() => {
             this.recommendViewModel.selectCategory(index ?? 0);

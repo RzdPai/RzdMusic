@@ -211,5 +211,3 @@ export { RzdSelectMenuMaterial } from './src/main/ets/util/RzdSelectMaterial';
 export { TabBarConfigModel } from './src/main/ets/model/TabBarConfigModel';
 
 export { KugouShareResolver, KugouShareResult } from './src/main/ets/util/KugouShareResolver';
-// ★ 2026-11-19：API 26 沉浸光感材质（新增接入点用；已用 API 23 的地方不动）
-export { buildImmersiveMaterial, immersiveMaterialSupported } from './src/main/ets/util/ImmersiveMaterial';

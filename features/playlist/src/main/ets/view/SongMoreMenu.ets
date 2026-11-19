@@ -18,8 +18,7 @@ import {
   AmbientState,
   AppStorageKeys,
   buildBarBlurStyle,
-  // ★ 2026-11-19：API 26 沉浸光感（新接入点；已用 API 23 的位置不动）
-  buildImmersiveMaterial,
+  immersiveFromLevel,
   MusicAppState,
   MusicStoreService,
   PlayedSongRecord,
@@ -276,7 +275,7 @@ export struct SongMoreMenu {
       this.ActiveSheetBody()
     }
     .width('100%')
-    .systemMaterial(buildImmersiveMaterial())
+    .systemMaterial(immersiveFromLevel(this.ambientState.level))
   }
 
   @Builder
