@@ -775,7 +775,10 @@ export struct RecommendPage {
           //   （那一刻标题栏里放的是 Tab 行，不是标题）。
           //   官方口径：`titleBar` 管「返回图标区域 + 标题区域 + 菜单区域 + 背景板」，
           //   `mainTitle` 置空只影响文字本身，背景板/材质/菜单都不动。
-          mainTitle: (this.chipStickyActive || this.chipInBar) ? '' :
+          // ⚠️ `HdsNavigationTitle` **没有** `titleBuilder`（试过，编译不过）⇒ 标题只能用字符串。
+          //   "淡出"改由 `stackBuilder` 那一层的标题副本承担：`HomeTitleFade()` 画在胶囊行下面，
+          //   随滚动线性淡出、彻底淡完后 HDS 才把字符串置空（见 `chipStickyActive` 判定）。
+          mainTitle: this.chipStickyActive ? '' :
             (this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ?
               $r('app.string.home_page_title_pc') :
               $r('app.string.home_page_title')),
@@ -805,6 +808,31 @@ export struct RecommendPage {
    * 吸顶时叠在标题栏里的分类胶囊行（`stackBuilder`）。
    * 右侧留出菜单宽度，避免压住「搜索」钮（菜单在标题栏右侧，约 40vp + 边距）。
    */
+  /** 首页标题（自己画，才能做"淡出"；HDS 的 mainTitle 只能整块换字符串）。 */
+  @Builder
+  private HomeTitleFade() {
+    Text(this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ?
+      $r('app.string.home_page_title_pc') : $r('app.string.home_page_title'))
+      .fontSize(28)
+      .fontWeight(FontWeight.Bold)
+      .fontColor($r('sys.color.font_primary'))
+      .opacity(this.titleFadeOpacity())
+      .animation({ duration: 120, curve: Curve.EaseOut })
+  }
+
+  /** 标题淡出：进栏/吸顶时 0，其余 1；中间用进栏偏移做线性过渡（官方观感）。 */
+  private titleFadeOpacity(): number {
+    if (this.chipStickyActive) {
+      return 0;
+    }
+    if (!this.chipInBar) {
+      return 1;
+    }
+    const span: number = Math.max(1, this.chipRowTopInContentVp);
+    const p: number = Math.max(0, Math.min(1, this.chipBarOffsetVp / span));
+    return 1 - p;
+  }
+
   @Builder
   private StickyChipsInBar() {
     Row() {
