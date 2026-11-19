@@ -1418,12 +1418,14 @@ export class MusicDataService {
         }
         continue;
       }
-      // 内置平台：QQ 的广场接口实测一条都出不来（见 plazaSupported 注释），其余都能出
-      // —— 注意**不能**直接用 `plazaSupported()`：它把汽水也判成 false（那是「首页平台
-      // 跟随」的语义），而汽水广场走 Luna，是有数据的。
-      if (p !== 'tx') {
-        out.push(p);
-      }
+      // ★★★ 2026-11-19（用户：「我特意去平台管理看了一眼，QQ 是开启状态的，
+      //   而且以前 QQ 的歌单广场用着完全正常」）：
+      //   这里原来写死 `if (p !== 'tx')` 把 QQ 从**广场平台清单**里删掉了 ——
+      //   依据只是"`get_playlist_by_tag` 那条聚合口回空"（见 `plazaSupported()` 的注释）。
+      //   但 QQ 的**分类歌单**口（`playlist.PlayListCategoryServer / get_category_content`）
+      //   是能出数据的：广场选中任意分类后走的正是它 ⇒ 于是"有分类时能用、没分类时全空"。
+      //   ⇒ 恢复 QQ；无分类时的默认分类见 `playlists()` 里那条 tx 分支。
+      out.push(p);
     }
     return out;
   }
@@ -1519,6 +1521,39 @@ export class MusicDataService {
       return [{ id: 'hot', name: '最热' }];
     }
     return [{ id: '15127315', name: '推荐' }];
+  }
+
+  /**
+   * QQ 广场的**默认分类 id**（未选分类时用它当"全部/热门"）。
+   *
+   * 来源：`categories('tx')` 的 `get_all_categories` 第一组第一项（腾讯自己的顺序，热门在前）。
+   * 结果做进程内缓存 —— 广场一次会话里会反复调用 `playlists()`，别每次都拉分类表。
+   * @returns 分类 id；取不到返回空串（调用方退回老聚合口）
+   */
+  private static txDefaultCategoryCache: string = '';
+
+  private static async defaultTxCategoryId(): Promise<string> {
+    if (MusicDataService.txDefaultCategoryCache.length > 0) {
+      return MusicDataService.txDefaultCategoryCache;
+    }
+    try {
+      const groups: CategoryGroup[] = await MusicDataService.categories('tx');
+      for (let i: number = 0; i < groups.length; i++) {
+        const items: CategoryOption[] = groups[i].items;
+        for (let k: number = 0; k < items.length; k++) {
+          if (items[k].id.length > 0 && items[k].name !== '全部' && items[k].name !== '推荐') {
+            MusicDataService.txDefaultCategoryCache = items[k].id;
+            hilog.info(LOG_DOMAIN, LOG_TAG, 'tx default category=%{public}s name=%{public}s',
+              items[k].id, items[k].name);
+            return items[k].id;
+          }
+        }
+      }
+    } catch (err) {
+      hilog.warn(LOG_DOMAIN, LOG_TAG, 'tx categories fail err=%{public}s',
+        (err as Error).message ?? '');
+    }
+    return '';
   }
 
   static async categories(source: string): Promise<CategoryGroup[]> {
@@ -1725,10 +1760,24 @@ export class MusicDataService {
       url = `http://www2.kugou.kugou.com/yueku/v9/special/getSpecial?is_ajax=1&cdn=cdn&t=${selectedSort}&c=${categoryId ?? ''}&p=${pageNumber}`;
     }
     if (source === 'tx') {
-      const dataText = categoryId !== undefined && categoryId.length > 0
-        ? `{"comm":{"cv":1602,"ct":20},"playlist":{"method":"get_category_content","param":{"titleid":${Number(categoryId)},"caller":"0","category_id":${Number(categoryId)},"size":36,"page":${pageNumber - 1},"use_page":1},"module":"playlist.PlayListCategoryServer"}}`
-        : `{"playlist":{"method":"get_playlist_by_tag","param":{"id":10000000,"sin":${36 * (pageNumber - 1)},"size":36,"order":${Number(selectedSort)},"cur_page":${pageNumber}},"module":"playlist.PlayListPlazaServer"}}`;
-      url = 'https://u.y.qq.com/cgi-bin/musicu.fcg?format=json&data=' + encodeURIComponent(dataText);
+      // ★★★ 2026-11-19：**没有分类时也要能出内容**。
+      //   旧写法没分类就走 `playlist.PlayListPlazaServer / get_playlist_by_tag`，
+      //   那条口实测恒回 `{"code":0,"playlist":{"code":500003,"subcode":860100005}}`（一条都没有）
+      //   ⇒ 广场首次进入（未选分类）永远是空白，而选了分类就正常 —— 于是被误判成"QQ 广场不能用"。
+      //   现在没分类时**取一次分类表的第一个 id 当默认分类**（等价于"全部/热门"），
+      //   走的还是能用的 `get_category_content`。
+      let effectiveCategory: string = categoryId ?? '';
+      if (effectiveCategory.length === 0) {
+        effectiveCategory = await MusicDataService.defaultTxCategoryId();
+      }
+      if (effectiveCategory.length > 0) {
+        const dataText = `{"comm":{"cv":1602,"ct":20},"playlist":{"method":"get_category_content","param":{"titleid":${Number(effectiveCategory)},"caller":"0","category_id":${Number(effectiveCategory)},"size":36,"page":${pageNumber - 1},"use_page":1},"module":"playlist.PlayListCategoryServer"}}`;
+        url = 'https://u.y.qq.com/cgi-bin/musicu.fcg?format=json&data=' + encodeURIComponent(dataText);
+      } else {
+        // 连分类表都取不到：退回老的聚合口（至少不抛异常，上层按空态处理）
+        const dataText = `{"playlist":{"method":"get_playlist_by_tag","param":{"id":10000000,"sin":${36 * (pageNumber - 1)},"size":36,"order":${Number(selectedSort)},"cur_page":${pageNumber}},"module":"playlist.PlayListPlazaServer"}}`;
+        url = 'https://u.y.qq.com/cgi-bin/musicu.fcg?format=json&data=' + encodeURIComponent(dataText);
+      }
     }
     if (source === 'wy') {
       url = `https://music.163.com/api/playlist/list?cat=${encodeURIComponent(categoryId ?? '全部')}&order=${selectedSort}&limit=30&offset=${30 * (pageNumber - 1)}&total=true`;
