@@ -95,7 +95,6 @@ export function immersiveMaterial(style: RzdMaterialStyle = RzdMaterialStyle.REG
       style: styleOf(style),
       applyShadow: true,
       interactive: true,
-      materialColor: '#2EFFFFFF',
       lightEffect: {
         color: '#66FFFFFF'
       }

@@ -26,7 +26,7 @@ export struct ImmersiveIconButton {
   @Prop iconSize: number = 18;
   @Prop iconColor: ResourceColor = $r('sys.color.font_primary');
   /** 不支持材质时的兜底底色 */
-  @Prop fallbackColor: ResourceColor = '#33000000';
+  @Prop fallbackColor: ResourceColor = '#26FFFFFF';
   /** 点击 */
   onTap?: () => void;
 
@@ -50,7 +50,10 @@ export struct ImmersiveIconButton {
         .padding(0)
         .enabled(this.buttonEnabled)
         .systemMaterial(immersiveMedium())
-        .backgroundColor(Color.Transparent)
+        // ★ 2026-11-19（用户："关注按钮直接透明了"）：材质在**部分设备/部分模式下不渲染**，
+        //   backgroundColor 再给完全透明就整颗消失。⇒ 恒垫一层**半透明**底色（材质会在其上叠加，
+        //   不会盖住材质；材质不生效时也还有一颗可见的圆钮）。
+        .backgroundColor(this.fallbackColor)
         .focusable(false)
         .accessibilityText(this.accessibilityLabel)
         .onClick(() => {
