@@ -1285,7 +1285,13 @@ export struct OnlineSearchPage {
         const code: number = sourceToCode(activeSources[i]);
         const result = await searchAlbums(code, this.query, 1);
         for (let j: number = 0; j < result.list.length; j++) {
-          all.push(result.list[j]);
+          const album: AlbumInfo = result.list[j];
+          // ★★★ 2026-11-19（用户：「酷我的专辑搜索有问�题；QQ 有的能打开有的打不开」）：
+          //   这里原来**只 push 不加来源**，而点击时把 source 写死成 2（网易）⇒
+          //   拿酷我/QQ/酷狗/咪咕的专辑 id 去问网易 ⇒ 打不开。
+          //   与歌手那条对齐：id 前缀带上来源 code（`4_12345`）。
+          album.id = code + '_' + album.id;
+          all.push(album);
         }
         hilog.info(SEARCH_LOG_DOMAIN, SEARCH_LOG_TAG,
           'album source=%{public}s hits=%{public}d', activeSources[i], result.list.length);
@@ -1720,7 +1726,9 @@ export struct OnlineSearchPage {
         param.source = Number(s.id.substring(0, sep));
         param.id = s.id.substring(sep + 1);
       } else {
-        param.source = 2;
+        // 没有前缀（历史数据/其它入口）：退回当前搜索平台，再不行才按网易兜底
+        param.source = platformRegistry.isBuiltin(this.searchSource)
+          ? sourceToCode(this.searchSource) : 2;
         param.id = s.id;
       }
       param.name = s.name;
@@ -1767,8 +1775,22 @@ export struct OnlineSearchPage {
     .border({ width: { bottom: 0.5 }, color: $r('sys.color.comp_divider') })
     .onClick(() => {
       const param = new AlbumRouteParam();
-      param.source = 2;
-      param.id = a.id;
+      // ★ 与歌手同款：从 `code_id` 前缀解出来源；没有前缀才退回"当前搜索平台"（再不行才 2）
+      const sep: number = a.id.indexOf('_');
+      if (sep > 0 && sep < a.id.length - 1) {
+        param.source = Number(a.id.substring(0, sep));
+        param.id = a.id.substring(sep + 1);
+      } else {
+        param.source = platformRegistry.isBuiltin(this.searchSource)
+          ? sourceToCode(this.searchSource) : 2;
+        param.id = a.id;
+      }
+      // ★★★ 2026-11-19（「QQ 有的专辑能打开有的打不开」的真因之二）：
+      //   QQ/网易的专辑详情要的是 **mid**（如 `000MkMni19ClKG`），不是数字 id；
+      //   `AlbumInfo` 里两个字段都有（`TxSearch` 填的是 `String(albumID)` + `mid`），
+      //   但这里**从来没有把 mid 传下去** ⇒ dispatch 的 `mid.length>0 ? mid : id` 恒取数字 id
+      //   ⇒ QQ 专辑详情必然打不开（网易恰好两种都能认，所以只有 QQ 出问题）。
+      param.mid = a.mid;
       param.name = a.name;
       param.picUrl = a.picUrl;
       param.artistName = a.artistName;

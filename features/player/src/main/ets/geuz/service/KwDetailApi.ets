@@ -118,7 +118,7 @@ export async function getArtistDetail(artistId: string): Promise<ArtistInfo> {
 }
 
 async function fetchArtistAlbumCount(artistId: string): Promise<number> {
-  let url = 'http://www.kuwo.cn/api/www/artist/artistAlbum?artistid=' + artistId + '&pn=1&rn=1&httpsStatus=1'
+  let url = 'http://www.kuwo.cn/api/www/artist/artistAlbum?artistId=' + artistId + '&pn=1&rn=1&httpsStatus=1'
   let raw = await kwGet(url, 'http://www.kuwo.cn/singer_detail/' + encodeURIComponent(artistId) + '/album') as KwAlbumDetailResponse
   if (raw.code !== 200) return 0
   let data = raw.data
@@ -127,7 +127,7 @@ async function fetchArtistAlbumCount(artistId: string): Promise<number> {
 }
 
 async function fetchArtistSongCount(artistId: string): Promise<number> {
-  let url = 'http://www.kuwo.cn/api/www/artist/artistMusic?artistid=' + artistId + '&pn=1&rn=1&httpsStatus=1'
+  let url = 'http://www.kuwo.cn/api/www/artist/artistMusic?artistId=' + artistId + '&pn=1&rn=1&httpsStatus=1'
   let raw = await kwGet(url, 'http://www.kuwo.cn/singer_detail/' + encodeURIComponent(artistId)) as KwArtistMusicResponse
   if (raw.code !== 200) return 0
   let data = raw.data
@@ -167,7 +167,7 @@ interface KwArtistMusicItem {
 export async function getArtistSongs(artistId: string, order: string, limit: number, offset: number,
   artistName: string = ''): Promise<SongPageResult> {
   let page = Math.floor(offset / limit) + 1
-  let url = 'http://www.kuwo.cn/api/www/artist/artistMusic?artistid=' + artistId +
+  let url = 'http://www.kuwo.cn/api/www/artist/artistMusic?artistId=' + artistId +
     '&pn=' + page + '&rn=' + limit + '&httpsStatus=1'
   let raw = await kwGet(url, 'http://www.kuwo.cn/singer_detail/' + encodeURIComponent(artistId)) as KwArtistMusicResponse
   if (raw.code !== 200) throw new Error('获取歌手歌曲失败: code=' + raw.code)
@@ -195,7 +195,7 @@ export async function getArtistAlbums(artistId: string, limit: number,
 
 async function artistAlbumsNew(artistId: string, page: number, limit: number,
   offset: number): Promise<ArtistAlbumPageResult> {
-  let url = 'http://www.kuwo.cn/api/www/artist/artistAlbum?artistid=' + artistId +
+  let url = 'http://www.kuwo.cn/api/www/artist/artistAlbum?artistId=' + artistId +
     '&pn=' + page + '&rn=' + limit + '&httpsStatus=1'
   let raw = await kwGet(url, 'http://www.kuwo.cn/singer_detail/' + encodeURIComponent(artistId) + '/album') as KwAlbumDetailResponse
   if (raw.code !== 200) throw new Error('获取歌手专辑失败')
