@@ -43,7 +43,7 @@ import {
   buildTitleMaterial
 } from 'musicbasic';
 import { AccountChangedState, PlayerConstants } from 'player';
-import { BlurStrategy, HideMode, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
+import { BlurStrategy, HideMode, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize, hdsMaterial } from '@kit.UIDesignKit';
 import { RecommendViewModel } from '../viewmodel/RecommendViewModel';
 import { CategoryContentSection } from './CategoryContentSection';
 import { HomeFloatingMiniBar } from './HomeFloatingMiniBar';
@@ -759,7 +759,14 @@ export struct RecommendPage {
             }
           }
         },
-        systemMaterialEffect: buildTitleMaterial(this.ambientState.level)
+        // ★★★ 2026-11-19（照官方 Sample `sample_in_harmonyos` 的做法）：
+        //   官方首页标题栏用的是 **IMMERSIVE + ADAPTIVE**（系统按设备算力与日夜自适应），
+        //   不是我们这套"跟随软件设置档位"的做法 —— ADAPTIVE 才不会日间/夜间观感割裂。
+        //   胶囊那一层的材质**撤掉**（材质由标题栏提供，行内再挂会叠一层 = 之前那条背板）。
+        systemMaterialEffect: {
+          materialType: hdsMaterial.MaterialType.IMMERSIVE,
+          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+        }
       },
       content: {
         title: {

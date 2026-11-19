@@ -17,7 +17,7 @@ import { AppStorageV2 } from '@kit.ArkUI';
 
 import { LengthMetrics, uiObserver } from '@kit.ArkUI';
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
-import { AmbientState, AppStorageKeys, immersiveFromLevel } from 'musicbasic';
+import { AmbientState, AppStorageKeys } from 'musicbasic';
 import { BreakpointType, getWindowInfoState, ImmersiveType, StyleConstants, WindowInfo } from 'musicbasic';
 import { RecommendCategoryTabUi } from '../model/RecommendUiModels';
 import { RecommendViewModel } from '../viewmodel/RecommendViewModel';
@@ -35,9 +35,6 @@ export struct CategoryChipsSection {
   @Param enableFadingEdge: boolean = false;
   /** Title bar insets, immersive decor, and related window metrics. */
   @Local windowInfo: WindowInfo = getWindowInfoState();
-  /** 光感强度（软件设置里那一档）：材质档位跟随它，与全仓其它点位一致。 */
-  @Local ambientState: AmbientState = AppStorageV2.connect(AmbientState, AppStorageKeys.AMBIENT_STATE,
-    () => new AmbientState())!;
 
   private homeScrollGutterH(): number {
     return new BreakpointType(16, 24, 32, 32).getValue(this.breakpointEnv.widthBreakpoint);
@@ -110,12 +107,9 @@ export struct CategoryChipsSection {
           //   流内那一份在 body 里 ⇒ 不生效（无所谓，观感一致）。
           //   不支持该能力的设备返回 undefined ⇒ 无材质，胶囊原底色照旧。
           // 官方截图里**选中那枚是实心浅色胶囊**（不是玻璃）⇒ 材质只挂**未选中**的。
-          // ★ 2026-11-19 订正（用户："官方日间模式也有材质"）：**日夜都挂材质**。
-          //   日间那点色差的原因是**底色冲突**：材质生效时系统会把 backgroundColor 改成透明，
-          //   我们原来给未选中胶囊写死了 `chip_unselected_background` ⇒ 日间在材质上浮出一层灰。
-          //   ⇒ 见下面 `backgroundColor`：有材质时给 `Color.Transparent`，让材质自己决定底色。
-          .systemMaterial(this.recommendViewModel.selectedCategoryIndex === index ?
-            undefined : immersiveFromLevel(this.ambientState.level))
+          // ★ 2026-11-19 订正（照官方 Sample）：**胶囊自己不再挂材质** ——
+          //   官方首页整条标题栏是 `IMMERSIVE + ADAPTIVE`，行里的胶囊只是**实心/半透明底色**，
+          //   所以日间夜间都不割裂；我们之前在胶囊上挂材质反而叠出玻璃块。
           .justifyContent(FlexAlign.Center)
           .onClick(() => {
             this.recommendViewModel.selectCategory(index ?? 0);
