@@ -1738,7 +1738,9 @@ export struct OnlineSearchPage {
       param.picUrl = s.picUrl;
       param.albumSize = s.albumSize;
       param.songNum = s.songNum;
-      this.pageStack.pushPathByName(RouterUrlConstants.ARTIST_DETAIL, param);
+      // ★ 2026-11-19：搜索页隐藏了壳层底栏 ⇒ 去任何二级页之前都要**恢复**（歌手页也要）
+    this.onShowChange(false);
+    this.pageStack.pushPathByName(RouterUrlConstants.ARTIST_DETAIL, param);
     })
   }
 
@@ -2130,7 +2132,9 @@ export struct OnlineSearchPage {
       param.picUrl = s.picUrl;
       param.albumSize = s.albumSize;
       param.songNum = s.songNum;
-      this.pageStack.pushPathByName(RouterUrlConstants.ARTIST_DETAIL, param);
+      // ★ 2026-11-19：搜索页隐藏了壳层底栏 ⇒ 去任何二级页之前都要**恢复**（歌手页也要）
+    this.onShowChange(false);
+    this.pageStack.pushPathByName(RouterUrlConstants.ARTIST_DETAIL, param);
     })
   }
 
