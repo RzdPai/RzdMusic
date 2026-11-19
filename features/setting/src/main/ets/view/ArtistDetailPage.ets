@@ -641,7 +641,7 @@ export struct ArtistDetailPage {
       const offset: number = (page - 1) * SONG_PAGE_LIMIT;
       const order: string = this.songSort === 0 ? 'hot' : 'time';
       const result: SongPageResult = await getArtistSongs(this.source, this.effectiveArtistId, this.effectiveArtistMid,
-        order, SONG_PAGE_LIMIT, offset, this.artistNameText);
+        order, SONG_PAGE_LIMIT, offset, this.artistNameText || this.artistName);
       if (!this.pageAlive || generation !== this.songGeneration || sort !== this.songSort ||
         identity !== this.effectiveArtistId + ':' + this.effectiveArtistMid) {
         hilog.info(0, 'RzdArtistSticky', 'songs stale/cancel gen=%{public}d', generation);

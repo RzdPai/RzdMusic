@@ -41,6 +41,9 @@ interface MgSongSinger {
 interface MgContentData {
   header: Object | undefined
   contents: MgContentBlock[] | undefined
+  /** 搜索类接口的条目（`bmw/search/*`），与 `contents` 不同形状。 */
+  items: Object[] | undefined
+  hasNext: boolean | undefined
 }
 
 interface MgAlbumInfoResponse {
@@ -236,6 +239,75 @@ export async function getArtistSongs(singerId: string, order: string, limit: num
   }
   appendPlayLog('[RzdMgArtist] 三档都空 singer=' + singerId + ' code=' + lastCode);
   return new SongPageResult([], 0, false);
+}
+
+/**
+ * **按歌手名搜歌**（咪咕歌手页的兜底）。
+ *
+ * 为什么需要：`bmw/singer/song/v1.0` 在部分 `singerId` 下会返回 `code:000000` 但 `contents` 为空
+ * （本机实测：有效 id `953012` 有 30 首，另一个 id 就是空），而**搜索接口一直可用**。
+ * ⇒ 歌手页拿不到歌时，用"按名字搜"补齐，并按 `singerList` 过滤只留这位歌手的歌。
+ * @param artistName 歌手名
+ * @param limit 每页条数
+ * @param offset 偏移
+ */
+export async function getArtistSongsByName(artistName: string, limit: number,
+  offset: number): Promise<SongPageResult> {
+  const name: string = artistName.trim();
+  if (name.length === 0) {
+    return new SongPageResult([], 0, false);
+  }
+  const page: number = limit > 0 ? Math.floor(offset / limit) + 1 : 1;
+  const url: string = 'https://app.c.nf.migu.cn/bmw/search/song/v1.0?pageNo=' + page +
+    '&text=' + encodeURIComponent(name);
+  try {
+    const raw: MgBaseResponse = await httpGetJson(url, { 'User-Agent': MG_UA }) as MgBaseResponse;
+    const data = raw.data as MgContentData;
+    const rows: Record<string, Object>[] = data !== undefined && data.items !== undefined
+      ? data.items as Record<string, Object>[] : [];
+    const out: SongInfo[] = [];
+    for (let i: number = 0; i < rows.length && out.length < limit; i++) {
+      const item = rows[i]['song'] as Record<string, Object> | undefined;
+      if (item === undefined || item === null) {
+        continue;
+      }
+      const singers = item['singerList'] as Record<string, Object>[] | undefined;
+      let singerHit: boolean = false;
+      let singerLine: string = '';
+      if (singers !== undefined) {
+        for (let k: number = 0; k < singers.length; k++) {
+          const sn: string = String(singers[k]['name'] ?? '');
+          if (sn.length === 0) {
+            continue;
+          }
+          singerLine = singerLine.length === 0 ? sn : (singerLine + '/' + sn);
+          if (sn === name || sn.indexOf(name) >= 0 || name.indexOf(sn) >= 0) {
+            singerHit = true;
+          }
+        }
+      }
+      if (!singerHit) {
+        continue;
+      }
+      const id: string = String(item['contentId'] ?? '');
+      const songName: string = String(item['songName'] ?? '');
+      if (id.length === 0 || songName.length === 0) {
+        continue;
+      }
+      const album: string = String(item['album'] ?? '');
+      const dur: number = Number(item['duration'] ?? 0);
+      const img1: string = String(item['img1'] ?? item['img2'] ?? '');
+      const pic: string = img1.length > 0 && img1.startsWith('/')
+        ? 'https://d.musicapp.migu.cn' + img1 : img1;
+      out.push(new SongInfo(id, songName, singerLine, album, dur, pic));
+    }
+    appendPlayLog('[RzdMgArtist] byName name=' + name + ' rows=' + rows.length + ' songs=' + out.length);
+    return new SongPageResult(out, out.length, out.length >= limit);
+  } catch (err) {
+    appendPlayLog('[RzdMgArtist] byName 抛异常 name=' + name + ' ' +
+      JSON.stringify(err).substring(0, 100));
+    return new SongPageResult([], 0, false);
+  }
 }
 
 async function getMgAlbumCount(id: string, retryNum: number = 0): Promise<number> {
