@@ -758,11 +758,16 @@ export struct SongMoreMenu {
     // ★★ 2026-11-19（用户：「bindMenu 不支持光感直接换个组件」）：
     //   `bindMenu` 的 options 里没有 `systemMaterial`（只有 backgroundBlurStyle），
     //   而 **Popup 属于官方 A 档**（弹窗类接口）⇒ 换成 `bindPopup` + 自绘内容根挂材质。
-    // ★ 2026-11-19（用户：小的没有光感；音源管理右上角那个是正常的）：
-    //   音源管理用的是**系统 bindMenu**（系统菜单在 API 26 自带沉浸材质）⇒ 回到 `bindMenu`，
-    //   不要自绘 Popup（自绘内容根属灰色地带，材质不出来）。
-    .bindMenu(this.menuItems(), {
-      preview: MenuPreviewMode.NONE
+    .bindPopup(this.showMenu, {
+      builder: this.MenuPopup(),
+      placement: Placement.BottomRight,
+      popupColor: Color.Transparent,
+      enableArrow: false,
+      onStateChange: (event) => {
+        if (!event.isVisible) {
+          this.showMenu = false;
+        }
+      }
     })
     .bindSheet($$this.showSheet, this.ActiveSheet(), {
       // 评论要整屏高度才够看；其余弹层按内容自适应
@@ -772,6 +777,7 @@ export struct SongMoreMenu {
       // 用 bindSheet 原生 title 区域显示标题，X 关闭按钮由系统保证跟标题水平对齐（与播放详情页一致）
       title: this.sheetTitle(),
       // ★ 2026-11-19（用户："大的半模态是不透明"）：不透明底色会把材质整块盖住 ⇒ 透明底。
+      backgroundColor: Color.Transparent,
       onWillDismiss: (action: DismissSheetAction) => {
         action.dismiss();
         this.showSheet = false;

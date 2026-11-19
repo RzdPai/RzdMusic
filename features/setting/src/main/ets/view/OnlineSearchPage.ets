@@ -1604,6 +1604,7 @@ export struct OnlineSearchPage {
           }
         ], {
           backgroundBlurStyle: appBarBlurStyle(),
+          backgroundColor: $r('app.color.menu_surface'),
         })
       SymbolGlyph($r('sys.symbol.chevron_right'))
         .fontSize(18)
@@ -2920,6 +2921,7 @@ export struct OnlineSearchPage {
         detents: [SheetSize.FIT_CONTENT],
         dragBar: true,
         showClose: true,
+        backgroundColor: $r('app.color.background_secondary'),
         onWillDismiss: (action: DismissSheetAction): void => {
           action.dismiss();
           this.showQualitySheet = false;

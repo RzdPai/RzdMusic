@@ -1617,6 +1617,7 @@ export struct ControlAreaComponent {
       height: this.showMenuComment || this.showMenuLyric ? SheetSize.LARGE : 416,
       dragBar: true,
       showClose: false,
+      backgroundColor: $r('app.color.panel_surface'),
       onDisappear: (): void => {
         // 记下关闭动画结束的时刻（重新打开的冷却用），顺手把子页状态清干净
         this.sheetClosedAtMs = Date.now();

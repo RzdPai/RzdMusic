@@ -850,6 +850,7 @@ export struct PlaylistsPage {
           }
         ], {
           backgroundBlurStyle: this.playlistMenuBlur(),
+          backgroundColor: $r('app.color.menu_surface'),
         })
       SymbolGlyph($r('sys.symbol.chevron_right'))
         .fontSize(18)

@@ -197,6 +197,7 @@ export struct LoginMusicCard {
       height: ACCOUNT_SHEET_HEIGHT,
       dragBar: true,
       showClose: false,
+      backgroundColor: $r('app.color.background_secondary'),
       onDisappear: (): void => {
         this.sheetOpen = false;
       }
