@@ -52,6 +52,11 @@ export struct ImmersiveSurface {
   onTap?: () => void;
   /** 内容 */
   @BuilderParam content: () => void = this.emptyContent;
+  /** 按下中（驱动形变与光晕） */
+  @State touching: boolean = false;
+  /** 触点（相对本组件左上角，vp） */
+  @State touchX: number = 0;
+  @State touchY: number = 0;
 
   @Builder
   emptyContent() {
@@ -122,11 +127,46 @@ export struct ImmersiveSurface {
       .height(this.surfaceHeight)
       .borderRadius(this.radiusVp(), RenderStrategy.OFFSCREEN)
       .clip(true)
+
+      // ★ 2026-11-19（用户："官方的手拖动是有**形变和光效**的"）：
+      //   系统材质本身只负责"玻璃"，按下/拖动时的**形变**与**跟随触点的光晕**要自己做 ——
+      //   与参考工程 `qingye-reader` 的 `ImmersiveMaterialSurface` 同一做法：
+      //   一层 radialGradient 圆斑，中心跟随触点，透明度按下渐显（160ms Friction）。
+      Row()
+        .width(this.surfaceHeight * 2)
+        .height(this.surfaceHeight * 2)
+        .position({ x: this.touchX - this.surfaceHeight, y: this.touchY - this.surfaceHeight })
+        .radialGradient({
+          center: [this.surfaceHeight, this.surfaceHeight],
+          radius: this.surfaceHeight,
+          colors: [['#66FFFFFF', 0], [Color.Transparent, 1]]
+        })
+        .opacity(this.touching ? 0.9 : 0)
+        .animation({ duration: 160, curve: Curve.Friction })
+        .hitTestBehavior(HitTestMode.None)
+        .accessibilityLevel('no')
     }
     .width(this.surfaceWidth)
     .height(this.surfaceHeight)
     .borderRadius(this.radiusVp(), RenderStrategy.OFFSCREEN)
     .clip(true)
+    // 按下时轻微形变（官方的手感：压一下再弹回）
+    .scale(this.touching ? { x: 0.94, y: 0.94 } : { x: 1, y: 1 })
+    .animation({ duration: 120, curve: Curve.Friction })
+    .onTouch((event: TouchEvent) => {
+      if (event.touches.length === 0) {
+        this.touching = false;
+        return;
+      }
+      const t: TouchObject = event.touches[0];
+      this.touchX = t.x;
+      this.touchY = t.y;
+      if (event.type === TouchType.Down || event.type === TouchType.Move) {
+        this.touching = true;
+      } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+        this.touching = false;
+      }
+    })
     .onClick(() => {
       if (this.onTap !== undefined) {
         this.onTap();
