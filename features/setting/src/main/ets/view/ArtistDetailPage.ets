@@ -1860,17 +1860,20 @@ export struct ArtistDetailPage {
 
         Row({ space: 10 }) {
           // 关于（歌手信息）
-          Row() {
+          // ★ 2026-11-19（用户要这一颗也有光感）：自绘 `Row` 属 B 档（页面 body 越界，材质不渲染），
+          //   换成 **Button**（A 档「按钮类」）才能吃到 `systemMaterial`。
+          Button() {
             SymbolGlyph($r('sys.symbol.info_circle_fill'))
               .fontSize(18)
               .height(18)
               .fontColor([this.playAllGlyphColor()])
           }
+          .type(ButtonType.Normal)
           .width(40)
           .height(40)
           .borderRadius(20)
+          .systemMaterial(immersiveFromLevel(this.ambientState.level))
           .backgroundColor(this.playAllButtonColor())
-          .justifyContent(FlexAlign.Center)
           .onClick(() => {
             this.showAboutPopup = !this.showAboutPopup;
           })
