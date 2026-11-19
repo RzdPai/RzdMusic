@@ -21,14 +21,13 @@ import { hdsMaterial, SystemMaterialParams } from '@kit.UIDesignKit';
  * @returns Material params for the HDS title bar systemMaterialEffect.
  */
 export function buildTitleMaterial(level: number): SystemMaterialParams {
-  switch (level) {
-    case 1:
-      return { materialType: hdsMaterial.MaterialType.IMMERSIVE, materialLevel: hdsMaterial.MaterialLevel.SMOOTH };
-    case 2:
-      return { materialType: hdsMaterial.MaterialType.IMMERSIVE, materialLevel: hdsMaterial.MaterialLevel.GENTLE };
-    case 3:
-      return { materialType: hdsMaterial.MaterialType.IMMERSIVE, materialLevel: hdsMaterial.MaterialLevel.EXQUISITE };
-    default:
-      return { materialType: hdsMaterial.MaterialType.IMMERSIVE, materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE };
-  }
+  // ★★★ 2026-11-19（照官方 Sample `sample_in_harmonyos` 的 `BaseHomeViewModel`）：
+  //   官方标题栏一律用 **IMMERSIVE + ADAPTIVE**（系统按设备算力与日夜自适应），
+  //   **不跟软件设置里的档位**。我们原来按 `level` 手选档位 ——
+  //   那正是"日间模式割裂 / 右上角按钮日间还是白"的根源（手选档位在日间的表现与系统不一致）。
+  //   `level` 参数保留（调用点不改），但不再影响档位：系统自适应才是 HDS 规范口径。
+  return {
+    materialType: hdsMaterial.MaterialType.IMMERSIVE,
+    materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+  };
 }

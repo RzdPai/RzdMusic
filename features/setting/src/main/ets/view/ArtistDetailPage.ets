@@ -1457,7 +1457,7 @@ export struct ArtistDetailPage {
           .padding({ left: 12, right: 12 })
           .borderRadius(14)
           .systemMaterial(immersiveFlat())
-          .backgroundColor(this.fgTint())
+          .backgroundColor(Color.Transparent)
           .margin({ bottom: 10 })
           .onClick(() => {
             this.concertSheet = true;
@@ -1468,8 +1468,6 @@ export struct ArtistDetailPage {
             // ★ 2026-11-19 订正（用户："演唱会半模态现在变成透明了"）：
             //   `blurStyle` 是**背板**，删掉它就整层透明 —— 光感材质只能叠在**背板之上**，
             //   不能代替背板。⇒ 恢复真模糊作底，材质仍挂在内容根（见 `ConcertSheet()`）。
-            blurStyle: BlurStyle.COMPONENT_THIN,
-            backgroundColor: Color.Transparent,
             maskColor: '#33000000'
           })
         }
@@ -1498,7 +1496,7 @@ export struct ArtistDetailPage {
           .height(40)
           .borderRadius(20)
           .systemMaterial(immersiveFlat())
-          .backgroundColor(this.fgTint())
+          .backgroundColor(Color.Transparent)
           .onClick(() => {
             this.showAboutPopup = !this.showAboutPopup;
           })
@@ -1548,7 +1546,7 @@ export struct ArtistDetailPage {
           .height(40)
           .borderRadius(20)
           .systemMaterial(immersiveFlat())
-          .backgroundColor(this.fgTint())
+          .backgroundColor(Color.Transparent)
           .onClick(() => {
             this.toggleFavoriteArtist();
           })

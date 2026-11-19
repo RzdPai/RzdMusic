@@ -3451,7 +3451,6 @@ export struct SettingsDetailPage {
         title: { title: this.sourceSheetTitle() },
         dragBar: true,
         showClose: false,
-        backgroundColor: $r('app.color.background_secondary'),
         onWillDismiss: (action: DismissSheetAction): void => {
           this.sourceSheet = 0;
           action.dismiss();
