@@ -47,7 +47,7 @@ export struct ImmersiveSurface {
   /** 圆角（vp）；默认按高度取圆钮 */
   @Prop surfaceRadius: number = -1;
   /** 不支持材质的设备用这个底色兜底 */
-  @Prop fallbackColor: ResourceColor = '#33000000';
+  @Prop fallbackColor: ResourceColor = Color.Transparent;
   /** 点击回调（壳不抢事件，事件落在这层） */
   onTap?: () => void;
   /** 内容 */
@@ -110,7 +110,7 @@ export struct ImmersiveSurface {
       .height(this.surfaceHeight)
       .hitTestBehavior(HitTestMode.None)
 
-      // 兜底色（材质不可用时才看得见）
+      // 兜底色（**默认透明**：用户 2026-11-20「不要垫半透明」；材质不可用时再按需传实色）
       Column()
         .width('100%')
         .height('100%')

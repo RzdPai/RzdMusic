@@ -19,7 +19,7 @@ import { image } from '@kit.ImageKit';
 import { effectKit } from '@kit.ArkGraphics2D';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { common } from '@kit.AbilityKit';
-import { immersiveFlat, ImmersiveIconButton } from 'musicbasic';
+import { immersiveFlat, ImmersiveSurface } from 'musicbasic';
 import { guardPlayerBack, immersiveMedium } from 'musicbasic';
 import { ConcertItem, ConcertService } from '../concert/ConcertService';
 import { AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, SongTitleMarquee, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, shouldUseSplitDetailLayout, splitDetailCardWidthVp , immersiveFromLevel } from 'musicbasic';
@@ -1536,17 +1536,23 @@ export struct ArtistDetailPage {
           }
 
           // 关注 / 取消关注 —— 照 legado/青叶 那套：Button(Circle) + systemMaterial
-          ImmersiveIconButton({
-            icon: this.isFavoriteArtist ? $r('sys.symbol.heart_fill') : $r('sys.symbol.heart'),
-            buttonSize: 40,
-            iconSize: 18,
-            iconColor: this.fgPrimary(),
-            accessibilityLabel: this.isFavoriteArtist ? '取消关注' : '关注',
-            fallbackColor: this.fgTint(),
+          // ★ 2026-11-20（用户："没绕过的就会渲染成透明"）：
+          //   `Button + systemMaterial` 在页面 body 里**渲染成透明**（API 26 收窄了生效范围）
+          //   ⇒ 改用**绕过方案**：`ImmersiveSurface`（借空 HdsTabs 悬浮栏承载材质）+ 自带触点光效/形变。
+          ImmersiveSurface({
+            surfaceWidth: 40,
+            surfaceHeight: 40,
+            fallbackColor: Color.Transparent,
             onTap: (): void => {
               this.toggleFavoriteArtist();
             }
-          })
+          }) {
+            SymbolGlyph(this.isFavoriteArtist ? $r('sys.symbol.heart_fill') : $r('sys.symbol.heart'))
+              .fontSize(18)
+              .fontWeight(FontWeight.Regular)
+              .height(18)
+              .fontColor([this.fgPrimary()])
+          }
         }
         .justifyContent(FlexAlign.Center)
         .padding({ top: 12 })

@@ -213,3 +213,4 @@ export { TabBarConfigModel } from './src/main/ets/model/TabBarConfigModel';
 export { KugouShareResolver, KugouShareResult } from './src/main/ets/util/KugouShareResolver';
 export { ImmersiveSurface } from './src/main/ets/components/ImmersiveSurface';
 export { ImmersiveIconButton } from './src/main/ets/components/ImmersiveIconButton';
+export { rdzToast } from './src/main/ets/util/RdzToast';
