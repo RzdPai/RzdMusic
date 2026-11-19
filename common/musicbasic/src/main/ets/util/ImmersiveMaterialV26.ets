@@ -86,10 +86,19 @@ export function immersiveMaterial(style: RzdMaterialStyle = RzdMaterialStyle.REG
       Logger.info('[RzdMaterial] immersive material unsupported, fallback to none');
       return undefined;
     }
+    // ★★★ 2026-11-19（用户："还是不好看，我还是希望用官方的"；参考工程 `AdaptiveIconButton`）：
+    //   官方那套质感 = **交互形变 + 光感反馈 + 材质底色**三件一起给，缺一个就显得"只是块玻璃"：
+    //     · `interactive: true`      —— 按下有形变（官方手感）
+    //     · `lightEffect: {…}`       —— 跟随触点的光效（**我们之前完全没给，所以一直是死的**）
+    //     · `materialColor`          —— 材质底色（半透明白，深色下自动反相）
     const built: uiMaterial.ImmersiveMaterial = new uiMaterial.ImmersiveMaterial({
       style: styleOf(style),
       applyShadow: true,
-      interactive: true
+      interactive: true,
+      materialColor: '#2EFFFFFF',
+      lightEffect: {
+        color: '#66FFFFFF'
+      }
     });
     logSupportOnce(true, style);
     return built;
