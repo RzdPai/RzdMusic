@@ -42,7 +42,7 @@ interface KwAlbumCountData {
 }
 
 async function fetchArtistAlbumNum(artistId: string): Promise<number> {
-  let url = 'http://www.kuwo.cn/api/www/artist/artistAlbum?artistid=' + artistId + '&pn=1&rn=1&httpsStatus=1'
+  let url = 'http://www.kuwo.cn/api/www/artist/artistAlbum?artistId=' + artistId + '&pn=1&rn=1&httpsStatus=1'
   let raw = await kwGet(url, 'http://www.kuwo.cn/singer_detail/' + encodeURIComponent(artistId) + '/album') as KwAlbumCountResp
   if (raw.code !== 200) return 0
   let data = raw.data

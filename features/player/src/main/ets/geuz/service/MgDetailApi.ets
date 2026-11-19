@@ -120,18 +120,51 @@ function findDesc(contents: MgContentBlock[] | undefined): string {
   return ''
 }
 
+/**
+ * 从咪咕模板里取歌曲条目。
+ *
+ * ★★★ 2026-11-19（用户：「咪咕列表中能显示有多少首歌曲，但是打开后里面一首歌都没显示」）：
+ *   原来**只认 `view === 'ZJ-Singer-Song-Scroll'` 这一个模板名** —— 咪咕这类模板名会变
+ *   （A/B 下发、版本升级），名字对不上就一条都取不到，而歌手页上"有多少首"来自搜索接口的
+ *   `songNum` ⇒ 表现成"有数量、点进去空的"。
+ *   ⇒ 改成两级：先按已知模板名取；**取不到就兜底扫所有层级的 `songItem`**（宁多勿漏，
+ *   条目本身带 `songName`，不会把无关东西带进来）。
+ */
 function findSongItems(contents: MgContentBlock[] | undefined): MgSongItem[] {
   let list: MgSongItem[] = []
   if (contents === undefined) return list
+  const KNOWN_VIEWS: string[] = ['ZJ-Singer-Song-Scroll', 'ZJ-Singer-Song-List', 'ZJ-Singer-Song'];
   for (let i = 0; i < contents.length; i++) {
     let block = contents[i]
-    if (block.view === 'ZJ-Singer-Song-Scroll') {
-      let inner = block.contents ?? []
-      for (let j = 0; j < inner.length; j++) {
-        let item = inner[j].songItem
-        if (item !== undefined && (item.songName ?? '').length > 0) {
-          list.push(item)
-        }
+    if (block.view === undefined || KNOWN_VIEWS.indexOf(block.view) < 0) continue
+    let inner = block.contents ?? []
+    for (let j = 0; j < inner.length; j++) {
+      let item = inner[j].songItem
+      if (item !== undefined && (item.songName ?? '').length > 0) {
+        list.push(item)
+      }
+    }
+  }
+  if (list.length > 0) return list
+  // 兜底：模板名变了 —— 递归扫所有 block，抓到任何 `songItem` 就算
+  return collectSongItemsDeep(contents)
+}
+
+/** 递归收集所有 `songItem`（只在按模板名取不到时才用）。 */
+function collectSongItemsDeep(blocks: MgContentBlock[] | undefined): MgSongItem[] {
+  let list: MgSongItem[] = []
+  if (blocks === undefined) return list
+  for (let i = 0; i < blocks.length; i++) {
+    let block = blocks[i]
+    let item = block.songItem
+    if (item !== undefined && (item.songName ?? '').length > 0) {
+      list.push(item)
+    }
+    let inner: MgContentBlock[] | undefined = block.contents
+    if (inner !== undefined && inner.length > 0) {
+      let sub = collectSongItemsDeep(inner)
+      for (let k = 0; k < sub.length; k++) {
+        list.push(sub[k])
       }
     }
   }

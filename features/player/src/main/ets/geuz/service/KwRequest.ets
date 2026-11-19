@@ -152,9 +152,15 @@ function isIllegal(raw: Object): boolean {
 async function doKwRequest(url: string, referer: string, tk: KwToken, secret: string): Promise<Object> {
   let reqId = String(Date.now()) + Math.random().toString(16).slice(2)
   let cookie = tk.name + '=' + tk.value
-  let fullUrl = url + '&reqId=' + reqId
+  let fullUrl = (url.indexOf('?') >= 0 ? url + '&' : url + '?') + 'reqId=' + reqId
   let headers: Record<string, string> = {
     'cookie': cookie,
+    // ★★★ 2026-11-19（用户：「酷我还是搜索不到」）：**缺 `csrf` 头**。
+    //   酷我 `api/www/*` 这套口要求三件套同时在场：`Cookie: Hm_Iuvt_xxx=…` + `csrf: 同一个值`
+    //   + `Secret: <签名>`。少了 `csrf`，接口会回 `{"success":false,"message":"illegal request"}`
+    //   （或 code 200 但 data 为空）⇒ 搜索/歌手/专辑**全线拿不到数据**，
+    //   而 LX 脚本那条（脚本自己请求）不受影响 —— 表现就是"酷我搜不到、无界正常"。
+    'csrf': tk.value,
     'Secret': secret,
     'Referer': referer,
     'User-Agent': KW_UA,
