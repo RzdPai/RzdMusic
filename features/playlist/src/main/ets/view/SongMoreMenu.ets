@@ -18,6 +18,8 @@ import {
   AmbientState,
   AppStorageKeys,
   buildBarBlurStyle,
+  // ★ 2026-11-19：API 26 沉浸光感（新接入点；已用 API 23 的位置不动）
+  buildImmersiveMaterial,
   MusicAppState,
   MusicStoreService,
   PlayedSongRecord,
@@ -260,8 +262,25 @@ export struct SongMoreMenu {
   }
 
   /** 按 sheetType 渲染对应弹层内容（单组件只能挂一个 bindSheet）。 */
+  /**
+   * 弹层内容的**根**：挂 API 26 沉浸光感材质（用户 2026-11-19：「歌曲菜单…用 api26 的新光感」）。
+   *
+   * 官方生效范围里 **半模态（bindSheet）属于"弹窗类"，材质全页面生效** —— 所以材质写在
+   * 内容根节点上是有效的。（普通组件只能在标题栏/底部 TabBar 里生效，那种位置不要照抄。）
+   * 不支持该能力的设备 `buildImmersiveMaterial()` 返回 undefined ⇒ 无材质，
+   * 弹层自己的底色照旧（自动降级，不写分支）。
+   */
   @Builder
   private ActiveSheet() {
+    Column() {
+      this.ActiveSheetBody()
+    }
+    .width('100%')
+    .systemMaterial(buildImmersiveMaterial())
+  }
+
+  @Builder
+  private ActiveSheetBody() {
     if (this.sheetType === 1) {
       this.QualitySheet()
     } else if (this.sheetType === 2) {
