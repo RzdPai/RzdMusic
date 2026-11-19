@@ -15,6 +15,14 @@
       {
         "name": "ohos.permission.INTERNET"
       },
+      // ★★★ 2026-11-19（用户：「本地导入会复制一份，占两份空间」）：
+      //   改成**直接引用原文件**后，必须拿到**持久化授权**，否则应用重启/设备重启后
+      //   之前 Picker 给的临时权限就失效，歌单里的本地歌会全部"文件不见了"。
+      //   官方：ohos.fileshare.persistPermission / activatePermission 需要这个权限
+      //   （system_grant，声明即生效，不需要运行时弹窗）。
+      {
+        "name": "ohos.permission.FILE_ACCESS_PERSIST"
+      },
       {
         "name": "ohos.permission.GET_NETWORK_INFO"
       },

@@ -42,7 +42,7 @@
 import { common } from '@kit.AbilityKit';
 import { AppStorageV2 } from '@kit.ArkUI';
 import { util } from '@kit.ArkTS';
-import { fileIo as fs, fileUri, picker } from '@kit.CoreFileKit';
+import { fileIo as fs, fileShare, fileUri, picker } from '@kit.CoreFileKit';
 import { media } from '@kit.MediaKit';
 import { image } from '@kit.ImageKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
@@ -137,8 +137,20 @@ interface Id3ParseResult {
 export interface LocalSongEntry {
   /** 稳定标识（不含 local_ 前缀），同时作为 SongItem.songId */
   key: string;
-  /** 沙箱里的文件名（含后缀） */
+  /** 沙箱里的文件名（含后缀）——**旧数据**才有；新导入留空 */
   file: string;
+  /**
+   * ★★★ 2026-11-19（用户：「本地歌曲导入会**复制一份**，占两份空间」）：
+   * **原文件的路径或 URI**（Picker 给的 `file://docs/...` 或绝对路径）。
+   *
+   * 新导入一律**只记这个、不复制**；播放时直接读它。
+   * `file` 只在"历史数据（当初复制进沙箱的那批）"里非空 —— 两者取其一：
+   * `getPlayPath()` 优先 `srcPath`，为空才退回 `${dir}/${file}`。
+   *
+   * ⚠️ 访问原文件依赖**持久化授权**（`fileShare.persistPermission` + 每次启动
+   * `activatePermission`），见 `persistFolderAccess()` / `activatePersistedAccess()`。
+   */
+  srcPath: string;
   /** 封面文件名（covers/ 下），没有内嵌封面时为空串 */
   cover: string;
   /**
@@ -190,6 +202,11 @@ export interface ImportResult {
 interface LocalIndex {
   version: number;
   songs: LocalSongEntry[];
+  /**
+   * ★ 2026-11-19：已经**持久化授权**过的 URI（文件夹或单个文件）。
+   * 每次启动要按它 `activatePermission()`，否则原文件读不到（"文件不见了"）。
+   */
+  uris: string[];
   /** 非同步侧表：歌单 id -> 该歌单里的本地歌 key 列表（收藏用 'love' 键） */
   lists: Record<string, string[]>;
   /** 「设置 - 播放设置 - 本地音乐自动匹配歌词」开关，默认开 */
@@ -225,6 +242,8 @@ export class LocalMusic {
   }
 
   private dir: string = '';
+  /** 已持久化授权的 URI（文件夹/单文件）；启动时逐个 activate */
+  private persistedUris: string[] = [];
   private coverDir: string = '';
   private ready: boolean = false;
   /** 导入顺序（旧 -> 新）；界面用 getSongs() / getSongItems() 取倒序 */
@@ -265,6 +284,9 @@ export class LocalMusic {
       return;
     }
     this.load();
+    // ★ 2026-11-19：本地歌改成**直接引用原文件**（不再复制）⇒ 每次启动必须激活已持久化的授权，
+    //   否则系统库里权限还在、但本进程用不了，表现就是"本地歌全不见了"。
+    void this.activatePersistedAccess();
     // 播放侧不能反向依赖本模块（本模块依赖 player），所以由这里把「本地歌取词」
     // 注册进播放链路：MediaService 遇到 source === 'local' 时回调它。
     setLocalLyricResolver((song: SongItem): Promise<string> => this.resolveLyricForPlayback(song));
@@ -357,7 +379,77 @@ export class LocalMusic {
   }
 
   /** 沙箱里的绝对音频路径；文件不在了返回空串（用户清过数据 / 文件被误删） */
+  /**
+   * **把 Picker 给的临时授权持久化**（用户 2026-11-19：本地歌改成直接引用原文件）。
+   *
+   * 不持久化的话：应用重启 / 设备重启后临时权限失效 ⇒ 歌单里的本地歌全部"文件不见了"。
+   * 官方要求：`ohos.permission.FILE_ACCESS_PERSIST`（已声明）+ 只能对**已拿到临时权限**的 URI 做。
+   * @param uris 刚由 Picker 返回（或目录内文件所属目录）的 URI 列表
+   */
+  private async persistAccess(uris: string[]): Promise<void> {
+    if (uris.length === 0) {
+      return;
+    }
+    try {
+      if (!canIUse('SystemCapability.FileManagement.AppFileService.FolderAuthorization')) {
+        appendPlayLog('[本地音乐] 本机不支持持久化授权能力，重启后可能需要重新选择文件');
+        return;
+      }
+      const policies: fileShare.PolicyInfo[] = [];
+      for (let i: number = 0; i < uris.length; i++) {
+        const uri: string = uris[i];
+        if (uri.length === 0 || this.persistedUris.indexOf(uri) >= 0) {
+          continue;
+        }
+        policies.push({ uri: uri, operationMode: fileShare.OperationMode.READ_MODE });
+        this.persistedUris.push(uri);
+      }
+      if (policies.length === 0) {
+        return;
+      }
+      await fileShare.persistPermission(policies);
+      appendPlayLog('[本地音乐] persistPermission ok n=' + policies.length);
+      this.persist();
+    } catch (err) {
+      appendPlayLog('[本地音乐] persistPermission failed: ' +
+        JSON.stringify(err).substring(0, 160));
+    }
+  }
+
+  /**
+   * 启动时**激活**已持久化的授权（不激活的话权限在系统库里但用不了）。
+   *
+   * 官方注意点：按需激活，别全量；这里只有"用户导入过的目录/文件"这几个，量很小。
+   */
+  private async activatePersistedAccess(): Promise<void> {
+    if (this.persistedUris.length === 0) {
+      return;
+    }
+    try {
+      if (!canIUse('SystemCapability.FileManagement.AppFileService.FolderAuthorization')) {
+        return;
+      }
+      const policies: fileShare.PolicyInfo[] = [];
+      for (let i: number = 0; i < this.persistedUris.length; i++) {
+        policies.push({
+          uri: this.persistedUris[i],
+          operationMode: fileShare.OperationMode.READ_MODE
+        });
+      }
+      await fileShare.activatePermission(policies);
+      appendPlayLog('[本地音乐] activatePermission ok n=' + policies.length);
+    } catch (err) {
+      appendPlayLog('[本地音乐] activatePermission failed: ' +
+        JSON.stringify(err).substring(0, 160));
+    }
+  }
+
   getPlayPath(key: string): string {
+    // ★ 2026-11-19：**先看原文件**（不复制那批）——旧数据 `srcPath` 为空，自动退回沙箱副本。
+    const direct: LocalSongEntry | undefined = this.byKey.get(key);
+    if (direct !== undefined && direct.srcPath.length > 0) {
+      return direct.srcPath;
+    }
     const song: LocalSongEntry | undefined = this.byKey.get(key);
     if (song === undefined) {
       return '';
@@ -638,6 +730,8 @@ export class LocalMusic {
       options.maxSelectNumber = MAX_PICK;
       const audioPicker: picker.AudioViewPicker = new picker.AudioViewPicker(context);
       const uris: string[] = await audioPicker.select(options);
+      // ★ 2026-11-19：不复制文件了 ⇒ 必须把这批文件的授权**持久化**，否则重启后读不到
+      await this.persistAccess(uris);
       return await this.importUris(uris);
     } catch (e) {
       // 用户取消也会走到这里（错误码里带 cancel），不当成失败提示
@@ -675,6 +769,9 @@ export class LocalMusic {
     }
     const folderUri: string = results[0];
     hilog.info(DOMAIN, TAG, 'picked folder uri=%{public}s', folderUri.substring(0, 160));
+    // ★ 2026-11-19（用户：API26 支持授权整个目录）：**授权这一个目录就够了** ——
+    //   目录内所有文件（含以后新增的）都覆盖，不用逐个文件授权。
+    await this.persistAccess([folderUri]);
     let uris: string[] = listFolderFiles(folderUri);
     // 仍为空：再尝试把 URI 编码形式解码后枚举
     if (uris.length === 0) {
@@ -813,23 +910,27 @@ export class LocalMusic {
         return 'skipped';
       }
       const key: string = this.nextKey();
-      const file: string = `${key}${ext}`;
-      const dest: string = `${this.dir}/${file}`;
-      fs.copyFileSync(src.fd, dest);
+      // ★★★ 2026-11-19（用户：「本地导入会复制一份，占两份空间」）：**不再复制音频文件**。
+      //   直接把 Picker 给的原路径/URI 记进 `srcPath`，播放时直接读它。
+      //   封面仍会抽成 `covers/<key>.jpg`（几十 KB，且列表/背景都要用，复制是划算的）。
+      //   旧数据（`file` 非空、`srcPath` 空）继续用沙箱副本播放，互不影响。
+      const srcPath: string = uri;
       closeQuietly(src);
       src = null;
 
       // 读标签要用**另一个**句柄：官方文档明确说同一个 fd 同时给播放器和提取器
       // 会「存在竞争关系，将导致音视频元数据获取异常」
-      const meta: LocalMeta = await this.readMetadata(dest, size, key);
+      const meta: LocalMeta = await this.readMetadata(srcPath, size, key);
       // ★ 2026-11-05：文件头蒙对了、但解析不出时长的**小文件**同样视为无效
       //   （典型：把别的格式的前几 KB 拼过来的缓存碎片）。大文件保留，避免误伤。
       if (meta.durationMs <= 0 && size < INVALID_AUDIO_MAX_BYTES) {
         appendPlayLog(`[本地音乐] skip no-duration ${size}B ${label}`);
         try {
-          fs.unlinkSync(dest);
+          if (meta.coverFile.length > 0) {
+            fs.unlinkSync(`${this.coverDir}/${meta.coverFile}`);
+          }
         } catch (_e) {
-          // 本来就没拷成功/已被别的路径删掉：不删也行，下次导入同一首会覆盖
+          // 封面可能没生成：忽略
         }
         return 'unsupported';
       }
@@ -849,7 +950,9 @@ export class LocalMusic {
       }
       const entry: LocalSongEntry = {
         key: key,
-        file: file,
+        // 旧字段留空：新导入不再往沙箱放音频副本
+        file: '',
+        srcPath: srcPath,
         cover: meta.coverFile,
         lrc: lrc,
         matchJson: '',
@@ -1366,6 +1469,7 @@ export class LocalMusic {
   // ------------------------------------------------------------ 落盘
 
   private load(): void {
+    // ★ 2026-11-19：先把"已持久化授权的 URI"读回来，init 里再 activate（见 `activatePersistedAccess`）。
     this.songs = [];
     this.lists = new Map<string, string[]>();
     this.byKey.clear();
@@ -1380,6 +1484,8 @@ export class LocalMusic {
         if (typeof raw.autoMatchLyric === 'boolean') {
           this.autoMatch = raw.autoMatchLyric;
         }
+        // ★ 2026-11-19：读回已持久化授权的 URI（旧索引没有这个字段 ⇒ 空数组）
+        this.persistedUris = Array.isArray(raw.uris) ? raw.uris : [];
       } catch (e) {
         hilog.error(DOMAIN, TAG, 'parse index failed: %{public}s', JSON.stringify(e));
       }
@@ -1495,6 +1601,8 @@ export class LocalMusic {
         const entry: LocalSongEntry = {
           key: key,
           file: name,
+          // 历史扫描（沙箱里已有的文件）⇒ 没有原路径，靠 `file` 走
+          srcPath: '',
           cover: '',
           lrc: '',
           matchJson: '',
@@ -1605,6 +1713,7 @@ export class LocalMusic {
     const index: LocalIndex = {
       version: INDEX_VERSION,
       songs: this.songs,
+      uris: this.persistedUris,
       lists: this.snapshot(),
       autoMatchLyric: this.autoMatch
     };
@@ -1934,12 +2043,16 @@ function normalizeSongs(input: LocalSongEntry[] | undefined): LocalSongEntry[] {
     if (typeof item.key !== 'string' || item.key.length === 0) {
       continue;
     }
-    if (typeof item.file !== 'string' || item.file.length === 0) {
+    // ★ 2026-11-19：新导入的条目 `file` 为空（不复制）、只有 `srcPath` —— 两者至少有一个。
+    const hasFile: boolean = typeof item.file === 'string' && item.file.length > 0;
+    const hasSrc: boolean = typeof item.srcPath === 'string' && item.srcPath.length > 0;
+    if (!hasFile && !hasSrc) {
       continue;
     }
     out.push({
       key: item.key,
-      file: item.file,
+      file: typeof item.file === 'string' ? item.file : '',
+      srcPath: typeof item.srcPath === 'string' ? item.srcPath : '',
       cover: typeof item.cover === 'string' ? item.cover : '',
       lrc: typeof item.lrc === 'string' ? item.lrc : '',
       matchJson: typeof item.matchJson === 'string' ? item.matchJson : '',
