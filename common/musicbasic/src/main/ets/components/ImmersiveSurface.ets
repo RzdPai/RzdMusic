@@ -71,6 +71,17 @@ export struct ImmersiveSurface {
       .height(0)
   }
 
+  /** 跟随手指的形变：朝触点方向微位移（上限 2vp）。 */
+  private deformDx(): number {
+    const dx: number = this.touchX - this.surfaceWidth / 2;
+    return Math.max(-2, Math.min(2, dx * 0.06));
+  }
+
+  private deformDy(): number {
+    const dy: number = this.touchY - this.surfaceHeight / 2;
+    return Math.max(-2, Math.min(2, dy * 0.06));
+  }
+
   private radiusVp(): number {
     return this.surfaceRadius >= 0 ? this.surfaceRadius : this.surfaceHeight / 2;
   }
@@ -127,6 +138,9 @@ export struct ImmersiveSurface {
       Stack({ alignContent: Alignment.Center }) {
         this.content()
       }
+      // 内容极轻微地被"按薄"（0.97），与位移一起构成跟随手指的形变
+      .scale(this.touching ? { x: 0.97, y: 0.97 } : { x: 1, y: 1 })
+      .animation({ duration: 120, curve: Curve.Friction })
       .systemMaterial(immersiveMedium())
       .width(this.surfaceWidth)
       .height(this.surfaceHeight)
@@ -157,8 +171,14 @@ export struct ImmersiveSurface {
     .height(this.surfaceHeight)
     .borderRadius(this.radiusVp(), RenderStrategy.OFFSCREEN)
     .clip(true)
-    // 按下时轻微形变（官方的手感：压一下再弹回）
-    .scale(this.touching ? { x: 0.94, y: 0.94 } : { x: 1, y: 1 })
+    // ★ 2026-11-20（用户："官方按压后不是变大变小，是**跟随手指的轻微形变**"）：
+    //   原来整颗 `scale(0.94)` = 缩小，那是错的。官方是**朝触点方向微微让形**：
+    //   把内容按"触点相对中心的偏移"做极小位移（≈3%，上限 2vp），松手回中。
+    //   观感是"这块玻璃被手指按得有点软"，而不是"按钮变小了"。
+    .translate({
+      x: this.touching ? this.deformDx() : 0,
+      y: this.touching ? this.deformDy() : 0
+    })
     .animation({ duration: 120, curve: Curve.Friction })
     .onTouch((event: TouchEvent) => {
       if (event.touches.length === 0) {

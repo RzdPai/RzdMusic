@@ -1488,23 +1488,23 @@ export struct ArtistDetailPage {
           .padding({ left: 20, right: 20 })
 
         Row({ space: 14 }) {
-          // 歌手信息（简介弹窗）：info_circle_fill（甲方 2026-10-24 指定）
-          Button() {
-            SymbolGlyph($r('sys.symbol.info_circle_fill'))
-              .fontSize(18)
-              .fontWeight(FontWeight.Regular)
-              .height(18)
-              .fontColor([this.fgPrimary()])
+          // 歌手信息（简介弹窗）—— 绕过方案；自定义组件挂不了 `.bindPopup`，外面包一层 Column
+          Column() {
+            ImmersiveSurface({
+              surfaceWidth: 40,
+              surfaceHeight: 40,
+              fallbackColor: Color.Transparent,
+              onTap: (): void => {
+                this.showAboutPopup = !this.showAboutPopup;
+              }
+            }) {
+              SymbolGlyph($r('sys.symbol.info_circle_fill'))
+                .fontSize(18)
+                .fontWeight(FontWeight.Regular)
+                .height(18)
+                .fontColor([this.fgPrimary()])
+            }
           }
-          .type(ButtonType.Normal)
-          .width(40)
-          .height(40)
-          .borderRadius(20)
-          .systemMaterial(immersiveFlat())
-          .backgroundColor(this.fgTint())
-          .onClick(() => {
-            this.showAboutPopup = !this.showAboutPopup;
-          })
           .bindPopup($$this.showAboutPopup, {
             builder: this.AboutPopup,
             placement: Placement.Top,
