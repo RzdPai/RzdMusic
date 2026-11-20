@@ -96,23 +96,13 @@ export struct CategoryChipsSection {
           .width(this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ? 102 :
             new BreakpointType(78, 114, 134, 134).getValue(this.breakpointEnv.widthBreakpoint))
           .height(36)
+          // ★ 2026-11-21（用户："你怎么又自定义颜色了，尽量用官方的"）：
+          //   未选中胶囊**不再填自定义色**，让它透明 —— 玻璃由标题栏的 `systemMaterialEffect` 提供，
+          //   这才是官方观感；选中那枚保留实心（官方也是实心浅色胶囊）。
           .backgroundColor(
             this.recommendViewModel.selectedCategoryIndex === index ?
               $r('app.color.chip_selected_background') :
-              // 未选中：有材质就让材质决定底色（否则日间会浮出一层灰 = 用户说的"色差"）
               Color.Transparent)
-          .borderRadius(this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ? 8 : 21)
-          // ★★★ 2026-11-19（用户给了官方华为音乐截图：「Tab 栏**胶囊**改光感，不是加个背板」）：
-          //   材质挂在**每个胶囊**上 —— 吸顶那一份画在 `Navigation` 标题栏槽位里（B 档白名单）⇒ 生效；
-          //   流内那一份在 body 里 ⇒ 不生效（无所谓，观感一致）。
-          //   不支持该能力的设备返回 undefined ⇒ 无材质，胶囊原底色照旧。
-          // 官方截图里**选中那枚是实心浅色胶囊**（不是玻璃）⇒ 材质只挂**未选中**的。
-          // ★★★ 2026-11-19（用户："首页那几个按钮**吸顶之后没有光感**"）：胶囊自己要有材质。
-          //   用 **`immersiveFlat()`（无阴影薄材质）** —— 仓里注释写明它专给"贴在列表上的胶囊、
-          //   无背板托底的浮动条"用；带阴影的档位压在照片上会糊成一团，看起来就像"没光感"。
-          //   只挂**未选中**（选中那枚是实心浅色）。
-          .systemMaterial(this.recommendViewModel.selectedCategoryIndex === index ?
-            undefined : immersiveFlat())
           .justifyContent(FlexAlign.Center)
           .onClick(() => {
             this.recommendViewModel.selectCategory(index ?? 0);

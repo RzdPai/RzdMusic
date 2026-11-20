@@ -778,7 +778,7 @@ export struct RecommendPage {
           // ⚠️ `HdsNavigationTitle` **没有** `titleBuilder`（试过，编译不过）⇒ 标题只能用字符串。
           //   "淡出"改由 `stackBuilder` 那一层的标题副本承担：`HomeTitleFade()` 画在胶囊行下面，
           //   随滚动线性淡出、彻底淡完后 HDS 才把字符串置空（见 `chipStickyActive` 判定）。
-          mainTitle: this.chipStickyActive ? '' :
+          mainTitle: (this.chipStickyActive || this.chipInBar) ? '' :
             (this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ?
               $r('app.string.home_page_title_pc') :
               $r('app.string.home_page_title')),
