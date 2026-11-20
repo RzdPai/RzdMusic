@@ -133,15 +133,17 @@ export struct ImmersiveSurface {
       //   与参考工程 `qingye-reader` 的 `ImmersiveMaterialSurface` 同一做法：
       //   一层 radialGradient 圆斑，中心跟随触点，透明度按下渐显（160ms Friction）。
       Row()
-        .width(this.surfaceHeight * 2)
-        .height(this.surfaceHeight * 2)
-        .position({ x: this.touchX - this.surfaceHeight, y: this.touchY - this.surfaceHeight })
+        .width(this.surfaceHeight * 2.4)
+        .height(this.surfaceHeight * 2.4)
+        .position({ x: this.touchX - this.surfaceHeight * 1.2, y: this.touchY - this.surfaceHeight * 1.2 })
         .radialGradient({
-          center: [this.surfaceHeight, this.surfaceHeight],
-          radius: this.surfaceHeight,
-          colors: [['#66FFFFFF', 0], [Color.Transparent, 1]]
+          center: [this.surfaceHeight * 1.2, this.surfaceHeight * 1.2],
+          radius: this.surfaceHeight * 1.2,
+          // ★ 2026-11-20（用户："受光看不太出来"）：光斑太淡 ⇒ 提亮 + 加一圈内亮环，
+          //   观感接近 legado 那种"手指按住有一团光跟着走"。
+          colors: [['#B3FFFFFF', 0], ['#4DFFFFFF', 0.45], [Color.Transparent, 1]]
         })
-        .opacity(this.touching ? 0.9 : 0)
+        .opacity(this.touching ? 1 : 0)
         .animation({ duration: 160, curve: Curve.Friction })
         .hitTestBehavior(HitTestMode.None)
         .accessibilityLevel('no')

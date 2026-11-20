@@ -1442,7 +1442,18 @@ export struct ArtistDetailPage {
           //   搜索页返回钮/搜索框、首页搜索行、识别钮、定位钮都是这一套。
           //   §256 那轮曾把它压成 THIN「跟多选胶囊看齐」，但 THIN 叠在**歌手照片**上几乎看不出玻璃
           //   ⇒ 甲方观感就是"没有光感"。文档 §1.1 对 A 档按钮**没有**厚度要求，没必要自降一档。
-          Button() {
+          // 即将举办的演唱会 —— 长胶囊也用绕过方案（Button 在 body 里会被渲染成透明）
+          //   ⚠️ 自定义组件挂不了 `.bindSheet()` ⇒ 外面包一层 Column，弹层挂在 Column 上。
+          Column() {
+            ImmersiveSurface({
+            surfaceWidth: 132,
+            surfaceHeight: 28,
+            surfaceRadius: 14,
+            fallbackColor: Color.Transparent,
+            onTap: (): void => {
+              this.concertSheet = true;
+            }
+          }) {
             Row({ space: 6 }) {
               SymbolGlyph($r('sys.symbol.auditorium'))
                 .fontSize(13)
@@ -1451,17 +1462,9 @@ export struct ArtistDetailPage {
                 .fontSize(12)
                 .fontColor(this.fgPrimary())
             }
+            .justifyContent(FlexAlign.Center)
+            }
           }
-          .type(ButtonType.Normal)
-          .height(28)
-          .padding({ left: 12, right: 12 })
-          .borderRadius(14)
-          .systemMaterial(immersiveFlat())
-          .backgroundColor(this.fgTint())
-          .margin({ bottom: 10 })
-          .onClick(() => {
-            this.concertSheet = true;
-          })
           .bindSheet($$this.concertSheet, this.ConcertSheet(), {
             height: SheetSize.MEDIUM,
             showClose: true,
