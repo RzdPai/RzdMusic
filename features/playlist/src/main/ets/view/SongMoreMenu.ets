@@ -277,7 +277,10 @@ export struct SongMoreMenu {
       this.ActiveSheetBody()
     }
     .width('100%')
-    .systemMaterial(immersiveMedium())
+    // ★ 2026-11-20（用户："玻璃背景，上面一层不透明"）：
+    //   宿主（`SheetOptions.systemMaterial`）已经出了玻璃，内容层**不能再挂一次材质** ——
+    //   那会在玻璃上糊一层不透明的材质面，就是看到的"灰黑一层"。
+    //   ⇒ 内容层保持完全透明，只让宿主那层玻璃透出来。
   }
 
   @Builder
@@ -781,7 +784,6 @@ export struct SongMoreMenu {
       // 用 bindSheet 原生 title 区域显示标题，X 关闭按钮由系统保证跟标题水平对齐（与播放详情页一致）
       title: this.sheetTitle(),
       // ★ 2026-11-19（用户："大的半模态是不透明"）：不透明底色会把材质整块盖住 ⇒ 透明底。
-      backgroundColor: Color.Transparent,
       onWillDismiss: (action: DismissSheetAction) => {
         action.dismiss();
         this.showSheet = false;

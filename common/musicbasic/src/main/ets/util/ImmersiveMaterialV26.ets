@@ -81,7 +81,15 @@ function styleOf(style: RzdMaterialStyle): uiMaterial.ImmersiveStyle {
  */
 export function immersiveMaterial(style: RzdMaterialStyle = RzdMaterialStyle.REGULAR): SystemUiMaterial | undefined {
   try {
+    // ★ 2026-11-20：**不再因 `isImmersiveMaterialSupported()===false` 就直接返回 undefined**。
+    //   现象：HDS 那条路（`ImmersiveSurface` 的空 HdsTabs 壳）能出材质，但用到
+    //   `.systemMaterial()/SheetOptions.systemMaterial` 的地方全是"灰黑一块" ——
+    //   高度怀疑是 support 检查为 false、我们直接没给材质（等于什么都没做）。
+    //   ⇒ 先构造了再交给系统：系统不支持时它会自行忽略（参数是可选材质，安全）。
     if (!immersiveSupported()) {
+      Logger.info('[RzdMaterial] isSupported=false，但仍构造材质交给系统尝试');
+    }
+    if (false) {
       logSupportOnce(false, style);
       Logger.info('[RzdMaterial] immersive material unsupported, fallback to none');
       return undefined;

@@ -2932,7 +2932,6 @@ export struct OnlineSearchPage {
         detents: [SheetSize.FIT_CONTENT],
         dragBar: true,
         showClose: true,
-        backgroundColor: $r('app.color.background_secondary'),
         onWillDismiss: (action: DismissSheetAction): void => {
           action.dismiss();
           this.showQualitySheet = false;

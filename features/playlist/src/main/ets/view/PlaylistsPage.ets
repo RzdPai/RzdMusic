@@ -1137,7 +1137,6 @@ export struct PlaylistsPage {
             height: 180,
             dragBar: false,
             showClose: false,
-            backgroundColor: $r('sys.color.background_secondary')
           })
         }
       }
@@ -1186,7 +1185,6 @@ export struct PlaylistsPage {
       showClose: true,
       // 原生 title：标题左对齐 + 右上角 X 关闭，与「添加到歌单」弹层同款
       title: this.mainSheetTitle(),
-      backgroundColor: $r('sys.color.background_secondary'),
       onWillDismiss: (action: DismissSheetAction) => {
         action.dismiss();
         this.showSheet = false;

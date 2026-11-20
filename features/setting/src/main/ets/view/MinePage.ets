@@ -1671,7 +1671,6 @@ export struct MinePage {
           title: this.sheetKind === 'import' ? '网络导入歌单'
             : (this.editingId.length === 0 ? '新建歌单' : '重命名歌单')
         },
-        backgroundColor: $r('app.color.background_secondary')
       })
     }
     .onBackPressed((): boolean => guardPlayerBack('MinePage'))

@@ -681,7 +681,6 @@ export struct PlaylistBatchActionBar {
       // 标题写死一个能同时覆盖两层的中性文案：bindSheet 的 title 只在绑定创建时求值，
       // 跟着 sheetMode 变会出现「标题和内容对不上」的中间态。
       title: { title: '添加到歌单 / 下载音质' },
-      backgroundColor: $r('sys.color.background_secondary'),
       onWillDismiss: (action: DismissSheetAction) => {
         action.dismiss();
         this.setSheetMode(BatchSheetMode.NONE);

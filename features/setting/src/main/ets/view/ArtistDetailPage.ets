@@ -367,8 +367,9 @@ export struct ArtistDetailPage {
     .width('100%')
     .height('100%')
     .padding({ left: 16, right: 16, top: 8, bottom: 16 })
-    // 光感材质（叠在 `bindSheet` 的 blurStyle 背板之上；单独用会变透明）
-    .systemMaterial(immersiveFlat())
+    // ★ 2026-11-20（用户："演唱会那个就是一层模糊，但从光效看下面应该有玻璃"）：
+    //   宿主（`SheetOptions.systemMaterial`）已经出玻璃，内容层再挂材质只会糊一层；
+    //   之前那层 `blurStyle` 也已在 options 里删除。内容层保持透明。
   }
 
   @Builder
@@ -1472,8 +1473,6 @@ export struct ArtistDetailPage {
             // ★ 2026-11-19 订正（用户："演唱会半模态现在变成透明了"）：
             //   `blurStyle` 是**背板**，删掉它就整层透明 —— 光感材质只能叠在**背板之上**，
             //   不能代替背板。⇒ 恢复真模糊作底，材质仍挂在内容根（见 `ConcertSheet()`）。
-            blurStyle: BlurStyle.COMPONENT_THIN,
-            backgroundColor: Color.Transparent,
             maskColor: '#33000000'
           })
         }

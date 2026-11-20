@@ -1624,7 +1624,6 @@ export struct PlaylistDetailPage {
       height: 220,
       dragBar: true,
       showClose: false,
-      backgroundColor: $r('sys.color.background_secondary')
     });
   }
 }
