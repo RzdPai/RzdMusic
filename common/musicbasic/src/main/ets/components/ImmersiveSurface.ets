@@ -71,17 +71,6 @@ export struct ImmersiveSurface {
       .height(0)
   }
 
-  /** 跟随手指的形变：朝触点方向微位移（上限 2vp）。 */
-  private deformDx(): number {
-    const dx: number = this.touchX - this.surfaceWidth / 2;
-    return Math.max(-3, Math.min(3, dx * 0.10));
-  }
-
-  private deformDy(): number {
-    const dy: number = this.touchY - this.surfaceHeight / 2;
-    return Math.max(-3, Math.min(3, dy * 0.10));
-  }
-
   private radiusVp(): number {
     return this.surfaceRadius >= 0 ? this.surfaceRadius : this.surfaceHeight / 2;
   }
@@ -171,18 +160,12 @@ export struct ImmersiveSurface {
     .height(this.surfaceHeight)
     .borderRadius(this.radiusVp(), RenderStrategy.OFFSCREEN)
     .clip(true)
-    // ★★★ 2026-11-20（用户三次指正："不是变大变小 / 不是直接位移，是**直接的形变**"）：
-    //   官方的"形变"= **以触点为原点**的各向异性轻微挤压：
-    //     · `scale.centerX/centerY` 钉在**手指位置** ⇒ 按在哪儿就从哪儿变形（不是整体位移）；
-    //     · x / y 两轴系数**不相等**（0.97 / 0.99）⇒ 看起来是"被按扁了一点"，
-    //       而不是等比缩小（等比缩小就是用户说的"变大变小"）。
-    .scale({
-      x: this.touching ? 0.97 : 1,
-      y: this.touching ? 0.99 : 1,
-      centerX: this.touching ? this.touchX : this.surfaceWidth / 2,
-      centerY: this.touching ? this.touchY : this.surfaceHeight / 2
-    })
-    .animation({ duration: 140, curve: Curve.Friction })
+    // ★★★★ 2026-11-20 最终结论（用户）：**形变是 API 26 官方自带的行为** ——
+    //   "API 23 上不设置形变按钮就是硬的；API 26 不设置 = 默认形变"。
+    //   所以这里**什么位移/缩放都不要写**：自绘的 scale/translate 只会破坏官方形变
+    //   （演唱会那颗长胶囊就是被我这层 `scale` 弄成"自动缩小"的）。
+    //   本组件只负责：① 材质底板（空 HdsTabs 悬浮栏）② 跟随触点的光晕。
+    //   ⚠️ 不要再往这里加 `.scale()` / `.translate()`。
     .onTouch((event: TouchEvent) => {
       if (event.touches.length === 0) {
         this.touching = false;
