@@ -13,6 +13,7 @@
  * limitations under the License.
  */
 import { HdsTabs, hdsMaterial } from '@kit.UIDesignKit';
+import { immersiveMedium } from '../util/ImmersiveMaterialV26';
 
 /**
  * **沉浸光感底板**：给任意自绘控件（圆钮 / 胶囊 / 浮层）挂**真**系统材质。
@@ -119,10 +120,14 @@ export struct ImmersiveSurface {
         .clip(true)
         .hitTestBehavior(HitTestMode.None)
 
-      // 内容
+      // ★ 2026-11-20（用户："光斑能不能用官方属性"）：
+      //   官方光感反馈是 `uiMaterial.ImmersiveMaterial.lightEffect`（`.systemMaterial()` 的字段）。
+      //   壳里这一层**再挂一次**：若能渲染，跟随手指的光就由**系统**给（比自绘光斑准），
+      //   自绘光斑留作兜底（外壳材质不生效时仍有反馈）。
       Stack({ alignContent: Alignment.Center }) {
         this.content()
       }
+      .systemMaterial(immersiveMedium())
       .width(this.surfaceWidth)
       .height(this.surfaceHeight)
       .borderRadius(this.radiusVp(), RenderStrategy.OFFSCREEN)
