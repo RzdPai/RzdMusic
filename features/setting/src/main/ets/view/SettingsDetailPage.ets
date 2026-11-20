@@ -3403,7 +3403,7 @@ export struct SettingsDetailPage {
       .systemBarStyle(
         { statusBarContentColor: this.isDarkTheme() ? '#FFFFFF' : '#000000' },
         { statusBarContentColor: this.isDarkTheme() ? '#FFFFFF' : '#000000' })
-      .backgroundColor($r('app.color.background_secondary'))
+      // 半模态内容根：宿主已有材质，这里不能再铺不透明底
     }
   }
 

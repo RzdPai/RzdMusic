@@ -742,7 +742,9 @@ export struct SongMoreMenu {
     }
     .width('100%')
     .padding({ left: 16, right: 16, bottom: 24 })
-    .backgroundColor($r('app.color.background_secondary'))
+    // ★ 2026-11-20（用户："玻璃上面叠了一层纯色的内容，把玻璃挡住了"）：
+    //   半模态宿主已经有系统材质，内容根**不能再铺不透明底**，否则材质只在底部露一条。
+    .backgroundColor(Color.Transparent)
   }
 
   /** More button + popup menu. */
