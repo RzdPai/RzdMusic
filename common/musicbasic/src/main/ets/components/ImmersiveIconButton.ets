@@ -3,7 +3,7 @@
  * `entry/src/main/ets/components/AdaptiveIconButton.ets`（用户 2026-11-19："你抄代码都不会抄吗"）。
  *
  * 关键点（之前全错在这几处）：
- * 1. 宿主是 **`Button({ type: ButtonType.Circle, stateEffect: false })`** —— Button 属 A 档，
+ * 1. 宿主是 **`Button({ type: ButtonType.Circle })`** —— Button 属 A 档，
  *    页面 body 里任意位置挂 `.systemMaterial()` 都能渲染；
  * 2. `systemMaterial` 的材质必须带 **`interactive` + `lightEffect` + `materialColor`**（见 `immersiveMedium()`），
  *    只给 style 就是一块死玻璃；

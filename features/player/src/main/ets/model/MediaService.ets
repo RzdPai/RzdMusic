@@ -30,7 +30,9 @@ import { avSession } from '@kit.AVSessionKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { resourceManager } from '@kit.LocalizationKit';
 import { fileIo as fs } from '@kit.CoreFileKit';
-import { AppStorageKeys, getAppRuntime, Logger, MusicAppState, MusicCardBridge, MusicStoreService, PlayedSongRecord, SongItem, StringResourceUtil, appendPlayLog , UsbAudioService, UsbAudioState } from 'musicbasic';
+import { AppStorageKeys, getAppRuntime, Logger, MusicAppState, MusicCardBridge, MusicStoreService, PlayedSongRecord, SongItem, StringResourceUtil, appendPlayLog , UsbAudioService, UsbAudioState,
+  rdzToast
+} from 'musicbasic';
 import { AudioKernel } from '../engine/AudioKernel';
 import { createKernel, isMpvAvailable, preferredKernel } from '../engine/KernelFactory';
 import { AudioInterruptKind, kernelName, PlaybackKernelKind, logKernelSwitch } from '../engine/AudioKernel';
@@ -1115,7 +1117,8 @@ export class MediaService {
   private toast(message: string): void {
     const uiContext = getAppRuntime().uiContext;
     if (uiContext !== undefined) {
-      uiContext.getPromptAction().showToast({ message: message, duration: 2000 });
+      // ★ 2026-11-20（用户：弹窗提示也要光感）：统一走带系统材质的 rdzToast
+      rdzToast(uiContext, message, 2000);
     }
   }
 

@@ -24,7 +24,8 @@ import {
   PlayedSongRecord,
   PlaylistDto,
   SongItem,
-  ThemeState
+  ThemeState,
+  rdzToast
 } from 'musicbasic';
 import { DownloadUtil, LXQualityOption, LXSearchSong, OnlinePlayUtil, lxGetQualityOptions } from 'player';
 // 「切换平台」复用 localmusic 的歌曲匹配引擎（内部走 player 的 lxSearch）
@@ -103,7 +104,7 @@ export struct SongMoreMenu {
     AppStorageV2.connect(AmbientState, AppStorageKeys.AMBIENT_STATE, () => new AmbientState())!;
 
   private toast(message: string): void {
-    this.getUIContext().getPromptAction().showToast({ message: message, duration: 2000 });
+    rdzToast(this.getUIContext(), message, 2000);
   }
 
   /** Frosted glass strength of the popup, following the ambient light level. */
