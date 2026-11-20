@@ -1573,6 +1573,7 @@ intent.openPlayerUi = false;
     .backgroundColor($r('app.color.background_secondary'))
     // 多选底栏「添加至歌单」面板
     .bindSheet(this.addSheetOpen, this.AddToPlaylistSheet(), {
+      systemMaterial: immersiveMedium(),
       height: 420,
       dragBar: true,
       showClose: true,

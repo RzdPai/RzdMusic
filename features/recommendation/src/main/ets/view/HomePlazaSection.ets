@@ -3,7 +3,8 @@ import {
   BreakpointType,
   getPlaylistTransitionState,
   RouterUrlConstants,
-  StyleConstants
+  StyleConstants,
+  immersiveMedium
 } from 'musicbasic';
 import { ToplistRouteParam } from 'playlist';
 import { RecommendPlazaPlaylistUi } from '../model/RecommendUiModels';
@@ -426,6 +427,7 @@ export struct HomePlazaSection {
       bottom: 8
     })
     .bindSheet($$this.categoryOpen, this.CategorySheet(), {
+      systemMaterial: immersiveMedium(),
       height: 560,
       showClose: false,
       dragBar: true

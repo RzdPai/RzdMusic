@@ -18,7 +18,9 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { common } from '@kit.AbilityKit';
 import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
-import { appBarBlurStyle, barBlurOptions, guardPlayerBack } from 'musicbasic';
+import { appBarBlurStyle, barBlurOptions, guardPlayerBack,
+  immersiveMedium
+} from 'musicbasic';
 import { AppStorageKeys, BarScrollHelper, BreakpointType, getPlaylistTransitionState, MusicAppState, ThemeState } from 'musicbasic';
 import { AmbientState, MusicStoreService, PlayedSongRecord, PlaylistDto, RouterUrlConstants, TitleBarConstants, ToplistRouteParam, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, LocalCoverImage } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
@@ -1131,6 +1133,7 @@ export struct PlaylistsPage {
             right: new BreakpointType(16, 24, 32, 32).getValue(this.breakpointEnv.widthBreakpoint)
           })
           .bindSheet($$this.importing, this.ImportProgressSheet(), {
+            systemMaterial: immersiveMedium(),
             height: 180,
             dragBar: false,
             showClose: false,
@@ -1177,6 +1180,7 @@ export struct PlaylistsPage {
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     .backgroundColor($r('app.color.page_background'))
     .bindSheet($$this.showSheet, this.MainSheet(), {
+      systemMaterial: immersiveMedium(),
       height: SheetSize.FIT_CONTENT,
       dragBar: false,
       showClose: true,

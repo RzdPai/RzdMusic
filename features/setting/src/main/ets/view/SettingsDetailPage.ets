@@ -13,7 +13,9 @@
  * limitations under the License.
  */
 
-import { appendPlayLog, setScreenOrientation, UsbAudioService, UsbAudioState, TabBarConfigModel } from 'musicbasic';
+import { appendPlayLog, setScreenOrientation, UsbAudioService, UsbAudioState, TabBarConfigModel,
+  immersiveMedium
+} from 'musicbasic';
 import { bundleManager } from '@kit.AbilityKit';
 import { DrawableDescriptor, LayeredDrawableDescriptor } from '@kit.ArkUI';
 import { guardPlayerBack } from 'musicbasic';
@@ -3447,6 +3449,7 @@ export struct SettingsDetailPage {
       //   一个组件只能挂一个 bindSheet，用 `sourceSheet` 枚举分工（见 SourceSheetContent）。
       //   标题交给 HDS 半模态画（`title`），内容不再自绘标题栏 —— 这正是上一版「两个页面」的来源。
       .bindSheet(this.sourceSheet > 0, this.SourceSheetContent(), {
+        systemMaterial: immersiveMedium(),
         height: this.sourceSheetHeight(),
         title: { title: this.sourceSheetTitle() },
         dragBar: true,

@@ -1176,6 +1176,7 @@ export struct LocalMusicPage {
     })
     .backgroundColor($r('app.color.page_background'))
     .bindSheet(this.showMatchSheet, this.MatchSheetBuilder, {
+      systemMaterial: immersiveMedium(),
       height: SheetSize.MEDIUM,
       dragBar: true,
       showClose: true,

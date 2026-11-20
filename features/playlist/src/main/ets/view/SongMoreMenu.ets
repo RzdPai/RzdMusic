@@ -771,6 +771,7 @@ export struct SongMoreMenu {
       }
     })
     .bindSheet($$this.showSheet, this.ActiveSheet(), {
+      systemMaterial: immersiveMedium(),
       // 评论要整屏高度才够看；其余弹层按内容自适应
       height: this.sheetType === 4 ? SheetSize.LARGE : SheetSize.FIT_CONTENT,
       showClose: true,

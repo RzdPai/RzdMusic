@@ -27,7 +27,8 @@ import {
   StyleConstants,
   ThemeState,
   getWindowInfoState,
-  WindowInfo
+  WindowInfo,
+  immersiveMedium
 } from 'musicbasic';
 import { DownloadUtil, DownloadTask, LXQualityOption, LXSearchSong, lxGetQualityOptionsForSongs, sourceDisplayName } from 'player';
 import type { LXBatchQualityResult } from 'player';
@@ -672,6 +673,7 @@ export struct PlaylistBatchActionBar {
     // 弹层内容按 sheetMode 切换；`$$` 双向绑定这个布尔投影，用户下滑/点 X 关闭时
     // 会把 sheetMode 归零，状态不会残留在「以为还开着」。
     .bindSheet($$this.showBatchSheet, this.ActiveBatchSheet(), {
+      systemMaterial: immersiveMedium(),
       // 两个弹层高度不同，这里给函数式：跟着当前层返回
       height: this.sheetHeight(),
       showClose: true,

@@ -19,7 +19,9 @@ import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import {
   immersiveFromLevel,
   appBarBlurStyle,  guardPlayerBack
-, RzdSelectMenuMaterial } from 'musicbasic';
+, RzdSelectMenuMaterial,
+  immersiveMedium
+} from 'musicbasic';
 import { AlbumRouteParam, ArtistRouteParam, BreakpointType, ThemeState, WindowUtil } from 'musicbasic';
 import { BlurStrategy, BottomBuilderShowType, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, HideMode, ScrollEffectType } from '@kit.UIDesignKit';
 import { AppStorageKeys, AmbientState, FavoriteEntry, MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord, QualityInfo, RouterUrlConstants, SongItem, SongTitleMarquee, ToplistRouteParam, appendPlayLog, barBlurOptions, buildTitleMaterial } from 'musicbasic';
@@ -2926,6 +2928,7 @@ export struct OnlineSearchPage {
       // 页面主体从屏幕顶起排，让位由 `List.contentStartOffset(contentPaddingTop)` 负责
       .padding({ top: 0 })
       .bindSheet(this.showQualitySheet, this.BatchQualitySheet(), {
+        systemMaterial: immersiveMedium(),
         detents: [SheetSize.FIT_CONTENT],
         dragBar: true,
         showClose: true,

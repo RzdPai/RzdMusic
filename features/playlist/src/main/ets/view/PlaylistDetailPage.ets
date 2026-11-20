@@ -19,7 +19,8 @@ import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import {
   appBarBlurStyle,
-   guardPlayerBack, PLAYLIST_HERO_COVER_ID, shouldUseSplitDetailLayout, splitDetailCardWidthVp
+   guardPlayerBack, PLAYLIST_HERO_COVER_ID, shouldUseSplitDetailLayout, splitDetailCardWidthVp,
+  immersiveMedium
 } from 'musicbasic';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { http } from '@kit.NetworkKit';
@@ -1619,6 +1620,7 @@ export struct PlaylistDetailPage {
       }
     })
     .bindSheet($$this.showSearchSheet, this.SearchSheet(), {
+      systemMaterial: immersiveMedium(),
       height: 220,
       dragBar: true,
       showClose: false,

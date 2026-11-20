@@ -18,7 +18,9 @@ import { searchSingers, SearchPageResult, SingerInfo } from '../geuz/index';
 import { AppStorageV2, curves, uiObserver } from '@kit.ArkUI';
 import { AVCastPicker } from '@kit.AVSessionKit';
 import { platformLabel } from '../util/SourceDeclaredInfo';
-import { appendPlayLog, AppStorageKeys, ArtistRouteParam, BreakpointType, isWidthBreakpointLgOrXl, Logger, MusicStoreService, PlaybackPreferenceService, PlaybackIntentState, PlayedSongRecord, PlaylistDto, PlayerExpandState, RouterUrlConstants, SongItem, StyleConstants, ThemeState } from 'musicbasic';
+import { appendPlayLog, AppStorageKeys, ArtistRouteParam, BreakpointType, isWidthBreakpointLgOrXl, Logger, MusicStoreService, PlaybackPreferenceService, PlaybackIntentState, PlayedSongRecord, PlaylistDto, PlayerExpandState, RouterUrlConstants, SongItem, StyleConstants, ThemeState,
+  immersiveMedium
+} from 'musicbasic';
 import { PlayerConstants } from '../constant/PlayerConstants';
 import { MusicPlayMode } from '../model/MusicData';
 import { PlayerDataUtil } from '../util/PlayerDataUtil';
@@ -1612,6 +1614,7 @@ export struct ControlAreaComponent {
       this.playMode = PlayerDataUtil.getPlayMode();
     })
     .bindSheet(this.menuSheetOpen(), this.MenuSheet(), {
+      systemMaterial: immersiveMedium(),
       // 评论子页要整屏高度才够看（列表 + 两个页签）；菜单本身保持固定 360
       // 评论 / 搜索歌词都是「列表型」子页，固定 416 只够看三四行 ⇒ 给大高度
       height: this.showMenuComment || this.showMenuLyric ? SheetSize.LARGE : 416,

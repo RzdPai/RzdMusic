@@ -14,7 +14,9 @@
  */
 
 import { AppStorageV2 } from '@kit.ArkUI';
-import { AppStorageKeys, PlaybackIntentState, SongItem, SongTitleMarquee, StyleConstants, ThemeState } from 'musicbasic';
+import { AppStorageKeys, PlaybackIntentState, SongItem, SongTitleMarquee, StyleConstants, ThemeState,
+  immersiveMedium
+} from 'musicbasic';
 import { MusicAppState } from '../model/PlayerModels';
 import { MediaService } from '../model/MediaService';
 
@@ -239,6 +241,7 @@ export struct QueuePlaylistSheet {
       .height(1)
       .hitTestBehavior(HitTestMode.None)
       .bindSheet(this.isShow, this.SheetContent(), {
+        systemMaterial: immersiveMedium(),
         detents: [480, SheetSize.LARGE],
         preferType: SheetType.BOTTOM,
         dragBar: true,

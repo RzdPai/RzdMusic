@@ -1,6 +1,8 @@
 import { AppStorageV2 } from '@kit.ArkUI';
 import { HdsListItemCard } from '@kit.UIDesignKit';
-import { AppStorageKeys, MusicAppState, PlaybackIntentState, SongItem, ThemeState } from 'musicbasic';
+import { AppStorageKeys, MusicAppState, PlaybackIntentState, SongItem, ThemeState,
+  immersiveMedium
+} from 'musicbasic';
 import { LXSearchResult, LXSearchSong, lxSearch } from '../source/LXMusicSDK';
 import { lxEngineIsReady } from '../source/LXSourceEngine';
 import { OnlinePlayUtil } from '../util/OnlinePlayUtil';
@@ -345,6 +347,7 @@ export struct OtherVersionsSheet {
     Column() {}
       .width(0).height(0)
       .bindSheet($$this.visible, this.Content(), {
+        systemMaterial: immersiveMedium(),
         height: SheetSize.MEDIUM,
         detents: [SheetSize.MEDIUM, SheetSize.LARGE],
         dragBar: true,

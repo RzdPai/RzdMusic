@@ -1466,6 +1466,7 @@ export struct ArtistDetailPage {
             }
           }
           .bindSheet($$this.concertSheet, this.ConcertSheet(), {
+            systemMaterial: immersiveMedium(),
             height: SheetSize.MEDIUM,
             showClose: true,
             // ★ 2026-11-19 订正（用户："演唱会半模态现在变成透明了"）：

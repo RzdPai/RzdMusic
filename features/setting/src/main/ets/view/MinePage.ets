@@ -88,7 +88,8 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { common } from '@kit.AbilityKit';
 import {
   buildBarBlurStyle,
-   guardPlayerBack, shouldUseSplitDetailLayout
+   guardPlayerBack, shouldUseSplitDetailLayout,
+  immersiveMedium
 } from 'musicbasic';
 import {
   AmbientState, AppRuntimeStorage, AppStorageKeys, BarScrollHelper, BreakpointType, FavoriteEntry,
@@ -1660,6 +1661,7 @@ export struct MinePage {
       //   于是"点新建歌单只闪一下 / 没反应"。
       //   ⇒ 只留这一个 `bindSheet`，内容与标题按 `sheetKind` 切换（见 `MineInputSheet()`）。
       .bindSheet(!!this.editOpen, this.MineInputSheet(), {
+        systemMaterial: immersiveMedium(),
         preferType: SheetType.BOTTOM,
         detents: [SheetSize.MEDIUM],
         detentSelection: SheetSize.MEDIUM,

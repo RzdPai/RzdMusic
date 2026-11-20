@@ -45,7 +45,9 @@
 
 import { AppStorageV2 } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { LocalCoverImage } from 'musicbasic';
+import { LocalCoverImage,
+  immersiveMedium
+} from 'musicbasic';
 import { HuaweiAccountService, HuaweiAccountState, PlayerConstants } from 'player';
 import { AccountManageSheet } from '../account/AccountManageSheet';
 
@@ -194,6 +196,7 @@ export struct LoginMusicCard {
     .borderRadius(ACCOUNT_CARD_RADIUS)
     .backgroundColor($r('app.color.card_background'))
     .bindSheet(!!this.sheetOpen, this.AccountSheetContent(), {
+      systemMaterial: immersiveMedium(),
       height: ACCOUNT_SHEET_HEIGHT,
       dragBar: true,
       showClose: false,
