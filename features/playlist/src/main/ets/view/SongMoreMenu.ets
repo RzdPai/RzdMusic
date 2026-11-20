@@ -764,21 +764,18 @@ export struct SongMoreMenu {
     // ★★ 2026-11-19（用户：「bindMenu 不支持光感直接换个组件」）：
     //   `bindMenu` 的 options 里没有 `systemMaterial`（只有 backgroundBlurStyle），
     //   而 **Popup 属于官方 A 档**（弹窗类接口）⇒ 换成 `bindPopup` + 自绘内容根挂材质。
-    .bindPopup(this.showMenu, {
-      builder: this.MenuPopup(),
-      placement: Placement.BottomRight,
-      popupColor: Color.Transparent,
-      enableArrow: false,
-      onStateChange: (event) => {
-        if (!event.isVisible) {
-          this.showMenu = false;
-        }
-      }
-    })
+    // ★ 2026-11-20（用户："歌曲菜单还是不对"）：
+    //   `PopupOptions` **没有 `systemMaterial` 字段**（只有 popupColor / backgroundBlurStyle），
+    //   自绘内容层挂材质只会在弹窗里糊一层 —— 所以改回**系统 `bindMenu`**：
+    //   系统菜单本身是官方「Menu」宿主，材质由系统渲染，不需要我们叠任何层。
+    .bindMenu(this.menuItems())
     .bindSheet($$this.showSheet, this.ActiveSheet(), {
       systemMaterial: immersiveMedium(),
       // 评论要整屏高度才够看；其余弹层按内容自适应
-      height: this.sheetType === 4 ? SheetSize.LARGE : SheetSize.FIT_CONTENT,
+      // ★ 2026-11-20（用户："选项比当年多多了，默认展开高度加高"）：
+      //   非评论弹层也至少在 MEDIUM 起步，内容少时系统仍会按内容收（FIT_CONTENT 的语义由 detents 兜住）。
+      height: SheetSize.LARGE,
+      detents: [SheetSize.MEDIUM, SheetSize.LARGE],
       showClose: true,
       dragBar: false,
       // 用 bindSheet 原生 title 区域显示标题，X 关闭按钮由系统保证跟标题水平对齐（与播放详情页一致）
