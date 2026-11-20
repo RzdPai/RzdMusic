@@ -74,12 +74,12 @@ export struct ImmersiveSurface {
   /** 跟随手指的形变：朝触点方向微位移（上限 2vp）。 */
   private deformDx(): number {
     const dx: number = this.touchX - this.surfaceWidth / 2;
-    return Math.max(-2, Math.min(2, dx * 0.06));
+    return Math.max(-3, Math.min(3, dx * 0.10));
   }
 
   private deformDy(): number {
     const dy: number = this.touchY - this.surfaceHeight / 2;
-    return Math.max(-2, Math.min(2, dy * 0.06));
+    return Math.max(-3, Math.min(3, dy * 0.10));
   }
 
   private radiusVp(): number {
@@ -138,9 +138,9 @@ export struct ImmersiveSurface {
       Stack({ alignContent: Alignment.Center }) {
         this.content()
       }
-      // 内容极轻微地被"按薄"（0.97），与位移一起构成跟随手指的形变
-      .scale(this.touching ? { x: 0.97, y: 0.97 } : { x: 1, y: 1 })
-      .animation({ duration: 120, curve: Curve.Friction })
+      // ★ 2026-11-20（用户："演唱会按钮还是直接变大变小而不是形变"）：
+      //   内容层那 0.97 的缩放就是"变大变小"的来源 ⇒ **删掉**。
+      //   官方观感只来自外层"朝触点方向让形"的位移（见下面 `translate`），不做任何缩放。
       .systemMaterial(immersiveMedium())
       .width(this.surfaceWidth)
       .height(this.surfaceHeight)
