@@ -1332,7 +1332,11 @@ export struct ControlAreaComponent {
     // （用户反馈的「屏幕左右以及下方的黑边」就是这层内边距）。菜单本身仍然留白。
     .padding(this.showMenuComment ?
       { left: 0, right: 0, bottom: 0 } : { left: 16, right: 16, bottom: 24 })
-    .backgroundColor($r('app.color.panel_surface'))
+    // ★ 2026-11-21（用户："这层灰色是我们自己绘制的，最初是纯黑，我让你改成灰色"）：
+    //   面板根这层 `panel_surface` 就是那块灰 —— 它把 `SheetOptions.systemMaterial` 的玻璃整块盖住，
+    //   只有使劲上拉（内容滚出可视区）才露出下面的玻璃。
+    //   ⇒ 根节点必须**完全透明**，玻璃由宿主提供。
+    .backgroundColor(Color.Transparent)
   }
 
   /** 倍速档位（用户 2026-10-19：播放页歌曲菜单里要有倍速）。 */

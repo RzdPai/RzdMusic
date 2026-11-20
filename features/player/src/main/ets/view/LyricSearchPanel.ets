@@ -201,7 +201,7 @@ export struct LyricSearchPanel {
     .width('100%')
     .padding({ left: 12, right: 12, top: 10, bottom: 10 })
     .borderRadius(10)
-    .backgroundColor($r('app.color.panel_surface'))
+    .backgroundColor(Color.Transparent)
     .onClick((): void => {
       void this.pick(row);
     })
