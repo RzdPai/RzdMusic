@@ -171,15 +171,18 @@ export struct ImmersiveSurface {
     .height(this.surfaceHeight)
     .borderRadius(this.radiusVp(), RenderStrategy.OFFSCREEN)
     .clip(true)
-    // ★ 2026-11-20（用户："官方按压后不是变大变小，是**跟随手指的轻微形变**"）：
-    //   原来整颗 `scale(0.94)` = 缩小，那是错的。官方是**朝触点方向微微让形**：
-    //   把内容按"触点相对中心的偏移"做极小位移（≈3%，上限 2vp），松手回中。
-    //   观感是"这块玻璃被手指按得有点软"，而不是"按钮变小了"。
-    .translate({
-      x: this.touching ? this.deformDx() : 0,
-      y: this.touching ? this.deformDy() : 0
+    // ★★★ 2026-11-20（用户三次指正："不是变大变小 / 不是直接位移，是**直接的形变**"）：
+    //   官方的"形变"= **以触点为原点**的各向异性轻微挤压：
+    //     · `scale.centerX/centerY` 钉在**手指位置** ⇒ 按在哪儿就从哪儿变形（不是整体位移）；
+    //     · x / y 两轴系数**不相等**（0.97 / 0.99）⇒ 看起来是"被按扁了一点"，
+    //       而不是等比缩小（等比缩小就是用户说的"变大变小"）。
+    .scale({
+      x: this.touching ? 0.97 : 1,
+      y: this.touching ? 0.99 : 1,
+      centerX: this.touching ? this.touchX : this.surfaceWidth / 2,
+      centerY: this.touching ? this.touchY : this.surfaceHeight / 2
     })
-    .animation({ duration: 120, curve: Curve.Friction })
+    .animation({ duration: 140, curve: Curve.Friction })
     .onTouch((event: TouchEvent) => {
       if (event.touches.length === 0) {
         this.touching = false;
