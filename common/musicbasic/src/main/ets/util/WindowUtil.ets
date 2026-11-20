@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-import { ConfigurationConstant } from '@kit.AbilityKit';
+import { common, Configuration, ConfigurationConstant } from '@kit.AbilityKit';
 import { AppStorageV2, display, UIContext, window } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { AppStorageKeys } from '../constants/Constants';
@@ -437,6 +437,10 @@ export class WindowUtil {
     if (fullScreen) {
       this.setFullScreen(enter);
     }
+    // 退出播放页时把「当前是否深色」重新读一遍：`isDarkMode` 可能是很久以前记的
+    if (!enter) {
+      this.isDarkMode = this.detectDarkMode();
+    }
     this.setWindowSystemBarProperties({
       statusBarContentColor: enter ? '#FFFFFF' : (this.isDarkMode ? '#FFFFFF' : '#000000'),
       navigationBarColor: enter ? '#000000' : (this.isDarkMode ? '#000000' : '#F1F3F5')
@@ -461,9 +465,25 @@ export class WindowUtil {
    * current dark-mode flag for later window chrome updates.
    * @param isDark True when the app currently follows dark color mode.
    */
+  /** 读当前系统深浅色（用于退出播放页后恢复状态栏文字色）。 */
+  private detectDarkMode(): boolean {
+    try {
+      const abilityCtx: common.UIAbilityContext = getContext() as common.UIAbilityContext;
+      const cfg: Configuration = abilityCtx.config;
+      return cfg.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK;
+    } catch (_e) {
+      return this.isDarkMode;
+    }
+  }
+
   applyNavigationBarColor(isDark: boolean): void {
     this.isDarkMode = isDark;
+    // ★ 2026-11-21（用户："日间模式下四个一级页和设置二级页状态栏是白色"）：
+    //   这里原来**只改导航栏颜色、不改状态栏文字颜色** ⇒ 从播放页退出后
+    //   `statusBarContentColor` 还留着播放页设的 `#FFFFFF`，日间浅底上就看不见图标了。
+    //   ⇒ 一起按当前深浅色刷一遍状态栏内容色。
     this.setWindowSystemBarProperties({
+      statusBarContentColor: isDark ? '#FFFFFF' : '#000000',
       navigationBarColor: isDark ? '#000000' : '#F1F3F5'
     });
   }
