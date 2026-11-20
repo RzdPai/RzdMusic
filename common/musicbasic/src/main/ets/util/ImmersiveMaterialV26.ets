@@ -95,6 +95,10 @@ export function immersiveMaterial(style: RzdMaterialStyle = RzdMaterialStyle.REG
       style: styleOf(style),
       applyShadow: true,
       interactive: true,
+      // ★ 2026-11-20（用户："日间发白 / 夜间不够透"）：
+      //   材质底色用**深浅色自适应资源**（日间 20% 白纱、夜间 20% 黑纱），
+      //   不再留系统默认（默认偏白 ⇒ 日间发白、夜间发灰）。
+      materialColor: $r('app.color.immersive_glass_overlay'),
       lightEffect: {
         color: '#66FFFFFF'
       }
