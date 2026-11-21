@@ -18,6 +18,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import {
   immersiveFromLevel,
+  immersiveFromLevelFlat,
   appBarBlurStyle,  guardPlayerBack
 , RzdSelectMenuMaterial,
   immersiveMedium,
@@ -1969,18 +1970,22 @@ export struct OnlineSearchPage {
         .height(40)
         .font({ size: 13 })
         .fontColor($r('app.color.font_primary'))
-        // ★★★ 2026-11-02（用户：「切换平台那颗也要光感」）：
-        //   上一版换成官方 `Select` 时**只给它加了半透明底、没挂材质** ⇒ 屏上只有一片
-        //   `#33FFFFFF` 的平底，和旁边两颗玻璃胶囊明显不是一个东西。
-        //   `Select` 属官方「按钮与选择类」（A 档，页面任意区域都生效）⇒ 通用属性
-        //   `.systemMaterial(...)` 在这里是真渲染的，不是 out of scope。
-        //   ⚠️ 菜单本身的光感在 `RzdSelectMenuMaterial` 里（`menuSystemMaterial`），两者互不替代。
-        .systemMaterial(immersiveFromLevel(this.ambientState.level))
       // ★ 2026-11-15（合并 PR #16）：本文件 5 处玻璃底色统一改**深浅色自适应资源**
       //   （浅色白纱 #33FFFFFF / 深色黑纱 #33000000）。原来写死 20% 白，深色模式下玻璃发灰；
       //   首页那端（`HomeSearchRow`）用的是同一资源 ⇒ 形变中途无颜色跳变。
         .backgroundColor($r('app.color.immersive_glass_overlay'))
         .borderRadius(20)
+        // ★★★ 2026-11-21（用户截图：「平台切换按钮本身就会白一些，而且他有阴影，
+        //   整个视觉上和其他几个同样有光感的有些格格不入」）：
+        //   三处对齐，全部照官方文档：
+        //   ① **`systemMaterial` 必须放在其它样式属性之后**（官方 FAQ「通过通用属性 systemMaterial
+        //      设置沉浸式系统材质后组件样式显示异常」：放在背景色/边框/阴影之前会让材质优先级不对）。
+        //      我们上一版把它写在了 `backgroundColor` 前面 ⇒ 那层 20% 白纱盖在材质上，
+        //      所以这颗比旁边两颗（材质在壳里、没有额外底）更白。
+        //   ② 材质关掉自带投影（`immersiveFromLevelFlat`）：旁边两颗的投影被壳的 `clip(true)` 裁掉了，
+        //      这颗保留投影就会"浮"起来一层。
+        //   ③ 其它样式属性（背景色/边框）保持在前，没材质时（API<26）仍有那颗半透明胶囊兜底。
+        .systemMaterial(immersiveFromLevelFlat(this.ambientState.level))
         .attributeModifier(new RzdSelectMenuMaterial())
         .onSelect((index: number) => {
           const offset: number = (this.searchMode === 2 || this.searchMode === 3) ? 1 : 0;
@@ -3052,9 +3057,20 @@ export struct OnlineSearchPage {
     //   里的 `titleBarTopHeight`（= 状态栏 + 56 = 94）正好落在 94 ✔。
     //   ⚠️ 旧注释里"根节点带 TOP 会把标题/搜索按钮顶进状态栏 / 只能留 BOTTOM"那句**是错的**，已作废。
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
-    // 官方一镜到底示例里目标页也挂这个（PageTwo 的 `NavDestination().transition(OPACITY)`）：
-    // 配合 push(false) + animateTo，页面自己淡入，看起来只剩搜索框在飞。
-    .transition(TransitionEffect.OPACITY)
+    // ★★★ 2026-11-21（用户："还是灰"；且给出决定性线索：**平台切换那颗 Select 不灰**，
+    //   另外三颗（返回 / 搜索框 / 播放条）都灰）：这三颗的玻璃都来自**自绘壳内部的悬浮栏**，
+    //   而 `Select` 的玻璃是**组件自己**的材质。两者唯一的差别是"谁在画材质"；
+    //   而它们又都在同一次"页面淡入"里 ⇒ 只可能是**整页的透明度动画把材质关掉了**
+    //   （透明度组 = 离屏图层，材质滤镜要采样背后内容，采样不到就整块不画 ⇒ 只剩页面灰底）。
+    //   上一版（H1）把它改成 `opacity(0.99)` 没解决，正因为**只要还在做透明度动画**就仍然是一层 alpha 组。
+    //   ⇒ 本次把页面根的透明度转场**整条去掉**：页面（含标题行、迷你条）直接以不透明状态出现，
+    //     只剩搜索框在飞（共享元素动画本身还在）。这条同时是"灰的来源"的判定实验：
+    //     · 灰消失 ⇒ 确认是透明度组，下一版再把淡入加回到**内容区**（标题行保持不透明）；
+    //     · 灰仍在 ⇒ 与页面转场无关，是"新建的悬浮栏材质首帧不出"，改从材质载体那边解决。
+    //   ⚠️ 不要再对页面根挂成整条 `TransitionEffect.OPACITY`（进/出都是透明度动画）。
+    //   ⇒ 现在只保留**淡出**：`asymmetric(appear=IDENTITY, disappear=OPACITY)` ——
+    //     进入不透明出现（材质首帧就在），返回时页面照旧柔和消失（用户说"退出一直正常"，别动它）。
+    .transition(TransitionEffect.asymmetric(TransitionEffect.IDENTITY, TransitionEffect.OPACITY))
   }
 }
 

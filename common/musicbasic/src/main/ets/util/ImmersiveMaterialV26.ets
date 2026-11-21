@@ -78,8 +78,14 @@ function styleOf(style: RzdMaterialStyle): uiMaterial.ImmersiveStyle {
 /**
  * 取沉浸材质对象；设备不支持时返回 undefined（调用方 `.systemMaterial(undefined)` = 无材质，安全降级）。
  * @param style 厚度，默认中等（REGULAR）
+ * @param applyShadow 是否带材质自带投影（默认 true）。官方 FAQ：
+ *   `applyShadow` 为 true 时材质阴影**固定生效**并**优先于**通用属性 `shadow`；
+ *   为 false 时材质不出阴影（此时自定义 `shadow` 才生效）。
+ *   ⇒ 同一排里有的胶囊带投影、有的不带（自绘壳被 `clip(true)` 裁掉投影）就会"格格不入"，
+ *     这时把带投影那颗关掉，整排观感才统一（用户 2026-11-21 指出的正是这一条）。
  */
-export function immersiveMaterial(style: RzdMaterialStyle = RzdMaterialStyle.REGULAR): SystemUiMaterial | undefined {
+export function immersiveMaterial(style: RzdMaterialStyle = RzdMaterialStyle.REGULAR,
+  applyShadow: boolean = true): SystemUiMaterial | undefined {
   try {
     // ★ 2026-11-20：**不再因 `isImmersiveMaterialSupported()===false` 就直接返回 undefined**。
     //   现象：HDS 那条路（`ImmersiveSurface` 的空 HdsTabs 壳）能出材质，但用到
@@ -101,7 +107,7 @@ export function immersiveMaterial(style: RzdMaterialStyle = RzdMaterialStyle.REG
     //     · `materialColor`          —— 材质底色（半透明白，深色下自动反相）
     const built: uiMaterial.ImmersiveMaterial = new uiMaterial.ImmersiveMaterial({
       style: styleOf(style),
-      applyShadow: true,
+      applyShadow: applyShadow,
       interactive: true,
       // ★ 2026-11-20（用户："日间发白 / 夜间不够透"）：
       //   材质底色用**深浅色自适应资源**（日间 20% 白纱、夜间 20% 黑纱），
@@ -159,12 +165,31 @@ export function immersiveFlat(): SystemUiMaterial | undefined {
  * @param level 光感强度档位（0~3，越界按 0 处理）
  */
 export function immersiveFromLevel(level: number): SystemUiMaterial | undefined {
+  return immersiveMaterial(levelStyle(level));
+}
+
+/**
+ * 与 {@link immersiveFromLevel} 同档位，但**不带材质自带投影**。
+ *
+ * 用在哪：和"自绘玻璃壳"（`ImmersiveSurface`）同排/同屏的**官方组件**。
+ * 壳里的材质投影会被根节点 `.clip(true)` 裁掉（屏上没有投影），而官方组件（Select 等）
+ * 的 `applyShadow` 默认 true ⇒ 同一排里那颗会"更白一层 + 浮起来"。
+ * 用户 2026-11-21 的原话：「平台切换按钮…本身就会白一些，而且他有阴影，
+ * 整个视觉上和其他几个同样有光感的有些格格不入」。
+ * @param level 光感强度档位（0~3）
+ */
+export function immersiveFromLevelFlat(level: number): SystemUiMaterial | undefined {
+  return immersiveMaterial(levelStyle(level), false);
+}
+
+/** 光感档位 → 材质厚度（`immersiveFromLevel` / `immersiveFromLevelFlat` 共用一张表）。 */
+function levelStyle(level: number): RzdMaterialStyle {
   switch (level) {
     case 1:
-      return immersiveMaterial(RzdMaterialStyle.THIN);
+      return RzdMaterialStyle.THIN;
     case 3:
-      return immersiveMaterial(RzdMaterialStyle.THICK);
+      return RzdMaterialStyle.THICK;
     default:
-      return immersiveMaterial(RzdMaterialStyle.REGULAR);
+      return RzdMaterialStyle.REGULAR;
   }
 }
