@@ -34,6 +34,12 @@ export struct HomeSearchRow {
     this.flightBackstop = true;
     setTimeout((): void => {
       this.flightBackstop = false;
+      // 同搜索页：推一下宽度触发重排，让材质层重绘
+      const w: number = this.fieldWidthVp;
+      this.fieldWidthVp = w + 1;
+      setTimeout((): void => {
+        this.fieldWidthVp = w;
+      }, 80);
     }, 450);
   }
 

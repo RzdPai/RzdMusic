@@ -645,6 +645,14 @@ export struct OnlineSearchPage {
     this.flightBackstop = true;
     setTimeout((): void => {
       this.flightBackstop = false;
+      // ★ 2026-11-21（用户提到"以前状态栏也这样，是刷新机制的问题"）：
+      //   转场结束后 `HdsTabs` 壳里的材质层不会自己重绘 ⇒ 屏上留着兜底色（看起来"不透明/纯白"）。
+      //   这里把壳宽轻推 1vp 触发一次真实重排，材质随之重绘出来。
+      const w: number = this.searchBoxWidthVp;
+      this.searchBoxWidthVp = w + 1;
+      setTimeout((): void => {
+        this.searchBoxWidthVp = w;
+      }, 80);
     }, 450);
     morphLog('target aboutToAppear');
     this.onShowChange(true);

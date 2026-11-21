@@ -77,6 +77,20 @@ export struct ImmersiveSurface {
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
+      // ★★★ 2026-11-21（查官方 FAQ 得到的关键一条）：
+      //   "沉浸光感的视觉层级位于组件的 backgroundColor / backgroundBlurStyle **之下**，
+      //    不透明的背景会**覆盖在材质层之上**，导致材质不可见"。
+      //   ⇒ 兜底色必须画在 **HdsTabs 之前（下层）**，不能画在它上面 ——
+      //     之前它盖在材质上，所以材质永远出不来（表现为"纯白不透明"）。
+      // 兜底色（传实色时只管兜底；默认透明）
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(this.fallbackColor)
+        .borderRadius(this.radiusVp(), RenderStrategy.OFFSCREEN)
+        .clip(true)
+        .hitTestBehavior(HitTestMode.None)
+
       // 材质层：空 HdsTabs 壳（只为了那一条悬浮栏的 systemMaterialEffect）
       HdsTabs({ barPosition: BarPosition.End, index: 0 }) {
         TabContent() {
@@ -115,15 +129,6 @@ export struct ImmersiveSurface {
       .width(this.surfaceWidth)
       .height(this.surfaceHeight)
       .hitTestBehavior(HitTestMode.None)
-
-      // 兜底色（**默认透明**：用户 2026-11-20「不要垫半透明」；材质不可用时再按需传实色）
-      Column()
-        .width('100%')
-        .height('100%')
-        .backgroundColor(this.fallbackColor)
-        .borderRadius(this.radiusVp(), RenderStrategy.OFFSCREEN)
-        .clip(true)
-        .hitTestBehavior(HitTestMode.None)
 
       // ★ 2026-11-20（用户："光斑能不能用官方属性"）：
       //   官方光感反馈是 `uiMaterial.ImmersiveMaterial.lightEffect`（`.systemMaterial()` 的字段）。
