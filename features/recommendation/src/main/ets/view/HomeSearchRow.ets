@@ -22,8 +22,6 @@ export struct HomeSearchRow {
    * ★ 2026-11-02：光感强度档位（与标题栏 `buildTitleMaterial` 同一张表）。
    * 首页这端与搜索页那端必须**同一档**，否则一镜到底形变途中能看出材质厚度跳变。
    */
-  /** 同上：首帧不能是 0，否则返回动画开始时没有玻璃 */
-  @Local fieldWidthVp: number = 300;
   @Local ambientState: AmbientState =
     AppStorageV2.connect(AmbientState, AppStorageKeys.AMBIENT_STATE, () => new AmbientState())!;
 
@@ -42,22 +40,7 @@ export struct HomeSearchRow {
         //   飞起来就只有框里的文字、框本身不动（甲方原话："只有搜索框里的文字有动画"）。
         //   官方示例就是把背景直接挂在 `Search` 上（`.backgroundColor('#0D000000')`），这里照抄：
         //   背景/圆角/高度全部落在 `Search` 自己身上，两端同一套。
-        // ★★ 2026-11-21（用户："又有玻璃又有一镜到底"）：把 `Search` 包进 Stack，
-        //   **geo id 挂 Stack**，玻璃底板与文字在同一个形变节点里 ⇒ 整块一起飞。
-        Stack({ alignContent: Alignment.Center }) {
-          ImmersiveSurface({
-            surfaceWidth: this.fieldWidthVp,
-            surfaceHeight: SEARCH_FIELD_H,
-            surfaceRadius: SEARCH_FIELD_H / 2,
-            // 形变过程中材质可能来不及渲染 ⇒ 用同一份半透明玻璃色兜底，避免"中途变灰"
-            // 动画期间材质不渲染 ⇒ 兜底用实底卡片色（半透明叠白页会发灰）
-            // 同搜索页：只在动画期间用实底兜底，平时透明（否则框是纯白不透明）
-            fallbackColor: Color.Transparent
-          }) {
-            Column()
-          }
         Search({ placeholder: '艺人、歌曲或专辑' })
-          .width('100%')
           .height(SEARCH_FIELD_H)
           // ★ 2026-10-24（甲方：「搜索框现在半透明的不是很好看」）：改**实底卡片背板**，
           //   与搜索页那端（`OnlineSearchPage.SearchInputBar`）**逐字同一套**：
@@ -65,7 +48,7 @@ export struct HomeSearchRow {
           // 与搜索页那端保持同一套：光感 + 半透明底（否则形变途中颜色会跳）
           // ★ 2026-11-15（合并 PR #16）：底色改深浅色自适应资源（浅色白纱 / 深色黑纱）。
           //   与搜索页那端（`OnlineSearchPage`）**同一资源** ⇒ 形变中途仍无颜色跳变。
-          .backgroundColor(Color.Transparent)
+          .backgroundColor($r('app.color.immersive_glass_overlay'))
           .borderRadius(SEARCH_FIELD_H / 2)
           .clip(true)
           // 两端占位色必须同一个 token：不同色时形变中途会看到"白字突然变灰"。
@@ -93,22 +76,13 @@ export struct HomeSearchRow {
             morphLog(`source rect x=${area.globalPosition.x} y=${area.globalPosition.y} ` +
               `w=${area.width} h=${area.height}`);
           })
+          .geometryTransition(SEARCH_GEO_ID, { follow: true })
           .onTouch((event: TouchEvent): void => {
             if (event.type === TouchType.Up) {
               morphLog('source tap-open');
               this.onOpenSearch();
             }
           })
-        }
-        .height(SEARCH_FIELD_H)
-        .width('100%')
-        .geometryTransition(SEARCH_GEO_ID, { follow: true })
-        .onAreaChange((_o: Area, area: Area): void => {
-          const w: number = Number(area.width);
-          if (w > 0 && Math.abs(w - this.fieldWidthVp) > 0.5) {
-            this.fieldWidthVp = w;
-          }
-        })
 
         // 识别歌曲按钮已移到标题栏菜单（2026-11-04 甲方要求）
       }
