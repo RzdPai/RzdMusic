@@ -1935,7 +1935,7 @@ export struct OnlineSearchPage {
           surfaceWidth: this.searchBoxWidthVp,
           surfaceHeight: 40,
           surfaceRadius: 20,  // = 高度 40 的一半，与首页 `SEARCH_FIELD_H / 2` 同值
-          fallbackColor: Color.Transparent
+          fallbackColor: $r('app.color.immersive_glass_overlay')
         }) {
           Column()
         }

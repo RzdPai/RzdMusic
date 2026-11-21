@@ -45,7 +45,8 @@ export struct HomeSearchRow {
             surfaceWidth: this.fieldWidthVp,
             surfaceHeight: SEARCH_FIELD_H,
             surfaceRadius: SEARCH_FIELD_H / 2,
-            fallbackColor: Color.Transparent
+            // 形变过程中材质可能来不及渲染 ⇒ 用同一份半透明玻璃色兜底，避免"中途变灰"
+            fallbackColor: $r('app.color.immersive_glass_overlay')
           }) {
             Column()
           }

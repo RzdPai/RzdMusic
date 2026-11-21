@@ -243,7 +243,7 @@ export struct QueuePlaylistSheet {
     .width('100%')
     // ★ 2026-11-21 订正：系统关闭钮在标题栏右端，**右内边距要小**才会贴近它。
     //   （上一版我把它从 40 调到 56，等于把定位钮又往左推了 16 ⇒ 反而更远。）
-    .padding({ right: 8 })
+    .padding({ right: 0 })
   }
 
   build() {
