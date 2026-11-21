@@ -1531,9 +1531,7 @@ export struct MinePage {
           })
       }
       .width('100%')
-      Column()
-        .height(this.bottomReservedVp() + 8)
-        .width('100%')
+      // ★ 2026-11-21：同上，底部不再放占位块（改成 List 的 contentEndOffset，见列表定义处）
     }
     .width('100%')
     .padding({ left: 16, right: 16, top: 16, bottom: 8 })
@@ -1620,15 +1618,12 @@ export struct MinePage {
             }
           }
 
-          // 底部预留：HDS 浮动页签栏 + 手势条
-          ListItem() {
-            Column()
-              .height(this.bottomReservedVp())
-              .width('100%')
-          }
+          // ★ 2026-11-21：底部预留改走 `contentEndOffset`（滚动内容内边距），
+          //   不再插占位 ListItem —— 那在列表短时会变成一块可见空白。
         }
         .width('100%')
         .height('100%')
+        .contentEndOffset(this.bottomReservedVp())
         .scrollBar(BarState.Off)
         // ★ 底部（以及顶部）回弹：`List` 的 `edgeEffect` 默认是 `Spring`，但
         //   `EdgeEffectOptions.alwaysEnabled` 对 **List/Grid/WaterFlow 默认 false**、

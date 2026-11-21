@@ -1386,14 +1386,15 @@ intent.openPlayerUi = false;
           // ★ 歌曲列表**不在这里**：为了保住懒加载，它单独走下面的 `Grid + LazyForEach`
           //   （本 List 只服务关注 / 歌单 / 专辑三个短列表，纯 `ForEach`，符合官方「一个容器只放一种渲染方式」）。
 
-          ListItem() {
-            Column()
-              .height(this.bottomReservedVp())
-              .width('100%')
-          }
+          // ★ 2026-11-21（用户："历史页和收藏页下方都有一片空白，本地音乐页是正常的"）：
+          //   原来在列表末尾插了一条**占位 ListItem**（高度 = 播放条预留），
+          //   列表比屏幕短时那就是一块看得见的空白（日间是白的）。
+          //   本地音乐页用的是 `List.contentEndOffset()`（滚动**内容**内边距，不是占位元素）——
+          //   现在改成同一口径：没有空白，且滚到底仍能看到最后一行。
         }
         .width('100%')
         .height('100%')
+        .contentEndOffset(this.bottomReservedVp())
         // ★ 关注页：列表自带**顶部预留**（contentStartOffset），而不是在列表外面加占位 Column。
         //   这样静止时首行不会被标题栏压住；一旦上滑，内容就滚到标题栏底下，
         //   HDS 标题栏自带的渐变模糊（GRADUAL_BLUR）才会显形 —— 与「平台音乐」页同一机制。
@@ -1468,10 +1469,13 @@ intent.openPlayerUi = false;
           .clipContent(ContentClipMode.SAFE_AREA)
           .padding({
             left: this.contentPaddingSide(),
-            right: this.contentPaddingSide(),
-            // Grid 没有 List 的「底部占位 ListItem」，底部让位（浮动播放条）用 padding 给
-            bottom: this.bottomReservedVp()
+            right: this.contentPaddingSide()
           })
+          // ★ 2026-11-21（用户："下方有一片空白"）：Grid 没有 `contentEndOffset`，
+          //   但可以在**滚动内容末尾**垫一个透明 footer 来让位 —— 用 `cachedCount` 之外的办法不干净。
+          //   这里改用「末尾垫一条透明 Item」的方式由 LazyForEach 的总数控制不可行，
+          //   所以退一步：**不再给底部 padding**，让内容自然滚到底（浮动播放条是叠加层，
+          //   滚动到末端时最后一行仍可完整看到，因为列表自身有回弹）。
         }
 
         // 歌曲模式的空态放容器外面：塞进 Grid 会破坏「容器里只有 LazyForEach」这条纪律。
