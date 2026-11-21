@@ -2157,6 +2157,10 @@ export struct OnlineSearchPage {
       //   ⚠️ 首页那端（`HomeSearchRow`）必须保持**同一套**背板，否则形变中途会看到颜色跳变。
       .backgroundColor($r('app.color.immersive_glass_overlay'))
       .borderRadius(20)
+      // ★ 2026-11-21 修复回归：清理代码时**误删了目标页的 `geometryTransition`**，
+      //   一镜到底因此失效（源端首页还挂着 id，目标端没有 ⇒ 没有形变）。
+      //   两端 id 必须一致；`follow` 只写在源端（见本文件 2141 行注释）。
+      .geometryTransition('wanting_search_field')
       .clip(true)
       // 占位色与首页那端**同一套**：两端不同色就会在形变瞬间看到"白字突然变灰"。
       // （官方示例用 sys.color.mask_secondary；我们深色主题下它太淡、看着像"文字消失"，
