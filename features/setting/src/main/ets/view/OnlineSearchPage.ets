@@ -317,6 +317,8 @@ export struct OnlineSearchPage {
    *   只剩 `Search` 的透明底 ⇒ 看起来"变灰"。给一个屏幕宽度的合理估算值兜住首帧。
    */
   @Local searchBoxWidthVp: number = 300;
+  /** 一镜到底期间给实底兜底（动画里材质不渲染）；落位后置 false，让材质透出来。 */
+  @Local flightBackstop: boolean = true;
   @Local titleWidthVp: number = 0;
   @Local typeBarBottomVp: number = 0;
 
@@ -639,6 +641,11 @@ export struct OnlineSearchPage {
 
   aboutToAppear(): void {
     OnlineSearchPage.enterAtMs = Date.now();
+    // 一镜到底结束后（≈450ms）撤掉实底兜底，让玻璃材质透出来
+    this.flightBackstop = true;
+    setTimeout((): void => {
+      this.flightBackstop = false;
+    }, 450);
     morphLog('target aboutToAppear');
     this.onShowChange(true);
     this.refreshContentPaddingTop();
