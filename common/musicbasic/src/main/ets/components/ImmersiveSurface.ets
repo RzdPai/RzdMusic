@@ -12,7 +12,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { HdsTabs, hdsMaterial } from '@kit.UIDesignKit';
+import { uiMaterial } from '@kit.ArkUI';
 import { immersiveMedium } from '../util/ImmersiveMaterialV26';
 
 /**
@@ -71,6 +71,17 @@ export struct ImmersiveSurface {
       .height(0)
   }
 
+  /** 壳用的系统材质（API 26 `uiMaterial`；与全仓 `immersiveMedium()` 同一份参数）。 */
+  private buildShellMaterial(): uiMaterial.ImmersiveMaterial {
+    return new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      applyShadow: true,
+      interactive: true,
+      materialColor: $r('app.color.immersive_glass_overlay'),
+      lightEffect: { color: '#66FFFFFF' }
+    });
+  }
+
   private radiusVp(): number {
     return this.surfaceRadius >= 0 ? this.surfaceRadius : this.surfaceHeight / 2;
   }
@@ -92,7 +103,7 @@ export struct ImmersiveSurface {
         .hitTestBehavior(HitTestMode.None)
 
       // 材质层：空 HdsTabs 壳（只为了那一条悬浮栏的 systemMaterialEffect）
-      HdsTabs({ barPosition: BarPosition.End, index: 0 }) {
+      Tabs({ barPosition: BarPosition.End, index: 0 }) {
         TabContent() {
           // ★ 2026-11-21（用户："返回、搜索框、播放条都发灰，但平台切换是正常白"）：
           //   灰底来自 `TabContent` 的**系统表面色** —— 它默认不是透明的。
@@ -106,26 +117,19 @@ export struct ImmersiveSurface {
       .barMode(BarMode.Fixed)
       .barHeight(this.surfaceHeight)
       .barOverlap(true)
+      // ★★★ 2026-11-21（H2 修法）：官方 API 26 示例里，Tabs 悬浮栏的材质字段是
+      //   `barFloatingStyle.systemMaterial`（`uiMaterial.ImmersiveMaterial`）+ `maskColor`，
+      //   **不是** HDS 的 `systemMaterialEffect`（那是 HDS 组件自己的口）。
+      //   我们之前用 `systemMaterialEffect` ⇒ 壳只出**系统表面色（灰）**，材质根本没参与渲染。
+      .barWidth(this.surfaceWidth)
       .barFloatingStyle({
-        barWidth: {
-          smallWidth: this.surfaceWidth,
-          mediumWidth: this.surfaceWidth,
-          largeWidth: this.surfaceWidth
-        },
-        systemMaterialEffect: {
-          materialType: hdsMaterial.MaterialType.IMMERSIVE,
-          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
-        },
+        maskColor: Color.Transparent,
+        // ★ 2026-11-21（H2）：ArkUI `Tabs` 的 `barFloatingStyle.systemMaterial` 才是官方 API 26 口；
+        //   HDS 的 `HdsTabsFloatingStyle` 没有这个字段（只有 systemMaterialEffect，那条路只出灰表面）。
+        systemMaterial: this.buildShellMaterial(),
         barSideMargin: 0,
-        barBottomMargin: 0,
-        gradientMask: { maskColor: Color.Transparent, maskHeight: this.surfaceHeight },
-        adaptToHandedness: false,
-        thermoCtrl: true,
-        barOpacity: 1
+        barBottomMargin: 0
       })
-      .backgroundColor(Color.Transparent)
-      .scrollable(false)
-      .onContentWillChange(() => false)
       .width(this.surfaceWidth)
       .height(this.surfaceHeight)
       .hitTestBehavior(HitTestMode.None)
