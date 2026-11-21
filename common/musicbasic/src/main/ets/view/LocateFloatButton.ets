@@ -13,6 +13,7 @@
  * limitations under the License.
  */
 
+import { ImmersiveSurface } from '../components/ImmersiveSurface';
 import { motion } from '@kit.MultimodalAwarenessKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BusinessError } from '@kit.BasicServicesKit';
@@ -150,30 +151,28 @@ export struct LocateFloatButton {
   /** 圆按钮本体：材质背板 + 主题色图标 + 点光 + 换侧侧滑动画。 */
   @Builder
   private Ball(edge: TransitionEdge) {
-    Button() {
+    // ★ 2026-11-21（用户："不是让你接入光感吗""图标还是模糊红色+四角黑色"）：
+    //   - 底板改 `ImmersiveSurface`（空 HdsTabs 壳）——`Button + systemMaterial` 在页面 body 里
+    //     渲染成透明，这就是"没接上光感"的原因；
+    //   - 图标仍用 `Image + fillColor`，但 SVG 已改成**纯填充路径**（原来是 stroke，
+    //     `fillColor` 染不到描边 ⇒ 四角发黑；缩放时描边模糊 ⇒ "模糊红色"）。
+    ImmersiveSurface({
+      surfaceWidth: 40,
+      surfaceHeight: 40,
+      fallbackColor: $r('app.color.immersive_glass_overlay'),
+      onTap: (): void => {
+        if (this.clickable) {
+          hilog.info(DOMAIN, TAG, 'tap side=%{public}s', this.rightSide ? 'right' : 'left');
+          this.onTap();
+        }
+      }
+    }) {
       Image(this.icon)
         .width(22)
         .height(22)
         .fillColor(this.tint)
+        .opacity(this.clickable ? 1 : 0.45)
     }
-    .type(ButtonType.Normal)
-    .width(40)
-    .height(40)
-    .borderRadius(20)
-    // ★ 不要蓝色底：材质背板（浅色下是半透明白、深色下是半透明黑，并跟随背后画面）
-    // ★ 材质挂 Button（A 档宿主）；backgroundColor 必须半透明才透得出材质
-    .systemMaterial(immersiveMedium())
-    // ★ 2026-11-15（合并 PR #16）：原来左右两侧分支写的是同一个 '#33FFFFFF'（历史遗留的冗余三元），
-    //   深色下玻璃发灰；改成深浅色自适应资源（浅色白纱 / 深色黑纱）。
-    .backgroundColor($r('app.color.immersive_glass_overlay'))
-    .shadow({ radius: 14, color: 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 4 })
-    .enabled(this.clickable)
-    .opacity(this.clickable ? 1 : 0.45)
-    .transition(TransitionEffect.move(edge).animation({ duration: 250, curve: Curve.Friction }))
-    .onClick((): void => {
-      hilog.info(DOMAIN, TAG, 'tap side=%{public}s', this.rightSide ? 'right' : 'left');
-      this.onTap();
-    })
   }
 
   build() {

@@ -1147,8 +1147,17 @@ export struct LocalMusicPage {
     .titleBar({
       // ★ 与「设置页 / 平台音乐页」同一套：标题栏光感来自 HDS `systemMaterialEffect`，
       //   档位跟随「设置 → 沉浸光感强度」（buildTitleMaterial）。
+      // ★ 2026-11-21（用户："本地音乐页上滑时上面那一块会变色，历史/收藏页是正常的"）：
+      //   历史/收藏页的标题栏是**不透明底色 + 不开材质**（`background_secondary`），
+      //   而这一页挂了 `systemMaterialEffect` ⇒ 上滑时材质随背后内容变色。
+      //   ⇒ 按用户口径统一成"和别的页面一样"：不开材质、底色用页面底色。
       style: {
-        systemMaterialEffect: buildTitleMaterial(this.ambientState.level)
+        systemMaterialEffect: undefined,
+        originalStyle: {
+          backgroundStyle: {
+            backgroundColor: $r('sys.color.background_primary')
+          }
+        }
       },
       content: {
         title: { mainTitle: '本地音乐' },
