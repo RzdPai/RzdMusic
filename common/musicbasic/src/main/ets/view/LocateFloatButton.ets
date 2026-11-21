@@ -57,6 +57,11 @@ export struct LocateFloatButton {
   @Param bottomInset: number = 96;
   /** 距屏幕左右边距（vp）。 */
   @Param sideMargin: number = 18;
+  /**
+   * 是否显示（用户 2026-11-21："固定在列表底部，上滑到最下面时才出现"）。
+   * 由调用方按滚动位置驱动，默认 true 保持原行为。
+   */
+  @Param visible: boolean = true;
   /** 是否可用（没有正在播放时可传 false，视觉不变但点不动）。 */
   @Param clickable: boolean = true;
   /** 点击回调。 */
@@ -172,6 +177,13 @@ export struct LocateFloatButton {
   }
 
   build() {
+    if (this.visible) {
+      this.ButtonBody()
+    }
+  }
+
+  @Builder
+  ButtonBody() {
     Column() {
       Blank()
       Row() {

@@ -267,6 +267,8 @@ export struct RecordListPage {
    */
   @Local category: string = 'song';
   /** 多选删除模式。 */
+  /** 滚动到列表末尾时才显示定位按钮 */
+  @Local locateVisible: boolean = false;
   @Local selectionMode: boolean = false;
   /** 多选底栏「添加至歌单」的面板开关。 */
   @Local addSheetOpen: boolean = false;
@@ -783,6 +785,14 @@ intent.openPlayerUi = false;
   }
 
   /** 底部预留：壳层那条官方浮动播放条(56) + 间距(16) + 呼吸空间(16)。 */
+  /** 当前 List 里的条目总数（用于判断是否滚到最后）。 */
+  private listItemCount(): number {
+    if (this.category === 'playlist') {
+      return this.store.getPlaylists().length;
+    }
+    return this.records.length;
+  }
+
   private bottomReservedVp(): number {
     // 多选时播放条已临时隐藏（见 MusicAppState.selectionActive），改为给底部操作条让位
     return 56 + 16 + 16 + (this.selectionMode ? 76 : 0);
@@ -1395,6 +1405,14 @@ intent.openPlayerUi = false;
         .width('100%')
         .height('100%')
         .contentEndOffset(this.bottomReservedVp())
+        // 滚动到末尾才显示「定位到当前播放」（用户 2026-11-21）
+        .onReachEnd(() => {
+          this.locateVisible = true;
+        })
+        .onScrollIndex((_first: number, last: number) => {
+          const total: number = this.listItemCount();
+          this.locateVisible = total > 0 && last >= total - 1;
+        })
         // ★ 关注页：列表自带**顶部预留**（contentStartOffset），而不是在列表外面加占位 Column。
         //   这样静止时首行不会被标题栏压住；一旦上滑，内容就滚到标题栏底下，
         //   HDS 标题栏自带的渐变模糊（GRADUAL_BLUR）才会显形 —— 与「平台音乐」页同一机制。
@@ -1467,6 +1485,14 @@ intent.openPlayerUi = false;
           .scrollBar(BarState.Off)
           .edgeEffect(EdgeEffect.Spring)
           .clipContent(ContentClipMode.SAFE_AREA)
+          // 同上：滚到底才出现定位按钮
+          .onReachEnd(() => {
+            this.locateVisible = true;
+          })
+          .onScrollIndex((_first: number, last: number) => {
+            // Grid 的回调只有 (first, last)；末页判定用 reachEnd 兜底
+            this.locateVisible = last >= 0 && last >= this.records.length - 1;
+          })
           .padding({
             left: this.contentPaddingSide(),
             right: this.contentPaddingSide(),
@@ -1512,6 +1538,8 @@ intent.openPlayerUi = false;
           //   去掉蓝底、加智感握姿 ⇒ 统一用 musicbasic 的 `LocateFloatButton`，
           //   与播放器播放列表里的定位按钮同一个 SVG，见该组件头部注释）
           LocateFloatButton({
+            // ★ 2026-11-21（用户："固定在列表底部，上滑到最下面的时候才出现"）
+            visible: this.locateVisible,
             tint: this.themeState.color,
             // ★ 2026-11-01（用户：定位歌曲按钮位置调高）：原来 bottomInset 用默认 96，贴着底部；
             //   历史/收藏页底部还有一行内边距，抬到 150 让它明显离开底边。
