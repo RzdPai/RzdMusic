@@ -4,7 +4,9 @@ import { webview } from '@kit.ArkWeb';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
-import {appBarBlurStyle,  guardPlayerBack} from 'musicbasic';
+import {appBarBlurStyle,  guardPlayerBack,
+  rdzToast
+} from 'musicbasic';
 import { AppStorageKeys, AmbientState, MusicAppState, MusicStoreService, SongTitleMarquee, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { platformLabel } from '../util/SourceDeclaredInfo';
 import { RecognitionResult, RecognitionStatus, EngineReport, EngineResultGroup } from '../recognize/RecognitionTypes';
@@ -265,7 +267,7 @@ export struct MusicRecognitionPage {
           hilog.info(LOG_DOMAIN, LOG_TAG, 'search hit: %{public}s id=%{public}s', alt.name, alt.songId);
           void OnlinePlayUtil.playSearchSong(this.appState, alt, this.getUIContext());
         } else {
-          this.getUIContext().getPromptAction().showToast({ message: '未能找到可播放版本', duration: 2000 });
+          rdzToast(this.getUIContext(), '未能找到可播放版本', 2000);
         }
       } catch (_err) {
         hilog.error(LOG_DOMAIN, LOG_TAG, 'search fallback error: %{public}s', JSON.stringify(_err));
@@ -289,6 +291,7 @@ export struct MusicRecognitionPage {
             titleStyle: {
               mainTitleColor: $r('sys.color.font_primary')
             },
+            menuStyle: { iconColor: $r('sys.color.font_primary') },
             backIconStyle: {
               iconColor: $r('sys.color.font_primary'),
               backgroundColor: '#1AFFFFFF'
@@ -300,6 +303,7 @@ export struct MusicRecognitionPage {
             titleStyle: {
               mainTitleColor: $r('sys.color.font_primary')
             },
+            menuStyle: { iconColor: $r('sys.color.font_primary') },
             backIconStyle: {
               iconColor: $r('sys.color.font_primary'),
               backgroundColor: '#1AFFFFFF'
@@ -391,7 +395,7 @@ export struct MusicRecognitionPage {
               const pasteData: pasteboard.PasteData = pasteboard.createData(
                 pasteboard.MIMETYPE_TEXT_PLAIN, `${item.title} - ${item.artist}`);
               void pasteboard.getSystemPasteboard().setData(pasteData);
-              this.getUIContext().getPromptAction().showToast({ message: '已复制', duration: 1500 });
+              rdzToast(this.getUIContext(), '已复制', 1500);
             }
           }
         ], { backgroundBlurStyle: appBarBlurStyle() })

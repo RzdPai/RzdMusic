@@ -1,4 +1,5 @@
 import { common } from '@kit.AbilityKit';
+import { rdzToast } from '../util/RdzToast';
 import { AppStorageV2 } from '@kit.ArkUI';
 import { CoverCacheService, CoverCacheState } from '../services/CoverCacheService';
 import { ThemeState } from '../model/ThemeState';
@@ -55,10 +56,10 @@ export struct CoverCacheSettingsCard {
       }
       await CoverCacheService.getInstance().clear(context as common.Context);
       await this.refresh();
-      this.getUIContext().getPromptAction().showToast({ message: '封面缓存已清空' });
+      rdzToast(this.getUIContext(), '封面缓存已清空', 2000);
     } catch (_error) {
       await this.refresh();
-      this.getUIContext().getPromptAction().showToast({ message: '未能完成清理，请稍后重试' });
+      rdzToast(this.getUIContext(), '未能完成清理，请稍后重试', 2000);
     } finally {
       this.busy = false;
     }

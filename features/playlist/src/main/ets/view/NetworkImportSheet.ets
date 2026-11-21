@@ -14,7 +14,9 @@
  */
 
 import { AppStorageV2 } from '@kit.ArkUI';
-import { AppStorageKeys, MusicStoreService, PlayedSongRecord, ThemeState , RzdSelectMenuMaterial } from 'musicbasic';
+import { AppStorageKeys, MusicStoreService, PlayedSongRecord, ThemeState , RzdSelectMenuMaterial,
+  rdzToast
+} from 'musicbasic';
 import { SharePlaylistService, SharePlaylistSource } from 'player';
 
 /** 来源下拉的可选值（做成模块级常量：宿主页面若还要用，直接引用同一份）。 */
@@ -48,14 +50,14 @@ export struct NetworkImportSheet {
   private async importOnlinePlaylist(): Promise<void> {
     const link: string = this.onlineLink.trim();
     if (link.length === 0) {
-      this.getUIContext().getPromptAction().showToast({ message: '请粘贴歌单分享链接或ID', duration: 2000 });
+      rdzToast(this.getUIContext(), '请粘贴歌单分享链接或ID', 2000);
       return;
     }
     this.onlineImporting = true;
     try {
       const info = await SharePlaylistService.fetchPlaylist(link, this.onlineSource as SharePlaylistSource);
       if (info.songs.length === 0) {
-        this.getUIContext().getPromptAction().showToast({ message: '歌单为空或解析失败', duration: 2000 });
+        rdzToast(this.getUIContext(), '歌单为空或解析失败', 2000);
         return;
       }
       const songs: PlayedSongRecord[] = [];

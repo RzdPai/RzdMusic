@@ -19,7 +19,9 @@ import { image } from '@kit.ImageKit';
 import { effectKit } from '@kit.ArkGraphics2D';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { common } from '@kit.AbilityKit';
-import { immersiveFlat, ImmersiveSurface } from 'musicbasic';
+import { immersiveFlat, ImmersiveSurface,
+  rdzToast
+} from 'musicbasic';
 import { guardPlayerBack, immersiveMedium } from 'musicbasic';
 import { ConcertItem, ConcertService } from '../concert/ConcertService';
 import { AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, SongTitleMarquee, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, shouldUseSplitDetailLayout, splitDetailCardWidthVp , immersiveFromLevel } from 'musicbasic';
@@ -1096,14 +1098,14 @@ export struct ArtistDetailPage {
     const sourceId: string = codeToSource(this.source);
     const id: string = this.effectiveArtistId.length > 0 ? this.effectiveArtistId : this.effectiveArtistMid;
     if (id.length === 0) {
-      this.getUIContext().getPromptAction().showToast({ message: '歌手信息不完整，无法收藏', duration: 2000 });
+      rdzToast(this.getUIContext(), '歌手信息不完整，无法收藏', 2000);
       return;
     }
     const followName: string = this.artistNameText.length > 0 ? this.artistNameText : this.artistName;
     if (this.store.isFollowingArtistByName(followName)) {
       this.store.unfollowArtistByName(followName);
       this.isFavoriteArtist = false;
-      this.getUIContext().getPromptAction().showToast({ message: '已取消关注', duration: 1800 });
+      rdzToast(this.getUIContext(), '已取消关注', 1800);
       return;
     }
     const entry: FavoriteEntry = new FavoriteEntry();
@@ -1116,7 +1118,7 @@ export struct ArtistDetailPage {
     entry.time = Date.now();
     this.store.followArtistByName(entry);
     this.isFavoriteArtist = true;
-    this.getUIContext().getPromptAction().showToast({ message: '已关注歌手', duration: 1800 });
+    rdzToast(this.getUIContext(), '已关注歌手', 1800);
   }
 
   /** 拉取歌手全部歌曲（分页累加，最多 600 首）。 */

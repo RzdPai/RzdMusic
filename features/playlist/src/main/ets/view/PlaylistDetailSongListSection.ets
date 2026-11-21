@@ -15,7 +15,9 @@
 
 
 import { AppStorageV2, uiObserver } from '@kit.ArkUI';
-import { MusicAppState, SongItem } from 'musicbasic';
+import { MusicAppState, SongItem,
+  rdzToast
+} from 'musicbasic';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import {
   AppStorageKeys,
@@ -342,7 +344,7 @@ export struct PlaylistDetailSongListSection {
   }
 
   private toast(message: string): void {
-    this.getUIContext().getPromptAction().showToast({ message: message, duration: 2000 });
+    rdzToast(this.getUIContext(), message, 2000);
   }
 
   // ───────────────────── 取色底上的前景色（对比度恒定） ─────────────────────

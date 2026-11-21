@@ -441,9 +441,11 @@ export class WindowUtil {
     if (!enter) {
       this.isDarkMode = this.detectDarkMode();
     }
+    // ★ 2026-11-21（用户："你怎么又自定义颜色了，尽量用官方的"）：
+    //   **不再写死导航栏底色**（原来自定义 `#F1F3F5` / `#000000`），交给系统按深浅色自适应；
+    //   只保留"播放页要白字"这一条必要的信息（状态栏内容色）。
     this.setWindowSystemBarProperties({
-      statusBarContentColor: enter ? '#FFFFFF' : (this.isDarkMode ? '#FFFFFF' : '#000000'),
-      navigationBarColor: enter ? '#000000' : (this.isDarkMode ? '#000000' : '#F1F3F5')
+      statusBarContentColor: enter ? '#FFFFFF' : (this.isDarkMode ? '#FFFFFF' : '#000000')
     });
   }
 
@@ -454,8 +456,9 @@ export class WindowUtil {
    * @param enter True when opening full-screen player UI, false when closing.
    */
   applyPlaybackNavigationBarColor(enter: boolean): void {
+    // 同上：不写死底色（官方默认跟随主题），这里只在进入播放页时压暗系统栏
     this.setWindowSystemBarProperties({
-      navigationBarColor: enter ? '#000000' : (this.isDarkMode ? '#000000' : '#F1F3F5')
+      statusBarContentColor: enter ? '#FFFFFF' : (this.isDarkMode ? '#FFFFFF' : '#000000')
     });
   }
 
@@ -483,8 +486,7 @@ export class WindowUtil {
     //   `statusBarContentColor` 还留着播放页设的 `#FFFFFF`，日间浅底上就看不见图标了。
     //   ⇒ 一起按当前深浅色刷一遍状态栏内容色。
     this.setWindowSystemBarProperties({
-      statusBarContentColor: isDark ? '#FFFFFF' : '#000000',
-      navigationBarColor: isDark ? '#000000' : '#F1F3F5'
+      statusBarContentColor: isDark ? '#FFFFFF' : '#000000'
     });
   }
 

@@ -20,7 +20,8 @@ import {
   immersiveFromLevel,
   appBarBlurStyle,  guardPlayerBack
 , RzdSelectMenuMaterial,
-  immersiveMedium
+  immersiveMedium,
+  rdzToast
 } from 'musicbasic';
 import { AlbumRouteParam, ArtistRouteParam, BreakpointType, ThemeState, WindowUtil } from 'musicbasic';
 import { BlurStrategy, BottomBuilderShowType, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, HideMode, ScrollEffectType } from '@kit.UIDesignKit';
@@ -846,7 +847,7 @@ export struct OnlineSearchPage {
   }
 
   private toast(message: string): void {
-    this.getUIContext().getPromptAction().showToast({ message: message, duration: 2000 });
+    rdzToast(this.getUIContext(), message, 2000);
   }
 
   private sourceColor(source: string): string {
@@ -1348,7 +1349,7 @@ export struct OnlineSearchPage {
     try {
       const songs: SearchPlaylistSong[] = await PlaylistSearchApi.getPlaylistDetail(p.source, p.id);
       if (songs.length === 0) {
-        this.getUIContext().getPromptAction().showToast({ message: '歌单为空或获取失败', duration: 2000 });
+        rdzToast(this.getUIContext(), '歌单为空或获取失败', 2000);
         return;
       }
       const queue = this.appState.playQueue;
@@ -1369,7 +1370,7 @@ export struct OnlineSearchPage {
       this.getUIContext().getPromptAction().showToast(
         { message: '已添加 ' + songs.length + ' 首到播放列表', duration: 2000 });
     } catch (_err) {
-      this.getUIContext().getPromptAction().showToast({ message: '获取歌单失败', duration: 2000 });
+      rdzToast(this.getUIContext(), '获取歌单失败', 2000);
     }
   }
 
@@ -1385,7 +1386,7 @@ export struct OnlineSearchPage {
     const store = this.store;
     if (store.isFavoritePlaylist(p.source, p.id)) {
       store.removeFavoritePlaylist(p.source, p.id);
-      this.getUIContext().getPromptAction().showToast({ message: '已取消收藏', duration: 1800 });
+      rdzToast(this.getUIContext(), '已取消收藏', 1800);
       return;
     }
     const entry = new FavoriteEntry();
@@ -1405,7 +1406,7 @@ export struct OnlineSearchPage {
     try {
       const songs: SearchPlaylistSong[] = await PlaylistSearchApi.getPlaylistDetail(p.source, p.id);
       if (songs.length === 0) {
-        this.getUIContext().getPromptAction().showToast({ message: '歌单为空或获取失败', duration: 2000 });
+        rdzToast(this.getUIContext(), '歌单为空或获取失败', 2000);
         return;
       }
       const store = this.store;
@@ -1428,7 +1429,7 @@ export struct OnlineSearchPage {
       this.getUIContext().getPromptAction().showToast(
         { message: '已创建歌单「' + created.name + '」并添加 ' + added + ' 首', duration: 2200 });
     } catch (_err) {
-      this.getUIContext().getPromptAction().showToast({ message: '获取歌单失败', duration: 2000 });
+      rdzToast(this.getUIContext(), '获取歌单失败', 2000);
     }
   }
 

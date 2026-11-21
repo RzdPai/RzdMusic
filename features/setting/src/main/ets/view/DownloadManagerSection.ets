@@ -2,7 +2,8 @@ import { AppStorageV2 } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import {
   MusicStoreService,
-   AppStorageKeys, MusicAppState, PlayedSongRecord, SongTitleMarquee, ThemeState
+   AppStorageKeys, MusicAppState, PlayedSongRecord, SongTitleMarquee, ThemeState,
+  rdzToast
 } from 'musicbasic';
 import { DownloadService, DownloadStatus, DownloadTask, OnlinePlayUtil } from 'player';
 
@@ -180,7 +181,7 @@ export struct DownloadManagerSection {
     const uri: string = await DownloadService.getInstance().pickCustomDownloadDir();
     this.dirTick++;
     if (uri.length === 0) {
-      this.getUIContext().getPromptAction().showToast({ message: '未选择目录', duration: 1500 });
+      rdzToast(this.getUIContext(), '未选择目录', 1500);
     }
   }
   build() {

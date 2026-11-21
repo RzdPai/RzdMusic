@@ -4,7 +4,9 @@ import { AccountService } from 'player';
 import { HuaweiAccountService } from 'player';
 import { PlatformAccount, sourceName } from 'player';
 import { QrCodeLoginResult, QrCodeLoginState, QrLoginStatus } from 'player';
-import { AppStorageKeys, MusicStoreService, ThemeState } from 'musicbasic';
+import { AppStorageKeys, MusicStoreService, ThemeState,
+  rdzToast
+} from 'musicbasic';
 import { CapsuleSegmentedSelector } from '../view/CapsuleSegmentedSelector';
 import { HuaweiAccountCard } from './HuaweiAccountCard';
 
@@ -132,7 +134,7 @@ export struct AccountManageSheet {
         this.stopQrLogin();
         this.reloadAccounts();
         this.qrMessage = '账号已登录';
-        this.getUIContext().getPromptAction().showToast({ message: '扫码登录成功', duration: 2000 });
+        rdzToast(this.getUIContext(), '扫码登录成功', 2000);
         return;
       }
       if (result.status === QrLoginStatus.Expired || result.status === QrLoginStatus.Failed) return;

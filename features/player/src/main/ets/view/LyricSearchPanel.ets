@@ -17,7 +17,9 @@ import {
 } from '../util/LyricMatch';
 import { lxSourceLabel } from '../util/SourceDeclaredInfo';
 import { MediaService } from '../model/MediaService';
-import { MusicStoreService } from 'musicbasic';
+import { MusicStoreService,
+  rdzToast
+} from 'musicbasic';
 
 /** 一条候选：平台 + 歌 + 相似度。 */
 class LyricSearchRow {
@@ -160,7 +162,7 @@ export struct LyricSearchPanel {
   }
 
   private toast(message: string): void {
-    this.getUIContext().getPromptAction().showToast({ message: message, duration: 1800 });
+    rdzToast(this.getUIContext(), message, 1800);
   }
 
   /** 一行：歌名 + 歌手 · 专辑 + 平台标签 + 时长。 */

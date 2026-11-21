@@ -30,7 +30,9 @@ import {
   
   buildBarBlurStyle,
    guardPlayerBack
-, immersiveFlat } from 'musicbasic';
+, immersiveFlat,
+  rdzToast
+} from 'musicbasic';
 import {
   buildTitleMaterial,
   AmbientState,
@@ -222,7 +224,7 @@ export struct LocalMusicPage {
     // 导入可能跨越「切走再回来」：组件已经销毁时 getUIContext 会抛，
     // 那时提示丢掉就行，别让一个 toast 把导入流程带崩
     try {
-      this.getUIContext().getPromptAction().showToast({ message: message });
+      rdzToast(this.getUIContext(), message, 2000);
     } catch (e) {
       hilog.warn(DOMAIN, TAG, 'toast skipped: %{public}s', JSON.stringify(e));
     }
@@ -276,7 +278,7 @@ export struct LocalMusicPage {
       this.matchProgress = msg;
       this.toast(msg);
       try {
-        this.getUIContext().getPromptAction().showToast({ message: msg, duration: 3500 });
+        rdzToast(this.getUIContext(), msg, 3500);
       } catch (_e) {
         // 提示失败不影响业务（用户少看一条 Toast）
       }

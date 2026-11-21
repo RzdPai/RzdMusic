@@ -25,7 +25,9 @@ import { AmllLyricLine } from '../model/AmllTypes';
 import { AmllLyricPlayerEngine, AmllGroupState } from '../core/AmllLyricPlayerEngine';
 import { AmllCanvasLyricRenderer, AmllRenderStyle } from './AmllCanvasLyricRenderer';
 import { AmllLayoutAlignAnchor } from '../core/AmllConsts';
-import { AppStorageKeys, Logger, LyricCenterState, LyricFpsState, MusicStoreService, ShowSubLyricState, WindowUtil } from 'musicbasic';
+import { AppStorageKeys, Logger, LyricCenterState, LyricFpsState, MusicStoreService, ShowSubLyricState, WindowUtil,
+  rdzToast
+} from 'musicbasic';
 import { BusinessError, pasteboard } from '@kit.BasicServicesKit';
 import { AppStorageV2, FrameCallback, window } from '@kit.ArkUI';
 import { displaySync } from '@kit.ArkGraphics2D';
@@ -820,7 +822,7 @@ export struct AmllLyricView {
     const pasteData: pasteboard.PasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, text);
     const sysPasteboard: pasteboard.SystemPasteboard = pasteboard.getSystemPasteboard();
     sysPasteboard.setData(pasteData).then(() => {
-      this.getUIContext().getPromptAction().showToast({ message: '已复制该行歌词', duration: 2000 });
+      rdzToast(this.getUIContext(), '已复制该行歌词', 2000);
     }).catch((error: BusinessError) => {
       Logger.error('AmllLyricView', `copy lyric failed: ${error.message}`);
     });

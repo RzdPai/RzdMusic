@@ -14,7 +14,8 @@
  */
 
 import { appendPlayLog, setScreenOrientation, UsbAudioService, UsbAudioState, TabBarConfigModel,
-  immersiveMedium
+  immersiveMedium,
+  rdzToast
 } from 'musicbasic';
 import { bundleManager } from '@kit.AbilityKit';
 import { DrawableDescriptor, LayeredDrawableDescriptor } from '@kit.ArkUI';
@@ -426,12 +427,14 @@ export struct SettingsDetailPage {
           },
           contentStyle: {
             titleStyle: { mainTitleColor: $r('sys.color.font_primary') },
+            menuStyle: { iconColor: $r('sys.color.font_primary') },
             backIconStyle: { iconColor: $r('app.color.font_primary'), backgroundColor: '#1A808080' }
           }
         },
         scrollEffectStyle: {
           contentStyle: {
             titleStyle: { mainTitleColor: $r('sys.color.font_primary') },
+            menuStyle: { iconColor: $r('sys.color.font_primary') },
             backIconStyle: { iconColor: $r('app.color.font_primary'), backgroundColor: '#1A808080' }
           }
         },
@@ -625,7 +628,7 @@ export struct SettingsDetailPage {
    */
   private async runQualityProbe(onlyApiId?: string): Promise<void> {
     // ★ 2026-11-18（用户：「顺带给源测试也加一下提示」）：一轮要发很多请求，先把提示打出来。
-    this.getUIContext().getPromptAction().showToast({ message: '正在测试音源……', duration: 4000 });
+    rdzToast(this.getUIContext(), '正在测试音源……', 4000);
     let passed: number = 0;
     let total: number = 0;
     const ordered: LXUserApiInfo[] = this.orderedApiListForUi();
@@ -730,7 +733,7 @@ export struct SettingsDetailPage {
   }
 
   private toast(message: string): void {
-    this.getUIContext().getPromptAction().showToast({ message: message, duration: 2000 });
+    rdzToast(this.getUIContext(), message, 2000);
   }
 
   /** Opens the donation page in the system browser. */
@@ -1173,7 +1176,7 @@ export struct SettingsDetailPage {
       this.toast(message.length > 0 ? ('「' + api.name + '」' + message) : ('「' + api.name + '」未给出更新地址'));
       return;
     }
-    this.getUIContext().getPromptAction().showToast({ message: '正在获取更新……', duration: 3000 });
+    rdzToast(this.getUIContext(), '正在获取更新……', 3000);
     let text: string = '';
     try {
       text = await this.fetchText(updateUrl);
@@ -1534,12 +1537,12 @@ export struct SettingsDetailPage {
   private async pickCustomDir(): Promise<void> {
     const uri: string = await DownloadService.getInstance().pickCustomDownloadDir();
     if (uri.length === 0) {
-      this.getUIContext().getPromptAction().showToast({ message: '未选择目录', duration: 1500 });
+      rdzToast(this.getUIContext(), '未选择目录', 1500);
       return;
     }
     this.saveToDownloadDir = false;
     MusicStoreService.getInstance().setDownloadSaveMode('download');
-    this.getUIContext().getPromptAction().showToast({ message: '已授权下载目录，之后下载都存这里', duration: 2000 });
+    rdzToast(this.getUIContext(), '已授权下载目录，之后下载都存这里', 2000);
   }
 
   private selectSaveLocationIndex(index: number): void {

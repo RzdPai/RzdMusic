@@ -28,7 +28,8 @@ import {
   ThemeState,
   getWindowInfoState,
   WindowInfo,
-  immersiveMedium
+  immersiveMedium,
+  rdzToast
 } from 'musicbasic';
 import { DownloadUtil, DownloadTask, LXQualityOption, LXSearchSong, lxGetQualityOptionsForSongs, sourceDisplayName } from 'player';
 import type { LXBatchQualityResult } from 'player';
@@ -124,7 +125,7 @@ export struct PlaylistBatchActionBar {
   }
 
   private toast(message: string): void {
-    this.getUIContext().getPromptAction().showToast({ message: message, duration: 2000 });
+    rdzToast(this.getUIContext(), message, 2000);
   }
 
   // ─────────────────── 取色底上的前景色（与宿主那块底成对） ───────────────────

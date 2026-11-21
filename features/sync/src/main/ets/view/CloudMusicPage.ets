@@ -53,7 +53,8 @@ import {
   TitleBarConstants,
   buildTitleMaterial,
   getStatusBarTopVpFromWindowUtil,
-  guardPlayerBack
+  guardPlayerBack,
+  rdzToast
 } from 'musicbasic';
 import {
   WebDavDownloadProgress,
@@ -480,6 +481,7 @@ intent.openPlayerUi = false;
             titleStyle: {
               mainTitleColor: $r('sys.color.font_primary')
             },
+            menuStyle: { iconColor: $r('sys.color.font_primary') },
             backIconStyle: {
               iconColor: $r('sys.color.font_primary'),
               backgroundColor: '#1AFFFFFF'
@@ -491,6 +493,7 @@ intent.openPlayerUi = false;
             titleStyle: {
               mainTitleColor: $r('sys.color.font_primary')
             },
+            menuStyle: { iconColor: $r('sys.color.font_primary') },
             backIconStyle: {
               iconColor: $r('sys.color.font_primary'),
               backgroundColor: '#1AFFFFFF'
@@ -519,7 +522,7 @@ intent.openPlayerUi = false;
     if (message.length === 0) {
       return;
     }
-    this.getUIContext().getPromptAction().showToast({ message: message, duration: 2600 });
+    rdzToast(this.getUIContext(), message, 2600);
   }
 
   // ───────────────────────────────────────────── 界面

@@ -19,7 +19,8 @@ import { AppStorageV2, curves, uiObserver } from '@kit.ArkUI';
 import { AVCastPicker } from '@kit.AVSessionKit';
 import { platformLabel } from '../util/SourceDeclaredInfo';
 import { appendPlayLog, AppStorageKeys, ArtistRouteParam, BreakpointType, isWidthBreakpointLgOrXl, Logger, MusicStoreService, PlaybackPreferenceService, PlaybackIntentState, PlayedSongRecord, PlaylistDto, PlayerExpandState, RouterUrlConstants, SongItem, StyleConstants, ThemeState,
-  immersiveMedium
+  immersiveMedium,
+  rdzToast
 } from 'musicbasic';
 import { PlayerConstants } from '../constant/PlayerConstants';
 import { MusicPlayMode } from '../model/MusicData';
@@ -738,7 +739,7 @@ export struct ControlAreaComponent {
     const song: SongItem | undefined = this.currentSong();
     const title: string = song !== undefined && typeof song.title === 'string' ? song.title.trim() : '';
     if (song === undefined || title.length === 0) {
-      this.getUIContext().getPromptAction().showToast({ message: '暂无可搜索的歌曲' });
+      rdzToast(this.getUIContext(), '暂无可搜索的歌曲', 2000);
       return;
     }
     const singer: string = this.currentSinger().trim();
@@ -813,7 +814,7 @@ export struct ControlAreaComponent {
       intent.requestVersion++;
       Logger.info('[RzdQualityPolicy] explicit re-resolve requested tier=' + q);
     }
-    this.getUIContext().getPromptAction().showToast({ message: '已选择当前网络音质 ' + qualityDisplayName(q), duration: 2000 });
+    rdzToast(this.getUIContext(), '已选择当前网络音质 ' + qualityDisplayName(q), 2000);
   }
 
   /** sys.symbol.repeat | repeat_1 | shuffle per MusicPlayMode. */

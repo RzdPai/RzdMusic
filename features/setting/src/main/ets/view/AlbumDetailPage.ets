@@ -14,7 +14,9 @@
  */
 
 import { AppStorageV2, LengthMetrics, uiObserver } from '@kit.ArkUI';
-import { guardPlayerBack } from 'musicbasic';
+import { guardPlayerBack,
+  rdzToast
+} from 'musicbasic';
 import { AlbumRouteParam, AmbientState, AppStorageKeys, BreakpointType, FavoriteEntry, MusicAppState, MusicStoreService, PlayedSongRecord, RouterUrlConstants, SongTitleMarquee, ThemeState, TitleBarConstants, buildTitleMaterial, getStatusBarTopVpFromWindowUtil } from 'musicbasic';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, ScrollEffectType } from '@kit.UIDesignKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
@@ -607,14 +609,14 @@ export struct AlbumDetailPage {
     const sourceId: string = codeToSource(this.source);
     const id: string = this.albumId.length > 0 ? this.albumId : this.albumMid;
     if (id.length === 0) {
-      this.getUIContext().getPromptAction().showToast({ message: '专辑信息不完整，无法收藏', duration: 2000 });
+      rdzToast(this.getUIContext(), '专辑信息不完整，无法收藏', 2000);
       return;
     }
     const store: MusicStoreService = MusicStoreService.getInstance();
     if (store.isFavoriteAlbum(sourceId, id)) {
       store.removeFavoriteAlbum(sourceId, id);
       this.isFavoriteAlbum = false;
-      this.getUIContext().getPromptAction().showToast({ message: '已取消收藏', duration: 1800 });
+      rdzToast(this.getUIContext(), '已取消收藏', 1800);
       return;
     }
     const entry: FavoriteEntry = new FavoriteEntry();
@@ -626,7 +628,7 @@ export struct AlbumDetailPage {
     entry.time = Date.now();
     store.addFavoriteAlbum(entry);
     this.isFavoriteAlbum = true;
-    this.getUIContext().getPromptAction().showToast({ message: '已收藏专辑', duration: 1800 });
+    rdzToast(this.getUIContext(), '已收藏专辑', 1800);
   }
 
   private goBack(): void {

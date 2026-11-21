@@ -57,7 +57,9 @@ import {
   immersiveMedium,
   buildTitleMaterial,
    guardPlayerBack, PlaybackIntentState, SongItem
-, immersiveFlat } from 'musicbasic';
+, immersiveFlat,
+  rdzToast
+} from 'musicbasic';
 import {
   AlbumRouteParam, AmbientState, AppStorageKeys, ArtistRouteParam, BreakpointType, barBlurOptions,
   buildBarBlurStyle, FavoriteEntry, LocateFloatButton,
@@ -491,7 +493,7 @@ export struct RecordListPage {
       queue.push(item);
     }
     if (queue.length === 0) {
-      this.getUIContext().getPromptAction().showToast({ message: '暂无可播放歌曲' });
+      rdzToast(this.getUIContext(), '暂无可播放歌曲', 2000);
       return;
     }
     this.appState.replaceQueue(queue, 0);
@@ -612,7 +614,7 @@ intent.openPlayerUi = false;
     this.stopFramePump();
     const index: number = this.currentRecordIndex();
     if (index < 0) {
-      this.getUIContext().getPromptAction().showToast({ message: '当前没有正在播放的歌曲', duration: 1600 });
+      rdzToast(this.getUIContext(), '当前没有正在播放的歌曲', 1600);
       return;
     }
     this.pageScroller.scrollToIndex(index, true, ScrollAlign.CENTER);
@@ -959,7 +961,7 @@ intent.openPlayerUi = false;
       }
     }
     this.addSheetOpen = false;
-    this.getUIContext().getPromptAction().showToast({ message: '已添加 ' + added + ' 首', duration: 1800 });
+    rdzToast(this.getUIContext(), '已添加 ' + added + ' 首', 1800);
     this.exitSelectionMode();
   }
 

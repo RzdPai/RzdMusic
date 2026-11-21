@@ -20,7 +20,8 @@ import { util } from '@kit.ArkTS';
 import {
   appBarBlurStyle,
    guardPlayerBack, PLAYLIST_HERO_COVER_ID, shouldUseSplitDetailLayout, splitDetailCardWidthVp,
-  immersiveMedium
+  immersiveMedium,
+  rdzToast
 } from 'musicbasic';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { http } from '@kit.NetworkKit';
@@ -1430,7 +1431,7 @@ export struct PlaylistDetailPage {
 
   /** 轻提示（歌单封面相关的反馈用）。 */
   private toast(message: string): void {
-    this.getUIContext().getPromptAction().showToast({ message: message, duration: 2000 });
+    rdzToast(this.getUIContext(), message, 2000);
   }
 
   /**

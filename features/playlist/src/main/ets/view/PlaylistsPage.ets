@@ -19,7 +19,8 @@ import { common } from '@kit.AbilityKit';
 import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { appBarBlurStyle, barBlurOptions, guardPlayerBack,
-  immersiveMedium
+  immersiveMedium,
+  rdzToast
 } from 'musicbasic';
 import { AppStorageKeys, BarScrollHelper, BreakpointType, getPlaylistTransitionState, MusicAppState, ThemeState } from 'musicbasic';
 import { AmbientState, MusicStoreService, PlayedSongRecord, PlaylistDto, RouterUrlConstants, TitleBarConstants, ToplistRouteParam, buildTitleMaterial, getStatusBarTopVpFromWindowUtil, LocalCoverImage } from 'musicbasic';
@@ -517,15 +518,15 @@ export struct PlaylistsPage {
           const file: fs.File = fs.openSync(uris[0], fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
           fs.writeSync(file.fd, data.buffer as ArrayBuffer);
           fs.closeSync(file);
-          this.getUIContext().getPromptAction().showToast({ message: '已导出歌单', duration: 2000 });
+          rdzToast(this.getUIContext(), '已导出歌单', 2000);
         } catch (_err) {
-          this.getUIContext().getPromptAction().showToast({ message: '导出失败', duration: 2000 });
+          rdzToast(this.getUIContext(), '导出失败', 2000);
         }
       }).catch((_err: Object): void => {
         // user cancelled
       });
     } catch (_err) {
-      this.getUIContext().getPromptAction().showToast({ message: '无法打开保存选择器', duration: 2000 });
+      rdzToast(this.getUIContext(), '无法打开保存选择器', 2000);
     }
   }
 
@@ -567,7 +568,7 @@ export struct PlaylistsPage {
           });
           this.importing = false;
           if (list.length === 0) {
-            this.getUIContext().getPromptAction().showToast({ message: '无法解析该歌单文件', duration: 2000 });
+            rdzToast(this.getUIContext(), '无法解析该歌单文件', 2000);
           } else {
             let totalSongs: number = 0;
             for (let i: number = 0; i < list.length; i++) {
@@ -578,18 +579,18 @@ export struct PlaylistsPage {
             const msg: string = list.length === 1 ?
               ('已导入歌单《' + list[0].name + '》' + totalSongs + ' 首') :
               ('已导入 ' + list.length + ' 个歌单，共 ' + totalSongs + ' 首');
-            this.getUIContext().getPromptAction().showToast({ message: msg, duration: 2500 });
+            rdzToast(this.getUIContext(), msg, 2500);
             this.appendImportLog('[导入] ' + msg);
           }
         } catch (_err) {
           this.importing = false;
-          this.getUIContext().getPromptAction().showToast({ message: '导入失败', duration: 2000 });
+          rdzToast(this.getUIContext(), '导入失败', 2000);
         }
       }).catch((_err: Object): void => {
         // user cancelled
       });
     } catch (_err) {
-      this.getUIContext().getPromptAction().showToast({ message: '无法打开文件选择器', duration: 2000 });
+      rdzToast(this.getUIContext(), '无法打开文件选择器', 2000);
     }
   }
 
@@ -735,12 +736,12 @@ export struct PlaylistsPage {
   private async pickCoverFor(p: PlaylistDto): Promise<void> {
     const result: CoverPickResult = await pickPlaylistCover(p.id);
     if (!result.ok) {
-      this.getUIContext().getPromptAction().showToast({ message: result.message, duration: 2000 });
+      rdzToast(this.getUIContext(), result.message, 2000);
       return;
     }
     MusicStoreService.getInstance().setPlaylistCover(p.id, result.uri);
     this.appendImportLog('[封面] 歌单 ' + p.name + ' -> ' + result.uri);
-    this.getUIContext().getPromptAction().showToast({ message: result.message, duration: 2000 });
+    rdzToast(this.getUIContext(), result.message, 2000);
     // 显式重建列表：只换封面时行 key 之外的东西没变，靠 @Monitor 里的 changed 判断有时
     // 不够稳（Repeat 复用节点），这里照「重命名」那套手法把列表短暂摘掉再挂回。
     if (this.listVisible) {
@@ -833,7 +834,7 @@ export struct PlaylistsPage {
             value: '移除自定义封面',
             action: (): void => {
               MusicStoreService.getInstance().setPlaylistCover(p.id, '');
-              this.getUIContext().getPromptAction().showToast({ message: '已移除自定义封面', duration: 2000 });
+              rdzToast(this.getUIContext(), '已移除自定义封面', 2000);
             }
           },
           {

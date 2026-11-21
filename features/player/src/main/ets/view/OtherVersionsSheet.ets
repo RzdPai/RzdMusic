@@ -1,7 +1,8 @@
 import { AppStorageV2 } from '@kit.ArkUI';
 import { HdsListItemCard } from '@kit.UIDesignKit';
 import { AppStorageKeys, MusicAppState, PlaybackIntentState, SongItem, ThemeState,
-  immersiveMedium
+  immersiveMedium,
+  rdzToast
 } from 'musicbasic';
 import { LXSearchResult, LXSearchSong, lxSearch } from '../source/LXMusicSDK';
 import { lxEngineIsReady } from '../source/LXSourceEngine';
@@ -231,12 +232,12 @@ export struct OtherVersionsSheet {
 
   private replaceCurrent(song: LXSearchSong): void {
     if (!this.targetValid()) {
-      this.getUIContext().getPromptAction().showToast({ message: '当前歌曲已变化，请重新搜索' });
+      rdzToast(this.getUIContext(), '当前歌曲已变化，请重新搜索', 2000);
       this.cancel();
       return;
     }
     if (!lxEngineIsReady) {
-      this.getUIContext().getPromptAction().showToast({ message: '请先在设置中导入并选中音源' });
+      rdzToast(this.getUIContext(), '请先在设置中导入并选中音源', 2000);
       return;
     }
     const item: SongItem = new SongItem();
@@ -260,7 +261,7 @@ export struct OtherVersionsSheet {
       for (let index: number = queue.length; index <= this.targetIndex; index++) {
         const original: SongItem | undefined = this.appState.resolveSongAtQueueIndex(index);
         if (original === undefined) {
-          this.getUIContext().getPromptAction().showToast({ message: '队列歌曲已失效，未替换' });
+          rdzToast(this.getUIContext(), '队列歌曲已失效，未替换', 2000);
           return;
         }
         queue.push(index === this.targetIndex ? item : original);

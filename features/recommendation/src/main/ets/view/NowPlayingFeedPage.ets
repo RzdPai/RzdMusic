@@ -208,7 +208,9 @@ import {
   shouldUseSplitDetailLayout,
   WindowInfo,
   getWindowInfoState
-, MENU_PAD_TOP, MENU_PAD_BOTTOM, MENU_BORDER_WIDTH , immersiveMedium } from 'musicbasic';
+, MENU_PAD_TOP, MENU_PAD_BOTTOM, MENU_BORDER_WIDTH , immersiveMedium,
+  rdzToast
+} from 'musicbasic';
 import {
   BlurStrategy,
   HdsNavDestination,
@@ -2234,7 +2236,7 @@ export struct NowPlayingFeedPage {
   }
 
   private toast(message: string): void {
-    this.getUIContext().getPromptAction().showToast({ message: message, duration: 2000 });
+    rdzToast(this.getUIContext(), message, 2000);
   }
 
   // ─────────────────────────── 交互信号 ───────────────────────────

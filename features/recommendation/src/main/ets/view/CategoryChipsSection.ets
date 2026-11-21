@@ -96,13 +96,10 @@ export struct CategoryChipsSection {
           .width(this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ? 102 :
             new BreakpointType(78, 114, 134, 134).getValue(this.breakpointEnv.widthBreakpoint))
           .height(36)
-          // ★ 2026-11-21（用户："你怎么又自定义颜色了，尽量用官方的"）：
-          //   未选中胶囊**不再填自定义色**，让它透明 —— 玻璃由标题栏的 `systemMaterialEffect` 提供，
-          //   这才是官方观感；选中那枚保留实心（官方也是实心浅色胶囊）。
           .backgroundColor(
             this.recommendViewModel.selectedCategoryIndex === index ?
               $r('app.color.chip_selected_background') :
-              Color.Transparent)
+              $r('app.color.chip_unselected_background'))
           .justifyContent(FlexAlign.Center)
           .onClick(() => {
             this.recommendViewModel.selectCategory(index ?? 0);

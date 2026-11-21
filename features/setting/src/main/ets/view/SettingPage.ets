@@ -13,7 +13,9 @@
  * limitations under the License.
  */
 
-import { guardPlayerBack } from 'musicbasic';
+import { guardPlayerBack,
+  rdzToast
+} from 'musicbasic';
 import { AppStorageV2, uiObserver } from '@kit.ArkUI';
 
 import { http } from '@kit.NetworkKit';
@@ -154,7 +156,7 @@ export struct SettingPage {
   }
 
   private toast(message: string): void {
-    this.getUIContext().getPromptAction().showToast({ message: message, duration: 2000 });
+    rdzToast(this.getUIContext(), message, 2000);
   }
 
   private engineTimer: number = 0;
@@ -213,6 +215,7 @@ export struct SettingPage {
             titleStyle: {
               mainTitleColor: $r('app.color.font_primary')
             },
+            menuStyle: { iconColor: $r('sys.color.font_primary') },
             backIconStyle: {
               iconColor: $r('app.color.font_primary'),
               backgroundColor: '#1A808080'
@@ -224,6 +227,7 @@ export struct SettingPage {
             titleStyle: {
               mainTitleColor: $r('app.color.font_primary')
             },
+            menuStyle: { iconColor: $r('sys.color.font_primary') },
             backIconStyle: {
               iconColor: $r('app.color.font_primary'),
               backgroundColor: '#1A808080'

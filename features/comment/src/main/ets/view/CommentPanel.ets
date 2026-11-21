@@ -15,7 +15,9 @@
  */
 
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { appBarBlurStyle } from 'musicbasic';
+import { appBarBlurStyle,
+  rdzToast
+} from 'musicbasic';
 import {
   COMMENT_PAGE_SIZE,
   CommentKind,
@@ -288,7 +290,7 @@ export struct CommentPanel {
   // ---------------------------------------------------------------------------
 
   private toast(message: string): void {
-    this.getUIContext().getPromptAction().showToast({ message: message, duration: 2000 });
+    rdzToast(this.getUIContext(), message, 2000);
   }
 
   /**
