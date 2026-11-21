@@ -165,10 +165,21 @@ export async function probeScriptUpdate(updateUrl: string, currentVersion: strin
   }
   const request: http.HttpRequest = http.createHttp();
   try {
+    // ★ 2026-11-21（用户："检查更新有点问题，怀疑是我们的屏蔽更新导致"）：
+    //   探测复用的是**脚本自己那条 URL**，但很多音源站会用 UA / Referer 做风控 ——
+    //   我们裸请求会被拒（表现就是"无法连接到服务器"）。
+    //   这里带上与脚本浏览器环境一致的 UA/Accept，让"更新检查"这条路**独立于拦截逻辑**：
+    //   播放时脚本的版本检查照旧被拦（可用性不受影响），检查更新时由我们**真发**一次。
     const resp: http.HttpResponse = await request.request(updateUrl, {
       method: http.RequestMethod.GET,
       connectTimeout: timeoutMs,
-      readTimeout: timeoutMs
+      readTimeout: timeoutMs,
+      header: {
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) ' +
+          'Chrome/120.0.0.0 Mobile Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Cache-Control': 'no-cache'
+      }
     });
     if (resp.responseCode !== 200) {
       out.error = '更新接口返回 HTTP ' + resp.responseCode;

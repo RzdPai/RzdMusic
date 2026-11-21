@@ -100,6 +100,11 @@ export struct CategoryChipsSection {
             this.recommendViewModel.selectedCategoryIndex === index ?
               $r('app.color.chip_selected_background') :
               $r('app.color.chip_unselected_background'))
+          .borderRadius(this.windowInfo.immersiveDecor === ImmersiveType.IMMERSIVE ? 8 : 21)
+          // ★ 2026-11-21 修复回归：上一轮批量替换把 `borderRadius` 和这行材质一起吞掉了，
+          //   导致胶囊变方形、吸顶也没有玻璃。材质只挂未选中那枚（选中是实心浅色胶囊）。
+          .systemMaterial(this.recommendViewModel.selectedCategoryIndex === index ?
+            undefined : immersiveFlat())
           .justifyContent(FlexAlign.Center)
           .onClick(() => {
             this.recommendViewModel.selectCategory(index ?? 0);
