@@ -316,6 +316,14 @@ export struct OnlineSearchPage {
    *   目标页第一帧 `onAreaChange` 还没回调，`ImmersiveSurface` 宽度为 0 ⇒ 飞行前几帧**没有玻璃**，
    *   只剩 `Search` 的透明底 ⇒ 看起来"变灰"。给一个屏幕宽度的合理估算值兜住首帧。
    */
+  /**
+   * 玻璃底板宽度：**首帧就要接近真实值**。
+   * ★ 2026-11-21（用户："进入搜索页时搜索框会变灰，然后变回去"）：
+   *   `ImmersiveSurface` 的壳要按这个数值开 `barWidth`；初值偏离真实值太多时，
+   *   第一帧的玻璃要么不画、要么画错宽，等 `onAreaChange` 回来才纠正 ⇒ 观感就是"灰一下"。
+   *   用一个接近真值的估算（屏宽 - 返回钮 40 - 左右留白 32 - 与 Select 的间距 8 - Select 约 96），
+   *   再由 `onAreaChange` 精确覆盖。
+   */
   @Local searchBoxWidthVp: number = 300;
   @Local titleWidthVp: number = 0;
   @Local typeBarBottomVp: number = 0;
@@ -642,6 +650,18 @@ export struct OnlineSearchPage {
     morphLog('target aboutToAppear');
     this.onShowChange(true);
     this.refreshContentPaddingTop();
+    // 首帧底板宽度估算：屏宽 - 返回钮 40 - 左右留白 32 - 间距 8 - 平台选择约 96
+    try {
+      const wPx: number = WindowUtil.getInstance().mainWindowInfo.windowSize.width;
+      if (wPx > 0) {
+        const est: number = px2vp(wPx) - 40 - 32 - 8 - 96;
+        if (est > 80) {
+          this.searchBoxWidthVp = est;
+        }
+      }
+    } catch (_e) {
+      // 拿不到窗口宽度就沿用默认值
+    }
     // ★ 2026-10-24（甲方：「切换到搜索页会有点卡」）：
     //   `getSearchHistory()` / `getSearchSource()` 都是 **preferences（跨进程 IPC）同步读**，
     //   原来直接压在 `aboutToAppear` 里 = 正好卡在长镜头转场的第一帧上。
