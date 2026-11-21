@@ -1178,7 +1178,11 @@ export struct RecommendPage {
     .backgroundColor($r('app.color.background_secondary'))
     // 官方一镜到底示例里源页也挂这个（PageOne 的 `NavDestination().transition(OPACITY)`）：
     // 推入时源页保持不动（animated=false），返回时它淡回来，不会"啪"地出现。
-    .transition(TransitionEffect.OPACITY)
+    // ★ 2026-11-21（H1 修法）：**页面级不能用全透明淡入淡出** —— 官方示例那样写是为了
+    //  "让 out 节点别被立即析构"，但两页同时 OPACITY 会让中间几帧都半透明，
+    //  露出窗口底色 ⇒ 整屏发灰（夜间看不出，日间明显）。
+    //  改成 0.99：节点仍然"可见地"存在（防析构、共享元素能跑），但视觉上不淡出。
+    .transition(TransitionEffect.opacity(0.99))
   }
 
   pageTransition() {
