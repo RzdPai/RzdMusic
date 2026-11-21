@@ -1,6 +1,8 @@
 import { HdsListItemCard } from '@kit.UIDesignKit';
 import { AppStorageV2 } from '@kit.ArkUI';
-import { AppStorageKeys, Logger, ThemeState } from 'musicbasic';
+import { AppStorageKeys, Logger, ThemeState,
+  immersiveMedium
+} from 'musicbasic';
 import { syncManager } from '../core/SyncManager';
 import { WebDavBackupService, WebDavConfig } from '../core/WebDavBackupService';
 
@@ -59,6 +61,7 @@ export struct WebDavBackupCard {
       WebDavBackupService.saveConfig(this.config());
       this.pendingText = await WebDavBackupService.fetch(this.config(), this.fileName);
       const result = await this.getUIContext().getPromptAction().showDialog({
+        systemMaterial: immersiveMedium(),
         title: '确认覆盖本机数据',
         message: '恢复将使用备份中的设置和歌单覆盖本机对应数据，不合并（自定义音源除外：按 id 保守合并，不覆盖本机已有的同 id 音源，也不删除本机独有的音源）。请先备份当前数据；恢复期间请勿编辑歌单或切换同步。',
         buttons: [{ text: '取消', color: '#808080' }, { text: '覆盖恢复', color: '#E53935' }]

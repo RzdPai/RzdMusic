@@ -836,6 +836,8 @@ export struct SettingsDetailPage {
       ' url=' + info.updateUrl + ' err=' + info.error);
     if (info.hasUpdate) {
       this.getUIContext().getPromptAction().showDialog({
+        // ★ 2026-11-21（用户："这种弹窗好像也能接入光感"）：ShowDialogOptions.systemMaterial
+        systemMaterial: immersiveMedium(),
         title: '发现新版本',
         message: (info.message.length > 0 ? info.message : '有新版本可用') +
           (info.updateUrl.length > 0 ? ('\n' + info.updateUrl) : ''),
@@ -864,6 +866,8 @@ export struct SettingsDetailPage {
         ' hasUpdate=' + probe.hasUpdate + ' err=' + probe.error);
       if (probe.hasUpdate) {
         this.getUIContext().getPromptAction().showDialog({
+          // ★ 2026-11-21（用户："这种弹窗好像也能接入光感"）：ShowDialogOptions.systemMaterial
+          systemMaterial: immersiveMedium(),
           title: '发现新版本',
           message: (probe.message.length > 0 ? probe.message : '有新版本可用') +
             (probe.updateUrl.length > 0 ? ('\n' + probe.updateUrl) : ''),
@@ -889,6 +893,8 @@ export struct SettingsDetailPage {
       // 连代打都失败：说清"查不了"以及原因，并留一个可手动打开的线索
       const canOpen: boolean = /^https?:\/\//.test(info.blockedUrl);
       this.getUIContext().getPromptAction().showDialog({
+        // ★ 2026-11-21（用户："这种弹窗好像也能接入光感"）：ShowDialogOptions.systemMaterial
+        systemMaterial: immersiveMedium(),
         title: '无法检查该音源的更新',
         message: '「' + api.name + '」的版本检查已被应用拦截（为了"未更新也能用"），' +
           '代办查询也没有成功。\n' +
@@ -979,6 +985,8 @@ export struct SettingsDetailPage {
       appendPlayLog('[RzdSourceUpdate] ' + api.name + ' 脚本上报: ' + log.substring(0, 120) +
         (url.length > 0 ? ' url=' + url.substring(0, 80) : ''));
       this.getUIContext().getPromptAction().showDialog({
+        // ★ 2026-11-21（用户："这种弹窗好像也能接入光感"）：ShowDialogOptions.systemMaterial
+        systemMaterial: immersiveMedium(),
         title: '「' + api.name + '」的更新提示',
         message: log + (url.length > 0 ? ('\n\n下载 / 发布页：\n' + url) : ''),
         buttons: url.length > 0
@@ -1009,6 +1017,8 @@ export struct SettingsDetailPage {
         ' hasUpdate=' + probe.hasUpdate + ' url=' + probe.updateUrl.substring(0, 80));
       if (probe.hasUpdate) {
         this.getUIContext().getPromptAction().showDialog({
+          // ★ 2026-11-21（用户："这种弹窗好像也能接入光感"）：ShowDialogOptions.systemMaterial
+          systemMaterial: immersiveMedium(),
           title: '发现新版本',
           message: (probe.message.length > 0 ? probe.message : '有新版本可用') +
             (probe.updateUrl.length > 0 ? ('\n\n下载 / 发布页：\n' + probe.updateUrl) : ''),
@@ -1045,6 +1055,8 @@ export struct SettingsDetailPage {
     if (lines.length > 0) {
       appendPlayLog('[RzdSourceUpdate] ' + api.name + ' 脚本自查打印 ' + lines.length + ' 行');
       this.getUIContext().getPromptAction().showDialog({
+        // ★ 2026-11-21（用户："这种弹窗好像也能接入光感"）：ShowDialogOptions.systemMaterial
+        systemMaterial: immersiveMedium(),
         title: '「' + api.name + '」的更新检查结果',
         message: lines.join('\n'),
         buttons: [{ text: '知道了', color: this.themeState.color }]
@@ -1127,6 +1139,8 @@ export struct SettingsDetailPage {
     if (latest.length === 0) {
       // 拿不到版本号：不瞎猜「是否有新版」，让用户能自己看
       this.getUIContext().getPromptAction().showDialog({
+        // ★ 2026-11-21（用户："这种弹窗好像也能接入光感"）：ShowDialogOptions.systemMaterial
+        systemMaterial: immersiveMedium(),
         title: '已重新拉取该音源',
         message: '但没从脚本头部解析到 @version，无法判断是否有新版。\n' +
           '可以据此地址重新导入：\n' + srcUrl,
@@ -1139,6 +1153,8 @@ export struct SettingsDetailPage {
       return;
     }
     this.getUIContext().getPromptAction().showDialog({
+      // ★ 2026-11-21（用户："这种弹窗好像也能接入光感"）：ShowDialogOptions.systemMaterial
+      systemMaterial: immersiveMedium(),
       title: '发现新版本',
       message: '「' + api.name + '」当前 ' + api.version + '，最新 ' + latest + '。\n' +
         '可以直接就地更新（音源 id 与你的设置都会保留）。',
