@@ -3003,12 +3003,7 @@ export struct OnlineSearchPage {
     // 没有 HDS 的实色背板，也不会在 pop 时被标题栏子树拆解拖累转场。
     .hideTitleBar(true)
     .hideBackButton(true)
-    // ★ 2026-11-21（用户线索："进入搜索页时搜索框会变灰，随后变回正常；退出时一直正常"）：
-    //   根因指向**首帧还没有材质**那几十毫秒 —— 搜索框只有半透明底，叠在**灰色页面底色**
-    //   （`background_secondary` #F1F3F5）上就显灰；材质一画出来就"变回去"。
-    //   把页面底色换成**白**（`sys.color.background_primary`）：首帧即使没材质，也是白底上的白纱，
-    //   与最终玻璃观感几乎一致 ⇒ 不再出现"灰 → 正常"的跳变。
-    .backgroundColor($r('sys.color.background_primary'))
+    .backgroundColor($r('app.color.background_secondary'))
     // ★★ 用户 2026-10-11：「顶栏标题错位的问题还在，你应该参考一下其他显示正常的页面是怎么写的」。
     //   逐页对比后：显示正常的 MinePage / RecommendPage **都没有** expandSafeArea，
     //   而所有标题偏低的页面都有 ⇒ 照正常页面去掉它（官方语义：expandSafeArea 只延伸**绘制区**，
