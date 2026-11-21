@@ -187,7 +187,8 @@ export function dumpMaterialFacts(): void {
     Logger.info('[RzdMaterial] facts getMaterialInfo failed: ' + JSON.stringify(err).substring(0, 120));
   }
   try {
-    Logger.info(`[RzdMaterial] facts supported=${uiMaterial.isImmersiveMaterialSupported()}`);
+    Logger.info(`[RzdMaterial] facts supported=${uiMaterial.isImmersiveMaterialSupported()}` +
+      ` level=${uiMaterial.getGlobalMaterialLevel()}`);
   } catch (err) {
     Logger.info('[RzdMaterial] facts isSupported failed');
   }
