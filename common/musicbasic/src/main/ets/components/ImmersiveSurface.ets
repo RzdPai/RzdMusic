@@ -80,8 +80,12 @@ export struct ImmersiveSurface {
       // 材质层：空 HdsTabs 壳（只为了那一条悬浮栏的 systemMaterialEffect）
       HdsTabs({ barPosition: BarPosition.End, index: 0 }) {
         TabContent() {
-          Column()
+          // ★ 2026-11-21（用户："返回、搜索框、播放条都发灰，但平台切换是正常白"）：
+          //   灰底来自 `TabContent` 的**系统表面色** —— 它默认不是透明的。
+          //   这里把内容区涂成透明，只让悬浮栏那条材质可见。
+          Column().backgroundColor(Color.Transparent)
         }
+        .backgroundColor(Color.Transparent)
         .height(this.surfaceHeight)
         .tabBar(this.emptyTabBar())
       }
@@ -105,6 +109,7 @@ export struct ImmersiveSurface {
         thermoCtrl: true,
         barOpacity: 1
       })
+      .backgroundColor(Color.Transparent)
       .scrollable(false)
       .onContentWillChange(() => false)
       .width(this.surfaceWidth)
