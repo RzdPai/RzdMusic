@@ -52,7 +52,10 @@ export struct HomeSearchRow {
             // 形变过程中材质可能来不及渲染 ⇒ 用同一份半透明玻璃色兜底，避免"中途变灰"
             // 动画期间材质不渲染 ⇒ 兜底用实底卡片色（半透明叠白页会发灰）
             // 同搜索页：只在动画期间用实底兜底，平时透明（否则框是纯白不透明）
-            fallbackColor: Color.Transparent
+            fallbackColor: Color.Transparent,
+            // ★ 2026-11-22：材质之上那层白纱（与搜索页那端、与平台切换 Select 同一份资源）。
+            //   两端不同色会在一镜到底中途看到颜色跳变。
+            washColor: $r('app.color.immersive_glass_overlay')
           }) {
             Column()
           }

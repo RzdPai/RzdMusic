@@ -1919,10 +1919,15 @@ export struct OnlineSearchPage {
   private searchRow() {
     Row({ space: 10 }) {
       // 返回按钮：底板走 ImmersiveSurface（绕过 API 26 生效范围限制）
+      // ★ 2026-11-22（用户："我是想让你把那几个按钮和平台切换对齐"）：
+      //   这一排四颗（返回 / 搜索框 / 平台切换 / 播放条）要**同一套观感**。
+      //   平台切换是官方 `Select`：材质在下 + `immersive_glass_overlay` 白纱在上 + 材质自带投影。
+      //   ⇒ 壳也补同一层纱（`washColor` 用同一份资源）并放开根裁切露出材质投影。
       ImmersiveSurface({
         surfaceWidth: 40,
         surfaceHeight: 40,
         fallbackColor: Color.Transparent,
+        washColor: $r('app.color.immersive_glass_overlay'),
         onTap: (): void => {
           this.closeSearch();
         }
@@ -1942,7 +1947,10 @@ export struct OnlineSearchPage {
           surfaceHeight: 40,
           surfaceRadius: 20,  // = 高度 40 的一半，与首页 `SEARCH_FIELD_H / 2` 同值
           // 兜底透明（实底会盖住材质；发灰问题另行定位）
-          fallbackColor: Color.Transparent
+          fallbackColor: Color.Transparent,
+          // ★ 2026-11-22：与平台切换（Select）同一套观感 —— 材质之上那层白纱。
+          //   首页那端（`HomeSearchRow`）也要传同一份，否则一镜到底中途会看到颜色跳变。
+          washColor: $r('app.color.immersive_glass_overlay')
         }) {
           Column()
         }

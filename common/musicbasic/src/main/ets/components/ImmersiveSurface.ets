@@ -49,6 +49,16 @@ export struct ImmersiveSurface {
   @Prop surfaceRadius: number = -1;
   /** 不支持材质的设备用这个底色兜底 */
   @Prop fallbackColor: ResourceColor = Color.Transparent;
+  /**
+   * 材质**之上**那层纱（默认不加）。
+   *
+   * ★ 2026-11-22：官方 `Select` 这类组件开材质后，结构是「材质在下 + `backgroundColor` 在上」，
+   * 所以它看起来比"纯材质"白一层、而且自带投影。用户要求"把那几个按钮和平台切换对齐" ⇒
+   * 需要对齐的点位传 `$r('app.color.immersive_glass_overlay')`（与 Select 的底色同一份资源），
+   * 观感就与平台切换一致：白一层 + 有投影。
+   * 默认 `Color.Transparent`（不加纱）—— 播放页盖在封面上的浮钮等点位不受影响。
+   */
+  @Prop washColor: ResourceColor = Color.Transparent;
   /** 点击回调（壳不抢事件，事件落在这层） */
   onTap?: () => void;
   /** 内容 */
@@ -134,6 +144,24 @@ export struct ImmersiveSurface {
       .height(this.surfaceHeight)
       .hitTestBehavior(HitTestMode.None)
 
+      // ★ 2026-11-22（用户："我是想让你把那几个按钮和平台切换对齐"）：
+      //   上一轮我把平台切换（官方 `Select`）"降级"成旁两颗的观感 —— 方向错了。
+      //   用户要的是**反过来**：让返回/搜索框这几颗长成平台切换的样子。
+      //   平台切换为什么"更白 + 有投影"（有据可查）：
+      //     ① 材质层在**下**、`backgroundColor` 那层 20% 白纱在**上** ⇒ 白一层；
+      //     ② 材质 `applyShadow` 默认 true ⇒ 自带投影。
+      //   我们这颗壳的问题是 ① 根本没有那层纱、② 投影被根节点的 `clip(true)` 裁掉了。
+      //   ⇒ 补一层纱（`washColor`，默认透明＝不加；要对齐的点位传 `immersive_glass_overlay`），
+      //     并把根的裁切去掉，让**材质自带的投影**能画到胶囊外面（圆角由各层自己裁）。
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(this.washColor)
+        .borderRadius(this.radiusVp(), RenderStrategy.OFFSCREEN)
+        .clip(true)
+        .hitTestBehavior(HitTestMode.None)
+        .accessibilityLevel('no')
+
       // ★ 2026-11-20（用户："光斑能不能用官方属性"）：
       //   官方光感反馈是 `uiMaterial.ImmersiveMaterial.lightEffect`（`.systemMaterial()` 的字段）。
       //   壳里这一层**再挂一次**：若能渲染，跟随手指的光就由**系统**给（比自绘光斑准），
@@ -154,26 +182,38 @@ export struct ImmersiveSurface {
       //   系统材质本身只负责"玻璃"，按下/拖动时的**形变**与**跟随触点的光晕**要自己做 ——
       //   与参考工程 `qingye-reader` 的 `ImmersiveMaterialSurface` 同一做法：
       //   一层 radialGradient 圆斑，中心跟随触点，透明度按下渐显（160ms Friction）。
-      Row()
-        .width(this.surfaceHeight * 2.4)
-        .height(this.surfaceHeight * 2.4)
-        .position({ x: this.touchX - this.surfaceHeight * 1.2, y: this.touchY - this.surfaceHeight * 1.2 })
-        .radialGradient({
-          center: [this.surfaceHeight * 1.2, this.surfaceHeight * 1.2],
-          radius: this.surfaceHeight * 1.2,
-          // ★ 2026-11-20（用户："受光看不太出来"）：光斑太淡 ⇒ 提亮 + 加一圈内亮环，
-          //   观感接近 legado 那种"手指按住有一团光跟着走"。
-          colors: [['#B3FFFFFF', 0], ['#4DFFFFFF', 0.45], [Color.Transparent, 1]]
-        })
-        .opacity(this.touching ? 1 : 0)
-        .animation({ duration: 160, curve: Curve.Friction })
-        .hitTestBehavior(HitTestMode.None)
-        .accessibilityLevel('no')
+      // ★ 2026-11-22：光斑本身是胶囊的 2.4 倍大，原来靠**根节点**的 `clip(true)` 裁成胶囊形状；
+      //   根节点为了露出材质投影已经不裁了 ⇒ 光斑必须自己裁（否则光会溢到胶囊外面）。
+      Stack({ alignContent: Alignment.TopStart }) {
+        Row()
+          .width(this.surfaceHeight * 2.4)
+          .height(this.surfaceHeight * 2.4)
+          .position({ x: this.touchX - this.surfaceHeight * 1.2, y: this.touchY - this.surfaceHeight * 1.2 })
+          .radialGradient({
+            center: [this.surfaceHeight * 1.2, this.surfaceHeight * 1.2],
+            radius: this.surfaceHeight * 1.2,
+            // ★ 2026-11-20（用户："受光看不太出来"）：光斑太淡 ⇒ 提亮 + 加一圈内亮环，
+            //   观感接近 legado 那种"手指按住有一团光跟着走"。
+            colors: [['#B3FFFFFF', 0], ['#4DFFFFFF', 0.45], [Color.Transparent, 1]]
+          })
+          .opacity(this.touching ? 1 : 0)
+          .animation({ duration: 160, curve: Curve.Friction })
+          .hitTestBehavior(HitTestMode.None)
+          .accessibilityLevel('no')
+      }
+      .width('100%')
+      .height('100%')
+      .borderRadius(this.radiusVp(), RenderStrategy.OFFSCREEN)
+      .clip(true)
+      .hitTestBehavior(HitTestMode.None)
     }
     .width(this.surfaceWidth)
     .height(this.surfaceHeight)
     .borderRadius(this.radiusVp(), RenderStrategy.OFFSCREEN)
-    .clip(true)
+    // ★ 2026-11-22（对齐平台切换）：**不要在这里 clip** —— 裁了就等于把材质自带的投影切掉，
+    //   同一排里就只有官方 `Select` 那颗带投影（用户："他有阴影，格格不入"）。
+    //   形状改由**每一层自己裁**（兜底层 / 白纱层 / 内容层 / 光斑层都各自 `borderRadius + clip`）。
+    .clip(false)
     // ★★★★ 2026-11-20 最终结论（用户）：**形变是 API 26 官方自带的行为** ——
     //   "API 23 上不设置形变按钮就是硬的；API 26 不设置 = 默认形变"。
     //   所以这里**什么位移/缩放都不要写**：自绘的 scale/translate 只会破坏官方形变
