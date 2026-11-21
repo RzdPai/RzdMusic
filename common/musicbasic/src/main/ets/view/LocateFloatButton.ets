@@ -50,7 +50,12 @@ const TAG: string = 'RzdLocateGrip';
  */
 @ComponentV2
 export struct LocateFloatButton {
-  /** 图标（默认与播放列表那颗定位按钮同一个 SVG）。 */
+  /**
+   * 图标：**系统符号**（用户 2026-11-21："我不是说了不要自绘图标，我是让你把这个图标改成官方的"）。
+   * 用 `sys.symbol.music_note_list`（"当前播放列表"语义，与播放列表那颗一致，官方符号一定存在）。
+   */
+  @Param iconName: Resource = $r('sys.symbol.music_note_list');
+  /** 旧的自绘 SVG 参数（保留兼容，已不使用）。 */
   @Param icon: Resource = $r('app.media.ic_locate_current');
   /** 图标着色（一般传 `ThemeState.color`）。 */
   @Param tint: ResourceColor = $r('sys.color.font_primary');
@@ -161,17 +166,17 @@ export struct LocateFloatButton {
       surfaceHeight: 40,
       fallbackColor: $r('app.color.immersive_glass_overlay'),
       onTap: (): void => {
+        // 用户 2026-11-21：历史/收藏两页**亮度要一致** ⇒ 不再用 clickable 调透明度；
+        // 没有当前歌曲时点不动即可（这里直接挡掉）。
         if (this.clickable) {
           hilog.info(DOMAIN, TAG, 'tap side=%{public}s', this.rightSide ? 'right' : 'left');
           this.onTap();
         }
       }
     }) {
-      Image(this.icon)
-        .width(22)
-        .height(22)
-        .fillColor(this.tint)
-        .opacity(this.clickable ? 1 : 0.45)
+      SymbolGlyph(this.iconName)
+        .fontSize(20)
+        .fontColor([this.tint])
     }
   }
 
