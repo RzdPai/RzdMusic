@@ -1933,7 +1933,31 @@ export struct OnlineSearchPage {
           .accessibilityText('返回')
       }
 
-      this.SearchInputBar()
+      // ★ 2026-11-21（用户："搜索框加入光感"）：`Search` 吃不到材质 ⇒ 外面包一层玻璃底板。
+      //   ⚠️ 形变（`geometryTransition`）仍然只作用在 `Search` 节点上，底板不参与动画 ——
+      //      飞起来的过程中底板停在原位，落位后才与框重合。
+      Stack({ alignContent: Alignment.Center }) {
+        ImmersiveSurface({
+          surfaceWidth: this.searchBoxWidthVp,
+          surfaceHeight: 40,
+          surfaceRadius: 20,  // = 高度 40 的一半，与首页 `SEARCH_FIELD_H / 2` 同值
+          fallbackColor: $r('app.color.immersive_glass_overlay')
+        }) {
+          Column()
+        }
+        this.SearchInputBar()
+      }
+      .layoutWeight(1)
+      .height(40)
+      // ★ 2026-11-21（用户："又有玻璃又有一镜到底"）：把 `geometryTransition` 从 `Search`
+      //   **移到这层 Stack** 上 —— 玻璃底板与文字在同一个形变节点里，整块一起飞。
+      .geometryTransition('wanting_search_field')
+      .onAreaChange((_o: Area, n: Area): void => {
+        const w: number = Number(n.width);
+        if (w > 0 && Math.abs(w - this.searchBoxWidthVp) > 0.5) {
+          this.searchBoxWidthVp = w;
+        }
+      })
 
       // ★ 2026-10-31（用户：光感优先 + 不要对勾、要颜色高亮）：切换平台改用官方 Select
       //   参照 qingye-reader：Select 的选项用 selectedOptionBgColor 高亮（不是 ✓），
@@ -2162,10 +2186,9 @@ export struct OnlineSearchPage {
       //   在它身上挂实时模糊 = 长镜头全程重算模糊 ⇒ 正是甲方说的"切到搜索页有点卡"。
       //   ⇒ 改用**实底卡片背板**：`card_background`（浅 #FFFFFF / 深 #1C1D1F）+ 0.5vp 描边。
       //   ⚠️ 首页那端（`HomeSearchRow`）必须保持**同一套**背板，否则形变中途会看到颜色跳变。
-      // ★ 2026-11-21（用户："动画过程中颜色不一样（变灰），比没有玻璃更影响观感"）：
-      //   放弃"玻璃底板 + 一镜到底"的组合 —— `HdsTabs` 壳在转场子树里会带出灰底。
-      //   ⇒ 回到**半透明底 + geo id 都在 `Search` 自己身上**（不跳色，只是没有真材质）。
-      .backgroundColor($r('app.color.immersive_glass_overlay'))
+      // ★ 2026-11-21（用户："搜索框加入光感"）：`Search` 不在官方材质白名单里，
+      //   body 里挂 `.systemMaterial()` 不渲染 ⇒ 背景交出去，由外面的 `ImmersiveSurface` 提供玻璃。
+      .backgroundColor(Color.Transparent)
       .borderRadius(20)
       .clip(true)
       // 占位色与首页那端**同一套**：两端不同色就会在形变瞬间看到"白字突然变灰"。
