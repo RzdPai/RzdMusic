@@ -3054,11 +3054,7 @@ export struct OnlineSearchPage {
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     // 官方一镜到底示例里目标页也挂这个（PageTwo 的 `NavDestination().transition(OPACITY)`）：
     // 配合 push(false) + animateTo，页面自己淡入，看起来只剩搜索框在飞。
-    // ★ 2026-11-21（H1 修法）：**页面级不能用全透明淡入淡出** —— 官方示例那样写是为了
-    //  "让 out 节点别被立即析构"，但两页同时 OPACITY 会让中间几帧都半透明，
-    //  露出窗口底色 ⇒ 整屏发灰（夜间看不出，日间明显）。
-    //  改成 0.99：节点仍然"可见地"存在（防析构、共享元素能跑），但视觉上不淡出。
-    .transition(TransitionEffect.opacity(0.99))
+    .transition(TransitionEffect.OPACITY)
   }
 }
 
