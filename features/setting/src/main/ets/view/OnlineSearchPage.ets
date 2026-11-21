@@ -1943,6 +1943,9 @@ export struct OnlineSearchPage {
       }
       .layoutWeight(1)
       .height(40)
+      // ★ 2026-11-21（用户："又有玻璃又有一镜到底"）：把 `geometryTransition` 从 `Search`
+      //   **移到这层 Stack** 上 —— 玻璃底板与文字在同一个形变节点里，整块一起飞。
+      .geometryTransition('wanting_search_field')
       .onAreaChange((_o: Area, n: Area): void => {
         const w: number = Number(n.width);
         if (w > 0 && Math.abs(w - this.searchBoxWidthVp) > 0.5) {
@@ -2197,7 +2200,6 @@ export struct OnlineSearchPage {
         icon: { size: 17, color: $r('sys.color.font_secondary') }
       })
       .layoutWeight(1)
-      .geometryTransition('wanting_search_field')
       .transition(TransitionEffect.opacity(0.99))
       .defaultFocus(true)
       .focusOnTouch(true)

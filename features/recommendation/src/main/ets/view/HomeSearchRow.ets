@@ -1,5 +1,5 @@
 import { AppStorageV2 } from '@kit.ArkUI';
-import { AmbientState, AppStorageKeys, appendPlayLog, Logger, immersiveFromLevel } from 'musicbasic';
+import { AmbientState, AppStorageKeys, appendPlayLog, Logger, ImmersiveSurface } from 'musicbasic';
 
 /** 一镜到底诊断：同时写 HiLog 与**应用内运行日志**（设置→运行日志，无设备时只能靠它取证）。 */
 function morphLog(message: string): void {
@@ -22,6 +22,7 @@ export struct HomeSearchRow {
    * ★ 2026-11-02：光感强度档位（与标题栏 `buildTitleMaterial` 同一张表）。
    * 首页这端与搜索页那端必须**同一档**，否则一镜到底形变途中能看出材质厚度跳变。
    */
+  @Local fieldWidthVp: number = 0;
   @Local ambientState: AmbientState =
     AppStorageV2.connect(AmbientState, AppStorageKeys.AMBIENT_STATE, () => new AmbientState())!;
 
@@ -37,16 +38,27 @@ export struct HomeSearchRow {
         //   飞起来就只有框里的文字、框本身不动（甲方原话："只有搜索框里的文字有动画"）。
         //   官方示例就是把背景直接挂在 `Search` 上（`.backgroundColor('#0D000000')`），这里照抄：
         //   背景/圆角/高度全部落在 `Search` 自己身上，两端同一套。
+        // ★★ 2026-11-21（用户："又有玻璃又有一镜到底"）：把 `Search` 包进 Stack，
+        //   **geo id 挂 Stack**，玻璃底板与文字在同一个形变节点里 ⇒ 整块一起飞。
+        Stack({ alignContent: Alignment.Center }) {
+          ImmersiveSurface({
+            surfaceWidth: this.fieldWidthVp,
+            surfaceHeight: SEARCH_FIELD_H,
+            surfaceRadius: SEARCH_FIELD_H / 2,
+            fallbackColor: Color.Transparent
+          }) {
+            Column()
+          }
         Search({ placeholder: '艺人、歌曲或专辑' })
+          .width('100%')
           .height(SEARCH_FIELD_H)
           // ★ 2026-10-24（甲方：「搜索框现在半透明的不是很好看」）：改**实底卡片背板**，
           //   与搜索页那端（`OnlineSearchPage.SearchInputBar`）**逐字同一套**：
           //   `card_background` + 0.5vp 描边。两端不同色会在长镜头中途看出颜色跳变。
           // 与搜索页那端保持同一套：光感 + 半透明底（否则形变途中颜色会跳）
-          .systemMaterial(immersiveFromLevel(this.ambientState.level))
           // ★ 2026-11-15（合并 PR #16）：底色改深浅色自适应资源（浅色白纱 / 深色黑纱）。
           //   与搜索页那端（`OnlineSearchPage`）**同一资源** ⇒ 形变中途仍无颜色跳变。
-          .backgroundColor($r('app.color.immersive_glass_overlay'))
+          .backgroundColor(Color.Transparent)
           .borderRadius(SEARCH_FIELD_H / 2)
           .border({ width: 0.5, color: $r('sys.color.comp_divider') })
           .clip(true)
@@ -61,11 +73,9 @@ export struct HomeSearchRow {
             style: CancelButtonStyle.INPUT,
             icon: { size: 17, color: $r('sys.color.font_secondary') }
           })
-          .layoutWeight(1)
           .focusable(false)
           .focusOnTouch(false)
           .defaultFocus(false)
-          .geometryTransition(SEARCH_GEO_ID, { follow: true })
           // 诊断用：源节点在 push/pop 时是"保留"还是"重建"——退出没动画的关键判据。
           .onAppear((): void => {
             morphLog('source appear');
@@ -83,6 +93,16 @@ export struct HomeSearchRow {
               this.onOpenSearch();
             }
           })
+        }
+        .height(SEARCH_FIELD_H)
+        .width('100%')
+        .geometryTransition(SEARCH_GEO_ID, { follow: true })
+        .onAreaChange((_o: Area, area: Area): void => {
+          const w: number = Number(area.width);
+          if (w > 0 && Math.abs(w - this.fieldWidthVp) > 0.5) {
+            this.fieldWidthVp = w;
+          }
+        })
 
         // 识别歌曲按钮已移到标题栏菜单（2026-11-04 甲方要求）
       }
