@@ -17,7 +17,9 @@ import { AppStorageV2, curves, display, uiObserver } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import {
+  immersiveCapsuleShadow,
   immersiveFromLevel,
+  immersiveFromLevelNoShadow,
   appBarBlurStyle,  guardPlayerBack
 , RzdSelectMenuMaterial,
   immersiveMedium,
@@ -1983,12 +1985,18 @@ export struct OnlineSearchPage {
         //   `Select` 属官方「按钮与选择类」（A 档，页面任意区域都生效）⇒ 通用属性
         //   `.systemMaterial(...)` 在这里是真渲染的，不是 out of scope。
         //   ⚠️ 菜单本身的光感在 `RzdSelectMenuMaterial` 里（`menuSystemMaterial`），两者互不替代。
-        .systemMaterial(immersiveFromLevel(this.ambientState.level))
+        // ★★★ 2026-11-22（用户截图："阴影成了四角的方向"）：材质投影按**节点矩形**算，
+        //   和旁边壳里那份"方影子"是一回事 ⇒ 四颗统一成同一份**胶囊投影**
+        //   （材质关投影 `immersiveFromLevelNoShadow` + `immersiveCapsuleShadow()`）。
+        //   注意：`backgroundColor` 那层白纱仍留在材质**之后** —— 这是用户认可的那版观感
+        //   （上一轮把它挪到材质之前 ⇒ 材质盖住白纱 ⇒ 用户："平台切换也会变灰了"）。
+        .systemMaterial(immersiveFromLevelNoShadow(this.ambientState.level))
       // ★ 2026-11-15（合并 PR #16）：本文件 5 处玻璃底色统一改**深浅色自适应资源**
       //   （浅色白纱 #33FFFFFF / 深色黑纱 #33000000）。原来写死 20% 白，深色模式下玻璃发灰；
       //   首页那端（`HomeSearchRow`）用的是同一资源 ⇒ 形变中途无颜色跳变。
         .backgroundColor($r('app.color.immersive_glass_overlay'))
         .borderRadius(20)
+        .shadow(immersiveCapsuleShadow())
         .attributeModifier(new RzdSelectMenuMaterial())
         .onSelect((index: number) => {
           const offset: number = (this.searchMode === 2 || this.searchMode === 3) ? 1 : 0;

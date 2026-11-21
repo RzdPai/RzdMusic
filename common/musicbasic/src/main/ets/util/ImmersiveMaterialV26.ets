@@ -78,8 +78,14 @@ function styleOf(style: RzdMaterialStyle): uiMaterial.ImmersiveStyle {
 /**
  * 取沉浸材质对象；设备不支持时返回 undefined（调用方 `.systemMaterial(undefined)` = 无材质，安全降级）。
  * @param style 厚度，默认中等（REGULAR）
+ * @param applyShadow 是否带材质自带投影（默认 true）。官方 FAQ：`applyShadow` 为 true 时材质阴影
+ *   **固定生效**并**优先于**通用属性 `shadow`；为 false 时材质不出阴影，自定义 `shadow` 才生效。
+ *   什么时候要关掉它：材质不是画在"胶囊自己身上"时（如本仓借 `Tabs` 悬浮栏托底的壳），
+ *   系统按**节点矩形**投影 ⇒ 屏上是"四个角"的方影子，和官方 `Select` 的胶囊投影对不上。
+ *   这时关掉材质投影，改用 {@link immersiveCapsuleShadow}（胶囊形状的投影）才对齐。
  */
-export function immersiveMaterial(style: RzdMaterialStyle = RzdMaterialStyle.REGULAR): SystemUiMaterial | undefined {
+export function immersiveMaterial(style: RzdMaterialStyle = RzdMaterialStyle.REGULAR,
+  applyShadow: boolean = true): SystemUiMaterial | undefined {
   try {
     // ★ 2026-11-20：**不再因 `isImmersiveMaterialSupported()===false` 就直接返回 undefined**。
     //   现象：HDS 那条路（`ImmersiveSurface` 的空 HdsTabs 壳）能出材质，但用到
@@ -101,7 +107,7 @@ export function immersiveMaterial(style: RzdMaterialStyle = RzdMaterialStyle.REG
     //     · `materialColor`          —— 材质底色（半透明白，深色下自动反相）
     const built: uiMaterial.ImmersiveMaterial = new uiMaterial.ImmersiveMaterial({
       style: styleOf(style),
-      applyShadow: true,
+      applyShadow: applyShadow,
       interactive: true,
       // ★ 2026-11-20（用户："日间发白 / 夜间不够透"）：
       //   材质底色用**深浅色自适应资源**（日间 20% 白纱、夜间 20% 黑纱），
@@ -167,4 +173,44 @@ export function immersiveFromLevel(level: number): SystemUiMaterial | undefined 
     default:
       return immersiveMaterial(RzdMaterialStyle.REGULAR);
   }
+}
+
+/**
+ * 与 {@link immersiveFromLevel} 同档位，但**关掉材质自带投影**（配合 {@link immersiveCapsuleShadow}）。
+ *
+ * ★ 2026-11-22（用户截图："现在阴影成了四角的方向（颜色比较淡）"）：
+ *   材质投影由系统按**节点矩形**算 —— 借 `Tabs` 悬浮栏托底的壳拿到的是"方影子"，
+ *   而官方 `Select` 那种画在**胶囊自己身上**的材质拿到的是胶囊影子。
+ *   ⇒ 需要对齐的四颗（返回 / 搜索框 / 平台切换）统一：材质关投影 + **同一个**胶囊投影，
+ *     这样"谁画材质"都不影响投影形状，四颗观感才真正一致。
+ * @param level 光感强度档位（0~3）
+ */
+export function immersiveFromLevelNoShadow(level: number): SystemUiMaterial | undefined {
+  switch (level) {
+    case 1:
+      return immersiveMaterial(RzdMaterialStyle.THIN, false);
+    case 3:
+      return immersiveMaterial(RzdMaterialStyle.THICK, false);
+    default:
+      return immersiveMaterial(RzdMaterialStyle.REGULAR, false);
+  }
+}
+
+/**
+ * 胶囊投影（**四颗玻璃统一用这一份**）。
+ *
+ * 官方 FAQ 的写法：要让自定义 `shadow` 生效，必须先把材质的 `applyShadow` 置 false
+ * （材质投影优先级更高，不关它写的 shadow 不生效），本仓对应 {@link immersiveFromLevelNoShadow}。
+ *
+ * 数值取"官方材质阴影"那一档的量级（很淡、略微下移）：日间 12% 黑、夜间 25% 黑，
+ * 颜色走深浅色自适应资源 `immersive_glass_shadow`。
+ * @returns 直接传给 `.shadow(...)` 的对象
+ */
+export function immersiveCapsuleShadow(): ShadowOptions {
+  return {
+    radius: 12,
+    color: $r('app.color.immersive_glass_shadow'),
+    offsetX: 0,
+    offsetY: 3
+  };
 }

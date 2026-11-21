@@ -131,6 +131,10 @@
         {
             "name": "immersive_glass_overlay",
             "value": "#33FFFFFF"
+        },
+        {
+            "name": "immersive_glass_shadow",
+            "value": "#1F000000"
         }
     ]
 }

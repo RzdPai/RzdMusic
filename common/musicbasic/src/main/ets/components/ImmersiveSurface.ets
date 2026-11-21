@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 import { uiMaterial } from '@kit.ArkUI';
-import { immersiveMedium } from '../util/ImmersiveMaterialV26';
+import { immersiveCapsuleShadow, immersiveMedium } from '../util/ImmersiveMaterialV26';
 
 /**
  * **沉浸光感底板**：给任意自绘控件（圆钮 / 胶囊 / 浮层）挂**真**系统材质。
@@ -81,11 +81,19 @@ export struct ImmersiveSurface {
       .height(0)
   }
 
-  /** 壳用的系统材质（API 26 `uiMaterial`；与全仓 `immersiveMedium()` 同一份参数）。 */
+  /**
+   * 壳用的系统材质（API 26 `uiMaterial`；与全仓 `immersiveMedium()` 同一份参数）。
+   *
+   * ★ 2026-11-22（用户截图："现在阴影成了四角的方向（颜色比较淡）"）：
+   *   材质投影是系统按**节点矩形**画的 —— 我们把材质托在 `Tabs` 悬浮栏上，拿到的是"方影子"，
+   *   而官方 `Select` 的材质画在胶囊自己身上，影子是胶囊形。
+   *   ⇒ 壳里**关掉材质投影**，改由根节点用 `immersiveCapsuleShadow()`（胶囊形状）统一投，
+   *     这样四颗玻璃的投影才是同一份（官方 FAQ 也是这么写的：要自定义 shadow 就先把 applyShadow 置 false）。
+   */
   private buildShellMaterial(): uiMaterial.ImmersiveMaterial {
     return new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
-      applyShadow: true,
+      applyShadow: false,
       interactive: true,
       materialColor: $r('app.color.immersive_glass_overlay'),
       lightEffect: { color: '#66FFFFFF' }
@@ -210,9 +218,15 @@ export struct ImmersiveSurface {
     .width(this.surfaceWidth)
     .height(this.surfaceHeight)
     .borderRadius(this.radiusVp(), RenderStrategy.OFFSCREEN)
-    // ★ 2026-11-22（对齐平台切换）：**不要在这里 clip** —— 裁了就等于把材质自带的投影切掉，
-    //   同一排里就只有官方 `Select` 那颗带投影（用户："他有阴影，格格不入"）。
-    //   形状改由**每一层自己裁**（兜底层 / 白纱层 / 内容层 / 光斑层都各自 `borderRadius + clip`）。
+    // ★★★ 2026-11-22（用户截图："现在阴影成了四角的方向（颜色比较淡）"）：
+    //   上一版放开裁切后露出的是**材质自带的投影**，而材质投影按"节点矩形"算 ⇒ 长成方影子。
+    //   正确写法（官方 FAQ："如需自定义阴影，应将 applyShadow 置为 false 后再使用 shadow"）：
+    //     ① 壳里的材质 `applyShadow: false`（见 `buildShellMaterial`）；
+    //     ② 由**这个胶囊形状的根节点**投一份统一投影（`immersiveCapsuleShadow()`）。
+    //   ⇒ 四颗玻璃（返回 / 搜索框 / 平台切换 / 其余壳）投的是同一份胶囊阴影，与"谁画材质"无关。
+    .shadow(immersiveCapsuleShadow())
+    // 形状仍由**每一层自己裁**（兜底层 / 白纱层 / 内容层 / 光斑层都各自 `borderRadius + clip`），
+    // 根节点不裁：胶囊投影要画到外面去。
     .clip(false)
     // ★★★★ 2026-11-20 最终结论（用户）：**形变是 API 26 官方自带的行为** ——
     //   "API 23 上不设置形变按钮就是硬的；API 26 不设置 = 默认形变"。
