@@ -22,7 +22,8 @@ export struct HomeSearchRow {
    * ★ 2026-11-02：光感强度档位（与标题栏 `buildTitleMaterial` 同一张表）。
    * 首页这端与搜索页那端必须**同一档**，否则一镜到底形变途中能看出材质厚度跳变。
    */
-  @Local fieldWidthVp: number = 0;
+  /** 同上：首帧不能是 0，否则返回动画开始时没有玻璃 */
+  @Local fieldWidthVp: number = 300;
   @Local ambientState: AmbientState =
     AppStorageV2.connect(AmbientState, AppStorageKeys.AMBIENT_STATE, () => new AmbientState())!;
 

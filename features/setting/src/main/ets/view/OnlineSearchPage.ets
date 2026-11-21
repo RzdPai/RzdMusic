@@ -310,7 +310,13 @@ export struct OnlineSearchPage {
   /** Window-space bottom edges measured from the actual HDS builders. */
   @Local searchRowBottomVp: number = 0;
   /** 搜索框实测宽度（给玻璃底板用） */
-  @Local searchBoxWidthVp: number = 0;
+  /**
+   * 搜索框实测宽度（给玻璃底板用）。
+   * ★ 2026-11-21（用户："还是会发灰"）：**初值不能是 0** ——
+   *   目标页第一帧 `onAreaChange` 还没回调，`ImmersiveSurface` 宽度为 0 ⇒ 飞行前几帧**没有玻璃**，
+   *   只剩 `Search` 的透明底 ⇒ 看起来"变灰"。给一个屏幕宽度的合理估算值兜住首帧。
+   */
+  @Local searchBoxWidthVp: number = 300;
   @Local titleWidthVp: number = 0;
   @Local typeBarBottomVp: number = 0;
 
