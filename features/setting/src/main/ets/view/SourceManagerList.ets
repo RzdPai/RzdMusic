@@ -20,7 +20,9 @@
  * 改一处另一处不变（用户报"改了没效果"）。这里统一成一份，两处都调它。
  */
 
-import { appendPlayLog } from 'musicbasic';
+import { appendPlayLog,
+  immersiveMedium
+} from 'musicbasic';
 import { lxDeclaredPlatformsOf, LXUserApiInfo, MfSubscriptionInfo, musicFreeSubscriptionLabel } from 'player';
 import { LxSourceDeclaredBlock } from './LxSourceTags';
 import { shareSourceScript } from '../util/SourceShare';
@@ -407,6 +409,7 @@ export struct SourceManagerList {
       .fontSize(16)
       .fontColor([$r('sys.color.icon_secondary')])
       .bindPopup(this.aboutKey === key, {
+        systemMaterial: immersiveMedium(),
         builder: (): void => {
           this.AboutBubble(row)
         },

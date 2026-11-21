@@ -3034,6 +3034,7 @@ export struct SettingsDetailPage {
       .margin({ top: PageTopInsetHelper.contentOffsetVp(this.boxTopVp), right: 24 })
       .hitTestBehavior(HitTestMode.None)
       .bindPopup(this.showSourceMenu, {
+        systemMaterial: immersiveMedium(),
         builder: (): void => {
           this.SourceActionsMenu();
         },
@@ -3041,7 +3042,6 @@ export struct SettingsDetailPage {
         enableArrow: false,
         radius: 16,
         // ★ 光感档跟随用户的「沉浸光感」设置（不是写死中等），与标题栏/胶囊同一口径
-        systemMaterial: immersiveFromLevel(this.ambientLevel),
         onStateChange: (event): void => {
           if (!event.isVisible) {
             this.showSourceMenu = false;

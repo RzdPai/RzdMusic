@@ -61,7 +61,8 @@ import {
   WindowInfo,
   WindowUtil,
   // 2026-11-18：背景封面「先读本地缓存」，与列表封面共用同一份磁盘缓存
-  CoverCacheService
+  CoverCacheService,
+  immersiveMedium
 } from 'musicbasic';
 import type { LyricMorphRect } from 'musicbasic';
 import { MusicAppState } from '../model/PlayerModels';
@@ -9619,6 +9620,7 @@ export struct PlaybackPage {
           // ★ 唯一一处 bindPopup：气泡锚在"歌名+歌手"这一整行上，
           //   点标题或点歌手都只弹这一个（两处各挂一次会出现两个气泡）。
           .bindPopup($$this.metaTipOpen, {
+            systemMaterial: immersiveMedium(),
             builder: this.MetaInfoTip,
             placement: Placement.Top,
             enableArrow: true,

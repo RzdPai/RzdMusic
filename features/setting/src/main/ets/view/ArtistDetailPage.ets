@@ -1508,6 +1508,7 @@ export struct ArtistDetailPage {
             }
           }
           .bindPopup($$this.showAboutPopup, {
+            systemMaterial: immersiveMedium(),
             builder: this.AboutPopup,
             placement: Placement.Top,
             enableArrow: true,
@@ -1887,6 +1888,7 @@ export struct ArtistDetailPage {
             this.showAboutPopup = !this.showAboutPopup;
           })
           .bindPopup($$this.showAboutPopup, {
+            systemMaterial: immersiveMedium(),
             builder: this.AboutPopup,
             placement: Placement.Top,
             enableArrow: true,

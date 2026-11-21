@@ -1758,13 +1758,13 @@ export struct NowPlayingFeedPage {
       .backgroundColor(Color.Transparent)
       .padding(0)
       .bindPopup(this.showFeedModeMenu, {
+        systemMaterial: immersiveMedium(),
         builder: (): void => {
           this.FeedModeMenu();
         },
         placement: Placement.BottomLeft,
         enableArrow: false,
         radius: 16,
-        systemMaterial: immersiveMedium(),
         onStateChange: (event): void => {
           if (!event.isVisible) {
             this.showFeedModeMenu = false;

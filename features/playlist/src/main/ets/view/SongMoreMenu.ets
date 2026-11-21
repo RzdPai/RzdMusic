@@ -762,13 +762,13 @@ export struct SongMoreMenu {
     //   `PopupOptions` **是**支持 `systemMaterial` 的（音源管理那个菜单就是 `bindPopup` + 材质），
     //   之前我查错了文件才误判成"不支持"。⇒ 小菜单也走 `bindPopup` + 系统材质。
     .bindPopup(this.showMenu, {
+      systemMaterial: immersiveMedium(),
       builder: (): void => {
         this.MenuPopup();
       },
       placement: Placement.BottomRight,
       enableArrow: false,
       radius: 16,
-      systemMaterial: immersiveMedium(),
       onStateChange: (event): void => {
         if (!event.isVisible) {
           this.showMenu = false;
