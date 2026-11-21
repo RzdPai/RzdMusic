@@ -1469,7 +1469,12 @@ intent.openPlayerUi = false;
           .clipContent(ContentClipMode.SAFE_AREA)
           .padding({
             left: this.contentPaddingSide(),
-            right: this.contentPaddingSide()
+            right: this.contentPaddingSide(),
+            // ★ 2026-11-21（用户："滑到底最后一两条被播放条挡住"）：Grid 没有 `contentEndOffset`，
+            //   这里必须给底部让位，否则浮动播放条会压住最后两行。
+            //   与"占位 ListItem"不同，`padding` 在**滚动容器**上不会在短列表时变成空白块 ——
+            //   短列表本来就不需要滚，多出的空白由页面底色铺满，视觉上就是延伸到底。
+            bottom: this.bottomReservedVp()
           })
           // ★ 2026-11-21（用户："下方有一片空白"）：Grid 没有 `contentEndOffset`，
           //   但可以在**滚动内容末尾**垫一个透明 footer 来让位 —— 用 `cachedCount` 之外的办法不干净。

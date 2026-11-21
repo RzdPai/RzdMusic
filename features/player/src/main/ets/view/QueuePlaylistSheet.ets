@@ -15,7 +15,8 @@
 
 import { AppStorageV2 } from '@kit.ArkUI';
 import { AppStorageKeys, PlaybackIntentState, SongItem, SongTitleMarquee, StyleConstants, ThemeState,
-  immersiveMedium
+  immersiveMedium,
+  ImmersiveSurface
 } from 'musicbasic';
 import { MusicAppState } from '../model/PlayerModels';
 import { MediaService } from '../model/MediaService';
@@ -217,19 +218,27 @@ export struct QueuePlaylistSheet {
         .fontColor($r('app.color.font_tertiary'))
         .opacity(0.7)
       Blank()
-      Button({ type: ButtonType.Normal }) {
-        Image($r('app.media.ic_queue_locate'))
-          .width(22)
-          .height(22)
-          .fillColor(this.themeState.color)
+      // ★ 2026-11-21（用户："定位到当前歌曲按钮也接上光感，图标改系统自带"）：
+      //   自绘 Image 图标 → 系统 `SymbolGlyph`；底板走 `ImmersiveSurface`（HdsTabs 壳绕过生效范围）。
+      ImmersiveSurface({
+        surfaceWidth: 40,
+        surfaceHeight: 40,
+        fallbackColor: Color.Transparent,
+        onTap: (): void => {
+          // 没有当前歌曲时不可用（原来靠 `.enabled()`，自定义组件挂不了，改在这里挡）
+          if (this.appState.selectIndex >= 0 && this.appState.selectIndex < this.appState.getQueueLength()) {
+            this.locateCurrentSong();
+          }
+        }
+      }) {
+        SymbolGlyph($r('sys.symbol.music_note_list'))
+          .fontSize(20)
+          .fontColor([this.themeState.color])
+          .opacity(this.appState.selectIndex >= 0 &&
+            this.appState.selectIndex < this.appState.getQueueLength() ? 1 : 0.4)
+          .accessibilityText('定位到当前播放歌曲')
       }
-        .backgroundColor(Color.Transparent)
-        .width(40)
-        .height(40)
-        .borderRadius(20)
-        .enabled(this.appState.selectIndex >= 0 && this.appState.selectIndex < this.appState.getQueueLength())
-        .accessibilityText('定位到当前播放歌曲')
-        .onClick((): void => { this.locateCurrentSong(); })
+
     }
     .width('100%')
     .padding({ right: 40 })
