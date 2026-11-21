@@ -267,8 +267,6 @@ export struct RecordListPage {
    */
   @Local category: string = 'song';
   /** 多选删除模式。 */
-  /** 滚动到列表末尾时才显示定位按钮 */
-  @Local locateVisible: boolean = false;
   @Local selectionMode: boolean = false;
   /** 多选底栏「添加至歌单」的面板开关。 */
   @Local addSheetOpen: boolean = false;
@@ -785,14 +783,6 @@ intent.openPlayerUi = false;
   }
 
   /** 底部预留：壳层那条官方浮动播放条(56) + 间距(16) + 呼吸空间(16)。 */
-  /** 当前 List 里的条目总数（用于判断是否滚到最后）。 */
-  private listItemCount(): number {
-    if (this.category === 'playlist') {
-      return this.store.getPlaylists().length;
-    }
-    return this.records.length;
-  }
-
   private bottomReservedVp(): number {
     // 多选时播放条已临时隐藏（见 MusicAppState.selectionActive），改为给底部操作条让位
     return 56 + 16 + 16 + (this.selectionMode ? 76 : 0);
@@ -1218,6 +1208,11 @@ intent.openPlayerUi = false;
    * ⚠️ 原来这里返回的是列数，给 `List.lanes(count, 16)` 用 —— 那条属性会让 List 丢懒加载，
    *   已改成 Grid 的模板字符串（见 build 里 SongGrid 的注释）。
    */
+  /** 宽屏列数（List 的 `lanes` 要 number，不是 template 字符串）。 */
+  private wideRecordColumnsCount(): number {
+    return this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_XL ? 3 : 2;
+  }
+
   private wideRecordColumns(): string {
     return this.breakpointEnv.widthBreakpoint === WidthBreakpoint.WIDTH_XL ? '1fr 1fr 1fr' : '1fr 1fr';
   }
@@ -1405,14 +1400,7 @@ intent.openPlayerUi = false;
         .width('100%')
         .height('100%')
         .contentEndOffset(this.bottomReservedVp())
-        // 滚动到末尾才显示「定位到当前播放」（用户 2026-11-21）
-        .onReachEnd(() => {
-          this.locateVisible = true;
-        })
-        .onScrollIndex((_first: number, last: number) => {
-          const total: number = this.listItemCount();
-          this.locateVisible = total > 0 && last >= total - 1;
-        })
+
         // ★ 关注页：列表自带**顶部预留**（contentStartOffset），而不是在列表外面加占位 Column。
         //   这样静止时首行不会被标题栏压住；一旦上滑，内容就滚到标题栏底下，
         //   HDS 标题栏自带的渐变模糊（GRADUAL_BLUR）才会显形 —— 与「平台音乐」页同一机制。
@@ -1445,9 +1433,9 @@ intent.openPlayerUi = false;
         //   为什么不是和上面共用 List：官方「一个容器只放一种渲染方式」，混放会把整个容器拉回全量创建。
         //   首帧只建「可视区 + cachedCount 行」，200 条历史不再一次性全建。
         if (!this.isFollowing() && this.category === 'song') {
-          Grid(this.pageScroller) {
+          List({ scroller: this.pageScroller }) {
             LazyForEach(this.recordSource, (record: PlayedSongRecord, index: number) => {
-              GridItem() {
+              ListItem() {
                 // @ReusableV2 行组件（V2 体系）：滑出屏幕进复用池，滑回来只更新 @Param 不重建子树
                 RecordRowItem({
                   record: record,
@@ -1478,30 +1466,24 @@ intent.openPlayerUi = false;
           .width('100%')
           .height('100%')
           // 宽屏多列：XL 三列、其余两列；窄屏单列（等价于原来的 lanes，但不破坏懒加载）
-          .columnsTemplate(this.isWideRecordLayout() ? this.wideRecordColumns() : '1fr')
-          .columnsGap(this.isWideRecordLayout() ? 16 : 0)
-          .rowsGap(0)
+          // ★ 2026-11-21（用户："下面那片留白——上滑到最下面的时候才出现"）：
+          //   `Grid` **没有 `contentEndOffset`**（只有 List/Scroll 有），所以底部让位只能写 `padding`，
+          //   而 padding 是**视口内缩** ⇒ 滚到底时最后一行与播放条之间永远留一条空白。
+          //   本地音乐页用的是 `List + contentEndOffset`，所以没有这个现象。
+          //   ⇒ 这里同样换成 List：手机上本就是单列（原 `columnsTemplate('1fr')`），
+          //     宽屏用 `lanes()` 保持多列。
+          .lanes(this.isWideRecordLayout() ? this.wideRecordColumnsCount() : 1)
           .cachedCount(this.isWideRecordLayout() ? 6 : 8)
           .scrollBar(BarState.Off)
           .edgeEffect(EdgeEffect.Spring)
           .clipContent(ContentClipMode.SAFE_AREA)
-          // 同上：滚到底才出现定位按钮
-          .onReachEnd(() => {
-            this.locateVisible = true;
-          })
-          .onScrollIndex((_first: number, last: number) => {
-            // Grid 的回调只有 (first, last)；末页判定用 reachEnd 兜底
-            this.locateVisible = last >= 0 && last >= this.records.length - 1;
-          })
+
           .padding({
             left: this.contentPaddingSide(),
-            right: this.contentPaddingSide(),
-            // ★ 2026-11-21（用户："滑到底最后一两条被播放条挡住"）：Grid 没有 `contentEndOffset`，
-            //   这里必须给底部让位，否则浮动播放条会压住最后两行。
-            //   与"占位 ListItem"不同，`padding` 在**滚动容器**上不会在短列表时变成空白块 ——
-            //   短列表本来就不需要滚，多出的空白由页面底色铺满，视觉上就是延伸到底。
-            bottom: this.bottomReservedVp()
+            right: this.contentPaddingSide()
           })
+          // 底部让位走"滚动内容内边距"：只在滚到底时生效，静止时没有空白
+          .contentEndOffset(this.bottomReservedVp())
           // ★ 2026-11-21（用户："下方有一片空白"）：Grid 没有 `contentEndOffset`，
           //   但可以在**滚动内容末尾**垫一个透明 footer 来让位 —— 用 `cachedCount` 之外的办法不干净。
           //   这里改用「末尾垫一条透明 Item」的方式由 LazyForEach 的总数控制不可行，
@@ -1538,8 +1520,6 @@ intent.openPlayerUi = false;
           //   去掉蓝底、加智感握姿 ⇒ 统一用 musicbasic 的 `LocateFloatButton`，
           //   与播放器播放列表里的定位按钮同一个 SVG，见该组件头部注释）
           LocateFloatButton({
-            // ★ 2026-11-21（用户："固定在列表底部，上滑到最下面的时候才出现"）
-            visible: this.locateVisible,
             tint: this.themeState.color,
             // ★ 2026-11-01（用户：定位歌曲按钮位置调高）：原来 bottomInset 用默认 96，贴着底部；
             //   历史/收藏页底部还有一行内边距，抬到 150 让它明显离开底边。
