@@ -11,6 +11,21 @@
     "deliveryWithInstall": true,
     "installationFree": false,
     "pages": "$profile:main_pages",
+    // ★★★★ 2026-11-21（查官方《@ohos.arkui.uiMaterial》文档发现的**应用级开关**）：
+    //   沉浸式系统材质有一个**应用级使能状态** `MaterialState`，它来自 module.json5 的 metadata
+    //   （**只有 entry 模块的配置生效**）：
+    //     · DEFAULT（默认）—— 只有 Dialog / Toast / AlphabetIndexer 等少数组件默认开启，
+    //       **其它组件（含 Tabs 悬浮栏、Navigation 标题栏）默认不开启**；
+    //     · ENABLE —— 这些组件**默认开启**，且材质优先级高于 backgroundColor/blur/shadow；
+    //     · DISABLE —— 全部禁用。
+    //   我们一直没配这个 ⇒ 状态是 DEFAULT ⇒ 靠 `barFloatingStyle.systemMaterialEffect`
+    //   / `.systemMaterial()` 去要材质时，很多位置只会得到**系统灰表面**（就是用户看到的"发灰"）。
+    "metadata": [
+      {
+        "name": "ohos.arkui.UIMaterial.state",
+        "value": "enable"
+      }
+    ],
     "requestPermissions": [
       {
         "name": "ohos.permission.INTERNET"
