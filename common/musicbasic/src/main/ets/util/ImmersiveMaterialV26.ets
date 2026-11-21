@@ -168,3 +168,27 @@ export function immersiveFromLevel(level: number): SystemUiMaterial | undefined 
       return immersiveMaterial(RzdMaterialStyle.REGULAR);
   }
 }
+
+/**
+ * ★ 2026-11-21（用户："别再拿白色盖灰，找到灰的根源"）：
+ * 把**系统材质能力的事实**打一次日志 —— `getMaterialInfo()` 的 state / type、
+ * `isImmersiveMaterialSupported()`、以及 HDS 侧 `getSystemMaterialTypes()`。
+ *
+ * 判读：
+ * · `state=DISABLED` ⇒ 系统里"沉浸光感"被关掉（或设备不支持）⇒ 所有材质都会退化成**灰色表面**，
+ *   这正好解释"返回/搜索框/播放条发灰，而 Select 是正常白"（Select 用自己底色，不依赖材质）；
+ * · `state=ENABLE` ⇒ 材质可用，灰是别的原因（层序/宿主），继续查代码。
+ */
+export function dumpMaterialFacts(): void {
+  try {
+    const info: uiMaterial.MaterialInfo = uiMaterial.getMaterialInfo();
+    Logger.info(`[RzdMaterial] facts state=${info.state} type=${info.type}`);
+  } catch (err) {
+    Logger.info('[RzdMaterial] facts getMaterialInfo failed: ' + JSON.stringify(err).substring(0, 120));
+  }
+  try {
+    Logger.info(`[RzdMaterial] facts supported=${uiMaterial.isImmersiveMaterialSupported()}`);
+  } catch (err) {
+    Logger.info('[RzdMaterial] facts isSupported failed');
+  }
+}

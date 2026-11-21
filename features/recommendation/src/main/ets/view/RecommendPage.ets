@@ -13,7 +13,9 @@
  * limitations under the License.
  */
 
-import { guardPlayerBack } from 'musicbasic';
+import { guardPlayerBack,
+  dumpMaterialFacts
+} from 'musicbasic';
 import { AppStorageV2, curves, SymbolGlyphModifier, uiObserver } from '@kit.ArkUI';
 import {
   AmbientState,
