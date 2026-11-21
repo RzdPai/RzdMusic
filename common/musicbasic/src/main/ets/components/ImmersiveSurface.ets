@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 import { uiMaterial } from '@kit.ArkUI';
-import { immersiveCapsuleShadow, immersiveMedium } from '../util/ImmersiveMaterialV26';
+import { immersiveCapsuleShadow } from '../util/ImmersiveMaterialV26';
 
 /**
  * **沉浸光感底板**：给任意自绘控件（圆钮 / 胶囊 / 浮层）挂**真**系统材质。
@@ -135,6 +135,14 @@ export struct ImmersiveSurface {
       .barMode(BarMode.Fixed)
       .barHeight(this.surfaceHeight)
       .barOverlap(true)
+      // ★★★ 2026-11-22（用户："你那一版加了什么导致的平台切换也变灰了，把变灰的那几个组件的
+      //   那个东西删掉"）：`barOverlap(true)` 会**自带一层隐式厚模糊 + 系统栏底色**，
+      //   画在材质之上 ⇒ 材质被洗成"灰白一块"、材质还没画出来的那几帧就只剩这层灰。
+      //   本仓已经跑通的那条迷你条（`MiniBarMaterialCapsule`）就是**显式关掉**这两样的
+      //   （那里的注释原话："barOverlap 自带一层隐式厚模糊，会盖住材质背板 ⇒ 一律关掉"）。
+      //   ⇒ 壳这里照同一份口径关掉：不要任何栏底色、不要任何栏模糊，材质只由系统材质提供。
+      .barBackgroundColor(Color.Transparent)
+      .barBackgroundBlurStyle(BlurStyle.NONE)
       // ★★★ 2026-11-21（H2 修法）：官方 API 26 示例里，Tabs 悬浮栏的材质字段是
       //   `barFloatingStyle.systemMaterial`（`uiMaterial.ImmersiveMaterial`）+ `maskColor`，
       //   **不是** HDS 的 `systemMaterialEffect`（那是 HDS 组件自己的口）。
@@ -170,17 +178,17 @@ export struct ImmersiveSurface {
         .hitTestBehavior(HitTestMode.None)
         .accessibilityLevel('no')
 
-      // ★ 2026-11-20（用户："光斑能不能用官方属性"）：
-      //   官方光感反馈是 `uiMaterial.ImmersiveMaterial.lightEffect`（`.systemMaterial()` 的字段）。
-      //   壳里这一层**再挂一次**：若能渲染，跟随手指的光就由**系统**给（比自绘光斑准），
-      //   自绘光斑留作兜底（外壳材质不生效时仍有反馈）。
+      // ★★★ 2026-11-22（用户："把变灰的那几个组件的那个东西删掉"）：
+      //   这一层原来还挂了一次 `.systemMaterial(immersiveMedium())`（当时想着"系统光效比自绘光斑准"）。
+      //   但官方功耗文档明确写了「**避免材质嵌套**：同一子树中只需在最外层设置一次材质，
+      //   内层节点不应再设置；嵌套会让效果重复计算，视觉上又相互干扰」。
+      //   ⇒ 删掉。壳里只保留**一份**材质（`Tabs` 悬浮栏那条），光斑仍用自绘兜底。
       Stack({ alignContent: Alignment.Center }) {
         this.content()
       }
       // ★ 2026-11-20（用户："演唱会按钮还是直接变大变小而不是形变"）：
       //   内容层那 0.97 的缩放就是"变大变小"的来源 ⇒ **删掉**。
       //   官方观感只来自外层"朝触点方向让形"的位移（见下面 `translate`），不做任何缩放。
-      .systemMaterial(immersiveMedium())
       .width(this.surfaceWidth)
       .height(this.surfaceHeight)
       .borderRadius(this.radiusVp(), RenderStrategy.OFFSCREEN)
