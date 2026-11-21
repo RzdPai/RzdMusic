@@ -24,23 +24,10 @@ export struct HomeSearchRow {
    */
   /** 同上：首帧不能是 0，否则返回动画开始时没有玻璃 */
   @Local fieldWidthVp: number = 300;
-  /** 一镜到底期间给实底兜底（动画里材质不渲染）；落位后置 false。 */
-  @Local flightBackstop: boolean = true;
   @Local ambientState: AmbientState =
     AppStorageV2.connect(AmbientState, AppStorageKeys.AMBIENT_STATE, () => new AmbientState())!;
 
   aboutToAppear(): void {
-    // 从搜索页返回时也要有一段实底兜底（返回动画里材质同样不渲染）
-    this.flightBackstop = true;
-    setTimeout((): void => {
-      this.flightBackstop = false;
-      // 同搜索页：推一下宽度触发重排，让材质层重绘
-      const w: number = this.fieldWidthVp;
-      this.fieldWidthVp = w + 1;
-      setTimeout((): void => {
-        this.fieldWidthVp = w;
-      }, 80);
-    }, 450);
   }
 
   build() {
@@ -65,7 +52,7 @@ export struct HomeSearchRow {
             // 形变过程中材质可能来不及渲染 ⇒ 用同一份半透明玻璃色兜底，避免"中途变灰"
             // 动画期间材质不渲染 ⇒ 兜底用实底卡片色（半透明叠白页会发灰）
             // 同搜索页：只在动画期间用实底兜底，平时透明（否则框是纯白不透明）
-            fallbackColor: this.flightBackstop ? $r('app.color.card_background') : Color.Transparent
+            fallbackColor: Color.Transparent
           }) {
             Column()
           }

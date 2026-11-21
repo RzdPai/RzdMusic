@@ -317,8 +317,6 @@ export struct OnlineSearchPage {
    *   只剩 `Search` 的透明底 ⇒ 看起来"变灰"。给一个屏幕宽度的合理估算值兜住首帧。
    */
   @Local searchBoxWidthVp: number = 300;
-  /** 一镜到底期间给实底兜底（动画里材质不渲染）；落位后置 false，让材质透出来。 */
-  @Local flightBackstop: boolean = true;
   @Local titleWidthVp: number = 0;
   @Local typeBarBottomVp: number = 0;
 
@@ -641,19 +639,6 @@ export struct OnlineSearchPage {
 
   aboutToAppear(): void {
     OnlineSearchPage.enterAtMs = Date.now();
-    // 一镜到底结束后（≈450ms）撤掉实底兜底，让玻璃材质透出来
-    this.flightBackstop = true;
-    setTimeout((): void => {
-      this.flightBackstop = false;
-      // ★ 2026-11-21（用户提到"以前状态栏也这样，是刷新机制的问题"）：
-      //   转场结束后 `HdsTabs` 壳里的材质层不会自己重绘 ⇒ 屏上留着兜底色（看起来"不透明/纯白"）。
-      //   这里把壳宽轻推 1vp 触发一次真实重排，材质随之重绘出来。
-      const w: number = this.searchBoxWidthVp;
-      this.searchBoxWidthVp = w + 1;
-      setTimeout((): void => {
-        this.searchBoxWidthVp = w;
-      }, 80);
-    }, 450);
     morphLog('target aboutToAppear');
     this.onShowChange(true);
     this.refreshContentPaddingTop();
@@ -1956,8 +1941,8 @@ export struct OnlineSearchPage {
           surfaceWidth: this.searchBoxWidthVp,
           surfaceHeight: 40,
           surfaceRadius: 20,  // = 高度 40 的一半，与首页 `SEARCH_FIELD_H / 2` 同值
-          // 动画期间材质不渲染 ⇒ 兜底用实底卡片色（半透明叠白页会发灰）
-          fallbackColor: $r('app.color.card_background')
+          // 兜底透明（实底会盖住材质；发灰问题另行定位）
+          fallbackColor: Color.Transparent
         }) {
           Column()
         }
