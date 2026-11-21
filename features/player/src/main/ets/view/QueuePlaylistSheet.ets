@@ -231,7 +231,7 @@ export struct QueuePlaylistSheet {
           }
         }
       }) {
-        SymbolGlyph($r('sys.symbol.music_note_list'))
+        SymbolGlyph($r('sys.symbol.position'))
           .fontSize(20)
           .fontColor([this.themeState.color])
           .opacity(this.appState.selectIndex >= 0 &&
@@ -241,7 +241,9 @@ export struct QueuePlaylistSheet {
 
     }
     .width('100%')
-    .padding({ right: 40 })
+    // ★ 2026-11-21（用户："定位按钮和关闭按钮离得太远"）：系统关闭钮在右边缘内 40，
+    //   这里把定位按钮放到它左边 8vp 处 —— 两个按钮挨着。
+    .padding({ right: 56 })
   }
 
   build() {

@@ -21,7 +21,8 @@ import {
   appBarBlurStyle,  guardPlayerBack
 , RzdSelectMenuMaterial,
   immersiveMedium,
-  rdzToast
+  rdzToast,
+  ImmersiveSurface
 } from 'musicbasic';
 import { AlbumRouteParam, ArtistRouteParam, BreakpointType, ThemeState, WindowUtil } from 'musicbasic';
 import { BlurStrategy, BottomBuilderShowType, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, HideMode, ScrollEffectType } from '@kit.UIDesignKit';
@@ -308,6 +309,8 @@ export struct OnlineSearchPage {
   @Local contentPaddingTop: number = 0;
   /** Window-space bottom edges measured from the actual HDS builders. */
   @Local searchRowBottomVp: number = 0;
+  /** 搜索框实测宽度（给玻璃底板用） */
+  @Local searchBoxWidthVp: number = 0;
   @Local titleWidthVp: number = 0;
   @Local typeBarBottomVp: number = 0;
 
@@ -1909,32 +1912,43 @@ export struct OnlineSearchPage {
   @Builder
   private searchRow() {
     Row({ space: 10 }) {
-      Button() {
+      // 返回按钮：底板走 ImmersiveSurface（绕过 API 26 生效范围限制）
+      ImmersiveSurface({
+        surfaceWidth: 40,
+        surfaceHeight: 40,
+        fallbackColor: Color.Transparent,
+        onTap: (): void => {
+          this.closeSearch();
+        }
+      }) {
         SymbolGlyph($r('sys.symbol.chevron_left'))
           .fontSize(20)
           .fontColor([$r('sys.color.font_primary')])
+          .accessibilityText('返回')
       }
-      .type(ButtonType.Normal)
-      .width(40)
-      .height(40)
-      .borderRadius(20)
-      // ★ 材质挂在 Button（A 档宿主：官方「按钮与选择类」在页面任意区域都生效）
-      // ★ 2026-11-02（用户：「参考 API26 光感文档，恢复搜索页上方返回/搜索框/切换平台的光感」）：
-      //   档位改成**跟着「其它设置 → 光感强度」走**（`immersiveFromLevel`，与标题栏 `buildTitleMaterial`
-      //   同一张档位表）。原来写死 `immersiveMedium()` ⇒ 把光感调到“强”时标题栏变了、这三颗没变。
-      .systemMaterial(immersiveFromLevel(this.ambientState.level))
-      .backgroundColor($r('app.color.immersive_glass_overlay'))
-      // ★ 2026-10-24（甲方：「返回按钮、搜索框和切换平台这三个尽量都加上沉浸光感」）：
-      //   材质档位跟着「其它设置 → 光感强度」走，与标题栏 `buildTitleMaterial` 同一张表。
-      .accessibilityText('返回')
-      .onClick((): void => {
-        this.closeSearch();
-      })
 
-      // ★★ 搜索框**不再包玻璃 Stack**：做形变的是挂 `geometryTransition` 的节点，
-      //   背景必须落在 `Search` 自己身上，否则飞起来的只有文字、框不动
-      //   （官方示例 `PageTwo.ets:47-57` 就是把 backgroundColor 挂在 Search 上）。
-      this.SearchInputBar()
+      // ★ 2026-11-21（用户："搜索框加入光感"）：`Search` 吃不到材质 ⇒ 外面包一层玻璃底板。
+      //   ⚠️ 形变（`geometryTransition`）仍然只作用在 `Search` 节点上，底板不参与动画 ——
+      //      飞起来的过程中底板停在原位，落位后才与框重合。
+      Stack({ alignContent: Alignment.Center }) {
+        ImmersiveSurface({
+          surfaceWidth: this.searchBoxWidthVp,
+          surfaceHeight: 40,
+          surfaceRadius: 20,
+          fallbackColor: Color.Transparent
+        }) {
+          Column()
+        }
+        this.SearchInputBar()
+      }
+      .layoutWeight(1)
+      .height(40)
+      .onAreaChange((_o: Area, n: Area): void => {
+        const w: number = Number(n.width);
+        if (w > 0 && Math.abs(w - this.searchBoxWidthVp) > 0.5) {
+          this.searchBoxWidthVp = w;
+        }
+      })
 
       // ★ 2026-10-31（用户：光感优先 + 不要对勾、要颜色高亮）：切换平台改用官方 Select
       //   参照 qingye-reader：Select 的选项用 selectedOptionBgColor 高亮（不是 ✓），
@@ -2163,8 +2177,9 @@ export struct OnlineSearchPage {
       //   在它身上挂实时模糊 = 长镜头全程重算模糊 ⇒ 正是甲方说的"切到搜索页有点卡"。
       //   ⇒ 改用**实底卡片背板**：`card_background`（浅 #FFFFFF / 深 #1C1D1F）+ 0.5vp 描边。
       //   ⚠️ 首页那端（`HomeSearchRow`）必须保持**同一套**背板，否则形变中途会看到颜色跳变。
-      .systemMaterial(immersiveFromLevel(this.ambientState.level))
-        .backgroundColor($r('app.color.immersive_glass_overlay'))
+      // ★ 2026-11-21（用户："搜索框加入光感"）：`Search` 不在官方材质白名单里，
+      //   body 里挂 `.systemMaterial()` 不渲染 ⇒ 背景交出去，由外面的 `ImmersiveSurface` 提供玻璃。
+      .backgroundColor(Color.Transparent)
       .borderRadius(20)
       .border({ width: 0.5, color: $r('sys.color.comp_divider') })
       .clip(true)

@@ -54,7 +54,7 @@ export struct LocateFloatButton {
    * 图标：**系统符号**（用户 2026-11-21："我不是说了不要自绘图标，我是让你把这个图标改成官方的"）。
    * 用 `sys.symbol.music_note_list`（"当前播放列表"语义，与播放列表那颗一致，官方符号一定存在）。
    */
-  @Param iconName: Resource = $r('sys.symbol.music_note_list');
+  @Param iconName: Resource = $r('sys.symbol.position');
   /** 旧的自绘 SVG 参数（保留兼容，已不使用）。 */
   @Param icon: Resource = $r('app.media.ic_locate_current');
   /** 图标着色（一般传 `ThemeState.color`）。 */
