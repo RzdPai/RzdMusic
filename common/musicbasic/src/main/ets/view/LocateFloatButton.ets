@@ -27,7 +27,7 @@ const TAG: string = 'RzdLocateGrip';
  * 「定位到当前播放」浮动圆按钮（**智感握姿**：跟着握持/交互手换边）。
  *
  * ## 用户口径（2026-10-19）
- * ① 图标要跟**播放器内播放列表**那颗定位按钮一致（`app.media.ic_locate_current`，
+ * ① 图标用**系统符号**（`sys.symbol.position`），不再自绘 SVG，
  *    与 `QueuePlaylistSheet` 里那颗同一个 SVG：圆圈 + 十字准星）；
  * ② **不要蓝色底**：原来是一颗 52vp 的圆，底色 `sys.color.background_emphasize`（蓝）；
  *    现在改成**材质背板 + 主题色图标**，直径 40vp、图标 22vp（用户说「太大」）；
@@ -55,8 +55,6 @@ export struct LocateFloatButton {
    * 用 `sys.symbol.music_note_list`（"当前播放列表"语义，与播放列表那颗一致，官方符号一定存在）。
    */
   @Param iconName: Resource = $r('sys.symbol.position');
-  /** 旧的自绘 SVG 参数（保留兼容，已不使用）。 */
-  @Param icon: Resource = $r('app.media.ic_locate_current');
   /** 图标着色（一般传 `ThemeState.color`）。 */
   @Param tint: ResourceColor = $r('sys.color.font_primary');
   /** 距底部距离（vp）：要避开壳层那条悬浮播放条（56 + 间距）。 */
