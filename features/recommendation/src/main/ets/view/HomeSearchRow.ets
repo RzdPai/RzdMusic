@@ -60,7 +60,6 @@ export struct HomeSearchRow {
           //   与搜索页那端（`OnlineSearchPage`）**同一资源** ⇒ 形变中途仍无颜色跳变。
           .backgroundColor(Color.Transparent)
           .borderRadius(SEARCH_FIELD_H / 2)
-          .border({ width: 0.5, color: $r('sys.color.comp_divider') })
           .clip(true)
           // 两端占位色必须同一个 token：不同色时形变中途会看到"白字突然变灰"。
           .placeholderColor($r('sys.color.font_secondary'))

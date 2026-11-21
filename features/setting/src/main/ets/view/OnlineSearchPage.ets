@@ -1934,7 +1934,7 @@ export struct OnlineSearchPage {
         ImmersiveSurface({
           surfaceWidth: this.searchBoxWidthVp,
           surfaceHeight: 40,
-          surfaceRadius: 20,
+          surfaceRadius: 20,  // = 高度 40 的一半，与首页 `SEARCH_FIELD_H / 2` 同值
           fallbackColor: Color.Transparent
         }) {
           Column()
@@ -2184,7 +2184,6 @@ export struct OnlineSearchPage {
       //   body 里挂 `.systemMaterial()` 不渲染 ⇒ 背景交出去，由外面的 `ImmersiveSurface` 提供玻璃。
       .backgroundColor(Color.Transparent)
       .borderRadius(20)
-      .border({ width: 0.5, color: $r('sys.color.comp_divider') })
       .clip(true)
       // 占位色与首页那端**同一套**：两端不同色就会在形变瞬间看到"白字突然变灰"。
       // （官方示例用 sys.color.mask_secondary；我们深色主题下它太淡、看着像"文字消失"，
