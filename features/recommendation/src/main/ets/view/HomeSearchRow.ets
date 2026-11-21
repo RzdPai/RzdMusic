@@ -47,7 +47,8 @@ export struct HomeSearchRow {
             surfaceHeight: SEARCH_FIELD_H,
             surfaceRadius: SEARCH_FIELD_H / 2,
             // 形变过程中材质可能来不及渲染 ⇒ 用同一份半透明玻璃色兜底，避免"中途变灰"
-            fallbackColor: $r('app.color.immersive_glass_overlay')
+            // 动画期间材质不渲染 ⇒ 兜底用实底卡片色（半透明叠白页会发灰）
+            fallbackColor: $r('app.color.card_background')
           }) {
             Column()
           }

@@ -1941,7 +1941,8 @@ export struct OnlineSearchPage {
           surfaceWidth: this.searchBoxWidthVp,
           surfaceHeight: 40,
           surfaceRadius: 20,  // = 高度 40 的一半，与首页 `SEARCH_FIELD_H / 2` 同值
-          fallbackColor: $r('app.color.immersive_glass_overlay')
+          // 动画期间材质不渲染 ⇒ 兜底用实底卡片色（半透明叠白页会发灰）
+          fallbackColor: $r('app.color.card_background')
         }) {
           Column()
         }
