@@ -147,31 +147,15 @@ export function immersiveFromLevel(level: number): SystemUiMaterial | undefined 
 }
 
 /**
- * 与 {@link immersiveFromLevel} 同档位，但**关掉材质自带投影**（配合 {@link immersiveCapsuleShadow}）。
+ * 胶囊投影（**自绘壳 `ImmersiveSurface` 专用**）。
  *
- * ★ 2026-11-22（用户截图："现在阴影成了四角的方向（颜色比较淡）"）：
- *   材质投影由系统按**节点矩形**算 —— 借 `Tabs` 悬浮栏托底的壳拿到的是"方影子"，
- *   而官方 `Select` 那种画在**胶囊自己身上**的材质拿到的是胶囊影子。
- *   ⇒ 需要对齐的四颗（返回 / 搜索框 / 平台切换）统一：材质关投影 + **同一个**胶囊投影，
- *     这样"谁画材质"都不影响投影形状，四颗观感才真正一致。
- * @param level 光感强度档位（0~3）
- */
-export function immersiveFromLevelNoShadow(level: number): SystemUiMaterial | undefined {
-  switch (level) {
-    case 1:
-      return immersiveMaterial(RzdMaterialStyle.THIN, false);
-    case 3:
-      return immersiveMaterial(RzdMaterialStyle.THICK, false);
-    default:
-      return immersiveMaterial(RzdMaterialStyle.REGULAR, false);
-  }
-}
-
-/**
- * 胶囊投影（**四颗玻璃统一用这一份**）。
+ * 用途不变：壳的材质托在 `Tabs` 悬浮栏上，材质自带投影会被算成"方影子"，
+ * 所以壳里把 `applyShadow` 置 false，改由这个方法投一份胶囊形的影
+ * （官方 FAQ：要让自定义 `shadow` 生效，必须先把材质 `applyShadow` 置 false）。
  *
- * 官方 FAQ 的写法：要让自定义 `shadow` 生效，必须先把材质的 `applyShadow` 置 false
- * （材质投影优先级更高，不关它写的 shadow 不生效），本仓对应 {@link immersiveFromLevelNoShadow}。
+ * ⚠️ **组件级材质（`Select`/`Toggle`/`Slider`）不要用这个** ——
+ * 它们的材质画在胶囊自己身上，投影天然跟着圆角走，再叠一层就成了双层影。
+ * 搜索页顶栏与类型栏都已经是组件级材质，因此都不再引用本方法。
  *
  * 数值取"官方材质阴影"那一档的量级（很淡、略微下移）：日间 12% 黑、夜间 25% 黑，
  * 颜色走深浅色自适应资源 `immersive_glass_shadow`。

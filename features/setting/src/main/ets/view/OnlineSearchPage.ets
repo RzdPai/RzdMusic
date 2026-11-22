@@ -13,13 +13,11 @@
  * limitations under the License.
  */
 
-import { AppStorageV2, curves, display, uiObserver } from '@kit.ArkUI';
+import { AppStorageV2, curves, display, uiMaterial, uiObserver } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import {
-  immersiveCapsuleShadow,
   immersiveFromLevel,
-  immersiveFromLevelNoShadow,
   appBarBlurStyle,  guardPlayerBack
 , RzdSelectMenuMaterial,
   immersiveMedium,
@@ -640,7 +638,7 @@ export struct OnlineSearchPage {
 
   aboutToAppear(): void {
     OnlineSearchPage.enterAtMs = Date.now();
-    morphLog('target aboutToAppear entry-lab-v5 header=ComponentMaterial');
+    morphLog('target aboutToAppear entry-lab-v6 typebar=ComponentMaterial');
     this.onShowChange(true);
     this.refreshContentPaddingTop();
     // ★ 2026-10-24（甲方：「切换到搜索页会有点卡」）：
@@ -1986,17 +1984,17 @@ export struct OnlineSearchPage {
         //   `Select` 属官方「按钮与选择类」（A 档，页面任意区域都生效）⇒ 通用属性
         //   `.systemMaterial(...)` 在这里是真渲染的，不是 out of scope。
         //   ⚠️ 菜单本身的光感在 `RzdSelectMenuMaterial` 里（`menuSystemMaterial`），两者互不替代。
-        // ★★★ 2026-11-22（用户截图："阴影成了四角的方向"）：材质投影按**节点矩形**算，
-        //   和旁边壳里那份"方影子"是一回事 ⇒ 四颗统一成同一份**胶囊投影**
-        //   （材质关投影 `immersiveFromLevelNoShadow` + `immersiveCapsuleShadow()`）。
-        // 保留非 B 变体的属性顺序；该对照只涉及 Select，不解释其他控件的进场灰闪。
-        .systemMaterial(immersiveFromLevelNoShadow(this.ambientState.level))
+        // ★★★ 2026-11-22（用户："返回和搜索框都是官方阴影，把选择平台也改成官方"）：
+        //   旁边两颗已经换成**组件级材质**（`Toggle` + `immersiveFromLevel`，投影由系统材质给），
+        //   这颗之前为了对齐"方影子"关掉了材质投影、改用自绘胶囊投影 —— 现在反过来：
+        //   **材质投影交给系统**（`immersiveFromLevel`），不再叠自绘 `.shadow()`。
+        //   顺序仍是"材质在前、底色在后"（B 变体会让材质盖住白纱而变灰，真机已验证）。
+        .systemMaterial(immersiveFromLevel(this.ambientState.level))
       // ★ 2026-11-15（合并 PR #16）：本文件 5 处玻璃底色统一改**深浅色自适应资源**
       //   （浅色白纱 #33FFFFFF / 深色黑纱 #33000000）。原来写死 20% 白，深色模式下玻璃发灰；
       //   首页那端（`HomeSearchRow`）用的是同一资源 ⇒ 形变中途无颜色跳变。
         .backgroundColor($r('app.color.immersive_glass_overlay'))
         .borderRadius(20)
-        .shadow(immersiveCapsuleShadow())
         .attributeModifier(new RzdSelectMenuMaterial())
         .onSelect((index: number) => {
           const offset: number = (this.searchMode === 2 || this.searchMode === 3) ? 1 : 0;
@@ -2029,19 +2027,28 @@ export struct OnlineSearchPage {
     Scroll() {
       Row({ space: 8 }) {
         ForEach(this.tabLabels, (label: string, idx: number) => {
-          Text(label)
-            .fontSize($r('sys.float.Body_M'))
-            .fontWeight(this.currentTabIndex() === idx ? FontWeight.Medium : FontWeight.Regular)
-            .fontColor(this.currentTabIndex() === idx ?
-              $r('sys.color.font_on_primary') : $r('sys.color.font_primary'))
-            .maxLines(1)
-            .padding({ left: 16, right: 16, top: 7, bottom: 7 })
-            .borderRadius(18)
-            .backgroundColor(this.currentTabIndex() === idx ?
-              this.themeState.color : $r('app.color.background_secondary'))
-            .onClick((): void => {
-              this.selectTab(idx);
-            })
+          // ★★★ 2026-11-22（用户："类型栏那行胶囊也接入光感"）：
+          //   这行**随页面入场一起出现** ⇒ 不能用自绘壳（槽位材质在入场动画期间不绘制，会发灰），
+          //   必须用**组件级材质**。可选的只有 `Select`/`Toggle`/`Slider`，胶囊形态用
+          //   `Toggle` 按钮型承载（一个子组件 = 文本），与顶栏那两颗同一套做法。
+          //   选中态要"主题色实心 + 反白字"，所以选中时**关掉材质**
+          //   （官方文档：`uiMaterial.Material.empty` 用于单独关闭 Toggle 的材质）。
+          Toggle({ type: ToggleType.Button, isOn: this.currentTabIndex() === idx }) {
+            Text(label)
+              .fontSize($r('sys.float.Body_M'))
+              .fontWeight(this.currentTabIndex() === idx ? FontWeight.Medium : FontWeight.Regular)
+              .fontColor(this.currentTabIndex() === idx ?
+                $r('sys.color.font_on_primary') : $r('sys.color.font_primary'))
+              .maxLines(1)
+          }
+          .padding({ left: 16, right: 16, top: 7, bottom: 7 })
+          .borderRadius(18)
+          .backgroundColor(this.currentTabIndex() === idx ? this.themeState.color : Color.Transparent)
+          .systemMaterial(this.currentTabIndex() === idx ?
+            uiMaterial.Material.empty : immersiveFromLevel(this.ambientState.level))
+          .onChange((): void => {
+            this.selectTab(idx);
+          })
         }, (label: string) => 'findtab-' + label)
       }
       .padding({ left: 16, right: 16 })
