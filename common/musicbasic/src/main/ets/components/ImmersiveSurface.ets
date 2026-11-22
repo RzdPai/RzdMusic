@@ -31,12 +31,13 @@ import { immersiveCapsuleShadow } from '../util/ImmersiveMaterialV26';
  *
  * ## 结构（自下而上，别再改顺序）
  *
- * ① `fallbackColor` 兜底 → ② `Tabs` 悬浮栏材质（自带白色调）→ ③ 内容 → ④ 触点光斑，
+ * ① `fallbackColor` 兜底 → ② `Tabs` 悬浮栏（材质 + **栏内白纱**）→ ③ 内容 → ④ 触点光斑，
  * 最后整颗挂一份 `immersiveCapsuleShadow()` 胶囊投影。
  *
  * 三条硬约束（踩过很多次）：
- * - **白色调要长在材质自己身上**（`materialColor`）：材质浮在兄弟节点之上，放在它旁边的
- *   半透明层会被盖住 —— 这正是官方 `Select` 不灰、我们这几个灰的原因（见 `buildShellMaterial`）；
+ * - **白纱要画在材质之上、且在同一节点**：真机实验（`dded32c` 的 A/B/C）证明灰只由
+ *   "材质盖住白底"引起。壳的材质由悬浮栏绘制 ⇒ 白纱放**悬浮栏内容区**（`washTabBar`），
+ *   放兄弟 `Column` 会被材质盖住；
  * - **壳/内容区一律透明**：`Tabs`、`TabContent`、内容层默认带系统表面色，不涂透明会漏灰；
  * - **一份材质**：同一子树只设一次，嵌套会重复计算并互相干扰（官方功耗文档）；
  *   投影同理 —— 材质自带的投影按**矩形**算，胶囊形状要自己投。
@@ -72,12 +73,26 @@ export struct ImmersiveSurface {
   emptyContent() {
   }
 
-  /** 空的页签内容（材质由悬浮栏画，内容区必须是 0 高）。 */
+  /**
+   * 悬浮栏内容 = **白纱**（等价官方 `Select` 的 `backgroundColor`）。
+   *
+   * ★★★★ 2026-11-22（真机实验结论，`dded32c` 那版的长按 A/B/C）：
+   *   **只有 B（把 `.systemMaterial()` 挪到 `.backgroundColor()` 之后）会变灰**，A/C 都不灰
+   *   ⇒ 根因是**顺序**：材质站在白底之上，白底被盖住，胶囊只剩材质自身的灰调。
+   *   官方 `Select` 之所以不灰，是因为「材质 + 白底」**在同一个节点上、底画在材质之上**。
+   *   壳的材质由 `Tabs` 悬浮栏绘制 ⇒ 与之"同节点"的区域就是**悬浮栏内容区**，
+   *   把白纱放在这里，才真正做到"材质在下、白纱在上"（放在兄弟 `Column` 里会被材质盖住）。
+   */
   @Builder
-  emptyTabBar() {
-    Stack()
-      .width(0)
-      .height(0)
+  private washTabBar() {
+    Column()
+      .width('100%')
+      .height('100%')
+      .backgroundColor($r('app.color.immersive_glass_overlay'))
+      .borderRadius(this.radiusVp(), RenderStrategy.OFFSCREEN)
+      .clip(true)
+      .hitTestBehavior(HitTestMode.None)
+      .accessibilityLevel('no')
   }
 
   /**
@@ -94,15 +109,10 @@ export struct ImmersiveSurface {
       style: uiMaterial.ImmersiveStyle.REGULAR,
       applyShadow: false,
       interactive: true,
-      // ★★★★ 2026-11-22（用户："当时切换平台按钮出现灰色的时候你是改了什么，
-      //   照着这个把那几个的灰色去掉"）：官方 `Select` 之所以不灰，是因为它的
-      //   「材质 + `backgroundColor` 白纱」**长在同一个节点上**；我们把白纱做成**兄弟层**
-      //   时，材质是浮在兄弟之上的独立图层（官方 FAQ：材质层在 backgroundColor 之下，
-      //   但那是"同一节点"的语义）⇒ 白纱被材质盖住、等于没有，胶囊只剩材质本身的灰调。
-      //   ⇒ 正确的做法是把白色调**放进材质里**（`materialColor`，官方"材质层赋色"参数），
-      //     不再额外叠一层纱：一颗胶囊 = 一份材质，代码也干净。
-      //   值取官方 `Select` 的等效合成（材质 20% + 白纱 20% ≈ 35% 白）。
-      materialColor: $r('app.color.immersive_material_tint'),
+      // 材质赋色：与全仓其它材质同一份（20% 白/黑纱）。
+      // ⚠️ 白纱**不在**这里加重 —— 那样等于"材质自己变白"，材质缺位的帧仍然是灰的；
+      //   白纱由悬浮栏内容区提供（见 `washTabBar`）⇒ 与官方 `Select` 同构。
+      materialColor: $r('app.color.immersive_glass_overlay'),
       lightEffect: { color: '#66FFFFFF' }
     });
   }
@@ -134,7 +144,7 @@ export struct ImmersiveSurface {
         }
         .backgroundColor(Color.Transparent)
         .height(this.surfaceHeight)
-        .tabBar(this.emptyTabBar())
+        .tabBar(this.washTabBar())
       }
       .barMode(BarMode.Fixed)
       .barHeight(this.surfaceHeight)
