@@ -135,6 +135,10 @@
         {
             "name": "immersive_glass_shadow",
             "value": "#40000000"
+        },
+        {
+            "name": "immersive_material_tint",
+            "value": "#59000000"
         }
     ]
 }

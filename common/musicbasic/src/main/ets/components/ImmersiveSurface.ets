@@ -16,28 +16,37 @@ import { uiMaterial } from '@kit.ArkUI';
 import { immersiveCapsuleShadow } from '../util/ImmersiveMaterialV26';
 
 /**
- * **沉浸光感底板**：给任意自绘控件（圆钮 / 胶囊 / 浮层）挂**真**系统材质。
+ * **沉浸光感底板**：给页面 body 里的自绘控件（圆钮 / 胶囊 / 浮层）挂上**真**系统材质。
  *
- * ## 为什么需要这么一个组件
+ * ## 为什么需要它
  *
- * 官方把材质生效范围分成两档（API 26）：
- * - **A 档**：弹窗类 / Button / Slider / Toggle / Select …
- * - **B 档**：**只有** `Navigation/NavDestination` 标题栏 与 `barPosition=End` 的**底部悬浮页签**
+ * API 26 的材质生效范围分两档：
+ * - **A 档**（页面任意位置）：弹窗类接口 / `Slider` / `Toggle` / `Select` …
+ * - **B 档**（只有两个槽位）：`Navigation/NavDestination` **标题栏** 与
+ *   横向 `Tabs` 且 `barPosition=End` 的**底部悬浮页签**
  *
- * 页面 body 里的自绘 `Row/Column/Stack` 属 B 档且不在槽位内 ⇒ `.systemMaterial()` 写了也不渲染
- * （编译能过，屏上什么都没有 —— 我们前几轮踩的就是这个）。
+ * 页面 body 里的自绘 `Row/Column/Stack` 不在任何槽位里 ⇒ 直接写 `.systemMaterial()` 不渲染。
+ * 本组件按官方 FAQ 给的解决措施第二条办事：**借 `Tabs` 底部悬浮栏这一条槽位**承载材质，
+ * 内容自己叠在上面；壳不抢事件。
  *
- * ## 做法（照 `qingye-reader` 的 `ImmersiveMaterialSurface`）
+ * ## 结构（自下而上，别再改顺序）
  *
- * **借一个只有悬浮栏的空 `HdsTabs` 壳**：材质由 `barFloatingStyle.systemMaterialEffect` 提供，
- * 内容自己叠在上面；壳 `hitTestBehavior(None)` 不抢事件。
+ * ① `fallbackColor` 兜底 → ② `Tabs` 悬浮栏材质（自带白色调）→ ③ 内容 → ④ 触点光斑，
+ * 最后整颗挂一份 `immersiveCapsuleShadow()` 胶囊投影。
  *
- * ⚠️ 几个必须照抄的细节（缺一个就看不到材质）：
- * - `barWidth` 只认**具体数值**（三种断点都写同一个数），不能写 `'100%'`；
+ * 三条硬约束（踩过很多次）：
+ * - **白色调要长在材质自己身上**（`materialColor`）：材质浮在兄弟节点之上，放在它旁边的
+ *   半透明层会被盖住 —— 这正是官方 `Select` 不灰、我们这几个灰的原因（见 `buildShellMaterial`）；
+ * - **壳/内容区一律透明**：`Tabs`、`TabContent`、内容层默认带系统表面色，不涂透明会漏灰；
+ * - **一份材质**：同一子树只设一次，嵌套会重复计算并互相干扰（官方功耗文档）；
+ *   投影同理 —— 材质自带的投影按**矩形**算，胶囊形状要自己投。
+ *
+ * ## 槽位细节（缺一个就看不到材质）
+ *
+ * - `barWidth` 只认**具体数值**，不能写 `'100%'`；
  * - `barSideMargin / barBottomMargin` 必须是 0；
- * - `gradientMask.maskColor = Color.Transparent`（否则上下有渐变白/黑边）；
- * - `barHeight` 与壳高一致，`barOverlap(true)`；
- * - 圆角要 `borderRadius(r, RenderStrategy.OFFSCREEN)` + `clip(true)`。
+ * - `maskColor = Color.Transparent`（否则上下有渐变白/黑边）；
+ * - `barHeight` 与壳高一致，`barOverlap(true)`。
  */
 @Component
 export struct ImmersiveSurface {
@@ -49,16 +58,6 @@ export struct ImmersiveSurface {
   @Prop surfaceRadius: number = -1;
   /** 不支持材质的设备用这个底色兜底 */
   @Prop fallbackColor: ResourceColor = Color.Transparent;
-  /**
-   * 材质**之上**那层纱（默认不加）。
-   *
-   * ★ 2026-11-22：官方 `Select` 这类组件开材质后，结构是「材质在下 + `backgroundColor` 在上」，
-   * 所以它看起来比"纯材质"白一层、而且自带投影。用户要求"把那几个按钮和平台切换对齐" ⇒
-   * 需要对齐的点位传 `$r('app.color.immersive_glass_overlay')`（与 Select 的底色同一份资源），
-   * 观感就与平台切换一致：白一层 + 有投影。
-   * 默认 `Color.Transparent`（不加纱）—— 播放页盖在封面上的浮钮等点位不受影响。
-   */
-  @Prop washColor: ResourceColor = Color.Transparent;
   /** 点击回调（壳不抢事件，事件落在这层） */
   onTap?: () => void;
   /** 内容 */
@@ -95,7 +94,15 @@ export struct ImmersiveSurface {
       style: uiMaterial.ImmersiveStyle.REGULAR,
       applyShadow: false,
       interactive: true,
-      materialColor: $r('app.color.immersive_glass_overlay'),
+      // ★★★★ 2026-11-22（用户："当时切换平台按钮出现灰色的时候你是改了什么，
+      //   照着这个把那几个的灰色去掉"）：官方 `Select` 之所以不灰，是因为它的
+      //   「材质 + `backgroundColor` 白纱」**长在同一个节点上**；我们把白纱做成**兄弟层**
+      //   时，材质是浮在兄弟之上的独立图层（官方 FAQ：材质层在 backgroundColor 之下，
+      //   但那是"同一节点"的语义）⇒ 白纱被材质盖住、等于没有，胶囊只剩材质本身的灰调。
+      //   ⇒ 正确的做法是把白色调**放进材质里**（`materialColor`，官方"材质层赋色"参数），
+      //     不再额外叠一层纱：一颗胶囊 = 一份材质，代码也干净。
+      //   值取官方 `Select` 的等效合成（材质 20% + 白纱 20% ≈ 35% 白）。
+      materialColor: $r('app.color.immersive_material_tint'),
       lightEffect: { color: '#66FFFFFF' }
     });
   }
@@ -106,12 +113,9 @@ export struct ImmersiveSurface {
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
-      // ★★★ 2026-11-21（查官方 FAQ 得到的关键一条）：
-      //   "沉浸光感的视觉层级位于组件的 backgroundColor / backgroundBlurStyle **之下**，
-      //    不透明的背景会**覆盖在材质层之上**，导致材质不可见"。
-      //   ⇒ 兜底色必须画在 **HdsTabs 之前（下层）**，不能画在它上面 ——
-      //     之前它盖在材质上，所以材质永远出不来（表现为"纯白不透明"）。
-      // 兜底色（传实色时只管兜底；默认透明）
+      // ① 兜底色（只在"材质不渲染"的设备/时刻显形；必须画在材质**下面**）
+      //   官方 FAQ：材质层位于 backgroundColor 之下，不透明背景会盖住材质。
+      //   所以这一层永远在 `Tabs` 之前，不能搬到它后面。
       Column()
         .width('100%')
         .height('100%')
@@ -120,12 +124,12 @@ export struct ImmersiveSurface {
         .clip(true)
         .hitTestBehavior(HitTestMode.None)
 
-      // 材质层：空 HdsTabs 壳（只为了那一条悬浮栏的 systemMaterialEffect）
+      // ② 材质层：借 `Tabs` 底部悬浮栏这一条**官方材质槽位**（`barFloatingStyle.systemMaterial`）。
+      //   ⚠️ 壳自身、`TabContent`、内容区**一律透明**：`Tabs`/`TabContent` 默认带系统表面色，
+      //     不涂透明就会在材质没画出来的那几帧露出一整块灰（历史回归记录见 `9f79a5f` / `2603d3a`）。
+      //   ⚠️ 不要再给 `barBackgroundColor` / `barBackgroundBlurStyle` 赋值 —— 官方口径是"不设置"。
       Tabs({ barPosition: BarPosition.End, index: 0 }) {
         TabContent() {
-          // ★ 2026-11-21（用户："返回、搜索框、播放条都发灰，但平台切换是正常白"）：
-          //   灰底来自 `TabContent` 的**系统表面色** —— 它默认不是透明的。
-          //   这里把内容区涂成透明，只让悬浮栏那条材质可见。
           Column().backgroundColor(Color.Transparent)
         }
         .backgroundColor(Color.Transparent)
@@ -135,66 +139,21 @@ export struct ImmersiveSurface {
       .barMode(BarMode.Fixed)
       .barHeight(this.surfaceHeight)
       .barOverlap(true)
-      // ★★★ 2026-11-22（用户："你那一版加了什么导致的平台切换也变灰了，把变灰的那几个组件的
-      //   那个东西删掉"）：`barOverlap(true)` 会**自带一层隐式厚模糊 + 系统栏底色**，
-      //   画在材质之上 ⇒ 材质被洗成"灰白一块"、材质还没画出来的那几帧就只剩这层灰。
-      //   本仓已经跑通的那条迷你条（`MiniBarMaterialCapsule`）就是**显式关掉**这两样的
-      //   （那里的注释原话："barOverlap 自带一层隐式厚模糊，会盖住材质背板 ⇒ 一律关掉"）。
-      //   ⇒ 壳这里照同一份口径关掉：不要任何栏底色、不要任何栏模糊，材质只由系统材质提供。
-      .barBackgroundColor(Color.Transparent)
-      .barBackgroundBlurStyle(BlurStyle.NONE)
-      // ★★★ 2026-11-21（H2 修法）：官方 API 26 示例里，Tabs 悬浮栏的材质字段是
-      //   `barFloatingStyle.systemMaterial`（`uiMaterial.ImmersiveMaterial`）+ `maskColor`，
-      //   **不是** HDS 的 `systemMaterialEffect`（那是 HDS 组件自己的口）。
-      //   我们之前用 `systemMaterialEffect` ⇒ 壳只出**系统表面色（灰）**，材质根本没参与渲染。
       .barWidth(this.surfaceWidth)
       .barFloatingStyle({
         maskColor: Color.Transparent,
-        // ★ 2026-11-21（H2）：ArkUI `Tabs` 的 `barFloatingStyle.systemMaterial` 才是官方 API 26 口；
-        //   HDS 的 `HdsTabsFloatingStyle` 没有这个字段（只有 systemMaterialEffect，那条路只出灰表面）。
         systemMaterial: this.buildShellMaterial(),
         barSideMargin: 0,
         barBottomMargin: 0
       })
       .width(this.surfaceWidth)
       .height(this.surfaceHeight)
-      // ★★★★ 2026-11-22（用户："还是一样的灰。你仔细回忆一下，调取下历史记录"）——
-      //   查历史查到的**回归**：`9f79a5f`（2026-11-21 15:51）当时就把这个壳的灰底修掉了，
-      //   修法正是「`TabContent` **和 `HdsTabs` 本体**都涂 `Color.Transparent`」；
-      //   而 `2603d3a`（H2，壳从 `HdsTabs` 换成 ArkUI `Tabs`）那次改写里，
-      //   `.backgroundColor(Color.Transparent)`（连同 `.scrollable(false)`）**被一起删掉了** ——
-      //   于是 `Tabs` 容器又画回**自己的系统表面色（灰）**：
-      //   材质还没画出来的那几帧、以及转场快照层里，看到的就是这层灰（当时用户的判据是
-      //   "不止这一个东西发灰，周围一片都会发灰" —— 一整块矩形表面，正是容器表面的形状）。
-      //   ⇒ 补回透明底 + 禁滑动（单页壳不需要滑动）。
       .backgroundColor(Color.Transparent)
-      .backgroundBlurStyle(BlurStyle.NONE)
       .scrollable(false)
       .hitTestBehavior(HitTestMode.None)
 
-      // ★ 2026-11-22（用户："我是想让你把那几个按钮和平台切换对齐"）：
-      //   上一轮我把平台切换（官方 `Select`）"降级"成旁两颗的观感 —— 方向错了。
-      //   用户要的是**反过来**：让返回/搜索框这几颗长成平台切换的样子。
-      //   平台切换为什么"更白 + 有投影"（有据可查）：
-      //     ① 材质层在**下**、`backgroundColor` 那层 20% 白纱在**上** ⇒ 白一层；
-      //     ② 材质 `applyShadow` 默认 true ⇒ 自带投影。
-      //   我们这颗壳的问题是 ① 根本没有那层纱、② 投影被根节点的 `clip(true)` 裁掉了。
-      //   ⇒ 补一层纱（`washColor`，默认透明＝不加；要对齐的点位传 `immersive_glass_overlay`），
-      //     并把根的裁切去掉，让**材质自带的投影**能画到胶囊外面（圆角由各层自己裁）。
-      Column()
-        .width('100%')
-        .height('100%')
-        .backgroundColor(this.washColor)
-        .borderRadius(this.radiusVp(), RenderStrategy.OFFSCREEN)
-        .clip(true)
-        .hitTestBehavior(HitTestMode.None)
-        .accessibilityLevel('no')
-
-      // ★★★ 2026-11-22（用户："把变灰的那几个组件的那个东西删掉"）：
-      //   这一层原来还挂了一次 `.systemMaterial(immersiveMedium())`（当时想着"系统光效比自绘光斑准"）。
-      //   但官方功耗文档明确写了「**避免材质嵌套**：同一子树中只需在最外层设置一次材质，
-      //   内层节点不应再设置；嵌套会让效果重复计算，视觉上又相互干扰」。
-      //   ⇒ 删掉。壳里只保留**一份**材质（`Tabs` 悬浮栏那条），光斑仍用自绘兜底。
+      // ③ 内容层。⚠️ 这里**不能再挂** `.systemMaterial()` ——
+      //   官方功耗文档「避免材质嵌套」：同一子树只在外层设一次，内层再设会重复计算、视觉互相干扰。
       Stack({ alignContent: Alignment.Center }) {
         this.content()
       }
@@ -206,12 +165,9 @@ export struct ImmersiveSurface {
       .borderRadius(this.radiusVp(), RenderStrategy.OFFSCREEN)
       .clip(true)
 
-      // ★ 2026-11-19（用户："官方的手拖动是有**形变和光效**的"）：
-      //   系统材质本身只负责"玻璃"，按下/拖动时的**形变**与**跟随触点的光晕**要自己做 ——
-      //   与参考工程 `qingye-reader` 的 `ImmersiveMaterialSurface` 同一做法：
-      //   一层 radialGradient 圆斑，中心跟随触点，透明度按下渐显（160ms Friction）。
-      // ★ 2026-11-22：光斑本身是胶囊的 2.4 倍大，原来靠**根节点**的 `clip(true)` 裁成胶囊形状；
-      //   根节点为了露出材质投影已经不裁了 ⇒ 光斑必须自己裁（否则光会溢到胶囊外面）。
+      // ④ 跟随触点的光斑（材质只负责"玻璃"，光感反馈的兜底靠自己画）。
+      //   光斑是胶囊的 2.4 倍大，必须自带一层裁剪容器，否则会溢到胶囊外面
+      //   （根节点为了让胶囊投影透出去已经不裁了）。
       Stack({ alignContent: Alignment.TopStart }) {
         Row()
           .width(this.surfaceHeight * 2.4)
@@ -245,14 +201,14 @@ export struct ImmersiveSurface {
     //     ② 由**这个胶囊形状的根节点**投一份统一投影（`immersiveCapsuleShadow()`）。
     //   ⇒ 四颗玻璃（返回 / 搜索框 / 平台切换 / 其余壳）投的是同一份胶囊阴影，与"谁画材质"无关。
     .shadow(immersiveCapsuleShadow())
-    // 形状仍由**每一层自己裁**（兜底层 / 白纱层 / 内容层 / 光斑层都各自 `borderRadius + clip`），
+    // 形状仍由**每一层自己裁**（兜底层 / 内容层 / 光斑层各自 `borderRadius + clip`），
     // 根节点不裁：胶囊投影要画到外面去。
     .clip(false)
     // ★★★★ 2026-11-20 最终结论（用户）：**形变是 API 26 官方自带的行为** ——
     //   "API 23 上不设置形变按钮就是硬的；API 26 不设置 = 默认形变"。
     //   所以这里**什么位移/缩放都不要写**：自绘的 scale/translate 只会破坏官方形变
     //   （演唱会那颗长胶囊就是被我这层 `scale` 弄成"自动缩小"的）。
-    //   本组件只负责：① 材质底板（空 HdsTabs 悬浮栏）② 跟随触点的光晕。
+    //   本组件只负责：① 材质底板（`Tabs` 悬浮栏这条官方槽位）② 跟随触点的光晕。
     //   ⚠️ 不要再往这里加 `.scale()` / `.translate()`。
     .onTouch((event: TouchEvent) => {
       if (event.touches.length === 0) {

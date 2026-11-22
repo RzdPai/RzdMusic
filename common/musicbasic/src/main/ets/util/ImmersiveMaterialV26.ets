@@ -35,27 +35,6 @@ export enum RzdMaterialStyle {
  */
 let supportLogged: boolean = false;
 
-/**
- * 设备是否支持沉浸材质。
- *
- * ★ 为什么不能直接调 `uiMaterial.isImmersiveMaterialSupported()`：
- *   整个 `uiMaterial` 命名空间是 **API 26 新增**的，在更低的系统版本上它是
- *   `undefined` —— 直接调成员会抛 TypeError。编译器对这处的提示是
- *   「It is recommended to use apiAvailable to safeguard API compatibility」，
- *   对应的运行时手段就是「版本号 + try/catch」双保险：
- *   `deviceInfo.sdkApiVersion` 在所有版本上都有，先用它挡一道，再兜住异常。
- */
-function immersiveSupported(): boolean {
-  if (deviceInfo.sdkApiVersion < 26) {
-    return false;
-  }
-  try {
-    return uiMaterial.isImmersiveMaterialSupported();
-  } catch (e) {
-    return false;
-  }
-}
-
 function logSupportOnce(built: boolean, style: RzdMaterialStyle): void {
   if (supportLogged) {
     return;
@@ -88,18 +67,8 @@ export function immersiveMaterial(style: RzdMaterialStyle = RzdMaterialStyle.REG
   applyShadow: boolean = true): SystemUiMaterial | undefined {
   try {
     // ★ 2026-11-20：**不再因 `isImmersiveMaterialSupported()===false` 就直接返回 undefined**。
-    //   现象：HDS 那条路（`ImmersiveSurface` 的空 HdsTabs 壳）能出材质，但用到
-    //   `.systemMaterial()/SheetOptions.systemMaterial` 的地方全是"灰黑一块" ——
-    //   高度怀疑是 support 检查为 false、我们直接没给材质（等于什么都没做）。
-    //   ⇒ 先构造了再交给系统：系统不支持时它会自行忽略（参数是可选材质，安全）。
-    if (!immersiveSupported()) {
-      Logger.info('[RzdMaterial] isSupported=false，但仍构造材质交给系统尝试');
-    }
-    if (false) {
-      logSupportOnce(false, style);
-      Logger.info('[RzdMaterial] immersive material unsupported, fallback to none');
-      return undefined;
-    }
+    //   设备/算力不支持时，系统会自行忽略这个可选参数；直接不给材质反而会掉到"系统灰表面"。
+    //   ⇒ 一律先构造，再交给系统。
     // ★★★ 2026-11-19（用户："还是不好看，我还是希望用官方的"；参考工程 `AdaptiveIconButton`）：
     //   官方那套质感 = **交互形变 + 光感反馈 + 材质底色**三件一起给，缺一个就显得"只是块玻璃"：
     //     · `interactive: true`      —— 按下有形变（官方手感）
@@ -136,17 +105,19 @@ export function immersiveMedium(): SystemUiMaterial | undefined {
  * @returns 材质对象；不支持时 undefined。
  */
 export function immersiveFlat(): SystemUiMaterial | undefined {
-  if (!immersiveSupported()) {
+  try {
+    const built: uiMaterial.ImmersiveMaterial = new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.THIN,
+      applyShadow: false,
+      interactive: false
+    });
+    logSupportOnce(true, RzdMaterialStyle.THIN);
+    return built;
+  } catch (error) {
     logSupportOnce(false, RzdMaterialStyle.THIN);
+    Logger.info('[RzdMaterial] build flat material failed: ' + JSON.stringify(error).substring(0, 80));
     return undefined;
   }
-  const built: uiMaterial.ImmersiveMaterial = new uiMaterial.ImmersiveMaterial({
-    style: uiMaterial.ImmersiveStyle.THIN,
-    applyShadow: false,
-    interactive: false
-  });
-  logSupportOnce(true, RzdMaterialStyle.THIN);
-  return built;
 }
 
 /**
