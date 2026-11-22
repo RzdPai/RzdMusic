@@ -1675,6 +1675,12 @@ export struct MinePage {
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.pageScroller])
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
-    // 半模态内容根：宿主已有材质，这里不能再铺不透明底
+    // ★★★ 2026-11-22（用户："日间模式下背板和背景融一块了，夜间能正常看到三段颜色"）：
+    //   本页原来**没设页面底色**，`HdsNavDestination` 在日间给的是纯白，
+    //   而卡片底 `card_background` 日间也是 #FFFFFF ⇒ 页面与卡片糊成一片（夜间是 #000 / #1C1D1F，
+    //   所以夜间反而正常）。其它页面一直用的是 `background_secondary`（日间 #F1F3F5 / 夜间 #000000）。
+    //   ⇒ 本页补上**同一份**页面底色（不新增/修改任何颜色值，也不动其它页面）：
+    //     页面 #F1F3F5 → 卡片 #FFFFFF → 卡内浅底，三段层次就出来了。
+    .backgroundColor($r('app.color.background_secondary'))
   }
 }
