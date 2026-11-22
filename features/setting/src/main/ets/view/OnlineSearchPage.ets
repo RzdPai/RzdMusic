@@ -30,8 +30,6 @@ import { AlbumRouteParam, ArtistRouteParam, BreakpointType, ThemeState, WindowUt
 import { BlurStrategy, BottomBuilderShowType, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, HideMode, ScrollEffectType } from '@kit.UIDesignKit';
 import { AppStorageKeys, AmbientState, FavoriteEntry, MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord, QualityInfo, RouterUrlConstants, SongItem, SongTitleMarquee, ToplistRouteParam, appendPlayLog, barBlurOptions, buildTitleMaterial } from 'musicbasic';
 import { HomeMiniBarPlayer, MiniBarMaterialCapsule } from 'playlist';
-// ⚠️ 临时：光感单变量实验组件（验证完随本段一起删）
-import { SearchSourceSelectLab } from './SearchSourceSelectLab';
 import { platformBrandColor, AlbumInfo, LXQualityOption, LXSearchSong, LXSearchResult, SingerInfo, lxGetPicFallback, lxGetQualityOptions, lxSearch, lxTxHotSearch, lxSearchSuggest, searchAlbums, searchSingers, sourceToCode, DownloadTask, DownloadUtil, OnlinePlayUtil, PlaylistSearchApi, platformRegistry, lxSourceManager, searchPlatformSongs, searchPlatformSheets } from 'player';
 import type { SearchPlaylistInfo, SearchPlaylistSong } from 'player';
 import { sourceName } from 'player';
@@ -1966,21 +1964,38 @@ export struct OnlineSearchPage {
         }
       })
 
-      // ⚠️⚠️ 2026-11-22 **临时实验**（验证完就恢复本段，见提交说明）⚠️⚠️
-      // 目的：把"平台切换到底是被哪一项改灰的"单变量测出来。原生产写法在提交 `e4cceef` 里：
-      //   Select(...).systemMaterial(immersiveFromLevelNoShadow(level))
-      //     .backgroundColor(...).borderRadius(20).shadow(...).attributeModifier(...)
-      // 实验体长按可循环 A/B/C 三个只差一项的变体，判据是"返回再进搜索页看是否发灰"。
-      SearchSourceSelectLab({
-        options: this.sourceOptionsForMode(),
-        selected: this.displaySourceIndex(),
-        value: this.searchSource === 'all' ? '聚合' : this.selectedSourceText,
-        level: this.ambientState.level,
-        onSelectIndex: (index: number): void => {
+      // ★ 2026-10-31（用户：光感优先 + 不要对勾、要颜色高亮）：切换平台改用官方 Select
+      //   参照 qingye-reader：Select 的选项用 selectedOptionBgColor 高亮（不是 ✓），
+      //   菜单材质走 RzdSelectMenuMaterial（menuBackgroundColor/BlurStyle/menuOutline/menuSystemMaterial）。
+      Select(this.sourceOptionsForMode())
+        .selected(this.displaySourceIndex())
+        .value(this.searchSource === 'all' ? '聚合' : this.selectedSourceText)
+        .height(40)
+        .font({ size: 13 })
+        .fontColor($r('app.color.font_primary'))
+        // ★★★ 2026-11-02（用户：「切换平台那颗也要光感」）：
+        //   上一版换成官方 `Select` 时**只给它加了半透明底、没挂材质** ⇒ 屏上只有一片
+        //   `#33FFFFFF` 的平底，和旁边两颗玻璃胶囊明显不是一个东西。
+        //   `Select` 属官方「按钮与选择类」（A 档，页面任意区域都生效）⇒ 通用属性
+        //   `.systemMaterial(...)` 在这里是真渲染的，不是 out of scope。
+        //   ⚠️ 菜单本身的光感在 `RzdSelectMenuMaterial` 里（`menuSystemMaterial`），两者互不替代。
+        // ★★★ 2026-11-22（用户截图："阴影成了四角的方向"）：材质投影按**节点矩形**算，
+        //   和旁边壳里那份"方影子"是一回事 ⇒ 四颗统一成同一份**胶囊投影**
+        //   （材质关投影 `immersiveFromLevelNoShadow` + `immersiveCapsuleShadow()`）。
+        //   注意：`backgroundColor` 那层白纱仍留在材质**之后** —— 这是用户认可的那版观感
+        //   （上一轮把它挪到材质之前 ⇒ 材质盖住白纱 ⇒ 用户："平台切换也会变灰了"）。
+        .systemMaterial(immersiveFromLevelNoShadow(this.ambientState.level))
+      // ★ 2026-11-15（合并 PR #16）：本文件 5 处玻璃底色统一改**深浅色自适应资源**
+      //   （浅色白纱 #33FFFFFF / 深色黑纱 #33000000）。原来写死 20% 白，深色模式下玻璃发灰；
+      //   首页那端（`HomeSearchRow`）用的是同一资源 ⇒ 形变中途无颜色跳变。
+        .backgroundColor($r('app.color.immersive_glass_overlay'))
+        .borderRadius(20)
+        .shadow(immersiveCapsuleShadow())
+        .attributeModifier(new RzdSelectMenuMaterial())
+        .onSelect((index: number) => {
           const offset: number = (this.searchMode === 2 || this.searchMode === 3) ? 1 : 0;
           this.applySourceSelection(index + offset);
-        }
-      })
+        })
     }
     .width('100%')
     .height(56)
