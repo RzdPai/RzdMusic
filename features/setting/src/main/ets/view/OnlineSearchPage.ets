@@ -224,8 +224,6 @@ export struct OnlineSearchPage {
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
   /** Initial search query supplied by the route param (e.g. singer name). */
   @Param routeParam: Object = '';
-  // 仅首页入场诊断传入；其他搜索入口仍走原有转场。
-  @Param skipEntranceMotion: boolean = false;
   @Consumer('pageIndexInfos') pageStack: NavPathStack = new NavPathStack();
   /**
    * 本页**实际所在**的导航栈（由 `NavDestination.onReady` 给出，官方示例同款）。
@@ -643,7 +641,7 @@ export struct OnlineSearchPage {
 
   aboutToAppear(): void {
     OnlineSearchPage.enterAtMs = Date.now();
-    morphLog(`target aboutToAppear entry-lab-v2 mode=${this.skipEntranceMotion ? 'direct' : 'animated'}`);
+    morphLog('target aboutToAppear entry-lab-v3 rootAppear=identity');
     this.onShowChange(true);
     this.refreshContentPaddingTop();
     // ★ 2026-10-24（甲方：「切换到搜索页会有点卡」）：
@@ -1958,7 +1956,7 @@ export struct OnlineSearchPage {
       .height(40)
       // ★ 2026-11-21（用户："又有玻璃又有一镜到底"）：把 `geometryTransition` 从 `Search`
       //   **移到这层 Stack** 上 —— 玻璃底板与文字在同一个形变节点里，整块一起飞。
-      .geometryTransition(this.skipEntranceMotion ? '' : 'wanting_search_field')
+      .geometryTransition('wanting_search_field')
       .onAreaChange((_o: Area, n: Area): void => {
         const w: number = Number(n.width);
         if (w > 0 && Math.abs(w - this.searchBoxWidthVp) > 0.5) {
@@ -2217,9 +2215,7 @@ export struct OnlineSearchPage {
         icon: { size: 17, color: $r('sys.color.font_secondary') }
       })
       .layoutWeight(1)
-      .transition(this.skipEntranceMotion ?
-        TransitionEffect.asymmetric(TransitionEffect.IDENTITY, TransitionEffect.opacity(0.99)) :
-        TransitionEffect.opacity(0.99))
+      .transition(TransitionEffect.opacity(0.99))
       .defaultFocus(true)
       .focusOnTouch(true)
       .responseRegion({ x: 0, y: -4, width: '100%', height: 40 })
@@ -3065,10 +3061,14 @@ export struct OnlineSearchPage {
     //   里的 `titleBarTopHeight`（= 状态栏 + 56 = 94）正好落在 94 ✔。
     //   ⚠️ 旧注释里"根节点带 TOP 会把标题/搜索按钮顶进状态栏 / 只能留 BOTTOM"那句**是错的**，已作废。
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
-    // 官方一镜到底示例里目标页也挂这个（PageTwo 的 `NavDestination().transition(OPACITY)`）：
-    // 配合 push(false) + animateTo，页面自己淡入，看起来只剩搜索框在飞。
-    .transition(this.skipEntranceMotion ?
-      TransitionEffect.asymmetric(TransitionEffect.IDENTITY, TransitionEffect.OPACITY) : TransitionEffect.OPACITY)
+    // ★★★ 2026-11-22（`entry-lab-v3`）：官方示例给目标页挂的是双向 `OPACITY`
+    //   （PageTwo 的 `NavDestination().transition(OPACITY)`），但那会让**整页**在入场时
+    //   从透明渐显 —— 页里的返回按钮、播放条并不参与 `geometryTransition`，位置不动，
+    //   却会跟着整页一起叠到首页画面上，看起来就是"没动也跟着灰一下"。
+    //   真机对照（`2ee5e84`）已验证：**无动画直进时是同色的正常白**。
+    //   ⇒ 本轮只改这一处：入场**不做透明度动画**，淡出照旧保留（返回时仍然柔和消失）。
+    //   搜索框的一镜到底、底栏交接都不动。
+    .transition(TransitionEffect.asymmetric(TransitionEffect.IDENTITY, TransitionEffect.OPACITY))
   }
 }
 

@@ -289,14 +289,6 @@ class PlayerRouteParam {
 }
 
 /** 澹冲眰鏃ュ織鏍囩锛坄hdc shell hilog | grep HomeShell` 鍙崬褰㈠彉/璺敱閾捐矾锛夈€?*/
-class SearchEntryDiagnosticParam {
-  readonly skipEntranceMotion: boolean;
-
-  constructor(skipEntranceMotion: boolean) {
-    this.skipEntranceMotion = skipEntranceMotion;
-  }
-}
-
 const RzdShellLogTag: string = 'HomeShell';
 
 /**
@@ -2967,30 +2959,20 @@ struct Index {
    * `animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, () => pushPath(..., false))`
    * —— **必须** `animated = false` 关掉系统推页动画，否则两套动画叠加，形变会被压掉。
    */
-  // 临时真机诊断：同一进程内，首页搜索入口交替走动画和直进。
-  private searchEntryUseAnimation: boolean = true;
-
+  // ★ 2026-11-22（`entry-lab-v3`）：诊断实验结束，恢复**单一入场路径**。
+  //   本轮只验证一件事：把搜索页**整页的入场淡入**关掉（退出动画保留），
+  //   搜索框的一镜到底与底栏交接都不动 ⇒ 判断题注里"整页淡入把顶栏/播放条一起叠到首页上"的假设。
   private openHomeSearch(): void {
     if (this.homeStack.size() === 0) {
       this.ensureHomeRoute();
     }
-    if (this.homeStack.getAllPathName().includes(SEARCH_ROUTE_NAME)) {
-      return;
-    }
-    const animated: boolean = this.searchEntryUseAnimation;
-    this.searchEntryUseAnimation = !animated;
     Logger.info(RzdShellLogTag, `home search push from=${this.homeStack.getAllPathName()}`);
-    appendPlayLog(`[RzdSearchMorph] entry-lab-v2 push mode=${animated ? 'animated' : 'direct'}`);
-    const pushSearch = (): void => {
-      // 两种入场都在同一个操作里隐藏首页底栏并推入搜索页。
+    appendPlayLog(`[RzdSearchMorph] entry-lab-v3 push rootAppear=identity`);
+    this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, (): void => {
+      // 搜索页打开：底栏（Tab 栏 + 首页迷你条）一起隐藏，只留搜索页自己的播放条
       this.searchTabBarHidden = true;
-      this.homeStack.pushPath({ name: SEARCH_ROUTE_NAME, param: new SearchEntryDiagnosticParam(!animated) }, false);
-    };
-    if (animated) {
-      this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, pushSearch);
-    } else {
-      this.getUIContext().animateTo({ duration: 0 }, pushSearch);
-    }
+      this.homeStack.pushPath({ name: SEARCH_ROUTE_NAME }, false);
+    });
   }
 
   private closeHomeSearch(): void {
@@ -3051,7 +3033,6 @@ struct Index {
       })
     } else if (name === SEARCH_ROUTE_NAME) {
       OnlineSearchPage({
-        skipEntranceMotion: param instanceof SearchEntryDiagnosticParam && param.skipEntranceMotion,
         // 底栏（Tab 栏 + 迷你条）显隐由搜索页**自己的生命周期**驱动：
         // 首页本身也是内层栈的路由页，所以不能用 navBar 可见性去推"是否在搜索页"
         onShowChange: (open: boolean): void => {
