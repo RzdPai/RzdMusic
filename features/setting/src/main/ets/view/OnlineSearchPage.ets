@@ -23,8 +23,7 @@ import {
   appBarBlurStyle,  guardPlayerBack
 , RzdSelectMenuMaterial,
   immersiveMedium,
-  rdzToast,
-  ImmersiveSurface
+  rdzToast
 } from 'musicbasic';
 import { AlbumRouteParam, ArtistRouteParam, BreakpointType, ThemeState, WindowUtil } from 'musicbasic';
 import { BlurStrategy, BottomBuilderShowType, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationTitleBarOptions, HideMode, ScrollEffectType } from '@kit.UIDesignKit';
@@ -641,7 +640,7 @@ export struct OnlineSearchPage {
 
   aboutToAppear(): void {
     OnlineSearchPage.enterAtMs = Date.now();
-    morphLog('target aboutToAppear entry-lab-v4 back=ToggleMaterial');
+    morphLog('target aboutToAppear entry-lab-v5 header=ComponentMaterial');
     this.onShowChange(true);
     this.refreshContentPaddingTop();
     // ★ 2026-10-24（甲方：「切换到搜索页会有点卡」）：
@@ -1920,13 +1919,13 @@ export struct OnlineSearchPage {
   @Builder
   private searchRow() {
     Row({ space: 10 }) {
-      // ⚠️⚠️ 2026-11-22 `entry-lab-v4` **临时探针**（验证完即恢复，见提交说明）⚠️⚠️
-      // 假设：入场动画期间，借槽位（Tabs/HdsTabs 悬浮栏）画的材质不绘制，
-      //       只有**组件自己**画的材质（Select/Toggle/Slider 这类）照常渲染 ——
-      //       这能解释"飞着也灰、平台切换却一直白"。
-      // 探针：返回按钮改用 `Toggle` 的按钮型承载组件级材质，另外两颗壳保持原样。
-      //   · 只有返回按钮在飞行中保持白 ⇒ 假设成立；
-      //   · 三颗仍一起灰 ⇒ 假设不成立，别再用"换材质宿主"这条路。
+      // ★★★ 2026-11-22（真机定案，`2988f2d` 探针验证）：
+      //   **入场动画期间，借槽位（`Tabs`/`HdsTabs` 悬浮栏）画的材质不会被绘制**，
+      //   而**组件自己**画的材质（`Select`/`Toggle`/`Slider`，官方允许在页面任意位置生效）照常渲染。
+      //   证据链：无动画直进 = 正常白；关掉整页入场淡入 = 照样灰；返回按钮不参与形变却同样灰；
+      //   把返回按钮换成组件级材质后 = **不再灰**。
+      //   ⇒ 自绘壳（`ImmersiveSurface`）只适合"不参与入场动画"的位置；
+      //     凡是**随页面入场**的玻璃胶囊，一律用组件级材质承载。
       Toggle({ type: ToggleType.Button, isOn: false }) {
         SymbolGlyph($r('sys.symbol.chevron_left'))
           .fontSize(20)
@@ -1938,24 +1937,26 @@ export struct OnlineSearchPage {
       .backgroundColor(Color.Transparent)
       .borderRadius(20)
       .systemMaterial(immersiveFromLevel(this.ambientState.level))
-      // 用 `onChange` 而不是 `onClick`：`Toggle` 的点击经 `onChange` 回调最可靠（探针版别把返回弄坏）。
+      // `Toggle` 的点击走 `onChange` 最可靠（`onClick` 在部分场景不触发）。
       .onChange((): void => {
         this.closeSearch();
       })
 
       // ★ 2026-11-21（用户："搜索框加入光感"）：`Search` 吃不到材质 ⇒ 外面包一层玻璃底板。
-      //   ⚠️ 形变（`geometryTransition`）仍然只作用在 `Search` 节点上，底板不参与动画 ——
-      //      飞起来的过程中底板停在原位，落位后才与框重合。
+      // ★★★ 2026-11-22（同上定案）：这颗**随页面入场一起飞**，所以玻璃板也必须是
+      //   **组件级材质**（`Toggle` 按钮型，页面任意位置生效），不能用槽位壳 ——
+      //   槽位材质在入场动画期间不绘制，飞行中会发灰。
+      //   底板只是"一块玻璃"，`hitTestBehavior(None)` 不吃事件，输入仍由上面的 `Search` 负责。
       Stack({ alignContent: Alignment.Center }) {
-        ImmersiveSurface({
-          surfaceWidth: this.searchBoxWidthVp,
-          surfaceHeight: 40,
-          surfaceRadius: 20,  // = 高度 40 的一半，与首页 `SEARCH_FIELD_H / 2` 同值
-          // 兜底透明（实底会盖住材质；发灰问题另行定位）
-          fallbackColor: Color.Transparent
-        }) {
+        Toggle({ type: ToggleType.Button, isOn: false }) {
           Column()
         }
+        .width(this.searchBoxWidthVp)
+        .height(40)
+        .borderRadius(20)  // = 高度 40 的一半，与首页 `SEARCH_FIELD_H / 2` 同值
+        .backgroundColor(Color.Transparent)
+        .systemMaterial(immersiveFromLevel(this.ambientState.level))
+        .hitTestBehavior(HitTestMode.None)
         this.SearchInputBar()
       }
       .layoutWeight(1)
@@ -2202,8 +2203,8 @@ export struct OnlineSearchPage {
       //   在它身上挂实时模糊 = 长镜头全程重算模糊 ⇒ 正是甲方说的"切到搜索页有点卡"。
       //   ⇒ 改用**实底卡片背板**：`card_background`（浅 #FFFFFF / 深 #1C1D1F）+ 0.5vp 描边。
       //   ⚠️ 首页那端（`HomeSearchRow`）必须保持**同一套**背板，否则形变中途会看到颜色跳变。
-      // ★ 2026-11-21（用户："搜索框加入光感"）：`Search` 不在官方材质白名单里，
-      //   body 里挂 `.systemMaterial()` 不渲染 ⇒ 背景交出去，由外面的 `ImmersiveSurface` 提供玻璃。
+      // ★ 2026-11-21 / 2026-11-22：`Search` 本身吃不到材质（body 里挂 `.systemMaterial()` 不渲染），
+      //   背景交出去 —— 由外面那颗**组件级材质**的玻璃板提供（见 `searchRow` 的 `Toggle` 底板）。
       .backgroundColor(Color.Transparent)
       .borderRadius(20)
       .clip(true)
