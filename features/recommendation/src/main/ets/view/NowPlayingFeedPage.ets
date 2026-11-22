@@ -1757,18 +1757,19 @@ export struct NowPlayingFeedPage {
       }
       .backgroundColor(Color.Transparent)
       .padding(0)
-      .bindPopup(this.showFeedModeMenu, {
+    // ★★★ 2026-11-22（用户："三套菜单观感不统一，希望都像切换平台那样 = 玻璃 + 官方 Q 弹"）：
+    //   `bindPopup` 是**气泡**（淡入淡出那种），而"切换平台"走的是**系统菜单窗口**
+    //   （官方菜单自带非线性形变/边缘流光那套空间动效）。
+    //   `MenuOptions`（`bindMenu`）里没有 `systemMaterial`，但 `ContextMenuOptions` 有
+    //   ⇒ 改用 `bindContextMenuByIsShow`：同样是系统菜单窗口，玻璃与官方动效一次拿全。
+      .bindContextMenuByIsShow(this.showFeedModeMenu, (): void => {
+        this.FeedModeMenu();
+      }, {
         systemMaterial: immersiveMedium(),
-        builder: (): void => {
-          this.FeedModeMenu();
-        },
         placement: Placement.BottomLeft,
         enableArrow: false,
-        radius: 16,
-        onStateChange: (event): void => {
-          if (!event.isVisible) {
-            this.showFeedModeMenu = false;
-          }
+        onDisappear: (): void => {
+          this.showFeedModeMenu = false;
         }
       })
   }

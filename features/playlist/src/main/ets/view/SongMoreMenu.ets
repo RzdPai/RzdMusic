@@ -761,18 +761,19 @@ export struct SongMoreMenu {
     // ★ 2026-11-21（用户："音源管理右上角那个有玻璃，小歌曲菜单却是模糊"）：
     //   `PopupOptions` **是**支持 `systemMaterial` 的（音源管理那个菜单就是 `bindPopup` + 材质），
     //   之前我查错了文件才误判成"不支持"。⇒ 小菜单也走 `bindPopup` + 系统材质。
-    .bindPopup(this.showMenu, {
+    // ★★★ 2026-11-22（用户："三套菜单观感不统一，希望都像切换平台那样 = 玻璃 + 官方 Q 弹"）：
+    //   `bindPopup` 是**气泡**（淡入淡出那种），而"切换平台"走的是**系统菜单窗口**
+    //   （官方菜单自带非线性形变/边缘流光那套空间动效）。
+    //   `MenuOptions`（`bindMenu`）里没有 `systemMaterial`，但 `ContextMenuOptions` 有
+    //   ⇒ 改用 `bindContextMenuByIsShow`：同样是系统菜单窗口，玻璃与官方动效一次拿全。
+    .bindContextMenuByIsShow(this.showMenu, (): void => {
+      this.MenuPopup();
+    }, {
       systemMaterial: immersiveMedium(),
-      builder: (): void => {
-        this.MenuPopup();
-      },
       placement: Placement.BottomRight,
       enableArrow: false,
-      radius: 16,
-      onStateChange: (event): void => {
-        if (!event.isVisible) {
-          this.showMenu = false;
-        }
+      onDisappear: (): void => {
+        this.showMenu = false;
       }
     })
     .bindSheet($$this.showSheet, this.ActiveSheet(), {

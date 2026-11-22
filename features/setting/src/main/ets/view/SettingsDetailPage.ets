@@ -3049,19 +3049,19 @@ export struct SettingsDetailPage {
       .height(1)
       .margin({ top: PageTopInsetHelper.contentOffsetVp(this.boxTopVp), right: 24 })
       .hitTestBehavior(HitTestMode.None)
-      .bindPopup(this.showSourceMenu, {
+    // ★★★ 2026-11-22（用户："三套菜单观感不统一，希望都像切换平台那样 = 玻璃 + 官方 Q 弹"）：
+    //   `bindPopup` 是**气泡**（淡入淡出那种），而"切换平台"走的是**系统菜单窗口**
+    //   （官方菜单自带非线性形变/边缘流光那套空间动效）。
+    //   `MenuOptions`（`bindMenu`）里没有 `systemMaterial`，但 `ContextMenuOptions` 有
+    //   ⇒ 改用 `bindContextMenuByIsShow`：同样是系统菜单窗口，玻璃与官方动效一次拿全。
+      .bindContextMenuByIsShow(this.showSourceMenu, (): void => {
+        this.SourceActionsMenu();
+      }, {
         systemMaterial: immersiveMedium(),
-        builder: (): void => {
-          this.SourceActionsMenu();
-        },
         placement: Placement.BottomRight,
         enableArrow: false,
-        radius: 16,
-        // ★ 光感档跟随用户的「沉浸光感」设置（不是写死中等），与标题栏/胶囊同一口径
-        onStateChange: (event): void => {
-          if (!event.isVisible) {
-            this.showSourceMenu = false;
-          }
+        onDisappear: (): void => {
+          this.showSourceMenu = false;
         }
       })
   }
