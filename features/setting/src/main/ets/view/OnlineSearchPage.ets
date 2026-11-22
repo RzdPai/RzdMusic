@@ -641,7 +641,7 @@ export struct OnlineSearchPage {
 
   aboutToAppear(): void {
     OnlineSearchPage.enterAtMs = Date.now();
-    morphLog('target aboutToAppear entry-lab-v3 rootAppear=identity');
+    morphLog('target aboutToAppear entry-lab-v4 back=ToggleMaterial');
     this.onShowChange(true);
     this.refreshContentPaddingTop();
     // ★ 2026-10-24（甲方：「切换到搜索页会有点卡」）：
@@ -1920,22 +1920,28 @@ export struct OnlineSearchPage {
   @Builder
   private searchRow() {
     Row({ space: 10 }) {
-      // 返回按钮：底板走 ImmersiveSurface（绕过 API 26 生效范围限制）。
-      // 白色调与胶囊投影都长在壳自己的材质上（见 `ImmersiveSurface.buildShellMaterial`），
-      // 与同排的官方 `Select` 同一套观感。
-      ImmersiveSurface({
-        surfaceWidth: 40,
-        surfaceHeight: 40,
-        fallbackColor: Color.Transparent,
-        onTap: (): void => {
-          this.closeSearch();
-        }
-      }) {
+      // ⚠️⚠️ 2026-11-22 `entry-lab-v4` **临时探针**（验证完即恢复，见提交说明）⚠️⚠️
+      // 假设：入场动画期间，借槽位（Tabs/HdsTabs 悬浮栏）画的材质不绘制，
+      //       只有**组件自己**画的材质（Select/Toggle/Slider 这类）照常渲染 ——
+      //       这能解释"飞着也灰、平台切换却一直白"。
+      // 探针：返回按钮改用 `Toggle` 的按钮型承载组件级材质，另外两颗壳保持原样。
+      //   · 只有返回按钮在飞行中保持白 ⇒ 假设成立；
+      //   · 三颗仍一起灰 ⇒ 假设不成立，别再用"换材质宿主"这条路。
+      Toggle({ type: ToggleType.Button, isOn: false }) {
         SymbolGlyph($r('sys.symbol.chevron_left'))
           .fontSize(20)
           .fontColor([$r('sys.color.font_primary')])
           .accessibilityText('返回')
       }
+      .width(40)
+      .height(40)
+      .backgroundColor(Color.Transparent)
+      .borderRadius(20)
+      .systemMaterial(immersiveFromLevel(this.ambientState.level))
+      // 用 `onChange` 而不是 `onClick`：`Toggle` 的点击经 `onChange` 回调最可靠（探针版别把返回弄坏）。
+      .onChange((): void => {
+        this.closeSearch();
+      })
 
       // ★ 2026-11-21（用户："搜索框加入光感"）：`Search` 吃不到材质 ⇒ 外面包一层玻璃底板。
       //   ⚠️ 形变（`geometryTransition`）仍然只作用在 `Search` 节点上，底板不参与动画 ——
