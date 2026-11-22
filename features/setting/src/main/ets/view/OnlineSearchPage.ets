@@ -1898,9 +1898,9 @@ export struct OnlineSearchPage {
     }, 450);
   }
 
-  /** 内容首行要让开的浮层高度：状态栏 + 搜索行 56 + 类型栏 44。 */
+  /** 内容首行要让开的浮层高度：状态栏 + 搜索行 56 + 类型栏（自适应，兜底按 ~55 估）。 */
   private searchContentTopInsetVp(): number {
-    return WindowUtil.getInstance().resolveStatusBarTopVp() + 56 + 44;
+    return WindowUtil.getInstance().resolveStatusBarTopVp() + 56 + 55;
   }
 
   private searchSideVp(): number {
@@ -2043,6 +2043,10 @@ export struct OnlineSearchPage {
           }
           .padding({ left: 16, right: 16, top: 7, bottom: 7 })
           .borderRadius(18)
+          // ★ `Toggle` 的按钮型有自己的**选中色**（系统蓝）；不显式指定就会盖掉用户主题色
+          //   （用户实测："我设置的红，怎么成蓝色了"）。官方文档：`.selectedColor()` 三种
+          //   `ToggleType` 都支持，按钮型用它来定选中背景。
+          .selectedColor(this.themeState.color)
           .backgroundColor(this.currentTabIndex() === idx ? this.themeState.color : Color.Transparent)
           .systemMaterial(this.currentTabIndex() === idx ?
             uiMaterial.Material.empty : immersiveFromLevel(this.ambientState.level))
@@ -2052,13 +2056,17 @@ export struct OnlineSearchPage {
         }, (label: string) => 'findtab-' + label)
       }
       .padding({ left: 16, right: 16 })
-      .height('100%')
       .alignItems(VerticalAlign.Center)
     }
     .scrollable(ScrollDirection.Horizontal)
     .scrollBar(BarState.Off)
     .width('100%')
-    .height(44)
+    // ★★★ 2026-11-22（用户截图："胶囊下面阴影割裂了，能看到一条直线"）：
+    //   材质投影画在胶囊外面，而 `Scroll` 会**裁掉视口之外**的内容 ⇒ 原来固定 `height(44)`
+    //   时，胶囊（≈35）上下只剩 4~5vp，投影正好被切在下边界上，就是那条直线。
+    //   做法与首页吸顶那行胶囊一致：**不写死高度**，改由上下内边距给足投影的空间
+    //   （`Scroll` 的内边距在视口之内，投影落在内边距里就不会被裁）。
+    .padding({ top: 10, bottom: 10 })
     .align(Alignment.Start)
   }
 
