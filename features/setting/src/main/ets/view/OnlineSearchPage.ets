@@ -1982,8 +1982,7 @@ export struct OnlineSearchPage {
         // ★★★ 2026-11-22（用户截图："阴影成了四角的方向"）：材质投影按**节点矩形**算，
         //   和旁边壳里那份"方影子"是一回事 ⇒ 四颗统一成同一份**胶囊投影**
         //   （材质关投影 `immersiveFromLevelNoShadow` + `immersiveCapsuleShadow()`）。
-        //   注意：`backgroundColor` 那层白纱仍留在材质**之后** —— 这是用户认可的那版观感
-        //   （上一轮把它挪到材质之前 ⇒ 材质盖住白纱 ⇒ 用户："平台切换也会变灰了"）。
+        // 保留非 B 变体的属性顺序；该对照只涉及 Select，不解释其他控件的进场灰闪。
         .systemMaterial(immersiveFromLevelNoShadow(this.ambientState.level))
       // ★ 2026-11-15（合并 PR #16）：本文件 5 处玻璃底色统一改**深浅色自适应资源**
       //   （浅色白纱 #33FFFFFF / 深色黑纱 #33000000）。原来写死 20% 白，深色模式下玻璃发灰；

@@ -34,12 +34,7 @@ import { immersiveCapsuleShadow } from '../util/ImmersiveMaterialV26';
  * ① `fallbackColor` 兜底 → ② `Tabs` 悬浮栏材质（自带白色调）→ ③ 内容 → ④ 触点光斑，
  * 最后整颗挂一份 `immersiveCapsuleShadow()` 胶囊投影。
  *
- * 三条硬约束（踩过很多次）：
- * - **白色调要长在材质自己身上**（`materialColor`）：材质浮在兄弟节点之上，放在它旁边的
- *   半透明层会被盖住 —— 这正是官方 `Select` 不灰、我们这几个灰的原因（见 `buildShellMaterial`）；
- * - **壳/内容区一律透明**：`Tabs`、`TabContent`、内容层默认带系统表面色，不涂透明会漏灰；
- * - **一份材质**：同一子树只设一次，嵌套会重复计算并互相干扰（官方功耗文档）；
- *   投影同理 —— 材质自带的投影按**矩形**算，胶囊形状要自己投。
+ * 底板、内容和触点光斑分层；内容层不重复设置材质。
  *
  * ## 槽位细节（缺一个就看不到材质）
  *
@@ -94,14 +89,7 @@ export struct ImmersiveSurface {
       style: uiMaterial.ImmersiveStyle.REGULAR,
       applyShadow: false,
       interactive: true,
-      // ★★★★ 2026-11-22（用户："当时切换平台按钮出现灰色的时候你是改了什么，
-      //   照着这个把那几个的灰色去掉"）：官方 `Select` 之所以不灰，是因为它的
-      //   「材质 + `backgroundColor` 白纱」**长在同一个节点上**；我们把白纱做成**兄弟层**
-      //   时，材质是浮在兄弟之上的独立图层（官方 FAQ：材质层在 backgroundColor 之下，
-      //   但那是"同一节点"的语义）⇒ 白纱被材质盖住、等于没有，胶囊只剩材质本身的灰调。
-      //   ⇒ 正确的做法是把白色调**放进材质里**（`materialColor`，官方"材质层赋色"参数），
-      //     不再额外叠一层纱：一颗胶囊 = 一份材质，代码也干净。
-      //   值取官方 `Select` 的等效合成（材质 20% + 白纱 20% ≈ 35% 白）。
+      // 保留此底板原有的深浅色赋色资源。
       materialColor: $r('app.color.immersive_material_tint'),
       lightEffect: { color: '#66FFFFFF' }
     });

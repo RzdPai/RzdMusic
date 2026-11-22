@@ -2959,17 +2959,30 @@ struct Index {
    * `animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, () => pushPath(..., false))`
    * —— **必须** `animated = false` 关掉系统推页动画，否则两套动画叠加，形变会被压掉。
    */
+  // 临时真机诊断：同一进程内，首页搜索入口交替走动画和直进。
+  private searchEntryUseAnimation: boolean = true;
+
   private openHomeSearch(): void {
     if (this.homeStack.size() === 0) {
       this.ensureHomeRoute();
     }
+    if (this.homeStack.getAllPathName().includes(SEARCH_ROUTE_NAME)) {
+      return;
+    }
+    const animated: boolean = this.searchEntryUseAnimation;
+    this.searchEntryUseAnimation = !animated;
     Logger.info(RzdShellLogTag, `home search push from=${this.homeStack.getAllPathName()}`);
-    appendPlayLog(`[RzdSearchMorph] shell push from=${this.homeStack.size()}`);
-    this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, (): void => {
-    // 搜索页打开：底栏（Tab 栏 + 首页迷你条）一起隐藏，只留搜索页自己的播放条
-    this.searchTabBarHidden = true;
+    appendPlayLog(`[RzdSearchMorph] shell push from=${this.homeStack.size()} entry=${animated ? 'animated' : 'direct'}`);
+    const pushSearch = (): void => {
+      // 两种入场都在同一个操作里隐藏首页底栏并推入搜索页。
+      this.searchTabBarHidden = true;
       this.homeStack.pushPath({ name: SEARCH_ROUTE_NAME }, false);
-    });
+    };
+    if (animated) {
+      this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, pushSearch);
+    } else {
+      pushSearch();
+    }
   }
 
   private closeHomeSearch(): void {
