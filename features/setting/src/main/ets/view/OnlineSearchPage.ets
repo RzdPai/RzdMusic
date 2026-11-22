@@ -224,6 +224,8 @@ export struct OnlineSearchPage {
   @Env(SystemProperties.BREAK_POINT) breakpointEnv: uiObserver.WindowSizeLayoutBreakpointInfo;
   /** Initial search query supplied by the route param (e.g. singer name). */
   @Param routeParam: Object = '';
+  // 仅首页入场诊断传入；其他搜索入口仍走原有转场。
+  @Param skipEntranceMotion: boolean = false;
   @Consumer('pageIndexInfos') pageStack: NavPathStack = new NavPathStack();
   /**
    * 本页**实际所在**的导航栈（由 `NavDestination.onReady` 给出，官方示例同款）。
@@ -641,7 +643,7 @@ export struct OnlineSearchPage {
 
   aboutToAppear(): void {
     OnlineSearchPage.enterAtMs = Date.now();
-    morphLog('target aboutToAppear');
+    morphLog(`target aboutToAppear entry-lab-v2 mode=${this.skipEntranceMotion ? 'direct' : 'animated'}`);
     this.onShowChange(true);
     this.refreshContentPaddingTop();
     // ★ 2026-10-24（甲方：「切换到搜索页会有点卡」）：
@@ -1956,7 +1958,7 @@ export struct OnlineSearchPage {
       .height(40)
       // ★ 2026-11-21（用户："又有玻璃又有一镜到底"）：把 `geometryTransition` 从 `Search`
       //   **移到这层 Stack** 上 —— 玻璃底板与文字在同一个形变节点里，整块一起飞。
-      .geometryTransition('wanting_search_field')
+      .geometryTransition(this.skipEntranceMotion ? '' : 'wanting_search_field')
       .onAreaChange((_o: Area, n: Area): void => {
         const w: number = Number(n.width);
         if (w > 0 && Math.abs(w - this.searchBoxWidthVp) > 0.5) {
@@ -2215,7 +2217,9 @@ export struct OnlineSearchPage {
         icon: { size: 17, color: $r('sys.color.font_secondary') }
       })
       .layoutWeight(1)
-      .transition(TransitionEffect.opacity(0.99))
+      .transition(this.skipEntranceMotion ?
+        TransitionEffect.asymmetric(TransitionEffect.IDENTITY, TransitionEffect.opacity(0.99)) :
+        TransitionEffect.opacity(0.99))
       .defaultFocus(true)
       .focusOnTouch(true)
       .responseRegion({ x: 0, y: -4, width: '100%', height: 40 })
@@ -3063,7 +3067,8 @@ export struct OnlineSearchPage {
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     // 官方一镜到底示例里目标页也挂这个（PageTwo 的 `NavDestination().transition(OPACITY)`）：
     // 配合 push(false) + animateTo，页面自己淡入，看起来只剩搜索框在飞。
-    .transition(TransitionEffect.OPACITY)
+    .transition(this.skipEntranceMotion ?
+      TransitionEffect.asymmetric(TransitionEffect.IDENTITY, TransitionEffect.OPACITY) : TransitionEffect.OPACITY)
   }
 }
 

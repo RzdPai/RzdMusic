@@ -289,6 +289,14 @@ class PlayerRouteParam {
 }
 
 /** 澹冲眰鏃ュ織鏍囩锛坄hdc shell hilog | grep HomeShell` 鍙崬褰㈠彉/璺敱閾捐矾锛夈€?*/
+class SearchEntryDiagnosticParam {
+  readonly skipEntranceMotion: boolean;
+
+  constructor(skipEntranceMotion: boolean) {
+    this.skipEntranceMotion = skipEntranceMotion;
+  }
+}
+
 const RzdShellLogTag: string = 'HomeShell';
 
 /**
@@ -2972,16 +2980,16 @@ struct Index {
     const animated: boolean = this.searchEntryUseAnimation;
     this.searchEntryUseAnimation = !animated;
     Logger.info(RzdShellLogTag, `home search push from=${this.homeStack.getAllPathName()}`);
-    appendPlayLog(`[RzdSearchMorph] shell push from=${this.homeStack.size()} entry=${animated ? 'animated' : 'direct'}`);
+    appendPlayLog(`[RzdSearchMorph] entry-lab-v2 push mode=${animated ? 'animated' : 'direct'}`);
     const pushSearch = (): void => {
       // 两种入场都在同一个操作里隐藏首页底栏并推入搜索页。
       this.searchTabBarHidden = true;
-      this.homeStack.pushPath({ name: SEARCH_ROUTE_NAME }, false);
+      this.homeStack.pushPath({ name: SEARCH_ROUTE_NAME, param: new SearchEntryDiagnosticParam(!animated) }, false);
     };
     if (animated) {
       this.getUIContext().animateTo({ curve: curves.interpolatingSpring(0, 1, 342, 38) }, pushSearch);
     } else {
-      pushSearch();
+      this.getUIContext().animateTo({ duration: 0 }, pushSearch);
     }
   }
 
@@ -3043,7 +3051,7 @@ struct Index {
       })
     } else if (name === SEARCH_ROUTE_NAME) {
       OnlineSearchPage({
-        routeParam: param,
+        skipEntranceMotion: param instanceof SearchEntryDiagnosticParam && param.skipEntranceMotion,
         // 底栏（Tab 栏 + 迷你条）显隐由搜索页**自己的生命周期**驱动：
         // 首页本身也是内层栈的路由页，所以不能用 navBar 可见性去推"是否在搜索页"
         onShowChange: (open: boolean): void => {
