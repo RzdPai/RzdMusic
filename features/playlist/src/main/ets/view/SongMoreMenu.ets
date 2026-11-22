@@ -74,6 +74,7 @@ export struct SongMoreMenu {
   @Param onSongSwitched: (() => void) | null = null;
 
   /** Global music app state for playback requests. */
+  @Local showMenu: boolean = false;
   @Local appState: MusicAppState =
     AppStorageV2.connect(MusicAppState, AppStorageKeys.MUSIC_APP_STATE, () => new MusicAppState())!;
   /** Local store for playlists and favorites. */
@@ -485,6 +486,22 @@ export struct SongMoreMenu {
     return record;
   }
 
+  /** Popup menu items for the song actions. */
+  /** 列表里那枚「更多」的弹窗（Popup 属 A 档 ⇒ 内容根可挂系统沉浸光感）。 */
+  @Builder
+  private MenuPopup() {
+    // 与音源管理菜单同款：系统 `Menu` + `MenuItem`（材质由 PopupOptions.systemMaterial 给）
+    Menu() {
+      ForEach(this.menuItems(), (item: MenuElement) => {
+        MenuItem({ content: String(item.value) })
+          .onClick(() => {
+            this.showMenu = false;
+            item.action();
+          })
+      }, (item: MenuElement): string => String(item.value))
+    }
+  }
+
   private menuItems(): MenuElement[] {
     const items: MenuElement[] = [
       {
@@ -730,12 +747,34 @@ export struct SongMoreMenu {
         .fontSize(this.iconSize)
         .fontColor([this.iconColor])
     }
-    // ★★★ 2026-11-22（第 2 轮：上一版 `bindContextMenuByIsShow` 在本机点了不弹出，已回退）：
-    //   改回**系统 `bindMenu`** —— 它是"点击即弹"的系统菜单窗口，动效就是官方菜单那套
-    //   （非线性形变/边缘流光）；材质不用我们给：应用级开关 `ohos.arkui.UIMaterial.state=enable`
-    //   下**菜单默认开启沉浸光感**（系统默认 THICK，与"切换平台"那种系统菜单同一族）。
-    //   ⚠️ `MenuOptions` 没有 `systemMaterial` 字段，所以这里**不要**再传材质参数。
-    .bindMenu(this.menuItems())
+    .onClick(() => {
+      // 换成 bindPopup 后要自己开（`bindMenu` 是自带点击的）
+      this.showMenu = !this.showMenu;
+    })
+    // ★★ 2026-11-19（用户：「bindMenu 不支持光感直接换个组件」）：
+    //   `bindMenu` 的 options 里没有 `systemMaterial`（只有 backgroundBlurStyle），
+    //   而 **Popup 属于官方 A 档**（弹窗类接口）⇒ 换成 `bindPopup` + 自绘内容根挂材质。
+    // ★ 2026-11-20（用户："歌曲菜单还是不对"）：
+    //   `PopupOptions` **没有 `systemMaterial` 字段**（只有 popupColor / backgroundBlurStyle），
+    //   自绘内容层挂材质只会在弹窗里糊一层 —— 所以改回**系统 `bindMenu`**：
+    //   系统菜单本身是官方「Menu」宿主，材质由系统渲染，不需要我们叠任何层。
+    // ★ 2026-11-21（用户："音源管理右上角那个有玻璃，小歌曲菜单却是模糊"）：
+    //   `PopupOptions` **是**支持 `systemMaterial` 的（音源管理那个菜单就是 `bindPopup` + 材质），
+    //   之前我查错了文件才误判成"不支持"。⇒ 小菜单也走 `bindPopup` + 系统材质。
+    .bindPopup(this.showMenu, {
+      systemMaterial: immersiveMedium(),
+      builder: (): void => {
+        this.MenuPopup();
+      },
+      placement: Placement.BottomRight,
+      enableArrow: false,
+      radius: 16,
+      onStateChange: (event): void => {
+        if (!event.isVisible) {
+          this.showMenu = false;
+        }
+      }
+    })
     .bindSheet($$this.showSheet, this.ActiveSheet(), {
       systemMaterial: immersiveMedium(),
       // 评论要整屏高度才够看；其余弹层按内容自适应
