@@ -58,6 +58,17 @@ export struct ImmersiveSurface {
   @Prop surfaceRadius: number = -1;
   /** 不支持材质的设备用这个底色兜底 */
   @Prop fallbackColor: ResourceColor = Color.Transparent;
+  /**
+   * **强制夜间配色**（默认 true）。
+   *
+   * ★ 2026-11-22（用户："能不能单独取消这个组件的跟随日夜间（强制夜间）"）：
+   *   日间那套玻璃在浅色页面上读起来总是"灰"的（材质滤镜 + 白纱叠在浅灰页上），
+   *   夜间那套反而通透。⇒ 玻璃层单独用官方 `WithTheme({ colorMode: ThemeColorMode.DARK })`
+   *   作用域，**只包玻璃层（兜底 + 材质），不包内容** —— 内容里的 `$r('sys.color.*')`
+   *   仍然跟随应用深浅色，不会被染成反色。
+   *   ⚠️ 材质自身的深浅色由系统决定，我们能强制的是**材质赋色/兜底色**这些我们自己给的资源。
+   */
+  @Prop forceNight: boolean = true;
   /** 点击回调（壳不抢事件，事件落在这层） */
   onTap?: () => void;
   /** 内容 */
@@ -113,44 +124,54 @@ export struct ImmersiveSurface {
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
-      // ① 兜底色（只在"材质不渲染"的设备/时刻显形；必须画在材质**下面**）
-      //   官方 FAQ：材质层位于 backgroundColor 之下，不透明背景会盖住材质。
-      //   所以这一层永远在 `Tabs` 之前，不能搬到它后面。
-      Column()
+      // 玻璃层（兜底 + 材质）单独套一层主题作用域：见 `forceNight`。
+      // ⚠️ 只包玻璃，**不包内容** —— 内容里的 `$r('sys.color.*')` 要跟随应用深浅色。
+      WithTheme({ colorMode: this.forceNight ? ThemeColorMode.DARK : ThemeColorMode.SYSTEM }) {
+        Stack({ alignContent: Alignment.Center }) {
+          // ① 兜底色（只在"材质不渲染"的设备/时刻显形；必须画在材质**下面**）
+          //   官方 FAQ：材质层位于 backgroundColor 之下，不透明背景会盖住材质。
+          //   ⇒ 这一层永远在 `Tabs` 之前，不能搬到它后面。
+          Column()
+            .width('100%')
+            .height('100%')
+            .backgroundColor(this.fallbackColor)
+            .borderRadius(this.radiusVp(), RenderStrategy.OFFSCREEN)
+            .clip(true)
+            .hitTestBehavior(HitTestMode.None)
+
+          // ② 材质层：借 `Tabs` 底部悬浮栏这一条**官方材质槽位**（`barFloatingStyle.systemMaterial`）。
+          //   ⚠️ 壳自身、`TabContent`、内容区**一律透明**：`Tabs`/`TabContent` 默认带系统表面色，
+          //     不涂透明就会在材质没画出来的那几帧露出一整块灰（历史回归见 `9f79a5f` / `2603d3a`）。
+          //   ⚠️ 不要再给 `barBackgroundColor` / `barBackgroundBlurStyle` 赋值 —— 官方口径是"不设置"。
+          Tabs({ barPosition: BarPosition.End, index: 0 }) {
+            TabContent() {
+              Column().backgroundColor(Color.Transparent)
+            }
+            .backgroundColor(Color.Transparent)
+            .height(this.surfaceHeight)
+            .tabBar(this.emptyTabBar())
+          }
+          .barMode(BarMode.Fixed)
+          .barHeight(this.surfaceHeight)
+          .barOverlap(true)
+          .barWidth(this.surfaceWidth)
+          .barFloatingStyle({
+            maskColor: Color.Transparent,
+            systemMaterial: this.buildShellMaterial(),
+            barSideMargin: 0,
+            barBottomMargin: 0
+          })
+          .width(this.surfaceWidth)
+          .height(this.surfaceHeight)
+          .backgroundColor(Color.Transparent)
+          .scrollable(false)
+          .hitTestBehavior(HitTestMode.None)
+        }
         .width('100%')
         .height('100%')
-        .backgroundColor(this.fallbackColor)
-        .borderRadius(this.radiusVp(), RenderStrategy.OFFSCREEN)
-        .clip(true)
         .hitTestBehavior(HitTestMode.None)
-
-      // ② 材质层：借 `Tabs` 底部悬浮栏这一条**官方材质槽位**（`barFloatingStyle.systemMaterial`）。
-      //   ⚠️ 壳自身、`TabContent`、内容区**一律透明**：`Tabs`/`TabContent` 默认带系统表面色，
-      //     不涂透明就会在材质没画出来的那几帧露出一整块灰（历史回归记录见 `9f79a5f` / `2603d3a`）。
-      //   ⚠️ 不要再给 `barBackgroundColor` / `barBackgroundBlurStyle` 赋值 —— 官方口径是"不设置"。
-      Tabs({ barPosition: BarPosition.End, index: 0 }) {
-        TabContent() {
-          Column().backgroundColor(Color.Transparent)
-        }
-        .backgroundColor(Color.Transparent)
-        .height(this.surfaceHeight)
-        .tabBar(this.emptyTabBar())
+        .accessibilityLevel('no')
       }
-      .barMode(BarMode.Fixed)
-      .barHeight(this.surfaceHeight)
-      .barOverlap(true)
-      .barWidth(this.surfaceWidth)
-      .barFloatingStyle({
-        maskColor: Color.Transparent,
-        systemMaterial: this.buildShellMaterial(),
-        barSideMargin: 0,
-        barBottomMargin: 0
-      })
-      .width(this.surfaceWidth)
-      .height(this.surfaceHeight)
-      .backgroundColor(Color.Transparent)
-      .scrollable(false)
-      .hitTestBehavior(HitTestMode.None)
 
       // ③ 内容层。⚠️ 这里**不能再挂** `.systemMaterial()` ——
       //   官方功耗文档「避免材质嵌套」：同一子树只在外层设一次，内层再设会重复计算、视觉互相干扰。
