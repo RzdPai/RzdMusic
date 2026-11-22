@@ -158,6 +158,18 @@ export struct ImmersiveSurface {
       })
       .width(this.surfaceWidth)
       .height(this.surfaceHeight)
+      // ★★★★ 2026-11-22（用户："还是一样的灰。你仔细回忆一下，调取下历史记录"）——
+      //   查历史查到的**回归**：`9f79a5f`（2026-11-21 15:51）当时就把这个壳的灰底修掉了，
+      //   修法正是「`TabContent` **和 `HdsTabs` 本体**都涂 `Color.Transparent`」；
+      //   而 `2603d3a`（H2，壳从 `HdsTabs` 换成 ArkUI `Tabs`）那次改写里，
+      //   `.backgroundColor(Color.Transparent)`（连同 `.scrollable(false)`）**被一起删掉了** ——
+      //   于是 `Tabs` 容器又画回**自己的系统表面色（灰）**：
+      //   材质还没画出来的那几帧、以及转场快照层里，看到的就是这层灰（当时用户的判据是
+      //   "不止这一个东西发灰，周围一片都会发灰" —— 一整块矩形表面，正是容器表面的形状）。
+      //   ⇒ 补回透明底 + 禁滑动（单页壳不需要滑动）。
+      .backgroundColor(Color.Transparent)
+      .backgroundBlurStyle(BlurStyle.NONE)
+      .scrollable(false)
       .hitTestBehavior(HitTestMode.None)
 
       // ★ 2026-11-22（用户："我是想让你把那几个按钮和平台切换对齐"）：
