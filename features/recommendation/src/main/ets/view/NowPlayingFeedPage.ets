@@ -180,7 +180,7 @@
  * 壳层那半条用 `grep PlaybackIntent` / `RzdPlayerRoute` / `RzdMiniBarHide`。
  */
 
-import { AppStorageV2, uiObserver } from '@kit.ArkUI';
+import { AppStorageV2, curves, uiObserver } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
 import { BusinessError, deviceInfo } from '@kit.BasicServicesKit';
 import { effectKit } from '@kit.ArkGraphics2D';
@@ -1757,6 +1757,12 @@ export struct NowPlayingFeedPage {
       }
       .backgroundColor(Color.Transparent)
       .padding(0)
+      // ★★★ 2026-11-22（用户："歌曲小菜单还是普通样式，这里应该要绕过吧"）：
+      //   官方菜单动效（非线性形变/流光）只存在于**系统菜单窗口**，而给系统菜单窗口配材质的
+      //   字段只在 `ContextMenuOptions`（`bindContextMenu`/26+ 的 ByIsShow）里；
+      //   本机 `bindContextMenuByIsShow` 是空操作，`bindMenu` 又没有材质字段
+      //   ⇒ 走**绕过**：保留 Popup 的系统材质（玻璃），再给它一个**弹簧缩放**转场，
+      //   落位观感贴近官方菜单的"Q弹"（从锚点侧放大 + 轻微回弹 + 快速淡入）。
       .bindPopup(this.showFeedModeMenu, {
         systemMaterial: immersiveMedium(),
         builder: (): void => {
@@ -1765,6 +1771,10 @@ export struct NowPlayingFeedPage {
         placement: Placement.BottomLeft,
         enableArrow: false,
         radius: 16,
+        // 从左上角朝锚点方向"弹"出来
+        transition: TransitionEffect.scale({ x: 0.88, y: 0.88, centerX: '0%', centerY: '0%' })
+          .animation({ curve: curves.springMotion(0.42, 0.62) })
+          .combine(TransitionEffect.OPACITY.animation({ duration: 120, curve: Curve.FastOutSlowIn })),
         onStateChange: (event): void => {
           if (!event.isVisible) {
             this.showFeedModeMenu = false;

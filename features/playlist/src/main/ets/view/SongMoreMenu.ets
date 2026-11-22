@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-import { AppStorageV2 } from '@kit.ArkUI';
+import { AppStorageV2, curves } from '@kit.ArkUI';
 import {
   AmbientState,
   AppStorageKeys,
@@ -724,18 +724,57 @@ export struct SongMoreMenu {
   }
 
   /** More button + popup menu. */
+  /** 小菜单开合状态（Popup 由我们自己控制显隐）。 */
+  @Local showMenu: boolean = false;
+
+  /** 小菜单内容：系统 `Menu` + `MenuItem`，玻璃由 `PopupOptions.systemMaterial` 提供。 */
+  @Builder
+  private MenuPopup() {
+    Menu() {
+      ForEach(this.menuItems(), (item: MenuElement) => {
+        MenuItem({ content: String(item.value) })
+          .onClick(() => {
+            this.showMenu = false;
+            item.action();
+          })
+      }, (item: MenuElement): string => String(item.value))
+    }
+  }
+
   build() {
     Column() {
       SymbolGlyph($r('sys.symbol.dot_grid_1x2_circle'))
         .fontSize(this.iconSize)
         .fontColor([this.iconColor])
     }
-    // ★★★ 2026-11-22（第 2 轮：上一版 `bindContextMenuByIsShow` 在本机点了不弹出，已回退）：
-    //   改回**系统 `bindMenu`** —— 它是"点击即弹"的系统菜单窗口，动效就是官方菜单那套
-    //   （非线性形变/边缘流光）；材质不用我们给：应用级开关 `ohos.arkui.UIMaterial.state=enable`
-    //   下**菜单默认开启沉浸光感**（系统默认 THICK，与"切换平台"那种系统菜单同一族）。
-    //   ⚠️ `MenuOptions` 没有 `systemMaterial` 字段，所以这里**不要**再传材质参数。
-    .bindMenu(this.menuItems())
+    .onClick(() => {
+      // 用的是 Popup（见下），要自己开合
+      this.showMenu = !this.showMenu;
+    })
+      // ★★★ 2026-11-22（用户："歌曲小菜单还是普通样式，这里应该要绕过吧"）：
+      //   官方菜单动效（非线性形变/流光）只存在于**系统菜单窗口**，而给系统菜单窗口配材质的
+      //   字段只在 `ContextMenuOptions`（`bindContextMenu`/26+ 的 ByIsShow）里；
+      //   本机 `bindContextMenuByIsShow` 是空操作，`bindMenu` 又没有材质字段
+      //   ⇒ 走**绕过**：保留 Popup 的系统材质（玻璃），再给它一个**弹簧缩放**转场，
+      //   落位观感贴近官方菜单的"Q弹"（从锚点侧放大 + 轻微回弹 + 快速淡入）。
+    .bindPopup(this.showMenu, {
+      systemMaterial: immersiveMedium(),
+      builder: (): void => {
+        this.MenuPopup();
+      },
+      placement: Placement.BottomRight,
+      enableArrow: false,
+      radius: 16,
+      // 从右上角朝锚点方向"弹"出来：0.88 → 1 带一点过冲，同时快速淡入
+      transition: TransitionEffect.scale({ x: 0.88, y: 0.88, centerX: '100%', centerY: '0%' })
+        .animation({ curve: curves.springMotion(0.42, 0.62) })
+        .combine(TransitionEffect.OPACITY.animation({ duration: 120, curve: Curve.FastOutSlowIn })),
+      onStateChange: (event): void => {
+        if (!event.isVisible) {
+          this.showMenu = false;
+        }
+      }
+    })
     .bindSheet($$this.showSheet, this.ActiveSheet(), {
       systemMaterial: immersiveMedium(),
       // 评论要整屏高度才够看；其余弹层按内容自适应
