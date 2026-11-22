@@ -13,11 +13,10 @@
  * limitations under the License.
  */
 
-import { AppStorageV2, curves, display, uiMaterial, uiObserver } from '@kit.ArkUI';
+import { AppStorageV2, curves, display, RectShape, uiMaterial, uiObserver } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import {
-  immersiveFlat,
   immersiveFromLevel,
   appBarBlurStyle,  guardPlayerBack
 , RzdSelectMenuMaterial,
@@ -2049,11 +2048,10 @@ export struct OnlineSearchPage {
           //   `ToggleType` 都支持，按钮型用它来定选中背景。
           .selectedColor(this.themeState.color)
           .backgroundColor(this.currentTabIndex() === idx ? this.themeState.color : Color.Transparent)
-          // ⚠️ 这里用 **无投影** 的薄材质（`immersiveFlat`，与首页吸顶那行胶囊同一份）：
-          //   五枚胶囊的官方投影会连成一条横带、又会被 `Scroll` 的视口切出直线
-          //   （用户截图："阴影还在 / 看到一条直线"）。去掉投影后既有玻璃也没有那道边。
+          // 与顶栏三颗同一套**官方材质**（带材质投影）；投影被视口切断的问题由容器侧的
+          // `clipContent` 解决（见下面 `Scroll` 的链尾）。
           .systemMaterial(this.currentTabIndex() === idx ?
-            uiMaterial.Material.empty : immersiveFlat())
+            uiMaterial.Material.empty : immersiveFromLevel(this.ambientState.level))
           .onChange((): void => {
             this.selectTab(idx);
           })
@@ -2065,10 +2063,65 @@ export struct OnlineSearchPage {
     .scrollable(ScrollDirection.Horizontal)
     .scrollBar(BarState.Off)
     .width('100%')
-    // 高度自适应（不写死）：胶囊用无投影薄材质后不需要给投影留白，
-    // 上下各 4vp 只是为了贴近原来的行高（≈43，等于改动前的 44）。
+    // 上下各 4vp 只为贴近原来的行高（≈43，等于改动前的 44）
     .padding({ top: 4, bottom: 4 })
     .align(Alignment.Start)
+    // ★★★ 2026-11-22（用户："阴影还在，这里改回去想想其它办法"）：
+    //   逐像素量过截图：裁断位置正好落在 `Scroll` 视口底边（胶囊下方约 12vp 处）。
+    //   官方材质投影画在胶囊**外面**，而滚动容器默认按自身边界裁剪内容
+    //   （`clip` 默认 `ContentClipMode.BOUNDARY`）⇒ 投影被切出一条直线；
+    //   加大内边距只是把这条线往下推，不会消失。
+    //   ⇒ 用滚动容器专属的 `clipContent(RectShape)`（API 14+，官方《滚动组件通用接口》）
+    //     把裁剪区**上下各外扩 24vp**：投影落进裁剪区，不再被切断；
+    //     横向仍与视口等宽（横向超出的胶囊照旧被裁，不会溢出屏幕）。
+    //   ⚠️ 不要用通用 `clip` —— 它不接受 `ContentClipMode`/`RectShape`（编译期就报重载不匹配）。
+    .clipContent(new RectShape({
+      width: this.typeBarClipWidthVp(),
+      height: this.typeBarClipHeightVp()
+    }).offset({ x: 0, y: TYPE_BAR_CLIP_PAD_VP }))
+    .onAreaChange((_old: Area, area: Area): void => {
+      // 量一次自身尺寸：给上面的裁剪矩形用（尚无实测值时按窗口宽/43vp 兜底，见辅助方法）。
+      const w: number = Number(area.width);
+      const h: number = Number(area.height);
+      if (w > 0 && Math.abs(w - this.typeBarW) > 0.5) {
+        this.typeBarW = w;
+      }
+      if (h > 0 && Math.abs(h - this.typeBarH) > 0.5) {
+        this.typeBarH = h;
+      }
+    })
+  }
+
+  /** 类型栏 `Scroll` 的实测尺寸（给"放大裁剪区"的 `RectShape` 用）。 */
+  @Local typeBarW: number = 0;
+  @Local typeBarH: number = 0;
+
+  /**
+   * 类型栏裁剪矩形的宽度（vp）：实测值 → 搜索行实测宽 → 窗口宽 → 360。
+   * ⚠️ 不能写 `'100%'`：`RectShape` 里百分比不可靠，解析失败会变成 0vp 把内容全裁掉。
+   */
+  private typeBarClipWidthVp(): number {
+    if (this.typeBarW > 0) {
+      return this.typeBarW;
+    }
+    if (this.titleWidthVp > 0) {
+      return this.titleWidthVp;
+    }
+    try {
+      const wPx: number = WindowUtil.getInstance().mainWindowInfo.windowSize.width;
+      if (wPx > 0) {
+        return px2vp(wPx);
+      }
+    } catch (_e) {
+      // 取不到窗口宽就用下面的常量兜底
+    }
+    return 360;
+  }
+
+  /** 类型栏裁剪矩形的高度（vp）= 实测高 + 上下各一份投影余量。 */
+  private typeBarClipHeightVp(): number {
+    const h: number = this.typeBarH > 0 ? this.typeBarH : 43;
+    return h - TYPE_BAR_CLIP_PAD_VP * 2;
   }
 
   /** 当前选中的页签下标（0 = 综合，1..4 = `searchMode` 0..3）。 */
@@ -3094,6 +3147,9 @@ export struct OnlineSearchPage {
     .transition(TransitionEffect.asymmetric(TransitionEffect.IDENTITY, TransitionEffect.OPACITY))
   }
 }
+
+/** 类型栏裁剪区上下各外扩的尺寸（vp）：给官方材质投影留出的空间。 */
+const TYPE_BAR_CLIP_PAD_VP: number = -24;
 
 /** Route parameters for opening the online search page with an initial query. */
 export class SearchRouteParam {
