@@ -239,7 +239,7 @@ export struct HuaweiAccountCard {
             Button(this.cloudBusy ? '处理中…' : '备份到云盘')
               .height(32)
               .fontSize($r('sys.float.Body_S'))
-              .backgroundColor($r('sys.color.background_tertiary'))
+              .backgroundColor($r('sys.color.comp_background_secondary'))
               .fontColor($r('sys.color.font_primary'))
               .onClick(() => {
                 void this.backup();
@@ -247,7 +247,7 @@ export struct HuaweiAccountCard {
             Button(this.cloudBusy ? '处理中…' : '从云盘恢复')
               .height(32)
               .fontSize($r('sys.float.Body_S'))
-              .backgroundColor($r('sys.color.background_tertiary'))
+              .backgroundColor($r('sys.color.comp_background_secondary'))
               .fontColor($r('sys.color.font_primary'))
               .onClick(() => {
                 void this.restore();
@@ -265,7 +265,7 @@ export struct HuaweiAccountCard {
             Button(LEGACY_BACKUP_LABEL)
               .height(32)
               .fontSize($r('sys.float.Body_S'))
-              .backgroundColor($r('sys.color.background_tertiary'))
+              .backgroundColor($r('sys.color.comp_background_secondary'))
               .fontColor($r('sys.color.font_primary'))
               .onClick(() => {
                 void this.legacyBackup(false);
@@ -273,7 +273,7 @@ export struct HuaweiAccountCard {
             Button(LEGACY_RESTORE_LABEL)
               .height(32)
               .fontSize($r('sys.float.Body_S'))
-              .backgroundColor($r('sys.color.background_tertiary'))
+              .backgroundColor($r('sys.color.comp_background_secondary'))
               .fontColor($r('sys.color.font_primary'))
               .onClick(() => {
                 void this.legacyBackup(true);
@@ -290,13 +290,17 @@ export struct HuaweiAccountCard {
       .width('100%')
       .padding({ left: 14, right: 14, top: 12, bottom: 12 })
       .borderRadius($r('sys.float.corner_radius_level12'))
-      .backgroundColor($r('sys.color.background_secondary'))
+      // ★★★ 2026-11-23（用户："登录账号这里上下颜色不一样，整体风格割裂"）：
+      //   半模态的内容是**浮层**，卡片应该用 HDS 的**组件底色**（`comp_background_*`），
+      //   而不是"页面底色"（`background_*`）：后者在深色下接近纯黑、比浮层本身更暗，
+      //   于是"浮层 / 卡片 / 内嵌按钮"出现三层深浅不一的灰。
+      .backgroundColor($r('sys.color.comp_background_primary'))
 
       // 与下面的音乐平台账号分开
       if (this.showDivider) {
         Divider()
           .strokeWidth(0.6)
-          .color($r('sys.color.background_tertiary'))
+          .color($r('sys.color.comp_divider'))
       }
     }
     .width('100%')
