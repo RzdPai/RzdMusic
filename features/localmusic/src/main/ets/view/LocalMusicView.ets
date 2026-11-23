@@ -24,7 +24,7 @@ import { AppStorageV2 } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { uiObserver } from '@kit.ArkUI';
-import { HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions } from '@kit.UIDesignKit';
+import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions } from '@kit.UIDesignKit';
 import {
   immersiveMedium,
   
@@ -1149,12 +1149,17 @@ export struct LocalMusicPage {
       //   档位跟随「设置 → 沉浸光感强度」（buildTitleMaterial）。
       // ★ 2026-11-21（用户："本地音乐页上滑时上面那一块会变色，历史/收藏页是正常的"）：
       //   ⇒ 当时把 `systemMaterialEffect` 关掉、底色改成不透明（和"历史/收藏"一致）。
-      // ★★★ 2026-11-23（用户："本地音乐页面右上角那个菜单没有光感"）：
-      //   关掉材质连标题栏**按钮**的光感一起没了（HDS 的 `systemMaterialEffect` 正是
-      //   "标题栏按钮的沉浸光感"）。⇒ 重新打开材质，但**底色仍保持不透明 + 不开模糊/渐变模糊**，
-      //   这样按钮有光感、标题栏底色不随滚动变化（不再复现上一次的"上滑变色"）。
+      // ★★★ 2026-11-23（用户："菜单有玻璃了，但是上滑变色"）：
+      //   HDS 标题栏在**滚动时会切到 `scrollEffectStyle`**（`scrollEffectOpts` 那套联动），
+      //   加上 `blurStrategy` 默认会对背后的内容做模糊 ⇒ 一上滑整块栏的观感就跟着变。
+      //   ⇒ 显式关掉滚动联动（`enableScrollEffect: false`）+ 关掉栏模糊（`BlurStrategy.DISABLE`），
+      //     栏底色用不透明色、**按钮材质保留**：目标是"按钮有光感 + 栏底色不随滚动变化"。
       style: {
         systemMaterialEffect: buildTitleMaterial(this.ambientState.level),
+        scrollEffectOpts: {
+          enableScrollEffect: false
+        },
+        blurStrategy: BlurStrategy.DISABLE,
         originalStyle: {
           backgroundStyle: {
             backgroundColor: $r('sys.color.background_primary')
