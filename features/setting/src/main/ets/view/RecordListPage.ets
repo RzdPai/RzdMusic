@@ -1121,7 +1121,14 @@ intent.openPlayerUi = false;
           // ★ 与设置页 / 搜索页一致：HDS 自带「沉浸渐变模糊」（枚举来自 @kit.UIDesignKit，
           //   不是 ArkUI navigation 里那个 GRADUAL_BLUR）。
           scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR
-        } : undefined,
+        } : {
+          // ★★★ 2026-11-23（用户："细线还在，本地音乐页面是没有这条线的"）：
+          //   历史 / 收藏原来这里给的是 `undefined` ⇒ 走 HDS **默认的滚动联动**，
+          //   内容滚到栏下时栏底会带出一条 1px 的过渡线/分隔感（滚起来才出现，和你截图一致）。
+          //   本地音乐页的写法是显式 `enableScrollEffect: false` ⇒ 没有这条线。
+          //   这里对齐：非关注页（历史/收藏）关掉滚动联动。
+          enableScrollEffect: false
+        },
         originalStyle: {
           backgroundStyle: {
             backgroundColor: this.isFollowing()
