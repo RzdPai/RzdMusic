@@ -1317,9 +1317,16 @@ intent.openPlayerUi = false;
           }
         }
         .width('100%')
-        .backgroundBlurStyle(
-          this.isFollowing() ? BlurStyle.NONE : buildBarBlurStyle(this.ambientState.level),
-          barBlurOptions())
+        // ★★★ 2026-11-23（用户截图："历史页/收藏页颜色也不一样，而且上滑会多出一条细线"）：
+        //   这块固定头部原来挂的是 `buildBarBlurStyle(level)` 的**模糊蒙版**
+        //   （`adaptiveColor: AVERAGE` ⇒ 一层半透明白纱）：它叠在页面底色上就比页面亮一档
+        //   （实测头部 ≈ #F7F8FA，页面 ≈ #F2F3F5），所以"标题栏—头部—列表"三段颜色不齐；
+        //   而且模糊层和下方滚动内容在边界上会露出一条 1px 暗线。
+        //   这层模糊本来是给**关注页**做光感用的（那一页头部高度 0，光感由标题栏渐变模糊给）；
+        //   历史 / 收藏页要的是"一块黑板" ⇒ 不挂模糊，直接用**与页面同一份底色**铺平。
+        .backgroundBlurStyle(BlurStyle.NONE)
+        // 与页面根同一份 token（`app.color.background_secondary`），深浅色都严丝合缝
+        .backgroundColor($r('app.color.background_secondary'))
 
         Stack({ alignContent: Alignment.TopStart }) {
           // ★★ 2026-11-10「切页面卡」的真正修法：**容器分离**。
