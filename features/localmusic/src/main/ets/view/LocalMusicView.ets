@@ -1148,11 +1148,13 @@ export struct LocalMusicPage {
       // ★ 与「设置页 / 平台音乐页」同一套：标题栏光感来自 HDS `systemMaterialEffect`，
       //   档位跟随「设置 → 沉浸光感强度」（buildTitleMaterial）。
       // ★ 2026-11-21（用户："本地音乐页上滑时上面那一块会变色，历史/收藏页是正常的"）：
-      //   历史/收藏页的标题栏是**不透明底色 + 不开材质**（`background_secondary`），
-      //   而这一页挂了 `systemMaterialEffect` ⇒ 上滑时材质随背后内容变色。
-      //   ⇒ 按用户口径统一成"和别的页面一样"：不开材质、底色用页面底色。
+      //   ⇒ 当时把 `systemMaterialEffect` 关掉、底色改成不透明（和"历史/收藏"一致）。
+      // ★★★ 2026-11-23（用户："本地音乐页面右上角那个菜单没有光感"）：
+      //   关掉材质连标题栏**按钮**的光感一起没了（HDS 的 `systemMaterialEffect` 正是
+      //   "标题栏按钮的沉浸光感"）。⇒ 重新打开材质，但**底色仍保持不透明 + 不开模糊/渐变模糊**，
+      //   这样按钮有光感、标题栏底色不随滚动变化（不再复现上一次的"上滑变色"）。
       style: {
-        systemMaterialEffect: undefined,
+        systemMaterialEffect: buildTitleMaterial(this.ambientState.level),
         originalStyle: {
           backgroundStyle: {
             backgroundColor: $r('sys.color.background_primary')
