@@ -8,7 +8,7 @@ import { AppStorageKeys, MusicStoreService, ThemeState,
   rdzToast
 } from 'musicbasic';
 import { CapsuleSegmentedSelector } from '../view/CapsuleSegmentedSelector';
-import { HuaweiAccountCard } from './HuaweiAccountCard';
+import { ACCOUNT_BLOCK_RADIUS, HuaweiAccountCard } from './HuaweiAccountCard';
 
 @ComponentV2
 export struct AccountManageSheet {
@@ -272,8 +272,9 @@ export struct AccountManageSheet {
     }
     .width('100%')
     .padding(10)
-    .borderRadius(11)
-    .backgroundColor($r('sys.color.background_primary'))
+    .borderRadius(ACCOUNT_BLOCK_RADIUS)
+    // 与"华为账号卡"同一底色（实色卡底），不再是浮层黑
+    .backgroundColor($r('app.color.card_background'))
     .margin({ bottom: 8 })
   }
 
@@ -312,7 +313,7 @@ export struct AccountManageSheet {
               .height(38)
               .borderRadius(19)
               .textAlign(TextAlign.Center)
-              .backgroundColor($r('sys.color.background_primary'))
+              .backgroundColor($r('app.color.card_background'))
             Text('暂无账号，请在下方面板添加')
               .fontSize(12)
               .fontColor($r('sys.color.font_tertiary'))
@@ -447,8 +448,8 @@ export struct AccountManageSheet {
           .width('100%')
           .height(330)
           .padding(18)
-          .borderRadius(12)
-          .backgroundColor($r('sys.color.background_tertiary'))
+          .borderRadius(ACCOUNT_BLOCK_RADIUS)
+          .backgroundColor($r('app.color.card_background'))
           .margin({ top: 10 })
 
           if (this.error.length > 0) {

@@ -34,6 +34,15 @@ import { HuaweiLoginSheet } from './HuaweiLoginSheet';
 const LEGACY_BACKUP_LABEL: string = '旧云盘备份';
 const LEGACY_RESTORE_LABEL: string = '旧云盘恢复';
 
+/**
+ * 账号相关卡片的**统一圆角**（vp）。
+ *
+ * ★ 2026-11-23（用户："同样是卡片，那几个卡片圆角也不一样"）：
+ *   面板里"华为账号卡 / 平台账号行 / 二维码面板"原来分别是 12 / 11 / 12，
+ *   现在统一走这一个常量，导出给 `AccountManageSheet` 复用。
+ */
+export const ACCOUNT_BLOCK_RADIUS: number = 16;
+
 @ComponentV2
 export struct HuaweiAccountCard {
   /** 是否在卡片下面画一条分隔线（放在列表最上面时用）。 */
@@ -289,8 +298,11 @@ export struct HuaweiAccountCard {
       }
       .width('100%')
       .padding({ left: 14, right: 14, top: 12, bottom: 12 })
-      .borderRadius($r('sys.float.corner_radius_level12'))
-      .backgroundColor($r('sys.color.background_secondary'))
+      .borderRadius(ACCOUNT_BLOCK_RADIUS)
+      // ★ 2026-11-23（用户："登录账号那个卡片是纯黑的，下面那些东西却是深灰色"）：
+      //   `sys.color.background_secondary` 在深色下接近**纯黑**，而半模态浮层是深灰 ⇒ 一黑一灰；
+      //   ⇒ 卡片统一改用应用自己的实色卡底（日间纯白 / 夜间 #1C1D1F，与浮层同一层次）。
+      .backgroundColor($r('app.color.card_background'))
 
       // 与下面的音乐平台账号分开
       if (this.showDivider) {
