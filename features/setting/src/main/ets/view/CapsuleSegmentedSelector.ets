@@ -46,9 +46,7 @@ export struct CapsuleSegmentedSelector {
         this.current = index;
         this.onSelect(index);
       },
-      // ★ 2026-11-23：轨道色走 HDS 组件次级底色（原来用 `app.color.capsule_background`，
-      //   深色下 #2C2D2F 比浮层和卡片都亮，看着"割裂"）。
-      buttonBackgroundColor: ColorMetrics.resourceColor($r('sys.color.comp_background_secondary')),
+      buttonBackgroundColor: ColorMetrics.resourceColor($r('app.color.capsule_background')),
       buttonMinHeight: this.compact ? LengthMetrics.vp(30) : LengthMetrics.vp(40),
       buttonBorderRadius: this.compact ? LengthMetrics.vp(15) : LengthMetrics.vp(20),
       itemMinHeight: this.compact ? LengthMetrics.vp(30) : LengthMetrics.vp(40),

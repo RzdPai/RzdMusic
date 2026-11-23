@@ -1858,7 +1858,7 @@ export struct SettingsDetailPage {
           this.store.setNetworkExtendedEnabled(wifi, index === 1);
           this.logNetworkQuality(wifi, 'segment-mode');
         },
-        buttonBackgroundColor: ColorMetrics.resourceColor($r('sys.color.comp_background_secondary')),
+        buttonBackgroundColor: ColorMetrics.resourceColor($r('app.color.capsule_background')),
         buttonMinHeight: LengthMetrics.vp(40),
         buttonBorderRadius: LengthMetrics.vp(20),
         itemMinHeight: LengthMetrics.vp(40),
@@ -2077,7 +2077,7 @@ export struct SettingsDetailPage {
         this.store.setDownloadQualityMode(index === 1 ? 'manual' : 'follow');
         Logger.info('[RzdDownloadQuality] settings mode=' + this.store.getDownloadQualityMode());
       },
-      buttonBackgroundColor: ColorMetrics.resourceColor($r('sys.color.comp_background_secondary')),
+      buttonBackgroundColor: ColorMetrics.resourceColor($r('app.color.capsule_background')),
       buttonMinHeight: LengthMetrics.vp(40),
       buttonBorderRadius: LengthMetrics.vp(20),
       itemMinHeight: LengthMetrics.vp(40),

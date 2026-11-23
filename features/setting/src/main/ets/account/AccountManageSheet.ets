@@ -226,7 +226,7 @@ export struct AccountManageSheet {
           .height(40)
           .borderRadius(20)
           .objectFit(ImageFit.Cover)
-          .backgroundColor($r('sys.color.comp_background_secondary'))
+          .backgroundColor($r('sys.color.background_tertiary'))
           .onError(() => {
             const failed: Set<string> = new Set(this.avatarFailed);
             failed.add(account.id);
@@ -241,7 +241,7 @@ export struct AccountManageSheet {
           .fontSize(16)
           .fontWeight(FontWeight.Bold)
           .fontColor(this.themeState.color)
-          .backgroundColor($r('sys.color.comp_background_secondary'))
+          .backgroundColor($r('sys.color.background_tertiary'))
       }
       Column() {
         Text(account.nickname)
@@ -263,7 +263,7 @@ export struct AccountManageSheet {
         .type(ButtonType.Normal)
         .fontSize(11)
         .fontColor('#E64545')
-        .backgroundColor($r('sys.color.comp_background_secondary'))
+        .backgroundColor($r('sys.color.background_tertiary'))
         .height(26)
         .borderRadius(13)
         .onClick(() => {
@@ -273,8 +273,7 @@ export struct AccountManageSheet {
     .width('100%')
     .padding(10)
     .borderRadius(11)
-    // 浮层里的"行卡"用 HDS 组件底色（见 HuaweiAccountCard 同一处说明）
-    .backgroundColor($r('sys.color.comp_background_primary'))
+    .backgroundColor($r('sys.color.background_primary'))
     .margin({ bottom: 8 })
   }
 
@@ -313,7 +312,7 @@ export struct AccountManageSheet {
               .height(38)
               .borderRadius(19)
               .textAlign(TextAlign.Center)
-              .backgroundColor($r('sys.color.comp_background_primary'))
+              .backgroundColor($r('sys.color.background_primary'))
             Text('暂无账号，请在下方面板添加')
               .fontSize(12)
               .fontColor($r('sys.color.font_tertiary'))
@@ -381,7 +380,7 @@ export struct AccountManageSheet {
                   .height(160)
                   .justifyContent(FlexAlign.Center)
                   .borderRadius(16)
-                  .backgroundColor($r('sys.color.comp_background_secondary'))
+                  .backgroundColor($r('sys.color.background_tertiary'))
                 }
 
                 Column() {
@@ -405,7 +404,7 @@ export struct AccountManageSheet {
                     .type(ButtonType.Normal)
                     .fontSize(12)
                     .fontColor(this.themeState.color)
-                    .backgroundColor($r('sys.color.comp_background_secondary'))
+                    .backgroundColor($r('sys.color.background_tertiary'))
                     .height(30)
                     .margin({ top: 10 })
                     .enabled(this.qrStatus !== QrLoginStatus.Confirmed)
@@ -433,7 +432,7 @@ export struct AccountManageSheet {
                   .fontSize(12)
                   .fontColor($r('sys.color.font_primary'))
                   .placeholderColor($r('sys.color.font_tertiary'))
-                  .backgroundColor($r('sys.color.comp_background_secondary'))
+                  .backgroundColor($r('sys.color.background_tertiary'))
                   .borderRadius(10)
                   .margin({ top: 7 })
                   .onChange((value: string) => {
@@ -449,7 +448,7 @@ export struct AccountManageSheet {
           .height(330)
           .padding(18)
           .borderRadius(12)
-          .backgroundColor($r('sys.color.comp_background_secondary'))
+          .backgroundColor($r('sys.color.background_tertiary'))
           .margin({ top: 10 })
 
           if (this.error.length > 0) {
