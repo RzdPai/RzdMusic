@@ -1160,9 +1160,13 @@ export struct LocalMusicPage {
           enableScrollEffect: false
         },
         blurStrategy: BlurStrategy.DISABLE,
+        // ★ 2026-11-23（用户截图："上方被固定成白色，比较割裂"）：
+        //   标题栏底色原来写的是 `sys.color.background_primary`（日间纯白），
+        //   而页面主体是 `app.color.page_background`（日间 #F1F3F5）⇒ 上下两种白，看着断开。
+        //   ⇒ 标题栏与页面**用同一份底色**（`app.color.page_background`），接缝消失。
         originalStyle: {
           backgroundStyle: {
-            backgroundColor: $r('sys.color.background_primary')
+            backgroundColor: $r('app.color.page_background')
           }
         }
       },
