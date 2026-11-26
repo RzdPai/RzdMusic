@@ -945,16 +945,17 @@ appendPlayLog(msg);
       this.matchesAny(url, LXSourceEngine.UPDATE_MANIFEST_PATTERNS);
   }
 
-  /** 拦截后记一笔：给设置页展示"有新版本，已拦截以保持可用"，并标记该脚本。 */
-  private noteBlockedUpdateCheck(url: string, scriptId: string, scriptName: string): void {
-    const text: string = '音源「' + scriptName + '」的更新检查已被拦截（保持可用）：' + url.substring(0, 80);
+  /**
+   * 记下该脚本请求过的更新检查 URL（**放行时也要记**，供「检查更新」代打用）。
+   * @param url 版本检查请求地址
+   * @param scriptId 脚本 id
+   */
+  private recordUpdateCheckUrl(url: string, scriptId: string): void {
     try {
-      AppStorage.setOrCreate(KEY_BLOCKED_LOG, text);
       AppStorage.setOrCreate(KEY_BLOCKED_URL, url);
       AppStorage.setOrCreate(AppStorageKeys.LX_UPDATE_BLOCKED_VERSION, Date.now());
       if (scriptId.length > 0) {
         AppStorage.setOrCreate(scriptBlockedAtKey(scriptId), Date.now());
-        // 按脚本记下被拦的那条 URL：设置页点「检查更新」时据此说明"为什么查不了"
         AppStorage.setOrCreate(scriptBlockedUrlKey(scriptId), url);
         // ★ 2026-11-26：**全部**记下来（脚本会试主/备域名，只留最后一条会漏掉能用的那条）
         try {
@@ -972,6 +973,17 @@ appendPlayLog(msg);
           // 记录失败不影响主流程
         }
       }
+    } catch (e) {
+      // AppStorage 不可用时只打日志
+    }
+  }
+
+  /** 拦截后记一笔：给设置页展示"有新版本，已拦截以保持可用"，并标记该脚本。 */
+  private noteBlockedUpdateCheck(url: string, scriptId: string, scriptName: string): void {
+    const text: string = '音源「' + scriptName + '」的更新检查已被拦截（保持可用）：' + url.substring(0, 80);
+    this.recordUpdateCheckUrl(url, scriptId);
+    try {
+      AppStorage.setOrCreate(KEY_BLOCKED_LOG, text);
     } catch (e) {
       // AppStorage 不可用时只打日志
     }
@@ -1006,6 +1018,15 @@ appendPlayLog(msg);
     // 拦截音源脚本的**在线更新检查**：让脚本以为"已经是最新/检查不成功"，从而继续初始化。
     // （"未更新也能用"就靠这里；详见 UPDATE_FAKE_PATTERNS / UPDATE_MANIFEST_PATTERNS 的注释。）
     const scriptId: string = this.currentScriptId;
+    // ★★ 2026-11-26（用户："直接检查更新的时候不屏蔽不就行了，单独跑一个"）：
+    //   命中"更新清单"但该脚本处于**放行**状态（用户点了「检查更新」，见
+    //   `scriptAllowKey`）⇒ 仅记录 URL 供代打，**请求真的发出去**，让脚本自己拿到真实版本信息。
+    const isManifestUrl: boolean = this.matchesAny(url, LXSourceEngine.UPDATE_FAKE_PATTERNS) ||
+      this.matchesAny(url, LXSourceEngine.UPDATE_MANIFEST_PATTERNS);
+    if (isManifestUrl && !this.shouldBlockUpdateCheck(url, scriptId)) {
+      this.recordUpdateCheckUrl(url, scriptId);
+      LXSourceEngine.appendLog('引擎 放行更新检查（用户手动检查）: ' + url.substring(0, 80));
+    }
     if (this.shouldBlockUpdateCheck(url, scriptId)) {
       const scriptName: string = this.currentApiInfo?.name ?? scriptId;
       this.noteBlockedUpdateCheck(url, scriptId, scriptName);

@@ -27,7 +27,7 @@ import { common, ConfigurationConstant, Want } from '@kit.AbilityKit';
 import { http } from '@kit.NetworkKit';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { notificationManager } from '@kit.NotificationKit';
-import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, HomeSourceState, LyricCenterState, LyricFontSizeState, LyricFpsState, MotionCoverState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, immersiveFromLevel, scriptAlertAtKey, scriptAlertLogKey, scriptAlertUrlKey, scriptBlockedUrlKey, scriptBlockedUrlsKey } from 'musicbasic';
+import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, HomeSourceState, LyricCenterState, LyricFontSizeState, LyricFpsState, MotionCoverState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, immersiveFromLevel, scriptAlertAtKey, scriptAlertLogKey, scriptAlertUrlKey, scriptBlockedUrlKey, scriptBlockedUrlsKey, scriptAllowKey } from 'musicbasic';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { DownloadService, LXSourceEngine, LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatforms, lxDeclaredPlatformsOf, lxSourceManager, MediaService, lxSourceLabel, LX_PLATFORM_ORDER, normalizePlatformId, musicFreeSubscriptionLabel } from 'player';
@@ -818,8 +818,30 @@ export struct SettingsDetailPage {
     this.startEnginePolling();
   }
 
-  /** 版本比对：脚本自带 version 与已保存版本一致即视为最新（真正的远端比对在 A4 之后接）。 */
+  /**
+   * 「检查更新」入口。
+   *
+   * ★★ 2026-11-26（用户："直接检查更新的时候不屏蔽不就行了，就是检查更新的时候单独跑一个"）：
+   *   平时播放/初始化时我们会拦掉脚本的版本检查（为了"未更新也能用"）；
+   *   但**用户主动点「检查更新」时就该真查** ⇒ 这里临时给该脚本打上"放行"标记
+   *   （`scriptAllowKey`），让脚本自己的 `checkUpdate()` 真的把请求发出去，
+   *   查完（无论成败）再复位成原来的样子，播放期行为完全不变。
+   */
   private async checkSourceUpdateRemote(api: LXUserApiInfo): Promise<void> {
+    const allowedBefore: boolean = (AppStorage.get<boolean>(scriptAllowKey(api.id)) ?? false) === true;
+    AppStorage.setOrCreate(scriptAllowKey(api.id), true);
+    appendPlayLog('[RzdSourceUpdate] ' + api.name + ' 手动检查开始（本次放行更新检查）');
+    try {
+      await this.checkSourceUpdateRemoteInner(api);
+    } finally {
+      AppStorage.setOrCreate(scriptAllowKey(api.id), allowedBefore);
+      appendPlayLog('[RzdSourceUpdate] ' + api.name +
+        ' 手动检查结束（更新检查拦截已复位=' + String(allowedBefore) + '）');
+    }
+  }
+
+  /** 版本比对：脚本自带 version 与已保存版本一致即视为最新（真正的远端比对在 A4 之后接）。 */
+  private async checkSourceUpdateRemoteInner(api: LXUserApiInfo): Promise<void> {
     // ★ 2026-11-18（用户：「点击检查更新没有任何反应，就像卡了一下，加个小提示」）：
     //   整条链最短也要 2.6s（脚本自查要等它真的跑一遍）⇒ 先把提示打出来，别让人以为没响应。
     this.getUIContext().getPromptAction().showToast({
