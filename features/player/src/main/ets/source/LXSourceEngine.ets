@@ -6,7 +6,7 @@ import { lxSourceManager } from './LXSourceManager';
 import {AppStorageKeys, 
   appendPlayLog, MusicStoreService,
   scriptAlertUrlKey, scriptAlertLogKey, scriptAlertAtKey,
-  scriptBlockedAtKey, scriptBlockedUrlKey, scriptAllowKey,
+  scriptBlockedAtKey, scriptBlockedUrlKey, scriptBlockedUrlsKey, scriptAllowKey,
   KEY_ALERT_LOG, KEY_ALERT_URL, KEY_ALERT_AT, KEY_ALERT_OWNER,
   KEY_BLOCKED_LOG, KEY_BLOCKED_URL
 } from 'musicbasic';
@@ -926,6 +926,21 @@ appendPlayLog(msg);
         AppStorage.setOrCreate(scriptBlockedAtKey(scriptId), Date.now());
         // 按脚本记下被拦的那条 URL：设置页点「检查更新」时据此说明"为什么查不了"
         AppStorage.setOrCreate(scriptBlockedUrlKey(scriptId), url);
+        // ★ 2026-11-26：**全部**记下来（脚本会试主/备域名，只留最后一条会漏掉能用的那条）
+        try {
+          const prev: string[] = AppStorage.get<string[]>(scriptBlockedUrlsKey(scriptId)) ?? [];
+          const next: string[] = prev.slice();
+          if (next.indexOf(url) < 0) {
+            next.push(url);
+            // 上限 8 条：够覆盖主备域名，又不会把 AppStorage 撑大
+            while (next.length > 8) {
+              next.shift();
+            }
+            AppStorage.setOrCreate(scriptBlockedUrlsKey(scriptId), next);
+          }
+        } catch (e) {
+          // 记录失败不影响主流程
+        }
       }
     } catch (e) {
       // AppStorage 不可用时只打日志

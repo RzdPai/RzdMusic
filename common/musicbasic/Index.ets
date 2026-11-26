@@ -81,7 +81,7 @@ export { PlaybackIntentState } from './src/main/ets/model/PlaybackIntentState';
 export {
   SourceUpdateInfo, readScriptUpdateAlert, readGlobalUpdateAlert, globalAlertOwnedBy,
   scriptAlertUrlKey, scriptAlertLogKey, scriptAlertAtKey,
-  scriptBlockedAtKey, scriptBlockedUrlKey, scriptAllowKey,
+  scriptBlockedAtKey, scriptBlockedUrlKey, scriptBlockedUrlsKey, scriptAllowKey,
   KEY_ALERT_LOG, KEY_ALERT_URL, KEY_ALERT_AT, KEY_ALERT_OWNER, KEY_BLOCKED_LOG, KEY_BLOCKED_URL
 } from './src/main/ets/model/SourceUpdateAlert';
 export { SongDataSource } from './src/main/ets/model/SongDataSource';

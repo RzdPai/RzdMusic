@@ -27,7 +27,7 @@ import { common, ConfigurationConstant, Want } from '@kit.AbilityKit';
 import { http } from '@kit.NetworkKit';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { notificationManager } from '@kit.NotificationKit';
-import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, HomeSourceState, LyricCenterState, LyricFontSizeState, LyricFpsState, MotionCoverState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, immersiveFromLevel, scriptAlertAtKey, scriptAlertLogKey, scriptAlertUrlKey, scriptBlockedUrlKey } from 'musicbasic';
+import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, HomeSourceState, LyricCenterState, LyricFontSizeState, LyricFpsState, MotionCoverState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, immersiveFromLevel, scriptAlertAtKey, scriptAlertLogKey, scriptAlertUrlKey, scriptBlockedUrlKey, scriptBlockedUrlsKey } from 'musicbasic';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { DownloadService, LXSourceEngine, LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatforms, lxDeclaredPlatformsOf, lxSourceManager, MediaService, lxSourceLabel, LX_PLATFORM_ORDER, normalizePlatformId, musicFreeSubscriptionLabel } from 'player';
@@ -1011,8 +1011,38 @@ export struct SettingsDetailPage {
     //   ⇒ 用户点「检查更新」时，用**脚本自己那条 URL** 代打一次，拿服务端原话。
     //   （刚重载过 ⇒ 脚本这一次的 checkUpdate 已经把 URL 送进来了，这里读到的是最新的。）
     const blockedUrl: string = AppStorage.get<string>(scriptBlockedUrlKey(api.id)) ?? '';
-    if (/^https?:\/\//.test(blockedUrl)) {
-      const probe: SourceUpdateProbeResult = await probeScriptUpdate(blockedUrl, api.version);
+    // ★★ 2026-11-26（用户："检查更新的时候提示无法连接到服务器"）：
+    //   脚本通常会试**主/备两个域名**（如 `yy1.zddyr.top` 与 `yy.zddyr.top`），
+    //   过去只记最后一条 ⇒ 那条域名在本机解析失败时代打必然失败，只能报"连不上"。
+    //   ⇒ 现在把该脚本被拦过的**全部 URL** 都存下来（`scriptBlockedUrlsKey`），逐条重放，
+    //     任一条通就出结论；全失败才报错，并把每条的原因写进日志，便于定位是哪一侧不通。
+    const blockedUrls: string[] = [];
+    try {
+      const list: string[] = AppStorage.get<string[]>(scriptBlockedUrlsKey(api.id)) ?? [];
+      for (let i: number = 0; i < list.length; i++) {
+        if (/^https?:\/\//.test(list[i]) && blockedUrls.indexOf(list[i]) < 0) {
+          blockedUrls.push(list[i]);
+        }
+      }
+    } catch (e) {
+      // 读不到列表就只用单条
+    }
+    if (/^https?:\/\//.test(blockedUrl) && blockedUrls.indexOf(blockedUrl) < 0) {
+      blockedUrls.push(blockedUrl);
+    }
+    if (blockedUrls.length > 0) {
+      let probe: SourceUpdateProbeResult = new SourceUpdateProbeResult();
+      for (let i: number = 0; i < blockedUrls.length; i++) {
+        const one: SourceUpdateProbeResult = await probeScriptUpdate(blockedUrls[i], api.version);
+        appendPlayLog('[RzdSourceUpdate] ' + api.name + ' script-url[' + (i + 1) + '/' +
+          blockedUrls.length + '] ' + blockedUrls[i].substring(0, 60) + ' ok=' + one.ok +
+          ' hasUpdate=' + one.hasUpdate + (one.ok ? '' : (' err=' + one.error)));
+        if (one.ok) {
+          probe = one;
+          break;
+        }
+        probe = one;
+      }
       appendPlayLog('[RzdSourceUpdate] ' + api.name + ' script-url probe ok=' + probe.ok +
         ' hasUpdate=' + probe.hasUpdate + ' url=' + probe.updateUrl.substring(0, 80));
       if (probe.hasUpdate) {

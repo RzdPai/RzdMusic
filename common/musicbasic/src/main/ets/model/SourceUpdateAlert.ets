@@ -42,6 +42,15 @@ const PREFIX_ALERT_LOG: string = 'lxUpdateAlertLog:';
 const PREFIX_ALERT_AT: string = 'lxUpdateAlertAt:';
 const PREFIX_BLOCKED_AT: string = 'lxUpdateBlocked:';
 const PREFIX_BLOCKED_URL: string = 'lxUpdateBlockedUrl:';
+/**
+ * 某脚本被拦截时抓到的**全部**更新检查 URL（脚本通常会试主/备两个域名）。
+ *
+ * ★ 2026-11-26（用户："检查更新的时候提示无法连接到服务器"）：
+ *   星海这类脚本会同时请求 `yy1.zddyr.top` 与 `yy.zddyr.top` 两个域名；
+ *   只记最后一条时，若该域名在本机解析失败，代打查询就必然失败。
+ *   ⇒ 全记下来（去重、上限 8 条），检查更新时逐条重放，任一条通就能给出结论。
+ */
+const PREFIX_BLOCKED_URLS: string = 'lxUpdateBlockedUrls:';
 const PREFIX_ALLOW: string = 'lxUpdateCheckAllow:';
 
 /** 某脚本上报的告警地址键。 */
@@ -67,6 +76,11 @@ export function scriptBlockedAtKey(scriptId: string): string {
 /** 某脚本被拦截时抓到的那条更新检查 URL 键。 */
 export function scriptBlockedUrlKey(scriptId: string): string {
   return PREFIX_BLOCKED_URL + scriptId;
+}
+
+/** 某脚本被拦截时抓到的全部更新检查 URL 列表键。 */
+export function scriptBlockedUrlsKey(scriptId: string): string {
+  return PREFIX_BLOCKED_URLS + scriptId;
 }
 
 /** 某脚本「豁免拦截」的键（上次拦了它还是起不来 ⇒ 下次放行让脚本自己判断）。 */
