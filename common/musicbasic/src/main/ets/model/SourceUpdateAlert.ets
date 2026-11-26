@@ -108,6 +108,32 @@ export class SourceUpdateInfo {
 }
 
 /**
+ * 这段告警文本是不是"连不上服务器"（= 我们拦截更新检查的后果，**不是**新版本线索）。
+ *
+ * ★ 2026-11-26：星海源把 `versionh2.php` 拦成失败后，脚本打印
+ *   "无法连接到服务器，请手动查看更新 url=…/lx/vers.php"（那个页面还是 404）。
+ *   这条文本被当成告警后，`hasUpdate` 恒为真、跳转地址是死链。
+ *   引擎侧已经不再记录这类文本（`LXSourceEngine.isUpdateFailureText`），
+ *   这里再兜一层：**历史已存下的脏数据也不能当真**。
+ * @param text 告警原文
+ * @returns 属于"连不上/被拦"时为 true
+ */
+function looksLikeConnectionFailure(text: string): boolean {
+  if (text.length === 0) {
+    return false;
+  }
+  const lower: string = text.toLowerCase();
+  const bad: string[] = ['无法连接', '连接失败', '无法访问', '连接超时', '网络异常', '网络错误',
+    'failed to connect', 'connect failed', 'timeout', 'network error'];
+  for (let i: number = 0; i < bad.length; i++) {
+    if (lower.indexOf(bad[i].toLowerCase()) >= 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * 读取**某一个脚本**的更新告警（绝不跨源借用）。
  * @param scriptId 音源脚本 id
  * @returns 结果；`hasUpdate` / `blocked` 全为假表示"该脚本没有任何更新线索"
@@ -119,10 +145,11 @@ export function readScriptUpdateAlert(scriptId: string): SourceUpdateInfo {
     return out;
   }
   const url: string = AppStorage.get<string>(scriptAlertUrlKey(scriptId)) ?? '';
-  if (url.length > 0) {
+  const logText: string = AppStorage.get<string>(scriptAlertLogKey(scriptId)) ?? '';
+  if (url.length > 0 && !looksLikeConnectionFailure(logText)) {
     out.hasUpdate = true;
     out.updateUrl = url;
-    out.message = AppStorage.get<string>(scriptAlertLogKey(scriptId)) ?? '';
+    out.message = logText;
     return out;
   }
   const blockedAt: number = AppStorage.get<number>(scriptBlockedAtKey(scriptId)) ?? 0;

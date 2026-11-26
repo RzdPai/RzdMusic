@@ -879,6 +879,36 @@ appendPlayLog(msg);
    *   长青/刘阿五 那类（`…/lxmusic/changqing.json`、`/lx/versionh2.php`、`/lx/vers.php`）没命中，
    *   真请求发出去 ⇒ 脚本看到"发现新版本 v1.3.0，请更新后使用" ⇒ 自己拒绝 init ⇒ 8s 超时。
    */
+  /**
+   * 这段「更新提示」文本是不是**连接失败**（而不是真的发现了新版本）。
+   *
+   * ★★ 2026-11-26（用户：星海源"检查更新还是不行"，日志里是
+   *   `hasUpdate=true msg=无法连接到服务器，请手动查看更新 url=https://yy1.zddyr.top/lx/vers.php`）：
+   *   我们自己把 `versionh2.php` 拦成失败 ⇒ 脚本进 catch ⇒ 打出一句
+   *   "无法连接到服务器，请手动查看更新 url=…"。**里面那个 url= 是它的"手动更新页面"（404）**，
+   *   过去被当成"发现了新版本的下载地址" ⇒ 设置页直接走"发现新版本"分支，
+   *   既没去代打真接口，又给出一个 404 链接。
+   *   ⇒ 这类文本一律**不算更新告警**，让「检查更新」走代打查询（`probeScriptUpdate`）。
+   * @param text 提示文本（脚本 console 抓到的）
+   * @returns 属于"连不上/被拦"，不能当作更新线索时为 true
+   */
+  private static isUpdateFailureText(text: string): boolean {
+    if (text.length === 0) {
+      return false;
+    }
+    const bad: string[] = [
+      '无法连接', '连接失败', '无法访问', '连接超时', '请求失败', '网络异常', '网络错误',
+      'failed to connect', 'connect failed', 'timeout', 'network error', 'econnrefused'
+    ];
+    const lower: string = text.toLowerCase();
+    for (let i: number = 0; i < bad.length; i++) {
+      if (lower.indexOf(bad[i].toLowerCase()) >= 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private static readonly UPDATE_FAKE_PATTERNS: string[] =
     ['grass-source-info', 'source-info', 'source/info'];
 
@@ -1235,7 +1265,8 @@ appendPlayLog(msg);
       // ★ 2026-10-29：脚本只打日志「更新提示: … url=…」，抓到就写进官方 alert（检查更新才读得到）
       try {
         const jsText: string = msg.getMessage();
-        if (jsText.indexOf('更新提示') >= 0) {
+        if (jsText.indexOf('更新提示') >= 0 &&
+          !LXSourceEngine.isUpdateFailureText(jsText)) {
           const u: RegExpMatchArray | null = jsText.match(/url=(\S+)/);
           const alertUrl: string = u !== null && u.length > 1 ? u[1] : '';
           const alertLog: string = jsText.substring(0, Math.min(jsText.length, 160));
@@ -1249,6 +1280,11 @@ appendPlayLog(msg);
           }
           AppStorage.setOrCreate(AppStorageKeys.UPDATE_ALERT_URL, alertUrl);
           AppStorage.setOrCreate(AppStorageKeys.UPDATE_ALERT_LOG, alertLog);
+        } else if (jsText.indexOf('更新提示') >= 0) {
+          // 连接失败 / 被拦导致的提示：**不是**更新线索（见 isUpdateFailureText 注释），
+          // 只留一行日志；「检查更新」会走代打查询去拿真实结论。
+          LXSourceEngine.appendLog('[音源] 更新提示（连不上，非新版本）: ' +
+            jsText.substring(0, 120));
         }
       } catch (e) {
         // ★ 2026-11-15（§7.6）：脚本上报的 updateAlert 解析失败必须留痕 ——
