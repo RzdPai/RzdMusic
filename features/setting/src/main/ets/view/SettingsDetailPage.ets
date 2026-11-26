@@ -819,6 +819,44 @@ export struct SettingsDetailPage {
   }
 
   /**
+   * 逐条重放该脚本请求过的**全部**版本检查 URL（主/备域名都试），返回第一个"有结论"的结果。
+   *
+   * ★ 2026-11-26（真机日志：`blocked probe ok=false err=更新接口请求失败：Failed to connect`）：
+   *   过去只用 `scriptBlockedUrlKey` 那**一条**（= 脚本最后试的那个域名，往往是备用域名），
+   *   该域名在设备网络上连不上 ⇒ 结论必然是"连不上"。而主域名其实是通的。
+   */
+  private async probeBlockedUpdateUrls(api: LXUserApiInfo): Promise<SourceUpdateProbeResult> {
+    const urls: string[] = [];
+    try {
+      const list: string[] = AppStorage.get<string[]>(scriptBlockedUrlsKey(api.id)) ?? [];
+      for (let i: number = 0; i < list.length; i++) {
+        if (/^https?:\/\//.test(list[i]) && urls.indexOf(list[i]) < 0) {
+          urls.push(list[i]);
+        }
+      }
+    } catch (e) {
+      // 读不到列表就只用单条
+    }
+    const single: string = AppStorage.get<string>(scriptBlockedUrlKey(api.id)) ?? '';
+    if (/^https?:\/\//.test(single) && urls.indexOf(single) < 0) {
+      urls.push(single);
+    }
+    let last: SourceUpdateProbeResult = new SourceUpdateProbeResult();
+    last.error = '没有可用的更新检查地址';
+    for (let i: number = 0; i < urls.length; i++) {
+      const one: SourceUpdateProbeResult = await probeScriptUpdate(urls[i], api.version);
+      appendPlayLog('[RzdSourceUpdate] ' + api.name + ' probe[' + (i + 1) + '/' + urls.length + '] ' +
+        urls[i].substring(0, 60) + ' ok=' + one.ok + ' hasUpdate=' + one.hasUpdate +
+        (one.ok ? '' : (' err=' + one.error)));
+      if (one.ok) {
+        return one;
+      }
+      last = one;
+    }
+    return last;
+  }
+
+  /**
    * 「检查更新」入口。
    *
    * ★★ 2026-11-26（用户："直接检查更新的时候不屏蔽不就行了，就是检查更新的时候单独跑一个"）：
@@ -880,10 +918,15 @@ export struct SettingsDetailPage {
     //    `UPDATE_MANIFEST_PATTERNS`（如 `versionh2.php`），被应用强制置为失败以保住可用性，
     //    脚本的 checkUpdate 进 catch ⇒ 永远不上报 ⇒ 检查更新过去只能静默。
     if (info.blocked) {
-      // ★ 2026-11-14：脚本的版本检查被拦了（为了"未更新也能用"），脚本因此不会上报告警。
-      //   这里由应用**原样重放**那条被拦的 URL 拿真实结论 —— URL 是从脚本自己的请求里
-      //   抓的（含 ?ver=…），不需要猜任何规则；且只在用户主动点「检查更新」时发。
-      const probe: SourceUpdateProbeResult = await probeScriptUpdate(info.blockedUrl, api.version);
+      // ★★★ 2026-11-26（用户："检查更新的时候单独跑一个"；真机日志显示手动检查 <1s 就返回、
+      //   脚本根本没重跑）：**先让脚本自己真跑一次**（包装层已把该脚本的更新检查临时放行），
+      //   它上报了就展示脚本给的真实发布页；脚本没上报（= 已是最新）再走代打兜底。
+      const scriptSaid: boolean = await this.probeScriptSelfUpdate(api);
+      if (scriptSaid) {
+        return;
+      }
+      // 兜底：把该脚本请求过的 URL **逐条**重放（主/备域名都试，别只赌最后一条）。
+      const probe: SourceUpdateProbeResult = await this.probeBlockedUpdateUrls(api);
       appendPlayLog('[RzdSourceUpdate] ' + api.name + ' blocked probe ok=' + probe.ok +
         ' hasUpdate=' + probe.hasUpdate + ' err=' + probe.error);
       if (probe.hasUpdate) {
