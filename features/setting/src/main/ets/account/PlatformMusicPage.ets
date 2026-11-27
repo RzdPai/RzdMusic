@@ -26,10 +26,61 @@ class PlaylistDestination {
   isEditable: boolean = false;
 }
 
+/** 平台歌单歌曲的懒加载数据源（长歌单不再一次性建满节点）。 */
+class PlatformTrackSource implements IDataSource {
+  private items: PlatformTrackInfo[] = [];
+  private listeners: DataChangeListener[] = [];
+
+  /** 整体换一批（歌单切换 / 重新加载）。 */
+  public reload(next: PlatformTrackInfo[]): void {
+    this.items = next;
+    for (let i: number = 0; i < this.listeners.length; i++) {
+      this.listeners[i].onDataReloaded();
+    }
+  }
+
+  totalCount(): number {
+    return this.items.length;
+  }
+
+  getData(index: number): PlatformTrackInfo {
+    return this.items[index];
+  }
+
+  registerDataChangeListener(listener: DataChangeListener): void {
+    if (this.listeners.indexOf(listener) < 0) {
+      this.listeners.push(listener);
+    }
+  }
+
+  unregisterDataChangeListener(listener: DataChangeListener): void {
+    const i: number = this.listeners.indexOf(listener);
+    if (i >= 0) {
+      this.listeners.splice(i, 1);
+    }
+  }
+}
+
 @ComponentV2
 export struct PlatformMusicPage {
   @Param contentTopOffset: number = 0;
   @Param pageScroller: Scroller = new Scroller();
+  /**
+   * 歌曲列表的懒加载数据源。
+   *
+   * ★ 2026-11-27（用户："平台音乐页面中查看其它平台的歌单时，如果歌单特别长，容易卡退"）：
+   *   原来这一屏把**全部**歌曲塞进 `Scroll + ForEach` —— 上千首的在线歌单会在首帧一次性
+   *   建出上千个行节点（每行还有封面 Image），内存顶满 ⇒ 卡死 / 闪退。
+   *   现在改成 `List + LazyForEach`：只建可视区 + cachedCount。
+   */
+  private songSource: PlatformTrackSource = new PlatformTrackSource();
+
+  /** 换一批歌曲：`@Local songs` 与懒加载数据源必须同步（否则列表空白或错行）。 */
+  private setSongs(next: PlatformTrackInfo[]): void {
+    this.songs = next;
+    this.songSource.reload(next);
+  }
+
   @Local groups: AccountGroup[] = [];
   @Local currentAccountId: string = '';
   @Local currentPlaylists: PlaylistInfo[] = [];
@@ -145,7 +196,7 @@ export struct PlatformMusicPage {
     this.selectedTitle = '';
     this.selectedSource = '';
     this.selectedDestination = null;
-    this.songs = [];
+    this.setSongs([]);
     this.error = '';
     this.isLoading = false;
   }
@@ -235,11 +286,11 @@ export struct PlatformMusicPage {
     this.error = '';
     const cached: PlatformTrackInfo[] | undefined = songCache.get(key);
     if (cached !== undefined) {
-      this.songs = cached;
+      this.setSongs(cached);
       this.isLoading = false;
       return;
     }
-    this.songs = [];
+    this.setSongs([]);
     this.isLoading = true;
     try {
       const ids: string[] = await AccountService.getDailyTrackIds(account.id);
@@ -247,7 +298,7 @@ export struct PlatformMusicPage {
       let infos: PlatformTrackInfo[] = [];
       if (ids.length > 0) infos = await AccountService.getTrackDetails(account.id, ids);
       if (this.selectedKey !== key) return;
-      this.songs = infos;
+      this.setSongs(infos);
       songCache.set(key, infos);
     } catch (err) {
       const error: Error = err as Error;
@@ -274,11 +325,11 @@ export struct PlatformMusicPage {
     this.error = '';
     const cached: PlatformTrackInfo[] | undefined = songCache.get(key);
     if (cached !== undefined) {
-      this.songs = cached;
+      this.setSongs(cached);
       this.isLoading = false;
       return;
     }
-    this.songs = [];
+    this.setSongs([]);
     this.isLoading = true;
     try {
       const tracks: PlaylistTrackInfo[] = await AccountService.getPlaylistTrackIds(account.id, playlist.id, playlist.dirId);
@@ -292,7 +343,7 @@ export struct PlatformMusicPage {
         for (const info of infos) info.removeId = removeMap.get(info.id) ?? '';
       }
       if (this.selectedKey !== key) return;
-      this.songs = infos;
+      this.setSongs(infos);
       songCache.set(key, infos);
     } catch (err) {
       const error: Error = err as Error;
@@ -502,7 +553,9 @@ export struct PlatformMusicPage {
         .layoutWeight(1)
         .justifyContent(FlexAlign.Center)
       } else {
-        Scroll(this.pageScroller) {
+        // ★ 2026-11-27：`Scroll + Column + ForEach` → `List + ListItem(头部) + LazyForEach(歌曲)`
+        List({ scroller: this.pageScroller }) {
+          ListItem() {
           Column() {
             Scroll() {
               Row({ space: 8 }) {
@@ -657,8 +710,13 @@ export struct PlatformMusicPage {
                 .fontColor(DANGER_COLOR)
                 .padding({ left: 20, right: 20, bottom: 8 })
             }
+          }
+          .width('100%')
+          }
 
-            if (this.isLoading) {
+          // ── 歌曲列表（懒加载：只建可视区）──
+          if (this.isLoading) {
+            ListItem() {
               Column() {
                 Text('加载中...')
                   .fontSize(12)
@@ -666,20 +724,9 @@ export struct PlatformMusicPage {
               }
               .width('100%')
               .padding({ top: 40, bottom: 40 })
-            } else if (this.songs.length > 0) {
-              ForEach(this.songs, (song: PlatformTrackInfo, index: number) => {
-                Column() {
-                  this.songRow(song)
-                  if (index < this.songs.length - 1) {
-                    Divider()
-                      .strokeWidth(0.5)
-                      .color($r('sys.color.comp_divider'))
-                      .margin({ left: 66, right: 14 })
-                  }
-                }
-                .width('100%')
-              }, (song: PlatformTrackInfo) => `${song.id}_${song.removeId}`)
-            } else {
+            }
+          } else if (this.songs.length === 0) {
+            ListItem() {
               Column() {
                 Text(this.statusText())
                   .fontSize(12)
@@ -690,11 +737,33 @@ export struct PlatformMusicPage {
               .width('100%')
               .padding({ top: 40, bottom: 40 })
             }
+          } else {
+            LazyForEach(this.songSource, (song: PlatformTrackInfo, index: number) => {
+              ListItem() {
+                Column() {
+                  this.songRow(song)
+                  if (index < this.songs.length - 1) {
+                    Divider()
+                      .strokeWidth(0.5)
+                      .color($r('sys.color.comp_divider'))
+                      .margin({ left: 66, right: 14 })
+                  }
+                }
+                .width('100%')
+              }
+            }, (song: PlatformTrackInfo) => `${song.id}_${song.removeId}`)
+            // 列表尾部留白：与原来的底部 padding 同口径，最后一行不贴住播放条
+            ListItem() {
+              Column().width('100%').height(24)
+            }
           }
-          .width('100%')
         }
         .width('100%')
         .layoutWeight(1)
+        .cachedCount(8)
+        // 只放可视区附近的节点，避免长歌单堆内存
+        .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring)
         // ★ 用户 2026-10-11：「平台音乐页面上方有一块空白」——宿主面板已经让过一次顶（大设置页/二级页的首个 Blank），
       //   这里再让一次就叠成一块死空白 ⇒ 内层不再加顶部 padding，让位只由宿主的滚动内容负责。
       // ★ 用户 2026-10-12：「留白要写在**列表顶部**，不是屏幕顶部」⇒ 用官方 `contentStartOffset`

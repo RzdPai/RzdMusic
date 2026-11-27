@@ -15,6 +15,7 @@
 
 import { appendPlayLog, setScreenOrientation, UsbAudioService, UsbAudioState, TabBarConfigModel,
   immersiveMedium,
+  PlayerExpandState,
   rdzToast
 } from 'musicbasic';
 import { bundleManager } from '@kit.AbilityKit';
@@ -27,7 +28,7 @@ import { common, ConfigurationConstant, Want } from '@kit.AbilityKit';
 import { http } from '@kit.NetworkKit';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { notificationManager } from '@kit.NotificationKit';
-import { CoverCacheSettingsCard, AmbientState, AppStorageKeys, RouterUrlConstants, HomeSourceState, LyricCenterState, LyricFontSizeState, LyricFpsState, MotionCoverState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, immersiveFromLevel, scriptAlertAtKey, scriptAlertLogKey, scriptAlertUrlKey, scriptBlockedUrlKey, scriptBlockedUrlsKey, scriptAllowKey } from 'musicbasic';
+import { CoverCacheSettingsCard, AmbientState, CoverRadiusState, AppStorageKeys, RouterUrlConstants, HomeSourceState, LyricCenterState, LyricFontSizeState, LyricFpsState, MotionCoverState, MusicStoreService, notifyHomeSourceRefresh, PageTopInsetHelper, ShowMiniLyricState, ThemeState, TitleBarConstants, UseAccountRecState, buildTitleMaterial, immersiveFromLevel, scriptAlertAtKey, scriptAlertLogKey, scriptAlertUrlKey, scriptBlockedUrlKey, scriptBlockedUrlsKey, scriptAllowKey } from 'musicbasic';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BlurStrategy, HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions, HdsNavigationTitleBarOptions, ScrollEffectType, TitleSize } from '@kit.UIDesignKit';
 import { DownloadService, LXSourceEngine, LXUserApiInfo, LXSourcePlatformInfo, lxDeclaredPlatforms, lxDeclaredPlatformsOf, lxSourceManager, MediaService, lxSourceLabel, LX_PLATFORM_ORDER, normalizePlatformId, musicFreeSubscriptionLabel } from 'player';
@@ -175,6 +176,10 @@ export struct SettingsDetailPage {
   @Local downloadNameFormat: string = 'title';
   @Local playlistAddPosition: string = 'bottom';
   @Local showMiniLyric: boolean = false;
+  /** 播放页封面下方显示模式：0 无内容 / 1 小歌词 / 2 平台音质。 */
+  @Local playContentMode: number = 0;
+  /** 播放页封面圆角（vp，0..32）。 */
+  @Local coverRadius: number = 8;
   /** 桌面歌词（系统 AVSession 悬浮窗歌词）开关，默认关（见 MusicStoreService.getDesktopLyric）。 */
   @Local desktopLyric: boolean = false;
   /** 车载蓝牙歌词：推送当前句到蓝牙车机/音箱。 */
@@ -350,6 +355,8 @@ export struct SettingsDetailPage {
   }
 
   private readonly onOffOptions: string[] = ['开', '关'];
+  /** 播放页封面下方显示什么（用户 2026-11-27：三选项）。 */
+  private readonly playContentOptions: string[] = ['无内容', '小歌词', '平台音质'];
   private readonly saveLocationOptions: string[] = ['手动选择', 'Download目录', '自定义目录'];
   private readonly colorModeOptions: string[] = ['日间', '夜间', '跟随系统'];
   private pageScroller: Scroller = new Scroller();
@@ -509,6 +516,8 @@ export struct SettingsDetailPage {
     this.engineSources = AppStorage.get<string>(AppStorageKeys.LX_ENGINE_SOURCES) ?? '{}';
     this.ambientLevel = MusicStoreService.getInstance().getAmbientLevel();
     this.showMiniLyric = MusicStoreService.getInstance().getShowMiniLyric();
+    this.playContentMode = MusicStoreService.getInstance().getPlayContentMode();
+    this.coverRadius = MusicStoreService.getInstance().getCoverRadius();
     this.desktopLyric = MusicStoreService.getInstance().getDesktopLyric();
     this.bluetoothLyric = MusicStoreService.getInstance().getBluetoothLyric();
     // 会话是「第一次推歌」时才建的，所以这里主动探一次支持性（否则设置页只能说「未知」）
@@ -2052,17 +2061,58 @@ export struct SettingsDetailPage {
 
         Column() {
           this.SubTitle($r('app.string.setting_sub_mini_lyric'))
-          this.CapsuleSelector(this.onOffOptions, this.showMiniLyric ? 0 : 1,
+          // ★★★ 2026-11-27（用户）："播放页显示小歌词改为播放页显示，三个选项：
+          //   无内容、小歌词、平台音质（和播放页点击标题弹出的气泡里面的内容一样）"。
+          this.CapsuleSelector(this.playContentOptions, this.playContentMode,
             (index: number) => {
-              const isOn: boolean = index === 0;
-              this.showMiniLyric = isOn;
-              MusicStoreService.getInstance().setShowMiniLyric(isOn);
+              this.playContentMode = index;
+              this.showMiniLyric = index === 1;
+              MusicStoreService.getInstance().setPlayContentMode(index);
               const state = AppStorageV2.connect(ShowMiniLyricState, AppStorageKeys.SHOW_MINI_LYRIC_STATE,
                 () => new ShowMiniLyricState());
               if (state !== undefined) {
-                state.enabled = isOn;
+                state.enabled = index === 1;
+                state.mode = index;
               }
             })
+
+          // ★★★ 2026-11-27（用户）："加个播放页封面圆角，可以调整播放页第一页的封面圆角大小
+          //   （注意播放器展开动画中的封面 + 结束后的封面等）"。
+          //   展开动画两端与静止封面读同一个值（`PlayerExpandState.playerCoverRadiusVp` + `CoverRadiusState`），
+          //   所以这里一改，播放页与动画同时生效。
+          this.SubTitle($r('app.string.setting_sub_cover_radius'))
+          Row({ space: 8 }) {
+            Slider({
+              value: this.coverRadius,
+              min: 0,
+              max: 32,
+              step: 1,
+              style: SliderStyle.InSet
+            })
+              .layoutWeight(1)
+              .selectedColor(this.themeState.color)
+              .showSteps(false)
+              .showTips(true)
+              .onChange((value: number, mode: SliderChangeMode) => {
+                if (mode === SliderChangeMode.Moving || mode === SliderChangeMode.Click ||
+                  mode === SliderChangeMode.End) {
+                  this.coverRadius = value;
+                  MusicStoreService.getInstance().setCoverRadius(value);
+                  PlayerExpandState.playerCoverRadiusVp = value;
+                  const st = AppStorageV2.connect(CoverRadiusState, AppStorageKeys.COVER_RADIUS_STATE,
+                    () => new CoverRadiusState());
+                  if (st !== undefined) {
+                    st.radius = value;
+                  }
+                }
+              })
+            Text(String(Math.round(this.coverRadius)) + ' vp')
+              .fontSize(12)
+              .fontColor($r('sys.color.font_secondary'))
+              .width(44)
+              .textAlign(TextAlign.End)
+          }
+          .width('100%')
 
           // ★★★ 2026-10-18（用户：「现在似乎不能锁屏播放，你在播放设置里加一下，默认开」）：
           //   这一项控制"音频后台长时任务"（息屏/锁屏/切后台是否继续放）。

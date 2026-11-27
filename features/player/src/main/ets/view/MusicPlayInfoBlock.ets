@@ -161,7 +161,11 @@ export struct MusicPlayInfoBlock {
     //   原来这里是 `= MusicStoreService.getInstance().getCoverCornerRadius()`。
     //   现在封面圆角只有**一个来源** —— 无界 `CoverMorph.radiusPlayer = 8`，与内置播放页、
     //   浮层克隆三处同值（这也顺带消掉"动画结束时圆角跳一下"）。
-    this.coverRadiusState.radius = PlayerExpandState.COVER_RADIUS_PLAYER_VP;
+    // ★ 2026-11-27（用户）："加个播放页封面圆角，可以调整第一页封面圆角大小"。
+    //   之前这里被写死成 8（2026-10-17 删掉了那个设置）；现在读用户设置，
+    //   并同步给展开动画的两端（`PlayerExpandState.playerCoverRadiusVp`），避免交接时跳一下。
+    this.coverRadiusState.radius = MusicStoreService.getInstance().getCoverRadius();
+    PlayerExpandState.playerCoverRadiusVp = this.coverRadiusState.radius;
     this.coverSpringScale = this.state.isPlay ? 1.05 : 0.95;
     this.coverSpringTarget = this.coverSpringScale;
     // 初始缩放也要报出去：形变量测发生在同一帧，晚了就还是按 1.0 算端点

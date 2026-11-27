@@ -41,6 +41,10 @@ const KEY_AMBIENT_LEVEL: string = 'ambient_level';
 const KEY_THEME_COLOR: string = 'theme_color';
 const KEY_HOME_SOURCE: string = 'home_source';
 const KEY_SHOW_MINI_LYRIC: string = 'show_mini_lyric';
+/** 播放页封面下方显示模式（0 无内容 / 1 小歌词 / 2 平台音质）。 */
+const KEY_PLAY_CONTENT_MODE: string = 'play_content_mode';
+/** 播放页封面圆角（vp，用户可调）。 */
+const KEY_PLAY_COVER_RADIUS: string = 'play_cover_radius';
 const KEY_DESKTOP_LYRIC: string = 'desktop_lyric';
 /** 车载蓝牙歌词：通过 AVMetadata.singleLyricText 向蓝牙设备推送当前句（默认关）。 */
 const KEY_BLUETOOTH_LYRIC: string = 'bluetooth_lyric';
@@ -1245,6 +1249,61 @@ export class MusicStoreService {
   }
 
   /** Persists the playback-page mini lyric switch. */
+  /**
+   * 播放页封面圆角（vp）。
+   *
+   * ★ 2026-11-27（用户："加个播放页封面圆角，可以调整播放页第一页的封面圆角大小
+   *   （注意播放器展开动画中的封面 + 结束后的封面等）"）：2026-10-17 曾把这个设置删掉、
+   *   写死成 8；现在恢复成可调，并让**展开动画两端**也用同一个值（否则交接那帧会跳）。
+   * @returns 0..32 的圆角；没存过时用默认 8
+   */
+  public getCoverRadius(): number {
+    const store = this.getStore();
+    if (store === undefined) {
+      return 8;
+    }
+    const v: number = store.getSync(KEY_PLAY_COVER_RADIUS, 8) as number;
+    return Math.min(32, Math.max(0, v));
+  }
+
+  /** 保存播放页封面圆角（vp）。 */
+  public setCoverRadius(radius: number): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_PLAY_COVER_RADIUS, Math.min(32, Math.max(0, radius)));
+    store.flush();
+  }
+
+  /**
+   * 播放页封面下方显示模式（用户 2026-11-27：三选项 无内容 / 小歌词 / 平台音质）。
+   * @returns 0=无内容 1=小歌词 2=平台音质；没存过时按老开关 `show_mini_lyric` 折算
+   */
+  public getPlayContentMode(): number {
+    const store = this.getStore();
+    if (store === undefined) {
+      return 1;
+    }
+    const saved: number = store.getSync(KEY_PLAY_CONTENT_MODE, -1) as number;
+    if (saved >= 0) {
+      return saved;
+    }
+    // 老用户：没存过新模式 ⇒ 由"小歌词开关"折算（默认关 ⇒ 无内容，保持升级前观感）
+    return (store.getSync(KEY_SHOW_MINI_LYRIC, false) as boolean) ? 1 : 0;
+  }
+
+  /** 保存播放页显示模式（同时把老开关同步成"是否小歌词"，云端同步仍读得到）。 */
+  public setPlayContentMode(mode: number): void {
+    const store = this.getStore();
+    if (store === undefined) {
+      return;
+    }
+    store.putSync(KEY_PLAY_CONTENT_MODE, mode);
+    store.putSync(KEY_SHOW_MINI_LYRIC, mode === 1);
+    store.flush();
+  }
+
   public setShowMiniLyric(enabled: boolean): void {
     const store = this.getStore();
     if (store === undefined) {

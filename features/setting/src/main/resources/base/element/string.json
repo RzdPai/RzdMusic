@@ -246,7 +246,11 @@
     },
     {
       "name": "setting_sub_mini_lyric",
-      "value": "播放页显示小歌词"
+      "value": "播放页显示"
+    },
+    {
+      "name": "setting_sub_cover_radius",
+      "value": "播放页封面圆角"
     },
     {
       "name": "setting_sub_lock_screen_play",

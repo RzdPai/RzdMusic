@@ -54,7 +54,7 @@ import {
   appBarBlurStyle,
   
   buildBarBlurStyle,
-   AlbumRouteParam, AppStorageKeys, ArtistRouteParam, BarScrollHelper, MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord, RouterUrlConstants, shouldUseSplitDetailLayout
+   AlbumRouteParam, AppStorageKeys, ArtistRouteParam, BarScrollHelper, LocalCoverImage, MusicAppState, MusicStoreService, PageTopInsetHelper, PlayedSongRecord, RouterUrlConstants, shouldUseSplitDetailLayout
 , RzdSelectMenuMaterial } from 'musicbasic';
 import { OnlinePlayUtil } from 'player';
 import { AppStorageV2, matrix4, uiObserver } from '@kit.ArkUI';
@@ -1467,12 +1467,18 @@ export struct EchoReviewPage {
       // 卡片本体：封面 + 名次/歌名/次数，整列一起做四点投影（文字因此跟着斜）。
       Column({ space: 6 }) {
         if (this.stats.topSongs[index].img.length > 0) {
-          Image(this.stats.topSongs[index].img)
-            .width(this.coverVpOf(rank))
-            .height(this.coverVpOf(rank))
-            .borderRadius(this.coverRadiusOf(rank))
-            .objectFit(ImageFit.Cover)
-            // 图自己再反镜像一次 ⇒ 右卡的封面画面方向依然正常（不出现镜像的字）
+          // ★★★ 2026-11-27（用户："回响页的歌曲，当歌曲为本地音乐时，看不到封面"）：
+          //   本地音乐的封面是**沙箱文件**（`file://…` / 绝对路径），直接塞给 `Image()`
+          //   在真机上就是不显示（同一个问题 `LocalCoverImage` 的文件头注释里写过）。
+          //   ⇒ 统一走 `LocalCoverImage`：本地文件转 PixelMap 显示，网络地址照旧给 Image。
+          LocalCoverImage({
+            src: this.stats.topSongs[index].img,
+            imageWidth: this.coverVpOf(rank),
+            imageHeight: this.coverVpOf(rank),
+            radius: this.coverRadiusOf(rank),
+            fit: ImageFit.Cover
+          })
+            // 卡片自己再反镜像一次 ⇒ 右卡的封面画面方向依然正常（不出现镜像的字）
             .scale({ x: this.mirrorX(rank), y: 1 })
         } else {
           Column()
@@ -1540,10 +1546,13 @@ export struct EchoReviewPage {
       } else {
         Column() {
           if (this.stats.topArtists[0].img.length > 0) {
-            Image(this.stats.topArtists[0].img)
+            // 与原来 `Image(...).width('100%').height(220)` 一致（本地音乐封面是沙箱文件）
+            LocalCoverImage({
+              src: this.stats.topArtists[0].img,
+              imageWidth: '100%', imageHeight: 220, radius: 0, fit: ImageFit.Cover
+            })
               .width('100%')
               .height(220)
-              .objectFit(ImageFit.Cover)
           } else {
             Column().width('100%').height(220).backgroundColor($r('app.color.echo_placeholder_background'))
           }
@@ -1587,11 +1596,7 @@ export struct EchoReviewPage {
                   .fontColor($r('app.color.echo_text_primary'))
                   .width(22)
                 if (item.img.length > 0) {
-                  Image(item.img)
-                    .width(40)
-                    .height(40)
-                    .borderRadius(6)
-                    .objectFit(ImageFit.Cover)
+                  LocalCoverImage({ src: item.img, imageWidth: 40, imageHeight: 40, radius: 6 })
                 } else {
                   Column().width(40).height(40).borderRadius(6).backgroundColor($r('app.color.echo_placeholder_background'))
                 }
@@ -1649,11 +1654,9 @@ export struct EchoReviewPage {
           ForEach(this.stats.topAlbums, (item: EchoTopAlbum) => {
             Column({ space: 6 }) {
               if (item.img.length > 0) {
-                Image(item.img)
+                LocalCoverImage({ src: item.img, imageWidth: '100%', imageHeight: '100%', radius: 10 })
                   .width('100%')
                   .aspectRatio(1)
-                  .borderRadius(10)
-                  .objectFit(ImageFit.Cover)
               } else {
                 Column().width('100%').aspectRatio(1).borderRadius(10).backgroundColor($r('app.color.echo_placeholder_background'))
               }
@@ -1967,8 +1970,7 @@ export struct EchoReviewPage {
       Column({ space: 8 }) {
         this.SectionTitle('单曲循环之王')
         Row({ space: 12 }) {
-          Image(this.stats.loopKingImg)
-            .width(64).height(64).borderRadius(8).objectFit(ImageFit.Cover)
+          LocalCoverImage({ src: this.stats.loopKingImg, imageWidth: 64, imageHeight: 64, radius: 8 })
           Column({ space: 4 }) {
             Text(this.stats.loopKingName)
               .fontSize(18).fontWeight(FontWeight.Bold)
@@ -1997,8 +1999,7 @@ export struct EchoReviewPage {
       Column({ space: 8 }) {
         this.SectionTitle('深夜之歌')
         Row({ space: 12 }) {
-          Image(this.stats.nightImg)
-            .width(64).height(64).borderRadius(8).objectFit(ImageFit.Cover)
+          LocalCoverImage({ src: this.stats.nightImg, imageWidth: 64, imageHeight: 64, radius: 8 })
           Column({ space: 4 }) {
             Text(this.stats.nightName)
               .fontSize(18).fontWeight(FontWeight.Bold)

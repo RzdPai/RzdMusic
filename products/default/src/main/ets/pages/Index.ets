@@ -534,7 +534,10 @@ struct Index {
     this.ambientState.level = MusicStoreService.getInstance().getAmbientLevel();
     this.themeState.color = MusicStoreService.getInstance().getThemeColor();
     this.homeSourceState.source = MusicStoreService.getInstance().getHomeSource();
-    this.miniLyricState.enabled = MusicStoreService.getInstance().getShowMiniLyric();
+    // ★ 2026-11-27：显示模式扩成三选一（无内容 / 小歌词 / 平台音质）。
+    //   `mode` 由 store 提供真值；`enabled` 继续同步，供云端同步与旧逻辑读。
+    this.miniLyricState.mode = MusicStoreService.getInstance().getPlayContentMode();
+    this.miniLyricState.enabled = this.miniLyricState.mode === 1;
     AppStorage.setOrCreate(AppStorageKeys.LX_PLAY_QUALITY, MusicStoreService.getInstance().getPlayQuality());
     AppStorage.setOrCreate(AppStorageKeys.LX_PLAYBACK_FLOW_LIGHT, MusicStoreService.getInstance().getPlaybackFlowLight());
     // 鏈湴闊充箰搴撲笌鍚屾瀹㈡埛绔湪鍚姩鏃跺垵濮嬪寲锛氭湰鍦伴煶涔愯寤烘矙绠辩洰褰曞苟杞藉叆绱㈠紩锛?

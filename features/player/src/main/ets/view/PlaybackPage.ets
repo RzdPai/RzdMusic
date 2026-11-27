@@ -868,6 +868,14 @@ export struct PlaybackPage {
    *   ② 位移壳的 `offset` 补 `MINI_LYRIC_BLOCK_H_VP / 2`（把 ① 让出的那半抬回来）。
    */
   private static readonly MINI_LYRIC_BLOCK_H_VP: number = 57;
+  /** 「平台音质」块高度（三行 12/11fp，用户 2026-11-27 新增的显示模式）。 */
+  private static readonly PLATFORM_META_BLOCK_H_VP: number = 58;
+  /** 显示模式：无内容。 */
+  private static readonly PLAY_CONTENT_NONE: number = 0;
+  /** 显示模式：小歌词。 */
+  private static readonly PLAY_CONTENT_LYRIC: number = 1;
+  /** 显示模式：平台音质（平台 / 音质 / 音源）。 */
+  private static readonly PLAY_CONTENT_PLATFORM: number = 2;
   /**
    * 小歌词块的不透明度系数：调用点 `.opacity(pullChromeOpacity() × MINI_LYRIC_OPACITY)`
    * ⇒ 静止态 `pullChromeOpacity() === 1`，落到 **0.55**（用户实测要求"更淡"）。
@@ -4081,7 +4089,9 @@ export struct PlaybackPage {
     //   闂佺粯绮嶅妯猴耿椤忓牆鎹堕柛鈩冨嚬濞硷繝鏌涘▎妯圭凹婵犫偓?*婵炴垶鎸撮崑鎾斥槈閹垮啩绨兼繛濂告涧閳?*闂佹寧绋掔喊宥呂涢妶澶嬪仼?`CoverMorph.radiusPlayer = 8`
     //   闂佹寧绋戝濉抣ayerExpandState.COVER_RADIUS_PLAYER_VP`闂佹寧绋戦ˇ顐﹀闯?闁荤姳绀佹晶浠嬫偪閸℃稑纾归梻鍌氼嚟閻熸繈鏌涢幇顒傂㈢€殿噮鍓氱粙澶嬫償濠靛洤搴婃繛杈剧稻濞叉鎲伴崱娑樿摕闁圭偓澧庨崑?
     //   闂佸疇娉曟刊瀵哥箔?闁哄鏅滈悷銈囩博閹绢喖鐭楅柕澶堝劤缁犳垵顪冮妶鍫濆惞闁哄棌鍋撻梺娲诲亐閸嬫捇鏌ㄥ☉妯煎濠碘剝鎮傚畷妤呭矗濮椻偓閻撯晠鏌ｅΟ鍨厫闁逞屽厸缁€浣烘暜閸ヮ剙鐐婇柣鎰级閸娿倖绻涙径瀣闁逞屽墰閵嗗妲愬鑸垫櫖婵繃顑巓verRadiusState` 闂備焦褰冮懟顖濄亹閺屻儲鍤勯柤鎭掑劤閺嗘瑩鏌ｉ敐鍡欐噭婵☆偒鍋婂畷鎰箔鐞涒€充壕?
-    this.coverRadiusState.radius = PlayerExpandState.COVER_RADIUS_PLAYER_VP;
+    // ★ 2026-11-27：封面圆角改为用户可调（读设置；展开动画两端同值）
+    this.coverRadiusState.radius = MusicStoreService.getInstance().getCoverRadius();
+    PlayerExpandState.playerCoverRadiusVp = this.coverRadiusState.radius;
     // 闂?濠电偟绻濈粈渚€宕㈠鍫熷殑閻忕偟鍋撻悵顖溾偓娈垮枓閸嬫捇鏌涜箛鏇ㄥ姕缂?*闂婎偄娲ら幊姗€濡磋箛娑樻嵍闁靛鍔庣粻褰掓⒑閹绘帒顨欑紒顔惧█楠炴劖鎷呮搴ｆ毌闂佸憡鐗楅悧鏇㈡偤閵娾晛纾奸柕濞у倹宕撻柡?V2 闂佺粯顭堥崺鏍焵?*闂?
     // 闁宠棄鎳夊Σ鍕煡閸涱亝顫?2026-10-17闁?*闁?濞戞挸锕ｇ粩瀛橈純閺嶎偅娈屽☉鎾愁儑濞堟垵霉娴ｇ甯ㄩ柣顐熷亾闁?閻熸瑥妫旂拹鐔奉啅閸欏啸闁?* 闁炽儲鏌￠埀?濞ｅ浂鍠撻埀顒€鑻惈宥咁嚕閳ь剚娼诲Ο缁樞﹀☉鎾筹梗缁斿瓨锛冮弽顐ｇ暠濡増绮忔竟濠囧Υ瀹ュ繒绀?
     //   `coverTint` 闁?`AppStorageV2` 闁稿繐褰夐棅鈺呮偐閼哥鍋撴笟濠勭獥闁圭鍊藉ù鍥焽閿濆嫮顏遍柛鎺曨嚙閻ｇ娀鎯?`version` 鐎规瓕灏欑划锟犲及?*濞戞挸锕ｇ粩瀛橈純?*闁伙絾鐟ょ粭鍛存儍閸曗斁鍋?
@@ -9377,26 +9387,78 @@ export struct PlaybackPage {
   @Builder
   private MiniLyricLinesBlock() {
     Column() {
-      MiniLyricLinesComponent()
-        .width(StyleConstants.FULL_WIDTH)
-        // 淡入与歌名行同一个源（`pullChromeOpacity`，`wujie.pa:176459-176505`），再乘用户拍过的 0.55。
-        .opacity(this.expandState.pullChromeOpacity() * PlaybackPage.MINI_LYRIC_OPACITY)
-        .id(PlaybackPage.MINI_LYRIC_BOX_ID)
-        .onAreaChange((): void => {
-          // 只做诊断：`RzdBoxes` 的 `lyric=` 读这个 id 的矩形（判据见 `logLayoutBoxes()`）。
-          this.logLayoutBoxes();
-        })
+      if (this.playContentMode() === PlaybackPage.PLAY_CONTENT_LYRIC) {
+        // `ignoreUserSetting: true`：显示与否已由本 Builder 的 mode 判过，别让组件内部
+        // 再按旧开关判一次（两处判据会打架，例如云端同步把 enabled 覆盖成 false）。
+        MiniLyricLinesComponent({ ignoreUserSetting: true })
+          .width(StyleConstants.FULL_WIDTH)
+          // 淡入与歌名行同一个源（`pullChromeOpacity`，`wujie.pa:176459-176505`），再乘用户拍过的 0.55。
+          .opacity(this.expandState.pullChromeOpacity() * PlaybackPage.MINI_LYRIC_OPACITY)
+          .id(PlaybackPage.MINI_LYRIC_BOX_ID)
+          .onAreaChange((): void => {
+            // 只做诊断：`RzdBoxes` 的 `lyric=` 读这个 id 的矩形（判据见 `logLayoutBoxes()`）。
+            this.logLayoutBoxes();
+          })
+      } else if (this.playContentMode() === PlaybackPage.PLAY_CONTENT_PLATFORM) {
+        // ★ 2026-11-27（用户）："平台音质（和播放页点击标题弹出的气泡里面的内容一样）"
+        //   内容与 `MetaInfoTip` 同源（平台 / 音质 / 音源），只是从气泡里搬到此处常驻。
+        this.PlayMetaQualityBlock()
+      }
     }
     .width(StyleConstants.FULL_WIDTH)
     // 高度钉死（57 = 2×26 + 行距 3 + 上边距 2）：它在"定高 34"的文字列里是**溢出**的兄弟；
     // 不钉的话块高会随风变动（字号/行高一变，歌名/歌手两行的排版跟着抖）。
-    .height(PlaybackPage.MINI_LYRIC_BLOCK_H_VP)
+    // 平台音质是三行 12fp（≈ 51），给 58 留一点余量。
+    .height(this.playContentMode() === PlaybackPage.PLAY_CONTENT_PLATFORM
+      ? PlaybackPage.PLATFORM_META_BLOCK_H_VP : PlaybackPage.MINI_LYRIC_BLOCK_H_VP)
     .justifyContent(FlexAlign.Start)
     // ⛔ 不再挂 `.translate({ y: metaRiseVp() })`：外层位移壳已经在做同一条位移，再挂一次就是**双倍**升入。
     //
     // 只属于封面页：见本 @Builder 的 JSDoc 第二节。`Visibility.None` = 不占布局 + 不绘制，
     // 它又只是"定高 34 的文字列"里的溢出兄弟 ⇒ 藏掉它不会让歌名行移动一个像素。
-    .visibility((!this.isCollapsing() && this.lyricMorphT <= 0.001) ? Visibility.Visible : Visibility.None)
+    .visibility((!this.isCollapsing() && this.lyricMorphT <= 0.001 &&
+      this.playContentMode() !== PlaybackPage.PLAY_CONTENT_NONE) ? Visibility.Visible : Visibility.None)
+  }
+
+  /**
+   * 「平台音质」块（封面下方常驻，内容与 `MetaInfoTip` 气泡一致）。
+   *
+   * ★ 2026-11-27（用户）："三个选项：无内容、小歌词、平台音质（和播放页点击标题弹出的
+   *   气泡里面的内容一样）"。三行顺序、文案与 `MetaInfoTip()` 逐字对齐；
+   *   **同一个歌名行**上的气泡入口仍保留（两者读同一份状态，不会不一致）。
+   */
+  @Builder
+  private PlayMetaQualityBlock() {
+    Column({ space: 2 }) {
+      Text('平台：' + sourceDisplayName(this.state.getCurrentSongItem()?.source ?? ''))
+        .fontSize(12)
+        .fontColor($r('app.color.play_singer_color'))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width(StyleConstants.FULL_WIDTH)
+      Text('音质：' + qualityDisplayName(this.state.getCurrentSongItem()?.quality ?? ''))
+        .fontSize(12)
+        .fontColor($r('app.color.play_singer_color'))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width(StyleConstants.FULL_WIDTH)
+      if ((this.state.getCurrentSongItem()?.playScript ?? '').length > 0) {
+        Text('音源：' + (this.state.getCurrentSongItem()?.playScript ?? ''))
+          .fontSize(11)
+          .fontColor($r('app.color.play_singer_color'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width(StyleConstants.FULL_WIDTH)
+      }
+    }
+    .alignItems(HorizontalAlign.Start)
+    .width(StyleConstants.FULL_WIDTH)
+    .opacity(this.expandState.pullChromeOpacity() * PlaybackPage.MINI_LYRIC_OPACITY)
+  }
+
+  /** 当前生效的封面下方显示模式（0 无内容 / 1 小歌词 / 2 平台音质）。 */
+  private playContentMode(): number {
+    return this.miniLyricState.effectiveMode();
   }
 
   @Builder

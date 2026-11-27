@@ -1173,6 +1173,15 @@ export class PlayerExpandState {
    *   鈿狅笍 杩欎篃涓€骞朵慨鎺変簡"鍔ㄧ敾缁撴潫鏃跺皝闈㈠渾瑙掔獊鐒惰烦涓€涓?锛氫袱绔悓鍊?鈬?浜ゆ娌℃湁宸€?
    */
   public static readonly COVER_RADIUS_PLAYER_VP: number = 8;
+  /**
+   * **用户可调**的播放页封面圆角（vp）。
+   *
+   * ★ 2026-11-27（用户要求恢复"封面圆角"设置）：形变**两端**都读这里 ——
+   *   展开动画（`lyricMorph()` 的 radius 起点、`endRadius`）与静止的封面
+   *   （`CoverRadiusState.radius`）必须同值，否则动画交接那一帧圆角会跳。
+   *   默认 = {@link COVER_RADIUS_PLAYER_VP}（8），由设置的滑块写入。
+   */
+  public static playerCoverRadiusVp: number = 8;
 
   /**
    * 灏侀潰鍦ㄣ€屾瓕璇嶉〉銆嶉偅涓€绔殑鍦嗚锛?*瑙嗚鍊?*锛寁p锛夆€斺€?鐓ф妱鏃犵晫 `CoverMorph.radiusLyricVisual`銆?
@@ -1529,7 +1538,7 @@ export class PlayerExpandState {
       // 姝岃瘝椤甸偅涓€绔槸绠楀嚭鏉ョ殑姝ｆ柟褰紱灞曞紑椤甸偅涓€绔部鐢ㄥ疄娴嬬殑钀界偣鐭╁舰锛堝彲鑳戒笉鏄鏂瑰舰锛?
       height: height,
       // 鈽呪槄鈽?2026-10-16锛堢収鎶勬棤鐣?`CoverMorph.visualRadiusAt`锛夛細**涓ょ鐐?lerp**
-      radius: this.lerp(PlayerExpandState.COVER_RADIUS_PLAYER_VP,
+      radius: this.lerp(PlayerExpandState.playerCoverRadiusVp,
         PlayerExpandState.COVER_RADIUS_LYRIC_VISUAL_VP, p)
     };
   }
@@ -4050,7 +4059,7 @@ export class PlayerExpandState {
     // 鈬?鐜板湪涓ょ閮藉彇**鏃犵晫閭ｄ竴涓粷瀵瑰€?*锛坄CoverMorph.radiusPlayer = 8`锛宍wujie.pa:85481`锛夛紝
     //   骞朵笖闅忚瑙夌缉鏀?`s` 璧帮紙涓?涓績涓嶅彉銆佽竟闀夸箻 s"鍚屽彛寰勶級鈬?**鍔ㄧ敾缁堢偣 = 闈欐鎬?*锛屼笉璺炽€?
     //   鈿狅笍 鐢ㄦ埛瑕佹眰鍒犳帀"鑷畾涔夊皝闈㈠渾瑙?璁剧疆 鈬?杩欓噷涓嶅啀鏈変换浣曠敤鎴峰€煎弬涓庛€?
-    const endRadius: number = Math.min(PlayerExpandState.COVER_RADIUS_PLAYER_VP * s,
+    const endRadius: number = Math.min(PlayerExpandState.playerCoverRadiusVp * s,
       Math.min(endSize, endH) / 2);
     const startRadius: number = Math.min(this.snapStartRadius, this.snapStartW / 2);
     // 缁堢偣鏄?*鎸夊昂瀵哥缉鏀?*鐨勶細浣嶇疆闅忎腑蹇冧笉鍙樸€佽竟闀夸箻 s 鈥斺€?涓庣湡瀹炲皝闈㈢殑
