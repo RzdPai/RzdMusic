@@ -2157,28 +2157,39 @@ export struct SettingsDetailPage {
             })
 
           this.SubTitle($r('app.string.setting_sub_lyric_font_size'))
-          Slider({
-            value: this.lyricFontSize,
-            min: 18,
-            max: 44,
-            step: 1,
-            style: SliderStyle.InSet
-          })
-            .width('100%')
-            .selectedColor(this.themeState.color)
-            .showSteps(false)
-            .showTips(true)
-            .onChange((value: number, mode: SliderChangeMode) => {
-              if (mode === SliderChangeMode.Moving || mode === SliderChangeMode.Click) {
-                this.lyricFontSize = value;
-                MusicStoreService.getInstance().setLyricFontSize(value);
-                const state = AppStorageV2.connect(LyricFontSizeState, AppStorageKeys.LYRIC_FONT_SIZE_STATE,
-                  () => new LyricFontSizeState());
-                if (state !== undefined) {
-                  state.size = value;
-                }
-              }
+          // ★ 2026-11-27（用户："设置上下两个滑块还不太一样，下面的改成和上面一样右边显示当前值"）：
+          //   与「播放页封面圆角」那一行统一版式：滑块 + 右侧数值。
+          Row({ space: 8 }) {
+            Slider({
+              value: this.lyricFontSize,
+              min: 18,
+              max: 44,
+              step: 1,
+              style: SliderStyle.InSet
             })
+              .layoutWeight(1)
+              .selectedColor(this.themeState.color)
+              .showSteps(false)
+              .showTips(true)
+              .onChange((value: number, mode: SliderChangeMode) => {
+                if (mode === SliderChangeMode.Moving || mode === SliderChangeMode.Click ||
+                  mode === SliderChangeMode.End) {
+                  this.lyricFontSize = value;
+                  MusicStoreService.getInstance().setLyricFontSize(value);
+                  const state = AppStorageV2.connect(LyricFontSizeState, AppStorageKeys.LYRIC_FONT_SIZE_STATE,
+                    () => new LyricFontSizeState());
+                  if (state !== undefined) {
+                    state.size = value;
+                  }
+                }
+              })
+            Text(String(Math.round(this.lyricFontSize)) + ' vp')
+              .fontSize(12)
+              .fontColor($r('sys.color.font_secondary'))
+              .width(44)
+              .textAlign(TextAlign.End)
+          }
+          .width('100%')
 
           this.SubTitle($r('app.string.setting_sub_keep_screen_on'))
           this.CapsuleSelector(this.onOffOptions, this.keepScreenOn ? 0 : 1,

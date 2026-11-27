@@ -193,11 +193,9 @@ struct SongRowItem {
     .border({ width: { bottom: 0.5 }, color: $r('sys.color.comp_divider') })
     .gesture(LongPressGesture().onAction((): void => {
       // 长按进入批量选择模式并勾选该歌曲
-      // ★ 2026-11-27（用户："搜索页处于多选状态时底部选项太低了，被播放条挡住了，
-      //   你看看其它页面咋写的（推荐参考歌曲列表页）"）：
-      //   歌曲列表页的做法是 **批量模式下把壳层那条悬浮播放条临时隐藏**
-      //   （`MusicAppState.selectionActive`），底部操作条再按安全区让位。
-      //   搜索页原来没设这个标记 ⇒ 操作条和播放条叠在一起。
+      // ★ 2026-11-27（用户："搜索页处于多选状态时底部选项太低了，被播放条挡住了"）：
+      //   壳层那条浮动播放条在多选时**照常显示**（用户第二轮明确："歌曲列表页多选也不会
+      //   隐藏播放条"）⇒ 底部操作条要抬到它上方，见下方操作条的 `padding.bottom`。
       this.selection.batchMode = true;
       this.toggle();
     }))
@@ -552,8 +550,6 @@ export struct OnlineSearchPage {
   private exitBatchMode(): void {
     this.selection.batchMode = false;
     this.selection.keys = [];
-    // 与 `RecordListPage.exitSelectionMode()` 同源：退出多选就要把播放条放回来
-    this.appState.selectionActive = false;
   }
 
   /** 按所选音质把勾选歌曲批量加入下载队列。 */
@@ -964,20 +960,6 @@ export struct OnlineSearchPage {
       this.searchRequestRunning = false;
       this.searching = false;
     }
-  }
-
-  /**
-   * 批量（多选）模式与壳层悬浮播放条联动。
-   *
-   * ★ 2026-11-27（用户："搜索页处于多选状态时底部选项太低了，被播放条挡住了，
-   *   你看看其它页面咋写的（推荐参考歌曲列表页）"）：
-   *   歌曲列表页是"多选时把播放条临时隐藏（`MusicAppState.selectionActive`）"，
-   *   搜索页原来没有这一步 ⇒ 底部操作条与播放条叠在一起。
-   *   这里用 `@Monitor` 盯共享状态，**进入 / 退出 / 行内长按**都走同一个口径。
-   */
-  @Monitor('selection.batchMode')
-  onBatchModeChanged(): void {
-    this.appState.selectionActive = this.selection.batchMode;
   }
 
   aboutToDisappear(): void {
@@ -3041,13 +3023,15 @@ export struct OnlineSearchPage {
               })
           }
           .width('100%')
-          // ★ 2026-11-27：底部让开**导航空白区**（与歌曲列表页操作条 `bottom: 28` 同口径），
-          //   否则贴到屏幕最底、被系统导航条压住。
+          // ★★ 2026-11-27 第二轮（用户："歌曲列表页多选也不会隐藏播放条啊"）：
+          //   我上一版把播放条临时隐藏了，那是错的 —— 壳层那条浮动播放条在多选时**照常显示**，
+          //   正确做法是把操作条**抬到播放条上方**（播放条 56 + 间距 8 + 导航空白区），
+          //   而不是把播放条藏起来。
           .padding({
             left: 16,
             right: 16,
             top: 10,
-            bottom: 10 + getNavigationBarBottomVpFromWindowUtil()
+            bottom: 56 + 8 + getNavigationBarBottomVpFromWindowUtil()
           })
           .backgroundColor($r('app.color.floating_mini_bar_background'))
         }
