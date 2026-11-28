@@ -80,6 +80,14 @@ export class RecommendViewModel {
    * 补完（或确认拿不到）后置 true。
    */
   @Trace public dailySongsReady: boolean = false;
+  /**
+   * 首页数据是否已经**真正装完**（网络结果都回来、封面也补过）。
+   *
+   * ★ 2026-11-28（用户："首页还是有个大加载"）：`homeLoaded` 已经改成"一进函数就放行"，
+   *   所以它不能再用来判断"是不是还在等数据"。这个标记专门给"空态 vs 占位"用：
+   *   为 false 且列表为空 ⇒ 显示**占位**；为 true 且仍为空 ⇒ 才是真的没数据。
+   */
+  @Trace public homeDataSettled: boolean = false;
 
   /**
    * 「新歌推荐 / 精选推荐」两张榜单卡的四宫格封面（键 = 卡片标识 `newSongs` / `picked`）。
@@ -247,6 +255,7 @@ export class RecommendViewModel {
       this.guestSectionsRequested = false;
     }
     this.homeLoaded = false;
+    this.homeDataSettled = false;
     this.categoryTabItems = RecommendDataUtil.getCategoryTabs();
     this.chartList = [];
     this.syncHomeSourceIndices();
@@ -627,6 +636,14 @@ export class RecommendViewModel {
     //   首屏依旧要看转圈。⇒ **一进函数就放行**：先用内置兜底卡片/列表把页面画出来
     //   （缺封面走占位图），网络回来的结果再原地覆盖。
     this.recommendItems = RecommendDataUtil.getRecommendPlaylists();
+    // ★★★ 2026-11-28 第三轮（用户截图：首页顶部一大片空白，只有下面一排"精选推荐"空态）：
+    //   光把 `homeLoaded` 提前还不够 —— 顶部那 5 张大卡的数据（`heroCards`）是网络回来才装配的，
+    //   放行时它还是空数组 ⇒ 那一块高度在、但一张卡都不画。
+    //   ⇒ 这里先塞一套**占位卡**（badge/标题/路由都在数据层，封面用占位图 `ic_avatar1`），
+    //     真实数据回来后 `refreshFeatureHeroCards()` 原地替换。
+    if (this.heroCards.length === 0) {
+      this.heroCards = RecommendDataUtil.getFeatureHeroCards([], [], [], [], '', '', {});
+    }
     if (this.privateSongDisplayList.length === 0) {
       this.privateSongDisplayList = RecommendDataUtil.getPrivateSongDisplayList();
       this.privateSongDataSource = new RecommendSongUiDataSource(this.privateSongDisplayList);
@@ -793,6 +810,7 @@ export class RecommendViewModel {
       }
     }
     this.dailySongsReady = true;
+    this.homeDataSettled = true;
     // 首页卡片全部定稿：封面、取色、歌名都不再自动变（用户要求「不要每次自动刷新」）
     this.lockNowPlayingCard();
   }

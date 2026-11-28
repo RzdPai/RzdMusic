@@ -478,7 +478,38 @@ export struct CategoryContentSection {
       this.CategoryTitle($r('app.string.home_category_featured'))
       // ⚠️ 2026-10 用户明确要求：**这行"数据来源（QQ音乐·新歌榜）"与下面的降级说明全部删掉**
       //    —— 他要的是简洁，不要任何解释性文字。数据来源不再用文字表达。
-      if (this.recommendViewModel.privateSongDisplayList.length === 0) {
+      if (this.recommendViewModel.privateSongDisplayList.length === 0 &&
+        !this.recommendViewModel.homeDataSettled) {
+        // ★ 2026-11-28（用户截图："精选推荐 暂无数据，请稍后重试"一片空白）：
+        //   首页现在"先出内容再回填"，数据还没回来时不该显示空态文案，
+        //   而是画几条**占位行**（灰块），等数据回来原地替换。
+        Column({ space: CategoryContentSection.FEATURED_ROW_GAP }) {
+          ForEach([0, 1, 2], (i: number) => {
+            Row({ space: 12 }) {
+              Column()
+                .width(48)
+                .height(48)
+                .borderRadius(8)
+                .backgroundColor($r('app.color.background_secondary'))
+              Column({ space: 6 }) {
+                Column()
+                  .width('60%').height(12).borderRadius(6)
+                  .backgroundColor($r('app.color.background_secondary'))
+                Column()
+                  .width('35%').height(10).borderRadius(5)
+                  .backgroundColor($r('app.color.background_secondary'))
+              }
+              .alignItems(HorizontalAlign.Start)
+              .layoutWeight(1)
+            }
+            .width('100%')
+            .height(64)
+            .padding({ left: this.homeScrollGutterH(), right: this.homeScrollGutterH() })
+          }, (i: number) => 'feat-skeleton-' + i)
+        }
+        .width(StyleConstants.FULL_WIDTH)
+        .padding({ top: 4, bottom: 8 })
+      } else if (this.recommendViewModel.privateSongDisplayList.length === 0) {
         Text($r('app.string.home_category_empty'))
           .fontSize(13)
           .fontColor($r('app.color.font_tertiary'))
