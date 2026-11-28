@@ -478,8 +478,9 @@ export struct CategoryContentSection {
       this.CategoryTitle($r('app.string.home_category_featured'))
       // ⚠️ 2026-10 用户明确要求：**这行"数据来源（QQ音乐·新歌榜）"与下面的降级说明全部删掉**
       //    —— 他要的是简洁，不要任何解释性文字。数据来源不再用文字表达。
-      if (this.recommendViewModel.privateSongDisplayList.length === 0 &&
-        !this.recommendViewModel.homeDataSettled) {
+      // ★★ 判据：**数据没定稿**就画占位（不管列表此刻空不空）——
+      //   列表里可能已有"兜底数据但没封面"，那也不是最终形态，直接画占位更稳。
+      if (!this.recommendViewModel.homeDataSettled) {
         // ★ 2026-11-28（用户截图："精选推荐 暂无数据，请稍后重试"一片空白）：
         //   首页现在"先出内容再回填"，数据还没回来时不该显示空态文案，
         //   而是画几条**占位行**（灰块），等数据回来原地替换。
@@ -490,14 +491,14 @@ export struct CategoryContentSection {
                 .width(48)
                 .height(48)
                 .borderRadius(8)
-                .backgroundColor($r('app.color.background_secondary'))
+                .backgroundColor($r('sys.color.background_tertiary'))
               Column({ space: 6 }) {
                 Column()
                   .width('60%').height(12).borderRadius(6)
-                  .backgroundColor($r('app.color.background_secondary'))
+                  .backgroundColor($r('sys.color.background_tertiary'))
                 Column()
                   .width('35%').height(10).borderRadius(5)
-                  .backgroundColor($r('app.color.background_secondary'))
+                  .backgroundColor($r('sys.color.background_tertiary'))
               }
               .alignItems(HorizontalAlign.Start)
               .layoutWeight(1)

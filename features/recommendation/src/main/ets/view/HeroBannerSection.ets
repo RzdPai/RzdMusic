@@ -936,7 +936,11 @@ owPlayingCoverUrl），**不是**实时读在播歌曲 ——
               .width(this.cardWidth())
               .height(this.cardHeight())
               .borderRadius(20)
-              .backgroundColor($r('app.color.background_secondary'))
+              // ★ 2026-11-28（用户截图："没加载完是全黑的（日间就是全白），没显示占位图"）：
+              //   骨架原来用 `app.color.background_secondary` —— 夜间 #1C1C1E、页面 #000，
+              //   日间 #F1F3F5、页面 #FFF ⇒ **几乎同色**，等于没画。
+              //   占位必须"看得出是占位"：改用 HDS 的三级底色（夜间更亮、日间更灰）。
+              .backgroundColor($r('sys.color.background_tertiary'))
           }, (index: number) => `hero-skeleton-${index}`)
         }
         .padding({ left: this.homeScrollGutterH(), right: this.homeScrollGutterH() })

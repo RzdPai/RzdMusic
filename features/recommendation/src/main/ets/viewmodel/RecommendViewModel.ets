@@ -770,11 +770,24 @@ export class RecommendViewModel {
    * @param gen 世代号：中途换了平台就不要再往 UI 写（旧平台的封面不能覆盖新平台）。
    */
   private async refillHomeCovers(gen: number): Promise<void> {
+    try {
+      await this.refillHomeCoversInner(gen);
+    } catch (e) {
+      // 补封面链路异常：照样定稿，别让首页停在占位态
+      Logger.warn('RzdHomeSource', 'refillHomeCovers throw: ' + (e as Error).message);
+      this.dailySongsReady = true;
+      this.homeDataSettled = true;
+    }
+  }
+
+  private async refillHomeCoversInner(gen: number): Promise<void> {
     // ★★★ 2026-11-28（用户："先显示已经加载好的内容，没加载出来的用占位"）：
     //   以前是"3 轮封面全补完才放行"，网络慢时首页会长时间停在转圈上。
     //   现在**先放行**（缺封面的卡直接显示占位图），补到的每一轮再原地刷新；
     //   `lockNowPlayingCard()` 仍然放在全部补完之后（定稿语义不变）。
-    this.dailySongsReady = true;
+    // ⚠️ 这里**不放行** `dailySongsReady`：它控制"顶部大卡画真卡还是画骨架"，
+    //    放行早了会拿"没封面的空四宫格"去画真卡（看起来就是一片黑）。
+    //    骨架本身就是**占位**（HDS 三级底色），在封面补完之前显示它更符合"先出占位"的要求。
     const maxRounds: number = 3;
     for (let round: number = 0; round < maxRounds; round++) {
       if (gen !== this.loadGen) {
@@ -809,6 +822,7 @@ export class RecommendViewModel {
         await this.refreshNowPlayingTintAsync();
       }
     }
+    // ★ 全部补完（或补到没有缺失）才让"真卡"出现；异常也要定稿，否则占位永远退不掉。
     this.dailySongsReady = true;
     this.homeDataSettled = true;
     // 首页卡片全部定稿：封面、取色、歌名都不再自动变（用户要求「不要每次自动刷新」）
