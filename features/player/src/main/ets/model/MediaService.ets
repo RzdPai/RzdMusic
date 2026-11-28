@@ -51,6 +51,7 @@ import { amllGetCachedLyric, amllParseLyricCached } from '../amll/parse/AmllAuto
 import { AmllLyricLine } from '../amll/model/AmllTypes';
 import { buildPlainLrc, truncateLrc } from '../util/LrcUtils';
 import { LyricLiveViewController } from '../util/LyricLiveViewController';
+import { SleepTimerService } from './SleepTimerService';
 
 const TAG = 'MediaService';
 
@@ -2312,6 +2313,28 @@ export class MediaService {
   }
 
   /** Global singleton stored on AppRuntime.mediaServiceRef. */
+  /**
+   * 把「定时关闭到点动作」注册给 `SleepTimerService`（暂停 + 提示一句）。
+   *
+   * ★ 2026-11-28（用户："播放页的歌曲菜单里面加个定时关闭"）：
+   *   倒计时归 `SleepTimerService` 管（跨页面 / 跨曲目），这里只注册"到点做什么"，
+   *   避免两边互相 import 成环。
+   */
+  public static installSleepTimerHook(): void {
+    SleepTimerService.getInstance().ensureHooked((): void => {
+      try {
+        MediaService.getInstance().pause();
+      } catch (e) {
+        Logger.warn(TAG, 'sleep timer pause failed');
+      }
+      try {
+        MediaService.getInstance().toast('定时关闭已生效，已暂停播放');
+      } catch (e) {
+        // 提示失败不影响暂停
+      }
+    });
+  }
+
   public static getInstance(): MediaService {
     const rt = getAppRuntime();
     const ref: object | undefined = rt.mediaServiceRef;
@@ -3785,6 +3808,9 @@ export class MediaService {
   /** Writes selectIndex to MusicAppState and refreshes AVSession metadata when index changes. */
   private updateMusicIndex(musicIndex: number) {
     Logger.info(TAG, 'updateMusicIndex ===> ' + musicIndex);
+    // 「定时关闭 → 播完当前歌曲」靠这里判定换曲（见 SleepTimerService.onTrackChanged）
+    MediaService.installSleepTimerHook();
+    SleepTimerService.getInstance().onTrackChanged(musicIndex);
     const st = this.getAppState();
     st.selectIndex = musicIndex;
     if (this.musicIndex !== musicIndex) {

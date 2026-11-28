@@ -1197,11 +1197,57 @@ export class DownloadService {
    * @param task 当前下载任务（会就地改 fileName）
    * @param path 临时文件路径（`dl_*.tmp`，内容已经是最终音频）
    */
+  /**
+   * 文件头像不像"文本 / 网页 / JSON"这类**非音频**内容。
+   *
+   * 音源偶发把限流页、`{code:403}`、`#EXTM3U`（HLS 清单）当音频地址返回；
+   * 这类内容落盘后会被本地库判「格式不支持」，用户只看到一句含糊的提示。
+   * @param path 临时文件路径
+   * @returns 是文本类内容时为 true
+   */
+  private looksLikeNonAudioContent(path: string): boolean {
+    let f: fs.File | null = null;
+    try {
+      f = fs.openSync(path, fs.OpenMode.READ_ONLY);
+      const buf: ArrayBuffer = new ArrayBuffer(16);
+      const n: number = fs.readSync(f.fd, buf);
+      if (n <= 0) {
+        return false;
+      }
+      const bytes: Uint8Array = new Uint8Array(buf.slice(0, n));
+      const c0: number = bytes[0];
+      // `<` 开头的 html/xml、`{` 开头的 json、`#` 开头的 m3u/lrc、以及纯空白
+      if (c0 === 0x3C || c0 === 0x7B || c0 === 0x23 || c0 === 0x20 || c0 === 0x0A || c0 === 0x0D ||
+        c0 === 0x0D) {
+        return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    } finally {
+      if (f !== null) {
+        try {
+          fs.closeSync(f);
+        } catch (e) {
+          // 忽略
+        }
+      }
+    }
+  }
+
   private correctFileExtByContent(task: DownloadTask, path: string): void {
     const realExt: string = sniffAudioContainerExt(path);
     const dot: number = task.fileName.lastIndexOf('.');
     const currentExt: string = dot >= 0 ? task.fileName.substring(dot).toLowerCase() : '';
     if (realExt.length === 0) {
+      // ★★★ 2026-11-28（用户："有些歌曲下载时会提示不支持的格式"）：
+      //   音源返回的可能是**错误页 / 加密流 / m3u8 文本**，落盘后扩展名对不上，
+      //   之后导入本地库就会被判「格式不支持」（用户看到的那句提示其实来自导入侧）。
+      //   在这里直接判失败，给一条说得清的原因，别把垃圾文件存进去。
+      if (this.looksLikeNonAudioContent(path)) {
+        appendPlayLog('[下载] reject non-audio content for ' + task.fileName);
+        throw new Error('音源返回的内容不是音频文件（可能是错误页或加密流）');
+      }
       appendPlayLog('[下载] container unknown, keep ext ' + (currentExt.length > 0 ? currentExt : '(无)') +
         ' of ' + task.fileName);
       return;

@@ -1043,7 +1043,12 @@ export struct RecommendPage {
                   })
 
                   CategoryContentSection({ recommendViewModel: this.recommendViewModel })
-                  if (this.homePlazaState.enabled) {
+                  // ★ 2026-11-28（用户："只有歌单广场是加载出来再显示"）：
+                  //   其余模块已经改成"先出内容 + 占位"，唯独歌单广场**等它自己加载完**再出现
+                  //   （空的时候整块不占位，避免先冒出一片空白再被内容顶开）。
+                  if (this.homePlazaState.enabled &&
+                    (this.recommendViewModel.plazaPlaylists.length > 0 ||
+                      this.recommendViewModel.plazaErrorText.length > 0)) {
                     HomePlazaSection({ recommendViewModel: this.recommendViewModel })
                   }
                 }

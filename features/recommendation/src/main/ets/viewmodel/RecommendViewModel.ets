@@ -710,12 +710,16 @@ export class RecommendViewModel {
     //   再生成卡片 —— `refreshFeatureHeroCards()` 是**同步**的，封面必须先到位。
     //   取不到（网络失败 / 该平台没有这张榜）时该卡回落成首页列表那 4 张（见
     //   `getFeatureHeroCards` 的 `boardCovers`），不会变成空白拼图。
+    // ★★★ 2026-11-28（用户："现在首页加载太慢了（一直看着那个加载的动画），能不能先显示
+    //   已经加载好的内容，没加载出来的用一个占位，只有歌单广场是加载出来再显示"）：
+    //   **先把首页放行**（此时卡片列表、歌单列表都已经赋值，封面缺的走占位图），
+    //   榜单卡封面、每日30首四宫格封面都改成"回来后再原地刷新"。
+    this.homeLoaded = true;
     await this.loadFeatureBoardCovers(gen);
     if (gen !== this.loadGen) {
       return;
     }
     this.refreshFeatureHeroCards();
-    this.homeLoaded = true;
     // 「现在就听」卡背景取色：也放在**放行之前**完成，
     // 否则卡片会先用兜底色画出来、取色回来再变一次（用户看到的"加载后刷新"）。
     await this.refreshNowPlayingTintAsync();
@@ -738,6 +742,11 @@ export class RecommendViewModel {
    * @param gen 世代号：中途换了平台就不要再往 UI 写（旧平台的封面不能覆盖新平台）。
    */
   private async refillHomeCovers(gen: number): Promise<void> {
+    // ★★★ 2026-11-28（用户："先显示已经加载好的内容，没加载出来的用占位"）：
+    //   以前是"3 轮封面全补完才放行"，网络慢时首页会长时间停在转圈上。
+    //   现在**先放行**（缺封面的卡直接显示占位图），补到的每一轮再原地刷新；
+    //   `lockNowPlayingCard()` 仍然放在全部补完之后（定稿语义不变）。
+    this.dailySongsReady = true;
     const maxRounds: number = 3;
     for (let round: number = 0; round < maxRounds; round++) {
       if (gen !== this.loadGen) {

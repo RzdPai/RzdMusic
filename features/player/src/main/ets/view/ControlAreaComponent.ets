@@ -1,4 +1,5 @@
 import { qualityDisplayName } from '../util/SourceFallbackUtil';
+import { SleepTimerService, SLEEP_TIMER_MINUTES } from '../model/SleepTimerService';
 import { searchSingers, SearchPageResult, SingerInfo } from '../geuz/index';
 /*
  * Copyright (c) 2026 Huawei Device Co., Ltd.
@@ -279,6 +280,8 @@ export struct ControlAreaComponent {
   @Local showMenuSpeed: boolean = false;
   /** ★ 播放设置面板（倍速 + 升降调 + 5 段 EQ）。 */
   @Local showMenuTuning: boolean = false;
+  /** 「定时关闭」子页（用户 2026-11-28 要求加进播放页歌曲菜单）。 */
+  @Local showMenuSleep: boolean = false;
   /** 升降调半音数（0=原调）。 */
   @Local tuningPitch: number = 0;
   /** 5 段 EQ 增益（dB）：60 / 230 / 910 / 3.6k / 14k。 */
@@ -380,6 +383,7 @@ export struct ControlAreaComponent {
     this.showMenuPlaylist = false;
     this.showMenuQuality = false;
     this.showMenuSpeed = false;
+    this.showMenuSleep = false;
     this.showMenuLyric = false;
     this.menuQualityMode = 'switch';
   }
@@ -409,6 +413,8 @@ export struct ControlAreaComponent {
       this.showMenuComment = true;
     } else if (page === 'speed') {
       this.showMenuSpeed = true;
+    } else if (page === 'sleep') {
+      this.showMenuSleep = true;
     } else if (page === 'lyric') {
       this.showMenuLyric = true;
     } else if (page === 'tuning') {
@@ -536,7 +542,7 @@ export struct ControlAreaComponent {
 
   /** @returns 当前是否在歌曲菜单的某个子页（音质/播放设置/加歌单…）。 */
   private menuSubPageOpen(): boolean {
-    return this.showMenuQuality || this.showMenuSpeed || this.showMenuTuning ||
+    return this.showMenuQuality || this.showMenuSpeed || this.showMenuSleep || this.showMenuTuning ||
       this.showMenuPlaylist || this.showMenuLyric;
   }
 
@@ -1183,6 +1189,8 @@ export struct ControlAreaComponent {
         this.PlaylistPickerRows()
       } else if (this.showMenuSpeed) {
         this.SpeedRows()
+      } else if (this.showMenuSleep) {
+        this.SleepRows()
         } else if (this.showMenuTuning) {
         this.TuningRows()
       } else if (this.showMenuQuality) {
@@ -1287,6 +1295,11 @@ export struct ControlAreaComponent {
         })
           .width('100%')
           .height(ControlAreaComponent.MENU_ROW_H_VP)
+        // ★★ 2026-11-28（用户："播放页的歌曲菜单里面加个定时关闭"）：
+        //   与「倍速」同一层级；右侧直接显示当前定时状态（剩余时间 / 播完本曲）。
+        this.MenuRow(this.sleepMenuLabel(), $r('sys.symbol.moon'), (): void => {
+          this.openSheetFor('sleep');
+        })
         this.MenuRow($r('app.string.player_menu_share'), $r('sys.symbol.share'),
           (): void => {
             this.closeMenuSheet();
@@ -1436,6 +1449,108 @@ export struct ControlAreaComponent {
    *
    * 排查日志关键字：`RzdPlaybackRate`。
    */
+  /**
+   * 「定时关闭」子页（用户 2026-11-28）。
+   *
+   * 选项：关闭定时 / 15·30·45·60·90 分钟 / 播完当前歌曲。
+   * 状态与倒计时都在 `SleepTimerService`（跨页面、跨曲目都有效），这里只负责选。
+   */
+  @Builder
+  private SleepRows() {
+    Text('定时关闭')
+      .fontSize(18)
+      .fontWeight(FontWeight.Bold)
+      .fontColor($r('app.color.font_primary'))
+      .margin({ top: 8, bottom: 4 })
+
+    Text(SleepTimerService.getInstance().status().active
+      ? ('当前：' + this.sleepMenuLabel() + '（' + SleepTimerService.getInstance().remainText() + '）')
+      : '到点后自动暂停播放')
+      .fontSize(13)
+      .fontColor($r('app.color.font_tertiary'))
+      .margin({ bottom: 8 })
+
+    // 关闭定时
+    Row() {
+      Text('关闭定时')
+        .fontSize(16)
+        .fontColor($r('app.color.font_primary'))
+        .layoutWeight(1)
+      if (!SleepTimerService.getInstance().status().active) {
+        SymbolGlyph($r('sys.symbol.checkmark'))
+          .fontSize(18)
+          .fontColor([this.themeState.color])
+      }
+    }
+    .width('100%')
+    .height(48)
+    .padding({ left: 16, right: 16 })
+    .borderRadius(10)
+    .backgroundColor($r('app.color.background_secondary'))
+    .onClick((): void => {
+      SleepTimerService.getInstance().cancel();
+      this.closeMenuSheet();
+      this.getUIContext().getPromptAction().showToast({ message: '已取消定时关闭', duration: 1500 });
+    })
+
+    ForEach(SLEEP_TIMER_MINUTES, (minutes: number) => {
+      Row() {
+        Text(minutes + ' 分钟后暂停')
+          .fontSize(16)
+          .fontColor($r('app.color.font_primary'))
+          .layoutWeight(1)
+      }
+      .width('100%')
+      .height(48)
+      .padding({ left: 16, right: 16 })
+      .borderRadius(10)
+      .backgroundColor($r('app.color.background_secondary'))
+      .onClick((): void => {
+        SleepTimerService.getInstance().startMinutes(minutes);
+        this.closeMenuSheet();
+        this.getUIContext().getPromptAction().showToast({
+          message: minutes + ' 分钟后自动暂停播放',
+          duration: 1500
+        });
+      })
+    }, (minutes: number) => 'menu-sleep-' + minutes)
+
+    // 播完当前歌曲
+    Row() {
+      Text('播完当前歌曲后暂停')
+        .fontSize(16)
+        .fontColor($r('app.color.font_primary'))
+        .layoutWeight(1)
+      if (SleepTimerService.getInstance().status().afterTrack) {
+        SymbolGlyph($r('sys.symbol.checkmark'))
+          .fontSize(18)
+          .fontColor([this.themeState.color])
+      }
+    }
+    .width('100%')
+    .height(48)
+    .padding({ left: 16, right: 16 })
+    .borderRadius(10)
+    .backgroundColor($r('app.color.background_secondary'))
+    .onClick((): void => {
+      SleepTimerService.getInstance().startAfterCurrentTrack(this.playerViewModel.appState.selectIndex);
+      this.closeMenuSheet();
+      this.getUIContext().getPromptAction().showToast({
+        message: '将在播完当前歌曲后暂停',
+        duration: 1500
+      });
+    })
+  }
+
+  /** 菜单行显示的定时状态文案（未开启就是「定时关闭」）。 */
+  private sleepMenuLabel(): string {
+    const svc: SleepTimerService = SleepTimerService.getInstance();
+    if (!svc.status().active) {
+      return '定时关闭';
+    }
+    return '定时关闭 · ' + svc.remainText();
+  }
+
   @Builder
   private SpeedRows() {
     Text('播放倍速')

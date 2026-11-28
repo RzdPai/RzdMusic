@@ -113,6 +113,7 @@ export { buildSongShareText, showSystemShare } from './src/main/ets/util/ShareUt
 export { LyricLiveViewController } from './src/main/ets/util/LyricLiveViewController';
 export type { LiveViewLyricPayload } from './src/main/ets/util/LyricLiveViewController';
 export { DownloadUtil } from './src/main/ets/util/DownloadUtil';
+export { SleepTimerService, SleepTimerStatus, SLEEP_TIMER_MINUTES } from './src/main/ets/model/SleepTimerService';
 export { DownloadService, DownloadStatus, DownloadTask } from './src/main/ets/util/DownloadService';
 export type { TxToplistInfo, TxSinger } from './src/main/ets/source/LXMusicSDK';
 export type { LXSearchSong, LXSearchResult, LXQualityType, LXLeaderboardEntry, WyLyricResult, LyricFullResult } from './src/main/ets/source/LXMusicSDK';
