@@ -553,6 +553,10 @@ export struct ControlAreaComponent {
     this.showMenuTuning = false;
     this.showMenuPlaylist = false;
     this.showMenuLyric = false;
+    // ★ 2026-11-28（用户："定时关闭的返回按钮无效（其它子菜单是正常的）"）：
+    //   新增子页忘了在这里复位 —— `menuSubPageOpen()` 里算了它、`backToMenuRoot()` 却漏了，
+    //   于是"返回"后仍停在定时关闭那一页。
+    this.showMenuSleep = false;
   }
 
   private closeMenuSheet(): void {

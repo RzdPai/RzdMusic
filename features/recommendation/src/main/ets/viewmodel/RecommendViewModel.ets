@@ -621,6 +621,17 @@ export class RecommendViewModel {
   }
 
   private async loadHomeData(gen: number): Promise<void> {
+    // ★★★ 2026-11-28 第二轮（用户："首页还是有个大加载"）：
+    //   上一轮只是把"封面补全"从闸门里摘了出来，但闸门前面还压着两条网络链
+    //   （`hasPlatformSession()` + `loadHomeSongsAsync()` 的"广场分类→抽歌单→抽歌"），
+    //   首屏依旧要看转圈。⇒ **一进函数就放行**：先用内置兜底卡片/列表把页面画出来
+    //   （缺封面走占位图），网络回来的结果再原地覆盖。
+    this.recommendItems = RecommendDataUtil.getRecommendPlaylists();
+    if (this.privateSongDisplayList.length === 0) {
+      this.privateSongDisplayList = RecommendDataUtil.getPrivateSongDisplayList();
+      this.privateSongDataSource = new RecommendSongUiDataSource(this.privateSongDisplayList);
+    }
+    this.homeLoaded = true;
     // ★★★ 2026-11-18（用户口径）：
     //   「**用户登录了这个平台并且设置了通过平台获取推荐** 才走平台，其余的都走我们自己的算法。」
     //   以前只看了设置开关 —— 未登录也"以为能用账号推荐"，于是空了之后就落到固定榜单，
