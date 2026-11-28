@@ -487,11 +487,13 @@ export struct CategoryContentSection {
         Column({ space: CategoryContentSection.FEATURED_ROW_GAP }) {
           ForEach([0, 1, 2], (i: number) => {
             Row({ space: 12 }) {
-              Column()
+              // 与"歌曲没有封面"时同一张占位图（用户："不是有占位图吗，就是歌曲空时也是那张"）
+              Image($r('app.media.ic_avatar1'))
                 .width(48)
                 .height(48)
                 .borderRadius(8)
-                .backgroundColor($r('sys.color.background_tertiary'))
+                .objectFit(ImageFit.Cover)
+                .alt($r('app.media.ic_avatar1'))
               Column({ space: 6 }) {
                 Column()
                   .width('60%').height(12).borderRadius(6)

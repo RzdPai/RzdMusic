@@ -932,15 +932,15 @@ owPlayingCoverUrl），**不是**实时读在播歌曲 ——
       Scroll() {
         Row({ space: new BreakpointType(8, 12, 16, 16).getValue(this.breakpointEnv.widthBreakpoint) }) {
           ForEach([0, 1, 2, 3, 4], (_index: number) => {
-            Column()
+            // ★★ 2026-11-28（用户："不是有占位图吗，就是歌曲空时也是那张"）：
+            //   骨架不再画灰块，直接用**全应用统一的空封面占位图**（`app.media.ic_avatar1`，
+            //   与列表里"歌曲没有封面"时同一张）⇒ 一眼能看出"这是占位、内容在路上"。
+            Image($r('app.media.ic_avatar1'))
               .width(this.cardWidth())
               .height(this.cardHeight())
               .borderRadius(20)
-              // ★ 2026-11-28（用户截图："没加载完是全黑的（日间就是全白），没显示占位图"）：
-              //   骨架原来用 `app.color.background_secondary` —— 夜间 #1C1C1E、页面 #000，
-              //   日间 #F1F3F5、页面 #FFF ⇒ **几乎同色**，等于没画。
-              //   占位必须"看得出是占位"：改用 HDS 的三级底色（夜间更亮、日间更灰）。
-              .backgroundColor($r('sys.color.background_tertiary'))
+              .objectFit(ImageFit.Cover)
+              .alt($r('app.media.ic_avatar1'))
           }, (index: number) => `hero-skeleton-${index}`)
         }
         .padding({ left: this.homeScrollGutterH(), right: this.homeScrollGutterH() })
